@@ -1,13 +1,14 @@
 """
-channels/desktop — 桌宠通道，通过HTTP队列文件通知桌宠端。
-桌宠端轮询data/channel_queue.json，有消息就显示气泡。
+channels/desktop — 桌宠通道（双轨并行）。
+
+优先走 WebSocket 实时推送；WS 未连接或推送失败时降级到文件队列
+（桌宠端轮询 data/channel_queue.json）。
 """
 
 import asyncio
 import json
 import time
 import logging
-from pathlib import Path
 
 from channels.base import BaseChannel
 from core.sandbox import get_paths
@@ -19,7 +20,7 @@ _queue_lock = asyncio.Lock()
 
 class DesktopChannel(BaseChannel):
     def __init__(self):
-        self._active = False  # 默认不活跃，桌宠连接时激活
+        self._fallback_active = False  # 文件通道兜底活跃标志，由 set_active 控制
 
     @property
     def name(self) -> str:
@@ -27,13 +28,27 @@ class DesktopChannel(BaseChannel):
 
     @property
     def is_active(self) -> bool:
-        return self._active
+        from channels import desktop_ws
+        if desktop_ws.is_connected():
+            return True
+        return self._fallback_active
 
     def set_active(self, active: bool) -> None:
-        self._active = active
-        logger.info(f"[desktop_channel] 活跃状态: {active}")
+        self._fallback_active = active
+        logger.info(f"[desktop_channel] fallback 活跃状态: {active}")
 
     async def send(self, content: str, user_id: str) -> None:
+        from channels import desktop_ws
+        # 路径 1：WS 实时推送
+        if desktop_ws.is_connected():
+            ok = await desktop_ws.push_message(content)
+            if ok:
+                return
+            logger.warning("[desktop_channel] WS push 失败，降级到文件")
+        # 路径 2：文件队列 fallback
+        await self._write_to_queue(content)
+
+    async def _write_to_queue(self, content: str) -> None:
         try:
             async with _queue_lock:
                 q_file = get_paths().channel_queue()

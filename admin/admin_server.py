@@ -54,6 +54,16 @@ app.include_router(agent.router,            prefix="",           tags=["Agent"])
 app.include_router(sensor.router, prefix="", tags=["手机传感器"])
 app.include_router(inbox.router,  prefix="", tags=["文档投递"])
 
+# ── 桌宠端 WebSocket 端点 ─────────────────────────────────────────────────────
+from fastapi import WebSocket as _WebSocket
+from channels.desktop_ws import handle_connection as _ws_desktop_handler
+
+
+@app.websocket("/ws/desktop")
+async def ws_desktop_endpoint(websocket: _WebSocket):
+    await _ws_desktop_handler(websocket)
+
+
 # 挂载静态资源
 if _STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")

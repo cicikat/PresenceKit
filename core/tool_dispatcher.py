@@ -153,7 +153,10 @@ import json as _json
 from pathlib import Path as _Path
 
 def _is_desktop_active() -> bool:
-    """channel_queue.json 最后修改时间在5分钟内则认为桌宠端在线。"""
+    """优先看 WS 连接，没连接才看文件 mtime fallback（5分钟内）。"""
+    from channels import desktop_ws
+    if desktop_ws.is_connected():
+        return True
     import time
     from core.sandbox import get_paths
     f = get_paths().channel_queue()
@@ -162,10 +165,18 @@ def _is_desktop_active() -> bool:
     return (time.time() - f.stat().st_mtime) < 300
 
 
-def _push_desktop_action(action: dict) -> str:
-    """把桌面动作写入队列文件，供桌宠端轮询执行。"""
+async def _push_desktop_action(action: dict) -> str:
+    """推送桌面动作：优先 WS + ack，失败降级到文件队列。"""
     if not _is_desktop_active():
         return "桌宠端离线，动作未执行"
+    # 路径 1：WS push + 等 ack
+    from channels import desktop_ws
+    if desktop_ws.is_connected():
+        ok, err = await desktop_ws.push_action_and_wait(action, timeout=5.0)
+        if ok:
+            return "ok"
+        logger.warning(f"[_push_desktop_action] WS ack 失败: {err}，降级到文件")
+    # 路径 2：文件队列 fallback
     try:
         from core.sandbox import get_paths
         _actions_file = get_paths().agent_actions()
@@ -183,22 +194,22 @@ def _push_desktop_action(action: dict) -> str:
 
 
 async def _desktop_minimize_wrapper(window: str = "") -> str:
-    result = _push_desktop_action({"type": "minimize", "window": window})
+    result = await _push_desktop_action({"type": "minimize", "window": window})
     return f"已请求最小化窗口「{window}」" if result == "ok" else result
 
 
 async def _desktop_open_url_wrapper(url: str = "") -> str:
-    result = _push_desktop_action({"type": "open_url", "url": url})
+    result = await _push_desktop_action({"type": "open_url", "url": url})
     return f"已请求打开网址：{url}" if result == "ok" else result
 
 
 async def _desktop_play_pause_wrapper() -> str:
-    result = _push_desktop_action({"type": "play_pause"})
+    result = await _push_desktop_action({"type": "play_pause"})
     return "已请求播放/暂停媒体" if result == "ok" else result
 
 
 async def _desktop_notify_wrapper(title: str = _CHAR, message: str = "") -> str:
-    result = _push_desktop_action({"type": "notify", "title": title, "message": message})
+    result = await _push_desktop_action({"type": "notify", "title": title, "message": message})
     return f"已发送通知：{message}" if result == "ok" else result
 
 
@@ -236,7 +247,7 @@ async def _play_song_wrapper(song_name: str = "", artist: str = "") -> str:
         real_name = song.get("name", song_name)
         artists = "/".join(a.get("name", "") for a in song.get("artists", []))
 
-        result = _push_desktop_action({
+        result = await _push_desktop_action({
             "type": "play_netease",
             "song_id": song_id,
         })
