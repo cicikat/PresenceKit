@@ -24,7 +24,7 @@ D:\ai\qq-st-bot\
 | 任务类型 | 必读文档 |
 |---|---|
 | 理解系统全貌、pipeline 流程 | `ARCHITECTURE.md` |
-| 改记忆相关逻辑（episodic / growth / mood / event_log） | `docs/memory.md` |
+| 改记忆相关逻辑（episodic / growth / mood / event_log / fixation_pipeline） | `docs/memory.md` |
 | 改 prompt 层结构、tag 规则、token 裁剪 | `docs/prompt-layers.md` |
 | 改工具系统（新增工具、探针规则、桌面动作） | `docs/tools.md` |
 | 改调度器（定时触发、主动消息） | `docs/scheduler.md` |
@@ -57,6 +57,7 @@ t_validator.py` |
 | 并发锁池 | `core/memory/locks.py` |
 | 感知暂存（两阶段提交） | `core/memory/pending_perception.py` |
 | 中期记忆 | `core/memory/mid_term.py` |
+| 信息固化 pipeline（四 job） | `core/memory/fixation_pipeline.py` |
 | 元数据规则纠察 | `core/integrity_check.py` |
 | character_growth 三文件 | `角色_{uid}.md`（observer源）/ `.fingerprint.txt`（派生，每轮读）/ `.felt.md`（派生，进prompt） |
 │   └── 角色_{uid}.fingerprint.txt  压缩版指纹（存前150字备用，prompt实际取前100字）

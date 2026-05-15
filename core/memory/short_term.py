@@ -17,6 +17,50 @@ from core.sandbox import get_paths
 logger = logging.getLogger(__name__)
 
 
+def _strip_third_person_narrative(text: str) -> str:
+    """
+    检测第三人称小说叙事腔并做句子级过滤，保留对话句。
+    调用方应保证 len(text) > 80。
+    """
+    first30 = text[:30]
+    he_she_count = first30.count('他') + first30.count('她')
+
+    has_trigger = (
+        he_she_count >= 2
+        or bool(re.search(r'——不是.{1,30}?，是', text))
+        or bool(re.search(r'那种.{1,30}?的.{1,30}?[，。]', text))
+    )
+
+    if not has_trigger:
+        return text
+
+    parts = re.split(r'([。！？\n])', text)
+    result_parts = []
+    for i in range(0, len(parts), 2):
+        sentence = parts[i]
+        delimiter = parts[i + 1] if i + 1 < len(parts) else ''
+
+        stripped_s = sentence.lstrip()
+        discard = (
+            stripped_s.startswith('他') or stripped_s.startswith('她')
+            or bool(re.search(r'——不是.{1,30}?，是', sentence))
+            or bool(re.search(r'那种.{1,30}?的', sentence))
+        )
+
+        if not discard:
+            result_parts.append(sentence)
+            if delimiter:
+                result_parts.append(delimiter)
+
+    result = ''.join(result_parts).strip('，。！？\n 　')
+
+    non_punct_len = len(re.sub(r'[^\w]', '', result, flags=re.UNICODE))
+    if non_punct_len < 10:
+        return '...'
+
+    return result
+
+
 def _sanitize_assistant_message(content: str) -> str:
     """
     对过长的 assistant 回复做风格脱敏，保留台词，删除括号内动作描写。
@@ -25,6 +69,7 @@ def _sanitize_assistant_message(content: str) -> str:
     - 总长度 ≤ 80 字：原样保留
     - 超过 80 字：删除所有 () 和 （） 包围的内容
     - 删除后如果为空（说明全是动作描写），返回截断到80字的原文
+    - 继续检测并过滤第三人称叙事腔
     """
     if not content or len(content) <= 80:
         return content
@@ -35,6 +80,7 @@ def _sanitize_assistant_message(content: str) -> str:
     if not cleaned:
         return content[:80] + "..."
 
+    cleaned = _strip_third_person_narrative(cleaned)
     return cleaned
 
 

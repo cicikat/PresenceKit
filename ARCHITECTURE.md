@@ -187,3 +187,64 @@ pipeline = pipeline_registry.get()
 裁剪顺序（依次删，按质量从低到高）：
 `6b_event_search` → `mid_term` → `6d_diary` → `6e_inner_diary` → `6c_episodic` → `5.5_lore`
 
+
+---
+
+## Hook：文档同步提醒
+
+`.claude/hooks/` 下两个 hook 在 Claude Code 编辑代码后自动检查文档是否需要同步更新。
+
+### 工作机制
+PostToolUse（每次 Edit/Write/MultiEdit）
+└─ track_edits.py 把改动路径追加到 .claude/.cache/edits_{session_id}.json
+Stop（Claude 准备结束响应时）
+└─ remind_docs.py 读 cache，比对规则
+├─ 改了代码但相关文档未动 → decision: "block" + reason 拦下
+└─ 文档已同步或只改了文档 → 清空 cache，放行
+
+`stop_hook_active=true` 时直接放行，保证最多卡一轮，Claude 要么补文档、要么明说"无需更新：理由"再停。
+
+### 规则映射（remind_docs.py 顶部维护）
+
+**全局兜底**：改 `core/`、`main.py`、`admin/` 下任何代码 → 提示 `ARCHITECTURE.md` + `AGENTS.md`
+
+**专项追加**：
+
+| 改动路径关键词 | 追加提示文档 |
+|---|---|
+| `core/memory/`、`core/safe_write.py`、`core/integrity_check.py`、`core/llm_output_validator.py`、`tools/extract_observations.py` | `docs/memory.md` |
+| `core/prompt_builder.py`、`core/tag_rules.py`、`core/mood_text.py`、`core/author_note_rotator.py`、`core/lore_engine.py`、`characters/`、`data/jailbreak_entries.json` | `docs/prompt-layers.md` |
+| `core/tool_dispatcher.py`、`core/tools/` | `docs/tools.md` |
+| `core/scheduler/` | `docs/scheduler.md` |
+
+`docs/known-issues.md` 不进自动规则，bug 修复后手动记账。
+
+### 不会触发的情况
+
+- 改 `tests/`、`README.md`、配置文件等非映射路径
+- 同一轮里代码和对应文档都改了（pending 为空）
+- 上一轮已被 hook block 过（防死循环）
+
+### 配置位置
+
+| 文件 | 作用 |
+|---|---|
+| `.claude/settings.json` | hooks 节点声明 PostToolUse + Stop 两个钩子 |
+| `.claude/hooks/track_edits.py` | 记录本轮编辑过的文件 |
+| `.claude/hooks/remind_docs.py` | Stop 前检查 + 阻塞，规则映射也在此 |
+| `.claude/.cache/edits_*.json` | 每个 session 的编辑记录（已 gitignore） |
+
+### 新增规则
+
+`remind_docs.py` 顶部 `SPECIFIC_RULES` 追加一条：
+```python
+(["路径关键词1", "路径关键词2"], "docs/新文档.md", "说明"),
+```
+其他都不动。
+
+### 临时关闭
+
+`.claude/settings.json` 加 `"disableAllHooks": true`，或直接删 hooks 节点。改完自动 reload，不用重启 Claude Code。
+
+
+
