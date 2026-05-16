@@ -51,6 +51,7 @@ _COOLDOWNS: dict[str, int] = {
     "spontaneous_recall":   4 * 3600,   # 主动回忆：4小时冷却
     "dlq_monitor":         24 * 3600,   # DLQ 扫描：24小时
     "episodic_sweep":      30 * 60,     # mid_term 老化扫描：30分钟
+    "garden_water":        30 * 60,     # 花园自动浇水：30分钟
 }
 
 # 冷却跟踪 {trigger_name: last_unix_timestamp}
@@ -406,6 +407,7 @@ async def _loop():
                 from core.scheduler.triggers.timenode import _check_timenode
                 from core.scheduler.triggers.festival import _check_festival, _check_holiday_boost
                 from core.scheduler.triggers.episodic_sweep import _check_episodic_sweep
+                from core.scheduler.triggers.garden_water import _check_garden_water
 
                 await asyncio.gather(
                     _check_morning(),
@@ -431,6 +433,7 @@ async def _loop():
                     check_activity_switch(),
                     _check_dlq_monitor(),
                     _check_episodic_sweep(),
+                    _check_garden_water(),
                     return_exceptions=True,
                 )
         except Exception as e:

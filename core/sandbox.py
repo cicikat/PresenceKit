@@ -130,6 +130,9 @@ class DataPaths:
     def mid_term(self) -> Path:
         return self._p("mid_term")
 
+    def garden(self) -> Path:
+        return self._p("garden")
+
     def author_notes_pool(self) -> Path:
         return Path("characters/yexuan_author_notes.json")
 
