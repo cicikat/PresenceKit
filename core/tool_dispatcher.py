@@ -16,6 +16,7 @@ from typing import Callable
 
 from core.config_loader import get_config, _char_name
 from core.error_handler import log_error
+from core.tools.garden_tools import water_garden
 
 logger = logging.getLogger(__name__)
 _CHAR = _char_name()
@@ -571,6 +572,20 @@ _TOOL_REGISTRY["exit_yandere"] = {
         "properties": {},
         "required": [],
     },
+}
+
+_TOOL_REGISTRY["water_garden"] = {
+    "func": water_garden,
+    "description": f"用户催{_CHAR}去浇花、关心花园、问花长得怎么样并暗示该浇水时调用。无参数。{_CHAR}会按当前心情挑对应的那株花浇一次。",
+    "dangerous": False,
+    "category": "info",
+    "parameters": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+    },
+    "examples": ["你今天去浇花了吗", "快去浇花", "花园里的花怎么样了", "能不能现在去浇一下"],
+    "keywords": ["浇花", "花园", "浇水"],
 }
 
 
