@@ -203,7 +203,7 @@ async def _pipeline_send(prompt: str, search_query: str = "", trigger_name: str 
         if reply:
             await _send(reply)
             asyncio.create_task(
-                _pipeline.post_process(oid, prompt, reply)
+                _pipeline.post_process(oid, prompt, reply, trigger_name=trigger_name)
             )
         else:
             logger.warning("[scheduler._pipeline_send] LLM 返回空内容")

@@ -272,6 +272,7 @@ class Pipeline:
         target_id: str = "",
         is_group: bool = False,
         pending_paths: list[str] | None = None,
+        trigger_name: str = "",
     ):
         """
         关键写入在 uid_lock 内同步完成，慢任务（LLM调用）入 slow_queue 异步执行。
@@ -296,7 +297,9 @@ class Pipeline:
         _emotion = "neutral"
         _should_update_profile = False
         _profile_recent: list = []
-        _turn_id = ""
+        import time as _time
+        _turn_id = f"{user_id}_{int(_time.time() * 1000)}"
+        _critical_written = False
 
         async with _locks.uid_lock(user_id):
             # ── 检查用户画像更新条件（在写入前，读取当前历史长度 +2 估算）────
@@ -341,11 +344,19 @@ class Pipeline:
             # ── capture_turn：写 short_term + event_log（含 turn_id 血缘）───
             try:
                 from core.memory.fixation_pipeline import capture_turn as _capture_turn
-                _turn_id = _capture_turn(user_id, content, reply, _emotion)
+                _turn_id = _capture_turn(user_id, content, reply, _emotion, turn_id=_turn_id, trigger_name=trigger_name)
+                _critical_written = True
                 logger.debug(f"[pipeline.post_process] capture_turn: {_turn_id}")
             except Exception as e:
                 log_error("post_process.capture_turn", e)
-                _turn_id = f"{user_id}_{int(__import__('time').time() * 1000)}"
+                slow_queue.enqueue("capture_turn_retry", {
+                    "turn_id": _turn_id,
+                    "uid": user_id,
+                    "user_content": content,
+                    "reply": reply,
+                    "emotion": _emotion,
+                    "trigger_name": trigger_name,
+                })
 
         # ── uid_lock 释放，入慢队列 ───────────────────────────────────────────
         from core.tag_rules import get_tags as _get_tags
@@ -398,6 +409,12 @@ class Pipeline:
 
         if pending_paths:
             _pending_perception.confirm_delivered(pending_paths)
+
+        return {
+            "emotion": _emotion,
+            "turn_id": _turn_id,
+            "critical_written": _critical_written,
+        }
 
     # _compress_episode 已迁移为模块级 _do_compress_episode，由 slow_queue handler 调用
 
@@ -647,11 +664,13 @@ def register_slow_handlers() -> None:
     """main.py 启动时调用一次，注册所有慢任务 handler。"""
     from core.post_process import slow_queue
     from core.memory.fixation_pipeline import (
+        handler_capture_turn_retry,
         handler_summarize_to_midterm,
         handler_reflect_to_episodic,
         handler_consolidate_to_growth,
     )
     # 新 pipeline handler
+    slow_queue.register_handler("capture_turn_retry",      handler_capture_turn_retry)
     slow_queue.register_handler("summarize_to_midterm",    handler_summarize_to_midterm)
     slow_queue.register_handler("reflect_to_episodic",     handler_reflect_to_episodic)
     slow_queue.register_handler("consolidate_to_growth",   handler_consolidate_to_growth)

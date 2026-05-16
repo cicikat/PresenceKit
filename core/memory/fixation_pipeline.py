@@ -237,29 +237,41 @@ def _restore_growth_from_backup(char_name: str, uid: str) -> None:
 # Job 1 — capture_turn（同步，在 uid_lock 内、detect_emotion 后调用）
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def capture_turn(uid: str, user_msg: str, reply: str, emotion: str = "neutral") -> str:
+def capture_turn(
+    uid: str,
+    user_msg: str,
+    reply: str,
+    emotion: str = "neutral",
+    turn_id: str | None = None,
+    trigger_name: str = "",
+) -> str:
     """
-    生成 turn_id，写 short_term（user + assistant）+ event_log（user + assistant with emotion）。
+    生成 turn_id，写 short_term + event_log。
+    trigger_name 非空时为 scheduler 触发路径：跳过 user 行写入，assistant meta 附加 trigger: 字段。
     幂等：若 short_term 近 4 条已含相同 turn_id，直接返回。
-    替代 post_process 里原来散落的 4 行 short_term/event_log 写入。
 
     调用约束：必须在 uid_lock 内、detect_emotion 完成后调用。
     """
     from core.memory import short_term, event_log
 
     ts = time.time()
-    turn_id = f"{uid}_{int(ts * 1000)}"
+    turn_id = turn_id or f"{uid}_{int(ts * 1000)}"
 
-    # 幂等检查
-    existing = short_term.load(uid)
-    if any(e.get("_turn_id") == turn_id for e in existing[-4:]):
-        logger.warning(f"[fixation] capture_turn 幂等命中: {turn_id}")
-        return turn_id
-
-    short_term.append(uid, "user", user_msg, turn_id=turn_id)
-    short_term.append(uid, "assistant", reply, turn_id=turn_id)
-    event_log.append(uid, "user", user_msg, turn_id=turn_id)
-    event_log.append(uid, "assistant", reply, emotion=emotion, turn_id=turn_id)
+    if trigger_name:
+        # scheduler 触发：只写 assistant，跳过 user 行（prompt 是系统注入的情景描述）
+        writes = [
+            short_term.append(uid, "assistant", reply, turn_id=turn_id),
+            event_log.append(uid, "assistant", reply, emotion=emotion, turn_id=turn_id, trigger_name=trigger_name),
+        ]
+    else:
+        writes = [
+            short_term.append(uid, "user", user_msg, turn_id=turn_id),
+            short_term.append(uid, "assistant", reply, turn_id=turn_id),
+            event_log.append(uid, "user", user_msg, turn_id=turn_id),
+            event_log.append(uid, "assistant", reply, emotion=emotion, turn_id=turn_id),
+        ]
+    if not all(writes):
+        raise RuntimeError(f"capture_turn 写入不完整: turn_id={turn_id} writes={writes}")
 
     return turn_id
 
@@ -290,17 +302,21 @@ async def summarize_to_midterm(
     _ts_start = time.time()
 
     async with locks.uid_lock(uid):
-        # 幂等检查
         existing = _mt.load(uid)
         if any(e.get("source_turn_id") == turn_id for e in existing):
             logger.debug(f"[fixation] summarize_to_midterm 幂等命中: turn_id={turn_id}")
             return None
 
-        summary = await llm_client.summarize_turn(user_msg, reply, tags=tags)
-        if not summary:
-            return None
+    summary = await llm_client.summarize_turn(user_msg, reply, tags=tags)
+    if not summary:
+        return None
 
-        mid_id = f"mt_{uid}_{int(time.time() * 1000)}"
+    mid_id = f"mt_{uid}_{int(time.time() * 1000)}"
+    async with locks.uid_lock(uid):
+        existing = _mt.load(uid)
+        if any(e.get("source_turn_id") == turn_id for e in existing):
+            logger.debug(f"[fixation] summarize_to_midterm 幂等命中: turn_id={turn_id}")
+            return None
         _mt.append(uid, summary, tags=tags, mid_id=mid_id, source_turn_id=turn_id)
 
     duration_ms = int((time.time() - _ts_start) * 1000)
@@ -536,77 +552,78 @@ async def consolidate_to_growth(uid: str, char_name: str, llm_client) -> bool:
     _fail_key = f"consolidate_to_growth_{uid}"
 
     async with locks.uid_lock(uid):
-        all_episodes = _load_memories(uid)
-        unconsolidated = [ep for ep in all_episodes if ep.get("consolidated_at") is None]
+        snapshot = _load_memories(uid)
+        unconsolidated = [ep for ep in snapshot if ep.get("consolidated_at") is None]
 
-        if not unconsolidated:
-            _log_fixation("consolidate_to_growth", uid, {}, "ok", "no unconsolidated episodes")
-            return False
+    if not unconsolidated:
+        _log_fixation("consolidate_to_growth", uid, {}, "ok", "no unconsolidated episodes")
+        return False
 
-        # 内层：纯 LLM 合成（无文件 IO）
-        raw_content = await _synthesize_growth(unconsolidated, char_name, llm_client)
+    raw_content = await _synthesize_growth(unconsolidated, char_name, llm_client)
 
-        if not raw_content:
-            record_failure(_fail_key, "空输出", uid)
-            _log_fixation("consolidate_to_growth", uid, {}, "error", "LLM 返回空")
-            return False
+    if not raw_content:
+        record_failure(_fail_key, "空输出", uid)
+        _log_fixation("consolidate_to_growth", uid, {}, "error", "LLM 返回空")
+        return False
 
-        # 切割 observer 和 felt
-        if "===FELT===" in raw_content:
-            observer_part, felt_part = raw_content.split("===FELT===", 1)
-            observer_part = observer_part.strip()
-            felt_part = felt_part.strip()
-        else:
-            observer_part = raw_content.strip()
-            felt_part = ""
+    if "===FELT===" in raw_content:
+        observer_part, felt_part = raw_content.split("===FELT===", 1)
+        observer_part = observer_part.strip()
+        felt_part = felt_part.strip()
+    else:
+        observer_part = raw_content.strip()
+        felt_part = ""
 
-        # 校验 observer 段
-        if not _validate_growth_content(observer_part):
+    if not _validate_growth_content(observer_part):
+        record_failure(_fail_key, observer_part[:200], uid)
+        _log_fixation("consolidate_to_growth", uid, {}, "error",
+                      f"校验失败 len={len(observer_part)}")
+        return False
+
+    try:
+        from core.integrity_check import check_growth
+        issues = check_growth(observer_part)
+        if issues:
+            logger.warning(f"[fixation] consolidate_to_growth 纠察拒绝写入: {issues}")
             record_failure(_fail_key, observer_part[:200], uid)
-            _log_fixation("consolidate_to_growth", uid, {}, "error",
-                          f"校验失败 len={len(observer_part)}")
+            _log_fixation("consolidate_to_growth", uid, {}, "error", f"纠察失败: {issues}")
+            return False
+    except Exception as e:
+        log_error("fixation_pipeline.consolidate_to_growth.check_growth", e)
+
+    async with locks.uid_lock(uid):
+        all_episodes = _load_memories(uid)
+        snapshot_ids = {ep.get("id") for ep in unconsolidated}
+        still_unconsolidated = [
+            ep for ep in all_episodes
+            if ep.get("id") in snapshot_ids and ep.get("consolidated_at") is None
+        ]
+        if not still_unconsolidated:
+            _log_fixation("consolidate_to_growth", uid, {}, "ok", "already consolidated")
             return False
 
-        # 规则纠察
-        try:
-            from core.integrity_check import check_growth
-            issues = check_growth(observer_part)
-            if issues:
-                logger.warning(f"[fixation] consolidate_to_growth 纠察拒绝写入: {issues}")
-                record_failure(_fail_key, observer_part[:200], uid)
-                _log_fixation("consolidate_to_growth", uid, {}, "error", f"纠察失败: {issues}")
-                return False
-        except Exception as e:
-            log_error("fixation_pipeline.consolidate_to_growth.check_growth", e)
-
-        # 备份旧文件
         _backup_growth(char_name, uid)
         path = _growth_file(char_name, uid)
 
-        # 写 observer
         if not safe_write_text(path, observer_part):
             _restore_growth_from_backup(char_name, uid)
             _log_fixation("consolidate_to_growth", uid, {}, "error", "写 observer 失败")
             return False
 
-        # 写 fingerprint
         fp_path = path.with_suffix(".fingerprint.txt")
         safe_write_text(fp_path, observer_part[:150].strip())
 
-        # 写 felt（有内容才写，保留上一版而不是写空）
         if felt_part:
             felt_path = path.with_name(path.stem + ".felt.md")
             safe_write_text(felt_path, felt_part)
 
-        # 标记已消费的 episodic
         now = time.time()
-        consolidated_ids = {ep["id"] for ep in unconsolidated}
+        consolidated_ids = {ep["id"] for ep in still_unconsolidated}
         for ep in all_episodes:
             if ep.get("id") in consolidated_ids:
                 ep["consolidated_at"] = now
         _save_memories(uid, all_episodes)
 
-        # 重置 fixation_state
         state = _load_fixation_state(uid)
         state["episodic_since_last"] = 0
         state["high_strength_since_last"] = 0
@@ -616,10 +633,10 @@ async def consolidate_to_growth(uid: str, char_name: str, llm_client) -> bool:
 
     duration_ms = int((time.time() - _ts_start) * 1000)
     _log_fixation("consolidate_to_growth", uid, {
-        "ep_count": len(unconsolidated),
+        "ep_count": len(still_unconsolidated),
         "duration_ms": duration_ms,
     }, "ok")
-    logger.info(f"[fixation] consolidate_to_growth 完成: uid={uid} ep_count={len(unconsolidated)}")
+    logger.info(f"[fixation] consolidate_to_growth 完成: uid={uid} ep_count={len(still_unconsolidated)}")
     return True
 
 
@@ -636,6 +653,22 @@ async def handler_summarize_to_midterm(payload: dict) -> None:
         tags=payload.get("tags", []),
         emotion=payload.get("emotion", "neutral"),
     )
+
+
+async def handler_capture_turn_retry(payload: dict) -> None:
+    from core.memory import locks
+
+    uid = payload["uid"]
+    async with locks.uid_lock(uid):
+        capture_turn(
+            uid,
+            payload["user_content"],
+            payload["reply"],
+            payload.get("emotion", "neutral"),
+            turn_id=payload["turn_id"],
+            trigger_name=payload.get("trigger_name", ""),
+        )
+    logger.info(f"[fixation] capture_turn retry 完成: {payload['turn_id']}")
 
 
 async def handler_reflect_to_episodic(payload: dict) -> None:

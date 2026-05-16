@@ -97,18 +97,20 @@ def append(
     emotion: str = "neutral",
     intensity: int = 0,
     turn_id: str | None = None,
-):
+    trigger_name: str = "",
+) -> bool:
     """
     追加一条对话记录到当天日志和 full_log.md。
     永不修改已有内容，只追加。
 
     参数：
-        user_id   - 用户 QQ 号
-        role      - "user" 或 "assistant"
-        content   - 消息内容
-        emotion   - 情绪标签（仅 assistant 有效）
-        intensity - 情绪强度覆盖（0-2），传入时不再自动计算
-        turn_id   - 来自 fixation_pipeline.capture_turn 的血缘 ID（可选）
+        user_id      - 用户 QQ 号
+        role         - "user" 或 "assistant"
+        content      - 消息内容
+        emotion      - 情绪标签（仅 assistant 有效）
+        intensity    - 情绪强度覆盖（0-2），传入时不再自动计算
+        turn_id      - 来自 fixation_pipeline.capture_turn 的血缘 ID（可选）
+        trigger_name - scheduler 触发源名（非空时追加 trigger: 字段到 meta，仅 assistant 有效）
     """
     from core.config_loader import _char_name
     char_name = _char_name()
@@ -125,6 +127,8 @@ def append(
         meta = f"> emotion:{emotion} intensity:{_intensity}"
         if turn_id:
             meta += f" turn_id:{turn_id}"
+        if trigger_name:
+            meta += f" trigger:{trigger_name}"
         footer = meta + "\n---\n"
     else:
         footer = (f"> turn_id:{turn_id}\n" if turn_id else "")
@@ -135,15 +139,29 @@ def append(
         _ensure_dir(user_id)
 
         day_path = _day_file(user_id, now)
-        with open(day_path, "a", encoding="utf-8") as f:
-            f.write(chunk)
+        if not _already_appended(day_path, line, turn_id):
+            with open(day_path, "a", encoding="utf-8") as f:
+                f.write(chunk)
 
         full_path = _full_log_file(user_id)
-        with open(full_path, "a", encoding="utf-8") as f:
-            f.write(chunk)
+        if not _already_appended(full_path, line, turn_id):
+            with open(full_path, "a", encoding="utf-8") as f:
+                f.write(chunk)
+        return True
 
     except Exception as e:
         log_error("event_log.append", e)
+        return False
+
+
+def _already_appended(path: Path, line: str, turn_id: str | None) -> bool:
+    if not turn_id or not path.exists():
+        return False
+    try:
+        text = path.read_text(encoding="utf-8")
+        return line in text and f"turn_id:{turn_id}" in text
+    except Exception:
+        return False
 
 
 def get_recent_days(user_id: str, days: int = 3) -> str:
