@@ -2,24 +2,30 @@
 
 ---
 
-## 工具触发的两条路径
+## 工具触发路径
 
-工具有两条独立的触发路径，互不干扰：
+当前真正接入主流程的触发路径有两条：
 
 ```
 路径A：探针（pipeline 之前）
-  用户消息 → 极简 system prompt（get_probe_prompt）
+  用户消息 → 关键词快速路径（QQ入口）
+           → 极简 system prompt（get_probe_prompt）
            → LLM 判断是否调工具
            → 只判断 info + desktop 类
-           → 结果写入 tool_result → perception_block
+           → 结果写入 tool_result → prompt 层10
 
-路径B：LLM 自主调用（正式对话中）
-  完整 prompt → LLM 生成回复时自主触发 function calling
-              → memory 类工具主要走此路径
-              → 结果写入 tool_result → perception_block
+路径B：意图解析（pipeline 之后）
+  叶瑄的回复 → _parse_and_execute_intent()
+             → LLM 判断她是否声称要做桌面动作
+             → 执行 desktop action，失败写 pending_perception
 ```
 
-**memory 类工具不走探针**，探针调用时明确过滤：
+**memory 类工具当前不走探针，也没有暴露给正式主 LLM 调用。**
+`read_diary/read_watch/search_diary/get_profile/get_episodic/get_growth` 已注册且 `execute()` 能执行，
+但 `pipeline.run_llm()` 没有传入 tools schema，因此它们不是主对话链路里的自动工具。
+这和 Author's Note 里的"必须调用 read_diary"存在落差，见 `docs/known-issues.md`。
+
+探针调用时明确过滤：
 ```python
 get_tools_schema(categories=["info", "desktop"])
 ```
@@ -49,7 +55,7 @@ get_tools_schema(categories=["info", "desktop"])
 | `desktop_notify` | 发系统通知 | 写 agent_actions.json 队列 |
 | `play_song` | "放一首xx"/"我要听xx" | 网易云 API 搜索 song_id → 写队列 |
 
-### memory 类（不走探针，LLM 自主调用）
+### memory 类（已注册，但当前未自动接入正式对话）
 
 | 工具名 | 用途 | 备注 |
 |---|---|---|
@@ -60,7 +66,7 @@ get_tools_schema(categories=["info", "desktop"])
 | `get_episodic` | 召回情景记忆 | fetch_context 已自动注入，此工具是第二路径 |
 | `get_growth` | 获取叶瑄对用户的认知 | fetch_context 已自动注入，此工具是第二路径 |
 
-> 注：`get_profile / get_episodic / get_growth` 在 `fetch_context` 里已经自动加载到 prompt，这三个工具是供叶瑄在对话中按需**主动再次召回**的第二路径，两者并存不冲突。
+> 注：`get_profile / get_episodic / get_growth` 的同类信息已在 `fetch_context` 里自动加载到 prompt。若未来要让叶瑄在正式对话中主动再召回，需要在 `run_llm()` 或对话循环中接入 tools schema 与工具执行回合。
 
 ### 日记工具的三层分工
 
@@ -104,11 +110,11 @@ get_tools_schema(categories=["info", "desktop"])
 
 ```
 1. 工具调用或意图解析触发动作
-2. _is_desktop_active()：检查 channel_queue.json 修改时间是否在 5 分钟内
-   └─ 离线 → 直接返回失败，写入 pending_perception
-3. _push_desktop_action()：动作追加到 agent_actions.json
-4. 桌宠端轮询 agent_actions.json，执行后清空
-5. 执行失败：最多重试 2 次，间隔 0.5s
+2. _is_desktop_active()：优先检查桌宠 WebSocket；未连接时检查 channel_queue.json 修改时间是否在 5 分钟内
+   └─ 离线 → 直接返回失败；如果来自意图解析路径，失败信息会写入 pending_perception
+3. _push_desktop_action()：WS 在线时推送 action 并等 ack；失败时降级追加到 agent_actions.json
+4. 桌宠端通过 WS 或轮询 agent_actions.json 执行动作
+5. 意图解析路径执行失败时最多重试 2 次，间隔 0.5s
 6. 仍失败：_write_pending_perception() → 下轮注入 perception_block
 ```
 
@@ -125,9 +131,10 @@ get_tools_schema(categories=["info", "desktop"])
 
 ### send_notification 防误触发
 
-二次校验：叶瑄回复必须包含以下关键词之一才真正触发通知：
+二次校验：意图解析为 `send_notification` 后，叶瑄回复必须同时包含时间词和动作词才真正触发通知：
 ```
-"提醒你" / "通知你" / "告诉你记得" / "帮你记" / "记得提醒"
+时间词：等下 / 待会 / 一会 / 明天 / 后天 / 点 / 分钟后 / 小时后 / 到时 / 之后 / 时候
+动作词：提醒你 / 通知 / 告诉你 / 帮你记 / 记着 / 别忘 / 不要忘
 ```
 
 ---
@@ -176,6 +183,7 @@ tools:
 
 ---
 
-## 已注册但未生效的代码
+## 当前未注册的旧网易云 wrapper
 
-`_desktop_launch_netease_wrapper` 和 `_desktop_play_netease_wrapper` 有实现但未加入 `_TOOL_REGISTRY`，被 `play_song`（搜索+播放一体）取代，属于死代码。
+当前 `core/tool_dispatcher.py` 中未发现 `_desktop_launch_netease_wrapper` / `_desktop_play_netease_wrapper` 这类旧 wrapper。
+网易云播放只保留 `play_song`：搜索歌曲 ID 后推送 `{"type": "play_netease", "song_id": ...}`。

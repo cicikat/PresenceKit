@@ -5,13 +5,13 @@ qq:
 vision:
   enabled: true      # 是否启用图片识别（发送图片时自动描述）
   provider: glm      # 视觉模型提供商：gemini / openai / glm / custom
-  api_key: YOUR_VISION_API_KEY   # 视觉模型的 API Key，见配置指南
+  api_key: YOUR_VISION_API_KEY   # 视觉模型的 API Key，见 AA1 说明书
   model: glm-4v-flash            # 视觉模型名称
   base_url: https://open.bigmodel.cn/api/paas/v4/  # 对应 provider 的接口地址
 
 llm:
   provider: deepseek             # 主 LLM 提供商
-  api_key: YOUR_LLM_API_KEY      # 主 LLM 的 API Key，见配置指南
+  api_key: YOUR_LLM_API_KEY      # 主 LLM 的 API Key，见 AA1 说明书
   model: deepseek-chat           # 模型名称
   base_url: https://api.deepseek.com
   tool_call_mode: function_calling

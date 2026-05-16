@@ -29,19 +29,22 @@ No linting or formatting tooling is configured.
 
 ## Architecture
 
-Two message channels share a single Pipeline instance (managed by `core/pipeline_registry.py`):
+QQ, desktop, and scheduler-triggered messages share one Pipeline. `core/pipeline_registry.py` exposes the instance to admin routes and post-process handlers; the scheduler also receives its own reference through `scheduler.set_pipeline()`.
 
 ```
-QQ message  →  main.py
-Desktop/admin → admin/routers/chat.py
-                    ↓
-             core/pipeline.py   (4 steps)
-                    ↓
-             LLM (DeepSeek)
+QQ message      → main.py
+Desktop message → admin/routers/chat.py
+Scheduler       → core/scheduler/loop.py
+                         ↓
+                  core/pipeline.py
+                         ↓
+                  LLM (DeepSeek)
+                         ↓
+                  channels.registry broadcast
 ```
 
 **Pipeline steps:**
-1. **Pre-pipeline** (`main.py`): rule-based probe for `info`/`desktop` tools via `get_probe_prompt()`, topic tag extraction via `get_tags()`
+1. **Pre-pipeline** (`main.py`): keyword fast path + lightweight LLM probe for `info`/`desktop` tools via `get_probe_prompt()`, topic tag extraction via `get_tags()`
 2. **`fetch_context()`**: concurrently loads all memory layers
 3. **`build_prompt()`**: assembles 12+ layer `messages[]` with tag gating; hard limit 20k chars triggers pruning (order: `event_search` → `mid_term` → `diary` → `episodic` → `lore`)
 4. **`run_llm()`**: calls LLM with retry
@@ -52,13 +55,15 @@ Desktop/admin → admin/routers/chat.py
 |---|---|---|
 | Short-term | `history/{uid}.json` | Every turn (last 20 rounds) |
 | Mid-term | `mid_term/{uid}.json` | LLM compression per turn (12h expiry, 3 time buckets) |
-| Episodic | `episodic_memory/{uid}.json` | LLM extraction, strength decay, max 200 |
-| Character growth | `character_growth/角色_{uid}.md` + `.felt.md` + `.fingerprint.txt` | Every 20 rounds |
+| Episodic | `episodic_memory/{uid}.json` | mid_term eager/sweep promotion, strength decay, max 200 |
+| Character growth | `character_growth/角色_{uid}.md` + `.felt.md` + `.fingerprint.txt` | fixation pipeline consolidation |
 | Event log | `event_log/{uid}/` | Every turn, daily files, 30-day search window |
 
-**Memory consolidation** runs in the slow queue: `short → mid_term → episodic → character_growth`.
+**Memory consolidation** runs in the slow queue: `capture_turn → mid_term → episodic → character_growth`.
 
-**Tool system**: Tools declared in `_TOOL_REGISTRY` in `core/tool_dispatcher.py`. `info`/`desktop` tools fire via pre-pipeline probe; `memory` tools are self-triggered by the LLM during generation.
+**Tool system**: Tools declared in `_TOOL_REGISTRY` in `core/tool_dispatcher.py`. `info`/`desktop` tools fire via pre-pipeline probe; reply-side desktop intent parsing runs after generation. `memory` tools are registered but are not currently exposed to the main generation call.
+
+**Garden system**: `core/garden/manager.py` maintains five mood-mapped flower slots under `data/garden/`. `core/scheduler/triggers/garden_water.py` rolls automatic watering every 30 minutes, and `GET /garden/state` exposes read-only admin state. See `docs/garden.md`.
 
 ## Hard Rules
 

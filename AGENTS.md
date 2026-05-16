@@ -28,6 +28,8 @@ D:\ai\qq-st-bot\
 | 改 prompt 层结构、tag 规则、token 裁剪 | `docs/prompt-layers.md` |
 | 改工具系统（新增工具、探针规则、桌面动作） | `docs/tools.md` |
 | 改调度器（定时触发、主动消息） | `docs/scheduler.md` |
+| 改 QQ / 桌宠通道、广播、WebSocket、跨通道接续 | `docs/channels.md` |
+| 改花园系统（情绪花槽、自动浇水、管理面板状态） | `docs/garden.md` |
 | 修已知 bug / 查技术债 | `docs/known-issues.md` |
 | 不确定设计意图、准入标准、禁止行为 | `DESIGN.md` |
 | 改并发/锁/数据安全 | `docs/memory.md` → 七、并发保护 |
@@ -43,24 +45,27 @@ D:\ai\qq-st-bot\
 | Prompt 组装 | `core/prompt_builder.py` |
 | 话题标签规则 | `core/tag_rules.py` |
 | 工具注册 + 调度 + 探针 | `core/tool_dispatcher.py` |
+| 通道注册与广播 | `channels/registry.py` |
+| 桌宠通道 WebSocket + 文件降级 | `channels/desktop_ws.py` / `channels/desktop.py` |
+| 桌宠聊天 HTTP 入口 | `admin/routers/chat.py` |
 | 情景记忆 | `core/memory/episodic_memory.py` |
 | 情绪状态 | `core/memory/mood_state.py` |
 | 角色认知 | `core/memory/character_growth.py` |
 | 调度器主循环 | `core/scheduler/loop.py` |
+| 花园系统 | `core/garden/manager.py` / `core/garden/constants.py` |
+| 花园管理面板接口 | `admin/routers/garden.py` |
 | 沙盒路径管理 | `core/sandbox.py` ← 所有 data/ 路径必须经过此处 |
 | 从情景记忆提取用户观察（手动维护） | `tools/extract_observations.py` |
 | 角色人设提醒轮换 | `core/author_note_rotator.py` |
 | 情绪状态软提示生成 | `core/mood_text.py` |
 | 安全写入工具（atomic write） | `core/safe_write.py` |
-| LLM输出校验与失败计数 | `core/llm_outpu
-t_validator.py` |
+| LLM输出校验与失败计数 | `core/llm_output_validator.py` |
 | 并发锁池 | `core/memory/locks.py` |
 | 感知暂存（两阶段提交） | `core/memory/pending_perception.py` |
 | 中期记忆 | `core/memory/mid_term.py` |
 | 信息固化 pipeline（四 job） | `core/memory/fixation_pipeline.py` |
 | 元数据规则纠察 | `core/integrity_check.py` |
-| character_growth 三文件 | `角色_{uid}.md`（observer源）/ `.fingerprint.txt`（派生，每轮读）/ `.felt.md`（派生，进prompt） |
-│   └── 角色_{uid}.fingerprint.txt  压缩版指纹（存前150字备用，prompt实际取前100字）
+| character_growth 三文件 | `角色_{uid}.md`（observer源）/ `.fingerprint.txt`（派生，存前150字）/ `.felt.md`（派生，prompt 优先注入） |
 | 工具探针（声明式） | `core/tool_dispatcher.py` → `get_probe_prompt()` / `_TOOL_REGISTRY` |
 | history 风格脱敏 | `core/memory/short_term.py` → `_sanitize_assistant_message()` |
 

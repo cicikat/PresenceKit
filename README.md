@@ -8,9 +8,9 @@
 
 ### 记忆系统（五层并行）
 
-- **短期历史**：滑动窗口，最近 20 轮对话，写入前脱敏防止风格自反馈塌缩
+- **短期历史**：滑动窗口，最近 20 轮对话，读取时脱敏防止风格自反馈塌缩
 - **中期摘要**：12 小时内的对话压缩视图，三时间桶渲染（刚才 / 几小时前 / 早些时候），LLM 压缩 + fallback 兜底
-- **情景记忆**：LLM 提炼每轮对话为结构化片段，含 strength 衰减、MMR 多样性召回、emotion_texture 去重
+- **情景记忆**：由 mid_term 经 eager/sweep 晋升为结构化片段，含 strength 衰减、MMR 多样性召回、emotion_texture 去重
 - **角色认知**（character_growth）：角色对你的长期认知，由固化 pipeline 四段链路驱动（capture → midterm → episodic → growth），重启不丢状态
 - **事件流水账**（event_log）：每日按天分文件，支持关键词搜索 + 强度衰减评分，7 天外低强度条目自动跳过
 
@@ -25,7 +25,7 @@
 
 - 分层 prompt 架构，含 tag 门控、token 估算与质量梯度裁剪
 - 世界书 / 角色卡 / 用户画像 / 实时状态 / 情绪底色 / 情景记忆 / 中期摘要 / 活动状态 / 角色日记 / Author's Note 轮转
-- 探针机制：正式对话前用极简 prompt 预判工具调用，含关键词快速路径，不走 LLM
+- 探针机制：正式对话前用关键词快速路径 + 极简 LLM probe 预判 info/desktop 工具调用
 - 层 11 Author's Note：性格特质轮转 + 纠偏注入（consistency_check 发现问题时追加）
 - token 超限时按质量从低到高依次裁剪
 
@@ -54,13 +54,13 @@
 - 图片识别（GLM / Gemini / OpenAI Vision）
 - TTS 语音合成（GPT-SoVITS，情绪联动参考音频切换）
 - 表情包发送（情绪联动，与 TTS 互斥）
-- 工具调用：天气查询、备忘录提醒、网页搜索（DuckDuckGo）、桌面控制
+- 工具调用：天气查询、备忘录提醒、网页搜索（DuckDuckGo）、桌面控制；memory 类工具已注册但尚未接入正式主 LLM 自动调用
 - 桌面意图解析：角色说"我去把游戏关掉"→ 真的执行窗口最小化
 - 跨通道（QQ / 桌宠）连续性感知，切换时注入接续提示
 
 ### 工程质量
 
-- 所有数据路径通过沙盒管理（`core/sandbox`），测试与生产数据隔离
+- 数据路径主要通过沙盒管理（`core/sandbox`），测试与生产数据隔离；少量 legacy `data/...` 路径仍在技术债清单中
 - 原子写入（`safe_write`，跨平台 `os.replace`）
 - LLM 输出校验 + 最多 3 次重试，失败保留旧数据
 - Post-process 拆分为关键路径（持锁）和慢队列（单 worker，退避重试），避免锁饥饿
@@ -96,9 +96,9 @@ pip install -r requirements.txt
 cp config.example.yaml config.yaml
 ```
 
-按 [配置指南.md](配置指南.md) 填写必填项：LLM API Key、QQ 号、管理面板密钥。
+按 [AA1先看说明书正式版README.md](AA1先看说明书正式版README.md) 和 `config.example.yaml` 填写必填项：LLM API Key、QQ 号、管理面板密钥。
 
-在 `characters/` 目录放入角色卡 `.txt` 文件（格式见配置指南第 6 节）。
+在 `characters/` 目录放入角色卡文件；当前 loader 支持 `.json`（SillyTavern）、`.txt` 和 `.md`，可参考 `characters/character_template.json`。
 
 **运行**
 
@@ -116,13 +116,16 @@ python main.py
 
 | 文档 | 内容 |
 |---|---|
-| [配置指南.md](配置指南.md) | 所有配置项说明 |
-| [Watch配置指南.md](Watch配置指南.md) | Apple Watch 心率 / 睡眠数据接入（iPhone 捷径） |
+| [AA1先看说明书正式版README.md](AA1先看说明书正式版README.md) | 安装、启动、常见问题 |
+| [AAWatch配置指南.md](AAWatch配置指南.md) | Apple Watch 心率 / 睡眠数据接入（iPhone 捷径） |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | 系统架构总览、Pipeline 四步骤、数据目录结构 |
 | [docs/memory.md](docs/memory.md) | 五层记忆子系统设计与并发保护 |
 | [docs/prompt-layers.md](docs/prompt-layers.md) | Prompt 层结构、Tag 门控、token 裁剪 |
 | [docs/tools.md](docs/tools.md) | 工具系统、探针机制、桌面动作执行 |
 | [docs/scheduler.md](docs/scheduler.md) | 调度器触发器完整列表与冷却设计 |
+| [docs/channels.md](docs/channels.md) | QQ / 桌宠通道、WebSocket、文件降级与跨通道接续 |
+| [docs/garden.md](docs/garden.md) | 情绪花园、自动浇水、管理面板状态接口 |
+| [docs/known-issues.md](docs/known-issues.md) | 当前技术债与已核对修复项 |
 
 ---
 

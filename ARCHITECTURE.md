@@ -4,18 +4,21 @@
 
 ## 系统全貌
 
-角色通过两个入口接收消息，共用同一条 pipeline：
+角色通过 QQ、桌宠和调度器三个入口进入同一条 pipeline，输出再交给通道层发送：
 
 ```
-QQ 消息 → main.py
-桌宠/管理面板 → admin/routers/chat.py
-         ↓（两个入口共用）
+QQ 消息 → main.py → message_queue
+桌宠消息 → admin/routers/chat.py（POST /desktop/chat）
+调度器主动消息 → core/scheduler/loop.py
+         ↓（入口共用）
       Pipeline（core/pipeline.py）
          ↓
       LLM（DeepSeek）
          ↓
-      广播到活跃通道
+      channels.registry 广播到活跃通道（QQ / 桌宠）
 ```
+
+通道细节见 `docs/channels.md`。花园这类不进入对话 pipeline 的伴生状态，见 `docs/garden.md`。
 
 ---
 
@@ -25,7 +28,7 @@ QQ 消息 → main.py
 用户消息
     │
     ▼ 步骤0（在 pipeline 之前，main.py 里）
-探针判断工具（rule-based，极简，只看 info+desktop 类）
+探针判断工具（关键词快速路径 + 极简 LLM probe，只看 info+desktop 类）
 get_tags()（对消息打话题标签，传给 build_prompt）
 工具执行（结果写入 tool_result）
     │
@@ -55,13 +58,11 @@ get_tags()（对消息打话题标签，传给 build_prompt）
     ▼ 步骤4  post_process()（asyncio.create_task，不阻塞）
   │
   │  【关键路径】uid_lock(uid) 内，按顺序同步完成：
-  ├─ short_term.append()               写 history（user + assistant）
-  ├─ event_log.append(user 行)         写流水账
   ├─ detect_emotion()                  asyncio.wait_for(timeout=8s)，超时降级 neutral
   ├─ global_lock("mood_state") 内：
   │   ├─ mood_state.update(emotion)    更新情绪状态
   │   └─ yandere 触发检测              关键词 + 关系阈值
-  └─ event_log.append(assistant 行，带 emotion)
+  └─ capture_turn()                    写 history + event_log（user/assistant，含 turn_id）
   │
   │  【慢队列】uid_lock 释放后入 slow_queue，单 worker 异步执行：
   ├─ summarize_to_midterm              LLM 压缩单轮到 mid_term，写血缘字段；emotion 显著时触发 reflect_to_episodic(eager)
@@ -123,9 +124,9 @@ data/
 ├── episodic_memory/{uid}.json    情景记忆（最多 200 条，含 strength 衰减）
 ├── memory_index/{uid}.json       标签倒排索引（episodic 用）
 ├── character_growth/
-│   ├── 角色_{uid}.md             角色对用户的整体认知（每 20 轮 LLM 更新）
+│   ├── 角色_{uid}.md             角色对用户的整体认知（由 fixation pipeline 固化更新）
 │   ├── 角色_{uid}.felt.md        感受层版本（存在时优先读，不存在时降级到 .md）
-│   └── 角色_{uid}.fingerprint.txt  压缩版指纹（前 150 字，实际 prompt 取前 100 字）
+│   └── 角色_{uid}.fingerprint.txt  压缩版指纹（前 150 字；当前 prompt 直接从 felt/.md 取前 150 字）
 ├── profiles/{uid}.json           用户画像
 ├── history/{uid}.json            短期对话历史（最近 20 轮）
 ├── mid_term/{uid}.json           中期对话摘要（12小时过期，最多20条，三时间桶）
@@ -136,10 +137,13 @@ data/
 ├── activity_snapshot.json        桌宠推来的活动快照（TTL 5 分钟）
 ├── inbox/                        用户投递的原文档
 ├── pet.json                      角色宠物状态（core/pet.py 管理）
+├── garden/
+│   ├── plants.json               五个情绪花槽状态（stage/growth/last_watered）
+│   └── storage.json              收获/花瓶/历史记录（当前主要写 harvest）
 ├── yexuan_inner/
 │   ├── diary/                    角色日记（每日 23:00 调度器触发）
 │   ├── notes/                    角色读文档后的笔记
-│   │   └── notes_index.json
+│   ├── notes_index.json          笔记索引（inbox 生成；暂未注入 prompt）
 │   ├── mood_state.json           角色当前情绪状态（全局唯一）
 │   ├── activity_pool.yaml        活动状态池（手写配置，固定路径，不走沙盒隔离）
 │   ├── activity_state.json       当前活动状态（activity_manager 管理）
@@ -163,13 +167,14 @@ data/
 
 ## 全局 Pipeline 实例管理
 
-`core/pipeline_registry.py` 持有唯一的 Pipeline 实例：
+`core/pipeline_registry.py` 持有唯一的 Pipeline 实例，供管理面板和后处理纠偏等跨模块获取。
+调度器另有一份 `_pipeline` 引用，由 `scheduler.set_pipeline(pipeline)` 注入。
 
 ```python
 # 注册（main.py 初始化时）
 pipeline_registry.register(pipeline)
 
-# 跨模块获取（调度器等）
+# 跨模块获取（如 admin/routers/chat.py、consistency_check handler）
 pipeline = pipeline_registry.get()
 ```
 
@@ -245,6 +250,3 @@ Stop（Claude 准备结束响应时）
 ### 临时关闭
 
 `.claude/settings.json` 加 `"disableAllHooks": true`，或直接删 hooks 节点。改完自动 reload，不用重启 Claude Code。
-
-
-

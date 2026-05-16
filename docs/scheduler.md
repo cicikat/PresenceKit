@@ -16,7 +16,10 @@ core/scheduler/triggers/     ← 各触发器独立文件
     birthday.py              生日多段触发
     timenode.py              时间节点感知
     festival.py              节日 + 长假加速
+    episodic_sweep.py        mid_term 老化扫描，批量晋升情景记忆
+    garden_water.py          花园自动浇水
     watch.py                 Apple Watch 心率 / 睡眠事件
+    dnd.py                   请勿打扰状态（已实现，未接入）
 ```
 
 ---
@@ -90,6 +93,7 @@ birthday_midnight / birthday_eve / birthday_afternoon / birthday_night / period_
 | `festival` | 20h | 低 | festival | 节日感知 |
 | `holiday_boost` | 2h | 低 | festival | 长假加速发送 |
 | `episodic_sweep` | 30min | 低 | episodic_sweep | mid_term 老化扫描，aged > 11h 且未晋升的条目批量入队 reflect_to_episodic |
+| `garden_water` | 30min | 低 | garden_water | 30% 概率按当前 mood_state 给对应花槽自动浇水 |
 | `hr_high` | 30min | 低 | watch | 心率>100 提醒 |
 | `hr_critical` | 1h | **高** | watch | 心率>120 告警 |
 | `sleep_end` | 2h | 低 | watch | 睡眠结束感知 |
@@ -119,7 +123,12 @@ birthday_midnight / birthday_eve / birthday_afternoon / birthday_night / period_
 ## 管理面板集成
 
 - `get_status()` → 返回所有触发器的上次触发时间、冷却剩余秒数、是否 ready
-- `manual_trigger(name)` → 绕过冷却和条件检查，强制触发（管理面板用）
+- `manual_trigger(name)` → 绕过冷却和条件检查，强制触发部分触发器（管理面板用）
+
+当前手动触发覆盖：`morning_greeting`、`night_reminder`、`random_message`、`daily_journal`、
+`period_reminder`、`diary_reminder`、`diary_share_reminder`、`topic_followup`、
+生日四段、`timenode`、`festival`、`holiday_boost`。
+未覆盖：天气、记忆衰减、episodic sweep、garden_water、watch 事件、DLQ 监控、activity switch 等。
 
 ---
 

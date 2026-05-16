@@ -9,11 +9,11 @@
 | 层标识 | 内容 | 触发条件 | 数据来源 |
 |---|---|---|---|
 | `0_jailbreak` | 破限预设 layer=0 | 文件存在且 enabled | `data/jailbreak_entries.json` |
-| `1_system_prompt` | 角色存在性定义 + `{perception_block}` 槽位 | always | `characters/yexuan.json` |
+| `1_system_prompt` | 角色存在性定义 + 情绪软提示 + `{perception_block}` 槽位 | always | `characters/yexuan.json` + `core/mood_text.py` |
 | `2_char_desc` | 角色描述 + 性格 + 情境 | always | 角色卡 |
 | `2_jailbreak` | 破限预设 layer=2 | 文件存在且 enabled | `data/jailbreak_entries.json` |
 | `2.5_time` | 当前时间（年月日 时:分 星期X） | always | 实时生成 |
-| `2.7_mood_state` | 叶瑄当前情绪底色（软提示） | current != neutral 时注入 | `core/mood_text.py` → `get_mood_text()`，pending非空时追加过渡句 |
+| `2.55_last_seen` | 用户上次说话时间 | 距上次说话 ≥ 6 小时 | `core/presence.py` → `get_last_seen_text()` |
 | `2.6_activity` | 叶瑄此刻的状态 | 对话开头（history 为空）或沉默超10分钟 | `activity_manager.get_prompt_fragment()`，每15-45分钟随机切换，部分活动会从 episodic_memory 按 strength 加权抽一条记忆作为"叶瑄在想什么"注入 |
 | `3_relation` | 与该用户的关系 + 称呼 | always | `user_relation` |
 | `4_group_context` | 群聊最近动态 | 群聊时 | `group_context.get_recent()` |
@@ -24,14 +24,15 @@
 | `5_profile` | 用户画像（名字/位置/宠物/兴趣/职业） | 有内容即注 | `user_profile.load()` |
 | `5.2_reminders` | 待办备忘录列表 | 有待办即注 | `get_reminders()` |
 | `5.5_lore` | 世界书条目 | LoreEngine 命中时 | `lore_engine.match()` |
-| `6a_growth_fingerprint` | 角色认知前 100 字 | tagged 未命中时（有内容） | 优先读 `叶瑄_{uid}.felt.md`，不存在时降级读 `叶瑄_{uid}.md` |
+| `6a_growth_fingerprint` | 角色认知前 150 字 | tagged 未命中时（有内容） | 优先读 `叶瑄_{uid}.felt.md`，不存在时降级读 `叶瑄_{uid}.md` |
 | `6a_growth_full` | 角色认知全文 | tagged 命中时（与 fingerprint 互斥） | 优先读 `叶瑄_{uid}.felt.md`，不存在时降级读 `叶瑄_{uid}.md` |
 | `6b_event_search` | 相关往事（event_log 搜索结果） | 搜索结果非空 | `event_log.search()` |
 | `6c_episodic` | 情景记忆片段 | episodic_result 非空 | `episodic_memory.retrieve()` + `format_for_prompt()` |
+| `6c_episodic_fallback` | 近期高强度记忆兜底 | episodic_result 为空且 fallback 非空 | `episodic_memory.retrieve_fallback()`；实际消息 `_layer` 仍写 `6c_episodic`，便于统一裁剪 |
 | `mid_term` | 过去 12 小时对话压缩视图 | mid_term_context 非空 | `mid_term.format_for_prompt()`（12h 过期，最多 20 条，三时间桶渲染） |
-| `6d_diary_context` | 用户近期日记 | 有内容即注 | `diary_context.load()` |
-| `6e_inner_diary_facts` | 叶瑄昨天的记录（事件层） | 昨日日记文件存在且含事件层 | `data/yexuan_inner/diary/` | 必注入，取前200字 |
-| `6e_inner_diary_feeling` | 叶瑄昨天的心情（感受层） | 昨日日记存在且命中 `emotion.down/indirect/deep` 或 `topic.relation` | 同上 | 取前150字  |
+| `6d_diary_context` | 用户近期日记 | 有内容且命中 `emotion.down` / `emotion.indirect` | `diary_context.load()` |
+| `6e_inner_diary_facts` | 叶瑄昨天的记录（事件层，取前200字） | 昨日日记文件存在且含事件层 | `data/yexuan_inner/diary/` |
+| `6e_inner_diary_feeling` | 叶瑄昨天的心情（感受层，取前150字） | 昨日日记存在且命中 `emotion.down/indirect/deep` 或 `topic.relation` | `data/yexuan_inner/diary/` |
 | `7_mes_example_item` | 对话示例（few-shot） | always（有内容） | 角色卡 mes_example |
 | `9_history` | 短期对话历史（最近 20 轮） | always | `short_term.load()` |
 | `9.5_episodic_top` | 最相关情景记忆1条（attention sweet spot） | episodic_result 非空 | 从已召回结果取第一条，不重复召回 |
@@ -48,7 +49,7 @@
 
 文件：`core/tag_rules.py`
 
-对用户消息做简单字符串包含检查（不是正则，注释有误）：
+对用户消息做简单字符串包含检查（不是正则）：
 
 ```python
 if any(p in text for p in rule.patterns):
@@ -66,18 +67,18 @@ if any(p in text for p in rule.patterns):
 | `query.what_doing` | 你看到我在干嘛、你知道我在做什么、我在干嘛、我在做什么 | 3.8 activity |
 | `topic.body` | 肚子、痛、生理期、例假、姨妈 | 3.5 period |
 | `emotion.physical_discomfort` | 难受、不舒服、很疼 | 3.5 period |
-| `topic.relation` | 我们、你还记得、之前、那次、上次 | 6a growth 全文 |
+| `topic.relation` | 我们、你还记得、之前、那次、上次 | 6a growth 全文 + 6e感受层 |
 | `topic.history` | 那时候、以前、当时、记得吗 | 6a growth 全文 |
-| `emotion.deep` | 其实、说真的、一直、从来、没人 | 6a growth 全文 |
+| `emotion.deep` | 其实、说真的、一直、从来、没人 | 6a growth 全文 + 6e感受层 |
 | `meta.identity` | 你是谁、你是什么、你了解我吗 | 6a growth 全文 |
-| `emotion.down` | 难过、想哭、想吐、恶心、痛苦、呃呃、呕呕、想似 | 3.5 period + 3.6 watch + 6a growth全文 + 6d日记 |
+| `emotion.down` | 难过、想哭、想吐、恶心、痛苦、呃呃、呕呕、想似 | 3.5 period + 3.6 watch + 6a growth全文 + 6d日记 + 6e感受层 |
 | `emotion.positive` | 好耶、噢噢噢、喵喵喵 | 3.8 activity |
-| `emotion.indirect` | 咪、好累、不想动、没胃口、吃不下、今天又没 | 3.5 period + 3.6 watch + 6d日记 |
+| `emotion.indirect` | 咪、好累、不想动、没胃口、吃不下、今天又没 | 3.5 period + 3.6 watch + 6d日记 + 6e感受层 |
 
 ### Tag 覆盖率已知盲区
 
 - **孤独/失落**：无专属 tag，`emotion.deep` 靠"没人"兜底，覆盖窄
-- **高兴/庆祝**：完全没有 tag，生日/成功话题不触发任何额外层
+- **高兴/庆祝**：已有 `emotion.positive`，但触发词很窄，生日/成功话题仍可能不触发
 - **间接表达**：如"最近不太好"不命中任何 tag
 
 ---
@@ -87,6 +88,10 @@ if any(p in text for p in rule.patterns):
 层1 的 system_prompt 末尾有一个占位符 `{perception_block}`，由 pipeline.build_prompt 填入。
 **只承载 pending_perception**（上轮失败的桌面动作感知）和跨通道接续提示，不含工具结果——
 工具结果走层10的 `tool_result` 参数，唯一出口。
+
+情绪软提示也在层1内完成：`prompt_builder` 会读取 `mood_state.json`，调用
+`get_mood_text()`，并把"叶瑄此刻：..."插到 `## 当前感知（实时，非记忆）`
+之前。它没有独立 `_layer`，所以 debug layers 里不会出现 `2.7_mood_state`。
 
 ```python
 _perception = ""
@@ -102,7 +107,7 @@ if _pending:
 
 ```
 
-⚠️ `tool_result` 同时传给了 `perception_block` 和层10的 `tool_result` 参数，工具结果在 prompt 里出现**两次**。见 `docs/known-issues.md`。
+当前实现中，`tool_result` 不进入 `perception_block`，只作为层10注入。
 
 ---
 
@@ -120,6 +125,8 @@ Author's Note 放在历史之后、用户消息之前，对模型影响最大，
 8. `style_hint`（从 observations.jsonl 读取，深夜/压力状态提示词）
 9. `author_note_extra`（consistency_check 发现问题时的纠偏，用完即清）
 10. 破限预设 layer=11
+
+注意：这里的 `read_diary` 强制规则目前只是 Author's Note 文本；正式主 LLM 调用没有接入 memory 类 tools schema。`get_time` 等 info/desktop 工具可以由 pre-pipeline 探针触发。
 
 ---
 

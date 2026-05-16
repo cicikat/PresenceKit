@@ -44,7 +44,7 @@ cd qq-st-bot
 
 ### 2. 安装依赖并初始化配置
 
-双击运行 `安装并启动.bat`，脚本会自动安装依赖并生成 `config.yaml`。
+双击运行 `AA2安装并启动.bat`，脚本会自动安装依赖并生成 `config.yaml`。
 
 ### 3. 配置 NapCat
 
@@ -64,10 +64,10 @@ llm:
   api_key: "你的 DeepSeek API Key"
   model: "deepseek-chat"
 
-# QQ 协议层
-napcat:
-  ws_url: "ws://127.0.0.1:3001"
-  bot_qq: "bot的QQ号"
+# QQ 协议层（NapCat WebSocket）
+qq:
+  host: 127.0.0.1
+  port: 3001
 
 # 角色配置
 character:
@@ -89,7 +89,7 @@ scheduler:
 
 ```bash
 # 先启动 NapCat（登录 QQ）
-# 再双击启动.bat 或运行：
+# 再双击 AA3启动.bat 或运行：
 python main.py
 ```
 
@@ -102,7 +102,7 @@ python main.py
 ```
 qq-st-bot/
 ├── core/               # 核心逻辑
-│   ├── memory/         # 三层记忆系统
+│   ├── memory/         # 多层记忆系统
 │   ├── output/         # 消息/语音输出
 │   ├── scheduler/      # 调度器（主动触发）
 │   └── tools/          # 工具调用
@@ -111,26 +111,26 @@ qq-st-bot/
 ├── data/               # 运行数据（自动生成，不上传）
 ├── config.yaml         # 你的配置（不上传）
 ├── config.example.yaml # 配置模板
-├── 安装并启动.bat
-├── 启动.bat
-└── 更新.bat
+├── AA2安装并启动.bat
+├── AA3启动.bat
+└── AA更新.bat
 ```
 
 ---
 
 ## 更新
 
-双击 `更新.bat` 即可拉取最新代码并更新依赖。
+双击 `AA更新.bat` 即可拉取最新代码并更新依赖。
 
 ---
 
 ## 常见问题
 
 **Q：启动报错 `ModuleNotFoundError`**
-A：重新运行 `安装并启动.bat` 安装依赖。
+A：重新运行 `AA2安装并启动.bat` 安装依赖。
 
 **Q：收不到消息**
-A：检查 NapCat 是否正常运行，`config.yaml` 中 `ws_url` 和 `bot_qq` 是否正确。
+A：检查 NapCat 是否正常运行，`config.yaml` 中 `qq.host` 和 `qq.port` 是否正确，`scheduler.owner_id` 是否填了你的 QQ 号。
 
 **Q：管理面板打不开**
 A：确认 `python main.py` 正在运行，访问 `http://127.0.0.1:8080`。
@@ -145,4 +145,3 @@ A：TTS 是可选功能，需要额外安装 GPT-SoVITS 和 ffmpeg，并在 conf
 - 开发者：伟大的Claude，老脸爱睡觉
 - 技术栈：DeepSeek + FastAPI + NapCat + GPT-SoVITS
 - 视频介绍：【用claude开发了一个有记忆系统的陪伴系qq机器人|使用体会|开发过程分享|ai陪伴|纸片人赛博飞升计划】 https://www.bilibili.com/video/BV1gLoXBGEmW/?share_source=copy_web&vd_source=ccfbdeefcd37e1fc003c78d14a17b5cb
-
