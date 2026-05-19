@@ -68,7 +68,9 @@ Pipeline 未注入时降级：直接发送 prompt 原文（不经过 LLM）。
 | `"speak"`（默认）| 生成 reply 后经 `turn_sink` 写入并广播，返回 `None` |
 | `"return"` | 生成 reply 后经 `turn_sink` 写入但不广播，直接返回 reply 文本 |
 
-`sensor_aware` trigger 使用 `output_mode="return"` 拿到 reply 后，自己通过 `desktop_ws.push_message` / `push_action_and_wait` 推送，以便附加 action 包。其余所有 trigger 不传此参数（保持默认 `"speak"` 行为）。
+`sensor_aware` trigger 使用 `output_mode="return", record_turn=False` 拿到 reply 后，再显式调用
+`record_assistant_turn(source=SENSOR, fanout=["desktop", "mobile"], payload={"behavior": action})`，
+以便附加 action 包并跳过 QQ。其余所有 trigger 不传这些参数（保持默认 `"speak"` 行为）。
 
 ---
 
@@ -199,9 +201,9 @@ scheduler._check_sensor_aware()         ← loop.py 每 60s 检查一次（受 t
   → sensor_events.tick()               ← 返回本 tick 候选事件列表
   → sensor_judge.judge(event)          ← 客观评分，附 intent_tier
   → BehaviorPlanner.plan(event, score) ← 硬代码行为决策，score < 35 → 丢弃
-  → _pipeline_send(output_mode="return") ← LLM 生成发言文本，post_process 写记忆
-  → desktop_ws.push_message(reply)     ← 推 channel_message（所有级别）
-  → desktop_ws.push_action_and_wait()  ← 推 action 包（passive_speak 跳过）
+  → _pipeline_send(output_mode="return", record_turn=False) ← LLM 生成发言文本
+  → record_assistant_turn(source=SENSOR, fanout=["desktop", "mobile"], payload={"behavior": action})
+                                      ← 写记忆 + 推 channel_message；passive_speak 不带 action 包
   → sensor_events.mark_proactive_sent()
 ```
 

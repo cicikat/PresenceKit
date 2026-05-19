@@ -4,18 +4,18 @@ sensor_aware.py — sensor 触发主动开口的实际出口。三层架构：
   sensor_events.tick()
     → sensor_judge.judge()  (客观评分)
     → BehaviorPlanner.plan()  (硬代码行为决策)
-    → _pipeline_send(output_mode="return")  (LLM 生成发言文本)
-    → desktop_ws.push_message + push_action_and_wait  (WS 推送)
+  → _pipeline_send(output_mode="return", record_turn=False)  (LLM 生成发言文本)
+  → record_assistant_turn(fanout=["desktop", "mobile"])  (统一写入 + 推送)
 """
 import logging
 import time
 from datetime import datetime
 from typing import Optional
 
-from channels import desktop_ws
 from core.scheduler import sensor_events, sensor_judge
-from core.scheduler.loop import _char_name, _pipeline_send
+from core.scheduler.loop import _char_name, _owner_id, _pipeline_send
 from core.scheduler.triggers import sensor_aware_audit as _audit
+from core.turn_sink import TurnSource, record_assistant_turn
 
 logger = logging.getLogger(__name__)
 
@@ -262,7 +262,7 @@ def build_situation_narrative(behavior: dict) -> str:
 
 def build_action_packet(behavior: dict, reply_text: str) -> Optional[dict]:
     """
-    返回 push_action_and_wait 的 action dict。
+    返回传给 channel behavior 的 action dict。
     passive_speak 返回 None（只推 channel_message，无 action）。
     """
     action_type = LEVEL_TO_ACTION_TYPE.get(behavior["level"])
@@ -424,7 +424,12 @@ async def handle_tick() -> None:
 
         # ── 5. _pipeline_send 返回 ────────────────────────────────────────────
         try:
-            reply = await _pipeline_send(prompt, trigger_name="sensor_aware", output_mode="return")
+            reply = await _pipeline_send(
+                prompt,
+                trigger_name="sensor_aware",
+                output_mode="return",
+                record_turn=False,
+            )
         except Exception:
             logger.error("[sensor_aware] _pipeline_send 失败，不更新冷却")
             logger.exception("[sensor_aware] _pipeline_send 异常详情")
@@ -458,29 +463,35 @@ async def handle_tick() -> None:
             snapshot["final_stage"] = "empty_reply"
             return
 
-        # ── 6. Action Packet 组装 + 推送 ──────────────────────────────────────
+        # ── 6. Action Packet 组装 + 统一写入/推送 ────────────────────────────
         try:
-            await desktop_ws.push_message(reply)
             action = build_action_packet(behavior, reply)
             snapshot["action_packet"] = action
-            if action is not None:
-                ok, err = await desktop_ws.push_action_and_wait(action, timeout=5.0)
-                if not ok:
-                    logger.warning("[sensor_aware] desktop action 失败: %s", err)
+            payload = {"behavior": action} if action is not None else None
+            result = await record_assistant_turn(
+                assistant_text=reply,
+                uid=_owner_id(),
+                source=TurnSource.SENSOR,
+                trigger_name="sensor_aware",
+                fanout=["desktop", "mobile"],
+                payload=payload,
+            )
+            if result.fanout_failures:
+                logger.warning("[sensor_aware] fanout 部分失败: %s", result.fanout_failures)
         except Exception:
-            logger.error("[sensor_aware] desktop push 失败，不更新冷却")
-            logger.exception("[sensor_aware] desktop push 异常详情")
+            logger.error("[sensor_aware] turn_sink 推送失败，不更新冷却")
+            logger.exception("[sensor_aware] turn_sink 异常详情")
             _record_decision(
-                stage="desktop_push_error",
+                stage="turn_sink_error",
                 sent=False,
-                reason="桌宠端推送失败",
+                reason="统一写入/推送失败",
                 candidates_count=len(candidates),
                 picked=_event_summary(best_event),
                 score=best_score,
                 tier=best_tier,
                 behavior=behavior,
             )
-            snapshot["final_stage"] = "desktop_push_error"
+            snapshot["final_stage"] = "turn_sink_error"
             return
 
         sensor_events.mark_proactive_sent()

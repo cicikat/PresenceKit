@@ -182,6 +182,7 @@ async def _pipeline_send(
     trigger_name: str = "",
     behavior: dict | None = None,
     output_mode: str = "speak",   # "speak" | "return"
+    record_turn: bool = True,
 ) -> Optional[str]:
     """通过 Pipeline 生成角色回复，再向 owner 发送。
     Pipeline 未注入时降级直接发送 prompt 原文并打 warning。
@@ -213,25 +214,27 @@ async def _pipeline_send(
         messages, _ = _pipeline.build_prompt(oid, prompt, context)
         reply    = await _pipeline.run_llm(messages)
         if reply:
-            from core.turn_sink import TurnSource, record_assistant_turn
-            if trigger_name == "sensor_aware":
-                source = TurnSource.SENSOR
-            elif trigger_name in ("hr_high", "hr_critical", "sleep_end"):
-                source = TurnSource.WATCH
-            else:
-                source = TurnSource.TRIGGER
-            turn_result = await record_assistant_turn(
-                assistant_text=reply,
-                uid=oid,
-                source=source,
-                trigger_name=trigger_name or "scheduler",
-                fanout=[] if output_mode == "return" else "all",
-                bypass_gate=(trigger_name == "hr_critical"),
-                pipeline=_pipeline,
-            )
+            turn_result = None
+            if record_turn:
+                from core.turn_sink import TurnSource, record_assistant_turn
+                if trigger_name == "sensor_aware":
+                    source = TurnSource.SENSOR
+                elif trigger_name in ("hr_high", "hr_critical", "sleep_end"):
+                    source = TurnSource.WATCH
+                else:
+                    source = TurnSource.TRIGGER
+                turn_result = await record_assistant_turn(
+                    assistant_text=reply,
+                    uid=oid,
+                    source=source,
+                    trigger_name=trigger_name or "scheduler",
+                    fanout=[] if output_mode == "return" else "all",
+                    bypass_gate=(trigger_name == "hr_critical"),
+                    pipeline=_pipeline,
+                )
             if output_mode == "return":
                 return reply
-            if turn_result.fanout_failures:
+            if turn_result and turn_result.fanout_failures:
                 logger.warning(
                     "[scheduler._pipeline_send] fanout 部分失败: %s",
                     turn_result.fanout_failures,
