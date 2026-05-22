@@ -151,6 +151,15 @@ class DataPaths:
     def fixation_log(self) -> Path:
         return self._p("logs", "fixation.jsonl")
 
+    def trigger_state_log(self) -> Path:
+        return self._p("logs", "trigger_state.jsonl")
+
+    def gating_shadow_log(self) -> Path:
+        return self._p("logs", "gating_shadow.jsonl")
+
+    def user_identity_dir(self) -> Path:
+        return self._p("user_identity")
+
     def cleanup(self):
         if self.mode != "test":
             raise RuntimeError("只有 test 模式才能执行 cleanup()")

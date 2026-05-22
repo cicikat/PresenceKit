@@ -86,12 +86,13 @@ class Pipeline:
             "profile":            dict,        # 用户画像
             "relation":           dict,        # 用户关系配置
             "group_context":      str,         # 群消息流（私聊为 ""）
-            "growth_content":     str,         # 角色认知文件内容
+            "user_identity_text": str,         # 用户稳定行为模式描述
             "event_search_result": str,        # 事件日志语义搜索结果
             "lore_entries":       list[str],   # 命中的世界书条目
         }
         """
-        from core.memory import short_term, user_profile, group_context, event_log, character_growth, mid_term
+        from core.memory import short_term, user_profile, group_context, event_log, mid_term
+        from core.memory import user_identity
         from core import user_relation, llm_client
 
         # 需要 IO 的任务并发进行
@@ -105,7 +106,6 @@ class Pipeline:
         # 同步读取（内存/小文件，不值得并发）
         history          = short_term.load(user_id)
         recent_group_ctx = group_context.get_recent(group_id)
-        growth_content   = character_growth.load(self.character.name, user_id)
         relation         = user_relation.get_relation(user_id)
         lore_entries     = self.lore_engine.match(content, history)
 
@@ -139,9 +139,10 @@ class Pipeline:
         ) if episodic_fallback else ""
 
         # 等待异步任务
-        event_search_result = await event_search_task
-        profile             = await profile_future
-        mid_term_text       = await mid_term_future
+        event_search_result  = await event_search_task
+        profile              = await profile_future
+        mid_term_text        = await mid_term_future
+        user_identity_text   = await user_identity.format_for_prompt(user_id)
 
         from core.tools.reminder import get_reminders
         reminders = get_reminders(user_id)
@@ -164,7 +165,7 @@ class Pipeline:
             "profile":             profile,
             "relation":            relation,
             "group_context":       recent_group_ctx,
-            "growth_content":      growth_content,
+            "user_identity_text":  user_identity_text,
             "event_search_result": event_search_result,
             "lore_entries":        lore_entries,
             "reminders":           reminders,
@@ -227,7 +228,7 @@ class Pipeline:
             relation=context["relation"],
             profile=context["profile"],
             group_context=context["group_context"],
-            growth_content=context["growth_content"],
+            user_identity_text=context["user_identity_text"],
             event_search_result=context["event_search_result"],
             lore_entries=context["lore_entries"],
             tool_result=tool_result,
@@ -668,12 +669,14 @@ def register_slow_handlers() -> None:
         handler_summarize_to_midterm,
         handler_reflect_to_episodic,
         handler_consolidate_to_growth,
+        handler_consolidate_to_identity,
     )
     # 新 pipeline handler
-    slow_queue.register_handler("capture_turn_retry",      handler_capture_turn_retry)
-    slow_queue.register_handler("summarize_to_midterm",    handler_summarize_to_midterm)
-    slow_queue.register_handler("reflect_to_episodic",     handler_reflect_to_episodic)
-    slow_queue.register_handler("consolidate_to_growth",   handler_consolidate_to_growth)
+    slow_queue.register_handler("capture_turn_retry",       handler_capture_turn_retry)
+    slow_queue.register_handler("summarize_to_midterm",     handler_summarize_to_midterm)
+    slow_queue.register_handler("reflect_to_episodic",      handler_reflect_to_episodic)
+    slow_queue.register_handler("consolidate_to_identity",  handler_consolidate_to_identity)
+    slow_queue.register_handler("consolidate_to_growth",    handler_consolidate_to_growth)  # 旧 handler，保留供 DLQ 重试
     # 保留旧 handler 供 DLQ 里残留任务重试
     slow_queue.register_handler("mid_term_append",         _handler_mid_term_append)
     slow_queue.register_handler("episodic_compress",       _handler_episodic_compress)

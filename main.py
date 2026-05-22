@@ -54,8 +54,10 @@ def _init_modules():
 
     logger.info("正在初始化世界书引擎...")
     from core.lore_engine import LoreEngine
-    lore_engine = LoreEngine(character.world_book)
+    lore_engine = LoreEngine()
     lore_engine.load()
+    if character.world_book:
+        lore_engine.load_entries(character.world_book)
 
     logger.info("正在初始化 Pipeline...")
     from core.pipeline import Pipeline, register_slow_handlers
@@ -90,6 +92,16 @@ async def handle_message(message: dict):
     mark_user_active()
 
     user_id: str      = message["user_id"]
+    try:
+        from core.config_loader import get_config as _get_config
+        from core.scheduler.state_machine import notify_owner_turn
+
+        owner_id = str(_get_config().get("scheduler", {}).get("owner_id", "")).strip()
+        if owner_id and str(user_id) == owner_id:
+            notify_owner_turn(user_id)
+    except Exception:
+        logger.exception("[handle_message] trigger state notify_owner_turn 失败")
+
     from core.presence import update_last_message
     update_last_message(user_id)
     group_id: str | None = message.get("group_id")
@@ -320,7 +332,7 @@ async def _reply_with_tool_result(
     is_group: bool,
 ):
     """工具确认流程结束后，用完整 prompt 生成角色语气回复"""
-    from core.memory import short_term, user_profile, group_context, character_growth
+    from core.memory import short_term, user_profile, group_context
     from core import user_relation, response_processor
     from core.output import text_output
     from core.error_handler import log_error
@@ -331,7 +343,7 @@ async def _reply_with_tool_result(
         "profile":             user_profile.load(user_id),
         "relation":            user_relation.get_relation(user_id),
         "group_context":       group_context.get_recent(group_id),
-        "growth_content":      character_growth.load(_pipeline.character.name, user_id),
+        "user_identity_text":  "",
         "event_search_result": "",
         "lore_entries":        [],
     }

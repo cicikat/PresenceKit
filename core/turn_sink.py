@@ -87,12 +87,15 @@ async def _fanout(
     uid: str,
     fanout: FanoutPolicy,
     behavior: Optional[dict],
+    exclude_origin_channel: Optional[str] = None,
 ) -> tuple[list[str], dict[str, str]]:
     from channels import registry
 
     targets: list = []
     if fanout in ("all", "broadcast"):
         targets = registry.get_active()
+        if exclude_origin_channel:
+            targets = [ch for ch in targets if ch.name != exclude_origin_channel]
     elif isinstance(fanout, str):
         channel = registry.get(fanout)
         if channel is not None and channel.is_active:
@@ -131,6 +134,7 @@ async def record_assistant_turn(
     payload: Optional[dict] = None,
     await_critical_post_process: bool = True,
     bypass_gate: bool = False,
+    exclude_origin_channel: Optional[str] = None,
     pipeline=None,
 ) -> TurnResult:
     """
@@ -172,6 +176,7 @@ async def record_assistant_turn(
         uid=uid,
         fanout=fanout,
         behavior=behavior,
+        exclude_origin_channel=exclude_origin_channel,
     )
 
     return TurnResult(

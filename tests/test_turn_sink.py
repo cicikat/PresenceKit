@@ -194,3 +194,86 @@ async def test_bypass_gate_skips_conversation_gate():
     )
 
     assert pipeline.max_active == 2
+
+
+# ── exclude_origin_channel ────────────────────────────────────────────────────
+
+async def test_fanout_excludes_origin_channel():
+    """fanout="all" + exclude_origin_channel="desktop" 时，
+    desktop channel 不被调用，mobile channel 被调用。"""
+    from channels import registry
+    from core.turn_sink import TurnSource, record_assistant_turn
+
+    await _reset_channels()
+    desktop = _Channel("desktop")
+    mobile = _Channel("mobile")
+    registry.register(desktop)
+    registry.register(mobile)
+
+    result = await record_assistant_turn(
+        assistant_text="回复内容",
+        uid="owner",
+        source=TurnSource.USER_CHAT,
+        user_text="用户消息",
+        fanout="all",
+        bypass_gate=True,
+        exclude_origin_channel="desktop",
+        pipeline=_FakePipeline(),
+    )
+
+    assert "mobile" in result.fanout_targets
+    assert "desktop" not in result.fanout_targets
+    assert mobile.sent == [("回复内容", "owner", None)]
+    assert desktop.sent == []
+
+
+async def test_fanout_all_without_exclude_sends_to_all():
+    """exclude_origin_channel=None 时，所有活跃 channel 均被调用（原有行为不变）。"""
+    from channels import registry
+    from core.turn_sink import TurnSource, record_assistant_turn
+
+    await _reset_channels()
+    desktop = _Channel("desktop")
+    mobile = _Channel("mobile")
+    registry.register(desktop)
+    registry.register(mobile)
+
+    result = await record_assistant_turn(
+        assistant_text="回复内容",
+        uid="owner",
+        source=TurnSource.USER_CHAT,
+        user_text="用户消息",
+        fanout="all",
+        bypass_gate=True,
+        exclude_origin_channel=None,
+        pipeline=_FakePipeline(),
+    )
+
+    assert set(result.fanout_targets) == {"desktop", "mobile"}
+    assert desktop.sent == [("回复内容", "owner", None)]
+    assert mobile.sent == [("回复内容", "owner", None)]
+
+
+async def test_fanout_exclude_does_not_affect_named_fanout():
+    """fanout 指定具体名称时，exclude_origin_channel 不产生影响。"""
+    from channels import registry
+    from core.turn_sink import TurnSource, record_assistant_turn
+
+    await _reset_channels()
+    desktop = _Channel("desktop")
+    registry.register(desktop)
+
+    result = await record_assistant_turn(
+        assistant_text="回复内容",
+        uid="owner",
+        source=TurnSource.USER_CHAT,
+        user_text="用户消息",
+        fanout="desktop",
+        bypass_gate=True,
+        exclude_origin_channel="desktop",
+        pipeline=_FakePipeline(),
+    )
+
+    # fanout 指定的是具体 channel 名称（非 "all"），exclude 不过滤
+    assert "desktop" in result.fanout_targets
+    assert desktop.sent == [("回复内容", "owner", None)]

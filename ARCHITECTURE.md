@@ -12,6 +12,9 @@ QQ 消息 → main.py → message_queue
 手机消息 → admin/routers/chat.py（POST /mobile/chat）
 文件上传 → POST /upload/ingest → media_processor → 拼入用户消息
 调度器主动消息 → core/scheduler/loop.py
+         ├─ state_machine：观测 owner turn / sensor tick，维护 CHATTING / QUIET / RESTLESS
+         ├─ gating shadow：并行记录“若由 gating 决策本 tick 会选谁”
+         └─ 旧触发器路径：Step 2 期间仍按原 _is_ready/_mark 真实发送
          ↓（入口共用）
       Pipeline（core/pipeline.py）
          ↓
@@ -111,6 +114,7 @@ QQ/客户端/手机/HTTP上传
     ↓ media_processor（文件落盘 + 解析）→ 拼 user message
     ↓
 用户消息
+    ↓ notify_owner_turn(uid) → scheduler_state.trigger_state + logs/trigger_state.jsonl
     ↓ get_tags()
     ↓ 探针 + 工具执行
     ↓
@@ -167,9 +171,12 @@ data/
 ├── channel_queue.json            调度器广播队列（asyncio.Lock 保护）
 ├── mobile_queue.json             手机主动消息轮询队列（MobileChannel 写，/mobile/poll 读）
 ├── scheduler_state.json          调度器冷却状态
+│                                  其中 trigger_state 段记录触发状态机状态
 ├── fixation_state/{uid}.json     固化 pipeline 状态（episodic_since_last/strength_accumulated 等，重启不丢）
 ├── logs/
-│   └── fixation.jsonl           固化 pipeline 每 job 追加一行（ts/job/uid/status/duration_ms）
+│   ├── fixation.jsonl            固化 pipeline 每 job 追加一行（ts/job/uid/status/duration_ms）
+│   ├── trigger_state.jsonl       触发状态机每次状态切换追加一行
+│   └── gating_shadow.jsonl       gating 并行观测期每 tick 的候选与 would_pick
 ├── dead_letter_queue/            慢任务 DLQ（handler 3次失败后落盘，含 task/error/failed_at）
 ├── debug/
 │   └── llm_output/              LLM异常输出存档（带时间戳，7天自动清理）

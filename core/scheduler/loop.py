@@ -279,9 +279,16 @@ async def _check_sensor_aware():
     if now - _last_sensor_aware_tick < interval:
         return
     _last_sensor_aware_tick = now
-    from core.scheduler.triggers.sensor_aware import handle_tick
+    from core.scheduler.triggers.sensor_aware import get_last_decision, handle_tick
     try:
         await handle_tick()
+        oid = _owner_id()
+        if oid:
+            decision = get_last_decision()
+            event_count = int(decision.get("candidates_count") or 0)
+            from core.scheduler.state_machine import feed_sensor_tick
+
+            feed_sensor_tick(oid, event_count)
     except Exception:
         logger.exception("[scheduler] sensor_aware_tick 失败")
 
@@ -477,6 +484,12 @@ async def _loop():
                 from core.scheduler.triggers.episodic_sweep import _check_episodic_sweep
                 from core.scheduler.triggers.garden_water import _check_garden_water
                 from core.scheduler.triggers.garden_daily import _check_garden_daily
+
+                oid = _owner_id()
+                if oid:
+                    from core.scheduler.gating import write_shadow_tick
+
+                    write_shadow_tick(oid)
 
                 await asyncio.gather(
                     _check_morning(),

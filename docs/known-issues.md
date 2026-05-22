@@ -145,3 +145,32 @@
 - `llm_output_validator` 的失败计数在内存中，debug 输出写到 `data/debug/llm_output/`，保留 7 天。
 - `/upload/ingest` 支持文档（`.txt` / `.md` / `.docx`，单文件）和图片（`.jpg` / `.jpeg` / `.png` / `.gif` / `.webp` / `.heic` / `.heif` / `.bmp`，多文件）。QQ 路径仍由 NapCat 触发，走同一组 `ingest_*` 函数。旧 `inbox.py` 曾解析 `.pdf` 但产物未进 pipeline，等同未上线；若后续需要 PDF，可接入 skill 实现。
 - event_log 的实际存储格式是 `data/event_log/{uid}/{date}.md`，不是 `.jsonl`；Phase 1 turn_sink 文档曾写错，已按代码现实修正。
+### identity-1：counter 累积无上限衰减，长期可能僵死维度
+位置：core/memory/fixation_pipeline.py → _synthesize_identity
+counter_evidence_count 只在 LLM 重写 text 时归零，否则只增不减。
+翻转机制依赖 LLM 主动判断"旧判断已不成立并重写 text"。如果 LLM 保守
+不肯重写，某维度可能 counter 持续累积、confidence 被永久压到注入阈值以下，
+形成"僵死维度"——既不注入也不翻转。
+当前缓解：定期看 data/user_identity/{uid}.yaml，发现僵死维度手动清。
+待评估：是否加 counter 时间衰减（last_conflict_at 超过 N 天无新冲突时
+counter 缓慢回落），类似 episodic 的 decay。先观察实际是否发生再决定。
+
+### identity-2：identity 注入时机依赖 fixation 链，冷启动期长
+新用户前几十轮对话，episodic 还没攒够触发 consolidate，user_identity.yaml
+为空，6a_user_identity 层不注入。这是预期行为（宁可不注入也不瞎猜），
+但意味着"叶瑄了解用户"有明显冷启动期。观察项：confidence 阈值 0.5 +
+maturity_factor(ev/10) 双重门槛下，实际要多少轮对话才会有第一个维度
+注入。如果太久（比如 200 轮还是空），考虑放宽 maturity_factor 或降阈值。
+
+记账未做(都在 issue 里或该进 issue):
+
+identity-1:counter 无衰减,维度可能僵死
+identity-2:identity 冷启动期长,观察注入阈值
+short_term 加权裁剪(你最想要的那个,最大的活,还没开)
+mes_example 精简(防坍缩 vs 省 token,没动)
+时间联动注入(让叶瑄从"14:30"推出"清醒午后",没做)
+get_growth 死工具 + character_growth 模块清理(2-3 周后删)
+探针输出自然语言(记账不修)
+之前 codex 查的那 5 条里,还剩:context.max_turns 不生效、裁剪后 debug_info 失真、_layer 透传 LLM(这三条当时说"进 known-issues 下一轮",没确认你记了没)
+
+最后那条提醒你:codex 最初查的 5 条,我们只修了第 1 条(LoreEngine)和顺带处理的标签问题。第 4 条(_layer 透传 LLM)我当时说"顺手一行修了",但后面岔到 identity 去了,可能没修。还有 2(max_turns)、3(debug 失真)说好进 issue 也不确定进了没。你翻一下 known-issues.md 有没有这几条,没有的话补上——不然下周就真忘了。

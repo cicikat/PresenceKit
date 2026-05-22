@@ -35,7 +35,7 @@ def _make_empty_context() -> dict:
         "profile":             {},
         "relation":            {"role": "stranger"},
         "group_context":       [],
-        "growth_content":      "",
+        "user_identity_text":  "",
         "event_search_result": "",
         "lore_entries":        [],
         "reminders":           [],

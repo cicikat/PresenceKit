@@ -113,7 +113,7 @@ def build(
     relation: dict,
     profile: dict,
     group_context: list[dict],
-    growth_content: str = "",
+    user_identity_text: str = "",
     event_search_result: str = "",
     lore_entries: list[str] = None,
     tool_result: str | None = None,
@@ -142,7 +142,7 @@ def build(
         relation:            user_relation.get_relation() 的返回值
         profile:             user_profile.load() 的返回值
         group_context:       group_context.get_recent() 的返回值
-        growth_content:      character_growth.load() 的返回值（角色对用户的认知）
+        user_identity_text:  user_identity.format_for_prompt() 的返回值（用户稳定行为模式）
         event_search_result: event_log.search() 的返回值（相关往事摘要）
         lore_entries:        lore_engine.match() 的返回值
         tool_result:         本轮工具执行结果（有则注入）
@@ -156,7 +156,7 @@ def build(
 
     # ─────────────────────────────────────────────────────────────────────────
     # 层 0：破限预设（jailbreak，最高优先级，放在最前面）
-    # config.yaml jailbreak.enabled=true 时注入对应预设文本
+    # 来自 data/jailbreak_entries.json 中启用且 layer=0 的条目
     # ─────────────────────────────────────────────────────────────────────────
     jailbreak_text = _load_jailbreak(layer=0)
     if jailbreak_text:
@@ -218,6 +218,7 @@ def build(
 
     jb_layer2 = _load_jailbreak(layer=2)
     if jb_layer2:
+        _layers.append("2_jailbreak")
         messages.append({"role": "system", "content": jb_layer2, "_layer": "2_jailbreak"})
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -478,41 +479,19 @@ def build(
         })
 
     # ─────────────────────────────────────────────────────────────────────────
-    # 层 6a：角色对该用户的认知
-    #   fingerprint（前150字）：mode=always，每轮必注
-    #   full（完整内容）：mode=tagged，关系/历史/深情/身份话题才注全文
+    # 层 6a：用户稳定行为模式（user_identity，不可裁，与 5_profile 同级）
     # ─────────────────────────────────────────────────────────────────────────
-    # 优先读 felt 文件注入 prompt，不存在时降级用 observer
-    _felt_path = None
-    try:
-        from core.memory.character_growth import _growth_file
-        _gf = _growth_file(character.name, user_id)
-        _felt_candidate = _gf.with_suffix("").with_name(_gf.stem + ".felt.md")
-        if _felt_candidate.exists():
-            _felt_path = _felt_candidate.read_text(encoding="utf-8").strip()
-    except Exception:
-        pass
-    _growth_inject = _felt_path if _felt_path else growth_content
-
-    _growth_full_triggers = {"topic.relation", "topic.history", "emotion.deep", "meta.identity", "emotion.down"}
-    _growth_full_active = bool(_growth_inject and (_tags & _growth_full_triggers))
-
-    if _growth_full_active:
-        _layers.append("6a_growth_full")
+    if user_identity_text:
+        _identity_block = (
+            "关于用户的长期观察（优先级低于当前对话，如有冲突以当下为准）：\n"
+            + user_identity_text
+        )
+        _layers.append("6a_user_identity")
         messages.append({
             "role": "system",
-            "content": f"【{character.name}记得的事（完整）】\n{_growth_inject.replace('用户', '你').replace('他偏好', '你偏好').replace('他习惯', '你习惯').replace('他喜欢', '你喜欢').replace('他不喜欢', '你不喜欢').replace('他提到', '你提到').replace('他曾', '你曾')}",
-            "_layer": "6a_growth_full",
+            "content": _identity_block,
+            "_layer": "6a_user_identity",
         })
-    elif _growth_inject:
-        _fp = _growth_inject[:150].strip()
-        if _fp:
-            _layers.append("6a_growth_fingerprint")
-            messages.append({
-                "role": "system",
-                "content": f"【{character.name}记得的事】\n{_fp.replace('用户', '你').replace('他偏好', '你偏好').replace('他习惯', '你习惯').replace('他喜欢', '你喜欢').replace('他不喜欢', '你不喜欢').replace('他提到', '你提到').replace('他曾', '你曾')}",
-                "_layer": "6a_growth_fingerprint",
-            })
 
     # ─────────────────────────────────────────────────────────────────────────
     # 层 6b：相关往事（来自 event_log.search() 的摘要，无结果时跳过）
@@ -621,13 +600,17 @@ def build(
         if isinstance(mes_example_str, list):
             mes_example_str = "\n<START>\n".join(mes_example_str)
         example_messages = _parse_mes_example(mes_example_str, character.name)
-        messages.extend(example_messages)
+        for _em in example_messages:
+            _em.setdefault("_layer", "7_mes_example_item")
+            messages.append(_em)
 
     # ─────────────────────────────────────────────────────────────────────────
     # 层 9：短期对话历史（最近 N 轮实际对话）
     # ─────────────────────────────────────────────────────────────────────────
     _layers.append("9_history")
-    messages.extend(history)
+    for _hm in history:
+        _hm.setdefault("_layer", "9_history")
+        messages.append(_hm)
 
     # 层 9.5：最相关情景记忆（1条，挪到 history 之后获得 recency 红利）
     # 从已召回的 episodic_result 原始列表里取第一条，不重复召回
@@ -747,6 +730,7 @@ def build(
     # 破限条目层11
     jb_layer11 = _load_jailbreak(layer=11)
     if jb_layer11:
+        _layers.append("11_jailbreak")
         messages.append({"role": "system", "content": jb_layer11, "_layer": "11_jailbreak"})
 
     # ─────────────────────────────────────────────────────────────────────────

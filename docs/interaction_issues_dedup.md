@@ -1,0 +1,672 @@
+# 三仓库互动链路 Issue 去重整理
+
+> 审计日期：2026-05-19  
+> 范围：`D:\ai\Emerald-client`、`D:\ai\yexuan_memery`、`D:\ai\qq-st-bot`  
+> 说明：本文件只做文档级去重，不修复代码。若同一根因在多个仓库出现，合并成一个主 issue，并把其他记录列入“重复来源”。
+
+## ISSUE-001：assistant turn 尚未完全统一出口
+
+状态：新发现 / 已有记录合并
+
+严重度：P0：可能污染生产记忆、安全鉴权、真实关系状态
+
+问题描述：  
+`record_assistant_turn()` 已经承接 desktop/mobile/scheduler/sensor_aware 的新路径，但 QQ 主入口、冻结管理面板 `/chat`、`/desktop/trigger`、重复 `/chat` 仍直接发送或直接 `pipeline.post_process()`。这会导致不同入口在“先发送还是先落库、是否 await 关键写入、是否广播到多端、是否带 trigger/source 元数据”上不一致。
+
+证据：
+- `D:\ai\qq-st-bot\core\turn_sink.py:123`：新统一写入 + fanout 函数。
+- `D:\ai\qq-st-bot\admin\routers\chat.py:68`：desktop/mobile owner 入口使用 `record_assistant_turn()`。
+- `D:\ai\qq-st-bot\core\scheduler\loop.py:226`：scheduler 使用 `record_assistant_turn()`。
+- `D:\ai\qq-st-bot\main.py:290` / `:308`：QQ 主入口直接 `text_output.send()` 后 `create_task(post_process)`。
+- `D:\ai\qq-st-bot\admin\routers\chat.py:280`：`/desktop/trigger` 直接 `text_output.send()`。
+- `D:\ai\qq-st-bot\docs\assistant-turn-sink.md`：已有“统一写入与广播”设计背景。
+
+可能根因：  
+Phase 1 turn sink 已部分落地，但 legacy/冻结入口没有全部迁移，QQ 主入口仍保留原始 pipeline 流程。
+
+影响范围：
+- 记忆
+- 情绪
+- 主动触发
+- mobile
+- desktop
+- QQ
+- broadcast
+
+是否已有记录：  
+重复来源：`D:\ai\qq-st-bot\docs\assistant-turn-sink.md` 关于 sensor_aware、sleep_end、触发器出口不统一的记录；本轮新增 QQ 主入口和多个 HTTP legacy 入口仍绕过的事实。
+
+建议处理方式：  
+受控重构；需要人工拍板 QQ 是否同步广播到 desktop/mobile，以及 legacy `/chat`/`/desktop/trigger` 是否删除、鉴权或迁移。
+
+推荐处理顺序：立即处理
+
+## ISSUE-002：多个可写生产状态入口无鉴权或弱鉴权
+
+状态：新发现
+
+严重度：P0：可能污染生产记忆、安全鉴权、真实关系状态
+
+问题描述：  
+后端存在多个会写入真实记忆、profile、队列或活动快照的入口无 Bearer 鉴权。若管理服务监听到局域网或被转发，外部请求可触发真实对话、上传文件、写用户画像、写活动快照或发 QQ。
+
+证据：
+- `D:\ai\qq-st-bot\admin\routers\chat.py:189`：`POST /desktop/chat` 无鉴权，走正常 pipeline 并写记忆。
+- `D:\ai\qq-st-bot\admin\routers\chat.py:207`：`POST /upload/ingest` 无鉴权，上传内容会拼入用户消息并写记忆。
+- `D:\ai\qq-st-bot\admin\routers\chat.py:280`：`POST /desktop/trigger` 无鉴权，生成 QQ 回复并写 post_process。
+- `D:\ai\qq-st-bot\admin\routers\sensor.py:81`：`POST /sensor/push` 无鉴权，写 `user_profile` 的手机传感器摘要。
+- `D:\ai\qq-st-bot\admin\routers\sensor.py:248`：`POST /sensor/activity` 无鉴权，写 `activity_snapshot`。
+- `D:\ai\qq-st-bot\admin\routers\watch.py:164`：`watch_secret` 未配置时不校验。
+
+可能根因：  
+早期“本机/内网个人系统”假设被多个端复用后没有统一入口策略；desktop 被视为可信本机，但 mobile 和局域网调试让边界变宽。
+
+影响范围：
+- 记忆
+- 情绪
+- 花园
+- 主动触发
+- mobile
+- desktop
+- QQ
+- 后台健康数据
+- 鉴权
+
+是否已有记录：  
+重复来源：`D:\ai\qq-st-bot\docs\security_model.md` 的未来 WebSocket/Mobile 安全风险；`D:\ai\Emerald-client\docs\known-issues.md` 的 token 风险。本轮新增具体无鉴权入口列表。
+
+建议处理方式：  
+需要人工拍板。至少先给写记忆/写 profile/发 QQ 的入口补 Bearer 或本机白名单；`watch_secret` 未配置时不要默认放行。
+
+推荐处理顺序：立即处理
+
+## ISSUE-003：sensor/push 低频手机传感器会直接写真实 user_profile
+
+状态：新发现
+
+严重度：P0：可能污染生产记忆、安全鉴权、真实关系状态
+
+问题描述：  
+`POST /sensor/push` 接收 steps/battery/location/screen_sessions 后直接写 `phone_sensor_log` 和 `phone_sensor_today` 到真实用户画像。该入口无鉴权、无 source、无 is_test/is_debug、无可信设备标记。一旦被调试脚本、错误客户端或外部请求命中，会污染 prompt 中的现实状态。
+
+证据：
+- `D:\ai\qq-st-bot\admin\routers\sensor.py:27`：`_save_sensor_to_profile(data)`。
+- `D:\ai\qq-st-bot\admin\routers\sensor.py:81`：`receive_sensor_data(body)` 无 `Depends(verify_token)`。
+- `D:\ai\qq-st-bot\admin\routers\sensor.py:118`：调用 `_save_sensor_to_profile(data)`。
+
+可能根因：  
+把低频手机传感器作为可信内网数据处理，没有 interaction contract 和测试隔离字段。
+
+影响范围：
+- 记忆
+- mobile
+- 后台健康数据
+- debug/test
+- 鉴权
+
+是否已有记录：  
+未在 `known-issues.md` 看到直接等价记录；`docs/sensor_event_protocol.md` 已提出 `privacy.allow_memory` 草案，但未落地。
+
+建议处理方式：  
+小 patch + 文档补充。入口应鉴权；数据应带 source/device_id/is_test/privacy；profile 写入应受 `can_write_memory` 或 `allow_memory` 控制。
+
+推荐处理顺序：立即处理
+
+## ISSUE-004：实时 sensor 快照为全局 last-writer-wins，desktop/mobile 会互相覆盖
+
+状态：新发现
+
+严重度：P1：多端状态不一致、重复写入、触发误判
+
+问题描述：  
+`realtime_state` 只存一个 `_snapshot`，`POST /sensor/realtime` 来自桌面 Rust sensor 或 Android 无障碍上下文时都会整体替换。`sensor_events.tick()` 只读这一份全局快照，所以桌面键鼠和手机屏幕上下文可能互相覆盖，导致主动触发误判来源。
+
+证据：
+- `D:\ai\qq-st-bot\core\memory\realtime_state.py:14`：单个 `_snapshot`。
+- `D:\ai\qq-st-bot\core\memory\realtime_state.py:18`：`update(payload)` 整体替换。
+- `D:\ai\qq-st-bot\core\scheduler\sensor_events.py:168`：`tick()` 读取 `realtime_state.get()`。
+- `D:\ai\Emerald-client\src-tauri\src\sensor\publisher.rs:43`：桌面 sensor 发布。
+- `D:\ai\yexuan_memery\android\app\src\main\kotlin\com\example\yexuan_memery\MobileNotificationService.kt:173`：Android 后台推屏幕上下文到同一接口。
+
+可能根因：  
+实时状态从单客户端设计扩展到多端后，没有按 source/device 分桶。
+
+影响范围：
+- 主动触发
+- mobile
+- desktop
+- 后台健康数据
+- broadcast
+
+是否已有记录：  
+`D:\ai\Emerald-client\docs\backend-integration.md` 已记录 `/sensor/realtime` 是“单字典内存覆盖，最后写入者赢”。本 issue 合并为跨仓库风险。
+
+建议处理方式：  
+受控重构。按 `source.device_type/client` 分桶，裁决时显式选择或合并快照；短期至少在文档标注 mobile/desktop 互斥风险。
+
+推荐处理顺序：本轮重构处理
+
+## ISSUE-005：屏幕上下文可能经 sensor_aware 回复进入长期记忆
+
+状态：新发现
+
+严重度：P0：可能污染生产记忆、安全鉴权、真实关系状态
+
+问题描述：  
+Android 无障碍会采集可见文字/可点击文字，后端将其传给 `sensor_judge` 和 `sensor_aware` prompt。虽然原始 realtime snapshot 不持久化，但如果 LLM 回复复述敏感屏幕内容，`record_assistant_turn(source=SENSOR)` 会写 assistant turn，并进入 mid_term/episodic/growth 链路。
+
+证据：
+- `D:\ai\yexuan_memery\android\app\src\main\kotlin\com\example\yexuan_memery\YexuanAccessibilityService.kt:43`：采集屏幕快照。
+- `D:\ai\qq-st-bot\admin\routers\sensor.py:182`：接收 `screen.visible_text/clickable_text`。
+- `D:\ai\qq-st-bot\core\scheduler\sensor_events.py:103`：构造 `screen_text_hint` / `screen_click_hint`。
+- `D:\ai\qq-st-bot\core\scheduler\sensor_judge.py:88`：将屏幕文本摘要写入裁决 prompt。
+- `D:\ai\qq-st-bot\core\scheduler\triggers\sensor_aware.py:471`：主动回复经 `record_assistant_turn()` 写入。
+- `D:\ai\qq-st-bot\core\pipeline.py:362`：所有 post_process 都 enqueue `summarize_to_midterm`。
+
+可能根因：  
+缺少 `privacy.tier`、`allow_memory` 和“敏感上下文不得复述/不得写记忆”的硬门。
+
+影响范围：
+- 记忆
+- 主动触发
+- mobile
+- desktop
+- debug/test
+
+是否已有记录：  
+`D:\ai\yexuan_memery\docs\sensor_event_protocol.md` 已建议 `ephemeral` 默认不进记忆；当前代码未实现。
+
+建议处理方式：  
+需要人工拍板 + 小 patch。先在 sensor_aware prompt 和 turn sink 上引入 `can_write_memory=false` 或只写非敏感摘要；敏感 app/text 默认不送 LLM 或不允许回复复述。
+
+推荐处理顺序：立即处理
+
+## ISSUE-006：调试/测试主动行为没有顶层 is_test/is_debug 隔离
+
+状态：新发现
+
+严重度：P1：多端状态不一致、重复写入、触发误判
+
+问题描述：  
+手机端能力页可以通过 `/mobile/push` 投递行为测试消息，payload 内带 `prompt_kind=debug_test` 和 `cooldown_key=debug:*`，但后端 mobile queue item 没有顶层 `is_test/is_debug`。这些消息不会写记忆，但会进入真实 mobile queue，被前台/后台当普通主动消息消费。
+
+证据：
+- `D:\ai\yexuan_memery\lib\main.dart:1703`：`pushMobileBehaviorTest()`。
+- `D:\ai\yexuan_memery\lib\main.dart:1725`：写 `prompt_kind: debug_test`。
+- `D:\ai\qq-st-bot\admin\routers\mobile.py:68`：`POST /mobile/push`。
+- `D:\ai\qq-st-bot\channels\mobile.py:75`：queue item 只写 `id/content/user_id/timestamp/behavior`。
+
+可能根因：  
+debug metadata 属于客户端私约定，没有提升为后端统一策略字段。
+
+影响范围：
+- mobile
+- debug/test
+- broadcast
+
+是否已有记录：  
+`D:\ai\yexuan_memery\README.md` 记录能力检查页测试能力；未见隔离风险记录。
+
+建议处理方式：  
+文档补充 + 小 patch。`/mobile/push` 接收并保存 `is_test/is_debug`，客户端 UI 明确标注；测试消息默认不参与普通通知冷却统计或有专用调试通道。
+
+推荐处理顺序：本轮重构处理
+
+## ISSUE-007：Watch 健康入口 secret 可为空导致不鉴权
+
+状态：新发现
+
+严重度：P0：可能污染生产记忆、安全鉴权、真实关系状态
+
+问题描述：  
+`_watch_secret()` 未配置时返回空字符串，`receive_watch_event()` 只有在 expected 非空且不匹配时才拒绝。结果是 watch_secret 缺省时，任何请求都可提交心率/睡眠事件，触发高优先级主动消息并写 profile/assistant 记忆。
+
+证据：
+- `D:\ai\qq-st-bot\admin\routers\watch.py:164`：未配置返回空字符串。
+- `D:\ai\qq-st-bot\admin\routers\watch.py:190`：只有 `expected and secret != expected` 时拒绝。
+- `D:\ai\qq-st-bot\admin\routers\watch.py:251`：心率事件写 profile。
+- `D:\ai\qq-st-bot\core\scheduler\triggers\watch.py:8`：watch 事件可触发主动发言。
+
+可能根因：  
+iPhone 捷径易用性优先，安全默认值偏宽。
+
+影响范围：
+- 记忆
+- 情绪
+- 主动触发
+- 后台健康数据
+- 鉴权
+
+是否已有记录：  
+`D:\ai\qq-st-bot\AAWatch配置指南.md` 记录配置方式；未见“未配置即开放”的风险记录。
+
+建议处理方式：  
+小 patch。未配置 secret 时拒绝外部写入，或只允许 localhost；文档明确 watch_secret 必填。
+
+推荐处理顺序：立即处理
+
+## ISSUE-008：客户端硬编码 admin token
+
+状态：已有记录
+
+严重度：P1：多端状态不一致、重复写入、触发误判
+
+问题描述：  
+Emerald-client、Flutter 前台和 Android 后台服务均硬编码 `Emerald1231`。token 改动会导致多端失联；源码暴露也不适合长期使用。
+
+证据：
+- `D:\ai\Emerald-client\src\shared\api\backend.ts:5`：`ADMIN_TOKEN`。
+- `D:\ai\Emerald-client\src-tauri\src\sensor_config.rs:15`：`DEFAULT_ADMIN_TOKEN`。
+- `D:\ai\yexuan_memery\lib\main.dart:1927`：`_adminToken`。
+- `D:\ai\yexuan_memery\android\app\src\main\kotlin\com\example\yexuan_memery\MobileNotificationService.kt:26`：后台服务 token。
+
+可能根因：  
+单用户本地开发阶段为方便调试把 token 固化在客户端。
+
+影响范围：
+- mobile
+- desktop
+- 鉴权
+
+是否已有记录：  
+重复来源：`D:\ai\Emerald-client\docs\known-issues.md` 的 “P2：admin token 硬编码”；`D:\ai\Emerald-client\docs\backend-integration.md`。
+
+建议处理方式：  
+受控重构。改为本机配置、首次配对、系统 keychain/Android Keystore，或后端本机专用短期 token。
+
+推荐处理顺序：本轮重构处理
+
+## ISSUE-009：桌面 WS action 会成功 ack 但未执行
+
+状态：已有记录
+
+严重度：P1：多端状态不一致、重复写入、触发误判
+
+问题描述：  
+Emerald-client 收到 `action` 后立刻回 `ok:true`，但没有真正执行 `open_url/minimize_window/notify/pet_emote/execute`。后端会认为桌面动作成功，角色可能在下一轮基于“已执行”继续互动。
+
+证据：
+- `D:\ai\Emerald-client\src\shared\api\ws.ts:91`：收到 `action`。
+- `D:\ai\Emerald-client\src\shared\api\ws.ts:93`：立即 ack `ok:true`。
+- `D:\ai\qq-st-bot\channels\desktop.py:47`：后端等待 action ack。
+- `D:\ai\qq-st-bot\core\tool_dispatcher.py:176`：桌面工具等待 ack 成功即返回 ok。
+
+可能根因：  
+legacy WS 协议先接通，action executor 未迁入新 Tauri 客户端。
+
+影响范围：
+- desktop
+- broadcast
+- 主动触发
+
+是否已有记录：  
+重复来源：`D:\ai\Emerald-client\docs\known-issues.md` “P1：WebSocket action 会回成功 ack，但没有执行动作”。
+
+建议处理方式：  
+小 patch。未实现 executor 前 ack `ok:false`，或按 capabilities 告诉后端 action 不可用。
+
+推荐处理顺序：立即处理
+
+## ISSUE-010：desktop/mobile/QQ 客户端协议与字段不统一
+
+状态：已有记录 / 新发现合并
+
+严重度：P1：多端状态不一致、重复写入、触发误判
+
+问题描述：  
+desktop WS 使用 `channel_message/action` legacy 协议；mobile queue 使用 `id/content/user_id/timestamp/behavior`；HTTP chat 返回 `reply/emotion/affection/level/turn_id?`；QQ 直接发文本，不消费 channel envelope。缺少统一字段导致去重、来源、priority、trigger、behavior、test/debug 等信息在不同端表现不一致。
+
+证据：
+- `D:\ai\Emerald-client\src\shared\api\ws.ts:87`：desktop `channel_message`。
+- `D:\ai\qq-st-bot\channels\mobile.py:82`：mobile queue item schema。
+- `D:\ai\qq-st-bot\admin\routers\chat.py:80`：desktop/mobile chat response 增加 `turn_id/critical_written`。
+- `D:\ai\qq-st-bot\core\output\text_output.py:17`：QQ 直接文本发送。
+
+可能根因：  
+三端分阶段接入，后端已有 turn sink 但尚未形成统一 Interaction Contract。
+
+影响范围：
+- mobile
+- desktop
+- QQ
+- broadcast
+- debug/test
+
+是否已有记录：  
+重复来源：`D:\ai\Emerald-client\docs\known-issues.md` 的 v1 WS 协议不一致、HTTP `/desktop/chat` 仍在使用；本轮补充 mobile/QQ 字段不统一。
+
+建议处理方式：  
+需要人工拍板。先文档确认 legacy 过渡期字段，再设计 v1 envelope。
+
+推荐处理顺序：本轮重构处理
+
+## ISSUE-011：mobile_queue 缺少 trigger/priority/ttl，后台通知无法区分紧急程度
+
+状态：已有记录 / 新发现合并
+
+严重度：P1：多端状态不一致、重复写入、触发误判
+
+问题描述：  
+后端写入 mobile queue 时只保存基础字段和可选 behavior，普通 scheduler 主动消息没有 `trigger`、`priority`、`ttl`。手机端 README 已指出当前主动消息最高只按普通通知处理，无法根据心率/生日/普通碎碎念等来源决定通知强度。
+
+证据：
+- `D:\ai\qq-st-bot\channels\mobile.py:82`：queue item 字段。
+- `D:\ai\yexuan_memery\README.md` “当前 `mobile_queue` 只有 `content/user_id/timestamp`，没有优先级或 trigger 元数据”。
+- `D:\ai\yexuan_memery\android\app\src\main\kotlin\com\example\yexuan_memery\MobileNotificationService.kt:274`：后台仅按 behavior/通知闸门处理。
+
+可能根因：  
+mobile channel 先实现主动消息文本投递，未同步后端 trigger 元数据。
+
+影响范围：
+- mobile
+- 主动触发
+- 后台健康数据
+- broadcast
+
+是否已有记录：  
+重复来源：`D:\ai\yexuan_memery\README.md` 通知与主动消息部分。
+
+建议处理方式：  
+小 patch。`MobileChannel.send()` 支持 trigger/priority/ttl；`turn_sink` fanout 时透传。
+
+推荐处理顺序：本轮重构处理
+
+## ISSUE-012：slow_queue 不持久化，进程退出会丢失总结/反思/成长任务
+
+状态：已有记录 / 待确认
+
+严重度：P1：多端状态不一致、重复写入、触发误判
+
+问题描述：  
+关键写入已同步，但 mid_term、episodic、growth、consistency_check、profile_update 等慢任务在内存队列中。进程退出会丢失未执行慢任务，导致下一轮上下文缺少中期/长期归纳。文档称“不持久化队列（进程退出丢失，有意设计）”，但在跨端主动触发增多后风险升高。
+
+证据：
+- `D:\ai\qq-st-bot\core\post_process\slow_queue.py:31`：`enqueue()` 只进内存队列。
+- `D:\ai\qq-st-bot\core\post_process\slow_queue.py:91`：单 worker。
+- `D:\ai\qq-st-bot\ARCHITECTURE.md` Pipeline post_process 段记录“不持久化队列（进程退出丢失，有意设计）”。
+
+可能根因：  
+关键路径响应速度优先，慢任务可靠性未升级为持久队列。
+
+影响范围：
+- 记忆
+- 主动触发
+- debug/test
+
+是否已有记录：  
+架构文档已有行为记录，但未作为 issue；本轮作为风险项收敛。
+
+建议处理方式：  
+需要人工拍板。短期保留设计但加入观测；中期可把 slow_queue task 持久化或在 event_log 上做补偿扫尾。
+
+推荐处理顺序：后续处理
+
+## ISSUE-013：花园写入缺少 safe_write 和专用锁
+
+状态：已有记录
+
+严重度：P1：多端状态不一致、重复写入、触发误判
+
+问题描述：  
+花园 `plants.json/storage.json` 写入使用普通 `Path.write_text()`，有 `garden_water`、`garden_daily`、`water_garden` 多条写路径。用户催浇花与 scheduler 扫描并发时可能发生覆盖。
+
+证据：
+- `D:\ai\qq-st-bot\core\garden\manager.py:30`：`_save()` 使用 `path.write_text()`。
+- `D:\ai\qq-st-bot\core\garden\manager.py:170`：自动浇水。
+- `D:\ai\qq-st-bot\core\garden\manager.py:191`：被动浇水。
+- `D:\ai\qq-st-bot\core\garden\manager.py:203`：每日扫描。
+
+可能根因：  
+花园先作为伴生状态快速落地，尚未接入记忆系统同级别的锁和原子写。
+
+影响范围：
+- 花园
+- 主动触发
+
+是否已有记录：  
+重复来源：`D:\ai\qq-st-bot\docs\known-issues.md` G2；`D:\ai\qq-st-bot\docs\garden.md` 当前边界。
+
+建议处理方式：  
+小 patch。增加 garden 专用锁，使用 `safe_write_json()`。
+
+推荐处理顺序：本轮重构处理
+
+## ISSUE-014：花园 dry/gift/ask 分支仍留在 harvest，可能二次过期
+
+状态：已有记录
+
+严重度：P2：文档不一致、维护困难、轻微行为异常
+
+问题描述：  
+`daily_check()` 中 `vase` 会把花移出 harvest，但 `dry/gift/ask` 只标记状态或 note，仍留在 harvest。之后过期扫描可能再把同一朵花按 `harvest_expired` 处理。
+
+证据：
+- `D:\ai\qq-st-bot\core\garden\manager.py:224`：遍历 harvest handle。
+- `D:\ai\qq-st-bot\core\garden\manager.py:238`：`dry` 仅改 `status=dried`。
+- `D:\ai\qq-st-bot\core\garden\manager.py:249`：`gift` 仅写 `gifted_note`。
+- `D:\ai\qq-st-bot\core\garden\manager.py:257`：只有 `harvest_to_remove` 被移除。
+
+可能根因：  
+harvest 生命周期容器设计未定。
+
+影响范围：
+- 花园
+- 主动触发
+
+是否已有记录：  
+重复来源：`D:\ai\qq-st-bot\docs\known-issues.md` G4；`D:\ai\qq-st-bot\docs\garden.md` 当前边界。
+
+建议处理方式：  
+需要人工拍板。明确 dry/gift/ask 最终状态容器。
+
+推荐处理顺序：后续处理
+
+## ISSUE-015：fetch_context 读写竞态仍存在，跨端输入增多会放大
+
+状态：已有记录
+
+严重度：P1：多端状态不一致、重复写入、触发误判
+
+问题描述：  
+`fetch_context()` 不持 `uid_lock`，已知用户极短时间连发时可能读到上一轮尚未 capture 的旧状态。desktop/mobile owner 入口现在用 `conversation_lock` 包住整个 turn，但 QQ 主入口只靠 message_queue 按 QQ session 串行；scheduler/trigger 和 QQ/user 输入之间仍需看 `turn_sink` 覆盖情况。
+
+证据：
+- `D:\ai\qq-st-bot\core\pipeline.py:73`：`fetch_context()` 读取多层记忆。
+- `D:\ai\qq-st-bot\docs\known-issues.md` B11：明确记录 fetch_context 读写竞态。
+- `D:\ai\qq-st-bot\admin\routers\chat.py:45`：owner 入口使用 `conversation_lock`。
+- `D:\ai\qq-st-bot\main.py:308`：QQ post_process 异步。
+
+可能根因：  
+为了响应速度，没有给 fetch 阶段加 uid_lock；新旧入口串行策略不一致。
+
+影响范围：
+- 记忆
+- 情绪
+- mobile
+- desktop
+- QQ
+
+是否已有记录：  
+重复来源：`D:\ai\qq-st-bot\docs\known-issues.md` B11。
+
+建议处理方式：  
+受控重构。先迁移所有入口到 `turn_sink`/conversation gate，再评估是否需要 fetch 阶段锁或 per-uid 输入队列。
+
+推荐处理顺序：本轮重构处理
+
+## ISSUE-016：核心情景记忆上限裁剪未保护 is_core
+
+状态：已有记录
+
+严重度：P0：可能污染生产记忆、安全鉴权、真实关系状态
+
+问题描述：  
+情景记忆自动写入超过上限时按 strength 删除低分条目，没有排除 `is_core=True`。这可能删除对真实关系非常关键的核心记忆。
+
+证据：
+- `D:\ai\qq-st-bot\docs\known-issues.md` B12。
+- `D:\ai\qq-st-bot\docs\memory.md` 情景记忆上限段说明该缺口。
+
+可能根因：  
+核心记忆保护只在部分清理路径实现，自动写入裁剪路径未同步。
+
+影响范围：
+- 记忆
+- 主动触发
+
+是否已有记录：  
+重复来源：`D:\ai\qq-st-bot\docs\known-issues.md` B12。
+
+建议处理方式：  
+小 patch。
+
+推荐处理顺序：立即处理
+
+## ISSUE-017：部分 data/debug 路径仍绕过 sandbox
+
+状态：已有记录 / 新发现合并
+
+严重度：P1：多端状态不一致、重复写入、触发误判
+
+问题描述：  
+项目规则要求 data 路径走 `core.sandbox.get_paths()`。已知还有少量 legacy `Path("data/...")`。本轮额外确认 `llm_output_validator` 使用 `Path("data/debug/llm_output")`，测试模式下可能写入生产 `data/debug`。
+
+证据：
+- `D:\ai\qq-st-bot\docs\known-issues.md` S1。
+- `D:\ai\qq-st-bot\core\llm_output_validator.py:8`：`_DEBUG_DIR = Path("data/debug/llm_output")`。
+- `D:\ai\qq-st-bot\core\sandbox.py:33`：test 模式应进入 `data/test_sandbox/{session}`。
+
+可能根因：  
+早期 debug/配置类路径未纳入 DataPaths。
+
+影响范围：
+- debug/test
+- 记忆
+
+是否已有记录：  
+重复来源：`D:\ai\qq-st-bot\docs\known-issues.md` S1；本轮补充具体 debug 路径。
+
+建议处理方式：  
+小 patch。给 DataPaths 增加 debug llm 输出路径。
+
+推荐处理顺序：本轮重构处理
+
+## ISSUE-018：memory 类工具已注册但正式主 LLM 不能自动调用
+
+状态：已有记录
+
+严重度：P2：文档不一致、维护困难、轻微行为异常
+
+问题描述：  
+`read_diary/read_watch/search_diary/get_profile/get_episodic/get_growth` 已注册，但探针只覆盖 `info + desktop`，主 LLM 没有工具调用回合。Author's Note 中若要求调用 diary/watch 工具，当前没有真实执行通道。
+
+证据：
+- `D:\ai\qq-st-bot\docs\known-issues.md` F11。
+- `D:\ai\qq-st-bot\docs\tools.md` memory 类工具说明。
+- `D:\ai\qq-st-bot\main.py:229`：探针只取 `categories=["info", "desktop"]`。
+
+可能根因：  
+工具注册表先扩展，正式工具回合未接入。
+
+影响范围：
+- 记忆
+- 后台健康数据
+- QQ
+- mobile
+- desktop
+
+是否已有记录：  
+重复来源：`D:\ai\qq-st-bot\docs\known-issues.md` F11。
+
+建议处理方式：  
+需要人工拍板。二选一：正式 LLM 工具回合，或把允许的 memory 工具加入 pre-pipeline 探针。
+
+推荐处理顺序：后续处理
+
+## ISSUE-019：客户端侧高危动作边界依赖行为字符串推断
+
+状态：新发现 / 待确认
+
+严重度：P1：多端状态不一致、重复写入、触发误判
+
+问题描述：  
+手机端后台通知会根据 `kind/delivery/level/behavior_id` 字符串推断 lock/order/overlay。虽然当前锁屏和外卖都保留确认，但后端没有统一 `allowed_actions/blocked_actions/risk/requires_confirmation` 的强 schema，普通 behavior 字段只要包含 lock/order 等词就会进入高强度 UI。
+
+证据：
+- `D:\ai\yexuan_memery\android\app\src\main\kotlin\com\example\yexuan_memery\MobileNotificationService.kt:298`：`overlayRequestFor()`。
+- `D:\ai\yexuan_memery\lib\main.dart:2288`：前台 `_handleForegroundBehavior()` 也按 kind/behaviorId 推断。
+- `D:\ai\qq-st-bot\core\scheduler\triggers\sensor_aware.py:263`：后端 action packet 仅 `{action_type, params}`。
+
+可能根因：  
+行为 metadata 仍处于过渡版和阶段 6/7 版并存，没有固定 contract。
+
+影响范围：
+- mobile
+- 主动触发
+- 鉴权
+
+是否已有记录：  
+`D:\ai\yexuan_memery\README.md` 记录手机端执行边界；未见作为 issue 去重。
+
+建议处理方式：  
+需要人工拍板。定义 behavior schema，强制 `requires_confirmation/risk/allowed_actions`，客户端不得仅靠字符串升级能力。
+
+推荐处理顺序：本轮重构处理
+
+## ISSUE-020：重复 `/chat` 路由存在鉴权语义混乱
+
+状态：新发现 / 待确认
+
+严重度：P2：文档不一致、维护困难、轻微行为异常
+
+问题描述：  
+`admin/routers/chat.py` 中有两个 `@router.post("/chat")`：`frontend_chat()` 带 `verify_token`，`unified_chat()` 没有显式鉴权。FastAPI 对重复 path/method 的实际匹配顺序需要代码运行确认，但文档和维护层面已经存在明显歧义。
+
+证据：
+- `D:\ai\qq-st-bot\admin\routers\chat.py:140`：`frontend_chat(body, auth=Depends(verify_token))`。
+- `D:\ai\qq-st-bot\admin\routers\chat.py:322`：`unified_chat(request, body=Body(...))`。
+
+可能根因：  
+旧入口叠加，新旧接口没有清理或改名。
+
+影响范围：
+- desktop
+- mobile
+- QQ
+- 鉴权
+- 文档一致性
+
+是否已有记录：  
+未在 known-issues 中看到直接记录。
+
+建议处理方式：  
+小 patch，但需人工确认哪个 `/chat` 是权威入口。至少文档标注冻结/废弃，或改路径/补鉴权。
+
+推荐处理顺序：本轮重构处理
+
+## 去重摘要
+
+本轮共整理 20 个主 issue。
+
+新发现：
+- ISSUE-002、003、004、005、006、007、019、020
+
+已有记录合并：
+- ISSUE-001、008、009、010、011、013、014、015、016、017、018
+
+待确认/设计取舍：
+- ISSUE-012、019、020
+
+最危险的 5 个问题：
+
+1. ISSUE-002：无鉴权/弱鉴权写生产状态入口。
+2. ISSUE-005：屏幕上下文可能经主动回复进入长期记忆。
+3. ISSUE-001：assistant turn 未完全统一出口。
+4. ISSUE-007：Watch secret 可为空导致健康事件不鉴权。
+5. ISSUE-003：`/sensor/push` 可直接污染 user_profile。
+
+不建议 Codex 自动修改：
+- ISSUE-001：涉及 QQ 是否多端广播、legacy 入口去留，需要 Claude/用户定策略。
+- ISSUE-002/007：安全默认值会影响现有手机、桌面、Watch 调试方式，需要先定兼容策略。
+- ISSUE-005/019：涉及隐私边界和主动行为产品定义，需要人工拍板。
+- ISSUE-020：重复 `/chat` 可能有历史依赖，删除或改名前要确认调用方。

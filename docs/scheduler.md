@@ -30,6 +30,63 @@ core/scheduler/triggers/     ← 各触发器独立文件
 
 每 60 秒检查一次，所有触发器通过 `asyncio.gather` 并发执行，`return_exceptions=True` 保证单个触发器报错不影响其他。
 
+Phase 2 Step 2 已接入 gating 并行观测：每个 tick 先由 `core/scheduler/gating.py`
+按当前状态机状态和冷却读一遍候选，向 `data/logs/gating_shadow.jsonl` 写入
+“如果由 gating 决策会选谁”。这一步不调用 `_pipeline_send`，不 `_mark`，不改变旧触发器真实发送路径。
+
+```
+owner turn ──notify_owner_turn──→ state_machine
+sensor tick ─feed_sensor_tick───→ state_machine
+                                  ↓
+loop.py tick ──gating shadow log──→ logs/gating_shadow.jsonl
+        └────旧触发器 asyncio.gather──→ 原真实发送路径
+```
+
+---
+
+## 触发状态机（Phase 2 Step 1）
+
+`core/scheduler/state_machine.py` 维护每个 uid 的三态：
+
+| 状态 | 含义 |
+|---|---|
+| `CHATTING` | 最近收到 owner turn，主动触发器应在后续 gating 接管时静默 |
+| `QUIET` | 安静期，主动触发器可作为候选 |
+| `RESTLESS` | sensor 事件频繁，后续由 sensor_aware 优先 |
+
+当前状态机只观测不干预。入口：
+
+- `main.py` 收到 owner 的 QQ turn 后调用 `notify_owner_turn(uid)`
+- `admin/routers/chat.py` 的 owner 对话入口调用 `notify_owner_turn(uid)`
+- `loop.py` 在 `sensor_aware` tick 后读取现有审计结果里的候选数，调用 `feed_sensor_tick(uid, count)`
+
+状态持久化在 `data/scheduler_state.json` 的 `trigger_state` 段，不覆盖原有 `triggers` /
+`last_diary_share`。每次状态切换追加到 `data/logs/trigger_state.jsonl`。
+
+`CHATTING → QUIET` 的滞后按会话 owner turn 数和 `mood_state.get_intensity()` 动态计算；
+`QUIET ↔ RESTLESS` 按 sensor 事件率和持续时间确认，避免短暂鼠标/键盘动作造成状态抖动。
+
+---
+
+## Gating 并行观测（Phase 2 Step 2）
+
+`core/scheduler/gating.py` 定义 `TriggerProposal` 并实现 `collect_and_decide(uid, proposals)`：
+
+1. 过滤 `requires_state` 不包含当前状态的候选，`bypass_state_machine=True` 跳过此过滤
+2. 过滤冷却未到的候选，冷却仍沿用 `loop.py` 的 `_COOLDOWNS` / `_is_ready`
+3. 多候选按 `urgency` 选最高者
+4. 一个 tick 最多返回一条候选
+
+当前仍处于 shadow 模式。`_adapt_legacy_triggers(uid)` 只是临时桥接：不改触发器本体，
+只把 `_is_ready` 已 ready 的旧触发器包装成 proposal，高优先级 urgency=0.9，低优先级
+urgency=0.5。真实发送仍由旧 `_check_*()` 触发器自己决定。
+
+shadow log 格式：
+
+```json
+{"ts": 1748000000.0, "uid": "1043484516", "state": "QUIET", "candidates": [], "would_pick": null, "reason": "no_candidates"}
+```
+
 ---
 
 ## Pipeline 注入方式
@@ -139,11 +196,20 @@ birthday_midnight / birthday_eve / birthday_afternoon / birthday_night / period_
     "morning_greeting": 1748000000.0,
     "random_message": 1748003600.0
   },
-  "last_diary_share": 1748001234.0
+  "last_diary_share": 1748001234.0,
+  "trigger_state": {
+    "1043484516": {
+      "state": "QUIET",
+      "since_ts": 1748003600.0,
+      "last_owner_turn_ts": 1748003000.0,
+      "session_turn_count": 0
+    }
+  }
 }
 ```
 
 启动时自动恢复（`_load_scheduler_state()` 在模块导入时执行），重启不丢失冷却状态。
+状态机启动时同样从 `trigger_state` 段恢复自己的状态。
 
 ---
 

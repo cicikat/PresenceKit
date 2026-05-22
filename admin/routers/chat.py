@@ -41,6 +41,12 @@ async def run_owner_chat_turn(message: str, channel_name: str) -> dict:
     user_id = str(get_config().get("scheduler", {}).get("owner_id", "owner"))
     if not user_id:
         raise HTTPException(status_code=503, detail="owner_id 未配置")
+    try:
+        from core.scheduler.state_machine import notify_owner_turn
+
+        notify_owner_turn(user_id)
+    except Exception:
+        logger.exception("[owner_chat] trigger state notify_owner_turn 失败")
 
     from core.conversation_gate import conversation_lock
 
@@ -72,6 +78,7 @@ async def run_owner_chat_turn(message: str, channel_name: str) -> dict:
             user_text=message,
             fanout="all",
             bypass_gate=True,
+            exclude_origin_channel=channel_name,
             pipeline=pipeline,
         )
 
@@ -296,6 +303,12 @@ async def desktop_trigger(body: dict):
     user_id = str(get_config().get("scheduler", {}).get("owner_id", ""))
     if not user_id:
         raise HTTPException(status_code=503, detail="owner_id 未配置")
+    try:
+        from core.scheduler.state_machine import notify_owner_turn
+
+        notify_owner_turn(user_id)
+    except Exception:
+        logger.exception("[desktop_trigger] trigger state notify_owner_turn 失败")
 
     context = await pipeline.fetch_context(user_id, message)
     messages, _ = pipeline.build_prompt(user_id, message, context, channel="desktop")
@@ -317,62 +330,6 @@ async def desktop_trigger(body: dict):
         )
 
     return {"status": "sent"}
-
-
-@router.post("/chat")
-async def unified_chat(request: Request, body: dict = Body(...)):
-    """
-    统一对话接口，channel字段决定回复走哪里。
-    channel: desktop/qq（默认desktop）
-    """
-    from channels.registry import get
-    from channels.desktop import DesktopChannel
-
-    channel_name = body.get("channel", "desktop")
-    message = body.get("message", "")
-    if not message:
-        return {"error": "message不能为空"}
-
-    # 激活对应通道
-    channel = get(channel_name)
-    if channel and hasattr(channel, "set_active"):
-        channel.set_active(True)
-
-    # 走完整pipeline
-    from core.pipeline_registry import get as get_pipeline
-    pipeline = get_pipeline()
-    if not pipeline:
-        return {"error": "pipeline未初始化"}
-
-    from core.config_loader import get_config
-    cfg = get_config()
-    owner_id = str(cfg.get("scheduler", {}).get("owner_id", ""))
-    if not owner_id:
-        return {"error": "owner_id未配置"}
-
-    try:
-        context = await pipeline.fetch_context(owner_id, message)
-        messages, _ = pipeline.build_prompt(owner_id, message, context, channel=channel_name)
-        reply = await pipeline.run_llm(messages)
-        if not reply:
-            return {"reply": "", "emotion": "neutral"}
-
-        from core import llm_client
-        emotion = await llm_client.detect_emotion(reply)
-
-        import asyncio
-        asyncio.create_task(pipeline.post_process(owner_id, message, reply))
-
-        # 如果是desktop通道，同时写队列让桌宠显示
-        if channel_name == "desktop":
-            desktop = get("desktop")
-            if desktop:
-                await desktop.send(reply, owner_id)
-
-        return {"reply": reply, "emotion": emotion, "affection": 0, "level": ""}
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).warning(f"[desktop_chat] 探针异常: {e}")
 
 
 @router.post("/desktop/activate", summary="桌宠上线激活desktop通道（无鉴权）")

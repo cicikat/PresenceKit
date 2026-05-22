@@ -1,0 +1,49 @@
+# core/scheduler/policy.yaml
+# Phase 2 触发器决策层参数
+# 改完保存 → 调度器下一个 tick（60s 内）自动 reload，不需要重启
+
+state_machine:
+  # 聊天中 → 安静期：基础延迟（分钟）
+  # 增大 = 叶瑄更"守着"，对话间隙不容易主动开口
+  # 减小 = 叶瑄更"主动"，对话刚停就可能 ping
+  chat_to_quiet_base_minutes: 5
+
+  chat_to_quiet_duration_factor:
+    # 按本次会话 owner turn 数调整 base
+    short:        { max_turns: 3,   factor: 0.6 }   # 短聊完很快走
+    normal:       { max_turns: 10,  factor: 1.0 }
+    long:         { max_turns: 20,  factor: 1.4 }
+    deep:         { max_turns: 999, factor: 1.8 }   # 深聊给足喘息
+
+  chat_to_quiet_emotion_factor:
+    # 按 mood_state.intensity 调整 base
+    # 高情绪后她可能需要独处，提前切到安静期
+    high:    { min_intensity: 0.7, factor: 0.5 }
+    medium:  { min_intensity: 0.4, factor: 0.8 }
+    low:     { min_intensity: 0.0, factor: 1.0 }
+
+  # 安静期 → 躁动期：sensor 事件率门槛
+  quiet_to_active_events_per_window: 5
+  quiet_to_active_window_minutes: 3
+  quiet_to_active_persist_minutes: 1   # 持续多久才确认切换
+
+  # 躁动期 → 安静期：回切冷静时间（分钟）
+  active_to_quiet_base_minutes: 10
+  active_to_quiet_after_recent_chat_minutes: 5   # 30分钟内有聊过 → 缩短到这个值
+
+topic_weights:
+  # 安静期触发时从哪源拉话题，按权重加权抽
+  # 调高 = 这类话题更容易被选中
+  baseline:
+    last_mentioned: 0.40   # 上次未完结话题（最贴上下文）
+    episodic:       0.25   # 情景记忆召回（高 strength）
+    diary:          0.15
+    mood_match:     0.15
+    random:         0.05   # 兜底，避免完全可预测
+
+  emotion_high:   # mood_state.intensity ≥ 0.7 时用这套
+    last_mentioned: 0.55
+    episodic:       0.30
+    diary:          0.05
+    mood_match:     0.05
+    random:         0.05

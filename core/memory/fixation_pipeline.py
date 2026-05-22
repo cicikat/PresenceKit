@@ -94,6 +94,41 @@ _GROWTH_SYSTEM_TEMPLATE = """\
 - 不超过 200 字
 - 禁止动作描写和对白"""
 
+_IDENTITY_SYSTEM_PROMPT = """\
+你是一个客观分析器，负责归纳用户的稳定行为模式。
+你不是任何角色，不要带角色立场。
+你将看到一份"旧版印象"和一些"最近发生的事"，请基于这些，
+输出 8 个维度的最新判断。
+
+8 个维度：
+- trust_pattern（信任建立模式）
+- emotion_expression（情绪表达方式）
+- help_seeking（求助风格）
+- stress_response（压力反应模式）
+- intimacy_comfort（亲密舒适度）
+- sleep_pattern（作息模式）
+- topic_preference（话题偏好）
+- self_relation（自我关系）
+
+规则：
+1. 每个维度的 text 字段必须是第三人称"她"开头的短句，30-60 字，自然口语，不要心理学术语。
+2. 严禁出现具体日期、时间戳、"上周""3 月 15 日"等时间锚点。可以用"经常""偶尔""有时"等频次词。
+3. 如果某个维度没有新证据或证据不足以判断，沿用旧版本的 text 不动，last_updated 可以保留旧值。如果是全新维度从未判断过，text 留空字符串。
+4. confidence 是你对此判断的把握度（0-1）。把握度低就写低，不要硬给高分。
+5. evidence_count 是你"看到了多少条相关 episode 才得出这个结论"，老实给数字。
+6. 只把"跨多条 episode 反复出现"的特征写成模式。如果某个特征只在一两条 episode 里出现过，不要写成稳定人格，宁可留空或保持旧判断。
+7. 用户的单次情绪爆发、玩笑、自嘲、角色扮演式表达，不得固化为稳定人格。判断标准不是"这次是不是认真的"（你无法判断），而是"这个特征是否反复出现"。只出现一次的，一律不固化。
+8. 如果新证据与旧版印象冲突（比如旧版说"慢热"，但最近多次快速信任），不要直接推翻旧判断，而是：保留 text 但降低 confidence，并在返回的 counter_evidence_count 里反映冲突次数。让矛盾积累，而不是非黑即白地翻转。你报告的 counter_evidence_count 只需反映【本批新证据中】与旧判断冲突的次数，不需要累加历史——历史累积由系统负责。
+9. 如果你判断旧版印象的某个维度已经明显不再成立（新证据反复与之相反），不要继续保留旧 text，直接基于新证据重写该维度的 text，并把 counter_evidence_count 报告为 0（视为建立了全新判断）。
+
+输出严格 JSON，结构：
+{
+  "trust_pattern": {"text": "...", "confidence": 0.7, "evidence_count": 12, "counter_evidence_count": 2},
+  "emotion_expression": {...},
+  ...
+}
+不要输出任何 JSON 之外的文字。"""
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # fixation_state 读写
@@ -469,9 +504,8 @@ async def reflect_to_episodic(
 
     # uid_lock 释放后检查阈值
     if _should_consolidate(state):
-        char_name = _char_name()
-        slow_queue.enqueue("consolidate_to_growth", {"uid": uid, "char_name": char_name})
-        logger.info(f"[fixation] consolidate_to_growth 已入队: uid={uid}")
+        slow_queue.enqueue("consolidate_to_identity", {"uid": uid})
+        logger.info(f"[fixation] consolidate_to_identity 已入队: uid={uid}")
 
     duration_ms = int((time.time() - _ts_start) * 1000)
     _log_fixation("reflect_to_episodic", uid, {
@@ -533,6 +567,129 @@ async def _synthesize_growth(
             continue
         result = _raw
         break
+
+    return result
+
+
+async def _synthesize_identity(
+    uid: str,
+    old_identity: dict,
+    new_episodes: list[dict],
+    user_profile_data: dict,
+    llm_client,
+) -> dict | None:
+    """
+    输入旧 identity + 待固化 episodic 列表，调 LLM 输出新 identity dict。
+    计算最终 confidence（含反例惩罚），不做文件 IO。
+    LLM 输出格式错误返回 None，由调用方降级处理。
+    """
+    from core.memory.user_identity import IDENTITY_DIMENSIONS
+    from core.llm_output_validator import record_failure as _rf
+
+    # 格式化旧 identity
+    if old_identity:
+        old_lines = []
+        for key, label in IDENTITY_DIMENSIONS:
+            dim = old_identity.get(key)
+            if dim and dim.get("text"):
+                conf = dim.get("confidence", 0.0)
+                old_lines.append(f"- {label}：{dim['text']}（把握度 {conf:.2f}）")
+        old_identity_formatted = "\n".join(old_lines) or "（无旧版印象，请基于新证据初次归纳）"
+    else:
+        old_identity_formatted = "（无旧版印象，请基于新证据初次归纳）"
+
+    # 格式化 episodes
+    episodes_lines = []
+    for ep in new_episodes:
+        summary = ep.get("narrative_summary") or ep.get("summary", "（无摘要）")
+        emotion = ep.get("emotion_peak", "neutral")
+        strength = ep.get("strength", 0.5)
+        episodes_lines.append(f"- {summary}（情绪: {emotion}，强度: {strength:.2f}）")
+    episodes_formatted = "\n".join(episodes_lines)
+
+    # 格式化 user profile
+    profile_lines = [
+        f"- {k}: {v}"
+        for k, v in user_profile_data.items()
+        if isinstance(v, str) and v
+    ]
+    user_profile_formatted = "\n".join(profile_lines) if profile_lines else "（暂无基本信息）"
+
+    user_content = (
+        f"旧版印象：\n{old_identity_formatted}\n\n"
+        f"用户基本事实（仅供参考，这些不是行为模式）：\n{user_profile_formatted}\n\n"
+        f"最近发生的事（共 {len(new_episodes)} 条）：\n{episodes_formatted}"
+    )
+
+    _fail_key = f"consolidate_to_identity_{uid}"
+    _last_raw = ""
+    data = None
+
+    for attempt in range(3):
+        suffix = "" if attempt == 0 else "\n\n上次输出格式不符，请严格只输出 JSON，不要有任何其他文字。"
+        _last_raw = await llm_client.chat(
+            [
+                {"role": "system", "content": _IDENTITY_SYSTEM_PROMPT},
+                {"role": "user", "content": user_content + suffix},
+            ],
+            max_tokens_override=2000,
+        )
+        _last_raw = (_last_raw or "").strip()
+        try:
+            cleaned = re.sub(r"```json|```", "", _last_raw).strip()
+            candidate = json.loads(cleaned)
+            if isinstance(candidate, dict) and candidate:
+                if all(
+                    isinstance(v, dict) and {"text", "confidence", "evidence_count"} <= v.keys()
+                    for v in candidate.values()
+                ):
+                    data = candidate
+                    break
+        except Exception:
+            pass
+
+    if data is None:
+        _rf(_fail_key, (_last_raw or "")[:500], uid)
+        return None
+
+    now = time.time()
+    result = {}
+    for key, _ in IDENTITY_DIMENSIONS:
+        dim_raw = data.get(key)
+        if dim_raw is None:
+            if key in old_identity:
+                result[key] = old_identity[key]
+            continue
+
+        raw_conf = max(0.0, min(1.0, float(dim_raw.get("confidence", 0.5))))
+        ev = max(0, int(dim_raw.get("evidence_count", 0)))
+        new_conflict = max(0, int(dim_raw.get("counter_evidence_count", 0)))
+
+        old_dim = old_identity.get(key) or {}
+        old_cev = old_dim.get("counter_evidence_count", 0)
+        # LLM 重写了 text → 新判断，counter 归零重新计数；沿用旧 text → 累积历史冲突
+        if str(dim_raw.get("text", "")) != old_dim.get("text", ""):
+            cev = new_conflict
+        else:
+            cev = old_cev + new_conflict
+
+        evidence_factor = ev / (ev + cev * 2) if (ev + cev) > 0 else 0.0
+        maturity_factor = min(ev / 10, 1.0)
+        final_conf = round(raw_conf * evidence_factor * maturity_factor, 4)
+
+        if new_conflict > 0:
+            last_conflict_at = now
+        else:
+            last_conflict_at = old_dim.get("last_conflict_at", 0.0)
+
+        result[key] = {
+            "text": str(dim_raw.get("text", "")),
+            "confidence": final_conf,
+            "evidence_count": ev,
+            "counter_evidence_count": cev,
+            "last_updated": now,
+            "last_conflict_at": last_conflict_at,
+        }
 
     return result
 
@@ -640,6 +797,77 @@ async def consolidate_to_growth(uid: str, char_name: str, llm_client) -> bool:
     return True
 
 
+async def consolidate_to_identity(uid: str, llm_client) -> bool:
+    """
+    读取待固化 episodic，调 _synthesize_identity 生成新 identity，
+    写入 user_identity.yaml，标记 episodic consolidated_at，重置 fixation_state。
+    幂等：consolidated_at 已写的 episodic 不再参与。
+    """
+    from core.memory import locks
+    from core.memory import user_identity as _ui
+    from core.memory import user_profile as _up
+    from core.memory.episodic_memory import load_unconsolidated, _load_memories, _save_memories
+    from core.llm_output_validator import record_failure
+
+    _ts_start = time.time()
+    _fail_key = f"consolidate_to_identity_{uid}"
+
+    # 读旧 identity、待处理 episodic、user profile（各自管理自身锁）
+    old_identity = await _ui.load(uid)
+    new_episodes = load_unconsolidated(uid)
+    user_profile_data = _up.load(uid)
+
+    if not new_episodes:
+        _log_fixation("consolidate_to_identity", uid, {}, "ok", "no unconsolidated episodes")
+        return True
+
+    # LLM 合成（锁外）
+    new_identity = await _synthesize_identity(
+        uid, old_identity, new_episodes, user_profile_data, llm_client
+    )
+
+    if new_identity is None:
+        record_failure(_fail_key, "synthesis returned None", uid)
+        _log_fixation("consolidate_to_identity", uid, {}, "error", "LLM 合成失败")
+        raise RuntimeError(f"consolidate_to_identity LLM 合成失败: uid={uid}")
+
+    # 非空 → 写 identity；空 dict → LLM 判断无更新，跳过写入，仍标记 episodes
+    if new_identity:
+        ok = await _ui.save(uid, new_identity)
+        if not ok:
+            _log_fixation("consolidate_to_identity", uid, {}, "error", "identity 写入失败")
+            raise RuntimeError(f"consolidate_to_identity identity 写入失败: uid={uid}")
+    else:
+        _log_fixation("consolidate_to_identity", uid, {}, "ok", "no dimension updated")
+
+    # 标记 episodes + 重置 fixation_state（uid_lock 内原子操作）
+    now = time.time()
+    snapshot_ids = {ep.get("id") for ep in new_episodes}
+
+    async with locks.uid_lock(uid):
+        all_episodes = _load_memories(uid)
+        for ep in all_episodes:
+            if ep.get("id") in snapshot_ids and ep.get("consolidated_at") is None:
+                ep["consolidated_at"] = now
+        _save_memories(uid, all_episodes)
+
+        state = _load_fixation_state(uid)
+        state["episodic_since_last"] = 0
+        state["high_strength_since_last"] = 0
+        state["strength_accumulated"] = 0.0
+        state["last_consolidated_at"] = now
+        _save_fixation_state(uid, state)
+
+    ep_count = len(snapshot_ids)
+    duration_ms = int((time.time() - _ts_start) * 1000)
+    _log_fixation("consolidate_to_identity", uid, {
+        "ep_count": ep_count,
+        "duration_ms": duration_ms,
+    }, "ok")
+    logger.info(f"[fixation] consolidate_to_identity 完成: uid={uid} ep_count={ep_count}")
+    return True
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # slow_queue handler 包装
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -687,3 +915,8 @@ async def handler_consolidate_to_growth(payload: dict) -> None:
         char_name=payload.get("char_name") or _char_name(),
         llm_client=llm_client,
     )
+
+
+async def handler_consolidate_to_identity(payload: dict) -> None:
+    from core import llm_client
+    await consolidate_to_identity(uid=payload["uid"], llm_client=llm_client)

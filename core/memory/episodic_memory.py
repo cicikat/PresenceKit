@@ -40,6 +40,17 @@ def _save_memories(user_id: str, memories: list) -> None:
     safe_write_json(_mem_file(user_id), memories)
 
 
+def load_unconsolidated(user_id: str) -> list[dict]:
+    """供 consolidate 类慢任务读取待处理 episodic 的接口。
+
+    返回所有 consolidated_at 为 None 的条目，按 timestamp 升序排列，
+    便于增量处理时从最旧的记忆开始合并。
+    不带检索语义（不评分、不做 topic 匹配），也不更新 strength 或 retrieval_count。
+    """
+    raw = [m for m in _load_memories(user_id) if m.get("consolidated_at") is None]
+    return sorted(raw, key=lambda m: m.get("timestamp", 0))
+
+
 def _load_index(user_id: str) -> dict:
     try:
         return json.loads(_index_file(user_id).read_text(encoding="utf-8"))
