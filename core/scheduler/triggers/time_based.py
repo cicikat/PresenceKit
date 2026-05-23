@@ -106,6 +106,37 @@ def propose_night_reminder(ctx: dict | None = None):
     )
 
 
+def propose_daily_journal(ctx: dict | None = None):
+    """Shadow proposal for daily_journal; read-only and does not mark cooldown."""
+    cfg = _cfg()
+    if not cfg.get("enabled", True):
+        return None
+    now = _proposal_now(ctx)
+    if now.hour < 23:
+        return None
+    oid = _owner_id()
+    if not oid:
+        return None
+    from core.scheduler.rhythm import night_window_ratio, quiet_floor_elapsed, triggered_on_logical_day
+
+    if not quiet_floor_elapsed(oid, _proposal_ts(ctx, now)):
+        return None
+    if triggered_on_logical_day("daily_journal", now):
+        return None
+
+    from core.scheduler.gating import TriggerProposal
+    from core.scheduler.state_machine import TriggerState
+    from core.scheduler.urgency import UrgencyTier, urgency_in_tier
+
+    return TriggerProposal(
+        trigger_name="daily_journal",
+        urgency=urgency_in_tier(UrgencyTier.DAILY_RHYTHM, night_window_ratio(now)),
+        topic_source="diary",
+        requires_state=[TriggerState.QUIET],
+        bypass_state_machine=False,
+    )
+
+
 async def _check_random_message(force: bool = False):
     """随机日间消息：10-18点，每天随机触发一次。force=True 跳过时间和概率检查"""
     cfg = _cfg()

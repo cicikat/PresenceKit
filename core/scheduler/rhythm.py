@@ -15,6 +15,9 @@ PRESENCE_IDLE_THRESHOLD_SECONDS = 300
 # TODO(policy.yaml): move nightly rhythm window end to scheduler policy.
 NIGHT_WINDOW_END_HOUR = 2
 
+# TODO(policy.yaml): move diary quiet floor to scheduler policy.
+DIARY_MIN_QUIET_MINUTES = 12
+
 
 def logical_day(now: datetime | None = None, cutoff_hour: int = LOGICAL_DAY_CUTOFF_HOUR) -> date:
     """Return the scheduler's logical day; pre-cutoff early morning belongs to yesterday."""
@@ -53,6 +56,22 @@ def triggered_on_logical_day(trigger_name: str, now: datetime | None = None) -> 
     current = now or datetime.now()
     last_dt = datetime.fromtimestamp(last)
     return logical_day(last_dt) == logical_day(current)
+
+
+def quiet_floor_elapsed(
+    uid: str,
+    now_ts: float | None = None,
+    min_minutes: int = DIARY_MIN_QUIET_MINUTES,
+) -> bool:
+    """Return whether enough time has passed since her last owner turn."""
+    from core.scheduler.state_machine import snapshot
+
+    state = snapshot(uid)
+    last_owner_turn = float(state.get("last_owner_turn_ts") or 0)
+    if last_owner_turn <= 0:
+        return True
+    current = time.time() if now_ts is None else float(now_ts)
+    return current - last_owner_turn >= min_minutes * 60
 
 
 def daytime_window_ratio(now: datetime, start_hour: int, end_hour: int) -> float:

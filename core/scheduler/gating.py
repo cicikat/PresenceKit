@@ -24,6 +24,9 @@ MIGRATED_TRIGGERS: frozenset[str] = frozenset({
     "period_reminder",
     "morning_greeting",
     "night_reminder",
+    "daily_journal",
+    "diary_reminder",
+    "diary_share_reminder",
 })
 
 
@@ -80,6 +83,7 @@ def _collect_native_proposals(ctx: dict) -> list[TriggerProposal]:
         if item is not None:
             proposals.append(item)
     proposals.extend(_time_based_proposals(ctx))
+    proposals.extend(_diary_proposals(ctx))
     return proposals
 
 
@@ -102,10 +106,25 @@ def _period_propose(ctx: dict) -> Optional[TriggerProposal]:
 
 
 def _time_based_proposals(ctx: dict) -> list[TriggerProposal]:
-    from core.scheduler.triggers.time_based import propose_morning_greeting, propose_night_reminder
+    from core.scheduler.triggers.time_based import (
+        propose_daily_journal,
+        propose_morning_greeting,
+        propose_night_reminder,
+    )
 
     proposals: list[TriggerProposal] = []
-    for propose in (propose_morning_greeting, propose_night_reminder):
+    for propose in (propose_morning_greeting, propose_night_reminder, propose_daily_journal):
+        item = propose(ctx)
+        if item is not None:
+            proposals.append(item)
+    return proposals
+
+
+def _diary_proposals(ctx: dict) -> list[TriggerProposal]:
+    from core.scheduler.triggers.diary import propose_diary_reminder, propose_diary_share_reminder
+
+    proposals: list[TriggerProposal] = []
+    for propose in (propose_diary_reminder, propose_diary_share_reminder):
         item = propose(ctx)
         if item is not None:
             proposals.append(item)
