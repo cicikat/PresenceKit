@@ -157,6 +157,9 @@ class DataPaths:
     def gating_shadow_log(self) -> Path:
         return self._p("logs", "gating_shadow.jsonl")
 
+    def execute_dryrun_log(self) -> Path:
+        return self._p("logs", "execute_dryrun.jsonl")
+
     def user_identity_dir(self) -> Path:
         return self._p("user_identity")
 

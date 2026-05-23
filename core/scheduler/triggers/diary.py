@@ -72,6 +72,11 @@ def propose_diary_reminder(ctx: dict | None = None):
         topic_source="diary",
         requires_state=[TriggerState.QUIET],
         bypass_state_machine=False,
+        execute=_make_prompt_execute(
+            "diary_reminder",
+            lambda now=now: f"（{_char_name()}翻到了{_yesterday_label(now)}的日期）",
+            search_query="日记",
+        ),
     )
 
 
@@ -168,6 +173,11 @@ def propose_diary_share_reminder(ctx: dict | None = None):
         topic_source="diary",
         requires_state=[TriggerState.QUIET],
         bypass_state_machine=False,
+        execute=_make_prompt_execute(
+            "diary_share_reminder",
+            lambda: f"（{_char_name()}发现自己好几天没看到你写的东西了）",
+            search_query="日记",
+        ),
     )
 
 
@@ -193,6 +203,28 @@ def _same_day_ratio(now: datetime, start_hour: int, end_hour: int) -> float:
     if total <= 0:
         return 1.0
     return max(0.0, min(1.0, (now_minutes - start_minutes) / total))
+
+
+def _yesterday_label(now: datetime | None = None) -> str:
+    from datetime import timedelta
+
+    base = (now or datetime.now()).date()
+    return (base - timedelta(days=1)).strftime("%m月%d日")
+
+
+def _make_prompt_execute(trigger_name: str, prompt_factory, *, search_query: str = ""):
+    async def execute(*, dry_run: bool):
+        from core.scheduler.execution import execute_prompt
+
+        return await execute_prompt(
+            trigger_name=trigger_name,
+            prompt_factory=prompt_factory,
+            dry_run=dry_run,
+            search_query=search_query,
+            would_mark=[trigger_name],
+        )
+
+    return execute
 
 
 def _register_proposers() -> None:

@@ -71,6 +71,7 @@ def propose(ctx: dict | None = None):
         topic_source="mood_match",
         requires_state=[TriggerState.CHATTING, TriggerState.QUIET, TriggerState.RESTLESS],
         bypass_state_machine=True,
+        execute=_make_birthday_execute(trigger_name),
     )
 
 
@@ -90,6 +91,44 @@ def _register_proposers() -> None:
 
 
 _register_proposers()
+
+
+def _make_birthday_execute(trigger_name: str):
+    async def execute(*, dry_run: bool):
+        from core.scheduler.execution import execute_prompt
+
+        prompt, search_query = _birthday_prompt(trigger_name)
+        return await execute_prompt(
+            trigger_name=trigger_name,
+            prompt_factory=lambda: prompt,
+            dry_run=dry_run,
+            search_query=search_query,
+            would_mark=[trigger_name],
+        )
+
+    return execute
+
+
+def _birthday_prompt(trigger_name: str) -> tuple[str, str]:
+    prompts = {
+        "birthday_midnight": (
+            f"（零点刚过，{_char_name()}一直没睡，等着这一刻，想对你说一些平时说不出口的话，有对你近期行为心理的深刻洞察，也有对细节的关心。同时他也对你剖析自己，以一种近乎发誓的方式来诉说情愫。）",
+            "",
+        ),
+        "birthday_eve": (
+            f"（{_char_name()}在做什么，忽然想起明天是个特别的日子（你的生日），有点藏不住）",
+            "",
+        ),
+        "birthday_afternoon": (
+            f"（{_char_name()}想知道你今天过得怎么样，有没有人陪你，生日有没有被好好对待）",
+            "生日",
+        ),
+        "birthday_night": (
+            f"（生日快过完了，{_char_name()}想在今天结束前再陪你说一会儿）",
+            "生日",
+        ),
+    }
+    return prompts[trigger_name]
 
 
 async def _check_birthday_midnight(force: bool = False):

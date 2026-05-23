@@ -12,6 +12,7 @@ from typing import Optional
 
 from core.safe_write import safe_append_jsonl
 from core.sandbox import get_paths
+from core.scheduler.execution import ExecuteFn
 from core.scheduler.state_machine import TriggerState, get_state as get_current_state
 
 
@@ -53,6 +54,7 @@ class TriggerProposal:
     topic_source: str
     requires_state: list
     bypass_state_machine: bool = False
+    execute: Optional[ExecuteFn] = None
 
 
 def is_trigger_ready(trigger_name: str) -> bool:
@@ -66,7 +68,7 @@ def collect_and_decide(uid: str, proposals: list[TriggerProposal]) -> Optional[T
     return picked
 
 
-def write_shadow_tick(uid: str) -> None:
+def write_shadow_tick(uid: str) -> Optional[TriggerProposal]:
     ctx = _build_context(uid)
     proposals = _collect_native_proposals(ctx)
     picked, reason, candidates = _decide(uid, proposals)
@@ -82,6 +84,21 @@ def write_shadow_tick(uid: str) -> None:
             "reason": reason,
         },
     )
+    return picked
+
+
+WATCH_EVENT_DRIVEN_TRIGGERS: frozenset[str] = frozenset({"hr_critical", "hr_high", "sleep_end"})
+
+
+async def run_shadow_tick(uid: str) -> Optional[TriggerProposal]:
+    picked = write_shadow_tick(uid)
+    if (
+        picked is not None
+        and picked.execute is not None
+        and picked.trigger_name not in WATCH_EVENT_DRIVEN_TRIGGERS
+    ):
+        await picked.execute(dry_run=True)
+    return picked
 
 
 def _build_context(uid: str) -> dict:

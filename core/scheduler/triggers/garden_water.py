@@ -62,7 +62,8 @@ def propose_garden_bloom(ctx: dict | None = None):
     from core.scheduler.state_machine import TriggerState
     from core.scheduler.urgency import UrgencyTier, urgency_in_tier
 
-    newest = max(float(event.get("received_at") or 0) for event in fresh)
+    picked = max(fresh, key=lambda event: float(event.get("received_at") or 0))
+    newest = float(picked.get("received_at") or 0)
     ratio = 1 - min(1.0, max(0.0, (now_ts - newest) / GARDEN_EVENT_PROPOSAL_TTL_SECONDS))
     return TriggerProposal(
         trigger_name="garden_bloom",
@@ -70,6 +71,7 @@ def propose_garden_bloom(ctx: dict | None = None):
         topic_source="mood_match",
         requires_state=[TriggerState.QUIET],
         bypass_state_machine=False,
+        execute=_make_garden_bloom_execute(picked),
     )
 
 
@@ -80,3 +82,18 @@ def _register_proposers() -> None:
 
 
 _register_proposers()
+
+
+def _make_garden_bloom_execute(event: dict):
+    async def execute(*, dry_run: bool):
+        from core.scheduler.execution import execute_prompt
+
+        return await execute_prompt(
+            trigger_name="garden_bloom",
+            prompt_factory=lambda: f"（{_char_name()}发现花园里那株{event['name']}开了，站在那里看了一会儿）",
+            dry_run=dry_run,
+            would_mark=["garden_bloom"],
+            reads_cache_ok=True,
+        )
+
+    return execute

@@ -72,22 +72,10 @@ async def _check_timenode(force: bool = False):
     if not oid:
         return
 
-    today = date.today()
-    season = _get_season(today.month)
-    date_str = today.strftime("%Y年%m月%d日")
-    weekday_str = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"][today.weekday()]
-
-    prompts = {
-        "monday": f"（今天是{date_str}{weekday_str}，{_char_name()}忽然意识到新的一周开始了，有点说不清的感觉）",
-        "friday": f"（今天是{date_str}{weekday_str}，{_char_name()}发现这周快过完了，马上到周末了）",
-        "month_end": f"（今天是{date_str}，{_char_name()}想到{today.month}月快过完了，这个月发生了不少事）",
-        "season_change": f"（今天是{date_str}，{_char_name()}察觉到{season}来了，窗外有点不一样）",
-    }
-
     if force and node is None:
         node = "monday"
 
-    prompt = prompts.get(node)
+    prompt = _timenode_prompt(node, date.today())
     if not prompt:
         return
 
@@ -124,6 +112,7 @@ def propose(ctx: dict | None = None):
         topic_source="random",
         requires_state=[TriggerState.QUIET, TriggerState.RESTLESS],
         bypass_state_machine=False,
+        execute=_make_timenode_execute(node, now.date()),
     )
 
 
@@ -134,3 +123,31 @@ def _register_proposers() -> None:
 
 
 _register_proposers()
+
+
+def _timenode_prompt(node: str | None, today: date) -> str | None:
+    season = _get_season(today.month)
+    date_str = today.strftime("%Y年%m月%d日")
+    weekday_str = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"][today.weekday()]
+    prompts = {
+        "monday": f"（今天是{date_str}{weekday_str}，{_char_name()}忽然意识到新的一周开始了，有点说不清的感觉）",
+        "friday": f"（今天是{date_str}{weekday_str}，{_char_name()}发现这周快过完了，马上到周末了）",
+        "month_end": f"（今天是{date_str}，{_char_name()}想到{today.month}月快过完了，这个月发生了不少事）",
+        "season_change": f"（今天是{date_str}，{_char_name()}察觉到{season}来了，窗外有点不一样）",
+    }
+    return prompts.get(node or "")
+
+
+def _make_timenode_execute(node: str, today: date):
+    async def execute(*, dry_run: bool):
+        from core.scheduler.execution import execute_prompt
+
+        return await execute_prompt(
+            trigger_name="timenode",
+            prompt_factory=lambda: _timenode_prompt(node, today) or "",
+            dry_run=dry_run,
+            search_query="今天",
+            would_mark=["timenode"],
+        )
+
+    return execute

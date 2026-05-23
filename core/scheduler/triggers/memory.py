@@ -1,4 +1,5 @@
 import logging
+import re
 import time
 from datetime import datetime
 
@@ -129,6 +130,9 @@ def propose(ctx: dict | None = None):
     ratio = _followup_signal(str(growth))
     if ratio <= 0:
         return None
+    topic = _extract_followup_topic(str(growth))
+    if not topic:
+        return None
 
     from core.scheduler.gating import TriggerProposal
     from core.scheduler.state_machine import TriggerState
@@ -140,6 +144,7 @@ def propose(ctx: dict | None = None):
         topic_source="last_mentioned",
         requires_state=[TriggerState.QUIET],
         bypass_state_machine=False,
+        execute=_make_topic_followup_execute(topic),
     )
 
 
@@ -150,3 +155,33 @@ def _register_proposers() -> None:
 
 
 _register_proposers()
+
+
+def _extract_followup_topic(growth: str) -> str:
+    if "未跟进话题" not in growth:
+        return ""
+    tail = growth.split("未跟进话题", 1)[1]
+    for line in tail.splitlines():
+        line = line.strip()
+        if not line.startswith("-"):
+            continue
+        if "暂无" in line or "无" in line:
+            continue
+        topic = line.lstrip("-").strip()
+        topic = re.split(r"[:：]", topic, maxsplit=1)[0].strip() or topic
+        return topic[:20]
+    return ""
+
+
+def _make_topic_followup_execute(topic: str):
+    async def execute(*, dry_run: bool):
+        from core.scheduler.execution import execute_prompt
+
+        return await execute_prompt(
+            trigger_name="topic_followup",
+            prompt_factory=lambda: f"（{_char_name()}忽然想起来，你之前提到过「{topic}」，不知道后来怎样了）",
+            dry_run=dry_run,
+            would_mark=["topic_followup"],
+        )
+
+    return execute

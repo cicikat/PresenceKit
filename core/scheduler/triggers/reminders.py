@@ -22,13 +22,19 @@ def propose(ctx: dict | None = None):
         return None
 
     most_overdue = 0.0
+    picked_item = None
     for item in due:
         try:
             remind_at = datetime.strptime(item["remind_at"], "%Y-%m-%d %H:%M")
         except Exception:
             continue
-        most_overdue = max(most_overdue, (now - remind_at).total_seconds())
+        overdue = (now - remind_at).total_seconds()
+        if picked_item is None or overdue > most_overdue:
+            most_overdue = overdue
+            picked_item = item
     if most_overdue < 0:
+        return None
+    if picked_item is None:
         return None
 
     from core.scheduler.gating import TriggerProposal
@@ -42,6 +48,7 @@ def propose(ctx: dict | None = None):
         topic_source="random",
         requires_state=[TriggerState.CHATTING, TriggerState.QUIET, TriggerState.RESTLESS],
         bypass_state_machine=True,
+        execute=_make_reminder_execute(uid, picked_item),
     )
 
 
@@ -52,3 +59,32 @@ def _register_proposers() -> None:
 
 
 _register_proposers()
+
+
+def _make_reminder_execute(uid: str, item: dict):
+    async def execute(*, dry_run: bool):
+        from core.scheduler.execution import execute_prompt
+
+        reminder_id = str(item.get("id") or "")
+
+        def _mark_done_after_send():
+            from core.tools.reminder import mark_done
+
+            mark_done(uid, reminder_id)
+
+        return await execute_prompt(
+            trigger_name="reminders",
+            prompt_factory=lambda: f"备忘录提醒时间到了：{item['content']}，用{_char_name()}的方式提醒她",
+            dry_run=dry_run,
+            would_mark=[],
+            would_mark_done=[reminder_id] if reminder_id else [],
+            after_send=_mark_done_after_send if reminder_id else None,
+        )
+
+    return execute
+
+
+def _char_name() -> str:
+    from core.scheduler.loop import _char_name as _loop_char_name
+
+    return _loop_char_name()

@@ -48,6 +48,7 @@ def propose(ctx: dict | None = None):
         topic_source="mood_match",
         requires_state=[TriggerState.CHATTING, TriggerState.QUIET, TriggerState.RESTLESS],
         bypass_state_machine=True,
+        execute=_make_period_execute(days_elapsed),
     )
 
 
@@ -58,6 +59,25 @@ def _register_proposers() -> None:
 
 
 _register_proposers()
+
+
+def _make_period_execute(days_elapsed: int):
+    async def execute(*, dry_run: bool):
+        from core.scheduler.execution import execute_prompt
+
+        if 0 <= days_elapsed <= 7:
+            prompt = f"（{_char_name()}记得你的生理期第{days_elapsed}天）"
+        else:
+            prompt = f"（{_char_name()}想起你的生理期大概快到了）"
+        return await execute_prompt(
+            trigger_name="period_reminder",
+            prompt_factory=lambda: prompt,
+            dry_run=dry_run,
+            search_query="生理期",
+            would_mark=["period_reminder"],
+        )
+
+    return execute
 
 
 async def _check_period():

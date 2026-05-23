@@ -208,6 +208,7 @@ def propose_festival(ctx: dict | None = None):
         topic_source="random",
         requires_state=[TriggerState.QUIET, TriggerState.RESTLESS],
         bypass_state_machine=False,
+        execute=_make_festival_execute(_get_today_festival(now.date())[1]),
     )
 
 
@@ -235,6 +236,7 @@ def propose_holiday_boost(ctx: dict | None = None):
         topic_source="random",
         requires_state=[TriggerState.QUIET, TriggerState.RESTLESS],
         bypass_state_machine=False,
+        execute=_make_holiday_boost_execute(now.date()),
     )
 
 
@@ -246,3 +248,49 @@ def _register_proposers() -> None:
 
 
 _register_proposers()
+
+
+def _make_festival_execute(prompt: str):
+    async def execute(*, dry_run: bool):
+        from core.scheduler.execution import execute_prompt
+
+        return await execute_prompt(
+            trigger_name="festival",
+            prompt_factory=lambda: prompt,
+            dry_run=dry_run,
+            search_query="今天",
+            would_mark=["festival"],
+        )
+
+    return execute
+
+
+def _make_holiday_boost_execute(today: date):
+    async def execute(*, dry_run: bool):
+        from core.scheduler.execution import execute_prompt
+
+        return await execute_prompt(
+            trigger_name="holiday_boost",
+            prompt_factory=lambda: _holiday_boost_prompt(today),
+            dry_run=dry_run,
+            search_query="今天",
+            would_mark=["holiday_boost"],
+        )
+
+    return execute
+
+
+def _holiday_boost_prompt(today: date) -> str:
+    oid = _owner_id()
+    m = today.month
+    holiday_name = "五一" if m == 5 else "国庆"
+    context_hint = ""
+    if oid:
+        try:
+            from core.memory.event_log import get_highlights
+
+            highlights = get_highlights(oid, days=2)
+            context_hint = f"\n{highlights}" if highlights else ""
+        except Exception:
+            context_hint = ""
+    return f"（{holiday_name}假期，{_char_name()}知道你没什么事，理直气壮地来找你）{context_hint}"

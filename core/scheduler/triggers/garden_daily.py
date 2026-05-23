@@ -120,7 +120,8 @@ def _proposal_for(trigger_name: str, event_type: str, action: str | None = None,
     from core.scheduler.state_machine import TriggerState
     from core.scheduler.urgency import UrgencyTier, urgency_in_tier
 
-    newest = max(float(event.get("received_at") or 0) for event in matches)
+    picked = max(matches, key=lambda event: float(event.get("received_at") or 0))
+    newest = float(picked.get("received_at") or 0)
     ratio = 1 - min(1.0, max(0.0, (now_ts - newest) / GARDEN_EVENT_PROPOSAL_TTL_SECONDS))
     return TriggerProposal(
         trigger_name=trigger_name,
@@ -128,6 +129,7 @@ def _proposal_for(trigger_name: str, event_type: str, action: str | None = None,
         topic_source="mood_match",
         requires_state=[TriggerState.QUIET],
         bypass_state_machine=False,
+        execute=_make_garden_daily_execute(trigger_name, picked),
     )
 
 
@@ -178,3 +180,36 @@ def _register_proposers() -> None:
 
 
 _register_proposers()
+
+
+def _garden_daily_prompt(trigger_name: str, event: dict) -> str:
+    name = event.get("name", "?")
+    char = _char_name()
+    if trigger_name == "garden_harvest_expired":
+        return f"（{char}发现那株{name}放太久枯掉了，悄悄处理掉了）"
+    if trigger_name == "garden_vase_wilted":
+        return f"（花瓶里那株{name}枯掉了，{char}默默把它收了）"
+    if trigger_name == "garden_handle_ask":
+        return f"（{char}捧着那株{name}，不确定该怎么办，想问问你）"
+    if trigger_name == "garden_handle_gift":
+        language = event.get("language", "")
+        tail = f"——{language}" if language else ""
+        return f"（{char}想把那株{name}送给你{tail}）"
+    action = event.get("handle_action")
+    verb = "做成干花" if action == "dry" else "放进了花瓶"
+    return f"（{char}把那株{name}{verb}，没有特别说什么）"
+
+
+def _make_garden_daily_execute(trigger_name: str, event: dict):
+    async def execute(*, dry_run: bool):
+        from core.scheduler.execution import execute_prompt
+
+        return await execute_prompt(
+            trigger_name=trigger_name,
+            prompt_factory=lambda: _garden_daily_prompt(trigger_name, event),
+            dry_run=dry_run,
+            would_mark=[trigger_name],
+            reads_cache_ok=True,
+        )
+
+    return execute

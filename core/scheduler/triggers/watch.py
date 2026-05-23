@@ -67,6 +67,7 @@ def propose(ctx: dict | None = None):
         topic_source="mood_match",
         requires_state=[TriggerState.CHATTING, TriggerState.QUIET, TriggerState.RESTLESS],
         bypass_state_machine=True,
+        execute=_make_heart_rate_execute("hr_critical", hr, hour),
     )
 
 
@@ -97,6 +98,7 @@ def propose_hr_high(ctx: dict | None = None):
         topic_source="mood_match",
         requires_state=[TriggerState.QUIET],
         bypass_state_machine=False,
+        execute=_make_heart_rate_execute("hr_high", hr, hour),
     )
 
 
@@ -122,6 +124,7 @@ def propose_sleep_end(ctx: dict | None = None):
         topic_source="mood_match",
         requires_state=[TriggerState.QUIET, TriggerState.RESTLESS],
         bypass_state_machine=False,
+        execute=_make_sleep_end_execute(event),
     )
 
 
@@ -134,6 +137,55 @@ def _register_proposers() -> None:
 
 
 _register_proposers()
+
+
+def _heart_rate_prompt(trigger_name: str, hr: int, hour: int) -> str:
+    in_night = hour >= 22 or hour < 6
+    if trigger_name == "hr_critical":
+        if in_night:
+            return f"（深夜，{_char_name()}看到你的心率{hr}）"
+        return f"（{_char_name()}看到你的心率{hr}，皱了皱眉）"
+    if in_night:
+        return f"（深夜，{_char_name()}注意到你的心率{hr}）"
+    return f"（{_char_name()}看到你的心率有点高，{hr}）"
+
+
+def _make_heart_rate_execute(trigger_name: str, hr: int, hour: int):
+    async def execute(*, dry_run: bool):
+        from core.scheduler.execution import execute_prompt
+
+        return await execute_prompt(
+            trigger_name=trigger_name,
+            prompt_factory=lambda: _heart_rate_prompt(trigger_name, hr, hour),
+            dry_run=dry_run,
+            would_mark=[trigger_name],
+        )
+
+    return execute
+
+
+def _sleep_end_prompt(event: dict) -> str:
+    prompt = str(event.get("prompt") or "").strip()
+    if prompt:
+        return prompt
+    duration = float(event.get("duration_minutes", 0) or 0)
+    hours = int(duration // 60)
+    minutes = int(duration % 60)
+    return f"（{_char_name()}看到你醒了，睡了{hours}小时{minutes}分钟）"
+
+
+def _make_sleep_end_execute(event: dict):
+    async def execute(*, dry_run: bool):
+        from core.scheduler.execution import execute_prompt
+
+        return await execute_prompt(
+            trigger_name="sleep_end",
+            prompt_factory=lambda: _sleep_end_prompt(event),
+            dry_run=dry_run,
+            would_mark=["sleep_end", "morning_greeting"],
+        )
+
+    return execute
 
 
 async def on_watch_event(event_type: str, data: dict):

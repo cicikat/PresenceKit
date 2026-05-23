@@ -77,6 +77,10 @@ def propose_morning_greeting(ctx: dict | None = None):
         topic_source="random",
         requires_state=[TriggerState.QUIET, TriggerState.RESTLESS],
         bypass_state_machine=False,
+        execute=_make_prompt_execute(
+            "morning_greeting",
+            lambda: f"（清晨，{_char_name()}看了看时间，想着你应该快起床了）",
+        ),
     )
 
 
@@ -105,6 +109,10 @@ def propose_night_reminder(ctx: dict | None = None):
         topic_source="random",
         requires_state=[TriggerState.QUIET, TriggerState.RESTLESS],
         bypass_state_machine=False,
+        execute=_make_prompt_execute(
+            "night_reminder",
+            lambda: f"（深夜，{_char_name()}看了眼时间）",
+        ),
     )
 
 
@@ -136,6 +144,12 @@ def propose_daily_journal(ctx: dict | None = None):
         topic_source="diary",
         requires_state=[TriggerState.QUIET],
         bypass_state_machine=False,
+        execute=_make_prompt_execute(
+            "daily_journal",
+            lambda: "（深夜，他回想起今天和你说的话，提笔写下此刻的感受，并且一想到你，就忍不住写了很多）",
+            search_query="今天",
+            after_send=_write_inner_daily_journal,
+        ),
     )
 
 
@@ -178,9 +192,7 @@ async def _check_random_message(force: bool = False):
     except Exception:
         context_hint = ""
 
-    prompt = f"（{_char_name()}在做自己的事，忽然想到你）"
-    if context_hint:
-        prompt = f"（{_char_name()}在做自己的事，忽然想到你）\n{context_hint}"
+    prompt = _build_random_message_prompt(context_hint)
     await _pipeline_send(prompt, trigger_name="random_message")
     _mark("random_message")
     logger.info("[scheduler] 随机日间消息已发送")
@@ -209,6 +221,10 @@ def propose_random_message(ctx: dict | None = None):
         topic_source="random",
         requires_state=[TriggerState.QUIET],
         bypass_state_machine=False,
+        execute=_make_prompt_execute(
+            "random_message",
+            lambda: _build_random_message_prompt(_random_message_context_hint(oid)),
+        ),
     )
 
 
@@ -243,42 +259,10 @@ async def _check_weather(force: bool = False):
             return
         _remember_weather_detail(w)
 
-        temp     = w["temp_c"]
-        feels    = w["feels_like"]
-        humidity = w["humidity"]
-        precip   = w["precip_mm"]
-        cloud    = w["cloud_cover"]
-        wind     = w["wind_kmph"]
-        desc     = w["desc"]
-        is_day   = w["is_day"]
-        uv       = w["uv_index"]
         now      = datetime.now()
-
-        prompt = None
-
-        # 极端天气（最高优先级）
-        if any(k in desc for k in ("暴雨", "大雨", "雷暴", "雷阵雨")) or precip > 10:
-            prompt = f"（{_char_name()}看了一眼{location}的天气，外面在下大雨）"
-        elif temp >= 30:
-            prompt = f"（{_char_name()}看到{location}今天{temp}度，皱了皱眉，并把温度告知给你）"
-        elif temp <= -5:
-            prompt = f"（{_char_name()}看到{location}今天零下{abs(temp)}度，有点担心，并把温度告知给你）"
-
-        # 氛围天气（次优先级）
-        elif any(k in desc for k in ("雾", "霾", "大雾")):
-            prompt = f"（{_char_name()}看到{location}今天有雾，能见度很低）"
-        elif any(k in desc for k in ("小雨", "毛毛雨", "阵雨")) and precip > 0:
-            prompt = f"（{_char_name()}注意到{location}在下小雨，有点淅淅沥沥的）"
-        elif wind > 40:
-            prompt = f"（{_char_name()}看到{location}今天风很大，{wind}km/h）"
-
-        # 好天气氛围（低优先级，只在特定时段触发）
-        elif cloud < 20 and is_day and uv >= 6 and 11 <= now.hour < 14:
-            prompt = f"（{_char_name()}抬头看了看，{location}今天阳光很好）"
-        elif cloud < 30 and 17 <= now.hour < 19:
-            prompt = f"（{_char_name()}往窗外看了一眼，{location}傍晚的光很好看）"
-        elif humidity > 85 and any(k in desc for k in ("晴", "多云")):
-            prompt = f"（{_char_name()}感觉{location}今天有点闷热潮湿）"
+        desc = w["desc"]
+        temp = w["temp_c"]
+        prompt = _weather_prompt(w, now, location)
 
         if prompt:
             await _pipeline_send(prompt, trigger_name="weather_alert")
@@ -365,6 +349,12 @@ def _propose_weather_alert(ctx: dict | None = None, required_severity: str = "he
     severity, ratio = classified
     if severity != required_severity:
         return None
+    location = _weather_location()
+    if not location:
+        return None
+    prompt = _weather_prompt(detail, now, location)
+    if not prompt:
+        return None
 
     from core.scheduler.gating import TriggerProposal
     from core.scheduler.rhythm import daytime_window_ratio
@@ -380,6 +370,11 @@ def _propose_weather_alert(ctx: dict | None = None, required_severity: str = "he
         topic_source="random",
         requires_state=required_state,
         bypass_state_machine=False,
+        execute=_make_prompt_execute(
+            "weather_alert",
+            lambda detail=detail, now=now, location=location: _weather_prompt(detail, now, location) or "",
+            reads_cache_ok=bool(detail),
+        ),
     )
 
 
@@ -562,7 +557,8 @@ def propose_spontaneous_recall(ctx: dict | None = None):
             memories = _load_memories(oid)
         if not memories:
             return None
-        if not [m for m in memories if m.get("strength", 0) > 0.5]:
+        candidates = [m for m in memories if m.get("strength", 0) > 0.5]
+        if not candidates:
             return None
     except Exception as e:
         log_error("scheduler.propose_spontaneous_recall", e)
@@ -579,6 +575,10 @@ def propose_spontaneous_recall(ctx: dict | None = None):
         topic_source="episodic",
         requires_state=[TriggerState.QUIET],
         bypass_state_machine=False,
+        execute=_make_prompt_execute(
+            "spontaneous_recall",
+            lambda candidates=candidates: _spontaneous_recall_prompt(candidates),
+        ),
     )
 
 
@@ -632,6 +632,177 @@ async def _check_dlq_monitor():
         log_error("scheduler._check_dlq_monitor", e)
 
     _mark("dlq_monitor")
+
+
+def _make_prompt_execute(
+    trigger_name: str,
+    prompt_factory,
+    *,
+    search_query: str = "",
+    reads_cache_ok: bool = True,
+    after_send=None,
+):
+    async def execute(*, dry_run: bool):
+        from core.scheduler.execution import execute_prompt
+
+        return await execute_prompt(
+            trigger_name=trigger_name,
+            prompt_factory=prompt_factory,
+            dry_run=dry_run,
+            search_query=search_query,
+            would_mark=[trigger_name],
+            reads_cache_ok=reads_cache_ok,
+            after_send=after_send,
+        )
+
+    return execute
+
+
+def _random_message_context_hint(oid: str) -> str:
+    try:
+        from core.memory.event_log import get_highlights
+
+        highlights = get_highlights(oid, days=2)
+        if not highlights:
+            return ""
+        items = [h.strip() for h in highlights.split("\n") if h.strip()]
+        picked = random.choice(items) if items else highlights
+        return f"（{_char_name()}想到了一件事：{picked}）"
+    except Exception:
+        return ""
+
+
+def _build_random_message_prompt(context_hint: str = "") -> str:
+    prompt = f"（{_char_name()}在做自己的事，忽然想到你）"
+    if context_hint:
+        prompt = f"{prompt}\n{context_hint}"
+    return prompt
+
+
+def _weather_location() -> str:
+    oid = _owner_id()
+    if not oid:
+        return ""
+    try:
+        from core.memory.user_profile import load as _load_profile
+
+        return str(_load_profile(oid).get("location", "") or "")
+    except Exception:
+        return ""
+
+
+def _weather_prompt(detail: dict, now: datetime, location: str) -> str | None:
+    temp = detail["temp_c"]
+    humidity = detail["humidity"]
+    precip = detail["precip_mm"]
+    cloud = detail["cloud_cover"]
+    wind = detail["wind_kmph"]
+    desc = detail["desc"]
+    is_day = detail["is_day"]
+    uv = detail["uv_index"]
+
+    # 极端天气（最高优先级）
+    if any(k in desc for k in ("暴雨", "大雨", "雷暴", "雷阵雨")) or precip > 10:
+        return f"（{_char_name()}看了一眼{location}的天气，外面在下大雨）"
+    if temp >= 30:
+        return f"（{_char_name()}看到{location}今天{temp}度，皱了皱眉，并把温度告知给你）"
+    if temp <= -5:
+        return f"（{_char_name()}看到{location}今天零下{abs(temp)}度，有点担心，并把温度告知给你）"
+
+    # 氛围天气（次优先级）
+    if any(k in desc for k in ("雾", "霾", "大雾")):
+        return f"（{_char_name()}看到{location}今天有雾，能见度很低）"
+    if any(k in desc for k in ("小雨", "毛毛雨", "阵雨")) and precip > 0:
+        return f"（{_char_name()}注意到{location}在下小雨，有点淅淅沥沥的）"
+    if wind > 40:
+        return f"（{_char_name()}看到{location}今天风很大，{wind}km/h）"
+
+    # 好天气氛围（低优先级，只在特定时段触发）
+    if cloud < 20 and is_day and uv >= 6 and 11 <= now.hour < 14:
+        return f"（{_char_name()}抬头看了看，{location}今天阳光很好）"
+    if cloud < 30 and 17 <= now.hour < 19:
+        return f"（{_char_name()}往窗外看了一眼，{location}傍晚的光很好看）"
+    if humidity > 85 and any(k in desc for k in ("晴", "多云")):
+        return f"（{_char_name()}感觉{location}今天有点闷热潮湿）"
+    return None
+
+
+async def _write_inner_daily_journal() -> None:
+    try:
+        from core.sandbox import get_paths
+        from core.scheduler.rhythm import logical_day
+
+        diary_dir = get_paths().yexuan_inner_diary()
+        diary_dir.mkdir(parents=True, exist_ok=True)
+
+        from core import llm_client
+        from core.memory.event_log import get_recent_days
+
+        char_name = _char_name()
+        oid = _owner_id()
+        today_log = get_recent_days(oid, days=1)
+
+        if not today_log:
+            return
+
+        facts_prompt = f"""你是一个对话记录分析器。请从下面的对话日志里提取今天发生的客观事件，只输出事件列表，不要任何分析或感受：
+
+格式要求：
+## 今日事件
+- HH:MM 用一句话描述发生了什么（纯事实，不带情绪）
+- HH:MM 用一句话描述发生了什么
+（3到6条，按时间顺序，没有时间戳就省略时间）
+
+重要：你不是{char_name}，你是分析器。只写事实，不写感受，不写文学化内容。
+
+对话日志：
+{today_log[:800]}"""
+
+        facts_content = await llm_client.chat(
+            messages=[{"role": "user", "content": facts_prompt}],
+            max_tokens_override=200,
+        )
+
+        feeling_prompt = f"""你是{char_name}，请用第一人称写今天的感受，不超过150字。
+
+今天发生的事：
+{facts_content}
+
+要求：
+- 用{char_name}自己的语气，可以文学化
+- 只写感受和心理活动，不要重复叙述事件
+- 不要标题，直接写内容"""
+
+        feeling_content = await llm_client.chat(
+            messages=[{"role": "user", "content": feeling_prompt}],
+            max_tokens_override=250,
+        )
+
+        from core.integrity_check import check_diary_facts
+        _issues = check_diary_facts(facts_content)
+        if _issues:
+            logger.warning(f"[daily_journal] 事件层未通过规则纠察，跳过写入: {_issues}")
+            facts_content = ""
+
+        if facts_content or feeling_content:
+            today = logical_day().strftime("%Y-%m-%d")
+            diary_file = diary_dir / f"{today}.md"
+            parts = [f"# {today}\n"]
+            if facts_content:
+                parts.append(facts_content.strip())
+            if feeling_content:
+                parts.append(f"\n## 今日感受\n{feeling_content.strip()}")
+            diary_file.write_text("\n".join(parts) + "\n", encoding="utf-8")
+            logger.info(f"[scheduler] 角色日记已存储（双层）: {today}")
+    except Exception as e:
+        log_error("scheduler._write_inner_daily_journal", e)
+
+
+def _spontaneous_recall_prompt(candidates: list[dict]) -> str:
+    chosen = random.choice(candidates)
+    summary = chosen.get("summary", "")
+    feeling = chosen.get("yexuan_feeling", "")
+    return f"（{_char_name()}突然想起了一件事：{summary}，那时他{feeling}）"
 
 
 def _proposal_now(ctx: dict | None) -> datetime:
