@@ -5,6 +5,12 @@ from datetime import datetime
 
 from core.error_handler import log_error
 from core.scheduler.loop import _is_ready, _mark, _owner_id, _pipeline_send, _cfg, _char_name, _last_trigger
+from core.scheduler.last_mentioned import (
+    LastMentionedTopic,
+    is_recently_followed,
+    mark_topic_followed,
+    recall_last_mentioned,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -113,26 +119,24 @@ def propose(ctx: dict | None = None):
     now = ctx.get("now_dt") or datetime.now()
     if not (14 <= now.hour < 22):
         return None
-    oid = _owner_id()
+    oid = str(ctx.get("uid") or _owner_id()).strip()
     if not oid:
         return None
     try:
-        from core.memory.character_growth import load as load_growth
-
-        growth = ctx.get("character_growth")
-        if growth is None:
-            growth = load_growth(_char_name(), oid)
+        topic = ctx.get("last_mentioned")
+        if topic is None:
+            topic = recall_last_mentioned(oid, now=now)
     except Exception as e:
-        log_error("scheduler.propose_topic_followup.load_growth", e)
+        log_error("scheduler.propose_topic_followup.last_mentioned", e)
         return None
-    if not growth or len(growth) < 20:
+    if topic is None:
         return None
-    ratio = _followup_signal(str(growth))
-    if ratio <= 0:
+    if not isinstance(topic, LastMentionedTopic):
         return None
-    topic = _extract_followup_topic(str(growth))
-    if not topic:
+    now_ts = float(ctx.get("now_ts") or now.timestamp())
+    if is_recently_followed(topic.topic_key, now_ts=now_ts):
         return None
+    ratio = max(0.0, min(1.0, float(topic.score)))
 
     from core.scheduler.gating import TriggerProposal
     from core.scheduler.state_machine import TriggerState
@@ -173,15 +177,24 @@ def _extract_followup_topic(growth: str) -> str:
     return ""
 
 
-def _make_topic_followup_execute(topic: str):
+def _make_topic_followup_execute(topic: LastMentionedTopic):
     async def execute(*, dry_run: bool):
         from core.scheduler.execution import execute_prompt
 
         return await execute_prompt(
             trigger_name="topic_followup",
-            prompt_factory=lambda: f"（{_char_name()}忽然想起来，你之前提到过「{topic}」，不知道后来怎样了）",
+            prompt_factory=lambda: _topic_followup_prompt(topic),
             dry_run=dry_run,
             would_mark=["topic_followup"],
+            after_send=lambda: mark_topic_followed(topic.topic_key),
         )
 
     return execute
+
+
+def _topic_followup_prompt(topic: LastMentionedTopic) -> str:
+    return (
+        f"（{_char_name()}想起最近这段还没有接住的事：{topic.context}\n"
+        f"请接着「{topic.topic}」轻轻问一句后来怎么样了。不要像总结旧档案，"
+        f"要像顺着最近聊天自然想起来。）"
+    )

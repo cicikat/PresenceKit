@@ -14,6 +14,12 @@ async def _run_dry(proposal):
     return result
 
 
+def _write_event_log(paths, uid: str, date_text: str, body: str) -> None:
+    day_dir = paths.event_log() / uid
+    day_dir.mkdir(parents=True, exist_ok=True)
+    (day_dir / f"{date_text}.md").write_text(body, encoding="utf-8")
+
+
 @pytest.mark.asyncio
 async def test_native_proposal_executes_dryrun_for_each_registered_trigger(monkeypatch, sandbox):
     from core.scheduler.triggers import birthday, diary, festival, garden_daily, garden_water
@@ -55,7 +61,19 @@ async def test_native_proposal_executes_dryrun_for_each_registered_trigger(monke
     monkeypatch.setattr(festival, "_get_today_festival", lambda today=None: ("x", "（节日 prompt）"))
     monkeypatch.setattr(festival, "_is_holiday_period", lambda today=None: True)
     monkeypatch.setattr(memory, "_char_name", lambda: "叶瑄")
-    monkeypatch.setattr("core.memory.character_growth.load", lambda char, uid: "## 未跟进话题\n- 实习: 她说还没定\n")
+    _write_event_log(
+        sandbox,
+        "u1",
+        "2026-05-25",
+        """
+## 14:30
+**用户**：我准备继续改实习材料
+> turn_id:t1
+**叶瑄**：我记得。
+> emotion:gentle intensity:1 turn_id:t1
+---
+""",
+    )
 
     now = datetime(2026, 5, 25, 15, 0)
     weather_detail = {
@@ -176,6 +194,68 @@ async def test_sleep_end_execute_false_preserves_cross_marks(monkeypatch):
     assert result.would_mark == ["sleep_end", "morning_greeting"]
     assert marks == ["sleep_end", "morning_greeting"]
     assert sent and sent[0][1] == "sleep_end"
+
+
+@pytest.mark.asyncio
+async def test_topic_followup_execute_dryrun_does_not_write_followed_topics(monkeypatch, sandbox):
+    from core.scheduler.triggers import memory
+    from core.scheduler.last_mentioned import load_followed_topics
+
+    monkeypatch.setattr(memory, "_cfg", lambda: {"topic_followup": True})
+    monkeypatch.setattr(memory, "_owner_id", lambda: "u1")
+    _write_event_log(
+        sandbox,
+        "u1",
+        "2026-05-25",
+        """
+## 14:30
+**用户**：我准备继续改实习材料
+> turn_id:t1
+**叶瑄**：我记得。
+> emotion:gentle intensity:1 turn_id:t1
+---
+""",
+    )
+
+    proposal = memory.propose({"now_dt": datetime(2026, 5, 25, 16, 0), "uid": "u1"})
+    result = await proposal.execute(dry_run=True)
+
+    assert "继续改实习材料" in result.would_send_prompt
+    assert load_followed_topics() == {}
+
+
+@pytest.mark.asyncio
+async def test_topic_followup_execute_live_writes_followed_topics(monkeypatch, sandbox):
+    from core.scheduler import loop
+    from core.scheduler.triggers import memory
+    from core.scheduler.last_mentioned import load_followed_topics
+
+    async def fake_send(prompt, search_query="", trigger_name="", **kwargs):
+        return None
+
+    monkeypatch.setattr(loop, "_pipeline_send", fake_send)
+    monkeypatch.setattr(loop, "_mark", lambda name: None)
+    monkeypatch.setattr(memory, "_cfg", lambda: {"topic_followup": True})
+    monkeypatch.setattr(memory, "_owner_id", lambda: "u1")
+    _write_event_log(
+        sandbox,
+        "u1",
+        "2026-05-25",
+        """
+## 14:30
+**用户**：我准备继续改实习材料
+> turn_id:t1
+**叶瑄**：我记得。
+> emotion:gentle intensity:1 turn_id:t1
+---
+""",
+    )
+
+    proposal = memory.propose({"now_dt": datetime(2026, 5, 25, 16, 0), "uid": "u1"})
+    result = await proposal.execute(dry_run=False)
+
+    assert result.sent is True
+    assert "继续改实习材料" in load_followed_topics()
 
 
 @pytest.mark.asyncio

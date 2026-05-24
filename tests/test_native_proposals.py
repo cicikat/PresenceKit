@@ -1,4 +1,11 @@
 from datetime import date, datetime
+import inspect
+
+
+def _write_event_log(paths, uid: str, date_text: str, body: str) -> None:
+    day_dir = paths.event_log() / uid
+    day_dir.mkdir(parents=True, exist_ok=True)
+    (day_dir / f"{date_text}.md").write_text(body, encoding="utf-8")
 
 
 def test_hr_critical_propose_absent_when_heart_rate_normal():
@@ -161,20 +168,129 @@ def test_reactive_watch_proposals_use_recent_events():
     assert 0.30 <= sleep.urgency <= 0.49
 
 
-def test_topic_followup_propose_uses_growth_unfollowed_topic(monkeypatch):
+def test_topic_followup_propose_uses_event_log_last_mentioned(monkeypatch, sandbox):
     from core.scheduler.triggers import memory
 
     monkeypatch.setattr(memory, "_cfg", lambda: {"topic_followup": True})
     monkeypatch.setattr(memory, "_owner_id", lambda: "u1")
-    growth = "## 未跟进话题\n- 实习: 她说还没定\n"
+    _write_event_log(
+        sandbox,
+        "u1",
+        "2026-05-25",
+        """
+## 15:00
+**用户**：我准备继续改实习材料
+> turn_id:t1
+**叶瑄**：我记得。
+> emotion:gentle intensity:1 turn_id:t1
+---
+""",
+    )
 
     proposal = memory.propose({
         "now_dt": datetime(2026, 5, 25, 16, 0),
-        "character_growth": growth,
+        "uid": "u1",
     })
 
     assert proposal.trigger_name == "topic_followup"
     assert 0.30 <= proposal.urgency <= 0.49
+
+
+def test_topic_followup_new_propose_has_no_character_growth_dependency():
+    from core.scheduler.triggers import memory
+
+    assert "character_growth" not in inspect.getsource(memory.propose)
+
+
+def test_topic_followup_propose_skips_recently_followed_topic(monkeypatch, sandbox):
+    from core.scheduler.triggers import memory
+    from core.scheduler.last_mentioned import mark_topic_followed
+
+    monkeypatch.setattr(memory, "_cfg", lambda: {"topic_followup": True})
+    monkeypatch.setattr(memory, "_owner_id", lambda: "u1")
+    _write_event_log(
+        sandbox,
+        "u1",
+        "2026-05-25",
+        """
+## 15:00
+**用户**：我准备继续改实习材料
+> turn_id:t1
+**叶瑄**：我记得。
+> emotion:gentle intensity:1 turn_id:t1
+---
+""",
+    )
+    mark_topic_followed("继续改实习材料", now_ts=1_000.0)
+
+    proposal = memory.propose({
+        "now_dt": datetime(2026, 5, 25, 16, 0),
+        "now_ts": 1_000.0 + 3600,
+        "uid": "u1",
+    })
+
+    assert proposal is None
+
+
+def test_topic_followup_propose_allows_different_topic_key(monkeypatch, sandbox):
+    from core.scheduler.triggers import memory
+    from core.scheduler.last_mentioned import mark_topic_followed
+
+    monkeypatch.setattr(memory, "_cfg", lambda: {"topic_followup": True})
+    monkeypatch.setattr(memory, "_owner_id", lambda: "u1")
+    _write_event_log(
+        sandbox,
+        "u1",
+        "2026-05-25",
+        """
+## 15:00
+**用户**：我明天要测试桌宠通道
+> turn_id:t1
+**叶瑄**：那我陪你看结果。
+> emotion:gentle intensity:1 turn_id:t1
+---
+""",
+    )
+    mark_topic_followed("继续改实习材料", now_ts=1_000.0)
+
+    proposal = memory.propose({
+        "now_dt": datetime(2026, 5, 25, 16, 0),
+        "now_ts": 1_000.0 + 3600,
+        "uid": "u1",
+    })
+
+    assert proposal.trigger_name == "topic_followup"
+
+
+def test_no_recent_topic_followup_leaves_spontaneous_recall_available(monkeypatch, sandbox):
+    from core.scheduler.triggers import memory, time_based
+
+    monkeypatch.setattr(memory, "_cfg", lambda: {"topic_followup": True})
+    monkeypatch.setattr(memory, "_owner_id", lambda: "u1")
+    monkeypatch.setattr(time_based, "_owner_id", lambda: "u1")
+    monkeypatch.setattr("core.scheduler.rhythm.silence_ratio", lambda uid, now_ts=None: 1.0)
+    _write_event_log(
+        sandbox,
+        "u1",
+        "2026-05-25",
+        """
+## 15:00
+**用户**：嗯。叶瑄。
+> turn_id:t1
+**叶瑄**：我在。
+> emotion:neutral intensity:0 turn_id:t1
+---
+""",
+    )
+    ctx = {
+        "now_dt": datetime(2026, 5, 25, 16, 0),
+        "now_ts": datetime(2026, 5, 25, 16, 0).timestamp(),
+        "uid": "u1",
+        "episodic_memories": [{"summary": "她说起实习", "strength": 0.8}],
+    }
+
+    assert memory.propose(ctx) is None
+    assert time_based.propose_spontaneous_recall(ctx).trigger_name == "spontaneous_recall"
 
 
 def test_garden_reactive_proposals_use_cached_events():
