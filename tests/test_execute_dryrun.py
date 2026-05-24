@@ -316,6 +316,61 @@ async def test_reminder_execute_captures_mark_done_id(monkeypatch, sandbox):
 
 
 @pytest.mark.asyncio
+async def test_reminder_execute_live_marks_done(monkeypatch, sandbox):
+    from core.scheduler import loop
+    from core.scheduler.triggers import reminders
+
+    done = []
+
+    async def fake_send(prompt, search_query="", trigger_name="", **kwargs):
+        return None
+
+    monkeypatch.setattr(loop, "_pipeline_send", fake_send)
+    monkeypatch.setattr("core.scheduler.loop._owner_id", lambda: "u1")
+    monkeypatch.setattr("core.tools.reminder.mark_done", lambda uid, rid: done.append((uid, rid)))
+
+    proposal = reminders.propose({
+        "now_dt": datetime(2026, 5, 25, 12, 30),
+        "due_reminders": [{"id": "r42", "content": "交材料", "remind_at": "2026-05-25 12:00"}],
+    })
+
+    result = await proposal.execute(dry_run=False)
+
+    assert result.sent is True
+    assert done == [("u1", "r42")]
+
+
+@pytest.mark.asyncio
+async def test_diary_share_execute_live_marks_last_share(monkeypatch, sandbox):
+    from core.scheduler import loop
+    from core.scheduler.triggers import diary
+
+    async def fake_send(prompt, search_query="", trigger_name="", **kwargs):
+        return None
+
+    monkeypatch.setattr(loop, "_pipeline_send", fake_send)
+    monkeypatch.setattr(loop, "_owner_id", lambda: "u1")
+    monkeypatch.setattr(loop, "_last_diary_share", 0.0)
+    monkeypatch.setattr(diary, "_owner_id", lambda: "u1")
+    monkeypatch.setattr(diary, "_cfg", lambda: {"enabled": True})
+    monkeypatch.setattr(diary, "_scheduler_start_time", 0.0)
+    monkeypatch.setattr("core.scheduler.rhythm.quiet_floor_elapsed", lambda uid, now_ts=None: True)
+    monkeypatch.setattr("core.scheduler.rhythm.triggered_on_logical_day", lambda name, now=None: False)
+
+    proposal = diary.propose_diary_share_reminder({
+        "now_dt": datetime(2026, 5, 25, 22, 30),
+        "now_ts": datetime(2026, 5, 25, 22, 30).timestamp(),
+    })
+
+    result = await proposal.execute(dry_run=False)
+
+    assert result.sent is True
+    assert loop._last_diary_share > 0
+    raw = json.loads(sandbox.scheduler_state().read_text(encoding="utf-8"))
+    assert raw["last_diary_share"] == loop._last_diary_share
+
+
+@pytest.mark.asyncio
 async def test_weather_execute_dryrun_reads_cache_without_fetch(monkeypatch):
     from core.scheduler.triggers import time_based
 
@@ -357,6 +412,51 @@ async def test_weather_execute_dryrun_reads_cache_without_fetch(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_weather_live_old_tick_refreshes_cache_without_sending(monkeypatch):
+    from core.scheduler import execution, loop
+    from core.scheduler.triggers import time_based
+
+    sent = []
+    detail = {
+        "temp_c": 31,
+        "humidity": 50,
+        "precip_mm": 0.0,
+        "cloud_cover": 50,
+        "wind_kmph": 10,
+        "desc": "晴",
+        "is_day": True,
+        "uv_index": 3,
+    }
+
+    async def fake_send(prompt, search_query="", trigger_name="", **kwargs):
+        sent.append((prompt, trigger_name))
+
+    async def fake_fetch(location):
+        return dict(detail)
+
+    class FakeDatetime(datetime):
+        @classmethod
+        def now(cls):
+            return cls(2026, 5, 25, 12, 0)
+
+    monkeypatch.setattr(execution, "EXECUTE_MODE", "live")
+    monkeypatch.setattr(loop, "_pipeline_send", fake_send)
+    monkeypatch.setattr(time_based, "_pipeline_send", fake_send)
+    monkeypatch.setattr(time_based, "_cfg", lambda: {"enabled": True})
+    monkeypatch.setattr(time_based, "_owner_id", lambda: "u1")
+    monkeypatch.setattr(time_based, "datetime", FakeDatetime)
+    monkeypatch.setattr("core.config_loader.get_config", lambda: {"tools": {"weather": {"enabled": True}}})
+    monkeypatch.setattr("core.memory.user_profile.load", lambda uid: {"location": "杭州"})
+    monkeypatch.setitem(sys.modules, "core.tools.weather", SimpleNamespace(get_weather_detail=fake_fetch))
+
+    await time_based._check_weather(force=False)
+
+    cached = time_based.get_last_weather_detail()
+    assert cached and cached["desc"] == "晴"
+    assert sent == []
+
+
+@pytest.mark.asyncio
 async def test_gating_dryrun_executes_only_winner(monkeypatch, sandbox):
     from core.scheduler import gating, proposer_registry
     from core.scheduler.gating import TriggerProposal
@@ -394,4 +494,34 @@ async def test_gating_dryrun_executes_only_winner(monkeypatch, sandbox):
     await gating.run_shadow_tick("u1")
 
     assert executed == [("high", True)]
+    proposer_registry._reset_for_tests()
+
+
+@pytest.mark.asyncio
+async def test_gating_live_executes_winner_live(monkeypatch, sandbox):
+    from core.scheduler import execution, gating, proposer_registry
+    from core.scheduler.gating import TriggerProposal
+    from core.scheduler.state_machine import TriggerState
+
+    executed = []
+
+    async def execute(*, dry_run: bool):
+        executed.append(dry_run)
+        from core.scheduler.execution import ExecuteResult
+
+        return ExecuteResult(trigger_name="live", would_send_prompt="live", dry_run=dry_run, sent=not dry_run)
+
+    proposer_registry._reset_for_tests()
+    monkeypatch.setattr(proposer_registry, "_BUILTINS_LOADED", True)
+    monkeypatch.setattr(execution, "EXECUTE_MODE", "live")
+    proposer_registry.register_proposer(
+        "live",
+        lambda ctx: TriggerProposal("live", 0.9, "random", [TriggerState.QUIET], execute=execute),
+    )
+    monkeypatch.setattr(gating, "get_current_state", lambda uid: TriggerState.QUIET)
+    monkeypatch.setattr(gating, "is_trigger_ready", lambda name: True)
+
+    await gating.run_shadow_tick("u1")
+
+    assert executed == [False]
     proposer_registry._reset_for_tests()

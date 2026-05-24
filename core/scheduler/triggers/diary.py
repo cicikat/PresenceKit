@@ -185,6 +185,7 @@ def propose_diary_share_reminder(ctx: dict | None = None):
             "diary_share_reminder",
             lambda: f"（{_char_name()}发现自己好几天没看到你写的东西了）",
             search_query="日记",
+            after_send=_mark_diary_shared_after_send,
         ),
     )
 
@@ -220,7 +221,13 @@ def _yesterday_label(now: datetime | None = None) -> str:
     return (base - timedelta(days=1)).strftime("%m月%d日")
 
 
-def _make_prompt_execute(trigger_name: str, prompt_factory, *, search_query: str = ""):
+def _mark_diary_shared_after_send() -> None:
+    from core.scheduler import loop
+
+    loop.mark_diary_shared()
+
+
+def _make_prompt_execute(trigger_name: str, prompt_factory, *, search_query: str = "", after_send=None):
     async def execute(*, dry_run: bool):
         from core.scheduler.execution import execute_prompt
 
@@ -230,6 +237,7 @@ def _make_prompt_execute(trigger_name: str, prompt_factory, *, search_query: str
             dry_run=dry_run,
             search_query=search_query,
             would_mark=[trigger_name],
+            after_send=after_send,
         )
 
     return execute

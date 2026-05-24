@@ -293,6 +293,27 @@ def test_no_recent_topic_followup_leaves_spontaneous_recall_available(monkeypatc
     assert time_based.propose_spontaneous_recall(ctx).trigger_name == "spontaneous_recall"
 
 
+def test_sleep_end_morning_mark_blocks_new_morning_greeting_at_gating(monkeypatch, sandbox):
+    from core.scheduler import gating, loop
+    from core.scheduler.state_machine import TriggerState
+    from core.scheduler.triggers import time_based
+
+    monkeypatch.setattr(time_based, "_cfg", lambda: {"morning_greeting": True})
+    monkeypatch.setattr(time_based, "_owner_id", lambda: "u1")
+    monkeypatch.setattr(time_based, "_user_talked_today", lambda uid: False)
+    monkeypatch.setattr("core.scheduler.rhythm.is_present", lambda now_ts=None: True)
+    monkeypatch.setattr(gating, "get_current_state", lambda uid: TriggerState.QUIET)
+
+    loop._mark("morning_greeting")
+    proposal = time_based.propose_morning_greeting({
+        "now_dt": datetime(2026, 5, 25, 8, 0),
+        "now_ts": datetime(2026, 5, 25, 8, 0).timestamp(),
+    })
+
+    assert proposal is not None
+    assert gating.collect_and_decide("u1", [proposal]) is None
+
+
 def test_garden_reactive_proposals_use_cached_events():
     from core.scheduler.triggers import garden_daily, garden_water
 

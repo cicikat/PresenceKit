@@ -139,6 +139,7 @@ def _mark(name: str):
     try:
         import json
         p = get_paths().scheduler_state()
+        p.parent.mkdir(parents=True, exist_ok=True)
         existing = {}
         if p.exists():
             existing = json.loads(p.read_text(encoding="utf-8"))
@@ -259,6 +260,7 @@ def mark_diary_shared():
     try:
         import json
         p = get_paths().scheduler_state()
+        p.parent.mkdir(parents=True, exist_ok=True)
         existing = {}
         if p.exists():
             existing = json.loads(p.read_text(encoding="utf-8"))
