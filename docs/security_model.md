@@ -1,473 +1,141 @@
-前提：这份文档是gpt读完架构文档和接口文档后写的，仅供参考，具体参考代码
+# docs/security_model.md — 当前安全模型与风险边界
 
-# security_model.md（草案）
-
-> 当前阶段以“功能先完成”为主。
-> 本文档用于记录未来开源、社区化、插件化后必须处理的安全与架构风险。
+> 本文按当前代码校准，不是理想化设计稿。项目仍是单用户本地陪伴系统，默认部署假设是可信本机/内网；如果未来开源、社区化或插件化，必须把这里的“当前缺口”先补上。
 
 ---
 
-# 核心原则
+## 一、当前已落地的边界
 
-## 1. 社区资源默认不可信
+### 后端白名单执行
 
-所有：
+LLM 不能直接执行系统能力。所有工具都必须在 `core/tool_dispatcher.py` 的 `_TOOL_REGISTRY`
+注册，通过 `execute()` 做开关、危险标记、权限和确认流程。
 
-* 角色包
-* 主题包
-* 插件
-* 表情包
-* 动作包
-* prompt preset
+- 探针只暴露 `info` / `desktop` 类工具：`get_tools_schema(categories=["info", "desktop"])`
+- 危险工具 `device_shutdown` / `device_sleep` 标记 `dangerous=True`，并检查 `agent_control` 权限
+- 工具开关来自 `config.yaml tools:`，默认启用，危险工具通常配置为关闭
+- 桌面动作先走 WebSocket ack，失败才降级文件队列
 
-都必须视为“不可信输入”。
+### 管理接口 Bearer token
 
-禁止默认信任任何社区内容。
+`admin/auth.py` 使用简单 Bearer token，密钥来自 `config.admin.secret_key`。大多数管理路由和所有
+mobile 路由依赖 `verify_token()`。
 
----
+已鉴权示例：
+- `/characters/*`
+- `/scheduler/*`
+- `/mobile/activate` / `/mobile/chat` / `/mobile/poll` / `/mobile/push`
+- garden / memory / mood / diary / relations 等管理路由
 
-## 2. LLM 输出默认不可信
+### 路径与测试沙盒
 
-LLM：
+运行态 data 路径应通过 `core/sandbox.get_paths()` 获取。`mode=test` 时，路径前缀切到
+`data/test_sandbox/{session}/`，并把 `data_prefix` 写入 `config.yaml` 供桌宠端读取。
 
-* 可能 hallucination
-* 可能 prompt injection
-* 可能输出危险工具调用
-* 可能越权访问
+`core/safe_write.py` 提供：
+- `safe_write_text/json/bytes()`：写临时文件后 replace
+- `safe_append_jsonl()`：追加 jsonl，用于日志类观测文件
 
-因此：
+### 上传和媒体限制
 
-* 工具权限必须由后端控制
-* 不允许“模型说了就执行”
-* 所有危险操作必须经过权限检查
+`POST /upload/ingest` 只接受文档和图片：
+- 文档：`.txt` / `.md` / `.docx`，单文件，最大 5MB
+- 图片：`.jpg` / `.jpeg` / `.png` / `.gif` / `.webp` / `.heic` / `.heif` / `.bmp`，可多张，单张最大 10MB
+- 图片会按 sha256 做描述缓存，HEIC/WEBP/BMP 等会归一化，长边上限 1920
+- 文件名落盘前取 `Path(filename).name`，避免客户端传入路径穿越名
 
----
+### 角色卡路径保护
 
-## 3. 后端白名单 API 才可信
+`admin/routers/character.py` 的 `_safe_path(name)` 会把目标路径 resolve 到 `characters/` 下，防止
+`../` 路径穿越。上传只允许 `.json` / `.txt` / `.md`，JSON 会先解析校验。
 
-只有：
+### 网络代理控制
 
-* channel
-* tool_dispatcher
-* sandbox
-* registry
-* approved actions
-
-等后端白名单系统可以真正执行操作。
-
-禁止：
-
-* 插件直接写 memory
-* 插件直接写 queue 文件
-* 插件直接操作本地系统
+LLM client 在无显式 proxy 时使用 `trust_env=False`，网易云搜索的 aiohttp session 也使用
+`trust_env=False`。桌宠 WebSocket 客户端侧仍需遵守 `AGENTS.md` 里的规则：连接前临时清除
+`HTTP_PROXY` / `HTTPS_PROXY`，连接结束后恢复。
 
 ---
 
-# 一、社区包安全
+## 二、当前明确的缺口
 
-## 风险
+### 无鉴权本地入口
 
-社区包可能：
+以下入口当前无 token：
+- `POST /desktop/chat`
+- `POST /desktop/trigger`
+- `POST /desktop/activate`
+- `POST /desktop/deactivate`
+- `POST /upload/ingest`
+- `ws://127.0.0.1:8080/ws/desktop`
 
-* 携带恶意代码
-* 路径穿越
-* prompt 注入
-* 资源炸弹
-* 覆盖系统文件
+这符合本地桌宠接入的便利性，但如果服务绑定到非本机地址，风险会立刻升高：伪造客户端可以写入真实对话、触发 QQ 回复、上传内容、激活通道或接收桌面广播。
 
----
+### WebSocket 客户端身份未校验
 
-## 第一阶段允许的文件类型
+`channels/desktop_ws.py` 当前是单连接替换模型：新连接会关闭旧连接。没有 token、设备 id、origin 校验或会话超时策略。伪造连接可以抢占桌宠通道，并接收 `channel_message` / `action`。
 
-建议仅允许：
+### sandbox 不是安全沙箱
 
-* json
-* yaml
-* png
-* jpg
-* webp
-* gif
-* mp3
-* wav
-* md
-* txt
+`core/sandbox.py` 是路径集中管理和测试数据隔离，不是权限隔离。它不能阻止任意代码读取项目外文件，也不能限制第三方插件能力。未来插件化必须另做权限模型。
 
-禁止：
+### 导入/社区包体系未成型
 
-* exe
-* dll
-* bat
-* ps1
-* sh
-* py
-* js
-* ts
-* jar
+当前只有角色卡上传和 lore/jailbreak 等管理导入，没有统一 package manifest、schema version、资源总量限制、压缩包解压防护或插件生命周期隔离。
+
+### source / privacy 策略仍不完整
+
+`turn_sink` 已统一 desktop/mobile/scheduler/sensor 的部分 assistant turn，但 QQ 主入口、冻结 `/chat`、`/desktop/trigger` 仍有 legacy 路径。sensor/watch/mobile 等来源还没有统一的 `can_write_memory` / `can_affect_mood` / `privacy.allow_memory` 策略字段。
 
 ---
 
-## 导入校验
+## 三、高隐私数据
 
-导入时必须检查：
+默认不要导出、分享或打包：
 
-* schema_version
-* manifest
-* 文件大小
-* 文件数量
-* 解压后总大小
-* 文件类型白名单
-* 路径穿越（../）
+- `data/history/`
+- `data/event_log/`
+- `data/mid_term/`
+- `data/episodic_memory/`
+- `data/user_identity/`
+- `data/character_growth/`
+- `data/dreams/`
+- `data/profiles/`
+- `data/diary_context/`
+- `data/yexuan_inner/mood_state.json`
+- 用户日记、Watch/传感器数据、API keys、`config.yaml`
+
+默认可以考虑导出：
+- 角色设定
+- 立绘 / 表情 / 主题资源
+- lore / author notes / preset
+
+导出前必须显式排除 memory、history、profile、diary、event_log、API keys。
 
 ---
 
-## 包结构建议
+## 四、未来插件/社区化准入线
+
+开放社区资源前至少需要：
+
+1. package manifest + `schema_version`
+2. 文件类型白名单、单文件大小、文件数量、解压后总大小限制
+3. 路径穿越检查和嵌套压缩包拒绝
+4. 插件目录隔离，禁止插件直接写 memory / queue / system path
+5. 工具权限 manifest，危险能力必须用户确认
+6. WebSocket / mobile / desktop 本地 token 或配对机制
+7. 导出清单，默认排除所有私人记忆和密钥
+
+推荐演进顺序：
 
 ```text
-package/
-├── manifest.json
-├── character/
-├── emotes/
-├── motions/
-├── themes/
-├── lore/
-└── preview/
-```
-
----
-
-# 二、Prompt Injection
-
-## 风险
-
-角色卡可能包含：
-
-* 忽略系统 prompt
-* 读取本地文件
-* 泄露 API key
-* 执行桌面动作
-* 绕过安全层
-
----
-
-## 防护原则
-
-角色卡只能影响：
-
-* 人设层
-* 对话层
-* lore 层
-
-禁止影响：
-
-* system rules
-* tool permission
-* sandbox policy
-
----
-
-## 工具调用规则
-
-工具调用必须：
-
-* 后端白名单验证
-* 参数校验
-* 权限校验
-
-不能只依赖 LLM 判断。
-
----
-
-# 三、本地文件与用户隐私
-
-## 高风险数据
-
-以下数据属于高隐私：
-
-* profiles
-* episodic_memory
-* history
-* diary
-* character_growth
-* data/dreams/
-* mood_state
-* API keys
-
----
-
-## 建议目录隔离
-
-```text
-data/
-├── core_private/
-├── packages/
-├── user_assets/
-└── imported_characters/
-```
-
----
-
-## 原则
-
-社区资源：
-
-* 只能读自己的目录
-* 不能直接访问 memory
-* 不能读取 config/.env
-
----
-
-# 四、桌面动作安全
-
-## 风险
-
-LLM 可能：
-
-* 无限发送动作
-* 打开危险网站
-* 删除文件
-* 模拟危险行为
-
----
-
-## 动作分级
-
-### safe
-
-无需确认：
-
-* 表情
-* 姿态
-* UI 动画
-* 普通消息
-
-### confirm
-
-需要用户确认：
-
-* 打开网页
-* 打开文件
-* 外部跳转
-
-### danger
-
-默认禁止：
-
-* 删除文件
-* 执行 shell
-* 写系统目录
-* 注册表操作
-
----
-
-# 五、消息队列与循环
-
-## 风险
-
-可能出现：
-
-* 消息风暴
-* 自触发循环
-* scheduler 无限广播
-* pending perception 连锁污染
-
----
-
-## 需要限制
-
-* rate limit
-* queue size limit
-* cooldown
-* retry limit
-* DLQ size limit
-
----
-
-# 六、导出与分享
-
-## 风险
-
-用户导出角色包时：
-
-可能误包含：
-
-* 私人记忆
-* 历史记录
-* diary
-* profile
-* growth
-
----
-
-## 默认允许导出
-
-* 角色设定
-* 立绘
-* 表情
-* lore
-* author notes
-* preset
-
----
-
-## 默认禁止导出
-
-* memory
-* history
-* profiles
-* event_log
-* diary
-* API keys
-
----
-
-# 七、WebSocket 与 Mobile 安全
-
-## 风险
-
-可能：
-
-* 伪造桌宠客户端
-* 局域网劫持
-* 恶意轮询 mobile queue
-* 注入 desktop chat
-
----
-
-## 建议
-
-* WS token
-* localhost 限制
-* Bearer token
-* session timeout
-* rate limit
-
----
-
-# 八、资源炸弹
-
-## 风险
-
-社区资源可能：
-
-* 超大图片
-* 超长 prompt
-* 几万表情
-* 嵌套 zip
-* 巨型音频
-
----
-
-## 建议限制
-
-* 单文件大小
-* 总包大小
-* prompt 长度
-* 图片尺寸
-* 文件数量
-* 解压后大小
-
----
-
-# 九、未来插件系统（高风险）
-
-## 当前建议
-
-插件系统不要过早开放。
-
-优先级：
-
-```text
-Lv1：资源包
+Lv1：纯资源包
 Lv2：声明式扩展
-Lv3：真正插件系统
+Lv3：带权限 manifest 的插件系统
 ```
 
 ---
 
-## 真插件开放前必须具备
+## 当前结论
 
-* 权限系统
-* 沙箱
-* API version
-* 插件 manifest
-* 生命周期管理
-* 崩溃隔离
-* 插件目录隔离
-
----
-
-# 十、未来架构债关注点
-
-## 当前架构总体健康
-
-优点：
-
-* 单 pipeline
-* 通道隔离
-* sandbox
-* uid lock
-* queue 分层
-* 文档同步 hook
-
-适合继续扩展。
-
----
-
-## 未来可能的架构债
-
-### 1. data/ 目录职责膨胀
-
-需要逐渐：
-
-* core data
-* user assets
-* packages
-* runtime cache
-
-分层。
-
----
-
-### 2. schema version 缺失
-
-未来：
-
-* 角色包
-* memory
-* themes
-* API
-
-都建议加入：
-
-```json
-"schema_version": 1
-```
-
----
-
-### 3. 插件边界不够硬
-
-必须保证：
-
-* 插件不能直接碰 memory
-* 插件不能绕过 channel
-* 插件不能写系统目录
-
-所有能力必须走 API。
-
----
-
-# 当前结论
-
-当前架构：
-
-* 没有明显“必须推翻重构”的问题
-* 非常适合继续做桌宠生态
-* 最大风险来自未来社区化与插件化
-
-当前优先级仍然应该是：
-
-1. 完成核心体验
-2. 做角色包/主题包标准
-3. 做导入导出
-4. 再考虑插件系统
+当前安全模型适合“单用户、本机、可信客户端”的开发阶段。真正的风险不是核心 pipeline，而是把无鉴权本地入口、社区资源和插件能力暴露到不可信环境。准备开放生态前，优先补 WS/mobile/desktop 身份校验、导入导出白名单、统一 source/privacy 策略。
