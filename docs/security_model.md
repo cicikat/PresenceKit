@@ -188,6 +188,7 @@ package/
 * history
 * diary
 * character_growth
+* data/dreams/
 * mood_state
 * API keys
 

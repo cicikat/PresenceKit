@@ -146,6 +146,11 @@ data/
 ├── history/{uid}.json            短期对话历史（磁盘轮数可配；prompt 近场保留 + 远场加权择优）
 ├── mid_term/{uid}.json           中期对话摘要（12小时过期，最多20条，三时间桶）
 ├── diary_context/{uid}.json      用户日记上下文
+|-- dreams/
+|   |-- tmp/                      Dream Session temp files (dream_only; never a memory source)
+|   |-- archive/                  Dream Session archive (never enters any memory loader)
+|   |-- summaries/                Dream Session summaries (never enter any memory loader)
+|   `-- state/{uid}/dream_state.json  per-uid Dream Session state
 ├── group_context/{gid}.json      群聊最近动态（prompt 层 4 注入）
 ├── reminders/{uid}.json          用户备忘录列表（调度器检查到期即发）
 ├── pending_perception/           桌面动作失败感知（时间戳命名，两阶段提交）
