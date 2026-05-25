@@ -41,7 +41,7 @@ QQ 消息 → main.py → message_queue
     │
     ▼ 步骤0（在 pipeline 之前）
 探针判断工具（QQ：关键词快速路径 + LLM probe；desktop/mobile：LLM probe；只看 info+desktop 类）
-get_tags()（对消息打话题标签，传给 build_prompt）
+get_tags()（build_prompt 内计算；部分入口可显式传入复用）
 工具执行（结果写入 tool_result）
     │
     ▼ 步骤1  fetch_context()
@@ -49,7 +49,7 @@ get_tags()（对消息打话题标签，传给 build_prompt）
 ├─ short_term.load_for_prompt() → history            [同步，近场保留 + 远场加权择优]
   ├─ user_relation.get_relation()→ relation             [同步]
   ├─ group_context.get_recent() → group_context         [同步]
-  ├─ character_growth.load()    → growth_content        [同步]
+  ├─ user_identity.format_for_prompt() → user_identity_text [异步]
   ├─ lore_engine.match()        → lore_entries          [同步]
   ├─ episodic_memory.retrieve() → episodic_result       [同步]
   ├─ episodic_memory.retrieve_fallback() → episodic_fallback_result  [同步]
@@ -79,8 +79,9 @@ get_tags()（对消息打话题标签，传给 build_prompt）
   │
   │  【慢队列】uid_lock 释放后入 slow_queue，单 worker 异步执行：
   ├─ summarize_to_midterm              LLM 压缩单轮到 mid_term，写血缘字段；emotion 显著时触发 reflect_to_episodic(eager)
-  ├─ reflect_to_episodic               mid_term 列表 → episodic，更新 fixation_state；达阈值触发 consolidate_to_growth
-  ├─ consolidate_to_growth             unconsolidated episodic → character_growth.md（含备份+校验+回滚）
+  ├─ reflect_to_episodic               mid_term 列表 → episodic，更新 fixation_state；达阈值触发 consolidate_to_identity
+  ├─ consolidate_to_identity           unconsolidated episodic + old identity + profile → user_identity.yaml
+  ├─ consolidate_to_growth             legacy handler：unconsolidated episodic → character_growth.md（供旧 DLQ / 手动兼容）
   ├─ consistency_check                 人设一致性检测，问题存 author_note_extra
   └─ user_profile_update               每 N 轮触发，入队时已判断条件
   │  （旧 handler mid_term_append / episodic_compress 保留供 DLQ 残留任务重试）
@@ -141,10 +142,11 @@ data/
 ├── event_log/{uid}/              按天分割的对话流水账（search 最近 30 天）
 ├── episodic_memory/{uid}.json    情景记忆（最多 200 条，含 strength 衰减）
 ├── memory_index/{uid}.json       标签倒排索引（episodic 用）
+├── user_identity/{uid}.yaml      用户稳定行为模式（当前 prompt 层 6a 主入口）
 ├── character_growth/
-│   ├── 角色_{uid}.md             角色对用户的整体认知（由 fixation pipeline 固化更新）
-│   ├── 角色_{uid}.felt.md        感受层版本（存在时优先读，不存在时降级到 .md）
-│   └── 角色_{uid}.fingerprint.txt  压缩版指纹（前 150 字；当前 prompt 直接从 felt/.md 取前 150 字）
+│   ├── 角色_{uid}.md             角色对用户的整体认知（legacy/兼容）
+│   ├── 角色_{uid}.felt.md        感受层版本（legacy）
+│   └── 角色_{uid}.fingerprint.txt  压缩版指纹（legacy；当前主 prompt 不注入）
 ├── profiles/{uid}.json           用户画像
 ├── history/{uid}.json            短期对话历史（磁盘轮数可配；prompt 近场保留 + 远场加权择优）
 ├── mid_term/{uid}.json           中期对话摘要（12小时过期，最多20条，三时间桶）
@@ -219,6 +221,8 @@ pipeline = pipeline_registry.get()
 
 裁剪顺序（依次删，按质量从低到高）：
 `6b_event_search` → `mid_term` → `6d_diary` → `6e_inner_diary` → `6c_episodic` → `5.5_lore`
+
+`6a_user_identity`、`5_profile`、`9_history`、`11_author_note` 不在裁剪表里。
 
 
 ---

@@ -24,8 +24,7 @@
 | `5_profile` | 用户画像（名字/位置/宠物/兴趣/职业） | 有内容即注 | `user_profile.load()` |
 | `5.2_reminders` | 待办备忘录列表 | 有待办即注 | `get_reminders()` |
 | `5.5_lore` | 世界书条目 | LoreEngine 命中时 | `lore_engine.match()` |
-| `6a_growth_fingerprint` | 角色认知前 150 字 | tagged 未命中时（有内容） | 优先读 `叶瑄_{uid}.felt.md`，不存在时降级读 `叶瑄_{uid}.md` |
-| `6a_growth_full` | 角色认知全文 | tagged 命中时（与 fingerprint 互斥） | 优先读 `叶瑄_{uid}.felt.md`，不存在时降级读 `叶瑄_{uid}.md` |
+| `6a_user_identity` | 用户稳定行为模式 | `user_identity_text` 非空 | `core/memory/user_identity.py`，confidence >= 0.5 的维度 |
 | `6b_event_search` | 相关往事（event_log 搜索结果） | 搜索结果非空 | `event_log.search()` |
 | `6c_episodic` | 情景记忆片段 | episodic_result 非空 | `episodic_memory.retrieve()` + `format_for_prompt()` |
 | `6c_episodic_fallback` | 近期高强度记忆兜底 | episodic_result 为空且 fallback 非空 | `episodic_memory.retrieve_fallback()`；实际消息 `_layer` 仍写 `6c_episodic`，便于统一裁剪 |
@@ -67,13 +66,17 @@ if any(p in text for p in rule.patterns):
 | `query.what_doing` | 你看到我在干嘛、你知道我在做什么、我在干嘛、我在做什么 | 3.8 activity |
 | `topic.body` | 肚子、痛、生理期、例假、姨妈 | 3.5 period |
 | `emotion.physical_discomfort` | 难受、不舒服、很疼 | 3.5 period |
-| `topic.relation` | 我们、你还记得、之前、那次、上次 | 6a growth 全文 + 6e感受层 |
-| `topic.history` | 那时候、以前、当时、记得吗 | 6a growth 全文 |
-| `emotion.deep` | 其实、说真的、一直、从来、没人 | 6a growth 全文 + 6e感受层 |
-| `meta.identity` | 你是谁、你是什么、你了解我吗 | 6a growth 全文 |
-| `emotion.down` | 难过、想哭、想吐、恶心、痛苦、呃呃、呕呕、想似 | 3.5 period + 3.6 watch + 6a growth全文 + 6d日记 + 6e感受层 |
+| `topic.relation` | 我们、你还记得、之前、那次、上次 | 6e感受层 |
+| `topic.history` | 那时候、以前、当时、记得吗 | 当前不直接解锁额外层 |
+| `emotion.deep` | 其实、说真的、一直、从来、没人 | 6e感受层 |
+| `meta.identity` | 你是谁、你是什么、你了解我吗 | 当前不直接解锁额外层 |
+| `emotion.down` | 难过、想哭、想吐、恶心、痛苦、呃呃、呕呕、想似 | 3.5 period + 3.6 watch + 6d日记 + 6e感受层 |
 | `emotion.positive` | 好耶、噢噢噢、喵喵喵 | 3.8 activity |
 | `emotion.indirect` | 咪、好累、不想动、没胃口、吃不下、今天又没 | 3.5 period + 3.6 watch + 6d日记 + 6e感受层 |
+
+`topic.history` / `meta.identity` 目前仍会被 `tag_rules` 记录到 debug，但 `prompt_builder`
+不再用它们切换 `character_growth` 全文/指纹层。当前长期人格模式入口是 always-if-present 的
+`6a_user_identity`。
 
 ### Tag 覆盖率已知盲区
 
@@ -157,6 +160,9 @@ token_estimate = sum(len(m["content"]) for m in messages)
 - `mid_term` / `6d_diary` / `6e_inner_diary` 是被动上下文，丢了不影响相关性
 - `6c_episodic` 经过 LLM 压缩 + strength 校正 + MMR 多样性筛选，是质量最高的记忆层，靠后丢
 - `5.5_lore` 是世界书设定，丢了等于角色失忆，最后丢
+
+`6a_user_identity`、`5_profile`、`9_history`、`11_author_note` 不在裁剪表里。注意 `_layer`
+字段当前仍随 messages 传入 LLM client，见 `docs/known-issues.md` 的 `_layer` 透传记录。
 
 ---
 
