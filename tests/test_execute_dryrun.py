@@ -49,13 +49,14 @@ async def test_native_proposal_executes_dryrun_for_each_registered_trigger(monke
     monkeypatch.setattr("core.scheduler.rhythm.triggered_on_logical_day", lambda name, now=None: False)
     monkeypatch.setattr("core.scheduler.loop._owner_id", lambda: "u1")
     monkeypatch.setattr("core.scheduler.loop._last_diary_share", 0.0)
+    monkeypatch.setattr(diary, "_scheduler_start_time", 0.0)
     monkeypatch.setattr("core.config_loader.get_config", lambda: {"tools": {"weather": {"enabled": True}}})
     monkeypatch.setattr(period, "_days_elapsed", lambda uid, today=None: today.day)
     monkeypatch.setattr(time_based, "_user_talked_today", lambda uid: False)
     monkeypatch.setattr(time_based, "_weather_location", lambda: "杭州")
     monkeypatch.setattr("core.tools.diary_reader.yesterday_missing", lambda: True)
     monkeypatch.setattr("core.memory.episodic_memory._load_memories", lambda uid: [
-        {"summary": "她说起实习", "yexuan_feeling": "有些在意", "strength": 0.8}
+        {"id": "ep_exec_recall", "summary": "她说起实习", "yexuan_feeling": "有些在意", "strength": 0.8}
     ])
     monkeypatch.setattr(timenode, "_get_timenode", lambda today=None: "monday")
     monkeypatch.setattr(festival, "_get_today_festival", lambda today=None: ("x", "（节日 prompt）"))
@@ -134,7 +135,8 @@ async def test_native_proposal_executes_dryrun_for_each_registered_trigger(monke
     ]
 
     names = []
-    for proposal in proposals:
+    for index, proposal in enumerate(proposals):
+        assert proposal is not None, index
         result = await _run_dry(proposal)
         names.append(result.trigger_name)
 
@@ -297,6 +299,39 @@ async def test_topic_followup_execute_live_writes_followed_topics(monkeypatch, s
     assert result.sent is True
     assert "继续改实习材料" in load_followed_topics()
     assert "继续改实习材料" in load_followed_topics_shadow()
+
+
+@pytest.mark.asyncio
+async def test_spontaneous_recall_dryrun_shadow_blocks_second_propose(monkeypatch, sandbox):
+    from core.scheduler.triggers import time_based
+    from core.scheduler.last_mentioned import load_recalled_memories, load_recalled_memories_shadow
+
+    monkeypatch.setattr(time_based, "_owner_id", lambda: "u1")
+    monkeypatch.setattr("core.scheduler.rhythm.silence_ratio", lambda uid, now_ts=None: 1.0)
+    memory = {
+        "id": "ep_repeat",
+        "narrative_summary": "她说起实习",
+        "emotion_texture": "被认真接住的安心",
+        "strength": 0.9,
+    }
+    ctx = {
+        "now_dt": datetime(2026, 5, 25, 16, 0),
+        "now_ts": 1_000.0,
+        "uid": "u1",
+        "episodic_memories": [memory],
+    }
+
+    first = time_based.propose_spontaneous_recall(ctx)
+    assert first is not None
+    result = await first.execute(dry_run=True)
+
+    assert result.topic_key == "episode:ep_repeat"
+    assert "她说起实习" in result.would_send_prompt
+    assert load_recalled_memories() == {}
+    assert "episode:ep_repeat" in load_recalled_memories_shadow()
+
+    second = time_based.propose_spontaneous_recall({**ctx, "now_ts": 1_000.0 + 60})
+    assert second is None
 
 
 @pytest.mark.asyncio

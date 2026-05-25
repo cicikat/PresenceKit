@@ -20,6 +20,9 @@ RECENT_EVENT_LOG_DAYS = 3
 # TODO(policy.yaml): move topic-level refollow suppression into scheduler policy.
 TOPIC_REFOLLOW_WINDOW_SECONDS = 3 * 24 * 3600
 
+# TODO(policy.yaml): move filler memory-level refollow suppression into scheduler policy.
+RECALL_REFOLLOW_WINDOW_SECONDS = 12 * 3600
+
 _USER_PREFIX = "**用户**："
 _DATE_RE = re.compile(r"^#\s*(\d{4}-\d{2}-\d{2})\s*$")
 _TIME_RE = re.compile(r"^##\s*(\d{2}:\d{2})\s*$")
@@ -123,47 +126,125 @@ def is_recently_followed(
 ) -> bool:
     if not topic_key:
         return False
-    followed_at = _load_topic_state(_state_key(shadow)).get(topic_key)
-    if followed_at is None:
-        return False
-    return (now_ts if now_ts is not None else time.time()) - followed_at < window_seconds
+    return _is_recently_in_state(
+        _topic_state_key(shadow),
+        topic_key,
+        now_ts=now_ts,
+        window_seconds=window_seconds,
+    )
 
 
 def mark_topic_followed(topic_key: str, *, now_ts: float | None = None) -> None:
-    _mark_topic_state("followed_topics", topic_key, now_ts=now_ts)
+    _mark_state_map(
+        "followed_topics",
+        topic_key,
+        now_ts=now_ts,
+        prune_window_seconds=TOPIC_REFOLLOW_WINDOW_SECONDS,
+    )
 
 
 def mark_topic_followed_shadow(topic_key: str, *, now_ts: float | None = None) -> None:
-    _mark_topic_state("followed_topics_shadow", topic_key, now_ts=now_ts)
+    _mark_state_map(
+        "followed_topics_shadow",
+        topic_key,
+        now_ts=now_ts,
+        prune_window_seconds=TOPIC_REFOLLOW_WINDOW_SECONDS,
+    )
 
 
 def load_followed_topics() -> dict[str, float]:
-    return _load_topic_state("followed_topics")
+    return _load_state_map("followed_topics")
 
 
 def load_followed_topics_shadow() -> dict[str, float]:
-    return _load_topic_state("followed_topics_shadow")
+    return _load_state_map("followed_topics_shadow")
 
 
-def _mark_topic_state(state_key: str, topic_key: str, *, now_ts: float | None = None) -> None:
-    if not topic_key:
+def is_recently_recalled(
+    memory_key: str,
+    *,
+    now_ts: float | None = None,
+    window_seconds: int = RECALL_REFOLLOW_WINDOW_SECONDS,
+    shadow: bool = False,
+) -> bool:
+    if not memory_key:
+        return False
+    return _is_recently_in_state(
+        _memory_state_key(shadow),
+        memory_key,
+        now_ts=now_ts,
+        window_seconds=window_seconds,
+    )
+
+
+def mark_memory_recalled(memory_key: str, *, now_ts: float | None = None) -> None:
+    _mark_state_map(
+        "recalled_memories",
+        memory_key,
+        now_ts=now_ts,
+        prune_window_seconds=RECALL_REFOLLOW_WINDOW_SECONDS,
+    )
+
+
+def mark_memory_recalled_shadow(memory_key: str, *, now_ts: float | None = None) -> None:
+    _mark_state_map(
+        "recalled_memories_shadow",
+        memory_key,
+        now_ts=now_ts,
+        prune_window_seconds=RECALL_REFOLLOW_WINDOW_SECONDS,
+    )
+
+
+def load_recalled_memories() -> dict[str, float]:
+    return _load_state_map("recalled_memories")
+
+
+def load_recalled_memories_shadow() -> dict[str, float]:
+    return _load_state_map("recalled_memories_shadow")
+
+
+def _is_recently_in_state(
+    state_key: str,
+    key: str,
+    *,
+    now_ts: float | None,
+    window_seconds: int,
+) -> bool:
+    marked_at = _load_state_map(state_key).get(key)
+    if marked_at is None:
+        return False
+    return (now_ts if now_ts is not None else time.time()) - marked_at < window_seconds
+
+
+def _mark_state_map(
+    state_key: str,
+    key: str,
+    *,
+    now_ts: float | None = None,
+    prune_window_seconds: int,
+) -> None:
+    if not key:
         return
     ts = float(now_ts if now_ts is not None else time.time())
     state = _read_scheduler_state()
-    followed = state.get(state_key)
-    if not isinstance(followed, dict):
-        followed = {}
-    followed[str(topic_key)] = ts
-    state[state_key] = _prune_followed_topics(followed, now_ts=ts)
+    marked = state.get(state_key)
+    if not isinstance(marked, dict):
+        marked = {}
+    marked[str(key)] = ts
+    state[state_key] = _prune_state_map(
+        marked,
+        now_ts=ts,
+        window_seconds=prune_window_seconds,
+    )
     safe_write_json(get_paths().scheduler_state(), state)
 
 
-def _load_topic_state(state_key: str) -> dict[str, float]:
-    followed = _read_scheduler_state().get(state_key, {})
-    if not isinstance(followed, dict):
+def _load_state_map(state_key: str) -> dict[str, float]:
+    marked = _read_scheduler_state().get(state_key, {})
+    if not isinstance(marked, dict):
         return {}
     result: dict[str, float] = {}
-    for key, value in followed.items():
+    for key, value in marked.items():
         try:
             result[str(key)] = float(value)
         except (TypeError, ValueError):
@@ -171,8 +252,12 @@ def _load_topic_state(state_key: str) -> dict[str, float]:
     return result
 
 
-def _state_key(shadow: bool) -> str:
+def _topic_state_key(shadow: bool) -> str:
     return "followed_topics_shadow" if shadow else "followed_topics"
+
+
+def _memory_state_key(shadow: bool) -> str:
+    return "recalled_memories_shadow" if shadow else "recalled_memories"
 
 
 def topic_key_for(topic: str) -> str:
@@ -355,11 +440,16 @@ def _read_scheduler_state() -> dict:
     return data if isinstance(data, dict) else {}
 
 
-def _prune_followed_topics(followed: dict, *, now_ts: float | None = None) -> dict[str, float]:
+def _prune_state_map(
+    marked: dict,
+    *,
+    now_ts: float | None = None,
+    window_seconds: int,
+) -> dict[str, float]:
     now = now_ts if now_ts is not None else time.time()
-    max_age = TOPIC_REFOLLOW_WINDOW_SECONDS * 4
+    max_age = window_seconds * 4
     result: dict[str, float] = {}
-    for key, value in followed.items():
+    for key, value in marked.items():
         try:
             ts = float(value)
         except (TypeError, ValueError):
@@ -367,3 +457,11 @@ def _prune_followed_topics(followed: dict, *, now_ts: float | None = None) -> di
         if now - ts <= max_age:
             result[str(key)] = ts
     return result
+
+
+def _prune_followed_topics(followed: dict, *, now_ts: float | None = None) -> dict[str, float]:
+    return _prune_state_map(
+        followed,
+        now_ts=now_ts,
+        window_seconds=TOPIC_REFOLLOW_WINDOW_SECONDS,
+    )

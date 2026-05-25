@@ -3,6 +3,7 @@ import random
 import re
 import time
 from datetime import datetime
+from hashlib import sha1
 
 from core.error_handler import log_error
 from core.scheduler.loop import _is_ready, _mark, _owner_id, _pipeline_send, _cfg, _user_talked_today, _last_trigger, _char_name
@@ -10,6 +11,10 @@ from core.scheduler.loop import _is_ready, _mark, _owner_id, _pipeline_send, _cf
 logger = logging.getLogger(__name__)
 
 _LAST_WEATHER_DETAIL: dict | None = None
+
+# Keep spontaneous recall close to episodic_memory.retrieve(top_k=3) semantics
+# without calling retrieve() from the read-only proposer path.
+_SPONTANEOUS_RECALL_TOP_K = 3
 
 
 async def _check_morning(force: bool = False):
@@ -582,7 +587,13 @@ def propose_spontaneous_recall(ctx: dict | None = None):
             memories = _load_memories(oid)
         if not memories:
             return None
-        candidates = [m for m in memories if m.get("strength", 0) > 0.5]
+        from core.scheduler import execution as scheduler_execution
+
+        candidates = _spontaneous_recall_candidates(
+            memories,
+            now_ts=_proposal_ts(ctx, now),
+            shadow=scheduler_execution.EXECUTE_MODE == "dry_run",
+        )
         if not candidates:
             return None
     except Exception as e:
@@ -600,10 +611,7 @@ def propose_spontaneous_recall(ctx: dict | None = None):
         topic_source="episodic",
         requires_state=[TriggerState.QUIET],
         bypass_state_machine=False,
-        execute=_make_prompt_execute(
-            "spontaneous_recall",
-            lambda candidates=candidates: _spontaneous_recall_prompt(candidates),
-        ),
+        execute=_make_spontaneous_recall_execute(random.choice(candidates)),
     )
 
 
@@ -825,9 +833,127 @@ async def _write_inner_daily_journal() -> None:
 
 def _spontaneous_recall_prompt(candidates: list[dict]) -> str:
     chosen = random.choice(candidates)
-    summary = chosen.get("summary", "")
-    feeling = chosen.get("yexuan_feeling", "")
-    return f"（{_char_name()}突然想起了一件事：{summary}，那时他{feeling}）"
+    return _spontaneous_recall_prompt_for_memory(chosen)
+
+
+def _spontaneous_recall_candidates(
+    memories: list[dict],
+    *,
+    now_ts: float,
+    shadow: bool,
+) -> list[dict]:
+    from core.scheduler.last_mentioned import is_recently_recalled
+
+    prepared_memories: list[dict] = []
+    for memory in memories:
+        if not isinstance(memory, dict):
+            continue
+        try:
+            strength = float(memory.get("strength", 0))
+        except (TypeError, ValueError):
+            strength = 0.0
+        if strength <= 0.5:
+            continue
+        prepared = _prepare_spontaneous_recall_memory(memory)
+        if prepared is None:
+            continue
+        prepared_memories.append(prepared)
+
+    prepared_memories.sort(
+        key=lambda item: (
+            float(item.get("strength") or 0.0),
+            float(item.get("timestamp") or 0.0),
+        ),
+        reverse=True,
+    )
+    recall_window = prepared_memories[:_SPONTANEOUS_RECALL_TOP_K]
+    return [
+        item for item in recall_window
+        if not is_recently_recalled(item["_memory_key"], now_ts=now_ts, shadow=shadow)
+    ]
+
+
+def _prepare_spontaneous_recall_memory(memory: dict) -> dict | None:
+    summary = _memory_recall_summary(memory)
+    if not summary:
+        return None
+    memory_key = memory_key_for_recall(memory)
+    if not memory_key:
+        return None
+    prepared = dict(memory)
+    prepared["_recall_summary"] = summary
+    prepared["_recall_feeling"] = _memory_recall_feeling(memory)
+    prepared["_memory_key"] = memory_key
+    return prepared
+
+
+def memory_key_for_recall(memory: dict) -> str:
+    raw_id = str(memory.get("id") or "").strip()
+    if raw_id:
+        return f"episode:{raw_id}"
+    basis = _memory_recall_summary(memory)
+    if not basis:
+        facts = memory.get("raw_facts")
+        if isinstance(facts, list):
+            basis = " ".join(str(x).strip() for x in facts if str(x).strip())
+    normalized = _normalize_memory_key_text(basis)
+    if not normalized:
+        return ""
+    return f"content:{sha1(normalized.encode('utf-8')).hexdigest()[:16]}"
+
+
+def _memory_recall_summary(memory: dict) -> str:
+    for key in ("narrative_summary", "summary"):
+        value = str(memory.get(key) or "").strip()
+        if value:
+            return value
+    facts = memory.get("raw_facts")
+    if isinstance(facts, list):
+        joined = "；".join(str(item).strip() for item in facts if str(item).strip())
+        if joined:
+            return joined[:80]
+    return ""
+
+
+def _memory_recall_feeling(memory: dict) -> str:
+    for key in ("yexuan_feeling", "emotion_texture", "emotion_arc"):
+        value = str(memory.get(key) or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def _normalize_memory_key_text(text: str) -> str:
+    return re.sub(r"[\s\t\r\n，。！？!?、,.；;：:\"'“”‘’（）()\[\]【】<>《》…—-]+", "", str(text or "").lower())
+
+
+def _spontaneous_recall_prompt_for_memory(memory: dict) -> str:
+    summary = str(memory.get("_recall_summary") or _memory_recall_summary(memory)).strip()
+    feeling = str(memory.get("_recall_feeling") or _memory_recall_feeling(memory)).strip()
+    if feeling:
+        return f"（{_char_name()}突然想起了一件事：{summary}，那时他{feeling}）"
+    return f"（{_char_name()}突然想起了一件事：{summary}）"
+
+
+def _make_spontaneous_recall_execute(memory: dict):
+    async def execute(*, dry_run: bool):
+        from core.scheduler.execution import execute_prompt
+        from core.scheduler.last_mentioned import mark_memory_recalled, mark_memory_recalled_shadow
+
+        memory_key = str(memory.get("_memory_key") or memory_key_for_recall(memory))
+        result = await execute_prompt(
+            trigger_name="spontaneous_recall",
+            prompt_factory=lambda: _spontaneous_recall_prompt_for_memory(memory),
+            dry_run=dry_run,
+            would_mark=["spontaneous_recall"],
+            topic_key=memory_key,
+            after_send=lambda: mark_memory_recalled(memory_key),
+        )
+        if dry_run:
+            mark_memory_recalled_shadow(memory_key)
+        return result
+
+    return execute
 
 
 def _proposal_now(ctx: dict | None) -> datetime:

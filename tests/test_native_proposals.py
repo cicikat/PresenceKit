@@ -368,7 +368,10 @@ def test_filler_proposals_use_silence_ratio(monkeypatch):
     monkeypatch.setattr(time_based, "_cfg", lambda: {"random_message": True})
     monkeypatch.setattr(time_based, "_owner_id", lambda: "u1")
     monkeypatch.setattr("core.scheduler.rhythm.silence_ratio", lambda uid, now_ts=None: 1.0)
-    monkeypatch.setattr("core.memory.episodic_memory._load_memories", lambda uid: [{"strength": 0.8}])
+    monkeypatch.setattr(
+        "core.memory.episodic_memory._load_memories",
+        lambda uid: [{"id": "ep_1", "narrative_summary": "她说起实习", "strength": 0.8}],
+    )
 
     random_message = time_based.propose_random_message({"now_dt": now, "now_ts": now.timestamp()})
     recall = time_based.propose_spontaneous_recall({"now_dt": now, "now_ts": now.timestamp()})
@@ -377,3 +380,44 @@ def test_filler_proposals_use_silence_ratio(monkeypatch):
     assert recall.trigger_name == "spontaneous_recall"
     assert 0.10 <= random_message.urgency <= 0.29
     assert 0.10 <= recall.urgency <= 0.29
+
+
+def test_spontaneous_recall_empty_content_returns_none(monkeypatch, sandbox):
+    from core.scheduler.triggers import time_based
+
+    monkeypatch.setattr(time_based, "_owner_id", lambda: "u1")
+    proposal = time_based.propose_spontaneous_recall({
+        "now_dt": datetime(2026, 5, 25, 16, 0),
+        "now_ts": 1_000.0,
+        "uid": "u1",
+        "episodic_memories": [{"id": "ep_empty", "summary": "", "strength": 0.9}],
+    })
+
+    assert proposal is None
+
+
+def test_spontaneous_recall_all_recently_recalled_returns_none(monkeypatch, sandbox):
+    from core.scheduler.last_mentioned import mark_memory_recalled_shadow
+    from core.scheduler.triggers import time_based
+
+    monkeypatch.setattr(time_based, "_owner_id", lambda: "u1")
+    memory = {"id": "ep_recent", "narrative_summary": "她说起实习", "strength": 0.9}
+    mark_memory_recalled_shadow("episode:ep_recent", now_ts=1_000.0)
+
+    proposal = time_based.propose_spontaneous_recall({
+        "now_dt": datetime(2026, 5, 25, 16, 0),
+        "now_ts": 1_000.0 + 60,
+        "uid": "u1",
+        "episodic_memories": [memory],
+    })
+
+    assert proposal is None
+
+
+def test_memory_key_for_recall_is_stable():
+    from core.scheduler.triggers import time_based
+
+    memory = {"id": "ep_stable", "narrative_summary": "她说起实习", "strength": 0.9}
+
+    assert time_based.memory_key_for_recall(memory) == "episode:ep_stable"
+    assert time_based.memory_key_for_recall(memory) == "episode:ep_stable"
