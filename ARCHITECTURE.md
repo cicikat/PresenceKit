@@ -14,7 +14,9 @@ QQ 消息 → main.py → message_queue
 调度器主动消息 → core/scheduler/loop.py
          ├─ state_machine：观测 owner turn / sensor tick，维护 CHATTING / QUIET / RESTLESS
          ├─ gating shadow：并行记录“若由 gating 决策本 tick 会选谁”
-         └─ 旧触发器路径：Step 2 期间仍按原 _is_ready/_mark 真实发送
+         ├─ proposer dry-run：记录 would-send / would-mark，不真实发送
+         ├─ EXECUTE_MODE：当前为 live（见 core/scheduler/execution.py）
+         └─ legacy 真实触发器路径：仍按原 _is_ready/_mark 真实发送
          ↓（入口共用）
       Pipeline（core/pipeline.py）
          ↓
@@ -26,6 +28,7 @@ QQ 消息 → main.py → message_queue
 ```
 
 通道细节见 `docs/channels.md`。手机端当前通过 mobile 轮询通道接收主动消息，不占用桌宠 WebSocket。花园这类不进入对话 pipeline 的伴生状态，见 `docs/garden.md`。
+Dream Session 后续必须走独立 pipeline，不进入当前现实对话 pipeline，也不走现有 `post_process`。
 
 手机端用户输入走 `POST /mobile/chat`，桌宠输入走 `POST /desktop/chat`。这两个 owner 入口共享
 `core/conversation_gate.py` 的 per-user conversation lock，保证同一用户多端输入按顺序完成
@@ -151,11 +154,11 @@ data/
 ├── history/{uid}.json            短期对话历史（磁盘轮数可配；prompt 近场保留 + 远场加权择优）
 ├── mid_term/{uid}.json           中期对话摘要（12小时过期，最多20条，三时间桶）
 ├── diary_context/{uid}.json      用户日记上下文
-|-- dreams/
-|   |-- tmp/                      Dream Session temp files (dream_only; never a memory source)
-|   |-- archive/                  Dream Session archive (never enters any memory loader)
-|   |-- summaries/                Dream Session summaries (never enter any memory loader)
-|   `-- state/{uid}/dream_state.json  per-uid Dream Session state
+├── dreams/
+│   ├── tmp/                      Dream Session 临时文件（dream_only；永不作为记忆源）
+│   ├── archive/                  Dream Session 归档（archive 永不进 memory loader）
+│   ├── summaries/                Dream Session 摘要（永不进 memory loader）
+│   └── state/{uid}/dream_state.json  per-uid Dream Session 状态
 ├── group_context/{gid}.json      群聊最近动态（prompt 层 4 注入）
 ├── reminders/{uid}.json          用户备忘录列表（调度器检查到期即发）
 ├── pending_perception/           桌面动作失败感知（时间戳命名，两阶段提交）
@@ -186,7 +189,8 @@ data/
 ├── logs/
 │   ├── fixation.jsonl            固化 pipeline 每 job 追加一行（ts/job/uid/status/duration_ms）
 │   ├── trigger_state.jsonl       触发状态机每次状态切换追加一行
-│   └── gating_shadow.jsonl       gating 并行观测期每 tick 的候选与 would_pick
+│   ├── gating_shadow.jsonl       gating 并行观测期每 tick 的候选与 would_pick
+│   └── execute_dryrun.jsonl      proposer shadow 执行观测（would_send_prompt / would_mark）
 ├── dead_letter_queue/            慢任务 DLQ（handler 3次失败后落盘，含 task/error/failed_at）
 ├── debug/
 │   └── llm_output/              LLM异常输出存档（带时间戳，7天自动清理）

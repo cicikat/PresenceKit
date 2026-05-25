@@ -56,6 +56,7 @@ D:\ai\qq-st-bot\
 | 用户稳定行为模式 | `core/memory/user_identity.py` |
 | 角色认知（legacy/兼容） | `core/memory/character_growth.py` |
 | 调度器主循环 | `core/scheduler/loop.py` |
+| 调度器状态机 / gating / proposer | `core/scheduler/state_machine.py` / `core/scheduler/gating.py` / `core/scheduler/proposer_registry.py` |
 | 花园系统 | `core/garden/manager.py` / `core/garden/constants.py` |
 | 花园工具 | `core/tools/garden_tools.py` / `core/tool_dispatcher.py` → `water_garden` |
 | 花园调度器 | `core/scheduler/triggers/garden_water.py` / `core/scheduler/triggers/garden_daily.py` |
