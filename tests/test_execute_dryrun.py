@@ -199,6 +199,110 @@ async def test_sleep_end_execute_false_preserves_cross_marks(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_watch_dry_run_keeps_legacy_send_and_logs_execute(monkeypatch, sandbox):
+    from core.scheduler.triggers import watch
+
+    sent = []
+    marks = []
+
+    class FakeDatetime(datetime):
+        @classmethod
+        def now(cls):
+            return cls(2026, 5, 25, 14, 0)
+
+    async def legacy_send(prompt, search_query="", trigger_name="", **kwargs):
+        sent.append((prompt, trigger_name))
+
+    monkeypatch.setattr(watch, "WATCH_EXECUTE_MODE", "dry_run")
+    monkeypatch.setattr(watch, "datetime", FakeDatetime)
+    monkeypatch.setattr(watch, "_cfg", lambda: {"enabled": True})
+    monkeypatch.setattr(watch, "_owner_id", lambda: "u1")
+    monkeypatch.setattr(watch, "_is_ready", lambda name: True)
+    monkeypatch.setattr(watch, "_pipeline_send", legacy_send)
+    monkeypatch.setattr(watch, "_mark", lambda name: marks.append(name))
+
+    await watch.on_watch_event("sleep_end", {"duration_minutes": 420})
+
+    assert sent and sent[0][1] == "sleep_end"
+    assert marks == ["sleep_end", "morning_greeting"]
+    rows = sandbox.execute_dryrun_log().read_text(encoding="utf-8").splitlines()
+    row = json.loads(rows[-1])
+    assert row["trigger_name"] == "sleep_end"
+    assert row["would_mark"] == ["sleep_end", "morning_greeting"]
+
+
+@pytest.mark.asyncio
+async def test_watch_live_uses_execute_and_skips_legacy_send(monkeypatch):
+    from core.scheduler import loop
+    from core.scheduler.triggers import watch
+
+    legacy_sent = []
+    execute_sent = []
+    marks = []
+
+    class FakeDatetime(datetime):
+        @classmethod
+        def now(cls):
+            return cls(2026, 5, 25, 14, 0)
+
+    async def legacy_send(prompt, search_query="", trigger_name="", **kwargs):
+        legacy_sent.append((prompt, trigger_name))
+
+    async def execute_send(prompt, search_query="", trigger_name="", **kwargs):
+        execute_sent.append((prompt, trigger_name))
+
+    monkeypatch.setattr(watch, "WATCH_EXECUTE_MODE", "live")
+    monkeypatch.setattr(watch, "datetime", FakeDatetime)
+    monkeypatch.setattr(watch, "_cfg", lambda: {"enabled": True})
+    monkeypatch.setattr(watch, "_owner_id", lambda: "u1")
+    monkeypatch.setattr(watch, "_is_ready", lambda name: True)
+    monkeypatch.setattr(watch, "_pipeline_send", legacy_send)
+    monkeypatch.setattr(watch, "_mark", lambda name: legacy_sent.append(("mark", name)))
+    monkeypatch.setattr(loop, "_pipeline_send", execute_send)
+    monkeypatch.setattr(loop, "_mark", lambda name: marks.append(name))
+
+    await watch.on_watch_event("heart_rate", {"value": 130})
+
+    assert execute_sent and execute_sent[0][1] == "hr_critical"
+    assert marks == ["hr_critical"]
+    assert legacy_sent == []
+
+
+@pytest.mark.asyncio
+async def test_watch_live_sleep_end_marks_morning_and_blocks_tick_greeting(monkeypatch, sandbox):
+    from core.scheduler import gating, loop
+    from core.scheduler.state_machine import TriggerState
+    from core.scheduler.triggers import time_based, watch
+
+    sent = []
+
+    async def execute_send(prompt, search_query="", trigger_name="", **kwargs):
+        sent.append((prompt, trigger_name))
+
+    loop._last_trigger.clear()
+    monkeypatch.setattr(watch, "WATCH_EXECUTE_MODE", "live")
+    monkeypatch.setattr(watch, "_cfg", lambda: {"enabled": True})
+    monkeypatch.setattr(watch, "_owner_id", lambda: "u1")
+    monkeypatch.setattr(watch, "_pipeline_send", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("legacy send used")))
+    monkeypatch.setattr(loop, "_pipeline_send", execute_send)
+    monkeypatch.setattr(time_based, "_cfg", lambda: {"morning_greeting": True})
+    monkeypatch.setattr(time_based, "_owner_id", lambda: "u1")
+    monkeypatch.setattr(time_based, "_user_talked_today", lambda uid: False)
+    monkeypatch.setattr("core.scheduler.rhythm.is_present", lambda now_ts=None: True)
+    monkeypatch.setattr(gating, "get_current_state", lambda uid: TriggerState.QUIET)
+
+    await watch.on_watch_event("sleep_end", {"duration_minutes": 420})
+
+    assert sent and sent[0][1] == "sleep_end"
+    proposal = time_based.propose_morning_greeting({
+        "now_dt": datetime(2026, 5, 25, 8, 0),
+        "now_ts": datetime(2026, 5, 25, 8, 0).timestamp(),
+    })
+    assert proposal is not None
+    assert gating.collect_and_decide("u1", [proposal]) is None
+
+
+@pytest.mark.asyncio
 async def test_topic_followup_execute_dryrun_writes_shadow_only(monkeypatch, sandbox):
     from core.scheduler.triggers import memory
     from core.scheduler.last_mentioned import load_followed_topics, load_followed_topics_shadow
@@ -232,8 +336,10 @@ async def test_topic_followup_execute_dryrun_writes_shadow_only(monkeypatch, san
 
 @pytest.mark.asyncio
 async def test_topic_followup_dryrun_shadow_blocks_second_propose(monkeypatch, sandbox):
+    from core.scheduler import execution
     from core.scheduler.triggers import memory
 
+    monkeypatch.setattr(execution, "EXECUTE_MODE", "dry_run")
     monkeypatch.setattr(memory, "_cfg", lambda: {"topic_followup": True})
     monkeypatch.setattr(memory, "_owner_id", lambda: "u1")
     _write_event_log(
@@ -303,9 +409,11 @@ async def test_topic_followup_execute_live_writes_followed_topics(monkeypatch, s
 
 @pytest.mark.asyncio
 async def test_spontaneous_recall_dryrun_shadow_blocks_second_propose(monkeypatch, sandbox):
+    from core.scheduler import execution
     from core.scheduler.triggers import time_based
     from core.scheduler.last_mentioned import load_recalled_memories, load_recalled_memories_shadow
 
+    monkeypatch.setattr(execution, "EXECUTE_MODE", "dry_run")
     monkeypatch.setattr(time_based, "_owner_id", lambda: "u1")
     monkeypatch.setattr("core.scheduler.rhythm.silence_ratio", lambda uid, now_ts=None: 1.0)
     memory = {
@@ -493,7 +601,7 @@ async def test_weather_live_old_tick_refreshes_cache_without_sending(monkeypatch
 
 @pytest.mark.asyncio
 async def test_gating_dryrun_executes_only_winner(monkeypatch, sandbox):
-    from core.scheduler import gating, proposer_registry
+    from core.scheduler import execution, gating, proposer_registry
     from core.scheduler.gating import TriggerProposal
     from core.scheduler.state_machine import TriggerState
 
@@ -513,6 +621,7 @@ async def test_gating_dryrun_executes_only_winner(monkeypatch, sandbox):
 
     proposer_registry._reset_for_tests()
     monkeypatch.setattr(proposer_registry, "_BUILTINS_LOADED", True)
+    monkeypatch.setattr(execution, "EXECUTE_MODE", "dry_run")
     proposer_registry.register_proposer(
         "low",
         lambda ctx: TriggerProposal("low", 0.2, "random", [TriggerState.QUIET], execute=low_execute),

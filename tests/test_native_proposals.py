@@ -203,9 +203,11 @@ def test_topic_followup_new_propose_has_no_character_growth_dependency():
 
 
 def test_topic_followup_propose_skips_recently_followed_topic(monkeypatch, sandbox):
+    from core.scheduler import execution
     from core.scheduler.triggers import memory
     from core.scheduler.last_mentioned import mark_topic_followed_shadow
 
+    monkeypatch.setattr(execution, "EXECUTE_MODE", "dry_run")
     monkeypatch.setattr(memory, "_cfg", lambda: {"topic_followup": True})
     monkeypatch.setattr(memory, "_owner_id", lambda: "u1")
     _write_event_log(
@@ -397,9 +399,11 @@ def test_spontaneous_recall_empty_content_returns_none(monkeypatch, sandbox):
 
 
 def test_spontaneous_recall_all_recently_recalled_returns_none(monkeypatch, sandbox):
+    from core.scheduler import execution
     from core.scheduler.last_mentioned import mark_memory_recalled_shadow
     from core.scheduler.triggers import time_based
 
+    monkeypatch.setattr(execution, "EXECUTE_MODE", "dry_run")
     monkeypatch.setattr(time_based, "_owner_id", lambda: "u1")
     memory = {"id": "ep_recent", "narrative_summary": "她说起实习", "strength": 0.9}
     mark_memory_recalled_shadow("episode:ep_recent", now_ts=1_000.0)
