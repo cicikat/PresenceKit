@@ -5,7 +5,7 @@ channels/desktop_ws — 桌宠端 WebSocket 连接管理器（单例）。
 - 单连接：新连接进来时旧连接强制断开
 - channel_message 不等 ack，fire-and-forget
 - action 推送后等 ack（最多 timeout 秒），超时返回 (False, "timeout")
-- 心跳：服务端每 30s 发 ping，客户端 10s 内须回 pong，连续 2 次超时断开
+- 心跳：服务端每 20s 发 ping，客户端须回 pong；> 70s 未收到 pong 则强制断开
 """
 
 import asyncio
@@ -144,13 +144,13 @@ async def _handle_message(msg: dict) -> None:
 
 
 async def _heartbeat_loop() -> None:
-    """每 30s 发 ping；若上次 pong 距今 > 70s 则判定超时，强制断开。"""
+    """每 20s 发 ping；若上次 pong 距今 > 70s 则判定超时，强制断开。"""
     global _current_ws
     while True:
-        await asyncio.sleep(30)
+        await asyncio.sleep(20)
         if _current_ws is None:
             return
-        await _send_json({"type": "ping"})
+        await _send_json({"type": "ping", "source": "server", "ts": time.time()})
         if time.time() - _last_pong > 70:
             logger.warning("[desktop_ws] pong 超时，强制断开")
             try:
