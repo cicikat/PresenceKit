@@ -43,6 +43,12 @@ async def mobile_chat(body: dict = Body(...), auth=Depends(verify_token)):
     if not message:
         raise HTTPException(status_code=422, detail="message 不能为空")
 
+    # Safety net: hard reject reality turns when dream is active
+    from admin.routers.chat import _check_reality_not_in_dream
+    from core.config_loader import get_config as _cfg
+    _uid = str(_cfg().get("scheduler", {}).get("owner_id", "owner"))
+    _check_reality_not_in_dream(_uid)
+
     mobile = _get_mobile_channel()
     if mobile is not None:
         mobile.set_active(True)

@@ -195,6 +195,28 @@ async def frontend_chat(body: dict, auth=Depends(verify_token)):
     }
 
 
+def _check_reality_not_in_dream(uid: str) -> None:
+    """
+    Safety net: hard reject reality turns when dream is active.
+
+    Normal users never see this — the UI locks them in the dream window.
+    This guards stale clients, second devices, and race conditions.
+    """
+    try:
+        from core.dream.dream_state import read_state, DreamStatus
+        state = read_state(uid)
+        status = state.get("status")
+        if status in (DreamStatus.DREAM_ACTIVE.value, DreamStatus.DREAM_CLOSING.value):
+            raise HTTPException(
+                status_code=409,
+                detail="还在梦里，先醒过来（dream active — reality turn rejected）",
+            )
+    except HTTPException:
+        raise
+    except Exception:
+        pass  # read failure → allow through (safe default)
+
+
 @router.post("/desktop/chat", summary="桌宠对话（无鉴权，走正常 pipeline）")
 async def desktop_chat(body: dict):
     """
@@ -204,6 +226,10 @@ async def desktop_chat(body: dict):
     message = (body.get("message") or "").strip()
     if not message:
         raise HTTPException(status_code=422, detail="message 不能为空")
+
+    from core.config_loader import get_config as _cfg
+    _uid = str(_cfg().get("scheduler", {}).get("owner_id", "owner"))
+    _check_reality_not_in_dream(_uid)
 
     result = await run_owner_chat_turn(message, "desktop")
 
