@@ -75,4 +75,46 @@ def write_state(user_id: str | int, state: dict[str, Any]) -> bool:
         raise ValueError(f"unknown dream status: {status!r}")
 
     payload = {**state, "user_id": safe_user_id(user_id)}
-    return safe_write_json(get_paths().dream_state_path(user_id), payload)
+    path = get_paths().dream_state_path(user_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return safe_write_json(path, payload)
+
+
+# ── Dream-local volatile state helpers ───────────────────────────────────────
+# These fields live only inside dream_state while a dream is active.
+# They are cleared by clear_local_state() at dream close and never persist
+# to any reality store.
+
+
+def get_local_state(state: dict[str, Any]) -> dict[str, Any]:
+    """Return the dream-local volatile fields from a state dict."""
+    return {
+        "emotional_tension": float(state.get("emotional_tension", 0.0)),
+        "scene_state": state.get("scene_state"),
+        "symbolic_anchors": list(state.get("symbolic_anchors", [])),
+    }
+
+
+def patch_local_state(
+    state: dict[str, Any],
+    emotional_tension: float | None = None,
+    scene_state: str | None = None,
+    symbolic_anchors: list[str] | None = None,
+) -> dict[str, Any]:
+    """Return a new state dict with updated dream-local volatile fields."""
+    updated = dict(state)
+    if emotional_tension is not None:
+        updated["emotional_tension"] = max(0.0, min(1.0, float(emotional_tension)))
+    if scene_state is not None:
+        updated["scene_state"] = scene_state
+    if symbolic_anchors is not None:
+        updated["symbolic_anchors"] = list(symbolic_anchors)
+    return updated
+
+
+def clear_local_state(state: dict[str, Any]) -> dict[str, Any]:
+    """Strip all dream-local volatile fields (call at dream close)."""
+    out = dict(state)
+    for key in ("emotional_tension", "scene_state", "symbolic_anchors", "context_snapshot", "dream_id"):
+        out.pop(key, None)
+    return out
