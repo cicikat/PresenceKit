@@ -420,46 +420,41 @@ def test_afterglow_summary_not_retrieved_by_reality_loaders(sandbox):
 # 8. amnesia / keep_impression only change snapshot content
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def test_amnesia_true_empties_memory_fields_in_snapshot(sandbox):
-    """amnesia=True → episodic_summary and mid_term_context empty in snapshot."""
+def test_card_only_empties_memory_fields_in_snapshot(sandbox):
+    """memory_access=card_only → episodic_summary and mid_term_context empty in snapshot."""
     from core.dream.dream_settings import save as _save
-    _save(_UID, {"amnesia": True, "keep_impression": True})
+    _save(_UID, {"memory_access": "card_only"})
 
     # Plant fake episodic and mid-term data
     from core.memory import mid_term
     mid_term.append(_UID, "用户最近很开心", tags=[])
 
-    # Build snapshot; should NOT include mid_term (amnesia=True)
-    # We mock the episodic/midterm loaders to verify they're not called live
     episodic_called = []
-    midterm_called = []
 
-    async def fake_retrieve(*a, **kw):
+    def fake_retrieve(*a, **kw):
         episodic_called.append(True)
         return []
 
     async def run():
-        # Patch episodic retrieve to detect if called
         with patch("core.memory.episodic_memory.retrieve", fake_retrieve):
             from core.dream.dream_context import build_snapshot
-            return await build_snapshot(_UID, entry_reason="test amnesia")
+            return await build_snapshot(_UID, entry_reason="test card_only")
 
     snapshot = asyncio.run(run())
 
-    assert snapshot["episodic_summary"] == "", "amnesia=True should give empty episodic"
-    assert snapshot["mid_term_context"] == "", "amnesia=True should give empty mid_term"
-    # Crucially: episodic retrieve was NOT called (amnesia blocks snapshot-level fetch too)
-    assert not episodic_called, "episodic retrieve called despite amnesia=True"
+    assert snapshot["episodic_summary"] == "", "card_only should give empty episodic"
+    assert snapshot["mid_term_context"] == "", "card_only should give empty mid_term"
+    assert not episodic_called, "episodic retrieve called despite memory_access=card_only"
 
 
-def test_amnesia_false_includes_memory_in_snapshot(sandbox):
-    """amnesia=False → snapshot-level memory fetch is attempted."""
+def test_full_snapshot_includes_episodic_in_snapshot(sandbox):
+    """memory_access=full_snapshot → snapshot-level episodic fetch is attempted."""
     from core.dream.dream_settings import save as _save
-    _save(_UID, {"amnesia": False, "keep_impression": True})
+    _save(_UID, {"memory_access": "full_snapshot"})
 
     episodic_called = []
 
-    def fake_retrieve(*a, **kw):  # sync — matches core.memory.episodic_memory.retrieve
+    def fake_retrieve(*a, **kw):
         episodic_called.append(True)
         return []
 
@@ -467,29 +462,27 @@ def test_amnesia_false_includes_memory_in_snapshot(sandbox):
         with patch("core.memory.episodic_memory.retrieve", fake_retrieve):
             with patch("core.memory.mood_state.get_current", return_value="neutral"):
                 from core.dream.dream_context import build_snapshot
-                return await build_snapshot(_UID, entry_reason="test no amnesia")
+                return await build_snapshot(_UID, entry_reason="test full_snapshot")
 
     asyncio.run(run())
-    assert episodic_called, "amnesia=False should call episodic retrieve for snapshot"
+    assert episodic_called, "full_snapshot should call episodic retrieve for snapshot"
 
 
-def test_keep_impression_false_empties_profile_impression(sandbox):
-    """keep_impression=False → profile_impression empty in snapshot."""
+def test_card_only_empties_profile_impression(sandbox):
+    """memory_access=card_only → profile_impression empty in snapshot."""
     from core.dream.dream_settings import save as _save
-    _save(_UID, {"amnesia": False, "keep_impression": False})
+    _save(_UID, {"memory_access": "card_only"})
 
     # Plant profile data
     from core.memory import user_profile
     user_profile.save(_UID, {"traits": ["开朗", "有趣"]})
 
     async def run():
-        with patch("core.memory.episodic_memory.retrieve", MagicMock(return_value=[])):
-            with patch("core.memory.mood_state.get_current", return_value="neutral"):
-                from core.dream.dream_context import build_snapshot
-                return await build_snapshot(_UID)
+        from core.dream.dream_context import build_snapshot
+        return await build_snapshot(_UID)
 
     snapshot = asyncio.run(run())
-    assert snapshot["profile_impression"] == "", "keep_impression=False should give empty profile"
+    assert snapshot["profile_impression"] == "", "card_only should give empty profile_impression"
 
 
 def test_dream_log_written_only_to_dream_file(sandbox, active_dream):
