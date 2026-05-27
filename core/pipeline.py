@@ -156,6 +156,13 @@ class Pipeline:
             if _mood_get() not in ("yandere", "angry"):
                 _mood_update("sleepy", source="schedule")
 
+        # Dream impression — ambient, read-only, never written by reality chain
+        try:
+            from core.dream.impression_loader import load_impression_text as _load_imp
+            dream_impression_text = _load_imp(user_id)
+        except Exception:
+            dream_impression_text = ""
+
         logger.debug(
             f"[pipeline.fetch_context] uid={user_id} "
             f"history={len(history)} lore={len(lore_entries)}"
@@ -173,6 +180,7 @@ class Pipeline:
             "episodic_result":          episodic_result,
             "episodic_fallback_result": episodic_fallback_result,
             "mid_term":                 mid_term_text,
+            "dream_impression_text":    dream_impression_text,
         }
 
     # ──────────────────────────────────────────────────────────────────────────
@@ -241,6 +249,7 @@ class Pipeline:
             episodic_fallback_result=context.get("episodic_fallback_result", ""),
             mid_term_context=context.get("mid_term", ""),
             tags=_tags,
+            dream_impression_text=context.get("dream_impression_text", ""),
         )
         self.author_note_extra = ""
         debug_info["pending_paths"] = _pending_paths
