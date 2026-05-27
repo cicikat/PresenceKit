@@ -50,5 +50,5 @@ def frame_tool_result(safe_summary: str) -> str:
         "<<<TOOL_DATA_START>>>\n"
         f"{safe_summary}\n"
         "<<<TOOL_DATA_END>>>\n"
-        “请用叶瑄的语气自然回应，不要出现”工具”二字。”
+        "请用叶瑄的语气自然回应，不要出现‘工具’二字。"
     )
