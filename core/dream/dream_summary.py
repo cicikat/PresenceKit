@@ -50,12 +50,21 @@ async def generate_summary(uid: str, dream_id: str, exit_type: str) -> None:
     dialogue = _format_dialogue(turns)
     data = await _llm_strip_scene(dialogue, llm_client)
 
+    # Read frozen_world for depth-defense vocab strip
+    try:
+        from core.dream.dream_state import read_state as _read_ds
+        _ds = _read_ds(uid)
+        _frozen_world = _ds.get("frozen_world", "reality_derived")
+    except Exception:
+        _frozen_world = "reality_derived"
+
     summary_record: dict[str, Any] = {
         # Identification
         "dream_id": dream_id,
         "uid": uid,
         "created_at": time.time(),
         "exit_type": exit_type,
+        "world_id": _frozen_world,
         # Core afterglow content
         "title": str(data.get("title", "")),
         "summary": str(data.get("summary", "")),

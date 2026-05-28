@@ -87,18 +87,28 @@ def _format_afterglow(summary: dict[str, Any]) -> str:
     afterglow_type = summary.get("afterglow", "gentle_residue")
     frame = _HURT_FRAME if afterglow_type == "hurt_reluctance" else _GENTLE_FRAME
 
+    # Depth-defense: strip world-specific proprietary terms before injecting into reality
+    world_id = summary.get("world_id", "reality_derived")
+    try:
+        from core.dream.world_loader import strip_vocab as _strip
+        def _sv(text: str) -> str:
+            return _strip(text, world_id)
+    except Exception:
+        def _sv(text: str) -> str:
+            return text
+
     parts: list[str] = [frame]
 
     if s := summary.get("summary"):
-        parts.append(f"情绪摘要：{s}")
+        parts.append(f"情绪摘要：{_sv(s)}")
 
     if tags := summary.get("emotional_tags"):
         if isinstance(tags, list) and tags:
-            parts.append("情绪色调：" + "、".join(str(t) for t in tags[:4]))
+            parts.append("情绪色调：" + "、".join(_sv(str(t)) for t in tags[:4]))
 
     if frags := summary.get("symbolic_fragments"):
         if isinstance(frags, list) and frags:
-            parts.append("残留意象：" + "、".join(str(f) for f in frags[:3]))
+            parts.append("残留意象：" + "、".join(_sv(str(f)) for f in frags[:3]))
 
     parts.append(_PROHIBIT_DREAM_RP)
     return "\n".join(parts)

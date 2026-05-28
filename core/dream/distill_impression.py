@@ -85,6 +85,15 @@ async def _distill(uid: str, dream_id: str, exit_type: str) -> None:
         logger.info(f"[distill_impression] empty result uid={uid}, no impression written")
         return
 
+    # Depth-defense second layer: strip world vocab (承重墙仍是 store 隔离)
+    try:
+        from core.dream.dream_state import read_state as _read_ds
+        _world_id = _read_ds(uid).get("frozen_world", "reality_derived")
+        from core.dream.world_loader import strip_vocab as _strip_vocab
+        impression_text = _strip_vocab(impression_text, _world_id)
+    except Exception:
+        pass  # depth defense failure is non-fatal
+
     weight = float(data.get("weight") or _WEIGHT_MIN)
     weight = max(_WEIGHT_MIN, min(_WEIGHT_MAX, weight))
 
