@@ -1,0 +1,151 @@
+"""
+core/dream/world_loader.py — Dream world package loader.
+
+Each world package lives in characters/dream_worlds/{world_id}/ with:
+  ruleset.md     — D2 world ruleset text (shown above D3, below D1)
+  mes_example.md — D3 dream mes_example (独立于现实角色卡 mes_example)
+  vocab.json     — proprietary terms for depth-defense vocab strip
+
+Used exclusively by dream_prompt.py + distill_impression.py + dream_afterglow.py.
+NEVER imported by core/pipeline.py or core/memory/fixation_pipeline.py (I2).
+
+Lorebook:
+  match_dream_lore() is a pure function — takes entries list + message + history,
+  returns matched content strings. Dream lorebook data stored separately from
+  the reality lorebook (data/lorebook.yaml).
+"""
+
+import json
+import logging
+import re
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+logger = logging.getLogger(__name__)
+
+_WORLDS_BASE = Path("characters/dream_worlds")
+_KNOWN_WORLDS = frozenset({"reality_derived", "abo", "vampire", "cat", "flower_bud", "custom"})
+_FALLBACK_WORLD = "reality_derived"
+
+
+@dataclass
+class WorldPackage:
+    world_id: str
+    ruleset: str
+    mes_example: str
+    vocab_terms: list[str] = field(default_factory=list)
+
+
+def load_world(world_id: str) -> WorldPackage:
+    """
+    Load a world package from characters/dream_worlds/{world_id}/.
+    Falls back to reality_derived if world_id is unknown or files missing.
+    """
+    if world_id not in _KNOWN_WORLDS:
+        logger.warning(
+            f"[world_loader] unknown world_id={world_id!r}, "
+            f"falling back to {_FALLBACK_WORLD}"
+        )
+        world_id = _FALLBACK_WORLD
+
+    base = _WORLDS_BASE / world_id
+    return WorldPackage(
+        world_id=world_id,
+        ruleset=_read_text(base / "ruleset.md"),
+        mes_example=_read_text(base / "mes_example.md"),
+        vocab_terms=_read_vocab(base / "vocab.json"),
+    )
+
+
+def strip_vocab(text: str, world_id: str) -> str:
+    """
+    Remove world-specific proprietary terms from text.
+
+    Second-layer depth defense —承重墙 (store isolation) is still the primary wall.
+    Strips vocabulary terms loaded from the world package's vocab.json.
+    """
+    if not text:
+        return text
+    pkg = load_world(world_id)
+    result = text
+    for term in pkg.vocab_terms:
+        if term:
+            result = result.replace(term, "")
+    return result
+
+
+def match_dream_lore(
+    entries: list[dict[str, Any]],
+    user_message: str,
+    recent_messages: list[dict[str, Any]] | None = None,
+) -> list[str]:
+    """
+    Pure-function dream lorebook matcher.
+
+    Accepts dream-specific entries (not the reality lorebook) and returns
+    matched content strings. Same keyword-matching logic as LoreEngine.match()
+    but as a stateless function — no reality state contamination.
+
+    Entry format: {"keywords": [...], "content": "...", "regex": bool (optional)}
+    """
+    if not entries:
+        return []
+
+    scan_parts = [user_message]
+    if recent_messages:
+        for msg in recent_messages[-5:]:
+            c = msg.get("content", "")
+            if c:
+                scan_parts.append(c)
+    full_text = " ".join(scan_parts)
+    full_text_lower = full_text.lower()
+
+    matched: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    for entry in entries:
+        content = entry.get("content", "")
+        if not content or content in seen:
+            continue
+
+        is_regex = entry.get("regex", False)
+        hit = False
+
+        for kw in entry.get("keywords", []):
+            if is_regex:
+                try:
+                    if re.search(kw, full_text, re.IGNORECASE):
+                        hit = True
+                        break
+                except re.error:
+                    logger.warning(f"[world_loader] invalid regex: {kw!r}")
+            else:
+                if kw.lower() in full_text_lower:
+                    hit = True
+                    break
+
+        if hit:
+            seen.add(content)
+            matched.append({"insertion_order": entry.get("insertion_order", 0), "content": content})
+
+    matched.sort(key=lambda e: e["insertion_order"])
+    return [e["content"] for e in matched]
+
+
+def _read_text(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8").strip()
+    except Exception as e:
+        logger.warning(f"[world_loader] cannot read {path}: {e}")
+        return ""
+
+
+def _read_vocab(path: Path) -> list[str]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(data, list):
+            return [str(t) for t in data if t]
+        return []
+    except Exception:
+        return []
