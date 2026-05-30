@@ -83,13 +83,13 @@ class DataPaths:
 
     # ── 桌宠端轮询文件（方案A：前缀同步到 config.yaml 的 data_prefix 字段）──────
     def channel_queue(self) -> Path:
-        return self._p("channel_queue.json")
+        return self._p("runtime", "channel_queue.json")
 
     def mobile_queue(self) -> Path:
-        return self._p("mobile_queue.json")
+        return self._p("runtime", "mobile_queue.json")
 
     def agent_actions(self) -> Path:
-        return self._p("agent_actions.json")
+        return self._p("runtime", "agent_actions.json")
 
     # ── 日志 / 状态 ────────────────────────────────────────────────────────────
     def error_log(self) -> Path:
@@ -99,13 +99,13 @@ class DataPaths:
         return self._p("scheduler_cooldowns.json")
 
     def scheduler_user_state(self) -> Path:
-        return self._p("scheduler_user_state.json")
+        return self._p("runtime", "scheduler_user_state.json")
 
     # ── 记忆根目录 ─────────────────────────────────────────────────────────────
     def character_growth(self, *, char_id: str = "yexuan") -> Path:
         if _LAYOUT_CHARACTER_INNER == "legacy":
             return self._p("character_growth")
-        return self._p("characters", char_id, "character_growth")
+        return self._p("runtime", "characters", char_id, "character_growth")
 
     def diary_context(self, *, char_id: str = "yexuan") -> Path:
         if _LAYOUT_REALITY == "legacy":
@@ -115,7 +115,7 @@ class DataPaths:
     def pet_file(self, *, char_id: str = "yexuan") -> Path:
         if _LAYOUT_CHARACTER_INNER == "legacy":
             return self._p("pet.json")
-        return self._p("characters", char_id, "pet.json")
+        return self._p("runtime", "characters", char_id, "pet.json")
 
     def episodic_memory(self, *, char_id: str = "yexuan") -> Path:
         if _LAYOUT_REALITY == "legacy":
@@ -138,7 +138,7 @@ class DataPaths:
     def yexuan_inner_diary(self, *, char_id: str = "yexuan") -> Path:
         if _LAYOUT_CHARACTER_INNER == "legacy":
             return self._p("yexuan_inner", "diary")
-        return self._p("characters", char_id, "inner", "diary")
+        return self._p("runtime", "characters", char_id, "inner", "diary")
 
     def history(self, *, char_id: str = "yexuan") -> Path:
         if _LAYOUT_REALITY == "legacy":
@@ -159,19 +159,19 @@ class DataPaths:
         return self._p("diary_fallback")
 
     def pending_perception_dir(self) -> Path:
-        p = self._p("pending_perception")
+        p = self._p("runtime", "pending_perception")
         p.mkdir(parents=True, exist_ok=True)
         return p
 
     def activity_snapshot(self, *, char_id: str = "yexuan") -> Path:
         if _LAYOUT_CHARACTER_INNER == "legacy":
             return self._p("activity_snapshot.json")
-        return self._p("characters", char_id, "inner", "activity_snapshot.json")
+        return self._p("runtime", "characters", char_id, "inner", "activity_snapshot.json")
 
     def presence(self, *, char_id: str = "yexuan") -> Path:
         if _LAYOUT_CHARACTER_INNER == "legacy":
             return self._p("yexuan_inner", "presence.json")
-        return self._p("characters", char_id, "inner", "presence.json")
+        return self._p("runtime", "characters", char_id, "inner", "presence.json")
 
     def inbox_dir(self) -> Path:
         p = self._p("inbox")
@@ -179,14 +179,14 @@ class DataPaths:
         return p
 
     def image_cache_dir(self) -> Path:
-        p = self._p("image_cache")
+        p = self._p("cache", "image_cache")
         p.mkdir(parents=True, exist_ok=True)
         return p
 
     def mood_state(self, *, char_id: str = "yexuan") -> Path:
         if _LAYOUT_CHARACTER_INNER == "legacy":
             return self._p("yexuan_inner", "mood_state.json")
-        return self._p("characters", char_id, "inner", "mood_state.json")
+        return self._p("runtime", "characters", char_id, "inner", "mood_state.json")
 
     def activity_pool(self, *, char_id: str = "yexuan") -> Path:
         if _LAYOUT_CHARACTER_INNER == "legacy":
@@ -198,12 +198,12 @@ class DataPaths:
     def activity_state(self, *, char_id: str = "yexuan") -> Path:
         if _LAYOUT_CHARACTER_INNER == "legacy":
             return self._p("yexuan_inner", "activity_state.json")
-        return self._p("characters", char_id, "inner", "activity_state.json")
+        return self._p("runtime", "characters", char_id, "inner", "activity_state.json")
 
     def observations(self, *, char_id: str = "yexuan") -> Path:
         if _LAYOUT_CHARACTER_INNER == "legacy":
             return self._p("yexuan_inner", "observations.jsonl")
-        return self._p("characters", char_id, "inner", "observations.jsonl")
+        return self._p("runtime", "characters", char_id, "inner", "observations.jsonl")
 
     def mid_term(self, *, char_id: str = "yexuan") -> Path:
         if _LAYOUT_REALITY == "legacy":
@@ -213,37 +213,37 @@ class DataPaths:
     def dreams_tmp_dir(self, *, char_id: str = "yexuan") -> Path:
         if _LAYOUT_DREAM == "legacy":
             return self._p("dreams", "tmp")
-        return self._p("dreams", char_id, "tmp")
+        return self._p("runtime", "dreams", char_id, "tmp")
 
     def dreams_archive_dir(self, *, char_id: str = "yexuan") -> Path:
         if _LAYOUT_DREAM == "legacy":
             return self._p("dreams", "archive")
-        return self._p("dreams", char_id, "archive")
+        return self._p("runtime", "dreams", char_id, "archive")
 
     def dreams_summaries_dir(self, *, char_id: str = "yexuan") -> Path:
         if _LAYOUT_DREAM == "legacy":
             return self._p("dreams", "summaries")
-        return self._p("dreams", char_id, "summaries")
+        return self._p("runtime", "dreams", char_id, "summaries")
 
     def dreams_impressions_dir(self, *, char_id: str = "yexuan") -> Path:
         if _LAYOUT_DREAM == "legacy":
             return self._p("dreams", "impressions")
-        return self._p("dreams", char_id, "impressions")
+        return self._p("runtime", "dreams", char_id, "impressions")
 
     def dream_state_path(self, user_id: str | int, *, char_id: str = "yexuan") -> Path:
         if _LAYOUT_DREAM == "legacy":
             return self._p("dreams", "state", safe_user_id(user_id), "dream_state.json")
-        return self._p("dreams", char_id, "state", safe_user_id(user_id), "dream_state.json")
+        return self._p("runtime", "dreams", char_id, "state", safe_user_id(user_id), "dream_state.json")
 
     def dream_settings_path(self, user_id: str | int, *, char_id: str = "yexuan") -> Path:
         if _LAYOUT_DREAM == "legacy":
             return self._p("dreams", "settings", safe_user_id(user_id) + ".json")
-        return self._p("dreams", char_id, "settings", safe_user_id(user_id) + ".json")
+        return self._p("runtime", "dreams", char_id, "settings", safe_user_id(user_id) + ".json")
 
     def garden(self, *, char_id: str = "yexuan") -> Path:
         if _LAYOUT_CHARACTER_INNER == "legacy":
             return self._p("garden")
-        return self._p("characters", char_id, "garden")
+        return self._p("runtime", "characters", char_id, "garden")
 
     def author_notes_pool(self, *, char_id: str = "yexuan") -> Path:
         if _LAYOUT_CHARACTER_INNER == "legacy":
@@ -292,15 +292,15 @@ class DataPaths:
     def author_note_state(self, *, char_id: str = "yexuan") -> Path:
         if _LAYOUT_CHARACTER_INNER == "legacy":
             return self._p("yexuan_inner", "author_note_state.json")
-        return self._p("characters", char_id, "inner", "author_note_state.json")
+        return self._p("runtime", "characters", char_id, "inner", "author_note_state.json")
 
     def trait_state(self, *, char_id: str = "yexuan") -> Path:
         if _LAYOUT_CHARACTER_INNER == "legacy":
             return self._p("yexuan_inner", "trait_state.json")
-        return self._p("characters", char_id, "inner", "trait_state.json")
+        return self._p("runtime", "characters", char_id, "inner", "trait_state.json")
 
     def dead_letter_queue(self) -> Path:
-        return self._p("dead_letter_queue")
+        return self._p("logs", "dead_letter_queue")
 
     def fixation_state_dir(self, *, char_id: str = "yexuan") -> Path:
         if _LAYOUT_REALITY == "legacy":
@@ -329,14 +329,14 @@ class DataPaths:
 
     # ── S6: per-user memory 新布局 ────────────────────────────────────────────
     def user_memory_root(self, user_id: str | int, *, char_id: str = "yexuan") -> Path:
-        """S6: per-user memory 根目录: data/memory/{char_id}/{uid}/
+        """S6: per-user memory 根目录: data/runtime/memory/{char_id}/{uid}/
         写入前调用方负责 .mkdir(parents=True, exist_ok=True)。"""
-        return self._p("memory", char_id, safe_user_id(user_id))
+        return self._p("runtime", "memory", char_id, safe_user_id(user_id))
 
     def memory_char_root(self, *, char_id: str = "yexuan") -> Path:
-        """S6: per-char memory 根目录: data/memory/{char_id}/
+        """S6: per-char memory 根目录: data/runtime/memory/{char_id}/
         用于 v1 模式下枚举所有用户（各 uid 是其直接子目录）。"""
-        return self._p("memory", char_id)
+        return self._p("runtime", "memory", char_id)
 
     def cleanup(self):
         if self.mode != "test":
