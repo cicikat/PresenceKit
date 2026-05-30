@@ -39,7 +39,7 @@ def _validate_episode(data: dict) -> bool:
         return False
     if not isinstance(data["topic_keywords"], list) or len(data["topic_keywords"]) == 0:
         return False
-    if data["emotion_peak"] not in {"neutral", "happy", "sad", "gentle", "surprised", "angry"}:
+    if data["emotion_peak"] not in {"neutral", "happy", "sad", "gentle", "surprised", "angry", "thinking", "sleepy"}:
         return False
     try:
         s = float(data["strength"])

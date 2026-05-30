@@ -244,7 +244,7 @@ def _build_xml_tool_desc(tools: list[dict]) -> str:
     return "\n".join(lines)
 
 
-_VALID_EMOTIONS = frozenset({"neutral", "happy", "sad", "gentle", "surprised", "angry"})
+_VALID_EMOTIONS = frozenset({"neutral", "happy", "sad", "gentle", "surprised", "angry", "thinking", "sleepy"})
 
 _SUMMARIZE_SYSTEM = (
     "把下面这轮对话压缩成 8-15 字的客观陈述句，主语用「用户」，只描述发生了什么，"
@@ -326,12 +326,12 @@ async def detect_emotion(text: str) -> str:
     """
     轻量 LLM 调用，判断回复文本的情绪。
     只消耗约 10 个 token，异步非阻塞。
-    返回值：neutral / happy / sad / gentle / surprised / angry
+    返回值：neutral / happy / sad / gentle / surprised / angry / thinking / sleepy
     失败时返回 "neutral"。
     """
     prompt = (
         "判断以下文本的情绪，只返回一个词：\n"
-        "neutral/happy/sad/gentle/surprised/angry\n"
+        "neutral/happy/sad/gentle/surprised/angry/thinking/sleepy\n"
         f"文本：{text}"
     )
     try:
