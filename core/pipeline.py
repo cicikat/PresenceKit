@@ -677,7 +677,6 @@ def register_slow_handlers() -> None:
         handler_capture_turn_retry,
         handler_summarize_to_midterm,
         handler_reflect_to_episodic,
-        handler_consolidate_to_growth,
         handler_consolidate_to_identity,
     )
     # 新 pipeline handler
@@ -685,8 +684,6 @@ def register_slow_handlers() -> None:
     slow_queue.register_handler("summarize_to_midterm",     handler_summarize_to_midterm)
     slow_queue.register_handler("reflect_to_episodic",      handler_reflect_to_episodic)
     slow_queue.register_handler("consolidate_to_identity",  handler_consolidate_to_identity)
-    slow_queue.register_handler("consolidate_to_growth",    handler_consolidate_to_growth)  # 旧 handler，保留供 DLQ 重试
-    # 保留旧 handler 供 DLQ 里残留任务重试
     slow_queue.register_handler("mid_term_append",         _handler_mid_term_append)
     slow_queue.register_handler("episodic_compress",       _handler_episodic_compress)
     slow_queue.register_handler("consistency_check",       _handler_consistency_check)

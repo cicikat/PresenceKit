@@ -226,23 +226,12 @@ async def update(
         log_error("character_growth.update", e)
 
 
-def load_fingerprint(character_name: str, user_id: str) -> str:
-    """读取压缩版认知指纹，不存在时降级返回 load() 的前150字。"""
-    path = _growth_file(character_name, user_id)
-    fp_path = path.with_suffix(".fingerprint.txt")
-    if fp_path.exists():
-        try:
-            return fp_path.read_text(encoding="utf-8").strip()
-        except Exception as e:
-            log_error("character_growth.load_fingerprint", e)
-    full = load(character_name, user_id)
-    return full[:150] if full else ""
-
-
 def should_update(user_id: str) -> bool:
     """
-    读 fixation_state 判断是否应触发 consolidate_to_growth。
+    读 fixation_state 判断是否满足 consolidate_to_identity 触发阈值。
     重启不丢状态（从文件读取，无内存计数器）。
+
+    Legacy：当前无外部调用者，保留供工具/手动检查使用。
 
     参数：
         user_id - 用户 QQ 号
@@ -276,9 +265,6 @@ class CharacterGrowth:
         llm_client,
     ):
         await update(character_name, user_id, event_log_content, llm_client)
-
-    def load_fingerprint(self, character_name: str, user_id: str) -> str:
-        return load_fingerprint(character_name, user_id)
 
     def should_update(self, user_id: str) -> bool:  # noqa: D102
         return should_update(user_id)

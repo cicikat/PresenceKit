@@ -1,14 +1,13 @@
 """
 core/memory/fixation_pipeline.py — 信息固化显式 pipeline
 
-四个具名 job，每个有明确触发条件、输入、输出、幂等保证、可观测日志：
+三个具名 job，每个有明确触发条件、输入、输出、幂等保证、可观测日志：
 
   capture_turn         — 同步写 short_term + event_log（含 turn_id 血缘）
   summarize_to_midterm — LLM 压缩单轮到 mid_term（slow_queue handler）
   reflect_to_episodic  — mid_term 列表 → episodic entry（slow_queue handler）
-  consolidate_to_growth— episodic 列表 → character_growth 更新（slow_queue handler）
 
-晋升关系：turn → mid_term → episodic → character_growth
+晋升关系：turn → mid_term → episodic → identity
 所有 IO 走 core/sandbox.get_paths()，写入用 core/safe_write，锁用 core/memory/locks。
 """
 
@@ -55,44 +54,6 @@ _REFLECT_PROMPT_TEMPLATE = """\
   "strength": 0到1之间的浮点数（事件越重要、情绪越强则越高）
 }}
 重要：用第三人称客观陈述，不要使用文学化语言，不要写动作描写。"""
-
-_GROWTH_SYSTEM_TEMPLATE = """\
-你是一个客观的对话分析器。你的任务是根据下面的情景记忆列表，输出对用户的结构化认知更新。
-
-重要：你不是{char_name}。不要以{char_name}的视角写作，不要使用{char_name}的语气，不要使用任何文学化表达。
-
-输出要求：
-- 总长度不超过 300 字
-- 使用第三人称客观陈述
-- 分类列出，每类下用短句要点形式
-- 信息密度高，无修饰性语言
-
-输出格式（严格遵守）：
-## 用户特点
-- [一句话事实]
-
-## 关键事件
-- [日期或时间]: [一句话事件]
-
-## 未跟进话题
-- [话题]: [用户上次提到的状态]
-
-严格禁止：
-① 不要写动作描写（不允许出现中文括号包裹的动作）
-② 不要写对白（不允许引号、不允许"他/她说"句式）
-③ 不要使用任何文学化句式
-④ 不要进入{char_name}的角色
-
-硬规则：
-① 只记录情景记忆中明确出现的事实，不推测、不补全
-② 如果记忆间有矛盾，以更新的为准
-
-输出完上面的客观认知后，另起一行输出 ===FELT===
-然后用{char_name}的第一人称视角，把上面的认知转写成内心独白：
-- 用"我"而不是"{char_name}"
-- 保留所有事实，但允许有温度和情感
-- 不超过 200 字
-- 禁止动作描写和对白"""
 
 _IDENTITY_SYSTEM_PROMPT = """\
 你是一个客观分析器，负责归纳用户的稳定行为模式。
@@ -166,7 +127,7 @@ def _save_fixation_state(uid: str, state: dict) -> None:
 
 
 def _should_consolidate(state: dict) -> bool:
-    """检查是否满足 consolidate_to_growth 触发阈值（满足任一即返回 True）。"""
+    """检查是否满足 consolidate_to_identity 触发阈值（满足任一即返回 True）。"""
     high = state.get("high_strength_since_last", 0)
     strength_acc = state.get("strength_accumulated", 0.0)
     last_at = state.get("last_consolidated_at", 0.0)
@@ -248,39 +209,6 @@ def _validate_growth_content(observer: str) -> bool:
     if not re.search(r"^#+ ", stripped, re.MULTILINE):
         return False
     return True
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# character_growth 路径辅助（避免循环导入）
-# ═══════════════════════════════════════════════════════════════════════════════
-
-def _growth_file(char_name: str, uid: str) -> Path:
-    safe_char = "".join(c for c in char_name if c.isalnum() or c in "-_")
-    safe_user = "".join(c for c in uid if c.isalnum() or c in "-_")
-    root = get_paths().character_growth()
-    root.mkdir(parents=True, exist_ok=True)
-    return root / f"{safe_char}_{safe_user}.md"
-
-
-def _backup_growth(char_name: str, uid: str) -> None:
-    path = _growth_file(char_name, uid)
-    if path.exists():
-        bak = path.with_suffix(".md.bak")
-        try:
-            safe_write_text(bak, path.read_text(encoding="utf-8"))
-        except Exception as e:
-            log_error("fixation_pipeline._backup_growth", e)
-
-
-def _restore_growth_from_backup(char_name: str, uid: str) -> None:
-    path = _growth_file(char_name, uid)
-    bak = path.with_suffix(".md.bak")
-    if bak.exists():
-        try:
-            safe_write_text(path, bak.read_text(encoding="utf-8"))
-            logger.info(f"[fixation] character_growth 已从备份回滚: {path.name}")
-        except Exception as e:
-            log_error("fixation_pipeline._restore_growth_from_backup", e)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -398,7 +326,7 @@ async def reflect_to_episodic(
     """
     将一批 mid_term 条目合并反思为一条 episodic 记忆。
     幂等：已 promoted 或已生成对应 episodic 的条目跳过。
-    完成后更新 fixation_state，如达阈值则入队 consolidate_to_growth。
+    完成后更新 fixation_state，如达阈值则入队 consolidate_to_identity。
 
     返回 ep_id（已写入）或 None（跳过）。
     """
@@ -533,59 +461,6 @@ async def reflect_to_episodic(
     return ep_id
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# Job 4 — consolidate_to_growth（内层纯函数 + 外层 IO）
-# ═══════════════════════════════════════════════════════════════════════════════
-
-async def _synthesize_growth(
-    episodes: list[dict],
-    char_name: str,
-    llm_client,
-) -> str:
-    """
-    纯函数：输入 episode 列表，输出 markdown 文本（含 ===FELT=== 分隔的两段），不做任何文件 IO。
-    """
-    # 格式化 episode 列表为可读输入
-    lines = []
-    for ep in sorted(episodes, key=lambda e: e.get("timestamp", 0)):
-        ts = ep.get("timestamp", 0)
-        date_str = time.strftime("%m月%d日", time.localtime(ts)) if ts else "（未知时间）"
-        summary = ep.get("narrative_summary") or ep.get("summary", "（无摘要）")
-        emotion = ep.get("emotion_peak", "neutral")
-        strength = ep.get("strength", 0.5)
-        lines.append(f"[{date_str}] {summary}（情绪: {emotion}，强度: {strength:.2f}）")
-
-    episodes_text = "\n".join(lines)
-    system_prompt = _GROWTH_SYSTEM_TEMPLATE.format(char_name=char_name)
-
-    _REJECT_KWS = ["作为AI", "作为一个AI", "我无法", "I cannot", "I'm sorry", "As an AI"]
-    _retry_suffix = "\n\n[上次输出不符合格式要求，请严格按照## 标题 + - 要点的格式，不要出现任何角色扮演内容]"
-
-    result = ""
-    for attempt in range(3):
-        user_content = f"情景记忆列表：\n{episodes_text}"
-        if attempt > 0:
-            user_content += _retry_suffix
-        _raw = await llm_client.chat(
-            [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content},
-            ],
-            max_tokens_override=3000,
-        )
-        _raw = (_raw or "").strip()
-        if not _raw or len(_raw) < 20:
-            continue
-        if any(kw in _raw for kw in _REJECT_KWS):
-            continue
-        if not re.search(r"^#+ ", _raw, re.MULTILINE):
-            continue
-        result = _raw
-        break
-
-    return result
-
-
 async def _synthesize_identity(
     uid: str,
     old_identity: dict,
@@ -709,109 +584,6 @@ async def _synthesize_identity(
     return result
 
 
-async def consolidate_to_growth(uid: str, char_name: str, llm_client) -> bool:
-    """
-    外层 IO：加载所有未固化的 episodic，调内层 _synthesize_growth 合成认知文件，
-    校验通过后备份→写入→更新 fingerprint→标记 episodic→重置 fixation_state。
-    校验失败则回滚备份，不更新 state（保证下次仍会重试）。
-    幂等：consolidated_at 已写的 episodic 不再参与。
-    """
-    from core.memory import locks
-    from core.memory.episodic_memory import _load_memories, _save_memories
-    from core.llm_output_validator import record_failure
-
-    _ts_start = time.time()
-    _fail_key = f"consolidate_to_growth_{uid}"
-
-    async with locks.uid_lock(uid):
-        snapshot = _load_memories(uid)
-        unconsolidated = [ep for ep in snapshot if ep.get("consolidated_at") is None]
-
-    if not unconsolidated:
-        _log_fixation("consolidate_to_growth", uid, {}, "ok", "no unconsolidated episodes")
-        return False
-
-    raw_content = await _synthesize_growth(unconsolidated, char_name, llm_client)
-
-    if not raw_content:
-        record_failure(_fail_key, "空输出", uid)
-        _log_fixation("consolidate_to_growth", uid, {}, "error", "LLM 返回空")
-        return False
-
-    if "===FELT===" in raw_content:
-        observer_part, felt_part = raw_content.split("===FELT===", 1)
-        observer_part = observer_part.strip()
-        felt_part = felt_part.strip()
-    else:
-        observer_part = raw_content.strip()
-        felt_part = ""
-
-    if not _validate_growth_content(observer_part):
-        record_failure(_fail_key, observer_part[:200], uid)
-        _log_fixation("consolidate_to_growth", uid, {}, "error",
-                      f"校验失败 len={len(observer_part)}")
-        return False
-
-    try:
-        from core.integrity_check import check_growth
-        issues = check_growth(observer_part)
-        if issues:
-            logger.warning(f"[fixation] consolidate_to_growth 纠察拒绝写入: {issues}")
-            record_failure(_fail_key, observer_part[:200], uid)
-            _log_fixation("consolidate_to_growth", uid, {}, "error", f"纠察失败: {issues}")
-            return False
-    except Exception as e:
-        log_error("fixation_pipeline.consolidate_to_growth.check_growth", e)
-
-    async with locks.uid_lock(uid):
-        all_episodes = _load_memories(uid)
-        snapshot_ids = {ep.get("id") for ep in unconsolidated}
-        still_unconsolidated = [
-            ep for ep in all_episodes
-            if ep.get("id") in snapshot_ids and ep.get("consolidated_at") is None
-        ]
-        if not still_unconsolidated:
-            _log_fixation("consolidate_to_growth", uid, {}, "ok", "already consolidated")
-            return False
-
-        _backup_growth(char_name, uid)
-        path = _growth_file(char_name, uid)
-
-        if not safe_write_text(path, observer_part):
-            _restore_growth_from_backup(char_name, uid)
-            _log_fixation("consolidate_to_growth", uid, {}, "error", "写 observer 失败")
-            return False
-
-        fp_path = path.with_suffix(".fingerprint.txt")
-        safe_write_text(fp_path, observer_part[:150].strip())
-
-        if felt_part:
-            felt_path = path.with_name(path.stem + ".felt.md")
-            safe_write_text(felt_path, felt_part)
-
-        now = time.time()
-        consolidated_ids = {ep["id"] for ep in still_unconsolidated}
-        for ep in all_episodes:
-            if ep.get("id") in consolidated_ids:
-                ep["consolidated_at"] = now
-        _save_memories(uid, all_episodes)
-
-        state = _load_fixation_state(uid)
-        state["episodic_since_last"] = 0
-        state["high_strength_since_last"] = 0
-        state["strength_accumulated"] = 0.0
-        state["last_consolidated_at"] = now
-        _save_fixation_state(uid, state)
-
-    duration_ms = int((time.time() - _ts_start) * 1000)
-    _log_fixation("consolidate_to_growth", uid, {
-        "ep_count": len(still_unconsolidated),
-        "duration_ms": duration_ms,
-    }, "ok")
-    logger.info(f"[fixation] consolidate_to_growth 完成: uid={uid} ep_count={len(still_unconsolidated)}")
-    return True
-
-
 async def consolidate_to_identity(uid: str, llm_client) -> bool:
     """
     读取待固化 episodic，调 _synthesize_identity 生成新 identity，
@@ -919,16 +691,6 @@ async def handler_reflect_to_episodic(payload: dict) -> None:
         uid=payload["uid"],
         mid_ids=payload.get("mid_ids", []),
         trigger=payload.get("trigger", "eager"),
-    )
-
-
-async def handler_consolidate_to_growth(payload: dict) -> None:
-    from core import llm_client
-    from core.config_loader import _char_name
-    await consolidate_to_growth(
-        uid=payload["uid"],
-        char_name=payload.get("char_name") or _char_name(),
-        llm_client=llm_client,
     )
 
 
