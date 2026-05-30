@@ -11,7 +11,6 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from admin.auth import verify_token
 from core.config_loader import get_config
-from core.migration import for_read
 from core.sandbox import get_paths, safe_user_id
 
 router = APIRouter()
@@ -31,7 +30,8 @@ def _log_dir() -> Path:
     uid = safe_user_id(owner)
     new = get_paths().user_memory_root(uid) / "event_log"
     old = get_paths()._p("event_log") / uid
-    return for_read(new, old)
+    # for_read() reads bytes — unsuitable for directories; check with is_dir() instead.
+    return new if new.is_dir() else old
 
 
 def _parse_day(text: str) -> list[dict]:

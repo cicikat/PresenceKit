@@ -45,7 +45,8 @@ def _event_log_read_dir(user_id: str, *, char_id: str = "yexuan") -> Path:
     uid = safe_user_id(user_id)
     new = get_paths().user_memory_root(uid, char_id=char_id) / "event_log"
     old = get_paths()._p("event_log") / uid
-    return for_read(new, old)
+    # for_read() reads bytes — unsuitable for directories; check with is_dir() instead.
+    return new if new.is_dir() else old
 
 
 def _day_file_read(user_id: str, date: datetime, *, char_id: str = "yexuan") -> Path:
