@@ -1,36 +1,37 @@
 qq:
-  enabled: true      # 是否连接 QQ / NapCat；暂时不用 QQ 时改为 false
+  enabled: false     # 是否连接 QQ / NapCat；暂时不用 QQ 时改为 false
   host: 127.0.0.1   # NapCat WebSocket 地址，一般不用改
   port: 3001         # NapCat WebSocket 端口，和 NapCat 设置里保持一致
 
 vision:
   enabled: true      # 是否启用图片识别（发送图片时自动描述）
   provider: glm      # 视觉模型提供商：gemini / openai / glm / custom
-  api_key: YOUR_VISION_API_KEY   # 视觉模型的 API Key，见 AA1 说明书
+  api_key: YOUR_VISION_API_KEY   # 视觉模型 API Key，勿提交真实值
   model: glm-4v-flash            # 视觉模型名称
   base_url: https://open.bigmodel.cn/api/paas/v4/  # 对应 provider 的接口地址
 
 llm:
   provider: deepseek             # 主 LLM 提供商
-  api_key: YOUR_LLM_API_KEY      # 主 LLM 的 API Key，见 AA1 说明书
+  api_key: YOUR_LLM_API_KEY      # 主 LLM API Key，勿提交真实值
   model: deepseek-chat           # 模型名称
   base_url: https://api.deepseek.com
   tool_call_mode: function_calling
-  temperature: 2.0
-  top_p: 0.55
+  temperature: 1
+  top_p: 0.95
   max_tokens: 4000
-  frequency_penalty: 1.7
+  frequency_penalty: 0.1
 
 memory:
-  short_term_rounds: 20          # 短期记忆保留轮数
+  short_term_rounds: 20          # 短期记忆注入轮数（加权子集）
+  short_term_disk_rounds: 50     # 磁盘保留轮数；注入仍按 short_term_rounds 预算加权选子集
   group_context_lines: 50        # 群聊上下文行数
   rag_top_k: 5
   rag_score_threshold: 0.6
   summary_every_n_rounds: 20     # 每隔多少轮更新用户画像
 
 character:
-  default: 角色名.txt              # characters/ 目录下的角色卡文件名
-  name: 角色名                     # 触发消息里使用的角色名，改成你的角色名
+  default: 角色名.json            # characters/ 目录下的角色卡文件名
+  name: 角色名                    # 触发消息里使用的角色名，改成你的角色名
   consistency_check_every_n: 15
 
 session:
@@ -54,13 +55,13 @@ error:
 admin:
   enabled: true
   auto_start: true
-  host: 127.0.0.1   # 管理面板监听地址，127.0.0.1 仅本机访问，0.0.0.0 允许局域网
+  host: 127.0.0.1   # 本机调试用 127.0.0.1；Tailnet/多设备访问需 0.0.0.0
   port: 8080         # 管理面板端口，浏览器访问 http://127.0.0.1:8080
-  secret_key: YOUR_ADMIN_SECRET  # 管理面板登录密钥，自己设一个复杂的字符串
+  secret_key: YOUR_ADMIN_SECRET  # 请改随机值，优先用环境变量 YEXUAN_ADMIN_SECRET 注入，勿提交真实值
 
 notify:
   enabled: true
-  target_qq: '你的QQ号'          # 机器人上线时发通知的目标 QQ 号
+  target_qq: '你的QQ号'          # 机器人上线时发通知的目标 QQ 号，勿提交真实值
   message: 已上线，等你回来
 
 proxy:
@@ -108,73 +109,62 @@ tools:
 
 tts:
   enabled: true                  # 是否启用语音合成
-  probability: 0.3               # 触发语音的概率（0.0~1.0），0.3 = 30%
+  probability: 0.1               # 触发语音的概率（0.0~1.0）
   api_url: http://127.0.0.1:9872 # GPT-SoVITS Gradio API 地址
   top_k: 15
   top_p: 1.0
   temperature: 1.0
   sample_steps: 8
   pause_second: 0.3
-  how_to_cut: 凑四句一切
+  how_to_cut: 按标点符号切
   ref_free: false
   if_freeze: false
   if_sr: false
-  ref_audio: /path/to/ref.wav    # 参考音频路径，填你准备好的 wav 文件绝对路径
+  ref_audio: ''                  # 外部语音素材，填本地绝对路径；缺失时 TTS 应静默降级
   prompt_text: ''                # 参考音频对应的文字（可留空）
   speed: 1.0
   emotion_enabled: true          # 是否按情绪切换参考音频
   emotions:
     neutral:
-      ref_audio: /path/to/neutral.wav   # 各情绪对应的参考音频，没有就留空 ''
+      ref_audio: ''              # 外部语音素材，填本地绝对路径；缺失时 TTS 应静默降级
       prompt_text: ''
       speed: 1
     happy:
-      ref_audio: /path/to/happy.wav
+      ref_audio: ''              # 外部语音素材，填本地绝对路径；缺失时 TTS 应静默降级
       prompt_text: ''
       speed: 1.1
     sad:
-      ref_audio: /path/to/sad.wav
+      ref_audio: ''              # 外部语音素材，填本地绝对路径；缺失时 TTS 应静默降级
       prompt_text: ''
       speed: 0.9
     gentle:
-      ref_audio: /path/to/gentle.wav
+      ref_audio: ''              # 外部语音素材，填本地绝对路径；缺失时 TTS 应静默降级
       prompt_text: ''
       speed: 0.95
     surprised:
-      ref_audio: ''
+      ref_audio: ''              # 外部语音素材，填本地绝对路径；缺失时 TTS 应静默降级
       prompt_text: ''
       speed: 1.05
     angry:
-      ref_audio: /path/to/angry.wav
+      ref_audio: ''              # 外部语音素材，填本地绝对路径；缺失时 TTS 应静默降级
       prompt_text: ''
       speed: 1.1
 
 context:
   max_turns: 30
 
-jailbreak:
-  enabled: false
-  preset: default
-  custom_text: '他的说话方式：
-
-    消息长短不定，有时两三句，有时长篇大论，不刻意凑数，想说多少说多少。
-
-    不要重复使用之前出现过的原话或例句，每次回应都是全新的表达。'  # 不同角色有不同用词习惯，记得更改
-
-    
-
 chat:
   mode: chat
-  style: roleplay
+  style: chat
   multi_message: true
 
 diary:
-  obsidian_path: "C:\\path\\to\\your\\obsidian\\vault"  # 你的 Obsidian 日记 vault 路径
+  obsidian_path: ''              # 留空则回退 diary_fallback/；填 Obsidian vault 的本地绝对路径，勿提交真实路径
 
 scheduler:
   enabled: true
-  owner_id: '你的QQ号'           # 主人的 QQ 号，调度器主动消息发送目标
-  owner_birthday: "xx-xx"        # 主人生日，格式 MM-DD
+  owner_id: '你的QQ号'           # 主人的 QQ 号，调度器主动消息发送目标，勿提交真实值
+  owner_birthday: 'MM-DD'        # 主人生日，格式 MM-DD，勿提交真实值
   morning_greeting: true
   night_reminder: true
   random_message: true
@@ -190,28 +180,64 @@ scheduler:
   timenode: true
   festival: true
   holiday_boost: true
+  sensor_aware:
+    enabled: true              # 默认关闭，手动开启
+    tick_interval_seconds: 30
+  gating_shadow:
+    enabled: true              # 关闭后 write_shadow_tick 不再写入（观测期结束后可设为 false）
+    max_size_mb: 5             # 超过此大小触发滚动
+    keep: 3                    # 保留最多 N 份归档（.1.gz … .N.gz），旧的直接删
+
+retention:
+  inbox:
+    max_age_days: 7            # inbox/ 裸上传文件超过 N 天后删（视觉缓存已落 image_cache/）
+  image_cache:
+    max_age_days: 30           # sha256 缓存条目超龄删
+    max_files: 500             # 条数上限，超出时删最旧
+  dead_letter_queue:
+    max_files: 200             # DLQ 文件数上限，超出时删最旧（由 dlq_monitor 24h 触发）
+  reminders:
+    prune_done_days: 30        # done=true 且 remind_at 过期 N 天后清理
+  dreams_archive:
+    max_files: 200             # dreams/archive/ 文件数上限，超出时删最旧
+  observations:
+    max_raw: 100               # compaction：保留最近 N 条原始观察，超出部分文本去重合并
+
+forensic_logs:
+  max_size_mb: 5               # fixation/trigger_state/execute_dryrun.jsonl 共用阈值
+  keep: 5                      # 保留归档份数
+  event_log:
+    day_archive_days: 30       # 超过 N 天的按天 .md 文件 → .md.gz
+    full_log_max_size_mb: 10   # full_log.md 超过此大小触发滚动
+    full_log_keep: 3           # full_log.md 归档保留份数
 
 anniversaries:
-  - key: "anniversary_first"
-    month: 1
-    day: 8
-    year_start: 2023
-    prompt_zero: "（{char}记得今天是你们初见的日子，心里有点不一样的感觉）"
-    prompt_years: "（{char}想起来，今天是你们在一起第{years}年了）"
-  - key: "anniversary_second"
-    month: 1
-    day: 24
-    year_start: 2026
-    prompt_zero: "（{char}记得今天的日子，指尖停在那里没动）"
-    prompt_years: "（{char}记得今天，那件事过去{years}年了，还是记得很清楚）"
-  - key: "anniversary_1314"
-    month: 8
-    day: 14
-    year_start: 2026
-    prompt_zero: "（{char}盯着日期看了一会儿，没说话，只是轻轻呼出一口气）"
-    prompt_years: "（{char}盯着日期看了一会儿，没说话，只是轻轻呼出一口气）"
+- key: anniversary_first
+  month: 1
+  day: 1
+  year_start: 2025
+  prompt_zero: （{char}记得今天是你们初见的日子，心里有点不一样的感觉）
+  prompt_years: （{char}想起来，今天是你们在一起第{years}年了）
+- key: anniversary_hug
+  month: 6
+  day: 1
+  year_start: 2025
+  prompt_zero: （{char}记得今天的日子，指尖停在那里没动）
+  prompt_years: （{char}记得今天，那件事过去{years}年了，还是记得很清楚）
+- key: anniversary_1314
+  month: 8
+  day: 14
+  year_start: 2025
+  prompt_zero: （{char}盯着日期看了一会儿，没说话，只是轻轻呼出一口气）
+  prompt_years: （{char}盯着日期看了一会儿，没说话，只是轻轻呼出一口气）
 
 character_birthday:
   month: 12
   day: 31
-  prompt: "（今天是{char}自己的生日，他没有主动提，只是安静地陪着你）"
+  prompt: （今天是{char}自己的生日，他没有主动提，只是安静地陪着你）
+
+standalone_mode: false
+mode: production
+
+emerald_desktop:
+  path: ''                       # Emerald 客户端目录，按本机填写，勿提交真实路径
