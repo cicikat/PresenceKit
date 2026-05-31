@@ -267,3 +267,16 @@ TD-001 sandbox retirement
 TD-002 _sb 命名
 → 只是不好看
 → 真改还撞 _dp()
+
+P2
+CharacterGrowth Retirement 最后尾巴
+
+tool_dispatcher._get_growth_wrapper()
+
+阻塞：
+identity 缺关键事件
+identity 缺未跟进话题
+
+当前不处理
+
+Dream 输出协议设计

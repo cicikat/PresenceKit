@@ -1,5 +1,6 @@
 from core.sandbox import get_paths, _TRANSITION_CHARACTER_INNER
 from core.safe_write import safe_write_json
+from core.scheduler.rhythm import is_quiet_sleep_time
 import time, json
 
 
@@ -28,6 +29,8 @@ def get_last_seen_text(user_id: str) -> str:
     - 7天以上："很久前"
     没有记录时返回空字符串。
     """
+    if is_quiet_sleep_time():
+        return ""
     p = get_paths().presence()
     try:
         data = json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}

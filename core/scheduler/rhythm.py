@@ -110,6 +110,17 @@ def in_night_window(now: datetime, start_hour: int = 23, end_hour: int = NIGHT_W
     return start <= now < end
 
 
+def is_quiet_sleep_time(now: datetime | None = None) -> bool:
+    """Return True when local time is in the likely-sleep window (23:00–08:00).
+
+    Used as a hard gate: when True + idle≥300s, presence events are suppressed.
+    Intentionally simple — no LLM, no state, just clock hour.
+    """
+    current = now or datetime.now()
+    h = current.hour
+    return h >= 23 or h < 8
+
+
 def _ratio_between(now: datetime, start: datetime, end: datetime) -> float:
     total = (end - start).total_seconds()
     if total <= 0:
