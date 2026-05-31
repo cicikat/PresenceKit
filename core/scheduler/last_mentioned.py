@@ -24,6 +24,13 @@ TOPIC_REFOLLOW_WINDOW_SECONDS = 3 * 24 * 3600
 # TODO(policy.yaml): move filler memory-level refollow suppression into scheduler policy.
 RECALL_REFOLLOW_WINDOW_SECONDS = 12 * 3600
 
+# recent_topics soft-downweight parameters (Phase 1)
+FULL_RECOVER_SECONDS = 6 * 3600   # 6h: base_decay goes 0→1 over this window
+REPEAT_K = 0.3                    # repeat_penalty = 1/(1 + REPEAT_K * speak_count)
+CROSS_SOURCE_RELAX = 1.3          # freshness boost when source differs from last_source
+MIN_FRESHNESS = 0.05              # floor: never fully silence a topic
+MAX_RECENT_TOPICS = 200           # hard cap on entries per recent_topics / shadow dict
+
 _USER_PREFIX = "**用户**："
 _DATE_RE = re.compile(r"^#\s*(\d{4}-\d{2}-\d{2})\s*$")
 _TIME_RE = re.compile(r"^##\s*(\d{2}:\d{2})\s*$")
@@ -101,8 +108,9 @@ def recall_last_mentioned(
     *,
     now: datetime | None = None,
     days: int = RECENT_EVENT_LOG_DAYS,
+    dry_run: bool = False,
 ) -> LastMentionedTopic | None:
-    """Return the best last-mentioned event_log topic, currently sorted by time."""
+    """Return the best last-mentioned event_log topic, ranked by recency × freshness."""
 
     now_dt = now or datetime.now()
     text = _read_recent_event_log(user_id, days=days, now=now_dt)
@@ -114,7 +122,7 @@ def recall_last_mentioned(
         for turn in _parse_event_log_turns(text)
         if (topic := _topic_from_turn(turn, now_dt)) is not None
     ]
-    ordered = _rank_last_mentioned_candidates(candidates)
+    ordered = _rank_last_mentioned_candidates(candidates, now=now_dt, dry_run=dry_run)
     return ordered[0] if ordered else None
 
 
@@ -142,6 +150,8 @@ def mark_topic_followed(topic_key: str, *, now_ts: float | None = None) -> None:
         now_ts=now_ts,
         prune_window_seconds=TOPIC_REFOLLOW_WINDOW_SECONDS,
     )
+    _now = datetime.fromtimestamp(now_ts) if now_ts is not None else None
+    mark_recent_topic(topic_key, "followup", now=_now)
 
 
 def mark_topic_followed_shadow(topic_key: str, *, now_ts: float | None = None) -> None:
@@ -151,6 +161,8 @@ def mark_topic_followed_shadow(topic_key: str, *, now_ts: float | None = None) -
         now_ts=now_ts,
         prune_window_seconds=TOPIC_REFOLLOW_WINDOW_SECONDS,
     )
+    _now = datetime.fromtimestamp(now_ts) if now_ts is not None else None
+    mark_recent_topic(topic_key, "followup", now=_now, dry_run=True)
 
 
 def load_followed_topics() -> dict[str, float]:
@@ -202,6 +214,75 @@ def load_recalled_memories() -> dict[str, float]:
 
 def load_recalled_memories_shadow() -> dict[str, float]:
     return _load_state_map("recalled_memories_shadow")
+
+
+def compute_topic_freshness(
+    topic_key: str,
+    source: str,
+    *,
+    now: datetime | None = None,
+    dry_run: bool = False,
+) -> float:
+    """Return a [MIN_FRESHNESS, 1.0] weight for topic_key under the given source.
+
+    New topics return 1.0. Recently spoken topics are dampened; cross-source
+    calls get a CROSS_SOURCE_RELAX boost so the same topic can surface via a
+    different trigger sooner.
+    """
+    if not topic_key:
+        return 1.0
+    now_dt = now or datetime.now()
+    state_key = _recent_topics_key(dry_run)
+    recent = _read_scheduler_state().get(state_key, {})
+    if not isinstance(recent, dict):
+        return 1.0
+    entry = recent.get(topic_key)
+    if not isinstance(entry, dict):
+        return 1.0
+    try:
+        last_spoken_at = datetime.fromisoformat(str(entry["last_spoken_at"])).timestamp()
+        speak_count = max(0, int(entry.get("speak_count", 0)))
+        last_source = str(entry.get("last_source", ""))
+    except (KeyError, ValueError, TypeError):
+        return 1.0
+    elapsed = now_dt.timestamp() - last_spoken_at
+    base_decay = min(1.0, max(0.0, elapsed / FULL_RECOVER_SECONDS))
+    repeat_penalty = 1.0 / (1.0 + REPEAT_K * speak_count)
+    freshness = max(MIN_FRESHNESS, base_decay * repeat_penalty)
+    if last_source and last_source != source:
+        freshness = min(1.0, freshness * CROSS_SOURCE_RELAX)
+    return freshness
+
+
+def mark_recent_topic(
+    topic_key: str,
+    source: str,
+    *,
+    now: datetime | None = None,
+    dry_run: bool = False,
+) -> None:
+    """Record that topic_key was spoken from source; increments speak_count."""
+    if not topic_key:
+        return
+    now_dt = now or datetime.now()
+    state_key = _recent_topics_key(dry_run)
+    state = _read_scheduler_state()
+    recent = state.get(state_key)
+    if not isinstance(recent, dict):
+        recent = {}
+    entry = recent.get(topic_key)
+    if not isinstance(entry, dict):
+        entry = {}
+    try:
+        speak_count = max(0, int(entry.get("speak_count", 0)))
+    except (TypeError, ValueError):
+        speak_count = 0
+    entry["last_spoken_at"] = now_dt.isoformat(timespec="seconds")
+    entry["speak_count"] = speak_count + 1
+    entry["last_source"] = source
+    recent[str(topic_key)] = entry
+    state[state_key] = _prune_recent_topics(recent)
+    safe_write_json(get_paths().scheduler_user_state(), state)
 
 
 def _is_recently_in_state(
@@ -261,17 +342,40 @@ def _memory_state_key(shadow: bool) -> str:
     return "recalled_memories_shadow" if shadow else "recalled_memories"
 
 
+def _recent_topics_key(dry_run: bool) -> str:
+    return "recent_topics_shadow" if dry_run else "recent_topics"
+
+
 def topic_key_for(topic: str) -> str:
     normalized = _PUNCT_RE.sub("", topic.strip().lower())
     normalized = _FILLER_RE.sub("", normalized)
     return normalized[:40]
 
 
-def _rank_last_mentioned_candidates(candidates: list[LastMentionedTopic]) -> list[LastMentionedTopic]:
-    """Isolate topic ordering so future density ranking only changes this function."""
+def _rank_last_mentioned_candidates(
+    candidates: list[LastMentionedTopic],
+    *,
+    now: datetime | None = None,
+    dry_run: bool = False,
+) -> list[LastMentionedTopic]:
+    """Rank by recency × topic freshness (descending).
 
-    # TODO(short_term-density): replace timestamp ordering with information density here.
-    return sorted(candidates, key=lambda item: item.mentioned_at, reverse=True)
+    Recency is the primary signal (newer = higher); topic freshness from
+    recent_topics softly demotes topics that were spoken recently without
+    fully excluding them. Specificity is not factored here to preserve
+    the expected time-ordering when no recent_topics are marked.
+    """
+    if not candidates:
+        return []
+    now_dt = now or datetime.now()
+    _ref = float(RECENT_EVENT_LOG_DAYS * 24 * 3600)
+
+    def _weighted(item: LastMentionedTopic) -> float:
+        recency = 1.0 - min(item.age_seconds / _ref, 1.0)
+        freshness = compute_topic_freshness(item.topic_key, "followup", now=now_dt, dry_run=dry_run)
+        return recency * freshness
+
+    return sorted(candidates, key=_weighted, reverse=True)
 
 
 def _read_recent_event_log(user_id: str, *, days: int, now: datetime) -> str:
@@ -470,3 +574,21 @@ def _prune_followed_topics(followed: dict, *, now_ts: float | None = None) -> di
         now_ts=now_ts,
         window_seconds=TOPIC_REFOLLOW_WINDOW_SECONDS,
     )
+
+
+def _prune_recent_topics(recent: dict) -> dict:
+    """Retain the MAX_RECENT_TOPICS most-recent entries; drop oldest first.
+
+    Entries with unparseable last_spoken_at get sort key 0 and are dropped first.
+    """
+    if len(recent) <= MAX_RECENT_TOPICS:
+        return recent
+
+    def _ts(entry: object) -> float:
+        try:
+            return datetime.fromisoformat(str(entry.get("last_spoken_at", ""))).timestamp()  # type: ignore[union-attr]
+        except (ValueError, TypeError, AttributeError):
+            return 0.0
+
+    sorted_items = sorted(recent.items(), key=lambda kv: _ts(kv[1]), reverse=True)
+    return dict(sorted_items[:MAX_RECENT_TOPICS])

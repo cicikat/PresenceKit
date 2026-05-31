@@ -66,6 +66,7 @@ def test_followed_topics_live_state_uses_scheduler_state(sandbox):
     from core.scheduler.last_mentioned import is_recently_followed, mark_topic_followed
 
     user_state_path = sandbox.scheduler_user_state()
+    user_state_path.parent.mkdir(parents=True, exist_ok=True)
     user_state_path.write_text(json.dumps({"last_diary_share": 1.0}), encoding="utf-8")
 
     mark_topic_followed("实习材料", now_ts=1_000.0)

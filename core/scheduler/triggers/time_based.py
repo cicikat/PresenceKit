@@ -192,9 +192,11 @@ async def _check_random_message(force: bool = False):
         # 超过4小时未触发，直接放行（保底）
 
     oid = _owner_id()
+    _picked_key = ""
 
     try:
         from core.memory.event_log import get_highlights
+        from core.scheduler.last_mentioned import topic_key_for
         highlights = get_highlights(oid, days=2)
         if highlights:
             import random
@@ -203,6 +205,7 @@ async def _check_random_message(force: bool = False):
                 picked = random.choice(items)
             else:
                 picked = highlights
+            _picked_key = topic_key_for(picked)
             context_hint = f"（{_char_name()}想到了一件事：{picked}）"
         else:
             context_hint = ""
@@ -212,6 +215,9 @@ async def _check_random_message(force: bool = False):
     prompt = _build_random_message_prompt(context_hint)
     await _pipeline_send(prompt, trigger_name="random_message")
     _mark("random_message")
+    if _picked_key:
+        from core.scheduler.last_mentioned import mark_recent_topic
+        mark_recent_topic(_picked_key, "random", dry_run=False)
     logger.info("[scheduler] 随机日间消息已发送")
 
 
@@ -238,10 +244,7 @@ def propose_random_message(ctx: dict | None = None):
         topic_source="random",
         requires_state=[TriggerState.QUIET],
         bypass_state_machine=False,
-        execute=_make_prompt_execute(
-            "random_message",
-            lambda: _build_random_message_prompt(_random_message_context_hint(oid)),
-        ),
+        execute=_make_random_message_execute(oid),
     )
 
 
@@ -705,16 +708,48 @@ def _make_prompt_execute(
     return execute
 
 
-def _random_message_context_hint(oid: str) -> str:
+def _make_random_message_execute(oid: str):
+    async def execute(*, dry_run: bool):
+        from core.scheduler.execution import execute_prompt
+
+        return await execute_prompt(
+            trigger_name="random_message",
+            prompt_factory=lambda: _build_random_message_prompt(
+                _random_message_context_hint(oid, dry_run=dry_run)
+            ),
+            dry_run=dry_run,
+            would_mark=["random_message"],
+        )
+
+    return execute
+
+
+def _random_message_context_hint(oid: str, *, dry_run: bool = False) -> str:
     try:
         from core.memory.event_log import get_highlights
+        from core.scheduler.last_mentioned import (
+            compute_topic_freshness,
+            mark_recent_topic,
+            topic_key_for,
+        )
 
         highlights = get_highlights(oid, days=2)
         if not highlights:
             return ""
         items = [h.strip() for h in highlights.split("\n") if h.strip()]
-        picked = random.choice(items) if items else highlights
-        return f"（{_char_name()}想到了一件事：{picked}）"
+        if not items:
+            return ""
+
+        now = datetime.now()
+        pairs = [(item, topic_key_for(item)) for item in items]
+        weights = [
+            compute_topic_freshness(tk, "random", now=now, dry_run=dry_run) if tk else 1.0
+            for _, tk in pairs
+        ]
+        picked_item, picked_key = random.choices(pairs, weights=weights, k=1)[0]
+        if picked_key:
+            mark_recent_topic(picked_key, "random", now=now, dry_run=dry_run)
+        return f"（{_char_name()}想到了一件事：{picked_item}）"
     except Exception:
         return ""
 
@@ -952,19 +987,29 @@ def _spontaneous_recall_prompt_for_memory(memory: dict) -> str:
 def _make_spontaneous_recall_execute(memory: dict):
     async def execute(*, dry_run: bool):
         from core.scheduler.execution import execute_prompt
-        from core.scheduler.last_mentioned import mark_memory_recalled, mark_memory_recalled_shadow
+        from core.scheduler.last_mentioned import (
+            mark_memory_recalled,
+            mark_memory_recalled_shadow,
+            mark_recent_topic,
+        )
 
         memory_key = str(memory.get("_memory_key") or memory_key_for_recall(memory))
+
+        def _after_send():
+            mark_memory_recalled(memory_key)
+            mark_recent_topic(memory_key, "recall")
+
         result = await execute_prompt(
             trigger_name="spontaneous_recall",
             prompt_factory=lambda: _spontaneous_recall_prompt_for_memory(memory),
             dry_run=dry_run,
             would_mark=["spontaneous_recall"],
             topic_key=memory_key,
-            after_send=lambda: mark_memory_recalled(memory_key),
+            after_send=_after_send,
         )
         if dry_run:
             mark_memory_recalled_shadow(memory_key)
+            mark_recent_topic(memory_key, "recall", dry_run=True)
         return result
 
     return execute

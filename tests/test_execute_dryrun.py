@@ -334,6 +334,10 @@ async def test_topic_followup_execute_dryrun_writes_shadow_only(monkeypatch, san
     assert result.topic_key == "继续改实习材料"
     assert load_followed_topics() == {}
     assert "继续改实习材料" in load_followed_topics_shadow()
+    # Fix 2: recent_topics_shadow must also be written (via mark_topic_followed_shadow)
+    raw = json.loads(sandbox.scheduler_user_state().read_text(encoding="utf-8"))
+    assert "继续改实习材料" in raw.get("recent_topics_shadow", {})
+    assert "继续改实习材料" not in raw.get("recent_topics", {})
     row = json.loads(sandbox.execute_dryrun_log().read_text(encoding="utf-8").splitlines()[-1])
     assert row["topic_key"] == "继续改实习材料"
 
@@ -444,6 +448,45 @@ async def test_spontaneous_recall_dryrun_shadow_blocks_second_propose(monkeypatc
 
     second = time_based.propose_spontaneous_recall({**ctx, "now_ts": 1_000.0 + 60})
     assert second is None
+
+
+@pytest.mark.asyncio
+async def test_legacy_random_message_marks_recent_topics(monkeypatch, sandbox):
+    """Fix 1: _check_random_message (legacy path) must write recent_topics after send."""
+    from core.scheduler.triggers import time_based
+
+    sent = []
+
+    async def fake_send(prompt, search_query="", trigger_name="", **kwargs):
+        sent.append(trigger_name)
+        return "reply"
+
+    monkeypatch.setattr(time_based, "_pipeline_send", fake_send)
+    monkeypatch.setattr(time_based, "_mark", lambda name: None)
+    monkeypatch.setattr(time_based, "_is_ready", lambda name: True)
+    monkeypatch.setattr(time_based, "_cfg", lambda: {"random_message": True})
+    monkeypatch.setattr(time_based, "_owner_id", lambda: "u1")
+    monkeypatch.setattr(time_based, "_char_name", lambda: "叶瑄")
+    monkeypatch.setattr(
+        "core.memory.event_log.get_highlights",
+        lambda oid, days: "在写实习材料",  # single item → deterministic pick
+    )
+    monkeypatch.setattr(
+        "core.scheduler.execution.legacy_tick_should_send",
+        lambda force=False: True,
+    )
+
+    await time_based._check_random_message(force=True)
+
+    assert sent == ["random_message"]
+    raw = json.loads(sandbox.scheduler_user_state().read_text(encoding="utf-8"))
+    recent = raw.get("recent_topics", {})
+    assert len(recent) >= 1
+    # The picked key is topic_key_for("在写实习材料") == "在写实习材料"
+    assert "在写实习材料" in recent
+    assert recent["在写实习材料"]["last_source"] == "random"
+    # Shadow must NOT be written (dry_run=False)
+    assert raw.get("recent_topics_shadow", {}) == {}
 
 
 @pytest.mark.asyncio
