@@ -159,18 +159,6 @@ async def record_assistant_turn(
     capture_trigger = "" if source == TurnSource.USER_CHAT else (trigger_name or "")
     behavior = payload.get("behavior") if payload else None
 
-    # Pre-generate a shared msg_id so that the desktop channel_message and the
-    # parallel message_segments envelope can be correlated by the client.
-    # Only generated when the desktop WS is actually connected; otherwise None
-    # and both paths fall back to their own internal id generation.
-    _ws_msg_id: Optional[str] = None
-    try:
-        from channels import desktop_ws as _dws_pre
-        if _dws_pre.is_connected():
-            _ws_msg_id = _dws_pre._new_msg_id()
-    except Exception:
-        pass
-
     post_info: dict | None = None
     async with _maybe_conversation_gate(uid, bypass_gate):
         if await_critical_post_process:
@@ -189,6 +177,17 @@ async def record_assistant_turn(
                     trigger_name=capture_trigger,
                 )
             )
+
+    # Generate the shared msg_id AFTER post_process, immediately before fanout.
+    # This ensures channel_message and message_segments always share the same id
+    # even when the WS reconnects during the (potentially slow) LLM call above.
+    _ws_msg_id: Optional[str] = None
+    try:
+        from channels import desktop_ws as _dws_pre
+        if _dws_pre.is_connected():
+            _ws_msg_id = _dws_pre._new_msg_id()
+    except Exception:
+        pass
 
     targets, failures = await _fanout(
         assistant_text=assistant_text,
