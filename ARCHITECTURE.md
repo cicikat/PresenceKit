@@ -244,6 +244,31 @@ pipeline = pipeline_registry.get()
 
 ---
 
+## 目录职责：data/ vs characters/reality/
+
+| 目录 | 用途 | 示例 |
+|---|---|---|
+| `data/` | **运行时数据**，由程序运行中写入，不应手工编辑 | 聊天历史、情绪状态、计划队列等 |
+| `characters/reality/` | **现实 Chat authored prompt assets**，手工维护，可版本审计 | `lorebook.yaml`、`jailbreak_entries.json` |
+| `characters/dream_worlds/`、`characters/dream_presets/` | Dream 世界包 authored assets，独立体系 | Dream lorebook、presets |
+
+### 现实 Chat Authored Assets
+
+现实 Chat 的两个 authored prompt assets 存放于 `characters/reality/`，**不再从 `data/` 读取**：
+
+```
+characters/reality/
+├── lorebook.yaml            ← 现实世界书（admin 面板读写）
+└── jailbreak_entries.json   ← 破限预设条目（admin 面板读写）
+```
+
+路径由 `core/data_paths.py` 的 `DataPaths.lorebook()` / `DataPaths.jailbreak_entries()` 方法决定。  
+文件不存在时：记录 warning，返回空列表，**不 fallback 到 `data/`**，也不从 `data/` 读取旧文件。
+
+旧路径 `data/lorebook.yaml` 和 `data/jailbreak_entries.json` 已废弃，仅作迁移来源保留，运行时不读取。
+
+---
+
 ## Hook：文档同步提醒
 
 `.claude/hooks/` 下两个 hook 在 Claude Code 编辑代码后自动检查文档是否需要同步更新。
@@ -267,7 +292,7 @@ Stop（Claude 准备结束响应时）
 | 改动路径关键词 | 追加提示文档 |
 |---|---|
 | `core/memory/`、`core/safe_write.py`、`core/integrity_check.py`、`core/llm_output_validator.py`、`tools/extract_observations.py` | `docs/memory.md` |
-| `core/prompt_builder.py`、`core/tag_rules.py`、`core/mood_text.py`、`core/author_note_rotator.py`、`core/lore_engine.py`、`characters/`、`data/jailbreak_entries.json` | `docs/prompt-layers.md` |
+| `core/prompt_builder.py`、`core/tag_rules.py`、`core/mood_text.py`、`core/author_note_rotator.py`、`core/lore_engine.py`、`characters/` | `docs/prompt-layers.md` |
 | `core/tool_dispatcher.py`、`core/tools/` | `docs/tools.md` |
 | `core/scheduler/` | `docs/scheduler.md` |
 

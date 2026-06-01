@@ -103,7 +103,7 @@
 
 **关键状态文件/日志**
 - `characters/*.json`
-- `data/jailbreak_entries.json`
+- `characters/reality/jailbreak_entries.json`
 - `data/runtime/characters/{char_id}/inner/activity_snapshot.json`
 - `data/runtime/characters/{char_id}/inner/mood_state.json`
 - `data/runtime/characters/{char_id}/inner/diary/*.md`

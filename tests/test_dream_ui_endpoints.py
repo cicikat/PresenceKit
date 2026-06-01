@@ -254,6 +254,41 @@ def test_settings_patch_partial_update_only_changes_given_fields(sandbox):
     )
 
 
+def test_settings_patch_display_write_and_reread_consistent(sandbox):
+    """PATCH display.physiological_arousal persists as an explicit developer toggle."""
+    from admin.routers.dream import dream_settings_patch, dream_settings_get
+
+    uid = _UID + "_display"
+
+    with patch("admin.routers.dream._owner_uid", return_value=uid):
+        resp = asyncio.run(dream_settings_patch({
+            "display": {"physiological_arousal": True},
+        }))
+        assert resp["ok"]
+
+        reread = asyncio.run(dream_settings_get())
+
+    assert reread["display"] == {"physiological_arousal": True}
+
+
+@pytest.mark.parametrize("bad_display", [
+    True,
+    {},
+    {"unknown": True},
+    {"physiological_arousal": "yes"},
+])
+def test_settings_patch_invalid_display_rejected(sandbox, bad_display):
+    """PATCH display only accepts the supported boolean developer toggle."""
+    from fastapi import HTTPException
+    from admin.routers.dream import dream_settings_patch
+
+    with patch("admin.routers.dream._owner_uid", return_value=_UID + "_display_invalid"):
+        with pytest.raises(HTTPException) as exc_info:
+            asyncio.run(dream_settings_patch({"display": bad_display}))
+
+    assert exc_info.value.status_code == 422
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # ⑥ PATCH 非法枚举值被拒、不落盘
 # ═══════════════════════════════════════════════════════════════════════════════

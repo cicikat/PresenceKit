@@ -12,7 +12,7 @@ NEVER imported by core/pipeline.py or core/memory/fixation_pipeline.py (I2).
 Lorebook:
   match_dream_lore() is a pure function — takes entries list + message + history,
   returns matched content strings. Dream lorebook data stored separately from
-  the reality lorebook (data/lorebook.yaml).
+  the reality lorebook (characters/reality/lorebook.yaml).
 """
 
 import json
@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 _WORLDS_BASE = Path("characters/dream_worlds")
 _KNOWN_WORLDS = frozenset({"reality_derived", "abo", "vampire", "cat", "flower_bud", "custom"})
 _FALLBACK_WORLD = "reality_derived"
+_DEFAULT_DIR = "_default"
 
 
 @dataclass
@@ -40,7 +41,8 @@ class WorldPackage:
 def load_world(world_id: str) -> WorldPackage:
     """
     Load a world package from characters/dream_worlds/{world_id}/.
-    Falls back to reality_derived if world_id is unknown or files missing.
+    Falls back to reality_derived if world_id is unknown.
+    Falls back to _default/ for missing or empty ruleset, mes_example, vocab.
     """
     if world_id not in _KNOWN_WORLDS:
         logger.warning(
@@ -50,11 +52,34 @@ def load_world(world_id: str) -> WorldPackage:
         world_id = _FALLBACK_WORLD
 
     base = _WORLDS_BASE / world_id
+    default_base = _WORLDS_BASE / _DEFAULT_DIR
+
+    ruleset = _read_text_or_none(base / "ruleset.md")
+    if ruleset is None:
+        logger.info(
+            f"[world_loader] fallback world_id={world_id!r} field=ruleset source=_default"
+        )
+        ruleset = _read_text(default_base / "ruleset.md")
+
+    mes_example = _read_text_or_none(base / "mes_example.md")
+    if mes_example is None:
+        logger.info(
+            f"[world_loader] fallback world_id={world_id!r} field=mes_example source=_default"
+        )
+        mes_example = _read_text(default_base / "mes_example.md")
+
+    vocab_terms = _read_vocab_or_none(base / "vocab.json")
+    if vocab_terms is None:
+        logger.info(
+            f"[world_loader] fallback world_id={world_id!r} field=vocab source=_default"
+        )
+        vocab_terms = _read_vocab(default_base / "vocab.json")
+
     return WorldPackage(
         world_id=world_id,
-        ruleset=_read_text(base / "ruleset.md"),
-        mes_example=_read_text(base / "mes_example.md"),
-        vocab_terms=_read_vocab(base / "vocab.json"),
+        ruleset=ruleset,
+        mes_example=mes_example,
+        vocab_terms=vocab_terms,
     )
 
 
@@ -164,6 +189,15 @@ def _read_text(path: Path) -> str:
         return ""
 
 
+def _read_text_or_none(path: Path) -> str | None:
+    """Returns stripped text, or None if file missing/unreadable/empty after strip."""
+    try:
+        content = path.read_text(encoding="utf-8").strip()
+        return content if content else None
+    except Exception:
+        return None
+
+
 def _read_vocab(path: Path) -> list[str]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -172,3 +206,14 @@ def _read_vocab(path: Path) -> list[str]:
         return []
     except Exception:
         return []
+
+
+def _read_vocab_or_none(path: Path) -> list[str] | None:
+    """Returns vocab list, or None if file missing or invalid (non-list JSON)."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(data, list):
+            return [str(t) for t in data if t]
+        return None
+    except Exception:
+        return None

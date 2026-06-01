@@ -44,6 +44,7 @@ _DEFAULTS: dict[str, Any] = {
     "world_layer": "reality_derived",
     "lucid_mode": "lucid_shared",
     "jailbreak_preset": "default",
+    "display": {"physiological_arousal": False},
 }
 
 

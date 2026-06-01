@@ -180,10 +180,15 @@ async def dream_turn(
         write_state(uid, state)
         await _do_close_dream(uid, dream_id, exit_type="soft")
 
+    from core.narrative_parser import parse_narrative_segments as _parse_segs
+    _parsed = _parse_segs(reply)
+
     return {
         "reply": reply,
         "exit_accepted": exit_accepted,
         "force_exited": False,
+        "segments": _parsed["segments"],
+        "segmented_content": _parsed["content"],
     }
 
 
@@ -248,6 +253,10 @@ async def enter_dream(uid: str, entry_reason: str = "") -> dict[str, Any]:
     state.pop("body_state", None)
     write_state(uid, state)
 
+    # Clear any leftover HUD smooth state from a previous interrupted dream
+    from core.dream.dream_hud import delete_hud_state
+    delete_hud_state(uid)
+
     logger.info(f"[dream_pipeline] entered dream uid={uid} dream_id={dream_id}")
     return {"ok": True, "dream_id": dream_id}
 
@@ -256,6 +265,7 @@ async def _do_close_dream(uid: str, dream_id: str, exit_type: str) -> None:
     """Archive log, schedule summary generation, transition to REALITY_AFTERGLOW."""
     from core.dream.dream_state import read_state, write_state, DreamStatus, clear_local_state
     from core.dream.dream_log import archive_current
+    from core.dream.dream_hud import delete_hud_state
 
     if dream_id:
         archive_current(uid, dream_id)
@@ -269,6 +279,7 @@ async def _do_close_dream(uid: str, dream_id: str, exit_type: str) -> None:
     state["last_exit_type"] = exit_type
     write_state(uid, state)
 
+    delete_hud_state(uid)
     logger.info(f"[dream_pipeline] closed dream uid={uid} exit_type={exit_type}")
 
 

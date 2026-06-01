@@ -46,7 +46,7 @@ _ENUM_VALIDATORS: dict[str, frozenset] = {
 
 _PATCH_ALLOWED = frozenset({
     "memory_access", "boundary_level", "world_layer", "lucid_mode",
-    "enable_dream_lorebook", "jailbreak_preset",
+    "enable_dream_lorebook", "jailbreak_preset", "display",
 })
 
 _SAFE_PRESET_RE = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
@@ -111,25 +111,106 @@ async def dream_exit():
     return {"ok": True, "exited": True}
 
 
+_BOUNDARY_FACTOR: dict[str, int] = {
+    "vague": 10,
+    "body_perceptible": 20,
+    "numbers_visible": 35,
+    "threshold_break": 35,
+}
+
+
+def _compute_hud_v0(state: dict, settings: dict, body) -> dict:
+    """Compute Dream HUD v0 derived fields. Pure, no side effects, no I/O."""
+    heat = body.heat
+    sensitivity = body.sensitivity
+    raw_tension = float(state.get("emotional_tension", 0.0))
+    emotion_tension = round(raw_tension * 100)
+
+    physiological_arousal = round(min(100.0, max(0.0, heat)))
+
+    world = state.get("frozen_world") or settings.get("world_layer", "reality_derived")
+    base_intimacy = (heat + sensitivity + emotion_tension) / 3.0
+    if world == "abo":
+        base_intimacy *= 1.2
+    elif world == "cat":
+        base_intimacy *= 0.8
+    intimacy_tendency = round(min(100.0, max(0.0, base_intimacy)))
+
+    boundary_factor = _BOUNDARY_FACTOR.get(settings.get("boundary_level", "body_perceptible"), 20)
+    boundary_intrusion = round(min(100.0, max(0.0, heat * 0.4 + emotion_tension * 0.4 + boundary_factor)))
+
+    anchor_score = min(len(list(state.get("symbolic_anchors") or [])) * 10, 40)
+    obsession = round(min(100.0, max(0.0, emotion_tension * 0.7 + anchor_score * 0.3)))
+
+    turn_factor = 10  # no turn_count tracked in v0
+    dream_depth = round(min(100.0, max(0.0, (heat + sensitivity + turn_factor) / 3.0)))
+
+    scene_bonus = 20 if state.get("scene_state") else 0
+    dream_stability = round(min(100.0, max(0.0, 100 - emotion_tension * 0.4 - boundary_intrusion * 0.2 + scene_bonus)))
+
+    if emotion_tension < 25:
+        emotion_label = "平静"
+    elif emotion_tension < 45:
+        emotion_label = "专注"
+    elif emotion_tension < 65:
+        emotion_label = "克制"
+    elif emotion_tension < 80:
+        emotion_label = "紧绷"
+    else:
+        emotion_label = "临界"
+
+    scene_state = state.get("scene_state")
+    if scene_state:
+        scene_label = scene_state
+    elif dream_stability > 70:
+        scene_label = "稳定"
+    elif dream_depth > 70:
+        scene_label = "下沉"
+    elif boundary_intrusion > 60:
+        scene_label = "边界波动"
+    else:
+        scene_label = "梦境中"
+
+    return {
+        "emotion_label": emotion_label,
+        "scene_label": scene_label,
+        "emotion_tension": emotion_tension,
+        "boundary_intrusion": boundary_intrusion,
+        "intimacy_tendency": intimacy_tendency,
+        "obsession": obsession,
+        "dream_stability": dream_stability,
+        "dream_depth": dream_depth,
+        "physiological_arousal": physiological_arousal,
+    }
+
+
 @router.get("/dream/state", summary="读取梦境状态（只读 UI 面板字段）")
 async def dream_state_get():
     """
-    Pure read-only: never writes files, never triggers reality pipeline.
-    Returns safe defaults (status=REALITY_CHAT, body zeros) when no dream active.
+    Read-only UI panel. Returns safe defaults when no dream is active.
 
-    body.{heat,sensitivity,tension} — her cyber body numbers.
-      user_sees_own_numbers is always True; orthogonal to boundary_level
-      (which controls 叶瑄's perception, not the UI panel).
+    HUD v1: EMA-smoothed fields, anchor_charge injection, world multipliers.
+    Persists smooth values to dream_hud_state.json (dream-local, cleared at close).
+    Does not read mood_state, user_identity, or any reality store.
+
+    body.{heat,sensitivity,tension} — user always sees own numbers (orthogonal to
+      boundary_level, which controls 叶瑄's perception only).
     yexuan_tension — 叶瑄's dream-local emotional tension (0.0–1.0).
+    HUD fields: emotion_label, scene_label, emotion_tension, boundary_intrusion,
+      intimacy_tendency, obsession, dream_stability, dream_depth,
+      physiological_arousal — all int 0–100.
     """
     uid = _owner_uid()
-    from core.dream.dream_state import read_state
+    from core.dream.dream_state import read_state, DreamStatus
     from core.dream.body_state import BodyState
+    from core.dream.dream_settings import load as _load_settings
+    from core.dream.dream_hud import derive_hud_v1, load_hud_state, save_hud_state
 
     state = read_state(uid)
     body = BodyState.from_dict(state.get("body_state") or {})
+    settings = _load_settings(uid)
 
-    return {
+    base = {
         "status": state.get("status", "REALITY_CHAT"),
         "dream_id": state.get("dream_id"),
         "frozen_world": state.get("frozen_world"),
@@ -143,6 +224,21 @@ async def dream_state_get():
         "scene_state": state.get("scene_state"),
         "symbolic_anchors": list(state.get("symbolic_anchors") or []),
     }
+
+    # HUD v1: EMA smooth + anchor_charge + world corrections
+    # When dream is not active we still compute (using zeroed body), but do not persist.
+    dream_active = state.get("status") in (
+        DreamStatus.DREAM_ACTIVE.value,
+        DreamStatus.DREAM_CLOSING.value,
+        DreamStatus.DREAM_EXIT_REQUESTED.value,
+    )
+    prev_smooth = load_hud_state(uid) if dream_active else {}
+    smooth, hud = derive_hud_v1(state, settings, body, prev_smooth)
+    if dream_active:
+        save_hud_state(uid, smooth)
+
+    base.update(hud)
+    return base
 
 
 @router.get("/dream/settings", summary="读取梦境设置（全字段）")
@@ -159,7 +255,7 @@ async def dream_settings_patch(body: dict):
     Partial update for dream settings. Validates enum values before writing.
 
     Allowed fields: memory_access / boundary_level / world_layer / lucid_mode /
-                    enable_dream_lorebook
+                    enable_dream_lorebook / display
 
     ★ NEVER backfills into a running dream's frozen_world / lucid_mode.
       Those fields are frozen at dream entry (enter_dream reads from settings
@@ -188,6 +284,17 @@ async def dream_settings_patch(body: dict):
         if not isinstance(val, str) or not _SAFE_PRESET_RE.match(val):
             errors.append(
                 f"jailbreak_preset={val!r} 非法，只允许字母/数字/下划线/短横线（1-64字符）"
+            )
+    if "display" in updates:
+        val = updates["display"]
+        if not isinstance(val, dict):
+            errors.append(f"display 必须为对象，收到：{val!r}")
+        elif set(val) != {"physiological_arousal"}:
+            errors.append("display 只允许 physiological_arousal 字段")
+        elif not isinstance(val["physiological_arousal"], bool):
+            errors.append(
+                "display.physiological_arousal 必须为 bool，"
+                f"收到：{val['physiological_arousal']!r}"
             )
     if errors:
         raise HTTPException(status_code=422, detail="; ".join(errors))
