@@ -78,26 +78,44 @@ def _load_style_hint() -> str:
 
 def _load_jailbreak(layer: int | None = None) -> str:
     """
-    读取 jailbreak_entries.json，返回启用条目的内容。
-    layer指定时只返回该层的条目，None时返回所有启用条目。
+    从 active_prompt_assets.json 读取 enabled_jailbreaks 列表，
+    按顺序加载 characters/reality/jailbreaks/{stem}.json，合并启用条目。
+    layer 指定时只返回该层的条目，None 时返回所有启用条目。
+    保持 layer 0 / 2 / 11 注入顺序不变（由调用方控制）。
     """
     try:
-        from core.sandbox import get_paths
-        path = get_paths().jailbreak_entries()
-        if not path.exists():
-            return ""
         import json
-        data = json.loads(path.read_text(encoding="utf-8"))
-        entries = data.get("entries", [])
+        from core.sandbox import get_paths
+        paths = get_paths()
+
+        assets_path = paths.active_prompt_assets()
+        assets = json.loads(assets_path.read_text(encoding="utf-8"))
+        enabled_jailbreaks: list = assets.get("enabled_jailbreaks", [])
+
+        jailbreaks_dir = paths.jailbreaks_dir()
         parts = []
-        for e in entries:
-            if not e.get("enabled", True):
+
+        for stem in enabled_jailbreaks:
+            file_path = jailbreaks_dir / f"{stem}.json"
+            if not file_path.exists():
+                logger.warning(f"[prompt_builder] jailbreak 文件不存在，跳过: {file_path}")
                 continue
-            if layer is not None and e.get("layer", 0) != layer:
+            try:
+                data = json.loads(file_path.read_text(encoding="utf-8"))
+            except Exception as e:
+                from core.error_handler import log_error
+                log_error(f"prompt_builder._load_jailbreak.{stem}", e)
                 continue
-            content = e.get("content", "").strip()
-            if content:
-                parts.append(content)
+
+            for e in data.get("entries", []):
+                if not e.get("enabled", True):
+                    continue
+                if layer is not None and e.get("layer", 0) != layer:
+                    continue
+                content = e.get("content", "").strip()
+                if content:
+                    parts.append(content)
+
         return "\n".join(parts)
     except Exception as e:
         from core.error_handler import log_error

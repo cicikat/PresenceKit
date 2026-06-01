@@ -80,40 +80,59 @@ class LoreEngine:
 
     def load(self):
         """
-        从 lorebook.yaml 读取世界书条目，追加到 self.entries。
-        文件不存在时静默跳过，格式错误时记录日志后跳过。
-        可多次调用（每次重置再重新加载，避免重复）
+        从 active_prompt_assets.json 读取 enabled_lorebooks 列表，
+        按顺序加载 characters/reality/lorebooks/{stem}.yaml，合并所有条目。
+        可多次调用（每次重置再重新加载，避免重复）。
         """
+        import json
         from core.sandbox import get_paths
-        path = get_paths().lorebook()
+        paths = get_paths()
 
         # 重置已有条目，再重新加载（防止热重载时重复）
         self.entries = []
 
-        if not path.exists():
-            logger.debug("[lore_engine] lorebook.yaml 不存在，跳过加载")
-            return
-
         try:
-            with open(path, "r", encoding="utf-8") as f:
-                data = yaml.safe_load(f) or {}
+            assets_path = paths.active_prompt_assets()
+            assets = json.loads(assets_path.read_text(encoding="utf-8"))
         except Exception as e:
-            log_error("lore_engine.load", e)
+            log_error("lore_engine.load.assets", e)
             return
 
-        raw_entries = data.get("entries", [])
-        if not isinstance(raw_entries, list):
-            logger.warning("[lore_engine] lorebook.yaml entries 字段不是列表，跳过")
-            return
+        enabled_lorebooks: list = assets.get("enabled_lorebooks", [])
+        lorebooks_dir = paths.lorebooks_dir()
+        total_loaded = 0
 
-        loaded = 0
-        for entry in raw_entries:
-            normalized = _normalize_entry(entry)
-            if normalized:
-                self.entries.append(normalized)
-                loaded += 1
+        for stem in enabled_lorebooks:
+            file_path = lorebooks_dir / f"{stem}.yaml"
+            if not file_path.exists():
+                logger.warning(f"[lore_engine] lorebook 文件不存在，跳过: {file_path}")
+                continue
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    data = yaml.safe_load(f) or {}
+            except Exception as e:
+                log_error(f"lore_engine.load.{stem}", e)
+                continue
 
-        logger.info(f"[lore_engine] 从 lorebook.yaml 加载了 {loaded} 条世界书条目")
+            raw_entries = data.get("entries", [])
+            if not isinstance(raw_entries, list):
+                logger.warning(f"[lore_engine] {stem}.yaml entries 字段不是列表，跳过")
+                continue
+
+            loaded = 0
+            for entry in raw_entries:
+                normalized = _normalize_entry(entry)
+                if normalized:
+                    self.entries.append(normalized)
+                    loaded += 1
+                    total_loaded += 1
+
+            logger.info(f"[lore_engine] 从 {stem}.yaml 加载了 {loaded} 条世界书条目")
+
+        logger.info(
+            f"[lore_engine] 共加载 {total_loaded} 条世界书条目"
+            f"（{len(enabled_lorebooks)} 个文件）"
+        )
 
     def load_entries(self, world_book: list[dict]):
         """

@@ -279,6 +279,36 @@ class DataPaths:
             return self._base / "reality" / filename
         return Path("characters") / "reality" / filename
 
+    # ── Runtime prompt asset selection config ────────────────────────────────
+    def active_prompt_assets(self) -> Path:
+        """Runtime config: data/runtime/active_prompt_assets.json
+        文件不存在时自动生成默认内容，不 fallback 到旧文件。
+        """
+        import json
+        p = self._p("runtime", "active_prompt_assets.json")
+        if not p.exists():
+            p.parent.mkdir(parents=True, exist_ok=True)
+            default = {
+                "active_character": "yexuan",
+                "enabled_lorebooks": ["base"],
+                "enabled_jailbreaks": ["base"],
+            }
+            p.write_text(json.dumps(default, ensure_ascii=False, indent=2), encoding="utf-8")
+            logger.info(f"[data_paths] 自动生成默认 active_prompt_assets.json: {p}")
+        return p
+
+    def lorebooks_dir(self) -> Path:
+        """characters/reality/lorebooks/ 目录（authored，不走 data/ 沙盒偏移）"""
+        if self.mode == "test":
+            return self._base / "reality" / "lorebooks"
+        return Path("characters") / "reality" / "lorebooks"
+
+    def jailbreaks_dir(self) -> Path:
+        """characters/reality/jailbreaks/ 目录（authored，不走 data/ 沙盒偏移）"""
+        if self.mode == "test":
+            return self._base / "reality" / "jailbreaks"
+        return Path("characters") / "reality" / "jailbreaks"
+
     # ── authored reality prompt assets（characters/reality/，不走 data/ 沙盒偏移）
     def jailbreak_entries(self) -> Path:
         """主路径：characters/reality/jailbreak_entries.json（无 data/ fallback）"""

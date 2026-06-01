@@ -44,13 +44,14 @@ def _write_lorebook(data: dict):
 
 
 def _reload_lore_engine():
-    """热重载世界书引擎（main.py 里的全局实例）"""
+    """热重载世界书引擎（通过 pipeline_registry 获取当前实例）"""
     try:
-        import main as _main
-        if hasattr(_main, "_lore_engine") and _main._lore_engine is not None:
-            _main._lore_engine.load()
+        from core.pipeline_registry import get as _get_pipeline
+        pipeline = _get_pipeline()
+        if pipeline is not None and hasattr(pipeline, "lore_engine"):
+            pipeline.lore_engine.load()
     except Exception:
-        pass  # admin 单独运行时 main 可能未初始化，忽略
+        pass  # admin 单独运行时 pipeline 可能未初始化，忽略
 
 
 # ── 数据模型 ──────────────────────────────────────────────────────────────────
