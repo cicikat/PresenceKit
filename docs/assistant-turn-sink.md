@@ -143,12 +143,13 @@ async def record_assistant_turn(
 
 `record_assistant_turn()` 当前还会为桌面 WS 预生成共享 `msg_id`：
 
-1. 原始 `assistant_text` 先按原路径 fanout，仍写入 reality memory；
+1. 原始 `assistant_text` 先供 desktop 双轨展示；reality memory / event_log 写入前移除
+   `<say>` 等展示标签；
 2. `core/narrative_parser.py` 解析 `<say>` / `<do>` / `<env>` / `<feel>`；
 3. desktop WS 额外 fire-and-forget 推一条同 `msg_id` 的 `message_segments`；
-4. mobile / QQ / 文件 fallback 不变；旧桌面客户端忽略未知消息即可。
+4. QQ / mobile 输出移除展示标签；desktop segments 保持原行为，旧桌面客户端忽略未知消息即可。
 
-segments 是只读展示视图，不得替换 history / event_log / archive 中的原始回复。
+segments 是只读展示视图，不得替换 Dream archive 中的原始回复。
 
 ---
 

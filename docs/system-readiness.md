@@ -4,6 +4,24 @@
 
 ---
 
+## 0. P0 安全清场状态
+
+**当前已完成**
+- Write Envelope v0：写入准入 fail-closed；未 stamp 默认不写 memory / mood；
+  `is_test` / `is_debug` 强制不可写；sensor / watch 原始感知默认不写 profile。
+- QQ Dream Guard：`DREAM_ACTIVE` / `DREAM_CLOSING` 时 QQ owner 消息被拒，不进入现实
+  pipeline，不写 runtime / memory。
+- Render Tag 收口：QQ / mobile 输出移除 `<say>` 等展示标签；reality memory / event_log
+  保存纯文本；desktop segments 保持原行为。
+- legacy `POST /desktop/trigger`：确认零调用方后已删除。
+- S6 路径清理：生产代码中 `data/chars` 字面量引用为 0，layout 测试已通过。
+
+**边界**
+- 以上仅代表 P0 安全清场，不代表完整权限系统、完整字段契约、`policy.py` 接线、
+  NMP、mood per-user、Dream 三模式或 sensor privacy 全系统已经完成。
+
+---
+
 ## 1. 调度器 / 主动消息
 
 **当前状态**：半稳定
@@ -156,7 +174,6 @@
 - 不建议新增旁路长期记忆写入。
 
 **最小补强**
-- `B12` 核心记忆裁剪保护。
 - event_log/index 安全写或锁边界。
 
 ---
@@ -183,10 +200,12 @@
 **已有测试或缺口**
 - 已有：`tests/test_turn_sink.py`
 - 缺口：`DesktopChannel` / `MobileChannel` 文件队列并发与损坏恢复测试不足；QQ 主入口仍是 legacy 直发；`message_segments` 目前只覆盖桌面 WS。
+- 已完成：QQ / mobile 展示文本移除 `<say>` 等标签；reality memory / event_log 保存纯文本；
+  legacy `/desktop/trigger` 已删除。
 
 **是否适合继续叠新功能**
 - 适合承载 mobile/desktop 主动消息。
-- 不建议继续扩 `/desktop/trigger` 或 QQ legacy 直发路径。
+- 不建议继续扩 QQ legacy 直发路径。`/desktop/trigger` 已删除。
 
 **最小补强**
 - 队列文件安全写。
@@ -216,6 +235,8 @@
 **已有测试或缺口**
 - 已有：`tests/smoke_sensor_*.py`
 - 缺口：工具 registry/schema/权限矩阵缺单元测试；memory 类工具已注册但未进入正式 LLM tool round。
+- 已完成：Write Envelope v0 已阻止未 stamp、`is_test` / `is_debug` 事件写 memory / mood，
+  sensor / watch 原始感知默认不写 profile。
 
 **是否适合继续叠新功能**
 - info/desktop 工具可继续承载小改。
@@ -252,10 +273,9 @@
 
 **是否适合继续叠新功能**
 - 适合叠只读展示和低频事件。
-- 不建议在 `G2` 补强前继续增加多写入口。
+- 花园锁与 `safe_write_json()` 已补齐；新增多写入口仍需补状态迁移和并发回归。
 
 **最小补强**
-- garden 专用锁与 `safe_write_json()`。
 - `daily_check()` 分支迁移测试。
 
 ---
@@ -270,7 +290,8 @@
 
 不适合继续叠的旧旁路：
 - `core/scheduler/triggers/watch.py` → `on_watch_event()` 内继续加即时发话分支
-- QQ / `/desktop/trigger` legacy 直发路径
-- 没有锁和安全写的队列/花园写路径
+- QQ legacy 直发路径
+- 没有锁和安全写的队列写路径
 
-当前优先级应以小补强和边界文档为主：`B12`、`S1`、`G2` 可现在修；`D2`、watch、diary_share 等等 execute live soak；`F10`、`F11`、`D7` 等重构期处理；`B11`、`G4`、DESIGN 感知/主动原则先文档化边界。
+当前优先级应以小补强和边界文档为主：`D2`、watch、diary_share 等继续 execute live
+soak；`F10`、`F11`、`D7` 等重构期处理；`B11`、`G4`、DESIGN 感知/主动原则继续补边界。

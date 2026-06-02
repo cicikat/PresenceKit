@@ -1,8 +1,7 @@
 # docs/known-issues.md — 已知问题与技术债
 
-> 最近核对：2026-05-31
-> 核对范围：只读审计 `D:\ai\qq-st-bot` 当前代码，只修改本文档。
-> Dream 相关代码正在并行调整，本轮不追踪 Dream 新增问题，也不据此关闭 Dream 条目。
+> 最近核对：2026-06-02
+> 核对范围：P0 安全清场文档收口。已落地事项按当前实现同步；未列出的条目保持原审计结论。
 >
 > 状态标签：
 > - `now-safe-to-fix`：可按小修推进。
@@ -18,15 +17,15 @@
 
 **状态**：`now-safe-to-fix`
 
-**位置**：`main.py` → `handle_message()`；`admin/routers/chat.py` → `/chat`、`/desktop/trigger`
+**位置**：`main.py` → `handle_message()`；`admin/routers/chat.py` → `/chat`
 
 desktop/mobile owner chat 已由 `run_owner_chat_turn()` 使用 `conversation_lock(uid)` 包住
 `fetch_context → LLM → critical post_process`。但 QQ 主入口仍在发送后
 `asyncio.create_task(pipeline.post_process(...))`：`message_queue` 虽然串行调用 handler，
 下一条消息仍可能在上一条异步落库完成前进入 `fetch_context()`。
 
-冻结管理面板 `/chat` 与 legacy `/desktop/trigger` 也仍走异步 `post_process()`，没有接入
-统一 turn sink / conversation gate。
+冻结管理面板 `/chat` 也仍走异步 `post_process()`，没有接入统一 turn sink /
+conversation gate。legacy `/desktop/trigger` 已删除，不再属于本条缺口。
 
 **建议**：把剩余现实入口收口到 `record_assistant_turn()`；QQ 若保留先发送语义，也要保证
 下一轮 `fetch_context()` 前 critical write 已完成。
@@ -144,24 +143,6 @@ OpenAI-compatible API；宽松 provider 可能忽略，严格 provider 可能拒
 
 **建议**：裁剪后从最终 messages 重算 effective layers，必要时另保留
 `layers_before_trim`。
-
----
-
-### S2：旧布局 fallback accessor 与迁移后布局混用
-
-**状态**：`refactor-phase`
-
-**位置**：`core/data_paths.py`、`admin/routers/users.py`、`admin/routers/system.py`、
-`core/scheduler/triggers/episodic_sweep.py`、`tools/extract_observations.py`
-
-现实记忆主路径已统一到 `user_memory_root()` / `memory_char_root()`（S6）。
-`history()`、`profiles()`、`mid_term()` 等 DataPaths accessor 在 `_LAYOUT_REALITY="v1"` 时
-返回 `data/chars/{char_id}/...`（**已退休路径**，v1 模式下从不写入，扫描结果恒为空）。
-部分调用方仍将这些 accessor 当作 legacy `data/history/`、`data/profiles/`、`data/mid_term/`
-fallback 使用，实际扫描到空目录，属于无效 I/O。
-
-**建议**：删除 DataPaths 中 `_LAYOUT_REALITY` 的 v1 分支，令其直接对齐 `user_memory_root()`；
-同步移除调用方的 legacy fallback 扫描（参见 DataPaths 重构任务）。
 
 ---
 
@@ -288,6 +269,11 @@ token”的问题已缓解。
 
 | 编号 | 结论 |
 |---|---|
+| P0 Write Envelope v0 | 已完成。写入准入 fail-closed；未 stamp 默认不写 memory / mood；`is_test` / `is_debug` 强制不可写；sensor / watch 原始感知默认不写 profile。该结论不等于完整权限系统或完整字段契约。 |
+| P0 QQ Dream Guard | 已完成。`DREAM_ACTIVE` / `DREAM_CLOSING` 时 QQ owner 消息被拒，不进入现实 pipeline，不写 runtime / memory。 |
+| P0 Render Tag 收口 | 已完成。QQ / mobile 输出移除 `<say>` 等展示标签；reality memory / event_log 保存纯文本；desktop segments 保持原行为。 |
+| P0 `/desktop/trigger` 无鉴权旧入口 | 已完成。零调用方确认后已删除 legacy route。 |
+| S2 `data/chars` 幽灵分支 | 已完成。生产代码字面量引用归零；`data/chars` 仅作为已退休路径留档，S6 layout 测试已通过。 |
 | B12 核心情景记忆未被上限裁剪保护 | 已修复。`write_episode()` 只从非核心记忆删除低 strength 项。 |
 | S1 部分 data 路径绕过 sandbox | 已修复。列出的运行模块已走 `get_paths()`；剩余硬编码是 DataPaths 内明确的 authored-content fallback。 |
 | D10 diary_share 新旧路径去重源分叉 | 已修复。状态拆到 `scheduler_user_state.json`；proposal 仅在 sent 后执行 `after_send` 和 `_mark()`。 |

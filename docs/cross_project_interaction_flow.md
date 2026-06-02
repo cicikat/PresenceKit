@@ -9,6 +9,11 @@
 > `Emerald-client` 已正式接入 Dream overlay。当前事实优先看 `docs/data-taxonomy.md`、
 > `docs/scheduler.md`、`docs/channels.md`、`docs/dream.md` 和客户端自己的
 > `docs/backend-integration.md`。
+>
+> **2026-06-02 P0 安全清场校准**：Write Envelope v0、QQ Dream Guard、Render Tag 收口均已
+> 落地；legacy `POST /desktop/trigger` 已确认零调用方并删除；生产代码中 `data/chars`
+> 字面量引用为 0。Write Envelope v0 仅代表 fail-closed 写入准入，不等于完整权限系统、
+> 完整字段契约、`policy.py` 接线或 sensor privacy 全系统完成。
 
 ## 1. 总览
 
@@ -20,7 +25,7 @@
 | `Emerald-client` | Tauri + React 桌面客户端：聊天 UI、Tauri HTTP 桥、legacy desktop WS 订阅、桌面 sensor 发布、只读花园/日记/状态面板。 | `D:\ai\Emerald-client\ARCHITECTURE.md`；`D:\ai\Emerald-client\src-tauri\src\lib.rs:26`；`D:\ai\Emerald-client\src\shared\api\ws.ts:9` |
 | `yexuan_memery` | Flutter/Android 手机薄客户端：`mobile channel` 对话、主动消息轮询、后台通知、无障碍屏幕上下文、移动端行为 metadata 消费。 | `D:\ai\yexuan_memery\README.md`；`D:\ai\yexuan_memery\lib\main.dart:1563`；`D:\ai\yexuan_memery\android\app\src\main\kotlin\com\example\yexuan_memery\MobileNotificationService.kt:19` |
 
-当前事实不是“三端都走同一出口”。`/desktop/chat`、`/mobile/chat`、普通 scheduler 和 `sensor_aware` 已经大量使用 `core.turn_sink.record_assistant_turn()`，但 QQ 主入口、管理面板冻结入口、`/desktop/trigger` 和重复 `/chat` 仍有绕过路径。
+当前事实不是“三端都走同一出口”。`/desktop/chat`、`/mobile/chat`、普通 scheduler 和 `sensor_aware` 已经大量使用 `core.turn_sink.record_assistant_turn()`，但 QQ 主入口、管理面板冻结入口和重复 `/chat` 仍有绕过路径。
 
 ## 2. 当前项目真实术语表
 
@@ -34,7 +39,6 @@
 | `POST /mobile/chat` / `mobile_chat()` | 手机端 HTTP 对话入口，Bearer 鉴权 | `D:\ai\qq-st-bot\admin\routers\mobile.py:40` |
 | `run_owner_chat_turn(message, channel_name)` | desktop/mobile 共用 owner 对话函数 | `D:\ai\qq-st-bot\admin\routers\chat.py:29` |
 | `POST /upload/ingest` | 三端统一文件上传入口，无鉴权 | `D:\ai\qq-st-bot\admin\routers\chat.py:207` |
-| `POST /desktop/trigger` | 桌宠触发 QQ 回复的旧入口，无鉴权 | `D:\ai\qq-st-bot\admin\routers\chat.py:280` |
 | `POST /chat` / `frontend_chat()` | 管理面板专用对话，Bearer 鉴权，冻结 | `D:\ai\qq-st-bot\admin\routers\chat.py:140` |
 | `POST /chat` / `unified_chat()` | 重复注册的对话入口，无显式鉴权 | `D:\ai\qq-st-bot\admin\routers\chat.py:322` |
 | `POST /watch/event` | Watch/快捷指令事件入口，query secret | `D:\ai\qq-st-bot\admin\routers\watch.py:174` |
@@ -305,12 +309,14 @@
 | 问题 | 当前代码事实 |
 |---|---|
 | AI 回复最终在哪里落库 | 新主路径是 `record_assistant_turn()` → `Pipeline.post_process()` → `fixation_pipeline.capture_turn()`。QQ 主入口和若干旧 HTTP 入口仍直接 `pipeline.post_process()`。 |
-| 消息最终在哪里广播 | 新主路径是 `record_assistant_turn()` 内 `_fanout()` 调通道；也存在 `channels.registry.broadcast()`；QQ 主入口和 `/desktop/trigger` 使用 `text_output.send()` 直接发 QQ。 |
+| 消息最终在哪里广播 | 新主路径是 `record_assistant_turn()` 内 `_fanout()` 调通道；也存在 `channels.registry.broadcast()`；QQ 主入口使用 `text_output.send()` 直接发 QQ。 |
 | 触发来源在哪里记录 | `capture_turn(trigger_name=...)` 在 scheduler assistant meta 写 `trigger`；普通用户消息无统一 source 字段；sensor/mobile behavior metadata 不会统一写入 event_log。 |
 | 并发/锁在哪里处理 | owner desktop/mobile 由 `conversation_lock(uid)` 包 `fetch_context → LLM → post_process`；关键记忆写入由 `uid_lock(uid)`；mood 由 `global_lock("mood_state")`；QQ 由 `message_queue` 按 session 串行，但不走 owner `conversation_lock`。 |
 | 慢任务在哪里调度 | `core.post_process.slow_queue`，单 worker，不持久化，失败写 DLQ。 |
 
-结论：**当前没有发现完全统一出口**。`turn_sink` 已经是新核心收口点，但 QQ 主消息、冻结管理面板 `/chat`、`/desktop/trigger`、重复 `unified_chat` 仍绕过它。缺口主要在：发送出口不统一、source/priority/test/debug 策略未统一、部分入口鉴权不一致。
+结论：**当前没有发现完全统一出口**。`turn_sink` 已经是新核心收口点，但 QQ 主消息、
+冻结管理面板 `/chat`、重复 `unified_chat` 仍绕过它。Write Envelope v0 已为写入提供
+fail-closed 准入；剩余缺口主要在发送出口不统一、完整字段契约未完成、部分入口鉴权不一致。
 
 ## 6. Interaction Contract 草案
 

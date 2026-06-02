@@ -17,9 +17,9 @@ QQ 收消息 → main.handle_message → Pipeline → text_output.send() 直发 
                                           └─ MobileChannel
 ```
 
-注意：QQ 主入口、冻结管理面板 `/chat`、`/desktop/trigger` 仍是 legacy 直发/异步
-`post_process` 路径；`/desktop/chat`、`/mobile/chat`、scheduler、sensor_aware 已走
-`core.turn_sink.record_assistant_turn()`。
+注意：QQ 主入口、冻结管理面板 `/chat` 仍是 legacy 直发/异步 `post_process` 路径；
+`/desktop/chat`、`/mobile/chat`、scheduler、sensor_aware 已走
+`core.turn_sink.record_assistant_turn()`。legacy `/desktop/trigger` 已确认零调用方并删除。
 
 ---
 
@@ -95,8 +95,7 @@ MobileChannel 的活跃状态有 120 秒 TTL：手机端持续轮询时保持活
 | `feel` | 感受 |
 | `narration` | 未标记文本或容错降级 |
 
-原始回复仍是 history / event_log / Dream archive 等链路的 source of truth，不被解析器改写。
-桌面在线时，同一个 `msg_id` 会收到两条消息：
+桌面在线时，原始 tagged 回复仍用于 desktop 双轨展示，同一个 `msg_id` 会收到两条消息：
 
 ```json
 {"type":"channel_message","content":"<say>你好</say>","msg_id":"..."}
@@ -104,8 +103,8 @@ MobileChannel 的活跃状态有 120 秒 TTL：手机端持续轮询时保持活
 ```
 
 Emerald-client 的 `ChatPanel` 按 `msg_id` 关联两条消息；`message_segments` 先到时会暂存。
-旧客户端忽略未知 `message_segments` 即可继续工作。mobile / QQ / 文件 fallback 当前仍只接收
-原始文本，不消费 segments。
+旧客户端忽略未知 `message_segments` 即可继续工作。QQ / mobile 输出会移除 `<say>` 等展示
+标签；reality history / event_log 同样保存纯文本。desktop segments 保持原行为。
 
 ---
 
