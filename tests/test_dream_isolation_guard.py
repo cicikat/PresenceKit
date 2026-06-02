@@ -37,8 +37,17 @@ _MARKERS = [
 
 # Only one permitted exception: pipeline.py importing impression_loader.
 # Any additional reference in any other file → add here explicitly and document why.
+#
+# Phase 5 (2026-06-03): AfterglowResidueInput and integrate_afterglow() are
+# the approved one-way Dream → Reality writeback path.  The three files below
+# are the Reality-side integrator + schema + store — they legitimately contain
+# "afterglow" by design.  Dream modules (core/dream/*.py) still hold no write
+# authority; DREAM_DIRECT_WRITABLE remains frozenset().
 _ALLOWLIST: set[tuple[str, str]] = {
     ("core/pipeline.py", "impression_loader"),
+    ("core/memory/user_hidden_state.py", "afterglow"),
+    ("core/memory/user_hidden_state_integrator.py", "afterglow"),
+    ("core/memory/user_hidden_state_store.py", "afterglow"),
 }
 
 

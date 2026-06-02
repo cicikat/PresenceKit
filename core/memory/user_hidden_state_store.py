@@ -35,6 +35,7 @@ from pathlib import Path
 from typing import Any
 
 from core.memory.user_hidden_state import (
+    AfterglowResidueInput,
     UserHiddenState,
     default_hidden_state,
     from_dict,
@@ -47,6 +48,7 @@ from core.sandbox import get_paths
 logger = logging.getLogger(__name__)
 
 HIDDEN_STATE_FILENAME = "hidden_state.json"
+AFTERGLOW_FILENAME = "afterglow_residue.json"
 
 
 def load_hidden_state(uid: str | int) -> UserHiddenState:
@@ -108,6 +110,56 @@ def load_dream_snapshot(uid: str | int, now: str) -> dict[str, Any]:
     """
     state = load_hidden_state(uid)
     return to_dream_snapshot(state, now)
+
+
+def _load_afterglow_raw(uid: str | int) -> dict | None:
+    """Load raw afterglow residue dict from disk.  Returns None if absent or corrupt.
+
+    Internal helper called by read_afterglow_residue() in user_hidden_state.py.
+    Read-only.  Does NOT write anything.  Does NOT emit a WriteEnvelope stamp.
+    """
+    path: Path = get_paths().user_memory_root(uid) / AFTERGLOW_FILENAME
+    if not path.exists():
+        return None
+    try:
+        raw = path.read_text(encoding="utf-8")
+        data = json.loads(raw)
+        return data if isinstance(data, dict) else None
+    except Exception as exc:
+        logger.warning("[afterglow] cannot read %s: %s — returning None", path, exc)
+        return None
+
+
+def save_afterglow_residue(
+    uid: str | int,
+    residue: AfterglowResidueInput,
+    created_at: str,
+) -> bool:
+    """Persist an afterglow residue to disk (called at Dream exit).
+
+    Stores emotional_tags, tone, and created_at.  age_hours is NOT stored —
+    it is computed dynamically by read_afterglow_residue() from created_at.
+
+    SECURITY NOTE: Caller MUST hold a WriteEnvelope with can_write_memory=True
+    AND source=DREAM_AFTERGLOW before calling this function.  This store does
+    NOT enforce the envelope gate.
+
+    Returns True on success, False on I/O error.  Never raises.
+    """
+    if not isinstance(residue, AfterglowResidueInput):
+        logger.warning("[afterglow] save_afterglow_residue: invalid residue type %r", type(residue).__name__)
+        return False
+
+    path: Path = get_paths().user_memory_root(uid) / AFTERGLOW_FILENAME
+    data = {
+        "emotional_tags": list(residue.emotional_tags),
+        "tone": residue.tone,
+        "created_at": created_at,
+    }
+    ok = safe_write_json(path, data)
+    if not ok:
+        logger.error("[afterglow] save failed for uid=%s", uid)
+    return ok
 
 
 def save_hidden_state(uid: str | int, state: UserHiddenState) -> bool:

@@ -235,6 +235,12 @@ MAX_NUDGE_PER_EVENT: float = 6.0               # max single-event delta on any s
 DREAM_GATE_MIN: float = 0.2                    # minimum Dream-derived update gate
 DREAM_GATE_MAX: float = 0.4                    # maximum Dream-derived update gate
 
+# Afterglow TTL
+AFTERGLOW_TTL_HOURS: float = 8.0
+"""Maximum age (hours) for an afterglow residue to be considered valid.
+Residues older than this are rejected by read_afterglow_residue() and
+integrate_afterglow() alike."""
+
 # Body memory capacity
 BODY_MEMORY_MAX_ENTRIES: int = 32
 MEMORY_EVICT_EPS: float = 0.05                 # weight threshold for eviction eligibility
@@ -882,23 +888,56 @@ _SNAPSHOT_TOP_CUES: int = 5
 
 
 def read_afterglow_residue(uid: str, now: str) -> Optional[AfterglowResidueInput]:
-    """Return the most recent unprocessed afterglow residue for uid, if any.
+    """Return the most recent afterglow residue for uid if within TTL, else None.
 
-    Interface only — Phase 0 stub.
-    Does NOT create any new persistent field.
-    Does NOT read from disk or any real file.
-    Does NOT write memory, mood, profile, or event_log.
+    Phase 5 implementation.  Reads from disk via the store (lazy import to
+    keep schema module import-order safe).  Applies TTL check (AFTERGLOW_TTL_HOURS).
 
-    Future implementation must use user_memory_root(uid) path system,
-    never data/chars/{char_id}.
+    Contract:
+      - Read-only.  Does NOT write memory, mood, profile, or event_log.
+      - Does NOT emit a WriteEnvelope stamp.
+      - If the stored residue is absent, corrupt, or expired → returns None.
+      - age_hours on the returned object reflects elapsed time since creation.
+      - Must not be called from within a live Dream turn.
 
-    Returns:
-        None in Phase 0 always.
-
-    Raises:
-        NotImplementedError: Phase 0 — implementation deferred to Phase 1.
+    TTL window: 0 ~ AFTERGLOW_TTL_HOURS (8 h).  Residues older than TTL
+    are silently discarded (returns None).
     """
-    raise NotImplementedError("read_afterglow_residue: Phase 0 stub — no I/O in Phase 0")
+    from core.memory.user_hidden_state_store import _load_afterglow_raw as _load  # lazy
+
+    raw = _load(uid)
+    if raw is None:
+        return None
+
+    created_at = raw.get("created_at")
+    if not created_at:
+        _log.debug("[afterglow] uid=%s: no created_at in stored residue — discarding", uid)
+        return None
+
+    try:
+        age_hours = (
+            datetime.fromisoformat(now) - datetime.fromisoformat(created_at)
+        ).total_seconds() / 3600.0
+    except (ValueError, TypeError) as exc:
+        _log.warning("[afterglow] uid=%s: cannot parse timestamps (%s) — discarding", uid, exc)
+        return None
+
+    if age_hours > AFTERGLOW_TTL_HOURS:
+        _log.debug(
+            "[afterglow] uid=%s: TTL expired (%.2fh > %.0fh) — returning None",
+            uid, age_hours, AFTERGLOW_TTL_HOURS,
+        )
+        return None
+
+    try:
+        return AfterglowResidueInput(
+            emotional_tags=list(raw.get("emotional_tags", [])),
+            tone=str(raw.get("tone", "")),
+            age_hours=max(0.0, age_hours),
+        )
+    except Exception as exc:
+        _log.warning("[afterglow] uid=%s: failed to build AfterglowResidueInput: %s", uid, exc)
+        return None
 
 
 def to_dream_snapshot(state: UserHiddenState, now: str) -> dict[str, Any]:

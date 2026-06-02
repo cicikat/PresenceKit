@@ -100,6 +100,33 @@
 - Fail-closed：load 失败 / snapshot 格式异常 / tag 判断异常 → 不注入，记 warning，不阻断 Dream。
 - 优先级：D4.5 排在 D4（frozen_reality）之后，如需裁剪优先裁 D4.5。
 
+**Afterglow Residue 回流（Phase 5）**：
+
+Dream 退出后，调用方（Reality-side）将 `AfterglowResidueInput` 写入 `afterglow_residue.json`
+（via `save_afterglow_residue(uid, residue, created_at)`），**Dream 本身不拥有写权限**。
+
+回流管道：
+
+```
+Dream Exit
+  ↓ (Reality caller with stamp_dream_afterglow())
+save_afterglow_residue()  →  afterglow_residue.json  (TTL 8h)
+  ↓
+read_afterglow_residue()  →  AfterglowResidueInput | None
+  ↓
+integrate_afterglow()     →  UserHiddenState (感知单向写入)
+```
+
+允许影响字段（仅两个，均为快速层）：
+- `sensitivity.current` — ±1.5（正向 tone: comfort/calm/warm/safe/trusted；负向: fear/stress/threat）
+- `embodied_ease` — +0.8（仅 comfort/safe/trusted；无负向影响）
+
+永久禁止字段：`sensitivity.baseline` / `touch_need.baseline` / `touch_need.deficit` / `body_memory`
+
+WriteEnvelope 双重门控：
+- `can_write_memory=True` — 必须
+- `source=DREAM_AFTERGLOW` — 必须；其他 source 即使 can_write_memory=True 也被拒绝
+
 ### 现实侧（梦的回流注入层，由现实 prompt_builder 注入）
 
 | 层 | 内容 | 生命周期 |

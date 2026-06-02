@@ -14,13 +14,14 @@ from enum import Enum
 
 
 class SourceType(str, Enum):
-    UNKNOWN      = "unknown"
-    USER_CHAT    = "user_chat"
-    QQ           = "qq"
-    INGEST       = "ingest"
-    TRIGGER      = "trigger"
-    SENSOR       = "sensor"
-    SENSOR_WATCH = "sensor/watch"
+    UNKNOWN        = "unknown"
+    USER_CHAT      = "user_chat"
+    QQ             = "qq"
+    INGEST         = "ingest"
+    TRIGGER        = "trigger"
+    SENSOR         = "sensor"
+    SENSOR_WATCH   = "sensor/watch"
+    DREAM_AFTERGLOW = "dream_afterglow"
 
 
 class PerceptionSensitivity(str, Enum):
@@ -104,6 +105,20 @@ def stamp_sensor_watch() -> WriteEnvelope:
         can_write_memory=False,
         can_affect_mood=False,
         perception_sensitivity=PerceptionSensitivity.NEVER_SPEAK,
+    )
+
+
+def stamp_dream_afterglow() -> WriteEnvelope:
+    """Dream afterglow writeback — only valid at Dream exit, never inside a Dream turn.
+
+    source=DREAM_AFTERGLOW is the required source for integrate_afterglow().
+    can_affect_mood is False — afterglow does not directly alter mood_state.
+    """
+    return WriteEnvelope(
+        source=SourceType.DREAM_AFTERGLOW,
+        can_write_memory=True,
+        can_affect_mood=False,
+        perception_sensitivity=PerceptionSensitivity.ATTITUDE_ONLY,
     )
 
 

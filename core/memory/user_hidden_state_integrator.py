@@ -44,19 +44,22 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 from core.memory.user_hidden_state import (
+    AFTERGLOW_TTL_HOURS,
     DREAM_GATE_MAX,
     DREAM_GATE_MIN,
     MAX_NUDGE_PER_EVENT,
+    AfterglowResidueInput,
     ImpressionInput,
     UpdateSource,
     UserHiddenState,
     _clamp,
     discharge_touch_deficit,
     nudge_current_sensitivity,
+    nudge_embodied_ease,
     reinforce_body_memory,
 )
 from core.memory.user_hidden_state_store import load_hidden_state, save_hidden_state
-from core.write_envelope import WriteEnvelope
+from core.write_envelope import SourceType, WriteEnvelope
 
 logger = logging.getLogger(__name__)
 
@@ -433,6 +436,184 @@ def integrate_body_cue(
         )
 
     return hidden_state, result
+
+
+# ── G. Phase 5 — Afterglow integration (Dream exit → Reality-side) ────────────
+
+_POSITIVE_TONES: frozenset[str] = frozenset({"comfort", "calm", "warm", "safe", "trusted"})
+"""Tones that produce a gentle positive nudge to sensitivity.current."""
+
+_EASE_TONES: frozenset[str] = frozenset({"comfort", "safe", "trusted"})
+"""Subset of positive tones that also nudge embodied_ease upward."""
+
+_NEGATIVE_TONES: frozenset[str] = frozenset({"fear", "stress", "threat"})
+"""Tones that produce a gentle negative nudge to sensitivity.current."""
+
+AFTERGLOW_SENS_NUDGE_POSITIVE: float = 1.5
+"""Delta applied to sensitivity.current for positive-tone afterglow (0.25x typical event)."""
+
+AFTERGLOW_SENS_NUDGE_NEGATIVE: float = -1.5
+"""Delta applied to sensitivity.current for negative-tone afterglow (0.25x typical event)."""
+
+AFTERGLOW_EASE_NUDGE: float = 0.8
+"""Delta applied to embodied_ease for comfort/safe/trusted afterglow (very weak)."""
+
+
+def integrate_afterglow(
+    afterglow: AfterglowResidueInput,
+    hidden_state: UserHiddenState,
+    write_envelope: WriteEnvelope,
+    now: str,
+) -> tuple[UserHiddenState, IntegratorResult]:
+    """Apply Dream afterglow residue to sensitivity.current and embodied_ease.
+
+    Afterglow is emotional residue — not fact, not long-term memory.
+    It affects only the two fast-moving fields within AFTERGLOW_TTL_HOURS (8 h).
+
+    Gate rules (all must pass; fail-closed):
+      1. write_envelope.can_write_memory must be True.
+      2. write_envelope.source must be SourceType.DREAM_AFTERGLOW.
+      3. afterglow.age_hours must be <= AFTERGLOW_TTL_HOURS.
+
+    Allowed mutations:
+      - sensitivity.current  — small increase (positive tone) or decrease (negative tone).
+      - embodied_ease        — very small increase (comfort/safe/trusted only).
+
+    Prohibited mutations (enforced; these fields are never touched):
+      - sensitivity.baseline
+      - touch_need.baseline
+      - touch_need.deficit
+      - body_memory
+
+    Influence magnitude:
+      AFTERGLOW_SENS_NUDGE_*  = ±1.5  (≈ 0.25× a typical Reality event)
+      AFTERGLOW_EASE_NUDGE    = +0.8  (extremely weak)
+
+    Returns:
+        (updated_state, IntegratorResult)
+        On any rejection, state is returned unchanged.
+    """
+    if not isinstance(afterglow, AfterglowResidueInput):
+        raise TypeError(
+            f"integrate_afterglow: afterglow must be AfterglowResidueInput, "
+            f"got {type(afterglow).__name__}"
+        )
+
+    result = IntegratorResult(source=UpdateSource.DREAM_AFTERGLOW.value, timestamp=now)
+
+    # Gate 1 — envelope memory write
+    if not write_envelope.can_write_memory:
+        reason = "write_envelope.can_write_memory=False [afterglow]"
+        result.rejected_reasons.append(reason)
+        logger.warning("integrator rejected afterglow: %s", reason)
+        return hidden_state, result
+
+    # Gate 2 — source must be DREAM_AFTERGLOW
+    if write_envelope.source != SourceType.DREAM_AFTERGLOW:
+        reason = (
+            f"write_envelope.source={write_envelope.source.value!r} "
+            f"!= 'dream_afterglow' [afterglow]"
+        )
+        result.rejected_reasons.append(reason)
+        logger.warning("integrator rejected afterglow: %s", reason)
+        return hidden_state, result
+
+    # Gate 3 — TTL
+    if afterglow.age_hours > AFTERGLOW_TTL_HOURS:
+        reason = (
+            f"afterglow.age_hours={afterglow.age_hours:.2f}h "
+            f"> TTL {AFTERGLOW_TTL_HOURS:.0f}h"
+        )
+        result.rejected_reasons.append(reason)
+        logger.debug("integrator rejected afterglow (TTL): %s", reason)
+        return hidden_state, result
+
+    # Classify tone
+    tone = afterglow.tone.lower().strip()
+    all_tags: list[str] = [t.lower().strip() for t in afterglow.emotional_tags]
+    if tone:
+        all_tags.append(tone)
+
+    has_positive = tone in _POSITIVE_TONES or any(t in _POSITIVE_TONES for t in all_tags)
+    has_negative = tone in _NEGATIVE_TONES or any(t in _NEGATIVE_TONES for t in all_tags)
+    has_ease = tone in _EASE_TONES or any(t in _EASE_TONES for t in all_tags)
+
+    # sensitivity.current nudge
+    if has_positive and not has_negative:
+        sens_delta = AFTERGLOW_SENS_NUDGE_POSITIVE
+    elif has_negative and not has_positive:
+        sens_delta = AFTERGLOW_SENS_NUDGE_NEGATIVE
+    else:
+        sens_delta = 0.0  # ambiguous or neutral → no nudge
+
+    if sens_delta != 0.0:
+        old_sens = hidden_state.sensitivity.current.value
+        nudge_current_sensitivity(hidden_state, sens_delta, UpdateSource.DREAM_AFTERGLOW, now)
+        new_sens = hidden_state.sensitivity.current.value
+        result.touched_fields.append(FieldDelta(
+            field="sensitivity.current",
+            old_value=old_sens,
+            new_value=new_sens,
+            source=UpdateSource.DREAM_AFTERGLOW.value,
+        ))
+        logger.info(
+            "integrator: afterglow sensitivity.current %.2f → %.2f [tone=%r age=%.1fh]",
+            old_sens, new_sens, tone, afterglow.age_hours,
+        )
+
+    # embodied_ease nudge — only for ease-qualifying tones, no negative overriding
+    if has_ease and not has_negative:
+        old_ease = hidden_state.embodied_ease.value
+        nudge_embodied_ease(hidden_state, AFTERGLOW_EASE_NUDGE, UpdateSource.DREAM_AFTERGLOW, now)
+        new_ease = hidden_state.embodied_ease.value
+        result.touched_fields.append(FieldDelta(
+            field="embodied_ease",
+            old_value=old_ease,
+            new_value=new_ease,
+            source=UpdateSource.DREAM_AFTERGLOW.value,
+        ))
+        logger.info(
+            "integrator: afterglow embodied_ease %.2f → %.2f [tone=%r age=%.1fh]",
+            old_ease, new_ease, tone, afterglow.age_hours,
+        )
+
+    return hidden_state, result
+
+
+def integrate_afterglow_and_save(
+    uid: str | int,
+    afterglow: AfterglowResidueInput,
+    write_envelope: WriteEnvelope,
+    now: str,
+) -> tuple[UserHiddenState, IntegratorResult]:
+    """Load hidden state, apply afterglow residue, and persist if permitted.
+
+    Steps:
+      1. Load UserHiddenState from store (or default if absent/corrupt).
+      2. Call integrate_afterglow() — applies afterglow gates and mutations.
+      3. If write_envelope.can_write_memory AND result.accepted: atomic save.
+         Otherwise: state is returned unchanged, nothing is written to disk.
+
+    Dream-derived afterglow must only be supplied at Dream exit by the
+    Reality-side caller — never from within an active Dream turn.
+
+    Fail-closed: closed envelope, wrong source, expired TTL, or I/O error → no write.
+
+    Returns:
+        (state_after_mutation, IntegratorResult)
+    """
+    if not isinstance(uid, (str, int)):
+        raise TypeError(f"uid must be str or int, got {type(uid).__name__}")
+    state = load_hidden_state(uid)
+    state, result = integrate_afterglow(afterglow, state, write_envelope, now)
+    if write_envelope.can_write_memory and result.accepted:
+        ok = save_hidden_state(uid, state)
+        if not ok:
+            logger.error(
+                "integrate_afterglow_and_save: save failed [uid=%s tone=%s]",
+                uid, afterglow.tone,
+            )
+    return state, result
 
 
 def integrate_body_cue_and_save(
