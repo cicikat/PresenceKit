@@ -290,6 +290,13 @@ async def _generate_summary_bg(uid: str, dream_id: str, exit_type: str) -> None:
     except Exception as e:
         logger.error(f"[dream_pipeline] summary failed uid={uid}: {e}")
 
+    # Phase 6: Wire afterglow residue at Dream exit (Reality-side integrator, fail-closed)
+    try:
+        from core.dream.dream_exit_afterglow import wire_afterglow_from_summary
+        wire_afterglow_from_summary(uid, dream_id, exit_type)
+    except Exception as e:
+        logger.warning(f"[dream_pipeline] afterglow wiring failed uid={uid}: {e}")
+
     # Distill impression after summary (failure is warning-only per C7)
     try:
         from core.dream.distill_impression import distill_impression

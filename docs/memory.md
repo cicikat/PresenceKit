@@ -20,8 +20,8 @@
 | 用户稳定行为模式 | `data/runtime/memory/{char_id}/{uid}/identity.yaml` | fixation pipeline 达阈值后固化更新 | 层6a |
 | 角色认知（legacy/兼容） | `data/runtime/characters/{char_id}/character_growth/角色_{uid}.md` | 旧 handler / 工具查询仍保留，当前主链路不自动入队 | 当前主 prompt 不注入 |
 | 情绪状态 | `data/runtime/characters/{char_id}/inner/mood_state.json` | 每轮 post_process / 工具触发 / 深夜调度 | 层1内嵌软提示 |
-| 用户隐性状态（Phase 5） | `data/runtime/memory/{char_id}/{uid}/hidden_state.json` | Reality-side integrator + WriteEnvelope；调度器 decay/consolidate tick；Dream 退出后 afterglow 回流 | Dream D4.5 tag-gated bucket 只读快照（body_intimate / physical_closeness；不含 float） |
-| Afterglow 残差（Phase 5） | `data/runtime/memory/{char_id}/{uid}/afterglow_residue.json` | Dream 退出时由 Reality-side 调用 `save_afterglow_residue()` 写入；8h TTL | 不直接注入 prompt；由 `integrate_afterglow()` 消费后影响 sensitivity.current / embodied_ease |
+| 用户隐性状态（Phase 6） | `data/runtime/memory/{char_id}/{uid}/hidden_state.json` | Reality-side integrator + WriteEnvelope；调度器 decay/consolidate tick；Dream exit afterglow 已接线（Phase 6：`wire_afterglow_from_summary()`） | Dream D4.5 tag-gated bucket 只读快照（body_intimate / physical_closeness；不含 float） |
+| Afterglow 残差（Phase 6） | `data/runtime/memory/{char_id}/{uid}/afterglow_residue.json` | Dream exit 时 `wire_afterglow_from_summary()` 写入（`core/dream/dream_exit_afterglow.py`）；8h TTL | 不直接注入 prompt；由 `integrate_afterglow_and_save()` 消费后影响 sensitivity.current / embodied_ease；Dream 无直接写权限 |
 
 > **当前 v1 写布局**：per-user 主链统一写入 `get_paths().user_memory_root()`，即
 > `data/runtime/memory/{char_id}/{uid}/`。迁移期 `for_read(new, old)` 仍保留在 event_log

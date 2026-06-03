@@ -100,22 +100,35 @@
 - Fail-closed：load 失败 / snapshot 格式异常 / tag 判断异常 → 不注入，记 warning，不阻断 Dream。
 - 优先级：D4.5 排在 D4（frozen_reality）之后，如需裁剪优先裁 D4.5。
 
-**Afterglow Residue 回流（Phase 5）**：
+**Afterglow Residue 回流（Phase 6 — 已接线）**：
 
-Dream 退出后，调用方（Reality-side）将 `AfterglowResidueInput` 写入 `afterglow_residue.json`
-（via `save_afterglow_residue(uid, residue, created_at)`），**Dream 本身不拥有写权限**。
+Dream 退出后，`_generate_summary_bg()` 在 `generate_summary()` 完成后调用
+`wire_afterglow_from_summary()`（`core/dream/dream_exit_afterglow.py`）。
+**Dream 本身不拥有写权限**；所有写入经 Reality-side integrator。
 
 回流管道：
 
 ```
-Dream Exit
-  ↓ (Reality caller with stamp_dream_afterglow())
-save_afterglow_residue()  →  afterglow_residue.json  (TTL 8h)
-  ↓
-read_afterglow_residue()  →  AfterglowResidueInput | None
-  ↓
-integrate_afterglow()     →  UserHiddenState (感知单向写入)
+Dream Exit  →  _do_close_dream()  →  archive log  →  REALITY_AFTERGLOW
+                                         ↓ (background task)
+                                   generate_summary()  →  summary.json
+                                         ↓
+                              wire_afterglow_from_summary()
+                                         ↓ derive tone from summary
+                              AfterglowResidueInput (age_hours=0.0)
+                                         ↓
+                              save_afterglow_residue()  →  afterglow_residue.json (TTL 8h)
+                                         ↓  stamp_dream_afterglow()
+                              integrate_afterglow_and_save()  →  UserHiddenState
 ```
+
+Tone 推导规则（从 summary record）：
+- `exit_type=hard_exit` OR `afterglow=hurt_reluctance` → `"stress"` （负向）
+- `afterglow=gentle_residue` + `summary_weight≥0.7` → `"comfort"` （正向 + ease）
+- `afterglow=gentle_residue` → `"calm"` （正向，无 ease）
+- 空 summary 或无法推导 → `"neutral"` （零效果 fallback）
+
+Fail-closed：`save_afterglow_residue` 或 `integrate_afterglow_and_save` 失败 → warning，不阻断 Dream exit。
 
 允许影响字段（仅两个，均为快速层）：
 - `sensitivity.current` — ±1.5（正向 tone: comfort/calm/warm/safe/trusted；负向: fear/stress/threat）
@@ -131,11 +144,12 @@ WriteEnvelope 双重门控：
 
 | 层 | 内容 | 生命周期 |
 |---|---|---|
-| `6f_dream_afterglow` | 即时情绪余韵（剥场景/世界/身体） | **预留未接线**；summary 和 loader 已有，现实 pipeline 尚未调用 |
+| `6f_dream_afterglow` | 即时情绪余韵（剥场景/世界/身体） | summary 和 loader 已有，现实 prompt pipeline 尚未接 6f 注入；afterglow 当前只写 hidden_state（via integrator），不注入文本层 |
 | `6g_dream_impression` | 低权"我好像在梦里…"模糊印象 | 慢衰减 |
 
 当前只有 `6g_dream_impression` 从 dream 域读入现实 prompt，并进入 token 裁剪表最早裁剪。
 `6f` loader 仍是独立可测模块，但未接 `core/pipeline.py` / `core/prompt_builder.py`。
+afterglow 回流路径（Phase 6）: Dream exit → `wire_afterglow_from_summary()` → `integrate_afterglow_and_save()` → hidden_state.json（不经过 prompt pipeline）。
 
 ---
 
@@ -144,7 +158,7 @@ WriteEnvelope 双重门控：
 | 产物 | 内容 | 去向 | 谁能读 |
 |---|---|---|---|
 | **archive 原文** | 梦境全文 | `archive/dream_*.jsonl` | **仅她复盘，任何 loader 永不读** |
-| **afterglow summary** | 剥场景的情绪余韵 | `summaries/*.summary.json` | afterglow loader，短 TTL；当前未注入现实 prompt |
+| **afterglow summary** | 剥场景的情绪余韵 | `summaries/*.summary.json` | `wire_afterglow_from_summary()` 读取后转写 `afterglow_residue.json`（Phase 6 已接线）；summary 本身 never_retrieve |
 | **impression residue** | 低权模糊印象 | `impressions/{uid}.json` → 6g | impression_loader 唯一读 |
 
 **边界精确化**：「我们共有过一场梦 + 那种情绪」**是**真实共同事件，可回流；「梦里去了哪、做了什么、什么世界设定」**不是**现实事实，只留 archive。剥离在**生成时**结构性完成，使下游没有可泄漏的场景。

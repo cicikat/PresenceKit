@@ -205,7 +205,7 @@ data/
 └── (锁池)                        core/memory/locks.py 管理，运行时内存对象，不落盘
 ```
 
-> **User Hidden State（Phase 4 完成）**：
+> **User Hidden State（Phase 6 完成）**：
 > `core/memory/user_hidden_state.py` — schema（UserHiddenState：sensitivity / touch_need / embodied_ease / body_memory）+ 所有 primitive helpers + 全部更新函数已实现（`apply_time_decay` / `accrue_touch_deficit` / `nudge_embodied_ease` / `reinforce_body_memory` / `consolidate_baselines`）；所有接受 `source: UpdateSource` 的函数含 TypeError 守卫。
 > `core/memory/user_hidden_state_integrator.py` — Phase 3 更新：`integrate_event` / `integrate_impression` 新增 TypeError 类型守卫；`integrate_event_and_save` / `integrate_impression_and_save` 新增 uid 类型守卫；新增 `integrate_body_cue` / `integrate_body_cue_and_save`（长期层 body_memory，WriteEnvelope gated）；`_assert_not_long_term` 内部断言防止 integrator 意外写长期层。
 > `core/memory/user_hidden_state_store.py` — `load_hidden_state` / `save_hidden_state` / `load_dream_snapshot`（只读 bucket 快照，不暴露 float）。
@@ -213,12 +213,14 @@ data/
 >
 > **Phase 4（Dream 只读接入）**：`core/dream/dream_context.build_snapshot()` 在入梦时调用 `load_dream_snapshot()` 并将结果冻结进 `context_snapshot["user_hidden_state_snapshot"]`。`core/dream/dream_prompt.build_dream_prompt()` 在 D4–D5 之间插入 D4.5 层，tag-gated（`body_intimate` / `physical_closeness`）。注入内容只含 bucket label（sensitivity / touch_appetite / embodied_ease / memory_cues），无 float / uid / timestamp / weight。Fail-closed：任何异常 → 不注入，不阻断 Dream。Dream 无写路径：`DREAM_DIRECT_WRITABLE = frozenset()`。
 >
+> **Phase 6（Dream Exit Afterglow Wiring）**：`core/dream/dream_pipeline._generate_summary_bg()` 在 `generate_summary()` 后调用 `wire_afterglow_from_summary()`（`core/dream/dream_exit_afterglow.py`）。从 summary record 推导 tone（hard_exit/hurt_reluctance → stress；gentle_residue+high_weight → comfort；gentle_residue → calm；fallback → neutral），构建 `AfterglowResidueInput`，经 `save_afterglow_residue()` 落盘，再经 `integrate_afterglow_and_save(stamp_dream_afterglow())` 写入 hidden_state。Fail-closed：任何步骤失败 → warning，不阻断 Dream exit。Dream 仍无直接写权限（`DREAM_DIRECT_WRITABLE = frozenset()`）。
+>
 > 长期层写权限（全部 `WriteEnvelope.can_write_memory=True` 必须）：
 >   `body_memory` ← `integrate_body_cue*`（Reality-side，stamp_trigger / stamp_user_chat）
->   `embodied_ease` ← `nudge_embodied_ease`（调度器专用 pass 或 integrator，stamp_trigger）
+>   `embodied_ease` ← `nudge_embodied_ease` / `integrate_afterglow_and_save`（调度器 or Dream exit afterglow）
 >   `sensitivity.baseline` / `touch_need.baseline` ← `apply_time_decay` + `consolidate_baselines`（调度器）
 >
-> 安全不变量：Dream 不得直接写任何字段（DREAM_DIRECT_WRITABLE = frozenset()）；snapshot 只输出 bucket string，不暴露 float 原始值；长期层写入不经过 integrate_event / integrate_impression。
+> 安全不变量：Dream 不得直接写任何字段（DREAM_DIRECT_WRITABLE = frozenset()）；snapshot 只输出 bucket string，不暴露 float 原始值；长期层写入不经过 integrate_event / integrate_impression；afterglow 回流只影响 sensitivity.current / embodied_ease，不写 baseline / touch_need / body_memory。
 > 持久化路径：`user_memory_root(uid)/hidden_state.json`，原子写入。设计文档：`docs/user_hidden_state_phase3.md`。
 
 > **authored 静态配置**（不走沙盒）：
