@@ -26,11 +26,20 @@ _FOURTH_WALL_NOTE = (
 )
 
 
-async def run_owner_chat_turn(message: str, channel_name: str) -> dict:
+async def run_owner_chat_turn(
+    message: str,
+    channel_name: str,
+    *,
+    trusted_user_text: str | None = None,
+) -> dict:
     """
     手机/桌宠共用的 owner 对话入口。
     conversation_lock 覆盖 fetch_context → LLM → critical post_process，
     保证同一用户多端输入不会并行读取旧上下文。
+
+    trusted_user_text: 媒体拼接前的原始用户文本，仅用于 probe；
+      不传时退化为 message（纯文字消息两者相同）。
+      media 端点须显式传入原始 message（在 full_message 拼接前捕获）。
     """
     from core.pipeline_registry import get as _get_pipeline
     pipeline = _get_pipeline()
@@ -50,10 +59,12 @@ async def run_owner_chat_turn(message: str, channel_name: str) -> dict:
     except Exception:
         logger.exception("[owner_chat] trigger state notify_owner_turn 失败")
 
+    _probe_text = trusted_user_text if trusted_user_text is not None else message
+
     from core.conversation_gate import conversation_lock
 
     async with conversation_lock(user_id):
-        tool_result_text = await _probe_and_execute_tools(message, user_id)
+        tool_result_text = await _probe_and_execute_tools(_probe_text, user_id)
 
         context = await pipeline.fetch_context(user_id, message)
         messages, _ = pipeline.build_prompt(
@@ -310,7 +321,9 @@ async def upload_ingest(
             f"回应长度不少于150字,不要因为克制就缩短回应。\n{text[:3000]}"
         )
         full_message = media_context + ("\n" + message if message else "")
-        response = await run_owner_chat_turn(full_message, channel)
+        # trusted_user_text = original message body before media prepend;
+        # probe must not see file content to prevent injection via uploaded docs.
+        response = await run_owner_chat_turn(full_message, channel, trusted_user_text=message)
         response["stored_path"] = str(stored_path)
         return response
 
@@ -332,7 +345,9 @@ async def upload_ingest(
             lines = "\n".join(f"图{i + 1}:{desc}" for i, desc in enumerate(descriptions))
             media_context = f"(你看到了用户发来的{len(descriptions)}张图,内容如下:\n{lines})"
         full_message = media_context + ("\n" + message if message else "")
-        response = await run_owner_chat_turn(full_message, channel)
+        # trusted_user_text = original message body before media prepend;
+        # probe must not see image descriptions to prevent injection via uploaded images.
+        response = await run_owner_chat_turn(full_message, channel, trusted_user_text=message)
         response["stored_paths"] = media_processor.LAST_IMAGE_STORED_PATHS
         return response
 

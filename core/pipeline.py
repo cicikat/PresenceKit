@@ -15,6 +15,14 @@ logger = logging.getLogger(__name__)
 
 _DETECT_EMOTION_TIMEOUT = 8.0  # detect_emotion wait_for 超时阈值，测试时可 monkeypatch
 
+# Path B 幂等窗口：同 uid + 同 action_type + 同关键参数在窗口内已执行 → 跳过。
+# key = _intent_action_key(uid, action, params); value = last-executed timestamp。
+_INTENT_LAST_ACTION: dict[str, float] = {}
+_INTENT_COOLDOWN_SEC = 60.0  # 1 分钟内相同动作不重复执行
+
+# Path B 危险动作黑名单：永不经 Path B 自动触发
+_INTENT_DANGEROUS_ACTIONS: frozenset[str] = frozenset({"device_shutdown", "device_sleep"})
+
 YANDERE_KEYWORDS = (
     "只属于我", "别看别人", "只能是我", "独占",
     "不许", "不准", "你是我的",
@@ -28,6 +36,17 @@ def _check_yandere_trigger(user_message: str, reply: str, relation_priority: int
         return False
     text = user_message + " " + reply
     return any(kw in text for kw in YANDERE_KEYWORDS)
+
+
+def _intent_action_key(user_id: str, action: str, params: dict) -> str:
+    """c2 幂等 key：uid + action_type + 关键参数（区分「关了想再关一次」的不同目标）。"""
+    if action == "minimize_window":
+        return f"{user_id}:{action}:{params.get('window', '')}"
+    if action == "play_song":
+        return f"{user_id}:{action}:{params.get('song_name', '')}"
+    if action == "open_url":
+        return f"{user_id}:{action}:{params.get('url', '')}"
+    return f"{user_id}:{action}"
 
 
 
@@ -421,7 +440,12 @@ class Pipeline:
 
         try:
             logger.info(f"[pipeline.intent] 开始解析，reply前30字={reply[:30]!r}")
-            asyncio.create_task(self._parse_and_execute_intent(reply))
+            asyncio.create_task(self._parse_and_execute_intent(
+                reply,
+                trigger_name=trigger_name,
+                user_content=content,
+                user_id=user_id,
+            ))
         except Exception as e:
             log_error("pipeline.post_process.intent", e)
 
@@ -436,39 +460,77 @@ class Pipeline:
 
     # _compress_episode 已迁移为模块级 _do_compress_episode，由 slow_queue handler 调用
 
-    async def _parse_and_execute_intent(self, reply: str) -> None:
+    async def _parse_and_execute_intent(
+        self,
+        reply: str,
+        *,
+        trigger_name: str = "",
+        user_content: str = "",
+        user_id: str = "",
+    ) -> None:
         """
-        解析角色回复里声称要执行的桌面操作，写入agent_actions.json队列。
-        角色说'我去把游戏关掉'→真的执行minimize_window。
+        Path B: 解析角色回复里声称要执行的桌面操作，写入 agent_actions.json 队列。
+        角色说'我去把游戏关掉'→真的执行 minimize_window。
+
+        守卫（全部满足才执行）：
+          (a) trigger_name 为空 → 真实 owner turn（非 scheduler/sensor/watch）
+          (b) user_content 非空非纯空白 → 本轮有真实用户输入
+          (c) 意图非 dangerous（device_shutdown/device_sleep 永不经此路径触发）
+          (c2) per-uid 同动作幂等窗口 60s：窗口内已执行 → 跳过
         """
         import json as _json
         import re
+        import time as _time
         from core import llm_client
         from core.error_handler import log_error
+
+        # guard (a): non-empty trigger_name → scheduler/sensor/watch turn → skip
+        if trigger_name:
+            logger.debug(
+                "[pipeline.intent] 跳过: trigger_name=%r 非真实 owner turn", trigger_name
+            )
+            return
+
+        # guard (b): no real user content this turn → skip
+        if not user_content or not user_content.strip():
+            logger.debug("[pipeline.intent] 跳过: user_content 为空")
+            return
 
         if len(reply) < 10:
             return
 
         from core.config_loader import _char_name
-        intent_prompt = f"""判断以下回复里{_char_name()}是否声称要执行某个桌面操作。
-回复：{reply[:200]}
+        _char = _char_name()
 
-如果有，输出JSON（只输出JSON不要其他内容）：
-{{"action": "操作类型", "params": {{}}}}
-
-操作类型只能是以下之一：
-- minimize_window: 最小化窗口，params需要{{"window": "窗口关键词"}}
-- play_song: 播放歌曲，params需要{{"song_name": "歌名", "artist": "歌手（可选）"}}
-- open_url: 打开网址，params需要{{"url": "网址"}}
-- play_pause: 播放暂停媒体，params为{{}}
-- send_notification: 发通知，仅当{_char_name()}明确说'提醒你''通知你''告诉你记得'等字样时才触发，params需要{{'title': '标题', 'message': '内容'}}\n
-
-如果没有任何桌面操作意图，输出空字符串。"""
+        # c1: 收紧意图解析 prompt，只在「第一人称、当下要做」时命中；
+        #     承认/复述/过去式/回应吐槽/睡眠关机语义一律不命中。
+        intent_prompt = (
+            f"判断以下回复里{_char}是否【当下、第一人称、主动声称要做】某个桌面操作。\n\n"
+            f"严格规则：\n"
+            f"- 只在{_char}表达「我现在/马上/去做X」等第一人称当下主动意图时命中\n"
+            f"- 以下情形一律不命中：\n"
+            f"  · 承认/解释：「{_char}说自己刚才做了X」\n"
+            f"  · 复述用户的话：用户说了什么，{_char}重述或回应\n"
+            f"  · 过去式：「{_char}已经做了/之前做过」\n"
+            f"  · 回应用户吐槽或抱怨：用户抱怨某动作，{_char}道歉或解释\n"
+            f"  · 睡眠/关机/让屏幕休眠语义：永不命中为任何操作类型\n\n"
+            f"回复：{reply[:200]}\n\n"
+            f"如果满足严格规则，输出JSON（只输出JSON，不要其他内容）：\n"
+            f'{{\"action\": \"操作类型\", \"params\": {{}}}}\n\n'
+            f"操作类型只能是以下之一（不含关机/睡眠）：\n"
+            f"- minimize_window: 最小化窗口（不得匹配睡眠/关机语义），params: {{\"window\": \"窗口关键词\"}}\n"
+            f"- play_song: 播放歌曲，params: {{\"song_name\": \"歌名\", \"artist\": \"歌手（可选）\"}}\n"
+            f"- open_url: 打开网址，params: {{\"url\": \"网址\"}}\n"
+            f"- play_pause: 播放暂停媒体，params: {{}}\n"
+            f"- send_notification: 发通知，仅当{_char}明确说「提醒你/通知你/告诉你记得」等字样时才触发，"
+            f"params: {{\"title\": \"标题\", \"message\": \"内容\"}}\n\n"
+            f"如果不满足严格规则，输出空字符串。"
+        )
 
         try:
             raw = await llm_client.chat(
                 messages=[{"role": "user", "content": intent_prompt}],
-                max_tokens_override=100,
+                max_tokens_override=120,
             )
             if not raw or not raw.strip():
                 return
@@ -484,6 +546,13 @@ class Pipeline:
             if not action:
                 return
 
+            # guard (c): dangerous actions never via Path B
+            if action in _INTENT_DANGEROUS_ACTIONS:
+                logger.warning(
+                    "[pipeline.intent] 拒绝: 危险动作 %r 不得经 Path B 自动触发", action
+                )
+                return
+
             _NOTIFY_TIME_WORDS = [
                 "等下", "待会", "一会", "等一下", "明天", "后天",
                 "点", "分钟后", "小时后", "到时", "之后", "时候"
@@ -496,10 +565,20 @@ class Pipeline:
                 has_action = any(kw in reply for kw in _NOTIFY_ACTION_WORDS)
                 if not (has_time and has_action):
                     logger.info(
-                        f"[pipeline.intent] send_notification 组合校验未通过"
-                        f"（time={has_time}, action={has_action}），跳过"
+                        "[pipeline.intent] send_notification 组合校验未通过"
+                        "（time=%s, action=%s），跳过", has_time, has_action
                     )
                     return
+
+            # c2: per-uid 同动作幂等窗口
+            _ck = _intent_action_key(user_id, action, params)
+            _now = _time.time()
+            if _now - _INTENT_LAST_ACTION.get(_ck, 0.0) < _INTENT_COOLDOWN_SEC:
+                logger.info(
+                    "[pipeline.intent] 幂等跳过: action=%r 在 %.0fs 窗口内已执行",
+                    action, _INTENT_COOLDOWN_SEC,
+                )
+                return
 
             from core.tool_dispatcher import _push_desktop_action
             action_payload = {"type": action, **params}
@@ -510,9 +589,15 @@ class Pipeline:
                     break
                 await asyncio.sleep(0.5)
             else:
-                _pending_perception.write(text=f"{action} 执行失败（重试2次）: {last_result}", action=action, result=last_result)
+                _pending_perception.write(
+                    text=f"{action} 执行失败（重试2次）: {last_result}",
+                    action=action, result=last_result,
+                )
 
-            logger.info(f"[pipeline.intent] 检测到意图: {action}({params}), result={last_result}")
+            if last_result == "ok":
+                _INTENT_LAST_ACTION[_ck] = _now
+
+            logger.info("[pipeline.intent] 检测到意图: %s(%s), result=%s", action, params, last_result)
 
         except _json.JSONDecodeError:
             pass

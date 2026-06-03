@@ -245,6 +245,10 @@ async def handle_message(message: dict):
         return
 
     # ── 步骤2.5：处理图片和文件 ─────────────────────────────────────────────
+    # trusted_user_text 必须在媒体拼接之前捕获：probe 只能消费原始用户输入，
+    # 不得混入 media_context（媒体抽取文本只进 prompt，不进 probe）。
+    _trusted_user_text = content
+
     image_urls = message.get("image_urls", [])
     file_info = message.get("file_info")
     media_context = ""
@@ -289,7 +293,7 @@ async def handle_message(message: dict):
     from core.memory import user_profile as _up
     _profile = _up.load(user_id)
     _location = _profile.get("location", "杭州")
-    # 快速路径：关键词命中直接走，不调 LLM
+    # 快速路径：关键词命中直接走，不调 LLM；只匹配 trusted_user_text，不含 media span
     def _fast_path_match(user_msg: str) -> str | None:
         for name, spec in tool_dispatcher._TOOL_REGISTRY.items():
             if spec.get("category") not in ("info", "desktop"):
@@ -298,7 +302,7 @@ async def handle_message(message: dict):
                 return name
         return None
 
-    _fast_tool = _fast_path_match(content)
+    _fast_tool = _fast_path_match(_trusted_user_text)
     if _fast_tool:
         tool_calls = [{"name": _fast_tool, "arguments": {}}]
         logger.info(f"[handle_message] 快速路径命中工具: {_fast_tool}")
@@ -308,7 +312,7 @@ async def handle_message(message: dict):
                 "role": "system",
                 "content": tool_dispatcher.get_probe_prompt(_location),
             },
-            {"role": "user", "content": content},
+            {"role": "user", "content": _trusted_user_text},
         ]
         tools_schema = tool_dispatcher.get_tools_schema(categories=["info", "desktop"])
         try:
