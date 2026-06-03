@@ -148,13 +148,18 @@ async def _probe_and_execute_tools(message: str, user_id: str) -> str | None:
     return None
 
 
-@router.post("/chat", summary="与角色对话（管理面板专用）")
+@router.post("/chat", summary="与角色对话（管理面板专用）[v0.1 已禁用]")
 async def frontend_chat(body: dict, auth=Depends(verify_token)):
     """
-    走完整 Pipeline，user_id 固定为 frontend_owner。
-    在 Author's Note 层追加第四面墙提示，让角色以真实自我回应。
-    返回回复文本 + 当前好感度数值 + 等级。
+    v0.1 禁用：该通道使用 frontend_owner 作为幽灵 uid，会产生假历史与调试分叉。
+    v0.1 只保留 /desktop/chat 单通道。v0.2 再决定此通道去留。
     """
+    raise HTTPException(
+        status_code=410,
+        detail="v0.1 禁用 legacy /chat，请使用 /desktop/chat。",
+    )
+
+    # 以下代码已不可达，保留供 v0.2 参考
     message = (body.get("message") or "").strip()
     if not message:
         raise HTTPException(status_code=422, detail="message 不能为空")
@@ -330,3 +335,71 @@ async def desktop_deactivate():
     if channel and hasattr(channel, "set_active"):
         channel.set_active(False)
     return {"status": "ok"}
+
+
+@router.post("/desktop/wake", summary="桌宠重开问候（仅触发 assistant turn，不写 user 历史）")
+async def desktop_wake(body: dict = Body(default={})):
+    """
+    桌宠重开时调用，绝不向 user 历史写入机器合成文本。
+
+    Path A（优先）: last_seen 之后若有未回放的 assistant trigger turn，返回最新一条。
+    Path B（兜底）: 无 pending turn 则现场跑一次 wake pipeline，
+                   以 trigger_name="desktop_wake" 落库，fanout=[] 避免双推。
+    """
+    from core.config_loader import get_config as _cfg
+    uid = str(_cfg().get("scheduler", {}).get("owner_id", "owner"))
+
+    last_seen: float | None = body.get("last_seen")
+
+    # ── Path A: pending trigger turns ──────────────────────────────────────
+    if last_seen is not None:
+        try:
+            from core.memory.short_term import load as _load_st
+            history = _load_st(uid)
+            user_turn_ids = {
+                e["_turn_id"] for e in history
+                if e.get("role") == "user" and e.get("_turn_id")
+            }
+            pending = [
+                e for e in history
+                if (
+                    e.get("role") == "assistant"
+                    and e.get("timestamp", 0) > last_seen
+                    and e.get("_turn_id")
+                    and e["_turn_id"] not in user_turn_ids
+                )
+            ]
+            if pending:
+                latest = max(pending, key=lambda e: e.get("timestamp", 0))
+                return {"reply": latest["content"], "source": "pending_trigger"}
+        except Exception:
+            logger.exception("[desktop_wake] Path A 失败，降级到 Path B")
+
+    # ── Path B: 现场生成 wake trigger ──────────────────────────────────────
+    try:
+        from core.pipeline_registry import get as _get_pipeline
+        pipeline = _get_pipeline()
+        if pipeline is None:
+            return {"reply": None, "source": "no_pipeline"}
+
+        prompt = "（用户重新打开了桌宠，请结合真实记忆自然接续）"
+        context = await pipeline.fetch_context(uid, prompt)
+        messages, _ = pipeline.build_prompt(uid, prompt, context)
+        reply = await pipeline.run_llm(messages)
+        if reply:
+            from core.turn_sink import TurnSource, record_assistant_turn
+            from core.write_envelope import stamp_trigger
+            await record_assistant_turn(
+                assistant_text=reply,
+                uid=uid,
+                source=TurnSource.TRIGGER,
+                trigger_name="desktop_wake",
+                fanout=[],  # 客户端直接展示，不通过 channel 二次推送
+                pipeline=pipeline,
+                envelope=stamp_trigger(),
+            )
+            return {"reply": reply, "source": "live_wake"}
+        return {"reply": None, "source": "live_wake_empty"}
+    except Exception:
+        logger.exception("[desktop_wake] Path B 失败")
+        return {"reply": None, "source": "error"}

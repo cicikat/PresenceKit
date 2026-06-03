@@ -46,6 +46,17 @@ def _init_modules():
     cfg = get_config()
     logger.info("配置文件加载完成")
 
+    # v0.1 发布门禁：gating_shadow 必须开启，否则主动触发全部失效
+    _gs_enabled = cfg.get("scheduler", {}).get("gating_shadow", {}).get("enabled", True)
+    if not _gs_enabled:
+        logger.error("=" * 60)
+        logger.error("  [v0.1 启动阻断] scheduler.gating_shadow.enabled = false")
+        logger.error("  主动触发将全部失效，v0.1 不允许在此配置下静默启动。")
+        logger.error("  请将 config.yaml 中 scheduler.gating_shadow.enabled 设为 true")
+        logger.error("=" * 60)
+        sys.exit(1)
+    logger.info("[v0.1] gating_shadow 已启用，主动触发链路正常")
+
     logger.info("正在加载角色卡...")
     from core import character_loader
     char_filename = cfg.get("character", {}).get("default", "default.json")
