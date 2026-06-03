@@ -88,10 +88,15 @@ Phase 2 在 Phase 1.5 持久化基础上增加了三个组件，边界如下：
 - **读后不写**：函数本身不写磁盘，不接 Dream pipeline 写路径。
 - **结果可变性隔离**：返回的 dict 是新对象，修改它不影响已持久化状态。
 
-### QQ Dream Guard 与渲染标签收口
+### Dream Guard 与渲染标签收口（P2.4 fail-closed）
 
-- `DREAM_ACTIVE` / `DREAM_CLOSING` 时 QQ owner 消息被拒，不进入现实 pipeline，
-  不写 runtime / memory。
+- `DREAM_ACTIVE` / `DREAM_CLOSING` 时 QQ owner 消息、`/desktop/chat`、`/mobile/chat`、
+  `/desktop/wake` Path B 均被拒，不进入现实 pipeline，不写 runtime / memory。
+- **Fail-closed**：dream state 文件存在但 JSON 损坏 / 读取异常 / 状态非法时，
+  同样拒绝 reality turn（`BLOCK_UNCERTAIN`），记录 `logger.error`。
+  仅 `FileNotFoundError`（文件不存在 = 正常无梦态）被允许通行。
+  实现：`core/dream/dream_state.get_reality_guard_status()` +
+  `admin/routers/chat._check_reality_not_in_dream()`（已替换旧 `except: pass`）。
 - QQ / mobile 输出移除 `<say>` 等展示标签；reality memory / event_log 保存纯文本；
   desktop segments 保持原行为。
 

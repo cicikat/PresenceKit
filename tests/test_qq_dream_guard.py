@@ -1,5 +1,5 @@
 """
-tests/test_qq_dream_guard.py — Task A: QQ 入梦 guard
+tests/test_qq_dream_guard.py — QQ 入梦 guard
 
 覆盖场景：
   1. DREAM_ACTIVE 时 QQ owner 消息被拒（不进入 pipeline）
@@ -9,7 +9,7 @@ tests/test_qq_dream_guard.py — Task A: QQ 入梦 guard
   5. 非 dream 状态（REALITY_CHAT）时 owner 消息正常进入 pipeline
   6. 非 owner 消息在 DREAM_ACTIVE 时不被 guard 拦截（guard 只限 owner）
   7. stamp_qq() 在非梦境 owner 聊天中仍被正确使用（WriteEnvelope 无误伤）
-  8. read_state 异常时 guard 安全放行（safe default）
+  8. get_reality_guard_status 异常时 guard fail-closed（不进入 pipeline）— P2.4
 """
 
 import asyncio
@@ -254,34 +254,29 @@ async def test_non_owner_not_blocked_by_dream_guard(sandbox, monkeypatch):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 6. read_state 异常时 guard 安全放行（safe default）
+# 6. get_reality_guard_status 异常时 guard fail-closed（不进入 pipeline）
 # ═══════════════════════════════════════════════════════════════════════════════
 
-async def test_dream_guard_safe_default_on_exception(sandbox, monkeypatch):
-    """read_state 抛异常时 guard 安全放行，不阻塞 QQ 聊天。"""
+async def test_dream_guard_fail_closed_on_exception(sandbox, monkeypatch):
+    """get_reality_guard_status 抛异常时 guard fail-closed，owner QQ 消息被拒，不进入 pipeline。"""
     _patch_config(monkeypatch)
     _patch_scheduler_noise(monkeypatch)
-    _patch_text_output(monkeypatch)
-    _patch_response_processor(monkeypatch)
-    _patch_tool_dispatcher(monkeypatch)
-    _patch_llm_client(monkeypatch)
-    _patch_group_context(monkeypatch)
+    sent = _patch_text_output(monkeypatch)
     fake_pipeline = _patch_pipeline(monkeypatch)
 
     import core.dream.dream_state as _ds
-    monkeypatch.setattr(_ds, "read_state", lambda uid: (_ for _ in ()).throw(RuntimeError("disk error")))
-
-    try:
-        import core.memory.user_profile as _up
-        monkeypatch.setattr(_up, "load", lambda uid: {"location": "杭州"})
-    except Exception:
-        pass
+    monkeypatch.setattr(
+        _ds, "get_reality_guard_status",
+        lambda uid: (_ for _ in ()).throw(RuntimeError("disk error")),
+    )
 
     import main as _main
     await _main.handle_message(_make_msg())
 
-    # Should pass through and reach run_llm despite read_state failure
-    fake_pipeline.run_llm.assert_called_once()
+    # Fail-closed: pipeline not reached
+    fake_pipeline.run_llm.assert_not_called()
+    # User-visible rejection message sent
+    assert len(sent) == 1
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

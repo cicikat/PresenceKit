@@ -32,6 +32,53 @@ def default_state(user_id: str | int) -> dict[str, Any]:
     }
 
 
+class DreamGuardStatus(str, Enum):
+    ALLOW = "ALLOW"
+    BLOCK_ACTIVE = "BLOCK_ACTIVE"
+    BLOCK_UNCERTAIN = "BLOCK_UNCERTAIN"
+
+
+def get_reality_guard_status(user_id: str | int) -> DreamGuardStatus:
+    """
+    Fail-closed dream guard for reality turns.
+
+    ALLOW:           File missing (normal no-dream state) or dream is inactive.
+    BLOCK_ACTIVE:    Dream is DREAM_ACTIVE or DREAM_CLOSING — reject reality turn.
+    BLOCK_UNCERTAIN: File exists but unreadable / corrupt / invalid status —
+                     caller must treat as fail-closed (reject reality turn).
+
+    Only FileNotFoundError → ALLOW; any other I/O or parse error → BLOCK_UNCERTAIN.
+    """
+    path = get_paths().dream_state_path(user_id)
+    try:
+        text = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return DreamGuardStatus.ALLOW
+    except Exception as exc:
+        logger.error("[dream_guard] state unreadable uid=%s: %s", user_id, exc)
+        return DreamGuardStatus.BLOCK_UNCERTAIN
+
+    try:
+        data = json.loads(text)
+    except Exception as exc:
+        logger.error("[dream_guard] state unparseable uid=%s: %s", user_id, exc)
+        return DreamGuardStatus.BLOCK_UNCERTAIN
+
+    if not isinstance(data, dict):
+        logger.error("[dream_guard] state invalid shape uid=%s", user_id)
+        return DreamGuardStatus.BLOCK_UNCERTAIN
+
+    status = data.get("status")
+    if status not in {item.value for item in DreamStatus}:
+        logger.error("[dream_guard] unknown status uid=%s: %r", user_id, status)
+        return DreamGuardStatus.BLOCK_UNCERTAIN
+
+    if status in (DreamStatus.DREAM_ACTIVE.value, DreamStatus.DREAM_CLOSING.value):
+        return DreamGuardStatus.BLOCK_ACTIVE
+
+    return DreamGuardStatus.ALLOW
+
+
 def apply_dream_artifact_sentinel(record: dict[str, Any]) -> dict[str, Any]:
     """Attach the required boundary fields for tmp/archive/summary dream artifacts."""
     if not isinstance(record, dict):
