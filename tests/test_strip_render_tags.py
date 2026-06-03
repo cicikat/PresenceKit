@@ -1,16 +1,16 @@
 """
-tests/test_strip_render_tags.py — Task B: <say> 标签收口
+tests/test_strip_render_tags.py — NMP 标签剥离 + 现实聊天清洗
 
 覆盖场景：
   1. strip_render_tags: <say>/<thought>/<narration> 被完整剥离
   2. strip_render_tags: 嵌套/多处标签一次性清理
   3. strip_render_tags: 无标签纯文本原样返回
-  4. QQ fanout 收到纯文本（无 <say>）
+  4. QQ fanout 收到纯文本（无 <say>，无动作描写）
   5. mobile fanout 收到纯文本（无 <say>）
-  6. memory/post_process 收到纯文本（无 <say>）
-  7. desktop channel_message 仍收到完整原文（含标签，渲染侧负责解析）
-  8. desktop message_segments 仍保留原有 NMP 解析行为（say segment 存在）
-  9. test_message_segments_plain_text 回归：无标签文本行为不变
+  6. memory/post_process 收到清洗后文本（无 <say>，无动作描写）
+  7. desktop channel_message 收到清洗后文本（NMP 标签已剥，动作已清）
+  8. desktop message_segments 只推送 say 类型（do/feel/env 被过滤）
+  9. 回归：无标签纯对白文本行为不变
 """
 
 import asyncio
@@ -100,7 +100,7 @@ def test_strip_nmp_do_env_feel():
 # ═══════════════════════════════════════════════════════════════════════════════
 
 async def test_qq_fanout_strips_say_tags():
-    """QQ channel 收到的文本不含 <say> 标签。"""
+    """QQ channel 收到清洗后纯对白（无 <say> 标签，无动作描写）。"""
     from channels import registry
     from core.turn_sink import TurnSource, record_assistant_turn
 
@@ -108,8 +108,9 @@ async def test_qq_fanout_strips_say_tags():
     qq_ch = _Channel("qq")
     registry.register(qq_ch)
 
+    # Direct dialogue wrapped in <say> — no narration prefix
     await record_assistant_turn(
-        assistant_text="她说：<say>你好</say>",
+        assistant_text="<say>你好</say>",
         uid="uid1",
         source=TurnSource.USER_CHAT,
         user_text="hello",
@@ -204,8 +205,9 @@ async def test_memory_text_stripped_of_multiple_tags():
 # 7. desktop channel_message 收到完整原文（含标签）
 # ═══════════════════════════════════════════════════════════════════════════════
 
-async def test_desktop_fanout_receives_full_text(monkeypatch):
-    """desktop channel 收到的 assistant_text 保持原样（NMP 标签完整）。"""
+async def test_desktop_fanout_receives_scrubbed_text(monkeypatch):
+    """desktop channel_message receives scrubbed text: NMP tags stripped, action content removed.
+    All record_assistant_turn calls are reality-only; Dream uses its own pipeline."""
     from channels import registry
     from channels.desktop import DesktopChannel
     from core.turn_sink import TurnSource, record_assistant_turn
@@ -226,7 +228,8 @@ async def test_desktop_fanout_receives_full_text(monkeypatch):
     monkeypatch.setattr("channels.desktop_ws.push_segments", fake_push_segments)
 
     registry.register(DesktopChannel())
-    raw = "她说：<say>你好</say>"
+    # Pure say content — scrubber keeps dialogue intact
+    raw = "<say>你好</say>"
 
     await record_assistant_turn(
         assistant_text=raw,
@@ -238,8 +241,8 @@ async def test_desktop_fanout_receives_full_text(monkeypatch):
     )
 
     assert len(push_msg_calls) == 1
-    # Desktop channel_message preserves original text with tags
-    assert "<say>" in push_msg_calls[0]["content"]
+    # NMP tags are stripped; plain dialogue is preserved
+    assert "<say>" not in push_msg_calls[0]["content"]
     assert "你好" in push_msg_calls[0]["content"]
 
 
@@ -247,8 +250,9 @@ async def test_desktop_fanout_receives_full_text(monkeypatch):
 # 8. desktop message_segments 仍保留 NMP 解析行为
 # ═══════════════════════════════════════════════════════════════════════════════
 
-async def test_desktop_message_segments_say_segment_preserved(monkeypatch):
-    """desktop message_segments 仍推送 say segment，NMP 渲染行为不被破坏。"""
+async def test_desktop_message_segments_say_only(monkeypatch):
+    """desktop message_segments pushes only say segments; do/feel/env are filtered.
+    Reality-only gate: all record_assistant_turn calls are reality."""
     from channels import registry
     from channels.desktop import DesktopChannel
     from core.turn_sink import TurnSource, record_assistant_turn
@@ -270,8 +274,9 @@ async def test_desktop_message_segments_say_segment_preserved(monkeypatch):
 
     registry.register(DesktopChannel())
 
+    raw = "<say>你好</say><do>她点头</do><feel>温暖</feel><env>阳光</env>"
     await record_assistant_turn(
-        assistant_text="<say>你好</say>",
+        assistant_text=raw,
         uid="uid6",
         source=TurnSource.USER_CHAT,
         user_text="hello",
@@ -280,12 +285,17 @@ async def test_desktop_message_segments_say_segment_preserved(monkeypatch):
     )
 
     assert len(push_seg_calls) == 1
-    say_segs = [s for s in push_seg_calls[0]["segments"] if s["type"] == "say"]
-    assert len(say_segs) == 1
-    assert say_segs[0]["text"] == "你好"
+    segs = push_seg_calls[0]["segments"]
+    seg_types = {s["type"] for s in segs}
 
-    # content (plain) has no tags
-    assert "<say>" not in push_seg_calls[0]["content"]
+    # Only say segments pushed
+    assert "say" in seg_types
+    assert "do" not in seg_types
+    assert "feel" not in seg_types
+    assert "env" not in seg_types
+
+    say_segs = [s for s in segs if s["type"] == "say"]
+    assert say_segs[0]["text"] == "你好"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -293,7 +303,7 @@ async def test_desktop_message_segments_say_segment_preserved(monkeypatch):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 async def test_plain_text_memory_unchanged():
-    """无标签纯文本时，post_process 收到的 reply 与原文相同（strip 无副作用）。"""
+    """无标签纯对白文本经过清洗器后保持不变（scrub 对纯对白是 no-op）。"""
     from channels import registry
     from core.turn_sink import TurnSource, record_assistant_turn
 
@@ -310,6 +320,7 @@ async def test_plain_text_memory_unchanged():
         pipeline=pipeline,
     )
 
+    # Scrubber is a no-op for plain dialogue — content unchanged
     assert pipeline.captured_reply == raw
 
 

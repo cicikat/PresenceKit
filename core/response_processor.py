@@ -27,15 +27,11 @@ _SELF_CENSOR_PATTERNS = [
 
 
 def process(reply: str, character_name: str) -> list[str]:
-    """
-    对模型原始回复进行后处理
+    """QQ-only legacy processor: guard filters + segment split.
 
-    参数:
-        reply:          模型返回的原始字符串
-        character_name: 角色名，用于去除开头的角色名前缀
-
-    返回:
-        处理后的消息列表（超长时拆分为多条）
+    Helper functions (_remove_tool_call_tags / _remove_character_prefix /
+    _filter_self_censor) are also imported directly by core/reality_output_guard.py
+    for non-QQ channels — keep their signatures stable.
     """
     if not reply:
         return []

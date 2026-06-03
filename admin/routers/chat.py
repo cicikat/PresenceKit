@@ -67,6 +67,12 @@ async def run_owner_chat_turn(message: str, channel_name: str) -> dict:
         if not reply:
             reply = ""
 
+        # Shared reality guard: remove tool_call residue, character-name prefix,
+        # AI self-disclosure — applied before both fanout and memory write.
+        if reply:
+            from core.reality_output_guard import clean_reality_reply_text as _clean_reply
+            reply = _clean_reply(reply, pipeline.character.name) or reply
+
         from channels.registry import get as _get_channel
         channel = _get_channel(channel_name)
         if channel and hasattr(channel, "set_active"):
@@ -89,8 +95,13 @@ async def run_owner_chat_turn(message: str, channel_name: str) -> dict:
         from core.memory.user_profile import get_affection_level
         info = get_affection_level(user_id)
 
+        # Visible reply: strip render/NMP tags only so action descriptions survive
+        # for chat texture.  Memory is already scrubbed inside record_assistant_turn.
+        from core.response_processor import strip_render_tags as _strip_tags
+        visible_reply = _strip_tags(reply) or reply
+
         return {
-            "reply": reply,
+            "reply": visible_reply,
             "affection": info["value"],
             "level": info["label"],
             "emotion": turn_result.emotion,
@@ -202,26 +213,34 @@ async def frontend_chat(body: dict, auth=Depends(verify_token)):
     }
 
 
+_DREAM_GUARD_UNCERTAIN_MSG = (
+    "梦境状态暂时无法确认，为避免串写现实记忆，已暂停这次现实对话。"
+)
+
+
 def _check_reality_not_in_dream(uid: str) -> None:
     """
-    Safety net: hard reject reality turns when dream is active.
+    Safety net: hard reject reality turns when dream is active or unconfirmable.
 
-    Normal users never see this — the UI locks them in the dream window.
-    This guards stale clients, second devices, and race conditions.
+    Fail-closed: if the dream state file exists but cannot be read or parsed,
+    the reality turn is rejected rather than allowed through.
+    FileNotFoundError is treated as inactive (normal startup / no dream session).
     """
     try:
-        from core.dream.dream_state import read_state, DreamStatus
-        state = read_state(uid)
-        status = state.get("status")
-        if status in (DreamStatus.DREAM_ACTIVE.value, DreamStatus.DREAM_CLOSING.value):
-            raise HTTPException(
-                status_code=409,
-                detail="还在梦里，先醒过来（dream active — reality turn rejected）",
-            )
-    except HTTPException:
-        raise
+        from core.dream.dream_state import get_reality_guard_status, DreamGuardStatus
+        guard = get_reality_guard_status(uid)
     except Exception:
-        pass  # read failure → allow through (safe default)
+        logger.error("[dream_guard] guard check failed uid=%s — fail closed", uid, exc_info=True)
+        raise HTTPException(status_code=409, detail=_DREAM_GUARD_UNCERTAIN_MSG)
+
+    if guard == DreamGuardStatus.BLOCK_ACTIVE:
+        raise HTTPException(
+            status_code=409,
+            detail="还在梦里，先醒过来（dream active — reality turn rejected）",
+        )
+    if guard == DreamGuardStatus.BLOCK_UNCERTAIN:
+        logger.error("[dream_guard] reality turn rejected — unconfirmable dream state uid=%s", uid)
+        raise HTTPException(status_code=409, detail=_DREAM_GUARD_UNCERTAIN_MSG)
 
 
 @router.post("/desktop/chat", summary="桌宠对话（Bearer 鉴权）")
@@ -375,6 +394,17 @@ async def desktop_wake(body: dict = Body(default={})):
         except Exception:
             logger.exception("[desktop_wake] Path A 失败，降级到 Path B")
 
+    # ── Dream guard: fail-closed before live Path B generation ────────────
+    try:
+        from core.dream.dream_state import get_reality_guard_status as _grgs, DreamGuardStatus as _DGS
+        _wake_guard = _grgs(uid)
+    except Exception:
+        logger.error("[desktop_wake] dream guard check failed uid=%s — blocking Path B", uid, exc_info=True)
+        return {"reply": None, "source": "dream_guard_error"}
+    if _wake_guard != _DGS.ALLOW:
+        logger.info("[desktop_wake] Path B blocked by dream guard uid=%s guard=%s", uid, _wake_guard)
+        return {"reply": None, "source": "dream_guard_blocked"}
+
     # ── Path B: 现场生成 wake trigger ──────────────────────────────────────
     try:
         from core.pipeline_registry import get as _get_pipeline
@@ -387,6 +417,10 @@ async def desktop_wake(body: dict = Body(default={})):
         messages, _ = pipeline.build_prompt(uid, prompt, context)
         reply = await pipeline.run_llm(messages)
         if reply:
+            # Shared reality guard before record_assistant_turn.
+            from core.reality_output_guard import clean_reality_reply_text as _clean_wake_reply
+            reply = _clean_wake_reply(reply, pipeline.character.name) or reply
+        if reply:
             from core.turn_sink import TurnSource, record_assistant_turn
             from core.write_envelope import stamp_trigger
             await record_assistant_turn(
@@ -398,7 +432,10 @@ async def desktop_wake(body: dict = Body(default={})):
                 pipeline=pipeline,
                 envelope=stamp_trigger(),
             )
-            return {"reply": reply, "source": "live_wake"}
+            # Visible reply: strip render/NMP tags only; memory already scrubbed
+            # inside record_assistant_turn (memory_text path).
+            from core.response_processor import strip_render_tags as _strip_tags
+            return {"reply": _strip_tags(reply) or reply, "source": "live_wake"}
         return {"reply": None, "source": "live_wake_empty"}
     except Exception:
         logger.exception("[desktop_wake] Path B 失败")

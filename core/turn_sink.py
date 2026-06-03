@@ -109,15 +109,18 @@ async def _fanout(
 
     from core.response_processor import strip_render_tags as _strip_tags
 
+    # Visible output: strip render/NMP tags only so action descriptions survive
+    # for chat texture.  Action descriptions are cleaned on the memory path
+    # (memory_text in record_assistant_turn) — not here.
+    _visible_text = _strip_tags(assistant_text)
+
     sent_targets: list[str] = []
     failures: dict[str, str] = {}
     for channel in targets:
         name = getattr(channel, "name", channel.__class__.__name__)
         sent_targets.append(name)
         try:
-            # Desktop receives the full text (NMP tags intact for rendering).
-            # All other channels (QQ, mobile, …) receive plain stripped text.
-            text_to_send = assistant_text if name == "desktop" else _strip_tags(assistant_text)
+            text_to_send = _visible_text
             # Pass ws_msg_id only to the desktop channel so channel_message and
             # message_segments can share the same correlation id.  Other channels
             # (mobile, QQ) don't have this concept and are not changed.
@@ -170,9 +173,11 @@ async def record_assistant_turn(
     capture_trigger = "" if source == TurnSource.USER_CHAT else (trigger_name or "")
     behavior = payload.get("behavior") if payload else None
 
-    # Memory / history / event_log must store plain text, not render markup.
+    # Memory / history / event_log must store plain text with no render markup
+    # and no action descriptions.
     from core.response_processor import strip_render_tags as _strip_tags
-    memory_text = _strip_tags(assistant_text)
+    from core.reality_output_scrubber import scrub_reality_output_text as _scrub
+    memory_text = _scrub(_strip_tags(assistant_text)) or ""
 
     post_info: dict | None = None
     async with _maybe_conversation_gate(uid, bypass_gate):
@@ -216,15 +221,17 @@ async def record_assistant_turn(
     )
 
     # Narrative segments: push a parallel message_segments envelope to the
-    # desktop WS client only.  This is fire-and-forget and exception-safe;
-    # the original channel_message with full text has already been sent above.
+    # desktop WS client only.  This is fire-and-forget and exception-safe.
+    # Reality-only gate: only say segments are pushed; do/feel/env are discarded.
     # mobile / QQ / event_log / post_process are intentionally not touched.
     try:
         from channels import desktop_ws as _dws
         if _dws.is_connected():
             from core.narrative_parser import parse_narrative_segments
             _parsed = parse_narrative_segments(assistant_text)
-            await _dws.push_segments(_parsed["content"], _parsed["segments"], msg_id=_ws_msg_id)
+            _say_segs = [s for s in _parsed["segments"] if s.get("type") == "say"]
+            _say_content = " ".join(s.get("text", "") for s in _say_segs).strip() or _parsed["content"]
+            await _dws.push_segments(_say_content, _say_segs, msg_id=_ws_msg_id)
     except Exception:
         logger.debug("[turn_sink] message_segments fanout failed", exc_info=True)
 

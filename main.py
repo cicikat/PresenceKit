@@ -59,8 +59,18 @@ def _init_modules():
 
     logger.info("正在加载角色卡...")
     from core import character_loader
-    char_filename = cfg.get("character", {}).get("default", "default.json")
-    character = character_loader.load(char_filename)
+    char_ref = cfg.get("character", {}).get("default", "")
+    if not char_ref:
+        logger.critical(
+            "[startup] config.yaml 缺少 character.default 字段，无法启动。"
+            " 请在 config.yaml 中设置 character.default: <角色id>"
+        )
+        sys.exit(1)
+    try:
+        character = character_loader.load(char_ref)
+    except Exception as e:
+        logger.critical(f"[startup] 角色卡加载失败，无法启动: {e}")
+        sys.exit(1)
     logger.info(f"角色 '{character.name}' 已就绪")
 
     logger.info("正在初始化世界书引擎...")
@@ -108,22 +118,49 @@ async def handle_message(message: dict):
     try:
         from core.config_loader import get_config as _get_config_dg
         _owner_id_dg = str(_get_config_dg().get("scheduler", {}).get("owner_id", "")).strip()
-        if _owner_id_dg and str(user_id) == _owner_id_dg:
-            from core.dream.dream_state import read_state as _read_ds, DreamStatus as _DreamStatus
-            _ds_status = _read_ds(user_id).get("status")
-            if _ds_status in (_DreamStatus.DREAM_ACTIVE.value, _DreamStatus.DREAM_CLOSING.value):
-                logger.info(
-                    f"[handle_message] dream guard: 拒绝 owner QQ 消息 uid={user_id} status={_ds_status}"
-                )
-                try:
-                    from core.output import text_output as _to_dg
-                    _tgt_dg = message.get("group_id") or user_id
-                    await _to_dg.send(_tgt_dg, ["正在梦境中，请先退出梦境再回到现实聊天。"], bool(message.get("group_id")))
-                except Exception:
-                    pass
-                return
     except Exception:
-        pass
+        logger.exception("[handle_message] dream guard: 无法读取 owner_id")
+        _owner_id_dg = ""
+
+    if _owner_id_dg and str(user_id) == _owner_id_dg:
+        _dg_result = None
+        try:
+            from core.dream.dream_state import get_reality_guard_status as _dg_fn, DreamGuardStatus as _DGS
+            _dg_result = _dg_fn(user_id)
+        except Exception:
+            logger.error(
+                "[handle_message] dream guard: guard 异常 uid=%s — fail closed", user_id, exc_info=True
+            )
+            try:
+                from core.output import text_output as _to_dg
+                _tgt_dg = message.get("group_id") or user_id
+                await _to_dg.send(_tgt_dg, ["梦境状态暂时无法确认，已暂停现实对话。"], bool(message.get("group_id")))
+            except Exception:
+                pass
+            return
+
+        if _dg_result == _DGS.BLOCK_ACTIVE:
+            logger.info(
+                "[handle_message] dream guard: 拒绝 owner QQ 消息 uid=%s status=BLOCK_ACTIVE", user_id
+            )
+            try:
+                from core.output import text_output as _to_dg
+                _tgt_dg = message.get("group_id") or user_id
+                await _to_dg.send(_tgt_dg, ["正在梦境中，请先退出梦境再回到现实聊天。"], bool(message.get("group_id")))
+            except Exception:
+                pass
+            return
+        elif _dg_result == _DGS.BLOCK_UNCERTAIN:
+            logger.error(
+                "[handle_message] dream guard: 梦境状态不可确认 uid=%s — fail closed", user_id
+            )
+            try:
+                from core.output import text_output as _to_dg
+                _tgt_dg = message.get("group_id") or user_id
+                await _to_dg.send(_tgt_dg, ["梦境状态暂时无法确认，已暂停现实对话。"], bool(message.get("group_id")))
+            except Exception:
+                pass
+            return
 
     try:
         from core.config_loader import get_config as _get_config
@@ -335,11 +372,12 @@ async def handle_message(message: dict):
     if not segments:
         logger.warning("[handle_message] LLM 回复经处理后为空，本轮不发送")
         return
-    # QQ is a non-desktop channel: strip render tags before sending and storing
+    # Visible output (QQ): strip render/NMP tags only — preserve action descriptions
+    # for chat texture.  Heavy scrubbing only happens on the memory path below.
     from core.response_processor import strip_render_tags as _strip_rt
     segments = [s for s in (_strip_rt(seg) for seg in segments) if s]
     if not segments:
-        logger.warning("[handle_message] 回复经标签清理后为空，本轮不发送")
+        logger.warning("[handle_message] 回复经处理后为空，本轮不发送")
         return
 
     # ── 步骤8：发送回复 ──────────────────────────────────────────────────────
@@ -354,10 +392,15 @@ async def handle_message(message: dict):
     logger.info(f"[handle_message] 回复已发送，共 {len(segments)} 段")
 
     # ── 步骤9：异步后处理（写记忆、TTS 等，不阻塞本轮）──────────────────────
-    final_reply = "\n".join(segments)
+    # Memory path: scrub action descriptions before handing off to post_process.
+    # capture_turn, summarize_to_midterm, and the entire consolidation chain receive
+    # dialogue-only text — never raw action/narration content.
+    from core.reality_output_scrubber import scrub_reality_output_text as _scrub_qq
+    _raw_join = "\n".join(segments)
+    memory_reply = _scrub_qq(_raw_join) or ""
     from core.write_envelope import stamp_qq
     asyncio.create_task(
-        _pipeline.post_process(user_id, content, final_reply, target_id, is_group, pending_paths=_meta.get("pending_paths", []), envelope=stamp_qq())
+        _pipeline.post_process(user_id, content, memory_reply, target_id, is_group, pending_paths=_meta.get("pending_paths", []), envelope=stamp_qq())
     )
 
 
@@ -376,6 +419,9 @@ async def _reply_with_tool_result(
     from core import user_relation, response_processor
     from core.output import text_output
     from core.error_handler import log_error
+    from core.response_processor import strip_render_tags as _strip_rt
+    from core.reality_output_scrubber import scrub_reality_output_text as _scrub_qq
+    from core.write_envelope import stamp_qq
 
     group_id = target_id if is_group else None
     context = {
@@ -387,15 +433,42 @@ async def _reply_with_tool_result(
         "event_search_result": "",
         "lore_entries":        [],
     }
-    messages, _ = _pipeline.build_prompt(
-        user_id, "（工具已执行，请告知结果）", context, tool_result=tool_result, channel="qq"
+    # Synthetic user-turn label; actual user input ("确认" / supplementary text)
+    # is not forwarded here — build_prompt uses the same placeholder.
+    _turn_content = "（工具已执行，请告知结果）"
+    messages, _meta = _pipeline.build_prompt(
+        user_id, _turn_content, context, tool_result=tool_result, channel="qq"
     )
     try:
         raw_reply = await _pipeline.run_llm(messages)
-        segments = response_processor.process(raw_reply, _pipeline.character.name)
+    except Exception as e:
+        log_error("main._reply_with_tool_result.llm", e)
+        return
+
+    segments = response_processor.process(raw_reply, _pipeline.character.name)
+    # Visible output (QQ): strip render/NMP tags — mirrors QQ main message path.
+    segments = [s for s in (_strip_rt(seg) for seg in segments) if s]
+    if not segments:
+        logger.warning("[_reply_with_tool_result] 处理后回复为空，不发送")
+        return
+
+    try:
         await text_output.send(target_id, segments, is_group)
     except Exception as e:
-        log_error("main._reply_with_tool_result", e)
+        log_error("main._reply_with_tool_result.send", e)
+        return
+
+    # Memory path: scrub action/narration content before post_process.
+    # post_process runs non-blocking — failure must not prevent the already-sent reply.
+    _raw_join = "\n".join(segments)
+    memory_reply = _scrub_qq(_raw_join) or ""
+    asyncio.create_task(
+        _pipeline.post_process(
+            user_id, _turn_content, memory_reply, target_id, is_group,
+            pending_paths=_meta.get("pending_paths", []),
+            envelope=stamp_qq(),
+        )
+    )
 
 
 

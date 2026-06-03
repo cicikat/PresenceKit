@@ -50,6 +50,27 @@
 - `_ready_signal_bonus()` 目前固定 0，预留给未来按 turn_id join mid_term/episodic 就绪状态
 - debug logger：`short_term_weight` 会记录每组分数和 selected 状态
 
+### Reality 输出出口闸（scrub_reality_output_text）
+
+`core/reality_output_scrubber.py` — 现实 Chat 的统一出口清洗器，作用于所有出口：
+- `capture_turn` 写 short_term 前 + 写 event_log 前（不再保留原始动作描写）
+- `turn_sink.record_assistant_turn` 的 memory_text 传 post_process 前
+- `_fanout` 向所有通道（含 desktop channel_message）发送前
+- `admin/routers/chat.py` 的 HTTP 响应 reply 字段返回前
+- `main.py` QQ 段落发送前
+
+**清洗规则**（逐行，代码块豁免）：整行 `（…）`/`(…)` 删；整行 `*…*`/`_…_`/`> …` 删；以
+他/她/动作/沉默/停顿/视线/目光/呼吸/微微/缓缓/轻轻/慢慢 开头的行删；含 抬起/低头/靠近/
+尾巴/扫过/看你一眼/守着/趴/蹭/贴近/伸手/垂眸/眯眼/摸/抱(非抱歉/抱怨/抱负) 的行删。
+
+**Segment 路径**：有 segments 时只保留 `"type": "say"` 文本，再走行级过滤。
+
+清洗后为空 → 返回 `None`：写 short_term/event_log 时跳过该行；返回给前端时 fallback `"我在。"`。
+
+**Dream 隔离**：`dream_pipeline.py` 永不调用此模块。Dream 的 do/feel/env/segment 渲染协议完全不受影响。
+
+---
+
 ### 风格脱敏（_sanitize_assistant_message）
 
 读取 history 时，对过长的 assistant 回复做脱敏处理，防止角色扮演格式自反馈导致塌缩。注意：当前实现是在 `short_term.load()` 返回前清洗内存中的内容，磁盘上的原始 history 不会被改写。

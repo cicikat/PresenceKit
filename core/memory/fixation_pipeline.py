@@ -244,18 +244,29 @@ def capture_turn(
     if not envelope.can_write_memory:
         return turn_id
 
+    # Scrub reply for both short_term and event_log: keep dialogue only,
+    # discard all action / stage-direction / env content.
+    from core.reality_output_scrubber import scrub_reality_output_text as _scrub
+    _scrubbed_reply = _scrub(reply)
+
     if trigger_name:
         # scheduler 触发：只写 assistant，跳过 user 行（prompt 是系统注入的情景描述）
         writes = [
-            short_term.append(uid, "assistant", reply, turn_id=turn_id),
-            event_log.append(uid, "assistant", reply, emotion=emotion, turn_id=turn_id, trigger_name=trigger_name),
+            # Skip short_term when scrubber returned nothing (all non-dialogue)
+            short_term.append(uid, "assistant", _scrubbed_reply, turn_id=turn_id)
+            if _scrubbed_reply is not None else True,
+            # event_log also stores scrubbed text — no raw action descriptions persist
+            event_log.append(uid, "assistant", _scrubbed_reply, emotion=emotion, turn_id=turn_id, trigger_name=trigger_name)
+            if _scrubbed_reply is not None else True,
         ]
     else:
         writes = [
             short_term.append(uid, "user", user_msg, turn_id=turn_id),
-            short_term.append(uid, "assistant", reply, turn_id=turn_id),
+            short_term.append(uid, "assistant", _scrubbed_reply, turn_id=turn_id)
+            if _scrubbed_reply is not None else True,
             event_log.append(uid, "user", user_msg, turn_id=turn_id),
-            event_log.append(uid, "assistant", reply, emotion=emotion, turn_id=turn_id),
+            event_log.append(uid, "assistant", _scrubbed_reply, emotion=emotion, turn_id=turn_id)
+            if _scrubbed_reply is not None else True,
         ]
     if not all(writes):
         raise RuntimeError(f"capture_turn 写入不完整: turn_id={turn_id} writes={writes}")
