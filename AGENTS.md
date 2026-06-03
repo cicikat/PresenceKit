@@ -25,7 +25,7 @@ D:\ai\qq-st-bot\
 | 理解系统全貌、pipeline 流程 | `ARCHITECTURE.md` |
 | 改记忆相关逻辑（episodic / user_identity / growth legacy / mood / event_log / fixation_pipeline / user_hidden_state） | `docs/memory.md` |
 | 改 prompt 层结构、tag 规则、token 裁剪 | `docs/prompt-layers.md` |
-| 改工具系统（新增工具、探针规则、桌面动作） | `docs/tools.md` |
+| 改工具系统（新增工具、探针规则、桌面动作、execute() origin 闸门、Path B 守卫） | `docs/tools.md` |
 | 改调度器（定时触发、主动消息） | `docs/scheduler.md` |
 | 改 QQ / 桌宠通道、广播、WebSocket、跨通道接续 | `docs/channels.md` |
 | 改花园系统（情绪花槽、自动/被动浇水、采后处理、管理面板状态） | `docs/garden.md` |
@@ -82,6 +82,9 @@ D:\ai\qq-st-bot\
 | user_identity 文件 | `data/user_identity/{uid}.yaml`（当前 prompt 层6a 主入口） |
 | character_growth 三文件（legacy） | `角色_{uid}.md`（observer源）/ `.fingerprint.txt`（派生，存前150字）/ `.felt.md`（派生；当前主 prompt 不注入） |
 | 工具探针（声明式） | `core/tool_dispatcher.py` → `get_probe_prompt()` / `_TOOL_REGISTRY` |
+| trusted_user_text / probe grounding | `main.py` `_trusted_user_text` 在 media merge 前捕获；`admin/routers/chat.py` `run_owner_chat_turn(trusted_user_text=)` |
+| execute() origin 闸门 | `core/tool_dispatcher.py` → `_EXECUTE_ALLOWED_ORIGINS` / `execute(origin=)` |
+| Path B 守卫（意图反射去重） | `core/pipeline.py` → `_parse_and_execute_intent()` guards (a/b/c) + `_INTENT_LAST_ACTION` c2 幂等 |
 | history 风格脱敏 | `core/memory/short_term.py` → `_sanitize_assistant_message()` |
 
 ---
