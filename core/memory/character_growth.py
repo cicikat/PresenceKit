@@ -63,6 +63,8 @@ async def update(
     user_id: str,
     event_log_content: str,
     llm_client,
+    *,
+    char_id: str = "yexuan",
 ):
     """
     让 LLM 以角色的视角，根据最近对话日志更新认知文件。
@@ -92,7 +94,9 @@ async def update(
         with open(traits_path, encoding="utf-8") as _f:
             traits = yaml.safe_load(_f)["yexuan_traits"]
 
-        recent = _short_term.load(user_id)[-40:]
+        # char_id is forwarded from the caller; update() has no current production callers
+        # (consolidate_to_identity in fixation_pipeline replaced this path).
+        recent = _short_term.load(user_id, char_id=char_id)[-40:]
         history_lines = [msg["content"] for msg in recent]
 
         counts = count_traits_in_history(history_lines, traits)

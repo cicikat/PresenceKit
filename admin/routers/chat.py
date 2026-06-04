@@ -391,7 +391,16 @@ async def desktop_wake(body: dict = Body(default={})):
         try:
             from core.memory.short_term import load as _load_st
             from channels import desktop_ws as _dws_pa
-            history = _load_st(uid)
+            # Resolve active character to scope history read correctly.
+            # If active_prompt_assets.json is absent or empty, let exception propagate
+            # so Path A is skipped and Path B (full pipeline) takes over.
+            import json as _json_wake
+            from core.sandbox import get_paths as _gp_wake
+            _apa = _json_wake.loads(_gp_wake().active_prompt_assets().read_text(encoding="utf-8"))
+            _active_cid = (_apa.get("active_character") or "").strip()
+            if not _active_cid:
+                raise ValueError("active_character missing in active_prompt_assets.json")
+            history = _load_st(uid, char_id=_active_cid)
             user_turn_ids = {
                 e["_turn_id"] for e in history
                 if e.get("role") == "user" and e.get("_turn_id")

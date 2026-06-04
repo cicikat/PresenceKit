@@ -263,7 +263,7 @@ def load(user_id: str, *, char_id: str = "yexuan") -> list[dict]:
     return []
 
 
-def get_history(user_id: str, max_turns: int | None = None) -> list[dict]:
+def get_history(user_id: str, max_turns: int | None = None, *, char_id: str = "yexuan") -> list[dict]:
     """
     读取用户的短期对话历史，支持按轮数截断。
 
@@ -272,6 +272,7 @@ def get_history(user_id: str, max_turns: int | None = None) -> list[dict]:
         max_turns - 最多返回多少轮（一轮 = user + assistant 各一条）
                     None 时从 config.yaml 的 context.max_turns 读取，
                     再 fallback 到 memory.short_term_rounds，默认 20
+        char_id   - 角色桶 id（默认 "yexuan"，生产调用方须显式传入）
 
     返回：
         截断后的消息列表，格式同 load()
@@ -284,7 +285,7 @@ def get_history(user_id: str, max_turns: int | None = None) -> list[dict]:
             or cfg.get("memory", {}).get("short_term_rounds", 20)
         )
 
-    history = load(user_id)
+    history = load(user_id, char_id=char_id)
     # 每轮 = 2 条消息（user + assistant）
     max_msgs = max_turns * 2
     return history[-max_msgs:] if len(history) > max_msgs else history
@@ -389,8 +390,8 @@ class ShortTermMemory:
     def load(self, user_id: str, *, char_id: str = "yexuan") -> list[dict]:
         return load(user_id, char_id=char_id)
 
-    def get_history(self, user_id: str, max_turns: int | None = None) -> list[dict]:
-        return get_history(user_id, max_turns)
+    def get_history(self, user_id: str, max_turns: int | None = None, *, char_id: str = "yexuan") -> list[dict]:
+        return get_history(user_id, max_turns, char_id=char_id)
 
     def append(self, user_id: str, role: str, content: str, turn_id: str | None = None, *, char_id: str = "yexuan"):
         append(user_id, role, content, turn_id=turn_id, char_id=char_id)
