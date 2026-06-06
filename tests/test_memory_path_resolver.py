@@ -382,3 +382,21 @@ def test_history_same_root_as_mid_term(sandbox):
     hist = resolve_path(REALITY, "history")
     mt = resolve_path(REALITY, "mid_term")
     assert hist.parent == mt.parent
+
+
+# ---------------------------------------------------------------------------
+# P1-2H: event_log path layout consistency
+# event_log must live under runtime/memory/{char_id}/{uid}/event_log
+# ---------------------------------------------------------------------------
+
+def test_event_log_exact_layout(sandbox):
+    """event_log → runtime/memory/{char_id}/{uid}/event_log (directory, not a file)"""
+    p = _s(resolve_path(REALITY, "event_log"))
+    assert f"runtime/memory/{CHAR}/{UID}/event_log" in p
+
+
+def test_event_log_same_root_as_mid_term(sandbox):
+    """event_log parent must equal user_memory_root (same as mid_term's parent)."""
+    el = resolve_path(REALITY, "event_log")
+    mt = resolve_path(REALITY, "mid_term")
+    assert el.parent == mt.parent

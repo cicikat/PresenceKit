@@ -71,7 +71,7 @@ def resolve_path(scope: MemoryScope, artifact: str) -> Path:
         return paths.user_memory_root(uid, char_id=char_id) / "history.json"
 
     if artifact == "event_log":
-        return paths.event_log(char_id=char_id) / uid
+        return paths.user_memory_root(uid, char_id=char_id) / "event_log"
 
     if artifact == "mid_term":
         return paths.user_memory_root(uid, char_id=char_id) / "mid_term.json"

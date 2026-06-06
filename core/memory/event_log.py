@@ -22,6 +22,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from core.error_handler import log_error
+from core.memory.path_resolver import resolve_path
+from core.memory.scope import MemoryScope
 from core.migration import for_read
 from core.sandbox import get_paths, safe_user_id
 
@@ -35,15 +37,16 @@ _TURN_ID_RE = re.compile(r"turn_id:(\S+)")
 
 
 def _event_log_write_dir(user_id: str, *, char_id: str = "yexuan") -> Path:
-    """写目录：始终写新布局 memory/{char_id}/{uid}/event_log/。"""
-    uid = safe_user_id(user_id)
-    return get_paths().user_memory_root(uid, char_id=char_id) / "event_log"
+    """写目录：始终写新布局 runtime/memory/{char_id}/{uid}/event_log/。"""
+    scope = MemoryScope.reality_scope(str(user_id), char_id)
+    return resolve_path(scope, "event_log")
 
 
 def _event_log_read_dir(user_id: str, *, char_id: str = "yexuan") -> Path:
     """读目录：新目录存在时读新，否则降级旧路径。"""
     uid = safe_user_id(user_id)
-    new = get_paths().user_memory_root(uid, char_id=char_id) / "event_log"
+    scope = MemoryScope.reality_scope(uid, char_id)
+    new = resolve_path(scope, "event_log")
     old = get_paths()._p("event_log") / uid
     # for_read() reads bytes — unsuitable for directories; check with is_dir() instead.
     return new if new.is_dir() else old
@@ -53,23 +56,24 @@ def _day_file_read(user_id: str, date: datetime, *, char_id: str = "yexuan") -> 
     """读：指定日期日志文件，新存在读新，否则降级旧路径。"""
     uid = safe_user_id(user_id)
     date_str = date.strftime("%Y-%m-%d")
-    new = get_paths().user_memory_root(uid, char_id=char_id) / "event_log" / f"{date_str}.md"
+    scope = MemoryScope.reality_scope(uid, char_id)
+    new = resolve_path(scope, "event_log") / f"{date_str}.md"
     old = get_paths()._p("event_log") / uid / f"{date_str}.md"
     return for_read(new, old)
 
 
 def _day_file_write(user_id: str, date: datetime, *, char_id: str = "yexuan") -> Path:
     """写：指定日期日志文件，始终写新布局，保证目录存在。"""
-    uid = safe_user_id(user_id)
-    d = get_paths().user_memory_root(uid, char_id=char_id) / "event_log"
+    scope = MemoryScope.reality_scope(str(user_id), char_id)
+    d = resolve_path(scope, "event_log")
     d.mkdir(parents=True, exist_ok=True)
     return d / f"{date.strftime('%Y-%m-%d')}.md"
 
 
 def _full_log_file_write(user_id: str, *, char_id: str = "yexuan") -> Path:
     """写：full_log.md，始终写新布局。"""
-    uid = safe_user_id(user_id)
-    d = get_paths().user_memory_root(uid, char_id=char_id) / "event_log"
+    scope = MemoryScope.reality_scope(str(user_id), char_id)
+    d = resolve_path(scope, "event_log")
     d.mkdir(parents=True, exist_ok=True)
     return d / "full_log.md"
 
@@ -272,7 +276,8 @@ def get_recent_days(user_id: str, days: int = 3, *, char_id: str = "yexuan") -> 
         拼接后的日志文本，空则返回空字符串
     """
     uid = safe_user_id(user_id)
-    new_dir = get_paths().user_memory_root(uid, char_id=char_id) / "event_log"
+    scope = MemoryScope.reality_scope(uid, char_id)
+    new_dir = resolve_path(scope, "event_log")
     old_dir = get_paths()._p("event_log") / uid
 
     parts = []
