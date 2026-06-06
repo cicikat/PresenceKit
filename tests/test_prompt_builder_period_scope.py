@@ -69,20 +69,16 @@ def test_get_period_info_signature_accepts_char_id():
 # 3. Backward compat (no char_id arg → default yexuan)
 # ─────────────────────────────────────────────────────────────────────────────
 
-def test_get_period_info_default_char_id(tmp_path, monkeypatch):
+def test_get_period_info_default_char_id(sandbox):
     """char_id 省略時は 'yexuan' バケットを読む (後方互換)."""
     uid = "u999"
-    yexuan_dir = tmp_path / uid / "yexuan"
-    yexuan_dir.mkdir(parents=True)
-    (yexuan_dir / "profile.json").write_text(
+    path = sandbox.user_memory_root(uid, char_id="yexuan") / "profile.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
         json.dumps({"last_period_date": "2026-01-15"}), encoding="utf-8"
     )
 
     import core.memory.user_profile as _up
-    mock_paths = MagicMock()
-    mock_paths.user_memory_root.side_effect = lambda u, char_id="yexuan": tmp_path / u / char_id
-    monkeypatch.setattr(_up, "get_paths", lambda: mock_paths)
-
     result = _up.get_period_info(uid)
     assert result == {"last_period_date": "2026-01-15"}
 
@@ -91,21 +87,17 @@ def test_get_period_info_default_char_id(tmp_path, monkeypatch):
 # 4. Data isolation: different char_ids → different buckets
 # ─────────────────────────────────────────────────────────────────────────────
 
-def test_get_period_info_char_id_isolation(tmp_path, monkeypatch):
+def test_get_period_info_char_id_isolation(sandbox):
     """char_id="yexuan" vs "hongcha" で異なる生理期データを読む."""
     uid = "u1"
     for char, date in [("yexuan", "2026-06-01"), ("hongcha", "2026-06-15")]:
-        d = tmp_path / uid / char
-        d.mkdir(parents=True)
-        (d / "profile.json").write_text(
+        path = sandbox.user_memory_root(uid, char_id=char) / "profile.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
             json.dumps({"last_period_date": date}), encoding="utf-8"
         )
 
     import core.memory.user_profile as _up
-    mock_paths = MagicMock()
-    mock_paths.user_memory_root.side_effect = lambda u, char_id="yexuan": tmp_path / u / char_id
-    monkeypatch.setattr(_up, "get_paths", lambda: mock_paths)
-
     yexuan_info = _up.get_period_info(uid, char_id="yexuan")
     hongcha_info = _up.get_period_info(uid, char_id="hongcha")
 
@@ -207,25 +199,20 @@ def test_build_passes_char_id_yexuan(monkeypatch):
 # 6. Content isolation: hongcha build() must not inject yexuan period text
 # ─────────────────────────────────────────────────────────────────────────────
 
-def test_build_hongcha_excludes_yexuan_period_data(tmp_path, monkeypatch):
+def test_build_hongcha_excludes_yexuan_period_data(sandbox, monkeypatch):
     """yexuan は生理期データあり, hongcha はなし → hongcha build() に生理期層が入らない."""
     uid = "u1"
     today = datetime.date.today().isoformat()
 
     for char, date in [("yexuan", today), ("hongcha", None)]:
-        d = tmp_path / uid / char
-        d.mkdir(parents=True)
-        (d / "profile.json").write_text(
+        path = sandbox.user_memory_root(uid, char_id=char) / "profile.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
             json.dumps({"last_period_date": date}), encoding="utf-8"
         )
 
-    import core.memory.user_profile as _up
     import core.prompt_builder as _pb
     from core.character_loader import Character
-
-    mock_paths = MagicMock()
-    mock_paths.user_memory_root.side_effect = lambda u, char_id="yexuan": tmp_path / u / char_id
-    monkeypatch.setattr(_up, "get_paths", lambda: mock_paths)
 
     _apply_build_stubs(monkeypatch)
 
