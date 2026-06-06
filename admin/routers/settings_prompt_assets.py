@@ -14,12 +14,14 @@ import json
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from admin.auth import verify_token
-from core.asset_registry import get_registry, reload_registry
+from core.asset_registry import get_registry, reload_registry, _AVATARS_DIR, _AVATAR_EXTS
 from core.sandbox import get_paths
+from core.safe_write import safe_write_bytes
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -93,6 +95,125 @@ async def get_prompt_assets(auth=Depends(verify_token)):
         "dream_presets": [e.as_ui_dict() for e in reg.list_ui("dream_preset")],
         "active":        _read_active(),
     }
+
+
+_AVATAR_CONTENT_TYPES: dict[str, str] = {
+    "png":  "image/png",
+    "jpg":  "image/jpeg",
+    "jpeg": "image/jpeg",
+    "webp": "image/webp",
+}
+_UPLOAD_ALLOWED_CONTENT_TYPES: dict[str, str] = {
+    "image/png":  "png",
+    "image/jpeg": "jpg",
+    "image/webp": "webp",
+}
+_AVATAR_MAX_BYTES = 5 * 1024 * 1024  # 5 MB
+
+
+def _resolve_char_or_404(char_id: str):
+    """Resolve char_id from registry; raise 404 on unknown id. Never fallbacks."""
+    reg = get_registry()
+    try:
+        return reg.resolve(char_id, "character")
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@router.get("/settings/character-avatar/{char_id}", summary="获取角色头像")
+async def get_character_avatar(char_id: str, v: Optional[str] = None, auth=Depends(verify_token)):
+    """Serve avatar for a character. Priority: runtime override > authored default > 404.
+
+    Fail-loud on unknown char_id. Never guesses from label or filename.
+    v= query param is ignored (cache-busting only).
+    """
+    _resolve_char_or_404(char_id)
+
+    # Runtime override first
+    runtime_dir = get_paths().runtime_character_dir(char_id=char_id)
+    for ext in _AVATAR_EXTS:
+        p = runtime_dir / f"avatar.{ext}"
+        if p.exists():
+            return FileResponse(str(p), media_type=_AVATAR_CONTENT_TYPES[ext])
+
+    # Authored default
+    authored = _AVATARS_DIR / f"{char_id}.png"
+    if authored.exists():
+        return FileResponse(str(authored), media_type="image/png")
+
+    raise HTTPException(status_code=404, detail=f"no avatar for character {char_id!r}")
+
+
+@router.post("/settings/characters/{char_id}/avatar", summary="上传角色头像（runtime override）")
+async def upload_character_avatar(
+    char_id: str,
+    file: UploadFile,
+    auth=Depends(verify_token),
+):
+    """Upload a runtime override avatar for char_id.
+
+    - char_id must exist in the asset registry (fail-loud, no fallback).
+    - Accepted types: image/png, image/jpeg, image/webp. Max 5 MB.
+    - Atomically replaces any existing runtime avatar.
+    - Calls reload_registry() so avatar_url in /settings/prompt-assets reflects the new file.
+    """
+    _resolve_char_or_404(char_id)
+
+    ct = (file.content_type or "").lower().split(";")[0].strip()
+    if ct not in _UPLOAD_ALLOWED_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"不支持的文件类型：{ct!r}，仅支持 image/png、image/jpeg、image/webp",
+        )
+    ext = _UPLOAD_ALLOWED_CONTENT_TYPES[ct]
+
+    content = await file.read()
+    if len(content) > _AVATAR_MAX_BYTES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"文件超过 5 MB 限制（实际 {len(content)} 字节）",
+        )
+
+    runtime_dir = get_paths().runtime_character_dir(char_id=char_id)
+
+    # Remove any existing runtime avatars with different extensions
+    for old_ext in _AVATAR_EXTS:
+        if old_ext != ext:
+            old_p = runtime_dir / f"avatar.{old_ext}"
+            if old_p.exists():
+                try:
+                    old_p.unlink()
+                except Exception:
+                    pass
+
+    dest = runtime_dir / f"avatar.{ext}"
+    ok = safe_write_bytes(dest, content)
+    if not ok:
+        raise HTTPException(status_code=500, detail="头像写入失败")
+
+    reload_registry()
+    return {"char_id": char_id, "avatar_url": f"/settings/character-avatar/{char_id}"}
+
+
+@router.delete("/settings/characters/{char_id}/avatar", summary="删除角色 runtime 头像覆盖")
+async def delete_character_avatar(char_id: str, auth=Depends(verify_token)):
+    """Delete the runtime override avatar for char_id. Falls back to authored default.
+
+    char_id must exist in the asset registry (fail-loud, no fallback to yexuan).
+    Returns deleted=false if no runtime override existed.
+    """
+    _resolve_char_or_404(char_id)
+
+    runtime_dir = get_paths().runtime_character_dir(char_id=char_id)
+    deleted = False
+    for ext in _AVATAR_EXTS:
+        p = runtime_dir / f"avatar.{ext}"
+        if p.exists():
+            p.unlink()
+            deleted = True
+
+    reload_registry()
+    return {"char_id": char_id, "deleted": deleted}
 
 
 class PromptAssetsUpdate(BaseModel):

@@ -31,6 +31,7 @@ _CHARACTERS_DIR = Path("characters")
 _LOREBOOKS_DIR = _CHARACTERS_DIR / "reality" / "lorebooks"
 _JAILBREAKS_DIR = _CHARACTERS_DIR / "reality" / "jailbreaks"
 _DREAM_PRESETS_DIR = _CHARACTERS_DIR / "dream_presets"
+_AVATARS_DIR = _CHARACTERS_DIR / "reality" / "avatars"
 
 # Stem substrings that mark non-rolecard / scaffold files
 _NON_CARD_KEYWORDS = frozenset({"template", "author_notes", "example"})
@@ -54,9 +55,14 @@ class AssetEntry:
     filename: str
     kind: str
     hidden: bool
+    avatar_url: str | None = None
+    has_runtime_avatar: bool = False
 
     def as_ui_dict(self) -> dict:
-        return {"id": self.id, "label": self.label, "kind": self.kind}
+        d: dict = {"id": self.id, "label": self.label, "kind": self.kind, "avatar_url": self.avatar_url}
+        if self.kind == "character":
+            d["has_runtime_avatar"] = self.has_runtime_avatar
+        return d
 
     def path(self) -> Path:
         if self.kind == "character":
@@ -72,6 +78,30 @@ class AssetEntry:
 
 # ── Per-kind scanners ─────────────────────────────────────────────────────────
 
+_AVATAR_EXTS = ("png", "jpg", "jpeg", "webp")
+
+
+def _avatar_info_for(char_id: str) -> tuple[str | None, bool]:
+    """Return (avatar_url, has_runtime_avatar).
+
+    Priority: runtime override (data/runtime/characters/{id}/avatar.*) >
+              authored default (characters/reality/avatars/{id}.png).
+    avatar_url includes ?v={mtime} for cache-busting.
+    """
+    from core.sandbox import get_paths
+    runtime_dir = get_paths().runtime_character_dir(char_id=char_id)
+    for ext in _AVATAR_EXTS:
+        p = runtime_dir / f"avatar.{ext}"
+        if p.exists():
+            mtime = int(p.stat().st_mtime)
+            return (f"/settings/character-avatar/{char_id}?v={mtime}", True)
+    authored = _AVATARS_DIR / f"{char_id}.png"
+    if authored.exists():
+        mtime = int(authored.stat().st_mtime)
+        return (f"/settings/character-avatar/{char_id}?v={mtime}", False)
+    return (None, False)
+
+
 def _scan_characters() -> list[AssetEntry]:
     if not _CHARACTERS_DIR.exists():
         return []
@@ -85,18 +115,21 @@ def _scan_characters() -> list[AssetEntry]:
             label = data.get("name") or p.stem
         except Exception:
             pass
+        avatar_url, has_runtime = _avatar_info_for(p.stem)
         result.append(AssetEntry(id=p.stem, label=label, filename=p.name,
-                                  kind="character", hidden=hidden))
+                                  kind="character", hidden=hidden,
+                                  avatar_url=avatar_url,
+                                  has_runtime_avatar=has_runtime))
     # Also scan .txt and .md character cards
     for ext in ("*.txt", "*.md"):
         for p in sorted(_CHARACTERS_DIR.glob(ext)):
             stem_lower = p.stem.lower()
-            if any(kw in stem_lower for kw in _NON_CARD_KEYWORDS):
-                hidden = True
-            else:
-                hidden = False
+            hidden = any(kw in stem_lower for kw in _NON_CARD_KEYWORDS)
+            avatar_url, has_runtime = _avatar_info_for(p.stem)
             result.append(AssetEntry(id=p.stem, label=p.stem, filename=p.name,
-                                      kind="character", hidden=hidden))
+                                      kind="character", hidden=hidden,
+                                      avatar_url=avatar_url,
+                                      has_runtime_avatar=has_runtime))
     return result
 
 

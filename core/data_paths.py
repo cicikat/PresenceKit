@@ -434,6 +434,11 @@ class DataPaths:
         用于 v1 模式下枚举所有用户（各 uid 是其直接子目录）。"""
         return self._p("runtime", "memory", char_id)
 
+    def runtime_character_dir(self, *, char_id: str) -> Path:
+        """Per-character runtime override dir: data/runtime/characters/{char_id}/
+        Used for runtime-uploaded assets (e.g. avatar overrides)."""
+        return self._p("runtime", "characters", char_id)
+
     def cleanup(self):
         if self.mode != "test":
             raise RuntimeError("只有 test 模式才能执行 cleanup()")

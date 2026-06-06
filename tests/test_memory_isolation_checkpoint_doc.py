@@ -12,6 +12,10 @@ REQUIRED_STRINGS = [
     "slow_queue scope payload",
     "pipeline MemoryScope",
     "P2 migration",
+    "P2 Dry-Run Results",
+    "migrate_uid_only_memory_dry_run",
+    "copy=0",
+    "no actual migration needed",
 ]
 
 

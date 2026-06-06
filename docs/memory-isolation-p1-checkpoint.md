@@ -169,9 +169,11 @@ per-character fact isolation is needed or whether global is correct.
 
 ### P2 migration — Legacy data migration
 
-Rename on-disk files from old uid-only paths to the new `{char_id}/{uid}/` layout for
-any users who have data under the legacy tree. Provide a migration script; test with
-dry-run mode.
+**Dry-run complete (2026-06-06)** — see §10.
+
+Result: `copy=0 conflict=0`. All active uid data is already under the yexuan v1
+scoped paths (`runtime/memory/yexuan/{uid}/`). No actual file migration is needed.
+hongcha and j5412 have no legacy data to migrate (empty histories).
 
 ### Optional / future
 
@@ -254,3 +256,39 @@ Full suite: `pytest` (approximately 2096 tests as of P1-FINAL).
 | `tests/test_memory_isolation_p0_final.py` | P0 final gate |
 | `docs/memory.md` | General memory architecture |
 | `docs/memory-isolation-p1-checkpoint.md` | **This file** |
+
+---
+
+## 10. P2 Dry-Run Results (2026-06-06)
+
+**Script**: `scripts/migrate_uid_only_memory_dry_run.py`
+**Tests**: `tests/test_migrate_uid_only_memory_dry_run.py` — 30 tests, all passed
+**Status**: dry-run complete, no actual migration needed
+
+### What the script does
+
+Scans two sources:
+- **Legacy tree** (`data/{artifact}/{uid}.{ext}`) — uid-only paths that pre-date P1-2
+- **v1 scoped tree** (`data/runtime/memory/yexuan/{uid}/`) — post-P1-2 resolver paths
+
+For each uid × artifact combination it classifies the entry as one of:
+`copy` (source exists, target absent) | `skip` (already migrated) | `conflict` (both exist) | `missing` (neither exists)
+
+### Actual run results
+
+| action | count |
+|--------|-------|
+| copy | 0 |
+| conflict | 0 |
+| skip | — (all active uids already v1) |
+| missing | — (hongcha / j5412 empty) |
+
+All active user data was already written to v1 scoped paths by the live runtime since
+P1-2 shipped. No legacy-tree files exist for any active uid.
+
+### Implications
+
+- **No copy/move/rollback implementation required.** There is nothing to migrate.
+- **hongcha and j5412** have no legacy data; their v1 histories remain empty.
+- **character_growth** was not included in the script scope — see §4.1 and §7.
+- **Do not implement** copy, rollback, or delete logic on top of this script.

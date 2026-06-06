@@ -101,8 +101,11 @@ def _resolve_slot_for_mood(mood: str) -> str | None:
 
 def _bootstrap(*, char_id: str = "yexuan") -> dict:
     """plants.json 不存在则初始化五槽位；storage.json 不存在则初始化空仓库。返回 plants 数据。"""
-    read_plants = _read_plants_path(char_id)
-    read_storage = _read_storage_path(char_id)
+    garden_dir = get_paths().garden(char_id=char_id)
+    garden_dir.mkdir(parents=True, exist_ok=True)
+
+    read_plants = garden_dir / "plants.json"
+    read_storage = garden_dir / "storage.json"
 
     if not read_plants.exists():
         now = time.time()
@@ -149,7 +152,7 @@ def _on_bloom(plant: dict, storage: dict) -> None:
 
 # ── 公开函数 ───────────────────────────────────────────────────────────────────
 
-def water(slot_key: str, *, reason: str, char_id: str = "yexuan") -> dict:
+def water(slot_key: str, *, reason: str, char_id: str) -> dict:
     """给指定槽位浇一次水，推进 growth / stage，bloom 时自动重播种。"""
     with _garden_lock:
         data = _bootstrap(char_id=char_id)
@@ -195,7 +198,7 @@ def water(slot_key: str, *, reason: str, char_id: str = "yexuan") -> dict:
         }
 
 
-def auto_water_tick(*, char_id: str = "yexuan") -> dict | None:
+def auto_water_tick(*, char_id: str) -> dict | None:
     """scheduler 调用入口。按概率 roll，命中后读 mood 并浇对应槽位。"""
     if random.random() >= AUTO_WATER_PROBABILITY:
         return None
@@ -215,7 +218,7 @@ def auto_water_tick(*, char_id: str = "yexuan") -> dict | None:
     return result
 
 
-def force_water(mood: str | None = None, *, char_id: str = "yexuan") -> dict:
+def force_water(mood: str | None = None, *, char_id: str) -> dict:
     """被动浇水入口（工具调用）。mood 为 None 时自动读当前情绪。"""
     if mood is None:
         from core.memory.mood_state import get_current
@@ -228,7 +231,7 @@ def force_water(mood: str | None = None, *, char_id: str = "yexuan") -> dict:
     return water(slot_key, reason="force", char_id=char_id)
 
 
-def daily_check(*, char_id: str = "yexuan") -> list:
+def daily_check(*, char_id: str) -> list:
     """
     每天扫一次：harvest 过期 / harvest 触发 handle / vase 枯萎。
     状态变更必执行；返回事件列表给上层 trigger 决定是否让叶瑄说话。
@@ -310,7 +313,7 @@ def daily_check(*, char_id: str = "yexuan") -> list:
         return events
 
 
-def get_state(*, char_id: str = "yexuan") -> dict:
+def get_state(*, char_id: str) -> dict:
     """给 admin 路由返回完整花园状态。"""
     with _garden_lock:
         data = _bootstrap(char_id=char_id)
