@@ -10,6 +10,7 @@ import logging
 
 from core.llm_output_validator import record_failure, reset
 from core.memory import pending_perception as _pending_perception
+from core.memory.scope import MemoryScope
 
 logger = logging.getLogger(__name__)
 
@@ -473,6 +474,7 @@ class Pipeline:
                         "emotion": _emotion,
                         "trigger_name": trigger_name,
                         "char_id": _char_id,
+                        "scope": MemoryScope.reality_scope(str(user_id), _char_id).to_payload(),
                     })
 
         # ── uid_lock 释放，入慢队列 ───────────────────────────────────────────
@@ -490,6 +492,7 @@ class Pipeline:
                 "tags": _mt_tags,
                 "emotion": _emotion,
                 "char_id": _char_id,
+                "scope": MemoryScope.reality_scope(str(user_id), _char_id).to_payload(),
             })
         slow_queue.enqueue("consistency_check", {
             "reply": reply,
@@ -499,6 +502,7 @@ class Pipeline:
                 "uid": user_id,
                 "recent": _profile_recent,
                 "char_id": _char_id,
+                "scope": MemoryScope.reality_scope(str(user_id), _char_id).to_payload(),
             })
             logger.info(f"[pipeline.post_process] 用户画像更新已入队: {user_id}")
 
@@ -722,18 +726,34 @@ class Pipeline:
 # 慢队列独立函数 + handlers（由 main.py 注册到 slow_queue）
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def _get_char_id_from_payload(payload: dict, handler_name: str) -> str:
-    """从 payload 读取 char_id，缺失时 WARN fallback yexuan（DLQ 兼容层）。"""
+def _get_scope_from_payload(payload: dict, handler_name: str) -> MemoryScope:
+    """从 payload 解析 MemoryScope。
+
+    优先读 payload["scope"]（新格式）；无 scope 时 fallback 到 legacy uid+char_id；
+    两者均缺时 WARN + fallback yexuan（DLQ 兼容层）。
+    payload["scope"] 存在但解析失败或 domain 非 reality → fail-loud，不 fallback。
+    """
+    raw = payload.get("scope")
+    if raw is not None:
+        scope = MemoryScope.from_payload(raw)  # 坏数据 fail-loud
+        if scope.domain != "reality":
+            raise ValueError(
+                f"[pipeline.{handler_name}] scope domain must be 'reality', got {scope.domain!r}"
+            )
+        return scope
+
+    # legacy fallback：旧 payload 无 scope 字段
+    uid = payload.get("uid", "unknown")
     char_id = payload.get("char_id")
-    if char_id is None:
-        uid = payload.get("uid", "unknown")
-        logger.warning(
-            "[pipeline.%s] payload 缺少 char_id，使用 legacy DLQ fallback char_id=yexuan "
-            "(uid=%s, task_type=%s)",
-            handler_name, uid, handler_name,
-        )
-        return "yexuan"
-    return char_id
+    if char_id:
+        return MemoryScope.reality_scope(str(uid), char_id)
+
+    logger.warning(
+        "[pipeline.%s] payload 缺少 scope/char_id，使用 legacy DLQ fallback char_id=yexuan "
+        "(uid=%s)",
+        handler_name, uid,
+    )
+    return MemoryScope.reality_scope(str(uid), "yexuan")
 
 
 async def _do_compress_episode(
@@ -821,8 +841,9 @@ async def _handler_mid_term_append(payload: dict) -> None:
     # 保留旧 handler 供 DLQ 里残留任务重试用，新入队任务已改走 summarize_to_midterm
     from core.memory import locks as _locks, mid_term as _mid_term
     from core import llm_client
-    uid = payload["uid"]
-    char_id = _get_char_id_from_payload(payload, "_handler_mid_term_append")
+    scope = _get_scope_from_payload(payload, "_handler_mid_term_append")
+    uid = scope.uid
+    char_id = scope.character_id
     async with _locks.uid_lock(uid):
         summary = await llm_client.summarize_turn(
             payload["user_content"], payload["reply"], tags=payload.get("tags")
@@ -832,12 +853,12 @@ async def _handler_mid_term_append(payload: dict) -> None:
 
 async def _handler_episodic_compress(payload: dict) -> None:
     # 保留旧 handler 供 DLQ 里残留任务重试用，新入队任务已改走 reflect_to_episodic
-    char_id = _get_char_id_from_payload(payload, "_handler_episodic_compress")
+    scope = _get_scope_from_payload(payload, "_handler_episodic_compress")
     await _do_compress_episode(
-        user_id=payload["uid"],
+        user_id=scope.uid,
         user_content=payload["user_content"],
         reply=payload["reply"],
-        char_id=char_id,
+        char_id=scope.character_id,
     )
 
 
@@ -857,8 +878,9 @@ async def _handler_consistency_check(payload: dict) -> None:
 
 async def _handler_user_profile_update(payload: dict) -> None:
     from core.memory import locks as _locks, user_profile
-    uid = payload["uid"]
-    char_id = _get_char_id_from_payload(payload, "_handler_user_profile_update")
+    scope = _get_scope_from_payload(payload, "_handler_user_profile_update")
+    uid = scope.uid
+    char_id = scope.character_id
     async with _locks.uid_lock(uid):
         await user_profile.extract_and_update(uid, payload["recent"], char_id=char_id)
     logger.info(f"[pipeline.user_profile] 画像更新完成: {uid}")

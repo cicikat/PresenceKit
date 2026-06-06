@@ -8,6 +8,7 @@ import logging
 import time
 
 from core.error_handler import log_error
+from core.memory.scope import MemoryScope
 from core.sandbox import get_paths
 
 logger = logging.getLogger(__name__)
@@ -78,6 +79,7 @@ async def _sweep_uid(uid: str, *, char_id: str) -> None:
         "char_id": char_id,
         "mid_ids": aged_ids,
         "trigger": "sweep",
+        "scope": MemoryScope.reality_scope(str(uid), char_id).to_payload(),
     })
     logger.info(
         f"[scheduler.episodic_sweep] uid={uid} char={char_id} 入队 reflect_to_episodic sweep "

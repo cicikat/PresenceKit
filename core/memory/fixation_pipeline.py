@@ -338,6 +338,7 @@ async def summarize_to_midterm(
             "mid_ids": [mid_id],
             "trigger": "eager",
             "char_id": char_id,
+            "scope": MemoryScope.reality_scope(str(uid), char_id).to_payload(),
         })
         logger.info(f"[fixation] reflect_to_episodic eager 已入队: uid={uid} emotion={emotion}")
 
@@ -479,7 +480,11 @@ async def reflect_to_episodic(
 
     # uid_lock 释放后检查阈值，携带入队时的 char_id 快照
     if _should_consolidate(state):
-        slow_queue.enqueue("consolidate_to_identity", {"uid": uid, "char_id": char_id})
+        slow_queue.enqueue("consolidate_to_identity", {
+            "uid": uid,
+            "char_id": char_id,
+            "scope": MemoryScope.reality_scope(str(uid), char_id).to_payload(),
+        })
         logger.info(f"[fixation] consolidate_to_identity 已入队: uid={uid}")
 
     duration_ms = int((time.time() - _ts_start) * 1000)
@@ -691,30 +696,46 @@ async def consolidate_to_identity(uid: str, llm_client, *, char_id: str = "yexua
 # slow_queue handler 包装
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def _get_char_id_from_payload(payload: dict, handler_name: str) -> str:
-    """从 payload 读取 char_id，缺失时 WARN fallback yexuan（DLQ 兼容层）。"""
+def _get_scope_from_payload(payload: dict, handler_name: str) -> MemoryScope:
+    """从 payload 解析 MemoryScope。
+
+    优先读 payload["scope"]（新格式）；无 scope 时 fallback 到 legacy uid+char_id；
+    两者均缺时 WARN + fallback yexuan（DLQ 兼容层）。
+    payload["scope"] 存在但解析失败或 domain 非 reality → fail-loud，不 fallback。
+    """
+    raw = payload.get("scope")
+    if raw is not None:
+        scope = MemoryScope.from_payload(raw)  # 坏数据 fail-loud
+        if scope.domain != "reality":
+            raise ValueError(
+                f"[fixation.{handler_name}] scope domain must be 'reality', got {scope.domain!r}"
+            )
+        return scope
+
+    # legacy fallback：旧 payload 无 scope 字段
+    uid = payload.get("uid", "unknown")
     char_id = payload.get("char_id")
-    if char_id is None:
-        uid = payload.get("uid", "unknown")
-        logger.warning(
-            "[fixation.%s] payload 缺少 char_id，使用 legacy DLQ fallback char_id=yexuan "
-            "(uid=%s, task_type=%s)",
-            handler_name, uid, handler_name,
-        )
-        return "yexuan"
-    return char_id
+    if char_id:
+        return MemoryScope.reality_scope(str(uid), char_id)
+
+    logger.warning(
+        "[fixation.%s] payload 缺少 scope/char_id，使用 legacy DLQ fallback char_id=yexuan "
+        "(uid=%s)",
+        handler_name, uid,
+    )
+    return MemoryScope.reality_scope(str(uid), "yexuan")
 
 
 async def handler_summarize_to_midterm(payload: dict) -> None:
-    char_id = _get_char_id_from_payload(payload, "handler_summarize_to_midterm")
+    scope = _get_scope_from_payload(payload, "handler_summarize_to_midterm")
     await summarize_to_midterm(
         turn_id=payload["turn_id"],
-        uid=payload["uid"],
+        uid=scope.uid,
         user_msg=payload["user_content"],
         reply=payload["reply"],
         tags=payload.get("tags", []),
         emotion=payload.get("emotion", "neutral"),
-        char_id=char_id,
+        char_id=scope.character_id,
     )
 
 
@@ -722,8 +743,9 @@ async def handler_capture_turn_retry(payload: dict) -> None:
     from core.memory import locks
     from core.write_envelope import WriteEnvelope, SourceType
 
-    uid = payload["uid"]
-    char_id = _get_char_id_from_payload(payload, "handler_capture_turn_retry")
+    scope = _get_scope_from_payload(payload, "handler_capture_turn_retry")
+    uid = scope.uid
+    char_id = scope.character_id
     # retry 只有在原调用拥有写入权限时才会入队，固定用 INGEST 源恢复写入
     _env = WriteEnvelope(
         source=SourceType.INGEST,
@@ -745,16 +767,16 @@ async def handler_capture_turn_retry(payload: dict) -> None:
 
 
 async def handler_reflect_to_episodic(payload: dict) -> None:
-    char_id = _get_char_id_from_payload(payload, "handler_reflect_to_episodic")
+    scope = _get_scope_from_payload(payload, "handler_reflect_to_episodic")
     await reflect_to_episodic(
-        uid=payload["uid"],
+        uid=scope.uid,
         mid_ids=payload.get("mid_ids", []),
         trigger=payload.get("trigger", "eager"),
-        char_id=char_id,
+        char_id=scope.character_id,
     )
 
 
 async def handler_consolidate_to_identity(payload: dict) -> None:
     from core import llm_client
-    char_id = _get_char_id_from_payload(payload, "handler_consolidate_to_identity")
-    await consolidate_to_identity(uid=payload["uid"], llm_client=llm_client, char_id=char_id)
+    scope = _get_scope_from_payload(payload, "handler_consolidate_to_identity")
+    await consolidate_to_identity(uid=scope.uid, llm_client=llm_client, char_id=scope.character_id)

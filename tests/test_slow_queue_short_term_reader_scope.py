@@ -335,23 +335,23 @@ async def test_legacy_dlq_payload_missing_char_id_warns_and_falls_back(caplog):
     payload 缺少 char_id 时，_get_char_id_from_payload 发出 WARNING 并返回 'yexuan'。
     覆盖 fixation_pipeline 和 pipeline 两处 helper。
     """
-    from core.memory.fixation_pipeline import _get_char_id_from_payload as _fp_helper
-    from core.pipeline import _get_char_id_from_payload as _pl_helper
+    from core.memory.fixation_pipeline import _get_scope_from_payload as _fp_helper
+    from core.pipeline import _get_scope_from_payload as _pl_helper
 
     with caplog.at_level(logging.WARNING):
-        fp_result = _fp_helper({"uid": "u1"}, "test_handler")
-    assert fp_result == "yexuan", f"fallback 应为 yexuan，实际: {fp_result!r}"
-    assert any("char_id" in r.message for r in caplog.records), (
+        fp_scope = _fp_helper({"uid": "u1"}, "test_handler")
+    assert fp_scope.character_id == "yexuan", f"fallback 应为 yexuan，实际: {fp_scope.character_id!r}"
+    assert any("yexuan" in r.message for r in caplog.records), (
         "缺少 char_id 时应有 WARNING 日志，但未检测到"
     )
 
     caplog.clear()
 
     with caplog.at_level(logging.WARNING):
-        pl_result = _pl_helper({"uid": "u2"}, "test_handler2")
-    assert pl_result == "yexuan", f"pipeline fallback 应为 yexuan，实际: {pl_result!r}"
-    assert any("char_id" in r.message for r in caplog.records), (
-        "pipeline _get_char_id_from_payload 缺少 char_id 时应有 WARNING 日志"
+        pl_scope = _pl_helper({"uid": "u2"}, "test_handler2")
+    assert pl_scope.character_id == "yexuan", f"pipeline fallback 应为 yexuan，实际: {pl_scope.character_id!r}"
+    assert any("yexuan" in r.message for r in caplog.records), (
+        "pipeline _get_scope_from_payload 缺少 scope/char_id 时应有 WARNING 日志"
     )
 
 
@@ -401,19 +401,19 @@ async def test_legacy_payload_fallback_does_not_read_short_term(sandbox):
 
 def test_get_char_id_from_payload_returns_char_id_silently(caplog):
     """
-    payload 含 char_id 时 helper 直接返回值，不发任何 WARNING。
+    payload 含 char_id（无 scope）时 legacy fallback 直接返回 scope，不发任何 WARNING。
     """
-    from core.memory.fixation_pipeline import _get_char_id_from_payload as _fp_helper
-    from core.pipeline import _get_char_id_from_payload as _pl_helper
+    from core.memory.fixation_pipeline import _get_scope_from_payload as _fp_helper
+    from core.pipeline import _get_scope_from_payload as _pl_helper
 
     with caplog.at_level(logging.WARNING):
-        fp_result = _fp_helper({"uid": "u1", "char_id": "hongcha"}, "test_handler")
-    assert fp_result == "hongcha"
+        fp_scope = _fp_helper({"uid": "u1", "char_id": "hongcha"}, "test_handler")
+    assert fp_scope.character_id == "hongcha"
     assert not caplog.records, f"char_id 存在时不应有 WARNING，但有: {caplog.records}"
 
     with caplog.at_level(logging.WARNING):
-        pl_result = _pl_helper({"uid": "u2", "char_id": "hongcha"}, "test_handler2")
-    assert pl_result == "hongcha"
+        pl_scope = _pl_helper({"uid": "u2", "char_id": "hongcha"}, "test_handler2")
+    assert pl_scope.character_id == "hongcha"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

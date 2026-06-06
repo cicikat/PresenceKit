@@ -45,35 +45,40 @@ def _lines_with(src: str, pat: str) -> list[str]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 _DLQ_ALLOWED_FUNCTIONS = {
-    "core/pipeline.py":              "_get_char_id_from_payload",
-    "core/memory/fixation_pipeline.py": "_get_char_id_from_payload",
+    "core/pipeline.py":              "_get_scope_from_payload",
+    "core/memory/fixation_pipeline.py": "_get_scope_from_payload",
     "core/dream/dream_pipeline.py":  "_state_char_id",
 }
+
+# P1-3A: DLQ fallback 由旧 `return "yexuan"` 改为 `MemoryScope.reality_scope(uid, "yexuan")`
+_DLQ_FALLBACK_PATTERN = ', "yexuan")'  # 出现在 reality_scope(str(uid), "yexuan") 中
 
 
 def test_dlq_fallback_yexuan_only_in_allowed_functions():
     """
-    `return "yexuan"` 只出现在三个已知 DLQ 兼容函数中，
-    不出现在任何其他生产路径里。
+    DLQ yexuan fallback 只出现在三个已知兼容函数中（pipeline/_get_scope_from_payload，
+    fixation/_get_scope_from_payload，dream/_state_char_id），不出现在其他路径。
+    dream_pipeline 仍使用旧 `return "yexuan"` 形式。
     """
     for rel, allowed_fn in _DLQ_ALLOWED_FUNCTIONS.items():
         src = _read_src(rel)
-        # 找到所有含 return "yexuan" 的行
-        bad_lines = [
-            l.strip() for l in src.splitlines()
-            if 'return "yexuan"' in l
-        ]
-        assert bad_lines, (
-            f"{rel} 应当包含 DLQ 兼容 `return 'yexuan'` 行（函数 {allowed_fn}）"
-        )
-        # 确认这些行确实在 allowed_fn 的上下文中（用简单 token 检查函数名在前面出现）
         fn_idx = src.find(f"def {allowed_fn}")
         assert fn_idx != -1, f"{rel} 找不到函数 {allowed_fn}"
-        for line in bad_lines:
-            # 该 return "yexuan" 行应在 allowed_fn 之后出现
-            line_pos = src.find(line, fn_idx)
-            assert line_pos != -1, (
-                f"{rel}: `return 'yexuan'` 出现在 {allowed_fn} 函数之外: {line!r}"
+
+        if rel == "core/dream/dream_pipeline.py":
+            # dream pipeline 仍用旧模式
+            bad_lines = [l.strip() for l in src.splitlines() if 'return "yexuan"' in l]
+            assert bad_lines, f"{rel} 应保留旧 DLQ `return 'yexuan'` 行（函数 {allowed_fn}）"
+        else:
+            # pipeline / fixation: 新 scope fallback 形式
+            # 搜索下一个顶层函数定义（可能是 async def）
+            next_def = min(
+                (src.find(p, fn_idx + 1) for p in ("\ndef ", "\nasync def ") if src.find(p, fn_idx + 1) != -1),
+                default=-1,
+            )
+            fn_body = src[fn_idx: next_def if next_def != -1 else len(src)]
+            assert _DLQ_FALLBACK_PATTERN in fn_body, (
+                f"{rel}: {allowed_fn} 函数体中找不到 DLQ fallback pattern {_DLQ_FALLBACK_PATTERN!r}"
             )
 
 
@@ -90,19 +95,22 @@ def test_no_unexpected_return_yexuan_in_admin_routers():
 
 def test_no_unexpected_return_yexuan_in_core_memory():
     """
-    core/memory/*.py 中唯一允许的 `return "yexuan"` 是
-    fixation_pipeline._get_char_id_from_payload。
+    core/memory/*.py 中不应有意外的 `return "yexuan"` fallback。
+    P1-3A 后 fixation_pipeline 使用 MemoryScope.reality_scope(uid, "yexuan")，
+    不再出现裸 `return "yexuan"` 行，但应保留 _get_scope_from_payload 函数。
     """
     mem_dir = ROOT / "core" / "memory"
     for py_file in mem_dir.glob("*.py"):
         src = py_file.read_text(encoding="utf-8")
         bad = [l.strip() for l in src.splitlines() if 'return "yexuan"' in l]
-        if py_file.name == "fixation_pipeline.py":
-            assert bad, "fixation_pipeline.py 应保留 DLQ 兼容 return 行"
-        else:
-            assert not bad, (
-                f"core/memory/{py_file.name} 中出现意外的 `return 'yexuan'`: {bad}"
-            )
+        assert not bad, (
+            f"core/memory/{py_file.name} 中出现意外的 `return 'yexuan'`: {bad}"
+        )
+    # fixation_pipeline 应保留 DLQ scope fallback helper
+    fp_src = (ROOT / "core/memory/fixation_pipeline.py").read_text(encoding="utf-8")
+    assert "_get_scope_from_payload" in fp_src, (
+        "fixation_pipeline.py 应保留 _get_scope_from_payload DLQ 兼容 helper"
+    )
 
 
 def test_no_unexpected_return_yexuan_in_core_garden():
@@ -261,18 +269,19 @@ def test_active_resolver_files_no_return_yexuan_fallback():
 def test_dlq_compat_layers_emit_warn():
     """
     三个 DLQ 兼容函数都包含 logger.warning(...) 调用。
+    P1-3A 后 pipeline/fixation 改名为 _get_scope_from_payload。
     """
     checks = [
-        ("core/pipeline.py",               "_get_char_id_from_payload", "logger.warning"),
-        ("core/memory/fixation_pipeline.py","_get_char_id_from_payload", "logger.warning"),
+        ("core/pipeline.py",               "_get_scope_from_payload",  "logger.warning"),
+        ("core/memory/fixation_pipeline.py","_get_scope_from_payload",  "logger.warning"),
         ("core/dream/dream_pipeline.py",    "_state_char_id",            "logger.warning"),
     ]
     for rel, fn_name, warn_token in checks:
         src = _read_src(rel)
         fn_start = src.find(f"def {fn_name}")
         assert fn_start != -1, f"{rel}: 找不到 {fn_name}"
-        # 取函数体（向后200字符简单截取）
-        fn_body = src[fn_start: fn_start + 400]
+        fn_end = src.find("\ndef ", fn_start + 1)
+        fn_body = src[fn_start: fn_end if fn_end != -1 else fn_start + 1200]
         assert warn_token in fn_body, (
             f"{rel}: {fn_name} 应包含 {warn_token} 调用"
         )
@@ -343,18 +352,19 @@ def test_episodic_sweep_source_iterates_registry():
 
 def test_pipeline_dlq_fallback_emits_warning_for_legacy_payload():
     """
-    _get_char_id_from_payload(payload_without_char_id) 返回 "yexuan" 并发出 WARNING。
+    _get_scope_from_payload(payload_without_char_id) 返回 character_id="yexuan" 并发出 WARNING。
+    P1-3A: 返回值由 str 改为 MemoryScope。
     """
     import logging
-    from core.pipeline import _get_char_id_from_payload
+    from core.pipeline import _get_scope_from_payload
 
     with mock.patch.object(
         __import__("logging").getLogger("core.pipeline"),
         "warning",
     ) as warn_mock:
-        result = _get_char_id_from_payload({"uid": "u1"}, "test_handler")
+        scope = _get_scope_from_payload({"uid": "u1"}, "test_handler")
 
-    assert result == "yexuan"
+    assert scope.character_id == "yexuan"
     warn_mock.assert_called_once()
     call_args = str(warn_mock.call_args)
     assert "yexuan" in call_args
@@ -362,18 +372,19 @@ def test_pipeline_dlq_fallback_emits_warning_for_legacy_payload():
 
 def test_fixation_dlq_fallback_emits_warning_for_legacy_payload():
     """
-    fixation_pipeline._get_char_id_from_payload 同上。
+    fixation_pipeline._get_scope_from_payload 对旧 payload 同样 WARN + fallback yexuan。
+    P1-3A: 返回值由 str 改为 MemoryScope。
     """
     import logging
-    from core.memory.fixation_pipeline import _get_char_id_from_payload
+    from core.memory.fixation_pipeline import _get_scope_from_payload
 
     with mock.patch.object(
         __import__("logging").getLogger("core.memory.fixation_pipeline"),
         "warning",
     ) as warn_mock:
-        result = _get_char_id_from_payload({"uid": "u1"}, "test_handler")
+        scope = _get_scope_from_payload({"uid": "u1"}, "test_handler")
 
-    assert result == "yexuan"
+    assert scope.character_id == "yexuan"
     warn_mock.assert_called_once()
 
 
@@ -397,18 +408,19 @@ def test_dream_pipeline_dlq_fallback_emits_warning_for_legacy_state():
 
 def test_pipeline_dlq_new_payload_no_fallback():
     """
-    _get_char_id_from_payload 对包含 char_id 的新 payload 不触发 fallback。
+    _get_scope_from_payload 对包含 char_id（无 scope）的旧 payload 不触发 fallback WARNING。
+    P1-3A: 返回值由 str 改为 MemoryScope。
     """
     import logging
-    from core.pipeline import _get_char_id_from_payload
+    from core.pipeline import _get_scope_from_payload
 
     with mock.patch.object(
         __import__("logging").getLogger("core.pipeline"),
         "warning",
     ) as warn_mock:
-        result = _get_char_id_from_payload({"uid": "u1", "char_id": "hongcha"}, "h")
+        scope = _get_scope_from_payload({"uid": "u1", "char_id": "hongcha"}, "h")
 
-    assert result == "hongcha"
+    assert scope.character_id == "hongcha"
     warn_mock.assert_not_called()
 
 
