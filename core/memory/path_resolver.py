@@ -2,6 +2,7 @@
 core/memory/path_resolver.py
 ============================
 P1-2A: standalone resolver — MemoryScope + artifact key → Path.
+P1-2K: resolver guard — artifact allowlist + domain rules.
 
 Not wired to pipeline / slow_queue / Dream / admin / store.
 Resolver only returns paths; it never creates directories.
@@ -13,32 +14,65 @@ from pathlib import Path
 from core.memory.scope import MemoryScope
 from core.sandbox import get_paths, safe_user_id
 
+# ── Artifact allowlists ───────────────────────────────────────────────────────
+
+# Reality-scoped, per-user: path uses both char_id and uid.
+REALITY_USER_ARTIFACTS: frozenset[str] = frozenset({
+    "history",
+    "event_log",
+    "mid_term",
+    "episodic",
+    "memory_index",
+    "fixation_state",
+    "profile",
+    "identity",
+    "hidden_state",
+    "afterglow_residue",
+    "impression",        # dream-origin but reality-scoped
+})
+
+# Reality-scoped, character-global: path uses char_id only, uid is NOT part of path.
+REALITY_CHARACTER_ARTIFACTS: frozenset[str] = frozenset({
+    "mood_state",
+    "trait_state",
+    "author_note_state",
+    "observations",
+    "garden_plants",
+    "garden_storage",
+})
+
+# Global-scoped: path uses uid only, no char_id in scope.
+GLOBAL_USER_ARTIFACTS: frozenset[str] = frozenset({
+    "user_facts",
+})
+
+# Dream-scoped: path uses char_id, uid, and world_id.
+DREAM_ARTIFACTS: frozenset[str] = frozenset({
+    "dream_state",
+})
+
+# Legacy / dead-registered artifacts: not migrated to active production use.
+# Kept so resolver stays backward-compatible; callers should not write new paths via these.
+# character_growth: legacy tool — paths still resolve for audit/compat, never migrated.
+LEGACY_ARTIFACTS: frozenset[str] = frozenset({
+    "character_growth",
+})
+
+# All actively migrated artifacts (excludes LEGACY_ARTIFACTS).
+MIGRATED_ARTIFACTS: frozenset[str] = (
+    REALITY_USER_ARTIFACTS
+    | REALITY_CHARACTER_ARTIFACTS
+    | GLOBAL_USER_ARTIFACTS
+    | DREAM_ARTIFACTS
+)
+
 # ── artifact → required domain ───────────────────────────────────────────────
 _ARTIFACT_DOMAIN: dict[str, str] = {
-    # reality-scoped: (char_id, uid)
-    "history":           "reality",
-    "event_log":         "reality",
-    "mid_term":          "reality",
-    "episodic":          "reality",
-    "memory_index":      "reality",
-    "fixation_state":    "reality",
-    "profile":           "reality",
-    "identity":          "reality",
-    "hidden_state":      "reality",
-    "afterglow_residue": "reality",
-    "character_growth":  "reality",
-    "impression":        "reality",   # dream-origin but reality-scoped
-    # character-global scoped: (char_id) only, uid ignored in path — still domain=reality
-    "mood_state":        "reality",
-    "trait_state":       "reality",
-    "author_note_state": "reality",
-    "observations":      "reality",
-    "garden_plants":     "reality",
-    "garden_storage":    "reality",
-    # global-scoped: (uid) only
-    "user_facts":        "global",
-    # dream-scoped: (char_id, uid, world_id)
-    "dream_state":       "dream",
+    **{a: "reality" for a in REALITY_USER_ARTIFACTS},
+    **{a: "reality" for a in REALITY_CHARACTER_ARTIFACTS},
+    **{a: "reality" for a in LEGACY_ARTIFACTS},
+    **{a: "global"  for a in GLOBAL_USER_ARTIFACTS},
+    **{a: "dream"   for a in DREAM_ARTIFACTS},
 }
 
 
@@ -98,8 +132,8 @@ def resolve_path(scope: MemoryScope, artifact: str) -> Path:
         return paths.user_memory_root(uid, char_id=char_id) / "afterglow_residue.json"
 
     if artifact == "character_growth":
-        # Temporary central point — legacy callers write {char_name}_{uid}.md filenames;
-        # future P1-2B alignment will use {uid}.md under per-char growth dir.
+        # legacy/dead registered tool — callers should not write new paths via this key.
+        # Kept for backward-compat only; not in MIGRATED_ARTIFACTS.
         return paths.character_growth(char_id=char_id) / f"{uid}.md"
 
     if artifact == "impression":
@@ -129,16 +163,13 @@ def resolve_path(scope: MemoryScope, artifact: str) -> Path:
     # ── global-scoped: (uid) only — char_id is None in scope ────────────────
 
     if artifact == "user_facts":
-        # Temporary central point — no existing DataPaths helper for global user facts.
         # Planned layout: {data_base}/global_facts/{uid}.json
         return paths._p("global_facts", uid + ".json")
 
     # ── dream-scoped: (char_id, uid, world_id) ───────────────────────────────
 
     if artifact == "dream_state":
-        # Extend current dream_state_path with a world_id layer.
-        # Current layout: …/dreams/{char_id}/state/{uid}/dream_state.json
-        # World-scoped:   …/dreams/{char_id}/state/{uid}/{world_id}/dream_state.json
+        # Layout: …/dreams/{char_id}/state/{uid}/{world_id}/dream_state.json
         base = paths.dream_state_path(uid, char_id=char_id)
         return base.parent / scope.world_id / base.name  # type: ignore[arg-type]
 
