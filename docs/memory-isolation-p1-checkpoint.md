@@ -3,12 +3,13 @@
 > **Audience**: next-window coding agent or reviewer picking up multi-character memory isolation work.
 > **Status date**: 2026-06-06
 > **Keyword for search**: `P1 freeze checkpoint`
+> **P1-FINAL**: All P1 sub-phases (P0 through P1-3C) are complete. P1 is frozen.
 
 ---
 
 ## 1. Current State Overview
 
-All P0–P1 isolation work is **complete and passing** (1707 collected tests, all green at time of freeze).
+All P0–P1 isolation work is **complete and passing** (≈2096 collected tests, all green at time of P1-FINAL freeze).
 
 | Phase | Scope | Status |
 |-------|-------|--------|
@@ -17,7 +18,10 @@ All P0–P1 isolation work is **complete and passing** (1707 collected tests, al
 | **P1-1** | `MemoryScope` frozen dataclass (`core/memory/scope.py`) | ✅ Done |
 | **P1-2** | `path_resolver.py` + all per-store migrations (see §2) + remaining path audit + artifact/domain guard | ✅ Done |
 | **T-14A** | `require_character_id` fail-loud guard wired into all 8 migrated scoped stores | ✅ Done |
-| **T-14B** | `test_memory_direct_path_lint.py` — direct-path lint guard with 3 known violations pinned (see §5) | ✅ Done |
+| **T-14B** | `test_memory_direct_path_lint.py` — direct-path lint guard; known violations cleared (see §5) | ✅ Done |
+| **P1-3A** | slow_queue scope payload: `MemoryScope` serialized via `to_payload()` / `from_payload()`; `_get_scope_from_payload` replaces raw char_id helper | ✅ Done |
+| **P1-3B** | Pipeline `_current_reality_scope()` + `fetch_context`/`post_process` pipeline MemoryScope scope-first refactor | ✅ Done |
+| **P1-3C** | Fix 3 event_log known violations (`chat_log`, `loop`, `last_mentioned`); lint now at zero known violations | ✅ Done |
 
 ---
 
@@ -38,6 +42,10 @@ All ten of the following artifacts resolve through `resolve_path(scope, artifact
 | `identity` | `core/memory/user_identity.py` | `test_identity_resolver_integration.py` |
 | `hidden_state` | `core/memory/user_hidden_state_store.py` | `test_hidden_state_store_resolver_integration.py` |
 | `afterglow_residue` | `core/memory/user_hidden_state_store.py` | `test_hidden_state_store_resolver_integration.py` |
+
+**Not migrated** (see §4):
+
+- `character_growth` — legacy/dead registered tool; stays in `LEGACY_ARTIFACTS`.
 
 **Additional resolver artifact sets** (not per-user, already correct before P1-2):
 
@@ -76,11 +84,28 @@ Tests: `tests/test_scoped_store_char_id_guard.py` (58 tests)
 ### 3.4 Direct-path lint guard
 
 `tests/test_memory_direct_path_lint.py` scans source for calls to
-`user_memory_root(` or `_p("` **without** a `char_id=` keyword argument, and asserts that
-only the 3 known violations remain (pinned by file + line range). Any new direct-path
-call will fail the lint test.
+`user_memory_root(` or `_p("` **without** a `char_id=` keyword argument.
+As of P1-3C, known violations cleared — all three previously-pinned call sites
+(`chat_log`, `loop`, `last_mentioned`) were resolved. The lint test now pins
+**zero** exemptions. Any new direct-path call will fail the lint test.
 
 Tests: `tests/test_memory_direct_path_lint.py` (25 tests)
+
+### 3.5 slow_queue scope payload (P1-3A)
+
+`_get_scope_from_payload()` deserializes a `MemoryScope` from every slow_queue payload.
+All enqueue callers now send a `scope` field. Old payloads missing `char_id` still
+trigger a `WARN` log and fall back to `"yexuan"` (legacy compat — see §4.2).
+
+Tests: `tests/test_slow_queue_scope_payload.py`
+
+### 3.6 pipeline MemoryScope (P1-3B)
+
+`pipeline._current_reality_scope()` constructs a `MemoryScope` from the resolved
+`char_id` + `uid` at pipeline entry. `fetch_context()` and `post_process()` use this
+scope object for all store reads/writes.
+
+Tests: `tests/test_pipeline_memory_scope_integration.py`
 
 ---
 
@@ -97,14 +122,16 @@ resolves for audit/compat, but:
 ### 4.2 DLQ payload missing char_id — legacy compatibility
 
 When a slow_queue payload lacks `char_id`, the handler falls back to `"yexuan"` with a
-`WARN` log. This is a legacy compat shim. It is intentional and must remain `WARN` (not
-silent). Do not remove the fallback; it will be superseded by P1-3A scope-payload work.
+`WARN` log. This is a legacy compat shim for old serialized payloads that pre-date P1-3A.
+It is intentional and must remain `WARN` (not silent). Do not remove the fallback; it
+will be retired in a future cleanup once the queue is confirmed drained of pre-P1-3A payloads.
 
 ### 4.3 API default `char_id="yexuan"`
 
 Several admin/pipeline entry points default `char_id` to `"yexuan"` when not supplied.
 This is the single-character compatibility default. **Do not delete these defaults** until
-P1-3/T-14 follow-up work explicitly replaces them with scope payload propagation.
+a follow-up explicitly replaces them with scope payload propagation. The default is not a
+runtime source of truth for the resolver.
 
 ### 4.4 `user_facts` — not yet migrated
 
@@ -114,55 +141,44 @@ phase.
 
 ---
 
-## 5. Known Violations (pinned in T-14B lint)
+## 5. Known Violations
 
-These three call sites pass no `char_id=` to `user_memory_root()`. They are pinned in
-the direct-path lint test and **must not be "fixed" ad hoc**. Each requires upstream
-scope propagation before it can be properly wired.
+**As of P1-3C: known violations cleared — zero remaining.**
 
-| # | File | Line(s) | Reason not fixed here |
-|---|------|---------|----------------------|
-| 1 | `admin/routers/chat_log.py` | ~31 | Needs route-level scope (char_id comes from request context, not available at read site) |
-| 2 | `core/scheduler/loop.py` | ~295 | Needs scheduler scope payload; `_has_event_today()` has no char context |
-| 3 | `core/scheduler/last_mentioned.py` | ~387 | Same: reads event_log by uid only; char context not threaded through scheduler callers |
+All three previously-pinned call sites have been resolved:
 
-**Do not fix these in the current window.** Fix target: P1-3C (after scope payload and
-scheduler/admin scope propagation are in place).
+| # | File | Fix applied in |
+|---|------|---------------|
+| 1 | `admin/routers/chat_log.py` ~31 | P1-3C |
+| 2 | `core/scheduler/loop.py` ~295 | P1-3C |
+| 3 | `core/scheduler/last_mentioned.py` ~387 | P1-3C |
+
+The lint test (`tests/test_memory_direct_path_lint.py`) now pins **zero** exemptions.
+Any new direct-path call will immediately fail the lint.
 
 ---
 
-## 6. Next Phase Recommendations
+## 6. P1-FINAL: Remaining TODO (non-blocking, enters P1+ / P2)
 
-Work the phases in order. Each phase is independently deliverable.
-
-### P1-3A — Scope payload in slow_queue
-
-Thread `MemoryScope` (serialized via `to_payload()` / `from_payload()`) through the
-slow_queue enqueue/dispatch path. Store APIs are unchanged at this stage; just replace
-the raw `char_id` + `uid` dict entries with a serialized `MemoryScope`. Retire the
-`"yexuan"` DLQ fallback once all callers are confirmed to send a valid scope.
-
-### P1-3B — Pipeline constructs MemoryScope internally
-
-Pipeline `fetch_context()` and `build_prompt()` construct a `MemoryScope` from the
-resolved `char_id` + `uid` at entry. Pass the scope object down to store calls instead
-of bare strings. Store APIs still accept `char_id` strings at this stage — no API break.
-
-### P1-3C — Fix scheduler/admin event_log known violations
-
-After P1-3A/B thread scope through scheduler and admin routes, replace the three pinned
-violations (§5) with proper resolver calls. Remove their exemptions from the lint test.
+P1 is frozen. The items below are tracked for future phases and **do not block shipping**.
 
 ### P1-4 — user_facts global split
 
 Migrate `user_facts` store to `GLOBAL_USER_ARTIFACTS` path via resolver. Decide whether
 per-character fact isolation is needed or whether global is correct.
 
-### P2 — Legacy data migration
+### P2 migration — Legacy data migration
 
 Rename on-disk files from old uid-only paths to the new `{char_id}/{uid}/` layout for
 any users who have data under the legacy tree. Provide a migration script; test with
 dry-run mode.
+
+### Optional / future
+
+- Scheduler entry points: more thorough `MemoryScope` propagation (P1-3A/B covers the
+  critical path; deeper scheduler scope threading is an optional improvement).
+- API default `char_id="yexuan"` final removal — deferred to a later major version once
+  all callers are confirmed to send a fully-formed scope.
 
 ---
 
@@ -170,18 +186,22 @@ dry-run mode.
 
 - **Do not migrate `character_growth`** — it is a legacy/dead tool.
 - **Do not delete `char_id` API defaults** before scope payload propagation is in place.
-- **Do not wire the full scope chain end-to-end in one PR** — phase it as P1-3A → B → C.
 - **Do not migrate existing on-disk data** outside of a dedicated P2 migration script.
 - **Do not alter the Dream session structure** — dream scope is frozen; char_id + world_id
   are already enforced by `MemoryScope`.
 - **Do not migrate `user_facts`** before P1-4 design is agreed.
 - **Do not silently swallow the DLQ `"yexuan"` fallback** — it must remain a `WARN` log.
+- **Do not read `config.default` as runtime source of truth** for character identity.
+- **Do not re-read `active` char during Dream close/summary/impression/afterglow** — scope
+  is fixed at Dream open.
+- **Do not copy yexuan memories to hongcha or other characters** — isolation is
+  per-character; backfill requires an explicit P2 migration script.
 
 ---
 
 ## 8. Recommended Regression Commands
 
-Run all four suites before and after any isolation-related change:
+Run all suites before and after any isolation-related change:
 
 ```bash
 # MemoryScope + path_resolver + guards
@@ -200,6 +220,10 @@ pytest tests/test_hidden_state_store_resolver_integration.py \
        tests/test_fixation_state_resolver_integration.py \
        tests/test_memory_resolver_remaining_paths_audit.py -v
 
+# P1-3A/B slow_queue scope payload + pipeline MemoryScope
+pytest tests/test_slow_queue_scope_payload.py \
+       tests/test_pipeline_memory_scope_integration.py -v
+
 # Memory isolation final gate (P0 + P1-0 scope tests)
 pytest tests/test_memory_isolation_p0_final.py \
        tests/test_memory_isolation_no_runtime_yexuan_fallback.py \
@@ -210,7 +234,7 @@ pytest tests/test_memory_isolation_p0_final.py \
 pytest tests/test_memory_direct_path_lint.py -v
 ```
 
-Full suite: `pytest` (currently 1707 tests).
+Full suite: `pytest` (approximately 2096 tests as of P1-FINAL).
 
 ---
 
@@ -225,6 +249,8 @@ Full suite: `pytest` (currently 1707 tests).
 | `tests/test_memory_path_resolver_guard.py` | 37 allowlist/domain guard tests |
 | `tests/test_scoped_store_char_id_guard.py` | 58 char_id fail-loud tests (T-14A) |
 | `tests/test_memory_direct_path_lint.py` | 25 direct-path lint tests (T-14B) |
+| `tests/test_slow_queue_scope_payload.py` | P1-3A scope payload tests |
+| `tests/test_pipeline_memory_scope_integration.py` | P1-3B pipeline MemoryScope tests |
 | `tests/test_memory_isolation_p0_final.py` | P0 final gate |
 | `docs/memory.md` | General memory architecture |
 | `docs/memory-isolation-p1-checkpoint.md` | **This file** |

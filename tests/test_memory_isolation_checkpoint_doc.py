@@ -5,9 +5,13 @@ DOC = Path(__file__).parent.parent / "docs" / "memory-isolation-p1-checkpoint.md
 
 REQUIRED_STRINGS = [
     "P1 freeze checkpoint",
+    "P1-FINAL",
     "known violations",
+    "known violations cleared",
     "character_growth legacy/dead",
-    "Next Phase",
+    "slow_queue scope payload",
+    "pipeline MemoryScope",
+    "P2 migration",
 ]
 
 
