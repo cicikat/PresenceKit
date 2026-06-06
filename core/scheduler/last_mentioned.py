@@ -103,17 +103,35 @@ class _Turn:
     raw: str
 
 
+def _active_char_id_or_none() -> str | None:
+    """Return the active character id from active_prompt_assets.json, or None if unavailable."""
+    try:
+        import json as _j
+        data = _j.loads(get_paths().active_prompt_assets().read_text(encoding="utf-8"))
+        cid = (data.get("active_character") or "").strip()
+        return cid or None
+    except Exception:
+        return None
+
+
 def recall_last_mentioned(
     user_id: str,
     *,
     now: datetime | None = None,
     days: int = RECENT_EVENT_LOG_DAYS,
     dry_run: bool = False,
+    char_id: str | None = None,
 ) -> LastMentionedTopic | None:
-    """Return the best last-mentioned event_log topic, ranked by recency × freshness."""
+    """Return the best last-mentioned event_log topic, ranked by recency × freshness.
+
+    char_id 未传时尝试读 active_prompt_assets.json；仍无则返回 None（不 fallback yexuan）。
+    """
+    resolved = char_id or _active_char_id_or_none()
+    if not resolved:
+        return None
 
     now_dt = now or datetime.now()
-    text = _read_recent_event_log(user_id, days=days, now=now_dt)
+    text = _read_recent_event_log(user_id, days=days, now=now_dt, char_id=resolved)
     if not text.strip():
         return None
 
@@ -378,13 +396,18 @@ def _rank_last_mentioned_candidates(
     return sorted(candidates, key=_weighted, reverse=True)
 
 
-def _read_recent_event_log(user_id: str, *, days: int, now: datetime) -> str:
+def _read_recent_event_log(user_id: str, *, days: int, now: datetime, char_id: str) -> str:
+    from core.memory.path_resolver import resolve_path
+    from core.memory.scope import MemoryScope
+
+    uid = safe_user_id(user_id)
+    scope = MemoryScope.reality_scope(uid, char_id)
+
     parts: list[str] = []
     for i in range(days):
         target_day = now - timedelta(days=i)
-        uid = safe_user_id(user_id)
         date_str = target_day.strftime('%Y-%m-%d')
-        new_path = get_paths().user_memory_root(uid) / "event_log" / f"{date_str}.md"
+        new_path = resolve_path(scope, "event_log") / f"{date_str}.md"
         old_path = get_paths()._p("event_log") / uid / f"{date_str}.md"
         path = for_read(new_path, old_path)
         try:

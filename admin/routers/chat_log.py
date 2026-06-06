@@ -4,6 +4,7 @@ GET /chat-log/{date}     — 返回单日解析后的对话条目
 owner_qq 由后端从 config 读取，接口路径不暴露 QQ 号。
 """
 
+import json as _json
 import re
 from pathlib import Path
 
@@ -11,6 +12,8 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from admin.auth import verify_token
 from core.config_loader import get_config
+from core.memory.path_resolver import resolve_path
+from core.memory.scope import MemoryScope
 from core.sandbox import get_paths, safe_user_id
 
 router = APIRouter()
@@ -23,12 +26,43 @@ def _owner_qq() -> str:
     return str(get_config().get("scheduler", {}).get("owner_id", "")).strip()
 
 
-def _log_dir() -> Path:
+def _resolve_char_id(char_id: str | None) -> str:
+    """Resolve and validate a char_id for chat-log operations.
+
+    If char_id is None, reads active_character from active_prompt_assets.json.
+    Raises HTTP 503 if active_character is missing or unreadable.
+    Raises HTTP 422 if the resolved or supplied char_id is not a known character.
+    Never falls back to a hardcoded character.
+    """
+    from core.asset_registry import get_registry
+
+    if char_id is None:
+        try:
+            data = _json.loads(get_paths().active_prompt_assets().read_text(encoding="utf-8"))
+            char_id = (data.get("active_character") or "").strip()
+        except Exception as e:
+            raise HTTPException(status_code=503, detail=f"读取 active_prompt_assets.json 失败: {e}")
+        if not char_id:
+            raise HTTPException(
+                status_code=503,
+                detail="active_prompt_assets.json 中 active_character 为空，请先设置活跃角色",
+            )
+
+    try:
+        get_registry().resolve(char_id, "character")
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    return char_id
+
+
+def _log_dir(char_id: str) -> Path:
     owner = _owner_qq()
     if not owner:
         raise HTTPException(status_code=500, detail="owner_id not configured")
     uid = safe_user_id(owner)
-    new = get_paths().user_memory_root(uid) / "event_log"
+    scope = MemoryScope.reality_scope(uid, char_id)
+    new = resolve_path(scope, "event_log")
     old = get_paths()._p("event_log") / uid
     # for_read() reads bytes — unsuitable for directories; check with is_dir() instead.
     return new if new.is_dir() else old
@@ -126,8 +160,9 @@ def _parse_day(text: str) -> list[dict]:
 
 
 @router.get("/dates", summary="获取聊天日志日期列表")
-async def list_dates(auth=Depends(verify_token)):
-    log_dir = _log_dir()
+async def list_dates(char_id: str | None = None, auth=Depends(verify_token)):
+    resolved = _resolve_char_id(char_id)
+    log_dir = _log_dir(resolved)
     dates = []
     if log_dir.exists():
         for f in log_dir.iterdir():
@@ -138,10 +173,11 @@ async def list_dates(auth=Depends(verify_token)):
 
 
 @router.get("/{date}", summary="获取单日聊天日志")
-async def get_day(date: str, auth=Depends(verify_token)):
+async def get_day(date: str, char_id: str | None = None, auth=Depends(verify_token)):
     if not _DATE_RE.match(date):
         raise HTTPException(status_code=422, detail="date format must be YYYY-MM-DD")
-    log_dir = _log_dir()
+    resolved = _resolve_char_id(char_id)
+    log_dir = _log_dir(resolved)
     path = log_dir / f"{date}.md"
     if not path.exists():
         raise HTTPException(status_code=404, detail="log not found")

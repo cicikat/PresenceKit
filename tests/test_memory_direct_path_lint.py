@@ -18,10 +18,7 @@ Allowlisted files (exempt from all checks):
   core/data_paths.py             — defines user_memory_root / memory_char_root APIs
   core/memory/character_growth.py — legacy/dead tool, not in active pipeline (P1-2J)
 
-Known violations (existing code, deferred per T-14B hard rules):
-  admin/routers/chat_log.py       — admin routers must not be changed (hard rule 5)
-  core/scheduler/loop.py          — event_log read-only fallback; char_id not in scope here
-  core/scheduler/last_mentioned.py — same
+Known violations (P1-3C): all three event_log violations fixed — table now empty.
 
 A test fails only if violations appear in files NOT covered by the known-violations table,
 or if a known file gains a new artifact beyond what is listed.
@@ -71,11 +68,7 @@ _MANAGED_ARTIFACT_NAMES: frozenset[str] = frozenset({
 # a new artifact beyond those recorded here.
 
 _KNOWN_VIOLATIONS: dict[str, frozenset[str]] = {
-    # admin routers must not be changed (T-14B hard rule 5)
-    "admin/routers/chat_log.py": frozenset({"event_log"}),
-    # scheduler: event_log read-only fallback pattern; fixing requires char_id awareness
-    "core/scheduler/loop.py": frozenset({"event_log"}),
-    "core/scheduler/last_mentioned.py": frozenset({"event_log"}),
+    # P1-3C: all three event_log violations fixed.
 }
 
 # ── Migrated stores (must be violation-free) ──────────────────────────────────

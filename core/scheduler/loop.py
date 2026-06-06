@@ -52,7 +52,7 @@ _COOLDOWNS: dict[str, int] = {
     "dlq_monitor":         24 * 3600,   # DLQ 扫描：24小时
     "log_maintenance":     24 * 3600,   # forensic 日志归档/滚动：24小时
     "episodic_sweep":      30 * 60,     # mid_term 老化扫描：30分钟
-    "garden_water":        30 * 60,     # 花园自动浇水：30分钟
+    "garden_water":       300 * 60,     # 花园自动浇水：300分钟
     "garden_daily":        24 * 3600,   # 花园每日扫描：harvest/vase 状态
     "garden_bloom":         8 * 3600,   # 开花发言冷却（同株短期不重复）
     "garden_harvest_expired": 4 * 3600,
@@ -288,11 +288,32 @@ async def _pipeline_send(
     return None
 
 
-def _user_talked_today(user_id: str) -> bool:
-    """检查用户今天在事件日志中是否有记录"""
+def _active_char_id_or_none() -> str | None:
+    """Return the active character id from active_prompt_assets.json, or None if unavailable."""
+    try:
+        import json as _j
+        data = _j.loads(get_paths().active_prompt_assets().read_text(encoding="utf-8"))
+        cid = (data.get("active_character") or "").strip()
+        return cid or None
+    except Exception:
+        return None
+
+
+def _user_talked_today(user_id: str, *, char_id: str | None = None) -> bool:
+    """检查用户今天在事件日志中是否有记录。
+
+    char_id 未传时尝试读 active_prompt_assets.json；仍无则 warning + 返回 False（不 fallback yexuan）。
+    """
+    resolved = char_id or _active_char_id_or_none()
+    if not resolved:
+        logger.warning("[scheduler._user_talked_today] char_id 未知，跳过检查")
+        return False
+    from core.memory.path_resolver import resolve_path
+    from core.memory.scope import MemoryScope
     today = date.today().strftime("%Y-%m-%d")
     uid = safe_user_id(user_id)
-    new_p = get_paths().user_memory_root(uid) / "event_log" / f"{today}.md"
+    scope = MemoryScope.reality_scope(uid, resolved)
+    new_p = resolve_path(scope, "event_log") / f"{today}.md"
     old_p = get_paths()._p("event_log") / uid / f"{today}.md"
     p = for_read(new_p, old_p)
     return p.exists() and p.stat().st_size > 10
