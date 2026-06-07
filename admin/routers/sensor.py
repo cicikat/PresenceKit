@@ -252,11 +252,40 @@ async def get_behavior_status(auth=Depends(verify_token)):
 @router.post("/sensor/activity", summary="接收桌宠端活动快照")
 async def receive_activity_snapshot(payload: dict):
     """桌宠端每5分钟推送一次屏幕活动快照，写入文件供 prompt_builder 读取。"""
+    # Resolve active char_id — fail-loud, no yexuan fallback.
+    try:
+        _apa = json.loads(
+            get_paths().active_prompt_assets().read_text(encoding="utf-8")
+        )
+        char_id = (_apa.get("active_character") or "").strip()
+    except Exception as _e:
+        import logging as _logging
+        _logging.getLogger(__name__).warning(
+            "[sensor.activity] active_prompt_assets 读取失败，跳过写入: %s", _e
+        )
+        return {"status": "skipped", "reason": "active_character_unresolvable"}
+
+    if not char_id:
+        import logging as _logging
+        _logging.getLogger(__name__).warning(
+            "[sensor.activity] active_character 为空，跳过写入"
+        )
+        return {"status": "skipped", "reason": "active_character_empty"}
+
+    oid = str(get_config().get("scheduler", {}).get("owner_id", ""))
     payload["received_at"] = time.time()
-    p = get_paths().activity_snapshot()
+    payload_len = len(json.dumps(payload, ensure_ascii=False))
+
+    import logging as _logging
+    _logging.getLogger(__name__).info(
+        "[sensor.activity] uid=%s char_id=%s source=sensor payload_len=%d",
+        oid, char_id, payload_len,
+    )
+
+    p = get_paths().activity_snapshot(char_id=char_id)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
     if _TRANSITION_CHARACTER_INNER:
         old = get_paths()._p("activity_snapshot.json")
         old.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
-    return {"status": "ok"}
+    return {"status": "ok", "char_id": char_id}

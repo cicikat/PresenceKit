@@ -68,11 +68,11 @@ def _format_afterglow_soft_hint(uid: str, *, char_id: str = "yexuan") -> str:
         logger.warning("[prompt_builder] afterglow soft hint read failed: %s", exc)
         return ""
 
-def _load_activity_snapshot() -> str:
+def _load_activity_snapshot(*, char_id: str) -> str:
     from core.sandbox import get_paths
     import json
     import time
-    p = get_paths().activity_snapshot()
+    p = get_paths().activity_snapshot(char_id=char_id)
     if not p.exists():
         return ""
     try:
@@ -93,13 +93,13 @@ def _load_activity_snapshot() -> str:
         return ""
 
 
-def _load_style_hint() -> str:
+def _load_style_hint(*, char_id: str) -> str:
     """从observations.jsonl读取行为倾向，返回给author_note的提示词片段。"""
     try:
         import json
         from datetime import datetime as _dt
         from core.sandbox import get_paths
-        obs_path = get_paths().observations()
+        obs_path = get_paths().observations(char_id=char_id)
         if not obs_path.exists():
             return ""
         lines = obs_path.read_text(encoding="utf-8").strip().splitlines()
@@ -240,7 +240,7 @@ def build(
         import json
         from core.sandbox import get_paths
         try:
-            mood_raw = json.loads(get_paths().mood_state().read_text(encoding="utf-8"))
+            mood_raw = json.loads(get_paths().mood_state(char_id=char_id).read_text(encoding="utf-8"))
         except Exception:
             mood_raw = {}
         mood_line = get_mood_text(mood_raw)
@@ -481,7 +481,7 @@ def build(
     # ─────────────────────────────────────────────────────────────────────────
     _activity_triggers = {"topic.activity", "query.what_doing", "emotion.positive"}
     if _tags & _activity_triggers:
-        _activity_text = _load_activity_snapshot()
+        _activity_text = _load_activity_snapshot(char_id=char_id)
         if _activity_text:
             _layers.append("3.8_activity")
             messages.append({
@@ -825,7 +825,7 @@ def build(
     author_note_lines.append(
         "【表达规则】对话示例仅作风格参考，禁止复用原句或近似表达，每次回应必须是全新的措辞。"
     )
-    _style_hint = _load_style_hint()
+    _style_hint = _load_style_hint(char_id=char_id)
     if _style_hint:
         author_note_lines.append(f"[{_style_hint}]")
 

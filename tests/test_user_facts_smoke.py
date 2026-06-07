@@ -79,8 +79,8 @@ def _apply_build_stubs(monkeypatch):
     import core.config_loader as _cl
 
     monkeypatch.setattr(_pb, "_load_jailbreak", lambda layer=None: "")
-    monkeypatch.setattr(_pb, "_load_style_hint", lambda: "")
-    monkeypatch.setattr(_pb, "_load_activity_snapshot", lambda: "")
+    monkeypatch.setattr(_pb, "_load_style_hint", lambda *, char_id="": "")
+    monkeypatch.setattr(_pb, "_load_activity_snapshot", lambda *, char_id="": "")
     monkeypatch.setattr(_pb, "_format_afterglow_soft_hint", lambda uid, char_id="yexuan": "")
     monkeypatch.setattr(_pres, "get_last_seen_text", lambda uid: "")
     monkeypatch.setattr(_anr, "get_current_note", lambda paths=None: "")
