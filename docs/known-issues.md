@@ -1,7 +1,7 @@
 # docs/known-issues.md — 已知问题与技术债
 
-> 最近核对：2026-06-02
-> 核对范围：P0 安全清场文档收口。已落地事项按当前实现同步；未列出的条目保持原审计结论。
+> 最近核对：2026-06-07
+> 核对范围：perceive_event P0+P1 收口。已落地事项按当前实现同步；未列出的条目保持原审计结论。
 >
 > 状态标签：
 > - `now-safe-to-fix`：可按小修推进。
@@ -19,15 +19,21 @@
 
 **位置**：`main.py` → `handle_message()`；`admin/routers/chat.py` → `/chat`
 
-desktop/mobile owner chat 已由 `run_owner_chat_turn()` 使用 `conversation_lock(uid)` 包住
-`fetch_context → LLM → critical post_process`。但 QQ 主入口仍在发送后
-`asyncio.create_task(pipeline.post_process(...))`：`message_queue` 虽然串行调用 handler，
-下一条消息仍可能在上一条异步落库完成前进入 `fetch_context()`。
+**已收口路径**：desktop/mobile owner chat（`run_owner_chat_turn()`）、`desktop_wake` Path B
+（perceive_event gate + `conversation_lock`，P0）、scheduler `_pipeline_send`
+（perceive_event gate + `conversation_lock`，P1）均已用 uid 级锁覆盖
+`fetch_context → build_prompt → run_llm → record_assistant_turn`。
 
-冻结管理面板 `/chat` 也仍走异步 `post_process()`，没有接入统一 turn sink /
+**仍为 legacy**：`main.handle_message()`（QQ 主入口）仍在发送后以
+`asyncio.create_task` 异步调用 `pipeline.post_process()`；`message_queue` 虽然串行调用
+handler，下一条消息仍可能在上一条异步落库完成前进入 `fetch_context()`。
+`_reply_with_tool_result`（QQ 工具确认）同样无 perceive_event gate 和
+`conversation_lock`，已明确排除在 P0/P1 范围之外。
+
+冻结管理面板 `/chat` 仍走异步 `post_process()`，未接入统一 turn sink /
 conversation gate。legacy `/desktop/trigger` 已删除，不再属于本条缺口。
 
-**建议**：把剩余现实入口收口到 `record_assistant_turn()`；QQ 若保留先发送语义，也要保证
+**建议**：把剩余 QQ 入口收口到 `record_assistant_turn()`；若保留先发送语义，也要保证
 下一轮 `fetch_context()` 前 critical write 已完成。
 
 ---

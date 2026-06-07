@@ -52,6 +52,26 @@ loop.py tick ──gating log──→ logs/gating_shadow.jsonl
         └────legacy/maintenance asyncio.gather──→ 未迁移检查或状态扫描
 ```
 
+`_pipeline_send()` 内部执行顺序（P1 gate）：
+
+```
+receive_perceive_event(source="scheduler", kind="scheduled")
+  → Dream Guard (fail-closed) + TTL dedup (60s bucket, key = trigger_name)
+  → ACCEPTED → log perceive_event=true + correlation_id + event_id
+conversation_lock(uid)
+  → fetch_context → build_prompt → run_llm
+  → record_assistant_turn(bypass_gate=True)
+```
+
+- **conversation_lock** 是 uid 级，与 `desktop_wake Path B` 和 `run_owner_chat_turn` 共用同一把锁，保证同 uid 的 reality LLM 串行。
+- **Dream Guard** 通过 `receive_perceive_event` fail-closed：BLOCK_ACTIVE / BLOCK_UNCERTAIN → 直接返回 None，不进 LLM。
+- **TTL dedup**：同一 trigger_name 在同一 60s 时间桶内重复触发 → DUPLICATE，静默丢弃。
+- **dedupe_key 组成（scheduler）**：`scheduler:uid:char:system:scheduled:hash({"trigger_name":name}):bucket` — payload 只含 trigger_name，key 稳定。
+- **dedupe_key 组成（desktop_wake）**：`desktop_wake:uid:char:desktop:wake:hash({}):bucket` — payload 固定为 `{}`，last_seen 等 per-request 字段不入 hash，rapid reconnect 内幂等。
+- **dedupe 原则（P1.1 稳定化）**：`event_id` / `correlation_id` 仅用于 tracing，不参与 dedupe（event_id is tracing only）。`dedupe_key` 只能包含稳定语义字段；`last_seen`、timestamp、随机 UUID、request time 等观测字段不得加入 payload（last_seen must not be part of dedupe payload）。违反此原则会导致同语义请求因 key 不同而各自通过去重、多次触发 LLM。
+- **DUPLICATE / BLOCKED_DREAM no-op 保证**：命中 DUPLICATE 或 BLOCKED_DREAM 的调用必须立即返回，不进入 LLM、不调用 record / post_process、不向任何 channel fanout。
+- `bypass_gate=True` 传给 `record_assistant_turn`，避免锁重入。
+
 ---
 
 ## 触发状态机（Phase 2 Step 1）
