@@ -37,7 +37,7 @@ from admin.routers import (
     scheduler, watch, agent, sensor,
     garden, mobile, diary, chat_log,
     mood, activity, dream,
-    reading,
+    reading, gomoku, chess,
     debug, hidden_state_debug,
 )
 
@@ -61,6 +61,8 @@ app.include_router(garden.router,   prefix="/garden",   tags=["花园"])
 app.include_router(mood.router,     prefix="/mood",     tags=["情绪状态"])
 app.include_router(activity.router, prefix="/activity", tags=["活动状态"])
 app.include_router(reading.router,  prefix="/activity", tags=["阅读活动"])
+app.include_router(gomoku.router,   prefix="/activity", tags=["五子棋活动"])
+app.include_router(chess.router,    prefix="/activity", tags=["国际象棋活动"])
 app.include_router(diary.router,     prefix="/diary",     tags=["日记"])
 app.include_router(chat_log.router,  prefix="/chat-log",  tags=["聊天日志"])
 app.include_router(mobile.router,    prefix="",           tags=["手机端"])

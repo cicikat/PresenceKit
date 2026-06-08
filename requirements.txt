@@ -16,3 +16,4 @@ ddgs
 pillow
 pillow-heif
 pypdf
+python-chess
