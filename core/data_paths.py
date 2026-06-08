@@ -439,6 +439,22 @@ class DataPaths:
         Used for runtime-uploaded assets (e.g. avatar overrides)."""
         return self._p("runtime", "characters", char_id)
 
+    # ── Activity: reading ─────────────────────────────────────────────────────
+    def reading_char_root(self, *, char_id: str) -> Path:
+        """data/runtime/activity/reading/{char_id}/  — enumerate all uid subdirs."""
+        return self._p("runtime", "activity", "reading", char_id)
+
+    def reading_sessions_root(self, *, char_id: str, uid: str) -> Path:
+        """data/runtime/activity/reading/{char_id}/{uid}/"""
+        return self._p("runtime", "activity", "reading", char_id, safe_user_id(uid))
+
+    def reading_session_dir(self, *, char_id: str, uid: str, session_id: str) -> Path:
+        """data/runtime/activity/reading/{char_id}/{uid}/{session_id}/"""
+        return self._p(
+            "runtime", "activity", "reading",
+            char_id, safe_user_id(uid), safe_user_id(session_id),
+        )
+
     def cleanup(self):
         if self.mode != "test":
             raise RuntimeError("只有 test 模式才能执行 cleanup()")
