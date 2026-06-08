@@ -19,6 +19,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+from admin.log_filter import install_asyncio_proactor_noise_filter
+install_asyncio_proactor_noise_filter()
+
 # ── 工作目录：切换到 main.py 所在目录，保证相对路径正确 ──────────────────────
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
