@@ -173,3 +173,35 @@ def close_session(
     save_session(session)
     logger.info("[activity_store] close: session=%s", session_id)
     return session
+
+
+def save_summary(
+    char_id: str,
+    uid: str,
+    activity_type: str,
+    session_id: str,
+    summary: dict,
+) -> bool:
+    """将摘要写入 session 目录的 summary.json（原子写入）。"""
+    p = _session_path(char_id, uid, activity_type, session_id).parent / "summary.json"
+    ok = safe_write_json(p, summary)
+    if not ok:
+        logger.error("[activity_store] save_summary failed: %s", session_id)
+    return ok
+
+
+def load_summary(
+    char_id: str,
+    uid: str,
+    activity_type: str,
+    session_id: str,
+) -> dict | None:
+    """加载 session 目录的 summary.json，不存在返回 None。"""
+    p = _session_path(char_id, uid, activity_type, session_id).parent / "summary.json"
+    if not p.exists():
+        return None
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except Exception as e:
+        logger.error("[activity_store] load_summary failed %s: %s", session_id, e)
+        return None
