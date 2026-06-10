@@ -86,11 +86,12 @@ def _pick_note(pool: list[dict], state: dict, underrepresented: list[str]) -> di
     return random.choices(candidates, weights=weights, k=1)[0]
 
 
-def get_current_note(paths=None) -> str:
+def get_current_note(paths=None, char_id: str | None = None) -> str:
     """
     返回当前轮次应注入层 11 的 author_note 文本。
     满足任一条件时切换：从未切换过，或距上次切换超过 30 分钟。
     paths 可选；不传时自动调用 get_paths()。
+    char_id 可选；不传时保持旧行为（路径方法使用各自的默认值）。
     """
     if paths is None:
         from core.sandbox import get_paths
@@ -98,8 +99,10 @@ def get_current_note(paths=None) -> str:
 
     from core.sandbox import _TRANSITION_CHARACTER_INNER
 
-    pool_path = paths.author_notes_pool()
-    write_state_path = paths.author_note_state()
+    _kw = {"char_id": char_id} if char_id is not None else {}
+
+    pool_path = paths.author_notes_pool(**_kw)
+    write_state_path = paths.author_note_state(**_kw)
 
     try:
         pool = _load_pool(pool_path)
@@ -114,7 +117,7 @@ def get_current_note(paths=None) -> str:
 
         underrepresented: list[str] = []
         try:
-            trait_state = json.loads(paths.trait_state().read_text(encoding="utf-8"))
+            trait_state = json.loads(paths.trait_state(**_kw).read_text(encoding="utf-8"))
             underrepresented = trait_state.get("underrepresented", [])
         except Exception:
             pass

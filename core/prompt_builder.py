@@ -758,7 +758,7 @@ def build(
     # 放在历史之后、用户消息之前，对模型影响最大
     # ─────────────────────────────────────────────────────────────────────────
     from core.author_note_rotator import get_current_note as _get_current_note
-    _rotated_note = _get_current_note()
+    _rotated_note = _get_current_note(char_id=char_id)
     author_note_lines = (
         [_rotated_note] if _rotated_note else []
     ) + [
