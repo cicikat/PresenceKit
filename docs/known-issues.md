@@ -53,7 +53,7 @@ R8-C 已落地（2026-06-10）：`author_note_rotator.get_current_note()` 新增
 传入对应角色路径；`prompt_builder.build()` 已透传本轮 `char_id`。
 读写路径对齐，多角色 `underrepresented` 加权不再默认读 yexuan。
 
-`character_growth.update()` 保留（不在 R8-B/R8-C 退役），legacy handler 不删除。
+R8-E2 已落地（2026-06-10）：`character_growth.update()` 已删除，其内部 `trait_state()` 死代码写路径（缺 char_id）随之消除。`character_growth` 现为只读 legacy 接口，写入链完全由 `trait_tracker_update` slow_queue task 承接。
 
 ---
 
@@ -281,32 +281,32 @@ token”的问题已缓解。
 
 ### TD-2：CharacterGrowth retirement 尚未结束
 
-**状态**：`refactor-phase`（R8-D 审计已完成，进入 R8-E 候选）
+**状态**：`fixed`（R8-E2，2026-06-10）
 
-**R8-D 审计结论（2026-06-10）**：
+**R8-E2 完成结论**：
 
 | 对象 | 状态 | 依据 |
 |---|---|---|
-| `character_growth.update()` | DEAD_CANDIDATE | 零生产调用方；`fixation_pipeline` 已切换到 `consolidate_to_identity` |
-| `character_growth.load()` | ACTIVE | `tool_dispatcher._get_growth_wrapper()` 唯一调用方，`get_growth` 工具读路径 |
+| `character_growth.update()` | REMOVED R8-E2 | 函数已删除；写入链迁移到 `consolidate_to_identity` + `trait_tracker_update` |
+| `character_growth.should_update()` | REMOVED R8-E2 | 函数已删除；无外部调用方 |
+| `character_growth.load()` | ACTIVE | `tool_dispatcher._get_growth_wrapper()` 唯一调用方，`get_growth` 工具只读兼容面 |
 | `consolidate_to_growth` | REMOVED R8-E1 | 已从 `LEGACY_TASK_TYPES` 移除；从未注册 handler，无 enqueue，无 DLQ 文件 |
 | `mid_term_append` | LEGACY_COMPAT | handler 注册（DLQ 保护），无新 enqueue，无 DLQ 文件存量 |
 | `episodic_compress` | LEGACY_COMPAT | handler 注册（DLQ 保护），无新 enqueue，无 DLQ 文件存量 |
 | `LEGACY_TASK_TYPES` | ACTIVE | `time_based` DLQ monitor sweep 使用 |
-| `character_growth.update()` 内 `trait_state()` 无 char_id | 死代码缺陷 | 因 update() 无调用方，不影响生产；R8-E 删除时一并清理 |
+| `character_growth.update()` 内 `trait_state()` 无 char_id | REMOVED R8-E2 | 死代码缺陷随 update() 删除一并消除 |
 
-**R8-E1 已完成**：
-- `consolidate_to_growth` 已从 `LEGACY_TASK_TYPES` 移除（2026-06-10，R8-E1）
+**R8-E1 已完成**（2026-06-10）：
+- `consolidate_to_growth` 已从 `LEGACY_TASK_TYPES` 移除
 
-**R8-E 候选（可在下包删除）**：
-- `character_growth.update()` 函数体及调用（整个 async 函数，不含 `load()`）
-- `character_growth.should_update()` 函数（已注明 "Legacy：当前无外部调用者"）
+**R8-E2 已完成**（2026-06-10）：
+- `character_growth.update()` 函数体已删除
+- `character_growth.should_update()` 函数已删除
+- 死代码携带的 `trait_state()` 无 char_id 缺陷随函数删除一并消除
+- `character_growth.py` 现为只读 legacy 接口，不再含 `char_id="yexuan"` 默认参数
 
 **保留至 30-day TTL 后再评估**：
-- `mid_term_append` / `episodic_compress` handler 注册
-
-原有结论：`tool_dispatcher._get_growth_wrapper()`、legacy `character_growth` 文件与旧测试说明仍保留。
-先解决 F10 / F11，再决定是否删除兼容出口。
+- `mid_term_append` / `episodic_compress` handler 注册（见 TD-3）
 
 ### TD-3：DLQ legacy handler 兼容层已设 30 天过期（R8-A）
 

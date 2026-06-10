@@ -65,7 +65,7 @@ CHAR_ID_DEFAULT_ALLOWLIST: frozenset[str] = frozenset({
     "core/memory/user_hidden_state.py",
     "core/memory/user_hidden_state_store.py",
     "core/memory/user_hidden_state_integrator.py",
-    "core/memory/character_growth.py",
+    # "core/memory/character_growth.py" — R8-E2: update(char_id="yexuan") deleted; no longer a violation
     # dream subsystem
     "core/dream/dream_afterglow.py",
     "core/dream/dream_context.py",

@@ -258,28 +258,29 @@ def test_author_note_rotator_does_not_import_character_growth():
 
 
 # ---------------------------------------------------------------------------
-# 9. character_growth.update() 内 trait_state 写路径 char_id 缺省（死代码记录）
+# 9. character_growth.update() 已于 R8-E2 删除（trait_state 死代码缺陷已随之消除）
 # ---------------------------------------------------------------------------
 
 def test_character_growth_update_has_no_char_id_in_trait_state_call_dead_code_note():
     """
-    Documents that character_growth.update() still calls paths.trait_state()
-    without char_id (a latent bug). Because update() has zero production callers
-    (confirmed by test_character_growth_update_has_no_production_callers), this
-    code is unreachable in production and is safe-to-ignore until update() is
-    eventually deleted in a future R8-E pass.
-
-    This test guards that the code is still in 'dead but present' state — if
-    someone adds a caller to update(), they must fix the trait_state() call too.
+    R8-E2: character_growth.update() has been deleted.
+    The latent trait_state() bug (no char_id kwarg) is gone with it.
+    This test verifies update() no longer appears as a defined function
+    in the module (neither sync nor async).
     """
     src = _source("core/memory/character_growth.py")
-    # The latent bug line: trait_state() call without char_id= keyword
-    # We assert it exists (dead code still there), combined with test 3's
-    # guarantee that it has no callers.
-    assert "trait_state()" in src, (
-        "Expected character_growth.update() to still contain paths.trait_state() "
-        "without char_id (dead code, scheduled for R8-E removal). "
-        "If this was already fixed/removed, update this test accordingly."
+    tree = ast.parse(src)
+    func_names = {
+        node.name
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    assert "update" not in func_names, (
+        "character_growth.update() was supposed to be deleted in R8-E2. "
+        "If it was re-added, it must include char_id= in the trait_state() call."
+    )
+    assert "should_update" not in func_names, (
+        "character_growth.should_update() was supposed to be deleted in R8-E2."
     )
 
 

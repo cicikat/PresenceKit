@@ -211,7 +211,7 @@ score = intensity * decay + relevance
 `get_highlights(user_id, days, max_lines)` 是独立函数，
 从最近 N 天日志里提取有情感词的用户发言，供调度器碎碎念触发时参考，不走搜索路径。
 
-**legacy 用途**：`character_growth.update()` 仍保留基于 `get_recent_days()` 的旧更新函数，但当前主路径已经切到 fixation pipeline，不再由每 20 轮 event_log 直接驱动。
+**legacy 用途**：`character_growth.update()` 已于 R8-E2 删除。`load()` 保留为 `get_growth` 工具的只读兼容面。
 
 ---
 
@@ -499,29 +499,21 @@ LLM 生成的结构化 Markdown，客观描述用户特点：
 - 找工作: 上次说在准备简历
 ```
 
-### 当前状态
+### 当前状态（R8-E2）
 
-`character_growth` 的读写代码、`.fingerprint.txt` / `.felt.md`
-派生文件仍保留，`get_growth` 工具也仍可读取它；但当前 prompt_builder 已不再注入
-`6a_growth_fingerprint` / `6a_growth_full`，`fetch_context()` 也不再固定读取 `character_growth`。
+`character_growth.update()` 和 `should_update()` 已于 R8-E2 删除。
+`.fingerprint.txt` / `.felt.md` 派生文件仍可能存在（历史遗留），`get_growth` 工具仍可读取 `.md` 主文件。
 
-`reflect_to_episodic()` 达阈值后自动入队的是 `consolidate_to_identity`（不是
-`consolidate_to_growth`）。`consolidate_to_growth` 是 pre-S5 遗留名称，R8-E1 已从
-`LEGACY_TASK_TYPES` 移除，因此 `character_growth` 现在应视作只读 legacy 出口（`get_growth` 工具）。
+当前 prompt_builder 不注入 `6a_growth_fingerprint` / `6a_growth_full`，`fetch_context()` 也不固定读取 `character_growth`。
+`character_growth` 现为**只读 legacy 出口**，仅 `get_growth` 工具通过 `load()` 访问。
 
-### legacy 更新机制
-
-早期设计中，character_growth 不再由定时计数器驱动，改由 `fixation_pipeline.consolidate_to_growth` 触发。
-
-触发路径：
+写入链已迁移：
 ```
-capture_turn → summarize_to_midterm → reflect_to_episodic → consolidate_to_growth
+trait_state 写入  → trait_tracker_update slow_queue task（R8-B）
+user identity 写入 → consolidate_to_identity（fixation_pipeline）
 ```
 
-- `should_update(user_id)` 读 `fixation_state` 判断阈值（重启不丢状态；当前自动主链路不调用它）
-- `consolidate_to_growth` 加载所有 `consolidated_at is None` 的 episodic，调纯函数 `_synthesize_growth` 生成 markdown，写入前备份到 `.md.bak`，校验失败自动回滚
-- 输入从 event_log 流水切换为 episodic 列表（完全切换，不保留 event_log 兜底）
-- 同步写 `.fingerprint.txt`（前 150 字）和 `.felt.md`（如有 ===FELT=== 段）
+`consolidate_to_growth` 是 pre-S5 遗留名称，R8-E1 已从 `LEGACY_TASK_TYPES` 移除（从未注册 handler，无 enqueue，无 DLQ 文件）。
 
 ### 两级读取
 
@@ -538,10 +530,9 @@ capture_turn → summarize_to_midterm → reflect_to_episodic → consolidate_to
 
 文件：`core/memory/trait_tracker.py`
 
-trait 统计逻辑目前仍在 legacy `character_growth.update()` 内：调用时会统计最近40条对话里各性格特质的关键词命中次数，维护最近5次的滑动窗口。累计命中≤2次的特质标记为 `underrepresented`，写入 `data/runtime/characters/yexuan/inner/trait_state.json`。
+trait 统计逻辑（R8-B 起）由独立的 `trait_tracker_update` slow_queue task 承接：每个 `can_write_memory=True` 的有效 assistant turn 后入队，handler 直接写入 `data/runtime/characters/{char_id}/inner/trait_state.json`。统计最近40条对话里各性格特质的关键词命中次数，维护最近5次的滑动窗口，累计命中≤2次的特质标记为 `underrepresented`。
 
-当前主路径 `fixation_pipeline.consolidate_to_identity()` 没有调用 `trait_tracker`，因此只走新固化
-pipeline 时，`trait_state.json` 可能不会刷新。这是已知技术债，见 `docs/known-issues.md`。
+legacy `character_growth.update()` 内的 trait 写路径已于 R8-E2 随函数删除一并消除。
 
 author_note_rotator 每次选 note 时读取此文件，命中 underrepresented 特质的 note 权重×2，让叶瑄近期较少展现的性格侧面更容易出现。
 
@@ -677,7 +668,7 @@ consolidate_to_identity
 
 自动阈值出口为 `consolidate_to_identity`（写 `user_identity.yaml`）。
 `consolidate_to_growth` 是 pre-S5 遗留名称，从未注册 handler，R8-E1 已从
-`LEGACY_TASK_TYPES` 移除；`character_growth.md` 现仅由 `get_growth` 工具只读访问。
+`LEGACY_TASK_TYPES` 移除；`character_growth.md` 现仅由 `get_growth` 工具只读访问（R8-E2：`update()` / `should_update()` 已删除，写入链完全迁移）。
 
 ### schema 字段（新增）
 
@@ -824,7 +815,7 @@ sensor privacy 全系统已经完成。
 | `core/memory/episodic_memory.py` | 新增 `source_mid_ids` / `consolidated_at` 血缘字段 |
 | `core/memory/short_term.py` | `append()` 新增 `turn_id` 参数 |
 | `core/memory/event_log.py` | `append()` 新增 `turn_id` 参数 |
-| `core/memory/character_growth.py` | `should_update()` 改为读 `fixation_state` 文件；删除内存计数器 |
+| `core/memory/character_growth.py` | `should_update()` 改为读 `fixation_state` 文件；删除内存计数器（R8-E2：`update()` / `should_update()` 已删除，现为只读接口） |
 | `core/sandbox.py` | 新增 `fixation_state_dir()` / `fixation_log()` 路径 |
 | `core/safe_write.py` | 新增 `safe_append_jsonl()` |
 | `core/pipeline.py` | `post_process` 关键路径改用 `capture_turn()`；慢队列任务名重命名；`register_slow_handlers()` 同步更新 |
