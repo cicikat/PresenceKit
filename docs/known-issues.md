@@ -289,15 +289,17 @@ token”的问题已缓解。
 |---|---|---|
 | `character_growth.update()` | DEAD_CANDIDATE | 零生产调用方；`fixation_pipeline` 已切换到 `consolidate_to_identity` |
 | `character_growth.load()` | ACTIVE | `tool_dispatcher._get_growth_wrapper()` 唯一调用方，`get_growth` 工具读路径 |
-| `consolidate_to_growth` | DEAD | 仅在 `LEGACY_TASK_TYPES` 作名字残留，从未注册 handler，无 enqueue，无 DLQ 文件 |
+| `consolidate_to_growth` | REMOVED R8-E1 | 已从 `LEGACY_TASK_TYPES` 移除；从未注册 handler，无 enqueue，无 DLQ 文件 |
 | `mid_term_append` | LEGACY_COMPAT | handler 注册（DLQ 保护），无新 enqueue，无 DLQ 文件存量 |
 | `episodic_compress` | LEGACY_COMPAT | handler 注册（DLQ 保护），无新 enqueue，无 DLQ 文件存量 |
 | `LEGACY_TASK_TYPES` | ACTIVE | `time_based` DLQ monitor sweep 使用 |
 | `character_growth.update()` 内 `trait_state()` 无 char_id | 死代码缺陷 | 因 update() 无调用方，不影响生产；R8-E 删除时一并清理 |
 
+**R8-E1 已完成**：
+- `consolidate_to_growth` 已从 `LEGACY_TASK_TYPES` 移除（2026-06-10，R8-E1）
+
 **R8-E 候选（可在下包删除）**：
 - `character_growth.update()` 函数体及调用（整个 async 函数，不含 `load()`）
-- `consolidate_to_growth` 条目可从 `LEGACY_TASK_TYPES` 移除（但保留至少 30 天后）
 - `character_growth.should_update()` 函数（已注明 "Legacy：当前无外部调用者"）
 
 **保留至 30-day TTL 后再评估**：
@@ -312,16 +314,18 @@ token”的问题已缓解。
 
 **位置**：`core/post_process/slow_queue.py`、`core/scheduler/triggers/time_based.py`
 
-`mid_term_append`、`episodic_compress`、`consolidate_to_growth` 三个 handler
-仅为 DLQ 残留任务保留。R8-A 起，`dlq_monitor` 每日扫描时自动将这些类型超过 30 天的
+`mid_term_append`、`episodic_compress` 两个 handler 仅为 DLQ 残留任务保留。
+R8-A 起，`dlq_monitor` 每日扫描时自动将这些类型超过 30 天的
 DLQ 文件移到 `data/logs/dead_letter_queue/expired/`（不静默删除，保留审计记录）。
 
-R8-D 实测：当前 DLQ 目录无任何 legacy task 文件（`mid_term_append` / `episodic_compress` /
-`consolidate_to_growth`），唯一存量文件为活跃类型 `reflect_to_episodic`，30-day TTL
-归零已提前达成（无 legacy 积压）。
+R8-E1（2026-06-10）：`consolidate_to_growth` 已从 `LEGACY_TASK_TYPES` 移除 —
+它从未注册 handler，从未 enqueue，DLQ 目录无任何存量文件，属 DEAD 名字残留。
+
+R8-D 实测：当前 DLQ 目录无任何 legacy task 文件（`mid_term_append` / `episodic_compress`），
+30-day TTL 归零已提前达成（无 legacy 积压）。
 
 30 天观察已可视为完成，届时可进入 R8-E 评估 handler 是否可安全退役。
-在此之前 **不要删除** 这三个 handler 的注册。
+在此之前 **不要删除** `mid_term_append` / `episodic_compress` 的 handler 注册。
 
 ### 其他观察
 

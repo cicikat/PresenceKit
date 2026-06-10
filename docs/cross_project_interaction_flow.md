@@ -72,7 +72,7 @@
 | `mid_term` | 12 小时中期摘要 | `D:\ai\qq-st-bot\core\memory\mid_term.py`；`D:\ai\qq-st-bot\core\memory\fixation_pipeline.py:283` |
 | `episodic_memory` | 情景记忆 | `D:\ai\qq-st-bot\core\memory\episodic_memory.py`；`D:\ai\qq-st-bot\core\memory\fixation_pipeline.py:343` |
 | `character_growth` | 角色对用户的长期认知 | `D:\ai\qq-st-bot\core\memory\character_growth.py`；`D:\ai\qq-st-bot\core\memory\fixation_pipeline.py:540` |
-| `capture_turn` / `summarize_to_midterm` / `reflect_to_episodic` / `consolidate_to_growth` | 信息固化四 job | `D:\ai\qq-st-bot\core\memory\fixation_pipeline.py:240` / `:283` / `:343` / `:540` |
+| `capture_turn` / `summarize_to_midterm` / `reflect_to_episodic` / `consolidate_to_identity` | 信息固化四 job | `D:\ai\qq-st-bot\core\memory\fixation_pipeline.py:240` / `:283` / `:343` / `:540` |
 | `user_profile` | 用户画像、低频传感器摘要、心率/睡眠片段 | `D:\ai\qq-st-bot\core\memory\user_profile.py`；`D:\ai\qq-st-bot\admin\routers\sensor.py:27`；`D:\ai\qq-st-bot\admin\routers\watch.py:14` |
 | `pending_perception` | 桌面动作失败感知暂存 | `D:\ai\qq-st-bot\core\memory\pending_perception.py`；`D:\ai\qq-st-bot\core\pipeline.py:216` |
 | `realtime_state` | 实时 sensor 内存快照，不持久化 | `D:\ai\qq-st-bot\core\memory\realtime_state.py:18` |

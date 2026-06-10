@@ -125,7 +125,7 @@ async def record_assistant_turn(
    - **此步之后，任何"直推 desktop_ws / mobile_queue"的代码必须删除**
 
 7. **post_process 慢队列触发**（与 owner 入口一致）
-   - 入 slow_queue：`summarize_to_midterm` / `reflect_to_episodic` / `consolidate_to_growth` / `consistency_check` / `user_profile_update`
+   - 入 slow_queue：`summarize_to_midterm` / `reflect_to_episodic` / `consolidate_to_identity` / `consistency_check` / `user_profile_update`
    - `await_critical_post_process=True` 时等待关键块（`detect_emotion` + `mood_state.update` + `capture_turn`）完成再返回
    - TTS / 表情包等副作用保持 `asyncio.create_task` 模式，不接管
 

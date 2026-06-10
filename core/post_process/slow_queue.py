@@ -25,9 +25,10 @@ _MAX_RETRIES = 2  # 首次 + 最多 2 次重试，共 3 次尝试
 # R8-A: task types kept only for DLQ backward-compat — no longer enqueued by current code.
 # These are candidates for automatic 30-day expiry in the DLQ monitor sweep.
 LEGACY_TASK_TYPES: frozenset[str] = frozenset({
-    "mid_term_append",       # superseded by summarize_to_midterm (S6 migration)
-    "episodic_compress",     # superseded by reflect_to_episodic (S6 migration)
-    "consolidate_to_growth", # never registered; from pre-S5 code
+    "mid_term_append",   # superseded by summarize_to_midterm (S6 migration)
+    "episodic_compress", # superseded by reflect_to_episodic (S6 migration)
+    # "consolidate_to_growth" removed in R8-E1: was DEAD (name-only residue, never registered,
+    # no enqueue, no DLQ files). See docs/known-issues.md TD-2 / TD-3.
 })
 
 

@@ -85,10 +85,10 @@ get_tags()（build_prompt 内计算；部分入口可显式传入复用）
   ├─ summarize_to_midterm              LLM 压缩单轮到 mid_term，写血缘字段；emotion 显著时触发 reflect_to_episodic(eager)
   ├─ reflect_to_episodic               mid_term 列表 → episodic，更新 fixation_state；达阈值触发 consolidate_to_identity
   ├─ consolidate_to_identity           unconsolidated episodic + old identity + profile → user_identity.yaml
-  ├─ consolidate_to_growth             legacy handler：unconsolidated episodic → character_growth.md（供旧 DLQ / 手动兼容）
   ├─ consistency_check                 人设一致性检测，问题存 author_note_extra
   └─ user_profile_update               每 N 轮触发，入队时已判断条件
   │  （旧 handler mid_term_append / episodic_compress 保留供 DLQ 残留任务重试）
+  │  （consolidate_to_growth 已在 R8-E1 移除：DEAD 名字残留，从未注册 handler）
   │
   │  【side effects】保持 asyncio.create_task，不入慢队列：
   ├─ TTS / 表情包（随机互斥）

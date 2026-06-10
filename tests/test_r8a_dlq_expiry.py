@@ -15,7 +15,7 @@ Coverage:
 11. DLQ monitor does NOT archive recent legacy task
 12. DLQ monitor does NOT archive live task even if old
 13. Old record missing failed_at uses filename prefix fallback
-14. All three legacy types (mid_term_append / episodic_compress / consolidate_to_growth) expire
+14. Two LEGACY_COMPAT types (mid_term_append / episodic_compress) still expire via sweep
 15. Mixed file set: only expired legacy file archived
 16. Legacy handler functions still exist (no accidental deletion)
 """
@@ -125,7 +125,8 @@ def test_legacy_task_types_contains_zombie_handlers():
     from core.post_process.slow_queue import LEGACY_TASK_TYPES
     assert "mid_term_append" in LEGACY_TASK_TYPES
     assert "episodic_compress" in LEGACY_TASK_TYPES
-    assert "consolidate_to_growth" in LEGACY_TASK_TYPES
+    # R8-E1: consolidate_to_growth removed from LEGACY_TASK_TYPES (DEAD name-only residue)
+    assert "consolidate_to_growth" not in LEGACY_TASK_TYPES
 
 
 def test_live_task_types_not_in_legacy():
@@ -234,7 +235,21 @@ async def test_sweep_episodic_compress_is_legacy(sandbox):
     assert len(archived) == 1
 
 
-async def test_sweep_consolidate_to_growth_is_legacy(sandbox):
+def test_consolidate_to_growth_not_in_legacy_task_types():
+    """R8-E1: consolidate_to_growth removed from LEGACY_TASK_TYPES.
+    It was DEAD (name-only residue): never registered as handler, never enqueued,
+    no DLQ files. Removing it prevents the sweep from expiring any hypothetical
+    stale DLQ file with this type.
+    """
+    from core.post_process.slow_queue import LEGACY_TASK_TYPES
+    assert "consolidate_to_growth" not in LEGACY_TASK_TYPES
+
+
+async def test_sweep_does_not_archive_consolidate_to_growth_dlq_file(sandbox):
+    """R8-E1: A hypothetical DLQ file with type consolidate_to_growth is NOT swept.
+    Since it is no longer in LEGACY_TASK_TYPES, the monitor treats it as unknown
+    and leaves it in the active DLQ (same as any live task type).
+    """
     from core.scheduler.triggers.time_based import _check_dlq_monitor
 
     dlq_dir = sandbox.dead_letter_queue()
@@ -244,8 +259,10 @@ async def test_sweep_consolidate_to_growth_is_legacy(sandbox):
     _reset_dlq_cooldown()
     await _check_dlq_monitor()
 
+    active = list(dlq_dir.glob("*.json"))
     archived = list((dlq_dir / "expired").glob("*.json")) if (dlq_dir / "expired").exists() else []
-    assert len(archived) == 1
+    assert len(active) == 1, "consolidate_to_growth DLQ file must not be swept (not in LEGACY_TASK_TYPES)"
+    assert len(archived) == 0
 
 
 async def test_sweep_mixed_files(sandbox):

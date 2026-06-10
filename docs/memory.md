@@ -501,13 +501,13 @@ LLM 生成的结构化 Markdown，客观描述用户特点：
 
 ### 当前状态
 
-`character_growth` 的读写代码、`consolidate_to_growth` handler、`.fingerprint.txt` / `.felt.md`
+`character_growth` 的读写代码、`.fingerprint.txt` / `.felt.md`
 派生文件仍保留，`get_growth` 工具也仍可读取它；但当前 prompt_builder 已不再注入
 `6a_growth_fingerprint` / `6a_growth_full`，`fetch_context()` 也不再固定读取 `character_growth`。
 
-`reflect_to_episodic()` 达阈值后自动入队的是 `consolidate_to_identity`，不是
-`consolidate_to_growth`。因此 `character_growth` 现在应视作 legacy/兼容出口，除非手动或旧 DLQ
-任务触发 `consolidate_to_growth`。
+`reflect_to_episodic()` 达阈值后自动入队的是 `consolidate_to_identity`（不是
+`consolidate_to_growth`）。`consolidate_to_growth` 是 pre-S5 遗留名称，R8-E1 已从
+`LEGACY_TASK_TYPES` 移除，因此 `character_growth` 现在应视作只读 legacy 出口（`get_growth` 工具）。
 
 ### legacy 更新机制
 
@@ -675,9 +675,9 @@ consolidate_to_identity
     └─ 标记 episodic.consolidated_at，重置 fixation_state
 ```
 
-`consolidate_to_growth` handler 仍注册，供旧 DLQ / 手动兼容路径重试；它会写
-`character_growth.md`、`.fingerprint.txt`、`.felt.md`。但当前自动阈值出口已切到
-`consolidate_to_identity`。
+自动阈值出口为 `consolidate_to_identity`（写 `user_identity.yaml`）。
+`consolidate_to_growth` 是 pre-S5 遗留名称，从未注册 handler，R8-E1 已从
+`LEGACY_TASK_TYPES` 移除；`character_growth.md` 现仅由 `get_growth` 工具只读访问。
 
 ### schema 字段（新增）
 

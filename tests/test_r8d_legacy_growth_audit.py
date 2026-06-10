@@ -7,7 +7,7 @@ Coverage:
 3.  character_growth.update() 在 core/ 内无生产调用方（DEAD_CANDIDATE 确认）
 4.  legacy handler mid_term_append / episodic_compress 仍注册（DLQ 保护）
 5.  consolidate_to_growth 未注册为 handler（DEAD 确认）
-6.  LEGACY_TASK_TYPES 完整包含三个 legacy 类型
+6.  LEGACY_TASK_TYPES 包含两个 LEGACY_COMPAT 类型（R8-E1 移除 consolidate_to_growth 后）
 7.  LEGACY_TASK_TYPES 不包含任何活跃任务类型
 8.  author_note_rotator 不导入 character_growth
 9.  character_growth.update() 内的 trait_state 写路径存在 char_id 缺省问题（死代码残留记录）
@@ -17,7 +17,7 @@ Coverage:
 
 审计结论（快速参考）：
   character_growth.update()  → DEAD_CANDIDATE （无生产调用方）
-  consolidate_to_growth      → DEAD           （LEGACY_TASK_TYPES 名字残留，无 handler，无 enqueue）
+  consolidate_to_growth      → REMOVED R8-E1  （已从 LEGACY_TASK_TYPES 删除；无 handler，无 enqueue，无 DLQ 存量）
   mid_term_append            → LEGACY_COMPAT  （handler 注册，DLQ 保护，无新 enqueue）
   episodic_compress          → LEGACY_COMPAT  （handler 注册，DLQ 保护，无新 enqueue）
   _handler_mid_term_append   → LEGACY_COMPAT  （同上）
@@ -172,9 +172,8 @@ def test_legacy_handlers_mid_term_append_and_episodic_compress_registered(monkey
 def test_consolidate_to_growth_not_registered_as_handler(monkeypatch):
     """
     After register_slow_handlers(), 'consolidate_to_growth' must NOT be
-    in the handler registry — it was never a live handler, only a
-    LEGACY_TASK_TYPES DLQ-name-only entry from pre-S5 code.
-    Status: DEAD (name survives only in LEGACY_TASK_TYPES for expiry detection).
+    in the handler registry. It was never a live handler (pre-S5 code artifact).
+    R8-E1: also removed from LEGACY_TASK_TYPES.
     """
     import core.post_process.slow_queue as sq
     sq._handlers = {}
@@ -193,20 +192,23 @@ def test_consolidate_to_growth_not_registered_as_handler(monkeypatch):
 
     assert "consolidate_to_growth" not in sq._handlers, (
         "'consolidate_to_growth' must never be registered as a slow_queue handler "
-        "(DEAD: pre-S5 code artifact; only present in LEGACY_TASK_TYPES for DLQ expiry)"
+        "(REMOVED R8-E1: pre-S5 code artifact; no handler, no enqueue, no DLQ files)"
     )
 
 
 # ---------------------------------------------------------------------------
-# 6. LEGACY_TASK_TYPES 完整包含三个 legacy 类型
+# 6. LEGACY_TASK_TYPES 包含两个 LEGACY_COMPAT 类型；不含 consolidate_to_growth（R8-E1 移除）
 # ---------------------------------------------------------------------------
 
-def test_legacy_task_types_contains_all_three_legacy_names():
-    """LEGACY_TASK_TYPES must contain all three known legacy task type names."""
+def test_legacy_task_types_contains_two_compat_names():
+    """R8-E1: LEGACY_TASK_TYPES contains mid_term_append + episodic_compress only.
+    consolidate_to_growth is removed (DEAD name-only residue, never registered,
+    no enqueue, no DLQ files).
+    """
     from core.post_process.slow_queue import LEGACY_TASK_TYPES
     assert "mid_term_append" in LEGACY_TASK_TYPES
     assert "episodic_compress" in LEGACY_TASK_TYPES
-    assert "consolidate_to_growth" in LEGACY_TASK_TYPES
+    assert "consolidate_to_growth" not in LEGACY_TASK_TYPES
     assert isinstance(LEGACY_TASK_TYPES, frozenset)
 
 
