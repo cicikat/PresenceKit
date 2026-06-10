@@ -35,15 +35,18 @@ class PromptLayer:
 def prompt_layer_to_message(layer: PromptLayer) -> dict:
     """Convert a PromptLayer to a message dict for prompt_builder.
 
-    The returned dict contains ``_layer`` so the existing token-pruning logic
-    can identify and drop this message.  Call sanitize_messages() on the full
-    list before handing it to the LLM API.
+    The returned dict contains ``_layer`` (and ``_drop_priority`` when set) so
+    the token-pruning logic can identify and drop this message by priority.
+    Call sanitize_messages() on the full list before handing it to the LLM API.
     """
-    return {
+    msg: dict = {
         "role": layer.role,
         "content": layer.content,
         "_layer": layer.name,
     }
+    if layer.drop_priority is not None:
+        msg["_drop_priority"] = layer.drop_priority
+    return msg
 
 
 def sanitize_messages(messages: list[dict]) -> list[dict]:

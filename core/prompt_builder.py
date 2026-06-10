@@ -557,6 +557,7 @@ def build(
             "role": "system",
             "content": f"【世界书】\n{lore_text}",
             "_layer": "5.5_lore",
+            "_drop_priority": 80,
         })
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -586,6 +587,7 @@ def build(
             "role": "system",
             "content": f"【相关往事】\n{event_search_result}",
             "_layer": "6b_event_search",
+            "_drop_priority": 30,
         })
 
     # 层 6c：情景记忆（角色视角的情节片段）
@@ -595,6 +597,7 @@ def build(
             "role": "system",
             "content": f"【{character.name}记得的片段】\n{episodic_result}",
             "_layer": "6c_episodic",
+            "_drop_priority": 70,
         })
     elif episodic_fallback_result:
         # tag 未命中时兜底：注入近期高强度记忆，标注是自己想起来的
@@ -603,6 +606,7 @@ def build(
             "role": "system",
             "content": f"【{character.name}最近印象深的事】\n{episodic_fallback_result}",
             "_layer": "6c_episodic",
+            "_drop_priority": 70,
         })
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -615,6 +619,7 @@ def build(
             "role": "system",
             "content": f"# 最近 12 小时\n{mid_term_context}",
             "_layer": "mid_term",
+            "_drop_priority": 40,
         })
 
     # ──────────────────────────────────────────────────────────────────────────
@@ -627,6 +632,7 @@ def build(
             "role": "system",
             "content": f"【用户的近期日记】\n{diary_context}",
             "_layer": "6d_diary_context",
+            "_drop_priority": 50,
         })
 
     # 层 6e：角色昨天的日记（事件层必注入，感受层按情绪tag条件注入）
@@ -659,6 +665,7 @@ def build(
                         "role": "system",
                         "content": f"【{character.name}昨天的记录】\n{_facts_part[:200]}",
                         "_layer": "6e_inner_diary",
+                        "_drop_priority": 60,
                     })
 
                 # 感受层：只在情绪相关tag时注入（取前150字）
@@ -669,6 +676,7 @@ def build(
                         "role": "system",
                         "content": f"【{character.name}昨天的心情】\n{_feeling_part[:150]}",
                         "_layer": "6e_inner_diary",
+                        "_drop_priority": 60,
                     })
     except Exception:
         pass
@@ -685,6 +693,7 @@ def build(
             "role": "system",
             "content": _afterglow_hint,
             "_layer": "dream_afterglow_soft_hint",
+            "_drop_priority": 10,
         })
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -697,6 +706,7 @@ def build(
             "role": "system",
             "content": dream_impression_text,
             "_layer": "6g_dream_impression",
+            "_drop_priority": 20,
         })
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -894,16 +904,31 @@ def build(
     # 估算基于字符数（1 token ≈ 1.5~2 汉字，此处保守用字符数做硬上限）
     # ─────────────────────────────────────────────────────────────────────────
     token_estimate = sum(len(m["content"]) for m in messages)
+    _removed_layers: list[str] = []
     if token_estimate > 20000:
         _prompt_logger.warning(f"[prompt] token估算超硬上限: {token_estimate}，触发层裁剪")
-        # 强制裁剪：按优先级删层，先删6b/6c/6d，再删5.5/6e
-        # 按质量从低到高排序：先丢质量最低的（关键词匹配），最后才丢质量最高的（LLM压缩+MMR筛选）和世界设定
-        _DROPPABLE = ["dream_afterglow_soft_hint", "6g_dream_impression", "6b_event_search", "mid_term", "6d_diary", "6e_inner_diary", "6c_episodic", "5.5_lore"]
-        for drop in _DROPPABLE:
-            if token_estimate <= 18000:
-                break
-            messages = [m for m in messages if not m.get("_layer", "").startswith(drop)]
-            token_estimate = sum(len(m["content"]) for m in messages)
+        # R4-B: 动态裁剪——收集所有带 _drop_priority 的消息，按 priority 升序排列（数字越小越先丢），
+        # 同 priority 整批一次性丢弃，直到估算 ≤18000。无 _drop_priority 的层永不被自动丢弃。
+        _droppable = [
+            (i, m) for i, m in enumerate(messages)
+            if m.get("_drop_priority") is not None
+        ]
+        _droppable.sort(key=lambda x: (x[1]["_drop_priority"], x[0]))
+        _drop_indices: set[int] = set()
+        _di = 0
+        while _di < len(_droppable) and token_estimate > 18000:
+            _cur_prio = _droppable[_di][1]["_drop_priority"]
+            # 整批同 priority 的消息一次性丢弃
+            while _di < len(_droppable) and _droppable[_di][1]["_drop_priority"] == _cur_prio:
+                _idx, _msg = _droppable[_di]
+                _drop_indices.add(_idx)
+                _removed_layers.append(_msg.get("_layer", "?"))
+                token_estimate -= len(_msg["content"])
+                _di += 1
+        if _drop_indices:
+            messages = [m for j, m in enumerate(messages) if j not in _drop_indices]
+        if _removed_layers:
+            _prompt_logger.info(f"[prompt] 裁剪层：{_removed_layers}，裁剪后估算：{token_estimate}")
     elif token_estimate > 15000:
         _prompt_logger.warning(f"[prompt] token估算超软警戒: {token_estimate}")
 
@@ -919,6 +944,7 @@ def build(
         "layers_activated": _layers,
         "token_estimate": sum(len(m["content"]) for m in messages),
         "tags": list(_tags),
+        "removed_layers": _removed_layers,
     }
 
 

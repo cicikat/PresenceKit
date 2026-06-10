@@ -63,11 +63,18 @@ class TestPromptLayerConstruction:
         assert msg["role"] == "system"
         assert msg["content"] == "some context"
 
-    def test_to_message_does_not_include_drop_priority(self):
+    def test_to_message_includes_drop_priority_for_trimmer(self):
+        # R4-B: _drop_priority IS included in the internal message dict so the
+        # trimmer can read it.  sanitize_messages() strips it before the API call.
         layer = PromptLayer(name="x", content="y", drop_priority=5)
         msg = prompt_layer_to_message(layer)
+        assert msg["_drop_priority"] == 5
+        assert "drop_priority" not in msg  # public (non-underscore) key must not exist
+
+    def test_to_message_omits_drop_priority_when_none(self):
+        layer = PromptLayer(name="x", content="y")  # drop_priority=None default
+        msg = prompt_layer_to_message(layer)
         assert "_drop_priority" not in msg
-        assert "drop_priority" not in msg
 
 
 # ---------------------------------------------------------------------------

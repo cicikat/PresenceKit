@@ -159,23 +159,56 @@ token_estimate = sum(len(m["content"]) for m in messages)
 | 字符数 | 行为 |
 |---|---|
 | > 15000 | warning 日志 |
-| > 20000 | 强制裁剪 |
+| > 20000 | 强制裁剪，目标降到 ≤18000 |
 
-### 裁剪顺序
+### _drop_priority 裁剪元数据（R4-B）
 
-依次删以下层（通过 `_layer` 字段 startswith 匹配），按质量从低到高：
-dream_afterglow_soft_hint → 6g_dream_impression → 6b_event_search → mid_term → 6d_diary → 6e_inner_diary → 6c_episodic → 5.5_lore
+每条可裁剪消息在 `messages.append()` 时附带内部字段 `_drop_priority: int`：
 
-设计原则：
-- `dream_afterglow_soft_hint` 是梦境余韵软提示，非事实、只读、最轻量，最先丢（优先级最低）
-- `6g_dream_impression` 是模糊梦境印象，ambient 注入、低权重、非事实，次先丢
-- `6b_event_search` 是关键词匹配 + 简单评分，质量较低，次先丢
-- `mid_term` / `6d_diary` / `6e_inner_diary` 是被动上下文，丢了不影响相关性
-- `6c_episodic` 经过 LLM 压缩 + strength 校正 + MMR 多样性筛选，是质量最高的记忆层，靠后丢
-- `5.5_lore` 是世界书设定，丢了等于角色失忆，最后丢
+- **数字越小越先丢**（lower = dropped first）。
+- `None` / 未声明 = 不可裁，裁剪器不得自动删除。
+- `sanitize_messages()` 会在 LLM API 出口剥离此字段，不会泄漏给供应商。
+- `_DROPPABLE` 中心列表已在 R4-B 退役（`_DROPPABLE` no longer exists in production code）。
 
-`6a_user_identity`、`5_profile`、`9_history`、`11_author_note` 不在裁剪表里。
-`_layer` 字段在 R4-A 之后已在 `llm_client.chat()` 入口统一剥离，不再透传给供应商（见下方 **PromptLayer 与 LLM 边界** 章节）。
+### 当前裁剪顺序
+
+| `_drop_priority` | 层 | 说明 |
+|---|---|---|
+| 10 | `dream_afterglow_soft_hint` | 梦境余韵软提示，只读非事实，最先丢 |
+| 20 | `6g_dream_impression` | 梦境印象回流，ambient 非事实框定，次先丢 |
+| 30 | `6b_event_search` | 关键词 + 评分搜索结果，质量较低 |
+| 40 | `mid_term` | 过去 12 小时压缩视图 |
+| 50 | `6d_diary_context` | 用户近期日记，tag 门控注入 |
+| 60 | `6e_inner_diary` | 角色昨天日记（事件层 + 感受层，同 priority 整批丢） |
+| 70 | `6c_episodic` | LLM 压缩 + MMR 筛选的情景记忆，高质量，靠后丢 |
+| 80 | `5.5_lore` | 世界书设定，最后丢 |
+
+不在裁剪表里（无 `_drop_priority`）：`6a_user_identity`、`5_profile`、`5.1_user_facts`、`9_history`、`11_author_note` 等核心层。
+
+### 裁剪算法
+
+1. 收集所有 `_drop_priority is not None` 的消息，按 priority 升序排列，同 priority 按原始顺序（稳定排序）。
+2. 按 priority 分组，整批原子性丢弃，丢完后检查预算是否达标。
+3. 预算已满（≤18000）即停止，更高 priority 的层保留。
+4. 无 `_drop_priority` 的层永不被裁剪器触碰。
+5. 裁剪结果写入 `debug_info["removed_layers"]`，与实际删除严格一致。
+
+### 新增可裁剪层规范
+
+新层如果可裁，必须在 `messages.append()` 时声明 `_drop_priority`：
+
+```python
+messages.append({
+    "role": "system",
+    "content": some_text,
+    "_layer": "Nx_new_layer",
+    "_drop_priority": 35,   # 插入已有层之间，不需要改中心列表
+})
+```
+
+不再需要修改任何中心列表。`sanitize_messages()` 保证此字段不出 LLM 边界。
+
+`_layer` 和 `_drop_priority` 在 R4-A/R4-B 之后已在 `llm_client.chat()` 入口统一剥离，不再透传给供应商（见下方 **PromptLayer 与 LLM 边界** 章节）。
 
 ---
 
@@ -223,10 +256,11 @@ class PromptLayer:
 - `_layer` 可以在 prompt_builder → 裁剪 → 日志 整个内部路径中存在。
 - 但出 `llm_client.chat()` 边界后，供应商收到的 messages 里不会有任何内部字段。
 
-### R4-B 待完成
+### R4-B（已完成）
 
-- 强制所有可裁剪层在 `prompt_layer_to_message` 或 `messages.append` 时声明 `drop_priority`。
-- 裁剪逻辑迁至按 `drop_priority` 动态排序，取代当前硬编码 `_DROPPABLE` 列表。
+- 所有可裁剪层在 `messages.append` 时声明 `_drop_priority`；`prompt_layer_to_message()` 也在 `drop_priority is not None` 时写入 `_drop_priority`。
+- 裁剪逻辑已迁至按 `_drop_priority` 动态排序，`_DROPPABLE` 中心列表已退役。
+- `debug_info["removed_layers"]` 反映实际删除层，不依赖静态列表。
 
 ---
 
@@ -235,6 +269,6 @@ class PromptLayer:
 新增一层时必须：
 
 1. 在 messages.append() 时加 `"_layer": "N_name"` 字段
-2. 如果是可裁剪的非核心层，加入上面的裁剪顺序
+2. 如果是可裁剪的非核心层，加 `"_drop_priority": N` 字段（数字越小越先丢）；无需修改任何中心列表
 3. 如果是 tagged 层，在 `tag_rules.py` 里确认有对应 tag 规则
-4. 在此文档的层总览表格里补充说明
+4. 在此文档的层总览表格和裁剪顺序表里补充说明
