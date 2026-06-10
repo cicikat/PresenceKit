@@ -443,13 +443,14 @@ class Pipeline:
         assert char_id is not None
         scope_payload = scope.to_payload()
 
-        # N2-A: sleepy mood — 从 fetch_context 迁出的显式写操作。
+        # N2-A/N2-B: sleepy mood — 从 fetch_context 迁出的显式写操作。
         # 放在 post_process 开头（uid_lock 外）：保留深夜 sleepy 语义，
         # 但不再污染读路径。覆盖所有调用链（QQ / admin / scheduler），
         # 因为 record_assistant_turn 最终都走 pipeline.post_process。
+        # N2-B: helper 已升级为 async + global_lock("mood_state")，需 await。
         try:
             from core.mood_helpers import maybe_mark_sleepy_from_time as _mark_sleepy
-            _mark_sleepy(uid=user_id, char_id=char_id, envelope=envelope)
+            await _mark_sleepy(uid=user_id, char_id=char_id, envelope=envelope)
         except Exception as _sleepy_err:
             logger.warning("[pipeline.post_process] sleepy mood 写入异常（已忽略）: %s", _sleepy_err)
 

@@ -315,6 +315,9 @@ async def handle_message(message: dict):
     # conversation_lock 保证多端（QQ / desktop / mobile）不并行跑同一用户的 pipeline。
     # 同时保证 scope freeze 的一致性：同一把锁内 char_id 不会被另一轮入侵。
     from core.conversation_gate import conversation_lock
+    # N2-B: qq envelope 提前构造，供 thinking helper 传入 envelope 参数
+    from core.write_envelope import stamp_qq as _stamp_qq_early
+    _qq_envelope = _stamp_qq_early()
     async with conversation_lock(user_id):
         # ── 步骤3：工具调用探测 ──────────────────────────────────────────────
         from core import llm_client
@@ -357,9 +360,9 @@ async def handle_message(message: dict):
             logger.info(f"[handle_message] probe_response type={type(probe_response)} tool_calls={tool_calls}")
         if tool_calls:
             try:
-                # N2-A: thinking mood 写入通过显式 helper，不再裸调 mood_state.update
+                # N2-A/N2-B: thinking mood 写入通过显式 helper，传入 qq envelope
                 from core.mood_helpers import mark_tool_thinking_mood as _mark_thinking
-                _mark_thinking(uid=user_id, char_id=_char_id)
+                await _mark_thinking(uid=user_id, char_id=_char_id, envelope=_qq_envelope)
             except Exception:
                 pass
             for tc in tool_calls:

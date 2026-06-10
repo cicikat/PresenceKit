@@ -337,22 +337,33 @@ def test_main_py_does_not_import_mood_state_update_directly():
     )
 
 
-def test_mark_tool_thinking_mood_calls_mood_update():
-    """N2-A T3a: mark_tool_thinking_mood 调 mood_state.update('thinking', ...)。"""
+@pytest.mark.asyncio
+async def test_mark_tool_thinking_mood_calls_mood_update():
+    """N2-A T3a: mark_tool_thinking_mood 调 mood_state.update('thinking', ...)。
+    N2-B update: helper 已升级为 async，需 await + mock lock。
+    """
+    from unittest.mock import AsyncMock
     from core import mood_helpers
     import core.memory.mood_state as _ms
 
     calls = []
-    with patch.object(_ms, "update",
-                      side_effect=lambda *a, **kw: calls.append((a, kw))):
-        mood_helpers.mark_tool_thinking_mood(uid="u1", char_id="yexuan")
+    mock_lock = AsyncMock()
+    mock_lock.__aenter__ = AsyncMock(return_value=None)
+    mock_lock.__aexit__ = AsyncMock(return_value=False)
+    with patch("core.memory.locks.global_lock", return_value=mock_lock):
+        with patch.object(_ms, "update",
+                          side_effect=lambda *a, **kw: calls.append((a, kw))):
+            await mood_helpers.mark_tool_thinking_mood(uid="u1", char_id="yexuan")
 
     assert len(calls) == 1
     assert calls[0][0][0] == "thinking", f"情绪应为 thinking，实际 {calls[0][0][0]!r}"
 
 
-def test_mark_tool_thinking_mood_skips_when_envelope_blocks():
-    """N2-A T3b: envelope.can_affect_mood=False 时不写 mood。"""
+@pytest.mark.asyncio
+async def test_mark_tool_thinking_mood_skips_when_envelope_blocks():
+    """N2-A T3b: envelope.can_affect_mood=False 时不写 mood。
+    N2-B update: helper 已升级为 async，需 await。envelope 拦截在 lock 前，无需 mock lock。
+    """
     from core import mood_helpers
     import core.memory.mood_state as _ms
     from core.write_envelope import WriteEnvelope
@@ -361,7 +372,7 @@ def test_mark_tool_thinking_mood_skips_when_envelope_blocks():
     calls = []
     with patch.object(_ms, "update",
                       side_effect=lambda *a, **kw: calls.append((a, kw))):
-        mood_helpers.mark_tool_thinking_mood(uid="u1", char_id="yexuan", envelope=env)
+        await mood_helpers.mark_tool_thinking_mood(uid="u1", char_id="yexuan", envelope=env)
 
     assert calls == []
 
@@ -370,26 +381,37 @@ def test_mark_tool_thinking_mood_skips_when_envelope_blocks():
 # 4. sleepy 语义仍存在，由 post_process 内 maybe_mark_sleepy_from_time 触发
 # ══════════════════════════════════════════════════════════════════════════════
 
-def test_maybe_mark_sleepy_writes_when_nighttime():
-    """N2-A T4a: 深夜 neutral 时写入 sleepy。"""
+@pytest.mark.asyncio
+async def test_maybe_mark_sleepy_writes_when_nighttime():
+    """N2-A T4a: 深夜 neutral 时写入 sleepy。
+    N2-B update: helper 已升级为 async，需 await + mock lock。
+    """
+    from unittest.mock import AsyncMock
     from core import mood_helpers
     import core.memory.mood_state as _ms
 
     calls = []
+    mock_lock = AsyncMock()
+    mock_lock.__aenter__ = AsyncMock(return_value=None)
+    mock_lock.__aexit__ = AsyncMock(return_value=False)
     with (
         patch("core.mood_helpers.datetime") as _dt,
+        patch("core.memory.locks.global_lock", return_value=mock_lock),
         patch.object(_ms, "get_current", return_value="neutral"),
         patch.object(_ms, "update",
                      side_effect=lambda *a, **kw: calls.append((a, kw))),
     ):
         _dt.now.return_value.hour = 23
-        mood_helpers.maybe_mark_sleepy_from_time(uid="u1", char_id="yexuan")
+        await mood_helpers.maybe_mark_sleepy_from_time(uid="u1", char_id="yexuan")
 
     assert len(calls) == 1 and calls[0][0][0] == "sleepy"
 
 
-def test_maybe_mark_sleepy_skips_when_daytime():
-    """N2-A T4b: 白天不写 sleepy。"""
+@pytest.mark.asyncio
+async def test_maybe_mark_sleepy_skips_when_daytime():
+    """N2-A T4b: 白天不写 sleepy。
+    N2-B update: helper 已升级为 async，需 await。白天在 lock 前返回，无需 mock lock。
+    """
     from core import mood_helpers
     import core.memory.mood_state as _ms
 
@@ -400,31 +422,42 @@ def test_maybe_mark_sleepy_skips_when_daytime():
                      side_effect=lambda *a, **kw: calls.append(a)),
     ):
         _dt.now.return_value.hour = 14
-        mood_helpers.maybe_mark_sleepy_from_time(uid="u1", char_id="yexuan")
+        await mood_helpers.maybe_mark_sleepy_from_time(uid="u1", char_id="yexuan")
 
     assert calls == []
 
 
-def test_maybe_mark_sleepy_skips_when_yandere():
-    """N2-A T4c: 深夜但 mood=yandere 时不覆盖。"""
+@pytest.mark.asyncio
+async def test_maybe_mark_sleepy_skips_when_yandere():
+    """N2-A T4c: 深夜但 mood=yandere 时不覆盖。
+    N2-B update: helper 已升级为 async，需 await + mock lock。
+    """
+    from unittest.mock import AsyncMock
     from core import mood_helpers
     import core.memory.mood_state as _ms
 
     calls = []
+    mock_lock = AsyncMock()
+    mock_lock.__aenter__ = AsyncMock(return_value=None)
+    mock_lock.__aexit__ = AsyncMock(return_value=False)
     with (
         patch("core.mood_helpers.datetime") as _dt,
+        patch("core.memory.locks.global_lock", return_value=mock_lock),
         patch.object(_ms, "get_current", return_value="yandere"),
         patch.object(_ms, "update",
                      side_effect=lambda *a, **kw: calls.append(a)),
     ):
         _dt.now.return_value.hour = 2
-        mood_helpers.maybe_mark_sleepy_from_time(uid="u1", char_id="yexuan")
+        await mood_helpers.maybe_mark_sleepy_from_time(uid="u1", char_id="yexuan")
 
     assert calls == []
 
 
-def test_maybe_mark_sleepy_skips_when_envelope_blocks():
-    """N2-A T4d: envelope.can_affect_mood=False 时不写。"""
+@pytest.mark.asyncio
+async def test_maybe_mark_sleepy_skips_when_envelope_blocks():
+    """N2-A T4d: envelope.can_affect_mood=False 时不写。
+    N2-B update: helper 已升级为 async，需 await。envelope 拦截在 lock 前，无需 mock lock。
+    """
     from core import mood_helpers
     import core.memory.mood_state as _ms
     from core.write_envelope import WriteEnvelope
@@ -438,8 +471,8 @@ def test_maybe_mark_sleepy_skips_when_envelope_blocks():
                      side_effect=lambda *a, **kw: calls.append(a)),
     ):
         _dt.now.return_value.hour = 23
-        mood_helpers.maybe_mark_sleepy_from_time(uid="u1", char_id="yexuan",
-                                                  envelope=env)
+        await mood_helpers.maybe_mark_sleepy_from_time(uid="u1", char_id="yexuan",
+                                                        envelope=env)
 
     assert calls == []
 
