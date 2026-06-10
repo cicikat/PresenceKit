@@ -174,8 +174,8 @@ dream_afterglow_soft_hint → 6g_dream_impression → 6b_event_search → mid_te
 - `6c_episodic` 经过 LLM 压缩 + strength 校正 + MMR 多样性筛选，是质量最高的记忆层，靠后丢
 - `5.5_lore` 是世界书设定，丢了等于角色失忆，最后丢
 
-`6a_user_identity`、`5_profile`、`9_history`、`11_author_note` 不在裁剪表里。注意 `_layer`
-字段当前仍随 messages 传入 LLM client，见 `docs/known-issues.md` 的 `_layer` 透传记录。
+`6a_user_identity`、`5_profile`、`9_history`、`11_author_note` 不在裁剪表里。
+`_layer` 字段在 R4-A 之后已在 `llm_client.chat()` 入口统一剥离，不再透传给供应商（见下方 **PromptLayer 与 LLM 边界** 章节）。
 
 ---
 
@@ -188,6 +188,45 @@ dream_afterglow_soft_hint → 6g_dream_impression → 6b_event_search → mid_te
 - 分组：优先按 `_turn_id` 把同一轮 user/assistant 连续消息绑在一起，旧数据按相邻 user+assistant 分组
 - 选择：固定保留最近 `NEAR_K=5` 组；更早的组按长度、实体、问句、数字/日期、tag、情绪信号打分择优补足预算
 - 日志：`short_term_weight` debug 会记录每组分数和是否入选
+
+---
+
+## PromptLayer 与 LLM 边界（R4-A）
+
+### PromptLayer 结构
+
+`core/prompt_layer.py` 中定义了轻量结构体：
+
+```python
+@dataclass(frozen=True)
+class PromptLayer:
+    name: str              # 层标识，如 "6c_episodic"
+    content: str           # 发送给 LLM 的文本
+    role: str = "system"   # system / user / assistant
+    drop_priority: int | None = None  # 越小越先丢；None = 永不自动丢
+```
+
+`PromptLayer` 是项目内部结构，不得直接序列化给供应商。
+
+- `prompt_layer_to_message(layer)` → 返回含 `_layer` 字段的 dict，供 prompt_builder 使用（保留裁剪元数据）。
+- `sanitize_messages(messages)` → 返回新列表，剥离所有 `_` 前缀内部字段，用于 LLM API 调用。
+
+### LLM API 边界规则
+
+`llm_client.chat()` 在进入任何分支（function_calling / xml_fallback / plain）前，统一调用 `sanitize_messages()` 清洗入参：
+
+- **剥离**：任何以 `_` 开头的键（`_layer`、`_debug`、`_drop_priority` 等）。
+- **保留**：`role`、`content`、`name`、`tool_calls`、`tool_call_id` 等标准 OpenAI 字段。
+- **不修改原始对象**：返回新 list + 新 dict，调用方持有的 messages 不受影响。
+
+这意味着：
+- `_layer` 可以在 prompt_builder → 裁剪 → 日志 整个内部路径中存在。
+- 但出 `llm_client.chat()` 边界后，供应商收到的 messages 里不会有任何内部字段。
+
+### R4-B 待完成
+
+- 强制所有可裁剪层在 `prompt_layer_to_message` 或 `messages.append` 时声明 `drop_priority`。
+- 裁剪逻辑迁至按 `drop_priority` 动态排序，取代当前硬编码 `_DROPPABLE` 列表。
 
 ---
 

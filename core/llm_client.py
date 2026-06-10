@@ -13,6 +13,7 @@ from openai import AsyncOpenAI
 
 from core.config_loader import get_config
 from core.error_handler import log_error
+from core.prompt_layer import sanitize_messages
 
 logger = logging.getLogger(__name__)
 
@@ -120,6 +121,10 @@ async def chat(
         function_calling 模式下如果模型调用了工具，返回序列化后的工具调用 JSON
     """
     _timeout = _CALL_TIMEOUTS.get(call_category, _DEFAULT_CALL_TIMEOUT)
+
+    # Strip internal fields (e.g. _layer, _debug) before any message reaches the API.
+    # Never mutates the caller's list.
+    messages = sanitize_messages(messages)
 
     # vision模式用视觉客户端和模型
     if use_vision:
