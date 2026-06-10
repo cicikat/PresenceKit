@@ -31,16 +31,17 @@ def _isolation(monkeypatch):
     clear_dedup_registry_for_test()
     import core.conversation_gate as _cg
     _cg._conversation_locks.clear()
-    # Save and restore _pipeline global
+    # Save and restore pipeline via pipeline_registry (R7-B: scheduler no longer owns _pipeline)
     import core.scheduler.loop as _loop
-    orig_pipeline = _loop._pipeline
+    import core.pipeline_registry as _preg
+    orig_pipeline = _preg.get()
     # Reset active-window so user is not flagged as active
     orig_last_msg = _loop._last_user_message_time
     _loop._last_user_message_time = 0.0
     yield
     clear_dedup_registry_for_test()
     _cg._conversation_locks.clear()
-    _loop._pipeline = orig_pipeline
+    _preg.register(orig_pipeline)
     _loop._last_user_message_time = orig_last_msg
 
 
@@ -99,7 +100,8 @@ def _setup_pipeline_send(monkeypatch, owner_id="owner1", char_id="yexuan", pipel
         "core.scheduler.triggers.birthday._is_birthday_period", lambda: False,
     )
     if pipeline is not None:
-        _loop._pipeline = pipeline
+        import core.pipeline_registry as _preg
+        _preg.register(pipeline)
 
     import core.turn_sink as _ts
 
@@ -351,7 +353,8 @@ async def test_duplicate_scheduler_event_no_llm_no_post_process(monkeypatch):
     )
     monkeypatch.setattr(_loop, "_active_char_id_or_none", lambda: "yexuan")
     monkeypatch.setattr("core.scheduler.triggers.birthday._is_birthday_period", lambda: False)
-    _loop._pipeline = fp
+    import core.pipeline_registry as _preg
+    _preg.register(fp)
 
     # Stub record_assistant_turn to call post_process so we can observe it
     async def _record_with_pp(**kwargs):

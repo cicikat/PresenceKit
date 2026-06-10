@@ -172,18 +172,22 @@ blocked log 格式：
 
 ## Pipeline 注入方式
 
-调度器有自己的 `_pipeline` 变量，由 `main.py` 初始化时调用注入：
+调度器统一从 `pipeline_registry` 获取 Pipeline 实例（R7-B 后已统一）：
 
 ```python
-from core.scheduler import loop as scheduler
-scheduler.set_pipeline(pipeline)
+# main.py 初始化时注册一次即可
+from core.pipeline_registry import register
+register(pipeline)
 ```
 
-> 注意：这和 `pipeline_registry.py` 是两套机制，调度器用的是 loop.py 内部的 `_pipeline`，不是 registry。
+`scheduler.set_pipeline(pipeline)` 已降为 **deprecated** 兼容壳，内部委托到 `pipeline_registry.register()`，
+调度器不再维护自己的 `_pipeline` 副本。
 
 注入后，调度器通过 `_pipeline_send()` 走完整四步流程生成回复：
 
 ```python
+# _pipeline_send 内部
+_pipeline = pipeline_registry.get()   # 从 registry 读取
 context  = await _pipeline.fetch_context(owner_id, prompt)
 messages, _ = _pipeline.build_prompt(owner_id, prompt, context)
 reply    = await _pipeline.run_llm(messages)

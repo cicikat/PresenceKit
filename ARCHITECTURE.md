@@ -234,16 +234,18 @@ data/
 
 ## 全局 Pipeline 实例管理
 
-`core/pipeline_registry.py` 持有唯一的 Pipeline 实例，供管理面板和后处理纠偏等跨模块获取。
-调度器另有一份 `_pipeline` 引用，由 `scheduler.set_pipeline(pipeline)` 注入。
+`core/pipeline_registry.py` 持有唯一的 Pipeline 实例，供管理面板、后处理纠偏、调度器等跨模块获取。
 
 ```python
 # 注册（main.py 初始化时）
 pipeline_registry.register(pipeline)
 
-# 跨模块获取（如 admin/routers/chat.py、consistency_check handler）
+# 跨模块获取（admin/routers/chat.py、consistency_check handler、scheduler._pipeline_send）
 pipeline = pipeline_registry.get()
 ```
+
+> `scheduler.set_pipeline()` 已降为 deprecated 兼容壳，内部委托到 `pipeline_registry.register()`。
+> 调度器不再维护自己的 `_pipeline` 副本；`_pipeline_send()` 执行时从 registry 读取当前实例。
 
 ---
 

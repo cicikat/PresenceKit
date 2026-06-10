@@ -184,7 +184,7 @@ async def test_pipeline_send_high_priority_exempt_from_active_window(monkeypatch
         recorded.append(kwargs)
         return SimpleNamespace(fanout_failures={})
 
-    monkeypatch.setattr(loop, "_pipeline", _FakePipeline())
+    monkeypatch.setattr("core.pipeline_registry.get", lambda: _FakePipeline())
     monkeypatch.setattr(loop, "_owner_id", lambda: "u1")
     monkeypatch.setattr(loop, "_last_user_message_time", time.time())
     monkeypatch.setattr("core.scheduler.triggers.birthday._is_birthday_period", lambda: False)

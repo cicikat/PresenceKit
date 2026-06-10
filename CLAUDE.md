@@ -29,7 +29,7 @@ No linting or formatting tooling is configured.
 
 ## Architecture
 
-QQ, desktop, and scheduler-triggered messages share one Pipeline. `core/pipeline_registry.py` exposes the instance to admin routes and post-process handlers; the scheduler also receives its own reference through `scheduler.set_pipeline()`.
+QQ, desktop, and scheduler-triggered messages share one Pipeline. `core/pipeline_registry.py` is the single owner; admin routes, post-process handlers, and the scheduler all read from it via `pipeline_registry.get()`. `scheduler.set_pipeline()` is a deprecated shim that delegates to `pipeline_registry.register()`.
 
 ```
 QQ message      → main.py

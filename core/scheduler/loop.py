@@ -15,13 +15,20 @@ from core.sandbox import get_paths, safe_user_id
 
 logger = logging.getLogger(__name__)
 
-# ── Pipeline 注入（由 main.py 调用 set_pipeline 写入）────────────────────────
-_pipeline = None
-
+# ── Pipeline 注入（deprecated: 统一由 pipeline_registry 持有）────────────────
+# set_pipeline 保留为兼容壳；内部委托到 pipeline_registry，不再维护本地副本。
+# 新代码直接调用 pipeline_registry.register()，不调此函数。
 
 def set_pipeline(p):
-    global _pipeline
-    _pipeline = p
+    """[deprecated] 兼容壳：委托到 pipeline_registry.register()。
+    scheduler 不再维护自己的 _pipeline；执行时从 pipeline_registry 读取。
+    """
+    logger.warning(
+        "[scheduler] set_pipeline() is deprecated; "
+        "call pipeline_registry.register() directly and remove this call."
+    )
+    from core.pipeline_registry import register as _reg
+    _reg(p)
 
 
 # ── 冷却时间（秒）────────────────────────────────────────────────────────────
@@ -278,6 +285,8 @@ async def _pipeline_send(
         logger.warning("[scheduler._pipeline_send] owner_id 未配置，跳过")
         return None
     try:
+        from core.pipeline_registry import get as _get_pipeline
+        _pipeline = _get_pipeline()
         if _pipeline is None:
             logger.warning("[scheduler._pipeline_send] pipeline 未注入，降级直接发送")
             if output_mode != "return":
