@@ -357,8 +357,9 @@ async def handle_message(message: dict):
             logger.info(f"[handle_message] probe_response type={type(probe_response)} tool_calls={tool_calls}")
         if tool_calls:
             try:
-                from core.memory.mood_state import update as _update_mood_probe
-                _update_mood_probe("thinking", source="trigger", char_id=_char_id)
+                # N2-A: thinking mood 写入通过显式 helper，不再裸调 mood_state.update
+                from core.mood_helpers import mark_tool_thinking_mood as _mark_thinking
+                _mark_thinking(uid=user_id, char_id=_char_id)
             except Exception:
                 pass
             for tc in tool_calls:

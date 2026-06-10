@@ -289,7 +289,7 @@ def test_fetch_context_passes_char_id_to_episodic_retrieve(
 
     captured: list[str] = []
 
-    def _spy_retrieve(user_id, topic="", top_k=3, *, char_id="yexuan"):
+    def _spy_retrieve(user_id, topic="", top_k=3, *, char_id="yexuan", allow_strengthen=True):
         captured.append(char_id)
         return []
 

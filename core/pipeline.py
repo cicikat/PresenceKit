@@ -220,12 +220,15 @@ class Pipeline:
         lore_entries     = self.lore_engine.match(content, history)
 
         # 情景记忆检索
+        # N2-A: fetch_context 是读路径，传 allow_strengthen=False 禁止写回 strength，
+        # 避免"召回→增强→更易召回"的永动机效应。写回仍由写路径触发（post_process 等）。
         from core.memory.episodic_memory import retrieve, format_for_prompt
         episodic_memories = retrieve(
             user_id=uid,
             topic=content,
             top_k=3,
             char_id=char_id,
+            allow_strengthen=False,
         )
         from core.memory.mood_state import get_current as _get_mood
         episodic_result = format_for_prompt(
@@ -263,12 +266,8 @@ class Pipeline:
         from core.memory.diary_context import load as _load_diary
         diary_context = _load_diary(uid)
 
-        from datetime import datetime
-        _hour = datetime.now().hour
-        if _hour >= 23 or _hour < 6:
-            from core.memory.mood_state import get_current as _mood_get, update as _mood_update
-            if _mood_get(char_id=char_id) not in ("yandere", "angry"):
-                _mood_update("sleepy", source="schedule", char_id=char_id)
+        # N2-A: sleepy mood 已迁出 — 见 Pipeline.post_process 开头的
+        #        maybe_mark_sleepy_from_time() 调用。fetch_context 是读路径，不写 mood。
 
         # Dream impression — ambient, read-only, never written by reality chain
         try:
@@ -443,6 +442,16 @@ class Pipeline:
         char_id = scope.character_id
         assert char_id is not None
         scope_payload = scope.to_payload()
+
+        # N2-A: sleepy mood — 从 fetch_context 迁出的显式写操作。
+        # 放在 post_process 开头（uid_lock 外）：保留深夜 sleepy 语义，
+        # 但不再污染读路径。覆盖所有调用链（QQ / admin / scheduler），
+        # 因为 record_assistant_turn 最终都走 pipeline.post_process。
+        try:
+            from core.mood_helpers import maybe_mark_sleepy_from_time as _mark_sleepy
+            _mark_sleepy(uid=user_id, char_id=char_id, envelope=envelope)
+        except Exception as _sleepy_err:
+            logger.warning("[pipeline.post_process] sleepy mood 写入异常（已忽略）: %s", _sleepy_err)
 
         from core.memory import locks as _locks
         from core import llm_client

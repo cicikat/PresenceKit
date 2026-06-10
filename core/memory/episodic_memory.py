@@ -220,10 +220,22 @@ def write_episode(user_id: str, episode: dict, *, char_id: str = "yexuan") -> No
     logger.info(f"[episodic] 写入情景记忆: {episode['id']}")
 
 
-def retrieve(user_id: str, topic: str = "", top_k: int = 3, *, char_id: str = "yexuan") -> list:
+def retrieve(
+    user_id: str,
+    topic: str = "",
+    top_k: int = 3,
+    *,
+    char_id: str = "yexuan",
+    allow_strengthen: bool = True,
+) -> list:
     """
     按话题标签+情绪检索最相关的情景记忆，检索后强化strength。
     返回list[dict]，按相关性排序。
+
+    allow_strengthen: 控制是否执行召回后写回（strength += 0.15 / nudge_from_memory）。
+      N2-A: fetch_context（读路径）调用时必须传 allow_strengthen=False，
+      避免"召回→增强→更易召回"的永动机效应。
+      post_process / 写路径可保持默认 True（向后兼容）。
     """
     memories = _load_memories(user_id, char_id=char_id)
     if not memories:
@@ -311,24 +323,29 @@ def retrieve(user_id: str, topic: str = "", top_k: int = 3, *, char_id: str = "y
 
         result = selected
 
-    # 检索后强化
-    ids_to_strengthen = {m["id"] for m in result}
-    changed = False
-    for mem in memories:
-        if mem["id"] in ids_to_strengthen:
-            mem["strength"] = min(1.0, mem.get("strength", 0.5) + 0.15)
-            mem["retrieval_count"] = mem.get("retrieval_count", 0) + 1
-            mem["last_retrieved"] = now
-            changed = True
+    # 检索后强化（N2-A: allow_strengthen=False 时跳过，读路径不写回）
+    if allow_strengthen:
+        ids_to_strengthen = {m["id"] for m in result}
+        changed = False
+        for mem in memories:
+            if mem["id"] in ids_to_strengthen:
+                mem["strength"] = min(1.0, mem.get("strength", 0.5) + 0.15)
+                mem["retrieval_count"] = mem.get("retrieval_count", 0) + 1
+                mem["last_retrieved"] = now
+                changed = True
 
-    if changed:
-        _save_memories(user_id, memories, char_id=char_id)
+        if changed:
+            _save_memories(user_id, memories, char_id=char_id)
 
-    from core.memory.mood_state import nudge_from_memory
-    for mem in result:
-        nudge_from_memory(
-            mem.get("emotion_peak", "neutral"),
-            mem.get("strength", 0.5)
+        from core.memory.mood_state import nudge_from_memory
+        for mem in result:
+            nudge_from_memory(
+                mem.get("emotion_peak", "neutral"),
+                mem.get("strength", 0.5)
+            )
+    else:
+        logger.debug(
+            "[episodic.retrieve] allow_strengthen=False，跳过 strength 写回 uid=%s", user_id
         )
 
     return result
@@ -437,6 +454,7 @@ def retrieve_fallback(user_id: str, recent_history: list[str], top_k: int = 1, *
         )
     candidates.sort(key=lambda x: x[0], reverse=True)
     return [m for _, m in candidates[:top_k]]
+
 
 
 def cleanup(user_id: str, max_count: int = 200) -> None:
