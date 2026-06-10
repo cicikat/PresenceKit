@@ -253,7 +253,7 @@ window 拦截、LLM 空回复或发送前异常时，不调用 execute 的 `afte
 | `daily_journal` | 1h | 低 | time_based | 叶瑄写今日手账（深夜触发） |
 | `episodic_decay` | 20h | 低 | time_based | 情景记忆每日衰减 |
 | `spontaneous_recall` | 4h | 低 | time_based | 主动回忆触发 |
-| `dlq_monitor` | 24h | 低 | time_based | 扫 DLQ 目录，文件数 > 0 时 log warning |
+| `dlq_monitor` | 24h | 低 | time_based | 扫 DLQ 目录，文件数 > 0 时 log warning；R8-A：legacy task 超 30 天自动归档到 `expired/` |
 | `log_maintenance` | 24h | 维护 | loop.py 内联 | 清理 event_log、done reminders、dream archive、inbox/image cache，并压缩 observations |
 | `activity_remind` | 20h | 低 | — | 仅预留冷却位，尚无对应实现 |
 | `diary_reminder` | 20h | 低 | diary | 提醒用户写日记 |

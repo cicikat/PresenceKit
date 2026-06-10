@@ -283,6 +283,19 @@ token”的问题已缓解。
 `tool_dispatcher._get_growth_wrapper()`、legacy `character_growth` 文件与旧测试说明仍保留。
 先解决 F10 / F11，再决定是否删除兼容出口。
 
+### TD-3：DLQ legacy handler 兼容层已设 30 天过期（R8-A）
+
+**状态**：`observe`
+
+**位置**：`core/post_process/slow_queue.py`、`core/scheduler/triggers/time_based.py`
+
+`mid_term_append`、`episodic_compress`、`consolidate_to_growth` 三个 handler
+仅为 DLQ 残留任务保留。R8-A 起，`dlq_monitor` 每日扫描时自动将这些类型超过 30 天的
+DLQ 文件移到 `data/logs/dead_letter_queue/expired/`（不静默删除，保留审计记录）。
+
+30 天后 DLQ 旧债自然归零，届时可进入 R8-B 评估 handler 是否可安全退役。
+在此之前 **不要删除** 这三个 handler 的注册。
+
 ### 其他观察
 
 - `short_term._sanitize_assistant_message()` 在读取 history 时清洗，不回写磁盘。

@@ -631,7 +631,50 @@ async def _check_dlq_monitor():
             _mark("dlq_monitor")
             return
 
+        import json as _json
+
         json_files = list(dlq_dir.glob("*.json"))
+
+        # ── R8-A: 30-day expiry for legacy DLQ tasks ──────────────────────────
+        from core.post_process.slow_queue import LEGACY_TASK_TYPES, is_dlq_task_expired
+        expired_dir = dlq_dir / "expired"
+        expired_count = 0
+        active_files = []
+        for _f in json_files:
+            _stem_parts = _f.stem.split("_", 1)
+            _file_task_type = _stem_parts[1] if len(_stem_parts) == 2 else "unknown"
+            if _file_task_type in LEGACY_TASK_TYPES:
+                try:
+                    _rec = _json.loads(_f.read_text(encoding="utf-8-sig"))
+                except Exception:
+                    _rec = {}
+                _fmtime: float | None = None
+                try:
+                    _fmtime = _f.stat().st_mtime
+                except Exception:
+                    pass
+                if is_dlq_task_expired(_rec, filename=_f.name, file_mtime=_fmtime):
+                    _failed_at = _rec.get("failed_at")
+                    _age_days = (time.time() - float(_failed_at)) / 86400.0 if _failed_at else 0.0
+                    try:
+                        expired_dir.mkdir(parents=True, exist_ok=True)
+                        _f.rename(expired_dir / _f.name)
+                        expired_count += 1
+                        logger.info(
+                            "[slow_queue] event=slow_queue_dlq_expired task_type=%s "
+                            "age_days=%.1f ttl_days=30 reason=legacy_task_type_over_ttl file=%s",
+                            _file_task_type, _age_days, _f.name,
+                        )
+                    except Exception as _mv_err:
+                        logger.warning("[dlq_monitor] 无法归档过期文件 %s: %s", _f.name, _mv_err)
+                        active_files.append(_f)
+                    continue
+            active_files.append(_f)
+        if expired_count:
+            logger.info("[dlq_monitor] 已归档 %d 个过期 legacy DLQ 任务到 expired/", expired_count)
+        json_files = active_files
+        # ── end R8-A ───────────────────────────────────────────────────────────
+
         if not json_files:
             _mark("dlq_monitor")
             return
@@ -648,7 +691,6 @@ async def _check_dlq_monitor():
         breakdown = ", ".join(f"{t}: {c}" for t, c in type_counts.most_common())
 
         # 取最近 3 个文件，读 error 字段首行作摘要
-        import json as _json
         recent = sorted(json_files, key=lambda f: f.stat().st_mtime, reverse=True)[:3]
         samples = []
         for f in recent:

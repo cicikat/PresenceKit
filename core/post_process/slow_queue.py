@@ -22,6 +22,56 @@ _worker_task: asyncio.Task | None = None
 
 _MAX_RETRIES = 2  # 首次 + 最多 2 次重试，共 3 次尝试
 
+# R8-A: task types kept only for DLQ backward-compat — no longer enqueued by current code.
+# These are candidates for automatic 30-day expiry in the DLQ monitor sweep.
+LEGACY_TASK_TYPES: frozenset[str] = frozenset({
+    "mid_term_append",       # superseded by summarize_to_midterm (S6 migration)
+    "episodic_compress",     # superseded by reflect_to_episodic (S6 migration)
+    "consolidate_to_growth", # never registered; from pre-S5 code
+})
+
+
+def is_dlq_task_expired(
+    record: dict,
+    *,
+    filename: str = "",
+    file_mtime: float | None = None,
+    now: float | None = None,
+    ttl_days: int = 30,
+) -> bool:
+    """Return True if this DLQ record has exceeded ttl_days.
+
+    Timestamp resolution priority:
+    1. record["failed_at"]  — written by _write_dlq since day 1
+    2. filename ms-prefix   — {ms_ts}_{task_type}.json (~= failed_at in practice)
+    3. file_mtime           — filesystem fallback for very old files
+    4. (none reachable)     — returns False (safe: never expire undatable tasks)
+    """
+    if now is None:
+        now = time.time()
+    ttl_sec = ttl_days * 86400.0
+
+    failed_at = record.get("failed_at")
+    if failed_at is not None:
+        try:
+            return (now - float(failed_at)) > ttl_sec
+        except (ValueError, TypeError):
+            pass
+
+    if filename:
+        stem = filename.rsplit(".", 1)[0]
+        prefix = stem.split("_", 1)[0]
+        if prefix.isdigit():
+            try:
+                return (now - int(prefix) / 1000.0) > ttl_sec
+            except (ValueError, OverflowError):
+                pass
+
+    if file_mtime is not None:
+        return (now - file_mtime) > ttl_sec
+
+    return False
+
 
 def register_handler(task_type: str, fn: Callable) -> None:
     """启动时注册 handler，task_type 为字符串键。"""
