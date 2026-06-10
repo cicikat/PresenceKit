@@ -46,7 +46,7 @@ def test_llm_output_validator_writes_debug_to_sandbox(sandbox):
 
 
 def test_safe_user_id_digits_unchanged():
-    assert safe_user_id("1043484516") == "1043484516"
+    assert safe_user_id("1234567890") == "1234567890"
 
 
 def test_memory_paths_reject_malicious_uid(sandbox):

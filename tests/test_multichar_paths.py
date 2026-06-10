@@ -138,9 +138,9 @@ def test_short_term_history_path_legacy(dp, tmp_path, monkeypatch):
     monkeypatch.setattr(_sb, "_instance", dp)
 
     from core.memory import short_term
-    p = short_term._history_path("1043484516", char_id="yexuan")
-    assert p == tmp_path / "history" / "1043484516.json"
-    assert short_term._history_path("1043484516") == p
+    p = short_term._history_path("1234567890", char_id="yexuan")
+    assert p == tmp_path / "history" / "1234567890.json"
+    assert short_term._history_path("1234567890") == p
 
 
 def test_mid_term_file_legacy(dp, tmp_path, monkeypatch):
@@ -148,9 +148,9 @@ def test_mid_term_file_legacy(dp, tmp_path, monkeypatch):
     monkeypatch.setattr(_sb, "_instance", dp)
 
     from core.memory import mid_term
-    p = mid_term._file("1043484516", char_id="yexuan")
-    assert p == tmp_path / "mid_term" / "1043484516.json"
-    assert mid_term._file("1043484516") == p
+    p = mid_term._file("1234567890", char_id="yexuan")
+    assert p == tmp_path / "mid_term" / "1234567890.json"
+    assert mid_term._file("1234567890") == p
 
 
 def test_episodic_mem_file_legacy(dp, tmp_path, monkeypatch):
@@ -158,9 +158,9 @@ def test_episodic_mem_file_legacy(dp, tmp_path, monkeypatch):
     monkeypatch.setattr(_sb, "_instance", dp)
 
     from core.memory import episodic_memory
-    p = episodic_memory._mem_file("1043484516", char_id="yexuan")
-    assert p == tmp_path / "episodic_memory" / "1043484516.json"
-    assert episodic_memory._mem_file("1043484516") == p
+    p = episodic_memory._mem_file("1234567890", char_id="yexuan")
+    assert p == tmp_path / "episodic_memory" / "1234567890.json"
+    assert episodic_memory._mem_file("1234567890") == p
 
 
 def test_fixation_state_file_legacy(dp, tmp_path, monkeypatch):
@@ -168,9 +168,9 @@ def test_fixation_state_file_legacy(dp, tmp_path, monkeypatch):
     monkeypatch.setattr(_sb, "_instance", dp)
 
     from core.memory import fixation_pipeline
-    p = fixation_pipeline._state_file("1043484516", char_id="yexuan")
-    assert p == tmp_path / "fixation_state" / "1043484516.json"
-    assert fixation_pipeline._state_file("1043484516") == p
+    p = fixation_pipeline._state_file("1234567890", char_id="yexuan")
+    assert p == tmp_path / "fixation_state" / "1234567890.json"
+    assert fixation_pipeline._state_file("1234567890") == p
 
 
 def test_event_log_day_file_legacy(dp, tmp_path, monkeypatch):
@@ -180,6 +180,6 @@ def test_event_log_day_file_legacy(dp, tmp_path, monkeypatch):
     from datetime import datetime
     from core.memory import event_log
     d = datetime(2026, 5, 29)
-    p = event_log._day_file("1043484516", d, char_id="yexuan")
-    assert p == tmp_path / "event_log" / "1043484516" / "2026-05-29.md"
-    assert event_log._day_file("1043484516", d) == p
+    p = event_log._day_file("1234567890", d, char_id="yexuan")
+    assert p == tmp_path / "event_log" / "1234567890" / "2026-05-29.md"
+    assert event_log._day_file("1234567890", d) == p

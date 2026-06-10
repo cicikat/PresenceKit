@@ -75,10 +75,10 @@ def test_collect_legacy_uids_empty_when_no_dirs(tmp_path):
 
 def test_collect_legacy_uids_finds_json_stems(tmp_path):
     (tmp_path / "history").mkdir()
-    (tmp_path / "history" / "1043484516.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "history" / "1234567890.json").write_text("{}", encoding="utf-8")
     (tmp_path / "history" / "2985713106.json").write_text("{}", encoding="utf-8")
     uids = _collect_legacy_uids(tmp_path)
-    assert "1043484516" in uids
+    assert "1234567890" in uids
     assert "2985713106" in uids
 
 

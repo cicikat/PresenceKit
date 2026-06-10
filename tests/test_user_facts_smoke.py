@@ -26,7 +26,7 @@ sys.path.insert(0, str(ROOT))
 # Constants
 # ─────────────────────────────────────────────────────────────────────────────
 
-OWNER_UID = "1043484516"
+OWNER_UID = "1234567890"
 CHARACTERS = ["yexuan", "hongcha", "yexuanJ-5412"]
 
 TEST_FACTS = {
