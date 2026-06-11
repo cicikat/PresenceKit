@@ -1,18 +1,18 @@
 """
 tests/test_r6c_reality_scrub_final.py — R6-final: Reality output scrub single-exit stable state
 
-Confirms the R6 final convergence state after R1-C (2026-06-11):
+Confirms the R6 final convergence state after R1-D (2026-06-11):
   - Both QQ LLM reply paths (handle_message + _reply_with_tool_result) route through
-    _qq_reality_reply_adapter, which is the single REALITY_MEMORY pre-scrub + post_process caller.
+    _qq_reality_reply_adapter → record_assistant_turn (turn_sink) → post_process → capture_turn.
   - capture_turn remains the REALITY_MEMORY authority scrub point.
   - System short texts (Dream guard / cancel / ask_text) do not write memory.
   - Dream modules remain isolated from reality_output_scrubber.
   - docs/known-issues.md and docs/assistant-turn-sink.md reflect R6-final stable state.
 
 These tests complement R6-A (test_r6_reality_scrub_audit.py) and R6-B
-(test_r6b_reality_scrub_contract.py) by confirming the *post-R1-C convergence* invariants.
-They do NOT duplicate existing R6-A/B or R1-C tests; they confirm the final-state contracts
-that only became true after R1-C landed.
+(test_r6b_reality_scrub_contract.py) by confirming the *post-R1-D convergence* invariants.
+They do NOT duplicate existing R6-A/B or R1-C/D tests; they confirm the final-state contracts
+that only became true after R1-D landed.
 
 Naming: F-prefix = R6-final specific guard.
 """
@@ -68,92 +68,54 @@ def _function_body_text(src: str, func_name: str) -> str:
 # F1. Single post_process exit in main.py — adapter is the sole caller
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def test_f1_adapter_is_sole_post_process_caller_in_main():
+def test_f1_adapter_routes_memory_through_turn_sink():
     """
-    F1: In main.py, _pipeline.post_process must be called ONLY from within
-    _qq_reality_reply_adapter.  handle_message and _reply_with_tool_result must not
-    call it directly — R1-C moved the call into the adapter.
+    F1 (R1-D): In main.py, _pipeline.post_process must NOT be called directly at all.
+    After R1-D, both QQ LLM paths route through:
+      _qq_reality_reply_adapter → record_assistant_turn (turn_sink) → post_process
 
-    A direct post_process call outside the adapter would mean the two LLM paths
-    have diverged again, breaking the single-exit invariant.
+    A direct post_process call in main.py would mean the adapter is bypassed,
+    breaking the single-exit invariant.
     """
     src = _src("main.py")
     lines = src.splitlines()
-
-    # Find which lines are inside _qq_reality_reply_adapter
-    adapter_linenos: set[int] = set()
-    in_adapter = False
-    base_indent: int | None = None
-    for i, ln in enumerate(lines):
-        stripped = ln.lstrip()
-        indent = len(ln) - len(stripped)
-        if "async def _qq_reality_reply_adapter(" in ln:
-            in_adapter = True
-            base_indent = indent
-        if in_adapter:
-            adapter_linenos.add(i)
-            if stripped and indent <= base_indent and (
-                stripped.startswith("def ")
-                or stripped.startswith("async def ")
-                or stripped.startswith("class ")
-                or stripped.startswith("@")
-            ) and "async def _qq_reality_reply_adapter(" not in ln:
-                in_adapter = False
 
     violations: list[str] = []
     for i, ln in enumerate(lines):
         stripped = ln.strip()
         if stripped.startswith("#"):
             continue
-        if "_pipeline.post_process(" in ln and i not in adapter_linenos:
+        if "_pipeline.post_process(" in ln:
             violations.append(f"main.py:{i+1}: {stripped}")
 
     assert not violations, (
-        "main.py: _pipeline.post_process called outside _qq_reality_reply_adapter — "
-        "single-exit invariant broken (R1-C regression):\n"
+        "main.py: _pipeline.post_process called directly — "
+        "R1-D: must route through _qq_reality_reply_adapter → record_assistant_turn:\n"
         + "\n".join(violations)
     )
 
 
-def test_f1b_adapter_is_sole_scrub_caller_in_main():
+def test_f1b_adapter_does_not_directly_scrub_in_main():
     """
-    F1b: scrub_reality_output_text must only be called within _qq_reality_reply_adapter
-    in main.py.  A direct call from handle_message or _reply_with_tool_result would
-    mean scrub is applied outside the adapter chain.
+    F1b (R1-D): main.py must not directly call scrub_reality_output_text.
+    After R1-D, scrub lives inside turn_sink.record_assistant_turn (defense-in-depth)
+    and capture_turn (authority).  A direct scrub call in main.py would be redundant
+    and signals a regression to the R1-C hand-written chain.
     """
     src = _src("main.py")
     lines = src.splitlines()
-
-    adapter_linenos: set[int] = set()
-    in_adapter = False
-    base_indent: int | None = None
-    for i, ln in enumerate(lines):
-        stripped = ln.lstrip()
-        indent = len(ln) - len(stripped)
-        if "async def _qq_reality_reply_adapter(" in ln:
-            in_adapter = True
-            base_indent = indent
-        if in_adapter:
-            adapter_linenos.add(i)
-            if stripped and indent <= base_indent and (
-                stripped.startswith("def ")
-                or stripped.startswith("async def ")
-                or stripped.startswith("class ")
-                or stripped.startswith("@")
-            ) and "async def _qq_reality_reply_adapter(" not in ln:
-                in_adapter = False
 
     violations: list[str] = []
     for i, ln in enumerate(lines):
         stripped = ln.strip()
         if stripped.startswith("#"):
             continue
-        if "scrub_reality_output_text" in ln and i not in adapter_linenos:
+        if "scrub_reality_output_text" in ln:
             violations.append(f"main.py:{i+1}: {stripped}")
 
     assert not violations, (
-        "main.py: scrub_reality_output_text called outside _qq_reality_reply_adapter — "
-        "pre-scrub should only live inside the adapter:\n"
+        "main.py: scrub_reality_output_text called directly — "
+        "R1-D: scrub must live in turn_sink (defense-in-depth) and capture_turn (authority):\n"
         + "\n".join(violations)
     )
 
@@ -345,13 +307,13 @@ def test_f4b_scheduler_loop_routes_through_turn_sink():
 def test_f4c_turn_sink_record_assistant_turn_calls_scrub():
     """
     F4c: turn_sink.record_assistant_turn must call scrub_reality_output_text.
-    This is the non-QQ inlet pre-scrub (desktop/scheduler/sensor/wake paths).
+    This is the inlet pre-scrub for all paths (desktop/scheduler/sensor/wake/QQ via R1-D).
     """
     src = _src("core/turn_sink.py")
     body = _function_body_text(src, "record_assistant_turn")
     assert "scrub_reality_output_text" in body, (
         "turn_sink.record_assistant_turn: scrub_reality_output_text not called — "
-        "non-QQ pre-scrub guard missing"
+        "inlet pre-scrub guard missing (all paths including QQ R1-D)"
     )
 
 
@@ -469,15 +431,14 @@ def test_f6d_assistant_turn_sink_names_adapter_as_stable_exit():
     )
 
 
-def test_f6e_assistant_turn_sink_mentions_r1d_as_optional():
+def test_f6e_assistant_turn_sink_mentions_r1d():
     """
-    F6e: docs/assistant-turn-sink.md must clarify that R1-D / full turn_sink migration
-    is a future optional step, not a prerequisite for scrub safety.
+    F6e: docs/assistant-turn-sink.md must mention R1-D (either as completed or as a step).
     """
     src = _src("docs/assistant-turn-sink.md")
     assert "R1-D" in src, (
         "docs/assistant-turn-sink.md does not mention R1-D — "
-        "document that full turn_sink migration is optional and not a scrub safety blocker"
+        "document R1-D turn_sink migration status"
     )
 
 

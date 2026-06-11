@@ -546,20 +546,24 @@ async def _qq_reality_reply_adapter(
     pending_paths: list | None = None,
 ) -> None:
     """
-    QQ LLM_ASSISTANT_REPLY 统一出口。
+    QQ LLM_ASSISTANT_REPLY 统一出口（R1-D: turn_sink 统一链路）。
 
     handle_message（普通 LLM 回复）和 _reply_with_tool_result（工具确认 LLM 回复）
-    共用此 adapter，消除重复链路：
+    共用此 adapter：
 
-      REALITY_VISIBLE strip → QQ send → REALITY_MEMORY pre-scrub
-        → await post_process → capture_turn（权威 scrub 点）
+      REALITY_VISIBLE strip → QQ send（text_output.send）
+        → record_assistant_turn（turn_sink 统一链路）
+            → scrub + post_process → capture_turn（REALITY_MEMORY 权威 scrub 点）
 
     只处理 LLM_ASSISTANT_REPLY。Dream guard / SYSTEM_SHORT_TEXT /
     TOOL_CONFIRMATION_PROMPT 等系统短文本继续直发，不经此 adapter，不写 memory。
+
+    fanout=[]: visible send 已在 text_output.send 完成，turn_sink 不重复发送。
+    bypass_gate=True: adapter 调用方已在 conversation_lock 内，无需重入。
     """
     from core.response_processor import strip_render_tags as _strip_rt
     from core.output import text_output
-    from core.reality_output_scrubber import scrub_reality_output_text as _scrub
+    from core.turn_sink import record_assistant_turn as _record_turn, TurnSource
     from core.write_envelope import stamp_qq
     from core.error_handler import log_error as _log_error
 
@@ -584,23 +588,31 @@ async def _qq_reality_reply_adapter(
         )
         return
 
-    # REALITY_MEMORY pre-scrub (defense-in-depth): strip action/narration before
-    # post_process.  capture_turn is the authoritative final scrub point; this
-    # upstream pre-scrub is idempotent and safe to layer on top.
-    _raw_join = "\n".join(clean)
-    memory_reply = _scrub(_raw_join) or ""
+    # Route memory write through turn_sink unified chain.
+    # scrub_reality_output_text + capture_turn (authority scrub) live inside
+    # record_assistant_turn → pipeline.post_process → capture_turn.
+    # fanout=[] avoids double-send (visible already delivered via text_output.send).
+    # bypass_gate=True: already inside conversation_lock from the call site.
     try:
-        await _pipeline.post_process(
-            user_id, user_content, memory_reply, target_id, is_group,
-            pending_paths=pending_paths or [],
+        await _record_turn(
+            assistant_text="\n".join(segments),
+            uid=user_id,
+            source=TurnSource.USER_CHAT,
+            user_text=user_content,
+            fanout=[],
+            bypass_gate=True,
             envelope=stamp_qq(),
+            target_id=target_id,
+            is_group=is_group,
+            pending_paths=pending_paths,
             frozen_scope=frozen_scope,
+            pipeline=_pipeline,
         )
-    except Exception as _pp_err:
-        _log_error("qq_reality_reply_adapter.post_process", _pp_err)
+    except Exception as _ts_err:
+        _log_error("qq_reality_reply_adapter.turn_sink", _ts_err)
         logger.error(
-            "[qq_reality_reply_adapter] post_process 異常（記憶寫入可能丟失）uid=%s: %s",
-            user_id, _pp_err,
+            "[qq_reality_reply_adapter] turn_sink 異常（記憶寫入可能丟失）uid=%s: %s",
+            user_id, _ts_err,
         )
 
 

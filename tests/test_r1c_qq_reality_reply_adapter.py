@@ -1,8 +1,8 @@
 """
-tests/test_r1c_qq_reality_reply_adapter.py — R1-C: QQ Reality Reply Adapter
+tests/test_r1c_qq_reality_reply_adapter.py — R1-C/D: QQ Reality Reply Adapter
 
-Contracts for the _qq_reality_reply_adapter introduced in R1-C to unify
-the two QQ LLM_ASSISTANT_REPLY exit paths.
+Contracts for the _qq_reality_reply_adapter introduced in R1-C and updated in
+R1-D to route the memory write chain through turn_sink.record_assistant_turn.
 
 ───────────────────────────────────────────────────────────────────────────────
 Before R1-C (R1-B baseline):
@@ -12,10 +12,15 @@ Before R1-C (R1-B baseline):
 After R1-C:
   handle_message          → _qq_reality_reply_adapter(frozen_scope=_frozen_scope)
   _reply_with_tool_result → _qq_reality_reply_adapter(frozen_scope=frozen_scope)
-  _qq_reality_reply_adapter → strip_render_tags → text_output.send
+  _qq_reality_reply_adapter → strip_render_tags → text_output.send (REALITY_VISIBLE)
                             → scrub_reality_output_text → post_process → capture_turn
 
-QQChannel.send: target_id / is_group now accepted (no longer hardcoded is_group=False).
+After R1-D (current):
+  _qq_reality_reply_adapter → strip_render_tags → text_output.send (REALITY_VISIBLE)
+                            → record_assistant_turn(turn_sink)
+                                → scrub + post_process → capture_turn (REALITY_MEMORY)
+
+QQChannel.send: target_id / is_group accepted (no longer hardcoded is_group=False).
 
 Systems short texts (Dream guard / cancel / ask_text) still go directly via
 text_output.send or _to_dg.send — NOT through the adapter, NOT written to memory.
@@ -125,20 +130,26 @@ def test_c2b_adapter_calls_text_output_send():
     )
 
 
-def test_c2c_adapter_calls_scrub():
-    """C2c: Adapter must call scrub_reality_output_text (REALITY_MEMORY pre-scrub)."""
+def test_c2c_adapter_routes_memory_through_turn_sink():
+    """
+    C2c (R1-D): Adapter must call record_assistant_turn (turn_sink).
+    Scrub is now inside record_assistant_turn; the adapter must not duplicate it.
+    """
     body = _function_body_text(_src("main.py"), "_qq_reality_reply_adapter")
-    assert "scrub_reality_output_text" in body, (
-        "_qq_reality_reply_adapter: scrub_reality_output_text missing — "
-        "QQ memory pre-scrub removed (R6-A/B regression)"
+    assert "record_assistant_turn" in body or "_record_turn" in body, (
+        "_qq_reality_reply_adapter: record_assistant_turn not called — "
+        "R1-D turn_sink migration missing (memory pre-scrub + post_process not unified)"
     )
 
 
-def test_c2d_adapter_awaits_post_process():
-    """C2d: Adapter must await _pipeline.post_process (N10: critical writes must not drop)."""
+def test_c2d_adapter_awaits_turn_sink():
+    """
+    C2d (R1-D): Adapter must await record_assistant_turn (N10: critical writes must not drop).
+    post_process is now invoked inside record_assistant_turn.
+    """
     body = _function_body_text(_src("main.py"), "_qq_reality_reply_adapter")
-    assert "await _pipeline.post_process(" in body, (
-        "_qq_reality_reply_adapter: post_process not awaited — "
+    assert "await _record_turn(" in body or "await record_assistant_turn(" in body, (
+        "_qq_reality_reply_adapter: record_assistant_turn not awaited — "
         "N10 regression (memory writes may be dropped)"
     )
 
@@ -157,25 +168,28 @@ def test_c2e_adapter_strip_before_send():
     )
 
 
-def test_c2f_adapter_scrub_before_post_process():
-    """C2f: scrub_reality_output_text must be applied before post_process in the adapter."""
+def test_c2f_adapter_send_before_turn_sink():
+    """
+    C2f (R1-D): text_output.send must appear before record_assistant_turn in the adapter.
+    Visible delivery should happen before the (potentially slow) memory write chain.
+    """
     body = _function_body_text(_src("main.py"), "_qq_reality_reply_adapter")
-    scrub_pos = body.find("scrub_reality_output_text")
-    pp_pos = body.find("await _pipeline.post_process(")
-    assert scrub_pos != -1 and pp_pos != -1, (
-        "Adapter missing scrub_reality_output_text or await _pipeline.post_process"
-    )
-    assert scrub_pos < pp_pos, (
-        "_qq_reality_reply_adapter: scrub appears AFTER post_process — "
-        "action/narration may enter memory unscrubbed"
+    send_pos = body.find("text_output.send(")
+    ts_pos = body.find("_record_turn(")
+    if ts_pos == -1:
+        ts_pos = body.find("record_assistant_turn(")
+    assert send_pos != -1, "Adapter missing text_output.send"
+    assert ts_pos != -1, "Adapter missing record_assistant_turn/_record_turn"
+    assert send_pos < ts_pos, (
+        "_qq_reality_reply_adapter: text_output.send appears AFTER record_assistant_turn — "
+        "visible delivery should precede memory write"
     )
 
 
 def test_c2g_adapter_has_capture_turn_comment():
     """
     C2g: Adapter body must contain a comment referencing capture_turn, documenting
-    that this pre-scrub is defense-in-depth and not the authority scrub point.
-    Required by R6-B C10 pattern.
+    that capture_turn is the authority scrub point (R6-B C10 pattern).
     """
     lines = _lines("main.py")
     in_adapter = False
@@ -192,7 +206,7 @@ def test_c2g_adapter_has_capture_turn_comment():
 
     assert found, (
         "_qq_reality_reply_adapter: no comment mentioning capture_turn — "
-        "add a note that this pre-scrub is defense-in-depth, capture_turn is authority"
+        "add a note that capture_turn is the REALITY_MEMORY authority scrub point"
     )
 
 
@@ -328,13 +342,14 @@ def test_c5c_ask_text_sends_are_direct():
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# C6. LLM reply paths no longer directly call text_output.send / scrub / post_process
+# C6. LLM reply paths do not directly call post_process or scrub (R1-D: via turn_sink)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def test_c6_handle_message_no_direct_post_process():
     """
-    C6: handle_message must not directly call _pipeline.post_process (R1-C moved
-    this into the adapter).  A direct call would mean the paths are diverged again.
+    C6: handle_message must not directly call _pipeline.post_process.
+    R1-C routed through the adapter; R1-D further routes through turn_sink.
+    A direct call would mean the single-exit invariant is broken.
     """
     src = _src("main.py")
     hm_body = _function_body_text(src, "handle_message")
@@ -344,7 +359,7 @@ def test_c6_handle_message_no_direct_post_process():
     ]
     assert not non_comment, (
         "handle_message: _pipeline.post_process called directly — "
-        "R1-C should route through _qq_reality_reply_adapter:\n"
+        "must route through _qq_reality_reply_adapter → record_assistant_turn:\n"
         + "\n".join(ln.strip() for ln in non_comment)
     )
 
@@ -359,7 +374,7 @@ def test_c6b_tool_reply_no_direct_post_process():
     ]
     assert not non_comment, (
         "_reply_with_tool_result: _pipeline.post_process called directly — "
-        "R1-C should route through _qq_reality_reply_adapter:\n"
+        "must route through _qq_reality_reply_adapter → record_assistant_turn:\n"
         + "\n".join(ln.strip() for ln in non_comment)
     )
 
@@ -414,19 +429,18 @@ def test_c7d_qq_channel_passes_is_group_to_adapter():
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# C8. record_assistant_turn still not used (R1-C is adapter-only, not full turn_sink)
+# C8. record_assistant_turn is used (R1-D: full turn_sink migration complete)
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def test_c8_adapter_does_not_use_record_assistant_turn():
+def test_c8_adapter_uses_record_assistant_turn():
     """
-    C8: _qq_reality_reply_adapter must not call record_assistant_turn.
-    R1-C is an adapter-convergence step (not full turn_sink migration).
-    Full turn_sink migration (R1-D) is a separate future step.
+    C8 (R1-D): _qq_reality_reply_adapter must call record_assistant_turn.
+    R1-D migrated the memory write chain from direct post_process to turn_sink.
     """
     body = _function_body_text(_src("main.py"), "_qq_reality_reply_adapter")
-    assert "record_assistant_turn" not in body, (
-        "_qq_reality_reply_adapter calls record_assistant_turn — "
-        "R1-C is adapter-only; full turn_sink migration is a separate step"
+    assert "record_assistant_turn" in body or "_record_turn" in body, (
+        "_qq_reality_reply_adapter does not call record_assistant_turn — "
+        "R1-D turn_sink migration missing"
     )
 
 

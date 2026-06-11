@@ -124,13 +124,23 @@ _OWNER_ID = "77777"
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def test_s1a_scrub_call_site_main_handle_message():
-    """S1a: main.py handle_message must import and call scrub_reality_output_text."""
+    """
+    S1a (R1-D updated): main.py no longer calls scrub_reality_output_text directly.
+    After R1-D the scrub lives inside record_assistant_turn → pipeline.post_process →
+    capture_turn.  The adapter must call record_assistant_turn (turn_sink chain) and
+    must NOT call scrub or post_process directly.
+    """
     src = _source("main.py")
-    assert "scrub_reality_output_text" in src, (
-        "main.py: scrub_reality_output_text not found — QQ memory scrub guard missing"
+    # R1-D: scrub authority moved into turn_sink; no direct post_process call in adapter
+    assert "await _pipeline.post_process(" not in src, (
+        "main.py: direct await _pipeline.post_process found — "
+        "R1-D turn_sink migration regression; adapter must route through record_assistant_turn"
     )
-    # Must be used for the memory_reply variable
-    assert "memory_reply" in src
+    # R1-D: adapter must call record_assistant_turn (via import alias _record_turn)
+    assert "_record_turn(" in src or "record_assistant_turn(" in src, (
+        "main.py: record_assistant_turn/_record_turn call missing — "
+        "R1-D turn_sink chain not wired"
+    )
 
 
 def test_s1b_scrub_call_site_main_tool_reply():
@@ -301,8 +311,10 @@ def test_s4_text_output_send_allowlist():
     Fails if a new send site is added that doesn't match a known pattern.
     """
     lines = (_ROOT / "main.py").read_text(encoding="utf-8").splitlines()
-    send_linenos = [i + 1 for i, ln in enumerate(lines) if "text_output.send" in ln]
-    assert send_linenos, "No text_output.send found in main.py — file may have changed"
+    # Match only actual call sites (with open paren) — comments/docstrings say "text_output.send"
+    # without parens and must not be treated as call sites.
+    send_linenos = [i + 1 for i, ln in enumerate(lines) if "text_output.send(" in ln]
+    assert send_linenos, "No text_output.send( found in main.py — file may have changed"
 
     # Patterns that are either SYSTEM_MSG (hardcoded strings) or LLM segments already
     # processed through strip_render_tags.

@@ -153,6 +153,11 @@ async def record_assistant_turn(
     pipeline=None,
     envelope=None,
     audit_extras: Optional[dict] = None,
+    # QQ-specific params: passed through to pipeline.post_process (R1-D)
+    target_id: str = "",
+    is_group: bool = False,
+    pending_paths: Optional[list] = None,
+    frozen_scope=None,
 ) -> TurnResult:
     """
     Record one completed assistant turn and deliver it to the requested channels.
@@ -161,6 +166,11 @@ async def record_assistant_turn(
     retained here for validation and future audit; current persistence encodes
     non-user sources through trigger_name only.
     envelope 未传时默认零值（fail-closed）。
+
+    QQ 路径（R1-D）：传入 target_id / is_group / pending_paths / frozen_scope，
+    经由 post_process 透传到 TTS/sticker side effects 和 scope freeze 链路。
+    fanout=[] 时不执行 channel fanout（QQ visible send 由调用方在 adapter 内独立完成）。
+    bypass_gate=True 时跳过 conversation_lock（QQ adapter 已在 conversation_lock 内）。
     """
     from core.write_envelope import WriteEnvelope
     if envelope is None:
@@ -174,9 +184,10 @@ async def record_assistant_turn(
     capture_trigger = "" if source == TurnSource.USER_CHAT else (trigger_name or "")
     behavior = payload.get("behavior") if payload else None
 
-    # Non-QQ reality inlet pre-scrub (defense-in-depth): strip render markup then
-    # action/narration content before passing to post_process.  This covers desktop,
-    # scheduler, sensor, and watch paths going through record_assistant_turn.
+    # Reality inlet pre-scrub (defense-in-depth): strip render markup then
+    # action/narration content before passing to post_process.  This covers all
+    # paths going through record_assistant_turn (desktop, scheduler, sensor, watch,
+    # and QQ via R1-D).
     # The authoritative final scrub is in capture_turn — do not remove this call,
     # but also do not rely on it as the sole scrub guard.
     # (scrub_reality_output_text is idempotent; double-scrub with capture_turn is safe.)
@@ -191,9 +202,13 @@ async def record_assistant_turn(
                 uid,
                 memory_input,
                 memory_text,
+                target_id=target_id,
+                is_group=is_group,
+                pending_paths=pending_paths,
                 trigger_name=capture_trigger,
                 envelope=envelope,
                 audit_extras=audit_extras,
+                frozen_scope=frozen_scope,
             )
         else:
             asyncio.create_task(
@@ -201,9 +216,13 @@ async def record_assistant_turn(
                     uid,
                     memory_input,
                     memory_text,
+                    target_id=target_id,
+                    is_group=is_group,
+                    pending_paths=pending_paths,
                     trigger_name=capture_trigger,
                     envelope=envelope,
                     audit_extras=audit_extras,
+                    frozen_scope=frozen_scope,
                 )
             )
 

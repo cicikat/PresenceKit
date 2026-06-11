@@ -230,8 +230,12 @@ async def test_r1_conversation_lock_acquired(sandbox, monkeypatch):
 
 async def test_n10_post_process_exception_observable(sandbox, monkeypatch):
     """
-    post_process 抛出异常时，handle_message 不崩溃，且异常经由 log_error 被记录
+    post_process 抛出异常时、handle_message 不崩溃，且异常经由 log_error 被记录
     （不被 asyncio.create_task 静默吞掉）。
+
+    R1-D 更新：post_process 现在经由 record_assistant_turn（turn_sink）调用，
+    异常可能以 "qq_reality_reply_adapter.turn_sink" tag 记录，而非 "post_process.*"。
+    合约：异常必须被 log_error 捕获，不允许静默丢弃。
     """
     _write_reality_state(_OWNER_ID)
     _patch_noise(monkeypatch)
@@ -258,13 +262,19 @@ async def test_n10_post_process_exception_observable(sandbox, monkeypatch):
         "sender_name": _OWNER_ID,
     })
 
-    # Exception must have been captured by log_error
-    pp_errors = [(tag, err) for tag, err in logged_errors if "post_process" in tag]
-    assert pp_errors, (
+    # Exception must have been captured by log_error — not silently dropped.
+    # After R1-D: post_process is called inside record_assistant_turn (turn_sink),
+    # so the exception may be logged as "qq_reality_reply_adapter.turn_sink" instead of
+    # a "post_process.*" tag.  Accept either — the contract is non-silent capture.
+    captured = [
+        (tag, err) for tag, err in logged_errors
+        if "post_process" in tag or "turn_sink" in tag or "qq_reality_reply_adapter" in tag
+    ]
+    assert captured, (
         f"post_process exception was not logged — silent drop detected. "
         f"logged_errors={logged_errors}"
     )
-    assert isinstance(pp_errors[0][1], RuntimeError)
+    assert isinstance(captured[0][1], RuntimeError)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

@@ -265,9 +265,10 @@ def test_a3b_create_task_calls_are_startup_only():
 
 def test_a4_handle_message_awaits_post_process():
     """
-    A4 (R1-C updated): handle_message delegates to _qq_reality_reply_adapter,
-    which is the function that awaits post_process.  Both LLM reply paths share
-    the same adapter, which is the single post_process entry point.
+    A4 (R1-D updated): handle_message delegates to _qq_reality_reply_adapter,
+    which calls record_assistant_turn (turn_sink chain) — NOT post_process directly.
+    post_process is invoked inside turn_sink, so the contract is still satisfied
+    but at a higher abstraction level.
     """
     src = _src("main.py")
     hm_body = _function_body_text(src, "handle_message")
@@ -275,15 +276,22 @@ def test_a4_handle_message_awaits_post_process():
     assert "_qq_reality_reply_adapter(" in hm_body, (
         "handle_message: _qq_reality_reply_adapter call missing — R1-C adapter not wired"
     )
-    assert "await _pipeline.post_process(" in adapter_body, (
-        "_qq_reality_reply_adapter: post_process not awaited — N10 regression"
+    # R1-D: adapter routes through turn_sink, not direct post_process call
+    assert "_record_turn(" in adapter_body or "record_assistant_turn(" in adapter_body, (
+        "_qq_reality_reply_adapter: record_assistant_turn/_record_turn not called — "
+        "R1-D turn_sink chain not wired"
+    )
+    assert "await _pipeline.post_process(" not in adapter_body, (
+        "_qq_reality_reply_adapter: direct post_process call found — "
+        "R1-D requires routing through turn_sink (record_assistant_turn)"
     )
 
 
 def test_a4b_tool_reply_awaits_post_process():
     """
-    A4b (R1-C updated): _reply_with_tool_result also delegates to
-    _qq_reality_reply_adapter for its post_process call.
+    A4b (R1-D updated): _reply_with_tool_result also delegates to
+    _qq_reality_reply_adapter, which calls record_assistant_turn (turn_sink chain).
+    post_process is invoked inside turn_sink rather than directly.
     """
     src = _src("main.py")
     tr_body = _function_body_text(src, "_reply_with_tool_result")
@@ -292,8 +300,14 @@ def test_a4b_tool_reply_awaits_post_process():
         "_reply_with_tool_result: _qq_reality_reply_adapter call missing — "
         "R1-C adapter not wired into tool-reply path"
     )
-    assert "await _pipeline.post_process(" in adapter_body, (
-        "_qq_reality_reply_adapter: post_process not awaited — N10 regression"
+    # R1-D: adapter routes through turn_sink, not direct post_process call
+    assert "_record_turn(" in adapter_body or "record_assistant_turn(" in adapter_body, (
+        "_qq_reality_reply_adapter: record_assistant_turn/_record_turn not called — "
+        "R1-D turn_sink chain not wired"
+    )
+    assert "await _pipeline.post_process(" not in adapter_body, (
+        "_qq_reality_reply_adapter: direct post_process call found — "
+        "R1-D requires routing through turn_sink (record_assistant_turn)"
     )
 
 
@@ -451,20 +465,24 @@ def test_a8b_r6b_contract_still_holds():
 # A9. Partial-convergence gap: QQ not yet using record_assistant_turn
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def test_a9_qq_not_yet_using_record_assistant_turn():
+def test_a9_qq_now_using_record_assistant_turn():
     """
-    A9 (documents partial convergence): main.py must NOT import or call
-    record_assistant_turn.  QQ still sends via text_output.send and calls
-    post_process directly.
+    A9 (R1-D: INVERTED from R1-B marker): main.py must import and call
+    record_assistant_turn (via alias _record_turn) through _qq_reality_reply_adapter.
 
-    When R1-C migrates QQ to the unified turn_sink path, this test should be
-    INVERTED to assert the opposite (record_assistant_turn IS present, and
-    the old direct-send + post_process pattern is gone).
+    R1-D completed the turn_sink migration; the old direct-send + post_process pattern
+    in the adapter has been replaced by the unified turn_sink chain.
     """
     src = _src("main.py")
-    assert "record_assistant_turn" not in src, (
-        "main.py now references record_assistant_turn — R1-C migration may have started. "
-        "Update this test: invert the assertion and verify the new QQ adapter path."
+    assert "record_assistant_turn" in src, (
+        "main.py: record_assistant_turn not found — "
+        "R1-D turn_sink migration not in effect; adapter must call _record_turn"
+    )
+    # Old direct-call pattern must be gone from the adapter
+    adapter_body = _function_body_text(src, "_qq_reality_reply_adapter")
+    assert "await _pipeline.post_process(" not in adapter_body, (
+        "_qq_reality_reply_adapter: direct _pipeline.post_process call found — "
+        "R1-D requires routing through record_assistant_turn instead"
     )
 
 
