@@ -220,8 +220,9 @@ class TestDropOrder:
         # After dropping prio=10 (3000 chars): 22002 - 3000 = 19002 > 18000
         # After dropping prio=80 (3000 chars): 19002 - 3000 = 16002 ≤ 18000 → stop
         # So both are dropped in this scenario; order must be 10 before 80
-        assert removed.index("dream_afterglow_soft_hint") < removed.index("5.5_lore") \
-            if "5.5_lore" in removed else True
+        assert "dream_afterglow_soft_hint" in removed
+        assert "5.5_lore" in removed
+        assert removed.index("dream_afterglow_soft_hint") < removed.index("5.5_lore")
 
     def test_higher_priority_kept_when_budget_satisfied_earlier(self):
         # prio=10 alone is enough to bring us under 18000
@@ -423,3 +424,35 @@ class TestContentNotMutated:
         assert len(msgs) == len(original)
         for orig, after in zip(original, msgs):
             assert orig == after
+
+
+# ---------------------------------------------------------------------------
+# 11. Over-budget-after-exhaustion warning (P2-R4B-2)
+# ---------------------------------------------------------------------------
+
+class TestOverBudgetWarning:
+    """Coverage for the 裁完仍超预算 path: all droppable layers removed but still > 18000."""
+
+    def test_budget_remains_exceeded_after_exhausting_all_droppable(self):
+        """_run_trimmer: when every droppable layer is removed but budget still > 18000."""
+        msgs = [
+            _make_msg("1_system_prompt", "X" * 19000),   # no drop_priority, cannot drop
+            _make_msg("5.5_lore", "L" * 2000, drop_priority=80),
+            _make_msg("12_user_message", "hi"),
+        ]
+        # 19000 + 2000 + 2 = 21002 → over 20000 → triggers trim
+        # Drop lore (2000): 21002 - 2000 = 19002 > 18000, no more droppable → exhausted
+        trimmed, removed = _run_trimmer(msgs)
+        remaining = sum(len(m["content"]) for m in trimmed)
+        assert "5.5_lore" in removed
+        assert remaining > 18000, "scenario must leave budget still exceeded"
+
+    def test_prompt_builder_has_over_budget_warning_in_source(self):
+        """prompt_builder.build() source must contain the 裁完仍超预算 warning."""
+        import inspect
+        import core.prompt_builder as pb
+        src = inspect.getsource(pb.build)
+        assert "裁完仍超预算" in src, (
+            "build() must log a warning when all droppable layers are exhausted "
+            "but token_estimate still exceeds 18000"
+        )

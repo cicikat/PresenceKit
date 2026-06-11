@@ -346,3 +346,88 @@ def test_yexuan_explicit_reads_yexuan_trait_state(tmp_path):
     assert call == {"char_id": "yexuan"}, (
         f"trait_state must be called with char_id='yexuan'; got {call}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Helpers for transition write-back tests (8 & 9)
+# ---------------------------------------------------------------------------
+
+class _FakePathsWithP(_FakePaths):
+    """Extends _FakePaths with a trackable _p() method."""
+
+    def __init__(self, tmp_path, **kw):
+        super().__init__(**kw)
+        self._tmp = tmp_path
+        self.p_calls: list[tuple] = []
+
+    def _p(self, *args):
+        self.p_calls.append(args)
+        dest = self._tmp / "_".join(str(a) for a in args)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        return dest
+
+
+# ---------------------------------------------------------------------------
+# 8. _TRANSITION_CHARACTER_INNER=True, char_id="hongcha" → must NOT write yexuan_inner
+# ---------------------------------------------------------------------------
+
+def test_transition_write_back_skipped_for_non_yexuan(tmp_path, monkeypatch):
+    """
+    P1-R8C: When _TRANSITION_CHARACTER_INNER is True and char_id="hongcha",
+    the legacy write-back to yexuan_inner/author_note_state.json must NOT happen.
+    """
+    import core.sandbox as _sb
+    from core.author_note_rotator import get_current_note
+
+    pool_file = tmp_path / "notes.json"
+    pool_file.write_text(json.dumps(_pool_data(("note1", []))), encoding="utf-8")
+
+    paths = _FakePathsWithP(
+        tmp_path=tmp_path,
+        pool_path=pool_file,
+        state_path=tmp_path / "state.json",
+        hongcha_trait_path=tmp_path / "hongcha_trait.json",
+    )
+
+    monkeypatch.setattr(_sb, "_TRANSITION_CHARACTER_INNER", True)
+
+    get_current_note(paths=paths, char_id="hongcha")
+
+    yexuan_inner_calls = [args for args in paths.p_calls if args and args[0] == "yexuan_inner"]
+    assert not yexuan_inner_calls, (
+        f"yexuan_inner write-back must NOT occur for char_id='hongcha'; "
+        f"_p calls: {paths.p_calls}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# 9. _TRANSITION_CHARACTER_INNER=True, char_id="yexuan" → must still write yexuan_inner
+# ---------------------------------------------------------------------------
+
+def test_transition_write_back_preserved_for_yexuan(tmp_path, monkeypatch):
+    """
+    P1-R8C: When _TRANSITION_CHARACTER_INNER is True and char_id="yexuan",
+    the legacy write-back to yexuan_inner/author_note_state.json must still happen.
+    """
+    import core.sandbox as _sb
+    from core.author_note_rotator import get_current_note
+
+    pool_file = tmp_path / "notes.json"
+    pool_file.write_text(json.dumps(_pool_data(("note1", []))), encoding="utf-8")
+
+    paths = _FakePathsWithP(
+        tmp_path=tmp_path,
+        pool_path=pool_file,
+        state_path=tmp_path / "state.json",
+        hongcha_trait_path=tmp_path / "yexuan_trait.json",
+    )
+
+    monkeypatch.setattr(_sb, "_TRANSITION_CHARACTER_INNER", True)
+
+    get_current_note(paths=paths, char_id="yexuan")
+
+    yexuan_inner_calls = [args for args in paths.p_calls if args and args[0] == "yexuan_inner"]
+    assert yexuan_inner_calls, (
+        f"yexuan_inner write-back must occur for char_id='yexuan'; "
+        f"_p calls: {paths.p_calls}"
+    )

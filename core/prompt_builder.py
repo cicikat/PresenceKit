@@ -929,6 +929,11 @@ def build(
             messages = [m for j, m in enumerate(messages) if j not in _drop_indices]
         if _removed_layers:
             _prompt_logger.info(f"[prompt] 裁剪层：{_removed_layers}，裁剪后估算：{token_estimate}")
+        if token_estimate > 18000:
+            _prompt_logger.warning(
+                "[prompt] 裁完仍超预算: %d，全部可裁层已丢弃，无法继续压缩",
+                token_estimate,
+            )
     elif token_estimate > 15000:
         _prompt_logger.warning(f"[prompt] token估算超软警戒: {token_estimate}")
 

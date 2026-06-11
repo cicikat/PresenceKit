@@ -70,9 +70,15 @@ R8-B 已落地：`post_process()` 在每个 `can_write_memory=True` 的有效 as
 运行，直接写入 `data/runtime/characters/{char_id}/inner/trait_state.json`。
 
 R8-C 已落地（2026-06-10）：`author_note_rotator.get_current_note()` 新增 `char_id` 参数，
-三处路径调用（`trait_state` / `author_note_state` / `author_notes_pool`）均随 `char_id`
+主要路径三处调用（`trait_state` / `author_note_state` / `author_notes_pool`）均随 `char_id`
 传入对应角色路径；`prompt_builder.build()` 已透传本轮 `char_id`。
 读写路径对齐，多角色 `underrepresented` 加权不再默认读 yexuan。
+
+R8-C P1-补丁（2026-06-11）：上述修复遗漏了 `_TRANSITION_CHARACTER_INNER` 分支的 write-back
+路径。原代码在状态切换时额外写一份 `yexuan_inner/author_note_state.json`，未检查 `char_id`，
+导致非 yexuan 角色也会写入 legacy yexuan_inner 路径。现已加
+`char_id is None or char_id == "yexuan"` 守卫：只有 yexuan/legacy 调用才触发该 write-back。
+守卫测试：`tests/test_r8c_author_note_rotator_scope.py`（tests 8 & 9）。
 
 R8-E2 已落地（2026-06-10）：`character_growth.update()` 已删除，其内部 `trait_state()` 死代码写路径（缺 char_id）随之消除。`character_growth` 现为只读 legacy 接口，写入链完全由 `trait_tracker_update` slow_queue task 承接。
 
