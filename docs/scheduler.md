@@ -7,27 +7,28 @@
 调度器负责**叶瑄的主动行为**——不等用户发消息，自己在合适的时机触发。
 
 ```
-core/scheduler/loop.py       ← 主循环 + 工具函数 + 冷却管理
-core/scheduler/gating.py     ← proposal 收集、状态/冷却过滤、每 tick 选一
-core/scheduler/execution.py  ← proposal dry-run/live 执行收口，成功后才 mark
+core/scheduler/loop.py           ← 主循环 + 工具函数 + 冷却管理
+core/scheduler/gating.py         ← proposal 收集、状态/冷却/defer/DND 过滤、每 tick 选一
+core/scheduler/execution.py      ← proposal dry-run/live 执行收口，成功后才 mark
+core/scheduler/defer_queue.py    ← defer 队列（内存态）：age 跟踪 + 过期 force_send/drop
 core/scheduler/proposer_registry.py ← 原生 proposer 注册表
-core/scheduler/rhythm.py     ← presence、逻辑日、时间窗比例等节律 helper
-core/scheduler/triggers/     ← 各触发器独立文件
-    time_based.py            早安 / 晚安 / 随机消息 / 天气 / 日记 / 记忆衰减
-    diary.py                 日记相关触发
-    period.py                生理期关心
-    memory.py                未完结话题追问 / 主动回忆
-    birthday.py              生日多段触发
-    timenode.py              时间节点感知
-    festival.py              节日 + 长假加速
-    episodic_sweep.py        mid_term 老化扫描，批量晋升情景记忆
-    garden_water.py          花园自动浇水
-    garden_daily.py          花园 harvest/vase 每日扫描
-    hidden_state_decay.py    用户隐性状态衰减（12h）+ 基线收敛（7d），不发言
-    watch.py                 Apple Watch 心率 / 睡眠事件
-    reminders.py             到点备忘录 proposer
-    sensor_aware.py          sensor 实时状态 → 主动开口（默认关闭）
-    dnd.py                   请勿打扰状态（已实现，未接入）
+core/scheduler/rhythm.py         ← presence、逻辑日、时间窗比例等节律 helper
+core/scheduler/triggers/         ← 各触发器独立文件
+    time_based.py                早安 / 晚安 / 随机消息 / 天气 / 日记 / 记忆衰减
+    diary.py                     日记相关触发
+    period.py                    生理期关心
+    memory.py                    未完结话题追问 / 主动回忆
+    birthday.py                  生日多段触发
+    timenode.py                  时间节点感知
+    festival.py                  节日 + 长假加速
+    episodic_sweep.py            mid_term 老化扫描，批量晋升情景记忆
+    garden_water.py              花园自动浇水
+    garden_daily.py              花园 harvest/vase 每日扫描
+    hidden_state_decay.py        用户隐性状态衰减（12h）+ 基线收敛（7d），不发言
+    watch.py                     Apple Watch 心率 / 睡眠事件
+    reminders.py                 到点备忘录 proposer
+    sensor_aware.py              sensor 实时状态 → 主动开口（默认关闭）
+    dnd.py                       请勿打扰状态（已实现，R2-D 已接入 main.py）
 ```
 
 ---
@@ -169,19 +170,145 @@ R2-C 后的状态：
 - `hr_high`：语义上是 defer，但 Watch proposal 受 `HEART_RATE_PROPOSAL_TTL_SECONDS=10min`
   限制，`max_defer_age_secs` 只能记为 10 分钟；超过 TTL 后 proposal 返回 `None`，等同过期 drop。
 
-未完成范围（R2-D）：
+**R2-D 完成项（2026-06-11）**：
 
-- defer 队列（真正延迟到活跃窗口结束后发送，而非本 tick 丢弃等下次重试）
-- DND 触发词自动检测接线（`dnd.py` 的 `detect_and_set` 已实现，未接入 `main.py`）
+- ✅ defer 队列最小实现（`core/scheduler/defer_queue.py`，内存态）
+- ✅ DND 触发词自动检测接入 `main.py` owner 消息路径
 
 ---
 
-## R2-A 执行面审计（2026-06-10）+ R2-B（2026-06-11）+ R2-C（2026-06-11）
+## Defer 队列（R2-D）
+
+文件：`core/scheduler/defer_queue.py`
+
+### 语义
+
+当 `gating._decide()` 遇到 `active_window_behavior="defer"` 的触发器且用户活跃时，
+不仅跳过本 tick，还将 `(uid, trigger_name)` 记录到内存队列并追踪首次推迟时间戳。
+每个 tick 的 `_decide()` 调用流程：
+
+1. `scan_expired(uid)` — 扫描超龄条目，返回 `(force_send_names, dropped_names)`；
+   超龄条目从队列中删除。
+2. 若 `trigger_name in force_send_names`（即 `on_defer_expire="force_send"` 且已超龄），
+   该触发器被加入 `aw_allowed`，**即使用户仍在活跃窗口也可通过**。
+3. 若用户活跃且触发器未能通过 `aw_allowed`，对 `defer` 行为的触发器调用 `enqueue_defer`
+   （幂等：首次推迟时间戳不会被后续 tick 覆盖）。
+4. 触发器被选中（`picked`）后，调用 `release_defer(uid, trigger_name)` 从队列删除。
+
+### 到期行为
+
+| `on_defer_expire` | 超龄后的行为 |
+|---|---|
+| `"force_send"` | 即使用户活跃也强制发送（bypass active_window filter） |
+| `"drop"` | 清除队列条目，下次重新从零累积 age |
+
+### 限制与生命周期
+
+- **内存态**：进程重启后队列清零；所有 `defer` 触发器的 `max_defer_age_secs` 均较短
+  （10 分钟 ~ 4 小时），重启后从新的 tick 开始重新累积 age，无实质影响。
+- **不扩大发送频率**：defer 队列只做 age 追踪 + 过期决策，不创建新 proposal；
+  proposal 仍来自 proposer registry 每 tick 正常返回。
+- **可观测**：`get_queue_snapshot(uid)` 返回当前队列快照，含 `enqueue_ts` 和 `age_secs`；
+  候选序列化中新增 `force_send` 和 `deferred_age_secs` 字段，写入 `gating_shadow.jsonl`。
+
+### 当前配置表（defer 触发器）
+
+| 触发器 | max_defer_age_secs | on_defer_expire |
+|---|---|---|
+| `hr_high` | 10 分钟 | drop |
+| `weather_alert` | 30 分钟 | drop |
+| `topic_followup` | 2 小时 | drop |
+| `reminders` | 10 分钟 | **force_send** |
+| `diary_share_reminder` | 4 小时 | drop |
+| `diary_reminder` | 4 小时 | drop |
+
+---
+
+## DND 主入口（R2-D）
+
+文件：`core/scheduler/triggers/dnd.py`（逻辑），`main.py`（接线）
+
+**R2-D 完成**：`detect_and_set()` 已接入 `main.py` 的 owner 消息处理路径。
+
+### 接线位置
+
+`main.py::handle_message()` — 在确认 `user_id == owner_id` 的 try 块内，
+`mark_user_active()` 调用之后，立即调用：
+
+```python
+from core.scheduler.triggers.dnd import detect_and_set as _dnd_detect
+_dnd_detect(user_id, message.get("content", ""))
+```
+
+- 仅对 owner 消息生效（非 owner 消息不触发 DND 检测）。
+- `detect_and_set` 是纯内存操作，不阻塞快速路径。
+- 不调用任何 LLM，不影响 pipeline 流程。
+
+### 触发词（设置 DND）
+
+`学习` / `开会` / `上班` / `工作` / `在忙` / `忙着` / `复习` / `备考` / `做题` / `写作业` / `写报告`
+
+### 结束词（清除 DND）
+
+`下课` / `散会` / `下班` / `忙完` / `做完了` / `写完了` / `结束了` / `搞定了`
+
+结束词优先于触发词（同一消息中若两者都出现，结束词生效）。
+
+### DND 生效期间
+
+- DND 默认持续 3 小时（`_DND_DURATION = 3 * 3600`），超时自动失效。
+- `gating._decide()` 在 DND 活跃时，只有 `priority="emergency"` 的触发器（`hr_critical`）可通过，
+  其余全部返回 `dnd_filtered`。
+- Maintenance tick（`log_maintenance` / `episodic_sweep` / `hidden_state_decay` 等）不经过
+  发言 gating，不受 DND 影响。
+
+---
+
+## R2-A（2026-06-10）+ R2-B（2026-06-11）+ R2-C（2026-06-11）+ R2-D（2026-06-11）
 
 > R2-A 是审计和决策包。R2-B 完成"发言决策前移第一段"。R2-C 完成 legacy 安全网删除、
-> 执行层收口到 send + mark only。
+> 执行层收口到 send + mark only。R2-D 完成 defer 队列最小实现 + DND 主入口接线。
 
-### 当前执行面总览（R2-C 后）
+### 最终调度决策路径图（R2-D 后）
+
+```
+owner QQ 消息
+    ↓ main.py::handle_message()
+    ├─ notify_owner_turn(uid)       → state_machine
+    ├─ mark_user_active()           → _last_user_message_time
+    └─ detect_and_set(uid, content) → dnd._dnd_expire  ← R2-D DND 接线
+
+每 60s tick
+    ↓ loop._loop()
+    ├─ gating.run_shadow_tick(uid)
+    │     ↓ _collect_native_proposals(ctx)   → proposer_registry 每个 proposer
+    │     ↓ _decide(uid, proposals)
+    │         1. scan_expired(uid)           → defer_queue 过期处理 (R2-D)
+    │         2. state filter               → TriggerState 门控
+    │         3. active_window filter       → POLICY_TABLE.active_window_behavior
+    │            ├─ force_send_names 豁免   → 过期 defer + on_defer_expire=force_send
+    │            └─ 被过滤 defer → enqueue_defer(uid, name)  (R2-D)
+    │         4. DND filter                 → is_dnd(uid), emergency 豁免
+    │         5. cooldown filter            → _is_ready(name)
+    │         6. max urgency 选 winner
+    │         7. release_defer(uid, winner) → defer_queue 释放 (R2-D)
+    │     ↓ winner.execute(dry_run=False)
+    │         → execute_prompt() → _pipeline_send() → perceive_event gate
+    │           → conversation_lock → run_llm → record_assistant_turn
+    │           → 成功后 _mark(trigger_name)
+    └─ legacy asyncio.gather(_check_*...)
+          speaking 触发器: legacy_tick_should_send()=False → 让路（no-op）
+          maintenance 触发器: 正常执行（不发言，不受 gating/DND 影响）
+```
+
+**最终合约**：
+- 发言 trigger winner 决策 **只在** `gating._decide()`（含 POLICY_TABLE + defer_queue + DND + state）。
+- `_pipeline_send()` / `execution.execute_prompt()` **只负责** send + mark；block/defer 不调 `_mark()`。
+- maintenance tick 不受 active-window / DND / defer 误伤（不在 MIGRATED_TRIGGERS，不走发言路径）。
+- Watch 独立 `WATCH_EXECUTE_MODE` 是独立面（S4），不属于 R2 统一路径，文档单独说明。
+- `policy.py` 是运行时决策权威，被 `gating.py` 通过延迟 import 引用，`loop.py` 不直接引用。
+
+### 当前执行面总览（R2-D 后）
 
 | 编号 | 执行面 | 文件 | 状态 |
 |---|---|---|---|
@@ -244,7 +371,7 @@ R2-C 后的状态：
 | DND 过滤（legacy 路径安全网）| ~~`loop._legacy_dnd_blocks()`~~ | **R2-C 已删除**；gating 是唯一权威 |
 | 高优先级豁免（exempt） | `POLICY_TABLE.active_window_behavior == "exempt"` | hr_critical / period_reminder / birthday 系列全部 exempt |
 | priority/urgency 排序 | `gating._decide()` → 按 `urgency` 选最高者 | POLICY_TABLE priority 字段未接入 urgency 排序；R2-C 范畴 |
-| defer 队列 | **未实现**；R2-B 中 defer = 本 tick 跳过，下 tick 重试 | 真正的延迟队列为 R2-C/D 范畴 |
+| defer 队列 | `core/scheduler/defer_queue.py`（内存态） | **R2-D done**；`enqueue_defer` 追踪首次推迟时间；超龄后 force_send / drop；restart 清零（可接受，所有 defer 触发器 TTL 均较短） |
 
 ### 执行与 mark 表
 
@@ -276,11 +403,14 @@ R2-C 后的状态：
 5. ✅ Legacy speaking `_check_*` 通过 `legacy_tick_should_send()` 在 live 模式让路（维护型保留）
 6. ✅ `_HIGH_PRIORITY_TRIGGERS` 保留为文档/测试断言常量
 
-**遗留项（R2-D）**：
-- `defer` 队列实现（目前 defer = 本 tick 跳过，等下次 60s tick）
-- `dnd.detect_and_set` 接入 `main.py` 自动检测
-- 120s active window 长度迁入配置
-- POLICY_TABLE `priority` 字段接入 urgency 排序
+**R2-D 完成情况（2026-06-11）**：
+1. ✅ `defer` 队列实现（`core/scheduler/defer_queue.py`，内存态，age 跟踪 + 过期 force_send/drop）
+2. ✅ `dnd.detect_and_set` 接入 `main.py` owner 消息路径（R2-D 主入口接线）
+
+**仍为遗留项（R2 外或后续迭代）**：
+- 120s active window 长度迁入配置（当前硬编码，影响 `_user_active_recently` 默认值）
+- POLICY_TABLE `priority` 字段接入 urgency 排序（目前 priority 仅用于 DND emergency 判断；
+  urgency 由 proposer 自身决定，priority 未参与 max() 选择）
 
 ---
 
@@ -463,12 +593,13 @@ window 拦截、LLM 空回复或发送前异常时，不调用 execute 的 `afte
 
 文件：`core/scheduler/triggers/dnd.py`
 
-**当前状态：已实现，尚未接入主流程。**
+**R2-D 完成：已接入 `main.py` owner 消息路径。**
 
-模块逻辑已完整（关键词检测 → 设置 3 小时 DND → 结束词清除），但 `main.py` 和 `loop.py` 均未调用 `detect_and_set()` / `is_dnd()`。如需启用：
+参见上方 [DND 主入口（R2-D）](#dnd-主入口r2-d) 章节。
 
-1. 在 `main.py` 的消息处理入口调用 `dnd.detect_and_set(uid, content)`
-2. 在 `_pipeline_send()` 里检查 `dnd.is_dnd(oid)` 决定是否跳过低优先级触发
+`is_dnd(uid)` 已在 `gating._decide()` 的 DND filter 中使用（R2-B 起）；
+`detect_and_set(uid, content)` 已在 `main.py::handle_message()` 的 owner block 调用（R2-D）。
+`loop.py` 不直接调用 `is_dnd`（DND 决策属于 gating 层，不属于执行层）。
 
 ---
 

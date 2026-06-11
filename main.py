@@ -212,6 +212,14 @@ async def handle_message(message: dict):
         if owner_id and str(user_id) == owner_id:
             notify_owner_turn(user_id)
             mark_user_active()  # 仅 owner 有效输入才重置主动消息窗口
+            # R2-D: DND 主入口接线 — 检测 owner 消息中的"别打扰/在忙"等关键词，
+            # 匹配则设置 3 小时 DND；结束词（"下课/搞定了"等）则清除 DND。
+            # 仅对 owner 消息生效，不影响快速路径（detect_and_set 是纯内存操作）。
+            try:
+                from core.scheduler.triggers.dnd import detect_and_set as _dnd_detect
+                _dnd_detect(user_id, message.get("content", ""))
+            except Exception:
+                logger.exception("[handle_message] DND detect_and_set 失败")
     except Exception:
         logger.exception("[handle_message] trigger state notify_owner_turn 失败")
 

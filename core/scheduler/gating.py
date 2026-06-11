@@ -136,7 +136,23 @@ def _decide(uid: str, proposals: list[TriggerProposal]) -> tuple[Optional[Trigge
     state = get_current_state(uid)
     user_active = _user_active_recently()
     dnd_active = is_dnd(uid)
-    candidates = [_serialize_candidate(p, state, user_active=user_active, dnd_active=dnd_active) for p in proposals]
+
+    # ── Defer queue: handle expired items before building candidates ─────────
+    # scan_expired() removes stale entries and returns names that should be
+    # force-sent (bypassing active_window) or dropped (already cleaned up).
+    from core.scheduler.defer_queue import enqueue_defer, release_defer, scan_expired
+    force_send_names, _dropped_names = scan_expired(uid)
+
+    candidates = [
+        _serialize_candidate(
+            p, state,
+            uid=uid,
+            user_active=user_active,
+            dnd_active=dnd_active,
+            force_send_names=force_send_names,
+        )
+        for p in proposals
+    ]
     if not proposals:
         return None, "no_candidates", candidates
 
@@ -147,18 +163,28 @@ def _decide(uid: str, proposals: list[TriggerProposal]) -> tuple[Optional[Trigge
     if not state_allowed:
         return None, "state_filtered", candidates
 
-    # ── Active-window filter (R2-B) ──────────────────────────────────────────
+    # ── Active-window filter (R2-B / R2-D) ───────────────────────────────────
     # Consult POLICY_TABLE.active_window_behavior before picking a winner.
-    # exempt  → always allow
-    # defer   → skip this tick when user active (natural re-try on next 60s tick)
-    # drop    → skip this tick when user active
-    # unknown → defer by default (conservative)
+    # exempt       → always allow
+    # defer        → skip this tick when user active; enqueue in defer_queue for
+    #                age tracking.  When max_defer_age_secs expires with
+    #                on_defer_expire="force_send", the trigger is added to
+    #                force_send_names and bypasses active_window on that tick.
+    # drop         → skip this tick when user active
+    # unknown      → defer by default (conservative)
     if user_active:
         aw_allowed = [
             p for p in state_allowed
             if _policy_active_window_behavior(p.trigger_name) == "exempt"
+            or p.trigger_name in force_send_names
         ]
         if not aw_allowed:
+            # Enqueue defer-behavior proposals for age tracking.
+            # drop-behavior proposals are NOT enqueued (they're intentionally
+            # discarded; only defer triggers need expiry semantics).
+            for p in state_allowed:
+                if _policy_active_window_behavior(p.trigger_name) == "defer":
+                    enqueue_defer(uid, p.trigger_name)
             return None, "active_window_filtered", candidates
         state_allowed = aw_allowed
 
@@ -175,6 +201,8 @@ def _decide(uid: str, proposals: list[TriggerProposal]) -> tuple[Optional[Trigge
         return None, "cooldown_filtered", candidates
 
     picked = max(cooldown_allowed, key=lambda p: p.urgency)
+    # Release from defer queue: trigger was sent (or will be sent this tick).
+    release_defer(uid, picked.trigger_name)
     return picked, "picked_highest_urgency", candidates
 
 
@@ -196,15 +224,29 @@ def _serialize_candidate(
     proposal: TriggerProposal,
     state: TriggerState | str,
     *,
+    uid: str = "",
     user_active: bool = False,
     dnd_active: bool = False,
+    force_send_names: frozenset[str] | None = None,
 ) -> dict:
     required = [_state_value(s) for s in proposal.requires_state]
     state_allowed = proposal.bypass_state_machine or _state_value(state) in set(required)
     cooldown_ready = is_trigger_ready(proposal.trigger_name)
     aw_behavior = _policy_active_window_behavior(proposal.trigger_name)
-    aw_blocked = user_active and aw_behavior != "exempt"
+    _force_send = proposal.trigger_name in (force_send_names or frozenset())
+    aw_blocked = user_active and aw_behavior != "exempt" and not _force_send
     dnd_blocked = dnd_active and not _policy_is_emergency(proposal.trigger_name)
+    # Defer queue observability: include current deferred age if tracked.
+    deferred_age_secs = None
+    if uid:
+        try:
+            from core.scheduler.defer_queue import get_queue_snapshot as _dq_snap
+            snap = {e["trigger_name"]: e for e in _dq_snap(uid)}
+            entry = snap.get(proposal.trigger_name)
+            if entry:
+                deferred_age_secs = round(entry["age_secs"], 1)
+        except Exception:
+            pass
     return {
         "trigger_name": proposal.trigger_name,
         "urgency": proposal.urgency,
@@ -216,6 +258,8 @@ def _serialize_candidate(
         "aw_behavior": aw_behavior,
         "aw_blocked": aw_blocked,
         "dnd_blocked": dnd_blocked,
+        "force_send": _force_send,
+        "deferred_age_secs": deferred_age_secs,
     }
 
 
