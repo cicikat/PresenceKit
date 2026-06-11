@@ -279,10 +279,10 @@ class TestAndSaveWiring:
         ag = _residue(tone="comfort", age_hours=1.0)
         save_calls: list[str] = []
 
-        def _fake_load(uid):
+        def _fake_load(uid, char_id="yexuan"):
             return default_hidden_state()
 
-        def _fake_save(uid, state):
+        def _fake_save(uid, state, char_id="yexuan"):
             save_calls.append(str(uid))
             return True
 
@@ -298,10 +298,10 @@ class TestAndSaveWiring:
         ag = _residue(tone="comfort", age_hours=1.0)
         save_calls: list[str] = []
 
-        def _fake_load(uid):
+        def _fake_load(uid, char_id="yexuan"):
             return default_hidden_state()
 
-        def _fake_save(uid, state):
+        def _fake_save(uid, state, char_id="yexuan"):
             save_calls.append(str(uid))
             return True
 

@@ -28,7 +28,7 @@ _REAL_WORLDS_BASE = _PROJECT_ROOT / "characters" / "dream_worlds"
 # ── Key phrases from _default files (see characters/dream_worlds/_default/) ──
 # Changes to _default content must be reflected here.
 _DEFAULT_RULESET_PHRASE = "梦境是现实的变体"
-_DEFAULT_MES_TAG = "<env>"
+_DEFAULT_MES_TAG = "灰白色的光"   # opening line of _default/mes_example.md
 _DEFAULT_MES_PHRASE = "你来了"
 
 # ── Minimal fakes ─────────────────────────────────────────────────────────────

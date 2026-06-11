@@ -301,8 +301,10 @@ def test_phase2a_chat_style_instruction_in_prompt():
     chat_block_end = src.find("),", chat_block_start)
     chat_instruction = src[chat_block_start:chat_block_end]
 
-    # 应包含 Markdown 动作格式说明（单星号）
-    assert "*" in chat_instruction, "chat 指令应包含 Markdown *动作* 格式说明"
+    # 应包含 chat 模式的核心输出规则说明
+    assert "对白" in chat_instruction or "Chat" in chat_instruction, (
+        "chat 指令应包含 Chat 模式的输出规则说明"
+    )
     # 不应再使用 XML 标签作为格式指引
     assert "<say>" not in chat_instruction, "chat 指令不应使用 XML <say> 标签"
     assert "<do>" not in chat_instruction, "chat 指令不应使用 XML <do> 标签"

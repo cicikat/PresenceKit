@@ -213,6 +213,14 @@ def test_fc02_no_exception_raised_on_any_error(sandbox):
 
 def test_ro01_no_files_written(sandbox):
     """RO-01: GET /debug/user-hidden-state 不写任何文件。"""
+    # Pre-create active_prompt_assets.json so _active_char_id() doesn't create it during the call.
+    import json as _json
+    apa = sandbox._base / "runtime" / "active_prompt_assets.json"
+    apa.parent.mkdir(parents=True, exist_ok=True)
+    apa.write_text(
+        _json.dumps({"active_character": "yexuan", "enabled_lorebooks": [], "enabled_jailbreaks": []}),
+        encoding="utf-8",
+    )
     save_hidden_state(_UID, default_hidden_state())
 
     pre = set(sandbox._base.rglob("*")) if sandbox._base.exists() else set()

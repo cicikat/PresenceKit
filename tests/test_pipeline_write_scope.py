@@ -150,7 +150,7 @@ async def test_post_process_passes_active_char_id_to_capture_turn(
 
     original_ct = _fp.capture_turn
 
-    def _spy_ct(uid, user_msg, reply, emotion="neutral", turn_id=None, trigger_name="", envelope=None, *, char_id="yexuan"):
+    def _spy_ct(uid, user_msg, reply, emotion="neutral", turn_id=None, trigger_name="", envelope=None, *, char_id="yexuan", audit_extras=None):
         captured_char_ids.append(char_id)
         return turn_id or f"{uid}_spy"
 
@@ -195,7 +195,7 @@ async def test_post_process_uses_new_char_id_after_switch(
 
     captured_char_ids: list[str] = []
 
-    def _spy_ct(uid, user_msg, reply, emotion="neutral", turn_id=None, trigger_name="", envelope=None, *, char_id="yexuan"):
+    def _spy_ct(uid, user_msg, reply, emotion="neutral", turn_id=None, trigger_name="", envelope=None, *, char_id="yexuan", audit_extras=None):
         captured_char_ids.append(char_id)
         return turn_id or f"{uid}_spy"
 

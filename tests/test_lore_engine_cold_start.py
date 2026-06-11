@@ -24,9 +24,19 @@ _CHAR_ENTRY = {
 
 
 def _write_lorebook(sandbox, entries):
-    p = sandbox.lorebook()
-    p.parent.mkdir(parents=True, exist_ok=True)
+    # LoreEngine.load() reads from lorebooks_dir/{stem}.yaml (enabled_lorebooks: ["base"])
+    lorebooks_dir = sandbox.lorebooks_dir()
+    lorebooks_dir.mkdir(parents=True, exist_ok=True)
+    p = lorebooks_dir / "base.yaml"
     p.write_text(yaml.dump({"entries": entries}), encoding="utf-8")
+    # Also set up active_prompt_assets.json so LoreEngine.load() can resolve enabled_lorebooks
+    import json as _json
+    apa = sandbox._base / "runtime" / "active_prompt_assets.json"
+    apa.parent.mkdir(parents=True, exist_ok=True)
+    apa.write_text(
+        _json.dumps({"active_character": "yexuan", "enabled_lorebooks": ["base"], "enabled_jailbreaks": []}),
+        encoding="utf-8",
+    )
 
 
 def test_cold_start_correct_order_loads_both(sandbox):

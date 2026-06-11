@@ -123,6 +123,29 @@ REGISTRY: dict[str, PathMeta] = {
     "lorebook":               PathMeta("canonical", "shared",          "global",        "seed"),
     "relations":              PathMeta("canonical", "shared",          "global",        "seed"),
     "blacklist":              PathMeta("canonical", "shared",          "global",        "seed"),
+
+    # ── runtime config: active prompt asset selection ─────────────────────────
+    "active_prompt_assets":   PathMeta("runtime",   "shared",          "global",        "ignore"),
+
+    # ── authored: lorebooks / jailbreaks (characters/reality/ 目录，不走 data/) ─
+    "lorebooks_dir":          PathMeta("authored",  "shared",          "global",        "ignore-but-authored"),
+    "jailbreaks_dir":         PathMeta("authored",  "shared",          "global",        "ignore-but-authored"),
+
+    # ── dream: HUD state ────────────────────────────────────────────────────────
+    "dream_hud_state_path":   PathMeta("runtime",   "dream",           "per_user",      "ignore"),
+
+    # ── runtime: per-character runtime assets dir ─────────────────────────────
+    "runtime_character_dir":  PathMeta("runtime",   "character_inner", "per_char",      "ignore"),
+
+    # ── Activity: reading activity paths ─────────────────────────────────────
+    "reading_char_root":      PathMeta("runtime",   "reality",         "per_char",      "ignore"),
+    "reading_sessions_root":  PathMeta("runtime",   "reality",         "per_char_user", "ignore"),
+    "reading_session_dir":    PathMeta("runtime",   "reality",         "per_char_user", "ignore"),
+
+    # ── Activity: generic session (char_id-first layout) ─────────────────────
+    "activity_char_root":     PathMeta("runtime",   "reality",         "per_char",      "ignore"),
+    "activity_sessions_root": PathMeta("runtime",   "reality",         "per_char_user", "ignore"),
+    "activity_session_dir":   PathMeta("runtime",   "reality",         "per_char_user", "ignore"),
 }
 
 # ── retention 策略（由 scheduler.log_maintenance 每 24 小时执行，参数见 config.yaml retention.*）

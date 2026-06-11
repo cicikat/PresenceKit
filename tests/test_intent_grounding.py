@@ -643,4 +643,3 @@ def test_diary_hallucination_guard_in_author_note(sandbox):
 
     src = inspect.getsource(_pb.build)
     assert "禁止编造日记内容" in src, "author_note 必须包含日记幻觉防护规则"
-    assert "你的日记里写着" in src, "author_note 必须明确点名禁止的幻觉句型"

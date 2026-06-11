@@ -128,20 +128,19 @@ def test_apply_ai_move_adds_ai_move_to_history(sandbox):
 
 # ── T8: user wins → pending_ai_turn stays False ───────────────────────────────
 
-def test_user_wins_no_pending_ai_turn(sandbox):
+def test_user_wins_no_pending_ai_turn(sandbox, monkeypatch):
+    # Mock AI to always play at a safe corner so it can't block the winning line.
+    # Must patch the name in the gomoku module (already imported at module level there).
+    monkeypatch.setattr(G, "choose_gomoku_ai_move", lambda *a, **kw: (14, 14))
+
     session = _start_pending(sandbox)
     uid, char_id, sid = session.uid, session.char_id, session.session_id
-    # Build a near-win: place 4 black stones, one non-blocking white stone each time
-    # We do this by using auto-mode simulation: just place black stones manually
-    # Layout: black row at y=0: (0,0),(1,0),(2,0),(3,0) then win at (4,0)
-    # We also need to inject white stone at some other spot to avoid AI conflicts.
-    # In pending mode, AI never auto-moves, so we can place black freely.
+    # Layout: black row at y=5: (0,5),(1,5),(2,5),(3,5) then win at (4,5)
+    # AI always plays (14,14) so can't block.
     for x in range(4):
-        G.make_move(uid, char_id, sid, x, 0)
-        # Each move triggers pending — call apply_ai_move to switch back to black
+        G.make_move(uid, char_id, sid, x, 5)
         G.apply_ai_move(uid, char_id, sid)
-    # Now user plays the 5th in a row
-    result = G.make_move(uid, char_id, sid, 4, 0)
+    result = G.make_move(uid, char_id, sid, 4, 5)
     assert result["status"] == "completed"
     assert result["winner"] == "black"
     assert result["pending_ai_turn"] is False, "winning move must not set pending_ai_turn"

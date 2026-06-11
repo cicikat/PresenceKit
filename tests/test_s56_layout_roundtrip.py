@@ -315,13 +315,13 @@ def test_garden_water_writes_new_path(sandbox):
     """water(slot_key) → 写新路径 plants.json → get_state 包含该槽位。"""
     from core.garden.manager import water, get_state
 
-    result = water("calm", reason="smoke_test")
+    result = water("calm", reason="smoke_test", char_id="yexuan")
     assert result["ok"], f"water 返回失败: {result}"
 
-    new_plants = sandbox.garden() / "plants.json"
+    new_plants = sandbox.garden(char_id="yexuan") / "plants.json"
     assert new_plants.exists(), "water 应写入新路径 plants.json"
 
-    state = get_state()
+    state = get_state(char_id="yexuan")
     slot_keys = {s["slot_key"] for s in state["slots"]}
     assert "calm" in slot_keys
 

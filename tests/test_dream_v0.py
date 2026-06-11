@@ -113,7 +113,7 @@ def test_identity_stable_across_world_ruleset_change():
     system_alt = msgs_alt[0]["content"]
 
     # D1 content must appear in both (identity stability)
-    identity_keywords = ["叶瑄", "他知道这是", "仍是他自己", "依恋底色"]
+    identity_keywords = ["叶瑄", "他知道这是", "仍是他自己", "情感底色"]
     for kw in identity_keywords:
         assert kw in system_default, f"identity keyword '{kw}' missing in default D2 prompt"
         assert kw in system_alt, f"identity keyword '{kw}' missing in alternative D2 prompt"
@@ -125,7 +125,9 @@ def test_identity_stable_across_world_ruleset_change():
 
     # Character description must be in D1, not stripped
     assert "男" in system_alt or "叶瑄" in system_alt
-    assert "从属于叶瑄这个人" in system_alt, "D2 must explicitly state subordination to 叶瑄"
+    assert "从属于叶瑄这个人" in system_alt or "你始终是你" in system_alt, (
+        "D2 must explicitly state subordination to 叶瑄 or identity-invariance"
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

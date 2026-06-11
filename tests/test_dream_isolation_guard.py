@@ -51,6 +51,11 @@ _ALLOWLIST: set[tuple[str, str]] = {
     # Phase 7: prompt_builder reads afterglow residue (read-only) to inject layer 6f.
     # No write path; _format_afterglow_soft_hint() is explicitly fail-closed.
     ("core/prompt_builder.py", "afterglow"),
+    # path_resolver resolves afterglow_residue → user_memory_root() (reality path).
+    # Approved: afterglow_residue is a reality-scoped artifact (P5 Dream→Reality writeback).
+    ("core/memory/path_resolver.py", "afterglow"),
+    # user_facts.py enumerates known reality-scoped artifact names including afterglow_residue.
+    ("core/memory/user_facts.py", "afterglow"),
 }
 
 

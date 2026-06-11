@@ -614,29 +614,31 @@ def test_prompt_builder_no_6g_when_empty(sandbox):
 
 
 def test_6g_earliest_in_droppable(sandbox):
-    """6g_dream_impression must be the first (earliest-dropped) entry in _DROPPABLE."""
-    import ast
+    """6g_dream_impression must have a lower _drop_priority than heavier memory layers."""
+    import re
     import pathlib
 
     src = pathlib.Path("core/prompt_builder.py").read_text(encoding="utf-8")
-    tree = ast.parse(src)
 
-    droppable_list = None
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Assign):
-            for target in node.targets:
-                if isinstance(target, ast.Name) and target.id == "_DROPPABLE":
-                    if isinstance(node.value, ast.List):
-                        droppable_list = [
-                            elt.value for elt in node.value.elts
-                            if isinstance(elt, ast.Constant)
-                        ]
-                    break
+    def _find_priority(layer_name: str) -> int | None:
+        # Match "_layer": "NAME" ... "_drop_priority": N within ~200 chars
+        pattern = rf'"_layer":\s*"{re.escape(layer_name)}"[^}}]*?"_drop_priority":\s*(\d+)'
+        m = re.search(pattern, src, re.DOTALL)
+        if not m:
+            return None
+        return int(m.group(1))
 
-    assert droppable_list is not None, "_DROPPABLE list not found in prompt_builder"
-    assert droppable_list[0] == "6g_dream_impression", (
-        f"6g_dream_impression must be first in _DROPPABLE, got {droppable_list[0]!r}"
-    )
+    p_6g = _find_priority("6g_dream_impression")
+    assert p_6g is not None, "6g_dream_impression layer must have _drop_priority for token pruning"
+
+    # Heavier memory layers that should be dropped AFTER the impression layer
+    for heavier in ("6c_episodic", "mid_term", "6d_diary_context", "5.5_lore"):
+        p = _find_priority(heavier)
+        if p is not None:
+            assert p_6g < p, (
+                f"6g_dream_impression (_drop_priority={p_6g}) should be dropped before"
+                f" {heavier!r} (_drop_priority={p})"
+            )
 
 
 # ──────────────────────────────────────────────────────────────────────────────

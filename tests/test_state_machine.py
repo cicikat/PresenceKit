@@ -78,6 +78,7 @@ def test_state_persists_inside_scheduler_user_state_without_clobbering(monkeypat
         json.dumps({"triggers": {"random_message": 123.0}}), encoding="utf-8"
     )
     # pre-existing user_state (e.g. last_diary_share)
+    paths.scheduler_user_state().parent.mkdir(parents=True, exist_ok=True)
     paths.scheduler_user_state().write_text(
         json.dumps({"last_diary_share": 456.0}), encoding="utf-8"
     )

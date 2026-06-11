@@ -21,6 +21,8 @@ import pytest
 # ── helpers ──────────────────────────────────────────────────────────────────
 
 def _make_pipeline(active_char_id: str, refresh_raises=None):
+    from core.memory.scope import MemoryScope
+
     fake = MagicMock()
     fake.character = MagicMock()
     fake.character.name = "TestChar"
@@ -33,9 +35,15 @@ def _make_pipeline(active_char_id: str, refresh_raises=None):
         return_value={"turn_id": "t1", "critical_written": True, "emotion": "neutral"}
     )
     if refresh_raises is not None:
+        # _current_reality_scope calls _refresh_character_if_needed; mock it to raise
+        fake._current_reality_scope = MagicMock(side_effect=refresh_raises)
         fake._refresh_character_if_needed = MagicMock(side_effect=refresh_raises)
     else:
         fake._refresh_character_if_needed = MagicMock()
+        # Return a proper MemoryScope so _char_id = _frozen_scope.character_id resolves
+        fake._current_reality_scope = MagicMock(
+            side_effect=lambda uid: MemoryScope.reality_scope(str(uid), active_char_id)
+        )
     return fake
 
 

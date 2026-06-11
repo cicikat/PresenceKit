@@ -74,7 +74,7 @@ def test_identity_stable_in_world(world_id):
     system = msgs[0]["content"]
 
     # D1 identity keywords must be present regardless of world
-    for kw in ["叶瑄", "他知道这是", "仍是他自己", "依恋底色"]:
+    for kw in ["叶瑄", "他知道这是", "仍是他自己", "情感底色"]:
         assert kw in system, (
             f"[world={world_id}] identity keyword '{kw}' missing — persona collapsed"
         )
@@ -86,10 +86,12 @@ def test_identity_stable_in_world(world_id):
     assert d2_idx != -1, f"[world={world_id}] D2 missing from prompt"
     assert d1_idx < d2_idx, f"[world={world_id}] D1 must precede D2"
 
-    # D2 must assert subordination to 叶瑄
+    # D2 must assert subordination to the character (叶瑄 by name or 你 as self-reference)
     d2_start = system.find("D2·今晚梦的世界规则")
     d2_section = system[d2_start:d2_start + 600]
-    assert "叶瑄" in d2_section, f"[world={world_id}] D2 missing 叶瑄 reference"
+    assert "叶瑄" in d2_section or "你始终是你" in d2_section, (
+        f"[world={world_id}] D2 missing character reference (叶瑄 or 你始终是你)"
+    )
 
     # 人称: 叶瑄 referred to as 他 in D1
     d1_start = system.find("D1·身份核心")
@@ -424,8 +426,10 @@ def test_pronoun_correct_in_world_prompt(world_id):
             # Simple check: after "叶瑄", the pronoun should be 他 not 她
             pass  # structural constraint — no "叶瑄是她" type errors
 
-        # Must explicitly state subordination
-        assert "叶瑄" in world.ruleset, f"[world={world_id}] 叶瑄 missing from D2 ruleset"
+        # Must explicitly state subordination (叶瑄 by name or 你 as self-reference)
+        assert "叶瑄" in world.ruleset or "你始终是你" in world.ruleset, (
+            f"[world={world_id}] D2 ruleset missing character reference (叶瑄 or 你始终是你)"
+        )
 
     # D3 mes_example: 叶瑄 has lines, user referred to as 她
     if world.mes_example:

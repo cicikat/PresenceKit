@@ -294,18 +294,25 @@ class TestLayerName:
 
 class TestLayerDroppable:
     def test_P7_J01_dream_afterglow_in_droppable(self):
-        """P7-J-01: 'dream_afterglow_soft_hint' appears in the _DROPPABLE list."""
+        """P7-J-01: 'dream_afterglow_soft_hint' layer has a _drop_priority for token pruning.
+
+        R4-B replaced the old _DROPPABLE list with per-layer _drop_priority fields.
+        Verify that the dream_afterglow_soft_hint layer sets _drop_priority.
+        """
         from pathlib import Path
         src = (Path(__file__).parent.parent / "core" / "prompt_builder.py").read_text(encoding="utf-8")
-        assert "dream_afterglow_soft_hint" in src
-        # Verify it's inside the _DROPPABLE assignment
-        import ast, re as _re
-        # Find _DROPPABLE line
-        match = _re.search(r"_DROPPABLE\s*=\s*\[([^\]]+)\]", src)
-        assert match, "_DROPPABLE list not found in prompt_builder.py"
-        droppable_content = match.group(1)
-        assert "dream_afterglow_soft_hint" in droppable_content, (
-            "'dream_afterglow_soft_hint' must be in _DROPPABLE for token pruning"
+        assert "dream_afterglow_soft_hint" in src, \
+            "'dream_afterglow_soft_hint' layer not found in prompt_builder.py"
+        # In R4-B layout, droppability is expressed via _drop_priority on the layer dict.
+        # Verify the layer assignment block contains _drop_priority.
+        import re as _re
+        match = _re.search(
+            r'"_layer":\s*"dream_afterglow_soft_hint"[^}]*"_drop_priority"',
+            src,
+            _re.DOTALL,
+        )
+        assert match, (
+            "'dream_afterglow_soft_hint' layer must include '_drop_priority' for token pruning"
         )
 
 

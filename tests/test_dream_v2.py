@@ -268,7 +268,7 @@ def test_non_lucid_d1_no_lucid_awareness_statement():
     )
 
     # non_lucid D1 must still carry 叶瑄 identity keywords
-    for kw in ["叶瑄", "依恋", "情感"]:
+    for kw in ["叶瑄", "情感底色", "情感"]:
         assert kw in d1_nl, (
             f"non_lucid D1 missing identity keyword '{kw}' — persona collapsed"
         )

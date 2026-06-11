@@ -7,6 +7,8 @@ import pytest
 
 
 class _FakePipeline:
+    character = type("_C", (), {"name": "TestChar"})()
+
     async def fetch_context(self, uid, query):
         return {}
 
