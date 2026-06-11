@@ -37,8 +37,9 @@ core/scheduler/triggers/         ← 各触发器独立文件
 
 每 60 秒检查一次。每个 tick 先跑 `core/scheduler/gating.py::run_shadow_tick()` 收集原生
 proposal、记录 `data/logs/gating_shadow.jsonl`，再根据 `core/scheduler/execution.py`
-的 `EXECUTE_MODE` 决定是否执行 winner。当前常量为 `EXECUTE_MODE = "live"`：除 Watch
-事件驱动例外外，winner 会经 `execute_prompt(dry_run=False)` 真正发送，成功后才 `_mark()`。
+的 `EXECUTE_MODE` 决定是否执行 winner。当前常量为 `EXECUTE_MODE = "live"`：所有发言型
+winner（含 Watch 事件到达路径）均先经 `gating._decide()`，再由
+`execute_prompt(dry_run=False)` 真正发送，成功后才 `_mark()`。
 
 随后 `loop.py` 仍用 `asyncio.gather(..., return_exceptions=True)` 跑 legacy `_check_*`。
 已迁移触发器会通过 `legacy_tick_should_send()` 在 live 模式下让路；维护型扫描
@@ -121,8 +122,10 @@ time_based 的早晚安/随机/天气/日记/主动回忆、diary 两档、`time
 仍只走 legacy 真实检查或事件驱动路径。
 
 `run_shadow_tick()` 如果选中了带 `execute` 的 proposal，会按模式调用 `execute()`：
-dry-run 写 would-send / would-mark；live 真实调用 `_pipeline_send()`。Watch 心率和睡醒事件由
-`watch.py::on_watch_event()` 使用独立 `WATCH_EXECUTE_MODE` 即时执行，普通 tick 跳过，避免重复。
+dry-run 写 would-send / would-mark；live 真实调用 `_pipeline_send()`。Watch 心率和睡醒事件到达时，
+`watch.py::on_watch_event()` 通过 `gating.decide_and_execute_event()` 进入同一套 `_decide()`；
+普通 tick 也可重试缓存 proposal。`WATCH_EXECUTE_MODE` 仅控制事件到达时立即 live 或 dry-run，
+是 rollback/config switch，不能绕过 gating/policy。
 urgency 分档统一由 `core/scheduler/urgency.py` 提供。同一个日志也记录 live execute 被 `_pipeline_send()` 拦下的
 `blocked=true` 条目，用于观察 active window 真实拦截分布；该日志只做可观测性，不改变发送、
 mark 或重试行为。
@@ -305,7 +308,7 @@ owner QQ 消息
 - 发言 trigger winner 决策 **只在** `gating._decide()`（含 POLICY_TABLE + defer_queue + DND + state）。
 - `_pipeline_send()` / `execution.execute_prompt()` **只负责** send + mark；block/defer 不调 `_mark()`。
 - maintenance tick 不受 active-window / DND / defer 误伤（不在 MIGRATED_TRIGGERS，不走发言路径）。
-- Watch 独立 `WATCH_EXECUTE_MODE` 是独立面（S4），不属于 R2 统一路径，文档单独说明。
+- `WATCH_EXECUTE_MODE` 仅是事件到达时 live/dry-run 的 rollback/config switch；两种模式都经过统一 `gating._decide()`。
 - `policy.py` 是运行时决策权威，被 `gating.py` 通过延迟 import 引用，`loop.py` 不直接引用。
 
 ### 当前执行面总览（R2-D 后）
@@ -315,7 +318,7 @@ owner QQ 消息
 | S1 | **Gating/Proposer live 路径** | `gating.py::run_shadow_tick()` → `execute_prompt()` → `_pipeline_send()` | 生产活跃；winner 通过 `execute(dry_run=False)` 真实发送 |
 | S2 | **Legacy `_check_*` gather 路径** | `loop.py::_loop()` → `asyncio.gather(_check_*...)` | 生产活跃；speaking 触发器通过 `legacy_tick_should_send()` 在 live 模式下让路，维护型触发器仍正常运行 |
 | S3 | **`legacy_tick_should_send()` 让路垫片** | `execution.py` | 当前 `EXECUTE_MODE="live"` → 返回 False，阻止 legacy speaking 触发器双发 |
-| S4 | **Watch 独立 `WATCH_EXECUTE_MODE`** | `triggers/watch.py` | 独立于 `execution.EXECUTE_MODE`；watch 事件驱动触发器（hr_critical/hr_high/sleep_end）在 gating.run_shadow_tick 中被 `WATCH_EVENT_DRIVEN_TRIGGERS` 排除，只走 `on_watch_event()` 路径 |
+| S4 | **Watch 事件到达 adapter** | `triggers/watch.py` → `gating.decide_and_execute_event()` | `WATCH_EXECUTE_MODE` 仅切换事件到达时 live/dry-run；hr_critical/hr_high/sleep_end 均经过 `_decide()`，普通 tick 可重试缓存 proposal |
 | S5 | **sensor_aware `output_mode="return"` 旁路** | `triggers/sensor_aware.py` | 调用 `_pipeline_send(output_mode="return", record_turn=False)` 拿 reply，再自行调用 `record_assistant_turn(fanout=["desktop","mobile"])`；不是完整绕过，仍经过 perceive_event gate 和 conversation_lock |
 | S6 | **policy.py 決策表** | `policy.py` | **R2-C 完成**；gating._decide() 以 POLICY_TABLE 为单一权威；_pipeline_send 不再参与决策 |
 | S7 | **`_pipeline_send` 执行层（仅 send + mark）** | `loop.py::_pipeline_send()` | **R2-C done**：`_legacy_active_window_blocks()` / `_legacy_dnd_blocks()` 已删除；_pipeline_send 不再做 active-window / DND 过滤 |
@@ -336,12 +339,12 @@ owner QQ 消息
 | garden_bloom | garden_water.py | legacy 通过 `legacy_send` 变量门控 + proposer 接管 |
 | garden_harvest_expired/handle_ask/handle_gift/handle_self/vase_wilted | garden_daily.py | 同上 |
 
-**类型二：Watch 事件驱动 Speaking Trigger（独立路径）**
+**类型二：Watch 事件驱动 Speaking Trigger（统一 gating 路径）**
 
 | 触发器 | 执行路径 | 备注 |
 |---|---|---|
-| hr_critical, hr_high | `on_watch_event("heart_rate", ...)` → `_execute_watch_event(proposal, dry_run=False)` | WATCH_EXECUTE_MODE="live"；gating tick 跳过 |
-| sleep_end | `on_watch_event("sleep_end", ...)` → 同上 | 同上 |
+| hr_critical, hr_high | `on_watch_event("heart_rate", ...)` → `decide_and_execute_event()` → `_decide()` → proposal execute | `WATCH_EXECUTE_MODE` 仅控制即时 live/dry-run；普通 tick 可重试缓存 proposal |
+| sleep_end | `on_watch_event("sleep_end", ...)` → 同上 | state / active-window / DND / cooldown / policy 均统一决策 |
 
 **类型三：Sensor 实时 Speaking Trigger（独立路径）**
 
@@ -379,7 +382,7 @@ owner QQ 消息
 |---|---|---|---|---|
 | Gating live（execute_prompt）| `execute_prompt()` 调用 `_pipeline_send()` | 仅在 `sent=True` 后调用 `loop._mark()` | 否（write_execute_blocked 记录）| 是（execute_dryrun.jsonl blocked 条目）|
 | Legacy speaking（步退）| N/A（live 模式下不执行）| N/A | N/A | N/A |
-| Watch event-driven | `_execute_watch_event()` → `execute_prompt()` → `_pipeline_send()` | 仅 sent 后 mark | 否 | 是（log_error）|
+| Watch event-driven | `decide_and_execute_event()` → `_decide()` → `execute_prompt()` → `_pipeline_send()` | 仅 sent 后 mark | 否 | 是（log_error）|
 | sensor_aware | 手动 `record_assistant_turn()` | 不调用 `_mark()`（无 cooldown 名）| sensor_events.mark_proactive_sent() 8min 冷却 | 是（audit ring buffer）|
 | Maintenance tick | 不 send | 立即 mark（不依赖 send 结果）| N/A | 是（log_error 各步独立）|
 

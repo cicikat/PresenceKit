@@ -8,7 +8,8 @@
 
 > **当前代码校准**：`run_shadow_tick()` 函数名和 `gating_shadow.jsonl` 日志名仍保留，但
 > `EXECUTE_MODE = "live"` 时 winner 会真实发送；已迁移 legacy tick 通过
-> `legacy_tick_should_send()` 让路。Watch 仍使用独立事件驱动 `WATCH_EXECUTE_MODE`。
+> `legacy_tick_should_send()` 让路。Watch 事件到达路径也经过统一 `gating._decide()`；
+> `WATCH_EXECUTE_MODE` 仅保留为事件到达时 live/dry-run 的 rollback/config switch。
 > 当前事实总览见 `docs/scheduler.md`。
 
 ---

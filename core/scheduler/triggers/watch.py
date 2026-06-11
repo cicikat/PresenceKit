@@ -2,7 +2,7 @@ import logging
 import time
 from datetime import datetime
 
-from core.scheduler.loop import _is_ready, _mark, _owner_id, _pipeline_send, _cfg, _char_name
+from core.scheduler.loop import _owner_id, _cfg, _char_name
 
 logger = logging.getLogger(__name__)
 
@@ -11,7 +11,9 @@ HR_CRITICAL_THRESHOLD = 120
 HEART_RATE_PROPOSAL_TTL_SECONDS = 10 * 60
 SLEEP_END_PROPOSAL_TTL_SECONDS = 10 * 60
 
-# Independent rollback switch for event-driven Watch execution.
+# Event-arrival execution switch. Both modes still pass through gating/policy.
+# "dry_run" disables immediate live sending; the normal scheduler tick may retry
+# a still-valid cached Watch proposal through the same gating path.
 WATCH_EXECUTE_MODE = "live"
 
 _LAST_HEART_RATE_EVENT: dict | None = None
@@ -192,9 +194,15 @@ def _make_sleep_end_execute(event: dict):
 
 
 async def _execute_watch_event(proposal, *, dry_run: bool):
-    if proposal is None or proposal.execute is None:
+    """Compatibility helper: execute an event proposal only after unified gating."""
+    if proposal is None:
         return None
-    return await proposal.execute(dry_run=dry_run)
+    from core.scheduler.gating import decide_and_execute_event
+    return await decide_and_execute_event(
+        _owner_id(),
+        [proposal],
+        dry_run=dry_run,
+    )
 
 
 def _watch_live_mode() -> bool:
@@ -235,69 +243,43 @@ async def on_watch_event(event_type: str, data: dict):
         # 深夜(22-06点)降低阈值，>100就关心
         in_night = now_hour >= 22 or now_hour < 6
         trigger_name = ""
+        proposal = None
         if in_night:
-            if hr > HR_CRITICAL_THRESHOLD and _is_ready("hr_critical"):
+            if hr > HR_CRITICAL_THRESHOLD:
                 trigger_name = "hr_critical"
                 proposal = propose({"heart_rate_event": get_last_heart_rate_event()})
-                if _watch_live_mode():
-                    await _execute_watch_event(proposal, dry_run=False)
-                else:
-                    sent = await _pipeline_send(f"（深夜，{_char_name()}看到你的心率{hr}）", trigger_name="hr_critical")
-                    if sent:
-                        _mark("hr_critical")
-                    await _execute_watch_event(proposal, dry_run=True)
-            elif hr > HR_HIGH_THRESHOLD and _is_ready("hr_high"):
+            elif hr > HR_HIGH_THRESHOLD:
                 trigger_name = "hr_high"
                 proposal = propose_hr_high({"heart_rate_event": get_last_heart_rate_event()})
-                if _watch_live_mode():
-                    await _execute_watch_event(proposal, dry_run=False)
-                else:
-                    sent = await _pipeline_send(f"（深夜，{_char_name()}注意到你的心率{hr}）", trigger_name="hr_high")
-                    if sent:
-                        _mark("hr_high")
-                    await _execute_watch_event(proposal, dry_run=True)
         else:
-            if hr > HR_CRITICAL_THRESHOLD and _is_ready("hr_critical"):
+            if hr > HR_CRITICAL_THRESHOLD:
                 trigger_name = "hr_critical"
                 proposal = propose({"heart_rate_event": get_last_heart_rate_event()})
-                if _watch_live_mode():
-                    await _execute_watch_event(proposal, dry_run=False)
-                else:
-                    sent = await _pipeline_send(f"（{_char_name()}看到你的心率{hr}，皱了皱眉）", trigger_name="hr_critical")
-                    if sent:
-                        _mark("hr_critical")
-                    await _execute_watch_event(proposal, dry_run=True)
-            elif hr > HR_HIGH_THRESHOLD and _is_ready("hr_high"):
+            elif hr > HR_HIGH_THRESHOLD:
                 trigger_name = "hr_high"
                 proposal = propose_hr_high({"heart_rate_event": get_last_heart_rate_event()})
-                if _watch_live_mode():
-                    await _execute_watch_event(proposal, dry_run=False)
-                else:
-                    sent = await _pipeline_send(f"（{_char_name()}看到你的心率有点高，{hr}）", trigger_name="hr_high")
-                    if sent:
-                        _mark("hr_high")
-                    await _execute_watch_event(proposal, dry_run=True)
-        if trigger_name:
-            logger.info(f"[scheduler] Watch {trigger_name} 已触发 hr={hr}")
+        if trigger_name and proposal is not None:
+            _, reason, result = await _execute_watch_event(
+                proposal,
+                dry_run=not _watch_live_mode(),
+            )
+            logger.info(
+                "[scheduler] Watch %s decision=%s sent=%s hr=%s",
+                trigger_name,
+                reason,
+                bool(getattr(result, "sent", False)),
+                hr,
+            )
 
     elif event_type == "sleep_end":
         _remember_sleep_end(data)
-        if not _is_ready("sleep_end"):
-            return
         proposal = propose_sleep_end({"sleep_end_event": get_last_sleep_end_event()})
-        if _watch_live_mode():
-            await _execute_watch_event(proposal, dry_run=False)
-            logger.info("[scheduler] 睡醒关心已触发")
-            return
-        prompt = str(data.get("prompt") or "").strip()
-        if not prompt:
-            duration = float(data.get("duration_minutes", 0) or 0)
-            hours = int(duration // 60)
-            minutes = int(duration % 60)
-            prompt = f"（{_char_name()}看到你醒了，睡了{hours}小时{minutes}分钟）"
-        sent = await _pipeline_send(prompt, trigger_name="sleep_end")
-        if sent:
-            _mark("sleep_end")
-            _mark("morning_greeting")
-        await _execute_watch_event(proposal, dry_run=True)
-        logger.info("[scheduler] 睡醒关心已触发")
+        _, reason, result = await _execute_watch_event(
+            proposal,
+            dry_run=not _watch_live_mode(),
+        )
+        logger.info(
+            "[scheduler] sleep_end decision=%s sent=%s",
+            reason,
+            bool(getattr(result, "sent", False)),
+        )

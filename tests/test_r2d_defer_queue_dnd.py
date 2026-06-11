@@ -730,7 +730,7 @@ class TestDeferNoMark:
                 sent=False,
             )
 
-        from core.scheduler.gating import TriggerProposal, WATCH_EVENT_DRIVEN_TRIGGERS
+        from core.scheduler.gating import TriggerProposal
         from core.scheduler.state_machine import TriggerState
 
         proposal = TriggerProposal(

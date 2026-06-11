@@ -11,7 +11,7 @@
     "timestamp": 1714000000
   }
 
-无需鉴权，内网使用，不建议暴露公网。
+所有端点均使用管理面 Bearer token 鉴权。
 """
 
 import json
@@ -250,7 +250,7 @@ async def get_behavior_status(auth=Depends(verify_token)):
 
 
 @router.post("/sensor/activity", summary="接收桌宠端活动快照")
-async def receive_activity_snapshot(payload: dict):
+async def receive_activity_snapshot(payload: dict, auth=Depends(verify_token)):
     """桌宠端每5分钟推送一次屏幕活动快照，写入文件供 prompt_builder 读取。"""
     # Resolve active char_id — fail-loud, no yexuan fallback.
     try:

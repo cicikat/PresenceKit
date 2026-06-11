@@ -13,18 +13,18 @@ QQ 消息 → main.py → message_queue
 文件上传 → POST /upload/ingest → media_processor → 拼入用户消息
 调度器主动消息 → core/scheduler/loop.py
          ├─ state_machine：观测 owner turn / sensor tick，维护 CHATTING / QUIET / RESTLESS
-         ├─ gating shadow：并行记录“若由 gating 决策本 tick 会选谁”
-         ├─ proposer dry-run：记录 would-send / would-mark，不真实发送
-         ├─ policy.py：策略表 scaffold / 语义断言，尚未接入 live 决策
+         ├─ gating/policy：统一 state / active-window / DND / defer / cooldown 决策（含 Watch 发言事件）
+         ├─ proposer dry-run：记录 would-send / would-mark；live winner 进入统一执行层
+         ├─ policy.py：active-window / DND 运行时策略权威
          ├─ EXECUTE_MODE：当前为 live（见 core/scheduler/execution.py）
-         └─ legacy 真实触发器路径：仍按原 _is_ready/_mark 真实发送
+         └─ legacy gather：发言型 trigger 让路，maintenance/state scan 保留
          ↓（入口共用）
       Pipeline（core/pipeline.py）
          ↓
       LLM（DeepSeek）
          ↓
       输出层
-         ├─ QQ 主入口：text_output.send() 直发 QQ（legacy）
+         ├─ QQ 主入口：_qq_reality_reply_adapter 可见发送 + turn_sink 记忆写入
          └─ desktop/mobile/scheduler/sensor：core.turn_sink 写入 + channels.registry 广播活跃通道
 ```
 

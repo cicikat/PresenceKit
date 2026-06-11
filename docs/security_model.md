@@ -31,7 +31,7 @@ public endpoint。
 - `/dream/enter` / `/dream/chat` / `/dream/exit` / `/dream/state` / `/dream/settings`
 - `/activity/*` / `/reading/*` / `/gomoku/*` / `/chess/*`
 - `/agent/think`
-- `/sensor/*` / `/watch/*` / `/garden/*` / `/mood/*` / `/diary/*`
+- `/sensor/*`（含 `/sensor/activity`）/ `/watch/*`（含 `/watch/event`）/ `/garden/*` / `/mood/*` / `/diary/*`
 - `/memory/*` / `/users/*` / `/relations/*`
 - `GET /system/data-path`
 - 所有 LLM/settings 路由
@@ -42,6 +42,7 @@ public endpoint。
 **token 安全**：token 值不会出现在任何错误响应或日志记录中。
 
 **客户端调用方式**：所有受保护端点均需 `Authorization: Bearer <YEXUAN_ADMIN_SECRET>` header。
+HTTP 管理面不接受 `?token=` / `?secret=` query 鉴权；`/watch/event` 也只接受 Bearer header。
 
 ### 路径与测试沙盒
 
@@ -133,6 +134,8 @@ header，将收到 401/403 拒绝：
 - `GET /dream/state` / `/dream/settings`
 - `PATCH /dream/settings`
 - `POST /agent/think`
+- `POST /sensor/activity`
+- `POST /watch/event`
 
 这是预期的 fail-closed 安全变化。所有调用方需补充 `Authorization: Bearer <token>` header。
 
@@ -162,8 +165,8 @@ Emerald-client 已完成 Tauri Rust native bridge header 迁移；SEC-WS-1 已 f
 
 ### source / privacy 策略仍不完整
 
-`turn_sink` 已统一 desktop/mobile/scheduler/sensor 的部分 assistant turn，Write Envelope v0 也已
-提供 fail-closed 写入准入。但 QQ 主入口、冻结 `/chat` 仍有 legacy 路径；当前仍不是完整
+`turn_sink` 已统一 QQ、desktop/mobile/scheduler/sensor 的 assistant turn；冻结 `/chat` 已返回
+410，Write Envelope v0 也已提供 fail-closed 写入准入。当前仍不是完整
 `can_write_memory` / `can_affect_mood` / `privacy.allow_memory` 字段契约。
 
 ---

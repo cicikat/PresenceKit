@@ -1,20 +1,17 @@
 """
 R2-A 调度器执行面审计 — 守卫测试
 
-目的：精确记录当前存在的双执行面事实，防止误以为已完成重构。
+目的：精确记录当前执行面事实，防止统一决策面回退。
 所有测试均为只读审计，不改变任何行为。
 
 当前已知双执行面：
   1. Gating/Proposer live 路径（execution.py EXECUTE_MODE="live"）
   2. Legacy _check_* gather 路径（loop.py asyncio.gather）
   3. legacy_tick_should_send() 让路垫片（live 模式下让路）
-  4. Watch 独立 WATCH_EXECUTE_MODE（triggers/watch.py）
+  4. Watch 事件 adapter（WATCH_EXECUTE_MODE 仅控制即时 live/dry-run，决策仍走 gating）
   5. sensor_aware output_mode="return" 旁路（triggers/sensor_aware.py）
-  6. policy.py 静态表（无运行时接线，未接 gating/pipeline）
-  7. _pipeline_send 120s active-window 二次拦截（pending R2-B）
-
-标记说明：
-  PENDING_R2B — 本包不修复；R2-B 施工时移除此标记，改为正式断言。
+  6. policy.py 运行时策略表（由 gating._decide 使用）
+  7. _pipeline_send 执行层（send + mark，不做二次仲裁）
 """
 
 import ast
@@ -347,11 +344,11 @@ class TestMarkAndSafeWriteUnchanged:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# E. Watch 独立 WATCH_EXECUTE_MODE 存在并记录
+# E. Watch rollback/config switch 与统一 gating
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestWatchIndependentExecuteMode:
-    """WATCH_EXECUTE_MODE 独立开关存在于 triggers/watch.py，与 execution.EXECUTE_MODE 分离。"""
+    """WATCH_EXECUTE_MODE 与 EXECUTE_MODE 分离，但不能绕过统一 gating。"""
 
     def test_watch_execute_mode_constant_exists(self):
         from core.scheduler.triggers.watch import WATCH_EXECUTE_MODE
@@ -392,16 +389,16 @@ class TestWatchIndependentExecuteMode:
         finally:
             exec_mod.EXECUTE_MODE = original
 
-    def test_watch_event_driven_triggers_excluded_from_gating_tick(self):
-        """hr_critical/hr_high/sleep_end 在 gating.run_shadow_tick 中被排除，不走 gating 执行。"""
-        from core.scheduler.gating import WATCH_EVENT_DRIVEN_TRIGGERS
+    def test_watch_event_driven_triggers_use_unified_gating(self):
+        """Watch event arrival and normal tick both use the unified gating decision."""
+        from core.scheduler.gating import decide_and_execute_event
 
-        assert "hr_critical" in WATCH_EVENT_DRIVEN_TRIGGERS
-        assert "hr_high" in WATCH_EVENT_DRIVEN_TRIGGERS
-        assert "sleep_end" in WATCH_EVENT_DRIVEN_TRIGGERS
+        assert callable(decide_and_execute_event)
+        source = (ROOT / "core/scheduler/gating.py").read_text(encoding="utf-8")
+        assert "WATCH_EVENT_DRIVEN_TRIGGERS" not in source
 
     def test_watch_triggers_still_registered_as_proposers(self):
-        """Watch 触发器虽不走 gating 执行，但仍在 proposer_registry（供 shadow log）。"""
+        """Watch 触发器在 proposer_registry，供统一 gating 决策与 defer 重试。"""
         from core.scheduler.proposer_registry import registered_trigger_names
 
         names = registered_trigger_names()

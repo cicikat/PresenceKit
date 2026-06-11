@@ -1,7 +1,7 @@
 """
 调度器 gating 决策层。
 
-Phase 2 Step 2 只写 shadow log，不接管真实发送路径。
+发言 proposal 的统一决策层：状态、active-window、DND、defer、冷却与 winner。
 """
 
 from __future__ import annotations
@@ -99,18 +99,25 @@ def write_shadow_tick(uid: str) -> Optional[TriggerProposal]:
     return picked
 
 
-WATCH_EVENT_DRIVEN_TRIGGERS: frozenset[str] = frozenset({"hr_critical", "hr_high", "sleep_end"})
-
-
 async def run_shadow_tick(uid: str) -> Optional[TriggerProposal]:
     picked = write_shadow_tick(uid)
-    if (
-        picked is not None
-        and picked.execute is not None
-        and picked.trigger_name not in WATCH_EVENT_DRIVEN_TRIGGERS
-    ):
+    if picked is not None and picked.execute is not None:
         await picked.execute(dry_run=not is_live_mode())
     return picked
+
+
+async def decide_and_execute_event(
+    uid: str,
+    proposals: list[TriggerProposal],
+    *,
+    dry_run: bool,
+) -> tuple[Optional[TriggerProposal], str, object | None]:
+    """Run an event-driven proposal through the same policy decision as tick proposals."""
+    picked, reason, _ = _decide(uid, proposals)
+    if picked is None or picked.execute is None:
+        return picked, reason, None
+    result = await picked.execute(dry_run=dry_run)
+    return picked, reason, result
 
 
 def _build_context(uid: str) -> dict:

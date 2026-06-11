@@ -42,7 +42,7 @@
 
 **已有测试或缺口**
 - 已有：`tests/test_state_machine.py`、`tests/test_gating.py`、`tests/test_native_proposals.py`、`tests/test_execute_dryrun.py`、`tests/test_rhythm.py`
-- 缺口：Watch 仍有独立事件驱动 live 开关；维护型 legacy 扫描与 proposal 缓存的端到端覆盖仍可补强。
+- 缺口：维护型 legacy 扫描与 proposal 缓存的端到端覆盖仍可补强；Watch 事件到达路径已进入统一 gating/policy。
 
 **是否适合继续叠新功能**
 - 适合继续承载小型触发器，但应走 `proposer_registry.register_proposer()` + `execute_prompt()`。
@@ -50,7 +50,7 @@
 
 **最小补强**
 - 明确 `core/scheduler/execution.py` → `EXECUTE_MODE` 的配置来源和启动日志。
-- 为 Watch 独立开关、维护型扫描和 proposal 缓存补齐集成测试。
+- 为维护型扫描和 proposal 缓存补齐集成测试；`WATCH_EXECUTE_MODE` 仅作为 rollback/config switch 保留。
 
 ---
 
@@ -72,7 +72,7 @@
 
 **已有测试或缺口**
 - 已有：`tests/test_execute_dryrun.py` 覆盖 dry/live、reminder mark、weather cache、gating live winner。
-- 缺口：live 模式当前不是运行时配置；watch event-driven triggers 被 `WATCH_EVENT_DRIVEN_TRIGGERS` 跳过 shadow execute。
+- 缺口：live 模式当前不是运行时配置；Watch event-driven triggers 已可由普通 tick 重试缓存 proposal。
 
 **是否适合继续叠新功能**
 - 适合继续接入 dry-run 观测。
@@ -100,7 +100,7 @@
 
 **已有测试或缺口**
 - 已有：`tests/test_native_proposals.py`、`tests/test_execute_dryrun.py`
-- 缺口：`/watch/event` 路由、sleep buffer cancel/flush、即时 live 与 proposal shadow 组合缺端到端覆盖。
+- 缺口：sleep buffer cancel/flush 仍可补端到端覆盖；`/watch/event` Bearer-only 与即时 live 统一 gating 已有专项守卫。
 
 **是否适合继续叠新功能**
 - 不建议继续在 `on_watch_event()` 里叠即时分支。
@@ -199,13 +199,13 @@
 
 **已有测试或缺口**
 - 已有：`tests/test_turn_sink.py`
-- 缺口：`DesktopChannel` / `MobileChannel` 文件队列并发与损坏恢复测试不足；QQ 主入口仍是 legacy 直发；`message_segments` 目前只覆盖桌面 WS。
+- 缺口：`DesktopChannel` / `MobileChannel` 文件队列并发与损坏恢复测试不足；QQ 可见发送仍是通道特有 adapter，但 LLM reply 记忆写入已统一走 turn_sink；`message_segments` 目前只覆盖桌面 WS。
 - 已完成：QQ / mobile 展示文本移除 `<say>` 等标签；reality memory / event_log 保存纯文本；
   legacy `/desktop/trigger` 已删除。
 
 **是否适合继续叠新功能**
 - 适合承载 mobile/desktop 主动消息。
-- 不建议继续扩 QQ legacy 直发路径。`/desktop/trigger` 已删除。
+- 不建议绕过 QQ adapter / turn_sink 新增直发路径。`/desktop/trigger` 已删除。
 
 **最小补强**
 - 队列文件安全写。
@@ -290,7 +290,7 @@
 
 不适合继续叠的旧旁路：
 - `core/scheduler/triggers/watch.py` → `on_watch_event()` 内继续加即时发话分支
-- QQ legacy 直发路径
+- 绕过 QQ adapter / turn_sink 的直发路径
 - 没有锁和安全写的队列写路径
 
 当前优先级应以小补强和边界文档为主：`D2`、watch、diary_share 等继续 execute live

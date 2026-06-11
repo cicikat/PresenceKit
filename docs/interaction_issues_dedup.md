@@ -20,12 +20,14 @@
 
 ## ISSUE-001：assistant turn 尚未完全统一出口
 
-状态：降级；legacy `/desktop/trigger` 已删除，QQ 与冻结 `/chat` 的统一出口债仍保留
+状态：已关闭主阻断；legacy `/desktop/trigger` 已删除，QQ LLM reply 已接入 turn_sink，冻结 `/chat` 已返回 410
 
 严重度：P0：可能污染生产记忆、安全鉴权、真实关系状态
 
 问题描述：  
-`record_assistant_turn()` 已经承接 desktop/mobile/scheduler/sensor_aware 的新路径，但 QQ 主入口、冻结管理面板 `/chat`、重复 `/chat` 仍直接发送或直接 `pipeline.post_process()`。这会导致不同入口在“先发送还是先落库、是否 await 关键写入、是否广播到多端、是否带 trigger/source 元数据”上不一致。
+`record_assistant_turn()` 已承接 QQ、desktop/mobile/scheduler/sensor_aware 的 LLM reply 写入；
+QQ 可见发送仍由通道 adapter 负责，冻结管理面板 `/chat` 已返回 410。剩余差异主要是
+QQ 是否 fanout 到 desktop/mobile，不再是记忆写入绕过。
 
 证据：
 - `D:\ai\qq-st-bot\core\turn_sink.py:123`：新统一写入 + fanout 函数。
@@ -47,10 +49,10 @@ Phase 1 turn sink 已部分落地，但 legacy/冻结入口没有全部迁移，
 - broadcast
 
 是否已有记录：  
-重复来源：`D:\ai\qq-st-bot\docs\assistant-turn-sink.md` 关于 sensor_aware、sleep_end、触发器出口不统一的记录；本轮新增 QQ 主入口和多个 HTTP legacy 入口仍绕过的事实。
+重复来源：`D:\ai\qq-st-bot\docs\assistant-turn-sink.md` 关于历史出口不统一的记录；主阻断已收口，保留 fanout 等后续架构差异。
 
 建议处理方式：  
-受控重构；需要人工拍板 QQ 是否同步广播到 desktop/mobile，以及 legacy `/chat` 是否删除、
+受控重构；需要人工拍板 QQ 是否同步广播到 desktop/mobile；
 鉴权或迁移。`/desktop/trigger` 已删除。
 
 推荐处理顺序：立即处理

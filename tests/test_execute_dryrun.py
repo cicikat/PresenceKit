@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from datetime import date, datetime
 
 import pytest
+from unittest.mock import AsyncMock
 
 
 async def _run_dry(proposal):
@@ -200,33 +201,33 @@ async def test_sleep_end_execute_false_preserves_cross_marks(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_watch_dry_run_keeps_legacy_send_and_logs_execute(monkeypatch, sandbox):
+async def test_watch_dry_run_uses_gating_and_logs_execute(monkeypatch, sandbox):
+    from core.scheduler import loop
+    from core.scheduler.state_machine import TriggerState
     from core.scheduler.triggers import watch
-
-    sent = []
-    marks = []
 
     class FakeDatetime(datetime):
         @classmethod
         def now(cls):
             return cls(2026, 5, 25, 14, 0)
 
-    async def legacy_send(prompt, search_query="", trigger_name="", **kwargs):
-        sent.append((prompt, trigger_name))
-        return prompt
-
     monkeypatch.setattr(watch, "WATCH_EXECUTE_MODE", "dry_run")
     monkeypatch.setattr(watch, "datetime", FakeDatetime)
     monkeypatch.setattr(watch, "_cfg", lambda: {"enabled": True})
     monkeypatch.setattr(watch, "_owner_id", lambda: "u1")
-    monkeypatch.setattr(watch, "_is_ready", lambda name: True)
-    monkeypatch.setattr(watch, "_pipeline_send", legacy_send)
-    monkeypatch.setattr(watch, "_mark", lambda name: marks.append(name))
+    monkeypatch.setattr("core.scheduler.gating.get_current_state", lambda uid: TriggerState.QUIET)
+    monkeypatch.setattr("core.scheduler.loop._user_active_recently", lambda: False)
+    monkeypatch.setattr("core.scheduler.triggers.dnd.is_dnd", lambda uid: False)
+    monkeypatch.setattr("core.scheduler.gating.is_trigger_ready", lambda name: True)
+    send = AsyncMock(return_value="reply")
+    marks = []
+    monkeypatch.setattr(loop, "_pipeline_send", send)
+    monkeypatch.setattr(loop, "_mark", lambda name: marks.append(name))
 
     await watch.on_watch_event("sleep_end", {"duration_minutes": 420})
 
-    assert sent and sent[0][1] == "sleep_end"
-    assert marks == ["sleep_end", "morning_greeting"]
+    send.assert_not_called()
+    assert marks == []
     rows = sandbox.execute_dryrun_log().read_text(encoding="utf-8").splitlines()
     row = json.loads(rows[-1])
     assert row["trigger_name"] == "sleep_end"
@@ -236,9 +237,9 @@ async def test_watch_dry_run_keeps_legacy_send_and_logs_execute(monkeypatch, san
 @pytest.mark.asyncio
 async def test_watch_live_uses_execute_and_skips_legacy_send(monkeypatch):
     from core.scheduler import loop
+    from core.scheduler.state_machine import TriggerState
     from core.scheduler.triggers import watch
 
-    legacy_sent = []
     execute_sent = []
     marks = []
 
@@ -246,9 +247,6 @@ async def test_watch_live_uses_execute_and_skips_legacy_send(monkeypatch):
         @classmethod
         def now(cls):
             return cls(2026, 5, 25, 14, 0)
-
-    async def legacy_send(prompt, search_query="", trigger_name="", **kwargs):
-        legacy_sent.append((prompt, trigger_name))
 
     async def execute_send(prompt, search_query="", trigger_name="", **kwargs):
         execute_sent.append((prompt, trigger_name))
@@ -258,9 +256,10 @@ async def test_watch_live_uses_execute_and_skips_legacy_send(monkeypatch):
     monkeypatch.setattr(watch, "datetime", FakeDatetime)
     monkeypatch.setattr(watch, "_cfg", lambda: {"enabled": True})
     monkeypatch.setattr(watch, "_owner_id", lambda: "u1")
-    monkeypatch.setattr(watch, "_is_ready", lambda name: True)
-    monkeypatch.setattr(watch, "_pipeline_send", legacy_send)
-    monkeypatch.setattr(watch, "_mark", lambda name: legacy_sent.append(("mark", name)))
+    monkeypatch.setattr("core.scheduler.gating.get_current_state", lambda uid: TriggerState.QUIET)
+    monkeypatch.setattr("core.scheduler.loop._user_active_recently", lambda: False)
+    monkeypatch.setattr("core.scheduler.triggers.dnd.is_dnd", lambda uid: False)
+    monkeypatch.setattr("core.scheduler.gating.is_trigger_ready", lambda name: True)
     monkeypatch.setattr(loop, "_pipeline_send", execute_send)
     monkeypatch.setattr(loop, "_mark", lambda name: marks.append(name))
 
@@ -268,7 +267,6 @@ async def test_watch_live_uses_execute_and_skips_legacy_send(monkeypatch):
 
     assert execute_sent and execute_sent[0][1] == "hr_critical"
     assert marks == ["hr_critical"]
-    assert legacy_sent == []
 
 
 @pytest.mark.asyncio
@@ -287,13 +285,14 @@ async def test_watch_live_sleep_end_marks_morning_and_blocks_tick_greeting(monke
     monkeypatch.setattr(watch, "WATCH_EXECUTE_MODE", "live")
     monkeypatch.setattr(watch, "_cfg", lambda: {"enabled": True})
     monkeypatch.setattr(watch, "_owner_id", lambda: "u1")
-    monkeypatch.setattr(watch, "_pipeline_send", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("legacy send used")))
     monkeypatch.setattr(loop, "_pipeline_send", execute_send)
     monkeypatch.setattr(time_based, "_cfg", lambda: {"morning_greeting": True})
     monkeypatch.setattr(time_based, "_owner_id", lambda: "u1")
     monkeypatch.setattr(time_based, "_user_talked_today", lambda uid: False)
     monkeypatch.setattr("core.scheduler.rhythm.is_present", lambda now_ts=None: True)
     monkeypatch.setattr(gating, "get_current_state", lambda uid: TriggerState.QUIET)
+    monkeypatch.setattr(loop, "_user_active_recently", lambda: False)
+    monkeypatch.setattr("core.scheduler.triggers.dnd.is_dnd", lambda uid: False)
 
     await watch.on_watch_event("sleep_end", {"duration_minutes": 420})
 

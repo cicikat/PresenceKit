@@ -8,13 +8,12 @@ Watch 事件接收路由
   {"type": "sleep_end"}
   {"type": "heart_rate", "value": 85}
 
-接受 Bearer token（verify_token）或 query ?secret= 两种鉴权方式。
+只接受管理面 Authorization Bearer token（verify_token）。
 """
 
 from datetime import datetime, datetime as _dt
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi import APIRouter, Depends, HTTPException
 
 from admin.auth import verify_token
 from core.config_loader import get_config
@@ -174,37 +173,10 @@ async def _flush_sleep_buffer():
     await scheduler.on_watch_event("sleep_end", {**merged, "prompt": prompt})
 
 
-def _watch_secret() -> str:
-    """从 config 读取 watch secret，未配置则返回空字符串（调用方须拒绝请求）"""
-    return str(get_config().get("scheduler", {}).get("watch_secret", "")).strip()
-
-
-_bearer = HTTPBearer(auto_error=False)
-
-
-async def _verify_watch_auth(
-    credentials: HTTPAuthorizationCredentials = Depends(_bearer),
-    secret: str = Query(default=""),
-) -> bool:
-    """接受 Bearer admin token 或 query ?secret= 之一即通过。
-    Watch shortcuts 走 ?secret=；admin panel / API 客户端走 Bearer。
-    TODO（待确认）：?secret= 兼容路径是否应在所有调用方迁移到 Bearer 后关闭？
-    """
-    admin_secret = get_config().get("admin", {}).get("secret_key", "")
-    if admin_secret and credentials and credentials.credentials == admin_secret:
-        return True
-
-    expected = _watch_secret()
-    if expected and secret == expected:
-        return True
-
-    raise HTTPException(status_code=401, detail="Unauthorized")
-
-
 @router.post("/watch/event", summary="接收 Watch 健康事件")
 async def receive_watch_event(
     body: dict,
-    _auth: bool = Depends(_verify_watch_auth),
+    _auth: bool = Depends(verify_token),
 ):
     """
     外部设备推送健康事件的入口。
@@ -213,7 +185,7 @@ async def receive_watch_event(
       type  — 事件类型：heart_rate / sleep_end
       value — 数值（心率时必填）
 
-    鉴权：Bearer token（Authorization header）或 ?secret= query 参数二选一。
+    鉴权：仅接受管理面 Authorization Bearer token。
     """
 
     event_type = str(body.get("type", "")).strip()

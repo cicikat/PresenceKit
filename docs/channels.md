@@ -17,9 +17,10 @@ QQ 收消息 → main.handle_message → Pipeline → text_output.send() 直发 
                                           └─ MobileChannel
 ```
 
-注意：QQ 主入口、冻结管理面板 `/chat` 仍是 legacy 直发/异步 `post_process` 路径；
-`/desktop/chat`、`/mobile/chat`、scheduler、sensor_aware 已走
-`core.turn_sink.record_assistant_turn()`。legacy `/desktop/trigger` 已确认零调用方并删除。
+注意：QQ 主入口的可见发送由 `_qq_reality_reply_adapter` 调用 `text_output.send()`，LLM reply
+记忆写入统一走 `core.turn_sink.record_assistant_turn()`；冻结管理面板 `/chat` 已返回 410。
+`/desktop/chat`、`/mobile/chat`、scheduler、sensor_aware 同样走 turn sink。legacy
+`/desktop/trigger` 已确认零调用方并删除。
 
 ---
 
