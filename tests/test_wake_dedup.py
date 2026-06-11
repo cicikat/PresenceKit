@@ -58,7 +58,10 @@ async def test_push_segments_fires_only_when_desktop_in_fanout(monkeypatch):
         return True
 
     monkeypatch.setattr("channels.desktop_ws.is_connected", lambda: True)
-    monkeypatch.setattr("channels.desktop_ws._new_msg_id", lambda: "shared-id-1")
+    monkeypatch.setattr(
+        "channels.desktop_ws._new_msg_id",
+        lambda: (_ for _ in ()).throw(AssertionError("canonical turn_id should be reused")),
+    )
     monkeypatch.setattr("channels.desktop_ws.push_message", fake_push_message)
     monkeypatch.setattr("channels.desktop_ws.push_segments", fake_push_segments)
 
@@ -76,7 +79,7 @@ async def test_push_segments_fires_only_when_desktop_in_fanout(monkeypatch):
     # push_segments 也发出一次（desktop in fanout）
     assert len(push_seg_calls) == 1
     # 共享同一个 msg_id
-    assert push_msg_calls[0]["msg_id"] == push_seg_calls[0]["msg_id"] == "shared-id-1"
+    assert push_msg_calls[0]["msg_id"] == push_seg_calls[0]["msg_id"] == "t-morn"
 
 
 async def test_push_segments_skipped_when_fanout_empty(monkeypatch):
@@ -153,6 +156,39 @@ async def test_path_a_returns_pending_trigger_when_ws_disconnected(monkeypatch):
 
     assert len(pending) == 1, "WS 未连接时 pending trigger 应被 Path A 返回"
     assert pending[0]["content"] == "早上好！"
+
+
+async def test_desktop_wake_path_a_returns_canonical_ids(monkeypatch):
+    """Path A HTTP reply exposes the persisted turn_id as msg_id."""
+    import json
+
+    monkeypatch.setattr(
+        "core.config_loader.get_config",
+        lambda: {"scheduler": {"owner_id": "owner-wake"}},
+    )
+    monkeypatch.setattr("channels.desktop_ws.get_connect_time", lambda: 0.0)
+
+    class _FakeAPA:
+        def read_text(self, encoding="utf-8"):
+            return json.dumps({"active_character": "yexuan"})
+
+    monkeypatch.setattr("core.sandbox.DataPaths.active_prompt_assets", lambda self: _FakeAPA())
+    monkeypatch.setattr(
+        "core.memory.short_term.load",
+        lambda uid, char_id=None: [{
+            "role": "assistant",
+            "content": "离线问候",
+            "timestamp": time.time(),
+            "_turn_id": "turn-wake-path-a",
+        }],
+    )
+
+    from admin.routers.chat import desktop_wake
+
+    result = await desktop_wake({"last_seen": time.time() - 60})
+
+    assert result["reply"] == "离线问候"
+    assert result["turn_id"] == result["msg_id"] == "turn-wake-path-a"
 
 
 async def test_path_a_excludes_post_connect_trigger_when_ws_connected(monkeypatch):

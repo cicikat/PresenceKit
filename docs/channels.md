@@ -62,6 +62,10 @@ MobileChannel 的活跃状态有 120 秒 TTL：手机端持续轮询时保持活
 本端 reply 通过 HTTP response 返回；`record_assistant_turn(fanout="all", exclude_origin_channel=...)`
 会把同一回复同步到其他活跃端，避免本端重复收到一份队列消息。
 
+HTTP assistant reply 保留 `turn_id`，并同时返回兼容字段 `msg_id`；两者相等。该 canonical ID
+也用于同一 assistant turn 的 WS `channel_message.msg_id` / `message_segments.msg_id`。
+`/desktop/wake` 在实际返回 assistant reply 时同样返回相等的 `turn_id` / `msg_id`。
+
 ---
 
 ## 桌宠控制端点（SEC-AUTH-1，2026-06-11 已收口）

@@ -34,11 +34,13 @@ class _Channel:
         self.fail = fail
         self.is_active = True
         self.sent = []
+        self.msg_ids = []
 
-    async def send(self, content, user_id, behavior=None):
+    async def send(self, content, user_id, behavior=None, msg_id=None):
         if self.fail:
             raise RuntimeError("boom")
         self.sent.append((content, user_id, behavior))
+        self.msg_ids.append(msg_id)
 
 
 async def _reset_channels():
@@ -339,6 +341,7 @@ async def test_message_segments_fanout_with_say(monkeypatch):
     # msg_id is shared between channel_message and message_segments
     assert seg["msg_id"] is not None
     assert push_msg_calls[0]["msg_id"] == seg["msg_id"]
+    assert seg["msg_id"] == "turn-hello"
 
     # content has no tag markup
     assert "<say>" not in seg["content"]

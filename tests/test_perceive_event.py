@@ -366,6 +366,9 @@ async def test_ordinary_owner_chat_unaffected(monkeypatch):
         async def run_llm(self, messages):
             return "好呀"
 
+        def _current_reality_scope(self, uid):
+            return type("Scope", (), {"character_id": "yexuan"})()
+
         def _refresh_character_if_needed(self):
             pass
 
@@ -397,6 +400,7 @@ async def test_ordinary_owner_chat_unaffected(monkeypatch):
 
     assert isinstance(result, dict), "run_owner_chat_turn must return a dict"
     assert "reply" in result
+    assert result["turn_id"] == result["msg_id"] == "t-chat"
     assert len(record_called) == 1, f"record_assistant_turn should be called once, got {record_called}"
 
 
@@ -432,6 +436,9 @@ async def test_desktop_wake_path_b_uses_perceive_gate(monkeypatch):
 
         async def post_process(self, uid, content, reply, **kwargs):
             return {"turn_id": "t-x", "critical_written": True, "emotion": "neutral"}
+
+        def _current_reality_scope(self, uid):
+            return type("Scope", (), {"character_id": "yexuan"})()
 
     import core.pipeline_registry as _preg
     monkeypatch.setattr(_preg, "_pipeline", _FakePipeline())
@@ -495,4 +502,5 @@ async def test_desktop_wake_path_b_uses_perceive_gate(monkeypatch):
         f"LLM must be called exactly once across two rapid wake calls, got {llm_calls[0]}"
     )
     assert r1.get("source") == "live_wake", f"first wake should succeed: {r1}"
+    assert r1.get("turn_id") == r1.get("msg_id") == "t-wake"
     assert r2.get("source") == "duplicate_wake", f"second wake should be deduped: {r2}"

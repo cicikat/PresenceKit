@@ -226,16 +226,17 @@ async def record_assistant_turn(
                 )
             )
 
-    # Generate the shared msg_id AFTER post_process, immediately before fanout.
-    # This ensures channel_message and message_segments always share the same id
-    # even when the WS reconnects during the (potentially slow) LLM call above.
-    _ws_msg_id: Optional[str] = None
-    try:
-        from channels import desktop_ws as _dws_pre
-        if _dws_pre.is_connected():
-            _ws_msg_id = _dws_pre._new_msg_id()
-    except Exception:
-        pass
+    # Use the post-process turn_id as the canonical cross-transport correlation id.
+    # The fallback only applies to non-critical async post-process paths where no
+    # turn_id exists yet.
+    _ws_msg_id: Optional[str] = (post_info or {}).get("turn_id") or None
+    if _ws_msg_id is None:
+        try:
+            from channels import desktop_ws as _dws_pre
+            if _dws_pre.is_connected():
+                _ws_msg_id = _dws_pre._new_msg_id()
+        except Exception:
+            pass
 
     targets, failures = await _fanout(
         assistant_text=assistant_text,

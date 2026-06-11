@@ -132,6 +132,7 @@ async def run_owner_chat_turn(
             "level": info["label"],
             "emotion": turn_result.emotion,
             "turn_id": turn_result.turn_id,
+            "msg_id": turn_result.turn_id,
             "critical_written": turn_result.written_to_memory,
         }
 
@@ -437,7 +438,13 @@ async def desktop_wake(body: dict = Body(default={}), _auth=Depends(verify_token
             ]
             if pending:
                 latest = max(pending, key=lambda e: e.get("timestamp", 0))
-                return {"reply": latest["content"], "source": "pending_trigger"}
+                turn_id = latest["_turn_id"]
+                return {
+                    "reply": latest["content"],
+                    "source": "pending_trigger",
+                    "turn_id": turn_id,
+                    "msg_id": turn_id,
+                }
         except Exception:
             logger.exception("[desktop_wake] Path A 失败，降级到 Path B")
 
@@ -511,7 +518,7 @@ async def desktop_wake(body: dict = Body(default={}), _auth=Depends(verify_token
                 )
                 from core.turn_sink import TurnSource, record_assistant_turn
                 from core.write_envelope import stamp_trigger
-                await record_assistant_turn(
+                turn_result = await record_assistant_turn(
                     assistant_text=reply,
                     uid=uid,
                     source=TurnSource.TRIGGER,
@@ -525,7 +532,12 @@ async def desktop_wake(body: dict = Body(default={}), _auth=Depends(verify_token
                 # Visible reply: strip render/NMP tags only; memory already scrubbed
                 # inside record_assistant_turn (memory_text path).
                 from core.response_processor import strip_render_tags as _strip_tags
-                return {"reply": _strip_tags(reply) or reply, "source": "live_wake"}
+                return {
+                    "reply": _strip_tags(reply) or reply,
+                    "source": "live_wake",
+                    "turn_id": turn_result.turn_id,
+                    "msg_id": turn_result.turn_id,
+                }
             return {"reply": None, "source": "live_wake_empty"}
     except Exception:
         logger.exception("[desktop_wake] Path B 失败")
