@@ -16,16 +16,33 @@ LLM 不能直接执行系统能力。所有工具都必须在 `core/tool_dispatc
 - 工具开关来自 `config.yaml tools:`，默认启用，危险工具通常配置为关闭
 - 桌面动作先走 WebSocket ack，失败才降级文件队列
 
-### 管理接口 Bearer token
+### 管理接口 Bearer token（SEC-AUTH-1，2026-06-11 收口）
 
-`admin/auth.py` 使用简单 Bearer token，密钥来自 `config.admin.secret_key`。大多数管理路由和所有
-mobile 路由依赖 `verify_token()`。
+`admin/auth.py` 使用简单 Bearer token，密钥来自 `config.admin.secret_key`（或环境变量
+`YEXUAN_ADMIN_SECRET`）。所有管理路由均依赖 `verify_token()`，无例外。
 
-已鉴权示例：
-- `/characters/*`
-- `/scheduler/*`
+受保护端点（全量）：
+- `/characters/*` / `/scheduler/*` / `/lorebook/*` / `/jailbreak-entries/*`
 - `/mobile/activate` / `/mobile/chat` / `/mobile/poll` / `/mobile/push`
-- garden / memory / mood / diary / relations 等管理路由
+- `/desktop/chat` / `/desktop/activate` / `/desktop/deactivate` / `/desktop/wake`
+- `/upload/ingest`
+- `/dream/enter` / `/dream/chat` / `/dream/exit` / `/dream/state` / `/dream/settings`
+- `/activity/*` / `/reading/*` / `/gomoku/*` / `/chess/*`
+- `/agent/think`
+- `/sensor/*` / `/watch/*` / `/garden/*` / `/mood/*` / `/diary/*`
+- `/memory/*` / `/users/*` / `/relations/*`
+- 所有 LLM/settings 路由
+
+**鉴权失败行为**：`verify_token()` 抛出 HTTP 401/403，FastAPI 在函数体执行前拒绝请求。
+因此鉴权失败时：不触发 LLM、不写磁盘、不创建 runtime state。
+
+**token 安全**：token 值不会出现在任何错误响应或日志记录中。
+
+**例外（设计上无鉴权）**：
+- `GET /system/data-path` — 只读返回 `data_prefix` 配置字符串，供桌宠端自动发现路径；
+  不含私密数据。
+
+**客户端调用方式**：所有受保护端点均需 `Authorization: Bearer <YEXUAN_ADMIN_SECRET>` header。
 
 ### 路径与测试沙盒
 
@@ -104,18 +121,21 @@ Phase 2 在 Phase 1.5 持久化基础上增加了三个组件，边界如下：
 
 ## 二、当前明确的缺口
 
-### 无鉴权本地入口
+### 无鉴权本地入口（SEC-AUTH-1，2026-06-11 已收口）
 
-以下入口当前无 token：
-- `POST /desktop/chat`
-- `POST /desktop/wake`
-- `POST /desktop/activate`
-- `POST /desktop/deactivate`
+所有高风险写入/动作端点已接入 Bearer token 鉴权（见上方"管理接口 Bearer token"一节）。
+此项已关闭。
+
+**客户端影响**：旧版 Emerald-client 若调用以下端点时未带 `Authorization: Bearer <token>`
+header，将收到 401/403 拒绝：
+- `POST /desktop/activate` / `/desktop/deactivate` / `/desktop/wake`
 - `POST /upload/ingest`
+- `POST /dream/enter` / `/dream/chat` / `/dream/exit`
+- `GET /dream/state` / `/dream/settings`
+- `PATCH /dream/settings`
+- `POST /agent/think`
 
-这符合本地桌宠接入的便利性，但如果服务绑定到非本机地址，风险会立刻升高：伪造客户端
-可以发起对话、上传内容、激活通道或接收桌面广播。legacy `POST /desktop/trigger` 已确认
-零调用方并删除。
+这是预期的 fail-closed 安全变化。所有调用方需补充 `Authorization: Bearer <token>` header。
 
 ### WebSocket 鉴权（R9 / SEC-WS-1，2026-06-11 已迁移）
 
@@ -131,8 +151,8 @@ query 参数。
 **残留风险（过渡期）**：旧客户端仍走 query fallback 期间，token 可能出现在截图或代理日志；
 新客户端完成迁移并移除 query fallback 后此风险消除。
 
-> R9 本轮仅处理 SEC-WS-1（WS query token 迁移）。`/upload/ingest` 等无鉴权端点另列安全项
-> `SEC-AUTH-1`，本轮未处理。
+> R9 / SEC-WS-1 处理 WS query token 迁移；`SEC-AUTH-1`（HTTP endpoint 鉴权收口）已于
+> 同日完成（2026-06-11），见上方"无鉴权本地入口"一节。
 
 ### sandbox 不是安全沙箱
 

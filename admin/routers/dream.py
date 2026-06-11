@@ -24,8 +24,9 @@ Invariants:
 import logging
 import re
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from admin.auth import verify_token
 from core.config_loader import get_config
 
 router = APIRouter()
@@ -61,7 +62,7 @@ def _owner_uid() -> str:
 
 
 @router.post("/dream/enter", summary="进入梦境")
-async def dream_enter(body: dict = {}):
+async def dream_enter(body: dict = {}, _auth=Depends(verify_token)):
     uid = _owner_uid()
     entry_reason = (body.get("entry_reason") or "").strip()
     dream_mode = (body.get("dream_mode") or "sandbox").strip()
@@ -93,7 +94,7 @@ async def dream_enter(body: dict = {}):
 
 
 @router.post("/dream/chat", summary="梦境对话（独立 pipeline）")
-async def dream_chat(body: dict):
+async def dream_chat(body: dict, _auth=Depends(verify_token)):
     """
     Dream turn endpoint — routes to dream_pipeline, never to reality pipeline.
 
@@ -119,7 +120,7 @@ async def dream_chat(body: dict):
 
 
 @router.post("/dream/exit", summary="强退梦境（硬出口，不可被拒）")
-async def dream_exit():
+async def dream_exit(_auth=Depends(verify_token)):
     """
     Hard exit — unconditional, immediate, penetrates all state.
     Cannot be disabled by config or role behavior (invariant D).
@@ -206,7 +207,7 @@ def _compute_hud_v0(state: dict, settings: dict, body) -> dict:
 
 
 @router.get("/dream/state", summary="读取梦境状态（只读 UI 面板字段）")
-async def dream_state_get():
+async def dream_state_get(_auth=Depends(verify_token)):
     """
     Read-only UI panel. Returns safe defaults when no dream is active.
 
@@ -274,7 +275,7 @@ async def dream_state_get():
 
 
 @router.get("/dream/settings", summary="读取梦境设置（全字段）")
-async def dream_settings_get():
+async def dream_settings_get(_auth=Depends(verify_token)):
     """Read-only: returns all dream settings fields with defaults applied."""
     uid = _owner_uid()
     from core.dream.dream_settings import load as _load
@@ -282,7 +283,7 @@ async def dream_settings_get():
 
 
 @router.patch("/dream/settings", summary="部分更新梦境设置（校验枚举值；仅影响下一场梦）")
-async def dream_settings_patch(body: dict):
+async def dream_settings_patch(body: dict, _auth=Depends(verify_token)):
     """
     Partial update for dream settings. Validates enum values before writing.
 

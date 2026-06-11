@@ -123,21 +123,25 @@ def test_admin_dream_enter_passes_active_char_id(sandbox, chars_tree, monkeypatc
 
     captured_char_id: list[str] = []
 
-    async def _mock_enter(uid, entry_reason="", *, char_id="yexuan"):
+    async def _mock_enter(uid, entry_reason="", *, char_id="yexuan", dream_mode="sandbox", script_id=None):
         captured_char_id.append(char_id)
         return {"ok": True, "dream_id": "mock_dream_id"}
 
     mock_pipeline = MagicMock()
     mock_pipeline._active_character_id = "hongcha"
 
+    _mock_cfg = {"scheduler": {"owner_id": _UID}}
     with patch("core.pipeline_registry.get", return_value=mock_pipeline), \
          patch("core.dream.dream_pipeline.enter_dream", new=_mock_enter), \
-         patch("core.config_loader.get_config", return_value={"scheduler": {"owner_id": _UID}}):
+         patch("core.config_loader.get_config", return_value=_mock_cfg), \
+         patch("admin.routers.dream.get_config", return_value=_mock_cfg):
         from fastapi.testclient import TestClient
         from fastapi import FastAPI
         from admin.routers.dream import router
+        from admin.auth import verify_token
         app = FastAPI()
         app.include_router(router)
+        app.dependency_overrides[verify_token] = lambda: True
         client = TestClient(app)
         resp = client.post("/dream/enter", json={})
 

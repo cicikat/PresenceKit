@@ -63,17 +63,15 @@ MobileChannel 的活跃状态有 120 秒 TTL：手机端持续轮询时保持活
 
 ---
 
-## 桌宠控制端点（鉴权状态）
+## 桌宠控制端点（SEC-AUTH-1，2026-06-11 已收口）
 
-以下三个端点**当前无鉴权**（⚠️ 安全待修，见 docs/known-issues.md §SEC-AUTH-1）：
+以下端点均需 `Authorization: Bearer <YEXUAN_ADMIN_SECRET>` header，无 token 或 token 错误返回 401/403：
 
 | 端点 | 影响 |
 |---|---|
-| `POST /desktop/activate` | 激活 desktop channel；副作用为通道级，不触发 LLM |
-| `POST /desktop/deactivate` | 停用 desktop channel；副作用为通道级，不触发 LLM |
-| `POST /desktop/wake` | **触发完整 LLM 轮（Path B）并写记忆**；任意能访问 admin server 的进程均可无鉴权调用 |
-
-`/desktop/wake` 的影响显著高于另外两个端点：Path B 会调用 `_pipeline_send()`，完整经历 `fetch_context → run_llm → post_process`，向 event_log / short_term 写入 assistant turn。这是比文档以往描述更严重的无鉴权暴露面。
+| `POST /desktop/activate` | 激活 desktop channel；鉴权失败不执行通道操作 |
+| `POST /desktop/deactivate` | 停用 desktop channel；鉴权失败不执行通道操作 |
+| `POST /desktop/wake` | 触发 LLM 轮（Path B）并写记忆；鉴权失败不触发 LLM，不写记忆 |
 
 ---
 
@@ -155,7 +153,8 @@ Emerald-client 的 `ChatPanel` 按 `msg_id` 关联两条消息；`message_segmen
 
 ## 文件 / 图片上传
 
-三端统一走 `POST /upload/ingest`。**该接口无鉴权**（⚠️ 安全待修，见 docs/known-issues.md §SEC-AUTH-1）；接口同时兼容旧单文件字段 `file`，以及新多文件字段 `files`：
+三端统一走 `POST /upload/ingest`。该接口需 Bearer token 鉴权（SEC-AUTH-1，2026-06-11 已收口）；
+接口同时兼容旧单文件字段 `file`，以及新多文件字段 `files`：
 
 | 参数 | 说明 |
 |---|---|
