@@ -73,6 +73,11 @@ def _init_modules():
     cfg = get_config()
     logger.info("配置文件加载完成")
 
+    if cfg.get("mode") == "production" and "test_sandbox" in str(cfg.get("data_prefix", "")):
+        logger.error("=" * 60)
+        logger.error("  [启动警告] mode=production 但 data_prefix 指向 test_sandbox")
+        logger.error("=" * 60)
+
     # v0.1 发布门禁：gating_shadow 必须开启，否则主动触发全部失效
     _gs_enabled = cfg.get("scheduler", {}).get("gating_shadow", {}).get("enabled", True)
     if not _gs_enabled:
