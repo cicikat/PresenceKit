@@ -393,11 +393,21 @@ async def handle_message(message: dict):
             tool_calls = [{"name": _fast_tool, "arguments": {}}]
             logger.info(f"[handle_message] 快速路径命中工具: {_fast_tool}")
         else:
+            # 注入最近 2 轮（最多 4 条）真实对话，帮助探针解析代词指代
+            # 过滤 trigger_stub 条目，避免系统占位符混入探针上下文
+            from core.memory import short_term as _st_probe
+            _probe_ctx_raw = _st_probe.load(user_id, char_id=_char_id)
+            _probe_ctx = [
+                {"role": m["role"], "content": m.get("content", "")}
+                for m in _probe_ctx_raw
+                if m.get("_source") != "trigger_stub"
+            ][-4:]
             tool_detection_messages = [
                 {
                     "role": "system",
                     "content": tool_dispatcher.get_probe_prompt(_location),
                 },
+                *_probe_ctx,
                 {"role": "user", "content": _trusted_user_text},
             ]
             tools_schema = tool_dispatcher.get_tools_schema(categories=["info", "desktop"])

@@ -69,6 +69,8 @@ _COOLDOWNS: dict[str, int] = {
     "garden_vase_wilted":   4 * 3600,
     "hidden_state_decay":         12 * 3600,       # 用户隐性状态衰减：12小时
     "hidden_state_consolidate":   7 * 24 * 3600,   # 基线收敛：7天
+    "overflow":              3 * 3600,   # 理由累积溢出：3小时
+    "letter_writer":         7 * 24 * 3600,  # 真实邮件：7天最多一封
 }
 
 # 冷却跟踪 {trigger_name: last_unix_timestamp}
@@ -389,6 +391,17 @@ async def _pipeline_send(
             )
             reply = await _pipeline.run_llm(messages)
             if reply:
+                # 在 assistant 回复落盘前写一条最低权重的 user stub，
+                # 让后续轮次的 LLM 有上下文锚点（"角色上次是因为 X 主动说话的"）。
+                # _source="trigger_stub" 使 _score_turn_group 对其评 0 分，远场不占位。
+                try:
+                    from core.memory import short_term as _st_stub
+                    _stub_char = _frozen_scope.character_id if _frozen_scope else "yexuan"
+                    _stub_content = f"[触发: {trigger_name}]" if trigger_name else "[系统触发]"
+                    _st_stub.append(oid, "user", _stub_content, char_id=_stub_char, source="trigger_stub")
+                except Exception as _stub_err:
+                    logger.warning("[scheduler._pipeline_send] stub write failed: %s", _stub_err)
+
                 turn_result = None
                 if record_turn:
                     from core.turn_sink import TurnSource, record_assistant_turn

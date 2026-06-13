@@ -183,6 +183,9 @@ def _ready_signal_bonus(turn_id) -> float:
 
 def _score_turn_group(group: list[dict]) -> tuple[float, dict]:
     """在已 sanitize 的 content 上计算 turn-group 信息量分数。"""
+    # trigger_stub 是系统写入的锚点条目，信息量极低，固定评 0 分让它在远场选择中被淘汰
+    if any(msg.get("_source") == "trigger_stub" for msg in group):
+        return 0.0, {"trigger_stub": True}
     text = "\n".join(str(msg.get("content") or "") for msg in group)
     compact_text = re.sub(r"\s+", "", text)
 
@@ -342,7 +345,7 @@ def load_for_prompt(user_id, *, budget_rounds=None, near_k=NEAR_K, char_id: str 
     return selected
 
 
-def append(user_id: str, role: str, content: str, turn_id: str | None = None, *, char_id: str = "yexuan") -> bool:
+def append(user_id: str, role: str, content: str, turn_id: str | None = None, *, char_id: str = "yexuan", source: str | None = None) -> bool:
     """
     追加一条消息到历史记录，并裁剪到最大轮数
 
@@ -350,6 +353,7 @@ def append(user_id: str, role: str, content: str, turn_id: str | None = None, *,
     每两条（一问一答）算一轮，实际保留 short_term_rounds * 2 条消息
     turn_id 来自 fixation_pipeline.capture_turn，写入 _turn_id 字段供血缘追踪
     char_id 决定写入哪个角色桶（默认 "yexuan"）
+    source: 可选来源标记，写入 _source 字段（如 "trigger_stub" 表示系统触发锚点）
     """
     cfg = get_config()
     max_rounds = cfg.get("memory", {}).get("short_term_disk_rounds", cfg.get("memory", {}).get("short_term_rounds", 20))
@@ -365,6 +369,8 @@ def append(user_id: str, role: str, content: str, turn_id: str | None = None, *,
     entry: dict = {"role": role, "content": content, "timestamp": time.time()}
     if turn_id:
         entry["_turn_id"] = turn_id
+    if source:
+        entry["_source"] = source
     history.append(entry)
 
     # 超出上限时，从头部移除最早的消息
@@ -398,8 +404,8 @@ class ShortTermMemory:
     def get_history(self, user_id: str, max_turns: int | None = None, *, char_id: str = "yexuan") -> list[dict]:
         return get_history(user_id, max_turns, char_id=char_id)
 
-    def append(self, user_id: str, role: str, content: str, turn_id: str | None = None, *, char_id: str = "yexuan"):
-        append(user_id, role, content, turn_id=turn_id, char_id=char_id)
+    def append(self, user_id: str, role: str, content: str, turn_id: str | None = None, *, char_id: str = "yexuan", source: str | None = None):
+        append(user_id, role, content, turn_id=turn_id, char_id=char_id, source=source)
 
     def clear(self, user_id: str, *, char_id: str = "yexuan"):
         clear(user_id, char_id=char_id)
