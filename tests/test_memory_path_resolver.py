@@ -106,6 +106,13 @@ def test_afterglow_residue_contains_char_and_uid(sandbox):
     assert UID in p
 
 
+def test_dream_seed_contains_char_and_uid(sandbox):
+    p = _s(resolve_path(REALITY, "dream_seed"))
+    assert CHAR in p
+    assert UID in p
+    assert p.endswith("/dream_seed.json")
+
+
 # ---------------------------------------------------------------------------
 # 8. impression — reality (dream-origin), (char_id, uid)
 # ---------------------------------------------------------------------------
@@ -236,7 +243,7 @@ def test_resolver_with_non_default_char_id_all_reality_artifacts(sandbox):
     reality_char_uid_artifacts = [
         "history", "event_log", "mid_term", "episodic", "memory_index",
         "fixation_state", "profile", "identity", "hidden_state",
-        "afterglow_residue", "character_growth", "impression",
+        "afterglow_residue", "dream_seed", "character_growth", "impression",
     ]
     scope = MemoryScope.reality_scope("u77", "xchar")
     for art in reality_char_uid_artifacts:

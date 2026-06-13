@@ -130,6 +130,29 @@ ACTIVITY_REGISTRY: tuple[ActivityMeta, ...] = (
         has_companion_chat=False,
         docs_path="docs/chess-activity.md",
     ),
+    ActivityMeta(
+        id="dream_seed",
+        label="梦境预构",
+        enabled=True,
+        route_prefix="/activity/dream_seed",
+        session_store="activity_store",
+        session_dir_layout="{char_id}/{uid}/dream_seed/{session_id}",
+        frontend_key="dream_seed",
+        tauri_command_prefix="activity_dream_seed_",
+        tauri_commands=(
+            "activity_dream_seed_start",
+            "activity_dream_seed_state",
+            "activity_dream_seed_chat",
+            "activity_dream_seed_close",
+        ),
+        memory_policy=MemoryPolicy(
+            transcript="activity_local",
+            summary_threshold=6,
+            main_memory="deferred",
+        ),
+        has_companion_chat=True,
+        docs_path="docs/dream-seed-activity.md",
+    ),
 )
 
 

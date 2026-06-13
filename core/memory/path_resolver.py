@@ -28,6 +28,7 @@ REALITY_USER_ARTIFACTS: frozenset[str] = frozenset({
     "identity",
     "hidden_state",
     "afterglow_residue",
+    "dream_seed",
     "impression",        # dream-origin but reality-scoped
 })
 
@@ -130,6 +131,9 @@ def resolve_path(scope: MemoryScope, artifact: str) -> Path:
 
     if artifact == "afterglow_residue":
         return paths.user_memory_root(uid, char_id=char_id) / "afterglow_residue.json"
+
+    if artifact == "dream_seed":
+        return paths.user_memory_root(uid, char_id=char_id) / "dream_seed.json"
 
     if artifact == "character_growth":
         # legacy/dead registered tool — callers should not write new paths via this key.

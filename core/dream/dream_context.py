@@ -42,6 +42,20 @@ async def build_snapshot(user_id: str, entry_reason: str = "", *, char_id: str =
         "memory_access": memory_access,
     }
 
+    # A short-lived, one-shot bridge from the reality-side Dream Seed activity.
+    # It is deliberately consumed at Dream entry and only affects entry_reason.
+    try:
+        from core.activity.dream_seed import consume_seed as _consume_seed
+        seed = _consume_seed(user_id, char_id=char_id)
+        if seed:
+            prefix = f"今晚的梦境设定：{seed}"
+            snapshot["entry_reason"] = (
+                f"{prefix}\n{snapshot['entry_reason']}"
+                if snapshot["entry_reason"] else prefix
+            )
+    except Exception as exc:
+        logger.warning("[dream_context] dream_seed inject failed: %s", exc)
+
     # relationship_state — always included regardless of tier
     try:
         from core import user_relation

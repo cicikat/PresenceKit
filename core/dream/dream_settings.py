@@ -43,23 +43,27 @@ _DEFAULTS: dict[str, Any] = {
     "boundary_level": "body_perceptible",
     "world_layer": "reality_derived",
     "lucid_mode": "lucid_shared",
-    "jailbreak_preset": "default",
+    "jailbreak_presets": ["default"],
     "display": {"physiological_arousal": False},
 }
 
 
 def _migrate_legacy(data: dict[str, Any]) -> dict[str, Any]:
-    """One-shot migration from old amnesia/keep_impression booleans."""
-    if "memory_access" in data:
-        return data
-    amnesia = data.get("amnesia", False)
-    keep_impression = data.get("keep_impression", True)
-    if amnesia:
-        data["memory_access"] = MemoryAccess.card_only.value
-    elif keep_impression:
-        data["memory_access"] = MemoryAccess.relationship_summary.value
-    else:
-        data["memory_access"] = MemoryAccess.card_only.value
+    """One-shot migration from old amnesia/keep_impression booleans and single jailbreak_preset string."""
+    if "memory_access" not in data:
+        amnesia = data.get("amnesia", False)
+        keep_impression = data.get("keep_impression", True)
+        if amnesia:
+            data["memory_access"] = MemoryAccess.card_only.value
+        elif keep_impression:
+            data["memory_access"] = MemoryAccess.relationship_summary.value
+        else:
+            data["memory_access"] = MemoryAccess.card_only.value
+    # Migrate single jailbreak_preset string → jailbreak_presets list
+    if "jailbreak_presets" not in data and "jailbreak_preset" in data:
+        data["jailbreak_presets"] = [data.pop("jailbreak_preset")]
+    elif "jailbreak_preset" in data:
+        data.pop("jailbreak_preset")
     return data
 
 

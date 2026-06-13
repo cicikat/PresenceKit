@@ -4,7 +4,7 @@ tests/test_activity_registry.py
 Activity Registry P0-Lite — 静态结构断言。
 
 覆盖：
- 1.  registry 包含 reading / gomoku / chess
+ 1.  registry 包含 reading / gomoku / chess / dream_seed
  2.  id 唯一
  3.  route_prefix 唯一
  4.  frontend_key 唯一
@@ -52,6 +52,10 @@ def test_registry_contains_chess():
     assert get_activity_meta("chess") is not None
 
 
+def test_registry_contains_dream_seed():
+    assert get_activity_meta("dream_seed") is not None
+
+
 # ── Uniqueness constraints ─────────────────────────────────────────────────────
 
 def test_ids_unique():
@@ -83,7 +87,7 @@ def test_tauri_commands_unique_across_registry():
 
 # ── Memory policy: all activities must forbid main memory writes ───────────────
 
-@pytest.mark.parametrize("activity_id", ["reading", "gomoku", "chess"])
+@pytest.mark.parametrize("activity_id", ["reading", "gomoku", "chess", "dream_seed"])
 def test_writes_short_term_false(activity_id):
     meta = get_activity_meta(activity_id)
     assert meta.memory_policy.writes_short_term is False, (
@@ -91,7 +95,7 @@ def test_writes_short_term_false(activity_id):
     )
 
 
-@pytest.mark.parametrize("activity_id", ["reading", "gomoku", "chess"])
+@pytest.mark.parametrize("activity_id", ["reading", "gomoku", "chess", "dream_seed"])
 def test_writes_hidden_state_false(activity_id):
     meta = get_activity_meta(activity_id)
     assert meta.memory_policy.writes_hidden_state is False, (
@@ -99,7 +103,7 @@ def test_writes_hidden_state_false(activity_id):
     )
 
 
-@pytest.mark.parametrize("activity_id", ["reading", "gomoku", "chess"])
+@pytest.mark.parametrize("activity_id", ["reading", "gomoku", "chess", "dream_seed"])
 def test_writes_event_log_false(activity_id):
     meta = get_activity_meta(activity_id)
     assert meta.memory_policy.writes_event_log is False, (
@@ -122,6 +126,11 @@ def test_reading_summary_threshold_none():
 def test_chess_summary_threshold_none():
     meta = get_activity_meta("chess")
     assert meta.memory_policy.summary_threshold is None
+
+
+def test_dream_seed_summary_threshold_six():
+    meta = get_activity_meta("dream_seed")
+    assert meta.memory_policy.summary_threshold == 6
 
 
 # ── Registry matches engine constant ──────────────────────────────────────────
@@ -149,9 +158,13 @@ def test_chess_no_companion_chat():
     assert get_activity_meta("chess").has_companion_chat is False
 
 
+def test_dream_seed_has_companion_chat():
+    assert get_activity_meta("dream_seed").has_companion_chat is True
+
+
 # ── Docs files exist ───────────────────────────────────────────────────────────
 
-@pytest.mark.parametrize("activity_id", ["reading", "gomoku", "chess"])
+@pytest.mark.parametrize("activity_id", ["reading", "gomoku", "chess", "dream_seed"])
 def test_docs_path_exists(activity_id):
     meta = get_activity_meta(activity_id)
     path = _PROJECT_ROOT / meta.docs_path
@@ -160,10 +173,10 @@ def test_docs_path_exists(activity_id):
 
 # ── list_enabled_activities ────────────────────────────────────────────────────
 
-def test_list_enabled_activities_returns_all_three():
+def test_list_enabled_activities_returns_all():
     enabled = list_enabled_activities()
     ids = {m.id for m in enabled}
-    assert ids == {"reading", "gomoku", "chess"}
+    assert ids == {"reading", "gomoku", "chess", "dream_seed"}
 
 
 def test_list_enabled_activities_all_have_enabled_true():
@@ -173,7 +186,7 @@ def test_list_enabled_activities_all_have_enabled_true():
 
 def test_list_enabled_activities_order_stable():
     enabled = list_enabled_activities()
-    assert [m.id for m in enabled] == ["reading", "gomoku", "chess"]
+    assert [m.id for m in enabled] == ["reading", "gomoku", "chess", "dream_seed"]
 
 
 # ── get_activity_meta ──────────────────────────────────────────────────────────
@@ -190,6 +203,7 @@ def test_get_activity_meta_empty_string_returns_none():
     ("reading", "一起看书"),
     ("gomoku", "五子棋"),
     ("chess", "国际象棋"),
+    ("dream_seed", "梦境预构"),
 ])
 def test_get_activity_meta_correct_label(activity_id, expected_label):
     meta = get_activity_meta(activity_id)
@@ -198,7 +212,7 @@ def test_get_activity_meta_correct_label(activity_id, expected_label):
 
 # ── kind field ────────────────────────────────────────────────────────────────
 
-@pytest.mark.parametrize("activity_id", ["reading", "gomoku", "chess"])
+@pytest.mark.parametrize("activity_id", ["reading", "gomoku", "chess", "dream_seed"])
 def test_kind_is_activity(activity_id):
     meta = get_activity_meta(activity_id)
     assert meta.kind == "activity"
@@ -206,7 +220,7 @@ def test_kind_is_activity(activity_id):
 
 # ── Tauri command prefix consistency ──────────────────────────────────────────
 
-@pytest.mark.parametrize("activity_id", ["reading", "gomoku", "chess"])
+@pytest.mark.parametrize("activity_id", ["reading", "gomoku", "chess", "dream_seed"])
 def test_tauri_commands_start_with_prefix(activity_id):
     meta = get_activity_meta(activity_id)
     for cmd in meta.tauri_commands:
@@ -217,7 +231,7 @@ def test_tauri_commands_start_with_prefix(activity_id):
 
 # ── route_prefix structure ────────────────────────────────────────────────────
 
-@pytest.mark.parametrize("activity_id", ["reading", "gomoku", "chess"])
+@pytest.mark.parametrize("activity_id", ["reading", "gomoku", "chess", "dream_seed"])
 def test_route_prefix_starts_with_activity(activity_id):
     meta = get_activity_meta(activity_id)
     assert meta.route_prefix.startswith("/activity/"), (
@@ -225,7 +239,7 @@ def test_route_prefix_starts_with_activity(activity_id):
     )
 
 
-@pytest.mark.parametrize("activity_id", ["reading", "gomoku", "chess"])
+@pytest.mark.parametrize("activity_id", ["reading", "gomoku", "chess", "dream_seed"])
 def test_route_prefix_contains_activity_id(activity_id):
     meta = get_activity_meta(activity_id)
     assert f"/{activity_id}" in meta.route_prefix
@@ -233,7 +247,7 @@ def test_route_prefix_contains_activity_id(activity_id):
 
 # ── frontend_key matches id ───────────────────────────────────────────────────
 
-@pytest.mark.parametrize("activity_id", ["reading", "gomoku", "chess"])
+@pytest.mark.parametrize("activity_id", ["reading", "gomoku", "chess", "dream_seed"])
 def test_frontend_key_matches_id(activity_id):
     meta = get_activity_meta(activity_id)
     assert meta.frontend_key == meta.id

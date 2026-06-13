@@ -36,6 +36,16 @@ _AG_TONE_DESC: dict[str, str] = {
 }
 
 
+def _format_dream_afterglow_detail(uid: str, *, char_id: str = "yexuan") -> str:
+    """Return the active clear/fading dream summary, failing closed."""
+    try:
+        from core.dream.dream_afterglow import load_afterglow
+        return load_afterglow(uid, char_id=char_id)
+    except Exception as exc:
+        logger.warning("[prompt_builder] dream afterglow detail read failed: %s", exc)
+        return ""
+
+
 def _format_afterglow_soft_hint(uid: str, *, char_id: str = "yexuan") -> str:
     """Return a short soft-hint string if a fresh afterglow residue exists, else ''.
 
@@ -682,19 +692,29 @@ def build(
         pass
 
     # ─────────────────────────────────────────────────────────────────────────
-    # 层 6f：梦境余韵软提示（只读，非事实，TTL 失效/neutral+空tags 不注入）
-    # 来自 afterglow_residue.json；用于让 LLM 感知用户可能带着的余韵语气。
-    # 禁止从此层推断现实事件、身份或记忆，内容只表达 "may/可能"。
+    # 层 6f：梦境余韵（只读，非事实）
+    # 0~5h 优先注入逐渐模糊的梦境摘要；摘要层不活跃后才由 residue 软提示接管，
+    # 避免同一轮同时注入两种深度的 afterglow。
     # ─────────────────────────────────────────────────────────────────────────
-    _afterglow_hint = _format_afterglow_soft_hint(user_id, char_id=char_id)
-    if _afterglow_hint:
-        _layers.append("dream_afterglow_soft_hint")
+    _afterglow_detail = _format_dream_afterglow_detail(user_id, char_id=char_id)
+    if _afterglow_detail:
+        _layers.append("6f_dream_afterglow")
         messages.append({
             "role": "system",
-            "content": _afterglow_hint,
-            "_layer": "dream_afterglow_soft_hint",
+            "content": _afterglow_detail,
+            "_layer": "6f_dream_afterglow",
             "_drop_priority": 10,
         })
+    else:
+        _afterglow_hint = _format_afterglow_soft_hint(user_id, char_id=char_id)
+        if _afterglow_hint:
+            _layers.append("dream_afterglow_soft_hint")
+            messages.append({
+                "role": "system",
+                "content": _afterglow_hint,
+                "_layer": "dream_afterglow_soft_hint",
+                "_drop_priority": 10,
+            })
 
     # ─────────────────────────────────────────────────────────────────────────
     # 层 6g：梦境印象回流（ambient，非事实框定，最先裁剪）

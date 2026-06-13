@@ -117,7 +117,8 @@
 | 角色认知（read-only legacy） | `data/runtime/characters/{char_id}/character_growth/角色_{uid}.md` | **写路径已退役（R8-E2）**；load() 仅供 get_growth 工具只读查询；主链路不自动入队、不注入 prompt | 当前主 prompt 不注入 |
 | 情绪状态 | `data/runtime/characters/{char_id}/inner/mood_state.json` | 每轮 post_process / 工具触发 / 深夜调度 | 层1内嵌软提示 |
 | 用户隐性状态（Phase 6） | `data/runtime/memory/{char_id}/{uid}/hidden_state.json` | Reality-side integrator + WriteEnvelope；调度器 decay/consolidate tick；Dream exit afterglow 已接线（Phase 6：`wire_afterglow_from_summary()`） | Dream D4.5 tag-gated bucket 只读快照（body_intimate / physical_closeness；不含 float） |
-| Afterglow 残差（Phase 6/7） | `data/runtime/memory/{char_id}/{uid}/afterglow_residue.json` | Dream exit 时 `wire_afterglow_from_summary()` 写入（`core/dream/dream_exit_afterglow.py`）；8h TTL | Phase 6 数值层：由 `integrate_afterglow_and_save()` 消费后影响 sensitivity.current / embodied_ease；Phase 7 文本层：由 `_format_afterglow_soft_hint()` 只读注入 Reality prompt `dream_afterglow_soft_hint` 层（非事实，may/可能，TTL 失效不注入）；Dream 无直接写权限 |
+| Afterglow 残差（Phase 6/7） | `data/runtime/memory/{char_id}/{uid}/afterglow_residue.json` | Dream exit 时 `wire_afterglow_from_summary()` 写入（`core/dream/dream_exit_afterglow.py`）；8h TTL | Phase 6 数值层：由 `integrate_afterglow_and_save()` 消费后影响 sensitivity.current / embodied_ease；Reality 文本层先由 summary 提供 0–5h 的 `6f_dream_afterglow`，随后由 residue 提供至 8h 的 `dream_afterglow_soft_hint`；两层互斥、只读、非现实事实；Dream 无直接写权限 |
+| 梦境预构种子 | `data/runtime/memory/{char_id}/{uid}/dream_seed.json` | Dream Seed activity close 后写入；12h TTL；下一次入梦一次性消费 | 仅拼入 Dream `context_snapshot.entry_reason`，不进入 Reality prompt / 主记忆链 |
 
 > **当前 v1 写布局**：per-user 主链统一写入 `get_paths().user_memory_root()`，即
 > `data/runtime/memory/{char_id}/{uid}/`。迁移期 `for_read(new, old)` 仍保留在 event_log

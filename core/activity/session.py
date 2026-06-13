@@ -22,7 +22,7 @@ class ActivitySession:
     session_id: str
     uid: str
     char_id: str
-    activity_type: str   # reading | gomoku | chess
+    activity_type: str   # reading | gomoku | chess | dream_seed
     status: SessionStatus
     state: dict
     created_at: str      # ISO 8601 UTC

@@ -32,7 +32,8 @@
 | `6d_diary_context` | 用户近期日记 | 有内容且命中 `emotion.down` / `emotion.indirect` | `diary_context.load()` |
 | `6e_inner_diary_facts` | 他昨天的记录（事件层，取前200字） | 昨日日记文件存在且含事件层 | `data/runtime/characters/{char_id}/inner/diary/` |
 | `6e_inner_diary_feeling` | 他昨天的心情（感受层，取前150字） | 昨日日记存在且命中 `emotion.down/indirect/deep` 或 `topic.relation` | `data/runtime/characters/{char_id}/inner/diary/` |
-| `dream_afterglow_soft_hint` | 梦境余韵软提示（只读，非事实，TTL 8h，`may/可能` 限定语气，`neutral+空tags` 不注入） | afterglow_residue.json 存在且 TTL 未过期且 tone≠neutral 或 tags 非空 | `core/prompt_builder._format_afterglow_soft_hint()` → `core/memory/user_hidden_state.read_afterglow_residue()` → `data/runtime/memory/{char_id}/{uid}/afterglow_residue.json`（S6 路径，详见 docs/memory.md §记忆层一览） |
+| `6f_dream_afterglow` | 梦境余韵详细层（只读，非现实事实）：0–2h 完整摘要/色调/意象；2–5h 模糊摘要/色调 | 5h 内存在有效 dream summary | `core/dream/dream_afterglow.load_afterglow()`；5h 后返回空并交接给软提示层 |
+| `dream_afterglow_soft_hint` | 梦境余韵软提示（只读，非事实，TTL 8h，`may/可能` 限定语气，`neutral+空tags` 不注入） | 详细 afterglow 层为空，且 afterglow_residue.json 存在、TTL 未过期、tone≠neutral 或 tags 非空 | `core/prompt_builder._format_afterglow_soft_hint()` → `core/memory/user_hidden_state.read_afterglow_residue()` → `data/runtime/memory/{char_id}/{uid}/afterglow_residue.json`（S6 路径，详见 docs/memory.md §记忆层一览） |
 | `6g_dream_impression` | 梦境印象回流（ambient，≤3条，非事实框定，他自述"我好像在梦里……"） | 有未过期印象时注入 | `core/dream/impression_loader.load_impression_text()` → `data/runtime/dreams/{char_id}/impressions/{uid}.json` |
 | `7_mes_example_item` | 对话示例（few-shot） | always（有内容） | 角色卡 mes_example |
 | `9_history` | 短期对话历史（近场保留 + 远场加权择优） | always | `short_term.load_for_prompt()` |
@@ -44,7 +45,7 @@
 
 > 层 10 注入安全：工具裸输出经 `ToolResult.safe_summary`（截断上限 2000 字符）包裹后，以定界标记 `<<<TOOL_DATA_START>>>` / `<<<TOOL_DATA_END>>>` 加反注入指令框定，防止外部工具/搜索结果中的不可信文本被模型当作指令执行。原始数据仅落 debug 日志，永不进 prompt/memory。
 >
-> Phase 7 起：`dream_afterglow_soft_hint` 层（层 6f 位置）已接线，由 `_format_afterglow_soft_hint()` 读取 `afterglow_residue.json`，注入非事实软提示。该层是只读的，不写 memory / mood / profile / hidden state。TTL 失效或 neutral+空tags 时不注入，读取异常 fail-closed 不阻断。路径遵循 S6 布局：`data/runtime/memory/{char_id}/{uid}/afterglow_residue.json`，详见 docs/memory.md §记忆层一览。
+> `6f_dream_afterglow` 与 `dream_afterglow_soft_hint` 为互斥层：前者在退梦后 0–5h 注入逐渐模糊的摘要，后者在详细层为空后接管至 8h TTL。两层均只读、非现实事实、读取异常 fail-closed，不写 memory / mood / profile / hidden state。
 
 ---
 
@@ -174,6 +175,7 @@ token_estimate = sum(len(m["content"]) for m in messages)
 
 | `_drop_priority` | 层 | 说明 |
 |---|---|---|
+| 10 | `6f_dream_afterglow` | 梦境余韵详细层，只读非事实，与软提示互斥 |
 | 10 | `dream_afterglow_soft_hint` | 梦境余韵软提示，只读非事实，最先丢 |
 | 20 | `6g_dream_impression` | 梦境印象回流，ambient 非事实框定，次先丢 |
 | 30 | `6b_event_search` | 关键词 + 评分搜索结果，质量较低 |

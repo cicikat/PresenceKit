@@ -48,7 +48,7 @@ _ENUM_VALIDATORS: dict[str, frozenset] = {
 
 _PATCH_ALLOWED = frozenset({
     "memory_access", "boundary_level", "world_layer", "lucid_mode",
-    "enable_dream_lorebook", "jailbreak_preset", "display",
+    "enable_dream_lorebook", "jailbreak_presets", "display",
 })
 
 _SAFE_PRESET_RE = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
@@ -312,12 +312,16 @@ async def dream_settings_patch(body: dict, _auth=Depends(verify_token)):
         errors.append(
             f"enable_dream_lorebook 必须为 bool，收到：{updates['enable_dream_lorebook']!r}"
         )
-    if "jailbreak_preset" in updates:
-        val = updates["jailbreak_preset"]
-        if not isinstance(val, str) or not _SAFE_PRESET_RE.match(val):
-            errors.append(
-                f"jailbreak_preset={val!r} 非法，只允许字母/数字/下划线/短横线（1-64字符）"
-            )
+    if "jailbreak_presets" in updates:
+        val = updates["jailbreak_presets"]
+        if not isinstance(val, list) or len(val) == 0 or len(val) > 10:
+            errors.append("jailbreak_presets 必须为非空列表（最多 10 项）")
+        else:
+            for item in val:
+                if not isinstance(item, str) or not _SAFE_PRESET_RE.match(item):
+                    errors.append(
+                        f"jailbreak_presets 条目 {item!r} 非法，只允许字母/数字/下划线/短横线（1-64字符）"
+                    )
     if "display" in updates:
         val = updates["display"]
         if not isinstance(val, dict):

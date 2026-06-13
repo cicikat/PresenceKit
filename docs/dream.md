@@ -40,6 +40,7 @@
 - 软退出（可被他挽留）+ 硬退出（绝对穿透）
 - dream_summary + 短 TTL afterglow loader（Phase 7：现实层 `dream_afterglow_soft_hint` 已接线，`_format_afterglow_soft_hint()` 只读注入软提示）
 - 隔离合同测试
+- Dream Seed activity：睡前预构场景，12h TTL，下一次入梦时一次性注入 `entry_reason`
 
 **三轴结构（v0）**
 - `memory_access` 三档：`card_only` / `relationship_summary` / `full_snapshot`（全冻结只读）
@@ -271,12 +272,13 @@ WriteEnvelope 双重门控：
 
 | 层 | 内容 | 生命周期 |
 |---|---|---|
-| `dream_afterglow_soft_hint` | 梦境余韵软提示（只读，非事实，`may/可能` 限定，TTL 8h） | **Phase 7 已接线**：`_format_afterglow_soft_hint()` 读 `afterglow_residue.json`，注入非事实软提示；neutral+空tags 不注入；读取异常 fail-closed |
+| `6f_dream_afterglow` | 梦境余韵详细层（只读，非现实事实） | 0–2h 注入完整摘要/色调/意象；2–5h 注入模糊摘要/色调；5h 后返回空 |
+| `dream_afterglow_soft_hint` | 梦境余韵软提示（只读，非事实，`may/可能` 限定，TTL 8h） | 详细层为空后接管；读 `afterglow_residue.json`；neutral+空tags 不注入；读取异常 fail-closed |
 | `6g_dream_impression` | 低权"我好像在梦里…"模糊印象 | 慢衰减 |
 
-Phase 7 起，`dream_afterglow_soft_hint` 层已接入 Reality prompt builder（`core/prompt_builder.py`），位于层 6e 之后、层 6g 之前。该层进入 token 裁剪表且优先级最低（最先被裁剪）。写隔离不变：只读，不写 memory / mood / profile / hidden state。
+`6f_dream_afterglow` 与 `dream_afterglow_soft_hint` 在 Reality prompt builder 中互斥，位于层 6e 之后、层 6g 之前。两层均进入 token 裁剪表且优先级最低（最先被裁剪）。写隔离不变：只读，不写 memory / mood / profile / hidden state。
 
-afterglow 完整路径：Dream exit → `wire_afterglow_from_summary()` → `integrate_afterglow_and_save()` → hidden_state.json（Phase 6 numeric wiring）; 同时 → Reality prompt `dream_afterglow_soft_hint` 层（Phase 7 text hint）。
+afterglow 完整路径：Dream exit → summary → Reality prompt `6f_dream_afterglow`（0–5h）；同时 `wire_afterglow_from_summary()` → `integrate_afterglow_and_save()` → hidden_state.json（Phase 6 numeric wiring）并写 residue，供 `dream_afterglow_soft_hint` 在详细层结束后接管至 8h。
 
 ---
 
@@ -341,6 +343,9 @@ REALITY_CHAT → DREAM_ENTRANCE_AVAILABLE → DREAM_ACTIVE → DREAM_CLOSING →
 | `GET /dream/settings` | ✅ 已有 | 读取 per-uid 偏好默认值 |
 | `PATCH /dream/settings` | ✅ 已有 | 枚举校验后的局部更新；`world_layer` / `lucid_mode` 仅影响下一场梦 |
 
+入梦构建 `context_snapshot` 时会尝试消费 reality-scoped `dream_seed.json`。有效种子以前缀
+`今晚的梦境设定：...` 注入 `entry_reason`；TTL 12 小时、一次性消费、失败不阻断 Dream。
+
 ### dream_state.json 字段
 
 `user_id` / `status` / `dream_id` / `frozen_world` / `lucid_mode` / `context_snapshot` / `body_state{heat,sensitivity,tension}` / `emotional_tension`(他的，0–1)
@@ -401,7 +406,7 @@ REALITY_CHAT → DREAM_ENTRANCE_AVAILABLE → DREAM_ACTIVE → DREAM_CLOSING →
 
 ### CURRENT（当前实现）
 见第二节功能清单。三轴 + 四档 + 六世界 + 软硬双出口已落地；Mirror v0.1 已落地（只读镜子，MirrorCore 入梦冻结，DM 层注入，无写回）；三层产物均会生成，
-Phase 7 起，现实 prompt 同时接 `dream_afterglow_soft_hint`（只读软提示，层 6f 位置）和 `6g_dream_impression`。测试数量以
+现实 prompt 接入互斥的 `6f_dream_afterglow` / `dream_afterglow_soft_hint`（只读余韵层）和 `6g_dream_impression`。测试数量以
 `tests/test_dream_*.py` 当前收集结果为准，不在合同文档里固定计数。
 
 **现实侧 loader 不引用 dream 路径——已有自动测试护栏**

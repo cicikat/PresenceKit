@@ -24,6 +24,8 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 _AFTERGLOW_TTL_SECONDS: float = 8 * 3600  # 8 hours
+_PHASE_CLEAR_HOURS: float = 2.0
+_PHASE_FADE_HOURS: float = 5.0
 
 _GENTLE_FRAME = (
     "【梦的余韵】\n"
@@ -47,20 +49,27 @@ def load_afterglow(uid: str, *, char_id: str = "yexuan") -> str:
     Return active afterglow text for injection into reality prompt layer 6f.
     Returns empty string if no active afterglow within TTL.
     """
-    best = _find_best_summary(uid, char_id=char_id)
+    best, age_hours = _find_best_summary(uid, char_id=char_id)
     if best is None:
         return ""
-    return _format_afterglow(best)
+    # From this point the residue-only soft hint owns the reality prompt.
+    if age_hours >= _PHASE_FADE_HOURS:
+        return ""
+    return _format_afterglow(best, age_hours=age_hours)
 
 
-def _find_best_summary(uid: str, *, char_id: str = "yexuan") -> dict[str, Any] | None:
+def _find_best_summary(
+    uid: str,
+    *,
+    char_id: str = "yexuan",
+) -> tuple[dict[str, Any] | None, float]:
     summaries_dir = _get_summaries_dir(char_id=char_id)
     if not summaries_dir.exists():
-        return None
+        return None, 0.0
 
     candidates = list(summaries_dir.glob("dream_*.summary.json"))
     if not candidates:
-        return None
+        return None, 0.0
 
     now = time.time()
     best: dict[str, Any] | None = None
@@ -80,10 +89,13 @@ def _find_best_summary(uid: str, *, char_id: str = "yexuan") -> dict[str, Any] |
             best_ts = created_at
             best = data
 
-    return best
+    if best is None:
+        return None, 0.0
+    age_hours = max(0.0, (now - best_ts) / 3600.0)
+    return best, age_hours
 
 
-def _format_afterglow(summary: dict[str, Any]) -> str:
+def _format_afterglow(summary: dict[str, Any], *, age_hours: float = 0.0) -> str:
     afterglow_type = summary.get("afterglow", "gentle_residue")
     frame = _HURT_FRAME if afterglow_type == "hurt_reluctance" else _GENTLE_FRAME
 
@@ -100,18 +112,27 @@ def _format_afterglow(summary: dict[str, Any]) -> str:
     parts: list[str] = [frame]
 
     if s := summary.get("summary"):
-        parts.append(f"情绪摘要：{_sv(s)}")
+        summary_text = _sv(s)
+        if age_hours >= _PHASE_CLEAR_HOURS:
+            parts.append(f"情绪摘要（模糊）：{summary_text[:30]}……")
+        else:
+            parts.append(f"情绪摘要：{summary_text}")
 
     if tags := summary.get("emotional_tags"):
         if isinstance(tags, list) and tags:
             parts.append("情绪色调：" + "、".join(_sv(str(t)) for t in tags[:4]))
 
-    if frags := summary.get("symbolic_fragments"):
-        if isinstance(frags, list) and frags:
-            parts.append("残留意象：" + "、".join(_sv(str(f)) for f in frags[:3]))
+    if age_hours < _PHASE_CLEAR_HOURS:
+        if frags := summary.get("symbolic_fragments"):
+            if isinstance(frags, list) and frags:
+                parts.append("残留意象：" + "、".join(_sv(str(f)) for f in frags[:3]))
+
+    if age_hours >= _PHASE_FADE_HOURS:
+        tone_line = next((part for part in parts if part.startswith("情绪色调：")), "")
+        parts = [frame, tone_line] if tone_line else [frame]
 
     parts.append(_PROHIBIT_DREAM_RP)
-    return "\n".join(parts)
+    return "\n".join(part for part in parts if part)
 
 
 def _get_summaries_dir(*, char_id: str = "yexuan") -> Path:

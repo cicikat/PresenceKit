@@ -43,8 +43,9 @@ _ASCII_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 # key = file stem (Chinese), value = (ascii_id, display_label)
 # Add new entries here when a new Chinese-named preset is authored.
 _DREAM_PRESET_ID_MAP: dict[str, tuple[str, str]] = {
-    "审讯": ("interrogation", "审讯"),
-    "多p":  ("multi",         "多p"),
+    "审讯":   ("interrogation", "审讯"),
+    "多p":    ("multi",         "多p"),
+    "触手巢穴": ("tentacle",      "触手巢穴"),
 }
 
 

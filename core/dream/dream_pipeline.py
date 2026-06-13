@@ -152,8 +152,8 @@ async def dream_turn(
         except Exception as e:
             logger.debug(f"[dream_pipeline] dream lorebook match skipped: {e}")
 
-    jailbreak_preset = settings.get("jailbreak_preset", "default")
-    jailbreak_text, jailbreak_preset_status = _load_preset_text(jailbreak_preset)
+    jailbreak_presets = settings.get("jailbreak_presets") or [settings.get("jailbreak_preset", "default")]
+    jailbreak_text, jailbreak_preset_status = _load_presets_text(jailbreak_presets)
 
     from core.pipeline_registry import get as _get_pipeline2
     _pl2 = _get_pipeline2()
@@ -202,7 +202,7 @@ async def dream_turn(
         local_state=local_state,
         lore_entries=lore_entries,
         jailbreak_text=jailbreak_text,
-        jailbreak_preset_name=jailbreak_preset,
+        jailbreak_preset_name=",".join(jailbreak_presets),
         jailbreak_preset_status=jailbreak_preset_status,
         body_projection_text=projection["d5_text"],
         yexuan_tension=current_yexuan_tension,
@@ -557,7 +557,8 @@ def _looks_like_exit_request(msg: str) -> bool:
 
 def _load_preset_text(preset_name: str) -> tuple[str, str]:
     """
-    Load D0 jailbreak content from characters/dream_presets/{preset_name}.md.
+    Load D0 jailbreak content from characters/dream_presets/{filename}.
+    Uses the asset registry to resolve actual filename (handles Chinese-named presets).
     Returns (text, status): status is "" | "fallback" | "disabled".
     Falls back to default.md if named preset is missing; returns disabled if default missing too.
     """
@@ -570,13 +571,22 @@ def _load_preset_text(preset_name: str) -> tuple[str, str]:
         logger.warning("[dream_pipeline] preset name %r rejected, using default", preset_name)
         preset_name = "default"
 
+    def _resolve_filename(name: str) -> str:
+        try:
+            from core.asset_registry import get_registry
+            entry = get_registry().resolve(name, "dream_preset")
+            return entry.filename
+        except Exception:
+            return f"{name}.md"
+
     def _read(name: str) -> str | None:
-        p = _PRESETS_BASE / f"{name}.md"
+        fname = _resolve_filename(name)
+        p = _PRESETS_BASE / fname
         try:
             if p.exists():
                 return p.read_text(encoding="utf-8").strip() or None
         except Exception as exc:
-            logger.warning("[dream_pipeline] cannot read preset %r: %s", name, exc)
+            logger.warning("[dream_pipeline] cannot read preset %r (%s): %s", name, fname, exc)
         return None
 
     text = _read(preset_name)
@@ -591,3 +601,37 @@ def _load_preset_text(preset_name: str) -> tuple[str, str]:
 
     logger.warning("[dream_pipeline] D0 disabled: preset %r and default both missing/empty", preset_name)
     return "", "disabled"
+
+
+def _load_presets_text(preset_names: list[str]) -> tuple[str, str]:
+    """
+    Load and concatenate D0 jailbreak content for multiple preset names.
+    Returns (combined_text, status).
+    """
+    if not preset_names:
+        return _load_preset_text("default")
+
+    texts: list[str] = []
+    has_fallback = False
+    has_disabled = False
+
+    for name in preset_names:
+        text, status = _load_preset_text(name)
+        if text:
+            texts.append(text)
+        if status == "fallback":
+            has_fallback = True
+        elif status == "disabled":
+            has_disabled = True
+
+    if not texts:
+        return "", "disabled"
+
+    combined = "\n\n---\n\n".join(texts)
+    if has_disabled:
+        final_status = "disabled"
+    elif has_fallback:
+        final_status = "fallback"
+    else:
+        final_status = ""
+    return combined, final_status

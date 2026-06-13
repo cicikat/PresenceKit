@@ -80,6 +80,12 @@ def chess_routes():
 
 
 @pytest.fixture(scope="module")
+def dream_seed_routes():
+    from admin.routers.dream_seed import router
+    return _router_route_set(router)
+
+
+@pytest.fixture(scope="module")
 def activity_routes():
     from admin.routers.activity import router
     return _router_route_set(router)
@@ -130,6 +136,13 @@ def test_chess_close_route(chess_routes):
     assert ("POST", "/chess/close") in chess_routes
 
 
+def test_dream_seed_routes(dream_seed_routes):
+    assert ("POST", "/dream_seed/start") in dream_seed_routes
+    assert ("GET", "/dream_seed/state") in dream_seed_routes
+    assert ("POST", "/dream_seed/chat") in dream_seed_routes
+    assert ("POST", "/dream_seed/close") in dream_seed_routes
+
+
 # /activity/list
 def test_activity_list_route_registered(activity_routes):
     assert ("GET", "/list") in activity_routes
@@ -138,12 +151,16 @@ def test_activity_list_route_registered(activity_routes):
 # ── 所有 has_companion_chat=True activity 都有 /chat 路由 ─────────────────────
 # 这个测试会在新增带 companion 的 activity 时自动报错（如果忘记加路由）
 
-def test_companion_chat_activities_have_chat_route(gomoku_routes):
+def test_companion_chat_activities_have_chat_route(gomoku_routes, dream_seed_routes):
     for meta in ACTIVITY_REGISTRY:
         if not meta.has_companion_chat:
             continue
         if meta.id == "gomoku":
             assert ("POST", "/gomoku/chat") in gomoku_routes, (
+                f"{meta.id} has_companion_chat=True but /chat route missing"
+            )
+        elif meta.id == "dream_seed":
+            assert ("POST", "/dream_seed/chat") in dream_seed_routes, (
                 f"{meta.id} has_companion_chat=True but /chat route missing"
             )
 
@@ -278,7 +295,7 @@ def test_tauri_command_name_in_activity_api_ts(command, activity_api_ts_text):
     )
 
 
-@pytest.mark.parametrize("activity_id", ["reading", "gomoku", "chess"])
+@pytest.mark.parametrize("activity_id", ["reading", "gomoku", "chess", "dream_seed"])
 def test_tauri_command_prefix_in_activity_api_ts(activity_id, activity_api_ts_text):
     meta = get_activity_meta(activity_id)
     assert meta.tauri_command_prefix in activity_api_ts_text, (
