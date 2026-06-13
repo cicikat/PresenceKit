@@ -14,11 +14,19 @@ logger = logging.getLogger(__name__)
 _SWITCH_INTERVAL_MINUTES = 30
 
 
+_DEFAULT_POOL_PATH = Path(__file__).parent.parent / "characters" / "default_author_notes.json"
+
+
 def _load_pool(pool_path: Path) -> list[dict]:
     if not pool_path.exists():
-        raise FileNotFoundError(
-            f"[author_note_rotator] notes pool 文件不存在: {pool_path}"
+        logger.warning(
+            f"[author_note_rotator] notes pool 文件不存在: {pool_path}，回落到默认池"
         )
+        if not _DEFAULT_POOL_PATH.exists():
+            raise FileNotFoundError(
+                f"[author_note_rotator] 默认 notes pool 也不存在: {_DEFAULT_POOL_PATH}"
+            )
+        pool_path = _DEFAULT_POOL_PATH
     data = json.loads(pool_path.read_text(encoding="utf-8"))
     return data.get("notes", [])
 

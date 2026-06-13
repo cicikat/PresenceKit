@@ -5,6 +5,7 @@ import time
 from datetime import datetime
 from hashlib import sha1
 
+from core.character_name_provider import get_char_name
 from core.error_handler import log_error
 from core.scheduler.loop import _is_ready, _mark, _owner_id, _pipeline_send, _cfg, _user_talked_today, _last_trigger, _char_name, _active_char_id_or_none
 
@@ -433,8 +434,21 @@ def _collect_diary_voice(char_id: str) -> tuple[str, str, str]:
     return persona_hint, voice_example, mood_hint
 
 
-async def _generate_and_store_diary(oid: str) -> None:
-    """生成并存储角色的每日日记（双层：客观事件 + 第一人称感受）。
+def _diary_char_ids() -> list[str]:
+    """返回本晚需要生成日记的角色列表。
+
+    读 config.diary.characters 白名单；非空时按白名单逐个生成；
+    空列表时仅返回当前 active char。
+    """
+    from core.config_loader import get_config
+    whitelist = get_config().get("diary", {}).get("characters", [])
+    if whitelist:
+        return list(whitelist)
+    return [_active_char_id_or_none() or "yexuan"]
+
+
+async def _generate_and_store_diary(oid: str, char_id: str) -> None:
+    """生成并存储指定角色的每日日记（双层：客观事件 + 第一人称感受）。
 
     事件层：客观分析器从对话日志提炼事实。
     感受层：注入角色卡性格底色 + 语气示例 + 当前心情 + 真实对话片段，
@@ -448,11 +462,10 @@ async def _generate_and_store_diary(oid: str) -> None:
     from core import llm_client
     from core.memory.event_log import get_recent_days
 
-    diary_dir = get_paths().yexuan_inner_diary()
+    diary_dir = get_paths().yexuan_inner_diary(char_id=char_id)
     diary_dir.mkdir(parents=True, exist_ok=True)
 
-    char_name = _char_name()
-    char_id = _active_char_id_or_none() or "yexuan"
+    char_name = get_char_name(char_id)
     today_log = get_recent_days(oid, days=1)
     if not today_log:
         return
@@ -549,12 +562,13 @@ async def _check_daily_journal():
             trigger_name="daily_journal",
         )
 
-        # 存储角色的日记到内心文档（共用 _generate_and_store_diary）
-        try:
-            await _generate_and_store_diary(oid)
-        except Exception as e:
-            from core.error_handler import log_error
-            log_error("scheduler._check_daily_journal.diary", e)
+        # 存储各角色日记到内心文档（白名单多角色逐个生成）
+        for _cid in _diary_char_ids():
+            try:
+                await _generate_and_store_diary(oid, _cid)
+            except Exception as e:
+                from core.error_handler import log_error
+                log_error(f"scheduler._check_daily_journal.diary[{_cid}]", e)
 
         _mark("daily_journal")
         logger.info("[scheduler] 每日手账已发送")
@@ -908,12 +922,16 @@ def _weather_prompt(detail: dict, now: datetime, location: str) -> str | None:
 
 
 async def _write_inner_daily_journal() -> None:
-    """proposer after_send 回调：写角色内心日记（共用 _generate_and_store_diary）。"""
+    """proposer after_send 回调：写各角色内心日记（白名单多角色逐个生成）。"""
     try:
         oid = _owner_id()
         if not oid:
             return
-        await _generate_and_store_diary(oid)
+        for _cid in _diary_char_ids():
+            try:
+                await _generate_and_store_diary(oid, _cid)
+            except Exception as e:
+                log_error(f"scheduler._write_inner_daily_journal[{_cid}]", e)
     except Exception as e:
         log_error("scheduler._write_inner_daily_journal", e)
 

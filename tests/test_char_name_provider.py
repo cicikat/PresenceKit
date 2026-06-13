@@ -4,6 +4,7 @@ tests/test_char_name_provider.py
 Contract tests for core/character_name_provider.get_active_char_name().
 
 Rules verified:
+- Explicit char_id resolves through the character asset registry.
 - Returns character card .name when pipeline is registered with a character.
 - Returns controlled placeholder "(角色未加载)" when pipeline is not registered.
 - Never returns a hardcoded private character name.
@@ -23,6 +24,21 @@ def _make_pipeline(char_name: str):
 
 
 class TestGetActiveCharName:
+    def test_explicit_char_id_resolves_card_without_pipeline(self):
+        from core.character_name_provider import get_char_name
+
+        with patch("core.character_loader.load") as mock_load:
+            mock_load.return_value.name = "红茶"
+            assert get_char_name("hongcha") == "红茶"
+            mock_load.assert_called_once_with("hongcha")
+
+    def test_explicit_unknown_char_id_does_not_fall_back_to_active(self):
+        from core.character_name_provider import get_char_name
+
+        with patch("core.character_loader.load", side_effect=ValueError("unknown character id")):
+            with pytest.raises(ValueError, match="unknown character id"):
+                get_char_name("ghost")
+
     def test_returns_card_name_when_pipeline_registered(self):
         from core.character_name_provider import get_active_char_name
         pl = _make_pipeline("叶瑄")
