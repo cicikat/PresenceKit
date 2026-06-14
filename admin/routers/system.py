@@ -138,3 +138,45 @@ async def get_data_path(auth=Depends(verify_token)):
     cfg = get_config()
     prefix = cfg.get("data_prefix", "data")
     return {"data_prefix": prefix}
+
+
+@router.get("/system/meta-mode", summary="获取当前安全/危险模式")
+async def get_meta_mode(auth=Depends(verify_token)):
+    import json
+    import time
+    p = get_paths().meta_mode()
+    if not p.exists():
+        return {"mode": "safe", "expires_at": None}
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+        mode = data.get("mode", "safe")
+        expires_at = data.get("expires_at")
+        if mode == "danger" and expires_at is not None and time.time() > expires_at:
+            mode = "safe"
+            expires_at = None
+        return {"mode": mode, "expires_at": expires_at}
+    except Exception:
+        return {"mode": "safe", "expires_at": None}
+
+
+@router.patch("/system/meta-mode", summary="切换安全/危险模式")
+async def patch_meta_mode(body: dict, auth=Depends(verify_token)):
+    import json
+    import time
+    from core.safe_write import safe_write_json
+    from fastapi import HTTPException
+
+    mode = body.get("mode", "safe")
+    if mode not in ("safe", "danger"):
+        raise HTTPException(status_code=422, detail="mode 只接受 'safe' 或 'danger'")
+
+    from core.tool_dispatcher import _DANGER_MODE_TTL_SECONDS
+    expires_at: float | None = None
+    if mode == "danger":
+        ttl = int(body.get("ttl_seconds") or _DANGER_MODE_TTL_SECONDS)
+        expires_at = time.time() + ttl
+
+    p = get_paths().meta_mode()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    safe_write_json(p, {"mode": mode, "expires_at": expires_at})
+    return {"mode": mode, "expires_at": expires_at}

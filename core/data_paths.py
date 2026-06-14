@@ -445,6 +445,11 @@ class DataPaths:
         Used for runtime-uploaded assets (e.g. avatar overrides)."""
         return self._p("runtime", "characters", char_id)
 
+    # ── Global runtime meta flags ────────────────────────────────────────────
+    def meta_mode(self) -> Path:
+        """data/runtime/meta_mode.json — global safe/danger mode switch."""
+        return self._p("runtime", "meta_mode.json")
+
     # ── Stage / multi-character group session ───────────────────────────────
     def stage_group_dir(self, *, group_id: str) -> Path:
         """data/runtime/groups/{group_id}/ — shared Stage session state."""

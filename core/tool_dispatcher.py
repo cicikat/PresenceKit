@@ -150,7 +150,43 @@ async def _get_growth_wrapper(user_id: str) -> str:
 
 
 import json as _json
+import time as _time
 from pathlib import Path as _Path
+
+# ─── 全局模式闸 ─────────────────────────────────────────────────────────────────
+
+_MODE_RESTRICTED_CATEGORIES: frozenset[str] = frozenset({"desktop", "system"})
+_DANGER_MODE_TTL_SECONDS: int = 7200  # 2 小时后自动回 safe
+
+
+def _current_mode() -> str:
+    """读 data/runtime/meta_mode.json，返回 'safe' 或 'danger'。
+    expires_at 过期或文件不存在 → safe。
+    """
+    try:
+        from core.sandbox import get_paths
+        p = get_paths().meta_mode()
+        if not p.exists():
+            return "safe"
+        data = _json.loads(p.read_text(encoding="utf-8"))
+        mode = data.get("mode", "safe")
+        if mode != "danger":
+            return "safe"
+        expires_at = data.get("expires_at")
+        if expires_at is not None and _time.time() > expires_at:
+            return "safe"
+        return "danger"
+    except Exception:
+        return "safe"
+
+
+def _mode_gate(tool_name: str) -> str | None:
+    """返回拒绝文案（模式闸命中），或 None（放行）。"""
+    spec = _TOOL_REGISTRY.get(tool_name, {})
+    if spec.get("category") in _MODE_RESTRICTED_CATEGORIES and _current_mode() != "danger":
+        return "现在是安全模式，我不能操作你的电脑。要先在设置里开启危险模式哦。"
+    return None
+
 
 def _is_desktop_active() -> bool:
     """优先看 WS 连接，没连接才看文件 mtime fallback（5分钟内）。"""
@@ -194,7 +230,7 @@ async def _push_desktop_action(action: dict) -> str:
 
 
 async def _desktop_minimize_wrapper(window: str = "") -> str:
-    result = await _push_desktop_action({"type": "minimize", "window": window})
+    result = await _push_desktop_action({"type": "minimize_window", "window": window})
     return f"已请求最小化窗口「{window}」" if result == "ok" else result
 
 
@@ -204,14 +240,14 @@ async def _desktop_open_url_wrapper(url: str = "") -> str:
 
 
 async def _desktop_play_pause_wrapper() -> str:
-    result = await _push_desktop_action({"type": "play_pause"})
+    result = await _push_desktop_action({"type": "media_play_pause"})
     return "已请求播放/暂停媒体" if result == "ok" else result
 
 
 async def _desktop_notify_wrapper(title: str = "", message: str = "") -> str:
     if not title:
         title = get_active_char_name()
-    result = await _push_desktop_action({"type": "notify", "title": title, "message": message})
+    result = await _push_desktop_action({"type": "show_notify", "title": title, "message": message})
     return f"已发送通知：{message}" if result == "ok" else result
 
 
@@ -859,6 +895,10 @@ async def execute(
 
     if tool_name not in _TOOL_REGISTRY:
         return get_tool_fail_response(), None
+
+    gate_msg = _mode_gate(tool_name)
+    if gate_msg is not None:
+        return gate_msg, None
 
     if not _is_tool_enabled(tool_name):
         return get_tool_fail_response(), None

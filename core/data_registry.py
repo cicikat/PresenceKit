@@ -129,6 +129,9 @@ REGISTRY: dict[str, PathMeta] = {
     # ── runtime config: active prompt asset selection ─────────────────────────
     "active_prompt_assets":   PathMeta("runtime",   "shared",          "global",        "ignore"),
 
+    # ── runtime: global safe/danger mode flag ─────────────────────────────────
+    "meta_mode":              PathMeta("runtime",   "shared",          "global",        "ignore"),
+
     # ── Stage: multi-character session truth ─────────────────────────────────
     # Stage may run in reality or dream; the persisted meta carries the domain.
     "stage_group_dir":        PathMeta("canonical", "shared",          "per_group",     "ignore"),
