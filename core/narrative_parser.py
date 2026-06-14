@@ -25,6 +25,9 @@ import re
 from typing import TypedDict
 
 KNOWN_TAGS: frozenset[str] = frozenset({"say", "do", "env", "feel"})
+# Inline style tags preserved in segment.text (desktop rich-render path only).
+# All other paths (QQ / mobile / memory) strip them via strip_render_tags / _ALL_TAG_RE.
+INLINE_STYLE_TAGS: frozenset[str] = frozenset({"hl", "big", "sm"})
 
 # ── XML path ─────────────────────────────────────────────────────────────────
 # Matches any XML-like open or close token: <word> or </word>
@@ -92,8 +95,11 @@ def _parse_xml(reply: str) -> NarrativeParseResult:
         if tag in KNOWN_TAGS:
             tokens.append(("close_known" if is_close else "open_known", tag))
         else:
-            # Unknown tag: preserve as literal text so no content is dropped
-            tokens.append(("text", m.group(0)))
+            # Inline style tags are preserved in segment.text for desktop rendering.
+            # Other unknown tags are silently dropped; text content between them
+            # is still captured as regular text tokens, so no content is lost.
+            if tag in INLINE_STYLE_TAGS:
+                tokens.append(("text", m.group(0)))
         pos = end
     if pos < len(reply):
         tokens.append(("text", reply[pos:]))
@@ -194,8 +200,10 @@ def _parse_markdown(reply: str) -> NarrativeParseResult:
 
     _flush_say()
 
-    # Build clean content from segment texts (markers already stripped)
-    content = "\n".join(s["text"] for s in segments).strip()
+    # Build clean content: strip ALL xml-like tags (including inline style tags)
+    # so memory / QQ / mobile / stats paths receive plain text.
+    _raw = "\n".join(s["text"] for s in segments)
+    content = _ALL_TAG_RE.sub("", _raw).strip()
     content = re.sub(r"\n{3,}", "\n\n", content)
     content = re.sub(r" {2,}", " ", content)
 

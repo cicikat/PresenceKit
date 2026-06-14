@@ -20,9 +20,9 @@
 | `4_group_context` | 群聊最近动态 | 群聊时 | `group_context.get_recent()` |
 | `4.2_stage_transcript` | 带真实 speaker 标签的共享 Stage transcript | reality Stage 角色生成时 | `core/stage/context.py` |
 | `3.5_period` | 生理期感知（第N天） | tagged（见下） | `user_profile.get_period_info()` |
-| `3.6_watch` | 最近一次睡眠数据 | tagged（见下） | `user_profile` sleep_segments |
-| `3.7_sensor` | 手机传感器（步数/电量/位置/亮屏次数） | 当天有数据即注（无 tag 门控） | `user_profile.phone_sensor_today` |
-| `3.8_activity` | 桌宠屏幕活动快照 | tagged（见下） | `data/runtime/characters/{char_id}/inner/activity_snapshot.json`（TTL 5分钟） |
+| `3.6_watch` | 最近一次睡眠数据（以角色第三人称旁白注入，无方括号标签） | tagged（见下） | `user_profile` sleep_segments |
+| `3.7_sensor` | 手机传感器（步数/电量/位置/亮屏次数，以角色旁白注入，无方括号标签/时间戳/数据来源描述） | 当天有数据即注（无 tag 门控） | `user_profile.phone_sensor_today` |
+| `3.8_activity` | 屏幕活动快照（以角色旁白注入，无方括号标签；内容来自 activity_snapshot 的类别字段，不含原始应用名） | tagged（见下） | `data/runtime/characters/{char_id}/inner/activity_snapshot.json`（TTL 5分钟） |
 | `5_profile` | 用户画像（名字/位置/宠物/兴趣/职业） | 有内容即注 | `user_profile.load()` |
 | `5.2_reminders` | 待办备忘录列表 | 有待办即注 | `get_reminders()` |
 | `5.5_lore` | 世界书条目 | LoreEngine 命中时 | `lore_engine.match()` |
@@ -41,7 +41,7 @@
 | `9_history` | 短期对话历史（近场保留 + 远场加权择优；投影时跳过 `_source=="trigger_stub"` 防触发器名泄露） | always | `short_term.load_for_prompt()` |
 | `9.5_episodic_top` | 最相关情景记忆1条（attention sweet spot） | episodic_result 非空 | 从已召回结果取第一条，不重复召回 |
 | `10_tool_result` | 本轮工具执行结果 | 有工具调用时 | `tool_dispatcher.execute()` 裸输出经 `core/tools/tool_result.py` 截断+定界框定后注入（`safe_summary`） |
-| `11_author_note` | 人设核心提醒 + 输出格式规则 + 纠偏 | always | 硬编码 + `author_note_rotator` + consistency_check |
+| `11_author_note` | 人设核心提醒 + 输出格式规则 + 风格补充 | always | 硬编码 + `author_note_rotator` + consistency_check |
 | `11_jailbreak` | 破限预设 layer=11 | 文件存在且 enabled | `characters/reality/jailbreak_entries.json` |
 | `12_user_message` | 用户当前消息 | always | 用户输入 |
 
@@ -110,7 +110,7 @@ _perception = ""
 _pending, _pending_paths = pending_perception.read_and_mark()  # 两阶段提交
 if _pending:
     _perception = _pending.strip()
-# 跨通道切换时追加 "刚才在QQ那边/桌宠这边" 提示
+# 跨通道切换时追加中性接续提示（不含通道名/UI实现名）
 # post_process 成功后调用 confirm_delivered(_pending_paths) 删除文件
 ```
 
@@ -131,13 +131,13 @@ Author's Note 放在历史之后、用户消息之前，对模型影响最大，
 2. 硬编码的反问频率规则
 3. 硬编码的情感稳定性规则
 4. 硬编码的动作格式规则
-5. 输出风格指令（`chat` 或 `roleplay`，由 config.yaml `chat.style` 决定）
+5. 输出风格指令（`chat` 或 `roleplay`，由 config.yaml `chat.style` 决定；直接追加，不加 `[输出风格:]` 标签）
 6. 条件工具规则（R5）：
    - 有 `tool_result`：`【工具结果已提供】`，提示层10已注入，禁止再声称调用
    - 无 `tool_result`：`【无工具结果】`，禁止声称调用工具，禁止编造日记/实时数据
 7. 表达规则（禁止复用对话示例原句）
-8. `style_hint`（从 observations.jsonl 读取，深夜/压力状态提示词）
-9. `author_note_extra`（consistency_check 发现问题时的纠偏，用完即清）
+8. `style_hint`（从 observations.jsonl 读取，深夜/压力状态提示词；直接追加，不加方括号）
+9. `author_note_extra`（consistency_check 发现问题时的临时补充；用 `（...）` 包裹，不含 `[人设纠偏:]` 标签；用完即清）
 10. 破限预设 layer=11
 
 注意：正式主 LLM 调用没有接入任何 tools schema；`get_time` 等 info/desktop 工具

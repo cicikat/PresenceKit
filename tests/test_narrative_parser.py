@@ -421,3 +421,75 @@ def test_md_empty_string_no_segments():
     r = parse_narrative_segments("")
     assert r["segments"] == []
     assert r["content"] == ""
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CC-06 — Inline style tags (hl / big / sm)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def test_inline_hl_preserved_in_say_segment_text():
+    r = parse_narrative_segments("<say>我<hl>很</hl>想你</say>")
+    assert _types(r) == ["say"]
+    assert "<hl>很</hl>" in r["segments"][0]["text"]
+
+
+def test_inline_hl_stripped_from_content():
+    r = parse_narrative_segments("<say>我<hl>很</hl>想你</say>")
+    assert r["content"] == "我很想你"
+    assert "<hl>" not in r["content"]
+    assert "</hl>" not in r["content"]
+
+
+def test_inline_big_preserved_in_say_segment_text():
+    r = parse_narrative_segments("<say>真的<big>很</big>重要</say>")
+    assert "<big>很</big>" in r["segments"][0]["text"]
+
+
+def test_inline_sm_preserved_in_say_segment_text():
+    r = parse_narrative_segments("<say>（<sm>小声</sm>）就这样</say>")
+    assert "<sm>小声</sm>" in r["segments"][0]["text"]
+
+
+def test_inline_tags_content_stripped():
+    """content 字段对 hl/big/sm 全剥，只保留纯文本。"""
+    r = parse_narrative_segments("<say>你<big>好</big>啊，<hl>真的</hl>。</say>")
+    assert "<big>" not in r["content"]
+    assert "<hl>" not in r["content"]
+    assert "好" in r["content"]
+    assert "真的" in r["content"]
+
+
+def test_inline_hl_not_treated_as_segment_boundary():
+    """<hl> 是段内标签，不应切分出新的 segment 类型。"""
+    r = parse_narrative_segments("<say>正文<hl>词</hl>更多</say>")
+    assert _types(r) == ["say"]
+    assert r["segments"][0]["text"] == "正文<hl>词</hl>更多"
+
+
+def test_non_whitelist_unknown_tag_stripped_from_segment_text():
+    """<think> 等非白名单未知标签从 segment.text 中剥除，但文字内容保留。"""
+    r = parse_narrative_segments("<say>正文<think>内心</think>结尾</say>")
+    seg_text = r["segments"][0]["text"]
+    assert "<think>" not in seg_text
+    assert "内心" in seg_text  # text content preserved
+    assert "结尾" in seg_text
+
+
+def test_inline_tags_in_markdown_path_say_preserved():
+    """Markdown 路径下 say 段落内的 <hl> 保留在 text，但从 content 剥除。"""
+    r = parse_narrative_segments("你<hl>好</hl>啊")
+    assert _types(r) == ["say"]
+    assert "<hl>好</hl>" in r["segments"][0]["text"]
+    assert "<hl>" not in r["content"]
+    assert "好" in r["content"]
+
+
+def test_inline_tags_in_mixed_xml_say_and_do():
+    """<say> 段含 <hl>，<do> 段不含 inline tag；content 全剥。"""
+    r = parse_narrative_segments("<say>我<hl>很</hl>想你</say><do>笑了</do>")
+    say_segs = [s for s in r["segments"] if s["type"] == "say"]
+    do_segs = [s for s in r["segments"] if s["type"] == "do"]
+    assert "<hl>很</hl>" in say_segs[0]["text"]
+    assert do_segs[0]["text"] == "笑了"
+    assert "<hl>" not in r["content"]
+    assert "很" in r["content"]

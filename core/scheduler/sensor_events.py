@@ -350,8 +350,7 @@ def tick() -> list[dict]:
             events.append({
                 "type":      APP_CATEGORY_CHANGED,
                 "narrative": (
-                    f"她从 {_last_app}({_last_app_category})"
-                    f" 切换到 {focus_app}({current_cat})。"
+                    f"她从{_last_app_category}切换到{current_cat}了。"
                 ),
                 "context": ctx,
             })

@@ -259,10 +259,16 @@ def build_situation_narrative(behavior: dict) -> str:
     presence_str = _presence_narrative(ctx)  # attribution-aware, never "没理我"
     at_desk_str  = _at_desk_phrase(at_desk_secs)
 
-    if focus_app and title_hint:
-        focus_str = f"正在用 {focus_app}（{title_hint}）"
-    elif focus_app:
-        focus_str = f"正在用 {focus_app}"
+    if focus_app:
+        from core.scheduler.sensor_events import _app_category as _get_app_category
+        _APP_CATEGORY_PHRASES = {
+            "work":     "在忙工作上的事",
+            "leisure":  "在放松",
+            "takeout":  "在点餐",
+            "shopping": "在逛东西",
+        }
+        _cat = _get_app_category(focus_app)
+        focus_str = _APP_CATEGORY_PHRASES.get(_cat, "在做自己的事")
     else:
         focus_str = ""
 

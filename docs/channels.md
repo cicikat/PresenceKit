@@ -181,13 +181,27 @@ HTTP /desktop/chat 触发 turn
 桌面在线时，原始 tagged 回复仍用于 desktop 双轨展示，同一个 `msg_id` 会收到两条消息：
 
 ```json
-{"type":"channel_message","content":"<say>你好</say>","msg_id":"..."}
-{"type":"message_segments","content":"你好","segments":[{"type":"say","text":"你好"}],"msg_id":"..."}
+{"type":"channel_message","content":"你好","msg_id":"..."}
+{"type":"message_segments","content":"你<hl>好</hl>","segments":[{"type":"say","text":"你<hl>好</hl>"}],"msg_id":"..."}
 ```
 
+`channel_message.content` 已全剥标签（纯文本）；`message_segments.content` 保留段内样式标签供 Emerald-client 渲染。
+
 Emerald-client 的 `ChatPanel` 按 `msg_id` 关联两条消息；`message_segments` 先到时会暂存。
-旧客户端忽略未知 `message_segments` 即可继续工作。QQ / mobile 输出会移除 `<say>` 等展示
-标签；reality history / event_log 同样保存纯文本。desktop segments 保持原行为。
+旧客户端忽略未知 `message_segments` 即可继续工作。QQ / mobile 输出会移除所有展示
+标签（含 `<hl>/<big>/<sm>`）；reality history / event_log 同样保存纯文本。
+
+### 段内 Inline 样式标签（CC-06）
+
+`INLINE_STYLE_TAGS = {"hl", "big", "sm"}` — 这三种标签由 `narrative_parser.py` 在 `segment.text` 里保留，
+不作为段类型、不切分 segment；`content` 字段全剥（`_ALL_TAG_RE`）。
+
+- `<hl>词</hl>` — 强调/重音（桌面渲染为主题色 + 粗体）
+- `<big>词</big>` — 放大（`font-size: 1.18em`）
+- `<sm>词</sm>` — 缩小（`font-size: 0.85em, opacity: 0.8`）
+
+QQ / mobile / memory / hidden_state 路径无需任何修改 — `strip_render_tags` / `_ALL_TAG_RE`
+作为通用正则已覆盖这三个标签的剥除。桌面 `inlineStyle.tsx` 的 `renderInlineStyled()` 负责解析渲染。
 
 两种信封均可携带可选 `char_id` 发言人字段；旧客户端忽略未知字段即可。mobile 主动消息队列
 和 desktop 文件降级队列同样按需写入 `char_id`，QQ 当前只接受参数、不改变文本渲染。
