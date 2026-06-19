@@ -407,6 +407,32 @@ async def test_dream_invite_path_b_pushes_action(sandbox, monkeypatch):
     assert "dream_invite: 邀请用户进入梦境" in chat.await_args.kwargs["messages"][0]["content"]
 
 
+async def test_toy_invite_path_b_pushes_action(sandbox, monkeypatch):
+    """角色明确邀请玩耍时，Path B 原样推送 toy_invite action。"""
+    _reset_intent_cooldown()
+
+    import core.llm_client as _llm
+
+    push_calls: list = []
+    monkeypatch.setattr(
+        "core.tool_dispatcher._push_desktop_action",
+        AsyncMock(side_effect=lambda action: push_calls.append(action) or "ok"),
+    )
+    chat = AsyncMock(return_value='{"action": "toy_invite", "params": {}}')
+    monkeypatch.setattr(_llm, "chat", chat)
+
+    pipeline = _make_pipeline()
+    await pipeline._parse_and_execute_intent(
+        "来嘛，我现在就想和你一起玩玩具，打开玩耍模式好不好。",
+        trigger_name="",
+        user_content="我们一起玩会儿吧",
+        user_id="u1",
+    )
+
+    assert push_calls == [{"type": "toy_invite"}]
+    assert "toy_invite: 进入玩耍模式" in chat.await_args.kwargs["messages"][0]["content"]
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 8. 金标准回归 — minimize 执行 → 复述 → c2 幂等不重复
 # ─────────────────────────────────────────────────────────────────────────────

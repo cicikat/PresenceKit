@@ -334,6 +334,20 @@ async def _toy_pattern_wrapper(
     return await toy_pattern(pattern_name=pattern_name, device_index=device_index)
 
 
+async def _read_toy_file_wrapper(file_key: str) -> str:
+    from core.tools.toybox import read_toy_file
+    return read_toy_file(file_key=file_key)
+
+
+async def _write_toy_file_wrapper(
+    file_key: str,
+    content: str,
+    mode: str = "overwrite",
+) -> str:
+    from core.tools.toybox import write_toy_file
+    return write_toy_file(file_key=file_key, content=content, mode=mode)
+
+
 _TOOL_REGISTRY["get_time"] = {
     "func": _get_current_time,
     "description": "获取当前准确时间，当用户询问时间、日期时调用.不确定时间时优先调用此工具,禁止猜测。",
@@ -716,6 +730,61 @@ _TOOL_REGISTRY["toy_pattern"] = {
     "keywords": ["玩具模式", "波浪振动"],
 }
 
+_TOOL_REGISTRY["read_toy_file"] = {
+    "func": _read_toy_file_wrapper,
+    "description": (
+        "读取你们的玩具项目文件，可以随便读读写写画画。"
+        "只能用 file_key 选择思考笔记、愿望清单或涂鸦板，不能读取系统文件。"
+    ),
+    "dangerous": False,
+    "category": "desktop",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "file_key": {
+                "type": "string",
+                "enum": ["diary", "wishlist", "doodle"],
+                "description": "diary=思考笔记，wishlist=愿望清单，doodle=涂鸦板",
+            },
+        },
+        "required": ["file_key"],
+    },
+    "examples": ["读一下我们的思考笔记", "看看愿望清单", "打开涂鸦板看看"],
+    "keywords": ["思考笔记", "愿望清单", "涂鸦板"],
+}
+
+_TOOL_REGISTRY["write_toy_file"] = {
+    "func": _write_toy_file_wrapper,
+    "description": (
+        "写入你们的玩具项目文件，可以随便写写画画。"
+        "只能用 file_key 选择思考笔记、愿望清单或涂鸦板，不能修改系统文件。"
+    ),
+    "dangerous": False,
+    "category": "desktop",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "file_key": {
+                "type": "string",
+                "enum": ["diary", "wishlist", "doodle"],
+                "description": "diary=思考笔记，wishlist=愿望清单，doodle=涂鸦板",
+            },
+            "content": {
+                "type": "string",
+                "description": "要写入的纯文本内容，最多 4000 字",
+            },
+            "mode": {
+                "type": "string",
+                "enum": ["overwrite", "append"],
+                "description": "overwrite 覆盖写入，append 追加写入",
+            },
+        },
+        "required": ["file_key", "content"],
+    },
+    "examples": ["在思考笔记里写一句话", "把这个加到愿望清单", "在涂鸦板上画点文字"],
+    "keywords": ["写进思考笔记", "加到愿望清单", "写在涂鸦板"],
+}
+
 
 # ─── N7: 快速路径风险标记 helper ──────────────────────────────────────────────
 #
@@ -738,6 +807,7 @@ _SIDE_EFFECT_TOOLS: frozenset[str] = frozenset({
     "toy_vibrate",
     "toy_stop",
     "toy_pattern",
+    "write_toy_file",
     # 写状态的工具
     "add_reminder",
     "water_garden",
