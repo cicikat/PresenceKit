@@ -221,6 +221,11 @@ async def _send_letter_if_worthy(
     if sent:
         _last_letter_text = letter
         _mark("letter_writer")
+        try:
+            from core.mail.letter_reference import append_sent_letter
+            append_sent_letter(uid, char_id, letter)
+        except Exception:
+            pass
     result = _result(letter, dry_run=False, sent=sent)
     if not sent:
         write_execute_blocked(result)

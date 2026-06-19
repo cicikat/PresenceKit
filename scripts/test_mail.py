@@ -1,5 +1,11 @@
 """手动测试邮件发送。用法：python scripts/test_mail.py"""
 import asyncio
+import sys
+from pathlib import Path
+
+_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(_ROOT))
+
 from core.mail.mail_sender import send_letter
 
 
