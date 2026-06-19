@@ -29,7 +29,10 @@ class MemoryPolicy:
     transcript: Literal["activity_local", "none"] = "activity_local"
     # None = 该 activity 不生成结束摘要
     summary_threshold: Optional[int] = None
-    main_memory: Literal["deferred", "none"] = "none"
+    # "episodic" = 结束摘要回流 episodic 记忆（close + threshold 满足时触发）
+    # "deferred" = 预留但尚未接入（dream_seed 有自己的种子链，不复用本流程）
+    # "none"     = 不写主记忆
+    main_memory: Literal["deferred", "none", "episodic"] = "none"
 
 
 @dataclass(frozen=True)
@@ -72,13 +75,14 @@ ACTIVITY_REGISTRY: tuple[ActivityMeta, ...] = (
             "activity_reading_page",
             "activity_reading_turn_page",
             "activity_reading_close",
+            "activity_reading_chat",
         ),
         memory_policy=MemoryPolicy(
             transcript="activity_local",
-            summary_threshold=None,
-            main_memory="none",
+            summary_threshold=2,  # current_page 阈值，≤ 视为翻了开头就关
+            main_memory="episodic",
         ),
-        has_companion_chat=False,
+        has_companion_chat=True,
         docs_path="docs/reading-activity.md",
     ),
     ActivityMeta(
@@ -101,7 +105,7 @@ ACTIVITY_REGISTRY: tuple[ActivityMeta, ...] = (
         memory_policy=MemoryPolicy(
             transcript="activity_local",
             summary_threshold=12,
-            main_memory="deferred",
+            main_memory="episodic",
         ),
         has_companion_chat=True,
         docs_path="docs/gomoku-activity.md",
@@ -121,13 +125,14 @@ ACTIVITY_REGISTRY: tuple[ActivityMeta, ...] = (
             "activity_chess_move",
             "activity_chess_legal_moves",
             "activity_chess_close",
+            "activity_chess_chat",
         ),
         memory_policy=MemoryPolicy(
             transcript="activity_local",
-            summary_threshold=None,
-            main_memory="none",
+            summary_threshold=10,  # move_history 长度阈值，≤ 视为试棋噪声
+            main_memory="episodic",
         ),
-        has_companion_chat=False,
+        has_companion_chat=True,
         docs_path="docs/chess-activity.md",
     ),
     ActivityMeta(

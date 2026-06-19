@@ -25,6 +25,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from admin.auth import verify_token
+from core.activity import activity_summary as _activity_summary
 from core.activity import gomoku as gomoku_engine
 from core.activity import gomoku_companion
 from core.activity import store as gomoku_store
@@ -163,6 +164,8 @@ async def close_gomoku(body: CloseRequest, auth=Depends(verify_token)):
     session, summary = gomoku_engine.close_game(uid, char_id, body.session_id)
     if session is None:
         raise HTTPException(status_code=404, detail=f"session {body.session_id!r} 不存在")
+    if summary is not None:
+        await _activity_summary.generate_and_reflow(uid, char_id, "gomoku", session.session_id)
     resp: dict = {
         "session_id": session.session_id,
         "status": "closed",

@@ -118,19 +118,40 @@ def test_gomoku_summary_threshold_12():
     assert meta.memory_policy.summary_threshold == 12
 
 
-def test_reading_summary_threshold_none():
+def test_reading_summary_threshold():
     meta = get_activity_meta("reading")
-    assert meta.memory_policy.summary_threshold is None
+    assert meta.memory_policy.summary_threshold == 2, (
+        "reading threshold is pages; >2 means turned at least 2 pages"
+    )
 
 
-def test_chess_summary_threshold_none():
+def test_chess_summary_threshold():
     meta = get_activity_meta("chess")
-    assert meta.memory_policy.summary_threshold is None
+    assert meta.memory_policy.summary_threshold == 10, (
+        "chess threshold is move_history length; >10 means meaningful game"
+    )
 
 
 def test_dream_seed_summary_threshold_six():
     meta = get_activity_meta("dream_seed")
     assert meta.memory_policy.summary_threshold == 6
+
+
+# ── main_memory policy per activity ───────────────────────────────────────────
+
+@pytest.mark.parametrize("activity_id", ["gomoku", "chess", "reading"])
+def test_main_memory_episodic(activity_id):
+    meta = get_activity_meta(activity_id)
+    assert meta.memory_policy.main_memory == "episodic", (
+        f"{activity_id}: main_memory must be 'episodic' (reflow on close)"
+    )
+
+
+def test_dream_seed_main_memory_deferred():
+    meta = get_activity_meta("dream_seed")
+    assert meta.memory_policy.main_memory == "deferred", (
+        "dream_seed uses its own seed chain, not the episodic reflow path"
+    )
 
 
 # ── Registry matches engine constant ──────────────────────────────────────────
