@@ -100,6 +100,18 @@ def _calc_intensity(content: str, emotion: str) -> int:
     return intensity
 
 
+def _clip_sentence(text: str, limit: int = 60) -> str:
+    """在 limit 字符内按句末标点截断；无标点则硬截并加省略号。"""
+    if len(text) <= limit:
+        return text
+    clipped = text[:limit]
+    for punct in "。！？；":
+        idx = clipped.rfind(punct)
+        if idx > 0:
+            return clipped[:idx + 1]
+    return clipped + "…"
+
+
 def _parse_intensity(block_lines: list) -> int:
     """从块行列表里读取 > emotion: 行的 intensity 值，没有则返回 0"""
     for line in reversed(block_lines):
@@ -303,21 +315,23 @@ def get_recent_days(user_id: str, days: int = 3, *, char_id: str = "yexuan") -> 
     return "\n\n".join(parts)
 
 
-async def search(user_id: str, query: str, llm_client=None, *, char_id: str = "yexuan") -> str:
+async def search(user_id: str, query: str, llm_client=None, *, char_id: str = "yexuan", return_trace: bool = False) -> str | tuple:
     recent_text = get_recent_days(user_id, days=30, char_id=char_id)
     if not recent_text:
-        return ""
+        return ("", []) if return_trace else ""
 
-    keywords: set = set()
+    from core.text_match import ngram_tokens
+    from core.config_loader import _char_name
     q = query.strip()
-    for length in (2, 3, 4):
-        for i in range(len(q) - length + 1):
-            chunk = q[i:i+length]
-            if chunk.strip():
-                keywords.add(chunk)
+    keywords = ngram_tokens(q)
 
     if not keywords:
-        return ""
+        return ("", []) if return_trace else ""
+
+    char_name = _char_name()
+    _ROLE_PREFIX_RE = re.compile(
+        rf"^\*\*(用户|{re.escape(char_name)})\*\*[:：](.*)$"
+    )
 
     today = datetime.now().date()
     matched: list = []
@@ -345,29 +359,46 @@ async def search(user_id: str, query: str, llm_client=None, *, char_id: str = "y
             # 改动2: 乘法衰减，高强度老事件不再压过近期低强度
             score = intensity * decay
 
-            # 改动3: 块级聚合，同一块只出一条结果
-            block_hits = []
-            max_relevance = 0.0
+            # P0-1: 按说话人逐行成卡，不跨说话人缝合
+            cur_role = "assistant"
             for line in block:
-                stripped = line.strip()
-                if not stripped or stripped.startswith("#") or stripped == "---" or stripped.startswith("> emotion:"):
+                s = line.strip()
+                if not s or s.startswith("#") or s == "---" or s.startswith("> emotion:"):
                     continue
-                hit_count = sum(1 for kw in keywords if kw in stripped)
-                if hit_count > 0:
-                    relevance = hit_count / max(len(keywords), 1)
-                    max_relevance = max(max_relevance, relevance)
-                    block_hits.append(stripped)
+                m_role = _ROLE_PREFIX_RE.match(s)
+                if m_role:
+                    cur_role = "user" if m_role.group(1) == "用户" else "assistant"
+                    body = m_role.group(2).strip()
+                else:
+                    body = s
+                if not body:
+                    continue
+                hit = sum(1 for kw in keywords if kw in body)
+                if hit > 0:
+                    relevance = hit / max(len(keywords), 1)
+                    matched.append((score + relevance, cur_role, _clip_sentence(body, 60), days_ago))
 
-            if block_hits:
-                final_score = score + max_relevance
-                block_text = " ".join(block_hits)[:80]
-                matched.append((final_score, block_text))
+    def _render_card(role: str, text: str, days_ago: int) -> str:
+        coarse = (
+            "今天" if days_ago == 0 else
+            "昨天" if days_ago == 1 else
+            "前几天" if days_ago < 7 else
+            f"约{days_ago}天前"
+        )
+        who = "你提到" if role == "user" else f"{char_name}当时说"
+        return f"（{coarse}）{who}：{text}"
 
     matched.sort(key=lambda x: x[0], reverse=True)
-    # 改动4: 阈值提高、数量收紧、分隔符更易读
     MIN_SCORE = 0.6
-    selected = [text for score, text in matched[:5] if score >= MIN_SCORE]
-    return "; ".join(selected) if selected else ""
+    selected = [(s, r, t, d) for s, r, t, d in matched[:5] if s >= MIN_SCORE]
+    result_str = "\n".join(_render_card(r, t, d) for _, r, t, d in selected) if selected else ""
+    if return_trace:
+        trace_items = [
+            {"score": round(s, 4), "role": r, "snippet": t[:80], "event_day": d}
+            for s, r, t, d in selected
+        ]
+        return result_str, trace_items
+    return result_str
 
 
 def get_highlights(user_id: str, days: int = 2, max_lines: int = 5) -> str:

@@ -21,6 +21,10 @@ from core.llm_output_validator import record_failure
 logger = logging.getLogger(__name__)
 
 
+class EpisodicCorruptError(Exception):
+    """Raised when episodic.json exists but cannot be parsed. Prevents silent memory wipe."""
+
+
 def _mem_read_file(user_id: str, *, char_id: str = "yexuan") -> Path:
     require_character_id(char_id)
     uid = safe_user_id(user_id)
@@ -55,14 +59,30 @@ def _index_write_file(user_id: str, *, char_id: str = "yexuan") -> Path:
 
 def _load_memories(user_id: str, *, char_id: str = "yexuan") -> list:
     require_character_id(char_id)  # guard before try — ValueError must not be swallowed
+    p = _mem_read_file(user_id, char_id=char_id)
     try:
-        return json.loads(_mem_read_file(user_id, char_id=char_id).read_text(encoding="utf-8"))
-    except Exception:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except FileNotFoundError:
         return []
+    except Exception as e:
+        logger.error(
+            "[episodic] 加载失败（疑似损坏），拒绝按空处理 uid=%s path=%s err=%s",
+            user_id, p, e,
+        )
+        raise EpisodicCorruptError(str(p)) from e
 
 
 def _save_memories(user_id: str, memories: list, *, char_id: str = "yexuan") -> None:
-    safe_write_json(_mem_write_file(user_id, char_id=char_id), memories)
+    p = _mem_write_file(user_id, char_id=char_id)
+    # Guard: refuse to overwrite a non-empty file with an empty list — almost certainly
+    # means an upstream _load_memories failure leaked through.
+    try:
+        if (not memories) and p.exists() and p.stat().st_size > 1024:
+            logger.error("[episodic] 拒绝用空列表覆写非空记忆文件 uid=%s", user_id)
+            return
+    except Exception:
+        pass
+    safe_write_json(p, memories)
 
 
 def load_unconsolidated(user_id: str, *, char_id: str = "yexuan") -> list[dict]:
@@ -78,8 +98,18 @@ def load_unconsolidated(user_id: str, *, char_id: str = "yexuan") -> list[dict]:
 
 def _load_index(user_id: str, *, char_id: str = "yexuan") -> dict:
     require_character_id(char_id)  # guard before try — ValueError must not be swallowed
+    p = _index_read_file(user_id, char_id=char_id)
     try:
-        return json.loads(_index_read_file(user_id, char_id=char_id).read_text(encoding="utf-8"))
+        return json.loads(p.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        pass
+    except Exception as e:
+        logger.error("[episodic] 索引损坏，从记忆重建 uid=%s path=%s err=%s", user_id, p, e)
+    # index is derived data — rebuild from memories rather than returning empty and killing hop-2
+    try:
+        memories = _load_memories(user_id, char_id=char_id)
+        _rebuild_index(user_id, memories, char_id=char_id)
+        return json.loads(p.read_text(encoding="utf-8"))
     except Exception:
         return {}
 
@@ -231,6 +261,8 @@ def write_episode(user_id: str, episode: dict, *, char_id: str = "yexuan") -> No
         episode["event_time"] = None
     if not isinstance(episode.get("expires_at"), (int, float)):
         episode["expires_at"] = None
+    if not isinstance(episode.get("occurred_at"), (int, float)):
+        episode["occurred_at"] = episode.get("timestamp", time.time())
 
     memories.append(episode)
     _save_memories(user_id, memories, char_id=char_id)
@@ -244,8 +276,10 @@ def retrieve(
     top_k: int = 3,
     *,
     char_id: str = "yexuan",
+    char_name: str = "",
     allow_strengthen: bool = True,
-) -> list:
+    return_trace: bool = False,
+) -> list | tuple:
     """
     按话题标签+情绪检索最相关的情景记忆，检索后强化strength。
     返回list[dict]，按相关性排序。
@@ -254,10 +288,17 @@ def retrieve(
       N2-A: fetch_context（读路径）调用时必须传 allow_strengthen=False，
       避免"召回→增强→更易召回"的永动机效应。
       post_process / 写路径可保持默认 True（向后兼容）。
+
+    return_trace: 若 True，返回 (result, trace_items) 而非单独的 result。
+      trace_items: list[dict] — 所有通过 MIN_SCORE 的候选项明细（score, selected 等）。
     """
-    memories = _load_memories(user_id, char_id=char_id)
+    try:
+        memories = _load_memories(user_id, char_id=char_id)
+    except EpisodicCorruptError:
+        logger.error("[episodic.retrieve] 文件损坏，本轮跳过 episodic uid=%s", user_id)
+        return ([], []) if return_trace else []
     if not memories:
-        return []
+        return ([], []) if return_trace else []
 
     from core.memory.mood_state import get_current as _get_mood, get_intensity as _get_intensity
     _current_mood = _get_mood()
@@ -266,25 +307,52 @@ def retrieve(
     index = _load_index(user_id, char_id=char_id)
     now = time.time()
 
-    # 候选集：同时匹配 topic_keywords 和 raw_facts，兼容旧记忆
+    # 候选集：n-gram 分别命中 topic_keywords / raw_facts；keyword 为主信号，facts 为弱辅证
     candidate_ids = set()
-    hit_counts = {}  # mem_id -> 命中的 topic_word 数
+    matched_map: dict = {}      # mem_id -> set(全部命中 gram)
+    kw_matched_map: dict = {}   # mem_id -> set(命中 topic_keywords 的 gram)
+    df: dict = {}
+    query_grams: set = set()
+    idf: dict = {}
     if topic:
-        topic_words = topic.split()
+        from core.text_match import ngram_tokens
+        _clean = topic.replace(char_name, "  ") if char_name else topic
+        query_grams = ngram_tokens(_clean, stopwords={char_name} if char_name else None)
         for mem in memories:
             keywords_text = " ".join(mem.get("topic_keywords") or mem.get("tags", []))
             facts_text = " ".join(mem.get("raw_facts", []))
-            haystack = keywords_text + " " + facts_text
-            hits = sum(1 for kw in topic_words if kw and kw in haystack)
-            if hits > 0:
-                candidate_ids.add(mem["id"])
-                hit_counts[mem["id"]] = hits
+            kw_hit = {g for g in query_grams if g in keywords_text}
+            fact_hit = {g for g in query_grams if g in facts_text}
+            matched = kw_hit | fact_hit
+            if matched:
+                matched_map[mem["id"]] = matched
+                kw_matched_map[mem["id"]] = kw_hit
+                for g in matched:
+                    df[g] = df.get(g, 0) + 1
 
-    # 无匹配时全量参与评分
-    if not candidate_ids:
-        candidate_ids = {m["id"] for m in memories}
+        N = max(1, len(memories))
+        idf = {g: math.log((N + 1) / (c + 1)) + 1.0 for g, c in df.items()}
+        SPECIFIC_DF_FRAC = 0.10
+        _specific_cap = max(1, int(SPECIFIC_DF_FRAC * N))
+        specific = {g for g, c in df.items() if c <= _specific_cap}
+
+        for mid, matched in matched_map.items():
+            kwm = kw_matched_map.get(mid, set())
+            # 主证据：命中关键词里的具体词，或命中≥2个关键词
+            if (kwm & specific) or (len(kwm) >= 2):
+                candidate_ids.add(mid)
+            # 弱辅证：纯 facts 命中要更强（≥2个不同具体词）才入选，挡掉"到了/一起"这类单词偶然命中
+            elif len(matched & specific) >= 2:
+                candidate_ids.add(mid)
+
+    # 无真实词面命中（或证据不足）：主路径不强行倒高强度记忆，交给 fallback。
+    if topic and not candidate_ids:
+        logger.debug("[episodic.retrieve] 无足够词面证据，主召回返回空，交给 fallback uid=%s", user_id)
+        return ([], []) if return_trace else []
 
     # 评分
+    REL_SCALE = 5.0   # idf_sum 归一化尺度（约"一个稀有词≈满分"），据 trace 可调
+    rel_map: dict = {}   # mem_id -> relevance_norm，供 trace 段读取
     scored = []
     for mem in memories:
         if mem["id"] not in candidate_ids:
@@ -300,9 +368,14 @@ def retrieve(
             emotion_bonus = 0.15 + _mood_intensity * 0.15
         else:
             emotion_bonus = 0.0
-        # query relevance：命中越多越相关，3 个及以上视为完全命中
-        relevance_bonus = 0.2 * min(hit_counts.get(mem["id"], 0) / 3, 1.0)
-        score = strength * decay + emotion_bonus + relevance_bonus
+        FACTS_WEIGHT = 0.3   # 纯 facts 命中的折扣（据 trace 可调）
+        _kwm = kw_matched_map.get(mem["id"], set())
+        _fact_only = matched_map.get(mem["id"], set()) - _kwm
+        idf_sum = sum(idf.get(g, 0.0) for g in _kwm) + FACTS_WEIGHT * sum(idf.get(g, 0.0) for g in _fact_only)
+        relevance_norm = min(1.0, idf_sum / REL_SCALE)
+        rel_map[mem["id"]] = relevance_norm
+        # 相关性闸门：弱相关时把高强度记忆压低（×0.4），强相关时放行（×1.0）
+        score = strength * decay * (0.4 + 0.6 * relevance_norm) + emotion_bonus + 0.3 * relevance_norm
         expires_at = mem.get("expires_at")
         if isinstance(expires_at, (int, float)) and now > expires_at:
             score *= 0.3
@@ -347,13 +420,68 @@ def retrieve(
 
         result = selected
 
+    # ── hop-2：关键词二跳（保守、flag 可关）────────────────────────────────
+    from core.config_loader import get_config
+    _two_hop = get_config().get("episodic", {}).get("two_hop_enabled", False)
+    hop2_added: list = []
+    if _two_hop and topic and result:
+        HOP2_MAX = 2
+        HOP2_DECAY = 0.4
+        mem_by_id = {m["id"]: m for m in memories}
+        _seed_ids = {m["id"] for m in result}
+        _already = _seed_ids | candidate_ids
+
+        _N = max(1, len(memories))
+        _KW_SHARE_CAP = max(2, int(0.10 * _N))
+        cand_scores: dict = {}
+        for seed in result:
+            seed_rel = rel_map.get(seed["id"], 0.5)
+            for kw in (seed.get("topic_keywords") or []):
+                linked = index.get(kw, [])
+                if not (1 < len(linked) <= _KW_SHARE_CAP):
+                    continue
+                for mid in linked:
+                    if mid in _already or mid not in mem_by_id:
+                        continue
+                    m = mem_by_id[mid]
+                    if m.get("status", "open") in ("resolved", "elapsed"):
+                        continue
+                    if m.get("strength", 0) < 0.5:
+                        continue
+                    cand_scores[mid] = cand_scores.get(mid, 0.0) + \
+                        seed_rel * HOP2_DECAY * m.get("strength", 0.5)
+
+        ranked = sorted(cand_scores.items(), key=lambda kv: kv[1], reverse=True)
+        for mid, sc in ranked:
+            if len(hop2_added) >= HOP2_MAX:
+                break
+            if sc < MIN_SCORE:
+                continue
+            m = mem_by_id[mid]
+            m_tex = m.get("emotion_texture", "") or ""
+            if m_tex and any(
+                _texture_similarity(m_tex, s.get("emotion_texture", "") or "") > 0.6
+                for s in result if s.get("emotion_texture")
+            ):
+                continue
+            hop2_added.append(m)
+
+        result = result + hop2_added
+
     # 检索后强化（N2-A: allow_strengthen=False 时跳过，读路径不写回）
+    _COOLDOWN_S = 6 * 3600
+    _STRENGTH_CEIL_NONCORE = 0.9
     if allow_strengthen:
         ids_to_strengthen = {m["id"] for m in result}
         changed = False
         for mem in memories:
             if mem["id"] in ids_to_strengthen:
-                mem["strength"] = min(1.0, mem.get("strength", 0.5) + 0.15)
+                # P0-4: 冷却 + 上限，防 strength 单调爬升
+                last = mem.get("last_retrieved") or 0
+                if now - last < _COOLDOWN_S:
+                    continue
+                ceil = 1.0 if mem.get("is_core") else _STRENGTH_CEIL_NONCORE
+                mem["strength"] = min(ceil, mem.get("strength", 0.5) + 0.15)
                 mem["retrieval_count"] = mem.get("retrieval_count", 0) + 1
                 mem["last_retrieved"] = now
                 changed = True
@@ -372,6 +500,38 @@ def retrieve(
             "[episodic.retrieve] allow_strengthen=False，跳过 strength 写回 uid=%s", user_id
         )
 
+    if return_trace:
+        _selected_ids = {m["id"] for m in result}
+        trace_items = []
+        for score, mem in scored:
+            _hay = (" ".join(mem.get("topic_keywords") or mem.get("tags", []))
+                    + " " + " ".join(mem.get("raw_facts", [])))
+            trace_items.append({
+                "id": mem["id"],
+                "score": round(score, 4),
+                "hop": 1,
+                "kw": sorted(g for g in query_grams if g in _hay),
+                "rel": round(rel_map.get(mem["id"], 0.0), 3),
+                "summary": (mem.get("narrative_summary") or mem.get("summary", ""))[:80],
+                "strength": round(mem.get("strength", 0.5), 3),
+                "emotion_peak": mem.get("emotion_peak", "neutral"),
+                "kw_src": "keyword" if kw_matched_map.get(mem["id"]) else "facts",
+                "selected": mem["id"] in _selected_ids,
+            })
+        for mem in hop2_added:
+            trace_items.append({
+                "id": mem["id"],
+                "score": round(cand_scores.get(mem["id"], 0.0), 4),
+                "hop": 2,
+                "kw": [],
+                "rel": round(rel_map.get(mem["id"], 0.0), 3),
+                "summary": (mem.get("narrative_summary") or mem.get("summary", ""))[:80],
+                "strength": round(mem.get("strength", 0.5), 3),
+                "emotion_peak": mem.get("emotion_peak", "neutral"),
+                "kw_src": "two_hop",
+                "selected": True,
+            })
+        return result, trace_items
     return result
 
 
@@ -421,25 +581,43 @@ def format_for_prompt(
         if not summary:
             continue
 
-        timestamp = mem.get("timestamp", now)
-        elapsed_seconds = max(0.0, now - timestamp)
-        days = elapsed_seconds / 86400
+        # P0-3: 用 occurred_at（事件真实时刻）渲染时间锚；旧数据回退 timestamp
+        anchor_ts = mem.get("occurred_at")
+        if not isinstance(anchor_ts, (int, float)):
+            anchor_ts = mem.get("timestamp", now)
+        elapsed = max(0.0, now - anchor_ts)
+        days = elapsed / 86400
         local_now = datetime.fromtimestamp(now)
-        local_then = datetime.fromtimestamp(timestamp)
-        if elapsed_seconds < 3600:
-            time_str = "刚刚"
-        elif elapsed_seconds < 6 * 3600:
-            time_str = "几小时前"
-        elif local_then.date() == local_now.date():
-            time_str = "今天上午" if local_then.hour < 12 else "今天早些时候"
-        elif days < 3:
-            time_str = "前几天"
-        elif days < 7:
-            time_str = "上周"
-        elif days < 30:
-            time_str = f"大约{int(days)}天前"
+        local_then = datetime.fromtimestamp(anchor_ts)
+        is_past = mem.get("temporal_ref") == "past"
+
+        if is_past:
+            # 回顾型：禁用刚刚/几小时前/今天，只给粗粒度
+            if days < 1:
+                time_str = "之前"
+            elif days < 3:
+                time_str = "前几天"
+            elif days < 7:
+                time_str = "上周"
+            elif days < 30:
+                time_str = f"大约{int(days)}天前"
+            else:
+                time_str = f"{int(days // 30)}个月前"
         else:
-            time_str = f"{int(days // 30)}个月前"
+            if elapsed < 3600:
+                time_str = "刚刚"
+            elif elapsed < 6 * 3600:
+                time_str = "几小时前"
+            elif local_then.date() == local_now.date():
+                time_str = "今天上午" if local_then.hour < 12 else "今天早些时候"
+            elif days < 3:
+                time_str = "前几天"
+            elif days < 7:
+                time_str = "上周"
+            elif days < 30:
+                time_str = f"大约{int(days)}天前"
+            else:
+                time_str = f"{int(days // 30)}个月前"
 
         texture = mem.get("emotion_texture", "")
         arc = mem.get("emotion_arc", "")
@@ -474,19 +652,32 @@ def _render_elapsed_summary(summary: str) -> str:
     return re.sub(r"(?:这周|本周|下周)?周末|下周[一二三四五六日天]", "那天", rendered)
 
 
-def retrieve_fallback(user_id: str, recent_history: list[str], top_k: int = 1, *, char_id: str = "yexuan") -> list[dict]:
+def retrieve_fallback(user_id: str, recent_history: list[str], top_k: int = 1, *, char_id: str = "yexuan", return_trace: bool = False) -> list[dict] | tuple:
     """
     tag 未命中时的兜底召回。不依赖 query，按强度+时间挑近期高强度记忆。
     筛选条件：7天内、strength >= 0.6、不在最近 short_term 内容里。
+
+    return_trace: 若 True，返回 (result, trace_items)。
     """
-    memories = _load_memories(user_id, char_id=char_id)
+    try:
+        memories = _load_memories(user_id, char_id=char_id)
+    except EpisodicCorruptError:
+        logger.error("[episodic.retrieve_fallback] 文件损坏，本轮跳过 episodic uid=%s", user_id)
+        return ([], []) if return_trace else []
     now = time.time()
     candidates = []
     for m in memories:
         if m.get("status", "open") in ("resolved", "elapsed"):
             continue
-        age_days = (now - m.get("timestamp", now)) / 86400
+        # P0-4: 用 occurred_at（事件真实时刻）卡 7 天窗口
+        anchor = m.get("occurred_at")
+        if not isinstance(anchor, (int, float)):
+            anchor = m.get("timestamp", now)
+        age_days = (now - anchor) / 86400
         if age_days > 7:
+            continue
+        # 核心记忆不靠"近期高强度兜底"反复复活：真实发生超 2 天则跳过
+        if m.get("is_core") and age_days > 2:
             continue
         if m.get("strength", 0) < 0.6:
             continue
@@ -508,7 +699,20 @@ def retrieve_fallback(user_id: str, recent_history: list[str], top_k: int = 1, *
             f"selected={len([v for v in vals if v >= 0.4])}"
         )
     candidates.sort(key=lambda x: x[0], reverse=True)
-    return [m for _, m in candidates[:top_k]]
+    selected = [m for _, m in candidates[:top_k]]
+    if return_trace:
+        trace_items = [
+            {
+                "id": m["id"],
+                "score": round(score, 4),
+                "hop": "fallback",
+                "summary": (m.get("narrative_summary") or m.get("summary", ""))[:80],
+                "strength": round(m.get("strength", 0.5), 3),
+            }
+            for score, m in candidates[:top_k]
+        ]
+        return selected, trace_items
+    return selected
 
 
 
