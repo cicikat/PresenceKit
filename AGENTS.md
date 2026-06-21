@@ -12,9 +12,7 @@
 
 ## 代码根目录
 
-```
-D:\ai\qq-st-bot\
-```
+仓库克隆目录（即本文件所在目录）。
 
 ---
 
@@ -35,6 +33,7 @@ D:\ai\qq-st-bot\
 | 不确定设计意图、准入标准、禁止行为 | `DESIGN.md` |
 | 改并发/锁/数据安全 | `docs/memory.md` → 七、并发保护 |
 | 在 Codex / Claude Code Windows 环境运行测试、跨仓验证、处理沙箱报错 | `docs/dev-environment.md` |
+| 改多模型接入、preset 路由、LLM provider 适配、prompt_style 转换 | `docs/model-presets.md` |
 
 ---
 
@@ -79,6 +78,9 @@ D:\ai\qq-st-bot\
 | 角色人设提醒轮换 | `core/author_note_rotator.py` |
 | 情绪状态软提示生成 | `core/mood_text.py` |
 | 安全写入工具（atomic write） | `core/safe_write.py` |
+| LLM 多 preset adapter + 路由 | `core/llm_client.py` |
+| Model registry（preset 构建、路由解析、参数合并）| `core/model_registry.py` |
+| Prompt style 转换钩子（narrative / xml） | `core/prompt_style.py` |
 | LLM输出校验与失败计数 | `core/llm_output_validator.py` |
 | 并发锁池 | `core/memory/locks.py` |
 | 感知暂存（两阶段提交） | `core/memory/pending_perception.py` |
@@ -132,5 +134,5 @@ python run_test.py
 2. pytest 默认临时目录可能因沙箱权限报 `PermissionError`；把 `TEMP` / `TMP` 临时指向仓库内 `.tmp`，测试后安全清理。
 3. `Emerald-client` 的 Vite build 可能因沙箱禁止写 `node_modules/.vite-temp` 报 `EPERM`；应申请权限后原命令重跑。
 4. 跨仓执行 git 时可能遇到 `dubious ownership`；优先按命令使用
-   `git -c safe.directory=D:/ai/Emerald-client ...`，不要擅自修改全局 git 配置。
+   `git -c safe.directory=<Emerald-client 路径> ...`，不要擅自修改全局 git 配置。
 5. 两个仓库经常存在其他 agent 的并行未提交改动。只改任务相关文件，完整测试失败时先判断是否与本任务相关，禁止顺手修复或回滚无关改动。

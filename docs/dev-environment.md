@@ -7,11 +7,11 @@
 
 ## 一、开始前检查
 
-本项目常与 `D:\ai\Emerald-client` 跨仓联动，两个仓库都可能已有未提交改动。
+本项目常与 `Emerald-client`（前端仓库，与本仓同级目录）跨仓联动，两个仓库都可能已有未提交改动。
 
 ```powershell
 git status --short
-git -c safe.directory=D:/ai/Emerald-client -C D:\ai\Emerald-client status --short
+git -c safe.directory=<Emerald-client 路径> -C <Emerald-client 路径> status --short
 ```
 
 - 只改当前任务涉及的文件。
@@ -51,14 +51,13 @@ PermissionError: [WinError 5] ... AppData\Local\Temp\pytest-of-...
 将临时目录指向仓库内可写目录后重跑：
 
 ```powershell
-$env:TEMP='D:\ai\qq-st-bot\.tmp'
+$env:TEMP="$PWD\.tmp"
 $env:TMP=$env:TEMP
 New-Item -ItemType Directory -Force $env:TEMP | Out-Null
 & '<workspace dependency discovery 返回的 python.exe>' -m pytest -q
 ```
 
-完成后只能清理确认位于仓库内的 `.tmp`。删除前必须校验解析后的绝对路径仍在
-`D:\ai\qq-st-bot` 下，禁止对未校验的计算路径递归删除。
+完成后只能清理确认位于仓库内的 `.tmp`。删除前必须校验解析后的绝对路径仍在仓库根目录下，禁止对未校验的计算路径递归删除。
 
 ### 测试结果判读
 
@@ -71,20 +70,20 @@ New-Item -ItemType Directory -Force $env:TEMP | Out-Null
 
 ## 三、Emerald-client 验证
 
-前端仓库：`D:\ai\Emerald-client`
+前端仓库（与本仓同级，克隆时按需调整路径）。
 
 ### Git dubious ownership
 
 沙箱用户与仓库所有者不同，git 可能拒绝执行：
 
 ```text
-fatal: detected dubious ownership in repository at 'D:/ai/Emerald-client'
+fatal: detected dubious ownership in repository at '<Emerald-client 路径>'
 ```
 
 使用单命令范围的安全目录参数：
 
 ```powershell
-git -c safe.directory=D:/ai/Emerald-client -C D:\ai\Emerald-client status --short
+git -c safe.directory=<Emerald-client 路径> -C <Emerald-client 路径> status --short
 ```
 
 不要擅自执行 `git config --global --add safe.directory ...`，避免永久扩大信任范围。

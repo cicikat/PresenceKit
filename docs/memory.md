@@ -227,7 +227,12 @@ clamp 单测是弱断言（未验真截顶）；ShortTermMemory.append 类封装
    - `envelope.can_write_memory=False`（默认 WriteEnvelope）：所有写入均跳过，用于无副作用 dry-run。
    - `char_id` 由 `post_process` 显式传入，决定写入哪个角色桶。
 
-**搜索**：`event_log.search(user_id, content, llm_client)` 异步执行，返回拼接字符串。当前实现会把 query 切成 2/3/4 字符片段做关键词集合，扫描最近 30 天日志块。
+**搜索**：`event_log.search(user_id, content, llm_client)` 异步执行，返回按行排列的第三人称事实卡。每张卡带明确的说话人归属和粗粒度时间标签，格式如下：
+
+```
+（今天）你提到：最近睡不好
+（前几天）叶瑄当时说：你要注意休息
+```
 
 **搜索评分**：
 ```
@@ -236,8 +241,12 @@ score = intensity * decay + relevance
 ```
 
 - 7 天外且 intensity < 1 的块直接跳过。
-- 同一时间块只产生一条结果，最多取前 5 条。
-- `MIN_SCORE = 0.6`，低于阈值不注入。
+- 每行**按说话人单独成卡**（P0-1），不跨说话人拼接、不截断在词中间。
+- 60 字以上按句末标点截断；无标点时加"…"。
+- 时间粗粒度：今天 / 昨天 / 前几天 / 约N天前。
+- 最多取前 5 张卡，`MIN_SCORE = 0.6`，低于阈值不注入。
+
+**投毒防护（P0-2）**：assistant 回复写入 short_term/event_log 前，`reality_output_scrubber` 会删除以说话人标签开头的整行（如 `用户：…` / `叶瑄：…`），防止模型自写对白落库后被 search 误认为用户发言。
 
 `get_highlights(user_id, days, max_lines)` 是独立函数，
 从最近 N 天日志里提取有情感词的用户发言，供调度器碎碎念触发时参考，不走搜索路径。
@@ -258,6 +267,7 @@ score = intensity * decay + relevance
 {
   "id": "ep_1234567890",
   "timestamp": 1234567890.0,
+  "occurred_at": 1234500000.0,
   "raw_facts": ["用户提到最近失眠严重", "用户说'睡不着'", "用户表达了疲惫"],
   "topic_keywords": ["失眠", "深夜", "陪伴"],
   "emotion_peak": "gentle",
@@ -265,6 +275,7 @@ score = intensity * decay + relevance
   "emotion_arc": "从担心到平静",
   "user_state": "tired_and_struggling",
   "narrative_summary": "用户说最近失眠严重，他陪他聊到很晚",
+  "temporal_ref": "none",
   "strength": 0.85,
   "is_core": false,
   "status": "open",
@@ -276,6 +287,15 @@ score = intensity * decay + relevance
   "consolidated_at": null
 }
 ```
+
+字段语义（P0-3 双时间戳）：
+
+| 字段 | 语义 |
+|---|---|
+| `timestamp` | **recorded_at**：这条记忆被反思/写入的时刻。decay / index / MMR 排序用此字段。 |
+| `occurred_at` | **事件真实发生时刻**的最佳估计。`format_for_prompt()` 渲染时间锚（"刚刚" / "N个月前"）一律读此字段；旧数据缺失时回退 `timestamp`。 |
+| `temporal_ref` | `"future"` / `"past"` / `"none"`。`"past"` 时渲染层禁用刚刚/几小时前/今天等近期锚点，改为"之前" / "前几天" / "N个月前"，防止回顾型提及被渲染成刚发生的事。 |
+| `event_time` | **未来**事件的预定时刻（TTL/expires_at 用）。与 `occurred_at` 含义不同，勿混用。 |
 
 ### 写入：reflect_to_episodic()
 
@@ -428,9 +448,10 @@ episodic_result = format_for_prompt(
 
 当主召回没有可注入结果时，prompt_builder 会尝试注入一条近期高强度兜底记忆：
 
-- 只看 7 天内记忆
+- **只看 `occurred_at`（事件真实时刻）7 天内的记忆**（P0-4）；旧数据缺失 `occurred_at` 时回退 `timestamp`
 - `strength >= 0.6`
 - 与最近 short_term 内容不相似
+- **核心记忆（`is_core=True`）额外限制**：`occurred_at` 超过 2 天不允许通过 fallback 复活，防止"生日/纪念日"一再浮起（P0-4）
 - score = `strength × max(0.5, 1 / (age_days + 1))`，仅用于排序
 
 日志中的 `selected` 是 `score >= 0.4` 的统计计数，不是实际过滤阈值。

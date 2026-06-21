@@ -1,91 +1,101 @@
-qq:
-  enabled: false     # 是否连接 QQ / NapCat；暂时不用 QQ 时改为 false
-  host: 127.0.0.1   # NapCat WebSocket 地址，一般不用改
-  port: 3001         # NapCat WebSocket 端口，和 NapCat 设置里保持一致
+# ── 多模型 Preset 系统（推荐，见 docs/model-presets.md）──────────────────────
+# 若不配此块，系统自动从下方 llm: 块合成等价行为（向后兼容）。
+model_presets:
+  active_routing: default          # 当前生效的路由方案名
 
-vision:
-  enabled: true      # 是否启用图片识别（发送图片时自动描述）
-  provider: glm      # 视觉模型提供商：gemini / openai / glm / custom
-  api_key: YOUR_VISION_API_KEY   # 视觉模型 API Key，勿提交真实值
-  model: glm-4v-flash            # 视觉模型名称
-  base_url: https://open.bigmodel.cn/api/paas/v4/  # 对应 provider 的接口地址
+  defaults:                        # 全局生成参数默认值
+    temperature: 1.0
+    top_p: 0.9
+    max_tokens: 4000
+    frequency_penalty: 0.3
+    presence_penalty: 0.4
 
+  presets:
+    deepseek-default:
+      provider_kind: deepseek
+      base_url: https://api.deepseek.com
+      api_key: YOUR_DEEPSEEK_API_KEY
+      model: deepseek-chat
+      tool_call_mode: function_calling
+      params:
+        temperature: 1.0
+        frequency_penalty: 0.3
+        presence_penalty: 0.4
+
+    claude-sonnet:
+      provider_kind: anthropic_compat  # Claude 经 OpenAI 兼容层
+      base_url: https://your-oneapi.example/v1
+      api_key: YOUR_ONEAPI_KEY
+      model: claude-sonnet-4-6
+      tool_call_mode: function_calling
+      # prompt_style 省略 → anthropic_compat 默认 xml
+      params:
+        temperature: 0.8
+        # frequency/presence_penalty 被白名单过滤，不会发给 API
+
+    local-qwen:
+      provider_kind: local
+      base_url: http://127.0.0.1:8000/v1
+      api_key: none
+      model: qwen2.5-72b-instruct
+      tool_call_mode: xml_fallback
+      prompt_style: narrative
+
+  routing_profiles:
+    default:                       # 全 DeepSeek，等价旧行为
+      chat:           deepseek-default
+      intent:         deepseek-default
+      probe:          deepseek-default
+      summary:        deepseek-default
+      detect_emotion: deepseek-default
+      consolidation:  deepseek-default
+
+    claude-main:                   # 主对话走 Claude，杂活留 DS
+      chat:           claude-sonnet
+      intent:         deepseek-default
+      probe:          deepseek-default
+      summary:        deepseek-default
+      detect_emotion: deepseek-default
+      consolidation:  deepseek-default
+
+# ── Legacy 扁平 llm: 块（向后兼容，无 model_presets 时生效）────────────────
 llm:
-  provider: deepseek             # 主 LLM 提供商
-  api_key: YOUR_LLM_API_KEY      # 主 LLM API Key，勿提交真实值
-  model: deepseek-chat           # 模型名称
+  provider: deepseek
+  api_key: YOUR_DEEPSEEK_API_KEY
+  model: deepseek-chat
   base_url: https://api.deepseek.com
   tool_call_mode: function_calling
   temperature: 1
-  top_p: 0.95
+  top_p: 0.9
   max_tokens: 4000
-  frequency_penalty: 0.1
-
-memory:
-  short_term_rounds: 20          # 短期记忆注入轮数（加权子集）
-  short_term_disk_rounds: 50     # 磁盘保留轮数；注入仍按 short_term_rounds 预算加权选子集
-  group_context_lines: 50        # 群聊上下文行数
-  rag_top_k: 5
-  rag_score_threshold: 0.6
-  summary_every_n_rounds: 20     # 每隔多少轮更新用户画像
-
-character:
-  default: 角色名.json            # characters/ 目录下的角色卡文件名
-  name: 角色名                    # 触发消息里使用的角色名，改成你的角色名
-  consistency_check_every_n: 15
-
-session:
-  timeout_minutes: 10            # 会话超时时间（分钟）
-
-plugins:
-  voice:
-    enabled: false
-    mode: local
-    local_url: http://127.0.0.1:9880
-  image:
-    enabled: false
-    mode: local
-    local_url: http://127.0.0.1:7860
-
-error:
-  max_retries: 3
-  retry_delay_seconds: 2
-  fallback_message: 我现在有点累，等会儿再聊～
-
+  frequency_penalty: 0.3
+  presence_penalty: 0.4
+vision:
+  enabled: true
+  provider: glm
+  api_key: YOUR_VISION_API_KEY
+  model: glm-4v-flash
+  base_url: https://open.bigmodel.cn/api/paas/v4/
+qq:
+  enabled: true
+  host: 127.0.0.1
+  port: 3001
 admin:
   enabled: true
   auto_start: true
-  host: 127.0.0.1   # 本机调试用 127.0.0.1；Tailnet/多设备访问需 0.0.0.0
-  port: 8080         # 管理面板端口，浏览器访问 http://127.0.0.1:8080
-  secret_key: YOUR_ADMIN_SECRET  # 请改随机值，优先用环境变量 YEXUAN_ADMIN_SECRET 注入，勿提交真实值
-
-# 手机中继唤醒（任一项为空时静默禁用；中继 payload 只发信号，不含消息正文）
-relay_base_url: null             # 例如 https://ntfy.example.com（无尾斜杠）
-relay_topic: null                # 完整设备 topic，例如 yexuan/<user_id>/<device_token>
-relay_token: null                # 后端发布凭证；不要复用 admin secret
-
+  host: 0.0.0.0
+  port: 8080             # 管理面板端口，浏览器访问 http://127.0.0.1:8080
+  secret_key: YOUR_ADMIN_SECRET  # 请改随机值，优先用环境变量 
 notify:
   enabled: true
-  target_qq: '你的QQ号'          # 机器人上线时发通知的目标 QQ 号，勿提交真实值
+  target_qq: YOUR-TARGET-QQ
   message: 已上线，等你回来
-
+emerald_desktop:
+  path: YOUR-DESKTOP-PATH
 proxy:
-  enabled: false                 # 是否启用代理（访问 Google/Gemini 等需要）
-  http: http://127.0.0.1:7897   # 代理地址，改成你本地代理的端口
+  enabled: false
+  http: http://127.0.0.1:7897
   https: http://127.0.0.1:7897
-
-mail:
-  enabled: false                 # true 后才会真正发送角色来信
-  smtp_host: smtp.gmail.com
-  smtp_port: 587
-  proxy_url: ''                  # SMTP 直连失败时填写，如 http://127.0.0.1:7897
-  smtp_user: your@gmail.com
-  smtp_password: app-password-here
-  from_addr: your@gmail.com
-  from_name: 角色名
-  to_addr: recipient@example.com
-  subject_prefix: 【来信】
-
 tools:
   get_time:
     enabled: true
@@ -123,11 +133,16 @@ tools:
     enabled: false
   exit_yandere:
     enabled: true
-
+  toy_vibrate:
+    enabled: true
+  toy_stop:
+    enabled: true
+  toy_pattern:
+    enabled: true
 tts:
-  enabled: true                  # 是否启用语音合成
-  probability: 0.1               # 触发语音的概率（0.0~1.0）
-  api_url: http://127.0.0.1:9872 # GPT-SoVITS Gradio API 地址
+  enabled: true
+  probability: 0.1
+  api_url: http://127.0.0.1:9872
   top_k: 15
   top_p: 1.0
   temperature: 1.0
@@ -137,54 +152,122 @@ tts:
   ref_free: false
   if_freeze: false
   if_sr: false
-  ref_audio: content/characters/demo_character/voice/温柔.wav  # 相对于项目根目录；也接受绝对路径；缺失时 TTS 静默降级
-  prompt_text: ''                # 参考音频对应的文字（可留空）
+  ref_audio: content/characters/角色id/voice/default.wav
+  prompt_text: ''
   speed: 1.0
-  emotion_enabled: true          # 是否按情绪切换参考音频
+  emotion_enabled: true
   emotions:
     neutral:
-      ref_audio: content/characters/demo_character/voice/温柔.wav
+      ref_audio: content/characters/角色id/voice/neutral.wav
       prompt_text: ''
       speed: 1
     happy:
-      ref_audio: content/characters/demo_character/voice/温柔.wav
+      ref_audio: content/characters/角色id/voice/happy.wav
       prompt_text: ''
       speed: 1.1
     sad:
-      ref_audio: content/characters/demo_character/voice/温柔.wav
+      ref_audio: content/characters/角色id/voice/sad.wav
       prompt_text: ''
       speed: 0.9
     gentle:
-      ref_audio: content/characters/demo_character/voice/温柔.wav
+      ref_audio: content/characters/角色id/voice/gentle.wav
       prompt_text: ''
       speed: 0.95
     surprised:
-      ref_audio: content/characters/demo_character/voice/生气.wav
+      ref_audio: content/characters/角色id/voice/surprised.wav
       prompt_text: ''
       speed: 1.05
     angry:
-      ref_audio: content/characters/demo_character/voice/生气.wav
+      ref_audio: content/characters/角色id/voice/angry.wav
       prompt_text: ''
       speed: 1.1
-
+hardware:
+  enabled: false
+  buttplug_ws: ws://127.0.0.1:12345
+mail:
+  enabled: true
+  smtp_host: smtp.gmail.com
+  smtp_port: 587
+  proxy_url: http://127.0.0.1:YOUR-端口
+  smtp_user: YOUR-接收的邮箱
+  smtp_password: YOUR-邮箱通行密码
+  from_addr: YOUR-发送的邮箱
+  from_name: 角色名
+  to_addr: YOUR-邮箱
+  subject_prefix: 【来信】
+plugins:
+  voice:
+    enabled: false
+    mode: local
+    local_url: http://127.0.0.1:9880
+  image:
+    enabled: false
+    mode: local
+    local_url: http://127.0.0.1:7860
+logging:
+  console_quiet: true   # true=只 WARNING+ 上控制台 + 丢成功 access；false=恢复啰嗦
+mode: production
+standalone_mode: false
+data_prefix: "data"
+memory:
+  short_term_rounds: 20
+  short_term_disk_rounds: 50
+  group_context_lines: 50
+  rag_top_k: 5
+  rag_score_threshold: 0.6
+  summary_every_n_rounds: 20
+episodic:
+  two_hop_enabled: false   # 默认关；置 true 开二跳做对比测试
 context:
-  max_turns: 30  # [deprecated alias] 请改用 memory.short_term_rounds；此字段仅作兼容读取，新写入不再使用
-
+  max_turns: 30
 chat:
   mode: chat
   style: chat
   multi_message: true
-
+group_chat:
+  min_responders: 1
+  max_responders: 2
+  max_ai_chain_depth: 2
+  respond_threshold: 0.5
+  spontaneous_threshold: 0.7
+  addressed_exclusive: false
+  transcript_limit: 200
+  memory_strength:
+    solo: 1.0
+    group: 0.7
+    trigger: 0.4
+  debug_token_log: true
 diary:
-  obsidian_path: ''              # 留空则回退 diary_fallback/；填 Obsidian vault 的本地绝对路径，勿提交真实路径
-
+  characters:
+  - 角色名
+retention:
+  inbox:
+    max_age_days: 7
+  image_cache:
+    max_age_days: 30
+    max_files: 500
+  dead_letter_queue:
+    max_files: 200
+  reminders:
+    prune_done_days: 30
+  dreams_archive:
+    max_files: 200
+  observations:
+    max_raw: 100
+character:
+  default: default
+  name: 角色名
+  consistency_check_every_n: 15
+session:
+  timeout_minutes: 10
 scheduler:
   enabled: true
-  presence_nag: false
+  overflow_trigger: true
+  presence_nag: true
   presence_nag_minutes: 60
   activity_level: high
-  owner_id: '你的QQ号'           # 主人的 QQ 号，调度器主动消息发送目标，勿提交真实值
-  owner_birthday: 'MM-DD'        # 主人生日，格式 MM-DD，勿提交真实值
+  owner_id: 'YOUR-qq号'
+  owner_birthday: MM-DD  # 格式示例：01-01
   morning_greeting: true
   night_reminder: true
   random_message: true
@@ -192,7 +275,7 @@ scheduler:
   moments_enabled: true
   signature_enabled: true
   signatures:
-  - 今天的光很好
+  - 示例签名文字  # 可填多条，角色会轮换展示
   daily_journal: true
   period_reminder: true
   diary_reminder: true
@@ -201,63 +284,20 @@ scheduler:
   festival: true
   holiday_boost: true
   sensor_aware:
-    enabled: true              # 默认关闭，手动开启
+    enabled: true
     tick_interval_seconds: 30
   gating_shadow:
-    enabled: true              # 关闭后 write_shadow_tick 不再写入（观测期结束后可设为 false）
-    max_size_mb: 5             # 超过此大小触发滚动
-    keep: 3                    # 保留最多 N 份归档（.1.gz … .N.gz），旧的直接删
-
-retention:
-  inbox:
-    max_age_days: 7            # inbox/ 裸上传文件超过 N 天后删（视觉缓存已落 image_cache/）
-  image_cache:
-    max_age_days: 30           # sha256 缓存条目超龄删
-    max_files: 500             # 条数上限，超出时删最旧
-  dead_letter_queue:
-    max_files: 200             # DLQ 文件数上限，超出时删最旧（由 dlq_monitor 24h 触发）
-  reminders:
-    prune_done_days: 30        # done=true 且 remind_at 过期 N 天后清理
-  dreams_archive:
-    max_files: 200             # dreams/archive/ 文件数上限，超出时删最旧
-  observations:
-    max_raw: 100               # compaction：保留最近 N 条原始观察，超出部分文本去重合并
-
+    enabled: true
+    max_size_mb: 5
+    keep: 3
+error:
+  max_retries: 3
+  retry_delay_seconds: 2
+  fallback_message: 我现在有点累，等会儿再聊～
 forensic_logs:
-  max_size_mb: 5               # fixation/trigger_state/execute_dryrun.jsonl 共用阈值
-  keep: 5                      # 保留归档份数
+  max_size_mb: 5
+  keep: 5
   event_log:
-    day_archive_days: 30       # 超过 N 天的按天 .md 文件 → .md.gz
-    full_log_max_size_mb: 10   # full_log.md 超过此大小触发滚动
-    full_log_keep: 3           # full_log.md 归档保留份数
-
-anniversaries:
-- key: anniversary_first
-  month: 1
-  day: 1
-  year_start: 2025
-  prompt_zero: （{char}记得今天是你们初见的日子，心里有点不一样的感觉）
-  prompt_years: （{char}想起来，今天是你们在一起第{years}年了）
-- key: anniversary_hug
-  month: 6
-  day: 1
-  year_start: 2025
-  prompt_zero: （{char}记得今天的日子，指尖停在那里没动）
-  prompt_years: （{char}记得今天，那件事过去{years}年了，还是记得很清楚）
-- key: anniversary_1314
-  month: 8
-  day: 14
-  year_start: 2025
-  prompt_zero: （{char}盯着日期看了一会儿，没说话，只是轻轻呼出一口气）
-  prompt_years: （{char}盯着日期看了一会儿，没说话，只是轻轻呼出一口气）
-
-character_birthday:
-  month: 12
-  day: 31
-  prompt: （今天是{char}自己的生日，他没有主动提，只是安静地陪着你）
-
-standalone_mode: false
-mode: production
-
-emerald_desktop:
-  path: ''                       # Emerald 客户端目录，按本机填写，勿提交真实路径
+    day_archive_days: 30
+    full_log_max_size_mb: 10
+    full_log_keep: 3

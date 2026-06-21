@@ -1,4 +1,4 @@
-# QQ-ST-Bot
+# Emerald-Presence
 
 一个有记忆、有感知、会主动存在的 QQ 情感陪伴型机器人。
 不是工具集，是唯一的角色（角色卡须自备）
@@ -36,8 +36,8 @@
 ### 1. 获取项目
 
 ```bash
-git clone https://github.com/chah69634-arch/qq-st-bot.git
-cd qq-st-bot
+git clone https://github.com/chah69634-arch/Emerald-presence.git
+cd Emerald-presence
 ```
 
 或直接下载 ZIP 解压。
@@ -100,7 +100,7 @@ python main.py
 ## 目录结构
 
 ```
-qq-st-bot/
+Emerald-presence/
 ├── core/               # 核心逻辑
 │   ├── memory/         # 多层记忆系统
 │   ├── output/         # 消息/语音输出

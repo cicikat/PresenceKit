@@ -409,6 +409,55 @@ R8-D 实测：当前 DLQ 目录无任何 legacy task 文件（`mid_term_append` 
 - `mes_example` 精简、时间联动注入属于 prompt 体感策略，不作为当前小修。
 - R3 CI 门禁（2026-06-11）：`tests/test_r3_scope_lint.py`（13 条）守卫 core/ 不新增 `char_id="yexuan"` 函数默认参数或裸 `data/` 路径；`tests/test_r3_memory_scope_cleanup_contract.py` 追踪迁移目标 allowlist 清理进度，守卫 admin/ 无新违规。`docs/memory.md` 残余工作 1–8、10 项已全部落地；残留 followup：旧 uid-only 数据迁移（9）、ShortTermMemory 默认值（11）、scope freeze 统一（12）。
 
+### PB1：主动触发把情景记忆 / 角色自己的推断当成「用户的日记」提起
+
+**状态**：`observe`（待第一跳召回修复后复评）
+
+**现象**：角色主动触发时，常把记忆、或「他以为用户会说的话」当作"你的日记"作为话题抛出。
+
+**位置**：`core/scheduler/triggers/diary.py`（`diary_reminder` 触发，`topic_source="diary"` / `search_query="日记"`）；`core/prompt_builder.py` 层 `6d_diary_context`（标签【用户的近期日记】）、`6e_inner_diary`（【叶瑄昨天的记录】）、`6c_episodic`。
+
+**根因（初判 2026-06-19）**：
+1. `diary_context.txt` 本身是**真实用户日记**（`diary_reader.read_recent` 从用户日记文件读，非编造），内容没问题。
+2. 但情景召回第一跳坏（见 `docs/memory-recall-audit.md` 发现 A + recall_trace 实测：同 3 条高强度情绪记忆每轮都被选中、`kw` 全空）。主动 diary 触发时，prompt 里同时堆着【用户日记】【叶瑄记录】+ 一堆与当前无关的情绪情景记忆，三者标签隔离弱 → 模型把召回的记忆/自己的推断**并进"你的日记"**复述。
+
+**修复方向（待定，先观察）**：
+- 等施工单 01（第一跳 n-gram）落地后复测——内容相关召回应大幅减少"随机情绪记忆每轮注入"，可能直接缓解。
+- 若仍混淆：强化三层来源隔离措辞（用户日记 / 叶瑄记录 / 脑海浮现的往事 三者明确分开，并提示"用户日记是用户写的，不要替用户改写或当成对话内容复述"）。
+- 评估主动 diary 触发是否该注入 `6c_episodic`（可能不该）。
+
+---
+
+### PB2：角色把自己的桌宠 avatar 当成「用户的角色」（久离回来时）
+
+**状态**：`boundary-doc-needed`
+
+**现象**：用户长时间不动电脑再回来，角色说类似「桌宠界面还亮着，我看到你的角色正坐在屏幕角落打瞌睡」——把**叶瑄自己的桌宠形象**误认成"用户的角色"。
+
+**位置**：`core/prompt_builder.py` `_format_realtime_awareness`（idle≥120 注入"暂时停下来了"）、层 `3.9_screen_awareness` / `3.8_activity`；空闲回归类主动触发（`presence_nag` / `time_based`）。
+
+**根因（初判 2026-06-19）**：
+1. 该句是**模型生成**，非模板。久离回来时真实屏幕感知多为空/idle，落在「主动触发 + 空感知 → 编造」的老模式（见 `docs/hallucination-and-collapse-analysis.md`）。
+2. 角色识别缺锚点：没有任何层明确告诉模型"屏幕上那个桌宠形象**就是叶瑄自己**，不是用户拥有的另一个角色"。idle 场景一旦被提及，模型自行脑补并错配角色。
+
+**修复方向（待定）**：
+- 加一条身份锚点：桌宠 avatar = 叶瑄本人在屏幕上的存在，绝不是"用户的角色"。
+- 把 doc-1 的反编造硬规则同样套到空闲回归触发：无真实屏幕感知时不要虚构屏幕场景。
+
+### PB3：episodic.json 截断 + 加载静默归零风险
+
+**状态**：`now-safe-to-fix`（修复方案见 `docs/workorder-03b-episodic-integrity.md`）
+
+**现象（2026-06-20 实测）**：`data/runtime/memory/yexuan/1043484516/episodic.json` 末尾停在
+`"status": "open", "resolved_at":`，无值无闭合（原始字节确认非读取截断）。194 条中 193 条可解析，仅最后一条损坏。
+
+**根因/隐患**：`safe_write_json` 虽原子，但疑似被重启打断 / 存在非原子写入方 / mount 视图不一致。
+真正危险的是 `_load_memories` 解析失败时**静默返回 `[]`** → 线上读到损坏文件会让叶瑄丢光情景记忆且无提示，
+随后的写路径可能用 `[]` 覆写、永久清零。同类 `\x00` 脏行也在 `recall_trace` jsonl 出现过。
+
+**修复方向**：① 抢救现有文件（裁到最后完整记录，恢复 193 条）；② `safe_write_json` 写后校验 + 旧档 `.bak`；
+③ `_load_memories` 改 fail-loud（抛异常不返空），`_save_memories` 加"拒绝空列表覆写非空文件"护栏。
+
 ---
 
 ## 本轮已核对关闭

@@ -180,6 +180,109 @@ session_id 为 `uuid4().hex`（32 位十六进制），存储前经 `safe_user_i
 
 ---
 
+### GET `/activity/reading/library`
+
+列出书库（从 manifest.json 读取，含 title / category / total_pages）。
+
+**返回**
+
+```json
+{
+  "books": [
+    {
+      "book_id": "550e8400-...",
+      "title": "基督山伯爵",
+      "category": "小说",
+      "filename": "基督山伯爵.pdf",
+      "added_at": "2026-06-19T10:00:00+00:00",
+      "total_pages": 219,
+      "size_bytes": 2048000
+    }
+  ]
+}
+```
+
+---
+
+### POST `/activity/reading/library/add`
+
+上传 PDF 到书库，写入 manifest.json。同名文件覆盖时保留 book_id。
+
+**Body**：multipart，字段 `file`（PDF）
+
+**返回**：manifest 条目 + `size_bytes`
+
+---
+
+### POST `/activity/reading/start_from_library`
+
+从书库开始阅读（按 manifest book_id 查文件名，file_id 使用 book_id）。
+
+**Body**
+
+```json
+{ "book_id": "550e8400-...", "start_page": 1, "uid": "" }
+```
+
+**返回**：与 `/reading/start` 相同的 ReadingSession 结构。
+
+---
+
+### POST `/activity/reading/library/delete`
+
+从书库删除一本书（移除 manifest 条目 + 删除磁盘文件）。
+
+**Body**
+
+```json
+{ "book_id": "550e8400-...", "with_insights": false }
+```
+
+`with_insights: true` 时同时删除 `insights/{book_id}/` 目录。
+
+**返回**：`{ "deleted": true, "book_id": "..." }`
+
+---
+
+### POST `/activity/reading/library/rename`
+
+修改书的显示名称（只改 manifest title，磁盘文件名不变，book_id 不变）。
+
+**Body**
+
+```json
+{ "book_id": "550e8400-...", "title": "新名称" }
+```
+
+**返回**：更新后的 manifest 条目
+
+---
+
+### POST `/activity/reading/library/categorize`
+
+设置书的分类。留空则恢复「未分类」。
+
+**Body**
+
+```json
+{ "book_id": "550e8400-...", "category": "小说" }
+```
+
+**返回**：更新后的 manifest 条目
+
+---
+
+## 书库 manifest 设计
+
+`data/library/manifest.json` 是书库元数据注册表，book_id 与文件名解耦：
+
+- **book_id**：新增时生成一次（uuid4），此后永不变更，改名/分类均不影响 insights 路径和已有 session
+- **迁移**：manifest 不存在时，自动扫描 `books/` 目录生成，沿用 `make_file_id(filename)` 作为 book_id 以兼容已有 insights
+- **改名**：只改 manifest 的 `title` 字段，`filename` 与磁盘文件名保持原样
+- **re-upload**：同名文件重传时保留原有 book_id（按 filename 匹配），只更新 `total_pages`
+
+---
+
 ## 内存隔离规则
 
 以下内容禁止写入，适用于 P0 全部操作：
@@ -218,7 +321,8 @@ P0 不接 LLM。未来注入他 prompt 时，只允许：
 | `core/activity/pdf_reader.py` | 新建：PDF 文本提取工具 |
 | `core/activity/reading_session.py` | 新建：ReadingSession dataclass + 工厂函数 |
 | `core/activity/activity_store.py` | 新建：session 持久化层 |
-| `admin/routers/reading.py` | 新建：HTTP API（5 个端点） |
+| `admin/routers/reading.py` | 新建：HTTP API（5 个端点）；扩展书库 manifest 管理（+3 端点） |
+| `core/data_paths.py` | 新增 `reading_library_manifest()` |
 | `admin/admin_server.py` | 注册 `reading.router` 到 `/activity` |
 | `tests/test_reading_activity.py` | 新建：18 个测试用例 |
 | `docs/reading-activity.md` | 新建：本文档 |

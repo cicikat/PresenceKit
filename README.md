@@ -1,4 +1,4 @@
-# qq-st-bot
+# Emerald-Presence
 
 一个有长期记忆、能主动联系你的私人陪伴型 QQ 机器人。
 
@@ -102,8 +102,8 @@ Python · FastAPI · NapCat (OneBot 11) · DeepSeek · GPT-SoVITS
 **安装**
 
 ```bash
-git clone https://github.com/chah69634-arch/qq-st-bot.git
-cd qq-st-bot
+git clone https://github.com/chah69634-arch/Emerald-presence.git
+cd Emerald-presence
 pip install -r requirements.txt
 ```
 
