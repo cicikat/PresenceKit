@@ -5,7 +5,8 @@ Provides formatted text for reality prompt layer 6g_dream_impression.
 
 Injection strategy: ambient (newest-first, up to _MAX_INJECT unexpired entries).
 No relevance retrieve — see FUTURE F1.
-Framing: explicit non-reality marker + 叶瑄 self-narration "我好像在梦里……" (C3).
+Framing: explicit <梦境印象> XML tag with non-reality note; renders plot + vivid_lines
+when present (D2 细粒度 schema), falls back to impression_text-only for legacy entries.
 """
 
 import logging
@@ -14,8 +15,28 @@ logger = logging.getLogger(__name__)
 
 _MAX_INJECT = 3
 
-_NON_REALITY_FRAME = "（模糊的梦境印象，非现实发生的事）"
-_CONFABULATION_GUARD = "不要在现实里复述或编造梦的具体场景，只带那点情绪余味。"
+_TAG_NOTE = "以下是叶瑄做过的梦，不是现实发生的事；可以像记得一个梦一样自然提起，但绝不可当作真实经历复述为事实"
+
+
+def _render_entry(imp: dict) -> str:
+    """Render a single impression entry into human-readable text."""
+    parts: list[str] = []
+
+    plot = (imp.get("plot") or "").strip()
+    vivid_lines = [v.strip() for v in (imp.get("vivid_lines") or []) if str(v).strip()]
+    impression_text = (imp.get("impression_text") or "").strip()
+
+    if plot:
+        parts.append(plot)
+    if vivid_lines:
+        parts.append("——" + "；".join(f'"{v}"' for v in vivid_lines))
+    if impression_text:
+        # Always include the first-person overview as the final line
+        parts.append(impression_text)
+    elif not parts:
+        return ""
+
+    return "\n".join(parts)
 
 
 def load_impression_text(uid: str, *, char_id: str = "yexuan") -> str:
@@ -30,16 +51,17 @@ def load_impression_text(uid: str, *, char_id: str = "yexuan") -> str:
         if not active:
             return ""
 
-        lines: list[str] = [_NON_REALITY_FRAME, _CONFABULATION_GUARD]
+        rendered: list[str] = []
         for imp in active[:_MAX_INJECT]:
-            text = (imp.get("impression_text") or "").strip()
+            text = _render_entry(imp)
             if text:
-                lines.append(text)
+                rendered.append(text)
 
-        if len(lines) <= 1:
+        if not rendered:
             return ""
 
-        return "\n".join(lines)
+        body = "\n\n".join(rendered)
+        return f'<梦境印象 note="{_TAG_NOTE}">\n{body}\n</梦境印象>'
     except Exception as e:
         logger.warning(f"[impression_loader] uid={uid}: {e}")
         return ""

@@ -67,6 +67,7 @@ async def build_snapshot(user_id: str, entry_reason: str = "", *, char_id: str =
     if memory_access == MemoryAccess.card_only.value:
         # Minimal sandbox mode: no memory context whatsoever
         snapshot["recent_reality_context"] = ""
+        snapshot["recent_reality_gist"] = ""
         snapshot["episodic_summary"] = ""
         snapshot["mid_term_context"] = ""
         snapshot["profile_impression"] = ""
@@ -76,10 +77,13 @@ async def build_snapshot(user_id: str, entry_reason: str = "", *, char_id: str =
     try:
         from core.memory import short_term
         history = short_term.load_for_prompt(user_id, char_id=char_id)
-        snapshot["recent_reality_context"] = _summarize_recent(history, char_name=char_name)
+        _rrc = _summarize_recent(history, char_name=char_name)
+        snapshot["recent_reality_context"] = _rrc
+        snapshot["recent_reality_gist"] = _make_gist(_rrc)
     except Exception as e:
         logger.warning(f"[dream_context] recent_reality_context failed: {e}")
         snapshot["recent_reality_context"] = ""
+        snapshot["recent_reality_gist"] = ""
 
     try:
         from core.memory import user_profile
@@ -139,6 +143,19 @@ def _summarize_recent(history: list[dict], *, char_name: str = "(角色未加载
         content = (h.get("content") or "")[:60]
         lines.append(f"{role}：{content}")
     return "\n".join(lines)
+
+
+def _make_gist(recent_context: str) -> str:
+    """Extract a one-line gist from recent_reality_context for use after full-context turns expire."""
+    if not recent_context:
+        return "聊天"
+    lines = [l.strip() for l in recent_context.split("\n") if l.strip()]
+    if not lines:
+        return "聊天"
+    last = lines[-1]
+    if "：" in last:
+        last = last.split("：", 1)[1].strip()
+    return (last[:40] + "…") if len(last) > 40 else (last or "聊天")
 
 
 def _extract_impression(profile: dict) -> str:

@@ -45,6 +45,7 @@ _DEFAULTS: dict[str, Any] = {
     "lucid_mode": "lucid_shared",
     "jailbreak_presets": ["default"],
     "display": {"physiological_arousal": False},
+    "reality_context_full_turns": 3,
 }
 
 

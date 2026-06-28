@@ -143,10 +143,12 @@ async def dream_turn(
 
     from core.dream.dream_log import append_turn, read_current
     dream_history = read_current(uid, char_id=char_id)
+    _dream_turn_index = sum(1 for t in dream_history if t.get("role") == "assistant")
 
-    # Load settings (lorebook + boundary_level)
+    # Load settings (lorebook + boundary_level + reality_context_full_turns)
     from core.dream.dream_settings import load as _load_settings
     settings = _load_settings(uid)
+    _reality_context_full_turns = int(settings.get("reality_context_full_turns", 3))
 
     # Dream-local lorebook matching — pure function, separate from reality lorebook (C4)
     lore_entries: list[str] = []
@@ -223,6 +225,8 @@ async def dream_turn(
         scenario_core=state.get("scenario_core"),
         mirror_core=state.get("mirror_core"),
         _capture_hook=_dream_capture_hook,
+        dream_turn=_dream_turn_index,
+        reality_context_full_turns=_reality_context_full_turns,
     )
 
     # Call LLM — zero reality side-effects

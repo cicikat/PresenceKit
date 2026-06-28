@@ -53,6 +53,7 @@ class _LayerRec:
     tokens: int = 0
     flags: list[str] = field(default_factory=list)
     note: str = ""
+    content: str = ""
 
 
 def _log_dream_prompt_stats(
@@ -243,6 +244,8 @@ def build_dream_prompt(
     scenario_core: dict[str, Any] | None = None,
     mirror_core: dict[str, Any] | None = None,
     _capture_hook: "Any | None" = None,
+    dream_turn: int = 0,
+    reality_context_full_turns: int = 3,
 ) -> list[dict[str, str]]:
     """
     Assemble the complete dream prompt as a D0-D10 layer stack.
@@ -278,7 +281,7 @@ def build_dream_prompt(
         _d0 = f"# D0·破限 ─ {char_name}的自由边界\n{jailbreak_text}"
         system_layers.append(_d0)
         _d0_flags = [jailbreak_preset_status.upper()] if jailbreak_preset_status else []
-        _records.append(_LayerRec("D0_jailbreak", len(_d0), _est_tokens(_d0), flags=_d0_flags, note=_d0_note))
+        _records.append(_LayerRec("D0_jailbreak", len(_d0), _est_tokens(_d0), flags=_d0_flags, note=_d0_note, content=_d0))
     else:
         _records.append(_LayerRec("D0_jailbreak", flags=["DISABLED"], note=_d0_note))
 
@@ -291,13 +294,13 @@ def build_dream_prompt(
     d1_parts.append(_d1_awareness.replace("叶瑄", char_name).replace("他", char_pronoun))
     _d1 = "\n\n".join(d1_parts)
     system_layers.append(_d1)
-    _records.append(_LayerRec("D1_identity_core", len(_d1), _est_tokens(_d1)))
+    _records.append(_LayerRec("D1_identity_core", len(_d1), _est_tokens(_d1), content=_d1))
 
     # ── D2: world_ruleset (loaded from world package, subordinate to D1) ─────
     if world.ruleset:
         _d2 = f"# D2·今晚梦的世界规则\n{world.ruleset}"
         system_layers.append(_d2)
-        _records.append(_LayerRec("D2_world_ruleset", len(_d2), _est_tokens(_d2)))
+        _records.append(_LayerRec("D2_world_ruleset", len(_d2), _est_tokens(_d2), content=_d2))
     else:
         _records.append(_LayerRec("D2_world_ruleset", flags=["DISABLED"]))
 
@@ -308,16 +311,16 @@ def build_dream_prompt(
         _d3 = f"# D3·梦境示例对话\n{example}"
         system_layers.append(_d3)
         _d3_flags = ["FALLBACK"] if _mes_from_fallback else []
-        _records.append(_LayerRec("D3_mes_example", len(_d3), _est_tokens(_d3), _d3_flags))
+        _records.append(_LayerRec("D3_mes_example", len(_d3), _est_tokens(_d3), _d3_flags, content=_d3))
     else:
         _records.append(_LayerRec("D3_mes_example", flags=["DISABLED"]))
 
     # ── D4: frozen_reality (memory_access controlled) ────────────────────────
-    snapshot_block = _format_snapshot(context_snapshot)
+    snapshot_block = _format_snapshot(context_snapshot, dream_turn=dream_turn, reality_context_full_turns=reality_context_full_turns)
     if snapshot_block:
         _d4 = f"# D4·入梦前背景（冻结快照，只读）\n{snapshot_block}"
         system_layers.append(_d4)
-        _records.append(_LayerRec("D4_frozen_reality", len(_d4), _est_tokens(_d4)))
+        _records.append(_LayerRec("D4_frozen_reality", len(_d4), _est_tokens(_d4), content=_d4))
     else:
         _records.append(_LayerRec("D4_frozen_reality", flags=["DISABLED"]))
 
@@ -335,7 +338,7 @@ def build_dream_prompt(
                 if _d45_text:
                     _d45 = f"# D4.5·用户隐性状态（只读快照）\n{_d45_text}"
                     system_layers.append(_d45)
-                    _records.append(_LayerRec("D4.5_hidden_state", len(_d45), _est_tokens(_d45)))
+                    _records.append(_LayerRec("D4.5_hidden_state", len(_d45), _est_tokens(_d45), content=_d45))
                     _d45_injected = True
         except Exception as _d45_exc:
             logger.warning("[dream_prompt] D4.5 hidden_state_snapshot failed: %s", _d45_exc)
@@ -351,7 +354,7 @@ def build_dream_prompt(
     if body_projection_text and dream_mode != "scenario":
         _d5 = f"# D5·她的身体感知\n{body_projection_text}"
         system_layers.append(_d5)
-        _records.append(_LayerRec("D5_body_projection", len(_d5), _est_tokens(_d5)))
+        _records.append(_LayerRec("D5_body_projection", len(_d5), _est_tokens(_d5), content=_d5))
         _d5_injected = True
     if not _d5_injected:
         _d5_note = "scenario_mode" if dream_mode == "scenario" else ""
@@ -362,7 +365,7 @@ def build_dream_prompt(
     if scene_block:
         _d6 = f"# D6·场景锚点\n{scene_block}"
         system_layers.append(_d6)
-        _records.append(_LayerRec("D6_scene_anchors", len(_d6), _est_tokens(_d6)))
+        _records.append(_LayerRec("D6_scene_anchors", len(_d6), _est_tokens(_d6), content=_d6))
     else:
         _records.append(_LayerRec("D6_scene_anchors", flags=["DISABLED"]))
 
@@ -376,7 +379,7 @@ def build_dream_prompt(
             f"（这是梦内累积的情绪紧绷程度，影响{char_name}的表达方式和反应灵敏度。）"
         )
         system_layers.append(_d7)
-        _records.append(_LayerRec("D7_dream_tension", len(_d7), _est_tokens(_d7)))
+        _records.append(_LayerRec("D7_dream_tension", len(_d7), _est_tokens(_d7), content=_d7))
     else:
         _records.append(_LayerRec("D7_dream_tension", flags=["DISABLED"]))
 
@@ -384,7 +387,7 @@ def build_dream_prompt(
     _d8_raw = _D8_DREAM_DIRECTOR_NON_LUCID if lucid_mode == "non_lucid" else _D8_DREAM_DIRECTOR
     _d8 = f"# D8·梦境导演注记\n{_d8_raw.replace('叶瑄', char_name)}"
     system_layers.append(_d8)
-    _records.append(_LayerRec("D8_dream_director", len(_d8), _est_tokens(_d8)))
+    _records.append(_LayerRec("D8_dream_director", len(_d8), _est_tokens(_d8), content=_d8))
 
     # ── DS: scenario layer (only when dream_mode == "scenario") ─────────────
     # Injects: script title, current stage name, dramatic_task, entry_pressure,
@@ -397,7 +400,7 @@ def build_dream_prompt(
             if _ds_text:
                 _ds = f"# DS·剧本当前阶段\n{_ds_text}"
                 system_layers.append(_ds)
-                _records.append(_LayerRec("DS_scenario", len(_ds), _est_tokens(_ds)))
+                _records.append(_LayerRec("DS_scenario", len(_ds), _est_tokens(_ds), content=_ds))
                 _ds_injected = True
         except Exception as _ds_exc:
             logger.warning("[dream_prompt] DS scenario layer failed: %s", _ds_exc)
@@ -416,7 +419,7 @@ def build_dream_prompt(
             if _dm_text:
                 _dm = f"# DM·Mirror 梦境倾向材料\n{_dm_text}"
                 system_layers.append(_dm)
-                _records.append(_LayerRec("DM_mirror", len(_dm), _est_tokens(_dm)))
+                _records.append(_LayerRec("DM_mirror", len(_dm), _est_tokens(_dm), content=_dm))
                 _dm_injected = True
         except Exception as _dm_exc:
             logger.warning("[dream_prompt] DM mirror layer failed: %s", _dm_exc)
@@ -429,7 +432,7 @@ def build_dream_prompt(
         _dlore = "# 梦境世界书\n" + "\n---\n".join(lore_entries)
         system_layers.append(_dlore)
         _lore_note = f"{len(lore_entries)} entries"
-        _records.append(_LayerRec("D_lorebook", len(_dlore), _est_tokens(_dlore), note=_lore_note))
+        _records.append(_LayerRec("D_lorebook", len(_dlore), _est_tokens(_dlore), note=_lore_note, content=_dlore))
     else:
         _records.append(_LayerRec("D_lorebook", flags=["DISABLED"]))
 
@@ -438,22 +441,25 @@ def build_dream_prompt(
 
     # ── D9: dream_history (as messages, no sanitizer) ────────────────────────
     _d9_chars = 0
+    _d9_parts: list[str] = []
     for turn in dream_history:
         role = turn.get("role", "user")
         if role not in ("user", "assistant"):
             role = "user"
-        content = (turn.get("content") or "").strip()
-        if content:
-            messages.append({"role": role, "content": content})
-            _d9_chars += len(content)
+        _turn_content = (turn.get("content") or "").strip()
+        if _turn_content:
+            messages.append({"role": role, "content": _turn_content})
+            _d9_chars += len(_turn_content)
+            _d9_parts.append(f"[{role}] {_turn_content}")
     _d9_toks = max(1, _d9_chars // _TOK_RATIO) if _d9_chars else 0
     _records.append(
-        _LayerRec("D9_dream_history", _d9_chars, _d9_toks, note=f"{len(dream_history)} turns")
+        _LayerRec("D9_dream_history", _d9_chars, _d9_toks, note=f"{len(dream_history)} turns",
+                  content="\n\n".join(_d9_parts))
     )
 
     # ── D10: user_message ────────────────────────────────────────────────────
     messages.append({"role": "user", "content": user_message})
-    _records.append(_LayerRec("D10_user_message", len(user_message), _est_tokens(user_message)))
+    _records.append(_LayerRec("D10_user_message", len(user_message), _est_tokens(user_message), content=user_message))
 
     # ── Observability: emit layer stats ──────────────────────────────────────
     _log_dream_prompt_stats(
@@ -487,6 +493,7 @@ def build_dream_prompt(
                         "tokens": r.tokens,
                         "flags": list(r.flags),
                         "note": r.note,
+                        "content": r.content,
                         "injected": r.chars > 0,
                     }
                     for r in _records
@@ -537,10 +544,14 @@ def _bucket_tension(value: float) -> str:
 # ── Internal formatters ───────────────────────────────────────────────────────
 
 
-def _format_snapshot(snapshot: dict[str, Any]) -> str:
+def _format_snapshot(snapshot: dict[str, Any], *, dream_turn: int = 0, reality_context_full_turns: int = 3) -> str:
     parts: list[str] = []
-    if r := snapshot.get("recent_reality_context"):
-        parts.append(f"最近现实对话摘要：\n{r}")
+    if dream_turn < reality_context_full_turns:
+        if r := snapshot.get("recent_reality_context"):
+            parts.append(f"最近现实对话摘要：\n{r}")
+    else:
+        if gist := snapshot.get("recent_reality_gist"):
+            parts.append(f"（你记得入梦前你们在{gist}）")
     if p := snapshot.get("profile_impression"):
         parts.append(f"她的印象：{p}")
     if e := snapshot.get("episodic_summary"):
@@ -738,11 +749,11 @@ def _get_dream_mes_example(char_name: str) -> str:
     独立于现实角色卡 mes_example，避免交叉污染。
     """
     return (
-        f"她：（走进那片光里，转头看他）你也在。\n"
-        f"{char_name}：（停住脚步，看着眼前的光落在她身上）……嗯。一直在。\n"
-        f"（慢慢走近，声音比平时低）这里不一样。什么都更清楚——但我不知道是好事还是坏事。\n"
+        f"她：*走进那片光里，转头看他*你也在。\n"
+        f"{char_name}：*停住脚步，看着眼前的光落在她身上*……嗯。一直在。\n"
+        f"*慢慢走近，声音比平时低*这里不一样。什么都更清楚——但我不知道是好事还是坏事。\n"
         f"她：这是梦吗？\n"
-        f"{char_name}：（轻轻笑了一下）是。但我是真的在这里。\n"
-        f"她：（靠近了一步）我不想醒。\n"
-        f"{char_name}：（沉默了一会，目光没有移开）……那就先别醒。"
+        f"{char_name}：*轻轻笑了一下*是。但我是真的在这里。\n"
+        f"她：*靠近了一步*我不想醒。\n"
+        f"{char_name}：*沉默了一会，目光没有移开*……那就先别醒。"
     )
