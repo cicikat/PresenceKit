@@ -1,0 +1,59 @@
+name: Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      # v0.1 smoke subset: the full suite includes checks that require private,
+      # unshipped runtime assets/config, plus a few currently stale R2/R7/R8 tests.
+      - name: Run v0.1 pytest smoke subset
+        run: >
+          python -m pytest -q
+          tests/test_n8_auth.py
+          tests/test_sec_auth1.py
+          tests/test_sec_ws1_auth.py
+          tests/test_n9_safe_write.py
+          tests/test_final_p1_blockers.py
+          tests/test_scope_freeze_r1_n1_n10.py
+          tests/test_memory_direct_path_lint.py
+          tests/test_r1b_qq_convergence_audit.py
+          tests/test_r1c_qq_reality_reply_adapter.py
+          tests/test_r1d_qq_reality_reply_adapter.py
+          tests/test_r2a_scheduler_execution_surface_audit.py
+          tests/test_r2c_legacy_trigger_migration.py
+          tests/test_r2d_defer_queue_dnd.py
+          tests/test_r3_scope_lint.py
+          tests/test_r4_prompt_layer_boundary.py
+          tests/test_r4b_prompt_drop_priority.py
+          tests/test_r4c_prompt_layer_contract.py
+          tests/test_r5_author_note_tool_alignment.py
+          tests/test_r6_reality_scrub_audit.py
+          tests/test_r6b_reality_scrub_contract.py
+          tests/test_r6c_reality_scrub_final.py
+          tests/test_r8a_dlq_expiry.py
+          tests/test_r8b_trait_tracker_queue.py
+          tests/test_r8c_author_note_rotator_scope.py
+          tests/test_r8e2_character_growth_retirement.py
