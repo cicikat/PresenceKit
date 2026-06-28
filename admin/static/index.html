@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>QQ-ST-Bot 管理面板</title>
+<title>His Presence 管理面板</title>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -271,7 +271,7 @@ textarea { resize: vertical; min-height: 72px; }
 <div id="auth-overlay">
   <div class="auth-card">
     <h1>🤖 管理面板</h1>
-    <p>QQ-ST-Bot · 输入管理密钥登录</p>
+    <p>His Presence · 输入管理密钥登录</p>
     <input type="password" id="key-input" placeholder="secret_key" autocomplete="current-password">
     <div class="err" id="auth-err"></div>
     <button class="btn btn-primary" style="width:100%" onclick="doLogin()">登录</button>
@@ -308,6 +308,7 @@ textarea { resize: vertical; min-height: 72px; }
     <a data-page="observe-prompt"  onclick="goto('observe-prompt')"> <span class="icon">🗂️</span>Prompt 层检视</a>
     <a data-page="observe-probe"   onclick="goto('observe-probe')">  <span class="icon">🔭</span>探针观测</a>
     <a data-page="observe-dream-prompt" onclick="goto('observe-dream-prompt')"><span class="icon">💭</span>梦境 Prompt</a>
+    <a data-page="observe-trigger-catalog" onclick="goto('observe-trigger-catalog')"><span class="icon">📡</span>触发器目录</a>
 
     <a data-page="pet"    onclick="goto('pet')"    style="display:none"><span class="icon">🐾</span>宠物</a>
     <a data-page="yexuan" onclick="goto('yexuan')" style="display:none"><span class="icon">💬</span>与<span class="nav-char-name">叶瑄</span></a>
@@ -1089,6 +1090,7 @@ textarea { resize: vertical; min-height: 72px; }
         </select>
         <button class="btn btn-ghost btn-sm" onclick="loadObservePrompt()">查看</button>
         <button class="btn btn-ghost btn-sm" onclick="loadObservePromptUidList()">列出有快照的 uid</button>
+        <button class="btn btn-ghost btn-sm" onclick="exportSnapshotMd('prompt')">导出 MD</button>
       </div>
       <div id="obs-prompt-uid-list" style="font-size:12px;color:var(--muted);margin-bottom:8px"></div>
       <!-- 顶部总览卡 -->
@@ -1114,9 +1116,9 @@ textarea { resize: vertical; min-height: 72px; }
 
     <!-- ── 探针观测 ── -->
     <div class="page" id="page-observe-probe">
-      <h1 class="page-title">探针观测 <span style="font-size:13px;font-weight:400;color:var(--muted)">只读 · 最近 5 轮 · QQ 通道</span></h1>
+      <h1 class="page-title">探针观测 <span style="font-size:13px;font-weight:400;color:var(--muted)">只读 · 最近 5 轮 · 全通道</span></h1>
       <div style="display:flex;gap:8px;margin-bottom:16px;align-items:center;flex-wrap:wrap">
-        <input type="text" id="obs-probe-uid" placeholder="uid (QQ号)" style="width:150px;padding:4px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:var(--bg-secondary);color:var(--text)">
+        <input type="text" id="obs-probe-uid" placeholder="uid" style="width:150px;padding:4px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:var(--bg-secondary);color:var(--text)">
         <select id="obs-probe-n" style="padding:4px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:var(--bg-secondary);color:var(--text)">
           <option value="0">最新轮</option>
           <option value="1">次新轮</option>
@@ -1126,6 +1128,7 @@ textarea { resize: vertical; min-height: 72px; }
         </select>
         <button class="btn btn-ghost btn-sm" onclick="loadObserveProbe()">查看</button>
         <button class="btn btn-ghost btn-sm" onclick="loadObserveProbeUidList()">列出 uid</button>
+        <button class="btn btn-ghost btn-sm" onclick="exportSnapshotMd('probe')">导出 MD</button>
       </div>
       <div id="obs-probe-uid-list" style="font-size:12px;color:var(--muted);margin-bottom:8px"></div>
       <div id="obs-probe-content"></div>
@@ -1145,9 +1148,20 @@ textarea { resize: vertical; min-height: 72px; }
         </select>
         <button class="btn btn-ghost btn-sm" onclick="loadObserveDreamPrompt()">查看</button>
         <button class="btn btn-ghost btn-sm" onclick="loadObserveDreamPromptUidList()">列出 uid</button>
+        <button class="btn btn-ghost btn-sm" onclick="exportSnapshotMd('dream')">导出 MD</button>
       </div>
       <div id="obs-dream-prompt-uid-list" style="font-size:12px;color:var(--muted);margin-bottom:8px"></div>
       <div id="obs-dream-prompt-content"></div>
+    </div>
+
+    <!-- ── 触发器目录 ── -->
+    <div class="page" id="page-observe-trigger-catalog">
+      <h1 class="page-title">触发器目录 <span style="font-size:13px;font-weight:400;color:var(--muted)">只读 · proposer 注册表 + 最近真实触发快照</span></h1>
+      <div style="display:flex;gap:8px;margin-bottom:16px;align-items:center">
+        <button class="btn btn-ghost btn-sm" onclick="loadTriggerCatalog()">刷新</button>
+        <span style="font-size:12px;color:var(--muted)">进程重启后样本清空；首次触发后才显示 seed prompt / search_query / 回复</span>
+      </div>
+      <div id="trigger-catalog-content"></div>
     </div>
 
   </main>
@@ -1351,6 +1365,7 @@ function goto(page) {
     'observe-prompt':  () => loadObservePromptUidList(),
     'observe-probe':   () => loadObserveProbeUidList(),
     'observe-dream-prompt': () => loadObserveDreamPromptUidList(),
+    'observe-trigger-catalog': () => loadTriggerCatalog(),
   };
   if (page !== 'scheduler') _stopWatchStatusPoller();
   if (loaders[page]) loaders[page]();
@@ -1762,10 +1777,9 @@ function renderLorebook() {
     el.innerHTML = '<div class="empty">暂无条目，点击「新增」添加第一条</div>';
     return;
   }
-  const sorted = _loreEntries.map((e, i) => ({...e, _origIdx: i}))
-    .sort((a, b) => (a.insertion_order ?? 100) - (b.insertion_order ?? 100));
-  const rows = sorted.map(e => {
-    const i = e._origIdx;
+  const sorted = [..._loreEntries].sort((a, b) => (a.insertion_order ?? 100) - (b.insertion_order ?? 100));
+  const rows = sorted.map((e, renderIdx) => {
+    const eid = e.id || renderIdx;
     const kws = (e.keyword || []).join(', ');
     const badge = e.enabled
       ? '<span class="badge badge-success">启用</span>'
@@ -1773,7 +1787,7 @@ function renderLorebook() {
     const regexBadge = e.regex
       ? '<span class="badge badge-warn" style="font-size:10px">正则</span>'
       : '';
-    const contentId = `lore-content-${i}`;
+    const contentId = `lore-content-${renderIdx}`;
     const shortContent = (e.content || '').length > 60
       ? escapeHtml((e.content || '').slice(0, 60)) + '…'
       : escapeHtml(e.content || '');
@@ -1783,12 +1797,12 @@ function renderLorebook() {
       <td style="text-align:center;color:var(--muted);font-size:12px">${e.insertion_order ?? 100}</td>
       <td style="font-size:12px;color:var(--accent)">${escapeHtml(kws)} ${regexBadge}</td>
       <td style="font-size:12px;max-width:280px">
-        <span id="${contentId}-short" style="white-space:pre-wrap;cursor:pointer" onclick="toggleLoreContent(${i})" title="点击展开">${shortContent}</span>
-        <span id="${contentId}-full" style="white-space:pre-wrap;display:none">${fullContent}<br><a href="#" style="font-size:11px;color:var(--muted)" onclick="toggleLoreContent(${i});return false;">收起</a></span>
+        <span id="${contentId}-short" style="white-space:pre-wrap;cursor:pointer" onclick="toggleLoreContent(${renderIdx})" title="点击展开">${shortContent}</span>
+        <span id="${contentId}-full" style="white-space:pre-wrap;display:none">${fullContent}<br><a href="#" style="font-size:11px;color:var(--muted)" onclick="toggleLoreContent(${renderIdx});return false;">收起</a></span>
       </td>
       <td style="white-space:nowrap">
-        <button class="btn btn-ghost btn-sm" onclick="openLoreModal(${i})">编辑</button>
-        <button class="btn btn-danger btn-sm" onclick="deleteLoreEntry(${i})">删除</button>
+        <button class="btn btn-ghost btn-sm" onclick="openLoreModal('${eid}')">编辑</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteLoreEntry('${eid}')">删除</button>
       </td>
     </tr>`;
   }).join('');
@@ -1840,12 +1854,13 @@ async function importLorebookJson(file) {
   } catch(e) { toast('导入失败：' + e.message, 'err'); }
 }
 
-function openLoreModal(idx) {
-  _editingLoreIdx = idx;
-  const isNew = idx === null;
+function openLoreModal(eid) {
+  _editingLoreIdx = eid;  // null = new, string = existing id
+  const isNew = eid === null;
   document.getElementById('lore-modal-title').textContent = isNew ? '新增世界书条目' : '编辑世界书条目';
   if (!isNew) {
-    const e = _loreEntries[idx];
+    const e = _loreEntries.find(x => x.id === eid);
+    if (!e) return;
     document.getElementById('lore-keywords').value          = (e.keyword || []).join(', ');
     document.getElementById('lore-content').value            = e.content || '';
     document.getElementById('lore-enabled').checked          = e.enabled !== false;
@@ -1891,10 +1906,12 @@ async function saveLoreEntry() {
   }
 }
 
-async function deleteLoreEntry(idx) {
-  if (!confirm(`确定删除条目 #${idx}（${(_loreEntries[idx]?.keyword || []).join(', ')}）吗？`)) return;
+async function deleteLoreEntry(eid) {
+  const entry = _loreEntries.find(x => x.id === eid);
+  const label = entry ? (entry.keyword || []).join(', ') : eid;
+  if (!confirm(`确定删除条目（${label}）吗？`)) return;
   try {
-    await api('DELETE', `/lorebook/${idx}`);
+    await api('DELETE', `/lorebook/${eid}`);
     await loadLorebook();
     toast('条目已删除', 'ok');
   } catch(e) {
@@ -3069,6 +3086,11 @@ async function loadObserveRuntime() {
   }
 }
 
+// ── 检视器当前快照（导出 MD 用）──
+let _obsPromptCurrent      = null;
+let _obsDreamPromptCurrent = null;
+let _obsProbeCurrent       = null;
+
 // ══════════════════════════════════════════════════════════
 //  观测页：Prompt 层检视器
 // ══════════════════════════════════════════════════════════
@@ -3105,22 +3127,43 @@ async function loadObservePrompt() {
       return;
     }
     const snap = d.snapshot;
+    _obsPromptCurrent = { snap, uid };
     const SOFT = snap.soft_warn_threshold || 15000;
     const HARD = snap.hard_trigger_threshold || 20000;
     const est  = snap.token_estimate || 0;
 
     // ── 总览卡 ──
     summaryCard.style.display = '';
-    document.getElementById('obs-prompt-ts').textContent =
-      `${snap.captured_at ? snap.captured_at.slice(0,19).replace('T',' ') : ''} · 第 ${d.n+1}/${d.total_snapshots} 轮`;
+    const origin = snap.origin || {};
+    const isProactive = origin.origin === 'proactive';
+    const isDesktop   = origin.origin === 'desktop';
+    const originBadge = isProactive
+      ? `<span style="font-size:11px;background:#1a3a1a;color:#86efac;padding:2px 8px;border-radius:10px;margin-left:8px;font-weight:600">主动 · ${escapeHtml(origin.trigger_name||'')}</span>`
+      : isDesktop
+        ? `<span style="font-size:11px;background:#1e3a5f;color:#93c5fd;padding:2px 8px;border-radius:10px;margin-left:8px">桌宠</span>`
+        : `<span style="font-size:11px;background:#2d2d2d;color:#9ca3af;padding:2px 8px;border-radius:10px;margin-left:8px">用户</span>`;
+    document.getElementById('obs-prompt-ts').innerHTML =
+      `${snap.captured_at ? snap.captured_at.slice(0,19).replace('T',' ') : ''}${originBadge} · 第 ${d.n+1}/${d.total_snapshots} 轮`;
     const statusColor = est > HARD ? '#ef4444' : est > SOFT ? '#f59e0b' : 'var(--accent)';
-    summaryEl.innerHTML =
+    let summaryHtml =
       `<div>字符估算：<strong style="color:${statusColor}">${est.toLocaleString()}</strong>` +
       ` &nbsp;软警戒 ${SOFT.toLocaleString()} &nbsp;触发裁剪 ${HARD.toLocaleString()}</div>` +
       `<div style="margin-top:4px">激活 tags：${(snap.active_tags||[]).map(t=>`<code style="font-size:11px;background:var(--bg-secondary);padding:1px 4px;border-radius:3px">${escapeHtml(t)}</code>`).join(' ') || '(无)'}</div>` +
       (snap.removed_layers && snap.removed_layers.length
         ? `<div style="margin-top:4px;color:#ef4444">被裁层：${snap.removed_layers.map(l=>`<code style="font-size:11px">${escapeHtml(l)}</code>`).join(' ')}</div>`
         : '<div style="margin-top:4px;color:var(--muted)">无裁剪</div>');
+    if (isProactive) {
+      const sq = (origin.search_query||'').trim();
+      const sp = (origin.seed_prompt||'').trim();
+      summaryHtml += `<div style="margin-top:10px;padding:10px;background:#0f2410;border-radius:6px;border:1px solid #166534">
+        <div style="font-size:12px;font-weight:600;color:#86efac;margin-bottom:6px">主动触发详情</div>
+        <div style="font-size:12px;margin-bottom:4px"><span style="color:var(--muted)">触发器：</span><code style="background:var(--bg-secondary);padding:1px 5px;border-radius:3px">${escapeHtml(origin.trigger_name||'')}</code></div>
+        <div style="font-size:12px;margin-bottom:4px"><span style="color:var(--muted)">召回锚点 (search_query)：</span><span style="color:#fde68a">${sq ? escapeHtml(sq.slice(0,200)) : '<em style="color:var(--muted)">（与 seed_prompt 相同）</em>'}</span></div>
+        <div style="font-size:12px"><span style="color:var(--muted)">种子 prompt：</span><pre style="margin:4px 0 0;font-size:11px;white-space:pre-wrap;word-break:break-all;background:var(--bg-secondary);padding:6px;border-radius:4px;max-height:120px;overflow:auto">${escapeHtml(sp.slice(0,600))}${sp.length>600?'\n…':''}
+</pre></div>
+      </div>`;
+    }
+    summaryEl.innerHTML = summaryHtml;
 
     // token 进度条
     const pct = Math.min(100, est / HARD * 100);
@@ -3213,6 +3256,159 @@ function togglePromptLayer(contentId) {
   el.style.display = el.style.display === 'none' ? '' : 'none';
 }
 
+function exportSnapshotMd(kind) {
+  function fmtTs() {
+    const n = new Date(), p = v => String(v).padStart(2,'0');
+    return `${n.getFullYear()}${p(n.getMonth()+1)}${p(n.getDate())}-${p(n.getHours())}${p(n.getMinutes())}`;
+  }
+  function triggerDownload(filename, content) {
+    const blob = new Blob([content], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+  }
+  function safeSlug(s) { return (s||'').replace(/[^a-zA-Z0-9_\-]/g,'_'); }
+  function blockquote(text) {
+    return (text||'').split('\n').map(l => '> ' + l).join('\n');
+  }
+
+  if (kind === 'prompt') {
+    if (!_obsPromptCurrent) { alert('请先加载一条快照'); return; }
+    const { snap, uid } = _obsPromptCurrent;
+    const origin = snap.origin || {};
+    const originTag = origin.origin === 'proactive'
+      ? `proactive-${origin.trigger_name||'unknown'}`
+      : (origin.origin || 'user');
+    const filename = `prompt_${safeSlug(uid)}_${safeSlug(originTag)}_${fmtTs()}.md`;
+
+    const SOFT = snap.soft_warn_threshold || 15000;
+    const HARD = snap.hard_trigger_threshold || 20000;
+    const est  = snap.token_estimate || 0;
+    const layers = snap.layers || [];
+    const totalChars = layers.reduce((s,l) => s + (l.chars||0), 0) || 1;
+
+    let md = `# Prompt 快照 — ${originTag}\n`;
+    md += `- uid: ${uid}\n`;
+    md += `- 捕获时间: ${snap.captured_at || ''}\n`;
+    md += `- 来源: ${origin.origin || ''}`;
+    if (origin.origin === 'proactive') md += ` · trigger=${origin.trigger_name||''}`;
+    md += '\n';
+    if ((origin.seed_prompt||'').trim()) md += `- 种子 prompt: ${origin.seed_prompt}\n`;
+    if ((origin.search_query||'').trim()) md += `- 召回锚 search_query: ${origin.search_query}\n`;
+    md += `- token 估算: ${est}（软警戒 ${SOFT} / 触发裁剪 ${HARD} / 目标 18000）\n`;
+    md += `- 激活 tags: ${(snap.active_tags||[]).join(', ') || '(无)'}\n`;
+    md += `- 被裁层: ${(snap.removed_layers||[]).join(', ') || '(无)'}\n`;
+    md += '\n## 层级（按 position）\n\n';
+
+    for (const lyr of layers) {
+      const pct = ((lyr.chars||0)/totalChars*100).toFixed(1);
+      const prov = lyr.provenance;
+      const mode = prov ? (prov.mode || 'always') : 'always';
+      const status = lyr.pruned ? '被裁' : '已注入';
+      md += `### [${lyr.position}] ${lyr.layer || '?'}  · ${mode}  · ${lyr.chars||0}字/${Math.round(lyr.est_tokens||0)}tok (${pct}%)\n`;
+      md += `- 状态: ${status}\n`;
+      if (prov && mode !== 'always') {
+        let provStr = `mode=${mode}`;
+        if (prov.matched_tags && prov.matched_tags.length) provStr += ` 命中tag=${prov.matched_tags.join(',')}`;
+        if (prov.rag_query) provStr += ` rag_query=${prov.rag_query}`;
+        md += `- provenance: ${provStr}\n`;
+      }
+      md += '\n';
+      if (lyr.content) md += blockquote(lyr.content) + '\n';
+      md += '\n';
+    }
+
+    if (snap.user_message) md += `## 用户消息\n${snap.user_message}\n\n`;
+    if (snap.llm_output != null) md += `## LLM 实际输出\n${snap.llm_output}\n`;
+
+    triggerDownload(filename, md);
+
+  } else if (kind === 'dream') {
+    if (!_obsDreamPromptCurrent) { alert('请先加载一条快照'); return; }
+    const { snap: s, uid } = _obsDreamPromptCurrent;
+    const filename = `dream_${safeSlug(uid)}_${safeSlug(s.world_id||'unknown')}_${fmtTs()}.md`;
+
+    const layers = s.layers || [];
+    const totalTok = layers.reduce((a,l) => a + (l.tokens||0), 0) || 1;
+
+    let md = `# 梦境 Prompt 快照 — ${s.dream_id || '?'}\n`;
+    md += `- uid: ${uid}\n`;
+    md += `- 捕获时间: ${s.captured_at || ''}\n`;
+    md += `- dream_id: ${s.dream_id || ''}\n`;
+    md += `- 世界: ${s.world_id || ''}\n`;
+    md += `- 模式: ${s.lucid_mode || ''} / dream_mode: ${s.dream_mode || ''}\n`;
+    md += `- scene_tags: ${(s.scene_tags || []).join(', ') || '(无)'}\n`;
+    md += `- 历史轮数: ${s.history_turns || 0}\n`;
+    md += `- token 合计: ${s.total_tokens || 0}\n`;
+    md += '\n## 层级\n\n';
+
+    for (const lyr of layers) {
+      const pct = lyr.injected ? ((lyr.tokens||0)/totalTok*100).toFixed(1) : '0.0';
+      const flags = (lyr.flags||[]).join(' ');
+      const status = lyr.injected ? '已注入' : '未注入';
+      md += `### ${lyr.label || '?'}  · ${lyr.chars||0}字/${lyr.tokens||0}tok (${pct}%)\n`;
+      md += `- 状态: ${status}${flags ? ' ' + flags : ''}\n`;
+      if (lyr.note) md += `- note: ${lyr.note}\n`;
+      md += '\n';
+      if (lyr.content && lyr.injected) md += blockquote(lyr.content) + '\n';
+      md += '\n';
+    }
+
+    if (s.user_message) md += `## 用户消息\n${s.user_message}\n\n`;
+    if (s.llm_output != null) md += `## 梦境 LLM 回复\n${s.llm_output}\n`;
+
+    triggerDownload(filename, md);
+
+  } else if (kind === 'probe') {
+    if (!_obsProbeCurrent) { alert('请先加载一条快照'); return; }
+    const { snap: s, uid } = _obsProbeCurrent;
+    const pathKind = s.is_fast_path ? 'fast' : 'llm';
+    const filename = `probe_${safeSlug(uid)}_${pathKind}_${fmtTs()}.md`;
+
+    let md = `# 探针快照 — ${uid}\n`;
+    md += `- 捕获时间: ${s.captured_at || ''}\n`;
+    md += `- 路径: ${s.is_fast_path ? 'Fast-Path（跳过探针 LLM）' : 'LLM 探针'}\n`;
+    md += `- 用户消息: ${s.user_message || ''}\n\n`;
+
+    if (s.is_fast_path) {
+      md += `## Fast-Path 决策\n`;
+      md += `- 命中工具: ${s.matched_tool || ''}\n`;
+      md += `- 命中关键词: ${s.matched_keyword || ''}\n`;
+      md += `- 风险: ${s.fast_path_risk ?? ''}\n`;
+    } else {
+      md += `## LLM 探针决策\n`;
+      md += `- 可用工具: ${(s.tools_available||[]).join(', ')}\n`;
+      const tcs = (s.tool_calls && s.tool_calls.length)
+        ? s.tool_calls.map(tc => `${tc.name||'?'}(${JSON.stringify(tc.arguments||{})})`).join(', ')
+        : '(无工具调用)';
+      md += `- 解析 tool_calls: ${tcs}\n\n`;
+
+      if (s.probe_system) md += `## 探针 System Prompt\n${s.probe_system}\n\n`;
+
+      const ctx = s.probe_context || [];
+      if (ctx.length) {
+        md += `## 注入上下文（${ctx.length} 条）\n\n`;
+        for (const m of ctx) md += `**[${m.role||'?'}]** ${m.content||''}\n\n`;
+      }
+
+      if (s.probe_response_raw) md += `## 探针原始返回\n${s.probe_response_raw}\n\n`;
+    }
+
+    const results = s.tool_results || [];
+    if (results.length) {
+      md += `## 工具执行结果\n\n`;
+      for (const r of results) {
+        md += `### ${r.name||'?'}${r.has_side_effect ? ' (副作用)' : ''}\n`;
+        md += `- 参数: ${JSON.stringify(r.arguments||{})}\n`;
+        md += `- 结果: ${r.result||'(无返回)'}\n\n`;
+      }
+    }
+
+    triggerDownload(filename, md);
+  }
+}
+
 // ══════════════════════════════════════════════════════════
 //  探针观测（observe-probe）
 // ══════════════════════════════════════════════════════════
@@ -3243,13 +3439,16 @@ async function loadObserveProbe() {
   try {
     const d = await api('GET', `/observe/probe/${encodeURIComponent(uid)}?n=${n}`);
     if (!d.snapshot) {
-      el.innerHTML = `<div style="color:var(--muted)">uid ${escapeHtml(uid)} 暂无快照，QQ 收到一条消息后刷新。</div>`;
+      el.innerHTML = `<div style="color:var(--muted)">uid ${escapeHtml(uid)} 暂无快照，聊天后刷新。</div>`;
       return;
     }
     const s = d.snapshot;
+    _obsProbeCurrent = { snap: s, uid };
     const ts = s.captured_at ? s.captured_at.slice(0,19).replace('T',' ') : '';
+    const _chColor = s.channel === 'qq' ? '#2563eb' : s.channel === 'desktop' ? '#059669' : '#6b7280';
+    const _chBadge = s.channel ? `<span style="font-size:10px;background:${_chColor};color:#fff;padding:1px 6px;border-radius:8px;margin-left:8px;vertical-align:middle">${escapeHtml(s.channel)}</span>` : '';
 
-    let html = `<div style="font-size:12px;color:var(--muted);margin-bottom:12px">${ts} · 第 ${d.n+1}/${d.total_snapshots} 轮</div>`;
+    let html = `<div style="font-size:12px;color:var(--muted);margin-bottom:12px">${ts} · 第 ${d.n+1}/${d.total_snapshots} 轮${_chBadge}</div>`;
 
     // ── 决策卡 ──
     if (s.is_fast_path) {
@@ -3371,6 +3570,7 @@ async function loadObserveDreamPrompt() {
       return;
     }
     const s = d.snapshot;
+    _obsDreamPromptCurrent = { snap: s, uid };
     const ts = s.captured_at ? s.captured_at.slice(0,19).replace('T',' ') : '';
 
     // ── 总览 ──
@@ -3410,7 +3610,7 @@ async function loadObserveDreamPrompt() {
           </div>
           ${injected ? `<div style="padding:0 14px 2px"><div style="height:3px;background:var(--bg-secondary);border-radius:2px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${barColor}"></div></div></div>` : ''}
           <div id="${contentId}" style="display:none;padding:0 14px 10px;margin-top:4px">
-            <div style="font-size:11px;color:var(--muted);margin-bottom:4px">此层内容已合入 system_content，在梦境中所有层拼接为单条 system 消息。</div>
+            ${lyr.content ? `<pre style="font-size:11px;white-space:pre-wrap;word-break:break-all;background:var(--bg-secondary);padding:10px;border-radius:4px;max-height:300px;overflow:auto;color:var(--text);margin-top:4px">${escapeHtml((lyr.content||'').slice(0,3000))}${(lyr.content||'').length>3000?'\n… (截断)':''}</pre>` : '<div style="font-size:11px;color:var(--muted);padding:4px 0">（本层无内容/禁用）</div>'}
           </div>
         </div>`;
     }).join('');
@@ -3429,6 +3629,61 @@ async function loadObserveDreamPrompt() {
       </div>`;
     }
 
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = `<div style="color:#ef4444">加载失败：${escapeHtml(e.message)}</div>`;
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  触发器目录（observe-trigger-catalog）
+// ══════════════════════════════════════════════════════════
+
+async function loadTriggerCatalog() {
+  const el = document.getElementById('trigger-catalog-content');
+  if (!el) return;
+  el.innerHTML = '<div style="color:var(--muted)">加载中…</div>';
+  try {
+    const d = await api('GET', '/observe/trigger-catalog');
+    const proposers = d.proposers || [];
+    if (!proposers.length) {
+      el.innerHTML = '<div style="color:var(--muted)">无已注册 proposer。</div>';
+      return;
+    }
+    let html = '';
+    for (const p of proposers) {
+      const tnames = p.trigger_names || [];
+      const samples = p.samples || {};
+      const hasSample = tnames.some(t => samples[t] != null);
+      html += `<div class="card" style="margin-bottom:12px">
+        <div class="card-header" style="padding:10px 14px">
+          <h3 style="font-size:14px;margin:0">${escapeHtml(p.name)}</h3>
+          ${hasSample ? '<span style="font-size:11px;background:#1a3a1a;color:#86efac;padding:1px 6px;border-radius:8px;margin-left:8px">有样本</span>' : '<span style="font-size:11px;background:#2d2d2d;color:#9ca3af;padding:1px 6px;border-radius:8px;margin-left:8px">暂无样本</span>'}
+        </div>`;
+      for (const tname of tnames) {
+        const s = samples[tname];
+        const tsStr = s ? (s.captured_at||'').slice(0,19).replace('T',' ') : '';
+        const sq = s ? (s.search_query||'').trim() : '';
+        const sp = s ? (s.seed_prompt||'').trim() : '';
+        const out = s ? (s.llm_output||null) : null;
+        const tok = s ? (s.token_estimate||0) : 0;
+        const contentId = `tc-${escapeHtml(p.name)}-${escapeHtml(tname)}`.replace(/[^a-zA-Z0-9-]/g,'_');
+        html += `
+          <div style="padding:8px 14px;border-top:1px solid var(--border)">
+            <div style="display:flex;align-items:center;gap:8px;cursor:pointer" onclick="togglePromptLayer('${contentId}')">
+              <code style="font-size:12px;background:var(--bg-secondary);padding:2px 6px;border-radius:4px">${escapeHtml(tname)}</code>
+              ${s ? `<span style="font-size:11px;color:var(--muted)">${tsStr} · ${tok.toLocaleString()} 字</span>` : '<span style="font-size:11px;color:var(--muted)">暂无样本</span>'}
+              ${s ? '<span style="font-size:11px;color:var(--muted)">▶</span>' : ''}
+            </div>
+            ${s ? `<div id="${contentId}" style="display:none;margin-top:8px;padding-left:8px">
+              <div style="font-size:12px;margin-bottom:4px"><span style="color:var(--muted)">召回锚点 (search_query)：</span><span style="color:#fde68a">${sq ? escapeHtml(sq.slice(0,200)) : '<em style="color:var(--muted)">（与 seed_prompt 相同）</em>'}</span></div>
+              <div style="font-size:12px;margin-bottom:6px"><span style="color:var(--muted)">种子 prompt：</span><pre style="margin:4px 0 0;font-size:11px;white-space:pre-wrap;word-break:break-all;background:var(--bg-secondary);padding:6px;border-radius:4px;max-height:100px;overflow:auto">${escapeHtml(sp.slice(0,600))}${sp.length>600?'\n…':''}</pre></div>
+              ${out != null ? `<div style="font-size:12px"><span style="color:var(--muted)">LLM 回复：</span><pre style="margin:4px 0 0;font-size:11px;white-space:pre-wrap;word-break:break-all;background:var(--bg-secondary);padding:6px;border-radius:4px;max-height:100px;overflow:auto;color:var(--text)">${escapeHtml((out||'').slice(0,600))}${(out||'').length>600?'\n…':''}</pre></div>` : ''}
+            </div>` : ''}
+          </div>`;
+      }
+      html += '</div>';
+    }
     el.innerHTML = html;
   } catch(e) {
     el.innerHTML = `<div style="color:#ef4444">加载失败：${escapeHtml(e.message)}</div>`;

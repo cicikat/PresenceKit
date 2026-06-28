@@ -33,6 +33,7 @@ from admin.routers import (
     users, memory, relations,
     system, lorebook,
     settings_proxy, settings_llm, settings_misc, settings_prompt_assets,
+    settings_screen_peek,
     character, chat,
     scheduler, watch, agent, sensor,
     garden, mobile, diary, chat_log,
@@ -40,6 +41,7 @@ from admin.routers import (
     reading, gomoku, chess, dream_seed,
     hidden_state_debug, hardware, observe,
     group, relationship_facts,
+    transcribe, provenance,
 )
 
 app.include_router(users.router,          prefix="/users",     tags=["用户"])
@@ -51,6 +53,7 @@ app.include_router(settings_proxy.router, prefix="",           tags=["设置-代
 app.include_router(settings_llm.router,   prefix="",           tags=["设置-LLM"])
 app.include_router(settings_misc.router,          prefix="", tags=["设置-杂项"])
 app.include_router(settings_prompt_assets.router, prefix="", tags=["设置-Prompt资产"])
+app.include_router(settings_screen_peek.router,   prefix="", tags=["设置-屏幕内容"])
 app.include_router(character.router,      prefix="",           tags=["角色卡"])
 app.include_router(chat.router,           prefix="",           tags=["对话"])
 app.include_router(scheduler.router,      prefix="",           tags=["调度器"])
@@ -74,6 +77,8 @@ app.include_router(observe.router,            prefix="", tags=["观测"])
 app.include_router(hardware.router, prefix="/hardware", tags=["硬件"])
 app.include_router(group.router,    prefix="/group",    tags=["群聊"])
 app.include_router(relationship_facts.router, prefix="", tags=["关系事实"])
+app.include_router(transcribe.router,          prefix="", tags=["语音转写"])
+app.include_router(provenance.router,          prefix="", tags=["观测"])
 
 # ── 桌宠端 WebSocket 端点 ─────────────────────────────────────────────────────
 from fastapi import WebSocket as _WebSocket

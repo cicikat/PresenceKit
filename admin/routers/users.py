@@ -114,6 +114,33 @@ async def update_user_profile(
     return {"message": f"用户 {user_id} 画像已更新", "char_id": resolved, "profile": profile}
 
 
+@router.get("/{user_id}/pronoun", summary="获取用户称谓")
+async def get_user_pronoun(user_id: str, auth=Depends(verify_token)):
+    """返回该用户的第三人称称谓（她/他/TA/它）。"""
+    from core.memory.user_facts import get_user_pronoun as _get_pronoun
+    return {"user_id": user_id, "pronoun": _get_pronoun(user_id)}
+
+
+class _PronounBody(BaseModel):
+    pronoun: str
+
+
+@router.patch("/{user_id}/pronoun", summary="设置用户称谓")
+async def set_user_pronoun(
+    user_id: str,
+    body: _PronounBody,
+    auth=Depends(verify_token),
+):
+    """更新该用户的第三人称称谓（允许值：她/他/TA/它）。"""
+    from core.memory.user_facts import update_user_facts, _VALID_PRONOUNS
+    if body.pronoun not in _VALID_PRONOUNS:
+        raise HTTPException(status_code=422, detail=f"非法称谓值 {body.pronoun!r}，允许：{sorted(_VALID_PRONOUNS)}")
+    updated, rejected = update_user_facts(user_id, {"pronoun": body.pronoun})
+    if rejected:
+        raise HTTPException(status_code=422, detail=f"字段被拒绝: {rejected}")
+    return {"user_id": user_id, "pronoun": updated.get("pronoun", body.pronoun)}
+
+
 @router.delete("/{user_id}/memory", summary="清除用户所有记忆")
 async def delete_user_memory(
     user_id: str,

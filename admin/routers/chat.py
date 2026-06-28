@@ -75,11 +75,16 @@ async def run_owner_chat_turn(
         raise HTTPException(status_code=503, detail="active character 状态异常，本轮中止")
 
     async with conversation_lock(user_id):
-        tool_result_text = await _probe_and_execute_tools(_probe_text, user_id)
+        tool_result_text = await _probe_and_execute_tools(_probe_text, user_id, char_id=_frozen_scope.character_id)
 
         context = await pipeline.fetch_context(
             user_id, message, frozen_scope=_frozen_scope
         )
+        try:
+            from core.observe.prompt_capture import set_capture_origin as _set_capture_origin
+            _set_capture_origin({"origin": "desktop"})
+        except Exception:
+            pass
         messages, _ = pipeline.build_prompt(
             user_id,
             message,
@@ -130,6 +135,7 @@ async def run_owner_chat_turn(
 
         from core.turn_sink import TurnSource, record_assistant_turn
         from core.write_envelope import stamp_user_chat
+        _web_echo = bool(context.get("web_recall_result"))
         turn_result = await record_assistant_turn(
             assistant_text=reply,
             uid=user_id,
@@ -141,6 +147,7 @@ async def run_owner_chat_turn(
             pipeline=pipeline,
             envelope=stamp_user_chat(),
             frozen_scope=_frozen_scope,
+            web_echo=_web_echo,
         )
 
         from core.memory.user_profile import get_affection_level
@@ -174,7 +181,7 @@ async def run_owner_chat_turn(
         }
 
 
-async def _probe_and_execute_tools(message: str, user_id: str) -> str | None:
+async def _probe_and_execute_tools(message: str, user_id: str, *, char_id: str = "yexuan") -> str | None:
     from core import tool_dispatcher, llm_client as _llm
     from core.memory import user_profile as _up, short_term as _st_probe
     from core.session_state import get as _get_state
@@ -200,12 +207,39 @@ async def _probe_and_execute_tools(message: str, user_id: str) -> str | None:
         {"role": "user", "content": message},
     ]
 
+    _probe_snap: dict | None = None
+    _probe_tool_results: list[dict] = []
+
+    def _capture_snap() -> None:
+        if _probe_snap is None:
+            return
+        _probe_snap["tool_results"] = list(_probe_tool_results)
+        try:
+            from core.observe.probe_capture import capture_probe as _cap
+            _cap(user_id, _probe_snap)
+        except Exception:
+            pass
+
     try:
         logger.info(f"[owner_chat] 工具探针，channel消息={message[:20]!r}")
         probe_raw = await _llm.chat(probe_messages, tools=tools_schema)
         logger.info(f"[owner_chat] 探针回复={probe_raw[:60] if probe_raw else 'empty'!r}")
         tool_calls = _llm.parse_tool_call_response(probe_raw)
+        _probe_snap = {
+            "is_fast_path": False,
+            "probe_system": tool_dispatcher.get_probe_prompt(_location),
+            "probe_context": _probe_ctx,
+            "user_message": message,
+            "tools_available": [
+                (t.get("function") or t).get("name", "")
+                for t in tools_schema
+            ],
+            "probe_response_raw": probe_raw if isinstance(probe_raw, str) else "",
+            "tool_calls": tool_calls or [],
+            "channel": "desktop",
+        }
         if not tool_calls:
+            _capture_snap()
             return None
 
         for tc in tool_calls:
@@ -220,16 +254,24 @@ async def _probe_and_execute_tools(message: str, user_id: str) -> str | None:
                 is_group=False,
                 session_state=state,
                 origin="user_live",
+                char_id=char_id,
             )
+            _probe_tool_results.append({
+                "name": t_name,
+                "arguments": t_args,
+                "result": t_result or "",
+                "has_side_effect": tool_dispatcher.is_side_effect_tool(t_name),
+            })
             if t_result:
                 from core.config_loader import _char_name
-
+                _capture_snap()
                 return (
                     f"（{_char_name()}刚刚执行了操作：{t_result}，"
                     f"他知道自己做了这件事，可以自然地提及）"
                 )
     except Exception as e:
         logger.warning(f"[owner_chat] 探针异常: {e}")
+    _capture_snap()
     return None
 
 
@@ -549,7 +591,7 @@ async def desktop_wake(body: dict = Body(default={}), _auth=Depends(verify_token
             return {"reply": None, "source": "no_pipeline"}
 
         from core.conversation_gate import conversation_lock as _conv_lock
-        prompt = "（用户重新打开了桌宠，请结合真实记忆自然接续）"
+        prompt = "（用户重新打开了和你对话的软件，请结合真实记忆自然接续）"
 
         async with _conv_lock(uid):
             logger.info(
@@ -561,10 +603,26 @@ async def desktop_wake(body: dict = Body(default={}), _auth=Depends(verify_token
             context = await pipeline.fetch_context(
                 uid, prompt, frozen_scope=_wake_scope
             )
+            try:
+                from core.observe.prompt_capture import set_capture_origin as _set_capture_origin
+                _set_capture_origin({
+                    "origin": "proactive",
+                    "trigger_name": "desktop_wake",
+                    "seed_prompt": prompt,
+                    "search_query": "",
+                })
+            except Exception:
+                pass
             messages, _ = pipeline.build_prompt(
                 uid, prompt, context, char_id=_wake_scope.character_id
             )
             reply = await pipeline.run_llm(messages)
+            if reply:
+                try:
+                    from core.observe.prompt_capture import update_llm_output as _upd_wake
+                    _upd_wake(uid, reply)
+                except Exception:
+                    pass
             if reply:
                 # Shared reality guard before record_assistant_turn.
                 from core.reality_output_guard import clean_reality_reply_text as _clean_wake_reply
@@ -586,6 +644,7 @@ async def desktop_wake(body: dict = Body(default={}), _auth=Depends(verify_token
                     pipeline=pipeline,
                     envelope=stamp_trigger(),
                     frozen_scope=_wake_scope,
+                    web_echo=bool(context.get("web_recall_result")),
                 )
                 # Visible reply: strip render/NMP tags only; memory already scrubbed
                 # inside record_assistant_turn (memory_text path).

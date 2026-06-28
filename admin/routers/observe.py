@@ -8,6 +8,7 @@ GET /observe/probe/{uid}          — 最近 N 轮探针决策快照（fast-path
 GET /observe/probe                — 有探针快照的 uid 列表
 GET /observe/dream-prompt/{uid}   — 最近 N 轮梦境 Prompt 层级快照（D0-D10 + LLM 输出）
 GET /observe/dream-prompt         — 有梦境快照的 uid 列表
+GET /observe/trigger-catalog      — 触发器目录：全部 proposer + 最近真实捕获快照（seed prompt / search_query）
 """
 
 import logging
@@ -264,3 +265,58 @@ async def get_dream_prompt_snapshot(uid: str, n: int = 0, auth=Depends(verify_to
     idx = max(0, min(n, total - 1))
     snap = snaps[-(idx + 1)]
     return {"uid": uid, "snapshot": snap, "total_snapshots": total, "n": idx}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# /observe/trigger-catalog  —  触发器目录（静态注册表 + 最近真实捕获样本）
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.get(
+    "/observe/trigger-catalog",
+    summary="触发器目录：全部 proposer + 最近真实捕获快照",
+    description=(
+        "返回所有已注册 proposer 的目录，以及每种触发器最近一次真实捕获快照中的"
+        " seed_prompt / search_query / LLM 输出。\n\n"
+        "数据来源：\n"
+        "- **proposers**：`proposer_registry.iter_proposers()` 静态注册表（name + trigger_names）\n"
+        "- **samples**：`prompt_capture` 内存环形缓冲中标记为 `origin.proactive` 的最新快照，"
+        "按 trigger_name 分桶。进程重启后清空，首次触发后才有样本。\n\n"
+        "**只读**，不触发任何写操作。"
+    ),
+    tags=["观测"],
+)
+async def get_trigger_catalog(auth=Depends(verify_token)):
+    try:
+        from core.scheduler.proposer_registry import iter_proposers
+    except Exception as exc:
+        logger.warning("[observe/trigger-catalog] proposer_registry 加载失败: %s", exc)
+        return {"proposers": [], "error": str(exc)}
+
+    from core.observe.prompt_capture import get_latest_proactive_by_trigger
+    latest = get_latest_proactive_by_trigger()
+
+    catalog = []
+    for entry in iter_proposers():
+        trigger_names = sorted(entry.trigger_names)
+        samples: dict = {}
+        for tname in trigger_names:
+            snap = latest.get(tname)
+            if snap is None:
+                samples[tname] = None
+            else:
+                origin = snap.get("origin") or {}
+                samples[tname] = {
+                    "captured_at": snap.get("captured_at"),
+                    "uid": snap.get("uid"),
+                    "seed_prompt": origin.get("seed_prompt", ""),
+                    "search_query": origin.get("search_query", ""),
+                    "llm_output": snap.get("llm_output"),
+                    "token_estimate": snap.get("token_estimate"),
+                }
+        catalog.append({
+            "name": entry.name,
+            "trigger_names": trigger_names,
+            "samples": samples,
+        })
+
+    return {"proposers": catalog}

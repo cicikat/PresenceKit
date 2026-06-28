@@ -4,6 +4,7 @@
 """
 
 from typing import List, Optional
+import uuid
 
 import yaml
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -17,8 +18,22 @@ router = APIRouter()
 
 # ── 工具函数 ──────────────────────────────────────────────────────────────────
 
+def _new_id() -> str:
+    return str(uuid.uuid4())[:8]
+
+
+def _ensure_ids(data: dict) -> bool:
+    """为缺少 id 的条目补发 id，返回是否有补发（需回写）。"""
+    changed = False
+    for entry in data.get("entries", []):
+        if not entry.get("id"):
+            entry["id"] = _new_id()
+            changed = True
+    return changed
+
+
 def _read_lorebook() -> dict:
-    """读取 lorebook.yaml，文件不存在时返回空结构"""
+    """读取 lorebook.yaml，文件不存在时返回空结构；加载后自动补发缺失 id 并回写。"""
     p = get_paths().lorebook()
     if not p.exists():
         return {"entries": []}
@@ -27,6 +42,8 @@ def _read_lorebook() -> dict:
             data = yaml.safe_load(f) or {}
         if "entries" not in data:
             data["entries"] = []
+        if _ensure_ids(data):
+            _write_lorebook(data)
         return data
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"读取 lorebook.yaml 失败: {e}")
@@ -62,6 +79,7 @@ class LoreEntry(BaseModel):
     enabled: bool = True
     regex: bool = False          # True 时 keyword 作为正则表达式匹配
     insertion_order: int = 100   # 数字越小越靠前注入
+    id: Optional[str] = None     # 稳定 id，缺失时后端自动生成
 
 
 # ── 路由 ─────────────────────────────────────────────────────────────────────
@@ -77,38 +95,42 @@ async def get_lorebook(auth=Depends(verify_token)):
 async def add_lore_entry(entry: LoreEntry, auth=Depends(verify_token)):
     """在 lorebook.yaml 末尾追加一条新条目，并热重载世界书引擎"""
     data = _read_lorebook()
-    data["entries"].append({
-        "keyword":          entry.keyword,
-        "content":          entry.content,
-        "enabled":          entry.enabled,
-        "regex":            entry.regex,
-        "insertion_order":  entry.insertion_order,
-    })
-    _write_lorebook(data)
-    _reload_lore_engine()
-    return {"message": "条目已添加", "index": len(data["entries"]) - 1}
-
-
-@router.put("/lorebook/{index}", summary="修改世界书条目")
-async def update_lore_entry(index: int, entry: LoreEntry, auth=Depends(verify_token)):
-    """按下标修改 lorebook.yaml 中的条目，并热重载世界书引擎"""
-    data = _read_lorebook()
-    entries = data.get("entries", [])
-
-    if index < 0 or index >= len(entries):
-        raise HTTPException(status_code=404, detail=f"条目下标 {index} 不存在")
-
-    entries[index] = {
+    new_entry = {
+        "id":              entry.id or _new_id(),
         "keyword":         entry.keyword,
         "content":         entry.content,
         "enabled":         entry.enabled,
         "regex":           entry.regex,
         "insertion_order": entry.insertion_order,
     }
-    data["entries"] = entries
+    data["entries"].append(new_entry)
     _write_lorebook(data)
     _reload_lore_engine()
-    return {"message": f"条目 {index} 已更新"}
+    return {"message": "条目已添加", "id": new_entry["id"]}
+
+
+@router.put("/lorebook/{eid}", summary="修改世界书条目")
+async def update_lore_entry(eid: str, entry: LoreEntry, auth=Depends(verify_token)):
+    """按 id 修改 lorebook.yaml 中的条目，并热重载世界书引擎"""
+    data = _read_lorebook()
+    entries = data.get("entries", [])
+
+    for i, e in enumerate(entries):
+        if e.get("id") == eid:
+            entries[i] = {
+                "id":              eid,
+                "keyword":         entry.keyword,
+                "content":         entry.content,
+                "enabled":         entry.enabled,
+                "regex":           entry.regex,
+                "insertion_order": entry.insertion_order,
+            }
+            data["entries"] = entries
+            _write_lorebook(data)
+            _reload_lore_engine()
+            return {"message": f"条目 {eid} 已更新"}
+
+    raise HTTPException(status_code=404, detail=f"条目 {eid} 不存在")
 
 
 @router.post("/lorebook/import/txt", summary="从 txt 文件批量导入世界书条目")
@@ -145,6 +167,7 @@ async def import_lorebook_txt(file: UploadFile = File(...), auth=Depends(verify_
         if not keywords or not content_lines:
             continue
         data["entries"].append({
+            "id":              _new_id(),
             "keyword":         keywords,
             "content":         "\n".join(content_lines),
             "enabled":         True,
@@ -161,20 +184,18 @@ async def import_lorebook_txt(file: UploadFile = File(...), auth=Depends(verify_
     return {"message": f"已导入 {added} 条世界书条目", "added": added}
 
 
-@router.delete("/lorebook/{index}", summary="删除世界书条目")
-async def delete_lore_entry(index: int, auth=Depends(verify_token)):
-    """按下标删除 lorebook.yaml 中的条目，并热重载世界书引擎"""
+@router.delete("/lorebook/{eid}", summary="删除世界书条目")
+async def delete_lore_entry(eid: str, auth=Depends(verify_token)):
+    """按 id 删除 lorebook.yaml 中的条目，并热重载世界书引擎"""
     data = _read_lorebook()
     entries = data.get("entries", [])
-
-    if index < 0 or index >= len(entries):
-        raise HTTPException(status_code=404, detail=f"条目下标 {index} 不存在")
-
-    removed = entries.pop(index)
-    data["entries"] = entries
+    new_entries = [e for e in entries if e.get("id") != eid]
+    if len(new_entries) == len(entries):
+        raise HTTPException(status_code=404, detail=f"条目 {eid} 不存在")
+    data["entries"] = new_entries
     _write_lorebook(data)
     _reload_lore_engine()
-    return {"message": f"条目 {index} 已删除", "removed_keywords": removed.get("keyword", [])}
+    return {"message": f"条目 {eid} 已删除"}
 
 
 @router.get("/lorebook/export/json", summary="导出世界书为JSON")
@@ -207,7 +228,9 @@ async def import_lorebook_json(file: UploadFile = File(...), auth=Depends(verify
     new_entries = incoming.get("entries", [])
     if not new_entries:
         raise HTTPException(status_code=422, detail="未找到entries字段")
-    
+    for e in new_entries:
+        if not e.get("id"):
+            e["id"] = _new_id()
     data = _read_lorebook()
     data["entries"].extend(new_entries)
     _write_lorebook(data)

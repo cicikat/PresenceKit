@@ -5,6 +5,7 @@
 from typing import Optional
 import json
 import uuid
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import Response
@@ -16,11 +17,28 @@ from core.sandbox import get_paths
 router = APIRouter()
 
 
+def _new_id() -> str:
+    return str(uuid.uuid4())[:8]
+
+
+def _ensure_ids(data: dict) -> bool:
+    """为缺少 id 的条目补发 id，返回是否有补发（需回写）。"""
+    changed = False
+    for entry in data.get("entries", []):
+        if not entry.get("id"):
+            entry["id"] = _new_id()
+            changed = True
+    return changed
+
+
 def _read() -> dict:
     p = get_paths().jailbreak_entries()
     if p.exists():
         try:
-            return json.loads(p.read_text(encoding="utf-8"))
+            data = json.loads(p.read_text(encoding="utf-8"))
+            if _ensure_ids(data):
+                _write(data)
+            return data
         except Exception:
             pass
     return {"entries": []}
@@ -68,8 +86,8 @@ async def import_entries_json(file: UploadFile = File(...), auth=Depends(verify_
     if not new_entries:
         raise HTTPException(status_code=422, detail="未找到entries字段")
     for e in new_entries:
-        if "id" not in e:
-            e["id"] = str(uuid.uuid4())[:8]
+        if not e.get("id"):
+            e["id"] = _new_id()
     data = _read()
     data["entries"].extend(new_entries)
     _write(data)
@@ -87,8 +105,8 @@ async def import_entries_txt(file: UploadFile = File(...), auth=Depends(verify_t
         text = raw.decode("gbk", errors="replace")
     data = _read()
     data["entries"].append({
-        "id":      str(uuid.uuid4())[:8],
-        "title":   Path(file.filename).stem,
+        "id":      _new_id(),
+        "title":   Path(file.filename or "untitled").stem,
         "content": text.strip(),
         "enabled": True,
         "layer":   0,
@@ -101,7 +119,7 @@ async def import_entries_txt(file: UploadFile = File(...), auth=Depends(verify_t
 async def add_entry(entry: JbEntry, auth=Depends(verify_token)):
     data = _read()
     data["entries"].append({
-        "id":      str(uuid.uuid4())[:8],
+        "id":      _new_id(),
         "title":   entry.title,
         "content": entry.content,
         "enabled": entry.enabled,

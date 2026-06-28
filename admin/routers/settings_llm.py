@@ -35,7 +35,7 @@ class LlmParamsUpdate(BaseModel):
 
 
 def _get_chat_preset_params(cfg: dict) -> dict:
-    """返回当前 chat preset 的生成参数（用于 GET /llm-params）。"""
+    """返回当前 chat preset 的生成参数（provider 白名单过滤后，与真实发送值一致）。"""
     mp = cfg.get("model_presets")
     if mp:
         active = mp.get("active_routing", "default")
@@ -43,11 +43,11 @@ def _get_chat_preset_params(cfg: dict) -> dict:
         profile = profiles.get(active) or (next(iter(profiles.values())) if profiles else {})
         preset_name = profile.get("chat") or next(iter(mp.get("presets", {})), None)
         if preset_name:
+            from core.model_registry import resolve_params
             preset = mp.get("presets", {}).get(preset_name, {})
             defaults = mp.get("defaults", {})
-            params = dict(defaults)
-            params.update(preset.get("params", {}))
-            return params
+            kind = preset.get("provider_kind", "openai")
+            return resolve_params(defaults, preset.get("params", {}), kind)
     return cfg.get("llm", {})
 
 
