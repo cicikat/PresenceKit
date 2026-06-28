@@ -59,10 +59,13 @@ def append(
     char_id: str = "yexuan",
     source: str = "",
     memory_strength: float = 1.0,
+    is_trigger_turn: bool = False,
+    occurred_at: float | None = None,
 ) -> None:
     """追加事件；追加前先清理过期 + 截断到 MAX_EVENTS-1。
 
     mid_id / source_turn_id 是固化 pipeline 的血缘字段，旧数据缺失按 None 处理。
+    occurred_at: 事件真实发生时刻（turn 时刻）；None 时回退到记录时刻 now。
     """
     summary = summary.strip()
     if not summary:
@@ -81,6 +84,7 @@ def append(
             events = events[-(MAX_EVENTS - 1):]
         entry: dict = {
             "ts": now,
+            "occurred_at": occurred_at if isinstance(occurred_at, (int, float)) else now,
             "summary": summary,
             "tags": tags or [],
             "mid_id": mid_id,
@@ -88,6 +92,7 @@ def append(
             "promoted_to_episodic_id": None,
             "source": source,
             "memory_strength": max(0.0, min(1.0, float(memory_strength))),
+            "is_trigger_turn": is_trigger_turn,
         }
         events.append(entry)
         safe_write_json(write_path, {"events": events})
@@ -114,6 +119,48 @@ def mark_promoted(uid: str, mid_id: str, ep_id: str, *, char_id: str = "yexuan")
             safe_write_json(write_path, {"events": events})
     except Exception as e:
         log_error("mid_term.mark_promoted", e)
+
+
+def delete_event(uid: str, mid_id: str, *, char_id: str = "yexuan") -> bool:
+    """Delete one mid-term event by mid_id.
+
+    Returns True if found and removed. Appends provenance record on success.
+    """
+    read_path = _read_file(uid, char_id=char_id)
+    write_path = _write_file(uid, char_id=char_id)
+    try:
+        if not read_path.exists():
+            return False
+        data = json.loads(read_path.read_text(encoding="utf-8"))
+        events = data.get("events", [])
+        before_gist = ""
+        new_events = []
+        for e in events:
+            if e.get("mid_id") == mid_id:
+                before_gist = e.get("summary", "")[:120]
+            else:
+                new_events.append(e)
+        if len(new_events) == len(events):
+            return False
+        safe_write_json(write_path, {"events": new_events})
+
+        try:
+            from core.memory import provenance_log
+            provenance_log.append(
+                uid, char_id,
+                artifact="mid_term",
+                field=mid_id,
+                before_gist=before_gist,
+                after_gist="",
+                trigger_signal="explicit_forget",
+                origin={"source": "admin"},
+            )
+        except Exception:
+            pass
+        return True
+    except Exception as e:
+        log_error("mid_term.delete_event", e)
+        return False
 
 
 def format_for_prompt(uid: str, *, char_id: str = "yexuan") -> str:

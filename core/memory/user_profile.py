@@ -7,6 +7,7 @@
 import json
 import logging
 import re
+import time
 from pathlib import Path
 
 from core.config_loader import get_config
@@ -24,8 +25,31 @@ _DEFAULT_PROFILE = {
     "pets": None,           # 宠物
     "interests": None,      # 兴趣爱好
     "occupation": None,     # 职业/学校
-    "important_facts": [],  # 其他重要事实（列表）
+    "important_facts": [],  # 其他重要事实（列表，元素可为 str 或 {text,tag,ts}）
 }
+
+# important_facts 中受控 tag 集合
+# pref.* 类（易变偏好）、habit（行为习惯）、health（身体/精神状态）走 recency 召回；
+# stable（稳定事实）/ misc（未分类）/ 空字符串始终平铺注入
+_RECENCY_TAGS: frozenset[str] = frozenset({"pref.music", "pref.food", "pref.media", "habit", "health"})
+_PREF_PREFIX = "pref."
+_RECENCY_WINDOW_SECONDS = 90 * 86400  # 90 天
+
+
+def _normalize_fact(fact) -> dict:
+    """将画像条目归一化为 {text, tag, ts} 格式。旧 str 条目兼容处理，不强制迁移磁盘。"""
+    if isinstance(fact, dict):
+        return {
+            "text": str(fact.get("text", "")),
+            "tag": str(fact.get("tag", "misc")),
+            "ts": float(fact.get("ts", 0)),
+        }
+    return {"text": str(fact), "tag": "misc", "ts": 0.0}
+
+
+def _is_recency_tag(tag: str) -> bool:
+    """判断该 tag 是否属于需要 recency 门控的偏好/习惯类别。"""
+    return tag in _RECENCY_TAGS or tag.startswith(_PREF_PREFIX)
 
 
 def _profile_read_path(user_id: str, *, char_id: str = "yexuan") -> Path:
@@ -70,12 +94,13 @@ async def _compress_facts(facts: list) -> list:
         import json as _json
 
         prompt = (
-            "以下是用户的重要事实列表，请整理精简。规则：\n"
+            "以下是用户的重要事实列表（每条为 {text, tag, ts} 对象或旧格式字符串），请整理精简。规则：\n"
             "1. 语义相同或高度相似的条目只保留一条，措辞最准确的那条\n"
             "2. 以下类型直接删除：测试AI行为的记录、单次临时状态、对话玩笑、已在name/location/pets/interests/occupation字段存储的信息\n"
             "3. 输出不超过25条\n"
+            "4. 每条输出为 {\"text\": \"内容\", \"tag\": \"标签\", \"ts\": 时间戳} 格式；旧字符串条目保留原 tag=misc/ts=0\n"
             "只输出JSON数组，不要其他内容：\n"
-            + _json.dumps(facts, ensure_ascii=False)
+            + _json.dumps([_normalize_fact(f) for f in facts], ensure_ascii=False)
         )
         raw = await llm_client.chat([{"role": "user", "content": prompt}], max_tokens_override=2000)
         raw = raw.strip()
@@ -122,14 +147,15 @@ async def update(user_id: str, new_facts: dict, *, char_id: str = "yexuan"):
 
     for key, value in new_facts.items():
         if key == "important_facts":
-            # 列表字段：去重追加
+            # 列表字段：去重追加（支持旧 str 和新 {text,tag,ts} 两种格式）
             existing = profile.get("important_facts") or []
-            if isinstance(value, list):
-                for item in value:
-                    if item and item not in existing:
-                        existing.append(item)
-            elif value and value not in existing:
-                existing.append(value)
+            existing_texts = {_normalize_fact(f)["text"] for f in existing}
+            items = value if isinstance(value, list) else ([value] if value else [])
+            for item in items:
+                norm = _normalize_fact(item)
+                if norm["text"] and norm["text"] not in existing_texts:
+                    existing.append(norm)
+                    existing_texts.add(norm["text"])
 
             # 超过 30 条时触发 LLM 合并压缩
             if len(existing) > 30:
@@ -195,15 +221,18 @@ async def extract_and_update(user_id: str, recent_messages: list[dict], *, char_
                 "注意：以下文字仅包含用户自己说的话，不含AI发言。\n"
                 "只返回 JSON 对象，不要输出任何其他内容。\n"
                 "JSON 格式：\n"
-                '{"name": null或字符串, "location": null或字符串, "pets": null或字符串, "interests": null或字符串, "occupation": null或字符串, "important_facts": [字符串列表]}\n'
-                "important_facts 只记录稳定的、有意义的个人事实，例如：性格特点、生活习惯、重要经历、身体状况（包括精神状态）。\n"
+                '{"name": null或字符串, "location": null或字符串, "pets": null或字符串, "interests": null或字符串, "occupation": null或字符串, "important_facts": [条目列表]}\n'
+                "important_facts 中每条为对象 {\"text\": \"事实内容\", \"tag\": \"分类标签\", \"ts\": 时间戳数字}。\n"
+                "tag 从以下受控集合中选择：pref.music（音乐偏好）/ pref.food（饮食偏好）/ pref.media（影视/游戏偏好）/ habit（日常习惯）/ health（身体/精神状态）/ stable（稳定客观事实）/ misc（其他）。\n"
+                "ts 填写当前 Unix 时间戳（秒），用于判断事实新鲜度。\n"
+                "important_facts 只记录稳定的、有意义的个人事实，例如：性格特点、生活习惯、重要经历、身体状况（包括精神状态）、明确的偏好（喜欢/不喜欢）。\n"
                 "绝对不要记录：用户测试AI功能的行为、单次询问某件事、临时状态、对话中的玩笑或表情包、已经在其他字段记录的信息。\n"
-                "没有提到的字段填 null。"
+                "没有提到的字段填 null，important_facts 为空时填 []。"
             ),
         },
         {
             "role": "user",
-            "content": f"用户发言：\n{conv_text}",
+            "content": f"用户发言（当前时间戳约 {int(time.time())}）：\n{conv_text}",
         },
     ]
 
@@ -242,6 +271,68 @@ def _save(user_id: str, profile: dict, *, char_id: str = "yexuan"):
 def save(user_id: str, profile: dict, *, char_id: str = "yexuan"):
     """公开接口：直接将 profile 写回磁盘（admin 覆盖编辑用）"""
     _save(user_id, profile, char_id=char_id)
+
+
+def delete_important_fact(user_id: str, index: int, *, char_id: str = "yexuan") -> bool:
+    """Delete one important_fact entry by list index.
+
+    Returns True if removed, False if index out of range.
+    Appends provenance record on success.
+    """
+    profile = load(user_id, char_id=char_id)
+    facts = profile.get("important_facts") or []
+    if index < 0 or index >= len(facts):
+        return False
+    removed = _normalize_fact(facts.pop(index))
+    profile["important_facts"] = facts
+    _save(user_id, profile, char_id=char_id)
+
+    try:
+        from core.memory import provenance_log
+        provenance_log.append(
+            user_id, char_id,
+            artifact="profile.important_facts",
+            field=str(index),
+            before_gist=removed["text"][:120],
+            after_gist="",
+            trigger_signal="explicit_forget",
+            origin={"source": "admin"},
+        )
+    except Exception:
+        pass
+    return True
+
+
+def overwrite_important_fact(user_id: str, index: int, new_text: str, *, char_id: str = "yexuan", tag: str = "misc") -> bool:
+    """Overwrite one important_fact entry by list index with new_text.
+
+    Returns True if updated, False if index out of range.
+    Appends provenance record on success.
+    """
+    import time as _time
+    profile = load(user_id, char_id=char_id)
+    facts = profile.get("important_facts") or []
+    if index < 0 or index >= len(facts):
+        return False
+    old = _normalize_fact(facts[index])
+    facts[index] = {"text": new_text, "tag": tag, "ts": _time.time()}
+    profile["important_facts"] = facts
+    _save(user_id, profile, char_id=char_id)
+
+    try:
+        from core.memory import provenance_log
+        provenance_log.append(
+            user_id, char_id,
+            artifact="profile.important_facts",
+            field=str(index),
+            before_gist=old["text"][:120],
+            after_gist=new_text[:120],
+            trigger_signal="explicit_forget",
+            origin={"source": "admin"},
+        )
+    except Exception:
+        pass
+    return True
 
 
 def clear(user_id: str, *, char_id: str = "yexuan"):

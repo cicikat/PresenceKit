@@ -53,7 +53,10 @@ ALLOWED_FIELDS: frozenset[str] = frozenset({
     "known_projects",
     "writing_style_preferences",
     "tool_usage_preferences",
+    "pronoun",   # 用于记忆渲染：她/他/TA/它，跨角色客观属性
 })
+
+_VALID_PRONOUNS: frozenset[str] = frozenset({"她", "他", "TA", "它"})
 
 # ── Explicit deny: subjective / relationship / emotional fields ───────────────
 
@@ -168,6 +171,46 @@ def update_user_facts(uid: str, patch: dict) -> tuple[dict, list[str]]:
     return current, rejected
 
 
+def get_user_pronoun(uid: str) -> str:
+    """Return the user's preferred third-person pronoun (她/他/TA/它).
+
+    Defaults to '她' when unset or invalid.
+    """
+    p = load_user_facts(uid).get("pronoun")
+    return p if p in _VALID_PRONOUNS else "她"
+
+
+def delete_user_fact(uid: str, key: str) -> bool:
+    """Delete one key from user_facts.
+
+    Returns True if key existed and was removed.
+    Rejected for unknown / denied keys (returns False without error).
+    """
+    if key not in ALLOWED_FIELDS:
+        logger.info("[user_facts] delete_user_fact: key %r not in ALLOWED_FIELDS, skip", key)
+        return False
+    current = load_user_facts(uid)
+    if key not in current:
+        return False
+    before_val = current.pop(key)
+    save_user_facts(uid, current)
+
+    try:
+        from core.memory import provenance_log
+        from core.memory.scope import MemoryScope
+        # user_facts is global-scope (no char_id) — use empty string char_id placeholder
+        # provenance_log requires require_character_id; pass "global" as sentinel
+        # We call append directly with a known-safe char sentinel understood by the path resolver.
+        # Since provenance_log uses MemoryScope.reality_scope we need a char_id;
+        # global facts don't have one — skip provenance for global-scope facts.
+        pass  # provenance skipped: user_facts is global-scope, no char_id available
+    except Exception:
+        pass
+
+    logger.info("[user_facts] deleted key=%r uid=%s (was=%r)", key, uid, before_val)
+    return True
+
+
 def clear_user_facts(uid: str) -> bool:
     """Wipe user_facts to an empty dict."""
     p = _path(uid)
@@ -185,7 +228,7 @@ def format_for_prompt(uid: str) -> str:
         return ""
     lines: list[str] = []
     for key, value in facts.items():
-        if value is None:
+        if key == "pronoun" or value is None:
             continue
         if isinstance(value, list):
             if not value:

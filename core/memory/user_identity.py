@@ -118,6 +118,83 @@ async def save(user_id: str, identity_dict: dict, *, char_id: str = "yexuan") ->
         return safe_write_text(write_path, text)
 
 
+async def delete_dimension(user_id: str, key: str, *, char_id: str = "yexuan") -> bool:
+    """Remove one dimension from the identity file by key.
+
+    Returns True if the dimension existed and was removed, False otherwise.
+    Appends provenance record on success.
+    """
+    if key not in _VALID_KEYS:
+        logger.warning("[user_identity] delete_dimension: unknown key=%r uid=%s", key, user_id)
+        return False
+    identity = await load(user_id, char_id=char_id)
+    if key not in identity:
+        return False
+    before_gist = identity[key].get("text", "")[:120]
+    del identity[key]
+    ok = await save(user_id, identity, char_id=char_id)
+    if ok:
+        try:
+            from core.memory import provenance_log
+            provenance_log.append(
+                user_id, char_id,
+                artifact="user_identity",
+                field=key,
+                before_gist=before_gist,
+                after_gist="",
+                trigger_signal="explicit_forget",
+                origin={"source": "admin"},
+            )
+        except Exception:
+            pass
+    return ok
+
+
+async def overwrite_dimension(
+    user_id: str,
+    key: str,
+    text: str,
+    *,
+    char_id: str = "yexuan",
+    confidence: float = 1.0,
+    evidence_count: int = 1,
+) -> bool:
+    """Overwrite or create a dimension in the identity file.
+
+    Returns True on success. Appends provenance record.
+    """
+    import time as _time
+    if key not in _VALID_KEYS:
+        logger.warning("[user_identity] overwrite_dimension: unknown key=%r uid=%s", key, user_id)
+        return False
+    identity = await load(user_id, char_id=char_id)
+    before_gist = identity.get(key, {}).get("text", "")[:120] if key in identity else ""
+    identity[key] = {
+        "text": text,
+        "confidence": confidence,
+        "evidence_count": evidence_count,
+        "last_updated": _time.time(),
+        "counter_evidence_count": 0,
+        "last_conflict_at": 0.0,
+    }
+    ok = await save(user_id, identity, char_id=char_id)
+    if ok:
+        try:
+            from core.memory import provenance_log
+            provenance_log.append(
+                user_id, char_id,
+                artifact="user_identity",
+                field=key,
+                before_gist=before_gist,
+                after_gist=text[:120],
+                trigger_signal="explicit_forget",
+                origin={"source": "admin"},
+            )
+        except Exception:
+            pass
+    return ok
+
+
 async def format_for_prompt(user_id: str, min_confidence: float = 0.5, *, char_id: str = "yexuan") -> str:
     """返回 confidence >= min_confidence 的维度描述，按 IDENTITY_DIMENSIONS 顺序拼接。
 

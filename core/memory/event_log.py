@@ -34,6 +34,7 @@ _HIGH_INTENSITY_WORDS = {"心疼", "难过", "哭", "气死", "开心", "喜欢"
 _MED_INTENSITY_WORDS  = {"想", "记得", "担心", "等你", "在意"}
 
 _TURN_ID_RE = re.compile(r"turn_id:(\S+)")
+_SPEAKER_META_RE = re.compile(r"^>\s*.*\bspeaker:(\w+)")
 
 
 def _event_log_write_dir(user_id: str, *, char_id: str = "yexuan") -> Path:
@@ -238,14 +239,17 @@ def append(
 
     if role == "assistant":
         _intensity = _calc_intensity(content, emotion)
-        meta = f"> emotion:{emotion} intensity:{_intensity}"
+        meta = f"> emotion:{emotion} intensity:{_intensity} speaker:assistant"
         if turn_id:
             meta += f" turn_id:{turn_id}"
         if trigger_name:
             meta += f" trigger:{trigger_name}"
         footer = meta + "\n---\n"
     else:
-        footer = (f"> turn_id:{turn_id}\n" if turn_id else "")
+        _meta = "> speaker:user"
+        if turn_id:
+            _meta += f" turn_id:{turn_id}"
+        footer = _meta + "\n"
 
     chunk = header + line + footer
 
@@ -315,7 +319,15 @@ def get_recent_days(user_id: str, days: int = 3, *, char_id: str = "yexuan") -> 
     return "\n\n".join(parts)
 
 
-async def search(user_id: str, query: str, llm_client=None, *, char_id: str = "yexuan", return_trace: bool = False) -> str | tuple:
+async def search(
+    user_id: str,
+    query: str,
+    llm_client=None,
+    *,
+    char_id: str = "yexuan",
+    return_trace: bool = False,
+    query_vec: list | None = None,
+) -> str | tuple:
     recent_text = get_recent_days(user_id, days=30, char_id=char_id)
     if not recent_text:
         return ("", []) if return_trace else ""
@@ -328,7 +340,23 @@ async def search(user_id: str, query: str, llm_client=None, *, char_id: str = "y
     if not keywords:
         return ("", []) if return_trace else ""
 
+    # ── X2: overall event-log semantic similarity (single blob per user) ──────
+    _el_sem_sim = 0.0
+    if query_vec is not None:
+        try:
+            from core.memory import vector_store as _vs
+            from core.memory.vector_store import dist_to_sim as _d2s
+            _el_hits = _vs.query(user_id, char_id, query_vec, k=1, sources=["event_log"])
+            if _el_hits:
+                _el_sem_sim = _d2s(_el_hits[0][1])
+        except Exception as _se:
+            logger.debug("[event_log.search] semantic lookup failed: %s", _se)
+
+    from core.memory.vector_store import score_recall as _score_recall
+
     char_name = _char_name()
+    from core.memory.user_facts import get_user_pronoun as _get_pronoun
+    _user_pronoun = _get_pronoun(user_id)
     _ROLE_PREFIX_RE = re.compile(
         rf"^\*\*(用户|{re.escape(char_name)})\*\*[:：](.*)$"
     )
@@ -356,27 +384,52 @@ async def search(user_id: str, query: str, llm_client=None, *, char_id: str = "y
             if days_ago > 7 and intensity < 1:
                 continue
 
-            # 改动2: 乘法衰减，高强度老事件不再压过近期低强度
-            score = intensity * decay
+            # intensity 归一化到 [0,1]（原始 0/1/2 量纲），供 score_recall 统一量纲
+            strength_norm = min(intensity / 2.0, 1.0)
 
-            # P0-1: 按说话人逐行成卡，不跨说话人缝合
-            cur_role = "assistant"
-            for line in block:
-                s = line.strip()
-                if not s or s.startswith("#") or s == "---" or s.startswith("> emotion:"):
-                    continue
-                m_role = _ROLE_PREFIX_RE.match(s)
-                if m_role:
-                    cur_role = "user" if m_role.group(1) == "用户" else "assistant"
-                    body = m_role.group(2).strip()
-                else:
-                    body = s
-                if not body:
-                    continue
-                hit = sum(1 for kw in keywords if kw in body)
-                if hit > 0:
-                    relevance = hit / max(len(keywords), 1)
-                    matched.append((score + relevance, cur_role, _clip_sentence(body, 60), days_ago))
+            # P1-1: speaker 元字段优先归属；旧 block 无 speaker 元行时退回 prefix+继承
+            _has_speaker_meta = any(_SPEAKER_META_RE.match(l.strip()) for l in block)
+            if _has_speaker_meta:
+                _pending: list = []
+                for line in block:
+                    s = line.strip()
+                    if not s or s.startswith("#") or s == "---":
+                        continue
+                    m_meta = _SPEAKER_META_RE.match(s)
+                    if m_meta:
+                        _seg_role = "user" if m_meta.group(1) == "user" else "assistant"
+                        for body in _pending:
+                            hit = sum(1 for kw in keywords if kw in body)
+                            if hit > 0:
+                                relevance = hit / max(len(keywords), 1)
+                                matched.append((_score_recall(_el_sem_sim, relevance, strength_norm, decay), _seg_role, _clip_sentence(body, 60), days_ago))
+                        _pending = []
+                    elif s.startswith(">"):
+                        continue
+                    else:
+                        m_pref = _ROLE_PREFIX_RE.match(s)
+                        body = m_pref.group(2).strip() if m_pref else s
+                        if body:
+                            _pending.append(body)
+            else:
+                # 旧 block：prefix+继承（P0-1 行为）
+                cur_role = "assistant"
+                for line in block:
+                    s = line.strip()
+                    if not s or s.startswith("#") or s == "---" or s.startswith(">"):
+                        continue
+                    m_role = _ROLE_PREFIX_RE.match(s)
+                    if m_role:
+                        cur_role = "user" if m_role.group(1) == "用户" else "assistant"
+                        body = m_role.group(2).strip()
+                    else:
+                        body = s
+                    if not body:
+                        continue
+                    hit = sum(1 for kw in keywords if kw in body)
+                    if hit > 0:
+                        relevance = hit / max(len(keywords), 1)
+                        matched.append((_score_recall(_el_sem_sim, relevance, strength_norm, decay), cur_role, _clip_sentence(body, 60), days_ago))
 
     def _render_card(role: str, text: str, days_ago: int) -> str:
         coarse = (
@@ -385,11 +438,11 @@ async def search(user_id: str, query: str, llm_client=None, *, char_id: str = "y
             "前几天" if days_ago < 7 else
             f"约{days_ago}天前"
         )
-        who = "你提到" if role == "user" else f"{char_name}当时说"
+        who = f"{_user_pronoun}提到" if role == "user" else f"{char_name}当时说"
         return f"（{coarse}）{who}：{text}"
 
     matched.sort(key=lambda x: x[0], reverse=True)
-    MIN_SCORE = 0.6
+    MIN_SCORE = 0.3  # recalibrated for X2 fusion formula (w_sem+w_kw+w_str=1.0 range)
     selected = [(s, r, t, d) for s, r, t, d in matched[:5] if s >= MIN_SCORE]
     result_str = "\n".join(_render_card(r, t, d) for _, r, t, d in selected) if selected else ""
     if return_trace:
@@ -435,6 +488,25 @@ def get_highlights(user_id: str, days: int = 2, max_lines: int = 5) -> str:
     candidates.sort(key=lambda x: x[0], reverse=True)
     selected = [c for _, c in candidates[:max_lines]]
     return "；".join(selected) if selected else ""
+
+
+def delete_day(user_id: str, date_str: str, *, char_id: str = "yexuan") -> bool:
+    """Delete (unlink) the YYYY-MM-DD.md file for a given day.
+
+    Only removes the new-layout file; does not touch old-layout path or full_log.md.
+    Returns True if the file existed and was removed, False if not found.
+    """
+    try:
+        scope = MemoryScope.reality_scope(safe_user_id(user_id), char_id)
+        day_file = resolve_path(scope, "event_log") / f"{date_str}.md"
+        if not day_file.exists():
+            return False
+        day_file.unlink()
+        logger.info("[event_log] deleted day file date=%s uid=%s char=%s", date_str, user_id, char_id)
+        return True
+    except Exception as e:
+        log_error("event_log.delete_day", e)
+        return False
 
 
 def cleanup_event_log(user_id: str) -> None:

@@ -184,6 +184,14 @@ def write_episode(user_id: str, episode: dict, *, char_id: str = "yexuan") -> No
         record_failure("episodic_memory", str(episode), user_id)
         return
 
+    # 血缘 exact-dup：新 episode 的 source_mid_ids 与任意存量重叠 → 跳过
+    new_mids = set(episode.get("source_mid_ids") or [])
+    if new_mids:
+        for existing in memories:
+            if new_mids & set(existing.get("source_mid_ids") or []):
+                logger.info(f"[episodic] 血缘重复跳过: {episode.get('id')} ∩ {existing.get('id')}")
+                return
+
     # 去重：与最近10条做narrative_summary相似度检查，兼容旧记忆
     new_summary = episode.get("narrative_summary") or episode.get("summary", "")
     for existing in memories[-10:]:
@@ -279,6 +287,7 @@ def retrieve(
     char_name: str = "",
     allow_strengthen: bool = True,
     return_trace: bool = False,
+    query_vec: list | None = None,
 ) -> list | tuple:
     """
     按话题标签+情绪检索最相关的情景记忆，检索后强化strength。
@@ -345,7 +354,25 @@ def retrieve(
             elif len(matched & specific) >= 2:
                 candidate_ids.add(mid)
 
-    # 无真实词面命中（或证据不足）：主路径不强行倒高强度记忆，交给 fallback。
+    # ── X2: semantic candidate extension ─────────────────────────────────────
+    # Build sem_sim_map {ep_id -> similarity} from vector store hits,
+    # then add semantic-only hits (no keyword overlap) to the candidate pool.
+    sem_sim_map: dict[str, float] = {}
+    if query_vec is not None:
+        try:
+            from core.memory import vector_store as _vs
+            from core.memory.vector_store import dist_to_sim as _d2s
+            from core.sandbox import safe_user_id as _safe_uid
+            _sem_hits = _vs.query(_safe_uid(user_id), char_id, query_vec, k=10, sources=["episodic"])
+            _mem_by_id = {m["id"]: m for m in memories}
+            for _src_id, _dist, _ts in _sem_hits:
+                sem_sim_map[_src_id] = _d2s(_dist)
+                if _src_id not in candidate_ids and _src_id in _mem_by_id:
+                    candidate_ids.add(_src_id)
+        except Exception as _se:
+            logger.debug("[episodic.retrieve] semantic lookup failed: %s", _se)
+
+    # 无真实词面命中且无语义命中：主路径不强行倒高强度记忆，交给 fallback。
     if topic and not candidate_ids:
         logger.debug("[episodic.retrieve] 无足够词面证据，主召回返回空，交给 fallback uid=%s", user_id)
         return ([], []) if return_trace else []
@@ -354,6 +381,7 @@ def retrieve(
     REL_SCALE = 5.0   # idf_sum 归一化尺度（约"一个稀有词≈满分"），据 trace 可调
     rel_map: dict = {}   # mem_id -> relevance_norm，供 trace 段读取
     scored = []
+    from core.memory.vector_store import score_recall as _score_recall
     for mem in memories:
         if mem["id"] not in candidate_ids:
             continue
@@ -374,8 +402,8 @@ def retrieve(
         idf_sum = sum(idf.get(g, 0.0) for g in _kwm) + FACTS_WEIGHT * sum(idf.get(g, 0.0) for g in _fact_only)
         relevance_norm = min(1.0, idf_sum / REL_SCALE)
         rel_map[mem["id"]] = relevance_norm
-        # 相关性闸门：弱相关时把高强度记忆压低（×0.4），强相关时放行（×1.0）
-        score = strength * decay * (0.4 + 0.6 * relevance_norm) + emotion_bonus + 0.3 * relevance_norm
+        sem_sim = sem_sim_map.get(mem["id"], 0.0)
+        score = _score_recall(sem_sim, relevance_norm, strength, decay) + emotion_bonus
         expires_at = mem.get("expires_at")
         if isinstance(expires_at, (int, float)) and now > expires_at:
             score *= 0.3
@@ -512,10 +540,11 @@ def retrieve(
                 "hop": 1,
                 "kw": sorted(g for g in query_grams if g in _hay),
                 "rel": round(rel_map.get(mem["id"], 0.0), 3),
+                "sem_sim": round(sem_sim_map.get(mem["id"], 0.0), 3),
                 "summary": (mem.get("narrative_summary") or mem.get("summary", ""))[:80],
                 "strength": round(mem.get("strength", 0.5), 3),
                 "emotion_peak": mem.get("emotion_peak", "neutral"),
-                "kw_src": "keyword" if kw_matched_map.get(mem["id"]) else "facts",
+                "kw_src": "keyword" if kw_matched_map.get(mem["id"]) else ("semantic" if sem_sim_map.get(mem["id"]) else "facts"),
                 "selected": mem["id"] in _selected_ids,
             })
         for mem in hop2_added:
@@ -533,6 +562,60 @@ def retrieve(
             })
         return result, trace_items
     return result
+
+
+def delete_episode(user_id: str, ep_id: str, *, char_id: str = "yexuan") -> bool:
+    """Delete one episodic entry by id and cascade-delete its vector.
+
+    Returns True if the entry was found and removed, False otherwise.
+    Never raises — caller can treat False as 'not found'.
+    """
+    try:
+        memories = _load_memories(user_id, char_id=char_id)
+    except EpisodicCorruptError:
+        logger.error("[episodic] delete_episode: file corrupt uid=%s", user_id)
+        return False
+
+    original_len = len(memories)
+    before_gist = ""
+    memories_new = []
+    for m in memories:
+        if m.get("id") == ep_id:
+            before_gist = (m.get("narrative_summary") or m.get("summary", ""))[:120]
+        else:
+            memories_new.append(m)
+
+    if len(memories_new) == original_len:
+        return False  # not found
+
+    _save_memories(user_id, memories_new, char_id=char_id)
+    _rebuild_index(user_id, memories_new, char_id=char_id)
+
+    # cascade: remove from vector store (fail-open)
+    try:
+        from core.memory import vector_store as _vs
+        from core.sandbox import safe_user_id as _safe_uid
+        _vs.delete(_safe_uid(user_id), char_id, "episodic", ep_id)
+    except Exception as e:
+        logger.warning("[episodic] vector cascade delete failed ep_id=%s: %s", ep_id, e)
+
+    # provenance
+    try:
+        from core.memory import provenance_log
+        provenance_log.append(
+            user_id, char_id,
+            artifact="episodic",
+            field=ep_id,
+            before_gist=before_gist,
+            after_gist="",
+            trigger_signal="explicit_forget",
+            origin={"source": "admin"},
+        )
+    except Exception:
+        pass
+
+    logger.info("[episodic] deleted episode ep_id=%s uid=%s", ep_id, user_id)
+    return True
 
 
 def decay_all(user_id: str) -> None:
@@ -565,6 +648,7 @@ def format_for_prompt(
     memories: list,
     char_name: str = None,
     current_emotion: str = "neutral",
+    user_pronoun: str = "她",
 ) -> str:
     """把情景记忆列表格式化成prompt注入文本，带时间锚点和情绪染色。"""
     if char_name is None:
@@ -580,6 +664,7 @@ def format_for_prompt(
         summary = mem.get("narrative_summary") or mem.get("summary", "")
         if not summary:
             continue
+        summary = summary.replace("用户", user_pronoun)
 
         # P0-3: 用 occurred_at（事件真实时刻）渲染时间锚；旧数据回退 timestamp
         anchor_ts = mem.get("occurred_at")
@@ -676,8 +761,11 @@ def retrieve_fallback(user_id: str, recent_history: list[str], top_k: int = 1, *
         age_days = (now - anchor) / 86400
         if age_days > 7:
             continue
-        # 核心记忆不靠"近期高强度兜底"反复复活：真实发生超 2 天则跳过
-        if m.get("is_core") and age_days > 2:
+        # 核心记忆只经主相关性召回浮现，不参与 fallback 兜底
+        # (confab-fixation-loop fix: is_core episodes must not be unconditionally
+        # surfaced by fallback every turn — they should only reach the prompt via
+        # keyword-matched retrieve())
+        if m.get("is_core"):
             continue
         if m.get("strength", 0) < 0.6:
             continue

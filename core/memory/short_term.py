@@ -20,7 +20,7 @@ from core.sandbox import safe_user_id
 logger = logging.getLogger(__name__)
 
 # 近场承载对话连续性，必须优先保留最近几轮的上下文。
-NEAR_K = 5
+NEAR_K = 10
 
 # 内容越长，越可能包含具体事件、约束或连续叙述。
 LENGTH_SIGNAL_WEIGHT = 1.0
@@ -366,8 +366,15 @@ def load_for_prompt(user_id, *, budget_rounds=None, near_k=NEAR_K, char_id: str 
         total, parts = _score_turn_group(group)
         scored.append((total, idx, parts))
 
-    scored.sort(key=lambda item: (-item[0], item[1]))
-    for _, idx, _ in scored[:remaining_budget]:
+    # 时间衰减：越靠近近场的组额外获得 recency bonus，防止远古高分轮挤掉次新中分轮。
+    # 最老 idx=0 → bonus≈0；紧邻近场 idx=near_start-1 → bonus≈1.6。
+    # 综合分 = 信息分×0.6 + 时间分×1.6，使"中等信息量但最近"与"高信息量但很旧"基本持平。
+    _denom = max(near_start - 1, 1)
+    scored_by_recency = sorted(
+        scored,
+        key=lambda item: (-(item[0] * 0.6 + (item[1] / _denom) * 1.6), item[1]),
+    )
+    for _, idx, _ in scored_by_recency[:remaining_budget]:
         selected_indexes.add(idx)
 
     scored_parts = {idx: (total, parts) for total, idx, parts in scored}

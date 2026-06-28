@@ -49,7 +49,7 @@ _STATE_DEFAULTS: dict = {
 _REFLECT_PROMPT_TEMPLATE = """\
 你是一个对话记录分析器。请分析下面这些近期对话摘要，提炼出一条情景记忆，只输出JSON，不要有任何多余文字：
 {{
-  "raw_facts": ["事实陈述1（用户说了/做了什么）", "事实2", "事实3"],
+  "raw_facts": ["事实陈述1（{pronoun}说了/做了什么）", "事实2", "事实3"],
   "topic_keywords": ["话题词1", "话题词2", "话题词3"],
   "emotion_peak": "neutral/happy/sad/gentle/surprised/angry 中选一个",
   "emotion_texture": "最有重量的情绪质感描述，20字以内，可留空",
@@ -260,6 +260,14 @@ def _derive_occurred_at(to_process: list[dict], fallback: float) -> float:
     return min(times) if times else fallback
 
 
+def _batch_occurred_at(to_process: list[dict], fallback: float) -> float:
+    """优先读 mid_term entry 的 occurred_at 字段；旧数据无字段时回退 source_turn_id 解析。"""
+    times = [e["occurred_at"] for e in to_process if isinstance(e.get("occurred_at"), (int, float))]
+    if times:
+        return min(times)
+    return _derive_occurred_at(to_process, fallback)
+
+
 def _parse_event_time_hint(event_time_hint: str, *, now: float | None = None) -> float | None:
     """Conservatively parse a small set of Chinese date hints in local time."""
     if not isinstance(event_time_hint, str) or not event_time_hint.strip():
@@ -370,6 +378,34 @@ def _resolve_matching_open_episodes(
         _ep._rebuild_index(uid, memories, char_id=char_id)
         logger.info("episodic_resolved uid=%s closed=%s by=%s", uid, closed_ids, new_ep_id)
     return closed_ids
+
+
+def _find_core_duplicate(new_keywords: list[str], new_summary: str, existing_eps: list[dict]) -> dict | None:
+    """Return the first is_core open episode that overlaps sufficiently with the new episode.
+
+    Overlap is declared when:
+    - keyword intersection ≥ 2, OR
+    - keyword Jaccard ≥ 0.5, OR
+    - narrative_summary character-overlap ≥ 0.7 (using episodic_memory._is_similar)
+
+    Returns the matching episode dict, or None.
+    """
+    from core.memory.episodic_memory import _is_similar as _ep_similar
+    new_kw = set(new_keywords)
+    for ep in existing_eps:
+        if not ep.get("is_core") or ep.get("status", "open") in ("resolved", "elapsed"):
+            continue
+        existing_kw = set(ep.get("topic_keywords", []))
+        if existing_kw and new_kw:
+            intersection = existing_kw & new_kw
+            union = existing_kw | new_kw
+            kw_jaccard = len(intersection) / len(union) if union else 0.0
+            if len(intersection) >= 2 or kw_jaccard >= 0.5:
+                return ep
+        existing_summary = ep.get("narrative_summary") or ep.get("summary", "")
+        if _ep_similar(new_summary, existing_summary, threshold=0.7):
+            return ep
+    return None
 
 
 def _validate_growth_content(observer: str) -> bool:
@@ -574,6 +610,7 @@ async def summarize_to_midterm(
     source: str = "",
     memory_strength: float = 1.0,
     force_reflect: bool = False,
+    trigger_name: str = "",
 ) -> str | None:
     """
     LLM 压缩单轮对话到 mid_term，写入血缘字段。
@@ -609,13 +646,24 @@ async def summarize_to_midterm(
             append_kwargs["source"] = source
         if memory_strength != 1.0:
             append_kwargs["memory_strength"] = memory_strength
+        if trigger_name:
+            append_kwargs["is_trigger_turn"] = True
         _mt.append(
             uid,
             summary,
             tags=tags,
             mid_id=mid_id,
             source_turn_id=turn_id,
+            occurred_at=_parse_turn_ms(turn_id),
             **append_kwargs,
+        )
+        from core.memory.provenance_log import append as _prov_append
+        _prov_append(
+            uid, char_id,
+            artifact="mid_term",
+            after_gist=summary[:120],
+            trigger_signal=(user_msg or "")[:120],
+            turn_id=turn_id,
         )
 
     duration_ms = int((time.time() - _ts_start) * 1000)
@@ -656,7 +704,7 @@ async def reflect_to_episodic(
     返回 ep_id（已写入）或 None（跳过）。
     """
     from core.memory import locks, mid_term as _mt
-    from core.memory.episodic_memory import write_episode, _load_memories
+    from core.memory.episodic_memory import write_episode, _load_memories, _save_memories, _rebuild_index
     from core import llm_client
     from core.post_process import slow_queue
     from core.config_loader import get_config
@@ -669,10 +717,23 @@ async def reflect_to_episodic(
     async with locks.uid_lock(uid):
         all_events = _mt.load(uid, char_id=char_id)
 
-        # 只处理请求的、且未晋升的条目
+        # 只处理请求的、且未晋升的条目；触发轮（无真实用户输入）不铸造 episodic
+        trigger_skipped = [
+            e for e in all_events
+            if e.get("mid_id") in mid_ids_set
+            and not e.get("promoted_to_episodic_id")
+            and e.get("is_trigger_turn")
+        ]
+        if trigger_skipped:
+            logger.info(
+                "[fixation.reflect_to_episodic] 跳过触发轮 mid_term 条目 uid=%s ids=%s",
+                uid, [e.get("mid_id") for e in trigger_skipped],
+            )
         to_process = [
             e for e in all_events
-            if e.get("mid_id") in mid_ids_set and not e.get("promoted_to_episodic_id")
+            if e.get("mid_id") in mid_ids_set
+            and not e.get("promoted_to_episodic_id")
+            and not e.get("is_trigger_turn")
         ]
 
         if not to_process:
@@ -700,7 +761,11 @@ async def reflect_to_episodic(
             f"{i+1}. {e.get('summary', '')}"
             for i, e in enumerate(to_process)
         )
-        prompt_system = _REFLECT_PROMPT_TEMPLATE.format(char_name=char_name)
+        from core.memory.user_facts import get_user_pronoun as _get_pronoun
+        prompt_system = _REFLECT_PROMPT_TEMPLATE.format(
+            char_name=char_name,
+            pronoun=_get_pronoun(uid),
+        )
         base_user = f"对话摘要：\n{summaries_text}"
 
         # LLM 调用（最多 3 次）
@@ -758,7 +823,7 @@ async def reflect_to_episodic(
         episode: dict = {
             "id": ep_id,
             "timestamp": _now,
-            "occurred_at": _derive_occurred_at(to_process, _now),
+            "occurred_at": _batch_occurred_at(to_process, _now),
             "raw_facts": data.get("raw_facts", []),
             "topic_keywords": data.get("topic_keywords", []),
             "emotion_peak": data.get("emotion_peak", "neutral"),
@@ -794,10 +859,56 @@ async def reflect_to_episodic(
                 3,
             )
 
-        write_episode(uid, episode, char_id=char_id)
-        _reset(_fail_key)
+        # Patch A — core dedup: if a similar is_core episode already exists, merge
+        # rather than creating a recycled clone with a fresh timestamp (which would
+        # bypass the age-based guard in retrieve_fallback and restart the loop).
+        _dup_ep = _find_core_duplicate(
+            episode.get("topic_keywords", []),
+            episode.get("narrative_summary", ""),
+            existing_eps,
+        )
+        if _dup_ep is not None:
+            _dup_ep["last_retrieved"] = time.time()
+            _dup_ep["retrieval_count"] = _dup_ep.get("retrieval_count", 0) + 1
+            _save_memories(uid, existing_eps, char_id=char_id)
+            _rebuild_index(uid, existing_eps, char_id=char_id)
+            _reset(_fail_key)
+            logger.info(
+                "[fixation.reflect_to_episodic] core 记忆去重合并 uid=%s dup=%s",
+                uid, _dup_ep.get("id"),
+            )
+            _log_fixation("reflect_to_episodic", uid, {
+                "mid_ids": mid_ids, "trigger": trigger,
+                "core_dedup": _dup_ep.get("id"),
+            }, "ok", "core dedup merge")
+            ep_id = _dup_ep["id"]
+        else:
+            write_episode(uid, episode, char_id=char_id)
+            _reset(_fail_key)
+            from core.memory.provenance_log import append as _prov_append
+            _prov_append(
+                uid, char_id,
+                artifact="episodic",
+                after_gist=(episode.get("narrative_summary") or "")[:120],
+                trigger_signal=summaries_text[:120],
+                turn_id=ep_id,
+            )
+            # 语义索引（fail-open，不阻塞主流程）
+            try:
+                from core.memory import vector_store as _vs
+                _ep_text = (
+                    episode.get("narrative_summary")
+                    or episode.get("summary")
+                    or " ".join(episode.get("raw_facts") or [])
+                ).strip()
+                if _ep_text:
+                    asyncio.ensure_future(
+                        _vs.upsert(uid, char_id, "episodic", ep_id, episode.get("timestamp", 0), _ep_text)
+                    )
+            except Exception as _vs_e:
+                logger.debug("[fixation] vector_store upsert schedule error: %s", _vs_e)
 
-        # 回写 mid_term：标记已晋升
+        # 回写 mid_term：标记已晋升（指向新建 ep 或合并目标的 id）
         for e in to_process:
             if e.get("mid_id"):
                 _mt.mark_promoted(uid, e["mid_id"], ep_id, char_id=char_id)
@@ -997,6 +1108,25 @@ async def consolidate_to_identity(uid: str, llm_client, *, char_id: str = "yexua
         if not ok:
             _log_fixation("consolidate_to_identity", uid, {}, "error", "identity 写入失败")
             raise RuntimeError(f"consolidate_to_identity identity 写入失败: uid={uid}")
+        # Provenance: record each dimension whose text changed
+        from core.memory.provenance_log import append as _prov_append
+        _trigger_signal = "; ".join(
+            (ep.get("narrative_summary") or ep.get("summary") or "")[:40]
+            for ep in new_episodes[:3]
+        )
+        for _key, _new_dim in new_identity.items():
+            _old_dim = old_identity.get(_key) or {}
+            _old_text = _old_dim.get("text", "")
+            _new_text = _new_dim.get("text", "")
+            if _new_text != _old_text:
+                _prov_append(
+                    uid, char_id,
+                    artifact="identity",
+                    field=_key,
+                    before_gist=_old_text[:120],
+                    after_gist=_new_text[:120],
+                    trigger_signal=_trigger_signal,
+                )
     else:
         _log_fixation("consolidate_to_identity", uid, {}, "ok", "no dimension updated")
 
@@ -1063,6 +1193,17 @@ def _get_scope_from_payload(payload: dict, handler_name: str) -> MemoryScope:
 
 
 async def handler_summarize_to_midterm(payload: dict) -> None:
+    # D2/X3 isolation: skip mid-term summarization for turns where dream impressions
+    # or web-search recall were active — prevents non-reality facts from being
+    # promoted into episodic/identity via the normal consolidation chain.
+    _echo_reason = "dream_echo" if payload.get("dream_echo") else ("web_echo" if payload.get("web_echo") else None)
+    if _echo_reason:
+        logger.info(
+            "[fixation] handler_summarize_to_midterm skipped (%s=True): "
+            "turn_id=%s uid=%s",
+            _echo_reason, payload.get("turn_id"), payload.get("uid"),
+        )
+        return
     scope = _get_scope_from_payload(payload, "handler_summarize_to_midterm")
     kwargs = {
         "turn_id": payload["turn_id"],
@@ -1079,6 +1220,8 @@ async def handler_summarize_to_midterm(payload: dict) -> None:
         kwargs["memory_strength"] = payload["memory_strength"]
     if payload.get("force_reflect"):
         kwargs["force_reflect"] = True
+    if payload.get("trigger_name"):
+        kwargs["trigger_name"] = payload["trigger_name"]
     await summarize_to_midterm(
         **kwargs,
     )
