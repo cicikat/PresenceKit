@@ -25,9 +25,20 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 _WORLDS_BASE = Path("characters/dream_worlds")
-_KNOWN_WORLDS = frozenset({"reality_derived", "abo", "vampire", "cat", "flower_bud", "custom"})
 _FALLBACK_WORLD = "reality_derived"
 _DEFAULT_DIR = "_default"
+
+
+def discover_worlds() -> list[str]:
+    """Return sorted list of available world_ids by scanning characters/dream_worlds/."""
+    try:
+        return sorted(
+            d.name
+            for d in _WORLDS_BASE.iterdir()
+            if d.is_dir() and not d.name.startswith("_")
+        )
+    except Exception:
+        return [_FALLBACK_WORLD]
 
 
 @dataclass
@@ -41,17 +52,17 @@ class WorldPackage:
 def load_world(world_id: str) -> WorldPackage:
     """
     Load a world package from characters/dream_worlds/{world_id}/.
-    Falls back to reality_derived if world_id is unknown.
+    Falls back to reality_derived if world directory does not exist.
     Falls back to _default/ for missing or empty ruleset, mes_example, vocab.
     """
-    if world_id not in _KNOWN_WORLDS:
+    base = _WORLDS_BASE / world_id
+    if not base.is_dir():
         logger.warning(
             f"[world_loader] unknown world_id={world_id!r}, "
             f"falling back to {_FALLBACK_WORLD}"
         )
         world_id = _FALLBACK_WORLD
-
-    base = _WORLDS_BASE / world_id
+        base = _WORLDS_BASE / world_id
     default_base = _WORLDS_BASE / _DEFAULT_DIR
 
     ruleset = _read_text_or_none(base / "ruleset.md")
@@ -164,7 +175,7 @@ def load_dream_lore_entries(world_id: str) -> list[dict[str, Any]]:
     Reads characters/dream_worlds/{world_id}/lorebook.yaml.
     Returns empty list when file missing or empty.
     """
-    if world_id not in _KNOWN_WORLDS:
+    if not (_WORLDS_BASE / world_id).is_dir():
         world_id = _FALLBACK_WORLD
     path = _WORLDS_BASE / world_id / "lorebook.yaml"
     try:
