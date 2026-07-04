@@ -3,12 +3,14 @@ tests/test_trigger_boundary_p0.py — Trigger Boundary Refactor P0 tests.
 
 Coverage:
   T1  trigger active dream → BLOCKED_DREAM, no LLM, no fanout
-  T2  trigger does not write short_term/history (assistant row absent)
+  T2  non-conversational trigger does not write short_term/history at all;
+      conversational trigger (e.g. morning_greeting) writes only the assistant row
   T3  trigger does write trigger_audit_log (metadata + hash, no full text)
   T4  trigger goes through perceive_event with stable dedupe_key
   T5  duplicate trigger → DUPLICATE, no LLM
   T6  trigger char_id resolved without fallback to hardcoded name
-  T7  capture_turn trigger path: event_log written, short_term NOT written
+  T7  capture_turn trigger path: event_log written; short_term written only for
+      conversational triggers (assistant row only)
   T8  _write_trigger_audit_log: reply_hash present, full reply text absent
   T9  WS push_message carries source="reality"
 """
@@ -85,10 +87,50 @@ class TestTriggerDreamBlocked(unittest.TestCase):
 # ── T2 + T7: short_term NOT written for trigger turns ─────────────────────────
 
 class TestTriggerNoShortTermWrite(unittest.TestCase):
-    """T2 + T7: trigger does NOT write to short_term; event_log IS written."""
+    """T2 + T7: non-conversational triggers skip short_term entirely; conversational
+    triggers (e.g. morning_greeting) write only the assistant row so the next user
+    turn has context. event_log IS written for both."""
 
     def test_trigger_skips_short_term_append(self):
-        """capture_turn with trigger_name must not call short_term.append at all."""
+        """capture_turn with a non-conversational trigger_name must not call short_term.append at all."""
+        short_term_calls: list = []
+        event_log_calls: list = []
+
+        def _track_st(*a, **kw):
+            short_term_calls.append((a, kw))
+            return True
+
+        def _track_el(*a, **kw):
+            event_log_calls.append((a, kw))
+            return True
+
+        with patch("core.memory.short_term.append", side_effect=_track_st), \
+             patch("core.memory.event_log.append", side_effect=_track_el), \
+             patch("core.memory.fixation_pipeline._write_trigger_audit_log"), \
+             patch("core.reality_output_scrubber.scrub_reality_output_text",
+                   side_effect=lambda x: x):
+            from core.memory.fixation_pipeline import capture_turn
+            from core.write_envelope import stamp_trigger
+            turn_id = capture_turn(
+                uid="u1",
+                user_msg="（系统注入的触发描述）",
+                reply="早安，你今天早点起来啦。",
+                emotion="happy",
+                trigger_name="hidden_state_decay",
+                envelope=stamp_trigger(),
+                char_id="yexuan",
+            )
+
+        self.assertEqual(short_term_calls, [],
+                         "non-conversational trigger must NOT call short_term.append")
+        asst_el_calls = [c for c in event_log_calls if c[0][1] == "assistant"]
+        self.assertTrue(len(asst_el_calls) >= 1,
+                        "trigger must write assistant row to event_log")
+        self.assertIsNotNone(turn_id)
+
+    def test_conversational_trigger_writes_assistant_row_only(self):
+        """capture_turn with a conversational trigger_name (morning_greeting) writes
+        only the assistant row to short_term — no user row."""
         short_term_calls: list = []
         event_log_calls: list = []
 
@@ -117,8 +159,10 @@ class TestTriggerNoShortTermWrite(unittest.TestCase):
                 char_id="yexuan",
             )
 
-        self.assertEqual(short_term_calls, [],
-                         "trigger must NOT call short_term.append")
+        self.assertTrue(all(c[0][1] == "assistant" for c in short_term_calls),
+                        "conversational trigger must only write assistant rows to short_term")
+        self.assertEqual(len(short_term_calls), 1,
+                         "conversational trigger must write exactly one short_term row")
         asst_el_calls = [c for c in event_log_calls if c[0][1] == "assistant"]
         self.assertTrue(len(asst_el_calls) >= 1,
                         "trigger must write assistant row to event_log")

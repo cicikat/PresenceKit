@@ -77,6 +77,20 @@ def reset_proactive_ledger():
 
 
 @pytest.fixture(autouse=True)
+def reset_asset_registry():
+    """Reset core.asset_registry's module-level singleton before/after each test.
+
+    Several tests replace `_registry` directly (bypassing get_registry()/reload_registry())
+    without restoring it, so a fixture-scoped registry (e.g. missing hongcha) leaks into
+    unrelated later tests run in the same process.
+    """
+    import core.asset_registry as _reg
+    _reg._registry = None
+    yield
+    _reg._registry = None
+
+
+@pytest.fixture(autouse=True)
 async def reset_slow_queue():
     """每个测试前重置 slow_queue 模块状态（队列/handler/worker），测试后清理 worker。"""
     import core.post_process.slow_queue as sq

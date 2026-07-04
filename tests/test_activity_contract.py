@@ -172,11 +172,13 @@ def test_companion_chat_activities_have_chat_route(gomoku_routes, dream_seed_rou
 @pytest.fixture(scope="module")
 def activity_list_client():
     from admin.routers.activity import router
-    from admin.auth import verify_token
 
     app = FastAPI()
     app.include_router(router, prefix="/activity")
-    app.dependency_overrides[verify_token] = lambda: "test"
+    for route in router.routes:
+        for dep in route.dependant.dependencies:
+            if hasattr(dep.call, "_required_scopes"):
+                app.dependency_overrides[dep.call] = lambda: "test"
     return TestClient(app)
 
 

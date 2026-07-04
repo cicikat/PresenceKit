@@ -65,3 +65,13 @@ def load_impression_text(uid: str, *, char_id: str = "yexuan") -> str:
     except Exception as e:
         logger.warning(f"[impression_loader] uid={uid}: {e}")
         return ""
+
+
+def has_active_impressions(uid: str, *, char_id: str = "yexuan") -> bool:
+    """D2 隔离用：本轮是否存在活跃梦境印象（fail-closed 返回 False）。"""
+    try:
+        from core.dream.impression_store import get_active_impressions
+
+        return bool(get_active_impressions(uid, char_id=char_id))
+    except Exception:
+        return False

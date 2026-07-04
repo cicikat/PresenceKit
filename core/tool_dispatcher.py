@@ -969,7 +969,7 @@ async def execute(
     session_state,
     *,
     origin: str,
-    char_id: str = "yexuan",
+    char_id: str,
 ) -> tuple[str | None, str | None]:
     """
     执行工具，返回 (tool_result, ask_confirm_text)
@@ -1111,7 +1111,7 @@ class ToolDispatcher:
     def get_tools_schema(self, categories: list[str] | None = None) -> list:
         return get_tools_schema(categories=categories)
 
-    async def execute(self, tool_name, tool_args, user_id, target_id, is_group, session_state, *, origin: str, char_id: str = "yexuan"):
+    async def execute(self, tool_name, tool_args, user_id, target_id, is_group, session_state, *, origin: str, char_id: str):
         return await execute(
             tool_name=tool_name,
             tool_args=tool_args,

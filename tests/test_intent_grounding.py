@@ -271,6 +271,7 @@ async def test_execute_unknown_origins_rejected(sandbox, monkeypatch):
                 is_group=False,
                 session_state=state,
                 origin=bad_origin,
+                char_id="yexuan",
             )
             assert result == (None, None), \
                 f"origin={bad_origin!r} 应返回 (None, None)，实际 {result}"
@@ -631,31 +632,34 @@ async def test_read_diary_path_a_explicit_requests(sandbox, monkeypatch):
         status = "idle"
         WAITING_CONFIRM = "waiting_confirm"
 
-    async def _run(probe_tool_calls: list[dict]) -> None:
+    async def _run(probe_tool_calls: list[dict], uid: str) -> None:
         """Reproduce the main.py probe → execute loop in isolation."""
         for tc in probe_tool_calls:
             await _td.execute(
                 tool_name=tc["name"],
                 tool_args=tc.get("arguments", {}),
-                user_id="u1",
-                target_id="u1",
+                user_id=uid,
+                target_id=uid,
                 is_group=False,
                 session_state=_FakeState(),
                 origin="user_live",
+                char_id="yexuan",
             )
 
     # ✅ 帮我看看今天的日记 → probe 返回 read_diary → 执行
-    await _run([{"name": "read_diary", "arguments": {}}])
+    # 各用例独立 uid：read_diary 是 persist=True 工具，execute() 内的 P2 已读指纹
+    # （tool_read_log，指纹 diary:{today}）会在同一 uid 连续读取时去重跳过第二次。
+    await _run([{"name": "read_diary", "arguments": {}}], "u_case1")
     assert len(read_diary_calls) == 1, "「帮我看看今天的日记」应触发 read_diary"
     read_diary_calls.clear()
 
     # ✅ 评价一下我最近的日记 → probe 返回 read_diary → 执行
-    await _run([{"name": "read_diary", "arguments": {}}])
+    await _run([{"name": "read_diary", "arguments": {}}], "u_case2")
     assert len(read_diary_calls) == 1, "「评价一下我最近的日记」应触发 read_diary"
     read_diary_calls.clear()
 
     # ❌ 我好久没写日记了 → probe 返回空 → 不执行
-    await _run([])
+    await _run([], "u_case3")
     assert len(read_diary_calls) == 0, "「我好久没写日记了」不应触发 read_diary"
 
 

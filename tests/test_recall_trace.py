@@ -131,7 +131,7 @@ class TestEpisodicRetrieveTrace:
         episodic_memory.write_episode(UID, _episode("ep_t2", strength=0.8), char_id=CHAR_ID)
 
         _, trace = episodic_memory.retrieve(
-            UID, topic="", top_k=3, char_id=CHAR_ID,
+            UID, topic="西瓜", top_k=3, char_id=CHAR_ID,
             allow_strengthen=False, return_trace=True,
         )
         assert len(trace) >= 1

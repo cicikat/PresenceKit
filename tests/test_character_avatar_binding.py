@@ -77,16 +77,18 @@ def client_with_avatars(char_dir, monkeypatch):
     monkeypatch.chdir(char_dir)
     # Reset sandbox singleton so paths resolve under char_dir
     _sb._instance = None
-    _reg_mod._registry = AssetRegistry()
+    monkeypatch.setattr(_reg_mod, "_registry", AssetRegistry())
 
     from fastapi.testclient import TestClient
     from fastapi import FastAPI
     from admin.routers.settings_prompt_assets import router
-    from admin.auth import verify_token
 
     app = FastAPI()
     app.include_router(router)
-    app.dependency_overrides[verify_token] = lambda: "test"
+    for route in router.routes:
+        for dep in route.dependant.dependencies:
+            if hasattr(dep.call, "_required_scopes"):
+                app.dependency_overrides[dep.call] = lambda: "test"
 
     return TestClient(app)
 

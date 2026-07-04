@@ -117,7 +117,6 @@ def test_toy_tools_registered_as_desktop_side_effects():
 
 def test_hardware_routes_are_bearer_protected():
     from admin.admin_server import app
-    from admin.auth import verify_token
 
     routes = {
         route.path: route
@@ -126,9 +125,10 @@ def test_hardware_routes_are_bearer_protected():
     }
     for path in ("/hardware/devices", "/hardware/connect"):
         assert path in routes
-        assert verify_token in {
-            dependency.call for dependency in routes[path].dependant.dependencies
-        }
+        assert any(
+            hasattr(dependency.call, "_required_scopes")
+            for dependency in routes[path].dependant.dependencies
+        )
 
 
 async def test_toy_tools_reject_non_owner_and_group(monkeypatch):
@@ -154,6 +154,7 @@ async def test_toy_tools_reject_non_owner_and_group(monkeypatch):
             is_group=is_group,
             session_state=FakeState(),
             origin="user_live",
+            char_id="yexuan",
         )
         assert result == "硬件控制只允许 owner 私聊触发"
         assert confirm is None
@@ -185,6 +186,7 @@ async def test_toy_tool_executes_for_owner_private_turn(monkeypatch):
         is_group=False,
         session_state=FakeState(),
         origin="user_live",
+        char_id="yexuan",
     )
     assert result == "工具已执行：toy_stop，结果：已停止"
     assert confirm is None

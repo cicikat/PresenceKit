@@ -62,8 +62,8 @@ def test_expired_future_episode_is_downweighted_and_rendered_as_elapsed(sandbox,
 
     assert [item["id"] for item in result] == ["ep_normal", "ep_expired"]
     rendered = episodic_memory.format_for_prompt([result[1]], char_name="叶瑄")
-    assert "用户那天要考试" in rendered
-    assert "用户明天要考试" not in rendered
+    assert "她那天要考试" in rendered
+    assert "明天要考试" not in rendered
     assert "应该已经发生了" in rendered
 
 

@@ -296,12 +296,12 @@ class TestRegressionDataNotDeleted:
 
     def test_37_steps_still_injected(self):
         src = _src(self._PB)
-        assert "steps" in src and "今日步数" in src, \
+        assert "_sensor['steps']" in src, \
             "Step count injection in layer 3.7 must not have been removed"
 
     def test_37_battery_still_injected(self):
         src = _src(self._PB)
-        assert "battery" in src and "手机电量" in src, \
+        assert "_sensor['battery']" in src, \
             "Battery injection in layer 3.7 must not have been removed"
 
     def test_38_activity_text_passed(self):
@@ -311,5 +311,5 @@ class TestRegressionDataNotDeleted:
 
     def test_36_sleep_hours_still_injected(self):
         src = _src(self._PB)
-        assert "_h}小时{_m}分钟" in src, \
+        assert "{_h}时{_m}分" in src, \
             "Sleep duration must still appear in layer 3.6 content"

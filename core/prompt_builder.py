@@ -121,7 +121,7 @@ _REALTIME_ACTIVITY_LABELS: dict[str, str] = {
 
 
 def _format_realtime_awareness(tags: set[str], *, now: float | None = None) -> str:
-    """Build a short ephemeral sensor hint including window title when available."""
+    """Build a short ephemeral sensor hint summarizing app/input activity (no window title)."""
     try:
         import time
         from core.memory import realtime_state
@@ -151,12 +151,6 @@ def _format_realtime_awareness(tags: set[str], *, now: float | None = None) -> s
             app = re.sub(r"[^0-9A-Za-z._ +()-]", "", app)[:40]
             if app and app.casefold() != "unknown":
                 parts.append(f"在用 {app}")
-
-        # 注入 title_hint（已 server 端截断 80 字、过敏感窗口）。
-        # 绝不在此处注入 visible_text / clickable_text，那是 peek_screen_content 工具的受控出口。
-        title_hint = str(snap.get("focus", {}).get("title_hint", "")).strip()
-        if title_hint:
-            parts.append(f"在看「{title_hint}」")
 
         edit_hint = input_data.get("edit_hint")
         if edit_hint in ("typing_long", "editing"):

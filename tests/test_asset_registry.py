@@ -115,12 +115,12 @@ def test_active_config_uses_id(tmp_path):
 
 # ── 3. PATCH with label/filename is rejected ─────────────────────────────────
 
-def test_validate_id_rejects_filename_with_extension(registry):
+def test_validate_id_rejects_filename_with_extension(registry, monkeypatch):
     """Submitting 'yexuan.json' to PATCH should raise HTTPException (dot detected)."""
     from fastapi import HTTPException
     from admin.routers.settings_prompt_assets import _validate_id
     import core.asset_registry as _mod
-    _mod._registry = registry
+    monkeypatch.setattr(_mod, "_registry", registry)
 
     with pytest.raises(HTTPException) as exc:
         _validate_id("yexuan.json", "character", "active_character")
@@ -128,30 +128,30 @@ def test_validate_id_rejects_filename_with_extension(registry):
     assert "filename" in exc.value.detail.lower() or "扩展名" in exc.value.detail
 
 
-def test_validate_id_rejects_path_separator(registry):
+def test_validate_id_rejects_path_separator(registry, monkeypatch):
     from fastapi import HTTPException
     from admin.routers.settings_prompt_assets import _validate_id
     import core.asset_registry as _mod
-    _mod._registry = registry
+    monkeypatch.setattr(_mod, "_registry", registry)
 
     with pytest.raises(HTTPException):
         _validate_id("characters/yexuan", "character", "active_character")
 
 
-def test_validate_id_accepts_known_id(registry):
+def test_validate_id_accepts_known_id(registry, monkeypatch):
     from admin.routers.settings_prompt_assets import _validate_id
     import core.asset_registry as _mod
-    _mod._registry = registry
+    monkeypatch.setattr(_mod, "_registry", registry)
 
     # Should not raise
     _validate_id("yexuan", "character", "active_character")
 
 
-def test_validate_id_rejects_unknown_id(registry):
+def test_validate_id_rejects_unknown_id(registry, monkeypatch):
     from fastapi import HTTPException
     from admin.routers.settings_prompt_assets import _validate_id
     import core.asset_registry as _mod
-    _mod._registry = registry
+    monkeypatch.setattr(_mod, "_registry", registry)
 
     with pytest.raises(HTTPException) as exc:
         _validate_id("nonexistent", "character", "active_character")

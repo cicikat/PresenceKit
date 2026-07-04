@@ -164,7 +164,8 @@ class TestEventLogRenderCard:
         if pronoun is not None:
             _write_facts(UID, {"pronoun": pronoun})
 
-        fake_log = "# 2026-06-21\n**用户**：天气好好\n"
+        from datetime import datetime
+        fake_log = f"# {datetime.now().strftime('%Y-%m-%d')}\n**用户**：天气好好\n"
 
         from core.memory.event_log import search
         import asyncio

@@ -380,7 +380,7 @@ async def test_ordinary_owner_chat_unaffected(monkeypatch):
     # Stub tool probe so it returns None (no tool call)
     import admin.routers.chat as _chat
 
-    async def _no_tool(msg, uid):
+    async def _no_tool(msg, uid, *, char_id="yexuan"):
         return None
 
     monkeypatch.setattr(_chat, "_probe_and_execute_tools", _no_tool)

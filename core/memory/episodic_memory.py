@@ -323,6 +323,7 @@ def retrieve(
     df: dict = {}
     query_grams: set = set()
     idf: dict = {}
+    exact_kw_map: dict = {}     # mem_id -> set(精确命中 topic_keywords 条目的 gram)
     if topic:
         from core.text_match import ngram_tokens
         _clean = topic.replace(char_name, "  ") if char_name else topic
@@ -345,10 +346,18 @@ def retrieve(
         _specific_cap = max(1, int(SPECIFIC_DF_FRAC * N))
         specific = {g for g, c in df.items() if c <= _specific_cap}
 
+        # 精确命中：查询 gram 与某条 topic_keywords 条目完全相等——策划过的 tag 精确
+        # 命中不该受小语料 DF 特异性过滤挡（小语料下常见词也会被判定为"不 specific"）。
+        exact_kw_map: dict = {}
+        for mem in memories:
+            exact = query_grams & set(mem.get("topic_keywords") or [])
+            if exact:
+                exact_kw_map[mem["id"]] = exact
+
         for mid, matched in matched_map.items():
             kwm = kw_matched_map.get(mid, set())
-            # 主证据：命中关键词里的具体词，或命中≥2个关键词
-            if (kwm & specific) or (len(kwm) >= 2):
+            # 主证据：命中关键词里的具体词，命中≥2个关键词，或精确命中某个 topic_keywords 条目
+            if (kwm & specific) or (len(kwm) >= 2) or exact_kw_map.get(mid):
                 candidate_ids.add(mid)
             # 弱辅证：纯 facts 命中要更强（≥2个不同具体词）才入选，挡掉"到了/一起"这类单词偶然命中
             elif len(matched & specific) >= 2:
@@ -379,6 +388,7 @@ def retrieve(
 
     # 评分
     REL_SCALE = 5.0   # idf_sum 归一化尺度（约"一个稀有词≈满分"），据 trace 可调
+    MIN_SCORE = 0.15  # 浮起阈值：分数太低的记忆不注入，宁可不说也不强行关联
     rel_map: dict = {}   # mem_id -> relevance_norm，供 trace 段读取
     scored = []
     from core.memory.vector_store import score_recall as _score_recall
@@ -401,17 +411,20 @@ def retrieve(
         _fact_only = matched_map.get(mem["id"], set()) - _kwm
         idf_sum = sum(idf.get(g, 0.0) for g in _kwm) + FACTS_WEIGHT * sum(idf.get(g, 0.0) for g in _fact_only)
         relevance_norm = min(1.0, idf_sum / REL_SCALE)
+        if exact_kw_map.get(mem["id"]):
+            # 精确命中给个下限，避免小语料 idf 归一化把策划过的 tag 精确命中压得太低
+            relevance_norm = max(relevance_norm, 0.5)
         rel_map[mem["id"]] = relevance_norm
         sem_sim = sem_sim_map.get(mem["id"], 0.0)
-        score = _score_recall(sem_sim, relevance_norm, strength, decay) + emotion_bonus
+        base_score = _score_recall(sem_sim, relevance_norm, strength, decay) + emotion_bonus
         expires_at = mem.get("expires_at")
-        if isinstance(expires_at, (int, float)) and now > expires_at:
-            score *= 0.3
-        scored.append((score, mem))
+        is_expired = isinstance(expires_at, (int, float)) and now > expires_at
+        # 到期降权只影响排序，不应在 MIN_SCORE 判定前就把降权后的分数当依据——
+        # 否则"到期事件降权仍可召回"的设计意图等价于被直接排除。
+        rank_score = base_score * 0.3 if is_expired else base_score
+        if base_score >= MIN_SCORE:
+            scored.append((rank_score, mem))
 
-    # 浮起阈值：分数太低的记忆不注入，宁可不说也不强行关联
-    MIN_SCORE = 0.15
-    scored = [(score, mem) for score, mem in scored if score >= MIN_SCORE]
     scored.sort(key=lambda x: x[0], reverse=True)
 
     sorted_results = [mem for _, mem in scored]

@@ -28,7 +28,7 @@ ROOT = pathlib.Path(__file__).parent.parent
 # ─────────────────────────────────────────────────────────────────────────────
 
 class _FakePipeline:
-    async def fetch_context(self, uid, query):
+    async def fetch_context(self, uid, query, **kwargs):
         return {}
 
     def build_prompt(self, uid, prompt, context, **kwargs):

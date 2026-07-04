@@ -122,10 +122,12 @@ def test_admin_dream_enter_passes_active_char_id(sandbox, chars_tree, monkeypatc
         from fastapi.testclient import TestClient
         from fastapi import FastAPI
         from admin.routers.dream import router
-        from admin.auth import verify_token
         app = FastAPI()
         app.include_router(router)
-        app.dependency_overrides[verify_token] = lambda: True
+        for route in router.routes:
+            for dep in route.dependant.dependencies:
+                if hasattr(dep.call, "_required_scopes"):
+                    app.dependency_overrides[dep.call] = lambda: True
         client = TestClient(app)
         resp = client.post("/dream/enter", json={})
 

@@ -221,7 +221,10 @@ async def test_run_owner_chat_turn_guard_applied(monkeypatch):
     class _FakePipeline:
         character = _FakeCharacter()
 
-        async def fetch_context(self, uid, message, group_id=None):
+        def _current_reality_scope(self, uid):
+            return type("Scope", (), {"character_id": "yexuan"})()
+
+        async def fetch_context(self, uid, message, group_id=None, **kwargs):
             return {}
 
         def build_prompt(self, uid, message, context, **kwargs):
@@ -259,7 +262,7 @@ async def test_run_owner_chat_turn_guard_applied(monkeypatch):
     # Stub tool probe to skip (must be async — the real function is a coroutine)
     import admin.routers.chat as _chat
 
-    async def _noop_probe(msg, uid):
+    async def _noop_probe(msg, uid, *, char_id="yexuan"):
         return None
 
     monkeypatch.setattr(_chat, "_probe_and_execute_tools", _noop_probe)

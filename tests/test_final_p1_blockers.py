@@ -333,8 +333,11 @@ class TestFullRouteAuthInventory:
     }
 
     def test_all_http_management_routes_require_bearer(self):
+        """SEC-AUTH-2 P2: routes no longer share one literal `verify_token` callable —
+        each declares its own require_scopes(...) closure. The invariant that survives
+        is default-deny: every non-public route must carry a scope requirement, marked
+        by `_required_scopes` on the dependency (see tests/test_sec_auth2_scopes.py)."""
         from admin.admin_server import app
-        from admin.auth import verify_token
 
         violations = []
         for route in app.routes:
@@ -343,17 +346,16 @@ class TestFullRouteAuthInventory:
             if route.path in self.PUBLIC_HTTP_ALLOWLIST:
                 continue
             dependency_calls = {dep.call for dep in route.dependant.dependencies}
-            if verify_token not in dependency_calls:
+            if not any(hasattr(call, "_required_scopes") for call in dependency_calls):
                 violations.append(f"{sorted(route.methods)} {route.path}")
 
         assert not violations, (
-            "HTTP management routes without verify_token dependency:\n"
+            "HTTP management routes without a require_scopes(...) dependency:\n"
             + "\n".join(violations)
         )
 
     def test_high_risk_routes_present_and_bearer_protected(self):
         from admin.admin_server import app
-        from admin.auth import verify_token
 
         required = {
             "/desktop/chat",
@@ -378,9 +380,10 @@ class TestFullRouteAuthInventory:
         }
         assert not (required - routes.keys())
         for path in required:
-            assert verify_token in {
-                dep.call for dep in routes[path].dependant.dependencies
-            }, path
+            assert any(
+                hasattr(dep.call, "_required_scopes")
+                for dep in routes[path].dependant.dependencies
+            ), path
 
     def test_openapi_has_no_sensitive_query_auth_parameters(self):
         from admin.admin_server import app

@@ -773,12 +773,8 @@ class Pipeline:
 
         # D2 isolation: if dream impressions were active this turn, flag the
         # mid-term job so consolidation doesn't promote dream facts into episodic/identity.
-        _dream_echo = False
-        try:
-            from core.dream.impression_store import get_active_impressions as _get_active_imp
-            _dream_echo = bool(_get_active_imp(user_id, char_id=char_id))
-        except Exception:
-            pass
+        from core.dream.impression_loader import has_active_impressions as _has_active_imp
+        _dream_echo = _has_active_imp(user_id, char_id=char_id)
 
         # summarize_to_midterm 替代旧的 mid_term_append；
         # 若 emotion 显著，handler 内部会自动入队 reflect_to_episodic（eager）
@@ -821,6 +817,7 @@ class Pipeline:
             slow_queue.enqueue("toy_autogrow", {
                 "uid": user_id,
                 "char_id": char_id,
+                "scope": scope_payload,
                 "user_content": content,
                 "reply": reply,
             })

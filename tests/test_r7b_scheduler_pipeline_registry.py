@@ -32,7 +32,7 @@ class _FakePipeline:
     def __init__(self, name: str = "default"):
         self.name = name
 
-    async def fetch_context(self, uid, query):
+    async def fetch_context(self, uid, query, **kwargs):
         return {}
 
     def build_prompt(self, uid, prompt, context, **kwargs):

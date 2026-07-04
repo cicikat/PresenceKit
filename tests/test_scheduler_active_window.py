@@ -9,7 +9,10 @@ import pytest
 class _FakePipeline:
     character = type("_C", (), {"name": "TestChar"})()
 
-    async def fetch_context(self, uid, query):
+    def _current_reality_scope(self, uid):
+        return type("Scope", (), {"character_id": "yexuan"})()
+
+    async def fetch_context(self, uid, query, **kwargs):
         return {}
 
     def build_prompt(self, uid, prompt, context, **kwargs):
@@ -97,7 +100,7 @@ async def test_owner_chat_turn_marks_user_active(monkeypatch):
     monkeypatch.setattr(loop, "_last_user_message_time", 0.0)
     monkeypatch.setattr("core.pipeline_registry.get", lambda: _FakePipeline())
     monkeypatch.setattr("core.config_loader.get_config", lambda: {"scheduler": {"owner_id": "u1"}})
-    async def fake_probe(message, user_id):
+    async def fake_probe(message, user_id, *, char_id="yexuan"):
         return ""
 
     monkeypatch.setattr(chat, "_probe_and_execute_tools", fake_probe)

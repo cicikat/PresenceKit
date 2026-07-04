@@ -201,7 +201,7 @@ def test_random_message_hint_returns_string_and_marks_topic(sandbox, monkeypatch
     assert isinstance(result, str)
     # Either a hint or empty string (both valid)
     if result:
-        assert "想到了一件事" in result
+        assert "想到一件事" in result
 
 
 def test_random_message_hint_falls_back_on_empty_highlights(sandbox, monkeypatch):

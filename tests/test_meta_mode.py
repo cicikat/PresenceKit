@@ -7,7 +7,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from admin.auth import verify_token
+from admin.auth import TokenInfo
 from admin.routers.system import router as system_router
 from core import tool_dispatcher
 
@@ -29,7 +29,11 @@ class _Session:
 def client():
     app = FastAPI()
     app.include_router(system_router)
-    app.dependency_overrides[verify_token] = lambda: True
+    fake_admin = TokenInfo(label="test-admin", scopes=frozenset({"admin"}))
+    for route in system_router.routes:
+        for dep in route.dependant.dependencies:
+            if hasattr(dep.call, "_required_scopes"):
+                app.dependency_overrides[dep.call] = lambda: fake_admin
     return TestClient(app)
 
 
@@ -80,14 +84,14 @@ async def test_safe_mode_blocks_desktop_but_not_info(sandbox, monkeypatch):
 
     session = _Session()
     result, confirm = await tool_dispatcher.execute(
-        "_test_desktop", {}, "u1", "u1", False, session, origin="user_live"
+        "_test_desktop", {}, "u1", "u1", False, session, origin="user_live", char_id="yexuan"
     )
     assert "安全模式" in result
     assert confirm is None
     assert called == []
 
     result, confirm = await tool_dispatcher.execute(
-        "_test_info", {}, "u1", "u1", False, session, origin="user_live"
+        "_test_info", {}, "u1", "u1", False, session, origin="user_live", char_id="yexuan"
     )
     assert result == "工具已执行：_test_info，结果：info-ok"
     assert confirm is None
@@ -117,7 +121,7 @@ async def test_danger_mode_allows_desktop_action(sandbox, monkeypatch):
     monkeypatch.setattr(tool_dispatcher, "_is_tool_enabled", lambda _: True)
 
     result, confirm = await tool_dispatcher.execute(
-        "_test_desktop", {}, "u1", "u1", False, _Session(), origin="user_live"
+        "_test_desktop", {}, "u1", "u1", False, _Session(), origin="user_live", char_id="yexuan"
     )
     assert (result, confirm) == ("工具已执行：_test_desktop，结果：desktop-ok", None)
     assert called == [{}]
@@ -136,6 +140,7 @@ async def test_expired_danger_mode_fails_closed(sandbox, monkeypatch):
         False,
         _Session(),
         origin="user_live",
+        char_id="yexuan",
     )
     assert "安全模式" in result
     assert confirm is None
@@ -149,7 +154,7 @@ async def test_shutdown_still_requires_confirmation_in_danger_mode(sandbox, monk
     session = _Session()
 
     result, confirm = await tool_dispatcher.execute(
-        "device_shutdown", {}, "u1", "u1", False, session, origin="user_live"
+        "device_shutdown", {}, "u1", "u1", False, session, origin="user_live", char_id="yexuan"
     )
     assert result is None
     assert confirm
