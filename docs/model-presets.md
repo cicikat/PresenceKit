@@ -75,6 +75,7 @@ model_presets:
       summary:        deepseek-default
       detect_emotion: deepseek-default
       consolidation:  deepseek-default
+      perform:        deepseek-default   # 句级表演意图映射（仅 performance_mapping.provider=llm 时用到）
 
     claude-main:                 # 主对话走 Claude，杂活留 DS 省钱
       chat:           claude-sonnet
@@ -83,6 +84,7 @@ model_presets:
       summary:        deepseek-default
       detect_emotion: deepseek-default
       consolidation:  deepseek-default
+      perform:        deepseek-default
 ```
 
 ### 路由解析规则

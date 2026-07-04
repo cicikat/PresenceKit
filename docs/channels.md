@@ -293,6 +293,31 @@ QQ / mobile / memory / hidden_state 路径无需任何修改 — `strip_render_t
 两种信封均可携带可选 `char_id` 发言人字段；旧客户端忽略未知字段即可。mobile 主动消息队列
 和 desktop 文件降级队列同样按需写入 `char_id`，QQ 当前只接受参数、不改变文本渲染。
 
+### 句级表演 spec（perform，Brief 20）
+
+`message_segments.segments[]` 的 `say` 段可以额外携带可选 `perform` 键，驱动桌面端 3D/Live2D
+逐句表演；整体缺失 = 无表演标注，字段为 `null` = 不覆盖该通道（客户端回落 mood 基调层）：
+
+```jsonc
+{
+  "type": "say",
+  "text": "才、才没有等你很久呢",
+  "perform": {                  // 可选
+    "expression": "happy",      // neutral|gentle|thinking|happy|sad|surprised|angry|sleepy|yandere | null
+    "intensity": 0.7,           // 0~1，缺省 0.6
+    "head": "tilt_r",           // nod|shake|tilt_l|tilt_r|dip|null
+    "posture": "lean_in",       // lean_in|lean_back|shrink|straighten|null
+    "gaze": "away",             // user|away|down|wander|null
+    "energy": 0.4               // 0~1，缺省 0.5
+  }
+}
+```
+
+由 `core/perform_mapper.py`（`enrich_say_segments`）在 `build_say_segments()` 之后、`push_segments`
+之前挂上；fail-open——任何内部异常/超时都原样返回未标注的 segments，绝不影响主流程。
+模块职责、rules/llm 两个 provider、词典维护方式见 `docs/perform-mapping.md`。
+协议契约以 `Emerald-client/cc-tasks/12-perform-intent-mapping-client.md` §1 为准。
+
 ---
 
 ## 文件降级

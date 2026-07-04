@@ -49,6 +49,7 @@ model_presets:
       summary:        deepseek-default
       detect_emotion: deepseek-default
       consolidation:  deepseek-default
+      perform:        deepseek-default   # 句级表演意图映射（仅 performance_mapping.provider=llm 时使用）
 
     claude-main:                   # 主对话走 Claude，杂活留 DS
       chat:           claude-sonnet
@@ -57,6 +58,7 @@ model_presets:
       summary:        deepseek-default
       detect_emotion: deepseek-default
       consolidation:  deepseek-default
+      perform:        deepseek-default
 
 # ── Legacy 扁平 llm: 块（向后兼容，无 model_presets 时生效）────────────────
 llm:
@@ -344,6 +346,11 @@ forensic_logs:
     day_archive_days: 30
     full_log_max_size_mb: 10
     full_log_keep: 3
+
+performance_mapping:
+  enabled: true        # false = enrich_say_segments 直接透传，行为与现在完全一致
+  provider: rules       # rules | llm
+  llm_timeout_sec: 3.0   # llm provider 外层超时，超时放弃标注直接下发
 
 toy_autogrow:
   enabled: true

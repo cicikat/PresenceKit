@@ -292,6 +292,8 @@ async def record_assistant_turn(
                 # that looked like a double-send for multi-paragraph trigger messages.
                 from core.narrative_parser import build_say_segments
                 _say_content, _say_segs = build_say_segments(assistant_text)
+                from core.perform_mapper import enrich_say_segments
+                _say_segs = await enrich_say_segments(assistant_text, _say_segs, char_id=char_id)
                 segment_kwargs = {"msg_id": _ws_msg_id}
                 if char_id is not None:
                     segment_kwargs["char_id"] = char_id

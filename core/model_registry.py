@@ -109,7 +109,7 @@ def _synth_legacy_presets(cfg: dict) -> dict:
         "tool_call_mode": llm.get("tool_call_mode", "function_calling"),
         "params": {k: llm[k] for k in _known_params if k in llm},
     }
-    _all_categories = ("chat", "intent", "probe", "summary", "detect_emotion", "consolidation")
+    _all_categories = ("chat", "intent", "probe", "summary", "detect_emotion", "consolidation", "perform")
     return {
         "active_routing": "default",
         "defaults": {},
