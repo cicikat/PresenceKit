@@ -34,6 +34,8 @@
 | 改并发/锁/数据安全 | `docs/memory.md` → 七、并发保护 |
 | 在 Codex / Claude Code Windows 环境运行测试、跨仓验证、处理沙箱报错 | `docs/dev-environment.md` |
 | 改多模型接入、preset 路由、LLM provider 适配、prompt_style 转换 | `docs/model-presets.md` |
+| 改鉴权/token/scope（`admin/auth.py`、`admin/scopes.py`、`admin/token_registry.py`） | `docs/security.md` |
+| 改 ESP32 具身硬件固件（`firmware/presence-device/`） | `docs/presence-device-firmware.md`（协议/WS 通道侧见 `docs/channels.md`） |
 
 ---
 
@@ -44,6 +46,7 @@
 | 消息处理主流程 | `main.py` |
 | Pipeline 四步骤 | `core/pipeline.py` |
 | Prompt 组装 | `core/prompt_builder.py` |
+| Prompt 层级消融开关（对比/消融测试，只过滤注入不短路检索） | `core/prompt_ablation.py` |
 | 话题标签规则 | `core/tag_rules.py` |
 | 工具注册 + 调度 + 探针 | `core/tool_dispatcher.py` |
 | Intiface / Buttplug 硬件控制 | `core/hardware/buttplug_client.py` / `core/hardware/device_registry.py` / `core/tools/hardware_tools.py` |
@@ -74,6 +77,10 @@
 | 花园管理面板接口 | `admin/routers/garden.py` |
 | 媒体文件解析与落盘 | `core/media_processor.py` |
 | 沙盒路径管理 | `core/sandbox.py` ← 所有 data/ 路径必须经过此处 |
+| 管理面鉴权（scoped tokens，SEC-AUTH-2） | `admin/auth.py`（`resolve_token` / `require_scopes` / `authenticate_ws`）/ `admin/scopes.py`（scope+profile 表）/ `admin/token_registry.py`（token 加载/热重载/create/rotate/delete/set_disabled） |
+| Token 管理 API（whoami/profiles/disable 等，DX Brief 22） | `admin/routers/auth_tokens.py` |
+| 首次配置 CLI：生成 secret_key + 六个标准 token + 本地密码本（DX Brief 22） | `scripts/setup_auth.py`（见 `docs/token-rotation.md`） |
+| ESP32 具身硬件固件（presence-device，非 `_achieve_Emerald-hello` 废弃测试项目） | `firmware/presence-device/src/ws_client.cpp`（WS 客户端+鉴权）/ `include/secrets.h`（gitignored，本地 token）/ `src/display.cpp`（渲染） |
 | 从情景记忆提取用户观察（手动维护） | `tools/extract_observations.py` |
 | 角色人设提醒轮换 | `core/author_note_rotator.py` |
 | 情绪状态软提示生成 | `core/mood_text.py` |

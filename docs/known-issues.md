@@ -50,6 +50,16 @@
 
 **位置**：`main.py` → `_qq_reality_reply_adapter()` → `core/turn_sink.record_assistant_turn()`
 
+**R1-B 基线审计（2026-06-11，`tests/test_r1b_qq_convergence_audit.py`）**：R1-B 是本条目的起点——
+对 QQ 主入口 vs `turn_sink` 统一目标做的一次全量收敛审计，当时钉住的差距（partial-convergence
+baseline）是：
+- `QQChannel.send` 硬编码 `is_group=False`（阻塞群聊，R1-C 前置项）
+- `_qq_reality_reply_adapter` 直接调用 `post_process`，未走 `record_assistant_turn`
+- LLM_ASSISTANT_REPLY 走 `text_output.send` 直发，不经 channel fanout
+
+以下 R1-C / R1-D 均是在 R1-B 钉住的这份基线之上做的收敛修复；`test_r1b_qq_convergence_audit.py`
+里的 A9/A10 用例现在断言这些差距已经被"翻转"（即已修复）。
+
 **已完成（含 R1-D）**：
 
 | 修复点 | 包 | 当前状态 |

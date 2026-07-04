@@ -29,7 +29,14 @@ QQ 消息 → main.py → message_queue
          └─ desktop/mobile/scheduler/sensor：core.turn_sink 写入 + channels.registry 广播活跃通道
 ```
 
+桌面 `message_segments` 的 `say` 段可选携带句级表演 spec（`perform`，`core/perform_mapper.py`，
+fail-open），见 `docs/perform-mapping.md`。
+
 通道细节见 `docs/channels.md`。手机端当前通过 mobile 轮询通道接收主动消息，不占用桌宠 WebSocket。花园这类不进入对话 pipeline 的伴生状态，见 `docs/garden.md`。
+
+ESP32 具身硬件通过 `/ws/device` 接入，帧格式与桌宠端 `/ws/desktop` 一致（见 `docs/channels.md`）；
+固件本身（板型、代码结构、鉴权配置）见 `docs/presence-device-firmware.md`
+（`firmware/presence-device/`，不要与已废弃的 `hardware/_achieve_Emerald-hello` 测试项目混淆）。
 Dream Session 后续必须走独立 pipeline，不进入当前现实对话 pipeline，也不走现有 `post_process`。
 
 Scheduler proposal 显式携带 `char_id` 时，`execute_prompt → _pipeline_send` 会冻结该角色的
