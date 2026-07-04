@@ -588,7 +588,7 @@ R8-D 实测：当前 DLQ 目录无任何 legacy task 文件（`mid_term_append` 
 
 **状态**：`now-safe-to-fix`（修复方案见 `docs/workorder-03b-episodic-integrity.md`）
 
-**现象（2026-06-20 实测）**：`data/runtime/memory/yexuan/1043484516/episodic.json` 末尾停在
+**现象（2026-06-20 实测）**：`data/runtime/memory/yexuan/<owner_uid>/episodic.json` 末尾停在
 `"status": "open", "resolved_at":`，无值无闭合（原始字节确认非读取截断）。194 条中 193 条可解析，仅最后一条损坏。
 
 **根因/隐患**：`safe_write_json` 虽原子，但疑似被重启打断 / 存在非原子写入方 / mount 视图不一致。

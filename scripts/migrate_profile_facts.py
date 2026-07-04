@@ -1,12 +1,14 @@
 """
 一次性迁移：把 important_facts 里的 legacy raw-str 回迁为 {text, tag, ts}，并按维度分类。
-主用户 yexuan/1043484516 按手工核定表处理；其他用户用关键词启发式，未命中则保守归 stable。
+主用户（config.yaml scheduler.owner_id，可用 MIGRATE_PRIMARY_UID 覆盖）/yexuan 按手工核定表处理；
+其他用户用关键词启发式，未命中则保守归 stable。
 
 用法：
     python scripts/migrate_profile_facts.py           # 实际迁移
     python scripts/migrate_profile_facts.py --dry-run # 预览，不写盘
 """
 import json
+import os
 import shutil
 import sys
 import time
@@ -17,8 +19,23 @@ DATA_ROOT = REPO_ROOT / "data" / "runtime" / "memory"
 
 NOW_TS = float(int(time.time()))
 
+
+def _primary_uid() -> str | None:
+    """主用户 QQ 号：优先取环境变量覆盖，否则读 config.yaml scheduler.owner_id。"""
+    env_uid = os.environ.get("MIGRATE_PRIMARY_UID")
+    if env_uid:
+        return env_uid
+    try:
+        sys.path.insert(0, str(REPO_ROOT))
+        from core.config_loader import get_config
+        owner_id = get_config().get("scheduler", {}).get("owner_id")
+        return str(owner_id) if owner_id else None
+    except Exception:
+        return None
+
+
 # 主用户手工核定表：文本前缀 → tag（None = 删除）
-HAND_1043484516_YEXUAN: dict[str, str | None] = {
+HAND_PRIMARY_USER_YEXUAN: dict[str, str | None] = {
     "使用Obsidian": "habit",
     "喜欢傍晚跑步": "habit",
     "创作同人作品": "stable",
@@ -172,10 +189,12 @@ def main(dry_run: bool = False) -> None:
         print("No profile.json files found.")
         return
 
+    primary_uid = _primary_uid()
+
     for path, uid, char_id in targets:
         label = f"{char_id}/{uid}"
         print(f"\n{'[DRY-RUN] ' if dry_run else ''}=== {label} ===")
-        hand = HAND_1043484516_YEXUAN if (uid == "1043484516" and char_id == "yexuan") else None
+        hand = HAND_PRIMARY_USER_YEXUAN if (primary_uid and uid == primary_uid and char_id == "yexuan") else None
         try:
             changed = migrate_one(path, hand, dry_run)
             if not changed:
