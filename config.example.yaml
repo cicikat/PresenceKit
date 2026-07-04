@@ -87,7 +87,11 @@ admin:
   auto_start: true
   host: 0.0.0.0
   port: 8080             # 管理面板端口，浏览器访问 http://127.0.0.1:8080
-  secret_key: YOUR_ADMIN_SECRET  # 请改随机值，优先用环境变量 
+  # 请改随机值，优先用环境变量 YEXUAN_ADMIN_SECRET（会覆盖这里的值）。
+  # SEC-AUTH-2：这个值等价于 admin scope 的 bootstrap token（label legacy-admin），全权。
+  # 边缘设备（手机/Watch/ESP32/手机轮询端）应改用 POST /auth/tokens 签发的最小权限 token
+  # （P3 落地后可用；见 docs/security.md），不要把这个 secret_key 烧进边缘设备配置里。
+  secret_key: YOUR_ADMIN_SECRET
 notify:
   enabled: true
   target_qq: YOUR-TARGET-QQ
