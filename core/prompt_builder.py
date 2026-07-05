@@ -217,11 +217,24 @@ def _normalize_injection(text: str, *, char_name: str) -> str:
 
 def _load_jailbreak(layer: int | None = None) -> str:
     """
-    从 active_prompt_assets.json 读取 enabled_jailbreaks 列表，
-    按顺序加载 characters/reality/jailbreaks/{stem}.json，合并启用条目。
+    两套破限存储合并注入，按内容去重：
+    1) stems 源：active_prompt_assets.json 的 enabled_jailbreaks 列表，
+       按顺序加载 characters/reality/jailbreaks/{stem}.json。
+    2) entries 源：characters/reality/jailbreak_entries.json（前端「偏好→世界→破限条目」
+       EntryManager 管理的条目）。
     layer 指定时只返回该层的条目，None 时返回所有启用条目。
     保持 layer 0 / 2 / 11 注入顺序不变（由调用方控制）。
+    两源内容重复（`content.strip()` 相同）时只注入一次。
     """
+    parts: list[str] = []
+    seen: set[str] = set()
+
+    def _add(content: str) -> None:
+        content = content.strip()
+        if content and content not in seen:
+            seen.add(content)
+            parts.append(content)
+
     try:
         import json
         from core.sandbox import get_paths
@@ -232,7 +245,6 @@ def _load_jailbreak(layer: int | None = None) -> str:
         enabled_jailbreaks: list = assets.get("enabled_jailbreaks", [])
 
         jailbreaks_dir = paths.jailbreaks_dir()
-        parts = []
 
         for stem in enabled_jailbreaks:
             file_path = jailbreaks_dir / f"{stem}.json"
@@ -251,15 +263,27 @@ def _load_jailbreak(layer: int | None = None) -> str:
                     continue
                 if layer is not None and e.get("layer", 0) != layer:
                     continue
-                content = e.get("content", "").strip()
-                if content:
-                    parts.append(content)
-
-        return "\n".join(parts)
+                _add(e.get("content", ""))
     except Exception as e:
         from core.error_handler import log_error
-        log_error("prompt_builder._load_jailbreak", e)
-        return ""
+        log_error("prompt_builder._load_jailbreak.stems", e)
+
+    try:
+        import json
+        from core.sandbox import get_paths
+        entries_path = get_paths().jailbreak_entries()
+        entries_data = json.loads(entries_path.read_text(encoding="utf-8"))
+        for e in entries_data.get("entries", []):
+            if not e.get("enabled", True):
+                continue
+            if layer is not None and e.get("layer", 0) != layer:
+                continue
+            _add(e.get("content", ""))
+    except Exception as e:
+        from core.error_handler import log_error
+        log_error("prompt_builder._load_jailbreak.entries", e)
+
+    return "\n".join(parts)
 
 def _recent_openings(history: list[dict], n: int = 3, k: int = 8) -> list[str]:
     """Return the first k chars of the last n assistant turns (fail-open)."""
@@ -273,6 +297,42 @@ def _recent_openings(history: list[dict], n: int = 3, k: int = 8) -> list[str]:
         if len(outs) >= n:
             break
     return outs
+
+
+def _dedupe_filler_prefix_history(history: list[dict], prefix: str) -> list[dict]:
+    """
+    历史投影去同质（问题7 (a)）：只改注入 prompt 的历史副本，绝不写回 short_term 存储。
+
+    近场 assistant 回复连续以填充词前缀 P 开头时，模型会从上下文里"学到"每句都要 P 开头——
+    一条软提示对抗不了整段历史的示范效应。这里保留最早一条完整的 P，其余各条剥掉开头的 P，
+    使投影给模型看的历史里不再是"每句都嗯。"。
+
+    被剥掉前缀的消息额外带 `_raw_content` 记录原始文本（未去同质），供 pipeline 侧输出端
+    校验重试（问题7 (c)）复原同一份检测所需的原始 assistant 历史；`_raw_content` 与 `_layer` 等
+    内部字段一样在 `sanitize_messages()` 出口统一剥离，不会发给供应商，也不写回磁盘。
+    """
+    projected: list[dict] = []
+    kept_one = False
+    for msg in history:
+        content = msg.get("content")
+        if (
+            msg.get("role") == "assistant"
+            and isinstance(content, str)
+            and content.lstrip().startswith(prefix)
+        ):
+            if not kept_one:
+                kept_one = True
+                projected.append(msg)
+            else:
+                lstripped = content.lstrip()
+                leading_ws = content[: len(content) - len(lstripped)]
+                new_msg = dict(msg)
+                new_msg["content"] = leading_ws + lstripped[len(prefix):]
+                new_msg["_raw_content"] = content
+                projected.append(new_msg)
+        else:
+            projected.append(msg)
+    return projected
 
 
 def build(
@@ -345,9 +405,19 @@ def build(
     )
     _msg_gap_secs: float | None = _get_gap(history)
 
+    # S2 检测：近场 assistant 回复是否连续以同一前缀开头（问题7）。
+    # 只检测一次，供层9历史投影去同质 (a) 与层11软提示文案 (b) 复用同一份结果。
+    _s2_prefix: str | None = None
+    try:
+        from core.memory.short_term import detect_reply_homogeneity_prefix as _detect_s2_prefix
+        _s2_prefix = _detect_s2_prefix(history)
+    except Exception:
+        _s2_prefix = None
+
     # ─────────────────────────────────────────────────────────────────────────
     # 层 0：破限预设（jailbreak，最高优先级，放在最前面）
-    # 来自 characters/reality/jailbreak_entries.json 中启用且 layer=0 的条目
+    # 来自 stems（jailbreaks/{stem}.json，受 enabled_jailbreaks 控制）与
+    # characters/reality/jailbreak_entries.json 两套存储中启用且 layer=0 的条目，按内容去重合并
     # ─────────────────────────────────────────────────────────────────────────
     jailbreak_text = _load_jailbreak(layer=0)
     if jailbreak_text:
@@ -492,7 +562,7 @@ def build(
     if not history or _is_silent_10min(user_id):
         try:
             from core.activity_manager import get_prompt_fragment
-            _activity_fragment = get_prompt_fragment()
+            _activity_fragment = get_prompt_fragment(char_id=char_id)
             logger.info(f"[activity_inject] fragment={_activity_fragment!r}")
             if _activity_fragment:
                 _layers.append("2.6_activity")
@@ -1072,18 +1142,34 @@ def build(
         "content": '<对话记录 note="以下是与用户真实发生的对话">',
         "_layer": "9_history",
     })
-    for _hm in history:
+
+    # 历史投影去同质（问题7 (a)）：仅当命中前缀属于填充词白名单时才改投影副本，
+    # 非填充词前缀（如"现在，"）不做投影改写，只走层11软提示。
+    _history_for_prompt = history
+    if _s2_prefix:
+        try:
+            from core.memory.short_term import is_filler_prefix as _is_filler_prefix
+            if _is_filler_prefix(_s2_prefix):
+                _history_for_prompt = _dedupe_filler_prefix_history(history, _s2_prefix)
+        except Exception:
+            _history_for_prompt = history
+
+    for _hm in _history_for_prompt:
         # 防御性：trigger_stub（系统触发锚点，含内部 trigger_name 明文）绝不投影进 prompt。
         # 主过滤在 short_term.load_for_prompt，此处为第二道闸，挡住其他历史来源。
         if _hm.get("_source") == "trigger_stub":
             continue
         # short_term 持久化 speaker_id/timestamp/turn_id；当前单聊 prompt 只投影
         # OpenAI 标准字段。Stage 会在 P2 用独立 transcript renderer 展示发言人。
-        messages.append({
+        # _raw_content（若有）只供 pipeline 侧输出校验重试复原原始文本，同为内部字段一并投影。
+        _hm_out = {
             "role": _hm.get("role", "user"),
             "content": _hm.get("content", ""),
             "_layer": "9_history",
-        })
+        }
+        if "_raw_content" in _hm:
+            _hm_out["_raw_content"] = _hm["_raw_content"]
+        messages.append(_hm_out)
     messages.append({
         "role": "system",
         "content": "</对话记录>",
@@ -1157,26 +1243,39 @@ def build(
     if author_note_extra:
         author_note_lines.append(f"（{author_note_extra}）")
 
-    # S2 防句式坍缩：检测近几轮 assistant 短回复同质性，命中时注入软提示
+    # S2 防句式坍缩：复用 build() 顶部已算好的 _s2_prefix（与层9历史投影去同质同一份检测结果）
     try:
-        from core.memory.short_term import detect_reply_homogeneity as _detect_homogeneity
-        _homogeneity_hint = _detect_homogeneity(history)
-        if _homogeneity_hint:
-            author_note_lines.append(_homogeneity_hint)
+        from core.memory.short_term import is_filler_prefix as _is_filler_prefix
+        if _s2_prefix:
+            if _is_filler_prefix(_s2_prefix):
+                author_note_lines.append(
+                    "（你最近几条开头都是同一个语气词，这次第一个字直接进正文——"
+                    "从动作、称呼或要说的事本身开始。）"
+                )
+            else:
+                author_note_lines.append(
+                    f'（近几轮回复开头连续用了「{_s2_prefix}」，禁止以相同句首开头，自然地换个切入方式。）'
+                )
     except Exception:
         pass
 
-    # S3 防字数坍缩：检测近几轮 assistant 回复字数是否连续落在同一区间，命中时注入软提示
+    # S3 防字数坍缩：长/短两挡非对称触发（问题8），命中时注入软提示
     # 不叠加情感浓度权重——情感浓度高时 LLM 本就会无视纠偏提示，与本提示自然中和，无需额外系数
     try:
         from core.config_loader import get_config as _get_config_ac
         from core.memory.short_term import detect_reply_length_collapse as _detect_length_collapse
         _ac_cfg = _get_config_ac().get("anti_collapse", {})
+        if "thresholds" in _ac_cfg or "recent_n" in _ac_cfg:
+            logger.warning(
+                "[anti_collapse] 配置键 thresholds/recent_n 已废弃并被忽略，"
+                "请改用 short_max/recent_n_long/recent_n_short"
+            )
         if _ac_cfg.get("enabled", True):
             _length_hint = _detect_length_collapse(
                 history,
-                recent_n=_ac_cfg.get("recent_n", 5),
-                thresholds=tuple(_ac_cfg.get("thresholds", (15, 40, 80, 150))),
+                short_max=_ac_cfg.get("short_max", 60),
+                recent_n_long=_ac_cfg.get("recent_n_long", 4),
+                recent_n_short=_ac_cfg.get("recent_n_short", 7),
             )
             if _length_hint:
                 author_note_lines.append(_length_hint)

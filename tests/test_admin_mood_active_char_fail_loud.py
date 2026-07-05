@@ -61,8 +61,13 @@ def test_mood_empty_active_raises_503(sandbox):
 # ── 2. active 读取失败 → HTTP 503 ────────────────────────────────────────────
 
 def test_mood_read_failure_raises_503(sandbox, monkeypatch):
-    """_active_char_id when read_text raises must return HTTP 503."""
+    """_active_char_id when read_text raises must return HTTP 503.
+
+    _active_char_id() 实现已抽到 admin/routers/_common.py（CC 任务 24 · 3），
+    mood.py 只是重导出，所以要 monkeypatch 的是 _common 模块里的 _get_paths。
+    """
     import admin.routers.mood as _mood_router
+    import admin.routers._common as _common
 
     mock_path_obj = type("_P", (), {
         "read_text": lambda *a, **k: (_ for _ in ()).throw(OSError("disk failure")),
@@ -71,7 +76,7 @@ def test_mood_read_failure_raises_503(sandbox, monkeypatch):
     def _bad_get_paths():
         return type("_G", (), {"active_prompt_assets": lambda self: mock_path_obj})()
 
-    monkeypatch.setattr(_mood_router, "_get_paths", _bad_get_paths)
+    monkeypatch.setattr(_common, "_get_paths", _bad_get_paths)
 
     called = []
     with patch.object(_mood_state_mod, "load", side_effect=lambda **kw: called.append(kw)):

@@ -33,6 +33,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 from pydantic import BaseModel
 
 from admin.auth import require_scopes
+from admin.routers._common import active_char_id as _active_char_id
 from core.activity import activity_store
 from core.activity import activity_summary as _activity_summary
 from core.activity import reading_companion
@@ -70,22 +71,6 @@ def _sanitize_filename(raw: str) -> str:
     if len(name) > _MAX_FILENAME_LEN:
         name = name[:_MAX_FILENAME_LEN]
     return name or "upload.pdf"
-
-
-def _active_char_id() -> str:
-    try:
-        raw = json.loads(_get_paths().active_prompt_assets().read_text(encoding="utf-8"))
-        cid = (raw.get("active_character") or "").strip()
-    except Exception:
-        raise HTTPException(status_code=503, detail="active character unavailable")
-    if not cid:
-        raise HTTPException(status_code=503, detail="active_character missing")
-    from core.asset_registry import get_registry
-    try:
-        get_registry().resolve(cid, "character")
-    except ValueError:
-        raise HTTPException(status_code=422, detail=f"unknown character id: {cid!r}")
-    return cid
 
 
 def _default_uid() -> str:

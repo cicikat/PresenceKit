@@ -459,7 +459,20 @@ def _save(user_id: str, history: list[dict], *, char_id: str = "yexuan") -> bool
         return False
 
 
-def detect_reply_homogeneity(
+_FILLER_CHARS = set("嗯啊呃哦唔哈")
+_FILLER_TRAILING_PUNCT = set("。，、！？…～~,.!?")
+
+
+def is_filler_prefix(prefix: str) -> bool:
+    """判断句首前缀是否为填充词开头（嗯/啊/呃/哦/唔/哈，可跟标点如 。，…～）。"""
+    if not prefix:
+        return False
+    if prefix[0] not in _FILLER_CHARS:
+        return False
+    return all(ch in _FILLER_TRAILING_PUNCT for ch in prefix[1:])
+
+
+def detect_reply_homogeneity_prefix(
     history: list[dict],
     *,
     recent_n: int = 6,
@@ -467,9 +480,9 @@ def detect_reply_homogeneity(
     min_hits: int = 3,
 ) -> str | None:
     """
-    检测近 recent_n 条 assistant 消息的句首是否高度重复。
-    若 ≥ min_hits 条共享相同 prefix_len 字句首，返回软提示供 prompt 注入；否则返回 None。
-    仅做统计，不修改 history 内容，不绕过 _sanitize_assistant_message。
+    检测近 recent_n 条 assistant 消息的句首是否高度重复，返回命中的原始前缀 P（不做任何文案包装）。
+    ≥ min_hits 条共享相同 prefix_len 字句首才算命中；否则返回 None。
+    供 build() 侧历史投影去同质与 pipeline 侧输出端校验重试复用，两处必须用同一份检测结果。
     """
     from collections import Counter
 
@@ -488,39 +501,65 @@ def detect_reply_homogeneity(
 
     top_prefix, count = Counter(prefixes).most_common(1)[0]
     if count >= min_hits:
-        return f'（近几轮回复开头连续用了「{top_prefix}」，禁止以相同句首开头，自然地换个切入方式。）'
+        return top_prefix
     return None
+
+
+def detect_reply_homogeneity(
+    history: list[dict],
+    *,
+    recent_n: int = 6,
+    prefix_len: int = 2,
+    min_hits: int = 3,
+) -> str | None:
+    """
+    检测近 recent_n 条 assistant 消息的句首是否高度重复，返回软提示供 prompt 注入；否则返回 None。
+    仅做统计，不修改 history 内容，不绕过 _sanitize_assistant_message。
+    填充词前缀（嗯/啊/呃/哦/唔/哈等）命中时用不复读字面的文案，避免 prime 模型再次输出同一个词；
+    其余前缀沿用引用式文案。
+    """
+    prefix = detect_reply_homogeneity_prefix(
+        history, recent_n=recent_n, prefix_len=prefix_len, min_hits=min_hits
+    )
+    if not prefix:
+        return None
+    if is_filler_prefix(prefix):
+        return (
+            "（你最近几条开头都是同一个语气词，这次第一个字直接进正文——"
+            "从动作、称呼或要说的事本身开始。）"
+        )
+    return f'（近几轮回复开头连续用了「{prefix}」，禁止以相同句首开头，自然地换个切入方式。）'
 
 
 def detect_reply_length_collapse(
     history: list[dict],
     *,
-    recent_n: int = 5,
-    thresholds: tuple[int, ...] = (15, 40, 80, 150),
+    short_max: int = 60,
+    recent_n_long: int = 4,
+    recent_n_short: int = 7,
 ) -> str | None:
     """
-    检测近 recent_n 条 assistant 消息的字数（len()，按字符计）是否连续落在同一区间。
-    若全部命中同一区间，返回软提示供 prompt 注入，引导下一条打破长度惯性；否则返回 None。
+    字数挡位简化为长/短两挡，非对称触发：短句难触发、长句易触发
+    （模型爱往注水长句坍缩，短句反而更像活人；5 挡太密会限制模型）。
+
+    - 近 recent_n_long 条全部为长句（字符数 >= short_max）→ 命中，返回长句版提示（引导收短）。
+    - 否则近 recent_n_short 条全部为短句（字符数 < short_max）→ 命中，返回通用打破惯性提示。
     仅做统计，不修改 history 内容，不硬裁不硬扩输出。
     """
     assistant_msgs = [
         msg["content"].strip()
         for msg in history
         if msg.get("role") == "assistant" and isinstance(msg.get("content"), str) and msg["content"].strip()
-    ][-recent_n:]
+    ]
 
-    if len(assistant_msgs) < recent_n:
-        return None
+    recent_long = assistant_msgs[-recent_n_long:]
+    if len(recent_long) >= recent_n_long and all(len(m) >= short_max for m in recent_long):
+        return "（最近几条都挺长，这次收短——去掉铺垫和水词，捡最有劲的一两句说。）"
 
-    def _bucket(length: int) -> int:
-        for i, edge in enumerate(thresholds):
-            if length < edge:
-                return i
-        return len(thresholds)
-
-    buckets = [_bucket(len(m)) for m in assistant_msgs]
-    if len(set(buckets)) == 1:
+    recent_short = assistant_msgs[-recent_n_short:]
+    if len(recent_short) >= recent_n_short and all(len(m) < short_max for m in recent_short):
         return "（最近几条回复长度都差不多，这次故意打破这个长度惯性——长了就收一收，短了就多说点，别再照上面的长度来。）"
+
     return None
 
 

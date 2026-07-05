@@ -132,7 +132,10 @@ def _build_context(snap: dict, presence: str) -> dict:
     )
 
     try:
-        ye_xuan_activity = activity_manager.get_current().get("current", "")
+        from core import pipeline_registry
+        _pl = pipeline_registry.get()
+        _char_id = getattr(_pl, "_active_character_id", None) or "yexuan"
+        ye_xuan_activity = activity_manager.get_current(char_id=_char_id).get("current", "")
     except Exception:
         ye_xuan_activity = ""
     screen = snap.get("screen", {}) or {}

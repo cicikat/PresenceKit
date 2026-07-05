@@ -2,6 +2,10 @@
 activity_manager — 角色当前活动状态管理。
 每15-45分钟（随机）切换一次 activity，受 daily_arc 时段约束。
 activity_pool.yaml 是手写配置，定义角色会做的事。
+
+CC 任务 24 · 3：全链路按 char_id 隔离——此前所有函数都不传 char_id，
+_load_state()/_save_state()/_load_pool() 落盘时全部固定读写默认角色（yexuan）
+路径，导致切换 active_character 后 /activity/current 仍返回 yexuan 的动向。
 """
 import json
 import logging
@@ -15,6 +19,8 @@ import yaml
 from core.sandbox import get_paths, _TRANSITION_CHARACTER_INNER
 
 logger = logging.getLogger(__name__)
+
+_DEFAULT_CHAR_ID = "yexuan"
 
 # 时段定义（小时列表）
 ARCS = {
@@ -32,9 +38,16 @@ def _get_current_arc() -> str:
             return arc
     return "afternoon"
 
-def _load_pool() -> list:
+def _load_pool(char_id: str = _DEFAULT_CHAR_ID) -> list:
+    """加载该角色的 activity_pool.yaml；角色自己的池不存在时 fallback 读默认角色池（不复制文件）。"""
     try:
-        pool_path = get_paths().activity_pool()
+        pool_path = get_paths().activity_pool(char_id=char_id)
+        if char_id != _DEFAULT_CHAR_ID:
+            own_pool = Path(f"content/characters/{char_id}/activity_pool.yaml")
+            if not own_pool.exists():
+                logger.debug(
+                    f"[activity] {char_id} 无独立 activity_pool.yaml，fallback 读默认角色池"
+                )
         with open(pool_path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
         return data.get("activities", [])
@@ -42,21 +55,22 @@ def _load_pool() -> list:
         logger.warning(f"[activity] 加载activity_pool失败: {e}")
         return []
 
-def _load_state() -> dict:
+def _load_state(char_id: str = _DEFAULT_CHAR_ID) -> dict:
     try:
-        return json.loads(get_paths().activity_state().read_text(encoding="utf-8"))
+        return json.loads(get_paths().activity_state(char_id=char_id).read_text(encoding="utf-8"))
     except Exception:
         return {}
 
-def _save_state(state: dict) -> None:
-    p = get_paths().activity_state()
+def _save_state(state: dict, char_id: str = _DEFAULT_CHAR_ID) -> None:
+    p = get_paths().activity_state(char_id=char_id)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
-    if _TRANSITION_CHARACTER_INNER:
+    # 旧路径兼容写：只对默认角色保留，非默认角色没有对应的 legacy yexuan_inner 路径语义
+    if _TRANSITION_CHARACTER_INNER and char_id == _DEFAULT_CHAR_ID:
         old = get_paths()._p("yexuan_inner", "activity_state.json")
         old.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
 
-def _load_thinking_about(uid: str = "") -> str:
+def _load_thinking_about(uid: str = "", *, char_id: str = _DEFAULT_CHAR_ID) -> str:
     """
     从 episodic_memory 抽一条具体事件作为 thinking_about。
     按 strength 加权随机，只取最近30天、strength>0.4、有 summary 的记忆。
@@ -72,7 +86,7 @@ def _load_thinking_about(uid: str = "") -> str:
 
     try:
         from core.memory.episodic_memory import _load_memories
-        memories = _load_memories(uid)
+        memories = _load_memories(uid, char_id=char_id)
         if not memories:
             return ""
 
@@ -107,9 +121,9 @@ def _load_thinking_about(uid: str = "") -> str:
         logger.warning(f"[activity] 读取thinking_about失败: {e}")
         return ""
 
-def _pick_activity(arc: str) -> dict:
+def _pick_activity(arc: str, char_id: str = _DEFAULT_CHAR_ID) -> dict:
     """按当前时段随机抽一个activity。"""
-    pool = _load_pool()
+    pool = _load_pool(char_id=char_id)
     eligible = [a for a in pool if arc in a.get("arcs", [])]
     if not eligible:
         eligible = pool
@@ -123,18 +137,18 @@ def _pick_activity(arc: str) -> dict:
         text = text.replace("{book}", random.choice(books))
     return {**chosen, "text": text}
 
-def should_switch() -> bool:
+def should_switch(char_id: str = _DEFAULT_CHAR_ID) -> bool:
     """判断是否需要切换activity（距上次切换超过15-45分钟随机值）。"""
-    state = _load_state()
+    state = _load_state(char_id=char_id)
     if not state:
         return True
     expected_until = state.get("expected_until_ts", 0)
     return time.time() > expected_until
 
-def switch_activity() -> dict:
+def switch_activity(char_id: str = _DEFAULT_CHAR_ID) -> dict:
     """切换到新activity，返回新状态。"""
     arc = _get_current_arc()
-    activity = _pick_activity(arc)
+    activity = _pick_activity(arc, char_id=char_id)
     now = datetime.now()
     # 随机持续15-45分钟
     duration_min = random.randint(15, 45)
@@ -147,7 +161,7 @@ def switch_activity() -> dict:
             _uid = get_config().get("default_user_id", "")
         except Exception:
             _uid = ""
-        thinking_about = _load_thinking_about(_uid)
+        thinking_about = _load_thinking_about(_uid, char_id=char_id)
 
     state = {
         "current": activity["text"],
@@ -156,21 +170,21 @@ def switch_activity() -> dict:
         "thinking_about": thinking_about,
         "arc": arc,
     }
-    _save_state(state)
-    logger.info(f"[activity] 切换: {activity['text']} (arc={arc}, {duration_min}分钟)")
+    _save_state(state, char_id=char_id)
+    logger.info(f"[activity] 切换: {activity['text']} (char={char_id}, arc={arc}, {duration_min}分钟)")
     return state
 
-def get_current() -> dict:
+def get_current(char_id: str = _DEFAULT_CHAR_ID) -> dict:
     """获取当前activity状态，必要时自动切换。"""
-    if should_switch():
-        return switch_activity()
-    return _load_state()
+    if should_switch(char_id=char_id):
+        return switch_activity(char_id=char_id)
+    return _load_state(char_id=char_id)
 
 _PATTERN_WORDS = ["每次", "总是", "一直", "从来", "每天", "每周"]
 
-def get_prompt_fragment() -> str:
+def get_prompt_fragment(char_id: str = _DEFAULT_CHAR_ID) -> str:
     """返回注入prompt的文本片段，50字以内。"""
-    state = get_current()
+    state = get_current(char_id=char_id)
     current = state.get("current", "")
     thinking = state.get("thinking_about", "")
     if not current:

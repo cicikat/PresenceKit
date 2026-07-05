@@ -44,6 +44,36 @@
 
 ---
 
+### ACT-1：阅读动向被记录进 yexuan 数据——审计结论：后端已隔离，怀疑点在前端
+
+**状态**：`observe`
+
+**位置**：`core/activity/reading_companion.py` / `core/activity/activity_summary.py` / `core/activity/transcript.py` / `core/activity/activity_store.py`
+
+**背景**：用户报告"阅读动向被记录进 yexuan 数据"（CC 任务 24 · 3.3 顺手核查）。`admin/routers/reading.py` 路由侧已用 `_active_char_id()`（现抽到 `admin/routers/_common.py`）在每个 endpoint 入口解析 char_id 并显式传递。
+
+**审计结论（2026-07-05）**：grep 确认 `reading_companion.py` / `activity_summary.py` / `transcript.py` / `activity_store.py` 里的 `char_id` 参数**全部无默认值**（无 `char_id: str = "yexuan"` 这类签名），调用方必须显式传入，不存在"忘传 char_id 时静默落到 yexuan 路径"的缺省缺口。后端阅读/共同活动记忆路径本身是按 char_id + uid 双重隔离的。
+
+**怀疑点**：现象更可能来自 (a) 前端动向时间轴目前是全局 localStorage，不按角色分桶（属于 `Emerald-client` 前端侧 Brief 14 处理范围）；或 (b) 用户操作时 `active_character` 本身就切到了 yexuan（不是代码 bug，是当时激活的角色确实是 yexuan）。本轮同时修复的 `core/activity_manager.py` 全局单状态 bug（`/activity/current` 随机池此前永远读 yexuan 路径，与 `active_character` 无关）已独立解决，可能是用户实际观察到的现象的另一半根因——`GET /activity/current` 修复前返回的动向文案本就不随角色变化。
+
+**下一步**：待前端接入按角色隔离的时间轴（Brief 14）后，若现象仍复现，再回来查 (b)。
+
+---
+
+### ACT-2：反坍缩输出端重试未覆盖流式路径
+
+**状态**：`now-safe-to-fix`（需要独立设计，非小修）
+
+**位置**：`core/pipeline.py::Pipeline.run_llm_stream()`；对照 `run_llm()` 里的 `_anti_collapse_prefix_retry()`
+
+**背景**：CC 任务 24 · 2.2 (c) 在 `run_llm()`（非流式）加了输出端校验重试——LLM 回复仍以检测到的重复句首 P 开头时追加强指令重试一次。桌宠聊天等走 `run_llm_stream()` 的路径没有接入这个机制。
+
+**原因**：流式场景下 token 已经边生成边推给前端渲染，检测到"又是 P 开头"时前几个字符往往已经吐给用户看到了，不能像非流式那样直接丢弃整段重来；需要专门设计（比如：只在检测到 P 命中时暂缓推送前 N 个 token，等确认非 P 开头再开始转发，或者接受"流式场景下只做软提示、不做硬止血"的降级策略）。
+
+**影响范围**：桌宠 `admin/routers/chat.py` 的 `run_llm_stream` 分支、其他潜在流式入口。
+
+---
+
 ### B11：QQ 主入口 turn_sink 统一（turn-sink-converged）
 
 **状态**：`fixed`（R1-D 完成 2026-06-11；QQ LLM 回复链路已接入 `record_assistant_turn`）

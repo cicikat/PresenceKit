@@ -10,6 +10,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends
 
 from admin.auth import require_scopes
+from admin.routers._common import active_char_id as _active_char_id
 from core import activity_manager
 from core.activity.registry import list_enabled_activities
 
@@ -37,10 +38,11 @@ async def get_activity_list(auth=Depends(require_scopes("state.read"))):
     ]
 
 
-def _get_activity_text() -> str:
+def _get_activity_text(char_id: str) -> str:
     """
     优先级：梦境 > 共同活动会话 > 随机池。
-    返回当前动向文案字符串。
+    返回当前动向文案字符串。char_id 由调用方解析一次后传入，避免重复读取
+    active_prompt_assets.json（也避免与调用方对"当前激活角色"的判断产生分歧）。
     """
     # ── 1. 梦境检查 ───────────────────────────────────────────────────────────
     try:
@@ -58,14 +60,6 @@ def _get_activity_text() -> str:
         pass
 
     # ── 2. 活跃共同活动检查 ───────────────────────────────────────────────────
-    try:
-        import json
-        from core.sandbox import get_paths
-        raw = json.loads(get_paths().active_prompt_assets().read_text(encoding="utf-8"))
-        char_id = (raw.get("active_character") or "").strip()
-    except Exception:
-        char_id = ""
-
     if char_id:
         # 阅读
         try:
@@ -92,14 +86,15 @@ def _get_activity_text() -> str:
         except Exception:
             pass
 
-    # ── 3. 随机活动池 ─────────────────────────────────────────────────────────
-    state = activity_manager.get_current()
+    # ── 3. 随机活动池（按角色隔离，CC 任务 24 · 3）──────────────────────────────
+    state = activity_manager.get_current(char_id=char_id)
     return state.get("current", "")
 
 
 @router.get("/current", summary="获取当前活动状态")
 async def get_activity_state(auth=Depends(require_scopes("state.read"))):
-    state = activity_manager.get_current()
+    char_id = _active_char_id()
+    state = activity_manager.get_current(char_id=char_id)
 
     started_at = None
     raw = state.get("started_at")
@@ -109,10 +104,11 @@ async def get_activity_state(auth=Depends(require_scopes("state.read"))):
         except Exception:
             pass
 
-    text = _get_activity_text()
+    text = _get_activity_text(char_id)
 
     return {
         "id": None,
+        "char_id": char_id,
         "text": text,
         "arc": state.get("arc"),
         "started_at": started_at,

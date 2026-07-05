@@ -8,15 +8,15 @@
 
 | 层标识 | 内容 | 触发条件 | 数据来源 |
 |---|---|---|---|
-| `0_jailbreak` | 破限预设 layer=0 | 文件存在且 enabled | `characters/reality/jailbreak_entries.json` |
+| `0_jailbreak` | 破限预设 layer=0 | 文件存在且 enabled | stems（`jailbreaks/{stem}.json`，受 `enabled_jailbreaks` 控制）+ `characters/reality/jailbreak_entries.json`，按内容去重合并 |
 | `1_system_prompt` | 角色存在性定义 + 情绪软提示 + `{perception_block}` 槽位 | always | `characters/yexuan.json` + `core/mood_text.py` |
 | `1.5_fact_boundary` | 数据驱动单句：有实时感知数据时给出数据 + "仅以上为已确认，其余未知"；无数据时注入禁令句（物品/食物/天气等一律未知） | always | `_format_realtime_awareness()` 结果条件注入（`core/prompt_builder.py`） |
 | `2_char_desc` | 角色描述 + 性格 + 情境 | always | 角色卡 |
 | `2.2_stage_presence` | 群聊在场成员与公开发言提醒 | reality Stage 角色生成时 | `core/stage/context.py` |
-| `2_jailbreak` | 破限预设 layer=2 | 文件存在且 enabled | `characters/reality/jailbreak_entries.json` |
+| `2_jailbreak` | 破限预设 layer=2 | 文件存在且 enabled | stems + `characters/reality/jailbreak_entries.json`，按内容去重合并 |
 | `2.5_time` | 当前时间（年月日 时:分 星期X） | always | 实时生成 |
 | `2.55_last_seen` | 用户上一条消息距现在的精确时间差（如"约3小时12分钟"） | 非静默时段 且 gap ≥ 6 小时 | `core/presence.py` → `get_gap_from_history()` + `format_gap_text()` |
-| `2.6_activity` | 他此刻的状态 | 对话开头（history 为空）或沉默超10分钟 | `activity_manager.get_prompt_fragment()`，每15-45分钟随机切换，部分活动会从 episodic_memory 按 strength 加权抽一条记忆作为"他在想什么"注入 |
+| `2.6_activity` | 他此刻的状态 | 对话开头（history 为空）或沉默超10分钟 | `activity_manager.get_prompt_fragment(char_id=char_id)`（CC 任务 24 · 3 起按角色隔离，此前全角色共用 yexuan 状态），每15-45分钟随机切换，部分活动会从 episodic_memory 按 strength 加权抽一条记忆作为"他在想什么"注入 |
 | `3_relation` | 与该用户的关系 + 称呼 | always | `user_relation` |
 | `4_group_context` | 群聊最近动态 | 群聊时 | `group_context.get_recent()` |
 | `4.2_stage_transcript` | 带真实 speaker 标签的共享 Stage transcript | reality Stage 角色生成时 | `core/stage/context.py` |
@@ -48,7 +48,7 @@
 | `9.5_episodic_top` | 最相关情景记忆1条（attention sweet spot） | episodic_result 非空 | 从已召回结果取第一条，不重复召回 |
 | `10_tool_result` | 本轮工具执行结果 | 有工具调用时 | `tool_dispatcher.execute()` 裸输出经 `core/tools/tool_result.py` 截断+定界框定后注入（`safe_summary`） |
 | `11_author_note` | 人设核心提醒 + 输出格式规则 + 风格补充 | always | 硬编码 + `author_note_rotator` + consistency_check |
-| `11_jailbreak` | 破限预设 layer=11 | 文件存在且 enabled | `characters/reality/jailbreak_entries.json` |
+| `11_jailbreak` | 破限预设 layer=11 | 文件存在且 enabled | stems + `characters/reality/jailbreak_entries.json`，按内容去重合并 |
 | `11.5_post_history` | 酒馆卡「历史之后」约束层：`post_history_instructions` + `post_history_extra`（常驻 after 型世界书）；核心约束，永不被自动裁剪 | `character.post_history_instructions` 或 `post_history_extra` 非空时 | `core/character_loader.py` Character 字段（由 `scripts/import_st_card.py` 导入填入） |
 | `11.7_pinned_facts` | 用户主动强调过、要求记住的高价值事实（如生日），与泛化画像分离；不可裁 | `profile["pinned_facts"]` 非空且未与 5_profile 内容重复 | `profile["pinned_facts"] = [{text, ts, source}]` |
 | `12_time_hint` | 时间提示（`<时间提示>距上一条消息已过去约X</时间提示>`） | gap ≥ 10 分钟 | `core/presence.py` → `get_gap_from_history()` + `format_gap_text()` |
@@ -57,6 +57,8 @@
 > 层 10 注入安全：工具裸输出经 `ToolResult.safe_summary`（截断上限 2000 字符）包裹后，以定界标记 `<<<TOOL_DATA_START>>>` / `<<<TOOL_DATA_END>>>` 加反注入指令框定，防止外部工具/搜索结果中的不可信文本被模型当作指令执行。原始数据仅落 debug 日志，永不进 prompt/memory。
 >
 > `6f_dream_afterglow` 与 `dream_afterglow_soft_hint` 为互斥层：前者在退梦后 0–5h 注入逐渐模糊的摘要，后者在详细层为空后接管至 8h TTL。两层均只读、非现实事实、读取异常 fail-closed，不写 memory / mood / profile / hidden state。
+>
+> 破限层双来源+去重（CC 任务 24 · 1）：`_load_jailbreak(layer)`（`core/prompt_builder.py`）合并两套并行存储——stems 源（`characters/reality/jailbreaks/{stem}.json`，受 `active_prompt_assets.json` 的 `enabled_jailbreaks` 控制）与 entries 源（`characters/reality/jailbreak_entries.json`，前端「偏好→世界→破限条目」EntryManager 管理）。两源均按各自的 `enabled` + `layer` 过滤后合并，`content.strip()` 相同的条目跨源只注入一次（先出现的保留，通常是 stems 源）。entries 源读取失败时 fail-open（不影响 stems 源正常注入）。
 
 ---
 
@@ -139,8 +141,8 @@ Author's Note 放在历史之后、用户消息之前，对模型影响最大，
 1. `author_note_rotator.get_current_note()`（轮转的人设提醒）
 2. 记忆/人格约束单句（旧记忆≠当前事实，保持角色边界；原四块协议已压缩为此句）
 3. `author_note_extra`（consistency_check 临时纠偏；`（...）` 包裹；用完即清）
-4. S2 防句式坍缩软提示（短回复同质性检测，命中时注入）
-5. S3 防字数坍缩软提示（近 N 条 assistant 回复字数是否连续落在同一区间，命中时注入；`core/memory/short_term.py::detect_reply_length_collapse`，开关/阈值见 `config.yaml` `anti_collapse:` 块，默认开）
+4. S2 防句式坍缩软提示（句首同质性检测，命中时注入；`core/memory/short_term.py::detect_reply_homogeneity_prefix()`，与层9历史投影去同质复用同一份检测结果 `_s2_prefix`；填充词前缀「嗯/啊/呃/哦/唔/哈」等命中时用不复读字面的文案，避免再次 prime 同一个词，其余前缀沿用引用式文案，见下方「反坍缩治理」）
+5. S3 防字数坍缩软提示（长/短两挡非对称触发：近 4 条全长句易触发，近 7 条全短句才触发；`core/memory/short_term.py::detect_reply_length_collapse`，开关/阈值见 `config.yaml` `anti_collapse:` 块，默认开，见下方「反坍缩治理」）
 6. 【输出格式】（`chat` 或 `roleplay`，由 config.yaml `chat.style` 决定；三处格式规则已合并为单句）
 7. 【词级强调】每条回复在情绪/语义焦点处用一次 `<hl>`；需要时再用 `<big>/<sm>`，每条 1–3 处
 8. 条件工具规则（R5）：
@@ -154,6 +156,52 @@ Author's Note 放在历史之后、用户消息之前，对模型影响最大，
 由 pre-pipeline 探针触发，结果以 `tool_result` 参数进入层10。memory 类工具
 （`read_diary` / `search_diary` 等）需用户明确触发，主 LLM 不能自行调用。
 R5 修复了旧版 Author's Note 里"必须调用 read_diary"的工具幻觉风险。
+
+---
+
+## 反坍缩治理（CC 任务 24 · 2）
+
+「嗯。」句首坍缩与字数坍缩的三层治理，按软→硬排列：
+
+### S2 句首同质化：检测 + 历史投影去同质 + 输出端重试
+
+1. **检测**（`core/memory/short_term.py::detect_reply_homogeneity_prefix()`）：近 6 条 assistant
+   回复前 2 字有 ≥3 条相同 → 返回原始前缀 P；`is_filler_prefix(P)` 判断 P 是否属于填充词白名单
+   （`嗯 啊 呃 哦 唔 哈`，可跟 `。，、！？…～~,.!?` 标点）。`build()` 顶部只检测一次（`_s2_prefix`），
+   层9历史投影与层11软提示复用同一结果，避免两处判断不一致。
+2. **历史投影去同质**（`build()` 组装层9历史时，`_dedupe_filler_prefix_history()`）：仅当 P 是填充词时
+   生效——保留最早一条完整的 P，其余各条剥掉开头的 P，避免模型从上下文里"学到"每句都要 P 开头。
+   **只改注入 prompt 的历史副本，绝不写回 short_term 存储**；被剥的消息额外带内部字段 `_raw_content`
+   记录原文，供输出端重试复原检测所需的原始文本，与 `_layer` 一样在 `sanitize_messages()` 出口被剥离。
+3. **层11软提示文案**：P 是填充词 → 不复读字面的文案（"这次第一个字直接进正文"），避免再次 prime 该
+   token；非填充词前缀（如"现在，"）→ 保留引用式文案（"开头连续用了『P』"）。
+4. **输出端校验重试（硬止血）**（`core/pipeline.py::Pipeline._anti_collapse_prefix_retry()`，`run_llm()`
+   内调用）：LLM 输出仍以 P 开头 → 追加一条强 system 指令重试 1 次；重试仍命中且 P 为填充词 → 剥掉开头
+   P 后接受，非填充词前缀只接受重试结果不做硬剥离。仅覆盖 `run_llm()`（非流式）路径，`run_llm_stream()`
+   暂不接入（流式已实时吐出的 token 无法撤回，需要独立设计，见 `docs/known-issues.md`）。开关
+   `anti_collapse.prefix_retry`（默认 `true`）；重试计入一次额外 LLM 调用成本，日志 `[anti_collapse] prefix retry`。
+
+### S3 字数坍缩：长/短两挡非对称触发
+
+`detect_reply_length_collapse(history, *, short_max=60, recent_n_long=4, recent_n_short=7)`：字符数
+`< short_max` 为短句，`>= short_max` 为长句（单边界，只分两挡，替代旧版 5 挡 `thresholds`）。
+
+- 近 `recent_n_long` 条全为长句 → 触发（**易触发**）：`（最近几条都挺长，这次收短——去掉铺垫和水词，捡最有劲的一两句说。）`
+- 否则近 `recent_n_short` 条全为短句 → 触发（**难触发**）：沿用原通用打破惯性文案。
+- 设计意图：模型爱往注水长句坍缩，短句反而更像活人；5 挡太密会限制模型表达。
+
+配置 `config.yaml` `anti_collapse:` 块：
+
+```yaml
+anti_collapse:
+  enabled: true
+  short_max: 60
+  recent_n_long: 4
+  recent_n_short: 7
+  prefix_retry: true
+```
+
+旧键 `thresholds` / `recent_n` 读到时忽略并打 `[anti_collapse] 配置键 thresholds/recent_n 已废弃...` warning，不做自动迁移。
 
 ---
 

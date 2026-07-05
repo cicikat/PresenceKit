@@ -253,8 +253,11 @@ episodic:
   two_hop_enabled: false   # 默认关；置 true 开二跳做对比测试
 anti_collapse:
   enabled: true            # 字数坍缩纠偏总开关
-  recent_n: 5              # 检测最近 N 条 assistant 回复
-  thresholds: [15, 40, 80, 150]  # 区间边界（字符数），分 5 档：极短/短/中/长/极长
+  short_max: 60            # 字符数 < 60 为短句，>= 60 为长句（单边界，只分两挡）
+  recent_n_long: 4         # 近 4 条全为长句 → 触发（长句易触发，模型爱往注水长句坍缩）
+  recent_n_short: 7        # 近 7 条全为短句 → 才触发（短句难触发，短句反而更像活人）
+  prefix_retry: true       # 输出仍以检测到的重复句首开头时，追加强指令重试 1 次（硬止血）
+  # 旧键 recent_n / thresholds 已废弃，读到时忽略并打 warning，不做自动迁移
 context:
   max_turns: 30
 chat:

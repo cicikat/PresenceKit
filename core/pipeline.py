@@ -592,7 +592,52 @@ class Pipeline:
         async def _call():
             return await llm_client.chat(messages)
 
-        return await _call()
+        reply = await _call()
+        return await self._anti_collapse_prefix_retry(messages, reply)
+
+    async def _anti_collapse_prefix_retry(self, messages: list[dict], reply: str) -> str:
+        """
+        问题7 (c) 输出端校验重试（硬止血）：
+        软提示（层9历史投影去同质 + 层11 S2 提示）已经是"劝"，这里是"拦"——
+        如果输出仍然复现了检测到的重复句首 P，追加一条强 system 指令重试 1 次；
+        重试仍命中且 P 是填充词（嗯/啊/呃/哦/唔/哈等）→ 剥掉开头 P 后接受，
+        非填充词前缀不做硬剥离，只接受重试结果。fail-open：任何异常都返回原始 reply。
+        """
+        try:
+            from core.config_loader import get_config
+            if not get_config().get("anti_collapse", {}).get("prefix_retry", True):
+                return reply
+
+            from core.memory.short_term import (
+                detect_reply_homogeneity_prefix,
+                is_filler_prefix,
+            )
+            # messages 里层9历史条目已可能被 build() 做过去同质投影（剥掉了重复前缀），
+            # 命中的用 _raw_content 复原原文，才能拿到与 build() 内部同一份检测结果 P。
+            hist_for_check = [
+                {"role": "assistant", "content": m.get("_raw_content", m.get("content", ""))}
+                for m in messages
+                if m.get("_layer") == "9_history" and m.get("role") == "assistant"
+            ]
+            prefix = detect_reply_homogeneity_prefix(hist_for_check)
+            if not prefix or not reply.strip().startswith(prefix):
+                return reply
+
+            logger.info("[anti_collapse] prefix retry")
+            from core import llm_client
+            retry_messages = messages + [{
+                "role": "system",
+                "content": f"你上一条回复又以「{prefix}」开头了，这次绝对不能再用这个开头，换一种方式开口。",
+            }]
+            retry_reply = await llm_client.chat(retry_messages)
+            if retry_reply.strip().startswith(prefix) and is_filler_prefix(prefix):
+                stripped = retry_reply.strip()[len(prefix):].lstrip()
+                return stripped or retry_reply
+            return retry_reply
+        except Exception as e:
+            from core.error_handler import log_error
+            log_error("pipeline._anti_collapse_prefix_retry", e)
+            return reply
 
     async def run_llm_stream(self, messages: list[dict]):
         """流式生成，逐 token yield。失败（含零产出）时降级为非流式整段 yield 一次。
