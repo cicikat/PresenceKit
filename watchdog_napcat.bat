@@ -1,24 +1,23 @@
 @echo off
-chcp 65001 >nul
-REM ç”¨æ³•: watchdog_napcat.bat <ä½ çš„QQå·> [NapCat launcher è·¯å¾„]
-REM ä¾‹:   watchdog_napcat.bat 10001 "D:\NapCat\launcher_auto.bat"
+REM ÓÃ·¨: watchdog_napcat.bat <ÄãµÄQQºÅ> [NapCat launcher Â·¾¶]
+REM Àý:   watchdog_napcat.bat 10001 "D:\NapCat\launcher_auto.bat"
 if "%~1"=="" (
-    echo [watchdog] ç¼ºå°‘å‚æ•°: è¯·ä¼ å…¥ QQ å·ï¼Œä¾‹å¦‚ watchdog_napcat.bat 10001
+    echo [watchdog] È±ÉÙ²ÎÊý: Çë´«Èë QQ ºÅ£¬ÀýÈç watchdog_napcat.bat 10001
     exit /b 1
 )
 set "QQ_ACCOUNT=%~1"
 set "NAPCAT_LAUNCHER=%~2"
 if "%NAPCAT_LAUNCHER%"=="" set "NAPCAT_LAUNCHER=D:\NapCat\launcher_auto.bat"
-echo [watchdog] NapCat å®ˆæŠ¤è¿›ç¨‹å·²å¯åŠ¨ (QQ=%QQ_ACCOUNT%)
+echo [watchdog] NapCat ÊØ»¤½ø³ÌÒÑÆô¶¯ (QQ=%QQ_ACCOUNT%)
 :loop
 tasklist | findstr "NapCatWinBootMain" >nul
 if errorlevel 1 (
-    echo [%time%] NapCat å·²æŽ‰çº¿ï¼Œæ­£åœ¨é‡å¯...
+    echo [%time%] NapCat ÒÑµôÏß£¬ÕýÔÚÖØÆô...
     start "" "%NAPCAT_LAUNCHER%" %QQ_ACCOUNT%
     timeout /t 20 /nobreak >nul
-    echo [%time%] NapCat å·²é‡å¯
+    echo [%time%] NapCat ÒÑÖØÆô
 ) else (
-    echo [%time%] NapCat è¿è¡Œæ­£å¸¸
+    echo [%time%] NapCat ÔËÐÐÕý³£
 )
 timeout /t 60 /nobreak >nul
 goto loop
