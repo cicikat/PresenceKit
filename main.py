@@ -47,6 +47,27 @@ FAST_PATH_TOOL_ALLOWLIST: frozenset[str] = frozenset({
 })
 
 
+def _check_admin_auth_startup(secret: str, has_tokens: bool) -> None:
+    """Brief 33 §1.2：占位/空 secret 且 token registry 无任何记录 → 阻断启动。
+
+    对齐同文件 gating_shadow 的阻断先例：安全网关不能只是 log 一行就放行。
+    有 registry token 时 legacy secret 已失效（admin.auth.get_admin_secret 过滤占位），
+    无风险，允许启动，仅提示。
+    """
+    if secret:
+        return
+    if has_tokens:
+        logger.warning(
+            "[startup] admin.secret_key 为空/占位，legacy secret 已失效；仅 registry token 可用"
+        )
+        return
+    logger.error("=" * 60)
+    logger.error("  [启动阻断] 未检测到有效鉴权配置（secret_key 为空/占位，且无任何 token）")
+    logger.error("  请先运行: python scripts/setup_auth.py")
+    logger.error("=" * 60)
+    sys.exit(1)
+
+
 def _fast_path_match(user_msg: str) -> tuple[str, str] | None:
     """快速路径关键词匹配（N7 可观测版）。
 
@@ -77,11 +98,10 @@ def _init_modules():
     from core.sandbox import get_paths as _get_paths_for_log
     logger.info(f"[startup] 数据根目录: {_get_paths_for_log()._base.resolve()}")
 
-    # DX（Brief 22）：secret_key 空/占位且 registry 无任何 token 时提示首次配置，不自动生成、不阻塞启动。
-    from admin.token_registry import PLACEHOLDER_ADMIN_SECRET, list_records as _list_auth_tokens
-    _secret_key = str(cfg.get("admin", {}).get("secret_key", "")).strip()
-    if _secret_key in ("", PLACEHOLDER_ADMIN_SECRET) and not _list_auth_tokens():
-        logger.info("[startup] 未检测到鉴权配置，首次使用请运行: python scripts/setup_auth.py")
+    # 安全 P0（Brief 33 §1.2）：占位/空 secret 且 registry 无 token → 阻断启动。
+    from admin.auth import get_admin_secret as _get_admin_secret
+    from admin.token_registry import list_records as _list_auth_tokens
+    _check_admin_auth_startup(_get_admin_secret(), bool(_list_auth_tokens()))
 
     if cfg.get("mode") == "production" and "test_sandbox" in str(cfg.get("data_prefix", "")):
         logger.error("=" * 60)

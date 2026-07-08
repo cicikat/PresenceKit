@@ -124,6 +124,16 @@ async def root():
     return {"status": "ok", "service": "Emerald-Presence Admin", "ui": "index.html not found"}
 
 
+def _weak_password_warning(host: str, secret: str) -> None:
+    """host 非本地回环 + secret 强度不足（长度 < 12）→ error 级横幅（Brief 33 §1.3，不阻断）。"""
+    if host != "127.0.0.1" and len(secret) < 12:
+        logger.error("=" * 60)
+        logger.error("  [安全警告] admin.host=%s（非本地回环），但 admin secret 长度 < 12", host)
+        logger.error("  管理面板可能暴露在局域网/公网，弱口令下存在被接管风险。")
+        logger.error("  请立即修改 config.yaml 中 admin.secret_key 为足够长的随机值。")
+        logger.error("=" * 60)
+
+
 async def start_admin_server():
     """在当前事件循环中启动 uvicorn（由 main.py 以 asyncio.create_task 调用）"""
     import uvicorn
@@ -138,6 +148,7 @@ async def start_admin_server():
     cfg = get_config().get("admin", {})
     host = cfg.get("host", "127.0.0.1")
     port = cfg.get("port", 8080)
+    _weak_password_warning(host, get_admin_secret())
 
     config = uvicorn.Config(
         app=app,

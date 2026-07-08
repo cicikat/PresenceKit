@@ -4,6 +4,12 @@
 > 不包含可由运行时重建的缓存/索引，也不包含已进 git 的模板文件。  
 > 对应 `data_registry.py` 的 `git_policy = ignore-but-authored` 语义。
 
+> **审计类文档提醒（Brief 33 §1.4）**：`docs/critique-*.md`（审计报告）与
+> `docs/*-triage-*.md`（裁定记录）这类文档天然容易引用真实配置值（曾在
+> `docs/critique-fable-20260707.md` 中发现明文 admin secret）。`git add` 前须人工
+> grep 一遍真实密钥/口令/QQ 号等敏感值，确认已脱敏（占位符/`<redacted>`）再入库，
+> 开源前总检查（`docs/opensource-v0.1-checklist.md` 类清单）也应把这类新增文档纳入扫描范围。
+
 ---
 
 ## 一、track(git) — 已跟踪，可从 git 恢复

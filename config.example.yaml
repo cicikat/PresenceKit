@@ -99,7 +99,7 @@ qq:
 admin:
   enabled: true
   auto_start: true
-  host: 0.0.0.0
+  host: 127.0.0.1        # 默认仅本机可访问；局域网/公网访问需显式改成对应地址并配强口令（见下方 secret_key 说明）
   port: 8080             # 管理面板端口，浏览器访问 http://127.0.0.1:8080
   # 请改随机值，优先用环境变量 YEXUAN_ADMIN_SECRET（会覆盖这里的值）。
   # SEC-AUTH-2：这个值等价于 admin scope 的 bootstrap token（label legacy-admin），全权。

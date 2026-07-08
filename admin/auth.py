@@ -12,7 +12,7 @@ from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from core.config_loader import get_config
-from admin.token_registry import hash_token, find_by_hash
+from admin.token_registry import hash_token, find_by_hash, PLACEHOLDER_ADMIN_SECRET
 from admin import audit
 
 security = HTTPBearer(auto_error=False)
@@ -63,11 +63,14 @@ def get_admin_secret() -> str:
     """获取管理面板 secret：env YEXUAN_ADMIN_SECRET 优先，否则读 config.admin.secret_key。
 
     这个值永远等价于一条虚拟 admin token（label=legacy-admin），是 bootstrap 锚点。
+    占位符（PLACEHOLDER_ADMIN_SECRET）与空值一律视为"未配置"，返回 ""——
+    否则 config.example.yaml 里的占位符本身就是一个能用的 admin 全权 token（Brief 33 §1.1）。
     """
     env_val = os.environ.get("YEXUAN_ADMIN_SECRET", "").strip()
-    if env_val:
-        return env_val
-    return get_config().get("admin", {}).get("secret_key", "")
+    secret = env_val if env_val else str(get_config().get("admin", {}).get("secret_key", "")).strip()
+    if secret in ("", PLACEHOLDER_ADMIN_SECRET):
+        return ""
+    return secret
 
 
 @dataclass(frozen=True)
