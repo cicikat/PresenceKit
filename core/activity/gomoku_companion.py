@@ -45,6 +45,7 @@ import re
 
 from core import llm_client as _llm_client
 from core.activity import transcript as _tr
+from core.activity.companion_text import strip_action_descriptions
 from core.activity.gomoku_grounding import build_gomoku_grounding_facts
 from core.activity.session import now_iso
 
@@ -84,7 +85,8 @@ _SYSTEM_YEXUAN_AI = (
     "<activity_control>\n"
     '{"ai_style_tilt": "gentle|balanced|serious|teaching", "commentary_tone": "calm|teasing|focused|comforting"}\n'
     "</activity_control>\n"
-    "只在有实际意图时加控制块，没有则省略。"
+    "只在有实际意图时加控制块，没有则省略。\n\n"
+    "只输出说出口的话。不写旁白、不写括号动作描写、不写星号动作、不用 Markdown。"
     + _GROUNDING_CONSTRAINT
 )
 
@@ -96,7 +98,8 @@ _SYSTEM_HUMAN = (
     "<activity_control>\n"
     '{"ai_style_tilt": "gentle|balanced|serious|teaching", "commentary_tone": "calm|teasing|focused|comforting"}\n'
     "</activity_control>\n"
-    "只在有实际意图时加控制块，没有则省略。"
+    "只在有实际意图时加控制块，没有则省略。\n\n"
+    "只输出说出口的话。不写旁白、不写括号动作描写、不写星号动作、不用 Markdown。"
     + _GROUNDING_CONSTRAINT
 )
 
@@ -346,6 +349,7 @@ async def generate_reply(
 
     # 4. Call LLM
     reply, control = await _call_llm(messages)
+    reply = strip_action_descriptions(reply)
 
     # 5. Post-process: filter holdback claims not supported by facts
     reply = _filter_holdback_claims(reply, facts)

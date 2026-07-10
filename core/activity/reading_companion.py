@@ -30,6 +30,7 @@ from typing import Optional
 
 from core import llm_client as _llm_client
 from core.activity import transcript as _tr
+from core.activity.companion_text import strip_action_descriptions
 from core.activity.reading_grounding import (
     build_reading_grounding_facts,
     format_reading_grounding_for_prompt,
@@ -61,7 +62,8 @@ _SYSTEM_READING = (
     "<activity_control>\n"
     '{"commentary_tone": "calm|teasing|focused|comforting"}\n'
     "</activity_control>\n"
-    "只在有实际意图时加控制块，没有则省略。"
+    "只在有实际意图时加控制块，没有则省略。\n\n"
+    "只输出说出口的话。不写旁白、不写括号动作描写、不写星号动作、不用 Markdown。"
     + _GROUNDING_CONSTRAINT
 )
 
@@ -165,6 +167,7 @@ async def generate_reply(
     recent_ctx = _tr.load_recent(char_id, uid, "reading", session_id, limit=_TRANSCRIPT_CONTEXT_LIMIT)
     messages = _build_messages(current_page, total_pages, filename, page_text, recent_ctx, user_message, facts, char_name=char_name)
     reply, control = await _call_llm(messages)
+    reply = strip_action_descriptions(reply)
 
     ts = now_iso()
 
