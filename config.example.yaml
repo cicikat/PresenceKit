@@ -110,6 +110,13 @@ notify:
   enabled: true
   target_qq: YOUR-TARGET-QQ
   message: 已上线，等你回来
+# 手机后台推送唤醒中继（ntfy）。三项都填才生效；不填则后台推送只剩手机端每 6 小时的补偿轮询。
+# 消息正文不经过中继，只发 wake 信号；手机收到信号后回源 /mobile/poll 拉正文。
+# 自建 ntfy 参考 spike/push_relay_ntfy/server/docker-compose.yml（在手机端仓库）。
+# App 端需在设置里填同一组 中继地址/topic/token。
+relay_base_url: ""    # 例: https://ntfy.example.com 或局域网 http://192.168.x.x:8090
+relay_topic: ""       # 例: yexuan-wake-a1b2c3（当作密码，用随机后缀）
+relay_token: ""       # ntfy 访问 token；服务端开了鉴权才需要
 emerald_desktop:
   path: YOUR-DESKTOP-PATH
 proxy:

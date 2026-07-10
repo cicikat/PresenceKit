@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 _MAX_ATTEMPTS = 3
 _REQUEST_TIMEOUT_SECONDS = 10.0
 _publish_tasks: set[asyncio.Task] = set()
+_warned_unconfigured = False
 
 
 def _on_publish_done(task: asyncio.Task) -> None:
@@ -26,11 +27,12 @@ def _on_publish_done(task: asyncio.Task) -> None:
 
 
 def _relay_config() -> tuple[str, str, str] | None:
+    # token 可选：无鉴权的自建 ntfy 不需要（手机端订阅侧同样按可选处理）。
     config = get_config()
     base_url = str(config.get("relay_base_url") or "").strip().rstrip("/")
     topic = str(config.get("relay_topic") or "").strip().strip("/")
     token = str(config.get("relay_token") or "").strip()
-    if not base_url or not topic or not token:
+    if not base_url or not topic:
         return None
     return base_url, topic, token
 
@@ -43,6 +45,14 @@ def schedule_signal_publish(queue_item: Mapping) -> None:
         logger.warning("[relay_publisher] relay config unavailable: %s", exc)
         return
     if relay_config is None:
+        global _warned_unconfigured
+        if not _warned_unconfigured:
+            _warned_unconfigured = True
+            logger.warning(
+                "[relay_publisher] relay_base_url/relay_topic 未配置："
+                "mobile 消息已入队但不会实时唤醒手机，后台推送只剩手机端周期补偿轮询。"
+                "参见 config.example.yaml 的 relay_* 配置项。"
+            )
         return
 
     task = asyncio.create_task(publish_signal(queue_item, relay_config=relay_config))
@@ -72,7 +82,7 @@ async def publish_signal(
         "timestamp": queue_item["timestamp"],
         "signal": "new_message",
     }
-    headers = {"Authorization": f"Bearer {token}"}
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
 
     async with httpx.AsyncClient(
         trust_env=False,
