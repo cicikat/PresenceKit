@@ -217,6 +217,58 @@ python-chess 在每次 `board.push(move)` 后自动检测终局条件：
 
 ---
 
+## P1 本地 AI 对手 + pending 落子 + style tilt（Brief 43 §E）
+
+`make_initial_state(fen, opponent, ai_style)` 的 `opponent="character_ai"` 启用本地
+AI 对手（`core/activity/chess_ai.py`，minimax + alpha-beta，不接 Stockfish / 外部 API /
+LLM）。AI 固定执黑。
+
+**pending 落子**：用户落子后若轮到 AI，`apply_move()` 设 `pending_ai_turn=True`，不
+立即落子；前端需显式调用 `POST /activity/chess/ai_move` 触发。
+
+### `POST /activity/chess/ai_move`
+
+执行待处理的 AI 落子。调用前读取最近 transcript 的 `ai_style_tilt` control
+（`chess_companion.get_recent_ai_style_tilt`），对本次落子风格产生轻微影响，不
+永久覆盖 session 的 `ai_style`。规则引擎负责合法性与胜负判定，LLM 不输出坐标。
+
+**Body:** `{ "session_id": "...", "uid": "" }`
+
+**Response（含 last_move 的 style 字段）:**
+```json
+{
+  "session_id": "...",
+  "fen": "...",
+  "turn": "white",
+  "status": "active",
+  "result": null,
+  "termination": null,
+  "last_move": {
+    "move_no": 2, "uci": "e7e5", "san": "e5", "player": "black", "fen_after": "...",
+    "style": "gentle", "base_style": "balanced", "style_source": "activity_chat_control"
+  },
+  "opponent": "character_ai",
+  "ai_player": "black",
+  "pending_ai_turn": false
+}
+```
+
+`style_source` 为 `"activity_chat_control"`（tilt 生效）或 `"base_style"`（无有效
+tilt，用 session 的 `ai_style`）。
+
+**错误：** 404 session 不存在；409 session 已关闭 / 棋局已结束 /
+`pending_ai_turn=False` / 非 AI 轮次。
+
+### control 读取顺序（同 gomoku）
+
+1. `/chat` 回复中的 `<activity_control>{"ai_style_tilt": "..."}</activity_control>`
+   经 `_parse_control` 校验后写入 transcript 的 `assistant_chat.control`。
+2. `/ai_move` 调用时读取最近 10 条 transcript，取最新 `assistant_chat` 的
+   `ai_style_tilt`；非法值 / 无 control 时回退到 `base_style`。
+3. AI move 记录 `style` / `base_style` / `style_source`，供前端和 grounding 读取。
+
+---
+
 ## 活动内对话（companion chat + 只读注入 Brief 43 §C）
 
 `POST /activity/chess/chat` — 同 gomoku，只写 activity transcript，不写主记忆
@@ -239,11 +291,12 @@ LLM 输出协议（可选控制块）：
 自然语言回复
 
 <activity_control>
-{"commentary_tone": "calm|teasing|focused|comforting"}
+{"ai_style_tilt": "gentle|balanced|serious|teaching", "commentary_tone": "calm|teasing|focused|comforting"}
 </activity_control>
 ```
 
-非法值静默丢弃；解析失败不影响可见回复。
+`ai_style_tilt` 见上一节「P1 本地 AI 对手 + pending 落子 + style tilt」。非法值
+静默丢弃；解析失败不影响可见回复。
 
 ## 模块文件
 
@@ -252,7 +305,7 @@ LLM 输出协议（可选控制块）：
 | `core/activity/chess.py` | 棋局逻辑（`make_initial_state` / `apply_move` / `legal_moves_uci`），不含任何外部 I/O |
 | `core/activity/chess_ai.py` | 本地 AI 对手（`choose_chess_ai_move`，minimax + style） |
 | `core/activity/chess_grounding.py` | 确定性棋局事实计算（`build_chess_grounding_facts`） |
-| `core/activity/chess_companion.py` | 活动内对话 LLM 生成（`generate_reply`） |
+| `core/activity/chess_companion.py` | 活动内对话 LLM 生成（`generate_reply` / `get_recent_ai_style_tilt`） |
 | `core/activity/companion_context.py` | 只读注入 helper（`load_persona_brief` / `load_main_chat_recall`，Brief 43 §C） |
 | `core/activity/companion_text.py` | 陪聊输出清洗（`strip_action_descriptions`，Brief 43 §A） |
 | `admin/routers/chess.py` | HTTP API 路由，接入 `activity_store` |
@@ -260,6 +313,8 @@ LLM 输出协议（可选控制块）：
 | `tests/test_chess_activity.py` | 24 个验收测试 |
 | `tests/test_chess_companion.py` | companion chat 验收测试 |
 | `tests/test_chess_grounding.py` | grounding 验收测试 |
+| `tests/test_chess_style_tilt.py` | style tilt 验收测试（Brief 43 §E） |
+| `tests/test_chess_ai.py` | chess_ai teaching style 回归测试（Brief 43 §F） |
 
 ---
 

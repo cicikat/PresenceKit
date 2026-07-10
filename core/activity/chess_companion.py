@@ -20,11 +20,17 @@ LLM output protocol (optional control block):
   自然语言回复
 
   <activity_control>
-  {"commentary_tone": "calm"}
+  {"ai_style_tilt": "gentle", "commentary_tone": "calm"}
   </activity_control>
 
-  Allowed: commentary_tone: "calm" | "teasing" | "focused" | "comforting"
+  Allowed values:
+    ai_style_tilt: "gentle" | "balanced" | "serious" | "teaching" | None
+    commentary_tone: "calm" | "teasing" | "focused" | "comforting" | None
   Invalid values are silently discarded.
+
+P1 (Brief 43 §E, mirrors gomoku): get_recent_ai_style_tilt() reads transcript to
+influence the next pending AI move's style. Control is passed to apply_ai_move()
+via /ai_move — LLM does NOT output a move.
 """
 from __future__ import annotations
 
@@ -49,6 +55,7 @@ logger = logging.getLogger(__name__)
 _FALLBACK_REPLY = "我刚才走神了一下。你把刚才那句话再说一遍。"
 _TRANSCRIPT_CONTEXT_LIMIT = 6
 
+_VALID_AI_STYLE_TILTS = frozenset({"gentle", "balanced", "serious", "teaching"})
 _VALID_COMMENTARY_TONES = frozenset({"calm", "teasing", "focused", "comforting"})
 
 _CONTROL_RE = re.compile(r"<activity_control>\s*(.*?)\s*</activity_control>", re.DOTALL)
@@ -66,9 +73,9 @@ _SYSTEM_CHESS = (
     "你是叶瑄，正在和用户一起下国际象棋。这是一局本地双人裁判模式，白方与黑方轮流走棋。\n\n"
     "请以叶瑄的身份自然地回应用户的聊天消息。你可以评论棋局、回应用户的情绪、提供战术提示，"
     "但不要直接指示走棋记号，不要判断最终胜负。\n\n"
-    "如果你想影响对话气氛（可选），在回复末尾附加控制块：\n"
+    "如果你想影响对话气氛或后续 AI 落子风格（可选），在回复末尾附加控制块：\n"
     "<activity_control>\n"
-    '{"commentary_tone": "calm|teasing|focused|comforting"}\n'
+    '{"ai_style_tilt": "gentle|balanced|serious|teaching", "commentary_tone": "calm|teasing|focused|comforting"}\n'
     "</activity_control>\n"
     "只在有实际意图时加控制块，没有则省略。\n\n"
     "只输出说出口的话。不写旁白、不写括号动作描写、不写星号动作、不用 Markdown。"
@@ -149,6 +156,9 @@ def _parse_control(raw: str) -> tuple[str, dict]:
         logger.warning("[chess_companion] control block JSON parse failed")
         return clean, {}
     control: dict = {}
+    tilt = data.get("ai_style_tilt")
+    if tilt in _VALID_AI_STYLE_TILTS:
+        control["ai_style_tilt"] = tilt
     tone = data.get("commentary_tone")
     if tone in _VALID_COMMENTARY_TONES:
         control["commentary_tone"] = tone
@@ -260,3 +270,20 @@ async def generate_reply(
     }
 
     return reply, control, grounding
+
+
+def get_recent_ai_style_tilt(char_id: str, uid: str, session_id: str) -> str | None:
+    """
+    Return the most recent valid ai_style_tilt from assistant_chat transcript entries.
+
+    Called by the /ai_move router before apply_ai_move() to read any style preference
+    the LLM expressed during companion chat. Returns None if no valid tilt found.
+    Does NOT write to transcript or modify game state.
+    """
+    recent = _tr.load_recent(char_id, uid, "chess", session_id, limit=10)
+    for entry in reversed(recent):
+        if entry.get("type") == "assistant_chat":
+            tilt = entry.get("control", {}).get("ai_style_tilt")
+            if tilt in _VALID_AI_STYLE_TILTS:
+                return tilt
+    return None

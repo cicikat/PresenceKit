@@ -174,8 +174,13 @@ def apply_move(state: dict, move_str: str) -> dict:
     }
 
 
-def apply_ai_move(state: dict) -> dict:
+def apply_ai_move(state: dict, style_tilt: Optional[str] = None) -> dict:
     """Execute the pending AI move and return the updated state.
+
+    style_tilt (Brief 43 §E, mirrors gomoku): optional style read from companion
+    chat control (via chess_companion.get_recent_ai_style_tilt), applied for this
+    single move only. Invalid/None tilt falls back to the session's base ai_style;
+    the session's ai_style itself is never overwritten.
 
     Raises ValueError if there is no pending AI turn or the game is over.
     """
@@ -190,14 +195,20 @@ def apply_ai_move(state: dict) -> dict:
         raise ValueError("非 AI 对手模式")
 
     ai_color = chess.BLACK if ai_player_str == "black" else chess.WHITE
-    ai_style = state.get("ai_style", "balanced")
+    base_style = state.get("ai_style", "balanced")
+
+    effective_style = base_style
+    style_source = "base_style"
+    if style_tilt and style_tilt in _VALID_STYLES:
+        effective_style = style_tilt
+        style_source = "activity_chat_control"
 
     board = chess.Board(state["fen"])
     if board.turn != ai_color:
         raise ValueError("当前不是 AI 的回合")
 
     from core.activity.chess_ai import choose_chess_ai_move
-    move = choose_chess_ai_move(board, ai_color, ai_style)
+    move = choose_chess_ai_move(board, ai_color, effective_style)
     if move is None:
         raise ValueError("AI 无合法走法")
 
@@ -214,6 +225,9 @@ def apply_ai_move(state: dict) -> dict:
         "san": san,
         "player": player,
         "fen_after": new_fen,
+        "style": effective_style,
+        "base_style": base_style,
+        "style_source": style_source,
     }
 
     history = list(state.get("move_history") or [])
@@ -232,7 +246,7 @@ def apply_ai_move(state: dict) -> dict:
         "last_move": entry,
         "opponent": opponent,
         "ai_player": ai_player_str,
-        "ai_style": ai_style,
+        "ai_style": base_style,
         "pending_ai_turn": False,
     }
 

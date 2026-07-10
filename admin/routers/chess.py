@@ -272,6 +272,9 @@ async def chess_ai_move(body: AiMoveRequest, auth=Depends(require_scopes("activi
     """
     执行 AI 落子（当 pending_ai_turn=True 时有效）。
     规则引擎负责胜负判定，不调用 LLM。
+
+    读取最近 transcript 中的 ai_style_tilt control（Brief 43 §E），轻微影响本次
+    AI 风格，不永久覆盖 session 的 ai_style。
     """
     char_id = _active_char_id()
     resolved_uid = body.uid.strip() or _default_uid()
@@ -283,8 +286,10 @@ async def chess_ai_move(body: AiMoveRequest, auth=Depends(require_scopes("activi
     if session.status == "closed":
         raise HTTPException(status_code=409, detail="session 已关闭")
 
+    style_tilt = chess_companion.get_recent_ai_style_tilt(char_id, resolved_uid, body.session_id)
+
     try:
-        new_state = chess_activity.apply_ai_move(session.state)
+        new_state = chess_activity.apply_ai_move(session.state, style_tilt)
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
 
@@ -299,8 +304,9 @@ async def chess_ai_move(body: AiMoveRequest, auth=Depends(require_scopes("activi
         raise HTTPException(status_code=500, detail="state 保存失败")
 
     logger.info(
-        "[chess] ai_move session=%s status=%r last=%r",
+        "[chess] ai_move session=%s style_tilt=%r status=%r last=%r",
         body.session_id,
+        style_tilt,
         new_state["status"],
         new_state.get("last_move", {}).get("san") if new_state.get("last_move") else None,
     )
