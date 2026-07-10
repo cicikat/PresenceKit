@@ -128,6 +128,9 @@ def test_weather_heavy_propose_uses_window_event_tier(monkeypatch):
     from core.scheduler.triggers import time_based
 
     monkeypatch.setattr(time_based, "_cfg", lambda: {"enabled": True})
+    # _weather_location() 读 user_profile.location；显式打桩而非依赖磁盘数据
+    # （Brief 50 · 工单B：sandbox 守卫加固后不再能偷读生产 data/ 拿到非空 location）
+    monkeypatch.setattr(time_based, "_weather_location", lambda: "杭州")
     detail = {
         "temp_c": 31,
         "humidity": 50,
@@ -354,6 +357,7 @@ def test_weather_light_propose_uses_reactive_tier(monkeypatch):
     from core.scheduler.triggers import time_based
 
     monkeypatch.setattr(time_based, "_cfg", lambda: {"enabled": True})
+    monkeypatch.setattr(time_based, "_weather_location", lambda: "杭州")
     now = datetime(2026, 5, 25, 12, 0)
     detail = {
         "temp_c": 22,

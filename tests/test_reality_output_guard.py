@@ -259,6 +259,11 @@ async def test_run_owner_chat_turn_guard_applied(monkeypatch):
     monkeypatch.setattr(_sink, "record_assistant_turn", _fake_record)
     monkeypatch.setattr(_up, "get_affection_level", lambda uid: {"value": 0, "label": "陌生"})
 
+    # _FakePipeline 没实现 run_agentic_loop；显式关闭 tool loop 分支，避免这个测试
+    # 意外依赖真实 config/角色卡状态判出 tool_loop_active=True（Brief 50 · 工单B）。
+    import core.tool_dispatcher as _td
+    monkeypatch.setattr(_td, "tool_loop_active", lambda uid: False)
+
     # Stub out scheduler notifiers
     import core.scheduler.loop as _sl
     import core.scheduler.state_machine as _sm

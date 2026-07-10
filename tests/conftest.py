@@ -29,6 +29,21 @@ def sandbox(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _default_sandbox_guard(tmp_path, monkeypatch):
+    """默认安全重定向（Brief 50 · 工单B）。
+
+    `sandbox` fixture 不是 autouse，漏挂它的 I/O 测试会写真实 data/。这里在每个
+    测试开始时先把 core.sandbox._instance 重定向到 pytest 临时目录；显式使用
+    `sandbox` fixture 的测试会在此之后运行（同 scope 内 autouse 先于非 autouse
+    执行），其 monkeypatch.setattr 会覆盖这里设置的默认值，语义不变。
+    """
+    import core.sandbox as _sandbox
+    guard_paths = _sandbox.DataPaths(mode="test", test_session_id="pytest_default_guard")
+    guard_paths._base = tmp_path / "_default_sandbox_guard"
+    monkeypatch.setattr(_sandbox, "_instance", guard_paths)
+
+
+@pytest.fixture(autouse=True)
 def reset_perceive_event_registry():
     """Reset perceive_event dedup registry before each test (prevents cross-test leakage)."""
     from core.perceive_event import clear_dedup_registry_for_test
