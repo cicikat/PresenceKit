@@ -22,6 +22,20 @@ R1-D 路径（Brief 34 §4 顺序反转后）:
 "她没看到但角色记得"；不做补偿删除、不做重发队列。
 
 Naming: D-prefix = R1-D specific guard.
+
+Brief 50 · 工单C.4：test_r1c_qq_reality_reply_adapter.py 已合并进本文件并删除。
+r1c 测的是 R1-C 阶段（adapter 直调 post_process/scrub）的旧链路，大部分已被本
+文件 R1-D 阶段（adapter 经 record_assistant_turn/turn_sink）的等价或更强断言
+覆盖（如 c3/c8 被 d8/d1 覆盖，c5 系列被 d7 系列覆盖，c6 被更全面的 d10 覆盖，
+c2c/c2e/c2f/c4c/c9c 假设的是 adapter 直调 post_process 的旧架构，已过时）。
+仍有效且未被覆盖的契约（C-prefix 保留，标注原始编号）：
+  - C1/C1b：adapter 函数存在性 + module-level
+  - C2d：adapter 必须 await record_assistant_turn（不能 fire-and-forget）
+  - C2g：adapter 内必须有 capture_turn 权威 scrub 点注释
+  - C4/C4b：调用方（handle_message / _reply_with_tool_result）→ adapter 的
+    frozen_scope 转发（区别于 D4 测的是 adapter → record_assistant_turn 转发）
+  - C7 系列：QQChannel.send 的 target_id/is_group 支持（r1d 原文件未覆盖 channels/qq.py）
+  - C9/C9b：调用方 → adapter 的 pending_paths 转发（区别于 D4b）
 """
 
 from __future__ import annotations
@@ -610,4 +624,171 @@ def test_d10b_main_no_direct_scrub():
         "main.py: direct scrub_reality_output_text calls found — "
         "R1-D: scrub must live in turn_sink (defense-in-depth) and capture_turn (authority):\n"
         + "\n".join(violations)
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# C1. Adapter function exists in main.py（merged from test_r1c，Brief 50 · 工单C.4）
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def test_c1_adapter_exists_in_main():
+    """C1: _qq_reality_reply_adapter must be defined as an async function in main.py."""
+    src = _src("main.py")
+    assert "async def _qq_reality_reply_adapter(" in src, (
+        "main.py: _qq_reality_reply_adapter not found — R1-C adapter was removed or renamed"
+    )
+
+
+def test_c1b_adapter_is_module_level():
+    """C1b: _qq_reality_reply_adapter must be a module-level function (indented 0)."""
+    for ln in _lines("main.py"):
+        if "async def _qq_reality_reply_adapter(" in ln:
+            assert not ln[0].isspace(), (
+                "_qq_reality_reply_adapter is indented — must be a module-level function"
+            )
+            break
+    else:
+        raise AssertionError("_qq_reality_reply_adapter definition not found in main.py")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# C2d/C2g. Adapter await + capture_turn comment（merged from test_r1c）
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def test_c2d_adapter_awaits_turn_sink():
+    """
+    C2d (R1-D): Adapter must await record_assistant_turn (N10: critical writes must not drop).
+    """
+    body = _function_body_text(_src("main.py"), "_qq_reality_reply_adapter")
+    assert "await _record_turn(" in body or "await record_assistant_turn(" in body, (
+        "_qq_reality_reply_adapter: record_assistant_turn not awaited — "
+        "N10 regression (memory writes may be dropped)"
+    )
+
+
+def test_c2g_adapter_has_capture_turn_comment():
+    """
+    C2g: Adapter body must contain a comment referencing capture_turn, documenting
+    that capture_turn is the authority scrub point (R6-B C10 pattern).
+    """
+    lines = _lines("main.py")
+    in_adapter = False
+    found = False
+    for ln in lines:
+        if "async def _qq_reality_reply_adapter(" in ln:
+            in_adapter = True
+        if in_adapter and ln.startswith("async def ") and "_qq_reality_reply_adapter" not in ln:
+            break
+        if in_adapter and ln.startswith("def ") and "_qq_reality_reply_adapter" not in ln:
+            break
+        if in_adapter and "capture_turn" in ln and ln.strip().startswith("#"):
+            found = True
+
+    assert found, (
+        "_qq_reality_reply_adapter: no comment mentioning capture_turn — "
+        "add a note that capture_turn is the REALITY_MEMORY authority scrub point"
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# C4/C4b. Caller → adapter frozen_scope forwarding（merged from test_r1c；
+# 区别于上面 D4：D4 测的是 adapter → record_assistant_turn 的转发）
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def test_c4_handle_message_passes_frozen_scope():
+    """C4: handle_message must pass frozen_scope=_frozen_scope to the adapter (N1)."""
+    src = _src("main.py")
+    hm_body = _function_body_text(src, "handle_message")
+    assert "frozen_scope=_frozen_scope" in hm_body, (
+        "handle_message: frozen_scope=_frozen_scope not passed to adapter — "
+        "N1 scope-freeze regression"
+    )
+
+
+def test_c4b_tool_reply_passes_frozen_scope():
+    """C4b: _reply_with_tool_result must pass frozen_scope=frozen_scope to the adapter."""
+    src = _src("main.py")
+    tr_body = _function_body_text(src, "_reply_with_tool_result")
+    assert "frozen_scope=frozen_scope" in tr_body, (
+        "_reply_with_tool_result: frozen_scope not forwarded to adapter — "
+        "N1 scope-freeze regression"
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# C7. QQChannel.send group support（merged from test_r1c；r1d 原文件未覆盖 channels/qq.py）
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def test_c7_qq_channel_send_accepts_target_id():
+    """C7: QQChannel.send must accept an optional target_id parameter."""
+    src = _src("channels/qq.py")
+    send_body = _function_body_text(src, "send")
+    assert "target_id" in send_body, (
+        "QQChannel.send: target_id parameter missing — R1-C prerequisite not met"
+    )
+
+
+def test_c7b_qq_channel_send_accepts_is_group():
+    """C7b: QQChannel.send must accept an optional is_group parameter."""
+    src = _src("channels/qq.py")
+    send_body = _function_body_text(src, "send")
+    assert "is_group" in send_body, (
+        "QQChannel.send: is_group parameter missing"
+    )
+
+
+def test_c7c_qq_channel_no_hardcoded_group_false():
+    """C7c: QQChannel.send must not hardcode is_group=False in the send_message call."""
+    src = _src("channels/qq.py")
+    send_body = _function_body_text(src, "send")
+    assert "is_group=False" not in send_body, (
+        "QQChannel.send: is_group=False hardcode remains — "
+        "group routing would be silently broken when called with is_group=True"
+    )
+
+
+def test_c7d_qq_channel_passes_is_group_to_adapter():
+    """C7d: QQChannel.send must forward the is_group variable (via text_output.send).
+
+    FIX-08: QQChannel.send now routes through text_output.send for segmented delivery;
+    is_group is forwarded there rather than directly to qq_adapter.send_message.
+    """
+    src = _src("channels/qq.py")
+    send_body = _function_body_text(src, "send")
+    found_forwarding_call = False
+    for ln in send_body.splitlines():
+        stripped = ln.strip()
+        if stripped.startswith("#") or stripped.startswith('"""') or stripped.startswith("'"):
+            continue
+        if ("text_output.send(" in ln or "send_message(" in ln) and stripped.startswith("await"):
+            found_forwarding_call = True
+            assert "is_group" in ln, (
+                f"QQChannel.send: forwarding call does not pass is_group: {stripped}"
+            )
+    assert found_forwarding_call, (
+        "QQChannel.send: no `await text_output.send(` or `await send_message(` call found"
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# C9/C9b. Caller → adapter pending_paths forwarding（merged from test_r1c；
+# 区别于上面 D4b：D4b 测的是 adapter → record_assistant_turn 的转发）
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def test_c9_handle_message_passes_pending_paths():
+    """C9: handle_message must pass pending_paths to the adapter."""
+    src = _src("main.py")
+    hm_body = _function_body_text(src, "handle_message")
+    assert "pending_paths=" in hm_body, (
+        "handle_message: pending_paths not passed to adapter — "
+        "pending_paths context would be lost"
+    )
+
+
+def test_c9b_tool_reply_passes_pending_paths():
+    """C9b: _reply_with_tool_result must also pass pending_paths to the adapter."""
+    src = _src("main.py")
+    tr_body = _function_body_text(src, "_reply_with_tool_result")
+    assert "pending_paths=" in tr_body, (
+        "_reply_with_tool_result: pending_paths not passed to adapter"
     )
