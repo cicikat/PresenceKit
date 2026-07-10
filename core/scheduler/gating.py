@@ -49,6 +49,7 @@ MIGRATED_TRIGGERS: frozenset[str] = frozenset({
     "presence_nag",
     "dream_exit",
     "letter_writer",
+    "coplay_commentary",
 })
 
 

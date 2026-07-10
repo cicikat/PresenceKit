@@ -1194,10 +1194,17 @@ def _get_scope_from_payload(payload: dict, handler_name: str) -> MemoryScope:
 
 
 async def handler_summarize_to_midterm(payload: dict) -> None:
-    # D2/X3 isolation: skip mid-term summarization for turns where dream impressions
-    # or web-search recall were active — prevents non-reality facts from being
-    # promoted into episodic/identity via the normal consolidation chain.
-    _echo_reason = "dream_echo" if payload.get("dream_echo") else ("web_echo" if payload.get("web_echo") else None)
+    # D2/X3 isolation: skip mid-term summarization for turns where dream impressions,
+    # web-search recall, or an active coplay session were active — prevents
+    # non-reality (or not-yet-consolidated coplay) facts from being promoted into
+    # episodic/identity via the normal consolidation chain. Coplay's own memory
+    # flowback lives in game_log (Brief 42), not mid_term/episodic/identity.
+    _echo_reason = (
+        "dream_echo" if payload.get("dream_echo")
+        else "web_echo" if payload.get("web_echo")
+        else "coplay_echo" if payload.get("coplay_echo")
+        else None
+    )
     if _echo_reason:
         logger.info(
             "[fixation] handler_summarize_to_midterm skipped (%s=True): "

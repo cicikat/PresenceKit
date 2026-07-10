@@ -52,6 +52,7 @@ _COOLDOWNS: dict[str, int] = {
     "garden_water":       300 * 60,     # 花园自动浇水：300分钟
     "garden_daily":        24 * 3600,   # 花园每日扫描：harvest/vase 状态
     "garden_bloom":         8 * 3600,   # 开花发言冷却（同株短期不重复）
+    "coplay_commentary":    300,        # 陪玩主动开口：≥5分钟一次（Brief 41 D5）
     "garden_harvest_expired": 4 * 3600,
     "garden_handle_ask":    4 * 3600,
     "garden_handle_gift":   4 * 3600,
@@ -912,6 +913,7 @@ async def _loop():
                 from core.scheduler.triggers.hidden_state_decay import (
                     _check_hidden_state_decay, _check_hidden_state_consolidate,
                 )
+                from core.scheduler.triggers.coplay_watch import _check_coplay_watch
 
                 oid = _owner_id()
                 if oid:
@@ -931,7 +933,7 @@ async def _loop():
                     "activity_switch", "dlq_monitor", "log_maintenance",
                     "episodic_sweep", "garden_water", "garden_daily",
                     "hidden_state_decay", "hidden_state_consolidate",
-                    "sensor_aware",
+                    "sensor_aware", "coplay_watch",
                 ]
                 _trigger_results = await asyncio.gather(
                     _check_morning(),
@@ -964,6 +966,7 @@ async def _loop():
                     _check_hidden_state_decay(),
                     _check_hidden_state_consolidate(),
                     _check_sensor_aware(),
+                    _check_coplay_watch(),
                     return_exceptions=True,
                 )
                 for _tname, _tres in zip(_trigger_names, _trigger_results):

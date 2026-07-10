@@ -368,6 +368,9 @@ def build(
     web_recall_result: str = "",
     web_recall_hits: list | None = None,
     action_trace_entries: list[dict] | None = None,
+    coplay_context_text: str = "",
+    coplay_residue_text: str = "",
+    coplay_recall_text: str = "",
 ) -> tuple[list[dict], dict]:
     """
     组装完整的 prompt 消息列表
@@ -1109,6 +1112,48 @@ def build(
         })
 
     # ─────────────────────────────────────────────────────────────────────────
+    # 层 coplay_context：陪玩模式 active 时的游戏进度 + 最近动态 + 剧透压制硬约束
+    # （Brief 41）。已由 core.coplay.game_state.build_coplay_context_text() 整段
+    # 拼好（含 <陪玩状态> 定界标签），active 状态才非空。
+    # 内容很小（进度行 + 最近3条动态 + 一句硬约束），_drop_priority 放在 lore 之
+    # 后（数字更大→更晚丢），token 预算真正吃紧前基本不会被裁到。
+    # ─────────────────────────────────────────────────────────────────────────
+    if coplay_context_text:
+        _layers.append("coplay_context")
+        messages.append({
+            "role": "system",
+            "content": coplay_context_text,
+            "_layer": "coplay_context",
+            "_drop_priority": 85,
+        })
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # 层 coplay_residue_soft_hint：陪玩结束后 4 小时内的软提示（Brief 42）。
+    # 与 coplay_context 互斥（调用方保证：只在非 active 时才可能非空）。
+    # ─────────────────────────────────────────────────────────────────────────
+    if coplay_residue_text:
+        _layers.append("coplay_residue_soft_hint")
+        messages.append({
+            "role": "system",
+            "content": coplay_residue_text,
+            "_layer": "coplay_residue_soft_hint",
+            "_drop_priority": 12,
+        })
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # 层 coplay_recall：聊天里提到玩过的游戏名/别名时，回忆上次游玩摘要
+    # （Brief 42，game_log tag 门控注入）。与 coplay_context 互斥。
+    # ─────────────────────────────────────────────────────────────────────────
+    if coplay_recall_text:
+        _layers.append("coplay_recall")
+        messages.append({
+            "role": "system",
+            "content": coplay_recall_text,
+            "_layer": "coplay_recall",
+            "_drop_priority": 45,
+        })
+
+    # ─────────────────────────────────────────────────────────────────────────
     # 层 7：对话示例（few-shot，来自角色卡的 mes_example 字段）
     # mes_example 格式："{{user}}: xxx\n{{char}}: xxx\n<START>..."
     # ─────────────────────────────────────────────────────────────────────────
@@ -1647,6 +1692,9 @@ KNOWN_LAYERS: list[tuple[str, str]] = [
     ("6f_dream_afterglow", "梦境余韵详细层"),
     ("dream_afterglow_soft_hint", "梦境余韵软提示"),
     ("6g_dream_impression", "梦境印象回流"),
+    ("coplay_context", "陪玩模式 active 时的游戏进度/动态 + 剧透压制约束"),
+    ("coplay_residue_soft_hint", "陪玩结束后 4 小时内的软提示"),
+    ("coplay_recall", "聊天提到玩过的游戏时回忆上次游玩摘要"),
     ("7_mes_example_item", "对话示例（few-shot）"),
     ("9_history", "短期对话历史（关闭将严重改变行为）"),
     ("9_anti_repeat", "跨轮开头去同质软约束"),

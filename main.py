@@ -592,11 +592,13 @@ async def handle_message(message: dict):
 
         # ── 步骤8+9：QQ reality reply adapter ──────────────────────────────
         # visible strip → send → memory pre-scrub → post_process → capture_turn (authority)
+        from core.coplay.session import is_active as _coplay_is_active
         await _qq_reality_reply_adapter(
             segments, user_id, content, target_id, is_group,
             frozen_scope=_frozen_scope,
             pending_paths=_meta.get("pending_paths", []),
             web_echo=bool(context.get("web_recall_result")),
+            coplay_echo=_coplay_is_active(user_id, char_id=_char_id),
             loop_executed=_loop_active,
         )
 
@@ -669,10 +671,12 @@ async def _reply_with_tool_result(
             return
 
         # QQ tool-reply: visible send + memory pre-scrub → post_process → capture_turn (authority)
+        from core.coplay.session import is_active as _coplay_is_active
         await _qq_reality_reply_adapter(
             segments, user_id, _turn_content, target_id, is_group,
             frozen_scope=frozen_scope,
             pending_paths=_meta.get("pending_paths", []),
+            coplay_echo=_coplay_is_active(user_id, char_id=_char_id),
         )
 
 
@@ -778,6 +782,7 @@ async def _qq_reality_reply_adapter(
     frozen_scope,
     pending_paths: list | None = None,
     web_echo: bool = False,
+    coplay_echo: bool = False,
     loop_executed: bool = False,
 ) -> None:
     """
@@ -835,6 +840,7 @@ async def _qq_reality_reply_adapter(
             frozen_scope=frozen_scope,
             pipeline=_pipeline,
             web_echo=web_echo,
+            coplay_echo=coplay_echo,
             loop_executed=loop_executed,
         )
     except Exception as _ts_err:

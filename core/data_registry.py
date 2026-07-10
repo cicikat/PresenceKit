@@ -193,6 +193,16 @@ REGISTRY: dict[str, PathMeta] = {
 
     # ── runtime: X3 自主联网搜索限流状态 ────────────────────────────────────────
     "web_autosearch_state":   PathMeta("runtime",   "shared",          "global",        "ignore"),
+
+    # ── Coplay（陪玩模式，Brief 38-42）──────────────────────────────────────────
+    "coplay_state_path":      PathMeta("canonical", "reality",         "per_char_user", "ignore"),
+    "coplay_games_root":      PathMeta("runtime",   "reality",         "per_char_user", "ignore"),
+    "coplay_game_dir":        PathMeta("runtime",   "reality",         "per_char_user", "ignore"),
+    "coplay_game_state_path": PathMeta("canonical", "reality",         "per_char_user", "ignore"),
+    # log.md 是收尾链（Brief 42）追加式浓缩记录，唯一权威来源，无自动重建路径
+    "coplay_game_log_path":   PathMeta("canonical", "reality",         "per_char_user", "ignore"),
+    # afterglow 是纯 TTL 软提示残留，过期即无意义，等价于 dream_hud_state 的定位
+    "coplay_afterglow_path":  PathMeta("runtime",   "reality",         "per_char_user", "ignore"),
 }
 
 # ── retention 策略（由 scheduler.log_maintenance 每 24 小时执行，参数见 config.yaml retention.*）

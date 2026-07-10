@@ -515,6 +515,7 @@ class TestMigratedTriggersSnapshot:
         "garden_bloom", "garden_harvest_expired", "garden_handle_ask",
         "garden_handle_gift", "garden_handle_self", "garden_vase_wilted",
         "reminders", "overflow", "presence_nag", "dream_exit", "letter_writer",
+        "coplay_commentary",
     })
 
     def test_migrated_triggers_matches_snapshot(self):

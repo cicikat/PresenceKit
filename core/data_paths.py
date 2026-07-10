@@ -245,6 +245,32 @@ class DataPaths:
     def dream_hud_state_path(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
         return self._p("runtime", "dreams", char_id, "state", safe_user_id(user_id), "dream_hud_state.json")
 
+    def coplay_state_path(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
+        return self._p("runtime", "coplay", char_id, "state", safe_user_id(user_id), "coplay_state.json")
+
+    def coplay_games_root(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
+        """data/runtime/coplay/{char_id}/games/{uid}/ — parent of all per-game dirs (Brief 42 listing)."""
+        return self._p("runtime", "coplay", char_id, "games", safe_user_id(user_id))
+
+    def coplay_game_dir(self, user_id: str | int, game_id: str, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
+        """data/runtime/coplay/{char_id}/games/{uid}/{game_id}/ — game_state.json + log.md (Brief 41/42).
+
+        game_id can contain ':' (e.g. "steam:123", from core.coplay.watcher) which
+        is illegal in a Windows path segment — sanitize before it ever reaches _p().
+        """
+        safe_game_id = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", str(game_id)).strip(". ") or "unknown"
+        return self.coplay_games_root(user_id, char_id=char_id) / safe_game_id
+
+    def coplay_game_state_path(self, user_id: str | int, game_id: str, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
+        return self.coplay_game_dir(user_id, game_id, char_id=char_id) / "state.json"
+
+    def coplay_afterglow_path(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
+        """Brief 42 — session 结束后的软提示残留（纯文本 TTL，不挂 hidden_state）。"""
+        return self._p("runtime", "coplay", char_id, "afterglow", f"{safe_user_id(user_id)}.json")
+
+    def coplay_game_log_path(self, user_id: str | int, game_id: str, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
+        return self.coplay_game_dir(user_id, game_id, char_id=char_id) / "log.md"
+
     def garden(self, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
         return self._p("runtime", "characters", char_id, "garden")
 

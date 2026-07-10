@@ -56,6 +56,11 @@ _ALLOWLIST: set[tuple[str, str]] = {
     ("core/memory/path_resolver.py", "afterglow"),
     # user_facts.py enumerates known reality-scoped artifact names including afterglow_residue.
     ("core/memory/user_facts.py", "afterglow"),
+    # Brief 42 (coplay): core/coplay/afterglow.py is an unrelated, independent module —
+    # a plain TTL text residue for "just finished playing a game", not the Dream→Reality
+    # writeback machinery this guard otherwise protects. No dream data crosses here;
+    # "afterglow" is reused only as a generic English word for the concept.
+    ("core/pipeline.py", "afterglow"),
 }
 
 

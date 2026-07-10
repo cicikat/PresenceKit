@@ -195,7 +195,9 @@ async def run_owner_chat_turn(
 
         from core.turn_sink import TurnSource, record_assistant_turn
         from core.write_envelope import stamp_user_chat
+        from core.coplay.session import is_active as _coplay_is_active
         _web_echo = bool(context.get("web_recall_result"))
+        _coplay_echo = _coplay_is_active(user_id, char_id=_frozen_scope.character_id)
         _t0 = time.monotonic()
         turn_result = await record_assistant_turn(
             assistant_text=reply,
@@ -209,6 +211,7 @@ async def run_owner_chat_turn(
             envelope=stamp_user_chat(),
             frozen_scope=_frozen_scope,
             web_echo=_web_echo,
+            coplay_echo=_coplay_echo,
             loop_executed=_loop_active,
         )
         _t_post = time.monotonic() - _t0

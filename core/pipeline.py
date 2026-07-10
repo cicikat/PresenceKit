@@ -421,6 +421,32 @@ class Pipeline:
         except Exception:
             dream_impression_text = ""
 
+        # Coplay context — ambient, read-only, active-only (Brief 41). Already
+        # fail-open inside build_coplay_context_text() itself; wrapped again here
+        # for defense-in-depth (fetch_context must never raise on this).
+        try:
+            from core.coplay.game_state import build_coplay_context_text as _build_coplay_ctx
+            coplay_context_text = _build_coplay_ctx(uid, char_id=char_id)
+        except Exception:
+            coplay_context_text = ""
+
+        # Coplay afterglow + game_log recall (Brief 42) — only meaningful when
+        # NOT currently in an active coplay session (coplay_context already
+        # covers "the game you're playing right now").
+        coplay_residue_text = ""
+        coplay_recall_text = ""
+        if not coplay_context_text:
+            try:
+                from core.coplay.afterglow import load_afterglow_text as _load_coplay_afterglow
+                coplay_residue_text = _load_coplay_afterglow(uid, char_id=char_id)
+            except Exception:
+                coplay_residue_text = ""
+            try:
+                from core.coplay.game_state import build_game_log_recall_text as _build_coplay_recall
+                coplay_recall_text = _build_coplay_recall(uid, content, char_id=char_id)
+            except Exception:
+                coplay_recall_text = ""
+
         logger.debug(
             f"[pipeline.fetch_context] uid={uid} "
             f"history={len(history)} lore={len(lore_entries)}"
@@ -506,6 +532,9 @@ class Pipeline:
             "episodic_fallback_result": episodic_fallback_result,
             "mid_term":                 mid_term_text,
             "dream_impression_text":    dream_impression_text,
+            "coplay_context_text":      coplay_context_text,
+            "coplay_residue_text":    coplay_residue_text,
+            "coplay_recall_text":       coplay_recall_text,
             "_scoped_character":        scoped_character,
             "suppress_emotional_recall": _low_info,
             # 语义召回候选（X2 接管 score_recall；X3 复用 query_vec）
@@ -596,6 +625,9 @@ class Pipeline:
             mid_term_context=context.get("mid_term", ""),
             tags=_tags,
             dream_impression_text=context.get("dream_impression_text", ""),
+            coplay_context_text=context.get("coplay_context_text", ""),
+            coplay_residue_text=context.get("coplay_residue_text", ""),
+            coplay_recall_text=context.get("coplay_recall_text", ""),
             char_id=_char_id,
             stage_presence=context.get("stage_presence", ""),
             stage_transcript=context.get("stage_transcript", ""),
@@ -972,6 +1004,7 @@ class Pipeline:
         envelope=None,
         audit_extras: dict | None = None,
         web_echo: bool = False,
+        coplay_echo: bool = False,
         loop_executed: bool = False,
     ) -> dict:
         """
@@ -1062,6 +1095,8 @@ class Pipeline:
                 _mt_payload["dream_echo"] = True
             if web_echo:
                 _mt_payload["web_echo"] = True
+            if coplay_echo:
+                _mt_payload["coplay_echo"] = True
             slow_queue.enqueue("summarize_to_midterm", _mt_payload)
         slow_queue.enqueue("consistency_check", {
             "reply": reply,
@@ -1139,6 +1174,7 @@ class Pipeline:
         audit_extras: dict | None = None,
         frozen_scope: "MemoryScope | None" = None,
         web_echo: bool = False,
+        coplay_echo: bool = False,
         loop_executed: bool = False,
     ):
         """
@@ -1163,7 +1199,7 @@ class Pipeline:
             user_id, content, reply, critical_result,
             target_id=target_id, is_group=is_group, trigger_name=trigger_name,
             envelope=envelope, audit_extras=audit_extras, web_echo=web_echo,
-            loop_executed=loop_executed,
+            coplay_echo=coplay_echo, loop_executed=loop_executed,
         )
         return {
             "emotion": slow_result["emotion"],

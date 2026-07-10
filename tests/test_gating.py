@@ -143,6 +143,7 @@ def test_registered_triggers_match_assistant_turn_surface():
         "presence_nag",
         "dream_exit",
         "letter_writer",
+        "coplay_commentary",
     }
 
     assert registered_trigger_names() == expected

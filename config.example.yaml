@@ -371,6 +371,13 @@ retention:
     max_files: 200
   observations:
     max_raw: 100
+coplay:
+  enabled: false
+  pet_launch_cmd: ''
+  poll_interval: 10
+  game_whitelist: []
+  steam_library_paths: []
+  screenshot_interval: 8
 character:
   default: default
   name: 角色名

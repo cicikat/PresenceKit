@@ -176,6 +176,7 @@ async def record_assistant_turn(
     frozen_scope=None,
     char_id: Optional[str] = None,
     web_echo: bool = False,
+    coplay_echo: bool = False,
     loop_executed: bool = False,
 ) -> TurnResult:
     """
@@ -261,6 +262,7 @@ async def record_assistant_turn(
                     audit_extras=audit_extras,
                     frozen_scope=frozen_scope,
                     web_echo=web_echo,
+                    coplay_echo=coplay_echo,
                     loop_executed=loop_executed,
                 )
             )
@@ -303,6 +305,7 @@ async def record_assistant_turn(
                 envelope=envelope,
                 audit_extras=audit_extras,
                 web_echo=web_echo,
+                coplay_echo=coplay_echo,
                 loop_executed=loop_executed,
             )
         )
