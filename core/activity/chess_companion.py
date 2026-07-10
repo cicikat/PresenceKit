@@ -35,6 +35,7 @@ from core.activity import transcript as _tr
 from core.activity.chess_grounding import build_chess_grounding_facts, format_chess_grounding_for_prompt
 from core.activity.companion_text import strip_action_descriptions
 from core.activity.session import now_iso
+from core.observe import prompt_capture as _prompt_capture
 
 logger = logging.getLogger(__name__)
 
@@ -110,8 +111,8 @@ def _build_messages(
     context += f"\n\n用户说：{user_message}"
 
     return [
-        {"role": "system", "content": _SYSTEM_CHESS.replace("叶瑄", char_name)},
-        {"role": "user", "content": context},
+        {"role": "system", "content": _SYSTEM_CHESS.replace("叶瑄", char_name), "_layer": "activity_system"},
+        {"role": "user", "content": context, "_layer": "activity_context"},
     ]
 
 
@@ -130,6 +131,32 @@ def _parse_control(raw: str) -> tuple[str, dict]:
     if tone in _VALID_COMMENTARY_TONES:
         control["commentary_tone"] = tone
     return clean, control
+
+
+def _capture_prompt(uid: str, session_id: str, messages: list[dict], kind: str = "chat") -> None:
+    """Record this LLM call for /observe/prompt-layers. Fail-open: observation must
+    never break companion chat."""
+    try:
+        _prompt_capture.set_capture_origin({
+            "origin": "activity",
+            "activity_type": "chess",
+            "session_id": session_id,
+            "kind": kind,
+        })
+        _prompt_capture.capture(uid, messages, {
+            "tags": [],
+            "layers_activated": [m.get("_layer", "unknown") for m in messages],
+            "token_estimate": sum(len(m.get("content", "")) for m in messages),
+        })
+    except Exception as e:
+        logger.warning("[chess_companion] prompt_capture failed: %s", e)
+
+
+def _capture_output(uid: str, reply: str) -> None:
+    try:
+        _prompt_capture.update_llm_output(uid, reply)
+    except Exception as e:
+        logger.warning("[chess_companion] prompt_capture update failed: %s", e)
 
 
 async def _call_llm(messages: list[dict]) -> tuple[str, dict]:
@@ -170,8 +197,10 @@ async def generate_reply(
     facts = build_chess_grounding_facts(state)
     recent_ctx = _tr.load_recent(char_id, uid, "chess", session_id, limit=_TRANSCRIPT_CONTEXT_LIMIT)
     messages = _build_messages(state, recent_ctx, user_message, facts, char_name=char_name)
+    _capture_prompt(uid, session_id, messages, kind="chat")
     reply, control = await _call_llm(messages)
     reply = strip_action_descriptions(reply)
+    _capture_output(uid, reply)
 
     ts = now_iso()
 
