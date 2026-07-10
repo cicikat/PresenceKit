@@ -1,86 +1,35 @@
 """
-tests/test_user_hidden_state_phase25.py
-========================================
-Phase 2.5 — Edge-case audit / false-positive safety boundary tests.
+tests/test_user_hidden_state_longterm_isolation_and_accumulation.py — 长期层
+隔离守卫 + 跨字段/跨uid隔离审计 + 累积持久化 + 高频事件安全边界
 
-15 new tests covering gaps not reached by EC-01–EC-24 (edge_cases) or
-Phase 2 / Phase 1.5 / Phase 1 suites.
+合并自 test_user_hidden_state_edge_cases.py（EC-01–EC-24）+
+test_user_hidden_state_phase25.py（EC-25–EC-39，与前者互补不重复，Brief 50 ·
+工单E）。是与 test_user_hidden_state_envelope_and_gate_boundary.py 配对拆分的
+另一半（长期层隔离/累积/审计主题，20个测试）。
 
-Coverage map
-─────────────────────────────────────────────────────────────────────────────
-Group A — WriteEnvelope constructor coercion (2)
-  EC-25  WriteEnvelope(is_test=True, can_write_memory=True) → forced False
-         → Reality event rejected, state unchanged                  fail-closed
-  EC-26  WriteEnvelope(is_debug=True, can_write_memory=True) → forced False
-         → impression rejected, state unchanged                     fail-closed
-
-Group B — Reality event audit completeness (3)
-  EC-27  RECEIVED_COMFORT stamps last_update_source=REALITY_BEHAVIOR
-         and last_updated=NOW                                       audit
-  EC-28  NO_INTERACTION from mid-range: delta == DEFICIT_ACCRUE_AMOUNT
-         exactly (no amplification)                                 delta exactness
-  EC-29  SEEK_COMPANIONSHIP at deficit == DEFICIT_DISCHARGE_AMOUNT exactly
-         → deficit floors to exactly 0.0 (boundary floor)          clamp / audit
-
-Group C — Cross-field last_update_source isolation (2)
-  EC-30  After Dream impression: touch_need.deficit.last_update_source
-         stays INIT (impression must not cross-stamp deficit)       cross-field audit
-  EC-31  After NO_INTERACTION event: sensitivity.current.last_update_source
-         stays INIT (event must not cross-stamp sensitivity)        cross-field audit
-
-Group D — Cross-uid disk isolation (1)
-  EC-32  event_and_save for uid_a does not touch uid_b's stored state  isolation
-
-Group E — sensitivity.current underflow protection (1)
-  EC-33  nudge_current_sensitivity with delta=-200 clamps to 0.0        underflow
-
-Group F — to_dream_snapshot fail-closed on corrupt state (1)
-  EC-34  state with sensitivity=None → returns neutral snapshot,
-         no exception raised                                         fail-closed
-
-Group G — Phase 2 _and_save accumulation round-trip (2)
-  EC-35  NO_INTERACTION then SEEK_COMPANIONSHIP via event_and_save:
-         net deficit change tracked correctly across two saves       accumulation
-  EC-36  integrate_impression_and_save then integrate_event_and_save:
-         both mutations persist independently on disk                accumulation
-
-Group H — Gate boundary acceptance and wrong-type silent drop (3)
-  EC-37  impression at exact DREAM_GATE_MIN (0.2) is accepted
-         (inclusive lower boundary)                                  gate boundary
-  EC-38  Non-RealityEventType object passed to integrate_event falls
-         through: state unchanged, accepted=False                    silent drop
-  EC-39  stamp_sensor envelope (can_write_memory=True) accepts a
-         Reality event (legal path: sensor assistant turn)           legal path
-─────────────────────────────────────────────────────────────────────────────
-
-Design invariants verified by this suite:
-  • WriteEnvelope is_test / is_debug coercion overrides explicit can_write_memory=True.
-  • Every accepted event stamps the correct last_update_source; rejected events leave
-    the source untouched.
-  • Dream impression does not cross-stamp touch_need.deficit; Reality events do not
-    cross-stamp sensitivity.current.
-  • Two UIDs maintain fully independent on-disk state.
-  • sensitivity.current cannot go below SCALAR_MIN via nudge.
-  • to_dream_snapshot degrades to a neutral bucket snapshot rather than raising on
-    any corrupt state (fail-closed read path).
-  • Phase 2 _and_save wrappers accumulate state correctly across multiple calls.
-  • impression.weight at exactly DREAM_GATE_MIN is within the gate (inclusive).
-  • Unknown / wrong-type event_type to integrate_event causes no state mutation
-    (silent drop — safe, but documents the auditing semantic gap).
-  • stamp_sensor (post-reply sensor turn) is a legal write path.
+Covers:
+  - 高频/连续事件不腐化长期层字段、审计来源正确（原 EC-06–09）
+  - Dream 印象直接尝试写长期字段一律无效（原 EC-19–22）
+  - 弱证据 afterglow/impression 只产生小幅推动、长期层免疫（原 EC-23–24）
+  - Reality 事件审计完整性：来源/时间戳/delta 精确值（原 EC-27–29）
+  - 跨字段 last_update_source 隔离：impression 不串戳 deficit，event 不串戳 sensitivity（原 EC-30–31）
+  - 跨 uid 磁盘隔离（原 EC-32）
+  - sensitivity.current 下溢保护（原 EC-33）
+  - to_dream_snapshot 对损坏 state 的 fail-closed 降级（原 EC-34）
+  - Phase 2 _and_save 系列多次调用的累积持久化正确性（原 EC-35–36）
 """
 from __future__ import annotations
-
-import math
 
 import pytest
 
 from core.memory.user_hidden_state import (
+    BodyMemory,
+    BodyMemoryEntry,
     DREAM_GATE_MAX,
     DREAM_GATE_MIN,
+    SCALAR_MAX,
     SCALAR_MIN,
     SCALAR_CENTER,
-    DreamBodyStateEvent,
     ImpressionInput,
     UpdateSource,
     default_hidden_state,
@@ -102,11 +51,7 @@ from core.memory.user_hidden_state_store import (
     load_hidden_state,
     save_hidden_state,
 )
-from core.write_envelope import (
-    WriteEnvelope,
-    stamp_sensor,
-    stamp_user_chat,
-)
+from core.write_envelope import WriteEnvelope, stamp_user_chat
 
 NOW = "2026-06-02T12:00:00Z"
 UID_A = "uid_p25_a"
@@ -117,60 +62,204 @@ def _open() -> WriteEnvelope:
     return stamp_user_chat()
 
 
+def _long_term_snapshot(state):
+    """Capture all four long-term field values for before/after comparison."""
+    return (
+        state.sensitivity.baseline.value,
+        state.touch_need.baseline.value,
+        state.embodied_ease.value,
+        [e.cue for e in state.body_memory.entries],
+    )
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
-# Group A — WriteEnvelope constructor coercion
+# 高频/连续事件不腐化长期层、审计来源正确（原 edge_cases EC-06–09）
 # ═══════════════════════════════════════════════════════════════════════════════
 
-class TestWriteEnvelopeConstructorCoercion:
-    """EC-25 / EC-26: __post_init__ must override explicit can_write_memory=True
-    when is_test or is_debug is True."""
+class TestHighFrequencyNoBodyContact:
+    """EC-06 – EC-09: Bursty events must not corrupt state."""
 
-    def test_ec25_is_test_true_overrides_can_write_memory(self):
-        """EC-25 fail-closed: WriteEnvelope(is_test=True, can_write_memory=True)
-        must force can_write_memory to False, so the Reality event is rejected."""
-        env = WriteEnvelope(is_test=True, can_write_memory=True)
-
-        # __post_init__ override must have fired
-        assert env.can_write_memory is False, (
-            "is_test=True must force can_write_memory=False "
-            "even when caller explicitly passed can_write_memory=True"
-        )
-
+    def test_ec06_50_no_interaction_deficit_capped_at_scalar_max(self):
+        """EC-06 clamp: 50 × NO_INTERACTION — deficit is capped at SCALAR_MAX."""
         state = default_hidden_state()
-        state.touch_need.deficit.value = 40.0
-        _, result = integrate_event(RealityEventType.SEEK_COMPANIONSHIP, state, env, NOW)
+        state.touch_need.deficit.value = 0.0
+        envelope = _open()
 
-        assert result.rejected
-        assert not result.accepted
-        assert state.touch_need.deficit.value == pytest.approx(40.0), (
-            "is_test coerced envelope must not mutate deficit"
-        )
+        for _ in range(50):
+            state, _ = integrate_event(RealityEventType.NO_INTERACTION, state, envelope, NOW)
 
-    def test_ec26_is_debug_true_overrides_can_write_memory(self):
-        """EC-26 fail-closed: WriteEnvelope(is_debug=True, can_write_memory=True)
-        must force can_write_memory to False, so the impression is rejected."""
-        env = WriteEnvelope(is_debug=True, can_write_memory=True)
+        assert state.touch_need.deficit.value <= SCALAR_MAX
+        assert state.touch_need.deficit.value == pytest.approx(SCALAR_MAX), \
+            "50 × accrue should saturate deficit at SCALAR_MAX"
 
-        assert env.can_write_memory is False, (
-            "is_debug=True must force can_write_memory=False "
-            "even when caller explicitly passed can_write_memory=True"
-        )
-
+    def test_ec07_100_seek_companionship_floored_at_zero(self):
+        """EC-07 clamp: 100 × SEEK_COMPANIONSHIP from high deficit — never goes negative."""
         state = default_hidden_state()
-        original_sens = state.sensitivity.current.value
+        state.touch_need.deficit.value = 80.0
+        envelope = _open()
+
+        for _ in range(100):
+            state, _ = integrate_event(RealityEventType.SEEK_COMPANIONSHIP, state, envelope, NOW)
+
+        assert state.touch_need.deficit.value >= 0.0
+        assert state.touch_need.deficit.value == pytest.approx(0.0), \
+            "repeated discharge must floor deficit at 0"
+
+    def test_ec08_consecutive_events_long_term_fields_never_touched(self):
+        """EC-08 long-term guard: 20 mixed Reality events — all four long-term fields unchanged."""
+        state = default_hidden_state()
+        state.sensitivity.baseline.value = 55.0
+        state.touch_need.baseline.value = 45.0
+        state.embodied_ease.value = 60.0
+        state.body_memory = BodyMemory(
+            entries=[BodyMemoryEntry(cue="cue_a", weight=0.7, response_tag="r",
+                                     created_at=NOW, last_reinforced=NOW)],
+            max_entries=32,
+        )
+        baseline_before = _long_term_snapshot(state)
+        envelope = _open()
+
+        event_sequence = (
+            [RealityEventType.SEEK_COMPANIONSHIP] * 7
+            + [RealityEventType.NO_INTERACTION] * 7
+            + [RealityEventType.RECEIVED_COMFORT] * 6
+        )
+        for event in event_sequence:
+            state, _ = integrate_event(event, state, envelope, NOW)
+
+        assert _long_term_snapshot(state) == baseline_before, \
+            "20 mixed Reality events must not touch any long-term field"
+
+    def test_ec09_no_interaction_audit_source_is_reality_behavior(self):
+        """EC-09 audit: NO_INTERACTION sets last_update_source = REALITY_BEHAVIOR."""
+        state = default_hidden_state()
+        state.touch_need.deficit.value = 10.0
+
+        state, result = integrate_event(RealityEventType.NO_INTERACTION, state, _open(), NOW)
+
+        assert result.accepted
+        assert state.touch_need.deficit.last_update_source == UpdateSource.REALITY_BEHAVIOR
+        assert state.touch_need.deficit.last_updated == NOW
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Dream 印象直接尝试写长期字段一律无效（原 edge_cases EC-19–22）
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestDreamDirectLongTermWrite:
+    """EC-19 – EC-22: Dream-derived impressions must only touch sensitivity.current."""
+
+    def _apply_impressions(self, n: int = 5):
+        """Run n valid Dream impressions against a fresh state; return final state."""
+        state = default_hidden_state()
+        envelope = _open()
         mid_weight = (DREAM_GATE_MIN + DREAM_GATE_MAX) / 2
-        imp = ImpressionInput(weight=mid_weight)
-        _, result = integrate_impression(imp, state, env, NOW)
-
-        assert result.rejected
-        assert not result.accepted
-        assert state.sensitivity.current.value == pytest.approx(original_sens), (
-            "is_debug coerced envelope must not nudge sensitivity.current"
+        imp = ImpressionInput(
+            weight=mid_weight,
+            emotional_tags=["warm"],
+            impression_text="a close moment",
         )
+        for _ in range(n):
+            state, _ = integrate_impression(imp, state, envelope, NOW)
+        return state
+
+    def test_ec19_dream_impression_leaves_sensitivity_baseline_unchanged(self):
+        """EC-19 long-term guard: Dream impression must not alter sensitivity.baseline."""
+        original = default_hidden_state().sensitivity.baseline.value
+        state = self._apply_impressions(5)
+        assert state.sensitivity.baseline.value == pytest.approx(original), \
+            "sensitivity.baseline is a long-term field; Dream impression must not touch it"
+
+    def test_ec20_dream_impression_leaves_embodied_ease_unchanged(self):
+        """EC-20 long-term guard: Dream impression must not alter embodied_ease."""
+        original = default_hidden_state().embodied_ease.value
+        state = self._apply_impressions(5)
+        assert state.embodied_ease.value == pytest.approx(original), \
+            "embodied_ease is a long-term constitution field; Dream impression must not touch it"
+
+    def test_ec21_dream_impression_leaves_body_memory_unchanged(self):
+        """EC-21 long-term guard: Dream impression must not add entries to body_memory."""
+        state = self._apply_impressions(5)
+        assert state.body_memory.entries == [], \
+            "body_memory requires Reality corroboration (Phase 3+); Dream impression must not write it"
+
+    def test_ec22_dream_impression_leaves_touch_need_baseline_unchanged(self):
+        """EC-22 long-term guard: Dream impression must not alter touch_need.baseline."""
+        original = default_hidden_state().touch_need.baseline.value
+        state = self._apply_impressions(5)
+        assert state.touch_need.baseline.value == pytest.approx(original), \
+            "touch_need.baseline is a long-term field; Dream impression must not touch it"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Group B — Reality event audit completeness
+# 弱证据 afterglow/impression 只产生小幅推动、长期层免疫（原 edge_cases EC-23–24）
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestAfterglowImpressionBounded:
+    """EC-23 – EC-24: Weak evidence produces weak nudge; long-term fields immune."""
+
+    def test_ec23_mid_gate_impression_nudge_smaller_than_max(self):
+        """EC-23 weak evidence: mid-gate weight gives proportionally small delta (< IMPRESSION_MAX_NUDGE).
+
+        At weight=0.3 (mid of [0.2, 0.4]):
+          ratio = (0.3 − 0.2) / (0.4 − 0.2) = 0.5
+          delta = 0.5 × IMPRESSION_MAX_NUDGE = 1.5  (NOT the full 3.0)
+
+        This verifies that weak dream evidence only weakly pushes mid-term state.
+        """
+        state = default_hidden_state()
+        state.sensitivity.current.value = 50.0
+        mid_weight = (DREAM_GATE_MIN + DREAM_GATE_MAX) / 2  # 0.3
+
+        imp = ImpressionInput(weight=mid_weight)
+        state, result = integrate_impression(imp, state, _open(), NOW)
+
+        assert result.accepted
+        delta = result.touched_fields[0].new_value - result.touched_fields[0].old_value
+        expected_delta = ((mid_weight - DREAM_GATE_MIN) / (DREAM_GATE_MAX - DREAM_GATE_MIN)) * IMPRESSION_MAX_NUDGE
+        assert delta == pytest.approx(expected_delta, abs=1e-6), \
+            f"mid-gate nudge must be {expected_delta:.3f}, not the full {IMPRESSION_MAX_NUDGE}"
+        assert delta < IMPRESSION_MAX_NUDGE, \
+            "mid-gate impression must give less than IMPRESSION_MAX_NUDGE"
+
+    def test_ec24_multiple_impressions_only_move_sensitivity_current(self):
+        """EC-24 long-term guard: 5 valid Dream impressions accumulate in sensitivity.current only.
+
+        Verifies:
+          - sensitivity.current increases (mid-term layer is responsive)
+          - All four long-term fields remain at default values
+          - touch_need.deficit is unaffected (cross-field isolation)
+        """
+        state = default_hidden_state()
+        long_term_before = _long_term_snapshot(state)
+        original_deficit = state.touch_need.deficit.value
+        envelope = _open()
+        max_weight = DREAM_GATE_MAX
+        imp = ImpressionInput(weight=max_weight)
+
+        for _ in range(5):
+            state, result = integrate_impression(imp, state, envelope, NOW)
+            assert result.accepted
+
+        # 中期层: sensitivity.current should have increased
+        assert state.sensitivity.current.value > SCALAR_CENTER, \
+            "sensitivity.current (中期层) must accumulate across repeated impressions"
+        assert state.sensitivity.current.value <= SCALAR_MAX
+
+        # 中期层: touch_need.deficit must be untouched by impression
+        assert state.touch_need.deficit.value == pytest.approx(original_deficit), \
+            "impression must not affect touch_need.deficit"
+
+        # 长期层: all four long-term fields unchanged
+        assert _long_term_snapshot(state) == long_term_before, \
+            "5 Dream impressions must not touch any long-term field"
+
+        # Audit: update source on sensitivity.current is DREAM_IMPRESSION
+        assert state.sensitivity.current.last_update_source == UpdateSource.DREAM_IMPRESSION
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Reality 事件审计完整性：来源/时间戳/delta 精确值（原 phase25 EC-27–29）
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class TestRealityEventAudit:
@@ -224,7 +313,7 @@ class TestRealityEventAudit:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Group C — Cross-field last_update_source isolation
+# 跨字段 last_update_source 隔离（原 phase25 EC-30–31）
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class TestCrossFieldSourceIsolation:
@@ -235,16 +324,13 @@ class TestCrossFieldSourceIsolation:
         """EC-30 cross-field audit: After a Dream impression, touch_need.deficit's
         last_update_source must remain INIT — impression only touches sensitivity.current."""
         state = default_hidden_state()
-        # Confirm deficit source starts at INIT
         assert state.touch_need.deficit.last_update_source == UpdateSource.INIT
 
         imp = ImpressionInput(weight=(DREAM_GATE_MIN + DREAM_GATE_MAX) / 2)
         state, result = integrate_impression(imp, state, _open(), NOW)
 
         assert result.accepted
-        # sensitivity.current was mutated — its source should be DREAM_IMPRESSION
         assert state.sensitivity.current.last_update_source == UpdateSource.DREAM_IMPRESSION
-        # deficit was NOT touched — its source must stay INIT
         assert state.touch_need.deficit.last_update_source == UpdateSource.INIT, (
             "Dream impression must not cross-stamp touch_need.deficit.last_update_source"
         )
@@ -256,15 +342,12 @@ class TestCrossFieldSourceIsolation:
         """EC-31 cross-field audit: After a NO_INTERACTION event, sensitivity.current's
         last_update_source must remain INIT — Reality event only touches touch_need.deficit."""
         state = default_hidden_state()
-        # Confirm sensitivity source starts at INIT
         assert state.sensitivity.current.last_update_source == UpdateSource.INIT
 
         state, result = integrate_event(RealityEventType.NO_INTERACTION, state, _open(), NOW)
 
         assert result.accepted
-        # deficit was mutated — its source should be REALITY_BEHAVIOR
         assert state.touch_need.deficit.last_update_source == UpdateSource.REALITY_BEHAVIOR
-        # sensitivity.current was NOT touched — its source must stay INIT
         assert state.sensitivity.current.last_update_source == UpdateSource.INIT, (
             "NO_INTERACTION event must not cross-stamp sensitivity.current.last_update_source"
         )
@@ -274,7 +357,7 @@ class TestCrossFieldSourceIsolation:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Group D — Cross-uid disk isolation
+# 跨 uid 磁盘隔离（原 phase25 EC-32）
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class TestCrossUidDiskIsolation:
@@ -284,21 +367,17 @@ class TestCrossUidDiskIsolation:
     def test_ec32_writing_uid_a_does_not_affect_uid_b(self, sandbox):
         """EC-32 isolation: event_and_save for UID_A must not create or modify
         UID_B's hidden_state.json."""
-        # Establish a baseline for uid_b
         state_b = default_hidden_state()
         state_b.touch_need.deficit.value = 30.0
         save_hidden_state(UID_B, state_b)
 
-        # Write to uid_a
         integrate_event_and_save(UID_A, RealityEventType.SEEK_COMPANIONSHIP, _open(), NOW)
 
-        # uid_b's file must be unchanged
         loaded_b = load_hidden_state(UID_B)
         assert loaded_b.touch_need.deficit.value == pytest.approx(30.0), (
             "Saving uid_a must not touch uid_b's deficit"
         )
 
-        # Verify uid_a's file was actually written (sanity check)
         path_a = sandbox.user_memory_root(UID_A) / HIDDEN_STATE_FILENAME
         assert path_a.exists(), "uid_a hidden_state.json must exist after event_and_save"
 
@@ -307,7 +386,7 @@ class TestCrossUidDiskIsolation:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Group E — sensitivity.current underflow protection
+# sensitivity.current 下溢保护（原 phase25 EC-33）
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class TestSensitivityUnderflow:
@@ -329,12 +408,11 @@ class TestSensitivityUnderflow:
         assert state.sensitivity.current.value >= SCALAR_MIN, (
             "sensitivity.current must never go below SCALAR_MIN"
         )
-        # Source must still be stamped even on a clamped result
         assert state.sensitivity.current.last_update_source == UpdateSource.REALITY_BEHAVIOR
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Group F — to_dream_snapshot fail-closed on corrupt state
+# to_dream_snapshot 对损坏 state 的 fail-closed 降级（原 phase25 EC-34）
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class TestSnapshotFailClosed:
@@ -347,7 +425,6 @@ class TestSnapshotFailClosed:
         state = default_hidden_state()
         state.sensitivity = None  # type: ignore  — simulate corrupt state
 
-        # Must not raise; must return the neutral fallback
         snap = to_dream_snapshot(state, NOW)
 
         assert isinstance(snap, dict), "to_dream_snapshot must return a dict on corrupt state"
@@ -355,7 +432,6 @@ class TestSnapshotFailClosed:
         assert set(snap.keys()) == expected_keys, (
             "Corrupt-state snapshot must still contain the expected four keys"
         )
-        # Neutral fallback values (from _NEUTRAL constant)
         assert snap["sensitivity"] == "mid"
         assert snap["touch_appetite"] == "mid"
         assert snap["embodied_ease"] == "neutral"
@@ -363,7 +439,7 @@ class TestSnapshotFailClosed:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Group G — Phase 2 _and_save accumulation round-trip
+# Phase 2 _and_save 系列多次调用的累积持久化正确性（原 phase25 EC-35–36）
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class TestAndSaveAccumulation:
@@ -373,12 +449,10 @@ class TestAndSaveAccumulation:
     def test_ec35_no_interaction_then_seek_accumulate_correctly(self, sandbox):
         """EC-35 accumulation: NO_INTERACTION increases deficit; subsequent
         SEEK_COMPANIONSHIP decreases it; both are persisted to disk."""
-        # Start at a known mid-range deficit
         initial = default_hidden_state()
         initial.touch_need.deficit.value = 50.0
         save_hidden_state(UID_A, initial)
 
-        # First call: NO_INTERACTION → deficit increases
         integrate_event_and_save(UID_A, RealityEventType.NO_INTERACTION, _open(), NOW)
         after_no_interaction = load_hidden_state(UID_A)
         assert after_no_interaction.touch_need.deficit.value > 50.0, (
@@ -386,7 +460,6 @@ class TestAndSaveAccumulation:
         )
         deficit_mid = after_no_interaction.touch_need.deficit.value
 
-        # Second call: SEEK_COMPANIONSHIP → deficit decreases
         integrate_event_and_save(UID_A, RealityEventType.SEEK_COMPANIONSHIP, _open(), NOW)
         after_seek = load_hidden_state(UID_A)
         assert after_seek.touch_need.deficit.value < deficit_mid, (
@@ -402,7 +475,6 @@ class TestAndSaveAccumulation:
         initial.touch_need.deficit.value = 50.0
         save_hidden_state(UID_A, initial)
 
-        # Impression → sensitivity.current should increase
         imp = ImpressionInput(weight=DREAM_GATE_MAX)
         integrate_impression_and_save(UID_A, imp, _open(), NOW)
         after_impression = load_hidden_state(UID_A)
@@ -412,125 +484,9 @@ class TestAndSaveAccumulation:
         )
         sens_after_imp = after_impression.sensitivity.current.value
 
-        # Event → deficit should decrease; sensitivity.current must remain unchanged
         integrate_event_and_save(UID_A, RealityEventType.SEEK_COMPANIONSHIP, _open(), NOW)
         after_event = load_hidden_state(UID_A)
         assert after_event.touch_need.deficit.value < 50.0
         assert after_event.sensitivity.current.value == pytest.approx(sens_after_imp), (
             "event_and_save must not disturb sensitivity.current persisted by the prior impression"
         )
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# Group H — Gate boundary acceptance and wrong-type silent drop
-# ═══════════════════════════════════════════════════════════════════════════════
-
-class TestGateBoundaryAndSilentDrop:
-    """EC-37 / EC-38 / EC-39."""
-
-    def test_ec37_impression_at_exact_gate_min_is_accepted(self):
-        """EC-37 gate boundary: impression.weight == DREAM_GATE_MIN (0.2) is within
-        the inclusive gate [DREAM_GATE_MIN, DREAM_GATE_MAX] and must NOT be rejected.
-
-        Note — delta at the exact lower boundary:
-          ratio = (DREAM_GATE_MIN − DREAM_GATE_MIN) / (DREAM_GATE_MAX − DREAM_GATE_MIN) = 0.0
-          delta = 0.0 × IMPRESSION_MAX_NUDGE = 0.0
-
-        So sensitivity.current does not numerically change, but the call is accepted
-        (touched_fields is populated) and no rejection reason is produced.
-        This is correct gating behaviour: weight=0.2 is *inside* the gate.
-        """
-        state = default_hidden_state()
-        state.sensitivity.current.value = 50.0
-
-        imp = ImpressionInput(weight=DREAM_GATE_MIN)  # exactly 0.2 — inclusive lower bound
-        state, result = integrate_impression(imp, state, _open(), NOW)
-
-        assert result.accepted, (
-            f"weight={DREAM_GATE_MIN} is at the inclusive gate lower bound and must be accepted; "
-            f"got rejected_reasons={result.rejected_reasons}"
-        )
-        assert not result.rejected_reasons, (
-            "Gate-min impression must produce no rejection reasons"
-        )
-        # Delta at gate-min is 0.0 — no value movement, but no rejection either
-        if result.touched_fields:
-            nudge = result.touched_fields[0].new_value - result.touched_fields[0].old_value
-            assert nudge >= 0.0, "Impression nudge must never be negative"
-
-    def test_ec37_impression_at_exact_gate_min_is_not_rejected(self):
-        """EC-37 gate boundary (clean version): weight exactly at DREAM_GATE_MIN
-        must NOT appear in rejected_reasons."""
-        state = default_hidden_state()
-        imp = ImpressionInput(weight=DREAM_GATE_MIN)
-        _, result = integrate_impression(imp, state, _open(), NOW)
-
-        assert not result.rejected_reasons, (
-            f"weight=DREAM_GATE_MIN must not produce a rejection; "
-            f"got: {result.rejected_reasons}"
-        )
-        # Delta must be >= 0 (no negative nudge from impression path)
-        if result.touched_fields:
-            delta_val = result.touched_fields[0].new_value - result.touched_fields[0].old_value
-            assert delta_val >= 0.0, "Impression delta must never be negative"
-
-    def test_ec38_wrong_type_event_raises_before_mutation(self):
-        """EC-38 wrong-type guard: passing a DreamBodyStateEvent (wrong type) as
-        event_type to integrate_event raises TypeError BEFORE any envelope check
-        or state mutation.
-
-        Phase 3 upgrade: integrate_event now has an explicit isinstance guard that
-        raises TypeError (not AttributeError) before anything else runs.
-
-        Security contract:
-          - TypeError is raised (clear, explicit, not an AttributeError)
-          - State is unchanged at the point of the raise (no partial mutation)
-
-        This is a fail-closed outcome from a data-integrity perspective:
-        no field is written, no last_update_source is stamped.
-        """
-        state = default_hidden_state()
-        state.touch_need.deficit.value = 45.0
-        original_deficit = state.touch_need.deficit.value
-        original_source = state.touch_need.deficit.last_update_source
-
-        wrong_event = DreamBodyStateEvent(
-            heat=0.8, sensitivity=0.9, tension=0.5, arousal=0.6, duration_min=30.0
-        )
-
-        # Phase 3: explicit TypeError guard fires before any mutation
-        with pytest.raises(TypeError):
-            integrate_event(wrong_event, state, _open(), NOW)  # type: ignore
-
-        # State must be fully unchanged (raise occurred before any mutation)
-        assert state.touch_need.deficit.value == pytest.approx(original_deficit), (
-            "Wrong event_type raise must not have mutated touch_need.deficit"
-        )
-        assert state.touch_need.deficit.last_update_source == original_source, (
-            "Wrong event_type raise must not have cross-stamped last_update_source"
-        )
-
-    def test_ec39_stamp_sensor_envelope_accepts_reality_event(self):
-        """EC-39 legal path: stamp_sensor() has can_write_memory=True (it represents
-        a sensor assistant turn that has already produced a reply).  A Reality event
-        under this envelope must be accepted and must mutate touch_need.deficit."""
-        sensor_env = stamp_sensor()
-        assert sensor_env.can_write_memory is True, (
-            "stamp_sensor must have can_write_memory=True (sensor reply path)"
-        )
-
-        state = default_hidden_state()
-        state.touch_need.deficit.value = 60.0
-
-        state, result = integrate_event(
-            RealityEventType.SEEK_COMPANIONSHIP, state, sensor_env, NOW
-        )
-
-        assert result.accepted, (
-            "stamp_sensor envelope must allow a Reality event through — "
-            "it is a legal write path"
-        )
-        assert state.touch_need.deficit.value < 60.0, (
-            "Deficit must decrease under stamp_sensor envelope"
-        )
-        assert state.touch_need.deficit.last_update_source == UpdateSource.REALITY_BEHAVIOR
