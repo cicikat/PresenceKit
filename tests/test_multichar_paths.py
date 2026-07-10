@@ -57,7 +57,6 @@ def test_character_inner_v1_paths(dp, tmp_path, method, expected_parts):
 @pytest.mark.parametrize("method,expected_parts", [
     ("pet_file",         ("runtime", "characters", "yexuan", "pet.json")),
     ("garden",           ("runtime", "characters", "yexuan", "garden")),
-    ("character_growth", ("runtime", "characters", "yexuan", "character_growth")),
 ])
 def test_character_inner_v1_top_paths(dp, tmp_path, method, expected_parts):
     fn = getattr(dp, method)
@@ -85,13 +84,10 @@ def test_yexuan_traits_legacy(dp):
     assert dp.yexuan_traits() == dp.yexuan_traits(char_id="yexuan")
 
 
-# ── character_growth（legacy/dead artifact，仅供 path_resolver 兼容解析保留）───────
-
-def test_character_growth_v1(dp, tmp_path):
-    assert dp.character_growth(char_id="yexuan") == (
-        tmp_path / "runtime" / "characters" / "yexuan" / "character_growth"
-    )
-    assert dp.character_growth() == dp.character_growth(char_id="yexuan")
+# character_growth 路径解析测试已删除（Brief 50 · 工单C.3）：character_growth
+# 是 Brief 35 已删除模块的 legacy/dead artifact；DataPaths.character_growth()
+# 本身仍有调用方（scripts/migrate_data_v1.py 一次性迁移脚本），故兼容分支保留，
+# 只删测试。行为覆盖见 core/data_paths.py:character_growth() 的说明注释。
 
 
 # ── reality per_char_user 目录：v1 路径落在 chars/{char_id}/{artifact} ──────────
