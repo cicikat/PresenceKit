@@ -217,14 +217,49 @@ python-chess 在每次 `board.push(move)` 后自动检测终局条件：
 
 ---
 
+## 活动内对话（companion chat + 只读注入 Brief 43 §C）
+
+`POST /activity/chess/chat` — 同 gomoku，只写 activity transcript，不写主记忆
+（不写 short_term / event_log / user_hidden_state）。
+
+**只读边界（Brief 43 §C 拍板）**：companion chat 会**只读**注入主聊天最近 3 轮
+对话 + 人设摘要（personality，退 description，截断 ~300 字），用于让棋局陪聊更贴
+合角色人设与主线语境；两者均通过 `core/activity/companion_context.py` 读取，
+fail-open（读失败返回空串）。**写入边界不变**：仍不写 short_term / event_log /
+user_hidden_state / afterglow。
+
+回复在写入 transcript 前经 `core/activity/companion_text.py::strip_action_descriptions`
+清洗括号动作描写与整行 Markdown 旁白（Brief 43 §A）；LLM 调用前后接入
+`core.observe.prompt_capture`（`origin.origin="activity"`, `activity_type="chess"`），
+使 `/observe/prompt-layers/{uid}` 能看到棋局陪聊的 prompt 快照（Brief 43 §B）。
+
+LLM 输出协议（可选控制块）：
+
+```
+自然语言回复
+
+<activity_control>
+{"commentary_tone": "calm|teasing|focused|comforting"}
+</activity_control>
+```
+
+非法值静默丢弃；解析失败不影响可见回复。
+
 ## 模块文件
 
 | 文件 | 职责 |
 |---|---|
 | `core/activity/chess.py` | 棋局逻辑（`make_initial_state` / `apply_move` / `legal_moves_uci`），不含任何外部 I/O |
+| `core/activity/chess_ai.py` | 本地 AI 对手（`choose_chess_ai_move`，minimax + style） |
+| `core/activity/chess_grounding.py` | 确定性棋局事实计算（`build_chess_grounding_facts`） |
+| `core/activity/chess_companion.py` | 活动内对话 LLM 生成（`generate_reply`） |
+| `core/activity/companion_context.py` | 只读注入 helper（`load_persona_brief` / `load_main_chat_recall`，Brief 43 §C） |
+| `core/activity/companion_text.py` | 陪聊输出清洗（`strip_action_descriptions`，Brief 43 §A） |
 | `admin/routers/chess.py` | HTTP API 路由，接入 `activity_store` |
 | `core/activity/store.py` | 通用 ActivitySession 持久化层（chess 直接复用） |
 | `tests/test_chess_activity.py` | 24 个验收测试 |
+| `tests/test_chess_companion.py` | companion chat 验收测试 |
+| `tests/test_chess_grounding.py` | grounding 验收测试 |
 
 ---
 

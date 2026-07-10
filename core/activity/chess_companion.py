@@ -13,6 +13,8 @@ Boundary guarantees (must not violate):
 - Does NOT call perceive_event / trigger / scheduler / Dream.
 - LLM cannot modify board / move_history / result / status.
 - LLM cannot output a chess move on the user's behalf.
+- Read-only (Brief 43 §C): may read a persona brief + last 3 main-chat rounds via
+  companion_context for grounding. Write boundary above is unchanged.
 
 LLM output protocol (optional control block):
   自然语言回复
@@ -33,6 +35,11 @@ import re
 from core import llm_client as _llm_client
 from core.activity import transcript as _tr
 from core.activity.chess_grounding import build_chess_grounding_facts, format_chess_grounding_for_prompt
+from core.activity.companion_context import (
+    MAIN_CHAT_RECALL_HEADER,
+    load_main_chat_recall,
+    load_persona_brief,
+)
 from core.activity.companion_text import strip_action_descriptions
 from core.activity.session import now_iso
 from core.observe import prompt_capture as _prompt_capture
@@ -85,6 +92,9 @@ def _build_messages(
     user_message: str,
     facts: dict,
     char_name: str = "(角色未加载)",
+    persona_brief: str = "",
+    main_chat_recall: str = "",
+    proactive_instruction: str | None = None,
 ) -> list[dict]:
     status_label = {"active": "进行中", "completed": "已结束"}.get(
         state.get("status", "active"), state.get("status", "")
@@ -108,12 +118,24 @@ def _build_messages(
     transcript_ctx = _fmt_transcript_context(recent_transcript, char_name)
     if transcript_ctx:
         context += f"\n\n【最近对话】\n{transcript_ctx}"
-    context += f"\n\n用户说：{user_message}"
+    if proactive_instruction:
+        context += f"\n\n{proactive_instruction}"
+    else:
+        context += f"\n\n用户说：{user_message}"
 
-    return [
+    messages = [
         {"role": "system", "content": _SYSTEM_CHESS.replace("叶瑄", char_name), "_layer": "activity_system"},
-        {"role": "user", "content": context, "_layer": "activity_context"},
     ]
+    if persona_brief:
+        messages.append({"role": "system", "content": persona_brief, "_layer": "activity_persona"})
+    if main_chat_recall:
+        messages.append({
+            "role": "system",
+            "content": f"{MAIN_CHAT_RECALL_HEADER}\n{main_chat_recall}",
+            "_layer": "activity_main_chat_recall",
+        })
+    messages.append({"role": "user", "content": context, "_layer": "activity_context"})
+    return messages
 
 
 def _parse_control(raw: str) -> tuple[str, dict]:
@@ -190,13 +212,20 @@ async def generate_reply(
 
     Does NOT modify game state (board / move_history / result / status).
     Does NOT write short_term / event_log / user_hidden_state.
+    Reads (read-only) a persona summary and the last few main-chat rounds for
+    grounding; never writes to main memory.
     """
     from core.character_name_provider import get_char_name as _get_char_name
     char_name = _get_char_name(char_id)
 
     facts = build_chess_grounding_facts(state)
     recent_ctx = _tr.load_recent(char_id, uid, "chess", session_id, limit=_TRANSCRIPT_CONTEXT_LIMIT)
-    messages = _build_messages(state, recent_ctx, user_message, facts, char_name=char_name)
+    persona_brief = load_persona_brief(char_id)
+    main_chat_recall = load_main_chat_recall(uid, char_id)
+    messages = _build_messages(
+        state, recent_ctx, user_message, facts, char_name=char_name,
+        persona_brief=persona_brief, main_chat_recall=main_chat_recall,
+    )
     _capture_prompt(uid, session_id, messages, kind="chat")
     reply, control = await _call_llm(messages)
     reply = strip_action_descriptions(reply)
