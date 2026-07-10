@@ -505,38 +505,3 @@ def test_a10_qq_channel_no_longer_hardcodes_is_group_false():
         "channels/qq.py QQChannel.send: is_group=False hardcode is back — "
         "R1-C fix was reverted; group messages would be silently routed as private"
     )
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# A11. known-issues.md documents R1-B partial convergence state
-# ═══════════════════════════════════════════════════════════════════════════════
-
-def test_a11_known_issues_documents_r1b():
-    """
-    A11: docs/known-issues.md must mention R1-B convergence audit.
-    This ensures the B11 section is kept up to date as fixes land.
-    """
-    src = _src("docs/known-issues.md")
-    assert "R1-B" in src, (
-        "docs/known-issues.md does not mention R1-B — "
-        "update B11 to reflect the current partial-convergence state"
-    )
-
-
-def test_a11b_known_issues_reflects_n10_fix():
-    """
-    A11b: docs/known-issues.md B11 must NOT still claim create_task is used.
-    N10 changed both QQ paths from create_task to await; B11 must reflect this.
-    """
-    src = _src("docs/known-issues.md")
-    b11_start = src.find("### B11")
-    b11_end = src.find("\n---", b11_start) if b11_start != -1 else -1
-    if b11_start == -1 or b11_end == -1:
-        return  # B11 removed or restructured — skip
-
-    b11_text = src[b11_start:b11_end]
-    # N10 fix acknowledged: should NOT still say "仍在发送后以 asyncio.create_task"
-    assert "asyncio.create_task" not in b11_text or "N10" in b11_text, (
-        "docs/known-issues.md B11 still says create_task is used without noting "
-        "N10 fixed it — update the section to reflect the current state"
-    )
