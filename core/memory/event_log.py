@@ -493,6 +493,27 @@ def get_highlights(user_id: str, days: int = 2, max_lines: int = 5) -> str:
     return "；".join(selected) if selected else ""
 
 
+def list_days(user_id: str, *, char_id: str = DEFAULT_CHAR_ID) -> list[str]:
+    """列出该用户/角色下所有存在按天日志文件的日期（YYYY-MM-DD），新旧路径 union，按日期降序。
+
+    只统计按天分割文件（不含 full_log.md / .gz 归档），供管理面板浏览后按需 DELETE。
+    """
+    require_character_id(char_id)
+    uid = safe_user_id(user_id)
+    new_dir = _event_log_read_dir(user_id, char_id=char_id)
+    old_dir = get_paths()._p("event_log") / uid
+    dates: set[str] = set()
+    for d in (new_dir, old_dir):
+        try:
+            if d.is_dir():
+                for f in d.glob("*.md"):
+                    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", f.stem):
+                        dates.add(f.stem)
+        except Exception as e:
+            log_error("event_log.list_days", e)
+    return sorted(dates, reverse=True)
+
+
 def delete_day(user_id: str, date_str: str, *, char_id: str = DEFAULT_CHAR_ID) -> bool:
     """Delete (unlink) the YYYY-MM-DD.md file for a given day.
 

@@ -78,6 +78,54 @@ async def clear_short_term(
     return {"message": f"用户 {user_id} 角色 {resolved} 短期记忆已清除", "char_id": resolved}
 
 
+# ── 细粒度只读浏览端点（W4：补齐 list 读接口，供管理面板记忆管理页浏览后按需删除）───
+
+@router.get("/{user_id}/episodic", summary="列出情景记忆条目")
+async def list_episodic(
+    user_id: str,
+    char_id: str | None = None,
+    auth=Depends(require_scopes("memory.read")),
+):
+    from core.memory import episodic_memory
+    resolved = _resolve_char_id(char_id)
+    entries = episodic_memory.list_episodes(user_id, char_id=resolved)
+    return {"user_id": user_id, "char_id": resolved, "entries": entries, "count": len(entries)}
+
+
+@router.get("/{user_id}/mid-term", summary="列出中期记忆事件")
+async def list_mid_term(
+    user_id: str,
+    char_id: str | None = None,
+    auth=Depends(require_scopes("memory.read")),
+):
+    from core.memory import mid_term
+    resolved = _resolve_char_id(char_id)
+    events = mid_term.load(user_id, char_id=resolved)
+    return {"user_id": user_id, "char_id": resolved, "events": events, "count": len(events)}
+
+
+@router.get("/{user_id}/user-facts", summary="获取全局用户事实（跨角色，global scope）")
+async def list_user_facts(
+    user_id: str,
+    auth=Depends(require_scopes("memory.read")),
+):
+    from core.memory import user_facts
+    facts = user_facts.load_user_facts(user_id)
+    return {"user_id": user_id, "facts": facts}
+
+
+@router.get("/{user_id}/event-log", summary="列出有事件日志的日期")
+async def list_event_log_days(
+    user_id: str,
+    char_id: str | None = None,
+    auth=Depends(require_scopes("memory.read")),
+):
+    from core.memory import event_log
+    resolved = _resolve_char_id(char_id)
+    days = event_log.list_days(user_id, char_id=resolved)
+    return {"user_id": user_id, "char_id": resolved, "days": days, "count": len(days)}
+
+
 # ── 细粒度遗忘端点 ────────────────────────────────────────────────────────────
 
 class _FactBody(BaseModel):

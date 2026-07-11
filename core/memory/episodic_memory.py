@@ -642,6 +642,16 @@ def delete_episode(user_id: str, ep_id: str, *, char_id: str = DEFAULT_CHAR_ID) 
     return True
 
 
+def list_episodes(user_id: str, *, char_id: str = DEFAULT_CHAR_ID) -> list[dict]:
+    """列出该用户/角色下的全部情景记忆条目，供管理面板浏览。按 timestamp 降序排列。"""
+    try:
+        memories = _load_memories(user_id, char_id=char_id)
+    except EpisodicCorruptError:
+        logger.error("[episodic.list_episodes] 文件损坏 uid=%s", user_id)
+        return []
+    return sorted(memories, key=lambda m: m.get("timestamp", 0), reverse=True)
+
+
 def decay_all(user_id: str) -> None:
     """每日衰减，按情绪强度和被提及次数差异化处理。核心记忆不衰减。"""
     memories = _load_memories(user_id)
