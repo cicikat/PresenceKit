@@ -59,12 +59,15 @@ _REFLECT_PROMPT_TEMPLATE = """\
   "narrative_summary": "一句自然语言描述这段时期发生了什么，15字以内，供{char_name}回忆用",
   "is_closure": true/false,
   "closure_keywords": ["被结束或更新的事情关键词，如西瓜、考试；is_closure为false时为空数组"],
+  "is_state_change": true/false,
   "temporal_ref": "future/past/none 中选一个",
   "event_time_hint": "明天/周末/下周三/具体日期，无则空字符串",
   "strength": 0到1之间的浮点数（事件越重要、情绪越强则越高）
 }}
 完结/更新判定：用户明确表示先前提过的事情已经完成、结束、取消或状态已更新时，is_closure=true，
 例如“吃完了”“考完了”“不去了”“已经到了”；closure_keywords 只列被结束或更新的事情关键词。
+状态变更判定：is_closure=true 且这是持久状态的翻转（换了工作、搬了家、分手了、戒掉某习惯），
+而不是一次性事件的完结（吃完了、考完了）时，is_state_change=true，否则 is_state_change=false。
 时间判定：主要指向未来的计划或事件时 temporal_ref=future，并原样提取简短 event_time_hint；
 主要回顾过去时 temporal_ref=past；没有明确时间指向时 temporal_ref=none 且 event_time_hint 为空。
 重要：用第三人称客观陈述，不要使用文学化语言，不要写动作描写。"""
@@ -203,6 +206,8 @@ def _validate_episode(data: dict) -> bool:
         return False
     if not isinstance(data.get("is_closure"), bool):
         data["is_closure"] = False
+    if not isinstance(data.get("is_state_change"), bool):
+        data["is_state_change"] = False
     closure_keywords = data.get("closure_keywords")
     if not isinstance(closure_keywords, list):
         data["closure_keywords"] = []
@@ -331,8 +336,15 @@ def _resolve_matching_open_episodes(
     new_ep_id: str,
     *,
     char_id: str,
+    state_change: bool = False,
 ) -> list[str]:
-    """在调用方持有 uid_lock 时，关闭近 72 小时内匹配的非核心开放事件。"""
+    """在调用方持有 uid_lock 时，关闭匹配的非核心开放事件。
+
+    默认只关闭近 72 小时内的匹配事件（一次性事件完结场景）。
+    state_change=True（持久状态翻转，如搬家/离职/分手）时不受 72 小时窗口限制，
+    全时段扫描——但仍不自动关闭 is_core 记忆，只在 provenance 里记一条
+    "conflict_with_core" 观测日志，交由人工经 G2 删除 API 处理（Brief 45 §3 拍板）。
+    """
     from core.memory import episodic_memory as _ep
 
     keywords = [
@@ -347,14 +359,9 @@ def _resolve_matching_open_episodes(
     memories = _ep._load_memories(uid, char_id=char_id)
     closed_ids: list[str] = []
     for mem in memories:
-        if mem.get("status", "open") in ("resolved", "elapsed") or mem.get("is_core"):
+        if mem.get("status", "open") in ("resolved", "elapsed"):
             continue
-        timestamp = mem.get("timestamp", 0)
-        if not isinstance(timestamp, (int, float)):
-            continue
-        age_seconds = now - timestamp
-        if age_seconds < 0 or age_seconds > _CLOSURE_MATCH_WINDOW_SECONDS:
-            continue
+
         keywords_text = " ".join(
             str(value)
             for value in (mem.get("topic_keywords") or mem.get("tags", []))
@@ -362,6 +369,27 @@ def _resolve_matching_open_episodes(
         facts_text = " ".join(str(value) for value in mem.get("raw_facts", []))
         haystack = f"{keywords_text} {facts_text}"
         if not any(keyword in haystack for keyword in keywords):
+            continue
+
+        if mem.get("is_core"):
+            if state_change:
+                from core.memory.provenance_log import append as _prov_append
+                _prov_append(
+                    uid, char_id,
+                    artifact="episodic",
+                    field=str(mem.get("id", "")),
+                    before_gist=(mem.get("narrative_summary") or "")[:120],
+                    trigger_signal="conflict_with_core",
+                )
+            continue
+
+        timestamp = mem.get("timestamp", 0)
+        if not isinstance(timestamp, (int, float)):
+            continue
+        age_seconds = now - timestamp
+        if age_seconds < 0:
+            continue
+        if not state_change and age_seconds > _CLOSURE_MATCH_WINDOW_SECONDS:
             continue
 
         mem["status"] = "resolved"
@@ -803,6 +831,7 @@ async def reflect_to_episodic(
                 data.get("closure_keywords", []),
                 ep_id,
                 char_id=char_id,
+                state_change=bool(data.get("is_state_change", False)),
             )
 
         # 过滤平淡内容。closure 已在此前执行，因此中性低强度完结事件也能关闭旧记忆。

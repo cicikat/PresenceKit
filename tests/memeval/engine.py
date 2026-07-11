@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import json
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -114,6 +115,29 @@ def seed_profile_facts(uid: str, char_id: str, facts: list[dict]) -> None:
     profile = user_profile.load(uid, char_id=char_id)
     profile["important_facts"] = normalized
     user_profile.save(uid, profile, char_id=char_id)
+
+
+async def apply_profile_extract(uid: str, char_id: str, spec: dict, monkeypatch) -> None:
+    """knowledge_update 场景：真实走 user_profile.extract_and_update()（Brief 45）。
+
+    spec.seed_facts 先落一条"旧事实"到 profile（同 seed_profile_facts 格式）；
+    spec.new_message 模拟用户新发言；spec.mock_response 是打桩的 LLM 提取输出
+    （op-schema：{"op": "add"|"update"|"noop", "target_index", "text", "tag", "ts"}），
+    直接监听 core.llm_client.chat 返回，绕过真实网络调用，同时验证冲突裁决落盘逻辑本身。
+    """
+    from core.memory import user_profile
+
+    if spec.get("seed_facts"):
+        seed_profile_facts(uid, char_id, spec["seed_facts"])
+
+    import core.llm_client as _llm
+    from unittest.mock import AsyncMock
+    mock_json = json.dumps(spec["mock_response"], ensure_ascii=False)
+    monkeypatch.setattr(_llm, "chat", AsyncMock(return_value=mock_json))
+
+    await user_profile.extract_and_update(
+        uid, [{"role": "user", "content": spec["new_message"]}], char_id=char_id,
+    )
 
 
 def seed_mid_term(uid: str, char_id: str, entries: list[dict]) -> None:
@@ -301,6 +325,10 @@ async def _run_case_async(case: dict, monkeypatch, recall_mode: str, char_id: st
     apply_ambient_stubs(monkeypatch, char_name=TEST_CHAR_NAME)
     apply_recall_weights(monkeypatch, recall_mode)
     _seed_all(case, uid, char_id, monkeypatch)
+
+    profile_extract_spec = (case.get("seed") or {}).get("profile_extract")
+    if profile_extract_spec:
+        await apply_profile_extract(uid, char_id, profile_extract_spec, monkeypatch)
 
     pipeline = make_pipeline(char_id)
     from core.memory.scope import MemoryScope

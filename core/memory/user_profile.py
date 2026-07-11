@@ -144,6 +144,9 @@ async def _compress_facts(facts: list) -> list:
 
 _PENDING_OVERRIDE_THRESHOLD = 2  # 连续 N 次一致提取才落盘覆盖
 
+# important_facts 冲突裁决合法 op 集合（Brief 45）
+_VALID_FACT_OPS: frozenset[str] = frozenset({"add", "update", "noop"})
+
 
 async def update(user_id: str, new_facts: dict, *, char_id: str = DEFAULT_CHAR_ID):
     """
@@ -212,6 +215,54 @@ async def update(user_id: str, new_facts: dict, *, char_id: str = DEFAULT_CHAR_I
     _save(user_id, profile, char_id=char_id)
 
 
+async def _apply_important_facts_ops(user_id: str, ops: list, *, char_id: str = DEFAULT_CHAR_ID) -> None:
+    """按冲突裁决 op（add/update/noop）逐条落盘 important_facts 候选事实（Brief 45）。
+
+    - add：走 update() 原有的去重追加（+超30条压缩）逻辑，行为不变。
+    - update：越界/非 int/op 非法一律降级为 add（fail-open，只 WARN 不抛），
+      合法时调用 overwrite_important_fact 原地替换，trigger_signal 标 "fact_update"
+      以区别于 admin 显式删除/覆盖（"explicit_forget"）。
+    - noop：语义重复，直接丢弃。
+    """
+    if not ops:
+        return
+    current = load(user_id, char_id=char_id).get("important_facts") or []
+    current_count = len(current)
+    add_items = []
+    for raw_op in ops:
+        if not isinstance(raw_op, dict):
+            continue
+        op = raw_op.get("op", "add")
+        if op not in _VALID_FACT_OPS:
+            logger.warning(f"[user_profile] important_facts 非法 op {op!r}，降级为 add")
+            op = "add"
+        if op == "noop":
+            continue
+        if op == "update":
+            idx = raw_op.get("target_index")
+            if isinstance(idx, int) and not isinstance(idx, bool) and 0 <= idx < current_count:
+                overwrite_important_fact(
+                    user_id, idx, str(raw_op.get("text", "")),
+                    char_id=char_id, tag=str(raw_op.get("tag", "misc")),
+                    trigger_signal="fact_update",
+                )
+                continue
+            logger.warning(
+                f"[user_profile] important_facts update op target_index 非法/越界"
+                f"({idx!r}，现有 {current_count} 条），降级为 add"
+            )
+            op = "add"
+        if op == "add":
+            add_items.append({
+                "text": str(raw_op.get("text", "")),
+                "tag": str(raw_op.get("tag", "misc")),
+                "ts": float(raw_op.get("ts") or time.time()),
+            })
+
+    if add_items:
+        await update(user_id, {"important_facts": add_items}, char_id=char_id)
+
+
 async def extract_and_update(user_id: str, recent_messages: list[dict], *, char_id: str = DEFAULT_CHAR_ID):
     """
     用 LLM 从最近对话中提取新的用户信息，并更新画像
@@ -226,6 +277,11 @@ async def extract_and_update(user_id: str, recent_messages: list[dict], *, char_
     user_turns = [m for m in recent_messages if m.get("role") == "user"]
     conv_text = "\n".join(m["content"] for m in user_turns[-10:])
 
+    existing_facts = load(user_id, char_id=char_id).get("important_facts") or []
+    existing_facts_listing = "\n".join(
+        f"{i}: {_normalize_fact(f)['text']}" for i, f in enumerate(existing_facts)
+    ) or "（当前没有已记录的 important_facts）"
+
     prompt_messages = [
         {
             "role": "system",
@@ -234,14 +290,25 @@ async def extract_and_update(user_id: str, recent_messages: list[dict], *, char_
                 "注意：以下文字仅包含用户自己说的话，不含AI发言。\n"
                 "只返回 JSON 对象，不要输出任何其他内容。\n"
                 "JSON 格式：\n"
-                '{"name": null或字符串, "location": null或字符串, "pets": null或字符串, "interests": null或字符串, "occupation": null或字符串, "important_facts": [条目列表]}\n'
-                "important_facts 中每条为对象 {\"text\": \"事实内容\", \"tag\": \"分类标签\", \"ts\": 时间戳数字}。\n"
+                '{"name": null或字符串, "location": null或字符串, "pets": null或字符串, "interests": null或字符串, "occupation": null或字符串, "important_facts": [op条目列表]}\n'
+                "现有 important_facts 列表（index 从 0 开始，供你判断新信息是否与某条已有事实矛盾/更新/重复）：\n"
+                f"{existing_facts_listing}\n"
+                "important_facts 中每条候选新事实输出对象："
+                '{"op": "add"或"update"或"noop", "target_index": null或上面列表中的index数字, '
+                '"text": "事实内容", "tag": "分类标签", "ts": 时间戳数字}。\n'
+                "op 判定规则：\n"
+                "- add：全新事实，现有列表里没有对应条目，target_index 填 null。\n"
+                "- update：新信息是对某条现有事实的状态更新或矛盾（如\"搬家了\"推翻\"住在北京\"、"
+                "\"分手了\"推翻\"和男朋友在一起\"），target_index 填该条在现有列表中的 index，text 填更新后的完整事实。\n"
+                "- noop：新信息与某条现有事实语义重复（说的是同一件事，没有新增信息），"
+                "target_index 填该条 index，text 可留空。\n"
+                "没有可对照的新证据时，important_facts 填 []。\n"
                 "tag 从以下受控集合中选择：pref.music（音乐偏好）/ pref.food（饮食偏好）/ pref.media（影视/游戏偏好）/ habit（日常习惯）/ health（身体/精神状态）/ status.project（用户最近在做的事、在开发的项目、临时近况）/ stable（稳定的性格/观点/情感/关系等长期概况）/ misc（其他）。\n"
                 "情感、价值观、性格、关系定位 → stable；具体口味、在追的作品、手头项目、近期状态 → 对应 pref.*/status.project，不要塞进 stable。\n"
                 "ts 填写当前 Unix 时间戳（秒），用于判断事实新鲜度。\n"
                 "important_facts 只记录稳定的、有意义的个人事实，例如：性格特点、生活习惯、重要经历、身体状况（包括精神状态）、明确的偏好（喜欢/不喜欢）。\n"
                 "绝对不要记录：用户测试AI功能的行为、单次询问某件事、临时状态、对话中的玩笑或表情包、已经在其他字段记录的信息。\n"
-                "没有提到的字段填 null，important_facts 为空时填 []。"
+                "没有提到的字段填 null。"
             ),
         },
         {
@@ -266,7 +333,10 @@ async def extract_and_update(user_id: str, recent_messages: list[dict], *, char_
         if _issues:
             logger.warning(f"[user_profile] 内容未通过规则纠察，拒绝写入: {_issues}")
             return
+        facts_ops = new_facts.pop("important_facts", None)
         await update(user_id, new_facts, char_id=char_id)
+        if facts_ops:
+            await _apply_important_facts_ops(user_id, facts_ops, char_id=char_id)
         logger.info(f"[user_profile] 用户 {user_id} 画像已更新")
     except Exception as e:
         log_error("user_profile.extract_and_update", e)
@@ -317,11 +387,16 @@ def delete_important_fact(user_id: str, index: int, *, char_id: str = DEFAULT_CH
     return True
 
 
-def overwrite_important_fact(user_id: str, index: int, new_text: str, *, char_id: str = DEFAULT_CHAR_ID, tag: str = "misc") -> bool:
+def overwrite_important_fact(
+    user_id: str, index: int, new_text: str, *,
+    char_id: str = DEFAULT_CHAR_ID, tag: str = "misc",
+    trigger_signal: str = "explicit_forget",
+) -> bool:
     """Overwrite one important_fact entry by list index with new_text.
 
     Returns True if updated, False if index out of range.
-    Appends provenance record on success.
+    Appends provenance record on success. trigger_signal 默认 "explicit_forget"
+    （admin 显式改写场景）；事实冲突裁决（Brief 45 的 update op）传 "fact_update" 以区分来源。
     """
     import time as _time
     profile = load(user_id, char_id=char_id)
@@ -341,8 +416,8 @@ def overwrite_important_fact(user_id: str, index: int, new_text: str, *, char_id
             field=str(index),
             before_gist=old["text"][:120],
             after_gist=new_text[:120],
-            trigger_signal="explicit_forget",
-            origin={"source": "admin"},
+            trigger_signal=trigger_signal,
+            origin={"source": "admin" if trigger_signal == "explicit_forget" else "extract_and_update"},
         )
     except Exception:
         pass

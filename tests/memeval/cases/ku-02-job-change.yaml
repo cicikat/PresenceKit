@@ -1,15 +1,23 @@
 id: ku-02-job-change
 category: knowledge_update
-xfail: true
-xfail_reason: 同 ku-01：Brief 45 落地前 important_facts 只追加不裁决冲突。
 seed:
-  profile_facts:
-    - text: "在便利店打工"
-      tag: misc
-      ts_days_ago: 40
-    - text: "辞职去考研了"
-      tag: misc
-      ts_days_ago: 1
+  profile_extract:
+    seed_facts:
+      - text: "在便利店打工"
+        tag: misc
+        ts_days_ago: 40
+    new_message: "我辞职去考研了"
+    mock_response:
+      name: null
+      location: null
+      pets: null
+      interests: null
+      occupation: null
+      important_facts:
+        - op: update
+          target_index: 0
+          text: "辞职去考研了"
+          tag: misc
 query: "我现在还在便利店打工吗"
 expect:
   profile_facts_absent: ["在便利店打工"]

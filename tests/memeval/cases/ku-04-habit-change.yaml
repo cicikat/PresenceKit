@@ -1,15 +1,23 @@
 id: ku-04-habit-change
 category: knowledge_update
-xfail: true
-xfail_reason: 同 ku-01：Brief 45 落地前 important_facts 只追加不裁决冲突（habit tag 场景）。
 seed:
-  profile_facts:
-    - text: "每天都要喝一杯奶茶"
-      tag: habit
-      ts_days_ago: 80
-    - text: "已经戒奶茶一个月了"
-      tag: habit
-      ts_days_ago: 1
+  profile_extract:
+    seed_facts:
+      - text: "每天都要喝一杯奶茶"
+        tag: habit
+        ts_days_ago: 80
+    new_message: "我已经戒奶茶一个月了"
+    mock_response:
+      name: null
+      location: null
+      pets: null
+      interests: null
+      occupation: null
+      important_facts:
+        - op: update
+          target_index: 0
+          text: "已经戒奶茶一个月了"
+          tag: habit
 query: "我还有喝奶茶的习惯吗"
 expect:
   profile_facts_absent: ["每天都要喝一杯奶茶"]

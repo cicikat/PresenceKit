@@ -1,19 +1,23 @@
 id: ku-01-relocation
 category: knowledge_update
-xfail: true
-xfail_reason: >
-  Brief 45（事实更新语义 ADD/UPDATE/NOOP）落地前，important_facts 写入侧只会追加，
-  没有冲突裁决：旧值"住在北京"和新值"搬到上海了"会同时留在 important_facts 里，
-  一起 100% 注入 profile 层。Brief 45 落地后写入侧应替换旧条目而非追加，
-  本 case（校验 fetch_context 读到的 profile.important_facts）应转绿。
 seed:
-  profile_facts:
-    - text: "住在北京"
-      tag: misc
-      ts_days_ago: 60
-    - text: "搬到上海了"
-      tag: misc
-      ts_days_ago: 0
+  profile_extract:
+    seed_facts:
+      - text: "住在北京"
+        tag: misc
+        ts_days_ago: 60
+    new_message: "我搬到上海了"
+    mock_response:
+      name: null
+      location: null
+      pets: null
+      interests: null
+      occupation: null
+      important_facts:
+        - op: update
+          target_index: 0
+          text: "搬到上海了"
+          tag: misc
 query: "我现在住在哪来着"
 expect:
   profile_facts_absent: ["住在北京"]

@@ -187,6 +187,93 @@ def test_invalid_closure_signal_types_are_tolerated():
     assert data["closure_keywords"] == []
 
 
+def _state_change_closure_response(*, strength: float = 0.2) -> str:
+    return json.dumps(
+        {
+            "raw_facts": ["用户说入职了新公司"],
+            "topic_keywords": ["工作", "新公司"],
+            "emotion_peak": "neutral",
+            "narrative_summary": "用户入职了新公司",
+            "strength": strength,
+            "is_closure": True,
+            "closure_keywords": ["工作"],
+            "is_state_change": True,
+        },
+        ensure_ascii=False,
+    )
+
+
+@pytest.mark.asyncio
+async def test_reflect_state_change_closes_open_episode_older_than_72_hours(sandbox, monkeypatch):
+    episodic_memory.write_episode(
+        UID,
+        _episode("ep_old_job", keyword="工作", timestamp=time.time() - 5 * 86400),
+        char_id=CHAR_ID,
+    )
+    _append_mid_term("mt_state_change")
+
+    async def _fake_chat(*args, **kwargs):
+        return _state_change_closure_response()
+
+    monkeypatch.setattr("core.llm_client.chat", _fake_chat)
+
+    await reflect_to_episodic(
+        UID,
+        ["mt_state_change"],
+        trigger="eager",
+        char_id=CHAR_ID,
+    )
+
+    stored = episodic_memory._load_memories(UID, char_id=CHAR_ID)
+    old = next(mem for mem in stored if mem["id"] == "ep_old_job")
+    assert old["status"] == "resolved", "is_state_change=True 应越过 72 小时窗口关闭旧记忆"
+    assert old["strength"] <= 0.2
+
+
+def test_state_change_does_not_resolve_core_episode(sandbox):
+    episodic_memory.write_episode(
+        UID,
+        _episode("ep_core_job", keyword="工作", timestamp=time.time() - 5 * 86400, is_core=True),
+        char_id=CHAR_ID,
+    )
+
+    closed = _resolve_matching_open_episodes(
+        UID,
+        ["工作"],
+        "ep_closure",
+        char_id=CHAR_ID,
+        state_change=True,
+    )
+
+    assert closed == [], "is_core=True 记忆即使 state_change 也不自动关闭"
+    stored = episodic_memory._load_memories(UID, char_id=CHAR_ID)
+    assert stored[0].get("status", "open") == "open"
+
+    from core.memory import provenance_log
+    records = provenance_log.query(UID, CHAR_ID, artifact="episodic")
+    assert any(r.get("trigger_signal") == "conflict_with_core" for r in records), (
+        "is_core 冲突应留观测日志，而非静默丢弃"
+    )
+
+
+def test_non_state_change_closure_still_respects_72_hour_window(sandbox):
+    episodic_memory.write_episode(
+        UID,
+        _episode("ep_old_no_state_change", keyword="西瓜", timestamp=time.time() - 5 * 86400),
+        char_id=CHAR_ID,
+    )
+
+    closed = _resolve_matching_open_episodes(
+        UID,
+        ["西瓜"],
+        "ep_closure",
+        char_id=CHAR_ID,
+        state_change=False,
+    )
+
+    assert closed == [], "非 state_change 场景仍受 72 小时窗口限制"
+
+
 def test_write_defaults_and_resolved_prompt_wording(sandbox):
     episodic_memory.write_episode(UID, _episode("ep_defaults"), char_id=CHAR_ID)
     stored = episodic_memory._load_memories(UID, char_id=CHAR_ID)[0]
