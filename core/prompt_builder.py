@@ -1324,11 +1324,16 @@ def build(
     except Exception:
         pass
 
-    # S3 防字数坍缩：长/短两挡非对称触发（问题8），命中时注入软提示
+    # S3 防字数坍缩 + S4 防分段坍缩（问题54-B）：长度维度 + 分段维度合并进独立的
+    # anti_collapse_hint 层，各自维护 per-uid 持久化倒计时（触发后连续 hint_rounds 轮
+    # 都注入，不再是"当轮注入下轮就撤"）。长度维度沿用 detect_reply_length_collapse 的
+    # 无状态检测算法不变，只是外面套了一层衰减；分段维度的信号采集发生在
+    # capture_turn()（用 scrub 前的原始文本，见 core/memory/fixation_pipeline.py），
+    # 这里只读取+衰减，两个维度的衰减都在 get_anti_collapse_hint() 里统一处理。
     # 不叠加情感浓度权重——情感浓度高时 LLM 本就会无视纠偏提示，与本提示自然中和，无需额外系数
     try:
         from core.config_loader import get_config as _get_config_ac
-        from core.memory.short_term import detect_reply_length_collapse as _detect_length_collapse
+        from core.memory.short_term import get_anti_collapse_hint as _get_ac_hint
         _ac_cfg = _get_config_ac().get("anti_collapse", {})
         if "thresholds" in _ac_cfg or "recent_n" in _ac_cfg:
             logger.warning(
@@ -1336,14 +1341,23 @@ def build(
                 "请改用 short_max/recent_n_long/recent_n_short"
             )
         if _ac_cfg.get("enabled", True):
-            _length_hint = _detect_length_collapse(
+            _ac_hint = _get_ac_hint(
+                user_id,
                 history,
+                char_id=char_id,
                 short_max=_ac_cfg.get("short_max", 60),
                 recent_n_long=_ac_cfg.get("recent_n_long", 4),
                 recent_n_short=_ac_cfg.get("recent_n_short", 7),
+                hint_rounds=_ac_cfg.get("hint_rounds", 3),
             )
-            if _length_hint:
-                author_note_lines.append(_length_hint)
+            if _ac_hint:
+                logger.debug("[anti_collapse] hint_injected uid=%s char_id=%s", user_id, char_id)
+                _layers.append("anti_collapse_hint")
+                messages.append({
+                    "role": "system",
+                    "content": _ac_hint,
+                    "_layer": "anti_collapse_hint",
+                })
     except Exception:
         pass
 
@@ -1701,6 +1715,7 @@ KNOWN_LAYERS: list[tuple[str, str]] = [
     ("9.5_episodic_top", "最相关情景记忆置顶一条"),
     ("10_tool_result", "本轮工具执行结果"),
     ("10.5_action_trace", "工具动作痕迹：你最近做过的操作（跨轮回忆，不进裁剪链）"),
+    ("anti_collapse_hint", "反坍缩提示：长度/分段维度合并，各自持久化倒计时 hint_rounds 轮"),
     ("11_author_note", "Author's Note 人设核心提醒"),
     ("11_jailbreak", "破限预设 layer=11"),
     ("11.5_post_history", "酒馆卡历史之后约束层"),

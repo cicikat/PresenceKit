@@ -599,6 +599,30 @@ def capture_turn(
     if not envelope.can_write_memory:
         return turn_id
 
+    # Brief 54-B · 分段坍缩信号采集：必须用 scrub 之前的原始 reply——
+    # scrub_reality_output_text 按行过滤、_sanitize_assistant_message 在 load() 时才生效，
+    # 两者都可能吃掉换行或正文，破坏"是否分段"的判定依据。fail-open，异常不影响主写入路径。
+    try:
+        from core.memory.short_term import (
+            note_segment_collapse_signal,
+            DEFAULT_SEGMENT_MIN_LEN as _ac_seg_min_len_default,
+            DEFAULT_SEGMENT_RECENT_N as _ac_seg_recent_n_default,
+            DEFAULT_HINT_ROUNDS as _ac_hint_rounds_default,
+        )
+        from core.config_loader import get_config as _get_config_ac
+        _ac_cfg = _get_config_ac().get("anti_collapse", {})
+        if _ac_cfg.get("enabled", True) and reply:
+            note_segment_collapse_signal(
+                uid,
+                reply,
+                char_id=char_id,
+                segment_min_len=_ac_cfg.get("segment_min_len", _ac_seg_min_len_default),
+                segment_recent_n=_ac_cfg.get("segment_recent_n", _ac_seg_recent_n_default),
+                hint_rounds=_ac_cfg.get("hint_rounds", _ac_hint_rounds_default),
+            )
+    except Exception as e:
+        log_error("fixation_pipeline.note_segment_collapse_signal", e)
+
     # REALITY_MEMORY authority scrub — capture_turn is the final, authoritative scrub
     # point for all REALITY_MEMORY writes (short_term + event_log).  Upstream callers
     # (main.py QQ paths, turn_sink.record_assistant_turn) may have already pre-scrubbed

@@ -566,6 +566,124 @@ def detect_reply_length_collapse(
     return None
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# 反坍缩提示持久化倒计时（Brief 54-B）
+#
+# 背景：detect_reply_length_collapse() 本身无状态——每轮都是重新用 history 窗口判断，
+# 一旦窗口不再满足条件（哪怕只因中间插了一条稍短的回复），提示当场撤销，模型下一轮
+# 立刻弹回长文/密文。这里加一层 per (char_id, uid) 的内存倒计时：一旦触发，"继续注入
+# 提示"这件事延续 hint_rounds 轮（默认 3，含触发的当轮），每轮衰减 1；倒计时期间再次
+# 触发 → 重置为满值（不是叠加，也不提前清零），避免来回振荡。重启丢失可接受。
+#
+# 分段坍缩（新增维度）判定用的是 capture_turn() 收到的原始 reply 文本——在
+# scrub_reality_output_text 和 _sanitize_assistant_message 之前，因为两者都可能吃掉
+# 换行/正文，破坏"是否分段"的判定依据；历史一旦落盘重读就已经被 _sanitize_assistant_message
+# 处理过，不能反过来用 history 判断分段信号。因此分段维度的信号采集（note_segment_collapse_signal）
+# 和长度维度的检测+衰减（get_anti_collapse_hint）拆成两个入口，分别在生成落盘时/下一轮组
+# prompt 时调用，但两个维度的倒计时衰减统一在 get_anti_collapse_hint() 里做，确保"每轮调用
+# 一次就衰减一次"的节奏一致（调用方是 build()，每轮一次）。
+# ─────────────────────────────────────────────────────────────────────────────
+
+_ANTI_COLLAPSE_HINT_STATE: dict[str, dict] = {}
+
+DEFAULT_HINT_ROUNDS = 3
+DEFAULT_SEGMENT_MIN_LEN = 40
+DEFAULT_SEGMENT_RECENT_N = 2
+
+_SEGMENT_HINT_TEXT = (
+    "（最近几条回复都挤成一大段没有换行，超过两句就空一行分段，别把话都堆在一起。）"
+)
+
+
+def _anti_collapse_state_key(user_id: str, char_id: str) -> str:
+    return f"{char_id}:{user_id}"
+
+
+def _get_anti_collapse_state(user_id: str, char_id: str) -> dict:
+    key = _anti_collapse_state_key(user_id, char_id)
+    return _ANTI_COLLAPSE_HINT_STATE.setdefault(key, {
+        "length_remaining": 0,
+        "length_text": "",
+        "segment_remaining": 0,
+        "segment_streak": 0,
+    })
+
+
+def reset_anti_collapse_state(user_id: str | None = None, *, char_id: str = DEFAULT_CHAR_ID) -> None:
+    """测试/调试用：清空反坍缩倒计时状态。user_id 为 None 时清空全部（所有角色/用户）。"""
+    if user_id is None:
+        _ANTI_COLLAPSE_HINT_STATE.clear()
+        return
+    _ANTI_COLLAPSE_HINT_STATE.pop(_anti_collapse_state_key(user_id, char_id), None)
+
+
+def note_segment_collapse_signal(
+    user_id: str,
+    raw_reply: str,
+    *,
+    char_id: str = DEFAULT_CHAR_ID,
+    segment_min_len: int = DEFAULT_SEGMENT_MIN_LEN,
+    segment_recent_n: int = DEFAULT_SEGMENT_RECENT_N,
+    hint_rounds: int = DEFAULT_HINT_ROUNDS,
+) -> None:
+    """
+    记录一轮 assistant 回复的分段坍缩信号（问题54-B·2）。
+
+    raw_reply 必须是 _sanitize_assistant_message /scrub_reality_output_text 之前的原始文本
+    （调用方：`core.memory.fixation_pipeline.capture_turn()` 收到的 `reply` 参数）。
+    信号：文本不含 `\\n` 且长度 > segment_min_len 视为一次"未分段"命中；连续 segment_recent_n
+    轮命中才把 segment_remaining 重置为 hint_rounds（不足 recent_n 或中途断掉只清零 streak，
+    不动 segment_remaining——衰减统一由 get_anti_collapse_hint() 负责）。
+    """
+    state = _get_anti_collapse_state(user_id, char_id)
+    text = (raw_reply or "").strip()
+    is_bad = bool(text) and "\n" not in text and len(text) > segment_min_len
+    state["segment_streak"] = state["segment_streak"] + 1 if is_bad else 0
+    if state["segment_streak"] >= max(int(segment_recent_n), 1):
+        state["segment_remaining"] = max(int(hint_rounds), 0)
+
+
+def get_anti_collapse_hint(
+    user_id: str,
+    history: list[dict],
+    *,
+    char_id: str = DEFAULT_CHAR_ID,
+    short_max: int = 60,
+    recent_n_long: int = 4,
+    recent_n_short: int = 7,
+    hint_rounds: int = DEFAULT_HINT_ROUNDS,
+) -> str | None:
+    """
+    组装本轮要注入的反坍缩提示文案（长度维度 + 分段维度合并），供 `anti_collapse_hint`
+    prompt 层使用。每次 build() 调用一次——两个维度的剩余轮数都在这里衰减一次，
+    衰减节奏与 prompt 构建同频；未触发任何维度时返回 None。
+
+    长度维度：detect_reply_length_collapse() 无状态检测命中 → 计数器重置为 hint_rounds
+    并记下命中文案；未命中但计数器未归零 → 沿用上一次命中的文案继续倒计时。
+    分段维度：计数器由 note_segment_collapse_signal()（生成落盘时调用）驱动写入，这里只读+衰减。
+    """
+    state = _get_anti_collapse_state(user_id, char_id)
+
+    triggered_text = detect_reply_length_collapse(
+        history, short_max=short_max, recent_n_long=recent_n_long, recent_n_short=recent_n_short,
+    )
+    if triggered_text:
+        state["length_remaining"] = max(int(hint_rounds), 0)
+        state["length_text"] = triggered_text
+
+    parts: list[str] = []
+    if state["length_remaining"] > 0:
+        if state["length_text"]:
+            parts.append(state["length_text"])
+        state["length_remaining"] -= 1
+
+    if state["segment_remaining"] > 0:
+        parts.append(_SEGMENT_HINT_TEXT)
+        state["segment_remaining"] -= 1
+
+    return " ".join(parts) if parts else None
+
+
 def clear(user_id: str, *, char_id: str = DEFAULT_CHAR_ID):
     """清空指定用户的短期历史（admin 用）"""
     _save(user_id, [], char_id=char_id)
