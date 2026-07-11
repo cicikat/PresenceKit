@@ -35,3 +35,8 @@ def _active_char_id() -> str:
 @router.get("/state", summary="获取花园状态")
 async def get_garden_state(auth=Depends(require_scopes("state.read"))):
     return garden_manager.get_state(char_id=_active_char_id())
+
+
+@router.post("/water", summary="浇水（复用被动浇水工具的 force_water 逻辑）")
+async def water_garden_endpoint(auth=Depends(require_scopes("chat"))):
+    return garden_manager.force_water(char_id=_active_char_id())

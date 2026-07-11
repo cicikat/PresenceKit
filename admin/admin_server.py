@@ -33,7 +33,7 @@ from admin.routers import (
     users, memory, relations,
     system, lorebook,
     settings_proxy, settings_llm, settings_misc, settings_prompt_assets,
-    settings_screen_peek, settings_tool_loop, settings_thinking,
+    settings_screen_peek, settings_tool_loop, settings_thinking, settings_relay,
     character, chat,
     scheduler, watch, sensor,
     garden, mobile, diary, chat_log,
@@ -57,6 +57,7 @@ app.include_router(settings_prompt_assets.router, prefix="", tags=["设置-Promp
 app.include_router(settings_screen_peek.router,   prefix="", tags=["设置-屏幕内容"])
 app.include_router(settings_tool_loop.router,     prefix="", tags=["设置-工具循环"])
 app.include_router(settings_thinking.router,      prefix="", tags=["设置-思考"])
+app.include_router(settings_relay.router,         prefix="", tags=["设置-中继"])
 app.include_router(character.router,      prefix="",           tags=["角色卡"])
 app.include_router(chat.router,           prefix="",           tags=["对话"])
 app.include_router(scheduler.router,      prefix="",           tags=["调度器"])
