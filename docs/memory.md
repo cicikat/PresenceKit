@@ -287,6 +287,11 @@ clamp 单测是弱断言（未验真截顶）；ShortTermMemory.append 类封装
 
 **搜索**：`event_log.search(user_id, content, llm_client)` 异步执行，返回按行排列的第三人称事实卡。每张卡带明确的说话人归属和粗粒度时间标签，格式如下：
 
+`search()` / `get_recent_days()` 均接受可选 `since_ts` / `until_ts`（Brief 48，查询侧
+时间意图，`pipeline.fetch_context()` 解析出时间范围时透传）：非 None 时 `get_recent_days`
+不再看 `days` 参数，只扫 `[since_ts, until_ts)` 范围内的日文件，顺带省 IO；块内容过滤/
+评分逻辑不变。
+
 ```
 （今天）她提到：最近睡不好
 （前几天）叶瑄当时说：你要注意休息
@@ -469,6 +474,20 @@ episodic_memories = retrieve(
 
 候选集匹配优先用 `topic_keywords`，兼容旧记忆回退到 `tags`，同时匹配 `raw_facts` 文本。无匹配时全量参与评分。
 `status="resolved"` 的记忆在主召回和 fallback 召回中均被排除；旧记忆缺少 status 时按 open 处理。
+
+**查询侧时间过滤（Brief 48）**：`retrieve(..., since_ts=, until_ts=)` 可选参，默认
+`None`=现行为不变。非 None 时按 `occurred_at`（缺失回退 `timestamp`）过滤候选，过滤
+发生在关键词/语义候选之后、评分之前；过滤后为空则退化为"时间范围内全量记忆"参与
+评分，让"上周聊了什么"这类没有关键词的 time-only 查询也能召回；时间范围内确实
+没有任何记忆时按空结果 abstain，不越界兜底。`[since_ts, until_ts)` 为半开区间。
+调用方是 `pipeline.fetch_context()`：每轮开头调一次 `core.memory.temporal_query.
+parse_query_time_range(content, now)` 解析用户消息里的时间意图（纯规则，无 LLM；
+"昨天/前天/N天前/上周/上周末/上个月/周X（最近一个）/具体日期M月D日"；模糊表述如
+"之前/很久以前"保守返回 `None`，宁可不过滤也不误过滤），解析结果同时透传给
+`event_log.search(since_ts=, until_ts=)`（只扫范围内的日文件）与 episodic 语义预取
+`vector_store.query_async(..., since_ts=)`；不影响 `retrieve_fallback()`（本来就是
+近 7 天兜底，不接时间过滤）；解析结果记入 `recall_trace` 的 `parsed_time_range`
+字段（`null` 或 `[since, until]`），供盲区排查。
 
 **评分公式**：
 ```
