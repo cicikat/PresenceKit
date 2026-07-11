@@ -58,6 +58,8 @@
 | 多端 owner 对话串行锁 | `core/conversation_gate.py` |
 | 多角色 Stage session / 共享 transcript / 回合仲裁 | `core/stage/models.py` / `core/stage/store.py` / `core/stage/arbiter.py` / `core/stage/runner.py` |
 | 情景记忆 | `core/memory/episodic_memory.py` |
+| 情景记忆淘汰归档（遗忘=降级而非删除；上限裁剪批次压缩成"时期摘要"，v1 不进 prompt） | `core/memory/fixation_pipeline.py` → `digest_evicted_episodes()` / `handler_digest_evicted_episodes()` |
+| event_log 过期前抢救持久事实（age 27-29 天，产出走 important_facts 冲突裁决入口，不发言） | `core/scheduler/triggers/event_log_salvage.py` |
 | 情绪状态 | `core/memory/mood_state.py` |
 | 用户稳定行为模式 | `core/memory/user_identity.py` |
 | 用户隐性状态 schema + primitives（Phase 3：apply_time_decay / reinforce_body_memory / consolidate_baselines 等已实现；source 类型守卫） | `core/memory/user_hidden_state.py` |

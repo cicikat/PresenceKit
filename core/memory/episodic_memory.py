@@ -209,11 +209,22 @@ def write_episode(user_id: str, episode: dict, *, char_id: str = DEFAULT_CHAR_ID
         normal = [m for m in memories if not m.get("is_core")]
         normal.sort(key=lambda m: m.get("strength", 0))
         remove_count = min(20, len(normal))
-        remove_ids = {id(m) for m in normal[:remove_count]}
+        evicted = normal[:remove_count]
+        remove_ids = {id(m) for m in evicted}
         memories[:] = [m for m in memories if id(m) not in remove_ids]
         logger.info(
             f"[episodic] 记忆库裁剪至{len(memories)}条，保留核心{core_count}条"
         )
+        if evicted:
+            # 遗忘=降级而非删除（Brief 46 §1）：被裁条目先入队压缩归档，
+            # 再从 episodic.json 删除（上面已完成删除，入队携带全文快照）。
+            from core.post_process import slow_queue
+            slow_queue.enqueue("digest_evicted_episodes", {
+                "uid": user_id,
+                "char_id": char_id,
+                "episodes": evicted,
+                "scope": MemoryScope.reality_scope(str(user_id), char_id).to_payload(),
+            })
 
     # 双轨strength修正：LLM给初始值，规则叠加校正
     s = episode.get("strength", 0.5)

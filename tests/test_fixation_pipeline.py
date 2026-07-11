@@ -211,6 +211,140 @@ def test_write_episode_normal_write_under_cap_unchanged(sandbox):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# episodic 淘汰 → digest 归档（Brief 46 §1）
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def test_write_episode_cap_enqueues_digest_task(sandbox, monkeypatch):
+    """上限裁剪触发时，被裁的 20 条应整批入队 digest_evicted_episodes，payload 携带条目全文。"""
+    from core.data_paths import DEFAULT_CHAR_ID
+    from core.memory.episodic_memory import _save_memories, write_episode
+
+    uid = "u_ep_digest"
+    memories = [_episode_for_cap(f"normal_{i}", 0.2 + i / 1000) for i in range(199)]
+    memories.append(_episode_for_cap("core_keep", 0.0, is_core=True))
+    _save_memories(uid, memories)
+
+    enqueued = []
+    monkeypatch.setattr(
+        "core.post_process.slow_queue.enqueue",
+        lambda task_type, payload: enqueued.append((task_type, payload)),
+    )
+
+    write_episode(uid, _episode_for_cap("fresh_episode", 0.7, summary="全新事件"))
+
+    assert len(enqueued) == 1
+    task_type, payload = enqueued[0]
+    assert task_type == "digest_evicted_episodes"
+    assert payload["uid"] == uid
+    assert payload["char_id"] == DEFAULT_CHAR_ID
+    assert len(payload["episodes"]) == 20
+    evicted_ids = {e["id"] for e in payload["episodes"]}
+    assert "core_keep" not in evicted_ids       # 核心记忆不参与裁剪，不应被归档
+    assert "fresh_episode" not in evicted_ids   # 本轮新写入的不应混入被裁批次
+    # payload 携带条目全文快照（不是只有 id），digest handler 才能压缩正文
+    assert all("narrative_summary" in e for e in payload["episodes"])
+
+
+def test_write_episode_cap_result_unchanged_regardless_of_digest_enqueue(sandbox, monkeypatch):
+    """episodic.json 的裁剪结果应与现行为一致（§4.1）：加了 digest 入队不改变谁被留下。"""
+    from core.memory.episodic_memory import _load_memories, _save_memories, write_episode
+
+    uid = "u_ep_digest_result"
+    memories = [_episode_for_cap("weak_normal", 0.0)]
+    memories += [_episode_for_cap(f"normal_{i}", 0.2 + i / 1000) for i in range(198)]
+    memories.append(_episode_for_cap("core_low_strength", 0.0, is_core=True))
+    _save_memories(uid, memories)
+
+    monkeypatch.setattr("core.post_process.slow_queue.enqueue", lambda *a, **kw: None)
+
+    write_episode(uid, _episode_for_cap("fresh_episode", 0.7, summary="全新事件"))
+
+    ids = {m["id"] for m in _load_memories(uid)}
+    assert "core_low_strength" in ids   # 核心记忆仍不参与裁剪
+    assert "weak_normal" not in ids
+    assert "fresh_episode" in ids
+
+
+def test_digest_evicted_episodes_success_appends_with_lineage(sandbox, fake_llm):
+    """LLM mock 成功 → memory_digest.md 追加内容，带日期头 + 来源 ep_id 列表（血缘可追溯）。"""
+    from core.memory.fixation_pipeline import digest_evicted_episodes
+    from core.memory.path_resolver import resolve_path
+    from core.memory.scope import MemoryScope
+    from core.data_paths import DEFAULT_CHAR_ID
+
+    fake_llm.chat = AsyncMock(return_value="这段时间用户多次提到工作压力，情绪从担忧逐渐平复。")
+
+    uid = "u_digest_ok"
+    episodes = [
+        {"id": "ep_1", "occurred_at": time.time() - 86400, "narrative_summary": "第一条旧记忆"},
+        {"id": "ep_2", "occurred_at": time.time() - 43200, "narrative_summary": "第二条旧记忆"},
+    ]
+
+    asyncio.run(digest_evicted_episodes(uid, episodes))
+
+    scope = MemoryScope.reality_scope(uid, DEFAULT_CHAR_ID)
+    digest_path = resolve_path(scope, "memory_digest")
+    text = digest_path.read_text(encoding="utf-8")
+    assert "ep_1" in text and "ep_2" in text
+    assert "工作压力" in text
+    assert "<!-- raw -->" not in text
+
+
+def test_digest_evicted_episodes_llm_failure_falls_back_to_raw(sandbox, fake_llm):
+    """LLM 失败 → 原文条目以紧凑 JSON 追加到 <!-- raw --> 区块，不丢数据，不抛异常（fail-open）。"""
+    from core.memory.fixation_pipeline import digest_evicted_episodes
+    from core.memory.path_resolver import resolve_path
+    from core.memory.scope import MemoryScope
+    from core.data_paths import DEFAULT_CHAR_ID
+
+    fake_llm.chat = AsyncMock(side_effect=RuntimeError("boom"))
+
+    uid = "u_digest_fail"
+    episodes = [{"id": "ep_x", "occurred_at": time.time(), "narrative_summary": "会丢失的记忆"}]
+
+    asyncio.run(digest_evicted_episodes(uid, episodes))  # 不应抛异常
+
+    scope = MemoryScope.reality_scope(uid, DEFAULT_CHAR_ID)
+    digest_path = resolve_path(scope, "memory_digest")
+    text = digest_path.read_text(encoding="utf-8")
+    assert "<!-- raw -->" in text
+    assert "ep_x" in text
+    assert "会丢失的记忆" in text
+
+
+def test_write_episode_cap_digest_end_to_end(sandbox, fake_llm, monkeypatch):
+    """裁剪入队的 payload 经 handler 处理后应正确写入 memory_digest.md（端到端）。"""
+    from core.memory.episodic_memory import _save_memories, write_episode
+    from core.memory.fixation_pipeline import handler_digest_evicted_episodes
+    from core.memory.path_resolver import resolve_path
+    from core.memory.scope import MemoryScope
+    from core.data_paths import DEFAULT_CHAR_ID
+
+    fake_llm.chat = AsyncMock(return_value="这段时间内多次提到工作与作息变化。")
+
+    uid = "u_ep_e2e"
+    memories = [_episode_for_cap(f"normal_{i}", 0.2 + i / 1000) for i in range(200)]
+    _save_memories(uid, memories)
+
+    captured = {}
+    monkeypatch.setattr(
+        "core.post_process.slow_queue.enqueue",
+        lambda task_type, payload: captured.setdefault(task_type, payload),
+    )
+
+    write_episode(uid, _episode_for_cap("fresh_episode", 0.7, summary="全新事件"))
+
+    payload = captured["digest_evicted_episodes"]
+    asyncio.run(handler_digest_evicted_episodes(payload))
+
+    scope = MemoryScope.reality_scope(uid, DEFAULT_CHAR_ID)
+    digest_path = resolve_path(scope, "memory_digest")
+    text = digest_path.read_text(encoding="utf-8")
+    assert "工作与作息" in text
+    assert all(eid in text for eid in [e["id"] for e in payload["episodes"]])
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # capture_turn 幂等性
 # ═══════════════════════════════════════════════════════════════════════════════
 

@@ -26,6 +26,7 @@ core/scheduler/triggers/         ← 各触发器独立文件
     garden_water.py              花园自动浇水
     garden_daily.py              花园 harvest/vase 每日扫描
     hidden_state_decay.py        用户隐性状态衰减（12h）+ 基线收敛（7d），不发言
+    event_log_salvage.py         event_log 归档前抢救持久事实（24h，每次上限3文件），不发言
     watch.py                     Apple Watch 心率 / 睡眠事件
     reminders.py                 到点备忘录 proposer
     sensor_aware.py              sensor 实时状态 → 主动开口（默认关闭）
@@ -47,7 +48,7 @@ winner（含 Watch 事件到达路径）均先经 `gating._decide()`，再由
 
 随后 `loop.py` 仍用 `asyncio.gather(..., return_exceptions=True)` 跑 legacy `_check_*`。
 已迁移触发器会通过 `legacy_tick_should_send()` 在 live 模式下让路；维护型扫描
-（如 `garden_water`、`garden_daily`、`episodic_sweep`、`log_maintenance`、`hidden_state_decay`、`hidden_state_consolidate`）仍需执行状态变更。
+（如 `garden_water`、`garden_daily`、`episodic_sweep`、`log_maintenance`、`hidden_state_decay`、`hidden_state_consolidate`、`event_log_salvage`）仍需执行状态变更。
 
 ```
 owner turn ──notify_owner_turn──→ state_machine
@@ -500,6 +501,7 @@ owner QQ 消息
 | log_maintenance | loop.py 内联 |
 | episodic_sweep | episodic_sweep.py |
 | hidden_state_decay, hidden_state_consolidate | hidden_state_decay.py |
+| event_log_salvage | event_log_salvage.py |
 | diary_inject | diary.py（维护型：读日记存 diary_context，无 legacy_tick_should_send 检查）|
 
 ### 决策位置表（R2-B 后）
@@ -682,6 +684,7 @@ window 拦截、LLM 空回复或发送前异常时，不调用 execute 的 `afte
 | `garden_vase_wilted` | 4h | 低 | garden_daily | 花瓶枯萎事件发言名；事件发言前单独 check/mark |
 | `hidden_state_decay` | 12h | 维护 | hidden_state_decay | apply_time_decay：所有标量向目标半衰期衰减；不发言，stamp_trigger |
 | `hidden_state_consolidate` | 7天 | 维护 | hidden_state_decay | consolidate_baselines：sensitivity/touch baseline 轻推向 SCALAR_CENTER；不发言，stamp_trigger |
+| `event_log_salvage` | 24h | 维护 | event_log_salvage | 抢救 age 27-29 天、尚未归档的 event_log 日文件里的持久事实，产出走 Brief 45 冲突裁决入口；每次上限3文件；不发言，stamp_trigger |
 | `sensor_aware`（tick） | 30s（可配置） | 低 | sensor_aware | sensor 实时状态主动开口，默认关闭 |
 | `hr_high` | 30min | 低 | watch | 心率>100 提醒 |
 | `hr_critical` | 1h | **高** | watch | 心率>120 告警 |
