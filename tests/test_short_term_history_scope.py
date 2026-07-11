@@ -7,8 +7,9 @@ Covers:
 3.  get_history(uid, char_id="character_b") does not expose yexuan-bucket content.
 4.  ShortTermMemory.get_history(uid, char_id="character_b") reads character_b bucket only.
 5.  get_history respects max_turns truncation when char_id is supplied.
-6.  Production caller audit: no file outside short_term.py calls get_history() at module level
-    with an implicit yexuan default — at time of writing there are zero production callers.
+6.  Production caller audit: every call to get_history() outside short_term.py must pass
+    char_id explicitly — never rely on the implicit default bucket. (Brief 43 §C added the
+    first sanctioned external caller, core/activity/companion_context.py, which does.)
 """
 
 import ast
@@ -134,12 +135,13 @@ def test_get_history_max_turns_with_char_id(sandbox):
 
 # ── 6. Production caller audit ────────────────────────────────────────────────
 
-def _collect_get_history_calls(root: Path) -> list[tuple[str, int]]:
+def _collect_get_history_calls_missing_char_id(root: Path) -> list[tuple[str, int]]:
     """
     Walk all .py files under root, parse AST, find calls to get_history()
-    that are NOT inside core/memory/short_term.py itself.
+    (outside core/memory/short_term.py itself) that do NOT pass char_id as an
+    explicit keyword argument.
 
-    Returns list of (relpath, lineno) for each match.
+    Returns list of (relpath, lineno) for each such call.
     """
     hits = []
     short_term_path = root / "core" / "memory" / "short_term.py"
@@ -154,29 +156,32 @@ def _collect_get_history_calls(root: Path) -> list[tuple[str, int]]:
         for node in ast.walk(tree):
             if isinstance(node, ast.Call):
                 func = node.func
-                # Direct call: get_history(...)
-                if isinstance(func, ast.Name) and func.id == "get_history":
-                    hits.append((str(py_file.relative_to(root)), node.lineno))
-                # Attribute call: something.get_history(...)
-                elif isinstance(func, ast.Attribute) and func.attr == "get_history":
+                # Direct call: get_history(...) or attribute call: something.get_history(...)
+                is_get_history_call = (
+                    (isinstance(func, ast.Name) and func.id == "get_history")
+                    or (isinstance(func, ast.Attribute) and func.attr == "get_history")
+                )
+                if not is_get_history_call:
+                    continue
+                has_char_id_kwarg = any(kw.arg == "char_id" for kw in node.keywords)
+                if not has_char_id_kwarg:
                     hits.append((str(py_file.relative_to(root)), node.lineno))
     return hits
 
 
 def test_no_external_get_history_calls_without_char_id():
     """
-    Structural audit: no file outside short_term.py calls get_history() at
-    module level in production code (only ShortTermMemory.get_history class
-    wrapper exists, and it now forwards char_id correctly).
+    Structural audit: every call to get_history() outside short_term.py itself
+    (module-level function or ShortTermMemory.get_history wrapper) must pass
+    char_id explicitly — never rely on the implicit default bucket.
 
-    If new callers are added they MUST pass char_id explicitly; this test
-    documents the current zero-caller baseline so regressions are visible.
+    core/activity/companion_context.py::load_main_chat_recall (Brief 43 §C) is
+    a sanctioned external caller and passes char_id explicitly, so it does not
+    trip this guard; a caller that omits char_id would.
     """
     root = Path(__file__).parent.parent
 
-    # These are all the expected callers — currently only the class wrapper
-    # inside short_term.py itself, which we exclude from the scan above.
-    hits = _collect_get_history_calls(root)
+    hits = _collect_get_history_calls_missing_char_id(root)
 
     # Tests are allowed to call get_history with an explicit char_id or rely
     # on the default (legacy test compatibility).  Exclude tests/ directory.
@@ -186,7 +191,7 @@ def test_no_external_get_history_calls_without_char_id():
     ]
 
     assert production_hits == [], (
-        "Found production callers of get_history() outside short_term.py. "
-        "Each caller MUST pass char_id explicitly:\n"
+        "Found production callers of get_history() outside short_term.py "
+        "that do not pass char_id explicitly:\n"
         + "\n".join(f"  {f}:{ln}" for f, ln in production_hits)
     )
