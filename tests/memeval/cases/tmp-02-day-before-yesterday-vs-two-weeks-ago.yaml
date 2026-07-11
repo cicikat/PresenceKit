@@ -1,8 +1,5 @@
 id: tmp-02-day-before-yesterday-vs-two-weeks-ago
 category: temporal
-xfail: true
-xfail_reason: >
-  同 tmp-01：Brief 48 落地前召回侧无时间过滤，"前天" 无法排除两周前的同关键词记忆。
 seed:
   episodic:
     - id: ep_tmp02_recipe_two_weeks_ago

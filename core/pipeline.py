@@ -262,6 +262,14 @@ class Pipeline:
         from core.memory import user_identity, user_facts
         from core import user_relation, llm_client
 
+        # Brief 48: 查询侧时间意图，一轮只解析一次，非 None 时透传给 episodic /
+        # event_log / 向量预取三处（fail-open：解析失败已在 parse_query_time_range
+        # 内部兜底为 None，这里不用再包 try）。
+        import time as _time
+        from core.memory.temporal_query import parse_query_time_range
+        _parsed_time_range = parse_query_time_range(content, _time.time())
+        _since_ts, _until_ts = _parsed_time_range if _parsed_time_range else (None, None)
+
         from core.recall_gate import is_low_information as _is_low_info
         _low_info = _is_low_info(content)
         # C: recall_policy="none" 跳过 episodic/event_search/web_recall 检索层（RC6）。
@@ -290,7 +298,7 @@ class Pipeline:
                         [(h[0], round(h[1], 4)) for h in _semantic_hits],
                     )
                 _episodic_sem_hits = await _vs.query_async(
-                    uid, char_id, _query_vec, k=10, sources=["episodic"]
+                    uid, char_id, _query_vec, k=10, sources=["episodic"], since_ts=_since_ts
                 )
             except Exception as _ee:
                 logger.debug("[pipeline.fetch_context] embedding/vs.query skip: %s", _ee)
@@ -302,7 +310,8 @@ class Pipeline:
         else:
             event_search_task = asyncio.create_task(
                 event_log.search(uid, content, llm_client, char_id=char_id,
-                                 return_trace=True, query_vec=_query_vec)
+                                 return_trace=True, query_vec=_query_vec,
+                                 since_ts=_since_ts, until_ts=_until_ts)
             )
         profile_future = loop.run_in_executor(
             None, lambda: user_profile.load(uid, char_id=char_id)
@@ -348,6 +357,8 @@ class Pipeline:
                 return_trace=True,
                 query_vec=_query_vec,
                 sem_hits=_episodic_sem_hits,
+                since_ts=_since_ts,
+                until_ts=_until_ts,
             )
         from core.memory.mood_state import get_current as _get_mood
         episodic_result = format_for_prompt(
@@ -495,6 +506,11 @@ class Pipeline:
                 "lore_hits": _lore_trace,
                 "semantic_hits": [(_sid, round(_dist, 4)) for _sid, _dist in _semantic_hits],
                 "web_recall_hits": _web_recall_hits,
+                "parsed_time_range": (
+                    [round(_since_ts, 3) if _since_ts is not None else None,
+                     round(_until_ts, 3) if _until_ts is not None else None]
+                    if _parsed_time_range else None
+                ),
                 "mood": {
                     "current": _get_mood(char_id=char_id),
                     "intensity": round(_get_intensity(char_id=char_id), 3),

@@ -211,6 +211,114 @@ def test_near_term_time_wording(monkeypatch):
     assert "今天上午" in episodic_memory.format_for_prompt([earlier_today], char_name="叶瑄")
 
 
+def test_since_until_filters_out_of_range_candidate(sandbox, monkeypatch):
+    """Brief 48：同关键词两条记忆，只有 occurred_at 落在 [since, until) 内的应召回。"""
+    now_dt = datetime(2026, 6, 17, 12, 0)  # 周三
+    now = now_dt.timestamp()
+    monkeypatch.setattr(episodic_memory.time, "time", lambda: now)
+
+    recent_ts = now - 1 * 86400  # timestamp 保持新鲜，避免 decay 干扰，隔离时间过滤本身
+    # 两条 narrative_summary 刻意选字面差异大的表述，避免撞上 write_episode 的
+    # 文本近似去重（_is_similar 阈值 0.6，按字符集合重叠算，短句很容易误撞）。
+    in_range = _episode(
+        "ep_in_range", recent_ts,
+        occurred_at=now - 8 * 86400,
+        topic_keywords=["旅行"], raw_facts=["用户上周说起旅行计划"],
+        narrative_summary="两人聊到暑假想去海边度假",
+    )
+    out_of_range = _episode(
+        "ep_out_of_range", recent_ts,
+        occurred_at=now,
+        topic_keywords=["旅行"], raw_facts=["用户今天说旅行计划有变化"],
+        narrative_summary="行程取消临时改去看电影",
+    )
+    episodic_memory.write_episode(UID, in_range, char_id=CHAR_ID)
+    episodic_memory.write_episode(UID, out_of_range, char_id=CHAR_ID)
+
+    from core.memory.temporal_query import parse_query_time_range
+    since_ts, until_ts = parse_query_time_range("上周我们聊的旅行计划是什么来着", now)
+
+    result = episodic_memory.retrieve(
+        UID, topic="上周我们聊的旅行计划是什么来着", top_k=5, char_id=CHAR_ID,
+        allow_strengthen=False, since_ts=since_ts, until_ts=until_ts,
+    )
+    assert [item["id"] for item in result] == ["ep_in_range"]
+
+
+def test_time_only_query_recalls_without_keyword_match(sandbox, monkeypatch):
+    """Brief 48：纯 time-only 查询（关键词对不上）时间范围内全量记忆参与评分。"""
+    now_dt = datetime(2026, 6, 17, 12, 0)
+    now = now_dt.timestamp()
+    monkeypatch.setattr(episodic_memory.time, "time", lambda: now)
+
+    entry = _episode(
+        "ep_time_only", now - 1 * 86400,
+        occurred_at=now - 8 * 86400,
+        topic_keywords=["搬家"], raw_facts=["用户上周搬了家"],
+        narrative_summary="用户上周搬了家",
+    )
+    episodic_memory.write_episode(UID, entry, char_id=CHAR_ID)
+
+    from core.memory.temporal_query import parse_query_time_range
+    since_ts, until_ts = parse_query_time_range("上周都聊了什么", now)
+
+    result = episodic_memory.retrieve(
+        UID, topic="上周都聊了什么", top_k=5, char_id=CHAR_ID,
+        allow_strengthen=False, since_ts=since_ts, until_ts=until_ts,
+    )
+    assert [item["id"] for item in result] == ["ep_time_only"]
+
+
+def test_time_range_with_no_memories_abstains(sandbox, monkeypatch):
+    """Brief 48：关键词命中但 occurred_at 不在范围内 → 不越界兜底，返回空。"""
+    now_dt = datetime(2026, 6, 17, 12, 0)
+    now = now_dt.timestamp()
+    monkeypatch.setattr(episodic_memory.time, "time", lambda: now)
+
+    entry = _episode(
+        "ep_old", now - 1 * 86400,
+        occurred_at=now - 60 * 86400,
+        topic_keywords=["旅行"], raw_facts=["用户两个月前说起旅行计划"],
+        narrative_summary="用户两个月前聊到旅行计划",
+    )
+    episodic_memory.write_episode(UID, entry, char_id=CHAR_ID)
+
+    from core.memory.temporal_query import parse_query_time_range
+    since_ts, until_ts = parse_query_time_range("上周说的旅行计划怎么样了", now)
+
+    result = episodic_memory.retrieve(
+        UID, topic="上周说的旅行计划怎么样了", top_k=5, char_id=CHAR_ID,
+        allow_strengthen=False, since_ts=since_ts, until_ts=until_ts,
+    )
+    assert result == []
+
+
+def test_until_ts_boundary_is_exclusive(sandbox, monkeypatch):
+    """until_ts 上界排他：occurred_at == until_ts 应被排除，until_ts - 1 应被保留。"""
+    now = datetime(2026, 6, 17, 12, 0).timestamp()
+    monkeypatch.setattr(episodic_memory.time, "time", lambda: now)
+    since_ts, until_ts = now - 86400, now
+
+    at_boundary = _episode(
+        "ep_at_boundary", now - 1 * 3600, occurred_at=until_ts,
+        topic_keywords=["咖啡"], raw_facts=["用户提到咖啡"],
+        narrative_summary="同事推荐了一家新开的咖啡店",
+    )
+    just_inside = _episode(
+        "ep_just_inside", now - 1 * 3600, occurred_at=until_ts - 1,
+        topic_keywords=["咖啡"], raw_facts=["用户提到咖啡"],
+        narrative_summary="早上多喝了一杯美式提神",
+    )
+    episodic_memory.write_episode(UID, at_boundary, char_id=CHAR_ID)
+    episodic_memory.write_episode(UID, just_inside, char_id=CHAR_ID)
+
+    result = episodic_memory.retrieve(
+        UID, topic="咖啡的事", top_k=5, char_id=CHAR_ID,
+        allow_strengthen=False, since_ts=since_ts, until_ts=until_ts,
+    )
+    assert [item["id"] for item in result] == ["ep_just_inside"]
+
+
 def test_legacy_episode_and_llm_output_remain_compatible(sandbox):
     legacy_output = {
         "raw_facts": ["用户提到考试"],

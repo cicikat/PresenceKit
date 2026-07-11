@@ -1,8 +1,5 @@
 id: tmp-03-last-month-vs-this-week
 category: temporal
-xfail: true
-xfail_reason: >
-  同 tmp-01：Brief 48 落地前召回侧无时间过滤，"上个月" 无法排除本周的同关键词记忆。
 seed:
   episodic:
     - id: ep_tmp03_class_last_month

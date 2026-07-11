@@ -1,10 +1,5 @@
 id: tmp-05-time-range-empty-abstention
 category: temporal
-xfail: true
-xfail_reason: >
-  Brief 48 落地前召回侧无时间过滤：query 声称"上周"，但唯一同关键词记忆其实发生在
-  两个月前——今天 decay 地板 (0.3) 仍可能让它通过 MIN_SCORE 被错误召回，属于
-  "该 abstain 但没 abstain" 的时间意图版本。Brief 48 落地后应过滤为空。
 seed:
   episodic:
     - id: ep_tmp05_old_unrelated_to_timeframe

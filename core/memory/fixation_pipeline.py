@@ -258,6 +258,11 @@ _WEEKDAY_BY_CN = {
     "一": 0, "二": 1, "三": 2, "四": 3, "五": 4, "六": 5, "日": 6, "天": 6,
 }
 
+# M月D日 / M-D / M.D 形式的具体日期，年份可选。查询侧 temporal_query.py 复用同一模式
+# （don't fork a second copy of this regex），只是年份缺失时的兜底方向相反（那边找未来，
+# 这边找过去）。
+_DATE_MDY_RE = re.compile(r"(?:(\d{4})[-/.年])?(\d{1,2})[-/.月](\d{1,2})日?")
+
 
 def _parse_turn_ms(turn_id: str) -> float | None:
     """turn_id 形如 {uid}_{ms}；取尾段毫秒→秒。"""
@@ -324,7 +329,7 @@ def _parse_event_time_hint(event_time_hint: str, *, now: float | None = None) ->
             target_date = base.date() + timedelta(days=days_until_next_monday + target_weekday)
 
     if target_date is None:
-        date_match = re.search(r"(?:(\d{4})[-/.年])?(\d{1,2})[-/.月](\d{1,2})日?", hint)
+        date_match = _DATE_MDY_RE.search(hint)
         if date_match:
             year = int(date_match.group(1) or base.year)
             try:

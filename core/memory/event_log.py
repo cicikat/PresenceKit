@@ -285,7 +285,14 @@ def _already_appended(path: Path, line: str, turn_id: str | None) -> bool:
         return False
 
 
-def get_recent_days(user_id: str, days: int = 3, *, char_id: str = DEFAULT_CHAR_ID) -> str:
+def get_recent_days(
+    user_id: str,
+    days: int = 3,
+    *,
+    char_id: str = DEFAULT_CHAR_ID,
+    since_ts: float | None = None,
+    until_ts: float | None = None,
+) -> str:
     """
     读取最近 N 天的日志原文，拼接成一个字符串返回。
     同时读取新路径 memory/{char_id}/{uid}/event_log/ 与旧路径 event_log/{uid}/，
@@ -294,7 +301,9 @@ def get_recent_days(user_id: str, days: int = 3, *, char_id: str = DEFAULT_CHAR_
 
     参数：
         user_id - 用户 QQ 号
-        days    - 往前读几天（含今天），默认 3
+        days    - 往前读几天（含今天），默认 3；since_ts/until_ts 非 None 时忽略此参数
+        since_ts / until_ts - Brief 48：非 None 时按这个日期范围（半开区间，本地时区）
+          只扫范围内的日文件，不再看 days 参数——查询侧时间意图场景下顺带省 IO。
 
     返回：
         拼接后的日志文本，空则返回空字符串
@@ -305,11 +314,24 @@ def get_recent_days(user_id: str, days: int = 3, *, char_id: str = DEFAULT_CHAR_
     new_dir = resolve_path(scope, "event_log")
     old_dir = get_paths()._p("event_log") / uid
 
-    parts = []
     today = datetime.now()
 
-    for i in range(days):
-        target_day = today - timedelta(days=i)
+    if since_ts is not None or until_ts is not None:
+        start_date = datetime.fromtimestamp(since_ts).date() if since_ts is not None else today.date()
+        # until_ts 是排他上界，取范围内最后一天要减掉 1 秒再取日期，避免多扫一天。
+        end_date = (
+            datetime.fromtimestamp(until_ts - 1).date() if until_ts is not None else today.date()
+        )
+        day_list = []
+        d = start_date
+        while d <= end_date:
+            day_list.append(d)
+            d += timedelta(days=1)
+    else:
+        day_list = [(today - timedelta(days=i)).date() for i in range(days)][::-1]
+
+    parts = []
+    for target_day in day_list:
         date_str = target_day.strftime("%Y-%m-%d")
         try:
             text = _read_day_union(new_dir, old_dir, date_str)
@@ -318,7 +340,6 @@ def get_recent_days(user_id: str, days: int = 3, *, char_id: str = DEFAULT_CHAR_
         except Exception as e:
             log_error("event_log.get_recent_days", e)
 
-    parts.reverse()
     return "\n\n".join(parts)
 
 
@@ -330,8 +351,12 @@ async def search(
     char_id: str = DEFAULT_CHAR_ID,
     return_trace: bool = False,
     query_vec: list | None = None,
+    since_ts: float | None = None,
+    until_ts: float | None = None,
 ) -> str | tuple:
-    recent_text = get_recent_days(user_id, days=30, char_id=char_id)
+    recent_text = get_recent_days(
+        user_id, days=30, char_id=char_id, since_ts=since_ts, until_ts=until_ts
+    )
     if not recent_text:
         return ("", []) if return_trace else ""
 

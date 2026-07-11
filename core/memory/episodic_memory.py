@@ -304,10 +304,17 @@ def retrieve(
     return_trace: bool = False,
     query_vec: list | None = None,
     sem_hits: list | None = None,
+    since_ts: float | None = None,
+    until_ts: float | None = None,
 ) -> list | tuple:
     """
     按话题标签+情绪检索最相关的情景记忆，检索后强化strength。
     返回list[dict]，按相关性排序。
+
+    since_ts / until_ts（Brief 48，查询侧时间意图）：非 None 时按 occurred_at（缺失回退
+    timestamp）过滤候选，[since_ts, until_ts) 半开区间。过滤发生在关键词/语义候选之后、
+    评分之前；过滤后为空时改用时间范围内的全量记忆参与评分（"上周聊了什么"这类
+    time-only 查询没有关键词也要能召回）。默认 None=现行为，不受影响。
 
     allow_strengthen: 控制是否执行召回后写回（strength += 递减 boost / nudge_from_memory；
       Brief 47：boost = _RETRIEVAL_BOOST_BASE / (1 + retrieval_count)，收益递减防永动机）。
@@ -404,6 +411,25 @@ def retrieve(
                     candidate_ids.add(_src_id)
         except Exception as _se:
             logger.debug("[episodic.retrieve] semantic lookup failed: %s", _se)
+
+    # ── Brief 48: 查询侧时间过滤 ──────────────────────────────────────────────
+    # 在关键词/语义候选之后、评分之前过滤；过滤后为空则退化为"时间范围内全量记忆"，
+    # 让纯 time-only 查询（无关键词命中）也能召回。
+    if since_ts is not None or until_ts is not None:
+        def _occurred_at(mem: dict) -> float:
+            ts = mem.get("occurred_at")
+            return ts if isinstance(ts, (int, float)) else mem.get("timestamp", 0)
+
+        def _in_range(ts: float) -> bool:
+            if since_ts is not None and ts < since_ts:
+                return False
+            if until_ts is not None and ts >= until_ts:
+                return False
+            return True
+
+        time_candidate_ids = {m["id"] for m in memories if _in_range(_occurred_at(m))}
+        filtered_ids = candidate_ids & time_candidate_ids
+        candidate_ids = filtered_ids if filtered_ids else time_candidate_ids
 
     # 无真实词面命中且无语义命中：主路径不强行倒高强度记忆，交给 fallback。
     if topic and not candidate_ids:
