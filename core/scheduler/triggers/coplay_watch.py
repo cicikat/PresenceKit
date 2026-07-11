@@ -21,7 +21,10 @@ logger = logging.getLogger(__name__)
 
 
 async def _check_coplay_watch() -> None:
-    if not get_config().get("coplay", {}).get("enabled", False):
+    # coplay.enabled 是部署级"允许陪玩功能"开关，默认 True（缺省=允许）。
+    # 运行时唯一开关是状态机 armed/off，由用户在前端"游戏模式"驱动——不需要
+    # 用户在两处（config + 前端）都手动打开才能用（Brief 54-A，消灭双开关）。
+    if not get_config().get("coplay", {}).get("enabled", True):
         return
 
     uid = str(get_config().get("scheduler", {}).get("owner_id", "") or "")
@@ -34,6 +37,7 @@ async def _check_coplay_watch() -> None:
         char_id = (pl._active_character_id if pl else None) or "yexuan"
 
         from core.coplay import watcher, session
+        logger.debug("[coplay_watch] tick uid=%s char_id=%s", uid, char_id)
         await watcher.tick(uid, char_id=char_id)
 
         state = session.read_state(uid, char_id=char_id)

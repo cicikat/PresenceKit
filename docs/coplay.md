@@ -39,18 +39,50 @@ off → armed → active → closing → armed
 
 ```yaml
 coplay:
-  enabled: false        # 总开关（Brief 39 watcher 是否运行取决于此 + armed 状态）
+  enabled: true          # 部署级开关："是否允许陪玩功能存在"，默认 true。
+                         # 不是运行时开关——运行时唯一开关是状态机 armed/off，
+                         # 由用户在前端"游戏模式"开关驱动。只有完全不想部署此
+                         # 功能时才设 false（此时 /coplay/arm 返回 409）。
   pet_launch_cmd: ''     # active 时若桌宠未连接，用此命令拉起桌宠进程（Brief 39）
   poll_interval: 10      # watcher 轮询间隔（秒）
   game_whitelist: []     # 非 Steam 游戏手动配置：[{name, process_name}, ...]
+  steam_library_paths: []  # Steam 库路径，用于 appid → 游戏名解析
 ```
 
-## Admin API（Brief 38）
+> **历史note（Brief 54-A 修复的坑）**：早期版本 `enabled` 默认 `false`，且和前端
+> "游戏模式"状态机是两个互不知道对方存在的开关——用户开了前端开关、`enabled`
+> 仍是 `false` 时，watcher 在 `coplay_watch.py` 第一行就 return，整条链路悄无声息
+> 地什么都不做。现在 `enabled` 语义收窄为"部署级允许"，默认 `true`，只剩状态机
+> 一个运行时开关，双开关问题不再存在。
+
+## 启用步骤
+
+1. 首次使用需要在 `config.yaml` 补齐游戏检测相关字段：
+
+   ```yaml
+   coplay:
+     enabled: true
+     steam_library_paths: ['C:\Program Files (x86)\Steam']   # 按实际库路径
+     game_whitelist:
+       - {name: '底特律：化身为人', process_name: 'DetroitBecomeHuman.exe'}
+         # ⚠️ 进程名请任务管理器实测确认，作为 RunningAppID 未验证时的保底
+   ```
+
+2. **改完配置后必须重启后端进程**（新路由/新逻辑不会出现在正在运行的老进程
+   里；这是 Brief 54-A 复现问题的第二层原因——热改配置不生效，容易误以为功能
+   本身坏了）。
+3. 前端重新开一次"游戏模式"（disarm 再 arm 一次，或首次开启）。
+4. 排查检测链路：`GET /coplay/state` 响应里的 `last_probe` 字段
+   （`{running_app_id, matched_process, ts}`）反映 watcher 上一次 tick 实际探测到
+   的信号，不用开 DEBUG 日志就能看出检测卡在哪一步；DEBUG 级别日志里另有更细的
+   `[coplay_watcher] probe ...` 记录（`coplay_watch`/`coplay_watcher` logger）。
+
+## Admin API（Brief 38 + 54-A）
 
 | 方法 | 路径 | scope | 说明 |
 |---|---|---|---|
-| GET | `/coplay/state` | `activity` | 只读状态（status/game_id/game_name） |
-| POST | `/coplay/arm` | `activity` | off → armed |
+| GET | `/coplay/state` | `activity` | 只读状态：`status`/`game_id`/`game_name`/`enabled`（部署级开关值）/`last_probe`（调试字段，fail-open） |
+| POST | `/coplay/arm` | `activity` | off → armed；`coplay.enabled=false` 时返回 **409**，不 arm 一个 watcher 永远不会消费的状态 |
 | POST | `/coplay/disarm` | `activity` | 任意状态 → off，总是成功 |
 
 `armed → active → closing` 的转换只由 Brief 39 的 watcher 驱动，本 router 不提供手工

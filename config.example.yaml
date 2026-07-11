@@ -379,7 +379,10 @@ retention:
   observations:
     max_raw: 100
 coplay:
-  enabled: false
+  # 部署级开关："是否允许陪玩功能存在"，不是运行时开关——运行时是否真正轮询由
+  # 用户在前端"游戏模式"开关驱动的状态机（armed/off）决定，这里默认 true。
+  # 只有完全不想部署此功能时才设 false，此时 /coplay/arm 会返回 409。
+  enabled: true
   pet_launch_cmd: ''
   poll_interval: 10
   game_whitelist: []

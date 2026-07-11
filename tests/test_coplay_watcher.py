@@ -24,6 +24,14 @@ def _reset_poll_throttle():
 
 
 @pytest.fixture(autouse=True)
+def _reset_last_probe():
+    """watcher._last_probe 按 uid 记探测结果（Brief 54-A）；每个测试前后清空。"""
+    watcher._last_probe.clear()
+    yield
+    watcher._last_probe.clear()
+
+
+@pytest.fixture(autouse=True)
 def _enable_coplay():
     """get_config() 是跨测试共享的进程级单例——直接改字典会漏到其他测试文件，
     这里保存/还原 'coplay' 小节，避免污染。"""
@@ -125,6 +133,79 @@ async def test_tick_noop_when_off(sandbox):
     with patch("psutil.process_iter", return_value=[_fake_process("somegame.exe")]):
         await watcher.tick(UID, char_id=CHAR)
     assert session.read_state(UID, char_id=CHAR)["status"] == session.CoplayStatus.OFF.value
+
+
+@pytest.mark.asyncio
+async def test_tick_default_enabled_true_when_key_absent(sandbox):
+    """coplay.enabled 缺省即"默认允许"（Brief 54-A 消灭双开关，不再是默认关闭）。"""
+    import core.config_loader as cl
+
+    cfg = cl.get_config()
+    cfg["coplay"].pop("enabled", None)
+    session.arm(UID, char_id=CHAR)
+
+    with patch.object(watcher, "_read_steam_running_appid", return_value=None), \
+         patch("psutil.process_iter", return_value=[_fake_process("somegame.exe")]), \
+         patch.object(watcher, "_maybe_launch_pet"):
+        await watcher.tick(UID, char_id=CHAR)
+
+    assert session.read_state(UID, char_id=CHAR)["status"] == session.CoplayStatus.ACTIVE.value
+
+
+@pytest.mark.asyncio
+async def test_tick_records_last_probe_on_armed_whitelist_match(sandbox):
+    session.arm(UID, char_id=CHAR)
+
+    with patch.object(watcher, "_read_steam_running_appid", return_value=None), \
+         patch("psutil.process_iter", return_value=[_fake_process("somegame.exe")]), \
+         patch.object(watcher, "_maybe_launch_pet"):
+        await watcher.tick(UID, char_id=CHAR)
+
+    probe = watcher.get_last_probe(UID)
+    assert probe is not None
+    assert probe["running_app_id"] is None
+    assert probe["matched_process"] == "somegame"
+    assert isinstance(probe["ts"], float)
+
+
+@pytest.mark.asyncio
+async def test_tick_records_last_probe_on_armed_steam_signal(sandbox):
+    session.arm(UID, char_id=CHAR)
+
+    with patch.object(watcher, "_read_steam_running_appid", return_value="123"), \
+         patch.object(watcher, "_maybe_launch_pet"):
+        await watcher.tick(UID, char_id=CHAR)
+
+    probe = watcher.get_last_probe(UID)
+    assert probe is not None
+    assert probe["running_app_id"] == "123"
+    assert probe["matched_process"] is None
+
+
+@pytest.mark.asyncio
+async def test_tick_records_last_probe_when_nothing_detected(sandbox):
+    session.arm(UID, char_id=CHAR)
+
+    with patch.object(watcher, "_read_steam_running_appid", return_value=None), \
+         patch("psutil.process_iter", return_value=[_fake_process("notepad.exe")]):
+        await watcher.tick(UID, char_id=CHAR)
+
+    probe = watcher.get_last_probe(UID)
+    assert probe is not None
+    assert probe["running_app_id"] is None
+    assert probe["matched_process"] is None
+
+
+@pytest.mark.asyncio
+async def test_tick_does_not_record_probe_when_disabled(sandbox):
+    import core.config_loader as cl
+    cl.get_config()["coplay"]["enabled"] = False
+    session.arm(UID, char_id=CHAR)
+
+    with patch("psutil.process_iter", return_value=[_fake_process("somegame.exe")]):
+        await watcher.tick(UID, char_id=CHAR)
+
+    assert watcher.get_last_probe(UID) is None
 
 
 def test_maybe_launch_pet_spawns_when_disconnected_and_configured():

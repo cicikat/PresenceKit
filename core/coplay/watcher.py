@@ -41,9 +41,24 @@ _ACF_NAME_RE = re.compile(r'"name"\s*"([^"]*)"', re.IGNORECASE)
 
 _last_poll_ts: dict[str, float] = {}
 
+# 上一次 tick 探测到的原始信号（running_app_id / matched_process）+ 时间戳，
+# 按 uid 分桶，进程内存、不持久化（重启丢失可接受，fail-open）。
+# 供 /coplay/state 的 last_probe 调试字段读取（Brief 54-A §4：不用开 DEBUG 日志
+# 也能从前端设置页看到检测链路探测到了什么）。
+_last_probe: dict[str, dict[str, Any]] = {}
+
+# detect_running_game() 的副作用寄存位：本次探测到的原始信号，供 _record_probe
+# 读取写 DEBUG 日志 + 落 _last_probe，不影响 detect_running_game() 本身的返回值语义。
+_last_raw_signals: dict[str, str | None] = {"running_app_id": None, "matched_process": None}
+
 
 def _coplay_cfg() -> dict[str, Any]:
     return get_config().get("coplay", {}) or {}
+
+
+def get_last_probe(uid: str) -> dict[str, Any] | None:
+    """供 /coplay/state 读取上一次 tick 的探测信号。未探测过时返回 None（fail-open）。"""
+    return _last_probe.get(uid)
 
 
 def _poll_ready(uid: str) -> bool:
@@ -131,17 +146,47 @@ def _scan_whitelist_processes(whitelist: list[dict]) -> dict[str, str] | None:
 
 
 def detect_running_game() -> dict[str, str] | None:
-    """返回 {"game_id", "game_name"} 或 None。Steam 信号优先，白名单兜底。"""
+    """返回 {"game_id", "game_name"} 或 None。Steam 信号优先，白名单兜底。
+
+    副作用：把本次探测到的原始信号（running_app_id / 匹配到的白名单进程名）写入
+    模块级 `_last_raw_signals`，供 `_record_probe()` 写 DEBUG 日志 + 落
+    `_last_probe`（不影响本函数返回值语义，调用方/既有测试无感知）。
+    """
     cfg = _coplay_cfg()
     library_paths = cfg.get("steam_library_paths") or []
     whitelist = cfg.get("game_whitelist") or []
 
     appid = _read_steam_running_appid()
+    matched_process: str | None = None
+    result: dict[str, str] | None = None
+
     if appid:
         name = _resolve_appid_to_name(appid, library_paths) or f"App {appid}"
-        return {"game_id": f"steam:{appid}", "game_name": name}
+        result = {"game_id": f"steam:{appid}", "game_name": name}
+    else:
+        found = _scan_whitelist_processes(whitelist)
+        if found:
+            matched_process = found["game_id"]
+            result = found
 
-    return _scan_whitelist_processes(whitelist)
+    _last_raw_signals["running_app_id"] = appid
+    _last_raw_signals["matched_process"] = matched_process
+    return result
+
+
+def _record_probe(uid: str) -> None:
+    """把 `_last_raw_signals` 记为本次 tick 的探测结果：DEBUG 日志 + `_last_probe`。"""
+    running_app_id = _last_raw_signals.get("running_app_id")
+    matched_process = _last_raw_signals.get("matched_process")
+    logger.debug(
+        "[coplay_watcher] probe uid=%s running_app_id=%s matched_process=%s",
+        uid, running_app_id, matched_process,
+    )
+    _last_probe[uid] = {
+        "running_app_id": running_app_id,
+        "matched_process": matched_process,
+        "ts": time.time(),
+    }
 
 
 def _is_tracked_game_still_running(game_id: str) -> bool:
@@ -178,7 +223,10 @@ async def tick(uid: str, *, char_id: str = DEFAULT_CHAR_ID) -> None:
     """
     from core.coplay import session
 
-    if not _coplay_cfg().get("enabled", False):
+    # coplay.enabled 是部署级"允许陪玩功能"开关，默认 True——运行时唯一开关是
+    # 状态机 armed/off（由用户在前端"游戏模式"驱动），这里的判定本身不变，只是
+    # 缺省语义从"默认关闭"改成"默认允许"（Brief 54-A，消灭双开关）。
+    if not _coplay_cfg().get("enabled", True):
         return
     if not _poll_ready(uid):
         return
@@ -188,6 +236,7 @@ async def tick(uid: str, *, char_id: str = DEFAULT_CHAR_ID) -> None:
 
     if status == session.CoplayStatus.ARMED.value:
         found = detect_running_game()
+        _record_probe(uid)
         if found:
             session.enter_active(
                 uid, game_id=found["game_id"], game_name=found["game_name"], char_id=char_id,
@@ -196,7 +245,9 @@ async def tick(uid: str, *, char_id: str = DEFAULT_CHAR_ID) -> None:
 
     elif status == session.CoplayStatus.ACTIVE.value:
         game_id = state.get("game_id") or ""
-        if game_id and not _is_tracked_game_still_running(game_id):
+        still_running = bool(game_id) and _is_tracked_game_still_running(game_id)
+        _record_probe(uid)
+        if game_id and not still_running:
             session.enter_closing(uid, char_id=char_id)
         else:
             _maybe_launch_pet()  # 游戏中桌宠掉线了也顺手重连
