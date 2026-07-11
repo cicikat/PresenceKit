@@ -13,6 +13,7 @@ core/memory/fixation_pipeline.py — 信息固化显式 pipeline
 
 import json
 import logging
+import math
 import re
 import time
 from datetime import datetime, timedelta
@@ -36,6 +37,7 @@ _CONSOLIDATE_MIN_HOURS = 24        # 时间门槛（小时，条件 3）
 _CONSOLIDATE_MIN_EPISODIC_COUNT = 3  # 条件 3 生效时最少 episodic 数
 _CLOSURE_MATCH_WINDOW_SECONDS = 72 * 3600
 _RESOLVED_STRENGTH_FLOOR = 0.2
+_COUNTER_EVIDENCE_HALFLIFE_DAYS = 30  # identity-1: counter_evidence_count 半衰期衰减（Brief 47）
 
 # fixation_state 字段默认值（扩展了 4 个基本字段 + high_strength_since_last）
 _STATE_DEFAULTS: dict = {
@@ -1075,6 +1077,41 @@ async def handler_digest_evicted_episodes(payload: dict) -> None:
     )
 
 
+def _decay_counter_evidence(old_identity: dict, now: float) -> tuple[dict, list[dict]]:
+    """
+    identity-1：counter_evidence_count 只增不减会被历史反证永久压死某维度，
+    这里在每次 consolidate 时按 last_conflict_at 做半衰期衰减再参与判断（Brief 47）。
+    last_conflict_at 缺失（旧数据）视为兼容层，不猜、不衰减。
+    返回 (衰减后的 identity 副本, 实际发生变化的维度列表[{key, before, after}])。
+    """
+    decayed = dict(old_identity or {})
+    events: list[dict] = []
+    for key, dim in (old_identity or {}).items():
+        if not isinstance(dim, dict):
+            continue
+        last_conflict_at = dim.get("last_conflict_at")
+        cev = dim.get("counter_evidence_count", 0)
+        if not last_conflict_at or not cev:
+            continue
+        days = max(0.0, (now - last_conflict_at) / 86400)
+        new_cev = math.floor(cev * (0.5 ** (days / _COUNTER_EVIDENCE_HALFLIFE_DAYS)))
+        if new_cev == cev:
+            continue
+        new_dim = dict(dim)
+        if new_cev < 1:
+            new_dim["counter_evidence_count"] = 0
+            new_dim["last_conflict_at"] = None
+        else:
+            new_dim["counter_evidence_count"] = new_cev
+        decayed[key] = new_dim
+        events.append({
+            "key": key,
+            "before": cev,
+            "after": new_dim["counter_evidence_count"],
+        })
+    return decayed, events
+
+
 async def _synthesize_identity(
     uid: str,
     old_identity: dict,
@@ -1223,9 +1260,12 @@ async def consolidate_to_identity(uid: str, llm_client, *, char_id: str = DEFAUL
         _log_fixation("consolidate_to_identity", uid, {}, "ok", "no unconsolidated episodes")
         return True
 
+    # identity-1: counter_evidence_count 半衰期衰减，衰减后的版本参与 LLM 合成判断（Brief 47）
+    decayed_identity, decay_events = _decay_counter_evidence(old_identity, time.time())
+
     # LLM 合成（锁外）
     new_identity = await _synthesize_identity(
-        uid, old_identity, new_episodes, user_profile_data, llm_client
+        uid, decayed_identity, new_episodes, user_profile_data, llm_client
     )
 
     if new_identity is None:
@@ -1233,9 +1273,10 @@ async def consolidate_to_identity(uid: str, llm_client, *, char_id: str = DEFAUL
         _log_fixation("consolidate_to_identity", uid, {}, "error", "LLM 合成失败")
         raise RuntimeError(f"consolidate_to_identity LLM 合成失败: uid={uid}")
 
-    # 非空 → 写 identity；空 dict → LLM 判断无更新，跳过写入，仍标记 episodes
-    if new_identity:
-        ok = await _ui.save(uid, new_identity, char_id=char_id)
+    # 非空 → 写 identity；空 dict 但有衰减 → 仍写回衰减结果；都没有 → 跳过写入，仍标记 episodes
+    if new_identity or decay_events:
+        to_save = {**decayed_identity, **new_identity}
+        ok = await _ui.save(uid, to_save, char_id=char_id)
         if not ok:
             _log_fixation("consolidate_to_identity", uid, {}, "error", "identity 写入失败")
             raise RuntimeError(f"consolidate_to_identity identity 写入失败: uid={uid}")
@@ -1258,6 +1299,15 @@ async def consolidate_to_identity(uid: str, llm_client, *, char_id: str = DEFAUL
                     after_gist=_new_text[:120],
                     trigger_signal=_trigger_signal,
                 )
+        for _ev in decay_events:
+            _prov_append(
+                uid, char_id,
+                artifact="identity",
+                field=_ev["key"],
+                before_gist=str(_ev["before"]),
+                after_gist=str(_ev["after"]),
+                trigger_signal="counter_decay",
+            )
     else:
         _log_fixation("consolidate_to_identity", uid, {}, "ok", "no dimension updated")
 

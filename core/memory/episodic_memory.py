@@ -21,6 +21,9 @@ from core.data_paths import DEFAULT_CHAR_ID
 
 logger = logging.getLogger(__name__)
 
+# Brief 47: 召回增强收益递减，boost = _RETRIEVAL_BOOST_BASE / (1 + retrieval_count_before)
+_RETRIEVAL_BOOST_BASE = 0.15
+
 
 class EpisodicCorruptError(Exception):
     """Raised when episodic.json exists but cannot be parsed. Prevents silent memory wipe."""
@@ -306,7 +309,8 @@ def retrieve(
     按话题标签+情绪检索最相关的情景记忆，检索后强化strength。
     返回list[dict]，按相关性排序。
 
-    allow_strengthen: 控制是否执行召回后写回（strength += 0.15 / nudge_from_memory）。
+    allow_strengthen: 控制是否执行召回后写回（strength += 递减 boost / nudge_from_memory；
+      Brief 47：boost = _RETRIEVAL_BOOST_BASE / (1 + retrieval_count)，收益递减防永动机）。
       N2-A: fetch_context（读路径）调用时必须传 allow_strengthen=False，
       避免"召回→增强→更易召回"的永动机效应。
       post_process / 写路径可保持默认 True（向后兼容）。
@@ -542,8 +546,10 @@ def retrieve(
                 if now - last < _COOLDOWN_S:
                     continue
                 ceil = 1.0 if mem.get("is_core") else _STRENGTH_CEIL_NONCORE
-                mem["strength"] = min(ceil, mem.get("strength", 0.5) + 0.15)
-                mem["retrieval_count"] = mem.get("retrieval_count", 0) + 1
+                retrieval_count_before = mem.get("retrieval_count", 0)
+                boost = _RETRIEVAL_BOOST_BASE / (1 + retrieval_count_before)
+                mem["strength"] = min(ceil, mem.get("strength", 0.5) + boost)
+                mem["retrieval_count"] = retrieval_count_before + 1
                 mem["last_retrieved"] = now
                 changed = True
 
