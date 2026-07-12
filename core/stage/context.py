@@ -21,6 +21,27 @@ def render_presence(stage: Stage, *, viewer_id: str, chain_reply: bool = False) 
     )
     if chain_reply:
         text += "\n你正在回应上一位角色：回应但不要复述或简单附和上一位的话，说出你自己的看法或岔开。"
+    try:
+        from core.stage.char_relations import load_relation
+
+        relation_lines: list[str] = []
+        for index, char_a in enumerate(stage.roster):
+            for char_b in stage.roster[index + 1:]:
+                relation = load_relation(char_a, char_b)
+                if not relation:
+                    continue
+                name_a, name_b = get_char_name(char_a), get_char_name(char_b)
+                a_of_b = relation.get("a_of_b", {}).get("summary", "")
+                b_of_a = relation.get("b_of_a", {}).get("summary", "")
+                if a_of_b:
+                    relation_lines.append(f"{name_a}对{name_b}的印象：{a_of_b}")
+                if b_of_a:
+                    relation_lines.append(f"{name_b}对{name_a}的印象：{b_of_a}")
+        if relation_lines:
+            text += "\n\n【角色间既有印象】\n" + "\n".join(relation_lines)
+    except Exception:
+        # Presence context is optional and must never block a Stage turn.
+        pass
     return text
 
 
@@ -70,8 +91,10 @@ def render_transcript(
 
 
 def render_projection_segment(stage: Stage, transcript: list[TranscriptEntry]) -> str:
+    from core.config_loader import get_user_display_name
+
     lines: list[str] = []
     for entry in transcript:
-        speaker = "owner" if entry.speaker_id == "owner" else get_char_name(entry.speaker_id)
+        speaker = get_user_display_name() if entry.speaker_id == "owner" else get_char_name(entry.speaker_id)
         lines.append(f"{speaker}：{entry.content}")
     return "\n".join(lines)

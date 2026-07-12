@@ -1634,5 +1634,7 @@ def register_slow_handlers() -> None:
     slow_queue.register_handler("trait_tracker_update",    _handler_trait_tracker_update)
     from core.post_process.toy_autogrow import handler_toy_autogrow
     slow_queue.register_handler("toy_autogrow",            handler_toy_autogrow)
+    from core.stage.char_relations import handler_update_char_relations
+    slow_queue.register_handler("update_char_relations",   handler_update_char_relations)
     from core.growth.practice_session import handler_practice_session
     slow_queue.register_handler("practice_session",        handler_practice_session)

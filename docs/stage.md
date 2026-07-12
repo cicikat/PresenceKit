@@ -69,8 +69,10 @@ speaker_id / content / timestamp / _turn_id / triggered_by
   `2.2_stage_presence` 与 `4.2_stage_transcript` 两个独立 prompt 层注入。
 - Stage 回复通过 `channels.registry.broadcast(..., char_id=speaker_id)` 发送，旧客户端仍可忽略字段。
 - 每轮完成后，未投影 transcript 按 roster 逐角色入 `summarize_to_midterm` slow queue；
-  mid-term 记录携带 `source="group:{group_id}"` 和 `memory_strength=0.7`，后续仍由原 fixation
-  pipeline 晋升 episodic / identity。
+  输入保留说话人名前缀，且按本段的发言/被点名次数计算 `memory_strength`（0.4–0.9）。
+  mid-term 记录仍携带 `source="group:{group_id}"`，后续由原 fixation pipeline 晋升。
+- 同轮 AI↔AI 的直接接话会异步更新全局双向关系记录；冷却 6h，关系仅作为 presence 提示，
+  不参与仲裁打分，也绝不存 owner↔角色关系。
 - `projection_cursor` 保证投影幂等；transcript 裁剪时游标同步回退，避免漏掉后续新消息。
 - scheduler cooldown 支持显式 `char_id` 键。统一执行层双写角色键与旧全局键，旧触发器兼容，
   新的多角色 proposal 可按角色隔离。

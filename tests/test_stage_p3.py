@@ -103,7 +103,8 @@ async def test_projection_enqueues_per_character_and_is_idempotent(sandbox, monk
     assert second == 0
     assert {payload["char_id"] for _, payload in jobs} == {"yexuan", "yexuanJ-5412"}
     assert all(payload["source"] == "group:group-projection" for _, payload in jobs)
-    assert all(payload["memory_strength"] == 0.7 for _, payload in jobs)
+    strengths = {payload["char_id"]: payload["memory_strength"] for _, payload in jobs}
+    assert strengths == {"yexuan": 0.55, "yexuanJ-5412": 0.4}
     assert all(payload["scope"]["character_id"] == payload["char_id"] for _, payload in jobs)
     assert load_stage("group-projection").projection_cursor == 2
 

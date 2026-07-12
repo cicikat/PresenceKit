@@ -531,20 +531,27 @@ async def summarize_turn(user_msg: str, reply: str, tags: list[str] | None = Non
     if len(user_msg) + len(reply) < _SUMMARIZE_MIN_TOTAL_LEN:
         return _rule_fallback(user_msg, reply, tags)
     try:
+        is_group_projection = "group_chat" in (tags or [])
+        system_prompt = _SUMMARIZE_SYSTEM
+        if is_group_projection:
+            system_prompt += (
+                "\n这是群聊投影：必须用第三人称并保留名字归属，例如“甲说了…，乙回应…”。"
+                "不得把不同说话人的内容合并成无主语陈述。"
+            )
         mc = get_model_client("summary")
         response = await mc.client.chat.completions.create(
             model=mc.model,
             messages=[
-                {"role": "system", "content": _SUMMARIZE_SYSTEM},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"用户:{user_msg}\n回复:{reply}"},
             ],
-            max_tokens=40,
+            max_tokens=80 if is_group_projection else 40,
             temperature=0.3,
             timeout=_CALL_TIMEOUTS["summary"],
         )
         result = (response.choices[0].message.content or "").strip()
         result = result.strip('"\'"""''')
-        result = result[:30]
+        result = result[:60 if is_group_projection else 30]
         if not result:
             return _rule_fallback(user_msg, reply, tags)
         return result

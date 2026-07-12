@@ -192,20 +192,34 @@ async def get_group(group_id: str, _auth=Depends(require_scopes("chat"))):
 
 
 @router.get("/{group_id}/relations", summary="读取群聊角色双向印象")
-async def get_group_relations(group_id: str, _auth=Depends(require_scopes("state.read"))):
-    """Brief 64 read surface. Brief 55 data is optional, so an absent file is empty."""
-    _require_stage(group_id)
-    path = get_paths().stage_char_relations(group_id=group_id)
-    if not path.exists():
-        return {"group_id": group_id, "relations": [], "count": 0}
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {"group_id": group_id, "relations": [], "count": 0}
-    relations = data.get("relations", data) if isinstance(data, dict) else data
-    if not isinstance(relations, (list, dict)):
-        relations = []
+async def get_group_relations(group_id: str, _auth=Depends(require_scopes("memory.read"))):
+    """Return the global pair records relevant to this Stage roster."""
+    from itertools import combinations
+    from core.stage.char_relations import load_relation
+
+    stage = _require_stage(group_id)
+    relations = [
+        relation for pair in combinations(stage.roster, 2)
+        if (relation := load_relation(*pair)) is not None
+    ]
     return {"group_id": group_id, "relations": relations, "count": len(relations)}
+
+
+@router.delete("/{group_id}/relations/{char_a}/{char_b}", summary="删除角色双向印象")
+async def delete_group_relation(
+    group_id: str,
+    char_a: str,
+    char_b: str,
+    _auth=Depends(require_scopes("admin")),
+):
+    from core.stage.char_relations import delete_relation
+
+    stage = _require_stage(group_id)
+    if char_a not in stage.roster or char_b not in stage.roster or char_a == char_b:
+        raise HTTPException(status_code=422, detail="角色必须是该群的两个不同成员")
+    if not delete_relation(char_a, char_b, uid=stage.owner_uid):
+        raise HTTPException(status_code=404, detail="角色关系不存在")
+    return {"ok": True, "deleted": sorted((char_a, char_b))}
 
 
 # ── send ─────────────────────────────────────────────────────────────────────

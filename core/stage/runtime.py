@@ -97,4 +97,8 @@ async def run_reality_stage_turn(
             logger.debug("[stage.runtime] WS group_round_end push failed", exc_info=True)
 
     await enqueue_reality_projection(group_id)
+    if result.replies:
+        from core.stage.char_relations import enqueue_relation_updates
+
+        await enqueue_relation_updates(group_id, result.turn_id)
     return result
