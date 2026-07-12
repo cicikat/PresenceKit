@@ -5,11 +5,11 @@ from core.character_name_provider import get_char_name
 from core.stage.models import Stage, TranscriptEntry
 
 
-def render_presence(stage: Stage, *, viewer_id: str) -> str:
+def render_presence(stage: Stage, *, viewer_id: str, chain_reply: bool = False) -> str:
     me = get_char_name(viewer_id)
     others = [get_char_name(c) for c in stage.roster if c != viewer_id]
     joined = "、".join(others) if others else "没有其他角色"
-    return (
+    text = (
         "【群聊在场感】\n"
         f"现在你进入了群聊，你是「{me}」，在场的还有：{joined}。"
         "你说的话其他在场角色也看得到。\n"
@@ -19,6 +19,9 @@ def render_presence(stage: Stage, *, viewer_id: str) -> str:
         "你可以直接回应、反驳、补充或调侃其他角色（点名也行），"
         "像真实的多人对话那样彼此接话，而不是各说各的。"
     )
+    if chain_reply:
+        text += "\n你正在回应上一位角色：回应但不要复述或简单附和上一位的话，说出你自己的看法或岔开。"
+    return text
 
 
 def render_transcript(
@@ -32,20 +35,29 @@ def render_transcript(
     lines: list[str] = []
     last_other: tuple[str, str] | None = None
     for entry in transcript[-limit:]:
+        content = entry.content
         if entry.speaker_id == "owner":
             speaker = "owner"
-        elif entry.speaker_id == viewer_id:
-            speaker = "你"
         else:
-            speaker = get_char_name(entry.speaker_id)
-            last_other = (speaker, entry.content)
+            # Prompt views are intentionally lossy for every AI line. The shared
+            # transcript and delivery retain the exact original text.
+            from core.memory.short_term import _sanitize_assistant_message
+
+            content = _sanitize_assistant_message(entry.content, stage.owner_uid)
+            if entry.speaker_id == viewer_id:
+                speaker = "你"
+            else:
+                speaker = get_char_name(entry.speaker_id)
+                last_other = (speaker, content)
+        if entry.speaker_id == viewer_id:
+            speaker = "你"
         fresh = (
             current_turn_id is not None
             and entry.turn_id == current_turn_id
             and entry.speaker_id not in ("owner", viewer_id)
         )
         prefix = "（刚说）" if fresh else ""
-        lines.append(f"{prefix}{speaker}：{entry.content}")
+        lines.append(f"{prefix}{speaker}：{content}")
     text = "\n".join(lines)
     if last_other is not None:
         name, content = last_other

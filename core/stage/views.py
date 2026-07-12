@@ -42,7 +42,11 @@ class StageCharacterView:
             latest,
             frozen_scope=scope,
         )
-        context["stage_presence"] = render_presence(stage, viewer_id=self.char_id)
+        context["stage_presence"] = render_presence(
+            stage,
+            viewer_id=self.char_id,
+            chain_reply=triggered_by not in ("user", "owner"),
+        )
         context["stage_transcript"] = render_transcript(
             stage,
             transcript,

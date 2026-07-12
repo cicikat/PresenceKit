@@ -10,6 +10,7 @@ from typing import Awaitable, Callable
 
 from core.conversation_gate import conversation_lock
 from core.safe_write import rotate_jsonl_if_needed, safe_append_jsonl
+from core.memory.episodic_memory import _texture_similarity
 from core.stage.arbiter import score_candidates
 from core.stage.models import Stage, TranscriptEntry
 from core.stage.store import append_transcript, load_stage, load_transcript
@@ -21,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 _ARBITER_TRACE_MAX_BYTES = 5 * 1024 * 1024
 _ARBITER_TRACE_KEEP_N = 3
+ECHO_SIM_THRESHOLD = 0.55
 
 
 @dataclass(frozen=True)
@@ -86,13 +88,17 @@ async def _generate_and_append(
     triggered_by: str,
     generate_reply: GenerateReply,
     deliver_reply: DeliverReply | None,
-) -> TranscriptEntry | None:
+    *,
+    previous_ai_content: str | None = None,
+) -> tuple[TranscriptEntry | None, bool]:
     content = str(
         await _resolve(generate_reply(stage, speaker_id, list(transcript), turn_id, triggered_by))
         or ""
     ).strip()
     if not content:
-        return None
+        return None, False
+    if previous_ai_content and _texture_similarity(content, previous_ai_content) > ECHO_SIM_THRESHOLD:
+        return None, True
     entry = TranscriptEntry(
         speaker_id=speaker_id,
         content=content,
@@ -105,7 +111,7 @@ async def _generate_and_append(
     transcript.append(entry)
     if deliver_reply is not None:
         await _resolve(deliver_reply(speaker_id, content, turn_id))
-    return entry
+    return entry, False
 
 
 async def run_owner_turn(
@@ -158,7 +164,7 @@ async def run_owner_turn(
                 )
                 break
             attempted.add(pick.char_id)
-            entry = await _generate_and_append(
+            entry, _echo_cut = await _generate_and_append(
                 stage,
                 pick.char_id,
                 transcript,
@@ -191,7 +197,7 @@ async def run_owner_turn(
                     )
                 break
             pick = ranked[0]
-            entry = await _generate_and_append(
+            entry, echo_cut = await _generate_and_append(
                 stage,
                 pick.char_id,
                 transcript,
@@ -199,11 +205,13 @@ async def run_owner_turn(
                 latest_speaker,
                 generate_reply,
                 deliver_reply,
+                previous_ai_content=transcript[-1].content,
             )
             _append_arbiter_trace(
                 stage, transcript[:-1] if entry is not None else transcript, ranked,
                 turn_id=resolved_turn_id, phase="B",
                 selected=[entry.speaker_id] if entry is not None else [], chain_depth=ai_chain_depth,
+                extra={"echo_cut": True} if echo_cut else None,
             )
             if entry is None:
                 break
