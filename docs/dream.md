@@ -505,3 +505,9 @@ import（它只传递预加载文本给 prompt，不读 dream 数据）。
 - **dream settings 仍保留旧路径降级读**：`_LAYOUT_DREAM = "v1"` 后写入
   `data/runtime/dreams/{char_id}/settings/{uid}.json`，读取仍可通过 `for_read()` 回退旧
   `data/dreams/settings/{uid}.json`。清理旧文件前先看 fallback 观测。
+
+
+### 跨世界身份稳定性观测（当前）
+
+`data/runtime/dreams/{char_id}/invariants/{uid}.json` 与 impressions 物理分离，记录世界无关的处境到反应模式。它只供 `GET /dream/invariants` 管理面和明信片出站生成读取，绝不进现实或梦境 prompt，不延长 impression 窗口。
+

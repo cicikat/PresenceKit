@@ -28,6 +28,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from admin.auth import require_scopes
 from core.config_loader import get_config
+from core.data_paths import DEFAULT_CHAR_ID
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -50,6 +51,16 @@ _PATCH_ALLOWED = frozenset({
     "memory_access", "boundary_level", "world_layer", "lucid_mode",
     "enable_dream_lorebook", "jailbreak_presets", "display",
 })
+
+@router.get("/dream/invariants", summary="跨世界身份稳定性（只读）")
+async def dream_invariants_get(_auth=Depends(require_scopes("activity"))):
+    from core.pipeline_registry import get as _get_pipeline
+    from core.dream.invariants import load
+    pl = _get_pipeline()
+    char_id = (pl._active_character_id if pl else None) or DEFAULT_CHAR_ID
+    entries = load(_owner_uid(), char_id=char_id)
+    entries.sort(key=lambda item: (bool(item.get("contradicted_by")), int(item.get("count") or 0)), reverse=True)
+    return {"entries": entries}
 
 _SAFE_PRESET_RE = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
 

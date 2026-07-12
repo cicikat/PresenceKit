@@ -262,6 +262,9 @@ class DataPaths:
     def dreams_postcards_dir(self, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
         return self._p("runtime", "dreams", char_id, "postcards")
 
+    def dreams_invariants_dir(self, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
+        return self._p("runtime", "dreams", char_id, "invariants")
+
     def dream_state_path(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
         return self._p("runtime", "dreams", char_id, "state", safe_user_id(user_id), "dream_state.json")
 

@@ -532,6 +532,7 @@ async def _do_close_dream(uid: str, dream_id: str, exit_type: str) -> None:
     state = read_state(uid)
     char_id = _state_char_id(state, "_do_close_dream", uid, dream_id)
     dream_mode = state.get("dream_mode", "sandbox")
+    world_id = str(state.get("frozen_world") or "unknown")
 
     from core.dream.dream_flow import append_status_shift
     state = append_status_shift(state, "closing")
@@ -540,7 +541,7 @@ async def _do_close_dream(uid: str, dream_id: str, exit_type: str) -> None:
         archive_current(uid, dream_id, char_id=char_id)
 
     asyncio.create_task(
-        _generate_summary_bg(uid, dream_id, exit_type, char_id=char_id, dream_mode=dream_mode)
+        _generate_summary_bg(uid, dream_id, exit_type, char_id=char_id, dream_mode=dream_mode, world_id=world_id)
     )
 
     state = clear_local_state(state)  # clears body_state + emotional_tension + scene etc.
@@ -556,7 +557,7 @@ async def _do_close_dream(uid: str, dream_id: str, exit_type: str) -> None:
 
 
 async def _generate_summary_bg(
-    uid: str, dream_id: str, exit_type: str, *, char_id: str, dream_mode: str = "sandbox"
+    uid: str, dream_id: str, exit_type: str, *, char_id: str, dream_mode: str = "sandbox", world_id: str = "unknown"
 ) -> None:
     try:
         from core.dream.dream_summary import generate_summary
@@ -591,6 +592,11 @@ async def _generate_summary_bg(
             await distill_impression(uid, dream_id, exit_type, char_id=char_id)
         except Exception as e:
             logger.warning(f"[dream_pipeline] distill_impression failed uid={uid}: {e}")
+        try:
+            from core.dream.invariants import observe
+            await observe(uid, dream_id, world_id=world_id, char_id=char_id)
+        except Exception as e:
+            logger.warning(f"[dream_pipeline] invariant observation failed uid={uid}: {e}")
         try:
             from core.dream.postcard import generate_postcard
             await generate_postcard(uid, dream_id, exit_type, char_id=char_id)

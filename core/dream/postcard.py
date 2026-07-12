@@ -74,6 +74,9 @@ async def generate_postcard(uid: str, dream_id: str, exit_type: str, *, char_id:
     try:
         from core import llm_client
         template = _template_text(template_id)
+        from core.dream.invariants import select_for_postcard
+        invariant = select_for_postcard(uid, char_id=char_id)
+        invariant_hint = "" if not invariant else ("\n\u53ef\u81ea\u7136\u5730\u81f3\u591a\u4e00\u6b21\u63d0\u53ca\u8fd9\u6761\u8de8\u68a6\u89c2\u5bdf\uff08\u4e0d\u89e3\u91ca\u5176\u6765\u6e90\uff0c\u4e0d\u8981\u7167\u6284\uff09\uff1a" + f"\u5f53{invariant['situation']}\uff0c\u4ed6\u5f80\u5f80{invariant['response']}\u3002")
         dream_ts = next((float(t["ts"]) for t in turns if t.get("ts")), 0.0)
         dream_time = datetime.fromtimestamp(dream_ts or datetime.now().timestamp()).strftime("%Y-%m-%d %H:%M")
         dialogue = "\n".join(f"[{t.get('role')}] {str(t.get('content') or '')[:240]}" for t in turns[-12:])

@@ -201,3 +201,11 @@ python -c "from admin.routers.xxx import router; print('ok')"
 ### fable 5亲笔：
 
 新子系统只允许两种存在形态——Session（有生命周期、own transcript、经声明式 policy 回流记忆）或 Stimulus/Actuator（经 perceive_event 进、经 embodiment/channel 出）。永远不准成为 pipeline/main.py 里的新分支。 群聊是 Session（Stage），computer use 是 Session（Operation），硬件是 Stimulus+Actuator，新工具是 Session 和 Stimulus 都能调用的纯能力。
+
+
+## 梦境系统的哲学根据
+
+- **Winnicott 的过渡空间**：梦境是 potential space；hard_exit 铁律与 afterglow TTL 保留了健康过渡对象所需的缺席与醒来结构，而不是让陪伴无缝吞没现实。
+- **Huizinga 的魔环 / Foucault 的异托邦**：入梦、出梦状态机与现实窗口硬锁把边界工程化；隔离靠断开接线，而非事后过滤。
+- **Evan Thompson**：自我是跨状态过程，而非静态实体；lucid_shared 与 non_lucid 是同一角色在不同经验条件下的显现，不是两层人格。
+- **Hoel 的过拟合大脑假说**：世界包是身份的扰动测试集，跨世界重复出现的反应模式才构成泛化证据。本系统只把它落为观测：不变量不进 prompt、不写 impression，避免让模型对答案说话并把测量变成刻板化回流。
