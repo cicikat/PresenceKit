@@ -2,18 +2,25 @@
 from __future__ import annotations
 
 import inspect
+import logging
 import time
 import uuid
 from dataclasses import dataclass
 from typing import Awaitable, Callable
 
 from core.conversation_gate import conversation_lock
+from core.safe_write import rotate_jsonl_if_needed, safe_append_jsonl
 from core.stage.arbiter import score_candidates
 from core.stage.models import Stage, TranscriptEntry
 from core.stage.store import append_transcript, load_stage, load_transcript
 
 GenerateReply = Callable[[Stage, str, list[TranscriptEntry], str, str], str | Awaitable[str]]
 DeliverReply = Callable[[str, str, str], None | Awaitable[None]]
+
+logger = logging.getLogger(__name__)
+
+_ARBITER_TRACE_MAX_BYTES = 5 * 1024 * 1024
+_ARBITER_TRACE_KEEP_N = 3
 
 
 @dataclass(frozen=True)
@@ -26,6 +33,49 @@ class StageTurnResult:
 
 async def _resolve(value):
     return await value if inspect.isawaitable(value) else value
+
+
+def _append_arbiter_trace(
+    stage: Stage,
+    transcript: list[TranscriptEntry],
+    ranked,
+    *,
+    turn_id: str,
+    phase: str,
+    selected: list[str],
+    chain_depth: int,
+    extra: dict | None = None,
+) -> None:
+    """Persist one decision record. Observation must never block a Stage turn."""
+    try:
+        from core.sandbox import get_paths
+
+        latest = transcript[-1] if transcript else None
+        record = {
+            "ts": time.time(),
+            "round_id": turn_id,
+            "turn_id": turn_id,
+            "phase": phase,
+            "latest_speaker": latest.speaker_id if latest else "owner",
+            "latest_excerpt": latest.content[:40] if latest else "",
+            "addressed": [
+                item.char_id for item in ranked if item.parts.get("addressed", 0.0) > 0
+            ],
+            "candidates": [
+                {"char_id": item.char_id, "total": item.total, "parts": item.parts}
+                for item in ranked
+            ],
+            "selected": selected,
+            "chain_depth": chain_depth,
+        }
+        if extra:
+            record.update(extra)
+        path = get_paths().stage_arbiter_trace(group_id=stage.group_id)
+        rotate_jsonl_if_needed(path, _ARBITER_TRACE_MAX_BYTES, _ARBITER_TRACE_KEEP_N)
+        if not safe_append_jsonl(path, record):
+            logger.debug("[stage.runner] arbiter trace append failed group=%s", stage.group_id)
+    except Exception:
+        logger.debug("[stage.runner] arbiter trace suppressed group=%s", stage.group_id, exc_info=True)
 
 
 async def _generate_and_append(
@@ -102,6 +152,10 @@ async def run_owner_turn(
                 break
             pick = ranked[0]
             if responded >= min_responders and pick.total < stage.settings.respond_threshold:
+                _append_arbiter_trace(
+                    stage, transcript, ranked, turn_id=resolved_turn_id, phase="A",
+                    selected=[], chain_depth=0,
+                )
                 break
             attempted.add(pick.char_id)
             entry = await _generate_and_append(
@@ -112,6 +166,11 @@ async def run_owner_turn(
                 "user",
                 generate_reply,
                 deliver_reply,
+            )
+            _append_arbiter_trace(
+                stage, transcript[:-1] if entry is not None else transcript, ranked,
+                turn_id=resolved_turn_id, phase="A",
+                selected=[entry.speaker_id] if entry is not None else [], chain_depth=0,
             )
             if entry is not None:
                 replies.append(entry)
@@ -125,6 +184,11 @@ async def run_owner_turn(
             ranked = score_candidates(stage, transcript, candidates=candidates)
             # AI chain uses a looser threshold so peer_reply bonus can clear the bar.
             if not ranked or ranked[0].total < stage.settings.respond_threshold * 0.8:
+                if ranked:
+                    _append_arbiter_trace(
+                        stage, transcript, ranked, turn_id=resolved_turn_id, phase="B",
+                        selected=[], chain_depth=ai_chain_depth,
+                    )
                 break
             pick = ranked[0]
             entry = await _generate_and_append(
@@ -135,6 +199,11 @@ async def run_owner_turn(
                 latest_speaker,
                 generate_reply,
                 deliver_reply,
+            )
+            _append_arbiter_trace(
+                stage, transcript[:-1] if entry is not None else transcript, ranked,
+                turn_id=resolved_turn_id, phase="B",
+                selected=[entry.speaker_id] if entry is not None else [], chain_depth=ai_chain_depth,
             )
             if entry is None:
                 break

@@ -13,6 +13,7 @@ PATCH /group/{group_id}/settings  — 改群设置
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import uuid
 from dataclasses import replace
@@ -37,6 +38,8 @@ logger = logging.getLogger(__name__)
 
 _RECENT_TRANSCRIPT_LIMIT = 50
 _HISTORY_PAGE_SIZE = 50
+_ARBITER_TRACE_DEFAULT_LIMIT = 100
+_ARBITER_TRACE_MAX_LIMIT = 500
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -240,6 +243,26 @@ async def group_history(
         transcript = [e for e in transcript if e.timestamp < before]
     page = transcript[-_HISTORY_PAGE_SIZE:]
     return [_entry_to_message(e) for e in page]
+
+
+@router.get("/{group_id}/arbiter-trace", summary="读仲裁决策 trace")
+async def group_arbiter_trace(
+    group_id: str,
+    limit: int = _ARBITER_TRACE_DEFAULT_LIMIT,
+    _auth=Depends(require_scopes("chat")),
+):
+    _require_stage(group_id)
+    if limit < 1 or limit > _ARBITER_TRACE_MAX_LIMIT:
+        raise HTTPException(status_code=422, detail=f"limit 必须在 1..{_ARBITER_TRACE_MAX_LIMIT}")
+    path = get_paths().stage_arbiter_trace(group_id=group_id)
+    if not path.exists():
+        return []
+    try:
+        records = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
+    except (OSError, json.JSONDecodeError):
+        logger.debug("[group] arbiter trace read failed group=%s", group_id, exc_info=True)
+        return []
+    return list(reversed(records[-limit:]))
 
 
 # ── settings get ─────────────────────────────────────────────────────────────

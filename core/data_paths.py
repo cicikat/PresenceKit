@@ -529,6 +529,10 @@ class DataPaths:
     def stage_transcript(self, *, group_id: str) -> Path:
         return self.stage_group_dir(group_id=group_id) / "transcript.json"
 
+    def stage_arbiter_trace(self, *, group_id: str) -> Path:
+        """Append-only Stage arbiter decision trace for one group."""
+        return self.stage_group_dir(group_id=group_id) / "arbiter_trace.jsonl"
+
     # ── Activity: reading ─────────────────────────────────────────────────────
     def reading_char_root(self, *, char_id: str) -> Path:
         """data/runtime/activity/reading/{char_id}/  — enumerate all uid subdirs."""
