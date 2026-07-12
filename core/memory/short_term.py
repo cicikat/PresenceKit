@@ -557,11 +557,11 @@ def detect_reply_length_collapse(
 
     recent_long = assistant_msgs[-recent_n_long:]
     if len(recent_long) >= recent_n_long and all(len(m) >= short_max for m in recent_long):
-        return "（最近几条都挺长，这次收短——去掉铺垫和水词，捡最有劲的一两句说。）"
+        return "【消息长度提醒】最近几条消息太长了，要求收短——去掉铺垫和水词，捡最有劲的一两句说。不超过40字"
 
     recent_short = assistant_msgs[-recent_n_short:]
     if len(recent_short) >= recent_n_short and all(len(m) < short_max for m in recent_short):
-        return "（最近几条回复长度都差不多，这次故意打破这个长度惯性——长了就收一收，短了就多说点，别再照上面的长度来。）"
+        return "【消息长度提醒】最近几条回复太短太敷衍了，别再照上面的长度来。）"
 
     return None
 
@@ -591,7 +591,7 @@ DEFAULT_SEGMENT_MIN_LEN = 40
 DEFAULT_SEGMENT_RECENT_N = 2
 
 _SEGMENT_HINT_TEXT = (
-    "（最近几条回复都挤成一大段没有换行，超过两句就空一行分段，别把话都堆在一起。）"
+    "【分段】要求回复里至少带一个及以上'\n'换行符，分段流畅不生硬不赘余。"
 )
 
 

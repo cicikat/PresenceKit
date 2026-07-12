@@ -241,7 +241,6 @@ void enterRestState() {
 
 void displaySetup() {
     Wire.begin(kSdaPin, kSclPin);
-    u8g2.begin();
     u8g2.setFont(CJK_FONT);
     u8g2.setFontMode(0);
     renderOffline();
