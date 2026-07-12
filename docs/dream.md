@@ -57,6 +57,7 @@
 - `impression_loader`（D2）：**唯一读 impressions/ 的模块**，ambient 取最近 ≤3 条；渲染为 plot + vivid_lines + impression_text 三段结构，包裹于 `<梦境印象 note="…">` 标签
 - 现实层 `6g_dream_impression`：显式 XML 标签框定"以下是叶瑄做过的梦，不是现实发生的事"，叶瑄可像记得一个梦一样自然提起但绝不当作真实经历复述
 - **D2 新隔离墙（固化端）**：`pipeline.post_process` 检测到当前有活跃 impression 时，在 `summarize_to_midterm` 入队 payload 中加 `dream_echo=True`；`handler_summarize_to_midterm` 收到此标记直接跳过，阻止该轮的梦境剧情通过 mid_term → episodic → identity 链路固化为现实事实
+- **D2 echo 判定**：活跃 impression 仍照常注入 6g；但固化静音只覆盖出梦后 8 小时，之后仅当用户文本或回复命中梦境关键词时置 `dream_echo=True`，避免 30 天 impression TTL 饿死现实固化链。
 
 **梦境明信片（archive 出站复盘，非第四层回流）**
 - 合格 sandbox 梦（至少五个 assistant 轮、非 hard_exit、每个 dream_id 至多一次）会在 summary 后冻结成一封信；模板随机，投递日随机延迟 1–356 天。

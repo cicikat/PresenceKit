@@ -1091,10 +1091,15 @@ class Pipeline:
         from core.tag_rules import get_tags as _get_tags
         _mt_tags = list(_get_tags(content))
 
-        # D2 isolation: if dream impressions were active this turn, flag the
-        # mid-term job so consolidation doesn't promote dream facts into episodic/identity.
-        from core.dream.impression_loader import has_active_impressions as _has_active_imp
-        _dream_echo = _has_active_imp(user_id, char_id=char_id)
+        # Impression presence still controls 6g injection. Consolidation is
+        # silent only for the 8h exit window or an explicitly dream-related turn.
+        from core.dream.dream_state import read_state as _read_dream_state
+        from core.dream.echo_gate import should_dream_echo as _should_dream_echo
+        _dream_echo = _should_dream_echo(
+            last_exited_at=_read_dream_state(user_id).get("last_exited_at"),
+            user_content=content,
+            reply=reply,
+        )
 
         # 若 emotion 显著，handler 内部会自动入队 reflect_to_episodic（eager）
         if envelope.can_write_memory:
