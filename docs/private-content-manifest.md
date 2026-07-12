@@ -8,7 +8,7 @@
 > `docs/*-triage-*.md`（裁定记录）这类文档天然容易引用真实配置值（曾在
 > `docs/critique-fable-20260707.md` 中发现明文 admin secret）。`git add` 前须人工
 > grep 一遍真实密钥/口令/QQ 号等敏感值，确认已脱敏（占位符/`<redacted>`）再入库，
-> 开源前总检查（`docs/opensource-v0.1-checklist.md` 类清单）也应把这类新增文档纳入扫描范围。
+> 开源前总检查也应把这类新增文档纳入扫描范围；历史执行清单已归档，不作为现行流程入口。
 
 ---
 

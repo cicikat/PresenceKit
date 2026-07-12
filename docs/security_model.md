@@ -1,5 +1,7 @@
 # docs/security_model.md — 当前安全模型与风险边界
 
+> 本文不是鉴权实现说明；token、scope 与轮换的实现细节见 [security.md](security.md)。
+
 > 本文按当前代码校准，不是理想化设计稿。项目仍是单用户本地陪伴系统，默认部署假设是可信本机/内网；如果未来开源、社区化或插件化，必须把这里的“当前缺口”先补上。
 
 ---
@@ -182,7 +184,7 @@ Emerald-client 已完成 Tauri Rust native bridge header 迁移；SEC-WS-1 已 f
 默认不要导出、分享或打包：
 
 - `data/runtime/memory/`
-- `data/runtime/characters/{char_id}/character_growth/`
+- `data/runtime/characters/{char_id}/character_growth/`（Brief 35 已移除代码后的历史遗留数据）
 - `data/runtime/characters/{char_id}/inner/mood_state.json`
 - `data/runtime/dreams/`
 - `data/diary_fallback/`

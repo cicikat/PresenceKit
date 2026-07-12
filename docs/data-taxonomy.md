@@ -54,7 +54,7 @@ data/
 │   │   │   └── diary/
 │   │   ├── garden/{plants.json,storage.json}
 │   │   ├── pet.json
-│   │   └── character_growth/
+│   │   └── character_growth/  # 历史遗留文件；Brief 35 已移除代码读写
 │   └── dreams/{char_id}/
 │       ├── tmp/
 │       ├── archive/
@@ -107,8 +107,9 @@ data/
 
 ### Character inner
 
-角色内部状态统一落在 `data/runtime/characters/{char_id}/`。其中 `inner/`、`garden/`、
-`character_growth/` 和 `pet.json` 都按角色隔离。`activity_pool()`、`yexuan_traits()`、
+角色内部状态统一落在 `data/runtime/characters/{char_id}/`。其中 `inner/`、`garden/` 和
+`pet.json` 都按角色隔离。`character_growth/` 是 Brief 35 移除模块留下的历史数据：不再有
+代码读写，不应作为当前状态或新增路径使用。`activity_pool()`、`yexuan_traits()`、
 `author_notes_pool()` 属于 authored 静态内容，优先读 `content/characters/{char_id}/`，
 物理文件未迁移时回退旧位置。
 

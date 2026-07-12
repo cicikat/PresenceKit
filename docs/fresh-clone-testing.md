@@ -1,7 +1,7 @@
 # docs/fresh-clone-testing.md — 新用户开箱测试姿势
 
 > 给人工测试者（例如验证 v0.1 开源前的「clone 后接上原数据」问题是否已修复）使用。
-> 背景排查见 [opensource-v0.1-checklist.md](opensource-v0.1-checklist.md) P0-1。
+> 背景：开源前检查曾发现此问题；该一次性检查清单已归档，本文保留当前可执行的验证步骤。
 
 ## 为什么会「接上原数据」
 

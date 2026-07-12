@@ -1,5 +1,7 @@
 # 鉴权模型（SEC-AUTH-2：Scoped Tokens）
 
+> 本文只说明鉴权实现；整体风险边界、数据与部署假设见 [security_model.md](security_model.md)。
+
 > 施工 brief：`cc-tasks/21-鉴权分层-scoped-tokens.md`。当前状态见 `docs/known-issues.md` → SEC-AUTH-2。
 > P1（基座）+ P2（路由映射）+ P3（token 管理 API / 审计 / 限速）已合入。
 > P4 前半（六类持有者签发 token）已完成（2026-07-04，生产 `tokens.yaml` 已有六条记录）；

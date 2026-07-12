@@ -86,7 +86,7 @@ conversation_lock(uid)
 
 ## 全局主动间隔与统一发送预算：ProactiveLedger（CC 任务 19 · A/B）
 
-> 背景：`docs/proactive-trigger-audit.md` 的 Brief 08 #5 止血（把全局最小间隔调大）
+> 背景：2026-06 主动触发审计的 Brief 08 #5 止血（把全局最小间隔调大）；原始快照已归档。
 > **实际从未在运行中的进程里生效**——`core/config_loader.py` 的 `get_config()` 曾是
 > 永久缓存单例，手改 `config.yaml` 不会被运行中进程读取；同时旧版
 > `_global_proactive_gap_ready()` 每次检查都重新抽 jitter，等价于"反复抽签直到抽到

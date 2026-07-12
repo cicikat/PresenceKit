@@ -102,7 +102,7 @@ if any(p in text for p in rule.patterns):
 | `emotion.indirect` | 咪、好累、不想动、没胃口、吃不下、今天又没 | 3.5 period + 3.6 watch + 6d日记 + 6e感受层 |
 
 `topic.history` / `meta.identity` 目前仍会被 `tag_rules` 记录到 debug，但 `prompt_builder`
-不再用它们切换 `character_growth` 全文/指纹层。当前长期人格模式入口是 always-if-present 的
+Brief 35 已移除的 `character_growth` 全文/指纹层不再可切换。当前长期人格模式入口是 always-if-present 的
 `6a_user_identity`。
 
 ### Tag 覆盖率已知盲区

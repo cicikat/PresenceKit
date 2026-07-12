@@ -187,9 +187,9 @@ data/
 │   │   ├── plants.json           五个情绪花槽状态（stage/growth/last_watered）
 │   │   └── storage.json          收获/花瓶/历史记录（harvest/vase/history）
 │   ├── pet.json                  角色宠物状态（core/pet.py 管理）
-│   └── character_growth/
-│       ├── 角色_{uid}.md         角色对用户的整体认知
-│       ├── 角色_{uid}.felt.md    感受层版本
+│   └── character_growth/          历史遗留数据；Brief 35 已移除读写模块
+│       ├── 角色_{uid}.md         不再被读取
+│       ├── 角色_{uid}.felt.md    不再被读取
 │       └── 角色_{uid}.fingerprint.txt  压缩版指纹
 ├── memory/{char_id}/{uid}/       ← S6 新增：per-user 记忆根目录（当前 char_id = yexuan）
 │   ├── history.json              短期对话历史（磁盘轮数可配；prompt 近场保留 + 远场加权择优）
