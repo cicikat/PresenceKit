@@ -41,6 +41,9 @@ _SCENARIO_CONTROL_RE = re.compile(
 )
 _VALID_PROGRESS_SIGNALS: frozenset[str] = frozenset({"not_close", "approaching", "satisfied"})
 
+def _bucket_for_scenario(value: float) -> str:
+    return ("low", "rising", "high", "critical")[int(max(0, min(3, value * 4)))]
+
 
 def _extract_scenario_control(reply: str) -> tuple[str, dict | None]:
     """
@@ -222,7 +225,7 @@ async def dream_turn(
         world_id=state.get("frozen_world", "reality_derived"),
         lucid_mode=lucid_mode,
         dream_mode=state.get("dream_mode", "sandbox"),
-        scenario_core=state.get("scenario_core"),
+        scenario_core=({**state.get("scenario_core", {}), "_arc_mode": settings.get("scenario_arc_mode", "linear"), "_tension_bucket": _bucket_for_scenario(current_yexuan_tension)} if state.get("scenario_core") else None),
         mirror_core=state.get("mirror_core"),
         _capture_hook=_dream_capture_hook,
         dream_turn=_dream_turn_index,
@@ -295,11 +298,18 @@ async def dream_turn(
             )
             # v0.7: advance stage on consecutive satisfied streak (>= 2), skip if already completed
             if sc.satisfied_streak >= 2 and sc.ending_state != "completed":
-                from core.dream.scenario_loader import load_script, get_next_stage
+                from core.dream.scenario_loader import load_script, get_next_stage, get_stage
                 try:
                     script = load_script(sc.script_id)
                     next_stage = get_next_stage(script, sc.current_stage_id)
-                    if next_stage is not None:
+                    # Arc mode holds advancement until the current stage's target
+                    # bucket is reached; scripts without arc retain linear behavior.
+                    target = (get_stage(script, sc.current_stage_id) or {}).get("arc")
+                    rank = {"low": 0, "rising": 1, "high": 2, "critical": 3}
+                    current_rank = int(max(0, min(3, current_yexuan_tension * 4)))
+                    if settings.get("scenario_arc_mode") == "arc" and target in rank and current_rank < rank[target]:
+                        pass
+                    elif next_stage is not None:
                         sc = sc.advance_to_stage(next_stage["id"])
                         _did_advance = True
                         logger.info(

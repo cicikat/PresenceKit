@@ -46,6 +46,7 @@ _DEFAULTS: dict[str, Any] = {
     "jailbreak_presets": ["default"],
     "display": {"physiological_arousal": False},
     "reality_context_full_turns": 3,
+    "scenario_arc_mode": "linear",
 }
 
 

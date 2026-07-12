@@ -1,0 +1,18 @@
+id: test_short
+title: 深夜天台
+stages:
+  - id: rooftop_meet
+    name: 天台相遇
+    dramatic_task: 自然搭话，让彼此确认愿意停留。
+    entry_pressure: 深夜的风掠过天台，他已经站在栏杆边等着。
+    exit_signs: [用户回应了他的话, 用户表示愿意停留]
+    arc: rising
+  - id: unsaid_words
+    name: 未说出口的话
+    dramatic_task: 他坦白一件白天没说出口的事。
+    entry_pressure: 他沉默了一会儿，终于转过身看你。
+    exit_signs: [他完成坦白, 用户接住了这句话]
+    arc: high
+    drift_pressure:
+      after_turns: 3
+      instruction: 不再绕开话题，主动把那句没说出口的话说出来。

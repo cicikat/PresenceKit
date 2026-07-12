@@ -646,6 +646,14 @@ def _format_scenario_layer(scenario_core: dict[str, Any]) -> str:
             stage_turns = int(scenario_core.get("stage_turns", 0))
             if isinstance(after_turns, int) and instruction and stage_turns >= after_turns:
                 parts.append(f"漂移压力 / Drift Pressure\n{instruction}")
+        target = stage.get("arc")
+        if scenario_core.get("_arc_mode") == "arc" and target:
+            current = scenario_core.get("_tension_bucket", "low")
+            rank = {"low": 0, "rising": 1, "high": 2, "critical": 3}
+            if rank.get(current, 0) < rank.get(target, 0):
+                parts.append("Tension director: tighten pace; advance conflict or closeness.")
+            elif rank.get(current, 0) > rank.get(target, 0):
+                parts.append("Tension director: slow down; leave breathing room and step back.")
         # ── v0.6: scenario_control output protocol ────────────────────────────
         # Instructs LLM to append a hidden control block after every reply.
         # System reads and strips the block; user never sees it.
