@@ -14,4 +14,10 @@ ChatPanel 的 HTTP/WS 回复对账契约位于同一仓库：
 docs/chat-correlation.md
 ```
 
+后端实现锚点：
+
+- `channels/desktop_ws.py`：WS 帧、ack 等待与心跳（20 秒 ping，超过 70 秒无 pong 断开）。
+- `admin/admin_server.py`：`/ws/desktop` Bearer header 鉴权。
+- `admin/routers/chat.py`：正式发送路径 `POST /desktop/chat`。
+
 本仓不复制协议正文，避免客户端与后端各维护一份而发生漂移。修改桌面消息类型、字段、ack 语义或 action allowlist 前，必须先在双方工单中明确升级范围；v0.1 不允许任一端单边扩展。

@@ -9,7 +9,7 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 IDLE_LEFT_THRESHOLD  = 300  # 秒：超过此值视为用户已离开
-SENSOR_GAP_THRESHOLD = 120  # 秒：两次推送间隔超过此值视为 sensor-service 中断
+SENSOR_GAP_THRESHOLD = 120  # 秒：两次推送间隔超过此值视为 sensor producer 中断
 
 _snapshot: Optional[dict] = None
 _continuous_at_desk_seconds: int = 0
@@ -33,7 +33,7 @@ def update(payload: dict) -> None:
         else:
             gap = now - _snapshot["received_at"]
             if gap > SENSOR_GAP_THRESHOLD:
-                # sensor-service 中断过，保守重置
+                # sensor producer 中断过，保守重置
                 _continuous_at_desk_seconds = window if idle < IDLE_LEFT_THRESHOLD else 0
             elif idle >= IDLE_LEFT_THRESHOLD:
                 _continuous_at_desk_seconds = 0

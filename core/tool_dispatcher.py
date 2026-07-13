@@ -294,7 +294,7 @@ async def _exit_yandere_wrapper() -> str:
     emerald_path = get_config().get("emerald_desktop", {}).get("path", "")
     if not emerald_path:
         logger.warning("[exit_yandere] config.yaml 未配置 emerald_desktop.path，跳过")
-        return "未配置 Emerald-client 路径"
+        return "未配置旧 Emerald-desktop 路径"
     signal_file = Path(emerald_path) / "data" / "yandere_exit.signal"
     signal_file.parent.mkdir(parents=True, exist_ok=True)
     signal_file.write_text(json.dumps({"exit": True}), encoding="utf-8")

@@ -136,7 +136,7 @@ Phase 2 在 Phase 1.5 持久化基础上增加了三个组件，边界如下：
 所有 HTTP 管理端点（包括只读的 `GET /system/data-path`）均已接入 Bearer token 鉴权
 （见上方"管理接口 Bearer token"一节）。SEC-AUTH-1B 已完成，此项已关闭。
 
-**客户端影响**：旧版 Emerald-client 若调用以下端点时未带 `Authorization: Bearer <token>`
+**客户端影响**：旧版 PresenceKit-desktop 若调用以下端点时未带 `Authorization: Bearer <token>`
 header，将收到 401/403 拒绝：
 - `POST /desktop/activate` / `/desktop/wake`
 - `POST /upload/ingest`
@@ -157,7 +157,7 @@ query 参数。
 - `?token=<secret>` query fallback 已移除，即使 token 正确也以 code `1008` 拒绝。
 - uvicorn access log 的 `QuerySanitizeFilter` 保留，防止被拒绝请求或其他敏感 query 参数泄漏。
 
-Emerald-client 已完成 Tauri Rust native bridge header 迁移；SEC-WS-1 已 final，query token
+PresenceKit-desktop 已完成 Tauri Rust native bridge header 迁移；SEC-WS-1 已 final，query token
 过渡风险关闭。
 
 > R9 / SEC-WS-1 处理 WS query token 迁移；`SEC-AUTH-1`（HTTP endpoint 鉴权收口）已于

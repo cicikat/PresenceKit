@@ -343,13 +343,15 @@ HTTP 管理面已统一依赖 `admin.auth.verify_token`。本轮最终 P1 补齐
 - `?token=` query fallback 已删除；即使 token 正确也拒绝连接。
 - `ws_desktop_endpoint` 不再声明 `?token=` query param，不再把 token 暴露给 FastAPI OpenAPI。
 - token 值不出现在任何日志路径或错误响应；deprecated fallback warning 已移除。
-- Emerald-client 已通过 Tauri Rust native bridge 完成 header 迁移。
+- PresenceKit-desktop 已通过 Tauri Rust native bridge 完成 header 迁移。
 - `QuerySanitizeFilter` 保留，覆盖被拒绝请求及其他敏感 query 参数的 access log 泄漏风险。
 - 守卫测试：`tests/test_sec_ws1_auth.py`。
 
 ---
 
 ### SEC-AUTH-2：鉴权分层 — Scoped Tokens
+
+> **2026-07-13 当前状态覆盖说明**：PresenceKit-desktop 已删除独立 `sensor-service`，感知改为 Tauri Rust 内嵌并复用 `desktop-main`（desktop profile 已含 `sensor.write`）。`scripts/setup_auth.py` 当前只默认签发五类持有者；历史 `sensor-service` token/profile 记录不自动删除，确认无调用后可停用或删除。下方 2026-07-04 的六持有者叙述仅保留为历史施工记录，不再代表当前部署拓扑。
 
 **状态**：`in-progress`（P1+P2+P3 已合入，2026-07-04）
 

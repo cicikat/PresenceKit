@@ -201,7 +201,7 @@ def tick() -> list[dict]:
         "context":   dict,  # 给裁决/prompt 用的快照
       }
 
-    无事件返回 []。sensor-service 未启动或快照过旧（>90s）同样返回 []。
+    无事件返回 []。sensor producer 未启动或快照过旧（>90s）同样返回 []。
     """
     global _last_presence, _last_presence_changed_at
     global _last_app, _last_app_category

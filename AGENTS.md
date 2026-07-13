@@ -26,7 +26,7 @@
 | 改 prompt 层结构、tag 规则、token 裁剪 | `docs/prompt-layers.md` |
 | 改工具系统（新增工具、探针规则、桌面动作、execute() origin 闸门、Path B 守卫） | `docs/tools.md` |
 | 改调度器（定时触发、主动消息） | `docs/scheduler.md` |
-| 改 QQ / 桌宠通道、广播、WebSocket、跨通道接续 | `docs/channels.md` |
+| 改 QQ / 桌宠通道、广播、WebSocket、跨通道接续 | `docs/channels.md`；桌面 v0.1 协议入口见 `docs/desktop-client-protocol.md` |
 | 改多角色群聊、Stage session、共享 transcript、回合仲裁 | `docs/stage.md` |
 | 改花园系统（情绪花槽、自动/被动浇水、采后处理、管理面板状态） | `docs/garden.md` |
 | 理解事件/交互三维 envelope（realm/kind/lifecycle）、stimulus 边界、v0.1 约束 | `docs/interaction-event-model.md` |
@@ -52,7 +52,7 @@
 | 工具注册 + 调度 + 探针 | `core/tool_dispatcher.py` |
 | Intiface / Buttplug 硬件控制 | `core/hardware/buttplug_client.py` / `core/hardware/device_registry.py` / `core/tools/hardware_tools.py` |
 | 通道注册与广播 | `channels/registry.py` |
-| 桌宠通道 WebSocket + 文件降级 | `channels/desktop_ws.py` / `channels/desktop.py` |
+| 桌宠通道 WebSocket + 文件降级 | `channels/desktop_ws.py` / `channels/desktop.py`；协议权威指针 `docs/desktop-client-protocol.md` |
 | 桌宠聊天 HTTP 入口 | `admin/routers/chat.py` → `/desktop/chat` |
 | 手机通道 + 轮询接口 | `channels/mobile.py` / `admin/routers/mobile.py` |
 | 统一 assistant turn sink | `core/turn_sink.py` |
@@ -83,7 +83,7 @@
 | 沙盒路径管理 | `core/sandbox.py` ← 所有 data/ 路径必须经过此处 |
 | 管理面鉴权（scoped tokens，SEC-AUTH-2） | `admin/auth.py`（`resolve_token` / `require_scopes` / `authenticate_ws`）/ `admin/scopes.py`（scope+profile 表）/ `admin/token_registry.py`（token 加载/热重载/create/rotate/delete/set_disabled） |
 | Token 管理 API（whoami/profiles/disable 等，DX Brief 22） | `admin/routers/auth_tokens.py` |
-| 首次配置 CLI：生成 secret_key + 六个标准 token + 本地密码本（DX Brief 22） | `scripts/setup_auth.py`（见 `docs/token-rotation.md`） |
+| 首次配置 CLI：生成 secret_key + 五个标准 token + 本地密码本（DX Brief 22） | `scripts/setup_auth.py`（见 `docs/token-rotation.md`） |
 | ESP32 具身硬件固件（presence-device，非 `_achieve_Emerald-hello` 废弃测试项目） | `firmware/presence-device/src/ws_client.cpp`（WS 客户端+鉴权）/ `include/secrets.h`（gitignored，本地 token）/ `src/display.cpp`（渲染） |
 | 从情景记忆提取用户观察（手动维护） | `tools/extract_observations.py` |
 | 角色人设提醒轮换 | `core/author_note_rotator.py` |
@@ -185,7 +185,7 @@ brief，遵循“删除必须连同守卫、测试和文档条目一起删除”
 
 1. `python` 可能不在 `PATH`，`py.exe` 也可能存在但没有已安装解释器；不要把这误判为项目失败。
 2. pytest 默认临时目录可能因沙箱权限报 `PermissionError`；把 `TEMP` / `TMP` 临时指向仓库内 `.tmp`，测试后安全清理。
-3. `Emerald-client` 的 Vite build 可能因沙箱禁止写 `node_modules/.vite-temp` 报 `EPERM`；应申请权限后原命令重跑。
+3. `PresenceKit-desktop`（当前目录名通常为 `Emerald-client`）的 Vite build 可能因沙箱禁止写 `node_modules/.vite-temp` 报 `EPERM`；应申请权限后原命令重跑。
 4. 跨仓执行 git 时可能遇到 `dubious ownership`；优先按命令使用
    `git -c safe.directory=<Emerald-client 路径> ...`，不要擅自修改全局 git 配置。
 5. 两个仓库经常存在其他 agent 的并行未提交改动。只改任务相关文件，完整测试失败时先判断是否与本任务相关，禁止顺手修复或回滚无关改动。

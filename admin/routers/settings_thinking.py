@@ -3,7 +3,7 @@
 GET  /settings/thinking   — 读取当前 thinking 配置 + 只读的 auto 模式判定展示字段
 POST /settings/thinking   — 部分更新 enabled / mode / apply_to_proactive 并热重载
 
-配对前端文档：Emerald-client/cc-tasks/17-思考开关设置.md
+配对前端实现：PresenceKit-desktop 的思考开关设置。
 """
 
 from pathlib import Path

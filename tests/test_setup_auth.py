@@ -1,7 +1,7 @@
 """
 tests/test_setup_auth.py — Brief 22 §5.2: scripts/setup_auth.py 首次配置 CLI
 
-覆盖：空 config 全新跑（secret 生成 + 六 token + 密码本齐全）、重复跑幂等（含用户手工
+覆盖：空 config 全新跑（secret 生成 + 五 token + 密码本齐全）、重复跑幂等（含用户手工
 追加的密码本条目不被覆盖）、--rotate-all 后密码本条目更新且旧值立即失效、
 已有真实 secret_key 时不覆盖。
 """
@@ -37,7 +37,7 @@ def env(sandbox, monkeypatch):
     return config_path, secrets_local_path
 
 
-def test_first_run_generates_secret_and_six_tokens(env, monkeypatch):
+def test_first_run_generates_secret_and_five_tokens(env, monkeypatch):
     config_path, secrets_local_path = env
     monkeypatch.setattr(sys, "argv", ["setup_auth.py"])
     setup_auth.main()
@@ -50,7 +50,7 @@ def test_first_run_generates_secret_and_six_tokens(env, monkeypatch):
     doc = yaml.safe_load(secrets_local_path.read_text(encoding="utf-8"))
     assert doc["break_glass_secret"] == secret1
     assert set(doc["tokens"].keys()) == {
-        "desktop-main", "mobile-main", "sensor-service", "watch-main", "esp32-device", "admin-panel",
+        "desktop-main", "mobile-main", "watch-main", "esp32-device", "admin-panel",
     }
     assert doc["tokens"]["desktop-main"]["token"].startswith("emt_")
     assert "adminToken" in doc["tokens"]["desktop-main"]["配置位置"]

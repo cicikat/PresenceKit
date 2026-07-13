@@ -345,7 +345,7 @@ fs_access:
 |---|---|---|
 | `device_shutdown` | 关机 | `dangerous=True`，需用户确认，默认关闭 |
 | `device_sleep` | 睡眠 | `dangerous=True`，需用户确认，默认关闭 |
-| `exit_yandere` | 他从病娇状态平静 | 向 `Emerald-desktop（已废弃，现在前端是Emerald-client）` 项目写信号文件 |
+| `exit_yandere` | 他从病娇状态平静 | 旧客户端兼容：向 `Emerald-desktop` 写信号文件；PresenceKit-desktop 当前不消费该信号，未配置旧客户端时无可见效果 |
 
 ### fs 类（不走探针，只经 tool loop）
 

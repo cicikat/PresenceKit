@@ -123,9 +123,9 @@
 2. **平台级限流不做**。`desktop`/`QQ` 共享同一 uid 级 `ProactiveLedger` 账本是
    刻意设计，防止同一个人在不同设备上各收一份主动消息；`presence_nag` 独立
    `fanout=["desktop"]` 维持现状。审计 §五.2 关闭。
-3. **`dream_invite` / `toy_invite` 暂不实现**。后端未找到这两个 action 名的
-   发射点，Emerald-client 只有 WS listener 预埋，判定为前端规划中的功能，
-   非当前后端已知触发器。审计 §五.3 关闭，标注"规划中"。
+3. **`dream_invite` / `toy_invite` 已实现为受控 Path B 动作**。`core/pipeline.py` 将两者纳入
+   grounding prompt，并经既有三道守卫和幂等窗口调用桌面 action；PresenceKit-desktop 已实现 listener。
+   它们属于 v0.1 冻结 allowlist，不代表 v1 协议或 capabilities 已落地。
 4. legacy 花园直发循环（`garden_daily.py`/`garden_water.py` 里被
    `EXECUTE_MODE="live"` 挡死的 `_emit()` for-loop）已删除（审计 §五.4）。
 

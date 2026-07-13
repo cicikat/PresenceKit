@@ -9,6 +9,7 @@
 - [ARCHITECTURE.md](../ARCHITECTURE.md)：系统全貌与主 pipeline。
 - [DESIGN.md](../DESIGN.md)：设计意图、准入标准与禁止行为。
 - [api-reference.md](api-reference.md)：后端 HTTP/WS 端点与调用方。
+- [desktop-client-protocol.md](desktop-client-protocol.md)：桌面 v0.1 协议权威入口（正文位于 PresenceKit-desktop）。
 - [dev-environment.md](dev-environment.md)：Windows 沙箱开发与验证。
 - [known-issues.md](known-issues.md)：当前问题、观察项和技术债。
 

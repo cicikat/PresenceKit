@@ -1,6 +1,6 @@
 # Token 轮换与配置速查
 
-> 首次配置见 `python scripts/setup_auth.py`（自动生成 `config.admin.secret_key` + 六个标准 token +
+> 首次配置见 `python scripts/setup_auth.py`（自动生成 `config.admin.secret_key` + 五个标准 token +
 > 本地密码本 `secrets.local.yaml`）。本文档是之后手工排障/轮换时的命令清单。
 > 鉴权模型/scope 表见 `docs/security.md`。
 
@@ -29,12 +29,13 @@
 
 | label | profile / scopes | 配置去向 | 换装后需重启 |
 |---|---|---|---|
-| `desktop-main` | `desktop`（chat, state.read, memory.read, activity, persona, hardware, sensor.write, ws.desktop） | `Emerald-client/config/client.local.json` → `adminToken` | 桌面客户端（Tauri） |
+| `desktop-main` | `desktop`（chat, state.read, memory.read, activity, persona, hardware, sensor.write, ws.desktop） | `PresenceKit-desktop/config/client.local.json` → `adminToken` | 桌面客户端（Tauri，含内嵌 sensor） |
 | `mobile-main` | `mobile`（chat, state.read, memory.read, activity, persona, sensor.write） | 手机 app 系统设置 → Token 弹窗 | 手机 App（yexuan_memery） |
-| `sensor-service` | `sensor`（sensor.write） | `Emerald-client/sensor-service/config.yaml` → `backend.token` | sensor-service 进程 |
 | `watch-main` | `watch`（sensor.write） | Watch 端配置（如 iOS Shortcuts，Bearer 值） | Watch 端 Shortcut |
 | `esp32-device` | `device`（ws.device） | 固件配置（`firmware/presence-device/include/secrets.h`，烧录前写入） | **需要重新烧录**，不是热更新 |
 | `admin-panel` | `panel`（admin） | 浏览器面板登录框（`localStorage.qq_admin_key`） | 无需重启，重新登录面板即可 |
+
+`sensor` profile 仍保留，供未来独立只写感知端按需手工签发；首次配置不再生成 `sensor-service` label。历史同名 token 确认无调用后可停用或删除。
 
 Rotate 后本仓这一端不需要重启（后端 token registry 是 mtime 热重载）——上表「换装后需重启」
 指的都是**对端设备**，因为它们把旧明文缓存在了自己的配置里。
@@ -73,7 +74,7 @@ curl -s -X PATCH http://127.0.0.1:8080/auth/tokens/<label> \
   -d '{"disabled": true}'
 ```
 
-批量重来一遍（六个标准 token 全部轮换，例如怀疑密码本泄漏）：
+批量重来一遍（五个标准 token 全部轮换，例如怀疑密码本泄漏）：
 
 ```bash
 python scripts/setup_auth.py --rotate-all

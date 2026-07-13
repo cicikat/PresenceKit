@@ -17,7 +17,7 @@ armed 状态下轮询：
 检测到游戏 → session.enter_active(...)；追踪中的游戏进程消失 → session.enter_closing(...)。
 active 期间若 desktop_ws 未连接，用 config.coplay.pet_launch_cmd（任意 shell 命令，
 可以是打包后的 exe 路径，也可以是 "npm run dev" 之类的开发态命令——取决于
-Emerald-client 当前部署形态，用户自己在 config.yaml 里配好）spawn 桌宠进程。
+PresenceKit-desktop 当前部署形态，用户自己在 config.yaml 里配好）spawn 桌宠进程。
 fail-open：拉不起来只记日志，不抛异常，不影响陪玩状态机。
 
 轮询频率：由 config.coplay.poll_interval（秒）节流，但受制于

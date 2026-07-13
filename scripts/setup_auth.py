@@ -6,7 +6,7 @@ scripts/setup_auth.py — 首次鉴权配置 CLI（DX 主路径，Brief 22 / SEC
 不走 HTTP，不需要已运行的后端。幂等：可反复执行。
 
 用法：
-    python scripts/setup_auth.py               # 首次配置：生成 secret_key（如为空/占位）+ 六个标准 token
+    python scripts/setup_auth.py               # 首次配置：生成 secret_key（如为空/占位）+ 五个标准 token
     python scripts/setup_auth.py --rotate-all   # 已存在的标准 token 一并轮换（旧值立即失效）
 
 详见 docs/token-rotation.md。
@@ -27,9 +27,8 @@ SECRETS_LOCAL_PATH = REPO_ROOT / "secrets.local.yaml"
 
 # label -> (profile, 密码本里的"配置位置"提示，见 docs/token-rotation.md)
 STANDARD_TOKENS: list[tuple[str, str, str]] = [
-    ("desktop-main",   "desktop", "Emerald-client/config/client.local.json → adminToken"),
+    ("desktop-main",   "desktop", "PresenceKit-desktop/config/client.local.json → adminToken"),
     ("mobile-main",    "mobile",  "手机 app 系统设置 → Token 弹窗"),
-    ("sensor-service", "sensor",  "Emerald-client/sensor-service/config.yaml → backend.token"),
     ("watch-main",     "watch",  "Watch 端配置"),
     ("esp32-device",   "device", "固件配置（firmware/，烧录前写入）"),
     ("admin-panel",    "panel",  "浏览器面板登录框（localStorage qq_admin_key）"),
@@ -65,7 +64,7 @@ def _ensure_admin_secret() -> tuple[str, bool]:
 
 
 def _ensure_tokens(rotate_all: bool) -> dict[str, str]:
-    """六个标准 label 逐个检查；返回本次拿到明文的 {label: token}（仅新建/轮换的）。"""
+    """五个当前标准 label 逐个检查；返回本次拿到明文的 {label: token}（仅新建/轮换的）。"""
     from admin import token_registry
 
     plaintexts: dict[str, str] = {}

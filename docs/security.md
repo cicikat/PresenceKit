@@ -4,7 +4,7 @@
 
 > 施工 brief：`cc-tasks/21-鉴权分层-scoped-tokens.md`。当前状态见 `docs/known-issues.md` → SEC-AUTH-2。
 > P1（基座）+ P2（路由映射）+ P3（token 管理 API / 审计 / 限速）已合入。
-> P4 前半（六类持有者签发 token）已完成（2026-07-04，生产 `tokens.yaml` 已有六条记录）；
+> P4 前半已完成。当前首次配置默认签发五类持有者 token；2026-07-04 部署产生的历史 `sensor-service` 记录可能仍在 `tokens.yaml`，确认无调用后可停用或删除；
 > 后半（客户端接入后轮换 legacy secret）待各客户端仓完成配对 cc-tasks 后再做——见本文末尾。
 
 单 owner 系统，不做多用户 / OAuth / JWT / session。所有管理面 HTTP + WS 端点鉴权统一走
@@ -35,7 +35,7 @@
 |---|---|---|
 | `desktop` | chat, state.read, memory.read, activity, persona, hardware, sensor.write, ws.desktop | 桌面 Tauri 客户端 |
 | `mobile` | chat, state.read, memory.read, activity, persona, sensor.write | 手机 Flutter 端（yexuan_memery，同为 owner 胖客户端；刻意不含 hardware/admin——手机是最易丢失的设备，丢机不泄危险模式与 settings 写权） |
-| `sensor` | sensor.write | 手机 sensor-service |
+| `sensor` | sensor.write | 独立 sensor writer（按需手工签发；桌面内嵌 sensor 不使用） |
 | `watch` | sensor.write | Watch |
 | `device` | ws.device | ESP32 具身硬件 |
 | `panel` | admin | 管理面板网页 |
@@ -102,15 +102,13 @@ tokens:
 Token 明文格式：`emt_` + `secrets.token_urlsafe(32)`，由 `POST /auth/tokens`（或 rotate）
 服务端生成，`emt_` 前缀便于日志清洗时正则识别和肉眼辨认。
 
-## P4 现状（六类持有者签发进度）
+## P4 现状（五类当前标准持有者）
 
-生产 `data/runtime/auth/tokens.yaml` 已建好六条记录（`GET /auth/tokens` 可核实 label/scopes，
-不含明文）：
+首次配置脚本当前默认维护五条标准记录。既有部署可能额外保留历史 `sensor-service` token；它不再对应运行客户端，确认无调用后可通过管理面停用或删除。`GET /auth/tokens` 可核实 label/scopes（不含明文）：
 
 | label | profile | 发给谁 | 客户端代码 | 实际部署状态 |
 |---|---|---|---|---|
-| `desktop-main` | desktop | 桌面客户端（Emerald-client Tauri） | ✅ 已接入（401/403/429 语义、`cargo test` 41/41） | 待你确认本机正在跑的桌面客户端已配置为新 token |
-| `sensor-service` | sensor | 手机 sensor-service | ✅ 已接入（同仓 Emerald-client/sensor-service） | 待你确认本机 sensor-service 已配置为新 token |
+| `desktop-main` | desktop | 桌面客户端（PresenceKit-desktop Tauri） | ✅ 已接入（401/403/429 语义、`cargo test` 41/41） | 待你确认本机正在跑的桌面客户端已配置为新 token |
 | `mobile-main` | mobile | 手机端（yexuan_memery 安卓） | ✅ 已接入（`_extractError` 401/403/429、后台轮询 403 停止重试） | 待你在手机 App 设置里填入新 token |
 | `esp32-device` | device | ESP32 具身硬件（`firmware/presence-device`） | ✅ 已接入（`secrets.h` 已改为新 token，2026-07-04） | **待重新烧录**——板子目前跑的还是烧录时的旧 legacy secret 固件 |
 | `watch-main` | watch | Watch | 无本仓代码（推测是 iOS Shortcuts 直连 `/watch/event`） | 待你在 Shortcut 里把 Bearer 值换成新 token |
@@ -121,10 +119,7 @@ Token 明文格式：`emt_` + `secrets.token_urlsafe(32)`，由 `POST /auth/toke
 那正是这个文件存在的目的：本地设备凭据）。若丢失，`POST /auth/tokens/{label}/rotate`
 换新值即可（旧值同时失效，不影响其他持有者）。
 
-**legacy secret 尚未轮换**。客户端代码侧五类（除 Watch 外）都已具备读取 scoped token 的
-能力，但这不等于*运行中*的实例已经切换——桌面/sensor-service/mobile 需要你在各自配置里
-把值换成上表的新 token，ESP32 需要重新烧录，Watch 需要改 Shortcut。**全部六个都确认真的
-在用新 token 之后**，才轮换 legacy secret 的值（机制不变，只换值），P4 才算收尾；
+**legacy secret 尚未轮换**。当前客户端代码已具备读取 scoped token 的能力，但这不等于*运行中*的实例已经切换——桌面和 mobile 需要在各自配置里换值，ESP32 需要重新烧录，Watch 需要改 Shortcut。**五个当前持有方都确认实际使用新 token 后**，才轮换 legacy secret 的值（机制不变，只换值），P4 才算收尾；
 在那之前轮换会立刻锁死所有仍用旧值的设备。
 
 ## 审计文件位置

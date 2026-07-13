@@ -430,7 +430,7 @@ N 由 `dream.reality_context_full_turns` 配置（默认 3）。`dream_turn` 是
 
 > 破限属梦境独立源（D0），不在 settings 暴露开关（独立 pipeline 天然不漏进现实，工程上最不用操心）。
 
-### Emerald-client 当前接线
+### PresenceKit-desktop 当前接线
 
 同级项目 `<desktop-client-root>` 已把 Dream 作为正式 overlay 接入，不再是 mock preview：
 

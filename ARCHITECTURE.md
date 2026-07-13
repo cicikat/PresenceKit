@@ -31,6 +31,7 @@ QQ 消息 → main.py → message_queue
 
 桌面 `message_segments` 的 `say` 段可选携带句级表演 spec（`perform`，`core/perform_mapper.py`，
 fail-open），见 `docs/perform-mapping.md`。
+桌面端当前正式协议为 v0.1（legacy 冻结版）：用户输入正式走 `POST /desktop/chat`，服务端通过 `/ws/desktop` 下发回复与动作；本仓入口见 `docs/desktop-client-protocol.md`，协议正文唯一权威位于 PresenceKit-desktop 的 `docs/protocol-v0.md`。v1 未排期，双方均未实现。
 
 通道细节见 `docs/channels.md`。手机端当前通过 mobile 轮询通道接收主动消息，不占用桌宠 WebSocket。花园这类不进入对话 pipeline 的伴生状态，见 `docs/garden.md`。
 
