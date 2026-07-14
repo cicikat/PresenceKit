@@ -53,3 +53,15 @@ def test_visual_spend_digest_and_group_empty_views(sandbox, monkeypatch):
     assert client.get("/perception/visual-trace?date=bad", headers=_headers()).status_code == 422
     assert client.get("/spend/mandates", headers=_headers()).json()["entries"] == []
     assert client.get("/memory/digest/u1", headers=_headers()).json()["content"] == ""
+
+
+def test_debug_recall_alias_is_authenticated_and_empty_safe(sandbox, monkeypatch):
+    _active(sandbox)
+    client = _client(monkeypatch)
+    assert client.get("/debug/recall?uid=u1").status_code == 401
+    response = client.get("/debug/recall?uid=u1&char_id=yexuan", headers=_headers())
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["uid"] == "u1"
+    assert payload["char_id"] == "yexuan"
+    assert payload["records"] == []

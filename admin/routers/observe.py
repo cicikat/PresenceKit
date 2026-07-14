@@ -348,6 +348,12 @@ async def get_vector_overview(uid: str, source: str = "", limit: int = 100,
 # ─────────────────────────────────────────────────────────────────────────────
 
 @router.get(
+    "/debug/recall",
+    summary="桌面观测面板召回溯源兼容入口",
+    description="与 /observe/recall/{uid} 返回同一份 recall_trace 只读数据；uid 通过 query 传入。",
+    tags=["观测"],
+)
+@router.get(
     "/observe/recall/{uid}",
     summary="查看指定 uid 的召回溯源记录（recall_trace）",
     description=(
