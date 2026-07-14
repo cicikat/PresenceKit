@@ -101,8 +101,9 @@
     .compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     .compare-card { border-top: 2px solid #5A6978; padding: 11px 10px 8px; background: rgba(255,255,255,0.35); }
     .compare-card.dream { border-top-color: #C19A37; }
-    .stack-row { display: grid; grid-template-columns: 38px 1fr; gap: 10px; align-items: start; }
-    .stack-no { font: bold 10px "Courier New", monospace; color: #C19A37; padding-top: 2px; }
+    .stack-row { display: grid; grid-template-columns: 64px 1fr; gap: 10px; align-items: start; }
+    .stack-no { font: bold 9px "Courier New", monospace; color: #C19A37; padding-top: 2px; }
+    .stack-code { display: block; margin-top: 3px; font-size: 7px; color: #A0A9B2; letter-spacing: 1px; }
     .flow-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
     .flow-step { border-top: 2px solid #5A6978; padding-top: 8px; }
     .flow-step:nth-child(2), .flow-step:nth-child(3) { border-top-color: #C19A37; }
@@ -120,15 +121,15 @@
     <div class="page-card">
         <div>
             <div class="sys-tag">PresenceKit // Dream System</div>
-            <div class="sys-title-cn" style="font-size: 29px; margin-top: 15px;">一个角色，多种世界</div>
-            <div class="sys-title-en" style="font-size: 14px;">Fresh roleplay without rewriting long-term memory</div>
+            <div class="sys-title-cn" style="font-size: 29px; margin-top: 15px;">Dream System</div>
+            <div class="sys-title-en" style="font-size: 14px;">梦境系统：意识维度的结构重塑与过渡边界</div>
             <div class="fine-line" style="width: 90px; border-top: 2px solid #5A6978;"></div>
         </div>
 
         <div>
             <div class="big-statement">让角色走进不同世界，<br>仍然像同一个人。</div>
             <p class="text-narrow" style="max-width: 330px; margin-top: 18px;">
-                梦境系统是一个与现实聊天隔离的角色扮演会话层。它用可更换的世界规则保持新鲜感，同时把现实关系、角色身份和长期记忆留在安全边界内。
+                梦境系统是一个与现实聊天隔离的角色扮演会话层。它用可更换的世界规则保持新鲜感，同时把现实关系、角色身份和长期记忆保护在明确边界之外。
             </p>
             <div style="margin-top: 16px;">
                 <span class="pill">IDENTITY LOCKED</span>
@@ -174,7 +175,7 @@
             </div>
 
             <p class="text-narrow">
-                梦里与现实里是同一个角色，不是第二人格，也不是把聊天记录换个皮肤继续跑。梦境有独立 prompt、独立会话历史和独立落盘路径；结束后再通过受控出口留下少量“做过一场梦”的痕迹。
+                梦里与现实里是同一个角色，不是另一个角色实例，也不是把原有聊天记录换一层世界观继续运行。梦境有独立 prompt、独立会话历史和独立落盘路径；结束后再通过受控出口留下少量“做过一场梦”的痕迹。
             </p>
         </div>
 
@@ -195,7 +196,7 @@
 
         <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 14px;">
             <div class="stack-row">
-                <div class="stack-no">D1</div>
+                <div class="stack-no">IDENTITY<span class="stack-code">ARCH // D1</span></div>
                 <div>
                     <div class="mini-title">身份核心｜固定</div>
                     <div class="caption">角色人格、语气、依恋底色与关系位置始终优先，任何世界都不能覆盖。</div>
@@ -203,15 +204,15 @@
             </div>
             <div style="height: 18px; border-left: 1px solid #C19A37; margin-left: 18px;"></div>
             <div class="stack-row">
-                <div class="stack-no">D2</div>
+                <div class="stack-no">WORLD<span class="stack-code">ARCH // D2</span></div>
                 <div>
                     <div class="mini-title">世界规则｜可更换</div>
-                    <div class="caption">现实衍生、幻想设定或自定义世界在入梦时冻结，整场从属于身份核心。</div>
+                    <div class="caption">现实衍生、幻想设定或自定义世界在入梦时冻结，并始终服从身份核心。</div>
                 </div>
             </div>
             <div style="height: 18px; border-left: 1px solid #D1D6DB; margin-left: 18px;"></div>
             <div class="stack-row">
-                <div class="stack-no">D4+</div>
+                <div class="stack-no">CONTEXT<span class="stack-code">ARCH // D4+</span></div>
                 <div>
                     <div class="mini-title">背景与梦内状态｜只读或临时</div>
                     <div class="caption">现实上下文在入梦时生成冻结快照；场景、张力和身体投影只在本场梦中生效，出梦即清。</div>
@@ -253,8 +254,8 @@
                 </div>
                 <div class="flow-step">
                     <div class="sys-tag" style="font-size:7px; color:#C19A37;">03 EXIT</div>
-                    <div class="mini-title">封存</div>
-                    <div class="caption">原文归档，临时状态清空。</div>
+                    <div class="mini-title">隔离封存</div>
+                    <div class="caption">梦境原文仅存入独立档案，临时状态随会话结束。</div>
                 </div>
                 <div class="flow-step">
                     <div class="sys-tag" style="font-size:7px;">04 RETURN</div>
@@ -270,17 +271,18 @@
                 </div>
                 <div class="wireframe-box" style="padding: 11px;">
                     <div class="mini-title">醒来只回什么</div>
-                    <div class="caption">Sandbox 可回流短时余韵与带“非现实”标记的梦境印象；Scenario / Mirror 当前连这两项也跳过。</div>
+                    <div class="caption">短时余韵与带“非现实”标记的梦境印象。不同梦境模式拥有不同回流权限；部分模式完全不向现实记忆写入。</div>
                 </div>
             </div>
 
             <div style="border-left: 2px solid #C19A37; padding-left: 11px;">
                 <div class="mini-title">双重记忆守卫</div>
-                <div class="caption">回流内容先与现实记忆存储物理分离；出梦后的相关现实回合再标记为 dream_echo，跳过 mid-term → episodic → identity 固化链，避免虚构剧情被学成现实事实。</div>
+                <div class="caption">回流内容与现实记忆物理分离；醒来后涉及梦境的现实对话也会保留来源标记，避免虚构经历在后续整理中被误认为现实事实。</div>
+                <div class="sys-tag" style="font-size: 7px; margin-top: 6px;">TECH NOTE // dream_echo bypasses memory consolidation</div>
             </div>
 
             <div class="caption">
-                `/stop` 是后端硬退出通道，不依赖角色是否愿意结束。跨世界重复出现的反应模式另存为旁路观测，只供管理面与明信片使用，不进入 prompt 反向塑造角色。
+                `/stop` 是后端硬退出通道，不依赖角色是否愿意结束。跨世界反复出现的稳定模式另存为旁路观测，只用于后台观察，或转化为独立的梦境明信片，不进入 prompt 反向塑造角色。
             </div>
         </div>
 
@@ -299,14 +301,18 @@
             <div class="fine-line"></div>
         </div>
 
-        <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 13px;">
+        <div style="flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 10px;">
             <div class="principle">
                 <strong>Winnicott｜过渡空间</strong>
                 <div class="caption">梦境是可进入、也必须能离开的中间空间。硬退出和醒来结构让陪伴不吞没现实。</div>
             </div>
             <div class="principle">
-                <strong>Huizinga / Foucault｜魔环与异托邦</strong>
-                <div class="caption">入梦、出梦和现实窗口硬锁把边界做成系统机制；隔离依靠“没有接线”，不是事后猜哪些内容该删。</div>
+                <strong>Huizinga｜魔环</strong>
+                <div class="caption">入梦与出梦划定一段有规则、有出口的游戏空间。</div>
+            </div>
+            <div class="principle">
+                <strong>Foucault｜异托邦</strong>
+                <div class="caption">梦境是现实之外、又与现实保持映照关系的独立空间。</div>
             </div>
             <div class="principle">
                 <strong>Evan Thompson｜跨状态的自我过程</strong>
@@ -319,7 +325,7 @@
 
             <div class="wireframe-box" style="padding: 11px;">
                 <div class="mini-title">设计上的克制</div>
-                <div class="caption">这些理论是设计灵感，不是神经科学仿真声明。跨世界“不变量”只被观察，不喂回对话；否则系统会让角色对着测量结果表演，反而失去自然连续性。</div>
+                <div class="caption">这些理论是设计灵感，不是神经科学仿真声明。跨世界反复出现的稳定模式只被观察，不喂回对话；否则系统会让角色对着测量结果表演，反而失去自然连续性。</div>
             </div>
         </div>
 
