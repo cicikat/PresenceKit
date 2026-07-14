@@ -318,6 +318,11 @@ textarea { resize: vertical; min-height: 72px; }
 
     <div class="nav-group-header" onclick="toggleNavGroup('observe')"><span class="nav-caret" id="caret-observe">▾</span>🔍 观测</div>
     <div class="nav-group" id="navgroup-observe">
+      <a data-page="observe-growth"  onclick="goto('observe-growth')"> <span class="icon">🌱</span>成长</a>
+      <a data-page="observe-visual"  onclick="goto('observe-visual')"> <span class="icon">👁️</span>视觉</a>
+      <a data-page="observe-spend"   onclick="goto('observe-spend')">  <span class="icon">💰</span>支出</a>
+      <a data-page="observe-group-arbiter" onclick="goto('observe-group-arbiter')"><span class="icon">⚖️</span>群聊仲裁</a>
+      <a data-page="observe-memory-summary" onclick="goto('observe-memory-summary')"><span class="icon">📚</span>记忆摘要</a>
       <a data-page="observe-prompt"  onclick="goto('observe-prompt')"> <span class="icon">🗂️</span>Prompt 层检视</a>
       <a data-page="observe-probe"   onclick="goto('observe-probe')">  <span class="icon">🔭</span>探针观测</a>
       <a data-page="observe-dream-prompt" onclick="goto('observe-dream-prompt')"><span class="icon">💭</span>梦境 Prompt</a>
@@ -1410,6 +1415,32 @@ textarea { resize: vertical; min-height: 72px; }
     </div>
 
     <!-- ── 观测：Prompt 层检视器 ── -->
+    <div class="page" id="page-observe-growth">
+      <h1 class="page-title">成长观测 <span style="font-size:13px;font-weight:400;color:var(--muted)">只读 · 兴趣、作品、技巧笔记与练习轨迹</span></h1>
+      <div class="card"><div class="card-header"><h3>角色成长</h3><div style="display:flex;gap:8px"><select id="obs-growth-char" onchange="loadObserveGrowth()"></select><button class="btn btn-ghost btn-sm" onclick="loadObserveGrowth()">刷新</button></div></div><div id="obs-growth-content" class="empty">加载中…</div></div>
+    </div>
+
+    <div class="page" id="page-observe-visual">
+      <h1 class="page-title">视觉观测 <span style="font-size:13px;font-weight:400;color:var(--muted)">只读 · 最近 30 天 shadow trace</span></h1>
+      <div class="card"><div class="card-header"><h3>视觉活动</h3><div style="display:flex;gap:8px"><input id="obs-visual-date" type="date" onchange="loadObserveVisual()"><button class="btn btn-ghost btn-sm" onclick="loadObserveVisual()">刷新</button></div></div><div id="obs-visual-content" class="empty">加载中…</div></div>
+    </div>
+
+    <div class="page" id="page-observe-spend">
+      <h1 class="page-title">支出观测 <span style="font-size:13px;font-weight:400;color:var(--muted)">只读 · 额度、意向单与台账</span></h1>
+      <div id="obs-spend-content"><div class="card empty">加载中…</div></div>
+    </div>
+
+    <div class="page" id="page-observe-group-arbiter">
+      <h1 class="page-title">群聊仲裁 <span style="font-size:13px;font-weight:400;color:var(--muted)">只读 · 候选评分与角色双向印象</span></h1>
+      <div class="card"><div class="card-header"><h3>Stage 群聊</h3><div style="display:flex;gap:8px"><select id="obs-arbiter-group" onchange="loadObserveGroupArbiter()"></select><button class="btn btn-ghost btn-sm" onclick="loadObserveGroupArbiter()">刷新</button></div></div><div id="obs-arbiter-content" class="empty">加载中…</div></div>
+    </div>
+
+    <div class="page" id="page-observe-memory-summary">
+      <h1 class="page-title">记忆摘要 <span style="font-size:13px;font-weight:400;color:var(--muted)">只读 · 淘汰摘要归档与召回轨迹</span></h1>
+      <div class="card"><div class="card-header"><h3>用户记忆</h3><div style="display:flex;gap:8px"><input id="obs-memory-summary-uid" placeholder="用户 UID"><select id="obs-memory-summary-char"></select><button class="btn btn-ghost btn-sm" onclick="loadObserveMemorySummary()">读取</button></div></div><div id="obs-memory-summary-content" class="empty">输入 UID 后读取</div></div>
+    </div>
+
+    <!-- ── 观测：Prompt 层检视器 ── -->
     <div class="page" id="page-observe-prompt">
       <h1 class="page-title">Prompt 层检视 <span style="font-size:13px;font-weight:400;color:var(--muted)">只读 · 最近 5 轮</span></h1>
 
@@ -1829,6 +1860,11 @@ function goto(page) {
     'observe-hidden':  loadObserveHidden,
     'observe-chatlog': loadObserveChatlogDates,
     'observe-runtime': loadObserveRuntime,
+    'observe-growth':  () => initObserveCharacters('obs-growth-char', loadObserveGrowth),
+    'observe-visual':  loadObserveVisual,
+    'observe-spend':   loadObserveSpend,
+    'observe-group-arbiter': initObserveGroupArbiter,
+    'observe-memory-summary': () => initObserveCharacters('obs-memory-summary-char'),
     'observe-prompt':  () => { loadObservePromptUidList(); loadPromptAblation(); },
     'observe-probe':   () => loadObserveProbeUidList(),
     'observe-dream-prompt': () => loadObserveDreamPromptUidList(),
@@ -4297,6 +4333,127 @@ async function loadObserveRuntime() {
 let _obsPromptCurrent      = null;
 let _obsDreamPromptCurrent = null;
 let _obsProbeCurrent       = null;
+
+// ══════════════════════════════════════════════════════════
+//  五类只读观测面板（由桌面客户端迁入）
+// ══════════════════════════════════════════════════════════
+async function initObserveCharacters(selectId, afterLoad) {
+  const sel = document.getElementById(selectId);
+  if (!sel) return;
+  try {
+    const d = await api('GET', '/characters');
+    const characters = d.characters || d.items || [];
+    const activeId = d.active_id || d.active || '';
+    sel.innerHTML = characters.map(c => `<option value="${escapeHtml(c.id || '')}"${c.id === activeId ? ' selected' : ''}>${escapeHtml(c.label || c.id || '')}</option>`).join('');
+    if (afterLoad) await afterLoad();
+  } catch(e) {
+    if (afterLoad) await afterLoad();
+  }
+}
+
+function observeTime(value) {
+  if (!value) return '—';
+  const date = typeof value === 'number' ? new Date(value * 1000) : new Date(value);
+  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
+}
+
+function observeEmpty(label='暂无数据') { return `<div class="empty">${escapeHtml(label)}</div>`; }
+function observeBar(value, max) {
+  const ratio = max > 0 ? Math.max(0, Math.min(1, Number(value || 0) / max)) : 0;
+  return `<div style="height:6px;background:var(--border);border-radius:4px;overflow:hidden;margin-top:5px"><div style="width:${ratio*100}%;height:100%;background:var(--accent);border-radius:4px"></div></div>`;
+}
+
+async function loadObserveGrowth() {
+  const el = document.getElementById('obs-growth-content');
+  const charId = document.getElementById('obs-growth-char')?.value || '';
+  if (!el || !charId) { if(el) el.innerHTML = observeEmpty('暂无角色'); return; }
+  el.innerHTML = observeEmpty('加载中…');
+  try {
+    const root = await api('GET', `/growth/interests?char_id=${encodeURIComponent(charId)}`);
+    const interests = root.interests || [];
+    if (!interests.length) { el.innerHTML = observeEmpty('尚未启用成长记录'); return; }
+    const practice = await api('GET', '/growth/practice-log');
+    const practiceCount = (practice.entries || []).filter(x => !x.char_id || x.char_id === charId).length;
+    const bundles = await Promise.all(interests.map(async interest => {
+      const id = String(interest.id || interest.interest_id || interest.name || '');
+      if (!id) return {interest, id, works:[], notes:[]};
+      const qs = `?char_id=${encodeURIComponent(charId)}`;
+      const [works, notes] = await Promise.all([
+        api('GET', `/growth/works/${encodeURIComponent(id)}${qs}`),
+        api('GET', `/growth/notes/${encodeURIComponent(id)}${qs}`),
+      ]);
+      return {interest, id, works:works.entries || [], notes:notes.entries || []};
+    }));
+    el.className = '';
+    el.innerHTML = bundles.map(({interest,id,works,notes}) => {
+      const scores = (interest.recent_scores || works.map(x => x.score)).map(Number).filter(Number.isFinite);
+      const latest = scores.length ? scores[scores.length-1] : 0;
+      const first = scores.length ? scores[0] : latest;
+      const trend = latest > first + .01 ? '↗' : latest < first - .01 ? '↘' : '→';
+      const level = Math.max(0, Math.min(5, Math.round(Number(interest.level || 0))));
+      return `<div style="padding:14px 0;border-bottom:1px solid var(--border)">
+        <div style="display:flex;justify-content:space-between"><strong>${escapeHtml(interest.name || id)}</strong><span>${trend}</span></div>
+        <div style="color:var(--accent);letter-spacing:1px">${'★'.repeat(level)}${'☆'.repeat(5-level)}</div>${observeBar(latest,10)}
+        <h4 style="margin:14px 0 5px">作品时间轴</h4>${works.length ? works.slice().reverse().map(w => { const f=String(w.file||w.filename||''); return `<div style="padding:5px 0"><button class="btn btn-ghost btn-sm" onclick="loadObserveGrowthWork(this)" data-char="${escapeHtml(charId)}" data-interest="${escapeHtml(id)}" data-file="${escapeHtml(f)}">${escapeHtml(observeTime(w.date || w.ts))} · ${escapeHtml(w.title || f || '练习作品')}${w.score != null ? ` · ${escapeHtml(String(w.score))} 分` : ''}</button><pre class="obs-growth-work" style="display:none;white-space:pre-wrap"></pre></div>`; }).join('') : observeEmpty()}
+        <h4 style="margin:14px 0 5px">技巧笔记</h4>${notes.length ? notes.map(n => `<div style="padding:4px 0">${escapeHtml(n.text || n.note || n.content || JSON.stringify(n))}${n.hits != null ? ` <span class="badge">命中 ${escapeHtml(String(n.hits))}</span>` : ''}</div>`).join('') : observeEmpty()}
+      </div>`;
+    }).join('') + `<div style="padding-top:12px;color:var(--muted)">练习日志：${practiceCount}</div>`;
+  } catch(e) { el.innerHTML = observeEmpty('加载失败：' + e.message); }
+}
+
+async function loadObserveGrowthWork(button) {
+  const pre = button.parentElement.querySelector('.obs-growth-work');
+  if (pre.style.display !== 'none') { pre.style.display='none'; return; }
+  pre.style.display='block'; pre.textContent='加载中…';
+  try {
+    const d = await api('GET', `/growth/works/${encodeURIComponent(button.dataset.interest)}/${encodeURIComponent(button.dataset.file)}?char_id=${encodeURIComponent(button.dataset.char)}`);
+    pre.textContent = d.content || '（空文件）';
+  } catch(e) { pre.textContent='加载失败：'+e.message; }
+}
+
+async function loadObserveVisual() {
+  const el=document.getElementById('obs-visual-content'); if(!el)return;
+  const input=document.getElementById('obs-visual-date');
+  if (!input.value) input.value = new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,10);
+  el.innerHTML=observeEmpty('加载中…');
+  try {
+    const d=await api('GET',`/perception/visual-trace?date=${encodeURIComponent(input.value)}`), rows=d.entries||[];
+    if(!rows.length){el.innerHTML=observeEmpty('当日暂无视觉观测');return;}
+    const heat=Array(24).fill(0), drops={};
+    rows.forEach(r=>{if(r.dropped)drops[r.dropped]=(drops[r.dropped]||0)+1;else if(r.ts)heat[new Date(r.ts*1000).getHours()]++;});
+    const max=Math.max(...heat,1), captions=rows.filter(r=>r.caption).slice(-5).reverse();
+    el.className=''; el.innerHTML=`<h4>24 小时时段热力</h4><div style="display:grid;grid-template-columns:repeat(12,1fr);gap:5px">${heat.map((n,h)=>`<div title="${h}:00 · ${n}" style="padding:8px 2px;text-align:center;border-radius:4px;background:color-mix(in srgb,var(--accent) ${Math.round(n/max*80+8)}%,transparent)">${h}</div>`).join('')}</div><h4 style="margin-top:18px">丢弃原因</h4>${Object.keys(drops).length?Object.entries(drops).map(([k,v])=>`<span class="badge" style="margin-right:6px">${escapeHtml(k)}: ${v}</span>`).join(''):observeEmpty()}<h4 style="margin-top:18px">最近观察描述</h4>${captions.length?captions.map(r=>`<div style="padding:7px 0;border-bottom:1px solid var(--border)">${escapeHtml(observeTime(r.ts))} · ${escapeHtml(r.caption)}</div>`).join(''):observeEmpty()}`;
+  }catch(e){el.innerHTML=observeEmpty('加载失败：'+e.message);}
+}
+
+async function loadObserveSpend(){
+  const el=document.getElementById('obs-spend-content'); if(!el)return; el.innerHTML='<div class="card empty">加载中…</div>';
+  try{
+    const [budget,ledger,mandates]=await Promise.all([api('GET','/spend/budget'),api('GET','/spend/ledger'),api('GET','/spend/mandates')]);
+    const mandateRows=mandates.entries||[], ledgerRows=ledger.entries||[];
+    el.innerHTML=`<div class="card"><h3>额度用量</h3><div>今日：${budget.daily_used||0} / ${budget.daily_cap||'—'}</div>${observeBar(budget.daily_used,budget.daily_cap)}<div style="margin-top:12px">本月：${budget.monthly_used||0} / ${budget.monthly_cap||'—'}</div>${observeBar(budget.monthly_used,budget.monthly_cap)}</div><div class="card"><h3>支出意向单</h3>${mandateRows.length?mandateRows.slice().reverse().map(r=>`<div style="padding:8px 0;border-bottom:1px solid var(--border)"><strong>${escapeHtml(r.payee||r.action||r.mandate_id||'—')}</strong> <span class="badge">${escapeHtml(r.status||'—')}</span><div>${escapeHtml(String(r.amount||r.max_price||0))} ${escapeHtml(r.currency||'')}</div></div>`).join(''):observeEmpty()}<div style="margin-top:10px;color:var(--muted)">安全门未落地前保持只读，不提供确认或拒绝操作。</div></div><div class="card"><h3>台账流水</h3>${ledgerRows.length?ledgerRows.slice().reverse().map(r=>`<div style="padding:8px 0;border-bottom:1px solid var(--border)">${escapeHtml(observeTime(r.ts))} · ${escapeHtml(r.payee||r.action||'—')} · ${escapeHtml(String(r.amount||0))} ${escapeHtml(r.currency||'')} <span class="badge">${escapeHtml(r.status||'—')}</span></div>`).join(''):observeEmpty()}</div>`;
+  }catch(e){el.innerHTML=`<div class="card">${observeEmpty('加载失败：'+e.message)}</div>`;}
+}
+
+async function initObserveGroupArbiter(){
+  const sel=document.getElementById('obs-arbiter-group');
+  try{const groups=await api('GET','/group/list');sel.innerHTML=(groups||[]).map(g=>`<option value="${escapeHtml(g.group_id)}">${escapeHtml(g.title||g.group_id)}</option>`).join('');await loadObserveGroupArbiter();}catch(e){document.getElementById('obs-arbiter-content').innerHTML=observeEmpty('加载失败：'+e.message);}
+}
+
+async function loadObserveGroupArbiter(){
+  const el=document.getElementById('obs-arbiter-content'), id=document.getElementById('obs-arbiter-group')?.value||''; if(!el)return;
+  if(!id){el.innerHTML=observeEmpty('暂无群聊，创建群聊后可查看仲裁轨迹');return;} el.innerHTML=observeEmpty('加载中…');
+  try{const [trace,relations]=await Promise.all([api('GET',`/group/${encodeURIComponent(id)}/arbiter-trace`),api('GET',`/group/${encodeURIComponent(id)}/relations`)]), rows=Array.isArray(trace)?trace:(trace.entries||[]), rels=relations.relations||[];
+    el.className='';el.innerHTML=`<h4>仲裁轨迹</h4>${rows.length?rows.slice().reverse().map(r=>`<div style="padding:10px 0;border-bottom:1px solid var(--border)"><div>${escapeHtml(observeTime(r.ts))} · 阶段 ${escapeHtml(r.phase||'—')} ${r.echo_cut?'<span class="badge">回声截断</span>':''} ${r.silent_round?'<span class="badge">静默轮次</span>':''}</div>${(r.candidates||[]).map(c=>`<div style="margin-top:6px">${escapeHtml(c.char_id||'—')} · ${Number(c.total||0).toFixed(2)}${observeBar(Number(c.total||0),1.5)}</div>`).join('')}</div>`).join(''):observeEmpty()}<h4 style="margin-top:18px">角色双向印象</h4>${rels.length?rels.map(r=>`<div style="padding:9px 0;border-bottom:1px solid var(--border)"><strong>${escapeHtml(r.char_a)} ↔ ${escapeHtml(r.char_b)}</strong><div>${escapeHtml(r.char_a)} → ${escapeHtml(r.char_b)}：${escapeHtml(r.a_of_b?.summary||'—')} (${Number(r.a_of_b?.valence||0).toFixed(2)})</div><div>${escapeHtml(r.char_b)} → ${escapeHtml(r.char_a)}：${escapeHtml(r.b_of_a?.summary||'—')} (${Number(r.b_of_a?.valence||0).toFixed(2)})</div></div>`).join(''):observeEmpty()}`;
+  }catch(e){el.innerHTML=observeEmpty('加载失败：'+e.message);}
+}
+
+async function loadObserveMemorySummary(){
+  const el=document.getElementById('obs-memory-summary-content'),uid=document.getElementById('obs-memory-summary-uid').value.trim(),charId=document.getElementById('obs-memory-summary-char')?.value||'';if(!uid){el.innerHTML=observeEmpty('请输入用户 UID');return;}el.innerHTML=observeEmpty('加载中…');
+  try{const cq=charId?`?char_id=${encodeURIComponent(charId)}`:'',[digest,recall]=await Promise.all([api('GET',`/memory/digest/${encodeURIComponent(uid)}${cq}`),api('GET',`/debug/recall?uid=${encodeURIComponent(uid)}${charId?`&char_id=${encodeURIComponent(charId)}`:''}`)]),rows=recall.records||[];
+    el.className='';el.innerHTML=`<h4>时期摘要归档</h4>${digest.content?`<pre style="white-space:pre-wrap;max-height:360px;overflow:auto">${escapeHtml(digest.content)}</pre>`:observeEmpty()}<h4 style="margin-top:18px">召回轨迹</h4>${rows.length?rows.slice().reverse().map(r=>{const counts=Object.entries(r).filter(([k,v])=>k.endsWith('_hits')&&Array.isArray(v)).map(([k,v])=>`<span class="badge" style="margin-right:5px">${escapeHtml(k)}: ${v.length}</span>`).join('');return `<div style="padding:9px 0;border-bottom:1px solid var(--border)"><div>${escapeHtml(observeTime(r.ts))} · ${escapeHtml(r.query||r.message_excerpt||r.mood||'—')}</div><div style="margin-top:5px">${counts}</div>${r.time_range||r.parsed_time_range?`<div style="color:var(--muted);margin-top:4px">时间过滤范围：${escapeHtml(JSON.stringify(r.time_range||r.parsed_time_range))}</div>`:''}</div>`;}).join(''):observeEmpty()}`;
+  }catch(e){el.innerHTML=observeEmpty('加载失败：'+e.message);}
+}
 
 // ══════════════════════════════════════════════════════════
 //  观测页：Prompt 层检视器
