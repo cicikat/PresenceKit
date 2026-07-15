@@ -29,7 +29,8 @@ def test_seven_short_replies_trigger_short_hint():
     # 近 7 条全部 < short_max(60) -> 触发通用打破惯性提示（难触发）
     hint = detect_reply_length_collapse(_history([3, 5, 8, 10, 12, 20, 30]))
     assert hint is not None
-    assert "长度惯性" in hint
+    assert "太短" in hint
+    assert r"\n\n" in hint
 
 
 def test_six_short_replies_not_enough():
@@ -67,7 +68,8 @@ def test_custom_short_max_and_recent_n():
         _history([2, 3, 4, 4, 3, 2, 1]), short_max=5, recent_n_long=4, recent_n_short=7,
     )
     assert hint2 is not None
-    assert "长度惯性" in hint2
+    assert "太短" in hint2
+    assert r"\n\n" in hint2
 
 
 def test_long_check_takes_priority_over_short():

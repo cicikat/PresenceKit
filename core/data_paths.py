@@ -569,10 +569,6 @@ class DataPaths:
             raise ValueError("character relation requires two distinct characters")
         return self._p("runtime", "relations", f"{first}__{second}.json")
 
-    def stage_char_relations(self, *, group_id: str) -> Path:
-        """Brief 55 bilateral character impressions for one Stage group."""
-        return self.stage_group_dir(group_id=group_id) / "char_relations.json"
-
     # ── Activity: reading ─────────────────────────────────────────────────────
     def reading_char_root(self, *, char_id: str) -> Path:
         """data/runtime/activity/reading/{char_id}/  — enumerate all uid subdirs."""

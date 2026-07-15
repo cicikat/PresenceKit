@@ -108,7 +108,7 @@ def test_gating_no_longer_exposes_legacy_adapter():
     assert not hasattr(gating, "_adapt_legacy_triggers")
 
 
-def test_registered_triggers_match_assistant_turn_surface():
+def test_registered_triggers_match_scheduler_proposer_surface():
     from core.scheduler.proposer_registry import registered_trigger_names
 
     expected = {
@@ -142,9 +142,10 @@ def test_registered_triggers_match_assistant_turn_surface():
         "overflow",
         "presence_nag",
         "dream_exit",
+        "dream_postcards",
         "letter_writer",
-            "coplay_commentary",
-            "practice_help",
-        }
+        "coplay_commentary",
+        "practice_help",
+    }
 
     assert registered_trigger_names() == expected

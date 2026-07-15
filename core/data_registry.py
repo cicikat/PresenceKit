@@ -58,6 +58,7 @@ REGISTRY: dict[str, PathMeta] = {
     "gating_shadow_log":      PathMeta("forensic",  "shared",          "global",        "ignore"),
     "execute_dryrun_log":     PathMeta("forensic",  "shared",          "global",        "ignore"),
     "debug_llm_output_dir":   PathMeta("forensic",  "shared",          "global",        "ignore"),
+    "stage_arbiter_trace":    PathMeta("forensic",  "shared",          "per_group",     "ignore"),
 
     # ── derived: 可由 canonical 重建的缓存 / 索引 ─────────────────────────────
     "memory_index":           PathMeta("derived",   "reality",         "per_char_user", "ignore"),
@@ -87,6 +88,11 @@ REGISTRY: dict[str, PathMeta] = {
     "group_context":          PathMeta("canonical", "reality",         "per_group",     "ignore"),
     "fixation_state_dir":     PathMeta("canonical", "reality",         "per_char_user", "ignore"),
 
+    # ── canonical · shared: 跨角色/全局业务真值 ──────────────────────────────
+    "char_relation":          PathMeta("canonical", "shared",          "global",        "ignore"),
+    # Brief 63 尚未启用 writer，但只读兼容接口已公开；保留治理登记避免接口漂移。
+    "spend_mandates":         PathMeta("canonical", "shared",          "global",        "ignore"),
+
     # ── canonical · character_inner: 角色状态真值 ─────────────────────────────
     # S5: global → per_char（路径迁至 characters/{char_id}/inner/）
     "mood_state":             PathMeta("canonical", "character_inner", "per_char",      "ignore"),
@@ -98,6 +104,9 @@ REGISTRY: dict[str, PathMeta] = {
     "pet_file":               PathMeta("canonical", "character_inner", "per_char",      "ignore"),
     "garden":                 PathMeta("canonical", "character_inner", "per_char",      "ignore"),
     "character_growth":       PathMeta("canonical", "character_inner", "per_char_user", "ignore"),
+    "interest_state":         PathMeta("canonical", "character_inner", "per_char",      "ignore"),
+    "growth_works_dir":       PathMeta("canonical", "character_inner", "per_char",      "ignore"),
+    "growth_note":            PathMeta("canonical", "character_inner", "per_char",      "ignore"),
     # observations.jsonl 由离线脚本写入，但被 prompt_builder.py:60 读作提示词层输入；
     # 丢失永久降低输出质量且无自动重建路径，判定 canonical
     "observations":           PathMeta("canonical", "character_inner", "per_char",      "ignore"),
@@ -105,6 +114,8 @@ REGISTRY: dict[str, PathMeta] = {
     # ── canonical · dream: 梦域真值 ───────────────────────────────────────────
     "dreams_summaries_dir":   PathMeta("canonical", "dream",           "per_char_user", "ignore"),
     "dreams_impressions_dir": PathMeta("canonical", "dream",           "per_char_user", "ignore"),
+    "dreams_postcards_dir":   PathMeta("canonical", "dream",           "per_char",      "ignore"),
+    "dreams_invariants_dir":  PathMeta("canonical", "dream",           "per_char_user", "ignore"),
     "dream_state_path":       PathMeta("canonical", "dream",           "per_user",      "ignore"),
     "dream_settings_path":    PathMeta("canonical", "dream",           "per_user",      "ignore"),
 

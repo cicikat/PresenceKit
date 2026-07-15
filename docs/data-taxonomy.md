@@ -31,6 +31,12 @@ data/
 │   ├── agent_actions.json
 │   ├── pending_perception/
 │   ├── scheduler_user_state.json
+│   ├── spend/mandates.jsonl       # Brief 63 预留兼容读面，当前无 writer
+│   ├── relations/{char_a}__{char_b}.json
+│   ├── groups/{group_id}/
+│   │   ├── meta.json
+│   │   ├── transcript.json
+│   │   └── arbiter_trace.jsonl
 │   ├── memory/{char_id}/{uid}/
 │   │   ├── history.json
 │   │   ├── event_log/{date}.md
@@ -50,8 +56,11 @@ data/
 │   │   │   ├── observations.jsonl
 │   │   │   ├── author_note_state.json
 │   │   │   ├── trait_state.json
+│   │   │   ├── interest_state.json
 │   │   │   ├── presence.json
 │   │   │   └── diary/
+│   │   ├── works/{interest_id}/
+│   │   ├── notes/{interest_id}.md
 │   │   ├── garden/{plants.json,storage.json}
 │   │   ├── pet.json
 │   │   └── character_growth/  # 历史遗留文件；Brief 35 已移除代码读写
@@ -60,6 +69,8 @@ data/
 │       ├── archive/
 │       ├── summaries/
 │       ├── impressions/
+│       ├── postcards/schedule.json
+│       ├── invariants/{uid}.json
 │       ├── state/{uid}/dream_state.json
 │       └── settings/{uid}.json
 ├── scheduler_cooldowns.json
@@ -113,17 +124,25 @@ data/
 `author_notes_pool()` 属于 authored 静态内容，优先读 `content/characters/{char_id}/`，
 物理文件未迁移时回退旧位置。
 
+`interest_state.json`、`works/{interest_id}/` 与 `notes/{interest_id}.md` 是当前成长系统的
+角色级 canonical 真值；物理位置虽在 `runtime/` 树下，仍不可按临时缓存清理。
+
 ### Dream
 
 Dream domain 独立落在 `data/runtime/dreams/{char_id}/`，不进入 reality memory 树。
 现实侧只允许专用 loader 读取 `summaries/` 和 `impressions/` 生成低权回流层；
 `tmp/`、`archive/`、`state/`、`settings/` 均不是现实记忆源。
+`postcards/schedule.json` 保存冻结信件及投递状态，`invariants/{uid}.json` 保存跨世界观察；
+两者均为 canonical，不应随临时梦目录清理。
 
 ### Shared runtime and forensic
 
 - IPC / 临时队列：`data/runtime/*.json`
 - 调度器冷却真值：`data/scheduler_cooldowns.json`
 - 调度器用户级运行态：`data/runtime/scheduler_user_state.json`
+- Stage 真值与观测：`data/runtime/groups/{group_id}/{meta.json,transcript.json,arbiter_trace.jsonl}`
+- 跨 Stage 的角色关系：`data/runtime/relations/{char_a}__{char_b}.json`
+- Brief 63 兼容读面：`data/runtime/spend/mandates.jsonl`（当前无 writer）
 - forensic 日志与 DLQ：`data/logs/`
 - 上传文件与视觉缓存：`data/inbox/`、`data/cache/image_cache/`
 
