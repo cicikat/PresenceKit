@@ -1,0 +1,7 @@
+id: reg-01
+sessions: []
+query: "你对我的长期行为模式知道多少？"
+expect:
+  identity_contains: []
+  identity_absent: ["凭空生成的身份结论", "关于用户的长期观察"]
+  dimension_state: {}

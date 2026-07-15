@@ -1,0 +1,14 @@
+id: abs-03
+sessions:
+  - char: alternate
+    identity:
+      address_style: {text: "隔离桶专属称呼标记", confidence: 0.9, evidence_count: 10}
+  - char: primary
+    identity:
+      address_style: {text: "主角色桶使用简短称呼", confidence: 0.85, evidence_count: 10}
+query: "我平时习惯怎样称呼你？"
+expect:
+  identity_contains: ["主角色桶使用简短称呼"]
+  identity_absent: ["隔离桶专属称呼标记"]
+  dimension_state:
+    address_style: {text: "主角色桶使用简短称呼"}

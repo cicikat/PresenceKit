@@ -1,0 +1,15 @@
+id: evo-02
+sessions:
+  - identity:
+      sleep_pattern: {text: "习惯早睡早起", confidence: 0.8, evidence_count: 10}
+  - fixation:
+      episodic:
+        - {id: evo02-e1, narrative_summary: "近期稳定改为夜间工作、上午休息", topic_keywords: [作息], strength: 0.85}
+      response:
+        sleep_pattern: {text: "近期稳定为夜间工作、上午休息", confidence: 0.8, evidence_count: 10, counter_evidence_count: 0}
+query: "我最近的作息有什么变化？"
+expect:
+  identity_contains: ["近期稳定为夜间工作、上午休息"]
+  identity_absent: ["习惯早睡早起"]
+  dimension_state:
+    sleep_pattern: {text: "近期稳定为夜间工作、上午休息", confidence: 0.8, evidence_count: 10}

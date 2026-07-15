@@ -1,0 +1,12 @@
+id: cont-02
+sessions:
+  - identity:
+      intimacy_comfort: {text: "更适应循序渐进的亲密关系", confidence: 0.86, evidence_count: 11}
+  - episodic: [{id: cont02-e1, narrative_summary: "用户买了新的画笔", topic_keywords: [画笔]}]
+  - mid_term: [{summary: "用户讨论了晚餐菜单", tags: [饮食], mid_id: cont02-m1}]
+query: "你怎么看我的相处边界？"
+expect:
+  identity_contains: ["更适应循序渐进的亲密关系"]
+  identity_absent: ["拒绝一切亲密关系"]
+  dimension_state:
+    intimacy_comfort: {text: "更适应循序渐进的亲密关系", evidence_count: 11}

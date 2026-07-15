@@ -1,0 +1,11 @@
+id: abs-01
+sessions:
+  - identity:
+      help_seeking: {text: "通常先自行尝试，再明确求助", confidence: 0.8, evidence_count: 10}
+  - episodic: [{id: abs01-e1, narrative_summary: "用户询问了代码问题", topic_keywords: [代码]}]
+query: "你对我的稳定印象有哪些？"
+expect:
+  identity_contains: ["通常先自行尝试，再明确求助"]
+  identity_absent: ["虚构标记-热爱攀岩", "拥有私人飞机"]
+  dimension_state:
+    help_seeking: {text: "通常先自行尝试，再明确求助"}

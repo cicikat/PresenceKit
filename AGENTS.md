@@ -162,6 +162,7 @@ python run_test.py
    ## 测试（新增）
 - 跑测试用 `pytest -n auto`,不要用不带 -n 的全量单进程跑法
 - 只改了部分代码时优先用 `pytest --testmon` 或指定路径跑相关测试,避免每次全量
+- 身份连续性场景 eval：`pytest -n auto tests/identity_eval/`；脚本入口：`python tests/run_identity_eval.py`
 
 
 ---

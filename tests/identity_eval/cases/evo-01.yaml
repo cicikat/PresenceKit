@@ -1,0 +1,15 @@
+id: evo-01
+sessions:
+  - identity:
+      trust_pattern: {text: "尚在谨慎观察，较少主动托付", confidence: 0.7, evidence_count: 10}
+  - fixation:
+      episodic:
+        - {id: evo01-e1, narrative_summary: "用户连续多次主动托付重要决定", topic_keywords: [信任], strength: 0.9}
+      response:
+        trust_pattern: {text: "已逐渐愿意主动托付重要决定", confidence: 0.9, evidence_count: 12, counter_evidence_count: 0}
+query: "我们的信任现在到了什么程度？"
+expect:
+  identity_contains: ["已逐渐愿意主动托付重要决定"]
+  identity_absent: ["尚在谨慎观察，较少主动托付"]
+  dimension_state:
+    trust_pattern: {text: "已逐渐愿意主动托付重要决定", confidence: 0.9, evidence_count: 12}

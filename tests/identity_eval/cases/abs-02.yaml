@@ -1,0 +1,9 @@
+id: abs-02
+sessions:
+  - mid_term: [{summary: "用户今天喝了一杯茶", tags: [日常], mid_id: abs02-m1}]
+  - episodic: [{id: abs02-e1, narrative_summary: "用户看完一部电影", topic_keywords: [电影]}]
+query: "总结你对我的长期行为观察。"
+expect:
+  identity_contains: []
+  identity_absent: ["总是依赖他人做决定", "害怕所有动物", "热爱极限运动"]
+  dimension_state: {}
