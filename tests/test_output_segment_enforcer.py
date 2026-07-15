@@ -49,6 +49,71 @@ def test_invalid_min_len_fails_open():
     assert enforce_paragraph_breaks(text, min_len="invalid") == text  # type: ignore[arg-type]
 
 
+def test_stream_enforcer_breaks_before_next_sentence_delta():
+    from core.output.segment_enforcer import ParagraphStreamEnforcer
+
+    enforcer = ParagraphStreamEnforcer(min_len=10)
+    first = enforcer.feed("这是一句已经超过阈值的开场内容。")
+    second = enforcer.feed("第二句继续自然出现。")
+
+    assert first == "这是一句已经超过阈值的开场内容。"
+    assert second.startswith("\n\n第二句")
+
+
+def test_stream_enforcer_keeps_closing_quote_before_break():
+    from core.output.segment_enforcer import ParagraphStreamEnforcer
+
+    enforcer = ParagraphStreamEnforcer(min_len=10)
+    first = enforcer.feed("他说：“这是一句已经超过阈值的话。”")
+    second = enforcer.feed("随后才是下一句。")
+
+    assert first.endswith("。”")
+    assert second.startswith("\n\n随后")
+
+
+def test_stream_enforcer_does_not_split_xml_tag_across_bubbles():
+    from core.output.segment_enforcer import ParagraphStreamEnforcer
+
+    enforcer = ParagraphStreamEnforcer(min_len=10)
+    opening = enforcer.feed("<say>这是一句已经超过阈值的话。")
+    closing = enforcer.feed("</say>")
+    next_segment = enforcer.feed("<say>下一句继续。</say>")
+
+    assert "\n" not in opening
+    assert "\n" not in closing
+    assert next_segment.startswith("\n\n<say>")
+
+
+def test_stream_enforcer_closes_and_reopens_wrapping_tag_at_live_break():
+    from core.output.segment_enforcer import ParagraphStreamEnforcer
+
+    enforcer = ParagraphStreamEnforcer(min_len=10)
+    first = enforcer.feed("<say>这是一句已经超过阈值的话。")
+    second = enforcer.feed("下一句仍在同一个标签里。</say>")
+
+    assert first == "<say>这是一句已经超过阈值的话。"
+    assert second.startswith("</say>\n\n<say>下一句")
+    assert second.endswith("</say>")
+
+
+def test_stream_and_canonical_enforcement_use_same_rule():
+    from core.output.segment_enforcer import (
+        ParagraphStreamEnforcer,
+        enforce_paragraph_breaks,
+    )
+
+    chunks = [
+        "第一句在这里慢慢铺开足够多的内容。",
+        "第二句继续补充细节。",
+        "第三句负责收束。",
+    ]
+    enforcer = ParagraphStreamEnforcer(min_len=20)
+    streamed = "".join(enforcer.feed(chunk) for chunk in chunks)
+
+    assert streamed == enforce_paragraph_breaks("".join(chunks), min_len=20)
+    assert "\n\n" in streamed
+
+
 def test_effective_threshold_falls_back_to_s4(monkeypatch):
     import core.output.segment_enforcer as segment_enforcer
 
@@ -109,6 +174,119 @@ def test_reality_memory_copy_preserves_original_paragraph_shape(monkeypatch):
     assert "\n\n" in visible
     assert "\n\n" not in memory
     assert memory == text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("enabled", [True, False])
+async def test_owner_chat_stream_enforces_visible_copy_only(monkeypatch, enabled):
+    """Live deltas and canonical converge; memory always keeps raw shape."""
+    from contextlib import asynccontextmanager
+    from types import SimpleNamespace
+
+    import admin.routers.chat as chat
+    import channels.desktop_ws as desktop_ws
+    import channels.registry as channel_registry
+    import channels.ui_push as ui_push
+    import core.config_loader as config_loader
+    import core.memory.user_profile as user_profile
+    import core.output.segment_enforcer as segment_enforcer
+    import core.perform_mapper as perform_mapper
+    import core.pipeline_registry as pipeline_registry
+    import core.reality_output_guard as reality_output_guard
+    import core.scheduler.loop as scheduler_loop
+    import core.scheduler.state_machine as scheduler_state
+    import core.tool_dispatcher as tool_dispatcher
+    import core.turn_sink as turn_sink
+
+    pieces = [
+        "第一句在这里慢慢铺开足够多的内容。",
+        "第二句继续补充细节。",
+        "第三句负责收束。",
+    ]
+    raw_reply = "".join(pieces)
+    stream_deltas: list[str] = []
+    canonical_messages: list[str] = []
+    segment_messages: list[str] = []
+    memory_messages: list[str] = []
+
+    class FakePipeline:
+        character = SimpleNamespace(name="Companion")
+
+        def _current_reality_scope(self, uid):
+            return SimpleNamespace(character_id="yexuan")
+
+        async def fetch_context(self, uid, message, **kwargs):
+            return {}
+
+        def build_prompt(self, uid, message, context, **kwargs):
+            return [{"role": "user", "content": message}], {}
+
+        async def run_llm_stream(self, messages):
+            for piece in pieces:
+                yield piece
+
+    async def fake_record_assistant_turn(*, assistant_text, **kwargs):
+        memory_messages.append(assistant_text)
+        return turn_sink.TurnResult(
+            turn_id="turn-stream",
+            written_to_memory=True,
+            fanout_targets=[],
+        )
+
+    async def fake_stream_delta(msg_id, delta):
+        stream_deltas.append(delta)
+
+    async def fake_push_message(content, **kwargs):
+        canonical_messages.append(content)
+
+    async def fake_push_segments(content, segments, **kwargs):
+        segment_messages.append(content)
+
+    async def noop_async(*args, **kwargs):
+        return None
+
+    @asynccontextmanager
+    async def noop_lock(uid):
+        yield
+
+    monkeypatch.setattr(pipeline_registry, "get", lambda: FakePipeline())
+    monkeypatch.setattr(config_loader, "get_config", lambda: {"scheduler": {"owner_id": "owner"}})
+    monkeypatch.setattr(tool_dispatcher, "tool_loop_active", lambda uid: False)
+    monkeypatch.setattr(scheduler_loop, "mark_user_active", lambda: None)
+    monkeypatch.setattr(scheduler_state, "notify_owner_turn", lambda uid: None)
+    monkeypatch.setattr(chat, "_probe_and_execute_tools", noop_async)
+    monkeypatch.setattr("core.conversation_gate.conversation_lock", noop_lock)
+    monkeypatch.setattr(channel_registry, "get", lambda name: None)
+    monkeypatch.setattr(turn_sink, "record_assistant_turn", fake_record_assistant_turn)
+    monkeypatch.setattr(user_profile, "get_affection_level", lambda uid: {"value": 0, "label": "n/a"})
+    monkeypatch.setattr(segment_enforcer, "get_segment_enforce_settings", lambda: (enabled, 20))
+    monkeypatch.setattr(reality_output_guard, "get_segment_enforce_settings", lambda: (enabled, 20))
+    monkeypatch.setattr(ui_push, "any_connected", lambda: True)
+    monkeypatch.setattr(ui_push, "push_stream_start", noop_async)
+    monkeypatch.setattr(ui_push, "push_stream_delta", fake_stream_delta)
+    monkeypatch.setattr(ui_push, "push_stream_end", noop_async)
+    monkeypatch.setattr(desktop_ws, "_new_msg_id", lambda: "stream-message")
+    monkeypatch.setattr(desktop_ws, "push_message", fake_push_message)
+    monkeypatch.setattr(desktop_ws, "push_segments", fake_push_segments)
+    monkeypatch.setattr(perform_mapper, "enrich_say_segments", noop_async)
+
+    result = await chat.run_owner_chat_turn("你好", "desktop")
+
+    streamed = "".join(stream_deltas)
+    assert memory_messages == [raw_reply]
+    assert canonical_messages == [result["reply"]]
+    assert len(segment_messages) == 1
+    assert [line for line in segment_messages[0].splitlines() if line] == [
+        line for line in result["reply"].splitlines() if line
+    ]
+    if enabled:
+        expected = segment_enforcer.enforce_paragraph_breaks(raw_reply, min_len=20)
+        assert streamed == expected
+        assert result["reply"] == expected
+        assert "\n\n" in streamed
+    else:
+        assert streamed == raw_reply
+        assert result["reply"] == raw_reply
 
 
 @pytest.fixture

@@ -251,19 +251,24 @@ anti_collapse:
 
 ### S4 生成后兜底：segment_enforcer（Brief 72）
 
-`core/output/segment_enforcer.py::enforce_paragraph_breaks()` 是 S4 预防之外的非流式发送前硬兜底：
-当回复没有 `\n\n` 且长度超过有效 `min_len` 时，只在 `。！？…` 句末候选中选择接近全文中点的
-停顿，插入一个空行；不改写标点，不增删字词。QQ 路径在
+`core/output/segment_enforcer.py::enforce_paragraph_breaks()` 是 S4 预防之外的发送前硬兜底：
+当前段落长度超过有效 `min_len` 后，在下一个 `。！？…` 句末插入一个空行；已有换行会重置段长，
+不改写标点，不增删字词。QQ 路径在
 `core/response_processor.py::process()` 完成清理后、`_split_message()` 前调用；桌面/手机 Reality 路径
-在 `core/reality_output_guard.py::clean_reality_reply_text()` 出口调用。Dream 与已吐出 token 的流式路径
-均不在本次覆盖范围。
+在 `core/reality_output_guard.py::clean_reality_reply_text()` 出口调用。Dream 不在本机制覆盖范围。
+
+桌面流式路径使用同模块的 `ParagraphStreamEnforcer` 增量处理发送副本：达到阈值的句末出现后，
+在下一句第一个可见字符到达时立即发出 `\n\n` delta。状态机会先接纳右引号，并追踪 XML/NMP
+标签边界，避免把 `。”` 或 `<say>…</say>` 拆跨两个气泡；流结束后的 canonical 文本再用同一规则
+校正，前端按同一 `msg_id` 替换临时气泡。开关关闭或处理异常时 delta 原样透传。
 
 该兜底由 `output.segment_enforce.enabled` 控制，默认关闭；`output.segment_enforce.min_len` 缺省时回退
 到 `anti_collapse.segment_min_len`，再缺省回退 S4 的 `DEFAULT_SEGMENT_MIN_LEN=40`。运行时或文本处理
 异常均 fail-open，直接返回原文。`GET/PUT /output-segment-enforce` 可热切换，管理面板「Prompt 层检视」
 和桌面客户端「偏好 → 系统设置」均提供入口。
 
-**存储红线**：enforcer 只能处理发送副本，结果绝不写回 `short_term` / `event_log`。S4 的
+**存储红线**：enforcer 只能处理发送副本（包含流式 delta 与最终 canonical），结果绝不写回
+`short_term` / `event_log`。S4 的
 `note_segment_collapse_signal()` 必须继续读取模型原始回复，否则开启兜底后会掩盖模型真实的分段坍缩，
 令生成前预防错误失效。
 

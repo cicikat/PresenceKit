@@ -374,7 +374,7 @@ anti_collapse:
   # 旧键 recent_n / thresholds 已废弃，读到时忽略并打 warning，不做自动迁移
 output:
   segment_enforce:
-    enabled: false          # 生成后段落硬兜底；默认关，便于 A/B 对比
+    enabled: false          # 发送副本段落硬兜底（含桌面流式 delta）；默认关，便于 A/B 对比
     min_len: 40             # 缺省时回退 anti_collapse.segment_min_len
 context:
   max_turns: 30

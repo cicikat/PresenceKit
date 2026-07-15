@@ -137,6 +137,18 @@ async def run_owner_chat_turn(
         _t_stream = None
         _t_llm = None
         _use_stream = (channel_name == "desktop") and _ui_push.any_connected()
+        _stream_paragraph_enforcer = None
+        if _use_stream:
+            from core.output.segment_enforcer import (
+                ParagraphStreamEnforcer,
+                get_segment_enforce_settings,
+            )
+
+            _segment_enabled, _segment_min_len = get_segment_enforce_settings()
+            if _segment_enabled:
+                _stream_paragraph_enforcer = ParagraphStreamEnforcer(
+                    _segment_min_len,
+                )
         if _use_stream:
             _stream_msg_id = _dws._new_msg_id()
             await _ui_push.push_stream_start(_stream_msg_id)
@@ -156,7 +168,16 @@ async def run_owner_chat_turn(
                         _t_first_delta_ts = time.monotonic()
                         _t_first_delta = _t_first_delta_ts - _t_stream_launch
                     _chunks.append(piece)
-                    await _ui_push.push_stream_delta(_stream_msg_id, piece)
+                    visible_piece = (
+                        _stream_paragraph_enforcer.feed(piece)
+                        if _stream_paragraph_enforcer is not None
+                        else piece
+                    )
+                    if visible_piece:
+                        await _ui_push.push_stream_delta(
+                            _stream_msg_id,
+                            visible_piece,
+                        )
             finally:
                 await _ui_push.push_stream_end(_stream_msg_id)
             if _t_first_delta_ts is not None:
@@ -227,7 +248,7 @@ async def run_owner_chat_turn(
         # for chat texture.  Memory is already scrubbed inside record_assistant_turn.
         from core.response_processor import strip_render_tags as _strip_tags
         visible_source = reply
-        if not _use_stream:
+        if reply:
             visible_source = _clean_reply(reply, pipeline.character.name) or reply
         visible_reply = _strip_tags(visible_source) or visible_source
 
@@ -246,9 +267,13 @@ async def run_owner_chat_turn(
             try:
                 if _ui_push.any_connected():
                     from core.narrative_parser import build_say_segments
-                    _say_content, _say_segs = build_say_segments(reply)
+                    _say_content, _say_segs = build_say_segments(visible_source)
                     from core.perform_mapper import enrich_say_segments
-                    _say_segs = await enrich_say_segments(reply, _say_segs, char_id=_frozen_scope.character_id)
+                    _say_segs = await enrich_say_segments(
+                        visible_source,
+                        _say_segs,
+                        char_id=_frozen_scope.character_id,
+                    )
                     await _dws.push_segments(
                         _say_content,
                         _say_segs,
