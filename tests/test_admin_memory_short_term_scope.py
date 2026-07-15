@@ -47,6 +47,21 @@ def chars_tree(tmp_path):
 @pytest.fixture
 def registry(chars_tree, monkeypatch):
     monkeypatch.chdir(chars_tree)
+    # This fixture deliberately moves cwd away from the repository root so the
+    # asset registry scans the synthetic characters/ tree.  Short-term writes
+    # are not under test for config loading here, so keep their retention
+    # policy deterministic instead of depending on config.yaml or worker cache
+    # state.  Patch the consumer alias because short_term imports get_config
+    # directly from core.config_loader.
+    monkeypatch.setattr(
+        "core.memory.short_term.get_config",
+        lambda: {
+            "memory": {
+                "short_term_rounds": 20,
+                "short_term_disk_rounds": 20,
+            }
+        },
+    )
     reg = AssetRegistry()
     monkeypatch.setattr(_reg_mod, "_registry", reg)
     return reg
