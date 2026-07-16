@@ -54,10 +54,10 @@
 **印象回流（impression v2 · D2 细粒度化）**
 - `impression_store`：`data/runtime/dreams/{char_id}/impressions/`，慢衰减（0.02/天），50 条上限
 - `distill_impression`（D2）：梦结束提炼剧情概要 + 1–2 句清晰对白 + 情绪总览；输出字段：`plot`（≤80字概要）、`vivid_lines`（≤2条引语）、`impression_text`（80–150字第一人称总览）；仍禁止世界设定专有词和身体数值词；I4 写路径不变（只写 impression_store，不碰任何现实记忆存储）
-- `impression_loader`（D2）：**唯一读 impressions/ 的模块**，ambient 取最近 ≤3 条；渲染为 plot + vivid_lines + impression_text 三段结构，包裹于 `<梦境印象 note="…">` 标签
+- `impression_loader`（D2）：**唯一读 impressions/ 的模块**；出梦后精确 3 个现实 owner 回合只强注本次梦的 1 条印象，之后仅在用户文本/回复的 tags、关键词命中 `emotional_tags`/`plot` 时按相关度召回 ≤3 条；渲染为 plot + vivid_lines + impression_text 三段结构，包裹于 `<梦境印象 note="…">` 标签
 - 现实层 `6g_dream_impression`：显式 XML 标签框定"以下是叶瑄做过的梦，不是现实发生的事"，叶瑄可像记得一个梦一样自然提起但绝不当作真实经历复述
-- **D2 新隔离墙（固化端）**：`pipeline.post_process` 检测到当前有活跃 impression 时，在 `summarize_to_midterm` 入队 payload 中加 `dream_echo=True`；`handler_summarize_to_midterm` 收到此标记直接跳过，阻止该轮的梦境剧情通过 mid_term → episodic → identity 链路固化为现实事实
-- **D2 echo 判定**：活跃 impression 仍照常注入 6g；但固化静音只覆盖出梦后 8 小时，之后仅当用户文本或回复命中梦境关键词时置 `dream_echo=True`，避免 30 天 impression TTL 饿死现实固化链。
+- **D2 新隔离墙（固化端）**：只有强注轮或话题召回命中轮，`pipeline.post_process` 才在 `summarize_to_midterm` 入队 payload 中加 `dream_echo=True`；`handler_summarize_to_midterm` 收到此标记直接跳过，阻止该轮梦境剧情通过 mid_term → episodic → identity 链路固化为现实事实
+- **D2 echo 判定**：未注入的现实轮不置 `dream_echo`，现实固化链正常运行；计数只由真实用户驱动的现实回合消费，梦境回合与 scheduler/sensor/watch 回合不消费。
 
 **梦境明信片（archive 出站复盘，非第四层回流）**
 - 合格 sandbox 梦（至少五个 assistant 轮、非 hard_exit、每个 dream_id 至多一次）会在 summary 后冻结成一封信；模板随机，投递日随机延迟 1–356 天。
@@ -284,7 +284,7 @@ WriteEnvelope 双重门控：
 |---|---|---|
 | `6f_dream_afterglow` | 梦境余韵详细层（只读，非现实事实） | 0–2h 注入完整摘要/色调/意象；2–5h 注入模糊摘要/色调；5h 后返回空 |
 | `dream_afterglow_soft_hint` | 梦境余韵软提示（只读，非事实，`may/可能` 限定，TTL 8h） | 详细层为空后接管；读 `afterglow_residue.json`；neutral+空tags 不注入；读取异常 fail-closed |
-| `6g_dream_impression` | 梦境印象（plot + vivid_lines + 情绪总览，`<梦境印象>` XML 标签显式框定非现实） | 慢衰减；有活跃 impression 时注入；对应轮 `dream_echo=True` 跳过 mid_term 固化 |
+| `6g_dream_impression` | 梦境印象（plot + vivid_lines + 情绪总览，`<梦境印象>` XML 标签显式框定非现实） | 出梦后精确 3 个现实 owner 回合强注本次梦；之后仅话题命中时召回；实际注入轮 `dream_echo=True` |
 
 `6f_dream_afterglow` 与 `dream_afterglow_soft_hint` 在 Reality prompt builder 中互斥，位于层 6e 之后、层 6g 之前。两层均进入 token 裁剪表且优先级最低（最先被裁剪）。写隔离不变：只读，不写 memory / mood / profile / hidden state。
 

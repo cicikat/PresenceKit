@@ -166,6 +166,10 @@ tools:
     enabled: true
   toy_pattern:
     enabled: true
+dream:
+  impression:
+    forced_rounds: 3        # 出梦后强制连续注入轮数（精确现实回合数，非时间窗）
+    recall_enabled: true    # 强注结束后启用话题召回；false = 强注完即沉默
 tts:
   enabled: true
   desktop_enabled: false  # 桌面端按需语音条；独立于 QQ 概率语音，默认关闭
