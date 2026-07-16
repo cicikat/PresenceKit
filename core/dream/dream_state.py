@@ -8,6 +8,8 @@ from core.sandbox import get_paths, safe_user_id
 
 logger = logging.getLogger(__name__)
 
+_FORCED_ROUNDS = 3
+
 DREAM_ARTIFACT_SENTINEL = {
     "never_retrieve": True,
     "not_memory_source": True,
@@ -135,6 +137,32 @@ def write_state(user_id: str | int, state: dict[str, Any]) -> bool:
     path = get_paths().dream_state_path(user_id)
     path.parent.mkdir(parents=True, exist_ok=True)
     return safe_write_json(path, payload)
+
+
+def configured_forced_impression_rounds() -> int:
+    """Return configured post-exit forced rounds, clamped to a safe integer."""
+    try:
+        from core.config_loader import get_config
+
+        raw = get_config().get("dream", {}).get("impression", {}).get(
+            "forced_rounds", _FORCED_ROUNDS
+        )
+        return max(0, int(raw))
+    except Exception:
+        return _FORCED_ROUNDS
+
+
+def consume_forced_impression_round(user_id: str | int, *, reality_owner_turn: bool) -> int:
+    """Consume one forced round only for a real user-driven reality turn."""
+    state = read_state(user_id)
+    try:
+        remaining = max(0, int(state.get("forced_impression_rounds_left", 0)))
+    except (TypeError, ValueError):
+        remaining = 0
+    if reality_owner_turn and remaining > 0:
+        state["forced_impression_rounds_left"] = remaining - 1
+        write_state(user_id, state)
+    return remaining
 
 
 # ── Dream-local volatile state helpers ───────────────────────────────────────

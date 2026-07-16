@@ -522,7 +522,10 @@ async def enter_dream(
 
 async def _do_close_dream(uid: str, dream_id: str, exit_type: str) -> None:
     """Archive log, schedule summary generation, transition to REALITY_AFTERGLOW."""
-    from core.dream.dream_state import read_state, write_state, DreamStatus, clear_local_state
+    from core.dream.dream_state import (
+        read_state, write_state, DreamStatus, clear_local_state,
+        configured_forced_impression_rounds,
+    )
     from core.dream.dream_log import archive_current
     from core.dream.dream_hud import delete_hud_state
 
@@ -550,6 +553,7 @@ async def _do_close_dream(uid: str, dream_id: str, exit_type: str) -> None:
     state["last_exit_type"] = exit_type
     state["last_dream_mode"] = dream_mode
     state["last_exited_at"] = time.time()
+    state["forced_impression_rounds_left"] = configured_forced_impression_rounds()
     write_state(uid, state)
 
     delete_hud_state(uid)

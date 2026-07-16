@@ -1106,6 +1106,18 @@ class Pipeline:
         from core.tag_rules import get_tags as _get_tags
         _mt_tags = list(_get_tags(content))
 
+        # Only real user-driven reality turns consume forced impression rounds.
+        try:
+            from core.dream.dream_state import consume_forced_impression_round
+            consume_forced_impression_round(
+                user_id, reality_owner_turn=not bool(trigger_name)
+            )
+        except Exception as _consume_error:
+            logger.warning(
+                "[pipeline.post_process_slow] forced impression counter failed uid=%s: %s",
+                user_id, _consume_error,
+            )
+
         # Impression presence still controls 6g injection. Consolidation is
         # silent only for the 8h exit window or an explicitly dream-related turn.
         from core.dream.dream_state import read_state as _read_dream_state
