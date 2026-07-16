@@ -625,11 +625,11 @@ def build(
             _activity_fragment = get_prompt_fragment(char_id=char_id)
             logger.info(f"[activity_inject] fragment={_activity_fragment!r}")
             if _activity_fragment:
-                _layers.append("2.6_activity")
+                _layers.append("2.6_presence")
                 messages.append({
                     "role": "system",
                     "content": f"## {character.name}此刻\n{_activity_fragment}",
-                    "_layer": "2.6_activity",
+                    "_layer": "2.6_presence",
                 })
         except Exception as _e:
             logger.warning(f"[activity_inject] 异常: {_e}")
@@ -1759,7 +1759,7 @@ KNOWN_LAYERS: list[tuple[str, str]] = [
     ("2_jailbreak", "破限预设 layer=2"),
     ("2.5_time", "当前时间"),
     ("2.55_last_seen", "上次说话时间差"),
-    ("2.6_activity", "角色此刻在做什么"),
+    ("2.6_presence", "角色此刻在做什么（ambient presence）"),
     ("3_relation", "与该用户的关系"),
     ("3.5_period", "生理期感知（tagged）"),
     ("3.6_watch", "watch 睡眠数据摘要（tagged）"),

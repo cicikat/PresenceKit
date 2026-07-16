@@ -16,7 +16,7 @@
 | `2_jailbreak` | 破限预设 layer=2 | 文件存在且 enabled | stems + `characters/reality/jailbreak_entries.json`，按内容去重合并 |
 | `2.5_time` | 当前时间（年月日 时:分 星期X） | always | 实时生成 |
 | `2.55_last_seen` | 用户上一条消息距现在的精确时间差（如"约3小时12分钟"） | 非静默时段 且 gap ≥ 6 小时 | `core/presence.py` → `get_gap_from_history()` + `format_gap_text()` |
-| `2.6_activity` | 他此刻的状态 | 对话开头（history 为空）或沉默超10分钟 | `activity_manager.get_prompt_fragment(char_id=char_id)`（CC 任务 24 · 3 起按角色隔离，此前全角色共用 yexuan 状态），每15-45分钟随机切换，部分活动会从 episodic_memory 按 strength 加权抽一条记忆作为"他在想什么"注入 |
+| `2.6_presence` | 他此刻的 ambient presence 状态 | 对话开头（history 为空）或沉默超10分钟 | `activity_manager.get_prompt_fragment(char_id=char_id)`；不是 `core/activity/` 的共玩会话。每15-45分钟随机切换，部分活动会从 episodic_memory 按 strength 加权抽一条记忆作为"他在想什么"注入 |
 | `3_relation` | 与该用户的关系 + 称呼 | always | `user_relation` |
 | `4_group_context` | 群聊最近动态 | 群聊时 | `group_context.get_recent()` |
 | `4.2_stage_transcript` | 带真实 speaker 标签的共享 Stage transcript | reality Stage 角色生成时 | `core/stage/context.py` |

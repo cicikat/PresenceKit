@@ -1,5 +1,6 @@
 """
 activity_manager — 角色当前活动状态管理。
+这是 ambient presence（角色此刻在忙什么），不是 core.activity 的 ActivitySession 共玩会话。
 每15-45分钟（随机）切换一次 activity，受 daily_arc 时段约束。
 activity_pool.yaml 是手写配置，定义角色会做的事。
 

@@ -9,7 +9,7 @@
   "world_book": [],
   "gender": "neutral",
   "presence_ext": {
-    "disabled_layers": ["0_jailbreak", "2_jailbreak", "11_jailbreak", "11_author_note", "2.6_activity", "3_relation"],
+    "disabled_layers": ["0_jailbreak", "2_jailbreak", "11_jailbreak", "11_author_note", "2.6_presence", "3_relation"],
     "model_routing": "claude-main",
     "tool_categories": ["info", "desktop", "memory", "mcp"],
     "proactive": "off"
