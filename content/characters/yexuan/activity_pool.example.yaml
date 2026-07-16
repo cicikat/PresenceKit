@@ -2,11 +2,29 @@
 # 复制本文件，改名为 activity_pool.yaml，填入真实内容。
 #
 # activities 字段：
-#   id               唯一标识
+#   id               唯一标识，池内不可重复
 #   text             显示文本，{book} 占位符由 books 列表随机替换
 #   books            可选，text 含 {book} 时提供候选书目
 #   arcs             时段列表（见下方 arcs 定义）
-#   thinking_about_eligible  可选，true 表示挂入小观察池
+#   weight           可选，float，默认 1.0——arc 内加权随机的权重（Brief 78）。
+#                    全部条目 weight=0 时退回均匀抽样，不会除零/空抽。
+#   domain           可选，writing|music|drawing——声明该活动属于哪个 growth 域。
+#                    不填 = 纯 flavor 活动（漫游/喂鸟/校准之类），不参与 growth 对齐。
+#                    **不要填 other**：interest_state._normalise 会把未知 domain 都
+#                    归一成 "other"，池条目写 domain: other 会在角色恰好有任意
+#                    "other" 兴趣时被无关上调——两者毫无内容关联，想表达非成长活动
+#                    就留空。
+#                    命中角色 growth 当前 active 兴趣 → 权重 ×1.5；domain 存在但角色
+#                    没有对应 active 兴趣（含 active_interests 读取为空列表）→ ×0.3，
+#                    避免「此刻在写作」但 growth 完全没有 writing 兴趣的自相矛盾。
+#   thinking_about_eligible  可选，true 表示优先从 episodic 记忆抽一条具体事件当
+#                    「想着：」文案（真实记忆）。
+#   thinking_pool    可选，list[str]——该活动专属的静态「想着：」候选池，单条建议
+#                    ≤15 字（get_prompt_fragment 整体 50 字约定）。与
+#                    thinking_about_eligible 同时声明时，episodic 抽到内容优先，
+#                    episodic 为空才从这里均匀抽一条；均落到 state.thinking_about，
+#                    但只有 episodic 来源会套用「好像」前缀规则（thinking_pool 文本
+#                    不套）。
 #
 # arcs 字段：key 为时段名，value 为对应小时数组（0-24，可重叠）
 
@@ -16,10 +34,19 @@ activities:
     books:
       - "作者《书名》"
     arcs: [morning, afternoon]
+    weight: 1.0
 
   - id: example_activity
     text: "在做某事"
     arcs: [deep_night, morning]
+    weight: 1.0
+
+  - id: example_growth_practice
+    text: "在写一段东西"
+    domain: writing
+    weight: 1.0
+    arcs: [afternoon, evening]
+    thinking_pool: ["这段还差点意思"]
 
 arcs:
   deep_night:   [23, 24, 0, 1, 2, 3, 4, 5]

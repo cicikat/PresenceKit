@@ -8,14 +8,17 @@ activities:
     books:
       - "一本随手翻开的书"
     arcs: [morning, afternoon, evening]
+    weight: 1.0
 
   - id: resting
     text: "在发呆，没在想什么具体的事"
     arcs: [deep_night, morning]
+    weight: 1.0
 
   - id: idle_thinking
     text: "在想一件跟你无关的小事"
     arcs: [late_morning, afternoon]
+    weight: 1.0
 
 arcs:
   deep_night:   [23, 24, 0, 1, 2, 3, 4, 5]
