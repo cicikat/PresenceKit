@@ -35,7 +35,9 @@ Codex Windows 沙箱里可能出现：
 Get-Command python, py, pytest -ErrorAction SilentlyContinue | Select-Object Name,Source
 ```
 
-Codex 应调用 workspace dependency discovery，使用其返回的 bundled Python executable。
+运行项目 pytest 时，优先使用下节已确认的本机 Python 3.14 pytest 入口。workspace dependency
+discovery 返回的 bundled Python 可用于无需项目依赖的基础 Python 操作，但它可能没有安装 pytest；
+出现 `No module named pytest` 时不能据此判定测试不可运行。
 不要把某个用户名下的绝对 runtime 路径硬编码进项目脚本或文档。
 也不要从 `D:\ai` 递归搜索后随便使用其他项目附带的 `python.exe`；那些解释器的依赖集和
 运行时约束不属于本项目，容易产生假失败或污染。
@@ -66,7 +68,7 @@ PermissionError: [WinError 5] ... AppData\Local\Temp\pytest-of-...
 $env:TEMP="$PWD\.tmp"
 $env:TMP=$env:TEMP
 New-Item -ItemType Directory -Force $env:TEMP | Out-Null
-& '<workspace dependency discovery 返回的 python.exe>' -m pytest -q
+& 'C:\Users\10434\AppData\Local\Python\pythoncore-3.14-64\Scripts\pytest.exe' -n auto -q
 ```
 
 完成后只能清理确认位于仓库内的 `.tmp`。删除前必须校验解析后的绝对路径仍在仓库根目录下，禁止对未校验的计算路径递归删除。

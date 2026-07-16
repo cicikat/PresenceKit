@@ -185,6 +185,9 @@ brief，遵循“删除必须连同守卫、测试和文档条目一起删除”
 `docs/dev-environment.md`**。特别注意：
 
 1. `python` 可能不在 `PATH`，`py.exe` 也可能存在但没有已安装解释器；不要把这误判为项目失败。
+   本机运行项目 pytest 的正确入口是 Python 3.14 环境：
+   `C:\Users\10434\AppData\Local\Python\pythoncore-3.14-64\Scripts\pytest.exe`。
+   workspace dependency discovery 返回的 bundled Python 可能没有安装 pytest，不能据此判定测试不可运行。
 2. pytest 默认临时目录可能因沙箱权限报 `PermissionError`；把 `TEMP` / `TMP` 临时指向仓库内 `.tmp`，测试后安全清理。
 3. `PresenceKit-desktop`（当前目录名通常为 `Emerald-client`）的 Vite build 可能因沙箱禁止写 `node_modules/.vite-temp` 报 `EPERM`；应申请权限后原命令重跑。
 4. 跨仓执行 git 时可能遇到 `dubious ownership`；优先按命令使用
