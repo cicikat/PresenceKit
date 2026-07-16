@@ -45,6 +45,10 @@ def _bucket_for_scenario(value: float) -> str:
     return ("low", "rising", "high", "critical")[int(max(0, min(3, value * 4)))]
 
 
+def _scenario_bucket_rank(value: float) -> int:
+    return {"low": 0, "rising": 1, "high": 2, "critical": 3}[_bucket_for_scenario(value)]
+
+
 def _extract_scenario_control(reply: str) -> tuple[str, dict | None]:
     """
     Strip <scenario_control>…</scenario_control> from the LLM reply and parse it.
@@ -306,7 +310,7 @@ async def dream_turn(
                     # bucket is reached; scripts without arc retain linear behavior.
                     target = (get_stage(script, sc.current_stage_id) or {}).get("arc")
                     rank = {"low": 0, "rising": 1, "high": 2, "critical": 3}
-                    current_rank = int(max(0, min(3, current_yexuan_tension * 4)))
+                    current_rank = _scenario_bucket_rank(current_yexuan_tension)
                     if settings.get("scenario_arc_mode") == "arc" and target in rank and current_rank < rank[target]:
                         pass
                     elif next_stage is not None:

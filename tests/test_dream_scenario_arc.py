@@ -17,16 +17,16 @@ def _layer(bucket: str) -> str:
 
 
 def test_arc_below_target_injects_pressure():
-    assert "tighten pace" in _layer("low")
+    assert "张力导演：收紧节奏，推进冲突或靠近。" in _layer("low")
 
 
 def test_arc_above_target_injects_release():
-    assert "slow down" in _layer("high")
+    assert "张力导演：放缓，给彼此喘息，退半步。" in _layer("high")
 
 
 def test_arc_at_target_injects_no_director():
     layer = _layer("rising")
-    assert "Tension director" not in layer
+    assert "张力导演" not in layer
 
 
 async def _run_two_satisfied_turns(sandbox, *, script_id: str, projected_tension: float) -> dict:

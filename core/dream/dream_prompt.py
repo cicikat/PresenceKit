@@ -651,9 +651,9 @@ def _format_scenario_layer(scenario_core: dict[str, Any]) -> str:
             current = scenario_core.get("_tension_bucket", "low")
             rank = {"low": 0, "rising": 1, "high": 2, "critical": 3}
             if rank.get(current, 0) < rank.get(target, 0):
-                parts.append("Tension director: tighten pace; advance conflict or closeness.")
+                parts.append("张力导演：收紧节奏，推进冲突或靠近。")
             elif rank.get(current, 0) > rank.get(target, 0):
-                parts.append("Tension director: slow down; leave breathing room and step back.")
+                parts.append("张力导演：放缓，给彼此喘息，退半步。")
         # ── v0.6: scenario_control output protocol ────────────────────────────
         # Instructs LLM to append a hidden control block after every reply.
         # System reads and strips the block; user never sees it.
