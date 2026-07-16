@@ -247,6 +247,8 @@ async def record_assistant_turn(
                 envelope=envelope,
                 audit_extras=audit_extras,
                 frozen_scope=frozen_scope,
+                web_echo=web_echo,
+                coplay_echo=coplay_echo,
             )
         else:
             asyncio.create_task(

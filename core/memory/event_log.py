@@ -213,6 +213,7 @@ def append(
     trigger_name: str = "",
     *,
     char_id: str = DEFAULT_CHAR_ID,
+    source: str = "",
 ) -> bool:
     """
     追加一条对话记录到当天日志和 full_log.md。
@@ -227,6 +228,10 @@ def append(
         turn_id      - 来自 fixation_pipeline.capture_turn 的血缘 ID（可选）
         trigger_name - scheduler 触发源名（非空时追加 trigger: 字段到 meta，仅 assistant 有效）
         char_id      - 决定写入哪个角色桶（默认 "yexuan"）
+        source       - 外部信息来源标记（受控值：web / dream_echo / coplay；空 = 普通轮）。
+                       非空时追加 source: 字段到 meta（user/assistant 行同步）。Brief 79 §1：
+                       堵住 event_log_salvage 抢救链绕过固化隔离的通路，见 event_log_salvage
+                       的过滤逻辑。
     """
     from core.config_loader import _char_name
     char_name = _char_name()
@@ -245,11 +250,15 @@ def append(
             meta += f" turn_id:{turn_id}"
         if trigger_name:
             meta += f" trigger:{trigger_name}"
+        if source:
+            meta += f" source:{source}"
         footer = meta + "\n---\n"
     else:
         _meta = "> speaker:user"
         if turn_id:
             _meta += f" turn_id:{turn_id}"
+        if source:
+            _meta += f" source:{source}"
         footer = _meta + "\n"
 
     chunk = header + line + footer

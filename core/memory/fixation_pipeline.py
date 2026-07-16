@@ -573,6 +573,7 @@ def capture_turn(
     *,
     char_id: str = DEFAULT_CHAR_ID,
     audit_extras: dict | None = None,
+    source: str = "",
 ) -> str:
     """
     生成 turn_id，写 short_term + event_log。
@@ -586,6 +587,9 @@ def capture_turn(
     调用约束：必须在 uid_lock 内、detect_emotion 完成后调用。
     envelope 未传时默认零值（fail-closed）。
     char_id 决定写入哪个角色桶，生产路径必须显式传入。
+    source 透传给 event_log.append（Brief 79 §1）：本轮携带 web/dream/coplay 回流内容时
+    标记来源，供 event_log_salvage 抢救链过滤，堵住外部信息绕过固化隔离重新进入
+    important_facts 的通路。
     """
     from core.write_envelope import WriteEnvelope
     if envelope is None:
@@ -645,7 +649,7 @@ def capture_turn(
             **(audit_extras or {}),
         )
         writes = [
-            event_log.append(uid, "assistant", _scrubbed_reply, emotion=emotion, turn_id=turn_id, trigger_name=trigger_name, char_id=char_id)
+            event_log.append(uid, "assistant", _scrubbed_reply, emotion=emotion, turn_id=turn_id, trigger_name=trigger_name, char_id=char_id, source=source)
             if _scrubbed_reply is not None else True,
         ]
         if trigger_name in CONVERSATIONAL_TRIGGERS and _scrubbed_reply is not None:
@@ -657,8 +661,8 @@ def capture_turn(
             short_term.append(uid, "user", user_msg, turn_id=turn_id, char_id=char_id),
             short_term.append(uid, "assistant", _scrubbed_reply, turn_id=turn_id, char_id=char_id)
             if _scrubbed_reply is not None else True,
-            event_log.append(uid, "user", user_msg, turn_id=turn_id, char_id=char_id),
-            event_log.append(uid, "assistant", _scrubbed_reply, emotion=emotion, turn_id=turn_id, char_id=char_id)
+            event_log.append(uid, "user", user_msg, turn_id=turn_id, char_id=char_id, source=source),
+            event_log.append(uid, "assistant", _scrubbed_reply, emotion=emotion, turn_id=turn_id, char_id=char_id, source=source)
             if _scrubbed_reply is not None else True,
         ]
     if not all(writes):

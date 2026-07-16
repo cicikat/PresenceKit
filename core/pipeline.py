@@ -56,6 +56,43 @@ def _check_yandere_trigger(user_message: str, reply: str, relation_priority: int
     return any(kw in text for kw in YANDERE_KEYWORDS)
 
 
+def _detect_dream_echo(user_id: str, char_id: str, content: str, reply: str) -> bool:
+    """Read-only check：本轮是否携带梦境印象回流（Brief 79）。
+    只读本地印象文件 + tag 匹配，毫秒级、无 LLM，不消费 forced_impression_rounds_left
+    ——计数器消费仍然只在 post_process_slow 的 consume_forced_impression_round 里发生一次，
+    这里可以安全地在 post_process_critical（capture_turn 之前）提前调用一次判定来源标记。
+    fail-open：读取异常按无回流处理。
+    """
+    try:
+        from core.dream.dream_state import read_state as _read_dream_state
+        from core.dream.impression_loader import load_impression_text as _load_imp_for_echo
+        from core.config_loader import get_config as _get_config_for_echo
+        from core.tag_rules import get_tags as _get_tags
+
+        _echo_state = _read_dream_state(user_id)
+        try:
+            _echo_forced_left = max(0, int(_echo_state.get("forced_impression_rounds_left", 0)))
+        except (TypeError, ValueError):
+            _echo_forced_left = 0
+        _echo_dream_cfg = _get_config_for_echo().get("dream") or {}
+        _echo_imp_cfg = _echo_dream_cfg.get("impression") or {}
+        return bool(_load_imp_for_echo(
+            user_id,
+            char_id=char_id,
+            forced_rounds_left=_echo_forced_left,
+            latest_dream_id=str(_echo_state.get("last_dream_id") or ""),
+            user_text=f"{content}\n{reply}",
+            tags=set(_get_tags(content)),
+            recall_enabled=bool(_echo_imp_cfg.get("recall_enabled", True)),
+        ))
+    except Exception as _echo_error:
+        logger.warning(
+            "[pipeline._detect_dream_echo] dream impression echo check failed uid=%s: %s",
+            user_id, _echo_error,
+        )
+        return False
+
+
 async def _maybe_push_avatar_directive(mood_state: dict, char_id: str) -> None:
     """Phase A v8: push avatar_directive to desktop client when mood changes."""
     import time as _t
@@ -945,6 +982,8 @@ class Pipeline:
         envelope=None,
         audit_extras: dict | None = None,
         frozen_scope: "MemoryScope | None" = None,
+        web_echo: bool = False,
+        coplay_echo: bool = False,
     ) -> dict:
         """
         Brief 37：send 前必须走完的关键路径——只做毫秒级本地落盘（capture_turn），
@@ -960,6 +999,13 @@ class Pipeline:
         返回值原样传给 post_process_slow(critical_result=...)。
 
         frozen_scope: 如果传入，直接使用该 scope，跳过 _current_reality_scope()（N1）。
+
+        web_echo / coplay_echo（Brief 79）：本轮是否携带 web 搜索召回 / coplay 演出内容，
+        由调用方（turn_sink.record_assistant_turn）透传。连同本地重新判定的梦境印象回流
+        一起换算成 event_log 的 source 标记，堵住 event_log_salvage 抢救链绕过固化隔离的
+        通路。dream_echo 在这里独立重新判定（只读，不消费 forced_impression_rounds_left），
+        与 post_process_slow 里那份用于 mid_term 跳过判断的 dream_echo 各自独立求值，
+        两处判定逻辑一致（同一个 _detect_dream_echo），只是求值时机不同。
         """
         from core.write_envelope import WriteEnvelope
         if envelope is None:
@@ -1014,7 +1060,14 @@ class Pipeline:
             # ── capture_turn：写 short_term + event_log（含 turn_id 血缘）───
             try:
                 from core.memory.fixation_pipeline import capture_turn as _capture_turn
-                _turn_id = _capture_turn(user_id, content, reply, "neutral", turn_id=_turn_id, trigger_name=trigger_name, envelope=envelope, char_id=char_id, audit_extras=audit_extras)
+                _dream_echo_for_source = _detect_dream_echo(user_id, char_id, content, reply)
+                _source = (
+                    "dream_echo" if _dream_echo_for_source
+                    else "web" if web_echo
+                    else "coplay" if coplay_echo
+                    else ""
+                )
+                _turn_id = _capture_turn(user_id, content, reply, "neutral", turn_id=_turn_id, trigger_name=trigger_name, envelope=envelope, char_id=char_id, audit_extras=audit_extras, source=_source)
                 _critical_written = True
                 logger.debug(f"[pipeline.post_process_critical] capture_turn: {_turn_id}")
                 # 语义索引：event_log 条目异步写入向量库（fail-open）
@@ -1138,38 +1191,7 @@ class Pipeline:
         # Consolidation is silent exactly when this turn is a forced injection
         # or a topic-recall hit. Read before consuming so the third forced turn
         # still carries dream_echo=True.
-        _dream_echo = False
-        try:
-            from core.dream.dream_state import (
-                read_state as _read_dream_state,
-                consume_forced_impression_round,
-            )
-            from core.dream.impression_loader import load_impression_text as _load_imp_for_echo
-            from core.config_loader import get_config as _get_config_for_echo
-
-            _echo_state = _read_dream_state(user_id)
-            try:
-                _echo_forced_left = max(
-                    0, int(_echo_state.get("forced_impression_rounds_left", 0))
-                )
-            except (TypeError, ValueError):
-                _echo_forced_left = 0
-            _echo_dream_cfg = _get_config_for_echo().get("dream") or {}
-            _echo_imp_cfg = _echo_dream_cfg.get("impression") or {}
-            _dream_echo = bool(_load_imp_for_echo(
-                user_id,
-                char_id=char_id,
-                forced_rounds_left=_echo_forced_left,
-                latest_dream_id=str(_echo_state.get("last_dream_id") or ""),
-                user_text=f"{content}\n{reply}",
-                tags=set(_mt_tags),
-                recall_enabled=bool(_echo_imp_cfg.get("recall_enabled", True)),
-            ))
-        except Exception as _echo_error:
-            logger.warning(
-                "[pipeline.post_process_slow] dream impression echo failed uid=%s: %s",
-                user_id, _echo_error,
-            )
+        _dream_echo = _detect_dream_echo(user_id, char_id, content, reply)
         try:
             from core.dream.dream_state import consume_forced_impression_round
             consume_forced_impression_round(
@@ -1297,7 +1319,7 @@ class Pipeline:
             user_id, content, reply,
             target_id=target_id, is_group=is_group, pending_paths=pending_paths,
             trigger_name=trigger_name, envelope=envelope, audit_extras=audit_extras,
-            frozen_scope=frozen_scope,
+            frozen_scope=frozen_scope, web_echo=web_echo, coplay_echo=coplay_echo,
         )
         slow_result = await self.post_process_slow(
             user_id, content, reply, critical_result,
