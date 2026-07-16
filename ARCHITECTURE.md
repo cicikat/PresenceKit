@@ -204,6 +204,10 @@ data/
 │   ├── reminders.json            用户备忘录列表（调度器检查到期即发）
 │   ├── fixation_state.json       固化 pipeline 状态（重启不丢）
 │   ├── dream_seed.json           梦境预构短期种子（12h TTL；入梦一次性消费）
+│   ├── memory_digest.md          episodic 淘汰归档（Brief 46 §1，已于 Brief 80 起退役：只读存量，不再写入）
+│   ├── storyline.json            叙事弧 append-only 存储（Brief 80，弧线+节点，见 docs/memory.md §四点六）
+│   ├── storyline_inbox.json      episodic 淘汰批次待聚合暂存（storyline_weekly 消费后清空，滚动上限200）
+│   ├── storyline_archive.md      storyline 总弧线数超限时淘汰的 closed arc 归档
 │   └── event_log/{date}.md       按天分割的对话流水账（search 最近 30 天）
 ├── _legacy_retired/{timestamp}/      ← V9 归档：S5/S6 旧型目录（含 event_log 旧路径）
 │                                        event_log/{uid}/ 在 30 天窗口内仍被 union 读取

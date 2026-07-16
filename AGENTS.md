@@ -60,7 +60,8 @@
 | 多角色 Stage session / 共享 transcript / 回合仲裁 | `core/stage/models.py` / `core/stage/store.py` / `core/stage/arbiter.py` / `core/stage/runner.py` |
 | 情景记忆 | `core/memory/episodic_memory.py` |
 | 查询侧时间意图解析（Brief 48：解析"上周/前天/N天前"等，供 episodic/event_log/向量预取按时间窗过滤召回，纯规则无 LLM） | `core/memory/temporal_query.py` → `parse_query_time_range()`；接线点 `core/pipeline.py::fetch_context()` |
-| 情景记忆淘汰归档（遗忘=降级而非删除；上限裁剪批次压缩成"时期摘要"，v1 不进 prompt） | `core/memory/fixation_pipeline.py` → `digest_evicted_episodes()` / `handler_digest_evicted_episodes()` |
+| 情景记忆淘汰暂存（遗忘=降级而非删除；上限裁剪批次存进 storyline_inbox，等周频聚合统一消费；原即时 digest 压缩已退役） | `core/memory/fixation_pipeline.py` → `handler_storyline_evicted_input()` |
+| storyline 叙事弧层（append-only 存储 + 写API open_arc/append_node/set_arc_status；周频聚合 storyline_weekly；tagged 召回层 6h_storyline，Brief 80） | `core/memory/storyline.py` / `core/scheduler/triggers/storyline_weekly.py` |
 | event_log 过期前抢救持久事实（age 27-29 天，产出走 important_facts 冲突裁决入口，不发言） | `core/scheduler/triggers/event_log_salvage.py` |
 | 闲时整合 pass：episodic 存量近似重复合并（v1 零 LLM，复用写入时去重的同一相似度函数/阈值，核心记忆不参与，单轮上限10对）+ 向量库孤儿一致性核对（超阈值触发 rebuild） | `core/scheduler/triggers/memory_janitor.py` |
 | 情绪状态 | `core/memory/mood_state.py` |

@@ -43,6 +43,7 @@
 | `6f_dream_afterglow` | 梦境余韵详细层（只读，非现实事实）：0–2h 完整摘要/色调/意象；2–5h 模糊摘要/色调 | 5h 内存在有效 dream summary | `core/dream/dream_afterglow.load_afterglow()`；5h 后返回空并交接给软提示层 |
 | `dream_afterglow_soft_hint` | 梦境余韵软提示（只读，非事实，TTL 8h，`may/可能` 限定语气，`neutral+空tags` 不注入） | 详细 afterglow 层为空，且 afterglow_residue.json 存在、TTL 未过期、tone≠neutral 或 tags 非空 | `core/prompt_builder._format_afterglow_soft_hint()` → `core/memory/user_hidden_state.read_afterglow_residue()` → `data/runtime/memory/{char_id}/{uid}/afterglow_residue.json`（S6 路径，详见 docs/memory.md §记忆层一览） |
 | `6g_dream_impression` | 梦境印象回流（ambient，≤3条，非事实框定，他自述"我好像在梦里……"） | 有未过期印象时注入 | `core/dream/impression_loader.load_impression_text()` → `data/runtime/dreams/{char_id}/impressions/{uid}.json` |
+| `6h_storyline` | 叙事弧回忆：弧线标题 + 最近≤3个节点摘要（≤300字），框定语"这是你记得的一段持续经历，不是此刻发生的事" | tagged：本轮 tag 与某条 active/dormant 弧线的 tags 有交集（取交集最多的一条）；backchannel 低信息轮不注入 | `core/memory/storyline.list_recallable_arcs()`（Brief 80 §4） |
 | `coplay_context` | 陪玩模式游戏名 + 进度 + 最近3条动态 + 剧透压制硬约束（`<陪玩状态>`定界） | `CoplaySession.status == active` | `core/coplay/game_state.py::build_coplay_context_text()`，读 `core.coplay.session` + `game_state` + `observer.peek_moments()` |
 | `coplay_residue_soft_hint` | "刚陪她打完《X》，还有点意犹未尽"体裁软提示 | session 收尾后 4h TTL 内，且非 active（与 `coplay_context` 互斥） | `core/coplay/afterglow.py::load_afterglow_text()`，fail-closed |
 | `coplay_recall` | 聊天提到玩过的游戏名/别名时，回忆上次游玩摘要（`<陪玩回忆>`定界） | 命中 `game_state` 里任一已玩游戏的 `game_name`/`aliases` 子串，且非 active | `core/coplay/game_state.py::build_game_log_recall_text()` |
@@ -324,6 +325,7 @@ token_estimate = sum(len(m["content"]) for m in messages)
 | 45 | `coplay_recall` | game_log 摘要回忆（tag 门控命中游戏名/别名） |
 | 50 | `6d_diary_context` | 用户近期日记，tag 门控注入 |
 | 60 | `6e_inner_diary` | 角色昨天日记（事件层 + 感受层，同 priority 整批丢） |
+| 65 | `6h_storyline` | 叙事弧回忆，tag 门控命中时最多注入一条，质量高于中期压缩、低于精筛情景记忆 |
 | 70 | `6c_episodic` | LLM 压缩 + MMR 筛选的情景记忆，高质量，靠后丢 |
 | 80 | `5.5_lore` | 世界书设定，最后丢 |
 | 85 | `coplay_context` | 陪玩模式游戏进度/动态 + 剧透压制约束，内容很小，比 lore 更晚丢 |
