@@ -294,6 +294,19 @@ class TestTurnDedup:
         block = action_trace.format_trace_block(entries, current_tool_result=None)
         assert "北京多云" in block
 
+    def test_direct_question_can_be_answered_truthfully(self):
+        from core.memory import action_trace
+        entries = [
+            {"ts": 200.0, "tool": "weather", "status": "ok", "result_digest": "北京多云"},
+        ]
+        block = action_trace.format_trace_block(entries)
+        assert "可如实说明" in block
+        assert "不必提‘工具’二字" in block
+
+    def test_no_trace_adds_no_expression_permission(self):
+        from core.memory import action_trace
+        assert action_trace.format_trace_block([]) == ""
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 6. event_log_echo 开关

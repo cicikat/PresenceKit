@@ -249,7 +249,9 @@ def format_trace_block(entries: list[dict], *, current_tool_result: str | None =
         return ""
     lines = [f"- {format_line(e)}" for e in _entries]
     block = (
-        "（你最近做过的操作，供回忆，不要逐条复述：\n"
+        "（你最近做过的操作，供回忆，不要主动逐条复述。"
+        "用户直接问起你做过什么或刚才在忙什么时，可如实说明这些操作，"
+        "用你自己的说法，不必提‘工具’二字：\n"
         + "\n".join(lines)
         + "\n）"
     )
