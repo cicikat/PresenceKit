@@ -1135,7 +1135,41 @@ class Pipeline:
         from core.tag_rules import get_tags as _get_tags
         _mt_tags = list(_get_tags(content))
 
-        # Only real user-driven reality turns consume forced impression rounds.
+        # Consolidation is silent exactly when this turn is a forced injection
+        # or a topic-recall hit. Read before consuming so the third forced turn
+        # still carries dream_echo=True.
+        _dream_echo = False
+        try:
+            from core.dream.dream_state import (
+                read_state as _read_dream_state,
+                consume_forced_impression_round,
+            )
+            from core.dream.impression_loader import load_impression_text as _load_imp_for_echo
+            from core.config_loader import get_config as _get_config_for_echo
+
+            _echo_state = _read_dream_state(user_id)
+            try:
+                _echo_forced_left = max(
+                    0, int(_echo_state.get("forced_impression_rounds_left", 0))
+                )
+            except (TypeError, ValueError):
+                _echo_forced_left = 0
+            _echo_dream_cfg = _get_config_for_echo().get("dream") or {}
+            _echo_imp_cfg = _echo_dream_cfg.get("impression") or {}
+            _dream_echo = bool(_load_imp_for_echo(
+                user_id,
+                char_id=char_id,
+                forced_rounds_left=_echo_forced_left,
+                latest_dream_id=str(_echo_state.get("last_dream_id") or ""),
+                user_text=f"{content}\n{reply}",
+                tags=set(_mt_tags),
+                recall_enabled=bool(_echo_imp_cfg.get("recall_enabled", True)),
+            ))
+        except Exception as _echo_error:
+            logger.warning(
+                "[pipeline.post_process_slow] dream impression echo failed uid=%s: %s",
+                user_id, _echo_error,
+            )
         try:
             from core.dream.dream_state import consume_forced_impression_round
             consume_forced_impression_round(
@@ -1146,16 +1180,6 @@ class Pipeline:
                 "[pipeline.post_process_slow] forced impression counter failed uid=%s: %s",
                 user_id, _consume_error,
             )
-
-        # Impression presence still controls 6g injection. Consolidation is
-        # silent only for the 8h exit window or an explicitly dream-related turn.
-        from core.dream.dream_state import read_state as _read_dream_state
-        from core.dream.echo_gate import should_dream_echo as _should_dream_echo
-        _dream_echo = _should_dream_echo(
-            last_exited_at=_read_dream_state(user_id).get("last_exited_at"),
-            user_content=content,
-            reply=reply,
-        )
 
         # 若 emotion 显著，handler 内部会自动入队 reflect_to_episodic（eager）
         if envelope.can_write_memory:

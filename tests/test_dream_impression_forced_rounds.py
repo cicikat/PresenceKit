@@ -97,3 +97,28 @@ def test_recall_can_be_disabled_after_forced_rounds(sandbox):
         user_text="灯塔",
         recall_enabled=False,
     ) == ""
+
+
+def test_dream_echo_signal_tracks_actual_injection(sandbox):
+    from core.dream.impression_loader import load_impression_text
+
+    uid = "dream-echo-signal"
+    now = time.time()
+    _append(uid, "dream-lighthouse", "在海边灯塔下重逢", ["期待"], now)
+
+    assert bool(load_impression_text(
+        uid,
+        forced_rounds_left=1,
+        latest_dream_id="dream-lighthouse",
+        user_text="无关话题",
+    )) is True
+    assert bool(load_impression_text(
+        uid,
+        forced_rounds_left=0,
+        user_text="我又想起灯塔",
+    )) is True
+    assert bool(load_impression_text(
+        uid,
+        forced_rounds_left=0,
+        user_text="今天吃什么",
+    )) is False
