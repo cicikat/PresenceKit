@@ -11,6 +11,9 @@ from core.stage.models import Stage, TranscriptEntry
 
 logger = logging.getLogger(__name__)
 
+REACTION_MAX_CHARS = 15
+REACTION_MAX_TOKENS = 40
+
 
 class StageCharacterView:
     """A scoped generation view; it never calls Pipeline.post_process."""
@@ -139,6 +142,52 @@ class StageCharacterView:
                 debug.get("token_estimate"),
             )
         return await self.pipeline.run_llm(messages, char_id=self.char_id)
+
+    async def generate_reaction(
+        self,
+        stage: Stage,
+        transcript: list[TranscriptEntry],
+        turn_id: str,
+        triggered_by: str,
+    ) -> str:
+        """Noise-tier short reaction (Brief 85 §3): mini prompt, hard token cap.
+
+        Not the full `generate()` path — no fetch_context, no build_prompt,
+        just a character-card summary + the last two transcript lines, so a
+        react-tier candidate costs a fraction of a normal reply.
+        """
+        if stage.domain != "reality":
+            raise RuntimeError("reality StageCharacterView cannot generate for dream domain")
+        persona = (self._character.personality or self._character.description or "").strip()[:200]
+        system_content = f"你是{self._character.name}。{persona}".strip()
+        tail_lines = []
+        for entry in transcript[-2:]:
+            if entry.speaker_id == "owner":
+                speaker = "owner"
+            elif entry.speaker_id == self.char_id:
+                speaker = "你"
+            else:
+                speaker = get_char_name(entry.speaker_id)
+            tail_lines.append(f"{speaker}：{entry.content}")
+        instruction = (
+            "群聊里刚发生了这些：\n"
+            + "\n".join(tail_lines)
+            + f"\n\n用不超过{REACTION_MAX_CHARS}个字给一句简短的附和、吐槽或一个动作反应，"
+            "不要解释、不要描述场景，只输出这一句话本身。"
+        )
+        messages = [
+            {"role": "system", "content": system_content},
+            {"role": "user", "content": instruction},
+        ]
+        from core import llm_client
+
+        reply = await llm_client.chat(
+            messages,
+            max_tokens_override=REACTION_MAX_TOKENS,
+            call_category="stage_reaction",
+            char_id=self.char_id,
+        )
+        return (reply or "").strip()[:REACTION_MAX_CHARS]
 
     def _directed_block(self, triggered_by: str, transcript: list[TranscriptEntry]) -> str:
         """Point at who/what this reply is answering (Brief 85 §2).

@@ -30,6 +30,11 @@ class StageSettings:
     debug_token_log: bool = True
     talkativeness: dict[str, float] = field(default_factory=dict)
     keywords: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    # Brief 85 §3/§4: reaction tier + topic-seed knobs.
+    speak_threshold: float = 0.5
+    react_threshold: float = 0.25
+    max_reactions: int = 2
+    topic_seed_prob: float = 0.25
 
     def __post_init__(self) -> None:
         if self.min_responders < 0:
@@ -42,9 +47,16 @@ class StageSettings:
             raise ValueError("transcript_limit must be >= 1")
         if not 0.0 <= float(self.group_memory_strength) <= 1.0:
             raise ValueError("group_memory_strength must be within [0, 1]")
+        if self.max_reactions < 0:
+            raise ValueError("max_reactions must be >= 0")
+        if self.react_threshold > self.speak_threshold:
+            raise ValueError("react_threshold must be <= speak_threshold")
         for name, value in (
             ("respond_threshold", self.respond_threshold),
             ("spontaneous_threshold", self.spontaneous_threshold),
+            ("speak_threshold", self.speak_threshold),
+            ("react_threshold", self.react_threshold),
+            ("topic_seed_prob", self.topic_seed_prob),
         ):
             if not 0.0 <= float(value) <= 1.0:
                 raise ValueError(f"{name} must be within [0, 1]")
@@ -63,6 +75,10 @@ class StageSettings:
             "debug_token_log": self.debug_token_log,
             "talkativeness": dict(self.talkativeness),
             "keywords": {key: list(value) for key, value in self.keywords.items()},
+            "speak_threshold": self.speak_threshold,
+            "react_threshold": self.react_threshold,
+            "max_reactions": self.max_reactions,
+            "topic_seed_prob": self.topic_seed_prob,
         }
 
     @classmethod
@@ -87,6 +103,10 @@ class StageSettings:
                 str(key): tuple(str(item) for item in (value or []) if str(item).strip())
                 for key, value in (raw.get("keywords") or {}).items()
             },
+            speak_threshold=float(raw.get("speak_threshold", 0.5)),
+            react_threshold=float(raw.get("react_threshold", 0.25)),
+            max_reactions=int(raw.get("max_reactions", 2)),
+            topic_seed_prob=float(raw.get("topic_seed_prob", 0.25)),
         )
 
 

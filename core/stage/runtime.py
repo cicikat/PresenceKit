@@ -1,6 +1,7 @@
 """Reality Stage entry that connects views, delivery, and memory projection."""
 from __future__ import annotations
 
+import inspect
 import logging
 import uuid
 
@@ -12,6 +13,22 @@ from core.stage.views import StageViewRegistry
 logger = logging.getLogger(__name__)
 
 _VIEWS = StageViewRegistry()
+
+
+def _accepts_kwarg(func, name: str) -> bool:
+    """True if `func` declares `name` or accepts arbitrary **kwargs.
+
+    Lets this module hand optional kwargs (derived_keywords, generate_reaction,
+    …) to whatever `run_owner_turn` is currently bound — the real runner, or a
+    narrower test double that predates a given kwarg.
+    """
+    try:
+        params = inspect.signature(func).parameters
+    except (TypeError, ValueError):
+        return True
+    if name in params:
+        return True
+    return any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values())
 
 
 async def run_reality_stage_turn(
@@ -35,6 +52,14 @@ async def run_reality_stage_turn(
 
     async def generate(stg, speaker_id, transcript, _turn_id, triggered_by):
         return await _VIEWS.get(speaker_id).generate(
+            stg,
+            transcript,
+            _turn_id,
+            triggered_by,
+        )
+
+    async def generate_reaction(stg, speaker_id, transcript, _turn_id, triggered_by):
+        return await _VIEWS.get(speaker_id).generate_reaction(
             stg,
             transcript,
             _turn_id,
@@ -96,16 +121,14 @@ async def run_reality_stage_turn(
         generate_reply=generate,
         deliver_reply=deliver,
         turn_id=resolved_round_id,
-        derived_keywords={char_id: _VIEWS.get(char_id).topic_keywords(stage.owner_uid) for char_id in stage.roster},
     )
-    try:
-        result = await run_owner_turn(group_id, owner_content, **kwargs)
-    except TypeError as exc:
-        # Compatibility for narrow integrations that still stub the pre-52 runner.
-        if "derived_keywords" not in str(exc):
-            raise
-        kwargs.pop("derived_keywords")
-        result = await run_owner_turn(group_id, owner_content, **kwargs)
+    if _accepts_kwarg(run_owner_turn, "derived_keywords"):
+        kwargs["derived_keywords"] = {
+            char_id: _VIEWS.get(char_id).topic_keywords(stage.owner_uid) for char_id in stage.roster
+        }
+    if _accepts_kwarg(run_owner_turn, "generate_reaction"):
+        kwargs["generate_reaction"] = generate_reaction
+    result = await run_owner_turn(group_id, owner_content, **kwargs)
 
     if fanout:
         try:

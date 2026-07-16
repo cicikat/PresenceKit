@@ -130,6 +130,7 @@ async def run_owner_turn(
     deliver_reply: DeliverReply | None = None,
     turn_id: str | None = None,
     derived_keywords: dict[str, tuple[str, ...]] | None = None,
+    generate_reaction: GenerateReply | None = None,
 ) -> StageTurnResult:
     """Run Phase A + Phase B under one owner conversation lock."""
     stage = load_stage(group_id)
@@ -239,6 +240,45 @@ async def run_owner_turn(
                 break
             replies.append(entry)
             ai_chain_depth += 1
+
+        # Phase R: bounded noise-tier reactions (Brief 85 §3). A one-shot pass
+        # over near-miss candidates — not rescored, not counted against
+        # max_ai_chain_depth. generate_reaction is optional so callers that
+        # don't wire it (or older test doubles) simply skip this phase.
+        reaction_budget = stage.settings.max_reactions
+        if reaction_budget > 0 and generate_reaction is not None and transcript:
+            spoken_this_turn = {entry.speaker_id for entry in replies}
+            reaction_peer = transcript[-1].speaker_id
+            reaction_candidates = [
+                char_id for char_id in stage.roster
+                if char_id not in spoken_this_turn and char_id != reaction_peer
+            ]
+            if reaction_candidates:
+                ranked = _rank_candidates(stage, transcript, reaction_candidates, derived_keywords)
+                reactors = [
+                    item for item in ranked
+                    if stage.settings.react_threshold <= item.total < stage.settings.speak_threshold
+                ][:reaction_budget]
+                reacted: list[str] = []
+                for item in reactors:
+                    entry, _echo_cut = await _generate_and_append(
+                        stage,
+                        item.char_id,
+                        transcript,
+                        resolved_turn_id,
+                        reaction_peer,
+                        generate_reaction,
+                        deliver_reply,
+                    )
+                    if entry is not None:
+                        replies.append(entry)
+                        reacted.append(entry.speaker_id)
+                if ranked:
+                    _append_arbiter_trace(
+                        stage, transcript, ranked, turn_id=resolved_turn_id, phase="R",
+                        selected=reacted, chain_depth=ai_chain_depth,
+                        extra={"reaction": True},
+                    )
 
     return StageTurnResult(
         group_id=group_id,
