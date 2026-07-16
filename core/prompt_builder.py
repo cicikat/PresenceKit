@@ -526,11 +526,16 @@ def build(
     # ─────────────────────────────────────────────────────────────────────────
     _realtime_awareness = _format_realtime_awareness(_tags)
     if _realtime_awareness:
-        _fact_boundary_text = f"【现实信息】{_realtime_awareness}。仅以上为已确认，其余未知。"
+        _fact_boundary_text = (
+            f"【现实信息】{_realtime_awareness}。仅以上为已确认，其余未知。"
+            "屏幕上的桌宠形象是你自己在屏幕上的存在，不是用户的角色。"
+        )
     else:
         _fact_boundary_text = (
             "【现实信息】当前没有任何已确认的现实细节，"
             "凡未列出的现实物品/食物/天气/她的身体状态一律未知，不补充、不暗示。"
+            "没有真实屏幕感知时，不得虚构屏幕画面、界面状态或用户正在做的事。"
+            "屏幕上的桌宠形象是你自己在屏幕上的存在，不是用户的角色。"
         )
     _layers.append("1.5_fact_boundary")
     messages.append({
