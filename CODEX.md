@@ -72,7 +72,7 @@ Scheduler       → core/scheduler/loop.py
 
 **Memory consolidation** runs in the slow queue: `capture_turn → mid_term → episodic → consolidate_to_identity`.
 
-**Tool system**: Tools declared in `_TOOL_REGISTRY` in `core/tool_dispatcher.py`. `info`/`desktop` tools fire via pre-pipeline probe; reply-side desktop intent parsing runs after generation. `memory` tools are registered but are not currently exposed to the main generation call.
+**Tool system**: Tools are declared in `_TOOL_REGISTRY` in `core/tool_dispatcher.py`. The pre-pipeline probe exposes `info` + `desktop`; the generation-side tool loop exposes `info` + `desktop` + `memory` by default, unless the active character overrides this with `presence_ext.tool_categories`. `fs` / `system` are absent from both default exposure lists and require an explicit character declaration. `desktop` / `system` are also `_MODE_RESTRICTED_CATEGORIES`: execution is blocked in safe mode and allowed only during the danger-mode window (which expires automatically after 2 hours). Reply-side desktop intent parsing runs after generation.
 
 **Garden system**: `core/garden/manager.py` maintains five mood-mapped flower slots under `data/garden/`. `garden_water` rolls automatic watering every 30 minutes, `garden_daily` scans harvest/vase state, `water_garden` handles user-prompted watering through the info-tool probe, and `GET /garden/state` exposes admin state. See `docs/garden.md`.
 
