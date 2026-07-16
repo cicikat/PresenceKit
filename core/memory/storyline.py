@@ -92,6 +92,44 @@ def save_meta(uid: str, *, char_id: str = DEFAULT_CHAR_ID, last_aggregated_at: f
     _save(uid, data, char_id=char_id)
 
 
+MAX_INBOX_ENTRIES = 200
+
+
+def _inbox_file(uid: str, *, char_id: str = DEFAULT_CHAR_ID):
+    require_character_id(char_id)
+    scope = MemoryScope.reality_scope(safe_user_id(uid), char_id)
+    return resolve_path(scope, "storyline_inbox")
+
+
+def load_inbox(uid: str, *, char_id: str = DEFAULT_CHAR_ID) -> list[dict]:
+    """读取 episodic 淘汰批次暂存区（Brief 80 §3，取代原 memory_digest 的即时压缩）。"""
+    p = _inbox_file(uid, char_id=char_id)
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return []
+    except Exception as e:
+        logger.error("[storyline] inbox 加载失败，按空处理 uid=%s err=%s", uid, e)
+        return []
+
+
+def append_to_inbox(uid: str, entries: list[dict], *, char_id: str = DEFAULT_CHAR_ID) -> None:
+    """追加淘汰批次条目到 inbox，滚动保留最近 MAX_INBOX_ENTRIES 条。fail-open：写失败只记日志。"""
+    if not entries:
+        return
+    p = _inbox_file(uid, char_id=char_id)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    current = load_inbox(uid, char_id=char_id)
+    current.extend(entries)
+    current = current[-MAX_INBOX_ENTRIES:]
+    safe_write_json(p, current)
+
+
+def clear_inbox(uid: str, *, char_id: str = DEFAULT_CHAR_ID) -> None:
+    """周频聚合消费完 inbox 后清空。"""
+    safe_write_json(_inbox_file(uid, char_id=char_id), [])
+
+
 def list_recallable_arcs(uid: str, *, char_id: str = DEFAULT_CHAR_ID) -> list[dict]:
     """供 prompt_builder 召回层使用：返回 status in {active, dormant} 的弧线（closed 不参与召回）。"""
     data = load(uid, char_id=char_id)

@@ -60,6 +60,7 @@ _COOLDOWNS: dict[str, int] = {
     "garden_vase_wilted":   4 * 3600,
     "hidden_state_decay":         12 * 3600,       # 用户隐性状态衰减：12小时
     "hidden_state_consolidate":   7 * 24 * 3600,   # 基线收敛：7天
+    "storyline_weekly":          7 * 24 * 3600,    # storyline 叙事弧周频聚合（Brief 80 §2）：7天
     "event_log_salvage":         24 * 3600,        # event_log 过期前抢救持久事实：24小时
     "memory_janitor":            24 * 3600,        # 闲时整合 pass：episodic 近似重复合并 + 向量库一致性核对：24小时
     "spend_monitor":             24 * 3600,
@@ -925,6 +926,7 @@ async def _loop():
                 )
                 from core.scheduler.triggers.event_log_salvage import _check_event_log_salvage
                 from core.scheduler.triggers.memory_janitor import _check_memory_janitor
+                from core.scheduler.triggers.storyline_weekly import _check_storyline_weekly
                 from core.scheduler.triggers.coplay_watch import _check_coplay_watch
                 from core.scheduler.triggers.spend_monitor import _check_spend_monitor
                 from core.scheduler.triggers.interest_seed import _check_interest_seed
@@ -948,6 +950,7 @@ async def _loop():
                     "activity_switch", "dlq_monitor", "log_maintenance",
                     "episodic_sweep", "garden_water", "garden_daily",
                     "hidden_state_decay", "hidden_state_consolidate",
+                    "storyline_weekly",
                     "event_log_salvage", "memory_janitor",
                     "sensor_aware", "coplay_watch",
                     "spend_monitor",
@@ -983,6 +986,7 @@ async def _loop():
                     _check_garden_daily(),
                     _check_hidden_state_decay(),
                     _check_hidden_state_consolidate(),
+                    _check_storyline_weekly(),
                     _check_event_log_salvage(),
                     _check_memory_janitor(),
                     _check_sensor_aware(),
