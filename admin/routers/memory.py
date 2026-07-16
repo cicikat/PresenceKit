@@ -44,6 +44,41 @@ def _resolve_char_id(char_id: str | None) -> str:
     return char_id
 
 
+@router.get("/storyline/{user_id}", summary="读取 storyline 叙事弧概要（Brief 80）")
+async def get_storyline_state(
+    user_id: str,
+    char_id: str | None = None,
+    auth=Depends(require_scopes("memory.read")),
+):
+    from core.memory import storyline as _sl
+    resolved = _resolve_char_id(char_id)
+    data = _sl.load(user_id, char_id=resolved)
+    from core.memory.path_resolver import resolve_path
+    from core.memory.scope import MemoryScope
+    inbox_path = resolve_path(MemoryScope.reality_scope(user_id, resolved), "storyline_inbox")
+    try:
+        inbox_count = len(_json.loads(inbox_path.read_text(encoding="utf-8"))) if inbox_path.exists() else 0
+    except Exception:
+        inbox_count = 0
+    return {
+        "user_id": user_id,
+        "char_id": resolved,
+        "meta": data["meta"],
+        "inbox_count": inbox_count,
+        "arcs": [
+            {
+                "arc_id": a["arc_id"],
+                "title": a["title"],
+                "status": a["status"],
+                "tags": a["tags"],
+                "node_count": len(a["nodes"]),
+                "updated_at": a["updated_at"],
+            }
+            for a in data["arcs"]
+        ],
+    }
+
+
 @router.get("/digest/{user_id}", summary="读取淘汰情景记忆的时期摘要")
 async def get_memory_digest(
     user_id: str,

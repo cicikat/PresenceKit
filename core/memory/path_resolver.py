@@ -35,7 +35,10 @@ REALITY_USER_ARTIFACTS: frozenset[str] = frozenset({
     "vector_store",      # sqlite-vec semantic index (derived, rebuildable)
     "provenance_log",    # append-only JSONL: memory write provenance (G3)
     "action_trace",      # ring buffer: recent tool-execution traces (Brief 27)
-    "memory_digest",     # episodic eviction archive — 时期摘要 markdown (Brief 46 §1)
+    "memory_digest",     # episodic eviction archive — 时期摘要 markdown (Brief 46 §1，Brief 80 起退役)
+    "storyline",         # 叙事弧 append-only 存储 (Brief 80 §1)
+    "storyline_inbox",   # episodic 淘汰批次待聚合暂存 (Brief 80 §3)
+    "storyline_archive", # storyline 超限淘汰的 closed arc 归档 markdown (Brief 80 §1)
 })
 
 # Reality-scoped, character-global: path uses char_id only, uid is NOT part of path.
@@ -167,6 +170,15 @@ def resolve_path(scope: MemoryScope, artifact: str) -> Path:
 
     if artifact == "memory_digest":
         return paths.user_memory_root(uid, char_id=char_id) / "memory_digest.md"
+
+    if artifact == "storyline":
+        return paths.user_memory_root(uid, char_id=char_id) / "storyline.json"
+
+    if artifact == "storyline_inbox":
+        return paths.user_memory_root(uid, char_id=char_id) / "storyline_inbox.json"
+
+    if artifact == "storyline_archive":
+        return paths.user_memory_root(uid, char_id=char_id) / "storyline_archive.md"
 
     # ── character-global scoped: (char_id) only — uid is not part of path ───
 
