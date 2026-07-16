@@ -119,14 +119,49 @@ def _load_thinking_about(uid: str = "", *, char_id: str = _DEFAULT_CHAR_ID) -> s
         return ""
 
 def _pick_activity(arc: str, char_id: str = _DEFAULT_CHAR_ID) -> dict:
-    """按当前时段随机抽一个activity。"""
+    """按当前时段加权随机抽一个activity（CC 78·2）。
+
+    加权：条目 weight（默认1.0），按 growth active 兴趣做 domain 对齐——
+    domain 命中角色真实 active 兴趣 ×1.5，domain 存在但未命中 ×0.3（含
+    active_interests 读取为空列表的情况——没有成长数据支撑的练习活动本身就是
+    矛盾源），domain 留空不变。active_interests 读取抛异常时 fail-open，退回
+    纯 weight 加权（不区分 domain）。全部条目加权后 total<=0 时退回均匀抽样。
+    """
     pool = _load_pool(char_id=char_id)
     eligible = [a for a in pool if arc in a.get("arcs", [])]
     if not eligible:
         eligible = pool
     if not eligible:
         return {"id": "thinking", "text": "在思考"}
-    chosen = random.choice(eligible)
+
+    active_domains: set | None
+    try:
+        from core.growth.interest_state import active_interests
+        active_domains = {i.get("domain") for i in active_interests(char_id) if i.get("domain")}
+    except Exception:
+        active_domains = None  # fail-open：读取异常，退回纯 weight 加权
+
+    weights = []
+    for a in eligible:
+        w = max(float(a.get("weight", 1.0) or 0.0), 0.0)
+        domain = a.get("domain")
+        if domain and active_domains is not None:
+            w = w * 1.5 if domain in active_domains else w * 0.3
+        weights.append(w)
+
+    total = sum(weights)
+    if total <= 0:
+        chosen = random.choice(eligible)
+    else:
+        r = random.uniform(0, total)
+        acc = 0.0
+        chosen = eligible[-1]
+        for a, w in zip(eligible, weights):
+            acc += w
+            if r <= acc:
+                chosen = a
+                break
+
     # 处理reading的book占位符
     text = chosen.get("text", "在思考")
     if "{book}" in text:
@@ -189,7 +224,9 @@ def switch_activity(char_id: str = _DEFAULT_CHAR_ID) -> dict:
     duration_min = random.randint(15, 45)
     expected_until_ts = time.time() + duration_min * 60
 
+    # thinking_about：episodic 来源优先于 thinking_pool 静态文案（真实记忆 > 静态文案，CC 78·1）。
     thinking_about = ""
+    thinking_source = ""
     if activity.get("thinking_about_eligible"):
         try:
             from core.config_loader import get_config
@@ -197,15 +234,27 @@ def switch_activity(char_id: str = _DEFAULT_CHAR_ID) -> dict:
         except Exception:
             _uid = ""
         thinking_about = _load_thinking_about(_uid, char_id=char_id)
+        if thinking_about:
+            thinking_source = "episodic"
+    if not thinking_about:
+        _pool_thinking = activity.get("thinking_pool") or []
+        if _pool_thinking:
+            thinking_about = random.choice(_pool_thinking)
+            thinking_source = "pool"
 
     state = {
         "current": activity["text"],
         "started_at": now.isoformat(),
         "expected_until_ts": expected_until_ts,
         "thinking_about": thinking_about,
+        "thinking_source": thinking_source,
         "arc": arc,
         "source": activity.get("source", "pool"),
         "interest_id": activity.get("interest_id", ""),
+        # CC 78·2: domain 锚定的池活动功能上就是 growth 活动，写入 state 供
+        # get_prompt_fragment(suppress_growth=True) 一并抑制，避免与 3.8_growth_self
+        # 层双重陈述（source 仍是 "pool"，不是 "growth"，不能只靠 source 判断）。
+        "domain": activity.get("domain", ""),
     }
     _save_state(state, char_id=char_id)
     logger.info(f"[activity] 切换: {activity['text']} (char={char_id}, arc={arc}, {duration_min}分钟)")
@@ -224,14 +273,19 @@ def get_prompt_fragment(
 ) -> str:
     """返回注入prompt的文本片段，50字以内。"""
     state = get_current(char_id=char_id)
-    if suppress_growth and state.get("source") == "growth":
+    # source=="growth"：_pick_recent_growth_activity 直注的「在练X」。
+    # domain 非空：池条目本身锚定了某个 growth 域，功能上同属 growth 活动，需同样抑制，
+    # 否则聊写作时 3.8_growth_self 层与本层会双重陈述「在写东西」（CC 78·2）。
+    if suppress_growth and (state.get("source") == "growth" or state.get("domain")):
         return ""
     current = state.get("current", "")
     thinking = state.get("thinking_about", "")
     if not current:
         return ""
     if thinking:
-        if any(w in thinking for w in _PATTERN_WORDS):
+        # 老状态文件没有 thinking_source 字段时，历史行为一律是 episodic 来源。
+        thinking_source = state.get("thinking_source") or ("episodic" if thinking else "")
+        if thinking_source == "episodic" and any(w in thinking for w in _PATTERN_WORDS):
             thinking = f"好像{thinking}"
         return f"{current}，想着：{thinking}"
     return current
