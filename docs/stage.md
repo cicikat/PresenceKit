@@ -102,12 +102,21 @@ speaker_id / content / timestamp / _turn_id / triggered_by
 |---|---|---|
 | `group_round_start` | `round_id, group_id` | 每轮 Phase A 开始前 |
 | `group_round_end` | `round_id, group_id` | Phase B 完成后 |
-| `channel_message` | `content, msg_id, char_id, round_id` | 每条角色回复 |
-| `message_stream_start` | `msg_id, char_id?, round_id?` | 流式开始（1v1 路径，群聊保留字段） |
+| `message_stream_start` | `msg_id, char_id?, round_id?` | 每条角色回复的伪流式回放开始（Brief 84） |
+| `message_stream_delta` | `msg_id, delta` | 伪流式打字机分块（按标点/句内 2-6 字切块） |
+| `message_stream_end` | `msg_id` | 伪流式回放结束，随后是 canonical 替换 |
+| `channel_message` | `content, msg_id, char_id, round_id` | 每条角色回复的 canonical 替换（同一 `msg_id`） |
 
 群聊 deliver 路径绕过 `channels.registry.broadcast`：
-- **desktop WS**：直接调用 `push_message(content, char_id=..., round_id=...)`；
+- **伪流式**（Brief 84）：deliver 先调 `ui_push.pseudo_stream_push(content, msg_id=..., char_id=speaker_id, round_id=...)`
+  做打字机回放，复用上面三种 `message_stream_*` 帧；fail-open，不影响下面的 canonical 推送。
+- **desktop WS**：直接调用 `push_message(content, msg_id=..., char_id=..., round_id=...)`——`msg_id`
+  与伪流式帧共享，供前端替换同一个临时气泡。
 - **其他通道**（mobile、QQ）：经 `registry.get_active()` 轮询发送，无 `round_id`（v1 无群聊 UI）。
+- **device 通道**：同样经 `registry.get_active()` 发送，但显式传入与伪流式帧相同的 `msg_id`——
+  ESP32 firmware（`firmware/presence-device/src/ws_client.cpp`）按 `msg_id` 匹配 `message_stream_*`
+  帧与 `channel_message`，两者不一致会导致设备端流式气泡卡在打字状态、永不收口。
+  详见 `docs/channels.md` §伪流式。
 
 ## 五、当前边界
 

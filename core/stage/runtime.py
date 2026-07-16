@@ -44,26 +44,45 @@ async def run_reality_stage_turn(
     async def deliver(speaker_id: str, content: str, _turn_id: str):
         if not fanout:
             return
-        # Desktop WS: push directly with char_id + round_id for React correlation.
+        # Brief 84: server-side pseudo-stream (typewriter replay) reuses the 1v1
+        # message_stream_* frame contract. msg_id is shared with the canonical
+        # push below so desktop/device can correlate the replacement bubble.
+        _msg_id = uuid.uuid4().hex
+        try:
+            from channels import ui_push as _ui_push
+            await _ui_push.pseudo_stream_push(
+                content, msg_id=_msg_id, char_id=speaker_id, round_id=resolved_round_id,
+            )
+        except Exception:
+            logger.debug("[stage.runtime] pseudo_stream_push failed", exc_info=True)
+        # Desktop WS: push canonical directly with char_id + round_id for React correlation.
         try:
             from channels import desktop_ws as _dws
             if _dws.is_connected():
                 await _dws.push_message(
-                    content, char_id=speaker_id, round_id=resolved_round_id
+                    content, msg_id=_msg_id, char_id=speaker_id, round_id=resolved_round_id
                 )
         except Exception:
             logger.debug("[stage.runtime] WS deliver failed", exc_info=True)
-        # Other channels (mobile, QQ): push without round_id.
+        # Other channels (mobile, QQ, device): push without round_id. device shares
+        # _msg_id so its pseudo-stream frames (also fanned above via ui_push)
+        # resolve against the same envelope; other channels don't receive stream
+        # frames so their own auto-generated msg_id is fine.
         from channels import registry as _reg
         for _ch in _reg.get_active():
-            if getattr(_ch, "name", None) != "desktop":
-                try:
+            _name = getattr(_ch, "name", None)
+            if _name == "desktop":
+                continue
+            try:
+                if _name == "device":
+                    await _ch.send(content, stage.owner_uid, char_id=speaker_id, msg_id=_msg_id)
+                else:
                     await _ch.send(content, stage.owner_uid, char_id=speaker_id)
-                except Exception:
-                    logger.debug(
-                        "[stage.runtime] deliver fanout to %s failed",
-                        getattr(_ch, "name", "?"), exc_info=True,
-                    )
+            except Exception:
+                logger.debug(
+                    "[stage.runtime] deliver fanout to %s failed",
+                    _name, exc_info=True,
+                )
 
     if fanout:
         try:
