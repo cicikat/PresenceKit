@@ -51,16 +51,6 @@ _STATE_DEFAULTS: dict = {
     "janitor_merged_count": 0,    # memory_janitor 累计合并对数（Brief 49）
 }
 
-# ── episodic 淘汰归档（Brief 46 §1）── digest prompt 模板 ──────────────────────
-_DIGEST_PROMPT_TEMPLATE = """\
-你是一个记忆归档员。以下是即将从情景记忆库中淘汰的 {n} 条旧记忆（按时间顺序排列），
-请把它们压缩成一段 5-8 行的"时期摘要"，保留：这段时期的时间跨度、反复出现的主题、
-用户状态的变化。客观第三人称陈述，不要文学化描写。
-只输出摘要正文本身，不要标题、不要编号、不要输出其他任何文字。
-
-旧记忆列表：
-{entries}"""
-
 # ── LLM prompt 模板 ────────────────────────────────────────────────────────────
 _REFLECT_PROMPT_TEMPLATE = """\
 你是一个对话记录分析器。请分析下面这些近期对话摘要，提炼出一条情景记忆，只输出JSON，不要有任何多余文字：
@@ -1025,92 +1015,57 @@ async def reflect_to_episodic(
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Job — digest_evicted_episodes（slow_queue handler，Brief 46 §1）
+# Job — storyline_evicted_input（slow_queue handler，Brief 80 §3）
+#
+# 原 digest_evicted_episodes（Brief 46 §1，即时 LLM 压缩写 memory_digest.md）已退役——
+# storyline aggregator 吸收了这份职责（00d 裁决 2）。淘汰批次现在只做一件事：暂存进
+# storyline_inbox.json，等周频 storyline_weekly 聚合统一消费+清空，省一路即时 LLM 调用。
+# 存量 memory_digest.md 原地只读保留，不删数据、不再有新写入。
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def _format_evicted_entry(ep: dict) -> str:
-    ts = ep.get("occurred_at") or ep.get("timestamp") or 0
-    try:
-        date_str = datetime.fromtimestamp(float(ts)).strftime("%Y-%m-%d") if ts else "未知日期"
-    except (TypeError, ValueError, OSError):
-        date_str = "未知日期"
-    summary = (
-        ep.get("narrative_summary")
-        or ep.get("summary")
-        or "；".join(ep.get("raw_facts") or [])
-        or "（无摘要）"
-    )
-    return f"- [{date_str}] {summary}"
+async def handler_storyline_evicted_input(payload: dict) -> None:
+    """把上限裁剪淘汰的 episodic 条目暂存进 storyline_inbox（fail-open，写失败只记日志不重试——
+    同原 digest job：这里没有可重新触发的上游事件，重试没有意义）。"""
+    from core.memory import storyline as _sl
 
-
-async def digest_evicted_episodes(uid: str, episodes: list[dict], *, char_id: str = DEFAULT_CHAR_ID) -> None:
-    """把上限裁剪淘汰的 episodic 条目压缩成一段"时期摘要"，追加写入 memory_digest.md。
-
-    遗忘=降级而非删除（Brief 46 §1）：条目已从 episodic.json 删除，全文快照随
-    slow_queue payload 传入这里，压缩后归档，而不是直接丢弃。
-    LLM 失败时原文以紧凑 JSON 追加到 <!-- raw --> 区块兜底，不丢数据，不重试
-    （fail-open，与其余 fixation job 的重试策略不同——这里没有可重新触发的上游事件）。
-    v1 不接入 prompt_builder，只归档观察（§3 拍板）。
-    """
-    from core.memory.scope import MemoryScope
-    from core.memory.path_resolver import resolve_path
-
+    scope = _get_scope_from_payload(payload, "handler_storyline_evicted_input")
+    episodes = payload.get("episodes", [])
     if not episodes:
         return
 
     ep_ids = [e.get("id", "") for e in episodes]
-    entries_text = "\n".join(_format_evicted_entry(e) for e in episodes)
-    today = datetime.now().strftime("%Y-%m-%d")
-
-    scope = MemoryScope.reality_scope(str(uid), char_id)
-    digest_path = resolve_path(scope, "memory_digest")
-    digest_path.parent.mkdir(parents=True, exist_ok=True)
+    entries = [
+        {
+            "id": e.get("id", ""),
+            "summary": (
+                e.get("narrative_summary")
+                or e.get("summary")
+                or "；".join(e.get("raw_facts") or [])
+                or "（无摘要）"
+            ),
+            "ts": e.get("occurred_at") or e.get("timestamp") or time.time(),
+            "strength": e.get("strength", 0.0),
+        }
+        for e in episodes
+    ]
 
     try:
-        from core import llm_client
-        digest_text = await llm_client.chat(
-            messages=[{"role": "user", "content": _DIGEST_PROMPT_TEMPLATE.format(
-                n=len(episodes), entries=entries_text,
-            )}],
-            max_tokens_override=400,
-            call_category="consolidation",
-        )
-        digest_text = (digest_text or "").strip()
-        if not digest_text:
-            raise ValueError("empty digest")
-        chunk = f"\n## {today} 归档摘要（来源: {', '.join(ep_ids)}）\n{digest_text}\n"
-        with open(digest_path, "a", encoding="utf-8") as f:
-            f.write(chunk)
-        _log_fixation("digest_evicted_episodes", uid, {
+        _sl.append_to_inbox(scope.uid, entries, char_id=scope.character_id)
+        _log_fixation("storyline_evicted_input", scope.uid, {
             "ep_ids": ep_ids, "count": len(episodes),
         }, "ok")
     except Exception as e:
-        raw_json = json.dumps(episodes, ensure_ascii=False)
-        chunk = (
-            f"\n## {today} 压缩失败，原文归档（来源: {', '.join(ep_ids)}）\n"
-            f"<!-- raw -->\n{raw_json}\n"
-        )
-        with open(digest_path, "a", encoding="utf-8") as f:
-            f.write(chunk)
-        _log_fixation("digest_evicted_episodes", uid, {
+        _log_fixation("storyline_evicted_input", scope.uid, {
             "ep_ids": ep_ids, "count": len(episodes),
         }, "error", str(e))
 
     from core.memory.provenance_log import append as _prov_append
     _prov_append(
-        uid, char_id,
-        artifact="episodic",
-        after_gist=entries_text[:120],
-        trigger_signal="evict_digest",
-    )
-
-
-async def handler_digest_evicted_episodes(payload: dict) -> None:
-    scope = _get_scope_from_payload(payload, "handler_digest_evicted_episodes")
-    await digest_evicted_episodes(
-        uid=scope.uid,
-        episodes=payload.get("episodes", []),
-        char_id=scope.character_id,
+        scope.uid, scope.character_id,
+        artifact="storyline",
+        field="inbox",
+        after_gist="；".join(en["summary"] for en in entries)[:120],
+        trigger_signal="evict_to_inbox",
     )
 
 

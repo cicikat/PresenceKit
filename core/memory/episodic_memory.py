@@ -219,10 +219,11 @@ def write_episode(user_id: str, episode: dict, *, char_id: str = DEFAULT_CHAR_ID
             f"[episodic] 记忆库裁剪至{len(memories)}条，保留核心{core_count}条"
         )
         if evicted:
-            # 遗忘=降级而非删除（Brief 46 §1）：被裁条目先入队压缩归档，
+            # 遗忘=降级而非删除（Brief 46 §1，Brief 80 §3 起改走 storyline inbox）：
+            # 被裁条目先入队暂存进 storyline_inbox，等周频聚合统一消费，
             # 再从 episodic.json 删除（上面已完成删除，入队携带全文快照）。
             from core.post_process import slow_queue
-            slow_queue.enqueue("digest_evicted_episodes", {
+            slow_queue.enqueue("storyline_evicted_input", {
                 "uid": user_id,
                 "char_id": char_id,
                 "episodes": evicted,

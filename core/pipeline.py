@@ -1728,14 +1728,14 @@ def register_slow_handlers() -> None:
         handler_summarize_to_midterm,
         handler_reflect_to_episodic,
         handler_consolidate_to_identity,
-        handler_digest_evicted_episodes,
+        handler_storyline_evicted_input,
     )
     # 新 pipeline handler
     slow_queue.register_handler("capture_turn_retry",       handler_capture_turn_retry)
     slow_queue.register_handler("summarize_to_midterm",     handler_summarize_to_midterm)
     slow_queue.register_handler("reflect_to_episodic",      handler_reflect_to_episodic)
     slow_queue.register_handler("consolidate_to_identity",  handler_consolidate_to_identity)
-    slow_queue.register_handler("digest_evicted_episodes",  handler_digest_evicted_episodes)
+    slow_queue.register_handler("storyline_evicted_input",  handler_storyline_evicted_input)
     slow_queue.register_handler("consistency_check",       _handler_consistency_check)
     slow_queue.register_handler("user_profile_update",     _handler_user_profile_update)
     slow_queue.register_handler("trait_tracker_update",    _handler_trait_tracker_update)

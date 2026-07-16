@@ -211,15 +211,15 @@ def test_write_episode_normal_write_under_cap_unchanged(sandbox):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# episodic 淘汰 → digest 归档（Brief 46 §1）
+# episodic 淘汰 → storyline inbox 暂存（Brief 80 §3，取代 Brief 46 §1 的即时 digest）
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def test_write_episode_cap_enqueues_digest_task(sandbox, monkeypatch):
-    """上限裁剪触发时，被裁的 20 条应整批入队 digest_evicted_episodes，payload 携带条目全文。"""
+def test_write_episode_cap_enqueues_storyline_evicted_input_task(sandbox, monkeypatch):
+    """上限裁剪触发时，被裁的 20 条应整批入队 storyline_evicted_input，payload 携带条目全文。"""
     from core.data_paths import DEFAULT_CHAR_ID
     from core.memory.episodic_memory import _save_memories, write_episode
 
-    uid = "u_ep_digest"
+    uid = "u_ep_inbox"
     memories = [_episode_for_cap(f"normal_{i}", 0.2 + i / 1000) for i in range(199)]
     memories.append(_episode_for_cap("core_keep", 0.0, is_core=True))
     _save_memories(uid, memories)
@@ -234,22 +234,22 @@ def test_write_episode_cap_enqueues_digest_task(sandbox, monkeypatch):
 
     assert len(enqueued) == 1
     task_type, payload = enqueued[0]
-    assert task_type == "digest_evicted_episodes"
+    assert task_type == "storyline_evicted_input"
     assert payload["uid"] == uid
     assert payload["char_id"] == DEFAULT_CHAR_ID
     assert len(payload["episodes"]) == 20
     evicted_ids = {e["id"] for e in payload["episodes"]}
-    assert "core_keep" not in evicted_ids       # 核心记忆不参与裁剪，不应被归档
+    assert "core_keep" not in evicted_ids       # 核心记忆不参与裁剪，不应被暂存
     assert "fresh_episode" not in evicted_ids   # 本轮新写入的不应混入被裁批次
-    # payload 携带条目全文快照（不是只有 id），digest handler 才能压缩正文
+    # payload 携带条目全文快照（不是只有 id），inbox handler 才能提炼摘要
     assert all("narrative_summary" in e for e in payload["episodes"])
 
 
-def test_write_episode_cap_result_unchanged_regardless_of_digest_enqueue(sandbox, monkeypatch):
-    """episodic.json 的裁剪结果应与现行为一致（§4.1）：加了 digest 入队不改变谁被留下。"""
+def test_write_episode_cap_result_unchanged_regardless_of_inbox_enqueue(sandbox, monkeypatch):
+    """episodic.json 的裁剪结果应与现行为一致（§4.1）：加了 inbox 入队不改变谁被留下。"""
     from core.memory.episodic_memory import _load_memories, _save_memories, write_episode
 
-    uid = "u_ep_digest_result"
+    uid = "u_ep_inbox_result"
     memories = [_episode_for_cap("weak_normal", 0.0)]
     memories += [_episode_for_cap(f"normal_{i}", 0.2 + i / 1000) for i in range(198)]
     memories.append(_episode_for_cap("core_low_strength", 0.0, is_core=True))
@@ -265,64 +265,37 @@ def test_write_episode_cap_result_unchanged_regardless_of_digest_enqueue(sandbox
     assert "fresh_episode" in ids
 
 
-def test_digest_evicted_episodes_success_appends_with_lineage(sandbox, fake_llm):
-    """LLM mock 成功 → memory_digest.md 追加内容，带日期头 + 来源 ep_id 列表（血缘可追溯）。"""
-    from core.memory.fixation_pipeline import digest_evicted_episodes
-    from core.memory.path_resolver import resolve_path
-    from core.memory.scope import MemoryScope
+def test_handler_storyline_evicted_input_appends_to_inbox(sandbox):
+    """handler 应把 episodes 提炼成 {id, summary, ts, strength} 追加进 storyline_inbox.json，
+    不再调用 LLM（原 digest job 的即时压缩已退役，改由周频 storyline_weekly 聚合统一处理）。"""
+    from core.memory import storyline as _sl
+    from core.memory.fixation_pipeline import handler_storyline_evicted_input
     from core.data_paths import DEFAULT_CHAR_ID
 
-    fake_llm.chat = AsyncMock(return_value="这段时间用户多次提到工作压力，情绪从担忧逐渐平复。")
-
-    uid = "u_digest_ok"
+    uid = "u_inbox_ok"
     episodes = [
-        {"id": "ep_1", "occurred_at": time.time() - 86400, "narrative_summary": "第一条旧记忆"},
-        {"id": "ep_2", "occurred_at": time.time() - 43200, "narrative_summary": "第二条旧记忆"},
+        {"id": "ep_1", "occurred_at": time.time() - 86400, "narrative_summary": "第一条旧记忆", "strength": 0.3},
+        {"id": "ep_2", "occurred_at": time.time() - 43200, "narrative_summary": "第二条旧记忆", "strength": 0.5},
     ]
 
-    asyncio.run(digest_evicted_episodes(uid, episodes))
+    asyncio.run(handler_storyline_evicted_input({
+        "uid": uid, "char_id": DEFAULT_CHAR_ID, "episodes": episodes,
+    }))
 
-    scope = MemoryScope.reality_scope(uid, DEFAULT_CHAR_ID)
-    digest_path = resolve_path(scope, "memory_digest")
-    text = digest_path.read_text(encoding="utf-8")
-    assert "ep_1" in text and "ep_2" in text
-    assert "工作压力" in text
-    assert "<!-- raw -->" not in text
-
-
-def test_digest_evicted_episodes_llm_failure_falls_back_to_raw(sandbox, fake_llm):
-    """LLM 失败 → 原文条目以紧凑 JSON 追加到 <!-- raw --> 区块，不丢数据，不抛异常（fail-open）。"""
-    from core.memory.fixation_pipeline import digest_evicted_episodes
-    from core.memory.path_resolver import resolve_path
-    from core.memory.scope import MemoryScope
-    from core.data_paths import DEFAULT_CHAR_ID
-
-    fake_llm.chat = AsyncMock(side_effect=RuntimeError("boom"))
-
-    uid = "u_digest_fail"
-    episodes = [{"id": "ep_x", "occurred_at": time.time(), "narrative_summary": "会丢失的记忆"}]
-
-    asyncio.run(digest_evicted_episodes(uid, episodes))  # 不应抛异常
-
-    scope = MemoryScope.reality_scope(uid, DEFAULT_CHAR_ID)
-    digest_path = resolve_path(scope, "memory_digest")
-    text = digest_path.read_text(encoding="utf-8")
-    assert "<!-- raw -->" in text
-    assert "ep_x" in text
-    assert "会丢失的记忆" in text
+    inbox = _sl.load_inbox(uid, char_id=DEFAULT_CHAR_ID)
+    assert len(inbox) == 2
+    assert {e["id"] for e in inbox} == {"ep_1", "ep_2"}
+    assert all(e["summary"] for e in inbox)
 
 
-def test_write_episode_cap_digest_end_to_end(sandbox, fake_llm, monkeypatch):
-    """裁剪入队的 payload 经 handler 处理后应正确写入 memory_digest.md（端到端）。"""
+def test_write_episode_cap_storyline_inbox_end_to_end(sandbox, monkeypatch):
+    """裁剪入队的 payload 经 handler 处理后应正确暂存进 storyline_inbox.json（端到端）。"""
+    from core.memory import storyline as _sl
     from core.memory.episodic_memory import _save_memories, write_episode
-    from core.memory.fixation_pipeline import handler_digest_evicted_episodes
-    from core.memory.path_resolver import resolve_path
-    from core.memory.scope import MemoryScope
+    from core.memory.fixation_pipeline import handler_storyline_evicted_input
     from core.data_paths import DEFAULT_CHAR_ID
 
-    fake_llm.chat = AsyncMock(return_value="这段时间内多次提到工作与作息变化。")
-
-    uid = "u_ep_e2e"
+    uid = "u_ep_inbox_e2e"
     memories = [_episode_for_cap(f"normal_{i}", 0.2 + i / 1000) for i in range(200)]
     _save_memories(uid, memories)
 
@@ -334,14 +307,28 @@ def test_write_episode_cap_digest_end_to_end(sandbox, fake_llm, monkeypatch):
 
     write_episode(uid, _episode_for_cap("fresh_episode", 0.7, summary="全新事件"))
 
-    payload = captured["digest_evicted_episodes"]
-    asyncio.run(handler_digest_evicted_episodes(payload))
+    payload = captured["storyline_evicted_input"]
+    asyncio.run(handler_storyline_evicted_input(payload))
 
-    scope = MemoryScope.reality_scope(uid, DEFAULT_CHAR_ID)
-    digest_path = resolve_path(scope, "memory_digest")
-    text = digest_path.read_text(encoding="utf-8")
-    assert "工作与作息" in text
-    assert all(eid in text for eid in [e["id"] for e in payload["episodes"]])
+    inbox = _sl.load_inbox(uid, char_id=DEFAULT_CHAR_ID)
+    assert {e["id"] for e in inbox} == {e["id"] for e in payload["episodes"]}
+
+
+def test_digest_evicted_episodes_fully_retired(sandbox):
+    """Brief 80 §3 删除纪律：原 digest job/handler/prompt 模板零残留，不留僵尸代码。"""
+    import inspect
+
+    import core.memory.fixation_pipeline as fp
+    import core.pipeline as _pipeline
+
+    assert not hasattr(fp, "digest_evicted_episodes")
+    assert not hasattr(fp, "handler_digest_evicted_episodes")
+    assert not hasattr(fp, "_format_evicted_entry")
+    assert not hasattr(fp, "_DIGEST_PROMPT_TEMPLATE")
+
+    src = inspect.getsource(_pipeline.register_slow_handlers)
+    assert "digest_evicted_episodes" not in src
+    assert "storyline_evicted_input" in src
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
