@@ -588,9 +588,13 @@ async def reading_chat(
         user_message=msg,
     )
 
+    from core.activity.pseudo_stream import push_companion_reply
+    _msg_id = await push_companion_reply(reply, char_id=char_id)
+
     return {
         "session_id": body.session_id,
         "reply": reply,
         "control": control,
         "grounding": grounding,
+        "msg_id": _msg_id,
     }

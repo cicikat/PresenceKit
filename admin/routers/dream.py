@@ -127,6 +127,29 @@ async def dream_chat(body: dict, _auth=Depends(require_scopes("activity"))):
     if err := result.get("error"):
         raise HTTPException(status_code=409, detail=err)
 
+    # Brief 84: pseudo-stream typewriter replay for the dream reply. Generation
+    # already finished above (dream_turn is fully isolated, zero WS side effects
+    # by construction); the animation itself doesn't need conversation_lock.
+    # fail-open: pseudo_stream_push never raises, msg_id lets the client dedup
+    # against this HTTP response the same way owner chat's stream path does.
+    reply = result.get("reply") or ""
+    if reply:
+        import uuid as _uuid
+
+        from channels import ui_push as _ui_push
+        from core.pipeline_registry import get as _get_pipeline
+
+        _msg_id = _uuid.uuid4().hex
+        _pl = _get_pipeline()
+        _char_id = getattr(_pl, "_active_character_id", None) or ""
+        try:
+            await _ui_push.pseudo_stream_push(
+                reply, msg_id=_msg_id, char_id=_char_id, profile="dream",
+            )
+        except Exception:
+            logger.debug("[dream_chat] pseudo_stream_push failed", exc_info=True)
+        result["msg_id"] = _msg_id
+
     return result
 
 

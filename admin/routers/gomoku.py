@@ -263,11 +263,15 @@ async def gomoku_chat(body: ChatRequest, auth=Depends(require_scopes("activity")
         user_message=msg,
     )
 
+    from core.activity.pseudo_stream import push_companion_reply
+    _msg_id = await push_companion_reply(reply, char_id=char_id)
+
     return {
         "session_id": body.session_id,
         "reply": reply,
         "control": control,
         "grounding": grounding,
+        "msg_id": _msg_id,
     }
 
 
@@ -302,8 +306,12 @@ async def gomoku_comment(body: CommentRequest, auth=Depends(require_scopes("acti
         state=session.state,
     )
 
+    from core.activity.pseudo_stream import push_companion_reply
+    _msg_id = await push_companion_reply(comment, char_id=char_id)
+
     return {
         "session_id": body.session_id,
         "comment": comment,
         "grounding": grounding,
+        "msg_id": _msg_id,
     }

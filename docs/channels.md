@@ -181,6 +181,39 @@ fan 到所有已连接的 UI 客户端（桌宠 + 设备）：
 - `ui_push.push_segments(...)`：`turn_sink` 内部按「该 channel 是否确实在本轮 fanout targets 内」
   精确门控，避免向从未收到过对应 `channel_message` 的客户端推送孤立的 `message_segments`
   （破坏单一展示路径的不变量）。
+- `ui_push.pseudo_stream_push(text, *, msg_id, char_id="", round_id="", profile="default")`
+  （Brief 84）：服务器端伪流式打字机回放，见下方「伪流式」一节。
+
+### 伪流式（Brief 84）
+
+真流式（token 级）只接在 1v1 owner chat（`/desktop/chat`，见下方协议）。Stage 群聊、梦境聊天、
+coplay/活动聊天（chess/gomoku/reading 的 `*_chat`/`*_comment`）原本都是整段 `push_message` 或
+纯 HTTP 响应，视觉生硬。`ui_push.pseudo_stream_push()` 复用 1v1 已有的 `message_stream_*` 帧
+契约，把整段回复按标点/换行切句、句内切 2-6 字一块，逐块推 `push_stream_delta`，前端零新帧类型：
+
+- 行为：`push_stream_start(msg_id, char_id?, round_id?)` → 按块 `push_stream_delta` →
+  `push_stream_end`。**不发 canonical 帧**——调用方仍需照旧发送 `push_message`（同一个
+  `msg_id`）完成替换，与 1v1 契约一致。
+- 分块/节奏：块间 30-80ms 随机；总时长上限默认 ~4s，超长文本自动加速收敛到该上限，不会让
+  一段长文回放数十秒。全部参数进 `config.yaml` 的 `pseudo_stream:` 节（含总开关，默认开），
+  支持按 `profile` 覆盖（如梦境模式 `profile="dream"` 更慢一档贴合气氛）。
+- fail-open：未连接、配置关闭、文本切不出多块、或推送过程中任何异常，都直接返回，绝不影响
+  调用方后续的整段消息发送——这也是为什么函数本身从不抛异常。
+- 接入面：
+  - **Stage 群聊**（`core/stage/runtime.py` `deliver()`）：msg_id 在 pseudo-stream 帧与
+    desktop canonical `push_message` 之间共享；`device` 通道的 canonical 推送同样显式传入
+    这个 msg_id（`device_ws` 也会收到 pseudo-stream 帧，firmware 靠 msg_id 匹配 stream 帧
+    与 canonical 帧，两者必须一致，见 `firmware/ws_client.cpp`）。多角色连续发言天然串行
+    回放（deliver 本就逐条 await）。
+  - **梦境聊天**（`admin/routers/dream.py` `dream_chat`）：`dream_turn()` 全程零 WS 副作用
+    （isolation 不变量），伪流式改在路由层、拿到 `reply` 之后调用，不占用 `conversation_lock`；
+    HTTP 响应新增可空的 `msg_id` 字段，供前端与本次响应去重关联（同 1v1 的 HTTP fallback
+    机制）。
+  - **coplay/活动聊天**（`core/activity/pseudo_stream.push_companion_reply`，被
+    `chess_chat`/`chess_comment`/`gomoku_chat`/`gomoku_comment`/`reading_chat` 复用）：只有
+    产出角色对话正文的接口接入；落子/翻页等纯状态接口不接。`comment=None`（本步不评论）时
+    不推送，响应 `msg_id` 为 `null`。
+  - device_ws 已有的 delta 合并背压逻辑（见上）对伪流式帧天然兼容，不需要改。
 
 ### 设备动作 fanout
 
