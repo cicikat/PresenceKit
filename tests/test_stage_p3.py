@@ -80,6 +80,94 @@ async def test_stage_character_view_uses_explicit_scope_and_prompt_context(sandb
 
 
 @pytest.mark.asyncio
+async def test_stage_character_view_skips_fetch_context_for_peer_triggered_reply(sandbox):
+    from core.stage.models import Stage, TranscriptEntry
+    from core.stage.views import StageCharacterView
+
+    captured = {}
+
+    class FakePipeline:
+        async def fetch_context(self, uid, content, *, frozen_scope):
+            raise AssertionError("Phase B continuation must not call fetch_context")
+
+        def build_prompt(self, uid, content, context, **kwargs):
+            captured["context"] = context
+            return ([{"role": "user", "content": content}], {"token_estimate": 42})
+
+        async def run_llm(self, messages, *, char_id=None):
+            return "reply"
+
+    view = object.__new__(StageCharacterView)
+    view.char_id = "yexuanJ-5412"
+    view.pipeline = FakePipeline()
+    stage = Stage("g", "owner", ("yexuan", "yexuanJ-5412"), settings=_settings())
+    transcript = [
+        TranscriptEntry("owner", "hello", 1, "t", "user"),
+        TranscriptEntry("yexuan", "one", 2, "t", "user"),
+    ]
+
+    reply = await view.generate(stage, transcript, "t", "yexuan")
+
+    assert reply == "reply"
+    context = captured["context"]
+    assert context["history"] == []
+    assert context["lore_entries"] == []
+    assert context["episodic_result"] == ""
+    assert context["mid_term"] == ""
+
+
+def test_lightweight_prompt_context_is_smaller_than_full(sandbox):
+    from core import prompt_builder
+
+    char = MagicMock()
+    char.name = "Companion"
+    char.system_prompt = ""
+    char.description = "很长的角色描述"
+    char.personality = "很长的性格描述"
+    char.scenario = ""
+    char.mes_example = ""
+
+    full_extra = dict(
+        history=[{"role": "user", "content": "历史消息" * 20}, {"role": "assistant", "content": "历史回复" * 20}],
+        relation={"summary": "关系摘要" * 10},
+        profile={"summary": "画像摘要" * 10},
+        group_context="",
+        user_identity_text="用户稳定行为模式描述" * 20,
+        event_search_result="事件搜索结果" * 20,
+        lore_entries=["世界书条目一" * 10, "世界书条目二" * 10],
+        episodic_result="情景记忆片段" * 20,
+        mid_term_context="中期摘要" * 20,
+    )
+    lightweight_extra = dict(
+        history=[], relation={}, profile={}, group_context="",
+        user_identity_text="", event_search_result="", lore_entries=[],
+        episodic_result="", mid_term_context="",
+    )
+
+    with (
+        patch("core.prompt_builder._load_jailbreak", return_value=""),
+        patch("core.prompt_builder._load_style_hint", return_value=""),
+        patch("core.presence.get_last_seen_text", return_value=""),
+        patch("core.author_note_rotator.get_current_note", return_value=""),
+        patch("core.config_loader.get_config", return_value={"chat": {"style": "chat"}}),
+        patch("core.mood_text.get_mood_text", return_value=""),
+        patch("core.activity_manager.get_prompt_fragment", return_value=""),
+    ):
+        _full_messages, full_debug = prompt_builder.build(
+            character=char, user_id="owner", user_message="hi",
+            stage_presence="presence", stage_transcript="owner：hi",
+            **full_extra,
+        )
+        _light_messages, light_debug = prompt_builder.build(
+            character=char, user_id="owner", user_message="hi",
+            stage_presence="presence", stage_transcript="owner：hi",
+            **lightweight_extra,
+        )
+
+    assert light_debug["token_estimate"] < full_debug["token_estimate"] * 0.7
+
+
+@pytest.mark.asyncio
 async def test_projection_enqueues_per_character_and_is_idempotent(sandbox, monkeypatch):
     from core.stage.models import TranscriptEntry
     from core.stage.projection import enqueue_reality_projection

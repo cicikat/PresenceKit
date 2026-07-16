@@ -39,6 +39,32 @@ class StageCharacterView:
         words.extend(sorted(ngram_tokens(self._character.description + self._character.personality, lengths=(2, 3))))
         return tuple(dict.fromkeys(word.strip() for word in words if word.strip()))[:30]
 
+    @staticmethod
+    def _lightweight_context() -> dict:
+        """Phase B continuation context: character card core layer only.
+
+        Skips episodic/mid_term/diary/lore retrieval and the private
+        history/relation/profile/user_identity layers — a continuation replies
+        to the group's shared transcript, not the owner's long-term memory
+        (Brief 85 §1). Phase A (triggered_by="user"/"owner") keeps the full
+        `fetch_context()` path since that response is worth full memory.
+        """
+        return {
+            "history": [],
+            "relation": {},
+            "profile": {},
+            "group_context": "",
+            "user_identity_text": "",
+            "user_facts_text": "",
+            "event_search_result": "",
+            "lore_entries": [],
+            "episodic_result": "",
+            "episodic_fallback_result": "",
+            "mid_term": "",
+            "diary_context": "",
+            "reminders": [],
+        }
+
     async def generate(
         self,
         stage: Stage,
@@ -49,12 +75,16 @@ class StageCharacterView:
         if stage.domain != "reality":
             raise RuntimeError("reality StageCharacterView cannot generate for dream domain")
         latest = transcript[-1].content if transcript else ""
-        scope = MemoryScope.reality_scope(stage.owner_uid, self.char_id)
-        context = await self.pipeline.fetch_context(
-            stage.owner_uid,
-            latest,
-            frozen_scope=scope,
-        )
+        lightweight = triggered_by not in ("user", "owner")
+        if lightweight:
+            context = self._lightweight_context()
+        else:
+            scope = MemoryScope.reality_scope(stage.owner_uid, self.char_id)
+            context = await self.pipeline.fetch_context(
+                stage.owner_uid,
+                latest,
+                frozen_scope=scope,
+            )
         context["stage_presence"] = render_presence(
             stage,
             viewer_id=self.char_id,
@@ -65,6 +95,7 @@ class StageCharacterView:
             transcript,
             viewer_id=self.char_id,
             current_turn_id=turn_id,
+            limit=12 if lightweight else 40,
         )
         from core.tag_rules import get_tags
         from core.author_note_rotator import get_current_note
@@ -84,6 +115,9 @@ class StageCharacterView:
             "以你自己独特的方式回应，避免与其他角色刚说的话语气雷同。"
             + _note_hint
         )
+        extra_block = self._extra_instruction(stage, triggered_by, transcript)
+        if extra_block:
+            stage_instruction = extra_block + "\n\n" + stage_instruction
         messages, debug = self.pipeline.build_prompt(
             stage.owner_uid,
             stage_instruction,
@@ -95,14 +129,21 @@ class StageCharacterView:
         )
         if stage.settings.debug_token_log:
             logger.info(
-                "[stage.prompt] group=%s char_id=%s turn_id=%s triggered_by=%s token_estimate=%s",
+                "[stage.prompt] group=%s char_id=%s turn_id=%s triggered_by=%s lightweight=%s token_estimate=%s",
                 stage.group_id,
                 self.char_id,
                 turn_id,
                 triggered_by,
+                lightweight,
                 debug.get("token_estimate"),
             )
         return await self.pipeline.run_llm(messages, char_id=self.char_id)
+
+    def _extra_instruction(
+        self, stage: Stage, triggered_by: str, transcript: list[TranscriptEntry]
+    ) -> str:
+        """Content-side hook for directed replies (§2) and topic seeds (§4)."""
+        return ""
 
 
 class StageViewRegistry:
