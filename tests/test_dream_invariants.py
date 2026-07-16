@@ -32,3 +32,12 @@ def test_conversation_prompt_modules_cannot_read_invariants_store():
         assert "dreams_invariants" not in source
         assert "core.dream.invariants" not in source
     assert "core.dream.invariants" in Path("admin/routers/dream.py").read_text(encoding="utf-8")
+
+
+def test_llm_prompts_are_not_silently_mojibaked():
+    from pathlib import Path
+
+    source = Path("core/dream/invariants.py").read_text(encoding="utf-8")
+    assert "???" not in source
+    assert source.count('{"items":[{"situation":"...","response":"..."}]}') == 1
+    assert "same、contradicts 或 different" in source

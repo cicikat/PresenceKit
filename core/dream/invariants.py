@@ -11,7 +11,13 @@ from core.safe_write import safe_write_json
 logger = logging.getLogger(__name__)
 FORBIDDEN_WORDS = ("\u7231", "\u6c38\u8fdc", "\u6df1\u7231", "\u547d\u4e2d\u6ce8\u5b9a")
 HIGH_CONVERGENCE_COUNT = 3
-_SYSTEM = """Extract up to two world-independent situation-to-response observations. Return JSON only: ???????????????????????????????????????????? ? ????????????????????????????????????????????????????? JSON?{"items":[{"situation":"...","response":"..."}]}{"items":[{"situation":"...","response":"..."}]}"""
+_SYSTEM = """你是跨世界身份稳定性观察器，只做测量，不做人格结论。
+从梦境对话中提炼 0–2 条「情境类型 → 反应模式」：
+- 情境类型和反应模式都必须世界无关，不得包含世界专有名词或设定词；
+- 反应模式必须描述具体行为，不得使用抽象情感结论；
+- 没有合格观察时返回空数组。
+只输出 JSON，schema 仅为：
+{"items":[{"situation":"...","response":"..."}]}"""
 
 def _path(uid: str, char_id: str) -> Path:
     from core.sandbox import get_paths, safe_user_id
@@ -62,7 +68,7 @@ async def observe(uid: str, dream_id: str, *, world_id: str, char_id: str = DEFA
 
 async def _relation(candidate: dict[str, str], existing: dict[str, Any]) -> str:
     from core import llm_client
-    prompt = ("???????????????????? same?contradicts ? different?\n"
+    prompt = ("判断 A/B 两条观察是否属于同一反应模式。只回复 same、contradicts 或 different。\n"
               f"A: {existing.get('situation')} -> {existing.get('response')}\nB: {candidate['situation']} -> {candidate['response']}")
     answer = str(await llm_client.chat([{"role": "user", "content": prompt}], max_tokens_override=12)).strip().lower()
     return answer if answer in {"same", "contradicts", "different"} else "different"
