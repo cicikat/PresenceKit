@@ -896,6 +896,25 @@ consolidate_to_identity
 {"ts": 1748000000, "job": "reflect_to_episodic", "uid": "...", "trigger": "eager", "ep_id": "...", "duration_ms": 1200, "status": "ok"}
 ```
 
+### 来源隔离（web / dream / coplay，Brief 79）
+
+「web 与梦境来源同等隔离，不固化」（见 AGENTS.md 速查表）覆盖固化链 + event_log 两段：
+
+- **固化链**：`handler_summarize_to_midterm` 见 payload 的 `dream_echo` / `web_echo` /
+  `coplay_echo` 标记即跳过 mid_term → episodic → identity 写入。
+- **event_log**：`event_log.append(source=)` / `capture_turn(source=)` 把同一次判定
+  写进 meta 行（`> ... source:web|dream_echo|coplay`），`dream_echo` 由
+  `core/pipeline.py` `_detect_dream_echo()` 只读判定（不消费
+  `forced_impression_rounds_left`，那个计数器仍只在 `post_process_slow` 消费一次）。
+- **event_log_salvage 抢救链**：`_split_blocks` 出的块若 meta 带非空 `source:`，
+  拼 LLM 输入前整块跳过（`_filter_salvageable_text`）——否则 27 天后这些外部信息会
+  绕过固化隔离，经抢救直达 `important_facts`。
+
+**契约**：任何直接读 event_log 做聚合/固化的新代码（storyline、未来 reflection 类），
+必须过滤 `source:` 非空块。`event_log.search()` / `get_recent_days()`（注入侧召回）
+**不过滤**——隔离的是「固化为长期记忆」，不是「短期可见」，注入侧本来就允许引用外部信息
+（如 web_recall 层）。
+
 
 ## 六、他日记（yexuan_inner_diary）
 

@@ -102,7 +102,7 @@
 | toy 自主写入（自生长，走 post_process，非探针） | `core/post_process/toy_autogrow.py` → `handler_toy_autogrow`；配置 `toy_autogrow:` |
 | web 搜索沉淀（X3）：结果写入 vector_store source="web" | `core/tools/web_search.py` → `vector_store.upsert`；限频配置 `web_autosearch:` |
 | web 资料召回（X3）：semantic 召回 web 来源，注入 `web_recall` 层 | `core/pipeline.py` `fetch_context()` → `vector_store.query_with_preview(sources=["web"])` → `web_recall_result` → `prompt_builder.build(web_recall_result=)` |
-| web 与梦境来源同等隔离，不固化 | `web_recall_result` 非空时 `post_process` 携带 `web_echo=True`，`fixation_pipeline.handler_summarize_to_midterm` 与 dream_echo 同路跳过 mid_term/episodic/identity 写入 |
+| web 与梦境来源同等隔离，不固化 | `web_recall_result` 非空时 `post_process` 携带 `web_echo=True`，`fixation_pipeline.handler_summarize_to_midterm` 与 dream_echo 同路跳过 mid_term/episodic/identity 写入；同一判定经 `event_log.append(source=)` 写入 event_log meta，`event_log_salvage` 抢救链按块过滤 `source:` 非空内容（Brief 79，见 `docs/memory.md` §三点八「来源隔离」） |
 | 工具探针（声明式） | `core/tool_dispatcher.py` → `get_probe_prompt()` / `_TOOL_REGISTRY` |
 | 工具已读指纹日志（P2，去重防重读） | `core/memory/tool_read_log.py`（`persist=True` 工具：read_diary / read_watch / read_toy_file / search_diary） |
 | 工具动作痕迹（Brief 27，跨轮"你最近做过的操作"，层 `10.5_action_trace`） | `core/memory/action_trace.py`（`execute()` 收口埋点 + `event_log_echo` 经 `capture_turn` 回流） |
@@ -184,6 +184,29 @@ brief，遵循“删除必须连同守卫、测试和文档条目一起删除”
 在 Codex / Claude Code 环境里运行测试或跨仓修改前，**必须先读
 `docs/dev-environment.md`**。特别注意：
 
+这里有个好东西叫pytest -n auto
+别再python -m pytest串行跑全量啦！！！
+
+## Commands
+
+```bash
+# Run the bot (QQ + NapCat mode)
+python main.py
+
+# Run in standalone mode (HTTP only, no QQ)
+# Set standalone_mode: true in config.yaml, then:
+python main.py
+
+# Test mode (data-isolated sandbox, won't touch production data/)
+python run_test.py
+
+# Run tests (ALWAYS parallel — see Testing rules below)
+pytest -n auto
+pytest --testmon                     # partial changes: only affected tests
+pytest tests/test_short_term.py -v   # single file
+python tests/run_eval.py             # validate prompt tag/layer activation after tag_rules changes
+```
+
 1. `python` 可能不在 `PATH`，`py.exe` 也可能存在但没有已安装解释器；不要把这误判为项目失败。
    本机运行项目 pytest 的正确入口是 Python 3.14 环境：
    `C:\Users\10434\AppData\Local\Python\pythoncore-3.14-64\Scripts\pytest.exe`。
@@ -198,3 +221,4 @@ brief，遵循“删除必须连同守卫、测试和文档条目一起删除”
 ## 设置控制面文档
 
 修改模型路由、TTS、scheduler、relay、thinking、tool loop 或高级功能开关时，必须同步 docs/feature-control-surface.md 与客户端的设置审计文档。
+
