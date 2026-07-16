@@ -425,10 +425,39 @@ class Pipeline:
         # N2-A: sleepy mood 已迁出 — 见 Pipeline.post_process 开头的
         #        maybe_mark_sleepy_from_time() 调用。fetch_context 是读路径，不写 mood。
 
-        # Dream impression — ambient, read-only, never written by reality chain
+        # Dream impression — forced for the exact post-exit rounds, then topic recall.
         try:
             from core.dream.impression_loader import load_impression_text as _load_imp
-            dream_impression_text = _load_imp(uid, char_id=char_id, char_name=scoped_character.name)
+            try:
+                from core.dream.dream_state import read_state as _read_dream_state_for_imp
+                _dream_state = _read_dream_state_for_imp(uid)
+            except Exception:
+                _dream_state = {}
+            try:
+                from core.config_loader import get_config as _get_config_for_imp
+                _dream_cfg = _get_config_for_imp().get("dream") or {}
+                _imp_cfg = _dream_cfg.get("impression") or {}
+            except Exception:
+                _imp_cfg = {}
+            try:
+                from core.tag_rules import get_tags as _get_tags_for_imp
+                _imp_tags = set(_get_tags_for_imp(content))
+            except Exception:
+                _imp_tags = set()
+            try:
+                _forced_left = max(0, int(_dream_state.get("forced_impression_rounds_left", 0)))
+            except (TypeError, ValueError):
+                _forced_left = 0
+            dream_impression_text = _load_imp(
+                uid,
+                char_id=char_id,
+                char_name=scoped_character.name,
+                forced_rounds_left=_forced_left,
+                latest_dream_id=str(_dream_state.get("last_dream_id") or ""),
+                user_text=content,
+                tags=_imp_tags,
+                recall_enabled=bool(_imp_cfg.get("recall_enabled", True)),
+            )
         except Exception:
             dream_impression_text = ""
 
