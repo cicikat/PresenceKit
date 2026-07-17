@@ -143,6 +143,53 @@ class StageCharacterView:
             )
         return await self.pipeline.run_llm(messages, char_id=self.char_id)
 
+    async def generate_private(
+        self,
+        other_id: str,
+        turns: list[tuple[str, str]],
+        *,
+        owner_uid: str,
+        opener_material: str = "",
+    ) -> str:
+        """One turn of an off-hours pairwise session (Brief 86).
+
+        Reuses the §1 lightweight context (no long-term retrieval — this reply
+        answers the private exchange in front of it, not the owner's memory)
+        with a private-register framing layer in place of Stage's group
+        "在场感"/shared-transcript framing.
+        """
+        if self.char_id == other_id:
+            raise ValueError("private exchange requires two distinct characters")
+        from core.stage.context import render_private_presence, render_private_transcript
+
+        context = self._lightweight_context()
+        context["stage_presence"] = render_private_presence(self.char_id, other_id)
+        context["stage_transcript"] = render_private_transcript(turns, viewer_id=self.char_id)
+
+        if turns:
+            instruction = "接着刚才的话往下聊，只输出你要说的这一句话，不用加称呼或引号。"
+        else:
+            instruction = (
+                "你们难得单独说上话，随便聊聊，不必等谁开口，自然一点就好。"
+                "只输出你要说的这一句话，不用加称呼或引号。"
+            )
+            if opener_material:
+                instruction = opener_material + "\n" + instruction
+
+        from core.tag_rules import get_tags
+        seed_text = turns[-1][1] if turns else instruction
+        messages, _debug = self.pipeline.build_prompt(
+            owner_uid,
+            instruction,
+            context,
+            tags=get_tags(seed_text),
+            channel="stage",
+            char_id=self.char_id,
+            consume_pending_perception=False,
+        )
+        reply = await self.pipeline.run_llm(messages, char_id=self.char_id)
+        return (reply or "").strip()
+
     async def generate_reaction(
         self,
         stage: Stage,

@@ -45,6 +45,14 @@ def render_presence(stage: Stage, *, viewer_id: str, chain_reply: bool = False) 
     except Exception:
         # Presence context is optional and must never block a Stage turn.
         pass
+    try:
+        from core.stage.private_exchange import read_presence_hint
+
+        hint = read_presence_hint(viewer_id)
+        if hint:
+            text += f"\n\n（{hint}。）"
+    except Exception:
+        pass
     return text
 
 
@@ -91,6 +99,32 @@ def render_transcript(
             "别复述或简单附和这句，从你自己的立场出发回应或另起话头。）"
         )
     return text
+
+
+def render_private_presence(_viewer_id: str, _other_id: str) -> str:
+    """§2 私下语域框定层 — the two required system lines for a private exchange (Brief 86).
+
+    Both are mandatory. Line 1 licenses the private register; line 2 is the
+    anti-drift anchor (DESIGN.md §十一 决策 9.5) — without it, "the owner can't
+    see this" reliably drifts into conspiratorial narrative that then leaks
+    back into the shared char_relations layer via the round's reflow.
+    """
+    from core.config_loader import get_user_display_name
+
+    user_name = get_user_display_name() or "TA"
+    return (
+        f"这段对话{user_name}看不到，不需要表演给任何人，用你们私下的语气。\n"
+        f"私下语域不等于秘密——你们不讨论对{user_name}隐瞒什么，也不形成针对任何人的共识。"
+        "就是两个熟人闲聊。"
+    )
+
+
+def render_private_transcript(turns: list[tuple[str, str]], *, viewer_id: str) -> str:
+    lines = []
+    for speaker_id, content in turns:
+        speaker = "你" if speaker_id == viewer_id else get_char_name(speaker_id)
+        lines.append(f"{speaker}：{content}")
+    return "\n".join(lines)
 
 
 def render_projection_segment(stage: Stage, transcript: list[TranscriptEntry]) -> str:

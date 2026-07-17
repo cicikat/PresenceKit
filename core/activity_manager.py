@@ -287,5 +287,15 @@ def get_prompt_fragment(
         thinking_source = state.get("thinking_source") or ("episodic" if thinking else "")
         if thinking_source == "episodic" and any(w in thinking for w in _PATTERN_WORDS):
             thinking = f"好像{thinking}"
-        return f"{current}，想着：{thinking}"
-    return current
+        fragment = f"{current}，想着：{thinking}"
+    else:
+        fragment = current
+    try:
+        from core.stage.private_exchange import read_presence_hint
+
+        hint = read_presence_hint(char_id)
+        if hint:
+            fragment = f"{fragment}，{hint}"
+    except Exception:
+        pass
+    return fragment
