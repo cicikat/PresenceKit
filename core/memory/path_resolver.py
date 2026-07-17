@@ -27,6 +27,7 @@ REALITY_USER_ARTIFACTS: frozenset[str] = frozenset({
     "profile",
     "identity",
     "hidden_state",
+    "hidden_state_no_interaction_stamp",  # Brief 88 §2：NO_INTERACTION 逻辑日去重小 stamp
     "afterglow_residue",
     "dream_seed",
     "impression",        # dream-origin but reality-scoped
@@ -137,6 +138,9 @@ def resolve_path(scope: MemoryScope, artifact: str) -> Path:
 
     if artifact == "hidden_state":
         return paths.user_memory_root(uid, char_id=char_id) / "hidden_state.json"
+
+    if artifact == "hidden_state_no_interaction_stamp":
+        return paths.user_memory_root(uid, char_id=char_id) / "hidden_state_no_interaction_stamp.json"
 
     if artifact == "afterglow_residue":
         return paths.user_memory_root(uid, char_id=char_id) / "afterglow_residue.json"
