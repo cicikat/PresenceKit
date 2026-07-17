@@ -569,6 +569,33 @@ class DataPaths:
             raise ValueError("character relation requires two distinct characters")
         return self._p("runtime", "relations", f"{first}__{second}.json")
 
+    # ── Private exchange: off-hours char-to-char sessions (Brief 86) ─────────
+    def private_exchange_dir(self) -> Path:
+        """data/runtime/groups/_private/ — root for private exchange transcripts.
+
+        Deliberately siblings `stage_group_dir()`'s parent but under a `_private`
+        segment so `GET /group/list`'s `*/meta.json` glob never sees these pairs —
+        private exchanges have no Stage meta.json, only a rolling transcript.
+        """
+        return self._p("runtime", "groups", "_private")
+
+    def private_exchange_transcript(self, *, char_a: str, char_b: str) -> Path:
+        """data/runtime/groups/_private/{char_a}__{char_b}/transcript.jsonl"""
+        first, second = sorted((safe_user_id(char_a), safe_user_id(char_b)))
+        if first == second:
+            raise ValueError("private exchange requires two distinct characters")
+        return self.private_exchange_dir() / f"{first}__{second}" / "transcript.jsonl"
+
+    def private_exchange_presence(self, *, char_id: str) -> Path:
+        """data/runtime/relations/_presence/{char_id}.json — 12h TTL 'just talked
+        to X' ambient stamp, read by activity_manager / stage presence rendering."""
+        return self._p("runtime", "relations", "_presence", f"{safe_user_id(char_id)}.json")
+
+    def private_exchange_budget_state(self) -> Path:
+        """data/runtime/private_exchange_state.json — daily session-count budget
+        (logical_day + count), reset by rhythm.logical_day()."""
+        return self._p("runtime", "private_exchange_state.json")
+
     # ── Activity: reading ─────────────────────────────────────────────────────
     def reading_char_root(self, *, char_id: str) -> Path:
         """data/runtime/activity/reading/{char_id}/  — enumerate all uid subdirs."""

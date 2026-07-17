@@ -409,6 +409,14 @@ stage:
   # Brief 85「明确不做」：后台自发群聊/小剧场占位。默认关闭，未实现；
   # 未来若开必须走 ProactiveLedger + 每日上限，不能绕开 owner 触发的回波窗口。
   idle_theater: false
+private_exchange:
+  # Brief 86：深夜/闲时低频角色间私聊（受限形态，DESIGN.md 决策9.5 修订版）。
+  # 产物只回流关系层（char_relations + 12h presence 提示），全文不进五大记忆库/
+  # event_log/向量库，只落 data/runtime/groups/_private/ 供管理面板只读查看。
+  enabled: true
+  daily_limit: 1    # 每日会话数上限（跨所有角色对合计），按逻辑日重置
+  max_turns: 6       # 单次会话 LLM 调用硬上限（双方轮流，各 ≤3 轮）
+  window: deep_night # 触发窗口；v1 仅实现 deep_night（同 memory_janitor 时段判断）
 group_chat:
   min_responders: 1
   max_responders: 2

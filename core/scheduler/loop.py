@@ -62,6 +62,7 @@ _COOLDOWNS: dict[str, int] = {
     "storyline_weekly":          7 * 24 * 3600,    # storyline 叙事弧周频聚合（Brief 80 §2）：7天
     "event_log_salvage":         24 * 3600,        # event_log 过期前抢救持久事实：24小时
     "memory_janitor":            24 * 3600,        # 闲时整合 pass：episodic 近似重复合并 + 向量库一致性核对：24小时
+    "private_exchange":           2 * 3600,        # 角色间私聊：会话间隔下限（真正的每日总量闸是独立的 daily_limit 预算，Brief 86）
     "spend_monitor":             24 * 3600,
     "interest_seed":             7 * 24 * 3600,
     "practice":                  20 * 3600,
@@ -925,6 +926,7 @@ async def _loop():
                 )
                 from core.scheduler.triggers.event_log_salvage import _check_event_log_salvage
                 from core.scheduler.triggers.memory_janitor import _check_memory_janitor
+                from core.scheduler.triggers.private_exchange import _check_private_exchange
                 from core.scheduler.triggers.storyline_weekly import _check_storyline_weekly
                 from core.scheduler.triggers.coplay_watch import _check_coplay_watch
                 from core.scheduler.triggers.spend_monitor import _check_spend_monitor
@@ -950,7 +952,7 @@ async def _loop():
                     "episodic_sweep", "garden_water", "garden_daily",
                     "hidden_state_decay", "hidden_state_consolidate",
                     "storyline_weekly",
-                    "event_log_salvage", "memory_janitor",
+                    "event_log_salvage", "memory_janitor", "private_exchange",
                     "sensor_aware", "coplay_watch",
                     "spend_monitor",
                     "interest_seed", "practice",
@@ -988,6 +990,7 @@ async def _loop():
                     _check_storyline_weekly(),
                     _check_event_log_salvage(),
                     _check_memory_janitor(),
+                    _check_private_exchange(),
                     _check_sensor_aware(),
                     _check_coplay_watch(),
                     _check_spend_monitor(),
