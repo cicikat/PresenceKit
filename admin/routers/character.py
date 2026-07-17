@@ -12,10 +12,11 @@
 
 import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import yaml
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from pydantic import BaseModel
 
 from admin.auth import require_scopes
 from core.asset_registry import get_registry, reload_registry
@@ -322,3 +323,89 @@ async def rename_character(name: str, body: Dict[str, Any], auth=Depends(require
             raise HTTPException(status_code=500, detail=f"更新配置失败: {e}")
     reload_registry()
     return {"message": f"已重命名为 {new_name}", "new_name": new_name, "new_id": new_id}
+
+
+# ─── per-角色模型路由绑定（Brief 87 §1）──────────────────────────────────────────
+
+class ModelRoutingUpdate(BaseModel):
+    model_routing: Optional[str] = None
+
+
+@router.get("/character/{char_id}/model-routing", summary="读取角色卡的模型路由绑定与解析结果")
+async def get_character_model_routing(char_id: str, auth=Depends(require_scopes("persona"))):
+    """返回角色卡 presence_ext.model_routing 声明 + 实际解析结果。
+
+    resolved 字段（effective_profile / resolved_chat_preset）把 model_registry 的
+    profile 回落逻辑摊开给前端，绑定后立刻可见"实际会用哪个 preset"。
+    """
+    reg = get_registry()
+    try:
+        reg.resolve(char_id, "character")
+    except ValueError:
+        raise HTTPException(status_code=404, detail=f"未知角色 id {char_id!r}")
+
+    from core.model_registry import resolve_routing_info
+    return resolve_routing_info(char_id)
+
+
+@router.patch("/character/{char_id}/model-routing", summary="绑定/清除角色卡的模型路由 profile")
+async def set_character_model_routing(
+    char_id: str, body: ModelRoutingUpdate, auth=Depends(require_scopes("persona"))
+):
+    """写角色卡 presence_ext.model_routing。null = 清除绑定，回落全局 active_routing。
+
+    非 null 值必须存在于 routing_profiles，否则 422（character_loader 的既有注释已言明
+    "存在于 routing_profiles 才生效"——这里把它变成显式错误而不是静默失效）。
+    """
+    reg = get_registry()
+    try:
+        entry = reg.resolve(char_id, "character")
+    except ValueError:
+        raise HTTPException(status_code=404, detail=f"未知角色 id {char_id!r}")
+
+    path = entry.path()
+    if path.suffix.lower() != ".json":
+        raise HTTPException(status_code=422, detail="纯文本角色卡（.txt/.md）不支持 model_routing 绑定")
+
+    if body.model_routing is not None:
+        from core.model_registry import _get_preset_config
+        profiles = _get_preset_config().get("routing_profiles", {})
+        if body.model_routing not in profiles:
+            raise HTTPException(
+                status_code=422,
+                detail=f"routing profile {body.model_routing!r} 不存在。可用: {sorted(profiles)}",
+            )
+
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"读取角色卡失败: {e}")
+
+    # 就地改 presence_ext.model_routing，其余键/顺序不动（角色卡是 authored 资产）。
+    presence_ext = data.setdefault("presence_ext", {})
+    if body.model_routing is None:
+        presence_ext.pop("model_routing", None)
+    else:
+        presence_ext["model_routing"] = body.model_routing
+
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"保存角色卡失败: {e}")
+
+    # 缓存边沿：character_loader.load() 每次都重读磁盘，下次路由解析即生效；
+    # 若该卡恰好是当前活跃角色，顺带热重载 pipeline.character 保持一致。
+    _active_id = _active_character_id()
+    if _active_id:
+        try:
+            _reload_character(_active_id)
+        except Exception as _e:
+            _char_logger.warning(f"[character] model-routing 保存后热重载失败（非致命）: {_e}")
+
+    from core.model_registry import resolve_routing_info
+    return {
+        "message": f"角色 {char_id!r} 的 model_routing 已更新",
+        **resolve_routing_info(char_id),
+    }

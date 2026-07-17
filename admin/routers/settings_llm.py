@@ -284,6 +284,22 @@ async def set_desktop_model_routing(body: ActiveRoutingUpdate, auth=Depends(requ
     return {"message": "模型路由已切换", "active_routing": body.active_routing}
 
 
+@router.get("/model-presets/routing-profiles", summary="可选 routing profile 清单（角色绑定下拉框数据源）")
+async def list_routing_profiles(auth=Depends(require_scopes("persona"))):
+    """返回全部 routing profile 名 + 各 category→preset 映射摘要（Brief 87 §1）。
+
+    persona scope（非 admin-only）：不暴露 preset 的 api_key/base_url，
+    只暴露 profile 结构本身，供角色模型绑定下拉框使用。
+    """
+    from core.model_registry import _get_preset_config
+    mp = _get_preset_config()
+    profiles = mp.get("routing_profiles", {})
+    return {
+        "active_routing": mp.get("active_routing", "default"),
+        "profiles": [{"name": name, "categories": dict(mapping)} for name, mapping in profiles.items()],
+    }
+
+
 @router.put("/model-presets/active-routing", summary="切换当前生效的路由方案")
 async def set_active_routing(body: ActiveRoutingUpdate, auth=Depends(require_scopes("admin"))):
     """切换 active_routing（如 'default' → 'claude-main'）并热重载。

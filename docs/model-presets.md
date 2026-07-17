@@ -114,6 +114,15 @@ ModelClient 缓存（`core.model_registry._model_clients`）以**解析出的 pr
 call_category 或 profile 名——每次调用都重新走上面 0~2 步解析 preset 名，天然随角色切换取到
 正确的 client，无需额外失效逻辑。
 
+第 0 步还支持**显式 char_id**（Brief 30，非活跃角色路径，如 Stage 群聊里非活跃角色说话）：
+调用方传 `char_id` 时只读该角色自己的卡 `presence_ext.model_routing`，不回落到活跃角色的
+override；`char_id=None`（默认）才走活跃角色卡逻辑。`core.model_registry._char_model_routing()`
+是这条路径的实现；`core.stage.views.StageCharacterView` 的所有生成方法都显式传 `char_id`。
+
+角色卡的 `model_routing` 绑定由 `GET/PATCH /character/{char_id}/model-routing` 管理
+（Brief 87 §1，见下方「Admin 接口」），可选 profile 清单由
+`GET /model-presets/routing-profiles` 提供。
+
 ### `reasoning_native` / `reasoning_extra_body`（Brief 32 · 内部思考链）
 
 preset 侧可选字段，供 `config.thinking.mode: auto` 判断该 preset 走 native reasoning 还是
@@ -198,6 +207,9 @@ preset 侧可选字段，供 `config.thinking.mode: auto` 判断该 preset 走 n
 | `PUT /model-presets/presets/{name}` | 新增或更新一个 preset（合并更新；新建须提供 provider_kind；仅 model_presets 模式） |
 | `DELETE /model-presets/presets/{name}` | 删除一个 preset；被任意 routing_profile 引用或是唯一剩余 preset 时 409 |
 | `PUT /model-presets/routing-profiles/{name}` | 新增或更新一个 routing profile 的 call_category → preset 映射（合并更新，值须是已存在的 preset） |
+| `GET /model-presets/routing-profiles` | 可选 profile 清单（名字 + 各 category→preset 映射摘要），角色绑定下拉框数据源 |
 | `POST /model-presets/presets/{name}/test` | 连通性测试：实际发一条 `max_tokens=1` 的请求，返回 `{ok, latency_ms, error?}`，不经缓存 |
 | `GET /llm-params` | 读取当前 chat preset 的生成参数 |
 | `PUT /llm-params` | 修改当前 chat preset 的生成参数并热重载（legacy 模式写回 llm: 块） |
+| `GET /character/{char_id}/model-routing` | 读取角色卡 `model_routing` 声明 + 解析结果（`effective_profile`/`resolved_chat_preset`）（Brief 87 §1） |
+| `PATCH /character/{char_id}/model-routing` | 绑定/清除角色卡的 routing profile；`model_routing: null` 清除声明回落全局 `active_routing`；非法 profile 名 422（Brief 87 §1） |

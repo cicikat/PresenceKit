@@ -216,6 +216,26 @@ def _resolve_preset_name(call_category: str, char_id: str | None = None) -> str:
     return name
 
 
+def resolve_routing_info(char_id: str) -> dict:
+    """角色卡 model_routing 声明 + 实际解析结果（Brief 87 §1 绑定 API 用）。
+
+    绑定 API 把解析结果一起回给前端，这样"绑定后立刻可见实际会用哪个 preset"，
+    不用等一次真实 LLM 调用才知道结果。
+
+    Returns: {"model_routing": str|None, "effective_profile": str, "resolved_chat_preset": str}.
+    """
+    mp = _get_preset_config()
+    profiles = mp.get("routing_profiles", {})
+    active = mp.get("active_routing", "default")
+    char_routing = _char_model_routing(char_id)
+    effective_profile = char_routing if char_routing and char_routing in profiles else active
+    return {
+        "model_routing": char_routing,
+        "effective_profile": effective_profile,
+        "resolved_chat_preset": _resolve_preset_name("chat", char_id=char_id),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Client construction + registry
 # ---------------------------------------------------------------------------
