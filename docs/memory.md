@@ -83,6 +83,29 @@
 > **最近核对**：2026-06-11。第 1–8、10 项已全部落地；第 9、11、12 项为已知 followup，不影响 P0 隔离结论。
 > **2026-07-06 更新**：第 11 项已随 Brief 25 §3 P1 落地（`DEFAULT_CHAR_ID` 全仓迁移），CHAR_ID_DEFAULT_ALLOWLIST 从 ~25 个文件缩到仅 `core/data_paths.py` + `core/dream/dream_pipeline.py`。
 
+### `user_facts` 写入者（2026-07-18，Brief 89）
+
+`update_user_facts(uid, patch)` 是唯一落盘入口（带 ALLOWED/DENIED 名单），但调用方
+曾经只有 admin 手写（`admin/routers/users.py` 的 `PATCH /{user_id}/pronoun`）——
+宪章有 `user_facts` 席位，主链零自动写入者。Brief 89 给两个既有 LLM 固化点加了
+可选输出段分流（不新增 LLM 调用）：
+
+- **`consolidate_to_identity`**（`core/memory/fixation_pipeline.py`）：identity
+  合成 prompt 增加可选顶层字段 `global_facts: [{key, value}]`，与 9 维校验分开
+  解析（该段格式错误不影响 identity 主产物）。
+- **`event_log_salvage`**（`core/scheduler/triggers/event_log_salvage.py`）：抢救
+  prompt 输出改为 `{"important_facts_ops": [...], "global_facts": [...]}`，
+  `global_facts` 段同样可选、独立解析。
+
+两处均通过共享入口 `user_facts.apply_global_facts_patch(uid, char_id, items,
+trigger_signal=)` 落盘：每次 run ≤3 条（超出截断）、同值跳过（不留 provenance
+噪音）、写入走 `update_user_facts`（`rejected_keys` 非空时 `logger.warning`，
+观测 prompt 侧排除是否漏）、成功写入的 key 各记一条
+`provenance_log.append(artifact="user_facts", field=<key>, ...)`——`user_facts`
+是 global scope 无 char_id，provenance 落 uid 维度，`char_id` 取发起固化/抢救
+的角色。观测端点：`GET /{user_id}/facts`（`admin/routers/users.py`，只读，返回
+完整 facts）。
+
 ---
 
 ## Reality 输出 Scrub 契约（R6-B，2026-06-10）
@@ -1293,6 +1316,49 @@ sensor privacy 全系统已经完成。
 | `BASELINE_LEARN_RATE` | 0.02 | consolidate_baselines 每次向 center 推进的比率 |
 | `MAX_NUDGE_PER_EVENT` | 6.0 | 单次 nudge 最大 delta |
 | `MEMORY_EVICT_EPS` | 0.05 | body_memory entry weight 低于此值时可被蒸发 |
+
+### 现实侧信号映射（Brief 88 — H1 接线完成）
+
+Phase 6 之前现实对话对 hidden_state 零写入（只被 Dream 单向喂养）；Brief 88 打通了
+两条现实侧写入路径：
+
+**§1 对话侧（`core/memory/user_hidden_state_reality_signals.py::process_reality_turn`）**：
+接线点 `pipeline.post_process_slow` 的 detect_emotion 完成之后，判定全部用现成数据
+（tags / emotion / 现实轮 gap 快照 / 常量词表），零 LLM，fail-open。
+
+| 事件 | 判定 | 效果 |
+|---|---|---|
+| `SEEK_COMPANIONSHIP` | (a) 距上次 owner 轮 ≥6h 的开场轮；(b) 命中 `_COMPANIONSHIP_WORDS` | discharge deficit |
+| `RECEIVED_COMFORT` | tags ∩ {emotion.down, emotion.indirect, topic.health} 且本轮 assistant emotion ∈ {gentle, sad} | discharge deficit |
+| `BODY_TOPIC` | tags ∩ {body_intimate, physical_closeness, query.body_state}（body_intimate/physical_closeness 与 Dream D4.5 门控同一标签集，由 `core/tag_rules.py` 产出） | sensitivity.current +2.0 |
+| `AFFECTION_EXPRESSED` | 命中 `_AFFECTION_WORDS`（抱/贴贴/摸摸/亲/牵手级） | discharge deficit（小档 −3.0）+ sensitivity.current +1.0 |
+
+同轮多事件允许并发触发，各自独立 capped（BODY_TOPIC/AFFECTION_EXPRESSED 的 delta 均
+远低于 `MAX_NUDGE_PER_EVENT`）。**关键设计**：§1 中期层写入固定用本模块自建的
+`stamp_user_chat()`，不看调用方传入的 envelope——只看 `trigger_name` 是否为空（trigger
+轮零参与，scheduler 发起的发言不是 owner 的现实行为信号）。这套状态机自带阻尼
+（`MAX_NUDGE_PER_EVENT` 封顶 / `current` 持续回归 `baseline`），全量映射被吸收的是
+幅度不是方向。
+
+**§2 NO_INTERACTION（调度侧）**：挂现有 `core/scheduler/triggers/hidden_state_decay.py`
+的 12h decay tick（未新建 trigger），读 `presence.json`，gap ≥24h 且本逻辑日
+（`core.scheduler.rhythm.logical_day`）尚未记账时 accrue。去重 stamp 落盘于
+`hidden_state_no_interaction_stamp.json`（`user_memory_root(uid)` 下、hidden_state.json
+旁；path_resolver artifact key `hidden_state_no_interaction_stamp`），重启后仍可读到，
+不会重复 accrue。
+
+**§3 body_memory 长期层（`integrate_body_cue_and_save`）**：`AFFECTION_EXPRESSED` /
+`BODY_TOPIC` 命中且**调用方传入的 envelope.can_write_memory=True** 时，以命中词表词
+（AFFECTION）或命中标签对应的 tag_rules pattern（BODY_TOPIC，取自 `body_intimate` /
+`physical_closeness` 两个标签，`query.body_state` 的问询类词汇不产生 cue）为 cue 强化
+长期条件化线索。这是本模块唯一检查调用方 envelope（而非固定 stamp_user_chat()）的
+写入路径——长期层落盘比中期层更保守。
+
+**观测**：`admin/routers/hidden_state_debug.py` 响应新增 `trigger_counts`
+（`user_hidden_state_integrator.get_trigger_counts()`，per event_type/source 累计接受
+次数，进程内计数，重启清零，仅用于验收接线是否在动）。
+
+测试：`tests/test_hidden_state_reality_signals_brief88.py`。
 
 ---
 

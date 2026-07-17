@@ -67,9 +67,10 @@
 | 情绪状态 | `core/memory/mood_state.py` |
 | 用户稳定行为模式 | `core/memory/user_identity.py` |
 | 用户隐性状态 schema + primitives（Phase 3：apply_time_decay / reinforce_body_memory / consolidate_baselines 等已实现；source 类型守卫） | `core/memory/user_hidden_state.py` |
-| 用户隐性状态 integrator（中期层 integrate_event/impression + Phase 3 长期层 integrate_body_cue*；TypeError 类型守卫；_assert_not_long_term） | `core/memory/user_hidden_state_integrator.py` |
+| 用户隐性状态 integrator（中期层 integrate_event/impression + Phase 3 长期层 integrate_body_cue*；TypeError 类型守卫；_assert_not_long_term；Brief 88：RealityEventType 扩至 5 类，get_trigger_counts() 观测计数） | `core/memory/user_hidden_state_integrator.py` |
+| 用户隐性状态现实侧信号映射（Brief 88：对话侧五类事件判定 + body_memory cue 接线，挂 pipeline.post_process_slow） | `core/memory/user_hidden_state_reality_signals.py` |
 | 用户隐性状态持久化（load / save 原子写入；load_dream_snapshot 只读 bucket 快照） | `core/memory/user_hidden_state_store.py` |
-| 用户隐性状态衰减调度（12h decay tick + 7d consolidate tick，stamp_trigger，不发言） | `core/scheduler/triggers/hidden_state_decay.py` |
+| 用户隐性状态衰减调度（12h decay tick + 7d consolidate tick，stamp_trigger，不发言；Brief 88：12h tick 内顺带 NO_INTERACTION 判定，逻辑日去重 stamp） | `core/scheduler/triggers/hidden_state_decay.py` |
 | Dream snapshot 接入（Phase 4：tag-gated D4.5 只读注入；tag_gate helper；fail-closed） | `core/dream/dream_context.py` + `core/dream/dream_prompt.py` |
 | Dream exit afterglow 回流接线（Phase 6：wire_afterglow_from_summary；tone 推导；fail-closed） | `core/dream/dream_exit_afterglow.py` |
 | Reality prompt afterglow 软提示（Phase 7：_format_afterglow_soft_hint；只读；fail-closed；layer dream_afterglow_soft_hint） | `core/prompt_builder.py` → `_format_afterglow_soft_hint()` + `read_afterglow_residue()` |

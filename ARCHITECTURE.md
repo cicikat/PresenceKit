@@ -240,7 +240,7 @@ data/
 └── (锁池)                        core/memory/locks.py 管理，运行时内存对象，不落盘
 ```
 
-> **User Hidden State（Phase 6 完成）**：
+> **User Hidden State（Brief 88：现实侧接线完成）**：
 > `core/memory/user_hidden_state.py` — schema（UserHiddenState：sensitivity / touch_need / embodied_ease / body_memory）+ 所有 primitive helpers + 全部更新函数已实现（`apply_time_decay` / `accrue_touch_deficit` / `nudge_embodied_ease` / `reinforce_body_memory` / `consolidate_baselines`）；所有接受 `source: UpdateSource` 的函数含 TypeError 守卫。
 > `core/memory/user_hidden_state_integrator.py` — Phase 3 更新：`integrate_event` / `integrate_impression` 新增 TypeError 类型守卫；`integrate_event_and_save` / `integrate_impression_and_save` 新增 uid 类型守卫；新增 `integrate_body_cue` / `integrate_body_cue_and_save`（长期层 body_memory，WriteEnvelope gated）；`_assert_not_long_term` 内部断言防止 integrator 意外写长期层。
 > `core/memory/user_hidden_state_store.py` — `load_hidden_state` / `save_hidden_state` / `load_dream_snapshot`（只读 bucket 快照，不暴露 float）。
@@ -249,6 +249,19 @@ data/
 > **Phase 4（Dream 只读接入）**：`core/dream/dream_context.build_snapshot()` 在入梦时调用 `load_dream_snapshot()` 并将结果冻结进 `context_snapshot["user_hidden_state_snapshot"]`。`core/dream/dream_prompt.build_dream_prompt()` 在 D4–D5 之间插入 D4.5 层，tag-gated（`body_intimate` / `physical_closeness`）。注入内容只含 bucket label（sensitivity / touch_appetite / embodied_ease / memory_cues），无 float / uid / timestamp / weight。Fail-closed：任何异常 → 不注入，不阻断 Dream。Dream 无写路径：`DREAM_DIRECT_WRITABLE = frozenset()`。
 >
 > **Phase 6（Dream Exit Afterglow Wiring）**：`core/dream/dream_pipeline._generate_summary_bg()` 在 `generate_summary()` 后调用 `wire_afterglow_from_summary()`（`core/dream/dream_exit_afterglow.py`）。从 summary record 推导 tone（hard_exit/hurt_reluctance → stress；gentle_residue+high_weight → comfort；gentle_residue → calm；fallback → neutral），构建 `AfterglowResidueInput`，经 `save_afterglow_residue()` 落盘，再经 `integrate_afterglow_and_save(stamp_dream_afterglow())` 写入 hidden_state。Fail-closed：任何步骤失败 → warning，不阻断 Dream exit。Dream 仍无直接写权限（`DREAM_DIRECT_WRITABLE = frozenset()`）。
+>
+> **Brief 88（现实侧全量信号映射，H1 接线完成）**：`RealityEventType` 扩至 5 类
+> （新增 `BODY_TOPIC` / `AFFECTION_EXPRESSED`）。对话侧判定落在新模块
+> `core/memory/user_hidden_state_reality_signals.py::process_reality_turn()`，挂
+> `pipeline.post_process_slow` detect_emotion 完成之后，判定全用现成数据（tags /
+> emotion / 现实轮 gap 快照 / 常量词表），零 LLM，fail-open；trigger 轮零参与。
+> 中期层（sensitivity.current / touch_need.deficit）固定用本模块自建
+> `stamp_user_chat()`，不看调用方 envelope；长期层（body_memory，经
+> `integrate_body_cue_and_save`）则遵守调用方 envelope.can_write_memory。
+> `NO_INTERACTION` 挂现有 `hidden_state_decay` 12h tick（未新建 trigger），
+> presence gap ≥24h 且逻辑日未记账时 accrue，去重 stamp 落盘于
+> `hidden_state_no_interaction_stamp.json`，重启不重复。`hidden_state_debug` 观测
+> 端点新增 `trigger_counts`。详见 `docs/memory.md` 八·现实侧信号映射。
 >
 > 长期层写权限（全部 `WriteEnvelope.can_write_memory=True` 必须）：
 >   `body_memory` ← `integrate_body_cue*`（Reality-side，stamp_trigger / stamp_user_chat）

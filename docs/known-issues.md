@@ -12,13 +12,6 @@
 
 `config.intent_reflex.enabled` 默认关闭，旧 Path B 守卫暂留。观察期若出现 tool loop 已启用但“角色说了要做却没做”的用户可感缺口，在此登记触发消息、期望动作和实际结果；到期仍无记录则整删 `_parse_and_execute_intent`、守卫、幂等窗口及对应测试。
 
-### H1：hidden_state 现实侧写入链未接线
-
-**状态**：`open`（等待 RealityEventType 映射拍板）
-**位置**：`core/memory/user_hidden_state_integrator.py`、`core/pipeline.py::post_process`
-
-读写 primitives、存储和观测面已具备，现实对话仍没有调用 `integrate_event_and_save` / `integrate_impression_and_save`。下一步是按 `cc-tasks/08b-hidden-state-接现实写入.md` 拍板现实信号到 `RealityEventType` 的映射，再在 `uid_lock` 内以 `stamp_user_chat()` 接线并补场景测试。未拍板前不猜测业务含义。
-
 ### ACT-1：阅读动向跨角色串桶
 
 **状态**：`observe`（前端已分桶，待复现观察）
@@ -106,3 +99,4 @@
 | PB2 | 2026-07-16 在 `1.5_fact_boundary` 加桌宠身份锚点；空屏幕感知时明确禁止虚构屏幕场景，并有专项测试。 |
 | P2-1 | Brief 82：`tool_read_log.detect_bypass_intent()` 探测显式重读短语常量表，命中给本轮 `execute()` 传 `bypass_read_log=True`，`is_recently_read(bypass=True)` 放行拦截但指纹照常刷新。 |
 | G4 | Brief 83：`garden_manager.daily_check()` 里 `dry`/`gift`/`ask` 处理完成后统一落 `storage.json.history`（`kind/flower/mood_source/ts/note`）并离开 `harvest`；`garden_handle_self` proposer 收窄为仅 vase，`ask`/`dry` 不再发消息，仅 gift 保留经 `ProactiveLedger` 记账的主动消息；`GET /garden/state` 新增 `history_recent`。 |
+| H1 | Brief 88：`user_hidden_state` 现实侧写入链已全量接线——`RealityEventType` 扩至 5 类（新增 `BODY_TOPIC` / `AFFECTION_EXPRESSED`）；对话侧判定落在新模块 `core/memory/user_hidden_state_reality_signals.py`，挂 `pipeline.post_process_slow` detect_emotion 之后，trigger 轮零参与；`NO_INTERACTION` 挂现有 `hidden_state_decay` 12h tick，presence gap ≥24h 且逻辑日未记账时 accrue，去重 stamp 落盘于 `hidden_state_no_interaction_stamp.json`；`body_memory` 长期层经 `integrate_body_cue_and_save` 接线，仅在调用方 envelope.can_write_memory=True 时写入；`hidden_state_debug` 观测端点新增 `trigger_counts`。见 `cc-tasks/88-hidden_state现实侧接线-全量信号映射.md`；测试 `tests/test_hidden_state_reality_signals_brief88.py`。 |
