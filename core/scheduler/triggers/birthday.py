@@ -8,25 +8,55 @@ from core.scheduler.loop import _is_ready, _mark, _owner_id, _pipeline_send, _cf
 
 logger = logging.getLogger(__name__)
 
+_INVALID_BIRTHDAY_LOGGED = False
 
-def _birthday() -> tuple[int, int]:
-    """从 config 读取 owner_birthday (MM-DD)，返回 (month, day)"""
-    raw = _cfg().get("owner_birthday", "01-01")
+
+def _birthday() -> tuple[int, int] | None:
+    """从 config 读取 owner_birthday (MM-DD)。
+
+    未填 / 残留占位符 "MM-DD" / 非法日期一律返回 None，视同未配置——
+    不回落任何具体日期，避免误当作 1 月 1 日生日触发（Brief 95 §1）。
+    """
+    raw = str(_cfg().get("owner_birthday") or "").strip()
+    m = re.fullmatch(r"(\d{2})-(\d{2})", raw)
+    if not m:
+        _warn_invalid_birthday_once(raw)
+        return None
+    month, day = int(m.group(1)), int(m.group(2))
     try:
-        m, d = raw.split("-")
-        return int(m), int(d)
-    except Exception:
-        return 1, 1
+        date(2000, month, day)  # 2000 是闰年，允许 02-29
+    except ValueError:
+        _warn_invalid_birthday_once(raw)
+        return None
+    return month, day
+
+
+def _warn_invalid_birthday_once(raw: str) -> None:
+    """进程内只提示一次，避免调度器每 tick 刷屏。"""
+    global _INVALID_BIRTHDAY_LOGGED
+    if _INVALID_BIRTHDAY_LOGGED or not raw:
+        return
+    _INVALID_BIRTHDAY_LOGGED = True
+    logger.info(
+        "[scheduler] owner_birthday=%r 不是合法 MM-DD，按未配置处理（生日相关主动消息不会触发）",
+        raw,
+    )
 
 
 def _is_birthday_today() -> bool:
+    birthday = _birthday()
+    if birthday is None:
+        return False
     today = date.today()
-    return (today.month, today.day) == _birthday()
+    return (today.month, today.day) == birthday
 
 
 def _is_birthday_eve() -> bool:
+    birthday = _birthday()
+    if birthday is None:
+        return False
     today = date.today()
-    m, d = _birthday()
+    m, d = birthday
     eve = date(today.year, m, d) - timedelta(days=1)
     return (today.month, today.day) == (eve.month, eve.day)
 
@@ -40,7 +70,10 @@ def propose(ctx: dict | None = None):
     ctx = ctx or {}
     now = ctx.get("now_dt") or datetime.now()
     today = now.date()
-    m, d = _birthday()
+    parsed = _birthday()
+    if parsed is None:
+        return None
+    m, d = parsed
     birthday = date(today.year, m, d)
     eve = birthday - timedelta(days=1)
 
