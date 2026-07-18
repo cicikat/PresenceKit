@@ -347,12 +347,12 @@ textarea { resize: vertical; min-height: 72px; }
       <h1 class="page-title">配置</h1>
 
       <div class="card" id="setup-missing-banner" style="display:none;border-color:var(--danger);background:color-mix(in srgb, var(--danger) 10%, transparent)">
-        <p style="margin:0;color:var(--danger);font-weight:600">⚠ 未配置将无法聊天：请先填写下方「基础聊天模型」必填项</p>
+        <p id="setup-missing-banner-text" style="margin:0;color:var(--danger);font-weight:600">⚠ 未配置将无法聊天：请先填写下方「基础聊天模型」必填项</p>
       </div>
 
       <div class="card">
         <div class="card-header">
-          <h3>基础聊天模型 <span class="badge badge-warn">必填</span></h3>
+          <h3>基础聊天模型 <span class="badge badge-warn">必填①</span></h3>
           <span id="setup-base-status" style="font-size:12px;color:var(--muted)"></span>
         </div>
         <p style="font-size:12px;color:var(--muted);margin-bottom:12px">
@@ -378,6 +378,30 @@ textarea { resize: vertical; min-height: 72px; }
         </div>
         <div class="modal-footer" style="justify-content:flex-start;padding-top:4px">
           <button class="btn btn-primary" onclick="saveSetupBaseModel()">保存</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h3>Owner ID <span class="badge badge-warn">必填②</span></h3>
+          <span id="setup-owner-status" style="font-size:12px;color:var(--muted)"></span>
+        </div>
+        <p style="font-size:12px;color:var(--danger);margin-bottom:12px">
+          建议直接填你的 QQ 号——若此处用了别的 id，之后接 QQ 时会按 QQ 号另起一套记忆，与桌宠期记忆不互通。
+          留空 = 主动触发调度器会静默跳过主动消息，且记忆文件可能挂在错误/缺省 uid 下。
+        </p>
+        <div class="form-row">
+          <label class="field">
+            <span>owner_id（仅 A-Za-z0-9_- ）</span>
+            <input type="text" id="setup-owner-id" placeholder="建议填你的 QQ 号">
+          </label>
+          <label class="field">
+            <span>owner_birthday <span style="font-size:11px;color:var(--muted)">（可选，MM-DD）</span></span>
+            <input type="text" id="setup-owner-birthday" placeholder="例如 04-24">
+          </label>
+        </div>
+        <div class="modal-footer" style="justify-content:flex-start;padding-top:4px">
+          <button class="btn btn-primary" onclick="saveSetupOwner()">保存</button>
         </div>
       </div>
 
@@ -1944,8 +1968,20 @@ async function loadSetupPage() {
       api('GET', '/settings/base-model'),
       api('GET', '/settings/embedding'),
     ]);
+    const owner = status.owner || {};
 
-    document.getElementById('setup-missing-banner').style.display = status.needs_setup ? 'block' : 'none';
+    const missing = [];
+    if (!base.configured)  missing.push('基础聊天模型');
+    if (!owner.configured) missing.push('owner_id');
+    document.getElementById('setup-missing-banner').style.display = missing.length ? 'block' : 'none';
+    document.getElementById('setup-missing-banner-text').textContent =
+      `⚠ 未配置将无法聊天/主动触发失效：请先填写下方「${missing.join('」「')}」必填项`;
+
+    document.getElementById('setup-owner-id').value = owner.owner_id || '';
+    document.getElementById('setup-owner-birthday').value = owner.owner_birthday || '';
+    document.getElementById('setup-owner-status').innerHTML = owner.configured
+      ? '<span class="badge badge-success">● 已配置</span>'
+      : '<span class="badge badge-danger">○ 未配置</span>';
 
     document.getElementById('setup-base-url').value = base.base_url || '';
     document.getElementById('setup-base-model-name').value = base.model || '';
@@ -2016,6 +2052,26 @@ async function saveSetupBaseModel() {
   try {
     await api('PUT', '/settings/base-model', body);
     toast('基础聊天模型已保存', 'ok');
+    loadSetupPage();
+  } catch (e) {
+    toast('保存失败: ' + _setupErrMsg(e), 'err');
+  }
+}
+
+async function saveSetupOwner() {
+  const ownerId = document.getElementById('setup-owner-id').value.trim();
+  const birthday = document.getElementById('setup-owner-birthday').value.trim();
+  if (ownerId && !/^[A-Za-z0-9_-]+$/.test(ownerId)) {
+    toast('owner_id 只能包含字母、数字、下划线、短横线（A-Za-z0-9_-）', 'err');
+    return;
+  }
+  if (birthday && !/^\d{2}-\d{2}$/.test(birthday)) {
+    toast('owner_birthday 必须是 MM-DD 格式，如 04-24', 'err');
+    return;
+  }
+  try {
+    await api('PUT', '/scheduler/config', { owner_id: ownerId, owner_birthday: birthday });
+    toast('owner_id 已保存', 'ok');
     loadSetupPage();
   } catch (e) {
     toast('保存失败: ' + _setupErrMsg(e), 'err');
