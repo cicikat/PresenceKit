@@ -124,6 +124,8 @@ pip install -r requirements.txt
 **Windows 快捷方式**：也可以不走下面的手工步骤，直接双击 `AA1安装并启动.bat`
 （装依赖、生成 `config.yaml`），填好 `config.yaml` 后依次双击
 `AA2鉴权初始化.bat`（首次运行前必做的鉴权初始化）与 `AA3启动.bat`（启动）。
+`AA2` 结束后会自动打开密码本与管理面板——面板首次打开会自动落在「配置」页，
+按红色标记填完必填①基础聊天模型、必填② `owner_id` 即可开始聊天（详见下方「配置」）。
 后续更新用 `AA更新.bat`（`git pull` + 重装依赖）。
 
 **配置**
@@ -132,7 +134,11 @@ pip install -r requirements.txt
 cp config.example.yaml config.yaml
 ```
 
-按 `config.example.yaml` 中的注释填写必填项：LLM API Key、管理面板密钥；如需 QQ 机器人再填 QQ 号。
+按 `config.example.yaml` 中的注释填写必填项：LLM API Key、管理面板密钥、`scheduler.owner_id`；
+如需 QQ 机器人再填 QQ 号。也可以跳过手改 yaml，直接在管理面板「配置」页填写这两项必填项。
+
+`owner_id` 建议直接填你的 QQ 号——若这里用了别的 id，之后接 QQ 时会按 QQ 号另起一套记忆，
+与桌宠期记忆不互通；留空会导致主动触发调度器静默跳过。
 
 在 `characters/` 目录放入角色卡文件；当前 loader 支持 `.json`、`.txt` 和 `.md`，可参考 `examples/character_template.json`。仓库自带一份中性的 `default` 角色卡,开箱即可用。
 

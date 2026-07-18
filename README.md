@@ -124,8 +124,11 @@ pip install -r requirements.txt
 **Windows shortcut**: instead of the manual steps below, double-click
 `AA1安装并启动.bat` (installs deps, generates `config.yaml`), fill in
 `config.yaml`, then `AA2鉴权初始化.bat` (auth init, required before the
-first run) and `AA3启动.bat` (start). `AA更新.bat` does `git pull` +
-reinstall deps for later updates.
+first run) and `AA3启动.bat` (start). `AA2` finishes by auto-opening the
+secrets file and the admin panel — the panel lands on the "配置"
+(Setup) page on first launch; fill in the two red required fields
+(① base chat model, ② `owner_id`) and you're ready to chat.
+`AA更新.bat` does `git pull` + reinstall deps for later updates.
 
 **Configure**
 
@@ -133,7 +136,9 @@ reinstall deps for later updates.
 cp config.example.yaml config.yaml
 ```
 
-Fill in the required fields per the comments in `config.example.yaml`: your LLM API key and an admin-panel secret; add a QQ number only if you're using the QQ bot.
+Fill in the required fields per the comments in `config.example.yaml`: your LLM API key, an admin-panel secret, and `scheduler.owner_id`; add a QQ number only if you're using the QQ bot. You can also skip editing the yaml directly and fill both required fields from the admin panel's "配置" (Setup) page.
+
+For `owner_id`, use your QQ number if you have one — using a different id here means connecting QQ later will start a separate memory thread that won't merge with the desktop-pet memories. Leaving it empty makes the proactive-message scheduler silently skip all triggers.
 
 Drop character card files into `characters/`; the loader currently supports `.json`, `.txt`, and `.md` — see `examples/character_template.json`. The repo ships a neutral `default` character card that works out of the box.
 
