@@ -272,7 +272,7 @@ iPhone 捷径易用性优先，安全默认值偏宽。
 严重度（历史）：P1：多端状态不一致、重复写入、触发误判
 
 问题描述（历史）：  
-Emerald-client、Flutter 前台和 Android 后台服务曾均硬编码 `Emerald1231`。token 改动会导致多端失联；源码暴露也不适合长期使用。旧字符串仍留存于 desktop/mobile 的 **git 历史**中（工作区源码已清除），开源前需确认该值在当前部署上已不再是有效的 admin secret。
+Emerald-client、Flutter 前台和 Android 后台服务曾均硬编码同一个旧 admin token（已轮换失效）。token 改动会导致多端失联；源码暴露也不适合长期使用。旧字符串仍留存于 desktop/mobile 的 **git 历史**中（工作区源码已清除），该值在当前部署上已不再是有效的 admin secret。
 
 现状：  
 后端改为 `data/runtime/auth/tokens.yaml` token 注册表（label/hash/scopes，见 `<repo-root>\admin\token_registry.py`）。各客户端不再硬编码 token：

@@ -160,6 +160,12 @@ python run_test.py
    （send 后，`asyncio.create_task` 调度，装 detect_emotion / mood_state /
    slow_queue 等）是这个原则落地的参考实现，见 `core/turn_sink.py`
    `record_assistant_turn`。
+11. **禁止把真实密钥/token、真实 QQ 号或手机号、真实邮箱、本机绝对路径
+    （`C:\Users\...`、`D:\ai\...` 等）写进任何会被 track 的文档或代码。**
+    举例、排查记录、交接文档中需要引用敏感值时，用占位符或脱敏措辞（如
+    "旧 admin token（已轮换）"），不留原始明文；确需记录本机路径时用
+    `<用户目录>`/`<仓库路径>` 这类通用占位。commit 前如发现已写入，直接改掉
+    再提交，不要留到事后清理。
 
    ## 测试（新增）
 - 跑测试用 `pytest -n auto`,不要用不带 -n 的全量单进程跑法
@@ -211,7 +217,7 @@ python tests/run_eval.py             # validate prompt tag/layer activation afte
 
 1. `python` 可能不在 `PATH`，`py.exe` 也可能存在但没有已安装解释器；不要把这误判为项目失败。
    本机运行项目 pytest 的正确入口是 Python 3.14 环境：
-   `C:\Users\10434\AppData\Local\Python\pythoncore-3.14-64\Scripts\pytest.exe`。
+   `<用户目录>\AppData\Local\Python\pythoncore-3.14-64\Scripts\pytest.exe`。
    workspace dependency discovery 返回的 bundled Python 可能没有安装 pytest，不能据此判定测试不可运行。
 2. pytest 默认临时目录可能因沙箱权限报 `PermissionError`；把 `TEMP` / `TMP` 临时指向仓库内 `.tmp`，测试后安全清理。
 3. `PresenceKit-desktop`（当前目录名通常为 `Emerald-client`）的 Vite build 可能因沙箱禁止写 `node_modules/.vite-temp` 报 `EPERM`；应申请权限后原命令重跑。
