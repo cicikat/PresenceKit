@@ -151,9 +151,24 @@ def test_setup_status_needs_setup_when_base_chat_missing(tmp_path, monkeypatch):
     assert result["base_chat"]["configured"] is False
 
 
-def test_setup_status_ready_when_base_chat_configured(tmp_path, monkeypatch):
+def test_setup_status_needs_setup_when_owner_id_missing(tmp_path, monkeypatch):
+    # Brief 95 §1：owner_id 升为必填②，即便基础聊天模型已配置，owner_id 缺失仍要 needs_setup=True
     path = _write(tmp_path, "llm:\n  base_url: https://api.deepseek.com\n  api_key: sk-real\n  model: deepseek-chat\n")
+    _patch(monkeypatch, path)
+    result = asyncio.run(mod.get_setup_status(auth=None))
+    assert result["needs_setup"] is True
+    assert result["base_chat"]["configured"] is True
+    assert result["owner"]["configured"] is False
+
+
+def test_setup_status_ready_when_base_chat_and_owner_configured(tmp_path, monkeypatch):
+    path = _write(tmp_path, (
+        "llm:\n  base_url: https://api.deepseek.com\n  api_key: sk-real\n  model: deepseek-chat\n"
+        "scheduler:\n  owner_id: '123456'\n"
+    ))
     _patch(monkeypatch, path)
     result = asyncio.run(mod.get_setup_status(auth=None))
     assert result["needs_setup"] is False
     assert result["base_chat"]["configured"] is True
+    assert result["owner"]["configured"] is True
+    assert result["owner"]["owner_id"] == "123456"

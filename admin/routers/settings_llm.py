@@ -280,13 +280,18 @@ async def update_embedding_settings(body: EmbeddingSettingsUpdate, auth=Depends(
 
 @router.get("/settings/setup-status", summary="配置中心整体状态（首启自动跳转 + 缺项横幅判定）")
 async def get_setup_status(auth=Depends(require_scopes("admin"))):
+    from admin.routers.scheduler import owner_status
+
     cfg = get_config()
     base = _base_model_view(cfg)
     embedding = _embedding_view(cfg)
+    owner = owner_status(cfg)
     return {
         "base_chat": base,
         "embedding": embedding,
-        "needs_setup": not base["configured"],
+        "owner": owner,
+        # owner_id 升为必填②（Brief 95 §1）：任一缺失都触发首启自动跳转 + 顶部横幅
+        "needs_setup": not base["configured"] or not owner["configured"],
     }
 
 
