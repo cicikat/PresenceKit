@@ -543,3 +543,105 @@ async def update_anniversaries(body: AnniversariesUpdate, auth=Depends(require_s
     from core import config_loader
     config_loader.reload_config()
     return {"anniversaries": saved}
+
+
+# ---------------------------------------------------------------------------
+# /settings/diary — 配置中心「可选」层：Obsidian 日记读取路径（用户反馈补遗）
+# core/tools/diary_reader.py 读 diary.obsidian_path，此前只能手改 config.yaml。
+# 只暴露路径本身；diary.characters 白名单不在本页编辑，写入时原样保留。
+# ---------------------------------------------------------------------------
+
+class DiarySettingsUpdate(BaseModel):
+    obsidian_path: str
+
+
+@router.get("/settings/diary", summary="读取 Obsidian 日记读取路径（配置中心可选层）")
+async def get_diary_settings(auth=Depends(require_scopes("admin"))):
+    path = str(get_config().get("diary", {}).get("obsidian_path") or "")
+    return {"obsidian_path": path, "configured": bool(path.strip())}
+
+
+@router.put("/settings/diary", summary="写入 Obsidian 日记读取路径并热重载（配置中心可选层）")
+async def update_diary_settings(body: DiarySettingsUpdate, auth=Depends(require_scopes("admin"))):
+    path = body.obsidian_path.strip()
+    if not path:
+        raise HTTPException(status_code=422, detail="obsidian_path 不能为空")
+
+    try:
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            full_cfg = yaml.safe_load(f) or {}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"读取配置文件失败: {e}")
+
+    full_cfg.setdefault("diary", {})["obsidian_path"] = path
+
+    try:
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            yaml.dump(full_cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"写入配置文件失败: {e}")
+
+    from core import config_loader
+    config_loader.reload_config()
+    return {"obsidian_path": path, "configured": True}
+
+
+# ---------------------------------------------------------------------------
+# /settings/coplay-games — 配置中心「可选」层：coplay 后台游戏进程检测白名单
+# core/coplay/watcher.py 靠 config.coplay.game_whitelist（[{name, process_name,
+# save_dir?}, ...]）做非 Steam 游戏的 psutil 进程名匹配；此前只能手改 config.yaml。
+# 整体替换语义与 /settings/anniversaries 一致。
+# ---------------------------------------------------------------------------
+
+class GameWhitelistEntry(BaseModel):
+    name:         str
+    process_name: str
+    save_dir:     Optional[str] = None  # 可选：存档目录，供 coplay 存档变化检测用
+
+
+class CoplayGamesUpdate(BaseModel):
+    game_whitelist: list[GameWhitelistEntry]
+
+
+@router.get("/settings/coplay-games", summary="读取 coplay 后台游戏进程检测白名单（配置中心可选层）")
+async def get_coplay_games(auth=Depends(require_scopes("admin"))):
+    return {"game_whitelist": get_config().get("coplay", {}).get("game_whitelist", []) or []}
+
+
+@router.put("/settings/coplay-games", summary="整体替换 coplay 后台游戏进程检测白名单并热重载（配置中心可选层）")
+async def update_coplay_games(body: CoplayGamesUpdate, auth=Depends(require_scopes("admin"))):
+    saved: list[dict] = []
+    seen_proc: set[str] = set()
+    for item in body.game_whitelist:
+        name = item.name.strip()
+        proc = item.process_name.strip()
+        if not name or not proc:
+            raise HTTPException(status_code=422, detail="name 和 process_name 均不能为空")
+        proc_key = proc.lower()
+        if proc_key.endswith(".exe"):
+            proc_key = proc_key[:-4]
+        if proc_key in seen_proc:
+            raise HTTPException(status_code=422, detail=f"process_name 重复（去掉 .exe 后）: {proc}")
+        seen_proc.add(proc_key)
+        entry: dict = {"name": name, "process_name": proc}
+        if item.save_dir and item.save_dir.strip():
+            entry["save_dir"] = item.save_dir.strip()
+        saved.append(entry)
+
+    try:
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            full_cfg = yaml.safe_load(f) or {}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"读取配置文件失败: {e}")
+
+    full_cfg.setdefault("coplay", {})["game_whitelist"] = saved
+
+    try:
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            yaml.dump(full_cfg, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"写入配置文件失败: {e}")
+
+    from core import config_loader
+    config_loader.reload_config()
+    return {"game_whitelist": saved}

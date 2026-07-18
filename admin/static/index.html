@@ -534,6 +534,48 @@ textarea { resize: vertical; min-height: 72px; }
           <button class="btn btn-primary" onclick="saveSetupAnniversaries()">保存</button>
         </div>
       </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h3>Obsidian 日记路径 <span class="badge">可选</span></h3>
+          <span id="setup-diary-status" style="font-size:12px;color:var(--muted)"></span>
+        </div>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:12px">
+          日记读取功能（daily_journal/diary_reminder/diary_inject）读取此目录下按
+          <code style="font-family:var(--mono)">YYYY-MM-DD.md</code> 命名的日记文件；不填则回落到本地
+          fallback 目录。角色白名单（<code style="font-family:var(--mono)">diary.characters</code>）不在本页编辑。
+        </p>
+        <div class="form-row col-1">
+          <label class="field">
+            <span>obsidian_path</span>
+            <input type="text" id="setup-diary-path" placeholder="例如 E:\obsidian_note\Psychology\Calendar">
+          </label>
+        </div>
+        <div class="modal-footer" style="justify-content:flex-start;padding-top:4px">
+          <button class="btn btn-primary" onclick="saveSetupDiary()">保存</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3>Coplay 后台游戏检测白名单 <span class="badge">可选</span></h3></div>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:12px">
+          陪玩模式（coplay）用于识别非 Steam 游戏：armed 状态下按 <code style="font-family:var(--mono)">process_name</code>
+          做 psutil 进程名匹配（大小写不敏感，<code style="font-family:var(--mono)">.exe</code> 可写可不写）。
+          <code style="font-family:var(--mono)">save_dir</code> 可选，填了才会做存档变化检测。JSON 数组编辑，
+          <code style="font-family:var(--mono)">name/process_name</code> 必填。
+        </p>
+        <div class="form-row col-1">
+          <label class="field">
+            <span>game_whitelist（JSON 数组）</span>
+            <textarea id="setup-coplay-games-json" rows="8" style="font-family:var(--mono);font-size:12px" placeholder='[
+  {"name": "示例游戏", "process_name": "game.exe", "save_dir": "C:\\Users\\你\\Saved Games\\示例游戏"}
+]'></textarea>
+          </label>
+        </div>
+        <div class="modal-footer" style="justify-content:flex-start;padding-top:4px">
+          <button class="btn btn-primary" onclick="saveSetupCoplayGames()">保存</button>
+        </div>
+      </div>
     </div>
 
     <!-- ── 系统状态 ── -->
@@ -2173,7 +2215,10 @@ async function loadSetupPage() {
       ? '<span class="badge badge-success">● 已配置</span>'
       : '<span class="badge">○ 未配置（召回自动降级为关键词匹配，不影响聊天）</span>';
 
-    await Promise.all([_loadSetupOptional(), _loadSetupMail(), _loadSetupAnniversaries()]);
+    await Promise.all([
+      _loadSetupOptional(), _loadSetupMail(), _loadSetupAnniversaries(),
+      _loadSetupDiary(), _loadSetupCoplayGames(),
+    ]);
   } catch (e) {
     toast('加载配置中心失败: ' + _setupErrMsg(e), 'err');
   }
@@ -2257,6 +2302,59 @@ async function saveSetupAnniversaries() {
     await api('PUT', '/settings/anniversaries', { anniversaries });
     toast('自定义纪念日已保存', 'ok');
     _loadSetupAnniversaries();
+  } catch (e) {
+    toast('保存失败: ' + _setupErrMsg(e), 'err');
+  }
+}
+
+async function _loadSetupDiary() {
+  try {
+    const diary = await api('GET', '/settings/diary');
+    document.getElementById('setup-diary-path').value = diary.obsidian_path || '';
+    document.getElementById('setup-diary-status').innerHTML = diary.configured
+      ? '<span class="badge badge-success">● 已配置</span>'
+      : '<span class="badge">○ 未配置</span>';
+  } catch (e) {
+    toast('加载日记路径失败: ' + _setupErrMsg(e), 'err');
+  }
+}
+
+async function saveSetupDiary() {
+  const path = document.getElementById('setup-diary-path').value.trim();
+  if (!path) { toast('obsidian_path 不能为空', 'err'); return; }
+  try {
+    await api('PUT', '/settings/diary', { obsidian_path: path });
+    toast('日记路径已保存', 'ok');
+    _loadSetupDiary();
+  } catch (e) {
+    toast('保存失败: ' + _setupErrMsg(e), 'err');
+  }
+}
+
+async function _loadSetupCoplayGames() {
+  try {
+    const { game_whitelist } = await api('GET', '/settings/coplay-games');
+    document.getElementById('setup-coplay-games-json').value =
+      game_whitelist && game_whitelist.length ? JSON.stringify(game_whitelist, null, 2) : '';
+  } catch (e) {
+    toast('加载 coplay 游戏白名单失败: ' + _setupErrMsg(e), 'err');
+  }
+}
+
+async function saveSetupCoplayGames() {
+  const raw = document.getElementById('setup-coplay-games-json').value.trim();
+  let game_whitelist;
+  try {
+    game_whitelist = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(game_whitelist)) throw new Error('必须是数组');
+  } catch (e) {
+    toast('JSON 格式错误: ' + e.message, 'err');
+    return;
+  }
+  try {
+    await api('PUT', '/settings/coplay-games', { game_whitelist });
+    toast('coplay 游戏白名单已保存', 'ok');
+    _loadSetupCoplayGames();
   } catch (e) {
     toast('保存失败: ' + _setupErrMsg(e), 'err');
   }
