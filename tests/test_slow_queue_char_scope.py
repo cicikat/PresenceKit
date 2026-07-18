@@ -502,7 +502,7 @@ async def test_e2e_char_scoped_mid_term_isolation(sandbox):
     sq.register_handler("summarize_to_midterm", handler_summarize_to_midterm)
 
     # monkeypatch LLM，返回包含 char_id 特征字符串的固定摘要
-    async def _mock_summarize(user_msg, reply, tags=None):
+    async def _mock_summarize(user_msg, reply, tags=None, **kwargs):
         return f"摘要:{user_msg[:20]}"
 
     with patch.object(_llm, "summarize_turn", side_effect=_mock_summarize):

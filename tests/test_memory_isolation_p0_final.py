@@ -522,7 +522,7 @@ async def test_slow_queue_drain_mid_term_isolation(sandbox):
     yexuan_word = "草莓大福-SQ"
     character_b_word = "XYZ动画-SQ"
 
-    async def _mock_summarize(user_msg, reply, tags=None):
+    async def _mock_summarize(user_msg, reply, tags=None, **kwargs):
         return f"摘要:{user_msg[:30]}"
 
     with patch.object(_llm, "summarize_turn", side_effect=_mock_summarize), \

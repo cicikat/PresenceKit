@@ -710,7 +710,7 @@ async def summarize_to_midterm(
             logger.debug(f"[fixation] summarize_to_midterm 幂等命中: turn_id={turn_id}")
             return None
 
-    summary = await llm_client.summarize_turn(user_msg, reply, tags=tags)
+    summary = await llm_client.summarize_turn(user_msg, reply, tags=tags, is_trigger_turn=bool(trigger_name))
     if not summary:
         return None
 

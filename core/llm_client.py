@@ -486,6 +486,16 @@ _SUMMARIZE_SYSTEM = (
     "不要情感修饰，不要加引号。直接输出陈述句，不要任何前缀。"
 )
 
+# Brief 97 §3：trigger 轮的 user_msg 是 scheduler/sensor 的种子旁白，不是真实用户发言——
+# 沿用 _SUMMARIZE_SYSTEM 会把旁白当"用户做了什么"概括进 mid_term，冷启动首轮典型产出
+# "她收到日记分析提醒并回复了近况"这类凭空记忆。旁白只是触发角色开口的由头。
+_SUMMARIZE_SYSTEM_TRIGGER = (
+    "把下面这轮对话压缩成 8-15 字的客观陈述句。「场景旁白」是系统写的开场设定，"
+    "不是用户说的话，也不代表真实发生过的用户行为，只是触发角色开口的由头——"
+    "不要把旁白内容当成已发生的事实写进陈述句。只客观描述角色在回复里实际说了/"
+    "表达了什么，主语用角色。不要情感修饰，不要加引号。直接输出陈述句，不要任何前缀。"
+)
+
 
 def _truncate(s: str, n: int) -> str:
     """切到 n 字以内，截断时补省略号；空串返空串。"""
@@ -495,17 +505,24 @@ def _truncate(s: str, n: int) -> str:
     return s if len(s) <= n else s[:n] + "…"
 
 
-def _rule_fallback(user_msg: str, reply: str = "", tags: list[str] | None = None) -> str:
+def _rule_fallback(
+    user_msg: str, reply: str = "", tags: list[str] | None = None, *, is_trigger_turn: bool = False
+) -> str:
     """
     LLM 不可用 / 太琐碎不值得调 LLM 时的兜底摘要。
     必须同时利用 user_msg 和 reply，否则写进 mid_term 的全是用户原话，等于没记忆。
+
+    is_trigger_turn=True 时 user_msg 是触发器种子旁白，不是用户说的话——不能标成"用户：..."，
+    否则和 LLM 压缩路径一样会把旁白当成真实用户行为写进 mid_term（Brief 97）。
     """
     user_head = _truncate(user_msg, 18)
     reply_head = _truncate(reply, 18)
 
     from core.config_loader import _char_name
     char_name = _char_name()
-    if user_head and reply_head:
+    if is_trigger_turn:
+        base = f"{char_name}主动开口：{reply_head}" if reply_head else f"{char_name}主动开口"
+    elif user_head and reply_head:
         base = f"用户：{user_head}；{char_name}：{reply_head}"
     elif user_head:
         base = f"用户：{user_head}"
@@ -523,27 +540,38 @@ def _rule_fallback(user_msg: str, reply: str = "", tags: list[str] | None = None
 _SUMMARIZE_MIN_TOTAL_LEN = 8
 
 
-async def summarize_turn(user_msg: str, reply: str, tags: list[str] | None = None) -> str:
-    """把一轮对话压缩成 8-15 字客观陈述。失败/过短走规则 fallback。"""
+async def summarize_turn(
+    user_msg: str, reply: str, tags: list[str] | None = None, *, is_trigger_turn: bool = False
+) -> str:
+    """把一轮对话压缩成 8-15 字客观陈述。失败/过短走规则 fallback。
+
+    is_trigger_turn=True：user_msg 是 scheduler/sensor 触发轮的种子旁白，不是真实用户
+    发言，用专门的系统 prompt + 消息框定，避免旁白被当成"已发生的事"概括（Brief 97）。
+    """
     user_msg = (user_msg or "").strip()
     reply = (reply or "").strip()
 
     if len(user_msg) + len(reply) < _SUMMARIZE_MIN_TOTAL_LEN:
-        return _rule_fallback(user_msg, reply, tags)
+        return _rule_fallback(user_msg, reply, tags, is_trigger_turn=is_trigger_turn)
     try:
         is_group_projection = "group_chat" in (tags or [])
-        system_prompt = _SUMMARIZE_SYSTEM
+        system_prompt = _SUMMARIZE_SYSTEM_TRIGGER if is_trigger_turn else _SUMMARIZE_SYSTEM
         if is_group_projection:
             system_prompt += (
                 "\n这是群聊投影：必须用第三人称并保留名字归属，例如“甲说了…，乙回应…”。"
                 "不得把不同说话人的内容合并成无主语陈述。"
             )
         mc = get_model_client("summary")
+        user_content = (
+            f"场景旁白（非用户发言，不代表已发生的事）:{user_msg}\n角色回复:{reply}"
+            if is_trigger_turn
+            else f"用户:{user_msg}\n回复:{reply}"
+        )
         response = await mc.client.chat.completions.create(
             model=mc.model,
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"用户:{user_msg}\n回复:{reply}"},
+                {"role": "user", "content": user_content},
             ],
             max_tokens=80 if is_group_projection else 40,
             temperature=0.3,
@@ -553,11 +581,11 @@ async def summarize_turn(user_msg: str, reply: str, tags: list[str] | None = Non
         result = result.strip('"\'"""''')
         result = result[:60 if is_group_projection else 30]
         if not result:
-            return _rule_fallback(user_msg, reply, tags)
+            return _rule_fallback(user_msg, reply, tags, is_trigger_turn=is_trigger_turn)
         return result
     except Exception as e:
         logger.warning(f"[llm_client.summarize_turn] 压缩失败，走 fallback: {e}")
-        return _rule_fallback(user_msg, reply, tags)
+        return _rule_fallback(user_msg, reply, tags, is_trigger_turn=is_trigger_turn)
 
 
 async def detect_emotion(text: str) -> str:
