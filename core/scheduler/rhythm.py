@@ -21,6 +21,10 @@ DIARY_MIN_QUIET_MINUTES = 12
 # TODO(policy.yaml): move filler silence threshold to scheduler policy.
 FILLER_SILENCE_THRESHOLD_SECONDS = 30 * 60
 
+# Brief 97 §2：冷启动门控——真实用户轮数低于此值时，"久未见/久未写"类触发器一律 skip，
+# 不把"从未有过记录"误读成"有记录但很久没更新"。
+COLD_START_MIN_REAL_TURNS = 5
+
 
 def logical_day(now: datetime | None = None, cutoff_hour: int = LOGICAL_DAY_CUTOFF_HOUR) -> date:
     """Return the scheduler's logical day; pre-cutoff early morning belongs to yesterday."""
@@ -90,6 +94,32 @@ def silence_ratio(
         return 1.0
     current = time.time() if now_ts is None else float(now_ts)
     return max(0.0, min(1.0, (current - last_owner_turn) / threshold_seconds))
+
+
+def real_turn_count(uid: str, *, char_id: str | None = None) -> int:
+    """统计 short_term 里真实用户发言轮数（role="user"）。
+
+    Trigger 侧种子旁白从不写入 short_term 的 user 位（fixation_pipeline.capture_turn
+    的 P0 边界规则：trigger 的 user_msg 永远不进 history），所以这个计数只反映真实
+    用户交互，不会被调度器自己的主动轮污染。
+    """
+    from core.memory import short_term
+    from core.data_paths import DEFAULT_CHAR_ID
+
+    history = short_term.load(uid, char_id=char_id or DEFAULT_CHAR_ID)
+    return sum(1 for m in history if m.get("role") == "user")
+
+
+def has_real_interaction_history(
+    uid: str, *, char_id: str | None = None, min_turns: int = COLD_START_MIN_REAL_TURNS
+) -> bool:
+    """真实历史交互是否已建立到足以支撑"久未见/久未写"类判断。
+
+    依赖历史存在的触发器（diary/interest_seed 等）应在自己的时间窗判断之前先查
+    这个：真实用户轮数不足 min_turns 时视为冷启动，直接 skip——不能把"零数据"
+    误读成"很久没有更新"（Brief 97）。
+    """
+    return real_turn_count(uid, char_id=char_id) >= min_turns
 
 
 def daytime_window_ratio(now: datetime, start_hour: int, end_hour: int) -> float:

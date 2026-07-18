@@ -98,6 +98,10 @@ async def _check_interest_seed() -> None:
     from core.scheduler.triggers.garden_water import _active_char_id
     char_id = _active_char_id()
     if not char_id: return
+    from core.scheduler.rhythm import has_real_interaction_history
+    if not has_real_interaction_history(uid, char_id=char_id):
+        logger.debug("[scheduler] interest_seed 冷启动 skip：真实交互轮数不足")
+        return
     from core.growth import interest_state
     await interest_state.apply_lifecycle(char_id=char_id, uid=uid)
     existing = interest_state.active_interests(char_id)

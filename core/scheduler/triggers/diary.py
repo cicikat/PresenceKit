@@ -25,6 +25,12 @@ async def _check_diary_reminder():
     now = datetime.now()
     if not (9 <= now.hour < 12):
         return
+    oid = _owner_id()
+    if oid:
+        from core.scheduler.rhythm import has_real_interaction_history
+        if not has_real_interaction_history(oid):
+            logger.debug("[scheduler] diary_reminder 冷启动 skip：真实交互轮数不足")
+            return
     try:
         from core.tools.diary_reader import yesterday_missing
         if yesterday_missing():
@@ -52,8 +58,12 @@ def propose_diary_reminder(ctx: dict | None = None):
     oid = _owner_id()
     if not oid:
         return None
-    from core.scheduler.rhythm import daytime_window_ratio, quiet_floor_elapsed, triggered_on_logical_day
+    from core.scheduler.rhythm import (
+        daytime_window_ratio, has_real_interaction_history, quiet_floor_elapsed, triggered_on_logical_day,
+    )
 
+    if not has_real_interaction_history(oid):
+        return None
     if not quiet_floor_elapsed(oid, _proposal_ts(ctx, now)):
         return None
     if triggered_on_logical_day("diary_reminder", now):
@@ -134,14 +144,20 @@ async def _check_diary_share_reminder():
     now = datetime.now()
     if now.hour < 22:
         return
-    if _last_diary_share > 0:
-        from datetime import date as _date
-        if datetime.fromtimestamp(_last_diary_share).date() == _date.today():
-            return
-    if time.time() - _last_diary_share < 259200:  # 3天内分享过就跳过
-        return
     oid = _owner_id()
     if not oid:
+        return
+    from core.scheduler.rhythm import has_real_interaction_history
+    if not has_real_interaction_history(oid):
+        logger.debug("[scheduler] diary_share_reminder 冷启动 skip：真实交互轮数不足")
+        return
+    if _last_diary_share <= 0:
+        # 从未分享过日记 ≠ "好几天没看到你写的东西"——前者一律不触发（Brief 97）
+        return
+    from datetime import date as _date
+    if datetime.fromtimestamp(_last_diary_share).date() == _date.today():
+        return
+    if time.time() - _last_diary_share < 259200:  # 3天内分享过就跳过
         return
     try:
         await _pipeline_send(
@@ -170,16 +186,22 @@ def propose_diary_share_reminder(ctx: dict | None = None):
     if not oid:
         return None
     from core.scheduler import loop
-    from core.scheduler.rhythm import logical_day, quiet_floor_elapsed, triggered_on_logical_day
+    from core.scheduler.rhythm import (
+        has_real_interaction_history, logical_day, quiet_floor_elapsed, triggered_on_logical_day,
+    )
 
+    if not has_real_interaction_history(oid):
+        return None
     if not quiet_floor_elapsed(oid, now_ts):
         return None
     if triggered_on_logical_day("diary_share_reminder", now):
         return None
     last_diary_share = float(loop._last_diary_share or 0)
-    if last_diary_share > 0:
-        if logical_day(datetime.fromtimestamp(last_diary_share)) == logical_day(now):
-            return None
+    if last_diary_share <= 0:
+        # 从未分享过日记 ≠ "好几天没看到你写的东西"——前者一律不触发（Brief 97）
+        return None
+    if logical_day(datetime.fromtimestamp(last_diary_share)) == logical_day(now):
+        return None
     if now_ts - last_diary_share < 259200:
         return None
 

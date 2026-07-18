@@ -57,10 +57,12 @@ async def test_native_proposal_executes_dryrun_for_each_registered_trigger(monke
     for mod in (time_based, diary, period, timenode, festival, memory):
         monkeypatch.setattr(mod, "_owner_id", lambda: "u1")
     monkeypatch.setattr("core.scheduler.rhythm.is_present", lambda now=None: True)
+    monkeypatch.setattr("core.scheduler.rhythm.has_real_interaction_history", lambda uid, **kw: True)
     monkeypatch.setattr("core.scheduler.rhythm.quiet_floor_elapsed", lambda uid, now_ts=None: True)
     monkeypatch.setattr("core.scheduler.rhythm.triggered_on_logical_day", lambda name, now=None: False)
     monkeypatch.setattr("core.scheduler.loop._owner_id", lambda: "u1")
-    monkeypatch.setattr("core.scheduler.loop._last_diary_share", 0.0)
+    # 早于本用例 now(2026-05-25) 4 天，模拟"有过分享但已过 3 天"，不是"从未分享过"（Brief 97）。
+    monkeypatch.setattr("core.scheduler.loop._last_diary_share", datetime(2026, 5, 21, 12, 0).timestamp())
     monkeypatch.setattr(diary, "_scheduler_start_time", 0.0)
     monkeypatch.setattr("core.config_loader.get_config", lambda: {"tools": {"weather": {"enabled": True}}})
     monkeypatch.setattr(period, "_days_elapsed", lambda uid, today=None: today.day)
@@ -547,10 +549,12 @@ async def test_diary_share_execute_live_marks_last_share(monkeypatch, sandbox):
 
     monkeypatch.setattr(loop, "_pipeline_send", fake_send)
     monkeypatch.setattr(loop, "_owner_id", lambda: "u1")
-    monkeypatch.setattr(loop, "_last_diary_share", 0.0)
+    # 早于用例 now_dt(2026-05-25) 4 天，模拟"有过分享但已过 3 天"，不是"从未分享过"（Brief 97）。
+    monkeypatch.setattr(loop, "_last_diary_share", datetime(2026, 5, 21, 12, 0).timestamp())
     monkeypatch.setattr(diary, "_owner_id", lambda: "u1")
     monkeypatch.setattr(diary, "_cfg", lambda: {"enabled": True})
     monkeypatch.setattr(diary, "_scheduler_start_time", 0.0)
+    monkeypatch.setattr("core.scheduler.rhythm.has_real_interaction_history", lambda uid, **kw: True)
     monkeypatch.setattr("core.scheduler.rhythm.quiet_floor_elapsed", lambda uid, now_ts=None: True)
     monkeypatch.setattr("core.scheduler.rhythm.triggered_on_logical_day", lambda name, now=None: False)
 
