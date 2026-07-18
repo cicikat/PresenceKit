@@ -24,6 +24,13 @@ def _reset_registry_cache():
     token_registry._mtime = None
 
 
+@pytest.fixture(autouse=True)
+def _no_os_side_effects(monkeypatch):
+    """main() 收尾会尝试打开密钥本文件 / 浏览器（Brief 93 §3）；测试环境禁用，避免弹出真实窗口。"""
+    monkeypatch.setattr(setup_auth, "_open_secrets_book", lambda: None)
+    monkeypatch.setattr(setup_auth, "_maybe_open_admin_panel", lambda: None)
+
+
 @pytest.fixture()
 def env(sandbox, monkeypatch):
     config_path = sandbox._base / "config.yaml"

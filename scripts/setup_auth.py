@@ -14,6 +14,7 @@ scripts/setup_auth.py — 首次鉴权配置 CLI（DX 主路径，Brief 22 / SEC
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import secrets
 import sys
@@ -108,6 +109,49 @@ def _merge_secrets_local(new_tokens: dict[str, str], admin_secret: str) -> None:
     SECRETS_LOCAL_PATH.write_text(header + body, encoding="utf-8")
 
 
+def _open_secrets_book() -> None:
+    """Best-effort：用系统默认程序打开 secrets.local.yaml（Brief 93 §3）。失败不影响初始化结果。"""
+    try:
+        resolved = str(SECRETS_LOCAL_PATH.resolve())
+        if sys.platform == "win32":
+            os.startfile(resolved)  # type: ignore[attr-defined]
+        else:
+            import subprocess
+            opener = "open" if sys.platform == "darwin" else "xdg-open"
+            subprocess.Popen([opener, resolved])
+        print("📖 已用系统默认程序打开 secrets.local.yaml")
+    except Exception as e:
+        print(f"⚠️ 未能自动打开 secrets.local.yaml（{e}），请手动打开该文件查看")
+
+
+def _maybe_open_admin_panel() -> None:
+    """Best-effort：管理面板已在监听时打开浏览器；未启动则只提示地址，不阻塞、不报错（Brief 93 §3）。"""
+    import socket
+    import webbrowser
+
+    import yaml
+
+    try:
+        cfg = yaml.safe_load(CONFIG_PATH.read_text(encoding="utf-8")) or {}
+    except Exception:
+        cfg = {}
+    port = int((cfg.get("admin") or {}).get("port") or 8080)
+    url = f"http://127.0.0.1:{port}"
+
+    reachable = False
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=0.5):
+            reachable = True
+    except OSError:
+        reachable = False
+
+    if reachable:
+        webbrowser.open(url)
+        print(f"🌐 已打开浏览器: {url}")
+    else:
+        print(f"🌐 管理面板尚未启动，启动后请访问: {url}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--rotate-all", action="store_true", help="已存在的标准 token 一并轮换（旧值立即失效）")
@@ -125,8 +169,9 @@ def main() -> None:
 
     print()
     print("✅ 鉴权初始化完成，凭据已写入 secrets.local.yaml（已 gitignore，勿提交）")
-    print("🔑 管理面板: http://127.0.0.1:8080  →  登录 token 见密码本 admin-panel 条目")
     print("📋 各设备 token 的配置位置和轮换命令: docs/token-rotation.md")
+    _open_secrets_book()
+    _maybe_open_admin_panel()
 
 
 if __name__ == "__main__":
