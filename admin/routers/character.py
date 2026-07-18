@@ -183,6 +183,50 @@ async def set_active_character(body: Dict[str, Any], auth=Depends(require_scopes
     return {"message": f"当前角色已切换为 {char_id}", "active_id": char_id, "label": entry.label}
 
 
+@router.post("/characters/new", summary="从模板新建角色卡")
+async def new_character(body: Dict[str, Any], auth=Depends(require_scopes("persona"))):
+    """从 examples/character_template.json 派生一张新角色卡，写入 characters/{id}.json。
+
+    Request body: {"id": "some_id", "name": "可选显示名（缺省用 id）"}
+
+    - id 即文件名 stem，禁止包含路径分隔符/以 . 开头；已存在同名卡返回 409。
+    - 新卡不写 config.yaml，不切换活跃角色（由用户在既有激活机制里手动切换）。
+    """
+    raw_id = (body.get("id") or "").strip()
+    if not raw_id:
+        raise HTTPException(status_code=422, detail="id 不能为空")
+    if raw_id != Path(raw_id).name or raw_id.startswith("."):
+        raise HTTPException(status_code=422, detail=f"非法角色 id: {raw_id!r}")
+
+    dest = _safe_path(f"{raw_id}.json")
+    if dest.exists():
+        raise HTTPException(status_code=409, detail=f"角色卡 {raw_id} 已存在")
+
+    template_path = Path("examples") / "character_template.json"
+    try:
+        template = json.loads(template_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"读取角色卡模板失败: {e}")
+
+    label = (body.get("name") or "").strip() or raw_id
+    template["name"] = label
+
+    CHARACTERS_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        with open(dest, "w", encoding="utf-8") as f:
+            json.dump(template, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"创建角色卡失败: {e}")
+
+    reload_registry()
+    return {
+        "message": f"角色卡 {raw_id} 已创建",
+        "id": raw_id,
+        "filename": f"{raw_id}.json",
+        "label": label,
+    }
+
+
 @router.post("/characters/upload", summary="上传新角色卡（.json / .txt / .md）")
 async def upload_character(file: UploadFile = File(...), auth=Depends(require_scopes("persona"))):
     """接收 .json / .txt / .md 文件并保存到 characters/ 目录"""
