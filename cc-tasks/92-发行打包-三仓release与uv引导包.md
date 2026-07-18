@@ -144,6 +144,13 @@
   里写明依赖前三条线全部完成（要链 desktop/mobile 的 Release 页），当前
   desktop/mobile 两条线尚未开始，做局部 README 更新意义不大，留到三仓都有
   Release 产物后再统一收尾。
+- **已知缺口（用户拍板，v0.1 不处理）：`AA更新.bat` 靠 `git pull` 拉更新，
+  对纯 release zip 用户（`git archive` 打包不含 `.git`）会报 git 错误、
+  代码更新不了。** v0.1 用户量小，接受"重新下载新版本 zip 覆盖解压安装目录"
+  作为更新方式（zip 从不含 `config.yaml`/`secrets.local.yaml`/`data/`，覆盖
+  解压不会丢用户配置和数据）。v0.2 若要做真正的增量更新，可以让
+  `AA更新.bat` 检测不到 `.git` 时给出"请重新下载最新 release 覆盖安装"的
+  友好提示，而不是直接报 git 错误。
 
 ## 验收
 
