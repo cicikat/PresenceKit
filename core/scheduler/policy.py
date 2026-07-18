@@ -52,6 +52,12 @@ class TriggerPolicy:
     # 注意：cross_marks 中的操作只在消息实际 sent 后执行，绝不在 defer/drop 时执行
     cross_marks: list[str] = field(default_factory=list)
 
+    # ProactiveLedger 豁免（全局最小间隔 + 每日预算），与 priority=="emergency" 解耦：
+    # priority=="emergency" 同时豁免 DND；ledger_exempt 只豁免 ledger，DND 仍按 priority 判断。
+    # 用于"迟发即错但不该打断免打扰"的场景（如生日系列，Brief 95 补遗）。真正发送后
+    # record_send() 仍会记账，不豁免统计——只豁免"能不能发"这道闸。
+    ledger_exempt: bool = False
+
 
 # ---------------------------------------------------------------------------
 # 静态配置表（占位，内容由后续迭代填入）
@@ -70,28 +76,36 @@ POLICY_TABLE: dict[str, TriggerPolicy] = {
         priority="high",
         active_window_behavior="exempt",
     ),
-    # 零点告白，迟发即错，时刻精确
+    # 零点告白，迟发即错，时刻精确。窗口只有 00:00-00:05 五分钟，一旦被 ProactiveLedger
+    # 全局间隔/每日预算顶掉就是一整年的错过——ledger_exempt=True 豁免这道闸（但不豁免
+    # DND：priority 不是 emergency，免打扰时仍会被拦，这是有意的克制，见 Brief 95 补遗审计）。
     "birthday_midnight": TriggerPolicy(
         trigger_id="birthday_midnight",
         priority="high",
         active_window_behavior="exempt",
+        ledger_exempt=True,
     ),
 
     # ── 生日系列 exempt（生日系列打断用户是预期行为；R2-B 与 _HIGH_PRIORITY_TRIGGERS 对齐）──
+    # 三项窗口虽比零点宽（数小时），但同样可能被同日已用尽的 ledger 预算/间隔顶掉，
+    # 一样 ledger_exempt=True（Brief 95 补遗审计）。
     "birthday_eve": TriggerPolicy(
         trigger_id="birthday_eve",
         priority="normal",
         active_window_behavior="exempt",
+        ledger_exempt=True,
     ),
     "birthday_afternoon": TriggerPolicy(
         trigger_id="birthday_afternoon",
         priority="normal",
         active_window_behavior="exempt",
+        ledger_exempt=True,
     ),
     "birthday_night": TriggerPolicy(
         trigger_id="birthday_night",
         priority="normal",
         active_window_behavior="exempt",
+        ledger_exempt=True,
     ),
 
     # ── 其他 defer 条目 ────────────────────────────────────────────────────
@@ -282,6 +296,16 @@ def assert_filler_no_defer(policy: TriggerPolicy) -> None:
         )
 
 
+def assert_ledger_exempt_requires_exempt_window(policy: TriggerPolicy) -> None:
+    """ledger_exempt=True 时 active_window_behavior 必须为 'exempt'，否则豁免了 ledger 这道闸
+    也还是会被 active-window defer/drop 拦下，豁免没有意义。"""
+    if policy.ledger_exempt:
+        assert policy.active_window_behavior == "exempt", (
+            f"[{policy.trigger_id}] ledger_exempt 级别必须 active_window_behavior='exempt'，"
+            f"当前值：{policy.active_window_behavior}"
+        )
+
+
 # ---------------------------------------------------------------------------
 # 批量校验（仅定义，不在运行时调用；测试层显式调用以一次性校验全表）
 # ---------------------------------------------------------------------------
@@ -293,3 +317,4 @@ def _validate_all() -> None:
         assert_emergency_must_exempt(policy)
         assert_cross_marks_only_on_sent(policy)
         assert_filler_no_defer(policy)
+        assert_ledger_exempt_requires_exempt_window(policy)

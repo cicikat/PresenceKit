@@ -249,7 +249,7 @@ def _decide(uid: str, proposals: list[TriggerProposal]) -> tuple[Optional[Trigge
     ledger_allowed = []
     ledger_reasons: set[str] = set()
     for p in cooldown_allowed:
-        priority = "emergency" if _policy_is_emergency(p.trigger_name) else "normal"
+        priority = "emergency" if _policy_ledger_exempt(p.trigger_name) else "normal"
         allowed, reason = _ledger_can_send(p.trigger_name, priority=priority)
         if allowed:
             ledger_allowed.append(p)
@@ -278,10 +278,22 @@ def _policy_active_window_behavior(trigger_name: str) -> str:
 
 
 def _policy_is_emergency(trigger_name: str) -> bool:
-    """Return True iff POLICY_TABLE marks trigger as emergency priority."""
+    """Return True iff POLICY_TABLE marks trigger as emergency priority (also bypasses DND)."""
     from core.scheduler.policy import POLICY_TABLE
     policy = POLICY_TABLE.get(trigger_name)
     return policy is not None and policy.priority == "emergency"
+
+
+def _policy_ledger_exempt(trigger_name: str) -> bool:
+    """Return True iff the trigger is exempt from ProactiveLedger's global gap + daily budget.
+
+    Deliberately decoupled from `_policy_is_emergency()`: emergency also bypasses DND, but
+    a trigger can need "must not be crowded out by other proactive sends" without also
+    needing to interrupt Do-Not-Disturb (e.g. birthday series, Brief 95 补遗审计).
+    """
+    from core.scheduler.policy import POLICY_TABLE
+    policy = POLICY_TABLE.get(trigger_name)
+    return policy is not None and (policy.priority == "emergency" or policy.ledger_exempt)
 
 
 def _serialize_candidate(
