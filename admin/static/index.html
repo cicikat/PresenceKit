@@ -55,6 +55,9 @@ body {
 }
 .auth-card input:focus { border-color: var(--accent); }
 .auth-card .err { color: var(--danger); font-size: 13px; margin-top: -8px; margin-bottom: 12px; min-height: 18px; }
+.auth-language { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-bottom: 18px; }
+.auth-language label { color: var(--muted); font-size: 12px; }
+.auth-language select { width: auto; min-width: 112px; padding: 5px 8px; }
 
 /* ── Layout ── */
 #app { display: flex; height: 100vh; overflow: hidden; }
@@ -281,6 +284,13 @@ textarea { resize: vertical; min-height: 72px; }
 <!-- Auth overlay -->
 <div id="auth-overlay">
   <div class="auth-card">
+    <div class="auth-language">
+      <label for="auth-language-select" data-i18n="common.language">语言</label>
+      <select id="auth-language-select" data-language-select onchange="AdminI18n.setLanguage(this.value)">
+        <option value="zh-CN">中文</option>
+        <option value="en">English</option>
+      </select>
+    </div>
     <h1 data-i18n="auth.title">🤖 管理面板</h1>
     <p data-i18n="auth.subtitle">His Presence · 输入管理密钥登录</p>
     <input type="password" id="key-input" placeholder="secret_key" autocomplete="current-password">
@@ -351,7 +361,7 @@ textarea { resize: vertical; min-height: 72px; }
   <main>
     <div class="admin-topbar">
       <label for="admin-language-select" data-i18n="common.language">语言</label>
-      <select id="admin-language-select" onchange="AdminI18n.setLanguage(this.value)">
+      <select id="admin-language-select" data-language-select onchange="AdminI18n.setLanguage(this.value)">
         <option value="zh-CN">中文</option>
         <option value="en">English</option>
       </select>
@@ -1312,8 +1322,7 @@ textarea { resize: vertical; min-height: 72px; }
         <p style="font-size:13px;color:var(--muted);margin:0">
           当前配置未开启 <code style="font-family:var(--mono)">model_presets</code> 块（legacy 模式，等价合成了单个
           <code style="font-family:var(--mono)">legacy</code> preset）。请先在 <code style="font-family:var(--mono)">config.yaml</code>
-          里加上 <code style="font-family:var(--mono)">model_presets:</code> 顶层块（参见 <code style="font-family:var(--mono)">config.example.yaml</code>），
-          可点击右侧按钮把当前 legacy 连接初始化为可编辑 preset。<button class="btn btn-primary btn-sm" style="margin-left:12px" onclick="bootstrapModelPresets()">一键初始化</button>
+          里加上 <code style="font-family:var(--mono)">model_presets:</code> 顶层块（参见 <code style="font-family:var(--mono)">config.example.yaml</code><span data-i18n="static.routing.legacy_tail">），可点击右侧按钮把当前 legacy 连接初始化为可编辑 preset。</span><button class="btn btn-primary btn-sm" style="margin-left:12px" onclick="bootstrapModelPresets()">一键初始化</button>
         </p>
       </div>
 
@@ -2626,6 +2635,7 @@ async function api(method, path, body) {
 // ══════════════════════════════════════════════════════════
 let _toastTimer;
 function toast(msg, type = 'ok') {
+  msg = window.AdminI18n ? AdminI18n.translateUiText(msg) : msg;
   const el = document.getElementById('toast');
   el.textContent = msg;
   el.className = `show ${type}`;
@@ -2866,12 +2876,12 @@ async function loadProfile() {
     const el = document.getElementById('profile-view');
     el.innerHTML = `<div class="profile-grid">
       ${[['姓名/称呼','name'],['所在地','location'],['职业/学校','occupation'],['兴趣爱好','interests'],['宠物','pets']].map(([lbl, key]) =>
-        `<div class="profile-field"><div class="lbl">${lbl}</div><div class="val">${p[key] || '<span style="color:var(--muted)">未知</span>'}</div></div>`
+        `<div class="profile-field"><div class="lbl">${lbl}</div><div class="val">${p[key] ? `<span class="i18n-raw">${escapeHtml(String(p[key]))}</span>` : '<span style="color:var(--muted)">未知</span>'}</div></div>`
       ).join('')}
       <div class="profile-field" style="grid-column:1/-1">
         <div class="lbl">重要事实</div>
         <div class="val">${(p.important_facts||[]).length
-          ? (p.important_facts).map(f => `<div style="margin-bottom:3px">• ${f}</div>`).join('')
+          ? (p.important_facts).map(f => `<div class="i18n-raw" style="margin-bottom:3px">• ${escapeHtml(String(f))}</div>`).join('')
           : '<span style="color:var(--muted)">暂无</span>'
         }</div>
       </div>
@@ -2889,7 +2899,7 @@ async function loadHistory() {
     el.innerHTML = msgs.map(m =>
       `<div class="msg ${m.role}">
         <div class="role">${m.role === 'user' ? '用户' : 'Bot'}</div>
-        ${escapeHtml(m.content)}
+        <div class="i18n-raw">${escapeHtml(m.content)}</div>
       </div>`
     ).join('');
     el.scrollTop = el.scrollHeight;
@@ -2906,7 +2916,7 @@ async function searchRAG() {
     const d = await api('GET', `/memory/${uid}/rag/search?query=${encodeURIComponent(q)}`);
     const results = d.results || [];
     el.innerHTML = results.length
-      ? results.map((r, i) => `<div style="margin-bottom:8px;padding:8px;background:var(--border);border-radius:6px;font-size:12px;line-height:1.6">${i+1}. ${escapeHtml(r)}</div>`).join('')
+      ? results.map((r, i) => `<div class="i18n-raw" style="margin-bottom:8px;padding:8px;background:var(--border);border-radius:6px;font-size:12px;line-height:1.6">${i+1}. ${escapeHtml(r)}</div>`).join('')
       : '<div class="empty">未找到相关记忆</div>';
   } catch(e) { toast('搜索失败: ' + e.message, 'err'); el.innerHTML = ''; }
 }
@@ -3021,10 +3031,10 @@ function renderLorebook() {
     return `<tr>
       <td>${badge}</td>
       <td style="text-align:center;color:var(--muted);font-size:12px">${e.insertion_order ?? 100}</td>
-      <td style="font-size:12px;color:var(--accent)">${escapeHtml(kws)} ${regexBadge}</td>
+      <td style="font-size:12px;color:var(--accent)"><span class="i18n-raw">${escapeHtml(kws)}</span> ${regexBadge}</td>
       <td style="font-size:12px;max-width:280px">
-        <span id="${contentId}-short" style="white-space:pre-wrap;cursor:pointer" onclick="toggleLoreContent(${renderIdx})" title="点击展开">${shortContent}</span>
-        <span id="${contentId}-full" style="white-space:pre-wrap;display:none">${fullContent}<br><a href="#" style="font-size:11px;color:var(--muted)" onclick="toggleLoreContent(${renderIdx});return false;">收起</a></span>
+        <span id="${contentId}-short" class="i18n-raw" style="white-space:pre-wrap;cursor:pointer" onclick="toggleLoreContent(${renderIdx})" title="点击展开">${shortContent}</span>
+        <span id="${contentId}-full" style="white-space:pre-wrap;display:none"><span class="i18n-raw">${fullContent}</span><br><a href="#" style="font-size:11px;color:var(--muted)" onclick="toggleLoreContent(${renderIdx});return false;">收起</a></span>
       </td>
       <td style="white-space:nowrap">
         <button class="btn btn-ghost btn-sm" onclick="openLoreModal('${eid}')">编辑</button>
@@ -3620,7 +3630,11 @@ async function saveChannelToggle(name, enabled) {
   const meta = CHANNEL_TOGGLES[name];
   try {
     await api('PUT', '/settings/feature-flags', { flags: { [name]: enabled } });
-    toast(`${meta.label}已${enabled ? '开启' : '关闭'}${meta.restart ? '，重启后生效' : ''}`, 'ok');
+    toast(t('dynamic.channel.saved', '{label}已{state}{restart}', {
+      label: t('flag.' + name, meta.label),
+      state: t(enabled ? 'dynamic.channel.on' : 'dynamic.channel.off', enabled ? '开启' : '关闭'),
+      restart: meta.restart ? t('dynamic.channel.restart_suffix', '，重启后生效') : '',
+    }), 'ok');
   } catch (e) {
     toast(e.message, 'err');
     loadChannelToggles();
@@ -3741,12 +3755,12 @@ function closeAtConfirmModal() {
 }
 
 function confirmRotateToken(label) {
-  let body = '⚠️ 将立即使旧 Token 失效。\n\n' +
-    '持有旧 token 的设备会开始认证失败（401），\n' +
-    '连续失败会触发 429 限速（重启后端可立即解除）。\n' +
-    '请在 Rotate 后尽快更新对应设备的配置。';
+  let body = t('dynamic.tokens.rotate_warning_1', '⚠️ 将立即使旧 Token 失效。') + '\n\n' +
+    t('dynamic.tokens.rotate_warning_2', '持有旧 token 的设备会开始认证失败（401），') + '\n' +
+    t('dynamic.tokens.rotate_warning_3', '连续失败会触发 429 限速（重启后端可立即解除）。') + '\n' +
+    t('dynamic.tokens.rotate_warning_4', '请在 Rotate 后尽快更新对应设备的配置。');
   if (label === _atWhoamiLabel) {
-    body += '\n\n⚠️ 这是你当前登录面板使用的 token，操作后你需要用新值/break-glass 重新登录';
+    body += '\n\n' + t('dynamic.tokens.current_operation_warning', '⚠️ 这是你当前登录面板使用的 token，操作后你需要用新值/break-glass 重新登录');
   }
   _openAtConfirm(`Rotate ${label}`, body, async () => {
     try {
@@ -3762,15 +3776,15 @@ function confirmRotateToken(label) {
 function confirmToggleToken(label, disabled) {
   const verb = disabled ? 'Disable' : 'Enable';
   let body = disabled
-    ? `停用后该 token 立即认证失败（401），持有它的设备需要用新 token 或重新 Enable 才能恢复。`
-    : `重新启用后该 token 立即恢复可用。`;
+    ? t('dynamic.tokens.disable_warning', '停用后该 token 立即认证失败（401），持有它的设备需要用新 token 或重新 Enable 才能恢复。')
+    : t('dynamic.tokens.enable_warning', '重新启用后该 token 立即恢复可用。');
   if (label === _atWhoamiLabel) {
-    body += '\n\n⚠️ 这是你当前登录面板使用的 token，操作后你需要用新值/break-glass 重新登录';
+    body += '\n\n' + t('dynamic.tokens.current_operation_warning', '⚠️ 这是你当前登录面板使用的 token，操作后你需要用新值/break-glass 重新登录');
   }
   _openAtConfirm(`${verb} ${label}`, body, async () => {
     try {
       await api('PATCH', `/auth/tokens/${encodeURIComponent(label)}`, { disabled });
-      toast(`${label} 已${disabled ? '停用' : '启用'}`);
+      toast(t(disabled ? 'dynamic.tokens.disabled_state' : 'dynamic.tokens.enabled_state', disabled ? '{label} 已停用' : '{label} 已启用', {label}));
       loadAuthTokens();
     } catch (e) {
       toast(`${verb} 失败: ${_atErrMsg(e)}`, 'err');
@@ -4098,8 +4112,8 @@ function _renderRelationshipFacts(uid, facts) {
   };
   const rows = facts.map((f, i) => `
     <tr>
-      <td>${(f.keywords || []).map(k => `<span class="badge" style="margin:1px">${k}</span>`).join('')}</td>
-      <td style="max-width:280px">${f.content || ''}</td>
+      <td>${(f.keywords || []).map(k => `<span class="badge i18n-raw" style="margin:1px">${escapeHtml(String(k))}</span>`).join('')}</td>
+      <td class="i18n-raw" style="max-width:280px">${escapeHtml(String(f.content || ''))}</td>
       <td>${statusBadge(f.status)}</td>
       <td style="font-size:12px;color:var(--muted)">${(f.confidence ?? 1).toFixed?.(2) ?? f.confidence} / hit ${f.hit_count ?? 0}</td>
       <td style="white-space:nowrap">
@@ -5038,7 +5052,7 @@ async function loadObserveChatlogDay() {
       const content = escapeHtml(m.content || m.text || '');
       const ts = m.timestamp ? `<span style="font-size:11px;color:var(--muted)">[${escapeHtml(m.timestamp)}]</span> ` : '';
       const roleColor = role === 'assistant' ? 'var(--accent)' : 'var(--text)';
-      return `<div style="margin-bottom:6px;padding:6px 10px;border-radius:4px;background:var(--bg-secondary)">
+      return `<div class="i18n-raw" style="margin-bottom:6px;padding:6px 10px;border-radius:4px;background:var(--bg-secondary)">
         ${ts}<span style="font-weight:600;color:${roleColor}">${role}</span>: ${content}
       </div>`;
     }).join('');
@@ -5245,7 +5259,7 @@ function _renderPrivateExchangePair(groupId, relation, log) {
     ? entries.map(entry => `<div style="padding:7px 0;border-bottom:1px solid var(--border)">
         <span style="color:var(--muted);font-size:11px">${escapeHtml(observeTime(entry.ts))}</span>
         <strong style="margin-left:8px">${escapeHtml(_observeGroupCharacterLabel(groupId, entry.speaker_id))}</strong>
-        <div style="margin-top:3px;white-space:pre-wrap;word-break:break-word">${escapeHtml(entry.content || '')}</div>
+        <div class="i18n-raw" style="margin-top:3px;white-space:pre-wrap;word-break:break-word">${escapeHtml(entry.content || '')}</div>
       </div>`).join('')
     : observeEmpty(t('group.private_none', '这两位还没私下聊过'));
   return `<details style="padding:9px 0;border-bottom:1px solid var(--border)">
@@ -5327,7 +5341,7 @@ async function loadObserveGroupArbiter(){
 async function loadObserveMemorySummary(){
   const el=document.getElementById('obs-memory-summary-content'),uid=document.getElementById('obs-memory-summary-uid').value.trim(),charId=document.getElementById('obs-memory-summary-char')?.value||'';if(!uid){el.innerHTML=observeEmpty('请输入用户 UID');return;}el.innerHTML=observeEmpty('加载中…');
   try{const cq=charId?`?char_id=${encodeURIComponent(charId)}`:'',[digest,recall]=await Promise.all([api('GET',`/memory/digest/${encodeURIComponent(uid)}${cq}`),api('GET',`/debug/recall?uid=${encodeURIComponent(uid)}${charId?`&char_id=${encodeURIComponent(charId)}`:''}`)]),rows=recall.records||[];
-    el.className='';el.innerHTML=`<h4>时期摘要归档</h4>${digest.content?`<pre style="white-space:pre-wrap;max-height:360px;overflow:auto">${escapeHtml(digest.content)}</pre>`:observeEmpty()}<h4 style="margin-top:18px">召回轨迹</h4>${rows.length?rows.slice().reverse().map(r=>{const counts=Object.entries(r).filter(([k,v])=>k.endsWith('_hits')&&Array.isArray(v)).map(([k,v])=>`<span class="badge" style="margin-right:5px">${escapeHtml(k)}: ${v.length}</span>`).join('');return `<div style="padding:9px 0;border-bottom:1px solid var(--border)"><div>${escapeHtml(observeTime(r.ts))} · ${escapeHtml(r.query||r.message_excerpt||r.mood||'—')}</div><div style="margin-top:5px">${counts}</div>${r.time_range||r.parsed_time_range?`<div style="color:var(--muted);margin-top:4px">时间过滤范围：${escapeHtml(JSON.stringify(r.time_range||r.parsed_time_range))}</div>`:''}</div>`;}).join(''):observeEmpty()}`;
+    el.className='';el.innerHTML=`<h4>${escapeHtml(t('dynamic.memory_summary.archive','时期摘要归档'))}</h4>${digest.content?`<pre style="white-space:pre-wrap;max-height:360px;overflow:auto">${escapeHtml(digest.content)}</pre>`:observeEmpty()}<h4 style="margin-top:18px">${escapeHtml(t('dynamic.memory_summary.recall_trace','召回轨迹'))}</h4>${rows.length?rows.slice().reverse().map(r=>{const counts=Object.entries(r).filter(([k,v])=>k.endsWith('_hits')&&Array.isArray(v)).map(([k,v])=>`<span class="badge" style="margin-right:5px">${escapeHtml(k)}: ${v.length}</span>`).join('');return `<div style="padding:9px 0;border-bottom:1px solid var(--border)"><div class="i18n-raw">${escapeHtml(observeTime(r.ts))} · ${escapeHtml(r.query||r.message_excerpt||r.mood||'—')}</div><div style="margin-top:5px">${counts}</div>${r.time_range||r.parsed_time_range?`<div style="color:var(--muted);margin-top:4px">${escapeHtml(t('dynamic.memory_summary.time_range','时间过滤范围：{range}',{range:JSON.stringify(r.time_range||r.parsed_time_range)}))}</div>`:''}</div>`;}).join(''):observeEmpty()}`;
   }catch(e){el.innerHTML=observeEmpty('加载失败：'+e.message);}
 }
 
