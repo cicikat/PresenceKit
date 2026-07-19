@@ -584,16 +584,7 @@ textarea { resize: vertical; min-height: 72px; }
     <div class="page active" id="page-status">
       <h1 class="page-title">系统状态</h1>
       <div class="stat-row" id="stat-row">
-        <div class="stat"><div class="val" id="s-sessions">…</div><div class="lbl">活跃会话</div></div>
         <div class="stat"><div class="val" id="s-users">…</div><div class="lbl">已知用户</div></div>
-      </div>
-
-      <div class="card">
-        <div class="card-header">
-          <h3>活跃会话列表</h3>
-          <button class="btn btn-ghost btn-sm" onclick="loadStatus()">刷新</button>
-        </div>
-        <div id="session-list"><div class="loading">加载中…</div></div>
       </div>
 
       <div class="card">
@@ -2649,19 +2640,7 @@ async function loadStatus() {
   loadFeatureFlags();
   try {
     const d = await api('GET', '/status');
-    document.getElementById('s-sessions').textContent = d.active_session_count ?? d.active_sessions?.length ?? '—';
     document.getElementById('s-users').textContent    = d.known_user_count ?? '—';
-
-    const sessions = d.active_sessions || [];
-    const el = document.getElementById('session-list');
-    if (!sessions.length) {
-      el.innerHTML = '<div class="empty">当前无活跃会话</div>';
-    } else {
-      el.innerHTML = `<div class="tbl-wrap"><table>
-        <tr><th>会话 Key</th></tr>
-        ${sessions.map(s => `<tr><td><span class="badge badge-accent">${s}</span></td></tr>`).join('')}
-      </table></div>`;
-    }
   } catch(e) {
     toast('获取状态失败: ' + e.message, 'err');
   }

@@ -186,7 +186,8 @@ speaker_id / content / timestamp / _turn_id / triggered_by
   （经既有 6h 冷却更新路径）+ 12h presence 提示；transcript 全文按决策 3
   （自产内容不固化）永不进入 short_term / mid_term / episodic / identity / event_log / 向量库，
   只落 `data/runtime/groups/_private/{char_a}__{char_b}/transcript.jsonl`（管理面板只读端点
-  `GET /relations/private-log`，前端无可视化入口是设计）。任意一方生成失败 → 整段放弃，
+  `GET /relations/private-log`，在「群聊仲裁」页按角色 pair 折叠展示 transcript 尾部）。
+  任意一方生成失败 → 整段放弃，
   不落盘、不回流（fail-open，当日额度不返还）。
 
 接入现有 Pipeline 前，必须先构造显式的 per-character view，保证角色卡、prompt scope 和记忆 scope

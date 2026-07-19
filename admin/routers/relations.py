@@ -131,7 +131,7 @@ async def get_private_exchange_log(
     limit: int = 50,
     auth=Depends(require_scopes("memory.read")),
 ):
-    """管理面板专用只读端点——前端不做可视化入口是设计（Brief 86 §3）。
+    """管理面板专用只读端点——群聊仲裁页按角色 pair 展示 transcript 尾部。
 
     transcript 全文只落这一处磁盘，按决策 3（自产内容不固化）永不进入五大记忆库/
     event_log/向量库，唯一回流是 char_relations 摘要投影 + presence 提示。
