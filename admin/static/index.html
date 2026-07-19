@@ -400,6 +400,17 @@ textarea { resize: vertical; min-height: 72px; }
         </div>
         <div class="modal-footer" style="justify-content:flex-start;padding-top:4px">
           <button class="btn btn-primary" onclick="saveSetupBaseModel()" data-i18n="common.save">保存</button>
+          <button class="btn" id="setup-base-test-btn" onclick="testSetupBaseModel()" data-i18n="setup.base.test">测试连接</button>
+          <span id="setup-base-test-result" class="mono" style="font-size:12px"></span>
+        </div>
+      </div>
+
+      <div class="card" id="setup-character-tip" style="display:none;border-color:var(--accent)">
+        <p style="margin:0;font-size:13px;line-height:1.6" data-i18n="setup.character_tip">
+          💡 当前用的还是内置占位角色卡（"角色名"），去「角色卡」页创建/编辑属于你自己的角色，聊天才会有真实人设。
+        </p>
+        <div class="modal-footer" style="justify-content:flex-start;padding-top:8px">
+          <button class="btn btn-primary btn-sm" onclick="goto('character')" data-i18n="setup.character_tip.go">前往角色卡</button>
         </div>
       </div>
 
@@ -2230,12 +2241,18 @@ async function loadSetupPage() {
   document.getElementById('setup-missing-banner').style.display = 'none';
   document.getElementById('setup-optional-body').innerHTML = `<div class="loading">${escapeHtml(t('common.loading', '加载中…'))}</div>`;
   try {
-    const [status, base, embed] = await Promise.all([
+    const [status, base, embed, chars] = await Promise.all([
       api('GET', '/settings/setup-status'),
       api('GET', '/settings/base-model'),
       api('GET', '/settings/embedding'),
+      api('GET', '/characters').catch(() => null),
     ]);
     const owner = status.owner || {};
+
+    window._setupBasePresetName = base.preset_name || 'legacy';
+    document.getElementById('setup-base-test-result').textContent = '';
+    document.getElementById('setup-character-tip').style.display =
+      chars && chars.active_id === 'default' ? 'block' : 'none';
 
     const missing = [];
     if (!base.configured)  missing.push(t('setup.base.title', '基础聊天模型'));
@@ -2464,6 +2481,30 @@ async function saveSetupBaseModel() {
     loadSetupPage();
   } catch (e) {
     toast(t('common.save_failed', '保存失败: {error}', {error: _setupErrMsg(e)}), 'err');
+  }
+}
+
+async function testSetupBaseModel() {
+  const btn = document.getElementById('setup-base-test-btn');
+  const out = document.getElementById('setup-base-test-result');
+  const name = window._setupBasePresetName || 'legacy';
+  btn.disabled = true;
+  out.style.color = 'var(--muted)';
+  out.textContent = t('setup.base.testing', '测试中…');
+  try {
+    const r = await api('POST', `/model-presets/presets/${encodeURIComponent(name)}/test`);
+    if (r.ok) {
+      out.style.color = 'var(--success)';
+      out.textContent = t('setup.base.test_ok', '✓ {latency}ms · {model}', {latency: r.latency_ms, model: r.model});
+    } else {
+      out.style.color = 'var(--danger)';
+      out.textContent = t('setup.base.test_fail', '✗ {error}', {error: r.error || t('setup.base.test_unknown_error', '未知错误')});
+    }
+  } catch (e) {
+    out.style.color = 'var(--danger)';
+    out.textContent = t('setup.base.test_fail', '✗ {error}', {error: _setupErrMsg(e)});
+  } finally {
+    btn.disabled = false;
   }
 }
 
