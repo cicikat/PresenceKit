@@ -244,6 +244,55 @@ async def test_state_projection_fields(sandbox):
     assert set(active["char_tension"].keys()) == set(ROSTER)
 
 
+# ── transcript polling (mobile: 无 WS，靠轮询拿逐条发言) ────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_transcript_returns_new_entries_since_cursor(sandbox):
+    from core.stage.dream_store import append_dream_transcript
+    from core.stage.models import TranscriptEntry
+
+    from admin.routers.group_dream import group_dream_transcript_get
+
+    _create_reality_group()
+    await _enter_group_dream()
+
+    empty = await group_dream_transcript_get(GROUP_ID, after=0)
+    assert empty["entries"] == []
+    assert empty["cursor"] == 0
+    assert empty["status"] == "DREAM_ACTIVE"
+
+    append_dream_transcript(GROUP_ID, TranscriptEntry("owner", "你好", 1.0, "t1", "user"))
+    append_dream_transcript(GROUP_ID, TranscriptEntry(ROSTER[0], "我在", 2.0, "t1", ROSTER[0]))
+
+    first_page = await group_dream_transcript_get(GROUP_ID, after=0)
+    assert first_page["cursor"] == 2
+    assert [e["content"] for e in first_page["entries"]] == ["你好", "我在"]
+    assert [e["is_owner"] for e in first_page["entries"]] == [True, False]
+    assert [e["index"] for e in first_page["entries"]] == [0, 1]
+    assert all(e["round_id"] == "t1" for e in first_page["entries"])
+
+    second_page = await group_dream_transcript_get(GROUP_ID, after=first_page["cursor"])
+    assert second_page["entries"] == []
+    assert second_page["cursor"] == 2
+
+    append_dream_transcript(GROUP_ID, TranscriptEntry(ROSTER[1], "也在", 3.0, "t1", ROSTER[1]))
+    third_page = await group_dream_transcript_get(GROUP_ID, after=first_page["cursor"])
+    assert [e["content"] for e in third_page["entries"]] == ["也在"]
+    assert third_page["entries"][0]["index"] == 2
+
+
+@pytest.mark.asyncio
+async def test_transcript_requires_reality_group(sandbox):
+    from fastapi import HTTPException
+
+    from admin.routers.group_dream import group_dream_transcript_get
+
+    with pytest.raises(HTTPException) as exc:
+        await group_dream_transcript_get("no-such-group", after=0)
+    assert exc.value.status_code == 404
+
+
 @pytest.mark.asyncio
 async def test_settings_default_and_patch_roundtrip(sandbox):
     from admin.routers.group_dream import group_dream_settings_get, group_dream_settings_patch

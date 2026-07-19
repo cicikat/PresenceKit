@@ -8,6 +8,8 @@ POST  /group/{id}/dream/enter    — 入梦：冻结世界/lore/逐角色快照/
 POST  /group/{id}/dream/send     — {content} → {round_id, status:"accepted"}，异步整轮，WS 推送
 POST  /group/{id}/dream/exit     — 无条件硬退（Invariant D）
 GET   /group/{id}/dream/state    — 对齐单人 /dream/state shape；char_tension 为映射，新增 roster
+GET   /group/{id}/dream/transcript — 轮询式读取共享 transcript（?after=cursor），供无 WS 客户端
+                                     （mobile）使用；只读 dream_store，不接桌面 WS/mobile_queue 任何推送路径
 GET   /group/{id}/dream/settings — 见 core.stage.dream_settings schema
 PATCH /group/{id}/dream/settings — 同上，枚举校验对齐单人 settings
 
@@ -42,7 +44,7 @@ from core.stage.dream_state import (
     read_state as read_dream_group_state,
     write_state as write_dream_group_state,
 )
-from core.stage.dream_store import archive_dream_transcript, clear_dream_transcript
+from core.stage.dream_store import archive_dream_transcript, clear_dream_transcript, load_dream_transcript
 from core.stage.models import Stage
 from core.stage.store import load_stage
 
@@ -249,6 +251,39 @@ async def group_dream_state_get(group_id: str, _auth=Depends(require_scopes("cha
     base.update(derive_dream_state_projection(state))
     base["blocks_chat"] = get_reality_guard_status(stage.owner_uid) != DreamGuardStatus.ALLOW
     return base
+
+
+# ── transcript（Brief 100 之后新增：手机端无 WS，靠轮询拿逐条发言）───────────────
+
+@router.get("/{group_id}/dream/transcript", summary="轮询式读取群聊梦境发言（供无 WS 客户端如手机端使用）")
+async def group_dream_transcript_get(group_id: str, after: int = 0, _auth=Depends(require_scopes("chat"))):
+    """`after` 是上次响应里的 `cursor`（已消费的条数），返回其后的新增发言。
+
+    独立于桌面端 WS 推送线：只读 dream_store 的共享 transcript 文件，不复用
+    desktop_ws/device_ws/ui_push 任何一条推送路径，天然不会跟桌面 WS 或现实群聊
+    mobile_queue 打架（Brief 100 §0 零回流同源考量——这里只是多一个读法，不是新
+    的写路径）。
+    """
+    stage = _require_reality_stage(group_id)
+    entries = load_dream_transcript(group_id)
+    after = max(0, after)
+    state = read_dream_group_state(group_id)
+    return {
+        "status": state.get("status", DreamStatus.REALITY_CHAT.value),
+        "dream_id": state.get("dream_id"),
+        "cursor": len(entries),
+        "entries": [
+            {
+                "index": after + i,
+                "speaker_id": entry.speaker_id,
+                "is_owner": entry.speaker_id == stage.owner_uid,
+                "content": entry.content,
+                "timestamp": entry.timestamp,
+                "round_id": entry.turn_id,
+            }
+            for i, entry in enumerate(entries[after:])
+        ],
+    }
 
 
 # ── settings ─────────────────────────────────────────────────────────────────
