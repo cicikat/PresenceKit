@@ -109,6 +109,7 @@ async def pseudo_stream_push(
     msg_id: str,
     char_id: str = "",
     round_id: str = "",
+    domain: str = "",
     profile: str = "default",
 ) -> None:
     """服务器端伪流式打字机回放（Brief 84）。
@@ -155,6 +156,8 @@ async def pseudo_stream_push(
             kw["char_id"] = char_id
         if round_id:
             kw["round_id"] = round_id
+        if domain:
+            kw["domain"] = domain
 
         started = False
         try:

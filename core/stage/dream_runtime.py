@@ -103,7 +103,8 @@ async def run_dream_stage_turn(
         try:
             from channels import ui_push as _ui_push
             await _ui_push.pseudo_stream_push(
-                content, msg_id=_msg_id, char_id=speaker_id, round_id=resolved_round_id, profile="dream",
+                content, msg_id=_msg_id, char_id=speaker_id, round_id=resolved_round_id,
+                domain="dream", profile="dream",
             )
         except Exception:
             logger.debug("[dream_runtime] pseudo_stream_push failed", exc_info=True)
@@ -112,6 +113,7 @@ async def run_dream_stage_turn(
             if _dws.is_connected():
                 await _dws.push_message(
                     content, msg_id=_msg_id, char_id=speaker_id, round_id=resolved_round_id,
+                    domain="dream",
                 )
         except Exception:
             logger.debug("[dream_runtime] WS deliver failed", exc_info=True)

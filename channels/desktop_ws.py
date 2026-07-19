@@ -56,10 +56,13 @@ async def push_message(
     *,
     char_id: str | None = None,
     round_id: str | None = None,
+    domain: str | None = None,
 ) -> bool:
     """推送普通消息，fire-and-forget，不等 ack。
     msg_id 可由调用方预先生成（用于与 message_segments 共享），省略时自动生成。
-    source 固定为 "reality"：dream pipeline 不经 WS 推送，所有 WS channel_message 均为 reality turn。
+    source 固定为 "reality"（历史字段，保留兼容）；domain 缺省不发送 = 前端按 reality
+    处理，群聊梦境（core.stage.dream_runtime）传 domain="dream" 供前端路由到梦境窗口，
+    见 Brief 100 §3。
     """
     if msg_id is None:
         msg_id = _new_msg_id()
@@ -73,6 +76,8 @@ async def push_message(
         payload["char_id"] = char_id
     if round_id is not None:
         payload["round_id"] = round_id
+    if domain is not None:
+        payload["domain"] = domain
     return await _send_json(payload)
 
 
@@ -82,10 +87,11 @@ async def push_segments(
     msg_id: str | None = None,
     *,
     char_id: str | None = None,
+    domain: str | None = None,
 ) -> bool:
     """推送 narrative segments envelope，fire-and-forget，不等 ack。
     与 channel_message 并行发送；老客户端可安全忽略此消息类型。
-    source 固定为 "reality"，与 push_message 保持一致。
+    source 固定为 "reality"，与 push_message 保持一致；domain 同 push_message。
     """
     if msg_id is None:
         msg_id = _new_msg_id()
@@ -98,6 +104,8 @@ async def push_segments(
     }
     if char_id is not None:
         payload["char_id"] = char_id
+    if domain is not None:
+        payload["domain"] = domain
     return await _send_json(payload)
 
 
@@ -106,6 +114,7 @@ async def push_stream_start(
     *,
     char_id: str | None = None,
     round_id: str | None = None,
+    domain: str | None = None,
 ) -> bool:
     """流式开始标记。前端创建空的临时气泡。"""
     payload: dict = {
@@ -118,6 +127,8 @@ async def push_stream_start(
         payload["char_id"] = char_id
     if round_id is not None:
         payload["round_id"] = round_id
+    if domain is not None:
+        payload["domain"] = domain
     return await _send_json(payload)
 
 

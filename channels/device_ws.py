@@ -132,10 +132,13 @@ async def push_message(
     *,
     char_id: str | None = None,
     round_id: str | None = None,
+    domain: str | None = None,
 ) -> bool:
     """推送普通消息，走出站队列，fire-and-forget，不等 ack。
     msg_id 可由调用方预先生成（用于与 message_segments 共享），省略时自动生成。
-    source 固定为 "reality"：dream pipeline 不经 WS 推送，所有 WS channel_message 均为 reality turn。
+    source 固定为 "reality"（历史字段，保留兼容）；domain 见 desktop_ws.push_message
+    同名参数——v1 群聊梦境不 fanout 到 device（Brief 100 §3），本参数目前只是让
+    ui_push 的 **kw 转发不因缺参数报错，暂无调用方会传非 None 值。
     """
     if msg_id is None:
         msg_id = _new_msg_id()
@@ -149,6 +152,8 @@ async def push_message(
         payload["char_id"] = char_id
     if round_id is not None:
         payload["round_id"] = round_id
+    if domain is not None:
+        payload["domain"] = domain
     return enqueue_json(payload)
 
 
@@ -158,6 +163,7 @@ async def push_segments(
     msg_id: str | None = None,
     *,
     char_id: str | None = None,
+    domain: str | None = None,
 ) -> bool:
     """推送 narrative segments envelope，走出站队列，fire-and-forget，不等 ack。
     与 channel_message 并行发送；老客户端可安全忽略此消息类型。
@@ -174,6 +180,8 @@ async def push_segments(
     }
     if char_id is not None:
         payload["char_id"] = char_id
+    if domain is not None:
+        payload["domain"] = domain
     return enqueue_json(payload)
 
 
@@ -182,6 +190,7 @@ async def push_stream_start(
     *,
     char_id: str | None = None,
     round_id: str | None = None,
+    domain: str | None = None,
 ) -> bool:
     """流式开始标记，走出站队列。前端创建空的临时气泡。"""
     payload: dict = {
@@ -194,6 +203,8 @@ async def push_stream_start(
         payload["char_id"] = char_id
     if round_id is not None:
         payload["round_id"] = round_id
+    if domain is not None:
+        payload["domain"] = domain
     return enqueue_json(payload)
 
 
