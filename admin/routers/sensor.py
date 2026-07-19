@@ -240,17 +240,10 @@ async def receive_realtime_snapshot(
 async def get_realtime_snapshot(auth=Depends(require_scopes("state.read"))):
     snap = realtime_state.get()
     if snap is None:
-        return {
-            "ts": None,
-            "stale_seconds": None,
-            "presence": "active",
-            "continuous_at_desk_seconds": None,
-            "sensor_version": None,
-            "window_seconds": None,
-            "input": None,
-            "focus": None,
-            "screen": None,
-        }
+        # Keep the no-sample state structurally distinct from a usable snapshot.
+        # Returning a snapshot-shaped object full of nulls makes typed clients
+        # believe nested input/focus fields are safe to dereference.
+        return {"_no_data": True}
     return {
         "ts":                          snap["ts"],
         "stale_seconds":               int(time.time() - snap["received_at"]),
@@ -269,5 +262,4 @@ async def get_behavior_status(auth=Depends(require_scopes("state.read"))):
     from core.scheduler.triggers import sensor_aware
 
     return sensor_aware.get_last_decision()
-
 

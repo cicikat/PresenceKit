@@ -49,6 +49,34 @@ def test_sensitive_realtime_snapshot_is_not_stored(monkeypatch):
     assert stored == []
 
 
+def test_realtime_snapshot_without_sample_has_explicit_no_data_marker(monkeypatch):
+    monkeypatch.setattr(sensor.realtime_state, "get", lambda: None)
+
+    result = asyncio.run(sensor.get_realtime_snapshot(auth=None))
+
+    assert result == {"_no_data": True}
+
+
+def test_realtime_snapshot_with_sample_keeps_complete_shape(monkeypatch):
+    now = time.time()
+    snapshot = _payload().model_dump()
+    snapshot["received_at"] = now - 3
+    monkeypatch.setattr(sensor.realtime_state, "get", lambda: snapshot)
+    monkeypatch.setattr(sensor.realtime_state, "get_presence", lambda: "active")
+    monkeypatch.setattr(
+        sensor.realtime_state,
+        "get_continuous_at_desk_seconds",
+        lambda: 30,
+    )
+
+    result = asyncio.run(sensor.get_realtime_snapshot(auth=None))
+
+    assert result["stale_seconds"] in {2, 3}
+    assert result["window_seconds"] == 30
+    assert result["input"]["keystrokes"] == 20
+    assert result["focus"]["app"] == "Code.exe"
+
+
 def test_realtime_awareness_uses_summary_without_window_title(monkeypatch):
     now = time.time()
     monkeypatch.setattr(
