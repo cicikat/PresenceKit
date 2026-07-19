@@ -19,6 +19,16 @@ def test_i18n_runtime_is_wired_with_persistent_chinese_default():
     assert "console.debug(`[admin-i18n] missing ${currentLanguage}: ${key}`)" in runtime
 
 
+def test_i18n_javascript_is_served_with_an_executable_mime_type():
+    from fastapi.testclient import TestClient
+
+    from admin.admin_server import app
+
+    response = TestClient(app).get("/static/i18n.js")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/javascript")
+
+
 def test_all_navigation_links_use_semantic_i18n_keys():
     index = INDEX.read_text(encoding="utf-8")
     nav = re.search(r"<nav>(.*?)</nav>", index, re.S)

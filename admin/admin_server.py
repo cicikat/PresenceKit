@@ -5,6 +5,7 @@
 """
 
 import logging
+import mimetypes
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -17,6 +18,11 @@ from core.config_loader import get_config
 logger = logging.getLogger(__name__)
 
 _STATIC_DIR = Path(__file__).parent / "static"
+
+# Windows 的注册表可能把 .js 映射成 text/plain，现代浏览器会拒绝执行。
+# 在挂载 StaticFiles 前显式覆盖严格/非严格 MIME 映射。
+mimetypes.add_type("text/javascript", ".js")
+mimetypes.add_type("text/javascript", ".js", strict=False)
 
 # ── 鉴权：从独立模块导入，避免与 routers 的循环导入 ──────────────────────────
 from admin.auth import verify_token, security, get_admin_secret, authenticate_ws  # noqa: F401 (re-exported for legacy imports)
