@@ -21,16 +21,16 @@ def _read_default_char_id() -> str:
 
     Callers that omit char_id will use this value, so changing config.yaml
     character.default naturally propagates to all path defaults — no more
-    silent fallback to 'yexuan' on multi-character deployments.
-    Falls back to 'yexuan' only if config is unreadable (startup edge case).
+    silent fallback to a private deployment id on multi-character deployments.
+    Falls back to 'default' only if config is empty or unreadable (startup edge case).
     """
     try:
         import yaml as _yaml
         cfg = _yaml.safe_load(_CONFIG_PATH.read_text(encoding="utf-8")) or {}
         default = (cfg.get("character", {}).get("default") or "").strip()
-        return default if default else "yexuan"
+        return default if default else "default"
     except Exception:
-        return "yexuan"
+        return "default"
 
 
 _DEFAULT_CHAR_ID: str = _read_default_char_id()

@@ -2,7 +2,8 @@
 P1-0H: 运行期 yexuan fallback 审计测试
 
 确认生产路径中：
-  * 已知 DLQ 兼容层仍可 WARN fallback yexuan（被允许）
+  * 已知 reality DLQ 兼容层仍可 WARN fallback legacy role id（被允许）
+  * dream legacy state fallback 使用部署态 DEFAULT_CHAR_ID
   * 已修 active resolver（garden / mood / users / hidden_state_decay / episodic_sweep）不再 fallback yexuan
   * 所有新 slow_queue payload 携带 char_id
   * 关键 admin/core 源文件中不存在活跃 resolver fallback "yexuan" 字符串
@@ -41,13 +42,12 @@ def _lines_with(src: str, pat: str) -> list[str]:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 1. DLQ 兼容层：WARN fallback yexuan 只在明确标注的函数中存在
+# 1. Reality DLQ 兼容层：WARN fallback legacy role id 只在明确函数中存在
 # ─────────────────────────────────────────────────────────────────────────────
 
 _DLQ_ALLOWED_FUNCTIONS = {
     "core/pipeline.py":              "_get_scope_from_payload",
     "core/memory/fixation_pipeline.py": "_get_scope_from_payload",
-    "core/dream/dream_pipeline.py":  "_state_char_id",
 }
 
 # P1-3A: DLQ fallback 由旧 `return "yexuan"` 改为 `MemoryScope.reality_scope(uid, "yexuan")`
@@ -56,30 +56,22 @@ _DLQ_FALLBACK_PATTERN = ', "yexuan")'  # 出现在 reality_scope(str(uid), "yexu
 
 def test_dlq_fallback_yexuan_only_in_allowed_functions():
     """
-    DLQ yexuan fallback 只出现在三个已知兼容函数中（pipeline/_get_scope_from_payload，
-    fixation/_get_scope_from_payload，dream/_state_char_id），不出现在其他路径。
-    dream_pipeline 仍使用旧 `return "yexuan"` 形式。
+    Reality DLQ legacy role id fallback 只出现在两个已知兼容函数中
+    （pipeline/_get_scope_from_payload、fixation/_get_scope_from_payload）。
     """
     for rel, allowed_fn in _DLQ_ALLOWED_FUNCTIONS.items():
         src = _read_src(rel)
         fn_idx = src.find(f"def {allowed_fn}")
         assert fn_idx != -1, f"{rel} 找不到函数 {allowed_fn}"
 
-        if rel == "core/dream/dream_pipeline.py":
-            # dream pipeline 仍用旧模式
-            bad_lines = [l.strip() for l in src.splitlines() if 'return "yexuan"' in l]
-            assert bad_lines, f"{rel} 应保留旧 DLQ `return 'yexuan'` 行（函数 {allowed_fn}）"
-        else:
-            # pipeline / fixation: 新 scope fallback 形式
-            # 搜索下一个顶层函数定义（可能是 async def）
-            next_def = min(
-                (src.find(p, fn_idx + 1) for p in ("\ndef ", "\nasync def ") if src.find(p, fn_idx + 1) != -1),
-                default=-1,
-            )
-            fn_body = src[fn_idx: next_def if next_def != -1 else len(src)]
-            assert _DLQ_FALLBACK_PATTERN in fn_body, (
-                f"{rel}: {allowed_fn} 函数体中找不到 DLQ fallback pattern {_DLQ_FALLBACK_PATTERN!r}"
-            )
+        next_def = min(
+            (src.find(p, fn_idx + 1) for p in ("\ndef ", "\nasync def ") if src.find(p, fn_idx + 1) != -1),
+            default=-1,
+        )
+        fn_body = src[fn_idx: next_def if next_def != -1 else len(src)]
+        assert _DLQ_FALLBACK_PATTERN in fn_body, (
+            f"{rel}: {allowed_fn} 函数体中找不到 DLQ fallback pattern {_DLQ_FALLBACK_PATTERN!r}"
+        )
 
 
 def test_no_unexpected_return_yexuan_in_admin_routers():
@@ -390,8 +382,10 @@ def test_fixation_dlq_fallback_emits_warning_for_legacy_payload():
 
 def test_dream_pipeline_dlq_fallback_emits_warning_for_legacy_state():
     """
-    dream_pipeline._state_char_id 对缺少 char_id 的 state 发出 WARN + fallback yexuan。
+    dream_pipeline._state_char_id 对缺少 char_id 的 state 发出 WARN，
+    并 fallback 到部署态 DEFAULT_CHAR_ID。
     """
+    from core.data_paths import DEFAULT_CHAR_ID
     from core.dream.dream_pipeline import _state_char_id
     import logging
 
@@ -401,7 +395,7 @@ def test_dream_pipeline_dlq_fallback_emits_warning_for_legacy_state():
     ) as warn_mock:
         result = _state_char_id({}, "test_handler", uid="u1", dream_id="d1")
 
-    assert result == "yexuan"
+    assert result == DEFAULT_CHAR_ID
     warn_mock.assert_called_once()
     assert "legacy" in str(warn_mock.call_args).lower()
 

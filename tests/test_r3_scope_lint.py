@@ -44,15 +44,10 @@ def _iter_core_py(root: Path = CORE_ROOT):
 # core/data_paths.py is the canonical path-authority class; its methods carry
 # backward-compat defaults intentionally so call-sites can migrate incrementally.
 #
-# Brief 25 §3 P1 migrated every other former violation to
-# `char_id: str = DEFAULT_CHAR_ID` (imported from core.data_paths). The only
-# remaining entry is an intentional functional gate, not a path/default hardcode.
+# Brief 25 §3 P1 migrated former violations to
+# `char_id: str = DEFAULT_CHAR_ID` (imported from core.data_paths).
 CHAR_ID_DEFAULT_ALLOWLIST: frozenset[str] = frozenset({
     "core/data_paths.py",                          # canonical path authority — by design
-
-    "core/dream/dream_pipeline.py",                # enter_dream(): "dream subsystem supports
-                                                    # yexuan only" fail-closed gate — not a
-                                                    # path/default-param hardcode, left as-is.
 })
 
 _GUARDED_PARAM_NAMES: frozenset[str] = frozenset({"char_id", "character_id"})

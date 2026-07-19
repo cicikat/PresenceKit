@@ -3,10 +3,10 @@ tests/test_dream_session_char_scope.py — P0-T05.5: Dream session char_id plumb
 
 Covers:
 1.  enter_dream writes char_id into dream_state JSON
-2.  Production admin route passes active char_id (not the default "yexuan")
+2.  Production admin route passes active char_id (not an implicit default)
 3.  _generate_summary_bg / _do_close_dream pass dream_state.char_id to distill_impression
 4.  close after active-character switch still uses the session char_id (not current active)
-5.  Legacy dream_state missing char_id: WARN fallback to "yexuan", no crash
+5.  Legacy dream_state missing char_id: WARN fallback to DEFAULT_CHAR_ID, no crash
 6.  distill_impression reads archive from correct char_id-scoped path
 7.  afterglow summary record carries char_id field (T-06 seam)
 """
@@ -19,6 +19,8 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+from core.data_paths import DEFAULT_CHAR_ID
 
 
 _UID = "dream_char_scope_u1"
@@ -57,14 +59,14 @@ def _read_state(sandbox, uid):
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-# ── 1. enter_dream rejects non-yexuan (Method A fail-closed) ─────────────────
+# ── 1. enter_dream accepts only the configured primary character ─────────────
 
-def test_enter_dream_rejects_non_yexuan(sandbox):
-    """enter_dream with a non-yexuan char_id must fail-closed with a friendly error."""
+def test_enter_dream_rejects_non_default_character(sandbox):
+    """A non-primary char_id must fail-closed with a friendly error."""
     from core.dream.dream_pipeline import enter_dream
 
     async def run():
-        return await enter_dream(_UID, entry_reason="test", char_id="character_b")
+        return await enter_dream(_UID, entry_reason="test", char_id="other")
 
     result = asyncio.run(run())
     assert result.get("ok") is False, f"Expected rejection, got: {result}"
@@ -73,8 +75,9 @@ def test_enter_dream_rejects_non_yexuan(sandbox):
     )
 
 
-def test_enter_dream_yexuan_char_id(sandbox):
-    """enter_dream with char_id='yexuan' writes 'yexuan' into dream_state."""
+def test_enter_dream_default_char_id(sandbox):
+    """The configured primary char_id is accepted and frozen into dream_state."""
+    from core.data_paths import DEFAULT_CHAR_ID
     from core.dream.dream_pipeline import enter_dream
 
     async def run():
@@ -90,10 +93,11 @@ def test_enter_dream_yexuan_char_id(sandbox):
             "mid_term_context": "",
             "profile_impression": "",
         })):
-            return await enter_dream(_UID, char_id="yexuan")
+            return await enter_dream(_UID, char_id=DEFAULT_CHAR_ID)
 
-    asyncio.run(run())
-    assert _read_state(sandbox, _UID).get("char_id") == "yexuan"
+    result = asyncio.run(run())
+    assert result.get("ok") is True
+    assert _read_state(sandbox, _UID).get("char_id") == DEFAULT_CHAR_ID
 
 
 # ── 2. Production admin route passes active char_id, not default ──────────────
@@ -259,13 +263,13 @@ def test_close_uses_session_char_id_not_current_active(sandbox):
     )
 
 
-# ── 5. Legacy dream_state missing char_id: WARN + fallback to "yexuan" ────────
+# ── 5. Legacy dream_state missing char_id: WARN + configured fallback ─────────
 
 def test_legacy_dream_state_missing_char_id_warns_and_fallbacks(sandbox, caplog):
     """
     When dream_state has no char_id field (legacy session), _do_close_dream must:
-    - fallback to char_id='yexuan'
-    - emit a WARNING log containing 'legacy', 'fallback', and 'yexuan'
+    - fallback to DEFAULT_CHAR_ID
+    - emit a WARNING log containing 'legacy', 'fallback', and that id
     - NOT raise KeyError
     """
     from core.dream.dream_state import write_state, DreamStatus
@@ -298,19 +302,18 @@ def test_legacy_dream_state_missing_char_id_warns_and_fallbacks(sandbox, caplog)
                     await _do_close_dream(_UID, dream_id, "soft")
 
                 # Run the bg task directly to verify it uses the fallback char_id
-                await _generate_summary_bg(_UID, dream_id, "soft", char_id="yexuan")
+                await _generate_summary_bg(_UID, dream_id, "soft", char_id=DEFAULT_CHAR_ID)
 
         asyncio.run(run())
 
-    # Should fallback to "yexuan"
-    assert captured_char_id == ["yexuan"], (
-        f"Legacy state missing char_id must fallback to 'yexuan', got {captured_char_id}"
+    assert captured_char_id == [DEFAULT_CHAR_ID], (
+        f"Legacy state missing char_id must fallback to {DEFAULT_CHAR_ID!r}, "
+        f"got {captured_char_id}"
     )
 
-    # Must emit a WARNING with "legacy" and "yexuan"
     warn_msgs = [r.message for r in caplog.records if r.levelno >= logging.WARNING]
-    assert any("legacy" in m and "yexuan" in m for m in warn_msgs), (
-        f"Must WARN about legacy fallback to yexuan. Got warnings: {warn_msgs}"
+    assert any("legacy" in m and DEFAULT_CHAR_ID in m for m in warn_msgs), (
+        f"Must WARN about legacy fallback to {DEFAULT_CHAR_ID!r}. Got warnings: {warn_msgs}"
     )
 
 
@@ -502,11 +505,11 @@ def test_state_char_id_present(caplog):
 
 
 def test_state_char_id_missing_warns(caplog):
-    """_state_char_id warns and falls back to 'yexuan' when char_id absent."""
+    """_state_char_id warns and falls back to DEFAULT_CHAR_ID when absent."""
     from core.dream.dream_pipeline import _state_char_id
     with caplog.at_level(logging.WARNING, logger="core.dream.dream_pipeline"):
         result = _state_char_id({}, "test_handler", uid="u1", dream_id="d1")
-    assert result == "yexuan"
+    assert result == DEFAULT_CHAR_ID
     warn_text = " ".join(r.message for r in caplog.records if r.levelno >= logging.WARNING)
     assert "legacy" in warn_text
-    assert "yexuan" in warn_text
+    assert DEFAULT_CHAR_ID in warn_text

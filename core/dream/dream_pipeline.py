@@ -21,6 +21,8 @@ import re
 import time
 from typing import Any
 
+from core.data_paths import DEFAULT_CHAR_ID
+
 logger = logging.getLogger(__name__)
 
 HARD_EXIT_KEYWORD = "/stop"
@@ -99,10 +101,10 @@ def _state_char_id(state: dict, handler: str, uid: str = "", dream_id: str = "")
         return str(char_id)
     logger.warning(
         "[dream_pipeline] legacy dream_state missing char_id — "
-        "uid=%s dream_id=%s handler=%s fallback=yexuan",
-        uid, dream_id, handler,
+        "uid=%s dream_id=%s handler=%s fallback=%s",
+        uid, dream_id, handler, DEFAULT_CHAR_ID,
     )
-    return "yexuan"
+    return DEFAULT_CHAR_ID
 
 
 async def dream_turn(
@@ -380,7 +382,7 @@ async def force_exit_dream(uid: str) -> None:
 
 
 async def enter_dream(
-    uid: str, entry_reason: str = "", *, char_id: str = "yexuan",
+    uid: str, entry_reason: str = "", *, char_id: str = DEFAULT_CHAR_ID,
     dream_mode: str = "sandbox", script_id: str | None = None,
 ) -> dict[str, Any]:
     """
@@ -390,8 +392,8 @@ async def enter_dream(
     and writes the new state. Called by the /dream/enter endpoint.
 
     char_id must be passed explicitly by the production caller (admin router reads
-    it from pipeline._active_character_id). The default "yexuan" is a legacy/test
-    compatibility shim — production paths must not rely on it.
+    it from pipeline._active_character_id). The default follows the deployment's
+    configured primary character for legacy/test callers.
 
     dream_mode: "sandbox" | "scenario" | "mirror" — frozen for session lifetime.
     script_id: required when dream_mode == "scenario"; the scenario script to load.
@@ -399,8 +401,8 @@ async def enter_dream(
     from core.dream.dream_state import read_state, write_state, DreamStatus, _VALID_DREAM_MODES
     from core.dream.dream_context import build_snapshot
 
-    # Fail-closed: dream subsystem supports yexuan only; non-yexuan blocked until Method B
-    if char_id != "yexuan":
+    # Fail-closed: only the deployment's primary character dreams until Method B.
+    if char_id != DEFAULT_CHAR_ID:
         return {"ok": False, "error": "这个角色还不会做梦"}
 
     if dream_mode not in _VALID_DREAM_MODES:
@@ -636,7 +638,7 @@ def _should_retain(state: dict) -> bool:
 
     local = get_local_state(state)
     uid = str(state.get("user_id") or "")
-    char_id = str(state.get("char_id") or "yexuan")
+    char_id = str(state.get("char_id") or DEFAULT_CHAR_ID)
 
     # Immersion: count assistant turns in current dream log as proxy for valid turns
     try:

@@ -432,7 +432,7 @@ async def dream_stats_get(_auth=Depends(require_scopes("activity"))):
     from core.pipeline_registry import get as _get_pipeline
     from core.dream.dream_log import count_valid_dreams
     pl = _get_pipeline()
-    char_id = (pl._active_character_id if pl else None) or "yexuan"
+    char_id = (pl._active_character_id if pl else None) or DEFAULT_CHAR_ID
     return count_valid_dreams(char_id=char_id)
 
 
