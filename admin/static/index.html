@@ -595,53 +595,53 @@ textarea { resize: vertical; min-height: 72px; }
 
     <!-- ── 系统状态 ── -->
     <div class="page active" id="page-status">
-      <h1 class="page-title">系统状态</h1>
+      <h1 class="page-title" data-i18n="status.title">系统状态</h1>
       <div class="stat-row" id="stat-row">
-        <div class="stat"><div class="val" id="s-users">…</div><div class="lbl">已知用户</div></div>
+        <div class="stat"><div class="val" id="s-users">…</div><div class="lbl" data-i18n="status.known_users">已知用户</div></div>
       </div>
 
       <div class="card">
-        <div class="card-header"><h3>快捷操作</h3></div>
+        <div class="card-header"><h3 data-i18n="status.quick_actions">快捷操作</h3></div>
         <div style="display:flex;gap:10px;flex-wrap:wrap">
-          <button class="btn btn-ghost" onclick="reloadConfig()">⚡ 热重载全部配置</button>
+          <button class="btn btn-ghost" onclick="reloadConfig()" data-i18n="status.reload_all">⚡ 热重载全部配置</button>
         </div>
       </div>
       <div class="card">
-        <div class="card-header"><h3>Feature switches</h3><button class="btn btn-ghost btn-sm" onclick="loadFeatureFlags()">Refresh</button></div>
-        <div id="feature-flags-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px"><div class="loading">Loading...</div></div>
-        <button class="btn btn-primary btn-sm" style="margin-top:14px" onclick="saveFeatureFlags()">Save and reload</button>
+        <div class="card-header"><h3 data-i18n="status.feature_switches">Feature switches</h3><button class="btn btn-ghost btn-sm" onclick="loadFeatureFlags()" data-i18n="common.refresh">Refresh</button></div>
+        <div id="feature-flags-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px"><div class="loading" data-i18n="common.loading">加载中…</div></div>
+        <button class="btn btn-primary btn-sm" style="margin-top:14px" onclick="saveFeatureFlags()" data-i18n="status.save_reload">Save and reload</button>
       </div>
 
       <!-- 已注册工具（只读诊断） -->
       <div class="card">
         <div class="card-header">
-          <h3>已注册工具 <span class="badge" style="font-size:10px;vertical-align:middle;opacity:.7">只读</span></h3>
-          <button class="btn btn-ghost btn-sm" onclick="loadToolRegistry()">刷新</button>
+          <h3><span data-i18n="status.registered_tools">已注册工具</span> <span class="badge" style="font-size:10px;vertical-align:middle;opacity:.7" data-i18n="status.read_only">只读</span></h3>
+          <button class="btn btn-ghost btn-sm" onclick="loadToolRegistry()" data-i18n="common.refresh">刷新</button>
         </div>
-        <div id="tool-registry-list"><div class="loading">加载中…</div></div>
+        <div id="tool-registry-list"><div class="loading" data-i18n="common.loading">加载中…</div></div>
       </div>
 
       <!-- 代理配置（只读镜像） -->
       <div class="card">
         <div class="card-header">
-          <h3>代理配置</h3><button class="btn btn-primary btn-sm" onclick="saveProxy()">保存</button>
-          <button class="btn btn-ghost btn-sm" onclick="loadProxy()">刷新</button>
+          <h3 data-i18n="status.proxy.title">代理配置</h3><button class="btn btn-primary btn-sm" onclick="saveProxy()" data-i18n="common.save">保存</button>
+          <button class="btn btn-ghost btn-sm" onclick="loadProxy()" data-i18n="common.refresh">刷新</button>
         </div>
-        <p style="font-size:12px;color:var(--muted);margin-bottom:12px">保存后热重载；仅后端出站请求使用代理，桌面客户端 HTTP 始终禁用代理。</p>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:12px" data-i18n="status.proxy.hint">保存后热重载；仅后端出站请求使用代理，桌面客户端 HTTP 始终禁用代理。</p>
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
           <label class="checkbox-row" style="gap:8px;font-size:14px">
             <input type="checkbox" id="proxy-enabled" style="width:16px;height:16px;accent-color:var(--accent)">
-            <span>启用代理</span>
+            <span data-i18n="status.proxy.enable">启用代理</span>
           </label>
-          <span id="proxy-status-badge" class="badge badge-danger">未启用</span>
+          <span id="proxy-status-badge" class="badge badge-danger" data-i18n="common.disabled">未启用</span>
         </div>
         <div class="form-row" style="max-width:640px">
           <label class="field">
-            <span>HTTP 代理地址</span>
+            <span data-i18n="status.proxy.http">HTTP 代理地址</span>
             <input type="text" id="proxy-http" placeholder="http://127.0.0.1:7897">
           </label>
           <label class="field">
-            <span>HTTPS 代理地址</span>
+            <span data-i18n="status.proxy.https">HTTPS 代理地址</span>
             <input type="text" id="proxy-https" placeholder="http://127.0.0.1:7897">
           </label>
         </div>
@@ -650,18 +650,18 @@ textarea { resize: vertical; min-height: 72px; }
       <!-- 上下文轮数（只读镜像） -->
       <div class="card">
         <div class="card-header">
-          <h3>上下文长度</h3><button class="btn btn-primary btn-sm" onclick="saveContextConfig()">保存</button>
-          <button class="btn btn-ghost btn-sm" onclick="loadContextConfig()">刷新</button>
+          <h3 data-i18n="status.context.title">上下文长度</h3><button class="btn btn-primary btn-sm" onclick="saveContextConfig()" data-i18n="common.save">保存</button>
+          <button class="btn btn-ghost btn-sm" onclick="loadContextConfig()" data-i18n="common.refresh">刷新</button>
         </div>
-        <p style="font-size:12px;color:var(--muted);margin-bottom:12px">保存后热重载，影响后续新请求使用的上下文窗口。</p>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:12px" data-i18n="status.context.hint">保存后热重载，影响后续新请求使用的上下文窗口。</p>
         <div style="max-width:480px">
           <label class="field" style="margin-bottom:14px">
-            <span>最大轮数（每轮 = 一问一答）</span>
+            <span data-i18n="status.context.max_rounds">最大轮数（每轮 = 一问一答）</span>
             <div style="display:flex;align-items:center;gap:12px;margin-top:6px">
               <input type="range" id="ctx-slider" min="5" max="50" value="20"
                 style="flex:1;accent-color:var(--accent)">
               <span id="ctx-val" style="min-width:28px;text-align:center;font-weight:700;color:var(--accent)">20</span>
-              <span style="font-size:12px;color:var(--muted)">轮</span>
+              <span style="font-size:12px;color:var(--muted)" data-i18n="status.context.rounds">轮</span>
             </div>
           </label>
         </div>
@@ -670,10 +670,10 @@ textarea { resize: vertical; min-height: 72px; }
       <!-- LLM 生成参数（只读镜像） -->
       <div class="card">
         <div class="card-header">
-          <h3>LLM 生成参数</h3><button class="btn btn-primary btn-sm" onclick="saveLlmParams()">保存</button>
-          <button class="btn btn-ghost btn-sm" onclick="loadLlmParams()">刷新</button>
+          <h3 data-i18n="status.llm.title">LLM 生成参数</h3><button class="btn btn-primary btn-sm" onclick="saveLlmParams()" data-i18n="common.save">保存</button>
+          <button class="btn btn-ghost btn-sm" onclick="loadLlmParams()" data-i18n="common.refresh">刷新</button>
         </div>
-        <p style="font-size:12px;color:var(--muted);margin-bottom:12px">legacy 参数可在此热更新；启用多模型后优先在「模型路由」编辑 preset 参数。</p>
+        <p style="font-size:12px;color:var(--muted);margin-bottom:12px" data-i18n="status.llm.hint">legacy 参数可在此热更新；启用多模型后优先在「模型路由」编辑 preset 参数。</p>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px 32px;max-width:760px">
           <div>
             <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px">
@@ -682,13 +682,13 @@ textarea { resize: vertical; min-height: 72px; }
             </div>
             <input type="range" id="llm-max-tokens" min="200" max="4000" step="100" value="1500"
               style="width:100%;accent-color:var(--accent)">
-            <div style="font-size:11px;color:var(--muted);margin-top:4px">单次回复最大 token 数</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:4px" data-i18n="status.llm.max_tokens">单次回复最大 token 数</div>
           </div>
           <div style="display:flex;align-items:center">
             <div style="font-size:12px;color:var(--muted);line-height:1.8;padding:10px 14px;background:var(--bg-secondary);border-radius:6px;border:1px solid var(--border)">
-              推荐范围：<br>
-              💬 沉浸对话 &nbsp;500–800<br>
-              🎭 角色扮演 &nbsp;1500–3000
+              <span data-i18n="status.llm.recommended">推荐范围：</span><br>
+              <span data-i18n="status.llm.immersive">💬 沉浸对话 &nbsp;500–800</span><br>
+              <span data-i18n="status.llm.roleplay">🎭 角色扮演 &nbsp;1500–3000</span>
             </div>
           </div>
           <div>
@@ -698,7 +698,7 @@ textarea { resize: vertical; min-height: 72px; }
             </div>
             <input type="range" id="llm-temperature" min="0.0" max="2.0" step="0.05" value="0.7"
               style="width:100%;accent-color:var(--accent)">
-            <div style="font-size:11px;color:var(--muted);margin-top:4px">值越高回复越随机，越低越保守</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:4px" data-i18n="status.llm.temperature">值越高回复越随机，越低越保守</div>
           </div>
           <div>
             <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px">
@@ -707,7 +707,7 @@ textarea { resize: vertical; min-height: 72px; }
             </div>
             <input type="range" id="llm-top-p" min="0.0" max="1.0" step="0.05" value="0.9"
               style="width:100%;accent-color:var(--accent)">
-            <div style="font-size:11px;color:var(--muted);margin-top:4px">核采样概率，配合 temperature 控制多样性</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:4px" data-i18n="status.llm.top_p">核采样概率，配合 temperature 控制多样性</div>
           </div>
           <div>
             <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:4px">
@@ -716,7 +716,7 @@ textarea { resize: vertical; min-height: 72px; }
             </div>
             <input type="range" id="llm-frequency-penalty" min="0.0" max="2.0" step="0.05" value="0.0"
               style="width:100%;accent-color:var(--accent)">
-            <div style="font-size:11px;color:var(--muted);margin-top:4px">惩罚重复词，值越高越不容易重复用词</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:4px" data-i18n="status.llm.frequency_penalty">惩罚重复词，值越高越不容易重复用词</div>
           </div>
           <div></div>
         </div>
@@ -725,45 +725,45 @@ textarea { resize: vertical; min-height: 72px; }
       <!-- 视觉模型配置（只读镜像） -->
       <div class="card">
         <div class="card-header">
-          <h3>视觉模型配置（图片识别）</h3><button class="btn btn-primary btn-sm" onclick="saveVisionParams()">保存</button>
+          <h3 data-i18n="status.vision.title">视觉模型配置（图片识别）</h3><button class="btn btn-primary btn-sm" onclick="saveVisionParams()" data-i18n="common.save">保存</button>
           <label style="display:flex;align-items:center;gap:8px">
-            <span style="font-size:13px;color:var(--muted)">启用</span>
+            <span style="font-size:13px;color:var(--muted)" data-i18n="status.vision.enable">启用</span>
             <input type="checkbox" id="vision-enabled">
           </label>
         </div>
-        <p style="font-size:12px;color:var(--muted);margin:0 16px 8px">API Key 留空时保留已有密钥；保存后热重载。</p>
+        <p style="font-size:12px;color:var(--muted);margin:0 16px 8px" data-i18n="status.vision.key_hint">API Key 留空时保留已有密钥；保存后热重载。</p>
         <div style="padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:16px">
           <div>
             <div style="font-size:13px;font-weight:600;margin-bottom:6px">Provider</div>
             <select id="vision-provider" style="width:100%;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text)">
-              <option value="gemini">Gemini（谷歌）</option>
+              <option value="gemini">Gemini</option>
               <option value="openai">OpenAI</option>
-              <option value="glm">GLM（智谱）</option>
-              <option value="custom">自定义</option>
+              <option value="glm">GLM</option>
+              <option value="custom" data-i18n="status.vision.custom">自定义</option>
             </select>
           </div>
           <div>
-            <div style="font-size:13px;font-weight:600;margin-bottom:6px">模型</div>
+            <div style="font-size:13px;font-weight:600;margin-bottom:6px" data-i18n="status.vision.model">模型</div>
             <select id="vision-model-select" style="width:100%;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text)">
             </select>
           </div>
           <div style="grid-column:1/-1">
             <div style="font-size:13px;font-weight:600;margin-bottom:6px">API Key</div>
-            <input type="password" id="vision-api-key" placeholder="留空则保留已有 API Key"
+            <input type="password" id="vision-api-key" placeholder="留空则保留已有 API Key" data-i18n-placeholder="status.vision.key_placeholder"
               style="width:100%;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);box-sizing:border-box">
           </div>
           <div style="grid-column:1/-1">
             <div style="font-size:13px;font-weight:600;margin-bottom:4px">Base URL
-              <span style="font-size:11px;font-weight:400;color:var(--muted)">（自动填写，自定义时可修改）</span>
+              <span style="font-size:11px;font-weight:400;color:var(--muted)" data-i18n="status.vision.base_hint">（自动填写，自定义时可修改）</span>
             </div>
             <input type="text" id="vision-base-url"
               style="width:100%;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);box-sizing:border-box">
           </div>
           <div style="grid-column:1/-1;font-size:12px;color:var(--muted);line-height:1.8;padding:10px 14px;background:var(--bg-secondary);border-radius:6px;border:1px solid var(--border)">
-            <b>Gemini</b>：免费，去 <a href="https://aistudio.google.com" target="_blank" style="color:var(--accent)">aistudio.google.com</a> 申请 API Key，推荐模型 gemini-2.0-flash<br>
-            <b>GLM</b>：免费，去 <a href="https://bigmodel.cn" target="_blank" style="color:var(--accent)">bigmodel.cn</a> 申请，推荐模型 glm-4v-flash<br>
-            <b>OpenAI</b>：付费，需要信用卡，推荐模型 gpt-4o-mini<br>
-            <b>自定义</b>：手动填写 Base URL 和模型名
+            <b>Gemini</b>：<span data-i18n="status.vision.gemini_before">免费，前往</span> <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">aistudio.google.com</a> <span data-i18n="status.vision.gemini_after">申请 API Key，推荐模型 gemini-2.0-flash</span><br>
+            <b>GLM</b>：<span data-i18n="status.vision.glm_before">免费，前往</span> <a href="https://open.bigmodel.cn/usercenter/apikeys" target="_blank" rel="noopener">bigmodel.cn</a> <span data-i18n="status.vision.glm_after">申请，推荐模型 glm-4v-flash</span><br>
+            <b>OpenAI</b>：<span data-i18n="status.vision.openai_help">付费，需要信用卡，推荐模型 gpt-4o-mini</span><br>
+            <b data-i18n="status.vision.custom">自定义</b>：<span data-i18n="status.vision.custom_help">手动填写 Base URL 和模型名</span>
           </div>
         </div>
       </div>
@@ -771,43 +771,41 @@ textarea { resize: vertical; min-height: 72px; }
       <!-- 屏幕内容查看设置 -->
       <div class="card">
         <div class="card-header">
-          <h3>屏幕内容查看</h3>
-          <button class="btn btn-ghost btn-sm" onclick="loadScreenPeekSettings()">刷新</button>
+          <h3 data-i18n="status.screen.title">屏幕内容查看</h3>
+          <button class="btn btn-ghost btn-sm" onclick="loadScreenPeekSettings()" data-i18n="common.refresh">刷新</button>
         </div>
         <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;max-width:520px">
           <label class="checkbox-row" style="gap:8px;font-size:14px">
             <input type="checkbox" id="sp-enabled" style="width:16px;height:16px;accent-color:var(--accent)">
-            <span>启用</span>
+            <span data-i18n="status.vision.enable">启用</span>
           </label>
           <label class="field" style="min-width:160px;margin-bottom:0">
-            <span>冷却分钟数</span>
+            <span data-i18n="status.screen.cooldown">冷却分钟数</span>
             <input type="number" id="sp-cooldown" min="5" max="240" value="30">
           </label>
-          <button class="btn btn-primary btn-sm" onclick="saveScreenPeekSettings()">保存</button>
+          <button class="btn btn-primary btn-sm" onclick="saveScreenPeekSettings()" data-i18n="common.save">保存</button>
         </div>
       </div>
 
       <div class="card">
-        <div class="card-header"><h3>中继唤醒</h3><button class="btn btn-ghost btn-sm" onclick="loadRelaySettings()">刷新</button></div>
+        <div class="card-header"><h3 data-i18n="status.relay.title">中继唤醒</h3><button class="btn btn-ghost btn-sm" onclick="loadRelaySettings()" data-i18n="common.refresh">刷新</button></div>
         <div class="form-row" style="max-width:760px"><label class="field"><span>Base URL</span><input id="relay-base-url"></label><label class="field"><span>Topic</span><input id="relay-topic"></label></div>
-        <label class="field" style="max-width:760px"><span>Token（留空保留已有值）</span><input type="password" id="relay-token" autocomplete="off"></label>
-        <button class="btn btn-primary btn-sm" onclick="saveRelaySettings()">保存</button>
+        <label class="field" style="max-width:760px"><span data-i18n="status.relay.token">Token（留空保留已有值）</span><input type="password" id="relay-token" autocomplete="off"></label>
+        <button class="btn btn-primary btn-sm" onclick="saveRelaySettings()" data-i18n="common.save">保存</button>
       </div>
       <!-- TTS 配置 -->
       <div class="card">
         <div class="card-header">
-          <h3>TTS 配置</h3>
-          <button class="btn btn-ghost btn-sm" onclick="loadTtsConfig()">刷新</button>
+          <h3 data-i18n="status.tts.title">TTS 配置</h3>
+          <button class="btn btn-ghost btn-sm" onclick="loadTtsConfig()" data-i18n="common.refresh">刷新</button>
         </div>
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
           <label class="checkbox-row" style="gap:8px;font-size:14px">
             <input type="checkbox" id="tts-enabled" style="width:16px;height:16px;accent-color:var(--accent)">
-            <span>启用</span>
+            <span data-i18n="status.vision.enable">启用</span>
           </label>
           <label class="checkbox-row" style="gap:8px;font-size:14px">
-            <input type="checkbox" id="tts-emotion-enabled" style="width:16px;height:16px;accent-color:var(--accent)"><span>情绪分档</span></label><label class="checkbox-row" style="gap:8px;font-size:14px"><input type="checkbox" id="tts-desktop-enabled" style="width:16px;height:16px;accent-color:var(--accent)"><span>桌面语音条</span>
-            <span>情绪分档</span>
-          </label>
+            <input type="checkbox" id="tts-emotion-enabled" style="width:16px;height:16px;accent-color:var(--accent)"><span data-i18n="status.tts.emotion">情绪分档</span></label><label class="checkbox-row" style="gap:8px;font-size:14px"><input type="checkbox" id="tts-desktop-enabled" style="width:16px;height:16px;accent-color:var(--accent)"><span data-i18n="status.tts.desktop">桌面语音条</span></label>
         </div>
         <div class="form-row" style="max-width:640px">
           <label class="field">
@@ -815,43 +813,43 @@ textarea { resize: vertical; min-height: 72px; }
             <input type="text" id="tts-api-url" placeholder="http://127.0.0.1:9880">
           </label>
           <label class="field">
-            <span>参考音频路径</span>
+            <span data-i18n="status.tts.ref_audio">参考音频路径</span>
             <input type="text" id="tts-ref-audio" placeholder="ref.wav">
           </label>
         </div>
         <div class="form-row col-1" style="max-width:640px">
           <label class="field">
-            <span>参考文本</span>
-            <input type="text" id="tts-prompt-text" placeholder="参考音频对应文本">
+            <span data-i18n="status.tts.ref_text">参考文本</span>
+            <input type="text" id="tts-prompt-text" placeholder="参考音频对应文本" data-i18n-placeholder="status.tts.ref_placeholder">
           </label>
         </div>
         <label class="field" style="max-width:300px;margin-bottom:14px">
-          <span>语速 <span id="tts-speed-val" style="color:var(--accent);font-weight:700">1.00</span></span>
+          <span><span data-i18n="status.tts.speed">语速</span> <span id="tts-speed-val" style="color:var(--accent);font-weight:700">1.00</span></span>
           <input type="range" id="tts-speed" min="0.5" max="2.0" step="0.05" value="1.0"
             oninput="document.getElementById('tts-speed-val').textContent = parseFloat(this.value).toFixed(2)"
             style="width:100%;accent-color:var(--accent)">
         </label>
-        <button class="btn btn-primary btn-sm" onclick="saveTtsConfig()">保存</button>
+        <button class="btn btn-primary btn-sm" onclick="saveTtsConfig()" data-i18n="common.save">保存</button>
       </div>
 
       <!-- 用户称谓 -->
       <div class="card">
-        <div class="card-header"><h3>用户称谓</h3></div>
+        <div class="card-header"><h3 data-i18n="status.pronoun.title">用户称谓</h3></div>
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;max-width:560px">
           <label class="field" style="flex:1;min-width:160px;margin-bottom:0">
-            <span>用户</span>
+            <span data-i18n="status.pronoun.user">用户</span>
             <select id="pn-uid-select" onchange="loadUserPronoun()"></select>
           </label>
           <label class="field" style="min-width:120px;margin-bottom:0">
-            <span>称谓</span>
+            <span data-i18n="status.pronoun.value">称谓</span>
             <select id="pn-value">
-              <option value="她">她</option>
-              <option value="他">他</option>
-              <option value="TA">TA</option>
-              <option value="它">它</option>
+              <option value="她" data-i18n="status.pronoun.she">她</option>
+              <option value="他" data-i18n="status.pronoun.he">他</option>
+              <option value="TA" data-i18n="status.pronoun.they">TA</option>
+              <option value="它" data-i18n="status.pronoun.it">它</option>
             </select>
           </label>
-          <button class="btn btn-primary btn-sm" onclick="saveUserPronoun()" style="margin-top:18px">保存</button>
+          <button class="btn btn-primary btn-sm" onclick="saveUserPronoun()" style="margin-top:18px" data-i18n="common.save">保存</button>
         </div>
       </div>
     </div>
@@ -2662,7 +2660,7 @@ async function loadStatus() {
     const d = await api('GET', '/status');
     document.getElementById('s-users').textContent    = d.known_user_count ?? '—';
   } catch(e) {
-    toast('获取状态失败: ' + e.message, 'err');
+    toast(t('status.error.load', '获取状态失败: {error}', {error: e.message}), 'err');
   }
   loadToolRegistry();
   loadProxy();
@@ -2681,7 +2679,7 @@ async function reloadConfig() {
     const d = await api('POST', '/reload');
     toast(d.message, 'ok');
     loadStatus();
-  } catch(e) { toast('热重载失败: ' + e.message, 'err'); }
+  } catch(e) { toast(t('status.error.reload', '热重载失败: {error}', {error: e.message}), 'err'); }
 }
 
 // ══════════════════════════════════════════════════════════
@@ -3361,7 +3359,7 @@ async function loadContextConfig() {
     document.getElementById('ctx-slider').value = val;
     document.getElementById('ctx-val').textContent = val;
   } catch(e) {
-    toast('读取上下文配置失败: ' + e.message, 'err');
+    toast(t('status.context.load_error', '读取上下文配置失败: {error}', {error: e.message}), 'err');
   }
 }
 
@@ -3369,9 +3367,9 @@ async function saveContextConfig() {
   const max_turns = parseInt(document.getElementById('ctx-slider').value, 10);
   try {
     await api('PUT', '/context-config', { max_turns });
-    toast(`上下文已设为 ${max_turns} 轮`, 'ok');
+    toast(t('status.context.saved', '上下文已设为 {count} 轮', {count: max_turns}), 'ok');
   } catch(e) {
-    toast('保存失败: ' + e.message, 'err');
+    toast(t('common.save_failed', '保存失败: {error}', {error: e.message}), 'err');
   }
 }
 
@@ -3411,7 +3409,7 @@ async function loadLlmParams() {
     document.getElementById('llm-frequency-penalty').value   = fp;
     document.getElementById('llm-fp-val').textContent        = fp.toFixed(2);
   } catch(e) {
-    toast('加载 LLM 参数失败', 'err');
+    toast(t('status.llm.load_error', '加载 LLM 参数失败'), 'err');
   }
 }
 
@@ -3422,9 +3420,9 @@ async function saveLlmParams() {
   const frequency_penalty = parseFloat(document.getElementById('llm-frequency-penalty').value);
   try {
     await api('PUT', '/llm-params', { temperature, top_p, max_tokens, frequency_penalty });
-    toast('LLM 参数已保存', 'ok');
+    toast(t('status.llm.saved', 'LLM 参数已保存'), 'ok');
   } catch(e) {
-    toast('保存失败：' + (e.message || e), 'err');
+    toast(t('common.save_failed', '保存失败: {error}', {error: e.message || e}), 'err');
   }
 }
 
@@ -3458,7 +3456,7 @@ function onVisionProviderChange() {
   const sel = document.getElementById('vision-model-select');
   sel.innerHTML = info.models.map(m => `<option value="${m}">${m}</option>`).join('');
   if (provider === 'custom') {
-    sel.innerHTML += '<option value="">手动输入</option>';
+    sel.innerHTML += `<option value="">${escapeHtml(t('status.vision.manual_input', '手动输入'))}</option>`;
   }
 }
 
@@ -3496,10 +3494,10 @@ async function saveVisionParams() {
   try {
     await api('PUT', '/vision-params', body);
     const msg = document.getElementById('vision-save-msg');
-    msg.textContent = '已保存';
+    msg.textContent = t('common.saved', '已保存');
     setTimeout(() => msg.textContent = '', 2000);
   } catch(e) {
-    toast('保存失败', 'err');
+    toast(t('common.save_failed', '保存失败: {error}', {error: e.message || e}), 'err');
   }
 }
 
@@ -3514,14 +3512,14 @@ async function loadProxy() {
     document.getElementById('proxy-https').value  = data.https || '';
     _updateProxyBadge(!!data.enabled);
   } catch(e) {
-    toast('读取代理配置失败: ' + e.message, 'err');
+    toast(t('status.proxy.load_error', '读取代理配置失败: {error}', {error: e.message}), 'err');
   }
 }
 
 function _updateProxyBadge(enabled) {
   const badge = document.getElementById('proxy-status-badge');
   if (!badge) return;
-  badge.textContent  = enabled ? '已启用' : '未启用';
+  badge.textContent  = enabled ? t('common.enabled', '已启用') : t('common.disabled', '未启用');
   badge.className    = 'badge ' + (enabled ? 'badge-success' : 'badge-danger');
 }
 
@@ -3538,9 +3536,9 @@ async function saveProxy() {
   try {
     await api('PUT', '/proxy', { enabled, http, https: https_ });
     _updateProxyBadge(enabled);
-    toast('代理配置已保存并热重载', 'ok');
+    toast(t('status.proxy.saved', '代理配置已保存并热重载'), 'ok');
   } catch(e) {
-    toast('保存失败: ' + e.message, 'err');
+    toast(t('common.save_failed', '保存失败: {error}', {error: e.message}), 'err');
   }
 }
 
@@ -3550,12 +3548,12 @@ async function saveProxy() {
 async function loadToolRegistry() {
   const el = document.getElementById('tool-registry-list');
   if (!el) return;
-  el.innerHTML = '<div class="loading">加载中…</div>';
+  el.innerHTML = `<div class="loading">${escapeHtml(t('common.loading', '加载中…'))}</div>`;
   try {
     const d = await api('GET', '/tools/registry');
     const tools = d.tools || [];
     if (!tools.length) {
-      el.innerHTML = '<div class="empty">无已注册工具</div>';
+      el.innerHTML = `<div class="empty">${escapeHtml(t('status.tools.empty', '无已注册工具'))}</div>`;
       return;
     }
     const rows = tools.map(t =>
@@ -3565,11 +3563,11 @@ async function loadToolRegistry() {
       </tr>`
     ).join('');
     el.innerHTML = `<div class="tbl-wrap"><table>
-      <thead><tr><th>工具</th><th>描述</th></tr></thead>
+      <thead><tr><th>${escapeHtml(t('status.tools.name', '工具'))}</th><th>${escapeHtml(t('status.tools.description', '描述'))}</th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>`;
   } catch(e) {
-    el.innerHTML = `<div class="empty">加载失败：${escapeHtml(e.message)}</div>`;
+    el.innerHTML = `<div class="empty">${escapeHtml(t('status.tools.load_error', '加载失败：{error}', {error: e.message}))}</div>`;
   }
 }
 
@@ -3827,10 +3825,10 @@ let _featureFlags = {};
 async function loadFeatureFlags() {
   const el = document.getElementById('feature-flags-grid'); if (!el) return;
   try { const d = await api('GET', '/settings/feature-flags'); _featureFlags = d.flags || {};
-    el.innerHTML = Object.entries(_featureFlags).map(([name, item]) => `<label class="checkbox-row" style="gap:9px;padding:9px 10px;border:1px solid var(--border);border-radius:6px"><input type="checkbox" data-feature-flag="${name}" ${item.enabled ? 'checked' : ''}><span>${item.label}<small style="display:block;color:var(--muted)">${name}</small></span></label>`).join('');
+    el.innerHTML = Object.entries(_featureFlags).map(([name, item]) => `<label class="checkbox-row" style="gap:9px;padding:9px 10px;border:1px solid var(--border);border-radius:6px"><input type="checkbox" data-feature-flag="${name}" ${item.enabled ? 'checked' : ''}><span>${escapeHtml(t('flag.' + name, item.label))}<small style="display:block;color:var(--muted)">${name}</small></span></label>`).join('');
   } catch (e) { el.innerHTML = `<div class="empty">${e.message}</div>`; }
 }
-async function saveFeatureFlags() { const flags = {}; document.querySelectorAll('[data-feature-flag]').forEach(el => flags[el.dataset.featureFlag] = el.checked); try { await api('PUT', '/settings/feature-flags', { flags }); toast('Saved', 'ok'); loadFeatureFlags(); } catch (e) { toast(e.message, 'err'); } }
+async function saveFeatureFlags() { const flags = {}; document.querySelectorAll('[data-feature-flag]').forEach(el => flags[el.dataset.featureFlag] = el.checked); try { await api('PUT', '/settings/feature-flags', { flags }); toast(t('common.saved', '已保存'), 'ok'); loadFeatureFlags(); } catch (e) { toast(e.message, 'err'); } }
 let _mrData = { presets: {}, routing_profiles: {}, active_routing: 'default' };
 const MR_CATEGORIES = ['chat', 'intent', 'probe', 'summary', 'detect_emotion', 'consolidation', 'perform', 'monologue'];
 const MR_CATEGORY_DESC = {
@@ -4239,7 +4237,7 @@ async function loadScreenPeekSettings() {
     const d = await api('GET', '/settings/screen-peek');
     document.getElementById('sp-enabled').checked = !!d.enabled;
     document.getElementById('sp-cooldown').value = d.cooldown_minutes ?? 30;
-  } catch (e) { toast('读取屏幕内容查看配置失败: ' + e.message, 'err'); }
+  } catch (e) { toast(t('status.screen.load_error', '读取屏幕内容查看配置失败: {error}', {error: e.message}), 'err'); }
 }
 async function saveScreenPeekSettings() {
   const body = {
@@ -4248,8 +4246,8 @@ async function saveScreenPeekSettings() {
   };
   try {
     await api('POST', '/settings/screen-peek', body);
-    toast('屏幕内容查看配置已保存', 'ok');
-  } catch (e) { toast('保存失败: ' + e.message, 'err'); }
+    toast(t('status.screen.saved', '屏幕内容查看配置已保存'), 'ok');
+  } catch (e) { toast(t('common.save_failed', '保存失败: {error}', {error: e.message}), 'err'); }
 }
 
 async function loadTtsConfig() {
@@ -4265,7 +4263,7 @@ async function loadTtsConfig() {
     const speed = parseFloat(d.speed) || 1.0;
     document.getElementById('tts-speed').value = speed;
     document.getElementById('tts-speed-val').textContent = speed.toFixed(2);
-  } catch (e) { toast('读取 TTS 配置失败: ' + e.message, 'err'); }
+  } catch (e) { toast(t('status.tts.load_error', '读取 TTS 配置失败: {error}', {error: e.message}), 'err'); }
 }
 async function saveTtsConfig() {
   const body = {
@@ -4279,8 +4277,8 @@ async function saveTtsConfig() {
   };
   try {
     await api('PUT', '/tts-config', body);
-    toast('TTS 配置已保存', 'ok');
-  } catch (e) { toast('保存失败: ' + e.message, 'err'); }
+    toast(t('status.tts.saved', 'TTS 配置已保存'), 'ok');
+  } catch (e) { toast(t('common.save_failed', '保存失败: {error}', {error: e.message}), 'err'); }
 }
 
 async function _ensurePronounUidOptions() {
@@ -4301,16 +4299,16 @@ async function loadUserPronoun() {
   try {
     const d = await api('GET', `/users/${encodeURIComponent(uid)}/pronoun`);
     document.getElementById('pn-value').value = d.pronoun || '她';
-  } catch (e) { toast('读取称谓失败: ' + e.message, 'err'); }
+  } catch (e) { toast(t('status.pronoun.load_error', '读取称谓失败: {error}', {error: e.message}), 'err'); }
 }
 async function saveUserPronoun() {
   const uid = document.getElementById('pn-uid-select').value;
-  if (!uid) { toast('请先选择用户', 'err'); return; }
+  if (!uid) { toast(t('status.pronoun.select_user', '请先选择用户'), 'err'); return; }
   const pronoun = document.getElementById('pn-value').value;
   try {
     await api('PATCH', `/users/${encodeURIComponent(uid)}/pronoun`, { pronoun });
-    toast('称谓已保存', 'ok');
-  } catch (e) { toast('保存失败: ' + e.message, 'err'); }
+    toast(t('status.pronoun.saved', '称谓已保存'), 'ok');
+  } catch (e) { toast(t('common.save_failed', '保存失败: {error}', {error: e.message}), 'err'); }
 }
 
 // ══════════════════════════════════════════════════════════
@@ -4823,8 +4821,8 @@ const SC_BOOL_FIELDS = ['enabled','morning_greeting','night_reminder','random_me
 let _scConfig = {};
 async function loadSchedulerConfig() { try { _scConfig = await api('GET','/scheduler/config'); document.getElementById('sc-config-switches').innerHTML = SC_BOOL_FIELDS.map(k => `<label class="checkbox-row"><input type="checkbox" data-sc-bool="${k}" ${_scConfig[k] ? 'checked' : ''}><span>${k}</span></label>`).join(''); document.getElementById('sc-owner-id').value=_scConfig.owner_id||''; document.getElementById('sc-presence-minutes').value=_scConfig.presence_nag_minutes||60; document.getElementById('sc-gap-hours').value=_scConfig.global_proactive_min_gap_hours||1.5; document.getElementById('sc-signatures').value=(_scConfig.signatures||[]).join('\n'); } catch(e){toast('读取调度配置失败: '+e.message,'err');} }
 async function saveSchedulerConfig() { const body={owner_id:document.getElementById('sc-owner-id').value.trim(),presence_nag_minutes:Number(document.getElementById('sc-presence-minutes').value),global_proactive_min_gap_hours:Number(document.getElementById('sc-gap-hours').value),signatures:document.getElementById('sc-signatures').value.split('\n').map(x=>x.trim()).filter(Boolean)}; document.querySelectorAll('[data-sc-bool]').forEach(el=>body[el.dataset.scBool]=el.checked); try{await api('PUT','/scheduler/config',body);toast('调度配置已保存','ok');loadSchedulerConfig();}catch(e){toast('保存失败: '+e.message,'err');} }
-async function loadRelaySettings(){try{const d=await api('GET','/settings/relay');document.getElementById('relay-base-url').value=d.relay_base_url||'';document.getElementById('relay-topic').value=d.relay_topic||'';document.getElementById('relay-token').value='';document.getElementById('relay-token').placeholder=d.relay_token?`已配置（${d.relay_token}），留空保留`:'未配置';}catch(e){toast('读取中继失败: '+e.message,'err');}}
-async function saveRelaySettings(){const body={relay_base_url:document.getElementById('relay-base-url').value.trim(),relay_topic:document.getElementById('relay-topic').value.trim()};const token=document.getElementById('relay-token').value.trim();if(token)body.relay_token=token;try{await api('PUT','/settings/relay',body);toast('中继配置已保存','ok');loadRelaySettings();}catch(e){toast('保存失败: '+e.message,'err');}}
+async function loadRelaySettings(){try{const d=await api('GET','/settings/relay');document.getElementById('relay-base-url').value=d.relay_base_url||'';document.getElementById('relay-topic').value=d.relay_topic||'';document.getElementById('relay-token').value='';document.getElementById('relay-token').placeholder=d.relay_token?t('status.relay.configured','已配置（{value}），留空保留',{value:d.relay_token}):t('status.relay.unconfigured','未配置');}catch(e){toast(t('status.relay.load_error','读取中继失败: {error}',{error:e.message}),'err');}}
+async function saveRelaySettings(){const body={relay_base_url:document.getElementById('relay-base-url').value.trim(),relay_topic:document.getElementById('relay-topic').value.trim()};const token=document.getElementById('relay-token').value.trim();if(token)body.relay_token=token;try{await api('PUT','/settings/relay',body);toast(t('status.relay.saved','中继配置已保存'),'ok');loadRelaySettings();}catch(e){toast(t('common.save_failed','保存失败: {error}',{error:e.message}),'err');}}
 async function loadScheduler() {
   loadSchedulerConfig();
   _startWatchStatusPoller();
