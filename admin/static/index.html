@@ -1814,7 +1814,7 @@ textarea { resize: vertical; min-height: 72px; }
     </div>
 
     <div class="page" id="page-observe-group-arbiter">
-      <h1 class="page-title"><span data-i18n="group.title">群聊仲裁</span> <span style="font-size:13px;font-weight:400;color:var(--muted)" data-i18n="group.subtitle">只读 · 候选评分、角色关系与群聊 Prompt</span></h1>
+      <h1 class="page-title"><span data-i18n="group.title">群聊仲裁</span> <span style="font-size:13px;font-weight:400;color:var(--muted)" data-i18n="group.subtitle">只读 · 候选评分、角色关系、群聊 Prompt 与群聊梦境 Prompt</span></h1>
       <div class="card"><div class="card-header"><h3 data-i18n="group.stage">Stage 群聊</h3><div style="display:flex;gap:8px"><select id="obs-arbiter-group" onchange="loadObserveGroupArbiter()"></select><button class="btn btn-ghost btn-sm" onclick="loadObserveGroupArbiter()" data-i18n="common.refresh">刷新</button></div></div><div id="obs-arbiter-content" class="empty" data-i18n="common.loading">加载中…</div></div>
     </div>
 
@@ -5310,6 +5310,56 @@ async function _loadRecentPromptSnapshots(uid, limit=10) {
   return [first, ...rest].map(item => item.snapshot).filter(Boolean);
 }
 
+async function _loadRecentDreamPromptSnapshots(uid, limit=5) {
+  if (!uid) return [];
+  const first = await api('GET', `/observe/dream-prompt/${encodeURIComponent(uid)}?n=0`);
+  if (!first.snapshot) return [];
+  const count = Math.min(limit, Number(first.total_snapshots || 1));
+  const rest = await Promise.all(
+    Array.from({length: Math.max(0, count - 1)}, (_, i) =>
+      api('GET', `/observe/dream-prompt/${encodeURIComponent(uid)}?n=${i + 1}`)
+    )
+  );
+  return [first, ...rest].map(item => item.snapshot).filter(Boolean);
+}
+
+function _renderGroupDreamPromptSnapshot(groupId, snapshot) {
+  const origin = snapshot.origin || {};
+  const speaker = _observeGroupCharacterLabel(groupId, origin.char_id);
+  const sceneTags = (snapshot.scene_tags || []).map(tag => `<code style="font-size:10px;background:#1d3a6e;color:#93c5fd;padding:1px 4px;border-radius:3px;margin-right:3px">${escapeHtml(tag)}</code>`).join('') || '—';
+  const infoLine = `<div style="font-size:12px;color:var(--muted);display:flex;gap:16px;flex-wrap:wrap;padding:2px 0 8px">
+    <span>${escapeHtml(t('group.dream_prompt_world', '世界'))}：${escapeHtml(snapshot.world_id || '?')}</span>
+    <span>${escapeHtml(t('group.dream_prompt_lucid', '模式'))}：${escapeHtml(snapshot.lucid_mode || '?')}</span>
+    <span>token：${Number(snapshot.total_tokens || 0).toLocaleString()}</span>
+    <span>scene_tags：${sceneTags}</span>
+  </div>`;
+  const layerHtml = (snapshot.layers || []).length ? snapshot.layers.map(layer => {
+    const injected = !!layer.injected;
+    const state = injected
+      ? `<span class="badge">${escapeHtml(t('group.prompt_kept', '保留'))}</span>`
+      : `<span class="badge badge-danger">${escapeHtml(t('group.dream_prompt_not_injected', '未注入'))}</span>`;
+    const content = injected
+      ? (layer.content || t('group.prompt_empty_layer', '（空层）'))
+      : t('group.dream_prompt_layer_skipped', '本层未注入（禁用/无内容）');
+    return `<details style="margin:6px 0;padding:7px 9px;background:var(--bg-secondary);border-radius:6px">
+      <summary style="cursor:pointer">${escapeHtml(layer.label || '?')} · ${Number(layer.chars || 0).toLocaleString()} ${escapeHtml(t('group.prompt_chars', '字'))} ${state}</summary>
+      <pre style="font-size:11px;white-space:pre-wrap;word-break:break-all;max-height:260px;overflow:auto;margin:8px 0 0">${escapeHtml(content)}</pre>
+    </details>`;
+  }).join('') : observeEmpty(t('group.prompt_no_layers', '本轮没有可展示的层'));
+  const userMsgHtml = snapshot.user_message ? `<div style="margin-top:8px;padding:7px 9px;background:var(--bg-secondary);border-radius:6px;border-left:3px solid var(--success)">
+    <div style="font-size:11px;color:var(--muted)">${escapeHtml(t('group.dream_prompt_instruction', '发言指令'))}</div>
+    <pre style="font-size:11px;white-space:pre-wrap;word-break:break-all;margin:4px 0 0">${escapeHtml(snapshot.user_message)}</pre>
+  </div>` : '';
+  const replyHtml = snapshot.llm_output != null ? `<div style="margin-top:8px;padding:7px 9px;background:var(--bg-secondary);border-radius:6px;border-left:3px solid var(--accent)">
+    <div style="font-size:11px;color:var(--muted)">${escapeHtml(t('group.dream_prompt_reply', '角色回复'))}</div>
+    <pre style="font-size:11px;white-space:pre-wrap;word-break:break-all;margin:4px 0 0">${escapeHtml(snapshot.llm_output)}</pre>
+  </div>` : '';
+  return `<details style="padding:9px 0;border-bottom:1px solid var(--border)">
+    <summary style="cursor:pointer"><strong>${escapeHtml(speaker)}</strong> · dream_id: ${escapeHtml(snapshot.dream_id || '—')} · ${escapeHtml(observeTime(snapshot.captured_at))}</summary>
+    <div style="padding:8px 0 0 18px">${infoLine}${layerHtml}${userMsgHtml}${replyHtml}</div>
+  </details>`;
+}
+
 function _renderPrivateExchangePair(groupId, relation, log) {
   const charA = relation.char_a;
   const charB = relation.char_b;
@@ -5384,6 +5434,8 @@ async function loadObserveGroupArbiter(){
     }));
     const snapshots = await _loadRecentPromptSnapshots(String(scheduler.owner_id || '').trim(), 10);
     const groupSnapshots = snapshots.filter(snapshot => _isStagePromptForGroup(snapshot, id));
+    const dreamSnapshots = await _loadRecentDreamPromptSnapshots(String(scheduler.owner_id || '').trim(), 5);
+    const groupDreamSnapshots = dreamSnapshots.filter(snapshot => _isStagePromptForGroup(snapshot, id));
     const privateEnabled = !!flags.private_exchange?.enabled;
     const privateBadge = `<span class="badge ${privateEnabled?'badge-success':'badge-danger'}" style="margin-left:7px">private_exchange: ${escapeHtml(privateEnabled?t('common.enabled','已启用'):t('common.disabled','未启用'))}</span>`;
     const privateHtml = rels.length
@@ -5394,9 +5446,12 @@ async function loadObserveGroupArbiter(){
     const promptHtml = groupSnapshots.length
       ? groupSnapshots.map(snapshot => _renderGroupPromptSnapshot(id, snapshot)).join('')
       : observeEmpty(t('group.prompt_none','最近 10 轮没有当前群的 Prompt 快照；群聊跑一轮后刷新'));
+    const dreamPromptHtml = groupDreamSnapshots.length
+      ? groupDreamSnapshots.map(snapshot => _renderGroupDreamPromptSnapshot(id, snapshot)).join('')
+      : observeEmpty(t('group.dream_prompt_none','最近 5 轮没有当前群的梦境 Prompt 快照；群聊梦境跑一轮后刷新'));
     const echoCutBadge = `<span class="badge">${escapeHtml(t('group.echo_cut','回声截断'))}</span>`;
     const silentRoundBadge = `<span class="badge">${escapeHtml(t('group.silent_round','静默轮次'))}</span>`;
-    el.className='';el.innerHTML=`<h4>${escapeHtml(t('group.trace','仲裁轨迹'))}</h4>${rows.length?rows.slice().reverse().map(r=>`<div style="padding:10px 0;border-bottom:1px solid var(--border)"><div>${escapeHtml(observeTime(r.ts))} · ${escapeHtml(t('group.phase','阶段'))} ${escapeHtml(r.phase||'—')} ${r.echo_cut?echoCutBadge:''} ${r.silent_round?silentRoundBadge:''}</div>${(r.candidates||[]).map(c=>`<div style="margin-top:6px">${escapeHtml(_observeGroupCharacterLabel(id,c.char_id))} · ${Number(c.total||0).toFixed(2)}${observeBar(Number(c.total||0),1.5)}</div>`).join('')}</div>`).join(''):observeEmpty(t('group.no_trace','暂无仲裁轨迹'))}<h4 style="margin-top:18px">${escapeHtml(t('group.impressions','角色双向印象'))}</h4>${rels.length?rels.map(r=>{const labelA=_observeGroupCharacterLabel(id,r.char_a),labelB=_observeGroupCharacterLabel(id,r.char_b);return `<div style="padding:9px 0;border-bottom:1px solid var(--border)"><strong>${escapeHtml(labelA)} ↔ ${escapeHtml(labelB)}</strong><div>${escapeHtml(labelA)} → ${escapeHtml(labelB)}：${escapeHtml(r.a_of_b?.summary||'—')} (${Number(r.a_of_b?.valence||0).toFixed(2)})</div><div>${escapeHtml(labelB)} → ${escapeHtml(labelA)}：${escapeHtml(r.b_of_a?.summary||'—')} (${Number(r.b_of_a?.valence||0).toFixed(2)})</div></div>`;}).join(''):observeEmpty(t('group.no_impressions','暂无角色双向印象'))}<h4 style="margin-top:18px">${escapeHtml(t('group.private','角色私下往来'))} ${privateBadge}</h4>${privateHtml}<h4 style="margin-top:18px">${escapeHtml(t('group.prompt','群聊 Prompt 检视'))} <span style="font-size:12px;font-weight:400;color:var(--muted)">${escapeHtml(t('group.prompt_subtitle','最近 10 轮，仅显示当前群'))}</span></h4>${promptHtml}`;
+    el.className='';el.innerHTML=`<h4>${escapeHtml(t('group.trace','仲裁轨迹'))}</h4>${rows.length?rows.slice().reverse().map(r=>`<div style="padding:10px 0;border-bottom:1px solid var(--border)"><div>${escapeHtml(observeTime(r.ts))} · ${escapeHtml(t('group.phase','阶段'))} ${escapeHtml(r.phase||'—')} ${r.echo_cut?echoCutBadge:''} ${r.silent_round?silentRoundBadge:''}</div>${(r.candidates||[]).map(c=>`<div style="margin-top:6px">${escapeHtml(_observeGroupCharacterLabel(id,c.char_id))} · ${Number(c.total||0).toFixed(2)}${observeBar(Number(c.total||0),1.5)}</div>`).join('')}</div>`).join(''):observeEmpty(t('group.no_trace','暂无仲裁轨迹'))}<h4 style="margin-top:18px">${escapeHtml(t('group.impressions','角色双向印象'))}</h4>${rels.length?rels.map(r=>{const labelA=_observeGroupCharacterLabel(id,r.char_a),labelB=_observeGroupCharacterLabel(id,r.char_b);return `<div style="padding:9px 0;border-bottom:1px solid var(--border)"><strong>${escapeHtml(labelA)} ↔ ${escapeHtml(labelB)}</strong><div>${escapeHtml(labelA)} → ${escapeHtml(labelB)}：${escapeHtml(r.a_of_b?.summary||'—')} (${Number(r.a_of_b?.valence||0).toFixed(2)})</div><div>${escapeHtml(labelB)} → ${escapeHtml(labelA)}：${escapeHtml(r.b_of_a?.summary||'—')} (${Number(r.b_of_a?.valence||0).toFixed(2)})</div></div>`;}).join(''):observeEmpty(t('group.no_impressions','暂无角色双向印象'))}<h4 style="margin-top:18px">${escapeHtml(t('group.private','角色私下往来'))} ${privateBadge}</h4>${privateHtml}<h4 style="margin-top:18px">${escapeHtml(t('group.prompt','群聊 Prompt 检视'))} <span style="font-size:12px;font-weight:400;color:var(--muted)">${escapeHtml(t('group.prompt_subtitle','最近 10 轮，仅显示当前群'))}</span></h4>${promptHtml}<h4 style="margin-top:18px">${escapeHtml(t('group.dream_prompt','群聊梦境 Prompt 检视'))} <span style="font-size:12px;font-weight:400;color:var(--muted)">${escapeHtml(t('group.dream_prompt_subtitle','最近 5 轮，仅显示当前群 · 与现实 Prompt 相互独立'))}</span></h4>${dreamPromptHtml}`;
   }catch(e){el.innerHTML=observeEmpty(t('group.load_failed','加载失败：{error}',{error:e.message}));}
 }
 

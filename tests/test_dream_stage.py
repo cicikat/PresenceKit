@@ -456,6 +456,39 @@ async def test_group_dream_round_touches_nothing_reality(sandbox, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_group_dream_round_captures_prompt_snapshot(sandbox, monkeypatch):
+    """Admin panel observer (Brief 100 follow-up): group dream turns must land
+    in the same owner_uid-keyed ring buffer as solo dream, tagged with an
+    `origin` the frontend can filter on — mirrors how the reality prompt-layers
+    viewer already tells group turns apart from 1v1 ones for the same uid."""
+    import core.observe.dream_capture as dream_capture
+    from core.stage.dream_runtime import run_dream_stage_turn
+
+    monkeypatch.setattr(dream_capture, "_rings", {})
+
+    _create_reality_group()
+    await _enter_group_dream()
+
+    async def fake_chat(messages, *args, **kwargs):
+        return "梦里的一句话"
+
+    monkeypatch.setattr("core.llm_client.chat", fake_chat)
+
+    result = await run_dream_stage_turn(GROUP_ID, "你好", fanout=False)
+    assert len(result.replies) > 0
+
+    snaps = dream_capture.get_dream_snapshots("owner")
+    assert snaps, "group dream turn should have produced at least one capture"
+    group_snaps = [s for s in snaps if s.get("origin", {}).get("group_id") == GROUP_ID]
+    assert group_snaps, "captured snapshot must carry origin.group_id for the admin panel filter"
+    snap = group_snaps[0]
+    assert snap["origin"]["origin"] == "stage"
+    assert snap["origin"]["char_id"] in ROSTER
+    assert snap["llm_output"] == "梦里的一句话"
+    assert snap["layers"]
+
+
+@pytest.mark.asyncio
 async def test_positive_sample_reality_projection_enqueues_summarize(sandbox, monkeypatch):
     """Anti-false-green: the negative isolation test above only means something
     if the equivalent *reality* Stage step really does enqueue a summarize job —

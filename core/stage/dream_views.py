@@ -117,6 +117,11 @@ class DreamStageCharacterView:
                 "只输出这句话本身，不加称呼、不加引号。"
             )
 
+        _capture_data: dict = {}
+
+        def _capture_hook(data: dict) -> None:
+            _capture_data.update(data)
+
         messages = build_dream_prompt(
             character=self._character,
             user_id=stage.owner_uid,
@@ -142,12 +147,37 @@ class DreamStageCharacterView:
             dream_domain="group",
             dg_layer_text=dg_text,
             shared_transcript_block=shared_block,
+            _capture_hook=_capture_hook,
         )
 
         from core import llm_client
 
         reply = await llm_client.chat(messages, call_category="dream_stage", char_id=self.char_id)
-        return (reply or "").strip()
+        reply = (reply or "").strip()
+
+        # ── Dream prompt capture (admin panel observer) ─────────────────────────
+        # Reuses the solo-dream ring buffer keyed by owner_uid — `origin` is how
+        # the admin panel tells group-dream turns apart from solo ones for the
+        # same uid, mirroring how the reality prompt-layers viewer already
+        # disambiguates group vs 1v1 turns (see _isStagePromptForGroup in
+        # admin/static/index.html).
+        if _capture_data:
+            try:
+                from core.observe.dream_capture import capture_dream, update_dream_llm_output
+
+                _capture_data["user_message"] = instruction
+                _capture_data["dream_id"] = state.get("dream_id")
+                _capture_data["origin"] = {
+                    "origin": "stage",
+                    "group_id": stage.group_id,
+                    "char_id": self.char_id,
+                }
+                capture_dream(stage.owner_uid, _capture_data)
+                update_dream_llm_output(stage.owner_uid, reply)
+            except Exception:
+                logger.debug("[dream_views] dream capture failed", exc_info=True)
+
+        return reply
 
 
 class DreamStageViewRegistry:
