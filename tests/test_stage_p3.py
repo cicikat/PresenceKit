@@ -399,6 +399,70 @@ def test_prompt_builder_private_transcript_header_differs_from_group(sandbox):
     assert "不在场" in content
 
 
+def test_prompt_builder_group_stage_history_header_disclaims_not_group_content(sandbox):
+    """Brief 106 §4: in a real group Stage turn, layer 9 (1:1 short-term history)
+    and layer 4.2 (group transcript) sit back to back — both shaped like a
+    conversation record. Prompt capture on a live generate() call showed the
+    history block carries no visibility disclaimer, so it reads as if it
+    could be part of the same group conversation. Only the group-Stage case
+    (non-empty history + non-empty non-private stage_transcript) gets the
+    explicit "not this group chat" header; plain 1:1 chat and private_exchange
+    (whose history is always []) keep the original wording."""
+    from core import prompt_builder
+
+    char = MagicMock()
+    char.name = "Companion"
+    char.system_prompt = ""
+    char.description = ""
+    char.personality = ""
+    char.scenario = ""
+    char.mes_example = ""
+
+    with (
+        patch("core.prompt_builder._load_jailbreak", return_value=""),
+        patch("core.prompt_builder._load_style_hint", return_value=""),
+        patch("core.presence.get_last_seen_text", return_value=""),
+        patch("core.author_note_rotator.get_current_note", return_value=""),
+        patch("core.config_loader.get_config", return_value={"chat": {"style": "chat"}}),
+        patch("core.mood_text.get_mood_text", return_value=""),
+        patch("core.activity_manager.get_prompt_fragment", return_value=""),
+    ):
+        group_messages, _ = prompt_builder.build(
+            character=char, user_id="owner", user_message="hello",
+            history=[{"role": "user", "content": "我们晚上去吃火锅吧"}],
+            relation={}, profile={}, group_context=[],
+            stage_presence="presence", stage_transcript="owner：你们两个最近在聊什么",
+        )
+        private_messages, _ = prompt_builder.build(
+            character=char, user_id="owner", user_message="hello",
+            history=[], relation={}, profile={}, group_context=[],
+            stage_presence="presence", stage_transcript="A：在吗",
+            stage_transcript_private=True,
+        )
+        plain_chat_messages, _ = prompt_builder.build(
+            character=char, user_id="owner", user_message="hello",
+            history=[{"role": "user", "content": "我们晚上去吃火锅吧"}],
+            relation={}, profile={}, group_context=[],
+        )
+
+    def _history_header(messages):
+        for message in messages:
+            if message.get("_layer") == "9_history" and message["role"] == "system" and "对话记录" in message["content"]:
+                return message["content"]
+        raise AssertionError("9_history open tag not found")
+
+    group_header = _history_header(group_messages)
+    assert "不是这场群聊里发生的内容" in group_header
+    assert "私聊历史" in group_header
+
+    private_header = _history_header(private_messages)
+    assert "不是这场群聊里发生的内容" not in private_header
+    assert private_header == '<对话记录 note="以下是与用户真实发生的对话">'
+
+    plain_header = _history_header(plain_chat_messages)
+    assert plain_header == '<对话记录 note="以下是与用户真实发生的对话">'
+
+
 @pytest.mark.asyncio
 async def test_reality_runtime_delivers_speaker_and_enqueues_projection(sandbox, monkeypatch):
     from core.stage.models import Stage

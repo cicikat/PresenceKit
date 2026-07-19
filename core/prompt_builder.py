@@ -1300,10 +1300,21 @@ def build(
 
     # ─────────────────────────────────────────────────────────────────────────
     # 层 9：短期对话历史（最近 N 轮实际对话）
+    # Brief 106 §4：group Stage 场景下本层与层 4.2 群聊共享 transcript 相邻注入，
+    # 裸 user/assistant 轮次若不显式声明"这是私聊、不是这场群聊"，取证（真实
+    # prompt 抓取）显示两段都长得像"对话记录"，容易被读成同一场对话的延续。
+    # 仅在真正的多人 Stage（非私下往来）且历史非空时换用这句，避免给普通单聊/
+    # 私下往来既有措辞添乱——私下往来的 history 恒为空（lightweight_context）。
     # ─────────────────────────────────────────────────────────────────────────
+    _history_note = "以下是与用户真实发生的对话"
+    if history and stage_transcript and not stage_transcript_private:
+        from core.config_loader import get_user_display_name
+
+        _stage_user_name = get_user_display_name() or "用户"
+        _history_note = f"以下是你和{_stage_user_name}的私聊历史，不是这场群聊里发生的内容"
     messages.append({
         "role": "system",
-        "content": '<对话记录 note="以下是与用户真实发生的对话">',
+        "content": f'<对话记录 note="{_history_note}">',
         "_layer": "9_history",
     })
 
