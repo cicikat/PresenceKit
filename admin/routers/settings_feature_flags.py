@@ -30,6 +30,7 @@ FLAGS = {
     "toy_autogrow": ("toy_autogrow", "enabled", "玩具自主生长"),
     "web_autosearch": ("web_autosearch", "enabled", "自主联网搜索"),
     "performance_mapping": ("performance_mapping", "enabled", "表演标注映射"),
+    "private_exchange": ("private_exchange", "enabled", "角色私下往来"),
 }
 
 
