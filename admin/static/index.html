@@ -1821,8 +1821,8 @@ textarea { resize: vertical; min-height: 72px; }
     </div>
 
     <div class="page" id="page-observe-group-arbiter">
-      <h1 class="page-title">群聊仲裁 <span style="font-size:13px;font-weight:400;color:var(--muted)">只读 · 候选评分、角色关系与群聊 Prompt</span></h1>
-      <div class="card"><div class="card-header"><h3>Stage 群聊</h3><div style="display:flex;gap:8px"><select id="obs-arbiter-group" onchange="loadObserveGroupArbiter()"></select><button class="btn btn-ghost btn-sm" onclick="loadObserveGroupArbiter()">刷新</button></div></div><div id="obs-arbiter-content" class="empty">加载中…</div></div>
+      <h1 class="page-title"><span data-i18n="group.title">群聊仲裁</span> <span style="font-size:13px;font-weight:400;color:var(--muted)" data-i18n="group.subtitle">只读 · 候选评分、角色关系与群聊 Prompt</span></h1>
+      <div class="card"><div class="card-header"><h3 data-i18n="group.stage">Stage 群聊</h3><div style="display:flex;gap:8px"><select id="obs-arbiter-group" onchange="loadObserveGroupArbiter()"></select><button class="btn btn-ghost btn-sm" onclick="loadObserveGroupArbiter()" data-i18n="common.refresh">刷新</button></div></div><div id="obs-arbiter-content" class="empty" data-i18n="common.loading">加载中…</div></div>
     </div>
 
     <div class="page" id="page-observe-memory-summary">
@@ -5263,9 +5263,9 @@ function _renderPrivateExchangePair(groupId, relation, log) {
         <strong style="margin-left:8px">${escapeHtml(_observeGroupCharacterLabel(groupId, entry.speaker_id))}</strong>
         <div style="margin-top:3px;white-space:pre-wrap;word-break:break-word">${escapeHtml(entry.content || '')}</div>
       </div>`).join('')
-    : observeEmpty('这两位还没私下聊过');
+    : observeEmpty(t('group.private_none', '这两位还没私下聊过'));
   return `<details style="padding:9px 0;border-bottom:1px solid var(--border)">
-    <summary style="cursor:pointer"><strong>${escapeHtml(labelA)} ↔ ${escapeHtml(labelB)}</strong> · 最近往来 ${escapeHtml(latest)}</summary>
+    <summary style="cursor:pointer"><strong>${escapeHtml(labelA)} ↔ ${escapeHtml(labelB)}</strong> · ${escapeHtml(t('group.private_last', '最近往来 {time}', {time: latest}))}</summary>
     <div style="padding:8px 0 0 18px">${body}</div>
   </details>`;
 }
@@ -5282,13 +5282,17 @@ function _renderGroupPromptSnapshot(groupId, snapshot) {
   ];
   const layerHtml = layers.length ? layers.map(layer => {
     const pruned = !!layer.pruned;
-    const state = pruned ? '<span class="badge badge-danger">被裁</span>' : '<span class="badge">保留</span>';
-    const content = pruned && !layer.content ? '内容已在捕获前裁掉' : (layer.content || '（空层）');
+    const state = pruned
+      ? `<span class="badge badge-danger">${escapeHtml(t('group.prompt_pruned', '被裁'))}</span>`
+      : `<span class="badge">${escapeHtml(t('group.prompt_kept', '保留'))}</span>`;
+    const content = pruned && !layer.content
+      ? t('group.prompt_content_pruned', '内容已在捕获前裁掉')
+      : (layer.content || t('group.prompt_empty_layer', '（空层）'));
     return `<details style="margin:6px 0;padding:7px 9px;background:var(--bg-secondary);border-radius:6px">
-      <summary style="cursor:pointer">${escapeHtml(layer.layer || '?')} · ${Number(layer.chars || 0).toLocaleString()} 字 ${state}</summary>
+      <summary style="cursor:pointer">${escapeHtml(layer.layer || '?')} · ${Number(layer.chars || 0).toLocaleString()} ${escapeHtml(t('group.prompt_chars', '字'))} ${state}</summary>
       <pre style="font-size:11px;white-space:pre-wrap;word-break:break-all;max-height:260px;overflow:auto;margin:8px 0 0">${escapeHtml(content)}</pre>
     </details>`;
-  }).join('') : observeEmpty('本轮没有可展示的层');
+  }).join('') : observeEmpty(t('group.prompt_no_layers', '本轮没有可展示的层'));
   return `<details style="padding:9px 0;border-bottom:1px solid var(--border)">
     <summary style="cursor:pointer"><strong>${escapeHtml(speaker)}</strong> · ${escapeHtml(origin.round_id || '—')} · ${escapeHtml(observeTime(snapshot.captured_at))}</summary>
     <div style="padding:8px 0 0 18px">${layerHtml}</div>
@@ -5297,12 +5301,12 @@ function _renderGroupPromptSnapshot(groupId, snapshot) {
 
 async function initObserveGroupArbiter(){
   const sel=document.getElementById('obs-arbiter-group');
-  try{const groups=await api('GET','/group/list');_observeGroupSummaries=Object.fromEntries((groups||[]).map(g=>[g.group_id,g]));sel.innerHTML=(groups||[]).map(g=>`<option value="${escapeHtml(g.group_id)}">${escapeHtml(g.title||g.group_id)}</option>`).join('');await loadObserveGroupArbiter();}catch(e){document.getElementById('obs-arbiter-content').innerHTML=observeEmpty('加载失败：'+e.message);}
+  try{const groups=await api('GET','/group/list');_observeGroupSummaries=Object.fromEntries((groups||[]).map(g=>[g.group_id,g]));sel.innerHTML=(groups||[]).map(g=>`<option value="${escapeHtml(g.group_id)}">${escapeHtml(g.title||g.group_id)}</option>`).join('');await loadObserveGroupArbiter();}catch(e){document.getElementById('obs-arbiter-content').innerHTML=observeEmpty(t('group.load_failed','加载失败：{error}',{error:e.message}));}
 }
 
 async function loadObserveGroupArbiter(){
   const el=document.getElementById('obs-arbiter-content'), id=document.getElementById('obs-arbiter-group')?.value||''; if(!el)return;
-  if(!id){el.innerHTML=observeEmpty('暂无群聊，创建群聊后可查看仲裁轨迹');return;} el.innerHTML=observeEmpty('加载中…');
+  if(!id){el.innerHTML=observeEmpty(t('group.no_groups','暂无群聊，创建群聊后可查看仲裁轨迹'));return;} el.innerHTML=observeEmpty(t('common.loading','加载中…'));
   try{
     const flagRequest = _featureFlags.private_exchange
       ? Promise.resolve(_featureFlags)
@@ -5321,17 +5325,19 @@ async function loadObserveGroupArbiter(){
     const snapshots = await _loadRecentPromptSnapshots(String(scheduler.owner_id || '').trim(), 10);
     const groupSnapshots = snapshots.filter(snapshot => _isStagePromptForGroup(snapshot, id));
     const privateEnabled = !!flags.private_exchange?.enabled;
-    const privateBadge = `<span class="badge ${privateEnabled?'badge-success':'badge-danger'}" style="margin-left:7px">private_exchange：${privateEnabled?'已开启':'已关闭'}</span>`;
+    const privateBadge = `<span class="badge ${privateEnabled?'badge-success':'badge-danger'}" style="margin-left:7px">private_exchange: ${escapeHtml(privateEnabled?t('common.enabled','已启用'):t('common.disabled','未启用'))}</span>`;
     const privateHtml = rels.length
       ? rels.map((relation,index) => privateLogs[index]?.error
-          ? observeEmpty(`${relation.char_a} ↔ ${relation.char_b} 加载失败：${privateLogs[index].error}`)
+          ? observeEmpty(t('group.private_pair_failed','{pair} 加载失败：{error}',{pair:`${relation.char_a} ↔ ${relation.char_b}`,error:privateLogs[index].error}))
           : _renderPrivateExchangePair(id, relation, privateLogs[index])).join('')
-      : observeEmpty('当前群还没有可观测的角色关系 pair');
+      : observeEmpty(t('group.private_no_relations','当前群还没有可观测的角色关系 pair'));
     const promptHtml = groupSnapshots.length
       ? groupSnapshots.map(snapshot => _renderGroupPromptSnapshot(id, snapshot)).join('')
-      : observeEmpty('最近 10 轮没有当前群的 Prompt 快照；群聊跑一轮后刷新');
-    el.className='';el.innerHTML=`<h4>仲裁轨迹</h4>${rows.length?rows.slice().reverse().map(r=>`<div style="padding:10px 0;border-bottom:1px solid var(--border)"><div>${escapeHtml(observeTime(r.ts))} · 阶段 ${escapeHtml(r.phase||'—')} ${r.echo_cut?'<span class="badge">回声截断</span>':''} ${r.silent_round?'<span class="badge">静默轮次</span>':''}</div>${(r.candidates||[]).map(c=>`<div style="margin-top:6px">${escapeHtml(_observeGroupCharacterLabel(id,c.char_id))} · ${Number(c.total||0).toFixed(2)}${observeBar(Number(c.total||0),1.5)}</div>`).join('')}</div>`).join(''):observeEmpty()}<h4 style="margin-top:18px">角色双向印象</h4>${rels.length?rels.map(r=>{const labelA=_observeGroupCharacterLabel(id,r.char_a),labelB=_observeGroupCharacterLabel(id,r.char_b);return `<div style="padding:9px 0;border-bottom:1px solid var(--border)"><strong>${escapeHtml(labelA)} ↔ ${escapeHtml(labelB)}</strong><div>${escapeHtml(labelA)} → ${escapeHtml(labelB)}：${escapeHtml(r.a_of_b?.summary||'—')} (${Number(r.a_of_b?.valence||0).toFixed(2)})</div><div>${escapeHtml(labelB)} → ${escapeHtml(labelA)}：${escapeHtml(r.b_of_a?.summary||'—')} (${Number(r.b_of_a?.valence||0).toFixed(2)})</div></div>`;}).join(''):observeEmpty()}<h4 style="margin-top:18px">角色私下往来 ${privateBadge}</h4>${privateHtml}<h4 style="margin-top:18px">群聊 Prompt 检视 <span style="font-size:12px;font-weight:400;color:var(--muted)">最近 10 轮，仅显示当前群</span></h4>${promptHtml}`;
-  }catch(e){el.innerHTML=observeEmpty('加载失败：'+e.message);}
+      : observeEmpty(t('group.prompt_none','最近 10 轮没有当前群的 Prompt 快照；群聊跑一轮后刷新'));
+    const echoCutBadge = `<span class="badge">${escapeHtml(t('group.echo_cut','回声截断'))}</span>`;
+    const silentRoundBadge = `<span class="badge">${escapeHtml(t('group.silent_round','静默轮次'))}</span>`;
+    el.className='';el.innerHTML=`<h4>${escapeHtml(t('group.trace','仲裁轨迹'))}</h4>${rows.length?rows.slice().reverse().map(r=>`<div style="padding:10px 0;border-bottom:1px solid var(--border)"><div>${escapeHtml(observeTime(r.ts))} · ${escapeHtml(t('group.phase','阶段'))} ${escapeHtml(r.phase||'—')} ${r.echo_cut?echoCutBadge:''} ${r.silent_round?silentRoundBadge:''}</div>${(r.candidates||[]).map(c=>`<div style="margin-top:6px">${escapeHtml(_observeGroupCharacterLabel(id,c.char_id))} · ${Number(c.total||0).toFixed(2)}${observeBar(Number(c.total||0),1.5)}</div>`).join('')}</div>`).join(''):observeEmpty(t('group.no_trace','暂无仲裁轨迹'))}<h4 style="margin-top:18px">${escapeHtml(t('group.impressions','角色双向印象'))}</h4>${rels.length?rels.map(r=>{const labelA=_observeGroupCharacterLabel(id,r.char_a),labelB=_observeGroupCharacterLabel(id,r.char_b);return `<div style="padding:9px 0;border-bottom:1px solid var(--border)"><strong>${escapeHtml(labelA)} ↔ ${escapeHtml(labelB)}</strong><div>${escapeHtml(labelA)} → ${escapeHtml(labelB)}：${escapeHtml(r.a_of_b?.summary||'—')} (${Number(r.a_of_b?.valence||0).toFixed(2)})</div><div>${escapeHtml(labelB)} → ${escapeHtml(labelA)}：${escapeHtml(r.b_of_a?.summary||'—')} (${Number(r.b_of_a?.valence||0).toFixed(2)})</div></div>`;}).join(''):observeEmpty(t('group.no_impressions','暂无角色双向印象'))}<h4 style="margin-top:18px">${escapeHtml(t('group.private','角色私下往来'))} ${privateBadge}</h4>${privateHtml}<h4 style="margin-top:18px">${escapeHtml(t('group.prompt','群聊 Prompt 检视'))} <span style="font-size:12px;font-weight:400;color:var(--muted)">${escapeHtml(t('group.prompt_subtitle','最近 10 轮，仅显示当前群'))}</span></h4>${promptHtml}`;
+  }catch(e){el.innerHTML=observeEmpty(t('group.load_failed','加载失败：{error}',{error:e.message}));}
 }
 
 async function loadObserveMemorySummary(){

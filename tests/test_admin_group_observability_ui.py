@@ -18,4 +18,5 @@ def test_group_observability_uses_read_only_sources_and_required_empty_state():
     assert "/relations/private-log?${query}" in source
     assert "/observe/prompt-layers/${encodeURIComponent(uid)}?n=0" in source
     assert "这两位还没私下聊过" in source
-    assert "private_exchange：${privateEnabled?'已开启':'已关闭'}" in source
+    assert "t('group.private_none', '这两位还没私下聊过')" in source
+    assert "privateEnabled?t('common.enabled','已启用'):t('common.disabled','未启用')" in source

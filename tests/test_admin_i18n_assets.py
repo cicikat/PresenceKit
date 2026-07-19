@@ -78,3 +78,33 @@ def test_status_page_and_feature_flags_use_semantic_i18n_keys():
 
     assert "https://aistudio.google.com/app/apikey" in status.group(1)
     assert "https://open.bigmodel.cn/usercenter/apikeys" in status.group(1)
+
+
+def test_group_arbiter_private_exchange_and_prompt_inspector_are_localized():
+    index = INDEX.read_text(encoding="utf-8")
+    runtime = I18N.read_text(encoding="utf-8")
+    page = re.search(
+        r'<div class="page" id="page-observe-group-arbiter">(.*?)'
+        r'<div class="page" id="page-observe-memory-summary">',
+        index,
+        re.S,
+    )
+    assert page is not None
+    for key in ("group.title", "group.subtitle", "group.stage", "common.refresh"):
+        assert f'data-i18n="{key}"' in page.group(1)
+
+    for key in (
+        "group.trace",
+        "group.impressions",
+        "group.private",
+        "group.private_none",
+        "group.prompt",
+        "group.prompt_subtitle",
+        "group.prompt_pruned",
+        "group.prompt_kept",
+        "group.prompt_no_layers",
+    ):
+        assert f"t('{key}'" in index
+        assert f"'{key}'" in runtime
+
+    assert "origin.origin === 'stage' && origin.group_id === groupId" in index
