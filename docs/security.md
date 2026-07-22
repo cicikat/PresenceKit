@@ -22,7 +22,7 @@
 | `chat` | owner 对话回合 + 通道生命周期 + 上传/转写 | `/desktop/chat`、`/mobile/*`、`/desktop/wake\|activate`、`/upload/ingest`、`/transcribe`、`/group/*` |
 | `state.read` | 低敏状态只读 | `/mood/state`、`/activity/current`、`/garden/state`、`/sensor/realtime`、`/watch/status`、`GET /status` |
 | `memory.read` | 高敏内容只读 | `/diary/*`、`/chat-log/*`、`/history`、`/memory/*`（GET）、`/debug/user-hidden-state`、provenance/observe、relations（GET） |
-| `sensor.write` | 感知数据写入（只写不读） | `POST /sensor/push`、`POST /watch/event` |
+| `sensor.write` | 感知数据写入，以及仅服务于写入前 fail-closed 预检的低敏开关读取 | `POST /sensor/push`、`POST /watch/event`、`GET /perception/visual/config` |
 | `activity` | 活动/梦境 overlay 全生命周期 | `/dream/*`、`/activity/reading\|gomoku\|chess\|dream_seed/*` |
 | `persona` | 人设/世界/呈现配置读写 | `/settings/prompt-assets`、`/jailbreak-entries`、`/lorebook`、character 卡、`/chat-mode\|chat-style\|chat-multi-message`、头像 |
 | `hardware` | 实体硬件控制 + 危险模式开关 | `/hardware/*`、`GET\|PATCH /system/meta-mode` |

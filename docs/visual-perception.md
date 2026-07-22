@@ -8,6 +8,10 @@
 - `source`：`screen` 或 `camera`。
 - 鉴权：Bearer token 必须具有 `sensor.write` scope。
 
-处理前置条件与节流：`visual_perception.enabled=true`；视觉连接参数优先取 `visual_perception`，缺失字段继承 `vision`。同一 `source` 成功接收后冷却 5 分钟；冷却或关闭时仍返回 202 与 `accepted=true`，但 `processing=false`。生产者应只在可见场景发生显著变化时发送，不应周期性上传屏幕。
+生产者在任何截图前必须先请求 `GET /perception/visual/config`（同样需要
+`sensor.write`）。响应只含 `enabled` 和 `cooldown_seconds`，不含视觉模型、地址或密钥；
+请求失败按关闭处理，客户端不得截图。该预检与本地用户开关共同构成双闸。
+
+处理前置条件与节流：`visual_perception.enabled=true`；视觉连接参数优先取 `visual_perception`，缺失字段继承 `vision`。同一 `source` 成功接收后冷却 5 分钟；冷却或关闭时仍返回 202 与 `accepted=true`，但 `processing=false`。生产者可按固定周期在内存中采样并作场景变化比对，但只在显著变化时上传，不应周期性上传屏幕。
 
 响应 `{"accepted": true, "processing": true|false}`。结果只进入 shadow trace，不注入角色 prompt 或主记忆。管理面以 `GET /perception/visual-trace`（`state.read`）只读查看；trace 仅保存抽取后的场景/活动/置信度/短描述或丢弃原因，保留 30 天。

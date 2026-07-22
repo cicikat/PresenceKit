@@ -61,3 +61,16 @@ def test_enabled_shadow_observation_reuses_configured_vision_credentials(monkeyp
     assert cfg["provider"] == "glm"
     assert cfg["base_url"] == "https://glm"
     assert cfg["model"] == "glm-4v-flash"
+
+
+@pytest.mark.asyncio
+async def test_producer_preflight_returns_only_gate_and_cooldown(monkeypatch):
+    import admin.routers.perception as router
+
+    monkeypatch.setattr(
+        "core.config_loader.get_config",
+        lambda: {"visual_perception": {"enabled": True, "api_key": "must-not-leak"}},
+    )
+    result = await router.get_visual_producer_config(True)
+
+    assert result == {"enabled": True, "cooldown_seconds": 300}

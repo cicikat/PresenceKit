@@ -79,6 +79,19 @@ async def ingest_visual(
     return {"accepted": True, "processing": True}
 
 
+@router.get("/perception/visual/config", summary="读取视觉观测生产者预检状态")
+async def get_visual_producer_config(
+    _auth=Depends(require_scopes("sensor.write")),
+):
+    """Return only the producer-safe gate; never expose VLM connection details."""
+    from core.perception.vlm_client import get_visual_perception_config
+
+    return {
+        "enabled": bool(get_visual_perception_config().get("enabled", False)),
+        "cooldown_seconds": VISUAL_SOURCE_COOLDOWN_SECONDS,
+    }
+
+
 @router.get("/perception/visual-trace", summary="读取视觉 shadow trace")
 async def get_visual_trace(
     date: str = "",
