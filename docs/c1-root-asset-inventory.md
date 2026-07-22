@@ -1,15 +1,15 @@
-# C1 根目录资产盘点（迁移前清单）
+# C1 根目录资产盘点与迁移记录
 
-> 盘点日期：2026-07-22。此文件是 C1 的第一阶段产物：**只记录决策，不移动、不删除、不改路径引用**。
-> 第二阶段必须在用户审阅本清单、并手动完成下文“需手动删除”项后再开始。
+> 盘点与迁移完成：2026-07-22。本文保留 C1 的资产边界、迁移目标和遗留清理清单，描述的是
+> **当前实现**，不再是待执行的迁移计划。
 
 ## 决策与目标结构
 
-后续将新增一个仅容纳用户私有 authored 资产的根目录：`userdata/`。它不承载
+`userdata/` 是仅容纳用户私有 authored 资产的根目录。它不承载
 `data/` 的运行时状态；后者继续由 `core.sandbox.get_paths()` 管理，并保持测试沙箱偏移。
 
 ```text
-userdata/                         # 后续新增；用户可写/私有 authored 资产
+userdata/                         # 用户可写/私有 authored 资产（Git ignored）
 ├── assets/stickers/
 └── characters/
     ├── cards/
@@ -18,7 +18,8 @@ userdata/                         # 后续新增；用户可写/私有 authored 
     └── dream/{presets,worlds}/
 ```
 
-迁移实现会先提供 `userdata/` 主路径与现有路径只读回退；不会在未验证引用和回退观测前删除旧资产。
+`DataPaths` / `AssetRegistry` 已优先读取 `userdata/`，并为旧安装目录保留只读 fallback。
+新建角色和其他可写 authored 资产进入 `userdata/`；运行时 `data/` 路径不参与这次迁移。
 
 ## 保留在根目录
 
@@ -34,9 +35,9 @@ userdata/                         # 后续新增；用户可写/私有 authored 
 | `config.example.yaml`、`*.example.yaml`、`secrets.example.yaml`、`README*`、`ARCHITECTURE.md`、`AGENTS.md`、`DESIGN.md`、启动/安装脚本 | 保留 | 项目文档、模板和启动入口；即使某些本地文档当前未跟踪，也不是缓存。 |
 | `config.yaml`、`secrets.local.yaml` | 保留在根目录且继续忽略 | 本机运行配置/凭据；不能提交、移动或删除。 |
 
-## 后续迁入 `userdata/`（本阶段不移动）
+## 已迁入 `userdata/`
 
-| 当前路径 | 目标路径 | 当前消费者/原因 |
+| 原路径（旧安装可 fallback） | 当前主路径 | 消费者/原因 |
 |---|---|---|
 | `assets/stickers/` | `userdata/assets/stickers/` | 私有贴纸库；当前由 `core/output/sticker.py` 读取。 |
 | `characters/*.json`（排除 `default.json` 与 `default_author_notes.json`） | `userdata/characters/cards/` | 私有角色卡；当前由 `core/character_loader.py`、`core/asset_registry.py` 和角色管理 API 扫描。 |
@@ -45,9 +46,9 @@ userdata/                         # 后续新增；用户可写/私有 authored 
 | `characters/reality/` | `userdata/characters/reality/` | 私有 reality lorebook、jailbreak 与头像资产；当前由 `DataPaths`、asset registry、prompt builder 使用。 |
 | `characters/dream_presets/`、`characters/dream_worlds/` | `userdata/characters/dream/{presets,worlds}/` | 私有 Dream 世界/预设；当前由 Dream loaders 与 asset registry 使用。 |
 
-迁移时须同步完成：`core/data_paths.py` / `core/asset_registry.py` / `core/character_loader.py` /
-Dream loaders / `core/output/sticker.py` 的统一访问器改造，补充旧路径回退及其命中观测，并更新
-`.gitignore`、`docs/data-taxonomy.md`、相应测试。不得把任何 `data/` 路径迁到本目录。
+迁移已同步更新 `core/data_paths.py` / `core/asset_registry.py` / `core/character_loader.py` / Dream
+loaders / `core/output/sticker.py`、`.gitignore`、`docs/data-taxonomy.md` 与回归测试。不得把任何
+`data/` 路径迁到本目录。
 
 ## 需由用户手动删除
 
@@ -64,11 +65,11 @@ Dream loaders / `core/output/sticker.py` 的统一访问器改造，补充旧路
 
 `firmware/presence-device/.vscode/` 为本机编辑器配置，不列为必删项；是否删除由用户自行决定。
 
-## 第二阶段准入检查
+## 已完成的迁移约束
 
-开始迁移前必须同时满足：
-
-1. 用户已确认本清单，且上述手动删除项已处理或明确保留；
-2. `git status --short` 无意外改动；
-3. 所有迁移源、目标和 fallback 路径经测试覆盖；
-4. 未将 `config.yaml`、`secrets.local.yaml`、`data/` 或公开 default/example 资产纳入移动/删除范围。
+1. 用户已确认清单，并手动清理要求由用户处理的空目录占位文件；
+2. 主路径、旧路径 fallback 与公开 seed 均有测试覆盖；`tests/test_authored_assets.py` 只校验随仓库
+   发布的 `defaults/` / `examples/` 资产，不把用户私有 `userdata/` 误当成 tracked 文件；
+3. `config.yaml`、`secrets.local.yaml`、`data/` 和公开 default/example 资产没有被移动或纳入 Git；
+4. 后续若删除旧安装目录，只能在确认该用户的 `userdata/` 迁移完整后手动执行；代码 fallback 保留以兼容
+   尚未迁移的旧安装。

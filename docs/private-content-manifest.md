@@ -1,116 +1,74 @@
-# 私人内容备份集清单
+# 私人内容备份清单
 
-> **用途**：列出哪些路径属于"丢了不可重建、git 又不存"的，供磁盘外备份参考。  
-> 不包含可由运行时重建的缓存/索引，也不包含已进 git 的模板文件。  
-> 对应 `data_registry.py` 的 `git_policy = ignore-but-authored` 语义。
+> 当前口径：C1 已将用户 authored 资产的主路径统一到 Git 忽略的 `userdata/`。本文只列
+> 「丢失后无法从仓库恢复」的内容；运行缓存、索引、队列和测试沙盒不在备份集内。路径
+> 分类的代码真值见 `core/data_paths.py`，完整运行时树见 [data-taxonomy.md](data-taxonomy.md)。
 
-> **审计类文档提醒（Brief 33 §1.4）**：`docs/critique-*.md`（审计报告）与
-> `docs/*-triage-*.md`（裁定记录）这类文档天然容易引用真实配置值（曾在
-> `docs/critique-fable-20260707.md` 中发现明文 admin secret）。`git add` 前须人工
-> grep 一遍真实密钥/口令/QQ 号等敏感值，确认已脱敏（占位符/`<redacted>`）再入库，
-> 开源前总检查也应把这类新增文档纳入扫描范围；历史执行清单已归档，不作为现行流程入口。
+## 一、最高优先级：`userdata/`
 
----
+这是本机私有内容的主根目录，应整体备份：
 
-## 一、track(git) — 已跟踪，可从 git 恢复
+```text
+userdata/
+├── assets/stickers/{emotion}/
+└── characters/
+    ├── cards/{char_id}.{json,txt,md}
+    ├── authored/{char_id}/
+    │   ├── activity_pool.yaml
+    │   ├── author_notes.json
+    │   ├── traits.yaml
+    │   ├── letter_samples/
+    │   └── knowledge/
+    ├── reality/
+    └── dream/{worlds,presets}/
+```
 
-| 路径 | 说明 |
-|------|------|
-| `examples/character_template.json` | 角色卡空模板（在 examples/ 下，不再出现在 admin UI 列表中） |
-| `characters/dream_worlds/*/lorebook.yaml` | 内置梦世界 lorebook（6 个世界） |
-| `characters/dream_worlds/*/ruleset.md` | 梦世界规则文本 |
-| `characters/dream_worlds/*/mes_example.md` | 梦世界对话示例 |
-| `characters/dream_worlds/*/vocab.json` | 梦世界词汇表 |
-| `config.example.yaml` | 配置文件模板 |
+其中贴纸、角色卡、角色 authored 配置、现实素材和梦境世界/预设均不进 Git；丢失后只能从外部备份
+恢复。不要把仓库内的 `defaults/`、`examples/` 或公开默认角色/梦世界模板误当作私人唯一副本。
 
-**尚未 git add 的模板文件（不受 gitignore 限制，但还未跟踪）：**
+## 二、同样应备份的本机配置
 
-| 路径 | 说明 |
-|------|------|
-| `content/characters/yexuan/traits.example.yaml` | traits 编写模板 |
-| `content/characters/yexuan/activity_pool.example.yaml` | 活动池编写模板 |
-| `content/jailbreak_presets/示例.example.json` | jailbreak 预设模板 |
-| `defaults/lorebook.yaml` | lorebook 空种子（`entries: []`） |
-| `defaults/relations.yaml` | relations 最小默认种子 |
-| `defaults/blacklist.yaml` | blacklist 空种子 |
-| `defaults/jailbreak_entries.json` | jailbreak 空种子 |
+| 路径 | 原因 |
+|---|---|
+| `config.yaml` | 本机服务与渠道配置，不入库。 |
+| `secrets.local.yaml`（如存在） | 本机密钥配置，不入库；备份应放在受保护的位置。 |
+| 渠道或客户端各自的本地配置 | 属于对应应用的私有配置；按其仓库说明备份，勿复制到本仓 Git 工作树。 |
 
-> 建议执行一次 `git add` 将上述文件纳入跟踪，避免误以为"已备份"。
+备份内容不得提交、粘贴到工单或日志中；密钥应使用加密介质或受控密码库保存。
 
----
+## 三、按需要备份的运行积累
 
-## 二、ignore-but-authored(需备份) — 不在 git，唯一副本在磁盘
+以下文件不属于 C1 authored 资产，但通常重建代价高。需要保留对话连续性、梦境偏好或本地日记时，
+一并备份相应目录：
 
-**丢失 = 不可重建。须磁盘外备份（移动硬盘 / 网盘 / 加密云存储）。**
+| 路径模式 | 内容 |
+|---|---|
+| `data/runtime/memory/{char_id}/{uid}/` | 对话历史、identity、episodic/mid-term 和记忆索引。 |
+| `data/runtime/dreams/{char_id}/{settings,state,summaries,impressions}/` | dream 偏好、状态和可回顾的梦境积累。 |
+| `data/diary_fallback/` | 未配置外部日记根目录时的本地日记。 |
+| `data/relations.yaml`、`data/blacklist.yaml` | 本地关系/屏蔽定制（如已填写）。 |
 
-### 2a. DataPaths 注册路径（git_policy = ignore-but-authored）
+这类数据由 `get_paths()` 管理，测试模式会写到独立的 `data/test_sandbox/`；不要把测试沙盒纳入
+生产备份，也不要把生产 `data/` 复制进新 clone 来做开箱测试。
 
-| DataPaths 方法 | 当前物理路径（fallback） | 目标路径（accessor primary，S8 后生效） |
-|---------------|------------------------|----------------------------------------|
-| `activity_pool()` | `data/yexuan_inner/activity_pool.yaml` | `content/characters/yexuan/activity_pool.yaml` |
-| `yexuan_traits()` | `data/yexuan_traits.yaml` | `content/characters/yexuan/traits.yaml` |
-| `author_notes_pool()` | `characters/yexuan_author_notes.json` | `content/characters/yexuan/yexuan_author_notes.json` |
+## 四、迁移与旧目录
 
-> 物理文件尚未迁移（S8），accessor 已优先读新位置；fallback 路径即当前实际文件。  
-> **备份时以 fallback 路径为准（当前唯一副本）。**
+读取时，`DataPaths` / `AssetRegistry` 会优先使用 `userdata/`；仅为旧安装保留
+`assets/stickers/`、`characters/`、`content/characters/` 等历史位置的只读 fallback。确认
+`userdata/` 已包含所需资产并完成备份前，不要删除旧目录。新建或修改用户 authored 资产应落在
+`userdata/`，不要重新把私有内容写回旧根目录。
 
-### 2b. 非 DataPaths 路径（直接访问，未注册）
+## 五、不必作为私人唯一副本备份
 
-| 路径 | 说明 |
-|------|------|
-| `characters/他.json` | 角色卡主体（JSON 格式） |
-| `characters/他.txt` | 角色卡文本版 |
-| `characters/yexuan_author_notes.json` | 当前 author notes 池（同 2a fallback） |
-| `characters/yexuan_author_notes - 副本.json` | author notes 备份副本 |
-| `characters/dream_presets/custom.md` | 自定义梦境预设 |
-| `characters/dream_presets/default.md` | 默认梦境预设 |
+- `defaults/`、`examples/` 和其他已跟踪的公共种子：从 Git 可恢复。
+- `data/cache/`、`data/inbox/`、`data/runtime/*queue*`、`data/test_sandbox/`：缓存、上传原件、
+  IPC 或测试临时文件。
+- `data/logs/`、`data/debug/`：排障材料可按需要另存，但不是业务恢复的必需真值。
+- `data/runtime/observability/api_calls-*.jsonl`：仅调用元数据的短期观测账本，保留策略为最近 7 天。
 
-### 2c. seed 类（种子已跟踪为空模板，运行时副本含私人定制内容）
+## 备份顺序
 
-| 路径 | DataPaths 方法 | 说明 |
-|------|---------------|------|
-| `characters/reality/lorebook.yaml` | `lorebook()` | 现实世界书条目（defaults/ 空种子仅用于 test sandbox） |
-| `characters/reality/jailbreak_entries.json` | `jailbreak_entries()` | 破限预设条目（defaults/ 空种子仅用于 test sandbox） |
-| `data/relations.yaml` | `relations()` | 实际关系数据（defaults/ 种子为最小默认） |
-| `data/blacklist.yaml` | `blacklist()` | 实际黑名单（defaults/ 种子为空） |
-
-> `lorebook.yaml` 和 `jailbreak_entries.json` 在 production 模式下不再自动从 defaults/ 种子生成——
-> 若文件缺失，`data_paths.py` 会打印 ERROR 日志并返回原路径，调用方自行 fallback 空列表。
-> 文件缺失时应从版本库（`git checkout`）或磁盘备份恢复。
-
-### 2d. 用户级不可重建配置
-
-| 路径模式 | DataPaths 方法 | 说明 |
-|---------|---------------|------|
-| `data/runtime/dreams/{char_id}/settings/{uid}.json` | `dream_settings_path()` | 每用户的 dream 偏好设置 |
-| `data/runtime/memory/{char_id}/{uid}/identity.yaml` | `user_memory_root()` | 用户身份信息（手动或 LLM 积累） |
-| `data/diary_fallback/` | `diary_fallback()` | obsidian_path 未配置时的本地日记目录 |
-
----
-
-## 三、ignore-runtime(可重建) — 不在 git，程序可自动重建或可接受丢失
-
-| 路径模式 | 说明 |
-|---------|------|
-| `data/runtime/memory/{char_id}/{uid}/history.json` | 对话历史（丢=失忆，但属运行积累非配置） |
-| `data/runtime/memory/{char_id}/{uid}/{mid_term.json,episodic.json}` | 记忆摘要 |
-| `data/runtime/memory/{char_id}/{uid}/memory_index.json` | 情景记忆索引（可重算） |
-| `data/runtime/characters/{char_id}/inner/` | 运行时角色状态（mood/activity/trait_state 等） |
-| `data/runtime/dreams/{char_id}/tmp/` | 进行中的梦（退出转 archive） |
-| `data/runtime/dreams/{char_id}/archive/` | 梦境归档（count-cap GC，不进 loader） |
-| `data/logs/` | forensic 日志（可丢，不影响业务） |
-| `data/runtime/channel_queue.json` 等 | runtime IPC 文件（重启清） |
-| `data/cache/image_cache/` | 视觉缓存（sha256，可重算） |
-| `data/inbox/` | 上传原始文件（解析后可删） |
-| `data/test_sandbox/` | 测试沙盒（cleanup() 清理） |
-
----
-
-## 备份建议
-
-1. **最高优先级**：备份 §2a + §2b（私人authored，丢失=永久失去人设配置）  
-2. **次优先级**：备份 §2c（私人内容定制，种子可恢复但定制条目不可重建）  
-3. **可选**：备份 §2d（用户级配置，重配代价高但非零）  
-4. §三 无需特别备份（可接受丢失或可重建）
-
-备份频率建议：每次修改 §2a/§2b 后立即备份；§2c 每周一次。
+1. 每次编辑私有资产后立即备份整个 `userdata/`。
+2. 变更配置或密钥后更新受保护的配置备份。
+3. 需要长期连续性时，按用户/角色选择性备份 §三中的运行积累。
+4. 迁移或清理旧目录前，先完成第 1 步并验证主路径可被程序读取。

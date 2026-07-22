@@ -30,6 +30,7 @@ data/
 │   ├── mobile_queue.json
 │   ├── agent_actions.json
 │   ├── pending_perception/
+│   ├── observability/api_calls-YYYY-MM-DD.jsonl  # 外部 API 调用总账，保留最近 7 天
 │   ├── scheduler_user_state.json
 │   ├── spend/mandates.jsonl       # Brief 63 预留兼容读面，当前无 writer
 │   ├── relations/{char_a}__{char_b}.json
@@ -122,7 +123,7 @@ userdata/
     └── dream/{worlds,presets}/
 ```
 
-访问必须经 `DataPaths` 或 `AssetRegistry`。读取优先 `userdata/`，仅在迁移前旧目录仍存在时回退到
+访问必须经 `DataPaths` 或 `AssetRegistry`。读取优先 `userdata/`，仅在旧安装目录仍存在且主路径缺失时回退到
 `assets/stickers/`、`characters/` 和 `content/characters/`；新建角色、梦境世界及其他可写资产写入
 `userdata/`。`defaults/`、`examples/`、默认角色卡和梦境世界模板仍是随仓库发布的公共种子，不迁入
 `userdata/`。
@@ -152,7 +153,7 @@ userdata/
 `pet.json` 都按角色隔离。`character_growth/` 是 Brief 35 移除模块留下的历史数据：不再有
 代码读写，不应作为当前状态或新增路径使用。`activity_pool()`、`yexuan_traits()`、
 `author_notes_pool()` 属于 authored 静态内容，优先读
-`userdata/characters/authored/{char_id}/`，迁移完成前才回退旧位置。
+`userdata/characters/authored/{char_id}/`，仅为未迁移的旧安装回退旧位置。
 
 `interest_state.json`、`works/{interest_id}/` 与 `notes/{interest_id}.md` 是当前成长系统的
 角色级 canonical 真值；物理位置虽在 `runtime/` 树下，仍不可按临时缓存清理。
@@ -181,6 +182,8 @@ Dream domain 独立落在 `data/runtime/dreams/{char_id}/`，不进入 reality m
 - 调度器用户级运行态：`data/runtime/scheduler_user_state.json`
 - Stage 真值与观测：`data/runtime/groups/{group_id}/{meta.json,transcript.json,arbiter_trace.jsonl}`
 - 跨 Stage 的角色关系：`data/runtime/relations/{char_a}__{char_b}.json`
+- 外部 API 调用总账：`data/runtime/observability/api_calls-YYYY-MM-DD.jsonl`（只记调用元数据，
+  fail-open，最近 7 天；只读查询见 `GET /observability/api-calls`）
 - Brief 63 兼容读面：`data/runtime/spend/mandates.jsonl`（当前无 writer）
 - forensic 日志与 DLQ：`data/logs/`
 - 上传文件与视觉缓存：`data/inbox/`、`data/cache/image_cache/`

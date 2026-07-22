@@ -82,6 +82,8 @@
 | 花园工具 | `core/tools/garden_tools.py` / `core/tool_dispatcher.py` → `water_garden` |
 | 花园调度器 | `core/scheduler/triggers/garden_water.py` / `core/scheduler/triggers/garden_daily.py` |
 | 花园管理面板接口 | `admin/routers/garden.py` |
+| 用户私有 authored 资产（贴纸/角色卡/reality/dream 素材；非 `data/`） | `core/data_paths.py`（`userdata_*` / fallback accessor）+ `core/asset_registry.py`；分类见 `docs/data-taxonomy.md` |
+| 表情包输出（QQ 图片 + desktop/mobile sticker payload） | `core/output/sticker.py`；通道 payload 见 `docs/channels.md` |
 | 媒体文件解析与落盘 | `core/media_processor.py` |
 | 沙盒路径管理 | `core/sandbox.py` ← 所有 data/ 路径必须经过此处 |
 | 管理面鉴权（scoped tokens，SEC-AUTH-2） | `admin/auth.py`（`resolve_token` / `require_scopes` / `authenticate_ws`）/ `admin/scopes.py`（scope+profile 表）/ `admin/token_registry.py`（token 加载/热重载/create/rotate/delete/set_disabled） |
@@ -96,6 +98,8 @@
 | Model registry（preset 构建、路由解析、参数合并）| `core/model_registry.py` |
 | Prompt style 转换钩子（narrative / xml） | `core/prompt_style.py` |
 | LLM输出校验与失败计数 | `core/llm_output_validator.py` |
+| 外部 API 调用总账（按日轮转、只读查询） | `core/api_call_log.py` → `GET /observability/api-calls`（`state.read`） |
+| Reality stimulus 审计查询 | `core/perceive_event.py` / `core/perceive_event_audit.py` → `GET /observability/perceive-events`（`state.read`） |
 | 并发锁池 | `core/memory/locks.py` |
 | 感知暂存（两阶段提交） | `core/memory/pending_perception.py` |
 | 中期记忆 | `core/memory/mid_term.py` |
@@ -112,7 +116,7 @@
 | trusted_user_text / probe grounding | `main.py` `_trusted_user_text` 在 media merge 前捕获；`admin/routers/chat.py` `run_owner_chat_turn(trusted_user_text=)` |
 | execute() origin 闸门 | `core/tool_dispatcher.py` → `_EXECUTE_ALLOWED_ORIGINS`（`user_live` / `assistant_intent` / `assistant_loop`） / `execute(origin=)` |
 | Path B 守卫（意图反射去重） | `core/pipeline.py` → `_parse_and_execute_intent()` guards (a/b/c/d) + `_INTENT_LAST_ACTION` c2 幂等；guard (d) 为 `loop_executed=True` 时短路 |
-| tool loop 多步工具执行器（Brief 28 · Path C，function_calling 模型专用，默认关） | `core/tool_dispatcher.py` → `tool_loop_active(uid)`；`core/pipeline.py` → `run_agentic_loop()`；`core/llm_client.py` → `chat_turn()`；配置 `config.tool_loop`；设置接口 `admin/routers/settings_tool_loop.py` |
+| tool loop 多步工具执行器（Path C，function_calling 模型专用） | `core/tool_dispatcher.py` → `tool_loop_active(uid)`；`core/pipeline.py` → `run_agentic_loop()`；全局 `config.tool_loop.enabled` 默认关，活跃角色卡可用 `presence_ext.tool_loop: "on"|"off"` 覆盖；设置接口 `admin/routers/settings_tool_loop.py` |
 | MCP（Model Context Protocol）外部工具客户端（Brief 29 · 4，只接工具不接 resources/prompts/记忆库，默认关） | `core/mcp_client.py`（`init_mcp_servers()` / `shutdown_mcp_servers()`）；配置 `config.mcp_servers`；工具只经 tool loop 暴露 |
 | per-char 兼容钩子（Brief 29 · "本我"模式：注入过滤/路由/发言闸门/工具暴露面） | 角色卡 `presence_ext` 块 → `core/character_loader.py`（解析 + `is_proactive_disabled()`）；消费点分别在 `core/prompt_ablation.py` / `core/model_registry.py` / `core/scheduler/gating.py`+`execution.py` / `core/pipeline.py::run_agentic_loop()`；示例卡 `examples/benwo.example.json`（`characters/` 根目录不放模板/示例文件，见 `tests/test_authored_assets.py`） |
 | speaker-aware history + 风格脱敏 | `core/memory/short_term.py` → `speaker_id` / `_group_turns()` / `_sanitize_assistant_message()` |
@@ -237,4 +241,3 @@ python tests/run_eval.py             # validate prompt tag/layer activation afte
 ## 设置控制面文档
 
 修改模型路由、TTS、scheduler、relay、thinking、tool loop 或高级功能开关时，必须同步 docs/feature-control-surface.md 与客户端的设置审计文档。
-

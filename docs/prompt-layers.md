@@ -8,12 +8,12 @@
 
 | 层标识 | 内容 | 触发条件 | 数据来源 |
 |---|---|---|---|
-| `0_jailbreak` | 破限预设 layer=0 | 文件存在且 enabled | stems（`jailbreaks/{stem}.json`，受 `enabled_jailbreaks` 控制）+ `characters/reality/jailbreak_entries.json`，按内容去重合并 |
-| `1_system_prompt` | 角色存在性定义 + 情绪软提示 + `{perception_block}` 槽位 | always | `characters/yexuan.json` + `core/mood_text.py` |
+| `0_jailbreak` | 破限预设 layer=0 | 文件存在且 enabled | stems（`jailbreaks/{stem}.json`，受 `enabled_jailbreaks` 控制）+ `get_paths().jailbreak_entries()`；production 主路径为 `userdata/characters/reality/`，按内容去重合并 |
+| `1_system_prompt` | 角色存在性定义 + 情绪软提示 + `{perception_block}` 槽位 | always | 当前角色卡（由 `AssetRegistry` / character loader 解析）+ `core/mood_text.py` |
 | `1.5_fact_boundary` | 数据驱动单句：有实时感知数据时给出数据 + "仅以上为已确认，其余未知"；无数据时注入禁令句（物品/食物/天气等一律未知） | always | `_format_realtime_awareness()` 结果条件注入（`core/prompt_builder.py`） |
 | `2_char_desc` | 角色描述 + 性格 + 情境 | always | 角色卡 |
 | `2.2_stage_presence` | 群聊在场成员与公开发言提醒 | reality Stage 角色生成时 | `core/stage/context.py` |
-| `2_jailbreak` | 破限预设 layer=2 | 文件存在且 enabled | stems + `characters/reality/jailbreak_entries.json`，按内容去重合并 |
+| `2_jailbreak` | 破限预设 layer=2 | 文件存在且 enabled | stems + `get_paths().jailbreak_entries()`，按内容去重合并 |
 | `2.5_time` | 当前时间（年月日 时:分 星期X） | always | 实时生成 |
 | `2.55_last_seen` | 用户上一条消息距现在的精确时间差（如"约3小时12分钟"） | 非静默时段 且 gap ≥ 6 小时 | `core/presence.py` → `get_gap_from_history()` + `format_gap_text()` |
 | `2.6_presence` | 他此刻的 ambient presence 状态 | 对话开头（history 为空）或沉默超10分钟 | `activity_manager.get_prompt_fragment(char_id=char_id)`；不是 `core/activity/` 的共玩会话。每15-45分钟随机切换；近20h确有 practice 时按 `presence.growth_activity_prob` 混入「在练X」，否则走静态池。若同轮触发 `3.8_growth_self`，growth 来源的 2.6 让位，避免重复 |

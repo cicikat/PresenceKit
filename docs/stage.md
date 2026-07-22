@@ -48,6 +48,9 @@ data/runtime/groups/{group_id}/
 1. 读取 active Stage，追加 owner 发言。
 2. **Phase A**（直接回应）：对未发言角色逐条重算，产生 `min_responders..max_responders`
    条直接回应，走全量 `fetch_context()`——对 owner 的回应值得全套记忆。
+   空白或校验失败的生成不计入 responder；若第一轮全部落空而仍未达到 `min_responders`，会按最新
+   排名对最佳候选额外重试一次（`triggered_by="user_retry"`），避免瞬态 provider/validator 故障
+   静默吞掉一整轮。
 3. **Phase B**（自主续聊）：每条后重算，最多产生 `max_ai_chain_depth` 条续聊；使用
    `StageCharacterView` 的**轻量 prompt 视图**（只带角色卡核心层 + 群在场感 + transcript
    尾部 ≤12 条，跳过 episodic/mid_term/diary/lore/history/relation/profile 检索），并注入

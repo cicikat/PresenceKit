@@ -44,6 +44,9 @@ scope；只读端点通常允许对应的 read scope。
 | GET/POST/PUT/PATCH | `/llm-params`、`/vision-params`、`/model-presets/*`、`/context-config`、`/chat-*`、`/proxy`、`/settings/*` | settings | 管理面设置 |
 | GET/POST/PUT/PATCH/DELETE | `/system/*`、`/hardware/*` | admin / hardware | 管理面运维、设备控制 |
 | GET | `/observe/*`、`/debug/recall`、`/provenance/*`、`/hidden-state/*` | observe | 管理面与桌面客户端诊断；`/debug/recall?uid=` 是 recall trace 兼容入口 |
+| GET | `/observability/api-calls`、`/observability/perceive-events` | state.read | 外部 API 调用总账、reality stimulus 审计；均为只读查询 |
+| GET | `/perception/visual-trace` | state.read | 本地 VLM shadow 观察（不含原图，不进入 prompt/记忆） |
+| GET/PUT/POST | `/tts-config`、`/tts-config/test` | admin | TTS provider 安全配置与已就绪 provider 的试听 |
 | GET/POST/PATCH/DELETE | `/auth/*` | auth | Token 管理页 |
 | GET/POST/PATCH/DELETE | `/group/*` | group | Stage 群聊管理 |
 
