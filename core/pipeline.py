@@ -1362,15 +1362,15 @@ class Pipeline:
                 import random
                 _tts_enabled = _cfg().get("tts", {}).get("enabled", False)
                 _tts_prob = _cfg().get("tts", {}).get("probability", 0.3)
-                _sticker_prob = 0.06
-                _roll = random.random()
-                if _tts_enabled and _roll < _tts_prob:
+                if _tts_enabled and random.random() < _tts_prob:
                     asyncio.create_task(self._send_tts(reply, target_id, is_group, emotion=_emotion))
-                elif _roll < _tts_prob + _sticker_prob:
-                    from core.output.sticker import maybe_send_sticker
-                    asyncio.create_task(
-                        maybe_send_sticker(reply, target_id, is_group, emotion=_emotion)
-                    )
+                # Sticker owns its own enabled/probability gates.  Do not share
+                # TTS's dice roll: otherwise TTS can suppress configured sticker
+                # probabilities before maybe_send_sticker gets a chance to apply them.
+                from core.output.sticker import maybe_send_sticker
+                asyncio.create_task(
+                    maybe_send_sticker(reply, target_id, is_group, emotion=_emotion)
+                )
             except Exception as e:
                 log_error("pipeline.post_process.tts_sticker", e)
 

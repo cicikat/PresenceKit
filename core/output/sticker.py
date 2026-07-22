@@ -83,6 +83,9 @@ async def maybe_send_sticker(reply: str, target_id: str, is_group: bool = False,
 
         path = _pick_sticker(folder_emotion)
         if not path:
+            from core.sandbox import get_paths
+            folder = get_paths().stickers_dir() / folder_emotion
+            logger.info("[sticker] 目录无可用图片: %s", folder)
             return
 
         from core.qq_adapter import send_image

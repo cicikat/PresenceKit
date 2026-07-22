@@ -63,6 +63,20 @@ async def test_sticker_zero_probability_never_sends(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_sticker_logs_selected_folder_when_probability_hits_without_image(monkeypatch, caplog):
+    from core.output import sticker
+
+    monkeypatch.setattr(sticker, "get_config", lambda: {"sticker": {"enabled": True, "trigger_prob": 1.0}})
+    monkeypatch.setattr(sticker.random, "random", lambda: 0.0)
+    monkeypatch.setattr(sticker, "_pick_sticker", lambda emotion: None)
+
+    with caplog.at_level("INFO", logger="core.output.sticker"):
+        await sticker.maybe_send_sticker("reply", "owner-1", emotion="happy")
+
+    assert "[sticker] 目录无可用图片:" in caplog.text
+
+
+@pytest.mark.asyncio
 async def test_sticker_payload_reaches_desktop_ws_and_mobile_queue(sandbox, monkeypatch):
     from channels import desktop_ws
     from channels.mobile import MobileChannel
