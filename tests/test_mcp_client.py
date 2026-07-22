@@ -54,8 +54,10 @@ def _clean_registry_and_servers(monkeypatch):
     """隔离真实 _TOOL_REGISTRY / _servers，测试结束后还原。"""
     monkeypatch.setattr(td, "_TOOL_REGISTRY", dict(td._TOOL_REGISTRY))
     mc._servers.clear()
+    mc._server_status.clear()
     yield
     mc._servers.clear()
+    mc._server_status.clear()
 
 
 async def _noop_transport(stack, server_cfg):
@@ -157,6 +159,41 @@ class TestInitMcpServers:
         assert "bad" not in mc._servers
         assert "good" in mc._servers
 
+    async def test_per_server_disabled_is_skipped(self, monkeypatch):
+        monkeypatch.setattr("core.config_loader.get_config", lambda: {
+            "mcp_servers": {"enabled": True, "servers": [
+                {"name": "off", "enabled": False, "transport": "stdio", "command": ["fake"]},
+            ]}
+        })
+        await mc.init_mcp_servers()
+        assert mc._servers == {}
+
+
+class TestHttpHeadersAndProbe:
+    def test_headers_expand_environment_variables(self, monkeypatch):
+        monkeypatch.setenv("MCP_TEST_TOKEN", "secret-value")
+        assert mc._expand_headers({"Authorization": "Bearer ${MCP_TEST_TOKEN}"}) == {
+            "Authorization": "Bearer secret-value",
+        }
+
+    def test_headers_missing_environment_variable_fails_closed(self, monkeypatch):
+        monkeypatch.delenv("MCP_MISSING_TOKEN", raising=False)
+        with pytest.raises(ValueError, match="MCP_MISSING_TOKEN"):
+            mc._expand_headers({"Authorization": "Bearer ${MCP_MISSING_TOKEN}"})
+
+    async def test_probe_lists_tools_without_registering_them(self, monkeypatch):
+        session = _FakeSession()
+        session.tools_result = SimpleNamespace(tools=[
+            SimpleNamespace(name="inspect", description="inspect status", inputSchema={}),
+        ])
+        monkeypatch.setattr(mc, "_open_transport", _noop_transport)
+        _patch_client_session(monkeypatch, session)
+
+        tools = await mc.test_server_config({"name": "remote", "transport": "http", "url": "https://x/mcp"})
+
+        assert tools == [{"name": "inspect", "description": "inspect status"}]
+        assert "mcp__remote__inspect" not in td._TOOL_REGISTRY
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # _call_tool: 成功截断、isError 抛错、断线重连一次
@@ -240,6 +277,19 @@ class TestCallTool:
     async def test_unknown_server_raises(self):
         with pytest.raises(RuntimeError):
             await mc._call_tool("does-not-exist", "toolA", {}, 5)
+
+    async def test_call_is_written_to_api_ledger_without_arguments(self, monkeypatch):
+        session = _FakeSession(call_results=[
+            SimpleNamespace(content=[SimpleNamespace(text="ok")], isError=False),
+        ])
+        self._install_handle("srv1", session)
+        rows = []
+        monkeypatch.setattr("core.api_call_log.append", lambda **kwargs: rows.append(kwargs))
+
+        assert await mc._call_tool("srv1", "toolA", {"secret": "never-log"}, 5) == "ok"
+        assert rows[0]["caller"] == "mcp__srv1__toolA"
+        assert "secret" not in str(rows[0])
+        assert mc.server_runtime("srv1")["last_call_ok"] is True
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -19,15 +19,21 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import re
+import time
 from contextlib import AsyncExitStack
 from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
 
 _RESULT_CHAR_CAP = 2000
+_ENV_REF_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 
 # server_name → handle；进程内单例，main.py 启动时填充，关闭时清空。
 _servers: dict[str, "_ServerHandle"] = {}
+# 管理面读取的运行态；不落盘，进程重启后自然回到“尚未尝试”。
+_server_status: dict[str, dict] = {}
 
 
 @dataclass
@@ -37,11 +43,76 @@ class _ServerHandle:
     stack: AsyncExitStack
     session: object  # mcp.ClientSession，延迟导入避免模块级依赖未安装时报错
     tool_names: list[str] = field(default_factory=list)
+    tool_details: list[dict] = field(default_factory=list)
 
 
 def _get_mcp_config() -> dict:
     from core.config_loader import get_config
     return get_config().get("mcp_servers", {}) or {}
+
+
+def _expand_headers(raw_headers: object) -> dict[str, str] | None:
+    """展开 HTTP MCP headers 中的 ${ENV_VAR}，缺失变量 fail-closed。"""
+    if raw_headers is None:
+        return None
+    if not isinstance(raw_headers, dict):
+        raise ValueError("headers 必须是字符串键值对象")
+    resolved: dict[str, str] = {}
+    for key, value in raw_headers.items():
+        if not isinstance(key, str) or not key.strip() or not isinstance(value, str):
+            raise ValueError("headers 的键和值都必须是非空字符串")
+
+        def _replace(match: re.Match[str]) -> str:
+            env_name = match.group(1)
+            env_value = os.environ.get(env_name)
+            if env_value is None:
+                raise ValueError(f"headers 环境变量未设置: {env_name}")
+            return env_value
+
+        resolved[key.strip()] = _ENV_REF_RE.sub(_replace, value)
+    return resolved
+
+
+def _tool_details(listed) -> list[dict]:
+    return [
+        {"name": str(tool.name), "description": str(tool.description or "")}
+        for tool in (getattr(listed, "tools", None) or [])
+        if getattr(tool, "name", None)
+    ]
+
+
+def _record_init(name: str, *, ok: bool, error: str = "", tools: list[dict] | None = None) -> None:
+    state = _server_status.setdefault(name, {})
+    state.update({
+        "last_init_ts": time.time(),
+        "last_init_ok": bool(ok),
+        "last_init_error": str(error)[:300],
+    })
+    if tools is not None:
+        state["tools"] = tools
+
+
+def _record_call(name: str, tool_name: str, *, ok: bool, error: str = "") -> None:
+    _server_status.setdefault(name, {}).update({
+        "last_call_ts": time.time(),
+        "last_call_ok": bool(ok),
+        "last_call_tool": tool_name,
+        "last_call_error": str(error)[:300],
+    })
+
+
+def server_runtime(name: str) -> dict:
+    """返回不含配置密钥的单 server 运行状态，供 settings_mcp 只读展示。"""
+    state = dict(_server_status.get(name, {}))
+    handle = _servers.get(name)
+    state["connected"] = handle is not None
+    if handle is not None:
+        state["tools"] = list(handle.tool_details)
+        state["registered_tools"] = list(handle.tool_names)
+    else:
+        state.setdefault("tools", [])
+        state["registered_tools"] = []
+    return state
 
 
 async def init_mcp_servers() -> None:
@@ -65,6 +136,8 @@ async def init_mcp_servers() -> None:
         if not name:
             logger.warning("[mcp_client] server 配置缺少 name，跳过: %s", server_cfg)
             continue
+        if not server_cfg.get("enabled", True):
+            continue
         try:
             await _connect_server(name, server_cfg)
         except Exception as e:
@@ -87,7 +160,10 @@ async def _open_transport(stack: AsyncExitStack, server_cfg: dict):
         url = server_cfg.get("url")
         if not url:
             raise ValueError("http transport 需要 url")
-        read, write, _get_session_id = await stack.enter_async_context(streamablehttp_client(url))
+        headers = _expand_headers(server_cfg.get("headers"))
+        read, write, _get_session_id = await stack.enter_async_context(
+            streamablehttp_client(url, headers=headers)
+        )
         return read, write
     raise ValueError(f"未知 transport: {transport!r}（只支持 stdio | http）")
 
@@ -102,13 +178,17 @@ async def _connect_server(name: str, server_cfg: dict) -> None:
         session = await stack.enter_async_context(ClientSession(read, write))
         await session.initialize()
         listed = await session.list_tools()
-    except Exception:
+    except Exception as exc:
         await stack.aclose()
+        _record_init(name, ok=False, error=str(exc))
         raise
 
     allow = set(server_cfg.get("allow_tools") or [])
     timeout_s = float(server_cfg.get("tool_timeout_s", 30))
-    handle = _ServerHandle(name=name, cfg=server_cfg, stack=stack, session=session)
+    details = _tool_details(listed)
+    handle = _ServerHandle(
+        name=name, cfg=server_cfg, stack=stack, session=session, tool_details=details,
+    )
 
     for tool in listed.tools:
         if allow and tool.name not in allow:
@@ -129,7 +209,26 @@ async def _connect_server(name: str, server_cfg: dict) -> None:
         handle.tool_names.append(reg_name)
 
     _servers[name] = handle
+    _record_init(name, ok=True, tools=details)
     logger.info("[mcp_client] server '%s' 已连接，注册 %d 个工具", name, len(handle.tool_names))
+
+
+async def test_server_config(server_cfg: dict) -> list[dict]:
+    """连接并 list_tools 后立即关闭，供 URL 导入的提交前探测使用。"""
+    try:
+        import mcp  # noqa: F401 — 与 init 保持同一 SDK 前置条件
+    except ImportError as exc:
+        raise RuntimeError("未安装 mcp SDK，无法测试 MCP server") from exc
+
+    stack = AsyncExitStack()
+    try:
+        read, write = await _open_transport(stack, server_cfg)
+        from mcp import ClientSession
+        session = await stack.enter_async_context(ClientSession(read, write))
+        await session.initialize()
+        return _tool_details(await session.list_tools())
+    finally:
+        await stack.aclose()
 
 
 def _make_tool_func(server_name: str, tool_name: str, timeout_s: float):
@@ -142,20 +241,39 @@ async def _call_tool(server_name: str, tool_name: str, arguments: dict, timeout_
     handle = _servers.get(server_name)
     if handle is None:
         raise RuntimeError(f"MCP server '{server_name}' 未连接")
+    started = time.perf_counter()
     try:
-        result = await asyncio.wait_for(
-            handle.session.call_tool(tool_name, arguments), timeout=timeout_s
+        try:
+            result = await asyncio.wait_for(
+                handle.session.call_tool(tool_name, arguments), timeout=timeout_s
+            )
+        except Exception as exc:
+            logger.warning("[mcp_client] 调用 %s.%s 失败，尝试重连一次: %s", server_name, tool_name, exc)
+            await _reconnect_server(server_name)
+            handle = _servers.get(server_name)
+            if handle is None:
+                raise
+            result = await asyncio.wait_for(
+                handle.session.call_tool(tool_name, arguments), timeout=timeout_s
+            )
+        text = _format_result(result)
+    except Exception as exc:
+        _record_call(server_name, tool_name, ok=False, error=str(exc))
+        from core.api_call_log import append as append_api_call
+        append_api_call(
+            caller=f"mcp__{server_name}__{tool_name}", purpose="mcp_tool", provider=server_name,
+            model=tool_name, duration_ms=int((time.perf_counter() - started) * 1000), ok=False,
+            output_hint="MCP call failed",
         )
-    except Exception as e:
-        logger.warning("[mcp_client] 调用 %s.%s 失败，尝试重连一次: %s", server_name, tool_name, e)
-        await _reconnect_server(server_name)
-        handle = _servers.get(server_name)
-        if handle is None:
-            raise
-        result = await asyncio.wait_for(
-            handle.session.call_tool(tool_name, arguments), timeout=timeout_s
-        )
-    return _format_result(result)
+        raise
+    _record_call(server_name, tool_name, ok=True)
+    from core.api_call_log import append as append_api_call
+    append_api_call(
+        caller=f"mcp__{server_name}__{tool_name}", purpose="mcp_tool", provider=server_name,
+        model=tool_name, duration_ms=int((time.perf_counter() - started) * 1000), ok=True,
+        output_hint="MCP call succeeded",
+    )
+    return text
 
 
 def _format_result(result) -> str:
@@ -174,6 +292,19 @@ def _format_result(result) -> str:
 
 async def _reconnect_server(name: str) -> None:
     """断线重连一次（不做后台心跳）：先摘除旧 handle 与其注册的工具条目，再重新连接。"""
+    handle = _servers.get(name)
+    if handle is None:
+        return
+    cfg = handle.cfg
+    await disconnect_server(name)
+    try:
+        await _connect_server(name, cfg)
+    except Exception as e:
+        logger.warning("[mcp_client] server '%s' 重连失败: %s", name, e)
+
+
+async def disconnect_server(name: str) -> None:
+    """摘除一个运行中 server 及其动态工具；配置文件不受影响。"""
     handle = _servers.pop(name, None)
     if handle is None:
         return
@@ -182,19 +313,44 @@ async def _reconnect_server(name: str) -> None:
         _TOOL_REGISTRY.pop(reg_name, None)
     try:
         await handle.stack.aclose()
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("[mcp_client] server '%s' 关闭时出错: %s", name, exc)
+
+
+async def reload_server_from_config(name: str) -> None:
+    """只重启被管理面改动的一个 server，避免扰动其他 MCP session。"""
+    cfg = _get_mcp_config()
+    server_cfg = next((item for item in (cfg.get("servers") or []) if item.get("name") == name), None)
+    await disconnect_server(name)
+    if not cfg.get("enabled", False) or not server_cfg or not server_cfg.get("enabled", True):
+        return
     try:
-        await _connect_server(name, handle.cfg)
-    except Exception as e:
-        logger.warning("[mcp_client] server '%s' 重连失败: %s", name, e)
+        await _connect_server(name, server_cfg)
+    except Exception as exc:
+        logger.warning("[mcp_client] server '%s' 热重载失败: %s", name, exc)
+
+
+async def sync_mcp_servers() -> None:
+    """按当前配置同步运行态，供总开关热切换使用。"""
+    cfg = _get_mcp_config()
+    desired = {
+        item.get("name"): item
+        for item in (cfg.get("servers") or [])
+        if item.get("name") and item.get("enabled", True) and cfg.get("enabled", False)
+    }
+    for name in list(_servers):
+        if name not in desired:
+            await disconnect_server(name)
+    for name, server_cfg in desired.items():
+        if name in _servers:
+            await disconnect_server(name)
+        try:
+            await _connect_server(name, server_cfg)
+        except Exception as exc:
+            logger.warning("[mcp_client] server '%s' 同步失败: %s", name, exc)
 
 
 async def shutdown_mcp_servers() -> None:
     """进程退出时清理全部 server session（main.py finally 块调用）。"""
-    for name, handle in list(_servers.items()):
-        try:
-            await handle.stack.aclose()
-        except Exception as e:
-            logger.debug("[mcp_client] server '%s' 关闭时出错: %s", name, e)
-    _servers.clear()
+    for name in list(_servers):
+        await disconnect_server(name)

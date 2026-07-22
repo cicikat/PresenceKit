@@ -359,6 +359,9 @@ mcp_servers:
     #   transport: stdio            # stdio | http（streamable http）
     #   command: ["npx", "-y", "@modelcontextprotocol/server-filesystem", "D:/some/dir"]
     #   # http 时用: url: https://your-mcp-server.example/mcp
+    #   # 可选 HTTP 鉴权头；支持 ${ENV_VAR} 展开，勿在示例/文档写入真实 token
+    #   # headers: {Authorization: "Bearer ${MCP_SERVER_TOKEN}"}
+    #   enabled: true             # per-server 开关；总开关仍由 mcp_servers.enabled 控制
     #   tool_timeout_s: 30
     #   allow_tools: []              # 空 = 全部；非空 = 白名单
 

@@ -62,4 +62,7 @@ async def update_feature_flags(body: FeatureFlagsUpdate, auth=Depends(require_sc
         raise HTTPException(status_code=500, detail=f"保存功能开关失败: {exc}") from exc
     from core import config_loader
     config_loader.reload_config()
+    if "mcp_servers" in body.flags:
+        from core import mcp_client
+        await mcp_client.sync_mcp_servers()
     return await get_feature_flags(auth)

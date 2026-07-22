@@ -135,6 +135,8 @@ mcp_servers:
       transport: stdio            # stdio | http（streamable http）
       command: ["npx", "-y", "@modelcontextprotocol/server-filesystem", "D:/some/dir"]
       # http 时用: url: https://your-mcp-server.example/mcp
+      # headers: {Authorization: "Bearer ${MCP_SERVER_TOKEN}"}  # 可选；stdio 忽略
+      enabled: true                 # 单 server 开关（默认 true）
       tool_timeout_s: 30
       allow_tools: []              # 空 = 全部；非空 = 白名单
 ```
@@ -143,6 +145,11 @@ mcp_servers:
   `ClientSession` + `list_tools()`；单 server 初始化失败只跳过它（log + 继续），不影响其他
   server 或主流程。进程退出时 `main.py` 的 `finally` 块调 `shutdown_mcp_servers()` 清理全部
   session。
+- **管理面**（Brief 110）：admin token 可在 MCP 页测试 Streamable HTTP URL（`initialize +
+  list_tools`）、导入 server、切换总/单 server 开关和勾选 `allow_tools` 白名单。导入前的测试
+  不注册工具也不写配置；保存后总开关走 `sync_mcp_servers()`，单 server 走定点热重载。HTTP
+  `headers` 的 `${ENV_VAR}` 会在连接时展开，缺失环境变量即连接失败；管理面仅显示环境变量
+  占位符或“已配置”，不回显字面 token。
 - **工具注册**：转成 `_TOOL_REGISTRY` 动态条目，命名 `mcp__{server}__{tool}`，
   `category="mcp"`，description/inputSchema 直接映射为 OpenAI function schema。与静态注册表
   同名冲突时 MCP 侧让位（记 warning，不覆盖）。
@@ -152,6 +159,9 @@ mcp_servers:
   既有的失败兜底文案（不是 mcp_client 自己造文案）。**不做后台心跳**，只在调用时才发现断线。
 - **action_trace 自动生效**：收口埋点在 `tool_dispatcher.execute()`，MCP 工具零新增记账代
   码；注册条目不声明 `trace_args`，参数不落痕（防外部 server 的敏感入参入盘）。
+- **调用观测**：每次 MCP 工具调用额外写入既有 `api_call_log`，caller 固定为
+  `mcp__{server}__{tool}`，只记录成功/失败、时长与无敏感的结果提示，不记录 arguments 或
+  外部返回正文；管理面按工具展示最近一条调用记录。
 - **探针不覆盖 mcp 类**：`get_probe_prompt()` 只拼 info/desktop 两类，MCP 工具只经 tool
   loop（Path C）暴露——角色卡 `presence_ext.tool_categories` 不含 `"mcp"` 就永远看不到这
   些工具，这是"本我接 MCP、角色扮演不受影响"的实现方式。
