@@ -51,7 +51,7 @@ from admin.routers import (
     hidden_state_debug, hardware, observe,
     group, group_dream, relationship_facts,
     transcribe, provenance,
-    auth_tokens, coplay, perception, spend, growth,
+    auth_tokens, coplay, perception, spend, growth, observability,
 )
 
 # chess 路由依赖 python-chess（requirements-full.txt 的可选依赖，见 cc-tasks/92 §1），
@@ -107,6 +107,7 @@ app.include_router(coplay.router,              prefix="", tags=["陪玩"])
 app.include_router(perception.router,           prefix="", tags=["视觉感知"])
 app.include_router(spend.router,                prefix="", tags=["支出台账"])
 app.include_router(growth.router,               prefix="", tags=["成长观测"])
+app.include_router(observability.router,        prefix="", tags=["观测"])
 
 # ── 桌宠端 WebSocket 端点 ─────────────────────────────────────────────────────
 from fastapi import WebSocket as _WebSocket

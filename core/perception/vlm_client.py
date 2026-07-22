@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
@@ -72,6 +73,7 @@ async def describe_with_status(image_bytes: bytes, context_hint: str = "") -> tu
         logger.warning("[vlm] enabled but base_url/model missing provider=%s", cfg.get("provider"))
         return None, "error"
     try:
+        started_at = time.perf_counter()
         import aiohttp
         import base64
         payload = {
@@ -97,11 +99,17 @@ async def describe_with_status(image_bytes: bytes, context_hint: str = "") -> tu
         else:
             observation = _parse_observation(content)
         if observation is None:
+            from core.api_call_log import append
+            append(caller="visual_perception", purpose="shadow_observation", provider=str(cfg.get("provider") or "openai_compatible"), model=model, duration_ms=int((time.perf_counter() - started_at) * 1000), ok=False, output_hint="invalid_response")
             logger.warning("[vlm] observation response rejected as invalid model=%s", model)
             return None, "invalid"
+        from core.api_call_log import append
+        append(caller="visual_perception", purpose="shadow_observation", provider=str(cfg.get("provider") or "openai_compatible"), model=model, duration_ms=int((time.perf_counter() - started_at) * 1000), ok=True)
         logger.info("[vlm] initialized provider=%s model=%s", cfg.get("provider"), model)
         return observation, None
     except Exception as exc:
+        from core.api_call_log import append
+        append(caller="visual_perception", purpose="shadow_observation", provider=str(cfg.get("provider") or "openai_compatible"), model=model, duration_ms=int((time.perf_counter() - started_at) * 1000), ok=False, output_hint=type(exc).__name__)
         logger.warning("[vlm] describe failed: %s", exc)
         return None, "error"
 

@@ -7,6 +7,7 @@ HTTP endpoints directly — import embed() from here instead.
 from __future__ import annotations
 
 import logging
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +60,7 @@ async def _embed_openai_compat(texts: list[str], cfg: dict) -> list[list[float]]
 
     client = AsyncOpenAI(base_url=base_url, api_key=api_key)
     results: list[list[float]] = []
+    started_at = time.perf_counter()
     try:
         for i in range(0, len(texts), batch_size):
             batch = texts[i : i + batch_size]
@@ -67,5 +69,9 @@ async def _embed_openai_compat(texts: list[str], cfg: dict) -> list[list[float]]
     except EmbeddingUnavailable:
         raise
     except Exception as e:
+        from core.api_call_log import append
+        append(caller="embedding", purpose="encode", provider="openai_compat", model=model, duration_ms=int((time.perf_counter() - started_at) * 1000), ok=False, output_hint=type(e).__name__)
         raise EmbeddingUnavailable(f"embedding API call failed: {e}") from e
+    from core.api_call_log import append
+    append(caller="embedding", purpose="encode", provider="openai_compat", model=model, duration_ms=int((time.perf_counter() - started_at) * 1000), ok=True, output_hint=f"{len(texts)}_texts")
     return results

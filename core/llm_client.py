@@ -31,12 +31,42 @@ logger = logging.getLogger(__name__)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
-def _log_completed_call(*, model: str, purpose: str, started_at: float) -> None:
+def _record_api_call(
+    *,
+    provider: str,
+    model: str,
+    purpose: str,
+    started_at: float,
+    ok: bool,
+    output_hint: str = "",
+) -> None:
+    from core.api_call_log import append
+
+    append(
+        caller="llm_client",
+        purpose=purpose,
+        provider=provider,
+        model=model,
+        duration_ms=int((time.perf_counter() - started_at) * 1000),
+        ok=ok,
+        output_hint=output_hint,
+    )
+
+
+def _log_completed_call(*, provider: str, model: str, purpose: str, started_at: float) -> None:
+    duration_ms = int((time.perf_counter() - started_at) * 1000)
     logger.info(
         "[llm_client] 对话 API 调用 model=%s purpose=%s duration_ms=%d",
         model,
         purpose,
-        int((time.perf_counter() - started_at) * 1000),
+        duration_ms,
+    )
+    _record_api_call(
+        provider=provider,
+        model=model,
+        purpose=purpose,
+        started_at=started_at,
+        ok=True,
     )
 
 # Vision client is kept as a separate singleton; it does not participate in
@@ -154,9 +184,22 @@ async def chat(
                     max_tokens=1000,
                     timeout=_CALL_TIMEOUTS["vision"],
                 )
-                _log_completed_call(model=str(vision_cfg.get("model") or ""), purpose="vision", started_at=started_at)
+                _log_completed_call(
+                    provider=str(vision_cfg.get("provider") or "vision"),
+                    model=str(vision_cfg.get("model") or ""),
+                    purpose="vision",
+                    started_at=started_at,
+                )
                 return response.choices[0].message.content or ""
             except Exception as e:
+                _record_api_call(
+                    provider=str(vision_cfg.get("provider") or "vision"),
+                    model=str(vision_cfg.get("model") or ""),
+                    purpose="vision",
+                    started_at=started_at,
+                    ok=False,
+                    output_hint=type(e).__name__,
+                )
                 log_error("llm_client.chat.vision", e)
                 return ""
 
@@ -204,9 +247,9 @@ async def chat(
                         "name": tc.function.name,
                         "arguments": json.loads(tc.function.arguments),
                     })
-                _log_completed_call(model=model, purpose=call_category, started_at=started_at)
+                _log_completed_call(provider=mc.provider_kind, model=model, purpose=call_category, started_at=started_at)
                 return "__TOOL_CALL__:" + json.dumps(tool_calls, ensure_ascii=False)
-            _log_completed_call(model=model, purpose=call_category, started_at=started_at)
+            _log_completed_call(provider=mc.provider_kind, model=model, purpose=call_category, started_at=started_at)
             return thinking.strip_think_tags(choice.message.content) or ""
 
         # ── xml_fallback 模式（不支持 FC 的模型）────────────────────────────
@@ -230,7 +273,7 @@ async def chat(
                 messages=msgs,
                 **_gen_kwargs,
             )
-            _log_completed_call(model=model, purpose=call_category, started_at=started_at)
+            _log_completed_call(provider=mc.provider_kind, model=model, purpose=call_category, started_at=started_at)
             return thinking.strip_think_tags(response.choices[0].message.content) or ""
 
         # ── 普通对话（无工具）────────────────────────────────────────────────
@@ -240,10 +283,18 @@ async def chat(
                 messages=messages,
                 **_gen_kwargs,
             )
-            _log_completed_call(model=model, purpose=call_category, started_at=started_at)
+            _log_completed_call(provider=mc.provider_kind, model=model, purpose=call_category, started_at=started_at)
             return thinking.strip_think_tags(response.choices[0].message.content) or ""
 
     except Exception as e:
+        _record_api_call(
+            provider=mc.provider_kind,
+            model=model,
+            purpose=call_category,
+            started_at=started_at,
+            ok=False,
+            output_hint=type(e).__name__,
+        )
         log_error(f"llm_client.chat[{call_category}]", e)
         raise
 
@@ -312,6 +363,7 @@ async def chat_turn(
             f"{mc.tool_call_mode!r}，chat_turn 仅支持 function_calling"
         )
 
+    started_at = time.perf_counter()
     try:
         response = await mc.client.chat.completions.create(
             model=mc.model,
@@ -321,8 +373,23 @@ async def chat_turn(
             **gen_kwargs,
         )
     except Exception as e:
+        _record_api_call(
+            provider=mc.provider_kind,
+            model=mc.model,
+            purpose=call_category,
+            started_at=started_at,
+            ok=False,
+            output_hint=type(e).__name__,
+        )
         log_error(f"llm_client.chat_turn[{call_category}]", e)
         raise
+
+    _log_completed_call(
+        provider=mc.provider_kind,
+        model=mc.model,
+        purpose=call_category,
+        started_at=started_at,
+    )
 
     choice = response.choices[0]
     message = choice.message

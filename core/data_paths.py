@@ -195,6 +195,10 @@ class DataPaths:
         """Brief 56 shadow-only VLM observation trace (never stores images)."""
         return self._p("runtime", "perception", "visual_trace.jsonl")
 
+    def api_call_log(self) -> Path:
+        """Fail-open external API observability ledger, rotated by the writer."""
+        return self._p("runtime", "observability", "api_calls.jsonl")
+
     def spend_ledger(self) -> Path:
         """Brief 57 append-only spending mandate ledger."""
         return self._p("runtime", "spend", "ledger.jsonl")
