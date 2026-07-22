@@ -141,6 +141,12 @@ async def update_sticker_config(body: StickerConfigUpdate, auth=Depends(require_
 async def get_tts_config(auth=Depends(require_scopes("admin"))):
     cfg = get_config().get("tts", {})
     from core.output.voice_adapter import get_provider_status, get_safe_provider_params
+    provider_blocks = cfg.get("providers") if isinstance(cfg.get("providers"), dict) else {}
+    safe_provider_blocks = {
+        str(name): {key: value for key, value in dict(params or {}).items() if key != "api_key"}
+        for name, params in provider_blocks.items()
+        if isinstance(params, dict)
+    }
     return {
         "enabled":         cfg.get("enabled",         False),
         "desktop_enabled": cfg.get("desktop_enabled", False),
@@ -152,6 +158,7 @@ async def get_tts_config(auth=Depends(require_scopes("admin"))):
         "emotions":        cfg.get("emotions",        {}),
         "provider":        get_provider_status(cfg)["provider"],
         "provider_params": get_safe_provider_params(cfg),
+        "provider_params_by_provider": safe_provider_blocks,
         "provider_status": get_provider_status(cfg),
         "available_providers": [
             {"id": "gsv", "label": "GPT-SoVITS / GSV", "active": True},

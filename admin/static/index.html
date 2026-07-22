@@ -828,7 +828,7 @@ textarea { resize: vertical; min-height: 72px; }
             <input type="checkbox" id="tts-emotion-enabled" style="width:16px;height:16px;accent-color:var(--accent)"><span data-i18n="status.tts.emotion">情绪分档</span></label><label class="checkbox-row" style="gap:8px;font-size:14px"><input type="checkbox" id="tts-desktop-enabled" style="width:16px;height:16px;accent-color:var(--accent)"><span data-i18n="status.tts.desktop">桌面语音条</span></label>
         </div>
         <div class="form-row" style="max-width:640px">
-          <label class="field"><span>TTS Provider</span><select id="tts-provider"><option value="gsv">GPT-SoVITS / GSV</option><option value="openai_compatible">OpenAI-compatible / cloud (reserved)</option></select></label>
+          <label class="field"><span>TTS Provider</span><select id="tts-provider" onchange="onTtsProviderChange()"><option value="gsv">GPT-SoVITS / GSV</option><option value="openai_compatible" disabled>OpenAI-compatible / cloud (未实装)</option></select></label>
           <label class="field"><span>Provider status</span><input id="tts-provider-status" readonly></label>
         </div>
         <label class="field" style="max-width:640px"><span>Provider parameters (JSON; secret values are write-only)</span><textarea id="tts-provider-params" rows="4" placeholder='{"api_url":"..."}'></textarea></label>
@@ -4471,6 +4471,31 @@ async function saveScreenPeekSettings() {
   } catch (e) { toast(t('common.save_failed', '保存失败: {error}', {error: e.message}), 'err'); }
 }
 
+let _ttsProviderParamsByProvider = {};
+let _ttsLoadedProvider = 'gsv';
+
+function _renderTtsProvider(provider) {
+  const params = _ttsProviderParamsByProvider[provider] || {};
+  document.getElementById('tts-provider-params').value = JSON.stringify(params, null, 2);
+  document.getElementById('tts-api-url').value = params.api_url || '';
+  document.getElementById('tts-ref-audio').value = params.ref_audio || '';
+  document.getElementById('tts-prompt-text').value = params.prompt_text || '';
+  const speed = parseFloat(params.speed) || 1.0;
+  document.getElementById('tts-speed').value = speed;
+  document.getElementById('tts-speed-val').textContent = speed.toFixed(2);
+}
+
+function onTtsProviderChange() {
+  const next = document.getElementById('tts-provider').value;
+  if (next === _ttsLoadedProvider) return;
+  if (document.getElementById('tts-provider-params').value.trim() && !confirm('切换 Provider 会放弃当前未保存的参数编辑，继续吗？')) {
+    document.getElementById('tts-provider').value = _ttsLoadedProvider;
+    return;
+  }
+  _ttsLoadedProvider = next;
+  _renderTtsProvider(next);
+}
+
 async function loadTtsConfig() {
   loadRelaySettings();
   try {
@@ -4478,14 +4503,11 @@ async function loadTtsConfig() {
     document.getElementById('tts-enabled').checked = !!d.enabled;
     document.getElementById('tts-emotion-enabled').checked = !!d.emotion_enabled;
     document.getElementById('tts-desktop-enabled').checked = !!d.desktop_enabled;
-    document.getElementById('tts-api-url').value = d.api_url || '';
-    document.getElementById('tts-ref-audio').value = d.ref_audio || '';
-    document.getElementById('tts-prompt-text').value = d.prompt_text || '';
-    const speed = parseFloat(d.speed) || 1.0;
-    document.getElementById('tts-speed').value = speed;
-    document.getElementById('tts-speed-val').textContent = speed.toFixed(2);
     document.getElementById('tts-provider').value = d.provider || 'gsv';
-    document.getElementById('tts-provider-params').value = JSON.stringify(d.provider_params || {}, null, 2);
+    _ttsProviderParamsByProvider = d.provider_params_by_provider || {};
+    _ttsProviderParamsByProvider[d.provider || 'gsv'] = d.provider_params || {};
+    _ttsLoadedProvider = d.provider || 'gsv';
+    _renderTtsProvider(_ttsLoadedProvider);
     const s = d.provider_status || {};
     document.getElementById('tts-provider-status').value = s.ready ? 'ready' : (s.reason || 'not ready');
   } catch (e) { toast(t('status.tts.load_error', '读取 TTS 配置失败: {error}', {error: e.message}), 'err'); }
@@ -4494,6 +4516,12 @@ async function saveTtsConfig() {
   let providerParams;
   try { providerParams = JSON.parse(document.getElementById('tts-provider-params').value || '{}'); }
   catch (e) { toast('Provider parameters must be valid JSON', 'err'); return; }
+  const provider = document.getElementById('tts-provider').value;
+  if (provider === 'openai_compatible') { toast('该 TTS Provider 尚未实装，不能保存。', 'err'); return; }
+  providerParams.api_url = document.getElementById('tts-api-url').value.trim();
+  providerParams.ref_audio = document.getElementById('tts-ref-audio').value.trim();
+  providerParams.prompt_text = document.getElementById('tts-prompt-text').value.trim();
+  providerParams.speed = parseFloat(document.getElementById('tts-speed').value);
   const body = {
     enabled: document.getElementById('tts-enabled').checked,
     emotion_enabled: document.getElementById('tts-emotion-enabled').checked,
@@ -4502,7 +4530,7 @@ async function saveTtsConfig() {
     ref_audio: document.getElementById('tts-ref-audio').value.trim(),
     prompt_text: document.getElementById('tts-prompt-text').value.trim(),
     speed: parseFloat(document.getElementById('tts-speed').value),
-    provider: document.getElementById('tts-provider').value,
+    provider,
     provider_params: providerParams,
   };
   try {
