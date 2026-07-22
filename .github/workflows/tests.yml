@@ -30,10 +30,15 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
 
-      # v0.1 smoke subset: the full suite includes checks that require private,
-      # unshipped runtime assets/config. This list is pruned to files that
-      # currently exist (see cc-tasks/92 §1 — several R2/R4/R8 entries were
-      # stale references to tests removed by earlier refactors).
+      # config.yaml is deliberately private and gitignored.  The smoke suite
+      # must exercise the public fresh-clone contract, not a developer's local
+      # character.default or credentials.
+      - name: Prepare public fresh-clone configuration
+        run: cp config.example.yaml config.yaml
+
+      # v0.1 smoke subset: keep a focused, public-asset-only regression suite.
+      # A failure here is actionable; tests must not assume a private config or
+      # character assets beyond config.example.yaml and tracked defaults.
       - name: Run v0.1 pytest smoke subset
         run: >
           python -m pytest -q

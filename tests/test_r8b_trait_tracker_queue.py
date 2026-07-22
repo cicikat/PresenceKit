@@ -19,6 +19,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+PUBLIC_DEFAULT_CHAR_ID = "default"
+
 # ── Fixtures（镜像 test_pipeline_write_scope.py，用于 post_process 集成测试）────
 
 @pytest.fixture
@@ -213,20 +215,20 @@ async def test_no_enqueue_when_write_disabled(
 # ── 5. Handler 写入 trait_state ────────────────────────────────────────────────
 
 async def test_handler_creates_trait_state_file(sandbox):
-    """_handler_trait_tracker_update() writes a valid trait_state file."""
+    """The public default character's handler writes a valid trait_state file."""
     from core.pipeline import _handler_trait_tracker_update
     from core.memory.scope import MemoryScope
 
-    scope = MemoryScope.reality_scope("u_test", "yexuan")
+    scope = MemoryScope.reality_scope("u_test", PUBLIC_DEFAULT_CHAR_ID)
     payload = {
         "uid": "u_test",
-        "char_id": "yexuan",
+        "char_id": PUBLIC_DEFAULT_CHAR_ID,
         "scope": scope.to_payload(),
     }
 
     await _handler_trait_tracker_update(payload)
 
-    trait_path = sandbox.trait_state(char_id="yexuan")
+    trait_path = sandbox.trait_state(char_id=PUBLIC_DEFAULT_CHAR_ID)
     assert trait_path.exists(), f"trait_state file must be created: {trait_path}"
 
     state = json.loads(trait_path.read_text(encoding="utf-8"))
@@ -240,10 +242,10 @@ async def test_handler_creates_trait_state_file(sandbox):
 # ── 6. author_note_rotator 读取路径与 handler 写入路径一致 ─────────────────────
 
 def test_author_note_rotator_reads_handler_write_path(sandbox):
-    """The path author_note_rotator reads is the same path the handler writes."""
+    """Handler and rotator use the same explicit public-default character path."""
     from core.sandbox import get_paths
-    handler_write_path = get_paths().trait_state(char_id="yexuan")
-    rotator_read_path = get_paths().trait_state()      # default char_id="yexuan"
+    handler_write_path = get_paths().trait_state(char_id=PUBLIC_DEFAULT_CHAR_ID)
+    rotator_read_path = get_paths().trait_state(char_id=PUBLIC_DEFAULT_CHAR_ID)
     assert handler_write_path == rotator_read_path, (
         f"Path mismatch: handler writes to {handler_write_path}, "
         f"rotator reads from {rotator_read_path}"

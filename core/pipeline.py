@@ -1809,7 +1809,10 @@ async def _handler_trait_tracker_update(payload: dict) -> None:
         trait_key = f"{char_id}_traits"
         traits: list = data.get(trait_key) or data.get("yexuan_traits") or []
     except Exception as _e:
-        logger.warning("[pipeline.trait_tracker] traits 定义加载失败，跳过: %s", _e)
+        logger.warning(
+            "[pipeline.trait_tracker] traits 定义加载失败，跳过: char_id=%s path=%s error=%s",
+            char_id, traits_path, _e,
+        )
         return
     if not traits:
         logger.debug("[pipeline.trait_tracker] traits 为空，跳过: char_id=%s", char_id)

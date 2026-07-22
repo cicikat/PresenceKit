@@ -72,10 +72,10 @@ python scripts/build_release.py --version vX.Y.Z
 # 产物在 dist/，人工核对 zip 里不含 config.yaml / secrets.local.yaml
 ```
 
-**顺带检查**：同一次 push 会触发 `tests.yml`（Tests workflow）。这个
-workflow 在 CI 环境里缺 `config.yaml`（本机专属配置，不入库）会有一批
-用例失败，是已知的长期现象（和发布本身无关），不用因为它变红就卡住发布；
-但如果失败清单里出现新的、和你这次改动直接相关的用例，要单独排查。
+**顺带检查**：同一次 push 会触发 `tests.yml`（Tests workflow）。workflow 会从
+`config.example.yaml` 生成临时公开配置，因此 smoke 子集在 Python 3.10/3.12
+双矩阵都应为绿色；任何失败都应作为发布阻断信号排查，不能依赖开发机私有配置
+或资产来解释。
 
 ### 日常更新：`AA更新.bat`
 
