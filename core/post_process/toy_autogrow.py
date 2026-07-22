@@ -101,18 +101,21 @@ async def _judge_turn(user_content: str, reply: str, char_name: str) -> str:
         f"下面是你和用户刚完成的一轮对话：\n"
         f"[用户] {user_content[:300]}\n"
         f"[你] {reply[:300]}\n\n"
-        "如果这轮对话有值得你记下来的事（用户透露了重要信息、发生了有意义的互动、"
-        "你有了新感悟），请输出一句话（不超过50字）描述你想记住什么。\n"
-        "如果是普通闲聊、无特别内容，请只输出：SKIP\n"
-        "只输出一行，不要任何解释或格式标记。"
+        "先判断这轮是否值得留下：普通寒暄、没有新感受或新意义时，只输出 SKIP。\n"
+        "值得留下时，请以第一人称、像随手写给自己的日记那样写 1～3 句。可以有情绪、"
+        "比喻和碎碎念，不要写成事件摘要、观察记录或对用户的分析。\n"
+        "示例：窗外都暗下来了，可他那句‘我会慢慢来’还在心里亮着。\n"
+        "只输出日记正文或 SKIP，不要解释。"
     )
     try:
-        mc = get_model_client("summary")
+        # This is a low-frequency personal note, so use the chat/persona route
+        # instead of the terse summary route that naturally produces minutes.
+        mc = get_model_client("chat")
         response = await mc.client.chat.completions.create(
             model=mc.model,
             messages=[{"role": "user", "content": prompt}],
             max_tokens=80,
-            temperature=0.3,
+            temperature=0.9,
             timeout=30.0,
         )
         result = (response.choices[0].message.content or "").strip()

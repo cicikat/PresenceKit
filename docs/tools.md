@@ -278,7 +278,7 @@ fs_access:
 `core/post_process/toy_autogrow.py` 实现「叶瑄自生长」路径：
 
 - **触发**：每轮 `post_process` 在 uid_lock 释放后入慢队列（`toy_autogrow` 任务）。
-- **判断**：慢队列 handler 用轻量 LLM（category=`summary`，max_tokens=80）判断本轮是否值得记录。返回 SKIP 或一句不超过 50 字的笔记。
+- **判断**：慢队列 handler 用人格 chat 路由（max_tokens=80，temperature=0.9）判断本轮是否值得记录。返回 `SKIP` 或 1～3 句第一人称随手日记，不写事件摘要。
 - **写入**：服务端直接操作文件（`_rollover_append`），绕开 desktop 模式限制——QQ 模式和桌宠模式均可自主写入。
 - **限频**：每角色/用户 `toy_autogrow.min_interval_hours`（默认 6 小时）最多写一次。状态存 `data/very_formal_project/.autogrow_state.json`（JSON 字典，key = `{char_id}:{uid}`，value = Unix timestamp）。
 - **滚动**：文件超过 4000 字时截去头部（按行对齐），不抛错，始终保留最新内容。
