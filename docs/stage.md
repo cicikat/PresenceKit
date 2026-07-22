@@ -133,7 +133,7 @@ speaker_id / content / timestamp / _turn_id / triggered_by
 | `respond_threshold` | 0.5 | Phase A/B "是否接话" 的仲裁分数门槛 |
 | `spontaneous_threshold` | 0.7 | 预留（主动群触发未接入，v1 不消费） |
 | `addressed_exclusive` | false | 命中 vocative 时是否只留被点名角色候选 |
-| `allow_silent_rounds` | true | 允许整轮沉默（仅在消息本身是 backchannel/低信息量时生效，需与 `is_low_information` 同时成立；有实质内容的消息始终触发 `min_responders` 保底） |
+| `allow_silent_rounds` | true | 允许整轮沉默，但仅在 `min_responders=0` 且消息本身是 backchannel/低信息量时生效；任何正数 `min_responders` 都是优先于沉默策略的回复交付契约 |
 | `transcript_limit` | 200 | 共享 transcript 滚动上限 |
 | `memory_strength.group` | 0.7 | 群聊摘要投影写 mid_term 时的记忆强度 |
 | `debug_token_log` | true | 是否记录每条 Phase prompt 的 token 估算 |
@@ -261,7 +261,7 @@ async def run_owner_turn(
   行为与 Brief 85 之前完全一致。
 - `core/stage/dream_runtime.py::run_dream_stage_turn()`：注入 dream 专属实现——
   `_load_dream_stage()` 读**已有 reality 群**的 `meta.json`（复用其 roster / owner_uid /
-  仲裁调参），投影出 `domain="dream"` 且 `max_reactions=0`/`topic_seed_prob=0` 的视图；
+  仲裁调参），投影出 `domain="dream"` 且 `max_reactions=0`/`topic_seed_prob=0`/`allow_silent_rounds=false` 的视图；
   `load_dream_transcript()` / `append_dream_transcript()`（`core/stage/dream_store.py`）读写
   `data/runtime/dreams/_stage/{group_id}/tmp/current_dream.jsonl`（append-only jsonl，speaker
   前缀，不是 `transcript.json` 数组）；`trace_path_fn` 落 dream 树自己的

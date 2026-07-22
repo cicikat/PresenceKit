@@ -197,7 +197,7 @@ async def run_owner_turn(
         from core.stage.arbiter import addressed_kind
         has_vocative = any(addressed_kind(stage, char_id, owner_content) == "vocative" for char_id in stage.roster)
         may_be_silent = (
-            not has_vocative and initial_ranked and initial_ranked[0].total < SILENCE_THRESHOLD
+            min_responders == 0 and not has_vocative and initial_ranked and initial_ranked[0].total < SILENCE_THRESHOLD
             and stage.settings.allow_silent_rounds and is_low_information(owner_content)
         )
         if may_be_silent:

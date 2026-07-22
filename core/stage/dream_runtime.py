@@ -89,7 +89,12 @@ def _load_dream_stage(group_id: str) -> Stage | None:
     base = load_reality_stage(group_id)
     if base is None:
         return None
-    dream_settings = replace(base.settings, max_reactions=0, topic_seed_prob=0.0)
+    dream_settings = replace(
+        base.settings,
+        max_reactions=0,
+        topic_seed_prob=0.0,
+        allow_silent_rounds=False,
+    )
     return replace(base, domain="dream", settings=dream_settings)
 
 

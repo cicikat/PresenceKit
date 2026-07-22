@@ -59,7 +59,7 @@ async def test_backchannel_silent_when_allowed(sandbox):
     """backchannel（低信息量）+ allow_silent_rounds=True → 允许整轮静默。"""
     from core.stage.runner import run_owner_turn
 
-    stage = _stage(allow_silent_rounds=True)
+    stage = _stage(min_responders=0, allow_silent_rounds=True)
     result = await run_owner_turn(
         stage.group_id,
         "嗯",
@@ -68,6 +68,18 @@ async def test_backchannel_silent_when_allowed(sandbox):
     )
 
     assert len(result.replies) == 0
+
+
+@pytest.mark.asyncio
+async def test_backchannel_honors_min_responders_even_when_silent_rounds_allowed(sandbox):
+    from core.stage.runner import run_owner_turn
+
+    stage = _stage(min_responders=1, allow_silent_rounds=True)
+    result = await run_owner_turn(
+        stage.group_id, "在吗", generate_reply=_generate, turn_id="t-backchannel-minimum",
+    )
+
+    assert len(result.replies) >= 1
 
 
 @pytest.mark.asyncio
@@ -111,7 +123,7 @@ async def test_silent_round_trace_records_reason(sandbox):
 
     from core.stage.runner import run_owner_turn
 
-    stage = _stage(allow_silent_rounds=True)
+    stage = _stage(min_responders=0, allow_silent_rounds=True)
     await run_owner_turn(
         stage.group_id,
         "哦哦",
