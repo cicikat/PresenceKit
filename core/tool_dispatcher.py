@@ -149,6 +149,38 @@ async def _revise_memory_wrapper(user_id: str, episode_id: str, correction: str,
     return f"已更正那段记忆：原条目已降级，补充了新的更正记录（{correction_id}）。"
 
 
+async def _forget_episodic_wrapper(
+    user_id: str,
+    episode_id: str = "",
+    topic: str = "",
+    *,
+    char_id: str,
+) -> str:
+    from core.memory.episodic_memory import forget_episodes
+
+    forgotten = forget_episodes(
+        user_id,
+        episode_id=episode_id,
+        topic=topic,
+        char_id=char_id,
+        origin={"source": "assistant_tool", "tool": "forget_episodic"},
+    )
+    if not forgotten:
+        return "没有找到需要遗忘的情景记忆。"
+    return f"已将 {len(forgotten)} 条情景记忆降级为不再主动召回的归档。"
+
+
+async def _clear_midterm_wrapper(user_id: str, *, char_id: str) -> str:
+    from core.memory.mid_term import clear
+
+    removed = clear(
+        user_id,
+        char_id=char_id,
+        origin={"source": "assistant_tool", "tool": "clear_midterm"},
+    )
+    return f"已清空当前 {removed} 条中期记忆。" if removed else "当前没有可清空的中期记忆。"
+
+
 async def _revise_user_profile_wrapper(user_id: str, field: str, correction: str, *, char_id: str) -> str:
     from core.memory.user_identity import overwrite_dimension
     ok = await overwrite_dimension(
@@ -686,6 +718,31 @@ _TOOL_REGISTRY["revise_memory"] = {
     "trace_args": ["episode_id"],
 }
 
+_TOOL_REGISTRY["forget_episodic"] = {
+    "func": _forget_episodic_wrapper,
+    "description": "Forget an episodic memory only when the user explicitly asks to forget it. Provide either a known episode id or a specific topic. This downgrades the entry for audit/archive; it does not physically erase history.",
+    "dangerous": False,
+    "category": "memory",
+    "parameters": {"type": "object", "properties": {
+        "episode_id": {"type": "string", "description": "The exact episodic-memory identifier to forget, if known."},
+        "topic": {"type": "string", "description": "A specific topic to forget when no episode id is available."},
+    }, "anyOf": [{"required": ["episode_id"]}, {"required": ["topic"]}]},
+    "examples": ["忘掉那次失眠的记忆", "别再记得我们关于考试的那段事"],
+    "keywords": ["忘掉记忆", "别再记得", "遗忘这段"],
+    "trace_args": ["episode_id", "topic"],
+}
+
+_TOOL_REGISTRY["clear_midterm"] = {
+    "func": _clear_midterm_wrapper,
+    "description": "Clear the current user's short-lived mid-term memory bucket only when the user explicitly asks to clear recent memory. This does not alter episodic memory or the stable user profile.",
+    "dangerous": False,
+    "category": "memory",
+    "parameters": {"type": "object", "properties": {}, "required": []},
+    "examples": ["清空刚才这些近期记忆", "把最近的临时记忆忘掉"],
+    "keywords": ["清空近期记忆", "忘掉临时记忆"],
+    "trace_args": [],
+}
+
 _TOOL_REGISTRY["revise_user_profile"] = {
     "func": _revise_user_profile_wrapper,
     "description": "Correct one stable user-profile dimension after the user explicitly says the stored profile is wrong. Do not infer a replacement; use only the user's stated correction.",
@@ -932,6 +989,8 @@ _SIDE_EFFECT_TOOLS: frozenset[str] = frozenset({
     "add_reminder",
     "water_garden",
     "exit_yandere",
+    "forget_episodic",
+    "clear_midterm",
     # system 类（dangerous=True，冗余标注，保证兜底）
     "device_shutdown",
     "device_sleep",
@@ -1227,7 +1286,7 @@ async def execute(
             "get_profile", "get_episodic",
         ):
             result = await func(user_id=user_id, **tool_args)
-        elif tool_name in ("revise_memory", "revise_user_profile"):
+        elif tool_name in ("revise_memory", "forget_episodic", "clear_midterm", "revise_user_profile"):
             result = await func(user_id=user_id, char_id=char_id, **tool_args)
         elif tool_name == "web_search":
             result = await func(uid=user_id, char_id=char_id, **tool_args)

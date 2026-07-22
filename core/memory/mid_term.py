@@ -166,6 +166,38 @@ def delete_event(uid: str, mid_id: str, *, char_id: str = DEFAULT_CHAR_ID) -> bo
         return False
 
 
+def clear(uid: str, *, char_id: str = DEFAULT_CHAR_ID, origin: dict | None = None) -> int:
+    """Clear the user's current mid-term bucket and return the removed count."""
+    read_path = _read_file(uid, char_id=char_id)
+    write_path = _write_file(uid, char_id=char_id)
+    try:
+        if not read_path.exists():
+            return 0
+        data = json.loads(read_path.read_text(encoding="utf-8"))
+        events = data.get("events", [])
+        if not events:
+            return 0
+        before_gist = "；".join(str(event.get("summary", "")) for event in events)[:120]
+        safe_write_json(write_path, {"events": []})
+        try:
+            from core.memory import provenance_log
+            provenance_log.append(
+                uid, char_id,
+                artifact="mid_term",
+                field="all",
+                before_gist=before_gist,
+                after_gist="",
+                trigger_signal="explicit_forget",
+                origin=origin or {"source": "assistant_tool", "tool": "clear_midterm"},
+            )
+        except Exception:
+            pass
+        return len(events)
+    except Exception as e:
+        log_error("mid_term.clear", e)
+        return 0
+
+
 def format_for_prompt(uid: str, *, char_id: str = DEFAULT_CHAR_ID) -> str:
     """读取 + 时间桶分组 + 渲染成 prompt 段落。空返空串。"""
     events = load(uid, char_id=char_id)

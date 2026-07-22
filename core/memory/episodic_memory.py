@@ -274,7 +274,7 @@ def write_episode(user_id: str, episode: dict, *, char_id: str = DEFAULT_CHAR_ID
         episode["tags"] = []
     if not isinstance(episode.get("retrieval_count"), int):
         episode["retrieval_count"] = 0
-    if episode.get("status") not in ("open", "resolved", "elapsed"):
+    if episode.get("status") not in ("open", "resolved", "elapsed", "forgotten"):
         episode["status"] = "open"
     if not isinstance(episode.get("resolved_at"), (int, float)):
         episode["resolved_at"] = None
@@ -448,7 +448,7 @@ def retrieve(
         if mem["id"] not in candidate_ids:
             continue
         # 已解决事件默认不再召回；若未来需要偶尔浮起，可改为对 score 乘低权重。
-        if mem.get("status", "open") in ("resolved", "elapsed"):
+        if mem.get("status", "open") in ("resolved", "elapsed", "forgotten"):
             continue
 
         days = (now - mem["timestamp"]) / 86400
@@ -537,7 +537,7 @@ def retrieve(
                     if mid in _already or mid not in mem_by_id:
                         continue
                     m = mem_by_id[mid]
-                    if m.get("status", "open") in ("resolved", "elapsed"):
+                    if m.get("status", "open") in ("resolved", "elapsed", "forgotten"):
                         continue
                     if m.get("strength", 0) < 0.5:
                         continue
@@ -685,6 +685,93 @@ def delete_episode(user_id: str, ep_id: str, *, char_id: str = DEFAULT_CHAR_ID) 
 
     logger.info("[episodic] deleted episode ep_id=%s uid=%s", ep_id, user_id)
     return True
+
+
+def forget_episodes(
+    user_id: str,
+    *,
+    episode_id: str = "",
+    topic: str = "",
+    char_id: str = DEFAULT_CHAR_ID,
+    origin: dict | None = None,
+) -> list[str]:
+    """Downgrade explicitly forgotten episodic memories without erasing them."""
+    episode_id = str(episode_id or "").strip()
+    topic = str(topic or "").strip()
+    if not episode_id and not topic:
+        return []
+
+    try:
+        memories = _load_memories(user_id, char_id=char_id)
+    except EpisodicCorruptError:
+        logger.error("[episodic] forget_episodes: file corrupt uid=%s", user_id)
+        return []
+
+    topic_key = topic.casefold()
+    forgotten: list[dict] = []
+    now = time.time()
+    for memory in memories:
+        if episode_id:
+            matches = memory.get("id") == episode_id
+        else:
+            searchable = " ".join([
+                str(memory.get("narrative_summary") or memory.get("summary") or ""),
+                *[str(item) for item in memory.get("tags") or []],
+                *[str(item) for item in memory.get("topic_keywords") or []],
+                *[str(item) for item in memory.get("raw_facts") or []],
+            ]).casefold()
+            matches = topic_key in searchable
+        if not matches:
+            continue
+
+        before_gist = str(memory.get("narrative_summary") or memory.get("summary") or "")[:120]
+        memory["strength"] = min(float(memory.get("strength", 0.5)), 0.1)
+        memory["status"] = "forgotten"
+        memory["forgotten_at"] = now
+        memory["forgotten_by"] = "user_request"
+        memory["was_core_before_forget"] = bool(memory.get("is_core"))
+        memory["is_core"] = False
+        forgotten.append({"memory": memory, "before_gist": before_gist})
+
+    if not forgotten:
+        return []
+
+    _save_memories(user_id, memories, char_id=char_id)
+    _rebuild_index(user_id, memories, char_id=char_id)
+
+    # Use the same deferred archive route as capacity eviction.  It preserves
+    # audit-grade storyline input without allowing ordinary recall to restore it.
+    try:
+        from core.memory.scope import MemoryScope
+        from core.post_process import slow_queue
+        slow_queue.enqueue("storyline_evicted_input", {
+            "uid": user_id,
+            "char_id": char_id,
+            "episodes": [item["memory"] for item in forgotten],
+            "scope": MemoryScope.reality_scope(str(user_id), char_id).to_payload(),
+        })
+    except Exception as exc:
+        logger.debug("[episodic] forget archive enqueue failed uid=%s: %s", user_id, exc)
+
+    try:
+        from core.memory import provenance_log
+        audit_origin = origin or {"source": "assistant_tool", "tool": "forget_episodic"}
+        for item in forgotten:
+            provenance_log.append(
+                user_id, char_id,
+                artifact="episodic",
+                field=item["memory"]["id"],
+                before_gist=item["before_gist"],
+                after_gist="",
+                trigger_signal="explicit_forget",
+                origin=audit_origin,
+            )
+    except Exception:
+        pass
+
+    ids = [item["memory"]["id"] for item in forgotten]
+    logger.info("[episodic] downgraded forgotten entries uid=%s count=%s", user_id, len(ids))
+    return ids
 
 
 def revise_episode(
@@ -904,7 +991,7 @@ def retrieve_fallback(user_id: str, recent_history: list[str], top_k: int = 1, *
     now = time.time()
     candidates = []
     for m in memories:
-        if m.get("status", "open") in ("resolved", "elapsed"):
+        if m.get("status", "open") in ("resolved", "elapsed", "forgotten"):
             continue
         # P0-4: 用 occurred_at（事件真实时刻）卡 7 天窗口
         anchor = m.get("occurred_at")

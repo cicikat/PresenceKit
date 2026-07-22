@@ -310,6 +310,8 @@ fs_access:
 | `get_profile` | 获取用户画像 | profile 已由 fetch_context 自动注入，此工具是第二路径 |
 | `get_episodic` | 召回情景记忆 | episodic 已由 fetch_context 自动召回，此工具是第二路径 |
 | `revise_memory` | 更正指定情景记忆 | 仅 Path C；旧条目降强度并保留，更正作为新条目追加；必须给出 episode id 与用户确认的更正 |
+| `forget_episodic` | 遗忘指定情景记忆 | 仅 Path C；仅在用户明确要求时按 episode id 或 topic 降级，保留审计/叙事归档，不物理删除 |
+| `clear_midterm` | 清空近期中期记忆 | 仅 Path C；只清空当前用户/角色的 12 小时时间桶，不影响 episodic 或稳定画像 |
 | `revise_user_profile` | 更正用户稳定行为画像 | 仅 Path C；仅可覆写明确给出的合法 identity 维度，不能凭空推断 |
 
 > 注：`get_profile / get_episodic` 的同类信息已在 `fetch_context` 自动进入 prompt；长期行为模式当前走

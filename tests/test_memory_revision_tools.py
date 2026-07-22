@@ -50,3 +50,48 @@ async def test_revise_user_profile_writes_identity_provenance_and_action_trace(s
     records = query("owner", "yexuan", artifact="user_identity", field="sleep_pattern")
     assert records[0]["origin"]["tool"] == "revise_user_profile"
     assert any(item["tool"] == "revise_user_profile" and item["status"] == "ok" for item in recent("owner", "yexuan"))
+
+
+@pytest.mark.asyncio
+async def test_forget_episodic_downgrades_topic_excludes_recall_and_records_audit(sandbox):
+    from core.memory.episodic_memory import list_episodes, retrieve, write_episode
+    from core.memory.provenance_log import query
+    from core.tool_dispatcher import execute
+
+    write_episode("owner", {
+        "id": "ep-forget", "timestamp": 1.0, "summary": "用户为考试焦虑", "narrative_summary": "用户为考试焦虑",
+        "strength": 0.8, "tags": ["考试"], "topic_keywords": ["考试"], "is_core": True,
+    })
+    result, confirm = await execute(
+        "forget_episodic", {"topic": "考试"},
+        "owner", "owner", False, _Session(), origin="assistant_loop", char_id="yexuan",
+    )
+
+    assert confirm is None
+    assert "降级" in result
+    episode = next(item for item in list_episodes("owner") if item["id"] == "ep-forget")
+    assert episode["strength"] == 0.1
+    assert episode["status"] == "forgotten"
+    assert episode["is_core"] is False
+    assert retrieve("owner", topic="考试", char_id="yexuan", allow_strengthen=False) == []
+    records = query("owner", "yexuan", artifact="episodic", field="ep-forget")
+    assert records[0]["origin"]["tool"] == "forget_episodic"
+
+
+@pytest.mark.asyncio
+async def test_clear_midterm_clears_current_bucket_and_records_audit(sandbox):
+    from core.memory import mid_term
+    from core.memory.provenance_log import query
+    from core.tool_dispatcher import execute
+
+    mid_term.append("owner", "临时的近况", char_id="yexuan")
+    result, confirm = await execute(
+        "clear_midterm", {},
+        "owner", "owner", False, _Session(), origin="assistant_loop", char_id="yexuan",
+    )
+
+    assert confirm is None
+    assert "已清空当前 1 条" in result
+    assert mid_term.load("owner", char_id="yexuan") == []
+    records = query("owner", "yexuan", artifact="mid_term", field="all")
+    assert records[0]["origin"]["tool"] == "clear_midterm"
