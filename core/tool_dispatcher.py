@@ -1058,9 +1058,30 @@ _OWNER_ONLY_HARDWARE_TOOLS: frozenset[str] = frozenset({
 })
 
 
+def _effective_tool_loop_enabled(global_enabled: bool) -> bool:
+    """返回活跃角色卡覆盖后的 Path C 开关。
+
+    presence_ext.tool_loop 只接受 ``on`` / ``off``。字段缺失、角色尚未加载、或卡内容
+    非法时都回落全局值，避免一张损坏的角色卡阻断正常对话。
+    """
+    try:
+        from core import pipeline_registry
+
+        pipeline = pipeline_registry.get()
+        character = getattr(pipeline, "character", None) if pipeline is not None else None
+        override = (getattr(character, "presence_ext", None) or {}).get("tool_loop")
+        if override == "on":
+            return True
+        if override == "off":
+            return False
+    except Exception:
+        pass
+    return global_enabled
+
+
 def tool_loop_active(uid: str) -> bool:
-    """Brief 28 · Path C 总闸：tool_loop.enabled + owner 真实私聊 + chat preset 为
-    function_calling 模式，三者同时成立才为真。
+    """Brief 28/109 · Path C 总闸：有效 tool-loop 开关、owner 真实私聊与 chat preset
+    的 function_calling 模式三者同时成立才为真。
 
     群聊 / scheduler trigger / 梦境 / Stage 的调用点在到达这个判断之前就已经走了别的分支
     （群聊在 main.py 里提前 return），本函数只需要核对 uid 是否为 owner。
@@ -1068,7 +1089,7 @@ def tool_loop_active(uid: str) -> bool:
     run_agentic_loop"，两处判断必须一致，故抽在这里而不是各自内联。
     """
     cfg = get_config().get("tool_loop", {})
-    if not cfg.get("enabled", False):
+    if not _effective_tool_loop_enabled(bool(cfg.get("enabled", False))):
         return False
     owner_id = str(get_config().get("scheduler", {}).get("owner_id") or "")
     if not owner_id or str(uid) != owner_id:

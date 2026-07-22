@@ -946,6 +946,12 @@ class Pipeline:
             t for t in _filter_growth_tools(get_tools_schema(categories=categories), char_id=char_id)
             if (t.get("function") or t).get("name") not in exclude_tools
         ]
+        if len(tools) > 20:
+            logger.warning(
+                "[pipeline.run_agentic_loop] 暴露了 %d 个工具 schema，超过建议上限 20；"
+                "请收窄 tool_categories 或 exclude_tools",
+                len(tools),
+            )
 
         loop_msgs = list(messages)
         # 工具意愿软提示（Brief 29 · 5，Brief 28 补丁）：利用 recency 位置，插在用户消息

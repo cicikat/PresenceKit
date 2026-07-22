@@ -326,6 +326,46 @@ def test_tool_loop_active_gating(monkeypatch):
     assert tool_loop_active("u1") is False  # 小模型 xml_fallback 路径不激活
 
 
+def test_tool_loop_active_character_override(monkeypatch):
+    """109-a：角色卡 on/off 覆盖全局；缺失/非法值仍回落全局。"""
+    from dataclasses import dataclass
+    from core import pipeline_registry
+    from core.tool_dispatcher import tool_loop_active
+
+    @dataclass
+    class _Char:
+        presence_ext: dict
+
+    @dataclass
+    class _Pipeline:
+        character: object
+
+    class _FakeMcFc:
+        tool_call_mode = "function_calling"
+
+    monkeypatch.setattr(
+        "core.tool_dispatcher.get_config",
+        lambda: {"tool_loop": {"enabled": False}, "scheduler": {"owner_id": "u1"}},
+    )
+    monkeypatch.setattr("core.model_registry.get_model_client", lambda cat: _FakeMcFc())
+
+    pipeline_registry.register(_Pipeline(_Char({"tool_loop": "on"})))
+    assert tool_loop_active("u1") is True
+
+    pipeline_registry.register(_Pipeline(_Char({"tool_loop": "off"})))
+    assert tool_loop_active("u1") is False
+
+    monkeypatch.setattr(
+        "core.tool_dispatcher.get_config",
+        lambda: {"tool_loop": {"enabled": True}, "scheduler": {"owner_id": "u1"}},
+    )
+    pipeline_registry.register(_Pipeline(_Char({})))
+    assert tool_loop_active("u1") is True
+    pipeline_registry.register(_Pipeline(_Char({"tool_loop": "invalid"})))
+    assert tool_loop_active("u1") is True
+    pipeline_registry.register(None)
+
+
 # ── 9. 路径 B 跳过：loop_executed=True 时 Path B 直接 return ────────────────
 
 @pytest.mark.asyncio

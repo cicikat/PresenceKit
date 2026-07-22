@@ -64,6 +64,7 @@ class Character:
     # model_routing:   str | None  — 路由 profile 名，存在于 routing_profiles 才生效（core/model_registry.py）
     # tool_categories: list[str] | None — tool loop 暴露面覆盖（core/pipeline.py run_agentic_loop）
     # proactive:       "full"（默认）| "off" — 主动发言总闸（core/scheduler/gating.py）
+    # tool_loop:       "on" | "off" | 缺失 — 覆盖/回落全局 tool_loop.enabled（core/tool_dispatcher.py）
     presence_ext: dict = field(default_factory=dict)
 
 
