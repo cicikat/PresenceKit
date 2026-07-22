@@ -20,21 +20,19 @@ _ROOT = Path(__file__).parent.parent
 # ── Files that must exist (tracked in git) ────────────────────────────────────
 
 TRACKED_JSON = [
-    "characters/reality/jailbreak_entries.json",
     "defaults/jailbreak_entries.json",
     "examples/character_template.json",
 ]
 
 TRACKED_YAML = [
-    "characters/reality/lorebook.yaml",
     "defaults/lorebook.yaml",
     "defaults/relations.yaml",
     "defaults/blacklist.yaml",
 ]
 
 TRACKED_TEXT = [
-    "characters/dream_worlds/_default/ruleset.md",
-    "characters/dream_worlds/_default/mes_example.md",
+    "defaults/dream_worlds/_default/ruleset.md",
+    "defaults/dream_worlds/_default/mes_example.md",
 ]
 
 
@@ -67,20 +65,16 @@ def test_tracked_text_exists_and_nonempty(rel: str):
 # ── Structural checks ─────────────────────────────────────────────────────────
 
 def test_jailbreak_entries_schema():
-    """characters/reality/jailbreak_entries.json must have an 'entries' list."""
-    path = _ROOT / "characters/reality/jailbreak_entries.json"
-    if not path.exists():
-        pytest.skip("jailbreak_entries.json not present (private content)")
+    """Public jailbreak seed must have an 'entries' list."""
+    path = _ROOT / "defaults/jailbreak_entries.json"
     data = json.loads(path.read_text(encoding="utf-8"))
     assert "entries" in data, "jailbreak_entries.json must have top-level 'entries' key"
     assert isinstance(data["entries"], list)
 
 
 def test_lorebook_schema():
-    """characters/reality/lorebook.yaml must have an 'entries' list."""
-    path = _ROOT / "characters/reality/lorebook.yaml"
-    if not path.exists():
-        pytest.skip("lorebook.yaml not present (private content)")
+    """Public lorebook seed must have an 'entries' list."""
+    path = _ROOT / "defaults/lorebook.yaml"
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     assert "entries" in data, "lorebook.yaml must have top-level 'entries' key"
     assert isinstance(data["entries"], list)
