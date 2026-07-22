@@ -9,6 +9,7 @@ import logging
 import math
 import re
 import time
+import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -684,6 +685,79 @@ def delete_episode(user_id: str, ep_id: str, *, char_id: str = DEFAULT_CHAR_ID) 
 
     logger.info("[episodic] deleted episode ep_id=%s uid=%s", ep_id, user_id)
     return True
+
+
+def revise_episode(
+    user_id: str,
+    ep_id: str,
+    correction: str,
+    *,
+    char_id: str = DEFAULT_CHAR_ID,
+) -> str | None:
+    """Supersede an episodic memory without physically erasing its history.
+
+    The old entry is weakened and marked as corrected; a separate correction
+    entry preserves the updated fact for normal recall and auditability.
+    """
+    correction = str(correction or "").strip()
+    if not correction:
+        return None
+    try:
+        memories = _load_memories(user_id, char_id=char_id)
+    except EpisodicCorruptError:
+        logger.error("[episodic] revise_episode: file corrupt uid=%s", user_id)
+        return None
+    original = next((item for item in memories if item.get("id") == ep_id), None)
+    if original is None:
+        return None
+
+    before_gist = str(original.get("narrative_summary") or original.get("summary") or "")[:120]
+    original["strength"] = min(float(original.get("strength", 0.5)), 0.1)
+    original["status"] = "resolved"
+    original["resolved_at"] = time.time()
+    original["resolved_by"] = "user_correction"
+    original["correction"] = correction
+    correction_id = f"ep_correction_{int(time.time() * 1000)}_{uuid.uuid4().hex[:8]}"
+    memories.append({
+        "id": correction_id,
+        "timestamp": time.time(),
+        "raw_facts": [correction],
+        "topic_keywords": list(original.get("topic_keywords") or original.get("tags") or []),
+        "emotion_peak": "neutral",
+        "narrative_summary": correction,
+        "summary": correction,
+        "strength": 0.7,
+        "status": "resolved",
+        "resolved_at": time.time(),
+        "resolved_by": "user_correction",
+        "temporal_ref": "none",
+        "event_time": None,
+        "expires_at": None,
+        "retrieval_count": 0,
+        "last_retrieved": None,
+        "is_correction": True,
+        "corrects_episode_id": ep_id,
+        "tags": list(original.get("tags") or []),
+    })
+    _save_memories(user_id, memories, char_id=char_id)
+    _rebuild_index(user_id, memories, char_id=char_id)
+    try:
+        from core.memory import provenance_log
+        origin = {"source": "assistant_tool", "tool": "revise_memory"}
+        provenance_log.append(
+            user_id, char_id, artifact="episodic", field=ep_id,
+            before_gist=before_gist, after_gist=correction,
+            trigger_signal="user_memory_correction", origin=origin,
+        )
+        provenance_log.append(
+            user_id, char_id, artifact="episodic", field=correction_id,
+            before_gist="", after_gist=correction,
+            trigger_signal="user_memory_correction", origin=origin,
+        )
+    except Exception:
+        pass
+    logger.info("[episodic] revised episode ep_id=%s correction_id=%s uid=%s", ep_id, correction_id, user_id)
+    return correction_id
 
 
 def list_episodes(user_id: str, *, char_id: str = DEFAULT_CHAR_ID) -> list[dict]:

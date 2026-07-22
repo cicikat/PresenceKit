@@ -141,6 +141,24 @@ async def _get_episodic_wrapper(user_id: str, topic: str = "") -> str:
     return format_for_prompt(memories, char_name=get_active_char_name()) if memories else "暂无相关记忆"
 
 
+async def _revise_memory_wrapper(user_id: str, episode_id: str, correction: str, *, char_id: str) -> str:
+    from core.memory.episodic_memory import revise_episode
+    correction_id = revise_episode(user_id, episode_id, correction, char_id=char_id)
+    if not correction_id:
+        return "没有找到可更正的那条记忆，或更正内容为空。"
+    return f"已更正那段记忆：原条目已降级，补充了新的更正记录（{correction_id}）。"
+
+
+async def _revise_user_profile_wrapper(user_id: str, field: str, correction: str, *, char_id: str) -> str:
+    from core.memory.user_identity import overwrite_dimension
+    ok = await overwrite_dimension(
+        user_id, field, correction, char_id=char_id,
+        trigger_signal="user_profile_correction",
+        origin={"source": "assistant_tool", "tool": "revise_user_profile"},
+    )
+    return "已更新用户画像中的这一项。" if ok else "这个画像字段不存在或内容无效，未能更新。"
+
+
 import json as _json
 import time as _time
 from pathlib import Path as _Path
@@ -659,6 +677,30 @@ _TOOL_REGISTRY["get_episodic"] = {
     "trace_args": ["topic"],
 }
 
+_TOOL_REGISTRY["revise_memory"] = {
+    "func": _revise_memory_wrapper,
+    "description": "Correct an episodic memory after the user says it is wrong. Use only when a specific episode id is known; it weakens the old entry and records the correction instead of deleting history.",
+    "dangerous": False,
+    "category": "memory",
+    "parameters": {"type": "object", "properties": {
+        "episode_id": {"type": "string", "description": "The specific episodic memory id to correct."},
+        "correction": {"type": "string", "description": "The concise corrected fact supplied or confirmed by the user."},
+    }, "required": ["episode_id", "correction"]},
+    "trace_args": ["episode_id"],
+}
+
+_TOOL_REGISTRY["revise_user_profile"] = {
+    "func": _revise_user_profile_wrapper,
+    "description": "Correct one stable user-profile dimension after the user explicitly says the current profile is wrong. Do not infer a correction; use the user's stated replacement.",
+    "dangerous": False,
+    "category": "memory",
+    "parameters": {"type": "object", "properties": {
+        "field": {"type": "string", "enum": ["trust_pattern", "emotion_expression", "help_seeking", "stress_response", "intimacy_comfort", "sleep_pattern", "topic_preference", "self_relation", "address_style"], "description": "The profile dimension to replace."},
+        "correction": {"type": "string", "description": "The concise corrected user pattern."},
+    }, "required": ["field", "correction"]},
+    "trace_args": ["field"],
+}
+
 _TOOL_REGISTRY["exit_yandere"] = {
     "func": _exit_yandere_wrapper,
     "description": "当{char}决定从病娇状态平静下来时调用，通常是用户说了让她安心的话之后。由{char}自主判断是否调用，不需要用户明确要求。",
@@ -1167,6 +1209,8 @@ async def execute(
             "get_profile", "get_episodic",
         ):
             result = await func(user_id=user_id, **tool_args)
+        elif tool_name in ("revise_memory", "revise_user_profile"):
+            result = await func(user_id=user_id, char_id=char_id, **tool_args)
         elif tool_name == "web_search":
             result = await func(uid=user_id, char_id=char_id, **tool_args)
             # X3: record last search timestamp for autosearch rate-limit

@@ -159,6 +159,8 @@ async def overwrite_dimension(
     char_id: str = DEFAULT_CHAR_ID,
     confidence: float = 1.0,
     evidence_count: int = 1,
+    trigger_signal: str = "explicit_forget",
+    origin: dict | None = None,
 ) -> bool:
     """Overwrite or create a dimension in the identity file.
 
@@ -188,8 +190,8 @@ async def overwrite_dimension(
                 field=key,
                 before_gist=before_gist,
                 after_gist=text[:120],
-                trigger_signal="explicit_forget",
-                origin={"source": "admin"},
+                trigger_signal=trigger_signal,
+                origin=origin or {"source": "admin"},
             )
         except Exception:
             pass
