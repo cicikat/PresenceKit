@@ -193,7 +193,9 @@ brief，遵循“删除必须连同守卫、测试和文档条目一起删除”
 在 Codex / Claude Code 环境里运行测试或跨仓修改前，**必须先读
 `docs/dev-environment.md`**。特别注意：
 
-这里有个好东西叫pytest -n auto
+如果没有特殊说明，默认只跑改过的代码的测试，不跑全量🐱
+
+如果跑全量，这里有个好东西叫pytest -n auto
 别再python -m pytest串行跑全量啦！！！
 
 ## Commands
