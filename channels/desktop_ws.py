@@ -57,6 +57,7 @@ async def push_message(
     char_id: str | None = None,
     round_id: str | None = None,
     domain: str | None = None,
+    sticker: dict | None = None,
 ) -> bool:
     """推送普通消息，fire-and-forget，不等 ack。
     msg_id 可由调用方预先生成（用于与 message_segments 共享），省略时自动生成。
@@ -78,6 +79,8 @@ async def push_message(
         payload["round_id"] = round_id
     if domain is not None:
         payload["domain"] = domain
+    if sticker is not None:
+        payload["sticker"] = sticker
     return await _send_json(payload)
 
 

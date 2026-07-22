@@ -53,6 +53,7 @@ class DesktopChannel(BaseChannel):
         msg_id: str | None = None,
         *,
         char_id: str | None = None,
+        sticker: dict | None = None,
     ) -> None:
         from channels import desktop_ws
         # 路径 1：WS 实时推送
@@ -60,6 +61,8 @@ class DesktopChannel(BaseChannel):
             push_kwargs = {"msg_id": msg_id}
             if char_id is not None:
                 push_kwargs["char_id"] = char_id
+            if sticker is not None:
+                push_kwargs["sticker"] = sticker
             ok = await desktop_ws.push_message(content, **push_kwargs)
             if ok:
                 if behavior:
@@ -70,11 +73,17 @@ class DesktopChannel(BaseChannel):
                 return
             logger.warning("[desktop_channel] WS push 失败，降级到文件")
         # 路径 2：文件队列 fallback
-        await self._write_to_queue(content, char_id=char_id)
+        await self._write_to_queue(content, char_id=char_id, sticker=sticker)
         if behavior:
             await self._write_action_to_queue(behavior)
 
-    async def _write_to_queue(self, content: str, *, char_id: str | None = None) -> None:
+    async def _write_to_queue(
+        self,
+        content: str,
+        *,
+        char_id: str | None = None,
+        sticker: dict | None = None,
+    ) -> None:
         try:
             async with _queue_lock:
                 q_file = get_paths().channel_queue()
@@ -88,6 +97,8 @@ class DesktopChannel(BaseChannel):
                 }
                 if char_id is not None:
                     item["char_id"] = char_id
+                if sticker is not None:
+                    item["sticker"] = sticker
                 queue.append(item)
                 safe_write_json(q_file, queue)
         except Exception as e:

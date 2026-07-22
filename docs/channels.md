@@ -259,6 +259,14 @@ HTTP /desktop/chat 触发 turn
 | `message_stream_end` | server→client | 流结束，前端关闭打字光标，等 canonical 替换 |
 | `channel_message`（同 msg_id）| server→client | scrub 后干净版，前端用此内容替换临时气泡 |
 
+### 表情包副作用 payload（Brief 109）
+
+`core/output/sticker.py` 保持 QQ 的 OneBot 图片发送不变；同时通过
+`channels.registry.broadcast()` 向活跃的 desktop/mobile 通道发送一条空文本消息，并在 payload
+中附带可选 `sticker` 字段。字段值为 `{"kind":"sticker","emotion":"...","data_url":"data:image/...;base64,..."}`。
+它不包含本机绝对路径，桌宠 WebSocket 的 `channel_message` 与 mobile poll 队列均原样携带。
+客户端是否以及如何渲染该字段由各自仓库的独立工单决定；不识别该字段的旧客户端可忽略它。
+
 **约束：**
 - QQ / mobile 链路不走流式，只收完整 `channel_message`。
 - Dream pipeline 不经 `run_owner_chat_turn`，不受影响。

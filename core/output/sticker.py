@@ -6,6 +6,8 @@ LLM判断情绪类别，随机抽取对应文件夹的图片发送
 
 import logging
 import random
+from base64 import b64encode
+from pathlib import Path
 
 from core.error_handler import log_error
 
@@ -28,6 +30,28 @@ def _pick_sticker(emotion: str) -> str | None:
     if not files:
         return None
     return str(random.choice(files).resolve())
+
+
+def _build_sticker_payload(path: str, emotion: str) -> dict | None:
+    """构造可跨通道转发的贴纸 payload，不向客户端暴露本机文件路径。"""
+    suffix = Path(path).suffix.lower()
+    media_type = {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".gif": "image/gif",
+    }.get(suffix)
+    if media_type is None:
+        return None
+    try:
+        encoded = b64encode(Path(path).read_bytes()).decode("ascii")
+    except OSError:
+        return None
+    return {
+        "kind": "sticker",
+        "emotion": emotion,
+        "data_url": f"data:{media_type};base64,{encoded}",
+    }
 
 
 async def maybe_send_sticker(reply: str, target_id: str, is_group: bool = False, emotion: str = ""):
@@ -57,7 +81,16 @@ async def maybe_send_sticker(reply: str, target_id: str, is_group: bool = False,
 
         from core.qq_adapter import send_image
         await send_image(target_id, path, is_group)
-        logger.info(f"[sticker] 发送表情包: {folder_emotion} -> {path}")
+
+        payload = _build_sticker_payload(path, folder_emotion)
+        if payload is not None:
+            # QQ 保持原有 OneBot 图片发送；桌宠和手机经既有通道注册表收到同一份
+            # 自包含 payload，客户端可在独立工单中按 sticker 字段渲染。
+            from channels import registry
+            await registry.broadcast(
+                "", target_id, sticker=payload, exclude_channels={"qq"},
+            )
+        logger.info("[sticker] 发送表情包: %s", folder_emotion)
 
     except Exception as e:
         log_error("sticker.maybe_send_sticker", e)

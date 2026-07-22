@@ -31,9 +31,12 @@ async def broadcast(
     behavior: dict | None = None,
     *,
     char_id: str | None = None,
+    sticker: dict | None = None,
+    exclude_channels: set[str] | None = None,
 ) -> dict[str, str]:
     """广播到所有活跃通道。返回失败通道到错误文本的映射。"""
-    active = get_active()
+    excluded = exclude_channels or set()
+    active = [channel for channel in get_active() if channel.name not in excluded]
     if not active:
         logger.warning("[channel_registry] 无活跃通道，消息丢弃")
         return {}
@@ -43,6 +46,8 @@ async def broadcast(
             kwargs = {"behavior": behavior}
             if char_id is not None:
                 kwargs["char_id"] = char_id
+            if sticker is not None:
+                kwargs["sticker"] = sticker
             await channel.send(content, user_id, **kwargs)
         except Exception as e:
             failures[channel.name] = str(e)

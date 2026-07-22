@@ -65,6 +65,7 @@ class MobileChannel(BaseChannel):
         msg_id: str | None = None,
         *,
         char_id: str | None = None,
+        sticker: dict | None = None,
     ) -> None:
         await self._write_to_queue(
             content,
@@ -72,6 +73,7 @@ class MobileChannel(BaseChannel):
             behavior=behavior,
             msg_id=msg_id,
             char_id=char_id,
+            sticker=sticker,
         )
 
     async def send_with_behavior(
@@ -82,6 +84,7 @@ class MobileChannel(BaseChannel):
         msg_id: str | None = None,
         *,
         char_id: str | None = None,
+        sticker: dict | None = None,
     ) -> None:
         await self._write_to_queue(
             content,
@@ -89,6 +92,7 @@ class MobileChannel(BaseChannel):
             behavior=behavior,
             msg_id=msg_id,
             char_id=char_id,
+            sticker=sticker,
         )
 
     async def poll(
@@ -138,6 +142,7 @@ class MobileChannel(BaseChannel):
         msg_id: str | None = None,
         *,
         char_id: str | None = None,
+        sticker: dict | None = None,
     ) -> None:
         item = None
         try:
@@ -159,6 +164,8 @@ class MobileChannel(BaseChannel):
                     item["behavior"] = behavior
                 if char_id is not None:
                     item["char_id"] = char_id
+                if sticker is not None:
+                    item["sticker"] = sticker
                 queue.append(item)
                 queue = self._prune_queue(queue)
                 safe_write_json(q_file, queue)

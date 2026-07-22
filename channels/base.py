@@ -17,6 +17,7 @@ class BaseChannel(ABC):
         behavior: dict | None = None,
         *,
         char_id: str | None = None,
+        sticker: dict | None = None,
     ) -> None:
         """发送消息到此通道。"""
         pass
