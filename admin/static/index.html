@@ -802,6 +802,11 @@ textarea { resize: vertical; min-height: 72px; }
             <input type="checkbox" id="tts-emotion-enabled" style="width:16px;height:16px;accent-color:var(--accent)"><span data-i18n="status.tts.emotion">情绪分档</span></label><label class="checkbox-row" style="gap:8px;font-size:14px"><input type="checkbox" id="tts-desktop-enabled" style="width:16px;height:16px;accent-color:var(--accent)"><span data-i18n="status.tts.desktop">桌面语音条</span></label>
         </div>
         <div class="form-row" style="max-width:640px">
+          <label class="field"><span>TTS Provider</span><select id="tts-provider"><option value="gsv">GPT-SoVITS / GSV</option><option value="openai_compatible">OpenAI-compatible / cloud (reserved)</option></select></label>
+          <label class="field"><span>Provider status</span><input id="tts-provider-status" readonly></label>
+        </div>
+        <label class="field" style="max-width:640px"><span>Provider parameters (JSON; secret values are write-only)</span><textarea id="tts-provider-params" rows="4" placeholder='{"api_url":"..."}'></textarea></label>
+        <div class="form-row" style="max-width:640px">
           <label class="field">
             <span>API URL</span>
             <input type="text" id="tts-api-url" placeholder="http://127.0.0.1:9880">
@@ -824,6 +829,9 @@ textarea { resize: vertical; min-height: 72px; }
             style="width:100%;accent-color:var(--accent)">
         </label>
         <button class="btn btn-primary btn-sm" onclick="saveTtsConfig()" data-i18n="common.save">保存</button>
+        <button class="btn btn-ghost btn-sm" onclick="testTtsConfig()" data-i18n="status.tts.test">试听当前 Provider</button>
+        <button class="btn btn-ghost btn-sm" onclick="loadTtsCallLog()" data-i18n="status.tts.call_log">最近合成记录</button>
+        <pre id="tts-call-log" style="max-width:640px;max-height:160px;overflow:auto;white-space:pre-wrap"></pre>
       </div>
 
       <!-- 用户称谓 -->
@@ -4321,9 +4329,16 @@ async function loadTtsConfig() {
     const speed = parseFloat(d.speed) || 1.0;
     document.getElementById('tts-speed').value = speed;
     document.getElementById('tts-speed-val').textContent = speed.toFixed(2);
+    document.getElementById('tts-provider').value = d.provider || 'gsv';
+    document.getElementById('tts-provider-params').value = JSON.stringify(d.provider_params || {}, null, 2);
+    const s = d.provider_status || {};
+    document.getElementById('tts-provider-status').value = s.ready ? 'ready' : (s.reason || 'not ready');
   } catch (e) { toast(t('status.tts.load_error', '读取 TTS 配置失败: {error}', {error: e.message}), 'err'); }
 }
 async function saveTtsConfig() {
+  let providerParams;
+  try { providerParams = JSON.parse(document.getElementById('tts-provider-params').value || '{}'); }
+  catch (e) { toast('Provider parameters must be valid JSON', 'err'); return; }
   const body = {
     enabled: document.getElementById('tts-enabled').checked,
     emotion_enabled: document.getElementById('tts-emotion-enabled').checked,
@@ -4332,11 +4347,29 @@ async function saveTtsConfig() {
     ref_audio: document.getElementById('tts-ref-audio').value.trim(),
     prompt_text: document.getElementById('tts-prompt-text').value.trim(),
     speed: parseFloat(document.getElementById('tts-speed').value),
+    provider: document.getElementById('tts-provider').value,
+    provider_params: providerParams,
   };
   try {
     await api('PUT', '/tts-config', body);
     toast(t('status.tts.saved', 'TTS 配置已保存'), 'ok');
   } catch (e) { toast(t('common.save_failed', '保存失败: {error}', {error: e.message}), 'err'); }
+}
+async function testTtsConfig() {
+  try {
+    const d = await api('POST', '/tts-config/test', { text: '这是一段 TTS 配置试听。', emotion: 'neutral' });
+    const audio = new Audio(`data:${d.mime};base64,${d.audio_b64}`);
+    await audio.play();
+    toast(`试听成功 (${d.provider})`, 'ok');
+  } catch (e) { toast(`试听失败: ${e.message}`, 'err'); }
+}
+async function loadTtsCallLog() {
+  try {
+    const d = await api('GET', '/observability/api-calls?caller=tts&limit=10');
+    document.getElementById('tts-call-log').textContent = (d.entries || []).map(x =>
+      `${new Date(x.ts * 1000).toLocaleString()} | ${x.provider} | ${x.ok ? 'ok' : 'failed'} | ${x.duration_ms}ms | ${x.output_hint || ''}`
+    ).join('\n') || 'No TTS synthesis records yet.';
+  } catch (e) { toast(`读取合成记录失败: ${e.message}`, 'err'); }
 }
 
 async function _ensurePronounUidOptions() {

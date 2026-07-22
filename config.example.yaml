@@ -177,6 +177,18 @@ dream:
 watch:
   fresh_days: 3             # 3.6_watch 睡眠摘要最大新鲜度；超过即不注入
 tts:
+  # `provider` defaults to gsv. Existing top-level GSV fields remain valid and
+  # are automatically mapped to providers.gsv when that block is absent.
+  provider: gsv
+  providers:
+    # Optional new-style block. Omit it to continue using the legacy fields below.
+    gsv: {}
+    # Reserved configuration slot only; no cloud protocol is assumed or activated.
+    openai_compatible:
+      api_url: ''
+      api_key: ''
+      model: ''
+      voice: ''
   enabled: false  # 纯增值功能(QQ 概率语音)，默认关；依赖本机部署的 GPT-SoVITS，面板「系统状态」页可开
   desktop_enabled: false  # 桌面端按需语音条；独立于 QQ 概率语音，默认关闭
   probability: 0.1

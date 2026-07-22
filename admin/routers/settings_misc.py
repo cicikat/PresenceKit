@@ -82,11 +82,19 @@ class TtsConfigUpdate(BaseModel):
     speed:           Optional[float] = None
     emotion_enabled: Optional[bool]  = None
     emotions:        Optional[dict]  = None
+    provider:        Optional[str]   = None
+    provider_params: Optional[dict]  = None
+
+
+class TtsTestRequest(BaseModel):
+    text: str = "这是一段 TTS 配置试听。"
+    emotion: str = "neutral"
 
 
 @router.get("/tts-config", summary="获取 TTS 配置")
 async def get_tts_config(auth=Depends(require_scopes("admin"))):
     cfg = get_config().get("tts", {})
+    from core.output.voice_adapter import get_provider_status, get_safe_provider_params
     return {
         "enabled":         cfg.get("enabled",         False),
         "desktop_enabled": cfg.get("desktop_enabled", False),
@@ -96,6 +104,13 @@ async def get_tts_config(auth=Depends(require_scopes("admin"))):
         "speed":           float(cfg.get("speed",     1.0)),
         "emotion_enabled": cfg.get("emotion_enabled", False),
         "emotions":        cfg.get("emotions",        {}),
+        "provider":        get_provider_status(cfg)["provider"],
+        "provider_params": get_safe_provider_params(cfg),
+        "provider_status": get_provider_status(cfg),
+        "available_providers": [
+            {"id": "gsv", "label": "GPT-SoVITS / GSV", "active": True},
+            {"id": "openai_compatible", "label": "OpenAI-compatible / cloud", "active": False},
+        ],
     }
 
 
@@ -127,6 +142,23 @@ async def update_tts_config(body: TtsConfigUpdate, auth=Depends(require_scopes("
         tts_cfg["emotion_enabled"] = body.emotion_enabled
     if body.emotions is not None:
         tts_cfg["emotions"] = body.emotions
+    if body.provider is not None:
+        normalized_provider = body.provider.strip().lower()
+        if normalized_provider == "gpt_sovits":
+            normalized_provider = "gsv"
+        if normalized_provider not in {"gsv", "openai_compatible"}:
+            raise HTTPException(status_code=422, detail="不支持的 TTS provider")
+        tts_cfg["provider"] = normalized_provider
+    if body.provider_params is not None:
+        provider = str(tts_cfg.get("provider") or "gsv")
+        provider_blocks = tts_cfg.setdefault("providers", {})
+        current = dict(provider_blocks.get(provider) or {})
+        for key, value in body.provider_params.items():
+            # Empty secret input means keep an already configured credential.
+            if key == "api_key" and value == "":
+                continue
+            current[key] = value
+        provider_blocks[provider] = current
 
     try:
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
@@ -136,7 +168,32 @@ async def update_tts_config(body: TtsConfigUpdate, auth=Depends(require_scopes("
 
     from core import config_loader
     config_loader.reload_config()
-    return {"message": "TTS 配置已更新", "tts": tts_cfg}
+    from core.output.voice_adapter import get_provider_status, get_safe_provider_params
+    return {
+        "message": "TTS 配置已更新",
+        "tts": {
+            "provider": get_provider_status(tts_cfg)["provider"],
+            "provider_params": get_safe_provider_params(tts_cfg),
+            "provider_status": get_provider_status(tts_cfg),
+        },
+    }
+
+
+@router.post("/tts-config/test", summary="试听当前 TTS provider")
+async def test_tts_config(body: TtsTestRequest, auth=Depends(require_scopes("admin"))):
+    text = body.text.strip()
+    if not text:
+        raise HTTPException(status_code=422, detail="text 不能为空")
+    if len(text) > 500:
+        raise HTTPException(status_code=422, detail="试听文本不能超过 500 字")
+    from core.output.voice_adapter import get_provider_status, synthesize
+    status = get_provider_status()
+    if not status["ready"]:
+        raise HTTPException(status_code=409, detail=status["reason"])
+    audio = await synthesize(text, body.emotion)
+    if not audio:
+        raise HTTPException(status_code=502, detail="TTS 未返回音频；请查看最近合成记录")
+    return {"audio_b64": base64.b64encode(audio).decode("ascii"), "mime": "audio/wav", "provider": status["provider"]}
 
 
 class DesktopTtsUpdate(BaseModel):
