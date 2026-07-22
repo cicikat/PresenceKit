@@ -70,6 +70,28 @@ def test_load_by_id(registry_from):
     assert isinstance(char, Character)
 
 
+def test_load_caches_unchanged_card_but_reloads_after_mtime_change(registry_from, monkeypatch):
+    import core.character_loader as loader
+
+    read_count = 0
+    original_load = json.load
+
+    def _counting_load(*args, **kwargs):
+        nonlocal read_count
+        read_count += 1
+        return original_load(*args, **kwargs)
+
+    monkeypatch.setattr(loader.json, "load", _counting_load)
+    assert loader.load("yexuan").personality == "温柔"
+    assert loader.load("yexuan").personality == "温柔"
+    assert read_count == 1
+
+    card = Path("characters/yexuan.json")
+    card.write_text(json.dumps({"name": "Companion", "personality": "克制"}), encoding="utf-8")
+    assert loader.load("yexuan").personality == "克制"
+    assert read_count == 2
+
+
 # ── 2. Legacy: filename "yexuan.json" normalizes to id and loads ──────────────
 
 def test_load_by_legacy_filename(registry_from):

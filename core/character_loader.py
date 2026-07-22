@@ -6,6 +6,7 @@
 
 import json
 import logging
+from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -24,14 +25,17 @@ _consistency_counter: dict[str, int] = {}
 # 只在"本次加载的角色名与上次不同"（真正发生切换/首次加载）时打 INFO，
 # 同名重复解析降 DEBUG（Brief 54-C：记边沿，不记电平）。
 _last_loaded_char_name: str | None = None
+_last_loaded_signature: tuple[str, int, int] | None = None
+_character_cache: dict[str, tuple[tuple[str, int, int], "Character"]] = {}
 
 
-def _log_load_success(name: str, *, note: str = "") -> None:
-    global _last_loaded_char_name
+def _log_load_success(name: str, signature: tuple[str, int, int], *, note: str = "") -> None:
+    global _last_loaded_char_name, _last_loaded_signature
     suffix = f"（{note}）" if note else ""
-    if _last_loaded_char_name != name:
+    if _last_loaded_char_name != name or _last_loaded_signature != signature:
         logger.info(f"[character_loader] 角色 '{name}' 加载成功{suffix}")
         _last_loaded_char_name = name
+        _last_loaded_signature = signature
     else:
         logger.debug(f"[character_loader] 角色 '{name}' 加载成功{suffix}（重复解析，非切换）")
 
@@ -99,13 +103,23 @@ def load(filename_or_id: str) -> Character:
             f"(id={asset_id!r}, 已在 registry 中注册但磁盘文件缺失)"
         )
 
+    stat = path.stat()
+    cache_key = str(path.resolve())
+    signature = (cache_key, stat.st_mtime_ns, stat.st_size)
+    cached = _character_cache.get(cache_key)
+    if cached is not None and cached[0] == signature:
+        char = deepcopy(cached[1])
+        _log_load_success(char.name, signature, note="缓存命中")
+        return char
+
     # Step 4: 解析
     if suffix in (".txt", ".md"):
         text = path.read_text(encoding="utf-8")
         name = path.stem
         char = Character(name=name, description=text)
-        _log_load_success(name, note="纯文本格式")
-        return char
+        _character_cache[cache_key] = (signature, char)
+        _log_load_success(name, signature, note="纯文本格式")
+        return deepcopy(char)
 
     # JSON 格式 — json.JSONDecodeError 直接向上抛
     with open(path, "r", encoding="utf-8") as f:
@@ -136,8 +150,9 @@ def load(filename_or_id: str) -> Character:
         if isinstance(val, list):
             setattr(char, field_name, "".join(val))
 
-    _log_load_success(char.name)
-    return char
+    _character_cache[cache_key] = (signature, char)
+    _log_load_success(char.name, signature)
+    return deepcopy(char)
 
 
 def is_proactive_disabled(char_id: str | None = None) -> bool:
