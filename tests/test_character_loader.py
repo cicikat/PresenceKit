@@ -16,6 +16,7 @@ Covers:
 """
 
 import json
+import logging
 from pathlib import Path
 
 import pytest
@@ -90,6 +91,50 @@ def test_load_caches_unchanged_card_but_reloads_after_mtime_change(registry_from
     card.write_text(json.dumps({"name": "Companion", "personality": "克制"}), encoding="utf-8")
     assert loader.load("yexuan").personality == "克制"
     assert read_count == 2
+
+
+def test_load_logs_only_the_active_character_not_routed_cards(registry_from, monkeypatch, caplog):
+    """Repeated/routed card loads must not become INFO just because names alternate."""
+    import core.pipeline_registry as pipeline_registry
+
+    class _Pipeline:
+        _active_character_id = "other_character"
+
+    monkeypatch.setattr(pipeline_registry, "get", lambda: _Pipeline())
+    monkeypatch.setattr(_cl_mod, "_last_logged_active_asset_id", None)
+    monkeypatch.setattr(_cl_mod, "_last_logged_active_signature", None)
+
+    with caplog.at_level(logging.DEBUG, logger="core.character_loader"):
+        load("yexuan")
+        load("yexuan")
+
+    records = [
+        record for record in caplog.records
+        if record.name == "core.character_loader" and "加载成功" in record.getMessage()
+    ]
+    assert records
+    assert all(record.levelno == logging.DEBUG for record in records)
+
+
+def test_load_logs_active_character_once_until_its_card_changes(registry_from, monkeypatch, caplog):
+    import core.pipeline_registry as pipeline_registry
+
+    class _Pipeline:
+        _active_character_id = "yexuan"
+
+    monkeypatch.setattr(pipeline_registry, "get", lambda: _Pipeline())
+    monkeypatch.setattr(_cl_mod, "_last_logged_active_asset_id", None)
+    monkeypatch.setattr(_cl_mod, "_last_logged_active_signature", None)
+
+    with caplog.at_level(logging.DEBUG, logger="core.character_loader"):
+        load("yexuan")
+        load("yexuan")
+
+    records = [
+        record for record in caplog.records
+        if record.name == "core.character_loader" and "加载成功" in record.getMessage()
+    ]
+    assert [record.levelno for record in records] == [logging.INFO, logging.DEBUG]
 
 
 # ── 2. Legacy: filename "yexuan.json" normalizes to id and loads ──────────────

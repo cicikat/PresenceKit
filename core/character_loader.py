@@ -24,18 +24,43 @@ _consistency_counter: dict[str, int] = {}
 # 高频调用（每次 LLM 调用都可能带 char_id），并非只在真正切换角色时才走到这里。
 # 只在"本次加载的角色名与上次不同"（真正发生切换/首次加载）时打 INFO，
 # 同名重复解析降 DEBUG（Brief 54-C：记边沿，不记电平）。
-_last_loaded_char_name: str | None = None
-_last_loaded_signature: tuple[str, int, int] | None = None
+# INFO is reserved for the active pipeline character; routed/group cards stay DEBUG.
+_last_logged_active_asset_id: str | None = None
+_last_logged_active_signature: tuple[str, int, int] | None = None
 _character_cache: dict[str, tuple[tuple[str, int, int], "Character"]] = {}
 
 
-def _log_load_success(name: str, signature: tuple[str, int, int], *, note: str = "") -> None:
-    global _last_loaded_char_name, _last_loaded_signature
+def _active_character_id() -> str | None:
+    """Return the running pipeline's active id without making loading depend on it."""
+    try:
+        from core import pipeline_registry
+
+        pipeline = pipeline_registry.get()
+        return getattr(pipeline, "_active_character_id", None) if pipeline is not None else None
+    except Exception:
+        # Character loading is used during startup, before the pipeline is registered.
+        return None
+
+
+def _log_load_success(
+    asset_id: str,
+    name: str,
+    signature: tuple[str, int, int],
+    *,
+    note: str = "",
+) -> None:
+    global _last_logged_active_asset_id, _last_logged_active_signature
     suffix = f"（{note}）" if note else ""
-    if _last_loaded_char_name != name or _last_loaded_signature != signature:
+    active_id = _active_character_id()
+    is_initial_startup_load = active_id is None and _last_logged_active_asset_id is None
+    is_active_change = active_id == asset_id and (
+        _last_logged_active_asset_id != asset_id
+        or _last_logged_active_signature != signature
+    )
+    if is_initial_startup_load or is_active_change:
         logger.info(f"[character_loader] 角色 '{name}' 加载成功{suffix}")
-        _last_loaded_char_name = name
-        _last_loaded_signature = signature
+        _last_logged_active_asset_id = asset_id
+        _last_logged_active_signature = signature
     else:
         logger.debug(f"[character_loader] 角色 '{name}' 加载成功{suffix}（重复解析，非切换）")
 
@@ -109,7 +134,7 @@ def load(filename_or_id: str) -> Character:
     cached = _character_cache.get(cache_key)
     if cached is not None and cached[0] == signature:
         char = deepcopy(cached[1])
-        _log_load_success(char.name, signature, note="缓存命中")
+        _log_load_success(asset_id, char.name, signature, note="缓存命中")
         return char
 
     # Step 4: 解析
@@ -118,7 +143,7 @@ def load(filename_or_id: str) -> Character:
         name = path.stem
         char = Character(name=name, description=text)
         _character_cache[cache_key] = (signature, char)
-        _log_load_success(name, signature, note="纯文本格式")
+        _log_load_success(asset_id, name, signature, note="纯文本格式")
         return deepcopy(char)
 
     # JSON 格式 — json.JSONDecodeError 直接向上抛
@@ -151,7 +176,7 @@ def load(filename_or_id: str) -> Character:
             setattr(char, field_name, "".join(val))
 
     _character_cache[cache_key] = (signature, char)
-    _log_load_success(char.name, signature)
+    _log_load_success(asset_id, char.name, signature)
     return deepcopy(char)
 
 
