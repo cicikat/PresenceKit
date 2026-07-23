@@ -178,10 +178,18 @@ async def _connect_server(name: str, server_cfg: dict) -> None:
         session = await stack.enter_async_context(ClientSession(read, write))
         await session.initialize()
         listed = await session.list_tools()
-    except Exception as exc:
-        await stack.aclose()
+    except BaseException as exc:
+        # HTTP transport 内部用 anyio task group 实现 streaming；初始化阶段被取消
+        # （超时/请求中断/重载竞态）时，anyio 可能抛 CancelledError 或
+        # BaseExceptionGroup，两者都不是 Exception 子类，callers 的 `except Exception`
+        # 兜底接不住，会一路崩到 ASGI 应用层。这里统一收窄成普通 Exception 再上抛，
+        # 让现有的 fail-soft 调用方（init/sync/reload）都能正常捕获。
+        try:
+            await stack.aclose()
+        except BaseException as close_exc:
+            logger.debug("[mcp_client] server '%s' 初始化失败后关闭 stack 出错: %s", name, close_exc)
         _record_init(name, ok=False, error=str(exc))
-        raise
+        raise RuntimeError(f"MCP server '{name}' 初始化失败: {exc}") from exc
 
     allow = set(server_cfg.get("allow_tools") or [])
     timeout_s = float(server_cfg.get("tool_timeout_s", 30))
@@ -227,8 +235,15 @@ async def test_server_config(server_cfg: dict) -> list[dict]:
         session = await stack.enter_async_context(ClientSession(read, write))
         await session.initialize()
         return _tool_details(await session.list_tools())
+    except BaseException as exc:
+        # 同 _connect_server：初始化阶段被取消可能抛非 Exception 子类，统一收窄，
+        # 让 admin 路由的 `except Exception` 能正常转成 400 而不是让请求本身崩掉。
+        raise RuntimeError(f"连接或初始化未完成: {exc}") from exc
     finally:
-        await stack.aclose()
+        try:
+            await stack.aclose()
+        except BaseException as close_exc:
+            logger.debug("[mcp_client] test_server_config 关闭 stack 出错: %s", close_exc)
 
 
 def _make_tool_func(server_name: str, tool_name: str, timeout_s: float):
@@ -313,7 +328,12 @@ async def disconnect_server(name: str) -> None:
         _TOOL_REGISTRY.pop(reg_name, None)
     try:
         await handle.stack.aclose()
-    except Exception as exc:
+    except BaseException as exc:
+        # 同上：关闭 HTTP transport 的 task group 时，跨 task 取消可能抛出
+        # CancelledError / BaseExceptionGroup，不是 Exception 子类，必须用
+        # BaseException 兜住，否则这行代码本身就能把调用方（reload/sync/shutdown）
+        # 一路捅穿到 ASGI 应用层，导致整个请求 500。这里是纯 best-effort 清理，
+        # 吞掉即可，不影响配置或其他 server。
         logger.debug("[mcp_client] server '%s' 关闭时出错: %s", name, exc)
 
 

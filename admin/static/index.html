@@ -742,7 +742,7 @@ textarea { resize: vertical; min-height: 72px; }
         </div>
       </div>
 
-      <!-- 视觉模型配置（只读镜像） -->
+      <!-- 视觉模型配置（可编辑，保存后热重载；仅供 coplay 场景识别，与「视觉感知」影子观察是两套开关） -->
       <div class="card">
         <div class="card-header">
           <h3 data-i18n="status.vision.title">视觉模型配置（图片识别）</h3><button class="btn btn-primary btn-sm" onclick="saveVisionParams()" data-i18n="common.save">保存</button>
@@ -752,6 +752,7 @@ textarea { resize: vertical; min-height: 72px; }
           </label>
         </div>
         <p style="font-size:12px;color:var(--muted);margin:0 16px 8px" data-i18n="status.vision.key_hint">API Key 留空时保留已有密钥；保存后热重载。</p>
+        <p style="font-size:12px;color:var(--warning,#c77);margin:0 16px 8px" data-i18n="status.vision.scope_hint">此开关只影响陪玩场景识别（coplay），与「功能开关」页的「视觉感知」影子观察总闸是两套独立机制，互不控制，也不会打开桌宠客户端本地的截屏开关。</p>
         <div style="padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:16px">
           <div>
             <div style="font-size:13px;font-weight:600;margin-bottom:6px">Provider</div>
@@ -3710,9 +3711,7 @@ async function saveVisionParams() {
   };
   try {
     await api('PUT', '/vision-params', body);
-    const msg = document.getElementById('vision-save-msg');
-    msg.textContent = t('common.saved', '已保存');
-    setTimeout(() => msg.textContent = '', 2000);
+    toast(t('common.saved', '已保存'), 'ok');
   } catch(e) {
     toast(t('common.save_failed', '保存失败: {error}', {error: e.message || e}), 'err');
   }
@@ -4046,7 +4045,7 @@ let _featureFlags = {};
 async function loadFeatureFlags() {
   const el = document.getElementById('feature-flags-grid'); if (!el) return;
   try { const d = await api('GET', '/settings/feature-flags'); _featureFlags = d.flags || {};
-    el.innerHTML = Object.entries(_featureFlags).map(([name, item]) => `<label class="checkbox-row" style="gap:9px;padding:9px 10px;border:1px solid var(--border);border-radius:6px"><input type="checkbox" data-feature-flag="${name}" ${item.enabled ? 'checked' : ''}><span>${escapeHtml(t('flag.' + name, item.label))}<small style="display:block;color:var(--muted)">${name}</small></span></label>`).join('');
+    el.innerHTML = Object.entries(_featureFlags).map(([name, item]) => `<label class="checkbox-row" style="gap:9px;padding:9px 10px;border:1px solid var(--border);border-radius:6px"><input type="checkbox" data-feature-flag="${name}" ${item.enabled ? 'checked' : ''}><span>${escapeHtml(t('flag.' + name, item.label))}<small style="display:block;color:var(--muted)">${name}</small>${name === 'visual_perception' ? `<small style="display:block;color:var(--warning,#c77)">${escapeHtml(t('flag.visual_perception_hint', '此闸打开后，还需在桌宠客户端「设置→视觉观察」里单独打开本地开关，两处都开才会真正截图'))}</small>` : ''}</span></label>`).join('');
   } catch (e) { el.innerHTML = `<div class="empty">${e.message}</div>`; }
 }
 async function saveFeatureFlags() { const flags = {}; document.querySelectorAll('[data-feature-flag]').forEach(el => flags[el.dataset.featureFlag] = el.checked); try { await api('PUT', '/settings/feature-flags', { flags }); toast(t('common.saved', '已保存'), 'ok'); loadFeatureFlags(); } catch (e) { toast(e.message, 'err'); } }
