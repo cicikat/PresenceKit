@@ -35,7 +35,10 @@ def _draft(**overrides):
     return mod.McpServerDraft(**data)
 
 
-def test_import_tests_before_write_masks_header_and_reloads_one_server(tmp_path, monkeypatch):
+def test_import_tests_before_write_but_does_not_hot_reload(tmp_path, monkeypatch):
+    """止血（2026-07-23）：跨 task 关闭已有 AsyncExitStack 会把整个 uvicorn 主循环一起
+    取消带崩进程（观察到的真实 crash），在改造成常驻 task 生命周期之前，导入接口只
+    探测 + 写配置，不再调用 reload_server_from_config。"""
     path = _write(tmp_path, "mcp_servers:\n  enabled: true\n  servers: []\n")
     _patch_config(monkeypatch, path)
     from core import mcp_client
@@ -56,7 +59,8 @@ def test_import_tests_before_write_masks_header_and_reloads_one_server(tmp_path,
 
     assert result["tools"][0]["name"] == "toy_status"
     assert result["server"]["headers"]["Authorization"] == "Bearer ${CEDAR_TOY_TOKEN}"
-    assert calls[0][0] == "probe" and calls[1] == ("reload", "cedar_toy")
+    assert calls == [("probe", mod._validate_draft(_draft()))]
+    assert "重启" in result["message"]
     cfg = yaml.safe_load(path.read_text(encoding="utf-8"))
     assert cfg["mcp_servers"]["servers"][0]["headers"]["Authorization"] == "Bearer ${CEDAR_TOY_TOKEN}"
 
@@ -77,7 +81,8 @@ def test_import_rejects_unknown_whitelist_without_writing(tmp_path, monkeypatch)
     assert path.read_text(encoding="utf-8") == before
 
 
-def test_global_toggle_syncs_live_mcp_servers(tmp_path, monkeypatch):
+def test_global_toggle_writes_config_without_hot_sync(tmp_path, monkeypatch):
+    """止血：总开关只写配置，不再热同步（同上，跨 task 关闭连接会带崩整个进程）。"""
     path = _write(tmp_path, "mcp_servers:\n  enabled: false\n  servers: []\n")
     _patch_config(monkeypatch, path)
     from core import mcp_client
@@ -89,10 +94,14 @@ def test_global_toggle_syncs_live_mcp_servers(tmp_path, monkeypatch):
     monkeypatch.setattr(mcp_client, "sync_mcp_servers", sync)
     result = asyncio.run(mod.update_mcp_settings(mod.McpSettingsUpdate(enabled=True), _auth=None))
     assert result["enabled"] is True
-    assert calls == ["sync"]
+    assert calls == []
+    assert "重启" in result["message"]
+    cfg = yaml.safe_load(path.read_text(encoding="utf-8"))
+    assert cfg["mcp_servers"]["enabled"] is True
 
 
-def test_update_server_whitelist_reloads_only_that_server(tmp_path, monkeypatch):
+def test_update_server_whitelist_writes_config_without_hot_reload(tmp_path, monkeypatch):
+    """止血：单 server 更新只写配置，不再热重载（同上）。"""
     path = _write(tmp_path, "mcp_servers:\n  enabled: true\n  servers:\n    - name: cedar_toy\n      transport: http\n      url: https://example.test/mcp\n      allow_tools: []\n")
     _patch_config(monkeypatch, path)
     from core import mcp_client
@@ -107,4 +116,5 @@ def test_update_server_whitelist_reloads_only_that_server(tmp_path, monkeypatch)
         "cedar_toy", mod.McpServerUpdate(allow_tools=["toy_status"]), _auth=None,
     ))
     assert result["server"]["allow_tools"] == ["toy_status"]
-    assert calls == ["cedar_toy"]
+    assert calls == []
+    assert "重启" in result["message"]

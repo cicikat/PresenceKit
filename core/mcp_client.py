@@ -262,17 +262,27 @@ async def _call_tool(server_name: str, tool_name: str, arguments: dict, timeout_
             result = await asyncio.wait_for(
                 handle.session.call_tool(tool_name, arguments), timeout=timeout_s
             )
-        except Exception as exc:
+        except BaseException as exc:
+            # 同 _connect_server：真正的工具调用最常经过这条路径（每次 execute() 都走
+            # 这里），wait_for 超时自己内部取消底层 anyio 流读写时，同样可能抛
+            # CancelledError / BaseExceptionGroup，必须用 BaseException 才接得住，
+            # 否则重连都走不到就已经把请求捅穿了。
             logger.warning("[mcp_client] 调用 %s.%s 失败，尝试重连一次: %s", server_name, tool_name, exc)
-            await _reconnect_server(server_name)
+            try:
+                await _reconnect_server(server_name)
+            except BaseException as reconnect_exc:
+                logger.warning("[mcp_client] 重连 %s 失败: %s", server_name, reconnect_exc)
             handle = _servers.get(server_name)
             if handle is None:
-                raise
-            result = await asyncio.wait_for(
-                handle.session.call_tool(tool_name, arguments), timeout=timeout_s
-            )
+                raise RuntimeError(f"MCP 工具调用失败且重连未恢复: {exc}") from exc
+            try:
+                result = await asyncio.wait_for(
+                    handle.session.call_tool(tool_name, arguments), timeout=timeout_s
+                )
+            except BaseException as retry_exc:
+                raise RuntimeError(f"MCP 工具调用失败: {retry_exc}") from retry_exc
         text = _format_result(result)
-    except Exception as exc:
+    except BaseException as exc:
         _record_call(server_name, tool_name, ok=False, error=str(exc))
         from core.api_call_log import append as append_api_call
         append_api_call(
@@ -280,7 +290,9 @@ async def _call_tool(server_name: str, tool_name: str, arguments: dict, timeout_
             model=tool_name, duration_ms=int((time.perf_counter() - started) * 1000), ok=False,
             output_hint="MCP call failed",
         )
-        raise
+        if isinstance(exc, Exception):
+            raise
+        raise RuntimeError(f"MCP 工具调用未完成: {exc}") from exc
     _record_call(server_name, tool_name, ok=True)
     from core.api_call_log import append as append_api_call
     append_api_call(
