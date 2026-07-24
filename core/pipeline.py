@@ -961,12 +961,28 @@ class Pipeline:
             )
 
         loop_msgs = list(messages)
-        # 工具意愿软提示（Brief 29 · 5，Brief 28 补丁）：利用 recency 位置，插在用户消息
-        # 之前；只在 loop 首步注入一次，不进 short_term history（loop_msgs 本就是一次性副本）。
+        # 工具意愿软提示（Brief 29 · 5，Brief 28 补丁；Brief 120 补充尾部花括号约定）：
+        # 利用 recency 位置，插在用户消息之前；只在 loop 首步注入一次，不进 short_term
+        # history（loop_msgs 本就是一次性副本）。
+        #
+        # Brief 120：build_prompt() 在 Path C 场景下固定以 tool_result=None 调用，
+        # prompt_builder 会注入"【无工具结果】禁止声称调用了任何工具"——这条指令从
+        # loop 第一步起就在、且不随后续步骤刷新，会和"允许用自然语言+花括号标记下一步
+        # 动作"直接冲突。这里必须显式说明：光嘴上说不加标记＝仍然禁止（呼应那条静态
+        # 指令），加了标记才是被允许的例外——不能让模型觉得两条指令互相矛盾而谁都不信。
         if cfg.get("nudge_hint", True) and loop_msgs:
             loop_msgs.insert(len(loop_msgs) - 1, {
                 "role": "system",
-                "content": "需要外部信息或操作时，直接调用可用工具，不要凭记忆编造。",
+                "content": (
+                    "需要外部信息或操作时，直接调用可用工具，不要凭记忆编造。"
+                    "如果这一步想依赖已经拿到的工具结果再发起一次工具调用（比如钓鱼、"
+                    "海龟汤这类需要等一等/再问一句才能继续的小游戏），优先直接发起结构化"
+                    "工具调用；只有确实没法走结构化调用时，才在这次自然语言回复的末尾附加"
+                    "「{true: 具体要做什么，参数是什么}」，系统会据此把这个动作真正执行掉——"
+                    "只是嘴上说说而不加这个标记，动作不会真的发生，禁止只用文字暗示。"
+                    "不需要再调用工具就什么都不加，或加「{false}」；这个标记本身不会被"
+                    "展示给对方，放心用。"
+                ),
                 "_layer": "11.5_tool_nudge",
             })
         used_tool = False

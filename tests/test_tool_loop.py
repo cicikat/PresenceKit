@@ -528,6 +528,33 @@ def test_prompt_style_passthrough_for_tool_messages():
         assert tool_msg["tool_call_id"] == "call_1"
 
 
+# ── 12b. nudge_hint 必须教会模型尾部花括号约定（Brief 120）──────────────────
+#
+# 光实现后端解析而不告诉模型这个语法存在，模型就永远不会主动用它——这条约定必须
+# 出现在 loop 注入的 nudge_hint 里（_layer 11.5_tool_nudge，具备 recency 优先级，
+# 能压过 build_prompt() 在 tool_result=None 时注入的"禁止声称调用了任何工具"）。
+
+@pytest.mark.asyncio
+async def test_nudge_hint_teaches_tail_brace_convention(monkeypatch):
+    from core.llm_client import ChatTurn
+
+    _patch_tool_loop_config(monkeypatch)
+    _patch_tools_schema(monkeypatch, ["web_search"])
+    chat_turn_calls = _script_chat_turn(monkeypatch, [
+        ChatTurn(content="ok", tool_calls=[], assistant_message={"role": "assistant", "content": "ok"}),
+    ])
+    _script_execute(monkeypatch, [])
+
+    pipeline = _make_pipeline()
+    await pipeline.run_agentic_loop(
+        [{"role": "user", "content": "hi"}], uid="u1", char_id="yexuan", session_state=object(),
+    )
+
+    nudge = next(m for m in chat_turn_calls[0]["messages"] if m.get("_layer") == "11.5_tool_nudge")
+    assert "{true" in nudge["content"]
+    assert "{false" in nudge["content"]
+
+
 # ── 13. Brief 120·工具循环二次调用兜底（尾部花括号方案）────────────────────
 #
 # 覆盖 cc-tasks/120-工具循环二次调用兜底-尾部花括号方案.md §4 的验收要求：
