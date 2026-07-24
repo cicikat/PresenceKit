@@ -488,10 +488,10 @@ async def _generate_and_store_diary(oid: str, char_id: str) -> None:
 重要：你不是{char_name}，你是分析器。只写事实，不写感受，不写文学化内容。
 
 对话日志：
-{today_log[:800]}"""
+{today_log}"""
     facts_content = await llm_client.chat(
         messages=[{"role": "user", "content": facts_prompt}],
-        max_tokens_override=200,
+        max_tokens_override=2000,
         char_id=char_id,
     )
 
@@ -512,7 +512,7 @@ async def _generate_and_store_diary(oid: str, char_id: str) -> None:
 {facts_content}
 
 今天和她对话的真实片段（用来唤起具体的感觉，不要照抄原话）：
-{today_log[:1000]}
+{today_log}
 
 写作要求：
 - 这是私人日记，要真实、具体、有起伏，不是工整的总结报告
@@ -523,7 +523,7 @@ async def _generate_and_store_diary(oid: str, char_id: str) -> None:
 - 不要复述事件清单，只写这些事在你心里留下了什么"""
     feeling_content = await llm_client.chat(
         messages=[{"role": "user", "content": feeling_prompt}],
-        max_tokens_override=450,
+        max_tokens_override=4500,
         char_id=char_id,
     )
 

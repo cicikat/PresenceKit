@@ -568,7 +568,14 @@ async def _do_close_dream(uid: str, dream_id: str, exit_type: str) -> None:
 
     state = clear_local_state(state)  # clears body_state + emotional_tension + scene etc.
     state["status"] = DreamStatus.REALITY_AFTERGLOW.value
-    state["last_dream_id"] = dream_id
+    # force_exit_dream() is documented idempotent ("safe to call from any state"),
+    # so a redundant hard_exit can reach here with dream_id=="" after a prior close
+    # already cleared state["dream_id"]. Blindly overwriting last_dream_id with ""
+    # corrupts the value dream_exit's proposer depends on (empty last_dream_id makes
+    # it return None forever — this was observed for real: two status_shift entries
+    # 33s apart in flow_entries, then last_dream_id=="" stuck ever after). Never let
+    # an empty incoming dream_id clobber a previously-recorded one.
+    state["last_dream_id"] = dream_id or state.get("last_dream_id", "")
     state["last_exit_type"] = exit_type
     state["last_dream_mode"] = dream_mode
     state["last_exited_at"] = time.time()
