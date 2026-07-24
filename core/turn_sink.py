@@ -100,13 +100,41 @@ async def _fanout(
         if exclude_origin_channel:
             targets = [ch for ch in targets if ch.name != exclude_origin_channel]
 
-        # Durable mobile fallback: proactive turns (not USER_CHAT) must reach the
-        # mobile durable queue even when the phone is offline (is_active=False).
+        _is_proactive = source is not None and source != TurnSource.USER_CHAT
+
+        # Desktop broadcast-once: proactive turns must not fall back to
+        # channel_queue.json when desktop WS isn't live. desktop.is_active also
+        # returns True off a stale _fallback_active flag (set on any past
+        # /desktop/chat request, no TTL — see channels/desktop.py), so a trigger
+        # firing hours after the desktop app was last open would otherwise queue
+        # to disk and get replayed all at once whenever the app next opens,
+        # regardless of elapsed time. Proactive delivery to desktop should only
+        # ever be "live once, silent drop if unreachable" — the turn is still
+        # captured to memory/history independently of channel fanout.
+        if _is_proactive:
+            from channels import desktop_ws
+            if not desktop_ws.is_connected():
+                targets = [ch for ch in targets if getattr(ch, "name", "") != "desktop"]
+
+        # Durable mobile fallback: every turn (USER_CHAT replies included, not just
+        # proactive trigger/sensor/watch) must reach the mobile durable queue even
+        # when the phone reads as offline (is_active=False / TTL lapsed).
         # mobile.send() only writes to the persistent queue + fires relay signal —
         # safe to call for an offline phone. is_active should gate live poll
         # responses, not whether we bother leaving a message in the queue.
-        _is_proactive = source is not None and source != TurnSource.USER_CHAT
-        if _is_proactive and exclude_origin_channel != "mobile":
+        #
+        # Why unconditional (not just _is_proactive): the phone shares
+        # /desktop/chat with the desktop client (channel_name is always
+        # "desktop", never "mobile" — see admin/routers/chat.py), so a reply to a
+        # message the phone itself just sent still needs to land in mobile_queue
+        # to pop a QQ/WeChat-style banner if the user backgrounds the app before
+        # the reply is ready. This is safe from double-notifications: Android's
+        # MainActivity.onResume() stops MobileNotificationService entirely (see
+        # PresenceKit-mobile), so nothing is listening for the relay wake while
+        # the app is foreground — the message just sits queued and gets picked up
+        # by Flutter's own foreground poll instead, same as it already does for
+        # proactive messages.
+        if exclude_origin_channel != "mobile":
             mobile_ch = registry.get("mobile")
             already = any(getattr(t, "name", "") == "mobile" for t in targets)
             if mobile_ch is not None and not already:

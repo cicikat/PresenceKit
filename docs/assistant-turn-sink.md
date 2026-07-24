@@ -422,6 +422,42 @@ channel，只需改 `fanout="all"`，无需改动 scrub/post_process 链路。
 
 ---
 
+## 十三、Desktop proactive turn 广播一次（2026-07-24）
+
+`_fanout` 里新增一层过滤：`TurnSource != USER_CHAT` 的 turn（trigger / sensor / watch）只有在
+`channels.desktop_ws.is_connected()` 为真时才把 `desktop` 留在 fanout targets 里，否则直接摘除，
+不再调用 `DesktopChannel.send()`。
+
+动机：`DesktopChannel._fallback_active` 只在 WS 断开时清零，`/desktop/chat` 每次请求都会重新置
+`True` 且无 TTL；desktop 长时间未连 WS 时这个陈旧标志仍让 `is_active` 判真，导致 proactive turn
+照常写入 `channel_queue.json`，桌宠端下次打开时把积压消息全部当"刚收到"补发，与实际发生时间脱节。
+
+修复后语义：proactive turn 对桌面是"广播一次，打不进就静默丢弃"——turn 仍然正常写入
+memory/event_log/history（走 `capture_turn`，与 channel fanout 无关），只是不会晚点从队列补投到
+聊天窗口。USER_CHAT 回显不受影响；WS 在线时因瞬时故障导致 `push_message` 失败，仍走
+`channel_queue.json` 短时兜底。
+
+详见 `docs/channels.md` §桌宠 WebSocket。测试：
+`tests/test_turn_sink.py::test_proactive_turn_does_not_queue_to_desktop_file_when_disconnected`。
+
+## 十四、Mobile durable fallback 扩展到 USER_CHAT（2026-07-24）
+
+原本只有 trigger/sensor/watch（`_is_proactive`）才会无条件把 `mobile` 补进 fanout targets；
+USER_CHAT 回复要不要进 `mobile_queue.json` 完全看当时 `mobile.is_active`（120s TTL）。这导致"发
+完消息立刻切后台"这种 QQ/微信式场景不可靠——如果 TTL 恰好在回复生成期间过期，回复就不会落进
+mobile 队列，后台也就没有横幅可弹。
+
+现在这段 `if exclude_origin_channel != "mobile": targets.append(mobile_ch)` 对所有 source 无条件
+生效，不再区分 `_is_proactive`。之所以安全、不会导致前台重复弹通知：手机与桌宠共用
+`/desktop/chat`（`channel_name` 恒为 `"desktop"`，从不是 `"mobile"`，见
+`admin/routers/chat.py:528`），而 PresenceKit-mobile 的 `MainActivity.onResume()` 会把
+`MobileNotificationService`整个停掉——App 在前台时压根没有东西在监听中继信号，消息只是安静地
+躺在队列里，跟现有的前台 `/mobile/poll` 轮询一起被正常消费，不会额外弹窗。
+
+测试：`tests/test_turn_sink.py::test_user_chat_reaches_offline_mobile_queue`。
+
+---
+
 ## 附：与 codex 报告的对照
 
 本文档对 codex 报告里指出的"最显著链路缺口"做了如下回应：

@@ -63,21 +63,29 @@ async def _reset_channels():
 
 
 @pytest.mark.parametrize(
-    ("source", "trigger_name", "user_text"),
+    ("source", "trigger_name", "user_text", "ws_connected", "expect_desktop"),
     [
-        ("user_chat", None, "你好"),
-        ("trigger", "morning_greeting", None),
-        ("sensor", "sensor_aware", None),
-        ("watch", "hr_high", None),
+        # USER_CHAT is never subject to the desktop broadcast-once filter.
+        ("user_chat", None, "你好", False, True),
+        # Proactive sources (trigger/sensor/watch) only reach desktop when the
+        # WS is actually live; otherwise they must not fall back to
+        # channel_queue.json (see test_proactive_turn_does_not_queue_to_desktop_*).
+        ("trigger", "morning_greeting", None, True, True),
+        ("trigger", "morning_greeting", None, False, False),
+        ("sensor", "sensor_aware", None, True, True),
+        ("watch", "hr_high", None, False, False),
     ],
 )
-async def test_record_assistant_turn_sources_success(monkeypatch, source, trigger_name, user_text):
+async def test_record_assistant_turn_sources_success(
+    monkeypatch, source, trigger_name, user_text, ws_connected, expect_desktop
+):
     from channels import registry
     from core.turn_sink import record_assistant_turn
 
     await _reset_channels()
     channel = _Channel("desktop")
     registry.register(channel)
+    monkeypatch.setattr("channels.desktop_ws.is_connected", lambda: ws_connected)
 
     result = await record_assistant_turn(
         assistant_text="在。",
@@ -93,8 +101,38 @@ async def test_record_assistant_turn_sources_success(monkeypatch, source, trigge
     # Brief 37: emotion 字段现在只反映 critical 段的占位值（真实检测结果在
     # post_process_slow 里异步落进 mood_state，不再同步返回给调用方）。
     assert result.emotion == "neutral"
-    assert result.fanout_targets == ["desktop"]
-    assert channel.sent == [("在。", "uid1", None)]
+    if expect_desktop:
+        assert result.fanout_targets == ["desktop"]
+        assert channel.sent == [("在。", "uid1", None)]
+    else:
+        assert result.fanout_targets == []
+        assert channel.sent == []
+
+
+async def test_proactive_turn_does_not_queue_to_desktop_file_when_disconnected(monkeypatch, sandbox):
+    """Bug fix：trigger/sensor/watch 等 proactive turn 在桌面 WS 未连接时，不应该
+    写入 channel_queue.json 留到下次打开桌面端一次性补发——不管过了多久都会被
+    当成"刚收到"弹出，很出戏。现在改成只广播一次，打不进直接静默丢弃；turn 仍然
+    正常写入记忆/历史，只是不会晚点从队列里补投到桌面聊天窗口。"""
+    from channels import registry
+    from channels.desktop import DesktopChannel
+    from core.turn_sink import TurnSource, record_assistant_turn
+
+    await _reset_channels()
+    registry.register(DesktopChannel())
+    monkeypatch.setattr("channels.desktop_ws.is_connected", lambda: False)
+
+    result = await record_assistant_turn(
+        assistant_text="早安。",
+        uid="owner",
+        source=TurnSource.TRIGGER,
+        trigger_name="morning_greeting",
+        fanout="all",
+        pipeline=_FakePipeline(),
+    )
+
+    assert "desktop" not in result.fanout_targets
+    assert not sandbox.channel_queue().exists()
 
 
 async def test_fanout_failure_does_not_block_other_channels():
@@ -271,6 +309,38 @@ async def test_fanout_all_without_exclude_sends_to_all():
     assert set(result.fanout_targets) == {"desktop", "mobile"}
     assert desktop.sent == [("回复内容", "owner", None)]
     assert mobile.sent == [("回复内容", "owner", None)]
+
+
+async def test_user_chat_reaches_offline_mobile_queue(sandbox):
+    """QQ/微信式横幅：手机与桌宠共用 /desktop/chat（channel_name 恒为 "desktop"，
+    见 admin/routers/chat.py），所以哪怕这条回复就是回给手机自己发的消息，只要
+    mobile channel 当前读作离线（is_active=False，例如用户发完就切后台，poll 已经
+    停了），也必须落进 mobile_queue.json + 触发中继信号，而不是只有 trigger/sensor/
+    watch 才有这个待遇。Android 端 onResume() 会整个停掉 MobileNotificationService，
+    所以这里不会在前台重复弹通知——见 core/turn_sink.py::_fanout 里的说明。"""
+    from channels import registry
+    from channels.mobile import MobileChannel
+    from core.turn_sink import TurnSource, record_assistant_turn
+
+    await _reset_channels()
+    mobile = MobileChannel()
+    # 显式不调用 mobile.set_active(True)：模拟用户发完消息立刻切后台、
+    # is_active 已经过期/从未激活的场景。
+    registry.register(mobile)
+
+    result = await record_assistant_turn(
+        assistant_text="在的，怎么了。",
+        uid="owner",
+        source=TurnSource.USER_CHAT,
+        user_text="你在吗",
+        fanout="all",
+        bypass_gate=True,
+        pipeline=_FakePipeline(),
+    )
+
+    assert "mobile" in result.fanout_targets
+    queue = json.loads(sandbox.mobile_queue().read_text(encoding="utf-8"))
+    assert queue[0]["content"] == "在的，怎么了。"
 
 
 async def test_mobile_fanout_queue_id_matches_turn_id(sandbox):
