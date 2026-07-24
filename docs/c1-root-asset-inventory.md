@@ -2,6 +2,14 @@
 
 > 盘点与迁移完成：2026-07-22。本文保留 C1 的资产边界、迁移目标和遗留清理清单，描述的是
 > **当前实现**，不再是待执行的迁移计划。
+>
+> 2026-07-24 复查（Brief 116 §2）：`characters/`、`examples/`、`content/` 根目录逐文件核对，
+> 结论是**不需要再合并/搬动**——三个目录里的每个文件都已经是这里判定过的"保留"项，均有
+> 测试或文档硬引用（`tests/test_authored_assets.py`、`tests/test_no_template_files_in_characters_root`、
+> `docs/tools.md` 的 `examples/*.example.json` 路径、`core/activity_manager.py` 与
+> `core/data_paths.py` 的 `content/characters/{char_id}/` 硬编码路径）。唯一发现的缺口是本表
+> 漏记了 `content/characters/yexuan/*.example.yaml`（已跟踪但当时没写进表格），已在下方补上；
+> 没有发现需要清理或搬移的新增游离文件。
 
 ## 决策与目标结构
 
@@ -30,6 +38,7 @@ userdata/                         # 用户可写/私有 authored 资产（Git ig
 | `defaults/` | 保留 | 8 个已跟踪 seed 文件；`DataPaths` 使用它们初始化空运行时状态。 |
 | `examples/` | 保留 | 已跟踪的公开角色卡示例/模板。 |
 | `content/characters/default/`、`content/jailbreak_presets/示例.example.json` | 保留 | 已跟踪的公开默认 authored 资产。 |
+| `content/characters/yexuan/{activity_pool,traits}.example.yaml` | 保留 | 已跟踪的公开中性示例（`.gitignore` `content/characters/*/*.yaml` 的 `!*.example.yaml` 例外），供其他角色卡作者参照结构；上次盘点漏记，Brief 116 §2 复查时补上。 |
 | `characters/default.json`、`characters/default_author_notes.json` | 保留 | 已跟踪的公开默认角色卡与作者注池。 |
 | `characters/dream_postcards/templates/` | 保留 | 已跟踪的 Dream 明信片模板；`core/dream/postcard.py` 直接读取。 |
 | `config.example.yaml`、`*.example.yaml`、`secrets.example.yaml`、`README*`、`ARCHITECTURE.md`、`AGENTS.md`、`DESIGN.md`、启动/安装脚本 | 保留 | 项目文档、模板和启动入口；即使某些本地文档当前未跟踪，也不是缓存。 |
