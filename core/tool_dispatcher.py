@@ -539,7 +539,7 @@ _TOOL_REGISTRY["read_diary"] = {
 
 _TOOL_REGISTRY["read_watch"] = {
     "func": _read_watch_wrapper,
-    "description": "读取用户已授权的睡眠、心率或运动记录。用户询问自己的身体数据或趋势时调用。",
+    "description": "读取用户已授权的睡眠、心率或运动记录。用户询问自己的身体数据或趋势、或{char}想了解用户身体状况时调用。",
     "dangerous": False,
     "category": "memory",
     "persist": True,
@@ -558,7 +558,7 @@ _TOOL_REGISTRY["read_watch"] = {
 
 _TOOL_REGISTRY["search_diary"] = {
     "func": _search_diary_wrapper,
-    "description": "按主题检索最近 30 天的日记。需要确认用户曾写过的特定事件、情绪或话题时调用；不得把结果当作未检索的记忆猜测。",
+    "description": "按主题检索最近 30 天的日记。需要确认用户曾写过的特定事件、情绪或话题、或{char}想主动回忆时调用；不得把结果当作未检索的记忆猜测。",
     "dangerous": False,
     "category": "memory",
     "persist": True,
@@ -678,7 +678,7 @@ _TOOL_REGISTRY["play_song"] = {
 
 _TOOL_REGISTRY["get_profile"] = {
     "func": _get_profile_wrapper,
-    "description": "读取已存储的用户基本资料和重要事实。需要依据这些资料回答、且当前上下文未提供时调用。",
+    "description": "读取已存储的用户基本资料和重要事实。{char}需要依据这些资料回答、且当前上下文未提供时调用。",
     "dangerous": False,
     "category": "memory",
     "parameters": {
@@ -690,7 +690,7 @@ _TOOL_REGISTRY["get_profile"] = {
 
 _TOOL_REGISTRY["get_episodic"] = {
     "func": _get_episodic_wrapper,
-    "description": "检索与当前主题相关的情景记忆。需要核对过去具体事件而不是凭印象回答时调用。",
+    "description": "检索与当前主题相关的情景记忆。{char}需要核对过去具体事件而不是凭印象回答时调用。",
     "dangerous": False,
     "category": "memory",
     "parameters": {
@@ -757,7 +757,7 @@ _TOOL_REGISTRY["revise_user_profile"] = {
 
 _TOOL_REGISTRY["exit_yandere"] = {
     "func": _exit_yandere_wrapper,
-    "description": "结束当前的 yandere 角色状态并恢复平静。仅在该状态确实活跃且对话已自然缓和时调用。",
+    "description": "结束{char}当前的 yandere 状态并恢复平静。仅在该状态确实活跃且对话已自然缓和时调用。",
     "dangerous": False,
     "category": "system",
     "parameters": {
@@ -769,7 +769,7 @@ _TOOL_REGISTRY["exit_yandere"] = {
 
 _TOOL_REGISTRY["water_garden"] = {
     "func": water_garden,
-    "description": "为角色花园浇一次水。用户明确要求浇花，或询问花园状态并请求采取浇水动作时调用。",
+    "description": "为{char}的花园浇一次水。用户明确要求浇花，或询问花园状态并请求采取浇水动作时调用。",
     "dangerous": False,
     "category": "info",
     "parameters": {
