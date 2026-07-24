@@ -40,10 +40,12 @@ class TestToolRegistryDescriptions:
     def test_descriptions_contain_char_placeholder_not_baked_name(self):
         """Registry must store {char} literal, not a resolved character name."""
         from core.tool_dispatcher import _TOOL_REGISTRY
+        # desktop_minimize/desktop_open_url/desktop_play_pause/desktop_notify 不在这里：
+        # 2026-07-22 的 schema 澄清把这 4 个桌面控制工具的触发条件从"{char}可自主判断触发"
+        # 收紧为"仅在用户明确要求时调用"，不再需要按角色区分描述。
         char_dependent = [
             "read_diary", "read_watch", "search_diary",
-            "desktop_minimize", "desktop_open_url", "desktop_play_pause",
-            "desktop_notify", "get_profile", "get_episodic",
+            "get_profile", "get_episodic",
             "exit_yandere", "water_garden",
         ]
         for tool_name in char_dependent:
