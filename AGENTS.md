@@ -241,3 +241,12 @@ python tests/run_eval.py             # validate prompt tag/layer activation afte
 ## 设置控制面文档
 
 修改模型路由、TTS、scheduler、relay、thinking、tool loop 或高级功能开关时，必须同步 docs/feature-control-surface.md 与客户端的设置审计文档。
+
+## Architecture References
+
+Before modifying runtime, startup, registry, scheduler, sensor, or lifecycle code:
+
+Read:
+- docs/runtime-lifecycle.md
+- docs/interaction-event-model.md
+- docs/security_model.md
