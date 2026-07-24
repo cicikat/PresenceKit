@@ -15,7 +15,10 @@ from core.sandbox import get_paths
 
 logger = logging.getLogger(__name__)
 
-_WORLDS_BASE = get_paths().dream_worlds_dir()
+def _worlds_base() -> Path:
+    """Resolve fresh on every call instead of freezing at import time (see world_loader.py)."""
+    return get_paths().dream_worlds_dir()
+
 
 # Process-lifetime cache: world_id → {axis: {"low": str, "mid": str, "high": str}}
 _label_cache: dict[str, dict[str, dict[str, str]]] = {}
@@ -32,7 +35,7 @@ def load_hud_labels(world_id: str) -> dict[str, dict[str, str]]:
         return {}
     if world_id in _label_cache:
         return _label_cache[world_id]
-    path = _WORLDS_BASE / world_id / "hud_labels.yaml"
+    path = _worlds_base() / world_id / "hud_labels.yaml"
     result = _try_load_yaml(path, world_id)
     _label_cache[world_id] = result
     return result

@@ -43,6 +43,32 @@ def _default_sandbox_guard(tmp_path, monkeypatch):
     monkeypatch.setattr(_sandbox, "_instance", guard_paths)
 
 
+@pytest.fixture
+def real_dream_worlds(monkeypatch):
+    """让 core.dream 的 world/hud_label/scene_label/symbolic loader 读取仓库里真实的
+    userdata/characters/dream/worlds（生产态 DataPaths 解析结果），不受 autouse 沙盒
+    影响（Brief 121）。
+
+    直接 patch 各 loader 模块的 `_worlds_base` 函数，而不是整体替换
+    `core.sandbox._instance`——这样可以和 `sandbox` fixture 同时使用（比如某个测试
+    既要把 dreams_archive_dir() 隔离到 tmp，又要读真实的世界包 vocab.json）。
+    仅用于显式需要真实世界包内容做身份/人称/词表回归断言的测试。
+    """
+    import core.sandbox as _sandbox
+    real_base = _sandbox.DataPaths(mode=None).dream_worlds_dir()
+
+    import core.dream.world_loader as _world_loader
+    import core.dream.hud_label_loader as _hud_label_loader
+    import core.dream.scene_label_loader as _scene_label_loader
+    import core.dream.symbolic_loader as _symbolic_loader
+
+    monkeypatch.setattr(_world_loader, "_worlds_base", lambda: real_base)
+    monkeypatch.setattr(_hud_label_loader, "_worlds_base", lambda: real_base)
+    monkeypatch.setattr(_scene_label_loader, "_worlds_base", lambda: real_base)
+    monkeypatch.setattr(_symbolic_loader, "_worlds_base", lambda: real_base)
+    return real_base
+
+
 @pytest.fixture(autouse=True)
 def reset_perceive_event_registry():
     """Reset perceive_event dedup registry before each test (prevents cross-test leakage)."""

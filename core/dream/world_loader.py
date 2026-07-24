@@ -26,9 +26,19 @@ from core.sandbox import get_paths
 
 logger = logging.getLogger(__name__)
 
-_WORLDS_BASE = get_paths().dream_worlds_dir()
 _FALLBACK_WORLD = "reality_derived"
 _DEFAULT_DIR = "_default"
+
+
+def _worlds_base() -> Path:
+    """Resolve fresh on every call instead of freezing at import time.
+
+    core.sandbox.get_paths() is designed to be re-checked on each use (its whole
+    point is that core.sandbox._instance can be swapped per test); caching the
+    result in a module-level constant made that swap invisible to this loader
+    whenever it was first imported after the swap had already happened.
+    """
+    return get_paths().dream_worlds_dir()
 
 
 def discover_worlds() -> list[str]:
@@ -36,7 +46,7 @@ def discover_worlds() -> list[str]:
     try:
         return sorted(
             d.name
-            for d in _WORLDS_BASE.iterdir()
+            for d in _worlds_base().iterdir()
             if d.is_dir() and not d.name.startswith("_")
         )
     except Exception:
@@ -57,15 +67,16 @@ def load_world(world_id: str) -> WorldPackage:
     Falls back to reality_derived if world directory does not exist.
     Falls back to _default/ for missing or empty ruleset, mes_example, vocab.
     """
-    base = _WORLDS_BASE / world_id
+    worlds_base = _worlds_base()
+    base = worlds_base / world_id
     if not base.is_dir():
         logger.warning(
             f"[world_loader] unknown world_id={world_id!r}, "
             f"falling back to {_FALLBACK_WORLD}"
         )
         world_id = _FALLBACK_WORLD
-        base = _WORLDS_BASE / world_id
-    default_base = _WORLDS_BASE / _DEFAULT_DIR
+        base = worlds_base / world_id
+    default_base = worlds_base / _DEFAULT_DIR
 
     ruleset = _read_text_or_none(base / "ruleset.md")
     if ruleset is None:
@@ -177,9 +188,10 @@ def load_dream_lore_entries(world_id: str) -> list[dict[str, Any]]:
     Reads characters/dream_worlds/{world_id}/lorebook.yaml.
     Returns empty list when file missing or empty.
     """
-    if not (_WORLDS_BASE / world_id).is_dir():
+    worlds_base = _worlds_base()
+    if not (worlds_base / world_id).is_dir():
         world_id = _FALLBACK_WORLD
-    path = _WORLDS_BASE / world_id / "lorebook.yaml"
+    path = worlds_base / world_id / "lorebook.yaml"
     try:
         import yaml  # type: ignore
         data = yaml.safe_load(path.read_text(encoding="utf-8"))

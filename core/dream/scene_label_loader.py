@@ -15,7 +15,10 @@ from core.sandbox import get_paths
 
 logger = logging.getLogger(__name__)
 
-_WORLDS_BASE = get_paths().dream_worlds_dir()
+def _worlds_base() -> Path:
+    """Resolve fresh on every call instead of freezing at import time (see world_loader.py)."""
+    return get_paths().dream_worlds_dir()
+
 
 # Process-lifetime cache: world_id → {scene_key: str}
 _scene_cache: dict[str, dict[str, str]] = {}
@@ -39,7 +42,7 @@ def load_scene_labels(world_id: str) -> dict[str, str]:
         return {}
     if world_id in _scene_cache:
         return _scene_cache[world_id]
-    path = _WORLDS_BASE / world_id / "scene_labels.yaml"
+    path = _worlds_base() / world_id / "scene_labels.yaml"
     result = _try_load_yaml(path, world_id)
     _scene_cache[world_id] = result
     return result

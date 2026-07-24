@@ -17,8 +17,14 @@ from core.sandbox import get_paths
 
 logger = logging.getLogger(__name__)
 
-_WORLDS_BASE = get_paths().dream_worlds_dir()
-_ANCHOR_WEIGHTS_PATH = _WORLDS_BASE / "anchor_weights.json"
+def _worlds_base() -> Path:
+    """Resolve fresh on every call instead of freezing at import time (see world_loader.py)."""
+    return get_paths().dream_worlds_dir()
+
+
+def _anchor_weights_path() -> Path:
+    return _worlds_base() / "anchor_weights.json"
+
 
 # Per-world profile cache: world_id → {symbol: {"weight": float, "tags": list[str]}}
 _profile_cache: dict[str, dict[str, dict]] = {}
@@ -43,7 +49,7 @@ def load_symbolic_profile(world_id: str) -> dict[str, dict]:
     if world_id in _profile_cache:
         return _profile_cache[world_id]
 
-    path = _WORLDS_BASE / world_id / "symbolic_profile.yaml"
+    path = _worlds_base() / world_id / "symbolic_profile.yaml"
     profile = _try_load_yaml(path, world_id)
     if profile is not None:
         logger.debug(
@@ -101,7 +107,7 @@ def _load_fallback() -> dict[str, dict]:
     if _fallback_cache is not None:
         return _fallback_cache
     try:
-        data = json.loads(_ANCHOR_WEIGHTS_PATH.read_text(encoding="utf-8"))
+        data = json.loads(_anchor_weights_path().read_text(encoding="utf-8"))
         if isinstance(data, dict):
             _fallback_cache = {
                 str(k): {"weight": float(v), "tags": []}

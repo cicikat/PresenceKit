@@ -47,7 +47,7 @@ def test_fallback_ruleset_when_missing(tmp_path):
                 **{"mes_example.md": "WORLD MES", "vocab.json": "[]"})
 
     import core.dream.world_loader as wl
-    with patch("core.dream.world_loader._WORLDS_BASE", worlds):
+    with patch("core.dream.world_loader._worlds_base", return_value=worlds):
         pkg = wl.load_world("reality_derived")
 
     assert pkg.ruleset == "DEFAULT RULESET"
@@ -61,7 +61,7 @@ def test_fallback_ruleset_when_empty(tmp_path):
                 **{"ruleset.md": "   \n  ", "mes_example.md": "WORLD MES", "vocab.json": "[]"})
 
     import core.dream.world_loader as wl
-    with patch("core.dream.world_loader._WORLDS_BASE", worlds):
+    with patch("core.dream.world_loader._worlds_base", return_value=worlds):
         pkg = wl.load_world("reality_derived")
 
     assert pkg.ruleset == "DEFAULT RULESET"
@@ -78,7 +78,7 @@ def test_fallback_mes_example_when_missing(tmp_path):
                 **{"ruleset.md": "WORLD RULESET", "vocab.json": "[]"})
 
     import core.dream.world_loader as wl
-    with patch("core.dream.world_loader._WORLDS_BASE", worlds):
+    with patch("core.dream.world_loader._worlds_base", return_value=worlds):
         pkg = wl.load_world("reality_derived")
 
     assert pkg.mes_example == "DEFAULT MES"
@@ -98,7 +98,7 @@ def test_no_fallback_when_world_has_content(tmp_path):
                    "vocab.json": '["own_term"]'})
 
     import core.dream.world_loader as wl
-    with patch("core.dream.world_loader._WORLDS_BASE", worlds):
+    with patch("core.dream.world_loader._worlds_base", return_value=worlds):
         pkg = wl.load_world("reality_derived")
 
     assert pkg.ruleset == "OWN RULESET"
@@ -118,7 +118,7 @@ def test_lorebook_missing_no_error_empty_list(tmp_path):
     # intentionally no lorebook.yaml
 
     import core.dream.world_loader as wl
-    with patch("core.dream.world_loader._WORLDS_BASE", worlds):
+    with patch("core.dream.world_loader._worlds_base", return_value=worlds):
         entries = wl.load_dream_lore_entries("reality_derived")
 
     assert entries == []
@@ -137,7 +137,7 @@ def test_lorebook_missing_does_not_inject_default_lore(tmp_path):
     # no lorebook.yaml for this world
 
     import core.dream.world_loader as wl
-    with patch("core.dream.world_loader._WORLDS_BASE", worlds):
+    with patch("core.dream.world_loader._worlds_base", return_value=worlds):
         entries = wl.load_dream_lore_entries("reality_derived")
 
     assert entries == []
@@ -157,7 +157,7 @@ def test_fallback_vocab_when_missing(tmp_path):
     # no vocab.json
 
     import core.dream.world_loader as wl
-    with patch("core.dream.world_loader._WORLDS_BASE", worlds):
+    with patch("core.dream.world_loader._worlds_base", return_value=worlds):
         pkg = wl.load_world("reality_derived")
 
     assert pkg.vocab_terms == ["default_term"]
@@ -172,7 +172,7 @@ def test_fallback_vocab_when_invalid_json(tmp_path):
                    "vocab.json": "not-valid-json{"})
 
     import core.dream.world_loader as wl
-    with patch("core.dream.world_loader._WORLDS_BASE", worlds):
+    with patch("core.dream.world_loader._worlds_base", return_value=worlds):
         pkg = wl.load_world("reality_derived")
 
     assert pkg.vocab_terms == ["default_term"]
@@ -187,7 +187,7 @@ def test_no_fallback_vocab_when_intentionally_empty(tmp_path):
                    "vocab.json": "[]"})
 
     import core.dream.world_loader as wl
-    with patch("core.dream.world_loader._WORLDS_BASE", worlds):
+    with patch("core.dream.world_loader._worlds_base", return_value=worlds):
         pkg = wl.load_world("reality_derived")
 
     assert pkg.vocab_terms == []

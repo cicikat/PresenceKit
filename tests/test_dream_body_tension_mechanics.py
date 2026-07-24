@@ -144,7 +144,7 @@ def test_yexuan_tension_decays_without_body_signal():
 # D-layer 结构完整性
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def test_d_layer_order_in_system_prompt():
+def test_d_layer_order_in_system_prompt(real_dream_worlds):
     """D0-D8 在 system content 中严格保持顺序。"""
     from core.dream.dream_prompt import build_dream_prompt
 

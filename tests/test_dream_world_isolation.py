@@ -50,7 +50,7 @@ _ATTACHMENT_KEYWORDS = ["Companion", "他知道", "情感", "依恋", "他在梦
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @pytest.mark.parametrize("world_id", _ALL_WORLDS)
-def test_identity_stable_in_world(world_id):
+def test_identity_stable_in_world(world_id, real_dream_worlds):
     """
     Each world package loaded → D1 identity keywords present + D1 precedes D2.
     Weak assertion: persona keywords + pronoun correct, not regressed to generic world bot.
@@ -110,7 +110,7 @@ def test_identity_stable_in_world(world_id):
 # ② World sentinel does not wash into reality (vampire case)
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def test_world_sentinel_not_in_distill_output(sandbox):
+def test_world_sentinel_not_in_distill_output(sandbox, real_dream_worlds):
     """
     Vampire-world sentinel in LLM distill output → stripped before impression stored.
 
@@ -170,7 +170,7 @@ def test_world_sentinel_not_in_distill_output(sandbox):
     )
 
 
-def test_world_sentinel_not_in_afterglow_output(sandbox):
+def test_world_sentinel_not_in_afterglow_output(sandbox, real_dream_worlds):
     """
     Vampire-world sentinel in dream summary → stripped before injecting into reality 6f.
 
@@ -223,7 +223,7 @@ def test_world_sentinel_not_in_afterglow_output(sandbox):
     ("abo", "ABO_sentinel_v1"),
     ("cat", "猫化_sentinel_v1"),
 ])
-def test_world_sentinel_not_in_distill_for_world(sandbox, world_id, sentinel):
+def test_world_sentinel_not_in_distill_for_world(sandbox, real_dream_worlds, world_id, sentinel):
     """
     ABO / cat world sentinels stripped by distill depth defense.
 
@@ -304,7 +304,7 @@ def test_reality_pipeline_has_no_world_package_imports():
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @pytest.mark.parametrize("world_id", _ALL_WORLDS)
-def test_mes_example_isolation(world_id):
+def test_mes_example_isolation(world_id, real_dream_worlds):
     """
     Dream mes_example (D3) must come from the world package, not reality char card.
     Asserts dream mes_example ≠ reality character card mes_example.
@@ -419,7 +419,7 @@ def test_hard_exit_works_in_world(sandbox, world_id):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @pytest.mark.parametrize("world_id", _ALL_WORLDS)
-def test_pronoun_correct_in_world_prompt(world_id):
+def test_pronoun_correct_in_world_prompt(world_id, real_dream_worlds):
     """
     D2 ruleset for each world must reference Companion as Companion/他 (not 她 or generic).
     D3 mes_example must have Companion speaking in first person; user addressed as 你 (not voiced as 她：).
@@ -455,7 +455,7 @@ def test_pronoun_correct_in_world_prompt(world_id):
 # ⑧ mes_example 单侧契约细节（来自 test_dream_v0.py，reality_derived 专用回归守卫）
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def test_pronoun_first_person_and_no_reality_label_in_mes_example():
+def test_pronoun_first_person_and_no_reality_label_in_mes_example(real_dream_worlds):
     """
     梦境示例（单侧契约）：Companion全程第一人称「我」，无「Companion：」说话人标签。
     这两条是 ⑦ 的参数化测试没有覆盖的细节（⑦ 只检查「你」在、「她：」不在），
@@ -472,7 +472,7 @@ def test_pronoun_first_person_and_no_reality_label_in_mes_example():
 # ⑨ D8 导演注记人称正确性（来自 test_dream_v0.py，v1 无 D8 相关测试）
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def test_pronoun_correctness_in_d8_director():
+def test_pronoun_correctness_in_d8_director(real_dream_worlds):
     """D8 导演注记中用「你」指用户（单侧契约，不用「她」）。"""
     from core.dream.dream_prompt import _D8_DREAM_DIRECTOR
     # User addressed as 你 in D8 (single-sided contract, 她 → 你)

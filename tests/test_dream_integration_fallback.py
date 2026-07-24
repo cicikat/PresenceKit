@@ -16,14 +16,16 @@ tests/test_dream_integration_fallback.py — Integration: _default fallback → 
 
 import logging
 import shutil
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-# ── Project root & real _default location ─────────────────────────────────────
-_PROJECT_ROOT = Path(__file__).parent.parent
-_REAL_WORLDS_BASE = _PROJECT_ROOT / "characters" / "dream_worlds"
+import core.sandbox as _sandbox
+
+# ── Real _default location: resolved fresh, not hardcoded to the pre-C1-migration
+# characters/dream_worlds/ path (that dir no longer exists on disk; real content
+# now lives under userdata/characters/dream/worlds/, see docs/c1-root-asset-inventory.md).
+_REAL_WORLDS_BASE = _sandbox.DataPaths(mode=None).dream_worlds_dir()
 
 # ── Key phrases from _default files (see characters/dream_worlds/_default/) ──
 # Changes to _default content must be reflected here.
@@ -73,7 +75,7 @@ def _extract_section(system: str, marker: str) -> str:
 def tmp_worlds(tmp_path):
     """
     Temp worlds directory with _default/ copied from the real project location.
-    Tests that patch _WORLDS_BASE to this dir use the actual _default content.
+    Tests that patch _worlds_base() to this dir use the actual _default content.
     """
     worlds = tmp_path / "worlds"
     worlds.mkdir()
@@ -95,7 +97,7 @@ def test_full_fallback_reaches_d2_and_d3(tmp_worlds):
     # Create world dir with NO files
     (tmp_worlds / "reality_derived").mkdir()
 
-    with patch("core.dream.world_loader._WORLDS_BASE", tmp_worlds):
+    with patch("core.dream.world_loader._worlds_base", return_value=tmp_worlds):
         msgs = _call("reality_derived")
 
     sys = _system(msgs)
@@ -134,7 +136,7 @@ def test_per_field_fallback_ruleset_default_mes_own(tmp_worlds):
     (world_dir / "vocab.json").write_text("[]", encoding="utf-8")
     # intentionally NO ruleset.md
 
-    with patch("core.dream.world_loader._WORLDS_BASE", tmp_worlds):
+    with patch("core.dream.world_loader._worlds_base", return_value=tmp_worlds):
         msgs = _call("abo")
 
     sys = _system(msgs)
@@ -179,7 +181,7 @@ def test_lorebook_missing_full_pipeline_no_injection(tmp_worlds):
     import core.dream.world_loader as wl
     from core.dream.dream_prompt import build_dream_prompt
 
-    with patch("core.dream.world_loader._WORLDS_BASE", tmp_worlds):
+    with patch("core.dream.world_loader._worlds_base", return_value=tmp_worlds):
         raw_entries = wl.load_dream_lore_entries("reality_derived")
         matched_lore = wl.match_dream_lore(raw_entries, "测试消息")
         msgs = build_dream_prompt(
@@ -210,12 +212,13 @@ _ALL_WORLDS = ["reality_derived", "abo", "vampire", "cat", "flower_bud", "custom
 
 
 @pytest.mark.parametrize("world_id", _ALL_WORLDS)
-def test_existing_worlds_no_fallback(world_id, caplog):
+def test_existing_worlds_no_fallback(world_id, caplog, real_dream_worlds):
     """
     现有 6 个 world 文件完整 →
     - load_world 后 ruleset 和 mes_example 均非空
     - 无 'source=_default' fallback 日志（不触发 fallback）
-    使用真实 _WORLDS_BASE，不 patch，证明现有 world_layer 不受影响。
+    使用真实世界包内容（real_dream_worlds fixture），不 patch _worlds_base，
+    证明现有 world_layer 不受影响。
     """
     from core.dream.world_loader import load_world
 
