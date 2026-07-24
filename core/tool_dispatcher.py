@@ -11,6 +11,7 @@
 
 import logging
 import platform
+import re
 import subprocess
 from typing import Callable
 
@@ -1081,22 +1082,35 @@ def format_tool_capability_note(categories: list[str] | None = None) -> str:
     return "可用工具：" + "、".join(names)
 
 
-def get_probe_prompt(location: str) -> str:
-    """动态从注册表构建探针 prompt，新增工具自动同步，无需手动维护。"""
-    lines = [
-        "只输出工具调用或空字符串，不要任何其他文字或思考过程。",
-        "你作为工具调度器。根据用户消息判断是否调用工具。",
-        f"用户位置：{location}。",
+def _build_probe_prompt(categories, *, location: str | None = None, relay: bool = False) -> str:
+    """探针类 prompt 的共享构建逻辑。
+
+    被 get_probe_prompt()（Path A，固定 info/desktop 两类）与
+    get_tool_loop_relay_prompt()（Brief 120·工具循环二次调用兜底，categories 参数化）
+    共同调用。不要在 get_probe_prompt 里加 if 分支——两者未来措辞可能分叉，分开维护
+    避免探针本身的 prompt 被这次改动污染。
+    """
+    lines = ["只输出工具调用或空字符串，不要任何其他文字或思考过程。"]
+    if relay:
+        lines.append(
+            "你作为工具调度器。下面这段话是模型自己已标注为需要调用工具的干净意图文本，"
+            "判断它对应哪个工具、什么参数。"
+        )
+    else:
+        lines.append("你作为工具调度器。根据用户消息判断是否调用工具。")
+    if location:
+        lines.append(f"用户位置：{location}。")
+    lines.append(
         "【工具使用原则】"
         "工具是获取事实或执行操作的手段，不是表达情绪的方式。"
         "只有当用户明确提出需要读取、查询、搜索、打开、提醒、发送、生成、修改、读日记相关等与工具有关的操作时，才考虑调用工具。"
         "不要为了显得主动而调用工具。"
         "不要用工具结果替代陪伴回应；工具结果只能补充事实。"
-        "\n可用工具：",
-    ]
+        "\n可用工具："
+    )
     char_name = get_active_char_name()
     for name, spec in _TOOL_REGISTRY.items():
-        if spec.get("category") not in ("info", "desktop"):
+        if spec.get("category") not in categories:
             continue
         examples = spec.get("examples", [])
         desc = spec.get("description", "").replace("{char}", char_name)
@@ -1104,6 +1118,52 @@ def get_probe_prompt(location: str) -> str:
         lines.append(f"- {name}: {desc}\n  触发例句: {example_str}")
     lines.append("\n以上都不符合 → 输出空字符串，不调用任何工具")
     return "\n".join(lines)
+
+
+def get_probe_prompt(location: str) -> str:
+    """动态从注册表构建探针 prompt，新增工具自动同步，无需手动维护。"""
+    return _build_probe_prompt(("info", "desktop"), location=location)
+
+
+def get_tool_loop_relay_prompt(categories: list[str]) -> str:
+    """Brief 120·工具循环二次调用兜底专用 prompt。
+
+    解析模型自己在自然语言回复末尾用 ``{true: 意图}`` 标注过的干净意图文本，判断对应
+    哪个工具、什么参数。categories 覆盖 run_agentic_loop 当前实际暴露给这一轮的
+    tool_loop.categories（含 mcp），而不是探针默认的 info/desktop 两类——否则钓鱼/
+    海龟汤这类 mcp 工具还是够不着。
+    """
+    return _build_probe_prompt(categories, relay=True)
+
+
+_TAIL_BRACE_RE = re.compile(r"\{\s*(true|false)\s*[:：]?", re.IGNORECASE)
+
+
+def parse_tail_brace(text: str) -> tuple[str, str | None]:
+    """宽容解析自然语言回复末尾的 ``{true: 意图}`` / ``{false}`` 标记（Brief 120）。
+
+    刻意不做严格 JSON/格式校验：只要出现 ``{true``（大小写、全半角冒号皆兼容）就判定
+    为"要调用"，截到下一个 ``}``，找不到闭合括号就直接截到字符串结尾——哪怕模型漏了个
+    符号，顶多截取的意图文本多带点噪音，不会导致整段解析失败、啥都执行不了。这是相对
+    结构化 function-call 的核心优势，禁止把这里改成严格校验。
+
+    返回 (display_text, intent_text)：
+    - display_text 是剥离标记后、可以展示给用户的文本（未命中标记时原样返回）。
+    - intent_text 非 None 时表示命中 {true...}，是待解析的干净意图文本；
+      未命中，或命中 {false}，均返回 None。
+    """
+    if not text:
+        return text, None
+    m = _TAIL_BRACE_RE.search(text)
+    if not m:
+        return text, None
+    display_text = text[: m.start()].rstrip()
+    if m.group(1).lower() == "false":
+        return display_text, None
+    rest = text[m.end():]
+    close = rest.find("}")
+    intent = (rest[:close] if close != -1 else rest).strip()
+    return display_text, (intent or None)
 
 
 _EXECUTE_ALLOWED_ORIGINS: frozenset[str] = frozenset({"user_live", "assistant_intent", "assistant_loop"})

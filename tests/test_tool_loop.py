@@ -9,6 +9,8 @@ LLM 全 mock：core.llm_client.chat_turn / chat / chat_stream 按脚本吐结果
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from core.llm_client import ChatTurn
@@ -524,3 +526,203 @@ def test_prompt_style_passthrough_for_tool_messages():
         assert assistant_msg["tool_calls"] == tool_calls
         assert tool_msg["content"] == "工具结果原文"
         assert tool_msg["tool_call_id"] == "call_1"
+
+
+# ── 13. Brief 120·工具循环二次调用兜底（尾部花括号方案）────────────────────
+#
+# 覆盖 cc-tasks/120-工具循环二次调用兜底-尾部花括号方案.md §4 的验收要求：
+#   1) {true: ...} 触发额外一次 _execute()，循环不提前 return；
+#   2) 宽容解析（parse_tail_brace）边界样本；
+#   3) {false}/无花括号时行为与现状完全一致（回归）。
+
+def _fake_chat_with_relay(monkeypatch, *, relay_tool_calls, final_text):
+    """core.llm_client.chat 的分支 mock：call_category=="probe" 时模拟 relay 解析
+    结果（Path A 探针范式的 __TOOL_CALL__: 哨兵串），否则模拟 voice_reanchor 之后
+    不带 tools 的收尾生成（与 run_llm 内部调用一致）。
+    """
+    calls: list[dict] = []
+
+    async def _fake(messages, tools=None, max_tokens_override=None, use_vision=False,
+                     call_category="chat", char_id=None, is_proactive=False):
+        calls.append({
+            "call_category": call_category,
+            "messages": [dict(m) for m in messages],
+            "tools": tools,
+        })
+        if call_category == "probe":
+            return "__TOOL_CALL__:" + json.dumps(relay_tool_calls, ensure_ascii=False)
+        return final_text
+
+    monkeypatch.setattr("core.llm_client.chat", _fake)
+    return calls
+
+
+@pytest.mark.asyncio
+async def test_tail_brace_relay_triggers_second_tool_call(monkeypatch):
+    """模型第二步不带 tool_calls，只在自然语言末尾标注 {true: ...}：应触发一次
+    额外的 _execute()，循环继续进入第三步，而不是把这段文字直接丢弃收尾。"""
+    _patch_tool_loop_config(monkeypatch)
+    _patch_tools_schema(monkeypatch, ["web_search"])
+    chat_turn_calls = _script_chat_turn(monkeypatch, [
+        ChatTurn(
+            content="",
+            tool_calls=[{"id": "call_1", "name": "web_search", "arguments": {"query": "钓鱼"}}],
+            assistant_message={"role": "assistant", "content": None},
+        ),
+        ChatTurn(
+            content="我抛竿等一会～{true: 我需要钓鱼动作，等待10秒}",
+            tool_calls=[],
+            assistant_message={"role": "assistant", "content": "我抛竿等一会～{true: 我需要钓鱼动作，等待10秒}"},
+        ),
+        ChatTurn(content="钓到了一条大鱼！", tool_calls=[],
+                 assistant_message={"role": "assistant", "content": "钓到了一条大鱼！"}),
+    ])
+    execute_calls = _script_execute(monkeypatch, [("晴，25度", None), ("鱼上钩了", None)])
+    relay_calls = _fake_chat_with_relay(
+        monkeypatch,
+        relay_tool_calls=[{"name": "fish_cast", "arguments": {"wait": 10}}],
+        final_text="今天挺晴朗的～",
+    )
+
+    pipeline = _make_pipeline()
+    result = await pipeline.run_agentic_loop(
+        [{"role": "user", "content": "陪我钓鱼"}], uid="u1", char_id="yexuan", session_state=object(),
+    )
+
+    assert result == "今天挺晴朗的～"
+    # 3 步 chat_turn：正常工具 → 尾部花括号 → 最终自然收尾
+    assert len(chat_turn_calls) == 3
+    # execute 只脚本化了 2 次结果：第一步 web_search + relay 解析出的 fish_cast
+    assert len(execute_calls) == 2
+    assert execute_calls[0]["tool_name"] == "web_search"
+    assert execute_calls[1]["tool_name"] == "fish_cast"
+    assert execute_calls[1]["tool_args"] == {"wait": 10}
+    assert execute_calls[1]["origin"] == "assistant_loop"
+
+    probe_calls = [c for c in relay_calls if c["call_category"] == "probe"]
+    assert len(probe_calls) == 1
+    # 送去解析的是剥离花括号后的干净意图文本，不含标记语法本身
+    assert probe_calls[0]["messages"][-1]["content"] == "我需要钓鱼动作，等待10秒"
+
+    # loop_msgs 里应能看到 relay 合成的 assistant tool_calls + tool 结果回填
+    final_messages = [c for c in relay_calls if c["call_category"] != "probe"][-1]["messages"]
+    relay_assistant = next(
+        m for m in final_messages
+        if m.get("role") == "assistant" and m.get("tool_calls")
+        and m["tool_calls"][0]["function"]["name"] == "fish_cast"
+    )
+    assert relay_assistant["content"] == "我抛竿等一会～"
+    tool_result_msg = next(
+        m for m in final_messages
+        if m.get("role") == "tool" and m.get("tool_call_id") == relay_assistant["tool_calls"][0]["id"]
+    )
+    assert tool_result_msg["content"] == "鱼上钩了"
+
+
+@pytest.mark.asyncio
+async def test_tail_brace_relay_unresolved_falls_back_to_natural_text(monkeypatch):
+    """{true: ...} 命中但 relay 解析不出任何工具：不应静默吞掉文字或抛异常，
+    退回自然结束，展示文本已剥离花括号标记。"""
+    _patch_tool_loop_config(monkeypatch)
+    _patch_tools_schema(monkeypatch, ["web_search"])
+    _script_chat_turn(monkeypatch, [
+        ChatTurn(
+            content="这个我不太确定{true: 帮我处理一个不存在的功能}",
+            tool_calls=[],
+            assistant_message={"role": "assistant", "content": "这个我不太确定{true: 帮我处理一个不存在的功能}"},
+        ),
+    ])
+    _script_execute(monkeypatch, [])
+    _fake_chat_with_relay(monkeypatch, relay_tool_calls=[], final_text="不会被用到")
+
+    pipeline = _make_pipeline()
+    result = await pipeline.run_agentic_loop(
+        [{"role": "user", "content": "帮我个忙"}], uid="u1", char_id="yexuan", session_state=object(),
+    )
+
+    assert result == "这个我不太确定"
+    assert "{true" not in result and "}" not in result
+
+
+@pytest.mark.parametrize("tag, expected_display, expected_intent", [
+    # 正常闭合 + 半角冒号
+    ("我去看看{true: 需要打开浏览器}", "我去看看", "需要打开浏览器"),
+    # 全角冒号
+    ("我去看看{true：需要打开浏览器}", "我去看看", "需要打开浏览器"),
+    # 缺失闭合括号：截到字符串结尾
+    ("我去看看{true: 需要打开浏览器", "我去看看", "需要打开浏览器"),
+    # 大小写混用
+    ("我去看看{True: 需要打开浏览器}", "我去看看", "需要打开浏览器"),
+    # 前面还有正常聊天内容，多行
+    ("今天天气不错\n我们出去走走吧{true:查一下天气}", "今天天气不错\n我们出去走走吧", "查一下天气"),
+])
+def test_parse_tail_brace_lenient_true_cases(tag, expected_display, expected_intent):
+    from core.tool_dispatcher import parse_tail_brace
+
+    display, intent = parse_tail_brace(tag)
+    assert display == expected_display
+    assert intent == expected_intent
+    assert "{" not in display and "}" not in display
+
+
+@pytest.mark.parametrize("tag, expected_display", [
+    ("我随口说说{false}", "我随口说说"),
+    ("我随口说说{false", "我随口说说"),
+])
+def test_parse_tail_brace_false_tag_stripped_no_intent(tag, expected_display):
+    from core.tool_dispatcher import parse_tail_brace
+
+    display, intent = parse_tail_brace(tag)
+    assert display == expected_display
+    assert intent is None
+
+
+def test_parse_tail_brace_no_tag_passthrough():
+    """回归：没有花括号标记时原样返回，不影响现有默认路径。"""
+    from core.tool_dispatcher import parse_tail_brace
+
+    text = "完全正常的一段回复，没有任何标记。"
+    display, intent = parse_tail_brace(text)
+    assert display == text
+    assert intent is None
+
+
+@pytest.mark.asyncio
+async def test_relay_prompt_covers_current_loop_categories_including_mcp(monkeypatch):
+    """relay 解析用的类目应覆盖本轮 run_agentic_loop 实际暴露的 categories（含 mcp），
+    而不是探针默认的 info/desktop 两类——否则钓鱼/海龟汤这类 mcp 工具还是够不着。"""
+    from core import tool_dispatcher as td
+
+    _patch_tool_loop_config(monkeypatch, categories=["info", "desktop", "memory", "mcp"])
+    _patch_tools_schema(monkeypatch, ["web_search"])
+    monkeypatch.setitem(td._TOOL_REGISTRY, "mcp__turtle_soup__ask", {
+        "func": lambda: None,
+        "description": "海龟汤提问",
+        "dangerous": False,
+        "category": "mcp",
+        "parameters": {"type": "object", "properties": {}},
+    })
+
+    _script_chat_turn(monkeypatch, [
+        ChatTurn(
+            content="让我猜猜看{true: 我要问海龟汤线索}",
+            tool_calls=[],
+            assistant_message={"role": "assistant", "content": "让我猜猜看{true: 我要问海龟汤线索}"},
+        ),
+        ChatTurn(content="猜对了！", tool_calls=[], assistant_message={"role": "assistant", "content": "猜对了！"}),
+    ])
+    execute_calls = _script_execute(monkeypatch, [("线索：夜晚", None)])
+    relay_calls = _fake_chat_with_relay(
+        monkeypatch,
+        relay_tool_calls=[{"name": "mcp__turtle_soup__ask", "arguments": {}}],
+        final_text="猜对了！",
+    )
+
+    pipeline = _make_pipeline()
+    await pipeline.run_agentic_loop(
+        [{"role": "user", "content": "陪我玩海龟汤"}], uid="u1", char_id="yexuan", session_state=object(),
+    )
+
+    assert execute_calls[0]["tool_name"] == "mcp__turtle_soup__ask"
+    probe_system = next(c for c in relay_calls if c["call_category"] == "probe")["messages"][0]["content"]
+    assert "mcp__turtle_soup__ask" in probe_system
