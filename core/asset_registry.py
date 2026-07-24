@@ -49,6 +49,7 @@ _DREAM_PRESET_ID_MAP: dict[str, tuple[str, str]] = {
     "审讯":   ("interrogation", "审讯"),
     "多p":    ("multi",         "多p"),
     "触手巢穴": ("tentacle",      "触手巢穴"),
+    "感官": ("ganguan",      "感官"),
 }
 
 
