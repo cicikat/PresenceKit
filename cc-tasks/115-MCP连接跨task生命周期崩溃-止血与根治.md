@@ -1,9 +1,26 @@
-# Brief 115 · MCP 连接跨 task 生命周期崩溃 —— 止血已做，根治待排期
+# Brief 115 · MCP 连接跨 task 生命周期崩溃 —— 止血已做，根治已落地（2026-07-24）
 
 写于 2026-07-23。这次是茶茶在管理面板重载 MCP、以及角色直接调用 MCP 工具（`account`）
 时两次把**整个进程**崩掉（不是单个请求 500，是 uvicorn 主循环被取消退出）排查后的记录。
-止血已经落地并通过 `py_compile`，测试已同步更新；根治需要改连接生命周期的持有方式，
-量级不大但要重新测，留到下一轮排期。
+止血已经落地并通过 `py_compile`，测试已同步更新。
+
+**2026-07-24 更新**：§3 描述的根治方案已实现——`core/mcp_client.py` 里每个 server 的
+连接现在由它专属的常驻 task（`_owner_loop`）独占持有和关闭，`init_mcp_servers`、
+`disconnect_server`、`reload_server_from_config`、`sync_mcp_servers`、
+`shutdown_mcp_servers` 全部改成只发信号（`_send_command` 把指令丢进队列、await 一个
+Future 拿结果），真正的 `AsyncExitStack.aclose()`/重连永远在那个专属 task 自己的
+上下文里执行，调用方可以是任意 task。`admin/routers/settings_mcp.py` 三个接口的
+热更新能力已恢复（去掉了"需重启"文案），`tests/test_settings_mcp.py` 断言同步改回。
+新增 `tests/test_mcp_client.py::TestOwnerTaskLifecycle`，用
+`asyncio.current_task()` 在 connect/close 两端打点，断言跨 task 触发 reload/
+disconnect 时实际的 open/close 仍然发生在同一个专属 task 里。
+`_call_tool` 内部失败重连（`_reconnect_server`）按 §3 原计划维持原样未改（连接已经
+坏掉时关闭它的风险显著更低，见该函数新增的 docstring 说明），是唯一未纳入本轮改造
+的残余路径。
+
+验收：`pytest -n auto tests/test_mcp_client.py tests/test_settings_mcp.py
+tests/test_admin_mcp_ui.py` 26 项全过。真实环境验证（管理面板改 MCP 配置、角色调用
+MCP 工具、连续两次重载，进程不退出）尚未做，留给下一次有真实 MCP server 可连时手动跑一遍。
 
 ---
 

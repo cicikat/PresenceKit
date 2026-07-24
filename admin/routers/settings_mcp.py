@@ -113,24 +113,21 @@ async def get_mcp_settings(_auth=Depends(require_scopes("admin"))):
     }
 
 
-@router.patch("/settings/mcp", summary="更新 MCP 总开关（写配置，重启后生效）")
+@router.patch("/settings/mcp", summary="更新 MCP 总开关（写配置并热同步）")
 async def update_mcp_settings(body: McpSettingsUpdate, _auth=Depends(require_scopes("admin"))):
-    # 止血（2026-07-23）：sync_mcp_servers() 会在这次 HTTP 请求自己的 task 里对一个
-    # 可能在别的 task（服务启动时）建立的 AsyncExitStack 调 aclose()。MCP 的
-    # streamable-http transport 内部用 anyio task group 撑着连接，跨 task 关闭会让
-    # cancel scope 传播到不该传播的地方——观察到的实况是直接把 uvicorn 主循环的
-    # cancel scope 一起取消，整个进程退出，不是"这一个请求报错"这么轻。在把
-    # MCP session 生命周期改造成"专属常驻 task + 请求方只发信号"之前，这里先不做
-    # 热同步，只写配置文件，要求重启生效，避免同一个坑再次带崩全服务。
+    # Brief 115 根治：sync_mcp_servers() 现在只把信号丢进各 server 专属常驻 task 的
+    # 队列，真正的 AsyncExitStack.aclose()/重连都在那个专属 task 自己的上下文里执行，
+    # 不再从这次 HTTP 请求的 task 里跨 task 直接碰 stack，热同步可以安全恢复。
     if body.enabled is None:
         raise HTTPException(status_code=422, detail="至少提供 enabled")
     full_cfg = _read_config()
     full_cfg.setdefault("mcp_servers", {})["enabled"] = body.enabled
     _write_config(full_cfg)
-    from core import config_loader
+    from core import config_loader, mcp_client
     config_loader.reload_config()
+    await mcp_client.sync_mcp_servers()
     result = await get_mcp_settings(_auth)
-    result["message"] = "已写入配置；MCP 连接的热同步暂时禁用（已知 async 生命周期问题排查中），需重启进程后生效"
+    result["message"] = "MCP 总开关已更新并热同步"
     return result
 
 
@@ -167,11 +164,12 @@ async def import_mcp_server(body: McpServerDraft, _auth=Depends(require_scopes("
     mcp_cfg["servers"] = servers
     _write_config(full_cfg)
     config_loader.reload_config()
-    # 止血：不在这个请求的 task 里热重载已存在的旧连接（跨 task 关 AsyncExitStack 会带崩
-    # 整个进程，见 update_mcp_settings 的说明）。测试探测本身（test_server_config）用的是
-    # 独立、当次即开即关的 stack，不受影响，仍然安全。
+    # Brief 115 根治：热重载已恢复，走 reload_server_from_config 的信号队列，由该
+    # server 专属常驻 task 自己 aclose()/重连，不跨 task。测试探测（test_server_config）
+    # 用的是独立、当次即开即关的 stack，本来就不受这条根因影响。
+    await mcp_client.reload_server_from_config(server_cfg["name"])
     return {
-        "message": "MCP server 已导入配置；需重启进程后才会真正连接生效（热重载暂时禁用）",
+        "message": "MCP server 已导入并连接",
         "tools": tools,
         "server": _server_view(server_cfg),
     }
@@ -199,7 +197,8 @@ async def update_mcp_server(name: str, body: McpServerUpdate, _auth=Depends(requ
     if body.tool_timeout_s is not None:
         server["tool_timeout_s"] = max(1, min(300, float(body.tool_timeout_s)))
     _write_config(full_cfg)
-    from core import config_loader
+    from core import config_loader, mcp_client
     config_loader.reload_config()
-    # 止血：同上，不在请求 task 里热重载，避免跨 task 关闭已有连接的 AsyncExitStack。
-    return {"message": "MCP server 配置已更新；需重启进程后生效（热重载暂时禁用）", "server": _server_view(server)}
+    # Brief 115 根治：同上，走信号队列热重载，由 server 专属常驻 task 自己关闭/重连。
+    await mcp_client.reload_server_from_config(name)
+    return {"message": "MCP server 配置已更新并热重载", "server": _server_view(server)}

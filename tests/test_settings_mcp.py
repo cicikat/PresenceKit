@@ -35,10 +35,9 @@ def _draft(**overrides):
     return mod.McpServerDraft(**data)
 
 
-def test_import_tests_before_write_but_does_not_hot_reload(tmp_path, monkeypatch):
-    """止血（2026-07-23）：跨 task 关闭已有 AsyncExitStack 会把整个 uvicorn 主循环一起
-    取消带崩进程（观察到的真实 crash），在改造成常驻 task 生命周期之前，导入接口只
-    探测 + 写配置，不再调用 reload_server_from_config。"""
+def test_import_tests_before_write_and_hot_reloads(tmp_path, monkeypatch):
+    """Brief 115 根治：MCP 连接生命周期已改成专属常驻 task 持有、管理面只发信号，
+    不再跨 task 直接碰 AsyncExitStack，导入接口的热重载可以安全恢复。"""
     path = _write(tmp_path, "mcp_servers:\n  enabled: true\n  servers: []\n")
     _patch_config(monkeypatch, path)
     from core import mcp_client
@@ -50,6 +49,7 @@ def test_import_tests_before_write_but_does_not_hot_reload(tmp_path, monkeypatch
 
     async def reload(name):
         calls.append(("reload", name))
+        return True
 
     monkeypatch.setattr(mcp_client, "test_server_config", probe)
     monkeypatch.setattr(mcp_client, "reload_server_from_config", reload)
@@ -59,8 +59,8 @@ def test_import_tests_before_write_but_does_not_hot_reload(tmp_path, monkeypatch
 
     assert result["tools"][0]["name"] == "toy_status"
     assert result["server"]["headers"]["Authorization"] == "Bearer ${CEDAR_TOY_TOKEN}"
-    assert calls == [("probe", mod._validate_draft(_draft()))]
-    assert "重启" in result["message"]
+    assert calls == [("probe", mod._validate_draft(_draft())), ("reload", "cedar_toy")]
+    assert "重启" not in result["message"]
     cfg = yaml.safe_load(path.read_text(encoding="utf-8"))
     assert cfg["mcp_servers"]["servers"][0]["headers"]["Authorization"] == "Bearer ${CEDAR_TOY_TOKEN}"
 
@@ -81,8 +81,8 @@ def test_import_rejects_unknown_whitelist_without_writing(tmp_path, monkeypatch)
     assert path.read_text(encoding="utf-8") == before
 
 
-def test_global_toggle_writes_config_without_hot_sync(tmp_path, monkeypatch):
-    """止血：总开关只写配置，不再热同步（同上，跨 task 关闭连接会带崩整个进程）。"""
+def test_global_toggle_writes_config_and_hot_syncs(tmp_path, monkeypatch):
+    """Brief 115 根治：总开关热同步已恢复，sync_mcp_servers 只发信号给专属常驻 task。"""
     path = _write(tmp_path, "mcp_servers:\n  enabled: false\n  servers: []\n")
     _patch_config(monkeypatch, path)
     from core import mcp_client
@@ -94,14 +94,14 @@ def test_global_toggle_writes_config_without_hot_sync(tmp_path, monkeypatch):
     monkeypatch.setattr(mcp_client, "sync_mcp_servers", sync)
     result = asyncio.run(mod.update_mcp_settings(mod.McpSettingsUpdate(enabled=True), _auth=None))
     assert result["enabled"] is True
-    assert calls == []
-    assert "重启" in result["message"]
+    assert calls == ["sync"]
+    assert "重启" not in result["message"]
     cfg = yaml.safe_load(path.read_text(encoding="utf-8"))
     assert cfg["mcp_servers"]["enabled"] is True
 
 
-def test_update_server_whitelist_writes_config_without_hot_reload(tmp_path, monkeypatch):
-    """止血：单 server 更新只写配置，不再热重载（同上）。"""
+def test_update_server_whitelist_writes_config_and_hot_reloads(tmp_path, monkeypatch):
+    """Brief 115 根治：单 server 更新的热重载已恢复（同上）。"""
     path = _write(tmp_path, "mcp_servers:\n  enabled: true\n  servers:\n    - name: cedar_toy\n      transport: http\n      url: https://example.test/mcp\n      allow_tools: []\n")
     _patch_config(monkeypatch, path)
     from core import mcp_client
@@ -109,6 +109,7 @@ def test_update_server_whitelist_writes_config_without_hot_reload(tmp_path, monk
 
     async def reload(name):
         calls.append(name)
+        return True
 
     monkeypatch.setattr(mcp_client, "reload_server_from_config", reload)
     monkeypatch.setattr(mcp_client, "server_runtime", lambda name: {"connected": False, "tools": []})
@@ -116,5 +117,5 @@ def test_update_server_whitelist_writes_config_without_hot_reload(tmp_path, monk
         "cedar_toy", mod.McpServerUpdate(allow_tools=["toy_status"]), _auth=None,
     ))
     assert result["server"]["allow_tools"] == ["toy_status"]
-    assert calls == []
-    assert "重启" in result["message"]
+    assert calls == ["cedar_toy"]
+    assert "重启" not in result["message"]

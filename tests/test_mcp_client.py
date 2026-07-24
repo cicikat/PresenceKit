@@ -11,6 +11,7 @@ call_tool 超时/异常→重连一次→再失败按失败处理、断线重连
 
 from __future__ import annotations
 
+import asyncio
 from contextlib import AsyncExitStack
 from types import SimpleNamespace
 
@@ -50,12 +51,21 @@ class _FakeSession:
 
 
 @pytest.fixture(autouse=True)
-def _clean_registry_and_servers(monkeypatch):
-    """隔离真实 _TOOL_REGISTRY / _servers，测试结束后还原。"""
+async def _clean_registry_and_servers(monkeypatch):
+    """隔离真实 _TOOL_REGISTRY / _servers / _owners，测试结束后还原并回收专属 task。"""
     monkeypatch.setattr(td, "_TOOL_REGISTRY", dict(td._TOOL_REGISTRY))
     mc._servers.clear()
     mc._server_status.clear()
+    mc._owners.clear()
     yield
+    for owner in list(mc._owners.values()):
+        owner.task.cancel()
+    for owner in list(mc._owners.values()):
+        try:
+            await owner.task
+        except BaseException:
+            pass
+    mc._owners.clear()
     mc._servers.clear()
     mc._server_status.clear()
 
@@ -325,11 +335,82 @@ class TestReconnectServer:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestShutdown:
-    async def test_shutdown_clears_all_servers(self):
-        handle = mc._ServerHandle(
-            name="srv1", cfg={}, stack=AsyncExitStack(), session=_FakeSession(), tool_names=[],
-        )
-        mc._servers["srv1"] = handle
+    async def test_shutdown_clears_all_servers(self, monkeypatch):
+        session = _FakeSession()
+        session.tools_result = SimpleNamespace(tools=[])
+        monkeypatch.setattr(mc, "_open_transport", _noop_transport)
+        _patch_client_session(monkeypatch, session)
+
+        owner = mc._spawn_owner("srv1", {"transport": "stdio", "command": ["fake"]})
+        await owner.ready.wait()
+        assert "srv1" in mc._servers
 
         await mc.shutdown_mcp_servers()
         assert mc._servers == {}
+        assert mc._owners == {}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Brief 115 根治验收 #1：跨 task 触发 reload/disconnect，open/close 必须仍留在
+# server 专属的那一个常驻 task 里，调用方 task 身份不影响这一点。
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestOwnerTaskLifecycle:
+    async def test_reload_from_a_different_task_stays_in_owner_task(self, monkeypatch):
+        session = _FakeSession()
+        session.tools_result = SimpleNamespace(tools=[])
+        monkeypatch.setattr(mc, "_open_transport", _noop_transport)
+        _patch_client_session(monkeypatch, session)
+
+        connect_task_ids: list[int] = []
+        close_task_ids: list[int] = []
+        real_connect = mc._connect_server
+        real_close = mc._close_server
+
+        async def _tracking_connect(name, cfg):
+            connect_task_ids.append(id(asyncio.current_task()))
+            return await real_connect(name, cfg)
+
+        async def _tracking_close(name):
+            close_task_ids.append(id(asyncio.current_task()))
+            return await real_close(name)
+
+        monkeypatch.setattr(mc, "_connect_server", _tracking_connect)
+        monkeypatch.setattr(mc, "_close_server", _tracking_close)
+
+        owner = mc._spawn_owner("srv1", {"transport": "stdio", "command": ["fake"]})
+        await owner.ready.wait()
+        owner_task_id = id(owner.task)
+        assert connect_task_ids == [owner_task_id]
+
+        monkeypatch.setattr(mc, "_get_mcp_config", lambda: {
+            "enabled": True,
+            "servers": [{"name": "srv1", "transport": "stdio", "command": ["fake"]}],
+        })
+
+        # 从一个全新的、独立的 task 里触发 reload —— 模拟管理面 HTTP 请求的 task。
+        caller_task = asyncio.create_task(mc.reload_server_from_config("srv1"))
+        ok = await caller_task
+
+        assert ok is True
+        assert id(caller_task) != owner_task_id, "触发 reload 的调用方 task 不应是专属常驻 task 本身"
+        assert close_task_ids == [owner_task_id], "关闭旧连接必须发生在打开它的那个专属 task 里"
+        assert connect_task_ids == [owner_task_id, owner_task_id], "重连也必须发生在专属 task 里"
+        assert "srv1" in mc._servers
+
+    async def test_disconnect_from_a_different_task_does_not_raise(self, monkeypatch):
+        session = _FakeSession()
+        session.tools_result = SimpleNamespace(tools=[])
+        monkeypatch.setattr(mc, "_open_transport", _noop_transport)
+        _patch_client_session(monkeypatch, session)
+
+        owner = mc._spawn_owner("srv1", {"transport": "stdio", "command": ["fake"]})
+        await owner.ready.wait()
+        assert "srv1" in mc._servers
+
+        # disconnect_server 本身只发信号；这里用一个独立 task 触发，确认不会抛出
+        # CancelledError / BaseExceptionGroup 之类跨 task 取消祖先 scope 才会出现的异常。
+        caller_task = asyncio.create_task(mc.disconnect_server("srv1"))
+        await caller_task
+
+        assert "srv1" not in mc._servers
