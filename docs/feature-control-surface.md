@@ -301,6 +301,14 @@ scheduler, tool, deployment, and EventContext controls retain their current owne
 Future Briefs 230-237 must add configured/effective/runtime-observed controls in the same change as
 each implemented task or capability; clients must not infer availability from existing tool names.
 
+## Brief 232 Agent Work Sessions
+
+Agent Work Sessions are backend-only and have no client setting. The scheduler's
+`inner_diary_write` maintenance task uses the Reality Task Manager plus the independent
+`work_session_id` store. `GET /observability/agent-runtime-work-sessions` exposes bounded lifecycle,
+artifact-kind, digest, and error metadata only; it never exposes work context, prompts, diary正文, or
+paths. `daily_journal` remains governed by the existing autonomy signal controls.
+
 ## Brief 233 workspace capability
 
 `workspace_access` is a local deployment capability with explicit roots and independent read/list/create/

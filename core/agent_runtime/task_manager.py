@@ -431,6 +431,7 @@ def enqueue_task(
 def claim_next(
     principal: TaskPrincipal,
     *,
+    task_id: str | None = None,
     capabilities: set[str] | frozenset[str] | None = None,
     lease_seconds: int = DEFAULT_LEASE_SECONDS,
     now: float | None = None,
@@ -447,6 +448,8 @@ def claim_next(
         if capabilities is None
         else {_validate_name(item, "capability") for item in capabilities}
     )
+    if task_id is not None and not _TASK_ID_RE.fullmatch(str(task_id)):
+        raise TaskManagerError("invalid_task_id")
     timestamp = _now(now)
     with task_store.scope_lock(principal.uid, principal.char_id):
         state, records, changed = _load_records(principal, timestamp)
@@ -455,6 +458,7 @@ def claim_next(
             for task in records
             if task.status == TaskStatus.QUEUED.value
             and task.next_attempt_at <= timestamp
+            and (task_id is None or task.task_id == task_id)
             and (allowed is None or task.capability in allowed)
         ]
         if not candidates:

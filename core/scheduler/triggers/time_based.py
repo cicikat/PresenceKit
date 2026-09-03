@@ -595,7 +595,9 @@ async def _generate_and_store_diary(oid: str, char_id: str) -> None:
             parts.append(facts_content.strip())
         if feeling_content:
             parts.append(f"\n## 今日感受\n{feeling_content.strip()}")
-        diary_file.write_text("\n".join(parts) + "\n", encoding="utf-8")
+        from core.safe_write import safe_write_text
+        if not safe_write_text(diary_file, "\n".join(parts) + "\n"):
+            raise IOError("authored diary artifact write failed")
         logger.info(f"[scheduler] 角色日记已存储（双层）: {today}")
 
 
@@ -649,7 +651,57 @@ async def _check_inner_diary_write():
         if diary_file.exists():
             continue
         try:
-            await _generate_and_store_diary(oid, _cid)
+            # A diary is an authored artifact, not a chat turn.  Register a
+            # Reality task and an independent bounded work session so restart
+            # recovery/observability never touches EventContext or memory.
+            from core.agent_runtime import CausationRef, TaskPrincipal
+            from core.agent_runtime.task_manager import (
+                RetryPolicy, claim_next, complete_task, create_task, fail_task,
+            )
+            from core.agent_runtime.work_sessions import (
+                create_work_session, run_work_session,
+            )
+            logical_date = logical_day().strftime("%Y-%m-%d")
+            principal = TaskPrincipal.reality(oid, _cid)
+            idem = f"inner-diary:{_cid}:{logical_date}"
+            task_receipt, _ = create_task(
+                principal,
+                capability="authored_diary",
+                source="scheduler",
+                idempotency_key=idem,
+                ttl_seconds=6 * 3600,
+                retry_policy=RetryPolicy.NEVER.value,
+                causation_ref=CausationRef("signal", "inner_diary_write"),
+            )
+            session = create_work_session(
+                principal,
+                task_id=task_receipt["task_id"],
+                capability="authored_diary",
+                artifact_kind="authored_diary",
+                context=f"inner_diary_write:{logical_date}:{_cid}",
+                idempotency_key=idem,
+            )
+            lease = claim_next(principal, task_id=task_receipt["task_id"], capabilities={"authored_diary"})
+            if lease is None:
+                continue
+
+            async def _worker():
+                await _generate_and_store_diary(oid, _cid)
+                return {"artifact_id": session["artifact_id"], "artifact_version": 1}
+
+            try:
+                await run_work_session(principal, session["work_session_id"], _worker)
+                complete_task(
+                    principal,
+                    lease,
+                    result_metadata={"outcome_code": "authored_diary", "artifact_ids": [session["artifact_id"]]},
+                )
+            except Exception:
+                try:
+                    fail_task(principal, lease, error_code="work_session_failed")
+                except Exception:
+                    logger.debug("[inner_diary_write] task terminalization failed", exc_info=True)
+                raise
         except Exception as e:
             log_error(f"scheduler._check_inner_diary_write[{_cid}]", e)
     _mark("inner_diary_write")

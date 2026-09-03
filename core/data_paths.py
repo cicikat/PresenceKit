@@ -418,6 +418,14 @@ class DataPaths:
             safe_user_id(char_id), safe_user_id(user_id), "state.json",
         )
 
+    def agent_runtime_work_session_state(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
+        """Durable Reality Agent Work Session records, separate from Task state."""
+        assert_production_identity_allowed(user_id, mode=self.mode)
+        return self._p(
+            "runtime", "agent_runtime", "reality", "work_sessions",
+            safe_user_id(char_id), safe_user_id(user_id), "state.json",
+        )
+
     def self_management_state(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
         """Character-scoped Self Capability state; never shares autonomy state."""
         assert_production_identity_allowed(user_id, mode=self.mode)

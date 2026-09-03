@@ -68,6 +68,7 @@ REGISTRY: dict[str, PathMeta] = {
     "autonomy_state":         PathMeta("runtime",   "shared",          "per_char_user", "ignore"),
     "agent_runtime_reality_root": PathMeta("runtime", "reality",       "global",        "ignore"),
     "agent_runtime_task_state": PathMeta("runtime", "reality",         "per_char_user", "ignore"),
+    "agent_runtime_work_session_state": PathMeta("runtime", "reality", "per_char_user", "ignore"),
     "self_management_state":  PathMeta("runtime",   "shared",          "per_char_user", "ignore"),
     "self_management_audit":  PathMeta("forensic",  "shared",          "per_char_user", "ignore"),
     "wake_delivery_ledger":   PathMeta("canonical", "shared",          "per_user",      "ignore"),

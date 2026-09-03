@@ -124,6 +124,23 @@ async def agent_runtime_workspace(_auth=Depends(require_scopes("state.read"))):
 
 
 @router.get(
+    "/observability/agent-runtime-work-sessions",
+    summary="读取 Agent Work Session 脱敏生命周期观测",
+)
+async def agent_runtime_work_sessions(
+    uid: str = Query("", max_length=128),
+    char_id: str = Query("", max_length=128),
+    limit: int = Query(100, ge=1, le=200),
+    _auth=Depends(require_scopes("state.read")),
+):
+    from core.agent_runtime.work_sessions import WorkSessionError, observability_snapshot
+    try:
+        return observability_snapshot(uid=uid or None, char_id=char_id or None, limit=limit)
+    except WorkSessionError as exc:
+        raise HTTPException(status_code=422, detail={"code": exc.code}) from exc
+
+
+@router.get(
     "/observability/memory-event-ledger",
     summary="读取 Memory Event 账本双写健康度",
 )

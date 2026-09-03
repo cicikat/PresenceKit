@@ -260,6 +260,18 @@ and `daily_journal` retain separate names, counters, and lifecycles.
 Future durable state requires a same-change read-only backend observation endpoint and, where consumed,
 admin/desktop/mobile catalog updates. Brief 229 itself adds no endpoint, setting, or client field.
 
+## Brief 232 Agent Work Sessions
+
+`core/agent_runtime/work_sessions.py` provides the Reality-only non-chat LLM work boundary. A session
+has its own `work_session_id`, references exactly one Task Manager `task_id`, accepts bounded context,
+and permits only manifest artifact kinds (`authored_diary`, `document_summary`, or
+`workspace_artifact`). Its lifecycle and metadata-only observation are independent from EventContext,
+`turn_sink`, short-term history, `event_log`, episodic memory, and identity. The migrated
+`inner_diary_write` scheduler task creates and claims both records, invokes the existing fact/feeling
+generator, and completes the authored artifact without creating an assistant turn. `daily_journal`
+remains a proactive signal. Work-session failures and unknown outcomes never become user facts; only
+an explicit later fixation flow may promote an artifact.
+
 ## Brief 233 workspace capability
 
 The workspace adapter is separate from the legacy read-only `fs_access` tools. It accepts only explicit
