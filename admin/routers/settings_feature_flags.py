@@ -25,6 +25,7 @@ FLAGS = {
     "self_management": ("self_management", "enabled", "Self Capability"),
     "mcp_servers": ("mcp_servers", "enabled", "MCP 外部工具"),
     "fs_access": ("fs_access", "enabled", "文件只读访问"),
+    "workspace_access": ("workspace_access", "enabled", "Workspace 文件能力"),
     "anti_collapse": ("anti_collapse", "enabled", "输出防坍缩"),
     "coplay": ("coplay", "enabled", "陪玩部署"),
     "toy_autogrow": ("toy_autogrow", "enabled", "玩具自主生长"),

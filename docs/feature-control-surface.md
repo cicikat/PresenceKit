@@ -300,3 +300,13 @@ boundaries. It adds no setting, endpoint, worker, client control, or capability.
 scheduler, tool, deployment, and EventContext controls retain their current ownership and semantics.
 Future Briefs 230-237 must add configured/effective/runtime-observed controls in the same change as
 each implemented task or capability; clients must not infer availability from existing tool names.
+
+## Brief 233 workspace capability
+
+`workspace_access` is a local deployment capability with explicit roots and independent read/list/create/
+update/delete permissions. It defaults disabled and is unavailable in `remote_server` mode. Limits are
+bounded by file bytes, aggregate bytes, concurrent operations, read characters, and listing entries.
+The backend adapter rejects project data, symlinks, and sensitive names; mutating operations use the
+Reality Task Manager receipt boundary. The current control surface is backend configuration plus the
+read-only `GET /observability/agent-runtime-tasks` endpoint; no desktop/mobile setting or protocol is
+introduced until a client consumes workspace results.

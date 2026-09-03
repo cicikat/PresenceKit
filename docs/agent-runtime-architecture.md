@@ -186,6 +186,7 @@ existing origin, role, danger, confirmation, deployment, MCP, and enablement gat
 | `toy_vibrate`, `toy_stop`, `toy_pattern`, `toy_job_status` | hardware job | existing hardware manager remains owner |
 | `read_toy_file`, `write_toy_file` | fixed authored document | enum targets, not workspace |
 | `fs_list`, `fs_read` | workspace read | Brief 233 adapter; existing allow-roots |
+| `workspace_list`, `workspace_read`, `workspace_create`, `workspace_update`, `workspace_write`, `workspace_delete`, `workspace_undo` | workspace capability | Brief 233; explicit roots/operation grants, Reality-only, bounded receipts |
 | `manage_self_capability` | capability policy mutation | grant/revision/idempotency and dedicated origin |
 | dynamic `mcp__*` | MCP transport adapter | transport is not permission; intersect local policy |
 
@@ -258,3 +259,13 @@ and `daily_journal` retain separate names, counters, and lifecycles.
 
 Future durable state requires a same-change read-only backend observation endpoint and, where consumed,
 admin/desktop/mobile catalog updates. Brief 229 itself adds no endpoint, setting, or client field.
+
+## Brief 233 workspace capability
+
+The workspace adapter is separate from the legacy read-only `fs_access` tools. It accepts only explicit
+configured roots, rejects project `data/`, sensitive names, symlinks, unsupported text types, and
+`remote_server` mode. `read`, `list`, `create`, `update`, and `delete` are independent permissions;
+writes use atomic replacement and bounded file/total/concurrency limits. Mutating tool calls create a
+Reality Task Manager receipt and expose only metadata (`task_id`, operation, size, digest, version),
+never content or absolute paths. Delete requires an explicit confirmation flag. Dream has no adapter or
+access to the Reality workspace.

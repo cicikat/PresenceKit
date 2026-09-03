@@ -24,6 +24,13 @@ REMOTE_BLOCKED_TOOLS = frozenset({
     "exit_yandere",
     "fs_list",
     "fs_read",
+    "workspace_list",
+    "workspace_read",
+    "workspace_write",
+    "workspace_create",
+    "workspace_update",
+    "workspace_delete",
+    "workspace_undo",
 })
 
 REMOTE_CLIENT_ACTIONS = frozenset({
@@ -74,6 +81,18 @@ def capability_projection(*, desktop_ws_online: bool = False, last_ack_at: float
     """Return a redacted, logical capability projection for observability."""
     remote = is_remote_server()
     decisions: list[CapabilityDecision] = []
+    workspace_enabled = False
+    try:
+        from core.agent_runtime.workspace import capability_snapshot
+        workspace_enabled = bool(capability_snapshot().get("enabled"))
+    except Exception:
+        pass
+    decisions.append(CapabilityDecision(
+        logical_name="workspace",
+        status="disabled" if remote or not workspace_enabled else "enabled",
+        reason=("server-local operation is disabled in remote_server mode" if remote
+                else ("workspace capability is disabled" if not workspace_enabled else "explicit workspace roots")),
+    ))
     for name in sorted(REMOTE_BLOCKED_TOOLS):
         decisions.append(CapabilityDecision(
             logical_name=name,

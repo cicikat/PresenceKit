@@ -511,6 +511,22 @@ fs_access:
   max_read_chars: 4000            # 单次读取截断
   max_list_entries: 100           # 单次列目录条数上限
 
+# 受控 workspace 文件能力（Brief 233）：显式根目录与分操作权限，默认关闭。
+workspace_access:
+  enabled: false
+  roots: []
+  permissions:
+    read: true
+    list: true
+    create: false
+    update: false
+    delete: false
+  max_file_bytes: 5242880
+  max_total_bytes: 52428800
+  max_concurrent_tasks: 2
+  max_read_chars: 10000
+  max_list_entries: 100
+
 mode: production
 standalone_mode: false
 data_prefix: "data"

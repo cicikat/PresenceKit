@@ -10,6 +10,7 @@
 """
 
 import inspect
+import hashlib
 import json
 import logging
 import platform
@@ -575,6 +576,82 @@ async def _fs_list_wrapper(path: str | None = None, depth: int = 1) -> str:
 async def _fs_read_wrapper(path: str) -> str:
     from core.tools.fs_browse import fs_read
     return fs_read(path=path)
+
+
+async def _workspace_list_wrapper(path: str | None = None, depth: int = 1, *, user_id: str | None = None, char_id: str | None = None) -> str:
+    from core.agent_runtime.workspace import list_workspace
+    return json.dumps(list_workspace(path, depth), ensure_ascii=False)
+
+
+async def _workspace_read_wrapper(path: str, *, user_id: str | None = None, char_id: str | None = None) -> str:
+    from core.agent_runtime.workspace import read_workspace
+    return read_workspace(path)
+
+
+async def _workspace_write_wrapper(path: str, content: str, *, overwrite: bool = False, user_id: str | None = None, char_id: str | None = None) -> str:
+    from core.agent_runtime.workspace import write_workspace
+    from core.agent_runtime.models import TaskPrincipal, RetryPolicy, CausationRef
+    from core.agent_runtime.task_manager import create_task, claim_next, complete_task, fail_task
+    principal = TaskPrincipal.reality(user_id or "", char_id or "")
+    capability = "workspace.update" if overwrite else "workspace.create"
+    idem = hashlib.sha256((path + "\0" + content).encode("utf-8")).hexdigest()
+    receipt, _ = create_task(principal, capability=capability, source="tool", idempotency_key=idem, ttl_seconds=300, retry_policy=RetryPolicy.NEVER.value, causation_ref=CausationRef("reality_turn", path))
+    lease = claim_next(principal, capabilities={capability})
+    try:
+        result = write_workspace(path, content, overwrite=overwrite, operation="update" if overwrite else "create")
+        if lease:
+            complete_task(principal, lease, result_metadata={"outcome_code": "written", "counters": {"bytes": result["size"]}})
+        return json.dumps({"receipt": receipt["task_id"], **result}, ensure_ascii=False)
+    except Exception as exc:
+        if lease:
+            fail_task(principal, lease, error_code=getattr(exc, "code", "workspace_write_failed"))
+        raise
+
+
+async def _workspace_create_wrapper(path: str, content: str, *, user_id: str | None = None, char_id: str | None = None) -> str:
+    return await _workspace_write_wrapper(path, content, overwrite=False, user_id=user_id, char_id=char_id)
+
+
+async def _workspace_update_wrapper(path: str, content: str, *, confirmed: bool = False, user_id: str | None = None, char_id: str | None = None) -> str:
+    return await _workspace_write_wrapper(path, content, overwrite=confirmed, user_id=user_id, char_id=char_id)
+
+
+async def _workspace_delete_wrapper(path: str, *, confirmed: bool = False, user_id: str | None = None, char_id: str | None = None) -> str:
+    from core.agent_runtime.workspace import delete_workspace
+    from core.agent_runtime.models import TaskPrincipal, RetryPolicy, CausationRef
+    from core.agent_runtime.task_manager import create_task, claim_next, complete_task, fail_task
+    principal = TaskPrincipal.reality(user_id or "", char_id or "")
+    idem = hashlib.sha256(("delete\0" + path).encode("utf-8")).hexdigest()
+    receipt, _ = create_task(principal, capability="workspace.delete", source="tool", idempotency_key=idem, ttl_seconds=300, retry_policy=RetryPolicy.NEVER.value, causation_ref=CausationRef("reality_turn", path))
+    lease = claim_next(principal, capabilities={"workspace.delete"})
+    try:
+        result = delete_workspace(path, confirmed=confirmed)
+        if lease:
+            complete_task(principal, lease, result_metadata={"outcome_code": "deleted"})
+        return json.dumps({"receipt": receipt["task_id"], **result}, ensure_ascii=False)
+    except Exception as exc:
+        if lease:
+            fail_task(principal, lease, error_code=getattr(exc, "code", "workspace_delete_failed"))
+        raise
+
+
+async def _workspace_undo_wrapper(path: str, *, confirmed: bool = False, user_id: str | None = None, char_id: str | None = None) -> str:
+    from core.agent_runtime.workspace import undo_workspace
+    from core.agent_runtime.models import TaskPrincipal, RetryPolicy, CausationRef
+    from core.agent_runtime.task_manager import create_task, claim_next, complete_task, fail_task
+    principal = TaskPrincipal.reality(user_id or "", char_id or "")
+    idem = hashlib.sha256(("undo\0" + path).encode("utf-8")).hexdigest()
+    receipt, _ = create_task(principal, capability="workspace.update", source="tool", idempotency_key=idem, ttl_seconds=300, retry_policy=RetryPolicy.NEVER.value, causation_ref=CausationRef("reality_turn", path))
+    lease = claim_next(principal, capabilities={"workspace.update"})
+    try:
+        result = undo_workspace(path, confirmed=confirmed)
+        if lease:
+            complete_task(principal, lease, result_metadata={"outcome_code": "undone"})
+        return json.dumps({"receipt": receipt["task_id"], **result}, ensure_ascii=False)
+    except Exception as exc:
+        if lease:
+            fail_task(principal, lease, error_code=getattr(exc, "code", "workspace_undo_failed"))
+        raise
 
 
 async def _manage_self_capability_wrapper(
@@ -1336,6 +1413,62 @@ _TOOL_REGISTRY["fs_read"] = {
     "examples": ["读一下这个文件", "打开看看这个文档写了什么"],
     "keywords": ["读文件", "打开这个文件", "看看这个文档"],
     "trace_args": ["path"],
+}
+
+_TOOL_REGISTRY["workspace_list"] = {
+    "func": _workspace_list_wrapper,
+    "description": "列出已授权 workspace 的目录内容，只返回受限元数据。",
+    "dangerous": False, "category": "fs",
+    "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "depth": {"type": "integer", "enum": [1, 2]}}, "required": []},
+    "examples": ["列出工作区文件"], "keywords": ["工作区", "列目录"], "trace_args": ["path"],
+}
+
+_TOOL_REGISTRY["workspace_read"] = {
+    "func": _workspace_read_wrapper,
+    "description": "读取已授权 workspace 中的文本文件。",
+    "dangerous": False, "category": "fs",
+    "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]},
+    "examples": ["读取工作区文档"], "keywords": ["工作区", "读文件"], "trace_args": ["path"],
+}
+
+_TOOL_REGISTRY["workspace_write"] = {
+    "func": _workspace_write_wrapper,
+    "description": "在已授权 workspace 创建或更新文本文件；覆盖已有内容需要明确 overwrite。",
+    "dangerous": True, "category": "fs", "effect": "write",
+    "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "content": {"type": "string"}, "overwrite": {"type": "boolean"}}, "required": ["path", "content"]},
+    "examples": ["在工作区创建文档"], "keywords": ["工作区", "创建文件", "写文件"], "trace_args": ["path"],
+}
+
+_TOOL_REGISTRY["workspace_create"] = {
+    "func": _workspace_create_wrapper,
+    "description": "在已授权 workspace 创建新的文本文件；文件已存在时拒绝。",
+    "dangerous": True, "category": "fs", "effect": "write",
+    "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "content": {"type": "string"}}, "required": ["path", "content"]},
+    "examples": ["在工作区新建文档"], "keywords": ["工作区", "新建文件"], "trace_args": ["path"],
+}
+
+_TOOL_REGISTRY["workspace_update"] = {
+    "func": _workspace_update_wrapper,
+    "description": "更新已授权 workspace 中的文本文件；必须显式 confirmed=true 才能覆盖。",
+    "dangerous": True, "category": "fs", "effect": "write",
+    "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "content": {"type": "string"}, "confirmed": {"type": "boolean"}}, "required": ["path", "content", "confirmed"]},
+    "examples": ["确认后更新工作区文档"], "keywords": ["工作区", "更新文件", "覆盖文件"], "trace_args": ["path"],
+}
+
+_TOOL_REGISTRY["workspace_delete"] = {
+    "func": _workspace_delete_wrapper,
+    "description": "删除已授权 workspace 中的文件，必须显式 confirmed=true。",
+    "dangerous": True, "category": "fs", "effect": "write",
+    "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "confirmed": {"type": "boolean"}}, "required": ["path", "confirmed"]},
+    "examples": ["删除工作区文件"], "keywords": ["工作区", "删除文件"], "trace_args": ["path"],
+}
+
+_TOOL_REGISTRY["workspace_undo"] = {
+    "func": _workspace_undo_wrapper,
+    "description": "撤销 workspace 文件最近一次受控变更；必须显式 confirmed=true。",
+    "dangerous": True, "category": "fs", "effect": "write",
+    "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "confirmed": {"type": "boolean"}}, "required": ["path", "confirmed"]},
+    "examples": ["撤销工作区文件修改"], "keywords": ["工作区", "撤销修改"], "trace_args": ["path"],
 }
 
 _TOOL_REGISTRY["manage_self_capability"] = {

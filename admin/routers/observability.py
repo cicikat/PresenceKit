@@ -115,6 +115,15 @@ async def agent_runtime_tasks(
 
 
 @router.get(
+    "/observability/agent-runtime-workspace",
+    summary="读取 workspace capability 脱敏状态",
+)
+async def agent_runtime_workspace(_auth=Depends(require_scopes("state.read"))):
+    from core.agent_runtime.workspace import capability_snapshot
+    return capability_snapshot()
+
+
+@router.get(
     "/observability/memory-event-ledger",
     summary="读取 Memory Event 账本双写健康度",
 )
