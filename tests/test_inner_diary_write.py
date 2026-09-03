@@ -53,6 +53,11 @@ async def test_inner_diary_write_ignores_gating_and_writes_file(monkeypatch, san
     )
     chat_calls = []
     monkeypatch.setattr("core.llm_client.chat", _fake_chat_factory(chat_calls))
+    monkeypatch.setattr(
+        time_based,
+        "_generate_and_store_diary",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("legacy composition called")),
+    )
 
     await time_based._check_inner_diary_write()
 
@@ -60,6 +65,22 @@ async def test_inner_diary_write_ignores_gating_and_writes_file(monkeypatch, san
     assert diary_file.exists()
     assert marks == ["inner_diary_write"]
     assert len(chat_calls) == 2
+
+
+def test_diary_work_context_serialization_is_bounded(monkeypatch):
+    from core.agent_runtime.work_sessions import MAX_CONTEXT_CHARS
+    from core.scheduler.triggers import time_based
+
+    monkeypatch.setattr(
+        "core.memory.event_log.get_recent_days",
+        lambda *args, **kwargs: ("\\\n" * 9000),
+    )
+    monkeypatch.setattr(time_based, "_collect_diary_voice", lambda char_id: ("p" * 500, "v" * 400, "m" * 200))
+    monkeypatch.setattr(time_based, "get_char_name", lambda char_id: "character")
+    context = time_based._prepare_diary_work_context("owner", TEST_CHAR_ID)
+
+    assert context is not None
+    assert len(time_based.json.dumps(context, ensure_ascii=False, sort_keys=True)) <= MAX_CONTEXT_CHARS
 
 
 @pytest.mark.asyncio
@@ -135,6 +156,38 @@ async def test_inner_diary_write_outside_window_noop(monkeypatch, sandbox):
 
     assert marks == []
     assert chat_calls == []
+    diary_file = sandbox.yexuan_inner_diary(char_id=TEST_CHAR_ID) / "2026-05-25.md"
+    assert not diary_file.exists()
+
+
+@pytest.mark.asyncio
+async def test_inner_diary_write_failure_remains_retryable_without_cooldown(monkeypatch, sandbox):
+    from core.agent_runtime import TaskPrincipal
+    from core.agent_runtime.task_manager import list_tasks
+    from core.agent_runtime.work_sessions import list_work_sessions
+    from core.scheduler.triggers import time_based
+
+    _patch_now(monkeypatch, time_based, 2026, 5, 25, 23, 30)
+    marks = []
+    monkeypatch.setattr(time_based, "_is_ready", lambda name: True)
+    monkeypatch.setattr(time_based, "_mark", lambda name: marks.append(name))
+    monkeypatch.setattr(time_based, "_owner_id", lambda: "u1")
+    monkeypatch.setattr(time_based, "_diary_char_ids", lambda: [TEST_CHAR_ID])
+    monkeypatch.setattr(
+        "core.memory.event_log.get_recent_days",
+        lambda oid, days=1, **kw: "## 14:30\n**用户**：测试失败\n---\n",
+    )
+
+    async def failed_chat(**kwargs):
+        raise RuntimeError("llm unavailable")
+
+    monkeypatch.setattr("core.llm_client.chat", failed_chat)
+    await time_based._check_inner_diary_write()
+
+    principal = TaskPrincipal.reality("u1", TEST_CHAR_ID)
+    assert marks == []
+    assert list_tasks(principal)[0]["status"] == "queued"
+    assert list_work_sessions(principal)[0]["status"] == "failed"
     diary_file = sandbox.yexuan_inner_diary(char_id=TEST_CHAR_ID) / "2026-05-25.md"
     assert not diary_file.exists()
 

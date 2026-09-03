@@ -23,10 +23,18 @@ from core.sandbox import get_paths
 WORK_SESSION_SCHEMA_VERSION = "agent-runtime-work-session.v1"
 _SESSION_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 _NAME_RE = re.compile(r"^[a-z][a-z0-9_.:-]{0,127}$")
-_ARTIFACT_KINDS = frozenset({"authored_diary", "document_summary", "workspace_artifact"})
+CAPABILITY_MANIFESTS: dict[str, frozenset[str]] = {
+    "authored_diary": frozenset({"authored_diary"}),
+    "document_summary": frozenset({"document_summary"}),
+    "workspace_artifact": frozenset({"workspace_artifact"}),
+}
+_ARTIFACT_KINDS = frozenset().union(*CAPABILITY_MANIFESTS.values())
 _TERMINAL = frozenset({"succeeded", "failed", "canceled", "outcome_unknown"})
+_STATUSES = _TERMINAL | {"created", "running"}
+_DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
 MAX_CONTEXT_CHARS = 12000
 MAX_ARTIFACT_ID_CHARS = 128
+MAX_SESSIONS_PER_SCOPE = 100
 
 
 class WorkSessionError(RuntimeError):
@@ -89,6 +97,41 @@ def _session_path(principal: TaskPrincipal):
     return get_paths().agent_runtime_work_session_state(principal.uid, char_id=principal.char_id)
 
 
+def _record_valid(row: WorkSessionRecord) -> bool:
+    try:
+        return bool(
+            _SESSION_ID_RE.fullmatch(str(row.session_id or ""))
+            and _SESSION_ID_RE.fullmatch(str(row.task_id or ""))
+            and isinstance(row.capability, str)
+            and row.capability in CAPABILITY_MANIFESTS
+            and isinstance(row.artifact_kind, str)
+            and row.artifact_kind in CAPABILITY_MANIFESTS[row.capability]
+            and row.status in _STATUSES
+            and _DIGEST_RE.fullmatch(str(row.context_digest or ""))
+            and _DIGEST_RE.fullmatch(str(row.idempotency_digest or ""))
+            and isinstance(row.context_chars, int)
+            and not isinstance(row.context_chars, bool)
+            and 0 <= row.context_chars <= MAX_CONTEXT_CHARS
+            and isinstance(row.attempt_count, int)
+            and not isinstance(row.attempt_count, bool)
+            and row.attempt_count >= 0
+            and isinstance(row.artifact_id, str)
+            and (not row.artifact_id or _NAME_RE.fullmatch(row.artifact_id))
+            and isinstance(row.artifact_version, int)
+            and not isinstance(row.artifact_version, bool)
+            and row.artifact_version >= 0
+            and isinstance(row.error_code, str)
+            and (not row.error_code or _NAME_RE.fullmatch(row.error_code))
+            and isinstance(row.created_at, (int, float))
+            and not isinstance(row.created_at, bool)
+            and isinstance(row.updated_at, (int, float))
+            and not isinstance(row.updated_at, bool)
+            and (row.status != "succeeded" or (row.artifact_id and row.artifact_version > 0))
+        )
+    except (KeyError, TypeError, ValueError):
+        return False
+
+
 def _load(principal: TaskPrincipal) -> tuple[dict[str, Any], list[WorkSessionRecord]]:
     path = _session_path(principal)
     if not path.exists():
@@ -105,11 +148,20 @@ def _load(principal: TaskPrincipal) -> tuple[dict[str, Any], list[WorkSessionRec
     for row in rows:
         if row.realm != "reality" or row.uid != principal.uid or row.char_id != principal.char_id:
             raise WorkSessionError("work_session_scope_invalid")
+        if not _record_valid(row):
+            raise WorkSessionError("work_session_store_invalid")
     return raw, rows
 
 
 def _save(principal: TaskPrincipal, state: dict[str, Any], rows: list[WorkSessionRecord]) -> None:
-    state["sessions"] = [row.to_dict() for row in rows[-100:]]
+    active = [row for row in rows if row.status not in _TERMINAL]
+    terminal = sorted(
+        (row for row in rows if row.status in _TERMINAL),
+        key=lambda row: (row.updated_at, row.created_at, row.session_id),
+        reverse=True,
+    )
+    keep = active + terminal[:max(0, MAX_SESSIONS_PER_SCOPE - len(active))]
+    state["sessions"] = [row.to_dict() for row in keep]
     if not safe_write_json(_session_path(principal), state):
         raise WorkSessionError("work_session_store_write_failed")
 
@@ -148,7 +200,7 @@ def create_work_session(
     if not isinstance(task_id, str) or not _SESSION_ID_RE.fullmatch(task_id):
         raise WorkSessionError("invalid_task_id")
     capability = _validate_name(capability, "capability")
-    if artifact_kind not in _ARTIFACT_KINDS:
+    if artifact_kind not in _ARTIFACT_KINDS or artifact_kind not in CAPABILITY_MANIFESTS.get(capability, frozenset()):
         raise WorkSessionError("artifact_kind_forbidden")
     if not isinstance(context, str) or len(context) > MAX_CONTEXT_CHARS:
         raise WorkSessionError("context_limit_exceeded")
@@ -157,13 +209,34 @@ def create_work_session(
     digest = hashlib.sha256(context.encode("utf-8")).hexdigest()
     session_digest = hashlib.sha256(idempotency_key.encode("utf-8")).hexdigest()
     timestamp = time.time() if now is None else float(now)
+    from core.agent_runtime.task_manager import TaskManagerError, get_task
+    try:
+        task = get_task(principal, task_id, now=timestamp)
+    except TaskManagerError as exc:
+        raise WorkSessionError("task_not_found") from exc
+    if task["realm"] != "reality" or task["capability"] != capability:
+        raise WorkSessionError("task_capability_mismatch")
+    if task["status"] not in {"created", "queued", "running"}:
+        raise WorkSessionError("task_terminal")
     with task_store.scope_lock(principal.uid, principal.char_id):
         state, rows = _load(principal)
         for row in rows:
             if row.idempotency_digest == session_digest:
-                if row.task_id != task_id or row.capability != capability or row.context_digest != digest:
+                if row.task_id != task_id or row.capability != capability or row.artifact_kind != artifact_kind:
                     raise WorkSessionError("idempotency_conflict")
+                if row.context_digest != digest:
+                    if row.status != "failed" or task["status"] != "queued":
+                        raise WorkSessionError("idempotency_conflict")
+                    # A safe explicit retry may rebuild fresher bounded input.
+                    # Only its digest/size are retained; the worker still receives
+                    # the exact in-memory context for this attempt.
+                    row.context_digest = digest
+                    row.context_chars = len(context)
+                    row.updated_at = timestamp
+                    _save(principal, state, rows)
                 return _project(row)
+        if sum(1 for row in rows if row.status not in _TERMINAL) >= MAX_SESSIONS_PER_SCOPE:
+            raise WorkSessionError("work_session_capacity_exceeded")
         row = WorkSessionRecord(
             session_id=uuid.uuid4().hex,
             task_id=task_id,
@@ -178,7 +251,6 @@ def create_work_session(
             context_digest=digest,
             context_chars=len(context),
             idempotency_digest=session_digest,
-            artifact_id=f"ws-{session_digest[:24]}",
         )
         rows.append(row)
         _save(principal, state, rows)
@@ -190,12 +262,19 @@ def start_work_session(principal: TaskPrincipal, work_session_id: str, *, now: f
     if not _SESSION_ID_RE.fullmatch(str(work_session_id or "")):
         raise WorkSessionError("invalid_work_session_id")
     timestamp = time.time() if now is None else float(now)
+    from core.agent_runtime.task_manager import TaskManagerError, get_task
+    try:
+        task = get_task(principal, get_work_session(principal, work_session_id)["task_id"], now=timestamp)
+    except TaskManagerError as exc:
+        raise WorkSessionError("task_not_found") from exc
+    if task["status"] != "running":
+        raise WorkSessionError("task_not_running")
     with task_store.scope_lock(principal.uid, principal.char_id):
         state, rows = _load(principal)
         row = next((item for item in rows if item.session_id == work_session_id), None)
         if row is None:
             raise WorkSessionError("work_session_not_found")
-        if row.status in _TERMINAL:
+        if row.status != "created":
             raise WorkSessionError("work_session_terminal")
         row.status = "running"
         row.attempt_count += 1
@@ -205,6 +284,8 @@ def start_work_session(principal: TaskPrincipal, work_session_id: str, *, now: f
 
 
 def complete_work_session(principal: TaskPrincipal, work_session_id: str, *, artifact_id: str = "", artifact_version: int = 0, now: float | None = None) -> dict[str, Any]:
+    if not artifact_id or not isinstance(artifact_version, int) or isinstance(artifact_version, bool) or artifact_version <= 0:
+        raise WorkSessionError("artifact_not_created")
     return _finish(principal, work_session_id, "succeeded", artifact_id=artifact_id, artifact_version=artifact_version, now=now)
 
 
@@ -221,6 +302,32 @@ def unknown_work_session(principal: TaskPrincipal, work_session_id: str, *, now:
     return _finish(principal, work_session_id, "outcome_unknown", error_code="work_session_outcome_unknown", now=now)
 
 
+def retry_work_session(principal: TaskPrincipal, work_session_id: str, *, now: float | None = None) -> dict[str, Any]:
+    """Explicitly requeue a failed session; unknown/canceled sessions never replay."""
+    principal = _validate_principal(principal)
+    timestamp = time.time() if now is None else float(now)
+    current = get_work_session(principal, work_session_id)
+    from core.agent_runtime.task_manager import TaskManagerError, get_task
+    try:
+        task = get_task(principal, current["task_id"], now=timestamp)
+    except TaskManagerError as exc:
+        raise WorkSessionError("task_not_found") from exc
+    if task["status"] != "queued":
+        raise WorkSessionError("task_not_queued")
+    with task_store.scope_lock(principal.uid, principal.char_id):
+        state, rows = _load(principal)
+        row = next((item for item in rows if item.session_id == work_session_id), None)
+        if row is None:
+            raise WorkSessionError("work_session_not_found")
+        if row.status != "failed":
+            raise WorkSessionError("work_session_retry_forbidden")
+        row.status = "created"
+        row.updated_at = timestamp
+        row.error_code = ""
+        _save(principal, state, rows)
+        return _project(row)
+
+
 def _finish(principal: TaskPrincipal, work_session_id: str, status: str, *, artifact_id: str = "", artifact_version: int = 0, error_code: str = "", now: float | None = None) -> dict[str, Any]:
     principal = _validate_principal(principal)
     if not _SESSION_ID_RE.fullmatch(str(work_session_id or "")):
@@ -235,6 +342,8 @@ def _finish(principal: TaskPrincipal, work_session_id: str, status: str, *, arti
             raise WorkSessionError("work_session_not_found")
         if row.status in _TERMINAL:
             return _project(row)
+        if status == "succeeded" and row.status != "running":
+            raise WorkSessionError("work_session_not_running")
         row.status = status
         row.updated_at = timestamp
         row.error_code = error_code
@@ -276,7 +385,7 @@ def observability_snapshot(*, uid: str | None = None, char_id: str | None = None
         raise WorkSessionError("invalid_limit")
     entries: list[dict[str, Any]] = []
     counts: dict[str, int] = {}
-    for path in get_paths().root_dir().joinpath("runtime", "agent_runtime", "reality", "work_sessions").glob("*/*/state.json"):
+    for path in get_paths().agent_runtime_work_sessions_root().glob("*/*/state.json"):
         try:
             scope = path.parts[-3:-1]
             if len(scope) != 2:
@@ -296,6 +405,36 @@ def observability_snapshot(*, uid: str | None = None, char_id: str | None = None
     return {"schema_version": "agent-runtime-work-session-observability.v1", "entries": entries[:limit], "count": min(len(entries), limit), "total_matching": len(entries), "status_counts": dict(sorted(counts.items())), "truncated": len(entries) > limit}
 
 
+def recover_all_work_sessions(*, now: float | None = None) -> dict[str, int]:
+    """Mark orphan running sessions unknown before scheduler workers start."""
+    timestamp = time.time() if now is None else float(now)
+    result = {"scopes": 0, "recovered": 0, "unreadable": 0}
+    root = get_paths().agent_runtime_work_sessions_root()
+    for path in root.glob("*/*/state.json"):
+        parts = path.parts[-3:-1]
+        if len(parts) != 2:
+            continue
+        char_id, uid = parts
+        principal = TaskPrincipal.reality(uid, char_id)
+        result["scopes"] += 1
+        try:
+            with task_store.scope_lock(uid, char_id):
+                state, rows = _load(principal)
+                changed = 0
+                for row in rows:
+                    if row.status == "running":
+                        row.status = "outcome_unknown"
+                        row.error_code = "worker_process_lost"
+                        row.updated_at = timestamp
+                        changed += 1
+                if changed:
+                    _save(principal, state, rows)
+                    result["recovered"] += changed
+        except Exception:
+            result["unreadable"] += 1
+    return result
+
+
 async def run_work_session(
     principal: TaskPrincipal,
     work_session_id: str,
@@ -312,14 +451,19 @@ async def run_work_session(
         result = result or {}
         if not isinstance(result, dict):
             raise WorkSessionError("invalid_worker_result")
+        artifact_id = str(result.get("artifact_id") or "")
+        artifact_version = result.get("artifact_version")
+        if not artifact_id or not isinstance(artifact_version, int) or isinstance(artifact_version, bool) or artifact_version <= 0:
+            raise WorkSessionError("artifact_not_created")
         return complete_work_session(
             principal,
             work_session_id,
-            artifact_id=str(result.get("artifact_id") or ""),
-            artifact_version=int(result.get("artifact_version") or 0),
+            artifact_id=artifact_id,
+            artifact_version=artifact_version,
         )
-    except WorkSessionError:
-        raise
     except Exception as exc:
-        fail_work_session(principal, work_session_id, error_code="worker_failed")
-        raise WorkSessionError("worker_failed") from exc
+        code = exc.code if isinstance(exc, WorkSessionError) else "worker_failed"
+        fail_work_session(principal, work_session_id, error_code=code)
+        if isinstance(exc, WorkSessionError):
+            raise
+        raise WorkSessionError(code) from exc

@@ -296,21 +296,22 @@ additional production sources.
   multi-channel, and ledger-unavailable samples. No recall, prompt, ranking,
   Dream/Stage lifecycle, or client protocol consumes this trace.
 
-## Agent Runtime architecture (Briefs 229-230)
+## Agent Runtime architecture (Briefs 229-233)
 
 - `current`: the Reality-only general Task Manager and its metadata-only
   `state.read` observability endpoint are implemented. It provides atomic scoped
   storage, idempotent creation, lease/attempt/TTL/cancel handling, and restart
   recovery to `outcome_unknown` without replay.
-- `roadmap`: work sessions, workspace/process/browser capabilities, visible
-  completion notification, and trigger migration are not implemented yet. Existing autonomy jobs,
-  scheduler state, tool registry, and Dream stores retain their current owners;
-  neither desktop nor mobile should infer a general Task Runtime from them.
-- `roadmap`: `event_edge_proposer` and compatibility proposer aliases such as
-  `dream_postcards` / `practice_help` are real scheduler names but do not yet
-  have their own `TRIGGER_MIGRATION_STATUS` entries. Brief 231 must normalize
-  them to canonical names or register a unique lifecycle before migration;
-  they must not become compatibility direct-speech lanes.
+- `current`: Brief 231 gives every registered scheduler producer one lifecycle. Proactive candidates
+  become autonomy signals, maintenance workers remain silent, and `dream_postcards` is an independent
+  scheduled artifact-delivery entry rather than a `dream_exit` alias.
+- `current`: Brief 232 provides Reality-only bounded Agent Work Sessions and migrates
+  `inner_diary_write`; work context is digested in observation and no work session is an ingress,
+  assistant turn, evidence item, or automatic memory fact.
+- `current`: Brief 233 provides local-only controlled workspace read/list/create/update/delete/undo
+  with explicit roots and grants, durable version snapshots, Task receipts, and redacted observation.
+- `roadmap`: process/browser capabilities, visible completion notification, and a client task/result
+  surface remain unimplemented. Desktop and mobile must not infer them from backend tool names.
 ### KNOW-228: character knowledge client surface
 
 The scoped character knowledge library and admin observability endpoint are

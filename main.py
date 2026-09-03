@@ -845,6 +845,9 @@ async def main():
 
         recovery = recover_all_tasks()
         logger.info("Agent Runtime task recovery complete: %s", recovery)
+        from core.agent_runtime.work_sessions import recover_all_work_sessions
+        work_recovery = recover_all_work_sessions()
+        logger.info("Agent Runtime work-session recovery complete: %s", work_recovery)
     except Exception:
         logger.warning("Agent Runtime task recovery failed closed", exc_info=True)
 

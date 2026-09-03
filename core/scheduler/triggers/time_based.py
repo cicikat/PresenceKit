@@ -1,4 +1,5 @@
 import logging
+import json
 import random
 import re
 import time
@@ -9,6 +10,7 @@ from core.character_name_provider import get_char_name
 from core.error_handler import log_error
 from core.scheduler.loop import _is_ready, _mark, _owner_id, _pipeline_send, _cfg, _user_talked_today, _last_trigger, _char_name, _active_char_id_or_none
 from core.scheduler.rhythm import LOGICAL_DAY_CUTOFF_HOUR
+from core.data_paths import DEFAULT_CHAR_ID
 
 logger = logging.getLogger(__name__)
 
@@ -479,14 +481,14 @@ def _collect_diary_voice(char_id: str) -> tuple[str, str, str]:
     mood_hint = ""
     try:
         from core import character_loader
-        char = character_loader.load(char_id or "yexuan")
+        char = character_loader.load(char_id or DEFAULT_CHAR_ID)
         persona_hint = _coerce_card_text(getattr(char, "personality", ""), 500)
         voice_example = _coerce_card_text(getattr(char, "mes_example", ""), 400)
     except Exception as e:
         logger.debug("[daily_journal] voice anchor 读取失败: %s", e)
     try:
         from core.memory import mood_state
-        mood_hint = (mood_state.get_current(char_id=char_id or "yexuan") or "").strip()
+        mood_hint = (mood_state.get_current(char_id=char_id or DEFAULT_CHAR_ID) or "").strip()[:200]
     except Exception as e:
         logger.debug("[daily_journal] mood 读取失败: %s", e)
     return persona_hint, voice_example, mood_hint
@@ -502,32 +504,43 @@ def _diary_char_ids() -> list[str]:
     whitelist = get_config().get("diary", {}).get("characters", [])
     if whitelist:
         return list(whitelist)
-    return [_active_char_id_or_none() or "yexuan"]
+    return [_active_char_id_or_none() or DEFAULT_CHAR_ID]
 
 
-async def _generate_and_store_diary(oid: str, char_id: str) -> None:
-    """生成并存储指定角色的每日日记（双层：客观事件 + 第一人称感受）。
-
-    事件层：客观分析器从对话日志提炼事实。
-    感受层：注入角色卡性格底色 + 语气示例 + 当前心情 + 真实对话片段，
-    让模型写出有具体细节、有温度的私人日记，而非工整套话。
-
-    唯一调用方是静默维护任务 `_check_inner_diary_write`，与 daily_journal 主动发言
-    完全解耦（发言过 gating 与否不影响是否写日记）。
-    """
-    from core.sandbox import get_paths
-    from core.scheduler.rhythm import logical_day
-    from core import llm_client
+def _prepare_diary_work_context(oid: str, char_id: str) -> dict[str, str] | None:
+    """Build the exact bounded input consumed by the non-chat diary worker."""
     from core.memory.event_log import get_recent_days
 
-    diary_dir = get_paths().yexuan_inner_diary(char_id=char_id)
-    diary_dir.mkdir(parents=True, exist_ok=True)
-
-    char_name = get_char_name(char_id)
     days = 2 if datetime.now().hour < LOGICAL_DAY_CUTOFF_HOUR else 1
-    today_log = get_recent_days(oid, days=days)
+    today_log = (get_recent_days(oid, days=days) or "")[-9000:]
     if not today_log:
-        return
+        return None
+    persona_hint, voice_example, mood_hint = _collect_diary_voice(char_id)
+    context = {
+        "char_name": get_char_name(char_id)[:128],
+        "today_log": today_log,
+        "persona_hint": persona_hint,
+        "voice_example": voice_example,
+        "mood_hint": mood_hint,
+    }
+    from core.agent_runtime.work_sessions import MAX_CONTEXT_CHARS
+    serialized = json.dumps(context, ensure_ascii=False, sort_keys=True)
+    while len(serialized) > MAX_CONTEXT_CHARS and context["today_log"]:
+        excess = len(serialized) - MAX_CONTEXT_CHARS
+        context["today_log"] = context["today_log"][min(len(context["today_log"]), excess):]
+        serialized = json.dumps(context, ensure_ascii=False, sort_keys=True)
+    return context if context["today_log"] and len(serialized) <= MAX_CONTEXT_CHARS else None
+
+
+async def _generate_diary_material(
+    work_context: dict[str, str],
+    char_id: str,
+) -> dict[str, str] | None:
+    """Generate fact/feeling material without selecting or writing a path."""
+    from core import llm_client
+
+    char_name = work_context["char_name"]
+    today_log = work_context["today_log"]
 
     # ── 事件层：客观分析器 ──
     facts_prompt = f"""你是一个对话记录分析器。请从下面的对话日志里提取今天发生的客观事件，只输出事件列表，不要任何分析或感受：
@@ -549,7 +562,9 @@ async def _generate_and_store_diary(oid: str, char_id: str) -> None:
     )
 
     # ── 感受层：注入 voice anchor，写有温度的私人日记 ──
-    persona_hint, voice_example, mood_hint = _collect_diary_voice(char_id)
+    persona_hint = work_context["persona_hint"]
+    voice_example = work_context["voice_example"]
+    mood_hint = work_context["mood_hint"]
 
     feeling_prompt = f"""你是{char_name}。深夜，你在自己的本子上写今天的私人日记——不给任何人看，只写给自己。
 
@@ -587,18 +602,54 @@ async def _generate_and_store_diary(oid: str, char_id: str) -> None:
         logger.warning(f"[daily_journal] 事件层未通过规则纠察，跳过写入: {_issues}")
         facts_content = ""
 
-    if facts_content or feeling_content:
-        today = logical_day().strftime("%Y-%m-%d")
-        diary_file = diary_dir / f"{today}.md"
-        parts = [f"# {today}\n"]
-        if facts_content:
-            parts.append(facts_content.strip())
-        if feeling_content:
-            parts.append(f"\n## 今日感受\n{feeling_content.strip()}")
-        from core.safe_write import safe_write_text
-        if not safe_write_text(diary_file, "\n".join(parts) + "\n"):
-            raise IOError("authored diary artifact write failed")
-        logger.info(f"[scheduler] 角色日记已存储（双层）: {today}")
+    if not facts_content and not feeling_content:
+        return None
+    return {"facts": facts_content.strip(), "feeling": feeling_content.strip()}
+
+
+def _store_diary_artifact(
+    char_id: str,
+    material: dict[str, str],
+    *,
+    logical_date: str | None = None,
+) -> dict[str, object]:
+    """Write one authored diary to its fixed capability-owned target."""
+    from core.safe_write import safe_write_text
+    from core.sandbox import get_paths
+    from core.scheduler.rhythm import logical_day
+
+    today = logical_date or logical_day().strftime("%Y-%m-%d")
+    diary_dir = get_paths().yexuan_inner_diary(char_id=char_id)
+    diary_dir.mkdir(parents=True, exist_ok=True)
+    diary_file = diary_dir / f"{today}.md"
+    parts = [f"# {today}\n"]
+    if material.get("facts"):
+        parts.append(material["facts"])
+    if material.get("feeling"):
+        parts.append(f"\n## 今日感受\n{material['feeling']}")
+    if len(parts) == 1:
+        raise IOError("authored diary artifact is empty")
+    if not safe_write_text(diary_file, "\n".join(parts) + "\n"):
+        raise IOError("authored diary artifact write failed")
+    logger.info("[scheduler] 角色日记已存储（双层）: %s", today)
+    return {"artifact_id": f"diary-{today}", "artifact_version": 1}
+
+
+async def _generate_and_store_diary(
+    oid: str,
+    char_id: str,
+    *,
+    work_context: dict[str, str] | None = None,
+) -> bool:
+    """Compatibility composition for callers outside the Work Session worker."""
+    context = work_context or _prepare_diary_work_context(oid, char_id)
+    if not context:
+        return False
+    material = await _generate_diary_material(context, char_id)
+    if not material:
+        return False
+    _store_diary_artifact(char_id, material)
+    return True
 
 
 async def _check_daily_journal():
@@ -645,6 +696,7 @@ async def _check_inner_diary_write():
     from core.sandbox import get_paths
     from core.scheduler.rhythm import logical_day
 
+    retry_pending = False
     for _cid in _diary_char_ids():
         # 幂等主闸：当日（logical day）文件已存在则跳过，不发 LLM 调用
         diary_file = get_paths().yexuan_inner_diary(char_id=_cid) / f"{logical_day().strftime('%Y-%m-%d')}.md"
@@ -662,6 +714,9 @@ async def _check_inner_diary_write():
                 create_work_session, run_work_session,
             )
             logical_date = logical_day().strftime("%Y-%m-%d")
+            work_context = _prepare_diary_work_context(oid, _cid)
+            if not work_context:
+                continue
             principal = TaskPrincipal.reality(oid, _cid)
             idem = f"inner-diary:{_cid}:{logical_date}"
             task_receipt, _ = create_task(
@@ -670,7 +725,8 @@ async def _check_inner_diary_write():
                 source="scheduler",
                 idempotency_key=idem,
                 ttl_seconds=6 * 3600,
-                retry_policy=RetryPolicy.NEVER.value,
+                retry_policy=RetryPolicy.SAFE.value,
+                max_attempts=2,
                 causation_ref=CausationRef("signal", "inner_diary_write"),
             )
             session = create_work_session(
@@ -678,33 +734,45 @@ async def _check_inner_diary_write():
                 task_id=task_receipt["task_id"],
                 capability="authored_diary",
                 artifact_kind="authored_diary",
-                context=f"inner_diary_write:{logical_date}:{_cid}",
+                context=json.dumps(work_context, ensure_ascii=False, sort_keys=True),
                 idempotency_key=idem,
             )
+            if session["status"] == "failed" and task_receipt["status"] == "queued":
+                from core.agent_runtime.work_sessions import retry_work_session
+                session = retry_work_session(principal, session["work_session_id"])
             lease = claim_next(principal, task_id=task_receipt["task_id"], capabilities={"authored_diary"})
             if lease is None:
+                retry_pending = retry_pending or task_receipt["status"] == "queued"
                 continue
 
             async def _worker():
-                await _generate_and_store_diary(oid, _cid)
-                return {"artifact_id": session["artifact_id"], "artifact_version": 1}
+                material = await _generate_diary_material(work_context, _cid)
+                if not material:
+                    from core.agent_runtime.work_sessions import WorkSessionError
+                    raise WorkSessionError("artifact_not_created")
+                return _store_diary_artifact(_cid, material, logical_date=logical_date)
 
             try:
                 await run_work_session(principal, session["work_session_id"], _worker)
                 complete_task(
                     principal,
                     lease,
-                    result_metadata={"outcome_code": "authored_diary", "artifact_ids": [session["artifact_id"]]},
+                    result_metadata={"outcome_code": "authored_diary", "artifact_ids": [f"diary-{logical_date}"]},
                 )
             except Exception:
                 try:
-                    fail_task(principal, lease, error_code="work_session_failed")
+                    failed_receipt = fail_task(
+                        principal, lease, error_code="work_session_failed",
+                        retry=True, retry_delay_seconds=300,
+                    )
+                    retry_pending = retry_pending or failed_receipt["status"] == "queued"
                 except Exception:
                     logger.debug("[inner_diary_write] task terminalization failed", exc_info=True)
                 raise
         except Exception as e:
             log_error(f"scheduler._check_inner_diary_write[{_cid}]", e)
-    _mark("inner_diary_write")
+    if not retry_pending:
+        _mark("inner_diary_write")
 
 
 async def _check_episodic_decay():
@@ -730,7 +798,7 @@ async def check_activity_switch() -> None:
     """每次调度器循环时检查是否需要切换activity。"""
     try:
         from core.activity_manager import should_switch, switch_activity
-        char_id = _active_char_id_or_none() or "yexuan"
+        char_id = _active_char_id_or_none() or DEFAULT_CHAR_ID
         if should_switch(char_id=char_id):
             switch_activity(char_id=char_id)
     except Exception as e:

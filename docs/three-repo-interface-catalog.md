@@ -467,3 +467,13 @@ full paths, and raw tool output are excluded. There is no desktop, mobile, WebSo
 settings surface for task creation in this brief. Task lifecycle completion does not create an
 EventContext or Memory Event; a future visible notification must enter through a fresh Reality
 ingress adapter. Dream tasks require a separate store and allowlist and are not accepted here.
+
+## Briefs 231-233 / Trigger, Work Session, Workspace
+
+| Interface / path | Scope / consumers | Status |
+|---|---|---|
+| Scheduler trigger lifecycle -> autonomy signal or silent worker | Backend only; no new desktop/mobile payload | `current`; each producer has one registered lifecycle and no compatibility direct-speech lane |
+| `GET /observability/agent-runtime-work-sessions?uid=&char_id=&limit=` | Admin `state.read`; redacted session/task/artifact lifecycle only | `current`, admin-only; no context, prompt, content, user ID, token, or path |
+| `GET /observability/agent-runtime-workspace` | Admin `state.read`; effective status, grants, root count, and limits | `current`, admin-only; no configured root or file content is returned |
+| `workspace_list/read/create/update/delete/undo` | Backend Reality tool loop; local deployment and explicit configured roots only | `current`, backend; Dream and `remote_server` fail closed, writes return Task receipts |
+| Desktop/mobile Agent Runtime task/result UI | No REST mutation, WS, relay, Tauri, Flutter, or Android contract added | `roadmap`; clients must not infer capability from tool names |

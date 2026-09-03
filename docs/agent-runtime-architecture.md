@@ -1,7 +1,7 @@
 # Agent Runtime Architecture Contract (Brief 229)
 
-> Status: frozen architecture target with the Reality Task Manager foundation implemented by
-> Brief 230. Client protocols, capability workers, Agent sessions, and EventBus remain unchanged.
+> Status: frozen architecture target with Briefs 230-233 implemented. Client protocols,
+> process/browser capabilities, visible completion notification, and EventBus remain unchanged.
 
 ## Scope and non-goals
 
@@ -128,8 +128,10 @@ inside modules resolve to the registered lifecycle name before admission.
 | `dream_exit` | migrated | Dream exit -> new Reality signal/turn; no shared Dream state |
 | `letter_writer` | migrated | Task/Agent authored artifact plus separate delivery signal |
 | `coplay_commentary` | migrated | Session fact -> optional signal, no direct executor |
+| `practice_help` | migrated | Practice stall fact -> optional autonomy signal; the `practice` maintenance worker remains silent |
 | `desktop_wake`, `restart` | active | One-shot bounded signal; no direct assistant turn |
 | `interval`, `schedule` | active | Native clocks; produce signal/task, never prose |
+| `dream_postcards` | active | Due authored postcard delivery; calls the bounded mail artifact adapter, never the assistant speech outlet |
 | `activity_switch`, `coplay_watch`, `diary_inject` | maintenance-only | Silent Task worker/state maintenance |
 | `episodic_decay`, `episodic_sweep` | maintenance-only | Existing memory maintenance writer; no speech |
 | `inner_diary_write` | maintenance-only | Task -> Agent work session -> authored diary; 23:00 silent |
@@ -145,10 +147,10 @@ inside modules resolve to the registered lifecycle name before admission.
 | `scheduler_pipeline_send`, `manual_direct_trigger` | retired | No executor; adapters may only queue/test and must not restore speech |
 
 Module/loop aliases `morning`, `night`, `weather`, `birthday`, `watch_hr_critical`, `watch_hr_high`,
-`watch_sleep_end`, `weather_alert_light`, `weather_alert_heavy`, `practice_help`, and `dream_postcards`
+`watch_sleep_end`, `weather_alert_light`, and `weather_alert_heavy`
 are compatibility labels, not additional lifecycle owners. Brief 231 must either register each actual
-producer name with one of the four lifecycle states or normalize it to the canonical registered name;
-an unregistered label cannot enter the compatibility speech path.
+producer name with one of the four lifecycle states or normalize it to the canonical registered name.
+The implemented registry does so; an unregistered label cannot enter the compatibility speech path.
 
 ## Autonomy mapping
 
@@ -186,12 +188,12 @@ existing origin, role, danger, confirmation, deployment, MCP, and enablement gat
 | `toy_vibrate`, `toy_stop`, `toy_pattern`, `toy_job_status` | hardware job | existing hardware manager remains owner |
 | `read_toy_file`, `write_toy_file` | fixed authored document | enum targets, not workspace |
 | `fs_list`, `fs_read` | workspace read | Brief 233 adapter; existing allow-roots |
-| `workspace_list`, `workspace_read`, `workspace_create`, `workspace_update`, `workspace_write`, `workspace_delete`, `workspace_undo` | workspace capability | Brief 233; explicit roots/operation grants, Reality-only, bounded receipts |
+| `workspace_list`, `workspace_read`, `workspace_create`, `workspace_update`, `workspace_delete`, `workspace_undo` | workspace capability | Brief 233; explicit roots/operation grants, Reality-only, bounded receipts |
 | `manage_self_capability` | capability policy mutation | grant/revision/idempotency and dedicated origin |
 | dynamic `mcp__*` | MCP transport adapter | transport is not permission; intersect local policy |
 
-Workspace, process, browser, and network capabilities are not enabled by this table; Briefs 233,
-234, and 236 must independently satisfy their contracts.
+The workspace capability is implemented by Brief 233. Process, browser, and network capabilities are
+not enabled by this table; Briefs 234 and 236 must independently satisfy their contracts.
 
 ## Store mapping
 

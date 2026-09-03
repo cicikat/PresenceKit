@@ -43,6 +43,10 @@ main.py
 |
 +-- 清理 pending state
 |
++-- 恢复 Agent Runtime tasks；遗留 running task -> outcome_unknown
+|
++-- 恢复 Agent Work Sessions；遗留 running session -> outcome_unknown
+|
 +-- 启动 background service
 |
 +-- 启动 HTTP/admin service

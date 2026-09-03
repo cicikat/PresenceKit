@@ -1,6 +1,6 @@
 # Brief 232：Agent 工作会话与 Authored Material
 
-> 状态：proposal；前置：230、231；本工单定义“非聊天 LLM 工作”，不开放任意文件或进程执行。
+> 状态：implemented；前置：230、231；本工单定义“非聊天 LLM 工作”，不开放任意文件或进程执行。
 
 ## 目标
 
@@ -31,4 +31,3 @@ LLM 调用和 artifact 写入拆开。`inner_diary_write` 仍是静默维护任�
 - 工作输出可查询、可重试、可标记 unknown，但不会被自动提升为用户事实。
 - EventContext observer 不记录 work session 为 ingress 或 evidence。
 - 只有明确的独立固化流程才能把工作产物写入长期记忆。
-
