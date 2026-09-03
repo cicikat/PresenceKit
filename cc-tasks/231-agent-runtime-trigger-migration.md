@@ -1,6 +1,6 @@
 # Brief 231：Scheduler Trigger 分类与 Task/Signal 迁移
 
-> 状态：proposal；前置：229、230；本工单只迁移调度职责，不恢复旧直发执行器。
+> 状态：implemented；前置：229、230；本工单只迁移调度职责，不恢复旧直发执行器。
 
 ## 代码事实
 
@@ -51,4 +51,3 @@ signal 或返回明确的 test-only 排队结果。
 - 同一 tick 不会同时执行旧直发和 autonomy delivery。
 - maintenance task 不受 `proactive=off` 的发言闸影响，但仍受自身开关和失败策略约束。
 - 迁移期间保留旧行为基线测试和 EventContext 非污染测试。
-

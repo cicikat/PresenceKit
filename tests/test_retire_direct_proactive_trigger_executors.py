@@ -50,11 +50,23 @@ def test_pending_trigger_signals_merge_into_one_opportunity(sandbox):
     assert store.load("owner", "char")["pending_signals"] == []
 
 
+def test_scheduler_alias_is_canonicalized_before_signal_admission(sandbox):
+    from types import SimpleNamespace
+    from core.autonomy import store
+    from core.autonomy.signal_adapters import emit_scheduler_proposal_signal
+
+    proposal = SimpleNamespace(trigger_name="morning", urgency=0.2, metadata={})
+    assert emit_scheduler_proposal_signal("owner", "char", proposal)[1] == "queued"
+    signal = store.load("owner", "char")["pending_signals"][0]["signal"]
+    assert signal["evidence"][0]["trigger"] == "morning_greeting"
+
+
 def test_trigger_migration_registry_separates_speech_and_maintenance():
     from core.scheduler.gating import (
         MAINTENANCE_ONLY_TRIGGERS,
         MIGRATED_TRIGGERS,
         RETIRED_TRIGGER_EXECUTORS,
+        ACTIVE_TRIGGERS,
         trigger_migration_status,
     )
 
@@ -62,6 +74,9 @@ def test_trigger_migration_registry_separates_speech_and_maintenance():
     assert trigger_migration_status("morning_greeting") == "migrated"
     assert trigger_migration_status("memory_janitor") == "maintenance-only"
     assert trigger_migration_status("manual_direct_trigger") == "retired"
+    assert "practice_help" in MIGRATED_TRIGGERS
+    assert "dream_postcards" in ACTIVE_TRIGGERS
+    assert trigger_migration_status("dream_postcards") == "active"
 
 
 @pytest.mark.asyncio

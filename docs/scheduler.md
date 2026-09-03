@@ -1091,21 +1091,22 @@ curl -H "Authorization: Bearer <token>" \
 
 ## 新增触发器规范
 
-1. 在 `core/scheduler/triggers/` 下选择合适文件（或新建），优先实现只读 `propose(ctx)`
-2. proposal 通过 `proposer_registry.register_proposer()` 注册，并提供 `execute_prompt()` executor
-3. 在 `loop.py` 的 `_COOLDOWNS` 字典里加冷却时间；只允许 executor 成功发送后 `_mark()`
-4. 需要状态扫描的触发器才保留 `_check_xxx()` 并加入 `_loop()` gather；不要为纯发言新增 legacy 路径
-5. 如果是高优先级，明确 `bypass_state_machine`，必要时加入 `_HIGH_PRIORITY_TRIGGERS`
-6. 如果需要管理面板手动触发，在 `manual_trigger()` 补充 force 路径，并调用
-   `proactive_ledger.record_send()` 记账（record-only，CC 任务 19 · B）
-7. 明确 `recall_policy`（CC 任务 19 · C）：种子 prompt 里由头已写死的 filler 类
-   触发器用 `"none"`；有具体锚点（话题 key、被选中记忆原文）的用 `"anchored"`；
-   不确定就先留默认 `"seed"`，但目标是不再新增用 `"seed"` 的触发器
-8. 补 proposer / live / blocked 单测，并更新此文档列表
+1. 在 `core/scheduler/triggers/` 下选择合适文件（或新建），优先实现只读 `propose(ctx)`。
+2. 在 `core.scheduler.gating.TRIGGER_MIGRATION_STATUS` 登记唯一生命周期：`migrated`、
+   `maintenance-only`、`retired` 或 `active`；不得依赖未登记的兼容直发路径。
+3. 主动发言候选只携带 bounded facts，经 signal-first autonomy 决定是否发言；不得新增
+   `execute_prompt()` 或 `_pipeline_send()` 直发。静默维护写入由自己的 worker/capability 负责。
+4. 在 `loop.py` 的 `_COOLDOWNS` 字典里加冷却时间；只有最终可见投递成功才能 `_mark()`。
+5. 需要状态扫描的触发器才保留 `_check_xxx()` 并加入 `_loop()` gather；不要为纯发言新增 legacy 路径。
+6. 如果是高优先级，明确 `bypass_state_machine`，必要时加入 `_HIGH_PRIORITY_TRIGGERS`。
+7. 如果需要管理面板手动触发，只允许排入同一 signal/task 生命周期，不得恢复 force-send。
+8. 补 proposer / live / blocked、唯一生命周期和 EventContext 非污染单测，并更新此文档列表。
 
 ### dream_postcards
 
-`dream_postcards` proposer 每日扫描梦境 archive 出站明信片的 schedule；到期未发送的条目复用 Gmail 链路投递。SMTP 失败只递增 attempts 并保留 last_error，后续 tick 持续重试，成功后才标记 sent。
+`dream_postcards` 是独立 `active` 的定时产物投递，不是 `dream_exit` 别名。proposer 每日扫描梦境
+archive 出站明信片的 schedule；到期未发送的条目复用 Gmail 链路投递，不进入 assistant speech
+outlet。SMTP 失败只递增 attempts 并保留 last_error，后续 tick 持续重试，成功后才标记 sent。
 
 ### Dream continuation（Brief 170）
 

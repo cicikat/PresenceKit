@@ -44,8 +44,8 @@ _DESKTOP_WAKE_MAX_OFFLINE_SECONDS = 30 * 24 * 60 * 60
 
 def registered_signal_adapter(trigger_name: str):
     """Return the producer registered for a migrated conversational trigger."""
-    from core.scheduler.gating import MIGRATED_TRIGGERS
-    return emit_trigger_signal if str(trigger_name or "") in MIGRATED_TRIGGERS else None
+    from core.scheduler.gating import trigger_migration_status
+    return emit_trigger_signal if trigger_migration_status(trigger_name) == "migrated" else None
 
 
 def emit_trigger_signal(
@@ -112,7 +112,8 @@ def emit_scheduler_proposal_signal(
     legacy executors and prompt factories: a winner becomes one autonomy
     signal, never another delivery path.
     """
-    name = str(getattr(proposal, "trigger_name", "") or "").strip()
+    from core.scheduler.gating import canonical_trigger_name
+    name = canonical_trigger_name(str(getattr(proposal, "trigger_name", "") or "").strip())
     if not name:
         return False, "missing_trigger"
     metadata = getattr(proposal, "metadata", None)

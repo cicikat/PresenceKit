@@ -95,6 +95,7 @@ RETIRED_TRIGGER_EXECUTORS: frozenset[str] = frozenset({
 
 ACTIVE_TRIGGERS: frozenset[str] = frozenset({
     "desktop_wake",
+    "dream_postcards",
     "heart_rate",
     "interval",
     "memory_reactivation",
@@ -124,7 +125,6 @@ TRIGGER_ALIASES: dict[str, str] = {
     "watch_sleep_end": "sleep_end",
     "weather_alert_light": "weather_alert",
     "weather_alert_heavy": "weather_alert",
-    "dream_postcards": "dream_exit",
 }
 
 
@@ -189,7 +189,7 @@ def write_shadow_tick(uid: str) -> Optional[TriggerProposal]:
     ctx = _build_context(uid)
     proposals = _collect_native_proposals(ctx)
     picked, reason, candidates = _decide(uid, proposals)
-    if picked is not None and picked.trigger_name in MIGRATED_TRIGGERS:
+    if picked is not None and trigger_migration_status(picked.trigger_name) == "migrated":
         char_id = str(picked.char_id or ctx.get("char_id") or "")
         if char_id:
             try:
@@ -225,7 +225,7 @@ async def run_shadow_tick(uid: str) -> Optional[TriggerProposal]:
     if (
         picked is not None
         and picked.execute is not None
-        and picked.trigger_name not in MIGRATED_TRIGGERS
+        and trigger_migration_status(picked.trigger_name) != "migrated"
     ):
         await picked.execute(dry_run=not is_live_mode())
     return picked
@@ -241,7 +241,7 @@ async def decide_and_execute_event(
     picked, reason, _ = _decide(uid, proposals)
     if picked is None or picked.execute is None:
         return picked, reason, None
-    if picked.trigger_name in MIGRATED_TRIGGERS:
+    if trigger_migration_status(picked.trigger_name) == "migrated":
         from core.autonomy.signal_adapters import emit_scheduler_proposal_signal
         from core.scheduler.loop import _active_char_id_or_none
         char_id = picked.char_id or _active_char_id_or_none()
