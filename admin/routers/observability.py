@@ -83,6 +83,38 @@ async def runtime_signals(_auth=Depends(require_scopes("state.read"))):
 
 
 @router.get(
+    "/observability/agent-runtime-tasks",
+    summary="读取 Agent Runtime Task Manager 脱敏生命周期观测",
+    description=(
+        "仅返回状态、时间、能力、来源和有界结果元数据；不返回正文、token、完整路径、"
+        "lease secret、原始工具输出或用户标识。"
+    ),
+)
+async def agent_runtime_tasks(
+    uid: str = Query("", max_length=128),
+    char_id: str = Query("", max_length=128),
+    task_id: str = Query("", max_length=64),
+    status: str = Query("", max_length=32),
+    capability: str = Query("", max_length=128),
+    limit: int = Query(50, ge=1, le=200),
+    _auth=Depends(require_scopes("state.read")),
+):
+    from core.agent_runtime.task_manager import TaskManagerError, observability_snapshot
+
+    try:
+        return observability_snapshot(
+            uid=uid or None,
+            char_id=char_id or None,
+            task_id=task_id or None,
+            status=status or None,
+            capability=capability or None,
+            limit=limit,
+        )
+    except TaskManagerError as exc:
+        raise HTTPException(status_code=422, detail={"code": exc.code}) from exc
+
+
+@router.get(
     "/observability/memory-event-ledger",
     summary="读取 Memory Event 账本双写健康度",
 )

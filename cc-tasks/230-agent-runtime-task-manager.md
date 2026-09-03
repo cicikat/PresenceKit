@@ -1,6 +1,6 @@
 # Brief 230：Agent Runtime Task Manager 与 Receipt
 
-> 状态：proposal；前置：229；本工单建立长期任务骨架，不开放新的高风险 OS 能力。
+> 状态：implemented（Reality-only foundation；Dream/Agent session/capability workers remain roadmap）；前置：229。
 
 ## 目标
 
@@ -36,4 +36,3 @@
 - 进程重启后旧 running task 变为 `outcome_unknown`，不自动重跑副作用任务。
 - 取消、过期、lease 丢失和未知结果均有稳定状态和观测。
 - EventContext observer 的 ingress/evidence 计数不因 task lifecycle 增长。
-

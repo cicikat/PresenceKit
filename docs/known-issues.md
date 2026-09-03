@@ -296,12 +296,14 @@ additional production sources.
   multi-channel, and ledger-unavailable samples. No recall, prompt, ranking,
   Dream/Stage lifecycle, or client protocol consumes this trace.
 
-## Agent Runtime architecture (Brief 229)
+## Agent Runtime architecture (Briefs 229-230)
 
-- `roadmap`: the Clock/Trigger, Task, Agent, Capability, and Interaction plane
-  contract is frozen in `docs/agent-runtime-architecture.md`, but the general
-  Task Manager, work sessions, workspace/process/browser capabilities, and
-  trigger migration are not implemented by this brief. Existing autonomy jobs,
+- `current`: the Reality-only general Task Manager and its metadata-only
+  `state.read` observability endpoint are implemented. It provides atomic scoped
+  storage, idempotent creation, lease/attempt/TTL/cancel handling, and restart
+  recovery to `outcome_unknown` without replay.
+- `roadmap`: work sessions, workspace/process/browser capabilities, visible
+  completion notification, and trigger migration are not implemented yet. Existing autonomy jobs,
   scheduler state, tool registry, and Dream stores retain their current owners;
   neither desktop nor mobile should infer a general Task Runtime from them.
 - `roadmap`: `event_edge_proposer` and compatibility proposer aliases such as

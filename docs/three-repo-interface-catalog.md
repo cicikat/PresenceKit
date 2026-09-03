@@ -457,3 +457,13 @@ and proposer rows remain unreviewed candidates rather than deterministic edges.
 | `GET /observability/character-library?uid=&char_id=` | Admin `state.read`; aggregate counts/failures only | `current`, admin-only |
 | `DELETE /character-library/{document_id}?uid=&char_id=` | Admin `admin`; tombstone and optional raw-blob cleanup | `current`, admin-only |
 | Desktop/mobile settings and protocol | No new client UI or payload in Brief 228 | `roadmap`, backend capability remains admin-only |
+
+## Brief 230 / Agent Runtime Task Manager
+
+`GET /observability/agent-runtime-tasks` is a backend-only, `state.read` projection of the
+Reality Task Manager. It returns bounded task status/timestamps, capability/source labels, and
+bounded result metadata; user IDs, lease secrets, raw causation references, content, prompts,
+full paths, and raw tool output are excluded. There is no desktop, mobile, WebSocket, relay, or
+settings surface for task creation in this brief. Task lifecycle completion does not create an
+EventContext or Memory Event; a future visible notification must enter through a fresh Reality
+ingress adapter. Dream tasks require a separate store and allowlist and are not accepted here.

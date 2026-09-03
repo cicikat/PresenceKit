@@ -1,7 +1,7 @@
 # Agent Runtime Architecture Contract (Brief 229)
 
-> Status: frozen architecture target. Brief 229 changes no runtime code, client protocol, setting,
-> capability, worker, or EventBus. Implementation is staged in Briefs 230-237.
+> Status: frozen architecture target with the Reality Task Manager foundation implemented by
+> Brief 230. Client protocols, capability workers, Agent sessions, and EventBus remain unchanged.
 
 ## Scope and non-goals
 
@@ -21,6 +21,25 @@ notification. Existing code remains authoritative until the later briefs land:
 
 There is no universal event bus, `kind=task/tool/activity`, arbitrary filesystem or shell authority,
 new client protocol, or Reality/Dream shared runtime in this brief.
+
+## Implemented Task Manager foundation (Brief 230)
+
+`core/agent_runtime/task_manager.py` now owns the Reality-only durable lifecycle. Records are scoped
+by `uid + char_id + realm`, created idempotently, written atomically, and use the states `created`,
+`queued`, `running`, `succeeded`, `failed`, `canceled`, `expired`, and `outcome_unknown`. Claims carry
+an attempt ID and expiring lease. Retry defaults to `never`; callers must explicitly declare a safe
+retry policy and bounded attempt count.
+
+Startup recovery scans the separate `runtime/agent_runtime/reality` root before workers or scheduler
+producers may claim work. Any `running` record owned by a prior process becomes `outcome_unknown` and
+is never automatically replayed. Dream principals are rejected before storage access; a future Dream
+runtime must add its own root, manager, worker pool, and capability allowlist.
+
+Receipts and `GET /observability/agent-runtime-tasks` expose metadata only. Raw idempotency keys and
+causation IDs are persisted only as digests; lease tokens, user IDs, content, prompts, full paths, and
+raw tool output are excluded from observation. Task lifecycle code imports neither `capture_turn()`
+nor Memory Event writers. A future visible completion notification must create a fresh Reality
+`EventContext` through the existing ingress adapter and use only the bounded causation reference.
 
 ## Planes and ownership
 

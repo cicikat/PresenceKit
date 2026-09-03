@@ -837,6 +837,17 @@ async def main():
 
     _init_modules()
 
+    # Recover durable Agent Runtime tasks before workers or scheduler producers
+    # can claim work. A running task from another process is finalized as
+    # outcome_unknown; this hook never replays side effects.
+    try:
+        from core.agent_runtime.task_manager import recover_all_tasks
+
+        recovery = recover_all_tasks()
+        logger.info("Agent Runtime task recovery complete: %s", recovery)
+    except Exception:
+        logger.warning("Agent Runtime task recovery failed closed", exc_info=True)
+
     # Long-running hardware actions own explicit startup/recovery and shutdown
     # cleanup; tools only enqueue jobs after this lifecycle hook runs.
     from core.hardware import jobs as _hardware_jobs
