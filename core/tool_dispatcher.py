@@ -580,27 +580,33 @@ async def _fs_read_wrapper(path: str) -> str:
 
 async def _workspace_list_wrapper(path: str | None = None, depth: int = 1, *, user_id: str | None = None, char_id: str | None = None) -> str:
     from core.agent_runtime.workspace import list_workspace
-    return json.dumps(list_workspace(path, depth), ensure_ascii=False)
+    from core.agent_runtime.models import TaskPrincipal
+    return json.dumps(list_workspace(TaskPrincipal.reality(user_id or "", char_id or ""), path, depth), ensure_ascii=False)
 
 
 async def _workspace_read_wrapper(path: str, *, user_id: str | None = None, char_id: str | None = None) -> str:
     from core.agent_runtime.workspace import read_workspace
-    return read_workspace(path)
+    from core.agent_runtime.models import TaskPrincipal
+    return read_workspace(TaskPrincipal.reality(user_id or "", char_id or ""), path)
 
 
-async def _workspace_write_wrapper(path: str, content: str, *, overwrite: bool = False, user_id: str | None = None, char_id: str | None = None) -> str:
+async def _workspace_write_wrapper(path: str, content: str, *, operation: str, confirmed: bool = False, user_id: str | None = None, char_id: str | None = None) -> str:
     from core.agent_runtime.workspace import write_workspace
     from core.agent_runtime.models import TaskPrincipal, RetryPolicy, CausationRef
     from core.agent_runtime.task_manager import create_task, claim_next, complete_task, fail_task
     principal = TaskPrincipal.reality(user_id or "", char_id or "")
-    capability = "workspace.update" if overwrite else "workspace.create"
-    idem = hashlib.sha256((path + "\0" + content).encode("utf-8")).hexdigest()
-    receipt, _ = create_task(principal, capability=capability, source="tool", idempotency_key=idem, ttl_seconds=300, retry_policy=RetryPolicy.NEVER.value, causation_ref=CausationRef("reality_turn", path))
-    lease = claim_next(principal, capabilities={capability})
+    capability = f"workspace.{operation}"
+    idem = hashlib.sha256((operation + "\0" + path + "\0" + content).encode("utf-8")).hexdigest()
+    receipt, created = create_task(principal, capability=capability, source="tool", idempotency_key=idem, ttl_seconds=300, retry_policy=RetryPolicy.NEVER.value, causation_ref=CausationRef("reality_turn", idem))
+    if not created and receipt["status"] in {"succeeded", "failed", "canceled", "expired", "outcome_unknown"}:
+        return json.dumps({"receipt": receipt["task_id"], "status": receipt["status"], "duplicate": True}, ensure_ascii=False)
+    lease = claim_next(principal, task_id=receipt["task_id"], capabilities={capability})
+    if lease is None:
+        return json.dumps({"receipt": receipt["task_id"], "status": receipt["status"], "duplicate": True}, ensure_ascii=False)
     try:
-        result = write_workspace(path, content, overwrite=overwrite, operation="update" if overwrite else "create")
+        result = write_workspace(principal, path, content, overwrite=confirmed, operation=operation)
         if lease:
-            complete_task(principal, lease, result_metadata={"outcome_code": "written", "counters": {"bytes": result["size"]}})
+            complete_task(principal, lease, result_metadata={"outcome_code": "written", "counters": {"bytes": result["size"], "version": result["version"]}})
         return json.dumps({"receipt": receipt["task_id"], **result}, ensure_ascii=False)
     except Exception as exc:
         if lease:
@@ -609,11 +615,11 @@ async def _workspace_write_wrapper(path: str, content: str, *, overwrite: bool =
 
 
 async def _workspace_create_wrapper(path: str, content: str, *, user_id: str | None = None, char_id: str | None = None) -> str:
-    return await _workspace_write_wrapper(path, content, overwrite=False, user_id=user_id, char_id=char_id)
+    return await _workspace_write_wrapper(path, content, operation="create", user_id=user_id, char_id=char_id)
 
 
 async def _workspace_update_wrapper(path: str, content: str, *, confirmed: bool = False, user_id: str | None = None, char_id: str | None = None) -> str:
-    return await _workspace_write_wrapper(path, content, overwrite=confirmed, user_id=user_id, char_id=char_id)
+    return await _workspace_write_wrapper(path, content, operation="update", confirmed=confirmed, user_id=user_id, char_id=char_id)
 
 
 async def _workspace_delete_wrapper(path: str, *, confirmed: bool = False, user_id: str | None = None, char_id: str | None = None) -> str:
@@ -622,12 +628,16 @@ async def _workspace_delete_wrapper(path: str, *, confirmed: bool = False, user_
     from core.agent_runtime.task_manager import create_task, claim_next, complete_task, fail_task
     principal = TaskPrincipal.reality(user_id or "", char_id or "")
     idem = hashlib.sha256(("delete\0" + path).encode("utf-8")).hexdigest()
-    receipt, _ = create_task(principal, capability="workspace.delete", source="tool", idempotency_key=idem, ttl_seconds=300, retry_policy=RetryPolicy.NEVER.value, causation_ref=CausationRef("reality_turn", path))
-    lease = claim_next(principal, capabilities={"workspace.delete"})
+    receipt, created = create_task(principal, capability="workspace.delete", source="tool", idempotency_key=idem, ttl_seconds=300, retry_policy=RetryPolicy.NEVER.value, causation_ref=CausationRef("reality_turn", idem))
+    if not created and receipt["status"] in {"succeeded", "failed", "canceled", "expired", "outcome_unknown"}:
+        return json.dumps({"receipt": receipt["task_id"], "status": receipt["status"], "duplicate": True}, ensure_ascii=False)
+    lease = claim_next(principal, task_id=receipt["task_id"], capabilities={"workspace.delete"})
+    if lease is None:
+        return json.dumps({"receipt": receipt["task_id"], "status": receipt["status"], "duplicate": True}, ensure_ascii=False)
     try:
-        result = delete_workspace(path, confirmed=confirmed)
+        result = delete_workspace(principal, path, confirmed=confirmed)
         if lease:
-            complete_task(principal, lease, result_metadata={"outcome_code": "deleted"})
+            complete_task(principal, lease, result_metadata={"outcome_code": "deleted", "counters": {"version": result["version"]}})
         return json.dumps({"receipt": receipt["task_id"], **result}, ensure_ascii=False)
     except Exception as exc:
         if lease:
@@ -641,12 +651,16 @@ async def _workspace_undo_wrapper(path: str, *, confirmed: bool = False, user_id
     from core.agent_runtime.task_manager import create_task, claim_next, complete_task, fail_task
     principal = TaskPrincipal.reality(user_id or "", char_id or "")
     idem = hashlib.sha256(("undo\0" + path).encode("utf-8")).hexdigest()
-    receipt, _ = create_task(principal, capability="workspace.update", source="tool", idempotency_key=idem, ttl_seconds=300, retry_policy=RetryPolicy.NEVER.value, causation_ref=CausationRef("reality_turn", path))
-    lease = claim_next(principal, capabilities={"workspace.update"})
+    receipt, created = create_task(principal, capability="workspace.update", source="tool", idempotency_key=idem, ttl_seconds=300, retry_policy=RetryPolicy.NEVER.value, causation_ref=CausationRef("reality_turn", idem))
+    if not created and receipt["status"] in {"succeeded", "failed", "canceled", "expired", "outcome_unknown"}:
+        return json.dumps({"receipt": receipt["task_id"], "status": receipt["status"], "duplicate": True}, ensure_ascii=False)
+    lease = claim_next(principal, task_id=receipt["task_id"], capabilities={"workspace.update"})
+    if lease is None:
+        return json.dumps({"receipt": receipt["task_id"], "status": receipt["status"], "duplicate": True}, ensure_ascii=False)
     try:
-        result = undo_workspace(path, confirmed=confirmed)
+        result = undo_workspace(principal, path, confirmed=confirmed)
         if lease:
-            complete_task(principal, lease, result_metadata={"outcome_code": "undone"})
+            complete_task(principal, lease, result_metadata={"outcome_code": "undone", "counters": {"version": result["version"]}})
         return json.dumps({"receipt": receipt["task_id"], **result}, ensure_ascii=False)
     except Exception as exc:
         if lease:
@@ -1431,18 +1445,10 @@ _TOOL_REGISTRY["workspace_read"] = {
     "examples": ["读取工作区文档"], "keywords": ["工作区", "读文件"], "trace_args": ["path"],
 }
 
-_TOOL_REGISTRY["workspace_write"] = {
-    "func": _workspace_write_wrapper,
-    "description": "在已授权 workspace 创建或更新文本文件；覆盖已有内容需要明确 overwrite。",
-    "dangerous": True, "category": "fs", "effect": "write",
-    "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "content": {"type": "string"}, "overwrite": {"type": "boolean"}}, "required": ["path", "content"]},
-    "examples": ["在工作区创建文档"], "keywords": ["工作区", "创建文件", "写文件"], "trace_args": ["path"],
-}
-
 _TOOL_REGISTRY["workspace_create"] = {
     "func": _workspace_create_wrapper,
     "description": "在已授权 workspace 创建新的文本文件；文件已存在时拒绝。",
-    "dangerous": True, "category": "fs", "effect": "write",
+    "dangerous": False, "category": "fs", "effect": "write",
     "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "content": {"type": "string"}}, "required": ["path", "content"]},
     "examples": ["在工作区新建文档"], "keywords": ["工作区", "新建文件"], "trace_args": ["path"],
 }
@@ -2307,6 +2313,11 @@ async def _execute_structured_impl(
                 # that replace the legacy callable in the registry.
                 result = await func(user_id=user_id, **tool_args)
         elif tool_name in ("read_toy_file", "write_toy_file"):
+            result = await func(user_id=user_id, char_id=char_id, **tool_args)
+        elif tool_name in {
+            "workspace_list", "workspace_read", "workspace_create",
+            "workspace_update", "workspace_delete", "workspace_undo",
+        }:
             result = await func(user_id=user_id, char_id=char_id, **tool_args)
         elif tool_name in ("add_reminder", "read_watch"):
             result = await func(user_id=user_id, **tool_args)

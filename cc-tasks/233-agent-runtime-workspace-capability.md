@@ -1,6 +1,6 @@
 # Brief 233：Workspace 文件能力
 
-> 状态：proposal；前置：230、229；本工单只实现受控工作区读写，不提供全盘访问。
+> 状态：implemented；前置：230、229；本工单只实现受控工作区读写，不提供全盘访问。
 
 ## 现有代码事实
 
@@ -32,4 +32,3 @@
 - workspace 外路径、项目 data、软链接、敏感文件和未授权删除均 fail-closed。
 - 所有写入可通过 task receipt 和只读观测追踪，但观测不泄露正文和绝对路径。
 - 运行在 remote_server 时 capability 明确不可用。
-

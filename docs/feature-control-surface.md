@@ -315,6 +315,7 @@ paths. `daily_journal` remains governed by the existing autonomy signal controls
 update/delete permissions. It defaults disabled and is unavailable in `remote_server` mode. Limits are
 bounded by file bytes, aggregate bytes, concurrent operations, read characters, and listing entries.
 The backend adapter rejects project data, symlinks, and sensitive names; mutating operations use the
-Reality Task Manager receipt boundary. The current control surface is backend configuration plus the
-read-only `GET /observability/agent-runtime-tasks` endpoint; no desktop/mobile setting or protocol is
-introduced until a client consumes workspace results.
+Reality Task Manager receipt boundary. The current control surface is backend configuration, the
+generic admin feature-flag control, and read-only `GET /observability/agent-runtime-workspace` plus
+Task receipt observation; no desktop/mobile setting or protocol is introduced until a client consumes
+workspace results.

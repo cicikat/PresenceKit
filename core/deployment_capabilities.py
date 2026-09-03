@@ -26,7 +26,6 @@ REMOTE_BLOCKED_TOOLS = frozenset({
     "fs_read",
     "workspace_list",
     "workspace_read",
-    "workspace_write",
     "workspace_create",
     "workspace_update",
     "workspace_delete",

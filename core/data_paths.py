@@ -426,6 +426,18 @@ class DataPaths:
             safe_user_id(char_id), safe_user_id(user_id), "state.json",
         )
 
+    def agent_runtime_work_sessions_root(self) -> Path:
+        """Root used only to enumerate redacted Reality work-session state."""
+        return self._p("runtime", "agent_runtime", "reality", "work_sessions")
+
+    def agent_runtime_workspace_versions_dir(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
+        """Private version snapshots for the controlled Reality workspace."""
+        assert_production_identity_allowed(user_id, mode=self.mode)
+        return self._p(
+            "runtime", "agent_runtime", "reality", "workspace_versions",
+            safe_user_id(char_id), safe_user_id(user_id),
+        )
+
     def self_management_state(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
         """Character-scoped Self Capability state; never shares autonomy state."""
         assert_production_identity_allowed(user_id, mode=self.mode)
