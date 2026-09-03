@@ -396,10 +396,22 @@ async def _pipeline_send(
     # channel work can occur.  Prompt text is deliberately discarded: it is
     # legacy template material, not evidence for a new user-visible message.
     try:
-        from core.scheduler.gating import MIGRATED_TRIGGERS
+        from core.scheduler.gating import (
+            MIGRATED_TRIGGERS,
+            MAINTENANCE_ONLY_TRIGGERS,
+            canonical_trigger_name,
+        )
+        trigger_name = canonical_trigger_name(trigger_name)
         migrated = trigger_name in MIGRATED_TRIGGERS
+        maintenance_only = trigger_name in MAINTENANCE_ONLY_TRIGGERS
     except Exception:
         migrated = False
+        maintenance_only = False
+    if maintenance_only:
+        # Maintenance workers own their state/artifacts and must never create
+        # a visible Reality turn through this compatibility outlet.
+        logger.info("[scheduler] maintenance trigger=%s has no speech outlet", trigger_name)
+        return None
     if migrated:
         oid = _owner_id()
         resolved_char_id = char_id or _active_char_id_or_none()
@@ -858,7 +870,18 @@ def get_status() -> dict:
 
 async def manual_trigger(name: str) -> str:
     """Queue a manual autonomy opportunity; this endpoint never sends a turn."""
-    from core.scheduler.gating import MIGRATED_TRIGGERS
+    from core.scheduler.gating import (
+        MIGRATED_TRIGGERS,
+        MAINTENANCE_ONLY_TRIGGERS,
+        canonical_trigger_name,
+    )
+    original_name = str(name or "")
+    name = canonical_trigger_name(original_name)
+
+    if name in MAINTENANCE_ONLY_TRIGGERS:
+        # Manual invocations remain useful as test/maintenance fixtures, but
+        # are explicitly not a direct-delivery escape hatch.
+        return f"{original_name or name} maintenance task queued"
 
     # Validate the owner-side period input before the generic migrated branch.
     # A missing date is a configuration/input result, not an autonomy signal.

@@ -82,6 +82,9 @@ MAINTENANCE_ONLY_TRIGGERS: frozenset[str] = frozenset({
     "spend_monitor",
     "interest_seed",
     "practice",
+    # Candidate-edge discovery is a silent maintenance worker.  It may write
+    # bounded proposal state, but it never enters the speech/autonomy outlet.
+    "event_edge_proposer",
 })
 
 RETIRED_TRIGGER_EXECUTORS: frozenset[str] = frozenset({
@@ -107,9 +110,34 @@ TRIGGER_MIGRATION_STATUS: dict[str, str] = {
     **{name: "active" for name in ACTIVE_TRIGGERS},
 }
 
+# Producer-local labels kept for compatibility during the migration.  They
+# are aliases, not additional lifecycle owners; resolving them here prevents
+# an old producer name from falling through to an unregistered/direct path.
+TRIGGER_ALIASES: dict[str, str] = {
+    "morning": "morning_greeting",
+    "night": "night_reminder",
+    "weather": "weather_alert",
+    "birthday": "birthday_midnight",
+    "watch_hr_critical": "hr_critical",
+    "watch_hr_high": "hr_high",
+    "watch_sleep_end": "sleep_end",
+    "weather_alert_light": "weather_alert",
+    "weather_alert_heavy": "weather_alert",
+    "practice_help": "practice",
+    "dream_postcards": "dream_exit",
+}
+
 
 def trigger_migration_status(name: str) -> str:
-    return TRIGGER_MIGRATION_STATUS.get(str(name or ""), "unregistered")
+    key = str(name or "")
+    canonical = TRIGGER_ALIASES.get(key, key)
+    return TRIGGER_MIGRATION_STATUS.get(canonical, "unregistered")
+
+
+def canonical_trigger_name(name: str) -> str:
+    """Normalize a compatibility producer label to its lifecycle owner."""
+    key = str(name or "")
+    return TRIGGER_ALIASES.get(key, key)
 
 
 @dataclass(frozen=True)
