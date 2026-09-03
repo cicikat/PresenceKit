@@ -1433,7 +1433,10 @@ _TOOL_REGISTRY["workspace_list"] = {
     "func": _workspace_list_wrapper,
     "description": "列出已授权 workspace 的目录内容，只返回受限元数据。",
     "dangerous": False, "category": "fs",
-    "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "depth": {"type": "integer", "enum": [1, 2]}}, "required": []},
+    "parameters": {"type": "object", "properties": {
+        "path": {"type": "string", "description": "可选的已授权工作区目录；相对路径使用第一个配置根目录。"},
+        "depth": {"type": "integer", "enum": [1, 2], "description": "目录遍历深度，只允许 1 或 2。"},
+    }, "required": []},
     "examples": ["列出工作区文件"], "keywords": ["工作区", "列目录"], "trace_args": ["path"],
 }
 
@@ -1441,7 +1444,9 @@ _TOOL_REGISTRY["workspace_read"] = {
     "func": _workspace_read_wrapper,
     "description": "读取已授权 workspace 中的文本文件。",
     "dangerous": False, "category": "fs",
-    "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]},
+    "parameters": {"type": "object", "properties": {
+        "path": {"type": "string", "description": "已授权工作区内的 UTF-8 文本文件路径。"},
+    }, "required": ["path"]},
     "examples": ["读取工作区文档"], "keywords": ["工作区", "读文件"], "trace_args": ["path"],
 }
 
@@ -1449,7 +1454,10 @@ _TOOL_REGISTRY["workspace_create"] = {
     "func": _workspace_create_wrapper,
     "description": "在已授权 workspace 创建新的文本文件；文件已存在时拒绝。",
     "dangerous": False, "category": "fs", "effect": "write",
-    "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "content": {"type": "string"}}, "required": ["path", "content"]},
+    "parameters": {"type": "object", "properties": {
+        "path": {"type": "string", "description": "已授权工作区内尚不存在的文本文件路径。"},
+        "content": {"type": "string", "description": "要写入的新文件 UTF-8 文本正文。"},
+    }, "required": ["path", "content"]},
     "examples": ["在工作区新建文档"], "keywords": ["工作区", "新建文件"], "trace_args": ["path"],
 }
 
@@ -1457,7 +1465,11 @@ _TOOL_REGISTRY["workspace_update"] = {
     "func": _workspace_update_wrapper,
     "description": "更新已授权 workspace 中的文本文件；必须显式 confirmed=true 才能覆盖。",
     "dangerous": True, "category": "fs", "effect": "write",
-    "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "content": {"type": "string"}, "confirmed": {"type": "boolean"}}, "required": ["path", "content", "confirmed"]},
+    "parameters": {"type": "object", "properties": {
+        "path": {"type": "string", "description": "已授权工作区内已存在的文本文件路径。"},
+        "content": {"type": "string", "description": "确认后用于替换文件的 UTF-8 文本正文。"},
+        "confirmed": {"type": "boolean", "description": "用户是否已明确确认覆盖现有内容。"},
+    }, "required": ["path", "content", "confirmed"]},
     "examples": ["确认后更新工作区文档"], "keywords": ["工作区", "更新文件", "覆盖文件"], "trace_args": ["path"],
 }
 
@@ -1465,7 +1477,10 @@ _TOOL_REGISTRY["workspace_delete"] = {
     "func": _workspace_delete_wrapper,
     "description": "删除已授权 workspace 中的文件，必须显式 confirmed=true。",
     "dangerous": True, "category": "fs", "effect": "write",
-    "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "confirmed": {"type": "boolean"}}, "required": ["path", "confirmed"]},
+    "parameters": {"type": "object", "properties": {
+        "path": {"type": "string", "description": "已授权工作区内要删除的受支持文本文件路径。"},
+        "confirmed": {"type": "boolean", "description": "用户是否已明确确认删除该文件。"},
+    }, "required": ["path", "confirmed"]},
     "examples": ["删除工作区文件"], "keywords": ["工作区", "删除文件"], "trace_args": ["path"],
 }
 
@@ -1473,7 +1488,10 @@ _TOOL_REGISTRY["workspace_undo"] = {
     "func": _workspace_undo_wrapper,
     "description": "撤销 workspace 文件最近一次受控变更；必须显式 confirmed=true。",
     "dangerous": True, "category": "fs", "effect": "write",
-    "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "confirmed": {"type": "boolean"}}, "required": ["path", "confirmed"]},
+    "parameters": {"type": "object", "properties": {
+        "path": {"type": "string", "description": "已授权工作区内要恢复最近版本的文本文件路径。"},
+        "confirmed": {"type": "boolean", "description": "用户是否已明确确认执行版本撤销。"},
+    }, "required": ["path", "confirmed"]},
     "examples": ["撤销工作区文件修改"], "keywords": ["工作区", "撤销修改"], "trace_args": ["path"],
 }
 
