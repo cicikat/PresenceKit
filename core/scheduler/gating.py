@@ -60,6 +60,7 @@ MIGRATED_TRIGGERS: frozenset[str] = frozenset({
     "dream_exit",
     "letter_writer",
     "coplay_commentary",
+    "practice_help",
 })
 
 MAINTENANCE_ONLY_TRIGGERS: frozenset[str] = frozenset({
@@ -123,7 +124,6 @@ TRIGGER_ALIASES: dict[str, str] = {
     "watch_sleep_end": "sleep_end",
     "weather_alert_light": "weather_alert",
     "weather_alert_heavy": "weather_alert",
-    "practice_help": "practice",
     "dream_postcards": "dream_exit",
 }
 

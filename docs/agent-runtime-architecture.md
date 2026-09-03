@@ -138,7 +138,7 @@ inside modules resolve to the registered lifecycle name before admission.
 | `hidden_state_decay`, `hidden_state_consolidate` | maintenance-only | Hidden-state maintenance; no notification |
 | `storyline_weekly` | maintenance-only | Task -> Agent session -> storyline artifact |
 | `event_log_salvage`, `memory_janitor` | maintenance-only | Memory maintenance; no proactive speech |
-| `event_edge_proposer` | currently unregistered maintenance check | Task -> bounded Memory Event candidate-edge worker; never speech/prompt/accepted evidence |
+| `event_edge_proposer` | maintenance-only | Task -> bounded Memory Event candidate-edge worker; never speech/prompt/accepted evidence |
 | `private_exchange` | maintenance-only | Isolated Agent session; existing relationship artifact only |
 | `spend_monitor` | maintenance-only | Read-only balance task/manual notice proposal; never payment |
 | `interest_seed`, `practice` | maintenance-only | Agent authored growth work; help is separate signal |
