@@ -328,6 +328,13 @@ Pipeline / Output
 
 不要只为了 abstraction 就用 generic event bus 替换现有 registry。
 
+### Agent Runtime target contract (Brief 229)
+
+未来 Agent Runtime 按 Clock/Trigger、Task、Agent、Capability、Interaction 五个 plane 分层，
+但不通过 EventBus 合并现有 registry。完整目标和现有组件迁移映射见
+`agent-runtime-architecture.md`。本 brief 不创建 runtime owner、worker、store 或 startup/shutdown
+hook；这些必须由 Brief 230-237 逐项实现并补齐生命周期验证。
+
 ---
 
 ## 11. Dream continuation recovery（Brief 170）

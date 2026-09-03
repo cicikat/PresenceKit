@@ -22,6 +22,7 @@
 | 任务类型 | 必读文档 |
 |---|---|
 | 理解系统全貌、pipeline 流程 | `ARCHITECTURE.md` |
+| 改 Agent Runtime、长期任务、Agent 工作会话、capability 适配或迁移 | `docs/agent-runtime-architecture.md`；再读对应 Brief 230-237 |
 | 改记忆相关逻辑（episodic / user_identity / growth legacy / mood / event_log / fixation_pipeline / user_hidden_state） | `docs/memory.md` |
 | 改 prompt 层结构、tag 规则、token 裁剪 | `docs/prompt-layers.md` |
 | 改工具系统（新增工具、探针规则、桌面动作、execute() origin 闸门） | `docs/tools.md` |

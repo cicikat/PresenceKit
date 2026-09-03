@@ -50,6 +50,11 @@ flowchart LR
 - `open`：接口或实现的一环仍未闭环，不能按“接口存在”验收为完成。
 - `roadmap`：明确未排期，不属于当前 v0.1 缺陷。
 
+Agent Runtime 总体合同（Brief 229）当前为 `roadmap` 架构冻结：不新增 REST、WebSocket、Tauri、
+Flutter/Android 字段或设置面。桌面和手机不得把现有 autonomy job、scheduler 状态或 tool 注册表
+解释为通用 Task Runtime。后续 Brief 230-237 若新增 task/capability 接口，必须逐项回到本总账登记；
+分层、身份和 Reality/Dream 隔离合同见 `agent-runtime-architecture.md`。
+
 ## 2. 共同传输规则
 
 ### 2.1 鉴权、代理和错误

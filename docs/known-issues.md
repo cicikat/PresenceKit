@@ -295,6 +295,20 @@ additional production sources.
   matrix and S1 short soak have accumulated the required restart, duplicate,
   multi-channel, and ledger-unavailable samples. No recall, prompt, ranking,
   Dream/Stage lifecycle, or client protocol consumes this trace.
+
+## Agent Runtime architecture (Brief 229)
+
+- `roadmap`: the Clock/Trigger, Task, Agent, Capability, and Interaction plane
+  contract is frozen in `docs/agent-runtime-architecture.md`, but the general
+  Task Manager, work sessions, workspace/process/browser capabilities, and
+  trigger migration are not implemented by this brief. Existing autonomy jobs,
+  scheduler state, tool registry, and Dream stores retain their current owners;
+  neither desktop nor mobile should infer a general Task Runtime from them.
+- `roadmap`: `event_edge_proposer` and compatibility proposer aliases such as
+  `dream_postcards` / `practice_help` are real scheduler names but do not yet
+  have their own `TRIGGER_MIGRATION_STATUS` entries. Brief 231 must normalize
+  them to canonical names or register a unique lifecycle before migration;
+  they must not become compatibility direct-speech lanes.
 ### KNOW-228: character knowledge client surface
 
 The scoped character knowledge library and admin observability endpoint are

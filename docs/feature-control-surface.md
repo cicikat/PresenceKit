@@ -292,3 +292,11 @@ The observer remains backend-only and defaults to `disabled`. Its read projectio
 now includes startup ledger readiness, persistent chain linkage, and latency
 percentiles. Enabling `observe` reruns existing-ledger initialization and returns
 503 without changing config if a ledger fails or the bounded scan truncates.
+
+## Brief 229 Agent Runtime architecture contract
+
+Brief 229 only freezes the future Clock/Trigger, Task, Agent, Capability, and Interaction plane
+boundaries. It adds no setting, endpoint, worker, client control, or capability. Existing autonomy,
+scheduler, tool, deployment, and EventContext controls retain their current ownership and semantics.
+Future Briefs 230-237 must add configured/effective/runtime-observed controls in the same change as
+each implemented task or capability; clients must not infer availability from existing tool names.

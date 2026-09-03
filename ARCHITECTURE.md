@@ -2,6 +2,10 @@
 
 主动消息采用 signal-first autonomy：scheduler/sensor 只产生带事实、理由、优先级、时效、记忆锚点和行动模式的 `autonomy-signal.v1`；每个 tick 合并为一个 `autonomy-opportunity.v1`，由 `core/autonomy` 评估。只有 autonomy job 内显式调用 `talk_owner` 才能进入 `turn_sink`，旧 scheduler 直发路径按 `docs/autonomy.md` 迁移清单逐项封存。
 
+未来 Agent Runtime 的分层、身份边界、现有 trigger/tool/store 目标映射和 Reality/Dream 隔离合同见
+`docs/agent-runtime-architecture.md`。该合同是 Brief 229 的架构目标，不代表通用 Task Manager 或
+新 capability 已实现；当前运行代码仍以本文和各专题文档为准。
+
 ---
 
 ## 系统全貌
