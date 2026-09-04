@@ -189,6 +189,7 @@ existing origin, role, danger, confirmation, deployment, MCP, and enablement gat
 | `read_toy_file`, `write_toy_file` | fixed authored document | enum targets, not workspace |
 | `fs_list`, `fs_read` | workspace read | Brief 233 adapter; existing allow-roots |
 | `workspace_list`, `workspace_read`, `workspace_create`, `workspace_update`, `workspace_delete`, `workspace_undo` | workspace capability | Brief 233; explicit roots/operation grants, Reality-only, bounded receipts |
+| `process_run` | bounded process capability | Brief 234; local-only, workspace program, structured args, allowlisted interpreter, no shell/network, bounded resources |
 | `manage_self_capability` | capability policy mutation | grant/revision/idempotency and dedicated origin |
 | dynamic `mcp__*` | MCP transport adapter | transport is not permission; intersect local policy |
 

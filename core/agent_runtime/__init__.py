@@ -12,6 +12,7 @@ from core.agent_runtime.models import (
     TaskRecord,
     TaskStatus,
 )
+from core.agent_runtime.process_runner import ProcessLimits, ProcessRunnerError
 
 __all__ = [
     "CausationRef",
@@ -20,4 +21,6 @@ __all__ = [
     "TaskPrincipal",
     "TaskRecord",
     "TaskStatus",
+    "ProcessLimits",
+    "ProcessRunnerError",
 ]

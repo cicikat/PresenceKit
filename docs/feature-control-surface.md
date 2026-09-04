@@ -319,3 +319,12 @@ Reality Task Manager receipt boundary. The current control surface is backend co
 generic admin feature-flag control, and read-only `GET /observability/agent-runtime-workspace` plus
 Task receipt observation; no desktop/mobile setting or protocol is introduced until a client consumes
 workspace results.
+
+## Brief 234 process runner capability
+
+`process_runner.enabled` is a local-only, default-off capability. It executes only allowlisted
+program types already inside a configured `workspace_access` root, accepts structured argument
+arrays, never invokes a shell, and keeps network disabled. `process_runner.limits` bounds wall time,
+CPU, memory, process count, and captured output. The effective redacted state and task outcomes are
+available from `GET /observability/agent-runtime-processes` with `state.read`; `remote_server`
+always disables execution. Desktop and mobile do not yet expose a task/result control surface.

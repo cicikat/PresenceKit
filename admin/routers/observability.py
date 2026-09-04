@@ -141,6 +141,24 @@ async def agent_runtime_work_sessions(
 
 
 @router.get(
+    "/observability/agent-runtime-processes",
+    summary="读取受限进程 Runner 脱敏状态",
+)
+async def agent_runtime_processes(
+    uid: str = Query("", max_length=128),
+    char_id: str = Query("", max_length=128),
+    limit: int = Query(50, ge=1, le=200),
+    _auth=Depends(require_scopes("state.read")),
+):
+    from core.agent_runtime.process_runner import ProcessRunnerError, observability_snapshot
+    try:
+        return observability_snapshot(uid=uid or None, char_id=char_id or None, limit=limit)
+    except (ProcessRunnerError, ValueError) as exc:
+        code = getattr(exc, "code", "invalid_process_observability_query")
+        raise HTTPException(status_code=422, detail={"code": code}) from exc
+
+
+@router.get(
     "/observability/memory-event-ledger",
     summary="读取 Memory Event 账本双写健康度",
 )

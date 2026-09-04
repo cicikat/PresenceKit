@@ -668,6 +668,41 @@ async def _workspace_undo_wrapper(path: str, *, confirmed: bool = False, user_id
         raise
 
 
+async def _process_run_wrapper(
+    program: str,
+    args: list[str] | None = None,
+    interpreter: str = "python",
+    wall_seconds: int = 60,
+    output_bytes: int = 262144,
+    *,
+    user_id: str | None = None,
+    char_id: str | None = None,
+) -> str:
+    """Run one explicitly requested, workspace-scoped temporary program."""
+    from core.agent_runtime.models import TaskPrincipal
+    from core.agent_runtime.process_runner import ProcessLimits, run_process_task
+
+    principal = TaskPrincipal.reality(user_id or "", char_id or "")
+    result = await run_process_task(
+        principal,
+        program=program,
+        args=args,
+        interpreter=interpreter,
+        idempotency_key=hashlib.sha256(
+            json.dumps([program, args or [], interpreter, wall_seconds, output_bytes], separators=(",", ":")).encode("utf-8")
+        ).hexdigest(),
+        limits=ProcessLimits(wall_seconds=wall_seconds, output_bytes=output_bytes),
+    )
+    return json.dumps({
+        "receipt": result.get("receipt"),
+        "stdout": result.get("stdout", ""),
+        "stderr": result.get("stderr", ""),
+        "returncode": result.get("returncode"),
+        "truncated": bool(result.get("truncated")),
+        "duplicate": bool(result.get("duplicate", False)),
+    }, ensure_ascii=False)
+
+
 async def _manage_self_capability_wrapper(
     action: str,
     capability_id: str,
@@ -1493,6 +1528,22 @@ _TOOL_REGISTRY["workspace_undo"] = {
         "confirmed": {"type": "boolean", "description": "用户是否已明确确认执行版本撤销。"},
     }, "required": ["path", "confirmed"]},
     "examples": ["撤销工作区文件修改"], "keywords": ["工作区", "撤销修改"], "trace_args": ["path"],
+}
+
+_TOOL_REGISTRY["process_run"] = {
+    "func": _process_run_wrapper,
+    "description": "在已授权 workspace 内运行一个短时 allowlist 程序；不接受 shell 字符串，网络关闭，输出和资源受限。仅在用户明确要求执行该工作区程序时调用。",
+    "dangerous": True, "category": "system", "effect": "write",
+    "parameters": {"type": "object", "properties": {
+        "program": {"type": "string", "description": "workspace 内的相对程序路径，默认只允许 .py。"},
+        "args": {"type": "array", "items": {"type": "string", "maxLength": 2048}, "maxItems": 64, "description": "结构化程序参数，不是 shell 命令字符串。"},
+        "interpreter": {"type": "string", "enum": ["python", "python3"], "description": "已配置的解释器 allowlist 名称。"},
+        "wall_seconds": {"type": "integer", "minimum": 1, "maximum": 900},
+        "output_bytes": {"type": "integer", "minimum": 1, "maximum": 1048576},
+    }, "required": ["program"]},
+    "examples": ["运行工作区里的整理脚本"],
+    "keywords": ["运行脚本", "执行程序", "整理工作区"],
+    "trace_args": ["program", "interpreter"],
 }
 
 _TOOL_REGISTRY["manage_self_capability"] = {

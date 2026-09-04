@@ -1,6 +1,6 @@
 # Brief 234：受限临时程序 Runner
 
-> 状态：proposal；前置：230、233；高风险工单，必须在 workspace capability 和 Task Manager 稳定后施工。
+> 状态：implemented；前置：230、233；高风险工单，必须在 workspace capability 和 Task Manager 稳定后施工。
 
 ## 目标
 
@@ -28,4 +28,3 @@
 - 进程无法越过 workspace 根或访问 Dream/Reality 私有状态。
 - 运行结果只进入当前工作任务或用户明确指定的 artifact，不自动进入 memory/event ledger。
 - remote_server 模式下拒绝本地进程能力。
-

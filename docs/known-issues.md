@@ -310,7 +310,8 @@ additional production sources.
   assistant turn, evidence item, or automatic memory fact.
 - `current`: Brief 233 provides local-only controlled workspace read/list/create/update/delete/undo
   with explicit roots and grants, durable version snapshots, Task receipts, and redacted observation.
-- `roadmap`: process/browser capabilities, visible completion notification, and a client task/result
+- `current`: Brief 234 provides a local-only, workspace-scoped bounded process runner with no shell/network
+- `roadmap`: browser capability, visible completion notification, and a client task/result
   surface remain unimplemented. Desktop and mobile must not infer them from backend tool names.
 ### KNOW-228: character knowledge client surface
 
