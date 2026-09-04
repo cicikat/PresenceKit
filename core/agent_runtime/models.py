@@ -20,6 +20,8 @@ class TaskStatus(_StringEnum):
     CREATED = "created"
     QUEUED = "queued"
     RUNNING = "running"
+    WAITING_CONFIRM = "waiting_confirm"
+    PAUSED = "paused"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
     CANCELED = "canceled"
@@ -88,6 +90,7 @@ class TaskRecord:
     lease_until: float = 0.0
     cancel_requested_at: float = 0.0
     cancel_reason_code: str = ""
+    pause_requested_at: float = 0.0
     error_code: str = ""
     recovery_reason: str = ""
     result_metadata: dict[str, Any] = field(default_factory=dict)

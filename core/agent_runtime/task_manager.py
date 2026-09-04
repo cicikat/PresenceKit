@@ -99,6 +99,7 @@ def _request_digest(
     causation_ref: dict[str, str] | None,
     retry_policy: str,
     max_attempts: int,
+    request_context: dict[str, Any] | None = None,
 ) -> str:
     payload = {
         "capability": capability,
@@ -107,6 +108,7 @@ def _request_digest(
         "causation_ref": causation_ref,
         "retry_policy": retry_policy,
         "max_attempts": max_attempts,
+        "request_context": request_context or {},
     }
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return _digest(encoded)
@@ -171,6 +173,7 @@ def _receipt(task: TaskRecord) -> dict[str, Any]:
         "retry_policy": task.retry_policy,
         "lease_until": task.lease_until or None,
         "cancel_requested": bool(task.cancel_requested_at),
+        "pause_requested": bool(task.pause_requested_at),
         "cancel_reason_code": task.cancel_reason_code or None,
         "error_code": task.error_code or None,
         "recovery_reason": task.recovery_reason or None,
@@ -209,7 +212,7 @@ def _recover_records(tasks: list[TaskRecord], now: float) -> bool:
     for task in tasks:
         if task.terminal:
             continue
-        if task.status in {TaskStatus.CREATED.value, TaskStatus.QUEUED.value} and task.expires_at <= now:
+        if task.status in {TaskStatus.CREATED.value, TaskStatus.QUEUED.value, TaskStatus.WAITING_CONFIRM.value, TaskStatus.PAUSED.value} and task.expires_at <= now:
             _terminalize(task, TaskStatus.EXPIRED.value, now, error_code="task_ttl_expired")
             changed = True
             continue
@@ -329,6 +332,7 @@ def create_task(
     max_attempts: int = 1,
     enqueue: bool = True,
     now: float | None = None,
+    request_context: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], bool]:
     principal = _validate_principal(principal)
     capability = _validate_name(capability, "capability")
@@ -361,6 +365,7 @@ def create_task(
         causation_ref=causal,
         retry_policy=retry_policy,
         max_attempts=max_attempts,
+        request_context=request_context,
     )
     with task_store.scope_lock(principal.uid, principal.char_id):
         state, records, changed = _load_records(principal, timestamp)
@@ -554,6 +559,12 @@ def complete_task(
         _require_lease(task, lease, timestamp)
         if task.cancel_requested_at:
             raise TaskManagerError("cancel_requested")
+        if task.pause_requested_at:
+            task.status = TaskStatus.PAUSED.value
+            task.updated_at = timestamp
+            _clear_lease(task)
+            _save_records(principal, state, records, now=timestamp)
+            return _receipt(task)
         task.result_metadata = metadata
         _terminalize(task, TaskStatus.SUCCEEDED.value, timestamp)
         _save_records(principal, state, records, now=timestamp)
@@ -586,6 +597,12 @@ def fail_task(
         if changed:
             _save_records(principal, state, records, now=timestamp)
         _require_lease(task, lease, timestamp)
+        if task.pause_requested_at:
+            task.status = TaskStatus.PAUSED.value
+            task.updated_at = timestamp
+            _clear_lease(task)
+            _save_records(principal, state, records, now=timestamp)
+            return _receipt(task)
         task.result_metadata = metadata
         can_retry = (
             retry
@@ -631,8 +648,125 @@ def request_cancel(
         task.cancel_requested_at = task.cancel_requested_at or timestamp
         task.cancel_reason_code = task.cancel_reason_code or reason
         task.updated_at = timestamp
-        if task.status in {TaskStatus.CREATED.value, TaskStatus.QUEUED.value}:
+        if task.status in {TaskStatus.CREATED.value, TaskStatus.QUEUED.value, TaskStatus.WAITING_CONFIRM.value, TaskStatus.PAUSED.value}:
             _terminalize(task, TaskStatus.CANCELED.value, timestamp, error_code="task_canceled")
+        _save_records(principal, state, records, now=timestamp)
+        return _receipt(task)
+
+
+def request_pause(
+    principal: TaskPrincipal,
+    task_id: str,
+    *,
+    now: float | None = None,
+) -> dict[str, Any]:
+    """Pause a queued task immediately or request a running worker checkpoint."""
+    principal = _validate_principal(principal)
+    timestamp = _now(now)
+    with task_store.scope_lock(principal.uid, principal.char_id):
+        state, records, changed = _load_records(principal, timestamp)
+        task = _find(records, task_id)
+        if task.terminal:
+            if changed:
+                _save_records(principal, state, records, now=timestamp)
+            return _receipt(task)
+        if task.status in {TaskStatus.CREATED.value, TaskStatus.QUEUED.value}:
+            task.status = TaskStatus.PAUSED.value
+            task.updated_at = timestamp
+        elif task.status == TaskStatus.RUNNING.value:
+            task.pause_requested_at = task.pause_requested_at or timestamp
+            task.updated_at = timestamp
+        elif task.status in {TaskStatus.PAUSED.value, TaskStatus.WAITING_CONFIRM.value}:
+            pass
+        else:
+            raise TaskManagerError("task_not_pauseable")
+        _save_records(principal, state, records, now=timestamp)
+        return _receipt(task)
+
+
+def resume_task(
+    principal: TaskPrincipal,
+    task_id: str,
+    *,
+    now: float | None = None,
+) -> dict[str, Any]:
+    principal = _validate_principal(principal)
+    timestamp = _now(now)
+    with task_store.scope_lock(principal.uid, principal.char_id):
+        state, records, changed = _load_records(principal, timestamp)
+        task = _find(records, task_id)
+        if task.status in {TaskStatus.PAUSED.value, TaskStatus.WAITING_CONFIRM.value}:
+            if task.expires_at <= timestamp:
+                _terminalize(task, TaskStatus.EXPIRED.value, timestamp, error_code="task_ttl_expired")
+            else:
+                task.status = TaskStatus.QUEUED.value
+                task.queued_at = timestamp
+                task.updated_at = timestamp
+                task.pause_requested_at = 0.0
+        elif task.status != TaskStatus.QUEUED.value:
+            if changed:
+                _save_records(principal, state, records, now=timestamp)
+            raise TaskManagerError("task_not_resumable")
+        _save_records(principal, state, records, now=timestamp)
+        return _receipt(task)
+
+
+def mark_waiting_confirmation(
+    principal: TaskPrincipal, task_id: str, *, now: float | None = None
+) -> dict[str, Any]:
+    principal = _validate_principal(principal)
+    timestamp = _now(now)
+    with task_store.scope_lock(principal.uid, principal.char_id):
+        state, records, changed = _load_records(principal, timestamp)
+        task = _find(records, task_id)
+        if task.status in {TaskStatus.CREATED.value, TaskStatus.QUEUED.value}:
+            task.status = TaskStatus.WAITING_CONFIRM.value
+            task.updated_at = timestamp
+        elif task.status != TaskStatus.WAITING_CONFIRM.value:
+            raise TaskManagerError("task_not_waiting_confirmation")
+        _save_records(principal, state, records, now=timestamp)
+        return _receipt(task)
+
+
+def acknowledge_pause(
+    principal: TaskPrincipal, lease: TaskLease, *, now: float | None = None
+) -> dict[str, Any]:
+    principal = _validate_principal(principal)
+    timestamp = _now(now)
+    with task_store.scope_lock(principal.uid, principal.char_id):
+        state, records, changed = _load_records(principal, timestamp)
+        task = _find(records, lease.task_id)
+        if changed:
+            _save_records(principal, state, records, now=timestamp)
+        _require_lease(task, lease, timestamp)
+        if not task.pause_requested_at:
+            raise TaskManagerError("pause_not_requested")
+        task.status = TaskStatus.PAUSED.value
+        task.updated_at = timestamp
+        task.pause_requested_at = 0.0
+        _clear_lease(task)
+        _save_records(principal, state, records, now=timestamp)
+        return _receipt(task)
+
+
+def unknown_task(
+    principal: TaskPrincipal,
+    lease: TaskLease,
+    *,
+    error_code: str = "outcome_unknown",
+    recovery_reason: str = "result_unknown",
+    now: float | None = None,
+) -> dict[str, Any]:
+    principal = _validate_principal(principal)
+    code = _validate_code(error_code, "error_code")
+    timestamp = _now(now)
+    with task_store.scope_lock(principal.uid, principal.char_id):
+        state, records, changed = _load_records(principal, timestamp)
+        task = _find(records, lease.task_id)
+        if changed:
+            _save_records(principal, state, records, now=timestamp)
+        _require_lease(task, lease, timestamp)
+        _terminalize(task, TaskStatus.OUTCOME_UNKNOWN.value, timestamp, error_code=code, recovery_reason=recovery_reason)
         _save_records(principal, state, records, now=timestamp)
         return _receipt(task)
 

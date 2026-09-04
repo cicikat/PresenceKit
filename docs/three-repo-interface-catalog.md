@@ -481,3 +481,12 @@ entry point; it records a durable cancel request and never replays or delivers t
 | `GET /observability/agent-runtime-processes` | Admin `state.read`; redacted process capability state and `process.run` task receipts | `current`, backend-only; no source, output, full path, environment, or secret is returned |
 | `process_run` | Backend Reality tool loop; structured args, allowlisted interpreter/program type, configured workspace root, explicit confirmation | `current`, backend; local-only, bounded, no shell/network, Dream and `remote_server` fail closed |
 | Desktop/mobile Agent Runtime task/result UI | No REST mutation, WS, relay, Tauri, Flutter, or Android contract added | `roadmap`; clients must not infer capability from tool names |
+
+## Brief 238 / Browser worker
+
+| Interface / path | Scope / consumers | Status |
+|---|---|---|
+| `POST /agent-runtime-browser/tasks` and `/tasks/{task_id}/run` | Reality owner tool/admin path; explicit `uid + char_id`, allowlisted URL domain and operation; high-risk actions require confirmation | `partial`, backend-only; no client contract |
+| `POST /agent-runtime-browser/tasks/{task_id}/confirm` / `pause` and `GET .../{task_id}` | Scoped owner control or `state.read` receipt query; metadata-only lifecycle | `partial`, backend-only |
+| `GET /observability/agent-runtime-browser` | Admin `state.read`; effective state, domain count, limits, worker health and aggregate counters only | `current`, redacted observability |
+| `browser_automation` | Reality tool loop; isolated profile, bounded projection, Workspace-only upload/download, remote/Dream/disabled fail closed | `partial`; Playwright adapter opt-in and no desktop/mobile result UI |

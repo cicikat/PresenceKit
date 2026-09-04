@@ -527,6 +527,18 @@ workspace_access:
   max_read_chars: 10000
   max_list_entries: 100
 
+# Browser automation is an opt-in local experiment. Keep disabled until a
+# separately reviewed worker adapter, domain allowlist, and owner confirmation
+# flow are configured.
+browser:
+  enabled: false
+  allowed_domains: []
+  download_enabled: false
+  upload_enabled: false
+  max_page_chars: 12000
+  max_links: 30
+  worker_timeout_seconds: 60
+
 mode: production
 standalone_mode: false
 data_prefix: "data"

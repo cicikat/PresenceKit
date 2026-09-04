@@ -703,6 +703,32 @@ async def _process_run_wrapper(
     }, ensure_ascii=False)
 
 
+async def _browser_automation_wrapper(
+    url: str,
+    operation: str,
+    selector: str = "",
+    value: str = "",
+    path: str = "",
+    confirmed: bool = False,
+    *,
+    user_id: str | None = None,
+    char_id: str | None = None,
+) -> str:
+    """Run one bounded browser task; page data never enters task receipts."""
+    from core.agent_runtime import browser
+    from core.agent_runtime.models import TaskPrincipal
+    principal = TaskPrincipal.reality(user_id or "", char_id or "")
+    idem = hashlib.sha256(json.dumps([url, operation, selector, value, path], separators=(",", ":")).encode()).hexdigest()
+    try:
+        receipt = browser.create_task(principal, url=url, operation=operation, idempotency_key=idem, confirmed=confirmed)
+        if receipt["status"] == "waiting_confirm":
+            return json.dumps({"receipt": receipt, "status": "waiting_confirm"}, ensure_ascii=False)
+        result = await browser.run_task(principal, receipt["task_id"], url=url, operation=operation, confirmed=confirmed, params={"selector": selector, "value": value, "path": path} if any((selector, value, path)) else {})
+        return json.dumps({"receipt": result.get("receipt"), "result": result.get("result")}, ensure_ascii=False)
+    except browser.BrowserError as exc:
+        return json.dumps({"status": "failed", "error_code": exc.code}, ensure_ascii=False)
+
+
 async def _manage_self_capability_wrapper(
     action: str,
     capability_id: str,
@@ -1544,6 +1570,25 @@ _TOOL_REGISTRY["process_run"] = {
     "examples": ["运行工作区里的整理脚本"],
     "keywords": ["运行脚本", "执行程序", "整理工作区"],
     "trace_args": ["program", "interpreter"],
+}
+
+_TOOL_REGISTRY["browser_automation"] = {
+    "func": _browser_automation_wrapper,
+    "description": "在显式允许的网页域名中执行隔离浏览器操作；页面结果有界且不会暴露凭据、cookie、header 或 profile。高风险操作需要 confirmed=true。",
+    "dangerous": True,
+    "category": "browser",
+    "effect": "write",
+    "parameters": {"type": "object", "properties": {
+        "url": {"type": "string", "maxLength": 2048},
+        "operation": {"type": "string", "enum": ["navigate", "read_page", "click", "fill", "select", "login", "pay", "post", "delete", "send_email", "change_password", "upload", "download"]},
+        "selector": {"type": "string", "maxLength": 256},
+        "value": {"type": "string", "maxLength": 2000},
+        "path": {"type": "string", "maxLength": 1024},
+        "confirmed": {"type": "boolean"},
+    }, "required": ["url", "operation"]},
+    "examples": ["读取已允许域名的网页摘要"],
+    "keywords": ["浏览网页", "网页操作", "打开网页"],
+    "trace_args": ["operation"],
 }
 
 _TOOL_REGISTRY["manage_self_capability"] = {

@@ -848,6 +848,8 @@ async def main():
         from core.agent_runtime.work_sessions import recover_all_work_sessions
         work_recovery = recover_all_work_sessions()
         logger.info("Agent Runtime work-session recovery complete: %s", work_recovery)
+        from core.agent_runtime.browser import start_worker as _start_browser_worker
+        await _start_browser_worker()
     except Exception:
         logger.warning("Agent Runtime task recovery failed closed", exc_info=True)
 
@@ -970,6 +972,11 @@ async def main():
         await _buttplug_client.disconnect()
         await _slow_queue.shutdown()
         await mcp_client.shutdown_mcp_servers()
+        try:
+            from core.agent_runtime.browser import stop_worker as _stop_browser_worker
+            await _stop_browser_worker()
+        except Exception:
+            logger.warning("Agent Runtime browser worker failed to stop", exc_info=True)
         from core.runtime_service_state import clear_marker as _clear_service_marker
         _clear_service_marker()
 

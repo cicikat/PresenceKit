@@ -332,3 +332,13 @@ arrays, never invokes a shell, and keeps network disabled. `process_runner.limit
 CPU, memory, process count, and captured output. The effective redacted state and task outcomes are
 available from `GET /observability/agent-runtime-processes` with `state.read`; `remote_server`
 always disables execution. Desktop and mobile do not yet expose a task/result control surface.
+
+## Brief 238 browser worker
+
+`browser.enabled` is an opt-in local capability and remains disabled by default. Explicit
+`allowed_domains`, bounded page limits, and an optional reviewed Playwright adapter are required.
+Each task runs in a private profile and uses Reality Task Manager receipts; credentials, cookies,
+headers, profile paths, URLs, and page source are excluded from observations. High-risk operations
+park in `waiting_confirm`; pause, cancel, timeout, browser disconnect, and unknown results are
+durably represented. Downloads and uploads must use the Workspace capability. The browser
+observability endpoint exposes only effective state, limits, worker health, and aggregate counters.

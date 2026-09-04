@@ -865,6 +865,14 @@ class ToolResult:
 `add_reminder` 已统一进入 scheduler capability/Task Manager；runtime 写入失败不会静默回落到
 legacy reminder 文件。workspace/process/browser 工具的 task receipt 仍由 Reality Task Manager
 统一持有，visible delivery 必须经过新的 Reality ingress/turn，不能在后台调用 `capture_turn()`。
+## Brief 238 Browser worker
+
+`browser_automation` is a default-off, Reality-only capability. It accepts only explicit
+`http/https` domains and bounded operations, runs through a per-task isolated browser profile,
+and returns redacted bounded projections. High-risk operations require explicit confirmation;
+unknown browser outcomes become `outcome_unknown` and are never replayed. File transfer is
+delegated to Workspace, and the optional Playwright adapter is local-config opt-in.
+
 # Memory Event source boundary (Brief 214)
 
 Owner/Path C event-read tools retain their existing origin and scope gates.

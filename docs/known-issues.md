@@ -311,8 +311,11 @@ additional production sources.
 - `current`: Brief 233 provides local-only controlled workspace read/list/create/update/delete/undo
   with explicit roots and grants, durable version snapshots, Task receipts, and redacted observation.
 - `current`: Brief 234 provides a local-only, workspace-scoped bounded process runner with no shell/network
-- `roadmap`: browser capability, visible completion notification, and a client task/result
-  surface remain unimplemented. Desktop and mobile must not infer them from backend tool names.
+- `partial`: backend now contains a Reality-only, opt-in browser worker with per-task isolated
+  profiles, domain/operation checks, owner confirmation states, pause/cancel/timeout and
+  `outcome_unknown` handling, bounded redacted results, and Workspace-only file transfer hooks.
+- `open`: Playwright is optional and disabled by default; no desktop/mobile task/result surface or
+  production soak is claimed until Brief 239 and an operator-reviewed adapter deployment exist.
 ### KNOW-228: character knowledge client surface
 
 The scoped character knowledge library and admin observability endpoint are
