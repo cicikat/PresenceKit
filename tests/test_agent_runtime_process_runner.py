@@ -1,8 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import time
 
 import pytest
+
+
+class _ConfirmedSession:
+    WAITING_CONFIRM = "waiting_confirm"
+    status = WAITING_CONFIRM
 
 
 def _config(monkeypatch, root, *, enabled=True):
@@ -129,3 +136,30 @@ def test_process_runner_cancel_resource_limit_and_restart_unknown(monkeypatch, t
         assert recovered["error_code"] == "worker_process_lost"
     finally:
         task_store.reset_process_instance_for_tests()
+
+
+@pytest.mark.asyncio
+async def test_process_run_tool_uses_reality_scope(monkeypatch, tmp_path, sandbox):
+    root = tmp_path / "workspace"
+    root.mkdir()
+    _config(monkeypatch, root)
+    _script(root, "tool.py", "print('tool-ok')")
+    sandbox.meta_mode().parent.mkdir(parents=True, exist_ok=True)
+    sandbox.meta_mode().write_text(
+        json.dumps({"mode": "danger", "expires_at": time.time() + 60}),
+        encoding="utf-8",
+    )
+    from core import tool_dispatcher
+
+    output, confirmation = await tool_dispatcher.execute(
+        "process_run",
+        {"program": "tool.py"},
+        "proc-owner",
+        "proc-owner",
+        False,
+        _ConfirmedSession(),
+        origin="assistant_loop",
+        char_id="proc-char",
+    )
+    assert confirmation is None
+    assert "tool-ok" in output

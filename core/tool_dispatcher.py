@@ -2385,7 +2385,7 @@ async def _execute_structured_impl(
             result = await func(user_id=user_id, char_id=char_id, **tool_args)
         elif tool_name in {
             "workspace_list", "workspace_read", "workspace_create",
-            "workspace_update", "workspace_delete", "workspace_undo",
+            "workspace_update", "workspace_delete", "workspace_undo", "process_run",
         }:
             result = await func(user_id=user_id, char_id=char_id, **tool_args)
         elif tool_name in ("add_reminder", "read_watch"):
