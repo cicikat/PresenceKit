@@ -750,14 +750,13 @@ active window 决策已完全收入 `gating._decide()`（R2-C 后），以 `POLI
 - 普通主动消息被 gating 拦截时，`execute()` 不被调用，`_mark()` 不被调用。
 - execute live 路径里，`execute_prompt()` 收到 `None` 后只写 `execute_dryrun.jsonl` 的
   `blocked=true` 观测，不调用 `after_send`，不执行 `_mark()`，也不 `mark_done()`。
-- reminders proposal 由 `core/scheduler/triggers/reminders.py` 接管；只有 `_pipeline_send()`
-  实际返回 sent 文本后，`after_send` 才会 `mark_done()`。`EXECUTE_MODE="dry_run"` 回滚时，
-  `loop.py` 的 legacy reminder 路径也保持相同语义。
+- reminders proposal 由 `core/agent_runtime/scheduler_capability.py` 持有；到点后通过
+  `talk_gate` 的新 Reality ingress/turn 投递，成功后才完成 Task receipt。旧 reminder JSON
+  不再是写入或投递路径。
 
-当前已收口的“未发送不 mark”语义覆盖 execute live 路径和 reminder 回滚路径：被 active
-window 拦截、LLM 空回复或发送前异常时，不调用 execute 的 `after_send` / `_mark()`，也不会把
-备忘录标记完成。其他 legacy trigger 若仍在 `_pipeline_send()` 后无条件 `_mark()`，需逐个按 sent
-结果继续收口；reminder 旧路径已完成。
+当前已收口的“未发送不 mark”语义覆盖 execute live 路径和 Runtime reminder delivery：被
+策略拦截、无通道或发送前异常时，不完成 Task receipt。其他 legacy trigger 若仍在
+`_pipeline_send()` 后无条件 `_mark()`，需逐个按 sent 结果继续收口。
 
 ---
 
