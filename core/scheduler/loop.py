@@ -810,13 +810,14 @@ async def _check_reminders():
         due = due_schedules(principal)
         from core.autonomy.talk_gate import send as deliver_schedule
         for item in due:
+            occurrence = f"schedule:{item['schedule_id']}:{int(float(item.get('due_at') or 0))}"
             sent, _reason = await deliver_schedule(
                 oid,
                 char_id,
                 f"备忘录提醒时间到了：{item['content']}，用{_char_name()}的方式提醒你",
                 source="user_schedule",
-                run_id=f"schedule:{item['schedule_id']}",
-                correlation_id=f"schedule:{item['schedule_id']}",
+                run_id=occurrence,
+                correlation_id=occurrence,
                 bypass_soft_once=True,
             )
             if sent:
