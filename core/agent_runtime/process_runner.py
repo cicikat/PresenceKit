@@ -49,44 +49,63 @@ MAX_DISK_BYTES = 100 * 1024 * 1024
 _PYTHON_BOOTSTRAP = r'''
 import os, socket, sys, sysconfig
 root = os.path.realpath(sys.argv[1])
-program = os.path.realpath(sys.argv[2])
-sys.argv = [program, *sys.argv[3:]]
+private_root = os.path.realpath(sys.argv[2])
+program = os.path.realpath(sys.argv[3])
+sys.argv = [program, *sys.argv[4:]]
 with open(program, "rb") as _source_file:
     _source = _source_file.read()
 
-def within(path):
-    try:
-        return os.path.commonpath((root, os.path.realpath(os.fspath(path)))) == root
-    except (TypeError, ValueError, OSError):
-        return False
+def install_guard(workspace_root):
+    stdlib_root = os.path.realpath(sysconfig.get_paths().get("stdlib", sys.prefix))
+    deny_names = {"secrets", ".env", ".git", "node_modules", "__pycache__", "config.yaml", "token", "credentials", "password", "cookies", "browser", "profiles"}
 
-stdlib = os.path.realpath(sysconfig.get_paths().get("stdlib", sys.prefix))
-def readable(path, mode):
-    if within(path):
-        return True
-    try:
-        return os.path.commonpath((stdlib, os.path.realpath(os.fspath(path)))) == stdlib and not any(flag in (mode or "r") for flag in ("w", "a", "+", "x"))
-    except (TypeError, ValueError, OSError):
-        return False
+    def safe(path):
+        try:
+            lexical = os.path.abspath(os.fspath(path))
+            parts = {part.lower() for part in lexical.replace("\\", "/").split("/")}
+            if any(any(denied in part for denied in deny_names) for part in parts):
+                return False
+            cursor = os.path.splitdrive(lexical)[0] + os.sep
+            for part in os.path.relpath(lexical, cursor).split(os.sep):
+                cursor = os.path.join(cursor, part)
+                if os.path.islink(cursor):
+                    return False
+            resolved = os.path.realpath(lexical)
+            in_private = os.path.commonpath((private_root, resolved)) == private_root
+            return not in_private and os.path.commonpath((workspace_root, resolved)) == workspace_root
+        except (TypeError, ValueError, OSError):
+            return False
 
-def audit(event, args):
-    if event == "open":
-        path = args[0] if args else None
-        mode = args[1] if len(args) > 1 else "r"
-        if isinstance(path, (str, bytes, os.PathLike)) and not readable(path, mode):
-            raise PermissionError("process_workspace_boundary")
-    if event in {"os.mkdir", "os.rmdir", "os.remove", "os.rename", "os.replace", "os.link", "os.symlink"}:
-        paths = [item for item in (args or ()) if isinstance(item, (str, bytes, os.PathLike))]
-        if any(not within(item) for item in paths):
-            raise PermissionError("process_workspace_boundary")
-    if event.startswith("socket."):
-        raise PermissionError("process_network_disabled")
-    if event in {"subprocess.Popen", "os.system", "os.posix_spawn", "os.posix_spawnp", "ctypes.dlopen"}:
-        raise PermissionError("process_child_denied")
+    def readable(path, mode):
+        if safe(path):
+            return True
+        try:
+            return os.path.commonpath((stdlib_root, os.path.realpath(os.fspath(path)))) == stdlib_root and not any(flag in (mode or "r") for flag in ("w", "a", "+", "x"))
+        except (TypeError, ValueError, OSError):
+            return False
 
-sys.addaudithook(audit)
-globals()["__file__"] = program
-exec(compile(_source, program, "exec"), globals(), globals())
+    def audit(event, args):
+        if event == "open":
+            path = args[0] if args else None
+            mode = args[1] if len(args) > 1 else "r"
+            if isinstance(path, (str, bytes, os.PathLike)) and not readable(path, mode):
+                raise PermissionError("process_workspace_boundary")
+        if event in {"os.mkdir", "os.rmdir", "os.remove", "os.rename", "os.replace", "os.link", "os.symlink"}:
+            paths = [item for item in (args or ()) if isinstance(item, (str, bytes, os.PathLike))]
+            if any(not safe(item) for item in paths):
+                raise PermissionError("process_workspace_boundary")
+        if event.startswith("socket."):
+            raise PermissionError("process_network_disabled")
+        if event == "import" and args and str(args[0]).split(".")[0] in {"_winapi", "ctypes", "multiprocessing", "subprocess"}:
+            raise PermissionError("process_child_denied")
+        if event in {"subprocess.Popen", "os.system", "os.posix_spawn", "os.posix_spawnp", "ctypes.dlopen"}:
+            raise PermissionError("process_child_denied")
+
+    sys.addaudithook(audit)
+
+install_guard(root)
+_program_globals = {"__file__": program, "__name__": "__main__", "__builtins__": __builtins__}
+exec(compile(_source, program, "exec"), _program_globals, _program_globals)
 '''
 
 
@@ -124,16 +143,6 @@ def _cfg() -> dict[str, Any]:
     from core.config_loader import get_config
 
     value = get_config().get("process_runner", {})
-    return value if isinstance(value, dict) else {}
-
-
-def _workspace_cfg() -> dict[str, Any]:
-    value = _cfg().get("workspace")
-    if isinstance(value, dict):
-        return value
-    from core.config_loader import get_config
-
-    value = get_config().get("workspace_access", {})
     return value if isinstance(value, dict) else {}
 
 
@@ -264,8 +273,10 @@ def _tree_size(root: Path) -> int:
     return total
 
 
-def _bounded_digest(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()[:16]
+def _project_private_root() -> Path:
+    from core.agent_runtime import workspace
+
+    return workspace._project_data()
 
 
 def _terminate_tree(process: Any) -> None:
@@ -327,7 +338,7 @@ async def _execute(
         raise ProcessRunnerError("resource_monitor_unavailable") from exc
     command = _interpreter(interpreter) + [
         "-I", "-S", "-c", _PYTHON_BOOTSTRAP,
-        str(workspace_root), str(program), *args,
+        str(workspace_root), str(_project_private_root()), str(program), *args,
     ]
     env = {
         "PATH": str(Path(sys.executable).parent),
@@ -462,6 +473,8 @@ async def run_process(
         raise ProcessRunnerError("task_lease_required")
     try:
         task = get_task(principal, lease.task_id)
+        if task["capability"] != PROCESS_CAPABILITY or task["status"] != "running":
+            raise ProcessRunnerError("task_capability_mismatch")
         if task_id is not None and lease.task_id != task_id:
             raise ProcessRunnerError("task_lease_mismatch")
         result = await _execute(
@@ -496,6 +509,12 @@ async def run_process(
         raise
     except TaskManagerError as exc:
         raise ProcessRunnerError(exc.code) from exc
+    except ProcessRunnerError as exc:
+        try:
+            fail_task(principal, lease, error_code=exc.code)
+        except TaskManagerError:
+            pass
+        raise
 
 
 def create_process_task(
