@@ -917,6 +917,25 @@ async def manual_trigger(name: str) -> str:
             return f"{name} autonomy opportunity {status}"
         return f"{name} autonomy opportunity failed: {status}"
 
+    from core.scheduler.gating import ACTIVE_TRIGGERS
+    if name in ACTIVE_TRIGGERS:
+        oid = _owner_id()
+        char_id = _active_char_id_or_none()
+        if not oid or not char_id:
+            return "owner_id or active character not configured"
+        from core.autonomy.signal_adapters import emit_trigger_signal
+        queued, status = emit_trigger_signal(
+            oid,
+            char_id,
+            name,
+            evidence=[{"fact": "manual_active_signal", "trigger": name}],
+            priority=0.2,
+            urgency=0.2,
+        )
+        if queued or status == "duplicate":
+            return f"{name} autonomy opportunity {status}"
+        return f"{name} autonomy opportunity failed: {status}"
+
     # No unregistered or retired name may regain the historical direct
     # executor path. Compatibility callers must use an explicit lifecycle
     # adapter (signal or maintenance worker).
