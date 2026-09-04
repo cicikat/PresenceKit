@@ -6,7 +6,6 @@
 
 import json
 import logging
-import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -91,29 +90,19 @@ def add_reminder(user_id: str, content: str, remind_at_str: str) -> str:
             "请使用 HH:MM 或 MM-DD HH:MM 或 YYYY-MM-DD HH:MM"
         )
 
-    # Durable lifecycle is owned by Agent Runtime; legacy JSON remains a read
-    # compatibility fallback for records created by older versions.
+    # Durable lifecycle is owned by Agent Runtime. Do not fall back to the
+    # retired reminder JSON store on partial runtime failure.
     try:
         from core.agent_runtime.models import TaskPrincipal, CausationRef
         from core.agent_runtime.scheduler_capability import create_schedule
         principal = TaskPrincipal.reality(user_id, DEFAULT_CHAR_ID)
         receipt = create_schedule(principal, content=content, due_at=dt.timestamp(),
                                   idempotency_key=f"reminder:{user_id}:{content}:{dt.isoformat()}",
-                                  causation_ref=CausationRef("reality_turn", str(uuid.uuid4())))
+                                  causation_ref=CausationRef("reality_turn", f"reminder:{user_id}:{dt.isoformat()}"))
         return f"已记住：{content!r}，将在 {dt.strftime('%Y-%m-%d %H:%M')} 提醒你"
     except Exception as exc:
-        logger.warning("runtime scheduler unavailable, using legacy reminder store: %s", exc)
-    items = _load(user_id)
-    item = {
-        "id": str(uuid.uuid4())[:8],
-        "content": content,
-        "remind_at": dt.strftime("%Y-%m-%d %H:%M"),
-        "done": False,
-    }
-    items.append(item)
-    _save(user_id, items)
-    logger.info(f"[reminder] 已为 {user_id} 添加备忘：{content} @ {item['remind_at']}")
-    return f"已记住：{content!r}，将在 {item['remind_at']} 提醒你"
+        logger.error("runtime scheduler unavailable; reminder was not created: %s", exc)
+        return "提醒暂时无法创建，请稍后再试"
 
 
 def get_reminders(user_id: str) -> list:

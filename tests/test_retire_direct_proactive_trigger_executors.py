@@ -80,6 +80,37 @@ def test_trigger_migration_registry_separates_speech_and_maintenance():
 
 
 @pytest.mark.asyncio
+async def test_manual_trigger_never_falls_back_to_direct_executor(sandbox, monkeypatch):
+    from core.scheduler import loop
+
+    async def forbidden(*_args, **_kwargs):
+        raise AssertionError("retired manual trigger must not execute a scheduler trigger")
+
+    monkeypatch.setattr(loop, "_pipeline_send", forbidden)
+    assert "不支持直接执行" in await loop.manual_trigger("manual_direct_trigger")
+    assert "未知或未注册" in await loop.manual_trigger("not_registered")
+
+
+def test_reminder_runtime_failure_does_not_write_legacy_store(sandbox, monkeypatch):
+    from core.tools import reminder
+
+    monkeypatch.setattr(
+        "core.agent_runtime.scheduler_capability.create_schedule",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("runtime down")),
+    )
+    result = reminder.add_reminder("owner", "test reminder", "23:59")
+    assert "无法创建" in result
+    assert reminder._load("owner") == []
+
+
+def test_scheduler_reminder_checker_has_no_legacy_pipeline_send():
+    from core.scheduler import loop
+    import inspect
+
+    assert "_pipeline_send" not in inspect.getsource(loop._check_reminders)
+
+
+@pytest.mark.asyncio
 async def test_talk_owner_delivery_is_idempotent_per_correlation(sandbox, monkeypatch):
     from core.autonomy import talk_gate
 

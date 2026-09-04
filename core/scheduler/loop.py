@@ -795,11 +795,7 @@ async def _check_log_maintenance():
 
 # ── 备忘录到点提醒
 async def _check_reminders():
-    """检查 owner 的备忘录是否有到点条目，有则发送提醒后标记完成"""
-    from core.scheduler.execution import legacy_tick_should_send
-
-    if not legacy_tick_should_send():
-        return
+    """Deliver due Runtime schedules through a fresh Reality interaction."""
     cfg = _cfg()
     if not cfg.get("enabled", True):
         return
@@ -809,23 +805,22 @@ async def _check_reminders():
     try:
         from core.agent_runtime.models import TaskPrincipal
         from core.agent_runtime.scheduler_capability import due_schedules, mark_delivered
-        due = due_schedules(TaskPrincipal.reality(oid, _active_char_id_or_none() or "default"))
+        char_id = _active_char_id_or_none() or "default"
+        principal = TaskPrincipal.reality(oid, char_id)
+        due = due_schedules(principal)
+        from core.autonomy.talk_gate import send as deliver_schedule
         for item in due:
-            # Delivery remains a normal scheduler signal; user-requested alarms
-            # are explicit and may enter delivery, while autonomy still gates
-            # spontaneous reminders.
-            sent = await _pipeline_send(
+            sent, _reason = await deliver_schedule(
+                oid,
+                char_id,
                 f"备忘录提醒时间到了：{item['content']}，用{_char_name()}的方式提醒你",
-                trigger_name="reminders",
+                source="user_schedule",
+                run_id=f"schedule:{item['schedule_id']}",
+                correlation_id=f"schedule:{item['schedule_id']}",
+                bypass_soft_once=True,
             )
             if sent:
-                mark_delivered(TaskPrincipal.reality(oid, _active_char_id_or_none() or "default"), item["schedule_id"])
-        if due:
-            return
-        from core.tools.reminder import get_due_reminders, mark_done
-        for item in get_due_reminders(oid):
-            sent = await _pipeline_send(f"备忘录提醒时间到了：{item['content']}", trigger_name="reminders")
-            if sent: mark_done(oid, item["id"])
+                mark_delivered(principal, item["schedule_id"])
     except Exception as e:
         log_error("scheduler._check_reminders", e)
 
@@ -922,104 +917,15 @@ async def manual_trigger(name: str) -> str:
             return f"{name} autonomy opportunity {status}"
         return f"{name} autonomy opportunity failed: {status}"
 
-    # Legacy direct execution is retained only as a compatibility fallback for
-    # names outside the migrated registry; registered conversational triggers
-    # always return from the signal-first branch above.
-    _last_trigger[name] = 0  # 清零冷却
-
-    try:
-        from core.scheduler.triggers.time_based import (
-            _check_morning, _check_night, _check_random_message,
-        )
-
-        if name == "morning_greeting":
-            await _check_morning(force=True)
-        elif name == "night_reminder":
-            await _check_night(force=True)
-        elif name == "random_message":
-            await _check_random_message(force=True)
-        elif name == "daily_journal":
-            oid = _owner_id()
-            if not oid:
-                return "owner_id 未配置"
-            from core.memory.event_log import get_recent_days
-            today_log = get_recent_days(oid, days=1)
-            log_hint = today_log[:800] if today_log and len(today_log) > 10 else "今天还没有对话记录"
-            await _pipeline_send(
-                f"（深夜，{_char_name()}回想起今天和你说过的话，提笔写下今天的感受——"
-                f"今天的对话内容：{log_hint}）",
-                trigger_name="daily_journal",
-                recall_policy="none",
-            )
-            _mark("daily_journal")
-        elif name == "letter_writer":
-            oid = _owner_id()
-            char_id = _active_char_id_or_none()
-            if not oid or not char_id:
-                return "owner_id or active character not configured"
-            from core.scheduler.triggers.letter_writer import _send_letter_if_worthy
-            execution_id = uuid.uuid4().hex
-            result = await _send_letter_if_worthy(
-                oid, char_id, "管理员发起的测试来信", execution_id=execution_id,
-            )
-            return f"letter_writer execution_id={execution_id} sent={result.sent}"
-        elif name == "diary_reminder":
-            oid = _owner_id()
-            if not oid:
-                return "owner_id 未配置"
-            from datetime import date as _date, timedelta
-            yesterday = (_date.today() - timedelta(days=1)).strftime("%m月%d日")
-            await _pipeline_send(
-                f"（{_char_name()}想起来，{yesterday}好像没看到你写日记）",
-                trigger_name="diary_reminder",
-                recall_policy="none",
-            )
-            _mark("diary_reminder")
-        elif name == "diary_share_reminder":
-            oid = _owner_id()
-            if not oid:
-                return "owner_id not configured"
-            await _pipeline_send(
-                f"（{_char_name()}想起来，好像很久没看到你的日记了，故作不经意地提一句）",
-                trigger_name="diary_share_reminder",
-                recall_policy="none",
-            )
-            _mark("diary_share_reminder")
-        elif name == "topic_followup":
-            from core.scheduler.triggers.memory import _check_topic_followup
-            await _check_topic_followup(force=True)
-        elif name == "birthday_midnight":
-            from core.scheduler.triggers.birthday import _check_birthday_midnight
-            await _check_birthday_midnight(force=True)
-        elif name == "birthday_eve":
-            from core.scheduler.triggers.birthday import _check_birthday_eve
-            await _check_birthday_eve(force=True)
-        elif name == "birthday_afternoon":
-            from core.scheduler.triggers.birthday import _check_birthday_afternoon
-            await _check_birthday_afternoon(force=True)
-        elif name == "birthday_night":
-            from core.scheduler.triggers.birthday import _check_birthday_night
-            await _check_birthday_night(force=True)
-        elif name == "timenode":
-            from core.scheduler.triggers.timenode import _check_timenode
-            await _check_timenode(force=True)
-        elif name == "festival":
-            from core.scheduler.triggers.festival import _check_festival
-            await _check_festival(force=True)
-        elif name == "holiday_boost":
-            from core.scheduler.triggers.festival import _check_holiday_boost
-            await _check_holiday_boost(force=True)
-        else:
-            return f"未知触发器: {name}"
-        # B: manual_trigger 绕过冷却/条件检查属设计，但也该记账（RC5）——否则管理
-        # 面板测试触发不会让 gating 看到"刚说过话"，紧接着的自动触发可能背靠背双发。
-        from core.scheduler.proactive_ledger import record_send as _ledger_record
-        _ledger_record(name, channel="manual", gist=f"[手动触发] {name}")
-        return f"{name} 已触发"
-    except Exception as e:
-        log_error(f"scheduler.manual_trigger.{name}", e)
-        return f"{name} 触发失败: {e}"
-
+    # No unregistered or retired name may regain the historical direct
+    # executor path. Compatibility callers must use an explicit lifecycle
+    # adapter (signal or maintenance worker).
+    from core.scheduler.gating import TRIGGER_MIGRATION_STATUS
+    return (
+        f"{name} 不支持直接执行"
+        if name in TRIGGER_MIGRATION_STATUS
+        else f"未知或未注册触发器: {name}"
+    )
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 主循环 & 启动

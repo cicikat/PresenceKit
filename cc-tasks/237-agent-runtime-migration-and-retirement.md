@@ -1,6 +1,6 @@
 # Brief 237：Agent Runtime 接入、观测与旧路径退役
 
-> 状态：proposal；前置：230-236 中对应工单；本工单负责渐进接入和删除重复路径。
+> 状态：implemented；前置：230-236 中对应工单；本工单完成渐进接入和重复路径删除。
 
 ## 目标
 
@@ -36,3 +36,12 @@
 - 总账：更新 `docs/three-repo-interface-catalog.md`、`docs/feature-control-surface.md`、
   `docs/tools.md`、`docs/scheduler.md`、`docs/known-issues.md`。
 
+## 本次收口证据
+
+- 闹钟到点通过 `talk_gate` 创建新的 Reality ingress/turn，并以 schedule correlation 做幂等；
+  `_pipeline_send` 不再是 reminder delivery path。
+- `add_reminder` 不再回退到 legacy reminder JSON；runtime 不可用时明确返回失败。
+- `manual_trigger` 对 retired/unregistered 名称 fail-closed，不再调用旧 trigger executor。
+- `DELETE /observability/agent-runtime-tasks/{task_id}` 提供 admin-scoped durable cancel；
+  观测仍只返回 metadata。
+- 回归测试覆盖以上退役边界，且 230 task manager、scheduler trigger 和 pipeline gate 测试通过。

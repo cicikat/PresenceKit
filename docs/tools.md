@@ -859,6 +859,12 @@ class ToolResult:
 
 当前 `core/tool_dispatcher.py` 中未发现 `_desktop_launch_netease_wrapper` / `_desktop_play_netease_wrapper` 这类旧 wrapper。
 网易云播放只保留 `play_song`：搜索歌曲 ID 后推送 `{"type": "play_netease", "song_id": ...}`。
+
+## Brief 237 Agent Runtime 接入
+
+`add_reminder` 已统一进入 scheduler capability/Task Manager；runtime 写入失败不会静默回落到
+legacy reminder 文件。workspace/process/browser 工具的 task receipt 仍由 Reality Task Manager
+统一持有，visible delivery 必须经过新的 Reality ingress/turn，不能在后台调用 `capture_turn()`。
 # Memory Event source boundary (Brief 214)
 
 Owner/Path C event-read tools retain their existing origin and scope gates.

@@ -1104,6 +1104,12 @@ curl -H "Authorization: Bearer <token>" \
 
 ### dream_postcards
 
+### Brief 237 旧路径退役
+
+`_check_reminders()` 通过 `talk_gate` 的 Reality interaction adapter 投递，不再调用
+`_pipeline_send()`；`manual_trigger()` 对 retired/unregistered 名称 fail-closed。旧 reminder
+JSON 仅保留读取兼容函数，不再作为 `add_reminder()` 的写入 fallback。
+
 `dream_postcards` 是独立 `active` 的定时产物投递，不是 `dream_exit` 别名。proposer 每日扫描梦境
 archive 出站明信片的 schedule；到期未发送的条目复用 Gmail 链路投递，不进入 assistant speech
 outlet。SMTP 失败只递增 attempts 并保留 last_error，后续 tick 持续重试，成功后才标记 sent。

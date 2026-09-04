@@ -301,6 +301,10 @@ scheduler, tool, deployment, and EventContext controls retain their current owne
 Future Briefs 230-237 must add configured/effective/runtime-observed controls in the same change as
 each implemented task or capability; clients must not infer availability from existing tool names.
 
+Brief 237 closes legacy scheduler execution lanes: due schedules use the normal Reality interaction
+adapter, the reminder JSON fallback is retired, and manual direct-trigger execution is unavailable.
+Task cancellation is admin-only via the metadata endpoint in the interface catalog.
+
 ## Brief 232 Agent Work Sessions
 
 Agent Work Sessions are backend-only and have no client setting. The scheduler's

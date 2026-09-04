@@ -467,6 +467,8 @@ full paths, and raw tool output are excluded. There is no desktop, mobile, WebSo
 settings surface for task creation in this brief. Task lifecycle completion does not create an
 EventContext or Memory Event; a future visible notification must enter through a fresh Reality
 ingress adapter. Dream tasks require a separate store and allowlist and are not accepted here.
+`DELETE /observability/agent-runtime-tasks/{task_id}?uid=&char_id=` is an admin-scoped cancellation
+entry point; it records a durable cancel request and never replays or delivers the task.
 
 ## Briefs 231-233 / Trigger, Work Session, Workspace
 

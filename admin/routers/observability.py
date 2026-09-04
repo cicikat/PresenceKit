@@ -114,6 +114,24 @@ async def agent_runtime_tasks(
         raise HTTPException(status_code=422, detail={"code": exc.code}) from exc
 
 
+@router.delete(
+    "/observability/agent-runtime-tasks/{task_id}",
+    summary="取消 Reality Agent Runtime task",
+)
+async def cancel_agent_runtime_task(
+    task_id: str,
+    uid: str = Query(..., min_length=1, max_length=128),
+    char_id: str = Query(..., min_length=1, max_length=128),
+    _auth=Depends(require_scopes("admin")),
+):
+    from core.agent_runtime.models import TaskPrincipal
+    from core.agent_runtime.task_manager import TaskManagerError, request_cancel
+    try:
+        return request_cancel(TaskPrincipal.reality(uid, char_id), task_id, reason_code="admin_requested")
+    except TaskManagerError as exc:
+        raise HTTPException(status_code=422, detail={"code": exc.code}) from exc
+
+
 @router.get(
     "/observability/agent-runtime-workspace",
     summary="读取 workspace capability 脱敏状态",
