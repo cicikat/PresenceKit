@@ -807,16 +807,25 @@ async def _check_reminders():
     if not oid:
         return
     try:
-        from core.tools.reminder import get_due_reminders, mark_done
-        due = get_due_reminders(oid)
+        from core.agent_runtime.models import TaskPrincipal
+        from core.agent_runtime.scheduler_capability import due_schedules, mark_delivered
+        due = due_schedules(TaskPrincipal.reality(oid, _active_char_id_or_none() or "default"))
         for item in due:
+            # Delivery remains a normal scheduler signal; user-requested alarms
+            # are explicit and may enter delivery, while autonomy still gates
+            # spontaneous reminders.
             sent = await _pipeline_send(
-                f"备忘录提醒时间到了：{item['content']}，用{_char_name()}的方式提醒她",
+                f"备忘录提醒时间到了：{item['content']}，用{_char_name()}的方式提醒你",
                 trigger_name="reminders",
             )
             if sent:
-                mark_done(oid, item["id"])
-                logger.info(f"[scheduler] 备忘录提醒已发送: {item['content']}")
+                mark_delivered(TaskPrincipal.reality(oid, _active_char_id_or_none() or "default"), item["schedule_id"])
+        if due:
+            return
+        from core.tools.reminder import get_due_reminders, mark_done
+        for item in get_due_reminders(oid):
+            sent = await _pipeline_send(f"备忘录提醒时间到了：{item['content']}", trigger_name="reminders")
+            if sent: mark_done(oid, item["id"])
     except Exception as e:
         log_error("scheduler._check_reminders", e)
 

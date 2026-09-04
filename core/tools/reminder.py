@@ -91,6 +91,18 @@ def add_reminder(user_id: str, content: str, remind_at_str: str) -> str:
             "请使用 HH:MM 或 MM-DD HH:MM 或 YYYY-MM-DD HH:MM"
         )
 
+    # Durable lifecycle is owned by Agent Runtime; legacy JSON remains a read
+    # compatibility fallback for records created by older versions.
+    try:
+        from core.agent_runtime.models import TaskPrincipal, CausationRef
+        from core.agent_runtime.scheduler_capability import create_schedule
+        principal = TaskPrincipal.reality(user_id, DEFAULT_CHAR_ID)
+        receipt = create_schedule(principal, content=content, due_at=dt.timestamp(),
+                                  idempotency_key=f"reminder:{user_id}:{content}:{dt.isoformat()}",
+                                  causation_ref=CausationRef("reality_turn", str(uuid.uuid4())))
+        return f"已记住：{content!r}，将在 {dt.strftime('%Y-%m-%d %H:%M')} 提醒你"
+    except Exception as exc:
+        logger.warning("runtime scheduler unavailable, using legacy reminder store: %s", exc)
     items = _load(user_id)
     item = {
         "id": str(uuid.uuid4())[:8],
