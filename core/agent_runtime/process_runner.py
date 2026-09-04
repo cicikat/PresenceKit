@@ -475,8 +475,13 @@ async def run_process(
         if result["reason"] == "canceled":
             receipt = acknowledge_cancel(principal, lease)
             return {"schema_version": PROCESS_SCHEMA_VERSION, "receipt": receipt, **result}
-        if result["reason"] == "timeout":
-            receipt = fail_task(principal, lease, error_code="process_timeout", result_metadata=_metadata(result))
+        if result["reason"]:
+            receipt = fail_task(
+                principal,
+                lease,
+                error_code=f"process_{result['reason']}",
+                result_metadata=_metadata(result),
+            )
         elif result["succeeded"]:
             receipt = complete_task(principal, lease, result_metadata=_metadata(result))
         else:
