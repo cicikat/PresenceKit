@@ -15,7 +15,7 @@ def test_memory_event_query_page_is_registered_and_cache_busted():
     assert "ADMIN_UI_FRAGMENT_VERSION = 'brief-195-mcp-autonomy-signal-1'" in core
     assert '<script src="/static/js/core.js?v=brief-195-mcp-autonomy-signal-1"></script>' in index
     assert '<script src="/static/js/observability.js?v=brief-195-mcp-autonomy-signal-1"></script>' in index
-    assert '<script src="/static/i18n.js?v=brief-195-mcp-autonomy-signal-1"></script>' in index
+    assert '<script src="/static/i18n.js?v=brief-239-browser-confirmation-1"></script>' in index
     assert "loadMemoryEventSearch" in script
     assert "/memory-events/query-trace" in script
     assert "tombstoneMemoryEvent" in script
