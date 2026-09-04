@@ -122,6 +122,11 @@ async def agent_runtime_workspace(_auth=Depends(require_scopes("state.read"))):
     from core.agent_runtime.workspace import capability_snapshot
     return capability_snapshot()
 
+@router.get("/observability/agent-runtime-browser", summary="Browser capability status")
+async def agent_runtime_browser(_auth=Depends(require_scopes("state.read"))):
+    from core.agent_runtime.browser import observability_snapshot
+    return observability_snapshot()
+
 
 @router.get(
     "/observability/agent-runtime-work-sessions",
