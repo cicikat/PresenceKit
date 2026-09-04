@@ -538,6 +538,7 @@ browser:
   max_page_chars: 12000
   max_links: 30
   worker_timeout_seconds: 60
+  adapter: none
 
 mode: production
 standalone_mode: false

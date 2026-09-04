@@ -5,6 +5,8 @@ import asyncio
 import hashlib
 import inspect
 import re
+import tempfile
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
@@ -72,13 +74,45 @@ def policy() -> BrowserPolicy:
 
 
 def _validate_url(url: str, p: BrowserPolicy) -> str:
-    parsed = urlparse(str(url or ""))
+    raw = str(url or "")
+    parsed = urlparse(raw)
     host = (parsed.hostname or "").lower().rstrip(".")
-    if parsed.scheme not in {"http", "https"} or not host:
+    if parsed.scheme.lower() not in {"http", "https"} or not host or parsed.username or parsed.password:
         raise BrowserError("invalid_url")
     if not any(host == domain or host.endswith("." + domain) for domain in p.allowed_domains):
         raise BrowserError("domain_not_allowed")
-    return parsed._replace(fragment="").geturl()
+    return parsed._replace(scheme=parsed.scheme.lower(), netloc=parsed.netloc.lower(), fragment="").geturl()
+
+
+def _canonical_params(operation: str, params: Mapping[str, Any] | None) -> dict[str, Any]:
+    raw = dict(params or {})
+    allowed = {"selector", "value", "path"}
+    if set(raw) - allowed:
+        raise BrowserError("invalid_params")
+    result: dict[str, Any] = {}
+    for key, limit in (("selector", 256), ("value", 2000), ("path", 1024)):
+        if key not in raw:
+            continue
+        value = raw[key]
+        if not isinstance(value, str) or len(value) > limit:
+            raise BrowserError("invalid_params")
+        result[key] = value
+    if operation in {"click", "fill", "select"} and not result.get("selector"):
+        raise BrowserError("selector_required")
+    if operation in {"fill", "select"} and "value" not in result:
+        raise BrowserError("value_required")
+    if operation in {"upload", "download"} and not result.get("path"):
+        raise BrowserError("workspace_path_required")
+    return result
+
+
+def _request_binding(principal: TaskPrincipal, url: str, operation: str, params: Mapping[str, Any] | None, *, confirmed: bool) -> tuple[str, dict[str, Any]]:
+    canonical_url = _validate_url(url, policy())
+    canonical_params = _canonical_params(operation, params)
+    payload = {"schema": "browser-request.v1", "realm": principal.realm, "uid": principal.uid, "char_id": principal.char_id, "url": canonical_url, "operation": operation, "params": canonical_params}
+    fingerprint = hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    summary = {"schema_version": "browser-request.v1", "url_digest": hashlib.sha256(canonical_url.encode()).hexdigest()[:24], "operation": operation, "confirmed": bool(confirmed), "params": {k: {"type": "string", "length": len(v), "digest": hashlib.sha256(v.encode()).hexdigest()[:24]} for k, v in canonical_params.items()}}
+    return fingerprint, summary
 
 
 def _check(principal: TaskPrincipal, url: str, operation: str, *, confirmed: bool = False) -> BrowserPolicy:
@@ -103,7 +137,7 @@ def _check(principal: TaskPrincipal, url: str, operation: str, *, confirmed: boo
 
 def _profile_dir(principal: TaskPrincipal, task_id: str) -> Path:
     digest = hashlib.sha256(f"{principal.uid}:{principal.char_id}:{task_id}".encode()).hexdigest()[:32]
-    return get_paths().agent_runtime_browser_profiles_root() / digest
+    return Path(tempfile.gettempdir()) / "presencekit-browser-profiles" / digest
 
 
 def _redact(value: Any, *, depth: int = 0) -> Any:
@@ -303,12 +337,14 @@ async def stop_worker() -> None:
     _worker = None
 
 
-def create_task(principal: TaskPrincipal, *, url: str, operation: str, idempotency_key: str, confirmed: bool = False, ttl_seconds: int = 900, causation_ref: CausationRef | None = None) -> dict[str, Any]:
+def create_task(principal: TaskPrincipal, *, url: str, operation: str, idempotency_key: str, confirmed: bool = False, ttl_seconds: int = 900, causation_ref: CausationRef | None = None, params: dict[str, Any] | None = None) -> dict[str, Any]:
     # Creation of a dangerous operation is allowed only to park it in the
     # durable confirmation state; execution still requires explicit confirm.
     p = _check(principal, url, operation, confirmed=True)
     normalized_url = _validate_url(url, p)
-    receipt, _ = task_manager.create_task(principal, capability=BROWSER_CAPABILITY, source="browser", idempotency_key=idempotency_key, ttl_seconds=ttl_seconds, causation_ref=causation_ref, enqueue=operation not in CONFIRM_OPERATIONS or confirmed, request_context={"url_digest": hashlib.sha256(normalized_url.encode()).hexdigest()[:24], "operation": operation})
+    canonical_params = _canonical_params(operation, params)
+    fingerprint, summary = _request_binding(principal, normalized_url, operation, canonical_params, confirmed=confirmed)
+    receipt, _ = task_manager.create_task(principal, capability=BROWSER_CAPABILITY, source="browser", idempotency_key=idempotency_key, ttl_seconds=ttl_seconds, causation_ref=causation_ref, enqueue=operation not in CONFIRM_OPERATIONS or confirmed, request_context={"url_digest": summary["url_digest"], "operation": operation, "params": summary["params"]}, request_fingerprint=fingerprint, request_summary=summary, confirmation_required=operation in CONFIRM_OPERATIONS)
     _stats["submitted"] += 1
     if operation in CONFIRM_OPERATIONS and not confirmed:
         receipt = task_manager.mark_waiting_confirmation(principal, receipt["task_id"])
@@ -316,35 +352,61 @@ def create_task(principal: TaskPrincipal, *, url: str, operation: str, idempoten
 
 
 async def run_task(principal: TaskPrincipal, task_id: str, *, url: str, operation: str, confirmed: bool = False, params: dict[str, Any] | None = None) -> dict[str, Any]:
-    _check(principal, url, operation, confirmed=confirmed)
-    task = task_manager.get_task(principal, task_id)
+    try:
+        task = task_manager.get_task(principal, task_id)
+    except task_manager.TaskManagerError as exc:
+        raise BrowserError(exc.code) from exc
+    p = _check(principal, url, operation, confirmed=True)
+    canonical_params = _canonical_params(operation, params)
+    requested_fingerprint, _ = _request_binding(principal, url, operation, canonical_params, confirmed=bool(task.get("confirmation_required") and task.get("confirmation_granted")))
+    if requested_fingerprint != task.get("request_fingerprint"):
+        raise BrowserError("task_request_mismatch")
     if task["status"] == TaskStatus.WAITING_CONFIRM.value:
-        if not confirmed:
-            raise BrowserError("confirmation_required")
-        task = task_manager.resume_task(principal, task_id)
+        raise BrowserError("confirmation_required")
+    expected_confirmed = bool(
+        task.get("confirmation_required")
+        and (task.get("confirmation_granted") or task.get("request_summary", {}).get("confirmed"))
+    )
+    if bool(confirmed) != expected_confirmed:
+        raise BrowserError("task_request_mismatch")
     if task["status"] != TaskStatus.QUEUED.value:
         raise BrowserError("task_not_queued")
-    lease = task_manager.claim_next(principal, task_id=task_id, capabilities={BROWSER_CAPABILITY})
+    try:
+        lease = task_manager.claim_next(principal, task_id=task_id, capabilities={BROWSER_CAPABILITY})
+    except task_manager.TaskManagerError as exc:
+        raise BrowserError(exc.code) from exc
     if lease is None:
         raise BrowserError("task_not_queued")
     worker = _worker or BrowserWorker(_adapter)
-    return await worker.execute(principal, lease, url=url, operation=operation, params=params)
+    return await worker.execute(principal, lease, url=url, operation=operation, params=canonical_params)
 
 
 def cancel_task(principal: TaskPrincipal, task_id: str) -> dict[str, Any]:
-    return task_manager.request_cancel(principal, task_id, reason_code="user_requested")
+    try:
+        return task_manager.request_cancel(principal, task_id, reason_code="user_requested")
+    except task_manager.TaskManagerError as exc:
+        raise BrowserError(exc.code) from exc
 
 
 def pause_task(principal: TaskPrincipal, task_id: str) -> dict[str, Any]:
-    return task_manager.request_pause(principal, task_id)
+    try:
+        return task_manager.request_pause(principal, task_id)
+    except task_manager.TaskManagerError as exc:
+        raise BrowserError(exc.code) from exc
 
 
 def resume_task(principal: TaskPrincipal, task_id: str) -> dict[str, Any]:
-    return task_manager.resume_task(principal, task_id)
+    try:
+        return task_manager.resume_task(principal, task_id)
+    except task_manager.TaskManagerError as exc:
+        raise BrowserError(exc.code) from exc
 
 
 def confirm_task(principal: TaskPrincipal, task_id: str) -> dict[str, Any]:
-    return task_manager.resume_task(principal, task_id)
+    try:
+        return task_manager.confirm_task(principal, task_id)
+    except task_manager.TaskManagerError as exc:
+        raise BrowserError(exc.code) from exc
 
 
 def observability_snapshot() -> dict[str, Any]:

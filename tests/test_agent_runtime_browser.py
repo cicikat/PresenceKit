@@ -56,3 +56,87 @@ async def test_browser_disconnect_becomes_outcome_unknown(monkeypatch, sandbox):
     result = await browser.run_task(principal, task["task_id"], url="https://example.test/page", operation="navigate")
     assert result["receipt"]["status"] == "outcome_unknown"
     assert result["receipt"]["error_code"] == "browser_disconnected"
+
+
+@pytest.mark.asyncio
+async def test_browser_request_binding_rejects_substitution_before_claim(monkeypatch, sandbox):
+    _config(monkeypatch)
+    from core.agent_runtime import TaskPrincipal, browser
+
+    calls = 0
+
+    async def adapter(**kwargs):
+        nonlocal calls
+        calls += 1
+        return {"text": "ok"}
+
+    browser.set_adapter(adapter)
+    principal = TaskPrincipal.reality("browser-owner", "browser-character")
+    task = browser.create_task(
+        principal,
+        url="https://example.test/page?a=1",
+        operation="fill",
+        params={"selector": "#name", "value": "Ada"},
+        idempotency_key="bind-1",
+    )
+    before = task["attempt_count"]
+    for changed in (
+        {"url": "https://example.test/other?a=1"},
+        {"operation": "click"},
+        {"params": {"selector": "#other", "value": "Ada"}},
+        {"params": {"selector": "#name", "value": "Eve"}},
+    ):
+        with pytest.raises(browser.BrowserError, match="task_request_mismatch"):
+            await browser.run_task(
+                principal,
+                task["task_id"],
+                url=changed.get("url", "https://example.test/page?a=1"),
+                operation=changed.get("operation", "fill"),
+                params=changed.get("params", {"selector": "#name", "value": "Ada"}),
+            )
+        current = browser.task_manager.get_task(principal, task["task_id"])
+        assert current["attempt_count"] == before == 0
+    result = await browser.run_task(
+        principal,
+        task["task_id"],
+        url="https://example.test/page?a=1",
+        operation="fill",
+        params={"selector": "#name", "value": "Ada"},
+    )
+    assert result["receipt"]["status"] == "succeeded"
+    assert calls == 1
+
+
+@pytest.mark.asyncio
+async def test_high_risk_confirmation_is_one_shot_and_bound(monkeypatch, sandbox):
+    _config(monkeypatch)
+    from core.agent_runtime import TaskPrincipal, browser
+
+    calls = 0
+
+    async def adapter(**kwargs):
+        nonlocal calls
+        calls += 1
+        return {"ok": True}
+
+    browser.set_adapter(adapter)
+    principal = TaskPrincipal.reality("browser-owner", "browser-character")
+    task = browser.create_task(
+        principal,
+        url="https://example.test/pay",
+        operation="pay",
+        idempotency_key="confirm-1",
+    )
+    with pytest.raises(browser.BrowserError, match="confirmation_required"):
+        await browser.run_task(principal, task["task_id"], url="https://example.test/pay", operation="pay")
+    confirmed = browser.confirm_task(principal, task["task_id"])
+    assert confirmed["status"] == "queued"
+    assert browser.confirm_task(principal, task["task_id"])["status"] == "queued"
+    with pytest.raises(browser.BrowserError, match="task_request_mismatch"):
+        await browser.run_task(principal, task["task_id"], url="https://example.test/pay", operation="pay", confirmed=False)
+    result = await browser.run_task(principal, task["task_id"], url="https://example.test/pay", operation="pay", confirmed=True)
+    assert result["receipt"]["status"] == "succeeded"
+    assert calls == 1
+    with pytest.raises(browser.BrowserError, match="task_not_queued"):
+        await browser.run_task(principal, task["task_id"], url="https://example.test/pay", operation="pay", confirmed=True)
+    assert calls == 1

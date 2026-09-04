@@ -74,6 +74,10 @@ class TaskRecord:
     expires_at: float
     idempotency_digest: str
     request_digest: str
+    request_fingerprint: str = ""
+    request_summary: dict[str, Any] = field(default_factory=dict)
+    confirmation_required: bool = False
+    confirmation_granted_at: float = 0.0
     realm: str = "reality"
     schema_version: str = TASK_SCHEMA_VERSION
     causation_ref: dict[str, Any] | None = None

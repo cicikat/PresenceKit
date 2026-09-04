@@ -174,6 +174,10 @@ def _receipt(task: TaskRecord) -> dict[str, Any]:
         "lease_until": task.lease_until or None,
         "cancel_requested": bool(task.cancel_requested_at),
         "pause_requested": bool(task.pause_requested_at),
+        "confirmation_required": bool(task.confirmation_required),
+        "confirmation_granted": bool(task.confirmation_granted_at),
+        "request_fingerprint": task.request_fingerprint or None,
+        "request_summary": dict(task.request_summary),
         "cancel_reason_code": task.cancel_reason_code or None,
         "error_code": task.error_code or None,
         "recovery_reason": task.recovery_reason or None,
@@ -288,6 +292,11 @@ def _load_records(
             or not _DIGEST_RE.fullmatch(task.idempotency_digest)
             or not isinstance(task.request_digest, str)
             or not _DIGEST_RE.fullmatch(task.request_digest)
+            or not isinstance(task.request_fingerprint, str)
+            or not _DIGEST_RE.fullmatch(task.request_fingerprint)
+            or not isinstance(task.request_summary, dict)
+            or not isinstance(task.confirmation_required, bool)
+            or not isinstance(task.confirmation_granted_at, (int, float))
         ):
             raise TaskManagerError("task_store_record_invalid")
     changed = _recover_records(records, now)
@@ -333,6 +342,9 @@ def create_task(
     enqueue: bool = True,
     now: float | None = None,
     request_context: dict[str, Any] | None = None,
+    request_fingerprint: str | None = None,
+    request_summary: dict[str, Any] | None = None,
+    confirmation_required: bool = False,
 ) -> tuple[dict[str, Any], bool]:
     principal = _validate_principal(principal)
     capability = _validate_name(capability, "capability")
@@ -355,6 +367,15 @@ def create_task(
         raise TaskManagerError("invalid_max_attempts")
     if retry_policy == RetryPolicy.NEVER.value and max_attempts != 1:
         raise TaskManagerError("unsafe_retry_configuration")
+    if request_fingerprint is not None and not _DIGEST_RE.fullmatch(str(request_fingerprint)):
+        raise TaskManagerError("invalid_request_fingerprint")
+    if not isinstance(confirmation_required, bool):
+        raise TaskManagerError("invalid_confirmation_required")
+    if request_summary is not None and (not isinstance(request_summary, dict) or len(request_summary) > 32):
+        raise TaskManagerError("invalid_request_summary")
+    safe_summary = dict(request_summary or {})
+    if any(len(str(k)) > 64 for k in safe_summary):
+        raise TaskManagerError("invalid_request_summary")
     timestamp = _now(now)
     causal = _normalize_causation(causation_ref)
     idem_digest = _digest(idempotency_key)
@@ -392,6 +413,9 @@ def create_task(
             expires_at=timestamp + ttl_seconds,
             idempotency_digest=idem_digest,
             request_digest=request_digest,
+            request_fingerprint=str(request_fingerprint or request_digest),
+            request_summary=safe_summary,
+            confirmation_required=confirmation_required,
             causation_ref=causal,
             retry_policy=retry_policy,
             max_attempts=max_attempts,
@@ -695,7 +719,7 @@ def resume_task(
     with task_store.scope_lock(principal.uid, principal.char_id):
         state, records, changed = _load_records(principal, timestamp)
         task = _find(records, task_id)
-        if task.status in {TaskStatus.PAUSED.value, TaskStatus.WAITING_CONFIRM.value}:
+        if task.status == TaskStatus.PAUSED.value:
             if task.expires_at <= timestamp:
                 _terminalize(task, TaskStatus.EXPIRED.value, timestamp, error_code="task_ttl_expired")
             else:
@@ -707,6 +731,34 @@ def resume_task(
             if changed:
                 _save_records(principal, state, records, now=timestamp)
             raise TaskManagerError("task_not_resumable")
+        _save_records(principal, state, records, now=timestamp)
+        return _receipt(task)
+
+
+def confirm_task(
+    principal: TaskPrincipal, task_id: str, *, now: float | None = None
+) -> dict[str, Any]:
+    """Grant the parked confirmation exactly once; never changes the request binding."""
+    principal = _validate_principal(principal)
+    timestamp = _now(now)
+    with task_store.scope_lock(principal.uid, principal.char_id):
+        state, records, changed = _load_records(principal, timestamp)
+        task = _find(records, task_id)
+        if task.terminal:
+            if changed:
+                _save_records(principal, state, records, now=timestamp)
+            return _receipt(task)
+        if task.confirmation_granted_at:
+            return _receipt(task)
+        if task.status != TaskStatus.WAITING_CONFIRM.value:
+            raise TaskManagerError("task_not_waiting_confirmation")
+        if task.expires_at <= timestamp:
+            _terminalize(task, TaskStatus.EXPIRED.value, timestamp, error_code="task_ttl_expired")
+        else:
+            task.confirmation_granted_at = timestamp
+            task.status = TaskStatus.QUEUED.value
+            task.queued_at = timestamp
+            task.updated_at = timestamp
         _save_records(principal, state, records, now=timestamp)
         return _receipt(task)
 

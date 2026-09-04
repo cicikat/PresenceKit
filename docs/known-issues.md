@@ -316,6 +316,10 @@ additional production sources.
   `outcome_unknown` handling, bounded redacted results, and Workspace-only file transfer hooks.
 - `open`: Playwright is optional and disabled by default; no desktop/mobile task/result surface or
   production soak is claimed until Brief 239 and an operator-reviewed adapter deployment exist.
+- `partial/open` (Brief 239): request fingerprints, one-shot confirmation, redaction, and route
+  guards are implemented and covered by backend tests. The local acceptance environment lacks the
+  Playwright Python binding, so an actual Chromium fixture and client-side owner bridge remain
+  unverified; no completion claim is made.
 ### KNOW-228: character knowledge client surface
 
 The scoped character knowledge library and admin observability endpoint are

@@ -333,7 +333,13 @@ CPU, memory, process count, and captured output. The effective redacted state an
 available from `GET /observability/agent-runtime-processes` with `state.read`; `remote_server`
 always disables execution. Desktop and mobile do not yet expose a task/result control surface.
 
-## Brief 238 browser worker
+## Brief 239 browser worker confirmation hardening
+
+Brief 239 binds each task to a normalized `http/https` URL (fragment removed, query retained),
+operation, typed bounded parameters, Reality principal, and Workspace path digest. The server
+stores only a `browser-request.v1` fingerprint and safe summaries; substitutions fail before claim
+with `task_request_mismatch`. High-risk confirmation is a one-shot state transition, while raw
+queries, paths, profiles, credentials, and page payloads stay out of receipts and observability.
 
 `browser.enabled` is an opt-in local capability and remains disabled by default. Explicit
 `allowed_domains`, bounded page limits, and an optional reviewed Playwright adapter are required.

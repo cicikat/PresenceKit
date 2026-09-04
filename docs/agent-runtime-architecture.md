@@ -190,7 +190,7 @@ existing origin, role, danger, confirmation, deployment, MCP, and enablement gat
 | `fs_list`, `fs_read` | workspace read | Brief 233 adapter; existing allow-roots |
 | `workspace_list`, `workspace_read`, `workspace_create`, `workspace_update`, `workspace_delete`, `workspace_undo` | workspace capability | Brief 233; explicit roots/operation grants, Reality-only, bounded receipts |
 | `process_run` | bounded process capability | Brief 234; local-only, workspace program, structured args, allowlisted interpreter, no shell/network, bounded resources |
-| `browser_automation` | isolated browser capability | Brief 238; Reality-only, explicit domain allowlist, owner confirmation, bounded redacted result, Workspace-only file transfer |
+| `browser_automation` | isolated browser capability | Brief 239 hardening; Reality-only, explicit domain allowlist, immutable `browser-request.v1` fingerprint, one-shot owner confirmation, bounded redacted result, Workspace-only file transfer |
 | `manage_self_capability` | capability policy mutation | grant/revision/idempotency and dedicated origin |
 | dynamic `mcp__*` | MCP transport adapter | transport is not permission; intersect local policy |
 

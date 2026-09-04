@@ -867,6 +867,13 @@ legacy reminder 文件。workspace/process/browser 工具的 task receipt 仍由
 统一持有，visible delivery 必须经过新的 Reality ingress/turn，不能在后台调用 `capture_turn()`。
 ## Brief 238 Browser worker
 
+Brief 239 binds each task to a normalized `http/https` URL (fragment removed, query retained),
+operation, typed bounded parameters, Reality principal, and Workspace path digest. Only a
+`browser-request.v1` fingerprint and safe digest/length summary are persisted. Any URL, operation,
+selector, value, path, confirmation, or parameter-shape substitution is rejected before claim with
+`task_request_mismatch`; confirmation is a one-shot transition. Receipts and observability omit raw
+queries, paths, profiles, cookies, headers, credentials, and page payloads.
+
 `browser_automation` is a default-off, Reality-only capability. It accepts only explicit
 `http/https` domains and bounded operations, runs through a per-task isolated browser profile,
 and returns redacted bounded projections. High-risk operations require explicit confirmation;

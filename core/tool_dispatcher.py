@@ -720,10 +720,13 @@ async def _browser_automation_wrapper(
     principal = TaskPrincipal.reality(user_id or "", char_id or "")
     idem = hashlib.sha256(json.dumps([url, operation, selector, value, path], separators=(",", ":")).encode()).hexdigest()
     try:
-        receipt = browser.create_task(principal, url=url, operation=operation, idempotency_key=idem, confirmed=confirmed)
+        call_params = {"selector": selector, "value": value, "path": path} if any((selector, value, path)) else {}
+        receipt = browser.create_task(principal, url=url, operation=operation, params=call_params, idempotency_key=idem, confirmed=confirmed)
         if receipt["status"] == "waiting_confirm":
-            return json.dumps({"receipt": receipt, "status": "waiting_confirm"}, ensure_ascii=False)
-        result = await browser.run_task(principal, receipt["task_id"], url=url, operation=operation, confirmed=confirmed, params={"selector": selector, "value": value, "path": path} if any((selector, value, path)) else {})
+            if not confirmed:
+                return json.dumps({"receipt": receipt, "status": "waiting_confirm"}, ensure_ascii=False)
+            receipt = browser.confirm_task(principal, receipt["task_id"])
+        result = await browser.run_task(principal, receipt["task_id"], url=url, operation=operation, confirmed=confirmed, params=call_params)
         return json.dumps({"receipt": result.get("receipt"), "result": result.get("result")}, ensure_ascii=False)
     except browser.BrowserError as exc:
         return json.dumps({"status": "failed", "error_code": exc.code}, ensure_ascii=False)
@@ -1564,8 +1567,8 @@ _TOOL_REGISTRY["process_run"] = {
         "program": {"type": "string", "description": "workspace 内的相对程序路径，默认只允许 .py。"},
         "args": {"type": "array", "items": {"type": "string", "maxLength": 2048}, "maxItems": 64, "description": "结构化程序参数，不是 shell 命令字符串。"},
         "interpreter": {"type": "string", "enum": ["python", "python3"], "description": "已配置的解释器 allowlist 名称。"},
-        "wall_seconds": {"type": "integer", "minimum": 1, "maximum": 900},
-        "output_bytes": {"type": "integer", "minimum": 1, "maximum": 1048576},
+        "wall_seconds": {"type": "integer", "minimum": 1, "maximum": 900, "description": "进程允许运行的最长秒数，超时会以未知结果结束。"},
+        "output_bytes": {"type": "integer", "minimum": 1, "maximum": 1048576, "description": "stdout 与 stderr 合计的最大字节数，超出部分会截断。"},
     }, "required": ["program"]},
     "examples": ["运行工作区里的整理脚本"],
     "keywords": ["运行脚本", "执行程序", "整理工作区"],
@@ -1579,12 +1582,12 @@ _TOOL_REGISTRY["browser_automation"] = {
     "category": "browser",
     "effect": "write",
     "parameters": {"type": "object", "properties": {
-        "url": {"type": "string", "maxLength": 2048},
-        "operation": {"type": "string", "enum": ["navigate", "read_page", "click", "fill", "select", "login", "pay", "post", "delete", "send_email", "change_password", "upload", "download"]},
-        "selector": {"type": "string", "maxLength": 256},
-        "value": {"type": "string", "maxLength": 2000},
-        "path": {"type": "string", "maxLength": 1024},
-        "confirmed": {"type": "boolean"},
+        "url": {"type": "string", "maxLength": 2048, "description": "仅限配置允许域名的 http/https 目标 URL。"},
+        "operation": {"type": "string", "enum": ["navigate", "read_page", "click", "fill", "select", "login", "pay", "post", "delete", "send_email", "change_password", "upload", "download"], "description": "要执行的受限浏览器操作。"},
+        "selector": {"type": "string", "maxLength": 256, "description": "页面元素选择器；仅用于需要定位元素的操作。"},
+        "value": {"type": "string", "maxLength": 2000, "description": "填充或选择操作使用的值。"},
+        "path": {"type": "string", "maxLength": 1024, "description": "Workspace 内文件的相对路径；仅用于上传或下载。"},
+        "confirmed": {"type": "boolean", "description": "是否已有用户对高风险操作的明确确认。"},
     }, "required": ["url", "operation"]},
     "examples": ["读取已允许域名的网页摘要"],
     "keywords": ["浏览网页", "网页操作", "打开网页"],

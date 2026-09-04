@@ -162,7 +162,7 @@ async def create_agent_runtime_browser_task(body: _BrowserTaskRequest, _auth=Dep
     from core.agent_runtime.browser import BrowserError, create_task
     from core.agent_runtime.models import TaskPrincipal
     try:
-        return create_task(TaskPrincipal.reality(body.uid, body.char_id), url=body.url, operation=body.operation, idempotency_key=body.idempotency_key, confirmed=body.confirmed, ttl_seconds=body.ttl_seconds)
+        return create_task(TaskPrincipal.reality(body.uid, body.char_id), url=body.url, operation=body.operation, idempotency_key=body.idempotency_key, confirmed=body.confirmed, ttl_seconds=body.ttl_seconds, params=body.params)
     except BrowserError as exc:
         raise HTTPException(status_code=422, detail={"code": exc.code}) from exc
 
@@ -186,23 +186,32 @@ async def get_agent_runtime_browser_task(task_id: str, uid: str = Query(...), ch
 
 @router.post("/agent-runtime-browser/tasks/{task_id}/confirm", summary="Confirm a high-risk browser task")
 async def confirm_agent_runtime_browser_task(task_id: str, uid: str = Query(...), char_id: str = Query(...), _auth=Depends(require_scopes("chat"))):
-    from core.agent_runtime.browser import confirm_task
+    from core.agent_runtime.browser import BrowserError, confirm_task
     from core.agent_runtime.models import TaskPrincipal
-    return confirm_task(TaskPrincipal.reality(uid, char_id), task_id)
+    try:
+        return confirm_task(TaskPrincipal.reality(uid, char_id), task_id)
+    except BrowserError as exc:
+        raise HTTPException(status_code=422, detail={"code": exc.code}) from exc
 
 
 @router.post("/agent-runtime-browser/tasks/{task_id}/pause", summary="Pause a browser task")
 async def pause_agent_runtime_browser_task(task_id: str, uid: str = Query(...), char_id: str = Query(...), _auth=Depends(require_scopes("chat"))):
-    from core.agent_runtime.browser import pause_task
+    from core.agent_runtime.browser import BrowserError, pause_task
     from core.agent_runtime.models import TaskPrincipal
-    return pause_task(TaskPrincipal.reality(uid, char_id), task_id)
+    try:
+        return pause_task(TaskPrincipal.reality(uid, char_id), task_id)
+    except BrowserError as exc:
+        raise HTTPException(status_code=422, detail={"code": exc.code}) from exc
 
 
 @router.post("/agent-runtime-browser/tasks/{task_id}/cancel", summary="Cancel a browser task")
 async def cancel_agent_runtime_browser_task(task_id: str, uid: str = Query(...), char_id: str = Query(...), _auth=Depends(require_scopes("chat"))):
-    from core.agent_runtime.browser import cancel_task
+    from core.agent_runtime.browser import BrowserError, cancel_task
     from core.agent_runtime.models import TaskPrincipal
-    return cancel_task(TaskPrincipal.reality(uid, char_id), task_id)
+    try:
+        return cancel_task(TaskPrincipal.reality(uid, char_id), task_id)
+    except BrowserError as exc:
+        raise HTTPException(status_code=422, detail={"code": exc.code}) from exc
 
 
 @router.get(
