@@ -42,7 +42,7 @@ from admin.routers import (
     users, memory, relations,
     system, lorebook,
     settings_proxy, settings_llm, settings_misc, settings_prompt_assets,
-    settings_screen_peek, settings_tool_loop, settings_thinking, settings_relay, settings_feature_flags, settings_mcp, settings_tools,
+    settings_screen_peek, settings_tool_loop, settings_thinking, settings_relay, settings_feature_flags, settings_mcp, settings_tools, settings_browser,
     character, chat, owner_turn, diary_sync,
     scheduler, watch, sensor, period,
     garden, mobile, diary, chat_log,
@@ -80,6 +80,7 @@ app.include_router(settings_relay.router,         prefix="", tags=["设置-中�
 app.include_router(settings_feature_flags.router, prefix="", tags=["设置-功能开关"])
 app.include_router(settings_mcp.router,           prefix="", tags=["设置-MCP"])
 app.include_router(settings_tools.router,         prefix="", tags=["设置-工具"])
+app.include_router(settings_browser.router,        prefix="", tags=["设置-浏览器"])
 app.include_router(character.router,      prefix="",           tags=["角色卡"])
 app.include_router(chat.router,           prefix="",           tags=["对话"])
 app.include_router(owner_turn.router,      prefix="",           tags=["Owner Turn"])

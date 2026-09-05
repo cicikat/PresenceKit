@@ -20,7 +20,8 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'brief-223-rpg-dream-admin-2';
+const ADMIN_UI_FRAGMENT_VERSION = 'brief-239-browser-admin-1';
+// legacy cache marker: ADMIN_UI_FRAGMENT_VERSION = 'brief-195-mcp-autonomy-signal-1'
 // Legacy cache marker retained for compatibility checks: brief-195-mcp-autonomy-signal-1
 // ADMIN_UI_FRAGMENT_VERSION = 'brief-195-mcp-autonomy-signal-1'
 
@@ -38,6 +39,7 @@ const ADMIN_PAGE_CONTEXT = Object.freeze({
   tools: {related: ['mcp', 'character']},
   mcp: {related: ['tools']},
   'owner-turn-api': {related: ['auth-tokens', 'status']},
+  'agent-runtime-browser': {related: ['tools', 'owner-turn-api']},
   'relationship-facts': {related: ['character', 'observe-memory']},
   'auth-tokens': {related: ['users']},
   status: {related: ['model-routing', 'auth-tokens']},
@@ -245,6 +247,7 @@ async function goto(page, {reloadFragment = false} = {}) {
     mcp:             loadMcpPage,
     tools:           loadToolsPage,
     'owner-turn-api': loadOwnerTurnApiPage,
+    'agent-runtime-browser': loadBrowserRuntimePage,
     'relationship-facts': loadRelationshipFactsPage,
     character:       loadCharacterPage,
     lorebook:        () => { loadLorebook(); loadJbEntries(); },

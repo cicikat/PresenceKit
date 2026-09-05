@@ -338,6 +338,12 @@ always disables execution. Desktop and mobile do not yet expose a task/result co
 Brief 239 binds each task to a normalized `http/https` URL (fragment removed, query retained),
 operation, typed bounded parameters, Reality principal, and Workspace path digest. The server
 stores only a `browser-request.v1` fingerprint and safe summaries; substitutions fail before claim
+
+Browser policy and task control are owned by the backend admin surface. The admin-only
+`GET/PUT /settings/agent-runtime-browser` contract edits the local allowlist, worker adapter,
+bounded limits, and upload/download switches; task creation and confirmation use the same
+backend-owned owner/character scope. Desktop clients do not expose browser task submission or
+require a manually entered `botUserId`.
 with `task_request_mismatch`. High-risk confirmation is a one-shot state transition, while raw
 queries, paths, profiles, credentials, and page payloads stay out of receipts and observability.
 
