@@ -84,6 +84,17 @@ def _validate_url(url: str, p: BrowserPolicy) -> str:
     return parsed._replace(scheme=parsed.scheme.lower(), netloc=parsed.netloc.lower(), fragment="").geturl()
 
 
+def _validate_final_url(url: str, p: BrowserPolicy) -> str:
+    """Validate a post-navigation URL without accepting a cross-domain redirect."""
+    parsed = urlparse(str(url or ""))
+    host = (parsed.hostname or "").lower().rstrip(".")
+    if parsed.scheme.lower() not in {"http", "https"} or not host:
+        raise BrowserError("redirect_url_invalid")
+    if not any(host == domain or host.endswith("." + domain) for domain in p.allowed_domains):
+        raise BrowserError("redirect_domain_not_allowed")
+    return parsed._replace(scheme=parsed.scheme.lower(), netloc=parsed.netloc.lower(), fragment="").geturl()
+
+
 def _canonical_params(operation: str, params: Mapping[str, Any] | None) -> dict[str, Any]:
     raw = dict(params or {})
     allowed = {"selector", "value", "path"}
@@ -113,6 +124,36 @@ def _request_binding(principal: TaskPrincipal, url: str, operation: str, params:
     fingerprint = hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     summary = {"schema_version": "browser-request.v1", "url_digest": hashlib.sha256(canonical_url.encode()).hexdigest()[:24], "operation": operation, "confirmed": bool(confirmed), "params": {k: {"type": "string", "length": len(v), "digest": hashlib.sha256(v.encode()).hexdigest()[:24]} for k, v in canonical_params.items()}}
     return fingerprint, summary
+
+
+def _validate_task_request(
+    principal: TaskPrincipal,
+    task_id: str,
+    *,
+    url: str,
+    operation: str,
+    params: Mapping[str, Any] | None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Validate a caller-supplied request before any task state mutation.
+
+    The admin confirmation endpoint must not grant confirmation first and only
+    discover a URL/operation/parameter substitution while running. Keeping
+    this check in the browser service ensures every internal caller uses the
+    same immutable request binding.
+    """
+    try:
+        task = task_manager.get_task(principal, task_id)
+    except task_manager.TaskManagerError as exc:
+        raise BrowserError(exc.code) from exc
+    _check(principal, url, operation, confirmed=True)
+    canonical_params = _canonical_params(operation, params)
+    requested_fingerprint, _ = _request_binding(
+        principal, url, operation, canonical_params,
+        confirmed=bool(task.get("confirmation_required") and task.get("confirmation_granted")),
+    )
+    if requested_fingerprint != task.get("request_fingerprint"):
+        raise BrowserError("task_request_mismatch")
+    return task, canonical_params
 
 
 def _check(principal: TaskPrincipal, url: str, operation: str, *, confirmed: bool = False) -> BrowserPolicy:
@@ -211,10 +252,10 @@ class BrowserWorker:
 
     async def execute(self, principal: TaskPrincipal, lease: TaskLease, *, url: str, operation: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         p = _check(principal, url, operation, confirmed=True)
-        if self.adapter is None:
-            raise BrowserError("browser_adapter_unavailable")
         self._active.add(lease.task_id)
         try:
+            if self.adapter is None:
+                raise BrowserError("browser_adapter_unavailable")
             current = task_manager.get_task(principal, lease.task_id)
             if current.get("cancel_requested"):
                 receipt = task_manager.acknowledge_cancel(principal, lease)
@@ -285,9 +326,7 @@ class PlaywrightAdapter:
             try:
                 page = await browser.new_page()
                 await page.goto(url, wait_until="domcontentloaded", timeout=p.worker_timeout_seconds * 1000)
-                final_host = (urlparse(page.url).hostname or "").lower().rstrip(".")
-                if not any(final_host == domain or final_host.endswith("." + domain) for domain in p.allowed_domains):
-                    raise BrowserError("redirect_domain_not_allowed")
+                _validate_final_url(page.url, p)
                 selector = str(params.get("selector") or "")[:256]
                 if operation == "click":
                     await page.locator(selector).click(timeout=5000)
@@ -343,24 +382,22 @@ def create_task(principal: TaskPrincipal, *, url: str, operation: str, idempoten
     p = _check(principal, url, operation, confirmed=True)
     normalized_url = _validate_url(url, p)
     canonical_params = _canonical_params(operation, params)
-    fingerprint, summary = _request_binding(principal, normalized_url, operation, canonical_params, confirmed=confirmed)
-    receipt, _ = task_manager.create_task(principal, capability=BROWSER_CAPABILITY, source="browser", idempotency_key=idempotency_key, ttl_seconds=ttl_seconds, causation_ref=causation_ref, enqueue=operation not in CONFIRM_OPERATIONS or confirmed, request_context={"url_digest": summary["url_digest"], "operation": operation, "params": summary["params"]}, request_fingerprint=fingerprint, request_summary=summary, confirmation_required=operation in CONFIRM_OPERATIONS)
+    fingerprint, summary = _request_binding(principal, normalized_url, operation, canonical_params, confirmed=False)
+    # A caller-provided ``confirmed`` flag never skips the durable confirmation
+    # state.  High-risk work is always parked first; only confirm_task() may
+    # grant the one-shot transition to queued.
+    try:
+        receipt, _ = task_manager.create_task(principal, capability=BROWSER_CAPABILITY, source="browser", idempotency_key=idempotency_key, ttl_seconds=ttl_seconds, causation_ref=causation_ref, enqueue=operation not in CONFIRM_OPERATIONS, request_context={"url_digest": summary["url_digest"], "operation": operation, "params": summary["params"]}, request_fingerprint=fingerprint, request_summary=summary, confirmation_required=operation in CONFIRM_OPERATIONS)
+    except task_manager.TaskManagerError as exc:
+        raise BrowserError(exc.code) from exc
     _stats["submitted"] += 1
-    if operation in CONFIRM_OPERATIONS and not confirmed:
+    if operation in CONFIRM_OPERATIONS:
         receipt = task_manager.mark_waiting_confirmation(principal, receipt["task_id"])
     return receipt
 
 
 async def run_task(principal: TaskPrincipal, task_id: str, *, url: str, operation: str, confirmed: bool = False, params: dict[str, Any] | None = None) -> dict[str, Any]:
-    try:
-        task = task_manager.get_task(principal, task_id)
-    except task_manager.TaskManagerError as exc:
-        raise BrowserError(exc.code) from exc
-    p = _check(principal, url, operation, confirmed=True)
-    canonical_params = _canonical_params(operation, params)
-    requested_fingerprint, _ = _request_binding(principal, url, operation, canonical_params, confirmed=bool(task.get("confirmation_required") and task.get("confirmation_granted")))
-    if requested_fingerprint != task.get("request_fingerprint"):
-        raise BrowserError("task_request_mismatch")
+    task, canonical_params = _validate_task_request(principal, task_id, url=url, operation=operation, params=params)
     if task["status"] == TaskStatus.WAITING_CONFIRM.value:
         raise BrowserError("confirmation_required")
     expected_confirmed = bool(
@@ -379,6 +416,30 @@ async def run_task(principal: TaskPrincipal, task_id: str, *, url: str, operatio
         raise BrowserError("task_not_queued")
     worker = _worker or BrowserWorker(_adapter)
     return await worker.execute(principal, lease, url=url, operation=operation, params=canonical_params)
+
+
+async def confirm_and_run_task(
+    principal: TaskPrincipal,
+    task_id: str,
+    *,
+    url: str,
+    operation: str,
+    params: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Validate the immutable request, then confirm and execute it.
+
+    Validation deliberately precedes confirmation so a malformed or
+    substituted admin request cannot mutate a waiting task into a runnable
+    state.
+    """
+    task, _ = _validate_task_request(principal, task_id, url=url, operation=operation, params=params)
+    if task.get("status") != TaskStatus.WAITING_CONFIRM.value:
+        raise BrowserError("task_not_waiting_confirmation")
+    try:
+        confirm_task(principal, task_id)
+    except BrowserError:
+        raise
+    return await run_task(principal, task_id, url=url, operation=operation, confirmed=True, params=params)
 
 
 def cancel_task(principal: TaskPrincipal, task_id: str) -> dict[str, Any]:

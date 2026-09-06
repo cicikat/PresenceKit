@@ -114,12 +114,11 @@ async def create_browser_task(body: BrowserTaskRequest, _auth=Depends(require_sc
 
 @router.post("/settings/agent-runtime-browser/tasks/{task_id}/confirm", summary="确认并执行高风险浏览器任务")
 async def confirm_browser_task(task_id: str, body: BrowserTaskRequest, _auth=Depends(require_scopes("admin"))):
-    from core.agent_runtime.browser import BrowserError, confirm_task, run_task
+    from core.agent_runtime.browser import BrowserError, confirm_and_run_task
     from core.agent_runtime.models import TaskPrincipal
     uid, char_id = _scope()
     try:
         principal = TaskPrincipal.reality(uid, char_id)
-        confirm_task(principal, task_id)
-        return await run_task(principal, task_id, url=body.url, operation=body.operation, confirmed=True, params=body.params)
+        return await confirm_and_run_task(principal, task_id, url=body.url, operation=body.operation, params=body.params)
     except BrowserError as exc:
         raise HTTPException(status_code=422, detail={"code": exc.code}) from exc

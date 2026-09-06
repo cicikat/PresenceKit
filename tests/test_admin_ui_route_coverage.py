@@ -33,12 +33,6 @@ _ROUTE_RE = re.compile(r'@router\.(post|patch|put)\(\s*"([^"]+)"')
 NO_ADMIN_UI_WHITELIST: dict[tuple[str, str], str] = {
     ("POST", "/dream/rpg/turn"): "RPG runtime client route",
     ("POST", "/dream/rpg/corrections"): "RPG runtime correction route",
-    # Browser task lifecycle is an owner-client bridge; the admin panel only exposes read-only observability.
-    ("POST", "/agent-runtime-browser/tasks"): "Browser runtime owner bridge task creation; no admin-panel mutation UI",
-    ("POST", "/agent-runtime-browser/tasks/{task_id}/run"): "Browser runtime owner bridge execution; no admin-panel mutation UI",
-    ("POST", "/agent-runtime-browser/tasks/{task_id}/confirm"): "Browser runtime owner bridge confirmation; no admin-panel mutation UI",
-    ("POST", "/agent-runtime-browser/tasks/{task_id}/pause"): "Browser runtime owner bridge pause control; no admin-panel mutation UI",
-    ("POST", "/agent-runtime-browser/tasks/{task_id}/cancel"): "Browser runtime owner bridge cancellation; no admin-panel mutation UI",
     # ── 桌宠客户端（Emerald-client）专属通道 ────────────────────────────
     ("POST", "/desktop/chat"): "桌宠对话入口，由 Emerald-client 直连，非管理面板功能",
     ("POST", "/mobile/chat"): "手机普通对话入口，由 PresenceKit-mobile 直连，非管理面板功能",

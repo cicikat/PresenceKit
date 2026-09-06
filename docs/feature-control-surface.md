@@ -354,3 +354,10 @@ headers, profile paths, URLs, and page source are excluded from observations. Hi
 park in `waiting_confirm`; pause, cancel, timeout, browser disconnect, and unknown results are
 durably represented. Downloads and uploads must use the Workspace capability. The browser
 observability endpoint exposes only effective state, limits, worker health, and aggregate counters.
+
+The backend admin surface is the sole configuration and submission control plane. The former
+`/agent-runtime-browser/*` owner-bridge routes and `GET /observability/agent-runtime-browser` had
+no current Emerald-client source callers after Brief 72 removed the Tauri commands, so the routes,
+legacy request schema, and duplicate serialization have been retired. The three-repository catalog
+and OpenAPI assertions record the deletion. The remaining settings/task projections do not return
+URL/query, cookie, token, profile path, page body, or raw params in receipts/observability.

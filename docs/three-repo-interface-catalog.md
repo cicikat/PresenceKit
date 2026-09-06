@@ -486,9 +486,7 @@ entry point; it records a durable cancel request and never replays or delivers t
 
 | Interface / path | Scope / consumers | Status |
 |---|---|---|
-| `POST /agent-runtime-browser/tasks` and `/tasks/{task_id}/run` | Reality owner tool/admin path; explicit `uid + char_id`, allowlisted URL domain and operation; immutable `browser-request.v1` fingerprint; substitutions rejected before claim | `partial`, backend-only; no client contract |
-| `POST /agent-runtime-browser/tasks/{task_id}/confirm` / `pause` and `GET .../{task_id}` | Scoped owner control or `state.read` receipt query; metadata-only lifecycle | `partial`, backend-only |
-| `GET /observability/agent-runtime-browser` | Admin `state.read`; effective state, domain count, limits, worker health and aggregate counters only | `current`, redacted observability |
+| `/agent-runtime-browser/tasks*` and `GET /observability/agent-runtime-browser` | Brief 72 removed the former Emerald-client Tauri commands; current `rg` finds no source caller | none | `retired`; routes, legacy request schema, whitelist entries and duplicate serialization deleted |
 | `GET/PUT /settings/agent-runtime-browser` | Admin-only browser policy and worker control; allowlist and bounded limits; no credentials/profile/path values | `current`, backend admin surface |
-| `/settings/agent-runtime-browser/tasks*` | Admin-only owner-scoped task submission, confirmation and metadata-only task list; uses backend scheduler owner and active character | `current`, backend admin surface |
+| `/settings/agent-runtime-browser/tasks*` | Admin-only owner-scoped task submission, confirmation and metadata-only task list; uses backend scheduler owner and active character; confirmation revalidates immutable fingerprint before mutation | `current`, sole backend admin submission surface |
 | `browser_automation` | Reality tool loop; isolated per-task profile outside runtime data root, bounded projection, Workspace-only upload/download, remote/Dream/disabled fail closed; one-shot confirmation | `partial`; Playwright binding unavailable in this acceptance environment and no desktop/mobile result UI |

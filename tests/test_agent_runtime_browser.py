@@ -41,6 +41,35 @@ def test_high_risk_operation_waits_for_confirmation(monkeypatch, sandbox):
     assert receipt["status"] == "waiting_confirm"
 
 
+def test_non_allowlisted_domain_is_rejected_before_task_creation(monkeypatch, sandbox):
+    _config(monkeypatch)
+    from core.agent_runtime import TaskPrincipal, browser
+
+    with pytest.raises(browser.BrowserError, match="domain_not_allowed"):
+        browser.create_task(
+            TaskPrincipal.reality("browser-owner", "browser-character"),
+            url="https://not-allowed.example/",
+            operation="read_page",
+            idempotency_key="not-allowed",
+        )
+
+
+def test_high_risk_confirmed_flag_cannot_bypass_waiting_state(monkeypatch, sandbox):
+    _config(monkeypatch)
+    from core.agent_runtime import TaskPrincipal
+    from core.agent_runtime.browser import create_task
+
+    receipt = create_task(
+        TaskPrincipal.reality("browser-owner", "browser-character"),
+        url="https://example.test/post",
+        operation="post",
+        idempotency_key="post-flag",
+        confirmed=True,
+    )
+    assert receipt["status"] == "waiting_confirm"
+    assert receipt["request_summary"]["confirmed"] is False
+
+
 @pytest.mark.asyncio
 async def test_browser_disconnect_becomes_outcome_unknown(monkeypatch, sandbox):
     _config(monkeypatch)
@@ -140,3 +169,40 @@ async def test_high_risk_confirmation_is_one_shot_and_bound(monkeypatch, sandbox
     with pytest.raises(browser.BrowserError, match="task_not_queued"):
         await browser.run_task(principal, task["task_id"], url="https://example.test/pay", operation="pay", confirmed=True)
     assert calls == 1
+
+
+def test_redirect_domain_is_fail_closed(monkeypatch):
+    _config(monkeypatch)
+    from core.agent_runtime import browser
+
+    with pytest.raises(browser.BrowserError, match="redirect_domain_not_allowed"):
+        browser._validate_final_url("https://evil.example/landing?token=redacted", browser.policy())
+
+
+def test_reality_only_and_disabled_modes_fail_closed(monkeypatch, sandbox):
+    from core.agent_runtime import TaskPrincipal, browser
+
+    _config(monkeypatch, enabled=False)
+    with pytest.raises(browser.BrowserError, match="browser_disabled"):
+        browser.create_task(TaskPrincipal.reality("owner", "character"), url="https://example.test", operation="read_page", idempotency_key="disabled")
+
+    _config(monkeypatch, enabled=True)
+    with pytest.raises(browser.BrowserError, match="realm_forbidden"):
+        browser.create_task(TaskPrincipal(uid="owner", char_id="character", realm="dream"), url="https://example.test", operation="read_page", idempotency_key="dream")
+
+    monkeypatch.setattr("core.agent_runtime.browser.is_remote_server", lambda: True)
+    with pytest.raises(browser.BrowserError, match="disabled_remote_server_local_capability"):
+        browser.create_task(TaskPrincipal.reality("owner", "character"), url="https://example.test", operation="read_page", idempotency_key="remote")
+
+
+@pytest.mark.asyncio
+async def test_adapter_unavailable_fails_closed(monkeypatch, sandbox):
+    _config(monkeypatch)
+    from core.agent_runtime import TaskPrincipal, browser
+
+    browser.set_adapter(None)
+    principal = TaskPrincipal.reality("browser-owner", "browser-character")
+    task = browser.create_task(principal, url="https://example.test", operation="read_page", idempotency_key="no-adapter")
+    result = await browser.run_task(principal, task["task_id"], url="https://example.test", operation="read_page")
+    assert result["receipt"]["status"] == "failed"
+    assert result["receipt"]["error_code"] == "browser_adapter_unavailable"

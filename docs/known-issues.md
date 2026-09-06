@@ -5,6 +5,16 @@
 
 ## 当前仍存在
 
+### BROWSER-240：兼容 owner bridge 退役审计
+
+**状态**：`closed`（2026-09-06）
+
+浏览器任务配置与提交已经统一到后端 admin `/settings/agent-runtime-browser`。Brief 72 的
+当前客户端源码已删除 `load_agent_runtime_browser`、`create/run/confirm/pause/cancel` 等
+Tauri command，`rg` 未发现 source caller；本工单删除了旧写/观测路由、请求 schema、UI
+白名单和重复序列化，并在 OpenAPI/三仓总账中记录 retired。admin 仍 fail-closed：高风险
+任务先 `waiting_confirm`，确认前不会执行。
+
 ### RPG Dream client handoff
 
 The RPG backend contract is complete through Brief 222. Desktop dual-column

@@ -61,6 +61,7 @@ scope；只读端点通常允许对应的 read scope。
 | GET/PUT/POST | `/tts-config`、`/tts-config/test` | admin | TTS provider 安全配置与已就绪 provider 的试听 |
 | GET/POST/PATCH/DELETE | `/auth/*` | auth | Token 管理页 |
 | GET/POST/PATCH/DELETE | `/group/*` | group | Stage 群聊管理 |
+| GET/PUT/POST | `/settings/agent-runtime-browser`、`/settings/agent-runtime-browser/tasks*` | admin | 后端唯一浏览器 allowlist、worker 和任务控制面；任务 receipt/观测仅返回脱敏 metadata |
 
 ## 维护约定
 
