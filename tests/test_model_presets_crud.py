@@ -64,6 +64,21 @@ def _auth():
     return {"Authorization": f"Bearer {VALID_TOKEN}"}
 
 
+def test_force_stream_roundtrip_and_protocol_guard(admin_client):
+    client, temp_cfg = admin_client
+    _write_cfg(temp_cfg)
+    route = "/model-presets/presets/deepseek-default"
+    response = client.put(route, json={"force_stream": True}, headers=_auth())
+    assert response.status_code == 200
+    assert response.json()["preset"]["force_stream"] is True
+    assert client.put(route, json={"api_protocol": "responses"}, headers=_auth()).status_code == 422
+    saved = yaml.safe_load(temp_cfg.read_text(encoding="utf-8"))
+    assert saved["model_presets"]["presets"]["deepseek-default"]["force_stream"] is True
+    response = client.put(route, json={"force_stream": False, "api_protocol": "responses"}, headers=_auth())
+    assert response.status_code == 200
+    assert response.json()["preset"]["force_stream"] is False
+
+
 # ── PUT /model-presets/presets/{name} ──────────────────────────────────────────
 
 def test_put_creates_new_preset(admin_client):

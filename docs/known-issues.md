@@ -372,3 +372,7 @@ three-repo interface catalog before client work begins.
   durable trace aggregation survives process restarts. Enforcement remains
   unavailable until the focused S0 matrix and S1 short soak collect the required
   restart, duplicate, multi-channel, and ledger-unavailable samples.
+
+### Forced streaming verification
+
+`observe` (2026-09-09): Chat Completions presets support opt-in force_stream for ordinary generation and tool decisions; incomplete calls are rejected. Real gateway reproduction remains pending, so the original empty completion cause is not confirmed. Admin browser verification is incomplete because this session lacks Browser execution tools; alternatives are JS syntax, configuration API and protocol regressions. Responses/Anthropic forced streaming remains roadmap and unsupported combinations are explicitly rejected.

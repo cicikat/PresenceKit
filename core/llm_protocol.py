@@ -6,6 +6,7 @@ module is the only place that knows either wire format.
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 from dataclasses import dataclass
 from typing import Any, AsyncIterator
 
@@ -577,6 +578,8 @@ async def _create(
         kwargs = dict(gen_kwargs)
         if tools:
             kwargs.update(tools=tools, tool_choice=tool_choice or "auto")
+        if getattr(mc, "force_stream", False) is True:
+            return await _collect_chat_stream(mc, messages, kwargs, capture)
         response = await mc.client.chat.completions.create(model=mc.model, messages=messages, **kwargs)
         capture.response(response)
         return _normalize_chat_completion(mc, response)
@@ -612,6 +615,75 @@ async def _create(
     response = await responses.create(model=mc.model, **kwargs)
     capture.response(response)
     return _normalize_responses(mc, response)
+
+
+async def _collect_chat_stream(mc, messages, kwargs, capture) -> NormalizedResponse:
+    """Buffer a complete SSE turn; never execute partial tool arguments."""
+    stream = await mc.client.chat.completions.create(
+        model=mc.model, messages=messages, **{**kwargs, "stream": True},
+    )
+    parts: list[str] = []
+    calls: dict[int, dict] = {}
+    finish = None
+    usage = None
+    try:
+        async for chunk in stream:
+            usage = getattr(chunk, "usage", None) or usage
+            choices = getattr(chunk, "choices", None)
+            if not choices:
+                continue
+            choice = choices[0]
+            if getattr(choice, "index", 0) != 0:
+                continue
+            if finish is not None:
+                raise _format_error(mc, "Chat stream contains choices after completion")
+            delta = getattr(choice, "delta", None)
+            for key in ("reasoning_content", "reasoning"):
+                capture.add(key, getattr(delta, key, None))
+            text = getattr(delta, "content", None)
+            if text is not None:
+                if not isinstance(text, str):
+                    raise _format_error(mc, "Chat stream content delta is not text")
+                parts.append(text)
+                capture.text.append(text)
+            for call in getattr(delta, "tool_calls", None) or []:
+                index = getattr(call, "index", None)
+                if type(index) is not int or index < 0:
+                    raise _format_error(mc, "Chat stream tool call is missing index")
+                accumulated = calls.setdefault(index, {"id": "", "name": "", "arguments": ""})
+                function = getattr(call, "function", None)
+                for key, fragment in (
+                    ("id", getattr(call, "id", None)),
+                    ("name", getattr(function, "name", None)),
+                    ("arguments", getattr(function, "arguments", None)),
+                ):
+                    if fragment is not None:
+                        if not isinstance(fragment, str):
+                            raise _format_error(mc, "Chat stream tool delta is not text")
+                        accumulated[key] += fragment
+            finish = getattr(choice, "finish_reason", None)
+        if finish is None:
+            raise _format_error(mc, "Chat stream ended before finish_reason")
+        if calls and finish != "tool_calls":
+            raise _format_error(mc, "Chat stream ended without completing tool calls")
+        if finish == "tool_calls" and not calls:
+            raise _format_error(mc, "Chat stream completed tools without tool calls")
+        response = SimpleNamespace(
+            choices=[SimpleNamespace(
+                finish_reason=finish,
+                message=SimpleNamespace(
+                    content="".join(parts),
+                    tool_calls=[SimpleNamespace(
+                        id=call["id"], type="function",
+                        function=SimpleNamespace(name=call["name"], arguments=call["arguments"]),
+                    ) for _, call in sorted(calls.items())],
+                ),
+            )],
+            usage=usage,
+        )
+        return _normalize_chat_completion(mc, response)
+    finally:
+        await stream.close()
 
 
 async def _stream_text(

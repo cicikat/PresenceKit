@@ -59,6 +59,7 @@ class ModelClient:
     params: dict[str, Any]  # merged + whitelist-filtered generation params
     client: Any
     api_protocol: str = "chat_completions"
+    force_stream: bool = False
     base_url: str = ""
     api_key: str = ""
     anthropic_auth_mode: str = "x_api_key"
@@ -318,6 +319,9 @@ def _build_model_client(preset_name: str, *, request_policy: dict[str, float | i
             f"for preset={preset_name!r} provider={kind!r} model={preset.get('model', '')!r}: "
             f"{api_protocol!r}; expected one of {sorted(VALID_API_PROTOCOLS)}"
         )
+    force_stream = preset.get("force_stream", False)
+    if type(force_stream) is not bool or (force_stream and api_protocol != "chat_completions"):
+        raise ValueError("force_stream must be boolean and is supported only for chat_completions")
     anthropic_auth_mode = preset.get("anthropic_auth_mode", "x_api_key")
     if anthropic_auth_mode not in VALID_ANTHROPIC_AUTH_MODES:
         raise ValueError(
@@ -364,6 +368,7 @@ def _build_model_client(preset_name: str, *, request_policy: dict[str, float | i
         params=params,
         client=client,
         api_protocol=api_protocol,
+        force_stream=force_stream,
         base_url=base_url,
         api_key=api_key,
         anthropic_auth_mode=anthropic_auth_mode,

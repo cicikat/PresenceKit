@@ -381,7 +381,8 @@ async def chat(
         _record_debug_request(
             provider=mc.provider_kind, model=mc.model, purpose=call_category,
             messages=request_messages, tools=request_tools or (tools if mode == "xml_fallback" else None),
-            request_kwargs={"api_protocol": getattr(mc, "api_protocol", "chat_completions"), **request_debug},
+            request_kwargs={"api_protocol": getattr(mc, "api_protocol", "chat_completions"), **request_debug,
+                            "stream": getattr(mc, "force_stream", False) is True},
         )
         normalized = await create_protocol_response(
             mc,
@@ -515,7 +516,8 @@ async def chat_turn(
             purpose=call_category,
             messages=prepared,
             tools=tools,
-            request_kwargs={"api_protocol": getattr(mc, "api_protocol", "chat_completions"), "tool_choice": "auto", **gen_kwargs},
+            request_kwargs={"api_protocol": getattr(mc, "api_protocol", "chat_completions"), "tool_choice": "auto", **gen_kwargs,
+                            "stream": getattr(mc, "force_stream", False) is True},
         )
         normalized = await create_protocol_response(
             mc, prepared, tools=tools, tool_choice="auto", gen_kwargs=gen_kwargs,

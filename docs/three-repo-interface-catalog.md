@@ -528,3 +528,7 @@ entry point; it records a durable cancel request and never replays or delivers t
 | `GET/PUT /settings/agent-runtime-browser` | Admin-only browser policy and worker control; allowlist and bounded limits; no credentials/profile/path values | `current`, backend admin surface |
 | `/settings/agent-runtime-browser/tasks*` | Admin-only owner-scoped task submission, confirmation and metadata-only task list; uses backend scheduler owner and active character; confirmation revalidates immutable fingerprint before mutation | `current`, sole backend admin submission surface |
 | `browser_automation` | Reality tool loop; isolated per-task profile outside runtime data root, bounded projection, Workspace-only upload/download, remote/Dream/disabled fail closed; one-shot confirmation | `partial`; Playwright binding unavailable in this acceptance environment and no desktop/mobile result UI |
+
+## Preset forced streaming compatibility (2026-09-09)
+
+`current`: admin Preset editing and existing GET/PUT configuration add force_stream (default false, Chat Completions only), including complete tool-call aggregation before execution. Mobile HTTP/poll/ack/TTL/relay and desktop HTTP/WS contracts remain unchanged. No new client setting or scope. `observe`: browser verification is incomplete (no Browser execution tool), and real gateway/device recovery still needs verification; local regressions cover protocol aggregation, configuration writes and legacy request behavior.

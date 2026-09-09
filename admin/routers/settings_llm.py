@@ -707,6 +707,7 @@ async def set_active_routing(body: ActiveRoutingUpdate, auth=Depends(require_sco
 
 class PresetUpsert(BaseModel):
     provider_kind: Optional[str] = None
+    force_stream: Optional[bool] = None
     api_protocol: Optional[str] = None
     anthropic_auth_mode: Optional[str] = None
     base_url: Optional[str] = None
@@ -783,6 +784,8 @@ async def upsert_preset(name: str, body: PresetUpsert, auth=Depends(require_scop
         existing["params"] = update_data.pop("params")
 
     existing.update(update_data)
+    if existing.get("force_stream") and existing.get("api_protocol", "chat_completions") != "chat_completions":
+        raise HTTPException(status_code=422, detail="强制流式请求目前仅支持 Chat Completions 协议。")
     presets[name] = existing
 
     write_config_file(CONFIG_FILE, full_cfg)

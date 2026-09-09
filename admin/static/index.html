@@ -256,6 +256,10 @@
             </select>
           </label>
           <label class="field">
+            <input type="checkbox" id="mr-preset-force-stream">
+            <span>强制流式请求（仅 Chat Completions；含工具调用，手机仍接收完整回复）</span>
+          </label>
+          <label class="field">
             <span data-i18n="routing.preset.anthropic_auth_label">anthropic_auth_mode（仅 anthropic_messages：认证头）</span>
             <select id="mr-preset-anthropic-auth-mode">
               <option value="x_api_key" data-i18n="routing.preset.anthropic_auth_x_api_key">x_api_key（官方 Anthropic API）</option>
@@ -611,7 +615,7 @@
 <script src="/static/js/status-users.js?v=brief-163-status-config-ux-1"></script>
 <script src="/static/js/runtime-config.js?v=brief-217-event-context-observer-1"></script>
 <script src="/static/js/lorebook.js"></script>
-<script src="/static/js/settings.js?v=image-ocr-routing-1"></script>
+<script src="/static/js/settings.js?v=force-stream-1"></script>
 <script src="/static/js/owner-turn-api.js?v=brief-173-owner-turn-1"></script>
 <script src="/static/js/agent-runtime-browser.js?v=brief-239-browser-admin-1"></script>
 <script src="/static/js/relationship.js"></script>

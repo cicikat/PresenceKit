@@ -390,3 +390,9 @@ preset 侧可选字段，供 `config.thinking.mode: auto` 判断该 preset 走 n
 `GET /settings/prompt-assets` 的 `characters[]` 每项也带 `model_routing`/`effective_profile`/`resolved_chat_preset`
 （`resolve_routing_info()` 现算，fail-soft：`model_presets` 配置缺失/损坏时省略这三个字段，不影响角色列表本身），
 设置页角色列表可以直接读，不必对每个角色再单独调一次 `GET /character/{id}/model-routing`。
+
+### Forced streaming compatibility (2026-09-09)
+
+Preset `force_stream` defaults to false and supports Chat Completions only. The admin Preset editor saves it through PUT `/model-presets/presets/{name}` with hot reload; GET `/model-presets` returns the configuration. All calls using that preset, including tool decisions and final generation, buffer SSE into the existing normalized result. Tool fragments are assembled by index and require a complete finish and valid JSON before execution. Interrupted streams close and fail. Returned reasoning still uses the separate archive. Request snapshots record the actual stream flag.
+
+Mobile still receives complete HTTP JSON; poll, ack, TTL and relay are unchanged. This is gateway compatibility, independent of client typing animation. Unsupported protocol combinations return 422. Real gateway diagnosis remains observe pending deployment verification.
