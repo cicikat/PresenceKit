@@ -486,6 +486,7 @@ async def handle_message(message: dict):
                 exclude_tools=_fast_path_exclude_tools,
                 tool_call_required=_pretool.must_call_tool,
                 required_tool_names=_pretool.required_tool_names,
+                media_refs=media_refs,
                 tool_event_observer=(
                     _desktop_ws.push_tool_status if _desktop_ws.is_connected() else None
                 ),

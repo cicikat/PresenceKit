@@ -280,6 +280,7 @@ async def run_owner_chat_turn(
                     exclude_tools=_fast_path_exclude_tools,
                     tool_call_required=_tool_call_required,
                     required_tool_names=_required_tool_names,
+                    media_refs=media_refs,
                     allowed_tool_categories=allowed_tool_categories,
                     allowed_tool_names=allowed_tool_names,
                 )
@@ -319,6 +320,7 @@ async def run_owner_chat_turn(
                     exclude_tools=_fast_path_exclude_tools,
                     tool_call_required=_tool_call_required,
                     required_tool_names=_required_tool_names,
+                    media_refs=media_refs,
                     allowed_tool_categories=allowed_tool_categories,
                     allowed_tool_names=allowed_tool_names,
                 )

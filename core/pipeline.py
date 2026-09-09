@@ -982,6 +982,7 @@ class Pipeline:
         required_tool_names: list[str] | set[str] | tuple[str, ...] = (),
         allowed_tool_categories: frozenset[str] | None = None,
         allowed_tool_names: frozenset[str] | None = None,
+        media_refs: list[dict] | None = None,
     ):
         """主生成多步调用工具再回答，只在 tool_dispatcher.tool_loop_active(uid) 为真时被调用。
 
@@ -1130,6 +1131,17 @@ class Pipeline:
         mcp_opaque_params_note = format_mcp_opaque_params_note(tools)
 
         loop_msgs = list(messages)
+        image_refs = [
+            ref for ref in (media_refs or [])
+            if isinstance(ref, dict) and ref.get("kind") == "image" and ref.get("sha256")
+        ]
+        if image_refs:
+            loop_msgs.insert(0, {"role": "system", "content": (
+                "本轮收到的图片可再次读取。需要更仔细查看时调用 reread_image，使用下面的 sha256；"
+                "不要猜测或编造指纹：\n" + "\n".join(
+                    f"- {ref.get('filename', 'image')}: {ref['sha256']}" for ref in image_refs[-8:]
+                )
+            ), "_layer": "11.3_image_references"})
         if tool_call_required and not required_from_messages(loop_msgs):
             _grounding = grounding_message(
                 required=True,
