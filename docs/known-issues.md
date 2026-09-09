@@ -376,3 +376,7 @@ three-repo interface catalog before client work begins.
 ### Forced streaming verification
 
 `observe` (2026-09-09): Chat Completions presets support opt-in force_stream for ordinary generation and tool decisions; incomplete calls are rejected. Real gateway reproduction remains pending, so the original empty completion cause is not confirmed. Admin browser verification is incomplete because this session lacks Browser execution tools; alternatives are JS syntax, configuration API and protocol regressions. Responses/Anthropic forced streaming remains roadmap and unsupported combinations are explicitly rejected.
+
+### Mobile typography verification and historical fidelity
+
+`observe` (2026-09-09): reality replies and mobile queue delivery now carry optional inline display_text; Flutter renders hl/big/sm, including reveal and selection. Widget/controller and backend regressions cover live delivery; no physical phone visual verification has been performed. `roadmap`: chat-log history already stores plain text and cannot reconstruct discarded tags after reload; independent Dream/group typography transport is not included in this reality change.

@@ -80,6 +80,7 @@ class MobileChannel(BaseChannel):
         *,
         char_id: str | None = None,
         sticker: dict | None = None,
+        display_text: str | None = None,
     ) -> None:
         await self._write_to_queue(
             content,
@@ -88,6 +89,7 @@ class MobileChannel(BaseChannel):
             msg_id=msg_id,
             char_id=char_id,
             sticker=sticker,
+            display_text=display_text,
         )
 
     async def send_with_behavior(
@@ -157,6 +159,7 @@ class MobileChannel(BaseChannel):
         *,
         char_id: str | None = None,
         sticker: dict | None = None,
+        display_text: str | None = None,
     ) -> None:
         item = None
         try:
@@ -180,6 +183,8 @@ class MobileChannel(BaseChannel):
                     item["char_id"] = char_id
                 if sticker is not None:
                     item["sticker"] = sticker
+                if display_text is not None:
+                    item["display_text"] = display_text
                 # The marker is deliberately tiny: audio stays out of the
                 # durable polling queue and is synthesized only if the mobile
                 # client elected to play it.

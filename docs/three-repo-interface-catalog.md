@@ -532,3 +532,9 @@ entry point; it records a durable cancel request and never replays or delivers t
 ## Preset forced streaming compatibility (2026-09-09)
 
 `current`: admin Preset editing and existing GET/PUT configuration add force_stream (default false, Chat Completions only), including complete tool-call aggregation before execution. Mobile HTTP/poll/ack/TTL/relay and desktop HTTP/WS contracts remain unchanged. No new client setting or scope. `observe`: browser verification is incomplete (no Browser execution tool), and real gateway/device recovery still needs verification; local regressions cover protocol aggregation, configuration writes and legacy request behavior.
+
+## Mobile inline typography (2026-09-09)
+
+`current`: optional display_text on mobile owner-chat/upload JSON and durable poll items retains hl/big/sm styling. Existing reply/content stays plain. Flutter parses a matching display copy only, preserves styles across paragraphs/reveal/selection and copies/quotes plain text. Desktop inline styles are the reference (accent weight 600, 1.18x, .85x/.8 opacity); desktop WS contract is unchanged. Backend admin needs no switch for optional presentation metadata; mobile uses existing font size/theme preferences. Android notifications/TTS consume canonical content, ntfy still sends IDs only. Existing chat-scoped poll observes the same queue field; no new store or permission. Tests cover canonical/display separation, queue ack, phone controller HTTP/poll dedup, stale fallback and animation.
+
+`observe`: device visual verification is pending; Flutter widget tests and Dev APK build are alternative validation. `roadmap`: old plain-text chat-log history cannot restore discarded styles; independent Dream/group display transport is outside the reality implementation.

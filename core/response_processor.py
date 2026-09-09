@@ -213,6 +213,15 @@ def strip_render_tags(text: str) -> str:
     return stripped.strip()
 
 
+def inline_display_text(text: str) -> str:
+    """Keep only desktop inline styling in the optional mobile display copy."""
+    inline_tags = {"<hl>", "</hl>", "<big>", "</big>", "<sm>", "</sm>"}
+    stripped = _RENDER_TAG_RE.sub(
+        lambda match: match.group(0) if match.group(0) in inline_tags else "", text,
+    )
+    return re.sub(r" {2,}", " ", stripped).strip()
+
+
 class ResponseProcessor:
     """回复后处理类，封装模块级函数，供外部按类方式导入使用"""
 

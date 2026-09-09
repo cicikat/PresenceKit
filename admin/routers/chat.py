@@ -370,6 +370,7 @@ async def run_owner_chat_turn(
         from core.coplay.session import is_active as _coplay_is_active
         _web_echo = bool(context.get("web_recall_result"))
         _coplay_echo = _coplay_is_active(user_id, char_id=_frozen_scope.character_id)
+        visible_source = _clean_reply(reply, _turn_char_name) or reply
         _t0 = time.monotonic()
         turn_result = await record_assistant_turn(
             assistant_text=reply,
@@ -394,15 +395,13 @@ async def run_owner_chat_turn(
             raw_user_text=_probe_text,
             media_refs=media_refs,
             event_context=event_context,
+            visible_assistant_text=visible_source,
         )
         _t_post = time.monotonic() - _t0
 
         # Visible reply: strip render/NMP tags only so action descriptions survive
         # for chat texture.  Memory is already scrubbed inside record_assistant_turn.
-        from core.response_processor import strip_render_tags as _strip_tags
-        visible_source = reply
-        if reply:
-            visible_source = _clean_reply(reply, _turn_char_name) or reply
+        from core.response_processor import inline_display_text, strip_render_tags as _strip_tags
         visible_reply = _strip_tags(visible_source) or visible_source
 
         # 流式路径：record 走完后用同一 msg_id 推 canonical 干净版替换临时气泡。
@@ -457,6 +456,8 @@ async def run_owner_chat_turn(
 
         return {
             "reply": visible_reply,
+            **({"display_text": inline_display_text(visible_source)}
+               if provenance_channel == "mobile" else {}),
             "emotion": turn_result.emotion,
             "turn_id": turn_result.turn_id,
             # 流式路径：HTTP msg_id 与 WS 流式帧共享同一 id，

@@ -104,7 +104,7 @@ async def test_mobile_owner_turn_uses_mobile_context_without_desktop_stream(monk
             return [], {}
 
         async def run_llm(self, _messages):
-            return "手机回复"
+            return "<say><hl>手机</hl><big>回复</big></say>"
 
         async def run_llm_stream(self, _messages, **_kwargs):
             raise AssertionError("mobile provenance must not enable desktop stream")
@@ -164,6 +164,8 @@ async def test_mobile_owner_turn_uses_mobile_context_without_desktop_stream(monk
     )
 
     assert result["turn_id"] == result["msg_id"] == "turn-mobile"
+    assert result["reply"] == "手机回复"
+    assert result["display_text"] == "<hl>手机</hl><big>回复</big>"
     assert "affection" not in result
     assert "level" not in result
     assert prompt_channels == ["mobile"]

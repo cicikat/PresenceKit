@@ -391,7 +391,7 @@ PresenceKit-desktop 的 `ChatPanel` 按 `msg_id` 关联两条消息；`message_s
 - `<big>词</big>` — 放大（`font-size: 1.18em`）
 - `<sm>词</sm>` — 缩小（`font-size: 0.85em, opacity: 0.8`）
 
-QQ / mobile / memory / hidden_state 路径无需任何修改 — `strip_render_tags` / `_ALL_TAG_RE`
+QQ / mobile canonical / memory / hidden_state 继续使用纯文本 — `strip_render_tags` / `_ALL_TAG_RE`
 作为通用正则已覆盖这三个标签的剥除。桌面 `inlineStyle.tsx` 的 `renderInlineStyled()` 负责解析渲染。
 
 两种信封均可携带可选 `char_id` 发言人字段；旧客户端忽略未知字段即可。mobile 主动消息队列
@@ -513,3 +513,9 @@ desktop file queue. Desktop-owned actions are sent only through `desktop_ws` and
 existing file fallback. Unknown actions fail closed. Device clients return an `ack` with
 `ok: false` and `error: "unsupported action type"` for unknown action types. This does not change
 the desktop WebSocket v0.1 hello or introduce capability negotiation.
+
+## Mobile inline display copy (2026-09-09)
+
+`/mobile/chat` (including mobile upload replies) and mobile poll queue items may carry `display_text`. The original `reply`/`content` remains canonical plain text for old clients, notifications, voice, quoting and deduplication. The optional copy retains only `<hl>`, `<big>`, `<sm>` tags after normal reply cleanup. HTTP and durable mirror use the same outgoing paragraph layout. The existing poll endpoint exposes the queue field read-only under chat scope; no separate store is introduced. Ack, IDs, TTL, locks and relay signal payloads are unchanged.
+
+Flutter validates that parsing this copy reproduces canonical text, otherwise falls back to canonical. It matches desktop inline rendering: hl uses the theme red color (danger palette slot) and weight 600, big 1.18x, sm .85x and .8 opacity. Parsing precedes animation, styles survive paragraph splitting and text selection. This covers reality HTTP replies, uploads and turn-sink mobile delivery; old plain-text chat-log history cannot recover removed tags. Dream/group formatting outside this reality contract remains roadmap.

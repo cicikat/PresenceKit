@@ -158,6 +158,11 @@ async def _fanout(
         try:
             text_to_send = _visible_text
             send_kwargs = {"behavior": behavior}
+            if name == "mobile":
+                from core.response_processor import inline_display_text
+                styled = inline_display_text(assistant_text)
+                if styled != _visible_text:
+                    send_kwargs["display_text"] = styled
             if char_id is not None:
                 send_kwargs["char_id"] = char_id
             # Desktop, mobile, and device share the canonical turn id so clients
@@ -348,7 +353,7 @@ async def record_assistant_turn(
             pass
 
     targets, failures = await _fanout(
-        assistant_text=assistant_text,
+        assistant_text=visible_assistant_text or assistant_text,
         uid=uid,
         fanout=fanout,
         behavior=behavior,
