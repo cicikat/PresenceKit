@@ -568,6 +568,11 @@ async def _peek_screen_content_wrapper() -> str:
     return await peek_screen_content()
 
 
+async def _reread_image_wrapper(sha256: str, instruction: str = "") -> str:
+    from core.media_processor import reread_cached_image
+    return await reread_cached_image(sha256, instruction)
+
+
 async def _fs_list_wrapper(path: str | None = None, depth: int = 1) -> str:
     from core.tools.fs_browse import fs_list
     return fs_list(path=path, depth=depth)
@@ -1365,6 +1370,19 @@ _TOOL_REGISTRY["toy_pattern"] = {
     "examples": ["让玩具用波浪模式振动", "让设备执行轻柔模式"],
     "keywords": ["玩具模式", "波浪振动"],
     "trace_args": ["pattern_name"],
+}
+
+_TOOL_REGISTRY["reread_image"] = {
+    "func": _reread_image_wrapper,
+    "description": "对已经收到过的图片再次调用视觉模型。需要使用图片消息或上下文中的 sha256；不会修改首次识别缓存。",
+    "dangerous": False,
+    "category": "info",
+    "parameters": {"type": "object", "properties": {
+        "sha256": {"type": "string", "description": "图片的 64 位 sha256 指纹"},
+        "instruction": {"type": "string", "description": "本次想重点查看的内容"},
+    }, "required": ["sha256"]},
+    "examples": ["重新看看刚才那张图里的文字", "仔细确认图片里有几个人"],
+    "keywords": ["重新读图片", "再看一遍图片", "图片里的文字"],
 }
 
 _TOOL_REGISTRY["toy_job_status"] = {

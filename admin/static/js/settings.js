@@ -58,11 +58,8 @@ function onVisionProviderChange() {
   const info = VISION_PROVIDERS[provider] || VISION_PROVIDERS.custom;
   document.getElementById('vision-base-url').value = info.base_url;
   document.getElementById('vision-base-url').readOnly = provider !== 'custom';
-  const sel = document.getElementById('vision-model-select');
-  sel.innerHTML = info.models.map(m => `<option value="${m}">${m}</option>`).join('');
-  if (provider === 'custom') {
-    sel.innerHTML += `<option value="">${escapeHtml(t('status.vision.manual_input', '手动输入'))}</option>`;
-  }
+  const list = document.getElementById('vision-model-options');
+  if (list) list.innerHTML = info.models.map(m => `<option value="${escapeHtml(m)}"></option>`).join('');
 }
 
 function onVisionModelSelect() {}
@@ -75,9 +72,7 @@ async function loadVisionParams() {
     document.getElementById('vision-provider').value = provider;
     onVisionProviderChange();
     if (data.model) {
-      const sel = document.getElementById('vision-model-select');
-      const opt = [...sel.options].find(o => o.value === data.model);
-      if (opt) sel.value = data.model;
+      document.getElementById('vision-model-select').value = data.model;
     }
     if (data.api_key) document.getElementById('vision-api-key').value = data.api_key;
     if (data.base_url) document.getElementById('vision-base-url').value = data.base_url;

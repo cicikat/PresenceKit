@@ -20,7 +20,7 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'brief-239-browser-admin-1';
+const ADMIN_UI_FRAGMENT_VERSION = 'vision-manual-model-1';
 // legacy cache marker: ADMIN_UI_FRAGMENT_VERSION = 'brief-195-mcp-autonomy-signal-1'
 // Legacy cache marker retained for compatibility checks: brief-195-mcp-autonomy-signal-1
 // ADMIN_UI_FRAGMENT_VERSION = 'brief-195-mcp-autonomy-signal-1'

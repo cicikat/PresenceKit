@@ -352,6 +352,30 @@ def parse_file_bytes(data: bytes, filename: str) -> str | None:
     return None
 
 
+async def reread_cached_image(sha256: str, instruction: str = "请重新仔细描述这张图片中的可见内容。") -> str:
+    """主动再次调用视觉模型读取已接收的图片，而不是复用首次缓存。"""
+    from core import llm_client
+    safe = "".join(ch for ch in str(sha256).lower() if ch in "0123456789abcdef")
+    if len(safe) != 64:
+        return "图片指纹无效，请先使用图片消息里的 sha256。"
+    meta_path = get_paths().image_cache_dir() / f"{safe}.json"
+    if not meta_path.exists():
+        return "找不到这张图片的缓存；请让用户重新发送图片。"
+    try:
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        image_path = Path(str(meta.get("image_path") or ""))
+        data = image_path.read_bytes()
+        normalized, media_type = _normalize_image(data, str(meta.get("source_filename") or image_path.name))
+        result = await llm_client.chat([{"role": "user", "content": [
+            {"type": "text", "text": str(instruction or "请重新仔细描述这张图片中的可见内容。")[0:1000]},
+            {"type": "image_url", "image_url": {"url": f"data:{media_type};base64,{base64.b64encode(normalized).decode()}"}},
+        ]}], use_vision=True)
+        return str(result or "视觉模型没有返回结果。")
+    except Exception as exc:
+        logger.warning("[media_processor] reread image failed: %s", exc)
+        return "重新读取图片失败，请稍后再试。"
+
+
 def gc_inbox(max_age_days: int = 7) -> int:
     """删除 inbox/ 中超过 max_age_days 天未被访问的裸上传文件。返回删除数。"""
     inbox_dir = get_paths().inbox_dir()
