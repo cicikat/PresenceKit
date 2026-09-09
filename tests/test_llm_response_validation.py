@@ -100,3 +100,25 @@ def test_desktop_chat_preserves_model_not_found_as_404(monkeypatch):
 
     assert exc.value.status_code == 404
     assert "模型" in exc.value.detail
+
+
+@pytest.mark.parametrize("raw_text,reasoning,expected", [
+    ("", "private reasoning", "raw_text_chars=0 cleaned_text_chars=0 reasoning_chars=17"),
+    ("<think>private</think>", "", "raw_text_chars=22 cleaned_text_chars=0 reasoning_chars=0"),
+])
+def test_empty_response_diagnostics_distinguish_upstream_and_cleanup(monkeypatch, caplog, raw_text, reasoning, expected):
+    import core.llm_client as llm_client
+
+    message = SimpleNamespace(content=raw_text, reasoning_content=reasoning, tool_calls=[])
+    response = SimpleNamespace(choices=[SimpleNamespace(message=message, finish_reason="stop")])
+    model_client = _model_client(response)
+
+    async def passthrough(messages, **_kwargs):
+        return messages
+
+    monkeypatch.setattr(llm_client, "get_model_client", lambda *_args, **_kwargs: model_client)
+    monkeypatch.setattr(llm_client.thinking, "maybe_apply", passthrough)
+    monkeypatch.setattr(llm_client, "_record_api_call", lambda **_kwargs: None)
+    assert asyncio.run(llm_client.chat([{"role": "user", "content": "hello"}])) == ""
+    assert expected in caplog.text
+    assert "private" not in caplog.text

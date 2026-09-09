@@ -13,6 +13,11 @@
 手机已有错误展示与 sending/typing 的 finally 清理；真实中转、手机及桌面 UI 连续
 失败后恢复仍需部署验证。桌面 bridge 对 5xx 保留通用错误，不保证展示后端 detail。
 原报告的“首次失败后一直失败”尚未复现，不能据此认定存在持久会话锁死。
+空输出增加 `llm_client.empty_completion` 元数据日志：协议、结束原因、正文清理前后
+长度、Chat Completions reasoning 长度与原始/归一化工具数，不记录响应正文。
+`observe`：等待中转复现以区分上游空正文、仅思考内容及工具字段适配；目前不能
+从 owner_chat 的空回复日志确认具体根因。Chat Completions 仅在 finish_reason 为
+tool_calls 时接收工具字段，非标准中转结束标记可能使工具调用被忽略，尚未确认本例命中。
 
 ### OCR service and device verification
 

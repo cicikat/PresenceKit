@@ -25,6 +25,34 @@ from core.prompt_style import apply_prompt_style
 
 logger = logging.getLogger(__name__)
 
+
+def _log_empty_completion(mc, normalized, content: str) -> None:
+    """Diagnose empty output without logging response bodies or reasoning."""
+    if content.strip() or normalized.tool_calls:
+        return
+    raw_text = normalized.assistant_text
+    status = normalized.status
+    known_statuses = {
+        "stop", "length", "tool_calls", "content_filter", "end_turn",
+        "max_tokens", "stop_sequence", "tool_use", "completed", "incomplete",
+    }
+    choices = getattr(normalized.raw_response, "choices", None)
+    message = getattr(choices[0], "message", None) if isinstance(choices, list) and choices else None
+    reasoning = getattr(message, "reasoning_content", None)
+    raw_calls = getattr(message, "tool_calls", None)
+    logger.warning(
+        "[llm_client.empty_completion] protocol=%s status=%s "
+        "raw_text_chars=%d cleaned_text_chars=%d reasoning_chars=%d "
+        "raw_tool_calls=%d normalized_tool_calls=%d",
+        getattr(mc, "api_protocol", "chat_completions"),
+        status if status in known_statuses else "unknown",
+        len(raw_text) if isinstance(raw_text, str) else 0,
+        len(content),
+        len(reasoning) if isinstance(reasoning, str) else 0,
+        len(raw_calls) if isinstance(raw_calls, list) else 0,
+        len(normalized.tool_calls),
+    )
+
 # Logging contract: request URLs (and therefore query strings) stay at DEBUG;
 # INFO emits exactly one completed-call summary with model, purpose and latency.
 # The OpenAI SDK uses the ``httpx`` logger for per-request URL lines, so keep it
@@ -370,7 +398,9 @@ async def chat(
             _log_completed_call(provider=mc.provider_kind, model=mc.model, purpose=call_category, started_at=started_at)
             return "__TOOL_CALL__:" + json.dumps(tool_calls, ensure_ascii=False)
         _log_completed_call(provider=mc.provider_kind, model=mc.model, purpose=call_category, started_at=started_at)
-        return thinking.strip_think_tags(normalized.assistant_text) or ""
+        content = thinking.strip_think_tags(normalized.assistant_text) or ""
+        _log_empty_completion(mc, normalized, content)
+        return content
 
     except Exception as e:
         _record_api_call(
@@ -524,6 +554,7 @@ async def chat_turn(
     ]
 
     content = thinking.strip_think_tags(normalized.assistant_text) or ""
+    _log_empty_completion(mc, normalized, content)
     if not tool_calls and _looks_like_leaked_tool_call_markup(content):
         # 网关这一步没能把模型自己的工具调用内部 token 解析成结构化 tool_calls，
         # 原始 token 直接漏进了 content——不能把这个当成真的自然语言回复展示给

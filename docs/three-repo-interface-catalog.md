@@ -20,6 +20,8 @@
   回归验证同一用户失败后可继续发送，桌面空流仍发送既有 stream_end。
 - `observe`：手机 BackendClient 消费错误 detail，ChatController finally 释放发送状态；
   桌面 5xx 仍走通用错误。真实中转和双端 UI 连续失败恢复尚未实测，详见 known-issues。
+- `current`：LLM 空输出诊断沿用后端日志，仅记录协议、结束原因和内容长度/工具数，
+  不新增响应正文落盘、REST/WS 字段或客户端设置；上游根因仍为 `observe`。
 
 ### Image recognition routing (2026-09-09)
 
