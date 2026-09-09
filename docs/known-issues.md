@@ -5,6 +5,15 @@
 
 ## 当前仍存在
 
+### 空回复后的客户端恢复验证
+
+**状态**：`observe`（2026-09-09）。共享 owner chat 已在写入前拒绝空/纯空白正文，
+返回 HTTP 502 与安全提示，不写 assistant 记忆、不广播伪回复。回归覆盖手机与桌面
+流式路径、工具循环开关、失败后同一用户再次发送成功及锁释放。
+手机已有错误展示与 sending/typing 的 finally 清理；真实中转、手机及桌面 UI 连续
+失败后恢复仍需部署验证。桌面 bridge 对 5xx 保留通用错误，不保证展示后端 detail。
+原报告的“首次失败后一直失败”尚未复现，不能据此认定存在持久会话锁死。
+
 ### OCR service and device verification
 
 **Status**: `observe` (2026-09-09). Independent OCR supports GLM Layout Parsing and

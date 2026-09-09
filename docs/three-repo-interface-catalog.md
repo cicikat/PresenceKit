@@ -11,6 +11,16 @@
 
 ## 1. 系统边界与权威来源
 
+### Owner chat 空回复边界（2026-09-09）
+
+- `current`：`/mobile/chat` 与 `/desktop/chat` 共用入口在生成（含工具循环 fallback）
+  结束后拒绝空/纯空白正文，返回 HTTP 502，detail 为安全重试/切换预设提示；不进
+  turn sink，不产生 assistant 历史、广播或 mobile mirror。既有鉴权和成功字段不变。
+- `current`：沿用模型路由管理面，不增加设置或落盘状态；后端记录不含正文的 warning。
+  回归验证同一用户失败后可继续发送，桌面空流仍发送既有 stream_end。
+- `observe`：手机 BackendClient 消费错误 detail，ChatController finally 释放发送状态；
+  桌面 5xx 仍走通用错误。真实中转和双端 UI 连续失败恢复尚未实测，详见 known-issues。
+
 ### Image recognition routing (2026-09-09)
 
 - `current`, `admin-only`: `GET/PUT /image-recognition` configures upload mode and

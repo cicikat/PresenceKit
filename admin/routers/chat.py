@@ -334,8 +334,15 @@ async def run_owner_chat_turn(
                 else:
                     reply = await pipeline.run_llm(messages)
             _t_llm = time.monotonic() - _t0
-        if not reply:
-            reply = ""
+        if not reply or not reply.strip():
+            logger.warning(
+                "[owner_chat] empty model reply channel=%s loop_active=%s",
+                provenance_channel, _loop_active,
+            )
+            raise HTTPException(
+                status_code=502,
+                detail="模型服务未返回回复正文，请重试或切换模型预设。",
+            )
 
         try:
             from core.observe.prompt_capture import update_llm_output as _upd_prompt_out

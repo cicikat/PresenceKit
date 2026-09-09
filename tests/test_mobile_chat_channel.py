@@ -195,13 +195,18 @@ async def test_mobile_chat_dream_guard_blocks_before_owner_turn(sandbox, monkeyp
     assert exc.value.status_code == 409
 
 
-async def test_mobile_chat_reaches_turn_sink_with_pipeline_critical_contract(monkeypatch):
-    """Exercise mobile -> owner chat -> turn sink without mocking either boundary."""
+@pytest.mark.parametrize("empty_reply", [None, "", " \n\t"])
+@pytest.mark.parametrize("origin", ["mobile", "desktop"])
+@pytest.mark.parametrize("loop_active", [False, True])
+async def test_owner_chat_recovers_after_empty_reply(monkeypatch, empty_reply, origin, loop_active):
+    """An empty generation must not write memory or block the next owner turn."""
     from admin.routers import chat, mobile
     from core.memory.scope import MemoryScope
     from core.pipeline import Pipeline
 
     critical_calls = []
+    replies = iter([empty_reply, "mobile reply"])
+    stream_ends = []
 
     class _Character:
         name = "Companion"
@@ -220,7 +225,15 @@ async def test_mobile_chat_reaches_turn_sink_with_pipeline_critical_contract(mon
             return [], {}
 
         async def run_llm(self, _messages):
-            return "mobile reply"
+            return next(replies)
+
+        async def run_llm_stream(self, _messages, **_kwargs):
+            yield next(replies) or ""
+
+        async def run_agentic_loop(self, _messages, *, stream=False, **_kwargs):
+            if stream:
+                return self.run_llm_stream(_messages)
+            return await self.run_llm(_messages)
 
         async def post_process_critical(self, uid, content, reply, **kwargs):
             # Bind against the production method instead of accepting arbitrary
@@ -255,14 +268,34 @@ async def test_mobile_chat_reaches_turn_sink_with_pipeline_critical_contract(mon
     monkeypatch.setattr("core.scheduler.state_machine.notify_owner_turn", lambda _uid: None)
     monkeypatch.setattr("core.scheduler.proactive_ledger.record_user_message", lambda _uid: None)
     monkeypatch.setattr("core.scheduler.sensor_events.notify_chat_happened", lambda: None)
-    monkeypatch.setattr("core.tool_dispatcher.tool_loop_active", lambda _uid: False)
+    monkeypatch.setattr("core.tool_dispatcher.tool_loop_active", lambda _uid: loop_active)
     monkeypatch.setattr(chat, "_probe_and_execute_tools", fake_probe)
     monkeypatch.setattr("core.coplay.session.is_active", lambda *_args, **_kwargs: False)
     monkeypatch.setattr("channels.registry._channels", {})
 
-    result = await mobile.mobile_chat({"message": "hello"}, _auth=True)
+    from unittest.mock import AsyncMock
+    from fastapi import HTTPException
+    from core.conversation_gate import conversation_lock
 
-    assert result["turn_id"] == result["msg_id"] == "turn-mobile-real-chain"
+    monkeypatch.setattr("channels.ui_push.any_connected", lambda: True)
+    monkeypatch.setattr("channels.ui_push.push_stream_start", AsyncMock())
+    monkeypatch.setattr("channels.ui_push.push_stream_delta", AsyncMock())
+    monkeypatch.setattr("channels.ui_push.push_stream_end", AsyncMock(side_effect=lambda mid: stream_ends.append(mid)))
+    monkeypatch.setattr("channels.desktop_ws.push_message", AsyncMock())
+    endpoint = mobile.mobile_chat if origin == "mobile" else chat.desktop_chat
+    with pytest.raises(HTTPException) as exc:
+        await endpoint({"message": "first attempt"}, _auth=True)
+    assert exc.value.status_code == 502
+    assert "回复正文" in exc.value.detail
+    assert critical_calls == []
+    assert not conversation_lock("owner").locked()
+    assert len(stream_ends) == (1 if origin == "desktop" else 0)
+
+    import asyncio
+    result = await asyncio.wait_for(endpoint({"message": "hello"}, _auth=True), timeout=5)
+
+    assert result["turn_id"] == "turn-mobile-real-chain"
+    assert result["msg_id"] == (stream_ends[-1] if origin == "desktop" else result["turn_id"])
     assert len(critical_calls) == 1
     assert critical_calls[0]["provenance_source"] == ""
-    assert critical_calls[0]["event_channel"] == "mobile"
+    assert critical_calls[0]["event_channel"] == origin
