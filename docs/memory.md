@@ -1,5 +1,12 @@
 # docs/memory.md — 记忆子系统设计
 
+## API 思考存档与记忆隔离（2026-09-09）
+
+按用户明确要求，API 实际返回的思考默认存入独立 SQLite archive；此前“思考永不落盘”
+约束改为“不进入对话记忆、检索、prompt 回流或广播”。该 archive 不是 identity/episodic/
+mid_term 写入点，不参加 provenance 固化链。sandbox 路径、250ms SQLite 写锁等待、
+admin-only 列表/详情接口与失败语义见 `model-presets.md`。保留期无限，不自动删除。
+
 ## Memory Event 01: scope-safe retention
 
 The episodic/profile read tools require the current `uid + char_id` scope. The

@@ -2,6 +2,31 @@
 
 ## 概述
 
+### API 返回思考的独立存档（2026-09-09）
+
+模型协议出口默认保存实际返回的思考，不依赖 `thinking.enabled`，也不额外请求思考。
+存储为 sandbox 隔离的 `runtime/observability/llm_reasoning.sqlite3`；没有自动过期或截断，
+没有思考的调用不生成记录。此处只保存 API 已返回的文本，不获取未公开的内部过程。
+Chat Completions 的 `reasoning_content`/字符串 `reasoning`、Anthropic 明文 `thinking`、
+Responses 返回的 reasoning summary/content，以及正文 `<think>`/`<thinking>` 标签内容
+均可保存；加密内容、签名、请求 prompt、API key 与整个 raw response 不保存。
+
+非流式请求在归一化前采集，流式按 delta 采集，正常结束或中断时落盘；中断记录 status 为
+`interrupted`，成功处理为 `completed`（不表示模型未触及 token 上限）。思考标签在可见正文
+中仍被清理，包括拆分标签和未闭合标签，不进入记忆、工具 continuation 或消息广播。
+每次 API 尝试有独立 `call_id`，多步工具循环与重试各存一条；尚不关联聊天 `turn_id`。
+SQLite 写入使用工作线程与 250ms 锁等待，失败只记录错误类型，不让聊天失败。
+
+读取为 admin-only，端点由 `admin/routers/observability.py` 提供：
+
+- `GET /observability/llm-reasoning?limit=50&before=<seq>&model=<model>`：分页元数据，
+  返回 `enabled: true`、`retention: indefinite`、`entries` 与 `next_before`，不含思考正文。
+- `GET /observability/llm-reasoning/{call_id}`：读取该次调用的 `parts[{source,text}]`。
+  缺失返回 404，数据库不可读返回 503；列表读取不会创建数据库。
+
+当前没有管理面板查看页或客户端展开 UI，标准 desktop/mobile token 不具备此 admin 权限。
+未来按聊天回合展示需先补关联键与适当的受限读取契约，不应给客户端增加 admin token。
+
 ### Uploaded image routing and OCR
 
 The admin Model Routing page owns `GET/PUT /image-recognition` (admin scope).

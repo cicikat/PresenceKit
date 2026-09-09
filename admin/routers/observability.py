@@ -7,6 +7,38 @@ from admin.auth import require_scopes
 router = APIRouter()
 
 
+@router.get("/observability/llm-reasoning", summary="列出已保存的模型思考（默认不返回正文）")
+async def llm_reasoning_list(
+    limit: int = Query(50, ge=1, le=100),
+    before: int | None = Query(None, ge=1),
+    model: str = "",
+    _auth=Depends(require_scopes("admin")),
+):
+    import asyncio
+    from core.llm_reasoning_store import query
+    try:
+        entries = await asyncio.to_thread(query, limit=limit, before=before, model=model)
+    except Exception:
+        raise HTTPException(status_code=503, detail="思考存储暂时不可读取") from None
+    return {
+        "enabled": True, "retention": "indefinite", "entries": entries,
+        "next_before": entries[-1]["seq"] if len(entries) == limit else None,
+    }
+
+
+@router.get("/observability/llm-reasoning/{call_id}", summary="按调用编号读取模型返回的思考正文")
+async def llm_reasoning_detail(call_id: str, _auth=Depends(require_scopes("admin"))):
+    import asyncio
+    from core.llm_reasoning_store import query
+    try:
+        entry = await asyncio.to_thread(query, call_id=call_id)
+    except Exception:
+        raise HTTPException(status_code=503, detail="思考存储暂时不可读取") from None
+    if entry is None:
+        raise HTTPException(status_code=404, detail="思考记录不存在")
+    return entry
+
+
 @router.get(
     "/observability/owner-turns",
     summary="读取脱敏 Owner Turn receipt 观测",

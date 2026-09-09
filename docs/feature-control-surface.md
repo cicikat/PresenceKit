@@ -1,5 +1,12 @@
 # 功能控制面事实清单（2026-07-13）
 
+## API 思考存档（2026-09-09）
+
+后端默认记录 API 返回的思考，保留期无限；这是存储行为，与控制模型是否生成思考的
+`thinking.enabled` 独立，不新增开关。只读 `GET /observability/llm-reasoning` 与
+`/{call_id}` 均为 admin-only，列表不含正文，详情按需读取。管理面板与双端展开 UI
+为 roadmap，标准客户端 token 无权读取，不能把本地展示偏好当作存储开关。
+
 管理服务的设置面分三层：
 
 RPG Dream's `rpg_kp` route is a backend capability, not a client setting; its effective route is visible with the other model categories.

@@ -11,6 +11,17 @@
 
 ## 1. 系统边界与权威来源
 
+### API 思考独立存档（2026-09-09）
+
+- `current`：协议边界默认保存实际返回的 thinking/reasoning/inline 标签内容，独立
+  SQLite 存储走 sandbox，不写对话记忆或广播。保留期无限，写入失败不阻断生成。
+- `current`：admin-only `GET /observability/llm-reasoning` 支持 limit/before/model，
+  列表为元数据；`GET /observability/llm-reasoning/{call_id}` 返回 parts 思考文本。
+  call_id 每次 API 尝试独立，重试不覆盖；正常完成和中断分开标记。
+- `roadmap`：管理页/双端展开 UI、chat turn_id 关联、客户端适用的受限读取契约。
+  不给标准 desktop/mobile token 扩大权限，不改变现有 HTTP/WS 回复、ack、TTL 或中继。
+- `observe`：真实中转与真机验收尚未完成；本地测试不代表所有网关思考字段均可获取。
+
 ### Owner chat 空回复边界（2026-09-09）
 
 - `current`：`/mobile/chat` 与 `/desktop/chat` 共用入口在生成（含工具循环 fallback）

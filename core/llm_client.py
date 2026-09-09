@@ -545,8 +545,16 @@ async def chat_turn(
     # content 里内联的 <think>/<thinking> 标签剥除。
     for item in continuation_items:
         item.pop("reasoning_content", None)
+        item.pop("reasoning", None)
         if isinstance(item.get("content"), str) and item["content"]:
             item["content"] = thinking.strip_think_tags(item["content"])
+        elif isinstance(item.get("content"), list):
+            item["content"] = [
+                {**block, "text": thinking.strip_think_tags(block["text"])}
+                if isinstance(block, dict) and block.get("type") in {"text", "output_text"}
+                and isinstance(block.get("text"), str) else block
+                for block in item["content"]
+            ]
 
     tool_calls = [
         {"id": call.id, "name": call.name, "arguments": call.arguments}
@@ -583,9 +591,6 @@ async def chat_turn(
     )
 
 
-_THINK_BUFFER_TIMEOUT_S = 60.0
-
-
 async def chat_stream(
     messages: list[dict],
     max_tokens_override: int | None = None,
@@ -602,10 +607,8 @@ async def chat_stream(
     is_proactive: 本次是否 scheduler 主动消息（Brief 32）。
 
     native reasoning 防线：
-      - delta.reasoning_content 从不读取（只读 delta.content），天然跳过。
-      - 内联 <think>/<thinking>：首个非空 chunk 以其开头则进入缓冲态，直到读到闭合标签
-        才开始对外 yield；缓冲超 60s 或流结束仍未闭合 → fail-open，剥掉已缓冲的开标签
-        前缀后放行剩余部分。
+      - 协议边界默认独立保存 reasoning；此处只消费正文。
+      - 内联标签按跨 chunk 状态机剥离，未闭合内容也只留独立 archive，不展示。
 
     Brief 122 补：chat_turn()（工具决策步）已经会挡掉模型自己泄漏的工具调用内部
     special token（如 <｜tool▁calls▁begin｜>），但那次修复漏了这条纯文本的流式
@@ -643,10 +646,7 @@ async def chat_stream(
         request_kwargs={"api_protocol": getattr(mc, "api_protocol", "chat_completions"), "stream": True, **_gen_kwargs},
     )
 
-    first_piece_seen = False
-    in_think_buffer = False
-    buf = ""
-    buf_deadline = 0.0
+    think_filter = thinking.ThinkTextFilter()
 
     leak_buf = ""
     leaked = False
@@ -687,48 +687,16 @@ async def chat_stream(
         out, leak_buf = leak_buf, ""
         return out or None
 
-    async for piece in stream_text(mc, messages, gen_kwargs=_gen_kwargs):
-
-        if not first_piece_seen:
-            first_piece_seen = True
-            if thinking.THINK_OPEN_RE.match(piece):
-                in_think_buffer = True
-                buf = piece
-                buf_deadline = time.monotonic() + _THINK_BUFFER_TIMEOUT_S
-                continue
-
-        if in_think_buffer:
-            buf += piece
-            m = thinking.THINK_CLOSE_RE.search(buf)
-            if m:
-                in_think_buffer = False
-                remainder = buf[m.end():]
-                buf = ""
-                safe = _leak_scan(remainder) if remainder else None
-                if safe:
-                    yield safe
-                continue
-            if time.monotonic() >= buf_deadline:
-                in_think_buffer = False
-                stripped = thinking.THINK_OPEN_RE.sub("", buf, count=1)
-                buf = ""
-                safe = _leak_scan(stripped) if stripped else None
-                if safe:
-                    yield safe
-                continue
-            continue
-
-        safe = _leak_scan(piece)
-        if safe:
-            yield safe
-
-    # 流结束但仍在缓冲态（未闭合）→ fail-open，把已缓冲内容剥掉开标签后放行。
-    if in_think_buffer and buf:
-        stripped = thinking.THINK_OPEN_RE.sub("", buf, count=1)
-        if stripped:
-            safe = _leak_scan(stripped)
+    from contextlib import aclosing
+    async with aclosing(stream_text(mc, messages, gen_kwargs=_gen_kwargs)) as source:
+        async for piece in source:
+            safe = _leak_scan(think_filter.feed(piece))
             if safe:
                 yield safe
+
+    safe = _leak_scan(think_filter.finish())
+    if safe:
+        yield safe
 
     tail = _leak_flush()
     if tail:

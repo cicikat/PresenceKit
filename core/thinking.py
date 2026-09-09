@@ -7,8 +7,8 @@ core/thinking — Brief 32：内部思考链（原生 reasoning + 前置独白�
   - monologue：主生成前一次轻量调用产出内心活动，注入当轮 messages 尾部（用户消息之前），
     用完即弃。
 
-铁律：思考内容永不进 short_term history、永不广播、永不落 event_log；唯一合法去向是
-当轮主调用的 messages。本模块不做任何持久化。
+思考内容不进 short_term history、不广播、不落 event_log。API 返回的思考由协议边界
+默认写入独立 reasoning archive；本模块只负责正文过滤，不负责持久化。
 """
 from __future__ import annotations
 
@@ -27,18 +27,58 @@ _MONOLOGUE_LAYER = "11.7_inner_monologue"
 # 独白调用的 10s 超时在 core/llm_client.py 的 _CALL_TIMEOUTS["monologue"] 里统一管理。
 _MONOLOGUE_MAX_TOKENS_DEFAULT = 200
 
-# 剥离内联 <think>/<thinking> 标签（含跨行），native 路线三道防线之二。
-_THINK_TAG_RE = re.compile(r"<think(?:ing)?>.*?</think(?:ing)?>", re.S | re.I)
-# 公开给 llm_client.chat_stream() 做流式缓冲判断（开标签探测 / 闭标签搜索）。
-THINK_OPEN_RE = re.compile(r"^\s*<think(?:ing)?>", re.I)
-THINK_CLOSE_RE = re.compile(r"</think(?:ing)?>", re.S | re.I)
-
-
 def strip_think_tags(text: str | None) -> str | None:
     """剥除文本中的 <think>…</think> / <thinking>…</thinking>（含跨行、大小写不敏感）。"""
     if not text:
         return text
-    return _THINK_TAG_RE.sub("", text)
+    filter_ = ThinkTextFilter()
+    return filter_.feed(text) + filter_.finish()
+
+
+class ThinkTextFilter:
+    """Hide complete and interrupted thinking blocks across arbitrary chunks."""
+
+    def __init__(self):
+        self.pending = ""
+        self.closing = ""
+
+    def feed(self, text: str) -> str:
+        self.pending += text
+        visible = []
+        while self.pending:
+            if self.closing:
+                end = self.pending.lower().find(self.closing)
+                if end < 0:
+                    self.pending = self.pending[-(len(self.closing) - 1):]
+                    break
+                self.pending = self.pending[end + len(self.closing):]
+                self.closing = ""
+                continue
+            match = re.search(r"<(think|thinking)>", self.pending, re.I)
+            if match:
+                visible.append(self.pending[:match.start()])
+                self.closing = "</" + match.group(1).lower() + ">"
+                self.pending = self.pending[match.end():]
+                continue
+            keep = 0
+            lower = self.pending.lower()
+            for tag in ("<think>", "<thinking>"):
+                for size in range(1, len(tag)):
+                    if lower.endswith(tag[:size]):
+                        keep = max(keep, size)
+            if keep:
+                visible.append(self.pending[:-keep])
+                self.pending = self.pending[-keep:]
+            else:
+                visible.append(self.pending)
+                self.pending = ""
+            break
+        return "".join(visible)
+
+    def finish(self) -> str:
+        tail = "" if self.closing else self.pending
+        self.pending = ""
+        return tail
 
 
 # ---------------------------------------------------------------------------

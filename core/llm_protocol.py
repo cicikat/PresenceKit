@@ -459,8 +459,8 @@ def _normalize_anthropic_messages(mc: Any, response: Any) -> NormalizedResponse:
             })
         elif block_type in {"thinking", "redacted_thinking"}:
             # Internal reasoning is neither rendered nor carried into the local
-            # loop history.  This matches the system-wide no-thought-persistence
-            # boundary used by the OpenAI-compatible protocols.
+            # loop history. The independent archive already captured returned
+            # plaintext thinking before normalization; it is not prompt memory.
             continue
         else:
             raise _format_error(mc, f"Anthropic Messages content has unknown block type {block_type!r}", response)
@@ -543,7 +543,8 @@ def _normalize_responses(mc: Any, response: Any) -> NormalizedResponse:
             })
             saw_consumable = True
         elif item_type == "reasoning":
-            # Reasoning is neither rendered nor persisted. The current loop has no
+            # Reasoning is archived separately, never rendered or put in history.
+            # The current loop has no
             # stateful previous_response_id contract, so it is deliberately absent
             # from continuation input as well.
             continue
@@ -561,13 +562,14 @@ def _normalize_responses(mc: Any, response: Any) -> NormalizedResponse:
     )
 
 
-async def create(
+async def _create(
     mc: Any,
     messages: list[dict[str, Any]],
     *,
     tools: list[dict[str, Any]] | None,
     tool_choice: str | None,
     gen_kwargs: dict[str, Any],
+    capture,
 ) -> NormalizedResponse:
     """Call the declared wire protocol and normalize its response."""
     protocol = _protocol(mc)
@@ -576,6 +578,7 @@ async def create(
         if tools:
             kwargs.update(tools=tools, tool_choice=tool_choice or "auto")
         response = await mc.client.chat.completions.create(model=mc.model, messages=messages, **kwargs)
+        capture.response(response)
         return _normalize_chat_completion(mc, response)
     if protocol == "anthropic_messages":
         url, headers, payload, timeout = _anthropic_messages_request(
@@ -590,6 +593,7 @@ async def create(
             payload = response.json()
         except Exception as exc:
             raise _format_error(mc, "Anthropic Messages API returned invalid JSON", response) from exc
+        capture.response(payload)
         return _normalize_anthropic_messages(mc, payload)
     if protocol != "responses":
         raise _format_error(mc, "unknown api_protocol")
@@ -606,14 +610,16 @@ async def create(
         kwargs["tools"] = converted_tools
         kwargs["tool_choice"] = tool_choice or "auto"
     response = await responses.create(model=mc.model, **kwargs)
+    capture.response(response)
     return _normalize_responses(mc, response)
 
 
-async def stream_text(
+async def _stream_text(
     mc: Any,
     messages: list[dict[str, Any]],
     *,
     gen_kwargs: dict[str, Any],
+    capture,
 ) -> AsyncIterator[str]:
     """Yield text deltas while validating the declared protocol's stream state."""
     if _protocol(mc) == "chat_completions":
@@ -625,6 +631,8 @@ async def stream_text(
             if not isinstance(choices, list) or not choices:
                 continue
             delta = getattr(choices[0], "delta", None)
+            for key in ("reasoning_content", "reasoning"):
+                capture.add(key, getattr(delta, key, None))
             text = getattr(delta, "content", None)
             if text:
                 yield text
@@ -653,8 +661,14 @@ async def stream_text(
                 except json.JSONDecodeError as exc:
                     raise _format_error(mc, "Anthropic Messages stream contains invalid JSON", response) from exc
                 event_type = event.get("type") if isinstance(event, dict) else None
+                if event_type == "content_block_start":
+                    block = event.get("content_block") or {}
+                    if block.get("type") == "thinking":
+                        capture.add("thinking", block.get("thinking"))
                 if event_type == "content_block_delta":
                     delta = event.get("delta") or {}
+                    if delta.get("type") == "thinking_delta":
+                        capture.add("thinking", delta.get("thinking"))
                     if delta.get("type") == "text_delta":
                         text = delta.get("text")
                         if not isinstance(text, str):
@@ -688,6 +702,9 @@ async def stream_text(
     function_argument_deltas: dict[str, str] = {}
     async for event in stream:
         event_type = getattr(event, "type", None)
+        if event_type in {"response.reasoning_summary_text.delta", "response.reasoning_text.delta"}:
+            source = "reasoning_summary" if "summary" in event_type else "reasoning_content"
+            capture.add(source, getattr(event, "delta", None))
         if event_type == "response.output_text.delta":
             delta = getattr(event, "delta", None)
             if not isinstance(delta, str):
@@ -705,6 +722,13 @@ async def stream_text(
             # response below remains the authoritative normalized result.
             continue
         elif event_type == "response.completed":
+            # The completed response is authoritative; avoid storing both its
+            # reasoning and the same streamed deltas.
+            from core.llm_reasoning_store import Capture
+            final_capture = Capture(mc)
+            final_capture.response(getattr(event, "response", None))
+            if final_capture.parts:
+                capture.parts = final_capture.parts
             normalized = _normalize_responses(mc, getattr(event, "response", None))
             if normalized.tool_calls:
                 raise _format_error(mc, "Responses text stream unexpectedly returned function calls", event)
@@ -718,3 +742,33 @@ async def stream_text(
         # not carry user-visible text and are intentionally ignored.
     if not completed:
         raise _format_error(mc, "Responses stream ended before response.completed")
+
+
+async def create(mc, messages, *, tools=None, tool_choice=None, gen_kwargs):
+    """Archive returned reasoning independently, including rejected completions."""
+    from core.llm_reasoning_store import Capture
+    capture = Capture(mc)
+    try:
+        result = await _create(mc, messages, tools=tools, tool_choice=tool_choice,
+                               gen_kwargs=gen_kwargs, capture=capture)
+        capture.status = "completed"
+        return result
+    finally:
+        await capture.save()
+
+
+async def stream_text(mc, messages, *, gen_kwargs):
+    """Archive reasoning deltas and inline tags, including interrupted streams."""
+    from core.llm_reasoning_store import Capture
+    capture = Capture(mc)
+    source = _stream_text(mc, messages, gen_kwargs=gen_kwargs, capture=capture)
+    try:
+        async for text in source:
+            capture.text.append(text)
+            yield text
+        capture.status = "completed"
+    finally:
+        try:
+            await source.aclose()
+        finally:
+            await capture.save()

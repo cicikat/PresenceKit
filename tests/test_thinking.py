@@ -5,7 +5,7 @@ tests/test_thinking.py — Brief 32 · 内部思考链
   1. 开关关 → 主调用 messages 与现状逐字节一致（回归）。
   2. monologue：注入位置正确、带 _layer、独白失败时静默跳过、≤max_tokens 传参正确。
   3. native 非流式：内联 <think> 被剥（含跨行/变体标签）。
-  4. native 流式：缓冲态直到闭合才 yield；未闭合流 fail-open 放行；超时 fail-open。
+  4. native 流式：思考只留独立 archive，含未闭合及跨 chunk 标签。
   5. extra_body：reasoning_extra_body 出现在请求 kwargs 且不经白名单过滤；
      只在 call_category=="chat" 且解析到 native 路线时生效。
   6. auto 模式判定：reasoning_native true/false 分别走 native/monologue。
@@ -331,7 +331,7 @@ def test_build_reasoning_kwargs_empty_when_no_extra_body(monkeypatch):
 
 
 # ===========================================================================
-# 4. native 流式：缓冲态直到闭合才 yield；fail-open 场景
+# 4. native 流式：思考与可见正文隔离
 # ===========================================================================
 
 def _make_stream_mc(pieces: list[str]):
@@ -385,7 +385,7 @@ async def test_chat_stream_no_think_tag_passthrough_unchanged(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_chat_stream_unclosed_think_fails_open_at_stream_end(monkeypatch):
+async def test_chat_stream_unclosed_think_archived_without_display(monkeypatch):
     from core import llm_client
 
     _disable_thinking(monkeypatch)
@@ -396,8 +396,10 @@ async def test_chat_stream_unclosed_think_fails_open_at_stream_end(monkeypatch):
     async for piece in llm_client.chat_stream([{"role": "user", "content": "hi"}]):
         out.append(piece)
 
-    # fail-open：剥掉开标签前缀后放行剩余内容，而不是永久吞掉。
-    assert "".join(out) == "一直没闭合的思考内容"
+    assert "".join(out) == ""
+    from core.llm_reasoning_store import query
+    entry = query(call_id=query()[0]["call_id"])
+    assert entry["parts"] == [{"source": "inline_think", "text": "一直没闭合的思考内容"}]
 
 
 # ===========================================================================
