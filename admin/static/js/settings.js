@@ -56,8 +56,9 @@ const VISION_PROVIDERS = {
 function onVisionProviderChange() {
   const provider = document.getElementById('vision-provider').value;
   const info = VISION_PROVIDERS[provider] || VISION_PROVIDERS.custom;
-  document.getElementById('vision-base-url').value = info.base_url;
-  document.getElementById('vision-base-url').readOnly = provider !== 'custom';
+  const address = document.getElementById('vision-base-url');
+  if (!address.value.trim()) address.value = info.base_url;
+  address.readOnly = false;
   const list = document.getElementById('vision-model-options');
   if (list) list.innerHTML = info.models.map(m => `<option value="${escapeHtml(m)}"></option>`).join('');
 }
@@ -70,11 +71,13 @@ async function loadVisionParams() {
     document.getElementById('vision-enabled').checked = data.enabled;
     const provider = data.provider || 'gemini';
     document.getElementById('vision-provider').value = provider;
+    document.getElementById('vision-provider').onchange = onVisionProviderChange;
+    document.getElementById('vision-base-url').value = data.base_url || '';
     onVisionProviderChange();
     if (data.model) {
       document.getElementById('vision-model-select').value = data.model;
     }
-    if (data.api_key) document.getElementById('vision-api-key').value = data.api_key;
+    document.getElementById('vision-api-key').value = '';
     if (data.base_url) document.getElementById('vision-base-url').value = data.base_url;
   } catch(e) {
     console.error('加载Vision配置失败', e);
@@ -93,9 +96,56 @@ async function saveVisionParams() {
   };
   try {
     await api('PUT', '/vision-params', body);
+    document.getElementById('vision-api-key').value = '';
     toast(t('common.saved', '已保存'), 'ok');
   } catch(e) {
     toast(t('common.save_failed', '保存失败: {error}', {error: e.message || e}), 'err');
+  }
+}
+
+function renderOcrProtocol() {
+  const layout = document.getElementById('ocr-protocol').value === 'glm_layout_parsing';
+  document.getElementById('ocr-endpoint-field').hidden = !layout;
+  document.getElementById('ocr-base-field').hidden = layout;
+  document.getElementById('ocr-endpoint-field').style.display = layout ? '' : 'none';
+  document.getElementById('ocr-base-field').style.display = layout ? 'none' : '';
+  const address = document.getElementById(layout ? 'ocr-endpoint' : 'ocr-base-url').value.trim();
+  document.getElementById('ocr-request-url').textContent = address ?
+    (layout ? address : address.replace(/\/+$/, '') + '/chat/completions') : '-';
+}
+
+async function loadImageRecognition() {
+  try {
+    const data = await api('GET', '/image-recognition');
+    for (const [id, key] of Object.entries({
+      'image-recognition-mode': 'mode', 'ocr-provider': 'provider', 'ocr-protocol': 'api_protocol',
+      'ocr-model': 'model', 'ocr-base-url': 'base_url', 'ocr-endpoint': 'endpoint_url',
+    })) document.getElementById(id).value = data[key] || '';
+    document.getElementById('ocr-api-key').value = '';
+    document.getElementById('ocr-key-state').textContent = data.has_api_key ? '密钥已配置' : '密钥未配置';
+    document.getElementById('image-recognition-state').textContent =
+      `当前用途：${data.mode === 'ocr' ? 'OCR 文字提取' : '图片理解'} · ${data.effective ? '配置就绪，未验证服务连接' : '配置不完整或未启用'}`;
+    document.getElementById('ocr-protocol').onchange = renderOcrProtocol;
+    document.getElementById('ocr-endpoint').oninput = renderOcrProtocol;
+    document.getElementById('ocr-base-url').oninput = renderOcrProtocol;
+    renderOcrProtocol();
+  } catch (e) {
+    document.getElementById('image-recognition-state').textContent = `加载失败：${e.message}`;
+  }
+}
+
+async function saveImageRecognition() {
+  const body = {};
+  for (const [id, key] of Object.entries({
+    'image-recognition-mode': 'mode', 'ocr-provider': 'provider', 'ocr-protocol': 'api_protocol',
+    'ocr-model': 'model', 'ocr-base-url': 'base_url', 'ocr-endpoint': 'endpoint_url', 'ocr-api-key': 'api_key',
+  })) body[key] = document.getElementById(id).value.trim();
+  try {
+    await api('PUT', '/image-recognition', body);
+    await loadImageRecognition();
+    toast(t('common.saved', '已保存'), 'ok');
+  } catch (e) {
+    toast(t('common.save_failed', '保存失败: {error}', {error: e.message}), 'err');
   }
 }
 
@@ -552,6 +602,7 @@ window.addEventListener('admin-language-changed', () => {
 });
 
 async function loadModelRouting() {
+  loadImageRecognition();
   loadVisionParams();
   loadPhoneControlVisionParams();
   document.getElementById('mr-presets-body').innerHTML = '<div class="loading">加载中…</div>';

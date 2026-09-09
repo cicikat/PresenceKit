@@ -361,3 +361,12 @@ no current Emerald-client source callers after Brief 72 removed the Tauri comman
 legacy request schema, and duplicate serialization have been retired. The three-repository catalog
 and OpenAPI assertions record the deletion. The remaining settings/task projections do not return
 URL/query, cookie, token, profile path, page body, or raw params in receipts/observability.
+## Image upload OCR routing
+
+Model Routing exposes admin-only `GET/PUT /image-recognition` for upload mode
+(`vision` default, `ocr` opt-in) and an independent OCR connection. General Vision
+Base URLs remain editable. GLM Layout Parsing uses an exact Endpoint URL; OpenAI
+Chat Completions uses a Base URL. Keys are write-only; blank saves preserve keys.
+The page shows configured/effective state and request address; ready is not tested.
+Runtime call metadata uses `/observability/api-calls?caller=image_ocr` (`state.read`).
+Desktop/mobile keep `/upload/ingest`; screen automation keeps its existing connections.

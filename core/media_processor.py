@@ -107,18 +107,20 @@ def _hash_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def _load_image_cache(sha256: str) -> str | None:
+def _load_image_cache(sha256: str, signature: str | None = None) -> str | None:
     """读 data/image_cache/{sha256}.json,命中返回 description,未命中返回 None。"""
     path = get_paths().image_cache_dir() / f"{sha256}.json"
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
+        if signature is not None and payload.get("recognition_signature") != signature:
+            return None
         description = payload.get("description")
         return description if isinstance(description, str) and description else None
     except Exception:
         return None
 
 
-def _save_image_cache(sha256: str, description: str, image_path: Path, source_filename: str) -> None:
+def _save_image_cache(sha256: str, description: str, image_path: Path, source_filename: str, signature: str | None = None) -> None:
     """写入 cache json,字段:{description, created_at, source_filename, image_path}。"""
     path = get_paths().image_cache_dir() / f"{sha256}.json"
     payload = {
@@ -126,6 +128,7 @@ def _save_image_cache(sha256: str, description: str, image_path: Path, source_fi
         "created_at": time.time(),
         "source_filename": source_filename,
         "image_path": str(image_path),
+        "recognition_signature": signature,
     }
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -195,6 +198,11 @@ async def ingest_image_bytes(
         return None
 
     try:
+        from core import image_recognition
+        from core.config_loader import get_config
+        recognition_config = get_config()
+        recognition = image_recognition.settings(recognition_config)
+        signature = image_recognition.cache_signature(recognition_config)
         prepared = []
         descriptions: list[str | None] = [None] * len(items)
 
@@ -208,7 +216,7 @@ async def ingest_image_bytes(
                 return None
 
             sha256 = _hash_bytes(data)
-            cached = _load_image_cache(sha256)
+            cached = _load_image_cache(sha256, signature)
             if cached:
                 descriptions[index] = cached
                 if uid and char_id:
@@ -222,6 +230,12 @@ async def ingest_image_bytes(
                 continue
 
             normalized, media_type = _normalize_image(data, filename)
+            if recognition["mode"] == "ocr" and media_type == "image/gif":
+                from PIL import Image
+                with Image.open(io.BytesIO(normalized)) as img:
+                    out = io.BytesIO()
+                    img.convert("RGB").save(out, format="PNG")
+                    normalized, media_type = out.getvalue(), "image/png"
             prepared.append({
                 "index": index,
                 "data": data,
@@ -248,7 +262,13 @@ async def ingest_image_bytes(
 
         logger.info(f"[media_processor] vision识别调用: {len(prepared)}张")
         vision_messages = [{"role": "user", "content": content_blocks}]
-        result = await llm_client.chat(vision_messages, use_vision=True)
+        if recognition["mode"] == "ocr":
+            parsed = [await image_recognition.recognize_ocr(block["image_url"]["url"], recognition)
+                      for block in content_blocks if block["type"] == "image_url"]
+            result = "\n".join(parsed)
+        else:
+            result = await llm_client.chat(vision_messages, use_vision=True)
+            parsed = _split_vision_result(result, len(prepared)) if result else []
         if not result:
             if uid and char_id:
                 try:
@@ -258,7 +278,6 @@ async def ingest_image_bytes(
                     logger.debug("[media_processor] character library vision telemetry failed", exc_info=True)
             return None
 
-        parsed = _split_vision_result(result, len(prepared))
         inbox_dir = get_paths().inbox_dir()
         ts = int(time.time())
 
@@ -274,7 +293,7 @@ async def ingest_image_bytes(
                 counter += 1
 
             path.write_bytes(item["data"])
-            _save_image_cache(item["sha256"], description, path, filename)
+            _save_image_cache(item["sha256"], description, path, filename, signature)
             if uid and char_id:
                 try:
                     from core.character_document_library import store_upload
@@ -366,6 +385,18 @@ async def reread_cached_image(sha256: str, instruction: str = "请重新仔细�
         image_path = Path(str(meta.get("image_path") or ""))
         data = image_path.read_bytes()
         normalized, media_type = _normalize_image(data, str(meta.get("source_filename") or image_path.name))
+        from core import image_recognition
+        recognition = image_recognition.settings()
+        if recognition["mode"] == "ocr":
+            if media_type == "image/gif":
+                from PIL import Image
+                with Image.open(io.BytesIO(normalized)) as img:
+                    out = io.BytesIO()
+                    img.convert("RGB").save(out, format="PNG")
+                    normalized, media_type = out.getvalue(), "image/png"
+            return await image_recognition.recognize_ocr(
+                f"data:{media_type};base64,{base64.b64encode(normalized).decode()}", recognition,
+            )
         result = await llm_client.chat([{"role": "user", "content": [
             {"type": "text", "text": str(instruction or "请重新仔细描述这张图片中的可见内容。")[0:1000]},
             {"type": "image_url", "image_url": {"url": f"data:{media_type};base64,{base64.b64encode(normalized).decode()}"}},

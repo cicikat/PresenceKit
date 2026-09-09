@@ -11,6 +11,21 @@
 
 ## 1. 系统边界与权威来源
 
+### Image recognition routing (2026-09-09)
+
+- `current`, `admin-only`: `GET/PUT /image-recognition` configures upload mode and
+  independent OCR with explicit `glm_layout_parsing`/`chat_completions`. GET returns
+  redacted fields, configured/effective state and request URL. Model Routing owns editing.
+- `current`: QQ and `/upload/ingest` images use the selected route; existing upload schema,
+  owner scope, attachment hashes and delivery paths remain compatible. Desktop Rust and
+  Flutter `BackendClient` retain the same upload endpoint; phone automation inherits
+  `vision`, never OCR. No new client setting or secret distribution is required.
+- `current`: `/observability/api-calls?caller=image_ocr` (`state.read`) exposes call
+  metadata; image cache validity includes the recognition connection signature.
+- `observe`: real GLM credentials and physical desktop/mobile uploads need deployment
+  verification. Local mocks and admin browser tests do not establish provider availability.
+  PDF parsing and combined scene-plus-OCR routing remain `roadmap`.
+
 ```mermaid
 flowchart LR
     backend["Emerald-presence\nFastAPI + pipeline + data truth"]

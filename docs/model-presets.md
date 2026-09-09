@@ -2,6 +2,33 @@
 
 ## 概述
 
+### Uploaded image routing and OCR
+
+The admin Model Routing page owns `GET/PUT /image-recognition` (admin scope).
+`image_recognition.mode` selects `vision` (legacy default) or `ocr` for QQ images
+and desktop/mobile image uploads. OCR is independent of `vision`,
+`phone_control_vision`, and `use_computer_vision`; screen automation never inherits OCR.
+The UI follows the model connection fields: provider, explicit protocol, model, address,
+and write-only key. Provider selection does not lock or overwrite an edited address.
+
+`glm_layout_parsing` posts `{model, file}` directly to the exact `endpoint_url`, then
+reads `md_results`; `chat_completions` uses the independent OCR `base_url` plus
+`/chat/completions` and parses message content. Model names never infer protocols.
+Requests use the shared proxy, a 60-second timeout, no automatic retries or redirects,
+and the existing API call ledger (`caller=image_ocr`). No provider body or image data
+is written to the ledger. Multiple images retain their input order and individual results.
+GIF input uses its first frame as PNG. PDF upload support is not introduced here.
+
+The image cache keeps the original file hash and adds a recognition signature for mode,
+protocol, provider, model, and address. Old unsigned entries are reprocessed on upload;
+changing a key alone does not invalidate results. Explicit rereading bypasses cached text
+and uses the current upload route. OCR-only mode extracts text, not general scene meaning.
+Empty OCR text is marked explicitly; transport/schema failures are not cached.
+
+`GET /image-recognition` provides configured/effective state and the resolved OCR request
+address, without the key. Ready configuration is not evidence of a successful remote call.
+`GET/PUT /vision-params` also suppress key echo and preserve the key on blank input.
+
 RPG Dream uses the independent `rpg_kp` call category for neutral structured adjudication. It falls back to the active profile's chat preset when absent, with a bounded 30-second timeout and no SDK retry.
 
 把"只能跑一个 DeepSeek"重构成"按任务分流的多模型 preset 系统"：

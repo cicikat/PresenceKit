@@ -5,6 +5,14 @@
 
 ## 当前仍存在
 
+### OCR service and device verification
+
+**Status**: `observe` (2026-09-09). Independent OCR supports GLM Layout Parsing and
+OpenAI-compatible OCR. Focused regressions cover protocol, cache, configuration and
+phone inheritance. Real GLM credentials and physical desktop/mobile uploads need
+deployment verification; configuration readiness does not claim live provider success.
+PDF input and combined scene-plus-OCR routing remain `roadmap`.
+
 ### BROWSER-240：兼容 owner bridge 退役审计
 
 **状态**：`closed`（2026-09-06）

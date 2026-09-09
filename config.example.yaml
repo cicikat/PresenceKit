@@ -113,6 +113,14 @@ llm:
 llm_debug_requests:
   enabled: false
   keep_days: 1
+image_recognition:
+  mode: vision  # vision | ocr; uploaded images only, not screen automation
+  provider: glm
+  api_protocol: glm_layout_parsing  # glm_layout_parsing | chat_completions
+  model: glm-ocr
+  endpoint_url: https://open.bigmodel.cn/api/paas/v4/layout_parsing
+  base_url: ''  # only used by chat_completions
+  api_key: ''
 vision:
   enabled: false  # 纯增值功能(图片识别)，默认关；面板「系统状态」页可开，需自备 api_key
   provider: glm

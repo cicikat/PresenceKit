@@ -18,7 +18,7 @@ POST   /model-presets/presets/{name}/test     — 连通性测试：发一条 1 
 import json
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -347,7 +347,8 @@ async def get_vision_params(auth=Depends(require_scopes("admin"))):
     return {
         "enabled":  cfg.get("enabled",  False),
         "provider": cfg.get("provider", ""),
-        "api_key":  cfg.get("api_key",  ""),
+        "api_key":  "",
+        "has_api_key": bool(cfg.get("api_key")),
         "model":    cfg.get("model",    ""),
         "base_url": cfg.get("base_url", ""),
     }
@@ -360,7 +361,7 @@ async def update_vision_params(body: VisionParamsUpdate, auth=Depends(require_sc
     vision_cfg = full_cfg.setdefault("vision", {})
     if body.enabled  is not None: vision_cfg["enabled"]  = body.enabled
     if body.provider is not None: vision_cfg["provider"] = body.provider
-    if body.api_key  is not None: vision_cfg["api_key"]  = body.api_key
+    if body.api_key and body.api_key.strip(): vision_cfg["api_key"] = body.api_key.strip()
     if body.model    is not None: vision_cfg["model"]    = body.model
     if body.base_url is not None: vision_cfg["base_url"] = body.base_url
 
@@ -369,7 +370,46 @@ async def update_vision_params(body: VisionParamsUpdate, auth=Depends(require_sc
     from core import config_loader, llm_client
     config_loader.reload_config()
     await llm_client.reload_client()
-    return {"message": "Vision 配置已更新", "vision": vision_cfg}
+    return {"message": "Vision 配置已更新", "vision": await get_vision_params(auth)}
+
+
+class ImageRecognitionUpdate(BaseModel):
+    mode: Optional[Literal["vision", "ocr"]] = None
+    provider: Optional[str] = None
+    api_protocol: Optional[Literal["chat_completions", "glm_layout_parsing"]] = None
+    model: Optional[str] = None
+    base_url: Optional[str] = None
+    endpoint_url: Optional[str] = None
+    api_key: Optional[str] = None
+
+
+@router.get("/image-recognition", summary="Image upload routing and OCR connection")
+async def get_image_recognition(auth=Depends(require_scopes("admin"))):
+    from core.image_recognition import view
+    return view(get_config())
+
+
+@router.put("/image-recognition", summary="Update image upload routing and OCR connection")
+async def update_image_recognition(body: ImageRecognitionUpdate, auth=Depends(require_scopes("admin"))):
+    from core.image_recognition import endpoint, settings, view
+    full_cfg = read_config_file(CONFIG_FILE)
+    cfg = settings(full_cfg)
+    for key, value in body.model_dump(exclude_none=True).items():
+        value = value.strip()
+        if key == "api_key" and not value:
+            continue
+        cfg[key] = value
+    try:
+        endpoint(cfg)
+        if cfg["mode"] == "ocr" and not cfg["model"]:
+            raise ValueError("OCR model is required")
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    full_cfg["image_recognition"] = cfg
+    write_config_file(CONFIG_FILE, full_cfg)
+    from core import config_loader
+    config_loader.reload_config()
+    return view(full_cfg)
 
 
 def _phone_control_vision_view(cfg: dict) -> dict:
