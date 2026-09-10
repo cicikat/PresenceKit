@@ -5,19 +5,19 @@
       <div class="card">
         <div class="card-header"><h3 data-i18n="status.vision.title">视觉模型配置（图片识别）</h3><button class="btn btn-primary btn-sm" data-action="saveVisionParams" data-i18n="common.save">保存</button><label class="admin-inline-026"><span data-i18n="status.vision.enable" class="admin-inline-099">启用</span><input type="checkbox" id="vision-enabled"></label></div>
         <p data-i18n="status.vision.key_hint" class="admin-inline-091">API Key 留空时保留已有密钥；保存后热重载。</p>
-        <p class="admin-inline-092">通用图片理解连接；手机自动化可单独覆盖。OCR 文字提取使用下方独立连接。</p>
-        <div class="form-row"><label class="field"><span>API 协议</span><select disabled><option>OpenAI Chat Completions</option></select></label></div>
-        <div class="form-row"><label class="field"><span>Provider</span><select id="vision-provider"><option value="gemini">Gemini</option><option value="openai">OpenAI</option><option value="glm">GLM</option><option value="custom" data-i18n="status.vision.custom">自定义</option></select></label><label class="field"><span data-i18n="status.vision.model">模型</span><input id="vision-model-select" list="vision-model-options" placeholder="模型名"><datalist id="vision-model-options"></datalist></label></div>
+        <p class="admin-inline-092" data-i18n="settings_center.shared_vision_connection_with_a_separate_mobile_automation_override_ocr_uses_the_independent_connect">通用图片理解连接；手机自动化可单独覆盖。OCR 文字提取使用下方独立连接。</p>
+        <div class="form-row"><label class="field"><span data-i18n="settings_center.api_protocol">API 协议</span><select disabled><option>OpenAI Chat Completions</option></select></label></div>
+        <div class="form-row"><label class="field"><span>Provider</span><select id="vision-provider"><option value="gemini">Gemini</option><option value="openai">OpenAI</option><option value="glm">GLM</option><option value="custom" data-i18n="status.vision.custom">自定义</option></select></label><label class="field"><span data-i18n="status.vision.model">模型</span><input type="text" id="vision-model-select" list="vision-model-options" placeholder="模型名"><datalist id="vision-model-options"></datalist></label></div>
         <div class="form-row"><label class="field"><span>API Key</span><input type="password" id="vision-api-key" autocomplete="off" placeholder="留空则保留已有 API Key" data-i18n-placeholder="status.vision.key_placeholder"></label><label class="field"><span>Base URL</span><input type="url" id="vision-base-url"></label></div>
         <p class="admin-inline-120"><a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">Gemini API Key</a> · <a href="https://open.bigmodel.cn/usercenter/apikeys" target="_blank" rel="noopener">GLM API Key</a></p>
       </div>
 
       <section>
-        <div class="card-header"><h3>图片上传路由 / OCR 连接</h3><div><button class="btn btn-ghost btn-sm" data-action="loadImageRecognition">刷新</button><button class="btn btn-primary btn-sm" data-action="saveImageRecognition">保存</button></div></div>
-        <div class="form-row"><label class="field"><span>图片上传用途</span><select id="image-recognition-mode"><option value="vision">图片理解（通用视觉连接）</option><option value="ocr">OCR 文字提取（独立连接）</option></select></label><label class="field"><span>Provider</span><select id="ocr-provider"><option value="glm">GLM</option><option value="custom">自定义</option></select></label></div>
-        <div class="form-row"><label class="field"><span>API 协议</span><select id="ocr-protocol"><option value="glm_layout_parsing">GLM Layout Parsing</option><option value="chat_completions">OpenAI Chat Completions</option></select></label><label class="field"><span>模型</span><input id="ocr-model" placeholder="glm-ocr"></label></div>
-        <div class="form-row"><label class="field" id="ocr-endpoint-field"><span>Endpoint URL（完整地址）</span><input id="ocr-endpoint" type="url"></label><label class="field" id="ocr-base-field" hidden><span>Base URL</span><input id="ocr-base-url" type="url"></label><label class="field"><span>API Key <small id="ocr-key-state"></small></span><input id="ocr-api-key" type="password" autocomplete="off" placeholder="留空则保留已有 API Key"></label></div>
-        <p>请求地址：<code id="ocr-request-url" style="overflow-wrap:anywhere">-</code></p>
+        <div class="card-header"><h3 data-i18n="settings_center.image_routing_and_ocr_connection">图片上传路由 / OCR 连接</h3><div><button class="btn btn-ghost btn-sm" data-action="loadImageRecognition">刷新</button><button class="btn btn-primary btn-sm" data-action="saveImageRecognition" data-i18n="settings_center.save">保存</button></div></div>
+        <div class="form-row"><label class="field"><span data-i18n="settings_center.image_upload_purpose">图片上传用途</span><select id="image-recognition-mode"><option value="vision" data-i18n="settings_center.image_understanding">图片理解（通用视觉连接）</option><option value="ocr" data-i18n="settings_center.ocr_text_extraction">OCR 文字提取（独立连接）</option></select></label><label class="field"><span>Provider</span><select id="ocr-provider"><option value="glm">GLM</option><option value="custom">自定义</option></select></label></div>
+        <div class="form-row"><label class="field"><span data-i18n="settings_center.api_protocol">API 协议</span><select id="ocr-protocol"><option value="glm_layout_parsing">GLM Layout Parsing</option><option value="chat_completions">OpenAI Chat Completions</option></select></label><label class="field"><span>模型</span><input type="text" id="ocr-model" placeholder="glm-ocr"></label></div>
+        <div class="form-row"><label class="field" id="ocr-endpoint-field"><span data-i18n="settings_center.endpoint_url">Endpoint URL（完整地址）</span><input id="ocr-endpoint" type="url"></label><label class="field" id="ocr-base-field" hidden><span>Base URL</span><input id="ocr-base-url" type="url"></label><label class="field"><span>API Key <small id="ocr-key-state"></small></span><input id="ocr-api-key" type="password" autocomplete="off" placeholder="留空则保留已有 API Key"></label></div>
+        <p>请求地址：<code id="ocr-request-url" class="settings-url">-</code></p>
         <p id="image-recognition-state" role="status">加载中…</p>
       </section>
 
@@ -116,3 +116,4 @@
         </details>
         <div id="mr-profiles-body"><div class="loading">加载中…</div></div>
       </div>
+<section class="card"><button class="btn btn-primary" data-action="goto" data-action-args='["role-bindings"]' data-i18n="settings_center.character_model_bindings_and_reset">角色模型绑定与重置</button></section>

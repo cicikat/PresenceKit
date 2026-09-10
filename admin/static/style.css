@@ -727,7 +727,6 @@ textarea { resize: vertical; min-height: 72px; }
 .admin-inline-074{font-family:var(--mono);font-size:12px}
 .admin-inline-075{font-family:var(--mono);font-size:13px;background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px;resize:vertical}
 .admin-inline-077{font-size:11px;color:var(--muted)}
-.admin-inline-079{font-size:11px;font-weight:400;color:var(--muted)}
 .admin-inline-080{font-size:12px}
 .admin-inline-081{font-size:12px;color:var(--danger);margin-bottom:12px}
 .admin-inline-082{font-size:12px;color:var(--muted)}
@@ -753,8 +752,6 @@ textarea { resize: vertical; min-height: 72px; }
 .admin-inline-103{font-size:13px;color:var(--muted);margin:0}
 .admin-inline-104{font-size:13px;color:var(--text);line-height:1.8}
 .admin-inline-105{font-size:13px;font-weight:400;color:var(--muted)}
-.admin-inline-107{font-size:13px;font-weight:600;margin-bottom:4px}
-.admin-inline-108{font-size:13px;font-weight:600;margin-bottom:6px}
 .admin-inline-109{font-size:13px;line-height:1.7;white-space:pre-wrap;margin-bottom:8px}
 .admin-inline-110{font-size:13px;line-height:1.8;color:var(--text)}
 .admin-inline-111{font-size:13px;line-height:1.8;max-height:600px;overflow:auto;padding:4px 0}
@@ -762,7 +759,6 @@ textarea { resize: vertical; min-height: 72px; }
 .admin-inline-115{font-weight:600}
 .admin-inline-116{font-weight:600;color:var(--accent)}
 .admin-inline-117{gap:8px;font-size:14px}
-.admin-inline-119{grid-column:1/-1}
 .admin-inline-120{grid-column:1/-1;font-size:12px;color:var(--muted);line-height:1.8;padding:10px 14px;background:var(--bg-secondary);border-radius:6px;border:1px solid var(--border)}
 .admin-inline-122{height:100%;background:var(--accent);transition:width .3s}
 .admin-inline-124{justify-content:flex-start;padding-top:4px}
@@ -806,7 +802,6 @@ textarea { resize: vertical; min-height: 72px; }
 .admin-inline-171{min-width:200px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text)}
 .admin-inline-172{min-width:260px;flex:1;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text)}
 .admin-inline-174{padding:0 20px 20px;display:flex;gap:8px;justify-content:flex-end}
-.admin-inline-178{padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .admin-inline-179{padding:20px;display:flex;flex-direction:column;gap:14px}
 .admin-inline-180{padding:4px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:var(--bg-secondary);color:var(--text)}
 .admin-inline-181{padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text)}
@@ -822,8 +817,6 @@ textarea { resize: vertical; min-height: 72px; }
 .admin-inline-191{width:100%;margin-top:8px}
 .admin-inline-192{width:100%;min-height:240px;font-family:var(--mono);font-size:13px;background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:10px;box-sizing:border-box;resize:vertical}
 .admin-inline-194{width:100%;min-height:400px;font-family:monospace;font-size:13px;resize:vertical}
-.admin-inline-195{width:100%;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text)}
-.admin-inline-196{width:100%;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text);box-sizing:border-box}
 .admin-inline-197{width:100px}
 .admin-inline-198{width:120px}
 .admin-inline-199{width:140px;padding:4px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:var(--bg-secondary);color:var(--text)}
@@ -879,3 +872,8 @@ textarea { resize: vertical; min-height: 72px; }
   .status-summary-grid,.status-summary-grid-wide,.config-parameter-grid{grid-template-columns:1fr}
   .runtime-config-grid{grid-template-columns:1fr}
 }
+
+.settings-url { overflow-wrap: anywhere; }
+#feature-center-list [data-feature-row] { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(180px, 2fr) auto auto; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); align-items: center; }
+#feature-center-list [data-feature-row][hidden] { display: none; }
+@media (max-width: 760px) { #feature-center-list [data-feature-row] { grid-template-columns: 1fr 1fr; } }

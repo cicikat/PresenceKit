@@ -371,105 +371,12 @@ async function loadCharacterDetail(filename) {
       document.getElementById('char-edit-form').style.display = '';
       document.getElementById('char-text-form').style.display = 'none';
     }
-    await loadCharacterCapabilities(document.getElementById('char-select').value);
+
   } catch(e) { toast('加载角色卡失败：' + e.message, 'err'); }
 }
 
 function _characterCapabilityId() {
   return document.getElementById('char-select')?.value || '';
-}
-
-function _setCharacterCapabilityDisabled(disabled) {
-  ['char-tts-preset', 'char-sticker-pack', 'char-live2d-model', 'char-model-3d', 'char-model-routing'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.disabled = disabled;
-  });
-  document.querySelectorAll('[data-action="saveCharacterCapabilities"], [data-action="saveCharacterRouting"]').forEach(el => { el.disabled = disabled; });
-}
-
-function _resetCharacterCapabilities() {
-  ['char-tts-preset', 'char-sticker-pack', 'char-live2d-model', 'char-model-3d', 'char-model-routing'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) { el.value = ''; el.disabled = true; }
-  });
-  ['char-asset-resolution', 'char-routing-effective'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.textContent = '';
-  });
-}
-
-async function loadCharacterCapabilities(charId = _characterCapabilityId()) {
-  const status = document.getElementById('char-capabilities-status');
-  if (!status) return;
-  if (!charId) { _resetCharacterCapabilities(); status.textContent = '请选择角色'; return; }
-  _resetCharacterCapabilities();
-  if (_charData?.type === 'text') {
-    status.textContent = '暂未开放';
-    document.getElementById('char-routing-status').textContent = '暂未开放';
-    document.getElementById('char-capabilities-hint').textContent = '纯文本角色卡暂不支持能力绑定，请使用 JSON 角色卡。';
-    return;
-  }
-  status.textContent = '读取中…';
-  try {
-    const [assets, routing] = await Promise.all([
-      api('GET', `/character/${encodeURIComponent(charId)}/asset-bindings`),
-      api('GET', `/character/${encodeURIComponent(charId)}/model-routing`),
-    ]);
-    document.getElementById('char-tts-preset').value = assets.tts_preset || '';
-    document.getElementById('char-sticker-pack').value = assets.sticker_pack || '';
-    document.getElementById('char-live2d-model').value = assets.live2d_model || '';
-    document.getElementById('char-model-3d').value = assets.model_3d || '';
-    document.getElementById('char-model-routing').value = routing.model_routing || '';
-    document.getElementById('char-asset-resolution').textContent = assets.tts_preset
-      ? (assets.tts_preset_resolved ? 'TTS 来源：角色预设已解析' : 'TTS 来源：角色预设未找到，将 fail-soft 回落')
-      : 'TTS 来源：全局配置';
-    document.getElementById('char-routing-effective').textContent = `当前生效：${routing.effective_profile || '全局'} → ${routing.resolved_chat_preset || '未解析'}`;
-    status.textContent = '已加载';
-    document.getElementById('char-routing-status').textContent = '只读解析已同步';
-    _setCharacterCapabilityDisabled(_charData?.type === 'text');
-    document.getElementById('char-capabilities-hint').textContent = _charData?.type === 'text'
-      ? '纯文本角色卡暂不支持能力绑定，请使用 JSON 角色卡。'
-      : '来源：角色卡 presence_ext；清空字段可回落对应全局或客户端默认行为。';
-  } catch (e) {
-    status.textContent = '读取失败';
-    document.getElementById('char-routing-status').textContent = '读取失败';
-    toast('读取角色能力绑定失败：' + e.message, 'err');
-  }
-}
-
-async function saveCharacterCapabilities() {
-  const charId = _characterCapabilityId();
-  if (!charId) return;
-  const status = document.getElementById('char-capabilities-status');
-  status.textContent = '保存中…';
-  try {
-    const result = await api('PATCH', `/character/${encodeURIComponent(charId)}/asset-bindings`, {
-      tts_preset: document.getElementById('char-tts-preset').value.trim(),
-      sticker_pack: document.getElementById('char-sticker-pack').value.trim(),
-      live2d_model: document.getElementById('char-live2d-model').value.trim(),
-      model_3d: document.getElementById('char-model-3d').value.trim(),
-    });
-    status.textContent = '保存成功';
-    document.getElementById('char-asset-resolution').textContent = result.tts_preset
-      ? (result.tts_preset_resolved ? 'TTS 来源：角色预设已解析' : 'TTS 来源：角色预设未找到，将 fail-soft 回落')
-      : 'TTS 来源：全局配置';
-    toast('角色能力绑定已保存', 'ok');
-  } catch (e) { status.textContent = '保存失败'; toast('保存角色能力绑定失败：' + e.message, 'err'); }
-}
-
-async function saveCharacterRouting() {
-  const charId = _characterCapabilityId();
-  if (!charId) return;
-  const status = document.getElementById('char-routing-status');
-  status.textContent = '保存中…';
-  try {
-    const result = await api('PATCH', `/character/${encodeURIComponent(charId)}/model-routing`, {
-      model_routing: document.getElementById('char-model-routing').value.trim() || null,
-    });
-    status.textContent = '保存成功';
-    document.getElementById('char-routing-effective').textContent = `当前生效：${result.effective_profile || '全局'} → ${result.resolved_chat_preset || '未解析'}`;
-    toast('角色模型路由已保存', 'ok');
-  } catch (e) { status.textContent = '保存失败'; toast('保存角色模型路由失败：' + e.message, 'err'); }
 }
 
 async function saveCharacter() {

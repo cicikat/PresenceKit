@@ -4,7 +4,7 @@
       <!-- 选择与操作栏 -->
       <div class="card">
         <div class="card-header">
-          <h3>当前角色</h3>
+          <h3 data-i18n="settings_center.current_character">当前角色</h3>
           <div class="admin-action-group">
             <button class="btn btn-ghost btn-sm" data-action="loadCharacterList">刷新</button>
             <button class="btn btn-primary btn-sm" data-action="newCharacter">➕ 新建角色卡</button>
@@ -32,27 +32,7 @@
       </div>
 
       <!-- 与用户关系：只读提示 + 跳转（关系是角色×用户维度的运行时状态，不在角色卡编辑，见用户管理页） -->
-      <div class="card" id="char-capabilities-card">
-        <div class="admin-card-header">
-          <div><h3>角色能力绑定</h3><p id="char-capabilities-hint" class="admin-source-hint">选择角色后读取当前生效来源；保存只修改角色卡的 presence_ext。</p></div>
-          <span id="char-capabilities-status" class="admin-status-text" role="status" aria-live="polite"></span>
-        </div>
-        <div class="admin-field-grid">
-          <label class="field"><span>TTS 预设</span><input id="char-tts-preset" type="text" placeholder="留空 = 使用全局配置"></label>
-          <label class="field"><span>表情包池</span><input id="char-sticker-pack" type="text" placeholder="留空 = 使用通用池"></label>
-          <label class="field"><span>Live2D 模型标识</span><input id="char-live2d-model" type="text" placeholder="留空 = 客户端默认"></label>
-          <label class="field"><span>3D 模型标识</span><input id="char-model-3d" type="text" placeholder="留空 = 客户端默认"></label>
-        </div>
-        <div class="admin-action-group"><button class="btn btn-primary btn-sm" data-action="saveCharacterCapabilities">保存能力绑定</button><span id="char-asset-resolution" class="admin-source-hint"></span></div>
-      </div>
-
-      <div class="card" id="char-routing-card">
-        <div class="admin-card-header"><div><h3>模型路由绑定</h3><p class="admin-source-hint">角色绑定优先于全局路由；清除绑定后回落全局 active routing。</p></div><span id="char-routing-status" class="admin-status-text" role="status" aria-live="polite"></span></div>
-        <div class="admin-field-grid admin-field-grid-single"><label class="field"><span>Routing profile</span><input id="char-model-routing" type="text" placeholder="留空 = 跟随全局"></label></div>
-        <div class="admin-action-group"><button class="btn btn-primary btn-sm" data-action="saveCharacterRouting">保存模型路由</button><span id="char-routing-effective" class="admin-result-panel"></span></div>
-      </div>
-
-      <div class="card" id="char-dream-behavior-card">
+<section class="card"><p data-i18n="settings_center.manage_character_model_voice_and_appearance_bindings_in_service_configuration">角色模型、声音和形象绑定在服务配置中管理。</p><button class="btn btn-ghost" data-action="goto" data-action-args='["role-bindings"]' data-i18n="settings_center.view_character_bindings">查看角色绑定</button></section>      <div class="card" id="char-dream-behavior-card">
         <div class="admin-card-header">
           <div>
             <h3 data-i18n="character.dream_behavior.title">梦境行为分配</h3>
@@ -89,7 +69,7 @@
       <div class="card">
         <div class="card-header">
           <h3 id="char-edit-title">角色卡内容</h3>
-          <button class="btn btn-primary btn-sm" data-action="saveCharacter">保存</button>
+          <button class="btn btn-primary btn-sm" data-action="saveCharacter" data-i18n="settings_center.save">保存</button>
         </div>
         <!-- txt/md 纯文本编辑区 -->
         <div id="char-text-form" class="admin-inline-056">

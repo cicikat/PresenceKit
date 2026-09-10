@@ -74,17 +74,17 @@ def test_i18n_runtime_is_wired_with_persistent_chinese_default():
     runtime = I18N.read_text(encoding="utf-8")
     core_js = (ROOT / "admin" / "static" / "js" / "core.js").read_text(encoding="utf-8")
 
-    assert '<link rel="stylesheet" href="/static/style.css?v=brief-180-admin-static-1">' in index
-    assert '<script src="/static/i18n.js?v=brief-239-browser-confirmation-1"></script>' in index
-    assert '<script src="/static/js/core.js?v=brief-195-mcp-autonomy-signal-1"></script>' in index
+    assert '<link rel="stylesheet" href="/static/style.css?v=brief-242-settings-4">' in index
+    assert '<script src="/static/i18n.js?v=brief-242-settings-4"></script>' in index
+    assert '<script src="/static/js/core.js?v=brief-242-settings-4"></script>' in index
     assert '<script src="/static/js/dream-settings.js?v=brief-175-scenario-reconciler-1"></script>' in index
-    assert "ADMIN_UI_FRAGMENT_VERSION = 'brief-195-mcp-autonomy-signal-1'" in core_js
-    assert '<script src="/static/js/observability.js?v=brief-195-mcp-autonomy-signal-1"></script>' in index
-    assert '<script src="/static/js/character.js?v=brief-180-admin-static-1"></script>' in index
+    assert "ADMIN_UI_FRAGMENT_VERSION = 'brief-242-settings-4'" in core_js
+    assert '<script src="/static/js/observability.js?v=brief-242-settings-4"></script>' in index
+    assert '<script src="/static/js/character.js?v=brief-242-settings-4"></script>' in index
     assert 'id="ds-private-truths"' in read_admin_page("dream-settings")
     assert "dream.scenario.policy_reveal_required" in runtime
     assert '<script src="/static/js/overview.js?v=brief-180-admin-static-1"></script>' in index
-    assert '<script src="/static/js/mcp.js?v=brief-195-mcp-autonomy-signal-1"></script>' in index
+    assert '<script src="/static/js/mcp.js?v=brief-242-settings-4"></script>' in index
     assert '<script src="/static/js/scheduler.js?v=admin-i18n-completeness-1"></script>' in index
     assert '<script src="/static/js/integrations.js?v=brief-160-garden-freeze-1"></script>' in index
     assert "const DEFAULT_LANGUAGE = 'zh-CN';" in runtime
@@ -115,8 +115,8 @@ def test_all_navigation_links_use_semantic_i18n_keys():
     assert 'id="admin-language-select"' in index
     assert 'id="auth-language-select"' in index
     assert index.count("data-language-select") == 2
-    assert 'data-action-args=\'["existence"]\'' in index
-    assert 'data-action-args=\'["advanced"]\'' in index
+    assert 'data-action-args=\'["observation-center"]\'' in index
+    assert 'data-action-args=\'["operations-center"]\'' in index
     assert 'data-page="observe-probe"' not in index
 
 
@@ -124,7 +124,7 @@ def test_status_page_and_feature_flags_use_semantic_i18n_keys():
     index = read_admin_client_source()
     runtime = I18N.read_text(encoding="utf-8")
     status = read_admin_page("status")
-    runtime_config = read_admin_page("runtime-config")
+    runtime_config = "".join(read_admin_page(page) for page in ("runtime-config", "network-config", "conversation-settings", "device-policy", "output-settings", "personal-settings"))
     tts_config = read_admin_page("tts-config")
     routing = read_admin_page("model-routing")
 
@@ -138,7 +138,6 @@ def test_status_page_and_feature_flags_use_semantic_i18n_keys():
         assert f'data-i18n="{key}"' in status
 
     for key in (
-        "status.feature_switches",
         "status.proxy.title",
         "status.context.title",
         "status.llm.title",
@@ -211,7 +210,7 @@ def test_group_arbiter_private_exchange_and_prompt_inspector_are_localized():
 def test_setup_page_and_common_empty_state_are_localized():
     index = read_admin_client_source()
     runtime = I18N.read_text(encoding="utf-8")
-    page = read_admin_page("setup")
+    page = "".join(read_admin_page(name) for name in ("setup", "embedding-config", "mail-config", "personal-settings", "diary-config", "coplay-config"))
 
     for key in (
         "setup.title",
@@ -227,7 +226,7 @@ def test_setup_page_and_common_empty_state_are_localized():
         assert f'data-i18n="{key}"' in page
         assert runtime.count(f"'{key}'") == 2
 
-    assert page.count('data-i18n="common.save"') == 7
+    assert page.count('data-i18n="common.save"') == 8
     assert 'data-i18n-placeholder="setup.secret.keep"' in page
     assert "t('setup.base.saved'" in index
     assert "t('setup.mail.saved'" in index

@@ -161,7 +161,7 @@ async function loadMcpPage() {
     _moveMcpSaveControls(serversEl);
     _setMcpConsoleData(data);
     await _loadMcpRecentCalls(data.servers || []);
-    await loadMcpDebugRequests();
+    if (document.getElementById("mcp-llm-debug-enabled")) await loadMcpDebugRequests();
   } catch (e) { serversEl.innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`; }
 }
 
@@ -320,7 +320,7 @@ async function saveMcpDebugRequests() {
       keep_days,
     });
     toast(t('mcp.llm_debug.saved', 'LLM 请求调试设置已保存'), 'ok');
-    await loadMcpDebugRequests();
+    if (document.getElementById("mcp-llm-debug-enabled")) await loadMcpDebugRequests();
   } catch (e) { toast(t('mcp.llm_debug.save_error', '保存调试设置失败: {error}', { error: e.message }), 'err'); }
 }
 
@@ -329,7 +329,7 @@ async function clearMcpDebugRequests() {
   try {
     await api('DELETE', '/observability/llm-debug-requests');
     toast(t('mcp.llm_debug.cleared', 'LLM 请求调试快照已清理'), 'ok');
-    await loadMcpDebugRequests();
+    if (document.getElementById("mcp-llm-debug-enabled")) await loadMcpDebugRequests();
   } catch (e) { toast(t('mcp.llm_debug.clear_error', '清理调试快照失败: {error}', { error: e.message }), 'err'); }
 }
 

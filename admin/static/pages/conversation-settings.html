@@ -1,0 +1,36 @@
+<h1 class="page-title" data-i18n="settings_center.conversation_and_reasoning">对话与思考</h1><div id="conversation-settings-fields"></div>      <div class="card admin-inline-128" id="obs-segment-enforce-card">
+        <div class="card-header">
+          <h3>生成后段落兜底（实验）</h3>
+          <span class="admin-inline-082">只改发送副本，不写回短期记忆；默认关闭</span>
+        </div>
+        <div class="admin-card-actions admin-inline-018">
+          <label class="admin-inline-027">
+            <input type="checkbox" id="obs-segment-enforce-enabled">
+            <span class="admin-inline-080">长篇单段回复按句末标点补一个空行</span>
+          </label>
+          <label class="admin-inline-082">阈值
+            <input type="number" id="obs-segment-enforce-min-len" min="1" max="5000" class="admin-inline-210">
+          </label>
+          <button class="btn btn-ghost btn-sm" data-action="loadOutputSegmentEnforce">刷新</button>
+          <button class="btn btn-primary btn-sm" data-action="saveOutputSegmentEnforce" data-i18n="settings_center.save">保存</button>
+        </div>
+      </div>
+
+<div class="card">
+  <div class="card-header"><h3 data-i18n="status.context.title">上下文长度</h3><button class="btn btn-ghost btn-sm" data-action="loadContextConfig" data-i18n="common.refresh">刷新</button></div>
+  <p class="admin-inline-087" data-i18n="status.context.hint">影响后续新请求使用的上下文窗口。</p>
+  <label class="field config-range-field"><span data-i18n="status.context.max_rounds">最大轮数（每轮 = 一问一答）</span><span class="config-range-value"><output id="ctx-val">20</output><span data-i18n="status.context.rounds">轮</span></span><input type="range" id="ctx-slider" min="5" max="50" value="20" class="admin-inline-189"></label>
+  <div class="config-item-meta"><span data-i18n="runtime_config.source_legacy">来源：legacy memory 配置</span><span data-i18n="runtime_config.apply_reload">保存后热重载</span></div>
+  <button class="btn btn-primary btn-sm" data-action="saveContextConfig" data-i18n="common.save">保存</button>
+</div><div class="card">
+  <div class="card-header"><h3 data-i18n="status.llm.title">LLM 生成参数</h3><button class="btn btn-ghost btn-sm" data-action="loadLlmParams" data-i18n="common.refresh">刷新</button></div>
+  <p class="admin-inline-087" data-i18n="status.llm.hint">这是当前 chat preset 的兼容编辑入口；多模型场景优先在模型路由页编辑 preset。</p>
+  <div class="config-parameter-grid">
+    <label class="field"><span>max_tokens <small data-i18n="status.llm.max_tokens">单次回复最大 token 数</small></span><output id="llm-max-tokens-val">1500</output><input type="range" id="llm-max-tokens" min="200" max="4000" step="100" value="1500" class="admin-inline-189"></label>
+    <label class="field"><span>temperature <small data-i18n="status.llm.temperature">值越高回复越随机，越低越保守</small></span><output id="llm-temp-val">0.70</output><input type="range" id="llm-temperature" min="0" max="2" step="0.05" value="0.7" class="admin-inline-189"></label>
+    <label class="field"><span>top_p <small data-i18n="status.llm.top_p">核采样概率，配合 temperature 控制多样性</small></span><output id="llm-topp-val">0.90</output><input type="range" id="llm-top-p" min="0" max="1" step="0.05" value="0.9" class="admin-inline-189"></label>
+    <label class="field"><span>frequency_penalty <small data-i18n="status.llm.frequency_penalty">惩罚重复词</small></span><output id="llm-fp-val">0.00</output><input type="range" id="llm-frequency-penalty" min="0" max="2" step="0.05" value="0" class="admin-inline-189"></label>
+  </div>
+  <div class="config-item-meta"><span data-i18n="runtime_config.source_chat_preset">来源：当前 chat preset</span><span data-i18n="runtime_config.apply_reload">保存后热重载</span></div>
+  <button class="btn btn-primary btn-sm" data-action="saveLlmParams" data-i18n="common.save">保存</button>
+</div>

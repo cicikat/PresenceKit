@@ -1,0 +1,14 @@
+<h1 class="page-title" data-i18n="settings_center.call_and_task_records">调用与任务记录</h1>
+<p data-i18n="settings_center.read_only_records_ledgers_remain_separate_similar_timestamps_do_not_imply_the_same_call">只读查询。不同台账分开展示，不把相近时间的记录误认为同一次调用。</p>
+<label class="field"><span data-i18n="settings_center.record_type">记录类型</span><select id="record-source" onchange="loadUnifiedRecords()">
+<option value="/observability/api-calls" data-i18n="settings_center.external_service_calls">外部服务调用</option>
+<option value="/observability/api-calls?caller=tts" data-i18n="settings_center.voice_call_records">语音调用记录</option>
+<option value="/observability/mail-executions" data-i18n="settings_center.mail_channel">邮件通道</option>
+<option value="/observability/agent-runtime-tasks" data-i18n="settings_center.long_running_tasks">长期任务</option>
+<option value="/observability/agent-runtime-work-sessions" data-i18n="settings_center.work_sessions">工作会话</option>
+<option value="/observability/agent-runtime-processes" data-i18n="settings_center.process_execution">进程执行</option>
+<option value="/observability/agent-runtime-workspace" data-i18n="settings_center.workspace_access">工作区访问</option>
+</select></label>
+<button class="btn btn-ghost" data-action="loadUnifiedRecords">刷新</button>
+<div id="unified-records" role="status"></div>
+<label class="field"><span data-i18n="settings_center.record_filter">按状态、模型或调用方筛选</span><input type="search" id="record-filter" onchange="loadUnifiedRecords()"></label>

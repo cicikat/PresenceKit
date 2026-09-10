@@ -20,10 +20,7 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'image-ocr-routing-1';
-// legacy cache marker: ADMIN_UI_FRAGMENT_VERSION = 'brief-195-mcp-autonomy-signal-1'
-// Legacy cache marker retained for compatibility checks: brief-195-mcp-autonomy-signal-1
-// ADMIN_UI_FRAGMENT_VERSION = 'brief-195-mcp-autonomy-signal-1'
+const ADMIN_UI_FRAGMENT_VERSION = 'brief-242-settings-4';
 
 const ADMIN_PAGE_ALIASES = Object.freeze({memory: 'observe-memory'});
 
@@ -235,6 +232,24 @@ async function goto(page, {reloadFragment = false} = {}) {
   rememberPage(page);
 
   const loaders = {
+    'call-records': loadUnifiedRecords,
+    'autonomy-settings': loadAutonomySettings,
+    'output-settings': loadStickerConfig,
+    'device-policy': () => { loadScreenPeekSettings(); loadMetaMode(); },
+    'network-config': () => { loadProxy(); loadRelaySettings(); },
+    'personal-settings': async () => { _loadSetupAnniversaries(); await _ensurePronounUidOptions(); await loadUserPronoun(); },
+    'coplay-config': _loadSetupCoplayGames,
+    'diary-config': _loadSetupDiary,
+    'mail-config': _loadSetupMail,
+    'embedding-config': loadSetupEmbedding,
+    'creation-center': loadCreationAssets,
+    'observation-center': () => {},
+    'operations-center': () => {},
+    'feature-center': loadFeatureCenter,
+    'service-center': loadServiceCenter,
+    'role-bindings': loadRoleBindings,
+    'conversation-settings': loadConversationSettings,
+    'generation-debug': () => { loadPromptAblation(); loadMcpDebugRequests(); loadLatestAutonomyPrompt(); },
     setup:           loadSetupPage,
     'runtime-config': loadRuntimeConfig,
     'tts-config':     loadTtsConfig,
@@ -266,7 +281,7 @@ async function goto(page, {reloadFragment = false} = {}) {
     'observe-spend':   loadObserveSpend,
     'observe-group-arbiter': initObserveGroupArbiter,
     'observe-memory-summary': () => initObserveCharacters('obs-memory-summary-char'),
-    'observe-prompt':  () => { loadObservePromptUidList(); loadPromptAblation(); loadOutputSegmentEnforce(); },
+    'observe-prompt':  () => { loadObservePromptUidList(); },
     'observe-tools':   () => loadObserveToolUidList(),
     'observe-dream-prompt': () => loadObserveDreamPromptUidList(),
     'observe-dream-operations': loadObserveDreamOperations,

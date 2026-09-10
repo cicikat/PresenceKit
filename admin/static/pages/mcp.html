@@ -57,13 +57,3 @@
         </div>
         <pre id="mcp-console-result" class="log-view admin-inline-133 i18n-raw"></pre>
       </div>
-      <div class="card">
-        <div class="card-header"><h3 data-i18n="mcp.llm_debug.title">LLM 请求调试快照</h3><button class="btn btn-ghost btn-sm" data-action="loadMcpDebugRequests" data-i18n="common.refresh">刷新</button></div>
-        <p class="admin-inline-144" data-i18n="mcp.llm_debug.notice">仅用于短时排查：会记录发送给模型的 Prompt、工具 schema 与生成参数；密钥字段和图片数据会遮蔽。默认关闭，只有管理员可读。</p>
-        <div class="form-row"><label class="checkbox-row"><input type="checkbox" id="mcp-llm-debug-enabled"><span data-i18n="mcp.llm_debug.enabled">记录请求快照</span></label><label class="field"><span data-i18n="mcp.llm_debug.keep_days">保留天数</span><input id="mcp-llm-debug-keep-days" type="number" min="1" max="7" value="1"></label></div>
-        <div class="admin-inline-041">
-          <button class="btn btn-primary btn-sm" data-action="saveMcpDebugRequests" data-i18n="mcp.llm_debug.save">保存调试设置</button>
-          <button class="btn btn-danger btn-sm" data-action="clearMcpDebugRequests" data-i18n="mcp.llm_debug.clear">清理日志</button>
-        </div>
-        <pre id="mcp-llm-debug-entries" class="log-view admin-inline-133 i18n-raw"></pre>
-      </div>

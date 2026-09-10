@@ -1,0 +1,30 @@
+<h1 class="page-title" data-i18n="settings_center.generation_debugging">生成调试</h1>      <!-- 层级开关（消融测试） -->
+      <div class="card admin-inline-128" id="obs-ablation-card">
+        <div class="card-header">
+          <h3>层级开关（消融测试）</h3>
+          <span class="admin-inline-082">只过滤注入，不短路检索；保存后下一轮对话起作用</span>
+        </div>
+        <div class="admin-card-actions admin-inline-051">
+          <button class="btn btn-ghost btn-sm" data-action="loadPromptAblation">刷新</button>
+          <button class="btn btn-primary btn-sm" data-action="savePromptAblation" data-i18n="settings_center.save">保存</button>
+        </div>
+        <div id="obs-ablation-list" class="admin-inline-080">加载中…</div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3 data-i18n="mcp.llm_debug.title">LLM 请求调试快照</h3><button class="btn btn-ghost btn-sm" data-action="loadMcpDebugRequests" data-i18n="common.refresh">刷新</button></div>
+        <p class="admin-inline-144" data-i18n="mcp.llm_debug.notice">仅用于短时排查：会记录发送给模型的 Prompt、工具 schema 与生成参数；密钥字段和图片数据会遮蔽。默认关闭，只有管理员可读。</p>
+        <div class="form-row"><label class="checkbox-row"><input type="checkbox" id="mcp-llm-debug-enabled"><span data-i18n="mcp.llm_debug.enabled">记录请求快照</span></label><label class="field"><span data-i18n="mcp.llm_debug.keep_days">保留天数</span><input id="mcp-llm-debug-keep-days" type="number" min="1" max="7" value="1"></label></div>
+        <div class="admin-inline-041">
+          <button class="btn btn-primary btn-sm" data-action="saveMcpDebugRequests" data-i18n="mcp.llm_debug.save">保存调试设置</button>
+          <button class="btn btn-danger btn-sm" data-action="clearMcpDebugRequests" data-i18n="mcp.llm_debug.clear">清理日志</button>
+        </div>
+        <pre id="mcp-llm-debug-entries" class="log-view admin-inline-133 i18n-raw"></pre>
+      </div>
+
+<section class="card"><h3 data-i18n="settings_center.autonomy_test">自主活动测试</h3><label class="field"><span data-i18n="autonomy.test_source">测试触发源</span><select id="autonomy-test-source"><option value="manual" data-i18n="autonomy.source.manual">手动</option><option value="overflow">Overflow</option><option value="schedule" data-i18n="autonomy.source.schedule">定时</option><option value="interval" data-i18n="autonomy.source.interval">间隔</option></select></label><button class="btn btn-primary" data-action="enqueueAutonomyTest" data-i18n="autonomy.enqueue_test">排队一次测试</button></section>
+
+  <div class="card">
+    <div class="card-header"><div><h3 data-i18n="settings_center.autonomy_snapshot">最新自主行动提示词</h3><p class="autonomy-hint">显示最近一次完成运行的完整快照，仅管理员可查看。</p></div></div>
+    <div id="autonomy-prompt" class="tbl-wrap"><div class="empty">尚无运行记录。</div></div>
+  </div>

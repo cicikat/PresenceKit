@@ -9,7 +9,7 @@ INDEX = Path("admin/static/index.html")
 def test_mcp_management_page_exposes_import_whitelist_and_call_observation():
     source = read_admin_client_source()
     for marker in (
-        'data-page="mcp"',
+        'data-page-fragment="mcp"',
         'id="page-mcp"',
         "testMcpImport()",
         "importMcpServer()",

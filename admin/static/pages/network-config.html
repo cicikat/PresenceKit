@@ -1,0 +1,24 @@
+<h1 class="page-title" data-i18n="settings_center.proxy_and_relay">代理与中继</h1><div class="card">
+  <div class="card-header"><h3 data-i18n="status.proxy.title">代理配置</h3><button class="btn btn-ghost btn-sm" data-action="loadProxy" data-i18n="common.refresh">刷新</button></div>
+  <p class="admin-inline-087" data-i18n="status.proxy.hint">仅后端出站请求使用代理，桌面客户端 HTTP 始终禁用代理。</p>
+  <div class="form-row">
+    <label class="checkbox-row admin-inline-117"><input type="checkbox" id="proxy-enabled" class="admin-inline-202"><span data-i18n="status.proxy.enable">启用代理</span></label>
+    <span id="proxy-status-badge" class="badge badge-danger" data-i18n="common.disabled">未启用</span>
+  </div>
+  <div class="form-row">
+    <label class="field"><span data-i18n="status.proxy.http">HTTP 代理地址</span><input type="url" id="proxy-http" placeholder="http://proxy.example:7897"></label>
+    <label class="field"><span data-i18n="status.proxy.https">HTTPS 代理地址</span><input type="url" id="proxy-https" placeholder="http://proxy.example:7897"></label>
+  </div>
+  <div class="config-item-meta"><span data-i18n="runtime_config.source_global">来源：全局配置</span><span data-i18n="runtime_config.apply_reload">保存后热重载</span></div>
+  <button class="btn btn-primary btn-sm" data-action="saveProxy" data-i18n="common.save">保存</button>
+</div><div class="card">
+  <div class="card-header"><h3 data-i18n="status.relay.title">中继唤醒</h3><button class="btn btn-ghost btn-sm" data-action="loadRelaySettings" data-i18n="common.refresh">刷新</button></div>
+  <p class="admin-inline-087" data-i18n="static.status.relay_hint">只影响中继唤醒通道，不改变调度器本地触发。</p>
+  <div class="form-row">
+    <label class="field"><span data-i18n="runtime_config.relay_base_url">Base URL</span><input type="url" id="relay-base-url"></label>
+    <label class="field"><span data-i18n="runtime_config.relay_topic">Topic</span><input type="text" id="relay-topic"></label>
+  </div>
+  <label class="field"><span data-i18n="status.relay.token">Token（留空保留已有值）</span><input type="password" id="relay-token" autocomplete="off"></label>
+  <div class="config-item-meta"><span data-i18n="runtime_config.source_global">来源：全局 relay 设置</span><span data-i18n="runtime_config.apply_reload">保存后热重载</span></div>
+  <button class="btn btn-primary btn-sm" data-action="saveRelaySettings" data-i18n="common.save">保存</button>
+</div>

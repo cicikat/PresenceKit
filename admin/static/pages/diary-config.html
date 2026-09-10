@@ -1,0 +1,16 @@
+<h1 class="page-title" data-i18n="settings_center.backend_diary_source">后端日记数据源</h1><div class="card">
+        <div class="card-header">
+          <h3><span data-i18n="setup.diary.title">Obsidian 日记路径</span> <span class="badge" data-i18n="common.optional">可选</span></h3>
+          <span id="setup-diary-status" class="admin-inline-082"></span>
+        </div>
+        <p data-i18n="setup.diary.description" class="admin-inline-087">日记读取功能（daily_journal/diary_reminder/diary_inject）读取此目录下按 YYYY-MM-DD.md 命名的日记文件；不填则回落到本地 fallback 目录。角色白名单（diary.characters）不在本页编辑。</p>
+        <div class="form-row col-1">
+          <label class="field">
+            <span>obsidian_path</span>
+            <input type="text" id="setup-diary-path" placeholder="例如 E:\obsidian_note\Psychology\Calendar" data-i18n-placeholder="setup.diary.placeholder">
+          </label>
+        </div>
+        <div class="modal-footer admin-inline-124">
+          <button class="btn btn-primary" data-action="saveSetupDiary" data-i18n="common.save">保存</button>
+        </div>
+      </div>

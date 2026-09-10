@@ -301,26 +301,9 @@ async function loadObserveAutonomy() {
     _renderAutonomyOverview(overviewEl, status, config, effectiveState);
     _renderAutonomyRuns(runsEl, runs.runs || []);
     _renderAutonomyFunnel(document.getElementById('autonomy-funnel'), opportunities.funnel || {});
-    if ((runs.runs || []).length) await loadAutonomyPrompt(runs.runs[0].id);
-    document.getElementById('autonomy-enabled').checked = !!config.enabled;
-    document.getElementById('autonomy-talk').checked = !!config.talk_enabled;
-    document.getElementById('autonomy-daily').value = config.daily_evaluation_budget || 1;
-    document.getElementById('autonomy-min-interval').value = config.min_interval_seconds || 0;
-    document.getElementById('autonomy-interval').value = (config.interval || {}).seconds || 60;
-    document.getElementById('autonomy-interval-enabled').checked = !!(config.interval || {}).enabled;
-    document.getElementById('autonomy-overflow-enabled').checked = !!(config.overflow || {}).enabled;
-    document.getElementById('autonomy-overflow-threshold').value = (config.overflow || {}).threshold || 1.6;
-    const schedule = config.schedule || {};
-    document.getElementById('autonomy-schedule-enabled').checked = !!schedule.enabled;
-    document.getElementById('autonomy-schedule-time').value = schedule.time || '12:00';
-    document.getElementById('autonomy-schedule-timezone').value = schedule.timezone || 'local';
-    document.getElementById('autonomy-schedule-weekdays').value = (schedule.weekdays || []).join(',');
-    document.getElementById('autonomy-window-start').value = (schedule.window || [])[0] || '';
-    document.getElementById('autonomy-window-end').value = (schedule.window || [])[1] || '';
-    document.getElementById('autonomy-miss-policy').value = schedule.restart_miss_policy || 'skip';
     const host = document.getElementById('autonomy-tools');
     _renderAutonomyTools(host, tools.tools || []);
-    await loadSelfManagement();
+
   } catch (e) { overviewEl.innerHTML = `<div class="empty">读取唤醒状态失败：${escapeHtml(e.message)}</div>`; }
 }
 
@@ -491,7 +474,7 @@ async function saveAutonomyConfig() {
       overflow: {enabled: document.getElementById('autonomy-overflow-enabled').checked, threshold: Number(document.getElementById('autonomy-overflow-threshold').value)},
       schedule: {enabled: document.getElementById('autonomy-schedule-enabled').checked, time: document.getElementById('autonomy-schedule-time').value, timezone: document.getElementById('autonomy-schedule-timezone').value || 'local', weekdays, window: start && end ? [start, end] : [], restart_miss_policy: document.getElementById('autonomy-miss-policy').value},
     });
-    await loadObserveAutonomy();
+    await loadAutonomySettings();
     const enabled = config.enabled ? '已启用内置唤醒' : '已关闭内置唤醒';
     const overflow = config.overflow?.enabled ? `溢出信号已启用（阈值 ${config.overflow.threshold}）` : '溢出信号已关闭';
     const schedule = config.schedule?.enabled ? `定时唤醒已启用（${config.schedule.time}）` : '定时唤醒已关闭';
@@ -501,7 +484,7 @@ async function saveAutonomyConfig() {
 }
 
 async function enqueueAutonomyTest() {
-  try { const r = await api('POST', '/admin/autonomy/test-enqueue', {source: document.getElementById('autonomy-test-source').value}); toast(`已排队一次测试（任务 ${String(r.job_id).slice(0, 8)}）`, 'ok'); await loadObserveAutonomy(); }
+  try { const r = await api('POST', '/admin/autonomy/test-enqueue', {source: document.getElementById('autonomy-test-source').value}); toast(`已排队一次测试（任务 ${String(r.job_id).slice(0, 8)}）`, 'ok'); if(document.getElementById('page-observe-autonomy')?.classList.contains('active'))await loadObserveAutonomy(); }
   catch (e) { toast('排队失败：' + e.message, 'err'); }
 }
 
@@ -2063,4 +2046,33 @@ async function loadSystemDiagnosis() {
   } catch (e) {
     el.innerHTML = `<div style="color:#ef4444">加载失败：${escapeHtml(e.message)}</div>`;
   }
+}
+
+async function loadAutonomySettings() {
+  void loadSelfManagement();
+  try { const config=await api("GET", "/admin/autonomy/config");
+    document.getElementById('autonomy-enabled').checked = !!config.enabled;
+    document.getElementById('autonomy-talk').checked = !!config.talk_enabled;
+    document.getElementById('autonomy-daily').value = config.daily_evaluation_budget || 1;
+    document.getElementById('autonomy-min-interval').value = config.min_interval_seconds || 0;
+    document.getElementById('autonomy-interval').value = (config.interval || {}).seconds || 60;
+    document.getElementById('autonomy-interval-enabled').checked = !!(config.interval || {}).enabled;
+    document.getElementById('autonomy-overflow-enabled').checked = !!(config.overflow || {}).enabled;
+    document.getElementById('autonomy-overflow-threshold').value = (config.overflow || {}).threshold || 1.6;
+    const schedule = config.schedule || {};
+    document.getElementById('autonomy-schedule-enabled').checked = !!schedule.enabled;
+    document.getElementById('autonomy-schedule-time').value = schedule.time || '12:00';
+    document.getElementById('autonomy-schedule-timezone').value = schedule.timezone || 'local';
+    document.getElementById('autonomy-schedule-weekdays').value = (schedule.weekdays || []).join(',');
+    document.getElementById('autonomy-window-start').value = (schedule.window || [])[0] || '';
+    document.getElementById('autonomy-window-end').value = (schedule.window || [])[1] || '';
+    document.getElementById('autonomy-miss-policy').value = schedule.restart_miss_policy || 'skip';
+
+  } catch(error) { toast("读取失败："+error.message,"err"); }
+}
+
+async function loadLatestAutonomyPrompt() {
+  const host=document.getElementById('autonomy-prompt');
+  try {const data=await api('GET','/admin/autonomy/runs?limit=1');if(data.runs?.length)await loadAutonomyPrompt(data.runs[0].id);}
+  catch(error){centerError(host,error);}
 }

@@ -380,3 +380,12 @@ three-repo interface catalog before client work begins.
 ### Mobile typography verification and historical fidelity
 
 `observe` (2026-09-09): reality replies and mobile queue delivery now carry optional inline display_text; Flutter renders hl/big/sm, including reveal and selection. Widget/controller and backend regressions cover live delivery; no physical phone visual verification has been performed. `roadmap`: chat-log history already stores plain text and cannot reconstruct discarded tags after reload; independent Dream/group typography transport is not included in this reality change.
+
+## Brief 242 验收边界（2026-09-10）
+
+- `observe`：设置重整已通过后端 UI/API、桌面类型/构建与浏览器夹具检查；尚未完成真实
+  Tauri 原生窗口和手机设备回归。浏览器使用真实静态/React 资源、夹具 API/IPC，不能
+  代表真实 provider 连通、生产配置保存或 native bridge 实机结果。设置与协议事实见
+  `docs/three-repo-interface-catalog.md` 的 Brief 242 条目。
+- `open`（既有）：`tests/test_admin_tools_mcp_ux.py` 的工具说明覆盖检查发现 `reread_image`
+  缺中英文语义说明。此次未修改该工具或放宽断言；需独立补工具文案。

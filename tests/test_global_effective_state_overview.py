@@ -34,6 +34,22 @@ def test_routing_summary_is_safe_and_follows_global_after_reset(monkeypatch):
     assert "example.invalid" not in str(result)
 
 
+def test_routing_summary_allows_keyless_compatible_server_but_not_native_anthropic(monkeypatch):
+    from core import model_registry as registry
+
+    preset = {"model": "example", "base_url": "http://localhost:11434/v1"}
+    monkeypatch.setattr(registry, "_get_preset_config", lambda: {"presets": {"local": preset}})
+    monkeypatch.setattr(registry, "_char_model_routing", lambda _: None)
+    monkeypatch.setattr(registry, "_resolve_preset_name", lambda *a, **kw: "local")
+    assert registry.resolve_routing_info("example")["chat_configured"] is True
+    preset["api_protocol"] = "anthropic_messages"
+    assert registry.resolve_routing_info("example")["chat_configured"] is False
+    preset["api_key"] = "test-key"
+    assert registry.resolve_routing_info("example")["chat_configured"] is True
+    preset["model"] = "YOUR_MODEL"
+    assert registry.resolve_routing_info("example")["chat_configured"] is False
+
+
 def test_global_effective_state_contract_covers_required_features(sandbox):
     from core.control_center.effective_state import build_global_effective_state
 
@@ -54,6 +70,10 @@ def test_global_effective_state_contract_covers_required_features(sandbox):
     } for row in rows.values())
     assert rows["hardware_intiface"]["runtime_status"] == "dormant"
     assert rows["hardware_intiface"]["details"]["mcp"] is False
+    assert rows["tool_loop"]["edit_page"] == "conversation-settings"
+    assert rows["embedding"]["edit_page"] == "embedding-config"
+    assert rows["tts"]["edit_page"] == "tts-config"
+    assert rows["autonomy"]["edit_page"] == "autonomy-settings"
 
 
 def test_control_center_endpoint_and_overview_use_the_contract():

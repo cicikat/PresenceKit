@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>His Presence 管理面板</title>
-<link rel="stylesheet" href="/static/style.css?v=brief-180-admin-static-1">
+<link rel="stylesheet" href="/static/style.css?v=brief-242-settings-4">
 </head>
 <body>
 
@@ -14,7 +14,7 @@
     <div class="auth-language">
       <label for="auth-language-select" data-i18n="common.language">语言</label>
       <select id="auth-language-select" data-language-select onchange="AdminI18n.setLanguage(this.value)">
-        <option value="zh-CN">中文</option>
+        <option value="zh-CN" data-i18n="settings_center.chinese">中文</option>
         <option value="en">English</option>
       </select>
     </div>
@@ -53,82 +53,12 @@
       <h2 data-i18n="nav.console">运维控制台</h2>
       <p id="nav-host">127.0.0.1:8080</p>
     </div>
-    <a class="active" data-page="overview" data-action="goto" data-action-args='["overview"]'><span class="icon">⌂</span><span data-i18n="nav.overview">概览</span></a>
-
-    <div class="nav-group-header" data-action="toggleNavGroup" data-action-args='["setup"]'><span class="nav-caret" id="caret-setup">▾</span><span data-i18n="nav.group.setup">开始使用</span></div>
-    <div class="nav-group" id="navgroup-setup">
-      <a data-page="setup" data-action="goto" data-action-args='["setup"]'><span class="icon">🧩</span><span data-i18n="nav.setup">配置</span></a>
-    </div>
-
-    <div class="nav-group-header" data-action="toggleNavGroup" data-action-args='["conversation"]'><span class="nav-caret" id="caret-conversation">▾</span><span data-i18n="nav.group.conversation">对话与角色</span></div>
-    <div class="nav-group" id="navgroup-conversation">
-      <a data-page="character" data-action="goto" data-action-args='["character"]'><span class="icon">🃏</span><span data-i18n="nav.character">角色卡</span></a>
-      <a data-page="lorebook" data-action="goto" data-action-args='["lorebook"]'><span class="icon">🌍</span><span data-i18n="nav.lorebook">现实设定</span></a>
-      <a data-page="dream-settings" data-action="goto" data-action-args='["dream-settings"]'><span class="icon">🌙</span><span data-i18n="nav.dream_settings">梦境设定</span></a>
-      <a data-page="relationship-facts" data-action="goto" data-action-args='["relationship-facts"]'><span class="icon">📌</span><span data-i18n="nav.relationship_facts">关系事实</span></a>
-      <a data-page="user-data" data-action="goto" data-action-args='["user-data"]'><span class="icon">📦</span><span data-i18n="nav.user_data">用户数据</span></a>
-    </div>
-
-    <div class="nav-group-header" data-action="toggleNavGroup" data-action-args='["proactive"]'><span class="nav-caret" id="caret-proactive">▾</span><span data-i18n="nav.group.proactive">主动行为</span></div>
-    <div class="nav-group" id="navgroup-proactive">
-      <a data-page="scheduler" data-action="goto" data-action-args='["scheduler"]'><span class="icon">⏰</span><span data-i18n="nav.scheduler">调度器</span></a>
-      <a data-page="observe-autonomy" data-action="goto" data-action-args='["observe-autonomy"]'><span class="icon">⚡</span><span data-i18n="nav.autonomy">唤醒状态</span></a>
-    </div>
-
-    <div class="nav-group-header" data-action="toggleNavGroup" data-action-args='["connections"]'><span class="nav-caret" id="caret-connections">▾</span><span data-i18n="nav.group.connections">工具与连接</span></div>
-    <div class="nav-group" id="navgroup-connections">
-      <a data-page="tools" data-action="goto" data-action-args='["tools"]'><span class="icon">🧰</span><span data-i18n="nav.tools">工具</span></a>
-      <a data-page="mcp" data-action="goto" data-action-args='["mcp"]'><span class="icon">🔗</span><span data-i18n="nav.mcp">MCP 工具</span></a>
-      <a data-page="owner-turn-api" data-action="goto" data-action-args='["owner-turn-api"]'><span class="icon">🧾</span><span data-i18n="nav.owner_turn_api">接口与部署</span></a>
-      <a data-page="agent-runtime-browser" data-action="goto" data-action-args='["agent-runtime-browser"]'><span class="icon">🌐</span><span data-i18n="nav.agent_runtime_browser">浏览器能力</span></a>
-    </div>
-
-    <div class="nav-group-header" data-action="toggleNavGroup" data-action-args='["channels"]'><span class="nav-caret" id="caret-channels">▾</span><span data-i18n="nav.group.channels">通道与设备</span></div>
-    <div class="nav-group" id="navgroup-channels">
-      <a data-page="status" data-action="goto" data-action-args='["status"]'><span class="icon">📊</span><span data-i18n="nav.status">系统状态</span></a>
-    </div>
-
-    <div class="nav-group-header" data-action="toggleNavGroup" data-action-args='["security"]'><span class="nav-caret" id="caret-security">▾</span><span data-i18n="nav.group.security">安全与账户</span></div>
-    <div class="nav-group" id="navgroup-security">
-      <a data-page="auth-tokens" data-action="goto" data-action-args='["auth-tokens"]'><span class="icon">🔑</span><span data-i18n="nav.auth_tokens">Token</span></a>
-      <a data-page="users" data-action="goto" data-action-args='["users"]'><span class="icon">👤</span><span data-i18n="nav.users">用户管理</span></a>
-    </div>
-
-    <div class="nav-group-header nav-group-readonly" data-action="toggleNavGroup" data-action-args='["existence"]'><span class="nav-caret" id="caret-existence">▾</span><span data-i18n="nav.group.existence">存在</span></div>
-    <div class="nav-group nav-group-readonly" id="navgroup-existence">
-      <a data-page="observe-existence" data-action="goto" data-action-args='["observe-existence"]'><span class="icon">✨</span><span data-i18n="nav.existence_overview">存在总览</span></a>
-      <a data-page="observe-memory" data-action="goto" data-action-args='["memory"]'><span class="icon">🧠</span><span data-i18n="nav.memory">记忆探查</span></a>
-      <a data-page="observe-memory-events" data-action="goto" data-action-args='["observe-memory-events"]'><span class="icon">🔎</span><span data-i18n="nav.memory_events">事件证据</span></a>
-      <a data-page="observe-memory-summary" data-action="goto" data-action-args='["observe-memory-summary"]'><span class="icon">📚</span><span data-i18n="nav.memory_summary">记忆摘要</span></a>
-      <a data-page="observe-growth" data-action="goto" data-action-args='["observe-growth"]'><span class="icon">🌱</span><span data-i18n="nav.growth">成长</span></a>
-      <a data-page="observe-visual" data-action="goto" data-action-args='["observe-visual"]'><span class="icon">👁️</span><span data-i18n="nav.visual">视觉</span></a>
-      <a data-page="observe-spend" data-action="goto" data-action-args='["observe-spend"]'><span class="icon">💰</span><span data-i18n="nav.spend">支出</span></a>
-      <a data-page="observe-group-arbiter" data-action="goto" data-action-args='["observe-group-arbiter"]'><span class="icon">⚖️</span><span data-i18n="nav.group_arbiter">群聊仲裁</span></a>
-      <a data-page="observe-provenance" data-action="goto" data-action-args='["observe-provenance"]'><span class="icon">🧾</span><span data-i18n="nav.provenance">印象溯源</span></a>
-      <a data-page="observe-vector" data-action="goto" data-action-args='["observe-vector"]'><span class="icon">🧬</span><span data-i18n="nav.vector_store">向量库</span></a>
-    </div>
-
-    <div class="nav-group-header nav-group-readonly" data-action="toggleNavGroup" data-action-args='["observe"]'><span class="nav-caret" id="caret-observe">▾</span><span data-i18n="nav.group.observation">只读观测</span></div>
-    <div class="nav-group nav-group-readonly" id="navgroup-observe">
-      <a data-page="observe-prompt"  data-action="goto" data-action-args='["observe-prompt"]'> <span class="icon">🗂️</span><span data-i18n="nav.prompt_layers">Prompt 层检视</span></a>
-      <a data-page="observe-tools"   data-action="goto" data-action-args='["observe-tools"]'>  <span class="icon">🛠️</span><span data-i18n="nav.tool_observability">工具观测</span></a>
-      <a data-page="observe-dream-prompt" data-action="goto" data-action-args='["observe-dream-prompt"]'><span class="icon">💭</span><span data-i18n="nav.dream_prompt">梦境 Prompt</span></a>
-      <a data-page="observe-dream-operations" data-action="goto" data-action-args='["observe-dream-operations"]'><span class="icon">🧭</span><span data-i18n="nav.dream_operations">梦境运维</span></a>
-      <a data-page="observe-system-diagnosis" data-action="goto" data-action-args='["observe-system-diagnosis"]'><span class="icon">🩺</span><span data-i18n="nav.system_diagnosis">系统诊断</span></a>
-      <a data-page="observe-char-permissions" data-action="goto" data-action-args='["observe-char-permissions"]'><span class="icon">🔐</span><span data-i18n="nav.char_permissions">角色权限</span></a>
-      <a data-page="observe-chatlog" data-action="goto" data-action-args='["observe-chatlog"]'><span class="icon">💬</span><span data-i18n="nav.chat_log">聊天日志</span></a>
-      <a data-page="observe-runtime" data-action="goto" data-action-args='["observe-runtime"]'><span class="icon">⚙️</span><span data-i18n="nav.runtime">运行时内部态</span></a>
-      <a data-page="observe-runtime-signals" data-action="goto" data-action-args='["observe-runtime-signals"]'><span class="icon">📡</span><span data-i18n="nav.runtime_signals">运行信号</span></a>
-      <a data-page="logs"      data-action="goto" data-action-args='["logs"]'>     <span class="icon">📋</span><span data-i18n="nav.logs">错误日志</span></a>
-    </div>
-
-    <div class="nav-group-header" data-action="toggleNavGroup" data-action-args='["advanced"]'><span class="nav-caret" id="caret-advanced">▾</span><span data-i18n="nav.group.advanced">高级设置</span></div>
-    <div class="nav-group" id="navgroup-advanced">
-      <a data-page="model-routing" data-action="goto" data-action-args='["model-routing"]'><span class="icon">🔀</span><span data-i18n="nav.model_routing">模型路由</span></a>
-      <a data-page="runtime-config" data-action="goto" data-action-args='["runtime-config"]'><span class="icon">⚙️</span><span data-i18n="nav.runtime_config">运行配置</span></a>
-      <a data-page="tts-config" data-action="goto" data-action-args='["tts-config"]'><span class="icon">🔊</span><span data-i18n="nav.tts_config">TTS 配置</span></a>
-    </div>
-
+<a class="active" data-page="overview" data-action="goto" data-action-args='["overview"]'><span data-i18n="nav.overview">概览</span></a>
+<a data-page="feature-center" data-action="goto" data-action-args='["feature-center"]'><span data-i18n="nav.feature_center">功能与行为</span></a>
+<a data-page="service-center" data-action="goto" data-action-args='["service-center"]'><span data-i18n="nav.service_center">服务配置</span></a>
+<a data-page="creation-center" data-action="goto" data-action-args='["creation-center"]'><span data-i18n="nav.creation_center">创作</span></a>
+<a data-page="observation-center" data-action="goto" data-action-args='["observation-center"]'><span data-i18n="nav.observation_center">观测</span></a>
+<a data-page="operations-center" data-action="goto" data-action-args='["operations-center"]'><span data-i18n="nav.operations_center">运维与调试</span></a>
     <div class="nav-bottom">
       <div class="key-hint" id="nav-key-hint"></div>
       <button class="btn btn-ghost btn-sm admin-inline-191" data-action="logout" data-i18n="nav.logout">退出登录</button>
@@ -139,7 +69,7 @@
     <div class="admin-topbar">
       <label for="admin-language-select" data-i18n="common.language">语言</label>
       <select id="admin-language-select" data-language-select onchange="AdminI18n.setLanguage(this.value)">
-        <option value="zh-CN">中文</option>
+        <option value="zh-CN" data-i18n="settings_center.chinese">中文</option>
         <option value="en">English</option>
       </select>
     </div>
@@ -198,7 +128,7 @@
         </div>
         <div class="admin-inline-174">
           <button class="btn btn-ghost" data-action="closeDreamLoreModal">取消</button>
-          <button class="btn btn-primary" data-action="saveDreamLoreEntry">保存</button>
+          <button class="btn btn-primary" data-action="saveDreamLoreEntry" data-i18n="settings_center.save">保存</button>
         </div>
       </div>
     </div>
@@ -257,7 +187,7 @@
           </label>
           <label class="field">
             <input type="checkbox" id="mr-preset-force-stream">
-            <span>强制流式请求（仅 Chat Completions；含工具调用，手机仍接收完整回复）</span>
+            <span data-i18n="settings_center.force_streaming_for_chat_completions_including_tool_calls_mobile_still_receives_complete_replies">强制流式请求（仅 Chat Completions；含工具调用，手机仍接收完整回复）</span>
           </label>
           <label class="field">
             <span data-i18n="routing.preset.anthropic_auth_label">anthropic_auth_mode（仅 anthropic_messages：认证头）</span>
@@ -294,7 +224,7 @@
         <div id="mr-preset-err" class="admin-inline-011"></div>
         <div class="modal-footer">
           <button class="btn btn-ghost" data-action="closePresetModal">取消</button>
-          <button class="btn btn-primary" data-action="submitPresetModal">保存</button>
+          <button class="btn btn-primary" data-action="submitPresetModal" data-i18n="settings_center.save">保存</button>
         </div>
       </div>
     </div>
@@ -313,7 +243,7 @@
         <div id="mr-profile-err" class="admin-inline-011"></div>
         <div class="modal-footer">
           <button class="btn btn-ghost" data-action="closeProfileModal">取消</button>
-          <button class="btn btn-primary" data-action="submitProfileModal">保存</button>
+          <button class="btn btn-primary" data-action="submitProfileModal" data-i18n="settings_center.save">保存</button>
         </div>
       </div>
     </div>
@@ -350,7 +280,7 @@
         <div id="rf-fact-err" class="admin-inline-011"></div>
         <div class="modal-footer">
           <button class="btn btn-ghost" data-action="closeFactModal">取消</button>
-          <button class="btn btn-primary" data-action="submitFactModal">保存</button>
+          <button class="btn btn-primary" data-action="submitFactModal" data-i18n="settings_center.save">保存</button>
         </div>
       </div>
     </div>
@@ -427,6 +357,24 @@
     <!-- ── 向量库 ── -->
     <div class="page" id="page-observe-vector" data-page-fragment="observe-vector"></div>
 
+<div class="page" id="page-feature-center" data-page-fragment="feature-center"></div>
+<div class="page" id="page-service-center" data-page-fragment="service-center"></div>
+<div class="page" id="page-creation-center" data-page-fragment="creation-center"></div>
+<div class="page" id="page-observation-center" data-page-fragment="observation-center"></div>
+<div class="page" id="page-operations-center" data-page-fragment="operations-center"></div>
+<div class="page" id="page-conversation-settings" data-page-fragment="conversation-settings"></div>
+<div class="page" id="page-role-bindings" data-page-fragment="role-bindings"></div>
+<div class="page" id="page-generation-debug" data-page-fragment="generation-debug"></div>
+<div class="page" id="page-embedding-config" data-page-fragment="embedding-config"></div>
+<div class="page" id="page-mail-config" data-page-fragment="mail-config"></div>
+<div class="page" id="page-diary-config" data-page-fragment="diary-config"></div>
+<div class="page" id="page-coplay-config" data-page-fragment="coplay-config"></div>
+<div class="page" id="page-personal-settings" data-page-fragment="personal-settings"></div>
+<div class="page" id="page-network-config" data-page-fragment="network-config"></div>
+<div class="page" id="page-device-policy" data-page-fragment="device-policy"></div>
+<div class="page" id="page-output-settings" data-page-fragment="output-settings"></div>
+<div class="page" id="page-autonomy-settings" data-page-fragment="autonomy-settings"></div>
+<div class="page" id="page-call-records" data-page-fragment="call-records"></div>
   </main>
 </div>
 
@@ -505,7 +453,7 @@
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" data-action="closeProfileEdit">取消</button>
-      <button class="btn btn-primary" data-action="saveProfile">保存</button>
+      <button class="btn btn-primary" data-action="saveProfile" data-i18n="settings_center.save">保存</button>
     </div>
   </div>
 </div>
@@ -544,7 +492,7 @@
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" data-action="closeLoreModal">取消</button>
-      <button class="btn btn-primary" data-action="saveLoreEntry">保存</button>
+      <button class="btn btn-primary" data-action="saveLoreEntry" data-i18n="settings_center.save">保存</button>
     </div>
   </div>
 </div>
@@ -603,26 +551,26 @@
 
 <div id="toast"></div>
 
-<script src="/static/i18n.js?v=brief-239-browser-admin-2"></script>
-<!-- legacy cache marker: <script src="/static/i18n.js?v=brief-239-browser-confirmation-1"></script> -->
-<script src="/static/js/core.js?v=image-ocr-routing-1"></script>
-<!-- legacy cache marker: <script src="/static/js/core.js?v=brief-195-mcp-autonomy-signal-1"></script> -->
-<!-- legacy cache marker: <script src="/static/js/core.js?v=brief-195-mcp-autonomy-signal-1"></script> -->
+<script src="/static/i18n.js?v=brief-242-settings-4"></script>
+<!-- legacy cache marker: <script src="/static/i18n.js?v=brief-242-settings-4"></script> -->
+<script src="/static/js/core.js?v=brief-242-settings-4"></script>
+<!-- legacy cache marker: <script src="/static/js/core.js?v=brief-242-settings-4"></script> -->
+<!-- legacy cache marker: <script src="/static/js/core.js?v=brief-242-settings-4"></script> -->
 <script src="/static/js/overview.js?v=brief-180-admin-static-1"></script>
-<script src="/static/js/setup.js?v=brief-163-status-config-ux-1"></script>
-<script src="/static/js/mcp.js?v=brief-195-mcp-autonomy-signal-1"></script>
+<script src="/static/js/setup.js?v=brief-242-settings-4"></script>
+<script src="/static/js/mcp.js?v=brief-242-settings-4"></script>
 <script src="/static/js/tools.js?v=brief-161-tools-mcp-ux-1"></script>
 <script src="/static/js/status-users.js?v=brief-163-status-config-ux-1"></script>
-<script src="/static/js/runtime-config.js?v=brief-217-event-context-observer-1"></script>
+<script src="/static/js/runtime-config.js?v=settings-center-1"></script>
 <script src="/static/js/lorebook.js"></script>
-<script src="/static/js/settings.js?v=force-stream-1"></script>
+<script src="/static/js/settings.js?v=settings-center-1"></script>
 <script src="/static/js/owner-turn-api.js?v=brief-173-owner-turn-1"></script>
 <script src="/static/js/agent-runtime-browser.js?v=brief-239-browser-admin-1"></script>
 <script src="/static/js/relationship.js"></script>
-<script src="/static/js/character.js?v=brief-180-admin-static-1"></script>
+<script src="/static/js/character.js?v=brief-242-settings-4"></script>
 <script src="/static/js/scheduler.js?v=admin-i18n-completeness-1"></script>
 <script src="/static/js/integrations.js?v=brief-160-garden-freeze-1"></script>
-<script src="/static/js/observability.js?v=brief-195-mcp-autonomy-signal-1"></script>
+<script src="/static/js/observability.js?v=brief-242-settings-4"></script>
 <script src="/static/js/memory-event-control.js?v=brief-216-memory-event-control-1"></script>
 <script src="/static/js/dream-operations.js?v=brief-175-scenario-reconciler-1"></script>
 <script src="/static/js/user-data.js?v=brief-162-userdata-assets-1"></script>
@@ -630,5 +578,6 @@
 <!-- legacy cache marker: <script src="/static/js/dream-settings.js?v=brief-175-scenario-reconciler-1"></script> -->
 <!-- legacy cache marker: /static/js/dream-settings.js?v=brief-175-scenario-reconciler-1 -->
 <script src="/static/js/provenance-vector.js"></script>
+<script src="/static/js/settings-center.js?v=brief-242-settings-4"></script>
 </body>
 </html>

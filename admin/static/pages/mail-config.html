@@ -1,0 +1,62 @@
+<h1 class="page-title" data-i18n="settings_center.mail_connection">邮件连接</h1><div class="card">
+        <div class="card-header">
+          <h3><span data-i18n="setup.mail.title">邮件通道</span> <span class="badge" data-i18n="common.optional">可选</span></h3>
+          <span id="setup-mail-status" class="admin-inline-082"></span>
+        </div>
+        <p data-i18n="setup.mail.description" class="admin-inline-087">角色写信功能的 SMTP 发信配置；默认关闭，纯增值功能。总开关也可以在「Token」页「通道开关」区切换。</p>
+        <div class="form-row">
+          <label class="checkbox-row admin-inline-117">
+            <input type="checkbox" id="setup-mail-enabled" class="admin-inline-202">
+            <span data-i18n="setup.mail.enable">启用邮件通道</span>
+          </label>
+        </div>
+        <div class="form-row">
+          <label class="field">
+            <span>smtp_host</span>
+            <input type="text" id="setup-mail-host" placeholder="smtp.gmail.com">
+          </label>
+          <label class="field">
+            <span>smtp_port</span>
+            <input type="number" id="setup-mail-port" placeholder="587">
+          </label>
+        </div>
+        <div class="form-row">
+          <label class="field">
+            <span>smtp_user</span>
+            <input type="text" id="setup-mail-user" placeholder="发信邮箱账号" data-i18n-placeholder="setup.mail.user_placeholder">
+          </label>
+          <label class="field">
+            <span>smtp_password <span id="setup-mail-password-state" class="admin-inline-077"></span></span>
+            <input type="password" id="setup-mail-password" placeholder="留空=不修改已有值" data-i18n-placeholder="setup.secret.keep">
+          </label>
+        </div>
+        <div class="form-row">
+          <label class="field">
+            <span>from_addr</span>
+            <input type="text" id="setup-mail-from-addr" placeholder="发送邮箱地址" data-i18n-placeholder="setup.mail.from_addr_placeholder">
+          </label>
+          <label class="field">
+            <span>from_name</span>
+            <input type="text" id="setup-mail-from-name" placeholder="角色名" data-i18n-placeholder="setup.mail.from_name_placeholder">
+          </label>
+        </div>
+        <div class="form-row">
+          <label class="field">
+            <span>to_addr</span>
+            <input type="text" id="setup-mail-to-addr" placeholder="接收邮箱地址" data-i18n-placeholder="setup.mail.to_addr_placeholder">
+          </label>
+          <label class="field">
+            <span>subject_prefix</span>
+            <input type="text" id="setup-mail-subject-prefix" placeholder="【来信】" data-i18n-placeholder="setup.mail.subject_placeholder">
+          </label>
+        </div>
+        <div class="form-row col-1">
+          <label class="field">
+            <span data-i18n="setup.mail.proxy_label">proxy_url（可选，SMTP 端口被墙时用）</span>
+            <input type="text" id="setup-mail-proxy-url" placeholder="http://127.0.0.1:7897">
+          </label>
+        </div>
+        <div class="modal-footer admin-inline-124">
+          <button class="btn btn-primary" data-action="saveSetupMail" data-i18n="common.save">保存</button>
+        </div>
+      </div>

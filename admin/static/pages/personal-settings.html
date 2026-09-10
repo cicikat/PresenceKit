@@ -1,0 +1,17 @@
+<h1 class="page-title" data-i18n="settings_center.user_profile_and_anniversaries">用户资料与纪念日</h1><div class="card">
+        <div class="card-header"><h3><span data-i18n="setup.anniversaries.title">自定义纪念日</span> <span class="badge" data-i18n="common.optional">可选</span></h3></div>
+        <p class="admin-inline-087">letter_writer / festival 消费；命中当天会主动提起。每条填写 key、月、日；其余提示字段可选。</p>
+        <div id="setup-anniversaries-list"></div>
+        <button type="button" class="btn btn-ghost btn-sm" data-action="addSetupAnniversary">Add anniversary</button>
+        <div class="modal-footer admin-inline-124">
+          <button class="btn btn-primary" data-action="saveSetupAnniversaries" data-i18n="common.save">保存</button>
+        </div>
+      </div><div class="card">
+  <div class="card-header"><h3 data-i18n="status.pronoun.title">用户称谓</h3></div>
+  <p class="admin-inline-087" data-i18n="runtime_config.pronoun_hint">按用户选择固定称谓；这里只读当前选择，保存通过用户事实接口完成。</p>
+  <div class="form-row">
+    <label class="field"><span data-i18n="status.pronoun.user">用户</span><select id="pn-uid-select" onchange="loadUserPronoun()"></select></label>
+    <label class="field"><span data-i18n="status.pronoun.value">称谓</span><select id="pn-value"><option value="她" data-i18n="status.pronoun.she">她</option><option value="他" data-i18n="status.pronoun.he">他</option><option value="TA" data-i18n="status.pronoun.they">TA</option><option value="它" data-i18n="status.pronoun.it">它</option></select></label>
+    <button class="btn btn-primary btn-sm" data-action="saveUserPronoun" data-i18n="common.save">保存</button>
+  </div>
+</div>

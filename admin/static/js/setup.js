@@ -93,21 +93,8 @@ async function loadSetupPage() {
       : `（${t('common.not_configured', '未配置')}）`;
     document.getElementById('setup-base-status').innerHTML = _setupBadge(base.configured);
 
-    document.getElementById('setup-embed-base-url').value = embed.base_url || '';
-    document.getElementById('setup-embed-model').value = embed.model || '';
-    document.getElementById('setup-embed-dim').value = embed.dim || '';
-    document.getElementById('setup-embed-api-key').value = '';
-    document.getElementById('setup-embed-key-state').textContent = embed.api_key_set
-      ? t('setup.secret.configured', '（已配置 {value}）', {value: embed.api_key_masked})
-      : `（${t('common.not_configured', '未配置')}）`;
-    document.getElementById('setup-embedding-status').innerHTML = embed.configured
-      ? _setupBadge(true)
-      : `<span class="badge">○ ${escapeHtml(t('setup.embedding.not_configured', '未配置（召回自动降级为关键词匹配，不影响聊天）'))}</span>`;
+    await _loadSetupOptional();
 
-    await Promise.all([
-      _loadSetupOptional(), _loadSetupMail(), _loadSetupAnniversaries(),
-      _loadSetupDiary(), _loadSetupCoplayGames(),
-    ]);
   } catch (e) {
     toast(t('setup.load_error', '加载配置中心失败: {error}', {error: _setupErrMsg(e)}), 'err');
   }
@@ -363,7 +350,7 @@ async function saveSetupEmbedding() {
   try {
     await api('PUT', '/settings/embedding', body);
     toast(t('setup.embedding.saved', 'Embedding 配置已保存'), 'ok');
-    loadSetupPage();
+    loadSetupEmbedding();
   } catch (e) {
     toast(t('common.save_failed', '保存失败: {error}', {error: _setupErrMsg(e)}), 'err');
   }
@@ -459,3 +446,21 @@ function restoreNavGroups(){
 // ══════════════════════════════════════════════════════════
 //  MCP 管理（Brief 110）
 // ══════════════════════════════════════════════════════════
+
+async function loadSetupEmbedding() {
+  try {
+    const {embedding: embed} = await api("GET", "/settings/setup-status");
+    document.getElementById('setup-embed-base-url').value = embed.base_url || '';
+    document.getElementById('setup-embed-model').value = embed.model || '';
+    document.getElementById('setup-embed-dim').value = embed.dim || '';
+    document.getElementById('setup-embed-api-key').value = '';
+    document.getElementById('setup-embed-key-state').textContent = embed.api_key_set
+      ? t('setup.secret.configured', '（已配置 {value}）', {value: embed.api_key_masked})
+      : `（${t('common.not_configured', '未配置')}）`;
+    document.getElementById('setup-embedding-status').innerHTML = embed.configured
+      ? _setupBadge(true)
+      : `<span class="badge">○ ${escapeHtml(t('setup.embedding.not_configured', '未配置（召回自动降级为关键词匹配，不影响聊天）'))}</span>`;
+
+
+  } catch(error) { toast("读取失败：" + error.message, "err"); }
+}

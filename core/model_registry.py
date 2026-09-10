@@ -258,7 +258,10 @@ def resolve_routing_info(char_id: str) -> dict:
         "resolved_chat_model": preset.get("model", ""),
         "global_profile": active,
         "binding_source": "character" if char_routing and char_routing in profiles else "global",
-        "chat_configured": all(configured_value(key) for key in ("base_url", "api_key", "model")),
+        # OpenAI-compatible local servers may accept an empty API key. Native
+        # Anthropic requests always send an authentication header.
+        "chat_configured": all(configured_value(key) for key in ("base_url", "model"))
+        and (preset.get("api_protocol") != "anthropic_messages" or configured_value("api_key")),
         "resolved_scenario_reconcile_preset": _resolve_preset_name("scenario_reconcile", char_id=char_id),
     }
 

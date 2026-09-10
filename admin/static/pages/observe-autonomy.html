@@ -2,8 +2,6 @@
   <h1 class="page-title"><span data-i18n="autonomy.title">唤醒状态</span> <span class="page-subtitle" data-i18n="autonomy.subtitle">角色在合适时机获得一次“自行决定要不要活动”的机会</span></h1>
   <div class="observe-toolbar">
     <button class="btn btn-ghost btn-sm" data-action="loadObserveAutonomy" data-i18n="autonomy.refresh">刷新状态</button>
-    <label class="field autonomy-test-source"><span data-i18n="autonomy.test_source">测试触发源</span><select id="autonomy-test-source"><option value="manual" data-i18n="autonomy.source.manual">手动</option><option value="overflow">Overflow</option><option value="schedule" data-i18n="autonomy.source.schedule">定时</option><option value="interval" data-i18n="autonomy.source.interval">间隔</option></select></label>
-    <button class="btn btn-primary btn-sm" data-action="enqueueAutonomyTest" data-i18n="autonomy.enqueue_test">排队一次测试</button>
   </div>
   <p class="autonomy-trigger-note"><strong data-i18n="autonomy.sources">四种来源：</strong><span data-i18n="autonomy.sources_hint">Overflow 在运行信号积累到阈值时触发；定时按日历检查；间隔从上次评估完成后计时；手动只用于排队一次测试，不会直接在网页里运行模型或工具。</span></p>
 
@@ -15,34 +13,6 @@
   </div>
 
   <div class="card">
-    <div class="card-header"><div><h3 data-i18n="autonomy.control_title">总控与预算</h3><p class="autonomy-hint" data-i18n="autonomy.control_hint">决定是否创建新的自主活动机会；保存后才会写入运行配置。</p></div><button class="btn btn-primary btn-sm" data-action="saveAutonomyConfig" data-i18n="autonomy.save">保存全部设置</button></div>
-    <div class="form-row autonomy-controls">
-      <label class="checkbox-row"><input id="autonomy-enabled" type="checkbox"><span data-i18n="autonomy.enabled">启用内置唤醒</span></label>
-      <label class="checkbox-row"><input id="autonomy-talk" type="checkbox"><span data-i18n="autonomy.talk_enabled">允许主动发言</span></label>
-      <label class="field"><span><span data-i18n="autonomy.daily_limit">每日评估上限</span> <em title="一次评估指角色被唤醒后判断要做什么；无论最后是安静、工具还是发言，都会计入。">?</em></span><input id="autonomy-daily" type="number" min="1" max="100"></label>
-      <label class="field"><span><span data-i18n="autonomy.min_interval">最小评估间隔（秒）</span> <em title="任何一次已完成判断后，至少等待这么久才能开始下一次。数值越大，唤醒越少。">?</em></span><input id="autonomy-min-interval" type="number" min="0"></label>
-    </div>
-  </div>
-
-  <div class="autonomy-source-grid">
-    <div class="card">
-      <div class="card-header"><h3>Overflow</h3><span class="badge badge-accent" data-i18n="autonomy.overflow_badge">信号触发</span></div>
-      <p class="autonomy-hint" data-i18n="autonomy.overflow_hint">当现有溢出信号达到阈值时，排队一次活动机会。它不会发送消息；角色仍可能选择安静结束。</p>
-      <div class="form-row"><label class="checkbox-row"><input id="autonomy-overflow-enabled" type="checkbox"><span data-i18n="autonomy.overflow_enabled">启用溢出信号</span></label><label class="field"><span><span data-i18n="autonomy.overflow_threshold">触发阈值</span> <em title="越低越容易触发；建议从默认值开始，观察最近运行后再调整。">?</em></span><input id="autonomy-overflow-threshold" type="number" min="0.01" step="0.01"></label></div>
-    </div>
-    <div class="card">
-      <div class="card-header"><h3 data-i18n="autonomy.schedule_title">定时唤醒</h3><span class="badge badge-accent" data-i18n="autonomy.schedule_badge">按日历</span></div>
-      <p class="autonomy-hint" data-i18n="autonomy.schedule_hint">在选定日期和时间内创建一次机会。默认错过就跳过，避免重启后补发旧活动。</p>
-      <div class="form-row"><label class="checkbox-row"><input id="autonomy-schedule-enabled" type="checkbox"><span>启用定时唤醒</span></label><label class="field"><span>时间 <em title="角色将在这个时刻检查是否可以开始一次活动。">?</em></span><input id="autonomy-schedule-time" type="time"></label><label class="field"><span>时区 <em title="local 使用服务器本地时区；也可填写 IANA 时区，例如 Asia/Shanghai。">?</em></span><input type="text" id="autonomy-schedule-timezone" placeholder="local 或 Asia/Shanghai"></label><label class="field"><span>星期 <em title="0 是周一，6 是周日；可填写 0,1,2,3,4。">?</em></span><input type="text" id="autonomy-schedule-weekdays" placeholder="0,1,2,3,4"></label><label class="field"><span>活动窗口起 <em title="留空表示全天；填写起止时间后，定时点必须落在窗口内。">?</em></span><input id="autonomy-window-start" type="time"></label><label class="field"><span>活动窗口止</span><input id="autonomy-window-end" type="time"></label><label class="field"><span>重启后错过的时间 <em title="跳过最稳妥；最多补一次只会补最近一小时内错过的定时点。">?</em></span><select id="autonomy-miss-policy"><option value="skip">跳过</option><option value="catch_up_once">最多补一次</option></select></label></div>
-    </div>
-    <div class="card">
-      <div class="card-header"><h3 data-i18n="autonomy.interval_title">间隔唤醒</h3><span class="badge badge-accent" data-i18n="autonomy.interval_badge">按完成时间</span></div>
-      <p class="autonomy-hint" data-i18n="autonomy.interval_hint">从上一次完成评估开始计时。即使角色选择不做事，也会重新计时，不会每分钟反复唤醒。</p>
-      <div class="form-row"><label class="checkbox-row"><input id="autonomy-interval-enabled" type="checkbox"><span>启用间隔唤醒</span></label><label class="field"><span>间隔（秒） <em title="例如 21600 是 6 小时；数值越小，检查得越频繁。">?</em></span><input id="autonomy-interval" type="number" min="60"></label></div>
-    </div>
-  </div>
-
-  <div class="card">
       <div class="card-header"><div><h3 data-i18n="autonomy.tools.title">当前自主工具</h3><p class="autonomy-hint" data-i18n="autonomy.tools.hint">这里只显示此刻已经允许自主唤醒使用的工具；未启用的内置工具和未授权的 MCP 不会出现在这里。</p></div></div>
     <div id="autonomy-tools" class="tbl-wrap" data-i18n="common.loading">加载中…</div>
   </div>
@@ -51,14 +21,5 @@
     <div class="card-header"><div><h3 data-i18n="autonomy.runs.title">最近运行</h3><p class="autonomy-hint" data-i18n="autonomy.runs.hint">只记录“做了什么类型的事”和结果，不记录 prompt、工具参数或完整结果。</p></div></div>
     <div id="autonomy-runs" class="tbl-wrap" data-i18n="common.loading">加载中…</div>
   </div>
-  <div class="card">
-    <div class="card-header"><div><h3>最新自主行动 Prompt</h3><p class="autonomy-hint">显示最近一次完成运行的完整快照，仅管理员可查看。</p></div></div>
-    <div id="autonomy-prompt" class="tbl-wrap"><div class="empty">尚无运行记录。</div></div>
-  </div>
-  <div class="card" id="self-management-panel">
-    <div class="card-header"><h3 data-i18n="autonomy.self.title">自主管理能力</h3><button class="btn btn-ghost btn-sm" data-action="loadSelfManagement" data-i18n="autonomy.self.refresh">刷新</button></div>
-    <p class="autonomy-hint" data-i18n="autonomy.self.notice">这里只显示能力 ID 和安全状态，不显示连接地址或凭据。</p>
-    <div id="self-management-capabilities" class="tbl-wrap" data-i18n="common.loading">Loading...</div>
-    <div id="self-management-audit" class="tbl-wrap" data-i18n="common.loading">Loading...</div>
-  </div>
+
 </div>

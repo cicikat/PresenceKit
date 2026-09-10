@@ -61,20 +61,12 @@ NO_ADMIN_UI_WHITELIST: dict[tuple[str, str], str] = {
     ("POST", "/dream/resume"): "同上，挽留后留下由 Emerald-client 驱动",
     ("PATCH", "/dream/settings"): "persona 级设置，供桌面客户端使用（docs/feature-control-surface.md §1）",
 
-    # ── persona 级设置：docs/feature-control-surface.md 明确"供桌面客户端使用"，
+    # ── 客户端播放与会话接口：后端配置已迁往管理面板，
     #    管理面板不重复做界面 ──────────────────────────────────────────
-    ("PATCH", "/character/{char_id}/model-routing"): "角色卡模型路由绑定，persona scope，桌宠客户端消费",
-    ("PATCH", "/character/{char_id}/asset-bindings"): "角色资产绑定（TTS/表情包/Live2D/3D），由 Emerald-client 角色设置消费",
     ("PUT", "/settings/model-routing"): "桌面端切换已有模型路由，persona 级设置（docs/feature-control-surface.md §1）",
-    ("PUT", "/chat-mode"): "聊天模式切换，persona 级桌面客户端设置，不在管理面板",
-    ("PUT", "/chat-style"): "对话风格切换，persona 级桌面客户端设置，不在管理面板",
-    ("PUT", "/chat-multi-message"): "分条发送开关，persona 级桌面客户端设置，不在管理面板",
     ("POST", "/settings/tts-desktop"): "桌面语音播放开关，persona 级设置（docs/feature-control-surface.md §1）",
     ("POST", "/settings/tts-auto-play"): "分场景自动播放设置，persona 级设置（docs/feature-control-surface.md §1）",
     ("POST", "/tts/synthesize"): "按需合成语音，桌面端 {text,emotion}->{audio_b64,mime} 契约，非管理面板功能",
-    ("POST", "/settings/thinking"): "persona 级设置，供桌面客户端使用（docs/feature-control-surface.md §1）",
-    ("POST", "/settings/tool-loop"): "persona 级设置，供桌面客户端使用（docs/feature-control-surface.md §1）",
-    ("POST", "/settings/characters/{char_id}/avatar"): "角色头像 runtime override 上传，persona scope，桌宠客户端消费",
 
     # ── 手机端（Emerald-mobile）专属通道 ────────────────────────────────
     ("POST", "/mobile/activate"): "手机端上线激活，Emerald-mobile backend_client.dart 消费",

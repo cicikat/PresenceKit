@@ -124,7 +124,7 @@ def _tool_loop_row(cfg: dict[str, Any], uid: str) -> dict[str, Any]:
         status=status,
         reason=reason,
         consumer="core.tool_dispatcher.tool_loop_active",
-        edit_page="tools",
+        edit_page="conversation-settings",
         details={"path": "path_c", "max_steps": section.get("max_steps", 5)},
     )
 
@@ -187,7 +187,7 @@ def _self_capability_row(cfg: dict[str, Any]) -> dict[str, Any]:
         status="enabled" if effective else "disabled",
         reason=None if effective else "self_management_disabled",
         consumer="core.self_management.policy.feature_enabled",
-        edit_page="status",
+        edit_page="autonomy-settings",
     )
 
 
@@ -244,7 +244,7 @@ def _autonomy_and_scheduler_rows(cfg: dict[str, Any], uid: str, char_id: str) ->
         status=autonomy_status,
         reason=autonomy_reason,
         consumer=autonomy.get("runtime_consumer", "core.autonomy.runner.tick"),
-        edit_page="scheduler",
+        edit_page="autonomy-settings",
         details={
             "proactive_state": proactive_state,
             "proactive_reason": proactive_reason,
@@ -319,7 +319,7 @@ def _embedding_row(cfg: dict[str, Any]) -> dict[str, Any]:
         status="enabled" if configured else "unavailable",
         reason=None if configured else "embedding_not_configured",
         consumer="core.memory.vector_store",
-        edit_page="model-routing",
+        edit_page="embedding-config",
         details={"model": section.get("model", ""), "dim": section.get("dim")},
     )
 
@@ -347,7 +347,7 @@ def _tts_row(cfg: dict[str, Any]) -> dict[str, Any]:
         status=status,
         reason=reason,
         consumer="core.output.voice_adapter.get_provider_status",
-        edit_page="status",
+        edit_page="tts-config",
         details={"provider": provider.get("provider", ""), "provider_ready": bool(provider.get("ready"))},
     )
 

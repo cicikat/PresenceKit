@@ -1,37 +1,6 @@
 
       <h1 class="page-title">Prompt 层检视 <span class="admin-inline-105">只读 · 最近 10 轮</span></h1>
 
-      <!-- 层级开关（消融测试） -->
-      <div class="card admin-inline-128" id="obs-ablation-card">
-        <div class="card-header">
-          <h3>层级开关（消融测试）</h3>
-          <span class="admin-inline-082">只过滤注入，不短路检索；保存后下一轮对话起作用</span>
-        </div>
-        <div class="admin-card-actions admin-inline-051">
-          <button class="btn btn-ghost btn-sm" data-action="loadPromptAblation">刷新</button>
-          <button class="btn btn-primary btn-sm" data-action="savePromptAblation">保存</button>
-        </div>
-        <div id="obs-ablation-list" class="admin-inline-080">加载中…</div>
-      </div>
-
-      <div class="card admin-inline-128" id="obs-segment-enforce-card">
-        <div class="card-header">
-          <h3>生成后段落兜底（实验）</h3>
-          <span class="admin-inline-082">只改发送副本，不写回短期记忆；默认关闭</span>
-        </div>
-        <div class="admin-card-actions admin-inline-018">
-          <label class="admin-inline-027">
-            <input type="checkbox" id="obs-segment-enforce-enabled">
-            <span class="admin-inline-080">长篇单段回复按句末标点补一个空行</span>
-          </label>
-          <label class="admin-inline-082">阈值
-            <input type="number" id="obs-segment-enforce-min-len" min="1" max="5000" class="admin-inline-210">
-          </label>
-          <button class="btn btn-ghost btn-sm" data-action="loadOutputSegmentEnforce">刷新</button>
-          <button class="btn btn-primary btn-sm" data-action="saveOutputSegmentEnforce">保存</button>
-        </div>
-      </div>
-
       <p class="admin-source-hint">只读观测：数据来自最近对话快照，不会把观测结果写回配置或记忆。</p>
       <div class="admin-toolbar admin-inline-048">
         <input type="text" id="obs-prompt-uid" placeholder="uid (QQ号)" class="admin-inline-200">

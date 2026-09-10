@@ -8,13 +8,6 @@
 </div>
 
 <div class="card">
-  <div class="card-header"><h3 data-i18n="status.feature_switches">功能开关</h3><button class="btn btn-ghost btn-sm" data-action="loadFeatureFlags" data-i18n="common.refresh">刷新</button></div>
-  <p class="admin-inline-087" data-i18n="runtime_config.feature_hint">布尔开关使用明确的开/关控件；如果服务声明需要重启，保存结果会显示该生效方式。</p>
-  <div id="feature-flags-grid" class="runtime-config-grid"><div class="loading" data-i18n="common.loading">加载中…</div></div>
-  <button class="btn btn-primary btn-sm admin-inline-135" data-action="saveFeatureFlags" data-i18n="status.save_reload">保存并热重载</button>
-</div>
-
-<div class="card">
   <div class="card-header"><h3 data-i18n="memory_event.shadow.title">Memory Event shadow rollout</h3><button class="btn btn-ghost btn-sm" data-action="loadEventShadowRecallSettings" data-i18n="common.refresh">刷新</button></div>
   <p class="admin-inline-087" data-i18n="memory_event.shadow.hint">Only compares old and event-ledger recall. Results are excluded from the production prompt.</p>
   <div class="config-item-meta"><span id="event-shadow-effective">effective: -</span><span id="event-shadow-apply-mode">apply: -</span></div>
@@ -36,93 +29,4 @@
     <label class="checkbox-row"><input type="checkbox" id="event-context-observer-enabled"><span>Enable observation</span></label>
   </div>
   <button class="btn btn-primary btn-sm" data-action="saveEventContextObserverSettings" data-i18n="common.save">Save</button>
-</div>
-
-<div class="card">
-  <div class="card-header"><h3 data-i18n="status.proxy.title">代理配置</h3><button class="btn btn-ghost btn-sm" data-action="loadProxy" data-i18n="common.refresh">刷新</button></div>
-  <p class="admin-inline-087" data-i18n="status.proxy.hint">仅后端出站请求使用代理，桌面客户端 HTTP 始终禁用代理。</p>
-  <div class="form-row">
-    <label class="checkbox-row admin-inline-117"><input type="checkbox" id="proxy-enabled" class="admin-inline-202"><span data-i18n="status.proxy.enable">启用代理</span></label>
-    <span id="proxy-status-badge" class="badge badge-danger" data-i18n="common.disabled">未启用</span>
-  </div>
-  <div class="form-row">
-    <label class="field"><span data-i18n="status.proxy.http">HTTP 代理地址</span><input type="url" id="proxy-http" placeholder="http://proxy.example:7897"></label>
-    <label class="field"><span data-i18n="status.proxy.https">HTTPS 代理地址</span><input type="url" id="proxy-https" placeholder="http://proxy.example:7897"></label>
-  </div>
-  <div class="config-item-meta"><span data-i18n="runtime_config.source_global">来源：全局配置</span><span data-i18n="runtime_config.apply_reload">保存后热重载</span></div>
-  <button class="btn btn-primary btn-sm" data-action="saveProxy" data-i18n="common.save">保存</button>
-</div>
-
-<div class="card">
-  <div class="card-header"><h3 data-i18n="status.context.title">上下文长度</h3><button class="btn btn-ghost btn-sm" data-action="loadContextConfig" data-i18n="common.refresh">刷新</button></div>
-  <p class="admin-inline-087" data-i18n="status.context.hint">影响后续新请求使用的上下文窗口。</p>
-  <label class="field config-range-field"><span data-i18n="status.context.max_rounds">最大轮数（每轮 = 一问一答）</span><span class="config-range-value"><output id="ctx-val">20</output><span data-i18n="status.context.rounds">轮</span></span><input type="range" id="ctx-slider" min="5" max="50" value="20" class="admin-inline-189"></label>
-  <div class="config-item-meta"><span data-i18n="runtime_config.source_legacy">来源：legacy memory 配置</span><span data-i18n="runtime_config.apply_reload">保存后热重载</span></div>
-  <button class="btn btn-primary btn-sm" data-action="saveContextConfig" data-i18n="common.save">保存</button>
-</div>
-
-<div class="card">
-  <div class="card-header"><h3 data-i18n="status.llm.title">LLM 生成参数</h3><button class="btn btn-ghost btn-sm" data-action="loadLlmParams" data-i18n="common.refresh">刷新</button></div>
-  <p class="admin-inline-087" data-i18n="status.llm.hint">这是当前 chat preset 的兼容编辑入口；多模型场景优先在模型路由页编辑 preset。</p>
-  <div class="config-parameter-grid">
-    <label class="field"><span>max_tokens <small data-i18n="status.llm.max_tokens">单次回复最大 token 数</small></span><output id="llm-max-tokens-val">1500</output><input type="range" id="llm-max-tokens" min="200" max="4000" step="100" value="1500" class="admin-inline-189"></label>
-    <label class="field"><span>temperature <small data-i18n="status.llm.temperature">值越高回复越随机，越低越保守</small></span><output id="llm-temp-val">0.70</output><input type="range" id="llm-temperature" min="0" max="2" step="0.05" value="0.7" class="admin-inline-189"></label>
-    <label class="field"><span>top_p <small data-i18n="status.llm.top_p">核采样概率，配合 temperature 控制多样性</small></span><output id="llm-topp-val">0.90</output><input type="range" id="llm-top-p" min="0" max="1" step="0.05" value="0.9" class="admin-inline-189"></label>
-    <label class="field"><span>frequency_penalty <small data-i18n="status.llm.frequency_penalty">惩罚重复词</small></span><output id="llm-fp-val">0.00</output><input type="range" id="llm-frequency-penalty" min="0" max="2" step="0.05" value="0" class="admin-inline-189"></label>
-  </div>
-  <div class="config-item-meta"><span data-i18n="runtime_config.source_chat_preset">来源：当前 chat preset</span><span data-i18n="runtime_config.apply_reload">保存后热重载</span></div>
-  <button class="btn btn-primary btn-sm" data-action="saveLlmParams" data-i18n="common.save">保存</button>
-</div>
-
-<div class="card">
-  <div class="card-header"><h3 data-i18n="status.screen.title">屏幕内容查看</h3><button class="btn btn-ghost btn-sm" data-action="loadScreenPeekSettings" data-i18n="common.refresh">刷新</button></div>
-  <div class="form-row">
-    <label class="checkbox-row admin-inline-117"><input type="checkbox" id="sp-enabled" class="admin-inline-202"><span data-i18n="status.vision.enable">启用</span></label>
-    <label class="field"><span data-i18n="status.screen.cooldown">冷却分钟数</span><input type="number" id="sp-cooldown" min="5" max="240" step="1" value="30"></label>
-  </div>
-  <div class="config-item-meta"><span data-i18n="runtime_config.source_global">来源：全局 screen_peek 配置</span><span data-i18n="runtime_config.apply_reload">保存后热重载</span></div>
-  <button class="btn btn-primary btn-sm" data-action="saveScreenPeekSettings" data-i18n="common.save">保存</button>
-</div>
-
-<div class="card">
-  <div class="card-header"><h3 data-i18n="status.dangermode.title">危险模式</h3><button class="btn btn-ghost btn-sm" data-action="loadMetaMode" data-i18n="common.refresh">刷新</button></div>
-  <p class="admin-inline-087" data-i18n="status.dangermode.help">手机自动化和桌面/系统类工具只在危险模式下执行；到期后自动回落安全模式。</p>
-  <div class="form-row">
-    <div id="metamode-status" class="config-mode-status">—</div>
-    <label class="field"><span data-i18n="status.dangermode.ttl">持续分钟数</span><input type="number" id="metamode-ttl" min="5" max="1440" step="5" value="120"></label>
-    <button class="btn btn-primary btn-sm" id="metamode-toggle-btn" data-action="toggleMetaMode" data-i18n="status.dangermode.enter">切换到危险模式</button>
-  </div>
-  <div class="config-item-meta"><span data-i18n="runtime_config.source_runtime">来源：运行时安全闸</span><span data-i18n="runtime_config.apply_immediate">保存后立即反映当前闸状态</span></div>
-</div>
-
-<div class="card">
-  <div class="card-header"><h3 data-i18n="status.relay.title">中继唤醒</h3><button class="btn btn-ghost btn-sm" data-action="loadRelaySettings" data-i18n="common.refresh">刷新</button></div>
-  <p class="admin-inline-087" data-i18n="static.status.relay_hint">只影响中继唤醒通道，不改变调度器本地触发。</p>
-  <div class="form-row">
-    <label class="field"><span data-i18n="runtime_config.relay_base_url">Base URL</span><input type="url" id="relay-base-url"></label>
-    <label class="field"><span data-i18n="runtime_config.relay_topic">Topic</span><input type="text" id="relay-topic"></label>
-  </div>
-  <label class="field"><span data-i18n="status.relay.token">Token（留空保留已有值）</span><input type="password" id="relay-token" autocomplete="off"></label>
-  <div class="config-item-meta"><span data-i18n="runtime_config.source_global">来源：全局 relay 设置</span><span data-i18n="runtime_config.apply_reload">保存后热重载</span></div>
-  <button class="btn btn-primary btn-sm" data-action="saveRelaySettings" data-i18n="common.save">保存</button>
-</div>
-
-<div class="card">
-  <div class="card-header"><h3 data-i18n="status.sticker.title">表情包</h3><button class="btn btn-ghost btn-sm" data-action="loadStickerConfig" data-i18n="common.refresh">刷新</button></div>
-  <div class="form-row">
-    <label class="checkbox-row admin-inline-117"><input type="checkbox" id="sticker-enabled" class="admin-inline-202"><span data-i18n="status.sticker.enable">启用</span></label>
-    <label class="field"><span data-i18n="status.sticker.trigger_prob">触发概率（0–1）</span><input type="number" id="sticker-trigger-prob" min="0" max="1" step="0.01" value="0.06"></label>
-  </div>
-  <div class="config-item-meta"><span data-i18n="runtime_config.source_global">来源：全局 sticker 配置</span><span data-i18n="runtime_config.apply_reload">保存后热重载</span></div>
-  <button class="btn btn-primary btn-sm" data-action="saveStickerConfig" data-i18n="common.save">保存</button>
-</div>
-
-<div class="card">
-  <div class="card-header"><h3 data-i18n="status.pronoun.title">用户称谓</h3></div>
-  <p class="admin-inline-087" data-i18n="runtime_config.pronoun_hint">按用户选择固定称谓；这里只读当前选择，保存通过用户事实接口完成。</p>
-  <div class="form-row">
-    <label class="field"><span data-i18n="status.pronoun.user">用户</span><select id="pn-uid-select" onchange="loadUserPronoun()"></select></label>
-    <label class="field"><span data-i18n="status.pronoun.value">称谓</span><select id="pn-value"><option value="她" data-i18n="status.pronoun.she">她</option><option value="他" data-i18n="status.pronoun.he">他</option><option value="TA" data-i18n="status.pronoun.they">TA</option><option value="它" data-i18n="status.pronoun.it">它</option></select></label>
-    <button class="btn btn-primary btn-sm" data-action="saveUserPronoun" data-i18n="common.save">保存</button>
-  </div>
 </div>

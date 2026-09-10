@@ -1,0 +1,32 @@
+<h1 class="page-title" data-i18n="settings_center.embedding_configuration">向量检索配置</h1><div class="card">
+        <div class="card-header">
+          <h3><span data-i18n="setup.embedding.title">语义 Embedding</span> <span class="badge" data-i18n="setup.strongly_recommended">强烈建议</span></h3>
+          <span id="setup-embedding-status" class="admin-inline-082"></span>
+        </div>
+        <p data-i18n="setup.embedding.description" class="admin-inline-087">作用：长期记忆语义召回（情景记忆/往事检索按语义匹配而非纯关键词）。缺失后果：召回质量降级为关键词匹配，不会导致聊天崩溃或阻塞（fail-open）。</p>
+        <div class="form-row col-1">
+          <label class="field">
+            <span>base_url</span>
+            <input type="text" id="setup-embed-base-url" placeholder="https://api.siliconflow.cn/v1">
+          </label>
+        </div>
+        <div class="form-row">
+          <label class="field">
+            <span>model</span>
+            <input type="text" id="setup-embed-model" placeholder="BAAI/bge-m3">
+          </label>
+          <label class="field">
+            <span>dim</span>
+            <input type="number" id="setup-embed-dim" placeholder="1024">
+          </label>
+        </div>
+        <div class="form-row col-1">
+          <label class="field">
+            <span>api_key <span id="setup-embed-key-state" class="admin-inline-077"></span></span>
+            <input type="password" id="setup-embed-api-key" placeholder="留空=不修改已有值" data-i18n-placeholder="setup.secret.keep">
+          </label>
+        </div>
+        <div class="modal-footer admin-inline-124">
+          <button class="btn btn-primary" data-action="saveSetupEmbedding" data-i18n="common.save">保存</button>
+        </div>
+      </div>

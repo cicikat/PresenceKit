@@ -29,8 +29,8 @@ def test_status_page_is_read_only_summary_with_explicit_configuration_entries():
     assert not re.search(r'data-action="(?:save|toggle|reloadConfig)|<input\b|<textarea\b', status)
     assert 'data-action="saveTtsConfig"' not in status
 
-    assert 'data-action="saveFeatureFlags"' in runtime
-    assert 'data-action="saveProxy"' in runtime
+    assert 'onchange="saveCenterSwitch(this)"' in (static / 'js' / 'settings-center.js').read_text(encoding='utf-8')
+    assert 'data-action="saveProxy"' in (static / 'pages' / 'network-config.html').read_text(encoding='utf-8')
     assert 'data-action="saveTtsConfig"' in tts
     assert '<details class="card tts-advanced"' in tts
     assert 'id="tts-provider-api-key"' in tts
