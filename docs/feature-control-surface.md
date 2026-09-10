@@ -381,3 +381,11 @@ Desktop/mobile keep `/upload/ingest`; screen automation keeps its existing conne
 ## Forced streaming compatibility (2026-09-09)
 
 `model_presets.presets.<name>.force_stream` defaults to false. The admin Preset editor exposes it through existing admin-only GET/PUT model configuration with hot reload. Chat Completions only; unsupported protocol combinations are rejected. The selected preset governs both tool decisions and final generation for all channels. Clients do not duplicate this setting or request extra scopes. Request snapshots expose the actual stream flag. Browser verification is incomplete: this session provides no Browser execution tool. JS syntax and focused API/protocol regressions provide alternative validation; real gateway verification remains observe.
+
+
+## 设置重整：角色模型只读状态（2026-09-10）
+
+角色模型绑定 GET/PATCH 返回追加 `resolved_chat_model`、`global_profile`、
+`binding_source`、`chat_configured`。不返回密钥或连接地址；配置齐全不代表网络测试成功。
+清除绑定仍发送 `model_routing: null`，返回当前全局方案和实际模型。
+全局生效投影已修正角色开启多步工具循环覆盖全局默认关闭时的错误展示。

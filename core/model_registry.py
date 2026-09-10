@@ -246,10 +246,19 @@ def resolve_routing_info(char_id: str) -> dict:
     active = mp.get("active_routing", "default")
     char_routing = _char_model_routing(char_id)
     effective_profile = char_routing if char_routing and char_routing in profiles else active
+    preset_name = _resolve_preset_name("chat", char_id=char_id)
+    preset = mp.get("presets", {}).get(preset_name, {})
+    def configured_value(key: str) -> bool:
+        value = str(preset.get(key) or "").strip()
+        return bool(value) and not value.upper().startswith(("YOUR_", "YOUR-"))
     return {
         "model_routing": char_routing,
         "effective_profile": effective_profile,
-        "resolved_chat_preset": _resolve_preset_name("chat", char_id=char_id),
+        "resolved_chat_preset": preset_name,
+        "resolved_chat_model": preset.get("model", ""),
+        "global_profile": active,
+        "binding_source": "character" if char_routing and char_routing in profiles else "global",
+        "chat_configured": all(configured_value(key) for key in ("base_url", "api_key", "model")),
         "resolved_scenario_reconcile_preset": _resolve_preset_name("scenario_reconcile", char_id=char_id),
     }
 

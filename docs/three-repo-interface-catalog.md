@@ -538,3 +538,12 @@ entry point; it records a durable cancel request and never replays or delivers t
 `current`: optional display_text on mobile owner-chat/upload JSON and durable poll items retains hl/big/sm styling. Existing reply/content stays plain. Flutter parses a matching display copy only, preserves styles across paragraphs/reveal/selection and copies/quotes plain text. Desktop inline styles are the reference (accent weight 600, 1.18x, .85x/.8 opacity); desktop WS contract is unchanged. Backend admin needs no switch for optional presentation metadata; mobile uses existing font size/theme preferences. Android notifications/TTS consume canonical content, ntfy still sends IDs only. Existing chat-scoped poll observes the same queue field; no new store or permission. Tests cover canonical/display separation, queue ack, phone controller HTTP/poll dedup, stale fallback and animation.
 
 `observe`: device visual verification is pending; Flutter widget tests and Dev APK build are alternative validation. `roadmap`: old plain-text chat-log history cannot restore discarded styles; independent Dream/group display transport is outside the reality implementation.
+
+
+### 角色模型状态摘要（2026-09-10，current）
+
+`GET/PATCH /character/{char_id}/model-routing` 在原有字段上追加安全展示字段
+`resolved_chat_model/global_profile/binding_source/chat_configured`，沿用 persona scope。
+无密钥或 URL；配置齐全不表示上游可用。清除绑定仍用 null。
+桌面只读状态 UI 正在施工；手机现有调用不变。关联验证：
+`tests/test_global_effective_state_overview.py`。

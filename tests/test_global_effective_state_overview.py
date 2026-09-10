@@ -1,4 +1,37 @@
 from pathlib import Path
+from types import SimpleNamespace
+
+
+def test_character_can_enable_tool_loop_when_global_default_is_off(monkeypatch):
+    from core.control_center.effective_state import _tool_loop_row
+    from core import pipeline_registry, tool_dispatcher
+
+    monkeypatch.setattr(tool_dispatcher, "tool_loop_active", lambda uid: True)
+    monkeypatch.setattr(pipeline_registry, "get", lambda: SimpleNamespace(
+        character=SimpleNamespace(presence_ext={"tool_loop": "on"})))
+    row = _tool_loop_row({"tool_loop": {"enabled": False}}, "owner")
+    assert row["configured_value"] is False
+    assert row["effective_value"] is True
+    assert row["override_source"] == "character_card"
+
+
+def test_routing_summary_is_safe_and_follows_global_after_reset(monkeypatch):
+    from core import model_registry as registry
+
+    monkeypatch.setattr(registry, "_get_preset_config", lambda: {
+        "active_routing": "main", "routing_profiles": {"main": {"chat": "primary"}},
+        "presets": {"primary": {"model": "example-model", "base_url": "https://example.invalid",
+                                "api_key": "test-private-value"}},
+    })
+    monkeypatch.setattr(registry, "_char_model_routing", lambda char_id: None)
+    monkeypatch.setattr(registry, "_resolve_preset_name", lambda *args, **kwargs: "primary")
+    result = registry.resolve_routing_info("example")
+    assert result["model_routing"] is None
+    assert result["binding_source"] == "global"
+    assert result["resolved_chat_model"] == "example-model"
+    assert result["chat_configured"] is True
+    assert "test-private-value" not in str(result)
+    assert "example.invalid" not in str(result)
 
 
 def test_global_effective_state_contract_covers_required_features(sandbox):

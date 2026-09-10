@@ -88,20 +88,19 @@ def _tool_loop_row(cfg: dict[str, Any], uid: str) -> dict[str, Any]:
     section = cfg.get("tool_loop") or {}
     configured, source = _configured(section, "enabled", False)
     configured = bool(configured)
-    effective = bool(_safe_call(lambda: tool_loop_active(uid), False)) if configured else False
+    effective = bool(_safe_call(lambda: tool_loop_active(uid), False))
     reason = None
     effective_source = source
     card_override = _safe_call(
         lambda: (getattr(getattr(pipeline_registry.get(), "character", None), "presence_ext", {}) or {}).get("tool_loop"),
         None,
     )
-    if configured and card_override == "off":
+    if card_override in {"on", "off"}:
         effective_source = "character_card"
+    if card_override == "off":
         effective = False
         reason = "character_card_override"
-    elif configured and card_override == "on" and effective:
-        effective_source = "character_card"
-    if not configured:
+    if not configured and card_override != "on":
         status = "disabled"
         reason = "tool_loop_disabled"
     elif card_override == "off":
