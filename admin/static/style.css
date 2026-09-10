@@ -59,9 +59,9 @@ body {
 #app { display: flex; height: 100vh; overflow: hidden; }
 
 nav {
-  width: 200px; min-width: 200px;
+  width: 250px; min-width: 250px;
   height: 100vh; min-height: 0;
-  overflow-y: auto;
+  overflow-y: hidden;
   background: var(--surface);
   border-right: 1px solid var(--border);
   display: flex; flex-direction: column;
@@ -93,6 +93,28 @@ nav .icon { width: 18px; text-align: center; flex-shrink: 0; }
   border-top: 1px solid var(--border);
 }
 .nav-bottom .key-hint { font-size: 11px; color: var(--muted); word-break: break-all; }
+.nav-pages { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 16px; }
+.nav-logo, .nav-bottom { flex-shrink: 0; }
+.nav-bottom > a { padding: 8px 0; font-size: 13px; }
+.nav-group a { padding: 8px 16px 8px 34px; font-size: 13px; line-height: 1.5; }
+.nav-pages .nav-group-header {
+  width: 100%; border: 0; background: transparent; text-align: left;
+  padding: 14px 16px 8px; font: inherit; font-size: 13px; font-weight: 600;
+  color: var(--text); text-transform: none; letter-spacing: normal;
+}
+.nav-group-header:focus-visible, nav a:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+#nav-back { margin-right: auto; }
+.guide-task { padding: 16px 0; border-bottom: 1px solid var(--border); }
+.guide-task:last-child { border-bottom: 0; }
+#page-guide { max-width: 1100px; line-height: 1.8; }
+#page-guide > p, #page-guide > h2 { margin-bottom: 20px; }
+#page-guide h2 { font-size: 18px; }
+#page-guide h3 { font-size: 15px; }
+#page-guide p { color: var(--muted); margin: 8px 0 12px; }
+.guide-terms dt { font-weight: 600; margin-top: 14px; }
+.guide-terms dd { margin: 4px 0 0; color: var(--muted); }
+.guide-directory { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 12px 24px; }
+.guide-directory article { padding: 12px 0; border-bottom: 1px solid var(--border); }
 
 /* ── Main content ── */
 main {
@@ -105,6 +127,8 @@ main {
 }
 .admin-topbar label { color: var(--muted); font-size: 12px; }
 .admin-topbar select { width: auto; min-width: 112px; padding: 5px 8px; }
+.admin-topbar #admin-language-select { flex: 0 0 112px; width: 112px; }
+.admin-topbar label, #nav-back { white-space: nowrap; flex-shrink: 0; }
 .page { display: none; }
 .page.active { display: block; }
 

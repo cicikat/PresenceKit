@@ -380,8 +380,8 @@ async function tryLogin(key, silent) {
     const initialPage = setupStatus && setupStatus.needs_setup
       ? 'setup'
       : getRememberedPage() || 'overview';
-    goto(initialPage);
     restoreNavGroups();
+    goto(initialPage);
     _initCharName().catch(() => {});
     initSecretsBookFab().catch(() => {});
     return true;
@@ -420,26 +420,37 @@ if (TOKEN) {
 // ══════════════════════════════════════════════════════════
 //  Nav group collapse
 // ══════════════════════════════════════════════════════════
+function readNavGroups() {
+  try {
+    const state = JSON.parse(localStorage.getItem('navGroupsCollapsed') || '{}');
+    return state && typeof state === 'object' && !Array.isArray(state) ? state : {};
+  } catch (_error) { return {}; }
+}
+function setNavGroupExpanded(key, expanded, persist = true) {
+  const group = document.getElementById('navgroup-' + key);
+  if (!group) return;
+  group.hidden = !expanded;
+  document.getElementById('nav-toggle-' + key)?.setAttribute('aria-expanded', String(expanded));
+  const caret = document.getElementById('caret-' + key);
+  if (caret) caret.textContent = expanded ? '▾' : '▸';
+  if (persist) {
+    try {
+      const state = readNavGroups();
+      state[key] = !expanded;
+      localStorage.setItem('navGroupsCollapsed', JSON.stringify(state));
+    } catch (_error) { /* Collapsing works even when storage is unavailable. */ }
+  }
+}
 function toggleNavGroup(key){
-  const g=document.getElementById('navgroup-'+key), c=document.getElementById('caret-'+key);
-  if(!g) return;
-  const willShow = g.style.display==='none';
-  g.style.display = willShow?'':'none';
-  if(c) c.textContent = willShow?'▾':'▸';
-  const st=JSON.parse(localStorage.getItem('navGroupsCollapsed')||'{}');
-  st[key]=!willShow;
-  localStorage.setItem('navGroupsCollapsed',JSON.stringify(st));
+  const group = document.getElementById('navgroup-' + key);
+  if (group) setNavGroupExpanded(key, group.hidden);
 }
 function restoreNavGroups(){
-  const st=JSON.parse(localStorage.getItem('navGroupsCollapsed')||'{}');
+  const st = readNavGroups();
   const groups = document.querySelectorAll('[id^="navgroup-"]');
   for(const group of groups){
     const key = group.id.slice('navgroup-'.length);
-    if(st[key]){
-      const c=document.getElementById('caret-'+key);
-      group.style.display='none';
-      if(c) c.textContent='▸';
-    }
+    setNavGroupExpanded(key, !st[key], false);
   }
 }
 

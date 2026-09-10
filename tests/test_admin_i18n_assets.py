@@ -74,11 +74,11 @@ def test_i18n_runtime_is_wired_with_persistent_chinese_default():
     runtime = I18N.read_text(encoding="utf-8")
     core_js = (ROOT / "admin" / "static" / "js" / "core.js").read_text(encoding="utf-8")
 
-    assert '<link rel="stylesheet" href="/static/style.css?v=brief-242-settings-4">' in index
-    assert '<script src="/static/i18n.js?v=brief-242-settings-4"></script>' in index
-    assert '<script src="/static/js/core.js?v=brief-242-settings-4"></script>' in index
+    assert '<link rel="stylesheet" href="/static/style.css?v=admin-navigation-guide-1">' in index
+    assert '<script src="/static/i18n.js?v=admin-navigation-guide-1"></script>' in index
+    assert '<script src="/static/js/core.js?v=admin-navigation-guide-1"></script>' in index
     assert '<script src="/static/js/dream-settings.js?v=brief-175-scenario-reconciler-1"></script>' in index
-    assert "ADMIN_UI_FRAGMENT_VERSION = 'brief-242-settings-4'" in core_js
+    assert "ADMIN_UI_FRAGMENT_VERSION = 'admin-navigation-guide-1'" in core_js
     assert '<script src="/static/js/observability.js?v=brief-242-settings-4"></script>' in index
     assert '<script src="/static/js/character.js?v=brief-242-settings-4"></script>' in index
     assert 'id="ds-private-truths"' in read_admin_page("dream-settings")

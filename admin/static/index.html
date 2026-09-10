@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>His Presence 管理面板</title>
-<link rel="stylesheet" href="/static/style.css?v=brief-242-settings-4">
+<link rel="stylesheet" href="/static/style.css?v=admin-navigation-guide-1">
 </head>
 <body>
 
@@ -53,13 +53,88 @@
       <h2 data-i18n="nav.console">运维控制台</h2>
       <p id="nav-host">127.0.0.1:8080</p>
     </div>
-<a class="active" data-page="overview" data-action="goto" data-action-args='["overview"]'><span data-i18n="nav.overview">概览</span></a>
-<a data-page="feature-center" data-action="goto" data-action-args='["feature-center"]'><span data-i18n="nav.feature_center">功能与行为</span></a>
-<a data-page="service-center" data-action="goto" data-action-args='["service-center"]'><span data-i18n="nav.service_center">服务配置</span></a>
-<a data-page="creation-center" data-action="goto" data-action-args='["creation-center"]'><span data-i18n="nav.creation_center">创作</span></a>
-<a data-page="observation-center" data-action="goto" data-action-args='["observation-center"]'><span data-i18n="nav.observation_center">观测</span></a>
-<a data-page="operations-center" data-action="goto" data-action-args='["operations-center"]'><span data-i18n="nav.operations_center">运维与调试</span></a>
+<div class="nav-pages">
+<a href="#page-overview" data-page="overview" data-action="goto" data-action-args='["overview"]'><span data-i18n="nav.page.overview">概览</span></a>
+<button type="button" class="nav-group-header" id="nav-toggle-features" aria-expanded="true" aria-controls="navgroup-features" data-action="toggleNavGroup" data-action-args='["features"]'><span class="nav-caret" id="caret-features" aria-hidden="true">▾</span><span data-i18n="nav.category.features">功能与行为</span></button>
+<div class="nav-group" id="navgroup-features">
+<a href="#page-feature-center" data-page="feature-center" data-action="goto" data-action-args='["feature-center"]'><span data-i18n="nav.page.feature-center">功能开关总览</span></a>
+<a href="#page-conversation-settings" data-page="conversation-settings" data-action="goto" data-action-args='["conversation-settings"]'><span data-i18n="nav.page.conversation-settings">聊天方式与思考</span></a>
+<a href="#page-role-bindings" data-page="role-bindings" data-action="goto" data-action-args='["role-bindings"]'><span data-i18n="nav.page.role-bindings">角色的模型、声音与形象</span></a>
+<a href="#page-scheduler" data-page="scheduler" data-action="goto" data-action-args='["scheduler"]'><span data-i18n="nav.page.scheduler">主动消息与定时提醒</span></a>
+<a href="#page-autonomy-settings" data-page="autonomy-settings" data-action="goto" data-action-args='["autonomy-settings"]'><span data-i18n="nav.page.autonomy-settings">自主活动安排</span></a>
+<a href="#page-tools" data-page="tools" data-action="goto" data-action-args='["tools"]'><span data-i18n="nav.page.tools">角色能使用哪些工具</span></a>
+<a href="#page-mcp" data-page="mcp" data-action="goto" data-action-args='["mcp"]'><span data-i18n="nav.page.mcp">连接外部工具（MCP）</span></a>
+<a href="#page-agent-runtime-browser" data-page="agent-runtime-browser" data-action="goto" data-action-args='["agent-runtime-browser"]'><span data-i18n="nav.page.agent-runtime-browser">浏览器任务权限</span></a>
+<a href="#page-device-policy" data-page="device-policy" data-action="goto" data-action-args='["device-policy"]'><span data-i18n="nav.page.device-policy">看屏幕与操作电脑</span></a>
+<a href="#page-output-settings" data-page="output-settings" data-action="goto" data-action-args='["output-settings"]'><span data-i18n="nav.page.output-settings">表情包与回复表现</span></a>
+<a href="#page-coplay-config" data-page="coplay-config" data-action="goto" data-action-args='["coplay-config"]'><span data-i18n="nav.page.coplay-config">陪玩游戏识别</span></a>
+</div>
+<button type="button" class="nav-group-header" id="nav-toggle-services" aria-expanded="true" aria-controls="navgroup-services" data-action="toggleNavGroup" data-action-args='["services"]'><span class="nav-caret" id="caret-services" aria-hidden="true">▾</span><span data-i18n="nav.category.services">模型与服务</span></button>
+<div class="nav-group" id="navgroup-services">
+<a href="#page-service-center" data-page="service-center" data-action="goto" data-action-args='["service-center"]'><span data-i18n="nav.page.service-center">服务配置总览</span></a>
+<a href="#page-model-routing" data-page="model-routing" data-action="goto" data-action-args='["model-routing"]'><span data-i18n="nav.page.model-routing">模型连接与分工</span></a>
+<a href="#page-tts-config" data-page="tts-config" data-action="goto" data-action-args='["tts-config"]'><span data-i18n="nav.page.tts-config">语音合成与声音</span></a>
+<a href="#page-setup" data-page="setup" data-action="goto" data-action-args='["setup"]'><span data-i18n="nav.page.setup">首次配置与连接检查</span></a>
+<a href="#page-embedding-config" data-page="embedding-config" data-action="goto" data-action-args='["embedding-config"]'><span data-i18n="nav.page.embedding-config">记忆搜索模型</span></a>
+<a href="#page-network-config" data-page="network-config" data-action="goto" data-action-args='["network-config"]'><span data-i18n="nav.page.network-config">代理与手机中继</span></a>
+<a href="#page-mail-config" data-page="mail-config" data-action="goto" data-action-args='["mail-config"]'><span data-i18n="nav.page.mail-config">邮件连接</span></a>
+<a href="#page-diary-config" data-page="diary-config" data-action="goto" data-action-args='["diary-config"]'><span data-i18n="nav.page.diary-config">日记数据来源</span></a>
+</div>
+<button type="button" class="nav-group-header" id="nav-toggle-creation" aria-expanded="true" aria-controls="navgroup-creation" data-action="toggleNavGroup" data-action-args='["creation"]'><span class="nav-caret" id="caret-creation" aria-hidden="true">▾</span><span data-i18n="nav.category.creation">角色与创作</span></button>
+<div class="nav-group" id="navgroup-creation">
+<a href="#page-creation-center" data-page="creation-center" data-action="goto" data-action-args='["creation-center"]'><span data-i18n="nav.page.creation-center">启用角色与素材</span></a>
+<a href="#page-character" data-page="character" data-action="goto" data-action-args='["character"]'><span data-i18n="nav.page.character">角色卡与人设</span></a>
+<a href="#page-lorebook" data-page="lorebook" data-action="goto" data-action-args='["lorebook"]'><span data-i18n="nav.page.lorebook">现实世界设定</span></a>
+<a href="#page-dream-settings" data-page="dream-settings" data-action="goto" data-action-args='["dream-settings"]'><span data-i18n="nav.page.dream-settings">梦境世界与剧本</span></a>
+<a href="#page-relationship-facts" data-page="relationship-facts" data-action="goto" data-action-args='["relationship-facts"]'><span data-i18n="nav.page.relationship-facts">关系与重要事实</span></a>
+<a href="#page-personal-settings" data-page="personal-settings" data-action="goto" data-action-args='["personal-settings"]'><span data-i18n="nav.page.personal-settings">称呼、纪念日与资料</span></a>
+<a href="#page-user-data" data-page="user-data" data-action="goto" data-action-args='["user-data"]'><span data-i18n="nav.page.user-data">素材与数据管理</span></a>
+</div>
+<button type="button" class="nav-group-header" id="nav-toggle-observation" aria-expanded="true" aria-controls="navgroup-observation" data-action="toggleNavGroup" data-action-args='["observation"]'><span class="nav-caret" id="caret-observation" aria-hidden="true">▾</span><span data-i18n="nav.category.observation">记录与状态</span></button>
+<div class="nav-group" id="navgroup-observation">
+<a href="#page-observation-center" data-page="observation-center" data-action="goto" data-action-args='["observation-center"]'><span data-i18n="nav.page.observation-center">记录与状态总览</span></a>
+<a href="#page-status" data-page="status" data-action="goto" data-action-args='["status"]'><span data-i18n="nav.page.status">系统是否正常</span></a>
+<a href="#page-observe-chatlog" data-page="observe-chatlog" data-action="goto" data-action-args='["observe-chatlog"]'><span data-i18n="nav.page.observe-chatlog">聊天记录</span></a>
+<a href="#page-observe-prompt" data-page="observe-prompt" data-action="goto" data-action-args='["observe-prompt"]'><span data-i18n="nav.page.observe-prompt">发给模型的内容</span></a>
+<a href="#page-observe-tools" data-page="observe-tools" data-action="goto" data-action-args='["observe-tools"]'><span data-i18n="nav.page.observe-tools">工具执行记录</span></a>
+<a href="#page-call-records" data-page="call-records" data-action="goto" data-action-args='["call-records"]'><span data-i18n="nav.page.call-records">服务调用与任务记录</span></a>
+<a href="#page-observe-autonomy" data-page="observe-autonomy" data-action="goto" data-action-args='["observe-autonomy"]'><span data-i18n="nav.page.observe-autonomy">主动活动记录</span></a>
+<a href="#page-observe-char-permissions" data-page="observe-char-permissions" data-action="goto" data-action-args='["observe-char-permissions"]'><span data-i18n="nav.page.observe-char-permissions">角色当前可用的能力</span></a>
+<a href="#page-observe-visual" data-page="observe-visual" data-action="goto" data-action-args='["observe-visual"]'><span data-i18n="nav.page.observe-visual">屏幕与图片感知记录</span></a>
+<a href="#page-observe-existence" data-page="observe-existence" data-action="goto" data-action-args='["observe-existence"]'><span data-i18n="nav.page.observe-existence">角色状态总览</span></a>
+<a href="#page-observe-mood" data-page="observe-mood" data-action="goto" data-action-args='["observe-mood"]'><span data-i18n="nav.page.observe-mood">情绪与花园状态</span></a>
+<a href="#page-observe-hidden" data-page="observe-hidden" data-action="goto" data-action-args='["observe-hidden"]'><span data-i18n="nav.page.observe-hidden">用户隐性状态</span></a>
+<a href="#page-observe-memory" data-page="observe-memory" data-action="goto" data-action-args='["observe-memory"]'><span data-i18n="nav.page.observe-memory">查找记忆</span></a>
+<a href="#page-observe-memory-events" data-page="observe-memory-events" data-action="goto" data-action-args='["observe-memory-events"]'><span data-i18n="nav.page.observe-memory-events">记忆的事件证据</span></a>
+<a href="#page-observe-memory-summary" data-page="observe-memory-summary" data-action="goto" data-action-args='["observe-memory-summary"]'><span data-i18n="nav.page.observe-memory-summary">记忆摘要</span></a>
+<a href="#page-observe-growth" data-page="observe-growth" data-action="goto" data-action-args='["observe-growth"]'><span data-i18n="nav.page.observe-growth">成长记录</span></a>
+<a href="#page-observe-provenance" data-page="observe-provenance" data-action="goto" data-action-args='["observe-provenance"]'><span data-i18n="nav.page.observe-provenance">印象从哪里来</span></a>
+<a href="#page-observe-vector" data-page="observe-vector" data-action="goto" data-action-args='["observe-vector"]'><span data-i18n="nav.page.observe-vector">记忆搜索索引</span></a>
+<a href="#page-observe-dream" data-page="observe-dream" data-action="goto" data-action-args='["observe-dream"]'><span data-i18n="nav.page.observe-dream">梦境状态</span></a>
+<a href="#page-observe-dream-prompt" data-page="observe-dream-prompt" data-action="goto" data-action-args='["observe-dream-prompt"]'><span data-i18n="nav.page.observe-dream-prompt">梦境发给模型的内容</span></a>
+<a href="#page-observe-dream-operations" data-page="observe-dream-operations" data-action="goto" data-action-args='["observe-dream-operations"]'><span data-i18n="nav.page.observe-dream-operations">梦境会话记录</span></a>
+<a href="#page-observe-trigger-catalog" data-page="observe-trigger-catalog" data-action="goto" data-action-args='["observe-trigger-catalog"]'><span data-i18n="nav.page.observe-trigger-catalog">提醒与任务触发条件</span></a>
+<a href="#page-observe-group-arbiter" data-page="observe-group-arbiter" data-action="goto" data-action-args='["observe-group-arbiter"]'><span data-i18n="nav.page.observe-group-arbiter">群聊发言安排</span></a>
+<a href="#page-observe-spend" data-page="observe-spend" data-action="goto" data-action-args='["observe-spend"]'><span data-i18n="nav.page.observe-spend">支出意向记录</span></a>
+<a href="#page-observe-resource-completeness" data-page="observe-resource-completeness" data-action="goto" data-action-args='["observe-resource-completeness"]'><span data-i18n="nav.page.observe-resource-completeness">检查素材是否齐全</span></a>
+</div>
+<button type="button" class="nav-group-header" id="nav-toggle-operations" aria-expanded="true" aria-controls="navgroup-operations" data-action="toggleNavGroup" data-action-args='["operations"]'><span class="nav-caret" id="caret-operations" aria-hidden="true">▾</span><span data-i18n="nav.category.operations">排错与管理</span></button>
+<div class="nav-group" id="navgroup-operations">
+<a href="#page-operations-center" data-page="operations-center" data-action="goto" data-action-args='["operations-center"]'><span data-i18n="nav.page.operations-center">排错与管理总览</span></a>
+<a href="#page-observe-system-diagnosis" data-page="observe-system-diagnosis" data-action="goto" data-action-args='["observe-system-diagnosis"]'><span data-i18n="nav.page.observe-system-diagnosis">为什么没有正常工作</span></a>
+<a href="#page-logs" data-page="logs" data-action="goto" data-action-args='["logs"]'><span data-i18n="nav.page.logs">错误日志</span></a>
+<a href="#page-observe-runtime" data-page="observe-runtime" data-action="goto" data-action-args='["observe-runtime"]'><span data-i18n="nav.page.observe-runtime">内部运行状态</span></a>
+<a href="#page-observe-runtime-signals" data-page="observe-runtime-signals" data-action="goto" data-action-args='["observe-runtime-signals"]'><span data-i18n="nav.page.observe-runtime-signals">运行事件与信号</span></a>
+<a href="#page-observe-api-contract" data-page="observe-api-contract" data-action="goto" data-action-args='["observe-api-contract"]'><span data-i18n="nav.page.observe-api-contract">接口兼容检查</span></a>
+<a href="#page-auth-tokens" data-page="auth-tokens" data-action="goto" data-action-args='["auth-tokens"]'><span data-i18n="nav.page.auth-tokens">登录密钥与访问权限</span></a>
+<a href="#page-users" data-page="users" data-action="goto" data-action-args='["users"]'><span data-i18n="nav.page.users">用户管理</span></a>
+<a href="#page-owner-turn-api" data-page="owner-turn-api" data-action="goto" data-action-args='["owner-turn-api"]'><span data-i18n="nav.page.owner-turn-api">外部接入与部署</span></a>
+<a href="#page-generation-debug" data-page="generation-debug" data-action="goto" data-action-args='["generation-debug"]'><span data-i18n="nav.page.generation-debug">回答生成排查</span></a>
+<a href="#page-runtime-config" data-page="runtime-config" data-action="goto" data-action-args='["runtime-config"]'><span data-i18n="nav.page.runtime-config">高级运行配置与实验</span></a>
+</div>
+</div>
     <div class="nav-bottom">
+<a href="#page-guide" data-page="guide" data-action="goto" data-action-args='["guide"]'><span data-i18n="nav.page.guide">使用文档与页面指南</span></a>
       <div class="key-hint" id="nav-key-hint"></div>
       <button class="btn btn-ghost btn-sm admin-inline-191" data-action="logout" data-i18n="nav.logout">退出登录</button>
     </div>
@@ -67,6 +142,7 @@
 
   <main>
     <div class="admin-topbar">
+      <button type="button" id="nav-back" class="btn btn-ghost btn-sm" data-action="goBackPage" disabled><span aria-hidden="true">←</span> <span data-i18n="nav.back">返回上一页</span></button>
       <label for="admin-language-select" data-i18n="common.language">语言</label>
       <select id="admin-language-select" data-language-select onchange="AdminI18n.setLanguage(this.value)">
         <option value="zh-CN" data-i18n="settings_center.chinese">中文</option>
@@ -74,6 +150,7 @@
       </select>
     </div>
 
+    <div class="page" id="page-guide" data-page-fragment="guide"></div>
     <!-- ── 配置中心（Brief 93 §1） ── -->
     <div class="page active" id="page-overview" data-page-fragment="overview"></div>
     <div class="page" id="page-setup" data-page-fragment="setup"></div>
@@ -551,13 +628,13 @@
 
 <div id="toast"></div>
 
-<script src="/static/i18n.js?v=brief-242-settings-4"></script>
-<!-- legacy cache marker: <script src="/static/i18n.js?v=brief-242-settings-4"></script> -->
-<script src="/static/js/core.js?v=brief-242-settings-4"></script>
-<!-- legacy cache marker: <script src="/static/js/core.js?v=brief-242-settings-4"></script> -->
-<!-- legacy cache marker: <script src="/static/js/core.js?v=brief-242-settings-4"></script> -->
+<script src="/static/i18n.js?v=admin-navigation-guide-1"></script>
+<!-- legacy cache marker: <script src="/static/i18n.js?v=admin-navigation-guide-1"></script> -->
+<script src="/static/js/core.js?v=admin-navigation-guide-1"></script>
+<!-- legacy cache marker: <script src="/static/js/core.js?v=admin-navigation-guide-1"></script> -->
+<!-- legacy cache marker: <script src="/static/js/core.js?v=admin-navigation-guide-1"></script> -->
 <script src="/static/js/overview.js?v=brief-180-admin-static-1"></script>
-<script src="/static/js/setup.js?v=brief-242-settings-4"></script>
+<script src="/static/js/setup.js?v=admin-navigation-guide-1"></script>
 <script src="/static/js/mcp.js?v=brief-242-settings-4"></script>
 <script src="/static/js/tools.js?v=brief-161-tools-mcp-ux-1"></script>
 <script src="/static/js/status-users.js?v=brief-163-status-config-ux-1"></script>

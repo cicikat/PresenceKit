@@ -20,7 +20,7 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'brief-242-settings-4';
+const ADMIN_UI_FRAGMENT_VERSION = 'admin-navigation-guide-1';
 
 const ADMIN_PAGE_ALIASES = Object.freeze({memory: 'observe-memory'});
 
@@ -91,6 +91,7 @@ function rememberPage(page) {
 }
 
 function clearRememberedPage() {
+  resetPageHistory();
   try {
     sessionStorage.removeItem(ACTIVE_PAGE_SESSION_KEY);
   } catch (_error) { /* Best effort only. */ }
@@ -110,6 +111,7 @@ function _actionArgs(element) {
 
 function _runAction(event) {
   const element = event.currentTarget;
+  if (element.matches('a[data-page]')) event.preventDefault();
   const action = element.dataset.action;
   const args = _actionArgs(element);
   if (action === 'focus-element') {
@@ -212,26 +214,81 @@ function initMobileSidebar() {
 }
 
 
-async function goto(page, {reloadFragment = false} = {}) {
+const PAGE_HISTORY_KEY = 'admin_page_history';
+let _pageHistory = [];
+let _navigationGeneration = 0;
+try {
+  const saved = JSON.parse(sessionStorage.getItem(PAGE_HISTORY_KEY) || '[]');
+  if (Array.isArray(saved)) _pageHistory = saved.filter(item =>
+    item && typeof item.page === 'string' && document.getElementById('page-' + item.page)
+    && Number.isFinite(item.scroll) && item.scroll >= 0).slice(-100);
+} catch (_error) { /* Navigation also works with unavailable or corrupt storage. */ }
+
+function updatePageHistory() {
+  document.getElementById('nav-back').disabled = _pageHistory.length < 2;
+  try { sessionStorage.setItem(PAGE_HISTORY_KEY, JSON.stringify(_pageHistory)); }
+  catch (_error) { /* Best effort only; page history remains available in memory. */ }
+}
+
+function resetPageHistory() {
+  _navigationGeneration += 1;
+  _pageHistory = [];
+  updatePageHistory();
+}
+
+function goBackPage() {
+  if (_pageHistory.length < 2) return;
+  _pageHistory.pop();
+  return goto(_pageHistory[_pageHistory.length - 1].page, {fromHistory: true});
+}
+
+async function goto(page, {reloadFragment = false, fromHistory = false} = {}) {
   page = ADMIN_PAGE_ALIASES[page] || page;
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('nav a').forEach(a => a.classList.remove('active'));
   const pageElement = document.getElementById('page-' + page);
   if (!pageElement) {
     console.error('[admin] unknown page', page);
     return;
   }
+  const generation = ++_navigationGeneration;
+  const main = document.querySelector('main');
+  const current = _pageHistory[_pageHistory.length - 1];
+  const samePage = current?.page === page;
+  if (!fromHistory) {
+    if (current && document.getElementById('page-' + current.page)?.dataset.pageVisited === 'true') current.scroll = main.scrollTop;
+    if (!samePage) _pageHistory.push({page, scroll: 0});
+    _pageHistory = _pageHistory.slice(-100);
+  }
+  updatePageHistory();
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('nav a').forEach(a => {
+    a.classList.remove('active');
+    a.removeAttribute('aria-current');
+  });
   pageElement.classList.add('active');
-  document.querySelector(`nav a[data-page="${page}"]`)?.classList.add('active');
+  const navLink = document.querySelector(`nav a[data-page="${page}"]`);
+  navLink?.classList.add('active');
+  navLink?.setAttribute('aria-current', 'page');
+  const group = navLink?.closest('.nav-group');
+  if (group) setNavGroupExpanded(group.id.slice('navgroup-'.length), true);
+  closeSidebar();
+  rememberPage(page);
+  if (page !== 'scheduler') _stopWatchStatusPoller();
 
   try {
     await loadPageFragment(page, {reload: reloadFragment});
   } catch (_error) {
+    if (generation !== _navigationGeneration) return;
+    const error = document.createElement('p');
+    error.setAttribute('role', 'alert');
+    error.textContent = t('nav.load_failed', 'Page could not load. Select it again to retry, or go back.');
+    pageElement.replaceChildren(error);
     return;
   }
-  rememberPage(page);
+  // A slower fragment must never resume navigation after a newer click or logout.
+  if (generation !== _navigationGeneration) return;
 
   const loaders = {
+    guide: () => {},
     'call-records': loadUnifiedRecords,
     'autonomy-settings': loadAutonomySettings,
     'output-settings': loadStickerConfig,
@@ -296,10 +353,21 @@ async function goto(page, {reloadFragment = false} = {}) {
     'observe-char-permissions':      () => initObserveCharacters('obs-charperm-char', loadCharPermissions),
     'user-data':                     loadUserDataPage,
   };
-  if (page !== 'scheduler') _stopWatchStatusPoller();
-  if (loaders[page]) loaders[page]();
+  // Returning to an already mounted page preserves its filters and form state.
+  const resumePage = fromHistory && pageElement.dataset.pageVisited === 'true';
+  if (resumePage && page === 'scheduler') _startWatchStatusPoller();
+  if (!resumePage && loaders[page]) {
+    loaders[page]();
+  }
+  pageElement.dataset.pageVisited = 'true';
+  main.scrollTop = (fromHistory || samePage) ? (_pageHistory.at(-1)?.scroll || 0) : 0;
 }
 
+updatePageHistory();
+window.addEventListener('pagehide', () => {
+  if (_pageHistory.length) _pageHistory.at(-1).scroll = document.querySelector('main').scrollTop;
+  updatePageHistory();
+});
 bindShellActions();
 initMobileSidebar();
 
