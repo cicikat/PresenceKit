@@ -529,3 +529,9 @@ profile 可读取已关联的 Reality owner 回合，返回 available/entries（
 原 admin-only 全局归档接口不变。无新增生成开关，不修改正文、WS、poll、ack 或 TTL。
 `roadmap`：客户端按气泡展示和真机验收、QQ/主动消息/Dream/Stage 回合关联。
 前端工单见 cc-tasks/244-frontend-reasoning-handoff.md；按用户要求未跨仓修改。
+
+## Proactive history and inline display (2026-09-11)
+
+current: talk_owner stamps the trigger write envelope; autonomy is conversational. The existing capture/slow pipeline records assistant-only history and trigger-aware memory with existing provenance. No candidate signal is represented as a user message. New trigger event-log blocks have timestamps and the reader handles assistant-only entries and canonical turn_id. The canonical ledger keeps inline display markup separately from sanitized memory text. /chat-log/{date} adds optional assistant_display_text by scope and turn ID; desktop replays it through the existing inline renderer with plain-text fallback. No new store, scope, notification or ack policy.
+
+Validation: 48 related regressions plus 3 focused persistence/reload tests passed; desktop TypeScript and production build passed. observe: native desktop restart/phone rendering has not been tested; mobile optional styled history consumption remains roadmap. Historical stripped styles and previously unrecorded proactive messages cannot be reconstructed.

@@ -263,7 +263,8 @@ async def record_assistant_turn(
     from core.response_processor import strip_render_tags as _strip_tags
     from core.reality_output_scrubber import scrub_reality_output_text as _scrub
     memory_text = _scrub(_strip_tags(assistant_text)) or ""
-    visible_text = _strip_tags(visible_assistant_text or assistant_text) or (visible_assistant_text or assistant_text)
+    from core.response_processor import inline_display_text
+    visible_text = inline_display_text(visible_assistant_text or assistant_text)
     ledger_channel = event_channel or exclude_origin_channel or (
         "scheduler" if source != TurnSource.USER_CHAT else "unknown"
     )

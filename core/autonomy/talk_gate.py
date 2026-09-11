@@ -64,6 +64,7 @@ async def send(
     if not claim_delivery_correlation(uid, char_id, correlation_id):
         return False, Disposition.DUPLICATE.value
     from core.turn_sink import TurnSource, record_assistant_turn
+    from core.write_envelope import stamp_trigger
     from core.event_context import EventContext
     event_context = EventContext.from_ingress(
         uid=uid,
@@ -90,6 +91,7 @@ async def send(
             "correlation_id": correlation_id,
         },
         event_context=event_context,
+        envelope=stamp_trigger(),
     )
     if not result.fanout_targets: return False, "no_delivery_channel"
     from core.scheduler.proactive_ledger import record_send

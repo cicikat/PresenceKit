@@ -107,12 +107,16 @@ def _parse_day(text: str) -> list[dict]:
         user_lines: list[str] = []
         assistant_lines: list[str] = []
         state = "seek_user"
+        turn_id = ""
 
         for line in block[1:]:
             stripped = line.strip()
             if stripped == "---":
                 break
             if stripped.startswith("> "):
+                turn_match = re.search(r'\bturn_id:(\S+)', stripped)
+                if turn_match:
+                    turn_id = turn_match.group(1)
                 # meta 行，跳过，切换状态
                 if state == "in_user":
                     state = "seek_assistant"
@@ -125,6 +129,11 @@ def _parse_day(text: str) -> list[dict]:
                     content = re.sub(r'^\*\*用户\*\*[：:]', '', stripped)
                     user_lines.append(content)
                     state = "in_user"
+                else:
+                    char_match = re.match(r'^\*\*(.+?)\*\*[：:](.*)', stripped)
+                    if char_match:
+                        assistant_lines.append(char_match.group(2))
+                        state = "in_assistant"
             elif state == "in_user":
                 if stripped.startswith("**") and "**：" in stripped or "**:" in stripped:
                     # 可能是他行
@@ -154,6 +163,7 @@ def _parse_day(text: str) -> list[dict]:
             "time": time_str,
             "user": user_text,
             "assistant": assistant_text,
+            **({"turn_id": turn_id} if turn_id else {}),
         })
 
     return entries
@@ -184,6 +194,20 @@ async def get_day(date: str, char_id: str | None = None, auth=Depends(require_sc
 
     text = path.read_text(encoding="utf-8")
     entries = _parse_day(text)
+    # Display-only projection from the canonical ledger; never replace memory text.
+    # Missing/older ledgers retain the legacy plain-text history.
+    from core.memory.event_query import get_event, EventQueryError
+    scope = MemoryScope.reality_scope(_owner_qq(), resolved)
+    for entry in entries:
+        if not entry.get("turn_id") or not entry.get("assistant"):
+            continue
+        try:
+            event = get_event(scope, entry["turn_id"] + ":assistant", include_isolated=True)
+        except EventQueryError:
+            continue
+        if event and not event.get("tombstoned") and event.get("visible_text"):
+            from core.response_processor import inline_display_text
+            entry["assistant_display_text"] = inline_display_text(event["visible_text"])
     raw_fallback = len(entries) == 0 and bool(text.strip())
 
     return {

@@ -231,7 +231,7 @@ def append(
     time_str = now.strftime("%H:%M")
 
     line = f"**{role_label}**：{content}\n"
-    header = f"\n## {time_str}\n" if role == "user" else ""
+    header = f"\n## {time_str}\n" if role == "user" or trigger_name else ""
 
     if role == "assistant":
         _intensity = _calc_intensity(content, emotion)

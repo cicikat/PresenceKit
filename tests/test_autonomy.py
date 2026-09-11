@@ -342,6 +342,7 @@ def test_successful_talk_uses_turn_sink_then_records_shared_ledger(sandbox, monk
     assert sent and reason == "sent"
     assert [item[0] for item in order] == ["sink", "ledger"]
     assert order[0][1]["bypass_gate"] is False
+    assert order[0][1]["envelope"].can_write_memory is True
     assert order[1][1]["uid"] == "owner"
 
 

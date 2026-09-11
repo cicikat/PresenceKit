@@ -1931,3 +1931,10 @@ bounded through `search_documents`, `read_document`, and `search_character_notes
 it is not prompt-injected by default and never enters short-term, event-log,
 episodic, identity, or storyline memory. Deletion tombstones the index and removes
 an optionally retained raw blob.
+
+
+## Proactive history and inline display (2026-09-11)
+
+current: talk_owner stamps the trigger write envelope; autonomy is conversational. The existing capture/slow pipeline records assistant-only history and trigger-aware memory with existing provenance. No candidate signal is represented as a user message. New trigger event-log blocks have timestamps and the reader handles assistant-only entries and canonical turn_id. The canonical ledger keeps inline display markup separately from sanitized memory text. /chat-log/{date} adds optional assistant_display_text by scope and turn ID; desktop replays it through the existing inline renderer with plain-text fallback. No new store, scope, notification or ack policy.
+
+Validation: 48 related regressions plus 3 focused persistence/reload tests passed; desktop TypeScript and production build passed. observe: native desktop restart/phone rendering has not been tested; mobile optional styled history consumption remains roadmap. Historical stripped styles and previously unrecorded proactive messages cannot be reconstructed.
