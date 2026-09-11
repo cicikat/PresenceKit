@@ -1006,23 +1006,10 @@ async def _loop():
                 oid = _owner_id()
                 if oid:
                     from core.scheduler.gating import run_shadow_tick
-                    # Once signal-first autonomy is enabled, native proposals
-                    # remain observable but must not execute a competing
-                    # user-visible turn.  The autonomy runner consumes the
-                    # merged signal opportunity below.
-                    _autonomy_active = False
-                    try:
-                        from core.autonomy import store as _autonomy_store
-                        _autonomy_char_probe = _active_char_id_or_none()
-                        if _autonomy_char_probe:
-                            _autonomy_active = bool(_autonomy_store.load(oid, _autonomy_char_probe).get("config", {}).get("enabled"))
-                    except Exception:
-                        _autonomy_active = False
-                    if _autonomy_active:
-                        from core.scheduler.gating import write_shadow_tick
-                        await asyncio.to_thread(write_shadow_tick, oid)
-                    else:
-                        await run_shadow_tick(oid)
+                    # The gate queues migrated speech signals without running
+                    # their callbacks. Native mail delivery (letters/postcards)
+                    # must still execute when autonomy is enabled.
+                    await run_shadow_tick(oid)
 
                 # Wake Bridge owns durable receipt/disposition state, but its
                 # eligible records must still re-enter through this scheduler

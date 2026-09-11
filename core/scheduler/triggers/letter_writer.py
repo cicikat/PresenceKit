@@ -25,7 +25,7 @@ def propose(ctx: dict | None = None):
     if not get_config().get("mail", {}).get("enabled", False):
         return None
 
-    from core.scheduler.loop import _active_char_id_or_none, _is_ready, _owner_id
+    from core.scheduler.loop import _active_char_id_or_none, _owner_id
 
     uid = str(ctx.get("uid") or _owner_id()).strip()
     char_id = str(ctx.get("char_id") or _active_char_id_or_none() or "").strip()
@@ -35,7 +35,7 @@ def propose(ctx: dict | None = None):
     now_ts = float(ctx.get("now_ts") or time.time())
     from core.mail import weekly_contract
     weekly_due = _in_weekly_window(now_ts) and weekly_contract.is_due(uid, char_id, now=now_ts)
-    if not weekly_due and not _is_ready("letter_writer"):
+    if not weekly_due:
         return None
     reason = _check_trigger_conditions(uid, char_id=char_id, now_ts=now_ts)
     if not reason and not weekly_due:
@@ -54,6 +54,7 @@ def propose(ctx: dict | None = None):
         bypass_state_machine=False,
         execute=_make_execute(uid, char_id, reason, weekly_due=weekly_due),
         weekly_delivery_due=weekly_due,
+        char_id=char_id,
     )
 
 

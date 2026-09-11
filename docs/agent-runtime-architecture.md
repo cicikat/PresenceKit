@@ -126,7 +126,7 @@ inside modules resolve to the registered lifecycle name before admission.
 | `reminders` | migrated | Scheduler capability -> due signal; Brief 235 owns durable schedule |
 | `overflow`, `presence_nag`, `overflow_autonomy` | migrated/active | Clock -> bounded score signal; normal gates apply |
 | `dream_exit` | migrated | Dream exit -> new Reality signal/turn; no shared Dream state |
-| `letter_writer` | migrated | Task/Agent authored artifact plus separate delivery signal |
+| `letter_writer` | active | Bounded weekly SMTP delivery via mail subsystem; no autonomy/chat signal consumer. Task/Agent artifact migration remains roadmap until delivery is implemented. |
 | `coplay_commentary` | migrated | Session fact -> optional signal, no direct executor |
 | `practice_help` | migrated | Practice stall fact -> optional autonomy signal; the `practice` maintenance worker remains silent |
 | `desktop_wake`, `restart` | active | One-shot bounded signal; no direct assistant turn |

@@ -7,6 +7,27 @@ from admin.auth import require_scopes
 router = APIRouter()
 
 
+@router.get('/observability/mail-weekly', summary='读取当前周信到期与重试状态')
+async def mail_weekly_state(_auth=Depends(require_scopes('state.read'))):
+    import asyncio
+    import time
+    from core.config_loader import get_config
+    from core.mail import weekly_contract
+    from core.scheduler.loop import _active_char_id_or_none, _owner_id
+    from core.scheduler.triggers.letter_writer import _in_weekly_window
+    cfg = get_config()
+    mail = cfg.get('mail', {})
+    uid, char_id = _owner_id(), _active_char_id_or_none()
+    now = time.time()
+    state = await asyncio.to_thread(weekly_contract.snapshot, uid, char_id, now=now) if uid and char_id else {}
+    return {'enabled': bool(mail.get('enabled')), 'scheduler_enabled': bool(cfg.get('scheduler', {}).get('enabled')),
+            'configured': all(bool(mail.get(k)) for k in ('smtp_host', 'smtp_user', 'smtp_password', 'to_addr')),
+            'scope_ready': bool(uid and char_id), 'in_weekly_window': _in_weekly_window(now),
+            'delivery_path': 'scheduler_mail',
+            'weekly': {k: v for k, v in state.items() if k != 'provider_message_id'},
+            'admission_note': '到期仍需通过 QUIET、活跃窗口、DND 与角色主动开关；不保证固定星期发送'}
+
+
 @router.get("/chat/turns/{turn_id}/reasoning", summary="按聊天回合读取模型已返回的思考")
 async def chat_turn_reasoning(turn_id: str, _auth=Depends(require_scopes("memory.read"))):
     import asyncio

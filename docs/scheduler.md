@@ -1187,3 +1187,26 @@ all five tables, required columns, and matching scope. Discovery classifies
 `scope_mismatch`, `database_error`, and `timeout`; it never creates or upgrades
 a ledger. Proposal writes revalidate that contract and remain disabled by
 default.
+
+## 周信发送断链修复（2026-09-11）
+
+`current`：letter_writer 曾被标为 migrated，winner 仅转入通用 TALK 信号，
+而 autonomy 没有邮件发送适配器，导致原邮件回调永远不执行。现将邮件能力准确标为
+active，仍经原 QUIET/活跃窗口/DND/角色主动开关与周契约准入，执行仅走邮件子系统。
+无论 autonomy 是否开启，scheduler 都经 run_shadow_tick：已迁移的聊天触发器只入队，
+不执行旧回调；原生邮件/明信片可继续交付。没有恢复 retired assistant speech outlet。
+周契约未到期（已发送、退避、租约或窗口外）时不再落入事件理由旁路。
+
+`current`：GET `/observability/mail-weekly`（state.read）显示配置齐备、scheduler 开关、
+窗口、scope_ready、当前周状态及下一次重试，沿用 `/observability/mail-executions` 查阶段。
+周信是“每 ISO 周最多成功一封，到期可候选”，不是固定星期保证送达；阻断可导致本周未发。
+原手动 trigger 仍只排队测试信号，不会直接发信，不能再按旧文档把它当 SMTP 验证入口。
+
+`observe`：本地配置中 mail/scheduler 已开启且 SMTP 字段齐备，历史台账最后记录为
+empty_content/quality_rejected，没有 SMTP 成功证据。本次仅 mock 回归，不发送真实邮件，
+不修改收件地址、凭据或运行配置；部署后下一次合法调度需要观察生成质量和 SMTP。
+`roadmap`：Task/Agent authored artifact 邮件迁移尚未完成，不把通用 TALK 信号当邮件实现。
+管理面继续使用邮件配置和只读观测；桌面/手机不用新增发送控件，未跨仓修改。
+
+验证：41 项邮件/周契约/gating/信号回归通过；相邻测试文件另有一个既有 MCP 静态版本
+断言失败（要求早期 brief-195 版本字串），与邮件执行无关，未修改该旧断言。

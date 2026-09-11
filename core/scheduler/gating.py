@@ -58,7 +58,6 @@ MIGRATED_TRIGGERS: frozenset[str] = frozenset({
     "overflow",
     "presence_nag",
     "dream_exit",
-    "letter_writer",
     "coplay_commentary",
     "practice_help",
 })
@@ -94,6 +93,7 @@ RETIRED_TRIGGER_EXECUTORS: frozenset[str] = frozenset({
 })
 
 ACTIVE_TRIGGERS: frozenset[str] = frozenset({
+    "letter_writer",  # SMTP delivery has no autonomy signal consumer.
     "desktop_wake",
     "dream_postcards",
     "heart_rate",
@@ -218,7 +218,8 @@ def write_shadow_tick(uid: str) -> Optional[TriggerProposal]:
 
 
 async def run_shadow_tick(uid: str) -> Optional[TriggerProposal]:
-    picked = write_shadow_tick(uid)
+    import asyncio
+    picked = await asyncio.to_thread(write_shadow_tick, uid)
     # Migrated proposals are observability-only.  Their factual producers feed
     # the autonomy queue; executing the historical prompt callback here would
     # recreate a second path to a user-visible turn.

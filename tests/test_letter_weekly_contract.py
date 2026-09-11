@@ -42,3 +42,28 @@ def test_weekly_due_proposal_bypasses_only_global_cooldown(monkeypatch):
     proposal = TriggerProposal("letter_writer", 1, "letter", [TriggerState.QUIET], weekly_delivery_due=True)
     monkeypatch.setattr("core.scheduler.gating.is_trigger_ready", lambda *_args, **_kwargs: False)
     assert _proposal_cooldown_ready(proposal)
+
+
+def test_sent_or_backoff_never_falls_through_to_event_letter(monkeypatch):
+    from core.scheduler.triggers import letter_writer
+    monkeypatch.setattr('core.config_loader.get_config', lambda: {'mail': {'enabled': True}})
+    monkeypatch.setattr('core.mail.weekly_contract.is_due', lambda *a, **k: False)
+    monkeypatch.setattr(letter_writer, '_check_trigger_conditions', lambda *a, **k: 'strong reason')
+    assert letter_writer.propose({'uid': 'example', 'char_id': 'example'}) is None
+
+
+async def test_mail_executes_but_migrated_speech_does_not(monkeypatch):
+    from unittest.mock import AsyncMock
+    from core.scheduler import gating
+    from core.scheduler.state_machine import TriggerState
+    execute = AsyncMock()
+    winner = gating.TriggerProposal('letter_writer', 1, 'letter', [TriggerState.QUIET], execute=execute)
+    monkeypatch.setattr(gating, 'write_shadow_tick', lambda uid: winner)
+    monkeypatch.setattr(gating, 'is_live_mode', lambda: True)
+    await gating.run_shadow_tick('example')
+    execute.assert_awaited_once_with(dry_run=False)
+    execute.reset_mock()
+    from dataclasses import replace
+    winner = replace(winner, trigger_name='morning_greeting')
+    await gating.run_shadow_tick('example')
+    execute.assert_not_awaited()
