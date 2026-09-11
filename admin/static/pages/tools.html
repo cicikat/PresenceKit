@@ -1,6 +1,17 @@
 <h1 class="page-title" data-i18n="tools.title">工具</h1>
 
 <div class="card">
+  <h3>小红书分享读取</h3>
+  <p>读取帖子正文、图片和评论样本。需先运行并登录 xiaohongshu-mcp 读取服务；图片使用已有图片识别配置。</p>
+  <label><input id="xhs-enabled" type="checkbox">允许读取小红书分享</label>
+  <label class="field">读取服务地址<input id="xhs-reader-url" type="url" placeholder="http://127.0.0.1:18060"></label>
+  <label class="field">评论数量上限<input id="xhs-max-comments" type="number" min="1" max="30" value="10"></label>
+  <label class="field">图片识别上限（0为不识别）<input id="xhs-max-images" type="number" min="0" max="4" value="2"></label>
+  <button class="btn btn-primary" data-action="saveXiaohongshuSettings">保存小红书设置</button>
+  <p id="xhs-settings-status" role="status"></p>
+</div>
+
+<div class="card">
   <p data-i18n="tools.notice">这里管理内置已注册工具的运行开关，以及每个聊天模型实际收到的工具 schema。</p>
   <p id="tools-mcp-status" class="tools-status-note"></p>
   <p id="tools-intiface-status" class="tools-status-note"></p>

@@ -116,10 +116,37 @@ function _renderToolsPage() {
 }
 
 async function loadToolsPage() {
+  loadXiaohongshuSettings();
   const root = document.getElementById('tools-registry-list');
   if (root) root.innerHTML = `<div class="loading">${escapeHtml(t('common.loading', '加载中…'))}</div>`;
   try { _toolsControl = await api('GET', '/settings/tools'); _renderToolsPage(); }
   catch (error) { if (root) root.innerHTML = `<div class="empty">${escapeHtml(t('common.load_failed', '加载失败: {error}', { error: error.message }))}</div>`; }
+}
+
+function showXiaohongshuSettings(data) {
+  document.getElementById('xhs-enabled').checked = data.enabled;
+  document.getElementById('xhs-reader-url').value = data.reader_url || '';
+  document.getElementById('xhs-max-comments').value = data.max_comments;
+  document.getElementById('xhs-max-images').value = data.max_images;
+  document.getElementById('xhs-settings-status').textContent = !data.enabled ? '已关闭' :
+    !data.configured ? '已开启，但尚未配置读取服务' : '配置已就绪；远端连接与登录尚未验证，仍需允许模型使用此工具。';
+}
+
+async function loadXiaohongshuSettings() {
+  try { showXiaohongshuSettings(await api('GET', '/settings/xiaohongshu')); }
+  catch (e) { document.getElementById('xhs-settings-status').textContent = '读取小红书设置失败'; }
+}
+
+async function saveXiaohongshuSettings() {
+  try {
+    showXiaohongshuSettings(await api('PUT', '/settings/xiaohongshu', {
+      enabled: document.getElementById('xhs-enabled').checked,
+      reader_url: document.getElementById('xhs-reader-url').value.trim(),
+      max_comments: Number(document.getElementById('xhs-max-comments').value),
+      max_images: Number(document.getElementById('xhs-max-images').value),
+    }));
+    toast('小红书设置已保存', 'ok');
+  } catch (e) { document.getElementById('xhs-settings-status').textContent = `保存失败：${e.message || e}`; }
 }
 
 function changeToolsModelPreset(name) { _toolsTargetModel = name; _renderToolsPage(); }

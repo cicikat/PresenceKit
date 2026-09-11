@@ -872,6 +872,24 @@ _TOOL_REGISTRY["web_search"] = {
     "trace_args": ["query"],
 }
 
+
+async def _read_xiaohongshu_wrapper(share: str):
+    from core.tools.xiaohongshu import read_post
+    return await read_post(share)
+
+
+_TOOL_REGISTRY["read_xiaohongshu"] = {
+    "func": _read_xiaohongshu_wrapper,
+    "description": "读取用户提供的小红书分享链接的帖子正文、图片识别及评论样本；需要完整分享链接。",
+    "dangerous": False, "category": "info",
+    "parameters": {"type": "object", "properties": {
+        "share": {"type": "string", "description": "用户提供的完整分享文案或链接"},
+    }, "required": ["share"]},
+    "examples": ["看看这篇小红书和评论", "读一下这个小红书分享链接"],
+    "keywords": ["小红书", "xhslink.com", "xiaohongshu.com"],
+    "trace_args": [],
+}
+
 _TOOL_REGISTRY["read_diary"] = {
     "func": _read_diary_wrapper,
     "description": (
@@ -1750,6 +1768,9 @@ def _is_tool_enabled(tool_name: str) -> bool:
     """检查 config.yaml tools 配置中工具是否启用（默认启用）。
     优先查 tools.<tool_name>.enabled，再回退到旧的 group 键。
     """
+    if tool_name == "read_xiaohongshu":
+        from core.tools.xiaohongshu import settings
+        return settings(get_config())["effective"]
     if tool_name in _INTIFACE_TOOL_NAMES and not intiface_opted_in():
         return False
     cfg = get_config().get("tools", {})

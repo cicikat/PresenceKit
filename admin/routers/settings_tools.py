@@ -47,7 +47,38 @@ def _static_tool_enabled(name: str, tools_config: dict) -> bool:
         return bool(value.get("enabled", True))
     if value is not None:
         return bool(value)
-    return True
+    return name != "read_xiaohongshu"
+
+
+class XiaohongshuSettings(BaseModel):
+    enabled: bool = False
+    reader_url: str = ""
+    max_comments: int = Field(10, ge=1, le=30)
+    max_images: int = Field(2, ge=0, le=4)
+
+
+@router.get('/settings/xiaohongshu')
+async def get_xiaohongshu_settings(auth=Depends(require_scopes('admin'))):
+    from core.tools.xiaohongshu import settings
+    return settings(get_config())
+
+
+@router.put('/settings/xiaohongshu')
+async def update_xiaohongshu_settings(body: XiaohongshuSettings, auth=Depends(require_scopes('admin'))):
+    from urllib.parse import urlsplit
+    address = body.reader_url.strip().rstrip('/')
+    if address:
+        parsed = urlsplit(address)
+        if parsed.scheme not in {'http', 'https'} or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
+            raise HTTPException(422, '读取服务需要有效的 HTTP(S) 根地址')
+    cfg = read_config_file(CONFIG_FILE)
+    cfg['xiaohongshu'] = {'reader_url': address, 'max_comments': body.max_comments, 'max_images': body.max_images}
+    cfg.setdefault('tools', {})['read_xiaohongshu'] = {'enabled': body.enabled}
+    write_config_file(CONFIG_FILE, cfg)
+    from core import config_loader
+    config_loader.reload_config()
+    from core.tools.xiaohongshu import settings
+    return settings(cfg)
 
 
 def _registry_rows(cfg: dict) -> list[dict]:

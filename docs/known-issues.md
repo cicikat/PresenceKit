@@ -436,3 +436,14 @@ empty_content/quality_rejected，没有 SMTP 成功证据。本次仅 mock 回�
 
 验证：41 项邮件/周契约/gating/信号回归通过；相邻测试文件另有一个既有 MCP 静态版本
 断言失败（要求早期 brief-195 版本字串），与邮件执行无关，未修改该旧断言。
+## 小红书分享工具（2026-09-11）
+
+`current`：read_xiaohongshu 为默认关闭的 info 工具，管理面工具页通过
+GET/PUT `/settings/xiaohongshu` 配置读取服务与数量上限；开关共用
+`tools.read_xiaohongshu.enabled`。返回正文摘录、有限图片识别及评论样本。
+QQ/desktop/mobile 共用既有探针/工具循环、暴露白名单和 origin 闸门，无新客户端协议。
+元数据观测复用 `/observability/api-calls?caller=read_xiaohongshu`；remote_status
+明确为 not_checked，配置就绪不代表站点登录或连接健康。详见 docs/xiaohongshu-reader.md。
+`observe`：需用户部署并登录 xiaohongshu-mcp 读取服务后实测；本次未开启真实功能。
+真实帖子与真机效果、评论完整性不作完成承诺；评论始终标记样本，图片失败明确降级。
+`roadmap`：视频转录、完整评论遍历不在本次范围；无跨仓原生客户端代码修改。
