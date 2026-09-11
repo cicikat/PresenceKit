@@ -480,3 +480,9 @@ observe: physical phone/network/Doze and live image-model end-to-end validation 
 current: Navigation explicitly labels IME. The admin-only inbox includes device-filtered, pagination-independent draft/test counts and latest draft update time; no new storage. Existing local non-test drafts confirm reception. Browser cache-cleared verification used real assets and synthetic API data.
 
 roadmap: Character consumption remains disabled/unimplemented. Use short-lived, source-attributed summaries, exclude test and companion-chat duplicates, preserve uncertainty; never equate draft text with sent messages or stable user facts. See docs/ime-ingest.md. Physical phone offline retry remains observe.
+
+### 生活记录真实图片识别与手机校正冲突（2026-09-11）
+
+`open`：真机两张图片已通过 /life-records/sync 落库并返回回执，observability 显示两次识别 failed / ValidationError；一次不提交结果的 recognize 诊断又返回 JSONDecodeError。当前只有异常类型，未能定位具体字段，不能断言模型配置就绪等于识别可用。建议独立提取 schema、未知值/用户校正锁隔离校验和结构化输出解析，记录无输入内容的校验字段路径，修复后用原管理面 retry 验收。
+
+另一次同记录本机修改与识别推进的 revision 冲突，手机保留操作，但目前只提供采用电脑版本，缺保留本机修改的合并入口。手机改为每轮连续补传降低等待窗口，不替代正确的冲突处理。后端总开关已按用户授权开启，其他设置不变；没有改后端识别实现或自动丢弃冲突。见 three-repo-interface-catalog 同日条目。

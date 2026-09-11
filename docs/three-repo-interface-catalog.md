@@ -700,3 +700,10 @@ observe: physical phone/network/Doze and live image-model end-to-end validation 
 current: Navigation explicitly labels IME. The admin-only inbox includes device-filtered, pagination-independent draft/test counts and latest draft update time; no new storage. Existing local non-test drafts confirm reception. Browser cache-cleared verification used real assets and synthetic API data.
 
 roadmap: Character consumption remains disabled/unimplemented. Use short-lived, source-attributed summaries, exclude test and companion-chat duplicates, preserve uncertainty; never equate draft text with sent messages or stable user facts. See docs/ime-ingest.md. Physical phone offline retry remains observe.
+
+## 生活记录真机补传与手机时间显示（2026-09-11）
+
+- `current`：手机新增本机 showChatTime 外观偏好，默认开启；无后端/桌面总开关或 mobile 消息字段变化。手机同步忙时合并保存触发，缓存错误不阻断发送；原生按序批量补传（200 项/60 秒预算），foreground_only 等待不阻挡前台恢复。沿用现有 scope、origin+owner 隔离、operation_id、revision、ack、SQLite outbox 和 snapshot/observability，无新队列或通知路径。
+- `observe`：正式手机原显示 3 个待办，后端 enabled=false 阻挡上传。用户授权后仅通过 /settings/life-records 开启 enabled，GET 回读 effective=true，其他设置原值保留。已验证 2 次图片上传回执；另一次本机修改为 revision 冲突，保留本机内容。手机 1.0.1+38 同签名覆盖及时间开关重启保存已验收；Flutter 154 项与 Android LifeRecordsTest 19 项通过。
+- `open`：两张真实图片的识别任务 failed / ValidationError，额外不提交结果的识别诊断返回 JSONDecodeError；真实模型结构化输出尚未通过，不应标记为识别完成。后端需提供脱敏校验字段、独立提取 schema 与稳健解析后走原重试入口。
+- `open`：手机冲突 UI 只有采用电脑版本，缺保留本机修改的合并入口；未经用户确认不得丢弃本机操作。生活记录页暗色自定义主题下说明文字低对比度。真实 Doze、断网恢复和新图端到端保存即传仍为 observe。
