@@ -16,6 +16,7 @@ router = APIRouter()
 CONFIG_FILE = Path("config.yaml")
 
 FLAGS = {
+    "screen_observation": ("screen_observation", "enabled", "角色按需截图（电脑与手机）"),
     "ime_ingest": ("ime_ingest", "enabled", "IME 草稿与编辑事件接收"),
     "ime_awareness": ("ime_awareness", "enabled", "IME 活动理解与主动关心"),
     "qq":   ("qq",   "enabled", "QQ 通道"),
@@ -68,7 +69,12 @@ async def get_feature_flags(auth=Depends(require_scopes("admin"))):
             "apply_mode": "restart_required" if name in RESTART_REQUIRED_FLAGS else "hot_reload",
             "restart_required": name in RESTART_REQUIRED_FLAGS,
         }
-        if name == "ime_awareness":
+        if name == "screen_observation":
+            from core.perception.screen_observation import state
+            snapshot = state()
+            item["effective_state"] = "ready" if snapshot["enabled"] and snapshot["active_device"] else "no-active-device" if snapshot["enabled"] else "disabled"
+            item["description"] = "需要视觉感知及设备本地授权；实时设备和请求回执：/perception/screen/status"
+        elif name == "ime_awareness":
             from core.ime_awareness import effective_state
             awareness = effective_state()
             item['effective_state'] = 'enabled' if awareness['effective'] else awareness['blocking_reason']

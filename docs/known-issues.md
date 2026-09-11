@@ -546,15 +546,12 @@ Existing run.events now retain safe evaluation_error/error_type metadata. No new
 Runtime settings were updated through admin APIs and read back: interval 30 minutes, 48 evaluations/day,
 global proactive gap 45 minutes; daily talk cap 8 and evaluation minimum interval 15 minutes unchanged.
 open: restart backend to activate code and observe real delivery/circuit recovery. No real test message sent.
-Screenshot planning remains separate: desktop visual sampling is shadow-only and local consent is off;
-mobile offers a text snapshot, not this requested on-demand image capture. See desktop docs/proactivity-2026-09-12.md.
+On-demand screenshots now have desktop and Android implementations; local opt-in and native validation are still required. See docs/screen-observation-2026-09-12.md.
 
-## Autonomy XML compatibility and cadence (2026-09-12, partial)
-Autonomy opts into existing XML tool encoding in chat_turn; ordinary native-only callers keep
-strict FC semantics. Parsed tools remain bounded by the exposed names; private prose never sends.
-Existing run.events now retain safe evaluation_error/error_type metadata. No new store or scope.
-Runtime settings were updated through admin APIs and read back: interval 30 minutes, 48 evaluations/day,
-global proactive gap 45 minutes; daily talk cap 8 and evaluation minimum interval 15 minutes unchanged.
-open: restart backend to activate code and observe real delivery/circuit recovery. No real test message sent.
-Screenshot planning remains separate: desktop visual sampling is shadow-only and local consent is off;
-mobile offers a text snapshot, not this requested on-demand image capture. See desktop docs/proactivity-2026-09-12.md.
+## 按需截图三端接入（2026-09-12，partial）
+
+详见仓库 `docs/screen-observation-2026-09-12.md`。后端 `observe_user_screen` 通过独立 HTTP poll/result 请求活跃电脑或手机的新截图，UUID/凭据绑定、20 秒 TTL、30 秒设备新鲜度和本地授权均参与门控；图像只在内存中处理。
+
+管理面提供全局开关、effective state 与 `/perception/screen/status` 无正文观测；电脑视觉观察页、手机系统配置页各有独立本地授权，默认关闭。全局开启时自主工具继承启用，显式工具禁用优先；角色消息继续走原通知/免打扰链路。桌面 IPC 新增可选 onDemandEnabled；手机使用专用 screen_observation 通道与无障碍 worker，不改 mobile poll/ack/relay。
+
+实现及构建/定向测试通过，真实双设备、锁屏、OEM 后台及 VLM/消息联合验收保持 open。管理面既有国际化测试 3 项失败保持 open，详见施工记录，不能将静态检查作为真实设备验收。

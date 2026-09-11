@@ -528,7 +528,16 @@ async function loadFeatureFlags() {
   const el = document.getElementById('feature-flags-grid'); if (!el) return;
   try { const d = await api('GET', '/settings/feature-flags'); _featureFlags = d.flags || {};
     el.innerHTML = Object.entries(_featureFlags).map(([name, item]) => `<label class="checkbox-row" style="gap:9px;padding:9px 10px;border:1px solid var(--border);border-radius:6px"><input type="checkbox" data-feature-flag="${name}" ${item.enabled ? 'checked' : ''}><span>${escapeHtml(t('flag.' + name, item.label))}<small style="display:block;color:var(--muted)">${name}${item.restart_required ? ` ${escapeHtml(t('dynamic.tokens.restart_effect', '（重启后生效）'))}` : ''}</small>${name === 'visual_perception' ? `<small style="display:block;color:var(--warning,#c77)">${escapeHtml(t('flag.visual_perception_hint', '此闸打开后，还需在桌宠客户端「设置→视觉观察」里单独打开本地开关，两处都开才会真正截图'))}</small>` : ''}</span></label>`).join('');
-  } catch (e) { el.innerHTML = `<div class="empty">${e.message}</div>`; }
+    if (_featureFlags.screen_observation) {
+      const item = _featureFlags.screen_observation;
+      el.innerHTML += `<div style="grid-column:1/-1"><small>${escapeHtml(item.description || '')} (${escapeHtml(item.effective_state || '')})</small><button type="button" onclick="showScreenObservationStatus()">${escapeHtml(t('screen.status', 'Screen requests and devices'))}</button><pre id="screen-observation-status" style="white-space:pre-wrap"></pre></div>`;
+    }
+  } catch (e) { el.innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`; }
+}
+async function showScreenObservationStatus() {
+  const el = document.getElementById('screen-observation-status');
+  try { el.textContent = JSON.stringify(await api('GET', '/perception/screen/status'), null, 2); }
+  catch (e) { el.textContent = e.message; }
 }
 async function saveFeatureFlags() { const flags = {}; document.querySelectorAll('[data-feature-flag]').forEach(el => flags[el.dataset.featureFlag] = el.checked); try { const result = await api('PUT', '/settings/feature-flags', { flags }); toast(result.message || t('common.saved', '已保存'), result.reload_status === 'restart_required' ? 'err' : 'ok'); loadFeatureFlags(); } catch (e) { toast(e.message, 'err'); } }
 

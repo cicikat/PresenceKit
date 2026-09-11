@@ -118,6 +118,8 @@ app.include_router(transcribe.router,          prefix="", tags=["语音转写"])
 app.include_router(provenance.router,          prefix="", tags=["观测"])
 app.include_router(auth_tokens.router,         prefix="", tags=["鉴权"])
 app.include_router(coplay.router,              prefix="", tags=["陪玩"])
+from admin.routers import screen_observation
+app.include_router(screen_observation.router, tags=["按需截图"])
 app.include_router(perception.router,           prefix="", tags=["视觉感知"])
 app.include_router(spend.router,                prefix="", tags=["支出台账"])
 app.include_router(growth.router,               prefix="", tags=["成长观测"])

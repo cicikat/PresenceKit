@@ -1,5 +1,15 @@
 # 功能控制面事实清单（2026-07-13）
 
+## 角色按需截图（2026-09-12，partial）
+
+管理面功能开关 `screen_observation.enabled` 默认关闭，实际可用还需 `visual_perception.enabled`、
+视觉模型配置及活跃设备本地授权。功能开关页提供 effective state、设备/请求回执查询
+（`GET /perception/screen/status`，state.read）。电脑视觉观察页与手机系统配置页分别有
+独立「允许角色按需截图」UI，默认关闭，不等同于旧周期采样或屏幕文字分享。
+全局开启时，自主工具 `observe_user_screen` 在未显式配置其策略时继承启用；显式禁用优先。
+工具暴露、自我能力、冷却、Dream/对话锁和免打扰保持原有执行约束。
+三端构建及定向回归完成，真实设备验收 open；详见 `screen-observation-2026-09-12.md`。
+
 ## IME 活动理解与主动关心（2026-09-11）
 
 current：IME 编辑事件与独立 `ime_judge` 活动判定已接入 scheduler → autonomy signal →

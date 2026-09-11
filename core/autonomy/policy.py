@@ -139,6 +139,9 @@ def tool_decisions(uid: str, char_id: str, state: dict) -> list[dict]:
         if info.get("self_management"):
             continue
         configured_policy = configured.get(name) if isinstance(configured.get(name), dict) else {}
+        if name == "observe_user_screen" and name not in configured:
+            from core.perception.screen_observation import enabled as screen_enabled
+            configured_policy = {"enabled": screen_enabled()}
         effect = get_tool_effect(name) or ("write" if is_side_effect_tool(name) else "read")
         eligible, eligibility_reason = tool_eligibility(name, configured_policy, registry=_TOOL_REGISTRY, effect=effect)
         is_mcp = info.get("category") == "mcp"

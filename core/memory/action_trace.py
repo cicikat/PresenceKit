@@ -123,6 +123,8 @@ def build_result_digest(tool_name: str, result) -> str:
     """result → 脱敏摘要。peek_screen_content 特判只留 title_hint，不含屏幕原文。"""
     if result is None:
         return ""
+    if tool_name == "observe_user_screen":
+        return "screen observation (content omitted)"
     if tool_name == "peek_screen_content":
         text = str(result)
         m = re.search(r"【窗口】([^\n]*)", text)
