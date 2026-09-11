@@ -957,6 +957,8 @@ async def main():
     logger.info("Bot 已就绪，等待消息...")
     logger.info("=" * 60)
 
+    from core.life_records import worker as _life_records_worker
+    life_records_task = asyncio.create_task(_life_records_worker())
     try:
         await asyncio.gather(*tasks)
     except KeyboardInterrupt:
@@ -966,6 +968,8 @@ async def main():
         log_error("main", e)
         logger.error(f"主循环异常退出: {e}")
     finally:
+        life_records_task.cancel()
+        await asyncio.gather(life_records_task, return_exceptions=True)
         from core.dream.scenario_reconciler import shutdown as _shutdown_scenario_reconciler
         await _shutdown_scenario_reconciler()
         await _hardware_jobs.shutdown()

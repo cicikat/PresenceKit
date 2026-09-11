@@ -1,1 +1,10 @@
 <h1 class="page-title" data-i18n="settings_center.service_configuration">服务配置</h1><p data-i18n="settings_center.configuration_summary_only_complete_configuration_does_not_mean_the_upstream_service_has_been_tested">这里只显示配置情况；配置齐全不代表上游服务已经测试可用。</p><div id="service-center-list"></div>
+<section class="card"><h3>生活记录</h3><p>手机图片上传后异步提取饮食、账单、购物车记录，用户校正优先。不会自动付款或写入长期记忆。</p>
+<label><input id="life-enabled" type="checkbox">允许同步生活记录</label>
+<label><input id="life-readable" type="checkbox">允许角色只读查询</label>
+<label><input id="life-background" type="checkbox">允许手机后台上传</label>
+<label><input id="life-retain" type="checkbox">识别结束后保留原图</label>
+<p>关闭原图保留仅影响之后完成的任务；删除记录会移除原图。识别复用「模型路由」中的图片识别配置。</p>
+<button class="btn" data-action="saveLifeRecords">保存</button><button class="btn btn-ghost" data-action="loadLifeRecords">刷新任务与设备队列</button>
+<pre id="life-status" style="white-space:pre-wrap"></pre></section>
+<section class="card"><label>失败任务记录 ID <input id="life-retry-id"></label><button class="btn btn-ghost" data-action="retryLifeRecord">重试识别（需保留原图）</button></section>

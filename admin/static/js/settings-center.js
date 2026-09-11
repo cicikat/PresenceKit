@@ -121,6 +121,7 @@ async function loadImeObservation(more = false) {
 }
 
 async function loadServiceCenter() {
+  loadLifeRecords();
   const root=document.getElementById('service-center-list'); root.textContent=t('settings_center.loading',"读取中…");
   const specs=[
     [t('settings_center.text_model',"文本模型"),'/settings/prompt-assets','model-routing',d=>{const current=d.characters?.find(c=>c.id===d.active?.active_character);return [current?.chat_configured,current?.resolved_chat_model];}],
@@ -137,6 +138,31 @@ async function loadServiceCenter() {
   const results=await Promise.allSettled(specs.map(s=>api('GET',s[1])));
   root.innerHTML=specs.map(([label,path,page,view],i)=>{const result=results[i]; const [ready,detail]=result.status==='fulfilled'?view(result.value):[undefined,t('settings_center.could_not_load',"读取失败")]; return `<section class="card"><h3>${label}</h3><p>${result.status==='rejected'?t('settings_center.could_not_load',"读取失败"):ready===true?t('settings_center.configured_connection_not_tested',"已配置 · 未执行连通性测试"):ready===false?t('settings_center.not_configured_or_incomplete',"未配置或配置不完整"):t('settings_center.unknown_configuration_status_not_returned',"未知：接口未返回配置状态")}${detail?' · '+escapeHtml(detail):''}</p>${centerLink(page,t('settings_center.view_configuration',"查看配置"))}</section>`;}).join('')+`<section class="card">${centerLink('role-bindings',t('settings_center.character_model_and_asset_bindings',"角色模型与资源绑定"))}${centerLink('auth-tokens',t('settings_center.message_channels_and_credentials',"消息通道与访问凭据"))}</section>`;
   bindPageActions(root);
+}
+
+async function loadLifeRecords() {
+  const host = document.getElementById('life-status');
+  if (!host) return;
+  host.textContent = '正在读取生活记录状态…';
+  try {
+    const data = await api('GET', '/settings/life-records');
+    for (const [id, key] of [['enabled','enabled'],['readable','character_readable'],['background','background_sync'],['retain','retain_images']]) document.getElementById('life-' + id).checked = !!data[key];
+    host.textContent = `${data.enabled ? '同步已开启' : '同步已关闭'} · ${data.recognition_available ? '识别配置可用（不代表已实测）' : '图片识别尚未配置，任务将等待'}\n` + JSON.stringify({识别路由:data.recognition_route,任务:data.tasks,失败:data.failures,设备回执:data.devices,操作审计:data.audit}, null, 2);
+  } catch (error) { host.textContent = '生活记录状态读取失败：' + error.message; }
+}
+async function saveLifeRecords() {
+  try {
+    await api('PUT', '/settings/life-records', {enabled:document.getElementById('life-enabled').checked,character_readable:document.getElementById('life-readable').checked,background_sync:document.getElementById('life-background').checked,retain_images:document.getElementById('life-retain').checked});
+    await loadLifeRecords();
+  } catch (error) { document.getElementById('life-status').textContent = '保存失败：' + error.message; }
+}
+async function retryLifeRecord() {
+  try {
+    const id = document.getElementById('life-retry-id').value.trim();
+    if (!id) return;
+    await api('POST', '/settings/life-records/' + encodeURIComponent(id) + '/retry');
+    await loadLifeRecords();
+  } catch (error) { document.getElementById('life-status').textContent = '重试失败：' + error.message; }
 }
 let roleBindingGeneration=0;
 let roleBindingCharacters=[];

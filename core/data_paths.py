@@ -547,6 +547,9 @@ class DataPaths:
     def ime_drafts_db(self) -> Path:
         return self._p("runtime", "integrations", "ime_drafts.sqlite3")
 
+    def life_records_db(self) -> Path:
+        return self._p("runtime", "life_records", "records.sqlite3")
+
     def mail_execution_log(self) -> Path:
         """Sanitized forensic outcomes for scheduler-driven character letters."""
         return self._p("runtime", "observability", "mail_executions.jsonl")

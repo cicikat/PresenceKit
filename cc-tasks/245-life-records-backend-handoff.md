@@ -10,13 +10,13 @@
 
 ## 待办（后端施工者逐条打勾）
 
-- [ ] B1：确认 v1 契约，提供 capability 与 mobile scope，迁移/回滚方案。
-- [ ] B2：正式记录、原图、识别任务、操作幂等表与 revision；删除墓碑及检索清理。
-- [ ] B3：异步 OCR/视觉抽取；保留原始证据、置信度与不确定值，用户修正优先。
-- [ ] B4：记录 CRUD、分页日期/分类/关键词查询、冲突处理与设备队列观测端点同单提供。
-- [ ] B5：管理面配置 enabled、角色可读、原图保留策略、模型 effective state、任务失败与审计。
-- [ ] B6：角色只读工具按 owner/日期/分类检索，饮食估算标注来源；金额精度与币种不混算。
-- [ ] B7：桌面设置/只读观测评估并同步三仓总账，标记 current/open/roadmap/observe。
+- [x] B1：确认 v1 契约，提供 capability 与 mobile scope，迁移/回滚方案。
+- [x] B2：正式记录、原图、识别任务、操作幂等表与 revision；删除墓碑及检索清理。
+- [x] B3：异步 OCR/视觉抽取；保留原始证据、置信度与不确定值，用户修正优先。
+- [x] B4：记录 CRUD、分页日期/分类/关键词查询、冲突处理与设备队列观测端点同单提供。
+- [x] B5：管理面配置 enabled、角色可读、原图保留策略、模型 effective state、任务失败与审计。
+- [x] B6：角色只读工具按 owner/日期/分类检索，饮食估算标注来源；金额精度与币种不混算。
+- [x] B7：桌面设置/只读观测评估并同步三仓总账，标记 current/open/roadmap/observe。
 - [ ] B8：手机联调和网络失败矩阵，确认不影响 chat/poll/ack、通知与购物辅助。
 
 ## Proposed HTTP v1
@@ -50,3 +50,6 @@ capability 的 `background_sync` 必须明确给出；false 时系统后台任�
 测试：原图上传后断线重试、ack 丢失、重启、多个设备 revision 冲突、识别与校正并发、重复删除、token 轮换/吊销、跨 owner 越权、分页完整性、日期跨时区、金额小数、恶意图片指令、原图过大、删除后角色查询、既有聊天通知回归。
 
 淘宝直接导入列 roadmap：需官方 API 能力/授权资质核实与用户授权，不能依赖抓取登录 cookie 或把辅助点击当作购物车数据接口。一期用户上传截图。
+
+
+Implementation evidence: docs/life-records.md. B1-B7 implementation and local validation complete. B8 remains open: Android protocol regression passed, but physical-device live backend/OCR and OS lifecycle network matrix have not been exercised.
