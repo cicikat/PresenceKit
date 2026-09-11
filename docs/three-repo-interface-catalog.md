@@ -11,6 +11,13 @@
 
 ## 1. 系统边界与权威来源
 
+### 生活记录手机先行（2026-09-11）
+
+- `roadmap`：饮食/账单/购物车图片的识别、正式数据、角色只读检索、管理面开关与 scoped auth；后端工单 `cc-tasks/245-life-records-backend-handoff.md`。本轮仅交接文档，未新增后端代码或实际 HTTP 路由。
+- `open`：`/life-records/capabilities`、`/life-records/sync`、列表/详情和 `/life-records/observability` 均为 proposed。enabled 默认 false，background_sync 与角色读取由后端 effective state 决定；观测、审计和删除清理必须与存储同单交付。
+- 手机侧独立 Flutter controller/widget 与 Android 私有 SQLite outbox、源图、JobScheduler；队列绑定 origin+owner，操作 ID 幂等、revision 冲突保留、匹配 ack 才清队列。采用独立 `presence_mobile/life_records` channel，不改 legacy settings、聊天 ingest、mobile poll/ack、通知/中继或自动付款链路。
+- `observe`：手机本机测试/Dev 构建证据见手机工单 17；真实后端及真机后台网络矩阵待联调。淘宝直连导入、桌面记录 UI、上传后原图跨端重取列 roadmap，不把接口草案写成功能完成。
+
 ### 管理面分组导航与页面指南（2026-09-10）
 
 - `current`：管理面恢复可折叠分类及细页直达；底部文档提供任务路线、术语解释和
