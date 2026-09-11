@@ -78,7 +78,7 @@ def _parse_day(text: str) -> list[dict]:
       **他**：...
       > emotion:... intensity:N turn_id:...
       ---
-    返回 [{"time": "HH:MM", "user": "...", "assistant": "..."}]
+    返回 time/user/assistant，以及可信 assistant 尾部元数据中的可选 turn_id。
     能解析多少算多少；整体无法识别时返回空列表由调用方处理。
     """
     entries = []
@@ -109,18 +109,35 @@ def _parse_day(text: str) -> list[dict]:
         state = "seek_user"
         turn_id = ""
 
-        for line in block[1:]:
+        for index, line in enumerate(block[1:], start=1):
             stripped = line.strip()
             if stripped == "---":
                 break
+            # Only the writer's terminal assistant footer can identify a reply.
+            # Quotes inside message bodies (even metadata-shaped quotes) are text.
+            tail = ""
             if stripped.startswith("> "):
-                turn_match = re.search(r'\bturn_id:(\S+)', stripped)
-                if turn_match:
-                    turn_id = turn_match.group(1)
-                # meta 行，跳过，切换状态
-                if state == "in_user":
+                tail = next((item.strip() for item in block[index + 1:] if item.strip()), "")
+            assistant_meta = (
+                state == "in_assistant"
+                and re.fullmatch(r'> emotion:\S+ intensity:\d+(?: \S+:\S+)*', stripped)
+                and tail == "---"
+            )
+            user_meta = (
+                state == "in_user"
+                and re.fullmatch(r'> (?:speaker:user|turn_id:\S+)(?: \S+:\S+)*', stripped)
+                and re.match(r'^\*\*(?!用户\*\*)(.+?)\*\*[：:]', tail)
+            )
+            if assistant_meta or user_meta:
+                if assistant_meta:
+                    fields = stripped[2:].split()
+                    ids = [part.partition(":")[2] for part in fields if part.startswith("turn_id:")]
+                    speakers = [part for part in fields if part.startswith("speaker:")]
+                    if len(ids) == 1 and speakers in ([], ["speaker:assistant"]):
+                        turn_id = ids[0]
+                if user_meta:
                     state = "seek_assistant"
-                elif state == "in_assistant":
+                else:
                     state = "done"
                 continue
 

@@ -404,8 +404,12 @@ profile 可读取已关联的 Reality owner 回合，返回 available/entries（
 桌面/手机共享 owner 入口在生成期间关联调用，工具循环子任务同样关联，post-process
 前停止采集关联，防止后台思考串入；关联失败不影响回复。旧归档不推测关联。
 原 admin-only 全局归档接口不变。无新增生成开关，不修改正文、WS、poll、ack 或 TTL。
-`roadmap`：客户端按气泡展示和真机验收、QQ/主动消息/Dream/Stage 回合关联。
-前端工单见 cc-tasks/244-frontend-reasoning-handoff.md；按用户要求未跨仓修改。
+`current`：Brief 244 历史接口仅采用 assistant 尾部元数据的 canonical turn_id，
+已覆盖用户 ID 不串入、同分钟回合、多段正文、角色隔离、旧日志和正文伪造字段。
+桌面已消费历史 ID 并按回合展示入口；无 ID 不推测，不回写旧日志。
+`observe`：真实对话后原生桌面重启、单回合单入口、归档读取与空态重试尚未联调；
+目前证据为后端隔离回归和桌面既有夹具。
+`roadmap`：手机历史模型消费 turn_id，以及 QQ/主动消息/Dream/Stage 思考关联。
 ## IME v2 接收预备（2026-09-11）
 
 `current`：POST `/v1/ime/drafts`（sensor.write）按设备 token label + id + revision

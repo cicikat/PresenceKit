@@ -527,8 +527,12 @@ profile 可读取已关联的 Reality owner 回合，返回 available/entries（
 桌面/手机共享 owner 入口在生成期间关联调用，工具循环子任务同样关联，post-process
 前停止采集关联，防止后台思考串入；关联失败不影响回复。旧归档不推测关联。
 原 admin-only 全局归档接口不变。无新增生成开关，不修改正文、WS、poll、ack 或 TTL。
-`roadmap`：客户端按气泡展示和真机验收、QQ/主动消息/Dream/Stage 回合关联。
-前端工单见 cc-tasks/244-frontend-reasoning-handoff.md；按用户要求未跨仓修改。
+`current`：桌面已消费历史条目的可选 `turn_id`，按回合展示思考入口。
+`GET /chat-log/{date}` 仅从 assistant 尾部 emotion/intensity 元数据返回该 ID；
+user ID、正文引用、重复 ID 字段不作为关联，旧无 ID 日志缺字段且不回写。
+`observe`：真实对话后原生桌面重启、归档空态和重试联调尚未完成。
+`roadmap`：手机历史 ID 消费，以及 QQ/主动消息/Dream/Stage 思考关联。
+后端验收见 `cc-tasks/244-history-turn-id-backend-handoff.md`。
 
 ## Proactive history and inline display (2026-09-11)
 

@@ -612,8 +612,16 @@ profile 可读取已关联的 Reality owner 回合，返回 available/entries（
 桌面/手机共享 owner 入口在生成期间关联调用，工具循环子任务同样关联，post-process
 前停止采集关联，防止后台思考串入；关联失败不影响回复。旧归档不推测关联。
 原 admin-only 全局归档接口不变。无新增生成开关，不修改正文、WS、poll、ack 或 TTL。
-`roadmap`：客户端按气泡展示和真机验收、QQ/主动消息/Dream/Stage 回合关联。
-前端工单见 cc-tasks/244-frontend-reasoning-handoff.md；按用户要求未跨仓修改。
+`current`（Brief 244）：`GET /chat-log/{date}` 条目保留 time/user/assistant，
+可选 turn_id 仅来自 assistant 尾部 emotion/intensity 元数据（旧无 speaker 兼容）；
+显式非 assistant、重复 ID、用户元数据及正文字段不提供关联。无 ID 缺字段，不迁移或回写。
+现有 assistant_display_text 投影也使用该 canonical ID；日期、owner、角色桶和 memory.read 不变。
+桌面 ChatLogEntry.turn_id → assistant turnId → 每回合思考入口已接线；手机历史模型尚未消费。
+管理面复用现有历史/思考只读接口，无新增设置、权限、状态、ack 或 TTL。
+`observe`：真实对话后原生桌面重启、单回合单入口、归档读取及空态重试未联调；
+后端隔离回归及桌面既有夹具不代表真实端到端验收。
+`roadmap`：手机历史 ID 消费，以及 QQ/主动消息/Dream/Stage 思考关联。
+后端交付见 `cc-tasks/244-history-turn-id-backend-handoff.md`；本单仅修改后端仓。
 ## IME v2 接收预备（2026-09-11）
 
 `current`：POST `/v1/ime/drafts`（sensor.write）按设备 token label + id + revision
