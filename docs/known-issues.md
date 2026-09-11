@@ -1,5 +1,13 @@
 # docs/known-issues.md — 已知问题与技术债
 
+## Prompt 统一审计（Brief 247–249，2026-09-11）
+
+- open：Reality system 全文代词替换损伤引用保真；mood 精确槽位条件断链；Path C 静态“无工具结果”与后续结果冲突。分别由 248/249 处理。
+- open：现有 Prompt 检视包含 builder 与 thinking 追加，尚非 Path C 每一步完整请求观测。
+- roadmap：Dream D1/D8 与心声独立视角校准；不能直接套用 Reality 文案。
+- observe：真实模型文风 A/B、同名多角色及双端真机体验未验证；重复记忆/时间强化暂保留。
+- 本轮沿用管理面 memory.read 观测与 admin 消融、桌面管理面桥接、手机 owner-chat；无新 REST/WS/IPC/权限/状态存储。证据与范围见 [prompt-unification-audit.md](prompt-unification-audit.md)。
+
 ## IME 活动理解与主动关心（2026-09-11）
 
 current：IME 编辑事件与独立 `ime_judge` 活动判定已接入 scheduler → autonomy signal →
