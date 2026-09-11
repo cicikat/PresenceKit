@@ -216,6 +216,42 @@ class BaseModelUpdate(BaseModel):
     model:    Optional[str] = None
 
 
+class ModelDiscoveryRequest(BaseModel):
+    base_url: str
+    api_key: str = ""
+    preset_name: Optional[str] = None
+    use_base_model: bool = False
+    api_protocol: Literal["chat_completions", "responses", "anthropic_messages"] = "chat_completions"
+    anthropic_auth_mode: Literal["x_api_key", "bearer"] = "x_api_key"
+
+
+@router.post("/model-presets/discover", summary="查询连接可用模型（不保存配置）")
+async def discover_models(body: ModelDiscoveryRequest, auth=Depends(require_scopes("admin"))):
+    from core.model_discovery import catalogue_url, discover
+    cfg = get_config()
+    saved = {}
+    name = body.preset_name
+    if body.use_base_model:
+        name = _resolve_base_chat_preset_name(cfg)
+        if name is None:
+            saved = cfg.get("llm", {})
+    if name is not None:
+        saved = cfg.get("model_presets", {}).get("presets", {}).get(name)
+        if saved is None:
+            raise HTTPException(404, "模型连接不存在")
+    try:
+        requested_url = catalogue_url(body.base_url)
+        key = body.api_key.strip()
+        if not key and saved.get("api_key"):
+            # Editing the address must not forward the saved credential to a new destination.
+            if requested_url != catalogue_url(saved.get("base_url", "")):
+                return {"status": "key_required", "models": []}
+            key = saved["api_key"]
+        return await discover(body.base_url, key, body.api_protocol, body.anthropic_auth_mode)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
 @router.put("/settings/base-model", summary="写入基础聊天模型连接并热重载（配置中心 §1 必填项）")
 async def update_base_model(body: BaseModelUpdate, auth=Depends(require_scopes("admin"))):
     updates = {k: v.strip() for k, v in body.model_dump().items() if v is not None and v.strip() != ""}

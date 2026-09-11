@@ -396,3 +396,16 @@ preset 侧可选字段，供 `config.thinking.mode: auto` 判断该 preset 走 n
 Preset `force_stream` defaults to false and supports Chat Completions only. The admin Preset editor saves it through PUT `/model-presets/presets/{name}` with hot reload; GET `/model-presets` returns the configuration. All calls using that preset, including tool decisions and final generation, buffer SSE into the existing normalized result. Tool fragments are assembled by index and require a complete finish and valid JSON before execution. Interrupted streams close and fail. Returned reasoning still uses the separate archive. Request snapshots record the actual stream flag.
 
 Mobile still receives complete HTTP JSON; poll, ack, TTL and relay are unchanged. This is gateway compatibility, independent of client typing animation. Unsupported protocol combinations return 422. Real gateway diagnosis remains observe pending deployment verification.
+
+## 模型目录发现（2026-09-11）
+
+管理面「模型连接」编辑框提供获取可用模型、选择和手填。admin-only
+`POST /model-presets/discover` 接收 base_url、api_key、preset_name（可选）、
+api_protocol、anthropic_auth_mode；use_base_model 可引用基础模型连接。
+空 key 仅在目录地址与已保存连接相同时复用密钥。请求不会保存或修改配置。
+根 URL 映射 /v1/models；已有版本/代理路径保留，完整生成端点替换为 /models。
+返回 status、models，成功可含 has_more；不支持、空目录、鉴权、格式、网络和超时
+分别返回状态，均保留手填。目录不验证生成协议、工具能力或实际生成可用性。
+管理面是唯一编辑入口，双端仍消费既有 routing profile，无需新增客户端设置。
+本地 36 项回归通过，真实静态资源浏览器清缓存刷新验证了选择与手填降级；
+远端目录响应在浏览器测试中模拟，真实中转可用性属于 observe。

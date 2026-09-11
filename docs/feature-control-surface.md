@@ -415,3 +415,16 @@ Playwright 加载真实管理面资源并清缓存，18 个新页、中英文切
 失败重试通过。浏览器 API/IPC 使用夹具，未修改生产配置。
 `observe`：真实 Tauri 原生窗口与真实上游连通性未验收；手机未做设备回归，本次未修改
 其设置调用、HTTP/WS、Flutter/Android、relay 或通知路径。不得把夹具结果当作实机结果。
+
+## 模型目录发现（2026-09-11）
+
+管理面「模型连接」编辑框提供获取可用模型、选择和手填。admin-only
+`POST /model-presets/discover` 接收 base_url、api_key、preset_name（可选）、
+api_protocol、anthropic_auth_mode；use_base_model 可引用基础模型连接。
+空 key 仅在目录地址与已保存连接相同时复用密钥。请求不会保存或修改配置。
+根 URL 映射 /v1/models；已有版本/代理路径保留，完整生成端点替换为 /models。
+返回 status、models，成功可含 has_more；不支持、空目录、鉴权、格式、网络和超时
+分别返回状态，均保留手填。目录不验证生成协议、工具能力或实际生成可用性。
+管理面是唯一编辑入口，双端仍消费既有 routing profile，无需新增客户端设置。
+本地 36 项回归通过，真实静态资源浏览器清缓存刷新验证了选择与手填降级；
+远端目录响应在浏览器测试中模拟，真实中转可用性属于 observe。

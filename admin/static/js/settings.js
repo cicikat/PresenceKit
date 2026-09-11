@@ -733,6 +733,7 @@ function openPresetModal(name) {
 }
 
 function _openPresetModal(name) {
+  resetModelDiscovery();
   document.getElementById('mr-preset-err').textContent = '';
   const nameInput = document.getElementById('mr-preset-name');
   if (name) {
@@ -768,8 +769,71 @@ function _openPresetModal(name) {
   document.getElementById('mr-preset-modal').classList.add('open');
 }
 function closePresetModal() {
+  resetModelDiscovery();
   document.getElementById('mr-preset-modal').classList.remove('open');
   _mrEditingPresetName = null;
+}
+
+let _modelDiscoveryGeneration = 0;
+function resetModelDiscovery() {
+  _modelDiscoveryGeneration++;
+  const select = document.getElementById('mr-discovered-models');
+  select.replaceChildren();
+  select.hidden = true;
+  document.getElementById('mr-discover-button').disabled = false;
+  document.getElementById('mr-discovery-status').textContent = '可从中转站获取模型，也可手动填写。';
+}
+
+async function discoverPresetModels() {
+  const generation = ++_modelDiscoveryGeneration;
+  const button = document.getElementById('mr-discover-button');
+  const status = document.getElementById('mr-discovery-status');
+  const select = document.getElementById('mr-discovered-models');
+  const body = {
+    base_url: document.getElementById('mr-preset-base-url').value.trim(),
+    api_key: document.getElementById('mr-preset-api-key').value.trim(),
+    preset_name: _mrEditingPresetName,
+    api_protocol: document.getElementById('mr-preset-api-protocol').value,
+    anthropic_auth_mode: document.getElementById('mr-preset-anthropic-auth-mode').value,
+  };
+  const unchanged = () => generation === _modelDiscoveryGeneration &&
+    body.base_url === document.getElementById('mr-preset-base-url').value.trim() &&
+    body.api_key === document.getElementById('mr-preset-api-key').value.trim() &&
+    body.api_protocol === document.getElementById('mr-preset-api-protocol').value &&
+    body.anthropic_auth_mode === document.getElementById('mr-preset-anthropic-auth-mode').value;
+  select.hidden = true;
+  button.disabled = true;
+  status.textContent = '正在获取模型…';
+  try {
+    const result = await api('POST', '/model-presets/discover', body);
+    if (!unchanged()) return;
+    const hints = {
+      unsupported: '此中转站未提供模型目录，请手动填写模型名。',
+      unauthorized: '目录鉴权失败，请检查 API Key 或手动填写。',
+      key_required: '地址已修改，请填写该地址的 API Key 后重新获取。',
+      timeout: '获取超时，可重试或手动填写。',
+      empty: '目录为空，请手动填写模型名。',
+      invalid_response: '目录格式不兼容，请手动填写模型名。',
+      connection_error: '无法连接，请检查地址或手动填写。',
+      http_error: '目录请求失败，可重试或手动填写。',
+    };
+    if (result.status !== 'ok') { status.textContent = hints[result.status] || '无法获取目录，请手动填写。'; return; }
+    select.replaceChildren(new Option('请选择模型（也可手填）', ''));
+    for (const model of result.models) select.add(new Option(model, model));
+    select.hidden = false;
+    select.onchange = () => {
+      if (!unchanged()) { resetModelDiscovery(); return; }
+      if (select.value) document.getElementById('mr-preset-model').value = select.value;
+    };
+    status.textContent = `已获取 ${result.models.length} 个模型${result.has_more ? '（目录仅返回部分模型）' : ''}；选择后仍需保存，协议与工具能力请按中转站说明配置。`;
+  } catch (e) {
+    if (unchanged()) status.textContent = `获取失败：${e.message || e}；仍可手动填写。`;
+  } finally {
+    if (generation === _modelDiscoveryGeneration) {
+      button.disabled = false;
+      if (!unchanged()) { select.hidden = true; status.textContent = '连接信息已更改，请重新获取模型。'; }
+    }
+  }
 }
 async function submitPresetModal() {
   const nameInput = document.getElementById('mr-preset-name');
