@@ -39,7 +39,7 @@ def tool_eligibility(name: str, policy: dict, *, registry: dict, effect: str) ->
     return (tool_is_eligible(name, policy, registry=registry, effect=effect), "eligible")
 
 
-def admission(uid: str, char_id: str, state: dict) -> str | None:
+def admission(uid: str, char_id: str, state: dict, *, allow_observed_activity: bool = False) -> str | None:
     cfg = state["config"]
     if not cfg.get("enabled", False):
         return Disposition.SUPPRESSED_PROACTIVE_OFF.value
@@ -62,7 +62,8 @@ def admission(uid: str, char_id: str, state: dict) -> str | None:
     if guard != DreamGuardStatus.ALLOW:
         return Disposition.BLOCKED_DREAM.value
     from core.scheduler.state_machine import TriggerState, get_state
-    if get_state(uid) != TriggerState.QUIET:
+    trigger_state = get_state(uid)
+    if trigger_state != TriggerState.QUIET and not (allow_observed_activity and trigger_state == TriggerState.RESTLESS):
         return Disposition.BLOCKED_USER_ACTIVE.value
     from core.conversation_gate import conversation_lock
     if conversation_lock(uid).locked():

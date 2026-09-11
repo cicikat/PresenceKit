@@ -120,7 +120,7 @@ def _synth_legacy_presets(cfg: dict) -> dict:
         "api_protocol": "chat_completions",
         "params": {k: llm[k] for k in _known_params if k in llm},
     }
-    _all_categories = ("chat", "intent", "probe", "summary", "detect_emotion", "consolidation", "perform", "sensor_judge", "scenario_reconcile", "event_edge_proposer", "rpg_kp")
+    _all_categories = ("chat", "intent", "probe", "summary", "detect_emotion", "consolidation", "perform", "sensor_judge", "ime_judge", "scenario_reconcile", "event_edge_proposer", "rpg_kp")
     return {
         "active_routing": "default",
         "defaults": {},
@@ -223,6 +223,8 @@ def _resolve_preset_name(call_category: str, char_id: str | None = None) -> str:
     # the established category -> chat fallback.
     if call_category == "scenario_reconcile":
         name = profile.get("scenario_reconcile") or profile.get("intent") or profile.get("chat")
+    elif call_category == "ime_judge":
+        name = profile.get("ime_judge") or profile.get("sensor_judge") or profile.get("intent") or profile.get("chat")
     elif call_category == "sensor_judge":
         name = profile.get("sensor_judge") or profile.get("intent") or profile.get("chat")
     else:
@@ -283,6 +285,8 @@ def resolve_category_info(
     profile = profiles.get(active) or (next(iter(profiles.values())) if profiles else {})
     if call_category == "scenario_reconcile":
         candidates = (("scenario_reconcile", "category"), ("intent", "intent_fallback"), ("chat", "chat_fallback"))
+    elif call_category == "ime_judge":
+        candidates = (("ime_judge", "category"), ("sensor_judge", "sensor_fallback"), ("intent", "intent_fallback"), ("chat", "chat_fallback"))
     elif call_category == "sensor_judge":
         candidates = (("sensor_judge", "category"), ("intent", "intent_fallback"), ("chat", "chat_fallback"))
     else:
@@ -418,7 +422,7 @@ def get_model_client(
             raise ValueError("[model_registry] explicit preset name must not be empty")
     else:
         resolved_name = _resolve_preset_name(call_category, char_id=char_id)
-    policy_name = "sensor_judge" if call_category == "sensor_judge" else "default"
+    policy_name = "sensor_judge" if call_category in {"sensor_judge", "ime_judge"} else "default"
     cache_key = (resolved_name, policy_name)
     if cache_key not in _model_clients:
         policy = _SENSOR_JUDGE_POLICY if policy_name == "sensor_judge" else None

@@ -1,5 +1,20 @@
 # docs/known-issues.md — 已知问题与技术债
 
+## IME 活动理解与主动关心（2026-09-11）
+
+current：IME 编辑事件与独立 `ime_judge` 活动判定已接入 scheduler → autonomy signal →
+talk_owner → turn_sink；管理面功能总开关新增 `ime_awareness`（默认关闭），接收开关独立。
+模型路由页可选 ime_judge；未配置依次回退 sensor_judge / intent / chat。
+「记录与状态总览 · IME」展示 effective、阻塞原因、判定结果、编辑记录和 signal_id；
+最终交付在现有自主性观测中按 opportunity signals 的 source=ime / signal_id 关联。
+详见 [ime-ingest.md](ime-ingest.md)。这一条替代早期“未实现角色消费/仅存储”的状态说明。
+
+observe：真实手机安装、不同应用删除反馈、断网后上传以及真实模型主动关心体验未实测。
+本地自动化采用合成资料，不给真实角色发送测试消息。桌面/手机沿用普通主动消息展示与通知，
+没有新增原生设置或 IME 原文读取权限。处理事务/聊天分类不充当忙碌抑制；正在处理本系统
+对话的锁、DND、梦境和主动消息预算仍有效。周期为 scheduler 的约 60 秒扫描，非即时推送。
+
+
 > 最近核对：2026-08-23（补充 SCHED-1/SCHED-2 调度器后续风险；23 点日记回归已修复）。
 > 这里只保留仍需行动或观察的条目；已关闭条目的完整背景保留在 Git 历史。
 

@@ -1,5 +1,10 @@
 # docs/model-presets.md — 多模型 Preset 系统
 
+## IME 判定路由
+
+`ime_judge` 独立用途可在模型路由页选择；回退 sensor_judge → intent → chat，使用 sensor_judge 的轻量请求策略。详见 ime-ingest.md。
+
+
 角色心声通用提示与四家原生思考接口边界核对见 [thinking-voice.md](thinking-voice.md)。
 这次增加 prompt 文风引导，没有修改 provider 参数、路由或将思考前缀作为通用 API 能力。
 

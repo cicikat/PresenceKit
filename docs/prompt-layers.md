@@ -1,5 +1,10 @@
 # docs/prompt-layers.md — Prompt 层结构
 
+## IME 主动观察
+
+分类调用使用 ime_judge_policy / ime_observation；角色机会追加 ime_awareness_policy。均带 _layer；策略不把草稿作为已发送消息，称她为“她”。
+
+
 ---
 
 ## 层总览（实际执行顺序）

@@ -1,7 +1,7 @@
 <h1 class="page-title" data-i18n="settings_center.observability">观测</h1>
 <section class="card"><h3>IME 输入法接收</h3>
-<p>仅接收与保存，不触发 AI 或写入记忆。显示最近更新三小时内的草稿；正文仅管理员可见，默认折叠。</p>
-<div class="admin-action-group"><button class="btn btn-ghost" data-action="loadImeObservation">刷新接收记录</button><button class="btn btn-ghost" data-action="goto" data-action-args='["feature-center"]'>接收开关</button><button class="btn btn-ghost" data-action="goto" data-action-args='["auth-tokens"]'>配对凭据</button></div>
+<p>接收与活动理解分别开关；启用理解后可产生角色主动候选，不把草稿当成已发送消息。显示最近更新三小时内的草稿；正文仅管理员可见，默认折叠。</p>
+<div class="admin-action-group"><button class="btn btn-ghost" data-action="loadImeObservation">刷新接收记录</button><button class="btn btn-ghost" data-action="goto" data-action-args='["feature-center"]'>接收与理解开关</button><button class="btn btn-ghost" data-action="goto" data-action-args='["auth-tokens"]'>配对凭据</button></div>
 <label>设备标识 <input id="ime-device-filter" placeholder="留空查看全部设备"></label>
 <div id="ime-observation" aria-live="polite"></div>
 <button id="ime-more" class="btn btn-ghost" data-action="loadImeObservation" data-action-args='[true]' hidden>加载更早记录</button></section>

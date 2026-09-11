@@ -107,11 +107,13 @@ async function loadImeObservation(more = false) {
     const data = await api('GET', '/observability/ime-drafts?' + query);
     if (request !== imeObservationRequest) return;
     const rows = data.entries || [];
-    const content = rows.map(row => `<article><p>${row.app_package === 'com.chacha.jadeime.sync_test' ? '测试上传' : '输入草稿'} · ${escapeHtml(row.device_id)} · ${escapeHtml(row.app_package)} · ${escapeHtml(row.source)} · 修订 ${escapeHtml(String(row.revision))} · ${escapeHtml(new Date(row.updated_at).toLocaleString())}</p><details><summary>查看草稿正文（敏感内容）</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere">${escapeHtml(row.content)}</pre></details></article>`).join('');
+    const content = rows.map(row => `<article><p>${row.app_package === 'com.chacha.jadeime.sync_test' ? '测试上传' : '输入草稿'} · ${escapeHtml(row.device_id)} · ${escapeHtml(row.app_package)} · ${escapeHtml(row.source)} · 修订 ${escapeHtml(String(row.revision))} · ${escapeHtml(new Date(row.updated_at).toLocaleString())}</p><details><summary>查看草稿正文（敏感内容）</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere">${escapeHtml(row.content)}</pre><p>编辑事件（记录不等于已发送；requested 表示删除请求）</p><pre style="white-space:pre-wrap">${escapeHtml(JSON.stringify(row.edit_events || [], null, 2))}</pre></details></article>`).join('');
+    const awareness = data.awareness || {};
+    const awarenessHtml = `<section><h3>IME 活动理解与主动关心</h3><p>${awareness.effective ? '判定已生效' : '尚未生效：' + escapeHtml(awareness.blocking_reason || '未启用')} · 不按忙碌自动避让</p><p>模型路由：${escapeHtml(awareness.route?.effective_preset || '未配置')} · ${escapeHtml(awareness.route?.source || '')}</p><p>判定后仍由角色决定是否开口，queued 只表示进入主动候选。最终发送结果见主动性观测，source 为 ime。</p>${(data.analyses || []).map(r => `<details><summary>${escapeHtml(r.status)} · ${escapeHtml(r.result?.activity || 'unknown')} · 修订 ${escapeHtml(String(r.revision))}</summary><pre style="white-space:pre-wrap">${escapeHtml(JSON.stringify(r, null, 2))}</pre></details>`).join('')}</section>`;
     const summary = data.summary;
     const counts = summary ? `<p>IME 输入草稿 ${escapeHtml(String(summary.draft_count))} 条 · 测试上传 ${escapeHtml(String(summary.test_count))} 条${summary.latest_draft_updated_at ? ' · 最新草稿更新时间：' + escapeHtml(new Date(summary.latest_draft_updated_at).toLocaleString()) : ''}</p>` : '';
     if (append) host.insertAdjacentHTML('beforeend', content);
-    else host.innerHTML = `<p>${data.effective ? '接收已开启' : '接收已关闭'} · 保留 ${escapeHtml(String(data.retention_hours))} 小时 · 仅存储</p>` + counts + (content || '<p>三小时内暂无接收记录。请检查输入法草稿记录和自动回传两个开关；保存配置会关闭自动回传，需要重新开启。测试成功不代表自动上传已开启；空列表也可能是草稿已过期。</p>');
+    else host.innerHTML = `<p>${data.effective ? '接收已开启' : '接收已关闭'} · 保留 ${escapeHtml(String(data.retention_hours))} 小时</p>` + awarenessHtml + counts + (content || '<p>三小时内暂无接收记录。请检查输入法草稿记录和自动回传两个开关；保存配置会关闭自动回传，需要重新开启。测试成功不代表自动上传已开启；空列表也可能是草稿已过期。</p>');
     imeObservationCursor = data.next_before;
     imeObservationDevice = device;
     document.getElementById('ime-more').hidden = data.next_before == null;

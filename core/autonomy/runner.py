@@ -435,7 +435,14 @@ async def run_job(job: Job) -> Run:
         signal_count=len(opportunity.get("signals") or []),
         evaluation_status="evaluating",
     )
-    blocked = policy.admission(job.uid, job.char_id, state)
+    ime_job = any(s.get('source') == 'ime' for s in (job.opportunity or {}).get('signals', []) if isinstance(s, dict))
+    if ime_job:
+        from core.ime_awareness import effective_state
+        if not effective_state(job.uid, job.char_id)['effective']:
+            run.disposition = Disposition.SUPPRESSED_PROACTIVE_OFF.value
+            return _finish(run)
+    blocked = (policy.admission(job.uid, job.char_id, state, allow_observed_activity=True)
+               if ime_job else policy.admission(job.uid, job.char_id, state))
     if blocked:
         _record_dream_exit_lifecycle(
             job,
@@ -499,6 +506,9 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
     if self_context is not None:
         messages.append(_self_context_message(self_context))
     messages.append({"role": "system", "content": _opportunity_context(job), "_layer": "autonomy_opportunity"})
+    if any(s.get('source') == 'ime' for s in (job.opportunity or {}).get('signals', []) if isinstance(s, dict)):
+        from core.ime_awareness import CHARACTER_POLICY
+        messages.append({'role': 'system', 'content': CHARACTER_POLICY, '_layer': 'ime_awareness_policy'})
     messages.append({"role": "user", "content": "Evaluate this opportunity and decide what to do, if anything."})
     _set_prompt_snapshot(run, messages)
     cfg = state["config"]
@@ -541,6 +551,14 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
                 break
             messages.extend(turn.continuation_items or [turn.assistant_message])
             for call in turn.tool_calls:
+                ime_signals = [s for s in (job.opportunity or {}).get('signals', []) if isinstance(s, dict) and s.get('source') == 'ime']
+                if ime_signals:
+                    from core.ime_awareness import effective_state
+                    if not effective_state(job.uid, job.char_id)['effective'] or any(
+                        float(s.get('expiry') or s.get('expires_at') or 0) <= time.time() for s in ime_signals
+                    ):
+                        run.disposition = Disposition.EXPIRED.value
+                        return _finish(run)
                 name, args = call["name"], call["arguments"]
                 if _user_became_active(job.uid):
                     run.disposition = Disposition.CANCELED_BY_USER_ACTIVITY.value; break
@@ -1012,6 +1030,13 @@ async def tick(uid: str, char_id: str) -> None:
             continue
         from core.autonomy.signal_adapters import routine_key_for_signal, routine_trigger_enabled
 
+        if signal.source == 'ime':
+            from core.ime_awareness import effective_state
+            if not effective_state(uid, char_id)['effective']:
+                store.record_signal_outcome(uid, char_id, signal,
+                    disposition=Disposition.SUPPRESSED_PROACTIVE_OFF.value,
+                    event_status='ime_disabled_before_consumption')
+                continue
         routine_key = routine_key_for_signal(signal)
         if routine_key and not routine_trigger_enabled(routine_key):
             continue

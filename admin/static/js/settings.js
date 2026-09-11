@@ -562,8 +562,9 @@ async function saveEventShadowRecallSettings() {
 }
 let _mrData = { presets: {}, routing_profiles: {}, active_routing: 'default' };
 let _mrEditingPresetName = null;
-const MR_CATEGORIES = ['chat', 'intent', 'probe', 'summary', 'detect_emotion', 'consolidation', 'perform', 'monologue', 'scenario_reconcile', 'event_edge_proposer'];
+const MR_CATEGORIES = ['chat', 'intent', 'probe', 'summary', 'detect_emotion', 'consolidation', 'perform', 'monologue', 'ime_judge', 'scenario_reconcile', 'event_edge_proposer'];
 const MR_CATEGORY_DESC = {
+  ime_judge: 'IME 活动和有价值线索判断；可选轻量模型，未配置时沿用 sensor_judge / intent / chat',
   scenario_reconcile: 'Scenario assistant-turn semantic stage reconciliation; conservative background call.',
   event_edge_proposer: 'Bounded background proposal of unreviewed Memory Event relations; this never changes recall or facts.',
   chat:           '角色的正式回复，用户实际看到的每一句话（建议配主力模型）',

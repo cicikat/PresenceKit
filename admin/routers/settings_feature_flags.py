@@ -16,7 +16,8 @@ router = APIRouter()
 CONFIG_FILE = Path("config.yaml")
 
 FLAGS = {
-    "ime_ingest": ("ime_ingest", "enabled", "IME 草稿接收（仅存储）"),
+    "ime_ingest": ("ime_ingest", "enabled", "IME 草稿与编辑事件接收"),
+    "ime_awareness": ("ime_awareness", "enabled", "IME 活动理解与主动关心"),
     "qq":   ("qq",   "enabled", "QQ 通道"),
     "mail": ("mail", "enabled", "邮件通道"),
     "visual_perception": ("visual_perception", "enabled", "视觉感知"),
@@ -67,7 +68,12 @@ async def get_feature_flags(auth=Depends(require_scopes("admin"))):
             "apply_mode": "restart_required" if name in RESTART_REQUIRED_FLAGS else "hot_reload",
             "restart_required": name in RESTART_REQUIRED_FLAGS,
         }
-        if name == "event_edge_proposer":
+        if name == "ime_awareness":
+            from core.ime_awareness import effective_state
+            awareness = effective_state()
+            item['effective_state'] = 'enabled' if awareness['effective'] else awareness['blocking_reason']
+            item['description'] = '独立 ime_judge 路由；观测 → 记录与状态总览 · IME 查看判断和阻塞原因'
+        elif name == "event_edge_proposer":
             from core.scheduler.triggers.event_edge_proposer import discovery_observability_snapshot
             discovery = discovery_observability_snapshot()
             if not enabled:

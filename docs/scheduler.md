@@ -1,5 +1,10 @@
 # docs/scheduler.md — 调度器设计
 
+## IME 扫描
+
+既有 scheduler 循环在 autonomy tick 前执行 core.ime_awareness.tick，外层45秒上限；没有新增全局 worker，接收 HTTP 不调用模型。
+
+
 > 主动性架构边界：调度器和 sensor 只产生候选 signal，不生成台词。signal 在一个 tick 内合并为单一 autonomy opportunity，由 `core/autonomy` 完成评估；`talk_owner` 是主动消息进入 `turn_sink` 的唯一出口。契约、状态观测和旧直发迁移清单见 `docs/autonomy.md`。
 
 ---
