@@ -9,6 +9,12 @@ NOTE = 'a' * 24
 URL = f'https://www.xiaohongshu.com/explore/{NOTE}?xsec_token=example'
 
 
+@pytest.fixture(autouse=True)
+def reset_throttle(monkeypatch):
+    monkeypatch.setattr(xhs, '_read_busy', False)
+    monkeypatch.setattr(xhs, '_next_read_at', 0)
+
+
 def payload(comments=True):
     detail = {'note': {'noteId': NOTE, 'title': '标题', 'desc': '正文',
                        'imageList': [{'urlDefault': 'https://example.xhscdn.com/example.jpg'}]}}
@@ -29,13 +35,20 @@ def test_parse_share_and_comment_completeness():
     assert 'xsec_token' not in data['source_url']
 
 
-async def test_short_link_and_redirect_boundary():
+def test_cdn_webp_without_standard_filename():
+    from core.media_processor import _guess_image_filename
+    assert _guess_image_filename('https://example.xhscdn.com/opaque!format', b'RIFF\x00\x00\x00\x00WEBPdata') == 'image.webp'
+    assert _guess_image_filename('https://example.xhscdn.com/opaque', b'RIFF\x00\x00\x00\x00WAVEdata') != 'image.webp'
+
+
+@pytest.mark.parametrize('host', ['xhslink.com', 'xhslink.cn'])
+async def test_short_link_and_redirect_boundary(host):
     client = AsyncMock()
     client.get.return_value = httpx.Response(302, headers={'location': URL})
-    assert await xhs.resolve_share(client, 'https://xhslink.com/example') == (NOTE, 'example')
+    assert await xhs.resolve_share(client, f'https://{host}/example') == (NOTE, 'example')
     client.get.return_value = httpx.Response(302, headers={'location': 'http://127.0.0.1/private'})
     with pytest.raises(ValueError):
-        await xhs.resolve_share(client, 'https://xhslink.com/example')
+        await xhs.resolve_share(client, f'https://{host}/example')
     with pytest.raises(ValueError, match='missing_share_token'):
         await xhs.resolve_share(client, URL.split('?')[0])
 
@@ -56,6 +69,22 @@ async def test_reader_content_images_and_comments(monkeypatch):
     assert 'xsec_token' not in result.safe_summary
     assert client.post.call_args.args[0].endswith('/api/v1/feeds/detail')
     assert client.post.call_args.kwargs['json']['comment_config']['max_comment_items'] == 10
+    assert client.post.call_args.kwargs['json']['load_all_comments'] is False
+    assert (await xhs.read_post(URL)).meta['failure_reason'] == 'cooldown'
+    assert client.post.await_count == 1
+
+
+async def test_rate_limit_enters_five_minute_cooldown(monkeypatch):
+    monkeypatch.setattr(xhs, 'get_config', lambda: {'tools': {'read_xiaohongshu': True}, 'xiaohongshu': {'reader_url': 'http://127.0.0.1:18060'}})
+    monkeypatch.setattr('core.no_outbound.assert_outbound_allowed', lambda *a: None)
+    client = AsyncMock(); client.__aenter__.return_value = client
+    client.post.return_value = httpx.Response(429)
+    monkeypatch.setattr(xhs.httpx, 'AsyncClient', lambda **kw: client)
+    before = xhs.time.monotonic()
+    result = await xhs.read_post(URL)
+    assert result.meta['failure_reason'] == 'login_or_rate_limit'
+    assert xhs._next_read_at >= before + 300
+    assert xhs._read_busy is False
 
 
 async def test_disabled_and_missing_service_are_explicit(monkeypatch):

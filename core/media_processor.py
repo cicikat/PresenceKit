@@ -342,6 +342,8 @@ def _guess_image_filename(url: str, data: bytes) -> str:
         return "image.gif"
     if data[:2] == b"BM":
         return "image.bmp"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image.webp"
     return name or "image.jpg"
 
 

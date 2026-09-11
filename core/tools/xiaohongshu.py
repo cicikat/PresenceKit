@@ -2,6 +2,7 @@
 import asyncio
 import json
 import re
+import random
 import time
 from urllib.parse import parse_qs, urljoin, urlsplit
 
@@ -10,7 +11,9 @@ import httpx
 from core.config_loader import get_config
 from core.tools.tool_result import ToolResult, sanitize_for_prompt
 
-_HOSTS = {'xhslink.com', 'www.xhslink.com', 'xiaohongshu.com', 'www.xiaohongshu.com'}
+_HOSTS = {'xhslink.com', 'www.xhslink.com', 'xhslink.cn', 'www.xhslink.cn', 'xiaohongshu.com', 'www.xiaohongshu.com'}
+_read_busy = False
+_next_read_at = 0.0
 
 
 def settings(cfg=None):
@@ -24,6 +27,7 @@ def settings(cfg=None):
             'max_comments': max(1, min(30, int(raw.get('max_comments', 10)))),
             'max_images': max(0, min(4, int(raw.get('max_images', 2)))),
             'configured': bool(address), 'effective': bool(enabled and address),
+            'busy': _read_busy, 'cooldown_seconds': max(0, int(_next_read_at - time.monotonic())),
             'blocking_reason': 'disabled' if not enabled else '' if address else 'reader_not_configured',
             'remote_status': 'not_checked', 'observation_url': '/observability/api-calls?caller=read_xiaohongshu'}
 
@@ -50,6 +54,7 @@ async def resolve_share(client, text):
         response = await client.get(url, follow_redirects=False)
         if response.is_redirect and response.headers.get('location'):
             url = share_url(urljoin(url, response.headers['location']))
+            await asyncio.sleep(random.uniform(1, 2))
             continue
         raise ValueError('share_unavailable')
     raise ValueError('too_many_redirects')
@@ -84,11 +89,15 @@ def normalize(payload, note_id, max_comments):
 
 
 async def read_post(share: str) -> ToolResult:
+    global _read_busy, _next_read_at
     cfg = settings()
     if not cfg['effective']:
         return _failure(cfg['blocking_reason'])
     from core.no_outbound import assert_outbound_allowed
     assert_outbound_allowed('read_xiaohongshu')
+    if _read_busy or time.monotonic() < _next_read_at:
+        return _failure('cooldown')
+    _read_busy = True
     started = time.monotonic()
     error = ''
     try:
@@ -96,10 +105,12 @@ async def read_post(share: str) -> ToolResult:
             async with httpx.AsyncClient(timeout=20, trust_env=False) as client:
                 note_id, token = await resolve_share(client, share)
                 response = await client.post(cfg['reader_url'] + '/api/v1/feeds/detail', json={
-                    'feed_id': note_id, 'xsec_token': token, 'load_all_comments': True,
+                    'feed_id': note_id, 'xsec_token': token, 'load_all_comments': False,
                     'comment_config': {'max_comment_items': cfg['max_comments'],
                                        'click_more_replies': False, 'scroll_speed': 'normal'},
                 }, timeout=55, follow_redirects=False)
+                if response.status_code in (401, 403, 429):
+                    raise ValueError('login_or_rate_limit')
                 if response.status_code != 200:
                     raise ValueError('reader_http_error')
                 result = normalize(response.json(), note_id, cfg['max_comments'])
@@ -108,6 +119,7 @@ async def read_post(share: str) -> ToolResult:
             image_limit = cfg['max_images'] if recognition_view(get_config())['effective'] else 0
             for image in result['images'][:image_limit]:
                 try:
+                    await asyncio.sleep(random.uniform(1, 2))
                     description = await asyncio.wait_for(process_image(image['url']), timeout=12)
                     image['description'] = str(description or '')
                     image['status'] = 'analyzed' if description else 'unavailable'
@@ -126,13 +138,18 @@ async def read_post(share: str) -> ToolResult:
             return ToolResult(raw_data=json.dumps(result, ensure_ascii=False), safe_summary=sanitize_for_prompt(summary),
                               meta={'generated_at': time.time(), 'validity': 'current_turn', 'truncated': True})
         return await asyncio.wait_for(fetch(), timeout=90)
+    except asyncio.CancelledError:
+        error = 'cancelled'
+        raise
     except (TimeoutError, httpx.TimeoutException):
         error = 'timeout'
     except ValueError as exc:
-        error = str(exc) if str(exc) in {'invalid_share', 'missing_share_token', 'share_unavailable', 'too_many_redirects', 'reader_http_error', 'reader_rejected', 'invalid_note'} else 'invalid_response'
+        error = str(exc) if str(exc) in {'invalid_share', 'missing_share_token', 'share_unavailable', 'too_many_redirects', 'reader_http_error', 'reader_rejected', 'invalid_note', 'login_or_rate_limit'} else 'invalid_response'
     except Exception:
         error = 'reader_unavailable'
     finally:
+        _read_busy = False
+        _next_read_at = time.monotonic() + (300 if error in {'login_or_rate_limit', 'reader_rejected'} else random.uniform(15, 25))
         from core.api_call_log import append
         append(caller='read_xiaohongshu', purpose='read_post', provider='xiaohongshu-mcp', model='feed_detail',
                duration_ms=int((time.monotonic() - started) * 1000), ok=not error, error_category=error)
@@ -141,6 +158,8 @@ async def read_post(share: str) -> ToolResult:
 
 def _failure(reason):
     hints = {'disabled': '小红书读取未开启。', 'reader_not_configured': '尚未配置小红书读取服务。',
+             'cooldown': '小红书读取正在执行或冷却中，请稍后再试；不会并发重复请求。',
+             'login_or_rate_limit': '小红书登录、访问限制或限流阻止了读取，已冷却五分钟，请先检查登录状态。',
              'missing_share_token': '链接缺少访问参数，请重新复制完整分享链接。',
              'invalid_share': '没有找到有效的小红书分享链接。'}
     text = hints.get(reason, '未能读取帖子，请检查读取服务及其登录状态，或重新复制分享链接。')

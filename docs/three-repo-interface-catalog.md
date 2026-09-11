@@ -653,7 +653,7 @@ GET/PUT `/settings/xiaohongshu` 配置读取服务与数量上限；开关共用
 QQ/desktop/mobile 共用既有探针/工具循环、暴露白名单和 origin 闸门，无新客户端协议。
 元数据观测复用 `/observability/api-calls?caller=read_xiaohongshu`；remote_status
 明确为 not_checked，配置就绪不代表站点登录或连接健康。详见 docs/xiaohongshu-reader.md。
-`observe`：需用户部署并登录 xiaohongshu-mcp 读取服务后实测；本次未开启真实功能。
+`current`：读取服务已登录并启用，真实分享正文、WebP图片与10条评论样本通过；设置返回新增 busy/cooldown_seconds，通道协议不变。`observe`：运行中后端重启加载新代码及原生聊天验收。
 真实帖子与真机效果、评论完整性不作完成承诺；评论始终标记样本，图片失败明确降级。
 `roadmap`：视频转录、完整评论遍历不在本次范围；无跨仓原生客户端代码修改。
 

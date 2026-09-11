@@ -475,7 +475,7 @@ GET/PUT `/settings/xiaohongshu` 配置读取服务与数量上限；开关共用
 QQ/desktop/mobile 共用既有探针/工具循环、暴露白名单和 origin 闸门，无新客户端协议。
 元数据观测复用 `/observability/api-calls?caller=read_xiaohongshu`；remote_status
 明确为 not_checked，配置就绪不代表站点登录或连接健康。详见 docs/xiaohongshu-reader.md。
-`observe`：需用户部署并登录 xiaohongshu-mcp 读取服务后实测；本次未开启真实功能。
+`current`：本地 Docker 服务已部署、扫码登录并开启配置；用户分享正文、图片识别及10条评论样本实测成功。新增单进程串行与15–25秒冷却、拒绝后5分钟退避；配置查询提供 busy/cooldown_seconds。`observe`：运行中后端重启加载新代码及原生聊天验收。
 真实帖子与真机效果、评论完整性不作完成承诺；评论始终标记样本，图片失败明确降级。
 `roadmap`：视频转录、完整评论遍历不在本次范围；无跨仓原生客户端代码修改。
 
