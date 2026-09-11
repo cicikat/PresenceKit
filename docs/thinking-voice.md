@@ -6,6 +6,8 @@ messages 对象的快照，补齐实际注入层与字符统计；不新建一�
 
 状态：current（提示拼接与控制面）；observe（实际模型思考摘要的遵从程度）。
 
+Brief 249：monologue 的 scoped mood 提示改用“你此刻”，不借全局活跃角色名称标注其他角色的状态。无配置字段或 effective state 变更；心声文体内第一人称约定保留。
+
 ## 当前实现
 
 `core/thinking_voice.py` 把基础声音、称呼、语体、当前情绪变体、强度和过渡提示拼接起来。

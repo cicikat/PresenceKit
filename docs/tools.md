@@ -1,5 +1,7 @@
 # docs/tools.md — 工具系统
 
+Brief 249：删除未被生产链调用的旧工具名单生成器；Path A 仍使用 probe builder，Path C 仍使用经过 exposure 过滤的 schema。Author's Note 的工具事实规则现在适用于每一步实际返回，不再用初始“无工具结果”否定后续调用。nudge 开关只控制软提示，不改变成功/失败证据要求。
+
 ---
 
 ## MCP optional authentication (Brief 195)

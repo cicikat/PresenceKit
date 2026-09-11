@@ -198,7 +198,7 @@ def _mood_hint(char_id: str | None) -> str:
         mood_raw = json.loads(
             get_paths().mood_state(char_id=char_id or DEFAULT_CHAR_ID).read_text(encoding="utf-8")
         )
-        return get_mood_text(mood_raw)
+        return get_mood_text(mood_raw, subject="你")
     except Exception:
         return ""
 

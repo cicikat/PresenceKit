@@ -2,7 +2,7 @@
 
 ## Prompt 统一审计（Brief 247–249，2026-09-11）
 
-- open：Reality system 全文代词替换损伤引用保真；mood 精确槽位条件断链；Path C 静态“无工具结果”与后续结果冲突。分别由 248/249 处理。
+- current：248/249 已删除 Reality 全文代词替换、修复 mood/perception 槽位条件断链与 Path C 静态工具规则冲突，删除两处无生产消费者的代码及专用测试。相关回归见工单验收记录。
 - open：现有 Prompt 检视包含 builder 与 thinking 追加，尚非 Path C 每一步完整请求观测。
 - roadmap：Dream D1/D8 与心声独立视角校准；不能直接套用 Reality 文案。
 - observe：真实模型文风 A/B、同名多角色及双端真机体验未验证；重复记忆/时间强化暂保留。

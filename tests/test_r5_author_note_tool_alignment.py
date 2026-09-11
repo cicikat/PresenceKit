@@ -8,7 +8,6 @@ Fable R5: Author's Note 工具能力对齐检查
   2. 当 tool_result 来自 read_diary 时，层11 可以含工具已提供提示，
      但不得再次要求调用工具。
   3. 所有 prompt 中提到的工具名必须来自 _TOOL_REGISTRY。
-  4. format_tool_capability_note() 仅返回 registry 内的工具。
   5. 静态扫描：prompt_builder.py 不含硬编码"必须调用 read_diary"。
   6. 回归：read_diary 工具在 registry 内且可执行路径完整。
 """
@@ -300,53 +299,14 @@ def test_layer10_long_tool_result_exposes_only_truncated_summary(monkeypatch):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 4. 工具名来自 _TOOL_REGISTRY — format_tool_capability_note
+# 4. 生产 registry 保留日记工具
 # ─────────────────────────────────────────────────────────────────────────────
-
-def test_format_tool_capability_note_returns_registry_names():
-    """format_tool_capability_note() 返回的工具名全在 _TOOL_REGISTRY 中。"""
-    _td = _fresh_tool_dispatcher()
-
-    note = _td.format_tool_capability_note()
-    if not note:
-        return  # 空注册表也是合法的
-    assert note.startswith("可用工具："), f"格式不符合预期: {note!r}"
-    names_part = note[len("可用工具："):]
-    returned_names = [n.strip() for n in names_part.split("、") if n.strip()]
-    for name in returned_names:
-        assert name in _td._TOOL_REGISTRY, (
-            f"format_tool_capability_note() 返回了不在 registry 中的工具名: {name!r}"
-        )
-
-
-def test_format_tool_capability_note_category_filter():
-    """categories=['info'] 时，返回的工具名都属于 info 分类。"""
-    _td = _fresh_tool_dispatcher()
-
-    note = _td.format_tool_capability_note(categories=["info"])
-    if not note:
-        return
-    names_part = note[len("可用工具："):]
-    returned_names = [n.strip() for n in names_part.split("、") if n.strip()]
-    for name in returned_names:
-        assert _td._TOOL_REGISTRY.get(name, {}).get("category") == "info", (
-            f"format_tool_capability_note(categories=['info']) 返回了非 info 分类工具: {name!r}"
-        )
 
 
 def test_read_diary_in_registry():
     """read_diary 工具必须在 _TOOL_REGISTRY 中（回归：不能被误删）。"""
     _td = _fresh_tool_dispatcher()
     assert "read_diary" in _td._TOOL_REGISTRY, "read_diary 工具已从 registry 中消失"
-
-
-def test_format_tool_capability_note_includes_read_diary():
-    """read_diary 属于 info 分类，format_tool_capability_note(categories=['info']) 应包含它。"""
-    _td = _fresh_tool_dispatcher()
-    note = _td.format_tool_capability_note(categories=["info"])
-    assert "read_diary" in note, (
-        f"format_tool_capability_note(categories=['info']) 未包含 read_diary，返回: {note!r}"
-    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────

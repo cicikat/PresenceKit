@@ -150,9 +150,11 @@ Brief 35 已移除的 `character_growth` 全文/指纹层不再可切换。当�
 **只承载 pending_perception**（上轮失败的桌面动作感知）和跨通道接续提示，不含工具结果——
 工具结果走层10的 `tool_result` 参数，唯一出口。
 
-情绪软提示也在层1内完成：`prompt_builder` 会读取 `mood_state.json`，调用
-`get_mood_text()`，并把"他此刻：..."插到 `## 当前感知（实时，非记忆）`
-之前。它没有独立 `_layer`，所以 debug layers 里不会出现 `2.7_mood_state`。
+情绪软提示在层1内完成：`prompt_builder` 读取 scoped `mood_state.json`，调用
+`get_mood_text(subject="你")`，追加到同一 `1_system_prompt`；不依赖角色卡标题或槽位，
+空 system_prompt 也可注入。缺失、损坏或空状态不提供情绪事实。没有独立 `2.7_mood_state`。
+`{perception_block}` 旧槽位继续展开；未提供槽位时，非空感知追加到框架小节，仍受
+`perception_block_disabled` 控制。插入的正文不做二次模板展开。
 
 ```python
 _perception = ""
@@ -182,9 +184,7 @@ Author's Note 放在历史之后、用户消息之前，对模型影响最大，
 4. S2 防句式坍缩软提示（句首同质性检测，命中时注入；`core/memory/short_term.py::detect_reply_homogeneity_prefix()`，与层9历史投影去同质复用同一份检测结果 `_s2_prefix`；填充词前缀「嗯/啊/呃/哦/唔/哈」等命中时用不复读字面的文案，避免再次 prime 同一个词，其余前缀沿用引用式文案，见下方「反坍缩治理」）
 5. 【输出格式】（`chat` 或 `roleplay`，由 config.yaml `chat.style` 决定；两种模式都常态要求正文至少两段、段间一个空行；`chat` 分段不依赖句号）
 6. 【词级强调】每条回复在情绪/语义焦点处用一次 `<hl>`；需要时再用 `<big>/<sm>`，每条 1–3 处
-7. 条件工具规则（R5）：
-   - 有 `tool_result`：`【工具结果已提供】`，提示层10已注入，禁止再声称调用
-   - 无 `tool_result`：`【无工具结果】`，禁止声称调用工具，禁止编造日记/实时数据
+7. 工具事实规则（R5 / Brief 249）：初始提示区分已有返回与尚无成功返回；共同规则在每次回答时以实际结果为准，包括 Path C 后续 tool 消息。失败、已受理、待确认与结果不明不支持完成断言；不再以初始无结果否定后续执行。
 8. 表达规则（禁止复用对话示例原句）
 9. `style_hint`（从 observations.jsonl 读取，深夜/压力状态提示词；直接追加，不加方括号）
 10. 破限预设 layer=11
@@ -193,10 +193,10 @@ Author's Note 放在历史之后、用户消息之前，对模型影响最大，
 已独立为 `anti_collapse_hint` 层（见上方层总览与下方「反坍缩治理」），带自己的 per-uid 持久化
 倒计时，不与 Author's Note 的裁剪/组装逻辑耦合。
 
-注意：正式主 LLM 调用没有接入任何 tools schema；`get_time` 等 info/desktop 工具
-由 pre-pipeline 探针触发，结果以 `tool_result` 参数进入层10。memory 类工具
-（`read_diary` / `search_diary` 等）需用户明确触发，主 LLM 不能自行调用。
-R5 修复了旧版 Author's Note 里"必须调用 read_diary"的工具幻觉风险。
+Path A 的工具由 pre-pipeline 探针触发，结果以 `tool_result` 参数进入层10。
+Path C 使用经过 effective exposure 过滤的 tools schema，通过 `run_agentic_loop`
+调用并以 tool 消息返回；工具类别与执行权限仍由 dispatcher/exposure 决定。
+R5 禁止强制调用不存在的能力；249 删除了无生产调用的旧工具名单 helper 及其专用测试。
 
 ---
 

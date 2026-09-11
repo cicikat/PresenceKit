@@ -66,3 +66,26 @@ Dream 保留独立身份/退出协议与渲染格式，不能将 Reality 规则�
 真实模型文风 A/B、多角色同名歧义与 Dream/心声专项统一仍为 observe/roadmap，未调用真实模型评测。
 
 Brief 248 结果：P01 已删除，P03 的 Reality builder 已使用显式第二人称；thinking mood 的命名随后由 249 修复。空角色卡也有同一身份锚。首轮 164 passed，修正两项本任务失败后补充回归 53 passed；两项生产目录全量指纹测试因运行中的无关 SQLite 变化失败。
+
+## Brief 249 实施
+
+- P02：mood 现在在框架层追加，与 authored 标题解耦；顺带修复无槽位时 perception 丢失，旧槽位与消融继续工作。缺失/损坏/空 mood 不生成虚构状态。
+- P03：thinking 的 scoped mood 同样用“你此刻”，管理面保留命名显示。
+- P04/P05：删除未使用结构、旧工具名单生成器与三个仅测试该生成器的用例；实际 probe/schema/read_diary 注册保留。
+- P06/P08：单一工具事实规则面向每一步当前上下文；初始提示只描述组装阶段，后续结果同样可用。不再依赖 nudge 覆盖禁令，文档按 Path A/C 更正。
+- P07/P09/P11 保留 open/observe/roadmap。不是全仓或全部 Dream/心声模板已经统一。
+
+### 框架规则归属
+
+| 职责 | 唯一主要归属 | 保留的逻辑边界 |
+|---|---|---|
+| 当前发言者与材料人称 | 1_system_prompt | 当前身份和引用作者不同 |
+| 状态与感知 | 1/2.5/2.6/3.x | 角色状态、用户状态、TTL 分开 |
+| 事实与资料 | 5/6 系列 | 观察/历史/外部资料/梦境不互转 |
+| 示例与历史 | 7/9 | style example 与真实 role/speaker 不合并 |
+| 工具执行事实 | 11_author_note 通用规则 + 10/tool 返回证据 | 软件执行闸不由 prompt 代替 |
+| 输出格式与角色文风 | 11 的通道格式 + authored note | 已删除框架对角色职业身份的固定排除 |
+
+不增加一套旁路 renderer/registry。现有 `_layer` 与来源、顺序、裁剪和消融继续承担可观测的模块边界。
+
+249 验收：首轮 212 passed，修正新增循环测试 fixture 后 61 passed，收尾 mock 调整后四项循环测试复测通过。现有 probe/schema、thinking、裁剪/消融、引用/角色边界通过；无真实模型或真机验收。

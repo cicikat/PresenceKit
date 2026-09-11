@@ -105,3 +105,77 @@ def test_mood_prompt_does_not_resolve_global_character(monkeypatch):
     from core.mood_text import get_mood_text
     monkeypatch.setattr("core.mood_text._char_name", lambda: pytest.fail("global character lookup"))
     assert get_mood_text({"current": "happy", "intensity": .5}, subject="你") == "你此刻：心情不错。"
+
+
+@pytest.mark.parametrize("system_prompt", ["", "自定义角色规则", "记录：{perception_block}", "## 当前感知（实时，非记忆）\n{perception_block}"])
+def test_state_injection_does_not_depend_on_authored_heading(build_prompt, sandbox, system_prompt):
+    import json
+    from core.observe import prompt_capture
+    path = sandbox.mood_state(char_id=TEST_CHAR_ID)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"current": "happy", "intensity": .5}), encoding="utf-8")
+    character = Character(name="Scoped Companion", system_prompt=system_prompt)
+    messages, meta = build_prompt(character=character, perception_block="跨通道接续 user {user_name}")
+    text = layer(messages, "1_system_prompt")
+    assert text.count("你此刻：心情不错。") == 1
+    assert text.count("跨通道接续 user {user_name}") == 1
+    assert character.system_prompt == system_prompt
+    prompt_capture.capture("test_owner", messages, meta)
+    snapshot = prompt_capture.get_snapshots("test_owner")[0]
+    assert any("你此刻：心情不错。" in item.get("content", "") for item in snapshot["layers"])
+
+
+@pytest.mark.parametrize("raw", [None, "{broken", "[]", "{}"])
+def test_missing_or_invalid_mood_is_not_invented(build_prompt, sandbox, raw):
+    path = sandbox.mood_state(char_id=TEST_CHAR_ID)
+    if raw is not None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(raw, encoding="utf-8")
+    messages, _ = build_prompt()
+    assert "你此刻：" not in layer(messages, "1_system_prompt")
+
+
+def test_perception_ablation_still_hides_fallback(build_prompt, monkeypatch):
+    monkeypatch.setattr("core.prompt_ablation.get_state", lambda: {
+        "disabled_layers": set(), "perception_block_disabled": True,
+    })
+    messages, _ = build_prompt(perception_block="private context")
+    assert "private context" not in layer(messages, "1_system_prompt")
+
+
+def test_thinking_mood_uses_scoped_state_without_global_name(sandbox, monkeypatch):
+    from core.thinking import _mood_hint
+    path = sandbox.mood_state(char_id="other_character")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text('{"current":"happy","intensity":0.5}', encoding="utf-8")
+    monkeypatch.setattr("core.mood_text._char_name", lambda: pytest.fail("global character lookup"))
+    assert _mood_hint("other_character") == "你此刻：心情不错。"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("nudge", [True, False])
+@pytest.mark.parametrize("result", ["查到时间：10:00", "执行失败：权限不足"])
+async def test_builder_rules_remain_valid_after_loop_tool_return(build_prompt, monkeypatch, nudge, result):
+    from core.llm_client import ChatTurn
+    from tests.test_tool_loop import (
+        _make_pipeline, _patch_tool_loop_config, _patch_tools_schema,
+        _script_chat_turn, _script_execute, _patch_final_chat,
+    )
+    messages, _ = build_prompt()
+    _patch_tool_loop_config(monkeypatch, nudge_hint=nudge)
+    _patch_tools_schema(monkeypatch, ["get_time"])
+    call = {"id": "call_test", "type": "function", "function": {"name": "get_time", "arguments": "{}"}}
+    calls = _script_chat_turn(monkeypatch, [
+        ChatTurn(content="", tool_calls=[{"id": "call_test", "name": "get_time", "arguments": {}}], assistant_message={"role": "assistant", "content": "", "tool_calls": [call]}),
+        ChatTurn(content="收到结果。", tool_calls=[], assistant_message={"role": "assistant", "content": "收到结果。"}),
+    ])
+    _script_execute(monkeypatch, [(result, None)])
+    _patch_final_chat(monkeypatch, "收到结果。")
+    await _make_pipeline().run_agentic_loop(messages, uid="test_owner", char_id=TEST_CHAR_ID, session_state=object())
+    assert len(calls) == 2
+    note = layer(calls[-1]["messages"], "11_author_note")
+    assert "后续收到的新结果同样适用" in note
+    assert "失败、待确认、已受理或结果不明均不代表完成" in note
+    assert "本轮没有任何工具执行结果" not in note
+    assert "禁止声称调用了任何工具" not in note
+    assert any(result in m.get("content", "") for m in calls[-1]["messages"] if m["role"] == "tool")

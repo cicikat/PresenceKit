@@ -6,21 +6,12 @@ Prompt 构建模块
 
 import logging
 import re
-from dataclasses import dataclass, field
-from typing import Literal
 
 from core.character_loader import Character
 from core.error_handler import log_error
 from core.prompt_ablation import ALWAYS_ON
 from core.data_paths import DEFAULT_CHAR_ID
 
-
-@dataclass
-class LayerSpec:
-    name: str
-    mode: Literal["always", "tagged", "scored"]
-    triggers: list[str] = field(default_factory=list)
-    token_budget: int = 0
 
 logger = logging.getLogger(__name__)
 _prompt_logger = logging.getLogger("prompt_builder.token")
@@ -477,32 +468,28 @@ def build(
 
 
     # ─────────────────────────────────────────────────────────────────────────
-    # 层 1：全局 system prompt（来自角色卡的 system_prompt 字段）
+    # 层 1：框架身份/状态 + 原角色卡。状态注入不依赖 authored 标题。
     # ─────────────────────────────────────────────────────────────────────────
     sp = character.system_prompt or ""
-    if sp:
-        perception = perception_block.strip() if perception_block else ""
-        if _ab["perception_block_disabled"]:
-            perception = ""
+    perception = perception_block.strip() if perception_block else ""
+    if _ab["perception_block_disabled"]:
+        perception = ""
+    # Only the declared legacy slot is expanded. Inserted data is never re-templated.
+    if "{perception_block}" in sp:
+        sp = sp.replace("{perception_block}", perception)
+    elif perception:
+        sp += ("\n\n" if sp else "") + "## 当前感知（实时，非记忆）\n" + perception
 
-        from core.mood_text import get_mood_text
-        import json
-        from core.sandbox import get_paths
-        try:
-            mood_raw = json.loads(get_paths().mood_state(char_id=char_id).read_text(encoding="utf-8"))
-        except Exception:
-            mood_raw = {}
-        mood_line = get_mood_text(mood_raw, subject="你")
-
-        sp = character.system_prompt
-        _perception_section = "## 当前感知（实时，非记忆）\n{perception_block}"
-        if _perception_section in sp:
-            sp = sp.replace(
-                _perception_section,
-                f"{mood_line}\n\n## 当前感知（实时，非记忆）\n{perception}",
-            )
-        else:
-            sp = sp.replace("{perception_block}", perception)
+    from core.mood_text import get_mood_text
+    import json
+    from core.sandbox import get_paths
+    mood_line = ""
+    try:
+        mood_raw = json.loads(get_paths().mood_state(char_id=char_id).read_text(encoding="utf-8"))
+        if isinstance(mood_raw, dict) and mood_raw:
+            mood_line = get_mood_text(mood_raw, subject="你")
+    except Exception:
+        pass  # Missing/invalid state supplies no invented emotional fact.
 
     identity_contract = (
         f"你是{character.name}。本轮框架说明中的‘你’指当前发言角色；用户显示名为{user_name}。"
@@ -510,7 +497,7 @@ def build(
     )
     messages.append({
         "role": "system",
-        "content": identity_contract + ("\n\n" + sp if sp else ""),
+        "content": "\n\n".join(part for part in (identity_contract, sp, mood_line) if part),
         "_layer": "1_system_prompt",
     })
 
@@ -1516,17 +1503,19 @@ def build(
     if tool_result and (tool_result_status in (None, "tool_executed")):
         author_note_lines.append(
             "【工具结果已提供】"
-            "本轮层10已注入工具执行结果，直接依据该结果回答；"
-            "禁止声称'我去查一下'或暗示将再次调用工具——结果本轮已在上下文中。"
+            "已有工具返回可供参考；是否成功及适用范围以返回的状态与内容为准。"
         )
     else:
         author_note_lines.append(
-            "【无工具结果】"
-            "本轮没有任何工具执行结果。"
-            "禁止声称调用了任何工具；禁止编造日记内容；"
-            "禁止引用任何未经工具返回的日记文字或实时数据。"
-            "如果用户提到日记，可以询问是否希望你读取，或基于用户当前发来的内容回应。"
+            "【初始无工具成功结果】当前组装阶段尚无已确认成功的工具返回。"
         )
+    author_note_lines.append(
+        "【工具事实规则】每次回答以当前上下文实际提供的工具返回为准；"
+        "后续收到的新结果同样适用。只有明确成功的返回才支持相应的完成表述；"
+        "失败、待确认、已受理或结果不明均不代表完成。无成功结果时不得声称操作已完成；"
+        "禁止编造日记内容或实时数据。需要补充信息时，只能使用本次实际提供的工具，"
+        "没有可用工具则如实说明未知；不要以口头承诺代替执行。"
+    )
     author_note_lines.append(
         "【表达规则】对话示例仅作风格参考，禁止复用原句或近似表达，每次回应必须是全新的措辞。"
     )

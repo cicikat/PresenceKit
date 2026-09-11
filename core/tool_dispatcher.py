@@ -1975,22 +1975,6 @@ def format_mcp_opaque_params_note(tool_schemas: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def format_tool_capability_note(categories: list[str] | None = None) -> str:
-    """从 registry 派生已启用工具名称列表，供 prompt 注入。
-    categories: 若提供，仅包含该分类的工具；None 返回全部已启用工具。
-    工具名来自 _TOOL_REGISTRY，不手写，不列出 registry 中不存在的工具。
-    """
-    names = [
-        name
-        for name, info in _TOOL_REGISTRY.items()
-        if _is_tool_enabled(name)
-        and (categories is None or info.get("category") in categories)
-    ]
-    if not names:
-        return ""
-    return "可用工具：" + "、".join(names)
-
-
 def _build_probe_prompt(
     categories,
     *,
