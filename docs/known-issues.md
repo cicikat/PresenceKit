@@ -525,3 +525,16 @@ current：复用 GET/PATCH `/users/{user_id}/pronoun`（admin），默认“她�
 桌面使用现有 openAdminPanel 管理面桥，手机 `/mobile/chat` 继承后端组装；无新 WS/IPC/ack/TTL/锁或通知协议。手机原生称谓编辑及 Dream 专项称谓统一为 roadmap；真实模型文风、双端真机体验为 observe。
 
 thinking 原生提示标题改为【你们约定的思维链thinking输出方式*特调】，保留原有文风正文与执行闸门。
+
+## Tool display receipts (2026-09-12, partial)
+Owner reality execute_structured emits tool_activity with event_id, chain_id, char_id,
+source=reality, origin=chat|autonomy, tool_name, status and ts. No tool args/results, ack,
+TTS, turn_sink delivery or proactive budget effects. Existing dispatcher gates remain authoritative.
+Terminal display_activity metadata reuses the bounded 30-row action_trace store; existing
+/observability/tool-traces reads it. /chat-log/dates and /chat-log/{date} expose recent receipts
+under memory.read, replacing a matching action_trace echo by event_id. Older echoes are narration.
+Desktop defaults chat.toolActivityVisible=true; the switch is display-only. Backend action_trace
+settings continue to control persistence. No mobile poll/ack/relay contract changes.
+Validation: 57 backend regressions, 7 client regressions, build and Edge IPC fixture passed.
+open: native Tauri/restarted backend integration. roadmap: mobile tool chain UI and full unbounded
+historical tool receipts. Client evidence: docs/tool-activity-2026-09-12.md in the desktop repository.

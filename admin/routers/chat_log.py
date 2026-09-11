@@ -108,6 +108,7 @@ def _parse_day(text: str) -> list[dict]:
         assistant_lines: list[str] = []
         state = "seek_user"
         turn_id = ""
+        trigger = ""
 
         for index, line in enumerate(block[1:], start=1):
             stripped = line.strip()
@@ -131,6 +132,7 @@ def _parse_day(text: str) -> list[dict]:
             if assistant_meta or user_meta:
                 if assistant_meta:
                     fields = stripped[2:].split()
+                    trigger = next((part.partition(':')[2] for part in fields if part.startswith('trigger:')), '')
                     ids = [part.partition(":")[2] for part in fields if part.startswith("turn_id:")]
                     speakers = [part for part in fields if part.startswith("speaker:")]
                     if len(ids) == 1 and speakers in ([], ["speaker:assistant"]):
@@ -181,6 +183,7 @@ def _parse_day(text: str) -> list[dict]:
             "user": user_text,
             "assistant": assistant_text,
             **({"turn_id": turn_id} if turn_id else {}),
+            **({'entry_kind': 'narration'} if trigger == 'action_trace' else {}),
         })
 
     return entries
@@ -195,7 +198,12 @@ async def list_dates(char_id: str | None = None, auth=Depends(require_scopes("me
         for f in log_dir.iterdir():
             if _FILE_RE.match(f.name):
                 dates.append(f.stem)
-    dates.sort(reverse=True)
+    from core.memory.action_trace import recent
+    from datetime import datetime
+    dates.extend(datetime.fromtimestamp(row['display_activity']['ts']).strftime('%Y-%m-%d')
+                 for row in recent(_owner_qq(), resolved, max_items=30, window_hours=24 * 36500)
+                 if isinstance(row.get('display_activity'), dict))
+    dates = sorted(set(dates), reverse=True)
     return {"dates": dates, "count": len(dates)}
 
 
@@ -206,11 +214,22 @@ async def get_day(date: str, char_id: str | None = None, auth=Depends(require_sc
     resolved = _resolve_char_id(char_id)
     log_dir = _log_dir(resolved)
     path = log_dir / f"{date}.md"
-    if not path.exists():
-        raise HTTPException(status_code=404, detail="log not found")
-
-    text = path.read_text(encoding="utf-8")
+    text = path.read_text(encoding="utf-8") if path.exists() else ''
     entries = _parse_day(text)
+    # Recover recent tool receipts from the existing bounded action trace.
+    # Older action echoes remain narration; no inferred success or chain IDs.
+    from core.memory.action_trace import recent
+    from datetime import datetime
+    activities = [row['display_activity'] for row in recent(_owner_qq(), resolved, max_items=30, window_hours=24 * 36500)
+                  if isinstance(row.get('display_activity'), dict)
+                  and datetime.fromtimestamp(row['display_activity']['ts']).strftime('%Y-%m-%d') == date]
+    activity_ids = {item['event_id'] for item in activities}
+    if not path.exists() and not activities:
+        raise HTTPException(status_code=404, detail="log not found")
+    entries = [entry for entry in entries if not (entry.get('entry_kind') == 'narration' and entry.get('turn_id') in activity_ids)]
+    entries.extend({'time': datetime.fromtimestamp(item['ts']).strftime('%H:%M'), 'ts': item['ts'],
+                    'user': '', 'assistant': '', 'tool_activity': item} for item in activities)
+    entries.sort(key=lambda entry: entry['time'])
     # Display-only projection from the canonical ledger; never replace memory text.
     # Missing/older ledgers retain the legacy plain-text history.
     from core.memory.event_query import get_event, EventQueryError

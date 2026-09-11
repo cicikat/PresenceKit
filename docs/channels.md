@@ -539,3 +539,16 @@ user ID、正文引用、重复 ID 字段不作为关联，旧无 ID 日志缺�
 current: talk_owner stamps the trigger write envelope; autonomy is conversational. The existing capture/slow pipeline records assistant-only history and trigger-aware memory with existing provenance. No candidate signal is represented as a user message. New trigger event-log blocks have timestamps and the reader handles assistant-only entries and canonical turn_id. The canonical ledger keeps inline display markup separately from sanitized memory text. /chat-log/{date} adds optional assistant_display_text by scope and turn ID; desktop replays it through the existing inline renderer with plain-text fallback. No new store, scope, notification or ack policy.
 
 Validation: 48 related regressions plus 3 focused persistence/reload tests passed; desktop TypeScript and production build passed. observe: native desktop restart/phone rendering has not been tested; mobile optional styled history consumption remains roadmap. Historical stripped styles and previously unrecorded proactive messages cannot be reconstructed.
+
+## Tool display receipts (2026-09-12, partial)
+Owner reality execute_structured emits tool_activity with event_id, chain_id, char_id,
+source=reality, origin=chat|autonomy, tool_name, status and ts. No tool args/results, ack,
+TTS, turn_sink delivery or proactive budget effects. Existing dispatcher gates remain authoritative.
+Terminal display_activity metadata reuses the bounded 30-row action_trace store; existing
+/observability/tool-traces reads it. /chat-log/dates and /chat-log/{date} expose recent receipts
+under memory.read, replacing a matching action_trace echo by event_id. Older echoes are narration.
+Desktop defaults chat.toolActivityVisible=true; the switch is display-only. Backend action_trace
+settings continue to control persistence. No mobile poll/ack/relay contract changes.
+Validation: 57 backend regressions, 7 client regressions, build and Edge IPC fixture passed.
+open: native Tauri/restarted backend integration. roadmap: mobile tool chain UI and full unbounded
+historical tool receipts. Client evidence: docs/tool-activity-2026-09-12.md in the desktop repository.

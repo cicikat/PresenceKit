@@ -10,6 +10,7 @@ import json
 import logging
 import time
 import uuid
+from core.tool_activity import display_chain
 
 from core.llm_output_validator import record_failure, reset
 from core.memory import pending_perception as _pending_perception
@@ -966,6 +967,7 @@ class Pipeline:
     # 步骤3B：多步工具执行器（Brief 28 · Path C，function_calling 模型专用）
     # ──────────────────────────────────────────────────────────────────────────
 
+    @display_chain
     async def run_agentic_loop(
         self,
         messages: list[dict],

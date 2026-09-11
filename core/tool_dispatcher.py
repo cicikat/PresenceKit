@@ -2603,7 +2603,9 @@ async def execute_structured(
     tool_status_observer=None,
     allowed_tool_names: frozenset[str] | None = None,
 ) -> ToolExecutionOutcome:
-    return await _execute_structured_impl(
+    from core.tool_activity import execute_visible
+    return await execute_visible(
+        _execute_structured_impl,
         tool_name, tool_args, user_id, target_id, is_group, session_state,
         origin=origin,
         char_id=char_id,

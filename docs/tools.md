@@ -913,3 +913,16 @@ QQ/desktop/mobile 共用既有探针/工具循环、暴露白名单和 origin �
 `observe`：需用户部署并登录 xiaohongshu-mcp 读取服务后实测；本次未开启真实功能。
 真实帖子与真机效果、评论完整性不作完成承诺；评论始终标记样本，图片失败明确降级。
 `roadmap`：视频转录、完整评论遍历不在本次范围；无跨仓原生客户端代码修改。
+
+## Tool display receipts (2026-09-12, partial)
+Owner reality execute_structured emits tool_activity with event_id, chain_id, char_id,
+source=reality, origin=chat|autonomy, tool_name, status and ts. No tool args/results, ack,
+TTS, turn_sink delivery or proactive budget effects. Existing dispatcher gates remain authoritative.
+Terminal display_activity metadata reuses the bounded 30-row action_trace store; existing
+/observability/tool-traces reads it. /chat-log/dates and /chat-log/{date} expose recent receipts
+under memory.read, replacing a matching action_trace echo by event_id. Older echoes are narration.
+Desktop defaults chat.toolActivityVisible=true; the switch is display-only. Backend action_trace
+settings continue to control persistence. No mobile poll/ack/relay contract changes.
+Validation: 57 backend regressions, 7 client regressions, build and Edge IPC fixture passed.
+open: native Tauri/restarted backend integration. roadmap: mobile tool chain UI and full unbounded
+historical tool receipts. Client evidence: docs/tool-activity-2026-09-12.md in the desktop repository.

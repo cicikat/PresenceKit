@@ -9,6 +9,7 @@ import time
 from datetime import datetime
 
 from core.autonomy import policy, store, talk_gate
+from core.tool_activity import display_chain
 from core.autonomy.models import ActionMode, Disposition, Job, Run, Signal, evaluation_status_for
 
 logger = logging.getLogger(__name__)
@@ -477,6 +478,7 @@ async def run_job(job: Job) -> Run:
         keeper.cancel()
 
 
+@display_chain
 async def _run_locked(job: Job, state: dict, run: Run) -> Run:
     tools, self_context = _runtime_tools(job.uid, job.char_id, state)
     mode, talk_reason = talk_gate.check(job.uid)

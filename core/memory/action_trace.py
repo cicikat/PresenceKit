@@ -164,6 +164,13 @@ def record(
             "result_digest": result_digest,
             "status": status,
         }
+        from core.tool_activity import current_call
+        activity = current_call()
+        if activity:
+            entry['display_activity'] = {
+                **activity,
+                'status': 'success' if status == 'ok' else 'unknown' if status == 'outcome_unknown' else 'error',
+            }
         if scope is not None:
             entry["scope"] = {
                 "uid": str(scope.get("uid") or "")[:128],
@@ -202,14 +209,36 @@ def _maybe_echo_to_event_log(uid: str, char_id: str, tool: str, result_digest: s
             return
         from core.memory.fixation_pipeline import capture_turn
         from core.write_envelope import stamp_trigger
+        from core.tool_activity import current_call
+        activity = current_call()
         echo_text = f"做了一件事：{tool} — {result_digest[:40]}"
         capture_turn(
             uid, user_msg="", reply=echo_text,
             trigger_name="action_trace", char_id=char_id,
             envelope=stamp_trigger(),
+            **({'turn_id': activity['event_id']} if activity else {}),
         )
     except Exception as e:
         logger.debug("[action_trace] event_log echo failed: %s", e)
+
+
+def finalize_display(uid: str, char_id: str, event: dict) -> None:
+    """Update the existing bounded receipt, including rejected/unknown calls."""
+    if not _enabled():
+        return
+    path = _trace_path(uid, char_id)
+    entries = _load(path)
+    row = next((item for item in entries if (item.get('display_activity') or {}).get('event_id') == event['event_id']), None)
+    if row is None:
+        row = {'ts': event['ts'], 'tool': event['tool_name'], 'origin': event['origin'],
+               'status': event['status'], 'args_digest': '', 'result_digest': ''}
+        entries.append(row)
+    # A transport failure must never turn an explicitly unknown MCP outcome red.
+    if (row.get('display_activity') or {}).get('status') == 'unknown':
+        event['status'] = 'unknown'
+    row['display_activity'] = dict(event)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    safe_write_json(path, entries[-_MAX_ENTRIES:])
 
 
 def recent(
