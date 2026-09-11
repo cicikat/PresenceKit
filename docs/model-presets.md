@@ -432,3 +432,13 @@ profile 可读取已关联的 Reality owner 回合，返回 available/entries（
 Admin-only preset test now uses 256 output tokens, a 30-second total budget and zero SDK retries. It returns category, safe error/hint, HTTP status, error type, declared protocol and request path. Provider bodies and credentials are never echoed; UI uses textContent. Empty visible output is a warning rather than evidence of working conversation. Network/TLS/timeout, authentication, quota, endpoint/model, rejected parameters and response schema are distinguished.
 
 Validation: 69 related tests passed; cache-cleared Chromium Model Routing test rendered quota/protocol/status guidance. Live bounded probes succeeded for the configured Grok Responses and Gemini Chat Completions presets; another relay returned HTTP 403 INSUFFICIENT_BALANCE. No protocol/routing setting was changed. This is unrelated to desktop/device WS protocols. Native clients continue to open the backend management UI; no new local settings or secrets.
+
+## Autonomy XML compatibility and cadence (2026-09-12, partial)
+Autonomy opts into existing XML tool encoding in chat_turn; ordinary native-only callers keep
+strict FC semantics. Parsed tools remain bounded by the exposed names; private prose never sends.
+Existing run.events now retain safe evaluation_error/error_type metadata. No new store or scope.
+Runtime settings were updated through admin APIs and read back: interval 30 minutes, 48 evaluations/day,
+global proactive gap 45 minutes; daily talk cap 8 and evaluation minimum interval 15 minutes unchanged.
+open: restart backend to activate code and observe real delivery/circuit recovery. No real test message sent.
+Screenshot planning remains separate: desktop visual sampling is shadow-only and local consent is off;
+mobile offers a text snapshot, not this requested on-demand image capture. See desktop docs/proactivity-2026-09-12.md.

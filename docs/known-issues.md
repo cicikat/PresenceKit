@@ -538,3 +538,23 @@ settings continue to control persistence. No mobile poll/ack/relay contract chan
 Validation: 57 backend regressions, 7 client regressions, build and Edge IPC fixture passed.
 open: native Tauri/restarted backend integration. roadmap: mobile tool chain UI and full unbounded
 historical tool receipts. Client evidence: docs/tool-activity-2026-09-12.md in the desktop repository.
+
+## Autonomy XML compatibility and cadence (2026-09-12, partial)
+Autonomy opts into existing XML tool encoding in chat_turn; ordinary native-only callers keep
+strict FC semantics. Parsed tools remain bounded by the exposed names; private prose never sends.
+Existing run.events now retain safe evaluation_error/error_type metadata. No new store or scope.
+Runtime settings were updated through admin APIs and read back: interval 30 minutes, 48 evaluations/day,
+global proactive gap 45 minutes; daily talk cap 8 and evaluation minimum interval 15 minutes unchanged.
+open: restart backend to activate code and observe real delivery/circuit recovery. No real test message sent.
+Screenshot planning remains separate: desktop visual sampling is shadow-only and local consent is off;
+mobile offers a text snapshot, not this requested on-demand image capture. See desktop docs/proactivity-2026-09-12.md.
+
+## Autonomy XML compatibility and cadence (2026-09-12, partial)
+Autonomy opts into existing XML tool encoding in chat_turn; ordinary native-only callers keep
+strict FC semantics. Parsed tools remain bounded by the exposed names; private prose never sends.
+Existing run.events now retain safe evaluation_error/error_type metadata. No new store or scope.
+Runtime settings were updated through admin APIs and read back: interval 30 minutes, 48 evaluations/day,
+global proactive gap 45 minutes; daily talk cap 8 and evaluation minimum interval 15 minutes unchanged.
+open: restart backend to activate code and observe real delivery/circuit recovery. No real test message sent.
+Screenshot planning remains separate: desktop visual sampling is shadow-only and local consent is off;
+mobile offers a text snapshot, not this requested on-demand image capture. See desktop docs/proactivity-2026-09-12.md.

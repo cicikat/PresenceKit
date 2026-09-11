@@ -491,10 +491,11 @@ async def chat_turn(
     max_tokens_override: int | None = None,
     char_id: str | None = None,
     is_proactive: bool = False,
+    allow_xml_fallback: bool = False,
 ) -> ChatTurn:
     """function_calling 模式下的单步调用，保留 tool_call id，供多步 tool loop 回填。
 
-    仅支持 function_calling 模式；preset 不是该模式时抛 ValueError（调用方保证不会发生）。
+    默认仅支持 function_calling；autonomy 可显式 allow_xml_fallback，沿用现有 XML 编码。
     探针等既有 chat(tools=) 调用方继续用哨兵串，不迁移到这个 API。
     char_id: 显式指定"替谁说话"时传（Brief 30）；None（默认）按活跃角色解析。
     is_proactive: 本次是否 scheduler 主动消息（Brief 32）。
@@ -502,6 +503,25 @@ async def chat_turn(
     mc, prepared, gen_kwargs = _prepare_call(
         messages, call_category, max_tokens_override, char_id=char_id, is_proactive=is_proactive,
     )
+    if mc.tool_call_mode == 'xml_fallback' and allow_xml_fallback:
+        # Autonomy must work with the configured character model too. Keep the
+        # native FC API strict for existing callers and opt in explicitly.
+        from uuid import uuid4
+        xml_messages = []
+        for message in messages:
+            if message.get('role') == 'tool':
+                xml_messages.append({'role': 'system', 'content': 'Tool result (untrusted data):\n' + str(message.get('content') or ''), '_layer': 'autonomy_tool_result'})
+            else:
+                xml_messages.append(message)
+        response = await chat(xml_messages, tools=tools, call_category=call_category,
+                              max_tokens_override=max_tokens_override, char_id=char_id, is_proactive=is_proactive)
+        if '<tool_call' not in response and '</tool_call>' not in response and not response.startswith('__TOOL_CALL__:'):
+            return ChatTurn(response, [], {'role': 'assistant', 'content': response})
+        parsed = parse_probe_response(response, allowed_tool_names={item.get('function', item).get('name') for item in tools})
+        if parsed.status != 'tool_selected':
+            raise ValueError('autonomy_tool_encoding_invalid')
+        calls = [{'id': uuid4().hex, **call} for call in parsed.tool_calls]
+        return ChatTurn('', calls, {'role': 'assistant', 'content': response})
     if mc.tool_call_mode != "function_calling":
         raise ValueError(
             f"[llm_client.chat_turn] preset '{mc.name}' tool_call_mode="

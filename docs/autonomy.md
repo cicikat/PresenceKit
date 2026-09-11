@@ -132,3 +132,13 @@ rejection and delivered talk; prompt snapshots remain admin-only.
 Maintenance-only task 有意不在该 registry 中。例如 `diary_inject`、episodic/log cleanup、memory janitor、event-log salvage、hidden-state decay/consolidation、storyline aggregation 和 garden state maintenance。它们继续修改自己拥有的 state，但不会创建 assistant turn 或进入 `talk_owner`。
 
 本设计不引入全局 EventBus，也不引入 model-visible trigger tool。
+
+## Autonomy XML compatibility and cadence (2026-09-12, partial)
+Autonomy opts into existing XML tool encoding in chat_turn; ordinary native-only callers keep
+strict FC semantics. Parsed tools remain bounded by the exposed names; private prose never sends.
+Existing run.events now retain safe evaluation_error/error_type metadata. No new store or scope.
+Runtime settings were updated through admin APIs and read back: interval 30 minutes, 48 evaluations/day,
+global proactive gap 45 minutes; daily talk cap 8 and evaluation minimum interval 15 minutes unchanged.
+open: restart backend to activate code and observe real delivery/circuit recovery. No real test message sent.
+Screenshot planning remains separate: desktop visual sampling is shadow-only and local consent is off;
+mobile offers a text snapshot, not this requested on-demand image capture. See desktop docs/proactivity-2026-09-12.md.

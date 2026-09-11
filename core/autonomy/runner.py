@@ -542,7 +542,7 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
             if remaining <= 0:
                 raise asyncio.TimeoutError
             turn = await asyncio.wait_for(
-                llm_client.chat_turn(messages, active_tools, char_id=job.char_id, is_proactive=True),
+                llm_client.chat_turn(messages, active_tools, char_id=job.char_id, is_proactive=True, allow_xml_fallback=True),
                 timeout=remaining,
             )
             if not memory_candidates_evaluated:
@@ -682,8 +682,10 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
             run.disposition = _completed_disposition(saw_tool, saw_self_change)
     except asyncio.TimeoutError:
         run.disposition = Disposition.TIMEOUT.value
-    except Exception:
+    except Exception as exc:
         run.disposition = Disposition.LLM_FAILED.value
+        _record_event(run, 'evaluation_error', error_type=type(exc).__name__)
+        logger.warning('[autonomy] evaluation failed: %s', type(exc).__name__)
     finally:
         _set_prompt_snapshot(run, messages)
     return _finish(run)
