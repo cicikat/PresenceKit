@@ -486,3 +486,10 @@ roadmap: Character consumption remains disabled/unimplemented. Use short-lived, 
 `open`：真机两张图片已通过 /life-records/sync 落库并返回回执，observability 显示两次识别 failed / ValidationError；一次不提交结果的 recognize 诊断又返回 JSONDecodeError。当前只有异常类型，未能定位具体字段，不能断言模型配置就绪等于识别可用。建议独立提取 schema、未知值/用户校正锁隔离校验和结构化输出解析，记录无输入内容的校验字段路径，修复后用原管理面 retry 验收。
 
 另一次同记录本机修改与识别推进的 revision 冲突，手机保留操作，但目前只提供采用电脑版本，缺保留本机修改的合并入口。手机改为每轮连续补传降低等待窗口，不替代正确的冲突处理。后端总开关已按用户授权开启，其他设置不变；没有改后端识别实现或自动丢弃冲突。见 three-repo-interface-catalog 同日条目。
+
+
+## Character thinking voice (2026-09-11)
+
+current: Composed first-person voice guidance, stable daily registers, three variants per existing mood; admin toggle and read-only effective preview. See docs/thinking-voice.md.
+
+observe: Native summaries are provider-controlled. Two live synthetic chat calls returned text but no reasoning, so native voice compliance is not verified. No historical rewrite; restarting/reloading the backend is required. Mobile reasoning UI remains roadmap. 77 targeted tests and cache-cleared admin browser verification passed.

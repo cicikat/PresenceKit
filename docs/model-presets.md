@@ -1,5 +1,8 @@
 # docs/model-presets.md — 多模型 Preset 系统
 
+角色心声通用提示与四家原生思考接口边界核对见 [thinking-voice.md](thinking-voice.md)。
+这次增加 prompt 文风引导，没有修改 provider 参数、路由或将思考前缀作为通用 API 能力。
+
 ## 概述
 
 ### API 返回思考的独立存档（2026-09-09）

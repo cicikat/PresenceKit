@@ -880,6 +880,11 @@ PUT /prompt-ablation    body: {"disabled_layers": [...], "perception_block_disab
 
 ### `11.7_inner_monologue` 层（Brief 32 · 内部思考链，前置独白路线）
 
+2026-09-11：新增 `11.6_thinking_voice`（native 通用角色心声文风），与本层同属
+LLM 调用前附加层；不经过 builder 裁剪/消融。由 thinking.character_voice 控制，默认随
+thinking.enabled 生效，详情见 [角色心声文风](thinking-voice.md)。monologue 复用其拼接器与
+当轮人设。没有后处理、强制 reasoning 字段或新记忆写入。
+
 `core/thinking.py::maybe_apply()` 在 `llm_client.chat()` / `chat_stream()` 以及
 `pipeline.run_agentic_loop()` 进入循环前注入，同样**不经过 `prompt_builder.build()`**，
 不登记进 `KNOWN_LAYERS`，与 `11.5_tool_nudge` 是同一类"消融机制管辖范围外"的层。

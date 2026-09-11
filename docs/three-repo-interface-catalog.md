@@ -1,5 +1,14 @@
 # 三仓接口总览与闭环审计
 
+## 角色心声通用提示（2026-09-11）
+
+current：GET/POST /settings/thinking（persona）增加 character_voice 与 GET voice_preview；
+管理面「对话与思考」有真实开关、预览和 effective 状态，定义见 docs/thinking-voice.md。
+桌面既有 turn_id reasoning 读取与本地显示开关继续适用；手机无思考展开 UI，列 roadmap。
+无新增 REST 消费路径、IPC/WS、队列、落盘、ack/TTL、权限或记忆写入。
+observe：77 项回归和管理面清缓存浏览器验证通过；两次真实合成对话未返回 reasoning，
+原生摘要口吻与真机体验仍需验证，不把提示已发送等同于模型已遵从。
+
 > **状态**：current implementation catalog
 > **核对日期**：2026-08-11
 > **覆盖仓库**：`Emerald-presence`（后端）、`Emerald-client`（桌面）、`Emerald-mobile`（手机）

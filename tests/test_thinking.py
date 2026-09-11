@@ -300,6 +300,8 @@ async def test_native_injects_extra_body_bypassing_whitelist(monkeypatch):
 
     sent = captured[0]
     assert sent["extra_body"] == {"thinking": {"type": "enabled", "budget_tokens": 1024}}
+    assert any("角色心声的表达约定" in m.get("content", "") for m in sent["messages"])
+    assert all("_layer" not in m for m in sent["messages"])
     # provider 白名单（anthropic_compat/deepseek 等）不会剔除 extra_body —— 它压根不在
     # resolve_params 处理的 params 字典里，是独立 kwarg，白名单逻辑摸不到它。
     assert "thinking" not in mc.params

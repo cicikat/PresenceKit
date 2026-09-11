@@ -26,6 +26,7 @@ _DEFAULTS = {
     "mode": "auto",
     "monologue_max_tokens": 200,
     "apply_to_proactive": False,
+    "character_voice": True,
 }
 
 
@@ -47,17 +48,29 @@ class ThinkingUpdate(BaseModel):
     mode: Optional[str] = None
     apply_to_proactive: Optional[bool] = None
     monologue_max_tokens: Optional[int] = None
+    character_voice: Optional[bool] = None
 
 
 @router.get("/settings/thinking", summary="获取思考开关配置")
 async def get_thinking(auth=Depends(require_scopes("persona"))):
     cfg = get_config().get("thinking", {})
+    from core.thinking_voice import preview
+    voice_enabled = bool(cfg.get("character_voice", True))
+    voice = preview()
+    voice.update({
+        "enabled": voice_enabled,
+        "effective": bool(cfg.get("enabled", False)) and voice_enabled,
+        "blocking_reason": "thinking_disabled" if not cfg.get("enabled", False) else ("voice_disabled" if not voice_enabled else ""),
+        "control": "prompt_guidance", "output_guaranteed": False,
+    })
     return {
         "enabled": bool(cfg.get("enabled", _DEFAULTS["enabled"])),
         "mode": cfg.get("mode", _DEFAULTS["mode"]),
         "monologue_max_tokens": cfg.get("monologue_max_tokens", _DEFAULTS["monologue_max_tokens"]),
         "apply_to_proactive": bool(cfg.get("apply_to_proactive", _DEFAULTS["apply_to_proactive"])),
         "chat_preset_reasoning_native": _chat_preset_reasoning_native(),
+        "character_voice": voice_enabled,
+        "voice_preview": voice,
     }
 
 
@@ -71,6 +84,8 @@ async def update_thinking(body: ThinkingUpdate, auth=Depends(require_scopes("per
     th = full_cfg.setdefault("thinking", {})
     if body.enabled is not None:
         th["enabled"] = body.enabled
+    if body.character_voice is not None:
+        th["character_voice"] = body.character_voice
     if body.mode is not None:
         th["mode"] = body.mode
     if body.apply_to_proactive is not None:
@@ -90,6 +105,7 @@ async def update_thinking(body: ThinkingUpdate, auth=Depends(require_scopes("per
             "mode": th.get("mode", _DEFAULTS["mode"]),
             "monologue_max_tokens": th.get("monologue_max_tokens", _DEFAULTS["monologue_max_tokens"]),
             "apply_to_proactive": bool(th.get("apply_to_proactive", _DEFAULTS["apply_to_proactive"])),
+            "character_voice": bool(th.get("character_voice", True)),
         },
         "chat_preset_reasoning_native": _chat_preset_reasoning_native(),
     }

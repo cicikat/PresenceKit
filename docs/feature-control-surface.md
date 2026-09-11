@@ -437,7 +437,15 @@ profile 可读取已关联的 Reality owner 回合，返回 available/entries（
 原 admin-only 全局归档接口不变。无新增生成开关，不修改正文、WS、poll、ack 或 TTL。
 `roadmap`：客户端按气泡展示和真机验收、QQ/主动消息/Dream/Stage 回合关联。
 前端工单见 cc-tasks/244-frontend-reasoning-handoff.md；按用户要求未跨仓修改。
-## IME v2 接收预备（2026-09-11）
+## 角色心声文风（2026-09-11）
+
+current：管理面「对话与思考」通过既有 GET/POST /settings/thinking（persona）控制
+character_voice（默认 true、随 thinking.enabled 生效）。voice_preview 给出当前拼接提示、
+情绪/稳定变体和 enabled/effective/blocking_reason；output_guaranteed=false 明确其只是通用
+提示引导。native 不增加 LLM 调用，monologue 复用已有前置调用。可能影响最终回复。
+桌面只控制本地显示；手机思考展开 UI 仍 roadmap。见 [thinking-voice.md](thinking-voice.md)。
+
+## IME v2 接收预备（2026-09-11，历史条目）
 
 `current`：POST `/v1/ime/drafts`（sensor.write）按设备 token label + id + revision
 事务覆盖完整草稿；默认 ime_ingest.enabled=false，通过 feature-flags 的 ime_ingest

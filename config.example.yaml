@@ -427,6 +427,7 @@ tool_loop:
 # 铁律：思考内容永不进 short_term history / 广播 / event_log。
 thinking:
   enabled: false             # 总开关，默认关
+  character_voice: true      # 角色心声文风引导；随总开关生效，非原生思考区独立 prompt
   mode: auto                 # auto | native | monologue
   monologue_max_tokens: 200
   apply_to_proactive: false  # scheduler 主动消息是否也思考（默认省钱不开）

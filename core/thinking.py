@@ -2,8 +2,8 @@
 core/thinking — Brief 32：内部思考链（原生 reasoning + 前置独白，可开关）。
 
 全局开关，默认关。两条路按 preset 能力自动选：
-  - native：preset.reasoning_native=true 时，把 preset.reasoning_extra_body 原样并入
-    请求 extra_body（故意绕过 provider 参数白名单，见 core/model_registry.py）。
+  - native：把 preset.reasoning_extra_body 原样并入请求 extra_body；可选追加通用
+    角色心声文风提示（不是独立思考区 prompt，不保证供应商摘要遵从）。
   - monologue：主生成前一次轻量调用产出内心活动，注入当轮 messages 尾部（用户消息之前），
     用完即弃。
 
@@ -105,6 +105,10 @@ def get_apply_to_proactive() -> bool:
     return bool(_cfg().get("apply_to_proactive", False))
 
 
+def character_voice_enabled() -> bool:
+    return bool(_cfg().get("character_voice", True))
+
+
 # ---------------------------------------------------------------------------
 # 模式解析
 # ---------------------------------------------------------------------------
@@ -171,7 +175,7 @@ def _last_user_content(messages: list[dict]) -> str:
     return ""
 
 
-def _recent_history_summary(messages: list[dict], char_name: str) -> str:
+def _recent_history_summary(messages: list[dict]) -> str:
     """从已构建好的 messages 里取 9_history 层最近两轮，拼一句摘要。不发起新的记忆查询。"""
     hist = [m for m in messages if m.get("_layer") == "9_history"][-4:]
     lines = []
@@ -179,7 +183,7 @@ def _recent_history_summary(messages: list[dict], char_name: str) -> str:
         content = m.get("content", "")
         if not isinstance(content, str) or not content.strip():
             continue
-        speaker = "对方" if m.get("role") == "user" else char_name
+        speaker = "你" if m.get("role") == "user" else "我"
         lines.append(f"{speaker}：{_truncate(content, 40)}")
     return "\n".join(lines)
 
@@ -201,24 +205,34 @@ def _mood_hint(char_id: str | None) -> str:
 
 async def _run_monologue_call(messages: list[dict], *, char_id: str | None) -> str | None:
     """一次轻量调用产出内心活动。失败/超时/空结果 → None（fail-open，调用方跳过注入）。"""
-    from core.config_loader import _char_name
-
     try:
-        char_name = _char_name()
-        user_msg = _truncate(_last_user_content(messages), 200)
-        mood_hint = _mood_hint(char_id)
-        hist_summary = _recent_history_summary(messages, char_name)
-
-        system = _MONOLOGUE_SYSTEM_TEMPLATE.format(
-            char_name=char_name, max_chars=get_monologue_max_tokens()
-        )
-        user_content = (
-            f"对方刚说：{user_msg}\n你的心情：{mood_hint}\n最近两轮对话：\n{hist_summary}"
-        )
-        mono_messages = [
-            {"role": "system", "content": system},
-            {"role": "user", "content": user_content},
-        ]
+        user_msg = _truncate(_last_user_content(messages), 800)
+        hist_summary = _recent_history_summary(messages)
+        if character_voice_enabled():
+            from core.thinking_voice import preview
+            voice = preview(char_id)
+            # Reuse the turn's frozen persona, not whichever card is active later.
+            persona = "\n".join(
+                m["content"] for m in messages
+                if m.get("_layer") == "2_char_desc" and isinstance(m.get("content"), str)
+            )[:6000]
+            mono_messages = [
+                {"role": "system", "content": (
+                    f"以下是此刻的人设，心声保持其中的性格与关系：\n{persona}\n\n"
+                    + voice["prompt"]
+                    + f"\n只写心声本身，约{get_monologue_max_tokens()}字以内，不写标题、标签或回复正文。"
+                )},
+                {"role": "user", "content": f"你刚说：{user_msg}\n最近的对话：\n{hist_summary}"},
+            ]
+        else:
+            from core.character_name_provider import get_char_name
+            system = _MONOLOGUE_SYSTEM_TEMPLATE.format(
+                char_name=get_char_name(char_id), max_chars=get_monologue_max_tokens()
+            )
+            mono_messages = [
+                {"role": "system", "content": system},
+                {"role": "user", "content": f"对方刚说：{user_msg}\n你的心情：{_mood_hint(char_id)}\n最近两轮对话：\n{hist_summary}"},
+            ]
 
         from core import llm_client
 
@@ -259,13 +273,13 @@ async def maybe_apply(
     is_proactive: bool = False,
     mc: "ModelClient | None" = None,
 ) -> list[dict]:
-    """monologue 路线的唯一入口：条件不满足时原样返回 messages（no-op）。
+    """独白与 native 文风提示入口：条件不满足时原样返回 messages（no-op）。
 
     - 非 call_category=="chat" → no-op（探针/摘要等杂活不思考）。
     - 总开关关闭 / apply_to_proactive 不满足 → no-op，且不触碰 model_registry
       （thinking 关闭是默认状态，不该为了这次判断额外构建一个 ModelClient）。
     - 已包含 11.7_inner_monologue 层 → no-op（tool loop 多步复用同一份 messages 时防重复注入）。
-    - 解析路线不是 monologue（native / 关闭）→ no-op。
+    - native 路线只拼接角色心声文风提示，不增加模型调用。
     - 独白调用失败/超时/空结果 → no-op，fail-open，主生成照常。
     """
     if call_category != "chat":
@@ -278,14 +292,26 @@ async def maybe_apply(
         return messages
 
     mode = get_mode()
-    if mode == "native":
-        return messages
     if mode == "auto":
         if mc is None:
             from core.model_registry import get_model_client
             mc = get_model_client(call_category, char_id=char_id)
-        if mc.reasoning_native:
+        mode = "native" if mc.reasoning_native else "monologue"
+    if mode == "native":
+        if not character_voice_enabled():
             return messages
+        from core.thinking_voice import LAYER, native_message
+        if any(m.get("_layer") == LAYER for m in messages):
+            return messages
+        try:
+            block = native_message(char_id)
+        except Exception:
+            logger.warning("[thinking] character voice unavailable; continuing without hint")
+            return messages
+        out = list(messages)
+        position = len(out) - 1 if out and out[-1].get("role") == "user" else len(out)
+        out.insert(position, block)
+        return out
     # mode == "monologue"，或 auto 落到 monologue 分支
 
     monologue = await _run_monologue_call(messages, char_id=char_id)

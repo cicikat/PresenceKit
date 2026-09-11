@@ -333,7 +333,7 @@ async def chat(
         mc = get_model_client(call_category, char_id=char_id, preset_name=preset_name)
 
     # Brief 32：monologue 路线在 prompt_style 转换前注入（作为普通 system 消息一并转换）；
-    # native 路线不改 messages，只影响下面的 extra_body。
+    # native 路线可追加角色心声文风提示；思考开关参数仍由下面的 extra_body 控制。
     messages = await thinking.maybe_apply(
         messages, call_category=call_category, char_id=char_id, is_proactive=is_proactive, mc=mc,
     )

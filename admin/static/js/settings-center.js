@@ -241,18 +241,37 @@ function conversationFields() { return [
   [t('settings_center.chat_mode',"聊天模式"),'/chat-mode','PUT',[['mode',t('settings_center.mode',"模式"),['chat','roleplay'],[t('settings_center.everyday_companionship',"日常陪伴"),t('settings_center.roleplay',"角色扮演")]]]],
   [t('settings_center.conversation_style',"对话风格"),'/chat-style','PUT',[['style',t('settings_center.style',"风格"),['chat','roleplay'],[t('settings_center.dialogue_focused',"对白为主"),t('settings_center.first_person_immersion',"第一人称沉浸")]]]],
   [t('settings_center.split_replies',"分条发送"),'/chat-multi-message','PUT',[['enabled',t('settings_center.multiple_message_bubbles',"多消息气泡"),'boolean']]],
-  [t('settings_center.reasoning',"思考"),'/settings/thinking','POST',[['enabled',t('settings_center.generate_reasoning',"生成思考"),'boolean'],['mode',t('settings_center.method',"方式"),['auto','native','monologue'],[t('settings_center.automatic',"自动"),t('settings_center.native_reasoning',"原生思考"),t('settings_center.prefixed_monologue',"前置独白")]],['apply_to_proactive',t('settings_center.apply_to_proactive_messages',"应用于主动消息"),'boolean'],['monologue_max_tokens',t('settings_center.monologue_token_budget',"独白预算"),'number',32,2000]]],
+  [t('settings_center.reasoning',"思考"),'/settings/thinking','POST',[['enabled',t('settings_center.generate_reasoning',"生成思考"),'boolean'],['character_voice','角色心声文风（通用提示引导）','boolean'],['mode',t('settings_center.method',"方式"),['auto','native','monologue'],[t('settings_center.automatic',"自动"),t('settings_center.native_reasoning',"原生思考"),t('settings_center.prefixed_monologue',"前置独白")]],['apply_to_proactive',t('settings_center.apply_to_proactive_messages',"应用于主动消息"),'boolean'],['monologue_max_tokens',t('settings_center.monologue_token_budget',"独白预算"),'number',32,2000]]],
   [t('settings_center.multi_step_tool_calls',"多步工具调用"),'/settings/tool-loop','POST',[['enabled',t('settings_center.enabled_by_default',"全局默认开启"),'boolean'],['max_steps',t('settings_center.maximum_steps',"最大步骤"),'number',1,8],['total_timeout_s',t('settings_center.total_timeout_seconds',"总超时（秒）"),'number',5,720],['nudge_hint',t('settings_center.continuation_hint',"继续执行提示"),'text']]],
 ]; }
 async function loadConversationSettings(){
   const root=document.getElementById('conversation-settings-fields');root.textContent=t('settings_center.loading',"读取中…");
   const results=await Promise.allSettled(conversationFields().map(s=>api('GET',s[1])));
-  root.innerHTML=conversationFields().map(([title,path,method,fields],i)=>{const result=results[i];if(result.status==='rejected')return `<section class="card"><h3>${title}</h3><p>${t('settings_center.could_not_load_refresh_to_retry',"读取失败，请刷新重试")}</p></section>`; const data=result.value;if(path==='/chat-multi-message')data.enabled=data.multi_message;return `<section class="card" id="conversation-form-${i}"><h3>${title}</h3>${fields.map(([key,label,type,a,b])=>`<label class="field">${label}${Array.isArray(type)?`<select data-field="${key}">${type.map((value,j)=>`<option value="${value}" ${data[key]===value?'selected':''}>${a[j]}</option>`).join('')}</select>`:`<input data-field="${key}" type="${type==='boolean'?'checkbox':type}" ${type==='boolean'?(data[key]?'checked':''):`value="${escapeHtml(String(data[key]??''))}"`} ${type==='number'?`min="${a}" max="${b}"`:''}>`}</label>`).join('')}<button class="btn btn-primary" data-action="saveConversationSection" data-action-args='[${i}]'>${t('settings_center.save',"保存")}</button><p role="status" data-save-status></p></section>`;}).join('');bindPageActions(root);loadOutputSegmentEnforce();loadContextConfig();loadLlmParams();
+  root.innerHTML=conversationFields().map(([title,path,method,fields],i)=>{const result=results[i];if(result.status==='rejected')return `<section class="card"><h3>${title}</h3><p>${t('settings_center.could_not_load_refresh_to_retry',"读取失败，请刷新重试")}</p></section>`; const data=result.value;if(path==='/chat-multi-message')data.enabled=data.multi_message;return `<section class="card" id="conversation-form-${i}"><h3>${title}</h3>${fields.map(([key,label,type,a,b])=>`<label class="field">${label}${Array.isArray(type)?`<select data-field="${key}">${type.map((value,j)=>`<option value="${value}" ${data[key]===value?'selected':''}>${a[j]}</option>`).join('')}</select>`:`<input data-field="${key}" type="${type==='boolean'?'checkbox':type}" ${type==='boolean'?(data[key]?'checked':''):`value="${escapeHtml(String(data[key]??''))}"`} ${type==='number'?`min="${a}" max="${b}"`:''}>`}</label>`).join('')}<button class="btn btn-primary" data-action="saveConversationSection" data-action-args='[${i}]'>${t('settings_center.save',"保存")}</button><p role="status" data-save-status></p></section>`;}).join('');bindPageActions(root); if(results[3].status==='fulfilled')showThinkingVoicePreview(results[3].value);loadOutputSegmentEnforce();loadContextConfig();loadLlmParams();
+}
+function showThinkingVoicePreview(data) {
+  const root = document.getElementById('conversation-form-3');
+  if (!root || !data?.voice_preview) return;
+  root.querySelector('[data-voice-preview]')?.remove();
+  const voice = data.voice_preview;
+  const box = document.createElement('div');
+  box.dataset.voicePreview = 'true';
+  const status = document.createElement('p');
+  status.textContent = `心声引导：${voice.effective ? '已启用' : '未启用'} · ${voice.blocking_reason || '随主生成发送'}。风格约 24 小时轮换；情绪沿用现有平滑状态。原生摘要是否遵从由模型决定，通用提示可能影响回复措辞。`;
+  const details = document.createElement('details');
+  const heading = document.createElement('summary');
+  heading.textContent = '查看当前拼接提示';
+  const prompt = document.createElement('pre');
+  prompt.style.whiteSpace = 'pre-wrap';
+  prompt.textContent = voice.prompt || '';
+  details.append(heading, prompt);
+  box.append(status, details);
+  root.append(box);
 }
 async function saveConversationSection(i){
   const [,path,method]=conversationFields()[i],root=document.getElementById(`conversation-form-${i}`),body={};
   const inputs=[...root.querySelectorAll('[data-field]')];if(inputs.some(input=>!input.reportValidity()))return;
   inputs.forEach(input=>body[input.dataset.field]=input.type==='checkbox'?input.checked:input.type==='number'?Number(input.value):input.value);
   const button=root.querySelector('button');button.disabled=true;
-  try{await api(method,path,body);root.querySelector('[data-save-status]').textContent=t('settings_center.saved_applies_to_future_requests',"已保存，后续请求生效");}catch(error){root.querySelector('[data-save-status]').textContent=t('settings_center.save_error','保存失败：{error}',{error:error.message});}finally{button.disabled=false;}
+  try{await api(method,path,body);if(path==='/settings/thinking')showThinkingVoicePreview(await api('GET',path));root.querySelector('[data-save-status]').textContent=t('settings_center.saved_applies_to_future_requests',"已保存，后续请求生效");}catch(error){root.querySelector('[data-save-status]').textContent=t('settings_center.save_error','保存失败：{error}',{error:error.message});}finally{button.disabled=false;}
 }
