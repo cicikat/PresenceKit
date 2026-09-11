@@ -607,3 +607,11 @@ profile 可读取已关联的 Reality owner 回合，返回 available/entries（
 原 admin-only 全局归档接口不变。无新增生成开关，不修改正文、WS、poll、ack 或 TTL。
 `roadmap`：客户端按气泡展示和真机验收、QQ/主动消息/Dream/Stage 回合关联。
 前端工单见 cc-tasks/244-frontend-reasoning-handoff.md；按用户要求未跨仓修改。
+## IME v2 接收预备（2026-09-11）
+
+`current`：POST `/v1/ime/drafts`（sensor.write）按设备 token label + id + revision
+事务覆盖完整草稿；默认 ime_ingest.enabled=false，通过 feature-flags 的 ime_ingest
+控制。admin-only GET `/observability/ime-drafts` 提供三小时内原始字段与 effective 状态。
+独立 inbox 不接入 LLM/记忆/任务/广播；原 sensor、聊天、WS、ack、TTL 不变。
+`observe`：尚未启用真实 IME 传输；私网 HTTPS、证书与设备配对需部署验证。
+只读核对输入法真实 v2 代码，未跨仓修改。详细协议与限制见 docs/ime-ingest.md。

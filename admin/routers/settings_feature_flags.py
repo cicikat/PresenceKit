@@ -16,6 +16,7 @@ router = APIRouter()
 CONFIG_FILE = Path("config.yaml")
 
 FLAGS = {
+    "ime_ingest": ("ime_ingest", "enabled", "IME 草稿接收（仅存储）"),
     "qq":   ("qq",   "enabled", "QQ 通道"),
     "mail": ("mail", "enabled", "邮件通道"),
     "visual_perception": ("visual_perception", "enabled", "视觉感知"),

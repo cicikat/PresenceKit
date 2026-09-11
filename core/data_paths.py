@@ -544,6 +544,9 @@ class DataPaths:
         """Private archive of reasoning explicitly returned by model APIs."""
         return self._p("runtime", "observability", "llm_reasoning.sqlite3")
 
+    def ime_drafts_db(self) -> Path:
+        return self._p("runtime", "integrations", "ime_drafts.sqlite3")
+
     def mail_execution_log(self) -> Path:
         """Sanitized forensic outcomes for scheduler-driven character letters."""
         return self._p("runtime", "observability", "mail_executions.jsonl")

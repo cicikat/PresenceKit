@@ -89,6 +89,8 @@ app.include_router(scheduler.router,      prefix="",           tags=["调度器"
 app.include_router(watch.router,          prefix="",           tags=["Watch"])
 app.include_router(jailbreak_entries.router, prefix="",        tags=["破限条目"])
 app.include_router(sensor.router, prefix="", tags=["手机传感器"])
+from admin.routers import ime_drafts
+app.include_router(ime_drafts.router, tags=["IME 接收"])
 app.include_router(period.router, prefix="", tags=["经期输入"])
 app.include_router(garden.router,   prefix="/garden",   tags=["花园"])
 app.include_router(mood.router,     prefix="/mood",     tags=["情绪状态"])
