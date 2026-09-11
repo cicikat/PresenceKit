@@ -311,10 +311,15 @@ async def maybe_apply(
         out = list(messages)
         position = len(out) - 1 if out and out[-1].get("role") == "user" else len(out)
         out.insert(position, block)
+        from core.observe.prompt_capture import capture_injected_messages
+        capture_injected_messages(messages, out)
         return out
     # mode == "monologue"，或 auto 落到 monologue 分支
 
     monologue = await _run_monologue_call(messages, char_id=char_id)
     if not monologue:
         return messages
-    return _inject_monologue_message(messages, monologue)
+    out = _inject_monologue_message(messages, monologue)
+    from core.observe.prompt_capture import capture_injected_messages
+    capture_injected_messages(messages, out)
+    return out

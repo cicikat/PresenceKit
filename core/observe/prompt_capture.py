@@ -51,9 +51,10 @@ PRUNE_TARGET = 18000
 
 # per-uid ring:  uid → deque of snapshot dicts
 _rings: dict[str, deque] = {}
+_current_capture: ContextVar[Any] = ContextVar("_current_prompt_capture", default=None)
 
 
-def capture(uid: str, messages: list[dict], meta: dict) -> None:
+def capture(uid: str, messages: list[dict], meta: dict, *, _replace: dict | None = None) -> None:
     """Record one build() result into the ring buffer for uid."""
     if uid not in _rings:
         _rings[uid] = deque(maxlen=RING_SIZE)
@@ -127,7 +128,27 @@ def capture(uid: str, messages: list[dict], meta: dict) -> None:
         "layers": layers,
         "llm_output": None,  # filled by update_llm_output after run_llm
     }
-    _rings[uid].append(snap)
+    if _replace is None:
+        _rings[uid].append(snap)
+    else:
+        snap["captured_at"] = _replace["captured_at"]
+        snap["origin"] = _replace["origin"]
+        snap["llm_output"] = _replace["llm_output"]
+        _replace.update(snap)
+        snap = _replace
+    _current_capture.set((uid, messages, dict(meta), snap))
+
+
+def capture_injected_messages(before: list[dict], after: list[dict]) -> None:
+    """Refresh only the snapshot belonging to this exact prompt, never another turn."""
+    current = _current_capture.get()
+    if current is None or current[1] is not before:
+        return
+    uid, _, meta, snap = current
+    meta = {k: v for k, v in meta.items()
+            if k not in {"token_estimate", "char_estimate", "estimated_tokens"}}
+    meta["layers_activated"] = [m.get("_layer", "unknown") for m in after]
+    capture(uid, after, meta, _replace=snap)
 
 
 def update_llm_output(uid: str, reply: str) -> None:
