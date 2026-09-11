@@ -418,3 +418,9 @@ profile 可读取已关联的 Reality owner 回合，返回 available/entries（
 原 admin-only 全局归档接口不变。无新增生成开关，不修改正文、WS、poll、ack 或 TTL。
 `roadmap`：客户端按气泡展示和真机验收、QQ/主动消息/Dream/Stage 回合关联。
 前端工单见 cc-tasks/244-frontend-reasoning-handoff.md；按用户要求未跨仓修改。
+
+## Model probe diagnostics (2026-09-11)
+
+Admin-only preset test now uses 256 output tokens, a 30-second total budget and zero SDK retries. It returns category, safe error/hint, HTTP status, error type, declared protocol and request path. Provider bodies and credentials are never echoed; UI uses textContent. Empty visible output is a warning rather than evidence of working conversation. Network/TLS/timeout, authentication, quota, endpoint/model, rejected parameters and response schema are distinguished.
+
+Validation: 69 related tests passed; cache-cleared Chromium Model Routing test rendered quota/protocol/status guidance. Live bounded probes succeeded for the configured Grok Responses and Gemini Chat Completions presets; another relay returned HTTP 403 INSUFFICIENT_BALANCE. No protocol/routing setting was changed. This is unrelated to desktop/device WS protocols. Native clients continue to open the backend management UI; no new local settings or secrets.

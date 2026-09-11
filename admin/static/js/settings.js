@@ -706,12 +706,12 @@ async function testPreset(button) {
   try {
     const r = await api('POST', `/model-presets/presets/${encodeURIComponent(name)}/test`);
     if (r.ok) {
-      cell.innerHTML = `<span style="color:var(--success)">✓ 成功</span> 延迟 ${r.latency_ms}ms，model=${r.model}${r.reply_preview ? '，reply="' + r.reply_preview + '"' : ''}`;
+      cell.textContent = `✓ 连接成功 · ${r.latency_ms}ms · ${r.api_protocol || ''} ${r.request_path || ''} · model=${r.model}${r.reply_preview ? ' · ' + r.reply_preview : ''}${r.warning ? ' · ' + r.warning : ''}`;
     } else {
-      cell.innerHTML = `<span style="color:var(--danger)">✗ 失败</span>（${r.latency_ms}ms）：${r.error || '未知错误'}`;
+      cell.textContent = `✗ ${r.error || '测试失败'} ${r.hint || ''} · ${r.api_protocol || ''} ${r.request_path || ''}${r.http_status ? ' · HTTP ' + r.http_status : ''} · ${r.error_type || ''} · ${r.latency_ms}ms`;
     }
   } catch (e) {
-    cell.innerHTML = `<span style="color:var(--danger)">✗ 请求失败</span>：${e.message}`;
+    cell.textContent = `✗ 管理面请求失败：${e.message}`;
   }
 }
 

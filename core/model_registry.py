@@ -397,7 +397,7 @@ def build_client_for_preset(name: str) -> ModelClient:
     应自行关闭 `.client`（AsyncOpenAI），避免 httpx 连接泄漏。preset 不存在时
     抛 ValueError（与 `_build_model_client` 一致）。
     """
-    return _build_model_client(name)
+    return _build_model_client(name, request_policy={"timeout_s": 30, "max_retries": 0})
 
 
 def get_model_client(

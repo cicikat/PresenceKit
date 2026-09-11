@@ -955,11 +955,13 @@ async def upsert_routing_profile(name: str, body: dict[str, str], auth=Depends(r
 # /model-presets/presets/{name}/test — 连通性测试（Phase 4）
 # ---------------------------------------------------------------------------
 
-@router.post("/model-presets/presets/{name}/test", summary="连通性测试：发一条 1 token ping")
+@router.post("/model-presets/presets/{name}/test", summary="模型连通性与协议诊断")
 async def test_preset_connectivity(name: str, auth=Depends(require_scopes("admin"))):
-    """用该 preset 实际发一条 max_tokens=1 的请求，返回延迟/错误，不写入任何缓存。"""
+    """Bounded probe; report protocol failures without echoing provider bodies."""
     from core.model_registry import build_client_for_preset
     import time as _time
+    import asyncio
+    from core.model_diagnostics import diagnose, request_metadata
 
     try:
         client = build_client_for_preset(name)
@@ -969,13 +971,13 @@ async def test_preset_connectivity(name: str, auth=Depends(require_scopes("admin
     t0 = _time.monotonic()
     try:
         from core.llm_protocol import create as create_protocol_response
-        resp = await create_protocol_response(
+        resp = await asyncio.wait_for(create_protocol_response(
             client,
             [{"role": "user", "content": "ping"}],
             tools=None,
             tool_choice=None,
-            gen_kwargs={"max_tokens": 1, "timeout": 15.0},
-        )
+            gen_kwargs={"max_tokens": 256, "timeout": 30.0},
+        ), timeout=30.0)
         latency_ms = round((_time.monotonic() - t0) * 1000, 1)
         reply_preview = ""
         try:
@@ -985,12 +987,14 @@ async def test_preset_connectivity(name: str, auth=Depends(require_scopes("admin
         return {
             "ok": True, "name": name, "model": client.model,
             "latency_ms": latency_ms, "reply_preview": reply_preview,
+            "warning": "连接成功，但没有返回可见文字；可能 token 预算被推理消耗，尚不能确认正常对话可用。" if not reply_preview else "",
+            **request_metadata(client),
         }
     except Exception as e:
         latency_ms = round((_time.monotonic() - t0) * 1000, 1)
         return {
             "ok": False, "name": name, "model": client.model,
-            "latency_ms": latency_ms, "error": str(e)[:300],
+            "latency_ms": latency_ms, **diagnose(e), **request_metadata(client),
         }
     finally:
         try:
