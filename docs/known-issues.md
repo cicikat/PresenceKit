@@ -1,5 +1,15 @@
 # docs/known-issues.md — 已知问题与技术债
 
+## Relay SDK User-Agent compatibility (2026-09-12)
+
+- current: registry-built OpenAI clients identify as `PresenceKit/1.0`; 82 targeted tests pass.
+- observe: a live relay Responses probe no longer returned immediate HTTP 403 after the
+  User-Agent change, but exceeded the 30-second budget. Generation remains unverified;
+  neither a specific WAF rule nor a bulk-usage classification has been established.
+- open: running backend must restart to load the change; repeat admin connectivity test
+  and verify actual chat/device delivery after upstream availability is established.
+- Scope and three-surface review: [model-presets.md](model-presets.md#preset-http-client-identification-2026-09-12).
+
 ## Prompt 统一审计（Brief 247–249，2026-09-11）
 
 - current：248/249 已删除 Reality 全文代词替换、修复 mood/perception 槽位条件断链与 Path C 静态工具规则冲突，删除两处无生产消费者的代码及专用测试。相关回归见工单验收记录。

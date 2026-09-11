@@ -1,5 +1,25 @@
 # docs/model-presets.md — 多模型 Preset 系统
 
+## Preset HTTP client identification (2026-09-12)
+
+Registry-built OpenAI SDK clients send `User-Agent: PresenceKit/1.0` for both
+Chat Completions and Responses, including isolated admin probes, legacy presets,
+streaming and tool calls. Native Anthropic, independent vision and model discovery
+transports are outside this change. Authentication, protocol selection, proxy,
+timeouts and retries retain their existing behavior. No new setting or storage is added.
+
+82 targeted preset/CRUD/diagnostic/protocol tests passed, including real SDK requests
+through MockTransport that verify the wire User-Agent, authorization and endpoint.
+An isolated live Responses probe with the configured relay and unchanged credentials
+stopped returning immediate 403 but timed out at 30 seconds. This supports a client-header
+compatibility issue, not proof of a specific WAF rule or successful model generation.
+Restart the running backend to load the code; config reload alone does not load Python edits.
+
+Control-surface review: admin retains the existing preset test and diagnostics; desktop
+continues selecting routing profiles, and mobile continues using backend chat. No client
+setting, REST/WS/IPC field, scope, queue, ack or TTL changes are required. Real chat and
+device delivery remain observe until the upstream responds successfully.
+
 ## IME 判定路由
 
 `ime_judge` 独立用途可在模型路由页选择；回退 sensor_judge → intent → chat，使用 sensor_judge 的轻量请求策略。详见 ime-ingest.md。

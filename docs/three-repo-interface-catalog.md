@@ -1,5 +1,15 @@
 # 三仓接口总览与闭环审计
 
+## Relay SDK User-Agent compatibility (2026-09-12)
+
+current: backend registry-built Chat Completions/Responses clients send `PresenceKit/1.0`.
+Admin uses the existing preset test; desktop profile selection and mobile backend chat
+need no new settings. Authentication, routing, REST/WS/IPC fields, queues, ack and TTL
+are unchanged. No new persistent state or observation endpoint is introduced.
+82 backend regressions passed; real relay probe changed from immediate 403 to timeout.
+open: restart backend to load code. observe: successful generation and native client
+delivery remain unverified. See [model-presets.md](model-presets.md#preset-http-client-identification-2026-09-12).
+
 ## Prompt 统一审计（Brief 247–249，2026-09-11）
 
 - current：248/249 已删除 Reality 全文代词替换、修复 mood/perception 槽位条件断链与 Path C 静态工具规则冲突，删除两处无生产消费者的代码及专用测试。相关回归见工单验收记录。

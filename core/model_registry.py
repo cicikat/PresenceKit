@@ -370,6 +370,9 @@ def _build_model_client(preset_name: str, *, request_policy: dict[str, float | i
             base_url=base_url or None,
             http_client=http_client,
             max_retries=max_retries,
+            # Identify the application consistently for relay compatibility.
+            # Some gateways reject the SDK's generic Python User-Agent.
+            default_headers={"User-Agent": "PresenceKit/1.0"},
         )
     logger.info(
         "[model_registry] built ModelClient '%s' kind=%s model=%s api_protocol=%s proxy=%s",

@@ -17,6 +17,42 @@ import pytest
 TEST_API_KEY = "test-only-placeholder"
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("protocol", ["chat_completions", "responses"])
+async def test_preset_wire_headers_preserve_auth_and_identify_application(monkeypatch, protocol):
+    import core.model_registry as registry
+
+    requests = []
+
+    def handle(request):
+        requests.append(request)
+        return httpx.Response(200, json={"id": "test-response", "output": [], "choices": []})
+
+    monkeypatch.setattr(registry, "_get_preset_config", lambda: {
+        "defaults": {}, "presets": {"test": {
+            "api_protocol": protocol, "base_url": "https://relay.example/v1",
+            "api_key": TEST_API_KEY, "model": "test-model",
+        }},
+    })
+    monkeypatch.setattr(registry, "_get_proxy_url", lambda: None)
+    monkeypatch.setattr(registry, "_make_http_client", lambda *a, **kw:
+                        httpx.AsyncClient(transport=httpx.MockTransport(handle)))
+    mc = registry.build_client_for_preset("test")
+    try:
+        if protocol == "responses":
+            await mc.client.responses.create(model=mc.model, input="ping")
+        else:
+            await mc.client.chat.completions.create(
+                model=mc.model, messages=[{"role": "user", "content": "ping"}])
+        assert len(requests) == 1
+        assert requests[0].headers["user-agent"] == "PresenceKit/1.0"
+        assert requests[0].headers["authorization"] == f"Bearer {TEST_API_KEY}"
+        assert requests[0].url.path == (
+            "/v1/responses" if protocol == "responses" else "/v1/chat/completions")
+    finally:
+        await mc.client.close()
+
+
 # ===========================================================================
 # 1. Param merge + whitelist
 # ===========================================================================
