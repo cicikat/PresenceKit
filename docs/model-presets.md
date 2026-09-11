@@ -409,3 +409,12 @@ api_protocol、anthropic_auth_mode；use_base_model 可引用基础模型连接�
 管理面是唯一编辑入口，双端仍消费既有 routing profile，无需新增客户端设置。
 本地 36 项回归通过，真实静态资源浏览器清缓存刷新验证了选择与手填降级；
 远端目录响应在浏览器测试中模拟，真实中转可用性属于 observe。
+## 聊天回合思考读取（2026-09-11）
+
+`current`：GET `/chat/turns/{turn_id}/reasoning` 要求 memory.read，标准 desktop/mobile
+profile 可读取已关联的 Reality owner 回合，返回 available/entries（含 parts）。
+桌面/手机共享 owner 入口在生成期间关联调用，工具循环子任务同样关联，post-process
+前停止采集关联，防止后台思考串入；关联失败不影响回复。旧归档不推测关联。
+原 admin-only 全局归档接口不变。无新增生成开关，不修改正文、WS、poll、ack 或 TTL。
+`roadmap`：客户端按气泡展示和真机验收、QQ/主动消息/Dream/Stage 回合关联。
+前端工单见 cc-tasks/244-frontend-reasoning-handoff.md；按用户要求未跨仓修改。

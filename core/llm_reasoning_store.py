@@ -10,6 +10,8 @@ import time
 import threading
 import uuid
 from contextlib import closing
+from contextvars import ContextVar
+from functools import wraps
 
 from core.sandbox import get_paths
 
@@ -17,6 +19,67 @@ logger = logging.getLogger(__name__)
 _INLINE = re.compile(r"<(think|thinking)>(.*?)(?:</\1>|$)", re.I | re.S)
 _META = "seq, call_id, created_at, preset, model, protocol, status, reasoning_chars"
 _DB_LOCK = threading.RLock()
+_TURN_CAPTURE = ContextVar("reasoning_turn_capture", default=None)
+
+
+def associate_owner_turn(function):
+    """Correlate completed HTTP owner turns without inheriting background calls."""
+    @wraps(function)
+    async def wrapped(*args, **kwargs):
+        channel = args[1] if len(args) > 1 else kwargs.get("provenance_channel")
+        if channel not in {"desktop", "mobile"} or kwargs.get("turn_source", "user_chat") != "user_chat":
+            return await function(*args, **kwargs)
+        scope = {"active": True, "calls": []}
+        token = _TURN_CAPTURE.set(scope)
+        try:
+            result = await function(*args, **kwargs)
+            turn_id = result.get("turn_id") if isinstance(result, dict) else None
+            if turn_id and scope["calls"]:
+                try:
+                    await asyncio.to_thread(_bind_turn, scope["calls"], turn_id)
+                except Exception as exc:
+                    logger.warning("[reasoning_archive] bind_failed error_type=%s", type(exc).__name__)
+            return result
+        finally:
+            scope["active"] = False
+            _TURN_CAPTURE.reset(token)
+    return wrapped
+
+
+def finish_turn_capture():
+    """Stop correlation before post-processing can spawn unrelated LLM tasks."""
+    scope = _TURN_CAPTURE.get()
+    if scope is not None:
+        scope["active"] = False
+
+
+def _bind_turn(calls, turn_id):
+    with _DB_LOCK:
+        for path in {path for path, _ in calls}:
+            if not path.exists():
+                continue
+            with closing(sqlite3.connect(path, timeout=0.25)) as db, db:
+                db.executemany("UPDATE reasoning SET turn_id=? WHERE call_id=?",
+                               [(turn_id, call_id) for p, call_id in calls if p == path])
+
+
+def query_turn(turn_id: str):
+    """Only linked owner calls; historical/unlinked global calls stay admin-only."""
+    with _DB_LOCK:
+        path = get_paths().llm_reasoning_db()
+        if not path.exists():
+            return []
+        with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True, timeout=0.25)) as db:
+            db.row_factory = sqlite3.Row
+            columns = {row[1] for row in db.execute("PRAGMA table_info(reasoning)")}
+            if "turn_id" not in columns:
+                return []
+            result = []
+            for row in db.execute(f"SELECT {_META}, parts FROM reasoning WHERE turn_id=? ORDER BY seq", (turn_id,)):
+                entry = dict(row)
+                entry["parts"] = json.loads(entry["parts"])
+                result.append(entry)
+            return result
 
 
 def _field(obj, name, default=None):
@@ -83,6 +146,9 @@ class Capture:
                 self.add("inline_" + match.group(1).lower(), match.group(2))
             if self.parts:
                 await asyncio.to_thread(_append, self.paths, self)
+                scope = _TURN_CAPTURE.get()
+                if scope is not None and scope["active"]:
+                    scope["calls"].append((self.paths.llm_reasoning_db(), self.call_id))
         except Exception as exc:
             # Never put response contents or filesystem paths in ordinary logs.
             logger.warning("[reasoning_archive] write_failed error_type=%s", type(exc).__name__)
@@ -103,6 +169,9 @@ def _append_locked(path, capture):
             created_at REAL NOT NULL, preset TEXT NOT NULL, model TEXT NOT NULL,
             protocol TEXT NOT NULL, status TEXT NOT NULL, reasoning_chars INTEGER NOT NULL,
             parts TEXT NOT NULL)""")
+        if "turn_id" not in {row[1] for row in db.execute("PRAGMA table_info(reasoning)")}:
+            db.execute("ALTER TABLE reasoning ADD COLUMN turn_id TEXT NOT NULL DEFAULT ''")
+        db.execute("CREATE INDEX IF NOT EXISTS reasoning_turn ON reasoning(turn_id)")
         db.execute("""INSERT INTO reasoning
             (call_id, created_at, preset, model, protocol, status, reasoning_chars, parts)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)""", (

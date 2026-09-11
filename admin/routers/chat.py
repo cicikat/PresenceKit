@@ -15,6 +15,7 @@ from pathlib import Path
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Request, UploadFile
 
 from admin.auth import require_scopes
+from core.llm_reasoning_store import associate_owner_turn
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -29,6 +30,7 @@ _FOURTH_WALL_NOTE = (
 )
 
 
+@associate_owner_turn
 async def run_owner_chat_turn(
     message: str,
     provenance_channel: str,
@@ -334,6 +336,8 @@ async def run_owner_chat_turn(
                 else:
                     reply = await pipeline.run_llm(messages)
             _t_llm = time.monotonic() - _t0
+        from core.llm_reasoning_store import finish_turn_capture
+        finish_turn_capture()
         if not reply or not reply.strip():
             logger.warning(
                 "[owner_chat] empty model reply channel=%s loop_active=%s",

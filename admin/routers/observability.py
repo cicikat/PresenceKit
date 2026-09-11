@@ -7,6 +7,19 @@ from admin.auth import require_scopes
 router = APIRouter()
 
 
+@router.get("/chat/turns/{turn_id}/reasoning", summary="按聊天回合读取模型已返回的思考")
+async def chat_turn_reasoning(turn_id: str, _auth=Depends(require_scopes("memory.read"))):
+    import asyncio
+    from core.llm_reasoning_store import query_turn
+    if not turn_id.strip() or len(turn_id) > 128:
+        raise HTTPException(422, "无效的回合编号")
+    try:
+        entries = await asyncio.to_thread(query_turn, turn_id)
+    except Exception:
+        raise HTTPException(503, "思考存储暂时不可读取") from None
+    return {"turn_id": turn_id, "entries": entries, "available": bool(entries)}
+
+
 @router.get("/observability/llm-reasoning", summary="列出已保存的模型思考（默认不返回正文）")
 async def llm_reasoning_list(
     limit: int = Query(50, ge=1, le=100),

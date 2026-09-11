@@ -519,3 +519,13 @@ the desktop WebSocket v0.1 hello or introduce capability negotiation.
 `/mobile/chat` (including mobile upload replies) and mobile poll queue items may carry `display_text`. The original `reply`/`content` remains canonical plain text for old clients, notifications, voice, quoting and deduplication. The optional copy retains only `<hl>`, `<big>`, `<sm>` tags after normal reply cleanup. HTTP and durable mirror use the same outgoing paragraph layout. The existing poll endpoint exposes the queue field read-only under chat scope; no separate store is introduced. Ack, IDs, TTL, locks and relay signal payloads are unchanged.
 
 Flutter validates that parsing this copy reproduces canonical text, otherwise falls back to canonical. It matches desktop inline rendering: hl uses the theme red color (danger palette slot) and weight 600, big 1.18x, sm .85x and .8 opacity. Parsing precedes animation, styles survive paragraph splitting and text selection. This covers reality HTTP replies, uploads and turn-sink mobile delivery; old plain-text chat-log history cannot recover removed tags. Dream/group formatting outside this reality contract remains roadmap.
+
+## 聊天回合思考读取（2026-09-11）
+
+`current`：GET `/chat/turns/{turn_id}/reasoning` 要求 memory.read，标准 desktop/mobile
+profile 可读取已关联的 Reality owner 回合，返回 available/entries（含 parts）。
+桌面/手机共享 owner 入口在生成期间关联调用，工具循环子任务同样关联，post-process
+前停止采集关联，防止后台思考串入；关联失败不影响回复。旧归档不推测关联。
+原 admin-only 全局归档接口不变。无新增生成开关，不修改正文、WS、poll、ack 或 TTL。
+`roadmap`：客户端按气泡展示和真机验收、QQ/主动消息/Dream/Stage 回合关联。
+前端工单见 cc-tasks/244-frontend-reasoning-handoff.md；按用户要求未跨仓修改。

@@ -396,3 +396,13 @@ three-repo interface catalog before client work begins.
   `docs/three-repo-interface-catalog.md` 的 Brief 242 条目。
 - `open`（既有）：`tests/test_admin_tools_mcp_ux.py` 的工具说明覆盖检查发现 `reread_image`
   缺中英文语义说明。此次未修改该工具或放宽断言；需独立补工具文案。
+
+## 聊天回合思考读取（2026-09-11）
+
+`current`：GET `/chat/turns/{turn_id}/reasoning` 要求 memory.read，标准 desktop/mobile
+profile 可读取已关联的 Reality owner 回合，返回 available/entries（含 parts）。
+桌面/手机共享 owner 入口在生成期间关联调用，工具循环子任务同样关联，post-process
+前停止采集关联，防止后台思考串入；关联失败不影响回复。旧归档不推测关联。
+原 admin-only 全局归档接口不变。无新增生成开关，不修改正文、WS、poll、ack 或 TTL。
+`roadmap`：客户端按气泡展示和真机验收、QQ/主动消息/Dream/Stage 回合关联。
+前端工单见 cc-tasks/244-frontend-reasoning-handoff.md；按用户要求未跨仓修改。
