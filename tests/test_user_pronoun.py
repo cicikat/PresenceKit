@@ -237,3 +237,21 @@ class TestEpisodicFormatForPrompt:
         from core.memory.episodic_memory import format_for_prompt
         result = format_for_prompt([], char_name="叶瑄", user_pronoun="他")
         assert result == ""
+
+
+@pytest.mark.asyncio
+async def test_admin_pronoun_round_trip_and_validation(monkeypatch):
+    from admin.routers import users
+    from core.memory import user_facts
+    from fastapi import HTTPException
+    facts = {}
+    monkeypatch.setattr(user_facts, "load_user_facts", lambda uid: facts.copy())
+    monkeypatch.setattr(user_facts, "save_user_facts", lambda uid, value: facts.update(value) or True)
+    assert (await users.get_user_pronoun("fixture", auth=None))["pronoun"] == "她"
+    for pronoun in ("他", "祂", "TA", "它", "她"):
+        await users.set_user_pronoun("fixture", users._PronounBody(pronoun=pronoun), auth=None)
+        assert (await users.get_user_pronoun("fixture", auth=None))["pronoun"] == pronoun
+    with pytest.raises(HTTPException) as exc:
+        await users.set_user_pronoun("fixture", users._PronounBody(pronoun="invalid"), auth=None)
+    assert exc.value.status_code == 422
+    assert facts["pronoun"] == "她"

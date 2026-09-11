@@ -105,7 +105,7 @@ def preview(char_id: str | None = None) -> dict:
 def native_message(char_id: str | None = None) -> dict:
     voice = preview(char_id)
     return {"role": "system", "_layer": LAYER, "content": (
-        "【角色心声的表达约定】\n" + voice["prompt"] + "\n"
+        "【你们约定的思维链thinking输出方式*特调】\n" + voice["prompt"] + "\n"
         "这只约定角色心声的文风：若接口提供可见的思考摘要，尽量沿用这份声音；"
         "不要求公开内部推理，不强制生成思考，不在回复正文里补写心声、分析过程或思考标签。"
         "正常对话和工具调用仍按原有要求进行。"

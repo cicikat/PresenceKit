@@ -61,10 +61,10 @@ ALLOWED_FIELDS: frozenset[str] = frozenset({
     "known_projects",
     "writing_style_preferences",
     "tool_usage_preferences",
-    "pronoun",   # 用于记忆渲染：她/他/TA/它，跨角色客观属性
+    "pronoun",   # 用于记忆渲染：她/他/祂/TA/它，跨角色客观属性
 })
 
-_VALID_PRONOUNS: frozenset[str] = frozenset({"她", "他", "TA", "它"})
+_VALID_PRONOUNS: frozenset[str] = frozenset({"她", "他", "祂", "TA", "它"})
 
 # Brief 89: cap on how many global_facts entries a single fixation/salvage run may persist
 _MAX_GLOBAL_FACTS_PER_RUN = 3
@@ -183,7 +183,7 @@ def update_user_facts(uid: str, patch: dict) -> tuple[dict, list[str]]:
 
 
 def get_user_pronoun(uid: str) -> str:
-    """Return the user's preferred third-person pronoun (她/他/TA/它).
+    """Return the user's preferred third-person pronoun (她/他/祂/TA/它).
 
     Defaults to '她' when unset or invalid.
     """

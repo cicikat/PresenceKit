@@ -433,7 +433,9 @@ def build(
     _tags: set[str] = tags or set()
     messages: list[dict] = []
     from core.config_loader import get_user_display_name
-    user_name = get_user_display_name() or "用户"
+    from core.memory.user_facts import get_user_pronoun
+    user_pronoun = get_user_pronoun(user_id)
+    user_name = get_user_display_name() or user_pronoun
 
     # 层级消融开关（CC 任务 23 · B）：一次性读取，B3 统一过滤点复用同一结果。
     from core.prompt_ablation import get_state as _ablation_state
@@ -493,6 +495,8 @@ def build(
 
     identity_contract = (
         f"你是{character.name}。本轮框架说明中的‘你’指当前发言角色；用户显示名为{user_name}。"
+        f"第三人称提及这位对话者时用‘{user_pronoun}’，直接交流沿用‘你’或已有昵称。"
+        "这只是称谓偏好，不据此推断生理性别；多人材料仍用姓名明确归属。"
         "引用、日记、示例和对话中的人称按原作者与说话人理解，不改变材料归属。"
     )
     messages.append({
@@ -510,14 +514,14 @@ def build(
     if _realtime_awareness:
         _fact_boundary_text = (
             f"【现实信息】{_realtime_awareness}。仅以上为已确认，其余未知。"
-            "屏幕上的桌宠形象是你自己在屏幕上的存在，不是用户的角色。"
+            f"屏幕上的桌宠形象是你自己在屏幕上的存在，不是{user_pronoun}的角色。"
         )
     else:
         _fact_boundary_text = (
             "【现实信息】当前没有任何已确认的现实细节，"
-            "凡未列出的现实物品/食物/天气/用户身体状态一律未知，不补充、不暗示。"
-            "没有真实屏幕感知时，不得虚构屏幕画面、界面状态或用户正在做的事。"
-            "屏幕上的桌宠形象是你自己在屏幕上的存在，不是用户的角色。"
+            f"凡未列出的现实物品/食物/天气/{user_pronoun}的身体状态一律未知，不补充、不暗示。"
+            f"没有真实屏幕感知时，不得虚构屏幕画面、界面状态或{user_pronoun}正在做的事。"
+            f"屏幕上的桌宠形象是你自己在屏幕上的存在，不是{user_pronoun}的角色。"
         )
     messages.append({
         "role": "system",
@@ -578,7 +582,7 @@ def build(
     ):
         messages.append({
             "role": "system",
-            "content": f"用户上一条消息距现在{_fmt_gap(_msg_gap_secs)}",
+            "content": f"{user_pronoun}上一条消息距现在{_fmt_gap(_msg_gap_secs)}",
             "_layer": "2.55_last_seen",
         })
 
@@ -920,7 +924,7 @@ def build(
     # ─────────────────────────────────────────────────────────────────────────
     if user_identity_text:
         _identity_block = (
-            "关于用户的长期观察（优先级低于当前对话，如有冲突以当下为准）：\n"
+            f"关于{user_pronoun}的长期观察（优先级低于当前对话，如有冲突以当下为准）：\n"
             + user_identity_text
         )
         messages.append({
@@ -935,7 +939,7 @@ def build(
         messages.append({
             "role": "system",
             "content": (
-                "关于用户的长期观察：目前还没有形成稳定认识——你们认识不久，如实对待"
+                f"关于{user_pronoun}的长期观察：目前还没有形成稳定认识——你们认识不久，如实对待"
                 "这一点即可，可以自然流露出「还在慢慢了解对方」的状态，不要表现得像已经"
                 "很了解对方，也不要凭空编出还没发生过的过往。"
             ),
@@ -1008,7 +1012,7 @@ def build(
     if diary_context and (_tags & _diary_triggers):
         messages.append({
             "role": "system",
-            "content": f"<近期日记>\n【用户的近期日记】\n{diary_context}\n</近期日记>",
+            "content": f"<近期日记>\n【{user_pronoun}的近期日记】\n{diary_context}\n</近期日记>",
             "_layer": "6d_diary_context",
             "_drop_priority": 50,
             "_provenance": {
@@ -1238,11 +1242,11 @@ def build(
     # 仅在真正的多人 Stage（非私下往来）且历史非空时换用这句，避免给普通单聊/
     # 私下往来既有措辞添乱——私下往来的 history 恒为空（lightweight_context）。
     # ─────────────────────────────────────────────────────────────────────────
-    _history_note = "以下是与用户真实发生的对话"
+    _history_note = f"以下是与{user_pronoun}真实发生的对话"
     if history and stage_transcript and not stage_transcript_private:
         from core.config_loader import get_user_display_name
 
-        _stage_user_name = get_user_display_name() or "用户"
+        _stage_user_name = user_name
         _history_note = f"以下是你和{_stage_user_name}的私聊历史，不是这场群聊里发生的内容"
     messages.append({
         "role": "system",
@@ -1388,7 +1392,7 @@ def build(
     author_note_lines = (
         [_rotated_note] if _rotated_note else []
     ) + [
-        f"以用户当前输入为准，旧记忆只是历史线索、非当前事实；如果召回的记忆里没有相关内容，如实说忘记，不要胡编乱造。"
+        f"以{user_pronoun}当前输入为准，旧记忆只是历史线索、非当前事实；如果召回的记忆里没有相关内容，如实说忘记，不要胡编乱造。"
         "旧记忆里的专业词汇和情绪记录不改变你的语气或边界；表达方式以当前角色设定为准。",
     ]
     if author_note_extra:
@@ -1610,7 +1614,7 @@ def build(
         if _pinned_lines:
             messages.append({
                 "role": "system",
-                "content": "<重点记得>\n【用户特意提过、要你记住的事】\n" + "\n".join(_pinned_lines) + "\n</重点记得>",
+                "content": f"<重点记得>\n【{user_pronoun}特意提过、要你记住的事】\n" + "\n".join(_pinned_lines) + "\n</重点记得>",
                 "_layer": "11.7_pinned_facts",
                 "_provenance": {"mode": "pinned", "count": len(_pinned_lines)},
                 # 故意不设 _drop_priority —— 永不被 token 裁剪

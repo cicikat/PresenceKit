@@ -117,7 +117,7 @@ async def update_user_profile(
 
 @router.get("/{user_id}/pronoun", summary="获取用户称谓")
 async def get_user_pronoun(user_id: str, auth=Depends(require_scopes("admin"))):
-    """返回该用户的第三人称称谓（她/他/TA/它）。"""
+    """返回该用户的第三人称称谓（她/他/祂/TA/它）。"""
     from core.memory.user_facts import get_user_pronoun as _get_pronoun
     return {"user_id": user_id, "pronoun": _get_pronoun(user_id)}
 
@@ -143,7 +143,7 @@ async def set_user_pronoun(
     body: _PronounBody,
     auth=Depends(require_scopes("admin")),
 ):
-    """更新该用户的第三人称称谓（允许值：她/他/TA/它）。"""
+    """更新该用户的第三人称称谓（允许值：她/他/祂/TA/它）。"""
     from core.memory.user_facts import update_user_facts, _VALID_PRONOUNS
     if body.pronoun not in _VALID_PRONOUNS:
         raise HTTPException(status_code=422, detail=f"非法称谓值 {body.pronoun!r}，允许：{sorted(_VALID_PRONOUNS)}")

@@ -8,10 +8,10 @@
         </div>
       </div><div class="card">
   <div class="card-header"><h3 data-i18n="status.pronoun.title">用户称谓</h3></div>
-  <p class="admin-inline-087" data-i18n="runtime_config.pronoun_hint">按用户选择固定称谓；这里只读当前选择，保存通过用户事实接口完成。</p>
+  <p class="admin-inline-087" data-i18n="runtime_config.pronoun_hint">未选择时默认“她”。保存后，后续对话的第三人称称谓立即生效；这是称谓偏好，不代表生理性别。</p>
   <div class="form-row">
     <label class="field"><span data-i18n="status.pronoun.user">用户</span><select id="pn-uid-select" onchange="loadUserPronoun()"></select></label>
-    <label class="field"><span data-i18n="status.pronoun.value">称谓</span><select id="pn-value"><option value="她" data-i18n="status.pronoun.she">她</option><option value="他" data-i18n="status.pronoun.he">他</option><option value="TA" data-i18n="status.pronoun.they">TA</option><option value="它" data-i18n="status.pronoun.it">它</option></select></label>
+    <label class="field"><span data-i18n="status.pronoun.value">称谓</span><select id="pn-value"><option value="她" data-i18n="status.pronoun.she">她</option><option value="他" data-i18n="status.pronoun.he">他</option><option value="祂" data-i18n="status.pronoun.deity">祂</option><option value="TA" data-i18n="status.pronoun.they">TA</option><option value="它" data-i18n="status.pronoun.it">它</option></select></label>
     <button class="btn btn-primary btn-sm" data-action="saveUserPronoun" data-i18n="common.save">保存</button>
   </div>
 </div>

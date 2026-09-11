@@ -40,11 +40,11 @@ def test_framework_subjects_are_bound_without_gender_guessing(build_prompt, monk
     monkeypatch.setattr("core.config_loader.get_user_display_name", lambda: user_name)
     messages, _ = build_prompt(relation={"role": "friend", "nickname": "Reader"}, tags={"topic.activity"})
     assert "你是Test Companion" in layer(messages, "1_system_prompt")
-    expected = user_name or "用户"
+    expected = user_name or "她"
     assert f"{expected}是你的friend" in layer(messages, "3_relation")
     assert f"{expected}在阅读" in layer(messages, "3.8_activity")
     assert '你称呼对方为"Reader"' in layer(messages, "3_relation")
-    assert "她" not in layer(messages, "3_relation")
+    assert "第三人称提及这位对话者时用‘她’" in layer(messages, "1_system_prompt")
 
 
 def test_authored_and_quoted_system_sources_keep_original_words(build_prompt):
@@ -179,3 +179,15 @@ async def test_builder_rules_remain_valid_after_loop_tool_return(build_prompt, m
     assert "本轮没有任何工具执行结果" not in note
     assert "禁止声称调用了任何工具" not in note
     assert any(result in m.get("content", "") for m in calls[-1]["messages"] if m["role"] == "tool")
+
+
+@pytest.mark.parametrize("pronoun", ["她", "他", "祂", "TA", "它"])
+def test_selected_pronoun_reaches_framework_without_rewriting_sources(build_prompt, monkeypatch, pronoun):
+    monkeypatch.setattr("core.memory.user_facts.get_user_pronoun", lambda uid: pronoun)
+    raw = "用户 user 说她：{user_pronoun}"
+    messages, _ = build_prompt(user_identity_text=raw, diary_context=raw, tags={"emotion.down"})
+    assert f"用‘{pronoun}’" in layer(messages, "1_system_prompt")
+    assert f"关于{pronoun}的长期观察" in layer(messages, "6a_user_identity")
+    assert raw in layer(messages, "6a_user_identity")
+    assert raw in layer(messages, "6d_diary_context")
+    assert f"与{pronoun}真实发生的对话" in layer(messages, "9_history")

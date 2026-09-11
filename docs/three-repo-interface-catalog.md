@@ -739,3 +739,12 @@ roadmap: Character consumption remains disabled/unimplemented. Use short-lived, 
 - `observe`：正式手机原显示 3 个待办，后端 enabled=false 阻挡上传。用户授权后仅通过 /settings/life-records 开启 enabled，GET 回读 effective=true，其他设置原值保留。已验证 2 次图片上传回执；另一次本机修改为 revision 冲突，保留本机内容。手机 1.0.1+38 同签名覆盖及时间开关重启保存已验收；Flutter 154 项与 Android LifeRecordsTest 19 项通过。
 - `open`：两张真实图片的识别任务 failed / ValidationError，额外不提交结果的识别诊断返回 JSONDecodeError；真实模型结构化输出尚未通过，不应标记为识别完成。后端需提供脱敏校验字段、独立提取 schema 与稳健解析后走原重试入口。
 - `open`：手机冲突 UI 只有采用电脑版本，缺保留本机修改的合并入口；未经用户确认不得丢弃本机操作。生活记录页暗色自定义主题下说明文字低对比度。真实 Doze、断网恢复和新图端到端保存即传仍为 observe。
+
+
+## 用户称谓接线补充（2026-09-11）
+
+current：复用 GET/PATCH `/users/{user_id}/pronoun`（admin），默认“她”，允许“她 / 他 / 祂 / TA / 它”；管理面「个人设置 → 用户称谓」编辑，保存后下一次组装生效。GET 返回有效称谓，原始配置可经 `/users/{user_id}/facts` 观测。Reality 身份约定、事实边界、长期观察、日记/历史/重点事实框架使用所选称谓；显示名及多人 speaker 归属保留。引用、角色卡、历史正文不做全文替换。未新增配置源、存储或网络调用。
+
+桌面使用现有 openAdminPanel 管理面桥，手机 `/mobile/chat` 继承后端组装；无新 WS/IPC/ack/TTL/锁或通知协议。手机原生称谓编辑及 Dream 专项称谓统一为 roadmap；真实模型文风、双端真机体验为 observe。
+
+thinking 原生提示标题改为【你们约定的思维链thinking输出方式*特调】，保留原有文风正文与执行闸门。
