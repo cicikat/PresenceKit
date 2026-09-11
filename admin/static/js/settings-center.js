@@ -107,9 +107,11 @@ async function loadImeObservation(more = false) {
     const data = await api('GET', '/observability/ime-drafts?' + query);
     if (request !== imeObservationRequest) return;
     const rows = data.entries || [];
-    const content = rows.map(row => `<article><p>${escapeHtml(row.device_id)} · ${escapeHtml(row.app_package)} · ${escapeHtml(row.source)} · 修订 ${escapeHtml(String(row.revision))} · ${escapeHtml(new Date(row.updated_at).toLocaleString())}</p><details><summary>查看草稿正文（敏感内容）</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere">${escapeHtml(row.content)}</pre></details></article>`).join('');
+    const content = rows.map(row => `<article><p>${row.app_package === 'com.chacha.jadeime.sync_test' ? '测试上传' : '输入草稿'} · ${escapeHtml(row.device_id)} · ${escapeHtml(row.app_package)} · ${escapeHtml(row.source)} · 修订 ${escapeHtml(String(row.revision))} · ${escapeHtml(new Date(row.updated_at).toLocaleString())}</p><details><summary>查看草稿正文（敏感内容）</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere">${escapeHtml(row.content)}</pre></details></article>`).join('');
+    const summary = data.summary;
+    const counts = summary ? `<p>IME 输入草稿 ${escapeHtml(String(summary.draft_count))} 条 · 测试上传 ${escapeHtml(String(summary.test_count))} 条${summary.latest_draft_updated_at ? ' · 最新草稿更新时间：' + escapeHtml(new Date(summary.latest_draft_updated_at).toLocaleString()) : ''}</p>` : '';
     if (append) host.insertAdjacentHTML('beforeend', content);
-    else host.innerHTML = `<p>${data.effective ? '接收已开启' : '接收已关闭'} · 保留 ${escapeHtml(String(data.retention_hours))} 小时 · 仅存储</p>` + (content || '<p>三小时内暂无接收记录。请检查输入法上报开关、HTTPS 地址和配对密钥；空记录不代表连接已经验证成功。</p>');
+    else host.innerHTML = `<p>${data.effective ? '接收已开启' : '接收已关闭'} · 保留 ${escapeHtml(String(data.retention_hours))} 小时 · 仅存储</p>` + counts + (content || '<p>三小时内暂无接收记录。请检查输入法草稿记录和自动回传两个开关；保存配置会关闭自动回传，需要重新开启。测试成功不代表自动上传已开启；空列表也可能是草稿已过期。</p>');
     imeObservationCursor = data.next_before;
     imeObservationDevice = device;
     document.getElementById('ime-more').hidden = data.next_before == null;

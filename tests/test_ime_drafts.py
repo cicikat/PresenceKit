@@ -59,6 +59,21 @@ def test_atomic_ack_and_observation(client):
     response = client.get('/observability/ime-drafts', headers={'Authorization': 'Bearer admin'})
     assert len(response.json()['entries']) == 1
     assert response.json()['mode'] == 'receive_only'
+    assert response.json()['summary']['draft_count'] == 1
+
+
+def test_summary_separates_tests_and_filters_expiry_and_device(sandbox):
+    assert store.summary()['draft_count'] == 0
+    assert not sandbox.ime_drafts_db().exists()
+    now = int(time.time() * 1000)
+    store.receive('a', [row(), row(id=2, app_package=store.TEST_PACKAGE)], now_ms=now)
+    store.receive('b', [row()], now_ms=now)
+    assert store.summary(now_ms=now)['draft_count'] == 2
+    summary = store.summary(device_id='a', now_ms=now)
+    assert summary['draft_count'] == summary['test_count'] == 1
+    assert summary['latest_draft_updated_at'] is not None
+    assert store.summary(now_ms=now + store.RETENTION_MS + 1000) == {
+        'draft_count': 0, 'test_count': 0, 'latest_draft_updated_at': None}
 
 
 @pytest.mark.parametrize('payload', [{}, [row(source='unknown')], [row(revision=0)], [row(id=True)], [row(device_id='injected')]])

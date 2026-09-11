@@ -62,8 +62,9 @@ async def observe(device_id: str = '', limit: int = Query(50, ge=1, le=200),
     enabled = bool(get_config().get('ime_ingest', {}).get('enabled', False))
     try:
         rows = await asyncio.to_thread(ime_drafts.query, device_id=device_id, limit=limit, before=before)
+        summary = await asyncio.to_thread(ime_drafts.summary, device_id=device_id)
     except Exception:
         raise HTTPException(503, 'IME 存储暂时不可读取') from None
     return {'enabled': enabled, 'effective': enabled, 'mode': 'receive_only',
             'blocking_reason': '' if enabled else 'disabled', 'retention_hours': 3,
-            'entries': rows, 'next_before': rows[-1]['seq'] if len(rows) == limit else None}
+            'summary': summary, 'entries': rows, 'next_before': rows[-1]['seq'] if len(rows) == limit else None}

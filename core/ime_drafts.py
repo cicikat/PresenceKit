@@ -8,6 +8,29 @@ from core.sandbox import get_paths
 
 _LOCK = threading.RLock()
 RETENTION_MS = 3 * 60 * 60 * 1000
+TEST_PACKAGE = 'com.chacha.jadeime.sync_test'
+
+
+def summary(*, device_id: str = '', now_ms: int | None = None):
+    """Retained counts independent of pagination; never read content."""
+    result = {'draft_count': 0, 'test_count': 0, 'latest_draft_updated_at': None}
+    cutoff = (now_ms if now_ms is not None else int(time.time() * 1000)) - RETENTION_MS
+    with _LOCK:
+        path = get_paths().ime_drafts_db()
+        if not path.exists():
+            return result
+        with closing(sqlite3.connect(path.resolve().as_uri() + '?mode=ro', uri=True, timeout=2)) as db:
+            where = 'updated_at > ?' + (' AND device_id = ?' if device_id else '')
+            args = (cutoff, device_id) if device_id else (cutoff,)
+            for package, count, latest in db.execute(
+                'SELECT app_package, COUNT(*), MAX(updated_at) FROM drafts WHERE ' + where + ' GROUP BY app_package', args
+            ):
+                if package == TEST_PACKAGE:
+                    result['test_count'] += count
+                else:
+                    result['draft_count'] += count
+                    result['latest_draft_updated_at'] = max(result['latest_draft_updated_at'] or 0, latest)
+    return result
 
 
 def receive(device_id: str, rows: list[dict], *, now_ms: int | None = None):
