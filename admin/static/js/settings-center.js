@@ -90,6 +90,36 @@ async function saveCenterSwitch(input) {
     toast(centerRestartRequired(result?.restart_required)?t('settings_center.saved_some_settings_require_a_restart',"已保存，部分设置需重启"):t('settings_center.saved',"已保存"),'ok'); await loadFeatureCenter();
   } catch(error) { input.checked=!value; input.disabled=false; toast(t('settings_center.save_error','保存失败：{error}',{error:error.message}),'err'); }
 }
+let imeObservationCursor = null;
+let imeObservationDevice = '';
+let imeObservationRequest = 0;
+async function loadImeObservation(more = false) {
+  const host = document.getElementById('ime-observation');
+  if (!host) return;
+  const device = document.getElementById('ime-device-filter').value.trim();
+  const append = more === true && device === imeObservationDevice && imeObservationCursor !== null;
+  const request = ++imeObservationRequest;
+  const query = new URLSearchParams({device_id: device, limit: '50'});
+  if (append) query.set('before', imeObservationCursor);
+  document.getElementById('ime-more').hidden = true;
+  if (!append) host.textContent = '正在读取接收状态…';
+  try {
+    const data = await api('GET', '/observability/ime-drafts?' + query);
+    if (request !== imeObservationRequest) return;
+    const rows = data.entries || [];
+    const content = rows.map(row => `<article><p>${escapeHtml(row.device_id)} · ${escapeHtml(row.app_package)} · ${escapeHtml(row.source)} · 修订 ${escapeHtml(String(row.revision))} · ${escapeHtml(new Date(row.updated_at).toLocaleString())}</p><details><summary>查看草稿正文（敏感内容）</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere">${escapeHtml(row.content)}</pre></details></article>`).join('');
+    if (append) host.insertAdjacentHTML('beforeend', content);
+    else host.innerHTML = `<p>${data.effective ? '接收已开启' : '接收已关闭'} · 保留 ${escapeHtml(String(data.retention_hours))} 小时 · 仅存储</p>` + (content || '<p>三小时内暂无接收记录。请检查输入法上报开关、HTTPS 地址和配对密钥；空记录不代表连接已经验证成功。</p>');
+    imeObservationCursor = data.next_before;
+    imeObservationDevice = device;
+    document.getElementById('ime-more').hidden = data.next_before == null;
+  } catch (error) {
+    if (request !== imeObservationRequest) return;
+    if (!append) host.textContent = '接收状态读取失败：' + (error.message || String(error));
+    else { const message = document.createElement('p'); message.textContent = '更早记录读取失败，请刷新重试。'; host.append(message); }
+  }
+}
+
 async function loadServiceCenter() {
   const root=document.getElementById('service-center-list'); root.textContent=t('settings_center.loading',"读取中…");
   const specs=[

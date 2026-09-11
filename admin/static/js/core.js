@@ -20,7 +20,7 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'xiaohongshu-reader-1';
+const ADMIN_UI_FRAGMENT_VERSION = 'ime-observation-1';
 
 const ADMIN_PAGE_ALIASES = Object.freeze({memory: 'observe-memory'});
 
@@ -300,7 +300,7 @@ async function goto(page, {reloadFragment = false, fromHistory = false} = {}) {
     'mail-config': _loadSetupMail,
     'embedding-config': loadSetupEmbedding,
     'creation-center': loadCreationAssets,
-    'observation-center': () => {},
+    'observation-center': loadImeObservation,
     'operations-center': () => {},
     'feature-center': loadFeatureCenter,
     'service-center': loadServiceCenter,

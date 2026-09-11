@@ -656,3 +656,11 @@ QQ/desktop/mobile 共用既有探针/工具循环、暴露白名单和 origin �
 `observe`：需用户部署并登录 xiaohongshu-mcp 读取服务后实测；本次未开启真实功能。
 真实帖子与真机效果、评论完整性不作完成承诺；评论始终标记样本，图片失败明确降级。
 `roadmap`：视频转录、完整评论遍历不在本次范围；无跨仓原生客户端代码修改。
+
+## IME Tailscale deployment (2026-09-11)
+
+current: Admin Observation home now displays IME reception, device filtering, pagination and collapsed escaped draft content. Independent ime-main sensor token is in ignored secrets.local.yaml (ime_pairing). Receive-only ingress is enabled. Local and Tailscale HTTPS empty batches returned 204. The updated IME permits 100.64.0.0/10; older APKs require an update.
+
+Validation: 10 backend tests passed; Chromium cache-cleared UI verified records, escaped/collapsed content, empty/error states using synthetic API data. IME unit tests and Debug build passed with Android Studio JBR.
+
+observe: Phone installation, pairing, actual drafts and offline retry still require device validation. Desktop/mobile main apps do not consume this inbox; no WS/ack or memory changes.

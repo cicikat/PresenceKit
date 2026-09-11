@@ -44,3 +44,12 @@ entries 含 seq、device_id 和全部原始字段；before 是 seq 游标，动�
 管理面复用动态开关列表；原生桌面/手机客户端不需新增消费设置。
 IME 自己已有开关、URL 与配对密钥 UI，未跨仓改动。真实 HTTPS 配对、输入法后台存活、
 端到端断网重传仍为 observe；不把接口测试说成已接收真实手机数据。
+
+
+## IME Tailscale deployment (2026-09-11)
+
+current: Admin Observation home now displays IME reception, device filtering, pagination and collapsed escaped draft content. Independent ime-main sensor token is in ignored secrets.local.yaml (ime_pairing). Receive-only ingress is enabled. Local and Tailscale HTTPS empty batches returned 204. The updated IME permits 100.64.0.0/10; older APKs require an update.
+
+Validation: 10 backend tests passed; Chromium cache-cleared UI verified records, escaped/collapsed content, empty/error states using synthetic API data. IME unit tests and Debug build passed with Android Studio JBR.
+
+observe: Phone installation, pairing, actual drafts and offline retry still require device validation. Desktop/mobile main apps do not consume this inbox; no WS/ack or memory changes.
