@@ -34,12 +34,14 @@ RESIDUAL_TEXT = {
 RESIDUAL_WINDOW_SECONDS = 30 * 60
 
 
-def get_mood_text(mood_state: dict) -> str:
+def get_mood_text(mood_state: dict, *, subject: str | None = None) -> str:
     """
     传入 mood_state dict，返回一句软提示文字。
     mood_state 结构：{"current": str, "intensity": float, "pending": str|null,
                      "previous": str|null, "updated_at": float, ...}
     """
+    # Prompt callers bind the addressee explicitly; admin display keeps its name.
+    subject = _char_name() if subject is None else subject
     current = mood_state.get("current", "neutral")
     intensity = mood_state.get("intensity", 0.5)
     pending = mood_state.get("pending")
@@ -56,7 +58,7 @@ def get_mood_text(mood_state: dict) -> str:
         base = texts[2]
 
     if pending and pending != current:
-        return f"{_char_name()}此刻：{base}。{PENDING_SUFFIX}"
+        return f"{subject}此刻：{base}。{PENDING_SUFFIX}"
 
     residual = RESIDUAL_TEXT.get(previous)
     if (
@@ -65,6 +67,6 @@ def get_mood_text(mood_state: dict) -> str:
         and current != "yandere"
         and time.time() - updated_at <= RESIDUAL_WINDOW_SECONDS
     ):
-        return f"{_char_name()}此刻：{base}。{residual}"
+        return f"{subject}此刻：{base}。{residual}"
 
-    return f"{_char_name()}此刻：{base}。"
+    return f"{subject}此刻：{base}。"

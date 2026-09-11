@@ -250,26 +250,6 @@ def _load_style_hint(*, char_id: str) -> str:
         return ""
 
 
-def _normalize_injection(text: str, *, char_name: str) -> str:
-    """注入前文本规范化的唯一入口。只清洗 system 层正文；不碰 <...> 标签名，不碰真实对话。"""
-    # Split on angle-bracket tokens; rewrite only the text segments between tags.
-    parts = re.split(r'(<[^>]+>)', text)
-    out: list[str] = []
-    for part in parts:
-        if part.startswith('<') and part.endswith('>'):
-            out.append(part)
-        else:
-            # Specific compound phrase first — preserves "非角色记忆" semantic marker.
-            part = part.replace('用户客观信息', '她的客观信息')
-            part = part.replace('该用户', '她')
-            part = part.replace('这个用户', '她')
-            part = part.replace('用户的', '她的')
-            part = part.replace('用户', '她')
-            part = re.sub(r'\buser\b', '她', part, flags=re.IGNORECASE)
-            out.append(part)
-    return ''.join(out)
-
-
 def _load_jailbreak(layer: int | None = None) -> str:
     """
     两套破限存储合并注入，按内容去重：
@@ -461,6 +441,8 @@ def build(
         lore_entries = []
     _tags: set[str] = tags or set()
     messages: list[dict] = []
+    from core.config_loader import get_user_display_name
+    user_name = get_user_display_name() or "用户"
 
     # 层级消融开关（CC 任务 23 · B）：一次性读取，B3 统一过滤点复用同一结果。
     from core.prompt_ablation import get_state as _ablation_state
@@ -497,7 +479,8 @@ def build(
     # ─────────────────────────────────────────────────────────────────────────
     # 层 1：全局 system prompt（来自角色卡的 system_prompt 字段）
     # ─────────────────────────────────────────────────────────────────────────
-    if character.system_prompt:
+    sp = character.system_prompt or ""
+    if sp:
         perception = perception_block.strip() if perception_block else ""
         if _ab["perception_block_disabled"]:
             perception = ""
@@ -509,7 +492,7 @@ def build(
             mood_raw = json.loads(get_paths().mood_state(char_id=char_id).read_text(encoding="utf-8"))
         except Exception:
             mood_raw = {}
-        mood_line = get_mood_text(mood_raw)
+        mood_line = get_mood_text(mood_raw, subject="你")
 
         sp = character.system_prompt
         _perception_section = "## 当前感知（实时，非记忆）\n{perception_block}"
@@ -521,11 +504,15 @@ def build(
         else:
             sp = sp.replace("{perception_block}", perception)
 
-        messages.append({
-            "role": "system",
-            "content": sp,
-            "_layer": "1_system_prompt",
-        })
+    identity_contract = (
+        f"你是{character.name}。本轮框架说明中的‘你’指当前发言角色；用户显示名为{user_name}。"
+        "引用、日记、示例和对话中的人称按原作者与说话人理解，不改变材料归属。"
+    )
+    messages.append({
+        "role": "system",
+        "content": identity_contract + ("\n\n" + sp if sp else ""),
+        "_layer": "1_system_prompt",
+    })
 
     # ─────────────────────────────────────────────────────────────────────────
     # 层 1.5：事实边界（数据驱动，条件注入）
@@ -541,7 +528,7 @@ def build(
     else:
         _fact_boundary_text = (
             "【现实信息】当前没有任何已确认的现实细节，"
-            "凡未列出的现实物品/食物/天气/她的身体状态一律未知，不补充、不暗示。"
+            "凡未列出的现实物品/食物/天气/用户身体状态一律未知，不补充、不暗示。"
             "没有真实屏幕感知时，不得虚构屏幕画面、界面状态或用户正在做的事。"
             "屏幕上的桌宠形象是你自己在屏幕上的存在，不是用户的角色。"
         )
@@ -637,7 +624,7 @@ def build(
             if _activity_fragment:
                 messages.append({
                     "role": "system",
-                    "content": f"## {character.name}此刻\n{_activity_fragment}",
+                    "content": f"## 你此刻\n{_activity_fragment}",
                     "_layer": "2.6_presence",
                 })
         except Exception as _e:
@@ -656,9 +643,9 @@ def build(
         extra_prompt = relation.get("extra_prompt", "")
 
         if nickname:
-            relation_text = f"该用户是你的{role}，你叫他\"{nickname}\"。"
+            relation_text = f"{user_name}是你的{role}，你称呼对方为\"{nickname}\"。"
         else:
-            relation_text = f"该用户是你的{role}。"
+            relation_text = f"{user_name}是你的{role}。"
         if extra_prompt:
             relation_text += extra_prompt
 
@@ -683,7 +670,7 @@ def build(
                 if 0 <= _days <= 7:
                     messages.append({
                         "role": "system",
-                        "content": f"（她生理期第{_days + 1}天，态度更温柔些，不提冰/冷饮/剧烈运动。）",
+                        "content": f"（{user_name}生理期第{_days + 1}天，态度更温柔些，不提冰/冷饮/剧烈运动。）",
                         "_layer": "3.5_period",
                         "_provenance": {
                             "mode": "tagged",
@@ -713,7 +700,7 @@ def build(
                 _end = _last_seg.get("sleep_end_time", "")
                 messages.append({
                     "role": "system",
-                    "content": f"（她最近一次睡眠：{_seg_date} {_start}–{_end}，共{_h}时{_m}分。可自然提起。）",
+                    "content": f"（{user_name}最近一次睡眠：{_seg_date} {_start}–{_end}，共{_h}时{_m}分。可自然提起。）",
                     "_layer": "3.6_watch",
                     "_provenance": {
                         "mode": "tagged",
@@ -744,7 +731,7 @@ def build(
             if _s_parts:
                 messages.append({
                     "role": "system",
-                    "content": f"（她今天：{'、'.join(_s_parts)}。自然提，别罗列。）",
+                    "content": f"（{user_name}今天：{'、'.join(_s_parts)}。自然提，别罗列。）",
                     "_layer": "3.7_sensor",
                 })
     except Exception:
@@ -759,7 +746,7 @@ def build(
         if _activity_text:
             messages.append({
                 "role": "system",
-                "content": f"（她在{_activity_text}。可自然提起。）",
+                "content": f"（{user_name}在{_activity_text}。可自然提起。）",
                 "_layer": "3.8_activity",
                 "_provenance": {
                     "mode": "tagged",
@@ -796,7 +783,7 @@ def build(
     if _realtime_awareness:
         messages.append({
             "role": "system",
-            "content": f"（她此刻{_realtime_awareness}，短时线索，别当长期事实。）",
+            "content": f"（{user_name}此刻{_realtime_awareness}，短时线索，别当长期事实。）",
             "_layer": "3.9_screen_awareness",
             "_drop_priority": 25,
         })
@@ -963,7 +950,7 @@ def build(
             "content": (
                 "关于用户的长期观察：目前还没有形成稳定认识——你们认识不久，如实对待"
                 "这一点即可，可以自然流露出「还在慢慢了解对方」的状态，不要表现得像已经"
-                "很了解他，也不要凭空编出还没发生过的过往。"
+                "很了解对方，也不要凭空编出还没发生过的过往。"
             ),
             "_layer": "6a_user_identity_coldstart",
         })
@@ -990,7 +977,7 @@ def build(
     if episodic_result:
         messages.append({
             "role": "system",
-            "content": f"<情景记忆>\n【{character.name}记得的片段】\n{episodic_result}\n</情景记忆>",
+            "content": f"<情景记忆>\n【你记得的片段】\n{episodic_result}\n</情景记忆>",
             "_layer": "6c_episodic",
             "_drop_priority": 70,
             "_provenance": {
@@ -1005,7 +992,7 @@ def build(
         # 与"兜底注入"——run_eval/memeval 的 layers_absent 断言依赖这个区分。
         messages.append({
             "role": "system",
-            "content": f"<情景记忆>\n【{character.name}最近印象深的事】\n{episodic_fallback_result}\n</情景记忆>",
+            "content": f"<情景记忆>\n【你最近印象深的事】\n{episodic_fallback_result}\n</情景记忆>",
             "_layer": "6c_episodic",
             "_report_layer": "6c_episodic_fallback",
             "_drop_priority": 70,
@@ -1071,7 +1058,7 @@ def build(
                 if _facts_part:
                     messages.append({
                         "role": "system",
-                        "content": f"<昨日记录>\n【{character.name}昨天的记录】\n{_facts_part[:200]}\n</昨日记录>",
+                        "content": f"<昨日记录>\n【你昨天的记录（原文摘录）】\n{_facts_part[:200]}\n</昨日记录>",
                         "_layer": "6e_inner_diary",
                         "_drop_priority": 60,
                     })
@@ -1081,7 +1068,7 @@ def build(
                 if _feeling_part and (_tags & _feeling_triggers) and not suppress_emotional_recall:
                     messages.append({
                         "role": "system",
-                        "content": f"<昨日心情>\n【{character.name}昨天的心情】\n{_feeling_part[:150]}\n</昨日心情>",
+                        "content": f"<昨日心情>\n【你昨天的心情（原文摘录）】\n{_feeling_part[:150]}\n</昨日心情>",
                         "_layer": "6e_inner_diary",
                         "_drop_priority": 60,
                         "_provenance": {
@@ -1336,7 +1323,7 @@ def build(
             _top_memory = _lines[0]  # 第一条是最高分
             messages.append({
                 "role": "system",
-                "content": f"（此刻{character.name}脑海里浮现：{_top_memory.lstrip('- ')}）",
+                "content": f"（此刻你脑海里浮现的记忆片段：{_top_memory.lstrip('- ')}）",
                 "_layer": "9.5_episodic_top",
             })
 
@@ -1415,7 +1402,7 @@ def build(
         [_rotated_note] if _rotated_note else []
     ) + [
         f"以用户当前输入为准，旧记忆只是历史线索、非当前事实；如果召回的记忆里没有相关内容，如实说忘记，不要胡编乱造。"
-        f"旧记忆里的专业词汇和情绪记录不改变你的语气或边界——你是{character.name}，不是助手，也不是分析师。",
+        "旧记忆里的专业词汇和情绪记录不改变你的语气或边界；表达方式以当前角色设定为准。",
     ]
     if author_note_extra:
         author_note_lines.append(f"（{author_note_extra}）")
@@ -1514,7 +1501,7 @@ def build(
             "分段不依赖句号，有第二句或第二个意思时直接另起一段。"
         ),
         "roleplay": (
-            f"【输出格式】以{character.name}第一人称沉浸式展开当前场景。"
+            "【输出格式】你以第一人称沉浸式展开当前场景。"
             "说出口的话直接写，动作/心理/环境全部在（）括号内，不加人称主语。"
             "话语有长有短，句号后换行。不要总结、不要跳跃，给对方留回应空间。"
             "回复正文至少分为两段，段落之间必须保留一个空行。且必须使用 `\\n\\n` 作为段落分隔。"
@@ -1556,7 +1543,7 @@ def build(
             _th = str((_snap or {}).get("focus", {}).get("title_hint", "")).strip()
             if _th:
                 author_note_lines.append(
-                    f"【可选工具提示】你看到她在看「{_th}」。"
+                    f"【可选工具提示】你看到{user_name}在看「{_th}」。"
                     "如果好奇或觉得有必要，可以调用 peek_screen_content 查看该窗口的具体内容，"
                     "但这完全由你自主决定，不必每次都调用。"
                 )
@@ -1670,13 +1657,6 @@ def build(
             else:
                 _keep.append(_m)
         messages = _keep
-
-    # ─────────────────────────────────────────────────────────────────────────
-    # 注入前集中规范化（seam）——只清洗 system 层，绝不触碰真实对话
-    # ─────────────────────────────────────────────────────────────────────────
-    for _m in messages:
-        if _m.get("role") == "system" and isinstance(_m.get("content"), str):
-            _m["content"] = _normalize_injection(_m["content"], char_name=character.name)
 
     # ─────────────────────────────────────────────────────────────────────────
     # 定界标签配平检查（轻量 integrity，不配平打 WARNING）

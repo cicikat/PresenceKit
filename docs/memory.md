@@ -430,7 +430,7 @@ trigger_signal=)` 落盘：每次 run ≤3 条（超出截断）、同值跳过�
 
 > 层 3.5–3.9 归拢于层 3 之后、层 4 之前（P1 骨架，2026-06-26）。
 > 层 11.7 schema：`profile["pinned_facts"] = [{text, ts, source}]`，`source ∈ {"manual","auto"}`；写入接口待 G3/观察链补。
-> 所有 system 层注入前经 `_normalize_injection` 统一称呼清洗（P5 已落地）：正文中的指代性「用户/user」→「她」，`<...>` 标签名原样保留，不触碰真实对话（history role）。
+> Brief 248 已删除 system 正文的全文称呼替换。框架模板明确主体；记忆、日记、用户资料与 authored 内容保留原文，不推断用户性别。规则见 `docs/prompt-unification-audit.md`。
 
 ## 记忆层一览
 

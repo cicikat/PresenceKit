@@ -25,7 +25,7 @@ def test_fact_boundary_anchors_desktop_avatar_identity(monkeypatch):
 
     boundary = _fact_boundary(messages)
     assert "桌宠形象是你自己在屏幕上的存在" in boundary
-    assert "不是她的角色" in boundary
+    assert "不是用户的角色" in boundary
 
 
 def test_empty_realtime_awareness_forbids_invented_screen_scene(monkeypatch):

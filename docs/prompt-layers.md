@@ -2,6 +2,8 @@
 
 ## IME 主动观察
 
+Brief 248：Reality `1_system_prompt` 始终绑定当前角色与用户；框架指令用第二人称，用户用显示名或中性称谓。角色卡、资料与工具返回不再经过全文代词替换。builder 的 mood 提示显式使用“你此刻”，管理面命名显示兼容保留。来源地图见 [prompt-unification-audit.md](prompt-unification-audit.md)。
+
 分类调用使用 ime_judge_policy / ime_observation；角色机会追加 ime_awareness_policy。均带 _layer；策略不把草稿作为已发送消息，称她为“她”。
 
 
