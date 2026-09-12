@@ -37,3 +37,9 @@ test_admin_model_preset_ui.py、test_admin_phone_control_vision_ui.py、test_ima
 
 根目录 admin-style-review.html 为独立讨论稿，不是管理面功能。包含现有色彩变量和组件样本、
 候选排版、用途批注、localStorage 保存与 JSON 导入导出，供用户决定后续统一规范。
+
+## 管理面样式定稿实施（2026-09-12）
+
+灰绿状态色、中性按钮、分隔线设置区、复杂表单折叠及 JSON 填表已接入；观测与工具页复用现有 state.read 全局状态表。原保存 API、客户端管理面 bridge 和手机消费路径不变。
+current / open / roadmap / observe 与验证证据见 [admin-design-implementation.md](admin-design-implementation.md)。
+roadmap：逐请求的视觉、权限、队列、发送、ack/TTL 尚未合并入十类全局状态表，不能据此宣称端到端链路全部可观测。observe：原生容器与真实服务未联调。

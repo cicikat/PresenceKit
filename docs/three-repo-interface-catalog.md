@@ -819,3 +819,9 @@ current：diet/cart → vision，bill → OCR；普通聊天图片路由不变�
 手机 Flutter 列表/编辑页展示描述，Android 原 JSON 缓存/merge/ack 保留扩展字段；后台服务、token/scope、关联键、revision 冲突与聊天中继保持原路径。桌面继续打开管理面，未增加原生设置。角色工具返回备注及未经确认的识别描述。管理页清缓存浏览器实测，后端 34 项、Flutter 16 项定向回归通过。
 
 observe：手机新包真机展示/后台同步、真实 OCR 连接未完成；open：手机冲突保留本机修改合并入口；roadmap：桌面原生记录列表与跨端原图下载。此条更新 2026-09-11 识别错误条目的实现状态，不将配置就绪等同真实识别完成。
+
+## 管理面样式定稿实施（2026-09-12）
+
+灰绿状态色、中性按钮、分隔线设置区、复杂表单折叠及 JSON 填表已接入；观测与工具页复用现有 state.read 全局状态表。原保存 API、客户端管理面 bridge 和手机消费路径不变。
+current / open / roadmap / observe 与验证证据见 [admin-design-implementation.md](admin-design-implementation.md)。
+roadmap：逐请求的视觉、权限、队列、发送、ack/TTL 尚未合并入十类全局状态表，不能据此宣称端到端链路全部可观测。observe：原生容器与真实服务未联调。

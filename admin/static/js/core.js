@@ -20,7 +20,7 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'calendar-ui-1';
+const ADMIN_UI_FRAGMENT_VERSION = 'admin-design-1';
 
 const ADMIN_PAGE_ALIASES = Object.freeze({memory: 'observe-memory'});
 
@@ -357,8 +357,9 @@ async function goto(page, {reloadFragment = false, fromHistory = false} = {}) {
   const resumePage = fromHistory && pageElement.dataset.pageVisited === 'true';
   if (resumePage && page === 'scheduler') _startWatchStatusPoller();
   if (!resumePage && loaders[page]) {
-    loaders[page]();
+    Promise.resolve(loaders[page]()).then(() => decorateSettingsPanels(page, pageElement)).catch(error => console.error("[admin] page load failed", error));
   }
+  mountChainOverview(page, pageElement);
   pageElement.dataset.pageVisited = 'true';
   main.scrollTop = (fromHistory || samePage) ? (_pageHistory.at(-1)?.scroll || 0) : 0;
 }

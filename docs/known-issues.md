@@ -579,3 +579,9 @@ On-demand screenshots now have desktop and Android implementations; local opt-in
 
 current：旧严格 JSON/整记录校验已移除；饮食/购物车视觉描述、账单独立 OCR，可读内容落 recognition_description，备注与用户校正优先。管理面可逐条重试；相关 34 项后端和 16 项手机回归通过，浏览器清缓存检查通过。
 observe：真实 OCR 配置与手机新包端到端尚未验证；open：原手机冲突只能采用服务端版本，保留本机修改合并入口尚缺；桌面原生列表与原图下载仍 roadmap。历史两条 ValidationError 与一条 JSONDecodeError 的记录修复结果需按实际重试确认，不能只凭测试宣称恢复。
+
+## 管理面样式定稿实施（2026-09-12）
+
+灰绿状态色、中性按钮、分隔线设置区、复杂表单折叠及 JSON 填表已接入；观测与工具页复用现有 state.read 全局状态表。原保存 API、客户端管理面 bridge 和手机消费路径不变。
+current / open / roadmap / observe 与验证证据见 [admin-design-implementation.md](admin-design-implementation.md)。
+roadmap：逐请求的视觉、权限、队列、发送、ack/TTL 尚未合并入十类全局状态表，不能据此宣称端到端链路全部可观测。observe：原生容器与真实服务未联调。

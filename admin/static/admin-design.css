@@ -1,0 +1,41 @@
+/* Approved admin visual language: neutral structure, color for state only. */
+.card { background: transparent; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; padding: 24px 0; }
+.card .card { padding-inline: 16px; }
+.card-header h3, .settings-disclosure h3 { font-size: 15px; font-weight: 600; }
+.page-subtitle, .settings-current { font-size: 12px; font-weight: 400; color: var(--muted); line-height: 1.7; margin-top: 6px; }
+.page-context { border: 0; background: transparent; padding: 0; }
+.page-context-purpose { color: var(--text); }
+.control-center-card { border: 0; border-radius: 6px; padding: 24px; }
+.control-center-card:hover { background: #242936; }
+.control-center-card:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.nav-logo h2, .stat .val, .vision-section-title { color: var(--text); }
+.btn-primary { background: #d7dbe3; color: #191d26; }
+.btn-primary:hover { background: #f0f2f5; }
+.btn-danger { background: transparent; border-color: var(--danger); color: var(--danger); }
+.btn-danger:hover { background: #e052521a; }
+.settings-disclosure > summary { display: flex; align-items: center; gap: 16px; cursor: pointer; list-style: none; padding: 4px 0; }
+.settings-disclosure > summary::-webkit-details-marker { display: none; }
+.settings-disclosure > summary::after { content: '+'; margin-left: auto; color: var(--muted); font-size: 20px; }
+.settings-disclosure[open] > summary::after { content: '−'; }
+.settings-disclosure-heading { flex: 1; min-width: 0; }
+.settings-current { overflow-wrap: anywhere; margin-bottom: 0; }
+.settings-functions { display: block; margin-top: 6px; color: var(--muted); font: 11px var(--mono); overflow-wrap: anywhere; }
+.settings-search { width: min(100%, 560px); margin: 0 0 20px; }
+.settings-match { outline: 1px solid var(--text); outline-offset: 8px; }
+.settings-disclosure-body { padding-top: 20px; }
+.settings-disclosure-body > .card-header:empty { display: none; }
+.settings-footer, .modal-footer, .admin-action-group, .admin-card-actions, .tools-action-row { display: flex; gap: 8px; flex-wrap: nowrap; overflow-x: auto; max-width: 100%; padding-block: 8px; }
+.settings-footer { margin-top: 20px; }
+.settings-footer > *, .modal-footer > *, .admin-action-group > *, .admin-card-actions > *, .tools-action-row > * { flex-shrink: 0; }
+.chain-table { min-width: 760px; }
+.chain-table small { display: block; font-size: 11px; color: var(--muted); overflow-wrap: anywhere; max-width: 300px; margin-top: 6px; }
+.state-pass { color: var(--accent); }
+.state-stop { color: var(--danger); }
+.configuration-notice { display: block; position: static; width: auto; height: auto; padding: 16px 20px; margin: 16px 0; border: 0; border-left: 2px solid var(--warn); background: var(--surface); }
+.configuration-notice p { margin-top: 8px; }
+.preset-import { margin-top: 20px; border-top: 1px solid var(--border); padding-top: 16px; }
+.preset-import summary { cursor: pointer; }
+.preset-import p { font-size: 12px; color: var(--muted); margin: 8px 0; }
+.preset-import textarea { width: 100%; }
+summary:focus-visible { outline: 2px solid var(--text); outline-offset: 4px; }
+@media(max-width:600px) { .settings-disclosure > summary { gap: 8px; } .settings-disclosure-heading { max-width: 100%; } }

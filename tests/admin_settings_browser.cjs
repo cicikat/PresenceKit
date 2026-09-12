@@ -79,6 +79,7 @@ const base = process.env.ADMIN_TEST_URL || 'http://127.0.0.1:8769';
     await page.evaluate(()=>goto('scheduler'));
     await page.locator('#sc-presence-minutes').waitFor();
     assert.equal(await page.locator('#sc-owner-id,#sc-signatures').count(),0);
+    await page.locator('#page-scheduler details.settings-disclosure').filter({has:page.locator('[data-action="saveSchedulerConfig"]')}).locator('summary').click();
     await page.locator('[data-action="saveSchedulerConfig"]').click();
     await page.waitForTimeout(100);
     assert.equal('owner_id' in writes.at(-1).body,false);

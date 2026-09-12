@@ -567,3 +567,9 @@ mobile offers a text snapshot, not this requested on-demand image capture. See d
 ## 生活记录描述与路由（2026-09-12）
 
 后端 /settings/life-records 管理同步、后台同步、角色只读、原图保留；饮食/购物车固定 vision，账单固定独立 OCR，连接仍在模型页编辑。/life-records/capabilities 与设置观测逐分类返回 recognition_routes；普通聊天图片用途选择不影响生活记录。管理面显示任务状态和逐条重试按钮，技术台账折叠。手机展示独立图片描述与用户备注，不复制模型配置。角色查询原开关生效，用户备注优先；桌面经管理面配置，原生生活记录列表仍为 roadmap。
+
+## 管理面样式定稿实施（2026-09-12）
+
+灰绿状态色、中性按钮、分隔线设置区、复杂表单折叠及 JSON 填表已接入；观测与工具页复用现有 state.read 全局状态表。原保存 API、客户端管理面 bridge 和手机消费路径不变。
+current / open / roadmap / observe 与验证证据见 [admin-design-implementation.md](admin-design-implementation.md)。
+roadmap：逐请求的视觉、权限、队列、发送、ack/TTL 尚未合并入十类全局状态表，不能据此宣称端到端链路全部可观测。observe：原生容器与真实服务未联调。

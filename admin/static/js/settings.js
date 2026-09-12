@@ -793,6 +793,12 @@ function openPresetModal(name) {
 }
 
 function _openPresetModal(name) {
+  document.getElementById('preset-parameters').open = false;
+  document.querySelector('#preset-parameters > summary').textContent = designText('高级生成参数', 'Advanced generation parameters');
+  document.querySelector('#preset-import-panel > summary').textContent = designText('粘贴 JSON 填入表单', 'Fill form from JSON');
+  document.getElementById('preset-import-json').value = '';
+  document.getElementById('preset-import-result').textContent = '';
+  document.getElementById('preset-import-panel').open = false;
   resetModelDiscovery();
   document.getElementById('mr-preset-err').textContent = '';
   const nameInput = document.getElementById('mr-preset-name');
@@ -829,6 +835,8 @@ function _openPresetModal(name) {
   document.getElementById('mr-preset-modal').classList.add('open');
 }
 function closePresetModal() {
+  document.getElementById('preset-import-json').value = '';
+  document.getElementById('mr-preset-api-key').value = '';
   resetModelDiscovery();
   document.getElementById('mr-preset-modal').classList.remove('open');
   _mrEditingPresetName = null;
