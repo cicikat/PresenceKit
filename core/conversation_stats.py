@@ -8,13 +8,23 @@ import uuid
 import inspect
 from contextvars import ContextVar
 from functools import wraps
-from contextlib import closing
+from contextlib import closing, contextmanager
 from datetime import datetime, timedelta
 
 from core.sandbox import get_paths
 
 logger = logging.getLogger(__name__)
 _SCOPE = ContextVar("conversation_statistics_scope", default=None)
+_EXCLUDED = ContextVar("conversation_statistics_excluded", default=False)
+
+
+@contextmanager
+def exclude_diagnostic():
+    token = _EXCLUDED.set(True)
+    try:
+        yield
+    finally:
+        _EXCLUDED.reset(token)
 
 
 def attributed(function):
@@ -62,6 +72,8 @@ def attributed(function):
 def record(kind, *, uid="", char_id="", event_id=None, count=1, usage=None, ts=None):
     """Fail-open, idempotent for caller-supplied IDs; bounded SQLite lock wait."""
     try:
+        if _EXCLUDED.get():
+            return
         scope = _SCOPE.get() or {}
         uid, char_id = uid or scope.get("uid", ""), char_id or scope.get("char_id", "")
         if not uid or not char_id:

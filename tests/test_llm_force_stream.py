@@ -53,6 +53,7 @@ async def test_collects_text_and_usage_and_closes():
     assert "private" not in str(result.continuation_items)
     assert result.usage == {"total_tokens": 12}
     assert request.call_args.kwargs["stream"] is True
+    assert request.call_args.kwargs["stream_options"] == {"include_usage": True}
     assert request.call_args.kwargs["max_tokens"] == 32
     stream.close.assert_awaited_once()
 

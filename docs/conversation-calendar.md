@@ -21,7 +21,8 @@ Token 按调用开始时冻结的 owner + character 归属，切换角色不串�
 与 OCR 出口的用量，不仅是聊天生成，可能含后台和 Dream 调用。独立手机自动化等绕开这些出口
 的 transport 尚未覆盖；因此不称账单总额。图片次数是这些出口提交的图片张次，重读重复计，
 上传缓存命中不计，不代表人类打开图片。全部指标按角色查询；无法确定 owner/character 的调用不计入任何角色。
-流式只记录服务商实际返回的 usage；缺失计入 usage_missing_calls，不估算 token。
+Chat Completions 流式请求 include_usage；只记录服务商实际返回的 usage，缺失计入
+usage_missing_calls，不估算 token。管理面合成图片诊断不计入活动。
 Anthropic cache read/create 计入输入，OpenAI cached_tokens 不重复加算。
 
 持久化：sandbox DataPaths.conversation_stats_db，SQLite 元数据计数，无正文、参数、图片、

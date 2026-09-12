@@ -224,7 +224,11 @@ async def calendar_stats(
     """自然日数据；周从周一开始。显式起止日期最多 366 天，含首尾。"""
     from core.conversation_stats import query
     resolved = _resolve_char_id(char_id)
-    log_dir = _log_dir(resolved)
+    owner = _owner_qq()
+    if not owner:
+        raise HTTPException(503, "owner_id not configured")
+    # Unscoped legacy directories cannot prove which character owns a turn.
+    log_dir = resolve_path(MemoryScope.reality_scope(safe_user_id(owner), resolved), "event_log")
     anchor = date or CalendarDate.today()
     if (start is None) != (end is None):
         raise HTTPException(422, "start and end must be supplied together")
@@ -239,11 +243,11 @@ async def calendar_stats(
             end = anchor.replace(day=calendar.monthrange(anchor.year, anchor.month)[1])
         else:
             start, end = anchor.replace(month=1, day=1), anchor.replace(month=12, day=31)
-    if end < start or (end - start).days > 365:
+    if end < start or (end - start).days > 365 or start.year < 1970 or end == CalendarDate.max:
         raise HTTPException(422, "range must contain 1 to 366 days")
 
     def read():
-        result = query(start, end, uid=_owner_qq(), char_id=resolved)
+        result = query(start, end, uid=owner, char_id=resolved)
         for item in result["days"]:
             item.setdefault("chat_rounds_source", "counter")
             if item["coverage"] != "complete":

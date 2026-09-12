@@ -77,7 +77,7 @@ def test_idempotent_concurrent_writes(sandbox):
 @pytest.fixture
 def client(sandbox, monkeypatch, tmp_path):
     monkeypatch.setattr(chat_log, '_resolve_char_id', lambda value: 'role')
-    monkeypatch.setattr(chat_log, '_log_dir', lambda value: tmp_path)
+    monkeypatch.setattr(chat_log, 'resolve_path', lambda scope, key: tmp_path)
     monkeypatch.setattr(chat_log, '_owner_qq', lambda: 'owner')
     app = FastAPI()
     app.include_router(chat_log.router, prefix='/chat-log')
@@ -98,5 +98,31 @@ def test_calendar_ranges_validation_and_legacy(client, tmp_path):
     assert client.get('/chat-log/stats/calendar?period=month&date=2024-02-01').json()['end'] == '2024-02-29'
     assert client.get('/chat-log/stats/calendar?period=week&date=2024-01-01').json()['end'] == '2024-01-07'
     for query in ('date=2024-02-30', 'start=2024-01-01', 'start=2024-02-01&end=2024-01-01',
-                  'start=2020-01-01&end=2024-01-01', 'period=century'):
+                  'start=2020-01-01&end=2024-01-01', 'period=century', 'period=day&date=9999-12-31'):
         assert client.get('/chat-log/stats/calendar?' + query).status_code == 422
+
+
+def test_calendar_scopes_and_character_switch_over_http(sandbox, monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    from admin import auth
+    monkeypatch.setattr(chat_log, '_resolve_char_id', lambda value: value or 'first')
+    monkeypatch.setattr(chat_log, '_owner_qq', lambda: 'owner')
+    monkeypatch.setattr(chat_log, 'resolve_path', lambda scope, key: tmp_path / scope.character_id)
+    scopes = {'memory.read'}
+    monkeypatch.setattr(auth, 'resolve_token', lambda raw: SimpleNamespace(scopes=scopes, label='fixture'))
+    monkeypatch.setattr(auth, '_is_rate_blocked', lambda ip: False)
+    app = FastAPI()
+    app.include_router(chat_log.router, prefix='/chat-log')
+    client = TestClient(app)
+    url = '/chat-log/stats/calendar?period=day'
+    assert client.get(url).status_code == 401
+    assert client.get(url, headers={'Authorization': 'Bearer fixture'}).status_code == 403
+    scopes.add('state.read')
+    for character, count in [('first', 2), ('second', 7)]:
+        for kind in ['chat_round', 'tool_call', 'image_view']:
+            stats.record(kind, uid='owner', char_id=character, count=count)
+        stats.record('model_call', uid='owner', char_id=character, usage={'total_tokens': count*10})
+    for character, count in [('first', 2), ('second', 7)]:
+        body = client.get(url+'&char_id='+character, headers={'Authorization': 'Bearer fixture'}).json()
+        day = body['days'][0]
+        assert (day['chat_rounds'], day['tool_calls'], day['image_views'], day['total_tokens']) == (count,count,count,count*10)

@@ -620,7 +620,8 @@ async def _create(
 async def _collect_chat_stream(mc, messages, kwargs, capture) -> NormalizedResponse:
     """Buffer a complete SSE turn; never execute partial tool arguments."""
     stream = await mc.client.chat.completions.create(
-        model=mc.model, messages=messages, **{**kwargs, "stream": True},
+        model=mc.model, messages=messages, **{**kwargs, "stream": True,
+            "stream_options": {**(kwargs.get("stream_options") or {}), "include_usage": True}},
     )
     parts: list[str] = []
     calls: dict[int, dict] = {}
@@ -697,7 +698,8 @@ async def _stream_text(
     """Yield text deltas while validating the declared protocol's stream state."""
     if _protocol(mc) == "chat_completions":
         stream = await mc.client.chat.completions.create(
-            model=mc.model, messages=messages, stream=True, **gen_kwargs,
+            model=mc.model, messages=messages, stream=True, **{**gen_kwargs,
+                "stream_options": {**(gen_kwargs.get("stream_options") or {}), "include_usage": True}},
         )
         async for chunk in stream:
             if getattr(chunk, "usage", None) is not None:
