@@ -361,6 +361,7 @@ async def get_setup_status(auth=Depends(require_scopes("admin"))):
 # ---------------------------------------------------------------------------
 
 class VisionParamsUpdate(BaseModel):
+    api_protocol: Optional[Literal["chat_completions", "responses", "anthropic_messages"]] = None
     enabled:  Optional[bool]  = None
     provider: Optional[str]   = None
     api_key:  Optional[str]   = None
@@ -458,6 +459,7 @@ async def update_vision_params(body: VisionParamsUpdate, auth=Depends(require_sc
     if body.api_key and body.api_key.strip(): vision_cfg["api_key"] = body.api_key.strip()
     if body.model    is not None: vision_cfg["model"]    = body.model
     if body.base_url is not None: vision_cfg["base_url"] = body.base_url
+    if body.api_protocol is not None: vision_cfg["api_protocol"] = body.api_protocol
 
     write_config_file(CONFIG_FILE, full_cfg)
 

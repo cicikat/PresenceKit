@@ -112,6 +112,7 @@ async function loadVisionParams() {
     document.getElementById('vision-provider').value = provider;
     document.getElementById('vision-provider').onchange = onVisionProviderChange;
     document.getElementById('vision-base-url').value = data.base_url || '';
+    document.getElementById('vision-api-protocol').value = data.api_protocol || 'chat_completions';
     onVisionProviderChange();
     if (data.model) {
       document.getElementById('vision-model-select').value = data.model;
@@ -135,6 +136,7 @@ async function saveVisionParams() {
     api_key:  document.getElementById('vision-api-key').value.trim(),
     model:    model,
     base_url: document.getElementById('vision-base-url').value.trim(),
+    api_protocol: document.getElementById('vision-api-protocol').value,
   };
   try {
     await api('PUT', '/vision-params', body);
