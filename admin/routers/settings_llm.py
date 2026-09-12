@@ -430,6 +430,10 @@ async def test_image_connection(
                 return await image_recognition.recognize_ocr(uri, image_recognition.settings(cfg))
             async with AsyncOpenAI(api_key=vision.get("api_key") or "none", base_url=vision["base_url"],
                 http_client=_make_http_client(_get_proxy_url()), timeout=20, max_retries=0) as client:
+                if vision.get("api_protocol", "chat_completions") == "responses":
+                    response = await client.responses.create(model=vision["model"], max_output_tokens=32,
+                        input=[{"role": "user", "content": [{"type": "input_text", "text": "Read the text in this image. Return only that text."}, {"type": "input_image", "image_url": uri}]}])
+                    return getattr(response, "output_text", "") or ""
                 response = await client.chat.completions.create(model=vision["model"], max_tokens=32,
                     messages=[{"role": "user", "content": [
                         {"type": "text", "text": "Read the text in this image. Return only that text."},
