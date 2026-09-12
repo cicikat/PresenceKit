@@ -1,5 +1,12 @@
 # docs/known-issues.md — 已知问题与技术债
 
+## 图像连接测试预算（2026-09-13）
+
+current：修复 32 token 探针让 GLM 思考耗尽预算后误报 empty_response；预算提高至
+1024，截断单独报告 output_truncated。实测旧参数正文为空，1000 token 可读出合成
+图片文字。observe：部署后管理页按钮与实际聊天图片仍待复测；API 成功不等于正文非空。
+
+
 ## Conversation calendar (2026-09-12)
 
 管理面 UI：current / observe 见 [admin-settings-visual-review.md](admin-settings-visual-review.md)。

@@ -424,34 +424,42 @@ async def test_image_connection(
     uri = "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode()
     started = time.monotonic()
     ok, error = False, ""
+    truncated = False
+    # Reasoning models share the output budget with visible text.
+    output_budget = 1024
     try:
         async def probe():
+            nonlocal truncated
             if connection == "ocr":
                 return await image_recognition.recognize_ocr(uri, image_recognition.settings(cfg))
             async with AsyncOpenAI(api_key=vision.get("api_key") or "none", base_url=vision["base_url"],
                 http_client=_make_http_client(_get_proxy_url()), timeout=20, max_retries=0) as client:
                 if vision.get("api_protocol", "chat_completions") == "responses":
-                    response = await client.responses.create(model=vision["model"], max_output_tokens=32,
+                    response = await client.responses.create(model=vision["model"], max_output_tokens=output_budget,
                         input=[{"role": "user", "content": [{"type": "input_text", "text": "Read the text in this image. Return only that text."}, {"type": "input_image", "image_url": uri}]}])
+                    truncated = getattr(response, "status", None) == "incomplete"
                     return getattr(response, "output_text", "") or ""
                 if vision.get("api_protocol") == "anthropic_messages":
                     import httpx
                     headers = {"x-api-key": vision.get("api_key") or "", "anthropic-version": "2023-06-01"}
                     async with httpx.AsyncClient(timeout=20) as hc:
-                        rr = await hc.post(vision["base_url"].rstrip("/") + "/v1/messages", headers=headers, json={"model": vision["model"], "max_tokens": 32, "messages": [{"role": "user", "content": [{"type": "text", "text": "Read the text in this image. Return only that text."}, {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": uri.split(",", 1)[1]}}]}]})
+                        rr = await hc.post(vision["base_url"].rstrip("/") + "/v1/messages", headers=headers, json={"model": vision["model"], "max_tokens": output_budget, "messages": [{"role": "user", "content": [{"type": "text", "text": "Read the text in this image. Return only that text."}, {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": uri.split(",", 1)[1]}}]}]})
                         rr.raise_for_status()
-                        return "".join(x.get("text", "") for x in rr.json().get("content", []) if x.get("type") == "text")
-                response = await client.chat.completions.create(model=vision["model"], max_tokens=32,
+                        body = rr.json()
+                        truncated = body.get("stop_reason") == "max_tokens"
+                        return "".join(x.get("text", "") for x in body.get("content", []) if x.get("type") == "text")
+                response = await client.chat.completions.create(model=vision["model"], max_tokens=output_budget,
                     messages=[{"role": "user", "content": [
                         {"type": "text", "text": "Read the text in this image. Return only that text."},
                         {"type": "image_url", "image_url": {"url": uri}},
                     ]}])
+                truncated = bool(response.choices and response.choices[0].finish_reason == "length")
                 return response.choices[0].message.content if response.choices else ""
         from core.conversation_stats import exclude_diagnostic
         with exclude_diagnostic():
             answer = await asyncio.wait_for(probe(), timeout=25)
-        ok = bool(answer and answer.strip() and answer.strip() != "[OCR: no text detected]")
-        error = "" if ok else "empty_response"
+        ok = bool(not truncated and answer and answer.strip() and answer.strip() != "[OCR: no text detected]")
+        error = "output_truncated" if truncated else ("" if ok else "empty_response")
     except Exception as exc:
         error = type(exc).__name__
     duration = int((time.monotonic() - started) * 1000)

@@ -2,6 +2,11 @@
 
 ## 图像连接管理 UI（2026-09-12）
 
+图像连接探针输出预算为 1024 token，给推理模型留出生成正文的空间；
+Chat Completions length、Responses incomplete、Anthropic max_tokens 返回
+`output_truncated`，真正的空正文仍返回 `empty_response`。保留原超时、零 SDK
+重试、合成图片、admin scope 与既有 API 账本；不改变正式识别或思考配置。
+
 图像连接列表与用途分配使用文本 Presets/路由的列表编辑结构；通用视觉、OCR、手机覆盖
 仍读写既有配置。连接保存与聊天 mode 切换分离。admin 图像测试使用合成图片和已保存连接，
 不回显响应正文、不修改配置、不计入角色统计。详见 [admin-settings-visual-review.md](admin-settings-visual-review.md)。

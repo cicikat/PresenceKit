@@ -85,3 +85,54 @@ def test_probe_rejects_non_admin_before_calling_provider(sandbox, monkeypatch):
     assert client.post('/image-recognition/test/ocr').status_code == 401
     assert client.post('/image-recognition/test/ocr', headers={'Authorization':'Bearer fixture'}).status_code == 403
     probe.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('protocol', ['chat_completions', 'responses', 'anthropic_messages'])
+@pytest.mark.parametrize('ending,text,expected', [
+    ('stop', 'TEST 123', ''),
+    ('stop', '', 'empty_response'),
+    ('length', '', 'output_truncated'),
+    ('length', 'partial', 'output_truncated'),
+])
+async def test_vision_probe_budget_and_output_status(monkeypatch, protocol, ending, text, expected):
+    import openai
+    import httpx
+    from types import SimpleNamespace
+    from core import api_call_log, llm_client
+
+    async def completion(**kwargs):
+        assert kwargs['max_tokens'] >= 1000
+        return SimpleNamespace(choices=[SimpleNamespace(
+            finish_reason=ending, message=SimpleNamespace(content=text, reasoning_content='private'))])
+
+    async def responses(**kwargs):
+        assert kwargs['max_output_tokens'] >= 1000
+        return SimpleNamespace(status='incomplete' if ending == 'length' else 'completed', output_text=text)
+
+    async def anthropic(*args, **kwargs):
+        assert kwargs['json']['max_tokens'] >= 1000
+        return MagicMock(json=lambda: {'stop_reason': 'max_tokens' if ending == 'length' else 'end_turn',
+                                      'content': [{'type': 'text', 'text': text}]})
+
+    client = MagicMock()
+    client.chat.completions.create = AsyncMock(side_effect=completion)
+    client.responses.create = AsyncMock(side_effect=responses)
+    client.post = AsyncMock(side_effect=anthropic)
+    context = MagicMock()
+    context.__aenter__ = AsyncMock(return_value=client)
+    context.__aexit__ = AsyncMock()
+    monkeypatch.setattr(openai, 'AsyncOpenAI', lambda **kw: context)
+    monkeypatch.setattr(httpx, 'AsyncClient', lambda **kw: context)
+    monkeypatch.setattr(llm_client, '_make_http_client', lambda _: None)
+    audit = MagicMock()
+    monkeypatch.setattr(api_call_log, 'append', audit)
+    monkeypatch.setattr(router, 'get_config', lambda: {'vision': {
+        'enabled': True, 'model': 'vision-fixture', 'base_url': 'https://example.test',
+        'api_protocol': protocol}})
+    result = await router.test_image_connection('general', auth=None)
+    assert result['ok'] is (not expected)
+    assert result['error_category'] == expected
+    assert audit.call_args.kwargs['error_category'] == expected
+    assert 'private' not in str(result)
+    context.__aexit__.assert_awaited()

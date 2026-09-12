@@ -1,5 +1,14 @@
 # 三仓接口总览与闭环审计
 
+## 图像连接探针预算（2026-09-13）
+
+current：admin-only POST /image-recognition/test/{connection} 的视觉预算提高到 1024，
+既有 error_category 增加 output_truncated；管理页原错误展示直接消费该值。
+桌面与手机无独立探针消费者，不增加设置。OCR、正式图片识别、手机覆盖继承、
+鉴权、超时、统计排除和原消息链不变，无新落盘状态。observe：部署后按钮及实际
+聊天图片联调待完成；本次不把合成探针成功视为双端图片链验收。
+
+
 ## Conversation calendar (2026-09-12)
 
 管理面图像连接与用途分开编辑，新增 admin 合成图片连通性探针，沿用现有 API 账本观测；
