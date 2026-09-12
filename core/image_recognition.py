@@ -65,7 +65,7 @@ def cache_signature(config: dict | None = None) -> str:
     return hashlib.sha256(json.dumps(fields, sort_keys=True).encode()).hexdigest()
 
 
-async def recognize_ocr(image_uri: str, cfg: dict | None = None) -> str:
+async def recognize_ocr(image_uri: str, cfg: dict | None = None, *, prompt: str = 'Text Recognition:') -> str:
     cfg = settings() if cfg is None else cfg
     started = time.monotonic()
     ok = False
@@ -80,7 +80,7 @@ async def recognize_ocr(image_uri: str, cfg: dict | None = None) -> str:
             payload = {"model": cfg["model"], "file": image_uri}
         else:
             payload = {"model": cfg["model"], "messages": [{"role": "user", "content": [
-                {"type": "text", "text": "Text Recognition:"},
+                {"type": "text", "text": prompt},
                 {"type": "image_url", "image_url": {"url": image_uri}},
             ]}]}
         headers = {"Authorization": "Bearer " + cfg["api_key"]} if cfg.get("api_key") else {}

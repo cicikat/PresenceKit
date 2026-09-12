@@ -802,3 +802,11 @@ mobile offers a text snapshot, not this requested on-demand image capture. See d
 手机按需截图开关移到 SettingsPage 的系统配置分组，复用 SettingsRow + Switch；能力权限页仅显示 CapabilityRow 状态标记，不再显示灰色禁用开关。系统配置中的权限操作子页不重复放置截图开关。桌面按需截图使用与“允许视觉观察”一致的左侧标题/说明、右侧滑动开关布局。两端 AGENTS.md 已写入复用周围 UI 风格约定，手机额外明确设置与权限观测边界。
 
 三面检查：后端管理开关、effective state、观测端点、截图请求/TTL/去重和原生授权闸门不变。本次仅移动本机设置入口和统一控件；手机可先保存本地授权，实际截图仍须 Android 11+、无障碍及未锁屏。真实手机更新安装后的交互验收仍 open。
+
+## 生活记录描述优先闭环（2026-09-12）
+
+current：diet/cart → vision，bill → OCR；普通聊天图片路由不变。GET capabilities/settings 增加 recognition_routes（逐类 route/configured/effective/blocking_reason）；record 增加服务端只读 recognition_description/recognition_format/recognition_route，保留 schema_version=1 的可选字段兼容性。旧客户端保存不清理识别证据，用户分类/日期/备注不被识别覆盖。可读散文与部分 JSON 接受，空结果失败；过期租约、删除和分类变更有保护。
+
+手机 Flutter 列表/编辑页展示描述，Android 原 JSON 缓存/merge/ack 保留扩展字段；后台服务、token/scope、关联键、revision 冲突与聊天中继保持原路径。桌面继续打开管理面，未增加原生设置。角色工具返回备注及未经确认的识别描述。管理页清缓存浏览器实测，后端 34 项、Flutter 16 项定向回归通过。
+
+observe：手机新包真机展示/后台同步、真实 OCR 连接未完成；open：手机冲突保留本机修改合并入口；roadmap：桌面原生记录列表与跨端原图下载。此条更新 2026-09-11 识别错误条目的实现状态，不将配置就绪等同真实识别完成。

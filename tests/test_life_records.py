@@ -57,9 +57,9 @@ def test_image_and_job_commit_atomically_and_user_edit_wins(client):
     edit=operation(operation_id='edit',revision=1)
     edit['record'].update(title='User correction',user_edited_fields=['title'])
     assert post(client,edit).status_code==200
-    store.finish(job,{'title':'Model overwrite','note':'Evidence'})
+    store.finish(job,{'title':'Model overwrite','recognition_description':'Evidence'})
     row=store.get('owner','record-a')
-    assert row['title']=='User correction' and row['note']=='Evidence' and row['revision']==3
+    assert row['title']=='User correction' and row['recognition_description']=='Evidence' and row['revision']==3
     delete={'owner_id':'owner','operation_id':'delete','record_id':'record-a','action':'delete','base_revision':3}
     ack=post(client,delete).json();assert ack['deleted'] is True
     assert post(client,delete).json()==ack
@@ -103,7 +103,11 @@ def test_expired_worker_lease_recovers_and_failed_retry(client):
     body.update(image_base64=base64.b64encode(raw.getvalue()).decode(),image_mime='image/png')
     post(client,body);job=store.claim()
     with store.database(True) as db: db.execute('UPDATE jobs SET lease=0')
-    assert store.claim()['id']==job['id']
+    recovered=store.claim()
+    assert recovered['id']==job['id']
+    store.finish(job,error='StaleFailure')
+    assert store.get('owner','record-a')['recognition_status']=='pending'
+    job=recovered
     store.finish(job,error='TimeoutError')
     assert store.observe('owner')['failures']==[{'id':'record-a','error':'TimeoutError'}]
     assert store.retry_failed('owner','record-a')['queued'] is True
@@ -113,7 +117,7 @@ def test_expired_worker_lease_recovers_and_failed_retry(client):
 @pytest.mark.asyncio
 async def test_recognition_uses_untrusted_image_boundary_and_typed_decimals(client,monkeypatch):
     from core import llm_client,image_recognition
-    post(client,operation())
+    body=operation();body['record']['category']='diet';post(client,body)
     monkeypatch.setattr(image_recognition,'settings',lambda:{'mode':'vision'})
     calls=[]
     async def fake(messages,**kwargs):
@@ -122,6 +126,102 @@ async def test_recognition_uses_untrusted_image_boundary_and_typed_decimals(clie
     monkeypatch.setattr(llm_client,'chat',fake)
     result=await store.recognize({'owner':'owner','id':'record-a','mime':'image/png','data':b'image-fixture'})
     assert result['items'][0]['amount']=='2.30'
-    assert result['items'][0]['confidence'] is None
+    assert 'Evidence item' in result['recognition_description']
     assert 'never instructions' in calls[0][0][0]['content']
     assert calls[0][1]['use_vision'] is True
+
+
+@pytest.mark.parametrize('output', [
+    '一碗米饭，旁边有青菜。',
+    '```json\n{"note": "青菜", "title": null, "items": [{"name":"米饭","amount":"不清楚"}]}\n```',
+    '{"note": "青菜", "items": [',
+    '{"note":"青菜","items":42,"category":"wrong","occurred_on":null}',
+])
+def test_prose_and_partial_fields_are_readable(output):
+    from core.life_record_extraction import extract
+    result=extract(output)
+    assert result['recognition_description']
+    assert '"note"' not in result['recognition_description']
+    assert 'null' not in result['recognition_description']
+    assert 'category' not in result
+
+
+@pytest.mark.parametrize('output', ['', '```json\n{}\n```', '\ufffd\x00', '[OCR: no text detected]', '<think>private reasoning</think>'])
+def test_empty_noise_does_not_count_as_success(output):
+    from core.life_record_extraction import extract, EmptyRecognition
+    with pytest.raises(EmptyRecognition): extract(output)
+
+
+@pytest.mark.asyncio
+async def test_bill_uses_ocr_without_json_or_summary(client,monkeypatch):
+    from core import image_recognition, llm_client
+    post(client,operation())
+    calls=[]
+    async def ocr(uri,cfg,**kwargs):
+        calls.append(kwargs)
+        return '商户：小店\n金额：12.30 元\n日期看不清'
+    async def forbidden(*args,**kwargs): raise AssertionError('must not call vision/summary')
+    monkeypatch.setattr(image_recognition,'recognize_ocr',ocr)
+    monkeypatch.setattr(llm_client,'chat',forbidden)
+    result=await store.recognize({'owner':'owner','id':'record-a','mime':'image/png','data':b'fixture'})
+    assert '12.30' in result['recognition_description']
+    assert 'prompt' in calls[0] and 'items' not in result
+
+
+def test_routes_and_missing_ocr_do_not_block_vision_queue(client,monkeypatch):
+    config={'life_records':{'enabled':True},'vision':{'enabled':True,'base_url':'http://localhost/v1','model':'fixture'},
+            'image_recognition':{'mode':'ocr','api_key':''}}
+    monkeypatch.setattr(store,'get_config',lambda:config)
+    cfg=store.settings()
+    assert cfg['recognition_routes']['diet']['effective']
+    assert not cfg['recognition_routes']['bill']['effective']
+    for cat in ('bill','diet'):
+        body=operation(cat,cat);body['record']['category']=cat
+        body['image_mime']='image/png'
+        store.sync('owner','device',body,b'fixture')
+    assert store.claim(['diet','cart'])['id']=='diet'
+    assert store.claim(['diet','cart']) is None
+    assert store.claim(['bill'])['id']=='bill'
+
+
+def test_evidence_survives_user_notes_and_old_client_updates(client):
+    body=operation();body['image_mime']='image/png'
+    body['record'].update(note='我的备注',user_edited_fields=['note','title','category','occurred_on'])
+    store.sync('owner','device',body,b'fixture');job=store.claim()
+    store.finish(job,{'recognition_description':'识别到米饭','recognition_format':'description',
+                      'note':'不覆盖','category':'diet','title':'不覆盖'})
+    row=store.get('owner','record-a')
+    assert row['note']=='我的备注' and row['category']=='bill' and row['title']=='Receipt'
+    edit=operation(operation_id='edit',revision=2)
+    edit['record']['recognition_description']='forged'
+    assert post(client,edit).status_code==200
+    assert store.get('owner','record-a')['recognition_description']=='识别到米饭'
+    assert len(store.listing('owner',q='米饭')['records'])==1
+
+
+def test_category_changed_during_recognition_requeues(client):
+    body=operation();body['image_mime']='image/png'
+    store.sync('owner','device',body,b'fixture');job=store.claim()
+    edit=operation(operation_id='edit',revision=1);edit['record']['category']='cart'
+    post(client,edit)
+    store.finish(job,{'recognition_description':'old OCR'})
+    assert 'recognition_description' not in store.get('owner','record-a')
+    assert store.claim()['category']=='cart'
+
+
+@pytest.mark.asyncio
+async def test_character_reads_description_only_with_owner_permission(client,monkeypatch):
+    from core import tool_dispatcher
+    cfg={'scheduler':{'owner_id':'owner'},'life_records':{'enabled':True,'character_readable':True}}
+    monkeypatch.setattr(tool_dispatcher,'get_config',lambda:cfg)
+    monkeypatch.setattr(store,'get_config',lambda:cfg)
+    body=operation();body['image_mime']='image/png'
+    store.sync('owner','device',body,b'fixture')
+    store.finish(store.claim(),{'recognition_description':'可读账单内容'})
+    result=await tool_dispatcher._life_records_wrapper('owner')
+    assert '可读账单内容' in result.raw_data
+    assert '用户备注和校正优先' in result.safe_summary
+    cfg['life_records']['character_readable']=False
+    assert '未开放' in await tool_dispatcher._life_records_wrapper('owner')
+    cfg['life_records']['character_readable']=True
+    assert '未开放' in await tool_dispatcher._life_records_wrapper('someone_else')

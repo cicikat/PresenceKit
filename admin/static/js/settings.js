@@ -124,7 +124,7 @@ async function loadImageRecognition() {
     document.getElementById('ocr-api-key').value = '';
     document.getElementById('ocr-key-state').textContent = data.has_api_key ? '密钥已配置' : '密钥未配置';
     document.getElementById('image-recognition-state').textContent =
-      `当前用途：${data.mode === 'ocr' ? 'OCR 文字提取' : '图片理解'} · ${data.effective ? '配置就绪，未验证服务连接' : '配置不完整或未启用'}`;
+      `普通聊天图片用途：${data.mode === 'ocr' ? 'OCR 文字提取' : '图片理解'} · ${data.effective ? '配置就绪，未验证服务连接' : '配置不完整或未启用'}`;
     document.getElementById('ocr-protocol').onchange = renderOcrProtocol;
     document.getElementById('ocr-endpoint').oninput = renderOcrProtocol;
     document.getElementById('ocr-base-url').oninput = renderOcrProtocol;

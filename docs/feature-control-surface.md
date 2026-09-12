@@ -556,3 +556,7 @@ global proactive gap 45 minutes; daily talk cap 8 and evaluation minimum interva
 open: restart backend to activate code and observe real delivery/circuit recovery. No real test message sent.
 Screenshot planning remains separate: desktop visual sampling is shadow-only and local consent is off;
 mobile offers a text snapshot, not this requested on-demand image capture. See desktop docs/proactivity-2026-09-12.md.
+
+## 生活记录描述与路由（2026-09-12）
+
+后端 /settings/life-records 管理同步、后台同步、角色只读、原图保留；饮食/购物车固定 vision，账单固定独立 OCR，连接仍在模型页编辑。/life-records/capabilities 与设置观测逐分类返回 recognition_routes；普通聊天图片用途选择不影响生活记录。管理面显示任务状态和逐条重试按钮，技术台账折叠。手机展示独立图片描述与用户备注，不复制模型配置。角色查询原开关生效，用户备注优先；桌面经管理面配置，原生生活记录列表仍为 roadmap。

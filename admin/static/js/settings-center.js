@@ -132,7 +132,7 @@ async function loadServiceCenter() {
     [t('settings_center.embedding_search',"向量检索"),'/settings/setup-status','embedding-config',d=>[d.embedding?.configured,d.embedding?.model]],
     [t('settings_center.owner_profile',"所有者资料"),'/settings/setup-status','setup',d=>[d.owner?.configured,'']],
     [t('settings_center.image_recognition',"图片识别"),'/vision-params','model-routing',d=>[typeof d.model==='string'&&typeof d.base_url==='string'?Boolean(d.model&&d.base_url):undefined,d.model]],
-    [t('settings_center.text_recognition_ocr',"文字识别（OCR）"),'/image-recognition','model-routing',d=>[d.ocr?.configured??d.configured, d.mode==='ocr'?t('settings_center.currently_used_for_image_uploads',"当前用于图片上传"):t('settings_center.image_uploads_currently_use_vision',"当前图片上传使用视觉识别")]],
+    [t('settings_center.text_recognition_ocr',"文字识别（OCR）"),'/image-recognition','model-routing',d=>[d.ocr?.configured??d.configured, '生活记录账单固定使用 OCR；饮食与购物车使用视觉']],
     [t('settings_center.speech_synthesis',"语音合成"),'/tts-config','tts-config',d=>[d.provider_status?.ready,d.provider]],
     [t('settings_center.external_tool_services',"外部工具服务"),'/settings/mcp','mcp',d=>[Array.isArray(d.servers)?d.servers.length>0:undefined,Array.isArray(d.servers)?t('settings_center.server_count','{count} 个服务；连接状态见详情',{count:d.servers.length}):t('settings_center.service_status_not_returned',"服务状态未返回")]],
     [t('settings_center.mail',"邮件"),'/settings/mail','mail-config',d=>[d.configured,'']],
@@ -151,7 +151,15 @@ async function loadLifeRecords() {
   try {
     const data = await api('GET', '/settings/life-records');
     for (const [id, key] of [['enabled','enabled'],['readable','character_readable'],['background','background_sync'],['retain','retain_images']]) document.getElementById('life-' + id).checked = !!data[key];
-    host.textContent = `${data.enabled ? '同步已开启' : '同步已关闭'} · ${data.recognition_available ? '识别配置可用（不代表已实测）' : '图片识别尚未配置，任务将等待'}\n` + JSON.stringify({识别路由:data.recognition_route,任务:data.tasks,失败:data.failures,设备回执:data.devices,操作审计:data.audit}, null, 2);
+    const labels = {diet:'饮食',bill:'账单',cart:'购物车'};
+    const states = {pending:'等待识别',processing:'识别中',ready:'已保存描述',failed:'识别失败'};
+    const errors = {ValidationError:'旧版字段校验失败，可重试',JSONDecodeError:'旧版 JSON 解析失败，可重试',EmptyRecognition:'没有识别到可读内容，请检查原图',TimeoutError:'识别超时，可重试',ValueError:'识别服务请求失败，请检查连接'};
+    host.innerHTML = `<p>${data.enabled ? '同步已开启' : '同步已关闭'} · 手填内容与图片描述分开保存</p>` +
+      `<div class="admin-settings-list">${Object.entries(data.recognition_routes || {}).map(([category,route])=>`<div class="admin-setting-row"><span><strong>${escapeHtml(labels[category] || category)}</strong><small>${route.route === 'ocr' ? '独立 OCR · 提取账单文字' : '通用视觉 · 自然语言描述'}</small></span><span class="admin-status-badge">${route.effective ? '已配置，待实际识别验证' : route.configured ? '同步关闭' : '未配置，任务等待'}</span></div>`).join('')}</div>` +
+      `<div class="admin-toolbar">${Object.entries(states).map(([key,label])=>`<span class="admin-status-badge">${label} ${Number(data.tasks?.[key] || 0)}</span>`).join('')}</div>` +
+      ((data.failures || []).length ? `<div class="admin-settings-list">${data.failures.map(row=>`<div class="admin-setting-row"><span><strong>${escapeHtml(errors[row.error] || '识别失败，请检查服务连接后重试')}</strong><small>记录 ${escapeHtml(row.id)}</small></span><button class="btn btn-ghost btn-sm" data-action="retryLifeRecord" data-action-args='${escapeHtml(JSON.stringify([row.id]))}'>重试识别</button></div>`).join('')}</div>` : '<p class="admin-description">没有失败任务。</p>') +
+      `<details><summary>设备回执与技术详情</summary><pre>${escapeHtml(JSON.stringify({设备回执:data.devices,操作审计:data.audit,失败:data.failures},null,2))}</pre></details>`;
+    bindPageActions(host);
   } catch (error) { host.textContent = '生活记录状态读取失败：' + error.message; }
 }
 async function saveLifeRecords() {
@@ -160,9 +168,9 @@ async function saveLifeRecords() {
     await loadLifeRecords();
   } catch (error) { document.getElementById('life-status').textContent = '保存失败：' + error.message; }
 }
-async function retryLifeRecord() {
+async function retryLifeRecord(recordId) {
   try {
-    const id = document.getElementById('life-retry-id').value.trim();
+    const id = String(recordId || '').trim();
     if (!id) return;
     await api('POST', '/settings/life-records/' + encodeURIComponent(id) + '/retry');
     await loadLifeRecords();

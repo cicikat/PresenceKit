@@ -200,6 +200,24 @@ h1.page-title { font-size: 20px; margin-bottom: 20px; }
 .admin-error-panel { color: var(--danger); font-size: 12px; line-height: 1.6; }
 .admin-scope-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 
+/* Shared settings components: spacing belongs to the container, not each label. */
+.admin-page-header { margin-bottom: 24px; }
+.admin-page-header p, .admin-description { color: var(--muted); line-height: 1.6; }
+.admin-settings-list { display: flex; flex-direction: column; margin: 16px 0; }
+.admin-setting-row { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 16px 0; border-bottom: 1px solid var(--border); min-width: 0; }
+.admin-setting-row:last-child { border-bottom: 0; }
+.admin-setting-row > span:first-child { min-width: 0; }
+.admin-setting-row strong { display: block; font-size: 14px; font-weight: 500; line-height: 1.6; }
+.admin-setting-row small { display: block; color: var(--muted); margin-top: 4px; line-height: 1.6; overflow-wrap: anywhere; }
+.admin-setting-row input[type=checkbox] { flex: 0 0 auto; width: 18px; height: 18px; accent-color: var(--accent); }
+.admin-status-badge { display: inline-flex; padding: 4px 8px; border-radius: 6px; background: var(--bg); font-size: 12px; line-height: 1.6; }
+.admin-service-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 16px; margin-top: 16px; }
+.admin-service-grid > .card { margin: 0; }
+@media (max-width: 600px) {
+  .admin-setting-row { gap: 12px; flex-wrap: wrap; }
+  label.admin-setting-row { flex-wrap: nowrap; }
+}
+
 /* ── Stat row ── */
 .stat-row {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));

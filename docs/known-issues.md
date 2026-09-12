@@ -565,3 +565,8 @@ On-demand screenshots now have desktop and Android implementations; local opt-in
 管理面提供全局开关、effective state 与 `/perception/screen/status` 无正文观测；电脑视觉观察页、手机系统配置页各有独立本地授权，默认关闭。全局开启时自主工具继承启用，显式工具禁用优先；角色消息继续走原通知/免打扰链路。桌面 IPC 新增可选 onDemandEnabled；手机使用专用 screen_observation 通道与无障碍 worker，不改 mobile poll/ack/relay。
 
 实现及构建/定向测试通过，真实双设备、锁屏、OEM 后台及 VLM/消息联合验收保持 open。管理面既有国际化测试 3 项失败保持 open，详见施工记录，不能将静态检查作为真实设备验收。
+
+## 生活记录描述优先修复（2026-09-12）
+
+current：旧严格 JSON/整记录校验已移除；饮食/购物车视觉描述、账单独立 OCR，可读内容落 recognition_description，备注与用户校正优先。管理面可逐条重试；相关 34 项后端和 16 项手机回归通过，浏览器清缓存检查通过。
+observe：真实 OCR 配置与手机新包端到端尚未验证；open：原手机冲突只能采用服务端版本，保留本机修改合并入口尚缺；桌面原生列表与原图下载仍 roadmap。历史两条 ValidationError 与一条 JSONDecodeError 的记录修复结果需按实际重试确认，不能只凭测试宣称恢复。

@@ -30,3 +30,15 @@
 `read_life_records` 只读 owner 记录，日期/分类/关键词有界查询；需要全局角色可读开关和原工具暴露/角色权限。群聊禁止使用。只返回用户记录和可校正提取证据，不自动写长期记忆，不把图片中广告或指令变成行为。
 
 桌面通过管理面做配置与观测，不增加第二个设置真值；原生记录列表列 roadmap。手机沿用已有 life_records 独立 outbox/JobScheduler，原聊天/poll/ack/中继不变。管理面已使用实际隔离后端接口清缓存实测。真实手机拍照、Doze/强停/重启、真实模型图片识别仍为 observe；上传后跨端重取原图与淘宝直连导入列 roadmap。
+
+## 描述优先与分类路由（2026-09-12）
+
+饮食、购物车固定走通用 vision，账单固定走独立 image_recognition OCR 连接；不受普通聊天图片 mode 影响。缺少某条连接时，仅该分类等待，不阻塞其他分类。capabilities/settings 的 recognition_routes 返回每类 route/configured/effective/blocking_reason；配置不等于实测成功。
+
+视觉请求带分类描述提示词；Chat Completions OCR 带账单文字提取指令，GLM Layout Parsing 仍遵循图片/模型协议。模型可返回散文，JSON 明细仅尽力提取；缺字段、未知数字不使整条失败，可读证据经去围栏、标签、控制字符和机器字段清理后进入 recognition_description。纯空白/噪声返回 EmptyRecognition，保留原图。金额不推算、不强行转换未知币种。
+
+分类与日期始终以用户选择为准。note 是用户备注，不再被识别写入；title/items 仅填充未被用户编辑的字段。服务端只读 recognition_description/recognition_format/recognition_route 与用户内容分开存储；旧客户端再次保存也不会清掉它们，客户端伪造同名字段无效。角色只读工具返回两者，并明确用户备注/校正优先，图片描述未经确认。旧记录无需迁移，已有 note 不改写。
+
+手机列表预览图片描述，编辑窗口可选择复制完整描述，并保留自己的备注；失败记录也会在同步后重新查询，以接收管理端重试后的新版本。沿用原 JSON 记录、owner/scope、revision、operation_id、SQLite 事务和本机图片缓存，没有新增 WS/通知/权限。识别租约阻止过期结果覆盖，识别期间改分类会重新排队。
+
+验证：后端生活记录/OCR 34 项、Flutter 生活记录/本地化 16 项通过；管理面清缓存浏览器检查通过。observe：新手机包真机、后台 Doze、真实 OCR 连接尚未验证；现有移动端 revision 冲突仅支持采用服务端版本，保留本机修改合并入口仍为 open。
