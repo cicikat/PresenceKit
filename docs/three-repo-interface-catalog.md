@@ -1,5 +1,10 @@
 # 三仓接口总览与闭环审计
 
+## Conversation calendar (2026-09-12)
+
+Current: GET /chat-log/stats/calendar requires memory.read + state.read. All four metrics are scoped to owner + character; period=day/week/month/year with date, or start/end (up to 366 days). Missing history is null, never zero. Coverage and totals_partial disclose incomplete data. See backend docs/conversation-calendar.md.
+Roadmap: native desktop/mobile heatmap and day detail UI. Observe: real provider streaming usage and independent automation transport coverage. Existing history, WS/poll/ack/TTL remain unchanged.
+
 ## Relay SDK User-Agent compatibility (2026-09-12)
 
 current: backend registry-built Chat Completions/Responses clients send `PresenceKit/1.0`.

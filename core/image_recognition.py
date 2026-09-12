@@ -65,11 +65,16 @@ def cache_signature(config: dict | None = None) -> str:
     return hashlib.sha256(json.dumps(fields, sort_keys=True).encode()).hexdigest()
 
 
+from core.conversation_stats import attributed as _stats_attributed
+
+
+@_stats_attributed
 async def recognize_ocr(image_uri: str, cfg: dict | None = None, *, prompt: str = 'Text Recognition:') -> str:
     cfg = settings() if cfg is None else cfg
     started = time.monotonic()
     ok = False
     error = ""
+    body = None
     try:
         url = endpoint(cfg)
         if not cfg.get("model"):
@@ -107,6 +112,9 @@ async def recognize_ocr(image_uri: str, cfg: dict | None = None, *, prompt: str 
         error = error or type(exc).__name__
         raise ValueError(f"OCR request failed ({error})") from None
     finally:
+        from core.conversation_stats import record
+        record("model_call", usage=body.get("usage") if isinstance(body, dict) else None)
+        record("image_view")
         from core import api_call_log
         api_call_log.append(caller="image_ocr", purpose="ocr", provider=str(cfg.get("provider", "")),
                             model=str(cfg.get("model", "")), protocol=str(cfg.get("api_protocol", "")),

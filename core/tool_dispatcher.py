@@ -2275,6 +2275,10 @@ def _schema_errors(value, schema: object, path: str = "arguments") -> list[str]:
     return []
 
 
+from core.conversation_stats import attributed as _stats_attributed
+
+
+@_stats_attributed
 async def _execute_structured_impl(
     tool_name: str,
     tool_args: dict,
@@ -2490,6 +2494,8 @@ async def _execute_structured_impl(
         # All local policy/permission/confirmation gates have passed. This is
         # "handling it", not a claim that a remote service or device started.
         await _notify_status("queued")
+        from core.conversation_stats import record
+        record("tool_call", uid=user_id, char_id=char_id)
         if tool_info.get("self_management"):
             result = await func(user_id=user_id, char_id=char_id, origin=origin, **tool_args)
         elif tool_name == "observe_user_screen":

@@ -6,7 +6,12 @@ owner_qq 由后端从 config 读取，接口路径不暴露 QQ 号。
 
 import json as _json
 import re
+import asyncio
+import calendar
+import sqlite3
+from datetime import date as CalendarDate, timedelta
 from pathlib import Path
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -205,6 +210,68 @@ async def list_dates(char_id: str | None = None, auth=Depends(require_scopes("me
                  if isinstance(row.get('display_activity'), dict))
     dates = sorted(set(dates), reverse=True)
     return {"dates": dates, "count": len(dates)}
+
+
+@router.get("/stats/calendar", summary="对话热力图与每日用量")
+async def calendar_stats(
+    period: Literal["day", "week", "month", "year"] = "month",
+    date: CalendarDate | None = None,
+    start: CalendarDate | None = None,
+    end: CalendarDate | None = None,
+    char_id: str | None = None,
+    auth=Depends(require_scopes("memory.read", "state.read")),
+):
+    """自然日数据；周从周一开始。显式起止日期最多 366 天，含首尾。"""
+    from core.conversation_stats import query
+    resolved = _resolve_char_id(char_id)
+    log_dir = _log_dir(resolved)
+    anchor = date or CalendarDate.today()
+    if (start is None) != (end is None):
+        raise HTTPException(422, "start and end must be supplied together")
+    if start is None:
+        if period == "day":
+            start = end = anchor
+        elif period == "week":
+            start = anchor - timedelta(days=anchor.weekday())
+            end = start + timedelta(days=6)
+        elif period == "month":
+            start = anchor.replace(day=1)
+            end = anchor.replace(day=calendar.monthrange(anchor.year, anchor.month)[1])
+        else:
+            start, end = anchor.replace(month=1, day=1), anchor.replace(month=12, day=31)
+    if end < start or (end - start).days > 365:
+        raise HTTPException(422, "range must contain 1 to 366 days")
+
+    def read():
+        result = query(start, end, uid=_owner_qq(), char_id=resolved)
+        for item in result["days"]:
+            item.setdefault("chat_rounds_source", "counter")
+            if item["coverage"] != "complete":
+                path = log_dir / (item["date"] + ".md")
+                if path.exists():
+                    entries = _parse_day(path.read_text(encoding="utf-8"))
+                    pairs = [entry for entry in entries if entry["user"] and entry["assistant"]
+                             and entry.get("entry_kind") != "narration"]
+                    count = len({entry["turn_id"] for entry in pairs if entry.get("turn_id")})
+                    count += sum(not entry.get("turn_id") for entry in pairs)
+                    item["chat_rounds"] = max(item["chat_rounds"] or 0, count)
+                    item["chat_rounds_source"] = "retained_chat_log_partial"
+            if item["date"] > CalendarDate.today().isoformat():
+                item["coverage"] = "future"
+                for key in ("chat_rounds", "tool_calls", "image_views", "input_tokens", "output_tokens", "total_tokens"):
+                    item[key] = None
+        return result
+    try:
+        result = await asyncio.to_thread(read)
+    except (OSError, sqlite3.Error):
+        raise HTTPException(503, "conversation statistics unavailable") from None
+    result.update(start=start.isoformat(), end=end.isoformat(), char_id=resolved,
+                  period=period, week_starts_on="monday", schema_version=1)
+    result["totals"] = {key: sum(item[key] or 0 for item in result["days"])
+                        for key in ("chat_rounds", "tool_calls", "image_views", "input_tokens", "output_tokens", "total_tokens", "usage_missing_calls")}
+    result["totals_partial"] = any(item["coverage"] in {"partial", "unavailable"}
+                                    or item["usage_missing_calls"] for item in result["days"])
+    return result
 
 
 @router.get("/{date}", summary="获取单日聊天日志")

@@ -540,6 +540,10 @@ class DataPaths:
         """Fail-open external API observability ledger, rotated by the writer."""
         return self._p("runtime", "observability", "api_calls.jsonl")
 
+    def conversation_stats_db(self) -> Path:
+        """Numeric calendar activity, independent of expiring forensic logs."""
+        return self._p("runtime", "observability", "conversation_stats.sqlite3")
+
     def llm_reasoning_db(self) -> Path:
         """Private archive of reasoning explicitly returned by model APIs."""
         return self._p("runtime", "observability", "llm_reasoning.sqlite3")

@@ -186,6 +186,10 @@ def _normalize_image(data: bytes, filename: str) -> tuple[bytes, str]:
         raise ValueError(f"图片归一化失败:{filename}") from e
 
 
+from core.conversation_stats import attributed as _stats_attributed
+
+
+@_stats_attributed
 async def ingest_image_bytes(
     items: list[tuple[bytes, str]],
     *, uid: str = "", char_id: str = "",

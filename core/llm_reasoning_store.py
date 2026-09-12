@@ -105,6 +105,7 @@ class Capture:
             self.parts.append({"source": source, "text": text})
 
     def response(self, response):
+        self.usage = _field(response, "usage")
         try:
             self._response(response)
         except Exception as exc:

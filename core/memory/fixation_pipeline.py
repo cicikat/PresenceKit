@@ -903,6 +903,11 @@ def capture_turn(
     if not all(writes):
         raise RuntimeError(f"capture_turn 写入不完整: turn_id={turn_id} writes={writes}")
 
+    if not trigger_name and _scrubbed_reply and user_msg:
+        from core.conversation_stats import record
+        record("chat_round", uid=uid, char_id=char_id,
+               event_id=f"round:{uid}:{char_id}:{turn_id}", ts=ts)
+
     return turn_id
 
 

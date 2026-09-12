@@ -253,6 +253,10 @@ def _first_chat_choice(
     return choice
 
 
+from core.conversation_stats import attributed as _stats_attributed
+
+
+@_stats_attributed
 async def chat(
     messages: list[dict],
     tools: list[dict] | None = None,
@@ -292,6 +296,7 @@ async def chat(
             # Vision branch: sanitize only (no prompt_style transform needed)
             safe_msgs = sanitize_messages(messages)
             started_at = time.perf_counter()
+            response = None
             try:
                 _record_debug_request(
                     provider=str(vision_cfg.get("provider") or "vision"),
@@ -326,6 +331,14 @@ async def chat(
                 )
                 log_error("llm_client.chat.vision", e)
                 return ""
+            finally:
+                from core.conversation_stats import record
+                record("model_call", usage=getattr(response, "usage", None))
+                image_count = sum(1 for msg in safe_msgs
+                    for block in (msg.get("content") if isinstance(msg.get("content"), list) else [])
+                    if isinstance(block, dict) and block.get("type") == "image_url")
+                if image_count:
+                    record("image_view", count=image_count)
 
     if preset_name is None:
         mc: ModelClient = get_model_client(call_category, char_id=char_id)
@@ -483,6 +496,7 @@ def _looks_like_leaked_tool_call_markup(text: str) -> bool:
 _LEAK_SCAN_WINDOW = 64
 
 
+@_stats_attributed
 async def chat_turn(
     messages: list[dict],
     tools: list[dict],
@@ -613,6 +627,7 @@ async def chat_turn(
     )
 
 
+@_stats_attributed
 async def chat_stream(
     messages: list[dict],
     max_tokens_override: int | None = None,

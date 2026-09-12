@@ -1,5 +1,10 @@
 # docs/known-issues.md — 已知问题与技术债
 
+## Conversation calendar (2026-09-12)
+
+Current: GET /chat-log/stats/calendar requires memory.read + state.read. All four metrics are scoped to owner + character; period=day/week/month/year with date, or start/end (up to 366 days). Missing history is null, never zero. Coverage and totals_partial disclose incomplete data. See backend docs/conversation-calendar.md.
+Roadmap: native desktop/mobile heatmap and day detail UI. Observe: real provider streaming usage and independent automation transport coverage. Existing history, WS/poll/ack/TTL remain unchanged.
+
 ## Relay SDK User-Agent compatibility (2026-09-12)
 
 - current: registry-built OpenAI clients identify as `PresenceKit/1.0`; 82 targeted tests pass.

@@ -629,6 +629,7 @@ async def _collect_chat_stream(mc, messages, kwargs, capture) -> NormalizedRespo
     try:
         async for chunk in stream:
             usage = getattr(chunk, "usage", None) or usage
+            capture.usage = _usage(usage)
             choices = getattr(chunk, "choices", None)
             if not choices:
                 continue
@@ -699,6 +700,8 @@ async def _stream_text(
             model=mc.model, messages=messages, stream=True, **gen_kwargs,
         )
         async for chunk in stream:
+            if getattr(chunk, "usage", None) is not None:
+                capture.usage = _usage(chunk.usage)
             choices = getattr(chunk, "choices", None)
             if not isinstance(choices, list) or not choices:
                 continue
@@ -733,6 +736,10 @@ async def _stream_text(
                 except json.JSONDecodeError as exc:
                     raise _format_error(mc, "Anthropic Messages stream contains invalid JSON", response) from exc
                 event_type = event.get("type") if isinstance(event, dict) else None
+                if event_type in {"message_start", "message_delta"}:
+                    usage = (event.get("message") or {}).get("usage") if event_type == "message_start" else event.get("usage")
+                    if isinstance(usage, dict):
+                        capture.usage = {**(getattr(capture, "usage", None) or {}), **usage}
                 if event_type == "content_block_start":
                     block = event.get("content_block") or {}
                     if block.get("type") == "thinking":
@@ -802,6 +809,7 @@ async def _stream_text(
             if final_capture.parts:
                 capture.parts = final_capture.parts
             normalized = _normalize_responses(mc, getattr(event, "response", None))
+            capture.usage = normalized.usage
             if normalized.tool_calls:
                 raise _format_error(mc, "Responses text stream unexpectedly returned function calls", event)
             if normalized.assistant_text and not emitted:
@@ -823,9 +831,11 @@ async def create(mc, messages, *, tools=None, tool_choice=None, gen_kwargs):
     try:
         result = await _create(mc, messages, tools=tools, tool_choice=tool_choice,
                                gen_kwargs=gen_kwargs, capture=capture)
+        capture.usage = result.usage
         capture.status = "completed"
         return result
     finally:
+        _record_usage(capture, messages)
         await capture.save()
 
 
@@ -843,4 +853,16 @@ async def stream_text(mc, messages, *, gen_kwargs):
         try:
             await source.aclose()
         finally:
+            _record_usage(capture, messages)
             await capture.save()
+
+
+def _record_usage(capture, messages):
+    from core.conversation_stats import record
+    record("model_call", event_id="model:" + capture.call_id,
+           usage=getattr(capture, "usage", None))
+    images = sum(1 for message in messages
+                 for block in (message.get("content") if isinstance(message.get("content"), list) else [])
+                 if isinstance(block, dict) and block.get("type") in {"image_url", "image", "input_image"})
+    if images:
+        record("image_view", event_id="images:" + capture.call_id, count=images)
