@@ -1,5 +1,11 @@
 # docs/model-presets.md — 多模型 Preset 系统
 
+## Chat Completions 工具类型联合（2026-09-13）
+
+协议出口将工具参数 schema 的 `type: [A, B]` 递归转成等价 `anyOf`，兼容拒绝 type 数组的
+中转；保留 required、各分支约束和 null，不改注册表/MCP 原对象及本地执行校验。
+Responses 与 Anthropic 原生出口保持原格式。无新配置或路由判定，不按模型名猜协议。
+
 ## 工具探针超时（2026-09-13）
 
 `probe` 请求超时由 10 秒调整为 15 秒，适用于前置探针和 tool loop 的 probe 用途补救调用；

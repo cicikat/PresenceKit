@@ -1,5 +1,12 @@
 # docs/known-issues.md — 已知问题与技术债
 
+## 原生工具调用 type 数组（2026-09-13）
+
+current：空枚举修复后，上游继续拒绝工具 schema 的 type 数组。Chat Completions 出口统一
+转换为等价 anyOf，涵盖嵌套参数和 MCP 工具，无需删工具或放宽本地校验。
+56 项定向回归通过；当前中转合成类型联合请求已接受。observe：运行中动态 MCP 全集与
+真实角色完整聊天仍待重启验证；合成请求不执行工具、不写对话记忆。
+
 ## 原生工具调用空枚举（2026-09-13）
 
 current：read_life_records.category 移除空字符串枚举，省略仍查询全部分类，修复已报告的

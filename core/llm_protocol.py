@@ -563,6 +563,42 @@ def _normalize_responses(mc: Any, response: Any) -> NormalizedResponse:
     )
 
 
+def _portable_tool_schema(schema):
+    """Encode type unions as anyOf without altering the accepted JSON values."""
+    from copy import deepcopy
+
+    if not isinstance(schema, dict):
+        return deepcopy(schema)
+    result = deepcopy(schema)
+    for key in ("properties", "$defs", "definitions", "patternProperties"):
+        if isinstance(result.get(key), dict):
+            result[key] = {name: _portable_tool_schema(value) for name, value in result[key].items()}
+    for key in ("items", "additionalProperties", "not", "contains", "if", "then", "else"):
+        if isinstance(result.get(key), dict):
+            result[key] = _portable_tool_schema(result[key])
+    for key in ("anyOf", "oneOf", "allOf", "prefixItems"):
+        if isinstance(result.get(key), list):
+            result[key] = [_portable_tool_schema(value) for value in result[key]]
+    types = result.get("type")
+    if isinstance(types, list) and types:
+        del result["type"]
+        # Duplicate sibling constraints into each branch so existing anyOf
+        # constraints remain intersected with the type union.
+        return {"anyOf": [dict(deepcopy(result), type=kind) for kind in types]}
+    return result
+
+
+def _portable_tools(tools):
+    from copy import deepcopy
+
+    result = deepcopy(tools)
+    for tool in result or []:
+        function = tool.get("function", {})
+        if "parameters" in function:
+            function["parameters"] = _portable_tool_schema(function["parameters"])
+    return result
+
+
 async def _create(
     mc: Any,
     messages: list[dict[str, Any]],
@@ -577,7 +613,7 @@ async def _create(
     if protocol == "chat_completions":
         kwargs = dict(gen_kwargs)
         if tools:
-            kwargs.update(tools=tools, tool_choice=tool_choice or "auto")
+            kwargs.update(tools=_portable_tools(tools), tool_choice=tool_choice or "auto")
         if getattr(mc, "force_stream", False) is True:
             return await _collect_chat_stream(mc, messages, kwargs, capture)
         response = await mc.client.chat.completions.create(model=mc.model, messages=messages, **kwargs)

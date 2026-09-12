@@ -78,6 +78,38 @@ async def test_chat_request_category_timeout(monkeypatch, category, expected_tim
 
 
 @pytest.mark.asyncio
+async def test_chat_turn_sends_portable_type_unions_without_mutating_tools(monkeypatch):
+    from copy import deepcopy
+    from core import llm_client
+
+    fake_mc = _make_fake_model_client(_fake_message("ok"))
+    original_create = fake_mc.client.chat.completions.create
+    sent = []
+
+    async def capture(**kwargs):
+        sent.append(kwargs)
+        return await original_create(**kwargs)
+
+    fake_mc.client.chat.completions.create = capture
+    monkeypatch.setattr(llm_client, "get_model_client", lambda *a, **k: fake_mc)
+    tools = [{"type": "function", "function": {"name": "lookup", "parameters": {
+        "type": "object", "properties": {
+            "after": {"type": ["number", "null"], "minimum": 0},
+            "type": {"type": "string", "default": "number"},
+            "nested": {"type": "array", "items": {"type": ["string", "integer"]}},
+        }, "required": ["after"]}}}]
+    original = deepcopy(tools)
+    await llm_client.chat_turn([{"role": "user", "content": "hi"}], tools)
+    schema = sent[0]["tools"][0]["function"]["parameters"]
+    assert schema["properties"]["after"] == {"anyOf": [
+        {"type": "number", "minimum": 0}, {"type": "null", "minimum": 0}]}
+    assert schema["properties"]["nested"]["items"] == {"anyOf": [{"type": "string"}, {"type": "integer"}]}
+    assert schema["properties"]["type"] == original[0]["function"]["parameters"]["properties"]["type"]
+    assert schema["required"] == ["after"]
+    assert tools == original
+
+
+@pytest.mark.asyncio
 async def test_leaked_tool_call_markup_discarded_as_empty(monkeypatch):
     from core import llm_client
 

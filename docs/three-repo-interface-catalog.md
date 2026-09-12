@@ -1,5 +1,12 @@
 # 三仓接口总览与闭环审计
 
+## 工具类型联合兼容（2026-09-13）
+
+current：共享 Chat Completions 出口把 type 数组转为等价 anyOf，覆盖 QQ/桌面/手机工具请求。
+管理面沿用模型连接、工具配置与 API 观测；客户端设置、REST/WS/IPC、scope、ack、TTL 和
+本地工具校验不变，无新落盘状态。56 项回归及合成上游请求通过。
+observe：动态 MCP 全集和真实双端聊天仍需重启验证，不将合成请求等同于端到端交付。
+
 ## 生活记录工具空枚举（2026-09-13）
 
 current：共享 read_life_records schema 的可选 category 仅枚举 diet/bill/cart，省略查询全部。
