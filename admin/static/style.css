@@ -133,7 +133,12 @@ main {
 .page.active { display: block; }
 
 h1.page-title { font-size: 20px; margin-bottom: 20px; }
-.page-subtitle { color: var(--muted); font-size: 12px; font-weight: 400; }
+.page-subtitle { color: var(--muted); font-size: 13px; font-weight: 400; line-height: 1.7; margin: 10px 0 24px; }
+.page > .page-title + p { color: var(--muted); font-size: 13px; font-weight: 400; line-height: 1.7; margin: -8px 0 24px; }
+.card > h3 + p, .card-header h3 + p, .card > .card-header + p,
+.card > p:not(.badge), .admin-description { color: var(--muted); font-size: 13px; font-weight: 400; line-height: 1.7; margin: 10px 0 18px; }
+.card > h3 { margin-bottom: 12px; }
+.card-header > div > h3 + p { margin-top: 10px; margin-bottom: 0; }
 
 .page-context {
   border-left: 3px solid var(--accent2);
@@ -144,7 +149,7 @@ h1.page-title { font-size: 20px; margin-bottom: 20px; }
   font-size: 12px;
   line-height: 1.55;
 }
-.page-context-purpose { color: var(--text); }
+.page-context-purpose { color: var(--muted); font-weight: 400; }
 .page-context-source { margin-top: 2px; }
 .page-context-related { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
 .page-context-related > span { margin-right: 2px; }
@@ -519,7 +524,15 @@ textarea { resize: vertical; min-height: 72px; }
 .autonomy-overview .stat { margin: 0; min-height: 96px; }
 .autonomy-overview .stat .val { font-size: 20px; overflow-wrap: anywhere; }
 .autonomy-overview .stat .detail { color: var(--muted); font-size: 11px; line-height: 1.45; margin-top: 5px; }
-.autonomy-source-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.autonomy-source-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; margin-bottom: 24px; }
+#page-autonomy-settings .autonomy-source-grid .form-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 24px; }
+#page-autonomy-settings .autonomy-source-grid .checkbox-row { grid-column: 1 / -1; }
+@media (max-width: 600px) { #page-autonomy-settings .autonomy-source-grid .form-row { grid-template-columns: minmax(0, 1fr); } }
+.vision-editor { margin: 16px 0; padding: 20px; border: 1px solid var(--border); border-radius: var(--radius); }
+.vision-editor[hidden] { display: none; }
+.vision-editor h3 { font-size: 15px; }
+.vision-editor p { color: var(--muted); font-size: 13px; line-height: 1.7; margin: 12px 0; }
+.vision-section-title { font-size: 16px; font-weight: 600; margin: 32px 0 16px; }
 .autonomy-source-grid .card { margin-bottom: 0; }
 .autonomy-hint { color: var(--muted); font-size: 12px; line-height: 1.55; margin: 0 0 14px; }
 .autonomy-page .card-header .autonomy-hint { margin: 4px 0 0; }

@@ -1,54 +1,45 @@
-
-      <h1 class="page-title">模型路由</h1>
-      <p class="admin-source-hint">配置来源：全局 active routing 与角色绑定共同决定；本页显示当前生效解析结果。</p>
-
-      <div class="card">
+<h1 class="page-title" data-i18n="nav.page.model-routing">模型路由</h1>
+<p class="page-subtitle" data-i18n="routing.clean_intro">先配置模型连接，再分配用途。角色绑定优先于全局方案。</p>
+<h2 class="vision-section-title" data-i18n="routing.images_heading">图像识别</h2>
+<section class="card">
+  <div class="card-header"><h3 data-i18n="routing.image_presets">Presets · 图像连接</h3><button class="btn btn-ghost btn-sm" data-action="loadImageConnections" data-i18n="common.refresh">刷新</button></div>
+  <p data-i18n="routing.image_presets_hint">通用视觉负责理解图片，OCR 负责提取文字。选择一行编辑连接。</p>
+  <div class="tbl-wrap"><table><thead><tr><th data-i18n="routing.connection">连接</th><th>Provider</th><th data-i18n="status.vision.model">模型</th><th data-i18n="common.status">状态</th><th data-i18n="common.actions">操作</th></tr></thead><tbody id="vision-connections-body"></tbody></table></div>
+      <div class="vision-editor" id="vision-general-editor" hidden>
         <div class="card-header"><h3 data-i18n="status.vision.title">视觉模型配置（图片识别）</h3><button class="btn btn-primary btn-sm" data-action="saveVisionParams" data-i18n="common.save">保存</button><label class="admin-inline-026"><span data-i18n="status.vision.enable" class="admin-inline-099">启用</span><input type="checkbox" id="vision-enabled"></label></div>
-        <p data-i18n="status.vision.key_hint" class="admin-inline-091">API Key 留空时保留已有密钥；保存后热重载。</p>
-        <p class="admin-inline-092" data-i18n="settings_center.shared_vision_connection_with_a_separate_mobile_automation_override_ocr_uses_the_independent_connect">通用图片理解连接；手机自动化可单独覆盖。OCR 文字提取使用下方独立连接。</p>
         <div class="form-row"><label class="field"><span data-i18n="settings_center.api_protocol">API 协议</span><select disabled><option>OpenAI Chat Completions</option></select></label></div>
         <div class="form-row"><label class="field"><span>Provider</span><select id="vision-provider"><option value="gemini">Gemini</option><option value="openai">OpenAI</option><option value="glm">GLM</option><option value="custom" data-i18n="status.vision.custom">自定义</option></select></label><label class="field"><span data-i18n="status.vision.model">模型</span><input type="text" id="vision-model-select" list="vision-model-options" placeholder="模型名"><datalist id="vision-model-options"></datalist></label></div>
         <div class="form-row"><label class="field"><span>API Key</span><input type="password" id="vision-api-key" autocomplete="off" placeholder="留空则保留已有 API Key" data-i18n-placeholder="status.vision.key_placeholder"></label><label class="field"><span>Base URL</span><input type="url" id="vision-base-url"></label></div>
-        <p class="admin-inline-120"><a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">Gemini API Key</a> · <a href="https://open.bigmodel.cn/usercenter/apikeys" target="_blank" rel="noopener">GLM API Key</a></p>
       </div>
 
-      <section class="card">
+      <div class="vision-editor" id="vision-ocr-editor" hidden>
         <div class="card-header"><h3 data-i18n="settings_center.image_routing_and_ocr_connection">图片上传路由 / OCR 连接</h3><div><button class="btn btn-ghost btn-sm" data-action="loadImageRecognition">刷新</button><button class="btn btn-primary btn-sm" data-action="saveImageRecognition" data-i18n="settings_center.save">保存</button></div></div>
-        <div class="form-row"><label class="field"><span data-i18n="settings_center.image_upload_purpose">图片上传用途</span><select id="image-recognition-mode"><option value="vision" data-i18n="settings_center.image_understanding">图片理解（通用视觉连接）</option><option value="ocr" data-i18n="settings_center.ocr_text_extraction">OCR 文字提取（独立连接）</option></select></label><label class="field"><span>Provider</span><select id="ocr-provider"><option value="glm">GLM</option><option value="custom">自定义</option></select></label></div>
+        <div class="form-row"><label class="field"><span>Provider</span><select id="ocr-provider"><option value="glm">GLM</option><option value="custom">自定义</option></select></label></div>
         <div class="form-row"><label class="field"><span data-i18n="settings_center.api_protocol">API 协议</span><select id="ocr-protocol"><option value="glm_layout_parsing">GLM Layout Parsing</option><option value="chat_completions">OpenAI Chat Completions</option></select></label><label class="field"><span>模型</span><input type="text" id="ocr-model" placeholder="glm-ocr"></label></div>
         <div class="form-row"><label class="field" id="ocr-endpoint-field"><span data-i18n="settings_center.endpoint_url">Endpoint URL（完整地址）</span><input id="ocr-endpoint" type="url"></label><label class="field" id="ocr-base-field" hidden><span>Base URL</span><input id="ocr-base-url" type="url"></label><label class="field"><span>API Key <small id="ocr-key-state"></small></span><input id="ocr-api-key" type="password" autocomplete="off" placeholder="留空则保留已有 API Key"></label></div>
-        <p class="admin-description">生活记录独立按分类选择：饮食、购物车使用上方通用视觉；账单始终使用此 OCR 连接。用途选择只影响普通聊天图片上传。视觉调用带分类提示词；专用版面 OCR 接口不接收聊天提示词。</p>
         <p>请求地址：<code id="ocr-request-url" class="settings-url">-</code></p>
-        <p id="image-recognition-state" role="status">加载中…</p>
-      </section>
+      </div>
 
-      <div class="card">
+</section>
+<section class="card">
+  <div class="card-header"><h3 data-i18n="routing.image_profiles">Routing · 图像用途</h3></div>
+  <p data-i18n="routing.image_profiles_hint">聊天图片可切换识别方式；自动化继续使用视觉理解。</p>
+  <div class="form-row"><label class="field"><span data-i18n="settings_center.image_upload_purpose">图片上传用途</span><select id="image-recognition-mode"><option value="vision" data-i18n="settings_center.image_understanding">图片理解（通用视觉连接）</option><option value="ocr" data-i18n="settings_center.ocr_text_extraction">OCR 文字提取（独立连接）</option></select></label><button class="btn btn-primary btn-sm" data-action="saveImageRoute" data-i18n="common.save">保存</button></div>
+  <p id="image-recognition-state" role="status"></p>
+  <div class="tbl-wrap"><table><thead><tr><th data-i18n="routing.purpose">用途</th><th data-i18n="routing.connection">连接</th><th data-i18n="common.actions">操作</th></tr></thead><tbody>
+  <tr><td data-i18n="routing.life_vision">生活记录 · 饮食、购物车</td><td data-i18n="routing.general_vision">通用视觉</td><td>—</td></tr>
+  <tr><td data-i18n="routing.life_ocr">生活记录 · 账单</td><td>OCR</td><td>—</td></tr>
+  <tr><td data-i18n="routing.phone_automation">手机自动化</td><td id="vision-phone-summary"></td><td><button class="btn btn-ghost btn-sm" data-action="toggleVisionEditor" data-action-args='["vision-phone-editor"]' data-i18n="common.edit">编辑</button></td></tr>
+  </tbody></table></div>
+      <div class="vision-editor" id="vision-phone-editor" hidden>
         <div class="card-header"><h3 data-i18n="status.phone_vision.title">手机自动化视觉覆盖</h3><div><button class="btn btn-ghost btn-sm" data-action="loadPhoneControlVisionParams" data-i18n="common.refresh">刷新</button><button class="btn btn-primary btn-sm" data-action="savePhoneControlVisionParams" data-i18n="common.save">保存</button></div></div>
         <p data-i18n="status.phone_vision.hint">仅覆盖手机自动化的视觉模型。留空即继承上方通用视觉配置；通常只需要填写模型名。</p>
         <div class="form-row"><label class="field"><span data-i18n="status.phone_vision.enabled">启用状态</span><select id="phone-vision-enabled"><option value="" data-i18n="status.phone_vision.inherit">继承通用配置</option><option value="true" data-i18n="status.phone_vision.enabled_true">启用</option><option value="false" data-i18n="status.phone_vision.enabled_false">关闭</option></select></label><label class="field"><span data-i18n="status.vision.model">模型</span><input id="phone-vision-model" type="text" data-i18n-placeholder="status.phone_vision.model_placeholder" placeholder="留空则继承通用模型"></label></div>
         <div class="form-row"><label class="field"><span data-i18n="status.phone_vision.base_url">Base URL 覆盖</span><input id="phone-vision-base-url" type="text" data-i18n-placeholder="status.phone_vision.base_url_placeholder" placeholder="留空则继承通用 Base URL"></label><label class="field"><span data-i18n="status.phone_vision.api_key">API Key 覆盖</span><input id="phone-vision-api-key" type="password" autocomplete="off" data-i18n-placeholder="status.phone_vision.api_key_placeholder" placeholder="留空则继承通用 API Key"></label></div>
       </div>
 
-      <div class="card admin-inline-005">
-        <div class="card-header"><h3>这个页面是干什么的？</h3></div>
-        <p class="admin-inline-104">
-          三个概念，从下往上理解：<br>
-          ① <strong>Preset</strong>（模型连接）= 一个"你能用的模型"：服务商地址 + 密钥 + 模型名，
-          填一个 preset 相当于告诉后端"这里有一个能调用的模型"。<br>
-          ② <strong>Routing Profile</strong>（分配方案）= 一套"谁用谁"的表：把不同用途的调用
-          （比如角色正式回复 vs. 后台判断/摘要这类不需要用户看到的杂活）分别指给某个 preset。
-          不是每类都要填——留空的类别会自动回退用这套方案里的 <code class="admin-inline-073">chat</code>，
-          所以新手只填 <code class="admin-inline-073">chat</code> 一项就能跑起来。<br>
-          ③ <strong>当前生效路由方案</strong> = 现在实际在用的那一套分配方案。可以配多套（比如「日常省钱」
-          「重要场合上强模型」），需要时切换。
-        </p>
-        <p class="admin-inline-101">
-          配置顺序：先在下方「Presets」新建至少一个模型连接 → 再到「Routing Profiles」新建/编辑一套方案，
-          把 <code class="admin-inline-073">chat</code> 指向刚才建的 preset → 最上方「当前生效路由方案」
-          切换到这套方案即可生效。
-        </p>
-      </div>
-
+</section>
+<h2 class="vision-section-title" data-i18n="routing.text_heading">文本模型</h2>
       <div class="card admin-inline-056" id="mr-legacy-banner">
         <p class="admin-inline-103">
           当前配置未开启 <code class="admin-inline-073">model_presets</code> 块（legacy 模式，等价合成了单个
@@ -62,11 +53,7 @@
           <h3>当前生效路由方案</h3>
           <button class="btn btn-ghost btn-sm" data-action="loadModelRouting">刷新</button>
         </div>
-        <p class="admin-inline-087">
-          下拉框选一个下方已建好的 routing profile，点「切换」立即对全局生效。
-          注：如果某个角色卡自己单独绑定了一套方案（在「角色卡」页设置），该角色对话时优先用它自己绑定的那套，
-          不受这里的全局选择影响。
-        </p>
+        <p class="admin-description" data-i18n="routing.global_hint">切换全局方案；已有角色绑定不受影响。</p>
         <div class="admin-inline-019">
           <select id="mr-active-routing-select" class="admin-inline-171"></select>
           <button class="btn btn-primary btn-sm" data-action="switchActiveRouting">切换</button>
@@ -94,12 +81,7 @@
           <h3>Routing Profiles</h3>
           <button class="btn btn-primary btn-sm" data-action="openProfileModal">+ 新建/编辑 Profile</button>
         </div>
-        <p class="admin-inline-089">
-          一个 profile 就是一套"把哪类调用交给哪个 preset"的分配表（call_category → preset）。
-          没单独指定的类别会自动回退用这套方案里的 <code class="admin-inline-073">chat</code>，
-          所以只填 <code class="admin-inline-073">chat</code> 也能正常跑；其余类别都是不面向用户的后台
-          "杂活"，想省钱可以单独指到便宜模型。
-        </p>
+        <p class="admin-description" data-i18n="routing.preset_short">地址、密钥和模型组成一个连接。保存后可分配用途。</p>
         <details class="admin-inline-126">
           <summary class="admin-inline-013">各 category 是干什么的？点开看</summary>
           <div class="admin-inline-141">

@@ -1,4 +1,6 @@
-<h1 class="page-title" data-i18n="settings_center.autonomy_policy">自主活动策略</h1>  <div class="card">
+<h1 class="page-title" data-i18n="nav.page.autonomy-settings">自主活动安排</h1>
+<p class="page-subtitle" data-i18n="autonomy.prerequisites">让角色在合适的时机自行评估要做什么。需要先配置所有者、可用模型并启用调度器；主动发言还受发言开关、免打扰和每日预算限制。</p>
+<div class="card">
     <div class="card-header"><div><h3 data-i18n="autonomy.control_title">总控与预算</h3><p class="autonomy-hint" data-i18n="autonomy.control_hint">决定是否创建新的自主活动机会；保存后才会写入运行配置。</p></div><button class="btn btn-primary btn-sm" data-action="saveAutonomyConfig" data-i18n="autonomy.save">保存全部设置</button></div>
     <div class="form-row autonomy-controls">
       <label class="checkbox-row"><input id="autonomy-enabled" type="checkbox"><span data-i18n="autonomy.enabled">启用内置唤醒</span></label>
@@ -17,7 +19,16 @@
     <div class="card">
       <div class="card-header"><h3 data-i18n="autonomy.schedule_title">定时唤醒</h3><span class="badge badge-accent" data-i18n="autonomy.schedule_badge">按日历</span></div>
       <p class="autonomy-hint" data-i18n="autonomy.schedule_hint">在选定日期和时间内创建一次机会。默认错过就跳过，避免重启后补发旧活动。</p>
-      <div class="form-row"><label class="checkbox-row"><input id="autonomy-schedule-enabled" type="checkbox"><span>启用定时唤醒</span></label><label class="field"><span>时间 <em title="角色将在这个时刻检查是否可以开始一次活动。">?</em></span><input id="autonomy-schedule-time" type="time"></label><label class="field"><span>时区 <em title="local 使用服务器本地时区；也可填写 IANA 时区，例如 Asia/Shanghai。">?</em></span><input type="text" id="autonomy-schedule-timezone" placeholder="local 或 Asia/Shanghai"></label><label class="field"><span>星期 <em title="0 是周一，6 是周日；可填写 0,1,2,3,4。">?</em></span><input type="text" id="autonomy-schedule-weekdays" placeholder="0,1,2,3,4"></label><label class="field"><span>活动窗口起 <em title="留空表示全天；填写起止时间后，定时点必须落在窗口内。">?</em></span><input id="autonomy-window-start" type="time"></label><label class="field"><span>活动窗口止</span><input id="autonomy-window-end" type="time"></label><label class="field"><span>重启后错过的时间 <em title="跳过最稳妥；最多补一次只会补最近一小时内错过的定时点。">?</em></span><select id="autonomy-miss-policy"><option value="skip">跳过</option><option value="catch_up_once">最多补一次</option></select></label></div>
+      <div class="form-row">
+        <label class="checkbox-row"><input id="autonomy-schedule-enabled" type="checkbox"><span data-i18n="autonomy.schedule_enabled">启用定时唤醒</span></label>
+        <label class="field"><span data-i18n="autonomy.wake_time">每天检查时间</span><input id="autonomy-schedule-time" type="time"></label>
+        <label class="field"><span data-i18n="autonomy.timezone_label">时区（local 使用服务器时区）</span><input type="text" id="autonomy-schedule-timezone" placeholder="local / Asia/Shanghai"></label>
+        <label class="field"><span data-i18n="autonomy.weekdays_label">星期（0 为周一，6 为周日）</span><input type="text" id="autonomy-schedule-weekdays" placeholder="0,1,2,3,4"></label>
+        <label class="field"><span data-i18n="autonomy.missed_label">错过检查时间时</span><select id="autonomy-miss-policy"><option value="skip" data-i18n="autonomy.skip">跳过</option><option value="catch_up_once" data-i18n="autonomy.catch_up">补最近一小时内的一次</option></select></label>
+        <label class="field"><span data-i18n="autonomy.window_from">允许活动的开始时间</span><input id="autonomy-window-start" type="time"></label>
+        <label class="field"><span data-i18n="autonomy.window_until">允许活动的结束时间</span><input id="autonomy-window-end" type="time"></label>
+      </div>
+      <p class="autonomy-hint" data-i18n="autonomy.window_help">活动时段留空表示全天；设置后，每天检查时间须在此时段内。到点只创建活动机会，不保证发送消息。</p>
     </div>
     <div class="card">
       <div class="card-header"><h3 data-i18n="autonomy.interval_title">间隔唤醒</h3><span class="badge badge-accent" data-i18n="autonomy.interval_badge">按完成时间</span></div>

@@ -7,6 +7,44 @@
 
   const I18N = {
     'zh-CN': {
+      'scheduler.global_owner': '所有者资料（全局）',
+      'routing.test_saved': '测试已保存连接',
+      'routing.testing': '测试中…',
+      'routing.test_ok': '连接可用 · {ms} ms',
+      'routing.test_failed': '测试失败：{error}',
+      'routing.clean_intro': '先配置模型连接，再分配用途。角色绑定优先于全局方案。',
+      'routing.images_heading': '图像识别',
+      'routing.image_presets': 'Presets · 图像连接',
+      'routing.image_presets_hint': '通用视觉负责理解图片，OCR 负责提取文字。选择一行编辑连接。',
+      'routing.image_profiles': 'Routing · 图像用途',
+      'routing.image_profiles_hint': '聊天图片可切换识别方式；自动化继续使用视觉理解。',
+      'routing.connection': '连接',
+      'routing.purpose': '用途',
+      'routing.life_vision': '生活记录 · 饮食、购物车',
+      'routing.life_ocr': '生活记录 · 账单',
+      'routing.general_vision': '通用视觉',
+      'routing.phone_automation': '手机自动化',
+      'routing.text_heading': '文本模型',
+      'routing.global_hint': '切换全局方案；已有角色绑定不受影响。',
+      'routing.preset_short': '地址、密钥和模型组成一个连接。保存后可分配用途。',
+      'routing.profile_short': '把不同用途分配给模型连接；留空项按各类别的回退规则解析。',
+      'routing.ready_unchecked': '已配置 · 未测试',
+      'routing.not_ready': '未配置或未启用',
+      'routing.load_unavailable': '尚未读取或读取失败',
+      'routing.disabled': '已关闭',
+      'scheduler.shared_owner': '使用全局所有者资料，无需重复填写。',
+      'scheduler.edit_owner': '管理所有者资料',
+      'autonomy.prerequisites': '让角色在合适的时机自行评估要做什么。需要先配置所有者、可用模型并启用调度器；主动发言还受发言开关、免打扰和每日预算限制。',
+      'autonomy.schedule_enabled': '启用定时唤醒',
+      'autonomy.wake_time': '每天检查时间',
+      'autonomy.timezone_label': '时区（local 使用服务器时区）',
+      'autonomy.weekdays_label': '星期（0 为周一，6 为周日）',
+      'autonomy.missed_label': '错过检查时间时',
+      'autonomy.skip': '跳过',
+      'autonomy.catch_up': '补最近一小时内的一次',
+      'autonomy.window_from': '允许活动的开始时间',
+      'autonomy.window_until': '允许活动的结束时间',
+      'autonomy.window_help': '活动时段留空表示全天；设置后，每天检查时间须在此时段内。到点只创建活动机会，不保证发送消息。',
       'nav.load_failed': '页面加载失败。请重新点击入口重试，或返回上一页。',
       'nav.page.overview': "概览",
       'nav.category.features': "功能与行为",
@@ -2657,6 +2695,44 @@
       'owner_turn.deploy.diary': 'Diary sync',
     },
     en: {
+      'scheduler.global_owner': 'Global owner profile',
+      'routing.test_saved': 'Test saved connection',
+      'routing.testing': 'Testing…',
+      'routing.test_ok': 'Connected · {ms} ms',
+      'routing.test_failed': 'Test failed: {error}',
+      'routing.clean_intro': 'Configure connections, then assign purposes. Character bindings override the global profile.',
+      'routing.images_heading': 'Image recognition',
+      'routing.image_presets': 'Presets · Image connections',
+      'routing.image_presets_hint': 'Vision understands images; OCR extracts text. Select a row to edit its connection.',
+      'routing.image_profiles': 'Routing · Image purposes',
+      'routing.image_profiles_hint': 'Choose a recognition route for chat images. Automation continues to use vision.',
+      'routing.connection': 'Connection',
+      'routing.purpose': 'Purpose',
+      'routing.life_vision': 'Life records · Diet, cart',
+      'routing.life_ocr': 'Life records · Bills',
+      'routing.general_vision': 'General vision',
+      'routing.phone_automation': 'Phone automation',
+      'routing.text_heading': 'Text models',
+      'routing.global_hint': 'Switch the global profile; existing character bindings are unaffected.',
+      'routing.preset_short': 'An address, key and model form a connection. Save it before assigning purposes.',
+      'routing.profile_short': 'Assign connections to purposes. Empty values use the category fallback rules.',
+      'routing.ready_unchecked': 'Configured · Untested',
+      'routing.not_ready': 'Not configured or disabled',
+      'routing.load_unavailable': 'Not loaded or unavailable',
+      'routing.disabled': 'Disabled',
+      'scheduler.shared_owner': 'Uses the global owner profile; no repeated setup is needed.',
+      'scheduler.edit_owner': 'Manage owner profile',
+      'autonomy.prerequisites': 'Let the character decide when to act. Requires an owner, a configured model and the scheduler. Speaking also respects its permission, Do Not Disturb and daily budgets.',
+      'autonomy.schedule_enabled': 'Enable scheduled wake-up',
+      'autonomy.wake_time': 'Daily check time',
+      'autonomy.timezone_label': 'Timezone (local uses server time)',
+      'autonomy.weekdays_label': 'Weekdays (0 is Monday, 6 is Sunday)',
+      'autonomy.missed_label': 'When a check is missed',
+      'autonomy.skip': 'Skip',
+      'autonomy.catch_up': 'Catch up once within the last hour',
+      'autonomy.window_from': 'Activities allowed from',
+      'autonomy.window_until': 'Activities allowed until',
+      'autonomy.window_help': 'Leave the activity window empty for all day. Otherwise, the daily check must fall inside it. A check creates an opportunity, not a guaranteed message.',
       'nav.load_failed': 'Page could not load. Select it again to retry, or go back.',
       'nav.page.overview': "Overview",
       'nav.category.features': "Behavior & tools",
@@ -5341,7 +5417,6 @@
   const legacyExact = new Map();
   const legacyEnglishExact = new Map();
   const legacyPatterns = [];
-  const legacyEnglishPatterns = [];
   const legacyFragments = [];
 
   function escapeRegExp(value) {
@@ -5371,24 +5446,10 @@
       source += escapeRegExp(chinese.slice(cursor));
       const literalLength = chinese.replace(/\{[a-zA-Z0-9_]+\}/g, '').length;
       legacyPatterns.push({regex: new RegExp(`^${source}$`, 's'), names, english, chinese, literalLength});
-      // Keep a reverse matcher for nodes inserted while English is active.
-      let englishSource = '';
-      let englishCursor = 0;
-      const englishNames = [];
-      const englishMatcher = /\{([a-zA-Z0-9_]+)\}/g;
-      let englishMatch;
-      while ((englishMatch = englishMatcher.exec(english)) !== null) {
-        englishSource += escapeRegExp(english.slice(englishCursor, englishMatch.index)) + '(.*?)';
-        englishNames.push(englishMatch[1]);
-        englishCursor = englishMatch.index + englishMatch[0].length;
-      }
-      englishSource += escapeRegExp(english.slice(englishCursor));
-      legacyEnglishPatterns.push({regex: new RegExp(`^${englishSource}$`, 's'), names: englishNames, chinese, literalLength});
     }
   });
 
   legacyPatterns.sort((a, b) => b.literalLength - a.literalLength || a.names.length - b.names.length);
-  legacyEnglishPatterns.sort((a, b) => b.literalLength - a.literalLength || a.names.length - b.names.length);
   legacyFragments.sort((a, b) => b[0].length - a[0].length);
 
   function translateUiText(value, allowFragments=false) {
@@ -5424,13 +5485,8 @@
     const core = raw.slice(leading.length, end > leading.length ? end : raw.length);
     const exact = legacyEnglishExact.get(core);
     if (exact != null) return `${leading}${exact}${trailing}`;
-    for (const item of legacyEnglishPatterns) {
-      const match = item.regex.exec(core);
-      if (!match) continue;
-      const params = {};
-      item.names.forEach((name, index) => { params[name] = match[index + 1]; });
-      return `${leading}${format(item.chinese, params)}${trailing}`;
-    }
+    // Parameterized English can be a model name or technical label (Tool Loop).
+    // Only explicit translation keys and exact phrases may reverse-translate it.
     return raw;
   }
 

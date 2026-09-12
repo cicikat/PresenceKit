@@ -1,5 +1,11 @@
 # docs/model-presets.md — 多模型 Preset 系统
 
+## 图像连接管理 UI（2026-09-12）
+
+图像连接列表与用途分配使用文本 Presets/路由的列表编辑结构；通用视觉、OCR、手机覆盖
+仍读写既有配置。连接保存与聊天 mode 切换分离。admin 图像测试使用合成图片和已保存连接，
+不回显响应正文、不修改配置、不计入角色统计。详见 [admin-settings-visual-review.md](admin-settings-visual-review.md)。
+
 ## Preset HTTP client identification (2026-09-12)
 
 Registry-built OpenAI SDK clients send `User-Agent: PresenceKit/1.0` for both

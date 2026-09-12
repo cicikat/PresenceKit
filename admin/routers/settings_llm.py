@@ -390,6 +390,64 @@ async def get_vision_params(auth=Depends(require_scopes("admin"))):
     }
 
 
+@router.post("/image-recognition/test/{connection}", summary="测试已保存的图像连接")
+async def test_image_connection(
+    connection: Literal["general", "ocr", "phone"],
+    auth=Depends(require_scopes("admin")),
+):
+    """One synthetic image, no user media or automation, no config mutation."""
+    import asyncio
+    import base64
+    import io
+    import time
+    from PIL import Image, ImageDraw
+    from core import image_recognition, api_call_log
+    from core.llm_client import _make_http_client, _get_proxy_url
+    from openai import AsyncOpenAI
+
+    cfg = get_config()
+    vision = dict(cfg.get("vision") or {})
+    if connection == "phone":
+        vision.update({k: v for k, v in (cfg.get("phone_control_vision") or {}).items()
+                       if v is not None and v != ""})
+    if connection != "ocr" and not (vision.get("enabled") and vision.get("base_url") and vision.get("model")):
+        raise HTTPException(422, "Vision connection is disabled or incomplete")
+    if connection == "ocr" and not image_recognition.view(cfg)["configured"]:
+        raise HTTPException(422, "OCR connection is incomplete")
+    image = Image.new("RGB", (80, 25), "white")
+    ImageDraw.Draw(image).text((8, 6), "TEST 123", fill="black")
+    image = image.resize((320, 100))
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    uri = "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode()
+    started = time.monotonic()
+    ok, error = False, ""
+    try:
+        async def probe():
+            if connection == "ocr":
+                return await image_recognition.recognize_ocr(uri, image_recognition.settings(cfg))
+            async with AsyncOpenAI(api_key=vision.get("api_key") or "none", base_url=vision["base_url"],
+                http_client=_make_http_client(_get_proxy_url()), timeout=20, max_retries=0) as client:
+                response = await client.chat.completions.create(model=vision["model"], max_tokens=32,
+                    messages=[{"role": "user", "content": [
+                        {"type": "text", "text": "Read the text in this image. Return only that text."},
+                        {"type": "image_url", "image_url": {"url": uri}},
+                    ]}])
+                return response.choices[0].message.content if response.choices else ""
+        from core.conversation_stats import exclude_diagnostic
+        with exclude_diagnostic():
+            answer = await asyncio.wait_for(probe(), timeout=25)
+        ok = bool(answer and answer.strip() and answer.strip() != "[OCR: no text detected]")
+        error = "" if ok else "empty_response"
+    except Exception as exc:
+        error = type(exc).__name__
+    duration = int((time.monotonic() - started) * 1000)
+    api_call_log.append(caller="admin_image_test", purpose=connection, provider="image_test",
+                        model=str(vision.get("model") or "") if connection != "ocr" else str(image_recognition.settings(cfg).get("model") or ""),
+                        duration_ms=duration, ok=ok, error_category=error)
+    return {"ok": ok, "connection": connection, "duration_ms": duration, "error_category": error}
+
+
 @router.put("/vision-params", summary="修改 Vision 配置并热重载")
 async def update_vision_params(body: VisionParamsUpdate, auth=Depends(require_scopes("admin"))):
     full_cfg = read_config_file(CONFIG_FILE)

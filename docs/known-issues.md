@@ -2,6 +2,10 @@
 
 ## Conversation calendar (2026-09-12)
 
+管理面 UI：current / observe 见 [admin-settings-visual-review.md](admin-settings-visual-review.md)。
+本次页面的浏览器清缓存验收完成，真实模型探针及原生容器未联调。
+open：全站 i18n 两项扫描仍有既有 IME、生活记录、设备、小红书页面的未翻译文本；本次修改页面翻译检查通过。
+
 Current: GET /chat-log/stats/calendar requires memory.read + state.read. All four metrics are scoped to owner + character; period=day/week/month/year with date, or start/end (up to 366 days). Missing history is null, never zero. Coverage and totals_partial disclose incomplete data. See backend docs/conversation-calendar.md.
 Roadmap: native desktop/mobile heatmap and day detail UI. Observe: real provider streaming usage and independent automation transport coverage. Existing history, WS/poll/ack/TTL remain unchanged.
 

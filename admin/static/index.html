@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>His Presence 管理面板</title>
-<link rel="stylesheet" href="/static/style.css?v=life-descriptions-1">
+<link rel="stylesheet" href="/static/style.css?v=calendar-ui-1">
 </head>
 <body>
 
@@ -143,6 +143,7 @@
   <main>
     <div class="admin-topbar">
       <button type="button" id="nav-back" class="btn btn-ghost btn-sm" data-action="goBackPage" disabled><span aria-hidden="true">←</span> <span data-i18n="nav.back">返回上一页</span></button>
+      <button type="button" class="btn btn-ghost btn-sm" data-action="goto" data-action-args='["setup"]' data-i18n="scheduler.global_owner">所有者资料（全局）</button>
       <label for="admin-language-select" data-i18n="common.language">语言</label>
       <select id="admin-language-select" data-language-select onchange="AdminI18n.setLanguage(this.value)">
         <option value="zh-CN" data-i18n="settings_center.chinese">中文</option>
@@ -631,11 +632,11 @@
 
 <div id="toast"></div>
 
-<script src="/static/i18n.js?v=screen-observation-1"></script>
-<!-- legacy cache marker: <script src="/static/i18n.js?v=user-pronoun-3"></script> -->
-<script src="/static/js/core.js?v=life-descriptions-1"></script>
-<!-- legacy cache marker: <script src="/static/js/core.js?v=life-descriptions-1"></script> -->
-<!-- legacy cache marker: <script src="/static/js/core.js?v=life-descriptions-1"></script> -->
+<script src="/static/i18n.js?v=calendar-ui-1"></script>
+<!-- legacy cache marker: <script src="/static/i18n.js?v=calendar-ui-1"></script> -->
+<script src="/static/js/core.js?v=calendar-ui-1"></script>
+<!-- legacy cache marker: <script src="/static/js/core.js?v=calendar-ui-1"></script> -->
+<!-- legacy cache marker: <script src="/static/js/core.js?v=calendar-ui-1"></script> -->
 <script src="/static/js/overview.js?v=brief-180-admin-static-1"></script>
 <script src="/static/js/setup.js?v=admin-navigation-guide-1"></script>
 <script src="/static/js/mcp.js?v=brief-242-settings-4"></script>
@@ -643,12 +644,12 @@
 <script src="/static/js/status-users.js?v=brief-163-status-config-ux-1"></script>
 <script src="/static/js/runtime-config.js?v=settings-center-1"></script>
 <script src="/static/js/lorebook.js"></script>
-<script src="/static/js/settings.js?v=life-descriptions-1"></script>
+<script src="/static/js/settings.js?v=calendar-ui-1"></script>
 <script src="/static/js/owner-turn-api.js?v=brief-173-owner-turn-1"></script>
 <script src="/static/js/agent-runtime-browser.js?v=brief-239-browser-admin-1"></script>
 <script src="/static/js/relationship.js"></script>
 <script src="/static/js/character.js?v=brief-242-settings-4"></script>
-<script src="/static/js/scheduler.js?v=admin-i18n-completeness-1"></script>
+<script src="/static/js/scheduler.js?v=calendar-ui-1"></script>
 <script src="/static/js/integrations.js?v=brief-160-garden-freeze-1"></script>
 <script src="/static/js/observability.js?v=brief-242-settings-4"></script>
 <script src="/static/js/memory-event-control.js?v=brief-216-memory-event-control-1"></script>

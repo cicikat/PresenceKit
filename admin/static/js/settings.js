@@ -53,6 +53,44 @@ const VISION_PROVIDERS = {
   }
 };
 
+const _visionConnections = {general: null, ocr: null};
+function toggleVisionEditor(id) {
+  const editor = document.getElementById(id);
+  editor.hidden = !editor.hidden;
+  if (!editor.hidden) editor.querySelector('input,select,button')?.focus();
+}
+function renderImageConnections() {
+  const root = document.getElementById('vision-connections-body');
+  if (!root) return;
+  root.innerHTML = [['general',t('routing.general_vision','通用视觉'),'vision-general-editor'],['ocr','OCR','vision-ocr-editor']].map(([key,label,id])=>{
+    const d = _visionConnections[key];
+    const ready = d && (key === 'general' ? d.enabled && d.model && d.base_url : d.configured);
+    return `<tr><td>${escapeHtml(label)}</td><td>${escapeHtml(d?.provider || '—')}</td><td data-i18n-skip>${escapeHtml(d?.model || '—')}</td><td>${d ? (ready ? t('routing.ready_unchecked','已配置 · 未测试') : t('routing.not_ready','未配置或未启用')) : t('routing.load_unavailable','尚未读取或读取失败')}</td><td><button class="btn btn-ghost btn-sm" data-action="toggleVisionEditor" data-action-args='${JSON.stringify([id])}'>${t('common.edit','编辑')}</button><button class="btn btn-ghost btn-sm" data-action="testImageConnection" data-action-args='${JSON.stringify([key])}' ${ready ? '' : 'disabled'}>${t('routing.test_saved','测试已保存连接')}</button><span id="vision-test-${key}" role="status"></span></td></tr>`;
+  }).join('');
+  bindPageActions(root);
+}
+async function loadImageConnections() {
+  await Promise.allSettled([loadVisionParams(), loadImageRecognition(), loadPhoneControlVisionParams()]);
+}
+async function testImageConnection(connection) {
+  const state = document.getElementById('vision-test-' + connection);
+  const button = document.querySelector(`[data-action="testImageConnection"][data-action-args='["${connection}"]']`);
+  if (button) button.disabled = true;
+  state.textContent = t('routing.testing','测试中…');
+  try {
+    const result = await api('POST', '/image-recognition/test/' + connection);
+    state.textContent = result.ok ? t('routing.test_ok','连接可用 · {ms} ms',{ms:result.duration_ms}) : t('routing.test_failed','测试失败：{error}',{error:result.error_category});
+  } catch(e) { state.textContent = t('routing.test_failed','测试失败：{error}',{error:e.message}); }
+  finally { if (button) button.disabled = false; }
+}
+async function saveImageRoute() {
+  try {
+    await api('PUT', '/image-recognition', {mode: document.getElementById('image-recognition-mode').value});
+    await loadImageRecognition();
+    toast(t('common.saved','已保存'),'ok');
+  } catch(e) { toast(t('common.save_failed','保存失败: {error}',{error:e.message}),'err'); }
+}
+
 function onVisionProviderChange() {
   const provider = document.getElementById('vision-provider').value;
   const info = VISION_PROVIDERS[provider] || VISION_PROVIDERS.custom;
@@ -68,6 +106,7 @@ function onVisionModelSelect() {}
 async function loadVisionParams() {
   try {
     const data = await api('GET', '/vision-params');
+    _visionConnections.general = data;
     document.getElementById('vision-enabled').checked = data.enabled;
     const provider = data.provider || 'gemini';
     document.getElementById('vision-provider').value = provider;
@@ -80,7 +119,10 @@ async function loadVisionParams() {
     document.getElementById('vision-api-key').value = '';
     if (data.base_url) document.getElementById('vision-base-url').value = data.base_url;
   } catch(e) {
+    _visionConnections.general = null;
     console.error('加载Vision配置失败', e);
+  } finally {
+    renderImageConnections();
   }
 }
 
@@ -97,6 +139,7 @@ async function saveVisionParams() {
   try {
     await api('PUT', '/vision-params', body);
     document.getElementById('vision-api-key').value = '';
+    await loadVisionParams();
     toast(t('common.saved', '已保存'), 'ok');
   } catch(e) {
     toast(t('common.save_failed', '保存失败: {error}', {error: e.message || e}), 'err');
@@ -117,6 +160,7 @@ function renderOcrProtocol() {
 async function loadImageRecognition() {
   try {
     const data = await api('GET', '/image-recognition');
+    _visionConnections.ocr = data;
     for (const [id, key] of Object.entries({
       'image-recognition-mode': 'mode', 'ocr-provider': 'provider', 'ocr-protocol': 'api_protocol',
       'ocr-model': 'model', 'ocr-base-url': 'base_url', 'ocr-endpoint': 'endpoint_url',
@@ -130,14 +174,17 @@ async function loadImageRecognition() {
     document.getElementById('ocr-base-url').oninput = renderOcrProtocol;
     renderOcrProtocol();
   } catch (e) {
+    _visionConnections.ocr = null;
     document.getElementById('image-recognition-state').textContent = `加载失败：${e.message}`;
+  } finally {
+    renderImageConnections();
   }
 }
 
 async function saveImageRecognition() {
   const body = {};
   for (const [id, key] of Object.entries({
-    'image-recognition-mode': 'mode', 'ocr-provider': 'provider', 'ocr-protocol': 'api_protocol',
+    'ocr-provider': 'provider', 'ocr-protocol': 'api_protocol',
     'ocr-model': 'model', 'ocr-base-url': 'base_url', 'ocr-endpoint': 'endpoint_url', 'ocr-api-key': 'api_key',
   })) body[key] = document.getElementById(id).value.trim();
   try {
@@ -157,6 +204,8 @@ async function loadPhoneControlVisionParams() {
     document.getElementById('phone-vision-model').value = data.model || '';
     document.getElementById('phone-vision-base-url').value = data.base_url || '';
     document.getElementById('phone-vision-api-key').value = data.api_key || '';
+    const summary = document.getElementById('vision-phone-summary');
+    if (summary) summary.textContent = data.enabled === false ? t('routing.disabled','已关闭') : data.model || t('status.phone_vision.inherit','继承通用配置');
   } catch (e) {
     toast(t('status.phone_vision.load_error', '读取手机自动化视觉覆盖失败: {error}', {error: e.message || e}), 'err');
   }
@@ -172,6 +221,7 @@ async function savePhoneControlVisionParams() {
   };
   try {
     await api('PUT', '/vision-params/phone-control', body);
+    await loadPhoneControlVisionParams();
     toast(t('status.phone_vision.saved', '手机自动化视觉覆盖已保存'), 'ok');
   } catch (e) {
     toast(t('common.save_failed', '保存失败: {error}', {error: e.message || e}), 'err');

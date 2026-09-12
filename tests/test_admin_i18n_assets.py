@@ -74,18 +74,18 @@ def test_i18n_runtime_is_wired_with_persistent_chinese_default():
     runtime = I18N.read_text(encoding="utf-8")
     core_js = (ROOT / "admin" / "static" / "js" / "core.js").read_text(encoding="utf-8")
 
-    assert '<link rel="stylesheet" href="/static/style.css?v=admin-navigation-guide-1">' in index
-    assert '<script src="/static/i18n.js?v=admin-navigation-guide-1"></script>' in index
-    assert '<script src="/static/js/core.js?v=admin-navigation-guide-1"></script>' in index
+    assert '<link rel="stylesheet" href="/static/style.css?v=calendar-ui-1">' in index
+    assert '<script src="/static/i18n.js?v=calendar-ui-1"></script>' in index
+    assert '<script src="/static/js/core.js?v=calendar-ui-1"></script>' in index
     assert '<script src="/static/js/dream-settings.js?v=brief-175-scenario-reconciler-1"></script>' in index
-    assert "ADMIN_UI_FRAGMENT_VERSION = 'admin-navigation-guide-1'" in core_js
+    assert "ADMIN_UI_FRAGMENT_VERSION = 'calendar-ui-1'" in core_js
     assert '<script src="/static/js/observability.js?v=brief-242-settings-4"></script>' in index
     assert '<script src="/static/js/character.js?v=brief-242-settings-4"></script>' in index
     assert 'id="ds-private-truths"' in read_admin_page("dream-settings")
     assert "dream.scenario.policy_reveal_required" in runtime
     assert '<script src="/static/js/overview.js?v=brief-180-admin-static-1"></script>' in index
     assert '<script src="/static/js/mcp.js?v=brief-242-settings-4"></script>' in index
-    assert '<script src="/static/js/scheduler.js?v=admin-i18n-completeness-1"></script>' in index
+    assert '<script src="/static/js/scheduler.js?v=calendar-ui-1"></script>' in index
     assert '<script src="/static/js/integrations.js?v=brief-160-garden-freeze-1"></script>' in index
     assert "const DEFAULT_LANGUAGE = 'zh-CN';" in runtime
     assert "presence.admin.language" in runtime
@@ -179,8 +179,8 @@ def test_status_page_and_feature_flags_use_semantic_i18n_keys():
     ):
         assert f"'flag.{flag}'" in runtime
 
-    assert "https://aistudio.google.com/app/apikey" in routing
-    assert "https://open.bigmodel.cn/usercenter/apikeys" in routing
+    assert 'id="vision-connections-body"' in routing
+    assert 'data-action="saveImageRoute"' in routing
 
 
 def test_group_arbiter_private_exchange_and_prompt_inspector_are_localized():
@@ -349,3 +349,14 @@ def test_legacy_bridge_localizes_dynamic_dom_and_protects_raw_content():
         "dynamic.vector.",
     ):
         assert runtime.count(f"'{family}") >= 2
+
+
+def test_updated_settings_fragments_have_complete_translation_keys():
+    runtime = I18N.read_text(encoding="utf-8")
+    values = _chinese_dictionary_values(runtime)
+    for page in ("model-routing", "scheduler", "autonomy-settings"):
+        content = read_admin_page(page)
+        parser = _VisibleChineseParser()
+        parser.feed(content)
+        missing = {re.sub(r"\s+", " ", value).strip() for value in parser.values} - values
+        assert not missing, (page, sorted(missing))

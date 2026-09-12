@@ -2,6 +2,10 @@
 
 ## Conversation calendar (2026-09-12)
 
+管理面图像连接与用途分开编辑，新增 admin 合成图片连通性探针，沿用现有 API 账本观测；
+所有者配置唯一入口、删除重复身份与签名表单。current/observe/open 验收边界与全站 i18n 既有缺口见
+[admin-settings-visual-review.md](admin-settings-visual-review.md)。不改变客户端消息、上传识别、手机覆盖、WS/poll/ack/TTL。
+
 Current: GET /chat-log/stats/calendar requires memory.read + state.read. All four metrics are scoped to owner + character; period=day/week/month/year with date, or start/end (up to 366 days). Missing history is null, never zero. Coverage and totals_partial disclose incomplete data. See backend docs/conversation-calendar.md.
 Roadmap: native desktop/mobile heatmap and day detail UI. Observe: real provider streaming usage and independent automation transport coverage. Existing history, WS/poll/ack/TTL remain unchanged.
 

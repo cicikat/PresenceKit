@@ -1,0 +1,39 @@
+# 管理面设置整理（2026-09-12）
+
+## 当前实现
+
+- 英文技术名称不再经过含占位符的反向翻译；保留显式 i18n key 和完整短语翻译。
+  例如 Tool Loop 不会被套入“已……”句型；相应未使用的反向正则构建代码已删除。
+- 标题说明统一为常规字重、次级颜色和独立间距。自主活动三个触发源始终纵向排列，
+  时间字段分行，并说明前置条件、活动时段和机会不等于发言。
+- 顶部提供全局所有者资料入口；唯一编辑字段仍在首次配置页。
+  调度页保存不再提交 owner_id 或 signatures；签名 textarea 已删除。
+  不迁移身份数据、不更改存量配置值，QQ/desktop/mobile 均沿用同一个后端 owner_id。
+- 图像连接和用途分离：Presets 列表展示通用视觉与 OCR，按需展开编辑；用途区单独
+  保存聊天图片 mode，并展示生活记录固定路由、手机自动化覆盖及继承。
+  通用视觉空密钥保留、OCR 协议决定 URL 字段、手机空字段清除覆盖等既有语义不变。
+  配置就绪不宣称服务可用。这里复用两个既有连接，不引入虚假的命名视觉 Profile 存储。
+- 图像连接测试：POST /image-recognition/test/{general|ocr|phone}，admin-only，
+  使用已保存设置与本地生成的 TEST 123 图片，25 秒总超时；视觉 SDK 零重试。
+  不用用户图片、不执行手机动作、不修改配置。响应仅包含 ok/connection/duration_ms/
+  error_category；不会回显 provider 正文、密钥或异常文本。现有 API 调用账本记录探针结果；
+  诊断测试不计入角色对话统计。客户端不需要调用这个 admin 诊断接口。
+
+## 三面核对与验收
+
+管理面保持配置真值与测试入口；桌面由现有管理面桥接编辑这些设置，手机使用相同
+后端图片识别/自动化路由。原调用链鉴权、字段、配置热重载、上传缓存签名、图片顺序、
+phone inheritance、WS/poll/ack/TTL/通知不变；没有额外配置或状态存储。
+
+Chromium 已在本地隔离静态服务上清缓存并禁用缓存，实测桌面和窄屏：连接编辑展开、
+自定义地址不被 provider 覆盖、OCR 协议字段切换、连接与 mode 分开保存、诊断状态显示、
+调度保存不带 owner/signatures、自主活动纵向三行、Tool Loop 不被误译。测试 API 使用
+合成响应，不接触生产配置；真实模型连通性与原生容器仍为 observe。
+
+定向后端/UI 回归见 tests/test_admin_image_connections.py、test_admin_i18n_assets.py、
+test_admin_model_preset_ui.py、test_admin_phone_control_vision_ui.py、test_image_recognition.py。
+浏览器回归 tests/admin_settings_browser.cjs。全站 i18n 两项扫描仍被既有的 IME、生活记录、
+设备与小红书页面未翻译文本阻断；本次三个修改 fragment 的独立翻译覆盖通过，不顺手修改其他页面。
+
+根目录 admin-style-review.html 为独立讨论稿，不是管理面功能。包含现有色彩变量和组件样本、
+候选排版、用途批注、localStorage 保存与 JSON 导入导出，供用户决定后续统一规范。

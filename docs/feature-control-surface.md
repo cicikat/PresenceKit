@@ -1,5 +1,12 @@
 # 功能控制面事实清单（2026-07-13）
 
+## 管理面图像连接与全局所有者（2026-09-12）
+
+图像连接列表与用途分配分开保存，手机视觉覆盖仍继承通用配置；未新增视觉配置真值。
+admin POST /image-recognition/test/{general|ocr|phone} 用合成图片测试已保存连接，
+既有 API 账本提供观测，测试不计入角色统计。全局所有者只在配置页编辑，调度页不再
+重复提交身份或无消费的签名表单。详细 UI、浏览器与三面核对见 [admin-settings-visual-review.md](admin-settings-visual-review.md)。
+
 ## 角色按需截图（2026-09-12，partial）
 
 管理面功能开关 `screen_observation.enabled` 默认关闭，实际可用还需 `visual_perception.enabled`、
