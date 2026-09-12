@@ -1,5 +1,11 @@
 # 三仓接口总览与闭环审计
 
+## 生活记录工具空枚举（2026-09-13）
+
+current：共享 read_life_records schema 的可选 category 仅枚举 diet/bill/cart，省略查询全部。
+管理面沿用角色读取授权及观测；桌面/手机聊天和手机生活记录同步、权限、ack、TTL 不变，
+无新增设置或落盘物。observe：真实中转原生工具调用及双端聊天待重启复测。
+
 ## 工具探针超时（2026-09-13）
 
 current：后端 probe 请求预算 10 → 15 秒。QQ/desktop/mobile 共用 pretool 路由；

@@ -1,5 +1,10 @@
 # docs/known-issues.md — 已知问题与技术债
 
+## 原生工具调用空枚举（2026-09-13）
+
+current：read_life_records.category 移除空字符串枚举，省略仍查询全部分类，修复已报告的
+上游 enum[0] cannot be empty HTTP 400。observe：重启后真实中转和双端聊天仍待复测。
+
 ## 工具探针读取超时（2026-09-13）
 
 current：probe 请求超时由 10 秒放宽到 15 秒，超时仍返回 probe_unavailable 并继续聊天。

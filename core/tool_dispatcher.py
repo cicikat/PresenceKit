@@ -901,7 +901,7 @@ _TOOL_REGISTRY["read_life_records"] = {
     "func": _life_records_wrapper, "description": "按日期、分类和关键词只读检索用户提供的饮食、账单、购物车记录。",
     "dangerous": False, "category": "memory",
     "parameters": {"type": "object", "properties": {
-        "category": {"type": "string", "enum": ["", "diet", "bill", "cart"]},
+        "category": {"type": "string", "enum": ["diet", "bill", "cart"], "description": "按分类筛选；省略则查询全部分类。"},
         "date_from": {"type": "string", "description": "起始日期 YYYY-MM-DD"},
         "date_to": {"type": "string", "description": "结束日期 YYYY-MM-DD"},
         "query": {"type": "string"}}, "required": []},

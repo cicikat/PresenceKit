@@ -212,6 +212,9 @@ def test_category_changed_during_recognition_requeues(client):
 @pytest.mark.asyncio
 async def test_character_reads_description_only_with_owner_permission(client,monkeypatch):
     from core import tool_dispatcher
+    schema = tool_dispatcher._TOOL_REGISTRY['read_life_records']['parameters']
+    assert 'category' not in schema['required']
+    assert schema['properties']['category']['enum'] == ['diet', 'bill', 'cart']
     cfg={'scheduler':{'owner_id':'owner'},'life_records':{'enabled':True,'character_readable':True}}
     monkeypatch.setattr(tool_dispatcher,'get_config',lambda:cfg)
     monkeypatch.setattr(store,'get_config',lambda:cfg)
