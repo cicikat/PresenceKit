@@ -1,7 +1,7 @@
 # 小红书分享读取工具
 
 `read_xiaohongshu(share)` 接收完整分享文案或链接，提供正文摘录、图片识别和评论样本。
-默认关闭；管理面「工具」页配置开关、读取服务地址、评论上限（1–30）与图片识别上限（0–4）。
+默认关闭；管理面「工具」页配置开关、是否由后端托管本地服务、读取服务地址、评论上限（1–30）与图片识别上限（0–4）。
 保存走 admin-only GET/PUT `/settings/xiaohongshu`，和工具列表共用
 `tools.read_xiaohongshu.enabled`；不产生第二个开关。其余配置存 `xiaohongshu`。
 
@@ -13,7 +13,8 @@
 [帖子、图片和评论结构](https://github.com/xpzouying/xiaohongshu-mcp/blob/main/xiaohongshu/types.go)。
 此工具只调用读取端点，不注册该服务的发布、点赞或评论写入能力。
 
-需要先按该项目说明运行读取服务并完成小红书登录，在本管理面填写服务根地址。
+外部模式需要先按该项目说明运行读取服务并完成小红书登录，在本管理面填写服务根地址。
+本地托管模式由管理面安装固定版本并发起扫码；保存后后端启动时自动启动服务，关闭开关或后端退出时回收由后端拥有的进程。
 本地部署已使用 Docker 镜像 `xpzouying/xiaohongshu-mcp:v2.5.0`，用户扫码后登录状态接口已确认成功。
 服务仅绑定 `127.0.0.1:18060`，登录数据保存在 Docker 命名卷 `presencekit-xhs-data`，
 容器 `presencekit-xhs-reader` 使用 `unless-stopped` 重启策略。后端读取地址已配置并开启；
@@ -41,10 +42,8 @@ Docker Desktop 与小红书域名直连后恢复，代理监听端口未改变�
 
 ### Windows 本地部署补充（2026-09-12）
 
-当前维护机已改用 Windows 原生后台服务，不再依赖 Docker Desktop。
-安装目录为 `%LOCALAPPDATA%/PresenceKit/xiaohongshu/`，运行
-`start-reader.cmd` 启动，`stop-reader.ps1` 停止；启动脚本按可执行文件路径
-检查重复进程。未配置开机自启或后端生命周期联动，重启电脑后需手动启动读取服务。
+当前维护机已改用 Windows 原生后台服务，不再依赖 Docker Desktop；仓库同时提供跨平台安装入口和固定版本源码构建。
+Windows 安装目录为 `%LOCALAPPDATA%/PresenceKit/xiaohongshu/`；正常使用不再需要手动启动脚本，后端按管理面配置自动托管。手动脚本仍用于故障排查。
 服务仍仅监听 `127.0.0.1:18060`，后端开关与 reader_url 不变。
 登录使用显式 `COOKIES_PATH` 指向安装目录中的 `cookies.json`；程序、源码、
 登录数据与服务日志均在仓库外，旧 Docker 卷保留。
@@ -62,7 +61,7 @@ Clash 全局模式曾使小红书 TLS 连接中断；经用户同意切回规则
 
 验收：本地扫码后登录状态返回 true；真实帖子经后端 `read_post` 成功返回
 正文、18 张图片元数据和 7 条评论样本，此次未识别图片。
-后端相关测试 9 项通过；上游 configs 与 cookie 存取测试通过。
+后端相关测试 9 项通过；本地托管生命周期、安装边界、管理面权限与原有 reader 测试共 24 项通过；上游 configs 与 cookie 存取测试通过。
 上游 cookie 全组中有一个既有 Windows 不兼容测试：只设置 TMPDIR，未设置
 Windows 使用的 TEMP/TMP，导致旧临时路径回退断言失败；本部署显式指定
 COOKIES_PATH，不使用该回退。原生聊天入口尚未实测，保留 observe。

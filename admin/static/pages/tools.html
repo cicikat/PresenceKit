@@ -1,14 +1,26 @@
 <h1 class="page-title" data-i18n="tools.title">工具</h1>
 
 <div class="card">
-  <h3>小红书分享读取</h3>
-  <p>读取帖子正文、图片和评论样本。需先运行并登录 xiaohongshu-mcp 读取服务；图片使用已有图片识别配置。</p>
-  <label><input id="xhs-enabled" type="checkbox">允许读取小红书分享</label>
-  <label class="field">读取服务地址<input id="xhs-reader-url" type="url" placeholder="http://127.0.0.1:18060"></label>
-  <label class="field">评论数量上限<input id="xhs-max-comments" type="number" min="1" max="30" value="10"></label>
-  <label class="field">图片识别上限（0为不识别）<input id="xhs-max-images" type="number" min="0" max="4" value="2"></label>
-  <button class="btn btn-primary" data-action="saveXiaohongshuSettings">保存小红书设置</button>
+  <h3 data-i18n="xhs.title">小红书分享读取</h3>
+  <p data-i18n="xhs.intro">读取正文、图片和评论样本。首次安装并扫码后，本地服务可随后端自动启动；图片使用已有图片识别配置。</p>
+  <label><input id="xhs-enabled" type="checkbox"><span data-i18n="xhs.enabled">允许读取小红书分享</span></label>
+  <label><input id="xhs-local-service" type="checkbox" onchange="changeXiaohongshuMode()"><span data-i18n="xhs.local">随后端自动启动本地服务</span></label>
+  <label class="field"><span data-i18n="xhs.address">读取服务地址（未托管时可连接外部服务）</span><input id="xhs-reader-url" type="url" placeholder="http://127.0.0.1:18060"></label>
+  <label class="field"><span data-i18n="xhs.comments">评论数量上限</span><input id="xhs-max-comments" type="number" min="1" max="30" value="10"></label>
+  <label class="field"><span data-i18n="xhs.images">图片识别上限（0为不识别）</span><input id="xhs-max-images" type="number" min="0" max="4" value="2"></label>
+  <button class="btn btn-primary" data-action="saveXiaohongshuSettings" data-i18n="xhs.save">保存小红书设置</button>
   <p id="xhs-settings-status" role="status"></p>
+  <div id="xhs-local-controls" hidden>
+    <p data-i18n="xhs.install_hint">首次安装需要后端主机已安装 Go 1.24 或更新版本，并可访问 GitHub。先保存开关，再点击安装；安装会下载并编译固定版本源码，可能需要数分钟。</p>
+    <a href="https://go.dev/doc/install" target="_blank" rel="noopener noreferrer" data-i18n="xhs.go">Go 安装说明</a>
+    <button id="xhs-install" class="btn btn-ghost" data-action="installXiaohongshu" data-i18n="xhs.install">安装本地服务</button>
+    <button id="xhs-login" class="btn btn-ghost" data-action="loginXiaohongshu" data-i18n="xhs.login">扫码登录</button>
+    <button id="xhs-check-login" class="btn btn-ghost" data-action="checkXiaohongshuLogin" data-i18n="xhs.check">我已扫码 / 检查登录</button>
+    <button class="btn btn-ghost" data-action="refreshXiaohongshuStatus" data-i18n="common.refresh">刷新</button>
+    <p id="xhs-runtime-status" role="status"></p>
+    <p id="xhs-operation-status" role="status"></p>
+    <img id="xhs-qrcode" hidden width="240" height="240" alt="QR code">
+  </div>
 </div>
 
 <div class="card">

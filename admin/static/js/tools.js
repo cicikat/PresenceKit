@@ -125,27 +125,85 @@ async function loadToolsPage() {
 
 function showXiaohongshuSettings(data) {
   document.getElementById('xhs-enabled').checked = data.enabled;
+  document.getElementById('xhs-local-service').checked = !!data.local_service;
   document.getElementById('xhs-reader-url').value = data.reader_url || '';
   document.getElementById('xhs-max-comments').value = data.max_comments;
   document.getElementById('xhs-max-images').value = data.max_images;
-  document.getElementById('xhs-settings-status').textContent = !data.enabled ? '已关闭' :
-    !data.configured ? '已开启，但尚未配置读取服务' : '配置已就绪；远端连接与登录尚未验证，仍需允许模型使用此工具。';
+  document.getElementById('xhs-settings-status').textContent = !data.enabled ? t('xhs.disabled', '已关闭') :
+    !data.configured ? t('xhs.no_address', '已开启，但尚未配置读取服务') : t('xhs.configured', '配置已保存；仍需允许模型使用此工具。服务和登录状态见下方。');
+  changeXiaohongshuMode();
+  showXiaohongshuRuntime(data.local_runtime || {});
 }
+
+function changeXiaohongshuMode() {
+  const local = document.getElementById('xhs-local-service').checked;
+  const address = document.getElementById('xhs-reader-url');
+  address.readOnly = local;
+  if (local) address.value = 'http://127.0.0.1:18060';
+  document.getElementById('xhs-local-controls').hidden = !local;
+}
+
+function showXiaohongshuRuntime(data) {
+  const state = data.state || 'not_started';
+  const login = data.login_status || 'not_checked';
+  document.getElementById('xhs-runtime-status').textContent = [
+    data.installed ? t('xhs.installed', '已安装') : t('xhs.not_installed', '尚未安装'),
+    t(`xhs.state.${state}`, state), t(`xhs.login.${login}`, login),
+    data.install_state === 'installing' ? t('xhs.installing', '正在安装，请稍后刷新') : '',
+    data.install_error ? t('xhs.install_failed', '安装失败，请检查 Go 版本和 GitHub 网络连接，或按文档执行安装命令') : '',
+    !data.installer_available && !data.installed ? t('xhs.go_required', '后端未找到 Go，请先安装 Go 并重启后端') : '',
+  ].filter(Boolean).join(' · ');
+  document.getElementById('xhs-install').disabled = !!data.installed || data.install_state === 'installing' || !data.installer_available || !data.supported;
+  for (const id of ['xhs-login', 'xhs-check-login']) document.getElementById(id).disabled = !['running', 'reused'].includes(state);
+}
+
+async function refreshXiaohongshuStatus() {
+  try { showXiaohongshuRuntime((await api('GET', '/settings/xiaohongshu')).local_runtime || {}); }
+  catch (e) { document.getElementById('xhs-operation-status').textContent = e.message; }
+}
+
+async function installXiaohongshu() {
+  try { showXiaohongshuRuntime(await api('POST', '/settings/xiaohongshu/install')); }
+  catch (e) { document.getElementById('xhs-operation-status').textContent = e.message; }
+}
+
+async function _xiaohongshuLogin(action) {
+  const status = document.getElementById('xhs-operation-status');
+  const img = document.getElementById('xhs-qrcode');
+  status.textContent = t('xhs.checking', '正在连接小红书，请稍候…');
+  img.hidden = true;
+  img.removeAttribute('src');
+  try {
+    const data = await api('POST', `/settings/xiaohongshu/login/${action}`);
+    status.textContent = t(`xhs.login.${data.login_status}`, data.login_status);
+    if (data.img && /^data:image\/png;base64,/.test(data.img)) {
+      img.src = data.img;
+      img.hidden = false;
+      status.textContent = t('xhs.scan_hint', '用小红书 App 扫码并确认，4 分钟内有效；完成后点击“我已扫码 / 检查登录”。');
+      setTimeout(() => { if (img.src === data.img) { img.hidden = true; img.removeAttribute('src'); } }, 240000);
+    }
+    await refreshXiaohongshuStatus();
+  } catch (e) { status.textContent = t('xhs.login_failed', '登录检查失败，请检查小红书网络连接或稍后重试') + ': ' + e.message; }
+}
+
+function loginXiaohongshu() { return _xiaohongshuLogin('qrcode'); }
+function checkXiaohongshuLogin() { return _xiaohongshuLogin('status'); }
 
 async function loadXiaohongshuSettings() {
   try { showXiaohongshuSettings(await api('GET', '/settings/xiaohongshu')); }
-  catch (e) { document.getElementById('xhs-settings-status').textContent = '读取小红书设置失败'; }
+  catch (e) { document.getElementById('xhs-settings-status').textContent = t('xhs.load_failed', '读取小红书设置失败'); }
 }
 
 async function saveXiaohongshuSettings() {
   try {
     showXiaohongshuSettings(await api('PUT', '/settings/xiaohongshu', {
       enabled: document.getElementById('xhs-enabled').checked,
+      local_service: document.getElementById('xhs-local-service').checked,
       reader_url: document.getElementById('xhs-reader-url').value.trim(),
       max_comments: Number(document.getElementById('xhs-max-comments').value),
       max_images: Number(document.getElementById('xhs-max-images').value),
     }));
-    toast('小红书设置已保存', 'ok');
+    toast(t('xhs.saved', '小红书设置已保存，服务状态将在数秒内更新'), 'ok');
   } catch (e) { document.getElementById('xhs-settings-status').textContent = `保存失败：${e.message || e}`; }
 }
 

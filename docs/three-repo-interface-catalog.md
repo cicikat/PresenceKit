@@ -711,6 +711,7 @@ empty_content/quality_rejected，没有 SMTP 成功证据。本次仅 mock 回�
 `current`：read_xiaohongshu 为默认关闭的 info 工具，管理面工具页通过
 GET/PUT `/settings/xiaohongshu` 配置读取服务与数量上限；开关共用
 `tools.read_xiaohongshu.enabled`。返回正文摘录、有限图片识别及评论样本。
+新增管理面本地托管配置和 admin-only 安装/扫码接口；无 desktop/mobile/QQ payload 或通道变更。
 QQ/desktop/mobile 共用既有探针/工具循环、暴露白名单和 origin 闸门，无新客户端协议。
 元数据观测复用 `/observability/api-calls?caller=read_xiaohongshu`；remote_status
 明确为 not_checked，配置就绪不代表站点登录或连接健康。详见 docs/xiaohongshu-reader.md。

@@ -166,6 +166,14 @@ proxy:
   http: http://127.0.0.1:7897
   https: http://127.0.0.1:7897
 tools:
+  read_xiaohongshu:
+    enabled: false
+xiaohongshu:
+  # Admin UI can install and own the local reader. Set false to use reader_url as an external service.
+  local_service: false
+  reader_url: ""
+  max_comments: 10
+  max_images: 2
   get_time:
     enabled: true
   weather:

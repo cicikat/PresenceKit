@@ -52,6 +52,7 @@ def _static_tool_enabled(name: str, tools_config: dict) -> bool:
 
 class XiaohongshuSettings(BaseModel):
     enabled: bool = False
+    local_service: bool = False
     reader_url: str = ""
     max_comments: int = Field(10, ge=1, le=30)
     max_images: int = Field(2, ge=0, le=4)
@@ -67,18 +68,46 @@ async def get_xiaohongshu_settings(auth=Depends(require_scopes('admin'))):
 async def update_xiaohongshu_settings(body: XiaohongshuSettings, auth=Depends(require_scopes('admin'))):
     from urllib.parse import urlsplit
     address = body.reader_url.strip().rstrip('/')
+    if body.local_service:
+        from core.xiaohongshu_service import LOCAL_URL
+        if address and address != LOCAL_URL:
+            raise HTTPException(422, '本地托管服务使用 http://127.0.0.1:18060；其他地址请使用外部服务模式')
+        address = LOCAL_URL
     if address:
         parsed = urlsplit(address)
         if parsed.scheme not in {'http', 'https'} or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
             raise HTTPException(422, '读取服务需要有效的 HTTP(S) 根地址')
     cfg = read_config_file(CONFIG_FILE)
-    cfg['xiaohongshu'] = {'reader_url': address, 'max_comments': body.max_comments, 'max_images': body.max_images}
+    cfg.setdefault('xiaohongshu', {}).update(reader_url=address, max_comments=body.max_comments,
+                                           max_images=body.max_images, local_service=body.local_service)
     cfg.setdefault('tools', {})['read_xiaohongshu'] = {'enabled': body.enabled}
     write_config_file(CONFIG_FILE, cfg)
     from core import config_loader
     config_loader.reload_config()
     from core.tools.xiaohongshu import settings
     return settings(cfg)
+
+
+@router.post('/settings/xiaohongshu/install', status_code=202)
+async def install_xiaohongshu(auth=Depends(require_scopes('admin'))):
+    from core.xiaohongshu_service import runtime, status
+    try:
+        runtime().install()
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return status()
+
+
+@router.post('/settings/xiaohongshu/login/{action}')
+async def login_xiaohongshu(action: str, auth=Depends(require_scopes('admin'))):
+    from core.xiaohongshu_service import runtime
+    if action not in {'qrcode', 'status'}:
+        raise HTTPException(404, 'unknown_action')
+    try:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(await runtime().login(action), headers={'Cache-Control': 'no-store'})
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
 
 
 def _registry_rows(cfg: dict) -> list[dict]:

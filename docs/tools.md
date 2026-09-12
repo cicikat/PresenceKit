@@ -907,10 +907,12 @@ and `search_diary` use the active character diary path. All are bounded reads.
 `current`：read_xiaohongshu 为默认关闭的 info 工具，管理面工具页通过
 GET/PUT `/settings/xiaohongshu` 配置读取服务与数量上限；开关共用
 `tools.read_xiaohongshu.enabled`。返回正文摘录、有限图片识别及评论样本。
+可选 `local_service=true` 由后端在启动时托管本地安装、服务检查与退出回收；安装和扫码入口为 admin-only
+POST `/settings/xiaohongshu/install`、`/settings/xiaohongshu/login/{qrcode|status}`，运行投影随 GET 返回。
 QQ/desktop/mobile 共用既有探针/工具循环、暴露白名单和 origin 闸门，无新客户端协议。
 元数据观测复用 `/observability/api-calls?caller=read_xiaohongshu`；remote_status
 明确为 not_checked，配置就绪不代表站点登录或连接健康。详见 docs/xiaohongshu-reader.md。
-`observe`：需用户部署并登录 xiaohongshu-mcp 读取服务后实测；本次未开启真实功能。
+`observe`：跨平台首次安装、真实浏览器与原生聊天入口仍需各环境实测；未安装时管理面显示固定原因和 Go/GitHub 前置条件。
 真实帖子与真机效果、评论完整性不作完成承诺；评论始终标记样本，图片失败明确降级。
 `roadmap`：视频转录、完整评论遍历不在本次范围；无跨仓原生客户端代码修改。
 
