@@ -484,6 +484,8 @@ empty_content/quality_rejected，没有 SMTP 成功证据。本次仅 mock 回�
 断言失败（要求早期 brief-195 版本字串），与邮件执行无关，未修改该旧断言。
 ## 小红书分享工具（2026-09-11）
 
+`current`（2026-09-12）：维护机已切换 Windows 本地读取服务，真实登录、正文及评论读取通过，无需 Docker；部署及本机兼容构建见 `docs/xiaohongshu-reader.md`。`observe`：没有开机自启或后端启停联动；异常退出可能遗留浏览器进程，原生聊天入口尚未实测。
+
 `current`：read_xiaohongshu 为默认关闭的 info 工具，管理面工具页通过
 GET/PUT `/settings/xiaohongshu` 配置读取服务与数量上限；开关共用
 `tools.read_xiaohongshu.enabled`。返回正文摘录、有限图片识别及评论样本。

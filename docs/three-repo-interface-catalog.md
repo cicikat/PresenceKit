@@ -706,6 +706,8 @@ empty_content/quality_rejected，没有 SMTP 成功证据。本次仅 mock 回�
 
 ## 小红书分享工具（2026-09-11）
 
+`current`（2026-09-12）：维护机读取服务改用 Windows 原生进程，继续使用原有本机地址和 HTTP detail schema，管理面及桌面/手机协议无变更；真实登录、正文及评论读取通过。`observe`：本地服务需手动启动，无后端启停联动，原生聊天入口尚未实测。部署说明见 `docs/xiaohongshu-reader.md`。
+
 `current`：read_xiaohongshu 为默认关闭的 info 工具，管理面工具页通过
 GET/PUT `/settings/xiaohongshu` 配置读取服务与数量上限；开关共用
 `tools.read_xiaohongshu.enabled`。返回正文摘录、有限图片识别及评论样本。
