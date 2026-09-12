@@ -103,11 +103,14 @@ function onVisionProviderChange() {
 }
 
 async function discoverVisionModels() {
+  const status = document.getElementById('vision-model-discovery-status');
+  if (status) status.textContent = '读取中…';
   const base_url = document.getElementById('vision-base-url').value.trim();
   if (!base_url) return;
   const r = await api('POST', '/model-presets/discover', {base_url, api_key: document.getElementById('vision-api-key').value.trim(), api_protocol: document.getElementById('vision-api-protocol').value});
   const list = document.getElementById('vision-model-options');
   if (list && Array.isArray(r.models)) list.innerHTML = r.models.map(m => `<option value="${escapeHtml(typeof m === 'string' ? m : m.id || '')}"></option>`).join('');
+  if (status) status.textContent = `已读取 ${Array.isArray(r.models) ? r.models.length : 0} 个模型，可手动填写`;
 }
 
 function onVisionModelSelect() {}
