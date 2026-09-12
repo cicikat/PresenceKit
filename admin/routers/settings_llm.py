@@ -434,6 +434,13 @@ async def test_image_connection(
                     response = await client.responses.create(model=vision["model"], max_output_tokens=32,
                         input=[{"role": "user", "content": [{"type": "input_text", "text": "Read the text in this image. Return only that text."}, {"type": "input_image", "image_url": uri}]}])
                     return getattr(response, "output_text", "") or ""
+                if vision.get("api_protocol") == "anthropic_messages":
+                    import httpx
+                    headers = {"x-api-key": vision.get("api_key") or "", "anthropic-version": "2023-06-01"}
+                    async with httpx.AsyncClient(timeout=20) as hc:
+                        rr = await hc.post(vision["base_url"].rstrip("/") + "/v1/messages", headers=headers, json={"model": vision["model"], "max_tokens": 32, "messages": [{"role": "user", "content": [{"type": "text", "text": "Read the text in this image. Return only that text."}, {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": uri.split(",", 1)[1]}}]}]})
+                        rr.raise_for_status()
+                        return "".join(x.get("text", "") for x in rr.json().get("content", []) if x.get("type") == "text")
                 response = await client.chat.completions.create(model=vision["model"], max_tokens=32,
                     messages=[{"role": "user", "content": [
                         {"type": "text", "text": "Read the text in this image. Return only that text."},
