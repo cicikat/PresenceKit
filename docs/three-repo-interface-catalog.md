@@ -1,5 +1,13 @@
 # 三仓接口总览与闭环审计
 
+## 工具探针超时（2026-09-13）
+
+current：后端 probe 请求预算 10 → 15 秒。QQ/desktop/mobile 共用 pretool 路由；
+有效 Path C 自动跳过前置 LLM 探针，Path A 超时降级继续聊天。管理面保留模型路由、
+tool loop 设置和 API 调用观测；桌面保留 persona 级 tool-loop API，手机消费后端聊天。
+无新配置、状态存储、REST/WS/IPC 字段或客户端 UI 改动，原 scope/ack/TTL 保持不变。
+observe：重启后真实模型与双端聊天体验待验证，不以连接测试替代交付验收。
+
 ## 图像连接探针预算（2026-09-13）
 
 current：admin-only POST /image-recognition/test/{connection} 的视觉预算提高到 1024，

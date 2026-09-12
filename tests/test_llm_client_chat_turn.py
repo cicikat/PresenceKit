@@ -59,6 +59,25 @@ def _make_fake_model_client(message, *, finish_reason="stop"):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("category,expected_timeout", [("probe", 15.0), ("chat", 90.0), ("intent", 10.0)])
+async def test_chat_request_category_timeout(monkeypatch, category, expected_timeout):
+    from core import llm_client
+
+    fake_mc = _make_fake_model_client(_fake_message("ok"))
+    create = fake_mc.client.chat.completions.create
+    requests = []
+
+    async def capture_create(**kwargs):
+        requests.append(kwargs)
+        return await create(**kwargs)
+
+    fake_mc.client.chat.completions.create = capture_create
+    monkeypatch.setattr(llm_client, "get_model_client", lambda cat, char_id=None: fake_mc)
+    await llm_client.chat([{"role": "user", "content": "hi"}], call_category=category)
+    assert requests[0]["timeout"] == expected_timeout
+
+
+@pytest.mark.asyncio
 async def test_leaked_tool_call_markup_discarded_as_empty(monkeypatch):
     from core import llm_client
 

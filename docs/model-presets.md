@@ -1,5 +1,13 @@
 # docs/model-presets.md — 多模型 Preset 系统
 
+## 工具探针超时（2026-09-13）
+
+`probe` 请求超时由 10 秒调整为 15 秒，适用于前置探针和 tool loop 的 probe 用途补救调用；
+chat/intent 等用途预算与 SDK 重试策略不变。此值是请求超时，不是含重试的总墙钟上限。
+连接测试耗时不代表携带完整工具 schema 的探针耗时。Python 代码更新需重启后端生效。
+主模型配置为 `function_calling`、有效 tool loop 开启且为 owner 私聊时，前置 LLM 探针
+已自动跳过；`xml_fallback` 不满足该条件，不能仅删除 probe 路由来关闭探针（会回退 chat）。
+
 ## 图像连接管理 UI（2026-09-12）
 
 图像连接探针输出预算为 1024 token，给推理模型留出生成正文的空间；

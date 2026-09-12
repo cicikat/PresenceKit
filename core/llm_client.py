@@ -126,10 +126,10 @@ _vision_client: AsyncOpenAI | None = None
 
 
 # -- Call-category timeouts (seconds) ----------------------------------------
-# probe/intent/detect_emotion: lightweight, 10 s; summary/consolidation: 30 s
+# probe: 15 s; intent/detect_emotion: 10 s; summary/consolidation: 30 s
 # chat: main turn 90 s; vision: 30 s
 _CALL_TIMEOUTS: dict[str, float] = {
-    "probe":          10.0,
+    "probe":          15.0,
     "intent":         10.0,
     "detect_emotion": 10.0,
     "summary":        30.0,

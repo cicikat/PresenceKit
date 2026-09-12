@@ -1,5 +1,11 @@
 # docs/known-issues.md — 已知问题与技术债
 
+## 工具探针读取超时（2026-09-13）
+
+current：probe 请求超时由 10 秒放宽到 15 秒，超时仍返回 probe_unavailable 并继续聊天。
+observe：部署后真实模型延迟及 QQ/桌面/手机聊天仍待验证；连接测试成功不等于工具探针成功。
+SDK 重试可能使总等待超过 15 秒。function_calling 与有效 tool loop 同时成立才自动跳过前置探针。
+
 ## 图像连接测试预算（2026-09-13）
 
 current：修复 32 token 探针让 GLM 思考耗尽预算后误报 empty_response；预算提高至
