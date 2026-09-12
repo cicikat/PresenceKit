@@ -388,6 +388,7 @@ async def get_vision_params(auth=Depends(require_scopes("admin"))):
         "has_api_key": bool(cfg.get("api_key")),
         "model":    cfg.get("model",    ""),
         "base_url": cfg.get("base_url", ""),
+        "api_protocol": cfg.get("api_protocol", "chat_completions"),
     }
 
 
