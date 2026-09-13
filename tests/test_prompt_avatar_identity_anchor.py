@@ -25,7 +25,11 @@ def test_fact_boundary_anchors_desktop_avatar_identity(monkeypatch):
 
     boundary = _fact_boundary(messages)
     assert "桌宠形象是你自己在屏幕上的存在" in boundary
-    assert "不是用户的角色" in boundary
+    assert "不是" in boundary and "的角色" in boundary
+    assert "正在使用电脑" not in boundary
+    assert sum("正在使用电脑" in m["content"] for m in messages) == 1
+    screen = next(m for m in messages if m.get("_layer") == "3.9_screen_awareness")
+    assert screen["_provenance"]["mode"] == "fresh"
 
 
 def test_empty_realtime_awareness_forbids_invented_screen_scene(monkeypatch):
@@ -36,3 +40,6 @@ def test_empty_realtime_awareness_forbids_invented_screen_scene(monkeypatch):
     boundary = _fact_boundary(messages)
     assert "没有真实屏幕感知时" in boundary
     assert "不得虚构屏幕画面" in boundary
+    assert "当前没有任何已确认" not in boundary
+    assert "不否定其他来源" in boundary
+    assert not any(m.get("_layer") == "3.9_screen_awareness" for m in messages)
