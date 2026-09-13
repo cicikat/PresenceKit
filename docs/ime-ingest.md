@@ -16,6 +16,10 @@ POST 接收只等待 SQLite 事务，204 不代表模型已读或角色已发消
 不凭应用名断定活动，不把持续输入当忙碌，不因处理事务/聊天避让；给角色的策略用“她”和“我”。
 低于 0.65 或缺少文字依据时不产生候选。十分钟内最多产生一次 IME 候选，修订去重，五分钟过期。
 测试包排除；本系统手机聊天的普通输入排除，但编辑删除保留。QQ 无法区分收件人，不能自动排除。
+手机包 com.presencekit.mobile 明确为与陪伴角色聊天的应用，但不证明具体会话或已发送。
+仅上次成功判定之后的新 delete_backward/clear/restore 使本系统聊天进入分析；旧删除和单独
+compose_delete 不再触发。new_edit_events 是新增编辑，content 与 edit_events 仅作历史背景。
+购物、难过等不是白名单；日常分享、开心、兴趣与计划同样可产生候选。
 判定期间修订变化则旧判断不发布；开关和 TTL 在角色执行及工具调用前复核。
 
 信号 source=ime，经统一 autonomy opportunity 与 talk_owner 决策发送，可能选择不说话。
@@ -48,6 +52,9 @@ Android Room 7→8 增加 edit_events，最近 256 事件、每段最多 1024 �
 SQLite 经 `get_paths().ime_drafts_db()`，接收三小时后不再查询，写入时清理过期行。
 同库 ime_analysis 按 uid+char_id+device_id+id 保存最新判断、状态、revision、analyzed_at。
 只读观测返回 entries、summary、awareness、analyses；不创建空库。分析原始证据仅 admin 可读。
+analyses.result 增加 decision_reason、response_chars、assessed_revision；失败仅记 error_type，
+不保存异常正文。区分请求失败、输出校验失败、低置信度、缺证据、不值得联系与后续门控。
+回执仅保留最新修订，不能用它还原全部历史成功请求的后续投递。
 signal_id 可关联既有 autonomy jobs/runs；queued 只表示入候选，不是发送成功。
 摘要候选进入既有 autonomy 持久台账及 prompt 快照，遵循其保留机制，不能承诺全部派生数据三小时擦除。
 没有新增 identity/episodic/mid_term 写入；角色实际发出的消息仍走既有 turn_sink 与后处理。

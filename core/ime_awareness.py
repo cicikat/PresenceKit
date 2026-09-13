@@ -16,10 +16,16 @@ PROMPT = """阅读她近期的输入法观察，提取值得陪伴角色留意�
 依据文字与应用共同判断，应用名本身不足以断定活动；聊天也可能在办事。
 不要输出忙碌程度，也不要因为她在工作、学习、聊天或持续输入就建议避开发消息。
 content 只是历史提交文字的拼接，不是当前输入框，不代表消息已发送，也不能确定收件人。
+com.presencekit.mobile 是用户与陪伴角色聊天的本系统手机应用；不是与第三方聊天。
+这个包名说明应用用途，但不能确定具体会话、当前角色或发送状态；不要重复回应正常聊天。
+new_edit_events 才是上次成功判定之后的编辑；edit_events 和 content 是历史背景，不能当成刚发生。
 edit_events 是最近编辑记录；requested 仅代表按键或删除请求，不能断定成功删除。
 compose_delete 只是拼音组合区的删除，不是已上屏文字的删除。
 即使 applied，也不能从删除本身推断纠结、后悔、拒绝或想求助。没有证据就承认未知。
 留意明确购物意向、持续交流的话题、亲身表达的难过，以及确有文字依据的欲言又止。
+这些只是例子，不是白名单：日常分享、兴趣、开心的事、计划和想获得陪伴也可以值得留意。
+confidence 衡量文字是否支持这条观察，不要求确定发送状态或全部心理动机；未知之处写入 uncertainty。
+不必只有严重情绪或求助才 worth_contact=true；具体的新话题也可以交给角色自行决定是否开口。
 只摘取当前有意义的变化，避免每次增删一个字就重复提醒。同记录的 prior 是上次判断，
 若没有新信息，worth_contact=false。不要编造感情动机或心理诊断。
 格式：{"activity":"work|chat|mixed|unknown","summary":"她……（最多240字）",
@@ -108,16 +114,21 @@ async def tick(uid: str, char_id: str):
                 continue
             # Ordinary input in our own chat is already consumed by the chat pipeline;
             # retain edits there so deleted/unsent observations can still be considered.
+            assessed_revision = (old or {}).get('result', {}).get('assessed_revision',
+                old['revision'] if old and old['status'] != 'failed' else 0)
+            new_edits = [e for e in row['edit_events'] if e['seq'] > assessed_revision]
             if row['app_package'] in {'com.presencekit.mobile'} and not any(
-                e['kind'] in {'delete_backward', 'clear', 'compose_delete'} for e in row['edit_events']):
+                e['kind'] in {'delete_backward', 'clear', 'restore'} for e in new_edits):
                 continue
-            candidates.append((row, old))
-        for row, old in candidates[:2]:
+            candidates.append((row, old, new_edits))
+        for row, old, new_edits in candidates[:2]:
             payload = {'app_package': row['app_package'], 'updated_at': row['updated_at'],
                        'content': row['content'][-2400:], 'edit_events': row['edit_events'][-24:],
                        'prior': (old or {}).get('result', {})}
             # Bound text even when individual Android event windows are large.
             payload['edit_events'] = [{**e, 'text': e.get('text', '')[-240:]} for e in payload['edit_events']]
+            payload['new_edit_events'] = [{**e, 'text': e.get('text', '')[-240:]} for e in new_edits[-24:]]
+            raw = None
             try:
                 from core import llm_client
                 raw = await asyncio.wait_for(llm_client.chat([
@@ -125,10 +136,18 @@ async def tick(uid: str, char_id: str):
                     {'role': 'user', 'content': json.dumps(payload, ensure_ascii=False), '_layer': 'ime_observation'},
                 ], call_category='ime_judge', char_id=char_id, max_tokens_override=700), timeout=20)
                 result = Assessment.model_validate_json(raw).model_dump()
-            except Exception:
+            except Exception as exc:
+                failure = dict((old or {}).get('result', {}))
+                failure.update(decision_reason='invalid_output' if raw is not None else 'model_request_failed',
+                               error_type=type(exc).__name__, response_chars=len(raw) if isinstance(raw, str) else 0)
                 await asyncio.to_thread(ime_drafts.save_analysis, uid, char_id, row,
-                                       (old or {}).get('result', {}), 'failed')
+                                       failure, 'failed')
                 continue
+            result['assessed_revision'] = row['revision']
+            result['response_chars'] = len(raw)
+            result['decision_reason'] = ('not_worth_contact' if not result['worth_contact'] else
+                'low_confidence' if result['confidence'] < .65 else
+                'missing_evidence' if not result['evidence'].strip() else 'eligible')
             result['last_contact_at'] = (old or {}).get('result', {}).get('last_contact_at', 0)
             status = 'observed'
             # Recheck switches after the network wait; no late publication after disable.
@@ -157,5 +176,7 @@ async def tick(uid: str, char_id: str):
                     status = 'queued' if accepted else ('duplicate' if outcome == 'duplicate' else 'failed')
                     if accepted:
                         result['last_contact_at'] = fresh
+            if status != 'observed':
+                result['decision_reason'] = status
             await asyncio.to_thread(ime_drafts.save_analysis, uid, char_id, row, result, status)
             receipts.append({'status': status, 'analyzed_at': fresh, 'result': result})

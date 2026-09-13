@@ -55,8 +55,48 @@ async def test_deleted_own_chat_eligible_and_failed_model_observable(model):
     model.return_value='invalid'
     await awareness.tick('owner-fixture', 'character-fixture')
     assert store.analysis_query()[0]['status'] == 'failed'
+    assert store.analysis_query()[0]['result']['decision_reason'] == 'invalid_output'
     await awareness.tick('owner-fixture', 'character-fixture')
     assert model.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_own_chat_historical_delete_does_not_retrigger(model, monkeypatch):
+    now = int(time.time() * 1000)
+    event = dict(seq=1, at_ms=now, kind='delete_backward', text='x', outcome='requested')
+    row = draft(app_package='com.presencekit.mobile', edit_events=[event])
+    store.receive('fixture', [row])
+    await awareness.tick('owner-fixture', 'character-fixture')
+    payload = json.loads(model.call_args.args[0][1]['content'])
+    assert payload['new_edit_events'] == [event]
+    monkeypatch.setattr(awareness.time, 'time', lambda: (now + 61000) / 1000)
+    store.receive('fixture', [row | dict(revision=2, updated_at=now+61000,
+        content='ordinary new chat', edit_events=[event, dict(seq=2, at_ms=now+61000,
+            kind='insert', text='new', outcome='applied')])])
+    await awareness.tick('owner-fixture', 'character-fixture')
+    assert model.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_composition_delete_alone_is_not_own_chat_signal(model):
+    now = int(time.time() * 1000)
+    store.receive('fixture', [draft(app_package='com.presencekit.mobile', edit_events=[
+        dict(seq=1, at_ms=now, kind='compose_delete', text='', outcome='applied')])])
+    await awareness.tick('owner-fixture', 'character-fixture')
+    model.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_observed_reason_distinguishes_confidence_from_interest(model):
+    result = json.loads(model.return_value)
+    result['confidence'] = .5
+    model.return_value = json.dumps(result)
+    store.receive('fixture', [draft()])
+    await awareness.tick('owner-fixture', 'character-fixture')
+    receipt = store.analysis_query()[0]
+    assert receipt['status'] == 'observed'
+    assert receipt['result']['decision_reason'] == 'low_confidence'
+    assert receipt['result']['response_chars'] == len(model.return_value)
 
 
 @pytest.mark.asyncio

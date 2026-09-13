@@ -71,6 +71,11 @@ delivery remain unverified. See [model-presets.md](model-presets.md#preset-http-
 
 ## IME 活动理解与主动关心（2026-09-11）
 
+2026-09-13 current：核对 IME 接收端绑定的修订确认、后端整条替换与成功修订去重；历史删除
+不再使本系统后续普通聊天重复送模型。既有 admin-only analyses.result 增加判定原因、响应字符数
+与成功修订号，无上传/WS/IPC 或原生设置变化。observe：真实模型质量、手机重试交付与跨记录
+语义重复仍需实测；最新回执不能完整还原历史成功请求的后续命运。
+
 current：IME 编辑事件与独立 `ime_judge` 活动判定已接入 scheduler → autonomy signal →
 talk_owner → turn_sink；管理面功能总开关新增 `ime_awareness`（默认关闭），接收开关独立。
 模型路由页可选 ime_judge；未配置依次回退 sensor_judge / intent / chat。
