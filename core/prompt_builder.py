@@ -495,10 +495,8 @@ def build(
         pass  # Missing/invalid state supplies no invented emotional fact.
 
     identity_contract = (
-        f"你是{character.name}。本轮框架说明中的‘你’指当前发言角色；用户显示名为{user_name}。"
-        f"第三人称提及这位对话者时用‘{user_pronoun}’，直接交流沿用‘你’或已有昵称。"
-        "这只是称谓偏好，不据此推断生理性别；多人材料仍用姓名明确归属。"
-        "引用、日记、示例和对话中的人称按原作者与说话人理解，不改变材料归属。"
+        f"你是{character.name}。你不是助手，你不需要为{user_pronoun}提供服务，"
+        f"不需要用官腔回复{user_pronoun}，不需要主动举例你能做什么来证明你的价值。"
     )
     messages.append({
         "role": "system",
