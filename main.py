@@ -832,6 +832,14 @@ async def _run_long_lived_service(name: str, service) -> None:
 
 
 async def main():
+    from core import xiaohongshu_service
+    try:
+        await _main_with_services()
+    finally:
+        await xiaohongshu_service.shutdown()
+
+
+async def _main_with_services():
     logger.info("=" * 60)
     logger.info("  Emerald-Presence 启动中...")
     logger.info("=" * 60)
@@ -938,6 +946,8 @@ async def main():
         logger.warning("Dream Reality continuation recovery failed to start", exc_info=True)
 
     tasks = []
+    from core import xiaohongshu_service
+    await xiaohongshu_service.startup()
     admin_cfg = cfg.get("admin", {})
     if admin_cfg.get("enabled", False) and admin_cfg.get("auto_start", True):
         logger.info("管理面板已启用，正在启动...")

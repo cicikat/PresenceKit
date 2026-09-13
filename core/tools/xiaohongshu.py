@@ -17,6 +17,7 @@ _next_read_at = 0.0
 
 
 def settings(cfg=None):
+    from core.xiaohongshu_service import status
     cfg = get_config() if cfg is None else cfg
     raw = cfg.get('xiaohongshu', {})
     enabled = cfg.get('tools', {}).get('read_xiaohongshu', False)
@@ -24,6 +25,7 @@ def settings(cfg=None):
         enabled = enabled.get('enabled', False)
     address = str(raw.get('reader_url') or '').rstrip('/')
     return {'enabled': bool(enabled), 'reader_url': address,
+            'local_service': bool(raw.get('local_service', False)), 'local_runtime': status(),
             'max_comments': max(1, min(30, int(raw.get('max_comments', 10)))),
             'max_images': max(0, min(4, int(raw.get('max_images', 2)))),
             'configured': bool(address), 'effective': bool(enabled and address),
