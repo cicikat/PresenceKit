@@ -66,6 +66,18 @@ function centerSwitch(label, checked, source, name, disabled=false, note='') {
   const [edit,observe]=centerDestination(source,name);
   return `<div class="admin-toolbar" data-feature-row><label class="checkbox-row"><input type="checkbox" ${checked?'checked':''} ${disabled?'disabled':''} data-center-source="${source}" data-center-name="${escapeHtml(name)}" onchange="saveCenterSwitch(this)"><span>${escapeHtml(label)}</span></label><span class="admin-source-hint">${escapeHtml(note)}</span>${centerLink(edit,t('settings_center.detailed_settings',"细分设置"))}${centerLink(observe,t('settings_center.view_records',"查看记录"))}</div>`;
 }
+function centerAutonomyControls(config) {
+  const daily = Number(config.daily_evaluation_budget ?? 12);
+  const interval = Number(config.min_interval_seconds ?? 900);
+  return `<div class="admin-toolbar" data-feature-row data-autonomy-controls>
+    <label class="checkbox-row"><input type="checkbox" ${config.enabled?'checked':''} data-center-source="autonomy" data-center-name="enabled" onchange="saveCenterSwitch(this)"><span>${escapeHtml(t('settings_center.autonomous_activity','自主活动'))}</span></label>
+    <label class="field"><span>${escapeHtml(t('autonomy.daily_limit','每日评估上限'))}</span><input type="number" min="1" max="100" value="${daily}" data-autonomy-field="daily_evaluation_budget"></label>
+    <label class="field"><span>${escapeHtml(t('autonomy.min_interval','最小评估间隔（秒）'))}</span><input type="number" min="0" max="86400" value="${interval}" data-autonomy-field="min_interval_seconds"></label>
+    <button type="button" class="btn btn-primary btn-sm" data-action="saveCenterAutonomy">${escapeHtml(t('settings_center.save','保存'))}</button>
+    ${centerLink('autonomy-settings',t('settings_center.detailed_settings','细分设置'))}
+    ${centerLink('observe-autonomy',t('settings_center.view_records','查看记录'))}
+  </div>`;
+}
 async function loadFeatureCenter() {
   const root=document.getElementById('feature-center-list'); root.textContent=t('settings_center.loading',"读取中…");
   const results=await Promise.allSettled([api('GET','/settings/feature-flags'),api('GET','/settings/tools'),api('GET','/settings/tool-loop'),api('GET','/admin/control-center/effective-state'),api('GET','/scheduler/config'),api('GET','/admin/autonomy/config'),api('GET','/tts-config')]);
@@ -73,10 +85,24 @@ async function loadFeatureCenter() {
   const flags=results[0], tools=results[1], loop=results[2], state=results[3];
   let html=section(t('settings_center.feature_switches',"功能总开关"),flags.status==='fulfilled'?Object.entries(flags.value.flags||{}).map(([name,item])=>centerSwitch(centerFeatureNames()[name]||item.label,item.enabled,'flag',name,false,item.restart_required?t('settings_center.restart_required_after_saving',"保存后需重启"):t('settings_center.global_configuration_effective_availability_below',"全局配置；实际可用性见下方"))).join(''):t('settings_center.could_not_load_refresh_to_retry',"读取失败，请刷新重试"));
   html+=section(t('settings_center.multi_step_tool_calls',"多步工具调用"),loop.status==='fulfilled'?centerSwitch(t('settings_center.global_default',"全局默认"),loop.value.enabled,'loop','enabled',false,t('settings_center.character_cards_can_override_this_ordinary_tool_calls_are_controlled_separately',"角色卡可覆盖；普通工具调用另行控制")):t('settings_center.could_not_load',"读取失败"));
-  html+=section(t('settings_center.proactive_behavior_and_voice',"主动行为与语音"), [[t('settings_center.scheduler',"调度器"),4,'scheduler'],[t('settings_center.autonomous_activity',"自主活动"),5,'autonomy'],[t('settings_center.speech_synthesis',"语音合成"),6,'tts']].map(([label,i,source])=>results[i].status==='fulfilled'?centerSwitch(label,results[i].value.enabled,source,'enabled',false,t('settings_center.global_configuration',"全局配置")):label+t('settings_center.could_not_load',"：读取失败")).join(''));
+  html+=section(t('settings_center.proactive_behavior_and_voice',"主动行为与语音"), [[t('settings_center.scheduler',"调度器"),4,'scheduler'],[t('settings_center.autonomous_activity',"自主活动"),5,'autonomy'],[t('settings_center.speech_synthesis',"语音合成"),6,'tts']].map(([label,i,source])=>results[i].status==='fulfilled'?(source==='autonomy'?centerAutonomyControls(results[i].value):centerSwitch(label,results[i].value.enabled,source,'enabled',false,t('settings_center.global_configuration',"全局配置"))):label+t('settings_center.could_not_load',"：读取失败")).join(''));
   html+=section(t('settings_center.built_in_tool_permissions',"内置工具执行开关"),tools.status==='fulfilled'?(tools.value.tools||[]).map(tool=>centerSwitch(t(`tools.description.${tool.name}`,tool.description||tool.name),tool.execution_enabled,'tool',tool.name,tool.frozen,tool.frozen?t('settings_center.currently_frozen',"当前冻结"):t('settings_center.global_permission_character_scope_and_execution_conditions_still_apply',"全局执行许可；仍需满足角色范围和执行条件"))).join(''):t('settings_center.could_not_load',"读取失败"));
   html+=section(t('settings_center.effective_state',"当前生效状态"),state.status==='fulfilled'?renderChainTable(state.value.features||[]):t('settings_center.status_unavailable_this_does_not_mean_the_feature_is_disabled',"状态读取失败；不代表功能关闭"));
   root.innerHTML=html; bindPageActions(root);
+}
+async function saveCenterAutonomy(button) {
+  const row=button.closest('[data-autonomy-controls]');
+  const inputs=[...row.querySelectorAll('[data-autonomy-field]')];
+  if(inputs.some(input=>!input.reportValidity()))return;
+  button.disabled=true;
+  try {
+    await api('PATCH','/admin/autonomy/config',Object.fromEntries(inputs.map(input=>[input.dataset.autonomyField,Number(input.value)])));
+    toast(t('settings_center.saved','已保存'),'ok');
+    await loadFeatureCenter();
+  } catch(error) {
+    toast(t('settings_center.save_error','保存失败：{error}',{error:error.message}),'err');
+    button.disabled=false;
+  }
 }
 async function saveCenterSwitch(input) {
   const value=input.checked; input.disabled=true;

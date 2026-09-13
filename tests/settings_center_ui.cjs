@@ -61,4 +61,20 @@ const plain = value => JSON.parse(JSON.stringify(value));
   assert.equal(checkbox.checked,false);
   assert.equal(checkbox.disabled,false);
   assert.equal(writes.at(-1).path,'/scheduler/config');
+  const controlsHtml = context.centerAutonomyControls({enabled:true,daily_evaluation_budget:48,min_interval_seconds:900});
+  assert.ok(controlsHtml.includes('data-autonomy-field="daily_evaluation_budget"'));
+  assert.ok(controlsHtml.includes('value="48"'));
+  assert.ok(controlsHtml.includes('data-autonomy-field="min_interval_seconds"'));
+  assert.ok(controlsHtml.includes('value="900"'));
+  const autonomyInputs = [
+    {dataset:{autonomyField:'daily_evaluation_budget'},value:'24',reportValidity:()=>true},
+    {dataset:{autonomyField:'min_interval_seconds'},value:'1800',reportValidity:()=>true},
+  ];
+  const autonomyRow={querySelectorAll:()=>autonomyInputs};
+  const autonomyButton={disabled:false,closest:()=>autonomyRow};
+  context.loadFeatureCenter=async()=>{};
+  respond=async()=>({daily_evaluation_budget:24,min_interval_seconds:1800});
+  await context.saveCenterAutonomy(autonomyButton);
+  assert.equal(writes.at(-1).path,'/admin/autonomy/config');
+  assert.deepEqual(plain(writes.at(-1).body),{daily_evaluation_budget:24,min_interval_seconds:1800});
 })().catch(error=>{console.error(error);process.exitCode=1;});
