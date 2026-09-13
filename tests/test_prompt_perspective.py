@@ -96,7 +96,7 @@ def test_sensor_subject_and_provenance(build_prompt, monkeypatch):
         "sleep_segments": [{"time": date.today().isoformat(), "duration_minutes": 420}],
     })
     messages, _ = build_prompt(tags={"topic.health"})
-    assert "Test Reader今天：300步" in layer(messages, "3.7_sensor")
+    assert "Test Reader的手机数据" in layer(messages, "3.7_sensor")
     watch = next(m for m in messages if m.get("_layer") == "3.6_watch")
     assert "Test Reader最近一次睡眠" in watch["content"]
     assert watch["_provenance"]["matched_tags"] == ["topic.health"]

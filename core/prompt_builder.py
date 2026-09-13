@@ -505,23 +505,15 @@ def build(
     })
 
     # ─────────────────────────────────────────────────────────────────────────
-    # 层 1.5：事实边界（数据驱动，条件注入）
-    # 空感知 → 单句禁令；有感知 → 给实际数据 + 边界句。
-    # _realtime_awareness 在此提前计算，3.9 层复用该变量。
+    # 层 1.5：来源边界，不把缺少桌面快照等同于没有现实事实。
+    # 实际桌面数据只在 3.9 注入一次。
     # ─────────────────────────────────────────────────────────────────────────
     _realtime_awareness = _format_realtime_awareness(_tags)
-    if _realtime_awareness:
-        _fact_boundary_text = (
-            f"【现实信息】{_realtime_awareness}。仅以上为已确认，其余未知。"
-            f"屏幕上的桌宠形象是你自己在屏幕上的存在，不是{user_pronoun}的角色。"
-        )
-    else:
-        _fact_boundary_text = (
-            "【现实信息】当前没有任何已确认的现实细节，"
-            f"凡未列出的现实物品/食物/天气/{user_pronoun}的身体状态一律未知，不补充、不暗示。"
-            f"没有真实屏幕感知时，不得虚构屏幕画面、界面状态或{user_pronoun}正在做的事。"
-            f"屏幕上的桌宠形象是你自己在屏幕上的存在，不是{user_pronoun}的角色。"
-        )
+    _fact_boundary_text = (
+        "现实细节按用户自述、资料或工具结果各自的来源和时间理解；缺少屏幕快照不否定其他来源。"
+        "没有真实屏幕感知时，不得虚构屏幕画面；应用活动摘要不代表看到了屏幕原文。"
+        f"桌宠形象是你自己在屏幕上的存在，不是{user_pronoun}的角色。"
+    )
     messages.append({
         "role": "system",
         "content": _fact_boundary_text,
@@ -710,7 +702,12 @@ def build(
         _sensor = _up2.get("phone_sensor_today") or {}
         _sensor_date = _sensor.get("date", "")
         _today_str = __import__("datetime").date.today().isoformat()
-        if _sensor and _sensor_date == _today_str:
+        try:
+            from datetime import date as _date
+            _sensor_age = (_date.today() - _date.fromisoformat(str(_sensor_date)[:10])).days
+        except Exception:
+            _sensor_age = 999
+        if _sensor and 0 <= _sensor_age <= 3:
             _s_parts = []
             if _sensor.get("steps") is not None:
                 _s_parts.append(f"{_sensor['steps']}步")
@@ -721,7 +718,7 @@ def build(
             if _s_parts:
                 messages.append({
                     "role": "system",
-                    "content": f"（{user_name}今天：{'、'.join(_s_parts)}。自然提，别罗列。）",
+                    "content": f"（{user_name}的手机数据（{_sensor_date}，更新时间 {_sensor.get('last_updated', '未知')}）：{'、'.join(_s_parts)}。自然提，别罗列。）",
                     "_layer": "3.7_sensor",
                 })
     except Exception:
@@ -776,6 +773,7 @@ def build(
             "content": f"（{user_name}此刻{_realtime_awareness}，短时线索，别当长期事实。）",
             "_layer": "3.9_screen_awareness",
             "_drop_priority": 25,
+            "_provenance": {"mode": "fresh", "source": "realtime_state", "max_age_seconds": 300},
         })
 
     # ─────────────────────────────────────────────────────────────────────────

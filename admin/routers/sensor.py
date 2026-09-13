@@ -62,6 +62,8 @@ def _save_sensor_to_health_state(data: dict):
         state["phone_sensor_log"] = log[-30:]
 
         today = datetime.now().strftime("%Y-%m-%d")
+        if summary.get("date") != today:
+            summary = {}
         summary = dict(state["phone_sensor_today"] or {})
         if data.get("steps") is not None:
             summary["steps"] = max(summary.get("steps", 0), data["steps"])
@@ -72,7 +74,7 @@ def _save_sensor_to_health_state(data: dict):
         if data.get("screen_sessions") is not None:
             summary["screen_sessions"] = max(summary.get("screen_sessions", 0), data["screen_sessions"])
         summary["date"] = today
-        summary["last_updated"] = datetime.now().strftime("%H:%M")
+        summary["last_updated"] = datetime.now().isoformat(timespec="seconds")
         state["phone_sensor_today"] = summary
 
     health_state.mutate(oid, apply_sensor)
