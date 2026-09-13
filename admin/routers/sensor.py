@@ -62,9 +62,9 @@ def _save_sensor_to_health_state(data: dict):
         state["phone_sensor_log"] = log[-30:]
 
         today = datetime.now().strftime("%Y-%m-%d")
+        summary = dict(state["phone_sensor_today"] or {})
         if summary.get("date") != today:
             summary = {}
-        summary = dict(state["phone_sensor_today"] or {})
         if data.get("steps") is not None:
             summary["steps"] = max(summary.get("steps", 0), data["steps"])
         if data.get("battery") is not None:
