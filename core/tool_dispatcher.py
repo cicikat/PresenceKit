@@ -148,9 +148,9 @@ async def _search_documents_wrapper(user_id: str, query: str = "", media_type: s
     return await search_documents_for_user(user_id, char_id, query, media_type)
 
 
-async def _read_document_wrapper(user_id: str, document_id: str, offset: int = 0, *, char_id: str) -> str:
+async def _read_document_wrapper(user_id: str, document_id: str, offset: int = 0, mode: str = "context", query: str = "", *, char_id: str) -> str:
     from core.tools.character_recall import read_document_for_user
-    return await read_document_for_user(user_id, char_id, document_id, offset)
+    return await read_document_for_user(user_id, char_id, document_id, offset, mode=mode, query=query)
 
 
 async def _search_character_notes_wrapper(user_id: str, query: str = "", *, char_id: str) -> str:
@@ -568,9 +568,16 @@ async def _peek_screen_content_wrapper() -> str:
     return await peek_screen_content()
 
 
-async def _reread_image_wrapper(sha256: str, instruction: str = "") -> str:
+async def _reread_image_wrapper(user_id: str, sha256: str, instruction: str = "", mode: str = "cached", *, char_id: str) -> str:
+    from core.character_document_library import search
+    rows = search(user_id, char_id, source="upload_image", sha256=sha256)
+    if not rows:
+        return "当前角色的资料库中找不到这张图片，请先用 search_documents 查找已上传图片。"
+    if mode == "cached":
+        from core.tools.character_recall import read_document_for_user
+        return await read_document_for_user(user_id, char_id, rows[0]["document_id"])
     from core.media_processor import reread_cached_image
-    return await reread_cached_image(sha256, instruction)
+    return await reread_cached_image(sha256, instruction, mode=mode)
 
 
 async def _fs_list_wrapper(path: str | None = None, depth: int = 1) -> str:
@@ -1182,6 +1189,8 @@ _TOOL_REGISTRY["read_document"] = {
     "parameters": {"type": "object", "properties": {
         "document_id": {"type": "string", "description": "search_documents 返回的稳定 document_id。"},
         "offset": {"type": "integer", "description": "可选正文偏移量，用于继续读取。", "minimum": 0},
+        "mode": {"type": "string", "enum": ["summary", "context"], "description": "summary 读取已有内容摘录（非模型概括）；context 读取正文和上下文。"},
+        "query": {"type": "string", "description": "在文档内定位文字，从命中位置前后读取；offset 可用于继续查找。"},
     }, "required": ["document_id"]},
 }
 
@@ -1439,12 +1448,13 @@ _TOOL_REGISTRY["toy_pattern"] = {
 
 _TOOL_REGISTRY["reread_image"] = {
     "func": _reread_image_wrapper,
-    "description": "对已经收到过的图片再次调用视觉模型。需要使用图片消息或上下文中的 sha256；不会修改首次识别缓存。",
+    "description": "回读已上传图片。cached 读已有描述（默认，无模型调用）；vision 用通用模型重新看图；ocr 重读文字。sha256 来自图片消息或 search_documents。原图过期时仍可读已有描述。",
     "dangerous": False,
     "category": "info",
     "parameters": {"type": "object", "properties": {
         "sha256": {"type": "string", "description": "图片的 64 位 sha256 指纹"},
         "instruction": {"type": "string", "description": "本次想重点查看的内容"},
+        "mode": {"type": "string", "enum": ["cached", "vision", "ocr"], "description": "回读方式，不修改全局识别配置。"},
     }, "required": ["sha256"]},
     "examples": ["重新看看刚才那张图里的文字", "仔细确认图片里有几个人"],
     "keywords": ["重新读图片", "再看一遍图片", "图片里的文字"],
@@ -2347,7 +2357,7 @@ async def _execute_structured_impl(
         except Exception as _at_err:
             logger.debug("[tool_dispatcher] action_trace record error: %s", _at_err)
 
-    if tool_name in {"search_events", "expand_event_window", "get_related_events", "read_life_records"} and is_group:
+    if tool_name in {"search_events", "expand_event_window", "get_related_events", "read_life_records", "reread_image"} and is_group:
         _trace("failed", "reality_event_tools_forbidden_in_group")
         return _execution_outcome("tool_failed")
 
@@ -2503,7 +2513,7 @@ async def _execute_structured_impl(
             if is_group:
                 raise ValueError("screen observation is owner-only")
             result = await func(user_id=user_id, char_id=char_id)
-        elif tool_name == "read_life_records":
+        elif tool_name in {"read_life_records", "reread_image"}:
             _require_memory_read_scope(user_id, char_id)
             result = await func(user_id=user_id, char_id=char_id, **tool_args)
         elif tool_name in _SCOPED_MEMORY_READ_TOOLS:

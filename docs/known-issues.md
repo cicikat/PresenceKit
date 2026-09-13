@@ -1,5 +1,11 @@
 # docs/known-issues.md — 已知问题与技术债
 
+## 资料回读联合验收（2026-09-13，observe）
+
+合成图片与模拟 OCR/vision 回归通过；真实三端上传、模型服务联合验收未完成。
+旧资料库已截断正文无法恢复，需要重新上传；原图过期后只能读已有描述。
+范围见 [资料接续施工说明](media-continuity-2026-09-13.md)。
+
 ## 原生工具调用 type 数组（2026-09-13）
 
 current：空枚举修复后，上游继续拒绝工具 schema 的 type 数组。Chat Completions 出口统一

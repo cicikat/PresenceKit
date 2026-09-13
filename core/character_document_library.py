@@ -13,7 +13,7 @@ from core.sandbox import get_paths, safe_user_id
 
 logger = logging.getLogger(__name__)
 
-_SEARCH_TEXT_CAP = 12_000
+_SEARCH_TEXT_CAP = 500_000
 _READ_CAP = 2_000
 _RESULT_CAP = 8
 
@@ -144,7 +144,7 @@ def store_upload(
 
 
 def search(
-    uid: str, char_id: str, query: str = "", *, media_type: str = "", source: str = "",
+    uid: str, char_id: str, query: str = "", *, media_type: str = "", source: str = "", sha256: str = "",
 ) -> list[dict]:
     uid, char_id = safe_user_id(uid), safe_user_id(char_id)
     terms = _query_terms(query)
@@ -156,6 +156,8 @@ def search(
             continue
         if source and str(row.get("source")) != source:
             continue
+        if sha256 and str(row.get("sha256")) != sha256:
+            continue
         haystack = " ".join(str(row.get(key) or "") for key in ("filename", "summary", "searchable_text")).casefold()
         if terms and not all(term in haystack for term in terms):
             continue
@@ -165,7 +167,7 @@ def search(
     return sorted(results, key=lambda row: str(row.get("created_at") or ""), reverse=True)[:_RESULT_CAP]
 
 
-def read(uid: str, char_id: str, document_id: str, *, offset: int = 0) -> dict | None:
+def read(uid: str, char_id: str, document_id: str, *, offset: int = 0, mode: str = "context", query: str = "") -> dict | None:
     uid, char_id = safe_user_id(uid), safe_user_id(char_id)
     if not document_id.startswith("doc_"):
         return None
@@ -176,9 +178,19 @@ def read(uid: str, char_id: str, document_id: str, *, offset: int = 0) -> dict |
             return None
         start = max(0, int(offset or 0))
         text = str(row.get("searchable_text") or "")
+        if mode not in {"summary", "context"}:
+            raise ValueError("invalid_document_read_mode")
+        if query and mode == "context":
+            match = text.casefold().find(query.casefold(), start)
+            if match < 0:
+                return {"document_id": document_id, "filename": row.get("filename"), "content": "未找到指定文字。", "next_offset": None}
+            start = max(start, match - 400)
+        content = str(row.get("summary") or "") if mode == "summary" else text[start:start + _READ_CAP]
         return {
             "document_id": document_id, "filename": row.get("filename"), "media_type": row.get("media_type"),
-            "content": text[start:start + _READ_CAP], "next_offset": start + _READ_CAP if len(text) > start + _READ_CAP else None,
+            "content": content, "created_at": row.get("created_at"), "mode": mode,
+            "total_chars": len(text), "offset": start,
+            "next_offset": start + _READ_CAP if mode == "context" and len(text) > start + _READ_CAP else None,
         }
     return None
 

@@ -70,16 +70,17 @@ async def search_documents_for_user(user_id: str, char_id: str, query: str = "",
     rows = search_document_records(user_id, char_id, query, media_type=media_type)
     if not rows:
         return "No related character documents found."
-    lines = [f"{row['document_id']} | {row['filename']} | {row['media_type']} | {str(row['created_at'])[:10]}\nSummary: {row['summary']}" for row in rows]
+    lines = [f"{row['document_id']} | {row['filename']} | {row['media_type']} | {str(row['created_at'])[:10]} | sha256={row['sha256']}\n内容摘录（非模型概括）: {row['summary']}" for row in rows]
     return "Document search results:\n" + "\n".join(lines)
 
 
-async def read_document_for_user(user_id: str, char_id: str, document_id: str, offset: int = 0) -> str:
-    row = read_document_record(user_id, char_id, document_id, offset=offset)
+async def read_document_for_user(user_id: str, char_id: str, document_id: str, offset: int = 0, *, mode: str = "context", query: str = "") -> str:
+    row = read_document_record(user_id, char_id, document_id, offset=offset, mode=mode, query=query)
     if row is None:
         return "Character document not found."
     more = f" Continue with offset={row['next_offset']}." if row["next_offset"] is not None else ""
-    return f"Document {row['filename']}:\n{row['content']}{more}"
+    label = "内容摘录（非模型概括）" if mode == "summary" else "已保存正文/识别描述"
+    return f"Document {row['filename']} | {label} | {row.get('created_at', '')}:{more}\n{row['content']}"
 
 
 async def search_character_notes_for_user(user_id: str, char_id: str, query: str = "") -> str:

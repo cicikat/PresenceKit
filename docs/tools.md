@@ -896,6 +896,9 @@ The repair adds no tool, desktop/mobile protocol, or prompt injection path.
 
 ## Brief 228 character knowledge recall
 
+2026-09-13 补充：图片支持已有描述/vision/OCR 三种回读；文档支持摘录、正文及关键词上下文。
+范围与限制见 [上传资料接续](media-continuity-2026-09-13.md)。
+
 `search_documents`, `read_document`, and `search_character_notes` are explicit,
 bounded, frozen-`uid + char_id` recall tools. They do not inject results into the
 prompt by default and do not write short-term, event-log, episodic, identity, or
