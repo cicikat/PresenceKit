@@ -238,6 +238,7 @@ REGISTRY: dict[str, PathMeta] = {
     "character_document_root": PathMeta("canonical", "character_inner", "per_char_user", "ignore"),
     "character_document_index": PathMeta("canonical", "character_inner", "per_char_user", "ignore"),
     "character_document_stats": PathMeta("canonical", "character_inner", "per_char_user", "ignore"),
+    "context_continuity_db": PathMeta("runtime", "character_inner", "per_char_user", "ignore"),
     "character_document_blob_dir": PathMeta("canonical", "character_inner", "per_char_user", "ignore"),
     "character_inner_diary": PathMeta("canonical", "character_inner", "per_char", "ignore"),
     "dream_rpg_archive_owner_dir": PathMeta("runtime", "dream", "per_char_user", "ignore"),

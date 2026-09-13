@@ -154,10 +154,12 @@ async function loadLifeRecords() {
     const states = {pending:'等待识别',processing:'识别中',ready:'已保存描述',failed:'识别失败'};
     const errors = {ValidationError:'旧版字段校验失败，可重试',JSONDecodeError:'旧版 JSON 解析失败，可重试',EmptyRecognition:'没有识别到可读内容，请检查原图',TimeoutError:'识别超时，可重试',ValueError:'识别服务请求失败，请检查连接'};
     host.innerHTML = `<p>${data.enabled ? '同步已开启' : '同步已关闭'} · 手填内容与图片描述分开保存</p>` +
+      `<p>${data.character_readable ? '角色可读取生活记录' : '角色读取已关闭'}。上传识别完成后，未读资料会随下一次对话或主动机会提供；已读不代表已经回复。</p>` +
+      `<p class="admin-description">${data.continuity && !data.continuity.unavailable ? `当前角色待评估资料 ${Number(data.continuity.pending_count || 0)} 条（单轮最多 3 条）；近期主动工具结果 ${Number(data.continuity.tool_results?.length || 0)} 条，保留 24 小时。` : '资料接续状态暂不可用。'}</p>` +
       `<div class="admin-settings-list">${Object.entries(data.recognition_routes || {}).map(([category,route])=>`<div class="admin-setting-row"><span><strong>${escapeHtml(labels[category] || category)}</strong><small>${route.route === 'ocr' ? '独立 OCR · 提取账单文字' : '通用视觉 · 自然语言描述'}</small></span><span class="admin-status-badge">${route.effective ? '已配置，待实际识别验证' : route.configured ? '同步关闭' : '未配置，任务等待'}</span></div>`).join('')}</div>` +
       `<div class="admin-toolbar">${Object.entries(states).map(([key,label])=>`<span class="admin-status-badge">${label} ${Number(data.tasks?.[key] || 0)}</span>`).join('')}</div>` +
       ((data.failures || []).length ? `<div class="admin-settings-list">${data.failures.map(row=>`<div class="admin-setting-row"><span><strong>${escapeHtml(errors[row.error] || '识别失败，请检查服务连接后重试')}</strong><small>记录 ${escapeHtml(row.id)}</small></span><button class="btn btn-ghost btn-sm" data-action="retryLifeRecord" data-action-args='${escapeHtml(JSON.stringify([row.id]))}'>重试识别</button></div>`).join('')}</div>` : '<p class="admin-description">没有失败任务。</p>') +
-      `<details><summary>设备回执与技术详情</summary><pre>${escapeHtml(JSON.stringify({设备回执:data.devices,操作审计:data.audit,失败:data.failures},null,2))}</pre></details>`;
+      `<details><summary>设备回执与技术详情</summary><pre>${escapeHtml(JSON.stringify({设备回执:data.devices,操作审计:data.audit,失败:data.failures,资料接续:data.continuity},null,2))}</pre></details>`;
     bindPageActions(host);
   } catch (error) { host.textContent = '生活记录状态读取失败：' + error.message; }
 }

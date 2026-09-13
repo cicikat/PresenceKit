@@ -1,5 +1,13 @@
 # docs/memory.md — 记忆子系统设计
 
+## 资料接续回执（2026-09-13）
+
+经用户授权，owner 上传与生活记录增加有界自动投影；主动工具 safe_summary 增加 24 小时历史参考。
+这替代下文 Brief 228 的“完全不自动注入”旧约束，但仍不直接写 history/event_log/episodic/identity。
+context_continuity 使用独立 per-owner/char SQLite 回执与有界结果表，250ms 锁等待、事务写入、
+state.read 无正文观测。模型成功评估与用户可见回复分别记账；源记录更正/撤回优先。
+完整范围见 [资料接续](media-continuity-2026-09-13.md)。
+
 ## API 思考存档与记忆隔离（2026-09-09）
 
 按用户明确要求，API 实际返回的思考默认存入独立 SQLite archive；此前“思考永不落盘”

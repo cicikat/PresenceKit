@@ -195,6 +195,15 @@ def read(uid: str, char_id: str, document_id: str, *, offset: int = 0, mode: str
     return None
 
 
+def candidates(uid: str, char_id: str) -> list[dict]:
+    """Bounded current material metadata; tombstones and character notes stay out."""
+    uid, char_id = safe_user_id(uid), safe_user_id(char_id)
+    rows = [row for row in _load(uid, char_id) if row.get('uid') == uid and row.get('char_id') == char_id
+            and not row.get('deleted_at') and row.get('source') in {'upload_file', 'upload_image'}]
+    return [{key: row.get(key) for key in ('document_id', 'sha256', 'filename', 'source', 'created_at', 'summary')}
+            for row in sorted(rows, key=lambda row: str(row.get('created_at') or ''), reverse=True)[:100]]
+
+
 def delete(uid: str, char_id: str, document_id: str) -> bool:
     uid, char_id = safe_user_id(uid), safe_user_id(char_id)
     rows = _load(uid, char_id)

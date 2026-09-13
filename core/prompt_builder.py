@@ -404,6 +404,7 @@ def build(
     tool_call_required: bool = False,
     required_tool_names: list[str] | set[str] | tuple[str, ...] = (),
     hardware_jobs_text: str = "",
+    continuity_messages: list[dict] | None = None,
 ) -> tuple[list[dict], dict]:
     """
     组装完整的 prompt 消息列表
@@ -1344,6 +1345,7 @@ def build(
                 validity=_result_validity,
             ),
             "_layer": "10_tool_result",
+            "_continuity_receipt": getattr(tool_result, 'continuity_receipt', None),
         })
 
     from core.tool_grounding import grounding_message as _grounding_message
@@ -1624,6 +1626,7 @@ def build(
     # 层 12：用户当前消息（最后一层）
     # 大间隔（>10分钟）时先注入时间提示，帮助模型感知消息时效性
     # ─────────────────────────────────────────────────────────────────────────
+    messages.extend(continuity_messages or [])
     if _msg_gap_secs is not None and _msg_gap_secs >= _GAP_HINT_MIN_SECS:
         messages.append({
             "role": "system",
@@ -1857,5 +1860,8 @@ KNOWN_LAYERS: list[tuple[str, str]] = [
     ("11.5_post_history", "酒馆卡历史之后约束层"),
     ("11.7_pinned_facts", "用户特意提过要记住的事"),
     ("12_time_hint", "时间提示（gap≥10分钟）"),
+    ("10.6_pending_material", "待评估的用户上传资料"),
+    ("10.7_recent_material", "近期已读资料接续"),
+    ("10.8_recent_tool_results", "主动工具历史结果"),
     ("12_user_message", "用户当前消息（不可消融）"),
 ]

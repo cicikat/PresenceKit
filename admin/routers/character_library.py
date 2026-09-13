@@ -4,6 +4,13 @@ from admin.auth import require_scopes
 router = APIRouter()
 
 
+@router.get('/observability/context-continuity', summary='读取资料已读与主动工具结果接续状态')
+async def context_continuity_observability(uid: str, char_id: str, _auth=Depends(require_scopes('state.read'))):
+    _scope(uid, char_id)
+    from core.context_continuity import observability
+    return observability(uid, char_id)
+
+
 def _scope(uid: str, char_id: str):
     from core.memory.scope import MemoryScope
     try:

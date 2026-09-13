@@ -697,6 +697,7 @@ class Pipeline:
             "web_recall_result": _web_recall_text,
             "web_recall_hits":   _web_recall_hits,
             "action_trace_entries": _action_trace_entries,
+            "_continuity_private": not group_id,
             "hardware_jobs_text": _hardware_jobs_text,
         }
 
@@ -802,6 +803,10 @@ class Pipeline:
             required_tool_names=required_tool_names,
         )
         _hardware_jobs_for_prompt = context.get("hardware_jobs_text", "") if hardware_jobs_text is None else hardware_jobs_text
+        if (channel in {'qq', 'desktop', 'mobile'} and context.get('_continuity_private')
+                and not context.get('stage_presence') and not context.get('stage_transcript')):
+            from core.context_continuity import messages as continuity_messages
+            _prompt_kwargs['continuity_messages'] = continuity_messages(user_id, _char_id)
         if _hardware_jobs_for_prompt:
             _prompt_kwargs["hardware_jobs_text"] = _hardware_jobs_for_prompt
         messages, debug_info = prompt_builder.build(**_prompt_kwargs)
@@ -838,6 +843,8 @@ class Pipeline:
             return await llm_client.chat(messages, char_id=char_id, is_proactive=is_proactive)
 
         reply = await _call()
+        from core.context_continuity import acknowledge
+        acknowledge(messages)
         reply = await self._anti_collapse_prefix_retry(messages, reply)
         from core.tool_grounding import guard_completion_claim
         return guard_completion_claim(reply, messages)
@@ -950,6 +957,8 @@ class Pipeline:
                 yield piece
             # 流正常结束
             if got_any:
+                from core.context_continuity import acknowledge
+                acknowledge(messages)
                 self._check_stream_collapse(messages, "".join(pieces), char_id=char_id, user_id=user_id)
                 return
             # 0 token（模型返回空流） → 降级
@@ -1377,6 +1386,8 @@ class Pipeline:
                 turn = await llm_client.chat_turn(
                     loop_msgs, tools, char_id=char_id, is_proactive=is_proactive,
                 )
+                from core.context_continuity import acknowledge
+                acknowledge(loop_msgs)
                 if not turn.tool_calls:
                     if not turn.content.strip():
                         # Some OpenAI-compatible gateways occasionally return a
@@ -1480,6 +1491,7 @@ class Pipeline:
                     loop_msgs.append({
                         "role": "tool",
                         "tool_call_id": tc["id"],
+                        "_continuity_receipt": getattr(result, 'continuity_receipt', None),
                         "content": _tool_message_content(result, ask_confirm, generated_at=time.time(),
                                                          discovery_result=tc["name"].startswith(_discovery_prefix)),
                     })

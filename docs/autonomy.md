@@ -1,5 +1,9 @@
 # Signal-first Autonomy
 
+2026-09-13：静默轮已获得的 safe_summary 可在后续主动/owner 对话中作为带时间的历史工具结果接续。
+未读上传与就绪生活记录也随原主动机会提供，成功模型评估后确认已读；不新增 signal、不强制发言。
+资料工具继承可读授权，显式禁用优先。保留/撤回/观测与三端验收见 [资料接续](media-continuity-2026-09-13.md)。
+
 本文定义 v1 的 proactive 工作边界。scheduler 或 sensor 可以报告事实，但不能生成面向用户的一句话。`core.autonomy` 是唯一的 proactive 决策与交付路径；`talk_owner` 是唯一的用户可见出口。
 
 ## 版本化契约

@@ -1,5 +1,14 @@
 # 功能控制面事实清单（2026-07-13）
 
+## 资料接续（2026-09-13）
+
+生活记录角色可读沿用 enabled/character_readable；已就绪未读资料随下一次 owner 私聊/主动机会提供。
+管理面服务配置卡增加有界待评估数量、结果保留窗口与“已读不等于回复”说明。
+GET /settings/life-records 增加 continuity，独立 state.read 观测为 /observability/context-continuity。
+主动工具 safe_summary 沿用 action_trace.enabled 控制，保留 24 小时/最多 12 条，prompt 最多 3 条。
+未配置的四个资料回读工具在 autonomy 继承读取授权，显式禁用和角色权限优先；不新增客户端设置真值。
+图片 cached/vision/ocr 是单次工具参数，不改全局模型配置。三端闭环与限制见 [施工记录](media-continuity-2026-09-13.md)。
+
 ## 管理面图像连接与全局所有者（2026-09-12）
 
 图像连接列表与用途分配分开保存，手机视觉覆盖仍继承通用配置；未新增视觉配置真值。

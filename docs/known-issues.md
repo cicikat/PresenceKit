@@ -2,6 +2,10 @@
 
 ## 资料回读联合验收（2026-09-13，observe）
 
+`open`：定向路径登记审计发现既有 conversation_stats_db / ime_drafts_db / life_records_db /
+llm_reasoning_db 未登记，共 5 项失败；新增 context_continuity_db 已登记并通过。
+资料接续与静默结果回归、管理面隔离后端清缓存实测通过；运行中服务需重启加载代码。
+
 合成图片与模拟 OCR/vision 回归通过；真实三端上传、模型服务联合验收未完成。
 旧资料库已截断正文无法恢复，需要重新上传；原图过期后只能读已有描述。
 范围见 [资料接续施工说明](media-continuity-2026-09-13.md)。

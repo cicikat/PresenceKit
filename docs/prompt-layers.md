@@ -1,5 +1,13 @@
 # docs/prompt-layers.md — Prompt 层结构
 
+## 资料接续（2026-09-13）
+
+`10.6_pending_material`（最多 3 条未读资料）、`10.7_recent_material`（1 条近期已读参考）、
+`10.8_recent_tool_results`（最多 3 条主动工具历史结果）在用户当前消息之前注入，均有 `_layer` 和
+`_drop_priority=85`，参与原裁剪与消融。仅 owner QQ/desktop/mobile 私聊；autonomy 独立投影复用同一数据源。
+内部 `_continuity_receipt` 在 API 边界移除，成功模型返回后确认，被裁剪/消融的资料不确认。
+角色可读与撤回边界、历史时效和零直接长期记忆写入见 [资料接续](media-continuity-2026-09-13.md)。
+
 Path C 的轮内 `11.6_tool_discovery` 说明分类发现顺序与非业务证据边界，独立于
 `11.5_tool_nudge` 开关；不进持久 history。具体 schema 仅在该分类被模型加载后发送，
 MCP 自由参数提示也延迟到加载后且只引用当前暴露的说明工具。见 [tool-discovery.md](tool-discovery.md)。

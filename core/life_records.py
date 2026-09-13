@@ -191,6 +191,18 @@ def observe(owner):
     return result
 
 
+def character_candidates(owner):
+    """Latest revisions only; failed/pending recognitions never become ready evidence."""
+    with database() as db:
+        if not db:
+            return []
+        rows = db.execute('''SELECT v.data FROM versions v JOIN
+            (SELECT id,max(seq) seq FROM versions WHERE owner=? GROUP BY id) latest
+            ON v.seq=latest.seq ORDER BY v.seq DESC LIMIT 100''', (owner,))
+        records = [json.loads(row[0]) for row in rows]
+        return [r for r in records if not r.get('deleted') and r.get('recognition_status') == 'ready']
+
+
 def claim(available_categories=None):
     with database(True) as db:
         rows = db.execute("SELECT j.owner,j.id FROM jobs j WHERE j.status='pending' OR (j.status='processing' AND j.lease<?)", (time.time(),)).fetchall()

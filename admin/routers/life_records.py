@@ -140,7 +140,15 @@ class Settings(BaseModel):
 @router.get('/settings/life-records')
 async def settings(auth=Depends(require_scopes('admin'))):
     uid = str(get_config().get('scheduler', {}).get('owner_id', ''))
-    return await asyncio.to_thread(store.observe, uid)
+    result = await asyncio.to_thread(store.observe, uid)
+    try:
+        from core.scheduler.loop import _active_char_id_or_none
+        from core.context_continuity import observability
+        char_id = _active_char_id_or_none()
+        result['continuity'] = await asyncio.to_thread(observability, uid, char_id) if uid and char_id else {'unavailable': True}
+    except Exception:
+        result['continuity'] = {'unavailable': True}
+    return result
 
 
 @router.put('/settings/life-records')

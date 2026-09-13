@@ -2,6 +2,12 @@
 
 ## 资料回读与上下文接续（2026-09-13）
 
+`current`：已就绪生活记录/上传资料随 owner 对话或原主动机会提供，成功评估后去重，
+静默主动工具结果保留 24 小时。GET /settings/life-records 新增 continuity；
+GET /observability/context-continuity 为 state.read 无正文投影。管理面清缓存浏览器实测通过。
+桌面/手机仍消费原聊天结果、上传与生活记录 outbox，通知、poll、ack、TTL、IPC 不变，无须新客户端包。
+`open`：路径总登记既有四个 accessor 缺项导致 5 项审计失败，本次 accessor 已登记。
+
 `current`：图片回读选择 cached/vision/ocr，按角色校验；文档支持摘录/正文/关键词前后文。
 三端上传入口及通知/ack 协议不变。详见 [施工说明](media-continuity-2026-09-13.md)。
 `observe`：真实三端上传与模型服务联合验收尚未完成。

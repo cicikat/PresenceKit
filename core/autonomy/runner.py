@@ -184,6 +184,8 @@ def _context_messages(
         logger.debug("[autonomy] bounded ambient context failed: %s", exc)
 
     messages.append(_memory_query_message(uid, char_id, memory_query, now=now))
+    from core.context_continuity import messages as continuity_messages
+    messages.extend(continuity_messages(uid, char_id, now=now))
 
     hardware_message = _hardware_job_message(now=now)
     if hardware_message is not None:
@@ -548,6 +550,8 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
                 llm_client.chat_turn(messages, active_tools, char_id=job.char_id, is_proactive=True, allow_xml_fallback=True),
                 timeout=remaining,
             )
+            from core.context_continuity import acknowledge
+            acknowledge(messages)
             if not memory_candidates_evaluated:
                 _mark_memory_candidates_evaluated(job, run)
                 memory_candidates_evaluated = True
@@ -670,6 +674,7 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
                     "tool_call_id": call["id"],
                     "content": frame_tool_message(safe_result.safe_summary[:_CONTEXT_BUDGETS["tool_fact_chars"]], generated_at=generated_at, validity="current_turn" if outcome == "ok" else "outcome_unknown" if outcome == "outcome_unknown" else "execution_failed"),
                     "_layer": "autonomy_tool_result",
+                    "_continuity_receipt": getattr(result, 'continuity_receipt', None),
                     "_budget_chars": _CONTEXT_BUDGETS["tool_fact_chars"],
                     "_provenance": {"source": "tool_result", "tool_name": name, "generated_at": generated_at, "validity": "current_turn" if outcome == "ok" else "execution_failed"},
                 })

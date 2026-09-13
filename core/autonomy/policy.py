@@ -142,6 +142,10 @@ def tool_decisions(uid: str, char_id: str, state: dict) -> list[dict]:
         if name == "observe_user_screen" and name not in configured:
             from core.perception.screen_observation import enabled as screen_enabled
             configured_policy = {"enabled": screen_enabled()}
+        if name in {'read_life_records', 'search_documents', 'read_document', 'reread_image'} and name not in configured:
+            from core.life_records import settings as life_settings
+            life_cfg = life_settings()
+            configured_policy = {'enabled': name != 'read_life_records' or bool(life_cfg['enabled'] and life_cfg['character_readable'])}
         effect = get_tool_effect(name) or ("write" if is_side_effect_tool(name) else "read")
         eligible, eligibility_reason = tool_eligibility(name, configured_policy, registry=_TOOL_REGISTRY, effect=effect)
         is_mcp = info.get("category") == "mcp"

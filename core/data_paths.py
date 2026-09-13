@@ -520,6 +520,9 @@ class DataPaths:
     def character_document_stats(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
         return self.character_document_root(user_id, char_id=char_id) / "stats.json"
 
+    def context_continuity_db(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
+        return self.character_document_root(user_id, char_id=char_id) / "context_continuity.sqlite3"
+
     def character_document_blob_dir(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
         return self.character_document_root(user_id, char_id=char_id) / "blobs"
 
