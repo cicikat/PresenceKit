@@ -75,6 +75,11 @@ RPG Dream's `rpg_kp` route is a backend capability, not a client setting; its ef
 `presence_ext.tool_loop` 是角色卡级 Path C 覆写，不经设置 API：`"on"` 在全局
 `tool_loop.enabled=false` 时仍为该卡开启多步工具循环，`"off"` 强制关闭，缺失或非法值回落全局。
 全局 `tool_loop.total_timeout_s` 控制单轮工具循环的总墙钟预算，默认 300 秒；管理面可调范围为 5–720 秒。
+Path C 固定采用分类按需加载，无新增开关：首轮仅提供最终获授权的非空分类入口。
+`max_steps` 之外最多增加非空分类数（至多 9）个纯发现轮，发现/relay/执行共用总超时；
+thinking 前处理和无工具最终生成维持原预算边界。只读 `runtime-signals` 的
+`tool_loop_discovery` 提供实际 schema 数量、加载/拒绝/耗尽/超时观测。
+桌面继续从管理面配置，手机无本地权限副本；详见 [tool-discovery.md](tool-discovery.md)。
 它仍要求 owner 私聊与当前 chat preset 的 `tool_call_mode=function_calling`；角色卡不能借此绕过
 工具暴露分类或危险工具排除。`examples/assistant.example.json` 展示人机直连组合，普通角色卡未声明时
 继续遵从全局默认关闭。

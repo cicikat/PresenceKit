@@ -1977,10 +1977,11 @@ def format_mcp_opaque_params_note(tool_schemas: list[dict]) -> str:
         "并根据服务器返回的具体缺参/格式错误在下一步修正。"
     ]
     for server, names in opaque_by_server.items():
+        exposed_names = {(schema.get("function") or schema).get("name") for schema in tool_schemas}
         doc_tools = [
             candidate_name
             for candidate_name, info in _TOOL_REGISTRY.items()
-            if info.get("category") == "mcp"
+            if candidate_name in exposed_names and info.get("category") == "mcp"
             and info.get("mcp_server") == server
             and info.get("mcp_read_only") is True
             and any(hint in str(info.get("description") or "").casefold() for hint in _MCP_DOC_DESCRIPTION_HINTS)

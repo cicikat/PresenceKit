@@ -1,5 +1,9 @@
 # docs/prompt-layers.md — Prompt 层结构
 
+Path C 的轮内 `11.6_tool_discovery` 说明分类发现顺序与非业务证据边界，独立于
+`11.5_tool_nudge` 开关；不进持久 history。具体 schema 仅在该分类被模型加载后发送，
+MCP 自由参数提示也延迟到加载后且只引用当前暴露的说明工具。见 [tool-discovery.md](tool-discovery.md)。
+
 ## IME 主动观察
 
 Brief 248：Reality `1_system_prompt` 始终绑定当前角色与用户；框架指令用第二人称，用户用显示名或所选称谓（默认“她”）。角色卡、资料与工具返回不再经过全文代词替换。builder 的 mood 提示显式使用“你此刻”，管理面命名显示兼容保留。来源地图见 [prompt-unification-audit.md](prompt-unification-audit.md)。

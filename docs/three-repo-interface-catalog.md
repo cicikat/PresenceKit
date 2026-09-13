@@ -858,3 +858,11 @@ observe：手机新包真机展示/后台同步、真实 OCR 连接未完成；o
 灰绿状态色、中性按钮、分隔线设置区、复杂表单折叠及 JSON 填表已接入；观测与工具页复用现有 state.read 全局状态表。原保存 API、客户端管理面 bridge 和手机消费路径不变。
 current / open / roadmap / observe 与验证证据见 [admin-design-implementation.md](admin-design-implementation.md)。
 roadmap：逐请求的视觉、权限、队列、发送、ack/TTL 尚未合并入十类全局状态表，不能据此宣称端到端链路全部可观测。observe：原生容器与真实服务未联调。
+# 聊天工具分类发现（2026-09-13）
+
+`current`：QQ/desktop/mobile 共享 Path C 的分类按需加载；内部 `load_tools_<category>`
+仅加载 schema，不发业务活动/确认/WS/poll 消息。原 REST、IPC、scope、ack、TTL、锁、
+通知和中继合同不变。管理面保留原权限/角色/预设/预算控制，客户端不复制授权判断。
+`GET /observability/runtime-signals`（state.read）增加 `tool_loop_discovery` 聚合信号，
+不新增落盘。详见 [tool-discovery.md](tool-discovery.md)。
+`observe`：真实模型网关及 QQ/原生桌面/手机端到端验证，不能用 mocked 测试替代。

@@ -1109,30 +1109,19 @@ class Pipeline:
                 "[pipeline.run_agentic_loop] applied tool preset=%r model_preset=%r exposed=%d",
                 applied_tool_preset, chat_preset_name, len(tools),
             )
-        if len(tools) > 20:
-            from core.runtime_signal_observability import record
-
-            is_new = record(
-                category="tool_loop_capacity",
-                code="tool_schema_over_budget",
-                status="attention",
-                context={
-                    "tool_count": len(tools),
-                    "category_count": len(categories) if isinstance(categories, (list, tuple, set)) else 1,
-                },
-            )
-            if is_new:
-                logger.warning(
-                    "[pipeline.run_agentic_loop] 暴露了 %d 个工具 schema，超过建议上限 20；"
-                    "请收窄 tool_categories 或 exclude_tools",
-                    len(tools),
-                )
-            else:
-                logger.debug("[pipeline.run_agentic_loop] repeated tool schema over-budget: %d", len(tools))
-
+        from core.tool_discovery import ToolDiscovery, PREFIX as _discovery_prefix
+        from core.runtime_signal_observability import record as _record_discovery
+        discovery = ToolDiscovery(tools, _TOOL_REGISTRY)
+        tools = discovery.schemas()
+        _record_discovery(category="tool_loop_discovery", code="initial_surface", status="ok",
+                          context={"category_count": len(discovery.groups), "schema_count": len(tools)})
         mcp_opaque_params_note = format_mcp_opaque_params_note(tools)
 
         loop_msgs = list(messages)
+        loop_msgs.insert(0, {"role": "system", "_layer": "11.6_tool_discovery", "content": (
+            "工具按分类加载。先调用 load_tools_ 分类入口，再在下一轮使用获得的具体工具定义。"
+            "分类加载只提供定义，不是业务执行或成功证据。未加载的工具不得调用或猜测参数。"
+        )})
         image_refs = [
             ref for ref in (media_refs or [])
             if isinstance(ref, dict) and ref.get("kind") == "image" and ref.get("sha256")
@@ -1283,8 +1272,13 @@ class Pipeline:
             ask_confirm: str | None,
             *,
             generated_at: float | None = None,
+            discovery_result: bool = False,
         ) -> str:
             """Keep confirmation state outside the untrusted tool-data frame."""
+            if discovery_result:
+                # Local protocol receipt; never mark schema discovery as business
+                # success (or as a failed business execution).
+                return result or "分类未加载；未执行任何业务操作。"
             if ask_confirm:
                 return ask_confirm
             if result:
@@ -1307,6 +1301,7 @@ class Pipeline:
                 categories,
                 allowed_tool_names=exposed_tool_names,
             )
+            relay_system += "\n未加载的分类只能调用当前提供的 load_tools_ 入口（参数为 {}），不能直接选择具体工具。"
             try:
                 relay_response = await llm_client.chat(
                     [
@@ -1337,8 +1332,48 @@ class Pipeline:
             return resolved
 
         async def _run_steps() -> None:
-            nonlocal used_tool, successful_tool_call, outcome
-            for _step in range(max_steps):
+            nonlocal used_tool, successful_tool_call, outcome, tools
+            business_steps = 0
+            discovery_steps = 0
+            while business_steps < max_steps:
+                tools = discovery.schemas()
+                _record_discovery(category="tool_loop_discovery", code="request_surface", status="ok",
+                                  context={"schema_count": len(tools), "loaded_count": len(discovery.loaded)})
+                if len(tools) > 20:
+                    _record_discovery(category="tool_loop_capacity", code="tool_schema_over_budget", status="attention",
+                                      context={"tool_count": len(tools), "category_count": len(discovery.loaded)})
+                offered_names = {(t.get("function") or t)["name"] for t in tools}
+                # Freeze this request's surface: loading a category cannot authorize
+                # a guessed business call in the same model response.
+                async def _call(tc, index, total, origin):
+                    nonlocal used_tool
+                    name = tc["name"]
+                    if name not in offered_names:
+                        _record_discovery(category="tool_loop_discovery", code="unoffered_call", status="attention")
+                        return "工具调用被拒绝：本轮未提供该工具。请先加载分类。", None
+                    if name.startswith(_discovery_prefix):
+                        result, loaded = discovery.load(name, tc["arguments"])
+                        _record_discovery(category="tool_loop_discovery", code="category_loaded" if loaded else "invalid_discovery",
+                                          status="ok" if loaded else "attention",
+                                          context={"loaded_count": len(discovery.loaded), "schema_count": len(discovery.schemas())})
+                        if loaded:
+                            note = format_mcp_opaque_params_note(discovery.schemas())
+                            if note:
+                                result += "\n" + note
+                        return result, None
+                    used_tool = True
+                    return await _execute_with_ephemeral_status(
+                        tc["id"], name, tc["arguments"], index=index, total=total, origin=origin,
+                    )
+
+                def _charge(calls):
+                    nonlocal business_steps, discovery_steps
+                    if (discovery_steps < len(discovery.groups) and calls
+                            and all(c["name"].startswith(_discovery_prefix) for c in calls)):
+                        discovery_steps += 1
+                    else:
+                        business_steps += 1
+
                 turn = await llm_client.chat_turn(
                     loop_msgs, tools, char_id=char_id, is_proactive=is_proactive,
                 )
@@ -1362,7 +1397,6 @@ class Pipeline:
                     if intent_text:
                         relay_calls = await _resolve_relay_intent(intent_text)
                         if relay_calls:
-                            used_tool = True
                             # 可观测性：relay 分支和原生 tool_calls 分支最终都调用同一个
                             # _execute()，仅凭 error.log 里的报错完全分不清故障来自哪条路径
                             # （Brief 120 事后排查时吃过这个亏）。这里显式记一条 info，
@@ -1391,10 +1425,12 @@ class Pipeline:
                                 if rc["name"] == "manage_self_capability":
                                     # Relay parsing cannot safely supply an action id or a
                                     # revision, so this narrow operation is native-call only.
+                                    loop_msgs.append({"role": "tool", "tool_call_id": rc["id"],
+                                                      "content": "该操作必须使用原生工具调用。未执行。"})
                                     continue
                                 try:
-                                    result, ask_confirm = await _execute_with_ephemeral_status(
-                                        rc["id"], rc["name"], rc["arguments"],
+                                    result, ask_confirm = await _call(
+                                        rc,
                                         index=_index,
                                         total=len(relay_calls),
                                         origin="assistant_loop_relay",
@@ -1407,11 +1443,13 @@ class Pipeline:
                                 loop_msgs.append({
                                     "role": "tool",
                                     "tool_call_id": rc["id"],
-                                    "content": _tool_message_content(result, ask_confirm, generated_at=time.time()),
+                                    "content": _tool_message_content(result, ask_confirm, generated_at=time.time(),
+                                                                     discovery_result=rc["name"].startswith(_discovery_prefix)),
                                 })
                                 if ask_confirm:
                                     outcome = ("confirm", ask_confirm)
                                     return
+                            _charge(relay_calls)
                             # 不 return：复用现有多步机制，让 for 循环自然进入下一轮，
                             # 而不是新开一层循环（Brief 120 §2.3）。
                             continue
@@ -1426,11 +1464,10 @@ class Pipeline:
                 # message; Responses contributes function_call items keyed by the
                 # same call_id used by the tool result below.
                 loop_msgs.extend(turn.continuation_items or [turn.assistant_message])
-                used_tool = True
                 for _index, tc in enumerate(turn.tool_calls, start=1):
                     try:
-                        result, ask_confirm = await _execute_with_ephemeral_status(
-                            tc["id"], tc["name"], tc["arguments"],
+                        result, ask_confirm = await _call(
+                            tc,
                             index=_index,
                             total=len(turn.tool_calls),
                             origin=("assistant_self_management" if tc["name"] == "manage_self_capability" else "assistant_loop"),
@@ -1443,16 +1480,21 @@ class Pipeline:
                     loop_msgs.append({
                         "role": "tool",
                         "tool_call_id": tc["id"],
-                        "content": _tool_message_content(result, ask_confirm, generated_at=time.time()),
+                        "content": _tool_message_content(result, ask_confirm, generated_at=time.time(),
+                                                         discovery_result=tc["name"].startswith(_discovery_prefix)),
                     })
                     if ask_confirm:
                         outcome = ("confirm", ask_confirm)
                         return
+                _charge(turn.tool_calls)
+            _record_discovery(category="tool_loop_discovery", code="budget_exhausted", status="attention",
+                              context={"business_steps": business_steps, "discovery_steps": discovery_steps})
             outcome = ("exhausted", "")
 
         try:
             await asyncio.wait_for(_run_steps(), timeout=total_timeout_s)
         except asyncio.TimeoutError:
+            _record_discovery(category="tool_loop_discovery", code="timeout", status="attention")
             logger.warning(
                 "[pipeline.run_agentic_loop] 总预算 %.0fs 超时，按步数耗尽处理", total_timeout_s
             )

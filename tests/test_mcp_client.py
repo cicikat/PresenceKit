@@ -167,7 +167,8 @@ class TestConnectServerRegistration:
         assert mc._servers["srv1"].tool_names == []
 
 
-def test_opaque_parameter_guidance_uses_registry_metadata_not_a_hardcoded_guide_name(monkeypatch):
+@pytest.mark.parametrize("doc_exposed", [False, True])
+def test_opaque_parameter_guidance_uses_registry_metadata_not_a_hardcoded_guide_name(monkeypatch, doc_exposed):
     registry = {
         "mcp__arcade__play": {
             "category": "mcp", "mcp_server": "arcade", "description": "play an action",
@@ -185,10 +186,10 @@ def test_opaque_parameter_guidance_uses_registry_metadata_not_a_hardcoded_guide_
                 "params": {"type": "object", "additionalProperties": True},
             }},
         }},
-    ])
+    ] + ([{"type": "function", "function": {"name": "mcp__arcade__lookup_action_spec", "parameters": {}}}] if doc_exposed else []))
 
     assert "mcp__arcade__play" in note
-    assert "mcp__arcade__lookup_action_spec" in note
+    assert ("mcp__arcade__lookup_action_spec" in note) is doc_exposed
     assert "不要根据工具名猜测" in note
     assert "get_guide" not in note
 

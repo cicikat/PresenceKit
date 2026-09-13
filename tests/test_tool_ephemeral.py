@@ -14,6 +14,9 @@ def _make_pipeline():
 
 
 def _configure_loop(monkeypatch):
+    from core.tool_dispatcher import _TOOL_REGISTRY
+    monkeypatch.setitem(_TOOL_REGISTRY, "mcp__demo__call", {"category": "mcp"})
+    monkeypatch.setattr("core.model_registry._get_preset_config", lambda: {"presets": {}})
     monkeypatch.setattr(
         "core.config_loader.get_config",
         lambda: {"tool_loop": {"max_steps": 3, "total_timeout_s": 1, "categories": ["mcp"]}},
@@ -31,6 +34,9 @@ def _script_turns(monkeypatch, turns):
     iterator = iter(turns)
 
     async def _chat_turn(messages, tools, **kwargs):
+        if any(t["function"]["name"] == "load_tools_mcp" for t in tools):
+            return ChatTurn(content="", tool_calls=[{"id": "discover", "name": "load_tools_mcp", "arguments": {}}],
+                            assistant_message={"role": "assistant", "content": None})
         return next(iterator)
 
     monkeypatch.setattr("core.llm_client.chat_turn", _chat_turn)

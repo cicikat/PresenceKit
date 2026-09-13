@@ -50,6 +50,10 @@ def _patch_tool_loop_config(monkeypatch, **overrides):
 
 
 def _patch_tools_schema(monkeypatch, names):
+    from core.tool_dispatcher import _TOOL_REGISTRY
+    for name in names:
+        if name not in _TOOL_REGISTRY:
+            monkeypatch.setitem(_TOOL_REGISTRY, name, {"category": "info"})
     schema = [
         {"type": "function", "function": {"name": n, "description": "", "parameters": {"type": "object", "properties": {}}}}
         for n in names
@@ -62,6 +66,12 @@ def _script_chat_turn(monkeypatch, turns: list[ChatTurn]):
     it = iter(turns)
 
     async def _fake(messages, tools, **kw):
+        # Simulate the model's discovery round before the business script.
+        entries = [t["function"]["name"] for t in tools if t["function"]["name"].startswith("load_tools_")]
+        if entries:
+            tc = [{"id": name, "name": name, "arguments": {}} for name in entries]
+            return ChatTurn(content="", tool_calls=tc, assistant_message={"role": "assistant", "content": None,
+                "tool_calls": [{"id": c["id"], "type": "function", "function": {"name": c["name"], "arguments": "{}"}} for c in tc]})
         calls.append({"messages": [dict(m) for m in messages], "tools": tools})
         return next(it)
 
@@ -233,7 +243,7 @@ async def test_two_step_natural_termination_with_tool_includes_reanchor(monkeypa
     assert execute_calls[0]["origin"] == "assistant_loop"
 
     final_messages = final_calls[-1]
-    tool_msgs = [m for m in final_messages if m.get("role") == "tool"]
+    tool_msgs = [m for m in final_messages if m.get("role") == "tool" and not m.get("tool_call_id", "").startswith("load_tools_")]
     assert len(tool_msgs) == 1
     assert tool_msgs[0]["tool_call_id"] == "call_1"
     assert "<<<TOOL_DATA_START>>>" in tool_msgs[0]["content"]
@@ -331,7 +341,7 @@ async def test_single_tool_exception_does_not_abort_loop(monkeypatch):
 
     assert result == "收尾"
     assert len(chat_turn_calls) == 2
-    tool_msg = next(m for m in final_calls[-1] if m.get("role") == "tool")
+    tool_msg = next(m for m in final_calls[-1] if m.get("tool_call_id") == "call_1")
     assert tool_msg["content"] == "（工具无结果或执行失败）"
 
 
@@ -653,8 +663,8 @@ async def test_nudge_hint_derives_opaque_mcp_parameter_guidance_from_current_reg
     )
 
     nudge = next(m for m in chat_turn_calls[0]["messages"] if m.get("_layer") == "11.5_tool_nudge")
-    assert "mcp__arcade__inspect_action" in nudge["content"]
-    assert "不要根据工具名猜测" in nudge["content"]
+    assert "mcp__arcade__inspect_action" not in str(chat_turn_calls[0]["messages"])
+    assert "不要根据工具名猜测" in str(chat_turn_calls[0]["messages"])
 
 
 # ── 13. Brief 120·工具循环二次调用兜底（尾部花括号方案）────────────────────

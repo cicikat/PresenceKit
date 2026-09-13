@@ -612,3 +612,9 @@ observe：真实 OCR 配置与手机新包端到端尚未验证；open：原手�
 灰绿状态色、中性按钮、分隔线设置区、复杂表单折叠及 JSON 填表已接入；观测与工具页复用现有 state.read 全局状态表。原保存 API、客户端管理面 bridge 和手机消费路径不变。
 current / open / roadmap / observe 与验证证据见 [admin-design-implementation.md](admin-design-implementation.md)。
 roadmap：逐请求的视觉、权限、队列、发送、ack/TTL 尚未合并入十类全局状态表，不能据此宣称端到端链路全部可观测。observe：原生容器与真实服务未联调。
+# 聊天工具分类发现：实机验证（2026-09-13，observe）
+
+Path C 已改为分类入口 → 具体 schema → 原执行器，保留权限、MCP、确认及两次近期
+schema 兼容修复。实现与定向回归见 [tool-discovery.md](tool-discovery.md)。
+真实模型网关及 QQ/原生桌面/手机的端到端体验仍需运行环境验证；尤其关注发现增加的
+模型往返延迟，以及大 MCP 分类加载后的上下文容量。当前不截断大分类 schema。
