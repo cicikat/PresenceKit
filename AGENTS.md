@@ -216,6 +216,24 @@ brief，遵循“删除必须连同守卫、测试和文档条目一起删除”
 如果跑全量，这里有个好东西叫pytest -n auto
 别再python -m pytest串行跑全量啦！！！
 
+## Windows 换行噪音（必读，提交前核对）
+
+本仓库 `core.autocrlf=false`、`core.eol=lf`，但历史 blob 并不统一：不少大文件是 **LF / CRLF 混用**（例如 `core/tool_dispatcher.py`、`docs/tools.md`）。Git 把 `\r\n` ↔ `\n` 当成整行改动，一次整文件换行转换会变成上千行的假 diff，把真正改动淹没，后续 `git checkout` / amend 还容易把实质补丁一起冲掉。工单 2、工单 3 都因此返工过。
+
+**怎么产生的（按出现频率）：**
+
+1. 用编辑器 / `Path.write_text` / `search_replace` / 整文件 `replace(b'\r\n', b'\n')` 重写本就是混用或 CRLF 的文件。工具读入后再写出时，常把全文件归一成某一种换行。
+2. `git checkout HEAD -- file` 还原后，再把工作区内容整份写回去（而不是只打几个 hunk）。工作区若已被规范化，还原等于白做，二次写出仍是整文件换行。
+3. 把「先转成 LF 再 commit」当成清理手段。混用文件上这会制造比功能改动大几十倍的噪音；amend 时若再混入无关暂存，更难拆。
+4. 只看 `git diff --stat` 的行数。CRLF 噪音的 insertions/deletions 几乎对等且极大；`git diff --ignore-cr-at-eol --stat` 才会露出真实改动量。
+
+**提交前必须做：**
+
+- 对每个将要 `git add` 的文件，对比 `git diff --stat -- path` 和 `git diff --ignore-cr-at-eol --stat -- path`。两者差很多 → **不要提交**，先处理换行。
+- 禁止整文件转换换行。需要改混用文件时：从 `git show HEAD:path` 取原字节，只替换目标片段，按该片段原有的 `\n` 或 `\r\n` 写回。
+- 若已经整文件归一了：`git checkout HEAD -- path`，再用上面的字节级定点补丁重打实质改动。不要在已污染的工作区上继续编辑。
+- 不要用换行转换当格式化，也不要为此改 `core.autocrlf`。
+
 ## Admin Static Asset Cache
 
 When editing a JS or CSS file loaded directly by `admin/static/index.html`, update that asset's `?v=` query version in `index.html`. When editing a page fragment under `admin/static/pages/`, also update `ADMIN_UI_FRAGMENT_VERSION` in `admin/static/js/core.js` and the `core.js` query version in `index.html`. Do not rely on a browser refresh or the default StaticFiles cache behavior to verify a page change.
@@ -289,10 +307,10 @@ Read:
 - docs/interaction-event-model.md
 - docs/security_model.md
 
-## ����������߽磨��� / ������壩
+## ����������߽磨��� / ������壩
 
-�����������Ψһ��ʵ��Դ�����𱣴����á����� effective state��ִ��Ȩ�޺�Σ�ղ���բ�ţ����ṩֻ���۲�ӿڡ���������ǹ���Ա��������Ͻ��棺�����޸�ȫ�����á���ɫ���Ǻ���Ȩ�������ܰѡ��ֶδ��ڡ����ɡ���������Ч�����κ�������Ӧ����ʾ enabled/configured��effective�����ԭ����Դ�͹۲���ڡ�
+�����������Ψһ��ʵ��Դ�����𱣴����á����� effective state��ִ��Ȩ�޺�Σ�ղ���բ�ţ����ṩֻ���۲�ӿڡ���������ǹ���Ա��������Ͻ��棺�����޸�ȫ�����á���ɫ���Ǻ���Ȩ�������ܰѡ��ֶδ��ڡ����ɡ���������Ч�����κ�������Ӧ����ʾ enabled/configured��effective�����ԭ����Դ�͹۲���ڡ�
 
-�ͻ���ְ��ͬ������˺��ֻ���ֻ����չʾ���������ѵ����á��ϱ�����/����״̬��ִ���û�ȷ�Ϻ�ı��ض������ͻ��˲��ø��ƺ�˵�Ȩ���жϣ�Ҳ���ðѱ��� UI ���ص��ɺ���ܿ��ء���������ʱ�����ں�˶��� capability �� effective state�����ڹ�����岹����/�۲⣬���ʵ�����Ѷ˲����á��������ͽ�����ʾ��
+�ͻ���ְ��ͬ������˺��ֻ���ֻ����չʾ���������ѵ����á��ϱ�����/����״̬��ִ���û�ȷ�Ϻ�ı��ض������ͻ��˲��ø��ƺ�˵�Ȩ���жϣ�Ҳ���ðѱ��� UI ���ص��ɺ���ܿ��ء���������ʱ�����ں�˶��� capability �� effective state�����ڹ�����岹����/�۲⣬���ʵ�����Ѷ˲����á��������ͽ�����ʾ��
 
-�Ƽ���·�����������Ȩ�� �� ����������/�۲� �� REST/WS Э�� �� ������ֻ��ͻ���������ִ�С������������õ������á������ȼ���� effective state����ɫ��¶��tool loop/Ȩ��բ�źͿͻ�������״̬��
+�Ƽ���·�����������Ȩ�� �� ����������/�۲� �� REST/WS Э�� �� ������ֻ��ͻ���������ִ�С������������õ������á������ȼ���� effective state����ɫ��¶��tool loop/Ȩ��բ�źͿͻ�������״̬��
