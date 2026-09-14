@@ -10,8 +10,8 @@ def test_mcp_import_headers_start_empty_and_cache_versions_are_bumped():
 
     assert "const MCP_DEFAULT_HEADERS = Object.freeze({});" in source
     assert "renderKeyValueEditor('mcp-import-headers', MCP_DEFAULT_HEADERS" in source
-    assert "mcp.js?v=brief-195-mcp-autonomy-signal-1" in index
-    assert "ADMIN_UI_FRAGMENT_VERSION = 'brief-195-mcp-autonomy-signal-1'" in core
+    assert "mcp.js?v=brief-242-settings-4" in index
+    assert "ADMIN_UI_FRAGMENT_VERSION = 'admin-prompt-followups-1'" in core
 
 
 def test_selected_migrated_winner_queues_only_bounded_festival_facts(sandbox):

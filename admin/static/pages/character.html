@@ -1,162 +1,211 @@
 
-      <h1 class="page-title">角色卡编辑器</h1>
+      <h1 class="page-title" data-i18n="character.title">角色卡编辑器</h1>
 
       <!-- 选择与操作栏 -->
       <div class="card">
         <div class="card-header">
           <h3 data-i18n="settings_center.current_character">当前角色</h3>
           <div class="admin-action-group">
-            <button class="btn btn-ghost btn-sm" data-action="loadCharacterList">刷新</button>
-            <button class="btn btn-primary btn-sm" data-action="newCharacter">➕ 新建角色卡</button>
+            <button class="btn btn-ghost btn-sm" data-action="loadCharacterList" data-i18n="common.refresh">刷新</button>
+            <button class="btn btn-primary btn-sm" data-action="newCharacter" data-i18n="character.new">➕ 新建角色卡</button>
             <label class="admin-inline-186">
               <input type="file" id="char-upload-file" accept=".json,.txt,.md"
                      onchange="uploadCharacterFile(event)" class="admin-inline-056">
-              <button class="btn btn-ghost btn-sm" data-action="focus-element" data-action-args='["char-upload-file"]'>
+              <button class="btn btn-ghost btn-sm" data-action="focus-element" data-action-args='["char-upload-file"]' data-i18n="character.upload">
                 ⬆ 上传角色卡
               </button>
-             <button class="btn btn-ghost btn-sm" data-action="exportCharacter">📤 导出</button>
+             <button class="btn btn-ghost btn-sm" data-action="exportCharacter" data-i18n="character.export">📤 导出</button>
             </label>
           </div>
         </div>
         <div class="admin-toolbar">
           <select id="char-select" onchange="onCharSelectChange()" class="admin-inline-064">
-            <option value="">-- 加载中 --</option>
+            <option value="" data-i18n="character.loading_option">-- 加载中 --</option>
           </select>
-          <button class="btn btn-primary btn-sm" data-action="setActiveCharacter">设为当前</button>
+          <button class="btn btn-primary btn-sm" data-action="setActiveCharacter" data-i18n="character.set_current">设为当前</button>
 
-          <button class="btn btn-ghost btn-sm" data-action="renameCharacter">✏️ 重命名</button>
+          <button class="btn btn-ghost btn-sm" data-action="renameCharacter" data-i18n="character.rename">✏️ 重命名</button>
 
-          <span id="char-active-badge" class="badge badge-accent admin-inline-056"></span>
+          <span id="char-active-badge" class="badge badge-accent" style="display:none"></span>
         </div>
-        <p class="admin-source-note">支持 .json / .txt / .md</p>
-      </div>
-
-      <!-- 与用户关系：只读提示 + 跳转（关系是角色×用户维度的运行时状态，不在角色卡编辑，见用户管理页） -->
-<section class="card"><p data-i18n="settings_center.manage_character_model_voice_and_appearance_bindings_in_service_configuration">角色模型、声音和形象绑定在服务配置中管理。</p><button class="btn btn-ghost" data-action="goto" data-action-args='["role-bindings"]' data-i18n="settings_center.view_character_bindings">查看角色绑定</button></section>      <div class="card" id="char-dream-behavior-card">
-        <div class="admin-card-header">
-          <div>
-            <h3 data-i18n="character.dream_behavior.title">梦境行为分配</h3>
-            <p class="admin-source-hint" data-i18n="character.dream_behavior.hint">统一层只管格式、隔离与退出；这里把人格和模式行为交给每张角色卡。</p>
-          </div>
-        </div>
-        <div class="form-row col-1">
-          <label class="field">
-            <span data-i18n="character.dream_behavior.identity_anchor">梦境人格锚点（所有模式）</span>
-            <textarea id="char-dream-identity-anchor" placeholder="角色在不同梦境里始终保留的思考方式、表达和核心人格" data-i18n-placeholder="character.dream_behavior.identity_placeholder"></textarea>
-          </label>
-          <label class="field">
-            <span data-i18n="character.dream_behavior.sandbox_directive">沙盒模式指令</span>
-            <textarea id="char-dream-sandbox-directive" placeholder="自由梦境中的主动性、边界和关系表达" data-i18n-placeholder="character.dream_behavior.sandbox_placeholder"></textarea>
-          </label>
-          <label class="field">
-            <span data-i18n="character.dream_behavior.scenario_directive">剧本模式指令</span>
-            <textarea id="char-dream-scenario-directive" placeholder="剧本角色的立场、行动原则，以及内在感情如何影响但不覆盖 stage" data-i18n-placeholder="character.dream_behavior.scenario_placeholder"></textarea>
-          </label>
-          <label class="field">
-            <span data-i18n="character.dream_behavior.scenario_identity">剧本身份投影（仅 Scenario）</span>
-            <textarea id="char-dream-scenario-identity" placeholder="仅用于 Dream Scenario 的外貌、基础性格和说话方式摘要；不影响 Reality chat" data-i18n-placeholder="character.dream_behavior.scenario_identity_placeholder"></textarea>
-          </label>
-        </div>
-        <p class="admin-source-note" data-i18n="character.dream_behavior.source">保存随角色卡写入 presence_ext.dream_behavior；Scenario 身份投影只影响 Dream Scenario，不影响 Reality chat；留空字段不注入 Prompt。</p>
+        <p class="admin-source-note" data-i18n="character.file_hint_bindings">支持 .json / .txt / .md。模型、声音和形象绑定在服务配置中管理。</p>
+        <button class="btn btn-ghost" data-action="goto" data-action-args='["role-bindings"]' data-i18n="settings_center.view_character_bindings">查看角色绑定</button>
       </div>
 
       <div class="card admin-source-note">
-        💡 与用户的关系（称呼、亲密度等）不在角色卡里编辑——那是运行时状态，请去
-        <a href="javascript:void(0)" data-action="goto" data-action-args='["users"]' class="admin-inline-008">用户管理</a> 页查看/修改。
+        <span data-i18n="character.relation_hint_before">💡 与用户的关系（称呼、亲密度等）不在角色卡里编辑——那是运行时状态，请去</span>
+        <a href="javascript:void(0)" data-action="goto" data-action-args='["users"]' class="admin-inline-008" data-i18n="nav.page.users">用户管理</a>
+        <span data-i18n="character.relation_hint_after">页查看/修改。</span>
       </div>
 
       <!-- 编辑表单 -->
       <div class="card">
         <div class="card-header">
-          <h3 id="char-edit-title">角色卡内容</h3>
+          <h3 id="char-edit-title" data-i18n="character.content">角色卡内容</h3>
           <button class="btn btn-primary btn-sm" data-action="saveCharacter" data-i18n="settings_center.save">保存</button>
         </div>
         <!-- txt/md 纯文本编辑区 -->
-        <div id="char-text-form" class="admin-inline-056">
+        <div id="char-text-form" style="display:none">
           <textarea id="char-text-content" class="admin-inline-194"></textarea>
           <div class="admin-inline-140">
-            <button class="btn btn-primary" data-action="saveCharacter">保存角色卡</button>
+            <button class="btn btn-primary" data-action="saveCharacter" data-i18n="character.save">保存角色卡</button>
           </div>
         </div>
         <!-- json 多字段表单 -->
-        <div id="char-edit-form" class="admin-inline-056">
+        <div id="char-edit-form" style="display:none">
+          <h3 data-i18n="character.section.basic">基础</h3>
+          <p class="admin-source-hint" data-i18n="character.section.basic_hint">进入提示词的角色名、人称和当前场景。</p>
           <div class="form-row">
             <label class="field">
-              <span>name（角色名）</span>
+              <span data-i18n="character.field.name">角色名</span>
               <input type="text" id="char-name">
             </label>
             <label class="field">
-              <span>gender（性别）</span>
+              <span data-i18n="character.field.gender">性别（人称）</span>
               <select id="char-gender" class="admin-inline-181">
-                <option value="neutral">neutral（ta）</option>
-                <option value="female">female（她）</option>
-                <option value="male">male（他）</option>
+                <option value="neutral" data-i18n="character.gender.neutral">中性（ta）</option>
+                <option value="female" data-i18n="character.gender.female">女性（她）</option>
+                <option value="male" data-i18n="character.gender.male">男性（他）</option>
               </select>
-            </label>
-            <label class="field">
-              <span>scenario（场景）</span>
-              <input type="text" id="char-scenario">
             </label>
           </div>
           <div class="form-row col-1">
             <label class="field">
-              <span>system_prompt（人设核心）</span>
+              <span data-i18n="character.field.scenario">场景</span>
+              <textarea id="char-scenario" class="admin-inline-164"></textarea>
+            </label>
+          </div>
+
+          <h3 data-i18n="character.section.persona">人设</h3>
+          <p class="admin-source-hint" data-i18n="character.section.persona_hint">系统提示、外貌背景和性格会分别注入不同提示词层。</p>
+          <div class="form-row col-1">
+            <label class="field">
+              <span data-i18n="character.field.system_prompt">人设核心（系统提示）</span>
               <textarea id="char-system-prompt" class="admin-inline-163"></textarea>
             </label>
           </div>
           <div class="form-row col-1">
             <label class="field">
-              <span>description（外貌/背景描述）</span>
+              <span data-i18n="character.field.description">外貌与背景</span>
               <textarea id="char-description" class="admin-inline-161"></textarea>
             </label>
           </div>
           <div class="form-row col-1">
             <label class="field">
-              <span>personality（性格）</span>
+              <span data-i18n="character.field.personality">性格</span>
               <textarea id="char-personality" class="admin-inline-165"></textarea>
+            </label>
+          </div>
+
+          <h3 data-i18n="character.section.examples">对话示例</h3>
+          <p class="admin-source-hint" data-i18n="character.section.examples_hint">风格参考，不是真实对话。开场白多数角色卡不用。</p>
+          <div class="form-row col-1">
+            <label class="field">
+              <span data-i18n="character.field.example">对话示例</span>
+              <textarea id="char-mes-example" class="admin-inline-161"></textarea>
             </label>
           </div>
           <div class="form-row col-1">
             <label class="field">
-              <span>mes_example（对话示例）</span>
-              <textarea id="char-mes-example" class="admin-inline-161"></textarea>
+              <span data-i18n="character.first_message">开场白</span>
+              <textarea id="char-first-mes" class="admin-inline-164"></textarea>
+            </label>
+          </div>
+          <div class="form-row col-1">
+            <label class="field">
+              <span data-i18n="character.field.alternate_greetings">备用开场白</span>
+              <div id="char-alternate-greetings"></div>
+              <button type="button" class="btn btn-ghost btn-sm" data-action="addCharacterGreeting" data-i18n="character.add_greeting">添加开场白</button>
             </label>
           </div>
 
-          <!-- 生日 -->
+          <h3 data-i18n="character.section.world_book">世界书</h3>
+          <p class="admin-source-hint" data-i18n="character.section.world_book_hint">角色卡内嵌条目，命中关键词时注入。全局现实世界书在创作页单独启用。</p>
+          <div id="char-world-book"></div>
+          <button type="button" class="btn btn-ghost btn-sm" data-action="addCharacterWorldBook" data-i18n="character.add_world_book">添加世界书条目</button>
+
+          <h3 data-i18n="character.section.post_history">历史之后</h3>
+          <p class="admin-source-hint" data-i18n="character.section.post_history_hint">酒馆卡「历史之后」约束；有内容时注入，且不会被自动裁剪。</p>
+          <div class="form-row col-1">
+            <label class="field">
+              <span data-i18n="character.field.post_history">历史之后指令</span>
+              <textarea id="char-post-history" class="admin-inline-164"></textarea>
+            </label>
+          </div>
+          <div class="form-row col-1">
+            <label class="field">
+              <span data-i18n="character.field.post_history_extra">常驻补充（after 型世界书）</span>
+              <textarea id="char-post-history-extra" class="admin-inline-164"></textarea>
+            </label>
+          </div>
+
+          <h3 data-i18n="character.section.dates">日期</h3>
           <div class="form-row">
             <label class="field">
-              <span>birthday 月</span>
-              <input type="number" id="char-birthday-month" min="1" max="12" placeholder="月（1-12）">
+              <span data-i18n="character.birthday_month">生日月</span>
+              <input type="number" id="char-birthday-month" min="1" max="12" placeholder="1–12">
             </label>
             <label class="field">
-              <span>birthday 日</span>
-              <input type="number" id="char-birthday-day" min="1" max="31" placeholder="日（1-31）">
+              <span data-i18n="character.birthday_day">生日日</span>
+              <input type="number" id="char-birthday-day" min="1" max="31" placeholder="1–31">
             </label>
             <label class="field admin-inline-070">
-              <span>birthday prompt</span>
-              <input type="text" id="char-birthday-prompt" placeholder="生日提示文字（留空=未设置）">
+              <span data-i18n="character.birthday_prompt">生日提示</span>
+              <input type="text" id="char-birthday-prompt" placeholder="留空表示未设置" data-i18n-placeholder="character.birthday_prompt_placeholder">
             </label>
           </div>
+          <label class="field">
+            <span data-i18n="character.anniversaries">纪念日</span>
+            <div id="char-anniversaries" class="admin-inline-160"></div>
+            <button type="button" class="btn btn-ghost btn-sm" data-action="addCharacterAnniversary" data-i18n="character.add_anniversary">添加纪念日</button>
+          </label>
 
-          <!-- Advanced fields -->
+          <h3 data-i18n="character.dream_behavior.title">梦境行为分配</h3>
+          <p class="admin-source-hint" data-i18n="character.dream_behavior.hint">统一层只管格式、隔离与退出；这里把人格和模式行为交给每张角色卡。</p>
+          <div class="form-row col-1">
+            <label class="field">
+              <span data-i18n="character.dream_behavior.identity_anchor">梦境人格锚点（所有模式）</span>
+              <textarea id="char-dream-identity-anchor" placeholder="角色在不同梦境里始终保留的思考方式、表达和核心人格" data-i18n-placeholder="character.dream_behavior.identity_placeholder"></textarea>
+            </label>
+            <label class="field">
+              <span data-i18n="character.dream_behavior.sandbox_directive">沙盒模式指令</span>
+              <textarea id="char-dream-sandbox-directive" placeholder="自由梦境中的主动性、边界和关系表达" data-i18n-placeholder="character.dream_behavior.sandbox_placeholder"></textarea>
+            </label>
+            <label class="field">
+              <span data-i18n="character.dream_behavior.scenario_directive">剧本模式指令</span>
+              <textarea id="char-dream-scenario-directive" placeholder="剧本角色的立场、行动原则，以及内在感情如何影响但不覆盖 stage" data-i18n-placeholder="character.dream_behavior.scenario_placeholder"></textarea>
+            </label>
+            <label class="field">
+              <span data-i18n="character.dream_behavior.scenario_identity">剧本身份投影（仅 Scenario）</span>
+              <textarea id="char-dream-scenario-identity" placeholder="仅用于 Dream Scenario 的外貌、基础性格和说话方式摘要；不影响 Reality chat" data-i18n-placeholder="character.dream_behavior.scenario_identity_placeholder"></textarea>
+            </label>
+          </div>
+          <p class="admin-source-note" data-i18n="character.dream_behavior.source">保存随角色卡写入 presence_ext.dream_behavior；Scenario 身份投影只影响 Dream Scenario，不影响 Reality chat；留空字段不注入 Prompt。</p>
+
           <details class="admin-inline-134">
-            <summary class="admin-inline-014">高级</summary>
+            <summary class="admin-inline-014" data-i18n="static.character.advanced">高级</summary>
             <div class="admin-inline-132">
               <label class="field">
-                <span>anniversaries（纪念日列表）</span>
-                <div id="char-anniversaries" class="admin-inline-160"></div><button type="button" class="btn btn-ghost btn-sm" data-action="addCharacterAnniversary">Add anniversary</button>
+                <span data-i18n="character.proactive">主动发言</span>
+                <select id="char-proactive">
+                  <option value="full" data-i18n="character.proactive.full">完整主动（默认）</option>
+                  <option value="off" data-i18n="character.proactive.off">关闭主动发言</option>
+                </select>
               </label>
-              <label class="field admin-inline-132">
-                <span>first_mes（开场白，多数角色卡不使用）</span>
-                <textarea id="char-first-mes" class="admin-inline-164"></textarea>
+              <label class="field">
+                <span data-i18n="character.tool_loop">多步工具循环</span>
+                <select id="char-tool-loop">
+                  <option value="" data-i18n="character.tool_loop.follow">跟随全局</option>
+                  <option value="on" data-i18n="character.tool_loop.on">开启</option>
+                  <option value="off" data-i18n="character.tool_loop.off">关闭</option>
+                </select>
               </label>
             </div>
           </details>
 
           <div class="admin-inline-133">
-            <button class="btn btn-primary" data-action="saveCharacter">保存角色卡</button>
+            <button class="btn btn-primary" data-action="saveCharacter" data-i18n="character.save">保存角色卡</button>
           </div>
         </div>
-        <div id="char-empty" class="empty">请从上方选择一个角色卡</div>
+        <div id="char-empty" class="empty" data-i18n="character.empty">请从上方选择一个角色卡</div>
       </div>

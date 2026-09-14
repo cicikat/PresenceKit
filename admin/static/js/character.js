@@ -332,6 +332,7 @@ async function onCharSelectChange() {
   const id = document.getElementById('char-select').value;
   if (!id) {
     document.getElementById('char-edit-form').style.display = 'none';
+    document.getElementById('char-text-form').style.display = 'none';
     document.getElementById('char-empty').style.display = '';
     return;
   }
@@ -353,21 +354,28 @@ async function loadCharacterDetail(filename) {
     } else {
       document.getElementById('char-name').value           = d.name || '';
       document.getElementById('char-gender').value          = d.gender || 'neutral';
-      document.getElementById('char-scenario').value        = d.scenario || '';
-      document.getElementById('char-system-prompt').value   = d.system_prompt || '';
-      document.getElementById('char-description').value     = d.description || '';
-      document.getElementById('char-personality').value     = d.personality || '';
-      document.getElementById('char-mes-example').value     = d.mes_example || '';
+      document.getElementById('char-scenario').value        = _joinCharacterText(d.scenario);
+      document.getElementById('char-system-prompt').value   = _joinCharacterText(d.system_prompt);
+      document.getElementById('char-description').value     = _joinCharacterText(d.description);
+      document.getElementById('char-personality').value     = _joinCharacterText(d.personality);
+      document.getElementById('char-mes-example').value     = _joinCharacterText(d.mes_example);
       document.getElementById('char-birthday-month').value  = d.birthday?.month ?? '';
       document.getElementById('char-birthday-day').value    = d.birthday?.day   ?? '';
       document.getElementById('char-birthday-prompt').value = d.birthday?.prompt ?? '';
       _renderCharacterAnniversaries(d.anniversaries || []);
-      document.getElementById('char-first-mes').value       = d.first_mes || '';
-      const dreamBehavior = d.presence_ext?.dream_behavior || {};
+      document.getElementById('char-first-mes').value       = _joinCharacterText(d.first_mes);
+      document.getElementById('char-post-history').value    = _joinCharacterText(d.post_history_instructions);
+      document.getElementById('char-post-history-extra').value = _joinCharacterText(d.post_history_extra);
+      _renderCharacterGreetings(d.alternate_greetings || []);
+      _renderCharacterWorldBook(d.world_book || []);
+      const presenceExt = d.presence_ext || {};
+      const dreamBehavior = presenceExt.dream_behavior || {};
       document.getElementById('char-dream-identity-anchor').value = dreamBehavior.identity_anchor || '';
       document.getElementById('char-dream-sandbox-directive').value = dreamBehavior.sandbox_directive || '';
       document.getElementById('char-dream-scenario-directive').value = dreamBehavior.scenario_directive || '';
       document.getElementById('char-dream-scenario-identity').value = dreamBehavior.scenario_identity || '';
+      document.getElementById('char-proactive').value = presenceExt.proactive === 'off' ? 'off' : 'full';
+      document.getElementById('char-tool-loop').value = presenceExt.tool_loop === 'on' || presenceExt.tool_loop === 'off' ? presenceExt.tool_loop : '';
       document.getElementById('char-edit-form').style.display = '';
       document.getElementById('char-text-form').style.display = 'none';
     }
@@ -413,8 +421,17 @@ async function saveCharacter() {
       const presenceExt = { ...(_charData.presence_ext || {}) };
       if (Object.keys(dreamBehavior).length) presenceExt.dream_behavior = dreamBehavior;
       else delete presenceExt.dream_behavior;
+      const proactive = document.getElementById('char-proactive').value;
+      if (proactive === 'off') presenceExt.proactive = 'off';
+      else delete presenceExt.proactive;
+      const toolLoop = document.getElementById('char-tool-loop').value;
+      if (toolLoop === 'on' || toolLoop === 'off') presenceExt.tool_loop = toolLoop;
+      else delete presenceExt.tool_loop;
+      const greetingsVal = _readCharacterGreetings();
+      const worldBookVal = _readCharacterWorldBook();
+      const {type: _charType, filename: _charFilename, ...charRest} = _charData;
       const body = {
-        ..._charData,
+        ...charRest,
         presence_ext:  presenceExt,
         name:          document.getElementById('char-name').value,
         gender:        document.getElementById('char-gender').value,
@@ -426,6 +443,10 @@ async function saveCharacter() {
         birthday:      birthdayVal,
         anniversaries: anniversariesVal,
         first_mes:     document.getElementById('char-first-mes').value,
+        post_history_instructions: document.getElementById('char-post-history').value,
+        post_history_extra: document.getElementById('char-post-history-extra').value,
+        alternate_greetings: greetingsVal,
+        world_book: worldBookVal,
       };
       await api('PUT', `/characters/${encodeURIComponent(_charEditing)}`, body);
       toast(`角色卡 ${_charEditing} 已保存`, 'ok');
@@ -434,6 +455,68 @@ async function saveCharacter() {
   } catch(e) { toast('保存失败：' + e.message, 'err'); }
 }
 
+function _joinCharacterText(value) {
+  if (Array.isArray(value)) return value.join('');
+  return value == null ? '' : String(value);
+}
+function _renderCharacterGreetings(values) {
+  const root = document.getElementById('char-alternate-greetings');
+  if (!root) return;
+  const items = Array.isArray(values) ? values : [];
+  root.innerHTML = items.map((text, i) => `<div class="form-row col-1" data-greeting-row><label class="field"><span>${escapeHtml(t('character.greeting_n', '备用开场白 {index}', {index: i + 1}))}</span><textarea data-greeting></textarea></label><button type="button" class="btn btn-ghost btn-sm" data-action="removeCharacterGreeting">${escapeHtml(t('character.remove_greeting', '删除'))}</button></div>`).join('');
+  [...root.querySelectorAll('[data-greeting]')].forEach((el, i) => { el.value = _joinCharacterText(items[i]); });
+  bindPageActions(root);
+}
+function addCharacterGreeting() {
+  _renderCharacterGreetings([..._readCharacterGreetings(), '']);
+}
+function removeCharacterGreeting(button) {
+  button.closest('[data-greeting-row]')?.remove();
+  _renderCharacterGreetings(_readCharacterGreetings());
+}
+function _readCharacterGreetings() {
+  return [...document.querySelectorAll('#char-alternate-greetings [data-greeting]')].map(el => el.value).filter(text => text.trim());
+}
+function _worldBookExtra(entry) {
+  const rest = {...(entry || {})};
+  delete rest.keywords;
+  delete rest.keyword;
+  delete rest.content;
+  delete rest.enabled;
+  return rest;
+}
+function _renderCharacterWorldBook(values) {
+  const root = document.getElementById('char-world-book');
+  if (!root) return;
+  const items = Array.isArray(values) ? values : [];
+  root.innerHTML = items.map((entry) => `<div class="admin-setting-row" data-world-book-row><label class="field"><span>${escapeHtml(t('common.keywords', '关键词'))}</span><input type="text" data-wb-keywords></label><label class="checkbox-row"><input type="checkbox" data-wb-enabled ${entry.enabled === false ? '' : 'checked'}><span>${escapeHtml(t('common.enable', '启用'))}</span></label><label class="field"><span>${escapeHtml(t('common.content', '内容'))}</span><textarea data-wb-content></textarea></label><button type="button" class="btn btn-ghost btn-sm" data-action="removeCharacterWorldBook">${escapeHtml(t('character.remove_world_book', '删除条目'))}</button></div>`).join('');
+  [...root.querySelectorAll('[data-world-book-row]')].forEach((row, i) => {
+    const entry = items[i] || {};
+    const keywords = entry.keywords || entry.keyword || [];
+    row.querySelector('[data-wb-keywords]').value = Array.isArray(keywords) ? keywords.join(', ') : String(keywords || '');
+    row.querySelector('[data-wb-content]').value = _joinCharacterText(entry.content);
+    const extra = _worldBookExtra(entry);
+    if (Object.keys(extra).length) row.dataset.wbExtra = JSON.stringify(extra);
+  });
+  bindPageActions(root);
+}
+function addCharacterWorldBook() {
+  _renderCharacterWorldBook([..._readCharacterWorldBook(), {keywords: [], content: '', enabled: true}]);
+}
+function removeCharacterWorldBook(button) {
+  button.closest('[data-world-book-row]')?.remove();
+  _renderCharacterWorldBook(_readCharacterWorldBook());
+}
+function _readCharacterWorldBook() {
+  return [...document.querySelectorAll('#char-world-book [data-world-book-row]')].map(row => {
+    const keywords = row.querySelector('[data-wb-keywords]').value.split(/[,，]/).map(k => k.trim()).filter(Boolean);
+    const content = row.querySelector('[data-wb-content]').value;
+    const enabled = row.querySelector('[data-wb-enabled]').checked;
+    let extra = {};
+    try { extra = row.dataset.wbExtra ? JSON.parse(row.dataset.wbExtra) : {}; } catch (_) { extra = {}; }
+    return {...extra, keywords, content, enabled};
+  }).filter(entry => entry.keywords.length || entry.content.trim());
+}
 function _renderCharacterAnniversaries(values) {
   renderAnniversaryEditor(document.getElementById('char-anniversaries'), values, {removeAction: 'removeCharacterAnniversary'});
 }
