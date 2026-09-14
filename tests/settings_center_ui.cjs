@@ -77,4 +77,29 @@ const plain = value => JSON.parse(JSON.stringify(value));
   await context.saveCenterAutonomy(autonomyButton);
   assert.equal(writes.at(-1).path,'/admin/autonomy/config');
   assert.deepEqual(plain(writes.at(-1).body),{daily_evaluation_budget:24,min_interval_seconds:1800});
+  const creationControls = [{disabled:false},{disabled:false}];
+  const creationRoot = nodes['creation-assets'] = {textContent:'', innerHTML:'', querySelectorAll:()=>creationControls};
+  nodes['creation-result'] = {textContent:''};
+  respond = async () => ({
+    characters:[{id:'alice',label:'Alice'}],
+    lorebooks:[{id:'base',label:'圣塞西尔 / 学院'}],
+    jailbreaks:[{id:'base',label:'性张力'}],
+    active:{active_character:'alice',enabled_lorebooks:['base'],enabled_jailbreaks:[]}
+  });
+  await context.loadCreationAssets();
+  assert.ok(creationRoot.innerHTML.includes('admin-settings-list'));
+  assert.ok(creationRoot.innerHTML.includes('<strong>圣塞西尔 / 学院</strong>'));
+  assert.ok(creationRoot.innerHTML.includes('value="base"'));
+  assert.ok(!creationRoot.innerHTML.includes('>base<'));
+  assert.ok(creationRoot.innerHTML.includes('id="creation-avatar"'));
+  assert.ok(creationRoot.innerHTML.includes('data-action="saveCreationAssets"'));
+  assert.ok(creationRoot.innerHTML.includes('data-action="uploadCreationAvatar"'));
+  const checked = {checked:true,value:'base'};
+  context.document.querySelectorAll = selector => selector.includes('enabled_lorebooks') ? [checked] : [];
+  nodes['creation-character'] = {value:'alice'};
+  respond = async () => ({});
+  await context.saveCreationAssets();
+  assert.equal(writes.at(-1).path,'/settings/prompt-assets');
+  assert.equal(writes.at(-1).method,'PATCH');
+  assert.deepEqual(plain(writes.at(-1).body),{active_character:'alice',enabled_lorebooks:['base'],enabled_jailbreaks:[]});
 })().catch(error=>{console.error(error);process.exitCode=1;});

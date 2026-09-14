@@ -48,6 +48,10 @@ observe：真实手机安装、不同应用删除反馈、断网后上传以及�
 `/{call_id}` 均为 admin-only，列表不含正文，详情按需读取。管理面板与双端展开 UI
 为 roadmap，标准客户端 token 无权读取，不能把本地展示偏好当作存储开关。
 
+现实资产启用（2026-09-14）：管理面创作页把启用组合与头像拆成设置行。
+`GET /settings/prompt-assets` 的 lorebooks/jailbreaks `label` 由扫描写入（标题/关键词/条目标题），`id` 仍是 stem。
+`PATCH` 只接受 id，不接受 label/filename。无新落盘或观测端点；桌面仍走管理面，手机若展示资产名需改读 label（observe）。
+
 管理服务的设置面分三层：
 
 RPG Dream's `rpg_kp` route is a backend capability, not a client setting; its effective route is visible with the other model categories.

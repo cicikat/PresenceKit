@@ -25,6 +25,8 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+import yaml
+
 from core.authored_asset_resolver import resolve_layered_files
 
 logger = logging.getLogger(__name__)
@@ -201,6 +203,69 @@ def _scan_characters() -> list[AssetEntry]:
                                             source_path=p)
     return list(result.values())
 
+
+def _first_nonempty_str(*values) -> str:
+    for value in values:
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
+
+
+def _keyword_list(entry: dict | None) -> list[str]:
+    if not isinstance(entry, dict):
+        return []
+    raw = entry.get("keywords") or entry.get("keyword") or []
+    if isinstance(raw, str):
+        raw = [raw]
+    return [item.strip() for item in raw if isinstance(item, str) and item.strip()]
+
+
+def _lorebook_label(path: Path, stem: str) -> str:
+    """UI label: file title/name, else entry keywords, else stem."""
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return stem
+    if not isinstance(data, dict):
+        return stem
+    file_title = _first_nonempty_str(data.get("title"), data.get("name"))
+    if file_title:
+        return file_title
+    keywords: list[str] = []
+    seen: set[str] = set()
+    for entry in data.get("entries") or []:
+        for keyword in _keyword_list(entry):
+            if keyword in seen:
+                continue
+            seen.add(keyword)
+            keywords.append(keyword)
+            if len(keywords) >= 3:
+                break
+        if len(keywords) >= 3:
+            break
+    return " / ".join(keywords) if keywords else stem
+
+
+def _jailbreak_label(path: Path, stem: str) -> str:
+    """UI label: file title/name, else first entry title, else stem."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return stem
+    if not isinstance(data, dict):
+        return stem
+    file_title = _first_nonempty_str(data.get("title"), data.get("name"))
+    if file_title:
+        return file_title
+    for entry in data.get("entries") or []:
+        if not isinstance(entry, dict):
+            continue
+        title = _first_nonempty_str(entry.get("title"), entry.get("name"))
+        if title:
+            return title
+    return stem
+
+
 def _scan_lorebooks() -> list[AssetEntry]:
     paths = _paths()
     result = []
@@ -214,7 +279,7 @@ def _scan_lorebooks() -> list[AssetEntry]:
         p = item.path
         stem_lower = p.stem.lower()
         hidden = any(kw in stem_lower for kw in _NON_CARD_KEYWORDS)
-        result.append(AssetEntry(id=p.stem, label=p.stem, filename=p.name,
+        result.append(AssetEntry(id=p.stem, label=_lorebook_label(p, p.stem), filename=p.name,
                                   kind="reality_lorebook", hidden=hidden, source_path=p))
     return result
 
@@ -232,7 +297,7 @@ def _scan_jailbreaks() -> list[AssetEntry]:
         p = item.path
         stem_lower = p.stem.lower()
         hidden = any(kw in stem_lower for kw in _NON_CARD_KEYWORDS)
-        result.append(AssetEntry(id=p.stem, label=p.stem, filename=p.name,
+        result.append(AssetEntry(id=p.stem, label=_jailbreak_label(p, p.stem), filename=p.name,
                                   kind="reality_jailbreak", hidden=hidden, source_path=p))
     return result
 

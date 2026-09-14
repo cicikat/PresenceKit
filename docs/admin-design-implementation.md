@@ -11,6 +11,8 @@
 - 高级参数与 JSON 默认收起；JSON 先填入可视化表单，核对后保存，普通开关不用 JSON。
 - 未配置或受阻时显示提示与设置链接，恢复后提示消失；配置、实际生效、阻断和对应函数合并为表格。
 
+创作页「现实资产启用与头像」按设置行拆开：当前角色、世界书、提示词、头像各自成组，操作放底部，开关不成独立卡。世界书 UI label 优先 title/name，否则条目关键词，再回退 stem；破限优先条目标题。PATCH `/settings/prompt-assets` 仍只提交 id。
+
 ## 当前实现与边界
 
 共享样式在 `admin/static/style.css`、`admin-design.css`；交互在 `js/admin-design.js`。

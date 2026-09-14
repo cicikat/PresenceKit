@@ -1,11 +1,36 @@
 // Settings pages reuse the existing scoped APIs; no second configuration store.
+function creationAssetRow(item, key, enabledIds) {
+  const checked = (enabledIds || []).includes(item.id) ? 'checked' : '';
+  const subtitle = item.label && item.label !== item.id
+    ? t('settings_center.asset_id_hint','提交 id：{id}',{id:item.id})
+    : t('settings_center.asset_no_title_hint','无标题，回退文件名');
+  return `<label class="admin-setting-row"><span><strong>${escapeHtml(item.label||item.id)}</strong><small>${escapeHtml(subtitle)}</small></span><input type="checkbox" data-creation-asset="${key}" value="${escapeHtml(item.id)}" ${checked}></label>`;
+}
 async function loadCreationAssets() {
   const root=document.getElementById('creation-assets'); root.textContent=t('settings_center.loading',"读取中…");
   try {
     const data=await api('GET','/settings/prompt-assets');
-    root.innerHTML=`<label class="field">${t('settings_center.current_character',"当前角色")}<select id="creation-character">${data.characters.map(c=>`<option value="${escapeHtml(c.id)}" ${c.id===data.active.active_character?'selected':''}>${escapeHtml(c.label||c.id)}</option>`).join('')}</select></label>`+
-      [['lorebooks','enabled_lorebooks',t('settings_center.enabled_reality_lorebooks',"启用的现实世界书")],['jailbreaks','enabled_jailbreaks',t('settings_center.enabled_reality_prompts',"启用的现实提示词")]].map(([list,key,label])=>`<fieldset><legend>${label}</legend>${data[list].map(item=>`<label class="checkbox-row"><input type="checkbox" data-creation-asset="${key}" value="${escapeHtml(item.id)}" ${data.active[key].includes(item.id)?'checked':''}>${escapeHtml(item.label||item.id)}</label>`).join('')}</fieldset>`).join('')+
-      `<button class="btn btn-primary" data-action="saveCreationAssets">${t('settings_center.save_enabled_assets',"保存启用组合")}</button><label class="field">${t('settings_center.character_avatar_png_jpeg_webp_up_to_5_mb',"角色头像（PNG / JPEG / WebP，最大 5 MB）")}<input type="file" id="creation-avatar" accept="image/png,image/jpeg,image/webp"></label><button class="btn btn-ghost" data-action="uploadCreationAvatar">${t('settings_center.upload_selected_character_avatar',"上传所选角色头像")}</button><button class="btn btn-ghost" data-action="clearCreationAvatar">${t('settings_center.restore_selected_character_default_avatar',"恢复所选角色默认头像")}</button><p id="creation-result" role="status"></p>`;
+    const loreRows=(data.lorebooks||[]).map(item=>creationAssetRow(item,'enabled_lorebooks',data.active.enabled_lorebooks)).join('')
+      || `<p class="admin-description">${escapeHtml(t('settings_center.no_lorebooks',"暂无现实世界书"))}</p>`;
+    const jailbreakRows=(data.jailbreaks||[]).map(item=>creationAssetRow(item,'enabled_jailbreaks',data.active.enabled_jailbreaks)).join('')
+      || `<p class="admin-description">${escapeHtml(t('settings_center.no_jailbreaks',"暂无现实提示词"))}</p>`;
+    root.innerHTML=`<div class="admin-settings-list">
+      <label class="admin-setting-row"><span><strong>${escapeHtml(t('settings_center.current_character',"当前角色"))}</strong><small>${escapeHtml(t('settings_center.current_character_hint',"决定现实对话使用哪张角色卡。"))}</small></span><select id="creation-character">${data.characters.map(c=>`<option value="${escapeHtml(c.id)}" ${c.id===data.active.active_character?'selected':''}>${escapeHtml(c.label||c.id)}</option>`).join('')}</select></label>
+    </div>
+    <h3>${escapeHtml(t('settings_center.enabled_reality_lorebooks',"启用的现实世界书"))}</h3>
+    <p class="admin-description">${escapeHtml(t('settings_center.enabled_reality_lorebooks_hint',"显示标题或关键词；保存仍提交 id。"))}</p>
+    <div class="admin-settings-list">${loreRows}</div>
+    <h3>${escapeHtml(t('settings_center.enabled_reality_prompts',"启用的现实提示词"))}</h3>
+    <p class="admin-description">${escapeHtml(t('settings_center.enabled_reality_prompts_hint',"破限文件优先显示条目标题。"))}</p>
+    <div class="admin-settings-list">${jailbreakRows}</div>
+    <div class="admin-action-group"><button class="btn btn-primary" data-action="saveCreationAssets">${t('settings_center.save_enabled_assets',"保存启用组合")}</button></div>
+    <h3>${escapeHtml(t('settings_center.character_avatar',"角色头像"))}</h3>
+    <p class="admin-description">${escapeHtml(t('settings_center.character_avatar_png_jpeg_webp_up_to_5_mb',"角色头像（PNG / JPEG / WebP，最大 5 MB）"))}</p>
+    <div class="admin-settings-list">
+      <label class="admin-setting-row"><span><strong>${escapeHtml(t('settings_center.character_avatar_file',"头像文件"))}</strong><small>${escapeHtml(t('settings_center.character_avatar_file_hint',"上传覆盖当前所选角色的运行时头像。"))}</small></span><input type="file" id="creation-avatar" accept="image/png,image/jpeg,image/webp"></label>
+    </div>
+    <div class="admin-action-group"><button class="btn btn-ghost" data-action="uploadCreationAvatar">${t('settings_center.upload_selected_character_avatar',"上传所选角色头像")}</button><button class="btn btn-ghost" data-action="clearCreationAvatar">${t('settings_center.restore_selected_character_default_avatar',"恢复所选角色默认头像")}</button></div>
+    <p id="creation-result" role="status"></p>`;
     bindPageActions(root);
   } catch(error){centerError(root,error);}
 }

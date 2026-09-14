@@ -114,8 +114,8 @@ async def get_prompt_assets(auth=Depends(require_scopes("persona"))):
         "characters":    [{"id": "yexuan", "label": "叶瑄", "kind": "character",
                            "model_routing": None, "effective_profile": "default",
                            "resolved_chat_preset": "claude"}, ...],
-        "lorebooks":     [{"id": "base",   "label": "base",  "kind": "reality_lorebook"}, ...],
-        "jailbreaks":    [{"id": "base",   "label": "base",  "kind": "reality_jailbreak"}, ...],
+        "lorebooks":     [{"id": "base",   "label": "圣塞西尔 / 学院",  "kind": "reality_lorebook"}, ...],
+        "jailbreaks":    [{"id": "base",   "label": "条目标题",  "kind": "reality_jailbreak"}, ...],
         "dream_presets": [{"id": "default","label": "default","kind": "dream_preset"}, ...],
         "active": {
           "active_character":   "yexuan",

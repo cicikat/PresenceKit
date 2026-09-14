@@ -48,15 +48,27 @@ def fake_characters(tmp_path):
     # Lorebooks
     lb = chars / "reality" / "lorebooks"
     lb.mkdir(parents=True)
-    (lb / "base.yaml").write_text("entries: []", encoding="utf-8")
-    (lb / "relationship.yaml").write_text("entries: []", encoding="utf-8")
+    (lb / "base.yaml").write_text(
+        "entries:\n- keyword: [圣塞西尔, 学院]\n  content: campus\n",
+        encoding="utf-8",
+    )
+    (lb / "relationship.yaml").write_text(
+        "title: 关系设定\nentries:\n- keyword: [关系]\n  content: rel\n",
+        encoding="utf-8",
+    )
     (lb / "template_lb.yaml").write_text("entries: []", encoding="utf-8")  # hidden
 
     # Jailbreaks
     jb = chars / "reality" / "jailbreaks"
     jb.mkdir(parents=True)
-    (jb / "base.json").write_text(json.dumps({"entries": []}), encoding="utf-8")
-    (jb / "anti_assistant.json").write_text(json.dumps({"entries": []}), encoding="utf-8")
+    (jb / "base.json").write_text(
+        json.dumps({"entries": [{"title": "性张力", "content": "x", "enabled": True, "layer": 0}]}),
+        encoding="utf-8",
+    )
+    (jb / "anti_assistant.json").write_text(
+        json.dumps({"name": "去助手腔", "entries": []}),
+        encoding="utf-8",
+    )
 
     # Dream presets
     dp = chars / "dream_presets"
@@ -188,6 +200,30 @@ def test_list_ui_lorebooks_no_template(registry):
     assert "base" in visible
     assert "relationship" in visible
     assert "template_lb" not in visible
+
+
+def test_lorebook_label_uses_keywords_not_stem(registry):
+    entry = registry.resolve("base", "reality_lorebook")
+    assert entry.id == "base"
+    assert entry.label == "圣塞西尔 / 学院"
+
+
+def test_lorebook_label_prefers_file_title(registry):
+    entry = registry.resolve("relationship", "reality_lorebook")
+    assert entry.id == "relationship"
+    assert entry.label == "关系设定"
+
+
+def test_jailbreak_label_uses_entry_title(registry):
+    entry = registry.resolve("base", "reality_jailbreak")
+    assert entry.id == "base"
+    assert entry.label == "性张力"
+
+
+def test_jailbreak_label_prefers_file_name(registry):
+    entry = registry.resolve("anti_assistant", "reality_jailbreak")
+    assert entry.id == "anti_assistant"
+    assert entry.label == "去助手腔"
 
 
 # ── 5. Unknown asset id fails loud ───────────────────────────────────────────
