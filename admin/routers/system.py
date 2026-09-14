@@ -167,26 +167,21 @@ async def get_health(auth=Depends(require_scopes("state.read"))):
 @router.get("/system/meta-mode", summary="获取当前安全/危险模式")
 async def get_meta_mode(auth=Depends(require_scopes("state.read"))):
     import json
-    import time
     p = get_paths().meta_mode()
     if not p.exists():
         return {"mode": "safe", "expires_at": None}
     try:
         data = json.loads(p.read_text(encoding="utf-8"))
         mode = data.get("mode", "safe")
-        expires_at = data.get("expires_at")
-        if mode == "danger" and expires_at is not None and time.time() > expires_at:
-            mode = "safe"
-            expires_at = None
-        return {"mode": mode, "expires_at": expires_at}
+        if mode != "danger":
+            return {"mode": "safe", "expires_at": None}
+        return {"mode": "danger", "expires_at": None}
     except Exception:
         return {"mode": "safe", "expires_at": None}
 
 
 @router.patch("/system/meta-mode", summary="切换安全/危险模式")
 async def patch_meta_mode(body: dict, request: Request, auth=Depends(require_scopes("hardware"))):
-    import json
-    import time
     from core.safe_write import safe_write_json
     from fastapi import HTTPException
 
@@ -194,21 +189,9 @@ async def patch_meta_mode(body: dict, request: Request, auth=Depends(require_sco
     if mode not in ("safe", "danger"):
         raise HTTPException(status_code=422, detail="mode 只接受 'safe' 或 'danger'")
 
-    from core.tool_dispatcher import _DANGER_MODE_TTL_SECONDS
-    expires_at: float | None = None
-    if mode == "danger":
-        raw_ttl = body.get("ttl_seconds")
-        if isinstance(raw_ttl, bool) or (
-            isinstance(raw_ttl, float) and not raw_ttl.is_integer()
-        ):
-            raise HTTPException(status_code=422, detail="ttl_seconds 必须是正整数")
-        try:
-            ttl = _DANGER_MODE_TTL_SECONDS if raw_ttl is None else int(raw_ttl)
-        except (TypeError, ValueError):
-            raise HTTPException(status_code=422, detail="ttl_seconds 必须是正整数")
-        if ttl <= 0:
-            raise HTTPException(status_code=422, detail="ttl_seconds 必须是正整数")
-        expires_at = time.time() + ttl
+    # Danger stays on until the owner turns it off. Leftover ttl_seconds in
+    # mobile/desktop payloads is ignored and never written back.
+    expires_at = None
 
     p = get_paths().meta_mode()
     p.parent.mkdir(parents=True, exist_ok=True)

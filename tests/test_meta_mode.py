@@ -129,22 +129,32 @@ async def test_danger_mode_allows_desktop_action(sandbox, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_expired_danger_mode_fails_closed(sandbox, monkeypatch):
+async def test_legacy_expired_danger_mode_stays_on(sandbox, monkeypatch):
     _write_mode(sandbox, "danger", time.time() - 1)
+    called = []
+
+    async def fake_desktop(**kwargs):
+        called.append(kwargs)
+        return "desktop-ok"
+
+    monkeypatch.setitem(
+        tool_dispatcher._TOOL_REGISTRY,
+        "_test_desktop",
+        {
+            "func": fake_desktop,
+            "description": "test",
+            "dangerous": False,
+            "category": "desktop",
+            "parameters": {},
+        },
+    )
     monkeypatch.setattr(tool_dispatcher, "_is_tool_enabled", lambda _: True)
 
     result, confirm = await tool_dispatcher.execute(
-        "desktop_open_url",
-        {"url": "https://example.com"},
-        "u1",
-        "u1",
-        False,
-        _Session(),
-        origin="user_live",
-        char_id=TEST_CHAR_ID,
+        "_test_desktop", {}, "u1", "u1", False, _Session(), origin="user_live", char_id=TEST_CHAR_ID
     )
-    assert "安全模式" in result
-    assert confirm is None
+    assert (result, confirm) == ("工具已执行：_test_desktop，结果：desktop-ok", None)
+    assert called == [{}]
 
 
 @pytest.mark.asyncio
@@ -162,7 +172,7 @@ async def test_shutdown_still_requires_confirmation_in_danger_mode(sandbox, monk
     assert session.pending == ("device_shutdown", {})
 
 
-def test_meta_mode_endpoints_default_patch_and_expiry(client, sandbox, monkeypatch):
+def test_meta_mode_endpoints_danger_is_permanent(client, sandbox, monkeypatch):
     response = client.get("/system/meta-mode")
     assert response.status_code == 200
     assert response.json() == {"mode": "safe", "expires_at": None}
@@ -171,22 +181,34 @@ def test_meta_mode_endpoints_default_patch_and_expiry(client, sandbox, monkeypat
     monkeypatch.setattr(time, "time", lambda: now)
     response = client.patch("/system/meta-mode", json={"mode": "danger", "ttl_seconds": 30})
     assert response.status_code == 200
-    assert response.json() == {"mode": "danger", "expires_at": now + 30}
+    assert response.json() == {"mode": "danger", "expires_at": None}
+    stored = json.loads(sandbox.meta_mode().read_text(encoding="utf-8"))
+    assert stored == {"mode": "danger", "expires_at": None}
 
-    monkeypatch.setattr(time, "time", lambda: now + 31)
+    monkeypatch.setattr(time, "time", lambda: now + 8 * 3600)
     response = client.get("/system/meta-mode")
+    assert response.status_code == 200
+    assert response.json() == {"mode": "danger", "expires_at": None}
+
+    _write_mode(sandbox, "danger", now - 1)
+    response = client.get("/system/meta-mode")
+    assert response.json() == {"mode": "danger", "expires_at": None}
+
+    response = client.patch("/system/meta-mode", json={"mode": "safe"})
     assert response.status_code == 200
     assert response.json() == {"mode": "safe", "expires_at": None}
 
 
 @pytest.mark.parametrize("ttl", [0, -1, 1.5, True, "bad", [], {}])
-def test_meta_mode_endpoint_rejects_invalid_ttl(client, sandbox, ttl):
+def test_meta_mode_endpoint_ignores_ttl(client, sandbox, ttl):
     response = client.patch(
         "/system/meta-mode",
         json={"mode": "danger", "ttl_seconds": ttl},
     )
-    assert response.status_code == 422
-    assert not sandbox.meta_mode().exists()
+    assert response.status_code == 200
+    assert response.json() == {"mode": "danger", "expires_at": None}
+    stored = json.loads(sandbox.meta_mode().read_text(encoding="utf-8"))
+    assert stored == {"mode": "danger", "expires_at": None}
 
 
 def test_meta_mode_endpoints_require_auth(sandbox):

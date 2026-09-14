@@ -20,7 +20,25 @@ def test_creation_assets_are_split_setting_rows():
     assert "data-action=\"saveCreationAssets\"" in source
     assert "data-action=\"uploadCreationAvatar\"" in source
     assert "PATCH','/settings/prompt-assets'" in source
-    assert '<script src="/static/js/settings-center.js?v=admin-prompt-followups-2"></script>' in index
+    assert '<script src="/static/js/settings-center.js?v=admin-prompt-followups-3"></script>' in index
+
+
+def test_feature_center_groups_category_switches():
+    page = (ROOT / "admin/static/pages/feature-center.html").read_text(encoding="utf-8")
+    source = (ROOT / "admin/static/js/settings-center.js").read_text(encoding="utf-8")
+    device = (ROOT / "admin/static/pages/device-policy.html").read_text(encoding="utf-8")
+    assert "CENTER_GROUPED_FLAGS" in source
+    assert "screen_peek" in source
+    assert "PATCH','/system/meta-mode'" in source
+    assert "PUT','/settings/agent-runtime-browser'" in source
+    assert "PUT','/sticker-config'" in source
+    assert "settings_center.perception_and_computer_actions" in source
+    assert "settings_center.output_and_interaction" in source
+    assert "settings_center.external_capabilities" in source
+    assert 'id="metamode-ttl"' not in device
+    assert "status.dangermode.ttl" not in device
+    assert 'data-action-args=\'["output-settings"]\'' not in page
+    assert 'data-i18n="settings_center.other_detailed_settings"' in page
 
 
 def test_settings_center_control_contracts():

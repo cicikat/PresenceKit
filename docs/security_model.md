@@ -15,8 +15,8 @@ LLM 不能直接执行系统能力。所有工具都必须在 `core/tool_dispatc
 
 - 探针只暴露 `info` / `desktop` 类工具：`get_tools_schema(categories=["info", "desktop"])`
 - 全局默认处于 `safe` 模式；`desktop` / `system` 类工具只有在用户通过受鉴权的
-  `PATCH /system/meta-mode` 临时开启 `danger` 模式后才能执行。危险模式默认 2 小时后自动失效，
-  状态存于 `data/runtime/meta_mode.json`
+  `PATCH /system/meta-mode` 开启 `danger` 模式后才能执行。危险模式常驻到手动关闭，
+  `ttl_seconds` 会被忽略；GET 在 danger 时 `expires_at` 为 null。状态存于 `data/runtime/meta_mode.json`
 - 危险工具 `device_shutdown` / `device_sleep` 标记 `dangerous=True`，并检查 `agent_control` 权限
 - `device_shutdown` / `device_sleep` 即使在 `danger` 模式下仍需单独确认，形成模式闸和确认流双保险
 - 工具开关来自 `config.yaml tools:`，默认启用，危险工具通常配置为关闭

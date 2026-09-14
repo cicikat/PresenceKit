@@ -301,7 +301,7 @@ Flutter/Android 字段或设置面。桌面和手机不得把现有 autonomy job
 | `/settings/model-routing`、`/model-presets/*`、`/llm-params`、`/vision-params` | 模型连接和路由 | 密钥留在后端管理面；桌面只切已有 profile |
 | `/settings/tts-*`、`/tts-config*`、`/tts/synthesize` | TTS provider、桌面播放、自动播放、合成 | 桌面有播放相关设置；provider 细节留在后端管理面 |
 | `/chat-mode`、`/chat-style`、`/chat-multi-message`、`/output-segment-enforce` | 对话行为和输出兜底 | 桌面可见设置必须与后端读写接口同单更新 |
-| `/scheduler/*`、`/system/meta-mode`、`/coplay/*`、`/settings/relay`、`/settings/screen-peek` | 调度、安全模式、陪玩、中继、屏幕查看 | 主要是管理面或本地设置；不能只改 config 而没有 effective-state/观测 |
+| `/scheduler/*`、`/system/meta-mode`、`/coplay/*`、`/settings/relay`、`/settings/screen-peek` | 调度、安全模式、陪玩、中继、屏幕查看 | 主要是管理面或本地设置；danger 常驻到手动关闭，忽略 ttl；不能只改 config 而没有 effective-state/观测 |
 
 ### 3.5 管理、观测和外部集成
 
@@ -489,6 +489,7 @@ ack 和游标推进，不得另造一套消息真值。
 | tool loop / thinking / 输出兜底 | `/settings/tool-loop`、`/settings/thinking`、`/output-segment-enforce` | 保留协议桥，编辑入口已迁管理面 | 无同等编辑面 | 新增字段必须同步桌面设置审计 |
 | Reality / Dream Prompt 资产 | `/settings/prompt-assets`、`/dream/settings` | Reality 启用组合迁管理面；世界书/破限 label 为显示名，PATCH 仍提交 id；Dream 保持独立 | 受限选择/编辑 | 不能交叉提交字段；observe：手机若展示 stem 需改消费 label |
 | sensor / screen peek | `/sensor/realtime`、`/sensor/behavior/status`、`/settings/screen-peek`、`/perception/visual/config` | 本地采样 + 后端 opt-in | screen upload 开关 + 原生过滤 | 任何扩大采集范围的改动都需隐私回归 |
+| 危险模式 | `GET/PATCH /system/meta-mode` | 管理面功能与行为及 device-policy 常驻开关 | 无 hardware 写权；若仍传 ttl 被忽略 | danger 保持到手动关；observe：手机旧 TTL UI |
 | mobile proactive delivery | `/mobile/*`、`/settings/relay`、`/observability/*` | 不消费 mobile queue | 前台 poll + Android relay | relay 只 signal，正文回源 |
 | scheduler/autonomy | `/scheduler/*`、`/admin/autonomy/*`、`/observability/autonomy-opportunities` | 管理面显示 24h/7d 无正文漏斗 | 只接收结果 | 不在客户端复制触发规则；主动正文仍由后端 `talk_owner` 投递 |
 | 花园/日记/hidden state | `/garden/state`、`/diary/*`、`/debug/user-hidden-state` | 只读 UI | 只读 UI | 写接口和长期状态仍由后端拥有 |

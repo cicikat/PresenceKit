@@ -811,8 +811,8 @@ tools:
 工具执行还受全局安全模式约束：
 
 - 默认 `safe`：`desktop` / `system` 类工具在 `execute()` 入口被友好拒绝，`info` / `memory` 类不受影响
-- 临时 `danger`：通过受 Bearer 鉴权的 `PATCH /system/meta-mode` 开启，默认有效 7200 秒
-- 当前状态：`GET /system/meta-mode` 返回 `{mode, expires_at}`；过期或状态文件损坏时 fail-closed 为 `safe`
+- `danger`：通过受 Bearer 鉴权的 `PATCH /system/meta-mode` 开启，保持到手动切回 `safe`；客户端若仍传 `ttl_seconds` 会被忽略
+- 当前状态：`GET /system/meta-mode` 返回 `{mode, expires_at}`；danger 时 `expires_at` 恒为 null；状态文件损坏时 fail-closed 为 `safe`
 - 状态文件：`data/runtime/meta_mode.json`，路径通过 `get_paths().meta_mode()` 获取
 - 单工具 `config.tools.<name>.enabled` 仍保留；`device_shutdown` / `device_sleep` 在 danger 模式下仍需确认
 

@@ -251,7 +251,6 @@ def _require_memory_read_scope(user_id: str, char_id: str) -> None:
     from core.sandbox import safe_user_id
 
     MemoryScope.reality_scope(safe_user_id(user_id), char_id)
-_DANGER_MODE_TTL_SECONDS: int = 7200  # 2 小时后自动回 safe
 
 # Action ownership is static for desktop protocol v0.1.  This is deliberately
 # not a capabilities negotiation mechanism: an unregistered action must never
@@ -276,7 +275,7 @@ def resolve_action_target(action_type: str) -> str | None:
 
 def _current_mode() -> str:
     """读 data/runtime/meta_mode.json，返回 'safe' 或 'danger'。
-    expires_at 过期或文件不存在 → safe。
+    文件不存在或损坏 → safe。danger 常驻到手动关闭；遗留 expires_at 不再到期回落。
     """
     try:
         from core.sandbox import get_paths
@@ -284,13 +283,7 @@ def _current_mode() -> str:
         if not p.exists():
             return "safe"
         data = _json.loads(p.read_text(encoding="utf-8"))
-        mode = data.get("mode", "safe")
-        if mode != "danger":
-            return "safe"
-        expires_at = data.get("expires_at")
-        if expires_at is not None and _time.time() > expires_at:
-            return "safe"
-        return "danger"
+        return "danger" if data.get("mode") == "danger" else "safe"
     except Exception:
         return "safe"
 

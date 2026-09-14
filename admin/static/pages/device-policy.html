@@ -10,10 +10,9 @@
 
 <div class="card">
   <div class="card-header"><h3 data-i18n="status.dangermode.title">危险模式</h3><button class="btn btn-ghost btn-sm" data-action="loadMetaMode" data-i18n="common.refresh">刷新</button></div>
-  <p class="admin-inline-087" data-i18n="status.dangermode.help">手机自动化和桌面/系统类工具只在危险模式下执行；到期后自动回落安全模式。</p>
+  <p class="admin-inline-087" data-i18n="status.dangermode.help">手机自动化和桌面/系统类工具只在危险模式下执行；开启后保持到手动关闭。</p>
   <div class="form-row">
     <div id="metamode-status" class="config-mode-status">—</div>
-    <label class="field"><span data-i18n="status.dangermode.ttl">持续分钟数</span><input type="number" id="metamode-ttl" min="5" max="1440" step="5" value="120"></label>
     <button class="btn btn-primary btn-sm" id="metamode-toggle-btn" data-action="toggleMetaMode" data-i18n="status.dangermode.enter">切换到危险模式</button>
   </div>
   <div class="config-item-meta"><span data-i18n="runtime_config.source_runtime">来源：运行时安全闸</span><span data-i18n="runtime_config.apply_immediate">保存后立即反映当前闸状态</span></div>

@@ -64,18 +64,27 @@ function centerError(root, error) {
   root.textContent = t('settings_center.load_error','读取失败：{error}',{error:error.message});
 }
 function centerFeatureNames() { return {
-  qq:t('settings_center.qq_channel',"QQ 通道"), mail:t('settings_center.mail_channel',"邮件通道"), visual_perception:t('settings_center.screen_perception',"屏幕感知"), spend:t('settings_center.spending_intentions',"支出意向"), practice:t('settings_center.autonomous_practice',"自主练习"),
+  qq:t('settings_center.qq_channel',"QQ 通道"), mail:t('settings_center.mail_channel',"邮件通道"), visual_perception:t('settings_center.screen_perception',"视觉感知"), spend:t('settings_center.spending_intentions',"支出意向"), practice:t('settings_center.autonomous_practice',"自主练习"),
   action_trace:t('settings_center.action_trace',"行为记录"), self_management:t('settings_center.self_management',"自主管理"), mcp_servers:t('settings_center.external_tool_services',"外部工具服务"), fs_access:t('settings_center.read_only_file_access',"文件只读访问"),
   workspace_access:t('settings_center.workspace_files',"工作区文件"), anti_collapse:t('settings_center.output_stability',"输出稳定性"), coplay:t('settings_center.coplay',"陪玩"), toy_autogrow:t('settings_center.autonomous_toy_growth',"玩具自主生长"),
   web_autosearch:t('settings_center.autonomous_web_search',"自主联网搜索"), performance_mapping:t('settings_center.performance_annotations',"表演标注"), private_exchange:t('settings_center.private_character_exchanges',"角色私下往来"),
   event_edge_proposer:t('settings_center.memory_event_relations',"记忆事件关联"), event_shadow_recall:t('settings_center.memory_recall_comparison',"记忆召回对照实验"),
+  screen_observation:t('settings_center.on_demand_screenshot',"按需截图"), ime_ingest:t('settings_center.ime_ingest',"IME 草稿接收"), ime_awareness:t('settings_center.ime_awareness',"IME 活动理解"),
 }; }
+const CENTER_GROUPED_FLAGS = {
+  perception:['visual_perception','screen_observation'],
+  output:['coplay'],
+  external:['mcp_servers'],
+};
 const CENTER_DESTINATIONS = {
   tool:['tools','observe-tools'], loop:['conversation-settings','observe-tools'],
   scheduler:['scheduler','observe-autonomy'], autonomy:['autonomy-settings','observe-autonomy'], tts:['tts-config','call-records'],
+  screen_peek:['device-policy','observe-visual'], meta:['device-policy','observe-char-permissions'],
+  sticker:['output-settings','observe-prompt'], browser:['agent-runtime-browser','observe-tools'],
 };
 const CENTER_FLAG_DESTINATIONS = {
   qq:['feature-center','status'], mail:['mail-config','call-records'], visual_perception:['device-policy','observe-visual'],
+  screen_observation:['device-policy','observe-visual'],
   mcp_servers:['mcp','observe-tools'], self_management:['autonomy-settings','observe-autonomy'], fs_access:['tools','observe-tools'],
   workspace_access:['tools','call-records'], coplay:['coplay-config','observe-tools'], action_trace:['tools','observe-tools'],
   anti_collapse:['conversation-settings','observe-prompt'], performance_mapping:['output-settings','observe-prompt'],
@@ -103,12 +112,47 @@ function centerAutonomyControls(config) {
     ${centerLink('observe-autonomy',t('settings_center.view_records','查看记录'))}
   </div>`;
 }
+function centerFlagNote(item) {
+  return item.restart_required?t('settings_center.restart_required_after_saving',"保存后需重启"):t('settings_center.global_configuration_effective_availability_below',"全局配置；实际可用性见下方");
+}
+function centerFlagSwitch(flags, name, fallbackLabel) {
+  if (flags.status!=='fulfilled') return t('settings_center.could_not_load',"读取失败");
+  const item=(flags.value.flags||{})[name];
+  if (!item) return t('settings_center.could_not_load',"读取失败");
+  return centerSwitch(centerFeatureNames()[name]||item.label||fallbackLabel,item.enabled,'flag',name,false,centerFlagNote(item));
+}
+function centerSettledSwitch(result, label, source, enabled, note) {
+  if (result.status!=='fulfilled') return label+t('settings_center.could_not_load',"：读取失败");
+  return centerSwitch(label,enabled,source,'enabled',false,note||t('settings_center.global_configuration',"全局配置"));
+}
 async function loadFeatureCenter() {
   const root=document.getElementById('feature-center-list'); root.textContent=t('settings_center.loading',"读取中…");
-  const results=await Promise.allSettled([api('GET','/settings/feature-flags'),api('GET','/settings/tools'),api('GET','/settings/tool-loop'),api('GET','/admin/control-center/effective-state'),api('GET','/scheduler/config'),api('GET','/admin/autonomy/config'),api('GET','/tts-config')]);
+  const results=await Promise.allSettled([
+    api('GET','/settings/feature-flags'),api('GET','/settings/tools'),api('GET','/settings/tool-loop'),
+    api('GET','/admin/control-center/effective-state'),api('GET','/scheduler/config'),api('GET','/admin/autonomy/config'),
+    api('GET','/tts-config'),api('GET','/settings/screen-peek'),api('GET','/system/meta-mode'),
+    api('GET','/sticker-config'),api('GET','/settings/agent-runtime-browser'),
+  ]);
   const section=(title,body)=>`<section class="card"><h3>${title}</h3>${body}</section>`;
   const flags=results[0], tools=results[1], loop=results[2], state=results[3];
-  let html=section(t('settings_center.feature_switches',"功能总开关"),flags.status==='fulfilled'?Object.entries(flags.value.flags||{}).map(([name,item])=>centerSwitch(centerFeatureNames()[name]||item.label,item.enabled,'flag',name,false,item.restart_required?t('settings_center.restart_required_after_saving',"保存后需重启"):t('settings_center.global_configuration_effective_availability_below',"全局配置；实际可用性见下方"))).join(''):t('settings_center.could_not_load_refresh_to_retry',"读取失败，请刷新重试"));
+  const grouped=new Set(Object.values(CENTER_GROUPED_FLAGS).flat());
+  const remainingFlags=flags.status==='fulfilled'?Object.entries(flags.value.flags||{}).filter(([name])=>!grouped.has(name)).map(([name,item])=>centerSwitch(centerFeatureNames()[name]||item.label,item.enabled,'flag',name,false,centerFlagNote(item))).join(''):t('settings_center.could_not_load_refresh_to_retry',"读取失败，请刷新重试");
+  const peek=results[7], meta=results[8], sticker=results[9], browser=results[10];
+  let html=section(t('settings_center.perception_and_computer_actions',"感知与电脑操作"), [
+    centerFlagSwitch(flags,'visual_perception',t('settings_center.screen_perception',"视觉感知")),
+    centerFlagSwitch(flags,'screen_observation',t('settings_center.on_demand_screenshot',"按需截图")),
+    centerSettledSwitch(peek,t('settings_center.screen_content',"屏幕内容查看"),'screen_peek',peek.status==='fulfilled'&&peek.value.enabled),
+    centerSettledSwitch(meta,t('status.dangermode.title',"危险模式"),'meta',meta.status==='fulfilled'&&meta.value.mode==='danger',t('settings_center.danger_mode_hint',"开启后保持到手动关闭；电脑与手机操作仍受此闸约束")),
+  ].join(''));
+  html+=section(t('settings_center.output_and_interaction',"输出与互动"), [
+    centerSettledSwitch(sticker,t('settings_center.sticker_output',"表情包输出"),'sticker',sticker.status==='fulfilled'&&sticker.value.enabled),
+    centerFlagSwitch(flags,'coplay',t('settings_center.coplay',"陪玩")),
+  ].join(''));
+  html+=section(t('settings_center.external_capabilities',"外部能力"), [
+    centerFlagSwitch(flags,'mcp_servers',t('settings_center.external_tool_services',"外部工具服务")),
+    centerSettledSwitch(browser,t('settings_center.browser_tasks',"浏览器任务"),'browser',browser.status==='fulfilled'&&browser.value.enabled),
+  ].join(''));
+  html+=section(t('settings_center.feature_switches',"功能总开关"),remainingFlags);
   html+=section(t('settings_center.multi_step_tool_calls',"多步工具调用"),loop.status==='fulfilled'?centerSwitch(t('settings_center.global_default',"全局默认"),loop.value.enabled,'loop','enabled',false,t('settings_center.character_cards_can_override_this_ordinary_tool_calls_are_controlled_separately',"角色卡可覆盖；普通工具调用另行控制")):t('settings_center.could_not_load',"读取失败"));
   html+=section(t('settings_center.proactive_behavior_and_voice',"主动行为与语音"), [[t('settings_center.scheduler',"调度器"),4,'scheduler'],[t('settings_center.autonomous_activity',"自主活动"),5,'autonomy'],[t('settings_center.speech_synthesis',"语音合成"),6,'tts']].map(([label,i,source])=>results[i].status==='fulfilled'?(source==='autonomy'?centerAutonomyControls(results[i].value):centerSwitch(label,results[i].value.enabled,source,'enabled',false,t('settings_center.global_configuration',"全局配置"))):label+t('settings_center.could_not_load',"：读取失败")).join(''));
   html+=section(t('settings_center.built_in_tool_permissions',"内置工具执行开关"),tools.status==='fulfilled'?(tools.value.tools||[]).map(tool=>centerSwitch(t(`tools.description.${tool.name}`,tool.description||tool.name),tool.execution_enabled,'tool',tool.name,tool.frozen,tool.frozen?t('settings_center.currently_frozen',"当前冻结"):t('settings_center.global_permission_character_scope_and_execution_conditions_still_apply',"全局执行许可；仍需满足角色范围和执行条件"))).join(''):t('settings_center.could_not_load',"读取失败"));
@@ -136,6 +180,10 @@ async function saveCenterSwitch(input) {
     if(input.dataset.centerSource==='flag') result=await api('PUT','/settings/feature-flags',{flags:{[input.dataset.centerName]:value}});
     else if(input.dataset.centerSource==='tool') result=await api('PUT','/settings/tools',{execution_enabled:{[input.dataset.centerName]:value}});
     else if(input.dataset.centerSource==='loop') result=await api('POST','/settings/tool-loop',{enabled:value});
+    else if(input.dataset.centerSource==='meta') result=await api('PATCH','/system/meta-mode',{mode:value?'danger':'safe'});
+    else if(input.dataset.centerSource==='screen_peek') result=await api('POST','/settings/screen-peek',{enabled:value});
+    else if(input.dataset.centerSource==='sticker') result=await api('PUT','/sticker-config',{enabled:value});
+    else if(input.dataset.centerSource==='browser') result=await api('PUT','/settings/agent-runtime-browser',{enabled:value});
     else {const routes={scheduler:['PUT','/scheduler/config'],autonomy:['PATCH','/admin/autonomy/config'],tts:['PUT','/tts-config']};const [method,path]=routes[input.dataset.centerSource];result=await api(method,path,{enabled:value});}
     toast(centerRestartRequired(result?.restart_required)?t('settings_center.saved_some_settings_require_a_restart',"已保存，部分设置需重启"):t('settings_center.saved',"已保存"),'ok'); await loadFeatureCenter();
   } catch(error) { input.checked=!value; input.disabled=false; toast(t('settings_center.save_error','保存失败：{error}',{error:error.message}),'err'); }

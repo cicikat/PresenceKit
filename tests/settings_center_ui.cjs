@@ -6,9 +6,11 @@ const writes = [];
 let respond = async () => ({});
 const context = vm.createContext({
   document: {getElementById: id => nodes[id], querySelectorAll: () => []},
+  Promise,
   t: (_key, fallback, args = {}) => Object.entries(args).reduce((s, [k, v]) => s.replace(`{${k}}`, v), fallback || _key),
   escapeHtml: value => String(value ?? '').replaceAll('<', '&lt;'),
   bindPageActions: () => {}, toast: () => {},
+  renderChainTable: () => 'chain',
   api: async (method, path, body) => { writes.push({method,path,body}); return respond(method,path,body); },
   loadOutputSegmentEnforce: () => {}, loadContextConfig: () => {}, loadLlmParams: () => {},
 });
@@ -19,6 +21,13 @@ const plain = value => JSON.parse(JSON.stringify(value));
   assert.deepEqual(plain(run("centerDestination('scheduler','enabled')")), ['scheduler','observe-autonomy']);
   assert.deepEqual(plain(run("centerDestination('autonomy','enabled')")), ['autonomy-settings','observe-autonomy']);
   assert.deepEqual(plain(run("centerDestination('tts','enabled')")), ['tts-config','call-records']);
+  assert.deepEqual(plain(run("centerDestination('meta','enabled')")), ['device-policy','observe-char-permissions']);
+  assert.deepEqual(plain(run("centerDestination('screen_peek','enabled')")), ['device-policy','observe-visual']);
+  assert.deepEqual(plain(run("centerDestination('sticker','enabled')")), ['output-settings','observe-prompt']);
+  assert.deepEqual(plain(run("centerDestination('browser','enabled')")), ['agent-runtime-browser','observe-tools']);
+  assert.deepEqual(plain(run("centerDestination('flag','visual_perception')")), ['device-policy','observe-visual']);
+  assert.deepEqual(plain(run("centerDestination('flag','coplay')")), ['coplay-config','observe-tools']);
+  assert.deepEqual(plain(run("centerDestination('flag','mcp_servers')")), ['mcp','observe-tools']);
   const pages = fs.readFileSync('admin/static/index.html','utf8');
   for (const mapping of [run('CENTER_DESTINATIONS'),run('CENTER_FLAG_DESTINATIONS')]) {
     for (const destinations of Object.values(mapping)) for (const page of destinations) {
@@ -61,6 +70,47 @@ const plain = value => JSON.parse(JSON.stringify(value));
   assert.equal(checkbox.checked,false);
   assert.equal(checkbox.disabled,false);
   assert.equal(writes.at(-1).path,'/scheduler/config');
+  const loadFeatureCenter = context.loadFeatureCenter;
+  const metaSwitch={checked:true,disabled:false,dataset:{centerSource:'meta',centerName:'enabled'}};
+  context.loadFeatureCenter=async()=>{};
+  respond=async()=>({mode:'danger',expires_at:null});
+  await context.saveCenterSwitch(metaSwitch);
+  assert.equal(writes.at(-1).path,'/system/meta-mode');
+  assert.equal(writes.at(-1).method,'PATCH');
+  assert.deepEqual(plain(writes.at(-1).body),{mode:'danger'});
+  assert.equal(metaSwitch.disabled,true);
+  context.loadFeatureCenter = loadFeatureCenter;
+  const featureRoot = nodes['feature-center-list'] = {textContent:'', innerHTML:''};
+  const payloads = {
+    '/settings/feature-flags': {flags:{
+      visual_perception:{enabled:true,label:'视觉感知'},
+      screen_observation:{enabled:true,label:'按需截图'},
+      coplay:{enabled:false,label:'陪玩'},
+      mcp_servers:{enabled:true,label:'外部工具服务'},
+      qq:{enabled:true,label:'QQ 通道'},
+    }},
+    '/settings/tools': {tools:[]},
+    '/settings/tool-loop': {enabled:true},
+    '/admin/control-center/effective-state': {features:[]},
+    '/scheduler/config': {enabled:true},
+    '/admin/autonomy/config': {enabled:true,daily_evaluation_budget:12,min_interval_seconds:900},
+    '/tts-config': {enabled:false},
+    '/settings/screen-peek': {enabled:true},
+    '/system/meta-mode': {mode:'danger',expires_at:null},
+    '/sticker-config': {enabled:true},
+    '/settings/agent-runtime-browser': {enabled:false},
+  };
+  respond = async (_method, path) => payloads[path] || {};
+  await context.loadFeatureCenter();
+  assert.ok(featureRoot.innerHTML.includes('感知与电脑操作'));
+  assert.ok(featureRoot.innerHTML.includes('输出与互动'));
+  assert.ok(featureRoot.innerHTML.includes('外部能力'));
+  assert.ok(featureRoot.innerHTML.includes('data-center-source="meta"'));
+  assert.ok(featureRoot.innerHTML.includes('data-center-source="screen_peek"'));
+  assert.ok(featureRoot.innerHTML.includes('data-center-source="sticker"'));
+  assert.ok(featureRoot.innerHTML.includes('data-center-source="browser"'));
+  assert.ok(featureRoot.innerHTML.includes('危险模式'));
+  assert.equal((featureRoot.innerHTML.match(/data-center-source="flag"/g) || []).length, 5);
   const controlsHtml = context.centerAutonomyControls({enabled:true,daily_evaluation_budget:48,min_interval_seconds:900});
   assert.ok(controlsHtml.includes('data-autonomy-field="daily_evaluation_budget"'));
   assert.ok(controlsHtml.includes('value="48"'));

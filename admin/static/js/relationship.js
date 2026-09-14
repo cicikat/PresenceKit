@@ -187,12 +187,7 @@ async function loadMetaMode() {
     const el = document.getElementById('metamode-status');
     const btn = document.getElementById('metamode-toggle-btn');
     if (d.mode === 'danger') {
-      const remainMin = d.expires_at
-        ? Math.max(0, Math.round((d.expires_at * 1000 - Date.now()) / 60000))
-        : null;
-      el.textContent = remainMin === null
-        ? t('status.dangermode.active', '当前：危险模式')
-        : t('status.dangermode.active_remain', '当前：危险模式，约 {minutes} 分钟后自动回落', {minutes: remainMin});
+      el.textContent = t('status.dangermode.active', '当前：危险模式');
       el.style.color = 'var(--danger, #e05252)';
       btn.textContent = t('status.dangermode.exit', '切回安全模式');
       btn.dataset.target = 'safe';
@@ -211,10 +206,6 @@ async function toggleMetaMode() {
   const btn = document.getElementById('metamode-toggle-btn');
   const target = btn.dataset.target === 'safe' ? 'safe' : 'danger';
   const body = { mode: target };
-  if (target === 'danger') {
-    const ttlMinutes = parseInt(document.getElementById('metamode-ttl').value, 10);
-    if (Number.isFinite(ttlMinutes) && ttlMinutes > 0) body.ttl_seconds = ttlMinutes * 60;
-  }
   try {
     await api('PATCH', '/system/meta-mode', body);
     toast(target === 'danger' ? t('status.dangermode.entered', '已切换到危险模式') : t('status.dangermode.exited', '已切回安全模式'), 'ok');

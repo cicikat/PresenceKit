@@ -52,6 +52,8 @@ observe：真实手机安装、不同应用删除反馈、断网后上传以及�
 `GET /settings/prompt-assets` 的 lorebooks/jailbreaks `label` 由扫描写入（标题/关键词/条目标题），`id` 仍是 stem。
 `PATCH` 只接受 id，不接受 label/filename。无新落盘或观测端点；桌面仍走管理面，手机若展示资产名需改读 label（observe）。
 
+危险模式与功能分类（2026-09-14）：`PATCH /system/meta-mode` 开启 danger 不再写过期时间，忽略 `ttl_seconds`；GET 在 danger 时 `expires_at=null`。管理面功能与行为按感知与电脑、输出与互动、外部能力分组，开关行带细分跳转；`device-policy` 去掉 TTL。手机若仍传 ttl 被忽略且保持常驻（observe）。
+
 管理服务的设置面分三层：
 
 RPG Dream's `rpg_kp` route is a backend capability, not a client setting; its effective route is visible with the other model categories.
