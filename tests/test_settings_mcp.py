@@ -347,13 +347,13 @@ def test_global_toggle_writes_config_and_hot_syncs(tmp_path, monkeypatch):
     from core import mcp_client
     calls = []
 
-    async def sync():
-        calls.append("sync")
+    async def sync(*, wait=True):
+        calls.append(("sync", wait))
 
     monkeypatch.setattr(mcp_client, "sync_mcp_servers", sync)
     result = asyncio.run(mod.update_mcp_settings(mod.McpSettingsUpdate(enabled=True), _auth=None))
     assert result["enabled"] is True
-    assert calls == ["sync"]
+    assert calls == [("sync", False)]
     assert "重启" not in result["message"]
     cfg = yaml.safe_load(path.read_text(encoding="utf-8"))
     assert cfg["mcp_servers"]["enabled"] is True

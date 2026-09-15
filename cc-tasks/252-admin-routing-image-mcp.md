@@ -102,10 +102,10 @@
 
 ### 要做
 
-- [ ] 折叠/展开只改当前卡片 DOM + localStorage，禁止为此 `loadMcpPage()`。
-- [ ] `loadMcpPage` 已有内容时不要先刷成「加载中」；刷新尽量保持滚动位置。
-- [ ] `PATCH /settings/mcp` 写盘并发信号后即返回，不把每台 MCP 连上作为 HTTP 完成条件；前端用返回体更新，不再整页 loading。
-- [ ] 工具调用记录仍仅在首次进入/手动刷新时拉，展开不重打。
+- [x] 折叠/展开只改当前卡片 DOM + localStorage，禁止为此 `loadMcpPage()`。
+- [x] `loadMcpPage` 已有内容时不要先刷成「加载中」；刷新尽量保持滚动位置。
+- [x] `PATCH /settings/mcp` 写盘并发信号后即返回，不把每台 MCP 连上作为 HTTP 完成条件；前端用返回体更新，不再整页 loading。
+- [x] 工具调用记录仍仅在首次进入/手动刷新时拉，展开不重打。
 
 ### 验收
 

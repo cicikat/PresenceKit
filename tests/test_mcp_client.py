@@ -844,6 +844,34 @@ class TestOwnerTaskLifecycle:
 
         assert "srv1" not in mc._servers
 
+    async def test_sync_without_wait_returns_before_connect_finishes(self, monkeypatch):
+        started = asyncio.Event()
+        release = asyncio.Event()
+        session = _FakeSession()
+        session.tools_result = SimpleNamespace(tools=[])
+        monkeypatch.setattr(mc, "_open_transport", _noop_transport)
+        _patch_client_session(monkeypatch, session)
+        real_connect = mc._connect_server
+
+        async def _slow_connect(name, cfg):
+            started.set()
+            await release.wait()
+            return await real_connect(name, cfg)
+
+        monkeypatch.setattr(mc, "_connect_server", _slow_connect)
+        monkeypatch.setattr(mc, "_get_mcp_config", lambda: {
+            "enabled": True,
+            "servers": [{"name": "srv1", "transport": "stdio", "command": ["fake"]}],
+        })
+
+        await asyncio.wait_for(mc.sync_mcp_servers(wait=False), timeout=1)
+        await asyncio.wait_for(started.wait(), timeout=1)
+        assert "srv1" not in mc._servers
+        release.set()
+        owner = mc._owners["srv1"]
+        await asyncio.wait_for(owner.ready.wait(), timeout=1)
+        assert "srv1" in mc._servers
+
 
 # ── Brief 122：MCP 业务错误原话回填,而不是套通用兜底文案 ────────────────────
 #

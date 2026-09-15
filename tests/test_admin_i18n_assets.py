@@ -84,7 +84,7 @@ def test_i18n_runtime_is_wired_with_persistent_chinese_default():
     assert 'id="ds-private-truths"' in read_admin_page("dream-settings")
     assert "dream.scenario.policy_reveal_required" in runtime
     assert '<script src="/static/js/overview.js?v=brief-180-admin-static-1"></script>' in index
-    assert '<script src="/static/js/mcp.js?v=brief-251-thinking-cache-mcp-1"></script>' in index
+    assert '<script src="/static/js/mcp.js?v=brief-252-mcp-no-flash-1"></script>' in index
     assert '<script src="/static/js/scheduler.js?v=calendar-ui-1"></script>' in index
     assert '<script src="/static/js/integrations.js?v=brief-160-garden-freeze-1"></script>' in index
     assert "const DEFAULT_LANGUAGE = 'zh-CN';" in runtime

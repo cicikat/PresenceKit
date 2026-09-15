@@ -760,7 +760,7 @@ async def update_mcp_settings(body: McpSettingsUpdate, _auth=Depends(require_sco
     _write_config(full_cfg)
     from core import config_loader, mcp_client
     config_loader.reload_config()
-    await mcp_client.sync_mcp_servers()
+    await mcp_client.sync_mcp_servers(wait=False)
     result = await get_mcp_settings(_auth)
     result["message"] = "MCP 总开关已更新并热同步"
     return result

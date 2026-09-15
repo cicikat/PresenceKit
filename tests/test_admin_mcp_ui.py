@@ -57,6 +57,11 @@ def test_mcp_servers_start_collapsed_and_persist_ui_state():
     assert "const collapsed = !_mcpExpandedServers.has(server.name);" in source
     assert "_mcpExpandedServers.has(name) ? _mcpExpandedServers.delete(name) : _mcpExpandedServers.add(name);" in source
     assert "_persistMcpExpandedServers();" in source
+    assert "data-mcp-server-body" in source
+    assert "loadMcpPage();" not in source.split("function toggleMcpServerCollapsed(name)")[1].split("async function _saveMcpToolPresets")[0]
+    assert "if (!hadContent)" in source
+    assert "toast(t('mcp.enabled_saved', 'MCP 总开关已热同步'), 'ok');" in source
+    assert "loadMcpPage();" not in source.split("async function saveMcpEnabled()")[1].split("async function testMcpImport()")[0]
 
 
 def test_mcp_management_page_exposes_optional_metadata_controls_and_safe_summary():

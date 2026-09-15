@@ -146,7 +146,11 @@ async function loadMcpPage() {
   const serversEl = document.getElementById('mcp-servers');
   if (!serversEl) return;
   renderKeyValueEditor('mcp-import-headers', MCP_DEFAULT_HEADERS, _mcpHeaderEditorOptions());
-  serversEl.innerHTML = `<div class="loading">${escapeHtml(t('common.loading', '加载中…'))}</div>`;
+  const hadContent = Boolean(serversEl.querySelector('[data-mcp-server-body], .empty'));
+  const scrollY = window.scrollY;
+  if (!hadContent) {
+    serversEl.innerHTML = `<div class="loading">${escapeHtml(t('common.loading', '加载中…'))}</div>`;
+  }
   try {
     const data = await api('GET', '/settings/mcp');
     document.getElementById('mcp-enabled').checked = !!data.enabled;
@@ -162,6 +166,7 @@ async function loadMcpPage() {
     _setMcpConsoleData(data);
     await _loadMcpRecentCalls(data.servers || []);
     if (document.getElementById("mcp-llm-debug-enabled")) await loadMcpDebugRequests();
+    if (hadContent) window.scrollTo(0, scrollY);
   } catch (e) { serversEl.innerHTML = `<div class="empty">${escapeHtml(e.message)}</div>`; }
 }
 
@@ -498,13 +503,19 @@ function _renderMcpServer(server) {
     const editArgs = escapeHtml(JSON.stringify([server.name, preset.name]));
     return `<div style="display:flex;gap:6px;align-items:center;margin-top:5px"><code>${escapeHtml(preset.name)}</code><span style="font-size:12px;color:var(--muted)">${preset.tools.length} ${escapeHtml(t('mcp.preset.tools', '个工具'))}</span><button class="btn btn-ghost btn-sm" data-action="editMcpToolPreset" data-action-args="${editArgs}">${escapeHtml(t('common.edit', '修改'))}</button><button class="btn btn-danger btn-sm" data-action="deleteMcpToolPreset" data-action-args="${editArgs}">${escapeHtml(t('common.delete', '删除'))}</button></div>`;
   }).join('');
-  return `<section class="card" data-mcp-presets="${escapeHtml(JSON.stringify(server.tool_presets || []))}" style="background:var(--bg);margin:0 0 12px"><div class="card-header"><div style="display:flex;gap:8px;align-items:center"><button class="btn btn-ghost btn-sm" title="${escapeHtml(t('mcp.collapse', '展开/收起'))}" data-action="toggleMcpServerCollapsed" data-action-args="${collapseArgs}">${collapsed ? '▸' : '▾'}</button><h3>${escapeHtml(server.name)} ${status}</h3></div><label class="checkbox-row"><input type="checkbox" id="mcp-server-enabled-${escapeHtml(server.name)}" ${server.enabled ? 'checked' : ''}><span>${escapeHtml(t('common.enable', '启用'))}</span></label></div>${_mcpPresetButtons(server)}<div style="display:${collapsed ? 'none' : 'block'};margin-top:10px"><div style="font-size:12px;color:var(--muted);word-break:break-all">${escapeHtml(server.url || server.transport)} · ${escapeHtml(t('mcp.timeout', '超时'))} ${Number(server.tool_timeout_s || 30)}s</div>${proxyControl}${Object.keys(server.headers || {}).length ? `<div style="font-size:12px;color:var(--muted);margin-top:5px">${escapeHtml(t('mcp.headers', '请求头'))}：${escapeHtml(Object.keys(server.headers).join(', '))}</div>` : ''}${_mcpMetadataMappingControls(server)}${initError}<p style="font-size:12px;color:var(--warn);margin:10px 0">${escapeHtml(server.require_local_policy ? t('mcp.allowlist.strict_hint', 'Strict mode: an empty allowlist authorizes no tools.') : t('mcp.allowlist.legacy_hint', 'Legacy mode: an empty allowlist allows all tools; select the smallest explicit allowlist.'))}${escapeHtml(t('mcp.metadata.local_policy_notice', '远端分类不授予权限，执行和确认由本地 policy 控制。'))}</p>${exposureWarn}${grouped || `<div class="empty">${escapeHtml(t('mcp.no_discovered_tools', '尚未发现工具；可切换启用状态以重连。'))}</div>`}<div style="margin-top:12px"><strong>${escapeHtml(t('mcp.preset.manage', '工具预设'))}</strong>${presets || `<div style="font-size:12px;color:var(--muted);margin-top:5px">${escapeHtml(t('mcp.preset.none', '还没有预设'))}</div>`}<button class="btn btn-ghost btn-sm" style="margin-top:8px" data-action="createMcpToolPreset" data-action-args="${actionArgs}">+ ${escapeHtml(t('mcp.preset.create', '新增预设'))}</button></div><div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-primary btn-sm" data-action="saveMcpServer" data-action-args="${actionArgs}">${saveLabel}</button><button class="btn btn-ghost btn-sm" data-action="reconnectMcpServer" data-action-args="${actionArgs}">${reconnectLabel}</button><button class="btn btn-danger btn-sm" data-action="deleteMcpServer" data-action-args="${actionArgs}">${deleteLabel}</button></div></div></section>`;
+  return `<section class="card" data-mcp-presets="${escapeHtml(JSON.stringify(server.tool_presets || []))}" style="background:var(--bg);margin:0 0 12px"><div class="card-header"><div style="display:flex;gap:8px;align-items:center"><button class="btn btn-ghost btn-sm" title="${escapeHtml(t('mcp.collapse', '展开/收起'))}" data-action="toggleMcpServerCollapsed" data-action-args="${collapseArgs}">${collapsed ? '▸' : '▾'}</button><h3>${escapeHtml(server.name)} ${status}</h3></div><label class="checkbox-row"><input type="checkbox" id="mcp-server-enabled-${escapeHtml(server.name)}" ${server.enabled ? 'checked' : ''}><span>${escapeHtml(t('common.enable', '启用'))}</span></label></div>${_mcpPresetButtons(server)}<div data-mcp-server-body style="display:${collapsed ? 'none' : 'block'};margin-top:10px"><div style="font-size:12px;color:var(--muted);word-break:break-all">${escapeHtml(server.url || server.transport)} · ${escapeHtml(t('mcp.timeout', '超时'))} ${Number(server.tool_timeout_s || 30)}s</div>${proxyControl}${Object.keys(server.headers || {}).length ? `<div style="font-size:12px;color:var(--muted);margin-top:5px">${escapeHtml(t('mcp.headers', '请求头'))}：${escapeHtml(Object.keys(server.headers).join(', '))}</div>` : ''}${_mcpMetadataMappingControls(server)}${initError}<p style="font-size:12px;color:var(--warn);margin:10px 0">${escapeHtml(server.require_local_policy ? t('mcp.allowlist.strict_hint', 'Strict mode: an empty allowlist authorizes no tools.') : t('mcp.allowlist.legacy_hint', 'Legacy mode: an empty allowlist allows all tools; select the smallest explicit allowlist.'))}${escapeHtml(t('mcp.metadata.local_policy_notice', '远端分类不授予权限，执行和确认由本地 policy 控制。'))}</p>${exposureWarn}${grouped || `<div class="empty">${escapeHtml(t('mcp.no_discovered_tools', '尚未发现工具；可切换启用状态以重连。'))}</div>`}<div style="margin-top:12px"><strong>${escapeHtml(t('mcp.preset.manage', '工具预设'))}</strong>${presets || `<div style="font-size:12px;color:var(--muted);margin-top:5px">${escapeHtml(t('mcp.preset.none', '还没有预设'))}</div>`}<button class="btn btn-ghost btn-sm" style="margin-top:8px" data-action="createMcpToolPreset" data-action-args="${actionArgs}">+ ${escapeHtml(t('mcp.preset.create', '新增预设'))}</button></div><div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-primary btn-sm" data-action="saveMcpServer" data-action-args="${actionArgs}">${saveLabel}</button><button class="btn btn-ghost btn-sm" data-action="reconnectMcpServer" data-action-args="${actionArgs}">${reconnectLabel}</button><button class="btn btn-danger btn-sm" data-action="deleteMcpServer" data-action-args="${actionArgs}">${deleteLabel}</button></div></div></section>`;
 }
 
 function toggleMcpServerCollapsed(name) {
   _mcpExpandedServers.has(name) ? _mcpExpandedServers.delete(name) : _mcpExpandedServers.add(name);
   _persistMcpExpandedServers();
-  loadMcpPage();
+  const card = document.getElementById(`mcp-server-enabled-${name}`)?.closest('section');
+  if (!card) return;
+  const expanded = _mcpExpandedServers.has(name);
+  const body = card.querySelector('[data-mcp-server-body]');
+  const button = card.querySelector('[data-action="toggleMcpServerCollapsed"]');
+  if (body) body.style.display = expanded ? 'block' : 'none';
+  if (button) button.textContent = expanded ? '▾' : '▸';
 }
 
 async function _saveMcpToolPresets(name, presets, active_tool_preset = undefined) {
@@ -622,8 +633,12 @@ async function getMcpRecentCalls(caller, limit = 1) {
 }
 
 async function saveMcpEnabled() {
-  try { await api('PATCH', '/settings/mcp', { enabled: document.getElementById('mcp-enabled').checked }); toast(t('mcp.enabled_saved', 'MCP 总开关已热同步'), 'ok'); loadMcpPage(); }
-  catch (e) { toast(e.message, 'err'); }
+  const checkbox = document.getElementById('mcp-enabled');
+  try {
+    const result = await api('PATCH', '/settings/mcp', { enabled: checkbox.checked });
+    if (checkbox && result && typeof result.enabled === 'boolean') checkbox.checked = result.enabled;
+    toast(t('mcp.enabled_saved', 'MCP 总开关已热同步'), 'ok');
+  } catch (e) { toast(e.message, 'err'); }
 }
 
 async function testMcpImport() {

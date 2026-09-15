@@ -10,7 +10,7 @@ def test_mcp_import_headers_start_empty_and_cache_versions_are_bumped():
 
     assert "const MCP_DEFAULT_HEADERS = Object.freeze({});" in source
     assert "renderKeyValueEditor('mcp-import-headers', MCP_DEFAULT_HEADERS" in source
-    assert "mcp.js?v=brief-251-thinking-cache-mcp-1" in index
+    assert "mcp.js?v=brief-252-mcp-no-flash-1" in index
     assert "ADMIN_UI_FRAGMENT_VERSION = 'brief-252-image-presets-1'" in core
 
 

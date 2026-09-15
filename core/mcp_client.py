@@ -703,18 +703,20 @@ def _resolve(done: "asyncio.Future | None", value: object) -> None:
         done.set_result(value)
 
 
-async def _send_command(name: str, cmd: str, payload: dict | None = None) -> object:
-    """把一条指令丢进 server 专属 task 的队列，等它在自己的 task 里处理完并返回结果。
+async def _send_command(name: str, cmd: str, payload: dict | None = None, *, wait: bool = True) -> object:
+    """把一条指令丢进 server 专属 task 的队列；默认等它在自己的 task 里处理完。
 
-    这一步只是 put + await 一个 Future，不涉及跨 task 关闭 cancel scope，调用方可以是
+    这一步只是 put + 可选 await 一个 Future，不涉及跨 task 关闭 cancel scope，调用方可以是
     任意 task（HTTP 请求 task、总开关同步等）——真正的 aclose()/连接动作发生在
-    _owner_loop 所在的专属 task 里。
+    _owner_loop 所在的专属 task 里。``wait=False`` 只保证信号入队，不等连接完成。
     """
     owner = _owners.get(name)
     if owner is None:
         return None
-    done = asyncio.get_running_loop().create_future()
+    done = asyncio.get_running_loop().create_future() if wait else None
     await owner.queue.put((cmd, payload, done))
+    if not wait:
+        return None
     return await done
 
 
@@ -1269,11 +1271,12 @@ async def reload_server_from_config(name: str) -> bool | None:
     return bool(result)
 
 
-async def sync_mcp_servers() -> None:
+async def sync_mcp_servers(*, wait: bool = True) -> None:
     """按当前配置同步运行态，供总开关热切换使用。
 
     多出来的 server 发 shutdown 信号退场；仍存在的发 reload 信号刷新配置；新增的现起
-    专属 task。全部只发信号、等专属 task 自己处理，不跨 task 直接碰 AsyncExitStack。
+    专属 task。shutdown 始终等处理完，避免连发启停时把后续 reload 丢在已退出的 owner 队列里。
+    ``wait=False`` 时 reload/首次连接只入队，不把连上当作调用完成条件。
     """
     cfg = _get_mcp_config()
     desired = {
@@ -1286,10 +1289,11 @@ async def sync_mcp_servers() -> None:
             await _send_command(name, "shutdown")
     for name, server_cfg in desired.items():
         if name in _owners:
-            await _send_command(name, "reload", server_cfg)
+            await _send_command(name, "reload", server_cfg, wait=wait)
         else:
             owner = _spawn_owner(name, server_cfg)
-            await owner.ready.wait()
+            if wait:
+                await owner.ready.wait()
 
 
 async def shutdown_mcp_servers() -> None:
