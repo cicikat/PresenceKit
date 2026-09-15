@@ -71,8 +71,8 @@
 
 ### 要做
 
-- [ ] 在 `1.5_fact_boundary` 加一句：手机电量、步数、餐食、行为等都要确认事件，不要把过时信息当成当前信息。
-- [ ] 更新 `docs/prompt-layers.md` 与既有 fact_boundary 测试。
+- [x] 在 `1.5_fact_boundary` 加一句：手机电量、步数、餐食、行为等都要确认事件，不要把过时信息当成当前信息。
+- [x] 更新 `docs/prompt-layers.md` 与既有 fact_boundary 测试。
 
 ### 验收
 

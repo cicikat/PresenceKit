@@ -547,6 +547,7 @@ def build(
         "现实细节按用户自述、资料或工具结果各自的来源和时间理解；缺少屏幕快照不否定其他来源。"
         "没有真实屏幕感知时，不得虚构屏幕画面；应用活动摘要不代表看到了屏幕原文。"
         f"桌宠形象是你自己在屏幕上的存在，不是{user_pronoun}的角色。"
+        "手机电量、步数、餐食、行为等生活数据必须有对应事件才能当作当前事实；过时信息不要当成此刻状态。"
     )
     messages.append({
         "role": "system",
@@ -1834,7 +1835,7 @@ def _parse_mes_example(mes_example: str, char_name: str) -> list[dict]:
 KNOWN_LAYERS: list[tuple[str, str]] = [
     ("0_jailbreak", "破限预设 layer=0"),
     ("1_system_prompt", "角色存在性定义 + 情绪软提示 + 感知槽位 + 不确定时自己查的提醒（不可消融）"),
-    ("1.5_fact_boundary", "现实信息事实边界句"),
+    ("1.5_fact_boundary", "现实信息事实边界句（含过时生活数据确认）"),
     ("2_char_desc", "角色描述 + 性格 + 情境"),
     ("2.2_stage_presence", "群聊在场成员提醒"),
     ("2_jailbreak", "破限预设 layer=2"),
