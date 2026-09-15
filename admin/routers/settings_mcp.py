@@ -466,6 +466,33 @@ def _safe_metadata_config(server_cfg: dict) -> tuple[dict | None, dict[str, dict
     return mapping, overrides, selector
 
 
+def _mcp_reload_result(
+    name: str,
+    reload_ok,
+    *,
+    success_message: str,
+    connection_failed_message: str,
+    restart_message: str,
+) -> dict:
+    """Hot-reload ran in-process. Connection failure is not a process restart."""
+    from core import mcp_client
+
+    runtime = mcp_client.server_runtime(name)
+    error = str(runtime.get("last_init_error") or "").strip()
+    if reload_ok is None:
+        status, message = "restart_required", restart_message
+    elif reload_ok is False:
+        status = "connection_failed"
+        message = connection_failed_message + (f"：{error}" if error else "")
+    else:
+        status, message = "reloaded", success_message
+    return {
+        "reload_status": status,
+        "message": message,
+        "last_init_error": error,
+    }
+
+
 def _server_view(
     server_cfg: dict,
     *,
@@ -806,17 +833,22 @@ async def import_mcp_server(body: McpServerDraft, _auth=Depends(require_scopes("
     # server 专属常驻 task 自己 aclose()/重连，不跨 task。测试探测（test_server_config）
     # 用的是独立、当次即开即关的 stack，本来就不受这条根因影响。
     reload_ok = await mcp_client.reload_server_from_config(server_cfg["name"])
-    reloaded = reload_ok is not False
-    return {
-        "message": "MCP server 已导入并连接" if reloaded else "配置已保存，但 MCP 热重载失败，需要重启服务",
-        "reload_status": "reloaded" if reloaded else "restart_required",
+    payload = _mcp_reload_result(
+        server_cfg["name"],
+        reload_ok,
+        success_message="MCP server 已导入并连接",
+        connection_failed_message="MCP server 已导入并热重载，但未能连接",
+        restart_message="配置已保存，但 MCP 热重载失败，需要重启服务",
+    )
+    payload.update({
         "tools": tools,
         "server": _server_view(
             server_cfg,
             require_local_policy=bool(mcp_cfg.get("require_local_policy", False)),
             session_exposed_names=_current_mcp_exposure_names(),
         ),
-    }
+    })
+    return payload
 
 
 @router.patch("/settings/mcp/{name}", summary="更新一个 MCP server 的启停或工具白名单")
@@ -861,20 +893,25 @@ async def update_mcp_server(name: str, body: McpServerUpdate, _auth=Depends(requ
         _write_config(full_cfg)
         config_loader.reload_config()
         reload_ok = await mcp_client.reload_server_from_config(name)
-        reloaded = reload_ok is not False
-        return {
-            "message": "MCP 批量授权已完成" if reloaded else "配置已保存，但 MCP 热重载失败，需要重启服务",
+        payload = _mcp_reload_result(
+            name,
+            reload_ok,
+            success_message="MCP 批量授权已完成",
+            connection_failed_message="配置已保存并热重载，但未能连接",
+            restart_message="配置已保存，但 MCP 热重载失败，需要重启服务",
+        )
+        payload.update({
             "action": body.bulk_authorize,
             "processed_count": len(tool_names),
             "allow_tools": list(server.get("allow_tools") or []),
             "tool_policy": dict(server.get("tool_policy") or {}),
-            "reload_status": "reloaded" if reloaded else "restart_required",
             "server": _server_view(
                 server,
                 require_local_policy=bool(mcp_cfg.get("require_local_policy", False)),
                 session_exposed_names=_current_mcp_exposure_names(),
             ),
-        }
+        })
+        return payload
     if body.enabled is not None:
         server["enabled"] = body.enabled
     if body.allow_tools is not None:
@@ -954,16 +991,49 @@ async def update_mcp_server(name: str, body: McpServerUpdate, _auth=Depends(requ
     config_loader.reload_config()
     # Brief 115 根治：同上，走信号队列热重载，由 server 专属常驻 task 自己关闭/重连。
     reload_ok = await mcp_client.reload_server_from_config(name)
-    reloaded = reload_ok is not False
-    return {
-        "message": "MCP server 配置已更新并热重载" if reloaded else "配置已保存，但 MCP 热重载失败，需要重启服务",
-        "reload_status": "reloaded" if reloaded else "restart_required",
-        "server": _server_view(
-            server,
-            require_local_policy=bool(mcp_cfg.get("require_local_policy", False)),
-            session_exposed_names=_current_mcp_exposure_names(),
-        ),
-    }
+    payload = _mcp_reload_result(
+        name,
+        reload_ok,
+        success_message="MCP server 配置已更新并热重载",
+        connection_failed_message="配置已保存并热重载，但未能连接",
+        restart_message="配置已保存，但 MCP 热重载失败，需要重启服务",
+    )
+    payload["server"] = _server_view(
+        server,
+        require_local_policy=bool(mcp_cfg.get("require_local_policy", False)),
+        session_exposed_names=_current_mcp_exposure_names(),
+    )
+    return payload
+
+
+@router.post("/settings/mcp/{name}/reconnect", summary="按当前配置重新连接一个 MCP server")
+async def reconnect_mcp_server(name: str, _auth=Depends(require_scopes("admin"))):
+    if not _NAME_RE.fullmatch(name):
+        raise HTTPException(status_code=422, detail="非法 server name")
+    full_cfg = _read_config()
+    mcp_cfg = full_cfg.get("mcp_servers") or {}
+    server = next(
+        (item for item in (mcp_cfg.get("servers") or []) if isinstance(item, dict) and item.get("name") == name),
+        None,
+    )
+    if server is None:
+        raise HTTPException(status_code=404, detail="MCP server 不存在")
+    from core import mcp_client
+
+    reload_ok = await mcp_client.reload_server_from_config(name)
+    payload = _mcp_reload_result(
+        name,
+        reload_ok,
+        success_message="MCP server 已重新连接",
+        connection_failed_message="已尝试重新连接，但未能连上",
+        restart_message="重新连接失败，需要重启服务",
+    )
+    payload["server"] = _server_view(
+        server,
+        require_local_policy=bool(mcp_cfg.get("require_local_policy", False)),
+        session_exposed_names=_current_mcp_exposure_names(),
+    )
+    return payload
 
 
 @router.delete("/settings/mcp/{name}", summary="删除一个 MCP server 并断开其运行态")

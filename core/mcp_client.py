@@ -1248,21 +1248,24 @@ async def disconnect_server(name: str) -> None:
     await _send_command(name, "reload", None)
 
 
-async def reload_server_from_config(name: str) -> bool:
+async def reload_server_from_config(name: str) -> bool | None:
     """按当前配置重载一个 server，避免扰动其他 MCP session。
 
     只发信号给专属常驻 task；如果这个 server 之前还没有专属 task（比如刚导入、
     从未连接过），先起一个空壳 task 再发信号。返回是否成功建立了新连接。
+    True=已连接或无需运行；False=热重载已执行但未连上；None=信号未能交给 owner。
     """
     cfg = _get_mcp_config()
     server_cfg = next((item for item in (cfg.get("servers") or []) if item.get("name") == name), None)
     should_run = bool(cfg.get("enabled", False) and server_cfg and server_cfg.get("enabled", True))
     if name not in _owners:
         if not should_run:
-            return False
+            return True
         owner = _spawn_owner(name, None)
         await owner.ready.wait()
     result = await _send_command(name, "reload", server_cfg if should_run else None)
+    if result is None:
+        return None
     return bool(result)
 
 

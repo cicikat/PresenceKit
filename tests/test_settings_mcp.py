@@ -418,7 +418,7 @@ def test_per_tool_timeout_rejects_values_above_660_seconds():
         mod._normalize_tool_timeouts({"hardware_sequence": 661})
 
 
-def test_update_server_reports_restart_when_owner_reload_fails(tmp_path, monkeypatch):
+def test_update_server_reports_connection_failed_when_owner_reload_returns_false(tmp_path, monkeypatch):
     path = _write(tmp_path, "mcp_servers:\n  enabled: true\n  servers:\n    - name: cedar_toy\n      transport: http\n      url: https://example.test/mcp\n      allow_tools: [toy_status]\n")
     _patch_config(monkeypatch, path)
     from core import mcp_client
@@ -431,8 +431,9 @@ def test_update_server_reports_restart_when_owner_reload_fails(tmp_path, monkeyp
     result = asyncio.run(mod.update_mcp_server(
         "cedar_toy", mod.McpServerUpdate(enabled=False), _auth=None,
     ))
-    assert result["reload_status"] == "restart_required"
-    assert "重启" in result["message"]
+    assert result["reload_status"] == "connection_failed"
+    assert "未能连接" in result["message"]
+    assert "重启" not in result["message"]
 
 
 def test_strict_policy_whitelist_update_preserves_confirmed_entries_and_fills_new_tool_default(tmp_path, monkeypatch):
@@ -592,7 +593,7 @@ def test_bulk_authorization_rejects_empty_runtime_directory_without_writing(tmp_
     assert path.read_text(encoding="utf-8") == before
 
 
-def test_bulk_authorization_reports_restart_required_after_reload_failure(tmp_path, monkeypatch):
+def test_bulk_authorization_reports_connection_failed_after_reload_returns_false(tmp_path, monkeypatch):
     path = _write(
         tmp_path,
         "mcp_servers:\n  enabled: true\n  require_local_policy: true\n  servers:\n"
@@ -614,11 +615,63 @@ def test_bulk_authorization_reports_restart_required_after_reload_failure(tmp_pa
         "cedar_toy", mod.McpServerUpdate(bulk_authorize="default"), _auth=None,
     ))
 
-    assert result["reload_status"] == "restart_required"
+    assert result["reload_status"] == "connection_failed"
     assert result["processed_count"] == 1
     assert calls == ["cedar_toy"]
     stored = yaml.safe_load(path.read_text(encoding="utf-8"))
     assert stored["mcp_servers"]["servers"][0]["allow_tools"] == ["toy_status"]
+
+
+def test_update_server_reports_restart_required_when_reload_returns_none(tmp_path, monkeypatch):
+    path = _write(tmp_path, "mcp_servers:\n  enabled: true\n  servers:\n    - name: cedar_toy\n      transport: http\n      url: https://example.test/mcp\n      allow_tools: [toy_status]\n")
+    _patch_config(monkeypatch, path)
+    from core import mcp_client
+
+    async def reload(_name):
+        return None
+
+    monkeypatch.setattr(mcp_client, "reload_server_from_config", reload)
+    monkeypatch.setattr(mcp_client, "server_runtime", lambda _name: {"connected": False, "tools": []})
+    result = asyncio.run(mod.update_mcp_server(
+        "cedar_toy", mod.McpServerUpdate(enabled=True), _auth=None,
+    ))
+    assert result["reload_status"] == "restart_required"
+    assert "重启" in result["message"]
+
+
+def test_reconnect_server_reuses_hot_reload_and_reports_connection_failed(tmp_path, monkeypatch):
+    path = _write(
+        tmp_path,
+        "mcp_servers:\n  enabled: true\n  servers:\n"
+        "    - name: cedar_toy\n      transport: http\n      url: https://example.test/mcp\n",
+    )
+    _patch_config(monkeypatch, path)
+    from core import mcp_client
+    calls = []
+
+    async def reload(name):
+        calls.append(name)
+        return False
+
+    monkeypatch.setattr(mcp_client, "reload_server_from_config", reload)
+    monkeypatch.setattr(mcp_client, "server_runtime", lambda _name: {
+        "connected": False, "tools": [], "last_init_error": "handshake timeout",
+    })
+    result = asyncio.run(mod.reconnect_mcp_server("cedar_toy", _auth=None))
+    assert calls == ["cedar_toy"]
+    assert result["reload_status"] == "connection_failed"
+    assert "未能连上" in result["message"]
+    assert "handshake timeout" in result["message"]
+    assert result["last_init_error"] == "handshake timeout"
+    assert "重启" not in result["message"]
+
+
+def test_reconnect_missing_server_is_404(tmp_path, monkeypatch):
+    path = _write(tmp_path, "mcp_servers:\n  enabled: true\n  servers: []\n")
+    _patch_config(monkeypatch, path)
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(mod.reconnect_mcp_server("missing", _auth=None))
+    assert exc.value.status_code == 404
 
 
 def test_strict_policy_accepts_complete_whitelist_and_policy(tmp_path, monkeypatch):

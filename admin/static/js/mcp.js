@@ -432,6 +432,16 @@ function _decorateMcpServerCards(root, servers) {
   });
 }
 
+function _mcpReloadToastKind(status) {
+  return status === 'reloaded' ? 'ok' : 'err';
+}
+
+function _mcpReloadToastText(status, {reloaded, connectionFailed, restartRequired}) {
+  if (status === 'connection_failed') return connectionFailed;
+  if (status === 'restart_required') return restartRequired;
+  return reloaded;
+}
+
 async function bulkAuthorizeMcpServer(name, mode) {
   if (mode === 'unrestricted' && !confirm(t(
     'mcp.bulk.unrestricted_confirm',
@@ -443,10 +453,12 @@ async function bulkAuthorizeMcpServer(name, mode) {
   controls.forEach(button => { button.disabled = true; });
   try {
     const result = await api('PATCH', `/settings/mcp/${encodeURIComponent(name)}`, { bulk_authorize: mode });
-    const status = result.reload_status === 'restart_required' ? 'err' : 'ok';
-    const reloadText = result.reload_status === 'restart_required'
-      ? t('mcp.bulk.restart_required', 'Configuration saved; restart required.')
-      : t('mcp.bulk.reloaded', 'Hot reload completed.');
+    const status = _mcpReloadToastKind(result.reload_status);
+    const reloadText = _mcpReloadToastText(result.reload_status, {
+      reloaded: t('mcp.bulk.reloaded', 'Hot reload completed.'),
+      connectionFailed: t('mcp.bulk.connection_failed', '配置已保存并热重载，但未能连接。'),
+      restartRequired: t('mcp.bulk.restart_required', 'Configuration saved; restart required.'),
+    });
     const modeText = mode === 'unrestricted'
       ? t('mcp.bulk.unrestricted', 'Authorize all unrestricted')
       : t('mcp.bulk.default', 'Authorize all with defaults');
@@ -477,6 +489,7 @@ function _renderMcpServer(server) {
   const collapsed = !_mcpExpandedServers.has(server.name);
   const collapseArgs = escapeHtml(JSON.stringify([server.name]));
   const saveLabel = escapeHtml(t('mcp.save_server', '设置'));
+  const reconnectLabel = escapeHtml(t('mcp.reconnect', '重新连接'));
   const deleteLabel = escapeHtml(t('mcp.delete_server', '删除 server'));
   const proxyControl = server.is_local_url
     ? `<span style="font-size:12px;color:var(--muted)">${escapeHtml(t('mcp.proxy_direct', '本地地址：始终直连'))}</span>`
@@ -485,7 +498,7 @@ function _renderMcpServer(server) {
     const editArgs = escapeHtml(JSON.stringify([server.name, preset.name]));
     return `<div style="display:flex;gap:6px;align-items:center;margin-top:5px"><code>${escapeHtml(preset.name)}</code><span style="font-size:12px;color:var(--muted)">${preset.tools.length} ${escapeHtml(t('mcp.preset.tools', '个工具'))}</span><button class="btn btn-ghost btn-sm" data-action="editMcpToolPreset" data-action-args="${editArgs}">${escapeHtml(t('common.edit', '修改'))}</button><button class="btn btn-danger btn-sm" data-action="deleteMcpToolPreset" data-action-args="${editArgs}">${escapeHtml(t('common.delete', '删除'))}</button></div>`;
   }).join('');
-  return `<section class="card" data-mcp-presets="${escapeHtml(JSON.stringify(server.tool_presets || []))}" style="background:var(--bg);margin:0 0 12px"><div class="card-header"><div style="display:flex;gap:8px;align-items:center"><button class="btn btn-ghost btn-sm" title="${escapeHtml(t('mcp.collapse', '展开/收起'))}" data-action="toggleMcpServerCollapsed" data-action-args="${collapseArgs}">${collapsed ? '▸' : '▾'}</button><h3>${escapeHtml(server.name)} ${status}</h3></div><label class="checkbox-row"><input type="checkbox" id="mcp-server-enabled-${escapeHtml(server.name)}" ${server.enabled ? 'checked' : ''}><span>${escapeHtml(t('common.enable', '启用'))}</span></label></div>${_mcpPresetButtons(server)}<div style="display:${collapsed ? 'none' : 'block'};margin-top:10px"><div style="font-size:12px;color:var(--muted);word-break:break-all">${escapeHtml(server.url || server.transport)} · ${escapeHtml(t('mcp.timeout', '超时'))} ${Number(server.tool_timeout_s || 30)}s</div>${proxyControl}${Object.keys(server.headers || {}).length ? `<div style="font-size:12px;color:var(--muted);margin-top:5px">${escapeHtml(t('mcp.headers', '请求头'))}：${escapeHtml(Object.keys(server.headers).join(', '))}</div>` : ''}${_mcpMetadataMappingControls(server)}${initError}<p style="font-size:12px;color:var(--warn);margin:10px 0">${escapeHtml(server.require_local_policy ? t('mcp.allowlist.strict_hint', 'Strict mode: an empty allowlist authorizes no tools.') : t('mcp.allowlist.legacy_hint', 'Legacy mode: an empty allowlist allows all tools; select the smallest explicit allowlist.'))}${escapeHtml(t('mcp.metadata.local_policy_notice', '远端分类不授予权限，执行和确认由本地 policy 控制。'))}</p>${exposureWarn}${grouped || `<div class="empty">${escapeHtml(t('mcp.no_discovered_tools', '尚未发现工具；可切换启用状态以重连。'))}</div>`}<div style="margin-top:12px"><strong>${escapeHtml(t('mcp.preset.manage', '工具预设'))}</strong>${presets || `<div style="font-size:12px;color:var(--muted);margin-top:5px">${escapeHtml(t('mcp.preset.none', '还没有预设'))}</div>`}<button class="btn btn-ghost btn-sm" style="margin-top:8px" data-action="createMcpToolPreset" data-action-args="${actionArgs}">+ ${escapeHtml(t('mcp.preset.create', '新增预设'))}</button></div><div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-primary btn-sm" data-action="saveMcpServer" data-action-args="${actionArgs}">${saveLabel}</button><button class="btn btn-danger btn-sm" data-action="deleteMcpServer" data-action-args="${actionArgs}">${deleteLabel}</button></div></div></section>`;
+  return `<section class="card" data-mcp-presets="${escapeHtml(JSON.stringify(server.tool_presets || []))}" style="background:var(--bg);margin:0 0 12px"><div class="card-header"><div style="display:flex;gap:8px;align-items:center"><button class="btn btn-ghost btn-sm" title="${escapeHtml(t('mcp.collapse', '展开/收起'))}" data-action="toggleMcpServerCollapsed" data-action-args="${collapseArgs}">${collapsed ? '▸' : '▾'}</button><h3>${escapeHtml(server.name)} ${status}</h3></div><label class="checkbox-row"><input type="checkbox" id="mcp-server-enabled-${escapeHtml(server.name)}" ${server.enabled ? 'checked' : ''}><span>${escapeHtml(t('common.enable', '启用'))}</span></label></div>${_mcpPresetButtons(server)}<div style="display:${collapsed ? 'none' : 'block'};margin-top:10px"><div style="font-size:12px;color:var(--muted);word-break:break-all">${escapeHtml(server.url || server.transport)} · ${escapeHtml(t('mcp.timeout', '超时'))} ${Number(server.tool_timeout_s || 30)}s</div>${proxyControl}${Object.keys(server.headers || {}).length ? `<div style="font-size:12px;color:var(--muted);margin-top:5px">${escapeHtml(t('mcp.headers', '请求头'))}：${escapeHtml(Object.keys(server.headers).join(', '))}</div>` : ''}${_mcpMetadataMappingControls(server)}${initError}<p style="font-size:12px;color:var(--warn);margin:10px 0">${escapeHtml(server.require_local_policy ? t('mcp.allowlist.strict_hint', 'Strict mode: an empty allowlist authorizes no tools.') : t('mcp.allowlist.legacy_hint', 'Legacy mode: an empty allowlist allows all tools; select the smallest explicit allowlist.'))}${escapeHtml(t('mcp.metadata.local_policy_notice', '远端分类不授予权限，执行和确认由本地 policy 控制。'))}</p>${exposureWarn}${grouped || `<div class="empty">${escapeHtml(t('mcp.no_discovered_tools', '尚未发现工具；可切换启用状态以重连。'))}</div>`}<div style="margin-top:12px"><strong>${escapeHtml(t('mcp.preset.manage', '工具预设'))}</strong>${presets || `<div style="font-size:12px;color:var(--muted);margin-top:5px">${escapeHtml(t('mcp.preset.none', '还没有预设'))}</div>`}<button class="btn btn-ghost btn-sm" style="margin-top:8px" data-action="createMcpToolPreset" data-action-args="${actionArgs}">+ ${escapeHtml(t('mcp.preset.create', '新增预设'))}</button></div><div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-primary btn-sm" data-action="saveMcpServer" data-action-args="${actionArgs}">${saveLabel}</button><button class="btn btn-ghost btn-sm" data-action="reconnectMcpServer" data-action-args="${actionArgs}">${reconnectLabel}</button><button class="btn btn-danger btn-sm" data-action="deleteMcpServer" data-action-args="${actionArgs}">${deleteLabel}</button></div></div></section>`;
 }
 
 function toggleMcpServerCollapsed(name) {
@@ -529,9 +542,11 @@ async function saveMcpToolPolicy(name, toolName) {
       policy[toolName].require_confirm = !!confirmControl?.checked;
     }
     const result = await api('PATCH', `/settings/mcp/${encodeURIComponent(name)}`, { tool_policy: policy });
-    toast(result.reload_status === 'restart_required'
-      ? t('mcp.policy.restart_required', '模式已保存，需要重启服务')
-      : t('mcp.policy.saved', '工具模式已保存并热重载'), result.reload_status === 'restart_required' ? 'err' : 'ok');
+    toast(_mcpReloadToastText(result.reload_status, {
+      reloaded: t('mcp.policy.saved', '工具模式已保存并热重载'),
+      connectionFailed: t('mcp.policy.connection_failed', '模式已保存并热重载，但未能连接'),
+      restartRequired: t('mcp.policy.restart_required', '模式已保存，需要重启服务'),
+    }), _mcpReloadToastKind(result.reload_status));
     await loadMcpPage();
   } catch (e) { toast(e.message, 'err'); }
 }
@@ -551,9 +566,11 @@ async function saveMcpMetadataOverride(name, toolName) {
       overrides[toolName] = { mode: 'override', domains };
     }
     const result = await api('PATCH', `/settings/mcp/${encodeURIComponent(name)}`, { metadata_overrides: overrides });
-    toast(result.reload_status === 'restart_required'
-      ? t('mcp.metadata.restart_required', '分类已保存，需要重启服务')
-      : t('mcp.metadata.saved', '分类已保存并热重载'), result.reload_status === 'restart_required' ? 'err' : 'ok');
+    toast(_mcpReloadToastText(result.reload_status, {
+      reloaded: t('mcp.metadata.saved', '分类已保存并热重载'),
+      connectionFailed: t('mcp.metadata.connection_failed', '分类已保存并热重载，但未能连接'),
+      restartRequired: t('mcp.metadata.restart_required', '分类已保存，需要重启服务'),
+    }), _mcpReloadToastKind(result.reload_status));
     await loadMcpPage();
   } catch (e) { toast(e.message, 'err'); }
 }
@@ -627,9 +644,11 @@ async function importMcpServer() {
   const allow = [...document.querySelectorAll('[data-mcp-import-tool]:checked')].map(el => el.dataset.mcpImportTool);
   try {
     const result = await api('POST', '/settings/mcp/import', { ..._mcpImport.draft, allow_tools: allow });
-    toast(result.reload_status === 'restart_required'
-      ? t('mcp.import_restart_required', 'MCP server 已导入，需要重启服务')
-      : t('mcp.imported', 'MCP server 已导入，已补齐默认本地策略'), result.reload_status === 'restart_required' ? 'err' : 'ok'); _mcpImport = null; document.getElementById('mcp-import-save').disabled = true; document.getElementById('mcp-import-result').innerHTML = ''; loadMcpPage();
+    toast(_mcpReloadToastText(result.reload_status, {
+      reloaded: t('mcp.imported', 'MCP server 已导入，已补齐默认本地策略'),
+      connectionFailed: t('mcp.import_connection_failed', 'MCP server 已导入并热重载，但未能连接'),
+      restartRequired: t('mcp.import_restart_required', 'MCP server 已导入，需要重启服务'),
+    }), _mcpReloadToastKind(result.reload_status)); _mcpImport = null; document.getElementById('mcp-import-save').disabled = true; document.getElementById('mcp-import-result').innerHTML = ''; loadMcpPage();
   } catch (e) { toast(e.message, 'err'); }
 }
 
@@ -659,10 +678,30 @@ async function saveMcpServer(name) {
     domains: selectorDomains,
     include_unclassified: document.getElementById(`mcp-domain-include-unclassified-${name}`)?.checked !== false,
   } : null;
-  try { const result = await api('PATCH', `/settings/mcp/${encodeURIComponent(name)}`, body); toast(result.reload_status === 'restart_required'
-    ? t('mcp.server_restart_required', '{name} 已保存，需要重启服务', { name })
-    : t('mcp.server_saved', '{name} 已热重载', { name }), result.reload_status === 'restart_required' ? 'err' : 'ok'); loadMcpPage(); }
+  try { const result = await api('PATCH', `/settings/mcp/${encodeURIComponent(name)}`, body); toast(_mcpReloadToastText(result.reload_status, {
+    reloaded: t('mcp.server_saved', '{name} 已热重载', { name }),
+    connectionFailed: t('mcp.server_connection_failed', '{name} 已热重载，但未能连接', { name }),
+    restartRequired: t('mcp.server_restart_required', '{name} 已保存，需要重启服务', { name }),
+  }), _mcpReloadToastKind(result.reload_status)); loadMcpPage(); }
   catch (e) { toast(e.message, 'err'); }
+}
+
+async function reconnectMcpServer(name) {
+  const card = document.getElementById(`mcp-server-enabled-${name}`)?.closest('section');
+  const button = card?.querySelector('[data-action="reconnectMcpServer"]');
+  if (button) button.disabled = true;
+  try {
+    const result = await api('POST', `/settings/mcp/${encodeURIComponent(name)}/reconnect`);
+    toast(_mcpReloadToastText(result.reload_status, {
+      reloaded: t('mcp.server_saved', '{name} 已热重载', { name }),
+      connectionFailed: t('mcp.server_connection_failed', '{name} 已热重载，但未能连接', { name }),
+      restartRequired: t('mcp.server_restart_required', '{name} 已保存，需要重启服务', { name }),
+    }), _mcpReloadToastKind(result.reload_status));
+    await loadMcpPage();
+  } catch (e) {
+    toast(e.message, 'err');
+    if (button) button.disabled = false;
+  }
 }
 
 async function deleteMcpServer(name) {

@@ -105,8 +105,9 @@ observe：真实手机安装、不同应用删除反馈、断网后上传以及�
 ## 角色心声通用提示（2026-09-11）
 
 current：GET/POST /settings/thinking（persona）增加 character_voice 与 GET voice_preview；
-管理面「对话与思考」有真实开关、预览和 effective 状态，定义见 docs/thinking-voice.md。
-桌面既有 turn_id reasoning 读取与本地显示开关继续适用；手机无思考展开 UI，列 roadmap。
+管理面「模型连接与分工」有真实开关、预览和 effective 状态，「聊天方式与思考」只留跳转，
+定义见 docs/thinking-voice.md。回合思考读取只关联主聊天归档。
+桌面既有 turn_id reasoning 读取与本地显示开关继续适用，不新增设置；手机无思考展开 UI，列 roadmap。
 无新增 REST 消费路径、IPC/WS、队列、落盘、ack/TTL、权限或记忆写入。
 observe：77 项回归和管理面清缓存浏览器验证通过；两次真实合成对话未返回 reasoning，
 原生摘要口吻与真机体验仍需验证，不把提示已发送等同于模型已遵从。
@@ -297,7 +298,7 @@ Flutter/Android 字段或设置面。桌面和手机不得把现有 autonomy job
 | `/settings/character-avatar/{char_id}`、`/settings/characters/{char_id}/avatar` | 角色头像读/上传/删除 | 桌面可上传；物理落盘由后端 DataPaths 决定 |
 | `/characters*`、`/character/{char_id}/model-routing`、`/character/{char_id}/asset-bindings` | 角色卡、模型路由、资产绑定 | `admin-only` 或对应 settings scope |
 | `/lorebook*`、`/jailbreak-entries*` | Prompt 资产 CRUD | 管理面完整编辑；手机仅提供受限启停/读取 |
-| `/settings/feature-flags`、`/settings/tools`、`/settings/tool-loop`、`/settings/thinking`、`/settings/mcp` | 功能开关、工具暴露、tool loop、思考、MCP | `admin-only`；新增运行时开关必须同步管理面读写和有效状态 |
+| `/settings/feature-flags`、`/settings/tools`、`/settings/tool-loop`、`/settings/thinking`、`/settings/mcp` | 功能开关、工具暴露、tool loop、思考、MCP | `admin-only`；思考编辑在模型连接页；MCP 热重载区分 reloaded / connection_failed / restart_required；桌面不新增这些设置 |
 | `/settings/model-routing`、`/model-presets/*`、`/llm-params`、`/vision-params` | 模型连接和路由 | 密钥留在后端管理面；桌面只切已有 profile |
 | `/settings/tts-*`、`/tts-config*`、`/tts/synthesize` | TTS provider、桌面播放、自动播放、合成 | 桌面有播放相关设置；provider 细节留在后端管理面 |
 | `/chat-mode`、`/chat-style`、`/chat-multi-message`、`/output-segment-enforce` | 对话行为和输出兜底 | 桌面可见设置必须与后端读写接口同单更新 |
@@ -486,7 +487,7 @@ ack 和游标推进，不得另造一套消息真值。
 |---|---|---|---|---|
 | 模型路由 | `/settings/model-routing`、`/model-presets/routing-profiles` | 只读当前方案；在管理面修改绑定 | 不持有 provider 密钥 | 当前边界完整 |
 | TTS | `/tts-config*`、`/settings/tts-*`、`/tts/synthesize` | 播放/自动播放设置和桥接 | 合成/播放能力 | provider 管理面与客户端播放分离 |
-| tool loop / thinking / 输出兜底 | `/settings/tool-loop`、`/settings/thinking`、`/output-segment-enforce` | 保留协议桥，编辑入口已迁管理面 | 无同等编辑面 | 新增字段必须同步桌面设置审计 |
+| tool loop / thinking / 输出兜底 | `/settings/tool-loop`、`/settings/thinking`、`/output-segment-enforce` | 保留协议桥；思考编辑在管理面模型连接页，桌面不新增设置 | 无同等编辑面 | 新增字段必须同步管理面，不要往桌面塞开关 |
 | Reality / Dream Prompt 资产 | `/settings/prompt-assets`、`/dream/settings` | Reality 启用组合迁管理面；世界书/破限 label 为显示名，PATCH 仍提交 id；Dream 保持独立 | 受限选择/编辑 | 不能交叉提交字段；observe：手机若展示 stem 需改消费 label |
 | sensor / screen peek | `/sensor/realtime`、`/sensor/behavior/status`、`/settings/screen-peek`、`/perception/visual/config` | 本地采样 + 后端 opt-in | screen upload 开关 + 原生过滤 | 任何扩大采集范围的改动都需隐私回归 |
 | 危险模式 | `GET/PATCH /system/meta-mode` | 管理面功能与行为及 device-policy 常驻开关 | 无 hardware 写权；若仍传 ttl 被忽略 | danger 保持到手动关；observe：手机旧 TTL UI |

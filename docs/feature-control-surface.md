@@ -119,7 +119,8 @@ TTS provider 由管理面（admin token）经 `GET/PUT /tts-config` 管理：`tt
 表情包由管理面（admin token）经 `GET/PUT /sticker-config` 管理：`sticker.enabled` 是总开关，`sticker.trigger_prob` 是 0–1 的每轮独立触发概率。缺失该配置块时保持兼容行为（启用、0.06）；关闭时不会发送或广播表情包。TTS 的概率单独掷骰，不会抢占或缩减表情包的配置概率。GET 返回当前有效值，兼作该落盘配置的只读观测面；若已命中概率但目标情绪目录无图，服务端会记录目录路径以便排查。
 
 MCP server 由管理面（admin token）经 `GET/PATCH /settings/mcp`、`POST /settings/mcp/test`、
-`POST /settings/mcp/import`、`PATCH /settings/mcp/{name}` 和 `DELETE /settings/mcp/{name}` 管理。URL 导入必须先完成
+`POST /settings/mcp/import`、`PATCH /settings/mcp/{name}`、`POST /settings/mcp/{name}/reconnect`
+和 `DELETE /settings/mcp/{name}` 管理。URL 导入必须先完成
 `initialize + list_tools` 测试才写入配置；URL 导入可选 `streamable-http`（推荐）或 `sse`，而配置文件也可声明
 `stdio`；旧 `http` 配置继续按 `streamable-http` 处理。HTTP endpoint URL 与 headers 都支持 `${ENV_VAR}` 展开：
 服务商使用路径认证时可将敏感路径段写为 `${MCP_TOKEN}`，缺失变量会 fail-closed；管理面不回显字面 URL
@@ -131,7 +132,7 @@ MCP 不继承环境代理：loopback/localhost 地址始终直连，远程地址
 后端管理面 MCP 页的 Tool-call Console 仅通过 admin-only 的 `POST /settings/mcp/console/invoke` 与
 `POST /settings/mcp/console/confirm` 调用。路由只接受当前已连接、有效 allowlist、已注册且本地 policy 已确认的动态工具，并在服务端以工具的 JSON Schema 校验参数；绝不接受任意 MCP method 或 server command。它复用 `tool_dispatcher.execute(origin="admin_console")`、effect/确认门、每工具超时和 MCP API 调用总账，不直接触碰 session；高危调用返回一次性确认票据（120 秒、仅原工具原参数可确认）。控制台响应和总账以 `audit_id` 关联，且总账不记录 arguments 或返回正文。桌面客户端不代理 MCP 管理调用、配置或密钥。
 
-每个 MCP server 可保存命名的 `tool_presets`（每项是一组工具白名单）和当前 `active_tool_preset`。选择预设会将该工具集写回运行时实际使用的 `allow_tools` 后热重载；手工改复选框则回到“自定义”选择，避免悄悄改写命名预设。开启 `require_local_policy` 时，`allow_tools` 仍是唯一运行时白名单；管理面 URL 导入和普通白名单保存会在工具探测成功后为新白名单工具写入本地默认 `tool_policy`，保留已有显式策略。MCP annotations（`readOnlyHint` / `destructiveHint`）或名称和描述只能影响默认 effect 建议，不能授予远端权限或自动开启确认：未知语义落为 `write + require_confirm: false`。管理页逐工具“每次执行前确认”复选框显式保存 true/false；导入、普通保存和批量默认授权都只补缺失字段，不覆盖已有选择。无法从当前运行时快照补齐策略时，严格写入会被拒绝，不会注册或调用。保存时会清理已移出白名单的策略项。单 server 保存向对应 owner task 发送重载信号，失败时 API 返回 `reload_status=restart_required`，管理面提示重启。
+每个 MCP server 可保存命名的 `tool_presets`（每项是一组工具白名单）和当前 `active_tool_preset`。选择预设会将该工具集写回运行时实际使用的 `allow_tools` 后热重载；手工改复选框则回到“自定义”选择，避免悄悄改写命名预设。开启 `require_local_policy` 时，`allow_tools` 仍是唯一运行时白名单；管理面 URL 导入和普通白名单保存会在工具探测成功后为新白名单工具写入本地默认 `tool_policy`，保留已有显式策略。MCP annotations（`readOnlyHint` / `destructiveHint`）或名称和描述只能影响默认 effect 建议，不能授予远端权限或自动开启确认：未知语义落为 `write + require_confirm: false`。管理页逐工具“每次执行前确认”复选框显式保存 true/false；导入、普通保存和批量默认授权都只补缺失字段，不覆盖已有选择。无法从当前运行时快照补齐策略时，严格写入会被拒绝，不会注册或调用。保存时会清理已移出白名单的策略项。单 server 保存向对应 owner task 发送重载信号：连上返回 `reload_status=reloaded`；热重载已执行但未连上返回 `connection_failed`（附 `last_init_error`，owner task 仍在，可用「重新连接」再走同一热重载）；只有信号未能交给 owner 时才是 `restart_required`。连接失败不再叫重启。
 
 Brief 137 增加每 server 的可选 `metadata_mapping`、按远端工具精确名称保存的
 `metadata_overrides`，以及 `domain_selector`。这是 Emerald 客户端扩展，不是 MCP 官方分类标准；
@@ -491,11 +492,12 @@ profile 可读取已关联的 Reality owner 回合，返回 available/entries（
 前端工单见 cc-tasks/244-frontend-reasoning-handoff.md；按用户要求未跨仓修改。
 ## 角色心声文风（2026-09-11）
 
-current：管理面「对话与思考」通过既有 GET/POST /settings/thinking（persona）控制
-character_voice（默认 true、随 thinking.enabled 生效）。voice_preview 给出当前拼接提示、
+current：管理面「模型连接与分工」通过既有 GET/POST /settings/thinking（persona）控制
+总开关、mode、character_voice（默认 true、随 thinking.enabled 生效）、独白预算和主动消息。
+「聊天方式与思考」只留跳转。voice_preview 给出当前拼接提示、
 情绪/稳定变体和 enabled/effective/blocking_reason；output_guaranteed=false 明确其只是通用
 提示引导。native 不增加 LLM 调用，monologue 复用已有前置调用。可能影响最终回复。
-桌面只控制本地显示；手机思考展开 UI 仍 roadmap。见 [thinking-voice.md](thinking-voice.md)。
+桌面只控制本地显示，不新增设置；手机思考展开 UI 仍 roadmap。见 [thinking-voice.md](thinking-voice.md)。
 
 ## IME v2 接收预备（2026-09-11，历史条目）
 
