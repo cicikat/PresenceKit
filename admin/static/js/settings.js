@@ -635,11 +635,13 @@ async function saveEventShadowRecallSettings() {
 }
 let _mrData = { presets: {}, routing_profiles: {}, active_routing: 'default' };
 let _mrEditingPresetName = null;
-const MR_CATEGORIES = ['chat', 'intent', 'probe', 'summary', 'detect_emotion', 'consolidation', 'perform', 'monologue', 'ime_judge', 'scenario_reconcile', 'event_edge_proposer'];
+const MR_CATEGORIES = ['chat', 'intent', 'probe', 'summary', 'detect_emotion', 'consolidation', 'perform', 'monologue', 'sensor_judge', 'ime_judge', 'scenario_reconcile', 'event_edge_proposer', 'rpg_kp'];
 const MR_CATEGORY_DESC = {
   ime_judge: 'IME 活动和有价值线索判断；可选轻量模型，未配置时沿用 sensor_judge / intent / chat',
+  sensor_judge: '后台 sensor 裁决；未配置时沿用 intent / chat。短超时、零 SDK 重试。',
   scenario_reconcile: 'Scenario assistant-turn semantic stage reconciliation; conservative background call.',
   event_edge_proposer: 'Bounded background proposal of unreviewed Memory Event relations; this never changes recall or facts.',
+  rpg_kp: 'RPG Dream 中立裁决（KP）；未配置时回退 chat。30 秒超时、零 SDK 重试。',
   chat:           '角色的正式回复，用户实际看到的每一句话（建议配主力模型）',
   intent:         '判断要不要触发某个动作的轻量辅助判断（便宜模型即可）',
   probe:          '每轮先判断要不要调用工具的轻量探针（便宜模型即可）',
@@ -647,7 +649,7 @@ const MR_CATEGORY_DESC = {
   detect_emotion: '识别文字里的情绪标签（便宜模型即可）',
   consolidation:  '短期记忆整理沉淀为长期记忆等后台整理（便宜模型即可）',
   perform:        '回复文字映射成动作/表情演出指令（仅开启该功能时用到）',
-  monologue:      '说话前的内心独白/思考草稿（仅开启思考链功能时用到）',
+  monologue:      '前置独白 / 额外思考链（说话前的内心独白草稿；仅开启思考链功能时用到）',
 };
 
 function _renderActiveCharacterRoutingWarning(override) {

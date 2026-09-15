@@ -237,6 +237,26 @@ class TestRoutingFallback:
         result = self._resolve(mp, "chat")
         assert result == "only_preset"
 
+    def test_rpg_kp_falls_back_to_chat_when_unmapped(self):
+        mp = {
+            "active_routing": "default",
+            "presets": {"ds": {}, "kp": {}},
+            "routing_profiles": {
+                "default": {"chat": "ds"},
+            },
+        }
+        assert self._resolve(mp, "rpg_kp") == "ds"
+
+    def test_rpg_kp_uses_explicit_mapping(self):
+        mp = {
+            "active_routing": "default",
+            "presets": {"ds": {}, "kp": {}},
+            "routing_profiles": {
+                "default": {"chat": "ds", "rpg_kp": "kp"},
+            },
+        }
+        assert self._resolve(mp, "rpg_kp") == "kp"
+
 
 # ===========================================================================
 # 4. Backward-compat synthesis

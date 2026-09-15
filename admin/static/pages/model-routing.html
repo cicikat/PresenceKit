@@ -8,7 +8,7 @@
       <div class="vision-editor" id="vision-general-editor" hidden>
         <div class="card-header"><h3 data-i18n="status.vision.title">视觉模型配置（图片识别）</h3><button class="btn btn-primary btn-sm" data-action="saveVisionParams" data-i18n="common.save">保存</button><label class="admin-inline-026"><span data-i18n="status.vision.enable" class="admin-inline-099">启用</span><input type="checkbox" id="vision-enabled"></label></div>
         <div class="form-row"><label class="field"><span data-i18n="settings_center.api_protocol">API 协议</span><select id="vision-api-protocol"><option value="chat_completions">OpenAI Chat Completions</option><option value="responses">OpenAI Responses</option><option value="anthropic_messages">Anthropic Messages</option></select></label></div>
-        <div class="form-row"><label class="field"><span>Provider</span><select id="vision-provider"><option value="gemini">Gemini</option><option value="openai">OpenAI</option><option value="glm">GLM</option><option value="custom" data-i18n="status.vision.custom">自定义</option></select></label><label class="field"><span data-i18n="status.vision.model">模型</span><input type="text" id="vision-model-select" list="vision-model-options" placeholder="模型名"><datalist id="vision-model-options"></datalist></label><button class="btn btn-ghost btn-sm" data-action="discoverVisionModels" type="button">读取可用模型</button><span id="vision-model-discovery-status" role="status"></span></div>
+        <div class="form-row"><label class="field"><span>Provider</span><select id="vision-provider"><option value="gemini">Gemini</option><option value="openai">OpenAI</option><option value="glm">GLM</option><option value="custom" data-i18n="status.vision.custom">自定义</option></select></label><label class="field"><span data-i18n="status.vision.model">模型</span><input type="text" id="vision-model-select" list="vision-model-options" placeholder="模型名"><datalist id="vision-model-options"></datalist></label><button class="btn btn-ghost btn-sm" data-action="discoverVisionModels" type="button" data-i18n="routing.discover_models">读取可用模型</button><span id="vision-model-discovery-status" role="status"></span></div>
         <div class="form-row"><label class="field"><span>API Key</span><input type="password" id="vision-api-key" autocomplete="off" placeholder="留空则保留已有 API Key" data-i18n-placeholder="status.vision.key_placeholder"></label><label class="field"><span>Base URL</span><input type="url" id="vision-base-url"></label></div>
       </div>
 
@@ -105,7 +105,10 @@
             <div><code class="admin-inline-073">detect_emotion</code> —— 识别文字里的情绪标签，配便宜模型即可。</div>
             <div><code class="admin-inline-073">consolidation</code> —— 把短期记忆整理沉淀为长期记忆、提炼关系事实等后台整理，配便宜模型即可。</div>
             <div><code class="admin-inline-073">perform</code> —— 把回复文字映射成动作/表情演出指令（只有开启"表演意图映射"功能时才会用到）。</div>
-            <div><code class="admin-inline-073">monologue</code> —— 角色说话前的内心独白/思考草稿（只有开启"思考链"功能时才会用到）。</div>
+            <div><code class="admin-inline-073">monologue</code> <span data-i18n="routing.category.monologue">—— 前置独白 / 额外思考链：角色说话前的内心独白草稿（只有开启"思考链"功能时才会用到）。</span></div>
+            <div><code class="admin-inline-073">sensor_judge</code> <span data-i18n="routing.category.sensor_judge">—— 后台 sensor 裁决；未配置时沿用 intent / chat。短超时、零 SDK 重试。</span></div>
+            <div><code class="admin-inline-073">ime_judge</code> <span data-i18n="routing.category.ime_judge">—— IME 活动和有价值线索判断；未配置时沿用 sensor_judge / intent / chat。</span></div>
+            <div><code class="admin-inline-073">rpg_kp</code> <span data-i18n="routing.category.rpg_kp">—— RPG Dream 中立裁决（KP）；未配置时回退 chat。30 秒超时、零 SDK 重试。</span></div>
             <div><code class="admin-inline-073">scenario_reconcile</code> <span data-i18n="routing.category.scenario_reconcile">—— 场景梦回合后的语义阶段校准；只允许保守地停留或推进相邻阶段。</span></div>
           </div>
         </details>

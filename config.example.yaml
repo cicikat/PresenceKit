@@ -81,6 +81,7 @@ model_presets:
       perform:        deepseek-default   # 句级表演意图映射（仅 performance_mapping.provider=llm 时使用）
       monologue:      deepseek-default   # 前置独白轻量调用（Brief 32）；显式指到便宜 preset，
                                           # 缺省会回落 chat 键走主力贵模型
+      rpg_kp:         deepseek-default   # RPG Dream 中立裁决；缺省回落 chat
 
     claude-main:                   # 主对话走 Claude，杂活留 DS
       chat:           claude-sonnet
@@ -93,6 +94,7 @@ model_presets:
       consolidation:  deepseek-default
       perform:        deepseek-default
       monologue:      deepseek-default
+      rpg_kp:         deepseek-default
 
 # ── Legacy 扁平 llm: 块（向后兼容，无 model_presets 时生效）────────────────
 llm:

@@ -223,6 +223,8 @@ model_presets:
       consolidation:  deepseek-default
       event_edge_proposer: deepseek-default # optional bounded Memory Event candidate relations
       perform:        deepseek-default   # 句级表演意图映射（仅 performance_mapping.provider=llm 时用到）
+      monologue:      deepseek-default   # 前置独白 / 额外思考链；缺省回落 chat
+      rpg_kp:         deepseek-default   # RPG Dream 中立裁决；缺省回落 chat
 
     claude-main:                 # 主对话走 Claude，杂活留 DS 省钱
       chat:           claude-sonnet
@@ -234,6 +236,8 @@ model_presets:
       consolidation:  deepseek-default
       event_edge_proposer: deepseek-default
       perform:        deepseek-default
+      monologue:      deepseek-default
+      rpg_kp:         deepseek-default
 ```
 
 ### `api_protocol`
@@ -322,6 +326,9 @@ policy、连接、registry、角色 proficiency 和 exclude_tools 之后继续�
    `tests/test_model_presets.py::TestRoutingFallback`）。管理面板「配置」页 §1 的
    probe/summary 只读展示（`GET /character/{char_id}/model-routing` /
    `resolve_routing_info()`）读的就是这份真实解析结果，不是另一套展示专用逻辑。
+   `rpg_kp` 走普通 category → chat 回退（30 秒超时、零 SDK retry），管理面 Routing Profiles
+   与 `GET /model-presets` 的 `routing_effective` 会展示其 effective preset。`monologue`
+   是前置独白 / 额外思考链，缺省同样回落 chat。`sensor_judge` 已进入同一编辑器，不必再手改 yaml。
    少数明确声明“直接 preset 名”的配置可通过 `preset_name` 绕过这条回退链；显式 preset
    不存在时抛 `ValueError`。`practice.reviewer_preset` 使用此严格语义；常规配置推荐用
    `practice.reviewer_category: consolidation`，继续继承 per-character routing profile。
@@ -429,7 +436,7 @@ preset 侧可选字段，供 `config.thinking.mode: auto` 判断该 preset 走 n
 
 | 端点 | 说明 |
 |---|---|
-| `GET /model-presets` | 返回 presets（api_key 打码，含 `api_protocol`）、routing_profiles、active_routing；活动角色有有效固定绑定时附带 `active_character_routing`（角色、profile、实际 chat preset），供管理面提示全局切换不会影响它 |
+| `GET /model-presets` | 返回 presets（api_key 打码，含 `api_protocol`）、routing_profiles、active_routing；`routing_effective` 含 `scenario_reconcile` / `event_edge_proposer` / `rpg_kp` / `sensor_judge` / `monologue` 的解析摘要；活动角色有有效固定绑定时附带 `active_character_routing`（角色、profile、实际 chat preset），供管理面提示全局切换不会影响它 |
 | `PUT /model-presets/active-routing` | 切换 active_routing 并热重载（仅 model_presets 模式） |
 | `PUT /model-presets/presets/{name}` | 新增或更新一个 preset（合并更新；新建须提供 provider_kind；仅 model_presets 模式） |
 | `POST /model-presets/presets/{name}/rename` | 重命名 preset；同一次原子写入会更新所有 routing profile 的 category→preset 引用并热重载；目标名不能为空且不得已存在 |

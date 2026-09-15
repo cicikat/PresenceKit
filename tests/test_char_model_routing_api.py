@@ -166,3 +166,8 @@ def test_list_routing_profiles():
     assert result["active_routing"] == "default"
     by_name = {p["name"]: p["categories"] for p in result["profiles"]}
     assert by_name == {"default": {"chat": "ds"}, "claude-main": {"chat": "claude"}}
+    default_effective = next(p["effective"] for p in result["profiles"] if p["name"] == "default")
+    assert default_effective["rpg_kp"]["effective_preset"] == "ds"
+    assert default_effective["rpg_kp"]["source"] == "chat_fallback"
+    assert default_effective["sensor_judge"]["effective_preset"] == "ds"
+    assert default_effective["monologue"]["effective_preset"] == "ds"

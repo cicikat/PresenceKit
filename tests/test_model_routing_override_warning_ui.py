@@ -78,6 +78,11 @@ def test_model_presets_response_includes_the_active_character_override(monkeypat
     assert result["active_routing"] == "gpt-main"
     assert result["active_character_routing"] == {"char_id": "active-card", **_pinned_default()}
     assert result["presets"]["gpt"]["api_key"] == "***"
+    rpg = result["routing_effective"]["gpt-main"]["rpg_kp"]
+    assert rpg["effective_preset"] == "gpt"
+    assert rpg["source"] == "chat_fallback"
+    assert "sensor_judge" in result["routing_effective"]["gpt-main"]
+    assert "monologue" in result["routing_effective"]["gpt-main"]
 
 
 def test_model_routing_page_renders_the_override_warning_without_html_injection():
@@ -98,6 +103,22 @@ def test_model_routing_page_renders_the_override_warning_without_html_injection(
     assert ".innerHTML" not in warning_function
 
 
+def test_model_routing_editor_exposes_rpg_kp_sensor_judge_and_prefixed_monologue():
+    from admin_static_assets import read_admin_client_source, read_admin_page
+
+    page = read_admin_page("model-routing")
+    source = read_admin_client_source()
+    categories = source.split("const MR_CATEGORIES = [", 1)[1].split("];", 1)[0]
+    assert "'rpg_kp'" in categories
+    assert "'sensor_judge'" in categories
+    assert "'monologue'" in categories
+    assert "前置独白 / 额外思考链" in source
+    assert 'data-i18n="routing.category.rpg_kp"' in page
+    assert 'data-i18n="routing.category.sensor_judge"' in page
+    assert 'data-i18n="routing.category.monologue"' in page
+    assert "RPG Dream 中立裁决" in page
+
+
 def test_model_routing_override_copy_is_localized_in_both_languages():
     from pathlib import Path
 
@@ -105,5 +126,9 @@ def test_model_routing_override_copy_is_localized_in_both_languages():
     for key in (
         "routing.active_binding_hint",
         "dynamic.routing.active_character_override",
+        "routing.category.rpg_kp",
+        "routing.category.sensor_judge",
+        "routing.category.monologue",
+        "routing.discover_models",
     ):
         assert i18n.count(f"'{key}'") == 2

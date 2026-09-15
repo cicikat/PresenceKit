@@ -14,7 +14,7 @@ Put RPG in the existing Dream Settings page as a fourth mode beside `sandbox`,
 session status. It should not add a second script format or editors for dice,
 DC, seed, KP prompts, or hidden facts. Scenario authoring remains the existing
 Scenario management surface; RPG references its script. `rpg_kp` is a backend
-model-routing category, not a client toggle.
+model-routing category selectable in admin Routing Profiles, not a client toggle.
 
 ## Auth and Discovery
 

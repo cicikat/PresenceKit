@@ -75,10 +75,10 @@ def test_i18n_runtime_is_wired_with_persistent_chinese_default():
     core_js = (ROOT / "admin" / "static" / "js" / "core.js").read_text(encoding="utf-8")
 
     assert '<link rel="stylesheet" href="/static/style.css?v=admin-design-1">' in index
-    assert '<script src="/static/i18n.js?v=brief-251-thinking-cache-mcp-1"></script>' in index
-    assert '<script src="/static/js/core.js?v=brief-251-thinking-cache-mcp-1"></script>' in index
+    assert '<script src="/static/i18n.js?v=brief-252-rpg-kp-routing-1"></script>' in index
+    assert '<script src="/static/js/core.js?v=brief-252-rpg-kp-routing-1"></script>' in index
     assert '<script src="/static/js/dream-settings.js?v=brief-223-rpg-dream-admin-2"></script>' in index
-    assert "ADMIN_UI_FRAGMENT_VERSION = 'brief-251-thinking-cache-mcp-1'" in core_js
+    assert "ADMIN_UI_FRAGMENT_VERSION = 'brief-252-rpg-kp-routing-1'" in core_js
     assert '<script src="/static/js/observability.js?v=brief-242-settings-4"></script>' in index
     assert '<script src="/static/js/character.js?v=admin-prompt-followups-1"></script>' in index
     assert 'id="ds-private-truths"' in read_admin_page("dream-settings")

@@ -20,7 +20,7 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'brief-251-thinking-cache-mcp-1';
+const ADMIN_UI_FRAGMENT_VERSION = 'brief-252-rpg-kp-routing-1';
 
 const ADMIN_PAGE_ALIASES = Object.freeze({memory: 'observe-memory'});
 
