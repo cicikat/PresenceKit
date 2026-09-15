@@ -20,6 +20,23 @@ _INLINE = re.compile(r"<(think|thinking)>(.*?)(?:</\1>|$)", re.I | re.S)
 _META = "seq, call_id, created_at, preset, model, protocol, status, reasoning_chars"
 _DB_LOCK = threading.RLock()
 _TURN_CAPTURE = ContextVar("reasoning_turn_capture", default=None)
+_CAPTURE_PURPOSE = ContextVar("reasoning_capture_purpose", default="chat")
+_OWNER_TURN_PURPOSES = frozenset({"chat"})
+
+
+def set_capture_purpose(purpose: str | None):
+    """Tag the current LLM attempt so owner-turn binding can keep chat-only rows."""
+    value = purpose if isinstance(purpose, str) and purpose.strip() else "chat"
+    return _CAPTURE_PURPOSE.set(value.strip())
+
+
+def reset_capture_purpose(token) -> None:
+    _CAPTURE_PURPOSE.reset(token)
+
+
+def _owner_turn_purpose(purpose: str | None) -> bool:
+    value = (purpose or "").strip()
+    return not value or value in _OWNER_TURN_PURPOSES
 
 
 def associate_owner_turn(function):
@@ -55,12 +72,18 @@ def finish_turn_capture():
 
 def _bind_turn(calls, turn_id):
     with _DB_LOCK:
-        for path in {path for path, _ in calls}:
+        for path in {path for path, _, _purpose in calls}:
             if not path.exists():
                 continue
             with closing(sqlite3.connect(path, timeout=0.25)) as db, db:
-                db.executemany("UPDATE reasoning SET turn_id=? WHERE call_id=?",
-                               [(turn_id, call_id) for p, call_id in calls if p == path])
+                db.executemany(
+                    "UPDATE reasoning SET turn_id=? WHERE call_id=?",
+                    [
+                        (turn_id, call_id)
+                        for p, call_id, purpose in calls
+                        if p == path and _owner_turn_purpose(purpose)
+                    ],
+                )
 
 
 def query_turn(turn_id: str):
@@ -74,8 +97,15 @@ def query_turn(turn_id: str):
             columns = {row[1] for row in db.execute("PRAGMA table_info(reasoning)")}
             if "turn_id" not in columns:
                 return []
+            has_purpose = "purpose" in columns
+            select = f"SELECT {_META}, parts FROM reasoning WHERE turn_id=? ORDER BY seq"
+            if has_purpose:
+                select = (
+                    f"SELECT {_META}, parts FROM reasoning WHERE turn_id=? "
+                    "AND (purpose IS NULL OR purpose='' OR purpose='chat') ORDER BY seq"
+                )
             result = []
-            for row in db.execute(f"SELECT {_META}, parts FROM reasoning WHERE turn_id=? ORDER BY seq", (turn_id,)):
+            for row in db.execute(select, (turn_id,)):
                 entry = dict(row)
                 entry["parts"] = json.loads(entry["parts"])
                 result.append(entry)
@@ -95,6 +125,7 @@ class Capture:
         self.preset = mc.name
         self.model = mc.model
         self.protocol = getattr(mc, "api_protocol", "chat_completions")
+        self.purpose = _CAPTURE_PURPOSE.get() or "chat"
         self.parts = []
         self.text = []
         self.status = "interrupted"
@@ -148,8 +179,8 @@ class Capture:
             if self.parts:
                 await asyncio.to_thread(_append, self.paths, self)
                 scope = _TURN_CAPTURE.get()
-                if scope is not None and scope["active"]:
-                    scope["calls"].append((self.paths.llm_reasoning_db(), self.call_id))
+                if scope is not None and scope["active"] and _owner_turn_purpose(self.purpose):
+                    scope["calls"].append((self.paths.llm_reasoning_db(), self.call_id, self.purpose))
         except Exception as exc:
             # Never put response contents or filesystem paths in ordinary logs.
             logger.warning("[reasoning_archive] write_failed error_type=%s", type(exc).__name__)
@@ -170,15 +201,19 @@ def _append_locked(path, capture):
             created_at REAL NOT NULL, preset TEXT NOT NULL, model TEXT NOT NULL,
             protocol TEXT NOT NULL, status TEXT NOT NULL, reasoning_chars INTEGER NOT NULL,
             parts TEXT NOT NULL)""")
-        if "turn_id" not in {row[1] for row in db.execute("PRAGMA table_info(reasoning)")}:
+        columns = {row[1] for row in db.execute("PRAGMA table_info(reasoning)")}
+        if "turn_id" not in columns:
             db.execute("ALTER TABLE reasoning ADD COLUMN turn_id TEXT NOT NULL DEFAULT ''")
+        if "purpose" not in columns:
+            db.execute("ALTER TABLE reasoning ADD COLUMN purpose TEXT NOT NULL DEFAULT ''")
         db.execute("CREATE INDEX IF NOT EXISTS reasoning_turn ON reasoning(turn_id)")
         db.execute("""INSERT INTO reasoning
-            (call_id, created_at, preset, model, protocol, status, reasoning_chars, parts)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)""", (
+            (call_id, created_at, preset, model, protocol, status, reasoning_chars, parts, purpose)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""", (
                 capture.call_id, capture.created_at, capture.preset, capture.model,
                 capture.protocol, capture.status, sum(len(p["text"]) for p in capture.parts),
                 json.dumps(capture.parts, ensure_ascii=False),
+                capture.purpose or "chat",
             ))
 
 

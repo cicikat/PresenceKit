@@ -177,6 +177,28 @@ async def test_inline_stream_split_tags_never_reach_visible_reply(monkeypatch, c
     assert [p["text"] for p in parts()] == ["private A", "private B", "partial"]
 
 
+async def test_monologue_stream_does_not_join_owner_turn(monkeypatch):
+    from core import llm_client
+
+    async def chunks():
+        yield NS(choices=[NS(delta=NS(content="visible", reasoning_content="monologue private"))])
+
+    model = mc(client=NS(chat=NS(completions=NS(create=AsyncMock(return_value=chunks())))),
+               prompt_style="narrative", params={})
+    monkeypatch.setattr(llm_client, "get_model_client", lambda *a, **kw: model)
+    monkeypatch.setattr(llm_client.thinking, "maybe_apply", AsyncMock(return_value=[]))
+
+    @store.associate_owner_turn
+    async def run(message, provenance_channel):
+        async for _ in llm_client.chat_stream([], call_category="monologue"):
+            pass
+        return {"turn_id": "owner"}
+
+    await run("hi", "desktop")
+    assert store.query_turn("owner") == []
+    assert parts()[0]["text"] == "monologue private"
+
+
 async def test_tool_continuation_strips_nested_inline_reasoning(monkeypatch):
     from core import llm_client
     result = llm_protocol.NormalizedResponse(

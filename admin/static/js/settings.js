@@ -679,6 +679,7 @@ async function loadModelRouting() {
   loadImageRecognition();
   loadVisionParams();
   loadPhoneControlVisionParams();
+  if (typeof loadThinkingSettings === 'function') loadThinkingSettings();
   document.getElementById('mr-presets-body').innerHTML = '<div class="loading">加载中…</div>';
   document.getElementById('mr-profiles-body').innerHTML = '<div class="loading">加载中…</div>';
   try {
@@ -829,6 +830,10 @@ function _openPresetModal(name) {
     document.getElementById('mr-preset-api-key').value = '';
     document.getElementById('mr-preset-api-key').placeholder = p.api_key ? `已设置（${p.api_key}），留空不修改` : 'sk-...';
     document.getElementById('mr-preset-model').value = p.model || '';
+    document.getElementById('mr-preset-reasoning-native').checked = p.reasoning_native === true;
+    document.getElementById('mr-preset-reasoning-extra-body').value = p.reasoning_extra_body && typeof p.reasoning_extra_body === 'object'
+      ? JSON.stringify(p.reasoning_extra_body, null, 2)
+      : '';
     renderKeyValueEditor('mr-preset-params', p.params || {});
     document.getElementById('mr-preset-modal-title').textContent = `编辑 Preset: ${name}`;
   } else {
@@ -843,6 +848,8 @@ function _openPresetModal(name) {
     document.getElementById('mr-preset-api-key').value = '';
     document.getElementById('mr-preset-api-key').placeholder = 'sk-...';
     document.getElementById('mr-preset-model').value = '';
+    document.getElementById('mr-preset-reasoning-native').checked = false;
+    document.getElementById('mr-preset-reasoning-extra-body').value = '';
     renderKeyValueEditor('mr-preset-params', {});
     document.getElementById('mr-preset-modal-title').textContent = '新建 Preset';
   }
@@ -939,6 +946,20 @@ async function submitPresetModal() {
     const params = readKeyValueEditor('mr-preset-params');
     if (Object.keys(params).length) body.params = params;
   } catch (e) { errEl.textContent = e.message; return; }
+  body.reasoning_native = document.getElementById('mr-preset-reasoning-native').checked;
+  const extraBodyRaw = document.getElementById('mr-preset-reasoning-extra-body').value.trim();
+  if (extraBodyRaw) {
+    let extraBody;
+    try { extraBody = JSON.parse(extraBodyRaw); }
+    catch (e) { errEl.textContent = t('routing.preset.invalid_extra_body', 'reasoning_extra_body 不是合法 JSON'); return; }
+    if (!extraBody || Array.isArray(extraBody) || typeof extraBody !== 'object') {
+      errEl.textContent = t('routing.preset.invalid_extra_body', 'reasoning_extra_body 必须是 JSON 对象');
+      return;
+    }
+    body.reasoning_extra_body = extraBody;
+  } else {
+    body.reasoning_extra_body = {};
+  }
   body.provider_kind = document.getElementById('mr-preset-kind').value;
 
   try {

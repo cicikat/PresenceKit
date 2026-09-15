@@ -370,6 +370,8 @@ preset 侧可选字段，供 `config.thinking.mode: auto` 判断该 preset 走 n
   `llm_client` 在构建请求 kwargs 时原样并入 `extra_body=`（OpenAI python client 支持），不经白名单。
 - `reasoning_extra_body` 只在**主生成**（`call_category=="chat"`）且解析到 native 路线时被注入；
   `intent`/`probe`/`summary` 等杂活类别不受影响，成本不会因为开了思考而全面翻倍。
+- 管理面 Preset 编辑器可勾选「该连接有原生思考」并填写 `reasoning_extra_body` JSON；
+  思考总开关在同一页的「思考」卡片，不进桌面客户端设置。
 - 详见 `cc-tasks/32-内部思考链.md` 与 `config.thinking` 顶层配置块。
 
 ---

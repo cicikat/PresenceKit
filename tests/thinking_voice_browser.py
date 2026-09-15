@@ -36,15 +36,15 @@ def main():
         page.evaluate("""async () => {
           document.getElementById('auth-overlay').style.display='none';
           document.getElementById('app').style.display='flex';
-          await goto('conversation-settings');
+          await goto('model-routing');
         }""")
         page.get_by_text('心声引导：已启用', exact=False).wait_for()
-        box = page.locator('#conversation-form-3')
+        box = page.locator('#mr-thinking-card')
         assert box.locator('[data-field="character_voice"]').is_checked()
         box.get_by_text('查看当前拼接提示').click()
         assert '真挚、诚恳' in box.locator('pre').inner_text()
         box.locator('[data-field="character_voice"]').uncheck()
-        box.locator('button').click()
+        box.locator('[data-action="saveThinkingSettings"]').click()
         page.get_by_text('心声引导：未启用', exact=False).wait_for()
         assert state['character_voice'] is False
         assert state['mode'] == 'native'

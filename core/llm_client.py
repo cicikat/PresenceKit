@@ -20,6 +20,7 @@ from core.config_loader import get_config
 from core.error_handler import log_error
 from core.model_registry import ModelClient, get_model_client, reload_registry
 from core.llm_protocol import UpstreamResponseFormatError, create as create_protocol_response, stream_text
+from core.llm_reasoning_store import reset_capture_purpose, set_capture_purpose
 from core.prompt_layer import sanitize_messages
 from core.prompt_style import apply_prompt_style
 
@@ -58,6 +59,10 @@ def _log_empty_completion(mc, normalized, content: str) -> None:
 # The OpenAI SDK uses the ``httpx`` logger for per-request URL lines, so keep it
 # quiet unless an operator explicitly enables debug logging.
 logging.getLogger("httpx").setLevel(logging.WARNING)
+
+
+def _purpose_token(call_category: str | None):
+    return set_capture_purpose(call_category or "chat")
 
 
 def _record_api_call(
@@ -397,13 +402,17 @@ async def chat(
             request_kwargs={"api_protocol": getattr(mc, "api_protocol", "chat_completions"), **request_debug,
                             "stream": getattr(mc, "force_stream", False) is True},
         )
-        normalized = await create_protocol_response(
-            mc,
-            request_messages,
-            tools=request_tools,
-            tool_choice="auto" if request_tools else None,
-            gen_kwargs=_gen_kwargs,
-        )
+        purpose_token = _purpose_token(call_category)
+        try:
+            normalized = await create_protocol_response(
+                mc,
+                request_messages,
+                tools=request_tools,
+                tool_choice="auto" if request_tools else None,
+                gen_kwargs=_gen_kwargs,
+            )
+        finally:
+            reset_capture_purpose(purpose_token)
         if request_tools and normalized.tool_calls:
             tool_calls = [
                 {"name": call.name, "arguments": call.arguments}
@@ -553,9 +562,13 @@ async def chat_turn(
             request_kwargs={"api_protocol": getattr(mc, "api_protocol", "chat_completions"), "tool_choice": "auto", **gen_kwargs,
                             "stream": getattr(mc, "force_stream", False) is True},
         )
-        normalized = await create_protocol_response(
-            mc, prepared, tools=tools, tool_choice="auto", gen_kwargs=gen_kwargs,
-        )
+        purpose_token = _purpose_token(call_category)
+        try:
+            normalized = await create_protocol_response(
+                mc, prepared, tools=tools, tool_choice="auto", gen_kwargs=gen_kwargs,
+            )
+        finally:
+            reset_capture_purpose(purpose_token)
     except Exception as e:
         _record_api_call(
             provider=mc.provider_kind,
@@ -725,11 +738,15 @@ async def chat_stream(
         return out or None
 
     from contextlib import aclosing
-    async with aclosing(stream_text(mc, messages, gen_kwargs=_gen_kwargs)) as source:
-        async for piece in source:
-            safe = _leak_scan(think_filter.feed(piece))
-            if safe:
-                yield safe
+    purpose_token = _purpose_token(call_category)
+    try:
+        async with aclosing(stream_text(mc, messages, gen_kwargs=_gen_kwargs)) as source:
+            async for piece in source:
+                safe = _leak_scan(think_filter.feed(piece))
+                if safe:
+                    yield safe
+    finally:
+        reset_capture_purpose(purpose_token)
 
     safe = _leak_scan(think_filter.finish())
     if safe:
@@ -922,20 +939,24 @@ async def summarize_turn(
             if is_trigger_turn
             else f"用户:{user_msg}\n回复:{reply}"
         )
-        response = await create_protocol_response(
-            mc,
-            [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content},
-            ],
-            tools=None,
-            tool_choice=None,
-            gen_kwargs={
-                "max_tokens": 80 if is_group_projection else 40,
-                "temperature": 0.3,
-                "timeout": _CALL_TIMEOUTS["summary"],
-            },
-        )
+        purpose_token = _purpose_token("summary")
+        try:
+            response = await create_protocol_response(
+                mc,
+                [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_content},
+                ],
+                tools=None,
+                tool_choice=None,
+                gen_kwargs={
+                    "max_tokens": 80 if is_group_projection else 40,
+                    "temperature": 0.3,
+                    "timeout": _CALL_TIMEOUTS["summary"],
+                },
+            )
+        finally:
+            reset_capture_purpose(purpose_token)
         result = response.assistant_text.strip()
         result = result.strip('"\'"""''')
         result = result[:60 if is_group_projection else 30]
@@ -961,17 +982,21 @@ async def detect_emotion(text: str) -> str:
     )
     try:
         mc = get_model_client("detect_emotion")
-        response = await create_protocol_response(
-            mc,
-            [{"role": "user", "content": prompt}],
-            tools=None,
-            tool_choice=None,
-            gen_kwargs={
-                "max_tokens": 10,
-                "temperature": 0.0,
-                "timeout": _CALL_TIMEOUTS["detect_emotion"],
-            },
-        )
+        purpose_token = _purpose_token("detect_emotion")
+        try:
+            response = await create_protocol_response(
+                mc,
+                [{"role": "user", "content": prompt}],
+                tools=None,
+                tool_choice=None,
+                gen_kwargs={
+                    "max_tokens": 10,
+                    "temperature": 0.0,
+                    "timeout": _CALL_TIMEOUTS["detect_emotion"],
+                },
+            )
+        finally:
+            reset_capture_purpose(purpose_token)
         result = response.assistant_text.strip().lower()
         if result in _VALID_EMOTIONS:
             return result
@@ -1029,17 +1054,21 @@ async def detect_affection(text: str) -> bool:
     )
     try:
         mc = get_model_client("detect_emotion")   # 复用轻量档，无需新模型
-        resp = await create_protocol_response(
-            mc,
-            [{"role": "user", "content": prompt}],
-            tools=None,
-            tool_choice=None,
-            gen_kwargs={
-                "max_tokens": 3,
-                "temperature": 0.0,
-                "timeout": _CALL_TIMEOUTS["detect_emotion"],
-            },
-        )
+        purpose_token = _purpose_token("detect_emotion")
+        try:
+            resp = await create_protocol_response(
+                mc,
+                [{"role": "user", "content": prompt}],
+                tools=None,
+                tool_choice=None,
+                gen_kwargs={
+                    "max_tokens": 3,
+                    "temperature": 0.0,
+                    "timeout": _CALL_TIMEOUTS["detect_emotion"],
+                },
+            )
+        finally:
+            reset_capture_purpose(purpose_token)
         return resp.assistant_text.strip().lower().startswith("y")
     except Exception as e:
         log_error("llm_client.detect_affection", e)

@@ -40,6 +40,18 @@
 
 </section>
 <h2 class="vision-section-title" data-i18n="routing.text_heading">文本模型</h2>
+<section class="card" id="mr-thinking-card">
+  <div class="card-header">
+    <h3 data-i18n="settings_center.reasoning">思考</h3>
+    <button class="btn btn-ghost btn-sm" data-action="loadThinkingSettings" data-i18n="common.refresh">刷新</button>
+  </div>
+  <p class="admin-description" data-i18n="routing.thinking_hint">总开关和方式在这里改。原生思考走当前 chat 连接的网关方言；前置独白走下方 routing 的 monologue 用途。桌面客户端只负责展开显示，不新增设置。</p>
+  <div id="mr-thinking-fields"></div>
+  <div class="admin-card-actions">
+    <button class="btn btn-primary btn-sm" data-action="saveThinkingSettings" data-i18n="common.save">保存</button>
+    <p role="status" id="mr-thinking-status"></p>
+  </div>
+</section>
       <div class="card admin-inline-056" id="mr-legacy-banner">
         <p class="admin-inline-103">
           当前配置未开启 <code class="admin-inline-073">model_presets</code> 块（legacy 模式，等价合成了单个

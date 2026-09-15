@@ -843,6 +843,7 @@ async def _stream_text(
             # reasoning and the same streamed deltas.
             from core.llm_reasoning_store import Capture
             final_capture = Capture(mc)
+            final_capture.purpose = capture.purpose
             final_capture.response(getattr(event, "response", None))
             if final_capture.parts:
                 capture.parts = final_capture.parts

@@ -20,7 +20,24 @@ def test_creation_assets_are_split_setting_rows():
     assert "data-action=\"saveCreationAssets\"" in source
     assert "data-action=\"uploadCreationAvatar\"" in source
     assert "PATCH','/settings/prompt-assets'" in source
-    assert '<script src="/static/js/settings-center.js?v=admin-prompt-followups-3"></script>' in index
+    assert '<script src="/static/js/settings-center.js?v=brief-251-thinking-cache-mcp-1"></script>' in index
+
+
+def test_thinking_controls_live_on_model_routing_not_conversation_page():
+    routing = (ROOT / "admin/static/pages/model-routing.html").read_text(encoding="utf-8")
+    conversation = (ROOT / "admin/static/pages/conversation-settings.html").read_text(encoding="utf-8")
+    source = (ROOT / "admin/static/js/settings-center.js").read_text(encoding="utf-8")
+    settings = (ROOT / "admin/static/js/settings.js").read_text(encoding="utf-8")
+    assert 'id="mr-thinking-card"' in routing
+    assert 'data-action="saveThinkingSettings"' in routing
+    assert 'data-action="saveThinkingSettings"' not in conversation
+    assert "conversation-thinking-jump" in source
+    assert "thinking_moved" in source
+    assert "function loadThinkingSettings()" in source
+    assert "function saveThinkingSettings()" in source
+    assert "if (typeof loadThinkingSettings === 'function') loadThinkingSettings();" in settings
+    assert "['enabled'" in source
+    assert "['mode'" in source
 
 
 def test_feature_center_groups_category_switches():

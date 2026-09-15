@@ -155,6 +155,16 @@ function importPresetJson() {
     if (!changes.size && data.params === undefined) throw new Error();
     for (const [field,value] of changes) field.value = value;
     if (data.params !== undefined) renderKeyValueEditor('mr-preset-params',data.params);
+    if (typeof data.reasoning_native === 'boolean') document.getElementById('mr-preset-reasoning-native').checked = data.reasoning_native;
+    if (data.reasoning_extra_body !== undefined) {
+      if (data.reasoning_extra_body && typeof data.reasoning_extra_body === 'object' && !Array.isArray(data.reasoning_extra_body)) {
+        document.getElementById('mr-preset-reasoning-extra-body').value = JSON.stringify(data.reasoning_extra_body, null, 2);
+      } else if (data.reasoning_extra_body === null || data.reasoning_extra_body === '') {
+        document.getElementById('mr-preset-reasoning-extra-body').value = '';
+      } else {
+        throw new Error();
+      }
+    }
     bindPageActions(document.getElementById('mr-preset-params'));
     resetModelDiscovery(); input.value = '';
     result.textContent = designText('已填入表单，请核对后保存。未识别字段不会导入。','Form filled. Review and save; unrecognized fields are ignored.');

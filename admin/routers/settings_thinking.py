@@ -3,7 +3,7 @@
 GET  /settings/thinking   — 读取当前 thinking 配置 + 只读的 auto 模式判定展示字段
 POST /settings/thinking   — 部分更新 enabled / mode / apply_to_proactive 并热重载
 
-配对前端实现：PresenceKit-desktop 的思考开关设置。
+管理面入口在「模型连接与分工」；GET/POST /settings/thinking 仍是 persona API。桌面只展开显示，不新增设置。
 """
 
 from pathlib import Path

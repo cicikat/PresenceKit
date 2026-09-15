@@ -35,7 +35,10 @@ monologue 路线复用同一拼接器，并把当轮已构建的 `2_char_desc` �
 
 ## 控制面与跨端
 
-管理面「对话与思考」增加“角色心声文风（通用提示引导）”，支持关闭，预览当前拼接提示。
+管理面入口在「模型连接与分工」：总开关、mode、心声、独白预算和主动消息开关都在该页编辑。
+「聊天方式与思考」只保留跳转，不删 `GET/POST /settings/thinking`。Preset 编辑器暴露
+`reasoning_native` 与 `reasoning_extra_body`。桌面客户端只负责展开显示，不新增设置。
+回合思考读取只关联主聊天 `purpose=chat` 的归档；独白/探针/摘要的 reasoning 不进气泡。
 `GET/POST /settings/thinking` 仍使用 persona scope，增加 character_voice；GET 的 voice_preview
 返回 register/emotion/variant/rotation_hours/prompt、enabled/effective/blocking_reason，以及
 control=prompt_guidance/output_guaranteed=false。effective 表示提示发送条件满足，不表示
