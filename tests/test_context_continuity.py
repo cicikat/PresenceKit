@@ -112,7 +112,10 @@ def test_tool_results_survive_silence_are_bounded_and_do_not_leak_raw(configured
         continuity.retain_result('owner-test', 'char-test', 'weather', ToolResult(raw_data='SECRET', safe_summary=f'observed rain {i}'))
     restored = continuity.messages('owner-test', 'char-test')
     assert len(restored) == 3 and 'observed rain 19' in str(restored)
-    assert 'SECRET' not in str(restored) and '历史结果' in str(restored)
+    assert 'SECRET' not in str(restored)
+    assert '你被唤醒时调用的工具 weather' in str(restored)
+    assert '<<<TOOL_DATA_START>>>' not in str(restored)
+    assert '你无发言' in str(restored)
     assert continuity.messages('owner-test', 'other-char') == []
     assert len(continuity.observability('owner-test', 'char-test')['tool_results']) == 12
     assert continuity.messages('owner-test', 'char-test', now=time.time() + 25 * 3600) == []
@@ -125,8 +128,12 @@ def test_screen_success_only_and_revocation(configured, monkeypatch):
     monkeypatch.setattr(screen_observation, 'enabled', lambda: True)
     continuity.retain_result('owner-test', 'char-test', 'observe_user_screen', '{"status":"sensitive"}')
     assert continuity.messages('owner-test', 'char-test') == []
-    continuity.retain_result('owner-test', 'char-test', 'observe_user_screen', '{"status":"ok","caption":"spreadsheet"}')
-    assert 'spreadsheet' in str(continuity.messages('owner-test', 'char-test'))
+    continuity.retain_result('owner-test', 'char-test', 'observe_user_screen',
+                             '{"status":"ok","device":"desktop","caption":"spreadsheet"}')
+    projected = str(continuity.messages('owner-test', 'char-test'))
+    assert 'spreadsheet' in projected
+    assert '电脑上' in projected
+    assert '你无发言' in projected
     monkeypatch.setattr(screen_observation, 'enabled', lambda: False)
     assert continuity.messages('owner-test', 'char-test') == []
 
@@ -200,6 +207,9 @@ async def test_real_dispatcher_silent_autonomy_keeps_screen_result(configured, m
     later = continuity.messages('owner-test', 'char-test')
     assert not pending(later)
     assert 'fixture spreadsheet' in str(later)
+    assert 'observe_user_screen' in str(later)
+    assert '你无发言' in str(later)
+    assert '<<<TOOL_DATA_START>>>' not in str(later)
     assert_readable_material(later, 'lunch')
 
 
@@ -236,3 +246,21 @@ def test_material_summary_omits_internal_fields():
     })
     assert 'breakfast' in life and 'tea' in life and 'diet' in life
     assert 'record-hidden' not in life and 'revision' not in life
+
+
+def test_tool_result_projection_includes_device_and_talk_mark(configured, monkeypatch):
+    from core.perception import screen_observation
+    from core.tools.tool_result import ToolResult
+    monkeypatch.setattr(screen_observation, 'enabled', lambda: True)
+    continuity.retain_result(
+        'owner-test', 'char-test', 'observe_user_screen',
+        ToolResult(raw_data='SECRET', safe_summary='{"status":"ok","device":"mobile","caption":"chat app"}'),
+    )
+    continuity.mark_run_talk('owner-test', 'char-test', started_at=time.time() - 5, talk_sent=True)
+    text = str(continuity.messages('owner-test', 'char-test'))
+    assert 'observe_user_screen' in text
+    assert '手机上' in text
+    assert 'chat app' in text
+    assert '你有发言' in text
+    assert '<<<TOOL_DATA_START>>>' not in text
+    assert 'SECRET' not in text

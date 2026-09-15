@@ -696,6 +696,8 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
         logger.warning('[autonomy] evaluation failed: %s', type(exc).__name__)
     finally:
         _set_prompt_snapshot(run, messages)
+        from core.context_continuity import mark_run_talk
+        mark_run_talk(job.uid, job.char_id, started_at=run.started_at, talk_sent=run.talk_sent)
     return _finish(run)
 
 

@@ -45,9 +45,14 @@ def _db(uid, char_id, write=False):
         if write:
             db.executescript('''
                 CREATE TABLE IF NOT EXISTS receipts(kind TEXT, id TEXT, revision TEXT, seen_at REAL, PRIMARY KEY(kind,id));
-                CREATE TABLE IF NOT EXISTS results(id INTEGER PRIMARY KEY, tool TEXT, ts REAL, content TEXT);
+                CREATE TABLE IF NOT EXISTS results(id INTEGER PRIMARY KEY, tool TEXT, ts REAL, content TEXT, device TEXT, talk_sent INTEGER);
             ''')
             db.execute('BEGIN IMMEDIATE')
+            columns = {row[1] for row in db.execute('PRAGMA table_info(results)')}
+            if 'device' not in columns:
+                db.execute('ALTER TABLE results ADD COLUMN device TEXT')
+            if 'talk_sent' not in columns:
+                db.execute('ALTER TABLE results ADD COLUMN talk_sent INTEGER')
             db.execute('DELETE FROM receipts WHERE seen_at<?', (time.time() - 30 * WINDOW,))
             db.execute('DELETE FROM results WHERE ts<?', (time.time() - WINDOW,))
         yield db
@@ -197,24 +202,70 @@ def retain_result(uid, char_id, tool, result):
     if tool in {'peek_screen_content', 'read_life_records'} or (info.get('trace_result') is False and tool != 'observe_user_screen'):
         return
     safe = to_tool_result(result).safe_summary[:2000]
+    payload = None
+    try:
+        payload = json.loads(safe)
+    except (ValueError, TypeError, AttributeError):
+        payload = None
     if tool == 'observe_user_screen':
-        try:
-            if json.loads(safe).get('status') != 'ok':
-                return
-        except (ValueError, AttributeError):
+        if not isinstance(payload, dict) or payload.get('status') != 'ok':
             return
+    device = payload.get('device') if isinstance(payload, dict) else None
+    if device not in {'desktop', 'mobile'}:
+        device = None
     try:
         with _db(uid, char_id, True) as db:
-            db.execute('INSERT INTO results(tool,ts,content) VALUES(?,?,?)', (tool, time.time(), safe))
+            db.execute('INSERT INTO results(tool,ts,content,device,talk_sent) VALUES(?,?,?,?,?)',
+                       (tool, time.time(), safe, device, None))
             db.execute('DELETE FROM results WHERE id NOT IN (SELECT id FROM results ORDER BY id DESC LIMIT 12)')
     except Exception:
         logger.warning('[context_continuity] result unavailable', exc_info=True)
 
 
+def mark_run_talk(uid, char_id, *, started_at, talk_sent):
+    """Write talk_sent onto this autonomy run's retained tool results."""
+    if not _owner(uid) or not char_id:
+        return
+    try:
+        started = float(started_at or 0)
+    except (TypeError, ValueError):
+        return
+    try:
+        with _db(uid, char_id, True) as db:
+            db.execute(
+                'UPDATE results SET talk_sent=? WHERE ts>=? AND talk_sent IS NULL',
+                (1 if talk_sent else 0, started),
+            )
+    except Exception:
+        logger.warning('[context_continuity] talk mark unavailable', exc_info=True)
+
+
+def _device_phrase(device, pronoun):
+    if device == 'desktop':
+        return f'在{pronoun}的电脑上'
+    if device == 'mobile':
+        return f'在{pronoun}的手机上'
+    return ''
+
+
+def _tool_result_projection(row, pronoun):
+    when = datetime.fromtimestamp(row['ts']).strftime('%H:%M')
+    keys = set(row.keys())
+    device = row['device'] if 'device' in keys else None
+    talk_sent = row['talk_sent'] if 'talk_sent' in keys else None
+    phrase = _device_phrase(device, pronoun)
+    spoken = '有' if talk_sent not in (None, 0) else '无'
+    location = f' {phrase}' if phrase else ''
+    return (
+        f'这是 {when} 你被唤醒时调用的工具 {row["tool"]}{location}的结果：'
+        f'{row["content"][:1400]}。你{spoken}发言。'
+    )
+
+
 def result_messages(uid, char_id, *, now=None):
     from core.config_loader import get_config
     from core.tool_dispatcher import _is_tool_enabled
-    from core.tools.tool_result import frame_tool_message
+    from core.memory.user_facts import get_user_pronoun
     from core.self_management.policy import tool_allowed
     if not _owner(uid) or not char_id:
         return []
@@ -223,6 +274,7 @@ def result_messages(uid, char_id, *, now=None):
     now = time.time() if now is None else now
     with _db(uid, char_id) as db:
         rows = list(db.execute('SELECT * FROM results WHERE ts>? ORDER BY id DESC LIMIT 3', (now - WINDOW,))) if db else []
+    pronoun = get_user_pronoun(uid)
     result = []
     for row in rows:
         if not _is_tool_enabled(row['tool']) or not tool_allowed(uid, char_id, row['tool']):
@@ -232,8 +284,7 @@ def result_messages(uid, char_id, *, now=None):
             if not enabled():
                 continue
         result.append({'role': 'system', '_layer': '10.8_recent_tool_results', '_drop_priority': 85,
-                       'content': f"此前主动行动的工具结果：{row['tool']}。即使当时未发言，此结果也已取得；不是当前状态，也不是用户说过的话。可据此接续，只有需要最新状态时才重新获取。\n" +
-                           frame_tool_message(row['content'][:1400], generated_at=row['ts'], validity='historical_reference')})
+                       'content': _tool_result_projection(row, pronoun)})
     return result
 
 
