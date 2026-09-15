@@ -18,6 +18,16 @@ from core.config_loader import get_config
 logger = logging.getLogger(__name__)
 
 _STATIC_DIR = Path(__file__).parent / "static"
+_ADMIN_NO_CACHE = "no-cache, must-revalidate"
+
+
+class _NoCacheStaticFiles(StaticFiles):
+    """Admin UI must revalidate on ordinary refresh; agents bump ?v= for content changes."""
+
+    async def get_response(self, path: str, scope):
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = _ADMIN_NO_CACHE
+        return response
 
 # Windows 的注册表可能把 .js 映射成 text/plain，现代浏览器会拒绝执行。
 # 在挂载 StaticFiles 前显式覆盖严格/非严格 MIME 映射。
@@ -164,14 +174,14 @@ async def ws_device_endpoint(websocket: _WebSocket):
 
 # 挂载静态资源
 if _STATIC_DIR.exists():
-    app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
+    app.mount("/static", _NoCacheStaticFiles(directory=str(_STATIC_DIR)), name="static")
 
 
 @app.get("/", include_in_schema=False)
 async def root():
     index_file = _STATIC_DIR / "index.html"
     if index_file.exists():
-        return FileResponse(str(index_file))
+        return FileResponse(str(index_file), headers={"Cache-Control": _ADMIN_NO_CACHE})
     return {"status": "ok", "service": "Emerald-Presence Admin", "ui": "index.html not found"}
 
 

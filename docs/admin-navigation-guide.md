@@ -20,6 +20,8 @@
 
 新增页面时同步侧边栏、文档目录、双语词条和 loader。修改静态资源必须更新
 `index.html` 的对应版本；fragment 同步更新 `ADMIN_UI_FRAGMENT_VERSION`。
+`/` 与 `/static/*` 的 `Cache-Control` 是 `no-cache, must-revalidate`：普通刷新会向服务器再验证，
+不是面板自己会变。改了 JS/CSS/fragment 仍必须 bump `?v=`，否则对照的是再验证后仍命中的旧内容。
 `test_admin_navigation_ui.py` 校验导航与文档覆盖所有当前页面，避免遗漏细入口。
 
 浏览器回归：启动或复用本地 admin 服务，安装 Playwright 后运行

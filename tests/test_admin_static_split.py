@@ -105,6 +105,18 @@ def test_page_fragments_are_served_as_static_html():
         assert response.headers["content-type"].startswith("text/html")
 
 
+def test_admin_shell_and_static_assets_revalidate_on_refresh():
+    from fastapi.testclient import TestClient
+
+    from admin.admin_server import app
+
+    client = TestClient(app)
+    for path in ("/", "/static/js/core.js", "/static/pages/model-routing.html"):
+        response = client.get(path)
+        assert response.status_code == 200
+        assert response.headers["cache-control"] == "no-cache, must-revalidate"
+
+
 def test_split_pages_have_no_inline_style_or_onclick_and_actions_are_bound():
     index = (STATIC / "index.html").read_text(encoding="utf-8")
     html = "\n".join([index, *(path.read_text(encoding="utf-8") for path in PAGES.glob("*.html"))])
