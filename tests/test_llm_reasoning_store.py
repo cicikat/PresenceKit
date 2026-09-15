@@ -199,6 +199,27 @@ async def test_monologue_stream_does_not_join_owner_turn(monkeypatch):
     assert parts()[0]["text"] == "monologue private"
 
 
+async def test_prefixed_monologue_joins_owner_turn_and_sorts():
+    @store.associate_owner_turn
+    async def run(message, provenance_channel):
+        native = store.Capture(mc())
+        native.add("reasoning_content", "native later")
+        await native.save()
+        await store.archive_text("monologue", "inner voice")
+        return {"turn_id": "owner"}
+
+    await run("hi", "desktop")
+    preferred = store.query_turn("owner")
+    assert [entry["parts"][0]["text"] for entry in preferred] == ["inner voice", "native later"]
+    native_first = store.query_turn("owner", prefer_monologue=False)
+    assert [entry["parts"][0]["text"] for entry in native_first] == ["native later", "inner voice"]
+
+
+async def test_empty_monologue_is_not_archived():
+    await store.archive_text("monologue", "   ")
+    assert store.query() == []
+
+
 async def test_tool_continuation_strips_nested_inline_reasoning(monkeypatch):
     from core import llm_client
     result = llm_protocol.NormalizedResponse(

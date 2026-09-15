@@ -112,16 +112,19 @@ const plain = value => JSON.parse(JSON.stringify(value));
   assert.ok(featureRoot.innerHTML.includes('危险模式'));
   assert.equal((featureRoot.innerHTML.match(/data-center-source="flag"/g) || []).length, 5);
   const thinkingHtml = context.thinkingFieldMarkup({
-    enabled:true, character_voice:false, mode:'auto', apply_to_proactive:true, monologue_max_tokens:256,
+    enabled:true, character_voice:false, mode:'auto', apply_to_proactive:true,
+    display_prefer_monologue:true, monologue_max_tokens:256,
   });
   assert.ok(thinkingHtml.includes('class="admin-toolbar"'));
   assert.ok(thinkingHtml.includes('class="checkbox-row"'));
   assert.ok(thinkingHtml.includes('data-field="enabled"'));
   assert.ok(thinkingHtml.includes('data-field="character_voice"'));
   assert.ok(thinkingHtml.includes('data-field="apply_to_proactive"'));
+  assert.ok(thinkingHtml.includes('data-field="display_prefer_monologue"'));
   assert.ok(thinkingHtml.includes('data-field="mode"'));
   assert.ok(thinkingHtml.includes('data-field="monologue_max_tokens"'));
   assert.ok(thinkingHtml.indexOf('data-field="apply_to_proactive"') < thinkingHtml.indexOf('data-field="mode"'));
+  assert.ok(thinkingHtml.indexOf('data-field="display_prefer_monologue"') < thinkingHtml.indexOf('data-field="mode"'));
   assert.ok(thinkingHtml.indexOf('class="admin-toolbar"') < thinkingHtml.indexOf('class="field"'));
   const controlsHtml = context.centerAutonomyControls({enabled:true,daily_evaluation_budget:48,min_interval_seconds:900});
   assert.ok(controlsHtml.includes('data-autonomy-field="daily_evaluation_budget"'));

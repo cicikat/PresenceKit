@@ -35,7 +35,10 @@ async def chat_turn_reasoning(turn_id: str, _auth=Depends(require_scopes("memory
     if not turn_id.strip() or len(turn_id) > 128:
         raise HTTPException(422, "无效的回合编号")
     try:
-        entries = await asyncio.to_thread(query_turn, turn_id)
+        from core.thinking import display_prefer_monologue
+        entries = await asyncio.to_thread(
+            query_turn, turn_id, prefer_monologue=display_prefer_monologue()
+        )
     except Exception:
         raise HTTPException(503, "思考存储暂时不可读取") from None
     return {"turn_id": turn_id, "entries": entries, "available": bool(entries)}

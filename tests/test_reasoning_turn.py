@@ -19,6 +19,7 @@ async def test_monologue_and_probe_reasoning_are_not_bound_to_owner_turns():
         token = store.set_capture_purpose("monologue")
         try:
             await capture("monologue-private")
+            await store.archive_text("monologue", "inner voice")
         finally:
             store.reset_capture_purpose(token)
         token = store.set_capture_purpose("probe")
@@ -31,10 +32,10 @@ async def test_monologue_and_probe_reasoning_are_not_bound_to_owner_turns():
 
     await run("owner", "desktop")
     bound = store.query_turn("owner")
-    assert [entry["parts"][0]["text"] for entry in bound] == ["owner"]
-    assert all(entry.get("purpose", "chat") in {"", "chat"} or True for entry in bound)
+    assert [entry["parts"][0]["text"] for entry in bound] == ["inner voice", "owner"]
+    assert {entry.get("purpose") or "chat" for entry in bound} <= {"chat", "monologue"}
     archived = [row["call_id"] for row in store.query()]
-    assert len(archived) == 3
+    assert len(archived) == 4
 
 
 async def test_legacy_rows_without_purpose_still_join_owner_turns(sandbox):
@@ -111,3 +112,32 @@ def test_client_reader_scope(monkeypatch):
     assert response.status_code == 200
     assert response.json()['available'] is False
     assert client.get('/observability/llm-reasoning', headers={'Authorization': 'Bearer memory.read'}).status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_chat_turn_reasoning_prefers_monologue_by_display_setting(monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from admin import auth
+    from admin.routers.observability import router
+    from core import thinking
+
+    @store.associate_owner_turn
+    async def run(message, provenance_channel):
+        native = store.Capture(SimpleNamespace(name='example', model='example', api_protocol='chat_completions'))
+        native.add('thinking', 'native later')
+        await native.save()
+        await store.archive_text('monologue', 'inner voice')
+        return {'turn_id': 'owner'}
+
+    await run('hi', 'desktop')
+    monkeypatch.setattr(auth, 'resolve_token', lambda token: auth.TokenInfo('fixture', frozenset({token})))
+    app = FastAPI()
+    app.include_router(router)
+    client = TestClient(app)
+    monkeypatch.setattr(thinking, 'display_prefer_monologue', lambda: True)
+    preferred = client.get('/chat/turns/owner/reasoning', headers={'Authorization': 'Bearer memory.read'})
+    assert [entry['parts'][0]['text'] for entry in preferred.json()['entries']] == ['inner voice', 'native later']
+    monkeypatch.setattr(thinking, 'display_prefer_monologue', lambda: False)
+    native_first = client.get('/chat/turns/owner/reasoning', headers={'Authorization': 'Bearer memory.read'})
+    assert [entry['parts'][0]['text'] for entry in native_first.json()['entries']] == ['native later', 'inner voice']

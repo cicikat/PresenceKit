@@ -1,5 +1,11 @@
 # docs/known-issues.md — 已知问题与技术债
 
+## 前置独白优先出现在思考气泡（2026-09-16）
+
+current：独白正文以 source=monologue 归档并可绑定 owner turn；GET /chat/turns/{turn_id}/reasoning 默认独白在前，
+display_prefer_monologue=false 时原生在前。这是展示策略，不改 thinking.mode。探针/摘要和独白 helper 自身的 native CoT 仍不进气泡。
+observe：桌面展开气泡需运行中后端加载新代码后，真实独白回合仍待看；手机思考 UI 仍为 roadmap。
+
 ## Chat Completions 工具续轮 400（2026-09-15）
 
 current：复杂 tool 请求被中转以模糊 upstream_error 拒绝时，协议出口已改为白名单重建

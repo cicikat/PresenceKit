@@ -10,7 +10,8 @@ from core.thinking_voice import compose
 
 def main():
     state = {'enabled': True, 'character_voice': True, 'mode': 'native',
-             'monologue_max_tokens': 200, 'apply_to_proactive': False}
+             'monologue_max_tokens': 200, 'apply_to_proactive': False,
+             'display_prefer_monologue': True}
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch()
         page = browser.new_page()

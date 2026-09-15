@@ -89,6 +89,11 @@ async def test_monologue_receives_frozen_persona_and_only_returns_prose(monkeypa
     assert result == '我有点舍不得。'
     assert 'frozen quiet personality' in captured[0]['content']
     assert '我：earlier reply' in captured[1]['content']
+    from core import llm_reasoning_store as store
+    archived = store.query()
+    assert len(archived) == 1
+    detail = store.query(call_id=archived[0]['call_id'])
+    assert detail['parts'] == [{'source': 'monologue', 'text': '我有点舍不得。'}]
 
 
 @pytest.mark.asyncio
@@ -112,11 +117,13 @@ async def test_settings_expose_effective_preview_and_toggle(monkeypatch, tmp_pat
     monkeypatch.setattr(voice, 'get_user_display_name', lambda: '')
     state = await routes.get_thinking()
     assert state['character_voice'] is True
+    assert state['display_prefer_monologue'] is True
     assert state['voice_preview']['effective'] is False
-    await routes.update_thinking(routes.ThinkingUpdate(enabled=True, character_voice=False))
+    await routes.update_thinking(routes.ThinkingUpdate(enabled=True, character_voice=False, display_prefer_monologue=False))
     state = await routes.get_thinking()
     assert state['voice_preview']['blocking_reason'] == 'voice_disabled'
     await routes.update_thinking(routes.ThinkingUpdate(character_voice=True))
     state = await routes.get_thinking()
     assert state['voice_preview']['effective'] is True
     assert state['voice_preview']['output_guaranteed'] is False
+    assert state['display_prefer_monologue'] is False

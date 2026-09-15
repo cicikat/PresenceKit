@@ -358,6 +358,7 @@ function thinkingFieldSpecs() { return [
   ['character_voice',t('settings_center.character_voice',"角色心声文风（通用提示引导）"),'boolean'],
   ['mode',t('settings_center.method',"方式"),['auto','native','monologue'],[t('settings_center.automatic',"自动"),t('settings_center.native_reasoning',"原生思考"),t('settings_center.prefixed_monologue',"前置独白")]],
   ['apply_to_proactive',t('settings_center.apply_to_proactive_messages',"应用于主动消息"),'boolean'],
+  ['display_prefer_monologue',t('settings_center.display_prefer_monologue',"气泡优先显示前置独白"),'boolean'],
   ['monologue_max_tokens',t('settings_center.monologue_token_budget',"独白预算"),'number',32,2000],
 ]; }
 function thinkingFieldMarkup(data) {

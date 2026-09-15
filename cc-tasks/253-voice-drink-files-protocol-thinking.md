@@ -57,11 +57,11 @@
 
 ### 要做
 
-- [ ] 独白生成成功后，归档为 reasoning part `source=monologue`，并**允许绑定 owner `turn_id`**（扩 `_OWNER_TURN_PURPOSES` / `query_turn`，不要再把 monologue 从气泡查询里滤掉）。
-- [ ] `GET /chat/turns/{turn_id}/reasoning` 返回顺序：有独白则独白条目在前，原生思考随后；无独白则与现在一样只出 native。
-- [ ] `GET/POST /settings/thinking` 增加只影响展示的 `display_prefer_monologue`（默认 true）。false 时原生在前、独白在后。不改变 `mode` 的生成选择。
-- [ ] 管理面思考卡补一句说明：「前置独白更容易用 prompt 控文风；气泡优先显示独白，没有再用原生思考。」桌面继续消费原 reasoning API，不新增 IPC 字段。
-- [ ] 测试：绑定、排序、开关、未开启思考时不写空独白。
+- [x] 独白生成成功后，归档为 reasoning part `source=monologue`，并**允许绑定 owner `turn_id`**（扩 `_OWNER_TURN_PURPOSES` / `query_turn`，不要再把 monologue 从气泡查询里滤掉）。
+- [x] `GET /chat/turns/{turn_id}/reasoning` 返回顺序：有独白则独白条目在前，原生思考随后；无独白则与现在一样只出 native。
+- [x] `GET/POST /settings/thinking` 增加只影响展示的 `display_prefer_monologue`（默认 true）。false 时原生在前、独白在后。不改变 `mode` 的生成选择。
+- [x] 管理面思考卡补一句说明：「前置独白更容易用 prompt 控文风；气泡优先显示独白，没有再用原生思考。」桌面继续消费原 reasoning API，不新增 IPC 字段。
+- [x] 测试：绑定、排序、开关、未开启思考时不写空独白。
 
 ### 验收
 

@@ -12,6 +12,7 @@ import uuid
 from contextlib import closing
 from contextvars import ContextVar
 from functools import wraps
+from types import SimpleNamespace
 
 from core.sandbox import get_paths
 
@@ -21,11 +22,11 @@ _META = "seq, call_id, created_at, preset, model, protocol, status, reasoning_ch
 _DB_LOCK = threading.RLock()
 _TURN_CAPTURE = ContextVar("reasoning_turn_capture", default=None)
 _CAPTURE_PURPOSE = ContextVar("reasoning_capture_purpose", default="chat")
-_OWNER_TURN_PURPOSES = frozenset({"chat"})
+_OWNER_TURN_PURPOSES = frozenset({"chat", "monologue"})
 
 
 def set_capture_purpose(purpose: str | None):
-    """Tag the current LLM attempt so owner-turn binding can keep chat-only rows."""
+    """Tag the current LLM attempt so owner-turn binding can keep chat/monologue rows."""
     value = purpose if isinstance(purpose, str) and purpose.strip() else "chat"
     return _CAPTURE_PURPOSE.set(value.strip())
 
@@ -37,6 +38,19 @@ def reset_capture_purpose(token) -> None:
 def _owner_turn_purpose(purpose: str | None) -> bool:
     value = (purpose or "").strip()
     return not value or value in _OWNER_TURN_PURPOSES
+
+
+def _entry_is_monologue(parts) -> bool:
+    return any(isinstance(part, dict) and part.get("source") == "monologue" for part in (parts or []))
+
+
+def _bindable_owner_capture(capture) -> bool:
+    """Bind chat reasoning plus prefixed-monologue text; skip helper-call CoT."""
+    if not _owner_turn_purpose(capture.purpose):
+        return False
+    if (capture.purpose or "").strip() == "monologue":
+        return _entry_is_monologue(capture.parts)
+    return True
 
 
 def associate_owner_turn(function):
@@ -86,8 +100,14 @@ def _bind_turn(calls, turn_id):
                 )
 
 
-def query_turn(turn_id: str):
-    """Only linked owner calls; historical/unlinked global calls stay admin-only."""
+def query_turn(turn_id: str, *, prefer_monologue: bool = True):
+    """Only linked owner calls; historical/unlinked global calls stay admin-only.
+
+    Prefixed monologue (source=monologue) is included. Helper-call native CoT
+    stored under purpose=monologue without that source stays admin-only.
+    Display order is a presentation policy: monologue first by default, native
+    first when prefer_monologue is false.
+    """
     with _DB_LOCK:
         path = get_paths().llm_reasoning_db()
         if not path.exists():
@@ -102,13 +122,23 @@ def query_turn(turn_id: str):
             if has_purpose:
                 select = (
                     f"SELECT {_META}, parts FROM reasoning WHERE turn_id=? "
-                    "AND (purpose IS NULL OR purpose='' OR purpose='chat') ORDER BY seq"
+                    "AND (purpose IS NULL OR purpose='' OR purpose='chat' "
+                    "OR purpose='monologue') ORDER BY seq"
                 )
             result = []
             for row in db.execute(select, (turn_id,)):
                 entry = dict(row)
                 entry["parts"] = json.loads(entry["parts"])
+                purpose = (entry.get("purpose") or "").strip()
+                if purpose == "monologue" and not _entry_is_monologue(entry["parts"]):
+                    continue
                 result.append(entry)
+            result.sort(
+                key=lambda entry: (
+                    0 if _entry_is_monologue(entry.get("parts")) == bool(prefer_monologue) else 1,
+                    entry.get("seq") or 0,
+                )
+            )
             return result
 
 
@@ -179,11 +209,32 @@ class Capture:
             if self.parts:
                 await asyncio.to_thread(_append, self.paths, self)
                 scope = _TURN_CAPTURE.get()
-                if scope is not None and scope["active"] and _owner_turn_purpose(self.purpose):
+                if scope is not None and scope["active"] and _bindable_owner_capture(self):
                     scope["calls"].append((self.paths.llm_reasoning_db(), self.call_id, self.purpose))
         except Exception as exc:
             # Never put response contents or filesystem paths in ordinary logs.
             logger.warning("[reasoning_archive] write_failed error_type=%s", type(exc).__name__)
+
+
+async def archive_text(
+    source: str,
+    text: str,
+    *,
+    purpose: str = "monologue",
+    preset: str = "monologue",
+    model: str = "",
+    protocol: str = "internal",
+):
+    """Persist a display-only reasoning part (prefixed monologue). Empty text is a no-op."""
+    if not isinstance(text, str) or not text.strip():
+        return
+    capture = Capture(
+        SimpleNamespace(name=preset, model=model or preset, api_protocol=protocol)
+    )
+    capture.purpose = purpose
+    capture.add(source, text.strip())
+    capture.status = "completed"
+    await capture.save()
 
 
 def _append(paths, capture):

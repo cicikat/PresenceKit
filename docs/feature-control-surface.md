@@ -500,9 +500,10 @@ profile 可读取已关联的 Reality owner 回合，返回 available/entries（
 ## 角色心声文风（2026-09-11）
 
 current：管理面「模型连接与分工」通过既有 GET/POST /settings/thinking（persona）控制
-总开关、mode、character_voice（默认 true、随 thinking.enabled 生效）、独白预算和主动消息。
-开关（生成思考 / 角色心声 / 应用于主动消息）用 `admin-toolbar` + `checkbox-row` 分组，
-方式与独白预算单独一组 `field`，仍一次保存，不逐项 PATCH。
+总开关、mode、character_voice（默认 true、随 thinking.enabled 生效）、独白预算、主动消息
+和 display_prefer_monologue（默认 true，只改气泡顺序：有独白先显示独白）。
+开关（生成思考 / 角色心声 / 应用于主动消息 / 气泡优先显示前置独白）用 `admin-toolbar` +
+`checkbox-row` 分组，方式与独白预算单独一组 `field`，仍一次保存，不逐项 PATCH。
 「聊天方式与思考」只留跳转。voice_preview 给出当前拼接提示、
 情绪/稳定变体和 enabled/effective/blocking_reason；output_guaranteed=false 明确其只是通用
 提示引导。native 不增加 LLM 调用，monologue 复用已有前置调用。可能影响最终回复。

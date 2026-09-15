@@ -1,7 +1,7 @@
 """
 思考开关设置接口（Brief 32 §5）
 GET  /settings/thinking   — 读取当前 thinking 配置 + 只读的 auto 模式判定展示字段
-POST /settings/thinking   — 部分更新 enabled / mode / apply_to_proactive 并热重载
+POST /settings/thinking   — 部分更新 enabled / mode / apply_to_proactive / display_prefer_monologue 并热重载
 
 管理面入口在「模型连接与分工」；GET/POST /settings/thinking 仍是 persona API。桌面只展开显示，不新增设置。
 """
@@ -27,6 +27,7 @@ _DEFAULTS = {
     "monologue_max_tokens": 200,
     "apply_to_proactive": False,
     "character_voice": True,
+    "display_prefer_monologue": True,
 }
 
 
@@ -49,6 +50,7 @@ class ThinkingUpdate(BaseModel):
     apply_to_proactive: Optional[bool] = None
     monologue_max_tokens: Optional[int] = None
     character_voice: Optional[bool] = None
+    display_prefer_monologue: Optional[bool] = None
 
 
 @router.get("/settings/thinking", summary="获取思考开关配置")
@@ -70,6 +72,9 @@ async def get_thinking(auth=Depends(require_scopes("persona"))):
         "apply_to_proactive": bool(cfg.get("apply_to_proactive", _DEFAULTS["apply_to_proactive"])),
         "chat_preset_reasoning_native": _chat_preset_reasoning_native(),
         "character_voice": voice_enabled,
+        "display_prefer_monologue": bool(
+            cfg.get("display_prefer_monologue", _DEFAULTS["display_prefer_monologue"])
+        ),
         "voice_preview": voice,
     }
 
@@ -92,6 +97,8 @@ async def update_thinking(body: ThinkingUpdate, auth=Depends(require_scopes("per
         th["apply_to_proactive"] = body.apply_to_proactive
     if body.monologue_max_tokens is not None:
         th["monologue_max_tokens"] = max(32, min(2000, body.monologue_max_tokens))
+    if body.display_prefer_monologue is not None:
+        th["display_prefer_monologue"] = body.display_prefer_monologue
 
     write_config_file(CONFIG_FILE, full_cfg)
 
@@ -106,6 +113,9 @@ async def update_thinking(body: ThinkingUpdate, auth=Depends(require_scopes("per
             "monologue_max_tokens": th.get("monologue_max_tokens", _DEFAULTS["monologue_max_tokens"]),
             "apply_to_proactive": bool(th.get("apply_to_proactive", _DEFAULTS["apply_to_proactive"])),
             "character_voice": bool(th.get("character_voice", True)),
+            "display_prefer_monologue": bool(
+                th.get("display_prefer_monologue", _DEFAULTS["display_prefer_monologue"])
+            ),
         },
         "chat_preset_reasoning_native": _chat_preset_reasoning_native(),
     }

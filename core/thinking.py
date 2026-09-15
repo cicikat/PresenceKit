@@ -8,7 +8,8 @@ core/thinking — Brief 32：内部思考链（原生 reasoning + 前置独白�
     用完即弃。
 
 思考内容不进 short_term history、不广播、不落 event_log。API 返回的思考由协议边界
-默认写入独立 reasoning archive；本模块只负责正文过滤，不负责持久化。
+默认写入独立 reasoning archive；前置独白成功后另以 source=monologue 归档，供气泡
+按展示策略读取。本模块不把独白写入对话记忆。
 """
 from __future__ import annotations
 
@@ -107,6 +108,11 @@ def get_apply_to_proactive() -> bool:
 
 def character_voice_enabled() -> bool:
     return bool(_cfg().get("character_voice", True))
+
+
+def display_prefer_monologue() -> bool:
+    """Bubble order only: prefixed monologue before native reasoning when both exist."""
+    return bool(_cfg().get("display_prefer_monologue", True))
 
 
 # ---------------------------------------------------------------------------
@@ -244,6 +250,13 @@ async def _run_monologue_call(messages: list[dict], *, char_id: str | None) -> s
         )
         reply = strip_think_tags(reply) or ""
         reply = reply.strip()
+        if reply:
+            try:
+                from core.llm_reasoning_store import archive_text
+                await archive_text("monologue", reply, purpose="monologue")
+            except Exception as archive_exc:
+                from core.error_handler import log_error
+                log_error("thinking.monologue_archive", archive_exc)
         return reply or None
     except Exception as e:
         from core.error_handler import log_error

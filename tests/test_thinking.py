@@ -139,6 +139,22 @@ async def test_monologue_call_failure_is_fail_open_noop(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_empty_monologue_reply_is_not_archived(monkeypatch):
+    _enable_thinking(monkeypatch, mode="monologue")
+    from core import llm_client, llm_reasoning_store as store
+
+    async def fake_chat(*args, **kwargs):
+        return "   "
+
+    monkeypatch.setattr(llm_client, "chat", fake_chat)
+    result = await thinking._run_monologue_call(
+        [{"role": "user", "content": "在吗"}], char_id=None,
+    )
+    assert result is None
+    assert store.query() == []
+
+
+@pytest.mark.asyncio
 async def test_monologue_skips_when_already_injected():
     """tool loop 多步复用同一份 messages 时不重复注入（防每步都独白一次）。"""
     messages = [
@@ -203,6 +219,8 @@ async def test_monologue_call_passes_max_tokens_and_category(monkeypatch):
     assert result == "内心os"
     assert calls[0]["call_category"] == "monologue"
     assert calls[0]["max_tokens_override"] == 42
+    from core import llm_reasoning_store as store
+    assert store.query(call_id=store.query()[0]["call_id"])["parts"][0]["text"] == "内心os"
 
 
 @pytest.mark.asyncio
