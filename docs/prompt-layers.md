@@ -12,7 +12,7 @@
 
 Path C 的轮内 `11.6_tool_discovery` 说明分类发现顺序与非业务证据边界，独立于
 `11.5_tool_nudge` 开关；不进持久 history。具体 schema 仅在该分类被模型加载后发送，
-MCP 自由参数提示也延迟到加载后且只引用当前暴露的说明工具。见 [tool-discovery.md](tool-discovery.md)。
+MCP 自由参数提示也延迟到加载后且只引用当前暴露的说明工具。角色实际看到的入口 / nudge / schema / 本轮与跨轮结果见 [tool-discovery.md](tool-discovery.md)「角色实际看到的形态」。
 
 ## IME 主动观察
 
@@ -76,6 +76,9 @@ Reality `1_system_prompt` 绑定当前角色，并使用用户所选称谓（默
 | `10_tool_result` | 本轮工具执行结果（带生成时间与有效性） | 有工具调用结果时 | `tool_dispatcher.execute()` 裸输出经 `core/tools/tool_result.py` 截断+定界框定后注入（`safe_summary`）；失败/结果不明明确不是完成事实 |
 | `10.5_action_trace` | 历史工具动作参考：你最近做过的操作（不是本轮结果） | `action_trace_entries` 非空（`recent()` 过滤后仍有条目） | `core/memory/action_trace.py` → `recent()` + `format_trace_block()`；历史条目带时间并明确标为参考 |
 | `10.6_hardware_jobs` | 当前硬件后台动作状态与系统计算的剩余时间 | 存在 `accepted`/`started` job | `core/hardware/jobs.py::format_prompt()`；只读系统状态，断线/失败/取消/过期任务不继续倒计时 |
+| `10.6_pending_material` | 未读资料短摘要（文件名/标题、时间、摘录；无内部 id） | owner 私聊且有未读资料 | `core/context_continuity.py`；`_drop_priority=85` |
+| `10.7_recent_material` | 近期已读资料短摘要（最多 1 条） | owner 私聊且 24h 内已读 | 同上 |
+| `10.8_recent_tool_results` | 跨轮自主唤醒工具结果：HH:MM、工具名、设备（有则写）、结果、有/无发言 | owner 私聊且 24h 内有自主工具结果 | `context_continuity.result_messages()`；不套 `frame_tool_message` |
 | `11_tool_grounding` | 本轮工具事实闸：明确要求调用时绑定“必须成功调用”，并在输出端拦截无成功调用的完成式断言 | pretool 关键词命中，或调用方显式传入 `tool_call_required=True` | `core/pretool_router.py` 识别意图 → `core/tool_grounding.py` 组装消息并在 `Pipeline.run_llm()` / tool loop 收尾校验 |
 | `anti_collapse_hint` | 反坍缩提示（长度坍缩 + 分段坍缩合并，按触发维度拼装文案），per-uid 持久化倒计时 `hint_rounds` 轮（默认3），不可裁 | `anti_collapse.enabled` 且长度/分段任一维度倒计时未归零 | `core/memory/short_term.py::get_anti_collapse_hint()`（长度维度沿用 `detect_reply_length_collapse()`；分段维度由 `note_segment_collapse_signal()` 在 `capture_turn()` 落盘时写入） |
 | `stream_collapse_hint` | ACT-2 · 流式路径反坍缩软降级：上一轮流式生成命中句首同质坍缩时的一次性纠偏提示，读到即消费清除（非持久化倒计时） | `core.memory.short_term.consume_stream_collapse_signal()` 返回非空前缀 | `core/pipeline.py::Pipeline._check_stream_collapse()`（流式完成后复用 `detect_reply_homogeneity_prefix()`）写入 `core.memory.short_term.note_stream_collapse_signal()` → `data/runtime/memory/{char_id}/{uid}/stream_collapse_signal.json` |
@@ -891,6 +894,10 @@ PUT /prompt-ablation    body: {"disabled_layers": [...], "perception_block_disab
 
 管理面板「层级开关」页展示/编辑的仍然是全局开关文件那一份，不包含角色卡贡献的部分——
 角色卡的 `disabled_layers` 只在角色 JSON 里手改，不经过这个 API。
+
+### 角色看到的工具形态（Path C 轮内）
+
+`11.6_tool_discovery` 与 `11.5_tool_nudge` 只存在于 `run_agentic_loop()` 的 `loop_msgs` 副本，不进 `KNOWN_LAYERS`，也不经 builder 消融。首轮 `tools[]` 只有 `load_tools_<category>`（description「加载…的工具定义」，参数 `{}`）；加载后下一轮该分类换成具体 function schema，其余分类仍是入口。本轮 Path C 业务结果是 `role=tool`（`frame_tool_message`）；builder 带入的本轮 `tool_result` 才是 system `10_tool_result`；跨轮自主结果是 `10.8_recent_tool_results`。假数据示例见 [tool-discovery.md](tool-discovery.md)#角色实际看到的形态。
 
 ### 与 tool loop 的 `11.5_tool_nudge` 层的区别
 
