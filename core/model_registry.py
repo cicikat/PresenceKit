@@ -150,6 +150,13 @@ def resolve_params(defaults: dict, preset_params: dict, provider_kind: str) -> d
     return {k: v for k, v in resolved.items() if k in allow}
 
 
+def _default_preset_name(mp: dict) -> str:
+    """Return model_presets.default_preset when it still names a real preset."""
+    name = str(mp.get("default_preset") or "").strip()
+    presets = mp.get("presets") or {}
+    return name if name and name in presets else ""
+
+
 def _get_preset_config() -> dict:
     """Return the effective model_presets block (real or synthesised legacy)."""
     cfg = get_config()
@@ -200,8 +207,12 @@ def _resolve_preset_name(call_category: str, char_id: str | None = None) -> str:
 
     Fallback chain within the chosen profile:
       1. profile → call_category key
-      2. → "chat" key in same profile
-      3. → first preset name in presets dict
+      2. → model_presets.default_preset (if that name still exists)
+      3. → "chat" key in same profile
+      4. → first preset name in presets dict
+    Compatibility chains (sensor_judge / ime_judge / scenario_reconcile) keep
+    their intent/chat hops before default_preset, so old profiles without the
+    new field still behave the same.
     """
     mp = _get_preset_config()
     profiles = mp.get("routing_profiles", {})
@@ -218,20 +229,26 @@ def _resolve_preset_name(call_category: str, char_id: str | None = None) -> str:
             )
 
     profile = profiles.get(active) or (next(iter(profiles.values())) if profiles else {})
+    default_name = _default_preset_name(mp)
     # Old routing profiles predate sensor_judge.  Preserve their lightweight
     # intent route before falling back to chat; all other categories retain
-    # the established category -> chat fallback.
+    # the established category -> default_preset -> chat fallback.
     if call_category == "scenario_reconcile":
-        name = profile.get("scenario_reconcile") or profile.get("intent") or profile.get("chat")
+        name = profile.get("scenario_reconcile") or profile.get("intent") or profile.get("chat") or default_name
     elif call_category == "ime_judge":
-        name = profile.get("ime_judge") or profile.get("sensor_judge") or profile.get("intent") or profile.get("chat")
+        name = (
+            profile.get("ime_judge")
+            or profile.get("sensor_judge")
+            or profile.get("intent")
+            or profile.get("chat")
+            or default_name
+        )
     elif call_category == "sensor_judge":
-        name = profile.get("sensor_judge") or profile.get("intent") or profile.get("chat")
+        name = profile.get("sensor_judge") or profile.get("intent") or profile.get("chat") or default_name
     else:
-        name = profile.get(call_category) or profile.get("chat")
+        name = profile.get(call_category) or default_name or profile.get("chat")
     if not name:
-        presets = mp.get("presets", {})
-        name = next(iter(presets), "legacy")
+        name = next(iter(mp.get("presets", {})), "legacy")
     return name
 
 
@@ -293,13 +310,26 @@ def resolve_category_info(
         candidates = ((call_category, "category"), ("chat", "chat_fallback"))
     preset_name = ""
     source = "first_preset"
+    default_name = _default_preset_name(mp)
     for key, candidate_source in candidates:
         if profile.get(key):
             preset_name = str(profile[key])
             source = candidate_source
             break
+        if (
+            key == call_category
+            and call_category not in ("scenario_reconcile", "ime_judge", "sensor_judge")
+            and default_name
+        ):
+            preset_name = default_name
+            source = "default_preset"
+            break
     if not preset_name:
-        preset_name = str(next(iter(mp.get("presets", {})), "legacy"))
+        if default_name:
+            preset_name = default_name
+            source = "default_preset"
+        else:
+            preset_name = str(next(iter(mp.get("presets", {})), "legacy"))
     preset = mp.get("presets", {}).get(preset_name, {})
     return {
         "category": call_category,

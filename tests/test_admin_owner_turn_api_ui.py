@@ -9,7 +9,7 @@ def test_owner_turn_page_is_registered_and_cache_busted():
         'id="page-owner-turn-api"',
         'data-page-fragment="owner-turn-api"',
         '/static/js/owner-turn-api.js?v=brief-173-owner-turn-1',
-        "ADMIN_UI_FRAGMENT_VERSION = 'brief-252-image-presets-1'",
+        "ADMIN_UI_FRAGMENT_VERSION = 'brief-252-routing-profile-crud-1'",
         'data-action="ownerTurnSelectTab"',
         'owner-turn-tab-api',
         'owner-turn-tab-observability',

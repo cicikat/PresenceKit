@@ -103,6 +103,24 @@ def test_model_routing_page_renders_the_override_warning_without_html_injection(
     assert ".innerHTML" not in warning_function
 
 
+def test_model_routing_page_exposes_profile_rename_delete_and_default_preset():
+    from admin_static_assets import read_admin_client_source, read_admin_page
+
+    page = read_admin_page("model-routing")
+    source = read_admin_client_source()
+    assert 'id="mr-default-preset-select"' in page
+    assert "data-action=\"saveDefaultPreset\"" in page
+    assert "`/model-presets/routing-profiles/${encodeURIComponent(previousName)}/rename`" in source
+    assert "`/model-presets/routing-profiles/${encodeURIComponent(name)}`" in source
+    assert "api('DELETE', `/model-presets/routing-profiles/${encodeURIComponent(name)}`)" in source
+    assert "api('PUT', '/model-presets/default-preset'" in source
+    assert "nameInput.disabled = false" in source.split("function openProfileModal(name)", 1)[1].split(
+        "function closeProfileModal()", 1
+    )[0]
+    assert "confirmDeleteProfile" in source
+    assert "（清除映射，走默认 preset / chat）" in source
+
+
 def test_model_routing_editor_exposes_rpg_kp_sensor_judge_and_prefixed_monologue():
     from admin_static_assets import read_admin_client_source, read_admin_page
 
@@ -130,5 +148,8 @@ def test_model_routing_override_copy_is_localized_in_both_languages():
         "routing.category.sensor_judge",
         "routing.category.monologue",
         "routing.discover_models",
+        "routing.default_preset",
+        "routing.default_preset_hint",
+        "routing.save_default_preset",
     ):
         assert i18n.count(f"'{key}'") == 2

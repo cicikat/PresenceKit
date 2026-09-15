@@ -6,9 +6,13 @@ tests/test_model_presets_crud.py — W2: model-presets preset/routing-profile CR
   POST   /model-presets/presets/{name}/rename
   DELETE /model-presets/presets/{name}
   PUT    /model-presets/routing-profiles/{name}
+  POST   /model-presets/routing-profiles/{name}/rename
+  DELETE /model-presets/routing-profiles/{name}
+  PUT    /model-presets/default-preset
   POST   /model-presets/presets/{name}/test
 """
 
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -241,6 +245,30 @@ def test_rename_preset_updates_every_routing_profile_reference(admin_client):
     }
 
 
+def test_rename_preset_rewrites_default_preset(admin_client):
+    client, temp_cfg = admin_client
+    model_presets = {
+        **_BASE_MODEL_PRESETS,
+        "default_preset": "deepseek-default",
+        "presets": {
+            **_BASE_MODEL_PRESETS["presets"],
+            "spare": {"provider_kind": "openai", "model": "gpt-4"},
+        },
+        "routing_profiles": {"default": {"chat": "spare"}},
+    }
+    _write_cfg(temp_cfg, model_presets=model_presets)
+
+    resp = client.post(
+        "/model-presets/presets/deepseek-default/rename",
+        json={"new_name": "deepseek-relay"},
+        headers=_auth(),
+    )
+    assert resp.status_code == 200
+    assert "default_preset" in resp.json()["updated_references"]
+    saved = yaml.safe_load(temp_cfg.read_text(encoding="utf-8"))
+    assert saved["model_presets"]["default_preset"] == "deepseek-relay"
+
+
 def test_rename_preset_rejects_blank_or_existing_target_without_writing(admin_client):
     client, temp_cfg = admin_client
     model_presets = {
@@ -323,6 +351,25 @@ def test_delete_referenced_preset_409(admin_client):
     assert "deepseek-default" in saved["model_presets"]["presets"]
 
 
+def test_delete_default_preset_409(admin_client):
+    client, temp_cfg = admin_client
+    mp = {
+        **_BASE_MODEL_PRESETS,
+        "default_preset": "spare",
+        "presets": {
+            **_BASE_MODEL_PRESETS["presets"],
+            "spare": {"provider_kind": "openai", "base_url": "", "api_key": "", "model": "gpt-4"},
+        },
+    }
+    _write_cfg(temp_cfg, model_presets=mp)
+
+    resp = client.delete("/model-presets/presets/spare", headers=_auth())
+    assert resp.status_code == 409
+    assert "default_preset" in resp.json()["detail"]
+    saved = yaml.safe_load(temp_cfg.read_text(encoding="utf-8"))
+    assert "spare" in saved["model_presets"]["presets"]
+
+
 # ── PUT /model-presets/routing-profiles/{name} ─────────────────────────────────
 
 def test_put_routing_profile_creates_new(admin_client):
@@ -380,6 +427,246 @@ def test_put_routing_profile_empty_body_rejected(admin_client):
     _write_cfg(temp_cfg)
 
     resp = client.put("/model-presets/routing-profiles/default", json={}, headers=_auth())
+    assert resp.status_code == 422
+
+
+def test_put_routing_profile_empty_string_clears_mapping(admin_client):
+    client, temp_cfg = admin_client
+    _write_cfg(temp_cfg)
+
+    resp = client.put(
+        "/model-presets/routing-profiles/default",
+        json={"probe": ""},
+        headers=_auth(),
+    )
+    assert resp.status_code == 200
+    saved = yaml.safe_load(temp_cfg.read_text(encoding="utf-8"))
+    profile = saved["model_presets"]["routing_profiles"]["default"]
+    assert "probe" not in profile
+    assert profile["chat"] == "deepseek-default"
+
+
+# ── POST /model-presets/routing-profiles/{name}/rename ─────────────────────────
+
+def test_rename_routing_profile_updates_active_routing_and_character_cards(admin_client, tmp_path, monkeypatch):
+    client, temp_cfg = admin_client
+    model_presets = {
+        **_BASE_MODEL_PRESETS,
+        "active_routing": "claude-main",
+        "routing_profiles": {
+            "default": {"chat": "deepseek-default"},
+            "claude-main": {"chat": "deepseek-default", "probe": "deepseek-default"},
+        },
+    }
+    _write_cfg(temp_cfg, model_presets=model_presets)
+
+    import core.asset_registry as _reg_mod
+    from core.asset_registry import AssetEntry, AssetRegistry
+
+    cards_dir = tmp_path / "userdata" / "characters" / "cards"
+    cards_dir.mkdir(parents=True, exist_ok=True)
+    bound = cards_dir / "bound.json"
+    bound.write_text(
+        json.dumps({"name": "bound", "presence_ext": {"model_routing": "claude-main"}}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    other = cards_dir / "other.json"
+    other.write_text(
+        json.dumps({"name": "other", "presence_ext": {"model_routing": "default"}}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    txt = cards_dir / "plain.txt"
+    txt.write_text("plain card", encoding="utf-8")
+
+    class _FakePaths:
+        def character_card_write_path(self, char_id):
+            return cards_dir / f"{char_id}.json"
+
+    monkeypatch.setattr("core.sandbox.get_paths", lambda: _FakePaths())
+
+    registry = AssetRegistry.__new__(AssetRegistry)
+    registry._by_id_kind = {
+        ("bound", "character"): AssetEntry(
+            id="bound", label="bound", filename="bound.json", kind="character",
+            hidden=False, source_path=bound,
+        ),
+        ("other", "character"): AssetEntry(
+            id="other", label="other", filename="other.json", kind="character",
+            hidden=False, source_path=other,
+        ),
+        ("plain", "character"): AssetEntry(
+            id="plain", label="plain", filename="plain.txt", kind="character",
+            hidden=False, source_path=txt,
+        ),
+    }
+    monkeypatch.setattr(_reg_mod, "get_registry", lambda: registry)
+    monkeypatch.setattr(_reg_mod, "reload_registry", lambda: registry)
+
+    resp = client.post(
+        "/model-presets/routing-profiles/claude-main/rename",
+        json={"new_name": "claude-primary"},
+        headers=_auth(),
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["name"] == "claude-primary"
+    assert body["old_name"] == "claude-main"
+    assert body["active_routing"] == "claude-primary"
+    assert body["rewritten_character_cards"] == ["bound"]
+
+    saved = yaml.safe_load(temp_cfg.read_text(encoding="utf-8"))
+    assert "claude-main" not in saved["model_presets"]["routing_profiles"]
+    assert saved["model_presets"]["routing_profiles"]["claude-primary"]["chat"] == "deepseek-default"
+    assert saved["model_presets"]["active_routing"] == "claude-primary"
+    assert json.loads(bound.read_text(encoding="utf-8"))["presence_ext"]["model_routing"] == "claude-primary"
+    assert json.loads(other.read_text(encoding="utf-8"))["presence_ext"]["model_routing"] == "default"
+
+
+def test_rename_routing_profile_rejects_blank_or_existing_without_writing(admin_client):
+    client, temp_cfg = admin_client
+    model_presets = {
+        **_BASE_MODEL_PRESETS,
+        "routing_profiles": {
+            "default": {"chat": "deepseek-default"},
+            "occupied": {"chat": "deepseek-default"},
+        },
+    }
+    _write_cfg(temp_cfg, model_presets=model_presets)
+
+    blank = client.post(
+        "/model-presets/routing-profiles/default/rename",
+        json={"new_name": "  "}, headers=_auth(),
+    )
+    conflict = client.post(
+        "/model-presets/routing-profiles/default/rename",
+        json={"new_name": "occupied"}, headers=_auth(),
+    )
+    assert blank.status_code == 422
+    assert conflict.status_code == 409
+    saved = yaml.safe_load(temp_cfg.read_text(encoding="utf-8"))
+    assert set(saved["model_presets"]["routing_profiles"]) == {"default", "occupied"}
+
+
+# ── DELETE /model-presets/routing-profiles/{name} ──────────────────────────────
+
+def test_delete_routing_profile_switches_active_and_clears_character_bindings(admin_client, tmp_path, monkeypatch):
+    client, temp_cfg = admin_client
+    model_presets = {
+        **_BASE_MODEL_PRESETS,
+        "active_routing": "claude-main",
+        "routing_profiles": {
+            "default": {"chat": "deepseek-default"},
+            "claude-main": {"chat": "deepseek-default"},
+            "spare": {"chat": "deepseek-default"},
+        },
+    }
+    _write_cfg(temp_cfg, model_presets=model_presets)
+
+    import core.asset_registry as _reg_mod
+    from core.asset_registry import AssetEntry, AssetRegistry
+
+    cards_dir = tmp_path / "userdata" / "characters" / "cards"
+    cards_dir.mkdir(parents=True, exist_ok=True)
+    bound = cards_dir / "bound.json"
+    bound.write_text(
+        json.dumps({"name": "bound", "presence_ext": {"model_routing": "claude-main"}}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+    class _FakePaths:
+        def character_card_write_path(self, char_id):
+            return cards_dir / f"{char_id}.json"
+
+    monkeypatch.setattr("core.sandbox.get_paths", lambda: _FakePaths())
+    registry = AssetRegistry.__new__(AssetRegistry)
+    registry._by_id_kind = {
+        ("bound", "character"): AssetEntry(
+            id="bound", label="bound", filename="bound.json", kind="character",
+            hidden=False, source_path=bound,
+        ),
+    }
+    monkeypatch.setattr(_reg_mod, "get_registry", lambda: registry)
+    monkeypatch.setattr(_reg_mod, "reload_registry", lambda: registry)
+
+    resp = client.delete("/model-presets/routing-profiles/claude-main", headers=_auth())
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["active_routing"] == "default"
+    assert body["rewritten_character_cards"] == ["bound"]
+
+    saved = yaml.safe_load(temp_cfg.read_text(encoding="utf-8"))
+    assert "claude-main" not in saved["model_presets"]["routing_profiles"]
+    assert saved["model_presets"]["active_routing"] == "default"
+    assert "model_routing" not in json.loads(bound.read_text(encoding="utf-8"))["presence_ext"]
+
+
+def test_delete_last_routing_profile_409(admin_client):
+    client, temp_cfg = admin_client
+    _write_cfg(temp_cfg)
+
+    resp = client.delete("/model-presets/routing-profiles/default", headers=_auth())
+    assert resp.status_code == 409
+
+
+def test_delete_active_routing_profile_prefers_named_default(admin_client, monkeypatch):
+    client, temp_cfg = admin_client
+    model_presets = {
+        **_BASE_MODEL_PRESETS,
+        "active_routing": "spare",
+        "routing_profiles": {
+            "spare": {"chat": "deepseek-default"},
+            "default": {"chat": "deepseek-default"},
+        },
+    }
+    _write_cfg(temp_cfg, model_presets=model_presets)
+    monkeypatch.setattr("admin.routers.settings_llm._rewrite_character_model_routing", lambda **_kwargs: [])
+
+    resp = client.delete("/model-presets/routing-profiles/spare", headers=_auth())
+    assert resp.status_code == 200
+    saved = yaml.safe_load(temp_cfg.read_text(encoding="utf-8"))
+    assert saved["model_presets"]["active_routing"] == "default"
+
+
+# ── PUT /model-presets/default-preset ──────────────────────────────────────────
+
+def test_put_default_preset_roundtrip(admin_client):
+    client, temp_cfg = admin_client
+    mp = {
+        **_BASE_MODEL_PRESETS,
+        "presets": {
+            **_BASE_MODEL_PRESETS["presets"],
+            "spare": {"provider_kind": "openai", "model": "gpt-4"},
+        },
+    }
+    _write_cfg(temp_cfg, model_presets=mp)
+
+    resp = client.put(
+        "/model-presets/default-preset",
+        json={"default_preset": "spare"},
+        headers=_auth(),
+    )
+    assert resp.status_code == 200
+    saved = yaml.safe_load(temp_cfg.read_text(encoding="utf-8"))
+    assert saved["model_presets"]["default_preset"] == "spare"
+
+    cleared = client.put(
+        "/model-presets/default-preset",
+        json={"default_preset": ""},
+        headers=_auth(),
+    )
+    assert cleared.status_code == 200
+    saved = yaml.safe_load(temp_cfg.read_text(encoding="utf-8"))
+    assert "default_preset" not in saved["model_presets"]
+
+
+def test_put_default_preset_unknown_rejected(admin_client):
+    client, temp_cfg = admin_client
+    _write_cfg(temp_cfg)
+    resp = client.put(
+        "/model-presets/default-preset",
+        json={"default_preset": "ghost"},
+        headers=_auth(),
+    )
     assert resp.status_code == 422
 
 
@@ -458,4 +745,7 @@ def test_no_token_rejected_on_all_new_endpoints(admin_client):
     assert client.post("/model-presets/presets/deepseek-default/rename", json={"new_name": "x"}).status_code in (401, 403)
     assert client.delete("/model-presets/presets/deepseek-default").status_code in (401, 403)
     assert client.put("/model-presets/routing-profiles/default", json={"chat": "deepseek-default"}).status_code in (401, 403)
+    assert client.post("/model-presets/routing-profiles/default/rename", json={"new_name": "x"}).status_code in (401, 403)
+    assert client.delete("/model-presets/routing-profiles/default").status_code in (401, 403)
+    assert client.put("/model-presets/default-preset", json={"default_preset": "deepseek-default"}).status_code in (401, 403)
     assert client.post("/model-presets/presets/deepseek-default/test").status_code in (401, 403)

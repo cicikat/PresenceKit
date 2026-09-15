@@ -6,6 +6,7 @@
 # 若不配此块，系统自动从下方 llm: 块合成等价行为（向后兼容）。
 model_presets:
   active_routing: default          # 当前生效的路由方案名
+  default_preset: deepseek-default # 未映射 / 新建 profile 未填的 category 先落到它，再回退 chat → 第一个 preset
 
   defaults:                        # 全局生成参数默认值
     temperature: 1.0

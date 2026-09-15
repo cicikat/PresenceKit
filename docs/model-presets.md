@@ -155,6 +155,7 @@ llm_debug_requests:
 ```yaml
 model_presets:
   active_routing: default        # 当前生效的路由方案名
+  default_preset: deepseek-default  # 未映射 category 先落到它，再回退 chat → 第一个 preset
 
   defaults:                      # 全局参数默认值，preset 未声明的从这里回退
     temperature: 1.0
@@ -317,7 +318,7 @@ policy、连接、registry、角色 proficiency 和 exclude_tools 之后继续�
    活类别也会跟着这个 profile 走，是预期行为，卡里自己在 profile 定义里把杂活类别指到便宜
    preset（参照下方 `claude-main` 样例）。
 1. 取 `routing_profiles[active_routing]`（第 0 步可能已替换）。
-2. 用 `call_category` 查 preset 名；查不到 → 回退到该 profile 的 `chat`；再查不到 → 第一个 preset。
+2. 用 `call_category` 查 preset 名；查不到 → `model_presets.default_preset`（若该名仍存在）；再查不到 → 该 profile 的 `chat`；再查不到 → 第一个 preset。
    `sensor_judge` 是例外的兼容链：`sensor_judge → intent → chat → first preset`。所有新建
    profile 应显式声明它，并指向稳定、低成本的 `chat_completions` preset；旧 profile 缺失时仍可
    安全运行。该类别使用 10 秒超时与零 SDK 重试，且按 `preset + category` 独立缓存，不影响同一
@@ -444,12 +445,15 @@ preset 侧可选字段，供 `config.thinking.mode: auto` 判断该 preset 走 n
 
 | 端点 | 说明 |
 |---|---|
-| `GET /model-presets` | 返回 presets（api_key 打码，含 `api_protocol`）、routing_profiles、active_routing；`routing_effective` 含 `scenario_reconcile` / `event_edge_proposer` / `rpg_kp` / `sensor_judge` / `monologue` 的解析摘要；活动角色有有效固定绑定时附带 `active_character_routing`（角色、profile、实际 chat preset），供管理面提示全局切换不会影响它 |
+| `GET /model-presets` | 返回 presets（api_key 打码，含 `api_protocol`）、routing_profiles、active_routing、default_preset；`routing_effective` 含 `scenario_reconcile` / `event_edge_proposer` / `rpg_kp` / `sensor_judge` / `monologue` 的解析摘要；活动角色有有效固定绑定时附带 `active_character_routing`（角色、profile、实际 chat preset），供管理面提示全局切换不会影响它 |
 | `PUT /model-presets/active-routing` | 切换 active_routing 并热重载（仅 model_presets 模式） |
+| `PUT /model-presets/default-preset` | 设置未映射 category 的默认 preset；空字符串清除；必须是已存在的 preset 名 |
 | `PUT /model-presets/presets/{name}` | 新增或更新一个 preset（合并更新；新建须提供 provider_kind；仅 model_presets 模式） |
-| `POST /model-presets/presets/{name}/rename` | 重命名 preset；同一次原子写入会更新所有 routing profile 的 category→preset 引用并热重载；目标名不能为空且不得已存在 |
-| `DELETE /model-presets/presets/{name}` | 删除一个 preset；被任意 routing_profile 引用或是唯一剩余 preset 时 409 |
-| `PUT /model-presets/routing-profiles/{name}` | 新增或更新一个 routing profile 的 call_category → preset 映射（合并更新，值须是已存在的 preset） |
+| `POST /model-presets/presets/{name}/rename` | 重命名 preset；同一次原子写入会更新所有 routing profile 的 category→preset 引用和 `default_preset` 并热重载；目标名不能为空且不得已存在 |
+| `DELETE /model-presets/presets/{name}` | 删除一个 preset；被任意 routing_profile 引用、仍是 `default_preset`、或是唯一剩余 preset 时 409 |
+| `PUT /model-presets/routing-profiles/{name}` | 新增或更新一个 routing profile 的 call_category → preset 映射（合并更新；非空值须是已存在的 preset；空字符串清除该 category，走 default_preset） |
+| `POST /model-presets/routing-profiles/{name}/rename` | 重命名 routing profile；同步 `active_routing`，并改写角色卡 `presence_ext.model_routing` |
+| `DELETE /model-presets/routing-profiles/{name}` | 删除 routing profile；不能删最后一个；若删的是当前生效方案则切到剩余方案（优先名为 `default` 的）；绑定该方案的角色卡清除为跟随全局 |
 | `GET /model-presets/routing-profiles` | 可选 profile 清单（名字 + 各 category→preset 映射摘要），角色绑定下拉框数据源 |
 | `POST /model-presets/presets/{name}/test` | 连通性测试：实际发一条 `max_tokens=1` 的请求，返回 `{ok, latency_ms, error?}`，不经缓存 |
 | `GET /llm-params` | 读取当前 chat preset 的生成参数 |

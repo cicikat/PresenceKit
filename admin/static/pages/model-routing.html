@@ -69,6 +69,12 @@
           <button class="btn btn-primary btn-sm" data-action="switchActiveRouting">切换</button>
           <span id="mr-active-routing-current" class="admin-inline-082"></span>
         </div>
+        <label class="field admin-inline-019">
+          <span data-i18n="routing.default_preset">默认 Preset</span>
+          <select id="mr-default-preset-select" class="admin-inline-171"></select>
+          <button class="btn btn-primary btn-sm" data-action="saveDefaultPreset" data-i18n="routing.save_default_preset">保存默认</button>
+        </label>
+        <p class="admin-inline-087" data-i18n="routing.default_preset_hint">未选或新建 profile 未填的 category 解析到这个 preset，再回退 chat → 第一个 preset。</p>
         <p class="admin-inline-087" data-i18n="routing.active_binding_hint">只有清除角色卡的模型绑定后才会跟随全局；名为 <code>default</code> 的 profile 也属于固定绑定。</p>
         <div id="mr-active-character-routing-warning" role="status" aria-live="polite" class="admin-inline-087 admin-routing-warning"></div>
         <div id="mr-event-proposer-route-status" class="config-item-meta">event_edge_proposer: -</div>

@@ -16,12 +16,12 @@
 
 ### 要做
 
-- [ ] `POST /model-presets/routing-profiles/{name}/rename`：原子改名；同步 `active_routing`；扫描角色卡 `presence_ext.model_routing` 并改写。
-- [ ] `DELETE /model-presets/routing-profiles/{name}`：不能删最后一个；若删的是当前生效方案则切到剩余方案（优先名为 `default` 的）；角色卡绑定清除为跟随全局。
-- [ ] 管理面：编辑时名称可改；列表有删除；保存时若改名先 rename 再写映射。
-- [ ] `model_presets.default_preset`：当前生效路由方案卡片下增加默认 preset 下拉；未选 / 新建 profile 未填的 category 解析到它，再回退 chat → 第一个 preset。
-- [ ] 删除/重命名文本 preset 时同步更新 `default_preset`；仍被 default 引用则拒绝删除。
-- [ ] PUT profile 允许把某 category 设为空字符串以清除映射（走默认）。
+- [x] `POST /model-presets/routing-profiles/{name}/rename`：原子改名；同步 `active_routing`；扫描角色卡 `presence_ext.model_routing` 并改写。
+- [x] `DELETE /model-presets/routing-profiles/{name}`：不能删最后一个；若删的是当前生效方案则切到剩余方案（优先名为 `default` 的）；角色卡绑定清除为跟随全局。
+- [x] 管理面：编辑时名称可改；列表有删除；保存时若改名先 rename 再写映射。
+- [x] `model_presets.default_preset`：当前生效路由方案卡片下增加默认 preset 下拉；未选 / 新建 profile 未填的 category 解析到它，再回退 chat → 第一个 preset。
+- [x] 删除/重命名文本 preset 时同步更新 `default_preset`；仍被 default 引用则拒绝删除。
+- [x] PUT profile 允许把某 category 设为空字符串以清除映射（走默认）。
 
 ### 验收
 

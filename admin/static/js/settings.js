@@ -813,8 +813,9 @@ async function saveEventShadowRecallSettings() {
     loadFeatureFlags();
   } catch (e) { toast(e.message, 'err'); }
 }
-let _mrData = { presets: {}, routing_profiles: {}, active_routing: 'default' };
+let _mrData = { presets: {}, routing_profiles: {}, active_routing: 'default', default_preset: '' };
 let _mrEditingPresetName = null;
+let _mrEditingProfileName = null;
 const MR_CATEGORIES = ['chat', 'intent', 'probe', 'summary', 'detect_emotion', 'consolidation', 'perform', 'monologue', 'sensor_judge', 'ime_judge', 'scenario_reconcile', 'event_edge_proposer', 'rpg_kp'];
 const MR_CATEGORY_DESC = {
   ime_judge: 'IME 活动和有价值线索判断；可选轻量模型，未配置时沿用 sensor_judge / intent / chat',
@@ -872,6 +873,14 @@ async function loadModelRouting() {
       `<option value="${name}" ${name === data.active_routing ? 'selected' : ''}>${name}</option>`
     ).join('');
     document.getElementById('mr-active-routing-current').textContent = `当前: ${data.active_routing}`;
+    const defaultSel = document.getElementById('mr-default-preset-select');
+    if (defaultSel) {
+      const currentDefault = data.default_preset || '';
+      defaultSel.innerHTML = `<option value="">（不设默认，未填 category 回退 chat）</option>` +
+        Object.keys(data.presets || {}).map(name =>
+          `<option value="${escapeHtml(name)}" ${name === currentDefault ? 'selected' : ''}>${escapeHtml(name)}</option>`
+        ).join('');
+    }
     _renderActiveCharacterRoutingWarning(data.active_character_routing);
 
     _renderPresetsTable(data.presets || {});
@@ -897,6 +906,18 @@ async function switchActiveRouting() {
     loadModelRouting();
   } catch (e) {
     toast('切换失败: ' + e.message, 'err');
+  }
+}
+
+async function saveDefaultPreset() {
+  const sel = document.getElementById('mr-default-preset-select');
+  if (!sel) return;
+  try {
+    await api('PUT', '/model-presets/default-preset', { default_preset: sel.value });
+    toast(sel.value ? `默认 preset 已设为 '${sel.value}'` : '已清除默认 preset', 'ok');
+    loadModelRouting();
+  } catch (e) {
+    toast('保存默认 preset 失败: ' + e.message, 'err');
   }
 }
 
@@ -938,11 +959,15 @@ function _renderProfilesTable(profiles, presets) {
     const chips = Object.entries(profile).map(([cat, preset]) =>
       `<span class="badge" style="margin:2px">${cat}→${preset}</span>`
     ).join('');
+    const escapedName = escapeHtml(name);
     return `
       <tr>
-        <td><strong>${name}</strong>${name === _mrData.active_routing ? ' <span class="badge badge-success">生效中</span>' : ''}</td>
+        <td><strong>${escapedName}</strong>${name === _mrData.active_routing ? ' <span class="badge badge-success">生效中</span>' : ''}</td>
         <td>${chips}</td>
-        <td><button class="btn btn-ghost btn-sm" onclick="openProfileModal('${name}')">编辑</button></td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-ghost btn-sm" data-profile-name="${escapedName}" onclick="openProfileModal(this.dataset.profileName)">编辑</button>
+          <button class="btn btn-ghost btn-sm" data-profile-name="${escapedName}" onclick="confirmDeleteProfile(this.dataset.profileName)">删除</button>
+        </td>
       </tr>
     `;
   }).join('');
@@ -1158,7 +1183,7 @@ async function submitPresetModal() {
 function addPresetParam() { addKeyValueRow('mr-preset-params'); }
 
 function confirmDeletePreset(name) {
-  _openAtConfirm(`删除 preset '${name}'`, '若仍被某个 routing profile 引用，或是唯一剩余的 preset，将会被拒绝。', async () => {
+  _openAtConfirm(`删除 preset '${name}'`, '若仍被某个 routing profile 或默认 preset 引用，或是唯一剩余的 preset，将会被拒绝。', async () => {
     try {
       await api('DELETE', `/model-presets/presets/${encodeURIComponent(name)}`);
       toast(`preset '${name}' 已删除`, 'ok');
@@ -1171,17 +1196,19 @@ function confirmDeletePreset(name) {
 
 function openProfileModal(name) {
   document.getElementById('mr-profile-err').textContent = '';
+  const existingName = (typeof name === 'string' && name) ? name : '';
+  _mrEditingProfileName = existingName || null;
   const nameInput = document.getElementById('mr-profile-name');
-  nameInput.value = name || '';
-  nameInput.disabled = !!name;
-  const existing = (name && _mrData.routing_profiles[name]) || {};
+  nameInput.value = existingName;
+  nameInput.disabled = false;
+  const existing = (existingName && _mrData.routing_profiles[existingName]) || {};
   const presetNames = Object.keys(_mrData.presets || {});
   const catsEl = document.getElementById('mr-profile-categories');
   catsEl.innerHTML = MR_CATEGORIES.map(cat => `
     <label class="field" style="margin-bottom:8px">
       <span>${cat} <span style="font-size:11px;color:var(--muted);font-weight:normal">—— ${MR_CATEGORY_DESC[cat] || ''}</span></span>
       <select id="mr-profile-cat-${cat}">
-        <option value="">（不修改 / 沿用已有，缺省时自动回退用 chat）</option>
+        <option value="">（清除映射，走默认 preset / chat）</option>
         ${presetNames.map(p => `<option value="${p}" ${existing[cat] === p ? 'selected' : ''}>${p}</option>`).join('')}
       </select>
     </label>
@@ -1190,18 +1217,21 @@ function openProfileModal(name) {
 }
 function closeProfileModal() {
   document.getElementById('mr-profile-modal').classList.remove('open');
+  _mrEditingProfileName = null;
 }
 async function submitProfileModal() {
   const name = document.getElementById('mr-profile-name').value.trim();
+  const previousName = _mrEditingProfileName;
   const errEl = document.getElementById('mr-profile-err');
   if (!name) { errEl.textContent = '名称不能为空'; return; }
   const body = {};
   for (const cat of MR_CATEGORIES) {
-    const v = document.getElementById(`mr-profile-cat-${cat}`).value;
-    if (v) body[cat] = v;
+    body[cat] = document.getElementById(`mr-profile-cat-${cat}`).value;
   }
-  if (!Object.keys(body).length) { errEl.textContent = '至少选择一个 category'; return; }
   try {
+    if (previousName && previousName !== name) {
+      await api('POST', `/model-presets/routing-profiles/${encodeURIComponent(previousName)}/rename`, { new_name: name });
+    }
     await api('PUT', `/model-presets/routing-profiles/${encodeURIComponent(name)}`, body);
     toast(`routing profile '${name}' 已保存`, 'ok');
     closeProfileModal();
@@ -1209,6 +1239,18 @@ async function submitProfileModal() {
   } catch (e) {
     errEl.textContent = e.message;
   }
+}
+
+function confirmDeleteProfile(name) {
+  _openAtConfirm(`删除 routing profile '${name}'`, '不能删最后一个。若删的是当前生效方案会切到剩余方案（优先 default）。绑定该方案的角色卡会改为跟随全局。', async () => {
+    try {
+      await api('DELETE', `/model-presets/routing-profiles/${encodeURIComponent(name)}`);
+      toast(`routing profile '${name}' 已删除`, 'ok');
+      loadModelRouting();
+    } catch (e) {
+      toast('删除失败: ' + e.message, 'err');
+    }
+  });
 }
 
 // ══════════════════════════════════════════════════════════

@@ -12,10 +12,10 @@ def test_memory_event_query_page_is_registered_and_cache_busted():
 
     assert 'data-page="observe-memory-events"' in index
     assert 'id="page-observe-memory-events"' in index
-    assert "ADMIN_UI_FRAGMENT_VERSION = 'brief-252-image-presets-1'" in core
-    assert '<script src="/static/js/core.js?v=brief-252-image-presets-1"></script>' in index
+    assert "ADMIN_UI_FRAGMENT_VERSION = 'brief-252-routing-profile-crud-1'" in core
+    assert '<script src="/static/js/core.js?v=brief-252-routing-profile-crud-1"></script>' in index
     assert '<script src="/static/js/observability.js?v=brief-242-settings-4"></script>' in index
-    assert '<script src="/static/i18n.js?v=brief-252-image-presets-1"></script>' in index
+    assert '<script src="/static/i18n.js?v=brief-252-routing-profile-crud-1"></script>' in index
     assert "loadMemoryEventSearch" in script
     assert "/memory-events/query-trace" in script
     assert "tombstoneMemoryEvent" in script
@@ -36,8 +36,8 @@ def test_shadow_recall_rollout_controls_are_registered_and_cache_busted():
     assert "loadEventShadowRecallSettings" in settings
     assert "saveEventShadowRecallSettings" in settings
     assert "loadEventShadowRecallSettings();" in runtime
-    assert "ADMIN_UI_FRAGMENT_VERSION = 'brief-252-image-presets-1'" in core
-    assert '<script src="/static/js/settings.js?v=brief-252-image-presets-2"></script>' in index
+    assert "ADMIN_UI_FRAGMENT_VERSION = 'brief-252-routing-profile-crud-1'" in core
+    assert '<script src="/static/js/settings.js?v=brief-252-routing-profile-crud-1"></script>' in index
     assert '<script src="/static/js/runtime-config.js?v=settings-center-1"></script>' in index
     assert '<script src="/static/js/memory-event-control.js?v=brief-216-memory-event-control-1"></script>' in index
 

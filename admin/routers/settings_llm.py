@@ -13,9 +13,13 @@ PUT  /image-presets/routes        — 保存图像用途 → 连接映射
 GET/PUT /llm-debug-requests       — 管理高敏感 LLM 请求快照开关与保留期
 GET    /model-presets                        — 读取多模型 preset 配置（api_key 打码）
 PUT    /model-presets/active-routing          — 切换当前生效的路由方案
+PUT    /model-presets/default-preset          — 设置未映射 category 的默认 preset
 PUT    /model-presets/presets/{name}          — 新增或更新一个 preset
-DELETE /model-presets/presets/{name}          — 删除一个 preset（被 routing_profiles 引用时拒绝）
+POST   /model-presets/presets/{name}/rename   — 重命名 preset 并更新 routing 引用
+DELETE /model-presets/presets/{name}          — 删除一个 preset（被 routing_profiles / default_preset 引用时拒绝）
 PUT    /model-presets/routing-profiles/{name} — 新增或更新一个 routing profile
+POST   /model-presets/routing-profiles/{name}/rename — 重命名 routing profile 并改写角色卡绑定
+DELETE /model-presets/routing-profiles/{name} — 删除 routing profile（不能删最后一个）
 POST   /model-presets/presets/{name}/test     — 连通性测试：发一条 1 token ping，返回延迟/错误
 """
 
@@ -48,6 +52,15 @@ class LlmParamsUpdate(BaseModel):
     frequency_penalty: Optional[float] = None
 
 
+def _chat_preset_name(mp: dict, profile: dict) -> str | None:
+    """Chat mapping, then default_preset, then first remaining preset name."""
+    name = profile.get("chat") or str(mp.get("default_preset") or "").strip()
+    presets = mp.get("presets", {})
+    if name and name in presets:
+        return name
+    return next(iter(presets), None)
+
+
 def _get_chat_preset_params(cfg: dict) -> dict:
     """返回当前 chat preset 的生成参数（provider 白名单过滤后，与真实发送值一致）。"""
     mp = cfg.get("model_presets")
@@ -55,7 +68,7 @@ def _get_chat_preset_params(cfg: dict) -> dict:
         active = mp.get("active_routing", "default")
         profiles = mp.get("routing_profiles", {})
         profile = profiles.get(active) or (next(iter(profiles.values())) if profiles else {})
-        preset_name = profile.get("chat") or next(iter(mp.get("presets", {})), None)
+        preset_name = _chat_preset_name(mp, profile)
         if preset_name:
             from core.model_registry import resolve_params
             preset = mp.get("presets", {}).get(preset_name, {})
@@ -101,7 +114,7 @@ async def update_llm_params(body: LlmParamsUpdate, auth=Depends(require_scopes("
         active = mp.get("active_routing", "default")
         profiles = mp.get("routing_profiles", {})
         profile = profiles.get(active) or (next(iter(profiles.values())) if profiles else {})
-        preset_name = profile.get("chat") or next(iter(mp.get("presets", {})), None)
+        preset_name = _chat_preset_name(mp, profile)
         if preset_name and preset_name in mp.get("presets", {}):
             mp["presets"][preset_name].setdefault("params", {}).update(updates)
         target_params = mp.get("presets", {}).get(preset_name, {}).get("params", {})
@@ -829,6 +842,7 @@ async def get_model_presets(auth=Depends(require_scopes("admin"))):
     }
     return {
         "active_routing":    mp.get("active_routing", "default"),
+        "default_preset":    str(mp.get("default_preset") or ""),
         "presets":           _mask_presets(mp.get("presets", {})),
         "routing_profiles":  mp.get("routing_profiles", {}),
         "defaults":          mp.get("defaults", {}),
@@ -842,6 +856,10 @@ class ActiveRoutingUpdate(BaseModel):
     active_routing: str
 
 
+class DefaultPresetUpdate(BaseModel):
+    default_preset: str
+
+
 async def _persist_model_presets(full_cfg: dict) -> None:
     """Persist config and invalidate every cached model client."""
     write_config_file(CONFIG_FILE, full_cfg)
@@ -849,6 +867,65 @@ async def _persist_model_presets(full_cfg: dict) -> None:
     from core import config_loader, llm_client
     config_loader.reload_config()
     await llm_client.reload_client()
+
+
+def _rewrite_character_model_routing(*, old_name: str, new_name: str | None) -> list[str]:
+    """Rewrite or clear presence_ext.model_routing on JSON character cards.
+
+    JSON cards (legacy dir / userdata / bundled default) are rewritten in place
+    via the canonical userdata write path. txt/md cards cannot hold the field
+    and are skipped. Fail-open on a single unreadable card so remaining cards
+    still update. new_name=None clears the binding so the character follows
+    global active_routing.
+    """
+    from core.asset_registry import get_registry, reload_registry
+    from core.sandbox import get_paths
+
+    rewritten: list[str] = []
+    for entry in get_registry().list_all("character"):
+        read_path = entry.path()
+        if read_path.suffix.lower() != ".json":
+            continue
+        try:
+            data = json.loads(read_path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            logger.warning(
+                "[model_presets] 读取角色卡 %s 失败，跳过 model_routing 改写: %s",
+                read_path, exc,
+            )
+            continue
+        presence_ext = data.get("presence_ext")
+        if not isinstance(presence_ext, dict) or presence_ext.get("model_routing") != old_name:
+            continue
+        if new_name is None:
+            presence_ext.pop("model_routing", None)
+        else:
+            presence_ext["model_routing"] = new_name
+        write_path = get_paths().character_card_write_path(entry.id)
+        try:
+            write_path.parent.mkdir(parents=True, exist_ok=True)
+            write_path.write_text(
+                json.dumps(data, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except Exception as exc:
+            logger.warning(
+                "[model_presets] 写入角色卡 %s 失败，跳过 model_routing 改写: %s",
+                write_path, exc,
+            )
+            continue
+        rewritten.append(entry.id)
+
+    if rewritten:
+        reload_registry()
+        try:
+            from admin.routers.character import _active_character_id, _reload_character
+            active_id = _active_character_id()
+            if active_id:
+                _reload_character(active_id)
+        except Exception as exc:
+            logger.warning("[model_presets] 角色卡 model_routing 改写后热重载失败（非致命）: %s", exc)
+    return rewritten
 
 
 @router.post("/model-presets/bootstrap", summary="从 legacy llm 配置初始化 model_presets")
@@ -968,6 +1045,28 @@ async def set_active_routing(body: ActiveRoutingUpdate, auth=Depends(require_sco
     config_loader.reload_config()
     await llm_client.reload_client()
     return {"message": f"已切换到路由方案 '{body.active_routing}'", "active_routing": body.active_routing}
+
+
+@router.put("/model-presets/default-preset", summary="设置未映射 category 的默认 preset")
+async def set_default_preset(body: DefaultPresetUpdate, auth=Depends(require_scopes("admin"))):
+    """未选 / 新建 profile 未填的 category 先落到这个 preset，再回退 chat → 第一个 preset。
+
+    空字符串清除 default_preset，解析链回到 chat → 第一个 preset。
+    """
+    full_cfg = read_config_file(CONFIG_FILE)
+    mp = _require_model_presets_block(full_cfg)
+    name = (body.default_preset or "").strip()
+    if name and name not in mp.get("presets", {}):
+        raise HTTPException(
+            status_code=422,
+            detail=f"preset {name!r} 不存在。可用: {list(mp.get('presets', {}))}",
+        )
+    if name:
+        mp["default_preset"] = name
+    else:
+        mp.pop("default_preset", None)
+    await _persist_model_presets(full_cfg)
+    return {"message": "默认 preset 已更新", "default_preset": name}
 
 
 # ---------------------------------------------------------------------------
@@ -1099,6 +1198,9 @@ async def rename_preset(name: str, body: PresetRename, auth=Depends(require_scop
                 if preset_name == name:
                     profile[category] = new_name
                     updated_references.append(f"{profile_name}.{category}")
+        if mp.get("default_preset") == name:
+            mp["default_preset"] = new_name
+            updated_references.append("default_preset")
 
         await _persist_model_presets(full_cfg)
 
@@ -1136,6 +1238,11 @@ async def delete_preset(name: str, auth=Depends(require_scopes("admin"))):
             status_code=409,
             detail=f"preset {name!r} 仍被以下 routing profile 引用，请先改指向再删除: {referencing}",
         )
+    if mp.get("default_preset") == name:
+        raise HTTPException(
+            status_code=409,
+            detail=f"preset {name!r} 仍是 default_preset，请先改默认 preset 再删除",
+        )
 
     del presets[name]
 
@@ -1157,7 +1264,8 @@ async def upsert_routing_profile(name: str, body: dict[str, str], auth=Depends(r
     """合并更新指定 routing profile 的 call_category → preset 映射。
 
     body 例：{"chat": "claude-sonnet", "probe": "deepseek-default"}
-    只传入需要修改的 category；未传入的沿用已有映射。所有值必须是已存在的 preset 名。
+    只传入需要修改的 category；未传入的沿用已有映射。所有非空值必须是已存在的 preset 名。
+    空字符串清除该 category 映射，解析时走 default_preset → chat → 第一个 preset。
     """
     if not body:
         raise HTTPException(status_code=422, detail="body 不能为空，至少提供一个 call_category")
@@ -1166,13 +1274,17 @@ async def upsert_routing_profile(name: str, body: dict[str, str], auth=Depends(r
 
     mp = _require_model_presets_block(full_cfg)
     presets = mp.get("presets", {})
-    unknown = sorted({v for v in body.values() if v not in presets})
+    unknown = sorted({v for v in body.values() if v and v not in presets})
     if unknown:
         raise HTTPException(status_code=422, detail=f"routing profile 引用了不存在的 preset: {unknown}")
 
     profiles = mp.setdefault("routing_profiles", {})
     profile = dict(profiles.get(name, {}))
-    profile.update(body)
+    for category, preset_name in body.items():
+        if preset_name:
+            profile[category] = preset_name
+        else:
+            profile.pop(category, None)
     profiles[name] = profile
 
     write_config_file(CONFIG_FILE, full_cfg)
@@ -1182,6 +1294,69 @@ async def upsert_routing_profile(name: str, body: dict[str, str], auth=Depends(r
     await llm_client.reload_client()
 
     return {"message": f"routing profile '{name}' 已更新", "name": name, "profile": profile}
+
+
+@router.post("/model-presets/routing-profiles/{name}/rename", summary="重命名 routing profile 并改写角色卡绑定")
+async def rename_routing_profile(name: str, body: PresetRename, auth=Depends(require_scopes("admin"))):
+    """Rename one routing profile atomically with active_routing and character-card bindings."""
+    new_name = body.new_name.strip()
+    if not new_name:
+        raise HTTPException(status_code=422, detail="新的 routing profile 名称不能为空")
+
+    full_cfg = read_config_file(CONFIG_FILE)
+    mp = _require_model_presets_block(full_cfg)
+    profiles = mp.setdefault("routing_profiles", {})
+    if name not in profiles:
+        raise HTTPException(status_code=404, detail=f"routing profile {name!r} 不存在")
+    if new_name != name and new_name in profiles:
+        raise HTTPException(status_code=409, detail=f"routing profile {new_name!r} 已存在")
+
+    rewritten_cards: list[str] = []
+    if new_name != name:
+        mp["routing_profiles"] = {
+            (new_name if profile_name == name else profile_name): profile
+            for profile_name, profile in profiles.items()
+        }
+        if mp.get("active_routing") == name:
+            mp["active_routing"] = new_name
+        rewritten_cards = _rewrite_character_model_routing(old_name=name, new_name=new_name)
+        await _persist_model_presets(full_cfg)
+
+    return {
+        "message": f"routing profile {name!r} 已重命名为 {new_name!r}",
+        "name": new_name,
+        "old_name": name,
+        "active_routing": mp.get("active_routing", "default"),
+        "rewritten_character_cards": rewritten_cards,
+    }
+
+
+@router.delete("/model-presets/routing-profiles/{name}", summary="删除一个 routing profile")
+async def delete_routing_profile(name: str, auth=Depends(require_scopes("admin"))):
+    """删除指定 routing profile。不能删最后一个；删当前生效方案时切到剩余方案（优先 default）。
+
+    角色卡绑定该 profile 的声明会被清除，回落全局 active_routing。
+    """
+    full_cfg = read_config_file(CONFIG_FILE)
+    mp = _require_model_presets_block(full_cfg)
+    profiles = mp.get("routing_profiles", {})
+    if name not in profiles:
+        raise HTTPException(status_code=404, detail=f"routing profile {name!r} 不存在")
+    if len(profiles) <= 1:
+        raise HTTPException(status_code=409, detail="不能删除唯一的 routing profile，至少保留一个")
+
+    del profiles[name]
+    remaining = list(profiles)
+    if mp.get("active_routing") == name:
+        mp["active_routing"] = "default" if "default" in profiles else remaining[0]
+    rewritten_cards = _rewrite_character_model_routing(old_name=name, new_name=None)
+    await _persist_model_presets(full_cfg)
+    return {
+        "message": f"routing profile {name!r} 已删除",
+        "name": name,
+        "active_routing": mp.get("active_routing", "default"),
+        "rewritten_character_cards": rewritten_cards,
+    }
 
 
 # ---------------------------------------------------------------------------

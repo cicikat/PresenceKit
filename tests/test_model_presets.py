@@ -257,6 +257,54 @@ class TestRoutingFallback:
         }
         assert self._resolve(mp, "rpg_kp") == "kp"
 
+    def test_unmapped_category_uses_default_preset_before_chat(self):
+        mp = {
+            "active_routing": "default",
+            "default_preset": "cheap",
+            "presets": {"ds": {}, "cheap": {}},
+            "routing_profiles": {
+                "default": {"chat": "ds"},
+            },
+        }
+        assert self._resolve(mp, "probe") == "cheap"
+        assert self._resolve(mp, "rpg_kp") == "cheap"
+        assert self._resolve(mp, "chat") == "ds"
+
+    def test_empty_profile_uses_default_preset_before_first_preset(self):
+        mp = {
+            "active_routing": "default",
+            "default_preset": "cheap",
+            "presets": {"only_preset": {}, "cheap": {}},
+            "routing_profiles": {"default": {}},
+        }
+        assert self._resolve(mp, "chat") == "cheap"
+
+    def test_unknown_default_preset_is_ignored(self):
+        mp = {
+            "active_routing": "default",
+            "default_preset": "ghost",
+            "presets": {"only_preset": {}},
+            "routing_profiles": {"default": {}},
+        }
+        assert self._resolve(mp, "chat") == "only_preset"
+
+    def test_resolve_category_info_reports_default_preset_source(self):
+        import core.model_registry as reg
+        mp = {
+            "active_routing": "default",
+            "default_preset": "cheap",
+            "presets": {"ds": {"model": "chat-model"}, "cheap": {"model": "cheap-model"}},
+            "routing_profiles": {"default": {"chat": "ds"}},
+        }
+        original = reg._get_preset_config
+        reg._get_preset_config = lambda: mp
+        try:
+            info = reg.resolve_category_info("probe")
+        finally:
+            reg._get_preset_config = original
+        assert info["effective_preset"] == "cheap"
+        assert info["source"] == "default_preset"
+
 
 # ===========================================================================
 # 4. Backward-compat synthesis
