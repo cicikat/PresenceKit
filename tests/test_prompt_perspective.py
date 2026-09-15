@@ -192,3 +192,74 @@ def test_selected_pronoun_reaches_framework_without_rewriting_sources(build_prom
     assert raw in layer(messages, "6a_user_identity")
     assert raw in layer(messages, "6d_diary_context")
     assert f"与{pronoun}真实发生的对话" in layer(messages, "9_history")
+
+
+def _write_yesterday_inner_diary(sandbox, content: str, char_id: str = TEST_CHAR_ID):
+    from datetime import timedelta
+
+    yesterday = (date.today() - timedelta(days=1)).strftime("%Y-%m-%d")
+    directory = sandbox.yexuan_inner_diary(char_id=char_id)
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / f"{yesterday}.md"
+    path.write_text(content, encoding="utf-8")
+    return path
+
+
+def _inner_diary_layers(messages):
+    return [m for m in messages if m.get("_layer") == "6e_inner_diary"]
+
+
+def test_inner_diary_projection_rewrites_today_headings(build_prompt, sandbox):
+    path = _write_yesterday_inner_diary(
+        sandbox,
+        "# 2026-08-06\n\n## 今日事件\n- 09:00 用户完成了会议。\n\n## 今日感受\n她笑起来的时候，我忽然松了口气。\n",
+    )
+    messages, _ = build_prompt(tags={"emotion.down"})
+    layers = _inner_diary_layers(messages)
+    assert len(layers) == 2
+    facts, feeling = layers
+    assert facts["content"].startswith("<昨日记录>")
+    assert feeling["content"].startswith("<昨日心情>")
+    assert "昨日事件" in facts["content"]
+    assert "今日事件" not in facts["content"]
+    assert "今日感受" not in facts["content"]
+    assert "今日感受" not in feeling["content"]
+    assert "今日事件" not in feeling["content"]
+    assert "用户完成了会议" in facts["content"]
+    assert "她笑起来的时候，我忽然松了口气。" in feeling["content"]
+    assert "## 今日事件" in path.read_text(encoding="utf-8")
+    assert "## 今日感受" in path.read_text(encoding="utf-8")
+
+
+def test_inner_diary_facts_only_projection_drops_today_heading(build_prompt, sandbox):
+    _write_yesterday_inner_diary(
+        sandbox,
+        "# 2026-08-04\n\n## 今日事件\n- 完成了一件事。\n",
+    )
+    messages, _ = build_prompt(tags=set())
+    layers = _inner_diary_layers(messages)
+    assert len(layers) == 1
+    assert "昨日事件" in layers[0]["content"]
+    assert "今日事件" not in layers[0]["content"]
+    assert "<昨日心情>" not in layers[0]["content"]
+
+
+def test_inner_diary_legacy_unheaded_stays_feeling(build_prompt, sandbox):
+    _write_yesterday_inner_diary(sandbox, "# 2026-08-05\n旧格式的日记内容。\n")
+    messages, _ = build_prompt(tags={"topic.relation"})
+    layers = _inner_diary_layers(messages)
+    assert len(layers) == 1
+    assert layers[0]["content"].startswith("<昨日心情>")
+    assert "旧格式的日记内容。" in layers[0]["content"]
+    assert "今日事件" not in layers[0]["content"]
+    assert "今日感受" not in layers[0]["content"]
+
+
+def test_project_inner_diary_excerpt_rewrites_headings_only():
+    excerpt = prompt_builder._project_inner_diary_excerpt(
+        "# 2026-08-06\n\n## 今日事件\n- 09:00 用户说今日事件还没发生。\n",
+        200,
+    )
+    assert "## 昨日事件" in excerpt
+    assert excerpt.splitlines()[2] == "## 昨日事件"
+    assert "用户说今日事件还没发生。" in excerpt

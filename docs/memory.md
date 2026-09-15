@@ -1328,8 +1328,9 @@ HH:MM 发生了什么
 他第一人称的心理活动和感受……
 
 **注入方式**（prompt 层 6e，读昨天的文件）：
-- 事件层：必注入，取前 200 字
-- 感受层：命中 `emotion.down / emotion.indirect / emotion.deep / topic.relation` 时注入，取前 150 字；**低信息准入闸**：用户消息为 backchannel 时跳过（`suppress_emotional_recall=True`）
+- 事件层：必注入，取前 200 字；文件仍写 `今日事件`，投影改成 `昨日事件`
+- 感受层：命中 `emotion.down / emotion.indirect / emotion.deep / topic.relation` 时注入，取前 150 字；文件仍写 `今日感受`，投影改成 `昨日感受`；**低信息准入闸**：用户消息为 backchannel 时跳过（`suppress_emotional_recall=True`）
+- 只改 prompt 投影，不改生成侧文件格式
 
 **规则纠察**：事件层写入前跑 `check_diary_facts()`，不合规则清空事件层，感受层仍正常写入
 

@@ -57,8 +57,8 @@ Reality `1_system_prompt` 绑定当前角色，并使用用户所选称谓（默
 | `6c_episodic_fallback` | 近期高强度记忆兜底 | episodic_result 为空且 fallback 非空；`recall_policy="none"` 时同样跳过 | `episodic_memory.retrieve_fallback()`；实际消息 `_layer` 仍写 `6c_episodic`，便于统一裁剪 |
 | `mid_term` | 过去 12 小时对话压缩视图 | mid_term_context 非空 | `mid_term.format_for_prompt()`（12h 过期，最多 20 条，三时间桶渲染） |
 | `6d_diary_context` | 用户近期日记 | 有内容且命中 `emotion.down` / `emotion.indirect`；**新鲜度闸**：`diary_context.meta.json` 中 `latest_entry_date` 距今 >4 天（可配置 `diary.context_max_age_days`）或无 meta 时不注入；**低信息准入闸**：用户消息为 backchannel 时不注入 | `diary_context.load()` + `diary_context.load_meta()` |
-| `6e_inner_diary_facts` | 他昨天的记录（事件层，取前200字） | 昨日日记文件存在且含事件层 | `data/runtime/characters/{char_id}/inner/diary/` |
-| `6e_inner_diary_feeling` | 他昨天的心情（感受层，取前150字） | 昨日日记存在且命中 `emotion.down/indirect/deep` 或 `topic.relation`；**低信息准入闸**：`suppress_emotional_recall=True` 时跳过 | `data/runtime/characters/{char_id}/inner/diary/` |
+| `6e_inner_diary_facts` | 他昨天的记录（事件层，取前200字）；摘录里的 `今日事件` 改成 `昨日事件` | 昨日日记文件存在且含事件层 | `data/runtime/characters/{char_id}/inner/diary/` |
+| `6e_inner_diary_feeling` | 他昨天的心情（感受层，取前150字）；摘录里的 `今日感受` 改成 `昨日感受` | 昨日日记存在且命中 `emotion.down/indirect/deep` 或 `topic.relation`；**低信息准入闸**：`suppress_emotional_recall=True` 时跳过 | `data/runtime/characters/{char_id}/inner/diary/` |
 | `web_recall` | X3 向量库语义召回的相关网络资料（外部事实，非记忆/经历，标注来源） | `web_recall_result` 非空（`vs.query_with_preview(sources=["web"], k=3)` 命中） | `core/pipeline.py` fetch_context X3 块 → `prompt_builder.build(web_recall_result=)` |
 | `6f_dream_afterglow` | 梦境余韵详细层（只读，非现实事实）：0–2h 完整摘要/色调/意象；2–5h 模糊摘要/色调 | 5h 内存在有效 dream summary | `core/dream/dream_afterglow.load_afterglow()`；5h 后返回空并交接给软提示层 |
 | `dream_afterglow_soft_hint` | 梦境余韵软提示（只读，非事实，TTL 8h，`may/可能` 限定语气，`neutral+空tags` 不注入） | 详细 afterglow 层为空，且 afterglow_residue.json 存在、TTL 未过期、tone≠neutral 或 tags 非空 | `core/prompt_builder._format_afterglow_soft_hint()` → `core/memory/user_hidden_state.read_afterglow_residue()` → `data/runtime/memory/{char_id}/{uid}/afterglow_residue.json`（S6 路径，详见 docs/memory.md §记忆层一览） |
@@ -389,7 +389,7 @@ token_estimate = sum(len(m["content"]) for m in messages)
 | 40 | `mid_term` | 过去 12 小时压缩视图 |
 | 45 | `coplay_recall` | game_log 摘要回忆（tag 门控命中游戏名/别名） |
 | 50 | `6d_diary_context` | 用户近期日记，tag 门控注入 |
-| 60 | `6e_inner_diary` | 角色昨天日记（事件层 + 感受层，同 priority 整批丢） |
+| 60 | `6e_inner_diary` | 角色昨天日记（事件层 + 感受层，同 priority 整批丢；prompt 投影把文件里的今日标题改成昨日） |
 | 65 | `6h_storyline` | 叙事弧回忆，tag 门控命中时最多注入一条，质量高于中期压缩、低于精筛情景记忆 |
 | 70 | `6c_episodic` | LLM 压缩 + MMR 筛选的情景记忆，高质量，靠后丢 |
 | 80 | `5.5_lore` | 世界书设定，最后丢 |

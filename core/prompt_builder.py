@@ -70,6 +70,38 @@ def _format_growth_self_hint(char_id: str = DEFAULT_CHAR_ID) -> str:
     except Exception:
         return ""
 
+
+_INNER_DIARY_FEELING_MARKER = re.compile(r"(?m)^##\s*今日感受\s*$")
+_INNER_DIARY_TODAY_HEADING = re.compile(r"^(#{0,6}\s*)今日(事件|感受)\s*$")
+
+
+def _split_inner_diary_layers(diary_text: str) -> tuple[str, str]:
+    """Split on-disk inner diary into facts/feeling. File headings stay as written."""
+    text = (diary_text or "").strip()
+    if not text:
+        return "", ""
+    marker = _INNER_DIARY_FEELING_MARKER.search(text)
+    if marker:
+        return text[:marker.start()].strip(), text[marker.end():].strip()
+    if re.search(r"(?m)^##\s*今日事件\s*$", text):
+        return text, ""
+    return "", text
+
+
+def _project_inner_diary_excerpt(text: str, limit: int) -> str:
+    """Rewrite today's file headings for yesterday's prompt projection."""
+    if not text:
+        return ""
+    lines: list[str] = []
+    for line in text.splitlines():
+        match = _INNER_DIARY_TODAY_HEADING.match(line.strip())
+        if match:
+            lines.append(f"{match.group(1)}昨日{match.group(2)}")
+            continue
+        lines.append(line)
+    return "\n".join(lines).strip()[:limit]
+
+
 # tone → soft description for afterglow hint (see _format_afterglow_soft_hint)
 _AG_TONE_DESC: dict[str, str] = {
     "comfort":  "warm, calm",
@@ -1031,32 +1063,26 @@ def build(
         if inner_diary.exists():
             diary_text = inner_diary.read_text(encoding="utf-8").strip()
             if diary_text:
-                # 拆分事件层和感受层
-                _facts_part = ""
-                _feeling_part = ""
-                if "## 今日感受" in diary_text:
-                    _split = diary_text.split("## 今日感受", 1)
-                    _facts_part = _split[0].strip()
-                    _feeling_part = _split[1].strip()
-                else:
-                    # 旧格式日记，整体作为感受层兼容
-                    _feeling_part = diary_text
+                # 拆分事件层和感受层；文件仍用「今日*」，注入时改成昨日投影
+                _facts_part, _feeling_part = _split_inner_diary_layers(diary_text)
+                _facts_excerpt = _project_inner_diary_excerpt(_facts_part, 200)
+                _feeling_excerpt = _project_inner_diary_excerpt(_feeling_part, 150)
 
                 # 事件层：必注入（取前200字）
-                if _facts_part:
+                if _facts_excerpt:
                     messages.append({
                         "role": "system",
-                        "content": f"<昨日记录>\n【你昨天的记录（原文摘录）】\n{_facts_part[:200]}\n</昨日记录>",
+                        "content": f"<昨日记录>\n【你昨天的记录（原文摘录）】\n{_facts_excerpt}\n</昨日记录>",
                         "_layer": "6e_inner_diary",
                         "_drop_priority": 60,
                     })
 
                 # 感受层：只在情绪相关tag时注入（取前150字）
                 _feeling_triggers = {"emotion.down", "emotion.indirect", "emotion.deep", "topic.relation"}
-                if _feeling_part and (_tags & _feeling_triggers) and not suppress_emotional_recall:
+                if _feeling_excerpt and (_tags & _feeling_triggers) and not suppress_emotional_recall:
                     messages.append({
                         "role": "system",
-                        "content": f"<昨日心情>\n【你昨天的心情（原文摘录）】\n{_feeling_part[:150]}\n</昨日心情>",
+                        "content": f"<昨日心情>\n【你昨天的心情（原文摘录）】\n{_feeling_excerpt}\n</昨日心情>",
                         "_layer": "6e_inner_diary",
                         "_drop_priority": 60,
                         "_provenance": {
