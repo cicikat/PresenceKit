@@ -125,9 +125,11 @@ def _log_completed_call(*, provider: str, model: str, purpose: str, started_at: 
         ok=True,
     )
 
-# Vision client is kept as a separate singleton; it does not participate in
-# preset routing (as specified — vision stays on its own `vision:` block).
+# Vision clients stay outside text-model preset routing. The default singleton
+# covers the legacy ``vision:`` block; named image_presets reuse it when the
+# endpoint matches, otherwise they get a keyed client.
 _vision_client: AsyncOpenAI | None = None
+_vision_clients: dict[tuple[str, str], AsyncOpenAI] = {}
 
 
 # -- Call-category timeouts (seconds) ----------------------------------------
@@ -172,22 +174,50 @@ def _get_client() -> AsyncOpenAI:
     return get_model_client("chat").client
 
 
-def _get_vision_client() -> AsyncOpenAI | None:
+def _resolve_vision_config(vision_purpose: str | None = None) -> dict:
+    """Resolve a vision connection; ``vision_purpose`` uses image_presets routes."""
+    if vision_purpose:
+        from core.image_presets import resolve_purpose
+        try:
+            route = resolve_purpose(vision_purpose)
+        except KeyError:
+            return {}
+        if route.get("kind") != "vision":
+            return {}
+        return dict(route.get("config") or {})
+    return dict(get_config().get("vision") or {})
+
+
+def _get_vision_client(cfg: dict | None = None) -> AsyncOpenAI | None:
     """获取视觉模型客户端，未配置时返回None"""
     global _vision_client
-    cfg = get_config().get("vision", {})
+    cfg = dict(get_config().get("vision") or {}) if cfg is None else dict(cfg)
     if not cfg.get("enabled", False):
         return None
+    base_url = str(cfg.get("base_url") or "")
+    if not base_url or not cfg.get("model"):
+        return None
+    key = (base_url, str(cfg.get("api_key") or ""))
+    cached = _vision_clients.get(key)
+    if cached is not None:
+        return cached
+    if _vision_client is not None:
+        # Tests (and reload) inject a single shared client; reuse it when the
+        # cache is empty so existing monkeypatches keep working.
+        if not _vision_clients:
+            return _vision_client
+    proxy_url = _get_proxy_url()
+    http_client = _make_http_client(proxy_url)
+    client = AsyncOpenAI(
+        api_key=cfg.get("api_key") or "none",
+        base_url=base_url,
+        http_client=http_client,
+    )
+    _vision_clients[key] = client
     if _vision_client is None:
-        proxy_url = _get_proxy_url()
-        http_client = _make_http_client(proxy_url)
-        _vision_client = AsyncOpenAI(
-            api_key=cfg["api_key"],
-            base_url=cfg["base_url"],
-            http_client=http_client,
-        )
+        _vision_client = client
         logger.info(f"[llm_client] Vision客户端已初始化: {cfg.get('model')}")
-    return _vision_client
+    return client
 
 
 async def reload_client() -> None:
@@ -196,13 +226,14 @@ async def reload_client() -> None:
     下次调用时将按最新 config 重建。
     """
     global _vision_client
-    retired_vision = _vision_client
+    retired_vision = [_vision_client] if _vision_client is not None else []
+    retired_vision.extend(_vision_clients.values())
     _vision_client = None
+    _vision_clients.clear()
     retired_models = reload_registry()
 
     retired_clients = [mc.client for mc in retired_models]
-    if retired_vision is not None:
-        retired_clients.append(retired_vision)
+    retired_clients.extend(retired_vision)
     seen: set[int] = set()
     closed = 0
     for client in retired_clients:
@@ -272,6 +303,7 @@ async def chat(
     char_id: str | None = None,
     preset_name: str | None = None,
     is_proactive: bool = False,
+    vision_purpose: str | None = None,
 ) -> str:
     """
     调用 LLM 生成回复
@@ -293,11 +325,11 @@ async def chat(
     assert_outbound_allowed("llm")
     _timeout = _CALL_TIMEOUTS.get(call_category, _DEFAULT_CALL_TIMEOUT)
 
-    # vision 模式走独立 vision client，不经过 preset 路由
+    # vision 模式走独立 vision client，不经过文本 preset 路由
     if use_vision:
-        vision_client = _get_vision_client()
+        vision_cfg = _resolve_vision_config(vision_purpose)
+        vision_client = _get_vision_client(vision_cfg)
         if vision_client:
-            vision_cfg = get_config().get("vision", {})
             # Vision branch: sanitize only (no prompt_style transform needed)
             safe_msgs = sanitize_messages(messages)
             started_at = time.perf_counter()

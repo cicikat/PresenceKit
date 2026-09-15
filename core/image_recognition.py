@@ -49,20 +49,24 @@ def view(config: dict | None = None) -> dict:
         result["request_url"] = ""
         configured = False
     result["configured"] = configured
-    vision = config.get("vision", {})
-    result["effective"] = (configured if cfg["mode"] == "ocr" else
-                           bool(vision.get("enabled") and vision.get("base_url") and vision.get("model")))
+    from core.image_presets import catalog, connection_ready
+    cat = catalog(config)
+    if not cat["synthesized"]:
+        name = cat["routes"].get("chat_upload")
+        preset = cat["presets"].get(name) or {}
+        result["mode"] = "ocr" if preset.get("kind") == "ocr" else "vision"
+        result["effective"] = connection_ready(preset)
+    else:
+        vision = config.get("vision", {})
+        result["effective"] = (configured if cfg["mode"] == "ocr" else
+                               bool(vision.get("enabled") and vision.get("base_url") and vision.get("model")))
     result["state"] = "ready_not_tested" if result["effective"] else "not_configured"
     return result
 
 
 def cache_signature(config: dict | None = None) -> str:
-    config = get_config() if config is None else config
-    cfg = settings(config)
-    connection = cfg if cfg["mode"] == "ocr" else config.get("vision", {})
-    fields = {key: connection.get(key) for key in ("enabled", "provider", "api_protocol", "model", "base_url", "endpoint_url")}
-    fields["mode"] = cfg["mode"]
-    return hashlib.sha256(json.dumps(fields, sort_keys=True).encode()).hexdigest()
+    from core.image_presets import cache_signature as purpose_signature
+    return purpose_signature("chat_upload", config)
 
 
 from core.conversation_stats import attributed as _stats_attributed

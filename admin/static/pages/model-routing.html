@@ -2,35 +2,33 @@
 <p class="page-subtitle" data-i18n="routing.clean_intro">先配置模型连接，再分配用途。角色绑定优先于全局方案。</p>
 <h2 class="vision-section-title" data-i18n="routing.images_heading">图像识别</h2>
 <section class="card">
-  <div class="card-header"><h3 data-i18n="routing.image_presets">Presets · 图像连接</h3><button class="btn btn-ghost btn-sm" data-action="loadImageConnections" data-i18n="common.refresh">刷新</button></div>
-  <p data-i18n="routing.image_presets_hint">通用视觉负责理解图片，OCR 负责提取文字。选择一行编辑连接。</p>
-  <div class="tbl-wrap"><table><thead><tr><th data-i18n="routing.connection">连接</th><th>Provider</th><th data-i18n="status.vision.model">模型</th><th data-i18n="common.status">状态</th><th data-i18n="common.actions">操作</th></tr></thead><tbody id="vision-connections-body"></tbody></table></div>
-      <div class="vision-editor" id="vision-general-editor" hidden>
-        <div class="card-header"><h3 data-i18n="status.vision.title">视觉模型配置（图片识别）</h3><button class="btn btn-primary btn-sm" data-action="saveVisionParams" data-i18n="common.save">保存</button><label class="admin-inline-026"><span data-i18n="status.vision.enable" class="admin-inline-099">启用</span><input type="checkbox" id="vision-enabled"></label></div>
-        <div class="form-row"><label class="field"><span data-i18n="settings_center.api_protocol">API 协议</span><select id="vision-api-protocol"><option value="chat_completions">OpenAI Chat Completions</option><option value="responses">OpenAI Responses</option><option value="anthropic_messages">Anthropic Messages</option></select></label></div>
+  <div class="card-header"><h3 data-i18n="routing.image_presets">Presets · 图像连接</h3><div><button class="btn btn-primary btn-sm" data-action="openCreateImagePreset" data-i18n="routing.image_preset.new">+ 新建连接</button><button class="btn btn-ghost btn-sm" data-action="loadImageConnections" data-i18n="common.refresh">刷新</button></div></div>
+  <p data-i18n="routing.image_presets_hint">命名图像连接。vision 负责理解图片，OCR 负责提取文字。用途表可把任意连接指派给聊天图、生活记录或手机自动化。</p>
+  <div class="tbl-wrap"><table><thead><tr><th data-i18n="routing.connection">连接</th><th data-i18n="routing.kind">类型</th><th>Provider</th><th data-i18n="status.vision.model">模型</th><th data-i18n="common.status">状态</th><th data-i18n="common.actions">操作</th></tr></thead><tbody id="vision-connections-body"></tbody></table></div>
+      <div class="vision-editor" id="vision-image-editor" hidden>
+        <div class="card-header"><h3 id="image-preset-editor-title" data-i18n="status.vision.title">视觉模型配置（图片识别）</h3><button class="btn btn-primary btn-sm" data-action="saveImagePreset" data-i18n="common.save">保存</button></div>
+        <div class="form-row"><label class="field"><span data-i18n="routing.connection_name">连接名</span><input id="image-preset-name" type="text" autocomplete="off"></label><label class="field"><span data-i18n="routing.kind">类型</span><select id="image-preset-kind"><option value="vision" data-i18n="routing.kind.vision">视觉理解</option><option value="ocr">OCR</option></select></label></div>
+        <div id="image-vision-fields">
+        <div class="form-row"><label class="field"><span data-i18n="status.vision.enable">启用</span><input type="checkbox" id="vision-enabled"></label><label class="field"><span data-i18n="settings_center.api_protocol">API 协议</span><select id="vision-api-protocol"><option value="chat_completions">OpenAI Chat Completions</option><option value="responses">OpenAI Responses</option><option value="anthropic_messages">Anthropic Messages</option></select></label></div>
         <div class="form-row"><label class="field"><span>Provider</span><select id="vision-provider"><option value="gemini">Gemini</option><option value="openai">OpenAI</option><option value="glm">GLM</option><option value="custom" data-i18n="status.vision.custom">自定义</option></select></label><label class="field"><span data-i18n="status.vision.model">模型</span><input type="text" id="vision-model-select" list="vision-model-options" placeholder="模型名"><datalist id="vision-model-options"></datalist></label><button class="btn btn-ghost btn-sm" data-action="discoverVisionModels" type="button" data-i18n="routing.discover_models">读取可用模型</button><span id="vision-model-discovery-status" role="status"></span></div>
         <div class="form-row"><label class="field"><span>API Key</span><input type="password" id="vision-api-key" autocomplete="off" placeholder="留空则保留已有 API Key" data-i18n-placeholder="status.vision.key_placeholder"></label><label class="field"><span>Base URL</span><input type="url" id="vision-base-url"></label></div>
-      </div>
-
-      <div class="vision-editor" id="vision-ocr-editor" hidden>
-        <div class="card-header"><h3 data-i18n="settings_center.image_routing_and_ocr_connection">图片上传路由 / OCR 连接</h3><div><button class="btn btn-ghost btn-sm" data-action="loadImageRecognition">刷新</button><button class="btn btn-primary btn-sm" data-action="saveImageRecognition" data-i18n="settings_center.save">保存</button></div></div>
+        </div>
+        <div id="image-ocr-fields" hidden>
         <div class="form-row"><label class="field"><span>Provider</span><select id="ocr-provider"><option value="glm">GLM</option><option value="custom">自定义</option></select></label></div>
         <div class="form-row"><label class="field"><span data-i18n="settings_center.api_protocol">API 协议</span><select id="ocr-protocol"><option value="glm_layout_parsing">GLM Layout Parsing</option><option value="chat_completions">OpenAI Chat Completions</option></select></label><label class="field"><span>模型</span><input type="text" id="ocr-model" placeholder="glm-ocr"></label></div>
         <div class="form-row"><label class="field" id="ocr-endpoint-field"><span data-i18n="settings_center.endpoint_url">Endpoint URL（完整地址）</span><input id="ocr-endpoint" type="url"></label><label class="field" id="ocr-base-field" hidden><span>Base URL</span><input id="ocr-base-url" type="url"></label><label class="field"><span>API Key <small id="ocr-key-state"></small></span><input id="ocr-api-key" type="password" autocomplete="off" placeholder="留空则保留已有 API Key"></label></div>
         <p>请求地址：<code id="ocr-request-url" class="settings-url">-</code></p>
+        </div>
       </div>
+      <select id="image-recognition-mode" hidden><option value="vision">vision</option><option value="ocr">ocr</option></select>
+      <button hidden data-action="saveImageRoute" type="button"></button>
 
 </section>
 <section class="card">
-  <div class="card-header"><h3 data-i18n="routing.image_profiles">Routing · 图像用途</h3></div>
-  <p data-i18n="routing.image_profiles_hint">聊天图片可切换识别方式；自动化继续使用视觉理解。</p>
-  <div class="form-row"><label class="field"><span data-i18n="settings_center.image_upload_purpose">图片上传用途</span><select id="image-recognition-mode"><option value="vision" data-i18n="settings_center.image_understanding">图片理解（通用视觉连接）</option><option value="ocr" data-i18n="settings_center.ocr_text_extraction">OCR 文字提取（独立连接）</option></select></label><button class="btn btn-primary btn-sm" data-action="saveImageRoute" data-i18n="common.save">保存</button></div>
+  <div class="card-header"><h3 data-i18n="routing.image_profiles">Routing · 图像用途</h3><button class="btn btn-primary btn-sm" data-action="saveImageRoutes" data-i18n="common.save">保存</button></div>
+  <p data-i18n="routing.image_profiles_hint">每行自选一个已保存的图像连接。聊天图、生活记录和手机自动化互不影响。</p>
   <p id="image-recognition-state" role="status"></p>
-  <div class="tbl-wrap"><table><thead><tr><th data-i18n="routing.purpose">用途</th><th data-i18n="routing.connection">连接</th><th data-i18n="common.actions">操作</th></tr></thead><tbody>
-  <tr><td data-i18n="routing.life_vision">生活记录 · 饮食、购物车</td><td data-i18n="routing.general_vision">通用视觉</td><td>—</td></tr>
-  <tr><td data-i18n="routing.life_ocr">生活记录 · 账单</td><td>OCR</td><td>—</td></tr>
-  <tr><td data-i18n="routing.phone_automation">手机自动化</td><td id="vision-phone-summary"></td><td><button class="btn btn-ghost btn-sm" data-action="toggleVisionEditor" data-action-args='["vision-phone-editor"]' data-i18n="common.edit">编辑</button></td></tr>
-  </tbody></table></div>
+  <div class="tbl-wrap"><table><thead><tr><th data-i18n="routing.purpose">用途</th><th data-i18n="routing.connection">连接</th></tr></thead><tbody id="image-routes-body"></tbody></table></div>
       <div class="vision-editor" id="vision-phone-editor" hidden>
         <div class="card-header"><h3 data-i18n="status.phone_vision.title">手机自动化视觉覆盖</h3><div><button class="btn btn-ghost btn-sm" data-action="loadPhoneControlVisionParams" data-i18n="common.refresh">刷新</button><button class="btn btn-primary btn-sm" data-action="savePhoneControlVisionParams" data-i18n="common.save">保存</button></div></div>
         <p data-i18n="status.phone_vision.hint">仅覆盖手机自动化的视觉模型。留空即继承上方通用视觉配置；通常只需要填写模型名。</p>

@@ -129,6 +129,16 @@ vision:
   api_key: YOUR_VISION_API_KEY
   model: glm-4v-flash
   base_url: https://open.bigmodel.cn/api/paas/v4/
+# image_presets:  # 可选：命名图像连接。缺省时从 vision / image_recognition / phone_control_vision 合成
+#   presets:
+#     general: {kind: vision, enabled: false, provider: glm, model: glm-4v-flash, base_url: https://open.bigmodel.cn/api/paas/v4/}
+#     ocr: {kind: ocr, provider: glm, api_protocol: glm_layout_parsing, model: glm-ocr, endpoint_url: https://open.bigmodel.cn/api/paas/v4/layout_parsing}
+#   routes:
+#     chat_upload: general
+#     life_diet: general
+#     life_cart: general
+#     life_bill: ocr
+#     phone_automation: general
 # use_computer_vision:  # 可选：桌面自动化("用电脑")专用视觉模型槽位，缺省回落上面的 vision
 #   model: glm-4.6v      # 与 phone_control_vision 同一形状；只覆盖需要的字段即可
 #   api_key: YOUR_KEY

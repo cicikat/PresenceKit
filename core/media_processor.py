@@ -204,8 +204,15 @@ async def ingest_image_bytes(
     try:
         from core import image_recognition
         from core.config_loader import get_config
+        from core.image_presets import resolve_purpose
         recognition_config = get_config()
-        recognition = image_recognition.settings(recognition_config)
+        try:
+            _chat_route = resolve_purpose('chat_upload', recognition_config)
+        except KeyError:
+            _chat_route = {'kind': image_recognition.settings(recognition_config).get('mode', 'vision'),
+                           'config': image_recognition.settings(recognition_config)}
+        recognition = dict(_chat_route.get('config') or image_recognition.settings(recognition_config))
+        recognition['mode'] = 'ocr' if _chat_route.get('kind') == 'ocr' else 'vision'
         signature = image_recognition.cache_signature(recognition_config)
         prepared = []
         descriptions: list[str | None] = [None] * len(items)
@@ -271,7 +278,7 @@ async def ingest_image_bytes(
                       for block in content_blocks if block["type"] == "image_url"]
             result = "\n".join(parsed)
         else:
-            result = await llm_client.chat(vision_messages, use_vision=True)
+            result = await llm_client.chat(vision_messages, use_vision=True, vision_purpose='chat_upload')
             parsed = _split_vision_result(result, len(prepared)) if result else []
         if not result:
             if uid and char_id:
@@ -398,7 +405,16 @@ async def reread_cached_image(sha256: str, instruction: str = "请重新仔细�
         data = image_path.read_bytes()
         normalized, media_type = _normalize_image(data, str(meta.get("source_filename") or image_path.name))
         from core import image_recognition
-        recognition = image_recognition.settings()
+        from core.config_loader import get_config
+        from core.image_presets import resolve_purpose
+        recognition_config = get_config()
+        try:
+            _chat_route = resolve_purpose('chat_upload', recognition_config)
+        except KeyError:
+            _chat_route = {'kind': image_recognition.settings(recognition_config).get('mode', 'vision'),
+                           'config': image_recognition.settings(recognition_config)}
+        recognition = dict(_chat_route.get('config') or image_recognition.settings(recognition_config))
+        recognition['mode'] = 'ocr' if _chat_route.get('kind') == 'ocr' else 'vision'
         selected_mode = recognition["mode"] if mode == "auto" else mode
         if selected_mode == "ocr":
             if media_type == "image/gif":
@@ -414,7 +430,7 @@ async def reread_cached_image(sha256: str, instruction: str = "请重新仔细�
         result = await llm_client.chat([{"role": "user", "content": [
             {"type": "text", "text": str(instruction or "请重新仔细描述这张图片中的可见内容。")[0:1000]},
             {"type": "image_url", "image_url": {"url": f"data:{media_type};base64,{base64.b64encode(normalized).decode()}"}},
-        ]}], use_vision=True)
+        ]}], use_vision=True, vision_purpose='chat_upload')
         return str(result or "视觉模型没有返回结果。")
     except Exception as exc:
         logger.warning("[media_processor] reread image failed: %s", exc)

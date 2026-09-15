@@ -165,9 +165,11 @@ observe：77 项回归和管理面清缓存浏览器验证通过；两次真实�
 
 ### Image recognition routing (2026-09-09)
 
-- `current`, `admin-only`: `GET/PUT /image-recognition` configures upload mode and
-  independent OCR with explicit `glm_layout_parsing`/`chat_completions`. GET returns
-  redacted fields, configured/effective state and request URL. Model Routing owns editing.
+- `current`, `admin-only`: `GET /image-presets`, `PUT/DELETE /image-presets/presets/{name}`
+  and `PUT /image-presets/routes` own named image connections and purpose routing.
+  Legacy `GET/PUT /image-recognition` still configures the OCR slot and chat-upload
+  mode (`glm_layout_parsing`/`chat_completions`). GET returns redacted fields,
+  configured/effective state and request URL. Model Routing owns editing.
 - `current`: QQ and `/upload/ingest` images use the selected route; existing upload schema,
   owner scope, attachment hashes and delivery paths remain compatible. Desktop Rust and
   Flutter `BackendClient` retain the same upload endpoint; phone automation inherits

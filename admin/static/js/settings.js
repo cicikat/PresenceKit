@@ -54,23 +54,203 @@ const VISION_PROVIDERS = {
 };
 
 const _visionConnections = {general: null, ocr: null};
+let _imagePresetCatalog = {presets: {}, routes: {}, purposes: [], synthesized: true};
+let _editingImagePreset = null;
+const IMAGE_PURPOSE_LABELS = {
+  chat_upload: () => t('settings_center.image_upload_purpose', '图片上传用途'),
+  life_diet: () => t('routing.life_diet', '生活记录 · 饮食'),
+  life_cart: () => t('routing.life_cart', '生活记录 · 购物车'),
+  life_bill: () => t('routing.life_ocr', '生活记录 · 账单'),
+  phone_automation: () => t('routing.phone_automation', '手机自动化'),
+};
 function toggleVisionEditor(id) {
   const editor = document.getElementById(id);
   editor.hidden = !editor.hidden;
   if (!editor.hidden) editor.querySelector('input,select,button')?.focus();
 }
+function _imagePresetReady(preset) {
+  if (!preset) return false;
+  if (preset.kind === 'ocr') return !!preset.ready;
+  return preset.enabled !== false && preset.model && preset.base_url;
+}
 function renderImageConnections() {
   const root = document.getElementById('vision-connections-body');
   if (!root) return;
-  root.innerHTML = [['general',t('routing.general_vision','通用视觉'),'vision-general-editor'],['ocr','OCR','vision-ocr-editor']].map(([key,label,id])=>{
-    const d = _visionConnections[key];
-    const ready = d && (key === 'general' ? d.enabled && d.model && d.base_url : d.configured);
-    return `<tr><td>${escapeHtml(label)}</td><td>${escapeHtml(d?.provider || '—')}</td><td data-i18n-skip>${escapeHtml(d?.model || '—')}</td><td>${d ? (ready ? t('routing.ready_unchecked','已配置 · 未测试') : t('routing.not_ready','未配置或未启用')) : t('routing.load_unavailable','尚未读取或读取失败')}</td><td><button class="btn btn-ghost btn-sm" data-action="toggleVisionEditor" data-action-args='${JSON.stringify([id])}'>${t('common.edit','编辑')}</button><button class="btn btn-ghost btn-sm" data-action="testImageConnection" data-action-args='${JSON.stringify([key])}' ${ready ? '' : 'disabled'}>${t('routing.test_saved','测试已保存连接')}</button><span id="vision-test-${key}" role="status"></span></td></tr>`;
+  const presets = _imagePresetCatalog.presets || {};
+  const names = Object.keys(presets);
+  if (!names.length) {
+    root.innerHTML = `<tr><td colspan="6">${t('routing.load_unavailable','尚未读取或读取失败')}</td></tr>`;
+    return;
+  }
+  root.innerHTML = names.map(name => {
+    const d = presets[name] || {};
+    const ready = _imagePresetReady(d);
+    const kindLabel = d.kind === 'ocr' ? 'OCR' : t('routing.kind.vision', '视觉理解');
+    return `<tr><td data-i18n-skip>${escapeHtml(name)}</td><td>${escapeHtml(kindLabel)}</td><td>${escapeHtml(d.provider || '—')}</td><td data-i18n-skip>${escapeHtml(d.model || '—')}</td><td>${ready ? t('routing.ready_unchecked','已配置 · 未测试') : t('routing.not_ready','未配置或未启用')}</td><td><button class="btn btn-ghost btn-sm" data-action="editImagePreset" data-action-args='${JSON.stringify([name])}'>${t('common.edit','编辑')}</button><button class="btn btn-ghost btn-sm" data-action="testImageConnection" data-action-args='${JSON.stringify([name])}' ${ready ? '' : 'disabled'}>${t('routing.test_saved','测试已保存连接')}</button><button class="btn btn-ghost btn-sm" data-action="deleteImagePreset" data-action-args='${JSON.stringify([name])}'>${t('common.delete','删除')}</button><span id="vision-test-${escapeHtml(name)}" role="status"></span></td></tr>`;
   }).join('');
   bindPageActions(root);
+  renderImageRoutes();
+}
+function renderImageRoutes() {
+  const root = document.getElementById('image-routes-body');
+  if (!root) return;
+  const presets = _imagePresetCatalog.presets || {};
+  const names = Object.keys(presets);
+  const purposes = ['chat_upload', 'life_diet', 'life_cart', 'life_bill', 'phone_automation'];
+  const routes = _imagePresetCatalog.routes || {};
+  root.innerHTML = purposes.map(purpose => {
+    const selected = routes[purpose] || '';
+    const options = names.map(name => `<option value="${escapeHtml(name)}" ${name === selected ? 'selected' : ''} data-i18n-skip>${escapeHtml(name)}</option>`).join('');
+    return `<tr><td>${escapeHtml(IMAGE_PURPOSE_LABELS[purpose] ? IMAGE_PURPOSE_LABELS[purpose]() : purpose)}</td><td><select id="image-route-${purpose}">${options}</select></td></tr>`;
+  }).join('');
+  const chatKind = (presets[routes.chat_upload] || {}).kind;
+  const mode = document.getElementById('image-recognition-mode');
+  if (mode) mode.value = chatKind === 'ocr' ? 'ocr' : 'vision';
+  const state = document.getElementById('image-recognition-state');
+  if (state) {
+    const chat = presets[routes.chat_upload];
+    state.textContent = chat
+      ? t('routing.chat_upload_state', '普通聊天图片用途：{connection} · {status}', {
+          connection: routes.chat_upload,
+          status: _imagePresetReady(chat) ? t('routing.ready_unchecked', '已配置 · 未测试') : t('routing.not_ready', '未配置或未启用'),
+        })
+      : '';
+  }
+  const summary = document.getElementById('vision-phone-summary');
+  if (summary) summary.textContent = routes.phone_automation || t('status.phone_vision.inherit', '继承通用配置');
+}
+function _toggleImageKindFields() {
+  const kind = document.getElementById('image-preset-kind')?.value || 'vision';
+  const vision = document.getElementById('image-vision-fields');
+  const ocr = document.getElementById('image-ocr-fields');
+  if (vision) vision.hidden = kind !== 'vision';
+  if (ocr) ocr.hidden = kind !== 'ocr';
+  if (kind === 'ocr') renderOcrProtocol();
+}
+function openCreateImagePreset() {
+  _editingImagePreset = null;
+  const editor = document.getElementById('vision-image-editor');
+  if (editor) editor.hidden = false;
+  const name = document.getElementById('image-preset-name');
+  if (name) { name.value = ''; name.disabled = false; }
+  const kind = document.getElementById('image-preset-kind');
+  if (kind) kind.value = 'vision';
+  const enabled = document.getElementById('vision-enabled');
+  if (enabled) enabled.checked = true;
+  document.getElementById('vision-provider').value = 'custom';
+  document.getElementById('vision-api-protocol').value = 'chat_completions';
+  document.getElementById('vision-model-select').value = '';
+  document.getElementById('vision-base-url').value = '';
+  document.getElementById('vision-api-key').value = '';
+  document.getElementById('ocr-provider').value = 'glm';
+  document.getElementById('ocr-protocol').value = 'glm_layout_parsing';
+  document.getElementById('ocr-model').value = '';
+  document.getElementById('ocr-base-url').value = '';
+  document.getElementById('ocr-endpoint').value = '';
+  document.getElementById('ocr-api-key').value = '';
+  _toggleImageKindFields();
+  name?.focus();
+}
+function editImagePreset(name) {
+  const preset = (_imagePresetCatalog.presets || {})[name];
+  if (!preset) return;
+  _editingImagePreset = name;
+  const editor = document.getElementById('vision-image-editor');
+  if (editor) editor.hidden = false;
+  const nameInput = document.getElementById('image-preset-name');
+  if (nameInput) { nameInput.value = name; nameInput.disabled = false; }
+  document.getElementById('image-preset-kind').value = preset.kind === 'ocr' ? 'ocr' : 'vision';
+  if (preset.kind === 'ocr') {
+    document.getElementById('ocr-provider').value = preset.provider || 'glm';
+    document.getElementById('ocr-protocol').value = preset.api_protocol || 'glm_layout_parsing';
+    document.getElementById('ocr-model').value = preset.model || '';
+    document.getElementById('ocr-base-url').value = preset.base_url || '';
+    document.getElementById('ocr-endpoint').value = preset.endpoint_url || '';
+    document.getElementById('ocr-api-key').value = '';
+    document.getElementById('ocr-key-state').textContent = preset.has_api_key ? t('status.vision.key_set', '密钥已配置') : t('status.vision.key_missing', '密钥未配置');
+  } else {
+    document.getElementById('vision-enabled').checked = preset.enabled !== false;
+    document.getElementById('vision-provider').value = preset.provider || 'custom';
+    document.getElementById('vision-api-protocol').value = preset.api_protocol || 'chat_completions';
+    document.getElementById('vision-model-select').value = preset.model || '';
+    document.getElementById('vision-base-url').value = preset.base_url || '';
+    document.getElementById('vision-api-key').value = '';
+    onVisionProviderChange();
+  }
+  _toggleImageKindFields();
+  editor?.querySelector('input,select,button')?.focus();
+}
+async function saveImagePreset() {
+  const name = document.getElementById('image-preset-name').value.trim();
+  if (!name) { toast(t('routing.connection_name_required', '连接名不能为空'), 'err'); return; }
+  const kind = document.getElementById('image-preset-kind').value;
+  const body = {kind};
+  if (kind === 'ocr') {
+    body.provider = document.getElementById('ocr-provider').value.trim();
+    body.api_protocol = document.getElementById('ocr-protocol').value;
+    body.model = document.getElementById('ocr-model').value.trim();
+    body.base_url = document.getElementById('ocr-base-url').value.trim();
+    body.endpoint_url = document.getElementById('ocr-endpoint').value.trim();
+    const key = document.getElementById('ocr-api-key').value.trim();
+    if (key) body.api_key = key;
+  } else {
+    body.enabled = document.getElementById('vision-enabled').checked;
+    body.provider = document.getElementById('vision-provider').value;
+    body.api_protocol = document.getElementById('vision-api-protocol').value;
+    body.model = document.getElementById('vision-model-select').value.trim();
+    body.base_url = document.getElementById('vision-base-url').value.trim();
+    const key = document.getElementById('vision-api-key').value.trim();
+    if (key) body.api_key = key;
+  }
+  try {
+    await api('PUT', `/image-presets/presets/${encodeURIComponent(name)}`, body);
+    await loadImageConnections();
+    toast(t('common.saved', '已保存'), 'ok');
+  } catch (e) {
+    toast(t('common.save_failed', '保存失败: {error}', {error: e.message}), 'err');
+  }
+}
+async function deleteImagePreset(name) {
+  if (!name) return;
+  try {
+    await api('DELETE', `/image-presets/presets/${encodeURIComponent(name)}`);
+    await loadImageConnections();
+    toast(t('common.delete', '删除') + ' · ' + name, 'ok');
+  } catch (e) {
+    toast(t('common.delete_failed', '删除失败：{error}', {error: e.message}), 'err');
+  }
+}
+async function saveImageRoutes() {
+  const body = {};
+  for (const purpose of ['chat_upload', 'life_diet', 'life_cart', 'life_bill', 'phone_automation']) {
+    const select = document.getElementById('image-route-' + purpose);
+    if (select && select.value) body[purpose] = select.value;
+  }
+  try {
+    await api('PUT', '/image-presets/routes', body);
+    await loadImageConnections();
+    toast(t('common.saved', '已保存'), 'ok');
+  } catch (e) {
+    toast(t('common.save_failed', '保存失败: {error}', {error: e.message}), 'err');
+  }
 }
 async function loadImageConnections() {
-  await Promise.allSettled([loadVisionParams(), loadImageRecognition(), loadPhoneControlVisionParams()]);
+  const kind = document.getElementById('image-preset-kind');
+  if (kind && !kind.dataset.bound) {
+    kind.addEventListener('change', _toggleImageKindFields);
+    kind.dataset.bound = 'true';
+  }
+  await Promise.allSettled([loadNamedImagePresets(), loadVisionParams(), loadImageRecognition(), loadPhoneControlVisionParams()]);
+}
+async function loadNamedImagePresets() {
+  try {
+    _imagePresetCatalog = await api('GET', '/image-presets');
+  } catch (e) {
+    _imagePresetCatalog = {presets: {}, routes: {}, purposes: [], synthesized: true};
+    console.error('加载图像连接失败', e);
+  } finally {
+    renderImageConnections();
+  }
 }
 async function testImageConnection(connection) {
   const state = document.getElementById('vision-test-' + connection);
@@ -78,7 +258,7 @@ async function testImageConnection(connection) {
   if (button) button.disabled = true;
   state.textContent = t('routing.testing','测试中…');
   try {
-    const result = await api('POST', '/image-recognition/test/' + connection);
+    const result = await api('POST', `/image-recognition/test/${encodeURIComponent(connection)}`);
     state.textContent = result.ok ? t('routing.test_ok','连接可用 · {ms} ms',{ms:result.duration_ms}) : t('routing.test_failed','测试失败：{error}',{error:result.error_category});
   } catch(e) { state.textContent = t('routing.test_failed','测试失败：{error}',{error:e.message}); }
   finally { if (button) button.disabled = false; }
@@ -678,9 +858,7 @@ window.addEventListener('admin-language-changed', () => {
 });
 
 async function loadModelRouting() {
-  loadImageRecognition();
-  loadVisionParams();
-  loadPhoneControlVisionParams();
+  loadImageConnections();
   if (typeof loadThinkingSettings === 'function') loadThinkingSettings();
   document.getElementById('mr-presets-body').innerHTML = '<div class="loading">加载中…</div>';
   document.getElementById('mr-profiles-body').innerHTML = '<div class="loading">加载中…</div>';

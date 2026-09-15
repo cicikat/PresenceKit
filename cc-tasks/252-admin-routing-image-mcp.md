@@ -52,11 +52,11 @@
 
 ### 要做
 
-- [ ] 新增 `image_presets.presets`（命名连接，含 `kind: vision|ocr`）与 `image_presets.routes`（chat_upload / life_diet / life_cart / life_bill / phone_automation）。
-- [ ] 无新块时从现有 `vision:` + `image_recognition:` + `phone_control_vision` 合成，不改运行语义。
-- [ ] 管理面：图像 Presets 有新建 / 编辑 / 删除 / 测试，名称不锁死；Routing · 图像用途每行自选连接。
-- [ ] 运行时：`media_processor` 聊天图、`life_records` 三类、`phone_control` 视觉按 routes 解析；旧 `vision:` / `image_recognition:` 仅作无新块时的回退。
-- [ ] 删除仍被用途引用的连接 → 409。测试接口接受连接名，保留 general/ocr/phone 别名。
+- [x] 新增 `image_presets.presets`（命名连接，含 `kind: vision|ocr`）与 `image_presets.routes`（chat_upload / life_diet / life_cart / life_bill / phone_automation）。
+- [x] 无新块时从现有 `vision:` + `image_recognition:` + `phone_control_vision` 合成，不改运行语义。
+- [x] 管理面：图像 Presets 有新建 / 编辑 / 删除 / 测试，名称不锁死；Routing · 图像用途每行自选连接。
+- [x] 运行时：`media_processor` 聊天图、`life_records` 三类、`phone_control` 视觉按 routes 解析；旧 `vision:` / `image_recognition:` 仅作无新块时的回退。
+- [x] 删除仍被用途引用的连接 → 409。测试接口接受连接名，保留 general/ocr/phone 别名。
 
 ### 验收
 

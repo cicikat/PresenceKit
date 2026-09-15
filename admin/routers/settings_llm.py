@@ -6,6 +6,10 @@ GET  /vision-params               — 读取 vision 配置
 PUT  /vision-params               — 修改 vision 配置并热重载
 GET  /vision-params/phone-control — 读取手机自动化视觉覆盖
 PUT  /vision-params/phone-control — 修改手机自动化视觉覆盖并热重载
+GET  /image-presets               — 命名图像连接与用途路由（无新块时从 legacy 合成）
+PUT  /image-presets/presets/{name} — 新增或更新一个图像连接
+DELETE /image-presets/presets/{name} — 删除图像连接（仍被用途引用时 409）
+PUT  /image-presets/routes        — 保存图像用途 → 连接映射
 GET/PUT /llm-debug-requests       — 管理高敏感 LLM 请求快照开关与保留期
 GET    /model-presets                        — 读取多模型 preset 配置（api_key 打码）
 PUT    /model-presets/active-routing          — 切换当前生效的路由方案
@@ -394,7 +398,7 @@ async def get_vision_params(auth=Depends(require_scopes("admin"))):
 
 @router.post("/image-recognition/test/{connection}", summary="测试已保存的图像连接")
 async def test_image_connection(
-    connection: Literal["general", "ocr", "phone"],
+    connection: str,
     auth=Depends(require_scopes("admin")),
 ):
     """One synthetic image, no user media or automation, no config mutation."""
@@ -403,19 +407,22 @@ async def test_image_connection(
     import io
     import time
     from PIL import Image, ImageDraw
-    from core import image_recognition, api_call_log
+    from core import image_recognition, api_call_log, image_presets
     from core.llm_client import _make_http_client, _get_proxy_url
     from openai import AsyncOpenAI
 
     cfg = get_config()
-    vision = dict(cfg.get("vision") or {})
-    if connection == "phone":
-        vision.update({k: v for k, v in (cfg.get("phone_control_vision") or {}).items()
-                       if v is not None and v != ""})
-    if connection != "ocr" and not (vision.get("enabled") and vision.get("base_url") and vision.get("model")):
+    try:
+        resolved = image_presets.resolve_connection(connection, cfg)
+    except KeyError:
+        raise HTTPException(404, f"unknown image connection {connection!r}") from None
+    kind = resolved.get("kind") or "vision"
+    vision = dict(resolved)
+    if kind == "ocr":
+        if not image_presets.connection_ready(resolved):
+            raise HTTPException(422, "OCR connection is incomplete")
+    elif not image_presets.connection_ready(resolved):
         raise HTTPException(422, "Vision connection is disabled or incomplete")
-    if connection == "ocr" and not image_recognition.view(cfg)["configured"]:
-        raise HTTPException(422, "OCR connection is incomplete")
     image = Image.new("RGB", (80, 25), "white")
     ImageDraw.Draw(image).text((8, 6), "TEST 123", fill="black")
     image = image.resize((320, 100))
@@ -430,8 +437,8 @@ async def test_image_connection(
     try:
         async def probe():
             nonlocal truncated
-            if connection == "ocr":
-                return await image_recognition.recognize_ocr(uri, image_recognition.settings(cfg))
+            if kind == "ocr":
+                return await image_recognition.recognize_ocr(uri, resolved)
             async with AsyncOpenAI(api_key=vision.get("api_key") or "none", base_url=vision["base_url"],
                 http_client=_make_http_client(_get_proxy_url()), timeout=20, max_retries=0) as client:
                 if vision.get("api_protocol", "chat_completions") == "responses":
@@ -464,7 +471,7 @@ async def test_image_connection(
         error = type(exc).__name__
     duration = int((time.monotonic() - started) * 1000)
     api_call_log.append(caller="admin_image_test", purpose=connection, provider="image_test",
-                        model=str(vision.get("model") or "") if connection != "ocr" else str(image_recognition.settings(cfg).get("model") or ""),
+                        model=str(vision.get("model") or ""),
                         duration_ms=duration, ok=ok, error_category=error)
     return {"ok": ok, "connection": connection, "duration_ms": duration, "error_category": error}
 
@@ -480,6 +487,7 @@ async def update_vision_params(body: VisionParamsUpdate, auth=Depends(require_sc
     if body.model    is not None: vision_cfg["model"]    = body.model
     if body.base_url is not None: vision_cfg["base_url"] = body.base_url
     if body.api_protocol is not None: vision_cfg["api_protocol"] = body.api_protocol
+    _sync_legacy_image_slot(full_cfg, "general")
 
     write_config_file(CONFIG_FILE, full_cfg)
 
@@ -522,6 +530,7 @@ async def update_image_recognition(body: ImageRecognitionUpdate, auth=Depends(re
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     full_cfg["image_recognition"] = cfg
+    _sync_legacy_image_route(full_cfg)
     write_config_file(CONFIG_FILE, full_cfg)
     from core import config_loader
     config_loader.reload_config()
@@ -566,6 +575,7 @@ async def update_phone_control_vision_params(
         full_cfg["phone_control_vision"] = dedicated
     else:
         full_cfg.pop("phone_control_vision", None)
+    _sync_legacy_image_slot(full_cfg, "phone")
 
     write_config_file(CONFIG_FILE, full_cfg)
 
@@ -576,6 +586,139 @@ async def update_phone_control_vision_params(
         "message": "手机自动化视觉覆盖已更新",
         "phone_control_vision": _phone_control_vision_view(full_cfg),
     }
+
+
+def _image_presets_block(full_cfg: dict) -> dict:
+    from core.image_presets import bootstrap_from_legacy
+    block = full_cfg.get("image_presets")
+    if not isinstance(block, dict) or not isinstance(block.get("presets"), dict) or not block["presets"]:
+        full_cfg["image_presets"] = bootstrap_from_legacy(full_cfg)
+    return full_cfg["image_presets"]
+
+
+def _sync_legacy_image_slot(full_cfg: dict, name: str) -> None:
+    """Keep named image_presets in lockstep when a legacy slot is still edited."""
+    block = full_cfg.get("image_presets")
+    if not isinstance(block, dict) or not isinstance(block.get("presets"), dict):
+        return
+    presets = block["presets"]
+    from core.image_presets import bootstrap_from_legacy
+    synthesized = bootstrap_from_legacy(
+        {key: value for key, value in full_cfg.items() if key != "image_presets"}
+    )
+    if name in synthesized["presets"]:
+        presets[name] = synthesized["presets"][name]
+
+
+def _sync_legacy_image_route(full_cfg: dict) -> None:
+    """When chat-upload mode is saved via the legacy endpoint, update named routes."""
+    block = full_cfg.get("image_presets")
+    if not isinstance(block, dict) or not isinstance(block.get("presets"), dict):
+        return
+    from core.image_presets import catalog
+    cat = catalog({**full_cfg, "image_presets": None})
+    routes = dict(block.get("routes") or {})
+    routes["chat_upload"] = cat["routes"].get("chat_upload", routes.get("chat_upload", ""))
+    block["routes"] = routes
+    if "ocr" in cat["presets"] and "ocr" in block["presets"]:
+        block["presets"]["ocr"] = cat["presets"]["ocr"]
+
+
+class ImagePresetUpsert(BaseModel):
+    kind: Optional[Literal["vision", "ocr"]] = None
+    enabled: Optional[bool] = None
+    provider: Optional[str] = None
+    api_protocol: Optional[str] = None
+    model: Optional[str] = None
+    base_url: Optional[str] = None
+    endpoint_url: Optional[str] = None
+    api_key: Optional[str] = None
+
+
+class ImageRoutesUpdate(BaseModel):
+    chat_upload: Optional[str] = None
+    life_diet: Optional[str] = None
+    life_cart: Optional[str] = None
+    life_bill: Optional[str] = None
+    phone_automation: Optional[str] = None
+
+
+@router.get("/image-presets", summary="命名图像连接与用途路由")
+async def get_image_presets(auth=Depends(require_scopes("admin"))):
+    from core.image_presets import snapshot
+    return snapshot(get_config())
+
+
+@router.put("/image-presets/presets/{name}", summary="新增或更新一个图像连接")
+async def upsert_image_preset(name: str, body: ImagePresetUpsert, auth=Depends(require_scopes("admin"))):
+    from core.image_presets import validate_name, validate_preset, snapshot
+    try:
+        name = validate_name(name)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    full_cfg = read_config_file(CONFIG_FILE)
+    block = _image_presets_block(full_cfg)
+    presets = block.setdefault("presets", {})
+    existing = dict(presets.get(name) or {})
+    update = body.model_dump(exclude_none=True)
+    if "api_key" in update and not str(update["api_key"]).strip():
+        update.pop("api_key")
+        if existing.get("api_key"):
+            update["api_key"] = existing["api_key"]
+    merged = {**existing, **update}
+    if "kind" not in merged:
+        merged["kind"] = "vision"
+    try:
+        presets[name] = validate_preset(merged)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    write_config_file(CONFIG_FILE, full_cfg)
+    from core import config_loader, llm_client
+    config_loader.reload_config()
+    await llm_client.reload_client()
+    return {"message": f"image connection {name!r} saved", "name": name, **snapshot(full_cfg)}
+
+
+@router.delete("/image-presets/presets/{name}", summary="删除一个图像连接")
+async def delete_image_preset(name: str, auth=Depends(require_scopes("admin"))):
+    from core.image_presets import snapshot, referencing_purposes
+    full_cfg = read_config_file(CONFIG_FILE)
+    block = _image_presets_block(full_cfg)
+    if name not in (block.get("presets") or {}):
+        raise HTTPException(status_code=404, detail=f"image connection {name!r} 不存在")
+    refs = referencing_purposes(name, full_cfg)
+    if refs:
+        raise HTTPException(status_code=409, detail=f"仍被用途引用: {refs}")
+    if len(block["presets"]) <= 1:
+        raise HTTPException(status_code=409, detail="不能删除唯一的图像连接")
+    del block["presets"][name]
+    write_config_file(CONFIG_FILE, full_cfg)
+    from core import config_loader, llm_client
+    config_loader.reload_config()
+    await llm_client.reload_client()
+    return {"message": f"image connection {name!r} deleted", **snapshot(full_cfg)}
+
+
+@router.put("/image-presets/routes", summary="保存图像用途到连接的映射")
+async def update_image_routes(body: ImageRoutesUpdate, auth=Depends(require_scopes("admin"))):
+    from core.image_presets import PURPOSES, snapshot
+    full_cfg = read_config_file(CONFIG_FILE)
+    block = _image_presets_block(full_cfg)
+    presets = block.get("presets") or {}
+    routes = dict(block.get("routes") or {})
+    updates = body.model_dump(exclude_none=True)
+    for purpose, name in updates.items():
+        if purpose not in PURPOSES:
+            raise HTTPException(status_code=422, detail=f"未知用途 {purpose}")
+        if name not in presets:
+            raise HTTPException(status_code=422, detail=f"未知图像连接 {name}")
+        routes[purpose] = name
+    block["routes"] = routes
+    write_config_file(CONFIG_FILE, full_cfg)
+    from core import config_loader, llm_client
+    config_loader.reload_config()
+    await llm_client.reload_client()
+    return {"message": "图像用途已保存", **snapshot(full_cfg)}
 
 
 # ---------------------------------------------------------------------------

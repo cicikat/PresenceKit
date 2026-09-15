@@ -82,10 +82,16 @@ SQLite 写入使用工作线程与 250ms 锁等待，失败只记录错误类型
 
 ### Uploaded image routing and OCR
 
-The admin Model Routing page owns `GET/PUT /image-recognition` (admin scope).
-`image_recognition.mode` selects `vision` (legacy default) or `ocr` for QQ images
-and desktop/mobile image uploads. OCR is independent of `vision`,
-`phone_control_vision`, and `use_computer_vision`; screen automation never inherits OCR.
+The admin Model Routing page owns named image connections at
+`GET /image-presets`, `PUT/DELETE /image-presets/presets/{name}` and
+`PUT /image-presets/routes` (admin scope). `image_presets.presets` holds
+`kind: vision|ocr` connections; `image_presets.routes` maps `chat_upload`,
+`life_diet`, `life_cart`, `life_bill` and `phone_automation` to those names.
+When the named block is absent, connections and routes are synthesized from
+`vision:`, `image_recognition:` and `phone_control_vision:` so runtime stays
+unchanged. Legacy `GET/PUT /image-recognition` and `GET/PUT /vision-params`
+remain for the original slots and still seed synthesis. OCR is independent of
+screen/`use_computer_vision`; screen automation never inherits OCR.
 The UI follows the model connection fields: provider, explicit protocol, model, address,
 and write-only key. Provider selection does not lock or overwrite an edited address.
 
@@ -332,7 +338,9 @@ policy、连接、registry、角色 proficiency 和 exclude_tools 之后继续�
    少数明确声明“直接 preset 名”的配置可通过 `preset_name` 绕过这条回退链；显式 preset
    不存在时抛 `ValueError`。`practice.reviewer_preset` 使用此严格语义；常规配置推荐用
    `practice.reviewer_category: consolidation`，继续继承 per-character routing profile。
-3. `vision` 不进 routing_profiles：继续用独立的 `vision:` 块；手机自动化可选 `phone_control_vision:` 固定覆盖槽位，空字段继承通用 `vision`，不引入多 preset 或 profile。
+3. 图像连接不进文本 `routing_profiles`：走独立 `image_presets`（命名连接 + 用途路由）。
+   无该块时从 `vision:` / `image_recognition:` / `phone_control_vision:` 合成，语义不变。
+   手机自动化用途可选任意 vision 连接；旧覆盖槽位在合成模式下仍空字段继承通用 `vision`。
 
 ModelClient 缓存（`core.model_registry._model_clients`）以**解析出的 preset 名**为 key，不是
 call_category 或 profile 名——每次调用都重新走上面 0~2 步解析 preset 名，天然随角色切换取到

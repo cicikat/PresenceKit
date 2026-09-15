@@ -114,7 +114,13 @@ TTS 有三个层次的开关：`tts.enabled` 是服务端能力总开关；`tts.
 
 TTS provider 由管理面（admin token）经 `GET/PUT /tts-config` 管理：`tts.provider` 当前支持 `gsv` 与明确标注为预留的 `openai_compatible`，每个 provider 可放在 `tts.providers.<provider>`。`GET` 会分别返回各 provider 的脱敏参数块，面板切换 provider 时显示对应参数且保存互不污染；预留 provider 在面板禁用，绝不猜测或发起云厂商请求。GSV 可选 `gpt_model_path` / `sovits_model_path`，留空时分别切回 v3 / v2ProPlus 默认底模；模型切换是 GSV 服务的全局状态，后端会把切换与同次合成串行化，路径错误时自动回退对应底模。GSV 默认启用后端分句：清洗控制/格式字符并识别实际、字面 `\\n` 与 `/n` 换行，按 `。！？；……` 优先切分，只有超过 `segment_max_chars`（默认 42）才在逗号或破折号处兜底；每段以 GSV `不切` 请求、按中文/英文脚本选择语言模式，再校验 PCM WAV 参数并插入 `segment_pause_seconds`（默认 0.25 秒）静音拼接。`external_segment_enabled: false` 可临时恢复 GSV 内部切分。旧有顶层 GSV 字段（`api_url`、`ref_audio`、情绪参数等）会自动映射，保持已有本地 GPT-SoVITS 部署行为不变。`POST /tts-config/test` 只试听已就绪 provider，`GET /observability/api-calls?caller=tts` 可查询最近合成结果与失败类别（`state.read`）。
 
-视觉模型不进 LLM 的 `routing_profiles`：通用图片识别使用 `GET/PUT /vision-params` 的 `vision:` 块；手机自动化可通过 `GET/PUT /vision-params/phone-control` 管理 `phone_control_vision:` 覆盖。两个控制卡片归在管理面的“模型路由”页，接口、落盘语义和热重载保持不变。后者只保存显式填写的字段，空字段会删除覆盖并继承通用视觉配置；保存后热重载。`/phone_control/status` 继续按合并后的 `base_url` 与 `model` 判断 `vision_configured`。
+视觉模型不进 LLM 的 `routing_profiles`：管理面「模型路由」页用 `GET /image-presets` +
+`PUT/DELETE /image-presets/presets/{name}` + `PUT /image-presets/routes` 管理命名图像连接
+（`kind: vision|ocr`）及用途（聊天图 / 生活记录饮食·购物车·账单 / 手机自动化）。无
+`image_presets` 块时从 `vision:` / `image_recognition:` / `phone_control_vision:` 合成，
+不改运行语义。旧 `GET/PUT /vision-params` 与 `GET/PUT /vision-params/phone-control` 仍写
+legacy 槽位并热重载；手机覆盖空字段继承通用视觉。`/phone_control/status` 继续按解析后的
+`base_url` 与 `model` 判断 `vision_configured`。删除仍被用途引用的连接返回 409。
 
 表情包由管理面（admin token）经 `GET/PUT /sticker-config` 管理：`sticker.enabled` 是总开关，`sticker.trigger_prob` 是 0–1 的每轮独立触发概率。缺失该配置块时保持兼容行为（启用、0.06）；关闭时不会发送或广播表情包。TTS 的概率单独掷骰，不会抢占或缩减表情包的配置概率。GET 返回当前有效值，兼作该落盘配置的只读观测面；若已命中概率但目标情绪目录无图，服务端会记录目录路径以便排查。
 
@@ -423,13 +429,14 @@ and OpenAPI assertions record the deletion. The remaining settings/task projecti
 URL/query, cookie, token, profile path, page body, or raw params in receipts/observability.
 ## Image upload OCR routing
 
-Model Routing exposes admin-only `GET/PUT /image-recognition` for upload mode
-(`vision` default, `ocr` opt-in) and an independent OCR connection. General Vision
-Base URLs remain editable. GLM Layout Parsing uses an exact Endpoint URL; OpenAI
-Chat Completions uses a Base URL. Keys are write-only; blank saves preserve keys.
-The page shows configured/effective state and request address; ready is not tested.
-Runtime call metadata uses `/observability/api-calls?caller=image_ocr` (`state.read`).
-Desktop/mobile keep `/upload/ingest`; screen automation keeps its existing connections.
+Model Routing exposes named image connections (`GET /image-presets`,
+`PUT/DELETE /image-presets/presets/{name}`, `PUT /image-presets/routes`) plus
+legacy `GET/PUT /image-recognition` for the OCR slot and chat-upload mode.
+Purpose rows pick any saved connection. GLM Layout Parsing uses an exact Endpoint
+URL; OpenAI Chat Completions uses a Base URL. Keys are write-only; blank saves
+preserve keys. Ready is not tested. Runtime metadata uses
+`/observability/api-calls?caller=image_ocr` (`state.read`). Desktop/mobile keep
+`/upload/ingest`; screen automation never inherits OCR.
 
 ## Forced streaming compatibility (2026-09-09)
 

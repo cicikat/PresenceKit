@@ -9,11 +9,11 @@
 - 顶部提供全局所有者资料入口；唯一编辑字段仍在首次配置页。
   调度页保存不再提交 owner_id 或 signatures；签名 textarea 已删除。
   不迁移身份数据、不更改存量配置值，QQ/desktop/mobile 均沿用同一个后端 owner_id。
-- 图像连接和用途分离：Presets 列表展示通用视觉与 OCR，按需展开编辑；用途区单独
-  保存聊天图片 mode，并展示生活记录固定路由、手机自动化覆盖及继承。
-  通用视觉空密钥保留、OCR 协议决定 URL 字段、手机空字段清除覆盖等既有语义不变。
-  配置就绪不宣称服务可用。这里复用两个既有连接，不引入虚假的命名视觉 Profile 存储。
-- 图像连接测试：POST /image-recognition/test/{general|ocr|phone}，admin-only，
+- 图像连接和用途分离：Presets 列表可新建/编辑/删除命名连接（vision 或 OCR），名称不锁死；
+  用途表每行自选连接（聊天图、生活记录饮食/购物车/账单、手机自动化）。无 `image_presets`
+  块时从 `vision:` / `image_recognition:` / `phone_control_vision:` 合成，语义不变。
+  空密钥保留、OCR 协议决定 URL 字段、删除被引用连接返回 409。配置就绪不宣称服务可用。
+- 图像连接测试：POST /image-recognition/test/{connection}，接受连接名及 general/ocr/phone 别名，admin-only，
   使用已保存设置与本地生成的 TEST 123 图片，25 秒总超时；视觉 SDK 零重试。
   不用用户图片、不执行手机动作、不修改配置。响应仅包含 ok/connection/duration_ms/
   error_category；不会回显 provider 正文、密钥或异常文本。现有 API 调用账本记录探针结果；

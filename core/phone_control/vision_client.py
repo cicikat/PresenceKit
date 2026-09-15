@@ -51,8 +51,19 @@ class NextAction:
 
 def get_phone_control_vision_config() -> dict:
     from core.config_loader import get_config
+    from core.image_presets import resolve_purpose
 
     cfg = get_config()
+    try:
+        route = resolve_purpose("phone_automation", cfg)
+        if route.get("kind") == "vision":
+            merged = dict(route.get("config") or {})
+            if route.get("synthesized") or route.get("name") in ("phone", "general"):
+                dedicated = dict(cfg.get("phone_control_vision") or {})
+                merged.update({k: v for k, v in dedicated.items() if v is not None and v != ""})
+            return merged
+    except KeyError:
+        pass
     dedicated = dict(cfg.get("phone_control_vision") or {})
     general = dict(cfg.get("vision") or {})
     merged = dict(general)
