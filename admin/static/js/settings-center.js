@@ -361,7 +361,14 @@ function thinkingFieldSpecs() { return [
   ['monologue_max_tokens',t('settings_center.monologue_token_budget',"独白预算"),'number',32,2000],
 ]; }
 function thinkingFieldMarkup(data) {
-  return thinkingFieldSpecs().map(([key,label,type,a,b])=>`<label class="field">${label}${Array.isArray(type)?`<select data-field="${key}">${type.map((value,j)=>`<option value="${value}" ${data[key]===value?'selected':''}>${a[j]}</option>`).join('')}</select>`:`<input data-field="${key}" type="${type==='boolean'?'checkbox':type}" ${type==='boolean'?(data[key]?'checked':''):`value="${escapeHtml(String(data[key]??''))}"`} ${type==='number'?`min="${a}" max="${b}"`:''}>`}</label>`).join('');
+  const specs = thinkingFieldSpecs();
+  const switches = specs.filter(([, , type]) => type === 'boolean').map(([key, label]) =>
+    `<div class="admin-toolbar"><label class="checkbox-row"><input data-field="${key}" type="checkbox" ${data[key] ? 'checked' : ''}><span>${label}</span></label></div>`
+  ).join('');
+  const options = specs.filter(([, , type]) => type !== 'boolean').map(([key, label, type, a, b]) =>
+    `<label class="field">${label}${Array.isArray(type) ? `<select data-field="${key}">${type.map((value, j) => `<option value="${value}" ${data[key] === value ? 'selected' : ''}>${a[j]}</option>`).join('')}</select>` : `<input data-field="${key}" type="${type}" value="${escapeHtml(String(data[key] ?? ''))}" ${type === 'number' ? `min="${a}" max="${b}"` : ''}>`}</label>`
+  ).join('');
+  return switches + options;
 }
 async function loadConversationSettings(){
   const root=document.getElementById('conversation-settings-fields');root.textContent=t('settings_center.loading',"读取中…");

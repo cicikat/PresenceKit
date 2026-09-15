@@ -86,9 +86,9 @@
 
 ### 要做
 
-- [ ] 开关（生成思考 / 角色心声 / 应用于主动消息）用 `admin-toolbar` + `checkbox-row`，同类放一起。
-- [ ] 选项（方式 select、独白预算）单独一组 `field`，不要夹在开关中间。
-- [ ] 仍走 `GET/POST /settings/thinking`，保存按钮保留（不像总览那样逐项 PATCH）。
+- [x] 开关（生成思考 / 角色心声 / 应用于主动消息）用 `admin-toolbar` + `checkbox-row`，同类放一起。
+- [x] 选项（方式 select、独白预算）单独一组 `field`，不要夹在开关中间。
+- [x] 仍走 `GET/POST /settings/thinking`，保存按钮保留（不像总览那样逐项 PATCH）。
 
 ### 验收
 

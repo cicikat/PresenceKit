@@ -20,7 +20,7 @@ def test_creation_assets_are_split_setting_rows():
     assert "data-action=\"saveCreationAssets\"" in source
     assert "data-action=\"uploadCreationAvatar\"" in source
     assert "PATCH','/settings/prompt-assets'" in source
-    assert '<script src="/static/js/settings-center.js?v=brief-251-thinking-cache-mcp-1"></script>' in index
+    assert '<script src="/static/js/settings-center.js?v=brief-252-thinking-switch-ui-1"></script>' in index
 
 
 def test_thinking_controls_live_on_model_routing_not_conversation_page():
@@ -38,6 +38,9 @@ def test_thinking_controls_live_on_model_routing_not_conversation_page():
     assert "if (typeof loadThinkingSettings === 'function') loadThinkingSettings();" in settings
     assert "['enabled'" in source
     assert "['mode'" in source
+    assert 'class="admin-toolbar"' in source
+    assert 'class="checkbox-row"' in source
+    assert 'type === \'boolean\'' in source or 'type === "boolean"' in source
 
 
 def test_feature_center_groups_category_switches():
