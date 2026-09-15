@@ -30,7 +30,7 @@ Reality `1_system_prompt` 绑定当前角色，并使用用户所选称谓（默
 | 层标识 | 内容 | 触发条件 | 数据来源 |
 |---|---|---|---|
 | `0_jailbreak` | 破限预设 layer=0 | 文件存在且 enabled | stems（`jailbreaks/{stem}.json`，受 `enabled_jailbreaks` 控制）+ `get_paths().jailbreak_entries()`；production 主路径为 `userdata/characters/reality/`，按内容去重合并 |
-| `1_system_prompt` | 角色存在性定义 + 情绪软提示 + `{perception_block}` 槽位 | always | 当前角色卡（由 `AssetRegistry` / character loader 解析）+ `core/mood_text.py` |
+| `1_system_prompt` | 角色存在性定义 + 情绪软提示 + `{perception_block}` 槽位 + 不确定时自己查屏幕/记忆/工具结果/{user_pronoun}资料的提醒 | always | 当前角色卡（由 `AssetRegistry` / character loader 解析）+ `core/mood_text.py` |
 | `1.5_fact_boundary` | 简短来源边界：按自述/资料/工具各自时间理解；无屏幕快照不否定其他来源，桌宠形象归属于角色 | always | 不复制桌面摘要，不宣称其他现实事实未知 |
 | `2_char_desc` | 角色描述 + 性格 + 情境 | always | 角色卡 |
 | `2.2_stage_presence` | 群聊在场成员与公开发言提醒 | reality Stage 角色生成时 | `core/stage/context.py` |

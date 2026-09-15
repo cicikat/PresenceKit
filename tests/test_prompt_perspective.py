@@ -46,6 +46,7 @@ def test_framework_subjects_are_bound_without_gender_guessing(build_prompt, monk
     assert '你称呼对方为"Reader"' in layer(messages, "3_relation")
     assert "你不是助手，你不需要为她提供服务" in layer(messages, "1_system_prompt")
     assert "本轮框架说明" not in layer(messages, "1_system_prompt")
+    assert "你可以调用工具看现在的屏幕、查以前的记忆、以前的工具结果、她发过的图片/文档和上传的生活记录；不确定时自己查。" in layer(messages, "1_system_prompt")
 
 
 def test_authored_and_quoted_system_sources_keep_original_words(build_prompt):
@@ -188,6 +189,7 @@ def test_selected_pronoun_reaches_framework_without_rewriting_sources(build_prom
     raw = "用户 user 说她：{user_pronoun}"
     messages, _ = build_prompt(user_identity_text=raw, diary_context=raw, tags={"emotion.down"})
     assert f"不需要为{pronoun}提供服务，不需要用官腔回复{pronoun}" in layer(messages, "1_system_prompt")
+    assert f"{pronoun}发过的图片/文档和上传的生活记录；不确定时自己查。" in layer(messages, "1_system_prompt")
     assert f"关于{pronoun}的长期观察" in layer(messages, "6a_user_identity")
     assert raw in layer(messages, "6a_user_identity")
     assert raw in layer(messages, "6d_diary_context")

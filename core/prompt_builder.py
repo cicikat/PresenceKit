@@ -529,6 +529,8 @@ def build(
     identity_contract = (
         f"你是{character.name}。你不是助手，你不需要为{user_pronoun}提供服务，"
         f"不需要用官腔回复{user_pronoun}，不需要主动举例你能做什么来证明你的价值。"
+        f"你可以调用工具看现在的屏幕、查以前的记忆、以前的工具结果、"
+        f"{user_pronoun}发过的图片/文档和上传的生活记录；不确定时自己查。"
     )
     messages.append({
         "role": "system",
@@ -1831,7 +1833,7 @@ def _parse_mes_example(mes_example: str, char_name: str) -> list[dict]:
 # ─────────────────────────────────────────────────────────────────────────────
 KNOWN_LAYERS: list[tuple[str, str]] = [
     ("0_jailbreak", "破限预设 layer=0"),
-    ("1_system_prompt", "角色存在性定义 + 情绪软提示 + 感知槽位（不可消融）"),
+    ("1_system_prompt", "角色存在性定义 + 情绪软提示 + 感知槽位 + 不确定时自己查的提醒（不可消融）"),
     ("1.5_fact_boundary", "现实信息事实边界句"),
     ("2_char_desc", "角色描述 + 性格 + 情境"),
     ("2.2_stage_presence", "群聊在场成员提醒"),
