@@ -10,7 +10,10 @@ import pytest
 from core.llm_protocol import (
     UpstreamResponseFormatError,
     anthropic_messages_input,
+    chat_completions_input,
+    chat_completions_tools,
     create,
+    error_category_for_exception,
     responses_input,
     stream_text,
 )
@@ -359,3 +362,181 @@ def test_anthropic_messages_input_groups_tool_results_as_a_user_message():
     assert messages[-1] == {"role": "user", "content": [{
         "type": "tool_result", "tool_use_id": "t1", "content": "done",
     }]}
+
+
+def _chat_mc(client):
+    return ModelClient(
+        name="chat-test",
+        provider_kind="openai",
+        model="test-model",
+        tool_call_mode="function_calling",
+        prompt_style="narrative",
+        params={"temperature": 0.2, "max_tokens": 64},
+        client=client,
+        api_protocol="chat_completions",
+    )
+
+
+def test_chat_completions_input_strips_sdk_and_internal_fields():
+    rebuilt = chat_completions_input([
+        {"role": "system", "content": "stay in character", "_layer": "1_core", "refusal": "no"},
+        {
+            "role": "assistant",
+            "content": None,
+            "refusal": "I cannot",
+            "annotations": [{"type": "url"}],
+            "audio": {"id": "a1"},
+            "reasoning_content": "secret",
+            "tool_calls": [{
+                "id": "call_1",
+                "type": "function",
+                "index": 0,
+                "extra": "drop-me",
+                "function": {"name": "lookup", "arguments": '{"q":"rain"}', "parsed": {"q": "rain"}},
+            }],
+        },
+        {
+            "role": "tool",
+            "tool_call_id": "call_1",
+            "name": "lookup",
+            "content": "wet",
+            "_continuity_receipt": {"id": "hidden"},
+            "status": "ok",
+        },
+        {"role": "user", "content": [{"type": "text", "text": "hi"}], "timestamp": 1},
+    ])
+    assert rebuilt == [
+        {"role": "system", "content": "stay in character"},
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [{
+                "id": "call_1",
+                "type": "function",
+                "function": {"name": "lookup", "arguments": '{"q":"rain"}'},
+            }],
+        },
+        {"role": "tool", "tool_call_id": "call_1", "name": "lookup", "content": "wet"},
+        {"role": "user", "content": [{"type": "text", "text": "hi"}]},
+    ]
+
+
+def test_chat_completions_tools_rebuild_openai_shape_and_encode_type_unions():
+    rebuilt = chat_completions_tools([{
+        "type": "function",
+        "function": {
+            "name": "lookup",
+            "description": "find things",
+            "parameters": {
+                "type": "object",
+                "properties": {"after": {"type": ["number", "null"], "minimum": 0}},
+                "required": ["after"],
+            },
+            "extra": "drop-me",
+        },
+        "strict": True,
+    }])
+    assert rebuilt == [{
+        "type": "function",
+        "function": {
+            "name": "lookup",
+            "description": "find things",
+            "parameters": {
+                "type": "object",
+                "properties": {"after": {"anyOf": [
+                    {"type": "number", "minimum": 0},
+                    {"type": "null", "minimum": 0},
+                ]}},
+                "required": ["after"],
+            },
+        },
+    }]
+
+
+@pytest.mark.asyncio
+async def test_chat_completions_tool_loop_second_step_sends_whitelisted_history():
+    calls = []
+
+    async def fake_create(**kwargs):
+        calls.append(kwargs)
+        message = SimpleNamespace(
+            content=None,
+            refusal="I cannot",
+            annotations=[{"type": "url"}],
+            reasoning_content="hidden",
+            tool_calls=[SimpleNamespace(
+                id="call_9",
+                type="function",
+                index=0,
+                function=SimpleNamespace(name="lookup", arguments='{"q":"rain"}'),
+                model_dump=lambda exclude_none=True: {
+                    "id": "call_9", "type": "function", "index": 0,
+                    "function": {"name": "lookup", "arguments": '{"q":"rain"}', "parsed": {"q": "rain"}},
+                },
+            )],
+            model_dump=lambda exclude_none=True: {
+                "role": "assistant", "content": None, "refusal": "I cannot",
+                "annotations": [{"type": "url"}], "reasoning_content": "hidden",
+                "tool_calls": [{
+                    "id": "call_9", "type": "function", "index": 0,
+                    "function": {"name": "lookup", "arguments": '{"q":"rain"}'},
+                }],
+            },
+        )
+        return SimpleNamespace(choices=[SimpleNamespace(message=message, finish_reason="tool_calls")])
+
+    mc = _chat_mc(SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=fake_create))))
+    first = await create(
+        mc,
+        [{"role": "user", "content": "search", "_layer": "user"}],
+        tools=[{"type": "function", "function": {"name": "lookup", "parameters": {"type": "object"}}}],
+        tool_choice="auto",
+        gen_kwargs={"timeout": 8, "temperature": 0.2},
+    )
+    assert first.continuation_items == [{
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [{
+            "id": "call_9",
+            "type": "function",
+            "function": {"name": "lookup", "arguments": '{"q":"rain"}'},
+        }],
+    }]
+
+    await create(
+        mc,
+        first.continuation_items + [{
+            "role": "tool",
+            "tool_call_id": "call_9",
+            "content": "wet",
+            "_continuity_receipt": {"id": "hidden"},
+        }],
+        tools=[{"type": "function", "function": {"name": "lookup", "parameters": {"type": "object"}}}],
+        tool_choice="auto",
+        gen_kwargs={"timeout": 8},
+    )
+    assert calls[0]["messages"] == [{"role": "user", "content": "search"}]
+    assert calls[1]["messages"] == [
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [{
+                "id": "call_9",
+                "type": "function",
+                "function": {"name": "lookup", "arguments": '{"q":"rain"}'},
+            }],
+        },
+        {"role": "tool", "tool_call_id": "call_9", "content": "wet"},
+    ]
+    assert "refusal" not in calls[1]["messages"][0]
+    assert calls[0]["tools"][0]["function"]["name"] == "lookup"
+    assert calls[0]["timeout"] == 8
+
+
+def test_error_category_for_exception_maps_http_and_protocol_failures():
+    class FakeHttpError(Exception):
+        status_code = 400
+
+    assert error_category_for_exception(FakeHttpError()) == "upstream_request_rejected"
+    assert error_category_for_exception(UpstreamResponseFormatError("bad", http_status=404)) == "upstream_not_found"
+    assert error_category_for_exception(RuntimeError("offline")) == "protocol_incompatible"

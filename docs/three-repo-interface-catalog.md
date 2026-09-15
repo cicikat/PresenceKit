@@ -1,5 +1,11 @@
 # 三仓接口总览与闭环审计
 
+## Chat Completions 工具续轮白名单（2026-09-15）
+
+current：后端 Chat Completions 工具续轮只发送协议允许字段；管理面沿用 API 账本
+`error_category`。桌面/手机无新设置、REST/WS/IPC、scope、ack 或 TTL 变更。
+observe：真实中转复杂 tool 请求需重启后复测。
+
 ## 现实来源边界（2026-09-13）
 
 current：1.5 不再否定其他来源或复制桌面数据；3.9 保留原 3/5 分钟闸，观测标为 fresh。

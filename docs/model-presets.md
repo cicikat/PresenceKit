@@ -1,5 +1,15 @@
 # docs/model-presets.md — 多模型 Preset 系统
 
+## Chat Completions 工具续轮白名单（2026-09-15）
+
+Chat Completions 出口重建消息与工具，不再把 SDK `model_dump()` 或内部键送进中转。
+assistant/tool 历史只保留 `role` / `content` / `tool_calls` / `tool_call_id`（及可选工具名）；
+`tool_calls` 只有 `id` + `type=function` + `function.{name,arguments}`，`arguments` 为 JSON 字符串；
+`content is None` 的纯工具轮改成空字符串。工具 schema 重建为 OpenAI function 形状，参数仍把
+`type` 数组转成等价 `anyOf`。Responses / Anthropic 入口不变，不按模型名猜协议。
+失败时 API 账本记 `error_category`（400 为 `upstream_request_rejected`），`output_hint` 只留异常类名，
+不写请求体。无新配置或客户端字段。
+
 ## Chat Completions 工具类型联合（2026-09-13）
 
 协议出口将工具参数 schema 的 `type: [A, B]` 递归转成等价 `anyOf`，兼容拒绝 type 数组的

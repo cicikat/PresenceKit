@@ -19,7 +19,12 @@ from core import thinking
 from core.config_loader import get_config
 from core.error_handler import log_error
 from core.model_registry import ModelClient, get_model_client, reload_registry
-from core.llm_protocol import UpstreamResponseFormatError, create as create_protocol_response, stream_text
+from core.llm_protocol import (
+    UpstreamResponseFormatError,
+    create as create_protocol_response,
+    error_category_for_exception,
+    stream_text,
+)
 from core.llm_reasoning_store import reset_capture_purpose, set_capture_purpose
 from core.prompt_layer import sanitize_messages
 from core.prompt_style import apply_prompt_style
@@ -73,6 +78,8 @@ def _record_api_call(
     started_at: float,
     ok: bool,
     output_hint: str = "",
+    error_category: str = "",
+    protocol: str = "",
 ) -> None:
     from core.api_call_log import append
 
@@ -84,6 +91,8 @@ def _record_api_call(
         duration_ms=int((time.perf_counter() - started_at) * 1000),
         ok=ok,
         output_hint=output_hint,
+        error_category=error_category,
+        protocol=protocol,
     )
 
 
@@ -365,6 +374,8 @@ async def chat(
                     started_at=started_at,
                     ok=False,
                     output_hint=type(e).__name__,
+                    error_category=error_category_for_exception(e),
+                    protocol="chat_completions",
                 )
                 log_error("llm_client.chat.vision", e)
                 return ""
@@ -465,6 +476,8 @@ async def chat(
             started_at=started_at,
             ok=False,
             output_hint=type(e).__name__,
+            error_category=error_category_for_exception(e),
+            protocol=str(getattr(mc, "api_protocol", "") or ""),
         )
         log_error(f"llm_client.chat[{call_category}]", e)
         raise
@@ -609,6 +622,8 @@ async def chat_turn(
             started_at=started_at,
             ok=False,
             output_hint=type(e).__name__,
+            error_category=error_category_for_exception(e),
+            protocol=str(getattr(mc, "api_protocol", "") or ""),
         )
         log_error(f"llm_client.chat_turn[{call_category}]", e)
         raise

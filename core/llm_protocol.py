@@ -76,6 +76,21 @@ def _http_error_category(status: int | None) -> str:
     return "protocol_incompatible"
 
 
+def error_category_for_exception(exc: BaseException) -> str:
+    """Map an outbound LLM failure to the API ledger category, never a body."""
+    if isinstance(exc, UpstreamResponseFormatError):
+        if exc.category != "protocol_incompatible":
+            return exc.category
+        if isinstance(exc.http_status, int):
+            return _http_error_category(exc.http_status)
+        return exc.category
+    status = getattr(exc, "status_code", None)
+    if not isinstance(status, int):
+        response = getattr(exc, "response", None)
+        status = getattr(response, "status_code", None)
+    return _http_error_category(status if isinstance(status, int) else None)
+
+
 def _format_error(
     mc: Any,
     message: str,
@@ -124,27 +139,61 @@ def _usage(value: Any) -> dict[str, Any] | None:
     return result or None
 
 
-def _chat_assistant_message(message: Any) -> dict[str, Any]:
-    dump = getattr(message, "model_dump", None)
-    if callable(dump):
-        return dump(exclude_none=True)
-    result: dict[str, Any] = {"role": "assistant"}
+def _chat_tool_call_arguments(value: Any) -> str:
+    if value is None:
+        return "{}"
+    if isinstance(value, str):
+        return value if value else "{}"
+    if isinstance(value, dict):
+        return json.dumps(value, ensure_ascii=False)
+    raise ValueError("assistant tool arguments must be a JSON string or object")
+
+
+def _chat_tool_calls(calls: Any) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    for call in calls or []:
+        if isinstance(call, dict):
+            function = call.get("function") or {}
+            call_id = call.get("id")
+            name = function.get("name")
+            arguments = function.get("arguments")
+        else:
+            function = getattr(call, "function", None)
+            call_id = getattr(call, "id", None)
+            name = getattr(function, "name", None)
+            arguments = getattr(function, "arguments", None)
+        if not isinstance(call_id, str) or not call_id or not isinstance(name, str) or not name:
+            raise ValueError("assistant tool history is missing id or name")
+        result.append({
+            "id": call_id,
+            "type": "function",
+            "function": {"name": name, "arguments": _chat_tool_call_arguments(arguments)},
+        })
+    return result
+
+
+def _chat_message_content(content: Any, *, allow_parts: bool) -> str | list[Any]:
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if allow_parts and isinstance(content, list):
+        return list(content)
+    raise ValueError("Chat Completions message content must be text")
+
+
+def _chat_assistant_message(message: Any, *, include_tool_calls: bool = False) -> dict[str, Any]:
+    """Rebuild a Chat Completions assistant message; never echo SDK model_dump()."""
     content = getattr(message, "content", None)
-    if content is not None:
-        result["content"] = content
-    calls = getattr(message, "tool_calls", None)
+    result: dict[str, Any] = {
+        "role": "assistant",
+        "content": content if isinstance(content, str) else "",
+    }
+    if not include_tool_calls:
+        return result
+    calls = _chat_tool_calls(getattr(message, "tool_calls", None))
     if calls:
-        result["tool_calls"] = [
-            {
-                "id": getattr(call, "id", ""),
-                "type": "function",
-                "function": {
-                    "name": getattr(getattr(call, "function", None), "name", ""),
-                    "arguments": getattr(getattr(call, "function", None), "arguments", "{}"),
-                },
-            }
-            for call in calls
-        ]
+        result["tool_calls"] = calls
     return result
 
 
@@ -177,7 +226,7 @@ def _normalize_chat_completion(mc: Any, response: Any) -> NormalizedResponse:
         tool_calls=tool_calls,
         status=str(getattr(choice, "finish_reason", "") or ""),
         usage=_usage(getattr(response, "usage", None)),
-        continuation_items=[_chat_assistant_message(message)],
+        continuation_items=[_chat_assistant_message(message, include_tool_calls=bool(tool_calls))],
         raw_response=response,
     )
 
@@ -588,14 +637,77 @@ def _portable_tool_schema(schema):
     return result
 
 
-def _portable_tools(tools):
-    from copy import deepcopy
+def chat_completions_tools(tools: list[dict[str, Any]] | None) -> list[dict[str, Any]] | None:
+    """Rebuild OpenAI function tools; drop SDK extras and encode type unions as anyOf."""
+    if not tools:
+        return None
+    result: list[dict[str, Any]] = []
+    for tool in tools:
+        function = tool.get("function", tool)
+        name = function.get("name")
+        parameters = function.get("parameters")
+        if not isinstance(name, str) or not name or not isinstance(parameters, dict):
+            raise ValueError("invalid function tool schema")
+        item: dict[str, Any] = {
+            "type": "function",
+            "function": {
+                "name": name,
+                "parameters": _portable_tool_schema(parameters),
+            },
+        }
+        description = function.get("description")
+        if isinstance(description, str) and description:
+            item["function"]["description"] = description
+        if "strict" in function:
+            item["function"]["strict"] = function["strict"]
+        result.append(item)
+    return result
 
-    result = deepcopy(tools)
-    for tool in result or []:
-        function = tool.get("function", {})
-        if "parameters" in function:
-            function["parameters"] = _portable_tool_schema(function["parameters"])
+
+def chat_completions_input(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Rebuild Chat Completions history; never echo SDK dumps or internal keys."""
+    result: list[dict[str, Any]] = []
+    for message in messages:
+        if message.get("type") in {"function_call", "function_call_output"}:
+            raise ValueError("Chat Completions history cannot carry Responses API items")
+        role = message.get("role")
+        if role in {"system", "developer"}:
+            result.append({
+                "role": role,
+                "content": _chat_message_content(message.get("content"), allow_parts=False),
+            })
+            continue
+        if role == "user":
+            result.append({
+                "role": "user",
+                "content": _chat_message_content(message.get("content"), allow_parts=True),
+            })
+            continue
+        if role == "assistant":
+            item: dict[str, Any] = {
+                "role": "assistant",
+                "content": _chat_message_content(message.get("content"), allow_parts=False),
+            }
+            calls = _chat_tool_calls(message.get("tool_calls"))
+            if calls:
+                item["tool_calls"] = calls
+            result.append(item)
+            continue
+        if role == "tool":
+            call_id = message.get("tool_call_id")
+            if not isinstance(call_id, str) or not call_id:
+                raise ValueError("tool history is missing tool_call_id")
+            item = {
+                "role": "tool",
+                "tool_call_id": call_id,
+                "content": _chat_message_content(message.get("content"), allow_parts=False),
+            }
+            name = message.get("name")
+            if isinstance(name, str) and name:
+                item["name"] = name
+            result.append(item)
+            continue
+        raise ValueError(f"unsupported message role for Chat Completions API: {role!r}")
     return result
 
 
@@ -612,11 +724,16 @@ async def _create(
     protocol = _protocol(mc)
     if protocol == "chat_completions":
         kwargs = dict(gen_kwargs)
-        if tools:
-            kwargs.update(tools=_portable_tools(tools), tool_choice=tool_choice or "auto")
+        try:
+            wire_messages = chat_completions_input(messages)
+            converted_tools = chat_completions_tools(tools)
+        except ValueError as exc:
+            raise _format_error(mc, str(exc)) from exc
+        if converted_tools:
+            kwargs.update(tools=converted_tools, tool_choice=tool_choice or "auto")
         if getattr(mc, "force_stream", False) is True:
-            return await _collect_chat_stream(mc, messages, kwargs, capture)
-        response = await mc.client.chat.completions.create(model=mc.model, messages=messages, **kwargs)
+            return await _collect_chat_stream(mc, wire_messages, kwargs, capture)
+        response = await mc.client.chat.completions.create(model=mc.model, messages=wire_messages, **kwargs)
         capture.response(response)
         return _normalize_chat_completion(mc, response)
     if protocol == "anthropic_messages":
@@ -733,8 +850,12 @@ async def _stream_text(
 ) -> AsyncIterator[str]:
     """Yield text deltas while validating the declared protocol's stream state."""
     if _protocol(mc) == "chat_completions":
+        try:
+            wire_messages = chat_completions_input(messages)
+        except ValueError as exc:
+            raise _format_error(mc, str(exc)) from exc
         stream = await mc.client.chat.completions.create(
-            model=mc.model, messages=messages, stream=True, **{**gen_kwargs,
+            model=mc.model, messages=wire_messages, stream=True, **{**gen_kwargs,
                 "stream_options": {**(gen_kwargs.get("stream_options") or {}), "include_usage": True}},
         )
         async for chunk in stream:

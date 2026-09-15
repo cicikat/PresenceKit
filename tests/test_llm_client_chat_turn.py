@@ -24,7 +24,7 @@ import pytest
 from core.model_registry import ModelClient
 
 
-def _fake_message(content: str, *, tool_calls=None, model_dump_extra: dict | None = None):
+def _fake_message(content: str | None, *, tool_calls=None, model_dump_extra: dict | None = None):
     dump = {"role": "assistant"}
     if content:
         dump["content"] = content
@@ -185,6 +185,95 @@ async def test_chat_turn_records_the_actual_tool_request_when_opt_in_debug_is_en
     assert captured["messages"][-1]["content"] == "inspect the action"
     assert captured["tools"][0]["function"]["name"] == "mcp__arcade__play"
     assert captured["request_kwargs"]["tool_choice"] == "auto"
+
+
+@pytest.mark.asyncio
+async def test_chat_turn_rebuilds_continuation_without_sdk_dump_fields(monkeypatch):
+    from core import llm_client
+
+    tc = types.SimpleNamespace(
+        id="call_1",
+        type="function",
+        index=0,
+        function=types.SimpleNamespace(name="web_search", arguments='{"query": "x"}'),
+    )
+    message = _fake_message(
+        None,
+        tool_calls=[tc],
+        model_dump_extra={
+            "refusal": "I cannot",
+            "annotations": [{"type": "url_citation"}],
+            "reasoning_content": "hidden",
+        },
+    )
+    fake_mc = _make_fake_model_client(message, finish_reason="tool_calls")
+    sent = []
+    original = fake_mc.client.chat.completions.create
+
+    async def capture(**kwargs):
+        sent.append(kwargs)
+        return await original(**kwargs)
+
+    fake_mc.client.chat.completions.create = capture
+    monkeypatch.setattr(llm_client, "get_model_client", lambda *a, **k: fake_mc)
+
+    first = await llm_client.chat_turn(
+        [{"role": "user", "content": "hi", "_layer": "user"}],
+        [{"type": "function", "function": {"name": "web_search", "parameters": {"type": "object"}}}],
+    )
+    assert first.continuation_items[0] == {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [{
+            "id": "call_1",
+            "type": "function",
+            "function": {"name": "web_search", "arguments": '{"query": "x"}'},
+        }],
+    }
+
+    await llm_client.chat_turn(
+        first.continuation_items + [{
+            "role": "tool",
+            "tool_call_id": "call_1",
+            "content": "ok",
+            "_continuity_receipt": {"id": "hidden"},
+        }],
+        [{"type": "function", "function": {"name": "web_search", "parameters": {"type": "object"}}}],
+    )
+    assert sent[1]["messages"] == [
+        first.continuation_items[0],
+        {"role": "tool", "tool_call_id": "call_1", "content": "ok"},
+    ]
+    assert "refusal" not in sent[1]["messages"][0]
+    assert "_continuity_receipt" not in sent[1]["messages"][1]
+
+
+@pytest.mark.asyncio
+async def test_chat_turn_records_rejected_tool_request_category(monkeypatch):
+    from core import llm_client
+
+    class FakeRejected(Exception):
+        status_code = 400
+
+    fake_mc = _make_fake_model_client(_fake_message("ok"))
+
+    async def boom(**_kwargs):
+        raise FakeRejected("请求异常，请检查参数后重试")
+
+    fake_mc.client.chat.completions.create = boom
+    captured = {}
+    monkeypatch.setattr(llm_client, "get_model_client", lambda *a, **k: fake_mc)
+    monkeypatch.setattr(llm_client, "_record_api_call", lambda **kwargs: captured.update(kwargs))
+
+    with pytest.raises(FakeRejected):
+        await llm_client.chat_turn(
+            [{"role": "user", "content": "hi"}],
+            [{"type": "function", "function": {"name": "lookup", "parameters": {"type": "object"}}}],
+        )
+    assert captured["ok"] is False
+    assert captured["output_hint"] == "FakeRejected"
+    assert captured["error_category"] == "upstream_request_rejected"
+    assert captured["protocol"] == "chat_completions"
 
 
 class TestLeakDetectorHelper:

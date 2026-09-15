@@ -1,5 +1,12 @@
 # docs/known-issues.md — 已知问题与技术债
 
+## Chat Completions 工具续轮 400（2026-09-15）
+
+current：复杂 tool 请求被中转以模糊 upstream_error 拒绝时，协议出口已改为白名单重建
+Chat Completions 历史（丢掉 SDK dump 的 refusal/annotations/audio/reasoning 与内部键），
+工具 schema 仍走 anyOf。失败记 error_category=upstream_request_rejected，不含请求体。
+observe：运行中后端需重启；原先会 400 的真实中转复杂 tool 请求仍待复测，合成请求不等于端到端交付。
+
 ## 现实来源边界（2026-09-13，observe）
 
 1.5 的全局未知断言和重复桌面摘要已移除；3.9 是有时效的桌面活动线索，并非常驻事实。
