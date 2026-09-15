@@ -20,7 +20,8 @@
 普通 owner QQ/desktop/mobile 私聊和 autonomy 读取同一份角色隔离的资料投影。
 生活记录沿用 enabled + character_readable 及工具角色授权；文档沿用资料回读工具授权。
 过去 7 天的未读资料每轮最多 3 条，额外提供 1 条近期已读参考；待选来源各读取最新 100 条。
-识别 pending/failed 不投递。标题、用户备注、识别描述、时间和来源分开提供，详情通过工具分页读取。
+识别 pending/failed 不投递。Prompt 投影只给短摘要：文件名或标题、时间、摘录；
+不出现 sha256、revision、内部 id。详情通过工具分页读取。
 自动投递表示提供数据，不强制开口，不绕过 DND、Dream、用户活跃、预算或 talk_owner 闸门。
 没有新增 signal 或通知，等下一次原本符合条件的对话/主动机会；群聊、Stage、Dream、Companion 不自动注入。
 

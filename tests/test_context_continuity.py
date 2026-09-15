@@ -29,14 +29,33 @@ def pending(messages):
     return [m for m in messages if m['_layer'] == '10.6_pending_material']
 
 
+def recent(messages):
+    return [m for m in messages if m['_layer'] == '10.7_recent_material']
+
+
+_INTERNAL_MARKERS = ('sha256', 'document_id', 'record_id', 'revision', 'operation_id')
+
+
+def assert_readable_material(messages, *needles):
+    layers = pending(messages) + recent(messages)
+    blob = '\n'.join(message['content'] for message in layers)
+    for needle in needles:
+        assert needle in blob
+    for marker in _INTERNAL_MARKERS:
+        assert marker not in blob
+    assert '{' not in blob and '}' not in blob
+
+
 def test_ready_record_stays_pending_until_evaluated_then_becomes_reference(configured):
     life_records.sync('owner-test', 'device', record())
     first = continuity.messages('owner-test', 'char-test')
-    assert 'lunch' in str(first) and len(pending(first)) == 1
+    assert_readable_material(first, 'lunch')
+    assert len(pending(first)) == 1
     assert len(pending(continuity.messages('owner-test', 'char-test'))) == 1
     continuity.acknowledge(first)  # success, including a silent model response
     later = continuity.messages('owner-test', 'char-test')
-    assert not pending(later) and 'lunch' in str(later)
+    assert not pending(later) and len(recent(later)) == 1
+    assert_readable_material(later, 'lunch')
     assert len(pending(continuity.messages('owner-test', 'other-char'))) == 1
     assert continuity.messages('other-owner', 'char-test') == []
     state = continuity.observability('owner-test', 'char-test')
@@ -49,7 +68,9 @@ def test_latest_revision_deletion_and_permission_revocation(configured):
     life_records.sync('owner-test', 'device', record(operation='edit', revision=1, title='corrected'))
     continuity.acknowledge(old)
     current = continuity.messages('owner-test', 'char-test')
-    assert pending(current) and 'corrected' in str(current) and 'lunch' not in str(current)
+    assert pending(current)
+    assert_readable_material(current, 'corrected')
+    assert 'lunch' not in str(current)
     continuity.acknowledge(current)
     configured['life_records']['character_readable'] = False
     assert continuity.messages('owner-test', 'char-test') == []
@@ -65,17 +86,22 @@ def test_pending_recognition_waits_and_receipt_does_not_invent_content(configure
     assert continuity.messages('owner-test', 'char-test') == []
     job = life_records.claim()
     life_records.finish(job, {'recognition_description': 'noodles'})
-    assert 'noodles' in str(pending(continuity.messages('owner-test', 'char-test')))
+    projected = pending(continuity.messages('owner-test', 'char-test'))
+    assert_readable_material(projected, 'noodles')
 
 
 def test_upload_receipt_trimming_and_tombstone(configured):
+    digest = 'a' * 64
     doc = library.store_upload(uid='owner-test', char_id='char-test', filename='notes.txt', media_type='text/plain',
-                               sha256='a' * 64, searchable_text='chapter detail', source='upload_file')
+                               sha256=digest, searchable_text='chapter detail', source='upload_file')
     msg = continuity.messages('owner-test', 'char-test')
+    assert_readable_material(msg, 'notes.txt', 'chapter detail')
     continuity.acknowledge([])  # trimmed/ablated context must not be marked seen
     assert pending(continuity.messages('owner-test', 'char-test'))
     continuity.acknowledge(msg)
-    assert not pending(continuity.messages('owner-test', 'char-test'))
+    later = continuity.messages('owner-test', 'char-test')
+    assert not pending(later)
+    assert_readable_material(later, 'notes.txt', 'chapter detail')
     assert library.delete('owner-test', 'char-test', doc)
     assert continuity.messages('owner-test', 'char-test') == []
 
@@ -174,7 +200,7 @@ async def test_real_dispatcher_silent_autonomy_keeps_screen_result(configured, m
     later = continuity.messages('owner-test', 'char-test')
     assert not pending(later)
     assert 'fixture spreadsheet' in str(later)
-    assert 'lunch' in str(later)
+    assert_readable_material(later, 'lunch')
 
 
 def test_observability_requires_scope_and_hides_content(configured, monkeypatch):
@@ -192,3 +218,21 @@ def test_observability_requires_scope_and_hides_content(configured, monkeypatch)
     response = client.get(url, headers={'Authorization': 'Bearer state.read'})
     assert response.status_code == 200 and response.json()['tool_results']
     assert 'private weather detail' not in response.text
+
+
+def test_material_summary_omits_internal_fields():
+    digest = 'b' * 64
+    excerpt = continuity._material_summary('upload', {
+        'document_id': 'doc_hidden', 'sha256': digest, 'filename': 'memo.txt',
+        'source': 'upload_file', 'created_at': '2026-09-13T12:00:00+00:00',
+        'summary': 'kitchen notes',
+    })
+    assert 'memo.txt' in excerpt and 'kitchen notes' in excerpt
+    assert 'doc_hidden' not in excerpt and digest not in excerpt
+    life = continuity._material_summary('life', {
+        'id': 'record-hidden', 'revision': 9, 'category': 'diet',
+        'updated_at': '2026-09-13T12:00:00+00:00', 'title': 'breakfast',
+        'note': 'tea', 'recognition_description': 'model guess',
+    })
+    assert 'breakfast' in life and 'tea' in life and 'diet' in life
+    assert 'record-hidden' not in life and 'revision' not in life
