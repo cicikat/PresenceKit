@@ -954,3 +954,5 @@ historical tool receipts. Client evidence: docs/tool-activity-2026-09-12.md in t
 管理面提供全局开关、effective state 与 `/perception/screen/status` 无正文观测；电脑视觉观察页、手机系统配置页各有独立本地授权，默认关闭。全局开启时自主工具继承启用，显式工具禁用优先；角色消息继续走原通知/免打扰链路。桌面 IPC 新增可选 onDemandEnabled；手机使用专用 screen_observation 通道与无障碍 worker，不改 mobile poll/ack/relay。
 
 实现及构建/定向测试通过，真实双设备、锁屏、OEM 后台及 VLM/消息联合验收保持 open。管理面既有国际化测试 3 项失败保持 open，详见施工记录，不能将静态检查作为真实设备验收。
+
+工单 253.4：owner 私聊 Path C 的 11.5_file_path_hints 提供有界路径候选，不自动读取、不改变授权。fs_read 相对路径在授权根内解析，同名歧义要求完整路径，NUL 文本按二进制拒绝。管理面工具页显示 file_access enabled/configured/effective、阻断原因、授权根及来源；远程仍禁用，无新客户端设置或协议。

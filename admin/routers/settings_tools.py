@@ -168,6 +168,7 @@ def _response(cfg: dict) -> dict:
         for item in normalize_tool_presets(tool_loop.get("tool_presets"))
     ]
     return {
+        "file_access": __import__("core.tools.fs_browse", fromlist=["effective_state"]).effective_state(),
         "tools": rows,
         "tool_presets": tool_presets,
         "model_bindings": {

@@ -611,3 +611,5 @@ mobile offers a text snapshot, not this requested on-demand image capture. See d
 灰绿状态色、中性按钮、分隔线设置区、复杂表单折叠及 JSON 填表已接入；观测与工具页复用现有 state.read 全局状态表。原保存 API、客户端管理面 bridge 和手机消费路径不变。
 current / open / roadmap / observe 与验证证据见 [admin-design-implementation.md](admin-design-implementation.md)。
 roadmap：逐请求的视觉、权限、队列、发送、ack/TTL 尚未合并入十类全局状态表，不能据此宣称端到端链路全部可观测。observe：原生容器与真实服务未联调。
+
+工单 253.4：owner 私聊 Path C 的 11.5_file_path_hints 提供有界路径候选，不自动读取、不改变授权。fs_read 相对路径在授权根内解析，同名歧义要求完整路径，NUL 文本按二进制拒绝。管理面工具页显示 file_access enabled/configured/effective、阻断原因、授权根及来源；远程仍禁用，无新客户端设置或协议。

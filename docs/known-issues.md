@@ -679,3 +679,5 @@ schema 兼容修复。实现与定向回归见 [tool-discovery.md](tool-discover
 ## 工单 253.3 聊天产物验收（current / observe）
 
 三个产物工具及 owner-turn → turn sink → desktop/mobile payload 已接入；下载 chat scope，观测 state.read。HTML 预览为 sandbox iframe，响应与 srcdoc 内置 CSP 禁止脚本和联网。桌面 live 卡片实现，手机 UI 与历史卡片重放为 roadmap。后端相关回归 103 通过；两条既有全站 i18n 测试因 IME/生活记录裸文案失败，非产物页。桌面定向 5 项、build、cargo check 通过。隔离管理面硬刷新后 HTML 预览可见且测试脚本未执行；下载 HTTP 内容/鉴权通过，内置浏览器点击无报错但下载事件未返回，文件保存与原生 Tauri 实测为 observe。
+
+253.4 observe：路径提示与授权根读取完成；真实用户文件未用于测试。全后端读取及英文/数字遮罩尚未启用，等待用户在与原方案冲突的补充意见中选择范围。

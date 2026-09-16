@@ -964,3 +964,5 @@ Reality `/prompt-ablation` 与 Dream `/dream-prompt-ablation` 完全分离，修
 **Phase 2 方向**：引入 `prompt_layers` 配置块（`config.yaml`），每层支持 `enabled`/`order`/`drop_priority`/`budget` 可配，再配套管理面板编辑器。
 
 **为什么压后**：改的是每轮生成热路径，改错直接影响所有对话输出；且在 Phase 1 检视器（`GET /observe/prompt-layers/{uid}`）上线前无法判断哪层确实需要调。**先用 round4 检视器观察真实数据 1-2 周，再决定是否值得承担热路径风险。** 届时单开工单，且必须带 `python tests/run_eval.py` 回归。
+
+工单 253.4：owner 私聊 Path C 的 11.5_file_path_hints 提供有界路径候选，不自动读取、不改变授权。fs_read 相对路径在授权根内解析，同名歧义要求完整路径，NUL 文本按二进制拒绝。管理面工具页显示 file_access enabled/configured/effective、阻断原因、授权根及来源；远程仍禁用，无新客户端设置或协议。

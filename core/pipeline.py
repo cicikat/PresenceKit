@@ -1189,6 +1189,10 @@ class Pipeline:
                 ),
                 "_layer": "11.5_tool_nudge",
             })
+        from core.tools.file_path_hints import prompt_hint as _file_path_hint
+        _path_hint = _file_path_hint(_last_user_text, uid=uid, is_group=is_group, is_proactive=is_proactive)
+        if _path_hint:
+            loop_msgs.insert(max(0, len(loop_msgs) - 1), _path_hint)
         used_tool = False
         successful_tool_call = False
         # ("natural"/"exhausted"/"confirm", text) — 收尾结果种类 + 文本

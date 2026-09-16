@@ -79,6 +79,15 @@ def _check_deny_names(path: Path) -> None:
 def _resolve_and_guard(raw_path: str) -> Path:
     """共同守卫 2-4：allow_roots 包含校验、deny_names、软链拒绝、data/ 隐式拒绝。"""
     candidate = Path(raw_path)
+    if not candidate.is_absolute():
+        roots = _allow_roots()
+        matches = [root / candidate for root in roots if (root / candidate).exists()]
+        if len(matches) > 1:
+            raise FsAccessError("多个授权目录存在同名文件，请提供完整路径")
+        if matches:
+            candidate = matches[0]
+        elif len(roots) == 1:
+            candidate = roots[0] / candidate
     try:
         resolved = candidate.resolve()
     except OSError as exc:
@@ -206,7 +215,7 @@ def fs_read(path: str) -> str:
             break
         except UnicodeDecodeError:
             continue
-    if text is None:
+    if text is None or "\x00" in text:
         return f"这是二进制/不支持的文件类型，大小 {size / 1024:.1f} KB"
 
     cfg = _fs_config()
@@ -214,3 +223,14 @@ def fs_read(path: str) -> str:
     if len(text) > max_chars:
         return text[:max_chars] + f"\n（文件共 {len(text)} 字，已截断，可指定更精确的问题）"
     return text
+
+
+def effective_state() -> dict:
+    from core.deployment_capabilities import is_remote_server
+    cfg = _fs_config()
+    enabled = bool(cfg.get("enabled", False))
+    roots = _allow_roots()
+    reason = "remote_server" if is_remote_server() else "disabled" if not enabled else "no_allowed_roots" if not roots else ""
+    return {"enabled": enabled, "configured": bool(roots), "effective": not bool(reason),
+            "blocking_reason": reason, "source": "fs_access", "allow_roots": [str(p) for p in roots],
+            "note": "只读授权目录；内部数据与敏感名称仍拒绝。工具还需在当前角色和模型中可见。"}

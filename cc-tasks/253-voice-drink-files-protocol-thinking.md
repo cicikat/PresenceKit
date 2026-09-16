@@ -116,10 +116,10 @@
 用户异议：我要做。我想做。如果担心敏感文件可以改为后端任何文件只读允许。但是数字和英文被后端读取时自动转化为*
 ### 要做
 
-- [ ] Path C 对 owner 私聊：用户文本里的路径片段可作为 fs/workspace 工具参数提示（不是自动绕过 execute 闸门）。
-- [ ] `fs_access.enabled` 与 roots 的管理面有效状态写清楚；远程部署继续 disabled。
-- [ ] 失败文案可区分：未开启、越权、敏感名、目录、太大、非文本。
-- [ ] 测试：越权、data/、secrets 名、允许根内文本。
+- [x] Path C 对 owner 私聊：用户文本里的路径片段可作为 fs/workspace 工具参数提示（不是自动绕过 execute 闸门）。
+- [x] `fs_access.enabled` 与 roots 的管理面有效状态写清楚；远程部署继续 disabled。
+- [x] 失败文案可区分：未开启、越权、敏感名、目录、太大、非文本。
+- [x] 测试：越权、data/、secrets 名、允许根内文本。
 
 ### 验收
 
@@ -184,3 +184,5 @@
 - 一起听的进度同步与歌词活动。
 
 253.2 已核实提交 d5e9951，store/settings 回归通过。253.3 后端主要回归 103 passed / 2 既有全站 i18n failed；桌面 5 tests、build、cargo check 通过；隔离浏览器硬刷新/HTML 预览通过，下载接口通过而内置浏览器下载事件未返回，真实文件保存 observe。
+
+253.4 按原授权目录范围完成，37 项定向回归通过；隔离管理面硬刷新后可见 enabled/configured/effective、授权根和阻断原因。补充的全后端遮罩方案待用户选择，未扩权。

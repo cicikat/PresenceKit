@@ -110,6 +110,8 @@ function _renderToolsPage() {
   if (intifaceStatus) intifaceStatus.textContent = _toolsControl.intiface_opt_in
     ? t('tools.intiface_enabled', 'Intiface 硬件能力：已启用（仍受所有者、危险模式与硬件安全闸保护）')
     : t('tools.intiface_frozen', 'Intiface 硬件能力：冻结（默认关闭；toy_* 工具不会进入聊天、自主唤醒或自主管理能力）');
+  const fileAccess = document.getElementById('tools-file-access');
+  if (fileAccess) fileAccess.textContent = JSON.stringify(_toolsControl.file_access || {}, null, 2);
   _toolsPresetButtons();
   _renderPathExposure();
   _renderToolsRegistry();
