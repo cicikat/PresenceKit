@@ -42,7 +42,7 @@ E:\opensource-test 接上原数据不是单一 bug,有三个独立机制,全部�
 - [x] desktop 启动时 log 打印实际命中的 client config 文件路径与 backendBase。验收:同上。（`client_config.rs` `load_client_config()`）
 - [x] 清掉后端 `config.yaml` 残留的 `data_prefix` 行;检查 `run_test.py` 结束时是否还原 `data_prefix`,若无则补上(try/finally)。验收:跑一次 `python run_test.py` 后 config.yaml 无 test_sandbox 前缀残留。（本地 config.yaml 已清理；`run_test.py` 改为无论是否清理沙盒都会重置 `data_prefix`，且 `input()` 的 EOFError 也不再阻断重置）
 - [x] Tauri 改名:`identifier` → `com.presencekit.desktop`,`productName` → `PresenceKit Desktop`。注意:appdata 目录会变,老用户(只有茶茶)需手动迁移或重新配置,在 PR 描述里注明。**⚠️ 提醒茶茶：下次启动 desktop 前删除 `%APPDATA%\com.emerald-client.app\` 或迁移到 `%APPDATA%\com.presencekit.desktop\`，否则会读不到旧配置。**
-- [x] 给茶茶写一段「新用户流程正确测试姿势」加入 docs:必须 `git clone`(不是复制);测试前 `netstat -ano | findstr :8080` 确认原后端已停;desktop dev build 不可直接复制测试,需在新位置重新 build 或删除 `%APPDATA%\com.emerald-client.app`。→ 见 [docs/fresh-clone-testing.md](fresh-clone-testing.md)
+- [x] 给茶茶写一段「新用户流程正确测试姿势」加入 docs:必须 `git clone`(不是复制);测试前 `netstat -ano | findstr :8080` 确认原后端已停;desktop dev build 不可直接复制测试,需在新位置重新 build 或删除 `%APPDATA%\com.emerald-client.app`。→ 见 [docs/fresh-clone-testing.md](../fresh-clone-testing.md)
 
 ---
 
@@ -121,7 +121,7 @@ production 模式下 `data_paths.py` 只报 `authored asset missing` 不播种(�
 ## P1-3 README 重写(三仓,英文主 + 简体中文)
 
 结构:`README.md` = English,`README.zh-CN.md` = 简体中文,两文件**第一行**均为语言切换:
-`[English](README.md) | [简体中文](README.zh-CN.md)`。内容保持两语言同步。
+`[English](../../README.md) | [简体中文](../../README.zh-CN.md)`。内容保持两语言同步。
 
 当前后端 README 是早期 QQ 机器人版本,整体重写。各仓大纲:
 

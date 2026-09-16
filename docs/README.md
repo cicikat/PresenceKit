@@ -1,7 +1,11 @@
 # 文档索引
 
-这里仅收录描述当前系统的文档。带日期的排查、交接和执行快照统一放在
-[`archive/`](archive/)；它们可供溯源，不是实现或运行时的真值。
+这里仅收录描述当前系统的文档。三仓查找入口请先看
+[三仓文档总索引](three-repo-doc-index.md)；它按功能列出后端、桌面和手机端的权威文档、
+支撑文档与历史文档。
+
+带日期的排查、交接和执行快照可供溯源，不是实现或运行时的真值；历史文档的当前目录说明见
+[user-teach/README.md](user-teach/README.md)。
 
 ## 入门与全局设计
 
@@ -12,7 +16,8 @@
 - [api-reference.md](api-reference.md)：后端 HTTP/WS 端点与调用方。
 - [three-repo-interface-catalog.md](three-repo-interface-catalog.md)：三仓 HTTP、WS、Tauri IPC、Android channel、relay、设置/观测闭环和当前缺口总账。
 - [backend-integration.md](backend-integration.md)：desktop / mobile 共用的请求体字段契约（如 reply_to）。
-- 桌面 v0.1 消息细节：`Emerald-client/docs/protocol-v0.md`；本仓不再引用不存在的 `desktop-client-protocol.md`。
+- 桌面 v0.1 消息细节：`Emerald-client/docs/protocol-v0.md`；后端实现指针见
+  [desktop-client-protocol.md](desktop-client-protocol.md)。
 - [dev-environment.md](dev-environment.md)：Windows 沙箱开发与验证。
 - [testing-matrix.md](testing-matrix.md)：后端自动化测试、评测脚本、CI 范围与发布验收矩阵。
 - [known-issues.md](known-issues.md)：当前问题、观察项和技术债。
@@ -38,12 +43,12 @@
 - [security.md](security.md)：鉴权、token 与 scope 实现。
 - [security_model.md](security_model.md)：风险边界与部署假设。
 - [token-rotation.md](token-rotation.md)、[private-content-manifest.md](private-content-manifest.md)
-- [fresh-clone-testing.md](fresh-clone-testing.md)、[system-readiness.md](system-readiness.md)
+- [fresh-clone-testing.md](fresh-clone-testing.md)、[system-readiness.md](system-readiness.md)（历史快照）
 - [v1-cold-start-single-user-deployment.md](v1-cold-start-single-user-deployment.md)：v1 首次启动、readiness、迁移、备份恢复与单用户部署 runbook
-- [ubuntu-single-user-deployment.md](ubuntu-single-user-deployment.md)：Ubuntu + systemd + Tailscale 的个人服务器源码部署示例与排障记录。
-- [server-backup-and-upgrade-runbook.md](server-backup-and-upgrade-runbook.md)：Ubuntu 单机的每周备份、断点回传、恢复演练与源码升级命令。
+- [user-teach/ubuntu-single-user-deployment.md](user-teach/ubuntu-single-user-deployment.md)：Ubuntu + systemd + Tailscale 的个人服务器源码部署示例与排障记录。
+- [user-teach/server-backup-and-upgrade-runbook.md](user-teach/server-backup-and-upgrade-runbook.md)：Ubuntu 单机的每周备份、断点回传、恢复演练与源码升级命令。
 - [test_record.md](test_record.md)：手动测试记录模板。
 
-## 归档
+## 历史文档
 
-历史快照的目录说明和逐份处置结论见 [archive/README.md](archive/README.md)。
+历史快照的目录说明和逐份处置结论见 [user-teach/README.md](user-teach/README.md)。

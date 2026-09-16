@@ -2,7 +2,7 @@
 
 本文面向 Ubuntu 单机部署。目标是每周把服务器上的 PresenceKit 私有状态回传到本地，并在升级前留下可验证的恢复点。
 
-底层规则与文件清单以 [offline-state-backup.md](offline-state-backup.md) 为准。本文提供可直接执行的运维流程。
+底层规则与文件清单以 [offline-state-backup.md](../offline-state-backup.md) 为准。本文提供可直接执行的运维流程。
 
 ## 先理解三种目录
 

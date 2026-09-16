@@ -120,13 +120,16 @@ observe：77 项回归和管理面清缓存浏览器验证通过；两次真实�
 原生摘要口吻与真机体验仍需验证，不把提示已发送等同于模型已遵从。
 
 > **状态**：current implementation catalog
-> **核对日期**：2026-08-11
+> **核对日期**：2026-09-16
 > **覆盖仓库**：`Emerald-presence`（后端）、`Emerald-client`（桌面）、`Emerald-mobile`（手机）
 
 本文是三仓之间的接口总账和功能闭环检查入口。它整理 HTTP、WebSocket、Tauri IPC、Android
 `MethodChannel`、手机主动消息中继，以及“设置 / 观测 / 回归调用链”的关系。它不是单仓代码
 实现的替代品：精确 schema 仍以运行中的 `/openapi.json` 和对应源码为准，具体桌面消息字段仍
 以 `Emerald-client/docs/protocol-v0.md` 为准。
+
+按功能查文档请先看 [三仓文档总索引](three-repo-doc-index.md)；本文只维护稳定的跨仓接口、
+调用链、设置/观测闭环和当前缺口，不替代各仓的实现说明或 dated 审计记录。
 
 ## 1. 系统边界与权威来源
 
@@ -687,33 +690,14 @@ entry point; it records a durable cancel request and never replays or delivers t
 桌面只读状态 UI 已接入；手机现有调用不变。关联验证：
 `tests/test_global_effective_state_overview.py`。
 
-## 设置重整（Brief 242，2026-09-10）
+## 设置重整（Brief 242，跨仓指针）
 
-当前管理面一级导航为概览、功能与行为、服务配置、创作、观测、运维与调试。
-功能页区分全局配置、工具执行许可和后端 effective state，支持搜索；调度、自主活动、
-语音和工具各自进入真实细分页。服务首页只展示配置状态，未知与未配置分开，配置齐全
-不证明连通性；模型、向量、邮件、日记、代理分别编辑。
-
-角色模型/声音/形象绑定位于服务配置；模型重置仍为 PATCH 的 `model_routing:null`，
-纯文本卡在 UI 中只读。创作页可保存 Reality 世界书/提示词启用组合，上传或恢复角色头像。
-对话模式、风格、分条、思考、多步工具调用在对话设置；消融、请求快照和自主测试入队
-在生成调试，完整自主提示词也移至该页。观测首页按排查任务分组，调用记录显示时间、
-状态、调用方、模型、失败类别及耗时，支持筛选，原始详情按需展开。语音入口限定 caller=tts。
-
-桌面只保留界面、连接、本机采集同意、播放、活动/桌宠交互和当前角色切换；当前角色
-模型状态只读。Activity 外观并入聊天偏好，原五个偏好 key 不变。后端 scope、REST 写入
-路径、配置锁、WS/poll/ack/TTL 与发送链未改变，没有新增存储或客户端权限判断。
-`chat_configured` 对兼容协议允许无密钥连接，对原生 Anthropic 保留密钥检查；仍不表示
-上游已测试。旧 REST/IPC 包装保留给其他调用方，旧独立偏好组件已删除。
-
-验证：后端相关 UI/API 89 项通过；桌面相关 Vitest 40 项、TypeScript、生产构建通过。
-Playwright 加载真实管理面资源并清缓存，18 个新页、中英文切换、搜索、重置、开关和
-资产组合写请求通过；桌面真实 React 组件的阅读保持、角色切换、未知状态、聚焦刷新、
-失败重试通过。浏览器 API/IPC 使用夹具，未修改生产配置。
-`observe`：真实 Tauri 原生窗口与真实上游连通性未验收；手机未做设备回归，本次未修改
-其设置调用、HTTP/WS、Flutter/Android、relay 或通知路径。不得把夹具结果当作实机结果。
-
-`open`（既有 UI 文案）：reread_image 缺中英文工具说明，覆盖检查仍失败；不涉及三端协议变更。
+后端管理面导航、功能开关、effective state、scope 和观测的完整当前说明统一维护在
+[`feature-control-surface.md`](feature-control-surface.md)。本总账只保留跨仓差异：Desktop
+负责本地界面、连接、本机采集同意、播放、活动/桌宠交互和当前角色切换；模型方案、角色模型/
+资源绑定、思考、工具循环、段落兜底和后端权限由管理面负责。Desktop 的设置入口和验收见
+`Emerald-client/docs/settings-control-audit.md`；Mobile 当前不改变设置调用、HTTP/WS、
+Flutter/Android、relay 或通知路径。历史决策见 `settings-reorganization-audit-2026-09-10.md`。
 
 ## 模型目录发现（2026-09-11）
 

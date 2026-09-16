@@ -1,11 +1,15 @@
-# PresenceKit 三仓 Docs Truth Census
+# PresenceKit 三仓 Docs Truth Census（历史快照）
 
 审计日期：2026-08-10。范围：三个当前工作树中已跟踪的 Markdown/HTML，包含治理入口、admin HTML 和资源 README。代码优先；v1 产品承诺真值为 PresenceKit-backend/docs/v1-release-contract.md，桌面协议正文真值为 PresenceKit-desktop/docs/protocol-v0.md，数据路径以 PresenceKit-backend/docs/data-taxonomy.md 与 core/data_paths.py 交叉核对。
+
+> 本文保留 2026-08-10 的盘点证据，不再作为当前文档库存、数量或链接状态的权威。当前查找入口是
+> [`three-repo-doc-index.md`](three-repo-doc-index.md)；当前接口状态以
+> [`three-repo-interface-catalog.md`](three-repo-interface-catalog.md) 为准。
 
 本轮按 P0 清单逐项回到代码核对，并同步修正了正文、索引和历史文档的误导性表述；保留明确标注的 legacy/fallback/historical 证据，不把它们再当 current authority。当前工作区已有未提交文档改动，本单不覆盖、不回滚。
 ## 结论摘要
 
-扫描计数：backend 114 / desktop 23 / mobile 27，合计 164。分类计数：current-authority=25，duplicate=4，current-derived=111，historical=23，needs-verification=0，deletion-candidate=1。
+历史扫描计数：backend 114 / desktop 23 / mobile 27，合计 164。该数字不代表当前工作树库存；当前索引已按仓库逐份列出并标注职责。
 
 - 当前产品承诺链：release contract → 代码/CI evidence。设计稿、交接和 roadmap 不是 current truth。
 - 当前桌面协议链：desktop docs/protocol-v0.md → backend docs/desktop-client-protocol.md 指针 → backend/client HTTP/WS code。
@@ -76,9 +80,9 @@
 
 ## 文档引用完整性
 
-- Markdown/HTML 相对链接扫描未发现真实缺失目标。
+- 本节链接扫描只代表 2026-08-10 的历史快照，不能替代当前检查。
 - backend release-guide code fence 中的 .../PresenceKit*/releases/tag/vX.Y.Z 与 mobile web/index.html 的 $FLUTTER_BASE_HREF 是模板占位符，不算坏链。
-- backend docs/README 应加入本 census；mobile docs/README 仍索引已完成 split-plan，建议改为历史入口。
+- backend docs/README 现已指向三仓总索引；mobile docs/README 的旧 17/18 施工单链接已移除，已完成 split-plan 仍只作为历史入口。
 - backend desktop-client-protocol.md 与 desktop protocol-v0.md 不竞争：前者 pointer，后者正文。
 
 ## 完整文档清单

@@ -2,6 +2,11 @@
 
 日期：2026-09-10。初始审计记录；Brief 242 已完成代码和夹具验收，当前结果见文末。下文初始发现保留历史时间点。
 
+> **文档状态：历史决策记录。** 当前后端开关/effective state 以
+> [feature-control-surface.md](feature-control-surface.md) 为准，桌面设置归属以
+> `Emerald-client/docs/settings-control-audit.md` 为准，三仓闭环以
+> [three-repo-interface-catalog.md](three-repo-interface-catalog.md) 为准。本文不再单独维护当前实现状态。
+
 ## 1. 结论
 
 建议采用用户提出的职责划分：桌面偏好集中管理本机界面、桌宠、连接和当前角色切换；后端管理面集中管理模型、生成行为、工具能力、授权策略和服务配置。
