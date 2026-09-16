@@ -2170,3 +2170,9 @@ async function loadLatestAutonomyPrompt() {
   try {const data=await api('GET','/admin/autonomy/runs?limit=1');if(data.runs?.length)await loadAutonomyPrompt(data.runs[0].id);}
   catch(error){centerError(host,error);}
 }
+
+async function loadObserveDrinking() {
+  const host = document.getElementById('drinking-state');
+  try { host.textContent = JSON.stringify(await api('GET', '/observability/drinking'), null, 2); }
+  catch (error) { host.textContent = error.message; }
+}

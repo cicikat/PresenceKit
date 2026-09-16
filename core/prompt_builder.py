@@ -539,6 +539,11 @@ def build(
     })
 
     # ─────────────────────────────────────────────────────────────────────────
+    # Decaying fictional body state, independent of durable memory.
+    from core.tools.drinking import prompt_hint as _drinking_hint
+    if drinking_hint := _drinking_hint(char_id):
+        messages.append(drinking_hint)
+
     # 层 1.5：来源边界，不把缺少桌面快照等同于没有现实事实。
     # 实际桌面数据只在 3.9 注入一次。
     # ─────────────────────────────────────────────────────────────────────────

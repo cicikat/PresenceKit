@@ -1028,6 +1028,10 @@ class Pipeline:
         _last_user_text = next(
             (m.get("content", "") for m in reversed(messages) if m.get("role") == "user"), ""
         )
+        from core.tools.drinking import bind_turn as _bind_drinking_turn
+        _drinking_invited = _bind_drinking_turn(
+            _last_user_text, uid=uid, char_id=char_id, is_group=is_group, is_proactive=is_proactive,
+        )
         _bypass_read_log = _detect_bypass_reread(
             _last_user_text if isinstance(_last_user_text, str) else ""
         )
@@ -1050,6 +1054,8 @@ class Pipeline:
         categories = list(allowed_tool_categories) if allowed_tool_categories is not None else list(_exposure.categories)
         excluded_tool_names = set(_exposure.exclude_tools)
         excluded_tool_names.update(exclude_tools or ())
+        if not _drinking_invited:
+            excluded_tool_names.add("drink_with_user")
 
         # Keep the registry helper's long-standing call shape for test/plugin
         # compatibility; proficiency is an exposure-layer filter applied here.
@@ -1518,6 +1524,9 @@ class Pipeline:
                 "[pipeline.run_agentic_loop] 总预算 %.0fs 超时，按步数耗尽处理", total_timeout_s
             )
             outcome = ("exhausted", "")
+        finally:
+            from core.tools.drinking import end_turn as _end_drinking_turn
+            _end_drinking_turn()
 
         async def _single_chunk(text: str):
             if text:

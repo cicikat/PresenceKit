@@ -20,7 +20,7 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'brief-253-file-path-1';
+const ADMIN_UI_FRAGMENT_VERSION = 'brief-253-drinking-1';
 
 const ADMIN_PAGE_ALIASES = Object.freeze({memory: 'observe-memory'});
 
@@ -325,7 +325,7 @@ async function goto(page, {reloadFragment = false, fromHistory = false} = {}) {
     lorebook:        () => { loadLorebook(); loadJbEntries(); },
     'dream-settings': loadDreamSettings,
     scheduler:       loadScheduler,
-    'observe-existence': () => {},
+    'observe-existence': () => loadObserveDrinking(),
     'observe-mood':    loadObserveMood,
     'observe-dream':   loadObserveDream,
     'observe-memory':  () => {},

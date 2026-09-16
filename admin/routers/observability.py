@@ -651,3 +651,11 @@ async def character_permissions_test(
 ):
     from core.character_permissions import run_permission_test
     return await run_permission_test(body.link, uid=body.uid, char_id=body.char_id)
+
+
+@router.get("/observability/drinking", summary="角色酒意与自然衰减")
+async def drinking_state(_auth=Depends(require_scopes("state.read"))):
+    from core.scheduler.loop import _active_char_id_or_none
+    from core.tools.drinking import snapshot
+    char_id = _active_char_id_or_none()
+    return snapshot(char_id) if char_id else {"enabled": False, "effective": False, "blocking_reason": "no_character"}

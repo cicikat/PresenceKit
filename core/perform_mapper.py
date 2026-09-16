@@ -38,6 +38,7 @@ _DEFAULT_ENERGY = 0.5
 # "also_say": rule may also match on the say text itself (expression words only —
 # posture/head/gaze rely on do/feel text alone per spec §2.2).
 _WORD_RULES: list[dict] = [
+    {"pattern": re.compile(r"晃了晃|撑着桌|撑桌|笑得慢"), "field": "posture", "value": "lean_in", "energy_delta": -0.15},
     {"pattern": re.compile(r"凑近|靠近|贴近|探身"), "field": "posture", "value": "lean_in"},
     # "往后缩" excludes "缩成"（"往后缩成一团" is a shrink, not a lean-back）
     {"pattern": re.compile(r"后仰|退开|往后缩(?!成)"), "field": "posture", "value": "lean_back"},

@@ -131,12 +131,12 @@
 
 ### 要做
 
-- [ ] 工具 `drink_with_user`（或更生活化的名字）：参数 `action=sip|toast|pour|refuse`，`drink` 可选。category 用 info，默认不进 Path A；keywords 只覆盖明确「喝酒/干杯/敬你」之类，避免闲聊误触发。
-- [ ] 角色卡可 `presence_ext.drinking: "no"` 直接拒绝。否则模型自己决定叫不调用；工具内部也可因已很醉而拒绝续杯。
-- [ ] 状态：per char 沙盒文件，BAC 粗粒度 0–3，时间衰减（小时级），不写 identity / 不进情景记忆正文。
-- [ ] 醉时 prompt 软层：轻微错字、重复、标点漂，**是体感提示不是用户指令**；Author's Note 仍禁止把工具字眼说出口。
-- [ ] perform 词典加醉酒动作词（晃、撑桌、笑得慢…）映射到既有 posture/energy，不新增 expression 枚举。
-- [ ] 观测：`GET /observability/drinking` 只读强度与衰减，无酒名清单刷屏。
+- [x] 工具 `drink_with_user`（或更生活化的名字）：参数 `action=sip|toast|pour|refuse`，`drink` 可选。category 用 info，默认不进 Path A；keywords 只覆盖明确「喝酒/干杯/敬你」之类，避免闲聊误触发。
+- [x] 角色卡可 `presence_ext.drinking: "no"` 直接拒绝。否则模型自己决定叫不调用；工具内部也可因已很醉而拒绝续杯。
+- [x] 状态：per char 沙盒文件，BAC 粗粒度 0–3，时间衰减（小时级），不写 identity / 不进情景记忆正文。
+- [x] 醉时 prompt 软层：轻微错字、重复、标点漂，**是体感提示不是用户指令**；Author's Note 仍禁止把工具字眼说出口。
+- [x] perform 词典加醉酒动作词（晃、撑桌、笑得慢…）映射到既有 posture/energy，不新增 expression 枚举。
+- [x] 观测：`GET /observability/drinking` 只读强度与衰减，无酒名清单刷屏。
 
 ### 验收
 
@@ -186,3 +186,5 @@
 253.2 已核实提交 d5e9951，store/settings 回归通过。253.3 后端主要回归 103 passed / 2 既有全站 i18n failed；桌面 5 tests、build、cargo check 通过；隔离浏览器硬刷新/HTML 预览通过，下载接口通过而内置浏览器下载事件未返回，真实文件保存 observe。
 
 253.4 按原授权目录范围完成，37 项定向回归通过；隔离管理面硬刷新后可见 enabled/configured/effective、授权根和阻断原因。补充的全后端遮罩方案待用户选择，未扩权。
+
+253.5：定向回归首轮 53 passed / 1 测试依赖覆盖失败，修正后相关 18 passed；表演映射回归已过。隔离浏览器硬刷新可见强度、小时衰减、角色策略与有效状态。

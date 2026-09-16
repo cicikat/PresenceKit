@@ -1062,6 +1062,9 @@ class DataPaths:
         """Chat-facing product files: data/runtime/chat_artifacts/{char_id}/{uid}/"""
         return self._p("runtime", "chat_artifacts", char_id, safe_user_id(user_id))
 
+    def drinking_state(self, *, char_id: str) -> Path:
+        return self._p("runtime", "drinking", safe_user_id(char_id) + ".json")
+
     def chat_artifacts_index(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
         return self.chat_artifacts_dir(user_id, char_id=char_id) / "index.json"
 

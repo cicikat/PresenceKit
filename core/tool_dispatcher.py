@@ -1785,6 +1785,8 @@ _INTIFACE_TOOL_NAMES: frozenset[str] = frozenset({
 
 from core.tools.chat_artifacts import register_tools as _register_artifact_tools
 _register_artifact_tools(_TOOL_REGISTRY)
+from core.tools.drinking import register_tools as _register_drinking_tools
+_register_drinking_tools(_TOOL_REGISTRY)
 
 
 _SIDE_EFFECT_TOOLS: frozenset[str] = frozenset({
@@ -2064,6 +2066,8 @@ def _build_probe_prompt(
     )
     char_name = get_active_char_name()
     for name, spec in _TOOL_REGISTRY.items():
+        if spec.get("probe") is False:
+            continue
         if allowed_tool_names is not None and name not in allowed_tool_names:
             continue
         from core.deployment_capabilities import tool_allowed
@@ -2552,7 +2556,7 @@ async def _execute_structured_impl(
                 # Preserve the historical signature for test/local extensions
                 # that replace the legacy callable in the registry.
                 result = await func(user_id=user_id, **tool_args)
-        elif tool_name in ("read_toy_file", "write_toy_file", "write_artifact", "read_artifact", "list_artifacts"):
+        elif tool_name in ("read_toy_file", "write_toy_file", "write_artifact", "read_artifact", "list_artifacts", "drink_with_user"):
             result = await func(user_id=user_id, char_id=char_id, **tool_args)
         elif tool_name in {
             "workspace_list", "workspace_read", "workspace_create",
