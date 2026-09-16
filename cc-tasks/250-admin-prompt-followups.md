@@ -7,7 +7,7 @@
 - [x] 1. 角色卡编辑器按功能列齐全（先修 CSS 隐藏，再补缺字段）
 - [x] 2. 现实资产启用与头像：按管理面样式规范拉开；世界书显示标题/关键词，不直接展示 `base`
 - [x] 3. 危险模式改为常驻开关；看屏幕/操作电脑、表情包、陪玩、浏览器、MCP 按类别放进功能与行为，细分仍跳原页
-- [ ] 4. 0–8 点且手机/桌面均无活动迹象时，主动循环隐藏 `observe_user_screen`；对话与 `peek_screen_content` 不因此关闭
+- [x] 4. 0–8 点且手机/桌面均无活动迹象时，主动循环隐藏 `observe_user_screen`；对话与 `peek_screen_content` 不因此关闭
 - [x] 5. `6e_inner_diary` 昨日记录不再内嵌「今日事件」
 - [x] 6. `10.7_recent_material` 去掉 sha256 等内部字段，改成可读摘要
 - [x] 7. `10.8_recent_tool_results` 改成唤醒时间 + 工具 + 设备 + 结果 + 有/无发言
@@ -101,3 +101,7 @@
 ## 共同验收
 
 管理面静态改动：更新 `?v=` 与 `ADMIN_UI_FRAGMENT_VERSION`，硬刷新受影响页。无浏览器则写明未完成。专题文档、feature-control-surface、接口总账按改动同步。手机/桌面本地授权未改的标 observe。只暂存本任务文件。
+
+## 工单 4 完成记录（2026-09-16）
+
+已实现夜间无活动自主截屏 schema/提示词门控及执行前复查；沿用两端 poll，普通聊天、peek_screen_content 与 talk_owner 原规则不变。现有自主工具观测返回 night_no_active_device。定向 pytest -n auto：54 passed（夜间边界、截图、自主循环、上下文接续）。真实设备实测未执行，见按需截图专题和 known-issues 的 observe 项。

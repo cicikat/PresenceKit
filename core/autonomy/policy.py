@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from core.autonomy.models import Disposition
 
 # Autonomous writes are deliberately narrower than the normal tool-loop
@@ -112,6 +114,12 @@ def admission(uid: str, char_id: str, state: dict, *, allow_observed_activity: b
     return None
 
 
+def screen_observation_suppressed() -> bool:
+    """Local midnight to 08:00 requires a fresh, consenting active device."""
+    from core.perception.screen_observation import active_device
+    return datetime.now().hour < 8 and active_device() is None
+
+
 def allowed_tools(uid: str, char_id: str, state: dict) -> list[dict]:
     from core.tool_dispatcher import get_tools_schema
     schemas = {((s.get("function") or s).get("name")): s for s in get_tools_schema(char_id=char_id, uid=uid)}
@@ -180,6 +188,8 @@ def tool_decisions(uid: str, char_id: str, state: dict) -> list[dict]:
             explicitly_enabled and eligible and self_capability and name in schemas
             and connected and registered and mcp_policy_ok
         ))
+        night_inactive = name == "observe_user_screen" and screen_observation_suppressed()
+        final_schema = final_schema and not night_inactive
         denial = ""
         if not _is_tool_enabled(name):
             denial = "globally_disabled"
@@ -197,6 +207,8 @@ def tool_decisions(uid: str, char_id: str, state: dict) -> list[dict]:
             denial = mcp_policy_reason
         elif name not in schemas:
             denial = "schema_unavailable"
+        elif night_inactive:
+            denial = "night_no_active_device"
         rows.append({
             "name": name,
             "source": "mcp" if is_mcp else "builtin",

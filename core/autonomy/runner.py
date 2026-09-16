@@ -35,7 +35,7 @@ _MEMORY_CLAIM_RE = re.compile(
 )
 
 
-def _system_prompt(*, talk_available: bool, talk_unavailable_reason: str = "", character=None) -> str:
+def _system_prompt(*, talk_available: bool, talk_unavailable_reason: str = "", character=None, screen_available: bool = False) -> str:
     talk_note = (
         "talk_owner is available only for a deliberate final message."
         if talk_available
@@ -44,6 +44,12 @@ def _system_prompt(*, talk_available: bool, talk_unavailable_reason: str = "", c
             f"{talk_unavailable_reason or 'user-facing talk is disabled'}. "
             "You may still use allowed tools or finish silently."
         )
+    )
+    screen_note = (
+        "If observe_user_screen is available, you may request a fresh view of the owner's active device "
+        "to find a concrete reason for contact. A missing or sensitive image is not evidence of activity. "
+        "Avoid repeated checks; a short relevant message or silence are both valid choices. "
+        if screen_available else ""
     )
     identity = ""
     if character is not None:
@@ -54,9 +60,7 @@ def _system_prompt(*, talk_available: bool, talk_unavailable_reason: str = "", c
         "You are running an internal autonomous opportunity. This is not a chat turn. "
         "Your ordinary text is private and will never be delivered. You may call allowed tools, "
         "then either explicitly call talk_owner once or finish silently. Do not narrate tool calls. "
-        "If observe_user_screen is available, you may request a fresh view of the owner's active device "
-        "to find a concrete reason for contact. A missing or sensitive image is not evidence of activity. "
-        "Avoid repeated checks; a short relevant message or silence are both valid choices. "
+        + screen_note +
         "Treat opportunity evidence as a candidate reason to evaluate, never as dialogue that already happened. "
         "Only the bounded memory-query result and recent-history layers are historical anchors. "
         "Every historical claim in talk_owner.text must be traceable to an anchor with source, time, and speaker provenance. "
@@ -504,6 +508,7 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
             talk_available=talk_available,
             talk_unavailable_reason=talk_unavailable_reason,
             character=_character_for(job.char_id),
+            screen_available=any((item.get("function") or item).get("name") == "observe_user_screen" for item in tools),
         ),
         "_layer": "autonomy_policy",
         "_budget_chars": 1800,
@@ -543,6 +548,12 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
                 # A soft timing block is one explicit re-decision, not another
                 # chance to continue autonomous tool work before speaking.
                 active_tools = [talk_gate.confirm_schema()]
+            messages[0]["content"] = _system_prompt(
+                talk_available=talk_available,
+                talk_unavailable_reason=talk_unavailable_reason,
+                character=_character_for(job.char_id),
+                screen_available=any((item.get("function") or item).get("name") == "observe_user_screen" for item in active_tools),
+            )
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise asyncio.TimeoutError
@@ -972,6 +983,8 @@ async def _execute_tool(name: str, args: dict, job: Job, session, cfg: dict, run
     from core.mcp_client import audit_context
     from core.self_management.service import autonomy_audit_context
     from core.tool_dispatcher import execute
+    if name == "observe_user_screen" and policy.screen_observation_suppressed():
+        return "night_no_active_device", "denied"
     statuses: list[str] = []
 
     async def observe(kind: str, **_kwargs) -> None:

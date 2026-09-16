@@ -913,3 +913,13 @@ roadmap：逐请求的视觉、权限、队列、发送、ack/TTL 尚未合并�
 `GET /observability/runtime-signals`（state.read）增加 `tool_loop_discovery` 聚合信号，
 不新增落盘。详见 [tool-discovery.md](tool-discovery.md)。
 `observe`：真实模型网关及 QQ/原生桌面/手机端到端验证，不能用 mocked 测试替代。
+
+## 工单 250.4：夜间自主截屏（后端策略）
+
+current：本地 00:00–08:00 且无心跳 <30 秒、空闲 <300 秒、available 的设备时，
+自主 schema 隐藏 observe_user_screen，系统提示去掉截屏引导，执行前复查。
+现有 GET /admin/autonomy/tools 用 denial_reason=night_no_active_device 解释拒绝，
+设备观测仍用 GET /perception/screen/status。不增加 REST/WS 字段、设置或落盘；
+普通聊天 Path C、peek_screen_content、talk_owner 原门控不变。
+已核对 desktop visual 与 Android ScreenObservationClient 的 poll/result 和本地授权链。
+observe：两端真实锁屏、输入事件与后台生命周期验收未执行，沿用按需截图专题的 open 项。
