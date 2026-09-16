@@ -319,6 +319,13 @@ GitHub `tests.yml`：3.10/3.12 smoke + main 上 full pytest（`config.example.ya
 - 禁止把真实密钥、QQ 号、手机号、本机绝对路径写进会入库的文件。
 - 部分兼容路径仍可能出现历史 `yexuan` 字段名，不等于产品绑定该角色。
 
+## 贡献者
+
+- cicikat — 项目作者
+- Codex — 编码助手
+- Claude Code — 编码助手
+- Grok — 编码助手
+
 ## License
 
 PolyForm Noncommercial License 1.0.0.

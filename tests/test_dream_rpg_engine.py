@@ -130,8 +130,23 @@ def test_observability_is_content_free_and_kernel_has_no_reality_or_llm_dependen
     apply_proposal(_UID, dream_id, proposal, expected_revision=0, char_id=DEFAULT_CHAR_ID)
     core, health = rpg_store.load(_UID, dream_id, char_id=DEFAULT_CHAR_ID)
     payload = json.dumps(rpg_store.observability(core, health=health, recovery_source="test"))
-    for secret in ("never-expose-this", "seed", "faces", "dc", "modifier", str(rpg_store.session_dir(_UID, dream_id, char_id=DEFAULT_CHAR_ID))):
-        assert secret not in payload
+    parsed = json.loads(payload)
+
+    def _tokens(obj):
+        if isinstance(obj, dict):
+            for key, value in obj.items():
+                yield str(key)
+                yield from _tokens(value)
+        elif isinstance(obj, list):
+            for item in obj:
+                yield from _tokens(item)
+        elif obj is not None:
+            yield str(obj)
+
+    tokens = set(_tokens(parsed))
+    for secret in ("never-expose-this", "seed", "faces", "dc", "modifier"):
+        assert secret not in tokens
+    assert str(rpg_store.session_dir(_UID, dream_id, char_id=DEFAULT_CHAR_ID)) not in payload
     source = Path(__file__).parents[1].joinpath("core", "dream", "rpg_engine.py").read_text(encoding="utf-8")
     for forbidden in ("llm_client", "tool_dispatcher", "event_log", "afterglow", "stimulus"):
         assert forbidden not in source

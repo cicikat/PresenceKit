@@ -319,6 +319,13 @@ Dated investigation snapshots are not runtime truth.
 - Do not commit real secrets, QQ numbers, phone numbers, or machine-absolute paths.
 - Some compatibility paths may still mention historical `yexuan` field names; that is not a product binding to that character.
 
+## Contributors
+
+- cicikat — project author
+- Codex — coding agent
+- Claude Code — coding agent
+- Grok — coding agent
+
 ## License
 
 PolyForm Noncommercial License 1.0.0.

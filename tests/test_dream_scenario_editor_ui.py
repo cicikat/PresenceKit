@@ -54,15 +54,16 @@ def test_character_editor_exposes_per_mode_dream_behavior():
 
 
 def test_character_editor_shows_json_fields_without_permanent_hide_class():
-    assert 'id="char-edit-form" style="display:none"' in CHARACTER_PAGE
-    assert 'id="char-text-form" style="display:none"' in CHARACTER_PAGE
+    assert 'id="char-edit-form" class="admin-inline-056"' in CHARACTER_PAGE
+    assert 'id="char-text-form" class="admin-inline-056"' in CHARACTER_PAGE
     assert 'id="char-world-book"' in CHARACTER_PAGE
     assert 'id="char-post-history"' in CHARACTER_PAGE
     assert 'id="char-post-history-extra"' in CHARACTER_PAGE
     assert 'id="char-alternate-greetings"' in CHARACTER_PAGE
     assert 'id="char-proactive"' in CHARACTER_PAGE
     assert 'id="char-tool-loop"' in CHARACTER_PAGE
-    assert "style.display = ''" in CHARACTER_SOURCE
+    assert "classList.remove('admin-inline-056')" in CHARACTER_SOURCE
+    assert "classList.add('admin-inline-056')" in CHARACTER_SOURCE
     assert "_renderCharacterWorldBook" in CHARACTER_SOURCE
     assert "_worldBookExtra" in CHARACTER_SOURCE
     assert "post_history_instructions" in CHARACTER_SOURCE
