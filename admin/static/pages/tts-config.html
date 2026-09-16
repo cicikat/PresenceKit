@@ -48,3 +48,18 @@
   <button class="btn btn-ghost btn-sm" data-action="testTtsConfig" data-i18n="status.tts.test">试听当前 Provider</button>
   <pre id="tts-call-log" class="admin-inline-157"></pre>
 </div>
+
+<div class="card">
+  <h3 data-i18n="stt.title">语音识别与听觉印象</h3>
+  <p data-i18n="stt.hint">命名连接用于语音转写，默认关闭；语调只是印象。兼容 audio/transcriptions 接口，未提供语调时记为 unclear。</p>
+  <label class="field"><span data-i18n="stt.saved">已保存连接</span><select id="stt-saved" onchange="selectSttConnection()"></select></label>
+  <label class="field"><span data-i18n="stt.name">连接名</span><input id="stt-name" type="text"></label>
+  <label class="field"><span>Base URL</span><input id="stt-url" type="url"></label>
+  <label class="field"><span data-i18n="stt.model">转写模型</span><input id="stt-model" type="text"></label>
+  <label class="field"><span data-i18n="stt.key">API key（留空保留）</span><input id="stt-key" type="password" autocomplete="new-password"></label>
+  <button class="btn btn-primary" data-action="saveSttConnection" data-i18n="stt.save">保存连接</button>
+  <label class="checkbox-row"><input id="stt-enabled" type="checkbox"><span data-i18n="stt.enabled">启用语音感知</span></label>
+  <label class="field"><span data-i18n="stt.purpose">语音消息使用连接</span><select id="stt-route"></select></label>
+  <button class="btn btn-primary" data-action="saveSttPurpose" data-i18n="stt.route_save">保存用途与开关</button>
+  <pre id="stt-state"></pre>
+</div>

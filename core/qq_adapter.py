@@ -213,6 +213,8 @@ def _parse_event(raw: dict) -> dict | None:
     # 提取图片和文件信息
     image_urls = _extract_images(message_array)
     file_info = _extract_file(message_array)
+    audio_url = next((str(seg.get("data", {}).get("url") or seg.get("data", {}).get("file") or "")
+                      for seg in message_array if isinstance(seg, dict) and seg.get("type") == "record"), "")
 
     # 群聊：只响应 at 机器人的消息
     if message_type == "group":
@@ -233,7 +235,7 @@ def _parse_event(raw: dict) -> dict | None:
         content = re.sub(r"\[CQ:at,[^\]]*\]", "", content).strip()
         content = content.replace(f"@{_self_id}", "").strip()
 
-    if not content and not image_urls and not file_info:
+    if not content and not image_urls and not file_info and not audio_url:
         return None
 
     # 提取发送者信息
@@ -253,6 +255,7 @@ def _parse_event(raw: dict) -> dict | None:
         "event_id": f"qq:{raw['message_id']}" if raw.get("message_id") is not None else "",
         "image_urls": image_urls,
         "file_info": file_info,
+        "audio_url": audio_url,
     }
 
 

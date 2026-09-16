@@ -4,7 +4,7 @@
 
 ## 背景（查代码后）
 
-- 媒体入口 `core/media_processor.py` 只处理图和 txt/md/docx，**没有语音转写、没有声调**。听歌已有 `play_song`（desktop 类）。
+- 初始媒体入口 `core/media_processor.py` 只处理图和 txt/md/docx。施工核实另有 `/transcribe` 本地 Whisper 文字入口；253.6 在保留旧入口兼容的基础上补命名 STT、语音上传/QQ 入口与声调。听歌已有 `play_song`（desktop 类）。
 - 工具注册表已有只读 `fs_list` / `fs_read`（`fs_access.allow_roots`，默认关，永远拒 `data/` 与 secrets），以及 Agent Runtime 的 `workspace_*`（授权根、写要确认）。玩具箱 `write_toy_file` 只能写三份固定文本。聊天侧**没有** Gemini 式产物卡片 / 下载 / HTML 预览。
 - Agent Runtime（Brief 229–233）是**后台耐久任务 + 受限 workspace**，不是聊天里的无限 coding agent。`_TOOL_REGISTRY` + `execute(origin=)` 仍是聊天工具边界。
 - `GET/POST /settings/thinking` 已存在。独白走 `call_category=monologue`，注入 `11.7_inner_monologue`；桌面思考气泡读 `GET /chat/turns/{turn_id}/reasoning`，但 owner 回合绑定与查询**只收 `purpose=chat`**，独白即使落盘也不会出现在气泡里。
@@ -153,11 +153,11 @@
 
 ### 要做
 
-- [ ] `media_processor` 支持常见语音后缀（由配置的 STT preset 转写，失败 fail-open 当没听到声音）。
-- [ ] 语调 v0：用时长/能量启发式或 STT 旁路字段，映射到有限枚举 `calm|tired|bright|tense|unclear`，注入独立 prompt 层（带 `_layer`），声明这是听觉印象不是事实。
-- [ ] 管理面：语音识别连接复用模型/图像连接那套「命名连接 + 用途」，默认关。
-- [ ] 桌面/QQ/手机：已有发语音的通道透传字节；无语音入口的通道 no-op。
-- [ ] 测试：无音频不注入；STT 失败不堵 send；标签枚举守门。
+- [x] `media_processor` 支持常见语音后缀（由配置的 STT preset 转写，失败 fail-open 当没听到声音）。
+- [x] 语调 v0：采用 STT 旁路字段，映射到有限枚举 `calm|tired|bright|tense|unclear`，注入独立 prompt 层（带 `_layer`），声明这是听觉印象不是事实；缺字段为 unclear。
+- [x] 管理面：语音识别连接复用模型/图像连接那套「命名连接 + 用途」，默认关。
+- [x] 桌面/QQ/手机：已有发语音的通道透传字节；无语音入口的通道 no-op。
+- [x] 测试：无音频不注入；STT 失败有界降级；标签枚举守门。
 
 ### 验收
 
@@ -188,3 +188,5 @@
 253.4 按原授权目录范围完成，37 项定向回归通过；隔离管理面硬刷新后可见 enabled/configured/effective、授权根和阻断原因。补充的全后端遮罩方案待用户选择，未扩权。
 
 253.5：定向回归首轮 53 passed / 1 测试依赖覆盖失败，修正后相关 18 passed；表演映射回归已过。隔离浏览器硬刷新可见强度、小时衰减、角色策略与有效状态。
+
+253.6：后端声调/图像配置/QQ/手机通道 45 项通过，补充分块响应和撤销凭据后声调与静态资源/双语定向 30 项通过。桌面请求 6 项、build、cargo check 通过；手机请求 16 项和改动文件 analyze 通过。隔离管理面硬刷新、展开后可见连接表单、用途、开关与默认 disabled 有效状态。真实麦克风、QQ amr/silk、供应商 STT 和语调准确性仍为 observe；详情见 docs/audio-perception.md。

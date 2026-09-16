@@ -523,4 +523,6 @@ mobile offers a text snapshot, not this requested on-demand image capture. See d
 
 ## 生活记录分类识别（2026-09-12）
 
+Brief 253.6 的语音转写使用独立 `stt_presets` 命名连接和 `voice_message` 用途，默认关闭；不占用聊天模型 routing profile。管理面、兼容协议和超时边界见 [audio-perception.md](audio-perception.md)。
+
 生活记录 diet/cart 使用现有独立 vision 连接并带分类描述提示词；bill 使用 image_recognition 独立 OCR 连接。没有额外 routing profile 或影子配置。普通聊天图片的 image_recognition.mode、手机自动化 vision 覆盖不变。管理面模型页说明消费范围，生活记录状态页逐分类显示配置/有效状态。OCR 缺失只阻塞账单，配置完整不代表服务实测成功。

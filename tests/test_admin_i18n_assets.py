@@ -75,12 +75,12 @@ def test_i18n_runtime_is_wired_with_persistent_chinese_default():
     core_js = (ROOT / "admin" / "static" / "js" / "core.js").read_text(encoding="utf-8")
 
     assert '<link rel="stylesheet" href="/static/style.css?v=admin-design-1">' in index
-    assert '<script src="/static/i18n.js?v=brief-253-drinking-1"></script>' in index
-    assert '<script src="/static/js/core.js?v=brief-253-drinking-1"></script>' in index
+    assert '<script src="/static/i18n.js?v=brief-253-audio-1"></script>' in index
+    assert '<script src="/static/js/core.js?v=brief-253-audio-1"></script>' in index
     assert '<script src="/static/js/dream-settings.js?v=brief-223-rpg-dream-admin-2"></script>' in index
-    assert "ADMIN_UI_FRAGMENT_VERSION = 'brief-253-drinking-1'" in core_js
-    assert '<script src="/static/js/observability.js?v=brief-253-drinking-1"></script>' in index
-    assert '<script src="/static/js/character.js?v=admin-prompt-followups-1"></script>' in index
+    assert "ADMIN_UI_FRAGMENT_VERSION = 'brief-253-audio-1'" in core_js
+    assert '<script src="/static/js/observability.js?v=brief-253-audio-1"></script>' in index
+    assert '<script src="/static/js/character.js?v=brief-253-audio-1"></script>' in index
     assert 'id="ds-private-truths"' in read_admin_page("dream-settings")
     assert "dream.scenario.policy_reveal_required" in runtime
     assert '<script src="/static/js/overview.js?v=brief-180-admin-static-1"></script>' in index

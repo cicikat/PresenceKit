@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 _MAX_FILE_BYTES = 5 * 1024 * 1024
 SUPPORTED_SUFFIXES = {".txt", ".md", ".docx"}
+from core.audio_perception import SUFFIXES as SUPPORTED_AUDIO_SUFFIXES, ingest_audio_bytes
 SUPPORTED_IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".heif", ".bmp"}
 MAX_IMAGE_SIZE = 10 * 1024 * 1024
 MAX_IMAGE_LONG_EDGE = 1920
@@ -600,3 +601,23 @@ async def process_file_with_evidence(file_info: dict, *, uid: str = "", char_id:
     except Exception as e:
         log_error("media_processor.process_file", e)
     return None, _media_ref("file", name, None, availability="unavailable")
+
+
+async def process_audio_url(url: str):
+    from core.audio_perception import MAX_BYTES, config
+    if not config()["enabled"] or urlparse(url).scheme not in {"http", "https"}:
+        return None
+    try:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=8)) as session:
+            async with session.get(url, proxy=get_aiohttp_proxy(), allow_redirects=False) as response:
+                response.raise_for_status()
+                chunks, size = [], 0
+                async for chunk in response.content.iter_chunked(65536):
+                    size += len(chunk)
+                    if size > MAX_BYTES:
+                        return None
+                    chunks.append(chunk)
+        suffix = Path(urlparse(url).path).suffix.lower()
+        return await ingest_audio_bytes(b"".join(chunks), "voice" + (suffix if suffix in SUPPORTED_AUDIO_SUFFIXES else ".amr"))
+    except Exception:
+        return None

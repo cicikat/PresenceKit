@@ -539,6 +539,10 @@ def build(
     })
 
     # ─────────────────────────────────────────────────────────────────────────
+    from core.audio_perception import prompt_hint as _audio_hint
+    if audio_hint := _audio_hint():
+        messages.append(audio_hint)
+
     # Decaying fictional body state, independent of durable memory.
     from core.tools.drinking import prompt_hint as _drinking_hint
     if drinking_hint := _drinking_hint(char_id):

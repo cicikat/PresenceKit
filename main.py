@@ -378,6 +378,12 @@ async def handle_message(message: dict):
     file_info = message.get("file_info")
     media_context = ""
     media_refs: list[dict[str, str]] = []
+    audio_result = None
+    if message.get("audio_url"):
+        from core.media_processor import process_audio_url
+        audio_result = await process_audio_url(message["audio_url"])
+        media_context = ("（语音转写）" + audio_result["text"]) if audio_result else "（语音未能听清，不要猜测内容或语调）"
+        media_refs.append({"kind": "audio", "availability": "available" if audio_result else "unavailable"})
 
     if file_info:
         try:
@@ -476,6 +482,11 @@ async def handle_message(message: dict):
             channel="qq",
             char_id=_char_id,
         )
+
+        if audio_result:
+            from core.audio_perception import impression, prompt_hint
+            with impression(audio_result):
+                messages.append(prompt_hint())
 
         # ── 步骤6：调用主 LLM ────────────────────────────────────────────────
         logger.info("[handle_message] 调用主 LLM...")

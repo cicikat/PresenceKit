@@ -968,3 +968,5 @@ Reality `/prompt-ablation` 与 Dream `/dream-prompt-ablation` 完全分离，修
 工单 253.4：owner 私聊 Path C 的 11.5_file_path_hints 提供有界路径候选，不自动读取、不改变授权。fs_read 相对路径在授权根内解析，同名歧义要求完整路径，NUL 文本按二进制拒绝。管理面工具页显示 file_access enabled/configured/effective、阻断原因、授权根及来源；远程仍禁用，无新客户端设置或协议。
 
 Brief 253.5：`1.6_drinking` 是自然衰减的虚构角色体感软层，零网络调用；可选停顿/重复，不要求表演，不改变用户事实。
+
+Brief 253.6：`3.8_audio_impression` 只随本轮已转写音频或有效一次性凭据注入。语调枚举来自 STT 可选旁路字段，缺失为 unclear；提示明确是不确定印象，不写入用户人格事实。纯文字不注入，详见 [audio-perception.md](audio-perception.md)。

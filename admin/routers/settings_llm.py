@@ -1411,3 +1411,59 @@ async def test_preset_connectivity(name: str, auth=Depends(require_scopes("admin
                 await close()
         except Exception:
             pass
+
+
+class SttConnection(BaseModel):
+    base_url: str
+    model: str
+    api_key: str = ""
+    timeout_seconds: float = 12
+
+
+class SttPurpose(BaseModel):
+    enabled: bool = False
+    voice_message: str = ""
+
+
+@router.get("/stt-presets", summary="语音识别命名连接与有效状态")
+async def get_stt_presets(auth=Depends(require_scopes("admin"))):
+    from core.audio_perception import snapshot
+    return snapshot()
+
+
+@router.put("/stt-presets/presets/{name}", summary="保存语音识别连接")
+async def save_stt_preset(name: str, body: SttConnection, auth=Depends(require_scopes("admin"))):
+    from core.image_presets import validate_name
+    from core.audio_perception import validate_preset, snapshot
+    cfg = read_config_file(CONFIG_FILE)
+    block = cfg.setdefault("stt_presets", {"enabled": False, "presets": {}, "routes": {}})
+    presets = block.setdefault("presets", {})
+    data = body.model_dump()
+    if not data["api_key"]:
+        data["api_key"] = (presets.get(name) or {}).get("api_key", "")
+    try:
+        name = validate_name(name)
+        presets[name] = validate_preset(data)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    write_config_file(CONFIG_FILE, cfg)
+    from core.config_loader import reload_config
+    reload_config()
+    return snapshot()
+
+
+@router.put("/stt-presets/routes", summary="保存语音识别用途与开关")
+async def save_stt_route(body: SttPurpose, auth=Depends(require_scopes("admin"))):
+    cfg = read_config_file(CONFIG_FILE)
+    block = cfg.setdefault("stt_presets", {"enabled": False, "presets": {}, "routes": {}})
+    if body.voice_message and body.voice_message not in block.get("presets", {}):
+        raise HTTPException(status_code=422, detail="Unknown STT connection")
+    if body.enabled and not body.voice_message:
+        raise HTTPException(status_code=422, detail="Select an STT connection first")
+    block["enabled"] = body.enabled
+    block["routes"] = {"voice_message": body.voice_message}
+    write_config_file(CONFIG_FILE, cfg)
+    from core.config_loader import reload_config
+    from core.audio_perception import snapshot
+    reload_config()
+    return snapshot()

@@ -683,3 +683,5 @@ schema 兼容修复。实现与定向回归见 [tool-discovery.md](tool-discover
 253.4 observe：路径提示与授权根读取完成；真实用户文件未用于测试。全后端读取及英文/数字遮罩尚未启用，等待用户在与原方案冲突的补充意见中选择范围。
 
 - Brief 253.5 observe：喝酒模拟状态与现有 perform 映射已完成，真实桌面姿态表现待设备回归；不代表现实酒精测量。
+
+- Brief 253.6 observe：命名 STT、语调层与三端语音凭据已接入；真实麦克风、QQ amr/silk 服务兼容和语调准确率未验收。普通 STT 缺少 tone 字段时只给 unclear。旧本地 Whisper 超时后推理线程可能继续至结束，清理随线程完成；详细边界见 [audio-perception.md](audio-perception.md)。

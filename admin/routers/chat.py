@@ -17,6 +17,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 
 from admin.auth import require_scopes
 from core.llm_reasoning_store import associate_owner_turn
+from core.audio_perception import voice_context
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -726,6 +727,7 @@ async def preview_chat_artifact(artifact_id: str, _auth=Depends(require_scopes("
 
 
 @router.post("/desktop/chat", summary="桌宠对话（Bearer 鉴权）")
+@voice_context("desktop")
 async def desktop_chat(body: dict, _auth=Depends(require_scopes("chat"))):
     """
     桌宠端对话入口，需 Bearer token 鉴权（Authorization: Bearer <YEXUAN_ADMIN_SECRET>）。
@@ -807,6 +809,18 @@ async def upload_ingest(
 
     if any(is_docs) and any(is_images):
         raise HTTPException(status_code=422, detail="不支持文档和图片混合上传")
+
+    if len(upload_files) == 1 and suffixes[0] in media_processor.SUPPORTED_AUDIO_SUFFIXES:
+        data = await upload_files[0].read(25 * 1024 * 1024 + 1)
+        if len(data) > 25 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="音频超过 25MB 上限")
+        result = await media_processor.ingest_audio_bytes(data, upload_files[0].filename or "voice.wav")
+        from core.audio_perception import impression
+        text = result["text"] if result else "（语音未能听清，不要猜测内容或语调）"
+        with impression(result):
+            return await run_owner_chat_turn(text + ("\n" + message if message else ""), channel,
+                trusted_user_text=message,
+                media_refs=[{"kind": "audio", "availability": "available" if result else "unavailable"}])
 
     if all(is_docs):
         if len(upload_files) > 1:

@@ -5,11 +5,13 @@
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 
 from admin.auth import require_scopes
+from core.audio_perception import voice_context
 
 router = APIRouter()
 
 
 @router.post("/mobile/chat", summary="手机端普通对话（Bearer 鉴权）")
+@voice_context("mobile")
 async def mobile_chat(body: dict, _auth=Depends(require_scopes("chat"))):
     """Run the shared reality-chat pipeline with mobile provenance."""
     message = (body.get("message") or "").strip()

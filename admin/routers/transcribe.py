@@ -79,13 +79,21 @@ async def transcribe_audio(
     channel: str = Form("desktop"),
     _auth=Depends(require_scopes("chat")),
 ):
-    data = await file.read()
+    data = await file.read(MAX_AUDIO_BYTES + 1)
 
     if len(data) > MAX_AUDIO_BYTES:
         raise HTTPException(status_code=413, detail="音频超过 25MB 上限")
 
     if len(data) == 0:
         raise HTTPException(status_code=422, detail="音频内容为空")
+
+    from core.config_loader import get_config
+    from core.audio_perception import ingest_audio_bytes, issue_receipt
+    if "stt_presets" in get_config():
+        result = await ingest_audio_bytes(data, file.filename or "voice.webm")
+        if not result:
+            raise HTTPException(status_code=422, detail="语音识别未启用、未配置或未能听清，请重试或输入文字")
+        return {**result, "audio_perception_id": issue_receipt(result, channel)}
 
     # 根据文件名或 content-type 决定扩展名（影响 ffmpeg 解码路径）
     suffix = ".webm"
@@ -102,7 +110,16 @@ async def transcribe_audio(
             tmp_path = tmp.name
 
         loop = asyncio.get_event_loop()
-        text = await loop.run_in_executor(None, _transcribe_sync, tmp_path)
+        def run_and_cleanup(path):
+            try:
+                return _transcribe_sync(path)
+            finally:
+                try:
+                    os.unlink(path)
+                except OSError:
+                    pass
+        worker_path, tmp_path = tmp_path, None
+        text = await asyncio.wait_for(loop.run_in_executor(None, run_and_cleanup, worker_path), timeout=20)
     except RuntimeError as e:
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
