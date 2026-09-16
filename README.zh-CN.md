@@ -30,8 +30,8 @@ PresenceKit（本仓，后端 / 唯一业务真相源）
 | 仓 | 版本 | 说明 |
 |---|---|---|
 | 后端 PresenceKit | [v1.1.0](https://github.com/cicikat/PresenceKit/releases/tag/v1.1.0) | 本仓 |
-| 桌面 PresenceKit-desktop | 仍可用 [v1.0.1](https://github.com/cicikat/PresenceKit-desktop/releases/tag/v1.0.1)；桌面 v1.1.0 若未发，沿用冻结 v0.1 协议 | 渲染/ack 在客户端 |
-| 手机 PresenceKit-mobile | [v1.1.0](https://github.com/cicikat/PresenceKit-mobile/releases/tag/v1.1.0) 已发 | 生活记录 UI、热力图、梦境外观等在手机端 |
+| 桌面 PresenceKit-desktop | [v1.1.0](https://github.com/cicikat/PresenceKit-desktop/releases/tag/v1.1.0) | 渲染/ack 在客户端；冻结 v0.1 协议 |
+| 手机 PresenceKit-mobile | [v1.1.0](https://github.com/cicikat/PresenceKit-mobile/releases/tag/v1.1.0) | 生活记录 UI、热力图、梦境外观等在手机端 |
 
 跨仓契约、设置归属、open/observe 缺口见 [docs/three-repo-doc-index.md](docs/three-repo-doc-index.md) 与 [docs/three-repo-interface-catalog.md](docs/three-repo-interface-catalog.md)。功能开关、effective state、scope 以 [docs/feature-control-surface.md](docs/feature-control-surface.md) 为权威。
 

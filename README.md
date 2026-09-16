@@ -30,8 +30,8 @@ PresenceKit (this repo — backend, sole business source of truth)
 | Repo | Version | Notes |
 |---|---|---|
 | Backend PresenceKit | [v1.1.0](https://github.com/cicikat/PresenceKit/releases/tag/v1.1.0) | this repo |
-| Desktop PresenceKit-desktop | [v1.0.1](https://github.com/cicikat/PresenceKit-desktop/releases/tag/v1.0.1) still works if desktop v1.1.0 is not out; frozen v0.1 protocol | render/ack on the client |
-| Mobile PresenceKit-mobile | [v1.1.0](https://github.com/cicikat/PresenceKit-mobile/releases/tag/v1.1.0) already published | life-record UI, heatmap, dream chrome on the phone |
+| Desktop PresenceKit-desktop | [v1.1.0](https://github.com/cicikat/PresenceKit-desktop/releases/tag/v1.1.0) | render/ack on the client; frozen v0.1 protocol |
+| Mobile PresenceKit-mobile | [v1.1.0](https://github.com/cicikat/PresenceKit-mobile/releases/tag/v1.1.0) | life-record UI, heatmap, dream chrome on the phone |
 
 Cross-repo contracts and gaps: [docs/three-repo-doc-index.md](docs/three-repo-doc-index.md), [docs/three-repo-interface-catalog.md](docs/three-repo-interface-catalog.md). Feature flags, effective state, and scopes: [docs/feature-control-surface.md](docs/feature-control-surface.md).
 
