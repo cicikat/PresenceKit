@@ -21,8 +21,8 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Build release package
-        run: python scripts/build_release.py --version ${{ github.ref_name }}
+      - name: Build release packages (Windows + macOS)
+        run: python scripts/build_release.py --version ${{ github.ref_name }} --all-platforms
         env:
           # windows-latest 默认非 UTF-8 控制台代码页，脚本自身也会 reconfigure
           # stdout/stderr，这里再加一层保险。

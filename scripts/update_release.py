@@ -23,10 +23,13 @@ from typing import Any
 
 
 RELEASES_URL = "https://api.github.com/repos/cicikat/PresenceKit/releases?per_page=100"
-ASSET_RE = re.compile(r"^PresenceKit-(.+)-win64-setup\.zip$")
+ASSET_RE = re.compile(r"^PresenceKit-(.+)-(win64|macos-arm64|macos-x64)-setup\.zip$")
 PROTECTED_ROOTS = frozenset({"data", "userdata", ".venv"})
 PROTECTED_FILES = frozenset({"config.yaml", "secrets.local.yaml"})
-PROTECTED_PATHS = frozenset({PurePosixPath("tools/uv.exe")})
+PROTECTED_PATHS = frozenset({
+    PurePosixPath("tools/uv.exe"),
+    PurePosixPath("tools/uv"),
+})
 BACKUP_MANIFEST_NAME = "_update_backup_manifest.json"
 BACKUP_MANIFEST_SCHEMA_VERSION = 1
 
@@ -188,13 +191,33 @@ def parse_release_choice(value: str, releases: list[dict[str, Any]]) -> int:
     return index
 
 
+def current_package_suffix() -> str:
+    """Pick the GitHub asset suffix that matches this installation's host."""
+    if sys.platform == "darwin":
+        import platform
+        machine = platform.machine().lower()
+        return "macos-arm64-setup" if machine in {"arm64", "aarch64"} else "macos-x64-setup"
+    return "win64-setup"
+
+
 def _release_assets(release: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     assets = release.get("assets")
     if not isinstance(assets, list):
         raise UpdateError(f"{release.get('tag_name', '所选版本')} 没有可下载资产。")
-    zip_asset = next((asset for asset in assets if isinstance(asset, dict) and ASSET_RE.match(str(asset.get("name", "")))), None)
+    suffix = current_package_suffix()
+    preferred = re.compile(rf"^PresenceKit-.+-{re.escape(suffix)}\.zip$")
+    zip_asset = next(
+        (asset for asset in assets if isinstance(asset, dict) and preferred.match(str(asset.get("name", "")))),
+        None,
+    )
+    if zip_asset is None and suffix == "win64-setup":
+        # v1.0.x releases only published the Windows zip.
+        zip_asset = next(
+            (asset for asset in assets if isinstance(asset, dict) and ASSET_RE.match(str(asset.get("name", "")))),
+            None,
+        )
     if zip_asset is None:
-        raise UpdateError("所选版本没有 PresenceKit Windows 安装 zip。")
+        raise UpdateError(f"所选版本没有 PresenceKit {suffix} 安装 zip。")
     checksum_name = f"{zip_asset['name']}.sha256"
     checksum_asset = next((asset for asset in assets if isinstance(asset, dict) and asset.get("name") == checksum_name), None)
     if checksum_asset is None:
@@ -491,8 +514,12 @@ def _service_is_running() -> bool:
 def sync_dependencies(root: Path) -> None:
     python = root / ".venv" / "Scripts" / "python.exe"
     if not python.is_file():
-        raise UpdateError("未找到 .venv；请先运行 AA1安装并启动.bat 完成首次安装。")
+        python = root / ".venv" / "bin" / "python"
+    if not python.is_file():
+        raise UpdateError("未找到 .venv；请先完成首次安装后再更新。")
     bundled_uv = root / "tools" / "uv.exe"
+    if not bundled_uv.is_file():
+        bundled_uv = root / "tools" / "uv"
     if bundled_uv.is_file():
         command = [str(bundled_uv), "pip", "sync", "requirements.lock", "--python", str(python)]
     else:

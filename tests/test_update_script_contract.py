@@ -28,6 +28,7 @@ def test_release_package_protected_paths_are_never_overwritten():
         "secrets.local.yaml",
         ".venv/Scripts/python.exe",
         "tools/uv.exe",
+        "tools/uv",
     }
     ordinary = {"main.py", "tools/helper.exe", "scripts/update_release.py"}
 
@@ -64,6 +65,28 @@ def test_sha256_validation_and_release_menu_parsing(tmp_path):
             pass
         else:
             raise AssertionError(f"{invalid!r} must not select a release")
+
+
+def test_release_assets_prefer_host_platform_zip(monkeypatch):
+    release = {
+        "tag_name": "v1.1.0",
+        "assets": [
+            {"name": "PresenceKit-v1.1.0-win64-setup.zip"},
+            {"name": "PresenceKit-v1.1.0-win64-setup.zip.sha256"},
+            {"name": "PresenceKit-v1.1.0-macos-arm64-setup.zip"},
+            {"name": "PresenceKit-v1.1.0-macos-arm64-setup.zip.sha256"},
+            {"name": "PresenceKit-v1.1.0-macos-x64-setup.zip"},
+            {"name": "PresenceKit-v1.1.0-macos-x64-setup.zip.sha256"},
+        ],
+    }
+    monkeypatch.setattr(updater, "current_package_suffix", lambda: "macos-arm64-setup")
+    zip_asset, checksum_asset = updater._release_assets(release)
+    assert zip_asset["name"] == "PresenceKit-v1.1.0-macos-arm64-setup.zip"
+    assert checksum_asset["name"] == "PresenceKit-v1.1.0-macos-arm64-setup.zip.sha256"
+
+    monkeypatch.setattr(updater, "current_package_suffix", lambda: "win64-setup")
+    zip_asset, checksum_asset = updater._release_assets(release)
+    assert zip_asset["name"] == "PresenceKit-v1.1.0-win64-setup.zip"
 
 
 def test_fetch_releases_uses_mocked_network_response(tmp_path, monkeypatch):

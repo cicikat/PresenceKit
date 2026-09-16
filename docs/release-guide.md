@@ -41,14 +41,17 @@ gh auth status   # 确认已登录且没打印出完整 token
 
 ## 2. backend（本仓 PresenceKit）：CI 全自动，本机也能复现
 
-**产物**：`PresenceKit-<version>-win64-setup.zip`（uv 引导包，免配 Python
-环境）+ 同名 `.sha256`。
+**产物**：每个 tag 打三份 uv 引导包（免配 Python 环境）及各自 `.sha256`：
+
+- `PresenceKit-<version>-win64-setup.zip`
+- `PresenceKit-<version>-macos-arm64-setup.zip`
+- `PresenceKit-<version>-macos-x64-setup.zip`
 
 1. 改版本号：`pyproject.toml` 里的 `version = "X.Y.Z"`。
 2. 提交、push 到 `main`。
 3. 打 tag 并推送，触发 `.github/workflows/release.yml`（`windows-latest`，
-   跑 `scripts/build_release.py`，用 `softprops/action-gh-release` 自动
-   创建 Release 并挂资产、生成 changelog）：
+   跑 `scripts/build_release.py --all-platforms`，下载各平台 uv 二进制后打包，
+   用 `softprops/action-gh-release` 自动创建 Release 并挂资产、生成 changelog）：
 
    ```bash
    git tag -a vX.Y.Z -m "PresenceKit vX.Y.Z"
@@ -68,7 +71,7 @@ gh auth status   # 确认已登录且没打印出完整 token
 **本机复现构建**（不依赖 CI，验证产物用）：
 
 ```bash
-python scripts/build_release.py --version vX.Y.Z
+python scripts/build_release.py --version vX.Y.Z --all-platforms
 # 产物在 dist/，人工核对 zip 里不含 config.yaml / secrets.local.yaml
 ```
 

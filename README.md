@@ -2,283 +2,323 @@
 
 # PresenceKit
 
-An AI companion backend with long-term memory, emotional state, and the ability to reach out to you first. A QQ bot is just one of several optional channels — the core is a persona/memory/scheduling engine you can talk to over HTTP/WebSocket from any client.
+A **single-user AI companion backend**. It owns persona, long-term memory, mood, tools, proactive contact, and an isolated dream runtime. A QQ bot is only one optional channel. [PresenceKit-desktop](https://github.com/cicikat/PresenceKit-desktop) and [PresenceKit-mobile](https://github.com/cicikat/PresenceKit-mobile) are thin clients: they render UI, capture sensors, and deliver messages. They **do not own** memory, persona, scheduling, or business data.
+
+The current product train is **v1.1.0**. The desktop wire protocol remains frozen **v0.1** (`POST /desktop/chat` + `/ws/desktop`), not a new EventBus. Exact HTTP schemas live in the running `/openapi.json`. Topic docs under `docs/` are the product source of truth; root `ARCHITECTURE.md` / `DESIGN.md` / `AGENTS.md` are developer entry points.
 
 ---
 
-## Repo relationship
+## Three-repo relationship and ownership
 
 ```
-PresenceKit (this repo, backend)
-  ├── PresenceKit-desktop  Tauri desktop pet + admin panel client
-  └── PresenceKit-mobile   Flutter mobile client
+PresenceKit (this repo — backend, sole business source of truth)
+  ├── PresenceKit-desktop  Tauri desktop pet + admin-panel shell
+  └── PresenceKit-mobile   Flutter Android client
 ```
 
-The backend is the single source of truth: long-term memory, emotional state, the proactive scheduler, the tool system, and the persona all live here. Desktop and mobile are **thin clients** — they render UI and forward user input, they don't own any business data. All three talk over HTTP/WebSocket; you can run the backend with only one client connected, both, or neither (pure QQ-bot mode).
+| Question | Answer |
+|---|---|
+| Who stores memory, cards, dreams, garden, life records, tokens? | **Backend only** (`data/`, `userdata/`) |
+| Who decides whether to speak unsolicited? | Backend `core/autonomy`; `talk_owner` is the only user-visible exit |
+| Who renders bubbles, Live2D, notifications, heatmaps? | The matching client |
+| Who captures screenshots, sensors, IME? | Clients capture; backend receives, judges, and may speak |
+| Can the backend run alone? | Yes: admin-panel chat, QQ-only, or a single client |
+| Can a client run alone? | No. There is no on-device persona/memory engine |
+
+**Companion releases (this train)**
+
+| Repo | Version | Notes |
+|---|---|---|
+| Backend PresenceKit | [v1.1.0](https://github.com/cicikat/PresenceKit/releases/tag/v1.1.0) | this repo |
+| Desktop PresenceKit-desktop | [v1.0.1](https://github.com/cicikat/PresenceKit-desktop/releases/tag/v1.0.1) still works if desktop v1.1.0 is not out; frozen v0.1 protocol | render/ack on the client |
+| Mobile PresenceKit-mobile | [v1.1.0](https://github.com/cicikat/PresenceKit-mobile/releases/tag/v1.1.0) already published | life-record UI, heatmap, dream chrome on the phone |
+
+Cross-repo contracts and gaps: [docs/three-repo-doc-index.md](docs/three-repo-doc-index.md), [docs/three-repo-interface-catalog.md](docs/three-repo-interface-catalog.md). Feature flags, effective state, and scopes: [docs/feature-control-surface.md](docs/feature-control-surface.md).
 
 ---
 
-## Features
+## What this system is / is not
 
-### Memory system (five layers, running in parallel)
+**Is**
 
-- **Short-term history**: sliding window of the last 20 turns, sanitized on read to avoid style self-feedback collapse
-- **Mid-term summary**: compressed view of the last 12 hours, rendered into three time buckets (just now / a few hours ago / earlier), LLM-compressed with a rule-based fallback
-- **Episodic memory**: structured fragments promoted from mid-term via eager/sweep, with strength decay, MMR diversity recall, and emotion-texture dedup
-- **Stable behavior patterns** (user_identity): the character's long-term read on you, driven by a four-stage consolidation pipeline (capture → midterm → episodic → identity); survives restarts
-- **Event log**: daily-sharded, keyword-searchable, with intensity decay scoring — low-intensity entries older than 7 days are skipped automatically
+- A single-owner local or protected-LAN companion runtime: one process, one `scheduler.owner_id`, one set of cards and memories.
+- Two isolated realms: Reality writes memory; Dream uses a separate pipeline with only thin writeback (impressions / afterglow). Dreams must not be stored as real events.
+- HTTP + WebSocket (default `http://127.0.0.1:8080`) plus optional NapCat / OneBot 11 QQ.
+- The admin panel in this repo (`admin/static/`) is the operator, config, and observability surface.
 
-`character_growth` is kept as legacy-compatible data but is no longer the primary long-term context source for the live prompt.
+**Is not**
 
-### Emotional state system
+- Multi-tenant SaaS, OAuth, or a public chatbot platform.
+- A client-side LLM or client-side memory store.
+- A guarantee that Android background delivery survives every OEM/Doze policy (relay is signal-only; bodies live on the poll queue).
+- Automatic payment, automatic posting, or unbounded shell/filesystem power. Agent Runtime process/browser/workspace capabilities are bounded and off by default.
+- A shipped unified EventBus or desktop WebSocket v1. Those remain historical / deferred: [docs/interaction-event-model.md](docs/interaction-event-model.md), [docs/v1-release-contract.md](docs/v1-release-contract.md).
 
-- After every turn, an LLM detects the character's reply emotion and writes it to `mood_state`
-- Drift formula: `new_intensity = old_intensity × 0.7 + new_emotion_intensity × 0.3`; a state switch needs two consecutive confirming turns
-- The current emotional undertone is injected into the prompt as a soft hint, described at three intensity tiers
-- Emotion feeds back into episodic recall scoring — memories that get recalled more often become more durable
-
-### Prompt architecture (12+ layers)
-
-- Layered prompt construction with tag gating, token estimation, and quality-graded trimming
-- Lorebook / character card / user profile / realtime state / emotional undertone / episodic memory / mid-term summary / activity state / character diary / rotating Author's Note
-- Probe mechanism: a keyword fast-path plus a minimal LLM probe runs ahead of the main turn to pre-判断 info/desktop tool calls
-- Layer 11 (Author's Note): rotating personality traits plus corrective injection appended when `consistency_check` flags an issue
-- When the token budget is exceeded, layers are trimmed lowest-quality-first
-
-### Dream system
-
-- An isolated Dream Session pipeline: doesn't enter the waking-conversation post-process, doesn't write to waking history/memory, doesn't trigger the scheduler
-- A snapshot of the waking context is frozen on dream entry; dreams run their own D0–D10 prompt layer stack, world pack, and lorebook
-- Three dream modes: sandbox (free-form world lore + jailbreak preset authoring) / scenario
-  (scripted stage progression) / mirror (read-only figurative dreams, tendency material
-  auto-derived from the user's hidden state); the admin panel's "Dream Settings" page
-  authors each mode in its own tab, including create/rename/delete for world folders and scripts
-- Supports a soft exit and an unstoppable hard exit; on exit the raw dream text is archived and a low-weight dream impression is distilled
-- The waking prompt only ever receives the scene-stripped `6g_dream_impression`, so dream content can't be misremembered as reality
-
-### Proactive trigger scheduler
-
-- Good morning / good night / random daytime small talk (drawn from past messages carrying emotional words)
-- Weather-linked messages, a daily diary entry the character writes itself, natural memory decay
-- Multi-stage birthday triggers: night-before warmup, midnight greeting, afternoon check-in, evening wind-down
-- Follow-ups on unfinished topics, proactive-recall triggers
-- Holiday awareness, calendar-moment awareness, faster cadence over long holidays
-- Periodic episodic-memory sweep/promotion (30-minute cooldown)
-- Do-not-disturb module (implemented, pluggable)
-- High-priority triggers (birthday / period / heart-rate alert) force-send even while the do-not-disturb window is active
-- Cooldown state is persisted and survives restarts
-
-### Emotional garden
-
-- The character has its own flower plot: auto-watering, user-prompted watering, blooming, and post-harvest handling
-- Garden state is exposed to the admin panel; key events can feed into the proactive scheduler
-
-### Real-world data awareness
-
-- **Apple Watch**: abnormal heart-rate alerts (low priority above 100bpm, high priority above 120bpm), sleep awareness and reports (pushed via an iPhone Shortcut)
-- **Obsidian journal**: read by date, keyword-searchable over the last 30 days, marked as shared once read
-- **Menstrual cycle awareness**: tag-gated during and near the cycle, auto-injects a care layer
-- **Phone sensors**: steps / battery / location / screen-on count, injected whenever same-day data exists
-- **Desktop pet screen-activity snapshot**: 5-minute TTL, injected on tag match
-
-### Conversation capabilities
-
-- Image recognition (GLM / Gemini / OpenAI Vision)
-- TTS speech synthesis (GPT-SoVITS, reference audio switches with emotion)
-- Sticker sending (emotion-linked, mutually exclusive with TTS)
-- Tool calls: weather lookup, reminders, web search (DuckDuckGo), desktop control, and memory tools. When the per-character/global tool-loop switch is enabled, the function-calling main loop exposes the allowed registry categories (including memory); when it is off, the legacy probe/Path B paths remain in use.
-- Desktop intent parsing: the character saying "let me close that game for you" actually minimizes the window
-- Three channels — QQ, desktop pet, mobile polling — with WebSocket preferred for proactive desktop pushes and a file-queue fallback
-- The desktop WebSocket supports a segmented `message_segments` narrative view; the raw reply remains the source of truth for memory
-- Cross-channel continuity awareness — switching channels injects a pick-up-where-we-left-off hint
-
-### Engineering quality
-
-- Data paths are unified through `core/data_paths.py`, governance metadata is registered via `core/data_registry.py`, `core/sandbox.py` provides the singleton glue, and `core/migration.py` handles compatibility reads during migrations
-- Test mode redirects all data writes to `data/test_sandbox/{session_id}/`, keeping production data untouched
-- Atomic writes (`safe_write`, cross-platform `os.replace`)
-- LLM output validation with up to 3 retries; on failure, old data is preserved
-- Post-process is split into a critical path (lock-holding) and a slow queue (single worker, backoff retry), avoiding lock starvation
-- Failed slow tasks go to a dead-letter queue (DLQ), monitored periodically by the scheduler
-- Concurrency protection: per-uid locks plus a global emotional-state lock
+Conservative defaults: scheduler, autonomy, MCP, hardware, IME, on-demand screenshots, character-readable life records, and Xiaohongshu reading are mostly **off**. Being able to chat does not mean the character will message first, capture the screen, or move hardware.
 
 ---
 
-## Tech stack
+## What it can do now (by domain)
 
-Python · FastAPI · NapCat (OneBot 11, optional) · DeepSeek / any OpenAI-compatible LLM API · GPT-SoVITS (optional)
+### Conversation and channels
+
+- **Owner private chat**: QQ (optional), `POST /desktop/chat`, and `POST /mobile/chat` share `run_owner_chat_turn()` and the per-user lock in `core/conversation_gate.py`. Concurrent devices for the same owner do not enter `fetch_context → LLM → critical post-process` in parallel.
+- **Scripts / hardware speaking as the owner**: `POST /v1/owner/turns` (`owner-input` profile, idempotent `client_turn_id`). See [docs/owner-turn-api.md](docs/owner-turn-api.md).
+- **Proactive delivery**: desktop prefers `/ws/desktop` (file-queue fallback only for transient local failure; remote deploys do not write a local fallback); mobile uses durable `/mobile/poll` + `/mobile/ack`, optional ntfy/relay **signals only**; ESP32 uses `/ws/device` (no file fallback).
+- **Cross-channel continuity**: switching channels injects a pickup hint. Canonical reply text is the memory source of truth; desktop `message_segments` is a narrative view only.
+- **Media**: image recognition (named vision connections + OCR + phone override), upload ingest, optional STT (named remote connection or local Whisper), TTS (e.g. GPT-SoVITS), mood stickers (mutually exclusive with TTS; QQ image segment vs self-contained desktop/mobile sticker payload).
+- **Thinking / monologue**: optional native-reasoning archive (not memory), prefixed monologue, character-voice style. Desktop can expand the bubble; mobile thinking UI is still roadmap. See [docs/thinking-voice.md](docs/thinking-voice.md), [docs/audio-perception.md](docs/audio-perception.md).
+
+### Memory (backend-owned)
+
+Parallel layers, not a single vector DB:
+
+| Layer | Role |
+|---|---|
+| Short-term history | Sliding window; sanitized on read to avoid style collapse |
+| Mid-term | ~12h compressed view, three time buckets |
+| Episodic | Promoted from mid-term; strength decay, MMR, dedup |
+| user_identity | Long-term read on the owner; capture → mid_term → episodic → identity |
+| event_log | Daily ledger, keyword + intensity; salvage durable facts before expiry |
+| Memory Event ledger | Reality dual-write evidence store; not in the prompt by default; Path C `search_events` tools when category `memory` is exposed |
+| Vector store | Semantic recall; `web` sources are isolated like dreams and do not consolidate into identity |
+| user_hidden_state | Hidden state + 12h decay / 7d baseline; Dream gets a read-only snapshot |
+| storyline | Append-only narrative arcs + weekly aggregation; eviction is demotion, not hard delete |
+| Life records | Separate SQLite; phone sync; character read requires a switch; no automatic long-term memory writes |
+| LLM reasoning archive | Provider thinking stored separately, admin-only read, never returned to the prompt |
+
+Forgetting is demotion / tombstone, not casual physical deletion of evidence. Concurrency: `uid_lock` + global mood lock + atomic writes. Details: [docs/memory.md](docs/memory.md), [docs/data-taxonomy.md](docs/data-taxonomy.md), [docs/vector-store.md](docs/vector-store.md), [docs/life-records.md](docs/life-records.md).
+
+### Prompt and models
+
+- Layered prompts with tag gating and quality-graded token trim. Reality layers include persona, source boundary, time, presence, lorebook, profile, mood, episodic/mid-term/events, material continuity `10.6–10.8`, action traces, rotating Author's Note. Canonical table: [docs/prompt-layers.md](docs/prompt-layers.md).
+- Multi-preset routing: DeepSeek / OpenAI Chat Completions / Responses / Anthropic-compatible / local. Profiles map `chat` / `probe` / `intent` / `sensor_judge` / `ime_judge` / `monologue` / `rpg_kp` / `consolidation` and more. A character card may bind a whole profile. See [docs/model-presets.md](docs/model-presets.md).
+- Bring your own API key. Embedding is optional; missing embedding falls back to keyword recall.
+
+### Tools, MCP, Agent Runtime
+
+- Every tool must be in `_TOOL_REGISTRY` and pass `execute(origin=...)`. Unknown origin fails closed.
+- **Path A**: keyword fast-path + LLM probe (`info`/`desktop`). Ordinary probes are skipped when Path C is active.
+- **Path C tool loop**: globally off by default; per-card `presence_ext.tool_loop` can override. Function-calling loop loads schemas by authorized category discovery.
+- Example categories: time/weather/reminders, web search, diary/toy files, memory, life records, garden, desktop window actions, screen observation, Xiaohongshu read-only, sandboxed chat artifacts, hardware (frozen unless opted in).
+- **MCP**: optional external tool transport, **not** the client protocol; off by default; local allowlist required. Experimental; must not block chat.
+- **Danger mode**: `PATCH /system/meta-mode`. Shutdown/sleep still need a second confirmation. Mobile tokens **do not** include `hardware` or `admin`.
+- **Agent Runtime** (Reality): durable tasks, bounded work sessions, controlled workspace, process runner, isolated browser worker. Leftover `running` records become `outcome_unknown` at startup and are not auto-replayed. Dream does not share this runtime. See [docs/agent-runtime-architecture.md](docs/agent-runtime-architecture.md), [docs/tools.md](docs/tools.md).
+
+### Proactivity (scheduler + autonomy)
+
+Scheduler and sensors emit **fact signals**, not prose. One tick merges into `autonomy-opportunity.v1`; `core/autonomy` evaluates; only an explicit `talk_owner` enters `turn_sink`. Legacy direct-send paths are retired. See [docs/autonomy.md](docs/autonomy.md), [docs/scheduler.md](docs/scheduler.md).
+
+Candidate facts include morning/night/daytime chatter, weather, diary, multi-stage birthday, unfinished topics, proactive recall, holidays/time nodes, heart-rate/sleep, dream-exit greeting, garden events, IME activity, desktop reopen (`POST /desktop/wake` Path B enqueues a signal only), overflow, and letters. Maintenance jobs (decay, janitor, event salvage, hidden-state) stay silent. DND, active-user, Dream, budget, and the conversation lock can all suppress speech. High urgency (birthday / period / heart-rate) does **not** bypass autonomy gates.
+
+### Dream, group chat, activities
+
+- **Dream**: isolated D0–D10 stack; sandbox / scenario / mirror; soft exit + unstoppable hard exit. RPG Dream backend API exists (`dream_mode=rpg`); desktop dual-pane UI / mobile consumption are not done. Group Dream Stage is sandbox-only, zero writeback, absolute hard_exit.
+- **Reality Stage**: multi-character group chat with rule arbitration (phases A/B/R/T), one owner lock, no background spontaneous LLM.
+- **ActivitySession**: reading / gomoku / chess / dream_seed; explicit API lifecycle; not written to short-term memory.
+- **Coplay**: desktop “watch me play” (observer, not input injector); session compresses to `game_log`, not the main memory chain.
+- **Garden**: five mood plots, auto/tool watering; state is not injected into the prompt; events may become opportunities. Clients are read-only.
+
+### Perception and the outside world
+
+- Phone sensors, Watch heart-rate/sleep, desktop activity snapshots (TTL), on-demand screenshots (dual gate: backend flag + device consent, off by default).
+- IME draft inbox: received ≠ read ≠ will speak.
+- Obsidian journal, SMTP letters, spend-balance observation only (never auto-pay).
+- External Companion: `POST /integrations/companion/events` (e.g. in-game invite / decaying drinking observation); backend decides whether to talk.
+- Optional Xiaohongshu share reader (optional locally hosted reader service).
+- Wake Bridge: durable inbox for forum-like sources, then the existing proactive chain.
+
+### Admin panel
+
+Open the backend in a browser. Surfaces include first-run setup, character cards, model routing, feature flags, scheduler/autonomy budget, dream settings, MCP, tokens, life records, and an observation center (memory, dream, tools, API ledger, runtime signals, agent browser, …). The secrets-book shortcut works on loopback only.
 
 ---
 
-## Quickstart
+## Architecture and execution chain
 
-### 10-minute path (minimal playable config, no QQ/NapCat needed)
+```
+QQ / NapCat                 → main.py → message_queue
+Desktop POST /desktop/chat  ─┐
+Mobile POST /mobile/chat    ─┼→ conversation_gate → Pipeline
+Owner Turn API              ─┘
+Scheduler / sensors         → autonomy-signal → opportunity → talk_owner? → turn_sink
+Dream                       → isolated dream pipeline (no reality memory, no scheduler)
+```
 
-For new users who just want to get something running before reading further. Everything below goes through the desktop pet / admin panel; the QQ bot is optional (see "Optional integrations"). On Windows you can skip the manual commands and use the bundled `AA*.bat` scripts instead.
+**Reality pipeline (`core/pipeline.py`)**
 
-1. **Install dependencies**: double-click `AA1安装并启动.bat` (or manually run `pip install -r requirements.txt` + `cp config.example.yaml config.yaml`).
-   **Expected output**: the terminal ends with `Successfully installed ...`, and a `config.yaml` now exists at the repo root.
+0. Probe / Path C category discovery  
+1. `fetch_context()` concurrently loads memory, relations, lorebook, diary, vectors, …  
+2. `prompt_builder.build()` with tag gating  
+3. Main generation: tool loop or a single `llm_client.chat`  
+4. `turn_sink`: millisecond local writes before send (history/event_log); mood, consolidation, TTS after send  
 
-2. **Initialize auth** (required before the first run): double-click `AA2鉴权初始化.bat` (or `python scripts/setup_auth.py`).
-   **Expected output**:
-   ```
-   ✅ 鉴权初始化完成，凭据已写入 secrets.local.yaml（已 gitignore，勿提交）
-   📖 已用系统默认程序打开 secrets.local.yaml
-   ```
-   This auto-opens the secrets file `secrets.local.yaml` — **don't close that window yet**. The admin-panel login secret (`admin_secret`) and every per-device token live in there; you'll come back to copy the login secret in the next step, and again later when connecting the desktop/mobile client.
+Output fans out through `channels.registry.broadcast()` or the HTTP response. QQ visible send uses the OneBot adapter; memory still goes through `record_assistant_turn()`.
 
-3. **Start the backend**: double-click `AA3启动.bat` (or `python main.py`). If you're not connecting QQ, set `standalone_mode: true` in `config.yaml` first — that's the "minimal playable config" this section is about: it skips the NapCat connection while the desktop pet / admin panel keep working normally.
-   **Expected output**: the terminal keeps printing `INFO`-level logs; once you see `Uvicorn running on http://127.0.0.1:8080` the backend is ready and the process should stay running (not exit).
+Startup: [docs/runtime-lifecycle.md](docs/runtime-lifecycle.md) — load config → verify auth → load character → Pipeline → recover Agent tasks (stale `running` → unknown) → HTTP.
 
-4. **First panel login**: open `http://127.0.0.1:8080` in a browser and log in with the `admin_secret` from the secrets file.
-   **Expected output**: you land on the "配置" (Setup) page automatically, with a red banner at the top: `⚠ 未配置将无法聊天/主动触发失效：请先填写下方「基础聊天模型」「owner_id」必填项` (chat and proactive triggers won't work until the required fields below are filled in).
+Data paths: `core/data_paths.py` + `sandbox.get_paths()`; **do not hardcode `data/`**. Private authored assets live under `userdata/characters/`; release-owned seeds under `bundled/`.
 
-5. **Configure the LLM API**: fill in `base_url` / `model` / `api_key` (e.g. DeepSeek) in the "基础聊天模型" (Primary Chat Model) card, save, then click the "测试连接" (Test connection) button next to it. Fill in `owner_id` on the same page too (your QQ number is recommended, even if you're not connecting QQ yet).
-   **Expected output**: a green `✓ xxx ms · deepseek-chat` means the connection works; red text is the raw error — fix `base_url`/`api_key` accordingly. This save is hot-reloaded, **no backend restart needed**.
+---
 
-6. **Create a character card** (strongly recommended): the bundled `default` card is just a placeholder template (its name is literally "角色名" / "character name"). The panel shows a reminder card at this point — go to the "角色卡" (Character Card) page and create/edit your own character.
-   **Expected output**: your new character card appears and saves in the editor; the reminder card on the Setup page disappears once you're no longer on the placeholder.
+## Backend vs clients
 
-7. **Send your first message**: through the desktop client, or the admin panel's "聊天日志" (Chat Log) page.
-   **Expected output**: a reply from the character within a few seconds, and a pipeline-related log line printed in the backend terminal.
+| Capability | Backend | Desktop | Mobile |
+|---|---|---|---|
+| Persona / prompt / memory writes | Authority | Renders history | Renders history |
+| Whether to speak unsolicited | Authority | Render / notify | Poll + notify; relay is wake-only |
+| Window minimize and other actions | Emits allowlisted actions | Executes and acks (protocol v0.1) | None |
+| Intiface hardware | Gates + tools | May hold `hardware` | **No `hardware` scope** |
+| Screenshots / foreground observation | Policy, cooldown, injection | Capture + local consent | Revocable system setting |
+| Life-record capture UI | Store / recognize / permission | Admin config | v1.1.0 capture/sync UI |
+| Chat heatmap | `/chat-log/stats/calendar` | Roadmap | v1.1.0 profile page |
+| Dream HUD / chrome | Dream API / state | HUD consuming backend | Background / type / wake confirm |
+| Group Stage | Backend session | If the client wired it | Mobile group entry removed |
+| Admin config / tokens | Authority | May embed the panel | Connects only; no admin |
+| ESP32 firmware | `/ws/device` | — | — |
 
-At that point you have the minimal working loop: LLM configured, character card no longer a placeholder, and a real reply received.
+---
 
-**Requirements**
+## Auth and capability envelope
 
-- Python 3.10–3.12 (3.12 recommended; 3.13+ not yet supported — `rapidocr-onnxruntime`
-  caps at `<3.13`)
+Single owner, opaque Bearer tokens, **default-deny**. Implementation: [docs/security.md](docs/security.md). Threat model: [docs/security_model.md](docs/security_model.md).
 
-**Install**
+**Scopes**: `admin` (superset), `chat`, `state.read`, `memory.read`, `sensor.write`, `integration.write`, `companion.write`, `diary.sync`, `life_records`, `activity`, `persona`, `hardware`, `ws.desktop`, `ws.device`.
+
+**Typical profiles from `scripts/setup_auth.py`**
+
+| Profile | Holder | Intentionally missing |
+|---|---|---|
+| `panel` | Admin web UI | — (admin) |
+| `desktop` | Desktop pet | admin |
+| `mobile` | Phone | hardware, admin, ws.desktop |
+| `watch` | Watch shortcut | everything except sensor.write |
+| `device` | ESP32 | everything except ws.device |
+| `owner-input` | Scripts/hardware as owner | chat only |
+
+Plaintext tokens appear only at create/rotate. 401 = unknown token, 403 = insufficient scope, 429 = 401 rate limit (in-memory; restart clears). Do not put the admin secret on the phone.
+
+The LLM cannot execute system capabilities directly. Tools are further constrained by character permissions, category exposure, danger mode, confirmation, origin, and Dream/group exclusion rules.
+
+---
+
+## Configure, start, use
+
+### Environment
+
+- Python **3.10–3.12** (3.12 recommended; 3.13+ blocked by `rapidocr-onnxruntime`)
+- Your own chat-model API; optional embedding, TTS, STT, NapCat, Docker (local Xiaohongshu reader)
+- Default bind `127.0.0.1:8080`. LAN/remote access needs your own HTTPS reverse proxy. Do not expose plain HTTP plus the break-glass secret to the public internet.
+
+### Windows zip / source shortcuts
+
+1. `AA1安装并启动.bat` — uv installs Python 3.12, `.venv`, syncs `requirements.lock`; copies `config.example.yaml` → `config.yaml` if missing.
+2. `AA2鉴权初始化.bat` — `python scripts/setup_auth.py`, writes gitignored `secrets.local.yaml`.
+3. `AA3启动.bat` — `python main.py`. Set `standalone_mode: true` if you are not using QQ.
+4. Open the panel with `admin_secret`. Fill the base chat model and `owner_id` (use your QQ number if you have one; a different id later starts a separate memory thread).
+5. Create a real character card (bundled `default` is a placeholder named “角色名”).
+6. Send the first message from the panel, desktop pet, or phone.
+
+Updates: source trees use `AA更新.bat` (stop the service first). Unpacked release zips use the bundled updater: it replaces program files only and keeps `data/`, `userdata/`, `config.yaml`, `secrets.local.yaml`, `.venv/`, and `tools/uv*`. Automatic forward updates start at v1.0.0; v0.x requires backup + fresh install. See [docs/backend-upgrade-recovery.md](docs/backend-upgrade-recovery.md).
+
+### macOS (arm64 / x64 release zips)
+
+The zip includes the matching `tools/uv` binary. Unpack into an empty directory:
+
+```bash
+chmod +x tools/uv
+tools/uv python install 3.12
+tools/uv venv --python 3.12 .venv
+tools/uv pip sync requirements.lock --python .venv/bin/python
+cp config.example.yaml config.yaml
+.venv/bin/python scripts/setup_auth.py
+# edit config.yaml: standalone_mode: true if you skip QQ
+.venv/bin/python main.py
+```
+
+If desktop/mobile should reach `http://<Mac-LAN-IP>:8080`, change `admin.host` to a reachable address and use scoped tokens. Prefer a reverse proxy; do not bind the raw admin port to the public internet.
+
+### Source install (any platform)
 
 ```bash
 git clone https://github.com/cicikat/PresenceKit.git
 cd PresenceKit
-pip install -r requirements.txt
-```
-
-**Windows shortcut**: instead of the manual steps below, double-click
-`AA1安装并启动.bat` (installs deps, generates `config.yaml`), fill in
-`config.yaml`, then `AA2鉴权初始化.bat` (auth init, required before the
-first run) and `AA3启动.bat` (start). `AA2` finishes by auto-opening the
-secrets file and the admin panel — the panel lands on the "配置"
-(Setup) page on first launch; fill in the two red required fields
-(① base chat model, ② `owner_id`) and you're ready to chat.
-`AA更新.bat` does `git pull` + reinstall deps for later updates.
-
-> **PresenceKit v1.0.0 is the first supported update baseline. Preview v0.x
-> installations must migrate through backup and fresh installation.** Back up
-> `data/`, `userdata/`, `config.yaml`, and
-> optional `secrets.local.yaml`; install v1 into a new directory and copy only
-> those protected items. Do not copy preview program trees such as
-> `characters/`, `content/`, `defaults/`, `examples/`, `core/`, `scripts/`, or
-> `.venv/`. See [Backend Upgrade and Recovery](docs/backend-upgrade-recovery.md).
-
-For the complete first-run, readiness, backup, restart, and single-user server
-procedure, see [v1 Cold Start and Single-User Deployment](docs/v1-cold-start-single-user-deployment.md).
-
-**Configure**
-
-```bash
+pip install -r requirements.txt   # or: uv pip sync requirements.lock
 cp config.example.yaml config.yaml
-```
-
-Fill in the required fields per the comments in `config.example.yaml`: your LLM API key, an admin-panel secret, and `scheduler.owner_id`; add a QQ number only if you're using the QQ bot. You can also skip editing the yaml directly and fill both required fields from the admin panel's "配置" (Setup) page.
-
-`config.yaml` is the only file the app actually reads and writes — the admin panel's Setup/Settings pages persist directly to it. `config.example.yaml` is only a first-install template; it stays comment-annotated and is what you should check for field meanings. The two files' key sets are kept in sync by `scripts/gen_config_example.py`, so `config.yaml` growing longer and losing comments over time (from panel writes expanding defaults and YAML re-dumping) is expected, not a sign of corruption.
-
-For `owner_id`, use your QQ number if you have one — using a different id here means connecting QQ later will start a separate memory thread that won't merge with the desktop-pet memories. Leaving it empty makes the proactive-message scheduler silently skip all triggers.
-
-Create character cards in `userdata/characters/cards/`; the loader supports `.json`, `.txt`, and `.md` and retains a read-only fallback for legacy `characters/` installations. Other private authored assets belong below `userdata/characters/` (for example `authored/{char_id}/`, `reality/`, and `dream/`); see `docs/data-taxonomy.md`. Release-owned read-only seeds, templates, and examples live under `bundled/`, including `bundled/templates/character_template.json` and the neutral first-run `default` card.
-
-**Initialize auth** (before the first run)
-
-```bash
 python scripts/setup_auth.py
-```
-
-This generates the admin-panel secret and per-device tokens, and writes them to a local secrets file `secrets.local.yaml` (already gitignored). See [docs/token-rotation.md](docs/token-rotation.md).
-
-**Run**
-
-```bash
-# Using only the desktop pet or mobile client? Set standalone_mode: true in config.yaml to skip NapCat.
 python main.py
 ```
 
-To use the QQ bot: start NapCat first, make sure QQ is logged in and its WebSocket server is listening on port 3001, then run `python main.py`.
+`config.yaml` is the only runtime config; the admin panel writes the same file. `config.example.yaml` is the commented template; key sets stay in sync via `scripts/gen_config_example.py`. Isolated tests: `python run_test.py` (writes under `data/test_sandbox/`).
 
-Test mode redirects all writes to an isolated sandbox, leaving production data untouched:
+Live character cards: `userdata/characters/cards/` (`.json` / `.txt` / `.md`). Template: `bundled/templates/character_template.json`. Private lore/dream assets live under `userdata/characters/`.
 
-```bash
-python run_test.py
-```
+### Connecting clients
 
-Admin panel: `http://127.0.0.1:8080`
+- **Desktop**: keep the backend running; URL + desktop token. Unsigned installer triggers SmartScreen. Protocol authority: desktop repo `docs/protocol-v0.md`.
+- **Mobile**: LAN IP or `adb reverse`; mobile token. Foreground `/mobile/chat`; background poll/ack; optional `relay_*`.
+- **QQ**: NapCat WebSocket (example port 3001) + `qq.enabled` + not standalone. Changing the QQ flag requires a **restart**.
+- **Watch**: Shortcut `POST /watch/event` with a `watch` token.
+- **ESP32**: flash `firmware/presence-device/`, connect `/ws/device` with a device token.
 
----
-
-## Optional integrations
-
-- **QQ / NapCat**: see "Run" above; skip it entirely with `standalone_mode: true` if you don't need the QQ bot.
-- **Desktop client**: [PresenceKit-desktop](https://github.com/cicikat/PresenceKit-desktop) — requires the backend to be running. Before grabbing a release build, check its [Download section](https://github.com/cicikat/PresenceKit-desktop#download) for installer caveats (unsigned installer → SmartScreen prompt, Edge sometimes blocks the download outright, install to a non-system drive if you have one).
-- **Mobile client**: [PresenceKit-mobile](https://github.com/cicikat/PresenceKit-mobile) — connects over a LAN IP or `adb reverse`.
-- **TTS**: GPT-SoVITS; see the TTS-related fields in `config.example.yaml`.
-- **Apple Watch**: push heart-rate/sleep data to the backend via an iPhone Shortcut; see the relevant fields in `config.example.yaml` and [docs/known-issues.md](docs/known-issues.md).
+Cold start: [docs/v1-cold-start-single-user-deployment.md](docs/v1-cold-start-single-user-deployment.md). Token rotation: [docs/token-rotation.md](docs/token-rotation.md).
 
 ---
 
-## Testing
+## Deployment shapes
 
-```bash
-pytest
-python run_test.py
-```
-
-If you touch `tag_rules`-related logic, also run the eval suite:
-
-```bash
-python tests/run_eval.py
-```
-
----
-
-## Docs
-
-| Doc | Content |
+| Shape | Notes |
 |---|---|
-| [ARCHITECTURE.md](ARCHITECTURE.md) | System architecture overview, the four-stage pipeline, data directory layout |
-| [docs/memory.md](docs/memory.md) | The five-layer memory subsystem design and concurrency protection |
-| [docs/prompt-layers.md](docs/prompt-layers.md) | Prompt layer structure, tag gating, token trimming |
-| [docs/tools.md](docs/tools.md) | Tool system, probe mechanism, desktop action execution |
-| [docs/scheduler.md](docs/scheduler.md) | Full list of scheduler triggers and their cooldown design |
-| [docs/channels.md](docs/channels.md) | QQ / desktop-pet channels, WebSocket, file fallback, cross-channel continuity |
-| [docs/garden.md](docs/garden.md) | Emotional garden, auto/manual watering, post-harvest handling, admin panel state API |
-| [docs/dream.md](docs/dream.md) | Dream Session isolation boundary, independent prompt stack, world pack and impression writeback |
-| [docs/data-taxonomy.md](docs/data-taxonomy.md) | Current datapath layout, governance metadata, migration-era compatibility reads |
-| [docs/assistant-turn-sink.md](docs/assistant-turn-sink.md) | Unified assistant-turn writes, broadcast, and the narrative-segment protocol |
-| [docs/security_model.md](docs/security_model.md) | Admin panel, desktop-pet WebSocket, and client-secret boundaries |
-| [docs/security.md](docs/security.md) | Auth model (scoped tokens): scope/profile tables, token management API |
-| [docs/token-rotation.md](docs/token-rotation.md) | First-time setup, per-device token rotation commands, 401/403/429 troubleshooting |
-| [docs/fresh-clone-testing.md](docs/fresh-clone-testing.md) | How to correctly test a fresh clone (avoid connecting to a stale backend process/data) |
-| [docs/known-issues.md](docs/known-issues.md) | Current tech debt and verified fixes |
-| [docs/v1-release-contract.md](docs/v1-release-contract.md) | v1 product contract: supported surfaces, exclusions, ownership, and fallbacks |
-| [docs/v1-release-readiness.md](docs/v1-release-readiness.md) | Evidence-based v1 release blockers, compatibility matrix, and validation plan |
-| [docs/v1-cold-start-single-user-deployment.md](docs/v1-cold-start-single-user-deployment.md) | v1 cold-start, readiness, migration, backup, restart, and single-user deployment runbook |
+| Local desktop pet | `standalone_mode: true`, bind loopback |
+| Local + QQ | NapCat on the same machine, then the backend |
+| Home server | Ubuntu systemd example in `docs/user-teach/ubuntu-single-user-deployment.md`; private network (e.g. Tailscale); do not publish 8080 |
+| Backup | `python main.py backup-state create --output <protected-volume>`; restore does not swap the live directory by itself |
+
+---
+
+## Tests and CI
+
+```bash
+pytest                          # task-scoped is enough; full suite: pytest -n auto
+python tests/run_eval.py        # after tag_rules changes
+python tests/run_identity_eval.py
+```
+
+GitHub `tests.yml`: Python 3.10/3.12 smoke plus full pytest on `main` (public `config.example.yaml`, no private cards). Treat CI red as a release blocker.
+
+---
+
+## Docs map
+
+| Doc | Contents |
+|---|---|
+| [docs/README.md](docs/README.md) | Backend docs entry |
+| [docs/three-repo-doc-index.md](docs/three-repo-doc-index.md) | Cross-repo index by feature |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Overview and pipeline |
+| [docs/channels.md](docs/channels.md) | QQ / desktop / mobile / device |
+| [docs/api-reference.md](docs/api-reference.md) | HTTP/WS families |
+| [docs/memory.md](docs/memory.md) | Memory |
+| [docs/prompt-layers.md](docs/prompt-layers.md) | Prompt layers |
+| [docs/tools.md](docs/tools.md) | Tools / MCP |
+| [docs/scheduler.md](docs/scheduler.md) / [docs/autonomy.md](docs/autonomy.md) | Proactivity |
+| [docs/dream.md](docs/dream.md) / [docs/stage.md](docs/stage.md) | Dream and group chat |
+| [docs/security.md](docs/security.md) | Tokens / scopes |
+| [docs/feature-control-surface.md](docs/feature-control-surface.md) | Flags and effective state |
+| [docs/known-issues.md](docs/known-issues.md) | open / observe |
+| [docs/v1-release-contract.md](docs/v1-release-contract.md) | v1 guarantees vs experimental |
+| [docs/release-guide.md](docs/release-guide.md) | How to cut a release |
+
+Dated investigation snapshots are not runtime truth.
 
 ---
 
 ## Notes
 
-- Personal/learning use only.
-- Bring your own LLM API key (DeepSeek is recommended if you're in mainland China — direct connect, no proxy needed).
-- Bring your own character card; see `userdata/characters/cards/` for the live location and `bundled/templates/character_template.json` for the format. This project ships no copyrighted character material.
-- The project uses "他" (a male original character) as its example persona. The display name is configurable via `character.name` in `config.yaml`; some defaults, compatibility paths, and older docs still say `yexuan` internally — this doesn't affect functionality, and will be unified in a later version.
-
----
+- Licensed under PolyForm Noncommercial 1.0.0: noncommercial use allowed; commercial use needs a separate grant.
+- Bring your own models and character cards. This repo ships no copyrighted character assets.
+- Do not commit real secrets, QQ numbers, phone numbers, or machine-absolute paths.
+- Some compatibility paths may still mention historical `yexuan` field names; that is not a product binding to that character.
 
 ## License
 
-This project is licensed under the PolyForm Noncommercial License 1.0.0.
-
-Noncommercial use is permitted. Commercial use is not permitted without separate permission from the author.
+PolyForm Noncommercial License 1.0.0.

@@ -31,7 +31,8 @@ def _tree_digest(root: Path) -> dict[str, str]:
 
 def test_project_declares_the_v1_baseline():
     with Path("pyproject.toml").open("rb") as handle:
-        assert tomllib.load(handle)["project"]["version"] == "1.0.0"
+        version = tomllib.load(handle)["project"]["version"]
+    assert version.startswith("1."), version
 
 
 def _installation_digest(root: Path) -> dict[str, str]:
