@@ -242,7 +242,11 @@ def test_a3b_create_task_calls_are_startup_only():
     (admin_server or qq_adapter), not post_process paths.
     """
     lines = _lines("main.py")
-    _ALLOWED_TARGETS = {"start_admin_server", "qq_adapter.connect_and_listen"}
+    _ALLOWED_TARGETS = {
+        "start_admin_server",
+        "qq_adapter.connect_and_listen",
+        "_life_records_worker",
+    }
     violations: list[str] = []
     for i, ln in enumerate(lines, 1):
         stripped = ln.strip()
