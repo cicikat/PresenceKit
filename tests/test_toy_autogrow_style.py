@@ -18,7 +18,13 @@ async def test_autogrow_uses_chat_route_and_diary_style_prompt(monkeypatch):
 
     def model_client(category):
         captured["category"] = category
-        return type("Model", (), {"model": "chat-model", "client": _Client()})()
+        return type("Model", (), {
+            "name": "chat-preset",
+            "model": "chat-model",
+            "provider_kind": "openai",
+            "api_protocol": "chat_completions",
+            "client": _Client(),
+        })()
     monkeypatch.setattr("core.model_registry.get_model_client", model_client)
 
     note = await _judge_turn("我今天有点累", "我陪着你。", "角色")

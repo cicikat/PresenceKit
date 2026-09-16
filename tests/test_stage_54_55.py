@@ -54,7 +54,13 @@ async def test_projection_carries_speakers_and_group_attribution_prompt(sandbox,
             captured.update(kwargs)
             return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content="甲说了，乙回应。"))])
 
-    monkeypatch.setattr(llm_client, "get_model_client", lambda _: SimpleNamespace(client=SimpleNamespace(chat=SimpleNamespace(completions=FakeCompletions())), model="test"))
+    monkeypatch.setattr(llm_client, "get_model_client", lambda _: SimpleNamespace(
+        name="summary-preset",
+        model="test",
+        provider_kind="openai",
+        api_protocol="chat_completions",
+        client=SimpleNamespace(chat=SimpleNamespace(completions=FakeCompletions())),
+    ))
     assert await llm_client.summarize_turn("甲：你好\n乙：回应", "甲：补充", tags=["group_chat"])
     assert "保留名字归属" in captured["messages"][0]["content"]
 

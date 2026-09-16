@@ -62,7 +62,7 @@ def test_setup_and_character_anniversary_editors_consume_shared_helper():
 
     index = (STATIC / "index.html").read_text(encoding="utf-8")
     assert '/static/js/setup.js?v=admin-navigation-guide-1' in index
-    assert '/static/js/character.js?v=admin-prompt-followups-1' in index
+    assert '/static/js/character.js?v=v1-1-0-ci-1' in index
     assert '/static/js/user-data.js?v=brief-162-userdata-assets-1' in index
 
 

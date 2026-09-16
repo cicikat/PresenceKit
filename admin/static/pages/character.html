@@ -26,7 +26,7 @@
 
           <button class="btn btn-ghost btn-sm" data-action="renameCharacter" data-i18n="character.rename">✏️ 重命名</button>
 
-          <span id="char-active-badge" class="badge badge-accent" style="display:none"></span>
+          <span id="char-active-badge" class="badge badge-accent admin-inline-056"></span>
         </div>
         <p class="admin-source-note" data-i18n="character.file_hint_bindings">支持 .json / .txt / .md。模型、声音和形象绑定在服务配置中管理。</p>
         <button class="btn btn-ghost" data-action="goto" data-action-args='["role-bindings"]' data-i18n="settings_center.view_character_bindings">查看角色绑定</button>
@@ -45,14 +45,14 @@
           <button class="btn btn-primary btn-sm" data-action="saveCharacter" data-i18n="settings_center.save">保存</button>
         </div>
         <!-- txt/md 纯文本编辑区 -->
-        <div id="char-text-form" style="display:none">
+        <div id="char-text-form" class="admin-inline-056">
           <textarea id="char-text-content" class="admin-inline-194"></textarea>
           <div class="admin-inline-140">
             <button class="btn btn-primary" data-action="saveCharacter" data-i18n="character.save">保存角色卡</button>
           </div>
         </div>
         <!-- json 多字段表单 -->
-        <div id="char-edit-form" style="display:none">
+        <div id="char-edit-form" class="admin-inline-056">
           <h3 data-i18n="character.section.basic">基础</h3>
           <p class="admin-source-hint" data-i18n="character.section.basic_hint">进入提示词的角色名、人称和当前场景。</p>
           <div class="form-row">

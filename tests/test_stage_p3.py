@@ -458,10 +458,10 @@ def test_prompt_builder_group_stage_history_header_disclaims_not_group_content(s
 
     private_header = _history_header(private_messages)
     assert "不是这场群聊里发生的内容" not in private_header
-    assert private_header == '<对话记录 note="以下是与用户真实发生的对话">'
+    assert private_header == '<对话记录 note="以下是与她真实发生的对话">'
 
     plain_header = _history_header(plain_chat_messages)
-    assert plain_header == '<对话记录 note="以下是与用户真实发生的对话">'
+    assert plain_header == '<对话记录 note="以下是与她真实发生的对话">'
 
 
 @pytest.mark.asyncio

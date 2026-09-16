@@ -1,14 +1,14 @@
 <header class="admin-page-header"><h1 class="page-title" data-i18n="settings_center.service_configuration">服务配置</h1><p data-i18n="settings_center.configuration_summary_only_complete_configuration_does_not_mean_the_upstream_service_has_been_tested">这里只显示配置情况；配置齐全不代表上游服务已经测试可用。</p></header>
 <section class="card">
-  <div class="card-header"><h3>生活记录</h3><button class="btn btn-ghost btn-sm" data-action="loadLifeRecords">刷新状态</button></div>
-  <p class="admin-description">手机拍照或选图后，按你选择的分类识别。手填内容优先，图片描述单独保存；角色可按需查询，不会自动付款或写入长期记忆。</p>
+  <div class="card-header"><h3 data-i18n="life.title">生活记录</h3><button class="btn btn-ghost btn-sm" data-action="loadLifeRecords" data-i18n="life.refresh">刷新状态</button></div>
+  <p class="admin-description" data-i18n="life.hint">手机拍照或选图后，按你选择的分类识别。手填内容优先，图片描述单独保存；角色可按需查询，不会自动付款或写入长期记忆。</p>
   <div class="admin-settings-list">
-    <label class="admin-setting-row"><span><strong>同步生活记录</strong><small>允许手机上传记录与图片。</small></span><input id="life-enabled" type="checkbox"></label>
-    <label class="admin-setting-row"><span><strong>角色只读查询</strong><small>允许角色查看你的备注、明细和未经确认的图片描述。</small></span><input id="life-readable" type="checkbox"></label>
-    <label class="admin-setting-row"><span><strong>手机后台上传</strong><small>仍需手机本地权限与后台运行条件。</small></span><input id="life-background" type="checkbox"></label>
-    <label class="admin-setting-row"><span><strong>保留识别原图</strong><small>关闭后，仅清理之后识别成功的原图；失败原图保留以便重试。</small></span><input id="life-retain" type="checkbox"></label>
+    <label class="admin-setting-row"><span><strong data-i18n="life.sync">同步生活记录</strong><small data-i18n="life.sync_hint">允许手机上传记录与图片。</small></span><input id="life-enabled" type="checkbox"></label>
+    <label class="admin-setting-row"><span><strong data-i18n="life.readable">角色只读查询</strong><small data-i18n="life.readable_hint">允许角色查看你的备注、明细和未经确认的图片描述。</small></span><input id="life-readable" type="checkbox"></label>
+    <label class="admin-setting-row"><span><strong data-i18n="life.background">手机后台上传</strong><small data-i18n="life.background_hint">仍需手机本地权限与后台运行条件。</small></span><input id="life-background" type="checkbox"></label>
+    <label class="admin-setting-row"><span><strong data-i18n="life.retain">保留识别原图</strong><small data-i18n="life.retain_hint">关闭后，仅清理之后识别成功的原图；失败原图保留以便重试。</small></span><input id="life-retain" type="checkbox"></label>
   </div>
-  <div class="admin-action-group"><button class="btn btn-primary" data-action="saveLifeRecords">保存设置</button><button class="btn btn-ghost" data-action="goto" data-action-args='["model-routing"]'>配置视觉与 OCR 连接</button></div>
+  <div class="admin-action-group"><button class="btn btn-primary" data-action="saveLifeRecords" data-i18n="life.save">保存设置</button><button class="btn btn-ghost" data-action="goto" data-action-args='["model-routing"]' data-i18n="life.vision_ocr">配置视觉与 OCR 连接</button></div>
 </section>
-<section class="card"><div class="card-header"><h3>识别任务</h3></div><div id="life-status" class="admin-result-panel" role="status"></div></section>
-<details class="card"><summary>其他服务连接</summary><div id="service-center-list" class="admin-service-grid"></div></details>
+<section class="card"><div class="card-header"><h3 data-i18n="life.jobs">识别任务</h3></div><div id="life-status" class="admin-result-panel" role="status"></div></section>
+<details class="card"><summary data-i18n="life.other_services">其他服务连接</summary><div id="service-center-list" class="admin-service-grid"></div></details>

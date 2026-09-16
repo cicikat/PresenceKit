@@ -762,7 +762,7 @@ def build(
             if _s_parts:
                 messages.append({
                     "role": "system",
-                    "content": f"（{user_name}的手机数据（{_sensor_date}，更新时间 {_sensor.get('last_updated', '未知')}）：{'、'.join(_s_parts)}。自然提，别罗列。）",
+                    "content": f"（{user_name}的手机数据（{_sensor_date}）：{'、'.join(_s_parts)}。自然提，别罗列。）",
                     "_layer": "3.7_sensor",
                 })
     except Exception:

@@ -74,13 +74,13 @@ def test_i18n_runtime_is_wired_with_persistent_chinese_default():
     runtime = I18N.read_text(encoding="utf-8")
     core_js = (ROOT / "admin" / "static" / "js" / "core.js").read_text(encoding="utf-8")
 
-    assert '<link rel="stylesheet" href="/static/style.css?v=admin-design-1">' in index
-    assert '<script src="/static/i18n.js?v=brief-253-audio-1"></script>' in index
-    assert '<script src="/static/js/core.js?v=brief-253-audio-1"></script>' in index
+    assert '<link rel="stylesheet" href="/static/style.css?v=v1-1-0-ci-1">' in index
+    assert '<script src="/static/i18n.js?v=v1-1-0-ci-2"></script>' in index
+    assert '<script src="/static/js/core.js?v=v1-1-0-ci-2"></script>' in index
     assert '<script src="/static/js/dream-settings.js?v=brief-223-rpg-dream-admin-2"></script>' in index
-    assert "ADMIN_UI_FRAGMENT_VERSION = 'brief-253-audio-1'" in core_js
-    assert '<script src="/static/js/observability.js?v=brief-253-audio-1"></script>' in index
-    assert '<script src="/static/js/character.js?v=brief-253-audio-1"></script>' in index
+    assert "ADMIN_UI_FRAGMENT_VERSION = 'v1-1-0-ci-2'" in core_js
+    assert '<script src="/static/js/observability.js?v=v1-1-0-ci-1"></script>' in index
+    assert '<script src="/static/js/character.js?v=v1-1-0-ci-1"></script>' in index
     assert 'id="ds-private-truths"' in read_admin_page("dream-settings")
     assert "dream.scenario.policy_reveal_required" in runtime
     assert '<script src="/static/js/overview.js?v=brief-180-admin-static-1"></script>' in index
@@ -293,7 +293,7 @@ def test_every_page_fragment_has_complete_i18n_coverage_in_both_languages():
     client = TestClient(app)
     translated_values = _chinese_dictionary_values(runtime)
     allowed_authored_values = {"叶瑄", "中文"}
-    attribute_pattern = re.compile(r'data-i18n(?:-(?:placeholder|aria-label))?="([^"]+)"')
+    attribute_pattern = re.compile(r'data-i18n(?:-(?:placeholder|aria-label|title))?="([^"]+)"')
 
     for fragment in sorted(PAGES.glob("*.html")):
         response = client.get(f"/static/pages/{fragment.name}")

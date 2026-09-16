@@ -175,8 +175,13 @@ existing origin, role, danger, confirmation, deployment, MCP, and enablement gat
 |---|---|---|
 | `get_time`, `weather`, `web_search` | clock/network information | foreground bounded read/untrusted output |
 | `add_reminder` | scheduler | structured durable task (Brief 235) |
-| `read_diary`, `search_diary`, `read_watch`, `get_profile`, `get_episodic` | memory/document | Reality-scoped read |
+| `read_diary`, `search_diary`, `read_watch`, `get_profile`, `get_episodic`, `read_life_records` | memory/document | Reality-scoped read |
 | `search_events`, `expand_event_window`, `get_related_events` | memory evidence | explicit Reality read; receipts never indexed |
+| `reread_image` | media recall | owner-scoped image reread; cached/vision/ocr, never a write |
+| `read_xiaohongshu` | network information | untrusted public post fetch from an owner-supplied share URL |
+| `observe_user_screen` | device observation | explicit grant; privacy-filtered snapshot, not an instruction |
+| `write_artifact`, `read_artifact`, `list_artifacts` | chat artifact | bounded downloadable files; not workspace, not memory evidence |
+| `drink_with_user` | companion body cue | user-invited fictional drinking state only; never real-world control |
 | `revise_memory`, `forget_episodic`, `clear_midterm`, `revise_user_profile` | memory mutation | explicit owner/provenance policy |
 | `search_documents`, `read_document`, `search_character_notes` | memory/document | scoped character library (Brief 228) |
 | `desktop_minimize`, `desktop_open_url`, `desktop_play_pause`, `desktop_notify`, `play_song` | desktop actuator | Reality/local; remote requires client ack |

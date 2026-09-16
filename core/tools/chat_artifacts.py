@@ -405,10 +405,11 @@ def register_tools(registry: dict) -> None:
 
     for name, func, description, properties, required, keywords in (
         ("write_artifact", write, "创建给用户下载的文本产物，不能访问工作区或执行代码。",
-         {"filename": {"type": "string"}, "content": {"type": "string", "maxLength": MAX_CONTENT_CHARS}},
+         {"filename": {"type": "string", "description": "产物文件名，含扩展名。"},
+          "content": {"type": "string", "maxLength": MAX_CONTENT_CHARS, "description": "要写入产物的文本内容。"}},
          ["filename", "content"], ["生成文件", "做成文件"]),
         ("read_artifact", read, "读取当前用户与角色的既有产物。",
-         {"artifact_id": {"type": "string"}}, ["artifact_id"], ["读取产物"]),
+         {"artifact_id": {"type": "string", "description": "要读取的产物 ID。"}}, ["artifact_id"], ["读取产物"]),
         ("list_artifacts", listing, "列出当前用户与角色的产物元数据。",
          {}, [], ["列出产物"]),
     ):

@@ -125,6 +125,7 @@ async def test_owner_chat_turn_marks_user_active(monkeypatch):
             emotion="neutral",
             turn_id="t1",
             written_to_memory=True,
+            artifacts=[],
         )
 
     monkeypatch.setattr(loop, "_last_user_message_time", 0.0)

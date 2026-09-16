@@ -314,7 +314,7 @@ def responses_tools(tools: list[dict[str, Any]] | None) -> list[dict[str, Any]] 
     for tool in tools:
         function = tool.get("function", tool)
         name = function.get("name")
-        parameters = function.get("parameters")
+        parameters = function.get("parameters") or {"type": "object", "properties": {}}
         if not isinstance(name, str) or not name or not isinstance(parameters, dict):
             raise ValueError("invalid function tool schema")
         item: dict[str, Any] = {"type": "function", "name": name, "parameters": parameters}
@@ -384,7 +384,7 @@ def anthropic_messages_tools(tools: list[dict[str, Any]] | None) -> list[dict[st
     for tool in tools:
         function = tool.get("function", tool)
         name = function.get("name")
-        parameters = function.get("parameters")
+        parameters = function.get("parameters") or {"type": "object", "properties": {}}
         if not isinstance(name, str) or not name or not isinstance(parameters, dict):
             raise ValueError("invalid function tool schema")
         item: dict[str, Any] = {"name": name, "input_schema": parameters}
@@ -668,7 +668,7 @@ def chat_completions_tools(tools: list[dict[str, Any]] | None) -> list[dict[str,
     for tool in tools:
         function = tool.get("function", tool)
         name = function.get("name")
-        parameters = function.get("parameters")
+        parameters = function.get("parameters") or {"type": "object", "properties": {}}
         if not isinstance(name, str) or not name or not isinstance(parameters, dict):
             raise ValueError("invalid function tool schema")
         item: dict[str, Any] = {

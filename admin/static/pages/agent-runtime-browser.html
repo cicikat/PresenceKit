@@ -1,38 +1,38 @@
-<h1 class="page-title">浏览器能力与实验任务</h1>
-<p class="admin-source-hint">浏览器配置、allowlist、worker 状态和实验任务统一由后端管理面板控制。客户端不再提交浏览器任务。</p>
+<h1 class="page-title" data-i18n="agent_runtime_browser.title">浏览器能力与实验任务</h1>
+<p class="admin-source-hint" data-i18n="agent_runtime_browser.description">浏览器配置、allowlist、worker 状态和实验任务统一由后端管理面板控制。客户端不再提交浏览器任务。</p>
 
 <div class="card">
-  <div class="card-header"><h3>能力状态</h3><button class="btn btn-ghost btn-sm" data-action="loadBrowserRuntimePage">刷新</button></div>
-  <div id="browser-runtime-status" class="config-item-meta">加载中…</div>
+  <div class="card-header"><h3 data-i18n="agent_runtime_browser.status">能力状态</h3><button class="btn btn-ghost btn-sm" data-action="loadBrowserRuntimePage" data-i18n="common.refresh">刷新</button></div>
+  <div id="browser-runtime-status" class="config-item-meta" data-i18n="common.loading">加载中…</div>
 </div>
 
 <div class="card">
-  <div class="card-header"><h3>浏览器策略</h3></div>
+  <div class="card-header"><h3 data-i18n="agent_runtime_browser.policy">浏览器策略</h3></div>
   <div class="form-row">
-    <label class="checkbox-row"><input type="checkbox" id="browser-enabled"><span>启用浏览器 worker</span></label>
-    <label class="checkbox-row"><input type="checkbox" id="browser-download"><span>允许下载</span></label>
-    <label class="checkbox-row"><input type="checkbox" id="browser-upload"><span>允许上传</span></label>
+    <label class="checkbox-row"><input type="checkbox" id="browser-enabled"><span data-i18n="agent_runtime_browser.enabled">启用浏览器 worker</span></label>
+    <label class="checkbox-row"><input type="checkbox" id="browser-download"><span data-i18n="agent_runtime_browser.download">允许下载</span></label>
+    <label class="checkbox-row"><input type="checkbox" id="browser-upload"><span data-i18n="agent_runtime_browser.upload">允许上传</span></label>
   </div>
-  <label class="field"><span>允许域名（每行一个）</span><textarea id="browser-domains" rows="4" spellcheck="false" placeholder="example.com"></textarea></label>
+  <label class="field"><span data-i18n="agent_runtime_browser.domains">允许域名（每行一个）</span><textarea id="browser-domains" rows="4" spellcheck="false" placeholder="example.com"></textarea></label>
   <div class="form-row">
-    <label class="field"><span>页面最大字符数</span><input type="number" id="browser-max-chars" min="100" max="100000"></label>
-    <label class="field"><span>最大链接数</span><input type="number" id="browser-max-links" min="1" max="100"></label>
-    <label class="field"><span>worker 超时（秒）</span><input type="number" id="browser-timeout" min="1" max="300"></label>
+    <label class="field"><span data-i18n="agent_runtime_browser.max_chars">页面最大字符数</span><input type="number" id="browser-max-chars" min="100" max="100000"></label>
+    <label class="field"><span data-i18n="agent_runtime_browser.max_links">最大链接数</span><input type="number" id="browser-max-links" min="1" max="100"></label>
+    <label class="field"><span data-i18n="agent_runtime_browser.timeout">worker 超时（秒）</span><input type="number" id="browser-timeout" min="1" max="300"></label>
   </div>
-  <button class="btn btn-primary btn-sm" data-action="saveBrowserRuntimeSettings">保存策略</button>
+  <button class="btn btn-primary btn-sm" data-action="saveBrowserRuntimeSettings" data-i18n="agent_runtime_browser.save">保存策略</button>
 </div>
 
 <div class="card">
-  <div class="card-header"><h3>受控实验任务</h3><button class="btn btn-ghost btn-sm" data-action="loadBrowserRuntimeTasks">刷新</button></div>
+  <div class="card-header"><h3 data-i18n="agent_runtime_browser.tasks">受控实验任务</h3><button class="btn btn-ghost btn-sm" data-action="loadBrowserRuntimeTasks" data-i18n="common.refresh">刷新</button></div>
   <div class="form-row">
-    <label class="field"><span>目标地址</span><input type="url" id="browser-task-url" placeholder="https://allowlisted.example/"></label>
-    <label class="field"><span>操作</span><select id="browser-task-operation"><option value="navigate">打开页面</option><option value="read_page">读取页面摘要</option><option value="click">点击元素</option><option value="fill">填写字段</option><option value="select">选择选项</option><option value="post">发布（需确认）</option></select></label>
+    <label class="field"><span data-i18n="agent_runtime_browser.url">目标地址</span><input type="url" id="browser-task-url" placeholder="https://allowlisted.example/"></label>
+    <label class="field"><span data-i18n="agent_runtime_browser.operation">操作</span><select id="browser-task-operation"><option value="navigate" data-i18n="agent_runtime_browser.open">打开页面</option><option value="read_page" data-i18n="agent_runtime_browser.read">读取页面摘要</option><option value="click" data-i18n="agent_runtime_browser.click">点击元素</option><option value="fill" data-i18n="agent_runtime_browser.fill">填写字段</option><option value="select" data-i18n="agent_runtime_browser.select">选择选项</option><option value="post" data-i18n="agent_runtime_browser.post">发布（需确认）</option></select></label>
   </div>
   <div class="form-row">
-    <label class="field"><span>selector（点击/填写/选择时需要）</span><input type="text" id="browser-task-selector"></label>
-    <label class="field"><span>value（填写/选择时需要）</span><input type="text" id="browser-task-value"></label>
+    <label class="field"><span data-i18n="agent_runtime_browser.selector">selector（点击/填写/选择时需要）</span><input type="text" id="browser-task-selector"></label>
+    <label class="field"><span data-i18n="agent_runtime_browser.value">value（填写/选择时需要）</span><input type="text" id="browser-task-value"></label>
   </div>
-  <button class="btn btn-primary btn-sm" data-action="submitBrowserRuntimeTask">提交任务</button>
+  <button class="btn btn-primary btn-sm" data-action="submitBrowserRuntimeTask" data-i18n="agent_runtime_browser.submit">提交任务</button>
   <p id="browser-task-message" class="tools-status-note"></p>
-  <div id="browser-task-list"><div class="loading">暂无任务</div></div>
+  <div id="browser-task-list"><div class="loading" data-i18n="agent_runtime_browser.empty">暂无任务</div></div>
 </div>

@@ -736,7 +736,6 @@ textarea { resize: vertical; min-height: 72px; }
 .setup-optional-mono-code{font-family:var(--mono)}
 .admin-inline-002{align-self:end}
 .admin-inline-004{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;font-family:var(--mono);font-size:13px;word-break:break-all;margin-bottom:16px}
-.admin-inline-005{border-color:var(--accent)}
 .admin-inline-006{border-color:var(--warn)}
 .admin-inline-008{color:var(--accent)}
 .admin-inline-011{color:var(--danger);font-size:12px;min-height:16px}
@@ -746,7 +745,6 @@ textarea { resize: vertical; min-height: 72px; }
 .admin-inline-017{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .admin-inline-018{display:flex;align-items:center;gap:12px}
 .admin-inline-019{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-.admin-inline-026{display:flex;align-items:center;gap:8px}
 .admin-inline-027{display:flex;align-items:center;gap:8px;flex:1}
 .admin-inline-029{display:flex;flex-direction:column;gap:8px;justify-content:flex-end;padding-bottom:4px}
 .admin-inline-032{display:flex;gap:12px;align-items:flex-start;margin-bottom:10px;flex-wrap:wrap}
@@ -794,8 +792,6 @@ textarea { resize: vertical; min-height: 72px; }
 .admin-inline-088{font-size:12px;color:var(--muted);margin-bottom:4px}
 .admin-inline-089{font-size:12px;color:var(--muted);margin-bottom:8px}
 .admin-inline-090{font-size:12px;color:var(--muted);margin-top:8px}
-.admin-inline-091{font-size:12px;color:var(--muted);margin:0 16px 8px}
-.admin-inline-092{font-size:12px;color:var(--warning,#c77);margin:0 16px 8px}
 .admin-inline-093{font-size:12px;white-space:pre-wrap;color:var(--text);background:var(--bg-secondary);padding:12px;border-radius:6px}
 .admin-inline-094{font-size:12px;white-space:pre-wrap;word-break:break-all;color:var(--text);background:var(--bg-secondary);padding:12px;border-radius:6px;max-height:300px;overflow:auto}
 .admin-inline-095{font-size:12px;white-space:pre-wrap;word-break:break-all;color:var(--text);background:var(--bg-secondary);padding:12px;border-radius:6px;max-height:400px;overflow:auto}
@@ -803,10 +799,8 @@ textarea { resize: vertical; min-height: 72px; }
 .admin-inline-097{font-size:12px;white-space:pre-wrap;word-break:break-all;color:var(--text);background:var(--bg-secondary);padding:12px;border-radius:6px;max-height:600px;overflow:auto}
 .admin-inline-098{font-size:13px}
 .admin-inline-099{font-size:13px;color:var(--muted)}
-.admin-inline-101{font-size:13px;color:var(--muted);margin-top:10px}
 .admin-inline-102{font-size:13px;color:var(--muted);margin:-10px 0 16px}
 .admin-inline-103{font-size:13px;color:var(--muted);margin:0}
-.admin-inline-104{font-size:13px;color:var(--text);line-height:1.8}
 .admin-inline-105{font-size:13px;font-weight:400;color:var(--muted)}
 .admin-inline-109{font-size:13px;line-height:1.7;white-space:pre-wrap;margin-bottom:8px}
 .admin-inline-110{font-size:13px;line-height:1.8;color:var(--text)}
@@ -815,7 +809,6 @@ textarea { resize: vertical; min-height: 72px; }
 .admin-inline-115{font-weight:600}
 .admin-inline-116{font-weight:600;color:var(--accent)}
 .admin-inline-117{gap:8px;font-size:14px}
-.admin-inline-120{grid-column:1/-1;font-size:12px;color:var(--muted);line-height:1.8;padding:10px 14px;background:var(--bg-secondary);border-radius:6px;border:1px solid var(--border)}
 .admin-inline-122{height:100%;background:var(--accent);transition:width .3s}
 .admin-inline-124{justify-content:flex-start;padding-top:4px}
 .admin-inline-125{justify-content:flex-start;padding-top:8px}

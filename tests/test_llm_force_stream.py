@@ -67,7 +67,10 @@ async def test_interleaved_tool_fragments_are_assembled_by_index():
     tools = [{"type": "function", "function": {"name": "first"}}]
     result = await create(mc, [], tools=tools, tool_choice="auto", gen_kwargs={})
     assert [(c.id, c.name, c.arguments) for c in result.tool_calls] == [("a", "first", {}), ("b", "second", {"x": 2})]
-    assert request.call_args.kwargs["tools"] == tools
+    assert request.call_args.kwargs["tools"] == [{
+        "type": "function",
+        "function": {"name": "first", "parameters": {"type": "object", "properties": {}}},
+    }]
     assert result.continuation_items[0]["tool_calls"][1]["id"] == "b"
     stream.close.assert_awaited_once()
 

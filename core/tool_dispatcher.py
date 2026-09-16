@@ -926,7 +926,7 @@ _TOOL_REGISTRY["read_life_records"] = {
         "category": {"type": "string", "enum": ["diet", "bill", "cart"], "description": "按分类筛选；省略则查询全部分类。"},
         "date_from": {"type": "string", "description": "起始日期 YYYY-MM-DD"},
         "date_to": {"type": "string", "description": "结束日期 YYYY-MM-DD"},
-        "query": {"type": "string"},
+        "query": {"type": "string", "description": "标题、备注、明细或图片描述中的关键词；省略则不按关键词过滤。"},
         "record_id": {"type": "string", "description": "读取指定记录完整内容；不传则返回检索索引。"},
         "offset": {"type": "integer", "minimum": 0, "description": "指定记录正文的分页偏移。"}}, "required": []},
     "examples": ["查一下上周的饮食记录", "看看本月账单"],

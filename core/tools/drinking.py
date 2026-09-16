@@ -93,8 +93,8 @@ def register_tools(registry):
         "func": drink_with_user, "category": "info", "effect": "write", "dangerous": False,
         "description": "仅本轮用户明确提起喝酒时，自主选择小酌、碰杯、倒酒或拒绝。角色可以不喝。",
         "parameters": {"type": "object", "properties": {
-            "action": {"type": "string", "enum": ["sip", "toast", "pour", "refuse"]},
-            "drink": {"type": "string", "maxLength": 80}}, "required": ["action"]},
+            "action": {"type": "string", "enum": ["sip", "toast", "pour", "refuse"], "description": "小酌、碰杯、倒酒或婉拒。"},
+            "drink": {"type": "string", "maxLength": 80, "description": "可选的酒名或饮品描述。"}}, "required": ["action"]},
         "examples": ["一起喝酒吗", "干杯"], "keywords": ["喝酒", "干杯", "敬你", "碰杯"],
         "probe": False, "trace_args": [], "trace_result": False, "echo_event_log": False,
     }

@@ -20,7 +20,7 @@ def test_creation_assets_are_split_setting_rows():
     assert "data-action=\"saveCreationAssets\"" in source
     assert "data-action=\"uploadCreationAvatar\"" in source
     assert "PATCH','/settings/prompt-assets'" in source
-    assert '<script src="/static/js/settings-center.js?v=brief-253-audio-1"></script>' in index
+    assert '<script src="/static/js/settings-center.js?v=v1-1-0-ci-1"></script>' in index
 
 
 def test_thinking_controls_live_on_model_routing_not_conversation_page():

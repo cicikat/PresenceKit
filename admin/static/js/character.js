@@ -316,9 +316,9 @@ async function loadCharacterList() {
     const badge = document.getElementById('char-active-badge');
     if (activeId) {
       badge.textContent = '当前：' + _charLabelById(activeId);
-      badge.style.display = '';
+      badge.classList.remove('admin-inline-056');
     } else {
-      badge.style.display = 'none';
+      badge.classList.add('admin-inline-056');
     }
     // 自动加载当前活跃角色
     if (activeId && _charList.some(c => c.id === activeId)) {
@@ -331,8 +331,8 @@ async function loadCharacterList() {
 async function onCharSelectChange() {
   const id = document.getElementById('char-select').value;
   if (!id) {
-    document.getElementById('char-edit-form').style.display = 'none';
-    document.getElementById('char-text-form').style.display = 'none';
+    document.getElementById('char-edit-form').classList.add('admin-inline-056');
+    document.getElementById('char-text-form').classList.add('admin-inline-056');
     document.getElementById('char-empty').style.display = '';
     return;
   }
@@ -349,8 +349,8 @@ async function loadCharacterDetail(filename) {
 
     if (d.type === 'text') {
       document.getElementById('char-text-content').value = d.content || '';
-      document.getElementById('char-text-form').style.display = '';
-      document.getElementById('char-edit-form').style.display = 'none';
+      document.getElementById('char-text-form').classList.remove('admin-inline-056');
+      document.getElementById('char-edit-form').classList.add('admin-inline-056');
     } else {
       document.getElementById('char-name').value           = d.name || '';
       document.getElementById('char-gender').value          = d.gender || 'neutral';
@@ -376,8 +376,8 @@ async function loadCharacterDetail(filename) {
       document.getElementById('char-dream-scenario-identity').value = dreamBehavior.scenario_identity || '';
       document.getElementById('char-proactive').value = presenceExt.proactive === 'off' ? 'off' : 'full';
       document.getElementById('char-tool-loop').value = presenceExt.tool_loop === 'on' || presenceExt.tool_loop === 'off' ? presenceExt.tool_loop : '';
-      document.getElementById('char-edit-form').style.display = '';
-      document.getElementById('char-text-form').style.display = 'none';
+      document.getElementById('char-edit-form').classList.remove('admin-inline-056');
+      document.getElementById('char-text-form').classList.add('admin-inline-056');
     }
 
   } catch(e) { toast('加载角色卡失败：' + e.message, 'err'); }
@@ -539,7 +539,7 @@ async function setActiveCharacter() {
     toast(d.message, 'ok');
     const badge = document.getElementById('char-active-badge');
     badge.textContent = '当前：' + (d.label || _charLabelById(id));
-    badge.style.display = '';
+    badge.classList.remove('admin-inline-056');
   } catch(e) { toast('切换失败：' + e.message, 'err'); }
 }
 

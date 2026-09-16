@@ -1075,7 +1075,7 @@ function resetModelDiscovery() {
   select.replaceChildren();
   select.hidden = true;
   document.getElementById('mr-discover-button').disabled = false;
-  document.getElementById('mr-discovery-status').textContent = '可从中转站获取模型，也可手动填写。';
+  document.getElementById('mr-discovery-status').textContent = t('routing.discovery_hint', '可从中转站获取模型，也可手动填写。');
 }
 
 async function discoverPresetModels() {
@@ -1097,35 +1097,38 @@ async function discoverPresetModels() {
     body.anthropic_auth_mode === document.getElementById('mr-preset-anthropic-auth-mode').value;
   select.hidden = true;
   button.disabled = true;
-  status.textContent = '正在获取模型…';
+  status.textContent = t('routing.discovery.fetching', '正在获取模型…');
   try {
     const result = await api('POST', '/model-presets/discover', body);
     if (!unchanged()) return;
     const hints = {
-      unsupported: '此中转站未提供模型目录，请手动填写模型名。',
-      unauthorized: '目录鉴权失败，请检查 API Key 或手动填写。',
-      key_required: '地址已修改，请填写该地址的 API Key 后重新获取。',
-      timeout: '获取超时，可重试或手动填写。',
-      empty: '目录为空，请手动填写模型名。',
-      invalid_response: '目录格式不兼容，请手动填写模型名。',
-      connection_error: '无法连接，请检查地址或手动填写。',
-      http_error: '目录请求失败，可重试或手动填写。',
+      unsupported: t('routing.discovery.unsupported', '此中转站未提供模型目录，请手动填写模型名。'),
+      unauthorized: t('routing.discovery.unauthorized', '目录鉴权失败，请检查 API Key 或手动填写。'),
+      key_required: t('routing.discovery.key_required', '地址已修改，请填写该地址的 API Key 后重新获取。'),
+      timeout: t('routing.discovery.timeout', '获取超时，可重试或手动填写。'),
+      empty: t('routing.discovery.empty', '目录为空，请手动填写模型名。'),
+      invalid_response: t('routing.discovery.invalid_response', '目录格式不兼容，请手动填写模型名。'),
+      connection_error: t('routing.discovery.connection_error', '无法连接，请检查地址或手动填写。'),
+      http_error: t('routing.discovery.http_error', '目录请求失败，可重试或手动填写。'),
     };
-    if (result.status !== 'ok') { status.textContent = hints[result.status] || '无法获取目录，请手动填写。'; return; }
-    select.replaceChildren(new Option('请选择模型（也可手填）', ''));
+    if (result.status !== 'ok') { status.textContent = hints[result.status] || t('routing.discovery.unavailable', '无法获取目录，请手动填写。'); return; }
+    select.replaceChildren(new Option(t('routing.discovery.select_placeholder', '请选择模型（也可手填）'), ''));
     for (const model of result.models) select.add(new Option(model, model));
     select.hidden = false;
     select.onchange = () => {
       if (!unchanged()) { resetModelDiscovery(); return; }
       if (select.value) document.getElementById('mr-preset-model').value = select.value;
     };
-    status.textContent = `已获取 ${result.models.length} 个模型${result.has_more ? '（目录仅返回部分模型）' : ''}；选择后仍需保存，协议与工具能力请按中转站说明配置。`;
+    status.textContent = t('routing.discovery.fetched', '已获取 {count} 个模型{suffix}；选择后仍需保存，协议与工具能力请按中转站说明配置。', {
+      count: result.models.length,
+      suffix: result.has_more ? t('routing.discovery.partial', '（目录仅返回部分模型）') : '',
+    });
   } catch (e) {
-    if (unchanged()) status.textContent = `获取失败：${e.message || e}；仍可手动填写。`;
+    if (unchanged()) status.textContent = t('routing.discovery.fetch_failed', '获取失败：{error}；仍可手动填写。', { error: e.message || e });
   } finally {
     if (generation === _modelDiscoveryGeneration) {
       button.disabled = false;
-      if (!unchanged()) { select.hidden = true; status.textContent = '连接信息已更改，请重新获取模型。'; }
+      if (!unchanged()) { select.hidden = true; status.textContent = t('routing.discovery.stale', '连接信息已更改，请重新获取模型。'); }
     }
   }
 }
