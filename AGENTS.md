@@ -1,7 +1,7 @@
 # AGENTS.md — Codex / Claude Code 工作入口
 
-> 每次开始任务前必读此文件。根据任务类型，再按需读对应的详细文档。
-> Codex 默认读取本文件。`CODEX.md` 是 `CLAUDE.md` 的兼容镜像，保留其协作偏好；若两者与本文件的当前工程约束冲突，以本文件和任务对应专题文档为准。
+> 开始任务时使用本文件的当前规则；上下文已有完整有效版本时无需重读，文件变化或上下文缺失时再读。根据实际影响面，只读对应专题的相关章节。
+> Codex 默认读取本文件。`CODEX.md` 与 `CLAUDE.md` 仅保留协作入口；工程规则以本文件和任务对应专题文档为准，不重复维护架构副本。
 
 ---
 
@@ -19,7 +19,7 @@
 
 ## 任务 → 读哪个文档
 
-| 任务类型 | 必读文档 |
+| 实际涉及的任务类型 | 按需读取的文档或章节 |
 |---|---|
 | 理解系统全貌、pipeline 流程 | `ARCHITECTURE.md` |
 | 改 Agent Runtime、长期任务、Agent 工作会话、capability 适配或迁移 | `docs/agent-runtime-architecture.md`；再读对应 Brief 230-237 |
@@ -38,6 +38,8 @@
 | 在 Codex / Claude Code Windows 环境运行测试、跨仓验证、处理沙箱报错 | `docs/dev-environment.md` |
 | 改多模型接入、preset 路由、LLM provider 适配、prompt_style 转换 | `docs/model-presets.md` |
 | 改鉴权/token/scope（`admin/auth.py`、`admin/scopes.py`、`admin/token_registry.py`） | `docs/security.md` |
+| 改启动、关闭、生命周期或资源所有权 | `docs/runtime-lifecycle.md` 对应章节 |
+| 改信任边界、执行权限或安全模式 | `docs/security_model.md` 对应章节；鉴权实现另见 `docs/security.md` |
 | 改 ESP32 具身硬件固件（`firmware/presence-device/`） | `docs/presence-device-firmware.md`（协议/WS 通道侧见 `docs/channels.md`） |
 
 ---
@@ -149,7 +151,7 @@ python run_test.py
 4. **tag 规则改动后，用 `python tests/run_eval.py` 验证层激活情况。**
 5. **改 assistant 消息写入或截断逻辑前，必须先看 `_sanitize_assistant_message`，避免绕过脱敏。**
 6. **新增记忆写入点（identity / episodic / mid_term / trait / author_note）时，必须同步调用 `provenance_log.append()`（fail-open），否则改动无法追溯。详见 `docs/memory.md` §改动溯源。**
-7. **新增落盘状态、trace 或台账时，必须同单提供只读观测端点；scope 按数据敏感度选取。没有观测端点的落盘物不可验收。**
+7. **新增需运营排障的持久运行状态、trace 或台账时，同单提供只读观测能力，可复用现有端点；scope 按数据敏感度选取。临时文件、测试产物和无需独立排障的可重建内部缓存不要求新增端点。**
 8. WebSocket 客户端必须绕过系统代理。`websocket-client` 库会自动读取
    `HTTP_PROXY` / `HTTPS_PROXY` 环境变量，必须在 `run_forever` 调用前
    临时清除（连接结束后恢复）。`http_proxy_host=""` 这种参数不顶用。
@@ -161,8 +163,8 @@ python run_test.py
    （`from core.data_paths import DEFAULT_CHAR_ID`），不写死 `"yexuan"`。
    守门测试：`tests/test_no_hardcoded_character.py`（字面角色名/用户名 + 协议兼容
    字段白名单）、`tests/test_r3_scope_lint.py`（`char_id="yexuan"` 默认参数）。
-10. **任何要 await 进 send/关键路径的调用，先问它是不是 LLM/网络往返。** 是的话必须
-   挪到 send 之后异步执行（Brief 37 的教训：`detect_emotion` 曾经堵在
+10. **新增 send 前 await 时，先判断是否为回复生成所必需。** 非回复生成依赖的后处理 LLM/网络调用必须
+   挪到 send 之后异步执行；生成回复必需的模型与工具调用不在此限（Brief 37 的教训：`detect_emotion` 曾经堵在
    `post_process` 里，每条消息多付一次 LLM 往返延迟）。`core/pipeline.py` 的
    `post_process_critical`（send 前，只做毫秒级本地落盘）/ `post_process_slow`
    （send 后，`asyncio.create_task` 调度，装 detect_emotion / mood_state /
@@ -175,9 +177,11 @@ python run_test.py
     `<用户目录>`/`<仓库路径>` 这类通用占位。commit 前如发现已写入，直接改掉
     再提交，不要留到事后清理。
 
-   ## 测试（新增）
-- 跑测试用 `pytest -n auto`,不要用不带 -n 的全量单进程跑法
-- 只改了部分代码时优先用 `pytest --testmon` 或指定路径跑相关测试,避免每次全量
+## 测试
+
+- 默认只运行任务相关测试；优先指定路径或使用 `pytest --testmon`，局部测试可按兼容性串行。
+- 仅明确要求全量，或影响面与相关失败表明有必要时运行全量；全量必须用 `pytest -n auto`。
+- 现有测试已覆盖时直接复用，覆盖不足才补测；纯文档或指令改动只做相应结构、链接与差异检查。
 - 身份连续性场景 eval：`pytest -n auto tests/identity_eval/`；脚本入口：`python tests/run_identity_eval.py`
 
 
@@ -198,7 +202,7 @@ keystore、`key.properties`、密码/凭据说明、base64 内容和 token 始�
 
 **每张施工工单在相关测试通过、差异检查完成后，必须立即提交一次独立 Git commit，再开始下一张工单。**
 
-**每积累若干个功能 brief，安排一个删除 brief。** 只加法、不做减法会让测试从安全网
+**阶段规划时提出删除 brief 候选；本次未授权的清理不执行。** 只加法、不做减法会让测试从安全网
 变成防腐层——迁移化石从不拆、legacy 分支越叠越厚。删除 brief 中，测试随功能一起
 删除是合法且必须的：测试是跟随功能的，不是功能的遗产。删除必须连同其守卫、测试、
 文档条目一起删——不留只测已删除代码的"僵尸测试"。（Brief 35 是第一个这样的删除
@@ -208,13 +212,7 @@ brief，遵循“删除必须连同守卫、测试和文档条目一起删除”
 
 ## Windows Agent 验证须知
 
-在 Codex / Claude Code 环境里运行测试或跨仓修改前，**必须先读
-`docs/dev-environment.md`**。特别注意：
-
-如果没有特殊说明，默认只跑改过的代码的测试，不跑全量🐱
-
-如果跑全量，这里有个好东西叫pytest -n auto
-别再python -m pytest串行跑全量啦！！！
+在当前会话首次运行测试或跨仓验证前，按需读 `docs/dev-environment.md` 的相关环境章节；已读且未变化时复用。测试范围统一遵循上面的“测试”规则。
 
 ## Windows 换行噪音（必读，提交前核对）
 
@@ -230,22 +228,18 @@ brief，遵循“删除必须连同守卫、测试和文档条目一起删除”
 **提交前必须做：**
 
 - 对每个将要 `git add` 的文件，对比 `git diff --stat -- path` 和 `git diff --ignore-cr-at-eol --stat -- path`。两者差很多 → **不要提交**，先处理换行。
-- 禁止整文件转换换行。需要改混用文件时：从 `git show HEAD:path` 取原字节，只替换目标片段，按该片段原有的 `\n` 或 `\r\n` 写回。
-- 若已经整文件归一了：`git checkout HEAD -- path`，再用上面的字节级定点补丁重打实质改动。不要在已污染的工作区上继续编辑。
+- 禁止整文件转换换行。编辑前保留任务开始时的工作区原始字节，以此为基线，只替换目标片段并保留原换行；不要用 HEAD 替代含未提交改动的工作区基线。
+- 若本次编辑引入整文件换行变化，只修复本次引入的变化，并保留所有既有及并行改动。存在他人改动时禁止整文件 checkout/restore；基线不明时先核对差异，不自动还原。
 - 不要用换行转换当格式化，也不要为此改 `core.autocrlf`。
 
 ## Admin Static Asset Cache
 
-When editing a JS or CSS file loaded directly by `admin/static/index.html`, update that asset's `?v=` query version in `index.html`. When editing a page fragment under `admin/static/pages/`, also update `ADMIN_UI_FRAGMENT_VERSION` in `admin/static/js/core.js` and the `core.js` query version in `index.html`. Do not rely on a browser refresh or the default StaticFiles cache behavior to verify a page change.
+每批影响管理面显示或运行时行为的静态修改，在交付前统一完成一次版本更新和浏览器验收；纯注释或非运行内容修改不触发。
 
-**强制验收：管理面板静态改动必须实际刷新并核对可见结果。** 每次修改
-`admin/static/index.html`、`admin/static/pages/`、`admin/static/js/` 或
-`admin/static/*.css` 后，必须同时完成：
-
-1. 更新对应资源的 `?v=`；页面 fragment 还要更新 `ADMIN_UI_FRAGMENT_VERSION`。
-2. 启动/复用本地 admin 服务后，用浏览器执行硬刷新（清除该页面缓存，不能只依赖普通刷新）。
-3. 实际打开受影响页面，确认新增/修改的文字、控件和状态可见；不能仅凭源码、构建成功或接口存在宣称 UI 完成。
-4. 若浏览器启动或连接被环境阻断，必须在最终报告中明确写“浏览器实测未完成”，并记录已完成的替代验证。
+1. 直接由 `admin/static/index.html` 加载的 JS/CSS 更新对应 `?v=`；修改 `admin/static/pages/` fragment 时，同时更新 `ADMIN_UI_FRAGMENT_VERSION` 与 `core.js` 的 `?v=`。
+2. 启动或复用本地 admin 服务，清除受影响页面缓存并硬刷新；打开受影响页面，核对文字、控件、状态和相关交互。
+3. 同一批修改无需逐补丁重复验收；验收后若又改动相关行为，重新验证受影响部分。
+4. 若浏览器启动或连接被环境阻断，最终报告明确写“浏览器实测未完成”，并记录替代验证；源码或构建成功不能代替可见结果验收。
 
 ## Commands
 
@@ -260,22 +254,14 @@ python main.py
 # Test mode (data-isolated sandbox, won't touch production data/)
 python run_test.py
 
-# Run tests (ALWAYS parallel — see Testing rules below)
+# Test scope follows the Testing section above; full suite requires parallel execution
 pytest -n auto
 pytest --testmon                     # partial changes: only affected tests
 pytest tests/test_short_term.py -v   # single file
 python tests/run_eval.py             # validate prompt tag/layer activation after tag_rules changes
 ```
 
-1. `python` 可能不在 `PATH`，`py.exe` 也可能存在但没有已安装解释器；不要把这误判为项目失败。
-   本机运行项目 pytest 的正确入口是 Python 3.14 环境：
-   `<用户目录>\AppData\Local\Python\pythoncore-3.14-64\Scripts\pytest.exe`。
-   workspace dependency discovery 返回的 bundled Python 可能没有安装 pytest，不能据此判定测试不可运行。
-   注意：本机该 3.14 环境里的 `rapidocr-onnxruntime` 实际装的是 1.2.3（早于
-   `requirements.txt` 声明的 `>=1.3.0`）——`rapidocr-onnxruntime>=1.3.21` 起
-   `requires_python` 都是 `<3.13`，在 3.14 上 `pip install -r requirements.txt`
-   装不出满足约束的版本；本机能跑只是因为历史遗留装的旧版本还在。项目实际支持区间
-   是 Python 3.10–3.12（推荐 3.12，CI 覆盖 3.10/3.12 两端），3.13+ 暂不支持。
+1. `python` 不在 PATH 或 `py.exe` 无可用解释器不代表项目失败。优先项目支持的 Python 3.10–3.12 环境（推荐 3.12）；本机遗留 3.14 仅作备用，其测试结果不代表受支持环境验收。解释器发现与备用入口见 `docs/dev-environment.md`，不要在入口文件重复维护本机环境快照。
 2. pytest 默认临时目录可能因沙箱权限报 `PermissionError`；把 `TEMP` / `TMP` 临时指向仓库内 `.tmp`，测试后安全清理。
 3. `PresenceKit-desktop`（当前目录名通常为 `Emerald-client`）的 Vite build 可能因沙箱禁止写 `node_modules/.vite-temp` 报 `EPERM`；应申请权限后原命令重跑。
 4. 跨仓执行 git 时可能遇到 `dubious ownership`；优先按命令使用
@@ -285,32 +271,19 @@ python tests/run_eval.py             # validate prompt tag/layer activation afte
 
 ## 设置控制面文档
 
-修改模型路由、TTS、scheduler、relay、thinking、tool loop 或高级功能开关时，必须同步 docs/feature-control-surface.md 与客户端的设置审计文档。
+修改模型路由、TTS、scheduler、relay、thinking、tool loop 或高级功能时，仅当配置字段、默认值、effective state、权限或用户可见行为变化，才同步 `docs/feature-control-surface.md` 与实际受影响客户端的设置审计文档。内部重构且契约、行为不变时无需文档改动。
 
-## 当前阶段：每个小功能都要做三面闭环检查
+## 按影响面执行闭环检查
 
-现在这个阶段，新增、删除或修改任何小功能都必须执行跨仓闭环检查，不能因为改动很小而跳过：
+先判断本次改动影响后端管理面、桌面或手机中的哪些部分，只检查实际受影响的端与调用链。无跨端影响时在交付说明中简述理由即可，不为完成清单扩展到其他仓库。
 
-1. 查后端管理面板：功能是否需要设置开关、默认值、effective state、只读观测、审计记录；新增落盘状态、trace、队列或台账时，观测端点必须同单提供。
-2. 查客户端设置面：桌面前端是否已有或需要补功能设置、能力检查、降级提示；若手机也消费该功能，继续查 Flutter/Android 的设置、权限、后台服务和中继路径。配置字段存在不等于用户已有设置 UI。
-3. 查原调用链和相邻功能：从触发器/输入 → router/pipeline → queue/WS → Tauri IPC 或 mobile channel → UI/通知，核对鉴权 scope、字段、关联键、去重、ack、TTL、锁、生命周期和 fallback，确认不会让原调用链失效，也不会误伤其他功能。
-4. 为原路径和相邻路径补最小回归测试；未做全的部分必须同时记入 `docs/known-issues.md` 与 `docs/three-repo-interface-catalog.md`，标明 `open`/`roadmap`/`observe`，不得把“接口存在”写成“功能完成”。
+1. 后端：涉及设置、默认值、effective state、权限或运营排障状态时，检查对应控制面与观测能力；持久状态遵循上面的观测规则。
+2. 消费端：仅检查实际消费该功能的桌面/手机设置、能力、权限、降级与生命周期；配置字段存在不等于用户已有设置 UI。
+3. 调用链：沿实际变化的触发器、router/pipeline、队列/WS、IPC/channel 与展示路径，检查涉及的 scope、字段、关联键、去重、ack、TTL、锁及 fallback；不机械展开未受影响的链路。
+4. 验证：运行相关既有回归，覆盖不足才补最小测试。仅实际遗留缺陷或验收缺口记入 `docs/known-issues.md`；跨仓缺口同时记入 `docs/three-repo-interface-catalog.md`，标明 `open`/`roadmap`/`observe`。不适用项无需入账，不能把“接口存在”写成“功能完成”。
 
-三仓施工均适用本规则；跨仓接口改动还要同步三仓各自接口文档和本总账。
+跨仓接口实际变化时，同步受影响仓库的接口文档和本总账。
 
-## Architecture References
+## 控制面责任边界
 
-Before modifying runtime, startup, registry, scheduler, sensor, or lifecycle code:
-
-Read:
-- docs/runtime-lifecycle.md
-- docs/interaction-event-model.md
-- docs/security_model.md
-
-## ����������߽磨��� / ������壩
-
-�����������Ψһ��ʵ��Դ�����𱣴����á����� effective state��ִ��Ȩ�޺�Σ�ղ���բ�ţ����ṩֻ���۲�ӿڡ���������ǹ���Ա��������Ͻ��棺�����޸�ȫ�����á���ɫ���Ǻ���Ȩ�������ܰѡ��ֶδ��ڡ����ɡ���������Ч�����κ�������Ӧ����ʾ enabled/configured��effective�����ԭ����Դ�͹۲���ڡ�
-
-�ͻ���ְ��ͬ������˺��ֻ���ֻ����չʾ���������ѵ����á��ϱ�����/����״̬��ִ���û�ȷ�Ϻ�ı��ض������ͻ��˲��ø��ƺ�˵�Ȩ���жϣ�Ҳ���ðѱ��� UI ���ص��ɺ���ܿ��ء���������ʱ�����ں�˶��� capability �� effective state�����ڹ�����岹����/�۲⣬���ʵ�����Ѷ˲����á��������ͽ�����ʾ��
-
-�Ƽ���·�����������Ȩ�� �� ����������/�۲� �� REST/WS Э�� �� ������ֻ��ͻ���������ִ�С������������õ������á������ȼ���� effective state����ɫ��¶��tool loop/Ȩ��բ�źͿͻ�������״̬��
+后端功能开关、effective state、权限和观测入口以 `docs/feature-control-surface.md` 为权威；跨端设置归属与接入差异查 `docs/three-repo-doc-index.md` 和 `docs/three-repo-interface-catalog.md`。仅任务涉及这些边界时读取相关章节。

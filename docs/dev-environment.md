@@ -7,7 +7,7 @@
 
 ## 一、开始前检查
 
-本项目常与 `Emerald-client`（前端仓库，与本仓同级目录）跨仓联动，两个仓库都可能已有未提交改动。
+本项目可能与 `Emerald-client`（前端仓库，与本仓同级目录）跨仓联动。仅对本次实际涉及的仓库检查状态，不因环境检查扩展任务范围。
 
 ```powershell
 git status --short
@@ -35,26 +35,25 @@ Codex Windows 沙箱里可能出现：
 Get-Command python, py, pytest -ErrorAction SilentlyContinue | Select-Object Name,Source
 ```
 
-运行项目 pytest 时，优先使用下节已确认的本机 Python 3.14 pytest 入口。workspace dependency
+运行项目 pytest 时，优先使用项目支持的 Python 3.10–3.12 环境（推荐 3.12），检查项目虚拟环境与可用解释器。下节 3.14 是本机遗留备用，不是受支持的标准验收环境。workspace dependency
 discovery 返回的 bundled Python 可用于无需项目依赖的基础 Python 操作，但它可能没有安装 pytest；
 出现 `No module named pytest` 时不能据此判定测试不可运行。
 不要把某个用户名下的绝对 runtime 路径硬编码进项目脚本或文档。
-也不要从 `D:\ai` 递归搜索后随便使用其他项目附带的 `python.exe`；那些解释器的依赖集和
+也不要从工作区父目录递归搜索后随便使用其他项目附带的 `python.exe`；那些解释器的依赖集和
 运行时约束不属于本项目，容易产生假失败或污染。
 
-### pytest 临时目录权限错误
+### 本机遗留备用 pytest（Codex / Claude Code）
 
-### 已确认的本机 pytest（Codex / Claude Code）
-
-本机全局测试环境的固定入口是：
+仅无可用受支持环境时检查以下历史入口是否仍存在，不把它写成项目默认环境：
 
 ```powershell
-& 'C:\Users\10434\AppData\Local\Python\pythoncore-3.14-64\Scripts\pytest.exe' -n auto tests/test_stage* -q
-& 'C:\Users\10434\AppData\Local\Python\pythoncore-3.14-64\Scripts\pytest.exe' --testmon
+& '<用户目录>\AppData\Local\Python\pythoncore-3.14-64\Scripts\pytest.exe' -n auto tests/test_stage* -q
+& '<用户目录>\AppData\Local\Python\pythoncore-3.14-64\Scripts\pytest.exe' --testmon
 ```
 
-它对应 Python 3.14；不要误用 WindowsApps 别名或失效的 Python 3.13 PATH 残留。若 Codex
-沙箱拒绝执行该路径，应对同一条 pytest 命令申请权限后重跑。
+它对应 Python 3.14，超出项目支持范围；依赖可能与 requirements 不一致，运行结果不能替代受支持环境验收。不要误用 WindowsApps 别名或失效的 PATH 残留。若实际执行因沙箱拒绝而失败，对同一条范围明确的命令申请必要权限后重跑。
+
+### pytest 临时目录权限错误
 
 pytest 默认使用用户 `%TEMP%`。在受限沙箱中可能报：
 
@@ -68,7 +67,7 @@ PermissionError: [WinError 5] ... AppData\Local\Temp\pytest-of-...
 $env:TEMP="$PWD\.tmp"
 $env:TMP=$env:TEMP
 New-Item -ItemType Directory -Force $env:TEMP | Out-Null
-& 'C:\Users\10434\AppData\Local\Python\pythoncore-3.14-64\Scripts\pytest.exe' -n auto -q
+& '<用户目录>\AppData\Local\Python\pythoncore-3.14-64\Scripts\pytest.exe' -n auto -q
 ```
 
 完成后只能清理确认位于仓库内的 `.tmp`。删除前必须校验解析后的绝对路径仍在仓库根目录下，禁止对未校验的计算路径递归删除。
@@ -76,7 +75,7 @@ New-Item -ItemType Directory -Force $env:TEMP | Out-Null
 ### 测试结果判读
 
 - 先跑任务相关测试，确认本次改动本身通过。
-- 再跑完整 pytest，记录通过数与失败项。
+- 不例行追加全量测试。仅用户要求或影响面、相关失败表明必要时，按 `AGENTS.md` 的测试规则运行全量并记录结果。
 - 完整套件失败不等于本任务失败。若失败来自已有并行改动、过期 fixture 或缺失测试资产，应明确记录，不能顺手修改无关模块。
 - 若本次改动改变了合理前置条件，例如 desktop/system 工具新增 danger-mode 门控，应更新相关旧测试，让它显式建立该前置条件。
 
@@ -146,7 +145,7 @@ Windows 沙箱中内置浏览器可能因 `CreateProcessAsUserW failed: 5` 无�
 - 重要命令若因明确的沙箱写权限或进程权限失败，应对**同一条、范围明确的命令**申请权限后重跑。
 - 不要通过改写到别的 shell、关闭安全检查或扩大全局配置来绕过沙箱。
 - `Get-NetTCPConnection` / `Get-CimInstance` 在沙箱中可能报拒绝访问；需要识别或停止自己启动的服务时，申请范围明确的权限，并严格核对端口与命令行。
-- `git diff --check` 应在两个仓库分别运行，换行符警告不等于 diff 错误。
+- `git diff --check` 仅在本次实际修改的仓库、文件上运行，换行符警告不等于 diff 错误。
 
 ---
 
@@ -157,10 +156,10 @@ Windows 沙箱中内置浏览器可能因 `CreateProcessAsUserW failed: 5` 无�
 ```text
 1. git status --short
 2. 任务相关 pytest
-3. 完整 pytest（记录与本任务无关的既有失败）
-4. `<可用 Python>` -m py_compile（适合窄范围 Python 文件）
+3. 仅必要时扩大测试范围；纯文档/指令改动无需 pytest
+4. 必要时用 `<可用 Python>` -m py_compile 检查相关 Python 文件，不重复已充分验证的检查
 5. git diff --check
-6. 清理仓库内测试临时目录
+6. 仅清理本任务创建且路径核对通过的临时产物
 ```
 
 跨前端任务：
