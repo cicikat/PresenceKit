@@ -199,6 +199,10 @@ async def _forget_episodic_wrapper(
 ) -> str:
     from core.memory.episodic_memory import forget_episodes
 
+    episode_id = str(episode_id or "").strip()
+    topic = str(topic or "").strip()
+    if not episode_id and not topic:
+        return "请提供要遗忘的 episode_id，或一个具体 topic。"
     forgotten = forget_episodes(
         user_id,
         episode_id=episode_id,
@@ -1287,10 +1291,13 @@ _TOOL_REGISTRY["forget_episodic"] = {
     "description": "Forget an episodic memory only when the user explicitly asks to forget it. Provide either a known episode id or a specific topic. This downgrades the entry for audit/archive; it does not physically erase history.",
     "dangerous": False,
     "category": "memory",
+    # Keep both fields optional in JSON Schema. Top-level anyOf/required
+    # alternatives are rejected by some Gemini OpenAI-compat relays; the
+    # wrapper still requires at least one of episode_id / topic.
     "parameters": {"type": "object", "properties": {
-        "episode_id": {"type": "string", "description": "The exact episodic-memory identifier to forget, if known."},
-        "topic": {"type": "string", "description": "A specific topic to forget when no episode id is available."},
-    }, "anyOf": [{"required": ["episode_id"]}, {"required": ["topic"]}]},
+        "episode_id": {"type": "string", "description": "The exact episodic-memory identifier to forget, if known. Provide this or topic."},
+        "topic": {"type": "string", "description": "A specific topic to forget when no episode id is available. Provide this or episode_id."},
+    }},
     "examples": ["忘掉那次失眠的记忆", "别再记得我们关于考试的那段事"],
     "keywords": ["忘掉记忆", "别再记得", "遗忘这段"],
     "trace_args": ["episode_id", "topic"],

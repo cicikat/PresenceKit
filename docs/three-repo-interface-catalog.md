@@ -4,7 +4,8 @@
 
 current：后端 Chat Completions 工具续轮只发送协议允许字段；管理面沿用 API 账本
 `error_category`。桌面/手机无新设置、REST/WS/IPC、scope、ack 或 TTL 变更。
-observe：真实中转复杂 tool 请求需重启后复测。
+observe：续轮白名单实网已通；memory 整包曾因 forget_episodic 的 required-only anyOf
+被中转拒绝，已在 registry 与协议出口剥离，需重启后再点一次真实饮食记录查询。
 
 ## 现实来源边界（2026-09-13）
 
@@ -743,6 +744,12 @@ profile 可读取已关联的 Reality owner 回合，返回 available/entries（
 后端隔离回归及桌面既有夹具不代表真实端到端验收。
 `roadmap`：手机历史 ID 消费，以及 QQ/主动消息/Dream/Stage 思考关联。
 后端交付见 `cc-tasks/244-history-turn-id-backend-handoff.md`；本单仅修改后端仓。
+
+## 聊天产物文件（2026-09-16）
+
+`current`：Path C `artifacts` 类写出沙盒文件；owner 回合 HTTP/WS 可带有界 `artifacts[]`。`GET /chat/artifacts/{id}`（chat）下载，`GET /chat/artifacts/{id}/preview` CSP 预览，`GET /observability/chat-artifacts`（state.read）只读元数据。管理面观测页与桌面气泡文件卡走带鉴权下载；不新增 desktop action 类型。
+`observe`：真实写出 html 后的桌面预览/下载仍待运行中后端复测；管理面观测页需硬刷新。
+`roadmap`：手机产物卡 UI。
 ## IME v2 接收预备（2026-09-11）
 
 `current`：POST `/v1/ime/drafts`（sensor.write）按设备 token label + id + revision

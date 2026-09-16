@@ -6,7 +6,9 @@ Chat Completions 出口重建消息与工具，不再把 SDK `model_dump()` 或�
 assistant/tool 历史只保留 `role` / `content` / `tool_calls` / `tool_call_id`（及可选工具名）；
 `tool_calls` 只有 `id` + `type=function` + `function.{name,arguments}`，`arguments` 为 JSON 字符串；
 `content is None` 的纯工具轮改成空字符串。工具 schema 重建为 OpenAI function 形状，参数仍把
-`type` 数组转成等价 `anyOf`。Responses / Anthropic 入口不变，不按模型名猜协议。
+`type` 数组转成等价 `anyOf`；若 object 上的 `anyOf`/`oneOf` 分支只声明 `required`，出口会剥掉
+该组合（部分 Gemini 中转会因此 400），本地执行仍按原 registry/MCP schema 校验。
+Responses / Anthropic 入口不变，不按模型名猜协议。
 失败时 API 账本记 `error_category`（400 为 `upstream_request_rejected`），`output_hint` 只留异常类名，
 不写请求体。无新配置或客户端字段。
 

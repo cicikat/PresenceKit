@@ -453,6 +453,28 @@ def test_chat_completions_tools_rebuild_openai_shape_and_encode_type_unions():
     }]
 
 
+def test_chat_completions_tools_drop_required_only_anyof_alternatives():
+    rebuilt = chat_completions_tools([{
+        "type": "function",
+        "function": {
+            "name": "forget_episodic",
+            "description": "forget one memory",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "episode_id": {"type": "string"},
+                    "topic": {"type": "string"},
+                },
+                "anyOf": [{"required": ["episode_id"]}, {"required": ["topic"]}],
+            },
+        },
+    }])
+    params = rebuilt[0]["function"]["parameters"]
+    assert "anyOf" not in params
+    assert "oneOf" not in params
+    assert set(params["properties"]) == {"episode_id", "topic"}
+
+
 @pytest.mark.asyncio
 async def test_chat_completions_tool_loop_second_step_sends_whitelisted_history():
     calls = []

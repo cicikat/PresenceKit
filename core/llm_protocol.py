@@ -612,8 +612,25 @@ def _normalize_responses(mc: Any, response: Any) -> NormalizedResponse:
     )
 
 
+def _is_required_only_branch(branch: Any) -> bool:
+    """True when a composition branch only names required keys (plus optional description)."""
+    if not isinstance(branch, dict) or not branch:
+        return False
+    allowed = {"required", "description"}
+    if set(branch.keys()) - allowed:
+        return False
+    required = branch.get("required")
+    return isinstance(required, list) and bool(required) and all(isinstance(item, str) and item for item in required)
+
+
 def _portable_tool_schema(schema):
-    """Encode type unions as anyOf without altering the accepted JSON values."""
+    """Encode type unions as anyOf without altering the accepted JSON values.
+
+    Also drop object-level anyOf/oneOf branches that only list ``required``
+    keys.  Some OpenAI-compatible Gemini relays reject that composition even
+    though official OpenAI accepts it; local execute still validates the
+    original registry/MCP schema.
+    """
     from copy import deepcopy
 
     if not isinstance(schema, dict):
@@ -628,6 +645,12 @@ def _portable_tool_schema(schema):
     for key in ("anyOf", "oneOf", "allOf", "prefixItems"):
         if isinstance(result.get(key), list):
             result[key] = [_portable_tool_schema(value) for value in result[key]]
+    for key in ("anyOf", "oneOf"):
+        alternatives = result.get(key)
+        if isinstance(alternatives, list) and alternatives and all(
+            _is_required_only_branch(branch) for branch in alternatives
+        ):
+            del result[key]
     types = result.get("type")
     if isinstance(types, list) and types:
         del result["type"]

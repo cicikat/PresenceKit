@@ -80,6 +80,22 @@ async def test_forget_episodic_downgrades_topic_excludes_recall_and_records_audi
 
 
 @pytest.mark.asyncio
+async def test_forget_episodic_requires_episode_id_or_topic(sandbox):
+    from core.tool_dispatcher import _TOOL_REGISTRY, execute
+
+    params = _TOOL_REGISTRY["forget_episodic"]["parameters"]
+    assert "anyOf" not in params
+    assert "oneOf" not in params
+
+    result, confirm = await execute(
+        "forget_episodic", {},
+        "owner", "owner", False, _Session(), origin="assistant_loop", char_id=TEST_CHAR_ID,
+    )
+    assert confirm is None
+    assert "episode_id" in result and "topic" in result
+
+
+@pytest.mark.asyncio
 async def test_clear_midterm_clears_current_bucket_and_records_audit(sandbox):
     from core.memory import mid_term
     from core.memory.provenance_log import query

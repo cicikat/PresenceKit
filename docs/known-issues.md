@@ -6,12 +6,21 @@ current：独白正文以 source=monologue 归档并可绑定 owner turn；GET /
 display_prefer_monologue=false 时原生在前。这是展示策略，不改 thinking.mode。探针/摘要和独白 helper 自身的 native CoT 仍不进气泡。
 observe：桌面展开气泡需运行中后端加载新代码后，真实独白回合仍待看；手机思考 UI 仍为 roadmap。
 
+## Chat Completions memory 分类整包 400（2026-09-16）
+
+current：查生活记录时 Path C 先 load_tools_memory，再把 memory 整包 schema 送给
+gemini 中转；其中 forget_episodic 的顶层 anyOf[required] 会被模糊 upstream_error 拒绝，
+饮食记录工具本身与 tool 续轮白名单均正常。已去掉该 registry 写法，协议出口也会剥掉
+“仅含 required 的 anyOf/oneOf”以兜住 MCP；实网探测确认 memory 整包可通过。
+observe：运行中后端需重启后，桌面真实“查看饮食记录”回合仍待点一次确认。
+
 ## Chat Completions 工具续轮 400（2026-09-15）
 
 current：复杂 tool 请求被中转以模糊 upstream_error 拒绝时，协议出口已改为白名单重建
 Chat Completions 历史（丢掉 SDK dump 的 refusal/annotations/audio/reasoning 与内部键），
-工具 schema 仍走 anyOf。失败记 error_category=upstream_request_rejected，不含请求体。
-observe：运行中后端需重启；原先会 400 的真实中转复杂 tool 请求仍待复测，合成请求不等于端到端交付。
+工具 schema 仍走 type 联合 anyOf；仅含 required 的 anyOf/oneOf 会再剥掉。失败记
+error_category=upstream_request_rejected，不含请求体。
+observe：续轮白名单已用合成与实网续轮复测通过；与 memory 整包 schema 问题分开跟踪。
 
 ## 现实来源边界（2026-09-13，observe）
 
