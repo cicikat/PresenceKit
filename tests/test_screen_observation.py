@@ -67,6 +67,16 @@ async def test_revoke_and_timeout_release_pending(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_observe_maps_asyncio_timeout_error(monkeypatch):
+    async def boom(*_args, **_kwargs):
+        raise asyncio.TimeoutError()
+    monkeypatch.setattr(asyncio, "wait_for", boom)
+    service.poll("mobile", "m", True, 1)
+    assert "timeout" in await service.observe("owner", "char")
+    assert service._pending is None
+
+
+@pytest.mark.asyncio
 async def test_owner_and_disabled_gates(monkeypatch):
     assert 'owner_only' in await service.observe("other", "char")
     monkeypatch.setattr(service, "enabled", lambda: False)
