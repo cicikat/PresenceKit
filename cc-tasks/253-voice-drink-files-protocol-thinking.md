@@ -92,12 +92,12 @@
 
 ### 要做
 
-- [ ] 产物根：`get_paths()` 下 per-uid/char 的 artifacts，原子写，扩展名白名单（txt/md/html/css/js/json/csv/py/yaml 等文本；体积上限），禁止路径穿越。
-- [ ] 三个 info/desktop 工具注册进 `_TOOL_REGISTRY`（examples/keywords 齐），默认不进 Path A 探针；Path C 需 `tool_exposure` 或角色声明才可见。
-- [ ] 成功写入后，turn payload 带有界 `artifacts[]`（id、filename、mime、size、download_url），**不含正文、不含绝对路径**。
-- [ ] 下载：`GET /chat/artifacts/{id}`（chat scope）；HTML/图片预览用独立只读端点，CSP 沙箱。
-- [ ] 管理面聊天与桌面聊天气泡：文件卡片 + 下载按钮；html/md/txt 可预览。手机本单只保证 payload 字段，UI 标 roadmap。
-- [ ] 观测：`GET /observability/chat-artifacts` 元数据（state.read）。
+- [x] 产物根：`get_paths()` 下 per-uid/char 的 artifacts，原子写，扩展名白名单（txt/md/html/css/js/json/csv/py/yaml 等文本；体积上限），禁止路径穿越。
+- [x] 三个 artifacts 工具注册进 `_TOOL_REGISTRY`（examples/keywords 齐），默认不进 Path A 探针；Path C 需 `tool_exposure` 或角色声明才可见。
+- [x] 成功写入后，turn payload 带有界 `artifacts[]`（id、filename、mime、size、download_url），**不含正文、不含绝对路径**。
+- [x] 下载：`GET /chat/artifacts/{id}`（chat scope）；HTML/文本预览用独立只读端点，CSP 沙箱。
+- [x] 管理面观测页与桌面聊天气泡：文件卡片 + 下载按钮；html/md/txt 可预览。手机本单只保证 payload 字段，UI 标 roadmap。
+- [x] 观测：`GET /observability/chat-artifacts` 元数据（state.read）。
 
 ### 验收
 
@@ -113,6 +113,7 @@
 
 「后端任何文件」拒绝。本单只把**已有** `fs_read` / `workspace_read` / `read_document` 变得更好用：用户消息里的绝对/相对路径，在 allow_roots / workspace roots / 资料库命中时读得出来，并给模型清楚的失败原因（未开启 / 不在范围内 / 二进制 / 敏感名）。
 
+用户异议：我要做。我想做。如果担心敏感文件可以改为后端任何文件只读允许。但是数字和英文被后端读取时自动转化为*
 ### 要做
 
 - [ ] Path C 对 owner 私聊：用户文本里的路径片段可作为 fs/workspace 工具参数提示（不是自动绕过 execute 闸门）。
@@ -181,3 +182,5 @@
 - 读 secrets、config、data/ 记忆文件。
 - 新的醉酒 Live2D 表情。
 - 一起听的进度同步与歌词活动。
+
+253.2 已核实提交 d5e9951，store/settings 回归通过。253.3 后端主要回归 103 passed / 2 既有全站 i18n failed；桌面 5 tests、build、cargo check 通过；隔离浏览器硬刷新/HTML 预览通过，下载接口通过而内置浏览器下载事件未返回，真实文件保存 observe。

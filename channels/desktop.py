@@ -55,6 +55,7 @@ class DesktopChannel(BaseChannel):
         *,
         char_id: str | None = None,
         sticker: dict | None = None,
+        artifacts: list[dict] | None = None,
     ) -> None:
         from channels import desktop_ws
         # 路径 1：WS 实时推送
@@ -64,6 +65,8 @@ class DesktopChannel(BaseChannel):
                 push_kwargs["char_id"] = char_id
             if sticker is not None:
                 push_kwargs["sticker"] = sticker
+            if artifacts:
+                push_kwargs["artifacts"] = artifacts
             ok = await desktop_ws.push_message(content, **push_kwargs)
             if ok:
                 if behavior:
@@ -78,7 +81,7 @@ class DesktopChannel(BaseChannel):
         if is_remote_server():
             logger.info("[desktop_channel] remote_server desktop WS unavailable; no local file fallback")
             return
-        await self._write_to_queue(content, char_id=char_id, sticker=sticker)
+        await self._write_to_queue(content, char_id=char_id, sticker=sticker, artifacts=artifacts)
         if behavior and not is_remote_server():
             await self._write_action_to_queue(behavior)
 
@@ -88,6 +91,7 @@ class DesktopChannel(BaseChannel):
         *,
         char_id: str | None = None,
         sticker: dict | None = None,
+        artifacts: list[dict] | None = None,
     ) -> None:
         try:
             async with _queue_lock:
@@ -104,6 +108,8 @@ class DesktopChannel(BaseChannel):
                     item["char_id"] = char_id
                 if sticker is not None:
                     item["sticker"] = sticker
+                if artifacts:
+                    item["artifacts"] = artifacts
                 queue.append(item)
                 safe_write_json(q_file, queue)
         except Exception as e:

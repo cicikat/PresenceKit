@@ -32,6 +32,7 @@ async def broadcast(
     *,
     char_id: str | None = None,
     sticker: dict | None = None,
+    artifacts: list[dict] | None = None,
     exclude_channels: set[str] | None = None,
 ) -> dict[str, str]:
     """广播到所有活跃通道。返回失败通道到错误文本的映射。"""
@@ -50,6 +51,8 @@ async def broadcast(
                 kwargs["char_id"] = char_id
             if sticker is not None:
                 kwargs["sticker"] = sticker
+            if artifacts and channel.name in ("desktop", "mobile"):
+                kwargs["artifacts"] = artifacts
             await channel.send(content, user_id, **kwargs)
         except Exception as e:
             failures[channel.name] = str(e)

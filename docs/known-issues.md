@@ -675,3 +675,7 @@ schema 兼容修复。实现与定向回归见 [tool-discovery.md](tool-discover
 冻时间回归覆盖无设备、任一端活动、30/300 秒阈值、unavailable 与白天恢复。
 桌面/手机既有本地授权和 poll/result 链仅作静态核对，真实双设备、锁屏与后台存活验收
 仍为 observe/open；不据此宣称设备实测通过。无新增客户端设置或协议。
+
+## 工单 253.3 聊天产物验收（current / observe）
+
+三个产物工具及 owner-turn → turn sink → desktop/mobile payload 已接入；下载 chat scope，观测 state.read。HTML 预览为 sandbox iframe，响应与 srcdoc 内置 CSP 禁止脚本和联网。桌面 live 卡片实现，手机 UI 与历史卡片重放为 roadmap。后端相关回归 103 通过；两条既有全站 i18n 测试因 IME/生活记录裸文案失败，非产物页。桌面定向 5 项、build、cargo check 通过。隔离管理面硬刷新后 HTML 预览可见且测试脚本未执行；下载 HTTP 内容/鉴权通过，内置浏览器点击无报错但下载事件未返回，文件保存与原生 Tauri 实测为 observe。

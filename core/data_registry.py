@@ -43,6 +43,10 @@ REGISTRY: dict[str, PathMeta] = {
     "owner_turn_receipt":     PathMeta("runtime", "reality", "per_user", "ignore"),
     # Companion ingress stores bounded metadata only; caller-scoped files
     # mirror the owner-turn receipt classification.
+    "chat_artifacts_dir":      PathMeta("runtime", "reality", "per_char_user", "ignore"),
+    "chat_artifacts_index":    PathMeta("runtime", "reality", "per_char_user", "ignore"),
+    "chat_artifact_lookup_root": PathMeta("runtime", "reality", "global", "ignore"),
+    "chat_artifact_lookup":    PathMeta("runtime", "reality", "global", "ignore"),
     "companion_root":          PathMeta("runtime", "reality", "global",   "ignore"),
     "companion_receipt":       PathMeta("runtime", "reality", "per_user", "ignore"),
     "companion_receipts_root": PathMeta("runtime", "reality", "global",   "ignore"),

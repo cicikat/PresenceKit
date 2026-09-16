@@ -208,6 +208,97 @@ async function loadObserveChatlogDates() {
   }
 }
 
+async function _fetchChatArtifactResponse(artifactId, preview) {
+  const id = String(artifactId || '').trim();
+  if (!/^[A-Fa-f0-9]{32}$/.test(id)) throw new Error('invalid artifact id');
+  const path = `/chat/artifacts/${encodeURIComponent(id)}${preview ? '/preview' : ''}`;
+  const r = await fetch(BASE + path, { headers: { Authorization: `Bearer ${TOKEN}` } });
+  if (!r.ok) {
+    const text = await r.text();
+    throw new Error(`HTTP ${r.status}: ${text}`);
+  }
+  return r;
+}
+
+async function downloadObserveChatArtifact(artifactId, filename) {
+  try {
+    const r = await _fetchChatArtifactResponse(artifactId, false);
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = String(filename || 'artifact.txt').replace(/[\\/:*?"<>|]/g, '_');
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (e) {
+    toast(t('observe.chat_artifacts.download_failed', '下载失败：{error}', {error: e.message}), 'err');
+  }
+}
+
+async function previewObserveChatArtifact(artifactId) {
+  const host = document.getElementById('obs-artifacts-preview');
+  if (!host) return;
+  host.hidden = false;
+  host.textContent = t('common.loading', '加载中…');
+  try {
+    const r = await _fetchChatArtifactResponse(artifactId, true);
+    const html = await r.text();
+    host.replaceChildren();
+    const iframe = document.createElement('iframe');
+    iframe.setAttribute('sandbox', '');
+    iframe.setAttribute('referrerpolicy', 'no-referrer');
+    iframe.setAttribute('title', t('observe.chat_artifacts.preview', '预览'));
+    iframe.style.cssText = 'width:100%;min-height:280px;border:1px solid var(--border);background:#fff';
+    iframe.srcdoc = html;
+    host.appendChild(iframe);
+  } catch (e) {
+    host.textContent = t('observe.chat_artifacts.preview_failed', '预览失败：{error}', {error: e.message});
+  }
+}
+
+async function loadObserveChatArtifacts() {
+  const uid = (document.getElementById('obs-artifacts-uid')?.value || '').trim();
+  const charId = (document.getElementById('obs-artifacts-char')?.value || '').trim();
+  const el = document.getElementById('obs-artifacts-body');
+  const previewHost = document.getElementById('obs-artifacts-preview');
+  if (previewHost) {
+    previewHost.hidden = true;
+    previewHost.replaceChildren();
+  }
+  if (!el) return;
+  if (!uid || !charId) {
+    el.innerHTML = `<div class="empty">${escapeHtml(t('observe.chat_artifacts.need_scope', '输入用户 ID 和角色 ID 后查看。'))}</div>`;
+    return;
+  }
+  el.innerHTML = `<div class="loading">${escapeHtml(t('common.loading', '加载中…'))}</div>`;
+  try {
+    const query = new URLSearchParams({ uid, char_id: charId, limit: '50' });
+    const d = await api('GET', `/observability/chat-artifacts?${query}`);
+    const items = d.items || [];
+    if (!items.length) {
+      el.innerHTML = `<div class="empty">${escapeHtml(t('observe.chat_artifacts.empty', '该范围暂无产物文件。'))}</div>`;
+      return;
+    }
+    const rows = items.map(item => {
+      const id = String(item.id || '');
+      const filename = String(item.filename || '');
+      const mime = escapeHtml(item.mime || '');
+      const size = escapeHtml(String(item.size ?? 0));
+      const created = item.created_at ? new Date(item.created_at * 1000).toLocaleString() : '—';
+      const args = escapeHtml(JSON.stringify([id, filename]));
+      const previewable = item.previewable === true || /\.(html?|md|txt|json|csv|ya?ml|xml|toml|css)$/i.test(filename);
+      const preview = previewable
+        ? ` <button type="button" class="btn btn-ghost btn-sm" data-action="previewObserveChatArtifact" data-action-args="${escapeHtml(JSON.stringify([id]))}">${escapeHtml(t('observe.chat_artifacts.preview', '预览'))}</button>`
+        : '';
+      return `<div style="padding:10px 14px;border-top:1px solid var(--border);font-size:12px"><div><code>${escapeHtml(filename)}</code> · ${size} B · ${escapeHtml(created)}</div><div style="color:var(--muted);margin-top:4px">${mime} · ${escapeHtml(id)}</div><div style="margin-top:6px"><button type="button" class="btn btn-ghost btn-sm" data-action="downloadObserveChatArtifact" data-action-args="${args}">${escapeHtml(t('observe.chat_artifacts.download', '下载'))}</button>${preview}</div></div>`;
+    }).join('');
+    el.innerHTML = `<div class="admin-inline-086">${escapeHtml(t('observe.chat_artifacts.count', '共 {count} 个文件', {count: String(items.length)}))} · ${escapeHtml(d.retention || '')}</div>${rows}`;
+    bindPageActions(el);
+  } catch (e) {
+    el.innerHTML = `<div class="empty">${escapeHtml(t('observe.chat_artifacts.load_failed', '加载失败：{error}', {error: e.message}))}</div>`;
+  }
+}
+
 async function loadObserveChatlogDay() {
   const date = document.getElementById('obs-chatlog-date').value;
   const el   = document.getElementById('obs-chatlog-body');
@@ -488,6 +579,9 @@ async function enqueueAutonomyTest() {
   catch (e) { toast('排队失败：' + e.message, 'err'); }
 }
 
+window.loadObserveChatArtifacts = loadObserveChatArtifacts;
+window.downloadObserveChatArtifact = downloadObserveChatArtifact;
+window.previewObserveChatArtifact = previewObserveChatArtifact;
 window.loadObserveAutonomy = loadObserveAutonomy;
 window.loadSelfManagement = loadSelfManagement;
 window.selfManagementChange = selfManagementChange;

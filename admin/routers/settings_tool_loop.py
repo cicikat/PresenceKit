@@ -24,7 +24,7 @@ _DEFAULTS = {
     "enabled": False,
     "max_steps": 5,
     "total_timeout_s": 300,
-    "categories": ["info", "desktop", "memory"],
+    "categories": ["info", "desktop", "memory", "artifacts"],
     "exclude_tools": ["toy_vibrate", "toy_stop", "toy_pattern", "write_toy_file"],
     "nudge_hint": "",
 }

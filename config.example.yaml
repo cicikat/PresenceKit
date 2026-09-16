@@ -437,7 +437,7 @@ tool_loop:
   enabled: false
   max_steps: 5               # 单轮最多调用工具的步数，前端可调 1-8
   total_timeout_s: 720       # 整个 loop 墙钟超时，超时按步数耗尽处理
-  categories: ["info", "desktop", "memory"]
+  categories: ["info", "desktop", "memory", "artifacts"]
   exclude_tools: ["toy_vibrate", "toy_stop", "toy_pattern", "write_toy_file"]  # 硬件写类默认排除
   nudge_hint: true           # 首步注入"别凭记忆编造，需要就调工具"的软提示（Brief 29 · 5）
 

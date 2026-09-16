@@ -29,7 +29,7 @@ Chat Completions assistant/tool 对与 Responses continuation items/call_id 沿�
 
 ## 预算和补救
 
-`max_steps` 保留非发现决策轮的预算；额外给予最多 N 个纯发现响应轮，N 为本轮非空分类数（至多 9）。
+`max_steps` 保留非发现决策轮的预算；额外给予最多 N 个纯发现响应轮，N 为本轮非空分类数（至多 10）。
 纯发现轮包括无效参数与重复请求，不能无限免费重试；额度用完后继续消耗普通步数。
 混合响应消耗普通步数。总模型决策轮最多 `max_steps + N`；每个响应仍可有多个串行调用。
 分类发现、原生业务调用和尾部 relay 探针共用同一个 `total_timeout_s`。

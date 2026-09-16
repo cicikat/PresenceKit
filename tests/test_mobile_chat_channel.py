@@ -133,6 +133,7 @@ async def test_mobile_owner_turn_uses_mobile_context_without_desktop_stream(monk
         return SimpleNamespace(
             turn_id="turn-mobile",
             written_to_memory=True,
+            artifacts=[],
             emotion="neutral",
         )
 

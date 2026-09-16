@@ -11,7 +11,7 @@ from dataclasses import dataclass
 
 _DEFAULTS = {
     "path_a": {"categories": ["info", "desktop"], "tools": None, "exclude_tools": []},
-    "path_c": {"categories": ["info", "desktop", "memory"], "tools": None, "exclude_tools": []},
+    "path_c": {"categories": ["info", "desktop", "memory", "artifacts"], "tools": None, "exclude_tools": []},
 }
 
 

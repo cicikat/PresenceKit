@@ -1,0 +1,17 @@
+
+      <h1 class="page-title" data-i18n="observe.chat_artifacts.title">聊天产物文件</h1>
+      <p class="admin-inline-102" data-i18n="observe.chat_artifacts.subtitle">只读元数据。正文走聊天下载/预览，不在这里展示。</p>
+      <div class="card">
+        <div class="card-header">
+          <h3 data-i18n="observe.chat_artifacts.scope">范围</h3>
+        </div>
+        <div class="admin-inline-046">
+          <input type="text" id="obs-artifacts-uid" placeholder="uid" data-i18n-placeholder="observe.chat_artifacts.uid" class="admin-inline-200">
+          <input type="text" id="obs-artifacts-char" placeholder="char_id" data-i18n-placeholder="observe.chat_artifacts.char_id" class="admin-inline-200">
+          <button class="btn btn-ghost btn-sm" data-action="loadObserveChatArtifacts" data-i18n="common.refresh">刷新</button>
+        </div>
+        <div id="obs-artifacts-body" class="admin-inline-111">
+          <span data-i18n="observe.chat_artifacts.need_scope">输入用户 ID 和角色 ID 后查看。</span>
+        </div>
+        <div id="obs-artifacts-preview" class="admin-inline-111" hidden></div>
+      </div>

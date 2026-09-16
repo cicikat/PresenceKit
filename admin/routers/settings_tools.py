@@ -137,7 +137,7 @@ def _response(cfg: dict) -> dict:
     model_presets = cfg.get("model_presets", {}).get("presets", {})
     rows = _registry_rows(cfg)
     builtin_names = {row["name"] for row in rows}
-    global_categories = tool_loop.get("categories", ["info", "desktop", "memory"])
+    global_categories = tool_loop.get("categories", ["info", "desktop", "memory", "artifacts"])
     global_excluded = tool_loop.get("exclude_tools", [])
     if not isinstance(global_categories, list):
         global_categories = []
@@ -150,7 +150,7 @@ def _response(cfg: dict) -> dict:
         and not row.get("frozen")
     ]
     exposure_cfg = cfg.get("tool_exposure") if isinstance(cfg.get("tool_exposure"), dict) else {}
-    path_c_legacy = tool_loop.get("categories", ["info", "desktop", "memory"])
+    path_c_legacy = tool_loop.get("categories", ["info", "desktop", "memory", "artifacts"])
     path_c_excludes = tool_loop.get("exclude_tools", [])
     path_exposure = {}
     for path, defaults in {

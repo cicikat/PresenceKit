@@ -31,7 +31,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-_ALL_CATEGORIES = ("info", "desktop", "memory", "system", "fs", "phone_control", "mcp")
+_ALL_CATEGORIES = ("info", "desktop", "memory", "system", "fs", "phone_control", "mcp", "artifacts")
 
 # 与 core/tool_dispatcher.py 保持一致（不 import 私有名以外的逻辑，这里只读只报告）。
 _MODE_RESTRICTED_CATEGORIES = frozenset({"desktop", "system", "phone_control"})

@@ -1007,6 +1007,9 @@ class Pipeline:
         from core import llm_client, thinking
         from core.config_loader import get_config
         from core.error_handler import log_error
+        from core.tools.chat_artifacts import begin_turn_collection
+        # Owner chat already starts collection; QQ / scheduler Path C still needs it.
+        begin_turn_collection()
         from core.tool_dispatcher import (
             execute as _execute,
             format_mcp_opaque_params_note,

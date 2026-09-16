@@ -1058,6 +1058,19 @@ class DataPaths:
         Used for runtime-uploaded assets (e.g. avatar overrides)."""
         return self._p("runtime", "characters", char_id)
 
+    def chat_artifacts_dir(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
+        """Chat-facing product files: data/runtime/chat_artifacts/{char_id}/{uid}/"""
+        return self._p("runtime", "chat_artifacts", char_id, safe_user_id(user_id))
+
+    def chat_artifacts_index(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
+        return self.chat_artifacts_dir(user_id, char_id=char_id) / "index.json"
+
+    def chat_artifact_lookup_root(self) -> Path:
+        return self._p("runtime", "chat_artifacts", "_lookup")
+
+    def chat_artifact_lookup(self, artifact_id: str) -> Path:
+        return self.chat_artifact_lookup_root() / f"{safe_user_id(artifact_id)}.json"
+
     # ── Global runtime meta flags ────────────────────────────────────────────
     def meta_mode(self) -> Path:
         """data/runtime/meta_mode.json — global safe/danger mode switch."""

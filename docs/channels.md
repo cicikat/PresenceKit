@@ -295,6 +295,10 @@ HTTP /desktop/chat 触发 turn
 它不包含本机绝对路径，桌宠 WebSocket 的 `channel_message` 与 mobile poll 队列均原样携带。
 客户端是否以及如何渲染该字段由各自仓库的独立工单决定；不识别该字段的旧客户端可忽略它。
 
+### 聊天产物 payload（可选字段，sticker 同模式）
+
+`channel_message` 与 mobile poll 队列可附带 `artifacts[]`：`id`/`filename`/`mime`/`size`/`download_url`，可预览文件加 `preview_url`。不含正文与本机绝对路径。只经 desktop/mobile `send()` kwargs 传递；QQ/设备不接此字段。旧客户端可忽略未知字段。手机 UI 仍为 roadmap。
+
 **约束：**
 - QQ / mobile 链路不走流式，只收完整 `channel_message`。
 - Dream pipeline 不经 `run_owner_chat_turn`，不受影响。

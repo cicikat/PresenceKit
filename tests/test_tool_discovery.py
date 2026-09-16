@@ -175,10 +175,10 @@ def test_all_categories_no_truncation_and_schema_integrity():
                 "type": "object", "properties": {"value": {"type": ["string", "null"]}},
             }}})
     discovery = ToolDiscovery(schemas, registry)
-    assert len(discovery.schemas()) == 9
+    assert len(discovery.schemas()) == 10
     for category in CATEGORIES:
         assert discovery.load("load_tools_" + category, {})[1]
-    assert len(discovery.schemas()) == 225
+    assert len(discovery.schemas()) == 250
     assert discovery.schemas() == schemas
     assert not discovery.load("load_tools_info", {})[1]
     assert not discovery.load("load_tools_unknown", {})[1]

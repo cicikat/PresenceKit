@@ -36,6 +36,7 @@ class TurnResult:
     fanout_failures: dict[str, str] = field(default_factory=dict)
     post_process_scheduled: bool = False
     emotion: str = "neutral"
+    artifacts: list[dict] = field(default_factory=list)
 
 
 def _require_pipeline(pipeline=None):
@@ -92,6 +93,7 @@ async def _fanout(
     ws_msg_id: Optional[str] = None,
     char_id: Optional[str] = None,
     source: Optional[TurnSource] = None,
+    artifacts: Optional[list[dict]] = None,
 ) -> tuple[list[str], dict[str, str]]:
     from channels import registry
 
@@ -170,6 +172,10 @@ async def _fanout(
             # also needs this to match up channel_message with message_segments).
             if ws_msg_id is not None and name in ("desktop", "mobile", "device"):
                 send_kwargs["msg_id"] = ws_msg_id
+            # Artifacts follow the sticker pattern: desktop/mobile only.
+            # QQ and device send() do not accept this kwarg.
+            if artifacts and name in ("desktop", "mobile"):
+                send_kwargs["artifacts"] = artifacts
             await channel.send(text_to_send, uid, **send_kwargs)
         except Exception as exc:
             failures[name] = str(exc)
@@ -248,6 +254,8 @@ async def record_assistant_turn(
     memory_input = user_text if source == TurnSource.USER_CHAT else (trigger_name or "")
     capture_trigger = "" if source == TurnSource.USER_CHAT else (trigger_name or "")
     behavior = payload.get("behavior") if payload else None
+    from core.tools.chat_artifacts import drain_turn_artifacts
+    artifacts = drain_turn_artifacts()
     if char_id is None and frozen_scope is not None:
         char_id = getattr(frozen_scope, "character_id", None)
     if char_id is None:
@@ -363,6 +371,7 @@ async def record_assistant_turn(
         ws_msg_id=_ws_msg_id,
         char_id=char_id,
         source=source,
+        artifacts=artifacts or None,
     )
 
     # Brief 37: send（上面的 fanout）已经完成，慢段（detect_emotion / mood_state /
@@ -425,4 +434,5 @@ async def record_assistant_turn(
         fanout_failures=failures,
         post_process_scheduled=not await_critical_post_process,
         emotion=(post_info or {}).get("emotion", "neutral"),
+        artifacts=artifacts,
     )

@@ -1783,6 +1783,10 @@ _INTIFACE_TOOL_NAMES: frozenset[str] = frozenset({
 #     - 纯读类（get_time / weather / web_search / read_diary /
 #               read_watch / search_diary / get_profile / get_episodic）
 
+from core.tools.chat_artifacts import register_tools as _register_artifact_tools
+_register_artifact_tools(_TOOL_REGISTRY)
+
+
 _SIDE_EFFECT_TOOLS: frozenset[str] = frozenset({
     # desktop 控制类 —— 会向桌宠端推送外部动作
     "desktop_minimize",
@@ -2378,7 +2382,7 @@ async def _execute_structured_impl(
         except Exception as _at_err:
             logger.debug("[tool_dispatcher] action_trace record error: %s", _at_err)
 
-    if tool_name in {"search_events", "expand_event_window", "get_related_events", "read_life_records", "reread_image"} and is_group:
+    if tool_name in {"search_events", "expand_event_window", "get_related_events", "read_life_records", "reread_image", "write_artifact", "read_artifact", "list_artifacts"} and is_group:
         _trace("failed", "reality_event_tools_forbidden_in_group")
         return _execution_outcome("tool_failed")
 
@@ -2548,7 +2552,7 @@ async def _execute_structured_impl(
                 # Preserve the historical signature for test/local extensions
                 # that replace the legacy callable in the registry.
                 result = await func(user_id=user_id, **tool_args)
-        elif tool_name in ("read_toy_file", "write_toy_file"):
+        elif tool_name in ("read_toy_file", "write_toy_file", "write_artifact", "read_artifact", "list_artifacts"):
             result = await func(user_id=user_id, char_id=char_id, **tool_args)
         elif tool_name in {
             "workspace_list", "workspace_read", "workspace_create",

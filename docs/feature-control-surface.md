@@ -1,5 +1,9 @@
 # 功能控制面事实清单（2026-07-13）
 
+## 聊天产物文件（2026-09-16）
+
+Path C `artifacts` 类（`write_artifact` / `read_artifact` / `list_artifacts`）写出沙盒文本文件；不进 Path A 探针。没有独立客户端开关，暴露面由 tool loop categories / 角色 `presence_ext.tool_categories` 决定。管理面观测页 `observe-chat-artifacts` 只读元数据（state.read）；下载/预览走 chat scope。桌面气泡消费 live payload，不新增设置。手机 UI 为 roadmap。
+
 ## 资料接续（2026-09-13）
 
 生活记录角色可读沿用 enabled/character_readable；已就绪未读资料随下一次 owner 私聊/主动机会提供。
@@ -91,7 +95,7 @@ RPG Dream's `rpg_kp` route is a backend capability, not a client setting; it is 
 `tool_loop.enabled=false` 时仍为该卡开启多步工具循环，`"off"` 强制关闭，缺失或非法值回落全局。
 全局 `tool_loop.total_timeout_s` 控制单轮工具循环的总墙钟预算，默认 300 秒；管理面可调范围为 5–720 秒。
 Path C 固定采用分类按需加载，无新增开关：首轮仅提供最终获授权的非空分类入口。
-`max_steps` 之外最多增加非空分类数（至多 9）个纯发现轮，发现/relay/执行共用总超时；
+`max_steps` 之外最多增加非空分类数（至多 10）个纯发现轮，发现/relay/执行共用总超时；
 thinking 前处理和无工具最终生成维持原预算边界。只读 `runtime-signals` 的
 `tool_loop_discovery` 提供实际 schema 数量、加载/拒绝/耗尽/超时观测。
 桌面继续从管理面配置，手机无本地权限副本；详见 [tool-discovery.md](tool-discovery.md)。

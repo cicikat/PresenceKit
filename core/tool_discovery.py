@@ -11,6 +11,7 @@ from copy import deepcopy
 CATEGORIES = {
     "browser": "网页浏览与浏览器操作",
     "desktop": "电脑桌面与应用操作",
+    "artifacts": "聊天里给用户看的文件",
     "fs": "文件与工作区操作",
     "info": "时间、搜索和外部信息查询",
     "mcp": "已授权的外部 MCP 服务",

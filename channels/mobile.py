@@ -80,6 +80,7 @@ class MobileChannel(BaseChannel):
         *,
         char_id: str | None = None,
         sticker: dict | None = None,
+        artifacts: list[dict] | None = None,
         display_text: str | None = None,
     ) -> None:
         await self._write_to_queue(
@@ -89,6 +90,7 @@ class MobileChannel(BaseChannel):
             msg_id=msg_id,
             char_id=char_id,
             sticker=sticker,
+            artifacts=artifacts,
             display_text=display_text,
         )
 
@@ -159,6 +161,7 @@ class MobileChannel(BaseChannel):
         *,
         char_id: str | None = None,
         sticker: dict | None = None,
+        artifacts: list[dict] | None = None,
         display_text: str | None = None,
     ) -> None:
         item = None
@@ -183,6 +186,8 @@ class MobileChannel(BaseChannel):
                     item["char_id"] = char_id
                 if sticker is not None:
                     item["sticker"] = sticker
+                if artifacts:
+                    item["artifacts"] = artifacts
                 if display_text is not None:
                     item["display_text"] = display_text
                 # The marker is deliberately tiny: audio stays out of the

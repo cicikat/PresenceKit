@@ -28,6 +28,18 @@ async def mail_weekly_state(_auth=Depends(require_scopes('state.read'))):
             'admission_note': '到期仍需通过 QUIET、活跃窗口、DND 与角色主动开关；不保证固定星期发送'}
 
 
+@router.get("/observability/chat-artifacts", summary="读取聊天产物元数据（不含正文）")
+async def observability_chat_artifacts(
+    uid: str = "",
+    char_id: str = "",
+    limit: int = Query(50, ge=1, le=50),
+    _auth=Depends(require_scopes("state.read")),
+):
+    from core.tools.chat_artifacts import observability_snapshot
+
+    return observability_snapshot(uid=uid, char_id=char_id, limit=limit)
+
+
 @router.get("/chat/turns/{turn_id}/reasoning", summary="按聊天回合读取模型已返回的思考")
 async def chat_turn_reasoning(turn_id: str, _auth=Depends(require_scopes("memory.read"))):
     import asyncio

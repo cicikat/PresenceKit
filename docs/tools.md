@@ -519,6 +519,16 @@ fs_access:
 | `read_toy_file` | 读取玩具项目白名单文件 | `data/very_formal_project/`，仅接受枚举 `file_key` |
 | `write_toy_file` | 覆盖或追加玩具项目白名单文件 | UTF-8 文本，文件总长最多 4000 字，原子写入 |
 
+### artifacts 类（仅 Path C，不进 Path A 探针）
+
+| 工具名 | 触发描述 | 执行方式 |
+|---|---|---|
+| `write_artifact` | 用户明确要一份可下载文本文件 | 沙盒 `runtime/chat_artifacts/{char_id}/{uid}/`，扩展名白名单，单文件 256k 字符 |
+| `read_artifact` | 读取本轮或近期产物正文 | 只读沙盒产物，截断 12k 字符 |
+| `list_artifacts` | 列出近期产物元数据 | 不含正文与绝对路径 |
+
+成功写入后本轮 `artifacts[]` 只给 desktop/mobile：id/filename/mime/size/download_url，可预览时加 preview_url。HTML/txt 预览走 `GET /chat/artifacts/{id}/preview`，CSP 禁脚本；js/py 可写不可预览。不是 workspace_*，也不是聊天里的 coding agent。
+
 #### `peek_screen_content` — 屏幕内容受控出口
 
 实现：`core/tools/screen_peek.py`。设计原则：

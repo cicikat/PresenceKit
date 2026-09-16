@@ -20,7 +20,7 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'brief-253-monologue-display-1';
+const ADMIN_UI_FRAGMENT_VERSION = 'brief-253-chat-artifacts-3';
 
 const ADMIN_PAGE_ALIASES = Object.freeze({memory: 'observe-memory'});
 
@@ -332,6 +332,7 @@ async function goto(page, {reloadFragment = false, fromHistory = false} = {}) {
     'observe-memory-events': () => {},
     'observe-hidden':  loadObserveHidden,
     'observe-chatlog': loadObserveChatlogDates,
+    'observe-chat-artifacts': loadObserveChatArtifacts,
     'observe-runtime': loadObserveRuntime,
     'observe-growth':  () => initObserveCharacters('obs-growth-char', loadObserveGrowth),
     'observe-visual':  loadObserveVisual,

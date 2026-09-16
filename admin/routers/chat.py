@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse
 
 from admin.auth import require_scopes
 from core.llm_reasoning_store import associate_owner_turn
@@ -147,6 +148,69 @@ async def run_owner_chat_turn(
 
     _t_start = time.monotonic()
     async with conversation_lock(user_id):
+        from core.tools.chat_artifacts import begin_turn_collection, drain_turn_artifacts
+        begin_turn_collection()
+        try:
+            return await _execute_owner_chat_turn_locked(
+                message=message,
+                provenance_channel=provenance_channel,
+                live_origin_channel=live_origin_channel,
+                durable_mobile_mirror=durable_mobile_mirror,
+                _probe_text=_probe_text,
+                allowed_tool_categories=allowed_tool_categories,
+                allowed_tool_names=allowed_tool_names,
+                audit_extras=audit_extras,
+                pipeline=pipeline,
+                user_id=user_id,
+                frozen_scope=_frozen_scope,
+                tool_execution_enabled=tool_execution_enabled,
+                prompt_context_note=prompt_context_note,
+                prompt_capture_origin=prompt_capture_origin,
+                turn_source=turn_source,
+                trigger_name=trigger_name,
+                envelope=envelope,
+                fanout=fanout,
+                provenance_source=provenance_source,
+                schedule_slow=schedule_slow,
+                media_refs=media_refs,
+                event_context=event_context,
+                _loop_active=_loop_active,
+                _loop_session_state=_loop_session_state,
+                _t_start=_t_start,
+            )
+        finally:
+            drain_turn_artifacts()
+
+
+async def _execute_owner_chat_turn_locked(
+    *,
+    message,
+    provenance_channel,
+    live_origin_channel,
+    durable_mobile_mirror,
+    _probe_text,
+    allowed_tool_categories,
+    allowed_tool_names,
+    audit_extras,
+    pipeline,
+    user_id,
+    frozen_scope,
+    tool_execution_enabled,
+    prompt_context_note,
+    prompt_capture_origin,
+    turn_source,
+    trigger_name,
+    envelope,
+    fanout,
+    provenance_source,
+    schedule_slow,
+    media_refs,
+    event_context,
+    _loop_active,
+    _loop_session_state,
+    _t_start,
+):
+        _frozen_scope = frozen_scope
         # probe（探针自读 short_term 最近 4 条，不吃 context）与 fetch_context
         # 互不依赖，并行跑掉其中较短的一段；两者都在 conversation_lock 内，
         # gather 不改变锁语义。各自计时供 [owner_chat/timing] 打点使用。
@@ -416,6 +480,7 @@ async def run_owner_chat_turn(
                 visible_reply,
                 msg_id=_stream_msg_id,
                 char_id=_frozen_scope.character_id,
+                artifacts=turn_result.artifacts or None,
             )
             # Optional say-only segments, same msg_id as the canonical channel_message
             # above so the client can correlate them; failure never affects the main
@@ -468,6 +533,7 @@ async def run_owner_chat_turn(
             # 前端凭此判断 WS 已渲染，取消 3s HTTP fallback 计时器。
             "msg_id": _stream_msg_id or turn_result.turn_id,
             "critical_written": turn_result.written_to_memory,
+            "artifacts": list(turn_result.artifacts or []),
         }
 
 
@@ -578,6 +644,85 @@ def _check_reality_not_in_dream(uid: str) -> None:
     if guard == DreamGuardStatus.BLOCK_UNCERTAIN:
         logger.error("[dream_guard] reality turn rejected — unconfirmable dream state uid=%s", uid)
         raise HTTPException(status_code=409, detail=_DREAM_GUARD_UNCERTAIN_MSG)
+
+
+def _artifact_record_or_404(artifact_id: str):
+    from core.tools.chat_artifacts import (
+        ArtifactError,
+        get_artifact_record,
+        resolve_artifact_scope,
+    )
+
+    scope = resolve_artifact_scope(artifact_id)
+    if scope is None:
+        raise HTTPException(status_code=404, detail="产物不存在")
+    try:
+        record = get_artifact_record(
+            scope["id"], uid=scope["uid"], char_id=scope["char_id"]
+        )
+    except ArtifactError:
+        raise HTTPException(status_code=404, detail="产物不存在") from None
+    if record is None:
+        raise HTTPException(status_code=404, detail="产物不存在")
+    return record
+
+
+@router.get("/chat/artifacts/{artifact_id}", summary="下载聊天产物文件")
+async def download_chat_artifact(artifact_id: str, _auth=Depends(require_scopes("chat"))):
+    from core.tools.chat_artifacts import artifact_file_path
+
+    record = _artifact_record_or_404(artifact_id)
+    path = artifact_file_path(record)
+    if not path.exists() or not path.is_file():
+        raise HTTPException(status_code=404, detail="产物文件已不存在")
+    filename = str(record.get("filename") or "artifact.txt")
+    mime = str(record.get("mime") or "application/octet-stream")
+    return FileResponse(
+        path,
+        media_type=mime.split(";")[0].strip() or "application/octet-stream",
+        filename=filename,
+        headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "no-store"},
+    )
+
+
+@router.get("/chat/artifacts/{artifact_id}/preview", summary="只读预览聊天产物")
+async def preview_chat_artifact(artifact_id: str, _auth=Depends(require_scopes("chat"))):
+    from html import escape
+    from pathlib import Path as _Path
+
+    from core.tools.chat_artifacts import (
+        PREVIEW_CSP,
+        PREVIEWABLE_EXTENSIONS,
+        ArtifactError,
+        read_artifact_text,
+    )
+
+    record = _artifact_record_or_404(artifact_id)
+    filename = str(record.get("filename") or "")
+    ext = _Path(filename).suffix.lower()
+    if ext not in PREVIEWABLE_EXTENSIONS:
+        raise HTTPException(status_code=415, detail="该文件类型不支持预览")
+    try:
+        body = read_artifact_text(record)
+    except ArtifactError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    headers = {
+        "Content-Security-Policy": PREVIEW_CSP,
+        "X-Content-Type-Options": "nosniff",
+        "Cache-Control": "no-store",
+        "Referrer-Policy": "no-referrer",
+    }
+    if ext in {".html", ".htm"}:
+        return HTMLResponse(content=f'<meta http-equiv="Content-Security-Policy" content="{escape(PREVIEW_CSP, quote=True)}">' + body, headers=headers)
+    escaped = escape(body)
+    html = (
+        "<!DOCTYPE html><html><head><meta charset=\"utf-8\">"
+        f"<title>{escape(filename)}</title>"
+        "<style>body{margin:16px;font:14px/1.5 ui-monospace,Consolas,monospace;"
+        "white-space:pre-wrap;word-break:break-word;color:#111}</style></head>"
+        f"<body>{escaped}</body></html>"
+    )
+    return HTMLResponse(content=html, headers=headers)
 
 
 @router.post("/desktop/chat", summary="桌宠对话（Bearer 鉴权）")
