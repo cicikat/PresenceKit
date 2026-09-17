@@ -103,7 +103,7 @@ Forgetting is demotion / tombstone, not casual physical deletion of evidence. Co
 - Example categories: time/weather/reminders, web search, diary/toy files, memory, life records, garden, desktop window actions, screen observation, Xiaohongshu read-only, sandboxed chat artifacts, hardware (frozen unless opted in).
 - **MCP**: optional external tool transport, **not** the client protocol; off by default; local allowlist required. Experimental; must not block chat.
 - **Danger mode**: `PATCH /system/meta-mode`. Shutdown/sleep still need a second confirmation. Mobile tokens **do not** include `hardware` or `admin`.
-- **Agent Runtime** (Reality): durable tasks, bounded work sessions, controlled workspace, process runner, isolated browser worker. Leftover `running` records become `outcome_unknown` at startup and are not auto-replayed. Dream does not share this runtime. See [docs/agent-runtime-architecture.md](docs/agent-runtime-architecture.md), [docs/tools.md](docs/tools.md).
+- **Agent Runtime** (Reality): the same character's durable/specialized 副链 runtime — durable tasks, bounded work sessions, controlled workspace, process runner, isolated browser worker. It is not a second agent. Leftover `running` records become `outcome_unknown` at startup and are not auto-replayed. Dream does not share this runtime. See [docs/agent-runtime-architecture.md](docs/agent-runtime-architecture.md), [docs/tools.md](docs/tools.md).
 
 ### Proactivity (scheduler + autonomy)
 

@@ -508,7 +508,7 @@ def _diary_char_ids() -> list[str]:
 
 
 def _prepare_diary_work_context(oid: str, char_id: str) -> dict[str, str] | None:
-    """Build the exact bounded input consumed by the non-chat diary worker."""
+    """Build the exact bounded input consumed by the same-character diary 副链 worker."""
     from core.memory.event_log import get_recent_days
 
     days = 2 if datetime.now().hour < LOGICAL_DAY_CUTOFF_HOUR else 1

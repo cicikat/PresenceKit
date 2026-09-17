@@ -335,7 +335,8 @@ Pipeline / Output
 ### Agent Runtime target contract (Brief 229)
 
 未来 Agent Runtime 按 Clock/Trigger、Task、Agent、Capability、Interaction 五个 plane 分层，
-但不通过 EventBus 合并现有 registry。完整目标和现有组件迁移映射见
+但不通过 EventBus 合并现有 registry。这里的 Agent plane 是同一角色 durable / specialized
+副链的生命周期所有权层，不是独立人格或第二执行主体。完整目标和现有组件迁移映射见
 `agent-runtime-architecture.md`。本 brief 不创建 runtime owner、worker、store 或 startup/shutdown
 hook；这些必须由 Brief 230-237 逐项实现并补齐生命周期验证。
 

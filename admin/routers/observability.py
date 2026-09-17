@@ -223,7 +223,7 @@ async def agent_runtime_workspace(_auth=Depends(require_scopes("state.read"))):
 
 @router.get(
     "/observability/agent-runtime-work-sessions",
-    summary="读取 Agent Work Session 脱敏生命周期观测",
+    summary="读取同一角色 Agent Work Session（durable 副链）脱敏生命周期观测",
 )
 async def agent_runtime_work_sessions(
     uid: str = Query("", max_length=128),

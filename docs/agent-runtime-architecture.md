@@ -5,9 +5,10 @@
 
 ## Scope and non-goals
 
-The future Agent Runtime is the single architectural home for durable character work: task
-lifecycle, bounded Agent work sessions, explicit capability adapters, recovery, and optional owner
-notification. Existing code remains authoritative until the later briefs land:
+The future Agent Runtime is the single architectural home for the same character's durable or
+specialized 副链 work: task lifecycle, bounded work sessions, explicit capability adapters,
+recovery, and optional owner notification. Existing code remains authoritative until the later
+briefs land:
 
 - `EventContext` identifies one accepted Reality ingress and turn/evidence chain. It is not a task
   envelope, universal event envelope, dispatcher, or EventBus.
@@ -21,6 +22,29 @@ notification. Existing code remains authoritative until the later briefs land:
 
 There is no universal event bus, `kind=task/tool/activity`, arbitrary filesystem or shell authority,
 new client protocol, or Reality/Dream shared runtime in this brief.
+
+## Product semantics: same character, different execution chains
+
+Agent Runtime is not a second agent outside the character, and not a second subject that a
+single-character chat must delegate work to. It is the same character's background execution /
+durable-task runtime for specialized or long-lived work.
+
+In PresenceKit:
+
+- **Foreground 主链**: one character's live interaction. It uses the full Reality context, tool
+  loop, turn sink, and memory chain.
+- **Durable / specialized 副链**: still the same character, but a task-specific trimmed
+  context / prompt / lifecycle. `inner_diary_write` is the current example.
+- **Agent Runtime / Work Session**: engineering facilities (task, lease, retry, recovery,
+  workspace) for those background or long-lived 副链.
+
+"走 Agent Runtime / Work Session" only means the execution chain is different. It does not mean
+the acting subject is different. Whether a capability may be used from the foreground 主链 is
+decided by capability / permission / confirmation / deployment rules, not by whether the work
+runs on the 主链 or a 副链.
+
+The "Agent" plane below is a lifecycle ownership layer for durable 副链 sessions. It is not an
+independent personality or a second executor.
 
 ## Implemented Task Manager foundation (Brief 230)
 
@@ -46,9 +70,9 @@ nor Memory Event writers. A future visible completion notification must create a
 ```text
 Clock / Trigger -> due facts, signals, task registration (never prose)
        -> Task -> durable lifecycle, lease, TTL, cancel, retry, receipt
-       -> Agent -> bounded non-chat LLM work session and authored output
+       -> Agent -> same-character durable/specialized 副链 session and authored output
        -> Capability -> manifest, grant, policy, resource limits, adapter
-       -> Interaction -> new Reality ingress/turn and turn_sink only for visible notification
+       -> Interaction -> foreground 主链 Reality ingress/turn and turn_sink only for visible notification
 
 Dream Runtime = separate realm, stores, workers, manifests, and capability set
 ```
@@ -57,9 +81,9 @@ Dream Runtime = separate realm, stores, workers, manifests, and capability set
 |---|---|---|
 | Clock/Trigger | Time and external facts; signal/task creation | LLM prose, assistant turns |
 | Task | `task_id`, state, lease, TTL, cancellation, retry/recovery, metadata receipt | Prompt, memory evidence, fanout |
-| Agent | `work_session_id`, bounded context, planning, authored artifact | Arbitrary paths, task identity, turn/memory writers |
-| Capability | Manifest, authorization, limits, adapter outcome | Scheduling or implicit cross-realm access |
-| Interaction | Reality ingress, `turn_id`, serialization, visible delivery | Background lifecycle and worker logs |
+| Agent | `work_session_id` for the same character's durable/specialized 副链; bounded context, planning, authored artifact | A second personality, a second executor, arbitrary paths, task identity, turn/memory writers |
+| Capability | Manifest, authorization, limits, adapter outcome; decides whether a capability may run on 主链 or 副链 | Scheduling, implicit cross-realm access, or "must delegate to another Agent" |
+| Interaction | Foreground 主链 Reality ingress, `turn_id`, serialization, visible delivery | Background lifecycle and worker logs |
 | Dream | Dream-only task/capability lifecycle if separately approved | Reality task store, capabilities, login state |
 
 Pure helpers (locking, atomic serialization, validation, redaction, limits) may be shared; stores,
@@ -73,9 +97,9 @@ Equal strings never make identities interchangeable.
 | ID | Owner | Meaning | May appear in |
 |---|---|---|---|
 | `ingress_event_id` | Reality ingress | accepted external/user-visible ingress | `EventContext`, bounded causation |
-| `turn_id` | Interaction | one canonical visible Reality turn | `EventContext`, bounded causation |
-| `task_id` | Task Manager | one durable work unit | receipt, attempts, work session |
-| `work_session_id` | Agent Plane | one bounded non-chat LLM session | task/artifact provenance |
+| `turn_id` | Interaction / foreground 主链 | one canonical visible Reality turn | `EventContext`, bounded causation |
+| `task_id` | Task Manager | one durable work unit on a 副链 | receipt, attempts, work session |
+| `work_session_id` | Agent plane (same-character durable/specialized 副链) | one bounded work session for the same character | task/artifact provenance |
 | `attempt_id` | worker lease | one lease-owned execution attempt | worker log, receipt |
 
 `causation_ref` is optional, immutable, bounded lineage metadata (typed source, opaque reference,
@@ -120,13 +144,13 @@ inside modules resolve to the registered lifecycle name before admission.
 | `morning_greeting`, `night_reminder`, `good_night`, `midday`, `random_message` | migrated | Clock -> routine signal; source switches authoritative |
 | `daily_journal` | migrated | Clock -> optional proactive signal; distinct from authored diary |
 | `diary_reminder`, `diary_share_reminder`, `sensor_aware`, `sleep_end`, `weather_alert` | migrated | Clock -> bounded signal, no direct channel path |
-| `topic_followup`, `spontaneous_recall`, `topic_reactivation`, `memory_reactivation` | migrated/active | Agent evaluator, read-only candidate; success only after delivery |
+| `topic_followup`, `spontaneous_recall`, `topic_reactivation`, `memory_reactivation` | migrated/active | same-character evaluator, read-only candidate; success only after delivery |
 | `timenode`, `festival`, `holiday_boost` | migrated | Clock -> calendar signal |
 | `garden_bloom`, `garden_harvest_expired`, `garden_handle_gift`, `garden_handle_self`, `garden_vase_wilted` | migrated | Clock -> garden signal; state is not speech |
 | `reminders` | migrated | Scheduler capability -> due signal; Brief 235 owns durable schedule |
 | `overflow`, `presence_nag`, `overflow_autonomy` | migrated/active | Clock -> bounded score signal; normal gates apply |
 | `dream_exit` | migrated | Dream exit -> new Reality signal/turn; no shared Dream state |
-| `letter_writer` | active | Bounded weekly SMTP delivery via mail subsystem; no autonomy/chat signal consumer. Task/Agent artifact migration remains roadmap until delivery is implemented. |
+| `letter_writer` | active | Bounded weekly SMTP delivery via mail subsystem; no autonomy/chat signal consumer. Task/副链 artifact migration remains roadmap until delivery is implemented. |
 | `coplay_commentary` | migrated | Session fact -> optional signal, no direct executor |
 | `practice_help` | migrated | Practice stall fact -> optional autonomy signal; the `practice` maintenance worker remains silent |
 | `desktop_wake`, `restart` | active | One-shot bounded signal; no direct assistant turn |
@@ -134,16 +158,16 @@ inside modules resolve to the registered lifecycle name before admission.
 | `dream_postcards` | active | Due authored postcard delivery; calls the bounded mail artifact adapter, never the assistant speech outlet |
 | `activity_switch`, `coplay_watch`, `diary_inject` | maintenance-only | Silent Task worker/state maintenance |
 | `episodic_decay`, `episodic_sweep` | maintenance-only | Existing memory maintenance writer; no speech |
-| `inner_diary_write` | maintenance-only | Task -> Agent work session -> authored diary; 23:00 silent |
+| `inner_diary_write` | maintenance-only | Task -> same-character specialized 副链 work session -> authored diary; 23:00 silent |
 | `dlq_monitor`, `log_maintenance` | maintenance-only | Operational cleanup only |
 | `garden_water`, `garden_daily` | maintenance-only | Task -> garden capability; silent state mutation |
 | `hidden_state_decay`, `hidden_state_consolidate` | maintenance-only | Hidden-state maintenance; no notification |
-| `storyline_weekly` | maintenance-only | Task -> Agent session -> storyline artifact |
+| `storyline_weekly` | maintenance-only | Task -> same-character specialized 副链 session -> storyline artifact |
 | `event_log_salvage`, `memory_janitor` | maintenance-only | Memory maintenance; no proactive speech |
 | `event_edge_proposer` | maintenance-only | Task -> bounded Memory Event candidate-edge worker; never speech/prompt/accepted evidence |
-| `private_exchange` | maintenance-only | Isolated Agent session; existing relationship artifact only |
+| `private_exchange` | maintenance-only | Isolated same-character specialized 副链 session; existing relationship artifact only |
 | `spend_monitor` | maintenance-only | Read-only balance task/manual notice proposal; never payment |
-| `interest_seed`, `practice` | maintenance-only | Agent authored growth work; help is separate signal |
+| `interest_seed`, `practice` | maintenance-only | Same-character authored growth work on a specialized 副链; help is separate signal |
 | `scheduler_pipeline_send`, `manual_direct_trigger` | retired | No executor; adapters may only queue/test and must not restore speech |
 
 Module/loop aliases `morning`, `night`, `weather`, `birthday`, `watch_hr_critical`, `watch_hr_high`,
@@ -157,19 +181,20 @@ The implemented registry does so; an unregistered label cannot enter the compati
 | Existing object | Current meaning | Target |
 |---|---|---|
 | `Signal` / `pending_signals` | bounded proactive candidate fact | Clock/Trigger signal, never task/evidence |
-| `Opportunity` | per-tick merged evaluator input | Agent evaluator input, bounded/non-authoritative |
-| `Job(source=autonomy)` | short-lived evaluator lease/TTL/retry | Agent adapter; not a general Task alias |
-| `Run` | evaluation/tool/talk audit | Agent run audit linked to future task, prompt still admin-protected |
+| `Opportunity` | per-tick merged evaluator input | same-character evaluator input, bounded/non-authoritative |
+| `Job(source=autonomy)` | short-lived evaluator lease/TTL/retry | same-character adapter; not a general Task alias or a second agent |
+| `Run` | evaluation/tool/talk audit | same-character run audit linked to future task, prompt still admin-protected |
 | `interval`, `schedule`, `overflow` | native evaluation sources | Clock due facts |
 | `desktop_wake`, `restart`, `heart_rate` | runtime/external facts | bounded/one-shot signals |
-| `spontaneous_recall`, `topic_followup` | memory candidate evaluation | Agent read-only evaluator |
+| `spontaneous_recall`, `topic_followup` | memory candidate evaluation | same-character read-only evaluator |
 | `talk_owner` | sole proactive delivery outlet | Interaction adapter; creates new ingress/turn |
 | `manage_self_capability` | autonomy-only management gateway | Capability policy adapter, separate origin |
 
 ## Tool to capability mapping
 
 Current tools remain in `_TOOL_REGISTRY` and use `execute(origin=...)`; future adapters intersect all
-existing origin, role, danger, confirmation, deployment, MCP, and enablement gates.
+existing origin, role, danger, confirmation, deployment, MCP, and enablement gates. A tool living on
+a durable 副链 does not by itself mean the foreground 主链 cannot use that capability.
 
 | Tools | Target capability | Constraint |
 |---|---|---|
@@ -260,8 +285,8 @@ Briefs 230-237 must provide evidence for each case:
 ## Migration and control-surface rules
 
 Brief 230 adds Task Manager/observability first; 231 keeps trigger adapters and closes currently
-unregistered producer labels such as `event_edge_proposer`; 232 adds non-chat Agent
-work sessions; 233-236 add independently gated capabilities; 237 connects tools/autonomy/scheduler,
+unregistered producer labels such as `event_edge_proposer`; 232 adds same-character durable/specialized
+副链 work sessions; 233-236 add independently gated capabilities; 237 connects tools/autonomy/scheduler,
 proves coverage, then removes old paths together with guards, tests, settings, and docs. No brief may
 rewrite scheduler in one shot or restore `_pipeline_send` as a second speech path. `inner_diary_write`
 and `daily_journal` retain separate names, counters, and lifecycles.
@@ -271,15 +296,17 @@ admin/desktop/mobile catalog updates. Brief 229 itself adds no endpoint, setting
 
 ## Brief 232 Agent Work Sessions
 
-`core/agent_runtime/work_sessions.py` provides the Reality-only non-chat LLM work boundary. A session
-has its own `work_session_id`, references exactly one Task Manager `task_id`, accepts bounded context,
-and permits only manifest artifact kinds (`authored_diary`, `document_summary`, or
-`workspace_artifact`). Its lifecycle and metadata-only observation are independent from EventContext,
-`turn_sink`, short-term history, `event_log`, episodic memory, and identity. The migrated
-`inner_diary_write` scheduler task creates and claims both records, invokes the existing fact/feeling
-generator, and completes the authored artifact without creating an assistant turn. `daily_journal`
-remains a proactive signal. Work-session failures and unknown outcomes never become user facts; only
-an explicit later fixation flow may promote an artifact.
+`core/agent_runtime/work_sessions.py` provides the Reality-only durable/specialized 副链 work
+boundary for the same character. A session has its own `work_session_id`, references exactly one
+Task Manager `task_id`, accepts bounded context, and permits only manifest artifact kinds
+(`authored_diary`, `document_summary`, or `workspace_artifact`). Its lifecycle and metadata-only
+observation are independent from EventContext, `turn_sink`, short-term history, `event_log`,
+episodic memory, and identity. Independence here is an execution-chain and writer boundary, not a
+second acting subject. The migrated `inner_diary_write` scheduler task creates and claims both
+records, invokes the existing fact/feeling generator, and completes the authored artifact without
+creating an assistant turn. `daily_journal` remains a proactive signal. Work-session failures and
+unknown outcomes never become user facts; only an explicit later fixation flow may promote an
+artifact.
 
 ## Brief 233 workspace capability
 

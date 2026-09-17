@@ -103,7 +103,7 @@ PresenceKit（本仓，后端 / 唯一业务真相源）
 - 类别示例：时间/天气/备忘、网页搜索、日记/玩具文件、记忆读写、生活记录、花园、桌面窗口动作、屏幕观察、小红书只读、聊天产物沙盒、硬件（默认冻结）等。
 - **MCP**：可选外部工具传输，不是客户端协议；默认关；需本地 allowlist。实验性，不阻塞聊天。
 - **危险模式**：`PATCH /system/meta-mode`；关机/睡眠等仍需二次确认。手机 token **不含** `hardware`/`admin`。
-- **Agent Runtime**（Reality）：持久任务、有界 work session、受控 workspace、process runner、隔离 browser worker。启动时遗留 `running` → `outcome_unknown`，不自动重放。Dream 不共用这套 runtime。见 [docs/agent-runtime-architecture.md](docs/agent-runtime-architecture.md)、[docs/tools.md](docs/tools.md)。
+- **Agent Runtime**（Reality）：同一角色的 durable / specialized 副链运行时——持久任务、有界 work session、受控 workspace、process runner、隔离 browser worker。它不是第二个 Agent；走 Work Session 只代表执行链不同。启动时遗留 `running` → `outcome_unknown`，不自动重放。Dream 不共用这套 runtime。见 [docs/agent-runtime-architecture.md](docs/agent-runtime-architecture.md)、[docs/tools.md](docs/tools.md)。
 
 ### 主动性（scheduler + autonomy）
 

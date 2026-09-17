@@ -22,7 +22,7 @@
 | 实际涉及的任务类型 | 按需读取的文档或章节 |
 |---|---|
 | 理解系统全貌、pipeline 流程 | `ARCHITECTURE.md` |
-| 改 Agent Runtime、长期任务、Agent 工作会话、capability 适配或迁移 | `docs/agent-runtime-architecture.md`；再读对应 Brief 230-237 |
+| 改 Agent Runtime、长期任务、同一角色的 durable/specialized 副链工作会话、capability 适配或迁移 | `docs/agent-runtime-architecture.md`；再读对应 Brief 230-237。Agent Runtime 不是第二个 Agent，走 Work Session 只代表执行链不同 |
 | 改记忆相关逻辑（episodic / user_identity / growth legacy / mood / event_log / fixation_pipeline / user_hidden_state） | `docs/memory.md` |
 | 改 prompt 层结构、tag 规则、token 裁剪 | `docs/prompt-layers.md` |
 | 改工具系统（新增工具、探针规则、桌面动作、execute() origin 闸门） | `docs/tools.md` |
@@ -60,6 +60,7 @@
 | 桌宠聊天 HTTP 入口 | `admin/routers/chat.py` → `/desktop/chat` |
 | 手机通道 + 轮询接口 | `channels/mobile.py` / `admin/routers/mobile.py` |
 | 统一 assistant turn sink | `core/turn_sink.py` |
+| Agent Runtime（同一角色的 durable/specialized 副链：task / work session / workspace；不是第二个 Agent） | `core/agent_runtime/`；合同 `docs/agent-runtime-architecture.md` |
 | 多端 owner 对话串行锁 | `core/conversation_gate.py` |
 | 多角色 Stage session / 共享 transcript / 回合仲裁 | `core/stage/models.py` / `core/stage/store.py` / `core/stage/arbiter.py` / `core/stage/runner.py` |
 | 群聊梦境（Dream Stage，Brief 100：仅 sandbox、零回流、hard_exit 绝对） | `core/stage/dream_runtime.py`（`run_dream_stage_turn()`）/ `core/stage/dream_views.py`（`DreamStageCharacterView`）/ `core/stage/dream_state.py` + `dream_store.py` + `dream_settings.py`；端点 `admin/routers/group_dream.py`；详见 `docs/stage.md` §六 |

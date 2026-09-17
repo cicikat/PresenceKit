@@ -210,5 +210,6 @@ downstream evidence can prove which ingress produced it. Dream and Stage keep
 their own lifecycle boundaries.
 
 Brief 229 的 Agent Runtime task 生命周期不扩展此模型：`task_id`、`ingress_event_id`、`turn_id`
-属于不同命名空间；receipt/worker log 不产生 evidence。任务结果需要通知用户时，必须创建新的
-Reality ingress 和 turn。完整合同见 `agent-runtime-architecture.md`。
+属于不同命名空间；receipt/worker log 不产生 evidence。Agent Runtime 是同一角色的 durable 副链，
+不是第二个交互主体。任务结果需要通知用户时，必须创建新的 Reality ingress 和 turn。完整合同见
+`agent-runtime-architecture.md`。

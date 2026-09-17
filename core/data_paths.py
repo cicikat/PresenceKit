@@ -419,7 +419,7 @@ class DataPaths:
         )
 
     def agent_runtime_work_session_state(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
-        """Durable Reality Agent Work Session records, separate from Task state."""
+        """Durable same-character Reality work-session records, separate from Task state."""
         assert_production_identity_allowed(user_id, mode=self.mode)
         return self._p(
             "runtime", "agent_runtime", "reality", "work_sessions",

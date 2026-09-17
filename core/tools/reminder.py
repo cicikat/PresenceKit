@@ -90,8 +90,8 @@ def add_reminder(user_id: str, content: str, remind_at_str: str) -> str:
             "请使用 HH:MM 或 MM-DD HH:MM 或 YYYY-MM-DD HH:MM"
         )
 
-    # Durable lifecycle is owned by Agent Runtime. Do not fall back to the
-    # retired reminder JSON store on partial runtime failure.
+    # Durable lifecycle is owned by the same character's Agent Runtime 副链.
+    # Do not fall back to the retired reminder JSON store on partial runtime failure.
     try:
         from core.agent_runtime.models import TaskPrincipal, CausationRef
         from core.agent_runtime.scheduler_capability import create_schedule

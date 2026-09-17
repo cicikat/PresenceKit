@@ -6,14 +6,14 @@
 
 - 初始媒体入口 `core/media_processor.py` 只处理图和 txt/md/docx。施工核实另有 `/transcribe` 本地 Whisper 文字入口；253.6 在保留旧入口兼容的基础上补命名 STT、语音上传/QQ 入口与声调。听歌已有 `play_song`（desktop 类）。
 - 工具注册表已有只读 `fs_list` / `fs_read`（`fs_access.allow_roots`，默认关，永远拒 `data/` 与 secrets），以及 Agent Runtime 的 `workspace_*`（授权根、写要确认）。玩具箱 `write_toy_file` 只能写三份固定文本。聊天侧**没有** Gemini 式产物卡片 / 下载 / HTML 预览。
-- Agent Runtime（Brief 229–233）是**后台耐久任务 + 受限 workspace**，不是聊天里的无限 coding agent。`_TOOL_REGISTRY` + `execute(origin=)` 仍是聊天工具边界。
+- Agent Runtime（Brief 229–233）是**同一角色的后台耐久任务 + 受限 workspace**，不是聊天里的无限 coding agent，也不是角色外的第二个 Agent。走 Work Session 只代表执行链不同；主链能不能用某项能力由 permission / confirmation / deployment 决定。`_TOOL_REGISTRY` + `execute(origin=)` 仍是聊天工具边界。
 - `GET/POST /settings/thinking` 已存在。独白走 `call_category=monologue`，注入 `11.7_inner_monologue`；桌面思考气泡读 `GET /chat/turns/{turn_id}/reasoning`，但 owner 回合绑定与查询**只收 `purpose=chat`**，独白即使落盘也不会出现在气泡里。
 - 真实 400：`chat_turn` → `llm_protocol._create` → Chat Completions。复杂 tool 请求失败、普通对话与外部 Agent 软件正常。协议层已有 Chat / Responses / Anthropic 三出口，但 Chat Completions **把 SDK `model_dump()` 整包回填进下一轮**，只剥了 `reasoning*`，`refusal` / `annotations` / `audio` 等字段和内部 `_continuity_receipt` 以外的多余键会原样出网。中转返回的是模糊 `upstream_error`。
 
 ## 异议与总原则（先读）
 
 1. **不能读「后端任何文件」。** `config.yaml`、`secrets*`、token、`.env`、项目 `data/` 沙盒永远拒绝。用户发路径只能打到已授权根（`fs_access` / `workspace_access`）或用户自己上传的资料库。远程部署下本地 fs 保持关闭。
-2. **不能把 Cursor/Claude Code 塞进陪伴聊天当一个工具。** 聊天 Path C 是短回合、有预算、有 origin 闸门的工具循环。长期改仓库、跑测试、开 shell 属于 Agent Runtime 工作会话，必须有授权根、manifest、确认与观测，不能变成「模型想写哪就写哪」。
+2. **不能把 Cursor/Claude Code 塞进陪伴聊天当一个工具。** 聊天 Path C 是短回合、有预算、有 origin 闸门的工具循环。长期改仓库、跑测试、开 shell 属于同一角色的 Agent Runtime 工作会话（durable 副链），必须有授权根、manifest、确认与观测，不能变成「模型想写哪就写哪」。这是权限与生命周期约束，不是「聊天角色必须委托另一个 Agent」。
 3. **独白优先是展示策略，不是生成模式。** `thinking.mode` 的 auto/native/monologue 继续决定「这次有没有前置独白 / 要不要开原生思考」。展示层：有独白就先显示独白，没有再用原生思考兜底。两者可以并存，不互相覆盖生成。
 4. **声调是感知层，不是新人格。** 转写 + 粗粒度语调标签注入 prompt；听歌复用 `play_song`，不在本单做完整「一起听」ActivitySession。
 5. **喝酒必须低存在感。** 用户提起且角色愿意才调用；状态可衰减；酒醉表现走既有叙事段 + perform 词典，不新增客户端表情枚举。
@@ -88,7 +88,7 @@
 - `write_artifact` / `read_artifact` / `list_artifacts`：给用户看的一份文件（代码、markdown、html、csv…）。
 - 已有 `workspace_*`：只在管理员配置了 `workspace_access.roots` 且非远程时，改用户明确授权的目录；覆盖/删除仍要确认。
 
-长期多步改项目、跑测试、装依赖 → 继续走 Agent Runtime work session，本单只把「聊天里做出一份可下载文件」补齐。
+长期多步改项目、跑测试、装依赖 → 继续走同一角色的 Agent Runtime work session（durable 副链），本单只把「聊天里做出一份可下载文件」补齐。走副链不表示主链角色不能拥有文件能力；本单的 artifacts 工具就是主链权限规则允许的那部分。
 
 ### 要做
 

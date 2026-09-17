@@ -230,9 +230,11 @@ flowchart LR
 - `roadmap`：明确未排期，不属于当前 v0.1 缺陷。
 
 Agent Runtime 总体合同（Brief 229）当前为 `roadmap` 架构冻结：不新增 REST、WebSocket、Tauri、
-Flutter/Android 字段或设置面。桌面和手机不得把现有 autonomy job、scheduler 状态或 tool 注册表
-解释为通用 Task Runtime。后续 Brief 230-237 若新增 task/capability 接口，必须逐项回到本总账登记；
-分层、身份和 Reality/Dream 隔离合同见 `agent-runtime-architecture.md`。
+Flutter/Android 字段或设置面。Agent Runtime 是同一角色的 durable / specialized 副链运行时，不是
+角色外的第二个 Agent；桌面和手机不得把现有 autonomy job、scheduler 状态或 tool 注册表解释为
+通用 Task Runtime，也不得从「走 Work Session」推出「主链角色不能直接拥有该能力」。后续 Brief
+230-237 若新增 task/capability 接口，必须逐项回到本总账登记；分层、身份和 Reality/Dream 隔离
+合同见 `agent-runtime-architecture.md`。
 
 ## 2. 共同传输规则
 
@@ -651,6 +653,10 @@ ingress adapter. Dream tasks require a separate store and allowlist and are not 
 entry point; it records a durable cancel request and never replays or delivers the task.
 
 ## Briefs 231-233 / Trigger, Work Session, Workspace
+
+Work Sessions are the same character's durable/specialized 副链 sessions. They are not a second
+agent; capability admission on the foreground 主链 remains a permission/confirmation/deployment
+question.
 
 | Interface / path | Scope / consumers | Status |
 |---|---|---|

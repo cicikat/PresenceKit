@@ -775,7 +775,7 @@ active window 决策已完全收入 `gating._decide()`（R2-C 后），以 `POLI
 | `weather_alert` | 6h | 低 | time_based | 特殊天气联动 |
 | `daily_journal` | 1h | 低 | time_based | 他写今日手账并发出来（深夜触发，只负责发言）|
 | `episodic_decay` | 20h | 低 | time_based | 情景记忆每日衰减 |
-| `inner_diary_write` | 2h | 维护 | time_based | 静默写角色内心日记，与 daily_journal 发言解耦；23:00–次日05:00 窗口，幂等靠当日日记文件是否存在 |
+| `inner_diary_write` | 2h | 维护 | time_based | 同一角色 specialized 副链静默写内心日记，与 daily_journal 发言解耦；不是第二个 Agent；23:00–次日05:00 窗口，幂等靠当日日记文件是否存在 |
 | `spontaneous_recall` | 4h | 低 | time_based | 主动回忆触发 |
 | `dlq_monitor` | 24h | 低 | time_based | 扫 DLQ 目录，文件数 > 0 时 log warning；R8-A：legacy task 超 30 天自动归档到 `expired/` |
 | `log_maintenance` | 24h | 维护 | loop.py 内联 | 清理 event_log、done reminders、dream archive、inbox/image cache，并压缩 observations |

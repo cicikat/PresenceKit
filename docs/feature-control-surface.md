@@ -370,10 +370,13 @@ percentiles. Enabling `observe` reruns existing-ledger initialization and return
 ## Brief 229 Agent Runtime architecture contract
 
 Brief 229 only freezes the future Clock/Trigger, Task, Agent, Capability, and Interaction plane
-boundaries. It adds no setting, endpoint, worker, client control, or capability. Existing autonomy,
+boundaries. The Agent plane is the same character's durable/specialized 副链 lifecycle layer, not a
+second agent. It adds no setting, endpoint, worker, client control, or capability. Existing autonomy,
 scheduler, tool, deployment, and EventContext controls retain their current ownership and semantics.
 Future Briefs 230-237 must add configured/effective/runtime-observed controls in the same change as
-each implemented task or capability; clients must not infer availability from existing tool names.
+each implemented task or capability; clients must not infer availability from existing tool names,
+and must not infer that a capability is unavailable on the foreground 主链 merely because it also
+has a durable 副链 path.
 
 Brief 237 closes legacy scheduler execution lanes: due schedules use the normal Reality interaction
 adapter, the reminder JSON fallback is retired, and manual direct-trigger execution is unavailable.
@@ -381,7 +384,8 @@ Task cancellation is admin-only via the metadata endpoint in the interface catal
 
 ## Brief 232 Agent Work Sessions
 
-Agent Work Sessions are backend-only and have no client setting. The scheduler's
+Agent Work Sessions are backend-only and have no client setting. They are the same character's
+durable/specialized 副链 sessions, not a second acting subject. The scheduler's
 `inner_diary_write` maintenance task uses the Reality Task Manager plus the independent
 `work_session_id` store. `GET /observability/agent-runtime-work-sessions` exposes bounded lifecycle,
 artifact-kind, digest, and error metadata only; it never exposes work context, prompts, diary正文, or

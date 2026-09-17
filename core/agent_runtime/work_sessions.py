@@ -1,8 +1,9 @@
 """Bounded Reality Agent Work Session lifecycle (Brief 232).
 
-Work sessions are non-chat LLM jobs attached to a Task Manager task.  They
-carry only digested context and artifact metadata; they never create turns or
-write memory evidence.  Artifact writers remain capability-owned callables.
+Work sessions are the same character's durable/specialized 副链 jobs attached
+to a Task Manager task.  They are not a second agent.  They carry only digested
+context and artifact metadata; they never create turns or write memory
+evidence.  Artifact writers remain capability-owned callables.
 """
 
 from __future__ import annotations
@@ -440,10 +441,11 @@ async def run_work_session(
     work_session_id: str,
     worker: Callable[[], Awaitable[dict[str, Any] | None]],
 ) -> dict[str, Any]:
-    """Run a bounded non-chat worker and terminalize its session only.
+    """Run a bounded same-character 副链 worker and terminalize its session only.
 
     The worker is responsible for using an approved artifact capability.  No
     turn sink, EventContext, or memory writer is reachable from this helper.
+    Independence is an execution-chain boundary, not a second acting subject.
     """
     start_work_session(principal, work_session_id)
     try:

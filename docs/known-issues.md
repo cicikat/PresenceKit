@@ -461,6 +461,9 @@ additional production sources.
 
 ## Agent Runtime architecture (Briefs 229-233)
 
+Agent Runtime is the same character's durable/specialized 副链 runtime, not a second agent.
+Foreground 主链 capability admission remains a permission/confirmation/deployment question.
+
 - `current`: the Reality-only general Task Manager and its metadata-only
   `state.read` observability endpoint are implemented. It provides atomic scoped
   storage, idempotent creation, lease/attempt/TTL/cancel handling, and restart
@@ -468,9 +471,10 @@ additional production sources.
 - `current`: Brief 231 gives every registered scheduler producer one lifecycle. Proactive candidates
   become autonomy signals, maintenance workers remain silent, and `dream_postcards` is an independent
   scheduled artifact-delivery entry rather than a `dream_exit` alias.
-- `current`: Brief 232 provides Reality-only bounded Agent Work Sessions and migrates
+- `current`: Brief 232 provides Reality-only bounded same-character Work Sessions and migrates
   `inner_diary_write`; work context is digested in observation and no work session is an ingress,
-  assistant turn, evidence item, or automatic memory fact.
+  assistant turn, evidence item, or automatic memory fact. A work session is a specialized 副链,
+  not a second personality.
 - `current`: Brief 233 provides local-only controlled workspace read/list/create/update/delete/undo
   with explicit roots and grants, durable version snapshots, Task receipts, and redacted observation.
 - `current`: Brief 234 provides a local-only, workspace-scoped bounded process runner with no shell/network

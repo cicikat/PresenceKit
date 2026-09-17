@@ -878,6 +878,10 @@ class ToolResult:
 
 ## Brief 237 Agent Runtime 接入
 
+Agent Runtime 是同一角色的 durable / specialized 副链运行时，不是聊天角色必须委托的第二个
+Agent。能力是否允许在 foreground 主链主动使用，由 origin / permission / confirmation /
+deployment 闸门决定，而不是由「是否走 Work Session」决定。
+
 `add_reminder` 已统一进入 scheduler capability/Task Manager；runtime 写入失败不会静默回落到
 legacy reminder 文件。workspace/process/browser 工具的 task receipt 仍由 Reality Task Manager
 统一持有，visible delivery 必须经过新的 Reality ingress/turn，不能在后台调用 `capture_turn()`。
