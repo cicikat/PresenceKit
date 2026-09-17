@@ -1,6 +1,6 @@
 # 9.17 后端综合工单：角色隔离、固定会话与架构债收敛
 
-状态：A/B/C/E 已提交；D 自动化收尾完成、运行联调待执行；F 已提交；G 已提交（G4 删除候选未授权，保持未勾）；H1/H2/H3/H4 已提交；I 已提交（阈值 pending_approval，退场保持 open）；J 未开始。日期：2026-09-17。
+状态：A/B/C/E 已提交；D 自动化收尾完成、运行联调待执行；F 已提交；G 已提交（G4 删除候选未授权，保持未勾）；H1/H2/H3/H4 已提交；I 已提交（阈值 pending_approval，退场保持 open）；J 已提交（删除候选未授权，保持未勾）。日期：2026-09-17。
 用户已授权按本单施工。每张施工子单完成相关验证与差异检查后独立 commit，再开始下一张。
 勾选规则：完成一项且具备证据才勾一项；源码存在、自动测试通过、部署验收分别记账。每张施工子单完成相关验证与差异检查后独立 commit，再开始下一张。
 
@@ -111,12 +111,12 @@
 
 对应 P1-4、P2-1/2/4/6/7/8/10/11；不重复修已完成措辞。
 
-- [ ] J1 对照实现更新 ARCHITECTURE 与 agent-runtime 文档 current/roadmap，核实 Dream Stage sandbox 状态；memory path census 与 taxonomy 一致。
-- [ ] J2 分别盘点 source_policy.record_rejections 的现存调用、user_profile.get_period_info shim、context.max_turns alias；列消费者、迁移条件、守卫/测试/文档联删范围，获授权后再删。
-- [ ] J3 保留 Dream tension alias、sensor raw fields、flat llm synthesis 兼容；定义客户端最低版本/配置迁移方法/弃用提示/退出版本，不凭空指定发布日期。
-- [ ] J4 核实 core/paths.py 是否仍无生产引用；删除或显式 experimental 二选一。核实 spend/mandates 无 writer 后按历史/roadmap 标注，端点删除前查全部消费者及权限；不删历史数据。
-- [ ] J5 明确 self_management.enabled=false 是关闭 overlay、恢复 global 行为，不是关闭能力；优先修说明/展示，若改字段名须另附旧配置兼容与客户端接入。
-- [ ] J6 文档链接/结构/差异验证后提交；若改 UI 行为须额外完成缓存版本和浏览器验收。删除候选尚未授权的保持未勾选。
+- [x] J1 已对照实现更新 ARCHITECTURE 与 agent-runtime current/roadmap。Dream Stage 为 Brief 100 v1 sandbox（非全局 fail-closed）。taxonomy / ARCHITECTURE 补 `agent_runtime/reality` 与 spend 预留读面。
+- [x] J2 已盘点：`record_rejections` 仅 `event_tools` 一处；period shim 仅测试引用；`context.max_turns` 仍是只读 alias。消费者/迁移/联删范围见 `docs/known-issues.md`。未授权，不删。
+- [x] J3 已保留 Dream tension alias、sensor `_audit_*` raw fields、flat `llm:` 合成。兼容窗口写最低版本条件/弃用提示/退出版本，不指定发布日期。
+- [x] J4 `core/paths.py` 生产零引用，标为显式 experimental，本轮不删。`GET /spend/mandates` 无 writer，标 reserved read-only；不删端点与历史行。
+- [x] J5 `self_management.enabled=false` 已明确为关 overlay、恢复 global 默认，不是关能力。已修控制面、feature-flags 文案与管理面展示；未改字段名。
+- [x] J6 定向回归 65 passed；普通 diff 与 `--ignore-cr-at-eol` 一致，文件 LF。管理面缓存 `?v=v1-1-0-compat-hygiene-1`。隔离 18080 核对 overlay 文案。独立提交。G4 与 J2 删除候选未授权，保持未勾。
 
 ## 执行顺序与交付边界
 

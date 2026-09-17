@@ -8,7 +8,7 @@
 | `core/sandbox.py` | `get_paths()` / `init_paths()` 单例胶水，测试沙盒前缀写入 |
 | `core/data_registry.py` | 每个公开路径方法的 durability / domain / scope / git_policy 元数据 |
 | `core/migration.py` | 迁移期 `for_read(new, old)` 降级读与命中观测 |
-| `core/paths.py` | 未来 taxonomy 命名空间规划占位，当前不接 loader |
+| `core/paths.py` | 显式 experimental 规划命名空间；生产零引用，不接 loader。删除或真正迁移另授权 |
 
 ## 当前布局
 
@@ -43,7 +43,8 @@ data/
 │   ├── pending_perception/
 │   ├── observability/api_calls-YYYY-MM-DD.jsonl  # 外部 API 调用总账，保留最近 7 天
 │   ├── scheduler_user_state.json
-│   ├── spend/mandates.jsonl       # Brief 63 预留兼容读面，当前无 writer
+│   ├── spend/mandates.jsonl       # Brief 63 预留只读；无 writer，不删历史
+│   ├── agent_runtime/reality/     # Task Manager / work sessions / workspace versions
 │   ├── relations/{char_a}__{char_b}.json
 │   ├── groups/{group_id}/
 │   │   ├── meta.json
@@ -216,7 +217,8 @@ Dream domain 独立落在 `data/runtime/dreams/{char_id}/`，不进入 reality m
 - 跨 Stage 的角色关系：`data/runtime/relations/{char_a}__{char_b}.json`
 - 外部 API 调用总账：`data/runtime/observability/api_calls-YYYY-MM-DD.jsonl`（只记调用元数据，
   fail-open，最近 7 天；只读查询见 `GET /observability/api-calls`）
-- Brief 63 兼容读面：`data/runtime/spend/mandates.jsonl`（当前无 writer）
+- Brief 63 兼容读面：`data/runtime/spend/mandates.jsonl`。`GET /spend/mandates`（admin）只读；confirm/reject writer、购买执行器和商家 adapter 仍不存在（Brief 63/64/226）。不删端点、不删历史行。删除前须查全部消费者与权限。
+- Agent Runtime Reality 根：`data/runtime/agent_runtime/reality/`（tasks / work_sessions / workspace_versions / browser_profiles）
 - forensic 日志与 DLQ：`data/logs/`
 - 上传文件与视觉缓存：`data/inbox/`、`data/cache/image_cache/`
 

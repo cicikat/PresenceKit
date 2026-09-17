@@ -2,10 +2,16 @@
 
 主动消息采用 signal-first autonomy：scheduler/sensor 只产生带事实、理由、优先级、时效、记忆锚点和行动模式的 `autonomy-signal.v1`；每个 tick 合并为一个 `autonomy-opportunity.v1`，由 `core/autonomy` 评估。只有 autonomy job 内显式调用 `talk_owner` 才能进入 `turn_sink`，旧 scheduler 直发路径按 `docs/autonomy.md` 迁移清单逐项封存。
 
-未来 Agent Runtime 的分层、身份边界、现有 trigger/tool/store 目标映射和 Reality/Dream 隔离合同见
-`docs/agent-runtime-architecture.md`。Agent Runtime 是同一角色的 durable / specialized 副链运行时，
-不是角色外的第二个 Agent；走 Work Session 只代表执行链不同。该合同是 Brief 229 的架构目标，不代表
-通用 Task Manager 或新 capability 已实现；当前运行代码仍以本文和各专题文档为准。
+Agent Runtime 的分层、身份边界、现有 trigger/tool/store 映射和 Reality/Dream 隔离合同见
+`docs/agent-runtime-architecture.md`。它是同一角色的 durable / specialized 副链运行时，
+不是角色外的第二个 Agent；走 Work Session 只代表执行链不同。
+
+current（Briefs 230–234 / 239）：Reality Task Manager、Work Session、workspace、
+local process runner 与 browser confirmation hardening 已落地。生产路径走
+`execute_structured()`；tuple `execute()` 仍是兼容封装。
+roadmap：Briefs 235–237 的其余 gated capability、覆盖证明与旧路径联删；Dream 侧独立
+runtime；`letter_writer` 的 Task/副链产物迁移。Brief 229 本身仍是架构合同，不新增
+客户端字段。运行细节以本文和各专题文档为准。
 
 ---
 
@@ -59,7 +65,9 @@ Reality scope；若它不是当前 active character，Pipeline 按该 scope 加�
 Phase T（话题引子，可选）共用一次 owner conversation lock，零后台自发 LLM 调用（Brief 85）。
 Reality Stage 通过 per-character 只读生成视图显式绑定角色卡与 memory scope，群 transcript 独立
 注入 prompt；角色间关系（`char_relations`）参与 Phase B/R 仲裁打分与定向接话内容。回合后只把摘要
-按 `group:{group_id}` 来源送入各角色 fixation 链。Dream Stage 当前 fail-closed。详见 `docs/stage.md`。
+按 `group:{group_id}` 来源送入各角色 fixation 链。Dream Stage（Brief 100 v1）已实现且仅
+sandbox：scenario / mirror / D4.5 硬禁用，零回流，hard_exit 绝对；物理树
+`data/runtime/dreams/_stage/{group_id}/`，不进入 reality loader。详见 `docs/stage.md` §六。
 
 Intiface / Buttplug 硬件是 reality-side actuator：只有 owner 私聊中的真实 turn 工具调用可触发，
 不进入 scheduler、trigger 或 Dream pipeline。`core/hardware/buttplug_client.py` 通过
@@ -256,6 +264,9 @@ data/
 │   ├── dreams/{char_id}/         # tmp/archive/summaries/impressions/state/settings 等个人 Dream 状态
 │   ├── dreams/_stage/{group_id}/ # 群聊 Dream Stage；不进入 reality loader
 │   ├── groups/{group_id}/        # reality Stage 的 meta/transcript/arbiter trace
+│   ├── agent_runtime/reality/    # Task Manager / work sessions / workspace versions
+│   ├── spend/mandates.jsonl      # Brief 63 预留只读；当前无 writer
+│   ├── companion/                # owner-turn receipts
 │   ├── perception/visual_trace.jsonl
 │   ├── observability/api_calls-YYYY-MM-DD.jsonl
 │   ├── {channel,mobile}_queue.json、agent_actions.json

@@ -1088,6 +1088,9 @@ scheduler._check_sensor_aware()         ← loop.py 每 60s 检查一次（受 t
 ```
 
 字段拿不到时为 `null`，结构始终完整（不省略 key）。
+`judge_input_prompt` / `judge_output_raw` 来自 `sensor_judge._audit_prompt` /
+`_audit_raw_response`，是排障兼容字段，不是 prompt 输入。保留到 sensor 审计契约
+另立退出版本；当前不删、不指定发布日期。G4 死分支删除与这些审计字段无关。
 
 ```
 curl -H "Authorization: Bearer <token>" \

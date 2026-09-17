@@ -20,7 +20,7 @@ def test_creation_assets_are_split_setting_rows():
     assert "data-action=\"saveCreationAssets\"" in source
     assert "data-action=\"uploadCreationAvatar\"" in source
     assert "PATCH','/settings/prompt-assets'" in source
-    assert '<script src="/static/js/settings-center.js?v=v1-1-0-ci-1"></script>' in index
+    assert '<script src="/static/js/settings-center.js?v=v1-1-0-compat-hygiene-1"></script>' in index
 
 
 def test_thinking_controls_live_on_model_routing_not_conversation_page():
@@ -55,6 +55,8 @@ def test_feature_center_groups_category_switches():
     assert "settings_center.perception_and_computer_actions" in source
     assert "settings_center.output_and_interaction" in source
     assert "settings_center.external_capabilities" in source
+    assert "centerFlagNote(item,name)" in source
+    assert "flag.self_management_hint" in source
     assert 'id="metamode-ttl"' not in device
     assert "status.dangermode.ttl" not in device
     assert 'data-action-args=\'["output-settings"]\'' not in page

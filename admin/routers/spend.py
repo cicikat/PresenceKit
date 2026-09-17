@@ -30,7 +30,12 @@ async def get_spend_mandates(
     before: float | None = None,
     _auth=Depends(require_scopes("admin")),
 ):
-    """Brief 64 view for Brief 63 intent records; pre-63 installations return empty."""
+    """Reserved read-only view for Brief 63 intent records.
+
+    There is still no production writer, confirm/reject path, purchase executor,
+    or merchant adapter. Missing files return empty; historical jsonl rows are
+    never deleted by this endpoint.
+    """
     if status and status not in {"draft", "confirmed", "rejected", "expired", "failed"}:
         raise HTTPException(status_code=422, detail="未知 mandate status")
     from core.sandbox import get_paths

@@ -131,6 +131,11 @@ RPG Dream uses the independent `rpg_kp` call category for neutral structured adj
 - 主对话可以走 Claude / DS / 本地；轻量调用（probe / summary / detect_emotion）可以指向便宜模型。
 - 每个 preset 自带**生成参数默认适配**（provider 白名单过滤）和 **prompt 结构适配**（narrative / xml）。
 - **完全向后兼容**：现有 `config.yaml` 的扁平 `llm:` 块一字不改也能跑。
+  `core/model_registry.py::_synth_legacy_presets` 把 `llm:` 合成 chat_completions preset。
+  配置迁移：新安装写 `model_presets`；旧文件继续只读合成，管理面 `PUT /llm-params` 在
+  legacy 模式仍写回 `llm:`。弃用提示：新文档与 OpenAPI 以 `model_presets` 为权威。
+  退出版本：在确认无生产 `llm:`-only 配置、且管理面不再走 legacy 写回之后的下一个
+  后端版本再删合成器；当前不指定发布日期。
 
 ---
 

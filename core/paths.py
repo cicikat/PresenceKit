@@ -1,10 +1,12 @@
-# 规划占位：未来路径架构的命名空间，当前未启用，不与 core/data_paths.py 冲突。
-"""
-Future data taxonomy path helpers.
+# Experimental unused planning namespace. Not a production loader.
+# Runtime paths stay in core.sandbox.get_paths() / core.data_paths.DataPaths.
+"""Experimental future taxonomy helpers; not wired into production.
 
-This module is a planning entrypoint for the staged data/ migration. It does
-not replace core.sandbox.get_paths() yet and should not be wired into existing
-loaders until each data family is migrated deliberately.
+This module is an explicit experimental namespace for a staged data/ migration.
+Nothing in core/, admin/, or channels/ currently imports it. It does not replace
+core.sandbox.get_paths() and must not be wired into existing loaders. Deletion
+or a real migration needs a separate authorized ticket; do not treat this file
+as a silent leftover or as the current path authority.
 """
 
 from __future__ import annotations

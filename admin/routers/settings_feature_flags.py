@@ -25,7 +25,7 @@ FLAGS = {
     "spend": ("spend", "enabled", "支出意向"),
     "practice": ("practice", "enabled", "自主练习"),
     "action_trace": ("action_trace", "enabled", "行为痕迹"),
-    "self_management": ("self_management", "enabled", "Self Capability"),
+    "self_management": ("self_management", "enabled", "Self Capability overlay（关=恢复全局默认，不是关能力）"),
     "mcp_servers": ("mcp_servers", "enabled", "MCP 外部工具"),
     "fs_access": ("fs_access", "enabled", "文件只读访问"),
     "workspace_access": ("workspace_access", "enabled", "Workspace 文件能力"),
@@ -95,6 +95,10 @@ async def get_feature_flags(auth=Depends(require_scopes("admin"))):
             shadow = _shadow_settings()
             item["effective_state"] = shadow["effective_state"]
             item["description"] = "只比较新旧召回并写脱敏观测；不进入正式 prompt"
+        elif name == "self_management":
+            item["description"] = (
+                "关闭 overlay、恢复全局工具/自主默认；不删除授权或审计，也不是能力总闸"
+            )
         else:
             item["effective_state"] = "enabled" if enabled else "disabled"
         flags[name] = item

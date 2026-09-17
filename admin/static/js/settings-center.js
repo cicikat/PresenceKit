@@ -65,7 +65,7 @@ function centerError(root, error) {
 }
 function centerFeatureNames() { return {
   qq:t('settings_center.qq_channel',"QQ 通道"), mail:t('settings_center.mail_channel',"邮件通道"), visual_perception:t('settings_center.screen_perception',"视觉感知"), spend:t('settings_center.spending_intentions',"支出意向"), practice:t('settings_center.autonomous_practice',"自主练习"),
-  action_trace:t('settings_center.action_trace',"行为记录"), self_management:t('settings_center.self_management',"自主管理"), mcp_servers:t('settings_center.external_tool_services',"外部工具服务"), fs_access:t('settings_center.read_only_file_access',"文件只读访问"),
+  action_trace:t('settings_center.action_trace',"行为记录"), self_management:t('settings_center.self_management',"自主管理 overlay（关=恢复全局默认）"), mcp_servers:t('settings_center.external_tool_services',"外部工具服务"), fs_access:t('settings_center.read_only_file_access',"文件只读访问"),
   workspace_access:t('settings_center.workspace_files',"工作区文件"), anti_collapse:t('settings_center.output_stability',"输出稳定性"), coplay:t('settings_center.coplay',"陪玩"), toy_autogrow:t('settings_center.autonomous_toy_growth',"玩具自主生长"),
   web_autosearch:t('settings_center.autonomous_web_search',"自主联网搜索"), performance_mapping:t('settings_center.performance_annotations',"表演标注"), private_exchange:t('settings_center.private_character_exchanges',"角色私下往来"),
   event_edge_proposer:t('settings_center.memory_event_relations',"记忆事件关联"), event_shadow_recall:t('settings_center.memory_recall_comparison',"记忆召回对照实验"),
@@ -112,14 +112,15 @@ function centerAutonomyControls(config) {
     ${centerLink('observe-autonomy',t('settings_center.view_records','查看记录'))}
   </div>`;
 }
-function centerFlagNote(item) {
+function centerFlagNote(item, name) {
+  if (name === 'self_management') return t('flag.self_management_hint',"关闭后 overlay 休眠、管理网关隐藏；全局工具/自主默认恢复。不删除授权或审计，也不是能力总闸。");
   return item.restart_required?t('settings_center.restart_required_after_saving',"保存后需重启"):t('settings_center.global_configuration_effective_availability_below',"全局配置；实际可用性见下方");
 }
 function centerFlagSwitch(flags, name, fallbackLabel) {
   if (flags.status!=='fulfilled') return t('settings_center.could_not_load',"读取失败");
   const item=(flags.value.flags||{})[name];
   if (!item) return t('settings_center.could_not_load',"读取失败");
-  return centerSwitch(centerFeatureNames()[name]||item.label||fallbackLabel,item.enabled,'flag',name,false,centerFlagNote(item));
+  return centerSwitch(centerFeatureNames()[name]||item.label||fallbackLabel,item.enabled,'flag',name,false,centerFlagNote(item,name));
 }
 function centerSettledSwitch(result, label, source, enabled, note) {
   if (result.status!=='fulfilled') return label+t('settings_center.could_not_load',"：读取失败");
@@ -136,7 +137,7 @@ async function loadFeatureCenter() {
   const section=(title,body)=>`<section class="card"><h3>${title}</h3>${body}</section>`;
   const flags=results[0], tools=results[1], loop=results[2], state=results[3];
   const grouped=new Set(Object.values(CENTER_GROUPED_FLAGS).flat());
-  const remainingFlags=flags.status==='fulfilled'?Object.entries(flags.value.flags||{}).filter(([name])=>!grouped.has(name)).map(([name,item])=>centerSwitch(centerFeatureNames()[name]||item.label,item.enabled,'flag',name,false,centerFlagNote(item))).join(''):t('settings_center.could_not_load_refresh_to_retry',"读取失败，请刷新重试");
+  const remainingFlags=flags.status==='fulfilled'?Object.entries(flags.value.flags||{}).filter(([name])=>!grouped.has(name)).map(([name,item])=>centerSwitch(centerFeatureNames()[name]||item.label,item.enabled,'flag',name,false,centerFlagNote(item,name))).join(''):t('settings_center.could_not_load_refresh_to_retry',"读取失败，请刷新重试");
   const peek=results[7], meta=results[8], sticker=results[9], browser=results[10];
   let html=section(t('settings_center.perception_and_computer_actions',"感知与电脑操作"), [
     centerFlagSwitch(flags,'visual_perception',t('settings_center.screen_perception',"视觉感知")),

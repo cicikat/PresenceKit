@@ -1,14 +1,24 @@
 # Agent Runtime Architecture Contract (Brief 229)
 
-> Status: frozen architecture target with Briefs 230-233 implemented. Client protocols,
-> process/browser capabilities, visible completion notification, and EventBus remain unchanged.
+> Status: frozen architecture contract. Briefs 230-234 and 239 are implemented
+> foundations. Client protocols, visible completion notification, and EventBus remain
+> unchanged. Remaining briefs (235-237) are roadmap.
+
+## Current vs roadmap (2026-09-18)
+
+| State | What exists |
+|---|---|
+| current | Brief 230 Reality Task Manager (`runtime/agent_runtime/reality`); Brief 231 registered trigger adapters; Brief 232 same-character work sessions; Brief 233 workspace capability with `causation_ref.kind=tool_request`; Brief 234 local process runner; Brief 239 browser confirmation hardening |
+| roadmap | Briefs 235-237 remaining gated capabilities, coverage proof, and old-path removal together with guards/tests/docs; Dream-side Task Runtime with its own root; `letter_writer` Task/副链 artifact migration; visible completion notification via a fresh Reality `EventContext` |
+| non-goal | universal EventBus, `kind=task/tool/activity` dispatcher, or a second acting subject |
+
+Existing code remains authoritative for anything not in the current row.
 
 ## Scope and non-goals
 
-The future Agent Runtime is the single architectural home for the same character's durable or
+Agent Runtime is the single architectural home for the same character's durable or
 specialized 副链 work: task lifecycle, bounded work sessions, explicit capability adapters,
-recovery, and optional owner notification. Existing code remains authoritative until the later
-briefs land:
+recovery, and optional owner notification. Later briefs still land independently:
 
 - `EventContext` identifies one accepted Reality ingress and turn/evidence chain. It is not a task
   envelope, universal event envelope, dispatcher, or EventBus.
@@ -228,8 +238,9 @@ a durable 副链 does not by itself mean the foreground 主链 cannot use that c
 | `manage_self_capability` | capability policy mutation | grant/revision/idempotency and dedicated origin |
 | dynamic `mcp__*` | MCP transport adapter | transport is not permission; intersect local policy |
 
-The workspace capability is implemented by Brief 233. Process, browser, and network capabilities are
-not enabled by this table; Briefs 234 and 236 must independently satisfy their contracts.
+The workspace capability is implemented by Brief 233. Brief 234 process runner and
+Brief 239 browser hardening are implemented; remaining network/capability briefs
+must still independently satisfy their contracts.
 
 ## Store mapping
 

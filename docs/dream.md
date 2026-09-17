@@ -516,11 +516,18 @@ fresh clone / release 不依赖旧 compatibility root；新建操作从 tracked 
 - `DREAM_EXIT_REQUESTED` 状态下 `dream_turn()` 仍被 status 守卫拒绝（只接受 DREAM_ACTIVE / DREAM_CLOSING）；`/dream/resume` 把状态置回 DREAM_ACTIVE 后对话恢复。
 
 **协议字段更名（Brief 25 §3 P2）**：`GET /dream/state` 的情绪张力字段协议名是
-`char_tension`；`yexuan_tension` 作为已废弃别名双发（同值），供尚未升级的客户端过渡，
-计划保留 ≥1 个版本后删除（见 `tests/test_no_hardcoded_character.py`
-`YEXUAN_TENSION_ALLOWLIST` 的到期条件）。内部实现（`body_projection.py` /
-`dream_pipeline.py` 的 `yexuan_tension` 参数名/dict key）不受此次协议更名影响，
-仍是内部 plumbing，非对外协议。
+`char_tension`；`yexuan_tension` 作为已废弃别名双发（同值），供尚未升级的客户端过渡。
+兼容窗口（不凭空指定发布日期）：
+
+| 阶段 | 条件 | 动作 |
+|---|---|---|
+| 当前 | 桌面/手机仍可能读 `yexuan_tension` | 双发同值；内部 `body.tension` / Stage `char_tension` 保留 |
+| 弃用提示 | 协议/OpenAPI 与本段标注 deprecated alias | 新客户端必须读 `char_tension` |
+| 客户端最低版本 | 两端确认已读 `char_tension`（桌面 Brief 15 §G 或后续接入记录给出具体版本后再填） | 最低版本未登记前不得删 alias |
+| 退出版本 | 上述确认落地的**下一个**后端版本 | 从 `GET /dream/state` 去掉 `yexuan_tension`，并收紧 `YEXUAN_TENSION_ALLOWLIST` |
+
+内部实现（`body_projection.py` / `dream_pipeline.py` 的 `yexuan_tension` 参数名/dict key）
+不受此次协议更名影响，仍是内部 plumbing，非对外协议。
 
 入梦构建 `context_snapshot` 时会尝试消费 reality-scoped `dream_seed.json`。有效种子以前缀
 `今晚的梦境设定：...` 注入 `entry_reason`；TTL 12 小时、一次性消费、失败不阻断 Dream。

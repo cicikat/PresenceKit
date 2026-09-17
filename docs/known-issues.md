@@ -1,5 +1,18 @@
 # docs/known-issues.md — 已知问题与技术债
 
+## 文档真值与兼容删除候选（2026-09-18）
+
+`current`：ARCHITECTURE / agent-runtime 已按实现改 current/roadmap。Dream Stage 是
+sandbox-mode 已实现，不是全局 fail-closed。`self_management.enabled=false` 只关 overlay。
+`core/paths.py` 标为显式 experimental，生产零引用。`GET /spend/mandates` 仍是预留只读。
+`open` / 未授权删除：下表与 G4 传感死分支、tuple `execute()` wrapper 均待单独删除授权。
+
+| 候选 | 现存消费者 | 迁移条件 | 联删范围（获授权后） |
+|---|---|---|---|
+| `source_policy.record_rejections` | `core/tools/event_tools.py:183` 一处；内部转 `record_filtered_query` | 调用点改为 `record_filtered_query()` | shim、仅测死 shim 的守卫/测试、文档提及 |
+| `user_profile.get_period_info` / `set_period_date` | 生产路径已是 `health_state`（`prompt_builder` / `admin/routers/period.py`）；shim 仅 `tests/test_prompt_builder_period_scope.py` | 测试改走 `health_state` | shim、测试导入、过期文档 |
+| `context.max_turns` 只读 alias | `short_term.get_history` 与 `GET /context-config` 读 fallback；`PUT /context-config` 已只写 `memory.short_term_rounds`。守卫 `tests/test_r7_config_truth.py` | 确认无生产 `context.max_turns`-only 配置 | 读 fallback、alias 注释、R7 测试与文档；不得先拆写路径 |
+
 ## Memory Event 退场阈值（2026-09-18）
 
 `current`：event_store 仍是 evidence，当前 recall 仍是旧栈；shadow / proposal 不进

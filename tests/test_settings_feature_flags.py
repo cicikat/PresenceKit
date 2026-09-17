@@ -20,19 +20,29 @@ def test_feature_flags_update_is_allowlisted(tmp_path, monkeypatch):
 
 def test_self_management_feature_flag_is_exposed_and_consumed(tmp_path, monkeypatch):
     path = tmp_path / "config.yaml"
-    path.write_text("{}\n", encoding="utf-8")
+    path.write_text("self_management:\n  enabled: true\n", encoding="utf-8")
     monkeypatch.setattr(mod, "CONFIG_FILE", path)
-    read_config = lambda: yaml.safe_load(path.read_text(encoding="utf-8"))
+    read_config = lambda: yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     monkeypatch.setattr(mod, "get_config", read_config)
     from core import config_loader
+    from core.perception import screen_observation
     from core.self_management import policy
     monkeypatch.setattr(config_loader, "get_config", read_config)
     monkeypatch.setattr(config_loader, "reload_config", lambda: None)
+    monkeypatch.setattr(
+        screen_observation,
+        "state",
+        lambda: {"enabled": False, "active_device": None},
+    )
 
-    assert asyncio.run(mod.get_feature_flags(auth=None))["flags"]["self_management"]["enabled"] is True
+    snapshot = asyncio.run(mod.get_feature_flags(auth=None))["flags"]["self_management"]
+    assert snapshot["enabled"] is True
+    assert "不是关能力" in snapshot["label"]
+    assert "不是能力总闸" in snapshot["description"]
     result = asyncio.run(mod.update_feature_flags(mod.FeatureFlagsUpdate(flags={"self_management": False}), auth=None))
     assert result["flags"]["self_management"]["enabled"] is False
     assert policy.feature_enabled() is False
+    assert policy.effective("web_search", "owner", "char") == (True, None)
 
 
 def test_feature_flags_reject_unknown(monkeypatch):

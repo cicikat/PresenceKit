@@ -75,7 +75,7 @@ def test_i18n_runtime_is_wired_with_persistent_chinese_default():
     core_js = (ROOT / "admin" / "static" / "js" / "core.js").read_text(encoding="utf-8")
 
     assert '<link rel="stylesheet" href="/static/style.css?v=v1-1-0-ci-1">' in index
-    assert '<script src="/static/i18n.js?v=v1-1-0-chat-media-1"></script>' in index
+    assert '<script src="/static/i18n.js?v=v1-1-0-compat-hygiene-1"></script>' in index
     assert '<script src="/static/js/core.js?v=v1-1-0-chat-media-1"></script>' in index
     assert '<script src="/static/js/dream-settings.js?v=brief-223-rpg-dream-admin-2"></script>' in index
     assert "ADMIN_UI_FRAGMENT_VERSION = 'v1-1-0-chat-media-1'" in core_js
@@ -87,6 +87,8 @@ def test_i18n_runtime_is_wired_with_persistent_chinese_default():
     assert '<script src="/static/js/mcp.js?v=brief-252-mcp-no-flash-1"></script>' in index
     assert '<script src="/static/js/scheduler.js?v=calendar-ui-1"></script>' in index
     assert '<script src="/static/js/integrations.js?v=brief-160-garden-freeze-1"></script>' in index
+    assert "flag.self_management_hint" in runtime
+    assert "自主管理 overlay（关=恢复全局默认）" in runtime
     assert "const DEFAULT_LANGUAGE = 'zh-CN';" in runtime
     assert "presence.admin.language" in runtime
     assert "localStorage.setItem(STORAGE_KEY, language)" in runtime
@@ -176,6 +178,7 @@ def test_status_page_and_feature_flags_use_semantic_i18n_keys():
         "web_autosearch",
         "performance_mapping",
         "private_exchange",
+        "self_management",
     ):
         assert f"'flag.{flag}'" in runtime
 
