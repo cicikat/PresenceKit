@@ -299,7 +299,7 @@ async def _send_letter_if_worthy(
         record("sent", "ok", smtp_status_code=send_result.smtp_status_code)
         finish_weekly(sent=True, message_id=send_result.message_id)
         _last_letter_text = letter
-        _mark("letter_writer")
+        _mark("letter_writer", char_id=char_id)
         _clear_attempt_backoff("letter_writer", char_id=char_id)
         try:
             from core.mail.letter_reference import append_sent_letter

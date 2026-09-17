@@ -59,7 +59,7 @@ async def test_native_proposal_executes_dryrun_for_each_registered_trigger(monke
     monkeypatch.setattr("core.scheduler.rhythm.is_present", lambda now=None: True)
     monkeypatch.setattr("core.scheduler.rhythm.has_real_interaction_history", lambda uid, **kw: True)
     monkeypatch.setattr("core.scheduler.rhythm.quiet_floor_elapsed", lambda uid, now_ts=None: True)
-    monkeypatch.setattr("core.scheduler.rhythm.triggered_on_logical_day", lambda name, now=None: False)
+    monkeypatch.setattr("core.scheduler.rhythm.triggered_on_logical_day", lambda name, now=None, **_kwargs: False)
     monkeypatch.setattr("core.scheduler.loop._owner_id", lambda: "u1")
     # 早于本用例 now(2026-05-25) 4 天，模拟"有过分享但已过 3 天"，不是"从未分享过"（Brief 97）。
     monkeypatch.setattr("core.scheduler.loop._last_diary_share", datetime(2026, 5, 21, 12, 0).timestamp())
@@ -76,7 +76,6 @@ async def test_native_proposal_executes_dryrun_for_each_registered_trigger(monke
     monkeypatch.setattr(timenode, "_get_timenode", lambda today=None: "monday")
     monkeypatch.setattr(festival, "_get_today_festival", lambda today=None: ("x", "（节日 prompt）"))
     monkeypatch.setattr(festival, "_is_holiday_period", lambda today=None: True)
-    monkeypatch.setattr(memory, "_char_name", lambda: "Companion")
     _write_event_log(
         sandbox,
         "u1",
@@ -197,7 +196,7 @@ async def test_sleep_end_execute_false_preserves_cross_marks(monkeypatch):
         return "reply"
 
     monkeypatch.setattr(loop, "_pipeline_send", fake_send)
-    monkeypatch.setattr(loop, "_mark", lambda name: marks.append(name))
+    monkeypatch.setattr(loop, "_mark", lambda name, **_kwargs: marks.append(name))
 
     proposal = watch.propose_sleep_end({
         "now_ts": 1_000.0,
@@ -233,7 +232,7 @@ async def test_watch_dry_run_uses_gating_and_logs_execute(monkeypatch, sandbox):
     send = AsyncMock(return_value="reply")
     marks = []
     monkeypatch.setattr(loop, "_pipeline_send", send)
-    monkeypatch.setattr(loop, "_mark", lambda name: marks.append(name))
+    monkeypatch.setattr(loop, "_mark", lambda name, **_kwargs: marks.append(name))
 
     await watch.on_watch_event("sleep_end", {"duration_minutes": 420})
 
@@ -271,7 +270,7 @@ async def test_watch_live_uses_execute_and_skips_legacy_send(monkeypatch):
     monkeypatch.setattr("core.scheduler.triggers.dnd.is_dnd", lambda uid: False)
     monkeypatch.setattr("core.scheduler.gating.is_trigger_ready", lambda name: True)
     monkeypatch.setattr(loop, "_pipeline_send", execute_send)
-    monkeypatch.setattr(loop, "_mark", lambda name: marks.append(name))
+    monkeypatch.setattr(loop, "_mark", lambda name, **_kwargs: marks.append(name))
 
     await watch.on_watch_event("heart_rate", {"value": 130})
 
@@ -401,7 +400,7 @@ async def test_topic_followup_execute_live_writes_followed_topics(monkeypatch, s
 
     monkeypatch.setattr(execution, "EXECUTE_MODE", "live")
     monkeypatch.setattr(loop, "_pipeline_send", fake_send)
-    monkeypatch.setattr(loop, "_mark", lambda name: None)
+    monkeypatch.setattr(loop, "_mark", lambda name, **_kwargs: None)
     monkeypatch.setattr(memory, "_cfg", lambda: {"topic_followup": True})
     monkeypatch.setattr(memory, "_owner_id", lambda: "u1")
     _write_event_log(
@@ -462,45 +461,11 @@ async def test_spontaneous_recall_dryrun_shadow_blocks_second_propose(monkeypatc
     assert second is None
 
 
-@pytest.mark.asyncio
-async def test_legacy_random_message_marks_recent_topics(monkeypatch, sandbox):
-    """Fix 1: _check_random_message (legacy path) must write recent_topics after send."""
+def test_random_message_lives_on_proposer_not_legacy_check():
     from core.scheduler.triggers import time_based
 
-    sent = []
-
-    async def fake_send(prompt, search_query="", trigger_name="", **kwargs):
-        sent.append(trigger_name)
-        return "reply"
-
-    monkeypatch.setattr(time_based, "_pipeline_send", fake_send)
-    monkeypatch.setattr(time_based, "_mark", lambda name: None)
-    monkeypatch.setattr(time_based, "_is_ready", lambda name: True)
-    monkeypatch.setattr(time_based, "_cfg", lambda: {"random_message": True})
-    monkeypatch.setattr(time_based, "_owner_id", lambda: "u1")
-    monkeypatch.setattr(time_based, "_active_char_id_or_none", lambda: "char")
-    monkeypatch.setattr(time_based, "_char_name", lambda: "Companion")
-    monkeypatch.setattr(
-        "core.memory.event_log.get_highlights",
-        lambda oid, days: "在写实习材料",  # single item → deterministic pick
-    )
-    monkeypatch.setattr(
-        "core.scheduler.execution.legacy_tick_should_send",
-        lambda force=False: True,
-    )
-
-    await time_based._check_random_message(force=True)
-
-    assert sent == []
-    from core.autonomy import store
-    pending = store.load("u1", "char")["pending_signals"]
-    assert len(pending) == 1
-    return
-    # The picked key is topic_key_for("在写实习材料") == "在写实习材料"
-    assert "在写实习材料" in recent
-    assert recent["在写实习材料"]["last_source"] == "random"
-    # Shadow must NOT be written (dry_run=False)
-    assert raw.get("recent_topics_shadow", {}) == {}
+    assert not hasattr(time_based, "_check_random_message")
+    assert callable(time_based.propose_random_message)
 
 
 @pytest.mark.asyncio
@@ -561,7 +526,7 @@ async def test_diary_share_execute_live_marks_last_share(monkeypatch, sandbox):
     monkeypatch.setattr(diary, "_scheduler_start_time", 0.0)
     monkeypatch.setattr("core.scheduler.rhythm.has_real_interaction_history", lambda uid, **kw: True)
     monkeypatch.setattr("core.scheduler.rhythm.quiet_floor_elapsed", lambda uid, now_ts=None: True)
-    monkeypatch.setattr("core.scheduler.rhythm.triggered_on_logical_day", lambda name, now=None: False)
+    monkeypatch.setattr("core.scheduler.rhythm.triggered_on_logical_day", lambda name, now=None, **_kwargs: False)
 
     proposal = diary.propose_diary_share_reminder({
         "now_dt": datetime(2026, 5, 25, 22, 30),
@@ -648,7 +613,6 @@ async def test_weather_live_old_tick_refreshes_cache_without_sending(monkeypatch
 
     monkeypatch.setattr(execution, "EXECUTE_MODE", "live")
     monkeypatch.setattr(loop, "_pipeline_send", fake_send)
-    monkeypatch.setattr(time_based, "_pipeline_send", fake_send)
     monkeypatch.setattr(time_based, "_cfg", lambda: {"enabled": True})
     monkeypatch.setattr(time_based, "_owner_id", lambda: "u1")
     monkeypatch.setattr(time_based, "datetime", FakeDatetime)

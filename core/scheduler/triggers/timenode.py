@@ -5,11 +5,9 @@
 """
 
 import logging
-import time
 from datetime import datetime, date
 
-from core.error_handler import log_error
-from core.scheduler.loop import _is_ready, _mark, _owner_id, _pipeline_send, _cfg, _char_name, _last_trigger
+from core.scheduler.loop import _owner_id, _cfg, _char_name
 
 logger = logging.getLogger(__name__)
 
@@ -47,48 +45,6 @@ def _get_season(month: int) -> str:
     if month in (9, 10, 11):
         return "秋天"
     return "冬天"
-
-
-async def _check_timenode(force: bool = False):
-    """时间节点感知：特殊日子角色有自己的情绪，14-20点之间触发"""
-    from core.scheduler.execution import legacy_tick_should_send
-
-    if not legacy_tick_should_send(force=force):
-        return
-    cfg = _cfg()
-    if not cfg.get("timenode", True):
-        return
-
-    elapsed = time.time() - _last_trigger.get("timenode", 0)
-    if not force and elapsed < 20 * 3600:
-        return
-
-    if not force:
-        now = datetime.now()
-        if not (14 <= now.hour < 20):
-            return
-
-    node = _get_timenode()
-    if not force and node is None:
-        return
-
-    oid = _owner_id()
-    if not oid:
-        return
-
-    if force and node is None:
-        node = "monday"
-
-    prompt = _timenode_prompt(node, date.today())
-    if not prompt:
-        return
-
-    try:
-        await _pipeline_send(prompt, trigger_name="timenode", recall_policy="none")
-        _mark("timenode")
-        logger.info(f"[scheduler] 时间节点触发: {node}")
-    except Exception as e:
-        log_error("scheduler._check_timenode", e)
 
 
 def propose(ctx: dict | None = None):

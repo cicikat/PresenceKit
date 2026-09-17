@@ -112,9 +112,11 @@ TRIGGER_MIGRATION_STATUS: dict[str, str] = {
     **{name: "active" for name in ACTIVE_TRIGGERS},
 }
 
-# Producer-local labels kept for compatibility during the migration.  They
-# are aliases, not additional lifecycle owners; resolving them here prevents
-# an old producer name from falling through to an unregistered/direct path.
+# Producer-local labels kept for compatibility. They are aliases, not
+# additional lifecycle owners; resolving them here prevents an old producer
+# name from falling through to an unregistered/direct path. Migrated speech
+# names stay in this table for cooldown/audit, but their legacy gather
+# `_check_*` shells have been removed.
 TRIGGER_ALIASES: dict[str, str] = {
     "morning": "morning_greeting",
     "night": "night_reminder",

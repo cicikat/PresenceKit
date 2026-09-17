@@ -137,7 +137,8 @@ async def execute_prompt(
         mark_params = inspect.signature(loop._mark).parameters
         if resolved_char_id and "char_id" in mark_params:
             loop._mark(name, char_id=resolved_char_id)
-        loop._mark(name)
+        else:
+            loop._mark(name)
     loop._clear_attempt_backoff(trigger_name, char_id=resolved_char_id)
     from core.scheduler.proactive_ledger import record_send as _ledger_record
     _ledger_record(

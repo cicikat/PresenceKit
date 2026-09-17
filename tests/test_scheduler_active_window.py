@@ -155,7 +155,7 @@ async def test_execute_prompt_blocked_send_does_not_mark_or_after_send(monkeypat
         return None
 
     monkeypatch.setattr(loop, "_pipeline_send", blocked_send)
-    monkeypatch.setattr(loop, "_mark", lambda name: marks.append(name))
+    monkeypatch.setattr(loop, "_mark", lambda name, **_kwargs: marks.append(name))
 
     result = await execution.execute_prompt(
         trigger_name="random_message",

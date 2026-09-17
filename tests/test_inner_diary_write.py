@@ -202,7 +202,7 @@ async def test_daily_journal_proposal_no_longer_writes_diary(monkeypatch, sandbo
     monkeypatch.setattr(time_based, "_cfg", lambda: {"enabled": True})
     monkeypatch.setattr(time_based, "_owner_id", lambda: "u1")
     monkeypatch.setattr("core.scheduler.rhythm.quiet_floor_elapsed", lambda uid, now_ts=None: True)
-    monkeypatch.setattr("core.scheduler.rhythm.triggered_on_logical_day", lambda name, now=None: False)
+    monkeypatch.setattr("core.scheduler.rhythm.triggered_on_logical_day", lambda name, now=None, **_kwargs: False)
     chat_calls = []
     monkeypatch.setattr("core.llm_client.chat", _fake_chat_factory(chat_calls))
 

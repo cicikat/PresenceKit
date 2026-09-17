@@ -167,7 +167,7 @@ class TestWatchUnifiedGating:
         send = AsyncMock(return_value="reply")
         marks = []
         monkeypatch.setattr(loop, "_pipeline_send", send)
-        monkeypatch.setattr(loop, "_mark", lambda name: marks.append(name))
+        monkeypatch.setattr(loop, "_mark", lambda name, **_kwargs: marks.append(name))
 
         await watch.on_watch_event("heart_rate", {"value": 110})
 
@@ -190,7 +190,7 @@ class TestWatchUnifiedGating:
         send = AsyncMock(return_value="reply")
         marks = []
         monkeypatch.setattr(loop, "_pipeline_send", send)
-        monkeypatch.setattr(loop, "_mark", lambda name: marks.append(name))
+        monkeypatch.setattr(loop, "_mark", lambda name, **_kwargs: marks.append(name))
 
         await watch.on_watch_event("heart_rate", {"value": 110})
 
@@ -214,7 +214,7 @@ class TestWatchUnifiedGating:
         send = AsyncMock(return_value="reply")
         marks = []
         monkeypatch.setattr(loop, "_pipeline_send", send)
-        monkeypatch.setattr(loop, "_mark", lambda name: marks.append(name))
+        monkeypatch.setattr(loop, "_mark", lambda name, **_kwargs: marks.append(name))
         monkeypatch.setattr(loop, "_active_char_id_or_none", lambda: "char")
 
         await watch.on_watch_event("heart_rate", {"value": 130})
@@ -238,7 +238,7 @@ class TestWatchUnifiedGating:
         send = AsyncMock(return_value="reply")
         marks = []
         monkeypatch.setattr(loop, "_pipeline_send", send)
-        monkeypatch.setattr(loop, "_mark", lambda name: marks.append(name))
+        monkeypatch.setattr(loop, "_mark", lambda name, **_kwargs: marks.append(name))
 
         await watch.on_watch_event("sleep_end", {"duration_minutes": 420})
 

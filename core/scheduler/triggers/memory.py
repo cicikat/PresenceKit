@@ -1,10 +1,9 @@
 import logging
 import re
-import time
 from datetime import datetime
 
 from core.error_handler import log_error
-from core.scheduler.loop import _is_ready, _mark, _owner_id, _pipeline_send, _cfg, _char_name, _last_trigger
+from core.scheduler.loop import _owner_id, _cfg
 from core.scheduler.last_mentioned import (
     LastMentionedTopic,
     is_recently_followed,
@@ -14,16 +13,6 @@ from core.scheduler.last_mentioned import (
 )
 
 logger = logging.getLogger(__name__)
-
-_COOLDOWNS_LOCAL = {
-    "topic_followup": 24 * 3600,
-}
-
-
-async def _check_topic_followup(force: bool = False):
-    """Legacy no-op — topic followup is now driven by propose() via recall_last_mentioned."""
-    # 此函数已由 propose() + recall_last_mentioned 路径接管，保留签名避免调用点报错。
-    logger.debug("[scheduler] _check_topic_followup: legacy path, skipped (use proposer)")
 
 
 def _followup_signal(growth: str) -> float:

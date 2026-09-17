@@ -93,19 +93,7 @@ def test_period_proposer_and_legacy_check_read_health_state(sandbox, monkeypatch
 
     health_state.set_period_date("owner1", date.today().isoformat())
     assert period.propose({"uid": "owner1", "today": date.today()}) is not None
-    sent: list[str] = []
-
-    async def fake_send(message, **_kwargs):
-        sent.append(message)
-
-    monkeypatch.setattr("core.scheduler.execution.legacy_tick_should_send", lambda: True)
-    monkeypatch.setattr(period, "_cfg", lambda: {"enabled": True})
-    monkeypatch.setattr(period, "_owner_id", lambda: "owner1")
-    monkeypatch.setattr(period, "_is_ready", lambda _name: True)
-    monkeypatch.setattr(period, "_pipeline_send", fake_send)
-    monkeypatch.setattr(period, "_mark", lambda _name: None)
-    asyncio.run(period._check_period())
-    assert sent
+    assert not hasattr(period, "_check_period")
 
 
 def test_manual_trigger_missing_input_returns_reason_without_send(sandbox, monkeypatch):

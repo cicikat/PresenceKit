@@ -53,11 +53,16 @@ def is_present(
     return int(idle) < idle_threshold_sec
 
 
-def triggered_on_logical_day(trigger_name: str, now: datetime | None = None) -> bool:
+def triggered_on_logical_day(
+    trigger_name: str,
+    now: datetime | None = None,
+    *,
+    char_id: str | None = None,
+) -> bool:
     """Read scheduler cooldown marks and compare them by logical day without writing state."""
-    from core.scheduler.loop import _last_trigger
+    from core.scheduler.loop import _latest_trigger_ts
 
-    last = float(_last_trigger.get(trigger_name, 0) or 0)
+    last = float(_latest_trigger_ts(trigger_name, char_id=char_id) or 0)
     if last <= 0:
         return False
     current = now or datetime.now()

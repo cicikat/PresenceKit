@@ -8,7 +8,7 @@ from hashlib import sha1
 
 from core.character_name_provider import get_char_name
 from core.error_handler import log_error
-from core.scheduler.loop import _is_ready, _mark, _owner_id, _pipeline_send, _cfg, _user_talked_today, _last_trigger, _char_name, _active_char_id_or_none
+from core.scheduler.loop import _is_ready, _mark, _owner_id, _cfg, _user_talked_today, _active_char_id_or_none
 from core.scheduler.rhythm import LOGICAL_DAY_CUTOFF_HOUR
 from core.data_paths import DEFAULT_CHAR_ID
 
@@ -19,90 +19,6 @@ _LAST_WEATHER_DETAIL: dict | None = None
 # Keep spontaneous recall close to episodic_memory.retrieve(top_k=3) semantics
 # without calling retrieve() from the read-only proposer path.
 _SPONTANEOUS_RECALL_TOP_K = 3
-
-
-async def _check_morning(force: bool = False):
-    if not _cfg().get("morning_greeting", True) or not _is_ready("morning_greeting"):
-        return
-    if not force:
-        now = datetime.now()
-        if not (7 <= now.hour < 9):
-            return
-        oid = _owner_id()
-        if oid and _user_talked_today(oid):
-            return
-    oid, char_id = _owner_id(), _active_char_id_or_none()
-    if oid and char_id:
-        from core.autonomy.signal_adapters import emit_trigger_signal
-        queued, _ = emit_trigger_signal(
-            oid, char_id, "morning_greeting",
-            evidence=[{"fact": "configured_time_window", "window": "07:00-09:00"}],
-            reason="A configured morning time window is eligible for autonomy evaluation.",
-            priority=0.1,
-        )
-        if queued:
-            _mark("morning_greeting")
-    return
-    """早安触发：7-9点，且用户今天还没说过话。force=True 跳过时间和对话检查"""
-    from core.scheduler.execution import legacy_tick_should_send
-
-    if not legacy_tick_should_send(force=force):
-        return
-    cfg = _cfg()
-    if not cfg.get("morning_greeting", True):
-        return
-    if not _is_ready("morning_greeting"):
-        return
-
-    if not force:
-        now = datetime.now()
-        if not (7 <= now.hour < 9):
-            return
-        oid = _owner_id()
-        if oid and _user_talked_today(oid):
-            return
-
-    await _pipeline_send("（清晨，你看了看时间，想着她应该快起床了。想道句早安。）", trigger_name="morning_greeting", recall_policy="none")
-    _mark("morning_greeting")
-    logger.info("[scheduler] 早安消息已发送")
-
-
-async def _check_night(force: bool = False):
-    if not _cfg().get("night_reminder", True) or not _is_ready("night_reminder"):
-        return
-    if not force and datetime.now().hour < 23:
-        return
-    oid, char_id = _owner_id(), _active_char_id_or_none()
-    if oid and char_id:
-        from core.autonomy.signal_adapters import emit_trigger_signal
-        queued, _ = emit_trigger_signal(
-            oid, char_id, "night_reminder",
-            evidence=[{"fact": "configured_time_window", "window": "23:00-24:00"}],
-            reason="A configured night time window is eligible for autonomy evaluation.",
-            priority=0.1,
-        )
-        if queued:
-            _mark("night_reminder")
-    return
-    """晚安催睡：23点后。force=True 跳过时间检查"""
-    from core.scheduler.execution import legacy_tick_should_send
-
-    if not legacy_tick_should_send(force=force):
-        return
-    cfg = _cfg()
-    if not cfg.get("night_reminder", True):
-        return
-    if not _is_ready("night_reminder"):
-        return
-
-    if not force:
-        now = datetime.now()
-        if now.hour < 23:
-            return
-
-    await _pipeline_send("（深夜，你看了眼时间，想起她该睡了。）", trigger_name="night_reminder", recall_policy="none")
-    _mark("night_reminder")
-    logger.info("[scheduler] 晚安消息已发送")
 
 
 def propose_morning_greeting(ctx: dict | None = None):
@@ -151,7 +67,7 @@ def propose_night_reminder(ctx: dict | None = None):
         return None
     if not is_present(_proposal_ts(ctx, now)):
         return None
-    if triggered_on_logical_day("night_reminder", now):
+    if triggered_on_logical_day("night_reminder", now, char_id=_proposal_char_id(ctx)):
         return None
 
     from core.scheduler.gating import TriggerProposal
@@ -187,7 +103,7 @@ def propose_daily_journal(ctx: dict | None = None):
 
     if not quiet_floor_elapsed(oid, _proposal_ts(ctx, now)):
         return None
-    if triggered_on_logical_day("daily_journal", now):
+    if triggered_on_logical_day("daily_journal", now, char_id=_proposal_char_id(ctx)):
         return None
 
     from core.scheduler.gating import TriggerProposal
@@ -208,77 +124,6 @@ def propose_daily_journal(ctx: dict | None = None):
             recall_policy="none",
         ),
     )
-
-
-async def _check_random_message(force: bool = False):
-    if not _cfg().get("random_message", True) or not _is_ready("random_message"):
-        return
-    if not force and not (10 <= datetime.now().hour < 18):
-        return
-    oid, char_id = _owner_id(), _active_char_id_or_none()
-    if oid and char_id:
-        from core.autonomy.signal_adapters import emit_trigger_signal
-        queued, _ = emit_trigger_signal(
-            oid, char_id, "random_message",
-            evidence=[{"fact": "random_message_window", "window": "10:00-18:00"}],
-            reason="A bounded daytime opportunity is eligible for autonomy evaluation.",
-            priority=0.1,
-        )
-        if queued:
-            _mark("random_message")
-    return
-    """随机日间消息：10-18点，每天随机触发一次。force=True 跳过时间和概率检查"""
-    from core.scheduler.execution import legacy_tick_should_send
-
-    if not legacy_tick_should_send(force=force):
-        return
-    cfg = _cfg()
-    if not cfg.get("random_message", True):
-        return
-    if not _is_ready("random_message"):
-        return
-
-    if not force:
-        now = datetime.now()
-        if not (10 <= now.hour < 18):
-            return
-        # 保底逻辑：今天10点后超过4小时没有主动消息，必定触发
-        last = _last_trigger.get("random_message", 0)
-        hours_since = (time.time() - last) / 3600
-        if hours_since < 4:
-            # 4小时内触发过，走概率
-            if random.random() > (1 / 240):
-                return
-        # 超过4小时未触发，直接放行（保底）
-
-    oid = _owner_id()
-    _picked_key = ""
-
-    try:
-        from core.memory.event_log import get_highlights
-        from core.scheduler.last_mentioned import topic_key_for
-        highlights = get_highlights(oid, days=2, char_id=_active_char_id_or_none() or DEFAULT_CHAR_ID)
-        if highlights:
-            import random
-            items = [h.strip() for h in highlights.split("\n") if h.strip()]
-            if items:
-                picked = random.choice(items)
-            else:
-                picked = highlights
-            _picked_key = topic_key_for(picked)
-            context_hint = f"（你忽然想到一件事：{picked}，想说给她听。）"
-        else:
-            context_hint = ""
-    except Exception:
-        context_hint = ""
-
-    prompt = _build_random_message_prompt(context_hint)
-    await _pipeline_send(prompt, trigger_name="random_message", recall_policy="none")
-    _mark("random_message")
-    if _picked_key:
-        from core.scheduler.last_mentioned import mark_recent_topic
-        mark_recent_topic(_picked_key, "random", dry_run=False)
-    logger.info("[scheduler] 随机日间消息已发送")
 
 
 def propose_random_message(ctx: dict | None = None):
@@ -309,17 +154,13 @@ def propose_random_message(ctx: dict | None = None):
 
 
 async def _check_weather(force: bool = False):
-    """天气联动：多场景触发，有氛围感"""
+    """Refresh the weather cache used by weather proposers. Does not speak."""
     from core.config_loader import get_config
-    from core.scheduler.execution import legacy_tick_should_send
 
     if not get_config().get("tools", {}).get("weather", {}).get("enabled", True):
         return
     cfg = _cfg()
     if not cfg.get("enabled", True):
-        return
-    legacy_send = legacy_tick_should_send(force=force)
-    if legacy_send and not _is_ready("weather_alert"):
         return
     if not force:
         now = datetime.now()
@@ -341,21 +182,10 @@ async def _check_weather(force: bool = False):
         if not w:
             return
         _remember_weather_detail(w)
-
-        now      = datetime.now()
-        desc = w["desc"]
-        temp = w["temp_c"]
-        prompt = _weather_prompt(w, now, location)
-
-        if not legacy_send:
-            return
-        if prompt:
-            await _pipeline_send(prompt, trigger_name="weather_alert", recall_policy="none")
-            _mark("weather_alert")
-            logger.info(f"[scheduler] 天气触发: {desc} {temp}°C")
-        else:
-            logger.debug(f"[scheduler] 天气无需触发: {desc} {temp}°C")
-
+        logger.debug(
+            "[scheduler] weather cache refreshed: %s %s°C",
+            w.get("desc"), w.get("temp_c"),
+        )
     except Exception as e:
         log_error("scheduler._check_weather", e)
 
@@ -652,36 +482,6 @@ async def _generate_and_store_diary(
     return True
 
 
-async def _check_daily_journal():
-    """每日手账：23点后，读取今天event_log，让角色写一段心理活动发给你"""
-    from core.scheduler.execution import legacy_tick_should_send
-
-    if not legacy_tick_should_send():
-        return
-    cfg = _cfg()
-    if not cfg.get("enabled", True):
-        return
-    if not _is_ready("daily_journal"):
-        return
-    now = datetime.now()
-    if now.hour < 23:
-        return
-    oid = _owner_id()
-    if not oid:
-        return
-    try:
-        await _pipeline_send(
-            "（深夜，他回想起今天和你说的话，提笔写下此刻的感受，并且一想到你，就忍不住写了很多）",
-            trigger_name="daily_journal",
-            recall_policy="none",
-        )
-
-        _mark("daily_journal")
-        logger.info("[scheduler] 每日手账已发送")
-    except Exception as e:
-        log_error("scheduler._check_daily_journal", e)
-
-
 async def _check_inner_diary_write():
     """静默写各角色内心日记。与 daily_journal 主动发言完全解耦。"""
     now = datetime.now()
@@ -804,47 +604,6 @@ async def check_activity_switch() -> None:
     except Exception as e:
         from core.error_handler import log_error
         log_error("scheduler.activity_switch", e)
-
-
-async def _check_spontaneous_recall():
-    """主动回忆：低频随机触发，角色突然想起一段往事。"""
-    from core.scheduler.execution import legacy_tick_should_send
-
-    if not legacy_tick_should_send():
-        return
-    import random
-    if not _is_ready("spontaneous_recall"):
-        return
-    if random.random() > 0.10:
-        return
-    now = datetime.now()
-    if not (14 <= now.hour <= 22):
-        return
-    oid = _owner_id()
-    if not oid:
-        return
-    try:
-        from core.memory.episodic_memory import _load_memories
-        memories = _load_memories(oid)
-        if not memories:
-            return
-        candidates = [m for m in memories if m.get("strength", 0) > 0.5]
-        if not candidates:
-            return
-        chosen = random.choice(candidates)
-        summary = chosen.get("summary", "")
-        feeling = chosen.get("yexuan_feeling", "")
-        if not summary:
-            return
-        if feeling:
-            prompt = f"（你忽然想起一件事：{summary}。当时你{feeling}。想顺口说给她听，别像念旧档案，像顺着这两天自然想起。）"
-        else:
-            prompt = f"（你忽然想起一件事：{summary}。想顺口说给她听，别像念旧档案，像顺着这两天自然想起。）"
-        await _pipeline_send(prompt, trigger_name="spontaneous_recall", recall_policy="anchored")
-        _mark("spontaneous_recall")
-        logger.info(f"[scheduler] 主动回忆触发: {summary}")
-    except Exception as e:
-        log_error("scheduler._check_spontaneous_recall", e)
 
 
 def propose_spontaneous_recall(ctx: dict | None = None):
@@ -1226,6 +985,12 @@ def _make_spontaneous_recall_execute(memory: dict):
         return result
 
     return execute
+
+
+def _proposal_char_id(ctx: dict | None) -> str | None:
+    if ctx and ctx.get("char_id"):
+        return str(ctx["char_id"])
+    return _active_char_id_or_none()
 
 
 def _proposal_now(ctx: dict | None) -> datetime:

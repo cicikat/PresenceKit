@@ -526,6 +526,7 @@ def test_scheduler_cooldown_can_be_scoped_per_character(sandbox, monkeypatch):
     assert loop._is_ready("morning_greeting", char_id=TEST_CHAR_ID) is False
     assert loop._is_ready("morning_greeting", char_id=TEST_PEER_CHAR_ID) is True
     assert f'{TEST_CHAR_ID}:morning_greeting' in loop._last_trigger
+    assert "morning_greeting" not in loop._last_trigger
 
 
 async def _record_async(target: list, value):

@@ -1,6 +1,6 @@
 # 9.17 后端综合工单：角色隔离、固定会话与架构债收敛
 
-状态：A/B/C/E 已提交；D 自动化收尾完成、运行联调待执行；F 已提交；G–J 未开始。日期：2026-09-17。
+状态：A/B/C/E 已提交；D 自动化收尾完成、运行联调待执行；F 已提交；G 已提交（G4 删除候选未授权，保持未勾）；H–J 未开始。日期：2026-09-17。
 用户已授权按本单施工。每张施工子单完成相关验证与差异检查后独立 commit，再开始下一张。
 勾选规则：完成一项且具备证据才勾一项；源码存在、自动测试通过、部署验收分别记账。每张施工子单完成相关验证与差异检查后独立 commit，再开始下一张。
 
@@ -83,11 +83,11 @@
 
 对应 P1-1/2/3、P2-3/5。先读 `docs/scheduler.md`、`docs/autonomy.md`。
 
-- [ ] G1 按 registry 盘点 signal producer、maintenance、active/compat executor 及真实调用；不把双 gate 判成已复现双发，不移除有效 admission。
-- [ ] G2 从 legacy gather 迁出/删除已迁移 speech checks，保留真实 maintenance 与 active letter_writer；逐项证明 force/manual/debug 路径的处理。
-- [ ] G3 先列全 cooldown reader 并按角色或真实全局维护语义迁移，再移除不需要的 global 双写；测试多角色互不抑制及必要全局限流。
+- [x] G1 已按 registry 盘点：migrated 为 signal producer；maintenance-only 为状态/产物工人；`letter_writer` 为 gating `active` SMTP executor；未注册名走 compat `_pipeline_send` 或拒绝。双 gate 不是 live 已复现双发；未移除有效 admission。
+- [x] G2 已从 live gather 删除已迁移发言 `_check_*`；保留天气缓存、sensor 候选、Runtime 备忘录与维护扫描。`letter_writer` 仍由 gating active executor 发送。force=`legacy_tick_should_send(True)` 仍放行；manual migrated 只排队 autonomy；maintenance 返回 queued；未注册拒绝直发。
+- [x] G3 发言冷却只写 `{char_id}:{name}`，不再双写裸 `name`。读者 `_is_ready` / `triggered_on_logical_day` / gating / overflow / presence_nag 按角色；维护省略 `char_id` 保持 uid 全局。`ProactiveLedger.can_send(uid=)` 仍是跨触发器全局限流。测试覆盖多角色互不抑制与 ledger 跨角色 gap。
 - [ ] G4 删除候选：sensor return 后旧 LLM/action/send/sink/cooldown 分支及无生产引用 helper；同删仅保护死分支的测试/守卫/文档，保留 signal-first 行为测试。取得该删除范围施工授权后执行。
-- [ ] G5 验证每 tick migrated 只产 signal、maintenance 正常、compat 正常、无直接 sensor delivery；修 registry 和 ledger 注释，定向测试后独立提交。
+- [x] G5 定向回归 154 + 40 passed：migrated winner 只产 signal、不跑历史 executor；weather/inner_diary 维护正常；sensor `handle_tick` 不直发；compat `_pipeline_send` 仍对未迁移名开放。已修 registry/ledger 注释与 scheduler/autonomy/memory 文档。G4 未执行。独立提交。
 
 ## H — P1：工具决策 authority 与 causation 身份
 

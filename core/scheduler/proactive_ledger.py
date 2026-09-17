@@ -4,6 +4,8 @@
   - `gating._decide()` 在挑 winner 前用 `can_send()` 过滤候选 —— 只读，不记账。
   - 真正发送成功后，各发言出口（`execution.execute_prompt()` / `sensor_aware.handle_tick()`
     / `manual_trigger` / watch emergency）调用 `record_send()` 记账。
+  - 角色冷却（`loop._mark(name, char_id=)`）互不抑制；本 ledger 仍按 uid 做跨触发器
+    gap / 日预算 / 未回复上限，这是保留的必要全局限流，不是已删除的全局 `_mark(name)` 双写。
 
 接管原先分散在 `loop.py`（`_next_proactive_ts` 全局间隔 + jitter 一次性采样，A2）和
 执行出口里的状态，新增当日发送预算

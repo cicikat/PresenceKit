@@ -17,7 +17,7 @@ def _eligible(monkeypatch, *, mood="sad", last_owner_turn_ts=1_000.0, now_ts=5_0
     from core.scheduler.triggers import presence_nag
 
     monkeypatch.setattr("core.config_loader.get_config", lambda: _enabled_config())
-    monkeypatch.setattr(loop, "_is_ready", lambda name: True)
+    monkeypatch.setattr(loop, "_is_ready", lambda name, **_kwargs: True)
     monkeypatch.setattr(loop, "_owner_id", lambda: "owner")
     monkeypatch.setattr(loop, "_active_char_id_or_none", lambda: TEST_CHAR_ID)
     monkeypatch.setattr(

@@ -111,7 +111,7 @@ def test_proposer_requires_enabled_mail_and_quiet_state(monkeypatch):
     from core.scheduler.triggers import letter_writer
 
     monkeypatch.setattr("core.config_loader.get_config", lambda: {"mail": {"enabled": True}})
-    monkeypatch.setattr(loop, "_is_ready", lambda name: True)
+    monkeypatch.setattr(loop, "_is_ready", lambda name, **_kwargs: True)
     monkeypatch.setattr(loop, "_owner_id", lambda: "owner")
     monkeypatch.setattr(loop, "_active_char_id_or_none", lambda: "character_b")
     monkeypatch.setattr(
@@ -148,7 +148,10 @@ def test_successful_send_marks_cooldown(monkeypatch):
     monkeypatch.setattr(generator, "generate_letter", fake_generate)
     monkeypatch.setattr(generator, "evaluate_letter", fake_evaluate)
     monkeypatch.setattr(mail_sender, "send_letter_detailed", fake_send)
-    monkeypatch.setattr(loop, "_mark", marks.append)
+    def capture_mark(name, *, char_id=None):
+        marks.append((name, char_id))
+
+    monkeypatch.setattr(loop, "_mark", capture_mark)
     monkeypatch.setattr(letter_writer, "_last_letter_text", "")
 
     result = asyncio.run(
@@ -156,7 +159,7 @@ def test_successful_send_marks_cooldown(monkeypatch):
     )
 
     assert result.sent is True
-    assert marks == ["letter_writer"]
+    assert marks == [("letter_writer", "character_b")]
 
 
 def test_low_quality_letter_is_not_sent_or_marked(monkeypatch):
@@ -180,7 +183,7 @@ def test_low_quality_letter_is_not_sent_or_marked(monkeypatch):
     monkeypatch.setattr(generator, "generate_letter", fake_generate)
     monkeypatch.setattr(generator, "evaluate_letter", fake_evaluate)
     monkeypatch.setattr(mail_sender, "send_letter_detailed", fake_send)
-    monkeypatch.setattr(loop, "_mark", lambda name: calls.append("mark"))
+    monkeypatch.setattr(loop, "_mark", lambda name, **_kwargs: calls.append("mark"))
 
     result = asyncio.run(
         letter_writer._send_letter_if_worthy("u1", "character_b", "理由", dry_run=False)
@@ -421,7 +424,7 @@ def test_sent_letter_archived_after_successful_send(monkeypatch, tmp_path):
     monkeypatch.setattr(generator, "generate_letter", fake_generate)
     monkeypatch.setattr(generator, "evaluate_letter", fake_evaluate)
     monkeypatch.setattr(mail_sender, "send_letter_detailed", fake_send)
-    monkeypatch.setattr(loop, "_mark", lambda name: None)
+    monkeypatch.setattr(loop, "_mark", lambda name, **_kwargs: None)
     monkeypatch.setattr(letter_writer, "_last_letter_text", "")
     monkeypatch.setattr(letter_reference, "append_sent_letter", fake_append)
 

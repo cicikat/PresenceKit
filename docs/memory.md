@@ -1324,7 +1324,7 @@ episodic 上限裁剪淘汰的条目不再走 `consolidate_to_identity`/`reflect
 
 ## 六、他日记（yexuan_inner_diary）
 
-**触发**：调度器每日 23:00，由 `_check_daily_journal()` 生成
+**触发**：调度器每日 23:00 窗口，由维护任务 `_check_inner_diary_write()` 静默生成；`daily_journal` 只是同窗的主动发言 proposer，不再写日记文件
 
 **生成方式**：两次 LLM 调用，合并写入同一个 `.md` 文件
 

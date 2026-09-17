@@ -32,11 +32,11 @@ def propose(ctx: dict | None = None):
 
     from core.scheduler.loop import _active_char_id_or_none, _is_ready, _owner_id
 
-    if not _is_ready("presence_nag"):
-        return None
     uid = str(ctx.get("uid") or _owner_id()).strip()
     char_id = str(ctx.get("char_id") or _active_char_id_or_none() or "").strip()
     if not uid or not char_id:
+        return None
+    if not _is_ready("presence_nag", char_id=char_id):
         return None
 
     now_ts = float(ctx.get("now_ts") or time.time())

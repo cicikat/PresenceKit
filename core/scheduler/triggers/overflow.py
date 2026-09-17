@@ -25,14 +25,14 @@ def propose(ctx: dict | None = None):
 
     from core.scheduler.loop import _active_char_id_or_none, _is_ready, _owner_id
 
-    if not _is_ready("overflow"):
-        return None
     uid = str(ctx.get("uid") or _owner_id()).strip()
     if not uid:
         return None
 
     char_id = str(ctx.get("char_id") or _active_char_id_or_none() or "").strip()
     if not char_id:
+        return None
+    if not _is_ready("overflow", char_id=char_id):
         return None
     try:
         signals = compute_signals(uid, char_id=char_id)

@@ -1,53 +1,13 @@
 import logging
-import time
-from datetime import datetime, date
+from datetime import datetime
 
 from core.error_handler import log_error
 from core.scheduler.loop import (
-    _is_ready, _mark, _owner_id, _pipeline_send, _cfg, _char_name,
-    _last_diary_share, _scheduler_start_time,
+    _is_ready, _mark, _owner_id, _cfg,
+    _scheduler_start_time, _active_char_id_or_none,
 )
 
 logger = logging.getLogger(__name__)
-
-
-async def _check_diary_reminder():
-    """昨天没写日记时，角色提醒"""
-    from core.scheduler.execution import legacy_tick_should_send
-
-    if not legacy_tick_should_send():
-        return
-    cfg = _cfg()
-    if not cfg.get("enabled", True):
-        return
-    if not _is_ready("diary_reminder"):
-        return
-    now = datetime.now()
-    if not (9 <= now.hour < 12):
-        return
-    oid = _owner_id()
-    if oid:
-        from core.scheduler.rhythm import has_real_interaction_history
-        if not has_real_interaction_history(oid):
-            logger.debug("[scheduler] diary_reminder 冷启动 skip：真实交互轮数不足")
-            return
-    try:
-        from core.tools.diary_reader import has_any_diary_entry, yesterday_missing
-        if not has_any_diary_entry():
-            logger.debug("[scheduler] diary_reminder skip：从未读到过任何一篇日记")
-            return
-        if yesterday_missing():
-            from datetime import timedelta
-            yesterday = (date.today() - timedelta(days=1)).strftime("%m月%d日")
-            await _pipeline_send(
-                f"（你翻到了{yesterday}的日期，她好像漏了一天没写。）",
-                trigger_name="diary_reminder",
-                recall_policy="none",
-            )
-            _mark("diary_reminder")
-            logger.info("[scheduler] 日记缺失提醒已发送")
-    except Exception as e:
-        log_error("scheduler._check_diary_reminder", e)
 
 
 def propose_diary_reminder(ctx: dict | None = None):
@@ -69,7 +29,7 @@ def propose_diary_reminder(ctx: dict | None = None):
         return None
     if not quiet_floor_elapsed(oid, _proposal_ts(ctx, now)):
         return None
-    if triggered_on_logical_day("diary_reminder", now):
+    if triggered_on_logical_day("diary_reminder", now, char_id=_proposal_char_id(ctx)):
         return None
     try:
         from core.tools.diary_reader import has_any_diary_entry, yesterday_missing
@@ -133,49 +93,6 @@ async def _check_diary_inject():
         log_error("scheduler._check_diary_inject", e)
 
 
-async def _check_diary_share_reminder():
-    """超过3天没看到日记分享时，角色超不经意提一句"""
-    from core.scheduler.execution import legacy_tick_should_send
-
-    if not legacy_tick_should_send():
-        return
-    cfg = _cfg()
-    if not cfg.get("enabled", True):
-        return
-    if time.time() - _scheduler_start_time < 300:
-        return
-    if not _is_ready("diary_share_reminder"):
-        return
-    now = datetime.now()
-    if now.hour < 22:
-        return
-    oid = _owner_id()
-    if not oid:
-        return
-    from core.scheduler.rhythm import has_real_interaction_history
-    if not has_real_interaction_history(oid):
-        logger.debug("[scheduler] diary_share_reminder 冷启动 skip：真实交互轮数不足")
-        return
-    if _last_diary_share <= 0:
-        # 从未分享过日记 ≠ "好几天没看到你写的东西"——前者一律不触发（Brief 97）
-        return
-    from datetime import date as _date
-    if datetime.fromtimestamp(_last_diary_share).date() == _date.today():
-        return
-    if time.time() - _last_diary_share < 259200:  # 3天内分享过就跳过
-        return
-    try:
-        await _pipeline_send(
-            "（你发现自己好几天没看到她写的东西了。）",
-            trigger_name="diary_share_reminder",
-            recall_policy="none",
-        )
-        _mark("diary_share_reminder")
-        logger.info("[scheduler] 日记分享提醒已发送")
-    except Exception as e:
-        log_error("scheduler._check_diary_share_reminder", e)
-
-
 def propose_diary_share_reminder(ctx: dict | None = None):
     """Shadow proposal for diary_share_reminder; read-only and does not mark cooldown."""
     cfg = _cfg()
@@ -199,7 +116,7 @@ def propose_diary_share_reminder(ctx: dict | None = None):
         return None
     if not quiet_floor_elapsed(oid, now_ts):
         return None
-    if triggered_on_logical_day("diary_share_reminder", now):
+    if triggered_on_logical_day("diary_share_reminder", now, char_id=_proposal_char_id(ctx)):
         return None
     last_diary_share = float(loop._last_diary_share or 0)
     if last_diary_share <= 0:
@@ -227,6 +144,12 @@ def propose_diary_share_reminder(ctx: dict | None = None):
             recall_policy="none",
         ),
     )
+
+
+def _proposal_char_id(ctx: dict | None) -> str | None:
+    if ctx and ctx.get("char_id"):
+        return str(ctx["char_id"])
+    return _active_char_id_or_none()
 
 
 def _proposal_now(ctx: dict | None) -> datetime:

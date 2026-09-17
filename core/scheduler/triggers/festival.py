@@ -4,11 +4,9 @@
 """
 
 import logging
-import time
 from datetime import datetime, date
 
-from core.error_handler import log_error
-from core.scheduler.loop import _is_ready, _mark, _owner_id, _pipeline_send, _cfg, _char_name, _last_trigger
+from core.scheduler.loop import _owner_id, _cfg, _char_name
 
 
 logger = logging.getLogger(__name__)
@@ -146,95 +144,6 @@ def _festival_calendar_source(key: str) -> str:
     if key in {"anniversary", "character_birthday"}:
         return "character_card"
     return "gregorian"
-
-
-async def _check_festival(force: bool = False):
-    """节日感知：当天14-20点触发一次"""
-    from core.scheduler.execution import legacy_tick_should_send
-
-    if not legacy_tick_should_send(force=force):
-        return
-    cfg = _cfg()
-    if not cfg.get("festival", True):
-        return
-
-    elapsed = time.time() - _last_trigger.get("festival", 0)
-    if not force and elapsed < 20 * 3600:
-        return
-
-    if not force:
-        now = datetime.now()
-        if not (14 <= now.hour < 20):
-            return
-
-    result = _get_today_festival()
-    if not force and result is None:
-        return
-
-    oid = _owner_id()
-    if not oid:
-        return
-
-    try:
-        if result is None:
-            return
-        key, prompt = result
-        await _pipeline_send(prompt, trigger_name="festival", recall_policy="none")
-        _mark("festival")
-        logger.info(f"[scheduler] 节日感知触发: {key}")
-    except Exception as e:
-        log_error("scheduler._check_festival", e)
-
-
-async def _check_holiday_boost(force: bool = False):
-    """
-    长假期间额外碎碎念：五一/国庆假期内
-    在random_message基础上额外多发一次，冷却2小时
-    """
-    from core.scheduler.execution import legacy_tick_should_send
-
-    if not legacy_tick_should_send(force=force):
-        return
-    cfg = _cfg()
-    if not cfg.get("holiday_boost", True):
-        return
-
-    if not force and not _is_holiday_period():
-        return
-
-    elapsed = time.time() - _last_trigger.get("holiday_boost", 0)
-    if not force and elapsed < 2 * 3600:
-        return
-
-    if not force:
-        now = datetime.now()
-        if not (10 <= now.hour < 22):
-            return
-
-    oid = _owner_id()
-    if not oid:
-        return
-
-    today = date.today()
-    m = today.month
-    holiday_name = "五一" if m == 5 else "国庆"
-
-    try:
-        from core.memory.event_log import get_highlights
-        from core.data_paths import DEFAULT_CHAR_ID
-        from core.scheduler.loop import _active_char_id_or_none
-        highlights = get_highlights(oid, days=2, char_id=_active_char_id_or_none() or DEFAULT_CHAR_ID)
-        context_hint = f"\n{highlights}" if highlights else ""
-
-        await _pipeline_send(
-            f"（{holiday_name}假期，你知道她没什么事，理直气壮地来找她。）{context_hint}",
-            trigger_name="holiday_boost",
-            recall_policy="none",
-        )
-        _mark("holiday_boost")
-        logger.info(f"[scheduler] 长假加速触发: {holiday_name}")
-    except Exception as e:
-        log_error("scheduler._check_holiday_boost", e)
 
 
 def propose_festival(ctx: dict | None = None):

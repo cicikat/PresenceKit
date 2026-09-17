@@ -113,7 +113,7 @@ def test_proposer_returns_grounded_quiet_proposal(monkeypatch):
         "core.config_loader.get_config",
         lambda: {"scheduler": {"overflow_trigger": True}},
     )
-    monkeypatch.setattr(loop, "_is_ready", lambda name: True)
+    monkeypatch.setattr(loop, "_is_ready", lambda name, **_kwargs: True)
     monkeypatch.setattr(loop, "_owner_id", lambda: "owner")
     monkeypatch.setattr(loop, "_active_char_id_or_none", lambda: "character_b")
     monkeypatch.setattr(overflow, "compute_signals", lambda uid, *, char_id: signals)

@@ -63,14 +63,14 @@ def test_night_propose_uses_logical_day_dedupe(monkeypatch):
     now = datetime(2026, 5, 24, 1, 30)
     monkeypatch.setattr(time_based, "_cfg", lambda: {"night_reminder": True})
     monkeypatch.setattr("core.scheduler.rhythm.is_present", lambda now=None: True)
-    monkeypatch.setattr("core.scheduler.rhythm.triggered_on_logical_day", lambda name, now=None: False)
+    monkeypatch.setattr("core.scheduler.rhythm.triggered_on_logical_day", lambda name, now=None, **_kwargs: False)
 
     proposal = time_based.propose_night_reminder({"now_dt": now, "now_ts": now.timestamp()})
 
     assert proposal.trigger_name == "night_reminder"
     assert 0.50 <= proposal.urgency <= 0.69
 
-    monkeypatch.setattr("core.scheduler.rhythm.triggered_on_logical_day", lambda name, now=None: True)
+    monkeypatch.setattr("core.scheduler.rhythm.triggered_on_logical_day", lambda name, now=None, **_kwargs: True)
     assert time_based.propose_night_reminder({"now_dt": now, "now_ts": now.timestamp()}) is None
 
 
@@ -92,7 +92,7 @@ def test_daily_journal_propose_requires_quiet_floor(monkeypatch):
     now = datetime(2026, 5, 23, 23, 30)
     monkeypatch.setattr(time_based, "_cfg", lambda: {"enabled": True})
     monkeypatch.setattr(time_based, "_owner_id", lambda: "u1")
-    monkeypatch.setattr("core.scheduler.rhythm.triggered_on_logical_day", lambda name, now=None: False)
+    monkeypatch.setattr("core.scheduler.rhythm.triggered_on_logical_day", lambda name, now=None, **_kwargs: False)
     monkeypatch.setattr("core.scheduler.rhythm.quiet_floor_elapsed", lambda uid, now_ts=None: False)
 
     assert time_based.propose_daily_journal({"now_dt": now, "now_ts": now.timestamp()}) is None
@@ -112,7 +112,7 @@ def test_diary_reminder_propose_keeps_diary_quiet_and_missing_gates(monkeypatch)
     monkeypatch.setattr(diary, "_owner_id", lambda: "u1")
     monkeypatch.setattr("core.scheduler.rhythm.has_real_interaction_history", lambda uid, **kw: True)
     monkeypatch.setattr("core.scheduler.rhythm.quiet_floor_elapsed", lambda uid, now_ts=None: True)
-    monkeypatch.setattr("core.scheduler.rhythm.triggered_on_logical_day", lambda name, now=None: False)
+    monkeypatch.setattr("core.scheduler.rhythm.triggered_on_logical_day", lambda name, now=None, **_kwargs: False)
     monkeypatch.setattr("core.tools.diary_reader.has_any_diary_entry", lambda: True)
     monkeypatch.setattr("core.tools.diary_reader.yesterday_missing", lambda: True)
 
@@ -134,7 +134,7 @@ def test_diary_reminder_propose_skips_when_diary_never_used(monkeypatch):
     monkeypatch.setattr(diary, "_owner_id", lambda: "u1")
     monkeypatch.setattr("core.scheduler.rhythm.has_real_interaction_history", lambda uid, **kw: True)
     monkeypatch.setattr("core.scheduler.rhythm.quiet_floor_elapsed", lambda uid, now_ts=None: True)
-    monkeypatch.setattr("core.scheduler.rhythm.triggered_on_logical_day", lambda name, now=None: False)
+    monkeypatch.setattr("core.scheduler.rhythm.triggered_on_logical_day", lambda name, now=None, **_kwargs: False)
     monkeypatch.setattr("core.tools.diary_reader.has_any_diary_entry", lambda: False)
     monkeypatch.setattr("core.tools.diary_reader.yesterday_missing", lambda: True)
 

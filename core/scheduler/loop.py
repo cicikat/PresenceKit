@@ -85,6 +85,18 @@ def _cooldown_key(name: str, char_id: str | None = None) -> str:
     """Return a per-character key when char_id is explicit; legacy callers stay global."""
     return f"{char_id}:{name}" if char_id else name
 
+
+def _latest_trigger_ts(name: str, *, char_id: str | None = None) -> float:
+    """Read the cooldown mark that matches the requested scope.
+
+    Speech cooldowns are per-character. A scoped read never consults the bare
+    global key, so one character cannot suppress another. True-global
+    maintenance callers omit char_id and keep using the bare name.
+    """
+    _ensure_persistent_state_loaded()
+    return float(_last_trigger.get(_cooldown_key(name, char_id), 0) or 0)
+
+
 def _migrate_scheduler_state_once():
     """一次性迁移：拆分旧 scheduler_state.json → cooldowns + user_state，完成后删旧文件。"""
     old_path = get_paths()._p("scheduler_state.json")
@@ -228,7 +240,7 @@ def _cfg_retention() -> dict:
 def _is_ready(name: str, *, char_id: str | None = None) -> bool:
     """检查触发器是否已度过冷却期（正式冷却 + 失败退避 attempt-cooldown 均需通过，A4）。"""
     _ensure_persistent_state_loaded()
-    elapsed = time.time() - _last_trigger.get(_cooldown_key(name, char_id), 0)
+    elapsed = time.time() - _latest_trigger_ts(name, char_id=char_id)
     if elapsed < _COOLDOWNS.get(name, 3600):
         return False
     return _attempt_cooldown_ready(name, char_id=char_id)
@@ -844,8 +856,15 @@ def get_status() -> dict:
 
     now = time.time()
     result = {}
+    from core.scheduler.gating import MAINTENANCE_ONLY_TRIGGERS
+    scoped_char_id = _active_char_id_or_none()
     for name, cooldown in _COOLDOWNS.items():
-        last = _last_trigger.get(name, 0)
+        # Maintenance marks stay uid-global. Speech / letter cooldowns are
+        # per-character so the panel follows the currently frozen/active char.
+        last = _latest_trigger_ts(
+            name,
+            char_id=None if name in MAINTENANCE_ONLY_TRIGGERS else scoped_char_id,
+        )
         elapsed = now - last if last > 0 else cooldown + 1
         remaining = max(0, cooldown - elapsed)
         cfg_key = _TRIGGER_CONFIG_KEYS.get(name)
@@ -966,23 +985,12 @@ async def _loop():
             from core.autonomy.effective_state import scheduler_enabled
             if scheduler_enabled(cfg):
                 from core.scheduler.triggers.time_based import (
-                    _check_morning, _check_night, _check_random_message,
-                    _check_weather, _check_daily_journal, _check_episodic_decay,
+                    _check_weather, _check_episodic_decay,
                     _check_inner_diary_write,
-                    _check_spontaneous_recall, check_activity_switch,
+                    check_activity_switch,
                     _check_dlq_monitor,
                 )
-                from core.scheduler.triggers.diary import (
-                    _check_diary_reminder, _check_diary_inject, _check_diary_share_reminder,
-                )
-                from core.scheduler.triggers.period import _check_period
-                from core.scheduler.triggers.memory import _check_topic_followup
-                from core.scheduler.triggers.birthday import (
-                    _check_birthday_midnight, _check_birthday_eve,
-                    _check_birthday_afternoon, _check_birthday_night,
-                )
-                from core.scheduler.triggers.timenode import _check_timenode
-                from core.scheduler.triggers.festival import _check_festival, _check_holiday_boost
+                from core.scheduler.triggers.diary import _check_diary_inject
                 from core.scheduler.triggers.episodic_sweep import _check_episodic_sweep
                 from core.scheduler.triggers.garden_water import _check_garden_water
                 from core.scheduler.triggers.garden_daily import _check_garden_daily
@@ -1057,15 +1065,14 @@ async def _loop():
                     except Exception as exc:
                         logger.error("[scheduler] autonomy tick failed: %s", exc, exc_info=True)
 
+                # Gather keeps real maintenance, weather cache refresh, sensor
+                # signal production, and Runtime schedule delivery. Migrated
+                # speech _check_* shells are retired; their proposers feed
+                # run_shadow_tick() above and never re-enter this loop.
                 _trigger_names = [
-                    "morning", "night", "random_message", "weather",
-                    "reminders", "period", "diary_reminder", "diary_inject",
-                    "daily_journal", "episodic_decay", "inner_diary_write",
-                    "spontaneous_recall",
-                    "diary_share_reminder", "topic_followup",
-                    "birthday_midnight", "birthday_eve",
-                    "birthday_afternoon", "birthday_night",
-                    "timenode", "festival", "holiday_boost",
+                    "weather",
+                    "reminders", "diary_inject",
+                    "episodic_decay", "inner_diary_write",
                     "activity_switch", "dlq_monitor", "log_maintenance",
                     "episodic_sweep", "garden_water", "garden_daily",
                     "hidden_state_decay", "hidden_state_consolidate",
@@ -1077,27 +1084,11 @@ async def _loop():
                     "interest_seed", "practice",
                 ]
                 _trigger_results = await asyncio.gather(
-                    _check_morning(),
-                    _check_night(),
-                    _check_random_message(),
                     _check_weather(),
                     _check_reminders(),
-                    _check_period(),
-                    _check_diary_reminder(),
                     _check_diary_inject(),
-                    _check_daily_journal(),
                     _check_episodic_decay(),
                     _check_inner_diary_write(),
-                    _check_spontaneous_recall(),
-                    _check_diary_share_reminder(),
-                    _check_topic_followup(),
-                    _check_birthday_midnight(),
-                    _check_birthday_eve(),
-                    _check_birthday_afternoon(),
-                    _check_birthday_night(),
-                    _check_timenode(),
-                    _check_festival(),
-                    _check_holiday_boost(),
                     check_activity_switch(),
                     _check_dlq_monitor(),
                     _check_log_maintenance(),

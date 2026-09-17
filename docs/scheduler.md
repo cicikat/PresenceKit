@@ -127,8 +127,10 @@ proposal、记录 `data/logs/gating_shadow.jsonl`，再根据 `core/scheduler/ex
 winner（含 Watch 事件到达路径）均先经 `gating._decide()`，再由
 `execute_prompt(dry_run=False)` 真正发送，成功后才 `_mark()`。
 
-随后 `loop.py` 仍用 `asyncio.gather(..., return_exceptions=True)` 跑 legacy `_check_*`。
-已迁移触发器会通过 `legacy_tick_should_send()` 在 live 模式下让路；维护型扫描
+随后 `loop.py` 仍用 `asyncio.gather(..., return_exceptions=True)` 跑 **真实维护**
+与缓存刷新（天气、sensor 候选、Runtime 备忘录投递、`letter_writer` 由 gating 的
+active executor 发送 SMTP）。已迁移发言 `_check_*` 已从 gather 删除；它们的
+proposer 只经 `run_shadow_tick()` 产 signal，不再有 live 模式让路垫片。维护型扫描
 （如 `garden_water`、`garden_daily`、`episodic_sweep`、`log_maintenance`、`hidden_state_decay`、`hidden_state_consolidate`、`event_log_salvage`、`memory_janitor`）仍需执行状态变更。
 
 ```
@@ -137,7 +139,7 @@ sensor tick ─feed_sensor_tick───→ state_machine
                                   ↓
 loop.py tick ──gating log──→ logs/gating_shadow.jsonl
         │      └─ winner ──migrated──→ autonomy signal；compatibility──→ _pipeline_send()
-        └────legacy/maintenance asyncio.gather──→ 未迁移检查或状态扫描
+        └────legacy/maintenance asyncio.gather──→ 维护扫描 / 天气缓存 / sensor 候选 / Runtime 备忘录
 ```
 
 `MIGRATED_TRIGGERS` 中的 winner 不再调用 LLM、`turn_sink` 或 channel；兼容边界
@@ -347,15 +349,16 @@ scheduler:
 
 已迁移 proposer 覆盖：watch（`hr_critical/hr_high/sleep_end`）、生日四档、`period_reminder`、
 time_based 的早晚安/随机/天气/日记/主动回忆、diary 两档、`timenode`、`festival/holiday_boost`、
-`reminders`、`topic_followup`、`overflow`、`dream_exit`、`letter_writer`、花园伴生事件（bloom/harvest/handle/vase）。`garden_water`、
+`reminders`、`topic_followup`、`overflow`、`dream_exit`、花园伴生事件（bloom/harvest/handle/vase）。
+`letter_writer` 仍是 gating `active` executor（SMTP），不是 migrated signal。`garden_water`、
 `garden_daily` 扫描本体、`episodic_sweep`、`episodic_decay`、`dlq_monitor`、`sensor_aware`
 仍只走 legacy 真实检查或事件驱动路径。
 
-`run_shadow_tick()` 如果选中了带 `execute` 的 proposal，会按模式调用 `execute()`：
-dry-run 写 would-send / would-mark；live 真实调用 `_pipeline_send()`。Watch 心率和睡醒事件到达时，
+`run_shadow_tick()` 对 `migrated` winner 只入 autonomy signal，不调用历史 prompt
+`execute()`。`active` winner（如 `letter_writer`）仍走自有 executor。Watch 心率和睡醒事件到达时，
 `watch.py::on_watch_event()` 通过 `gating.decide_and_execute_event()` 进入同一套 `_decide()`；
-普通 tick 也可重试缓存 proposal。`WATCH_EXECUTE_MODE` 仅控制事件到达时立即 live 或 dry-run，
-是 rollback/config switch，不能绕过 gating/policy。
+migrated Watch 同样只排队 signal。普通 tick 也可重试缓存 proposal。`WATCH_EXECUTE_MODE`
+仅控制事件到达时立即 live 或 dry-run，是 rollback/config switch，不能绕过 gating/policy。
 urgency 分档统一由 `core/scheduler/urgency.py` 提供。同一个日志也记录 live execute 被 `_pipeline_send()` 拦下的
 `blocked=true` 条目，用于观察 active window 真实拦截分布；该日志只做可观测性，不改变发送、
 mark 或重试行为。
@@ -541,16 +544,18 @@ owner QQ 消息
     │            ├─ force_send_names 豁免   → 过期 defer + on_defer_expire=force_send
     │            └─ 被过滤 defer → enqueue_defer(uid, name)  (R2-D)
     │         4. DND filter                 → is_dnd(uid), emergency 豁免
-    │         5. cooldown filter            → _is_ready(name)
+    │         5. cooldown filter            → _is_ready(name, char_id=) 角色键；维护省略 char_id
     │         6. max urgency 选 winner
     │         7. release_defer(uid, winner) → defer_queue 释放 (R2-D)
     │     ↓ winner.execute(dry_run=False)
-    │         → migrated: signal-first（不进入 pipeline）
+    │         → migrated: signal-first（不进入 pipeline，不跑历史 prompt executor）
+    │         → active（如 letter_writer）: 自有 executor（SMTP），不经 autonomy signal
     │         → compatibility: execute_prompt() → _pipeline_send() → perceive_event gate
     │           → conversation_lock → run_llm → record_assistant_turn → _mark
     └─ legacy asyncio.gather(_check_*...)
-          speaking 触发器: legacy_tick_should_send()=False → 让路（no-op）
-          maintenance 触发器: 正常执行（不发言，不受 gating/DND 影响）
+          只保留维护、天气缓存、sensor 候选、Runtime 备忘录
+          已迁移发言 `_check_*` 已删除；live gather 不再依赖
+          `legacy_tick_should_send()` 让路垫片挡双发
 ```
 
 **最终合约**：
@@ -566,8 +571,8 @@ owner QQ 消息
 | 编号 | 执行面 | 文件 | 状态 |
 |---|---|---|---|
 | S1 | **Gating/Proposer live 路径** | `gating.py::run_shadow_tick()` → signal 或 compatibility executor | migrated winner 只入 autonomy signal；仅未迁移 compatibility trigger 进入 `_pipeline_send()` |
-| S2 | **Legacy `_check_*` gather 路径** | `loop.py::_loop()` → `asyncio.gather(_check_*...)` | 生产活跃；speaking 触发器通过 `legacy_tick_should_send()` 在 live 模式下让路，维护型触发器仍正常运行 |
-| S3 | **`legacy_tick_should_send()` 让路垫片** | `execution.py` | 当前 `EXECUTE_MODE="live"` → 返回 False，阻止 legacy speaking 触发器双发 |
+| S2 | **Legacy `_check_*` gather 路径** | `loop.py::_loop()` → `asyncio.gather(_check_*...)` | 只保留维护、天气缓存、sensor 候选与 Runtime 备忘录；已迁移发言检查已删除 |
+| S3 | **`legacy_tick_should_send()` 兼容垫片** | `execution.py` | 仍供 force/debug 与旧测试使用；live gather 不再依赖它挡住双发 |
 | S4 | **Watch 事件到达 adapter** | `triggers/watch.py` → `gating.decide_and_execute_event()` | `WATCH_EXECUTE_MODE` 仅切换事件到达时 live/dry-run；hr_critical/hr_high/sleep_end 均经过 `_decide()`，普通 tick 可重试缓存 proposal |
 | S5 | **sensor_aware signal-first 路径** | `triggers/sensor_aware.py` → `core/autonomy/signal_adapters.py` | `handle_tick()` 只入 signal store；autonomy runner 合并 opportunity，显式 `talk_owner` 后才进入 `talk_gate.send()` / `record_assistant_turn()`。旧 `output_mode="return"` 分支在源码 `return` 后封存 |
 | S6 | **policy.py 決策表** | `policy.py` | **R2-C 完成**；gating._decide() 以 POLICY_TABLE 为单一权威；_pipeline_send 不再参与决策 |
@@ -579,13 +584,13 @@ owner QQ 消息
 
 | 触发器 | 文件 | 让路逻辑 |
 |---|---|---|
-| morning_greeting, night_reminder, random_message, weather_alert, daily_journal, spontaneous_recall | time_based.py | `legacy_tick_should_send()` 让路 + proposer 接管；daily_journal 只负责发言，不再写日记（见类型四 `inner_diary_write`）|
-| diary_reminder, diary_share_reminder | diary.py | 同上 |
-| period_reminder | period.py | 同上 |
-| birthday_midnight/eve/afternoon/night | birthday.py | 同上 |
-| timenode, festival, holiday_boost | timenode.py / festival.py | 同上 |
-| reminders | reminders.py | 同上（proposer 路径，after_send 才 mark_done）|
-| topic_followup | memory.py | legacy `_check_topic_followup` 是 no-op stub，proposer 接管 |
+| morning_greeting, night_reminder, random_message, weather_alert, daily_journal, spontaneous_recall | time_based.py | proposer 接管；`_check_weather()` 只刷新缓存，不发言；daily_journal 只负责发言，日记文件由类型四 `inner_diary_write` 写 |
+| diary_reminder, diary_share_reminder | diary.py | proposer 接管；legacy `_check_*` 已删除 |
+| period_reminder | period.py | proposer 接管；legacy `_check_period` 已删除 |
+| birthday_midnight/eve/afternoon/night | birthday.py | proposer 接管；legacy `_check_birthday_*` 已删除 |
+| timenode, festival, holiday_boost | timenode.py / festival.py | proposer 接管；legacy `_check_*` 已删除 |
+| reminders | reminders.py | proposer 接管；Runtime due schedules 另由 `_check_reminders()` 经 talk_gate 投递 |
+| topic_followup | memory.py | proposer 接管；legacy stub 已删除 |
 | garden_bloom | garden_water.py | legacy 通过 `legacy_send` 变量门控 + proposer 接管 |
 | garden_harvest_expired/handle_ask/handle_gift/handle_self/vase_wilted | garden_daily.py | 同上 |
 
@@ -666,7 +671,7 @@ owner QQ 消息
 2. ✅ `loop._legacy_dnd_blocks()` 已删除
 3. ✅ `_pipeline_send()` 中无任何 active-window / DND 过滤（执行层仅 send + mark）
 4. ✅ 全量发言 trigger（28 个）均有 proposer 注册，均在 `MIGRATED_TRIGGERS` 中
-5. ✅ Legacy speaking `_check_*` 通过 `legacy_tick_should_send()` 在 live 模式让路（维护型保留）
+5. ✅ Legacy speaking `_check_*` 已从 gather 删除；维护型与天气缓存保留
 6. ✅ `_HIGH_PRIORITY_TRIGGERS` 保留为文档/测试断言常量
 
 **R2-D 完成情况（2026-06-11）**：
@@ -1164,8 +1169,8 @@ has_real_interaction_history(uid, *, char_id=None, min_turns=COLD_START_MIN_REAL
 
 | 触发器 | 接入点 |
 |---|---|
-| `diary_reminder` | `_check_diary_reminder()` / `propose_diary_reminder()`（`diary.py`），额外接入 `diary_reader.has_any_diary_entry()`：即使聊天轮数够了，只要日记目录（`obsidian_path` 或本地 `diary_fallback/`）从没出现过一篇日记，也不触发——不能把"从没配置/从没写过"读成"漏了一天"（用户复核追加，2026-07-18） |
-| `diary_share_reminder` | `_check_diary_share_reminder()` / `propose_diary_share_reminder()`（`diary.py`），同时把 `_last_diary_share <= 0`（从未分享过）与"分享过但已过 3 天"拆开，前者一律不触发 |
+| `diary_reminder` | `propose_diary_reminder()`（`diary.py`），额外接入 `diary_reader.has_any_diary_entry()`：即使聊天轮数够了，只要日记目录（`obsidian_path` 或本地 `diary_fallback/`）从没出现过一篇日记，也不触发——不能把"从没配置/从没写过"读成"漏了一天"（用户复核追加，2026-07-18） |
+| `diary_share_reminder` | `propose_diary_share_reminder()`（`diary.py`），同时把 `_last_diary_share <= 0`（从未分享过）与"分享过但已过 3 天"拆开，前者一律不触发 |
 | `interest_seed` | `_check_interest_seed()`（`interest_seed.py`） |
 
 `festival`/`timenode`/`holiday_boost`/`overflow`/`letter_writer`/`presence_nag` 未接入：

@@ -131,7 +131,7 @@ retains its `dream_id` lifecycle evidence.
 opportunity creation, admission, blocking, model silence, tools-only, talk-gate
 rejection and delivered talk; prompt snapshots remain admin-only.
 
-`core/scheduler/gating.py::MIGRATED_TRIGGERS` 是 retired-speech registry。集合中的名称仍可能出现在 cooldown、proposer 或 audit code 中，但 gating layer 永远不会运行它们的 executor，兼容性 `_pipeline_send` boundary 只能持久化 signal。范围包括 time-based greeting/reminder 和 recall、watch 与 sensor event、diary 与 period reminder、overflow、presence nag、dream exit、festival/timenode、garden event、coplay commentary 和 letter writer。
+`core/scheduler/gating.py::MIGRATED_TRIGGERS` 是 retired-speech registry。集合中的名称仍可能出现在 cooldown、proposer 或 audit code 中，但 gating layer 永远不会运行它们的 executor，兼容性 `_pipeline_send` boundary 只能持久化 signal。范围包括 time-based greeting/reminder 和 recall、watch 与 sensor event、diary 与 period reminder、overflow、presence nag、dream exit、festival/timenode、garden event、coplay commentary。`letter_writer` 是 `active` executor（SMTP 投递，不经 autonomy signal）。发言冷却按角色键 `{char_id}:{name}` 写入；必要的跨触发器全局限流仍是 `ProactiveLedger.can_send(uid=)`，不是全局 `_mark(name)` 双写。
 
 Maintenance-only task 有意不在该 registry 中。例如 `diary_inject`、episodic/log cleanup、memory janitor、event-log salvage、hidden-state decay/consolidation、storyline aggregation 和 garden state maintenance。它们继续修改自己拥有的 state，但不会创建 assistant turn 或进入 `talk_owner`。
 
