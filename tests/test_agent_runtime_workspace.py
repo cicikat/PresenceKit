@@ -172,7 +172,15 @@ async def test_workspace_tool_create_then_read_has_one_receipt(monkeypatch, tmp_
     assert "finished" in read
     tasks = observability_snapshot(uid="workspace-owner", char_id="workspace-character")
     assert tasks["status_counts"] == {"succeeded": 1}
-    assert tasks["entries"][0]["result_metadata"]["counters"]["version"] == 1
+    entry = tasks["entries"][0]
+    assert entry["result_metadata"]["counters"]["version"] == 1
+    assert entry["causation_ref"]["kind"] == "tool_request"
+    assert entry["causation_ref"]["kind"] != "reality_turn"
+    assert entry["request_fingerprint"]
+    raw = sandbox.agent_runtime_task_state("workspace-owner", char_id="workspace-character").read_text(encoding="utf-8")
+    assert "result.md" not in raw
+    assert '"content"' not in raw
+    assert "reality_turn" not in raw
 
 
 @pytest.mark.asyncio
@@ -188,7 +196,8 @@ async def test_workspace_duplicate_running_receipt_never_reexecutes(monkeypatch,
     idem = hashlib.sha256("create\0pending.md\0content".encode("utf-8")).hexdigest()
     task, _ = create_task(
         principal, capability="workspace.create", source="tool", idempotency_key=idem,
-        ttl_seconds=300, causation_ref=CausationRef("reality_turn", idem),
+        ttl_seconds=300, causation_ref=CausationRef("tool_request", idem),
+        request_fingerprint=idem,
     )
     assert claim_next(principal, task_id=task["task_id"], capabilities={"workspace.create"}) is not None
 

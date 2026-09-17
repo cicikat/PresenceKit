@@ -57,6 +57,30 @@ def test_create_is_idempotent_and_conflicting_payload_is_rejected(sandbox):
         _create(capability="local.write")
 
 
+def test_tool_request_causation_is_not_labeled_reality_turn(sandbox):
+    fingerprint = "a" * 64
+    created, _ = _create(
+        source="tool",
+        causation_ref=CausationRef("tool_request", fingerprint),
+        request_fingerprint=fingerprint,
+        idempotency_key="tool-request-1",
+    )
+    assert created["causation_ref"]["kind"] == "tool_request"
+    assert created["request_fingerprint"] == fingerprint
+    with pytest.raises(TaskManagerError, match="invalid_causation_ref"):
+        _create(
+            source="tool",
+            causation_ref=CausationRef("request_hash", fingerprint),
+            idempotency_key="tool-request-bad",
+        )
+    raw = sandbox.agent_runtime_task_state(UID, char_id=CHAR).read_text(encoding="utf-8")
+    snapshot = observability_snapshot(uid=UID, char_id=CHAR)
+    assert snapshot["entries"][0]["causation_ref"]["kind"] == "tool_request"
+    assert snapshot["entries"][0]["request_fingerprint"] == fingerprint
+    assert snapshot["entries"][0]["causation_ref"]["kind"] != "reality_turn"
+    assert "request_hash" not in raw
+
+
 def test_restart_recovery_marks_running_unknown_without_replay(sandbox):
     created, _ = _create()
     lease = claim_next(TaskPrincipal.reality(UID, CHAR), now=1_001.0, lease_seconds=60)

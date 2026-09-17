@@ -56,6 +56,13 @@ class TaskPrincipal:
 
 @dataclass(frozen=True)
 class CausationRef:
+    """Bounded lineage pointer. ``kind`` names the identity namespace.
+
+    ``reality_turn`` is a canonical visible turn ID. ``tool_request`` is an
+    explicit request fingerprint when execute() has no turn ID. Do not label a
+    content/path hash as ``reality_turn``.
+    """
+
     kind: str
     reference: str
 

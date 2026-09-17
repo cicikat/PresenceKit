@@ -35,7 +35,13 @@ _NAME_RE = re.compile(r"^[a-z][a-z0-9_.:-]{0,127}$")
 _CODE_RE = re.compile(r"^[a-z0-9][a-z0-9_.:-]{0,127}$")
 _TASK_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 _DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
-_CAUSATION_KINDS = frozenset({"reality_turn", "signal", "admin_action", "parent_task"})
+_CAUSATION_KINDS = frozenset({
+    "reality_turn",
+    "signal",
+    "admin_action",
+    "parent_task",
+    "tool_request",
+})
 _RESULT_KEYS = frozenset({"outcome_code", "artifact_ids", "counters", "truncated"})
 
 

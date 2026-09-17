@@ -105,6 +105,10 @@ Equal strings never make identities interchangeable.
 `causation_ref` is optional, immutable, bounded lineage metadata (typed source, opaque reference,
 digest). It is not evidence or authority and contains no text, prompt, tool data, secret, full path,
 or `EventContext` payload. It cannot restore the source turn's scope, permissions, or lock.
+`kind=reality_turn` is reserved for a canonical visible `turn_id`. Workspace mutating tools currently
+receive no turn ID from `execute()`, so they persist `kind=tool_request` plus the request fingerprint
+digest; a content/path hash must never be labeled `reality_turn`. Historical stored kinds are left
+unchanged.
 
 ```text
 I1 -> EventContext(I1) -> T1 -> create K1(causation_ref=T1)
@@ -315,5 +319,6 @@ configured roots, rejects project `data/`, sensitive names, symlinks, unsupporte
 `remote_server` mode. `read`, `list`, `create`, `update`, and `delete` are independent permissions;
 writes use atomic replacement and bounded file/total/concurrency limits. Mutating tool calls create a
 Reality Task Manager receipt and expose only metadata (`task_id`, operation, size, digest, version),
-never content or absolute paths. Delete requires an explicit confirmation flag. Dream has no adapter or
-access to the Reality workspace.
+never content or absolute paths. The receipt's `causation_ref.kind` is `tool_request` with the request
+fingerprint; it is not a `reality_turn`. Delete requires an explicit confirmation flag. Dream has no
+adapter or access to the Reality workspace.

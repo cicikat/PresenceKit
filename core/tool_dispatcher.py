@@ -599,14 +599,29 @@ async def _workspace_read_wrapper(path: str, *, user_id: str | None = None, char
     return read_workspace(TaskPrincipal.reality(user_id or "", char_id or ""), path)
 
 
+def _workspace_tool_request(idem: str):
+    """Workspace execute() has no canonical turn_id; bind the request fingerprint."""
+    from core.agent_runtime.models import CausationRef
+    return CausationRef("tool_request", idem)
+
+
 async def _workspace_write_wrapper(path: str, content: str, *, operation: str, confirmed: bool = False, user_id: str | None = None, char_id: str | None = None) -> str:
     from core.agent_runtime.workspace import write_workspace
-    from core.agent_runtime.models import TaskPrincipal, RetryPolicy, CausationRef
+    from core.agent_runtime.models import TaskPrincipal, RetryPolicy
     from core.agent_runtime.task_manager import create_task, claim_next, complete_task, fail_task
     principal = TaskPrincipal.reality(user_id or "", char_id or "")
     capability = f"workspace.{operation}"
     idem = hashlib.sha256((operation + "\0" + path + "\0" + content).encode("utf-8")).hexdigest()
-    receipt, created = create_task(principal, capability=capability, source="tool", idempotency_key=idem, ttl_seconds=300, retry_policy=RetryPolicy.NEVER.value, causation_ref=CausationRef("reality_turn", idem))
+    receipt, created = create_task(
+        principal,
+        capability=capability,
+        source="tool",
+        idempotency_key=idem,
+        ttl_seconds=300,
+        retry_policy=RetryPolicy.NEVER.value,
+        causation_ref=_workspace_tool_request(idem),
+        request_fingerprint=idem,
+    )
     if not created and receipt["status"] in {"succeeded", "failed", "canceled", "expired", "outcome_unknown"}:
         return json.dumps({"receipt": receipt["task_id"], "status": receipt["status"], "duplicate": True}, ensure_ascii=False)
     lease = claim_next(principal, task_id=receipt["task_id"], capabilities={capability})
@@ -633,11 +648,20 @@ async def _workspace_update_wrapper(path: str, content: str, *, confirmed: bool 
 
 async def _workspace_delete_wrapper(path: str, *, confirmed: bool = False, user_id: str | None = None, char_id: str | None = None) -> str:
     from core.agent_runtime.workspace import delete_workspace
-    from core.agent_runtime.models import TaskPrincipal, RetryPolicy, CausationRef
+    from core.agent_runtime.models import TaskPrincipal, RetryPolicy
     from core.agent_runtime.task_manager import create_task, claim_next, complete_task, fail_task
     principal = TaskPrincipal.reality(user_id or "", char_id or "")
     idem = hashlib.sha256(("delete\0" + path).encode("utf-8")).hexdigest()
-    receipt, created = create_task(principal, capability="workspace.delete", source="tool", idempotency_key=idem, ttl_seconds=300, retry_policy=RetryPolicy.NEVER.value, causation_ref=CausationRef("reality_turn", idem))
+    receipt, created = create_task(
+        principal,
+        capability="workspace.delete",
+        source="tool",
+        idempotency_key=idem,
+        ttl_seconds=300,
+        retry_policy=RetryPolicy.NEVER.value,
+        causation_ref=_workspace_tool_request(idem),
+        request_fingerprint=idem,
+    )
     if not created and receipt["status"] in {"succeeded", "failed", "canceled", "expired", "outcome_unknown"}:
         return json.dumps({"receipt": receipt["task_id"], "status": receipt["status"], "duplicate": True}, ensure_ascii=False)
     lease = claim_next(principal, task_id=receipt["task_id"], capabilities={"workspace.delete"})
@@ -656,11 +680,20 @@ async def _workspace_delete_wrapper(path: str, *, confirmed: bool = False, user_
 
 async def _workspace_undo_wrapper(path: str, *, confirmed: bool = False, user_id: str | None = None, char_id: str | None = None) -> str:
     from core.agent_runtime.workspace import undo_workspace
-    from core.agent_runtime.models import TaskPrincipal, RetryPolicy, CausationRef
+    from core.agent_runtime.models import TaskPrincipal, RetryPolicy
     from core.agent_runtime.task_manager import create_task, claim_next, complete_task, fail_task
     principal = TaskPrincipal.reality(user_id or "", char_id or "")
     idem = hashlib.sha256(("undo\0" + path).encode("utf-8")).hexdigest()
-    receipt, created = create_task(principal, capability="workspace.update", source="tool", idempotency_key=idem, ttl_seconds=300, retry_policy=RetryPolicy.NEVER.value, causation_ref=CausationRef("reality_turn", idem))
+    receipt, created = create_task(
+        principal,
+        capability="workspace.update",
+        source="tool",
+        idempotency_key=idem,
+        ttl_seconds=300,
+        retry_policy=RetryPolicy.NEVER.value,
+        causation_ref=_workspace_tool_request(idem),
+        request_fingerprint=idem,
+    )
     if not created and receipt["status"] in {"succeeded", "failed", "canceled", "expired", "outcome_unknown"}:
         return json.dumps({"receipt": receipt["task_id"], "status": receipt["status"], "duplicate": True}, ensure_ascii=False)
     lease = claim_next(principal, task_id=receipt["task_id"], capabilities={"workspace.update"})

@@ -47,6 +47,7 @@ def test_contract_freezes_identity_realm_and_soak_boundaries() -> None:
         "task_id",
         "ingress_event_id",
         "turn_id",
+        "tool_request",
         "causation_ref",
         "outcome_unknown",
         "Dream create/read/cancel/capability denial",
