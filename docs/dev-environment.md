@@ -145,7 +145,8 @@ Windows 沙箱中内置浏览器可能因 `CreateProcessAsUserW failed: 5` 无�
 - 重要命令若因明确的沙箱写权限或进程权限失败，应对**同一条、范围明确的命令**申请权限后重跑。
 - 不要通过改写到别的 shell、关闭安全检查或扩大全局配置来绕过沙箱。
 - `Get-NetTCPConnection` / `Get-CimInstance` 在沙箱中可能报拒绝访问；需要识别或停止自己启动的服务时，申请范围明确的权限，并严格核对端口与命令行。
-- `git diff --check` 仅在本次实际修改的仓库、文件上运行，换行符警告不等于 diff 错误。
+- 换行以仓库 `.gitattributes` 为准：文本 LF，`*.bat` / `*.cmd` CRLF；本机不要改 `core.autocrlf` 来代替它。
+- `git diff --check` 仅在本次实际修改的仓库、文件上运行，换行符警告不等于功能 diff 错误。新的混用 / 非 bat 文件出现 CRLF 应视为 `tests/test_line_endings.py` 失败，不要当噪音忽略。
 
 ---
 
