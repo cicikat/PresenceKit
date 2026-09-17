@@ -1,6 +1,6 @@
 # 9.17 后端综合工单：角色隔离、固定会话与架构债收敛
 
-状态：A/B/C 已提交；D–J 未开始。日期：2026-09-17。
+状态：A/B/C 已提交；D 自动化收尾完成、运行联调待执行；E–J 未开始。日期：2026-09-17。
 用户已授权按本单施工。每张施工子单完成相关验证与差异检查后独立 commit，再开始下一张。
 勾选规则：完成一项且具备证据才勾一项；源码存在、自动测试通过、部署验收分别记账。每张施工子单完成相关验证与差异检查后独立 commit，再开始下一张。
 
@@ -55,11 +55,11 @@
 
 已有实现不重复建设；解析回归可先做，全链会话验收依赖 C。
 
-- [ ] D1 复用 `tests/test_chat_log_turn_id.py`、turn sink 相关测试：同分钟多轮、多段、无 ID、不同 user/assistant ID、正文伪造、归档关联及角色隔离；无真实覆盖才补测。
-- [ ] D2 核对 persisted assistant footer、HTTP turn_id、reasoning archive 的真实关联；transport id 不得填充缺失 canonical ID，旧日志不回写、不按文本/时间补造 ID。
-- [ ] D3 确认部署版本；真实发送后重启桌面，从历史每回合唯一入口读取对应思考；无 ID 无推测入口，无归档空态可重试。手机历史对账与通知回放复用现有 D 成果。
-- [ ] D4 完成跨端 A/B/C 会话、WS 重连/乱序、前后台 poll/ack、撤权及旧服务器降级验收；证据分别标自动/浏览器/真机/not-run。
-- [ ] D5 回填桌面 244、会话交接及运行验收矩阵，后端总账 current/open/observe 与手机工单同步；提交本单实际变更。
+- [x] D1 已复用 `tests/test_chat_log_turn_id.py`、`tests/test_turn_sink.py`、`tests/test_reasoning_turn.py` 与 session scope 角色隔离回归；包含同分钟多轮、多段、无 ID、不同 user/assistant ID、正文伪造与归档关联。均包含在 C 的 262 passed 中。
+- [x] D2 已核对 persisted assistant footer → chat-log `turn_id` → reasoning bind/query 链；HTTP 分开返回 `turn_id`/`msg_id`，无 persisted ID 时仅 mint transport ID，旧日志不回写且不按正文/时间补造。
+- [ ] D3 部署版本、真实发送、桌面重启后历史→思考读取：**not-run**。无 ID 无推测入口与无归档空态已有自动回归；不能替代真实运行验收。
+- [ ] D4 跨端 A/B/C、WS 真实重连/乱序、前后台 poll/ack、撤权及旧服务器降级：自动隔离/撤权/重试已覆盖；浏览器/桌面/真机均 **not-run**。
+- [ ] D5 后端总账已标 current/open/observe；本机桌面 244 与会话交接文件在当前桌面 HEAD 不存在，手机 21 已被并行删除、22 仍在且待消费 C 合同。待两端实际接入时回填各仓与固定 SHA matrix，本轮不伪造完成。
 
 ## E — P1：specialized LLM 显式角色路由
 
