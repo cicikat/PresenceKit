@@ -59,24 +59,34 @@ async def observe(uid: str, dream_id: str, *, world_id: str, char_id: str = DEFA
         dialogue = "\n".join(f"[{t.get('role', '?')}] {str(t.get('content') or '')[:220]}" for t in turns)
         if not dialogue: return
         from core import llm_client
-        raw = await llm_client.chat([{"role": "system", "content": _SYSTEM}, {"role": "user", "content": dialogue[:1800]}], max_tokens_override=280)
+        raw = await llm_client.chat(
+            [{"role": "system", "content": _SYSTEM}, {"role": "user", "content": dialogue[:1800]}],
+            call_category="summary",
+            char_id=char_id,
+            max_tokens_override=280,
+        )
         payload = json.loads(str(raw).replace("```json", "").replace("```", "").strip())
         for item in valid_items(payload):
             await merge(uid, item, dream_id=dream_id, world_id=world_id, char_id=char_id)
     except Exception as exc:
         logger.warning("[invariants] observation skipped uid=%s dream=%s: %s", uid, dream_id, exc)
 
-async def _relation(candidate: dict[str, str], existing: dict[str, Any]) -> str:
+async def _relation(candidate: dict[str, str], existing: dict[str, Any], *, char_id: str) -> str:
     from core import llm_client
     prompt = ("判断 A/B 两条观察是否属于同一反应模式。只回复 same、contradicts 或 different。\n"
               f"A: {existing.get('situation')} -> {existing.get('response')}\nB: {candidate['situation']} -> {candidate['response']}")
-    answer = str(await llm_client.chat([{"role": "user", "content": prompt}], max_tokens_override=12)).strip().lower()
+    answer = str(await llm_client.chat(
+        [{"role": "user", "content": prompt}],
+        call_category="summary",
+        char_id=char_id,
+        max_tokens_override=12,
+    )).strip().lower()
     return answer if answer in {"same", "contradicts", "different"} else "different"
 
 async def merge(uid: str, candidate: dict[str, str], *, dream_id: str, world_id: str, char_id: str = DEFAULT_CHAR_ID) -> None:
     entries, now = load(uid, char_id=char_id), time.time()
     for entry in entries:
-        relation = await _relation(candidate, entry)
+        relation = await _relation(candidate, entry, char_id=char_id)
         if relation == "same":
             entry["count"] = int(entry.get("count") or 0) + 1
             entry["worlds_seen"] = sorted(set(entry.get("worlds_seen") or []) | {world_id})

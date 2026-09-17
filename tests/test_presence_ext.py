@@ -333,7 +333,7 @@ class TestRunAgenticLoopToolCategories:
             return ChatTurn(content="done", tool_calls=[], assistant_message={})
         monkeypatch.setattr("core.llm_client.chat_turn", _fake_chat_turn)
 
-        async def _fake_retry(loop_msgs, text):
+        async def _fake_retry(loop_msgs, text, **_kw):
             return text
         character = _FakeChar(presence_ext={"tool_categories_path_c": ["info", "mcp"]})
         monkeypatch.setattr("core.character_loader.load", lambda _char_id: character)
@@ -369,7 +369,7 @@ class TestRunAgenticLoopToolCategories:
             return ChatTurn(content="done", tool_calls=[], assistant_message={})
         monkeypatch.setattr("core.llm_client.chat_turn", _fake_chat_turn)
 
-        async def _fake_retry(loop_msgs, text):
+        async def _fake_retry(loop_msgs, text, **_kw):
             return text
         pl = self._make_pipeline(character=_FakeChar(presence_ext={}))
         monkeypatch.setattr(pl, "_anti_collapse_prefix_retry", _fake_retry)
@@ -400,7 +400,7 @@ class TestRunAgenticLoopToolCategories:
             return ChatTurn(content="done", tool_calls=[], assistant_message={})
         monkeypatch.setattr("core.llm_client.chat_turn", _fake_chat_turn)
 
-        async def _fake_retry(loop_msgs, text):
+        async def _fake_retry(loop_msgs, text, **_kw):
             return text
         pl = self._make_pipeline(character=_FakeChar(presence_ext={}))
         monkeypatch.setattr(pl, "_anti_collapse_prefix_retry", _fake_retry)
@@ -432,7 +432,7 @@ class TestRunAgenticLoopToolCategories:
             return ChatTurn(content="done", tool_calls=[], assistant_message={})
         monkeypatch.setattr("core.llm_client.chat_turn", _fake_chat_turn)
 
-        async def _fake_retry(loop_msgs, text):
+        async def _fake_retry(loop_msgs, text, **_kw):
             return text
         pl = self._make_pipeline(character=_FakeChar(presence_ext={}))
         monkeypatch.setattr(pl, "_anti_collapse_prefix_retry", _fake_retry)

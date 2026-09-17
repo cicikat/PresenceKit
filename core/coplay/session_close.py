@@ -61,7 +61,7 @@ def _collect_quote_lines(game_state_data: dict, remaining_moments: list) -> list
     return lines[:_MAX_QUOTE_LINES]
 
 
-async def _summarize_session(game_name: str, quote_lines: list[str]) -> str:
+async def _summarize_session(game_name: str, quote_lines: list[str], *, char_id: str) -> str:
     """一次 LLM 调用产出"大概经过"。失败 fail-open 返回 ""。"""
     if not quote_lines:
         return ""
@@ -76,7 +76,7 @@ async def _summarize_session(game_name: str, quote_lines: list[str]) -> str:
             "不要评价好坏，不要煽情，只说事实梗概。"
         )
         messages = [{"role": "user", "content": prompt}]
-        reply = await llm_client.chat(messages, call_category="summary")
+        reply = await llm_client.chat(messages, call_category="summary", char_id=char_id)
         return (reply or "").strip()
     except Exception:
         logger.exception("[coplay_session_close] summarizer LLM 调用失败（fail-open）")
@@ -115,7 +115,7 @@ async def run_session_close(uid: str | int, *, char_id: str = DEFAULT_CHAR_ID) -
     game_st = game_state.read_game_state(uid, game_id, char_id=char_id)
     remaining_moments = observer.drain_moments(str(uid))
     quote_lines = _collect_quote_lines(game_st, remaining_moments)
-    gist = await _summarize_session(game_name, quote_lines)
+    gist = await _summarize_session(game_name, quote_lines, char_id=char_id)
 
     entry_text = _format_log_entry(game_name, game_st.get("progress_markers") or [], gist, quote_lines)
     game_state.append_game_log_entry(uid, game_id, entry_text, char_id=char_id)

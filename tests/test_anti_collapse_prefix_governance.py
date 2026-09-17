@@ -135,7 +135,7 @@ async def test_prefix_retry_not_triggered_when_reply_does_not_match(monkeypatch)
 
     called = {"chat": 0}
 
-    async def _fake_chat(_messages):
+    async def _fake_chat(_messages, **_kwargs):
         called["chat"] += 1
         return "完全不同的开口"
 
@@ -150,7 +150,7 @@ async def test_prefix_retry_strips_filler_prefix_on_second_hit(monkeypatch):
     pipeline = _make_pipeline()
     messages = _history_messages(["嗯。第一条", "第二条", "第三条"], raw={1: "嗯。第二条", 2: "嗯。第三条"})
 
-    async def _fake_chat(_messages):
+    async def _fake_chat(_messages, **_kwargs):
         return "嗯。这次还是这样开头"
 
     monkeypatch.setattr("core.llm_client.chat", _fake_chat)
@@ -163,7 +163,7 @@ async def test_prefix_retry_accepts_retry_result_when_prefix_gone(monkeypatch):
     pipeline = _make_pipeline()
     messages = _history_messages(["嗯。第一条", "第二条", "第三条"], raw={1: "嗯。第二条", 2: "嗯。第三条"})
 
-    async def _fake_chat(_messages):
+    async def _fake_chat(_messages, **_kwargs):
         return "换了个开头说话"
 
     monkeypatch.setattr("core.llm_client.chat", _fake_chat)
@@ -181,7 +181,7 @@ async def test_prefix_retry_disabled_by_config(monkeypatch):
         lambda: {"anti_collapse": {"prefix_retry": False}},
     )
 
-    async def _fake_chat(_messages):
+    async def _fake_chat(_messages, **_kwargs):
         raise AssertionError("不应该重试")
 
     monkeypatch.setattr("core.llm_client.chat", _fake_chat)

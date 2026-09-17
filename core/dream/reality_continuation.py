@@ -274,7 +274,7 @@ async def _run_once(uid: str, dream_id: str, *, char_id: str) -> None:
                 context,
                 char_id=char_id,
             )
-            reply = await pipeline.run_llm(messages, is_proactive=True)
+            reply = await pipeline.run_llm(messages, is_proactive=True, char_id=char_id)
             if not str(reply or "").strip():
                 _lifecycle_record(
                     uid,

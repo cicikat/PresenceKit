@@ -518,7 +518,7 @@ async def dream_turn(
 
     # Call LLM — zero reality side-effects
     from core import llm_client
-    reply = await llm_client.chat(messages)
+    reply = await llm_client.chat(messages, call_category="chat", char_id=char_id)
 
     # ── Dream prompt capture (admin panel observer) ───────────────────────────
     if _dream_capture_data:
@@ -1522,7 +1522,8 @@ async def _generate_retention_line(uid: str, state: dict) -> str | None:
         ]
 
         from core import llm_client
-        reply = await llm_client.chat(messages)
+        char_id = _state_char_id(state, "generate_retention_line", uid, str(state.get("dream_id") or ""))
+        reply = await llm_client.chat(messages, call_category="chat", char_id=char_id)
         if not reply or not reply.strip():
             return None
         return reply.strip()

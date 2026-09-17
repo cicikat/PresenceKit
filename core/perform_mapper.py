@@ -224,7 +224,7 @@ async def _call_llm_for_perform(mapping_inputs: list[tuple[str, str]], *, char_i
         {"role": "system", "content": _SYSTEM_PROMPT},
         {"role": "user", "content": _build_llm_user_prompt(mapping_inputs)},
     ]
-    raw = await chat(messages, call_category="perform")
+    raw = await chat(messages, call_category="perform", char_id=char_id)
     data = _parse_json_array(raw, expected_len=len(mapping_inputs))
     if data is None:
         return [None] * len(mapping_inputs)

@@ -23,7 +23,6 @@ import logging
 import time
 
 from core.coplay.observer import GameMoment
-from core.data_paths import DEFAULT_CHAR_ID
 
 logger = logging.getLogger(__name__)
 
@@ -80,12 +79,10 @@ def propose_coplay_commentary(ctx: dict | None = None):
     if not uid:
         return None
 
-    from core.pipeline_registry import get as _get_pipeline
-    pl = _get_pipeline()
-    char_id = (pl._active_character_id if pl else None) or DEFAULT_CHAR_ID
-
-    if not session.is_active(uid, char_id=char_id):
+    active_chars = session.list_active_character_ids(uid)
+    if not active_chars:
         return None
+    char_id = active_chars[0]
 
     moment = _pick_moment(uid)
     if moment is None:

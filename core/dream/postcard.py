@@ -161,7 +161,7 @@ async def generate_postcard(
         letter = await llm_client.chat([
             {"role": "system", "content": template + invariant_hint + "\n只输出信正文。信内日期必须是：" + dream_time},
             {"role": "user", "content": "梦境归档片段：\n" + dialogue},
-        ], max_tokens_override=450)
+        ], call_category="chat", char_id=char_id, max_tokens_override=450)
         letter = str(letter).strip()
         if not letter:
             raise ValueError("empty_letter")

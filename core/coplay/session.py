@@ -86,6 +86,26 @@ def is_active(user_id: str | int, *, char_id: str = DEFAULT_CHAR_ID) -> bool:
     return read_state(user_id, char_id=char_id).get("status") == CoplayStatus.ACTIVE.value
 
 
+def list_active_character_ids(user_id: str | int) -> list[str]:
+    """Return registered character ids that currently own an active coplay session.
+
+    Proposers and background workers must use this owned-session set instead of
+    the live active character. Fail-open on registry errors: no ids, no speech.
+    """
+    try:
+        from core.asset_registry import get_registry
+        entries = get_registry().list_all("character")
+    except Exception:
+        logger.exception("[coplay_session] list_active_character_ids registry read failed uid=%s", user_id)
+        return []
+    found = [
+        entry.id for entry in entries
+        if entry.id and is_active(user_id, char_id=entry.id)
+    ]
+    found.sort()
+    return found
+
+
 def is_armed(user_id: str | int, *, char_id: str = DEFAULT_CHAR_ID) -> bool:
     """True 当 status in {armed, active, closing} —— watcher 应该继续轮询的范围。"""
     return read_state(user_id, char_id=char_id).get("status") in (

@@ -370,6 +370,12 @@ override；`char_id=None`（默认）才走活跃角色卡逻辑。`core.model_r
 是这条路径的实现；`core.stage.views.StageCharacterView` 的所有生成方法都显式传 `char_id`。
 后台记忆固化（profile / episodic / identity）和梦境 summary / impression 同样使用任务入队或
 session 冻结的 `char_id` 直传最终 LLM 调用，不能在执行时重新读取当前活跃角色。
+Dream solo 主生成与 invariants 观察/归并、Perform 标注、Coplay session close 摘要，以及
+pipeline 反坍缩重试、tool loop 收尾 `run_llm` / relay `probe`、scheduler `_pipeline_send`
+主生成，都必须把已经拥有的会话角色传到最终 `get_model_client`；中途把 live active 切到
+另一个角色，不得改写这次解析。`use_vision=True` 仍走独立 vision 连接，不经文本 preset；
+调用方仍应传入拥有该会话的 `char_id`，只是它不参与 vision 模型选择。不向不支持 realm
+的 API 增加 realm 参数。
 
 角色卡的 `model_routing` 绑定由 `GET/PATCH /character/{char_id}/model-routing` 管理
 （Brief 87 §1，见下方「Admin 接口」）。只有 `null` 或字段缺失表示跟随全局

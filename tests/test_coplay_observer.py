@@ -139,7 +139,7 @@ async def test_vlm_fallback_none_when_vision_disabled():
     original = cl.get_config().get("vision")
     cl.get_config()["vision"] = {"enabled": False}
     try:
-        result = await observer.vlm_fallback_summary(_png((1, 2, 3)))
+        result = await observer.vlm_fallback_summary(_png((1, 2, 3)), char_id="coplay-char")
     finally:
         if original is not None:
             cl.get_config()["vision"] = original
@@ -153,7 +153,7 @@ async def test_vlm_fallback_fail_open_on_exception():
     cl.get_config()["vision"] = {"enabled": True, "model": "test-vision"}
     try:
         with patch("core.llm_client.chat", new=AsyncMock(side_effect=RuntimeError("boom"))):
-            result = await observer.vlm_fallback_summary(_png((1, 2, 3)))
+            result = await observer.vlm_fallback_summary(_png((1, 2, 3)), char_id="coplay-char")
     finally:
         if original is not None:
             cl.get_config()["vision"] = original

@@ -147,4 +147,5 @@ async def test_execute_calls_execute_prompt_with_expected_args(sandbox):
     assert kwargs["would_mark"] == ["coplay_commentary"]
     assert kwargs["recall_policy"] == "none"
     assert kwargs["dry_run"] is True
+    assert kwargs["char_id"] == CHAR
     assert "解锁了成就A" in kwargs["prompt_factory"]()

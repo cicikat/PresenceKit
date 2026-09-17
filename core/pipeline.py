@@ -845,7 +845,9 @@ class Pipeline:
         reply = await _call()
         from core.context_continuity import acknowledge
         acknowledge(messages)
-        reply = await self._anti_collapse_prefix_retry(messages, reply)
+        reply = await self._anti_collapse_prefix_retry(
+            messages, reply, char_id=char_id, is_proactive=is_proactive,
+        )
         from core.tool_grounding import guard_completion_claim
         return guard_completion_claim(reply, messages)
 
@@ -862,7 +864,14 @@ class Pipeline:
             if m.get("_layer") == "9_history" and m.get("role") == "assistant"
         ]
 
-    async def _anti_collapse_prefix_retry(self, messages: list[dict], reply: str) -> str:
+    async def _anti_collapse_prefix_retry(
+        self,
+        messages: list[dict],
+        reply: str,
+        *,
+        char_id: str | None = None,
+        is_proactive: bool = False,
+    ) -> str:
         """
         问题7 (c) 输出端校验重试（硬止血）：
         软提示（层9历史投影去同质 + 层11 S2 提示）已经是"劝"，这里是"拦"——
@@ -890,7 +899,9 @@ class Pipeline:
                 "role": "system",
                 "content": f"你上一条回复又以「{prefix}」开头了，这次绝对不能再用这个开头，换一种方式开口。",
             }]
-            retry_reply = await llm_client.chat(retry_messages)
+            retry_reply = await llm_client.chat(
+                retry_messages, char_id=char_id, is_proactive=is_proactive,
+            )
             if retry_reply.strip().startswith(prefix) and is_filler_prefix(prefix):
                 stripped = retry_reply.strip()[len(prefix):].lstrip()
                 return stripped or retry_reply
@@ -1332,6 +1343,8 @@ class Pipeline:
                     ],
                     tools=tools,
                     call_category="probe",
+                    char_id=char_id,
+                    is_proactive=is_proactive,
                 )
             except Exception as e:
                 log_error("pipeline.run_agentic_loop.relay_resolve", e)
@@ -1538,7 +1551,9 @@ class Pipeline:
 
         if kind == "natural" and not used_tool:
             # 从未调用过工具：等价于原有单发生成，反坍缩检查照旧过一遍。
-            final_text = await self._anti_collapse_prefix_retry(loop_msgs, text)
+            final_text = await self._anti_collapse_prefix_retry(
+                loop_msgs, text, char_id=char_id, is_proactive=is_proactive,
+            )
             from core.tool_grounding import guard_completion_claim
             final_text = guard_completion_claim(
                 final_text, loop_msgs, successful_tool_call=successful_tool_call,
@@ -1566,7 +1581,9 @@ class Pipeline:
                 if _guarded:
                     yield _guarded
             return _grounded_stream()
-        final_text = await self.run_llm(loop_msgs, is_proactive=is_proactive)
+        final_text = await self.run_llm(
+            loop_msgs, is_proactive=is_proactive, char_id=char_id,
+        )
         from core.tool_grounding import guard_completion_claim
         return guard_completion_claim(
             final_text, loop_msgs, successful_tool_call=successful_tool_call,

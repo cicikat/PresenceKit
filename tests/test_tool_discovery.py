@@ -50,7 +50,7 @@ def harness(monkeypatch):
     monkeypatch.setattr("core.tool_dispatcher.execute", execute)
     monkeypatch.setattr("core.llm_client.chat", final)
     pipeline = _make_pipeline()
-    monkeypatch.setattr(pipeline, "_anti_collapse_prefix_retry", lambda msgs, text: final())
+    monkeypatch.setattr(pipeline, "_anti_collapse_prefix_retry", lambda msgs, text, **kw: final())
 
     async def run(**kwargs):
         return await pipeline.run_agentic_loop([{"role": "user", "content": "查询"}],

@@ -1,6 +1,6 @@
 # 9.17 后端综合工单：角色隔离、固定会话与架构债收敛
 
-状态：A/B/C 已提交；D 自动化收尾完成、运行联调待执行；E–J 未开始。日期：2026-09-17。
+状态：A/B/C/E 已提交；D 自动化收尾完成、运行联调待执行；F–J 未开始。日期：2026-09-17。
 用户已授权按本单施工。每张施工子单完成相关验证与差异检查后独立 commit，再开始下一张。
 勾选规则：完成一项且具备证据才勾一项；源码存在、自动测试通过、部署验收分别记账。每张施工子单完成相关验证与差异检查后独立 commit，再开始下一张。
 
@@ -65,10 +65,10 @@
 
 对应 P1-5、P1-11。先读 `docs/model-presets.md` 及对应 Dream/Agent Runtime 合同。
 
-- [ ] E1 逐调用核对 Dream solo/invariants、Perform、Coplay close 和相关 background worker：记录拥有的 realm、char_id、call_category 及最终路由来源。
-- [ ] E2 将已有会话角色贯穿提取、judge、summary 和主 LLM；不依赖 active character，不擅自向不支持 realm 的 API 增加参数。
-- [ ] E3 用 A/B 不同路由、任务中途切 active C 的测试证明最终 provider/preset 仍属于原角色；参数存在但未传到模型解析应失败。保持 Dream 不写 Reality evidence。
-- [ ] E4 更新必要路由说明，定向测试、差异检查、独立提交。两端仅需相关场景回归，不新增设置 UI。
+- [x] E1 已逐调用核对：Dream solo `dream_turn` / retention 用 `_state_char_id`、`call_category=chat`；invariants `observe`/`_relation` 用会话 `char_id`、`summary`；postcard 用 `chat`；reality continuation 用 `run_llm(..., char_id=)`；Perform 用 `perform`；Coplay close 用会话 `char_id`、`summary`；observer VLM 用会话 `char_id`、`vision`（独立 vision 连接，不经文本 preset）；prefix-retry / agentic 收尾 / relay probe / scheduler `_pipeline_send` 用已有会话或 frozen scope 角色。已有 `dream_summary` / `distill_impression` / `scenario_reconciler` 未重缝。未向不支持 realm 的 API 加 realm 参数。
+- [x] E2 已将上述拥有角色贯穿最终 `llm_client.chat` / `run_llm` / `get_model_client`；Coplay commentator 改读 `session.list_active_character_ids`，不读 live active。未改 coplay_watch 扫描语义，未开工 F。
+- [x] E3 `tests/test_char_routing.py` 覆盖 Dream solo/invariants、Perform、Coplay close、prefix-retry、agentic 收尾、`_pipeline_send` frozen scope、VLM `char_id` 透传；`char_id` 存在但未传入解析即失败；Dream solo 断言不写 Reality mood/episodic/history/mid_term。
+- [x] E4 已更新 `docs/model-presets.md` Brief 30 冻结 `char_id` 段与 `docs/coplay.md`。定向回归 208 passed（不含因当前 venv 缺 Pillow 无法收集的 `tests/test_coplay_observer.py`；VLM 断言改由 `test_char_routing.py` 覆盖）。普通 diff 与 `--ignore-cr-at-eol` 一致。两端无新设置 UI；桌面/手机相关场景回归 not-run。
 
 ## F — P1：Dream settings 归属决策后收口
 

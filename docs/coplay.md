@@ -154,10 +154,11 @@ scheduler 主循环（固定 60 秒一次 tick，只推状态机，不发言）�
    **不直接进 prompt**（防注入 + 防剧透原文）。OCR 命中时优先于差分信号
    （同一 tick 不会既报 death 又报 scene_change）。
 4. **VLM 兜底**：仅当 `scene_change` 且 OCR 未命中关键词时调用一次，复用已有的
-   `core.llm_client.chat(..., use_vision=True, call_category="vision")`
+   `core.llm_client.chat(..., use_vision=True, call_category="vision", char_id=...)`
    （`config.vision` 已经配了 `glm-4v-flash`，本 brief **不需要新增 preset**——
-   doc §五-2 的不确定项已解决：vision 已可用）。限一句话场景描述，
-   `config.vision.enabled=False` 时直接跳过。
+   doc §五-2 的不确定项已解决：vision 已可用）。`char_id` 是当前陪玩会话拥有的角色，
+   供调用方身份对齐；vision 分支走独立连接，不经该角色的文本 routing profile。
+   限一句话场景描述，`config.vision.enabled=False` 时直接跳过。
 5. **存档 watch**：只读 mtime，不解析存档内容（D4 红线的延伸——不只是不读进程
    内存，连存档文件内容本身都不解析）。`save_dir` 是 `game_whitelist` 条目的
    可选字段，按 `game_id`（=处理过的 process_name）匹配；Steam 检测到的游戏
@@ -208,7 +209,9 @@ scheduler 主循环（固定 60 秒一次 tick，只推状态机，不发言）�
 `core/coplay/commentator.py`，不直接发言——注册一个 proposer
 （`core/scheduler/proposer_registry.py` 新增 `"core.coplay.commentator"` 到
 builtins 加载列表），走标准 `TriggerProposal` → gating → `execute_prompt()`
-链路，与 `garden_water.py` 的 `propose_garden_bloom` 同款：
+链路，与 `garden_water.py` 的 `propose_garden_bloom` 同款。开口角色取当前
+`status=active` 的陪玩会话（`session.list_active_character_ids`），不读 live
+active character：
 
 - **丢弃**：`combat_start`（战斗/高强度画面）——"打扰比说错更劝退"，战斗中任何
   插话都是打扰，攒到战斗结束再补发也早就不是那个话题了。
@@ -271,8 +274,9 @@ active 陪玩状态）。
    真正消费 moment 队列的地方）的剩余 moment。这些本来就是观察层的客观描述，
    对应 `docs/briefs-36-37-and-outlook-20260710.md` §2「风格坍缩」：重复 LLM
    摘要会把内容磨成通用"总结语气"，原始观测文本反而更贴近"真的发生过"。
-2. **"大概经过"一句话叙述**：唯一的一次 LLM 调用（`call_category="summary"`），
-   失败 fail-open——退化成"没有大概经过，只有清晰词句"，不阻塞后续步骤。
+2. **"大概经过"一句话叙述**：唯一的一次 LLM 调用（`call_category="summary"`，
+   `char_id` 为本次陪玩会话角色），失败 fail-open——退化成"没有大概经过，只有清晰词句"，
+   不阻塞后续步骤。
 3. 写入 `game_state.append_game_log_entry()`（追加式 markdown，`log.md`，含
    日期 + 进度标记），同时缓存进 `game_state.last_summary` 供 tag 回忆低成本
    复用（不必每次重新解析 markdown）。

@@ -228,6 +228,7 @@ class TestEnrichSaySegments:
 
         async def fake_chat(messages, call_category=None, **kwargs):
             assert call_category == "perform"
+            assert kwargs["char_id"] == TEST_CHAR_ID
             return (
                 '[{"expression":"happy","intensity":0.7,"head":"tilt_r",'
                 '"posture":null,"gaze":null,"energy":0.6}]'

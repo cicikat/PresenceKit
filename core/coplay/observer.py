@@ -255,7 +255,7 @@ _VLM_PROMPT = (
 )
 
 
-async def vlm_fallback_summary(frame: bytes) -> str | None:
+async def vlm_fallback_summary(frame: bytes, *, char_id: str) -> str | None:
     """VLM 兜底描述。config.vision.enabled=False 或调用失败 → None（fail-open）。
 
     调用方负责"只在 scene_change 且 OCR 无法解释时调一次"的节流决策，本函数
@@ -274,6 +274,7 @@ async def vlm_fallback_summary(frame: bytes) -> str | None:
         from core import llm_client
         result = await llm_client.chat(
             [{"role": "user", "content": content_blocks}], use_vision=True, call_category="vision",
+            char_id=char_id,
         )
         return (result or "").strip() or None
     except Exception:
@@ -368,7 +369,7 @@ async def tick(uid: str, *, char_id: str = DEFAULT_CHAR_ID, game_id: str | None 
             if diff_kind == "scene_change":
                 # 廉价信号（直方图+OCR）都没能解释这次剧变时才兜底 VLM（额度紧张是硬约束，
                 # 只在这一种情况下调用，且每次剧变最多调一次）。
-                vlm_summary = await vlm_fallback_summary(frame)
+                vlm_summary = await vlm_fallback_summary(frame, char_id=char_id)
                 if vlm_summary:
                     summary = vlm_summary
             push_moment(uid, GameMoment(kind=diff_kind, summary=summary))
