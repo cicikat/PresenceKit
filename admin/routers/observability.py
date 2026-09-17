@@ -338,6 +338,7 @@ async def memory_event_migration(
 ):
     from core.asset_registry import get_registry
     from core.memory.event_migration import migration_status
+    from core.memory.event_retirement import migration_retirement_draft
     from core.memory.scope import MemoryScope
 
     try:
@@ -345,7 +346,12 @@ async def memory_event_migration(
         scope = MemoryScope.reality_scope(uid, char_id)
     except (TypeError, ValueError):
         raise HTTPException(status_code=422, detail={"code": "invalid_scope"}) from None
-    return {"scope": {"uid": uid, "char_id": char_id, "realm": "reality"}, **migration_status(scope)}
+    status = migration_status(scope)
+    return {
+        "scope": {"uid": uid, "char_id": char_id, "realm": "reality"},
+        **status,
+        "retirement_draft": migration_retirement_draft(status),
+    }
 
 
 @router.get(
@@ -419,6 +425,7 @@ async def memory_event_edge_proposals(
     description=(
         "只返回 shadow recall 的状态、计数、字符/token 预算、重叠率、"
         "scope 拒绝、截断和超时原因；不会返回查询正文或事件证据。"
+        "retirement_draft 是待批准的退场分母/阈值快照，used_as_gate 恒为 false。"
     ),
 )
 async def memory_event_shadow_recall(
@@ -489,13 +496,15 @@ async def memory_event_shadow_recall(
         return result
 
     records: list[dict] = []
+    records_by_day: dict[str, list[dict]] = {}
     selected_date = candidate_dates[0]
     for candidate_date in candidate_dates:
         candidate_records = _read_records(candidate_date)
         if candidate_records:
-            records = candidate_records
-            selected_date = candidate_date
-            break
+            records_by_day[candidate_date.isoformat()] = candidate_records
+            if not records:
+                records = candidate_records
+                selected_date = candidate_date
         if date:
             break
     date_str = selected_date.isoformat()
@@ -503,6 +512,7 @@ async def memory_event_shadow_recall(
     for item in records:
         status = str(item.get("status") or "unknown")
         status_counts[status] = status_counts.get(status, 0) + 1
+    from core.memory.event_retirement import shadow_retirement_draft
     from core.memory.event_shadow_recall import config as shadow_config, enabled_for
     from core.memory.event_store import existing_ledger_health_code
 
@@ -552,6 +562,12 @@ async def memory_event_shadow_recall(
             "average_coverage": round(sum(coverage_values) / len(coverage_values), 4) if coverage_values else None,
         },
         "latest_date": date_str if records else "",
+        "retirement_draft": shadow_retirement_draft(
+            records_by_day,
+            effective_state=effective_state,
+            schema_health=health,
+            scope_enabled=scope_enabled,
+        ),
     }
 
 

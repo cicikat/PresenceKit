@@ -39,7 +39,7 @@ def test_shadow_recall_rollout_controls_are_registered_and_cache_busted():
     assert "ADMIN_UI_FRAGMENT_VERSION = 'v1-1-0-chat-media-1'" in core
     assert '<script src="/static/js/settings.js?v=v1-1-0-ci-2"></script>' in index
     assert '<script src="/static/js/runtime-config.js?v=settings-center-1"></script>' in index
-    assert '<script src="/static/js/memory-event-control.js?v=brief-216-memory-event-control-1"></script>' in index
+    assert '<script src="/static/js/memory-event-control.js?v=brief-216-memory-event-control-2"></script>' in index
 
 
 def test_memory_event_control_ui_has_effective_route_and_redacted_metrics():
@@ -55,3 +55,5 @@ def test_memory_event_control_ui_has_effective_route_and_redacted_metrics():
     assert 'id="mr-event-proposer-route-status"' in routing
     assert 'id="event-shadow-effective"' in runtime
     assert "raw_text" not in control and "seed_event_ids" not in control
+    assert "_retirementDraftLabel" in control
+    assert "used_as_gate" in control

@@ -212,6 +212,7 @@ def compare_legacy_results(
         "new_turn_count": len(new_turns),
         "extra_event_count": len(new_ids - mapped_old_events),
         "omitted_event_count": len(mapped_old_events - new_ids),
+        # Coverage denominator is mapped old events, never old_result_count or new_event_count.
         "event_coverage": round(len(overlap_events) / len(mapped_old_events), 4) if mapped_old_events else 0.0,
         "event_overlap_rate": _jaccard(new_ids, mapped_old_events),
         "turn_overlap_rate": _jaccard(new_turns, comparable_turns),

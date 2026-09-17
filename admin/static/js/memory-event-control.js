@@ -59,6 +59,13 @@ async function saveEventContextObserverSettings() {
   } catch (error) { toast(error.message, 'err'); }
 }
 
+function _retirementDraftLabel(draft) {
+  if (!draft || typeof draft !== 'object') return 'pending_approval · not a gate';
+  const reasons = Array.isArray(draft.open_reasons) ? draft.open_reasons.join(', ') : 'thresholds_pending_approval';
+  const numeric = draft.numeric_ready ? 'numeric ready' : 'numeric open';
+  return `${draft.status || 'pending_approval'} · ${numeric} · used_as_gate=${Boolean(draft.used_as_gate)} · ${reasons}`;
+}
+
 function _memoryEventScopeQuery() {
   const uid = (document.getElementById('event-query-uid')?.value || '').trim();
   const charId = (document.getElementById('event-query-char-id')?.value || '').trim();
@@ -94,6 +101,7 @@ async function loadMemoryEventShadowObservability() {
       ['unmapped old / new', `${summary.unmapped_old || 0} / ${summary.unmapped_new || 0}`],
       ['average coverage', summary.average_coverage == null ? '-' : summary.average_coverage],
       ['latest date', data.latest_date || '-'],
+      ['retirement draft', _retirementDraftLabel(data.retirement_draft)],
     ]);
   } catch (error) { if (target) { target.className = 'empty'; target.textContent = error.message; } }
 }

@@ -1,5 +1,14 @@
 # docs/known-issues.md — 已知问题与技术债
 
+## Memory Event 退场阈值（2026-09-18）
+
+`current`：event_store 仍是 evidence，当前 recall 仍是旧栈；shadow / proposal 不进
+prompt。观测端点投影 `retirement_draft`，分母已钉死，但 `status=pending_approval`、
+`used_as_gate=false`。未批准前不得把 coverage / unmapped / fallback / migration
+数字当成退场闸门，也不得因重复存储删除旧召回。
+`open`：14 天 soak、阈值批准、灰度切换决策。物理删除仍是
+`disabled_pending_owner_policy`。
+
 ## 固定会话 scope（2026-09-17）
 
 `current`：后端广告 `session_scope=v1`，签发 token/owner/角色绑定的 24 小时 session；

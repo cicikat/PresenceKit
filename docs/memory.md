@@ -181,6 +181,33 @@ read-only Memory Event tools remain the explicit second-phase path: only an
 active owner Path C function-calling turn can request event evidence, while
 automatic shadow results remain disabled for prompt injection.
 
+## Memory Event retirement drafts (2026-09-18)
+
+event_store remains evidence. The current recall path is still episodic /
+event-log / vector. Shadow recall and unreviewed edge proposals stay in
+`recall_trace` / proposal tables and never become a prompt layer. Duplicate
+storage is not a reason to delete the old recall path.
+
+`GET /observability/memory-event-shadow-recall` and
+`GET /observability/memory-event-migration` now project a content-free
+`retirement_draft`. `used_as_gate` is always false and `meets_draft` stays
+false while `status=pending_approval`. `numeric_ready` only says the sample
+matches the draft numbers; it cannot switch recall, apply migration, or
+delete Markdown.
+
+Draft denominators:
+
+| metric | denominator | draft threshold | window | rollback |
+|---|---|---|---|---|
+| shadow coverage | `event_coverage = \|overlap_events\| / \|old_mapped_event_count\|`; never `old_result_count` or `new_event_count` | average ≥ 0.80 on completed (`status=ok`) rows that have mapped old events | 14 days and at least 20 completed calls | turn the flag off or clear allowlists; timeout/busy/cancelled stay fail-open |
+| unmapped legacy | residual = `old_unmapped_count - comparison_scope_rejections`, rate over `old_result_count` | residual rate ≤ 0.15 | same 14-day completed sample | keep legacy recall; isolated `web`/`dream_echo`/`coplay` and scope mismatches are expected unmapped, not residuals |
+| fallback hit rate | `timeout + busy + cancelled` over non-disabled observability calls | ≤ 0.05 | same scan of real (non-disabled) traces | immediate legacy path after config reload |
+| migration completeness | `event_migration_state` `plan_total`; artifacts stay `inventory_only` | `status=completed`, `next_offset >= total`, `failed=0`, `conflict=0`, `would_write=0`, not indeterminate | per-scope apply batches | Markdown fallback remains; dry-run default; tombstone is not physical delete |
+
+These drafts stay open until an explicit retirement decision reuses the same
+denominators. Existing business ledgers keep their own authorities; I does
+not add a universal ledger.
+
 ## Memory Event 10: legacy migration, retention, and forget semantics
 
 `scripts/migrate_memory_events.py --uid <uid> --char-id <char_id>` defaults to
@@ -201,8 +228,9 @@ explicit protected volume. It imports at most one bounded batch per invocation
 and persists content-free progress at `event_migration_state.json`; reruns use
 deterministic IDs, so interruption is safe and old Markdown fallback remains
 available if migration fails. `GET /observability/memory-event-migration`
-(`state.read`) exposes only counters, source coverage, inventory summaries and
-status, never source text or local paths.
+(`state.read`) exposes only counters, source coverage, inventory summaries,
+status, and a `retirement_draft` that is not a gate, never source text or
+local paths.
 
 Retention is explicit: ledger rows retain raw text, media references and their
 hash/description metadata; old Markdown day files and full-log rotations are
@@ -261,6 +289,26 @@ the original evidence.
 | trigger / perceive-event audit | `data/event_log/{uid}/trigger_audit.jsonl`；`fixation_pipeline._write_trigger_audit_log()`；`core/perceive_event_audit.py` 查询同一 forensic tree | 无 prompt-side fallback；历史坏行由 query fail-open 跳过 | 该 `data/event_log` 子树是 forensic audit，不是当前 event-log memory writer | 永不进入 prompt、memory consolidation 或 stimulus；仅 `state.read` observability |
 | recall / provenance / action trace | `data/runtime/memory/{char_id}/{uid}/recall_trace/`, `provenance_log.jsonl`, `action_trace.json` | 由各 accessor 处理历史缺失，不做目录猜测 | 旧散落 trace/log 文件 | 永不直接进入 prompt；只供观测、溯源和重复动作审计 |
 | scheduler / gating / dry-run / API audit | `data/logs/trigger_state.jsonl`, `gating_shadow.jsonl`, `execute_dryrun.jsonl`；API calls 在 `data/runtime/observability/api_calls-*.jsonl` | 无业务 memory fallback | 旧临时日志文件 | 永不进入 prompt 或 memory；仅管理面 forensic/observability |
+| owner receipts / runtime tasks / autonomy / mail | `owner_turn_receipts`、Agent Runtime task/work-session/process、`autonomy_state`、`proactive_ledger`、`mail_executions.jsonl` | 各模块现有观测入口，无跨 ledger 兼容读 | 无；不另造万能 ledger | 永不进入 prompt；关联 ID 与保留期见下表 |
+
+### Observability ownership map（I3，无缺口不新增台账）
+
+| ledger | authority | association IDs | retention | existing endpoint |
+|---|---|---|---|---|
+| owner receipt | `core.owner_turn_receipts` | caller_label + client_turn_id + canonical_turn_id | 30d and 1000 receipts per caller; live running skipped | `GET /observability/owner-turns` (`state.read`) |
+| Agent Runtime task | `core.agent_runtime.task_manager` | uid + char_id + task_id; `causation_ref.kind`/`digest` | terminal 30d; max 1000 tasks per scope | `GET /observability/agent-runtime-tasks` |
+| work session | `core.agent_runtime.work_sessions` | uid + char_id + work_session_id | durable scoped state; page is bounded | `GET /observability/agent-runtime-work-sessions` |
+| process runner | `core.agent_runtime.process_runner` | `process.run` task receipts | task terminal 30d; capability snapshot is live | `GET /observability/agent-runtime-processes` |
+| workspace | `core.agent_runtime.workspace` | capability snapshot; mutating tools use `tool_request` fingerprint | configured roots; no file content in observability | `GET /observability/agent-runtime-workspace` |
+| autonomy | `core.autonomy.store` | uid + char_id + job/run/signal_id | 60 jobs / 100 runs / 120 pending signals; funnel 24h and 7d | `GET /observability/autonomy-opportunities` |
+| proactive | `core.scheduler.proactive_ledger` | uid gap/budget; speech cooldown `{char_id}:{name}` | daily budget plus last 3 sends; `continuity_by_uid` | `GET /scheduler/proactive-ledger` |
+| event evidence | `core.memory.event_store` | uid + char_id + realm=reality + event_id/turn_id | append-only; DELETE is tombstone pending owner policy | `GET /observability/memory-event-ledger` |
+| shadow recall | `core.memory.event_shadow_recall` | recall_trace date + mapped event/turn IDs | daily traces; observability scans 31d | `GET /observability/memory-event-shadow-recall` |
+| event migration | `core.memory.event_migration` | uid + char_id + `event_migration_state.json` | resumable content-free progress; Markdown fallback remains | `GET /observability/memory-event-migration` |
+| action | `core.memory.action_trace` | uid + char_id + `execute_structured` traces | ring of last 30 | `GET /observability/tool-traces` |
+| mail | `core.mail.execution_ledger` | execution_id + uid + char_id + ISO week | append-only jsonl; query is bounded | `GET /observability/mail-executions` |
+| API | `core.api_call_log` | caller + provider + request_id | 7 daily jsonl files | `GET /observability/api-calls` |
+| chat media | `core.chat_media` | sha256 live refs | inbox 7d / image_cache 30d or 500; media_refs skip GC | `GET /observability/chat-media` |
 
 因此，`data/event_log/{uid}/trigger_audit.jsonl` 与 `data/logs/*` 不能被机械改名成 memory 路径：
 它们的 writer/read 语义是审计；而 event-log 日文件本身已由 writer 迁移到

@@ -38,11 +38,11 @@ scope；只读端点通常允许对应的 read scope。
 | GET/PUT/POST | `/characters*` | characters | 管理面角色卡 |
 | GET/POST/PUT/DELETE | `/memory/{user_id}/*` | memory | 管理面记忆浏览与删除 |
 | GET | `/memory-events/search`、`/memory-events/{event_id}`、`/memory-events/{event_id}/window`、`/memory-events/{event_id}/related`、`/memory-events/query-trace`、`/memory-events/lineage/*` | `memory.read` | 管理面 scoped Memory Event 证据检索与派生记忆血缘；显式 `uid + char_id + realm=reality`，仅只读，lineage 只按已存 `source_event_ids` 回溯，旧数据或已删除事件返回 `legacy_unknown`，dry-run 不写回 |
-| GET | `/observability/memory-event-shadow-recall` | `state.read` | Memory Event 09 shadow recall 的只读灰度指标；不返回查询正文或事件证据 |
+| GET | `/observability/memory-event-shadow-recall` | `state.read` | Memory Event 09 shadow recall 的只读灰度指标；不返回查询正文或事件证据；`retirement_draft` 仅观测、不作闸门 |
 | GET | `/observability/event-context` | `state.read` | Brief 217 入口、turn 和证据身份链的旁路聚合；仅状态、计数和延迟桶，不返回原文、完整 ID、用户 ID、媒体或路径 |
 | GET/PUT | `/settings/event-context-observer` | `admin` | 后端身份链旁路观测的热切换；S1 soak 前只允许 `disabled` / `observe`，不新增客户端协议 |
 | DELETE | `/memory-events/{event_id}` | `admin` | 可逆墓碑：清空事件正文和媒体引用，保留 event ID、证据关系边和派生血缘；不提供物理删除 |
-| GET | `/observability/memory-event-migration` | `state.read` | 内容无关的历史 Markdown 迁移状态、批次位置和计数；不返回正文、媒体或本地路径 |
+| GET | `/observability/memory-event-migration` | `state.read` | 内容无关的历史 Markdown 迁移状态、批次位置、计数和待批准 `retirement_draft`；不返回正文、媒体或本地路径 |
 | GET | `/observability/chat-identity` | `state.read` | 进程级聊天身份覆盖率：attempted / persisted_turn_id / generated_transport_id / empty_transport_id 及覆盖率；不含正文 |
 | POST/GET | `/v1/sessions`、`/auth/whoami` | `chat` / 任意有效 token | 签发固定 Reality 会话；whoami 广告 `capabilities.session_scope=v1` |
 | GET | `/chat/media/{sha256}` | `chat` | 按 sha256 读取仍可恢复的聊天原图/原文件；有 session 时按冻结 owner+角色闸，否则 legacy active；410 不可恢复；不返回磁盘路径 |

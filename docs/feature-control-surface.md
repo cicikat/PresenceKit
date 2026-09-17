@@ -1,4 +1,4 @@
-# 功能控制面事实清单（最后核对：2026-09-17）
+# 功能控制面事实清单（最后核对：2026-09-18）
 
 > 本文是后端功能开关、effective state、权限和观测入口的权威文档。跨仓调用方只记录
 > 自己的设置归属与接入差异，完整映射请查 [三仓文档总索引](three-repo-doc-index.md) 和
@@ -274,8 +274,12 @@ never changes prompt injection or memory writes. Use
 status, budget, event/turn overlap and coverage, mapped/unmapped results,
 temporal seed ordering, rejection, truncation, and timeout counters.
 `overlap_rate` remains an event-level compatibility alias, never a comparison
-between episodic/vector IDs and ledger IDs. Turning the flag off or clearing
-the allowlists immediately falls back to the legacy path after config reload.
+between episodic/vector IDs and ledger IDs. The same endpoint now includes
+`retirement_draft`: denominators are mapped old events, residual unmapped
+legacy, and non-disabled timeout/busy/cancelled calls. Draft thresholds stay
+`pending_approval` and `used_as_gate` is always false. Turning the flag off or
+clearing the allowlists immediately falls back to the legacy path after
+config reload.
 
 ## Brief 158 TTS resource selection
 
@@ -351,9 +355,12 @@ schema blocked, route blocked, and enabled but not yet run.
 
 The Memory Event evidence page consumes the existing `state.read` endpoints and
 shows aggregate calls, budgets, source filtering, failures, timeouts, coverage,
-and latest-run evidence. Empty evidence is labelled `未运行`, never healthy.
-No prompt, body, event ID, token text, or local path is projected. Desktop and
-mobile clients do not add settings or consume these backend diagnostics.
+latest-run evidence, and a pending retirement draft. Empty evidence is labelled
+`未运行`, never healthy. No prompt, body, event ID, token text, or local path is
+projected. Desktop and mobile clients do not add settings or consume these
+backend diagnostics. Existing owner-turn, Agent Runtime, autonomy, proactive,
+action, mail, and API ledgers keep their own endpoints; I does not add a
+universal ledger.
 
 ## Brief 217 EventContext observer
 

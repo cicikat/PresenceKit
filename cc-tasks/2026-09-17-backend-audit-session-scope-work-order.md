@@ -1,6 +1,6 @@
 # 9.17 后端综合工单：角色隔离、固定会话与架构债收敛
 
-状态：A/B/C/E 已提交；D 自动化收尾完成、运行联调待执行；F 已提交；G 已提交（G4 删除候选未授权，保持未勾）；H1/H2/H3/H4 已提交；I/J 未开始。日期：2026-09-17。
+状态：A/B/C/E 已提交；D 自动化收尾完成、运行联调待执行；F 已提交；G 已提交（G4 删除候选未授权，保持未勾）；H1/H2/H3/H4 已提交；I 已提交（阈值 pending_approval，退场保持 open）；J 未开始。日期：2026-09-17。
 用户已授权按本单施工。每张施工子单完成相关验证与差异检查后独立 commit，再开始下一张。
 勾选规则：完成一项且具备证据才勾一项；源码存在、自动测试通过、部署验收分别记账。每张施工子单完成相关验证与差异检查后独立 commit，再开始下一张。
 
@@ -102,10 +102,10 @@
 
 对应 P1-9、P2-9；保留现有业务 authority，不建万能 ledger。
 
-- [ ] I1 定义 shadow coverage、未映射 legacy、迁移完整度、fallback 命中率的分母、阈值、观察窗口和回退条件，批准后才能作为退场门槛。
-- [ ] I2 保持 event_store 为 evidence、旧栈为当前 recall、shadow/proposal 不进 prompt；通过隔离与迁移测试后才考虑切换，不因重复存储直接删旧召回。
-- [ ] I3 为 owner receipt/task/work session/process/autonomy/proactive/event/action/mail/API ledger 列 ownership map、关联 ID、保留期及现有观测入口；无缺口不新增台账。
-- [ ] I4 文档/指标检查与必要回归完成后提交；没有达到退场阈值的项保持 open。
+- [x] I1 已钉分母：coverage=`old_mapped_event_count`，unmapped residual=`old_unmapped_count - comparison_scope_rejections` / `old_result_count`，fallback=`timeout+busy+cancelled` / 非 disabled 调用，migration=`plan_total` 且 artifacts `inventory_only`。草稿阈值 0.80 / 0.15 / 0.05、14 天且 ≥20 次 completed；`status=pending_approval`，`used_as_gate=false`。
+- [x] I2 event_store 仍是 evidence，旧栈仍是当前 recall；shadow/proposal/`retirement_draft` 不进 prompt。重复存储不是删除信号；Markdown fallback 与 tombstone 语义未改。
+- [x] I3 已用现有端点列出 owner receipt / task / work session / process / workspace / autonomy / proactive / event / action / mail / API / chat-media 所有权、关联 ID 与保留期；无缺口，未新增万能 ledger。
+- [x] I4 文档/指标与定向回归完成后提交；阈值未批准、soak 未跑，退场保持 open。
 
 ## J — P2：文档真值与兼容删除候选清单
 

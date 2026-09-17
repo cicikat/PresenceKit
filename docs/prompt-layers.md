@@ -817,7 +817,9 @@ Memory Event 09 的 shadow recall 也遵守这一边界：它可以在 `fetch_co
 `event_shadow_recall` 诊断字段，不创建 prompt layer。角色若在 owner Path C
 工具循环中明确调用 `search_events` / `expand_event_window` /
 `get_related_events`，工具结果才会作为当前轮 `tool_result` 出现；Dream、Stage、
-主动触发和自动注入均不会暴露 shadow 事件链。
+主动触发和自动注入均不会暴露 shadow 事件链。观测里的 `retirement_draft`、
+未审核 edge proposal 和 event_store 正文同样不是 prompt 输入；当前召回仍是
+episodic / event-log / vector，不因重复存储切换。
 
 ### 存储
 
