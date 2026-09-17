@@ -11,7 +11,6 @@ from datetime import datetime, date
 from typing import Optional
 
 from core.error_handler import log_error
-from core.migration import for_read
 from core.sandbox import get_paths, safe_user_id
 
 logger = logging.getLogger(__name__)
@@ -679,14 +678,9 @@ def _user_talked_today(user_id: str, *, char_id: str | None = None) -> bool:
     if not resolved:
         logger.warning("[scheduler._user_talked_today] char_id 未知，跳过检查")
         return False
-    from core.memory.path_resolver import resolve_path
-    from core.memory.scope import MemoryScope
-    today = date.today().strftime("%Y-%m-%d")
-    uid = safe_user_id(user_id)
-    scope = MemoryScope.reality_scope(uid, resolved)
-    new_p = resolve_path(scope, "event_log") / f"{today}.md"
-    old_p = get_paths()._p("event_log") / uid / f"{today}.md"
-    p = for_read(new_p, old_p)
+    from core.memory.event_log import _day_file_read
+    today = date.today()
+    p = _day_file_read(user_id, datetime.combine(today, datetime.min.time()), char_id=resolved)
     return p.exists() and p.stat().st_size > 10
 
 

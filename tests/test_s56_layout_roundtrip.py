@@ -6,7 +6,7 @@ S5/S6 布局路径往返验证（V9 post-soak，fallback 已退役）
   Reality chain (S6):
     - capture_turn 写 event_log 落新路径 memory/yexuan/{uid}/event_log/
     - capture_turn 写 short_term 落新路径 memory/yexuan/{uid}/history.json
-    - 旧路径 event_log/{uid}/ 有数据时 get_recent_days union 可读到
+    - 旧路径 event_log/{uid}/ 仅历史默认角色可经 get_recent_days union 读到
 
   Inner state 读-改-写往返 (S5):
     mood / activity / trait / author_note / presence / pet / garden
@@ -66,8 +66,9 @@ def test_capture_turn_short_term_lands_in_new_layout(sandbox):
 
 
 def test_old_event_log_fallback_readable_via_union(sandbox):
-    """旧路径 event_log/{uid}/ 有数据时 get_recent_days union 能读到。"""
+    """旧路径 event_log/{uid}/ 仅历史默认角色可经 get_recent_days union 读到。"""
     from core.memory.event_log import get_recent_days
+    from tests.fixtures.public_assets import TEST_PEER_CHAR_ID
 
     uid = "s6_fallback_uid"
     today = datetime.now().strftime("%Y-%m-%d")
@@ -81,15 +82,16 @@ def test_old_event_log_fallback_readable_via_union(sandbox):
         encoding="utf-8",
     )
 
-    result = get_recent_days(uid, days=1)
+    result = get_recent_days(uid, days=1, char_id=TEST_CHAR_ID)
     assert "旧路径数据" in result
     assert "已读到" in result
+    assert "旧路径数据" not in get_recent_days(uid, days=1, char_id=TEST_PEER_CHAR_ID)
 
 
 def test_reality_chain_full_turn_new_layout(sandbox):
     """
     capture_turn → fixation_state → event_log 全程命中新布局；
-    旧路径数据（不同天）经 fallback 仍可经 get_recent_days 读到。
+    旧路径数据（不同天）仅历史默认角色可经 get_recent_days union 读到。
     """
     from core.memory.fixation_pipeline import capture_turn, _load_fixation_state
     from core.memory.event_log import get_recent_days
@@ -116,8 +118,8 @@ def test_reality_chain_full_turn_new_layout(sandbox):
     state = _load_fixation_state(uid)
     assert isinstance(state, dict)
 
-    # get_recent_days 同时读到新轮和旧路径历史
-    result = get_recent_days(uid, days=3)
+    # get_recent_days 同时读到新轮和旧路径历史（仅历史默认角色）
+    result = get_recent_days(uid, days=3, char_id=TEST_CHAR_ID)
     assert "新消息" in result, "新轮 capture_turn 应出现在 get_recent_days 结果中"
     assert "旧数据" in result, "旧路径历史应通过 fallback union 出现在结果中"
 

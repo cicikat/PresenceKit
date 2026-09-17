@@ -10,7 +10,6 @@ import asyncio
 import calendar
 import sqlite3
 from datetime import date as CalendarDate, timedelta
-from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -24,7 +23,6 @@ from core.sandbox import get_paths, safe_user_id
 router = APIRouter()
 
 _DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
-_FILE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}\.md$')
 
 
 def _owner_qq() -> str:
@@ -59,18 +57,6 @@ def _resolve_char_id(char_id: str | None) -> str:
         raise HTTPException(status_code=422, detail=str(e))
 
     return char_id
-
-
-def _log_dir(char_id: str) -> Path:
-    owner = _owner_qq()
-    if not owner:
-        raise HTTPException(status_code=500, detail="owner_id not configured")
-    uid = safe_user_id(owner)
-    scope = MemoryScope.reality_scope(uid, char_id)
-    new = resolve_path(scope, "event_log")
-    old = get_paths()._p("event_log") / uid
-    # for_read() reads bytes — unsuitable for directories; check with is_dir() instead.
-    return new if new.is_dir() else old
 
 
 def _parse_day(text: str) -> list[dict]:
@@ -197,12 +183,9 @@ def _parse_day(text: str) -> list[dict]:
 @router.get("/dates", summary="获取聊天日志日期列表")
 async def list_dates(char_id: str | None = None, auth=Depends(require_scopes("memory.read"))):
     resolved = _resolve_char_id(char_id)
-    log_dir = _log_dir(resolved)
-    dates = []
-    if log_dir.exists():
-        for f in log_dir.iterdir():
-            if _FILE_RE.match(f.name):
-                dates.append(f.stem)
+    from core.memory import event_log as _event_log
+
+    dates = list(_event_log.list_days(_owner_qq(), char_id=resolved))
     from core.memory.action_trace import recent
     from datetime import datetime
     dates.extend(datetime.fromtimestamp(row['display_activity']['ts']).strftime('%Y-%m-%d')
@@ -283,10 +266,16 @@ async def get_day(date: str, char_id: str | None = None, auth=Depends(require_sc
     if not _DATE_RE.match(date):
         raise HTTPException(status_code=422, detail="date format must be YYYY-MM-DD")
     resolved = _resolve_char_id(char_id)
-    log_dir = _log_dir(resolved)
-    path = log_dir / f"{date}.md"
-    text = path.read_text(encoding="utf-8") if path.exists() else ''
+    from core.memory import event_log as _event_log
+
+    owner = _owner_qq()
+    new_dir = _event_log._event_log_read_dir(owner, char_id=resolved)
+    old_dir = _event_log._legacy_read_dir_if_eligible(owner, resolved)
+    text = _event_log._read_day_union(new_dir, old_dir, date)
     entries = _parse_day(text)
+    day_found = (new_dir / f"{date}.md").exists() or (
+        old_dir is not None and (old_dir / f"{date}.md").exists()
+    )
     # Recover recent tool receipts from the existing bounded action trace.
     # Older action echoes remain narration; no inferred success or chain IDs.
     from core.memory.action_trace import recent
@@ -295,7 +284,7 @@ async def get_day(date: str, char_id: str | None = None, auth=Depends(require_sc
                   if isinstance(row.get('display_activity'), dict)
                   and datetime.fromtimestamp(row['display_activity']['ts']).strftime('%Y-%m-%d') == date]
     activity_ids = {item['event_id'] for item in activities}
-    if not path.exists() and not activities:
+    if not day_found and not activities:
         raise HTTPException(status_code=404, detail="log not found")
     entries = [entry for entry in entries if not (entry.get('entry_kind') == 'narration' and entry.get('turn_id') in activity_ids)]
     entries.extend({'time': datetime.fromtimestamp(item['ts']).strftime('%H:%M'), 'ts': item['ts'],

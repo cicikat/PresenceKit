@@ -225,15 +225,21 @@ Dream domain 独立落在 `data/runtime/dreams/{char_id}/`，不进入 reality m
 `core/migration.py` 仍保留 `for_read(new, old)`：新路径缺失、为空或无法解析时回退旧路径，
 并记录命中次数和最近命中样本。当前仍可见的兼容读包括：
 
-- `event_log` 单日读取、scheduler 今日发言检查和 last-mentioned 搜索；
-- `event_log` 近 30 天 union 读；
+- `event_log` 单日读取、近 30 天 union、scheduler 今日发言检查、last-mentioned 搜索、
+  storyline weekly 与称呼 suggester：canonical 桶始终按 owner+char 隔离；uid-only
+  `data/event_log/{uid}/` 仅该 owner 冻结的历史默认角色可并入。freeze 记录在
+  `data/runtime/memory/global/{uid}/legacy_event_log_owner.json`，首次兼容读时写入，
+  不随 `character.default` 或 active 角色改认领。旧日志不删除、不自动分配 ownership。
 - `dream_settings` 从旧 `data/dreams/settings/{uid}.json` 回退。
 
 authored 静态内容另有 new-primary / old-fallback，但由 accessor 自己判断文件存在性，不走
 `for_read()`。其余 reality memory loader 已直接读取 `user_memory_root()` 下的新路径。
 
 因此不能把旧目录删除当作默认安全动作。清理前先确认 fallback 观测归零，并检查
-`tests/test_fallback_obs.py`、`tests/test_s56_layout_roundtrip.py`、`tests/test_event_log_union.py`。
+`tests/test_fallback_obs.py`、`tests/test_s56_layout_roundtrip.py`、
+`tests/test_event_log_union.py`、`tests/test_event_log_legacy_ownership.py`。
+event_log 的 uid-only 兼容读已不再使用无资格 `for_read()`；非历史默认角色即使
+canonical 桶为空，也不得读到旧树。
 
 ## Never Prompt Load
 

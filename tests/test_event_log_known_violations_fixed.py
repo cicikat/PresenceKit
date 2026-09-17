@@ -3,7 +3,7 @@ tests/test_event_log_known_violations_fixed.py — P1-3C
 
 Verifies that all three event_log direct-path known violations are fixed:
 
-  1.  admin/routers/chat_log.py  — _log_dir now uses MemoryScope + resolve_path
+  1.  admin/routers/chat_log.py  — list_dates/get_day use event_log.list_days / _read_day_union
   2.  core/scheduler/loop.py     — _user_talked_today now uses MemoryScope + resolve_path
   3.  core/scheduler/last_mentioned.py — _read_recent_event_log now uses MemoryScope + resolve_path
 

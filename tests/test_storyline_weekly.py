@@ -10,7 +10,7 @@ Covers:
 6. 空 registry → warning + 不调用 LLM
 """
 from __future__ import annotations
-from tests.fixtures.public_assets import TEST_CHAR_ID
+from tests.fixtures.public_assets import TEST_CHAR_ID, TEST_PEER_CHAR_ID
 
 import asyncio
 import json
@@ -181,6 +181,12 @@ def test_event_log_union_reads_canonical_and_legacy_with_independent_checkpoints
     assert cursor["sources"]["canonical"]["offset"] > 0
     assert cursor["sources"]["legacy"]["offset"] > 0
     assert len(material_ids) == 2
+
+    peer_text, peer_cursor, peer_ids = _collect_event_log_since(uid, TEST_PEER_CHAR_ID, "")
+    assert "legacy-only" not in peer_text
+    assert peer_cursor["version"] == 3
+    assert "legacy" in peer_cursor["sources"]
+    assert peer_ids == []
 
 
 def test_v2_cursor_rescan_is_stopped_by_legacy_receipt(sandbox):

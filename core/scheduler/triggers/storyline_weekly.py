@@ -436,11 +436,14 @@ def _collect_event_log_since(
         "canonical": {"day": v2_day, "offset": v2_offset},
         "legacy": {"day": v2_day, "offset": 0},
     }
+    from core.memory.event_log import may_read_legacy_event_log
+
     scope = MemoryScope.reality_scope(uid, char_id)
     directories = {
         "canonical": resolve_path(scope, "event_log"),
-        "legacy": get_paths()._p("event_log") / uid,
     }
+    if may_read_legacy_event_log(uid, char_id):
+        directories["legacy"] = get_paths()._p("event_log") / uid
     consumed_ids = consumed_ids or set()
     parts: list[str] = []
     material_ids: list[str] = []
@@ -486,6 +489,8 @@ def _collect_event_log_since(
                 parts.append(f"[{day}/{source_name}]\n" + "\n".join(kept))
             next_checkpoint = {"day": day, "offset": len(raw_bytes)}
         next_sources[source_name] = next_checkpoint
+    if "legacy" not in next_sources:
+        next_sources["legacy"] = checkpoints.get("legacy") or {"day": "", "offset": 0}
     canonical = next_sources["canonical"]
     return "\n\n".join(parts), {
         "version": 3, "sources": next_sources,

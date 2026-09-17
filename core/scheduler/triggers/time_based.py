@@ -257,7 +257,7 @@ async def _check_random_message(force: bool = False):
     try:
         from core.memory.event_log import get_highlights
         from core.scheduler.last_mentioned import topic_key_for
-        highlights = get_highlights(oid, days=2)
+        highlights = get_highlights(oid, days=2, char_id=_active_char_id_or_none() or DEFAULT_CHAR_ID)
         if highlights:
             import random
             items = [h.strip() for h in highlights.split("\n") if h.strip()]
@@ -512,7 +512,7 @@ def _prepare_diary_work_context(oid: str, char_id: str) -> dict[str, str] | None
     from core.memory.event_log import get_recent_days
 
     days = 2 if datetime.now().hour < LOGICAL_DAY_CUTOFF_HOUR else 1
-    today_log = (get_recent_days(oid, days=days) or "")[-9000:]
+    today_log = (get_recent_days(oid, days=days, char_id=char_id) or "")[-9000:]
     if not today_log:
         return None
     persona_hint, voice_example, mood_hint = _collect_diary_voice(char_id)
@@ -1011,7 +1011,7 @@ def _random_message_context_hint(oid: str, *, dry_run: bool = False) -> str:
             topic_key_for,
         )
 
-        highlights = get_highlights(oid, days=2)
+        highlights = get_highlights(oid, days=2, char_id=_active_char_id_or_none() or DEFAULT_CHAR_ID)
         if not highlights:
             return ""
         items = [h.strip() for h in highlights.split("\n") if h.strip()]

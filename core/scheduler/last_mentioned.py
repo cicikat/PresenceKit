@@ -11,7 +11,6 @@ from pathlib import Path
 
 from core.error_handler import log_error
 from core.safe_write import safe_write_json
-from core.migration import for_read
 from core.sandbox import get_paths, safe_user_id
 
 
@@ -434,19 +433,12 @@ def _rank_last_mentioned_candidates(
 
 
 def _read_recent_event_log(user_id: str, *, days: int, now: datetime, char_id: str) -> str:
-    from core.memory.path_resolver import resolve_path
-    from core.memory.scope import MemoryScope
-
-    uid = safe_user_id(user_id)
-    scope = MemoryScope.reality_scope(uid, char_id)
+    from core.memory.event_log import _day_file_read
 
     parts: list[str] = []
     for i in range(days):
         target_day = now - timedelta(days=i)
-        date_str = target_day.strftime('%Y-%m-%d')
-        new_path = resolve_path(scope, "event_log") / f"{date_str}.md"
-        old_path = get_paths()._p("event_log") / uid / f"{date_str}.md"
-        path = for_read(new_path, old_path)
+        path = _day_file_read(user_id, target_day, char_id=char_id)
         try:
             if path.exists():
                 text = path.read_text(encoding="utf-8").strip()

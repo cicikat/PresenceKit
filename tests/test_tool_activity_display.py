@@ -47,7 +47,6 @@ def test_receipt_history_recovers_without_a_chat_file(sandbox, monkeypatch, tmp_
     monkeypatch.setattr(action_trace, '_enabled', lambda: True)
     monkeypatch.setattr(chat_log, '_owner_qq', lambda: 'owner')
     monkeypatch.setattr(chat_log, '_resolve_char_id', lambda value: 'char')
-    monkeypatch.setattr(chat_log, '_log_dir', lambda value: tmp_path)
     event = {'type': 'tool_activity', 'event_id': 'a', 'chain_id': 'c', 'char_id': 'char',
              'source': 'reality', 'origin': 'autonomy', 'tool_name': 'get_time', 'status': 'error', 'ts': time.time()}
     action_trace.finalize_display('owner', 'char', event)

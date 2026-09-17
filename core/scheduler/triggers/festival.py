@@ -221,7 +221,9 @@ async def _check_holiday_boost(force: bool = False):
 
     try:
         from core.memory.event_log import get_highlights
-        highlights = get_highlights(oid, days=2)
+        from core.data_paths import DEFAULT_CHAR_ID
+        from core.scheduler.loop import _active_char_id_or_none
+        highlights = get_highlights(oid, days=2, char_id=_active_char_id_or_none() or DEFAULT_CHAR_ID)
         context_hint = f"\n{highlights}" if highlights else ""
 
         await _pipeline_send(
@@ -350,8 +352,10 @@ def _holiday_boost_prompt(today: date) -> str:
     if oid:
         try:
             from core.memory.event_log import get_highlights
+            from core.data_paths import DEFAULT_CHAR_ID
+            from core.scheduler.loop import _active_char_id_or_none
 
-            highlights = get_highlights(oid, days=2)
+            highlights = get_highlights(oid, days=2, char_id=_active_char_id_or_none() or DEFAULT_CHAR_ID)
             context_hint = f"\n{highlights}" if highlights else ""
         except Exception:
             context_hint = ""

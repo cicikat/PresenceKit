@@ -255,7 +255,7 @@ the original evidence.
 | logical data | canonical writer path/accessor | compatibility read fallback | historical/retired path | prompt eligibility |
 |---|---|---|---|---|
 | short-term history | `data/runtime/memory/{char_id}/{uid}/history.json`；`core/memory/short_term.py` / `path_resolver` | `data/history/{uid}.json` | uid-only history layout | 经过 scrub、speaker grouping 和 budget 后可进入 layer 9 |
-| event log | `data/runtime/memory/{char_id}/{uid}/event_log/{date}.md`；`core/memory/event_log.py` | `data/event_log/{uid}/{date}.md` 由 read union 兼容读取 | 旧 uid-only event-log tree；旧 `full_log.md` 只供导出 | 仅经 `event_log.search()` / 时间召回；trigger stub、source-isolated blocks 和被过滤内容不可进入 |
+| event log | `data/runtime/memory/{char_id}/{uid}/event_log/{date}.md`；`core/memory/event_log.py` | `data/event_log/{uid}/{date}.md` 仅冻结的历史默认角色可 union 读取；freeze 记录在 `data/runtime/memory/global/{uid}/legacy_event_log_owner.json` | 旧 uid-only event-log tree；旧 `full_log.md` 只供导出 | 仅经 `event_log.search()` / 时间召回；trigger stub、source-isolated blocks 和被过滤内容不可进入；非归属角色不得把 uid-only 树注入 Reality prompt |
 | mid-term / episodic / profile / identity | `data/runtime/memory/{char_id}/{uid}/mid_term.json`, `episodic.json`, `profile.json`, `identity.yaml`；各自 memory module + `path_resolver` | 各模块的 migration `for_read()` 旧布局 | `data/mid_term`, `data/episodic_memory`, `data/user_identity` 等 uid-only roots | 仅由对应 prompt layer loader 选择；不是任意文件扫描 |
 | hidden state / afterglow / impression | hidden state 与 afterglow 在 `data/runtime/memory/{char_id}/{uid}/`；Dream impression 在 `data/runtime/dreams/{char_id}/impressions/{uid}.json` | 只按各 accessor 的显式兼容规则读取 | 旧 dream/reality 混合落盘 | hidden-state snapshot / afterglow / impression 均需专用 tag gate；不直接注入原始文件 |
 | trigger / perceive-event audit | `data/event_log/{uid}/trigger_audit.jsonl`；`fixation_pipeline._write_trigger_audit_log()`；`core/perceive_event_audit.py` 查询同一 forensic tree | 无 prompt-side fallback；历史坏行由 query fail-open 跳过 | 该 `data/event_log` 子树是 forensic audit，不是当前 event-log memory writer | 永不进入 prompt、memory consolidation 或 stimulus；仅 `state.read` observability |
@@ -265,6 +265,14 @@ the original evidence.
 因此，`data/event_log/{uid}/trigger_audit.jsonl` 与 `data/logs/*` 不能被机械改名成 memory 路径：
 它们的 writer/read 语义是审计；而 event-log 日文件本身已由 writer 迁移到
 `data/runtime/memory/{char_id}/{uid}/event_log/`。
+
+uid-only `data/event_log/{uid}/` 日文件不是“任意角色可读的共享历史”。合法归属是该
+owner 在**首次兼容读**时冻结的历史默认角色（当时的 `character.default`），写入
+`data/runtime/memory/global/{uid}/legacy_event_log_owner.json`。这与当前
+`character.default`、当前 active 角色都不是同一概念；切换角色或改配置不得重新认领。
+未 freeze 前，非默认角色的 `get_recent_days` / `search` / `list_days` / `count_real_turns`
+及管理面日期/单日读取都不得把旧树并进 Reality prompt 或历史 API。旧日志不删除、
+ownership 不自动分配给未读过的角色。
 
 多层记忆并行运作，各司其职，互不替代。
 
@@ -339,7 +347,7 @@ the original evidence.
 
 8. ✅ **`user_facts` global 拆分** — 已完成（P1-4）：跨角色通用事实归入 global scope；`pipeline.fetch_context` / `build_prompt` 已注入。
 
-9. **旧 uid-only 数据迁移**（R3-followup）— 旧 `data/history/{uid}.json`、`data/event_log/{uid}/` 等 legacy 文件未自动迁移至 `data/runtime/memory/{char_id}/{uid}/`。干跑脚本见 `scripts/migrate_uid_only_memory_dry_run.py`；实际迁移待定。
+9. **旧 uid-only 数据迁移**（R3-followup）— 旧 `data/history/{uid}.json`、`data/event_log/{uid}/` 等 legacy 文件未自动迁移至 `data/runtime/memory/{char_id}/{uid}/`。干跑脚本见 `scripts/migrate_uid_only_memory_dry_run.py`；实际迁移待定。event_log 旧树的读取资格已按冻结历史默认角色收口，不等于已完成物理迁移，也不授权删除旧日志。
 
 10. ✅ **`dream_state` 物理路径 v1** — `_LAYOUT_DREAM="v1"` 已走 `runtime/dreams/{char_id}/state/...`，legacy 兼容期完成。
 
@@ -457,8 +465,10 @@ trigger_signal=)` 落盘：每次 run ≤3 条（超出截断）、同值跳过�
 | storyline 叙事弧（Brief 80） | `data/runtime/memory/{char_id}/{uid}/storyline.json` | `storyline_weekly` 调度器周频（7d）聚合：episodic 新增条目 + `storyline_inbox.json`（episodic 淘汰批次暂存）+ 过滤后的 event_log，LLM 产出 ops，经 `core/memory/storyline.py` 的 append-only 写 API（`open_arc`/`append_node`/`set_arc_status`）落盘 | 层 `6h_storyline`（tagged，relevance 门控，非常态） |
 
 > **当前 v1 写布局**：per-user 主链统一写入 `get_paths().user_memory_root()`，即
-> `data/runtime/memory/{char_id}/{uid}/`。迁移期 `for_read(new, old)` 仍保留在 event_log
-> 相关读取；event_log 还保留近 30 天 union 读。其余主记忆 loader 已直接读新路径。
+> `data/runtime/memory/{char_id}/{uid}/`。event_log 的 uid-only 兼容读不再走通用
+> `for_read(new, old)`（该 helper 会把旧树交给任意新路径缺失的角色），而是由
+> `may_read_legacy_event_log()` 按冻结历史默认角色授权后的 union。其余主记忆
+> loader 已直接读新路径。
 
 > **character_growth 已整体删除（Brief 35）**：
 > `core/memory/character_growth.py` 模块与 `get_growth` 工具已于 Brief 35 一并删除——
@@ -604,8 +614,9 @@ score = intensity * decay + relevance
 
 **投毒防护（P0-2）**：assistant 回复写入 short_term/event_log 前，`reality_output_scrubber` 会删除以说话人标签开头的整行（如 `用户：…` / `叶瑄：…`），防止模型自写对白落库后被 search 误认为用户发言。
 
-`get_highlights(user_id, days, max_lines)` 是独立函数，
-从最近 N 天日志里提取有情感词的用户发言，供调度器碎碎念触发时参考，不走搜索路径。
+`get_highlights(user_id, days, max_lines, *, char_id=)` 是独立函数，
+从该角色最近 N 天日志里提取有情感词的用户发言，供调度器碎碎念触发时参考，不走搜索路径。
+`char_id` 必填语义与 `get_recent_days` 相同；uid-only 旧树仅冻结历史默认角色可并入。
 
 **过期前抢救（Brief 46 §2）**：按天日文件超过 `day_archive_days`（默认 30 天）会被
 `cleanup_event_log()` gzip 归档、退出 30 天搜索窗口——里面可能仍夹带"计划/承诺/生活
@@ -1422,8 +1433,9 @@ sensor privacy 全系统已经完成。
 **背景**：各类 per-user 记忆文件散落在十几个平级目录（`history/`、`mid_term/`、`episodic_memory/` 等），难以整体归档或按用户清理。
 
 **改动**：`_LAYOUT_REALITY = "v1"`，写入统一落
-`data/runtime/memory/{char_id}/{uid}/`；event_log 相关读取仍由 `for_read(new, old)` 兼容旧路径，
-并保留近 30 天 union 读。其余主记忆 loader 已直接读新路径。迁移观测逻辑位于
+`data/runtime/memory/{char_id}/{uid}/`；event_log 当时仍由 `for_read(new, old)` 兼容旧路径，
+并保留近 30 天 union 读。该无资格 fallback 已于 2026-09-17 收口为冻结历史默认角色
+才可 union。其余主记忆 loader 已直接读新路径。迁移观测逻辑位于
 `core/migration.py`。
 
 **涉及文件**：`core/data_paths.py`、`core/sandbox.py`、`core/migration.py`、

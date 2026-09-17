@@ -1,6 +1,6 @@
 # 9.17 后端综合工单：角色隔离、固定会话与架构债收敛
 
-状态：规划完成，施工未开始。日期：2026-09-17。
+状态：A 已提交；B–J 未开始。日期：2026-09-17。
 本单只交付工单，不授权运行代码修改、迁移、数据删除或兼容层删除。
 勾选规则：完成一项且具备证据才勾一项；源码存在、自动测试通过、部署验收分别记账。每张施工子单完成相关验证与差异检查后独立 commit，再开始下一张。
 
@@ -20,11 +20,11 @@
 对应审计 P0-1、P1-10；优先独立修复，不等待新客户端契约。
 先读 `docs/memory.md`、`docs/data-taxonomy.md`。落点：`core/memory/event_log.py`、resolver、`core/pipeline.py`、`admin/routers/chat_log.py`。
 
-- [ ] A1 明确 legacy 日志合法归属；区分历史默认角色、配置默认角色和当前 active 角色，不随切换重新认领旧数据。
-- [ ] A2 统一目录、单日、search/get_recent_days、list_days/count 及导出/删除调用的读取资格；非归属角色不得读到 uid-only 数据，canonical 桶仍按 owner+char 隔离。
-- [ ] A3 修正 `test_event_log_resolver_integration.py`、`test_event_log_union.py` 中保护错误 fallback 的断言；覆盖非默认仅旧目录、双目录、默认合法兼容、不同 owner、历史 API 与 prompt 检索。
-- [ ] A4 同步 memory/taxonomy 与接口总账；不删除旧日志、不自动分配 ownership。验证默认角色历史仍可用，非默认历史日期也不泄漏。
-- [ ] A5 运行上述相关回归并记录结果，检查差异/换行，独立提交。
+- [x] A1 明确 legacy 日志合法归属；区分历史默认角色、配置默认角色和当前 active 角色，不随切换重新认领旧数据。
+- [x] A2 统一目录、单日、search/get_recent_days、list_days/count 及导出/删除调用的读取资格；非归属角色不得读到 uid-only 数据，canonical 桶仍按 owner+char 隔离。
+- [x] A3 修正 `test_event_log_resolver_integration.py`、`test_event_log_union.py` 中保护错误 fallback 的断言；覆盖非默认仅旧目录、双目录、默认合法兼容、不同 owner、历史 API 与 prompt 检索。
+- [x] A4 同步 memory/taxonomy 与接口总账；不删除旧日志、不自动分配 ownership。验证默认角色历史仍可用，非默认历史日期也不泄漏。
+- [x] A5 运行上述相关回归并记录结果，检查差异/换行，独立提交。
 
 影响：后端修复；桌面/手机历史消费者做隔离回归，无须为本项增加客户端设置。
 

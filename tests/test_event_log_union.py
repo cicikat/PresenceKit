@@ -1,17 +1,17 @@
 """
 V2' event_log union 读取层验证测试
 
-断言1：旧路径有过去 N 天、新路径只有近 1~2 天 → get_recent_days(30) 取全
-断言2：同一天旧路径有上午条目、新路径有下午条目 → 读取返回两者且无重复
+历史默认角色（测试配置 character.default = fixture_character）仍可 union
+uid-only 旧树；非归属角色不得读到同一份旧数据。
 """
 
-import asyncio
 from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
 
 from core.memory import event_log
+from tests.fixtures.public_assets import TEST_CHAR_ID, TEST_PEER_CHAR_ID
 
 
 # ── 辅助 ─────────────────────────────────────────────────────────────────────
@@ -62,7 +62,7 @@ def test_union_cross_days(sandbox, tmp_path):
     block_new = _day_block("14:00", "新路径最近", "嗯嗯", f"tid-new-{new_date_str}")
     _write(new_dir / f"{new_date_str}.md", block_new)
 
-    result = event_log.get_recent_days(_UID, days=30)
+    result = event_log.get_recent_days(_UID, days=30, char_id=TEST_CHAR_ID)
 
     for offset in old_days:
         d = today + timedelta(days=offset)
@@ -93,7 +93,7 @@ def test_union_same_day_merge(sandbox):
     _write(old_dir / f"{date_str}.md", block_am)
     _write(new_dir / f"{date_str}.md", block_pm)
 
-    result = event_log.get_recent_days(_UID, days=1)
+    result = event_log.get_recent_days(_UID, days=1, char_id=TEST_CHAR_ID)
 
     assert "上午聊天" in result, "旧路径上午条目应出现"
     assert "下午聊天" in result, "新路径下午条目应出现"
@@ -120,7 +120,7 @@ def test_union_same_day_dedup(sandbox):
     _write(old_dir / f"{date_str}.md", block)
     _write(new_dir / f"{date_str}.md", block)
 
-    result = event_log.get_recent_days(_UID, days=1)
+    result = event_log.get_recent_days(_UID, days=1, char_id=TEST_CHAR_ID)
 
     # 相同块去重后 ## 12:00 应只出现一次
     assert result.count("## 12:00") == 1, "重复块应只保留一份"
@@ -144,6 +144,9 @@ async def test_search_covers_old_path(sandbox):
     block = _day_block("09:00", "猫猫咖啡馆", "好玩吧", "tid-cafe", intensity=1)
     _write(old_dir / f"{date_str}.md", block)
 
-    result = await event_log.search(_UID, "猫猫咖啡馆")
+    result = await event_log.search(_UID, "猫猫咖啡馆", char_id=TEST_CHAR_ID)
     assert result, "search 应能命中旧路径 20 天前含关键词的条目"
     assert "猫猫" in result or "咖啡" in result
+
+    leaked = await event_log.search(_UID, "猫猫咖啡馆", char_id=TEST_PEER_CHAR_ID)
+    assert not leaked, "非历史默认角色不得经 search 读到 uid-only 旧树"

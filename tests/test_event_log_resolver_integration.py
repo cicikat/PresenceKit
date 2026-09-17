@@ -14,7 +14,7 @@ Covers:
  7.  char_id="" → ValueError (fail-loud, no fallback yexuan)
  8.  yexuan / character_b event_log buckets are isolated
  9.  character_b search does not return yexuan-exclusive content
-10.  30-day union: new dir takes precedence; old dir used as fallback when new absent
+10.  30-day union: new dir takes precedence; uid-only is frozen-owner only, never leaked to unread characters
 11.  path_resolver "event_log" returns directory (not a file)
 12.  resolve_path event_log exact layout: runtime/memory/{char_id}/{uid}/event_log
 13.  get_recent_days yexuan and character_b return different content
@@ -230,7 +230,7 @@ async def test_search_character_b_excludes_yexuan_content(sandbox):
 
 
 # ---------------------------------------------------------------------------
-# 10. 30-day union: new dir used when present; old dir used as fallback
+# 10. 30-day union: new dir used when present; uid-only only for frozen owner
 # ---------------------------------------------------------------------------
 
 def test_get_recent_days_reads_new_dir_when_present(sandbox):
@@ -242,8 +242,8 @@ def test_get_recent_days_reads_new_dir_when_present(sandbox):
     assert "新目录写入内容" in text
 
 
-def test_get_recent_days_union_reads_old_dir_as_fallback(sandbox):
-    """If new dir is empty but old dir has content, union returns old dir content."""
+def test_get_recent_days_union_does_not_leak_uid_only_to_non_owner(sandbox):
+    """Unread / non-historical characters must not union uid-only logs."""
     import core.memory.event_log as el
     from core.sandbox import get_paths
     from core.sandbox import safe_user_id
@@ -257,13 +257,13 @@ def test_get_recent_days_union_reads_old_dir_as_fallback(sandbox):
         encoding="utf-8",
     )
 
-    # new dir does NOT exist → resolver dir is absent
     scope = MemoryScope.reality_scope(uid, "character_b")
     new_dir = resolve_path(scope, "event_log")
-    assert not new_dir.exists(), "new dir must not exist for this fallback test"
+    assert not new_dir.exists(), "new dir must not exist for this isolation test"
 
     text = el.get_recent_days(_UID, days=1, char_id="character_b")
-    assert "旧目录专属内容OLD_ONLY" in text
+    assert "旧目录专属内容OLD_ONLY" not in text
+    assert not el.may_read_legacy_event_log(_UID, "character_b")
 
 
 # ---------------------------------------------------------------------------

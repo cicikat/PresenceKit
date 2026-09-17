@@ -290,7 +290,7 @@ Flutter/Android 字段或设置面。Agent Runtime 是同一角色的 durable / 
 | `/desktop/chat`、`/desktop/activate`、`/desktop/wake` | POST | 桌面 | `current`；桌面 Reality 对话的正式 HTTP 入口 |
 | `/mobile/chat`、`/mobile/activate`、`/mobile/deactivate`、`/mobile/poll`、`/mobile/ack`、`/mobile/push` | POST/GET | 手机、后台服务、管理面测试 | `current`；poll 是非销毁式 durable queue |
 | `/upload/ingest`、`/transcribe` | POST | 桌面、手机 | `current`；上传必须带 Bearer，文件路径不由客户端直接写后端 data |
-| `/memory/{user_id}/short-term`、`/chat-log/dates`、`/chat-log/{date}` | GET；短期记忆另有 DELETE | 桌面、手机、管理面 | `current`；客户端不假定后端文件布局 |
+| `/memory/{user_id}/short-term`、`/chat-log/dates`、`/chat-log/{date}` | GET；短期记忆另有 DELETE | 桌面、手机、管理面 | `current`；客户端不假定后端文件布局。`/chat-log/dates` 与 `/chat-log/{date}` 按请求角色读 canonical 桶；uid-only 旧日志仅冻结的历史默认角色可 union，非归属角色看不到那些历史日期。日历统计仍只扫 canonical 桶。不删除旧日志、不自动分配 ownership |
 | `/diary/list`、`/diary/{date}` | GET | 桌面、手机、管理面 | `current`；只读，`emotion` 若为空必须安全显示 |
 | `/garden/state` | GET | 桌面、手机、管理面 | `current`；现阶段客户端是只读状态页 |
 | `/mood/state`、`/activity/current`、`/period` | GET/PUT/DELETE | 桌面、手机、管理面 | `current`；手机只消费允许的状态字段 |
@@ -747,6 +747,10 @@ profile 可读取已关联的 Reality owner 回合，返回 available/entries（
 可选 turn_id 仅来自 assistant 尾部 emotion/intensity 元数据（旧无 speaker 兼容）；
 显式非 assistant、重复 ID、用户元数据及正文字段不提供关联。无 ID 缺字段，不迁移或回写。
 现有 assistant_display_text 投影也使用该 canonical ID；日期、owner、角色桶和 memory.read 不变。
+`current`（2026-09-17）：`/chat-log/dates` 与 `/chat-log/{date}` 的 uid-only
+`data/event_log/{uid}/` 兼容读仅对该 owner 冻结的历史默认角色开放；切换 active 或
+改 `character.default` 不得让未读角色看到旧日期。canonical `runtime/memory/{char_id}/{uid}/event_log/`
+仍按 owner+char 隔离。旧日志不删除。`observe`：桌面/手机历史消费者做隔离回归。
 桌面 ChatLogEntry.turn_id → assistant turnId → 每回合思考入口已接线。
 手机历史模型已消费 chat-log `turn_id` 与 `media_refs`（kind/filename/sha256/availability）；
 思考仍只走明确 `turn_id`，不用 `msg_id` 代替。旧无 footer 日志不伪造身份。

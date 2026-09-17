@@ -5,8 +5,10 @@
 按天分割的 Markdown 日志文件里，永不修改已有内容。
 
 存储结构：
-  data/event_log/{user_id}/2026-04-15.md   ← AI 读取（按天）
-  data/event_log/{user_id}/full_log.md     ← 供用户导出，AI 不读
+  data/runtime/memory/{char_id}/{user_id}/event_log/{date}.md  ← canonical 写入与读取
+  data/event_log/{user_id}/{date}.md                          ← 旧 uid-only 兼容读
+  data/runtime/memory/global/{user_id}/legacy_event_log_owner.json
+      ← 冻结的历史默认角色（首次兼容读时写入，不随 active / character.default 改认领）
 
 日志格式（每次对话块）：
   ## 14:23
@@ -16,6 +18,7 @@
   ---
 """
 
+import json
 import logging
 import re
 from datetime import datetime, timedelta
@@ -24,9 +27,9 @@ from pathlib import Path
 from core.error_handler import log_error
 from core.memory.path_resolver import resolve_path
 from core.memory.scope import MemoryScope, require_character_id
-from core.migration import for_read
 from core.sandbox import get_paths, safe_user_id
 from core.data_paths import DEFAULT_CHAR_ID
+from core.safe_write import safe_write_json
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +41,91 @@ _TURN_ID_RE = re.compile(r"turn_id:(\S+)")
 _SPEAKER_META_RE = re.compile(r"^>\s*.*\bspeaker:(\w+)")
 
 
+def _legacy_event_log_dir(user_id: str) -> Path:
+    """物理 uid-only 旧目录。不表示任何角色对该目录有读取资格。"""
+    return get_paths()._p("event_log") / safe_user_id(user_id)
+
+
+def _legacy_owner_record_path(user_id: str) -> Path:
+    """Per-owner freeze of which character may read the uid-only tree."""
+    return get_paths()._p("runtime", "memory", "global", safe_user_id(user_id), "legacy_event_log_owner.json")
+
+
+def _configured_default_char_id() -> str:
+    """Live `character.default`. Distinct from the frozen historical owner."""
+    from core.config_loader import get_config
+
+    default = str((get_config().get("character") or {}).get("default") or "").strip()
+    return default or DEFAULT_CHAR_ID
+
+
+def _read_frozen_legacy_owner(user_id: str) -> str | None:
+    path = _legacy_owner_record_path(user_id)
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as e:
+        log_error("event_log.legacy_owner.read", e)
+        return None
+    if not isinstance(payload, dict):
+        return None
+    owner = str(payload.get("char_id") or "").strip()
+    return owner or None
+
+
+def _freeze_legacy_owner(user_id: str, char_id: str) -> str:
+    """Persist historical default ownership once. Never reassigns on later switches."""
+    require_character_id(char_id)
+    existing = _read_frozen_legacy_owner(user_id)
+    if existing:
+        return existing
+    record = {
+        "char_id": char_id,
+        "frozen_at": datetime.now().isoformat(timespec="seconds"),
+        "source": "configured_default_at_first_compatible_read",
+    }
+    if not safe_write_json(_legacy_owner_record_path(user_id), record, keep_bak=False):
+        logger.warning(
+            "[event_log] failed to freeze legacy owner uid=%s char=%s; using in-memory claim only",
+            user_id,
+            char_id,
+        )
+    return char_id
+
+
+def historical_legacy_event_log_char_id(user_id: str) -> str | None:
+    """Return the frozen historical default character for this owner's uid-only logs.
+
+    Distinct from:
+      - live `character.default` (may change after freeze)
+      - current active character (never used to claim old data)
+    Returns None when this owner has no uid-only event_log tree.
+    """
+    uid = safe_user_id(user_id)
+    if not _legacy_event_log_dir(uid).is_dir():
+        return _read_frozen_legacy_owner(uid)
+    frozen = _read_frozen_legacy_owner(uid)
+    if frozen:
+        return frozen
+    return _freeze_legacy_owner(uid, _configured_default_char_id())
+
+
+def may_read_legacy_event_log(user_id: str, char_id: str) -> bool:
+    """True only for the frozen historical default character of this owner."""
+    require_character_id(char_id)
+    owner = historical_legacy_event_log_char_id(user_id)
+    return owner is not None and owner == char_id
+
+
+def _legacy_read_dir_if_eligible(user_id: str, char_id: str) -> Path | None:
+    """Return the uid-only directory only when this character is the frozen owner."""
+    if not may_read_legacy_event_log(user_id, char_id):
+        return None
+    old = _legacy_event_log_dir(user_id)
+    return old if old.is_dir() else None
+
+
 def _event_log_write_dir(user_id: str, *, char_id: str = DEFAULT_CHAR_ID) -> Path:
     """写目录：始终写新布局 runtime/memory/{char_id}/{uid}/event_log/。"""
     require_character_id(char_id)
@@ -46,25 +134,24 @@ def _event_log_write_dir(user_id: str, *, char_id: str = DEFAULT_CHAR_ID) -> Pat
 
 
 def _event_log_read_dir(user_id: str, *, char_id: str = DEFAULT_CHAR_ID) -> Path:
-    """读目录：新目录存在时读新，否则降级旧路径。"""
+    """读目录：始终返回 canonical 桶。uid-only 兼容由 _legacy_read_dir_if_eligible 单独授权。"""
     require_character_id(char_id)
     uid = safe_user_id(user_id)
-    scope = MemoryScope.reality_scope(uid, char_id)
-    new = resolve_path(scope, "event_log")
-    old = get_paths()._p("event_log") / uid
-    # for_read() reads bytes — unsuitable for directories; check with is_dir() instead.
-    return new if new.is_dir() else old
+    return resolve_path(MemoryScope.reality_scope(uid, char_id), "event_log")
 
 
 def _day_file_read(user_id: str, date: datetime, *, char_id: str = DEFAULT_CHAR_ID) -> Path:
-    """读：指定日期日志文件，新存在读新，否则降级旧路径。"""
+    """读：指定日期的 canonical 日文件。旧路径仅在该角色有资格时作为不存在时的兼容源。"""
     require_character_id(char_id)
     uid = safe_user_id(user_id)
     date_str = date.strftime("%Y-%m-%d")
-    scope = MemoryScope.reality_scope(uid, char_id)
-    new = resolve_path(scope, "event_log") / f"{date_str}.md"
-    old = get_paths()._p("event_log") / uid / f"{date_str}.md"
-    return for_read(new, old)
+    new = resolve_path(MemoryScope.reality_scope(uid, char_id), "event_log") / f"{date_str}.md"
+    if new.exists():
+        return new
+    old_dir = _legacy_read_dir_if_eligible(uid, char_id)
+    if old_dir is not None:
+        return old_dir / f"{date_str}.md"
+    return new
 
 
 def _day_file_write(user_id: str, date: datetime, *, char_id: str = DEFAULT_CHAR_ID) -> Path:
@@ -167,13 +254,13 @@ def _merge_day_texts(text_a: str, text_b: str) -> str:
     return "\n".join("\n".join(block) for block in merged)
 
 
-def _read_day_union(new_dir: Path, old_dir: Path, date_str: str) -> str:
+def _read_day_union(new_dir: Path, old_dir: Path | None, date_str: str) -> str:
     """
-    Union 读取新旧两处目录中同一天的日志文件。
-    只匹配 YYYY-MM-DD.md，不读 .gz 归档。
+    Union 读取 canonical 桶与（仅当调用方已授权）uid-only 旧目录中同一天的日志。
+    只匹配 YYYY-MM-DD.md，不读 .gz 归档。old_dir 为 None 时不读旧树。
     """
     new_file = new_dir / f"{date_str}.md"
-    old_file = old_dir / f"{date_str}.md"
+    old_file = (old_dir / f"{date_str}.md") if old_dir is not None else None
 
     text_new = ""
     text_old = ""
@@ -183,7 +270,7 @@ def _read_day_union(new_dir: Path, old_dir: Path, date_str: str) -> str:
     except Exception as e:
         log_error("event_log._read_day_union.new", e)
     try:
-        if old_file.exists():
+        if old_file is not None and old_file.exists():
             text_old = old_file.read_text(encoding="utf-8").strip()
     except Exception as e:
         log_error("event_log._read_day_union.old", e)
@@ -294,8 +381,8 @@ def get_recent_days(
 ) -> str:
     """
     读取最近 N 天的日志原文，拼接成一个字符串返回。
-    同时读取新路径 memory/{char_id}/{uid}/event_log/ 与旧路径 event_log/{uid}/，
-    对每天的内容做 union 合并（按 turn_id 或全行去重）。
+    始终读 canonical 桶 memory/{char_id}/{uid}/event_log/。
+    仅冻结的历史默认角色可额外 union 旧路径 event_log/{uid}/（按 turn_id 或全行去重）。
     只读按天分割的 YYYY-MM-DD.md 文件，不读 full_log.md 和 .gz 归档。
 
     参数：
@@ -311,7 +398,7 @@ def get_recent_days(
     uid = safe_user_id(user_id)
     scope = MemoryScope.reality_scope(uid, char_id)
     new_dir = resolve_path(scope, "event_log")
-    old_dir = get_paths()._p("event_log") / uid
+    old_dir = _legacy_read_dir_if_eligible(uid, char_id)
 
     today = datetime.now()
 
@@ -487,13 +574,13 @@ async def search(
     return result_str
 
 
-def get_highlights(user_id: str, days: int = 2, max_lines: int = 5) -> str:
+def get_highlights(user_id: str, days: int = 2, max_lines: int = 5, *, char_id: str = DEFAULT_CHAR_ID) -> str:
     """
     从最近N天日志里提取有内容密度的片段，供碎碎念使用。
     优先选：包含具体事物/情感词的用户发言，跳过纯短句和系统行。
     角色回复 intensity >= 2 的块额外加分。
     """
-    recent_text = get_recent_days(user_id, days=days)
+    recent_text = get_recent_days(user_id, days=days, char_id=char_id)
     if not recent_text:
         return ""
 
@@ -524,16 +611,19 @@ def get_highlights(user_id: str, days: int = 2, max_lines: int = 5) -> str:
 
 
 def list_days(user_id: str, *, char_id: str = DEFAULT_CHAR_ID) -> list[str]:
-    """列出该用户/角色下所有存在按天日志文件的日期（YYYY-MM-DD），新旧路径 union，按日期降序。
+    """列出该用户/角色下所有存在按天日志文件的日期（YYYY-MM-DD），按日期降序。
 
+    canonical 桶始终计入。uid-only 旧目录仅冻结的历史默认角色可 union。
     只统计按天分割文件（不含 full_log.md / .gz 归档），供管理面板浏览后按需 DELETE。
     """
     require_character_id(char_id)
     uid = safe_user_id(user_id)
     new_dir = _event_log_read_dir(user_id, char_id=char_id)
-    old_dir = get_paths()._p("event_log") / uid
+    old_dir = _legacy_read_dir_if_eligible(uid, char_id)
     dates: set[str] = set()
     for d in (new_dir, old_dir):
+        if d is None:
+            continue
         try:
             if d.is_dir():
                 for f in d.glob("*.md"):
@@ -550,8 +640,12 @@ def count_real_turns(user_id: str, *, char_id: str = DEFAULT_CHAR_ID) -> int:
     不受 short_term 滑窗（20轮）、event_log 按天分片/删除影响，因为 full_log.md
     永不轮转、永不删除。仅供 identity 冷启动观测使用（identity-2，见
     docs/known-issues.md），不接入任何业务判断路径。
+    canonical 桶优先；仅历史默认角色在 canonical 缺失时可读 uid-only full_log.md。
     """
     path = _event_log_read_dir(user_id, char_id=char_id) / "full_log.md"
+    if not path.exists():
+        old_dir = _legacy_read_dir_if_eligible(user_id, char_id)
+        path = (old_dir / "full_log.md") if old_dir is not None else path
     if not path.exists():
         return 0
     try:
@@ -617,8 +711,8 @@ class EventLog:
     def append(self, user_id: str, role: str, content: str, emotion: str = "neutral", intensity: int = 0, *, char_id: str = DEFAULT_CHAR_ID):
         append(user_id, role, content, emotion=emotion, intensity=intensity, char_id=char_id)
 
-    def get_recent_days(self, user_id: str, days: int = 3) -> str:
-        return get_recent_days(user_id, days)
+    def get_recent_days(self, user_id: str, days: int = 3, *, char_id: str = DEFAULT_CHAR_ID) -> str:
+        return get_recent_days(user_id, days, char_id=char_id)
 
-    async def search(self, user_id: str, query: str, llm_client=None) -> str:
-        return await search(user_id, query, llm_client)
+    async def search(self, user_id: str, query: str, llm_client=None, *, char_id: str = DEFAULT_CHAR_ID) -> str:
+        return await search(user_id, query, llm_client, char_id=char_id)

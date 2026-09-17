@@ -139,17 +139,14 @@ def run_address_suggester(
     只产出 pending，不自动写入 confirmed。每条带 source 证据，供人工核对。
     返回本次新增的 pending 条目列表（已写入 relationship_facts.yaml）。
     """
-    from core.memory.scope import MemoryScope
-    from core.memory.path_resolver import resolve_path
-    from core.sandbox import get_paths, safe_user_id as _safe_uid
+    from core.memory.event_log import _event_log_read_dir, _legacy_read_dir_if_eligible
 
-    scope = MemoryScope.reality_scope(uid, char_id)
-    log_dir = resolve_path(scope, "event_log")
-    if not log_dir.is_dir():
-        # 降级到旧路径
-        log_dir = get_paths()._p("event_log") / _safe_uid(uid)
+    log_dirs = [_event_log_read_dir(uid, char_id=char_id)]
+    old_dir = _legacy_read_dir_if_eligible(uid, char_id)
+    if old_dir is not None and old_dir not in log_dirs:
+        log_dirs.append(old_dir)
 
-    if not log_dir.is_dir():
+    if not any(d.is_dir() for d in log_dirs):
         logger.debug(f"[relationship_facts.suggester] uid={uid} 无 event_log 目录，跳过")
         return []
 
@@ -159,15 +156,21 @@ def run_address_suggester(
 
     for i in range(days):
         d = today - timedelta(days=i)
-        fpath = log_dir / f"{d.isoformat()}.md"
-        if fpath.exists():
+        date_str = d.isoformat()
+        day_hit = False
+        for log_dir in log_dirs:
+            fpath = log_dir / f"{date_str}.md"
+            if not fpath.exists():
+                continue
             try:
                 text = fpath.read_text(encoding="utf-8")
                 for m in _USER_LINE_RE.finditer(text):
                     user_lines.append(m.group(1).strip())
-                days_scanned += 1
+                day_hit = True
             except Exception as e:
                 logger.warning(f"[relationship_facts.suggester] 读取 {fpath} 失败: {e}")
+        if day_hit:
+            days_scanned += 1
 
     if not user_lines:
         return []
