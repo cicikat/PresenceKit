@@ -37,10 +37,10 @@ def test_proposed_bundle_is_not_in_frozen_v1_manifest():
     assert v1["fixture_version"] == "v1"
 
 
-def test_contract_doc_does_not_claim_shipped():
+def test_contract_doc_records_backend_shipped_and_consumer_boundary():
     text = CONTRACT.read_text(encoding="utf-8")
-    assert "proposed-not-shipped" in text
-    assert "落定前不得" in text
+    assert "session_scope=v1" in text
+    assert "consumer-update-required" in text
     assert "Dream settings" in text
     assert "exactly-once" in text.lower() or "不承诺 exactly-once" in text
 

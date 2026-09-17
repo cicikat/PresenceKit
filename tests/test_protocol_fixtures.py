@@ -88,6 +88,15 @@ def test_mobile_duplicate_ack_is_explicitly_idempotent():
     assert first["response"] == duplicate["response"]
 
 
+def test_session_scope_fixture_allows_char_only_at_bind_boundary():
+    fixture = _load("session_scope.json")
+    assert fixture["bind"]["request"]["body"] == {"char_id": "fixture_character"}
+    assert "char_id" not in fixture["scoped_request"]["body"]
+    assert fixture["scoped_request"]["header"] == {
+        "X-Presence-Session": "<OPAQUE_ID>"
+    }
+
+
 @pytest.mark.asyncio
 async def test_mobile_chat_provider_uses_the_canonical_fixture(monkeypatch):
     from admin.routers import chat, mobile

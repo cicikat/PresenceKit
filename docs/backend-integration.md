@@ -5,9 +5,10 @@
 契约。新增字段前先确认三端（本仓 + PresenceKit-desktop + Emerald-mobile）对齐范围，
 避免任一端单边扩展导致字段语义漂移。
 
-固定会话 scope（拟议、未上线）见 [session-scope-contract.md](session-scope-contract.md)。
-legacy `/desktop/chat` 与 `/mobile/chat` 今天忽略未知字段并使用 live active；客户端不得把
-`char_id`/`session_id` 塞进这两支，以免旧服务端静默发给当时的活跃角色。
+固定会话 scope 后端已提供 `session_scope=v1`，见
+[session-scope-contract.md](session-scope-contract.md)。客户端先从 `/auth/whoami` 发现能力，
+再 `POST /v1/sessions`，后续以 `X-Presence-Session` 传不透明句柄；不要把 `char_id` 当请求权威。
+无 header 的 legacy `/desktop/chat` 与 `/mobile/chat` 仍使用 live active。
 
 ## Versioned owner turns and diary sync (Brief 171)
 

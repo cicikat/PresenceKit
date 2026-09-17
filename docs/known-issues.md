@@ -2,10 +2,11 @@
 
 ## 固定会话 scope（2026-09-17）
 
-`open`：拟议合同已写（[session-scope-contract.md](session-scope-contract.md)），未实现。
-chat 内部会冻 memory scope，但上传/媒体读取仍跟 live active；reasoning 只认 `turn_id`；
-手机共享 `seq` 若按角色跳过再 ack 会丢消息。旧服务端无 capability 广告。
-`observe`：桌面/手机接入与 C 实现。本轮不改桌面或手机代码；手机接入进度见 22 号工单。
+`current`：后端广告 `session_scope=v1`，签发 token/owner/角色绑定的 24 小时 session；
+chat、上传、wake、媒体、历史、calendar、reasoning 使用同一可选 session header，
+并提供有界 request receipt 与脱敏观测。无 header 的 legacy 行为不变。
+`open`：桌面/手机消费者接入与真实多端、重连、后台/真机验收；手机共享 `seq` 仍要求
+先持久化所有角色信封再 ack。固定 SHA 三仓 matrix 尚未更新，不能写成联调完成。
 
 ## 聊天媒体读取（2026-09-17）
 

@@ -1,10 +1,20 @@
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel
 from admin.auth import require_scopes
 
 router = APIRouter()
+
+
+@router.get("/observability/session-scope", summary="读取固定会话 scope 脱敏状态")
+async def session_scope_observability(
+    limit: int = Query(100, ge=1, le=500),
+    _auth=Depends(require_scopes("state.read")),
+):
+    from core.session_scope import observability_snapshot
+
+    return observability_snapshot(limit=limit)
 
 
 @router.get('/observability/mail-weekly', summary='读取当前周信到期与重试状态')
@@ -52,15 +62,24 @@ async def observability_chat_artifacts(
 
 
 @router.get("/chat/turns/{turn_id}/reasoning", summary="按聊天回合读取模型已返回的思考")
-async def chat_turn_reasoning(turn_id: str, _auth=Depends(require_scopes("memory.read"))):
+async def chat_turn_reasoning(
+    turn_id: str,
+    x_presence_session: str | None = Header(None, alias="X-Presence-Session"),
+    _auth=Depends(require_scopes("memory.read")),
+):
     import asyncio
     from core.llm_reasoning_store import query_turn
     if not turn_id.strip() or len(turn_id) > 128:
         raise HTTPException(422, "无效的回合编号")
+    grant = None
+    if x_presence_session:
+        from admin.routers.chat import _session_grant
+        grant = _session_grant(x_presence_session, getattr(_auth, "label", "legacy-admin"))
     try:
         from core.thinking import display_prefer_monologue
         entries = await asyncio.to_thread(
-            query_turn, turn_id, prefer_monologue=display_prefer_monologue()
+            query_turn, turn_id, prefer_monologue=display_prefer_monologue(),
+            char_id=grant.char_id if grant is not None else None,
         )
     except Exception:
         raise HTTPException(503, "思考存储暂时不可读取") from None

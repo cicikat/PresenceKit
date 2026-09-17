@@ -12,7 +12,7 @@ import sqlite3
 from datetime import date as CalendarDate, timedelta
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 
 from admin.auth import require_scopes
 from core.config_loader import get_config
@@ -181,7 +181,17 @@ def _parse_day(text: str) -> list[dict]:
 
 
 @router.get("/dates", summary="获取聊天日志日期列表")
-async def list_dates(char_id: str | None = None, auth=Depends(require_scopes("memory.read"))):
+async def list_dates(
+    char_id: str | None = None,
+    x_presence_session: str | None = Header(None, alias="X-Presence-Session"),
+    auth=Depends(require_scopes("memory.read")),
+):
+    if x_presence_session:
+        from admin.routers.chat import _session_grant
+        grant = _session_grant(x_presence_session, getattr(auth, "label", "legacy-admin"))
+        if char_id is not None and char_id != grant.char_id:
+            raise HTTPException(status_code=403, detail="character_not_authorized")
+        char_id = grant.char_id
     resolved = _resolve_char_id(char_id)
     from core.memory import event_log as _event_log
 
@@ -202,10 +212,17 @@ async def calendar_stats(
     start: CalendarDate | None = None,
     end: CalendarDate | None = None,
     char_id: str | None = None,
+    x_presence_session: str | None = Header(None, alias="X-Presence-Session"),
     auth=Depends(require_scopes("memory.read", "state.read")),
 ):
     """自然日数据；周从周一开始。显式起止日期最多 366 天，含首尾。"""
     from core.conversation_stats import query
+    if x_presence_session:
+        from admin.routers.chat import _session_grant
+        grant = _session_grant(x_presence_session, getattr(auth, "label", "legacy-admin"))
+        if char_id is not None and char_id != grant.char_id:
+            raise HTTPException(status_code=403, detail="character_not_authorized")
+        char_id = grant.char_id
     resolved = _resolve_char_id(char_id)
     owner = _owner_qq()
     if not owner:
@@ -262,9 +279,20 @@ async def calendar_stats(
 
 
 @router.get("/{date}", summary="获取单日聊天日志")
-async def get_day(date: str, char_id: str | None = None, auth=Depends(require_scopes("memory.read"))):
+async def get_day(
+    date: str,
+    char_id: str | None = None,
+    x_presence_session: str | None = Header(None, alias="X-Presence-Session"),
+    auth=Depends(require_scopes("memory.read")),
+):
     if not _DATE_RE.match(date):
         raise HTTPException(status_code=422, detail="date format must be YYYY-MM-DD")
+    if x_presence_session:
+        from admin.routers.chat import _session_grant
+        grant = _session_grant(x_presence_session, getattr(auth, "label", "legacy-admin"))
+        if char_id is not None and char_id != grant.char_id:
+            raise HTTPException(status_code=403, detail="character_not_authorized")
+        char_id = grant.char_id
     resolved = _resolve_char_id(char_id)
     from core.memory import event_log as _event_log
 

@@ -134,6 +134,7 @@ async def push_message(
     char_id: str | None = None,
     round_id: str | None = None,
     domain: str | None = None,
+    request_id: str | None = None,
 ) -> bool:
     """推送普通消息，走出站队列，fire-and-forget，不等 ack。
     msg_id 可由调用方预先生成（用于与 message_segments 共享），省略时自动生成。
@@ -155,6 +156,8 @@ async def push_message(
         payload["round_id"] = round_id
     if domain is not None:
         payload["domain"] = domain
+    if request_id is not None:
+        payload["request_id"] = request_id
     return enqueue_json(payload)
 
 
@@ -165,6 +168,7 @@ async def push_segments(
     *,
     char_id: str | None = None,
     domain: str | None = None,
+    request_id: str | None = None,
 ) -> bool:
     """推送 narrative segments envelope，走出站队列，fire-and-forget，不等 ack。
     与 channel_message 并行发送；老客户端可安全忽略此消息类型。
@@ -183,6 +187,8 @@ async def push_segments(
         payload["char_id"] = char_id
     if domain is not None:
         payload["domain"] = domain
+    if request_id is not None:
+        payload["request_id"] = request_id
     return enqueue_json(payload)
 
 
@@ -192,6 +198,7 @@ async def push_stream_start(
     char_id: str | None = None,
     round_id: str | None = None,
     domain: str | None = None,
+    request_id: str | None = None,
 ) -> bool:
     """流式开始标记，走出站队列。前端创建空的临时气泡。"""
     payload: dict = {
@@ -206,6 +213,8 @@ async def push_stream_start(
         payload["round_id"] = round_id
     if domain is not None:
         payload["domain"] = domain
+    if request_id is not None:
+        payload["request_id"] = request_id
     return enqueue_json(payload)
 
 

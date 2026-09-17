@@ -113,7 +113,13 @@ async def patch_token(label: str, body: TokenPatch, _auth=Depends(require_scopes
 
 @router.get("/auth/whoami", summary="当前 token 的身份（任意有效 token 可调）")
 async def whoami(info: TokenInfo = Depends(require_scopes())):
-    return {"label": info.label, "scopes": sorted(info.scopes)}
+    from core.session_scope import SESSION_SCOPE_VERSION
+
+    return {
+        "label": info.label,
+        "scopes": sorted(info.scopes),
+        "capabilities": {"session_scope": SESSION_SCOPE_VERSION},
+    }
 
 
 @router.get("/auth/profiles", summary="profile → scopes 常量表")

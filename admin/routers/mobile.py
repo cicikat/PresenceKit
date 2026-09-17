@@ -2,7 +2,7 @@
 手机端轮询接口。
 """
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query
 
 from admin.auth import require_scopes
 from core.audio_perception import voice_context
@@ -12,7 +12,11 @@ router = APIRouter()
 
 @router.post("/mobile/chat", summary="手机端普通对话（Bearer 鉴权）")
 @voice_context("mobile")
-async def mobile_chat(body: dict, _auth=Depends(require_scopes("chat"))):
+async def mobile_chat(
+    body: dict,
+    x_presence_session: str | None = Header(None, alias="X-Presence-Session"),
+    _auth=Depends(require_scopes("chat")),
+):
     """Run the shared reality-chat pipeline with mobile provenance."""
     message = (body.get("message") or "").strip()
     if not message:
@@ -26,11 +30,31 @@ async def mobile_chat(body: dict, _auth=Depends(require_scopes("chat"))):
     uid = str(get_config().get("scheduler", {}).get("owner_id", "owner"))
     _check_reality_not_in_dream(uid)
     context = legacy_mobile_context(getattr(_auth, "label", "legacy-admin"))
-    result = await run_legacy_owner_turn(
-        message,
-        context,
-        reply_to=reply_to,
-        executor=run_owner_chat_turn,
+    from admin.routers.chat import _run_session_request, _session_grant
+    grant = _session_grant(x_presence_session, getattr(_auth, "label", "legacy-admin"))
+    if grant is None and any(key in body for key in ("char_id", "session_id", "request_id")):
+        raise HTTPException(status_code=422, detail="session_scope_required")
+
+    async def _execute():
+        if grant is None:
+            return await run_legacy_owner_turn(
+                message, context, reply_to=reply_to, executor=run_owner_chat_turn,
+            )
+        return await run_owner_chat_turn(
+            message, context.provenance_channel,
+            live_origin_channel=context.live_origin_channel,
+            durable_mobile_mirror=context.durable_mobile_mirror,
+            reply_to=reply_to, frozen_scope=grant.memory_scope,
+            request_id=str(body.get("request_id") or ""),
+        )
+
+    result = (
+        await _run_session_request(
+            grant=grant, request_id=body.get("request_id"),
+            payload={"kind": "mobile_chat", "message": message, "reply_to": reply_to},
+            executor=_execute,
+        )
+        if grant is not None else await _execute()
     )
 
     from core.scheduler.sensor_events import notify_chat_happened

@@ -4,14 +4,13 @@
 > 自己的设置归属与接入差异，完整映射请查 [三仓文档总索引](three-repo-doc-index.md) 和
 > [三仓接口总账](three-repo-interface-catalog.md)。
 
-## 固定会话 scope（2026-09-17，proposed-not-shipped）
+## 固定会话 scope（2026-09-17，backend current）
 
-没有已上线的会话 capability 或设置开关。live 角色仍是
-`PATCH /settings/prompt-assets` / `PUT /characters/active` 写入的 `active_character`。
-拟议发现字段 `capabilities.session_scope` 不得复用
-`GET /observability/deployment-capabilities`（那是本机/远程工具策略）。
-合同见 [session-scope-contract.md](session-scope-contract.md)。C 落地前管理面不展示该能力。
-Dream settings 归属走工单 F。
+`GET /auth/whoami` 广告 `capabilities.session_scope=v1`；`POST /v1/sessions` 签发
+24 小时进程内 grant。无独立开关，旧请求仍跟 live `active_character`。
+`GET /observability/session-scope`（`state.read`）提供脱敏 effective state、TTL、计数和拒绝原因；
+不得复用 deployment-capabilities。合同见 [session-scope-contract.md](session-scope-contract.md)。
+Dream settings 归属走工单 F；桌面/手机接入与真实联调仍 open。
 
 ## 聊天产物文件（2026-09-16）
 

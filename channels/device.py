@@ -33,6 +33,7 @@ class DeviceChannel(BaseChannel):
         msg_id: str | None = None,
         *,
         char_id: str | None = None,
+        request_id: str | None = None,
     ) -> None:
         from channels import device_ws
         if not device_ws.is_connected():
@@ -40,6 +41,8 @@ class DeviceChannel(BaseChannel):
         push_kwargs = {"msg_id": msg_id}
         if char_id is not None:
             push_kwargs["char_id"] = char_id
+        if request_id is not None:
+            push_kwargs["request_id"] = request_id
         ok = await device_ws.push_message(content, **push_kwargs)
         if ok and behavior:
             action_ok, err = await device_ws.push_action_and_wait(behavior, timeout=5.0)

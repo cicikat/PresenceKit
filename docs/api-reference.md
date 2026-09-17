@@ -44,7 +44,8 @@ scope；只读端点通常允许对应的 read scope。
 | DELETE | `/memory-events/{event_id}` | `admin` | 可逆墓碑：清空事件正文和媒体引用，保留 event ID、证据关系边和派生血缘；不提供物理删除 |
 | GET | `/observability/memory-event-migration` | `state.read` | 内容无关的历史 Markdown 迁移状态、批次位置和计数；不返回正文、媒体或本地路径 |
 | GET | `/observability/chat-identity` | `state.read` | 进程级聊天身份覆盖率：attempted / persisted_turn_id / generated_transport_id / empty_transport_id 及覆盖率；不含正文 |
-| GET | `/chat/media/{sha256}` | `chat` | 按 sha256 读取仍可恢复的聊天原图/原文件；owner+活跃角色闸；410 不可恢复；不返回磁盘路径 |
+| POST/GET | `/v1/sessions`、`/auth/whoami` | `chat` / 任意有效 token | 签发固定 Reality 会话；whoami 广告 `capabilities.session_scope=v1` |
+| GET | `/chat/media/{sha256}` | `chat` | 按 sha256 读取仍可恢复的聊天原图/原文件；有 session 时按冻结 owner+角色闸，否则 legacy active；410 不可恢复；不返回磁盘路径 |
 | GET | `/observability/chat-media` | `state.read` | 聊天媒体引用计数、inbox/image_cache 保留策略与 live-ref 守卫；不含正文、路径或文件名 |
 | GET/PUT/PATCH/DELETE | `/users/*`、`/relations/*`、`/relationship-facts/*` | users / relations | 管理面用户与关系 |
 | GET/POST/PUT/DELETE | `/lorebook*`、`/jailbreak-entries*` | prompt_assets | 管理面 Prompt 资产 |
@@ -62,7 +63,8 @@ scope；只读端点通常允许对应的 read scope。
 | GET | `/observability/api-calls`、`/observability/perceive-events`、`/observability/runtime-signals`、`/observability/owner-turns` | state.read | 外部 API 调用总账、reality stimulus 审计、运行信号和脱敏 owner-turn receipt 观测；均为只读查询。 |
 | GET | `/perception/visual-trace` | state.read | 本地 VLM shadow 观察（不含原图，不进入 prompt/记忆） |
 | GET/PUT/POST | `/tts-config`、`/tts-config/test` | admin | TTS provider 安全配置与已就绪 provider 的试听 |
-| GET/POST/PATCH/DELETE | `/auth/*` | auth | Token 管理页。`GET /auth/whoami` 当前只回 `label`/`scopes`。拟议 `capabilities.session_scope` 见 [session-scope-contract.md](session-scope-contract.md)，未上线 |
+| GET/POST/PATCH/DELETE | `/auth/*` | auth | Token 管理页。`GET /auth/whoami` 回 `label`/`scopes` 与 `capabilities.session_scope=v1` |
+| GET | `/observability/session-scope` | `state.read` | 固定会话与 request receipt 的脱敏元数据、TTL、拒绝原因 |
 | GET/POST/PATCH/DELETE | `/group/*` | group | Stage 群聊管理 |
 | GET/PUT/POST | `/settings/agent-runtime-browser`、`/settings/agent-runtime-browser/tasks*` | admin | 后端唯一浏览器 allowlist、worker 和任务控制面；任务 receipt/观测仅返回脱敏 metadata |
 

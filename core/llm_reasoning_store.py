@@ -65,9 +65,11 @@ def associate_owner_turn(function):
         try:
             result = await function(*args, **kwargs)
             turn_id = result.get("turn_id") if isinstance(result, dict) else None
+            frozen_scope = kwargs.get("frozen_scope")
+            char_id = getattr(frozen_scope, "character_id", "") if frozen_scope is not None else ""
             if turn_id and scope["calls"]:
                 try:
-                    await asyncio.to_thread(_bind_turn, scope["calls"], turn_id)
+                    await asyncio.to_thread(_bind_turn, scope["calls"], turn_id, char_id)
                 except Exception as exc:
                     logger.warning("[reasoning_archive] bind_failed error_type=%s", type(exc).__name__)
             return result
@@ -84,23 +86,23 @@ def finish_turn_capture():
         scope["active"] = False
 
 
-def _bind_turn(calls, turn_id):
+def _bind_turn(calls, turn_id, char_id=""):
     with _DB_LOCK:
         for path in {path for path, _, _purpose in calls}:
             if not path.exists():
                 continue
             with closing(sqlite3.connect(path, timeout=0.25)) as db, db:
                 db.executemany(
-                    "UPDATE reasoning SET turn_id=? WHERE call_id=?",
+                    "UPDATE reasoning SET turn_id=?, char_id=? WHERE call_id=?",
                     [
-                        (turn_id, call_id)
+                        (turn_id, char_id, call_id)
                         for p, call_id, purpose in calls
                         if p == path and _owner_turn_purpose(purpose)
                     ],
                 )
 
 
-def query_turn(turn_id: str, *, prefer_monologue: bool = True):
+def query_turn(turn_id: str, *, prefer_monologue: bool = True, char_id: str | None = None):
     """Only linked owner calls; historical/unlinked global calls stay admin-only.
 
     Prefixed monologue (source=monologue) is included. Helper-call native CoT
@@ -118,15 +120,22 @@ def query_turn(turn_id: str, *, prefer_monologue: bool = True):
             if "turn_id" not in columns:
                 return []
             has_purpose = "purpose" in columns
-            select = f"SELECT {_META}, parts FROM reasoning WHERE turn_id=? ORDER BY seq"
+            where = "turn_id=?"
+            params: list[object] = [turn_id]
+            if char_id is not None:
+                if "char_id" not in columns:
+                    return []
+                where += " AND char_id=?"
+                params.append(char_id)
+            select = f"SELECT {_META}, parts FROM reasoning WHERE {where} ORDER BY seq"
             if has_purpose:
                 select = (
-                    f"SELECT {_META}, parts FROM reasoning WHERE turn_id=? "
+                    f"SELECT {_META}, parts FROM reasoning WHERE {where} "
                     "AND (purpose IS NULL OR purpose='' OR purpose='chat' "
                     "OR purpose='monologue') ORDER BY seq"
                 )
             result = []
-            for row in db.execute(select, (turn_id,)):
+            for row in db.execute(select, params):
                 entry = dict(row)
                 entry["parts"] = json.loads(entry["parts"])
                 purpose = (entry.get("purpose") or "").strip()
@@ -255,9 +264,12 @@ def _append_locked(path, capture):
         columns = {row[1] for row in db.execute("PRAGMA table_info(reasoning)")}
         if "turn_id" not in columns:
             db.execute("ALTER TABLE reasoning ADD COLUMN turn_id TEXT NOT NULL DEFAULT ''")
+        if "char_id" not in columns:
+            db.execute("ALTER TABLE reasoning ADD COLUMN char_id TEXT NOT NULL DEFAULT ''")
         if "purpose" not in columns:
             db.execute("ALTER TABLE reasoning ADD COLUMN purpose TEXT NOT NULL DEFAULT ''")
         db.execute("CREATE INDEX IF NOT EXISTS reasoning_turn ON reasoning(turn_id)")
+        db.execute("CREATE INDEX IF NOT EXISTS reasoning_turn_char ON reasoning(turn_id, char_id)")
         db.execute("""INSERT INTO reasoning
             (call_id, created_at, preset, model, protocol, status, reasoning_chars, parts, purpose)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""", (

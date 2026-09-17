@@ -82,6 +82,7 @@ class MobileChannel(BaseChannel):
         sticker: dict | None = None,
         artifacts: list[dict] | None = None,
         display_text: str | None = None,
+        request_id: str | None = None,
     ) -> None:
         await self._write_to_queue(
             content,
@@ -92,6 +93,7 @@ class MobileChannel(BaseChannel):
             sticker=sticker,
             artifacts=artifacts,
             display_text=display_text,
+            request_id=request_id,
         )
 
     async def send_with_behavior(
@@ -163,6 +165,7 @@ class MobileChannel(BaseChannel):
         sticker: dict | None = None,
         artifacts: list[dict] | None = None,
         display_text: str | None = None,
+        request_id: str | None = None,
     ) -> None:
         item = None
         try:
@@ -192,6 +195,8 @@ class MobileChannel(BaseChannel):
                     item["artifacts"] = artifacts
                 if display_text is not None:
                     item["display_text"] = display_text
+                if request_id is not None:
+                    item["request_id"] = request_id
                 # The marker is deliberately tiny: audio stays out of the
                 # durable polling queue and is synthesized only if the mobile
                 # client elected to play it.

@@ -1,0 +1,49 @@
+{
+  "case_id": "session-scope-v1",
+  "status": "backend-current-consumer-update-required",
+  "discovery": {
+    "endpoint": "GET /auth/whoami",
+    "response_extension": {"capabilities": {"session_scope": "v1"}}
+  },
+  "bind": {
+    "endpoint": "POST /v1/sessions",
+    "request": {"body": {"char_id": "fixture_character"}},
+    "response": {
+      "status": 201,
+      "body": {
+        "session_id": "<OPAQUE_ID>",
+        "owner_id": "fixture-owner",
+        "char_id": "fixture_character",
+        "domain": "reality",
+        "expires_at": "<TIMESTAMP>"
+      }
+    }
+  },
+  "scoped_request": {
+    "header": {"X-Presence-Session": "<OPAQUE_ID>"},
+    "body": {"message": "fixture scoped hello", "request_id": "request-fixture-001"},
+    "response_fields": ["request_id", "session_id", "char_id", "domain", "msg_id", "turn_id"]
+  },
+  "covered_endpoints": [
+    "POST /desktop/chat", "POST /mobile/chat", "POST /upload/ingest",
+    "POST /desktop/wake", "GET /chat/media/{sha256}",
+    "GET /chat-log/dates", "GET /chat-log/{date}",
+    "GET /chat-log/stats/calendar", "GET /chat/turns/{turn_id}/reasoning"
+  ],
+  "errors": {
+    "session_not_found": 404,
+    "character_not_authorized": 403,
+    "character_revoked": 403,
+    "character_unavailable": 404,
+    "request_payload_conflict": 409,
+    "in_flight": 202,
+    "execution_outcome_unknown": 503
+  },
+  "rules": [
+    "owner is server configured",
+    "legacy requests without the session header retain active-character behavior",
+    "request_id is not msg_id or persisted turn_id",
+    "mobile seq remains shared across characters",
+    "exactly-once is not promised"
+  ]
+}

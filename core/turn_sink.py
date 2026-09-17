@@ -103,6 +103,7 @@ async def _fanout(
     char_id: Optional[str] = None,
     source: Optional[TurnSource] = None,
     artifacts: Optional[list[dict]] = None,
+    request_id: Optional[str] = None,
 ) -> tuple[list[str], dict[str, str]]:
     from channels import registry
 
@@ -181,6 +182,8 @@ async def _fanout(
             # also needs this to match up channel_message with message_segments).
             if ws_msg_id is not None and name in ("desktop", "mobile", "device"):
                 send_kwargs["msg_id"] = ws_msg_id
+            if request_id and name in ("desktop", "mobile", "device"):
+                send_kwargs["request_id"] = request_id
             # Artifacts follow the sticker pattern: desktop/mobile only.
             # QQ and device send() do not accept this kwarg.
             if artifacts and name in ("desktop", "mobile"):
@@ -228,6 +231,7 @@ async def record_assistant_turn(
     raw_user_text: Optional[str] = None,
     media_refs: Optional[list[dict]] = None,
     event_context=None,
+    request_id: str = "",
 ) -> TurnResult:
     """
     Record one completed assistant turn and deliver it to the requested channels.
@@ -376,6 +380,7 @@ async def record_assistant_turn(
         char_id=char_id,
         source=source,
         artifacts=artifacts or None,
+        request_id=request_id or None,
     )
 
     # Brief 37: send（上面的 fanout）已经完成，慢段（detect_emotion / mood_state /
@@ -423,6 +428,8 @@ async def record_assistant_turn(
                 segment_kwargs = {"msg_id": _ws_msg_id}
                 if char_id is not None:
                     segment_kwargs["char_id"] = char_id
+                if request_id:
+                    segment_kwargs["request_id"] = request_id
                 from channels import desktop_ws as _dws, device_ws as _dvws
                 if "desktop" in targets and _dws.is_connected():
                     await _dws.push_segments(_say_content, _say_segs, **segment_kwargs)

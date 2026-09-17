@@ -1,7 +1,7 @@
 {
   "schema_version": "1",
   "fixture_version": "v1",
-  "contract_revision": "2026-08-10",
+  "contract_revision": "2026-09-17",
   "source_of_truth": "Emerald-presence",
   "description": "Public, synthetic protocol contract cases for the supported desktop and mobile adapters.",
   "normalization": {
@@ -9,6 +9,14 @@
     "opaque_id": "<OPAQUE_ID>"
   },
   "cases": [
+    {
+      "id": "session-scope-v1",
+      "file": "session_scope.json",
+      "direction": "client-to-server-and-back",
+      "endpoint": "GET /auth/whoami; POST /v1/sessions; scoped chat/read routes",
+      "expected": "201 bind; frozen owner/character; typed retry and authorization errors",
+      "classification": "consumer-update-required"
+    },
     {
       "id": "mobile-chat-success",
       "file": "mobile_http.json",

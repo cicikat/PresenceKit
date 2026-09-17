@@ -1,6 +1,6 @@
 # 9.17 后端综合工单：角色隔离、固定会话与架构债收敛
 
-状态：A 已提交；B 拟议合同已提交（未实现）；C–J 未开始。日期：2026-09-17。
+状态：A/B/C 已提交；D–J 未开始。日期：2026-09-17。
 用户已授权按本单施工。每张施工子单完成相关验证与差异检查后独立 commit，再开始下一张。
 勾选规则：完成一项且具备证据才勾一项；源码存在、自动测试通过、部署验收分别记账。每张施工子单完成相关验证与差异检查后独立 commit，再开始下一张。
 
@@ -43,13 +43,13 @@
 
 依赖 B 合同明确；复用 `core/owner_turn_service.py` 和已有 frozen scope，不另造全局角色切换锁。
 
-- [ ] C1 chat/上传/wake 在入口验证并冻结 scope，贯穿 pipeline、工具、模型路由、turn sink、媒体引用及异步后处理；禁止临时改 active character 实现隔离。
-- [ ] C2 历史、reasoning、媒体读取使用授权的相同 owner/char 边界；拥有 turn_id/sha256 不等于读取权限。附件与后续发送作用域不一致时拒绝或明确处理。
-- [ ] C3 response/stream/channel/segments 保留关联身份；允许早期无 turn_id，以显式绑定收敛。迟到、重复、乱序、重连、Dream/Activity/group 并发不得相互认领。
-- [ ] C4 按 B 落实幂等和 unknown-result 语义；新增 receipt/队列/trace 同单配只读观测。优先复用管理面，无正文、无凭据，展示 capability/effective state 和拒绝原因。
-- [ ] C5 补最小集成回归：桌面 A/手机 B 并发、管理面改 C、A 附件/历史/思考仍属 A；未授权角色、撤权、迟到回包、超时重试与附件重复均覆盖。
-- [ ] C6 同步控制面/接口文档；若改 admin 静态资源，统一版本更新与浏览器硬刷新验收。未实测明确记录，不以源码检查替代。
-- [ ] C7 验证、差异检查、独立提交，交付后端版本、能力值、fixture 和未完成运行项给两端。
+- [x] C1 chat/上传/wake 在入口验证并冻结 scope，贯穿 pipeline、工具、模型路由、turn sink、媒体引用及异步后处理；禁止临时改 active character 实现隔离。
+- [x] C2 历史、reasoning、媒体读取使用授权的相同 owner/char 边界；拥有 turn_id/sha256 不等于读取权限。`/upload/ingest` 为同一次上传并发送，不另发 upload_id；重复请求由同 session/request receipt 收敛。
+- [x] C3 response/stream/channel/segments 保留 request/msg/turn 与冻结 char/domain；早期 stream 允许无 turn_id，以同 msg_id canonical 收敛。Dream/Activity/group 未改，不能认领 Reality session。
+- [x] C4 按 B 落实 completed replay、in-flight、payload conflict 与保守 unknown-result；进程内 session/receipt 有界，`/observability/session-scope` 只读脱敏展示 capability/effective、TTL、计数与拒绝原因。
+- [x] C5 新增 session scope 回归，并复用 chat/media/reasoning/history/turn sink/WS/auth/wake 回归；覆盖桌面 A/手机 B 独立 grant、active 改 C 不改已签发 scope、未授权/撤权、迟到等待取消、同 ID 重试/冲突/并发和上传 request 去重语义。
+- [x] C6 已同步 capability、控制面、API、channels、接口总账与 provider fixture。未改 admin 静态资源，不触发缓存版本/浏览器验收；桌面/手机消费者、真实服务与真机验收均未执行。
+- [x] C7 定向回归 262 passed（1 条第三方弃用 warning）；完成换行/diff 检查并独立提交。交付能力 `session_scope=v1`、provider fixture `tests/protocol_fixtures/v1/session_scope.json`；桌面/手机消费者、真实服务、浏览器与真机验收均 not-run。
 
 ## D — P1：244 历史 canonical ID 收尾与三端联调
 
