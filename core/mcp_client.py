@@ -12,7 +12,7 @@ MCP 默认只在 Path C tool loop 暴露。管理员也可显式把 ``mcp`` 加�
 ``tool_exposure.path_a``，让 QQ、desktop、mobile 的预探针一致看到同一批经过
 本地 policy/proficiency/allowlist 过滤后的 schema；这不会绕过任一执行闸门。
 
-action_trace 落痕在 tool_dispatcher.execute() 的收口埋点自动生效，本模块不新增记账代码；
+action_trace 落痕在 tool_dispatcher.execute_structured() 的收口埋点自动生效，本模块不新增记账代码；
 MCP 工具注册时不声明 trace_args，参数不落痕（防外部 server 的敏感入参入盘）。
 
 连接生命周期（Brief 115 根治）：每个 server 的连接只由它专属的常驻 task（_owner_loop）

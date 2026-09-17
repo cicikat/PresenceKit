@@ -1691,7 +1691,7 @@ Phase 6 之前现实对话对 hidden_state 零写入（只被 Dream 单向喂养
 
 ### 去重与回写流程
 
-`tool_dispatcher.execute()` 的 `char_id` 为必传 kwarg（无默认值，调用方必须显式传入）：
+`tool_dispatcher.execute_structured()` 的 `char_id` 为必传 kwarg（无默认值，调用方必须显式传入）：
 
 1. **指纹检查**：persist 工具执行前调用 `build_fingerprint()` + `is_recently_read()`；命中 → 返回"刚读过这个，这次跳过"，不调用底层函数。
 2. **执行**：未命中 → 正常执行。

@@ -854,10 +854,17 @@ def test_console_confirmation_reuses_ticket_arguments_and_audit_id(monkeypatch):
     calls = []
 
     async def fake_run(*, registered_name, arguments, audit_id, confirmed):
+        from core.tool_dispatcher import ToolExecutionOutcome
         calls.append((registered_name, arguments, audit_id, confirmed))
         if not confirmed:
-            return None, "确认后执行"
-        return "工具已执行：mcp__cedar_toy__toy_status，结果：ok", None
+            return ToolExecutionOutcome(
+                status="confirmation_required",
+                confirmation_request="确认后执行",
+            )
+        return ToolExecutionOutcome(
+            status="tool_executed",
+            result="工具已执行：mcp__cedar_toy__toy_status，结果：ok",
+        )
 
     monkeypatch.setattr(mod, "_run_console_tool", fake_run)
     initial = asyncio.run(mod.invoke_mcp_console(
@@ -921,13 +928,15 @@ async def test_console_runner_uses_dispatcher_confirmation(monkeypatch, sandbox)
         "parameters": {}, "effect": "write", "mcp_server": "cedar_toy", "mcp_tool": "toy_status",
     })
     monkeypatch.setattr("core.memory.action_trace.record", lambda *args, **kwargs: None)
-    result, ask = await mod._run_console_tool(
+    pending = await mod._run_console_tool(
         registered_name="mcp__cedar_toy__toy_status", arguments={}, audit_id="audit", confirmed=False,
     )
-    assert result is None
-    assert ask is not None
-    result, ask = await mod._run_console_tool(
+    assert pending.result is None
+    assert pending.confirmation_request is not None
+    assert pending.status == "confirmation_required"
+    completed = await mod._run_console_tool(
         registered_name="mcp__cedar_toy__toy_status", arguments={}, audit_id="audit", confirmed=True,
     )
-    assert ask is None
-    assert result == "工具已执行：mcp__cedar_toy__toy_status，结果：ok"
+    assert completed.confirmation_request is None
+    assert completed.status == "tool_executed"
+    assert completed.result == "工具已执行：mcp__cedar_toy__toy_status，结果：ok"

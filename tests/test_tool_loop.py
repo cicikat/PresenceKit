@@ -3,8 +3,8 @@ tests/test_tool_loop.py — Brief 28 · tool loop 多步工具执行器
 
 覆盖 cc-tasks/28-tool-loop多步工具执行器.md §4 的 12 项测试。
 LLM 全 mock：core.llm_client.chat_turn / chat / chat_stream 按脚本吐结果，
-不发真实网络请求。tool_dispatcher.execute 多数场景也 mock（脚本化 result/ask_confirm），
-只有「action_trace 落痕」一项使用真实 execute() 走真实落盘（sandbox 隔离）。
+不发真实网络请求。tool_dispatcher.execute_structured 多数场景也 mock（脚本化 result/ask_confirm），
+只有「action_trace 落痕」一项使用真实 dispatcher 走真实落盘（sandbox 隔离）。
 """
 
 from __future__ import annotations
@@ -80,20 +80,35 @@ def _script_chat_turn(monkeypatch, turns: list[ChatTurn]):
 
 
 def _script_execute(monkeypatch, results: list[tuple]):
+    from core.tool_dispatcher import ToolExecutionOutcome
+
     calls: list[dict] = []
     it = iter(results)
 
+    def _as_outcome(item):
+        if isinstance(item, ToolExecutionOutcome):
+            return item
+        result, ask_confirm = item
+        if ask_confirm:
+            return ToolExecutionOutcome(
+                status="confirmation_required",
+                result=result,
+                confirmation_request=ask_confirm,
+            )
+        status = "tool_executed" if result else "tool_failed"
+        return ToolExecutionOutcome(status=status, result=result)
+
     async def _fake(tool_name, tool_args, user_id, target_id, is_group, session_state, *, origin, char_id,
-                     bypass_read_log=False):
+                     bypass_read_log=False, tool_status_observer=None, allowed_tool_names=None):
         calls.append({
             "tool_name": tool_name, "tool_args": tool_args,
             "user_id": user_id, "target_id": target_id,
             "is_group": is_group, "origin": origin, "char_id": char_id,
             "bypass_read_log": bypass_read_log,
         })
-        return next(it)
+        return _as_outcome(next(it))
 
-    monkeypatch.setattr("core.tool_dispatcher.execute", _fake)
+    monkeypatch.setattr("core.tool_dispatcher.execute_structured", _fake)
     return calls
 
 
@@ -331,7 +346,7 @@ async def test_single_tool_exception_does_not_abort_loop(monkeypatch):
     async def _raise(*a, **kw):
         raise RuntimeError("boom")
 
-    monkeypatch.setattr("core.tool_dispatcher.execute", _raise)
+    monkeypatch.setattr("core.tool_dispatcher.execute_structured", _raise)
     final_calls = _patch_final_chat(monkeypatch, text="收尾")
 
     pipeline = _make_pipeline()

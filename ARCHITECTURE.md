@@ -164,7 +164,7 @@ owner private turn
 
 这里的 `hardware_gateway` 只是外部 MCP Server 的一种实现，不是 PresenceKit 核心内部
 模块。MCP server 的工具描述和返回结果均视为不可信外部输入；它们只能经现有工具暴露面、
-`tool_dispatcher.execute()` 的 origin/角色/白名单/安全闸门，以及当前轮 ToolResult 边界，
+`tool_dispatcher.execute_structured()` 的 origin/角色/白名单/安全闸门，以及当前轮 ToolResult 边界，
 不能改变系统权限。
 
 - scheduler、stimulus/trigger、Dream 和 Stage 不得隐式升级为 MCP tool call；它们继续沿各自
@@ -187,7 +187,7 @@ owner private turn
 - memory 类工具不走探针，靠 LLM 在正式对话中自主调用
 - QQ 入口（`main.py`）和 owner HTTP 入口（`admin/routers/chat.py`）共用同一个 `get_probe_prompt()` 函数
 - **trusted_user_text**：探针只消费 media merge 之前的原始用户输入。QQ 在 media merge（`main.py` line ~276）前捕获 `_trusted_user_text`；desktop/mobile media 端点在 `run_owner_chat_turn` 调用前捕获。media 抽取文本只进 `build_prompt`，不进 probe。
-- **execute() origin 闸门**：`tool_dispatcher.execute()` 要求 `origin` 参数在白名单 `{"user_live", "assistant_loop", "assistant_loop_relay"}` 内；否则 fail-closed 返回 `(None, None)` + warning。
+- **execute() origin 闸门**：生产路径走 `tool_dispatcher.execute_structured()`；`execute()` 仍是兼容 tuple 封装。`origin` 不在白名单则 fail-closed：structured `status=tool_failed`，兼容 tuple 返回 `(None, None)` + warning。
 
 ---
 

@@ -191,7 +191,7 @@ async def _test_identity_consolidation(uid: str, char_id: str) -> dict:
 
 
 async def _test_fs_list(uid: str, char_id: str) -> dict:
-    from core.tool_dispatcher import execute
+    from core.tool_dispatcher import execute_structured
 
     class _FakeState:
         status = "idle"
@@ -200,7 +200,7 @@ async def _test_fs_list(uid: str, char_id: str) -> dict:
     try:
         # 不传 path：按 fs_list 自身文档，省略时返回 fs_access.allow_roots 允许浏览的
         # 入口目录列表——这是唯一不依赖具体 allow_roots 配置、随时能跑通的安全调用形态。
-        result, ask_confirm = await execute(
+        tool_outcome = await execute_structured(
             tool_name="fs_list",
             tool_args={},
             user_id=uid,
@@ -210,7 +210,8 @@ async def _test_fs_list(uid: str, char_id: str) -> dict:
             origin="user_live",
             char_id=char_id,
         )
-        ok = result is not None and ask_confirm is None
+        result = tool_outcome.result
+        ok = tool_outcome.status == "tool_executed" and tool_outcome.confirmation_request is None
         return {
             "link": "fs",
             "executed": True,

@@ -1022,7 +1022,8 @@ class Pipeline:
         # Owner chat already starts collection; QQ / scheduler Path C still needs it.
         begin_turn_collection()
         from core.tool_dispatcher import (
-            execute as _execute,
+            ToolExecutionOutcome,
+            execute_structured,
             format_mcp_opaque_params_note,
             get_tools_schema,
             get_tool_loop_relay_prompt,
@@ -1223,7 +1224,7 @@ class Pipeline:
             index: int,
             total: int,
             origin: str,
-        ) -> tuple[str | None, str | None]:
+        ) -> ToolExecutionOutcome:
             """Bridge trusted dispatcher lifecycle events into one UI-only status."""
             execute_kwargs = {
                 "origin": origin,
@@ -1233,7 +1234,7 @@ class Pipeline:
             if caller_allowed_tool_names is not None:
                 execute_kwargs["allowed_tool_names"] = caller_allowed_tool_names
             if tool_event_observer is None:
-                return await _execute(
+                return await execute_structured(
                     tool_name, tool_args, uid, uid, is_group, session_state,
                     **execute_kwargs,
                 )
@@ -1291,7 +1292,7 @@ class Pipeline:
                     waiting_task = None
 
             try:
-                return await _execute(
+                return await execute_structured(
                     tool_name, tool_args, uid, uid, is_group, session_state,
                     **execute_kwargs,
                     tool_status_observer=_dispatcher_status,
@@ -1385,7 +1386,10 @@ class Pipeline:
                     name = tc["name"]
                     if name not in offered_names:
                         _record_discovery(category="tool_loop_discovery", code="unoffered_call", status="attention")
-                        return "工具调用被拒绝：本轮未提供该工具。请先加载分类。", None
+                        return ToolExecutionOutcome(
+                            status="tool_failed",
+                            result="工具调用被拒绝：本轮未提供该工具。请先加载分类。",
+                        )
                     if name.startswith(_discovery_prefix):
                         result, loaded = discovery.load(name, tc["arguments"])
                         _record_discovery(category="tool_loop_discovery", code="category_loaded" if loaded else "invalid_discovery",
@@ -1395,7 +1399,8 @@ class Pipeline:
                             note = format_mcp_opaque_params_note(discovery.schemas())
                             if note:
                                 result += "\n" + note
-                        return result, None
+                        # Local protocol receipt; not a dispatcher execute.
+                        return ToolExecutionOutcome(status="discovery", result=result)
                     used_tool = True
                     return await _execute_with_ephemeral_status(
                         tc["id"], name, tc["arguments"], index=index, total=total, origin=origin,
@@ -1435,9 +1440,9 @@ class Pipeline:
                         relay_calls = await _resolve_relay_intent(intent_text)
                         if relay_calls:
                             # 可观测性：relay 分支和原生 tool_calls 分支最终都调用同一个
-                            # _execute()，仅凭 error.log 里的报错完全分不清故障来自哪条路径
+                            # execute_structured()，仅凭 error.log 里的报错完全分不清故障来自哪条路径
                             # （Brief 120 事后排查时吃过这个亏）。这里显式记一条 info，
-                            # 且下面 execute 用独立 origin=assistant_loop_relay。
+                            # 且下面用独立 origin=assistant_loop_relay。
                             logger.info(
                                 "[pipeline.run_agentic_loop] tail-brace relay 触发: "
                                 "intent=%r resolved=%s",
@@ -1466,7 +1471,7 @@ class Pipeline:
                                                       "content": "该操作必须使用原生工具调用。未执行。"})
                                     continue
                                 try:
-                                    result, ask_confirm = await _call(
+                                    tool_outcome = await _call(
                                         rc,
                                         index=_index,
                                         total=len(relay_calls),
@@ -1474,7 +1479,8 @@ class Pipeline:
                                     )
                                 except Exception as e:
                                     log_error("pipeline.run_agentic_loop.relay_execute", e)
-                                    result, ask_confirm = None, None
+                                    tool_outcome = ToolExecutionOutcome(status="tool_failed")
+                                result, ask_confirm = tool_outcome.result, tool_outcome.confirmation_request
                                 if result and str(result).startswith("工具已执行：") and not ask_confirm:
                                     successful_tool_call = True
                                 loop_msgs.append({
@@ -1503,7 +1509,7 @@ class Pipeline:
                 loop_msgs.extend(turn.continuation_items or [turn.assistant_message])
                 for _index, tc in enumerate(turn.tool_calls, start=1):
                     try:
-                        result, ask_confirm = await _call(
+                        tool_outcome = await _call(
                             tc,
                             index=_index,
                             total=len(turn.tool_calls),
@@ -1511,7 +1517,8 @@ class Pipeline:
                         )
                     except Exception as e:
                         log_error("pipeline.run_agentic_loop.execute", e)
-                        result, ask_confirm = None, None
+                        tool_outcome = ToolExecutionOutcome(status="tool_failed")
+                    result, ask_confirm = tool_outcome.result, tool_outcome.confirmation_request
                     if result and str(result).startswith("工具已执行：") and not ask_confirm:
                         successful_tool_call = True
                     loop_msgs.append({

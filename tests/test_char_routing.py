@@ -507,7 +507,8 @@ async def test_agentic_final_run_llm_forwards_owned_char(monkeypatch):
         )
 
     async def _fake_execute(*_a, **_kw):
-        return "工具已执行：ok", None
+        from core.tool_dispatcher import ToolExecutionOutcome
+        return ToolExecutionOutcome(status="tool_executed", result="工具已执行：ok")
 
     async def _fake_run_llm(self, messages, *, char_id=None, is_proactive=False):
         captured["char_id"] = char_id
@@ -543,7 +544,7 @@ async def test_agentic_final_run_llm_forwards_owned_char(monkeypatch):
         {"type": "function", "function": {"name": "web_search", "description": "", "parameters": {"type": "object", "properties": {}}}},
     ])
     monkeypatch.setattr("core.llm_client.chat_turn", _fake_chat_turn)
-    monkeypatch.setattr("core.tool_dispatcher.execute", _fake_execute)
+    monkeypatch.setattr("core.tool_dispatcher.execute_structured", _fake_execute)
     monkeypatch.setattr(Pipeline, "run_llm", _fake_run_llm)
 
     pipeline = Pipeline.__new__(Pipeline)

@@ -67,10 +67,14 @@ async def test_confirmation_emits_no_prelude(monkeypatch):
     observed = []
 
     async def _execute(*args, tool_status_observer=None, **kwargs):
+        from core.tool_dispatcher import ToolExecutionOutcome
         await tool_status_observer("pending_confirmation")
-        return None, "请确认"
+        return ToolExecutionOutcome(
+            status="confirmation_required",
+            confirmation_request="请确认",
+        )
 
-    monkeypatch.setattr("core.tool_dispatcher.execute", _execute)
+    monkeypatch.setattr("core.tool_dispatcher.execute_structured", _execute)
 
     result = await _make_pipeline().run_agentic_loop(
         [{"role": "user", "content": "执行"}], uid="u1", char_id="c1", session_state=object(),
@@ -90,12 +94,13 @@ async def test_waiting_is_emitted_once_after_threshold(monkeypatch):
     observed = []
 
     async def _execute(*args, tool_status_observer=None, **kwargs):
+        from core.tool_dispatcher import ToolExecutionOutcome
         await tool_status_observer("queued")
-        await asyncio.sleep(0.01)
+        await asyncio.sleep(0.05)
         await tool_status_observer("finished")
-        return "结果", None
+        return ToolExecutionOutcome(status="tool_executed", result="结果")
 
-    monkeypatch.setattr("core.tool_dispatcher.execute", _execute)
+    monkeypatch.setattr("core.tool_dispatcher.execute_structured", _execute)
 
     result = await _make_pipeline().run_agentic_loop(
         [{"role": "user", "content": "执行"}], uid="u1", char_id="c1", session_state=object(),
@@ -116,12 +121,13 @@ async def test_retry_updates_one_status_instance(monkeypatch):
     observed = []
 
     async def _execute(*args, tool_status_observer=None, **kwargs):
+        from core.tool_dispatcher import ToolExecutionOutcome
         await tool_status_observer("queued")
         await tool_status_observer("waiting", attempt=2)
         await tool_status_observer("finished", attempt=2)
-        return "结果", None
+        return ToolExecutionOutcome(status="tool_executed", result="结果")
 
-    monkeypatch.setattr("core.tool_dispatcher.execute", _execute)
+    monkeypatch.setattr("core.tool_dispatcher.execute_structured", _execute)
 
     await _make_pipeline().run_agentic_loop(
         [{"role": "user", "content": "执行"}], uid="u1", char_id="c1", session_state=object(),
@@ -140,11 +146,12 @@ async def test_outcome_unknown_never_becomes_finished(monkeypatch):
     observed = []
 
     async def _execute(*args, tool_status_observer=None, **kwargs):
+        from core.tool_dispatcher import ToolExecutionOutcome
         await tool_status_observer("queued")
         await tool_status_observer("outcome_unknown")
-        return "动作可能已经送达", None
+        return ToolExecutionOutcome(status="outcome_unknown", result="动作可能已经送达")
 
-    monkeypatch.setattr("core.tool_dispatcher.execute", _execute)
+    monkeypatch.setattr("core.tool_dispatcher.execute_structured", _execute)
 
     await _make_pipeline().run_agentic_loop(
         [{"role": "user", "content": "执行"}], uid="u1", char_id="c1", session_state=object(),
@@ -172,11 +179,12 @@ async def test_multiple_tools_keep_serial_index_and_final_reply(monkeypatch):
     observed = []
 
     async def _execute(*args, tool_status_observer=None, **kwargs):
+        from core.tool_dispatcher import ToolExecutionOutcome
         await tool_status_observer("queued")
         await tool_status_observer("finished")
-        return "结果", None
+        return ToolExecutionOutcome(status="tool_executed", result="结果")
 
-    monkeypatch.setattr("core.tool_dispatcher.execute", _execute)
+    monkeypatch.setattr("core.tool_dispatcher.execute_structured", _execute)
     memory_writes = []
     monkeypatch.setattr("core.turn_sink.record_assistant_turn", lambda *args, **kwargs: memory_writes.append(args))
 

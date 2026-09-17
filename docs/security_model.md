@@ -11,7 +11,7 @@
 ### 后端白名单执行
 
 LLM 不能直接执行系统能力。所有工具都必须在 `core/tool_dispatcher.py` 的 `_TOOL_REGISTRY`
-注册，通过 `execute()` 做开关、危险标记、权限和确认流程。
+注册，通过 `execute_structured()` 做开关、危险标记、权限和确认流程。`execute()` 仍是兼容 tuple 封装。
 
 - 探针只暴露 `info` / `desktop` 类工具：`get_tools_schema(categories=["info", "desktop"])`
 - 全局默认处于 `safe` 模式；`desktop` / `system` 类工具只有在用户通过受鉴权的
@@ -21,7 +21,7 @@ LLM 不能直接执行系统能力。所有工具都必须在 `core/tool_dispatc
 - `device_shutdown` / `device_sleep` 即使在 `danger` 模式下仍需单独确认，形成模式闸和确认流双保险
 - 工具开关来自 `config.yaml tools:`，默认启用，危险工具通常配置为关闭
 - 桌面动作先走 WebSocket ack，失败才降级文件队列
-- `execute()` 的 origin 白名单按调用面分层：`user_live`、`assistant_loop`/`assistant_loop_relay`、
+- `execute_structured()` 的 origin 白名单按调用面分层：`user_live`、`assistant_loop`/`assistant_loop_relay`、
   `autonomy_loop`、`admin_console`，以及只允许 `manage_self_capability` 的两个 self-management origin。
   未知 origin fail-closed；self-management gateway 仅在用户授权、角色可修改且未锁定时进入对应 schema，
   不接受 URL、header、token 或任意原始 payload。

@@ -45,14 +45,18 @@ async def test_path_c_native_result_is_framed_and_truncated(monkeypatch):
         return next(turns)
 
     async def _execute(*args, **kwargs):
-        return f"工具已执行：p0_tool，结果：{safe}", None
+        from core.tool_dispatcher import ToolExecutionOutcome
+        return ToolExecutionOutcome(
+            status="tool_executed",
+            result=f"工具已执行：p0_tool，结果：{safe}",
+        )
 
     async def _chat(messages, **kwargs):
         final_messages[:] = [dict(m) for m in messages]
         return "最终回复"
 
     monkeypatch.setattr("core.llm_client.chat_turn", _chat_turn)
-    monkeypatch.setattr("core.tool_dispatcher.execute", _execute)
+    monkeypatch.setattr("core.tool_dispatcher.execute_structured", _execute)
     monkeypatch.setattr("core.llm_client.chat", _chat)
 
     result = await _make_pipeline().run_agentic_loop(

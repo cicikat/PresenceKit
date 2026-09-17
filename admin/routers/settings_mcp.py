@@ -679,14 +679,14 @@ def _console_actor() -> tuple[str, str]:
 
 async def _run_console_tool(
     *, registered_name: str, arguments: dict[str, Any], audit_id: str, confirmed: bool,
-) -> tuple[str | None, str | None]:
+):
     from core.mcp_client import audit_context
-    from core.tool_dispatcher import execute
+    from core.tool_dispatcher import execute_structured
 
     owner_id, char_id = _console_actor()
     session = _ConsoleSessionState(confirmed=confirmed)
     with audit_context(audit_id):
-        return await execute(
+        return await execute_structured(
             registered_name,
             arguments,
             owner_id,
@@ -703,13 +703,14 @@ async def invoke_mcp_console(body: McpConsoleInvoke, _auth=Depends(require_scope
     registered_name, info = _resolve_console_tool(body.server, body.tool)
     _validate_console_arguments(body.arguments, info.get("parameters"))
     audit_id = uuid.uuid4().hex
-    result, ask_confirm = await _run_console_tool(
+    tool_outcome = await _run_console_tool(
         registered_name=registered_name,
         arguments=body.arguments,
         audit_id=audit_id,
         confirmed=False,
     )
-    if ask_confirm:
+    ask_confirm = tool_outcome.confirmation_request
+    if ask_confirm or tool_outcome.status == "confirmation_required":
         _prune_console_confirmations()
         confirmation_id = secrets.token_urlsafe(24)
         _console_confirmations[confirmation_id] = {
@@ -726,7 +727,7 @@ async def invoke_mcp_console(body: McpConsoleInvoke, _auth=Depends(require_scope
             "confirmation_message": ask_confirm,
             "expires_in_s": _CONSOLE_CONFIRM_TTL_S,
         }
-    return {"status": "completed", "audit_id": audit_id, "result": result or ""}
+    return {"status": "completed", "audit_id": audit_id, "result": tool_outcome.result or ""}
 
 
 @router.post("/settings/mcp/console/confirm", summary="确认并执行受控 MCP 控制台调用")
@@ -737,15 +738,15 @@ async def confirm_mcp_console(body: McpConsoleConfirm, _auth=Depends(require_sco
         raise HTTPException(status_code=409, detail="确认已失效、已使用或不存在")
     registered_name, info = _resolve_console_tool(ticket["server"], ticket["tool"])
     _validate_console_arguments(ticket["arguments"], info.get("parameters"))
-    result, ask_confirm = await _run_console_tool(
+    tool_outcome = await _run_console_tool(
         registered_name=registered_name,
         arguments=ticket["arguments"],
         audit_id=ticket["audit_id"],
         confirmed=True,
     )
-    if ask_confirm:
+    if tool_outcome.confirmation_request or tool_outcome.status == "confirmation_required":
         raise HTTPException(status_code=409, detail="工具策略在确认期间已改变")
-    return {"status": "completed", "audit_id": ticket["audit_id"], "result": result or ""}
+    return {"status": "completed", "audit_id": ticket["audit_id"], "result": tool_outcome.result or ""}
 
 
 @router.patch("/settings/mcp", summary="更新 MCP 总开关（写配置并热同步）")

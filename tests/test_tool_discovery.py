@@ -40,14 +40,15 @@ def harness(monkeypatch):
         return item
 
     async def execute(name, args, *a, **kw):
+        from core.tool_dispatcher import ToolExecutionOutcome
         executions.append((name, args, kw))
-        return "工具已执行：测试结果", None
+        return ToolExecutionOutcome(status="tool_executed", result="工具已执行：测试结果")
 
     async def final(*a, **kw):
         return "自然回复"
 
     monkeypatch.setattr("core.llm_client.chat_turn", chat_turn)
-    monkeypatch.setattr("core.tool_dispatcher.execute", execute)
+    monkeypatch.setattr("core.tool_dispatcher.execute_structured", execute)
     monkeypatch.setattr("core.llm_client.chat", final)
     pipeline = _make_pipeline()
     monkeypatch.setattr(pipeline, "_anti_collapse_prefix_retry", lambda msgs, text, **kw: final())

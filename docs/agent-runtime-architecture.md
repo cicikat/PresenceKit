@@ -106,7 +106,7 @@ Equal strings never make identities interchangeable.
 digest). It is not evidence or authority and contains no text, prompt, tool data, secret, full path,
 or `EventContext` payload. It cannot restore the source turn's scope, permissions, or lock.
 `kind=reality_turn` is reserved for a canonical visible `turn_id`. Workspace mutating tools currently
-receive no turn ID from `execute()`, so they persist `kind=tool_request` plus the request fingerprint
+receive no turn ID from `execute_structured()`, so they persist `kind=tool_request` plus the request fingerprint
 digest; a content/path hash must never be labeled `reality_turn`. Historical stored kinds are left
 unchanged.
 

@@ -69,7 +69,7 @@ Tool Loop、autonomy 或 Self Capability，也不能通过直接 dispatch 执行
 ### 媒介 MCP 熟练度门控（Brief 61）
 
 `mcp_proficiency` 按 MCP server 配置成长域与等级 tiers。连接层仍注册全量工具；
-tool-loop schema 暴露层根据角色级 `interest_state` 的同域最高 level 过滤，`execute()`
+tool-loop schema 暴露层根据角色级 `interest_state` 的同域最高 level 过滤，`execute_structured()`
 再做一次防御性校验。未列入配置的 server 以及 tiers 从未列出的工具视为器官类，行为不变。
 未解锁调用只返回中性失败文本，不记录动作痕迹，也不暴露等级或配置细节。
 
@@ -107,7 +107,7 @@ hello 字段或协商流程。
 
 **memory 类工具默认不走探针，路径C（tool loop）激活时才对主 LLM 可见。** 管理员可在
 `tool_exposure.path_a` 显式加入该类；这会同时影响 QQ、desktop 和 mobile，不能只为一个端开启。
-`read_diary/read_watch/search_diary/get_profile/get_episodic` 已注册且 `execute()` 能执行，
+`read_diary/read_watch/search_diary/get_profile/get_episodic` 已注册且 `execute_structured()` 能执行，
 但路径A不把 memory 类喂给探针。Fable R5 已修复与 Author's Note 工具承诺的落差：
 层11 Author's Note 现在是条件分支，有 `tool_result` 时提示已提供，无时明确禁止编造，
 不再承诺主 LLM 可以调用工具。见 `docs/known-issues.md` F11。
@@ -124,7 +124,7 @@ hello 字段或协商流程。
     - `route_pretool()` 仍先检查显式快速路径白名单；只有普通 LLM 探针会被跳过，工具决策权
       随后移交主模型。QQ、desktop、mobile 的快速路径判定和执行契约相同
     - 主生成改走 Pipeline.run_agentic_loop()：
-        chat_turn(messages, tools) → 有 tool_calls 就 execute(origin="assistant_loop") 回填
+        chat_turn(messages, tools) → 有 tool_calls 就 execute_structured(origin="assistant_loop") 回填
         role="tool" 消息（tool_call_id 对齐）→ 继续下一步，直到自然终止 / max_steps 耗尽 /
         总墙钟 total_timeout_s 超时
     - 用过 ≥1 个工具后，最终生成前注入 voice_reanchor system 提示，收尾出口改走
@@ -267,7 +267,7 @@ desktop/mobile ↔ backend 的客户端协议，不是 Interaction/Event kind，
 MCP 常规调用形态是 owner private turn 中已激活的 Path C：
 `Path C tool loop → tool_dispatcher → local tool 或 MCP dynamic tool → MCP client/session →
 external MCP server → bounded ToolResult → 当前轮 tool-result 边界`。此外，admin-only 的 MCP Tool-call
-Console 可在排障时走 `admin router → tool_dispatcher.execute(origin="admin_console") → MCP dynamic tool`
+Console 可在排障时走 `admin router → tool_dispatcher.execute_structured(origin="admin_console") → MCP dynamic tool`
 这一受限路径；它不直连 MCP session，也不能绕过 allowlist、本地 policy、effect/确认门或超时。scheduler、stimulus/trigger、
 Dream、Stage 不会隐式升级为 MCP 调用；MCP 结果不重新进入 `perceive_event`，不成为 stimulus，
 也不拥有直接 memory writer 权限。`hardware_gateway` 只是外部 MCP Server 的一种实现，不是
@@ -374,7 +374,7 @@ override。删除 mapping、override 或 selector 后立即回到普通 MCP 行�
   `tool_policy.<tool>.require_confirm: true` 仍会要求确认。需要
   排除的工具必须显式列入 `exclude_tools` 或 `allow_tools` 白名单。外部 server 不能通过工具
   描述改变这些系统权限。
-- **执行适配**：`execute()` 走既有的通用分发分支（`func(**tool_args)`），内部转发到
+- **执行适配**：`execute_structured()` 走既有的通用分发分支（`func(**tool_args)`），内部转发到
   `session.call_tool()`，默认超时 `tool_timeout_s`（管理面限制为 1–660 秒），可由
   `tool_timeouts_s.<tool_name>` 仅覆盖一项。重试按本地 effect/idempotency 策略执行：`read`
   可重连重试一次，`write` 必须显式 `idempotent: true`，`actuate` 不重试；`emergency` 仅
@@ -387,7 +387,7 @@ override。删除 mapping、override 或 selector 后立即回到普通 MCP 行�
   消息中，随后才做最终生成。结果带有“外部/工具数据、可能不可信”的来源标识和边界提示；
   raw data 不进入 prompt 或 memory。MCP 结果不独立写 `short_term`、`event_log` 或长期记忆，
   也不经过 `perceive_event`。
-- **action_trace 自动生效**：收口埋点在 `tool_dispatcher.execute()`，MCP 工具零新增记账代
+- **action_trace 自动生效**：收口埋点在 `tool_dispatcher.execute_structured()`，MCP 工具零新增记账代
   码；注册条目不声明 `trace_args`，参数不落痕（防外部 server 的敏感入参入盘）。
 - **调用观测**：每次 MCP 工具调用额外写入既有 `api_call_log`，caller 固定为
   `mcp__{server}__{tool}`，只记录成功/失败、时长与无敏感的结果提示，不记录 arguments 或
@@ -480,7 +480,7 @@ fs_access:
   `fs` 类不在其中——门控完全交给自身的 `enabled`/`allow_roots`/`deny_names`，不需要额外
   切到危险模式。
 - **action_trace 自动生效**：`trace_args: ["path"]`（路径本身已在 allowlist 内，不敏感，
-  落痕迹方便追问溯源），收口埋点在 `tool_dispatcher.execute()`，无需额外记账代码。
+  落痕迹方便追问溯源），收口埋点在 `tool_dispatcher.execute_structured()`，无需额外记账代码。
 - **风险**：文件内容是不可信输入（与 web_search/MCP 结果同级），可能含提示注入文本，
   v1 接受现状，见 `docs/known-issues.md`。
 - **不做什么**：写入/删除/移动（永远不进 `fs` 类）；`fs_search`/grep；分页读取；探针暴露；
@@ -605,12 +605,12 @@ worker 在到期、异常、断线、显式取消和进程关闭时尝试停止�
 
 `core/memory/tool_read_log.py` 为 `persist=True` 工具（`read_diary` / `read_watch` /
 `read_toy_file` / `search_diary`）记录已读指纹（`data/runtime/memory/{char_id}/{uid}/tool_read_log.json`），
-同一 uid/char 重复触发同一来源会被 `tool_dispatcher.execute()` 拦下，返回
+同一 uid/char 重复触发同一来源会被 `tool_dispatcher.execute_structured()` 拦下，返回
 `（刚读过这个，这次跳过）`。
 
 用户显式要求重读时（显式意图优先于去重优化，DESIGN.md §十一 决策 7）：探针/工具调用点
 在同轮用户原始文本里命中 `_BYPASS_PHRASES` 常量表（`再读一遍` / `重新读` / `再看一次` /
-`重新看看`，不上 LLM 判断）就给本轮 `execute()` 传 `bypass_read_log=True`。`is_recently_read()`
+`重新看看`，不上 LLM 判断）就给本轮 `execute_structured()` 传 `bypass_read_log=True`。`is_recently_read()`
 的 `bypass` 参数只影响"拦不拦"：命中时放行本次调用，但指纹仍照常 `record_read()` 刷新，
 不是关掉去重本身。Path A 的 QQ/desktop/mobile 调用统一由 `route_pretool()` 从本轮用户原始文本
 探测一次；`core/pipeline.py::run_agentic_loop` 的 Path C 也从同一原始文本计算并在多步调用中复用。
@@ -722,12 +722,15 @@ worker 在到期、异常、断线、显式取消和进程关闭时尝试停止�
 
 ## execute() origin 闸门
 
-`tool_dispatcher.execute()` 新增**必填**关键字参数 `origin: str`（无默认值）。
+生产路径走 `tool_dispatcher.execute_structured()`，返回 `ToolExecutionOutcome`
+（`status` / `result` / `confirmation_request` / `missing_parameters`）。
+`execute()` 仍是兼容 tuple 封装，解包为 `(result, confirmation_request)`；
+本轮不删除 wrapper，也不把 tuple 形状当生产合同。`origin: str` 仍是**必填**关键字参数（无默认值）。
 
 | 情形 | 行为 |
 |---|---|
 | 漏传（调用方未写 `origin=`） | `TypeError`，调用即崩，杜绝静默绕过 |
-| 传入值不在白名单 | `(None, None)` + `logger.warning`，零副作用（fail-closed） |
+| 传入值不在白名单 | structured `status=tool_failed`；兼容 tuple `(None, None)` + `logger.warning`，零副作用（fail-closed） |
 | `origin="user_live"` | Path A 正常执行 |
 | `origin="assistant_loop"` | Path C（Brief 28 tool loop）自主多步调用，`Pipeline.run_agentic_loop()` 专用 |
 | `origin="autonomy_loop"` | autonomy runner 受限工具调用；schema 与执行复查共用 `AutonomyToolDecision` |
@@ -753,7 +756,7 @@ Path A 的 pending confirmation、missing input、快速路径和普通探针均
 
 **埋点位置：**
 
-- `tool_dispatcher.execute()` 每条 return 前都调 `action_trace.record(...)`，**只有 origin
+- `tool_dispatcher.execute_structured()` 每条 return 前都调 `action_trace.record(...)`，**只有 origin
   闸门拒绝（fail-closed 那支）不记**——那不是角色做过的事。其余分支（工具不存在/模式闸/
   未启用/权限拒绝/高危待确认/persist 去重跳过/成功/异常）全部落痕迹，`status` 分别对应
   `failed` / `pending_confirm` / `ok`。
@@ -855,7 +858,7 @@ class ToolResult:
 
 ### 安全收口位置
 
-唯一注入点：`core/prompt_builder.py` layer 10（`10_tool_result`）。所有 4 个 `tool_dispatcher.execute()` 调用方均经 `build_prompt(tool_result=)` 参数汇聚于此，无其他注入路径。
+唯一注入点：`core/prompt_builder.py` layer 10（`10_tool_result`）。Path A 经 `route_pretool()` 的 `execute_structured()` 结果注入；Path C 把同轮 bounded `role=tool` 消息带回主生成。兼容 `execute()` 不另开注入路径。
 
 ---
 
@@ -865,7 +868,7 @@ class ToolResult:
 2. 在 `tool_dispatcher.py` 顶部写 wrapper 函数（async）
 3. 在 `_TOOL_REGISTRY` 里注册，填写 `func / description / dangerous / category / parameters`
 4. 如果需要探针覆盖（info/desktop 类），在注册条目里补充 `examples`（触发例句）和 `keywords`（快速路径关键词），`get_probe_prompt()` 会自动同步，无需手动改探针规则
-5. 如果是高危工具，设 `dangerous: True`，并在 `execute()` 的确认逻辑里补充描述文案
+5. 如果是高危工具，设 `dangerous: True`，并在 `execute_structured()` 的确认逻辑里补充描述文案
 6. 在 `config.yaml` 的 `tools:` 节点决定默认开关状态
 7. 在此文档的注册表里补充说明
 
@@ -885,7 +888,7 @@ deployment 闸门决定，而不是由「是否走 Work Session」决定。
 `add_reminder` 已统一进入 scheduler capability/Task Manager；runtime 写入失败不会静默回落到
 legacy reminder 文件。workspace/process/browser 工具的 task receipt 仍由 Reality Task Manager
 统一持有，visible delivery 必须经过新的 Reality ingress/turn，不能在后台调用 `capture_turn()`。
-Workspace mutating tools currently have no canonical `turn_id` on `execute()`; their causation is
+Workspace mutating tools currently have no canonical `turn_id` on `execute_structured()`; their causation is
 `tool_request` plus the request fingerprint, never a hash labeled `reality_turn`.
 ## Brief 238 Browser worker
 

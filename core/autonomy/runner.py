@@ -997,7 +997,7 @@ def _character_for(char_id: str):
 async def _execute_tool(name: str, args: dict, job: Job, session, cfg: dict, run: Run) -> tuple[str | None, str]:
     from core.mcp_client import audit_context
     from core.self_management.service import autonomy_audit_context
-    from core.tool_dispatcher import execute
+    from core.tool_dispatcher import execute_structured
     if name == "observe_user_screen" and policy.screen_observation_suppressed():
         return "night_no_active_device", "denied"
     statuses: list[str] = []
@@ -1008,12 +1008,19 @@ async def _execute_tool(name: str, args: dict, job: Job, session, cfg: dict, run
     origin = "autonomy_self_management" if name == "manage_self_capability" else "autonomy_loop"
     try:
         with audit_context(f"autonomy:{run.id}:{job.id}"), autonomy_audit_context(run_id=run.id, job_id=job.id):
-            result, ask = await asyncio.wait_for(execute(name, args, job.uid, job.uid, False, session, origin=origin, char_id=job.char_id, tool_status_observer=observe), timeout=float(cfg.get("tool_timeout_seconds") or 30))
+            tool_outcome = await asyncio.wait_for(
+                execute_structured(
+                    name, args, job.uid, job.uid, False, session,
+                    origin=origin, char_id=job.char_id, tool_status_observer=observe,
+                ),
+                timeout=float(cfg.get("tool_timeout_seconds") or 30),
+            )
     except asyncio.TimeoutError:
         return "tool timeout", "failed"
-    if ask:
+    result, ask = tool_outcome.result, tool_outcome.confirmation_request
+    if ask or tool_outcome.status == "confirmation_required":
         return "tool requires user confirmation and was not executed", "denied"
-    if "outcome_unknown" in statuses:
+    if "outcome_unknown" in statuses or tool_outcome.status == "outcome_unknown":
         return result, "outcome_unknown"
     if "failed" in statuses:
         return result, "failed"

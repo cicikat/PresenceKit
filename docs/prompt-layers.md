@@ -73,7 +73,7 @@ Reality `1_system_prompt` 绑定当前角色，并使用用户所选称谓（默
 | `9_history` | 短期对话历史，前后各有 `<对话记录>` / `</对话记录>` 定界标签，明示"以下是真实发生的对话"；近场保留 + 远场加权择优；投影时跳过 `_source=="trigger_stub"` 防触发器名泄露 | always | `short_term.load_for_prompt()` |
 | `9_anti_repeat` | 跨轮开头去同质：取最近 2–3 条 assistant 回复的起手（首 8 字），以软约束告知模型别用相同开头/句式；fail-open，无历史时不注入 | 有近期 assistant 回复时 | `_recent_openings()` 从 history 提取 |
 | `9.5_episodic_top` | 最相关情景记忆1条（attention sweet spot） | episodic_result 非空 | 从已召回结果取第一条，不重复召回 |
-| `10_tool_result` | 本轮工具执行结果（带生成时间与有效性） | 有工具调用结果时 | `tool_dispatcher.execute()` 裸输出经 `core/tools/tool_result.py` 截断+定界框定后注入（`safe_summary`）；失败/结果不明明确不是完成事实 |
+| `10_tool_result` | 本轮工具执行结果（带生成时间与有效性） | 有工具调用结果时 | `tool_dispatcher.execute_structured()` 裸输出经 `core/tools/tool_result.py` 截断+定界框定后注入（`safe_summary`）；失败/结果不明明确不是完成事实 |
 | `10.5_action_trace` | 历史工具动作参考：你最近做过的操作（不是本轮结果） | `action_trace_entries` 非空（`recent()` 过滤后仍有条目） | `core/memory/action_trace.py` → `recent()` + `format_trace_block()`；历史条目带时间并明确标为参考 |
 | `10.6_hardware_jobs` | 当前硬件后台动作状态与系统计算的剩余时间 | 存在 `accepted`/`started` job | `core/hardware/jobs.py::format_prompt()`；只读系统状态，断线/失败/取消/过期任务不继续倒计时 |
 | `10.6_pending_material` | 未读资料短摘要（文件名/标题、时间、摘录；无内部 id） | owner 私聊且有未读资料 | `core/context_continuity.py`；`_drop_priority=85` |
@@ -107,7 +107,7 @@ stage 的导演字段、当前 stage 标记与私密真相披露策略，并受�
 
 > 层 10 注入安全：工具裸输出经 `ToolResult.safe_summary`（截断上限 2000 字符）包裹后，以定界标记 `<<<TOOL_DATA_START>>>` / `<<<TOOL_DATA_END>>>` 加反注入指令框定，防止外部工具/搜索结果中的不可信文本被模型当作指令执行。原始数据仅落 debug 日志，永不进 prompt/memory。
 >
-> 层 10.5（Brief 27）：`tool_dispatcher.execute()` 每次 return（origin 闸门拒绝除外）都调 `action_trace.record()` 落一条精简痕迹（`data/runtime/memory/{char_id}/{uid}/action_trace.json`，环形上限 30 条）。`result_digest` 只消费 `ToolResult.safe_summary`，`peek_screen_content` 特判只留 title_hint。**当轮去重**：本轮已有 `tool_result` 且其工具名与痕迹最新一条相同时跳过该条，避免层10/10.5 重复同一件事。不进 `_drop_priority` 裁剪链（够小且时效性强），全层预算截断 400 字。`action_trace.enabled: false` 时零行为变化。可选 `event_log_echo` 配置项：`status=ok` 时经 `fixation_pipeline.capture_turn(trigger_name="action_trace")` 回流一条到 event_log（**不得**直接调用底层写入函数，见 `tests/test_r6b_reality_scrub_contract.py` C2 契约）；回流文案刻意不整行包在中文括号里，否则会被 `scrub_reality_output_text` 当整行动作旁白丢弃。
+> 层 10.5（Brief 27）：`tool_dispatcher.execute_structured()` 每次 return（origin 闸门拒绝除外）都调 `action_trace.record()` 落一条精简痕迹（`data/runtime/memory/{char_id}/{uid}/action_trace.json`，环形上限 30 条）。兼容 `execute()` 只解包同一结果。`result_digest` 只消费 `ToolResult.safe_summary`，`peek_screen_content` 特判只留 title_hint。**当轮去重**：本轮已有 `tool_result` 且其工具名与痕迹最新一条相同时跳过该条，避免层10/10.5 重复同一件事。不进 `_drop_priority` 裁剪链（够小且时效性强），全层预算截断 400 字。`action_trace.enabled: false` 时零行为变化。可选 `event_log_echo` 配置项：`status=ok` 时经 `fixation_pipeline.capture_turn(trigger_name="action_trace")` 回流一条到 event_log（**不得**直接调用底层写入函数，见 `tests/test_r6b_reality_scrub_contract.py` C2 契约）；回流文案刻意不整行包在中文括号里，否则会被 `scrub_reality_output_text` 当整行动作旁白丢弃。
 >
 > 层 10.6（硬件长时动作）：工具调用只登记 `hardware_jobs.json` 并立即返回；后台 worker 负责设备命令、到期 stop、断线/异常/显式取消和进程关闭清理。Prompt 只注入活动任务，`remaining_seconds` 由 `deadline_at - now` 计算；`failed`/`cancelled`/`expired` 任务不会被描述成仍在运行，也不把“已受理”说成“已完成”。
 >

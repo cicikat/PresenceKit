@@ -2738,7 +2738,13 @@ async def execute(
     tool_status_observer=None,
     allowed_tool_names: frozenset[str] | None = None,
 ) -> tuple[str | None, str | None]:
-    """Compatibility tuple API; new routing code should use execute_structured()."""
+    """Compatibility tuple API.
+
+    Production routing uses execute_structured(). This wrapper unpacks
+    (result, confirmation_request) for remaining tests and leftover callers.
+    Keep it until the compatibility window ends; do not treat tuple shape as
+    the production contract.
+    """
     outcome = await execute_structured(
         tool_name, tool_args, user_id, target_id, is_group, session_state,
         origin=origin,
