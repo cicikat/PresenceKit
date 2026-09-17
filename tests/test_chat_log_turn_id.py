@@ -98,3 +98,60 @@ async def test_persisted_history_joins_completed_owner_reasoning(sandbox):
     row = chat_log._parse_day(path.read_text(encoding='utf-8'))[0]
     assert row['turn_id'] == response['turn_id']
     assert store.query_turn(row['turn_id'])[0]['parts'][0]['text'] == 'Archived reasoning'
+
+
+def test_history_http_projects_media_refs_without_disk_paths(sandbox, monkeypatch):
+    from admin import auth
+    from core.memory.event_store import append_event
+    from core.memory.scope import MemoryScope
+
+    monkeypatch.setattr(chat_log, '_owner_qq', lambda: 'fixture-owner')
+    monkeypatch.setattr(chat_log, '_resolve_char_id', lambda value: value or DEFAULT_CHAR_ID)
+    monkeypatch.setattr(auth, 'resolve_token', lambda token: auth.TokenInfo('fixture', frozenset({token})))
+    event_log.append('fixture-owner', 'user', 'Question', turn_id='media-turn', char_id=DEFAULT_CHAR_ID)
+    event_log.append('fixture-owner', 'assistant', 'Answer', turn_id='media-turn', char_id=DEFAULT_CHAR_ID)
+    refs = [{
+        'kind': 'image',
+        'filename': 'photo.jpg',
+        'sha256': 'a' * 64,
+        'availability': 'available',
+        'image_path': 'C:/secret/inbox/photo.jpg',
+    }]
+    append_event(MemoryScope.reality_scope('fixture-owner', DEFAULT_CHAR_ID), {
+        'event_id': 'media-turn:user',
+        'turn_id': 'media-turn',
+        'kind': 'user_message',
+        'actor': 'user',
+        'visible_text': 'Question',
+        'memory_text': 'Question',
+        'media_refs_json': refs,
+    })
+    append_event(MemoryScope.reality_scope('fixture-owner', DEFAULT_CHAR_ID), {
+        'event_id': 'media-turn:assistant',
+        'turn_id': 'media-turn',
+        'kind': 'assistant_message',
+        'actor': 'assistant',
+        'visible_text': 'Answer',
+        'memory_text': 'Answer',
+        'media_refs_json': refs,
+    })
+    path = event_log._day_file_read('fixture-owner', datetime.now())
+    app = FastAPI()
+    app.include_router(chat_log.router, prefix='/chat-log')
+    with TestClient(app) as client:
+        response = client.get(
+            f'/chat-log/{path.stem}',
+            params={'char_id': DEFAULT_CHAR_ID},
+            headers={'Authorization': 'Bearer memory.read'},
+        )
+    assert response.status_code == 200
+    entry = response.json()['entries'][0]
+    assert entry['turn_id'] == 'media-turn'
+    assert entry['media_refs'] == [{
+        'kind': 'image',
+        'filename': 'photo.jpg',
+        'sha256': 'a' * 64,
+        'availability': 'available',
+    }]
+    assert 'image_path' not in entry['media_refs'][0]
+    assert 'C:/secret' not in str(response.json())

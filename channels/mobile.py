@@ -173,8 +173,10 @@ class MobileChannel(BaseChannel):
                 queue = self._load_queue()
                 seq = self._next_seq(queue)
                 safe_write_json(paths.mobile_queue_seq(), {"next_seq": seq + 1})
+                canonical_id = (msg_id or "").strip() or uuid4().hex
                 item = {
-                    "id": msg_id if msg_id is not None else uuid4().hex,
+                    "id": canonical_id,
+                    "turn_id": canonical_id,
                     "seq": seq,
                     "content": content,
                     "user_id": str(user_id),

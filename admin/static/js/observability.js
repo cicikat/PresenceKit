@@ -299,6 +299,26 @@ async function loadObserveChatArtifacts() {
   }
 }
 
+async function loadObserveChatIdentity() {
+  const el = document.getElementById('obs-chat-identity-body');
+  if (!el) return;
+  el.innerHTML = '<div class="loading">加载中…</div>';
+  try {
+    const d = await api('GET', '/observability/chat-identity');
+    const pct = (value) => value == null ? '—' : `${Math.round(Number(value) * 1000) / 10}%`;
+    el.innerHTML = [
+      `attempted=${escapeHtml(String(d.attempted ?? 0))}`,
+      `persisted_turn_id=${escapeHtml(String(d.persisted_turn_id ?? 0))}`,
+      `generated_transport_id=${escapeHtml(String(d.generated_transport_id ?? 0))}`,
+      `empty_transport_id=${escapeHtml(String(d.empty_transport_id ?? 0))}`,
+      `persisted_coverage=${escapeHtml(pct(d.persisted_coverage))}`,
+      `transport_coverage=${escapeHtml(pct(d.transport_coverage))}`,
+    ].map(line => `<div>${line}</div>`).join('');
+  } catch (e) {
+    el.innerHTML = `<div class="empty">加载失败：${escapeHtml(e.message)}</div>`;
+  }
+}
+
 async function loadObserveChatlogDay() {
   const date = document.getElementById('obs-chatlog-date').value;
   const el   = document.getElementById('obs-chatlog-body');
@@ -582,6 +602,9 @@ async function enqueueAutonomyTest() {
 window.loadObserveChatArtifacts = loadObserveChatArtifacts;
 window.downloadObserveChatArtifact = downloadObserveChatArtifact;
 window.previewObserveChatArtifact = previewObserveChatArtifact;
+window.loadObserveChatlogDates = loadObserveChatlogDates;
+window.loadObserveChatlogDay = loadObserveChatlogDay;
+window.loadObserveChatIdentity = loadObserveChatIdentity;
 window.loadObserveAutonomy = loadObserveAutonomy;
 window.loadSelfManagement = loadSelfManagement;
 window.selfManagementChange = selfManagementChange;

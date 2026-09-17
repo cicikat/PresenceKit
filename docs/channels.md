@@ -92,11 +92,15 @@ signal-only 中继唤醒（仅含 `id` / `seq` / `user_id` / `timestamp` / `sign
 本端 reply 通过 HTTP response 返回；`exclude_origin_channel` 只排除实时来源，
 mobile durable mirror 则由独立策略控制，确保手机发消息后立即切后台仍有可 poll 的副本。
 
-HTTP assistant reply 保留 `turn_id`，并同时返回兼容字段 `msg_id`；两者相等。mobile 普通聊天的
+HTTP assistant reply 保留 `turn_id`（仅 persisted memory id，可为空），并同时返回兼容字段
+`msg_id`（传输 correlator）。手机非流式且 critical 已落盘 turn_id 时，两者相等；无 persisted
+turn_id 时 `msg_id` 仍由 sink mint 不透明 transport id，`turn_id` 保持空，不伪造旧日志身份。
+桌面流式路径的 `_stream_msg_id` 可与 persisted `turn_id` 不同。mobile 普通聊天的
 provenance 是 `mobile`（prompt、probe 与观测），实时来源也是 `mobile`（不启用 desktop stream，
-不激活 desktop），但 USER_CHAT 的 mobile durable mirror 是独立策略，始终写入一次队列。该 canonical ID
-也用于同一 assistant turn 的 WS `channel_message.msg_id` / `message_segments.msg_id`。
-`/desktop/wake` 只有 Path A 回放已有 assistant turn 时返回 reply，并保持相等的
+不激活 desktop），但 USER_CHAT 的 mobile durable mirror 是独立策略，始终写入一次队列。该
+transport `msg_id` 也用于同一 assistant turn 的 WS `channel_message.msg_id` /
+`message_segments.msg_id` 与 mobile queue `id`/`turn_id`。
+`/desktop/wake` 只有 Path A 回放已有 assistant turn 时返回 reply，并保持该次回放的
 `turn_id` / `msg_id`。Path B 只确认 autonomy signal 已入队，不生成新 turn ID。
 
 ---

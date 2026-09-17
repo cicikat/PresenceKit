@@ -13,9 +13,17 @@ import logging
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional, Sequence, Union
+from typing import Any, Optional, Sequence, Union
+from uuid import uuid4
 
 logger = logging.getLogger(__name__)
+
+_IDENTITY_STATS: dict[str, int] = {
+    "attempted": 0,
+    "persisted_turn_id": 0,
+    "generated_transport_id": 0,
+    "empty_transport_id": 0,
+}
 
 
 class TurnSource(str, Enum):
@@ -37,6 +45,7 @@ class TurnResult:
     post_process_scheduled: bool = False
     emotion: str = "neutral"
     artifacts: list[dict] = field(default_factory=list)
+    msg_id: str = ""
 
 
 def _require_pipeline(pipeline=None):
@@ -349,17 +358,12 @@ async def record_assistant_turn(
                     )
                 )
 
-    # Use the post-process turn_id as the canonical cross-transport correlation id.
-    # The fallback only applies to non-critical async post-process paths where no
-    # turn_id exists yet.
-    _ws_msg_id: Optional[str] = (post_info or {}).get("turn_id") or None
-    if _ws_msg_id is None:
-        try:
-            from channels import desktop_ws as _dws_pre
-            if _dws_pre.is_connected():
-                _ws_msg_id = _dws_pre._new_msg_id()
-        except Exception:
-            pass
+    # Canonical transport identity: prefer the persisted turn_id. When critical
+    # post-process did not produce one, still mint an opaque id so mobile queue,
+    # desktop WS and HTTP replies share a correlator. Do not wait for desktop WS.
+    _persisted_turn_id = str((post_info or {}).get("turn_id") or "").strip()
+    _ws_msg_id = _persisted_turn_id or uuid4().hex
+    _record_identity_outcome(persisted=bool(_persisted_turn_id), transport=bool(_ws_msg_id))
 
     targets, failures = await _fanout(
         assistant_text=visible_assistant_text or assistant_text,
@@ -428,11 +432,44 @@ async def record_assistant_turn(
             logger.debug("[turn_sink] message_segments fanout failed", exc_info=True)
 
     return TurnResult(
-        turn_id=(post_info or {}).get("turn_id", ""),
+        turn_id=_persisted_turn_id,
         written_to_memory=bool((post_info or {}).get("critical_written", False)),
         fanout_targets=targets,
         fanout_failures=failures,
         post_process_scheduled=not await_critical_post_process,
         emotion=(post_info or {}).get("emotion", "neutral"),
         artifacts=artifacts,
+        msg_id=_ws_msg_id,
     )
+
+
+def _record_identity_outcome(*, persisted: bool, transport: bool) -> None:
+    _IDENTITY_STATS["attempted"] += 1
+    if persisted:
+        _IDENTITY_STATS["persisted_turn_id"] += 1
+    else:
+        _IDENTITY_STATS["generated_transport_id"] += 1
+    if not transport:
+        _IDENTITY_STATS["empty_transport_id"] += 1
+
+
+def identity_observability() -> dict[str, Any]:
+    """Content-free coverage of transport identity minting. Never includes bodies."""
+    attempted = int(_IDENTITY_STATS["attempted"])
+    persisted = int(_IDENTITY_STATS["persisted_turn_id"])
+    generated = int(_IDENTITY_STATS["generated_transport_id"])
+    empty = int(_IDENTITY_STATS["empty_transport_id"])
+    return {
+        "scope": "process",
+        "attempted": attempted,
+        "persisted_turn_id": persisted,
+        "generated_transport_id": generated,
+        "empty_transport_id": empty,
+        "persisted_coverage": (persisted / attempted) if attempted else None,
+        "transport_coverage": ((attempted - empty) / attempted) if attempted else None,
+    }
+
+
+def _reset_identity_observability_for_tests() -> None:
+    for key in _IDENTITY_STATS:
+        _IDENTITY_STATS[key] = 0

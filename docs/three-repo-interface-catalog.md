@@ -1,5 +1,16 @@
 # 三仓接口总览与闭环审计
 
+## 跨来源消息身份（2026-09-17）
+
+`current`：`record_assistant_turn` 优先用 persisted `turn_id` 作传输 `msg_id`；无 turn_id 时 mint
+不透明 transport id，不依赖 desktop WS。mobile queue 的 `id`/`turn_id` 与该 correlator 对齐。
+`GET /chat-log/{date}` 可投影 `media_refs`（kind/filename/sha256/availability），不把磁盘路径当 URL。
+`GET /observability/chat-identity`（state.read）只返回覆盖率。管理面观测页消费该端点，不展示正文。
+桌面本轮无需改代码：流式 `_stream_msg_id` 可不同于 persisted `turn_id`；思考仍用 turn_id。
+手机消费 HTTP `msg_id`/`turn_id`、chat-log 身份与 media_refs；有身份时不再猜正文；reasoning 不用
+msg_id 代替 turn_id；Dream 仍为 session-local。旧无 footer 日志不伪造身份。
+`observe`：真机跨端同文同分钟、附件对账与覆盖率卡片硬刷新。
+
 ## Chat Completions 工具续轮白名单（2026-09-15）
 
 current：后端 Chat Completions 工具续轮只发送协议允许字段；管理面沿用 API 账本
@@ -252,8 +263,10 @@ Flutter/Android 字段或设置面。Agent Runtime 是同一角色的 durable / 
 
 ### 2.2 关联键与持久化边界
 
-- 普通助手回复的关联键统一为 `turn_id = msg_id`；桌面 HTTP、桌面 WS、手机同步响应和
-  mobile durable mirror 必须按不透明字符串做关联，不能解析格式。
+- 普通助手回复的传输关联键是不透明 `msg_id`；persisted `turn_id` 仅在 critical 落盘后存在。
+  手机非流式且有 persisted turn_id 时 HTTP `msg_id == turn_id`；无 turn_id 时 `msg_id` 仍非空。
+  桌面流式 `_stream_msg_id` 可不同于 `turn_id`。桌面 HTTP、桌面 WS、手机同步响应和
+  mobile durable mirror 必须按不透明字符串做关联，不能解析格式，也不能用 seq/正文 hash 冒充身份。
 - 后端拥有记忆、Dream、花园、日记、调度、人格和队列真值；桌面/手机状态均是镜像或消费端。
 - mobile 队列的顺序是 `seq`，消息身份是 `id`。客户端必须先持久化消费/去重，再调用
   `/mobile/ack`，ack 成功后才推进 `lastAckedSeq`。
@@ -728,12 +741,14 @@ profile 可读取已关联的 Reality owner 回合，返回 available/entries（
 可选 turn_id 仅来自 assistant 尾部 emotion/intensity 元数据（旧无 speaker 兼容）；
 显式非 assistant、重复 ID、用户元数据及正文字段不提供关联。无 ID 缺字段，不迁移或回写。
 现有 assistant_display_text 投影也使用该 canonical ID；日期、owner、角色桶和 memory.read 不变。
-桌面 ChatLogEntry.turn_id → assistant turnId → 每回合思考入口已接线；手机历史模型尚未消费。
-管理面复用现有历史/思考只读接口，无新增设置、权限、状态、ack 或 TTL。
+桌面 ChatLogEntry.turn_id → assistant turnId → 每回合思考入口已接线。
+手机历史模型已消费 chat-log `turn_id` 与 `media_refs`（kind/filename/sha256/availability）；
+思考仍只走明确 `turn_id`，不用 `msg_id` 代替。旧无 footer 日志不伪造身份。
+管理面复用现有历史/思考只读接口，并在观测页展示 `GET /observability/chat-identity`
+覆盖率（attempted / persisted_turn_id / generated_transport_id / empty_transport_id），不展示正文。
 `observe`：真实对话后原生桌面重启、单回合单入口、归档读取及空态重试未联调；
 后端隔离回归及桌面既有夹具不代表真实端到端验收。
-`roadmap`：手机历史 ID 消费，以及 QQ/主动消息/Dream/Stage 思考关联。
-后端交付见 `cc-tasks/244-history-turn-id-backend-handoff.md`；本单仅修改后端仓。
+`roadmap`：QQ/主动消息/Dream/Stage 思考关联。
 
 ## 聊天产物文件（2026-09-16）
 

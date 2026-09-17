@@ -305,16 +305,45 @@ async def get_day(date: str, char_id: str | None = None, auth=Depends(require_sc
     # Missing/older ledgers retain the legacy plain-text history.
     from core.memory.event_query import get_event, EventQueryError
     scope = MemoryScope.reality_scope(_owner_qq(), resolved)
+
+    def _project_media_refs(event: dict | None) -> list[dict]:
+        if not event or event.get("tombstoned"):
+            return []
+        return [
+            {
+                key: value
+                for key, value in ref.items()
+                if key in ("kind", "filename", "sha256", "availability") and value
+            }
+            for ref in (event.get("media_refs") or [])
+            if isinstance(ref, dict)
+        ]
+
     for entry in entries:
-        if not entry.get("turn_id") or not entry.get("assistant"):
+        if not entry.get("turn_id"):
             continue
+        turn_id = entry["turn_id"]
+        assistant_event = None
+        user_event = None
         try:
-            event = get_event(scope, entry["turn_id"] + ":assistant", include_isolated=True)
+            assistant_event = get_event(scope, turn_id + ":assistant", include_isolated=True)
         except EventQueryError:
-            continue
-        if event and not event.get("tombstoned") and event.get("visible_text"):
+            assistant_event = None
+        try:
+            user_event = get_event(scope, turn_id + ":user", include_isolated=True)
+        except EventQueryError:
+            user_event = None
+        if (
+            entry.get("assistant")
+            and assistant_event
+            and not assistant_event.get("tombstoned")
+            and assistant_event.get("visible_text")
+        ):
             from core.response_processor import inline_display_text
-            entry["assistant_display_text"] = inline_display_text(event["visible_text"])
+            entry["assistant_display_text"] = inline_display_text(assistant_event["visible_text"])
+        media_refs = _project_media_refs(user_event) or _project_media_refs(assistant_event)
+        if media_refs:
+            entry["media_refs"] = media_refs
     raw_fallback = len(entries) == 0 and bool(text.strip())
 
     return {

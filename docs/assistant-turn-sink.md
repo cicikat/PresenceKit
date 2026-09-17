@@ -74,11 +74,12 @@ FanoutPolicy = Union[str, Sequence[str]]
 
 @dataclass
 class TurnResult:
-    turn_id: str
+    turn_id: str          # persisted memory id；critical 未落盘时为空
     written_to_memory: bool
     fanout_targets: list[str]
     fanout_failures: dict[str, str] = field(default_factory=dict)
     post_process_scheduled: bool = False
+    msg_id: str = ""      # 传输 correlator；优先 persisted turn_id，否则 uuid4().hex
 
 async def record_assistant_turn(
     *,
@@ -105,7 +106,7 @@ async def record_assistant_turn(
    - `source != USER_CHAT` → 必须有 `trigger_name`、不能有 `user_text`
    - `assistant_text` 非空
 
-2. **生成 `turn_id`**（UUID4），随后回填给 `capture_turn`
+2. **记忆 `turn_id` 由 `capture_turn` / `post_process_critical` 产出**；sink 不再预先 mint 记忆 id。fanout 前优先使用 persisted `turn_id` 作为传输 `msg_id`；若 critical 未产出，则 `uuid4().hex` mint 不透明 transport id，**不依赖 desktop WS `is_connected()`**，也不把该 transport id 回写成旧日志 footer。
 
 3. **进入 `conversation_gate(uid)`**（per-uid lock，与 owner 入口共享）
    - `bypass_gate=True` 时跳过；仅供已经持有外层 `conversation_lock` 的 adapter/兼容调用方使用，`hr_critical` 只绕过状态机准入，不绕过此锁
@@ -141,7 +142,7 @@ async def record_assistant_turn(
 
 ### 3.4 当前追加：Narrative Message 双轨
 
-`record_assistant_turn()` 当前还会为桌面 WS 预生成共享 `msg_id`：
+`record_assistant_turn()` 当前会为各通道准备共享传输 `msg_id`（优先 persisted `turn_id`，否则 mint）：
 
 1. 原始 `assistant_text` 先供 desktop 双轨展示；reality memory / event_log 写入前移除
    `<say>` 等展示标签；

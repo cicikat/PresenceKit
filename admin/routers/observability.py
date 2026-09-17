@@ -267,6 +267,16 @@ async def memory_event_ledger(_auth=Depends(require_scopes("state.read"))):
 
 
 @router.get(
+    "/observability/chat-identity",
+    summary="读取跨通道聊天身份覆盖率（不含正文）",
+)
+async def chat_identity_observability(_auth=Depends(require_scopes("state.read"))):
+    from core.turn_sink import identity_observability
+
+    return identity_observability()
+
+
+@router.get(
     "/observability/memory-event-migration",
     summary="读取 Memory Event 历史迁移进度（不返回正文或本地路径）",
 )

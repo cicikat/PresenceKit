@@ -530,9 +530,9 @@ async def _execute_owner_chat_turn_locked(
                if provenance_channel == "mobile" else {}),
             "emotion": turn_result.emotion,
             "turn_id": turn_result.turn_id,
-            # 流式路径：HTTP msg_id 与 WS 流式帧共享同一 id，
-            # 前端凭此判断 WS 已渲染，取消 3s HTTP fallback 计时器。
-            "msg_id": _stream_msg_id or turn_result.turn_id,
+            # 流式路径：HTTP msg_id 与 WS 流式帧共享同一 id。
+            # 非流式（含 mobile）回传 transport correlator；无 turn_id 时仍不为空。
+            "msg_id": _stream_msg_id or turn_result.msg_id or turn_result.turn_id,
             "critical_written": turn_result.written_to_memory,
             "artifacts": list(turn_result.artifacts or []),
         }

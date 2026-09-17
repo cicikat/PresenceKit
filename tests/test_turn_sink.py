@@ -407,6 +407,83 @@ async def test_mobile_fanout_queue_id_matches_turn_id(sandbox):
 
     queue = json.loads(sandbox.mobile_queue().read_text(encoding="utf-8"))
     assert queue[0]["id"] == result.turn_id == "turn-scheduler_message"
+    assert queue[0]["turn_id"] == result.turn_id == result.msg_id
+
+
+class _PipelineWithoutTurnId(_FakePipeline):
+    async def post_process_critical(self, uid, content, reply, **kwargs):
+        result = await super().post_process_critical(uid, content, reply, **kwargs)
+        result.pop("turn_id", None)
+        return result
+
+    async def post_process_slow(self, uid, content, reply, critical_result, **kwargs):
+        return {"emotion": "gentle", "turn_id": critical_result.get("turn_id", "")}
+
+
+async def test_mobile_fanout_mints_transport_id_without_turn_id_or_desktop(monkeypatch, sandbox):
+    """Desktop WS 未连且 critical 未落 turn_id 时，队列仍须有可对账的不透明身份。"""
+    from channels import registry
+    from channels.mobile import MobileChannel
+    from core.turn_sink import TurnSource, record_assistant_turn, _reset_identity_observability_for_tests
+
+    await _reset_channels()
+    _reset_identity_observability_for_tests()
+    monkeypatch.setattr("channels.desktop_ws.is_connected", lambda: False)
+    mobile = MobileChannel()
+    mobile.set_active(True)
+    registry.register(mobile)
+
+    result = await record_assistant_turn(
+        assistant_text="offline reply",
+        uid="owner",
+        source=TurnSource.TRIGGER,
+        trigger_name="scheduler_message",
+        fanout="mobile",
+        pipeline=_PipelineWithoutTurnId(),
+    )
+
+    queue = json.loads(sandbox.mobile_queue().read_text(encoding="utf-8"))
+    assert result.turn_id == ""
+    assert result.msg_id
+    assert queue[0]["id"] == queue[0]["turn_id"] == result.msg_id
+    from core.turn_sink import identity_observability
+    snapshot = identity_observability()
+    assert snapshot["attempted"] == 1
+    assert snapshot["generated_transport_id"] == 1
+    assert snapshot["empty_transport_id"] == 0
+    assert "content" not in snapshot
+    assert "reply" not in snapshot
+
+
+def test_chat_identity_observability_endpoint_is_content_free(sandbox, monkeypatch):
+    from admin import auth
+    from admin.admin_server import app
+    from core.turn_sink import identity_observability, _reset_identity_observability_for_tests
+    from fastapi.testclient import TestClient
+
+    _reset_identity_observability_for_tests()
+    monkeypatch.setattr(auth, "resolve_token", lambda token: auth.TokenInfo("obs", frozenset({token})))
+    with TestClient(app, raise_server_exceptions=False) as client:
+        denied = client.get("/observability/chat-identity")
+        assert denied.status_code == 401
+        allowed = client.get(
+            "/observability/chat-identity",
+            headers={"Authorization": "Bearer state.read"},
+        )
+    assert allowed.status_code == 200
+    body = allowed.json()
+    assert body == identity_observability()
+    assert set(body) >= {
+        "scope",
+        "attempted",
+        "persisted_turn_id",
+        "generated_transport_id",
+        "empty_transport_id",
+        "persisted_coverage",
+        "transport_coverage",
+    }
+    assert "content" not in body
+    assert "reply" not in body
 
 
 async def test_fanout_exclude_does_not_affect_named_fanout():
