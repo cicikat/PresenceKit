@@ -380,6 +380,189 @@ def test_allowlist_and_inheritance_share_one_denied_reason(sandbox, monkeypatch)
     assert row["decision_source"] == "global_read_inheritance"
 
 
+def test_dangerous_and_confirm_tools_stay_ineligible():
+    from core.autonomy.policy import tool_eligibility
+    registry = {
+        "device_shutdown": {"category": "system", "dangerous": True, "require_confirm": True},
+        "desktop_notify": {"category": "desktop", "dangerous": False, "require_confirm": False},
+    }
+    eligible, reason = tool_eligibility(
+        "device_shutdown", {"enabled": True}, registry=registry, effect="write"
+    )
+    assert eligible is False
+    assert reason == "side_effect_or_confirmation_required"
+    assert tool_eligibility("desktop_notify", {"enabled": True}, registry=registry, effect="actuate")[0] is False
+
+
+def test_global_disable_blocks_inherited_mcp(sandbox, monkeypatch):
+    from core.autonomy import policy, store
+    from core.self_management.service import user_grant
+    from core.tool_dispatcher import _TOOL_REGISTRY
+
+    tool_name = "mcp__inherit__status"
+    capability_id = "mcp.use:inherit/status"
+    monkeypatch.setitem(_TOOL_REGISTRY, tool_name, {
+        "func": lambda **_kwargs: "ok",
+        "description": "inherited mcp read",
+        "parameters": {"type": "object", "properties": {}},
+        "category": "mcp",
+        "mcp_server": "inherit",
+        "mcp_tool": "status",
+        "effect": "read",
+        "dangerous": False,
+        "require_confirm": False,
+    })
+    monkeypatch.setattr("core.tool_dispatcher._is_tool_enabled", lambda name: False)
+    monkeypatch.setattr(
+        "core.tool_dispatcher.get_tools_schema",
+        lambda **_kwargs: [{"type": "function", "function": {"name": tool_name}}],
+    )
+    monkeypatch.setattr("core.mcp_client.server_runtime", lambda _server: {
+        "connected": True,
+        "registered_tools": [tool_name],
+    })
+    monkeypatch.setattr("core.config_loader.get_config", lambda: {"mcp_servers": {}})
+    assert user_grant("owner", "char", capability_id=capability_id, allowed=True, mutable_by_agent=True, constraints={}, reason="allow").ok
+    row = next(item for item in policy.tool_decisions("owner", "char", store.load("owner", "char")) if item["name"] == tool_name)
+    assert row["allowed"] is False
+    assert row["denial_reason"] == "globally_disabled"
+
+
+def test_deployment_gate_blocks_local_capability(sandbox, monkeypatch):
+    from core.autonomy import policy, store
+
+    monkeypatch.setattr("core.tool_dispatcher._is_tool_enabled", lambda name: True)
+    monkeypatch.setattr(
+        "core.tool_dispatcher.get_tools_schema",
+        lambda **_kwargs: [{"type": "function", "function": {"name": "fs_list"}}],
+    )
+    monkeypatch.setattr(
+        "core.deployment_capabilities.tool_allowed",
+        lambda name, config=None: (False, "disabled_remote_server_local_capability") if name == "fs_list" else (True, None),
+    )
+    state = store.load("owner", "char")
+    state["config"]["tools"] = {"fs_list": {"enabled": True, "mcp_explicit": False, "outcome_unknown": "fail_closed"}}
+    row = next(item for item in policy.tool_decisions("owner", "char", state) if item["name"] == "fs_list")
+    assert row["allowed"] is False
+    assert row["deployment"] is False
+    assert row["denial_reason"] == "disabled_remote_server_local_capability"
+
+
+def test_self_capability_revoke_blocks_inherited_mcp(sandbox, monkeypatch):
+    from core.autonomy import policy, store
+    from core.self_management.service import user_grant
+    from core.tool_dispatcher import _TOOL_REGISTRY
+
+    tool_name = "mcp__inherit__status"
+    capability_id = "mcp.use:inherit/status"
+    monkeypatch.setitem(_TOOL_REGISTRY, tool_name, {
+        "func": lambda **_kwargs: "ok",
+        "description": "inherited mcp read",
+        "parameters": {"type": "object", "properties": {}},
+        "category": "mcp",
+        "mcp_server": "inherit",
+        "mcp_tool": "status",
+        "effect": "read",
+        "dangerous": False,
+        "require_confirm": False,
+    })
+    monkeypatch.setattr("core.tool_dispatcher._is_tool_enabled", lambda name: True)
+    monkeypatch.setattr(
+        "core.tool_dispatcher.get_tools_schema",
+        lambda **_kwargs: [{"type": "function", "function": {"name": tool_name}}],
+    )
+    monkeypatch.setattr("core.mcp_client.server_runtime", lambda _server: {
+        "connected": True,
+        "registered_tools": [tool_name],
+    })
+    monkeypatch.setattr("core.config_loader.get_config", lambda: {"mcp_servers": {}})
+    assert user_grant("owner", "char", capability_id=capability_id, allowed=False, mutable_by_agent=True, constraints={}, reason="revoke").ok
+    row = next(item for item in policy.tool_decisions("owner", "char", store.load("owner", "char")) if item["name"] == tool_name)
+    assert row["allowed"] is False
+    assert row["self_capability"] is False
+    assert row["denial_reason"] == "self_capability_disabled"
+
+
+def test_require_confirm_mcp_does_not_inherit(sandbox, monkeypatch):
+    from core.autonomy import policy, store
+    from core.self_management.service import user_grant
+    from core.tool_dispatcher import _TOOL_REGISTRY
+
+    tool_name = "mcp__inherit__status"
+    capability_id = "mcp.use:inherit/status"
+    monkeypatch.setitem(_TOOL_REGISTRY, tool_name, {
+        "func": lambda **_kwargs: "ok",
+        "description": "confirm mcp",
+        "parameters": {"type": "object", "properties": {}},
+        "category": "mcp",
+        "mcp_server": "inherit",
+        "mcp_tool": "status",
+        "effect": "read",
+        "dangerous": False,
+        "require_confirm": True,
+    })
+    monkeypatch.setattr("core.tool_dispatcher._is_tool_enabled", lambda name: True)
+    monkeypatch.setattr(
+        "core.tool_dispatcher.get_tools_schema",
+        lambda **_kwargs: [{"type": "function", "function": {"name": tool_name}}],
+    )
+    monkeypatch.setattr("core.mcp_client.server_runtime", lambda _server: {
+        "connected": True,
+        "registered_tools": [tool_name],
+    })
+    monkeypatch.setattr("core.config_loader.get_config", lambda: {"mcp_servers": {}})
+    assert user_grant("owner", "char", capability_id=capability_id, allowed=True, mutable_by_agent=True, constraints={}, reason="allow").ok
+    row = next(item for item in policy.tool_decisions("owner", "char", store.load("owner", "char")) if item["name"] == tool_name)
+    assert row["eligible"] is False
+    assert row["allowed"] is False
+    assert row["confirmation"] is True
+    assert row["denial_reason"] == "autonomy_allowlist_disabled"
+
+
+def test_mcp_local_policy_blocks_allowlisted_mcp(sandbox, monkeypatch):
+    from core.autonomy import policy, store
+    from core.self_management.service import user_grant
+    from core.tool_dispatcher import _TOOL_REGISTRY
+
+    tool_name = "mcp__inherit__status"
+    capability_id = "mcp.use:inherit/status"
+    monkeypatch.setitem(_TOOL_REGISTRY, tool_name, {
+        "func": lambda **_kwargs: "ok",
+        "description": "policy mcp",
+        "parameters": {"type": "object", "properties": {}},
+        "category": "mcp",
+        "mcp_server": "inherit",
+        "mcp_tool": "status",
+        "effect": "read",
+        "dangerous": False,
+        "require_confirm": False,
+    })
+    monkeypatch.setattr("core.tool_dispatcher._is_tool_enabled", lambda name: True)
+    monkeypatch.setattr(
+        "core.tool_dispatcher.get_tools_schema",
+        lambda **_kwargs: [{"type": "function", "function": {"name": tool_name}}],
+    )
+    monkeypatch.setattr("core.mcp_client.server_runtime", lambda _server: {
+        "connected": True,
+        "registered_tools": [tool_name],
+    })
+    monkeypatch.setattr("core.config_loader.get_config", lambda: {
+        "mcp_servers": {
+            "require_local_policy": True,
+            "servers": [{"name": "inherit", "allow_tools": [], "tool_policy": {}}],
+        }
+    })
+    assert user_grant("owner", "char", capability_id=capability_id, allowed=True, mutable_by_agent=True, constraints={}, reason="allow").ok
+    state = store.load("owner", "char")
+    state["config"]["tools"] = {
+        tool_name: {"enabled": True, "mcp_explicit": True, "outcome_unknown": "fail_closed"}
+    }
+    row = next(item for item in policy.tool_decisions("owner", "char", state) if item["name"] == tool_name)
+    assert row["allowed"] is False
+    assert row["mcp_policy"] == "mcp_local_policy_denied"
+    assert row["denial_reason"] == "mcp_local_policy_denied"
+
+
 def test_execution_recheck_denies_after_schema_exposure(sandbox, monkeypatch):
     from core.autonomy import runner, store
     from core.autonomy.models import Job, Run

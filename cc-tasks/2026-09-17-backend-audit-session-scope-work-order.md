@@ -1,6 +1,6 @@
 # 9.17 后端综合工单：角色隔离、固定会话与架构债收敛
 
-状态：A/B/C/E 已提交；D 自动化收尾完成、运行联调待执行；F 已提交；G 已提交（G4 删除候选未授权，保持未勾）；H1 已提交；H2–J 未开始。日期：2026-09-17。
+状态：A/B/C/E 已提交；D 自动化收尾完成、运行联调待执行；F 已提交；G 已提交（G4 删除候选未授权，保持未勾）；H1 已提交；H2 已提交；H3–J 未开始。日期：2026-09-17。
 用户已授权按本单施工。每张施工子单完成相关验证与差异检查后独立 commit，再开始下一张。
 勾选规则：完成一项且具备证据才勾一项；源码存在、自动测试通过、部署验收分别记账。每张施工子单完成相关验证与差异检查后独立 commit，再开始下一张。
 
@@ -94,7 +94,7 @@
 对应 P1-7/8/12；先读 tools/security_model/agent-runtime 合同。以下按独立小单提交。
 
 - [x] H1 已统一 `AutonomyToolDecision`：`tool_eligibility()` 只做 allowlist 准入；schema / `GET /admin/autonomy/tools` / 管理面矩阵 / run audit 共用 `allowed`+`decision_source`（`autonomy_allowlist` 或 `global_read_inheritance`）。全局只读 MCP 继承保留，执行前仍复查当前矩阵。定向 83 passed；管理面浏览器验收留 H2。
-- [ ] H2 回归 global/deployment/self-capability/MCP/autonomy policy、危险操作与确认；覆盖展示允许但执行时撤权。更新控制面和浏览器验收后提交。
+- [x] H2 回归 global/deployment/self-capability/MCP/autonomy policy、危险操作与确认，以及展示允许但执行时撤权。控制面沿用 H1 `AutonomyToolDecision` 合同，未改字段。管理面浏览器验收在当前代码隔离端口完成。
 - [ ] H3 Workspace causation 使用真实 turn ID 或明确的 request fingerprint 类型；更新类型验证、调用者、测试及无正文 lineage 观测，不把 hash 伪称 reality_turn，也不重写历史证据。验证后提交。
 - [ ] H4 盘点 tuple execute 的全部生产消费者，迁往 structured outcome，保留 origin/confirmation/unknown 语义；零生产依赖且兼容窗口结束后才提出删除 wrapper 和旧 shape-only 测试。此轮不直接删。
 
