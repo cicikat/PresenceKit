@@ -24,6 +24,10 @@ docs/chat-correlation.md
 
 本仓不复制协议正文，避免客户端与后端各维护一份而发生漂移。修改桌面消息类型、字段、ack 语义或 action allowlist 前，必须先在双方工单中明确升级范围；v0.1 不允许任一端单边扩展。
 
+拟议固定会话 scope（发现、`session_id`、早期 stream 绑定）见
+[session-scope-contract.md](session-scope-contract.md)。未与桌面仓同步前，不得把这些字段
+写进 v0.1 消息全集，也不得在本仓复制 `protocol-v0.md`。
+
 Tool Ephemeral Status P0 已作为配对的后端与 PresenceKit-desktop 改动交付：`tool_status` 是
 S→C、无 ack、无持久 fallback 的瞬态帧，仅覆盖桌面“动向”NOW 区域，不产生聊天气泡或历史。
 字段与 TTL 语义以客户端仓的 `docs/protocol-v0.md` 为准；旧客户端可忽略未知类型，但后端不得向

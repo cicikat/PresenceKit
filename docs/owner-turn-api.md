@@ -42,7 +42,10 @@ token 都不是本接口的集成凭证；sensor/device 事件也不能冒充用
 
 body 禁止出现 `uid`、`char_id`、`source`、`origin`、`trust`、tool capability、token、
 配置覆盖和任何本机路径。owner、active character、channel provenance、工具暴露面和写入
-策略由服务端固定解析，调用方不能覆盖。
+策略由服务端固定解析，调用方不能覆盖。固定会话 scope（`session_id` / `request_id` /
+`capabilities.session_scope`）是另一份拟议合同，见
+[session-scope-contract.md](session-scope-contract.md)；未落地前本接口仍冻 live active，
+且不得把 `client_turn_id` 改名为 `request_id`。
 
 这是有状态且有副作用的真实 owner turn：它复用现有 Reality pipeline、conversation gate、
 统一 `turn_sink` 和已授权工具面，可能写入对话/记忆状态。HTTP body 不是第二份聊天历史，

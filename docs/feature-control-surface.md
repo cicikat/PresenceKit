@@ -1,8 +1,17 @@
-# 功能控制面事实清单（最后核对：2026-09-16）
+# 功能控制面事实清单（最后核对：2026-09-17）
 
 > 本文是后端功能开关、effective state、权限和观测入口的权威文档。跨仓调用方只记录
 > 自己的设置归属与接入差异，完整映射请查 [三仓文档总索引](three-repo-doc-index.md) 和
 > [三仓接口总账](three-repo-interface-catalog.md)。
+
+## 固定会话 scope（2026-09-17，proposed-not-shipped）
+
+没有已上线的会话 capability 或设置开关。live 角色仍是
+`PATCH /settings/prompt-assets` / `PUT /characters/active` 写入的 `active_character`。
+拟议发现字段 `capabilities.session_scope` 不得复用
+`GET /observability/deployment-capabilities`（那是本机/远程工具策略）。
+合同见 [session-scope-contract.md](session-scope-contract.md)。C 落地前管理面不展示该能力。
+Dream settings 归属走工单 F。
 
 ## 聊天产物文件（2026-09-16）
 

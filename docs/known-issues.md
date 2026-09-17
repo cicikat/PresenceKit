@@ -1,5 +1,12 @@
 # docs/known-issues.md — 已知问题与技术债
 
+## 固定会话 scope（2026-09-17）
+
+`open`：拟议合同已写（[session-scope-contract.md](session-scope-contract.md)），未实现。
+chat 内部会冻 memory scope，但上传/媒体读取仍跟 live active；reasoning 只认 `turn_id`；
+手机共享 `seq` 若按角色跳过再 ack 会丢消息。旧服务端无 capability 广告。
+`observe`：桌面/手机接入与 C 实现。本轮不改桌面或手机代码；手机接入进度见 22 号工单。
+
 ## 聊天媒体读取（2026-09-17）
 
 current：`GET /chat/media/{sha256}` 提供鉴权原图读取；inbox/image_cache GC 有 live-ref 守卫。HTTP 不再返回 `stored_path(s)`。旧无 sha256、已删且无 raw blob 的图不可恢复。

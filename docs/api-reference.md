@@ -62,7 +62,7 @@ scope；只读端点通常允许对应的 read scope。
 | GET | `/observability/api-calls`、`/observability/perceive-events`、`/observability/runtime-signals`、`/observability/owner-turns` | state.read | 外部 API 调用总账、reality stimulus 审计、运行信号和脱敏 owner-turn receipt 观测；均为只读查询。 |
 | GET | `/perception/visual-trace` | state.read | 本地 VLM shadow 观察（不含原图，不进入 prompt/记忆） |
 | GET/PUT/POST | `/tts-config`、`/tts-config/test` | admin | TTS provider 安全配置与已就绪 provider 的试听 |
-| GET/POST/PATCH/DELETE | `/auth/*` | auth | Token 管理页 |
+| GET/POST/PATCH/DELETE | `/auth/*` | auth | Token 管理页。`GET /auth/whoami` 当前只回 `label`/`scopes`。拟议 `capabilities.session_scope` 见 [session-scope-contract.md](session-scope-contract.md)，未上线 |
 | GET/POST/PATCH/DELETE | `/group/*` | group | Stage 群聊管理 |
 | GET/PUT/POST | `/settings/agent-runtime-browser`、`/settings/agent-runtime-browser/tasks*` | admin | 后端唯一浏览器 allowlist、worker 和任务控制面；任务 receipt/观测仅返回脱敏 metadata |
 

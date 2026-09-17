@@ -1,0 +1,43 @@
+{
+  "case_id": "whoami-session-scope-discovery",
+  "status": "proposed-not-shipped",
+  "current_response": {
+    "status": 200,
+    "body": {
+      "label": "fixture-desktop",
+      "scopes": ["activity", "chat", "hardware", "memory.read", "persona", "sensor.write", "state.read", "ws.desktop"]
+    },
+    "note": "HEAD whoami returns only label and scopes. Missing capabilities means session_scope is unsupported."
+  },
+  "proposed_unsupported": {
+    "status": 200,
+    "body": {
+      "label": "fixture-desktop",
+      "scopes": ["activity", "chat", "hardware", "memory.read", "persona", "sensor.write", "state.read", "ws.desktop"]
+    },
+    "client_rule": "no capabilities object, or no session_scope key → show explicit unsupported prompt; do not send to live active"
+  },
+  "proposed_supported": {
+    "status": 200,
+    "body": {
+      "label": "fixture-desktop",
+      "scopes": ["activity", "chat", "hardware", "memory.read", "persona", "sensor.write", "state.read", "ws.desktop"],
+      "capabilities": {
+        "session_scope": "v1"
+      }
+    },
+    "client_rule": "only this advertisement authorizes POST /v1/sessions. chat scope alone is not enough. GET /observability/deployment-capabilities is a different capability surface."
+  },
+  "negative": [
+    {
+      "name": "treat-character-list-as-grant",
+      "wrong": "GET /characters visibility used as authorization",
+      "required": "server grant after session bind"
+    },
+    {
+      "name": "treat-deployment-capabilities-as-session",
+      "wrong": "GET /observability/deployment-capabilities",
+      "required": "local-vs-remote tool policy only"
+    }
+  ]
+}

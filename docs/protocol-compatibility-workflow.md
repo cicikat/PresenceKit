@@ -3,6 +3,9 @@
 The canonical fixture bundle is `tests/protocol_fixtures/v1/`. Desktop and
 mobile consumer tests read that bundle through
 `PRESENCEKIT_PROTOCOL_FIXTURES`; they do not maintain a second protocol truth.
+`tests/protocol_fixtures/session-scope-proposed/` is a proposed-not-shipped
+review bundle for session scope; it is not part of this frozen matrix until C
+advertises `session_scope` and the three repositories pick it up together.
 
 The machine-readable freeze is [.github/protocol-matrix.json](../.github/protocol-matrix.json).
 The manually dispatched workflow is

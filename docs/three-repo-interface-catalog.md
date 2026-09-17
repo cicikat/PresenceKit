@@ -1,5 +1,22 @@
 # 三仓接口总览与闭环审计
 
+## 固定会话 scope（2026-09-17，proposed-not-shipped）
+
+`open`：工单 B 给出拟议合同 [session-scope-contract.md](session-scope-contract.md)。
+今日 HEAD 仍是 live `active_character`：`/desktop/chat` `/mobile/chat` `/v1/owner/turns` 在
+`run_owner_chat_turn` 内冻一次 memory scope，但 HTTP 边的 `/upload/ingest` 与
+`GET /chat/media/{sha256}` 仍按请求时的 active 解析；`GET /chat/turns/{turn_id}/reasoning`
+只按 persisted `turn_id`，无角色闸。手机 `poll`/`ack` 的 `seq` 是 origin+owner 共享游标，
+`char_id` 只是信封。`GET /auth/whoami` 只有 `label`/`scopes`；
+`GET /observability/deployment-capabilities` 是本机/远程工具策略，**不是**会话能力。
+拟议 `capabilities.session_scope=v1`、`session_id`、`request_id` 与错误码未广告、未进
+OpenAPI。旧服务端不支持时客户端必须明确提示，禁止往 legacy chat 塞 `char_id`（会被忽略并
+静默发给 active）。Dream settings 归属走工单 F。
+机器可读拟议夹具：`tests/protocol_fixtures/session-scope-proposed/`，不进入冻结 v1 包或
+`.github/protocol-matrix.json`。
+两端接入：桌面沿原会话交接，本仓本轮不改桌面代码；手机对应 22 号工单（仓不在本工作区）。
+C 落地前不得把上述字段写成 `current`。
+
 ## 跨来源消息身份（2026-09-17）
 
 `current`：`record_assistant_turn` 优先用 persisted `turn_id` 作传输 `msg_id`；无 turn_id 时 mint
@@ -380,7 +397,8 @@ Flutter/Android 字段或设置面。Agent Runtime 是同一角色的 durable / 
 ```
 
 `reply_to` 可省略；旧后端忽略它时，客户端必须退化为普通消息。`msg_id` 缺失时才允许
-短时内容指纹兜底，不能把指纹当正式协议键。
+短时内容指纹兜底，不能把指纹当正式协议键。body 今天不接受权威 `char_id`；拟议固定会话
+见 [session-scope-contract.md](session-scope-contract.md)，未上线。
 
 ### 4.2 Mobile durable queue
 
@@ -395,7 +413,9 @@ POST /mobile/ack
 
 队列消息至少包含 `id`、`seq`、`content`、`user_id`、`timestamp`，可带 `char_id` 和
 `behavior`。`poll` 不销毁消息；只有 ack 成功后后端才清理已确认范围。前台和后台必须
-共享 `lastAckedSeq`、`seenMobileMessageIds` 与同一去重顺序。
+共享 `lastAckedSeq`、`seenMobileMessageIds` 与同一去重顺序。`seq` 是 origin+owner 共享
+游标，不是 per-char cursor：可按 `char_id` 显示过滤，但不得跳过未消费角色却推进
+`ack_seq`。拟议规则见 [session-scope-contract.md](session-scope-contract.md) §5。
 
 ### 4.3 Sensor 两条接口不能混用
 

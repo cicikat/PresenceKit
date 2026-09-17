@@ -8,7 +8,7 @@ Brief 253.6：QQ record、单音频上传与桌面/手机既有 `/transcribe` �
 
 ## 协议权威
 
-桌面端当前正式协议为 **v0.1（legacy 冻结版）**。本仓只维护实现说明，协议消息全集、ack/nack 语义、9 类 desktop action allowlist 与 HTTP/WS 对账契约统一见三仓总账 [three-repo-interface-catalog.md](three-repo-interface-catalog.md) 和桌面仓的 `docs/protocol-v0.md`。v1 未排期，双方均未实现；不得在本仓单边增加消息类型或 desktop action。
+桌面端当前正式协议为 **v0.1（legacy 冻结版）**。本仓只维护实现说明，协议消息全集、ack/nack 语义、9 类 desktop action allowlist 与 HTTP/WS 对账契约统一见三仓总账 [three-repo-interface-catalog.md](three-repo-interface-catalog.md) 和桌面仓的 `docs/protocol-v0.md`。v1 未排期，双方均未实现；不得在本仓单边增加消息类型或 desktop action。固定会话 scope（`session_id` / `request_id` / 发现 capability）是拟议合同 [session-scope-contract.md](session-scope-contract.md)，未广告前不得单边写入 v0.1 帧。
 
 实现真值：`channels/desktop_ws.py`（帧与心跳）、`admin/admin_server.py`（Bearer WS 鉴权）、`admin/routers/chat.py`（`POST /desktop/chat`）。
 

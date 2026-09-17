@@ -52,7 +52,7 @@
 | `admin/token_registry.py` | `TokenRecord` dataclass；加载 `data/runtime/auth/tokens.yaml`，按 mtime 热重载；`hash_token()`；`find_by_hash()`（跳过 disabled / 已过期，`hmac.compare_digest` 比对） |
 | `admin/auth.py` | `TokenInfo` dataclass；`resolve_token(raw)`（legacy secret 优先，其次查 registry）；`require_scopes(*scopes)` 依赖工厂（含 401 限速 + 审计调用）；`verify_token = require_scopes("admin")` 别名；`authenticate_ws(websocket, required_scope)`；`reset_rate_limit_state_for_test()`（测试用） |
 | `admin/audit.py` | `log_event(event, *, label=None, path=None, ip=None)` — 追加写 `data/runtime/auth/audit.jsonl`（走 `core.safe_write.safe_append_jsonl`，fail-open，不记 token 值） |
-| `admin/routers/auth_tokens.py` | Token 管理 API：`GET/POST /auth/tokens`、`POST /auth/tokens/{label}/rotate`、`PATCH /auth/tokens/{label}`（disable/enable）、`DELETE /auth/tokens/{label}`、`GET /auth/profiles`（均 `admin` scope）；`GET /auth/whoami`（零 scope，任意有效 token） |
+| `admin/routers/auth_tokens.py` | Token 管理 API：`GET/POST /auth/tokens`、`POST /auth/tokens/{label}/rotate`、`PATCH /auth/tokens/{label}`（disable/enable）、`DELETE /auth/tokens/{label}`、`GET /auth/profiles`（均 `admin` scope）；`GET /auth/whoami`（零 scope，任意有效 token；当前 `{label, scopes}`。拟议 `capabilities.session_scope` 未上线，见 [session-scope-contract.md](session-scope-contract.md)） |
 | `core/data_paths.py` | `auth_dir()` / `auth_tokens_file()` / `auth_audit_log()`（均经 `core/sandbox.get_paths()`，test 模式自动隔离） |
 
 ## 鉴权语义

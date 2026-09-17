@@ -1,0 +1,36 @@
+{
+  "case_id": "session-bind-and-errors",
+  "status": "proposed-not-shipped",
+  "endpoint": "POST /v1/sessions",
+  "success": {
+    "request": {
+      "method": "POST",
+      "path": "/v1/sessions",
+      "body": {"char_id": "fixture_character"}
+    },
+    "response": {
+      "status": 201,
+      "body": {
+        "session_id": "<OPAQUE_ID>",
+        "owner_id": "fixture-owner",
+        "char_id": "fixture_character",
+        "domain": "reality",
+        "expires_at": "<TIMESTAMP>"
+      }
+    },
+    "note": "Returned char_id is the frozen grant. Request char_id is a request, not authority."
+  },
+  "errors": [
+    {"name": "not-authorized", "status": 403, "detail": "character_not_authorized"},
+    {"name": "revoked", "status": 403, "detail": "character_revoked"},
+    {"name": "unavailable", "status": 404, "detail": "character_unavailable"},
+    {"name": "session-expired", "status": 404, "detail": "session_not_found"},
+    {"name": "upload-mismatch", "status": 409, "detail": "upload_scope_mismatch"},
+    {"name": "active-unusable-without-session", "status": 503, "detail": "active_character_unusable"}
+  ],
+  "rules": [
+    "do not fall back to live active after these errors",
+    "do not substitute another visible character from GET /characters",
+    "Dream settings ownership is ticket F and is not decided by this bind"
+  ]
+}

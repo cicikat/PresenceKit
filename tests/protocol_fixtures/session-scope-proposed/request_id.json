@@ -1,0 +1,41 @@
+{
+  "case_id": "request-id-idempotency",
+  "status": "proposed-not-shipped",
+  "not_exactly_once": true,
+  "distinct_from": {
+    "msg_id": "transport correlator on HTTP/WS/queue",
+    "turn_id": "persisted assistant identity, may be empty",
+    "client_turn_id": "existing owner-turn idempotency key only"
+  },
+  "same_payload_retry": {
+    "request_id": "req-fixture-001",
+    "payload": {"message": "fixture hello", "session_id": "<OPAQUE_ID>"},
+    "outcomes": [
+      {"status": 200, "note": "completed or retained replay of the same turn_id"},
+      {"status": 202, "body": {"status": "in_flight", "error_code": null}},
+      {"status": 503, "detail": "execution_outcome_unknown"}
+    ]
+  },
+  "payload_conflict": {
+    "request_id": "req-fixture-001",
+    "second_payload": {"message": "different fixture", "session_id": "<OPAQUE_ID>"},
+    "status": 409,
+    "detail": "request_payload_conflict"
+  },
+  "expired_result": {
+    "status": 410,
+    "detail": "completed_result_expired"
+  },
+  "attachment_duplicate": {
+    "same_bytes_same_session": "reuse existing upload_id, no second side effect",
+    "same_upload_id_different_session": {
+      "status": 409,
+      "detail": "upload_scope_mismatch"
+    }
+  },
+  "owner_turn_unchanged": {
+    "endpoint": "POST /v1/owner/turns",
+    "idempotency_key": "client_turn_id",
+    "do_not_rename_to_request_id": true
+  }
+}

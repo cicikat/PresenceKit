@@ -1,0 +1,20 @@
+{
+  "case_id": "id-taxonomy",
+  "status": "proposed-not-shipped",
+  "ids": [
+    {"name": "request_id", "role": "one HTTP/WS attempt correlator", "state": "proposed"},
+    {"name": "session_id", "role": "server-issued frozen session handle", "state": "proposed"},
+    {"name": "client_turn_id", "role": "owner-turn idempotency key scoped by caller label", "state": "shipped"},
+    {"name": "msg_id", "role": "transport correlator for HTTP, WS, and mobile queue id", "state": "shipped"},
+    {"name": "turn_id", "role": "persisted assistant identity; may be empty; never filled from msg_id", "state": "shipped"},
+    {"name": "seq", "role": "mobile durable queue cursor shared across characters", "state": "shipped"},
+    {"name": "round_id", "role": "group round boundary", "state": "shipped"},
+    {"name": "sha256", "role": "media content identity; not a read grant", "state": "shipped"}
+  ],
+  "rules": [
+    "none of these names are aliases",
+    "reasoning and history entries require persisted turn_id",
+    "desktop stream may mint msg_id before turn_id exists",
+    "exactly-once is not promised"
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "case_id": "legacy-chat-must-not-send-char-id",
+  "status": "proposed-not-shipped",
+  "reason": "Current POST /desktop/chat and POST /mobile/chat ignore unknown body keys and freeze live active internally. Sending char_id would silently talk to the active character on old servers.",
+  "allowed_legacy_bodies": [
+    {
+      "endpoint": "POST /desktop/chat",
+      "body": {
+        "message": "fixture desktop hello",
+        "reply_to": {"text": "fixture previous", "ts": 1700000000.0}
+      }
+    },
+    {
+      "endpoint": "POST /mobile/chat",
+      "body": {
+        "message": "fixture mobile hello"
+      }
+    }
+  ],
+  "forbidden_on_legacy_chat": [
+    "char_id",
+    "uid",
+    "session_id",
+    "origin",
+    "source",
+    "tool_capability"
+  ],
+  "client_behavior_when_user_selected_non_active_character": {
+    "old_server": "block send and show session_scope_unsupported",
+    "new_server": "POST /v1/sessions then versioned turn with session_id"
+  }
+}

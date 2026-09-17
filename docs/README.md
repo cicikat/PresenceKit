@@ -16,6 +16,7 @@
 - [api-reference.md](api-reference.md)：后端 HTTP/WS 端点与调用方。
 - [three-repo-interface-catalog.md](three-repo-interface-catalog.md)：三仓 HTTP、WS、Tauri IPC、Android channel、relay、设置/观测闭环和当前缺口总账。
 - [backend-integration.md](backend-integration.md)：desktop / mobile 共用的请求体字段契约（如 reply_to）。
+- [session-scope-contract.md](session-scope-contract.md)：固定会话 scope 拟议合同（未上线；C 落地前不是 current）。
 - 桌面 v0.1 消息细节：`Emerald-client/docs/protocol-v0.md`；后端实现指针见
   [desktop-client-protocol.md](desktop-client-protocol.md)。
 - [dev-environment.md](dev-environment.md)：Windows 沙箱开发与验证。

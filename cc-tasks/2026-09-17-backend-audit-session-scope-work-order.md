@@ -1,7 +1,7 @@
 # 9.17 后端综合工单：角色隔离、固定会话与架构债收敛
 
-状态：A 已提交；B–J 未开始。日期：2026-09-17。
-本单只交付工单，不授权运行代码修改、迁移、数据删除或兼容层删除。
+状态：A 已提交；B 拟议合同已提交（未实现）；C–J 未开始。日期：2026-09-17。
+用户已授权按本单施工。每张施工子单完成相关验证与差异检查后独立 commit，再开始下一张。
 勾选规则：完成一项且具备证据才勾一项；源码存在、自动测试通过、部署验收分别记账。每张施工子单完成相关验证与差异检查后独立 commit，再开始下一张。
 
 ## 输入与复核基线
@@ -32,12 +32,12 @@
 
 对应桌面会话交接；是 C/D 和手机新工单的前置。先读 `docs/channels.md`、`docs/security.md`、`docs/interaction-event-model.md`、接口总账及两端协议。
 
-- [ ] B1 建立端点矩阵：desktop/mobile chat、上传/图片、媒体读取、wake、历史日期/单日、reasoning、WS/segments、主动通知、mobile activate/poll/ack/relay；列当前 scope 来源、权限、缺口和消费者。
-- [ ] B2 定义本机固定角色的授权来源、能力/version 声明、角色不可用/删除/撤权响应；客户端不能把可见角色列表当授权。旧服务端不支持时明确提示，不静默发给 active 角色。
-- [ ] B3 定义请求开始冻结 owner/domain/char_id/request_id；明确 domain 与内部 realm 的映射、group round_id、早期 stream 后绑定 canonical turn_id 的事件/顺序。字段为拟议合同，落定前不得写成已上线。
-- [ ] B4 区分 request_id 关联、transport msg_id、persisted turn_id；列出重试 ID 复用、幂等键作用域/窗口、相同 ID 不同负载、并发重试、超时/未知结果、附件重复提交的行为与错误码，不承诺 exactly-once。
-- [ ] B5 明确主动消息所属角色及接收设备选择；核对 queue seq 的真实作用域，决定过滤、消费与 ack 的关系，禁止按角色跳过消息却推进共享 cursor 导致丢失。
-- [ ] B6 交付可评审字段表、兼容矩阵、错误码和协议 fixtures；更新实际受影响协议与总账，列入手机/桌面接入依赖。Dream settings 归属另走 F，不由本单顺带决定。
+- [x] B1 建立端点矩阵：desktop/mobile chat、上传/图片、媒体读取、wake、历史日期/单日、reasoning、WS/segments、主动通知、mobile activate/poll/ack/relay；列当前 scope 来源、权限、缺口和消费者。
+- [x] B2 定义本机固定角色的授权来源、能力/version 声明、角色不可用/删除/撤权响应；客户端不能把可见角色列表当授权。旧服务端不支持时明确提示，不静默发给 active 角色。
+- [x] B3 定义请求开始冻结 owner/domain/char_id/request_id；明确 domain 与内部 realm 的映射、group round_id、早期 stream 后绑定 canonical turn_id 的事件/顺序。字段为拟议合同，落定前不得写成已上线。
+- [x] B4 区分 request_id 关联、transport msg_id、persisted turn_id；列出重试 ID 复用、幂等键作用域/窗口、相同 ID 不同负载、并发重试、超时/未知结果、附件重复提交的行为与错误码，不承诺 exactly-once。
+- [x] B5 明确主动消息所属角色及接收设备选择；核对 queue seq 的真实作用域，决定过滤、消费与 ack 的关系，禁止按角色跳过消息却推进共享 cursor 导致丢失。
+- [x] B6 交付可评审字段表、兼容矩阵、错误码和协议 fixtures；更新实际受影响协议与总账，列入手机/桌面接入依赖。Dream settings 归属另走 F，不由本单顺带决定。
 
 ## C — P1：后端落实请求隔离和全链关联
 

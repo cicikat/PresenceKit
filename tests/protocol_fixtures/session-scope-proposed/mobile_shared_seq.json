@@ -1,0 +1,51 @@
+{
+  "case_id": "mobile-shared-seq-no-skip-ack",
+  "status": "proposed-not-shipped",
+  "queue_scope": "origin+owner shared cursor; char_id is envelope only",
+  "poll_response": {
+    "status": 200,
+    "body": {
+      "ok": true,
+      "active": true,
+      "messages": [
+        {
+          "id": "queue-fixture-010",
+          "turn_id": "queue-fixture-010",
+          "seq": 10,
+          "content": "fixture from character A",
+          "user_id": "fixture-owner",
+          "timestamp": "<TIMESTAMP>",
+          "char_id": "fixture_character"
+        },
+        {
+          "id": "queue-fixture-011",
+          "turn_id": "queue-fixture-011",
+          "seq": 11,
+          "content": "fixture from character B",
+          "user_id": "fixture-owner",
+          "timestamp": "<TIMESTAMP>",
+          "char_id": "fixture_peer_character"
+        }
+      ],
+      "count": 2,
+      "cursor": 11
+    }
+  },
+  "display_filter": {
+    "showing": "fixture_character",
+    "visible_seq": [10],
+    "must_persist_before_ack": [10, 11]
+  },
+  "forbidden_ack": {
+    "body": {"ack_seq": 11},
+    "why": "acking 11 after skipping seq 11 would delete character B"
+  },
+  "allowed_ack_if_filtered": {
+    "body": {"ack_seq": 10},
+    "why": "only after persisting seq 10; seq 11 remains queued"
+  },
+  "relay": {
+    "fields": ["id", "seq", "user_id", "timestamp", "signal"],
+    "must_not_include": ["content", "behavior", "char_id"]
+  }
+}

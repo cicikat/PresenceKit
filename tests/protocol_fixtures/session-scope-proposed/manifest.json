@@ -1,0 +1,70 @@
+{
+  "schema_version": "1",
+  "fixture_version": "session-scope-proposed",
+  "contract_revision": "2026-09-17",
+  "status": "proposed-not-shipped",
+  "source_of_truth": "Emerald-presence/docs/session-scope-contract.md",
+  "description": "Proposed session-scope discovery, errors, request_id, and mobile seq rules. Not part of the frozen v1 protocol bundle or protocol-matrix.",
+  "normalization": {
+    "timestamp": "<TIMESTAMP>",
+    "opaque_id": "<OPAQUE_ID>"
+  },
+  "cases": [
+    {
+      "id": "whoami-session-scope-unsupported",
+      "file": "whoami_discovery.json",
+      "direction": "client-to-server-and-back",
+      "endpoint": "GET /auth/whoami",
+      "expected": "200 without capabilities.session_scope",
+      "classification": "backward-compatible"
+    },
+    {
+      "id": "whoami-session-scope-v1",
+      "file": "whoami_discovery.json",
+      "direction": "client-to-server-and-back",
+      "endpoint": "GET /auth/whoami",
+      "expected": "200 with capabilities.session_scope=v1",
+      "classification": "consumer-update-required"
+    },
+    {
+      "id": "legacy-chat-must-not-send-char-id",
+      "file": "legacy_chat_forbidden.json",
+      "direction": "client-to-server",
+      "endpoint": "POST /desktop/chat and POST /mobile/chat",
+      "expected": "client must not send char_id; old servers ignore extra fields and would silently use live active",
+      "classification": "consumer-update-required"
+    },
+    {
+      "id": "session-bind-and-errors",
+      "file": "session_bind.json",
+      "direction": "client-to-server-and-back",
+      "endpoint": "POST /v1/sessions (proposed)",
+      "expected": "201/200 bind; 403/404/409/422/503 typed errors",
+      "classification": "consumer-update-required"
+    },
+    {
+      "id": "request-id-idempotency",
+      "file": "request_id.json",
+      "direction": "client-to-server-and-back",
+      "endpoint": "proposed versioned owner chat",
+      "expected": "same request_id same payload; conflict; in_flight; unknown",
+      "classification": "consumer-update-required"
+    },
+    {
+      "id": "mobile-shared-seq-no-skip-ack",
+      "file": "mobile_shared_seq.json",
+      "direction": "client-to-server-and-back",
+      "endpoint": "GET /mobile/poll; POST /mobile/ack",
+      "expected": "filter by char_id for display only; never ack past unconsumed roles",
+      "classification": "consumer-update-required"
+    },
+    {
+      "id": "id-taxonomy",
+      "file": "id_taxonomy.json",
+      "direction": "n/a",
+      "endpoint": "n/a",
+      "expected": "request_id, msg_id, turn_id, client_turn_id, seq, round_id stay distinct",
+      "classification": "backward-compatible"
+    }
+  ]
+}
