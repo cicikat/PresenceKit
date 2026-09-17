@@ -10,7 +10,8 @@
 
 后端管理面沿用工具注册表生成的开关/schema，OCR 与 vision 连接仍在模型路由配置。
 观测沿用 `/observability/character-library`、`/observability/tool-traces` 和 API 调用台账。
-桌面及手机继续通过 `/upload/ingest` 上传，QQ 走原媒体入口；无新增 REST/WS/ack 字段，
+桌面及手机继续通过 `/upload/ingest` 上传，QQ 走原媒体入口。聊天原图读取现为
+`GET /chat/media/{sha256}`（chat）；上传响应不再带磁盘 `stored_path(s)`。
 无需客户端复制模式配置，角色通过工具参数选择。手机生活记录仍走独立 outbox。
 
 `observe`：真实桌面、手机上传及实际 OCR/vision 服务联合验证未完成；本地测试使用合成图片和模拟模型。

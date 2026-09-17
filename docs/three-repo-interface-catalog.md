@@ -11,6 +11,12 @@
 msg_id 代替 turn_id；Dream 仍为 session-local。旧无 footer 日志不伪造身份。
 `observe`：真机跨端同文同分钟、附件对账与覆盖率卡片硬刷新。
 
+## 聊天媒体读取与缓存生命周期（2026-09-17）
+
+`current`：媒体身份为 sha256。`GET /chat/media/{sha256}`（chat）按 owner+活跃角色读取仍可恢复的原图/原文件；410 表示不可恢复，不承诺已删数据。inbox 7 天 / image_cache 30 天或 500 条仍执行，但事件 `media_refs` 与资料库 raw blob 仍引用时跳过。`POST /upload/ingest` 只回 `media_refs`，不再回 `stored_path(s)`。`GET /observability/chat-media`（state.read）只计引用与保留策略。管理面观测页消费该端点，不塞进手机能力页。
+手机消费 canonical 引用：有本机附件优先预览；否则鉴权下载；失败或缺图占位。未同步/冲突生活记录图不走该 GC。旧无 sha256 记录不能恢复。
+`observe`：换设备、重装、权限失效与容量上限真机验收。桌面本轮无需施工：类型里的 `stored_path` 已不被后端返回。
+
 ## Chat Completions 工具续轮白名单（2026-09-15）
 
 current：后端 Chat Completions 工具续轮只发送协议允许字段；管理面沿用 API 账本
@@ -754,7 +760,7 @@ profile 可读取已关联的 Reality owner 回合，返回 available/entries（
 
 `current`：Path C `artifacts` 类写出沙盒文件；owner 回合 HTTP/WS 可带有界 `artifacts[]`。`GET /chat/artifacts/{id}`（chat）下载，`GET /chat/artifacts/{id}/preview` CSP 预览，`GET /observability/chat-artifacts`（state.read）只读元数据。管理面观测页与桌面气泡文件卡走带鉴权下载；不新增 desktop action 类型。
 `observe`：真实写出 html 后的桌面预览/下载仍待运行中后端复测；管理面观测页需硬刷新。
-`roadmap`：手机产物卡 UI。
+`roadmap`：手机产物卡 UI。产物下载与聊天原图读取分离：原图走 `GET /chat/media/{sha256}`。
 ## IME v2 接收预备（2026-09-11）
 
 `current`：POST `/v1/ime/drafts`（sensor.write）按设备 token label + id + revision

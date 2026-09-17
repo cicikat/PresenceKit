@@ -668,6 +668,37 @@ def _artifact_record_or_404(artifact_id: str):
     return record
 
 
+def _owner_media_scope() -> tuple[str, str]:
+    from core.config_loader import get_config as _cfg
+    from core.data_paths import DEFAULT_CHAR_ID
+    from core import pipeline_registry
+
+    uid = str(_cfg().get("scheduler", {}).get("owner_id", "")).strip()
+    if not uid:
+        raise HTTPException(status_code=500, detail="owner_id not configured")
+    char_id = getattr(pipeline_registry.get(), "_active_character_id", None) or DEFAULT_CHAR_ID
+    return uid, char_id
+
+
+@router.get("/chat/media/{sha256}", summary="下载聊天原图或原文件")
+async def download_chat_media(sha256: str, _auth=Depends(require_scopes("chat"))):
+    from core.chat_media import ChatMediaError, resolve_chat_media
+
+    uid, char_id = _owner_media_scope()
+    try:
+        record = resolve_chat_media(sha256, uid=uid, char_id=char_id)
+    except ChatMediaError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from None
+    if not record.path.exists() or not record.path.is_file():
+        raise HTTPException(status_code=410, detail="媒体文件已不可恢复")
+    return FileResponse(
+        record.path,
+        media_type=record.mime.split(";")[0].strip() or "application/octet-stream",
+        filename=record.filename,
+        headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "no-store"},
+    )
+
+
 @router.get("/chat/artifacts/{artifact_id}", summary="下载聊天产物文件")
 async def download_chat_artifact(artifact_id: str, _auth=Depends(require_scopes("chat"))):
     from core.tools.chat_artifacts import artifact_file_path
@@ -849,6 +880,7 @@ async def upload_ingest(
         full_message = media_context + ("\n" + message if message else "")
         # trusted_user_text = original message body before media prepend;
         # probe must not see file content to prevent injection via uploaded docs.
+        digest = hashlib.sha256(data).hexdigest()
         response = await run_owner_chat_turn(
             full_message,
             channel,
@@ -856,10 +888,16 @@ async def upload_ingest(
             media_refs=[{
                 "kind": "file",
                 "filename": Path(fname).name,
-                "sha256": hashlib.sha256(data).hexdigest(),
+                "sha256": digest,
+                "availability": "available",
             }],
         )
-        response["stored_path"] = str(stored_path)
+        response["media_refs"] = [{
+            "kind": "file",
+            "filename": Path(fname).name,
+            "sha256": digest,
+            "availability": "available",
+        }]
         return response
 
     if all(is_images):
@@ -875,6 +913,7 @@ async def upload_ingest(
                 "kind": "image",
                 "filename": Path(filename).name,
                 "sha256": hashlib.sha256(data).hexdigest(),
+                "availability": "available",
             }
             for data, filename in items
         ]
@@ -900,7 +939,7 @@ async def upload_ingest(
             trusted_user_text=message,
             media_refs=media_refs,
         )
-        response["stored_paths"] = media_processor.LAST_IMAGE_STORED_PATHS
+        response["media_refs"] = media_refs
         return response
 
     raise HTTPException(status_code=415, detail="不支持的文件格式")

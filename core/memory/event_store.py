@@ -609,6 +609,12 @@ def append_event(scope: MemoryScope, event: EventRecord | Mapping[str, Any]) -> 
                 )
                 _ensure_deterministic_edges(connection, scope, record)
                 connection.commit()
+            if record.media_refs_json and record.media_refs_json not in {"", "[]"}:
+                try:
+                    from core.chat_media import invalidate_live_media_cache
+                    invalidate_live_media_cache()
+                except Exception:
+                    pass
             return _observe_append(AppendResult(True, True, record.event_id), scope)
         except sqlite3.IntegrityError:
             # Idempotent retries are still allowed to repair deterministic
@@ -710,6 +716,11 @@ def tombstone_event(scope: MemoryScope, event_id: str) -> TombstoneResult:
                     (scope.uid, scope.character_id, scope.domain, clean_id),
                 )
                 connection.commit()
+            try:
+                from core.chat_media import invalidate_live_media_cache
+                invalidate_live_media_cache()
+            except Exception:
+                pass
             return TombstoneResult(True, True, clean_id)
         except Exception as exc:
             logger.warning("[event_store] tombstone failed: %s", exc)

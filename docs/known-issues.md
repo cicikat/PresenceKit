@@ -1,5 +1,10 @@
 # docs/known-issues.md — 已知问题与技术债
 
+## 聊天媒体读取（2026-09-17）
+
+current：`GET /chat/media/{sha256}` 提供鉴权原图读取；inbox/image_cache GC 有 live-ref 守卫。HTTP 不再返回 `stored_path(s)`。旧无 sha256、已删且无 raw blob 的图不可恢复。
+observe：真机换设备/重装/断网/权限失效；管理面媒体观测页需硬刷新。
+
 ## 前置独白优先出现在思考气泡（2026-09-16）
 
 current：独白正文以 source=monologue 归档并可绑定 owner turn；GET /chat/turns/{turn_id}/reasoning 默认独白在前，

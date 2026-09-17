@@ -44,6 +44,8 @@ scope；只读端点通常允许对应的 read scope。
 | DELETE | `/memory-events/{event_id}` | `admin` | 可逆墓碑：清空事件正文和媒体引用，保留 event ID、证据关系边和派生血缘；不提供物理删除 |
 | GET | `/observability/memory-event-migration` | `state.read` | 内容无关的历史 Markdown 迁移状态、批次位置和计数；不返回正文、媒体或本地路径 |
 | GET | `/observability/chat-identity` | `state.read` | 进程级聊天身份覆盖率：attempted / persisted_turn_id / generated_transport_id / empty_transport_id 及覆盖率；不含正文 |
+| GET | `/chat/media/{sha256}` | `chat` | 按 sha256 读取仍可恢复的聊天原图/原文件；owner+活跃角色闸；410 不可恢复；不返回磁盘路径 |
+| GET | `/observability/chat-media` | `state.read` | 聊天媒体引用计数、inbox/image_cache 保留策略与 live-ref 守卫；不含正文、路径或文件名 |
 | GET/PUT/PATCH/DELETE | `/users/*`、`/relations/*`、`/relationship-facts/*` | users / relations | 管理面用户与关系 |
 | GET/POST/PUT/DELETE | `/lorebook*`、`/jailbreak-entries*` | prompt_assets | 管理面 Prompt 资产 |
 | GET/POST/PUT/DELETE | `/scheduler/*`、`/garden/*`、`/mood/*` | scheduler | 管理面状态和手动触发 |

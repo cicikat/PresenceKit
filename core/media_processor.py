@@ -306,6 +306,11 @@ async def ingest_image_bytes(
 
             path.write_bytes(item["data"])
             _save_image_cache(item["sha256"], description, path, filename, signature)
+            try:
+                from core.chat_media import invalidate_live_media_cache
+                invalidate_live_media_cache()
+            except Exception:
+                pass
             if uid and char_id:
                 try:
                     from core.character_document_library import store_upload
@@ -439,19 +444,26 @@ async def reread_cached_image(sha256: str, instruction: str = "请重新仔细�
 
 
 def gc_inbox(max_age_days: int = 7) -> int:
-    """删除 inbox/ 中超过 max_age_days 天未被访问的裸上传文件。返回删除数。"""
+    """删除 inbox/ 中超过 max_age_days 天、且无 live-ref 的裸上传文件。返回删除数。"""
+    from core.chat_media import inbox_file_digest, is_live_media_digest, live_media_digests
+
     inbox_dir = get_paths().inbox_dir()
     if not inbox_dir.exists():
         return 0
+    live_media_digests(refresh=True)
     cutoff = time.time() - max_age_days * 86400
     count = 0
     for f in inbox_dir.iterdir():
-        if not f.is_file():
+        if not f.is_file() or f.is_symlink():
             continue
         try:
-            if f.stat().st_mtime < cutoff:
-                f.unlink()
-                count += 1
+            if f.stat().st_mtime >= cutoff:
+                continue
+            digest = inbox_file_digest(f)
+            if digest and is_live_media_digest(digest):
+                continue
+            f.unlink()
+            count += 1
         except Exception as e:
             logger.error("[media_processor] inbox GC 失败 %s: %s", f.name, e)
     if count:
@@ -460,18 +472,21 @@ def gc_inbox(max_age_days: int = 7) -> int:
 
 
 def gc_image_cache(max_age_days: int = 30, max_files: int = 500) -> int:
-    """删除 image_cache/ 中过期或超量的 sha256 缓存条目。返回删除条数。
-    先按条数上限裁剪（删最旧），再按龄删；两条件 OR。
+    """删除 image_cache/ 中过期或超量、且无 live-ref 的 sha256 缓存。返回删除条数。
+    先按条数上限裁剪（删最旧），再按龄删；两条件 OR。仍被事件或资料库引用的条目跳过。
     """
+    from core.chat_media import cache_entry_digest, is_live_media_digest, live_media_digests
+
     cache_dir = get_paths().image_cache_dir()
     if not cache_dir.exists():
         return 0
     all_jsons = list(cache_dir.glob("*.json"))
     if not all_jsons:
         return 0
+    live_media_digests(refresh=True)
     cutoff_ts = time.time() - max_age_days * 86400
 
-    entries: list[tuple[float, Path]] = []
+    entries: list[tuple[float, Path, bool]] = []
     for f in all_jsons:
         try:
             payload = json.loads(f.read_text(encoding="utf-8"))
@@ -479,18 +494,25 @@ def gc_image_cache(max_age_days: int = 30, max_files: int = 500) -> int:
             ctime = float(ct) if ct else f.stat().st_mtime
         except Exception:
             ctime = f.stat().st_mtime
-        entries.append((ctime, f))
+        digest = cache_entry_digest(f)
+        live = bool(digest and is_live_media_digest(digest))
+        entries.append((ctime, f, live))
 
-    entries.sort()  # 最旧在前
+    entries.sort(key=lambda item: item[0])  # 最旧在前
     excess = max(0, len(entries) - max_files)
     count = 0
-    for i, (ctime, f) in enumerate(entries):
-        if i < excess or ctime < cutoff_ts:
-            try:
-                f.unlink()
-                count += 1
-            except Exception as e:
-                logger.error("[media_processor] image_cache GC 失败 %s: %s", f.name, e)
+    deleted_reclaimable = 0
+    for ctime, f, live in entries:
+        over_cap = deleted_reclaimable < excess
+        expired = ctime < cutoff_ts
+        if live or not (over_cap or expired):
+            continue
+        try:
+            f.unlink()
+            count += 1
+            deleted_reclaimable += 1
+        except Exception as e:
+            logger.error("[media_processor] image_cache GC 失败 %s: %s", f.name, e)
     if count:
         logger.info("[media_processor] image_cache GC: 已删 %d 条", count)
     return count

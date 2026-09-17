@@ -28,6 +28,17 @@ async def mail_weekly_state(_auth=Depends(require_scopes('state.read'))):
             'admission_note': '到期仍需通过 QUIET、活跃窗口、DND 与角色主动开关；不保证固定星期发送'}
 
 
+@router.get("/observability/chat-media", summary="读取聊天媒体引用与保留策略（不含正文）")
+async def observability_chat_media(
+    uid: str = "",
+    char_id: str = "",
+    _auth=Depends(require_scopes("state.read")),
+):
+    from core.chat_media import observability_snapshot
+
+    return observability_snapshot(uid=uid, char_id=char_id)
+
+
 @router.get("/observability/chat-artifacts", summary="读取聊天产物元数据（不含正文）")
 async def observability_chat_artifacts(
     uid: str = "",

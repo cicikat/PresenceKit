@@ -136,6 +136,12 @@ def store_upload(
             blob.parent.mkdir(parents=True, exist_ok=True)
             if not safe_write_bytes(blob, raw_bytes or b""):
                 _record_failure(uid, char_id, "raw_write")
+            else:
+                try:
+                    from core.chat_media import invalidate_live_media_cache
+                    invalidate_live_media_cache()
+                except Exception:
+                    pass
         return document_id
     except Exception as exc:
         logger.warning("[character_library] store failed uid=%s char=%s: %s", uid, char_id, exc)
@@ -218,7 +224,16 @@ def delete(uid: str, char_id: str, document_id: str) -> bool:
                     blob.unlink()
                 except OSError:
                     _record_failure(uid, char_id, "raw_delete")
-    return changed and _write(uid, char_id, rows)
+    if not changed:
+        return False
+    written = _write(uid, char_id, rows)
+    if written:
+        try:
+            from core.chat_media import invalidate_live_media_cache
+            invalidate_live_media_cache()
+        except Exception:
+            pass
+    return written
 
 
 def observability(uid: str, char_id: str) -> dict:

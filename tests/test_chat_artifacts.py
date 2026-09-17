@@ -213,7 +213,9 @@ def test_admin_observe_page_uses_authenticated_fetch():
     assert "downloadObserveChatArtifact" in source
     assert "previewObserveChatArtifact" in source
     assert "window.loadObserveChatIdentity = loadObserveChatIdentity" in source
+    assert "window.loadObserveChatMedia = loadObserveChatMedia" in source
     assert "/observability/chat-identity" in source
+    assert "/observability/chat-media" in source
     assert "Authorization: `Bearer ${TOKEN}`" in source
     assert 'href="/chat/artifacts/' not in source
     page = (Path(__file__).parents[1] / "admin" / "static" / "pages" / "observe-chat-artifacts.html").read_text(encoding="utf-8")

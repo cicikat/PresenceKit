@@ -363,8 +363,8 @@ REGISTRY: dict[str, PathMeta] = {
 # 键 = DataPaths 方法名；值 = GC 语义描述。
 RETENTION_POLICY: dict[str, str] = {
     # derived — 可重建，无业务语义
-    "inbox_dir":         "age-gc     max_age_days=7      原始上传裸文件，视觉/解析完成后即可删",
-    "image_cache_dir":   "age+lru    max_age_days=30, max_files=500   sha256 视觉缓存，条数+龄双重 GC",
+    "inbox_dir":         "age-gc     max_age_days=7      原始上传裸文件；事件 media_refs 或资料库 raw blob 仍引用时跳过",
+    "image_cache_dir":   "age+lru    max_age_days=30, max_files=500   sha256 视觉缓存；live-ref 守卫，条数+龄双重 GC",
     # forensic — 可丢，不影响业务
     "dead_letter_queue": "count-cap  max_files=200       超出时删最旧；保持可监控但不无限增长",
     # canonical — 仅删 done 项，活跃数据不受影响

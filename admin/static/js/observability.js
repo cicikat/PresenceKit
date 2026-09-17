@@ -299,6 +299,39 @@ async function loadObserveChatArtifacts() {
   }
 }
 
+async function loadObserveChatMedia() {
+  const uid = (document.getElementById('obs-chat-media-uid')?.value || '').trim();
+  const charId = (document.getElementById('obs-chat-media-char')?.value || '').trim();
+  const el = document.getElementById('obs-chat-media-body');
+  if (!el) return;
+  el.innerHTML = `<div class="loading">${escapeHtml(t('common.loading', '加载中…'))}</div>`;
+  try {
+    const query = new URLSearchParams();
+    if (uid) query.set('uid', uid);
+    if (charId) query.set('char_id', charId);
+    const suffix = query.toString() ? `?${query}` : '';
+    const d = await api('GET', `/observability/chat-media${suffix}`);
+    const retention = d.retention || {};
+    const counts = d.counts || {};
+    el.innerHTML = [
+      `identity=${escapeHtml(String(d.identity || 'sha256'))}`,
+      `live_ref_guard=${escapeHtml(String(retention.live_ref_guard ?? true))}`,
+      `inbox_max_age_days=${escapeHtml(String(retention.inbox_max_age_days ?? ''))}`,
+      `image_cache_max_age_days=${escapeHtml(String(retention.image_cache_max_age_days ?? ''))}`,
+      `image_cache_max_files=${escapeHtml(String(retention.image_cache_max_files ?? ''))}`,
+      `retain_raw_uploads=${escapeHtml(String(retention.retain_raw_uploads ?? false))}`,
+      `live_refs=${escapeHtml(String(counts.live_refs ?? 0))}`,
+      `inbox_files=${escapeHtml(String(counts.inbox_files ?? 0))}`,
+      `inbox_live=${escapeHtml(String(counts.inbox_live ?? 0))}`,
+      `image_cache_files=${escapeHtml(String(counts.image_cache_files ?? 0))}`,
+      `image_cache_live=${escapeHtml(String(counts.image_cache_live ?? 0))}`,
+      `recoverable_raw_in_scope=${escapeHtml(String(d.recoverable_raw_in_scope ?? false))}`,
+    ].map(line => `<div>${line}</div>`).join('');
+  } catch (e) {
+    el.innerHTML = `<div class="empty">${escapeHtml(t('observe.chat_media.load_failed', '加载失败：{error}', {error: e.message}))}</div>`;
+  }
+}
+
 async function loadObserveChatIdentity() {
   const el = document.getElementById('obs-chat-identity-body');
   if (!el) return;
@@ -605,6 +638,7 @@ window.previewObserveChatArtifact = previewObserveChatArtifact;
 window.loadObserveChatlogDates = loadObserveChatlogDates;
 window.loadObserveChatlogDay = loadObserveChatlogDay;
 window.loadObserveChatIdentity = loadObserveChatIdentity;
+window.loadObserveChatMedia = loadObserveChatMedia;
 window.loadObserveAutonomy = loadObserveAutonomy;
 window.loadSelfManagement = loadSelfManagement;
 window.selfManagementChange = selfManagementChange;
