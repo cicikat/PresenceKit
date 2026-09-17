@@ -730,7 +730,7 @@ worker 在到期、异常、断线、显式取消和进程关闭时尝试停止�
 | 传入值不在白名单 | `(None, None)` + `logger.warning`，零副作用（fail-closed） |
 | `origin="user_live"` | Path A 正常执行 |
 | `origin="assistant_loop"` | Path C（Brief 28 tool loop）自主多步调用，`Pipeline.run_agentic_loop()` 专用 |
-| `origin="autonomy_loop"` | autonomy runner 受限工具调用 |
+| `origin="autonomy_loop"` | autonomy runner 受限工具调用；schema 与执行复查共用 `AutonomyToolDecision` |
 | `origin="admin_console"` | 管理面 MCP Tool-call Console |
 | `origin="assistant_self_management"` | Path C 原生 tool call 的 self-management gateway；不能执行普通业务工具 |
 | `origin="autonomy_self_management"` | autonomy 的 self-management gateway；不能执行普通业务工具 |

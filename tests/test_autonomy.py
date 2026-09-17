@@ -281,8 +281,143 @@ def test_admin_tool_surface_reports_the_effective_decision_matrix(sandbox, monke
     monkeypatch.setattr(api, "_scope", lambda: ("owner", "char"))
     data = asyncio.run(api.tools(auth=None))
     assert data["tools"]
-    required = {"global_enabled", "registered", "mcp_policy", "self_capability_granted", "agent_selected_state", "autonomy_allowlist", "effect", "dangerous", "require_confirm", "execution_allowed", "denial_reason"}
+    required = {
+        "allowed", "decision_source", "global_enabled", "deployment", "self_capability",
+        "mcp_policy", "autonomy_policy", "danger", "confirmation", "registered",
+        "self_capability_granted", "agent_selected_state", "autonomy_allowlist",
+        "effect", "dangerous", "require_confirm", "execution_allowed", "final_schema",
+        "denial_reason",
+    }
     assert required <= set(data["tools"][0])
+
+
+def test_tool_eligibility_is_allowlist_admission_not_final_schema():
+    from core.autonomy.policy import tool_eligibility
+    registry = {
+        "mcp__weather__forecast": {"category": "mcp", "dangerous": False, "require_confirm": False},
+    }
+    eligible, reason = tool_eligibility(
+        "mcp__weather__forecast",
+        {"enabled": False, "mcp_explicit": False, "outcome_unknown": "fail_closed"},
+        registry=registry,
+        effect="read",
+    )
+    assert eligible is False
+    assert reason == "mcp_requires_explicit_enablement"
+
+
+def test_connected_readonly_mcp_inherits_without_allowlist(sandbox, monkeypatch):
+    from core.autonomy import policy, store
+    from core.self_management.service import user_grant
+    from core.tool_dispatcher import _TOOL_REGISTRY
+
+    tool_name = "mcp__inherit__status"
+    capability_id = "mcp.use:inherit/status"
+    monkeypatch.setitem(_TOOL_REGISTRY, tool_name, {
+        "func": lambda **_kwargs: "ok",
+        "description": "inherited mcp read",
+        "parameters": {"type": "object", "properties": {}},
+        "category": "mcp",
+        "mcp_server": "inherit",
+        "mcp_tool": "status",
+        "effect": "read",
+        "dangerous": False,
+        "require_confirm": False,
+    })
+    monkeypatch.setattr("core.tool_dispatcher._is_tool_enabled", lambda name: True)
+    monkeypatch.setattr(
+        "core.tool_dispatcher.get_tools_schema",
+        lambda **_kwargs: [{"type": "function", "function": {"name": tool_name}}],
+    )
+    monkeypatch.setattr("core.mcp_client.server_runtime", lambda _server: {
+        "connected": True,
+        "registered_tools": [tool_name],
+    })
+    monkeypatch.setattr("core.config_loader.get_config", lambda: {"mcp_servers": {}})
+    assert user_grant("owner", "char", capability_id=capability_id, allowed=True, mutable_by_agent=True, constraints={}, reason="allow").ok
+    state = store.load("owner", "char")
+    row = next(item for item in policy.tool_decisions("owner", "char", state) if item["name"] == tool_name)
+    assert row["eligible"] is False
+    assert row["eligibility_reason"] == "mcp_requires_explicit_enablement"
+    assert row["allowed"] is True
+    assert row["final_schema"] is True
+    assert row["execution_allowed"] is True
+    assert row["decision_source"] == "global_read_inheritance"
+    assert row["autonomy_policy"] == "global_read_inheritance"
+    assert [item["function"]["name"] for item in policy.allowed_tools("owner", "char", state)] == [tool_name]
+
+
+def test_allowlist_and_inheritance_share_one_denied_reason(sandbox, monkeypatch):
+    from core.autonomy import policy, store
+    from core.self_management.service import user_grant
+    from core.tool_dispatcher import _TOOL_REGISTRY
+
+    tool_name = "mcp__inherit__status"
+    capability_id = "mcp.use:inherit/status"
+    monkeypatch.setitem(_TOOL_REGISTRY, tool_name, {
+        "func": lambda **_kwargs: "ok",
+        "description": "inherited mcp read",
+        "parameters": {"type": "object", "properties": {}},
+        "category": "mcp",
+        "mcp_server": "inherit",
+        "mcp_tool": "status",
+        "effect": "read",
+        "dangerous": False,
+        "require_confirm": False,
+    })
+    monkeypatch.setattr("core.tool_dispatcher._is_tool_enabled", lambda name: True)
+    monkeypatch.setattr("core.tool_dispatcher.get_tools_schema", lambda **_kwargs: [])
+    monkeypatch.setattr("core.mcp_client.server_runtime", lambda _server: {
+        "connected": True,
+        "registered_tools": [tool_name],
+    })
+    monkeypatch.setattr("core.config_loader.get_config", lambda: {"mcp_servers": {}})
+    assert user_grant("owner", "char", capability_id=capability_id, allowed=True, mutable_by_agent=True, constraints={}, reason="allow").ok
+    state = store.load("owner", "char")
+    row = next(item for item in policy.tool_decisions("owner", "char", state) if item["name"] == tool_name)
+    assert row["allowed"] is False
+    assert row["denial_reason"] == "schema_unavailable"
+    assert row["decision_source"] == "global_read_inheritance"
+
+
+def test_execution_recheck_denies_after_schema_exposure(sandbox, monkeypatch):
+    from core.autonomy import runner, store
+    from core.autonomy.models import Job, Run
+
+    state = store.load("owner", "char")
+    state["config"]["enabled"] = True
+    schema = {"type": "function", "function": {"name": "safe_tool", "parameters": {}}}
+    calls = iter([
+        [schema],
+        [],
+    ])
+    monkeypatch.setattr(runner.policy, "admission", lambda *args: None)
+    monkeypatch.setattr(runner.policy, "allowed_tools", lambda *_args: next(calls))
+    monkeypatch.setattr(runner.talk_gate, "check", lambda *args, **kwargs: ("hard", "suppressed_unanswered_cap"))
+    invoked = []
+
+    async def chat_turn(_messages, schemas, **_kwargs):
+        return SimpleNamespace(
+            tool_calls=[{"id": "one", "name": "safe_tool", "arguments": {}}],
+            continuation_items=[],
+            assistant_message={},
+        )
+
+    async def execute(*_args, **_kwargs):
+        invoked.append(True)
+        return "ok", "ok"
+
+    monkeypatch.setattr("core.llm_client.chat_turn", chat_turn)
+    monkeypatch.setattr(runner, "_execute_tool", execute)
+    run = asyncio.run(runner._run_locked(
+        Job(uid="owner", char_id="char", source="manual"),
+        state,
+        Run(uid="owner", char_id="char", source="manual", job_id="job"),
+    ))
+    assert invoked == []
+    assert run.disposition == "tool_call_denied"
+    assert run.events[-1]["status"] == "tool_call_denied"
+    assert run.events[-1]["reason"] == "not_in_current_effective_allowlist"
 
 
 def test_expired_lease_can_be_reclaimed_but_stale_finisher_cannot_overwrite(sandbox, monkeypatch):

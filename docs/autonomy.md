@@ -6,6 +6,8 @@
 
 本文定义 v1 的 proactive 工作边界。scheduler 或 sensor 可以报告事实，但不能生成面向用户的一句话。`core.autonomy` 是唯一的 proactive 决策与交付路径；`talk_owner` 是唯一的用户可见出口。
 
+`tool_eligibility()` 只判断一项工具能否被 autonomy allowlist 显式打开；已连接的全局只读 MCP 仍可经 `global_read_inheritance` 进入工具面，不要求 `mcp_explicit`。schema、`GET /admin/autonomy/tools` 和管理面矩阵共用 `AutonomyToolDecision`（`allowed`、`decision_source`、global/deployment/self-capability/MCP/autonomy policy、danger、confirmation）。执行前仍复查当前矩阵，展示允许但执行时撤权记 `tool_call_denied`。
+
 ## 版本化契约
 
 Signal 使用 `autonomy-signal.v1`：

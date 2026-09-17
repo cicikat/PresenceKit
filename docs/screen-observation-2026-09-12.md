@@ -70,7 +70,7 @@ Windows 复用 GDI 截图，GetLastInputInfo 判定输入；Android 复用 Acces
 任一电脑或手机合格即可恢复，白天不按此规则隐藏。执行前再次检查，防止模型响应期间活动过期。
 `talk_owner` 保持原发言门控；普通聊天 Path C 和 `peek_screen_content` 不受此规则影响。
 
-管理面现有 `GET /admin/autonomy/tools` 决策矩阵返回 final_schema / execution_allowed=false
+管理面现有 `GET /admin/autonomy/tools` 决策矩阵返回 `allowed` / `final_schema` / `execution_allowed=false`
 和 `denial_reason=night_no_active_device`（其他授权拒绝原因优先）；设备详情仍查
 `GET /perception/screen/status`。无新开关、落盘状态或客户端协议字段。
 桌面 GetLastInputInfo 与手机无障碍输入事件的 poll 链已静态核对，沿用本地授权、

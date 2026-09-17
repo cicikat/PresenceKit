@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 from core.autonomy.models import Disposition
 
@@ -10,9 +12,12 @@ from core.autonomy.models import Disposition
 # control into an unattended side effect.
 _SANDBOXED_WRITE_TOOLS = frozenset({"water_garden"})
 
+DECISION_SOURCE_ALLOWLIST = "autonomy_allowlist"
+DECISION_SOURCE_INHERITANCE = "global_read_inheritance"
+
 
 def tool_is_eligible(name: str, policy: dict, *, registry: dict, effect: str) -> bool:
-    """Return whether one explicitly configured tool is safe for autonomy."""
+    """Return whether one explicitly configured allowlist entry is safe."""
     info = registry.get(name, {})
     if effect == "read":
         # MCP reads additionally require the operator to acknowledge that an
@@ -28,7 +33,11 @@ def tool_is_eligible(name: str, policy: dict, *, registry: dict, effect: str) ->
 
 
 def tool_eligibility(name: str, policy: dict, *, registry: dict, effect: str) -> tuple[bool, str]:
-    """Public-facing reason used by the configuration API/UI."""
+    """Allowlist-admission check only.
+
+    This is not the final schema/execute answer. Connected read-only MCP may
+    still enter the autonomy surface through ``global_read_inheritance``.
+    """
     info = registry.get(name, {})
     if info.get("dangerous") or info.get("require_confirm") or effect not in {"read", "write"}:
         return False, "side_effect_or_confirmation_required"
@@ -39,6 +48,69 @@ def tool_eligibility(name: str, policy: dict, *, registry: dict, effect: str) ->
     if info.get("category") == "mcp" and policy.get("outcome_unknown") != "fail_closed":
         return False, "mcp_requires_fail_closed_outcome_policy"
     return (tool_is_eligible(name, policy, registry=registry, effect=effect), "eligible")
+
+
+@dataclass(frozen=True)
+class AutonomyToolDecision:
+    """Single explainable autonomy tool decision for schema, admin, and audit."""
+
+    name: str
+    allowed: bool
+    decision_source: str
+    origin: str
+    global_enabled: bool
+    deployment_allowed: bool
+    deployment_reason: str
+    self_capability: bool
+    mcp_policy: str
+    autonomy_policy: str
+    danger: bool
+    confirmation: bool
+    registered: bool
+    mcp_server_connected: bool | None
+    mcp_policy_allowed: bool
+    self_capability_granted: bool | None
+    agent_selected_state: Any
+    autonomy_allowlist: bool
+    mcp_explicit: bool
+    effect: str
+    eligible: bool
+    eligibility_reason: str
+    denial_reason: str
+
+    def as_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "allowed": self.allowed,
+            "decision_source": self.decision_source,
+            "source": self.origin,
+            "global_enabled": self.global_enabled,
+            "deployment": self.deployment_allowed,
+            "deployment_allowed": self.deployment_allowed,
+            "deployment_reason": self.deployment_reason,
+            "self_capability": self.self_capability,
+            "self_capability_effective": self.self_capability,
+            "mcp_policy": self.mcp_policy,
+            "autonomy_policy": self.autonomy_policy,
+            "danger": self.danger,
+            "confirmation": self.confirmation,
+            "registered": self.registered,
+            "mcp_server_connected": self.mcp_server_connected,
+            "mcp_policy_allowed": self.mcp_policy_allowed,
+            "self_capability_granted": self.self_capability_granted,
+            "agent_selected_state": self.agent_selected_state,
+            "autonomy_allowlist": self.autonomy_allowlist,
+            "mcp_explicit": self.mcp_explicit,
+            "effect": self.effect,
+            "dangerous": self.danger,
+            "require_confirm": self.confirmation,
+            "eligible": self.eligible,
+            "eligibility_reason": self.eligibility_reason,
+            "final_schema": self.allowed,
+            "execution_allowed": self.allowed,
+            "enabled": self.allowed,
+            "denial_reason": self.denial_reason,
+        }
 
 
 def admission(uid: str, char_id: str, state: dict, *, allow_observed_activity: bool = False) -> str | None:
@@ -123,12 +195,17 @@ def screen_observation_suppressed() -> bool:
 def allowed_tools(uid: str, char_id: str, state: dict) -> list[dict]:
     from core.tool_dispatcher import get_tools_schema
     schemas = {((s.get("function") or s).get("name")): s for s in get_tools_schema(char_id=char_id, uid=uid)}
-    return [schemas[row["name"]] for row in tool_decisions(uid, char_id, state) if row["execution_allowed"] and row["name"] in schemas]
+    return [
+        schemas[decision.name]
+        for decision in decide_autonomy_tools(uid, char_id, state)
+        if decision.allowed and decision.name in schemas
+    ]
 
 
-def tool_decisions(uid: str, char_id: str, state: dict) -> list[dict]:
-    """Return a safe, execution-time decision matrix for the autonomy surface."""
+def decide_autonomy_tools(uid: str, char_id: str, state: dict) -> list[AutonomyToolDecision]:
+    """Return the single explainable autonomy tool decision matrix."""
     from core.config_loader import get_config
+    from core.deployment_capabilities import tool_allowed as deployment_tool_allowed
     from core.self_management import registry as capability_registry, store as capability_store
     from core.self_management.policy import effective as capability_effective
     from core.tool_dispatcher import _TOOL_REGISTRY, _is_tool_enabled, get_tool_effect, get_tools_schema, is_side_effect_tool
@@ -142,7 +219,7 @@ def tool_decisions(uid: str, char_id: str, state: dict) -> list[dict]:
         for item in (mcp_config.get("servers") or [])
         if isinstance(item, dict)
     }
-    rows = []
+    rows: list[AutonomyToolDecision] = []
     for name, info in _TOOL_REGISTRY.items():
         if info.get("self_management"):
             continue
@@ -179,25 +256,55 @@ def tool_decisions(uid: str, char_id: str, state: dict) -> list[dict]:
         self_capability, agent_selected_state = capability_effective(capability_id, uid, char_id) if capability_id else (False, None)
         grant = (capability_state.get("grants") or {}).get(capability_id) if capability_id else None
         explicitly_enabled = bool(configured_policy.get("enabled"))
-        direct_mcp_read = bool(
-            is_mcp and effect == "read" and self_capability and name in schemas
-            and connected and registered and mcp_policy_ok and not info.get("dangerous")
+        global_enabled = bool(_is_tool_enabled(name))
+        deployment_ok, deployment_reason = deployment_tool_allowed(name)
+        night_inactive = name == "observe_user_screen" and screen_observation_suppressed()
+        inherit_mcp_read = bool(
+            is_mcp
+            and effect == "read"
+            and global_enabled
+            and deployment_ok
+            and self_capability
+            and connected
+            and registered
+            and mcp_policy_ok
+            and not info.get("dangerous")
             and not info.get("require_confirm")
         )
-        final_schema = bool(direct_mcp_read or (
-            explicitly_enabled and eligible and self_capability and name in schemas
-            and connected and registered and mcp_policy_ok
-        ))
-        night_inactive = name == "observe_user_screen" and screen_observation_suppressed()
-        final_schema = final_schema and not night_inactive
+        allowlist_ok = bool(
+            explicitly_enabled
+            and eligible
+            and global_enabled
+            and deployment_ok
+            and self_capability
+            and connected
+            and registered
+            and mcp_policy_ok
+        )
+        in_schema = name in schemas
+        allowed = bool((allowlist_ok or inherit_mcp_read) and in_schema and not night_inactive)
+        if allowlist_ok:
+            decision_source = DECISION_SOURCE_ALLOWLIST
+            autonomy_policy = "allowlist"
+        elif inherit_mcp_read:
+            decision_source = DECISION_SOURCE_INHERITANCE
+            autonomy_policy = DECISION_SOURCE_INHERITANCE
+        elif explicitly_enabled:
+            decision_source = DECISION_SOURCE_ALLOWLIST
+            autonomy_policy = "allowlist"
+        else:
+            decision_source = DECISION_SOURCE_ALLOWLIST
+            autonomy_policy = "allowlist_required"
         denial = ""
-        if not _is_tool_enabled(name):
+        if not global_enabled:
             denial = "globally_disabled"
+        elif not deployment_ok:
+            denial = deployment_reason or "deployment_disabled"
         elif not self_capability:
             denial = "self_capability_disabled"
-        elif not explicitly_enabled and not direct_mcp_read:
+        elif not explicitly_enabled and not inherit_mcp_read:
             denial = "autonomy_allowlist_disabled"
-        elif not eligible and not direct_mcp_read:
+        elif not eligible and not inherit_mcp_read:
             denial = eligibility_reason
         elif not connected:
             denial = "mcp_server_disconnected"
@@ -209,27 +316,38 @@ def tool_decisions(uid: str, char_id: str, state: dict) -> list[dict]:
             denial = "schema_unavailable"
         elif night_inactive:
             denial = "night_no_active_device"
-        rows.append({
-            "name": name,
-            "source": "mcp" if is_mcp else "builtin",
-            "global_enabled": bool(_is_tool_enabled(name)),
-            "registered": registered,
-            "mcp_server_connected": connected if is_mcp else None,
-            "mcp_policy": mcp_policy_reason,
-            "mcp_policy_allowed": mcp_policy_ok,
-            "self_capability_effective": self_capability,
-            "self_capability_granted": bool((grant or {}).get("allowed")) if grant is not None else None,
-            "agent_selected_state": agent_selected_state,
-            "autonomy_allowlist": explicitly_enabled,
-            "mcp_explicit": bool(configured_policy.get("mcp_explicit")),
-            "effect": effect,
-            "dangerous": bool(info.get("dangerous")),
-            "require_confirm": bool(info.get("require_confirm")),
-            "eligible": eligible,
-            "eligibility_reason": eligibility_reason,
-            "final_schema": final_schema,
-            "execution_allowed": final_schema,
-            "enabled": final_schema,
-            "denial_reason": denial,
-        })
+        rows.append(AutonomyToolDecision(
+            name=name,
+            allowed=allowed,
+            decision_source=decision_source,
+            origin="mcp" if is_mcp else "builtin",
+            global_enabled=global_enabled,
+            deployment_allowed=bool(deployment_ok),
+            deployment_reason="" if deployment_ok else str(deployment_reason or "deployment_disabled"),
+            self_capability=bool(self_capability),
+            mcp_policy=mcp_policy_reason,
+            autonomy_policy=autonomy_policy,
+            danger=bool(info.get("dangerous")),
+            confirmation=bool(info.get("require_confirm")),
+            registered=registered,
+            mcp_server_connected=connected if is_mcp else None,
+            mcp_policy_allowed=mcp_policy_ok,
+            self_capability_granted=bool((grant or {}).get("allowed")) if grant is not None else None,
+            agent_selected_state=agent_selected_state,
+            autonomy_allowlist=explicitly_enabled,
+            mcp_explicit=bool(configured_policy.get("mcp_explicit")),
+            effect=effect,
+            eligible=eligible,
+            eligibility_reason=eligibility_reason,
+            denial_reason=denial,
+        ))
     return rows
+
+
+def tool_decisions(uid: str, char_id: str, state: dict) -> list[dict]:
+    """Compatibility projection of ``decide_autonomy_tools()``."""
+    return [decision.as_dict() for decision in decide_autonomy_tools(uid, char_id, state)]
+
+
+def decision_for(uid: str, char_id: str, state: dict, name: str) -> AutonomyToolDecision | None:
+    return next((row for row in decide_autonomy_tools(uid, char_id, state) if row.name == name), None)

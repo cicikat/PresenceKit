@@ -587,6 +587,21 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
                     _record_event(run, "tool_call_denied", tool_name=name, reason="not_in_current_effective_allowlist")
                     run.disposition = Disposition.TOOL_CALL_DENIED.value
                     return _finish(run)
+                if name not in {"talk_owner", "confirm_talk", "manage_self_capability"}:
+                    fresh_tools, _ = _runtime_tools(job.uid, job.char_id, store.load(job.uid, job.char_id))
+                    current_names = {((item.get("function") or item).get("name")) for item in fresh_tools}
+                    if name not in current_names:
+                        current = policy.decision_for(job.uid, job.char_id, store.load(job.uid, job.char_id), name)
+                        _record_event(
+                            run,
+                            "tool_call_denied",
+                            tool_name=name,
+                            reason=(current.denial_reason if current is not None else "not_in_current_effective_allowlist"),
+                            decision_source=(current.decision_source if current is not None else ""),
+                            eligibility_reason=(current.eligibility_reason if current is not None else ""),
+                        )
+                        run.disposition = Disposition.TOOL_CALL_DENIED.value
+                        return _finish(run)
                 if name == "talk_owner":
                     if _talk_text_has_unsupported_memory_claim(
                         str(args.get("text") or ""),

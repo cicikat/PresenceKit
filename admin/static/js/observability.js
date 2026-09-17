@@ -576,7 +576,12 @@ function _renderAutonomyToolsLegacy(host, tools) {
 
 function _renderAutonomyTools(host, tools) {
   const cell = value => escapeHtml(value === null || value === undefined || value === '' ? '-' : String(value));
-      host.innerHTML = `<table><thead><tr><th>工具</th><th>来源</th><th>全局开关</th><th>已注册</th><th>已连接</th><th>MCP 策略</th><th>MCP 明确授权</th><th>自主管理授权</th><th>自主管理生效值</th><th>代理选择</th><th>自主白名单</th><th>动作类型</th><th>危险/确认</th><th>最终状态</th><th>拒绝原因</th></tr></thead><tbody>${tools.map(item => `<tr><td>${cell(item.name)}</td><td>${cell(item.source)}</td><td>${cell(item.global_enabled)}</td><td>${cell(item.registered)}</td><td>${cell(item.mcp_server_connected)}</td><td>${cell(item.mcp_policy)}</td><td>${cell(item.mcp_explicit)}</td><td>${cell(item.self_capability_granted)}</td><td>${cell(item.self_capability_effective)}</td><td>${cell(item.agent_selected_state)}</td><td>${cell(item.autonomy_allowlist)}</td><td>${cell(item.effect)}</td><td>${cell(item.dangerous || item.require_confirm)}</td><td>${cell(item.execution_allowed)}</td><td>${cell(item.denial_reason)}</td></tr>`).join('')}</tbody></table>`;
+  const sourceLabel = item => {
+    if (item.decision_source === 'global_read_inheritance') return '全局只读继承';
+    if (item.decision_source === 'autonomy_allowlist') return '自主白名单';
+    return cell(item.decision_source || item.source);
+  };
+  host.innerHTML = `<table><thead><tr><th>工具</th><th>来源</th><th>决策来源</th><th>全局开关</th><th>部署</th><th>已注册</th><th>已连接</th><th>MCP 策略</th><th>自主策略</th><th>MCP 明确授权</th><th>自主管理授权</th><th>自主管理生效值</th><th>代理选择</th><th>自主白名单</th><th>动作类型</th><th>危险/确认</th><th>最终状态</th><th>拒绝原因</th></tr></thead><tbody>${tools.map(item => `<tr><td>${cell(item.name)}</td><td>${cell(item.source)}</td><td>${sourceLabel(item)}</td><td>${cell(item.global_enabled)}</td><td>${cell(item.deployment_allowed ?? item.deployment)}</td><td>${cell(item.registered)}</td><td>${cell(item.mcp_server_connected)}</td><td>${cell(item.mcp_policy)}</td><td>${cell(item.autonomy_policy)}</td><td>${cell(item.mcp_explicit)}</td><td>${cell(item.self_capability_granted)}</td><td>${cell(item.self_capability ?? item.self_capability_effective)}</td><td>${cell(item.agent_selected_state)}</td><td>${cell(item.autonomy_allowlist)}</td><td>${cell(item.effect)}</td><td>${cell(item.danger || item.confirmation || item.dangerous || item.require_confirm)}</td><td>${cell(item.allowed ?? item.execution_allowed)}</td><td>${cell(item.denial_reason)}</td></tr>`).join('')}</tbody></table>`;
 }
 
 function _renderAutonomyRuns(host, runs) {
