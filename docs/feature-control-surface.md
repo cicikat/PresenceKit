@@ -10,7 +10,12 @@
 24 小时进程内 grant。无独立开关，旧请求仍跟 live `active_character`。
 `GET /observability/session-scope`（`state.read`）提供脱敏 effective state、TTL、计数和拒绝原因；
 不得复用 deployment-capabilities。合同见 [session-scope-contract.md](session-scope-contract.md)。
-Dream settings 归属走工单 F；桌面/手机接入与真实联调仍 open。
+Dream settings 归属为 per-character：`GET/PATCH /dream/settings` 读写当前角色树
+`data/runtime/dreams/{char_id}/settings/{uid}.json`，不把 live active / default 目录
+偶然位置当共享语义。旧 uid-only 文件仅冻结的历史默认角色可读。桌面/手机消费者仍走
+既有 `/dream/settings`，无新设置 UI；真实联调仍 open。只读观测
+`GET /observability/dream-settings`（`state.read`）返回 effective char、canonical 是否存在、
+是否有资格读 legacy，不含正文。
 
 ## 聊天产物文件（2026-09-16）
 
@@ -85,7 +90,7 @@ RPG Dream's `rpg_kp` route is a backend capability, not a client setting; it is 
 
 - persona 级：`/settings/model-routing`、`/settings/tts-desktop`、`/settings/tts-auto-play`、`/settings/tool-loop`、`/settings/thinking`、`GET/PUT /output-segment-enforce`，供客户端使用；不返回模型密钥。段落兜底开关热更新 `output.segment_enforce`，只影响发送副本（桌面流式 delta、最终 canonical 与非流式输出），默认关闭。
 - admin 专用配置：`/model-presets/*`、`/proxy`、`/tts-config`、`/sticker-config`、`/scheduler/config`、`/settings/relay`、`/settings/mcp`。routing profile 也包含 `sensor_judge`、`rpg_kp` 与 `scenario_reconcile`：`sensor_judge` 是后台裁决专用 category，`rpg_kp` 是 RPG Dream 中立裁决，`scenario_reconcile` 是 Dream 发送后的语义校准 category。`sensor_judge` / `scenario_reconcile` 都应映射到稳定的轻量 `chat_completions` preset，缺失时分别兼容回退 `intent → chat`；`rpg_kp` 缺失时回退 `chat`。它们使用短 timeout 与零 SDK retry，未在桌面设置页单独暴露。preset 的 `api_protocol` 由管理面和 `PUT /model-presets/presets/{name}` 管理，取值为 `chat_completions`（默认）或 `responses`；它独立于 `provider_kind` 与 `tool_call_mode`，保存后热重载，不会静默切换 API。`POST /model-presets/presets/{name}/rename` 会原子重命名 preset 并更新所有 routing profile 引用和 `default_preset`，随后热重载。`POST /model-presets/routing-profiles/{name}/rename` 会同步 `active_routing` 并改写角色卡 `presence_ext.model_routing`；`DELETE /model-presets/routing-profiles/{name}` 不能删最后一个，删当前生效方案时切到剩余方案（优先 `default`），绑定该方案的角色卡清除为跟随全局。`PUT /model-presets/default-preset` 设置未映射 category 的默认 preset；空字符串清除。`PUT /model-presets/routing-profiles/{name}` 允许空字符串清除单个 category 映射。仍被 `default_preset` 引用的文本 preset 拒绝删除。
-- 单人 Scenario 的 Dream setting `scenario_injection_mode` 由 `GET/PATCH /dream/settings` 管理，取值为 `strict_stage`（默认）或 `full_script`；full mode 只在下一次入梦时冻结，预算超限会明确拒绝入梦。Sandbox、Mirror、Group Dream 与 Reality chat 不消费该字段。
+- 单人 Scenario 的 Dream setting `scenario_injection_mode` 由 `GET/PATCH /dream/settings` 管理，取值为 `strict_stage`（默认）或 `full_script`；full mode 只在下一次入梦时冻结，预算超限会明确拒绝入梦。Sandbox、Mirror、Group Dream 与 Reality chat 不消费该字段。该端点按当前角色隔离，不是 per-user 共享。
 - LLM/model preset/vision/proxy 热重载会等待旧 AsyncOpenAI/httpx client 关闭后再返回；关闭失败
   fail-open 记 warning，旧实例已从 registry 摘除，新请求只会按新配置惰性建 client。
 - admin 功能开关白名单：`GET/PUT /settings/feature-flags`。只接受 `settings_feature_flags.FLAGS` 中已有运行时消费者的布尔字段，不接受密钥、路径、额度或任意 YAML。每项返回 `apply_mode` / `restart_required`，PUT 返回 `reload_status` 和本次确实改变且需要重启的字段。`qq.enabled` 只在 `main.py` 启动阶段注册通道、回调和监听任务，因此明确为 `restart_required`，不得显示成热生效；`mail` 及其余逐次读配置的功能仍是 `hot_reload`。`private_exchange.enabled` 与 `qq`/`mail` 两个通道总开关均走这条白名单；desktop/mobile/device 通道没有独立 enabled 字段，是否可用只取决于对应 token 是否配置且未停用。管理面编辑入口为「高级设置 → 运行配置」；「系统状态」只读展示通道摘要，不再承载保存控件。

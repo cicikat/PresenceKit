@@ -367,7 +367,7 @@ def test_d5_injected_into_prompt_without_numbers_at_body_perceptible(sandbox):
 
     captured_messages = []
 
-    async def fake_llm(msgs):
+    async def fake_llm(msgs, **_kwargs):
         captured_messages.extend(msgs)
         return "Companion的梦境回复"
 

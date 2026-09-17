@@ -5,7 +5,7 @@ POST  /dream/enter    — enter dream (build frozen snapshot, DREAM_ACTIVE)
 POST  /dream/chat     — dream turn (goes to dream_pipeline, never reality pipeline)
 POST  /dream/exit     — hard exit (force_exit_dream, unconditional)
 GET   /dream/state    — read-only UI panel state (projected fields only)
-GET   /dream/settings — read full per-uid dream settings
+GET   /dream/settings — read full per-character dream settings
 PATCH /dream/settings — partial update (enum-validated; only affects next dream)
 
 Invariants:
@@ -775,7 +775,7 @@ async def dream_state_get(_auth=Depends(require_scopes("activity"))):
 
     state = read_state(uid)
     body = BodyState.from_dict(state.get("body_state") or {})
-    settings = _load_settings(uid)
+    settings = _load_settings(uid, char_id=_active_dream_char_id())
 
     dream_mode = state.get("dream_mode", "sandbox")
     scenario_info: dict | None = None
@@ -1145,7 +1145,7 @@ async def delete_standalone_dream_preset(
         raise HTTPException(status_code=404, detail=f"预设 {preset} 不存在")
 
     from core.dream.dream_settings import load as _load_settings
-    if preset in (_load_settings(_owner_uid()).get("jailbreak_presets") or []):
+    if preset in (_load_settings(_owner_uid(), char_id=_active_dream_char_id()).get("jailbreak_presets") or []):
         raise HTTPException(status_code=409, detail="该预设正在下一场梦的选用列表中，请先取消选用")
 
     canonical = _preset_write_path(preset)
@@ -1171,7 +1171,7 @@ async def dream_settings_get(_auth=Depends(require_scopes("activity"))):
     """Read-only: returns all dream settings fields with defaults applied."""
     uid = _owner_uid()
     from core.dream.dream_settings import load as _load
-    return _load(uid)
+    return _load(uid, char_id=_active_dream_char_id())
 
 
 @router.patch("/dream/settings", summary="部分更新梦境设置（校验枚举值；仅影响下一场梦）")
@@ -1188,6 +1188,7 @@ async def dream_settings_patch(body: dict, _auth=Depends(require_scopes("activit
       Changing world_layer while DREAM_ACTIVE does NOT change the current dream.
     """
     uid = _owner_uid()
+    char_id = _active_dream_char_id()
     from core.dream.dream_settings import load as _load, save as _save
 
     updates = {k: v for k, v in body.items() if k in _PATCH_ALLOWED}
@@ -1232,9 +1233,9 @@ async def dream_settings_patch(body: dict, _auth=Depends(require_scopes("activit
     if errors:
         raise HTTPException(status_code=422, detail="; ".join(errors))
 
-    current = _load(uid)
+    current = _load(uid, char_id=char_id)
     current.update(updates)
-    _save(uid, current)
+    _save(uid, current, char_id=char_id)
     return {"ok": True, "settings": current}
 
 
@@ -1313,10 +1314,11 @@ def _reset_world_layer_setting_if(match_world: str, reset_to: str) -> None:
     """若当前 dream_settings.world_layer == match_world，改写为 reset_to。"""
     from core.dream.dream_settings import load as _load_settings, save as _save_settings
     uid = _owner_uid()
-    settings = _load_settings(uid)
+    char_id = _active_dream_char_id()
+    settings = _load_settings(uid, char_id=char_id)
     if settings.get("world_layer") == match_world:
         settings["world_layer"] = reset_to
-        _save_settings(uid, settings)
+        _save_settings(uid, settings, char_id=char_id)
 
 
 def _ensure_default_world_template_seeded() -> Path:

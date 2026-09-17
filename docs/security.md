@@ -20,7 +20,7 @@
 |---|---|---|
 | `admin` | 全权：settings 写、系统运维、token 管理、记忆写删 | `/system/reload`、`PUT /llm-params`、`/users/*` |
 | `chat` | owner 对话回合 + 通道生命周期 + 上传/转写 | `/desktop/chat`、`/mobile/*`、`/desktop/wake\|activate`、`/upload/ingest`、`/transcribe`、`/group/*` |
-| `state.read` | 低敏状态只读 | `/mood/state`、`/activity/current`、`/garden/state`、`/sensor/realtime`、`/watch/status`、`GET /status`、`/observability/wake-bridge` |
+| `state.read` | 低敏状态只读 | `/mood/state`、`/activity/current`、`/garden/state`、`/sensor/realtime`、`/watch/status`、`GET /status`、`/observability/wake-bridge`、`/observability/dream-settings` |
 | `memory.read` | 高敏内容只读 | `/diary/*`、`/chat-log/*`、`/history`、`/memory/*`（GET）、`/debug/user-hidden-state`、provenance/observe、relations（GET） |
 | `sensor.write` | 感知数据写入，以及仅服务于写入前 fail-closed 预检的低敏开关读取 | `POST /sensor/push`、`POST /watch/event`、`GET /perception/visual/config` |
 | `integration.write` | 外部只读来源的标准化 stimulus ingress | `POST /integrations/forum/events` |
@@ -182,6 +182,16 @@ owner retention policy confirmation.
   测试隔离：`admin.auth.reset_rate_limit_state_for_test()`，`tests/conftest.py` 已挂 autouse
   fixture 在每个测试前后清零——这是模块级进程状态，忘记重置会导致某个测试文件里密集的
   no-token/wrong-token 用例把后面无关测试一起拖进 429。
+
+## Dream settings ownership (2026-09-17)
+
+Solo dream settings are per-character files under
+`data/runtime/dreams/{char_id}/settings/{uid}.json`. `GET/PATCH /dream/settings`
+read and write the current character, not a shared per-user authority.
+`GET /observability/dream-settings` (`state.read`) reports effective char,
+canonical existence, and legacy eligibility; it never returns the settings body.
+Old uid-only `data/dreams/settings/{uid}.json` is readable only by the frozen
+historical default character and is not copied or deleted.
 
 ## RPG Dream Foundation (Brief 219)
 

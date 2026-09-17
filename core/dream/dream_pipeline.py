@@ -410,7 +410,7 @@ async def dream_turn(
 
     # Load settings (lorebook + boundary_level + reality_context_full_turns)
     from core.dream.dream_settings import load as _load_settings
-    settings = _load_settings(uid)
+    settings = _load_settings(uid, char_id=char_id)
     _reality_context_full_turns = int(settings.get("reality_context_full_turns", 3))
     # The setting is only a next-session preference.  An active Scenario uses
     # the value frozen by enter_dream; legacy state without the field is strict.
@@ -1073,7 +1073,7 @@ async def enter_dream(
 
     # Freeze world_layer and lucid_mode from settings for this dream session
     from core.dream.dream_settings import load as _load_settings_enter
-    _settings_enter = _load_settings_enter(uid)
+    _settings_enter = _load_settings_enter(uid, char_id=char_id)
     frozen_world = _settings_enter.get("world_layer", "reality_derived")
     lucid_mode_entry = _settings_enter.get("lucid_mode", "lucid_shared")
     scenario_injection_mode = _settings_enter.get("scenario_injection_mode", "strict_stage")

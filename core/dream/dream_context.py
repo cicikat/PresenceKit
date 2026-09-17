@@ -31,7 +31,7 @@ async def build_snapshot(user_id: str, entry_reason: str = "", *, char_id: str =
     """
     from core.dream.dream_settings import load as _load_settings, MemoryAccess
 
-    settings = _load_settings(user_id)
+    settings = _load_settings(user_id, char_id=char_id)
     memory_access: str = settings.get("memory_access", MemoryAccess.relationship_summary.value)
 
     snapshot: dict[str, Any] = {

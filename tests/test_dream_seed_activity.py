@@ -114,7 +114,7 @@ def test_build_snapshot_injects_and_consumes_seed(sandbox, monkeypatch):
     monkeypatch.setattr(
         dream_settings,
         "load",
-        lambda uid: {"memory_access": dream_settings.MemoryAccess.card_only.value},
+        lambda uid, **_kw: {"memory_access": dream_settings.MemoryAccess.card_only.value},
     )
     assert dream_seed.save_seed(UID, "雨夜的旧图书馆里一起找一本书", char_id=CHAR)
 

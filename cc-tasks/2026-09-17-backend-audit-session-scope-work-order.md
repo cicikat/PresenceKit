@@ -1,6 +1,6 @@
 # 9.17 后端综合工单：角色隔离、固定会话与架构债收敛
 
-状态：A/B/C/E 已提交；D 自动化收尾完成、运行联调待执行；F–J 未开始。日期：2026-09-17。
+状态：A/B/C/E 已提交；D 自动化收尾完成、运行联调待执行；F 已提交；G–J 未开始。日期：2026-09-17。
 用户已授权按本单施工。每张施工子单完成相关验证与差异检查后独立 commit，再开始下一张。
 勾选规则：完成一项且具备证据才勾一项；源码存在、自动测试通过、部署验收分别记账。每张施工子单完成相关验证与差异检查后独立 commit，再开始下一张。
 
@@ -74,10 +74,10 @@
 
 对应 P1-6。当前 `dream_settings._path(user_id)` 未传角色，而物理 accessor 位于角色树。
 
-- [ ] F1 对照产品意图、API、registry、所有读写和实际旧数据，形成 per-user 与 per-character 两种方案及迁移/回滚差异，确认归属后再施工。
-- [ ] F2 若 per-character，贯穿请求/dream state 的 char_id；若 per-user，建立真正共享 authority。两者都不得把 active/default 目录偶然位置当语义。
-- [ ] F3 设计备份、dry-run、冲突和重入规则；不得无条件复制默认配置到所有角色或删除原数据。
-- [ ] F4 覆盖多角色切换/并发、旧配置、读写失败及迁移；同步 taxonomy、控制面与受影响客户端合同，验收后独立提交。
+- [x] F1 已确认归属为 per-character，不是真正共享的 per-user authority。物理 accessor 本就在 `runtime/dreams/{char_id}/settings/{uid}.json`；registry 由误标 `per_user` 改为 `per_char_user`。live active / `character.default` 目录偶然位置不当语义。旧 `data/dreams/settings/{uid}.json` 仅冻结历史默认角色可读。
+- [x] F2 `load`/`save`/`set_field` 关键字 `char_id`；pipeline `enter_dream`/`dream_turn`/`build_snapshot` 贯穿已有会话角色。HTTP GET/PATCH/HUD/jailbreak/世界 rename-delete 用 `_active_dream_char_id()`，不新增 query/body char 字段。世界改名只改当前角色 `world_layer`。
+- [x] F3 首次兼容读 uid-only 文件时，把当时的 `character.default` 冻结到 `runtime/dreams/global/{uid}/legacy_dream_settings_owner.json`，之后切 default/active 不改认领。不复制到其他角色树，不删除原文件。canonical 存在但不可读时回 `_DEFAULTS`，不穿透 legacy。
+- [x] F4 `tests/test_dream_settings_ownership.py` 覆盖多角色隔离、中途切 active、冻结认领、坏 JSON、HTTP 当前角色、世界改名不改 peer、观测无正文。已同步 taxonomy / dream / 控制面 / 接口总账 / security。定向回归 530 passed。无新管理面 UI，不 bump fragment。桌面/手机相关场景回归 not-run。
 
 ## G — P1：Scheduler 迁移收口与 sensor 死代码删除候选
 

@@ -230,7 +230,11 @@ Dream domain 独立落在 `data/runtime/dreams/{char_id}/`，不进入 reality m
   `data/event_log/{uid}/` 仅该 owner 冻结的历史默认角色可并入。freeze 记录在
   `data/runtime/memory/global/{uid}/legacy_event_log_owner.json`，首次兼容读时写入，
   不随 `character.default` 或 active 角色改认领。旧日志不删除、不自动分配 ownership。
-- `dream_settings` 从旧 `data/dreams/settings/{uid}.json` 回退。
+- `dream_settings` 的 canonical 桶是 `data/runtime/dreams/{char_id}/settings/{uid}.json`
+  （per-character）。旧 `data/dreams/settings/{uid}.json` 仅该 owner 冻结的历史默认角色
+  可并入；freeze 记录在
+  `data/runtime/dreams/global/{uid}/legacy_dream_settings_owner.json`，首次兼容读时写入，
+  不随 `character.default` 或 active 角色改认领。旧文件不删除、不复制到其他角色树。
 
 authored 静态内容另有 new-primary / old-fallback，但由 accessor 自己判断文件存在性，不走
 `for_read()`。其余 reality memory loader 已直接读取 `user_memory_root()` 下的新路径。

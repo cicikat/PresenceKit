@@ -1,8 +1,11 @@
 """
-Per-uid dream session settings.
+Per-character dream session settings.
 
 These switches control ONLY what goes into the frozen snapshot at dream entry.
 They NEVER open live memory access during the dream — that is always blocked.
+Physical authority is ``data/runtime/dreams/{char_id}/settings/{uid}.json``.
+Callers must pass the character that owns the dream; live active / config
+default directories are not a shared authority.
 
 memory_access tiers (D4_frozen_reality content):
   card_only            — relationship_state + entry_reason only (sandbox mode)
@@ -20,11 +23,14 @@ Migration from legacy booleans:
 
 import json
 import logging
+from datetime import datetime
 from enum import Enum
+from pathlib import Path
 from typing import Any
 
 from core.safe_write import safe_write_json
-from core.data_paths import _LAYOUT_DREAM
+from core.data_paths import DEFAULT_CHAR_ID, _LAYOUT_DREAM
+from core.memory.scope import require_character_id
 from core.migration import for_read
 from core.sandbox import get_paths, safe_user_id
 
@@ -74,21 +80,109 @@ def _migrate_legacy(data: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
-def _path(user_id: str | int):
-    return get_paths().dream_settings_path(user_id)
+def _configured_default_char_id() -> str:
+    """Live ``character.default``. Distinct from the frozen historical owner."""
+    from core.config_loader import get_config
+
+    default = str((get_config().get("character") or {}).get("default") or "").strip()
+    return default or DEFAULT_CHAR_ID
 
 
-def _read_path(user_id: str | int):
-    """S6 读降级：v1 新路径不存在时 fallback 到 legacy 路径。写始终走 _path()。"""
-    new = _path(user_id)
+def _legacy_owner_record_path(user_id: str) -> Path:
+    """Per-owner freeze of which character may read the uid-only tree."""
+    return get_paths()._p(
+        "runtime", "dreams", "global", safe_user_id(user_id), "legacy_dream_settings_owner.json",
+    )
+
+
+def _legacy_uid_only_path(user_id: str | int) -> Path:
+    """Physical uid-only old file. Does not grant any character read eligibility."""
+    return get_paths()._p("dreams", "settings", safe_user_id(user_id) + ".json")
+
+
+def _read_frozen_legacy_owner(user_id: str) -> str | None:
+    path = _legacy_owner_record_path(user_id)
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as e:
+        logger.warning("[dream_settings] legacy owner read failed uid=%s: %s", user_id, e)
+        return None
+    if not isinstance(payload, dict):
+        return None
+    owner = str(payload.get("char_id") or "").strip()
+    return owner or None
+
+
+def _freeze_legacy_owner(user_id: str, char_id: str) -> str:
+    """Persist historical default ownership once. Never reassigns on later switches."""
+    require_character_id(char_id)
+    existing = _read_frozen_legacy_owner(user_id)
+    if existing:
+        return existing
+    record = {
+        "char_id": char_id,
+        "frozen_at": datetime.now().isoformat(timespec="seconds"),
+        "source": "configured_default_at_first_compatible_read",
+    }
+    if not safe_write_json(_legacy_owner_record_path(user_id), record, keep_bak=False):
+        logger.warning(
+            "[dream_settings] failed to freeze legacy owner uid=%s char=%s; using in-memory claim only",
+            user_id,
+            char_id,
+        )
+    return char_id
+
+
+def historical_legacy_dream_settings_char_id(user_id: str | int) -> str | None:
+    """Return the frozen historical default character for this owner's uid-only settings.
+
+    Distinct from live ``character.default`` and the current active character.
+    Returns None when this owner has no uid-only dream settings file.
+    """
+    uid = safe_user_id(user_id)
+    if not _legacy_uid_only_path(uid).is_file():
+        return _read_frozen_legacy_owner(uid)
+    frozen = _read_frozen_legacy_owner(uid)
+    if frozen:
+        return frozen
+    return _freeze_legacy_owner(uid, _configured_default_char_id())
+
+
+def may_read_legacy_dream_settings(user_id: str | int, char_id: str) -> bool:
+    """True only for the frozen historical default character of this owner."""
+    require_character_id(char_id)
+    owner = historical_legacy_dream_settings_char_id(user_id)
+    return owner is not None and owner == char_id
+
+
+def _path(user_id: str | int, *, char_id: str = DEFAULT_CHAR_ID):
+    require_character_id(char_id)
+    return get_paths().dream_settings_path(user_id, char_id=char_id)
+
+
+def _read_path(user_id: str | int, *, char_id: str = DEFAULT_CHAR_ID):
+    """Canonical per-char file, with gated uid-only fallback for the frozen historical default.
+
+    Writes always go to ``_path()``. Old ``data/dreams/settings/{uid}.json`` is never
+    copied into other character trees and is never deleted by this module.
+    """
+    require_character_id(char_id)
+    new = _path(user_id, char_id=char_id)
     if _LAYOUT_DREAM == "legacy":
         return new
-    old = get_paths()._p("dreams", "settings", safe_user_id(user_id) + ".json")
+    if new.exists():
+        return new
+    if not may_read_legacy_dream_settings(user_id, char_id):
+        return new
+    old = _legacy_uid_only_path(user_id)
     return for_read(new, old)
 
 
-def load(user_id: str | int) -> dict[str, Any]:
-    path = _read_path(user_id)
+def load(user_id: str | int, *, char_id: str = DEFAULT_CHAR_ID) -> dict[str, Any]:
+    require_character_id(char_id)
+    path = _read_path(user_id, char_id=char_id)
     if not path.exists():
         return dict(_DEFAULTS)
     try:
@@ -98,18 +192,37 @@ def load(user_id: str | int) -> dict[str, Any]:
         data = _migrate_legacy(data)
         return {**_DEFAULTS, **data}
     except Exception as e:
-        logger.warning(f"[dream_settings] read failed uid={user_id}: {e}")
+        logger.warning("[dream_settings] read failed uid=%s char=%s: %s", user_id, char_id, e)
         return dict(_DEFAULTS)
 
 
-def save(user_id: str | int, settings: dict[str, Any]) -> bool:
+def save(user_id: str | int, settings: dict[str, Any], *, char_id: str = DEFAULT_CHAR_ID) -> bool:
+    require_character_id(char_id)
     merged = {**_DEFAULTS, **settings}
-    p = _path(user_id)
+    p = _path(user_id, char_id=char_id)
     p.parent.mkdir(parents=True, exist_ok=True)
     return safe_write_json(p, merged)
 
 
-def set_field(user_id: str | int, key: str, value: Any) -> bool:
-    s = load(user_id)
+def set_field(user_id: str | int, key: str, value: Any, *, char_id: str = DEFAULT_CHAR_ID) -> bool:
+    s = load(user_id, char_id=char_id)
     s[key] = value
-    return save(user_id, s)
+    return save(user_id, s, char_id=char_id)
+
+
+def observability_snapshot(user_id: str | int, *, char_id: str) -> dict[str, Any]:
+    """Content-free effective-state snapshot for ops. Never includes settings body."""
+    require_character_id(char_id)
+    uid = safe_user_id(user_id)
+    canonical = _path(uid, char_id=char_id)
+    legacy = _legacy_uid_only_path(uid)
+    frozen = historical_legacy_dream_settings_char_id(uid)
+    return {
+        "uid": uid,
+        "char_id": char_id,
+        "canonical_exists": canonical.is_file(),
+        "legacy_uid_only_exists": legacy.is_file(),
+        "legacy_eligible": may_read_legacy_dream_settings(uid, char_id),
+        "frozen_historical_char_id": frozen,
+        "configured_default_char_id": _configured_default_char_id(),
+    }

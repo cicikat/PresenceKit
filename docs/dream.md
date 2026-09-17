@@ -425,7 +425,7 @@ data/runtime/dreams/{char_id}/     独立 dream 根（不并入 reality memory �
 ├── summaries/dream_*.summary.json afterglow 摘要（→ 6f）
 ├── impressions/{uid}.json         低权印象（→ 6g，唯 impression_loader 读）
 ├── state/{uid}/dream_state.json   per-uid 会话状态
-└── settings/{uid}.json            per-uid 梦境设置
+└── settings/{uid}.json            per-character 梦境设置（按 char_id 隔离）
 
 userdata/characters/dream/worlds/{world_id}/
 ├── ruleset.md                     D2 世界规则
@@ -464,11 +464,11 @@ REALITY_CHAT → DREAM_ENTRANCE_AVAILABLE → DREAM_ACTIVE → DREAM_CLOSING →
 | `POST /dream/wake` | ✅ 已有 | 软挽留闸门；满足门控时角色挽留一次，否则直接硬退 |
 | `POST /dream/resume` | ✅ 已有 | 挽留后留下；`DREAM_EXIT_REQUESTED → DREAM_ACTIVE` |
 | `GET /dream/state` | ✅ 已有 | 只读 UI 投影：状态、身体数值、张力、场景和象征锚、`flow_entries`（梦境流动，见下） |
-| `GET /dream/settings` | ✅ 已有 | 读取 per-uid 偏好默认值 |
+| `GET /dream/settings` | ✅ 已有 | 读取当前角色的偏好默认值（per-character） |
 | `PATCH /dream/settings` | ✅ 已有 | 枚举校验后的局部更新；`world_layer` / `lucid_mode` 仅影响下一场梦 |
 | `GET /dream/worlds` | ✅ 已有 | 列出世界文件夹（隐藏名如 `_default` 不列出） |
 | `POST /dream/worlds` | ✅ Brief 96 §1 | 新建世界：建文件夹 + 从 `_default` 复制骨架（`ruleset.md` / `mes_example.md` / `vocab.json` / `lorebook.yaml`）；`_default` 缺失时先从 tracked `defaults/dream_worlds/_default/` 播种 |
-| `PUT /dream/worlds/{world}/rename` | ✅ Brief 96 §1 | 重命名文件夹；同名破限预设文件（`dream_presets/{world}.md`）跟随改名；命中当前 `dream_settings.world_layer` 时同步改写 |
+| `PUT /dream/worlds/{world}/rename` | ✅ Brief 96 §1 | 重命名文件夹；独立破限预设不随世界移动；仅同步当前角色 `dream_settings.world_layer`，不改写其他角色树 |
 | `DELETE /dream/worlds/{world}` | ✅ Brief 96 §1 | 删除文件夹 + 同名预设文件；命中当前 `world_layer` 时重置为 `_default` |
 | `GET/POST/PUT/DELETE /dream/worlds/{world}/lorebook[/…]` | ✅ 已有 | 世界书条目 CRUD |
 | `GET/PUT /dream/worlds/{world}/preset` | ✅ 已有 | 该世界的破限预设 Markdown |
@@ -556,6 +556,13 @@ fresh clone / release 不依赖旧 compatibility root；新建操作从 tracked 
 - **测试**：`tests/test_dream_flow_entries.py`。
 
 ### dream_settings.json 字段（UI 设置页对应）
+
+物理路径为 `data/runtime/dreams/{char_id}/settings/{uid}.json`（per-character）。
+`GET/PATCH /dream/settings` 读写当前角色，不是 per-user 共享 authority；live
+active / `character.default` 目录偶然位置不构成共享语义。旧
+`data/dreams/settings/{uid}.json` 仅该 owner 冻结的历史默认角色可读，不删除、
+不复制到其他角色树。观测见 `GET /observability/dream-settings`（`state.read`，无正文）。
+
 
 | 字段 | 取值 |
 |---|---|
@@ -694,9 +701,10 @@ QUIET、DND、gap、budget 或 winner；发送成功后才写 `last_greeted_drea
 - **vocab_strip 是手维护黑名单**：新世界/新术语忘填 `vocab.json` 会静默漏。但因承重墙是 store 隔离，仅在 F1 边界才有影响，不致命。**任何人不得把它当墙用。**
 - **身份稳定性测试是弱代理**：只断言人称正确 + 依恋关键词在场，真验证靠实际游玩。
 - **DREAM_LOCKED 预留未实现**：无系统级软退锁。
-- **dream settings 仍保留旧路径降级读**：`_LAYOUT_DREAM = "v1"` 后写入
-  `data/runtime/dreams/{char_id}/settings/{uid}.json`，读取仍可通过 `for_read()` 回退旧
-  `data/dreams/settings/{uid}.json`。清理旧文件前先看 fallback 观测。
+- **dream settings 是 per-character**：写入
+  `data/runtime/dreams/{char_id}/settings/{uid}.json`。旧 uid-only
+  `data/dreams/settings/{uid}.json` 仅冻结的历史默认角色可读；不复制到其他角色、
+  不删除原文件。live active / `character.default` 目录的偶然位置不是共享 authority。
 
 
 ### 跨世界身份稳定性观测（当前）

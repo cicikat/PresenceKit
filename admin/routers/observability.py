@@ -7,6 +7,27 @@ from admin.auth import require_scopes
 router = APIRouter()
 
 
+@router.get("/observability/dream-settings", summary="读取梦境设置归属脱敏状态（不含正文）")
+async def dream_settings_observability(
+    uid: str = "",
+    char_id: str = "",
+    _auth=Depends(require_scopes("state.read")),
+):
+    from core.dream.dream_settings import observability_snapshot
+    from core.config_loader import get_config
+    from core.data_paths import DEFAULT_CHAR_ID
+    from core.pipeline_registry import get as _get_pipeline
+
+    owner = uid.strip() or str(get_config().get("scheduler", {}).get("owner_id", "") or "").strip()
+    if not owner:
+        raise HTTPException(status_code=422, detail="uid 未提供且 owner_id 未配置")
+    selected = char_id.strip()
+    if not selected:
+        pl = _get_pipeline()
+        selected = str((getattr(pl, "_active_character_id", None) if pl else None) or DEFAULT_CHAR_ID)
+    return observability_snapshot(owner, char_id=selected)
+
+
 @router.get("/observability/session-scope", summary="读取固定会话 scope 脱敏状态")
 async def session_scope_observability(
     limit: int = Query(100, ge=1, le=500),

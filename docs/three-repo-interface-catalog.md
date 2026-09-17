@@ -12,7 +12,9 @@ reasoning 全部复用冻结 owner/char；无 header 仍是 legacy live active�
 `tests/protocol_fixtures/v1/session_scope.json`。
 `open`：桌面与手机消费者接入及真实重连/后台/撤权联调；固定 SHA matrix 保留上一轮快照，
 待三仓同时升级后再更新。手机 `seq` 仍是 owner 共享游标，不能按角色跳过后推进 ack。
-Dream settings 归属另走 F。
+Dream settings 归属为 per-character：`GET/PATCH /dream/settings` 读写当前角色树，
+旧 uid-only 文件仅冻结历史默认角色可读。观测：`GET /observability/dream-settings`
+（state.read，无正文）。桌面/手机消费者无新设置 UI，相关场景回归 open。
 
 ## 跨来源消息身份（2026-09-17）
 
@@ -316,7 +318,7 @@ Flutter/Android 字段或设置面。Agent Runtime 是同一角色的 durable / 
 | `/dream/state`、`/dream/invariants`、`/dream/stats`、`/dream/operations` | GET | 桌面、手机、管理面 | `current`；只读状态/运维投影 |
 | `/dream/enter`、`/dream/chat`、`/dream/exit`、`/dream/wake`、`/dream/resume` | POST | 桌面、手机 | `current`；`wake` 可能返回 retained，硬退出仍必须可达 |
 | `/dream/archive`、`/dream/archive/{dream_id}` | GET | 桌面回放 | `current`；只读，不回流 Reality pipeline |
-| `/dream/settings`、`/dream/presets*`、`/dream/worlds*`、`/dream/scenarios*` | GET/PATCH/CRUD | 桌面、手机部分设置、管理面 | `current`；Reality Prompt Assets 与 Dream 设置分离 |
+| `/dream/settings`、`/dream/presets*`、`/dream/worlds*`、`/dream/scenarios*` | GET/PATCH/CRUD | 桌面、手机部分设置、管理面 | `current`；Reality Prompt Assets 与 Dream 设置分离。`/dream/settings` 按当前角色隔离（per-character），旧 uid-only 文件仅冻结历史默认角色可读 |
 | `/group/list`、`/group/create`、`/group/{id}/*` | GET/POST/PATCH/DELETE | 桌面、手机、管理面 | `current`；Stage transcript 和 roster 由后端拥有 |
 | `/group/{id}/dream/state|enter|send|exit|transcript|settings` | GET/POST/PATCH | 桌面、手机部分消费、管理面 | `current`；群梦回复通过 dream-domain WS/轮询读取 |
 | `/activity/reading/*` | GET/POST | 桌面、手机 | `current`；含书库、翻页、聊天、关闭 |
@@ -357,6 +359,7 @@ Flutter/Android 字段或设置面。Agent Runtime 是同一角色的 durable / 
 |---|---|---|
 | `/status`、`/system/health`、`/system/logs`、`/system/reload`、`/system/data-path` | 启动、健康、日志、数据根和热重载 | `admin-only` / read scope；客户端只消费明确允许的诊断字段 |
 | `/observability/*`、`/observe/*`、`/debug/*`、`/provenance/*` | API 调用、stimulus、runtime signal、recall、来源和落盘追溯 | `current`；新增落盘状态必须增加只读观测端点 |
+| `/observability/dream-settings` | Dream settings 归属：effective char、canonical 是否存在、legacy 资格 | `current`；`state.read`，无正文；桌面/手机不消费 |
 | `/observability/memory-event-ledger` | Memory Event 双写成功率、失败计数、角色/realm 聚合，以及热路径/来源拒绝计数 | `current`；后端 `state.read` 观测面，进程内脱敏计数，桌面/手机不消费 |
 | `/settings/event-context-observer`、`/observability/event-context` | Brief 217 入口事件→turn→evidence 身份链的默认关闭旁路观测控制与汇总 | 管理面 Runtime Config 提供前者的 `admin` 热切换 `disabled/observe`；后者 `state.read`，无桌面/手机新协议；仅聚合、状态码和延迟桶，不返回正文、完整 ID、用户 ID、媒体或路径 |
 | `/memory-events/search`、`/memory-events/{event_id}`、`/memory-events/{event_id}/window`、`/memory-events/{event_id}/related`、`/memory-events/query-trace`、`/memory-events/lineage/*`、`/observability/memory-event-edge-proposals`、`/observability/memory-event-shadow-recall` | Memory Event 证据账本的 scoped 只读检索、受控 topics、确定性关联边、派生记忆血缘、脱敏查询审计、候选边调度和 shadow recall 观测 | `admin-only`；前者需 `memory.read`，请求必须显式 `uid + char_id + realm=reality`，`related` 对同一邻居保留兼容首关系并返回完整 `relations[]`；两类观测需 `state.read`，候选边只含 run/budget、发现和超时计数，shadow 只含事件/turn 覆盖、mapped/unmapped 和超时指标。默认过滤 `web`/`dream_echo`/`coplay`，管理员只能以显式 `source` 查看隔离证据，响应保留 source 标签；lineage 仅消费落盘的事件 ID，旧数据/已删除事件为 `legacy_unknown`，dry-run 不写回；管理面消费，桌面/手机不消费，不进入 prompt 或 tool loop |
@@ -538,7 +541,7 @@ ack 和游标推进，不得另造一套消息真值。
 | 模型路由 | `/settings/model-routing`、`/model-presets/routing-profiles` | 只读当前方案；在管理面修改绑定、改名/删除 profile、选 `default_preset`。`rpg_kp` / `sensor_judge` / `monologue` 仅管理面 Routing Profiles 可配，客户端不新增开关 | 不持有 provider 密钥 | 当前边界完整 |
 | TTS | `/tts-config*`、`/settings/tts-*`、`/tts/synthesize` | 播放/自动播放设置和桥接 | 合成/播放能力 | provider 管理面与客户端播放分离 |
 | tool loop / thinking / 输出兜底 | `/settings/tool-loop`、`/settings/thinking`、`/output-segment-enforce` | 保留协议桥；思考编辑在管理面模型连接页，桌面不新增设置 | 无同等编辑面 | 新增字段必须同步管理面，不要往桌面塞开关 |
-| Reality / Dream Prompt 资产 | `/settings/prompt-assets`、`/dream/settings` | Reality 启用组合迁管理面；世界书/破限 label 为显示名，PATCH 仍提交 id；Dream 保持独立 | 受限选择/编辑 | 不能交叉提交字段；observe：手机若展示 stem 需改消费 label |
+| Reality / Dream Prompt 资产 | `/settings/prompt-assets`、`/dream/settings` | Reality 启用组合迁管理面；世界书/破限 label 为显示名，PATCH 仍提交 id；Dream 设置 per-character，无新客户端 UI | 受限选择/编辑 | 不能交叉提交字段；observe：手机若展示 stem 需改消费 label；Dream settings 消费者需按角色回归 |
 | sensor / screen peek | `/sensor/realtime`、`/sensor/behavior/status`、`/settings/screen-peek`、`/perception/visual/config` | 本地采样 + 后端 opt-in | screen upload 开关 + 原生过滤 | 任何扩大采集范围的改动都需隐私回归 |
 | 危险模式 | `GET/PATCH /system/meta-mode` | 管理面功能与行为及 device-policy 常驻开关 | 无 hardware 写权；若仍传 ttl 被忽略 | danger 保持到手动关；observe：手机旧 TTL UI |
 | mobile proactive delivery | `/mobile/*`、`/settings/relay`、`/observability/*` | 不消费 mobile queue | 前台 poll + Android relay | relay 只 signal，正文回源 |
