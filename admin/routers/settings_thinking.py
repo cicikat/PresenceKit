@@ -38,8 +38,11 @@ def _chat_preset_reasoning_native() -> bool:
     真实的 AsyncOpenAI/httpx 客户端，同 settings_tool_loop._chat_preset_supports_fc）。
     """
     from core.model_registry import _get_preset_config, _resolve_preset_name
-    mp = _get_preset_config()
-    preset_name = _resolve_preset_name("chat")
+    try:
+        mp = _get_preset_config()
+        preset_name = _resolve_preset_name("chat")
+    except ValueError:
+        return False
     preset = mp.get("presets", {}).get(preset_name, {})
     return bool(preset.get("reasoning_native", False))
 

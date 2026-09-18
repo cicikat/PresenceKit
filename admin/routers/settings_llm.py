@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # /llm-params — 读写当前 chat preset 的生成参数
-# （旧扁平 llm: 块兼容：没有 model_presets 时读写 llm: 块）
+# （只读写 model_presets 当前 chat preset；扁平 llm: 合成已退出）
 # ---------------------------------------------------------------------------
 
 class LlmParamsUpdate(BaseModel):
@@ -75,12 +75,12 @@ def _get_chat_preset_params(cfg: dict) -> dict:
             defaults = mp.get("defaults", {})
             kind = preset.get("provider_kind", "openai")
             return resolve_params(defaults, preset.get("params", {}), kind)
-    return cfg.get("llm", {})
+    return {}
 
 
 @router.get("/llm-params", summary="获取 LLM 生成参数")
 async def get_llm_params(auth=Depends(require_scopes("admin"))):
-    """读取当前 chat preset 的生成参数（或 legacy llm: 块）。"""
+    """读取当前 chat preset 的生成参数。"""
     params = _get_chat_preset_params(get_config())
     return {
         "temperature":       float(params.get("temperature",       0.7)),
@@ -92,9 +92,7 @@ async def get_llm_params(auth=Depends(require_scopes("admin"))):
 
 @router.put("/llm-params", summary="修改 LLM 生成参数并热重载")
 async def update_llm_params(body: LlmParamsUpdate, auth=Depends(require_scopes("admin"))):
-    """修改当前 chat preset 的生成参数并热重载。
-    legacy 模式（无 model_presets 块）写回 llm: 块，保持旧行为。
-    """
+    """修改当前 chat preset 的生成参数并热重载。无 model_presets 时 400。"""
     if body.temperature is not None and not (0.0 <= body.temperature <= 2.0):
         raise HTTPException(status_code=422, detail="temperature 必须在 0.0~2.0 之间")
     if body.top_p is not None and not (0.0 <= body.top_p <= 1.0):
@@ -119,10 +117,10 @@ async def update_llm_params(body: LlmParamsUpdate, auth=Depends(require_scopes("
             mp["presets"][preset_name].setdefault("params", {}).update(updates)
         target_params = mp.get("presets", {}).get(preset_name, {}).get("params", {})
     else:
-        # Legacy: write into flat llm: block
-        llm_cfg = full_cfg.setdefault("llm", {})
-        llm_cfg.update(updates)
-        target_params = llm_cfg
+        raise HTTPException(
+            status_code=400,
+            detail="当前配置缺少 model_presets 块，无法写入生成参数。请先配置 model_presets。",
+        )
 
     write_config_file(CONFIG_FILE, full_cfg)
 
@@ -177,8 +175,7 @@ async def update_llm_debug_requests(body: LlmDebugRequestsUpdate, _auth=Depends(
 
 # ---------------------------------------------------------------------------
 # /settings/base-model — 配置中心 §1「必填」：基础聊天模型连接
-# 透明兼容 model_presets 与 legacy llm: 两种模式，写回目标由现有路由解析规则决定，
-# 不引入第三套真值来源（Brief 93 §1）。
+# 只读写 model_presets 主聊天 preset。扁平 llm: 合成已退出（Brief 93 §1 收口）。
 # ---------------------------------------------------------------------------
 
 def _looks_placeholder(value) -> bool:
@@ -191,7 +188,7 @@ def _looks_placeholder(value) -> bool:
 
 
 def _resolve_base_chat_preset_name(cfg: dict) -> Optional[str]:
-    """当前 chat call_category 解析到的 preset 名；无 model_presets 块时返回 None（走 legacy llm:）。"""
+    """当前 chat call_category 解析到的 preset 名；无 model_presets 块时返回 None。"""
     mp = cfg.get("model_presets")
     if not mp:
         return None
@@ -206,13 +203,13 @@ def _base_model_view(cfg: dict) -> dict:
     if preset_name:
         target = cfg.get("model_presets", {}).get("presets", {}).get(preset_name, {})
     else:
-        target = cfg.get("llm", {})
+        target = {}
     base_url = target.get("base_url", "")
     api_key  = target.get("api_key", "")
     model    = target.get("model", "")
     configured = not (_looks_placeholder(base_url) or _looks_placeholder(api_key) or _looks_placeholder(model))
     return {
-        "mode": "preset" if preset_name else "legacy",
+        "mode": "preset" if preset_name else "missing",
         "preset_name": preset_name,
         "base_url": "" if _looks_placeholder(base_url) else base_url,
         "model": "" if _looks_placeholder(model) else model,
@@ -251,7 +248,7 @@ async def discover_models(body: ModelDiscoveryRequest, auth=Depends(require_scop
     if body.use_base_model:
         name = _resolve_base_chat_preset_name(cfg)
         if name is None:
-            saved = cfg.get("llm", {})
+            saved = {}
     if name is not None:
         saved = cfg.get("model_presets", {}).get("presets", {}).get(name)
         if saved is None:
@@ -278,10 +275,12 @@ async def update_base_model(body: BaseModelUpdate, auth=Depends(require_scopes("
     full_cfg = read_config_file(CONFIG_FILE)
 
     preset_name = _resolve_base_chat_preset_name(full_cfg)
-    if preset_name:
-        target = full_cfg.setdefault("model_presets", {}).setdefault("presets", {}).setdefault(preset_name, {})
-    else:
-        target = full_cfg.setdefault("llm", {})
+    if not preset_name:
+        raise HTTPException(
+            status_code=400,
+            detail="当前配置缺少 model_presets 块，无法写入基础聊天模型。请先配置 model_presets。",
+        )
+    target = full_cfg.setdefault("model_presets", {}).setdefault("presets", {}).setdefault(preset_name, {})
     target.update(updates)
 
     write_config_file(CONFIG_FILE, full_cfg)
@@ -817,10 +816,13 @@ def _active_character_routing_override() -> dict | None:
 @router.get("/model-presets", summary="获取多模型 preset 配置")
 async def get_model_presets(auth=Depends(require_scopes("admin"))):
     """返回 presets 列表（api_key 打码）、routing_profiles、active_routing。
-    若配置中无 model_presets 块，返回合成的 legacy 视图。
+    无 model_presets 块时 400，不再合成扁平 llm: 视图。
     """
     from core.model_registry import _get_preset_config
-    mp = _get_preset_config()
+    try:
+        mp = _get_preset_config()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     from core.model_registry import resolve_category_info
     routing_effective = {
         profile_name: {
@@ -846,7 +848,6 @@ async def get_model_presets(auth=Depends(require_scopes("admin"))):
         "presets":           _mask_presets(mp.get("presets", {})),
         "routing_profiles":  mp.get("routing_profiles", {}),
         "defaults":          mp.get("defaults", {}),
-        "is_legacy_synth":   "model_presets" not in get_config(),
         "active_character_routing": _active_character_routing_override(),
         "routing_effective": routing_effective,
     }
@@ -928,25 +929,14 @@ def _rewrite_character_model_routing(*, old_name: str, new_name: str | None) -> 
     return rewritten
 
 
-@router.post("/model-presets/bootstrap", summary="从 legacy llm 配置初始化 model_presets")
-async def bootstrap_model_presets(auth=Depends(require_scopes("admin"))):
-    """One-time migration used by the visual admin panel."""
-    full_cfg = read_config_file(CONFIG_FILE)
-
-    if full_cfg.get("model_presets"):
-        return {"message": "model_presets 已存在，无需初始化", "created": False}
-
-    from core.model_registry import _synth_legacy_presets
-    full_cfg["model_presets"] = _synth_legacy_presets(full_cfg)
-    await _persist_model_presets(full_cfg)
-    return {"message": "已从 legacy llm 配置初始化 model_presets", "created": True}
-
-
 @router.get("/settings/model-routing", summary="桌面端读取可选模型路由")
 async def get_desktop_model_routing(auth=Depends(require_scopes("persona"))):
     """Return safe display data; API keys and endpoint credentials stay admin-only."""
     from core.model_registry import _get_preset_config
-    mp = _get_preset_config()
+    try:
+        mp = _get_preset_config()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     presets = mp.get("presets", {})
     profiles = mp.get("routing_profiles", {})
     from core.model_registry import resolve_category_info
@@ -967,7 +957,6 @@ async def get_desktop_model_routing(auth=Depends(require_scopes("persona"))):
     return {
         "active_routing": mp.get("active_routing", "default"),
         "profiles": rows,
-        "is_legacy_synth": "model_presets" not in get_config(),
     }
 
 
@@ -995,7 +984,10 @@ async def list_routing_profiles(auth=Depends(require_scopes("persona"))):
     只暴露 profile 结构本身，供角色模型绑定下拉框使用。
     """
     from core.model_registry import _get_preset_config, resolve_category_info
-    mp = _get_preset_config()
+    try:
+        mp = _get_preset_config()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     profiles = mp.get("routing_profiles", {})
     return {
         "active_routing": mp.get("active_routing", "default"),
@@ -1027,7 +1019,7 @@ async def set_active_routing(body: ActiveRoutingUpdate, auth=Depends(require_sco
     if not mp:
         raise HTTPException(
             status_code=400,
-            detail="当前配置使用 legacy llm: 块，不支持切换路由方案。请先配置 model_presets 块。",
+            detail="当前配置缺少 model_presets 块，不支持切换路由方案。请先配置 model_presets。",
         )
 
     profiles = mp.get("routing_profiles", {})
@@ -1098,7 +1090,7 @@ def _require_model_presets_block(full_cfg: dict) -> dict:
     if not mp:
         raise HTTPException(
             status_code=400,
-            detail="当前配置使用 legacy llm: 块，不支持 preset/routing profile 管理。请先配置 model_presets 块。",
+            detail="当前配置缺少 model_presets 块，不支持 preset/routing profile 管理。请先配置 model_presets。",
         )
     return mp
 

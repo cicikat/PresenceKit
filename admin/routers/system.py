@@ -46,8 +46,6 @@ async def get_status(auth=Depends(require_scopes("state.read"))):
         "data_root": str(paths.root_dir()).replace("\\", "/"),
         "test_user_ids": test_user_ids,
         "config_summary": {
-            "llm_model":        cfg.get("llm", {}).get("model",    "unknown"),
-            "llm_provider":     cfg.get("llm", {}).get("provider", "unknown"),
             "short_term_rounds": cfg.get("memory", {}).get("short_term_rounds", 20),
             "admin_host":       cfg.get("admin", {}).get("host",   "127.0.0.1"),
             "admin_port":       cfg.get("admin", {}).get("port",   8080),

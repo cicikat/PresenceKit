@@ -94,13 +94,14 @@ RPG Dream's `rpg_kp` route is a backend capability, not a client setting; it is 
 - LLM/model preset/vision/proxy 热重载会等待旧 AsyncOpenAI/httpx client 关闭后再返回；关闭失败
   fail-open 记 warning，旧实例已从 registry 摘除，新请求只会按新配置惰性建 client。
 - admin 功能开关白名单：`GET/PUT /settings/feature-flags`。只接受 `settings_feature_flags.FLAGS` 中已有运行时消费者的布尔字段，不接受密钥、路径、额度或任意 YAML。每项返回 `apply_mode` / `restart_required`，PUT 返回 `reload_status` 和本次确实改变且需要重启的字段。`qq.enabled` 只在 `main.py` 启动阶段注册通道、回调和监听任务，因此明确为 `restart_required`，不得显示成热生效；`mail` 及其余逐次读配置的功能仍是 `hot_reload`。`private_exchange.enabled` 与 `qq`/`mail` 两个通道总开关均走这条白名单；desktop/mobile/device 通道没有独立 enabled 字段，是否可用只取决于对应 token 是否配置且未停用。管理面编辑入口为「高级设置 → 运行配置」；「系统状态」只读展示通道摘要，不再承载保存控件。
-- admin 配置中心（Brief 93 §1，管理面板「配置」页，`GET/PUT /settings/base-model`、`GET/PUT /settings/embedding`、`GET /settings/setup-status`）：`/settings/base-model` 透明兼容 `model_presets` 主聊天 preset 与旧版 `llm:` 块，由 `_resolve_base_chat_preset_name()` 判定写入目标，不引入第三套真值来源；`/settings/embedding` 读写 `embedding:` 块（缺失时向量召回 fail-open 降级为关键词路径，不算必填）；`/settings/setup-status` 的 `needs_setup` 驱动面板首次登录自动跳转与顶部红色横幅，判定标准是 base_url/api_key/model 三者均非空且不是 `config.example.yaml` 里 `YOUR_`/`YOUR-` 前缀的占位符。
+- admin 配置中心（Brief 93 §1，管理面板「配置」页，`GET/PUT /settings/base-model`、`GET/PUT /settings/embedding`、`GET /settings/setup-status`）：`/settings/base-model` 只读写 `model_presets` 主聊天 preset；缺少该块时 GET 标 `mode=missing`、PUT 返回 400。扁平 `llm:` 合成已退出，不引入第三套真值来源。`/settings/embedding` 读写 `embedding:` 块（缺失时向量召回 fail-open 降级为关键词路径，不算必填）；`/settings/setup-status` 的 `needs_setup` 驱动面板首次登录自动跳转与顶部红色横幅，判定标准是 base_url/api_key/model 三者均非空且不是 `config.example.yaml` 里 `YOUR_`/`YOUR-` 前缀的占位符。
 - 密钥本快捷入口（Brief 93 §2，`GET /system/secrets-book`、`POST /system/secrets-book/open`）：仅当请求方 `request.client.host` 是 `127.0.0.1`/`::1`/`localhost` 时可用，用系统默认程序打开 `secrets.local.yaml`；非本机请求悬浮按钮隐藏、`open` 端点直接 403。
 
 管理面状态与配置入口（Brief 163）：「系统状态」仅读取 `/status`、`/model-presets`、`/tts-config`、`/proxy`、`/settings/relay`、`/scheduler/status`、`/settings/feature-flags` 和有限错误摘要，展示当前值、配置来源、生效范围、刷新结果及明确的外部健康边界。编辑入口分流到「高级设置 → 运行配置」「高级设置 → TTS 配置」「模型路由」和「调度器」；编辑页的布尔、枚举、数值控件分别使用 checkbox/select/range，并标注 hot reload、immediate 或 restart-required。数据环境只展示 formal/test、脱敏的测试会话标签、逻辑数据位置和隔离测试用户数量，不展示本机绝对路径或用户 ID。
 - 401 人话化（Brief 93 §6）：`admin/auth.py` 的 401 响应体 `detail` 从纯字符串改为 `{"message", "hint"}`；`/ws/desktop`、`/ws/device` 鉴权失败的 WS close 附带同语义的 `reason`（受 RFC 6455 123 字节上限约束，文案比 HTTP hint 精简）。桌面端 Brief 34 直接透传 `detail.hint` 显示。
 
-模型从 legacy 迁移时调用 `POST /model-presets/bootstrap`，它把现有 `llm` 连接持久化为 `legacy` preset 和 `default` routing profile；之后客户端只切 routing profile，不需要重新录入 API key/base URL。
+扁平 `llm:` 合成与 `POST /model-presets/bootstrap` 已退出。缺少 `model_presets` 时
+须按 `config.example.yaml` 配置该块，不能再从顶层 `llm:` 一键初始化。
 
 `/settings/model-routing` 切的是**全局** active_routing；per-角色覆盖是另一条入口：
 `GET/PATCH /character/{char_id}/model-routing`（persona 级，Brief 87）读写角色卡

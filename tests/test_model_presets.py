@@ -5,7 +5,7 @@ Coverage (per task spec §9):
   1. Param merge + whitelist: anthropic_compat drops penalty; deepseek keeps it.
   2. prompt_style resolution: preset explicit > provider_kind default.
   3. Routing fallback: unknown category → chat preset; missing profile → first preset.
-  4. Backward-compat synth: flat llm: config → correct legacy preset + kind detection.
+  4. Flat llm: synthesis is gone: missing model_presets fail-loud.
   5. xml transform: system layers wrapped; user/assistant untouched; tags sanitised; order preserved.
 """
 
@@ -310,87 +310,21 @@ class TestRoutingFallback:
 # 4. Backward-compat synthesis
 # ===========================================================================
 
-class TestBackwardCompatSynth:
-    def test_deepseek_base_url_gives_deepseek_kind(self):
-        from core.model_registry import _kind_from_legacy
-        assert _kind_from_legacy({"base_url": "https://api.deepseek.com"}) == "deepseek"
-
-    def test_anthropic_base_url_gives_anthropic_compat_kind(self):
-        from core.model_registry import _kind_from_legacy
-        assert _kind_from_legacy({"base_url": "https://api.anthropic.com"}) == "anthropic_compat"
-
-    def test_claude_in_url_gives_anthropic_compat(self):
-        from core.model_registry import _kind_from_legacy
-        assert _kind_from_legacy({"base_url": "https://my-proxy.com/claude/v1"}) == "anthropic_compat"
-
-    def test_localhost_gives_local_kind(self):
-        from core.model_registry import _kind_from_legacy
-        assert _kind_from_legacy({"base_url": "http://127.0.0.1:8000/v1"}) == "local"
-
-    def test_localhost_name_gives_local_kind(self):
-        from core.model_registry import _kind_from_legacy
-        assert _kind_from_legacy({"base_url": "http://localhost:11434/v1"}) == "local"
-
-    def test_unknown_url_gives_openai_kind(self):
-        from core.model_registry import _kind_from_legacy
-        assert _kind_from_legacy({"base_url": "https://api.openai.com"}) == "openai"
-
-    def test_synth_produces_valid_preset_structure(self):
-        from core.model_registry import _synth_legacy_presets
-        cfg = {
-            "llm": {
-                "api_key": TEST_API_KEY,
-                "base_url": "https://api.deepseek.com",
-                "model": "deepseek-chat",
-                "tool_call_mode": "function_calling",
-                "temperature": 1.0,
-                "top_p": 0.9,
-                "max_tokens": 4000,
-                "frequency_penalty": 0.3,
-                "presence_penalty": 0.4,
-            }
-        }
-        mp = _synth_legacy_presets(cfg)
-        assert "legacy" in mp["presets"]
-        legacy = mp["presets"]["legacy"]
-        assert legacy["provider_kind"] == "deepseek"
-        assert legacy["api_protocol"] == "chat_completions"
-        assert legacy["model"] == "deepseek-chat"
-        assert legacy["params"]["temperature"] == 1.0
-        assert legacy["params"]["frequency_penalty"] == 0.3
-
-    def test_synth_all_categories_route_to_legacy(self):
-        from core.model_registry import _synth_legacy_presets
-        cfg = {"llm": {"base_url": "https://api.deepseek.com", "model": "ds"}}
-        mp = _synth_legacy_presets(cfg)
-        profile = mp["routing_profiles"]["default"]
-        for cat in ("chat", "intent", "probe", "summary", "detect_emotion", "consolidation"):
-            assert profile[cat] == "legacy", f"category '{cat}' should route to 'legacy'"
-
-    @pytest.mark.asyncio
-    async def test_get_model_client_works_with_legacy_config(self, monkeypatch):
-        """get_model_client('chat') must succeed when only llm: block is present."""
+class TestFlatLlmSynthGone:
+    def test_missing_model_presets_is_fail_loud(self, monkeypatch):
         import core.model_registry as reg
 
-        fake_cfg = {
-            "llm": {
-                "api_key": TEST_API_KEY,
-                "base_url": "https://api.deepseek.com",
-                "model": "deepseek-chat",
-                "tool_call_mode": "function_calling",
-                "temperature": 1.0,
-                "max_tokens": 4000,
-            }
-        }
         monkeypatch.setattr(reg, "_model_clients", {})
-        monkeypatch.setattr("core.model_registry.get_config", lambda: fake_cfg)
+        monkeypatch.setattr("core.model_registry.get_config", lambda: {"llm": {"model": "deepseek-chat"}})
+        with pytest.raises(ValueError, match="model_presets"):
+            reg._get_preset_config()
+        with pytest.raises(ValueError, match="model_presets"):
+            reg.get_model_client("chat")
 
-        mc = reg.get_model_client("chat")
-        assert mc.name == "legacy"
-        assert mc.model == "deepseek-chat"
-        assert mc.provider_kind == "deepseek"
-        assert "temperature" in mc.params
-        assert mc.api_protocol == "chat_completions"
+    def test_synth_helpers_are_gone(self):
+        import core.model_registry as reg
+        assert not hasattr(reg, "_synth_legacy_presets")
+        assert not hasattr(reg, "_kind_from_legacy")
 
 
 class TestApiProtocol:

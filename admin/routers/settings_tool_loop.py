@@ -37,8 +37,11 @@ def _chat_preset_supports_fc() -> bool:
     顺带建出真实的 AsyncOpenAI/httpx 客户端）。
     """
     from core.model_registry import _get_preset_config, _resolve_preset_name
-    mp = _get_preset_config()
-    preset_name = _resolve_preset_name("chat")
+    try:
+        mp = _get_preset_config()
+        preset_name = _resolve_preset_name("chat")
+    except ValueError:
+        return False
     preset = mp.get("presets", {}).get(preset_name, {})
     return preset.get("tool_call_mode", "function_calling") == "function_calling"
 

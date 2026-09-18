@@ -1083,11 +1083,10 @@ scheduler._check_sensor_aware()         ← loop.py 每 60s 检查一次（受 t
 ```
 
 字段拿不到时为 `null`，结构始终完整（不省略 key）。
-`judge_input_prompt` / `judge_output_raw` 来自 `sensor_judge._audit_prompt` /
-`_audit_raw_response`，是排障兼容字段，不是 prompt 输入。保留到 sensor 审计契约
-另立退出版本；当前不删、不指定发布日期。`pipeline_send_prompt` /
-`pipeline_send_reply` / `action_packet` / `cooldown_remaining_seconds` 在直发删除后
-恒为 `null`，键仍保留以免拆审计契约。
+`judge_input_prompt` / `judge_output_raw` 是 sensor 审计快照的正式排障字段，
+由 `sensor_judge.judge()` 直接写入，不是 prompt 输入。内部 `_audit_*` 别名已删。
+`pipeline_send_prompt` / `pipeline_send_reply` / `action_packet` /
+`cooldown_remaining_seconds` 在直发删除后恒为 `null`，键仍保留以免拆审计契约。
 
 ```
 curl -H "Authorization: Bearer <token>" \

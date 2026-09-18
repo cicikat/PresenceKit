@@ -52,9 +52,8 @@ async function _loadStatusRuntime() {
 
 async function _loadStatusModel() {
   const d = await api('GET', '/model-presets');
-  const summary = {};
   const profile = d.routing_profiles?.[d.active_routing] || {};
-  const chatPreset = profile.chat || d.active_chat_preset || summary.llm_model || '—';
+  const chatPreset = profile.chat || d.active_chat_preset || '—';
   _statusSet('s-model-current', chatPreset);
   _statusSet('s-model-routing', d.active_routing || 'default');
   _statusSet('s-model-source', t('status.model.source_value', '来源：模型路由 / 当前 chat preset'));

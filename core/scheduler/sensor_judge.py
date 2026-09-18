@@ -143,9 +143,9 @@ async def judge(event: dict) -> dict:
     """
     输入：sensor_events.tick() 的单个事件 dict
     输出：{"score": int, "reason": str, "intent_tier": str,
-           "_audit_prompt": str|None, "_audit_raw_response": str|None}
+           "judge_input_prompt": str|None, "judge_output_raw": str|None}
 
-    _audit_* 字段仅供审计用，下游业务逻辑不读。
+    judge_input_prompt / judge_output_raw 是排障观测字段，下游业务逻辑不读。
     异常：任何情况都返回合法 dict，不抛异常，失败时 intent_tier="drop"。
     """
     event_type = event.get("type", "UNKNOWN")
@@ -190,7 +190,7 @@ async def judge(event: dict) -> dict:
         started = time.monotonic()
         if not _breaker_permits(breaker_key, started):
             logger.info("[sensor_judge] circuit open preset=%s", mc.name)
-            return {**dict(_FAILURE), "_audit_prompt": audit_prompt, "_audit_raw_response": None}
+            return {**dict(_FAILURE), "judge_input_prompt": audit_prompt, "judge_output_raw": None}
         from core.llm_protocol import create as create_protocol_response
         response = await asyncio.wait_for(create_protocol_response(
             mc, messages, tools=None, tool_choice=None,
@@ -208,7 +208,7 @@ async def judge(event: dict) -> dict:
         except Exception:
             pass
         logger.warning("[sensor_judge] LLM 调用失败 event=%s category=%s", event_type, category)
-        return {**dict(_FAILURE), "_audit_prompt": audit_prompt, "_audit_raw_response": None}
+        return {**dict(_FAILURE), "judge_input_prompt": audit_prompt, "judge_output_raw": None}
 
     # 解析 JSON（容错 markdown 代码块包裹）
     try:
@@ -222,18 +222,18 @@ async def judge(event: dict) -> dict:
             append(caller="sensor_judge", purpose="sensor_judge", provider=mc.provider_kind, model=mc.model, duration_ms=int((time.monotonic() - started) * 1000), ok=False, protocol=mc.api_protocol, error_category="response_format")
         except Exception:
             pass
-        return {**dict(_FAILURE), "_audit_prompt": audit_prompt, "_audit_raw_response": raw}
+        return {**dict(_FAILURE), "judge_input_prompt": audit_prompt, "judge_output_raw": raw}
 
     score = data.get("score")
     if not isinstance(score, int) or not (0 <= score <= 100):
         logger.warning(
             f"[sensor_judge] score 非法 event={event_type}: score={score!r}"
         )
-        return {**dict(_FAILURE), "_audit_prompt": audit_prompt, "_audit_raw_response": raw}
+        return {**dict(_FAILURE), "judge_input_prompt": audit_prompt, "judge_output_raw": raw}
     return {
         "score":                score,
         "reason":               str(data.get("reason", "")),
         "intent_tier":          _score_to_tier(score),
-        "_audit_prompt":        audit_prompt,
-        "_audit_raw_response":  raw,
+        "judge_input_prompt":   audit_prompt,
+        "judge_output_raw":     raw,
     }

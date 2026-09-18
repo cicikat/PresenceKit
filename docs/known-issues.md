@@ -5,6 +5,7 @@
 `current`：ARCHITECTURE / agent-runtime 已按实现改 current/roadmap。Dream Stage 是
 sandbox-mode 已实现，不是全局 fail-closed。`self_management.enabled=false` 只关 overlay。
 `core/paths.py` 与预留 `GET /spend/mandates` 读面已删；历史 `mandates.jsonl` 不由代码清掉。
+`GET /dream/state` 不再双发 `yexuan_tension`；扁平 `llm:` 合成已退出。
 `open` / 未授权删除：无。G4 传感死分支、J2 三个 shim
 （`record_rejections`、period shim、`context.max_turns` 读 fallback）与
 tuple `execute()` wrapper 已删。
@@ -17,6 +18,9 @@ tuple `execute()` wrapper 已删。
 | tuple `execute()` wrapper | 生产与测试均走 `execute_structured()` / `ToolExecutionOutcome` |
 | `core/paths.py` experimental namespace | 路径权威仍是 `get_paths()` / `DataPaths` |
 | `GET /spend/mandates` reserved reader | `/spend/ledger`、`/spend/budget`、`POST /spend/check` 保留；历史 jsonl 不由代码清掉 |
+| `GET /dream/state` `yexuan_tension` alias | 协议字段仅 `char_tension`；内部 plumbing 未改 |
+| sensor `_audit_*` judge aliases | 快照正式字段仍是 `judge_input_prompt` / `judge_output_raw` |
+| flat `llm:` synth | 缺 `model_presets` fail-loud；残留 `llm:` 不参与路由 |
 
 ## Memory Event 退场阈值（2026-09-18）
 

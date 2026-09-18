@@ -217,8 +217,8 @@ async def handle_tick() -> None:
         best_tier  = best_result["intent_tier"]
 
         snapshot["picked_event"]       = _event_summary(best_event)
-        snapshot["judge_input_prompt"] = best_result.get("_audit_prompt")
-        snapshot["judge_output_raw"]   = best_result.get("_audit_raw_response")
+        snapshot["judge_input_prompt"] = best_result.get("judge_input_prompt")
+        snapshot["judge_output_raw"]   = best_result.get("judge_output_raw")
         snapshot["judge_score"]        = best_score
         snapshot["judge_reason"]       = best_result.get("reason")
         snapshot["tier"]               = best_tier

@@ -277,7 +277,20 @@ def _channels_row() -> dict[str, Any]:
 def _model_routing_row(cfg: dict[str, Any], char_id: str) -> dict[str, Any]:
     from core.model_registry import _get_preset_config, resolve_routing_info
 
-    model_cfg = _get_preset_config()
+    model_cfg = _safe_call(_get_preset_config, None)
+    if not model_cfg:
+        return _row(
+            feature_id="model_routing",
+            default="default",
+            configured=None,
+            effective=None,
+            source="config",
+            status="unavailable",
+            reason="no_model_presets",
+            consumer="core.model_registry.resolve_routing_info",
+            edit_page="model-routing",
+            details={"resolved_chat_preset": "", "character_binding": None},
+        )
     configured = model_cfg.get("active_routing", "default")
     info = _safe_call(lambda: resolve_routing_info(char_id), {})
     effective = info.get("effective_profile") or configured

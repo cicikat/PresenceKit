@@ -2,8 +2,8 @@
 # +注释被写回剥离属正常现象，不是文件损坏；字段含义请查本文件（config.example.yaml）。
 # 两文件键集合由 scripts/gen_config_example.py 保持同步，改动配置项时记得重跑该脚本核对。
 
-# ── 多模型 Preset 系统（推荐，见 docs/model-presets.md）──────────────────────
-# 若不配此块，系统自动从下方 llm: 块合成等价行为（向后兼容）。
+# ── 多模型 Preset 系统（必填，见 docs/model-presets.md）──────────────────────
+# 扁平 llm: 合成已退出；缺少本块时路由 fail-loud，请按此结构配置。
 model_presets:
   active_routing: default          # 当前生效的路由方案名
   default_preset: deepseek-default # 未映射 / 新建 profile 未填的 category 先落到它，再回退 chat → 第一个 preset
@@ -97,18 +97,6 @@ model_presets:
       monologue:      deepseek-default
       rpg_kp:         deepseek-default
 
-# ── Legacy 扁平 llm: 块（向后兼容，无 model_presets 时生效）────────────────
-llm:
-  provider: deepseek
-  api_key: YOUR_DEEPSEEK_API_KEY
-  model: deepseek-chat
-  base_url: https://api.deepseek.com
-  tool_call_mode: function_calling
-  temperature: 1
-  top_p: 0.9
-  max_tokens: 4000
-  frequency_penalty: 0.3
-  presence_penalty: 0.4
 # High-sensitivity troubleshooting only.  When enabled, stores the semantic LLM
 # request (messages, tools and generation params) for admin inspection.  Prompt
 # content is retained, but credential-looking fields and image data URLs are

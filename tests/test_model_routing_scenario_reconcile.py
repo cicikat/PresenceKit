@@ -48,9 +48,7 @@ def test_character_profile_wins_and_legacy_synth_includes_category(monkeypatch):
     }))
     monkeypatch.setattr(registry, "_char_model_routing", lambda _char_id: "default")
     assert registry._resolve_preset_name("scenario_reconcile", char_id="character-a") == "reconcile-preset"
-
-    legacy = registry._synth_legacy_presets({"llm": {"model": "legacy-model"}})
-    assert legacy["routing_profiles"]["default"]["scenario_reconcile"] == "legacy"
+    assert not hasattr(registry, "_synth_legacy_presets")
 
 
 def test_routing_info_exposes_effective_reconciler_preset(monkeypatch):

@@ -866,7 +866,6 @@ async function loadModelRouting() {
   try {
     const data = await api('GET', '/model-presets');
     _mrData = data;
-    document.getElementById('mr-legacy-banner').style.display = data.is_legacy_synth ? '' : 'none';
 
     const sel = document.getElementById('mr-active-routing-select');
     sel.innerHTML = Object.keys(data.routing_profiles || {}).map(name =>
@@ -890,11 +889,6 @@ async function loadModelRouting() {
     document.getElementById('mr-presets-body').innerHTML = `<div class="empty">加载失败: ${e.message}</div>`;
     document.getElementById('mr-profiles-body').innerHTML = '';
   }
-}
-
-async function bootstrapModelPresets() {
-  try { await api('POST', '/model-presets/bootstrap'); toast('模型 preset 已初始化', 'ok'); loadModelRouting(); }
-  catch (e) { toast('初始化失败: ' + e.message, 'err'); }
 }
 
 async function switchActiveRouting() {

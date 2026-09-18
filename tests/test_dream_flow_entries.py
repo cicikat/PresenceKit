@@ -7,7 +7,7 @@ Covers:
   ③ append_status_shift: canned summaries per event
   ④ FIFO cap at 10, keeps newest entries
   ⑤ clear_flow_entries resets to []
-  ⑥ GET /dream/state exposes flow_entries (+ char_tension alongside legacy yexuan_tension)
+  ⑥ GET /dream/state exposes flow_entries + char_tension
   ⑦ GET /dream/state with no active dream → flow_entries == []
 """
 
@@ -168,7 +168,7 @@ def test_state_get_exposes_flow_entries_and_char_tension(sandbox):
         {"ts": "2026-01-01T00:00:00+00:00", "kind": "status_shift", "summary": "梦境正在成形"},
     ]
     assert result["char_tension"] == pytest.approx(0.37)
-    assert result["yexuan_tension"] == pytest.approx(0.37)
+    assert "yexuan_tension" not in result
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

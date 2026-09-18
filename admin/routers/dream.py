@@ -758,8 +758,7 @@ async def dream_state_get(_auth=Depends(require_scopes("activity"))):
 
     body.{heat,sensitivity,tension} — user always sees own numbers (orthogonal to
       boundary_level, which controls the character's perception only).
-    char_tension (yexuan_tension deprecated alias) — the character's dream-local
-      emotional tension (0.0–1.0).
+    char_tension — the character's dream-local emotional tension (0.0–1.0).
     HUD fields: emotion_label, scene_label, emotion_tension, boundary_intrusion,
       intimacy_tendency, obsession, dream_stability, dream_depth,
       physiological_arousal — all int 0–100.
@@ -827,7 +826,6 @@ async def dream_state_get(_auth=Depends(require_scopes("activity"))):
             "tension": round(body.tension, 2),
         },
         "char_tension": float(state.get("emotional_tension", 0.0)),
-        "yexuan_tension": float(state.get("emotional_tension", 0.0)),  # deprecated alias, see Brief 25 §3 P2
         "scene_state": state.get("scene_state"),
         "symbolic_anchors": list(state.get("symbolic_anchors") or []),
         "flow_entries": list(state.get("flow_entries") or []),

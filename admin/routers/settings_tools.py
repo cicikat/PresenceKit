@@ -241,7 +241,7 @@ async def update_tool_controls(body: ToolControlUpdate, auth=Depends(require_sco
     model_presets = full_cfg.get("model_presets", {}).get("presets")
     if body.model_bindings is not None:
         if not isinstance(model_presets, dict):
-            raise HTTPException(status_code=409, detail="当前为 legacy llm 配置；请先初始化 model_presets")
+            raise HTTPException(status_code=409, detail="当前配置缺少 model_presets 块；请先配置 model_presets")
         for model_name, tool_preset in body.model_bindings.items():
             if model_name not in model_presets:
                 raise HTTPException(status_code=422, detail=f"未知模型 preset: {model_name}")

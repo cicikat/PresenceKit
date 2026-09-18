@@ -1,6 +1,6 @@
 # 9.17 后端综合工单：角色隔离、固定会话与架构债收敛
 
-状态：A/B/C/E 已提交；D 自动化收尾完成、运行联调待执行；F 已提交；G/G4 已提交；H1/H2/H3/H4 已提交（含 tuple `execute()` wrapper 删除）；I 已提交（阈值 pending_approval，退场保持 open）；J/J2 已提交。日期：2026-09-17。
+状态：A/B/C/E 已提交；D 自动化收尾完成、运行联调待执行；F 已提交；G/G4 已提交；H1/H2/H3/H4 已提交（含 tuple `execute()` wrapper 删除）；I 已提交（阈值 pending_approval，退场保持 open）；J/J2/J4 已提交；J3 本单收口。日期：2026-09-17。
 用户已授权按本单施工。每张施工子单完成相关验证与差异检查后独立 commit，再开始下一张。
 勾选规则：完成一项且具备证据才勾一项；源码存在、自动测试通过、部署验收分别记账。每张施工子单完成相关验证与差异检查后独立 commit，再开始下一张。
 
@@ -113,7 +113,7 @@
 
 - [x] J1 已对照实现更新 ARCHITECTURE 与 agent-runtime current/roadmap。Dream Stage 为 Brief 100 v1 sandbox（非全局 fail-closed）。taxonomy / ARCHITECTURE 补 `agent_runtime/reality` 与 spend 预留读面。
 - [x] J2 已删除三个 shim：`event_tools` 改调 `record_filtered_query()` 后删 `record_rejections`；period 测试改走 `health_state` 后删 `user_profile.get_period_info`/`set_period_date`；确认 `memory.short_term_rounds` 已是 owner 后去掉 `context.max_turns` 读 fallback，`PUT` 仍只写 owner。联删仅保护 shim 的守卫/测试/文档。定向 49 + 9 passed；`config.example.yaml` 去掉残留 alias。独立提交。
-- [x] J3 已保留 Dream tension alias、sensor `_audit_*` raw fields、flat `llm:` 合成。兼容窗口写最低版本条件/弃用提示/退出版本，不指定发布日期。
+- [x] J3 已收口：`GET /dream/state` 不再双发 `yexuan_tension`（内部 plumbing 未改）；sensor judge 直接写 `judge_input_prompt` / `judge_output_raw`，去掉 `_audit_*` 内部别名，审计快照键保留；扁平 `llm:` 合成与 bootstrap 已删，缺 `model_presets` fail-loud。桌面/手机消费者回归 not-run。
 - [x] J4 已删 `core/paths.py` 与预留 `GET /spend/mandates` 读面（含 UI fetch、PathMeta、测试、文档声明）。`/spend/ledger`、`/spend/budget`、`POST /spend/check` 保留；历史 `mandates.jsonl` 不由代码清掉。
 - [x] J5 `self_management.enabled=false` 已明确为关 overlay、恢复 global 默认，不是关能力。已修控制面、feature-flags 文案与管理面展示；未改字段名。
 - [x] J6 定向回归 65 passed；普通 diff 与 `--ignore-cr-at-eol` 一致，文件 LF。管理面缓存 `?v=v1-1-0-compat-hygiene-1`。隔离 18080 核对 overlay 文案。独立提交。

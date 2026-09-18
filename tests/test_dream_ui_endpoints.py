@@ -5,7 +5,7 @@ tests/test_dream_ui_endpoints.py — Dream UI read/settings endpoint contract te
 Covers:
   ① GET /dream/state 纯只读：调用前后无文件写入、mood_state 未变、scheduler 未变
   ② GET /dream/state 无活动梦 → status=REALITY_CHAT，不报错
-  ③ GET /dream/state DREAM_ACTIVE → 返回 body{heat,sensitivity,tension} + yexuan_tension
+  ③ GET /dream/state DREAM_ACTIVE → 返回 body{heat,sensitivity,tension} + char_tension
   ④ GET /dream/settings 返回全字段（含所有 _DEFAULTS）
   ⑤ PATCH /dream/settings 写入并回读一致
   ⑥ PATCH 非法枚举值被拒（422）、不落盘
@@ -118,16 +118,17 @@ def test_state_get_no_dream_returns_reality_chat(sandbox):
     assert result["dream_id"] is None
     assert result["frozen_world"] is None
     assert result["lucid_mode"] is None
-    assert result["yexuan_tension"] == 0.0
+    assert result["char_tension"] == 0.0
+    assert "yexuan_tension" not in result
     assert result["body"] == {"heat": 0.0, "sensitivity": 0.0, "tension": 0.0}
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# ③ GET /dream/state DREAM_ACTIVE → correct body + yexuan_tension
+# ③ GET /dream/state DREAM_ACTIVE → correct body + char_tension
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def test_state_get_dream_active_returns_projected_body(sandbox):
-    """DREAM_ACTIVE state → projected body{heat,sensitivity,tension} + yexuan_tension."""
+    """DREAM_ACTIVE state → projected body{heat,sensitivity,tension} + char_tension."""
     from core.dream.dream_state import write_state, DreamStatus
     from admin.routers.dream import dream_state_get
 
@@ -152,7 +153,8 @@ def test_state_get_dream_active_returns_projected_body(sandbox):
     assert result["dream_id"] == f"dream_{uid}_proj"
     assert result["frozen_world"] == "vampire"
     assert result["lucid_mode"] == "non_lucid"
-    assert result["yexuan_tension"] == pytest.approx(0.42)
+    assert result["char_tension"] == pytest.approx(0.42)
+    assert "yexuan_tension" not in result
     # body projects only heat/sensitivity/tension, not caps
     assert set(result["body"].keys()) == {"heat", "sensitivity", "tension"}
     assert result["body"]["heat"] == pytest.approx(30.0)
@@ -224,7 +226,8 @@ def test_state_get_body_zero_when_no_body_state(sandbox):
         result = asyncio.run(dream_state_get())
 
     assert result["body"] == {"heat": 0.0, "sensitivity": 0.0, "tension": 0.0}
-    assert result["yexuan_tension"] == 0.0
+    assert result["char_tension"] == 0.0
+    assert "yexuan_tension" not in result
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

@@ -130,13 +130,9 @@ YEXUAN_AI_ALLOWLIST: frozenset[str] = frozenset({
 })
 
 YEXUAN_TENSION_ALLOWLIST: frozenset[str] = frozenset({
-    # GET /dream/state dual-emits char_tension + yexuan_tension (deprecated alias)
-    # for >=1 version so un-upgraded clients keep working. Expiry: once client
-    # Brief 15 §G confirms all clients read char_tension, drop the alias key here.
-    "admin/routers/dream.py",
     # Internal dream_pipeline<->body_projection plumbing dict key — not a protocol
     # field, but the literal is quoted so it matches the same regex; whitelisted
-    # rather than renamed (see plan: internal identifiers out of scope for P2).
+    # rather than renamed (see plan: protocol rename covers GET /dream/state only).
     "core/dream/body_projection.py",
     "core/dream/dream_pipeline.py",
     # Brief 100: Dream Stage's post-round tension coupling reads the same
@@ -184,7 +180,7 @@ def test_no_quoted_yexuan_tension_outside_allowlist():
     assert not violations, (
         "Found quoted 'yexuan_tension' string literal outside YEXUAN_TENSION_ALLOWLIST.\n"
         "The dream-state protocol field is 'char_tension' (Brief 25 §3 P2); "
-        "'yexuan_tension' is a deprecated dual-emit alias only.\n"
+        "'yexuan_tension' is an internal plumbing key only, not a GET /dream/state alias.\n"
         f"Violations: {violations}"
     )
 

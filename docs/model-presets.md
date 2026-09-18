@@ -130,12 +130,10 @@ RPG Dream uses the independent `rpg_kp` call category for neutral structured adj
 把"只能跑一个 DeepSeek"重构成"按任务分流的多模型 preset 系统"：
 - 主对话可以走 Claude / DS / 本地；轻量调用（probe / summary / detect_emotion）可以指向便宜模型。
 - 每个 preset 自带**生成参数默认适配**（provider 白名单过滤）和 **prompt 结构适配**（narrative / xml）。
-- **完全向后兼容**：现有 `config.yaml` 的扁平 `llm:` 块一字不改也能跑。
-  `core/model_registry.py::_synth_legacy_presets` 把 `llm:` 合成 chat_completions preset。
-  配置迁移：新安装写 `model_presets`；旧文件继续只读合成，管理面 `PUT /llm-params` 在
-  legacy 模式仍写回 `llm:`。弃用提示：新文档与 OpenAPI 以 `model_presets` 为权威。
-  退出版本：在确认无生产 `llm:`-only 配置、且管理面不再走 legacy 写回之后的下一个
-  后端版本再删合成器；当前不指定发布日期。
+- **`model_presets` 是唯一路由真值**：扁平 `llm:` 合成已退出。缺少 `model_presets`
+  块时 `_get_preset_config()` / `get_model_client()` fail-loud，管理面读写也 400。
+  现网 `config.yaml` 若仍残留 `llm:` 块，它不再参与路由；请按 `config.example.yaml`
+  配置 `model_presets`。
 
 ---
 
@@ -143,7 +141,7 @@ RPG Dream uses the independent `rpg_kp` call category for neutral structured adj
 
 | 文件 | 职责 |
 |---|---|
-| `core/model_registry.py` | ModelClient 构建 + 缓存、路由解析、参数合并+白名单、向后兼容合成 |
+| `core/model_registry.py` | ModelClient 构建 + 缓存、路由解析、参数合并+白名单；缺 `model_presets` fail-loud |
 | `core/llm_protocol.py` | Chat Completions / Responses / Anthropic Messages 请求转换、调用与统一结果归一化 |
 | `core/prompt_style.py` | prompt_style 转换钩子（narrative / xml） |
 | `core/llm_client.py` | 唯一 LLM 出口，调用 model_registry 路由，在 sanitize 前应用 prompt_style；可选记录高敏感调试快照 |
@@ -153,7 +151,7 @@ RPG Dream uses the independent `rpg_kp` call category for neutral structured adj
 
 ## 配置 schema
 
-新增顶层 `model_presets` 块。旧 `llm:` 与 `vision:` 块保留。
+新增顶层 `model_presets` 块。旧扁平 `llm:` 合成已退出；`vision:` 块仍独立。
 
 ### 请求快照调试（默认关闭）
 
@@ -448,10 +446,8 @@ preset 侧可选字段，供 `config.thinking.mode: auto` 判断该 preset 走 n
 
 ## 向后兼容
 
-如果 `config.yaml` **没有** `model_presets` 块，系统自动合成等价结构：
-- 识别旧 `llm:` 块的 `base_url` → 推断 `provider_kind`（含 `deepseek` → deepseek；含 `anthropic`/`claude` → anthropic_compat；127.0.0.1/localhost → local；其余 → openai）。
-- 合成 `legacy` preset，全部 category 路由到它。
-- 行为与原先完全一致。
+扁平 `llm:` 合成已退出。`config.yaml` 必须有 `model_presets` 块；缺失时路由和管理面
+fail-loud，不再静默合成 `legacy` preset。残留的顶层 `llm:` 键不参与路由。
 
 ---
 
@@ -480,7 +476,7 @@ preset 侧可选字段，供 `config.thinking.mode: auto` 判断该 preset 走 n
 | `GET /model-presets/routing-profiles` | 可选 profile 清单（名字 + 各 category→preset 映射摘要），角色绑定下拉框数据源 |
 | `POST /model-presets/presets/{name}/test` | 连通性测试：实际发一条 `max_tokens=1` 的请求，返回 `{ok, latency_ms, error?}`，不经缓存 |
 | `GET /llm-params` | 读取当前 chat preset 的生成参数 |
-| `PUT /llm-params` | 修改当前 chat preset 的生成参数并热重载（legacy 模式写回 llm: 块） |
+| `PUT /llm-params` | 修改当前 chat preset 的生成参数并热重载；无 `model_presets` 时 400 |
 | `GET /character/{char_id}/model-routing` | 读取角色卡 `model_routing` 声明 + 解析结果（`effective_profile`/`resolved_chat_preset`）（Brief 87 §1） |
 | `PATCH /character/{char_id}/model-routing` | 绑定/清除角色卡的 routing profile；`model_routing: null` 清除声明回落全局 `active_routing`；非法 profile 名 422（Brief 87 §1） |
 

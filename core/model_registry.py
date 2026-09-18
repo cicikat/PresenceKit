@@ -1,9 +1,9 @@
 """Model registry — multi-preset routing for LLM calls.
 
 Owns ModelClient construction, param merging, provider whitelist filtering,
-and backward compatibility synthesis from a legacy flat `llm:` config block.
+and routing from a required `model_presets` block.
 
-Phase 1: core logic (registry, param merge, routing, backward compat).
+Phase 1: core logic (registry, param merge, routing).
 Phase 2: prompt_style wiring is done in llm_client.
 """
 from __future__ import annotations
@@ -92,46 +92,6 @@ def _make_http_client(proxy_url: str | None, *, timeout_s: float = _DEFAULT_CALL
 
 
 # ---------------------------------------------------------------------------
-# Backward compatibility: synthesise preset structure from flat `llm:` block
-# ---------------------------------------------------------------------------
-
-def _kind_from_legacy(llm: dict) -> str:
-    """Infer provider_kind from base_url in a legacy llm config block."""
-    base_url = (llm.get("base_url") or "").lower()
-    if "deepseek" in base_url:
-        return "deepseek"
-    if "anthropic" in base_url or "claude" in base_url:
-        return "anthropic_compat"
-    if "127.0.0.1" in base_url or "localhost" in base_url:
-        return "local"
-    return "openai"
-
-
-def _synth_legacy_presets(cfg: dict) -> dict:
-    """Build a synthetic model_presets block from a flat `llm:` config."""
-    llm = cfg.get("llm", {})
-    _known_params = ("temperature", "top_p", "max_tokens", "frequency_penalty", "presence_penalty")
-    preset: dict[str, Any] = {
-        "provider_kind": _kind_from_legacy(llm),
-        "base_url": llm.get("base_url", ""),
-        "api_key": llm.get("api_key", ""),
-        "model": llm.get("model", ""),
-        "tool_call_mode": llm.get("tool_call_mode", "function_calling"),
-        "api_protocol": "chat_completions",
-        "params": {k: llm[k] for k in _known_params if k in llm},
-    }
-    _all_categories = ("chat", "intent", "probe", "summary", "detect_emotion", "consolidation", "perform", "sensor_judge", "ime_judge", "scenario_reconcile", "event_edge_proposer", "rpg_kp")
-    return {
-        "active_routing": "default",
-        "defaults": {},
-        "presets": {"legacy": preset},
-        "routing_profiles": {
-            "default": {cat: "legacy" for cat in _all_categories},
-        },
-    }
-
-
-# ---------------------------------------------------------------------------
 # Pure helpers (easy to unit-test)
 # ---------------------------------------------------------------------------
 
@@ -158,12 +118,15 @@ def _default_preset_name(mp: dict) -> str:
 
 
 def _get_preset_config() -> dict:
-    """Return the effective model_presets block (real or synthesised legacy)."""
+    """Return the configured model_presets block. Flat `llm:` synthesis is gone."""
     cfg = get_config()
     mp = cfg.get("model_presets")
-    if mp:
-        return mp
-    return _synth_legacy_presets(cfg)
+    if not mp:
+        raise ValueError(
+            "config.yaml 缺少 model_presets 块；扁平 llm: 合成已退出。"
+            "请按 config.example.yaml 配置 model_presets，或用管理面新增 preset。"
+        )
+    return mp
 
 
 def _active_char_model_routing() -> str | None:

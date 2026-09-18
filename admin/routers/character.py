@@ -465,7 +465,10 @@ async def get_character_model_routing(char_id: str, auth=Depends(require_scopes(
         raise HTTPException(status_code=404, detail=f"未知角色 id {char_id!r}")
 
     from core.model_registry import resolve_routing_info
-    return resolve_routing_info(char_id)
+    try:
+        return resolve_routing_info(char_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.patch("/character/{char_id}/model-routing", summary="绑定/清除角色卡的模型路由 profile")
@@ -490,7 +493,10 @@ async def set_character_model_routing(
 
     if body.model_routing is not None:
         from core.model_registry import _get_preset_config
-        profiles = _get_preset_config().get("routing_profiles", {})
+        try:
+            profiles = _get_preset_config().get("routing_profiles", {})
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         if body.model_routing not in profiles:
             raise HTTPException(
                 status_code=422,
