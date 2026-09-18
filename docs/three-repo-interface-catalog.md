@@ -10,8 +10,11 @@ reasoning 全部复用冻结 owner/char；无 header 仍是 legacy live active�
 不与 `msg_id`/`turn_id` 混用。WS start/canonical/segments 与 mobile envelope 透传关联字段。
 观测：`GET /observability/session-scope`（state.read，无正文/凭据）。provider fixture：
 `tests/protocol_fixtures/v1/session_scope.json`。
-`open`：桌面与手机消费者接入及真实重连/后台/撤权联调；固定 SHA matrix 保留上一轮快照，
-待三仓同时升级后再更新。手机 `seq` 仍是 owner 共享游标，不能按角色跳过后推进 ack。
+手机 chat/upload 失败气泡保留同一 `request_id`；手动重试、会话重绑与 completed
+receipt 回放都复用该 ID，不另 mint。`in_flight` / unknown-result / 超时标失败后由
+用户用原 ID 再试。桌面消费者接入及真实重连/后台/撤权联调仍 `open`；固定 SHA matrix
+保留上一轮快照，待三仓同时升级后再更新。手机 `seq` 仍是 owner 共享游标，不能按角色
+跳过后推进 ack。
 Dream settings 归属为 per-character：`GET/PATCH /dream/settings` 读写当前角色树，
 旧 uid-only 文件仅冻结历史默认角色可读。观测：`GET /observability/dream-settings`
 （state.read，无正文）。桌面/手机消费者无新设置 UI，相关场景回归 open。
