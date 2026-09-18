@@ -10,7 +10,14 @@ from core.autonomy.models import Disposition
 # surface. New entries require an explicit review here; a configurable
 # allowlist must never turn a reminder, memory edit, desktop action, or device
 # control into an unattended side effect.
-_SANDBOXED_WRITE_TOOLS = frozenset({"water_garden"})
+_SANDBOXED_WRITE_TOOLS = frozenset({
+    "water_garden",
+    "self_create",
+    "self_update",
+    "self_move",
+    "self_delete",
+    "self_restore",
+})
 
 DECISION_SOURCE_ALLOWLIST = "autonomy_allowlist"
 DECISION_SOURCE_INHERITANCE = "global_read_inheritance"

@@ -1837,6 +1837,8 @@ from core.tools.chat_artifacts import register_tools as _register_artifact_tools
 _register_artifact_tools(_TOOL_REGISTRY)
 from core.tools.drinking import register_tools as _register_drinking_tools
 _register_drinking_tools(_TOOL_REGISTRY)
+from core.tools.character_self import register_tools as _register_self_tools
+_register_self_tools(_TOOL_REGISTRY)
 
 
 _SIDE_EFFECT_TOOLS: frozenset[str] = frozenset({
@@ -1853,6 +1855,11 @@ _SIDE_EFFECT_TOOLS: frozenset[str] = frozenset({
     # 写状态的工具
     "add_reminder",
     "water_garden",
+    "self_create",
+    "self_update",
+    "self_move",
+    "self_delete",
+    "self_restore",
     "exit_yandere",
     "forget_episodic",
     "clear_midterm",
@@ -2610,6 +2617,8 @@ async def _execute_structured_impl(
             "fs_list", "fs_read",
             "workspace_list", "workspace_read", "workspace_create",
             "workspace_update", "workspace_delete", "workspace_undo", "process_run",
+            "self_list", "self_read", "self_create", "self_update",
+            "self_move", "self_delete", "self_restore",
         }:
             for key in ("user_id", "uid", "char_id", "owner", "realm"):
                 if key in tool_args:

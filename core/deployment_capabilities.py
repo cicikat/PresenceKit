@@ -116,6 +116,16 @@ def capability_projection(*, desktop_ws_online: bool = False, last_ack_at: float
             reason=("backend read remains available; local external paths stay denied"
                     if remote else "backend and local external read"),
         ))
+    for name in (
+        "self_list", "self_read", "self_create", "self_update",
+        "self_move", "self_delete", "self_restore",
+    ):
+        decisions.append(CapabilityDecision(
+            logical_name=name,
+            status="enabled",
+            reason=("server-local self bucket remains available"
+                    if remote else "character self file space"),
+        ))
     for name in sorted(REMOTE_CLIENT_ACTIONS):
         decisions.append(CapabilityDecision(
             logical_name=name,

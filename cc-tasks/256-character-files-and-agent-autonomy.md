@@ -1,6 +1,6 @@
 # 229 — 单角色文件、自有空间与 Agent 自主能力扩展
 
-日期：2026-09-18。状态：A 拟议合同已提交；B current；C–G 功能施工未开始；H 本轮不执行。
+日期：2026-09-18。状态：A 拟议合同已提交；B/C current；D–G 功能施工未开始；H 本轮不执行。
 
 本单历史权威见 [Agent Runtime](../docs/agent-runtime-architecture.md)。
 
@@ -68,12 +68,12 @@
 
 依赖 A/B；提供 `self_list/read/create/update/move/delete/restore`（名称施工时统一），不新增记账/音乐/待办专用系统。
 
-- [ ] C1 实现 scoped accessor、存储和通用相对路径工具；支持自定目录与文件名，首次使用创建空间。默认授予本角色 self 操作，管理员可撤销；不依赖 danger 模式才能写自己的笔记。
-- [ ] C2 写入用锁、原子替换、expected_revision 冲突检查；移动同时校验源/目标，目标覆盖明示。删除进入有界回收站，支持按 revision 恢复；self 内可自主删，不强加每次用户确认。不可逆清空依单独策略。
-- [ ] C3 校验目录每层与临时文件，处理 links/reparse/hardlinks 和竞态；禁止 self 指向系统文件、其他角色或 workspace；审计/版本库不能经 self 工具改写。OS 权限不足明确报错。
-- [ ] C4 自主创建可执行文本不等于获准执行；process 必须再次走 Runtime capability。所有操作附 principal、origin、causation、revision 与结果元数据；状态/历史能在后端只读观测。
-- [ ] C5 注册 examples/keywords/effect 和角色 schema；聊天与 autonomy 的实际 discovery 都能发现并调用。配额超限不自动删老内容；历史清理保留恢复策略。
-- [ ] C6 验证增删改移恢复、重启持久化、多角色/realm 隔离、冲突、损坏状态、磁盘失败、撤权和逃逸；检查脱敏链，独立提交。
+- [x] C1 实现 scoped accessor、存储和通用相对路径工具；支持自定目录与文件名，首次使用创建空间。默认授予本角色 self 操作，管理员可撤销；不依赖 danger 模式才能写自己的笔记。
+- [x] C2 写入用锁、原子替换、expected_revision 冲突检查；移动同时校验源/目标，目标覆盖明示。删除进入有界回收站，支持按 revision 恢复；self 内可自主删，不强加每次用户确认。不可逆清空依单独策略。
+- [x] C3 校验目录每层与临时文件，处理 links/reparse/hardlinks 和竞态；禁止 self 指向系统文件、其他角色或 workspace；审计/版本库不能经 self 工具改写。OS 权限不足明确报错。
+- [x] C4 自主创建可执行文本不等于获准执行；process 必须再次走 Runtime capability。所有操作附 principal、origin、causation、revision 与结果元数据；状态/历史能在后端只读观测。
+- [x] C5 注册 examples/keywords/effect 和角色 schema；聊天与 autonomy 的实际 discovery 都能发现并调用。配额超限不自动删老内容；历史清理保留恢复策略。
+- [x] C6 验证增删改移恢复、重启持久化、多角色/realm 隔离、冲突、损坏状态、磁盘失败、撤权和逃逸；检查脱敏链，独立提交。
 
 ## D — self-authored AGENT.md 上下文与旧笔记迁移
 
@@ -138,7 +138,7 @@
 |---|---|---|---|
 | A | 本提交（SHA 见 git log） | 对照 `_TOOL_REGISTRY` / autonomy policy / reminder+fs+toybox 源码；链接与 LF 换行核对 | 纯文档拟议合同，无代码行为、无生产数据迁移；运行验收不适用 |
 | B | 本提交（SHA 见 git log） | `.venv` Python 3.12：`test_sensitive_redaction` / `test_fs_browse` / `test_file_path_hints` / `test_brief171_owner_turn_diary` / workspace / chat_artifacts / process_runner / admin i18n+fragment 相关 97 通过。同文件 `test_qixi_uses_lunar_conversion_and_adjacent_dates_do_not_match` 失败，与本单无关（该文件本单只改 fragment 缓存版本）。换行 `diff --stat` 与 `--ignore-cr-at-eol --stat` 一致，`diff --check` 无警告。 | 模型出口：合成秘密不出现在 fs/workspace/process/artifact 结果；TestClient 对 `/observability/backend-read` 无 token 401、有 token 200 且仅元数据。管理面 8080 静态页已含 call-records 选项与 `v1-256-backend-read-1` 缓存；该进程未重载，live GET 该端点 404。浏览器硬刷新交互未完成。未改生产数据。 |
-| C | 待施工 | 待执行 | self 生命周期 |
+| C | 本提交（SHA 见 git log） | `.venv` Python 3.12：`tests/test_character_self.py` 21 通过。同批 `test_data_registry` / admin i18n+fragment / `test_fs_browse` / autonomy write sandbox 相关合计 301 通过。`test_brief195_mcp_autonomy_signal_delivery.py::test_qixi_uses_lunar_conversion_and_adjacent_dates_do_not_match` 失败，与本单无关（该文件本单只改 fragment 缓存版本）。换行 `diff --stat` 与 `--ignore-cr-at-eol --stat` 一致，`diff --check` 无警告；新文件 LF。 | self 生命周期：CRUD/move/restore、隔离、逃逸（含 UNC/ADS/设备名）、配额不删现文件、损坏 revision 状态、磁盘失败后 CAS 可重试、撤权、脱敏、discovery/autonomy/非 danger、principal mismatch、观测元数据、remote 保持 self。管理面静态已含 call-records 选项与 `v1-256-character-self-1` 缓存。浏览器硬刷新交互未完成。未改生产数据。未开始 D–G，未执行 H。 |
 | D | 待施工 | 待执行 | prompt 与迁移恢复 |
 | E | 待施工 | 待执行 | 提醒竞态与交付 |
 | F | 待施工 | 待执行 | 真实 coding worker |

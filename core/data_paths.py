@@ -452,6 +452,20 @@ class DataPaths:
         assert_production_identity_allowed(user_id, mode=self.mode)
         return self._p("runtime", "self_management", safe_user_id(char_id), safe_user_id(user_id), "audit.jsonl")
 
+    def character_self_root(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
+        """Reality owner+char user-content bucket for the character's self files."""
+        assert_production_identity_allowed(user_id, mode=self.mode)
+        return self._p("runtime", "self", safe_user_id(char_id), safe_user_id(user_id))
+
+    def character_self_meta_root(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
+        """System revision/trash/quota for one self bucket; not writable via self tools."""
+        assert_production_identity_allowed(user_id, mode=self.mode)
+        return self._p("runtime", "self_meta", safe_user_id(char_id), safe_user_id(user_id))
+
+    def character_self_audit(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
+        """Append-only self-file operation audit; never prompt-loaded."""
+        return self.character_self_meta_root(user_id, char_id=char_id) / "audit.jsonl"
+
     def wake_delivery_ledger(self, user_id: str | int) -> Path:
         assert_production_identity_allowed(user_id, mode=self.mode)
         return self._p("wake_delivery", f"{safe_user_id(user_id)}.json")

@@ -710,15 +710,16 @@ question.
 ## Work order 256 / character self, backend read, Agent task
 
 Backend-only. No desktop/mobile settings, WS, or protocol fields are authorized by ticket A.
-Ticket B landed backend-read observability in the same change. Self and Agent-task endpoints
-remain proposed until C–G. Details:
+Ticket B landed backend-read observability. Ticket C landed self space tools and
+`GET /observability/character-self`. Agent-task endpoints remain proposed until F/G. Details:
 [character-files-and-agent-autonomy.md](character-files-and-agent-autonomy.md).
 
 | Interface / path | Scope / consumers | Status |
 |---|---|---|
 | `GET /observability/backend-read` | Admin `state.read`; configured/effective, redaction version/counts, no file body | `current`, admin-only |
-| `GET /observability/character-self` | Admin `state.read`; quota remaining, grant revision, file counts, no private notes | `proposed` |
-| Character tools `self_*`, reminder list/update/cancel, `start_agent_task` | Reality tool loop / autonomy after explicit admission | `proposed`; not in `_TOOL_REGISTRY` |
+| `GET /observability/character-self` | Admin `state.read`; quota remaining, grant revision, file counts, no private notes | `current`, admin-only |
+| Character tools `self_list/read/create/update/move/delete/restore` | Reality tool loop / autonomy (sandboxed writes; default grant, admin may revoke) | `current`; category `info` |
+| reminder list/update/cancel, `start_agent_task` | Reality tool loop / autonomy after explicit admission | `proposed`; not in `_TOOL_REGISTRY` |
 | Desktop/mobile confirmation UI for Agent-task grants | Reuse existing authenticated channels; missing UI waits on admin approval | `proposed`; do not claim client support |
 
 ## Brief 239 / Browser worker confirmation hardening

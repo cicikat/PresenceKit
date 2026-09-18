@@ -12,7 +12,7 @@
 - [AGENTS.md](../AGENTS.md)：任务入口、强制规则与关键文件速查。
 - [ARCHITECTURE.md](../ARCHITECTURE.md)：系统全貌与主 pipeline。
 - [agent-runtime-architecture.md](agent-runtime-architecture.md)：Brief 229 Agent Runtime 总体分层、同一角色 foreground 主链 / durable 副链语义、身份/realm 边界与现有组件迁移映射（后续实现目标，不代表当前能力）。
-- [character-files-and-agent-autonomy.md](character-files-and-agent-autonomy.md)：工单 256 拟议合同（backend/external 只读、self 空间、提醒生命周期、聊天发起 Agent task）。A 单已冻结；B–G 落地前不是 current。
+- [character-files-and-agent-autonomy.md](character-files-and-agent-autonomy.md)：工单 256 合同（backend/external 只读、self 空间、提醒生命周期、聊天发起 Agent task）。A 冻结；B/C current；D–G 落地前不是 current。
 - [DESIGN.md](../DESIGN.md)：设计意图、准入标准与禁止行为。
 - [api-reference.md](api-reference.md)：后端 HTTP/WS 端点与调用方。
 - [three-repo-interface-catalog.md](three-repo-interface-catalog.md)：三仓 HTTP、WS、Tauri IPC、Android channel、relay、设置/观测闭环和当前缺口总账。

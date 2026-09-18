@@ -281,6 +281,20 @@ async def backend_read_observability(_auth=Depends(require_scopes("state.read"))
     from core.tools.fs_browse import observability_snapshot
     return observability_snapshot()
 
+
+@router.get(
+    "/observability/character-self",
+    summary="读取角色 self 空间配额、grant 与最近操作元数据（不含正文）",
+)
+async def character_self_observability(
+    uid: str = Query("", max_length=128),
+    char_id: str = Query("", max_length=128),
+    _auth=Depends(require_scopes("state.read")),
+):
+    from core.character_self import observability_snapshot
+    return observability_snapshot(uid=uid or None, char_id=char_id or None)
+
+
 @router.get(
     "/observability/agent-runtime-work-sessions",
     summary="读取同一角色 Agent Work Session（durable 副链）脱敏生命周期观测",

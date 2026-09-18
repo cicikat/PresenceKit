@@ -1,4 +1,4 @@
-# 功能控制面事实清单（最后核对：2026-09-18 256 B backend-read）
+# 功能控制面事实清单（最后核对：2026-09-18 256 C character-self）
 
 > 本文是后端功能开关、effective state、权限和观测入口的权威文档。跨仓调用方只记录
 > 自己的设置归属与接入差异，完整映射请查 [三仓文档总索引](three-repo-doc-index.md) 和
@@ -411,7 +411,10 @@ new key or legacy `enabled`. `allow_roots` are discovery hints, not the sole adm
 ordinary external files. Whole `data/` deny and substring `deny_names` are retired for fs
 reads. `GET /observability/backend-read` (`state.read`) reports configured/effective,
 blocking reasons, redaction version and counts; no file body, secret, or full path.
-Self quotas/grants and Agent-task observation remain proposed (C–G).
+Self space is C current: default grant, admin revoke, quotas in `self_access`,
+tools `self_*` in category `info`, observability `GET /observability/character-self`
+(`state.read`) with remaining quota, grant revision, file counts and recent op
+metadata; no private notes. Agent-task observation remains proposed (F–G).
 `workspace_access` and process/browser capabilities are unchanged except that their
 model-facing reads/outputs reuse the same redaction service.
 

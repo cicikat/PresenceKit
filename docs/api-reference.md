@@ -65,6 +65,8 @@ scope；只读端点通常允许对应的 read scope。
 | GET/PUT/POST | `/tts-config`、`/tts-config/test` | admin | TTS provider 安全配置与已就绪 provider 的试听 |
 | GET/POST/PATCH/DELETE | `/auth/*` | auth | Token 管理页。`GET /auth/whoami` 回 `label`/`scopes` 与 `capabilities.session_scope=v1` |
 | GET | `/observability/session-scope` | `state.read` | 固定会话与 request receipt 的脱敏元数据、TTL、拒绝原因 |
+| GET | `/observability/backend-read` | `state.read` | backend/external 只读与脱敏 effective 状态；不含正文、秘密或完整路径 |
+| GET | `/observability/character-self` | `state.read` | 角色 self 空间配额余量、grant revision、文件计数与最近操作元数据；不含私有正文 |
 | GET/POST/PATCH/DELETE | `/group/*` | group | Stage 群聊管理 |
 | GET/PUT/POST | `/settings/agent-runtime-browser`、`/settings/agent-runtime-browser/tasks*` | admin | 后端唯一浏览器 allowlist、worker 和任务控制面；任务 receipt/观测仅返回脱敏 metadata |
 

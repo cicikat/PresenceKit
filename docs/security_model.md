@@ -89,10 +89,10 @@ Companion receipt/session 文件只保存 caller、opaque ID、digest、状态�
 玩具文件工具只接受 `diary` / `wishlist` / `doodle` 三个枚举 key，不接受 LLM 提供的路径。
 目标统一解析到 `get_paths().very_formal_project_dir()`，写入前会校验目标文件、原子写临时文件
 和玩具箱目录本身均未通过软链或 `..` 越过边界。该工具属于 `desktop` 类，仅 danger 模式可用。
-工单 256 拟议把这套共享 toybox 迁到 Reality `owner+char` 的 self 桶，默认授予本角色读写、
-不依赖 danger 模式；workspace 写权限不随 self 放开。合同见
-[character-files-and-agent-autonomy.md](character-files-and-agent-autonomy.md)，落地前以上
-仍是 current。
+工单 256 C 已落地 Reality `owner+char` 的 self 桶（`self_list/read/create/update/move/delete/restore`），
+默认授予本角色读写、不依赖 danger 模式；管理员可撤。workspace 写权限不随 self 放开。
+旧 toybox 三枚举入口仍 current，迁移在 D。合同见
+[character-files-and-agent-autonomy.md](character-files-and-agent-autonomy.md)。
 
 ### 上传和媒体限制
 
@@ -201,8 +201,8 @@ PresenceKit-desktop 已完成 Tauri Rust native bridge header 迁移；SEC-WS-1 
 但保留 owner/char/realm 隔离。统一脱敏（`core.sensitive_redaction`）先于截断、分页、模型与
 可读缓存；失败返回 `sensitive_redaction_failed`，不得退回原文。高风险凭据库按类型/内容拒绝，
 禁止 `token` 子串误杀源文件。模型不能指定 owner/char/realm 或自签授权。UNC、ADS、设备路径
-和 reparse 不是普通本机文件。观测 `GET /observability/backend-read` 只含元数据。self 写工具
-与 Agent task 仍属 C–G，尚未 current。
+和 reparse 不是普通本机文件。观测 `GET /observability/backend-read` 只含元数据。
+self 写工具与 `GET /observability/character-self` 属 256 C current。Agent task 仍属 F/G。
 
 ### 导入/社区包体系未成型
 

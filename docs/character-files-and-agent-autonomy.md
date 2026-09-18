@@ -1,6 +1,6 @@
 # 单角色文件、自有空间与 Agent 自主能力（拟议合同）
 
-状态：**B current**；C–G 仍拟议。工单 [256](../cc-tasks/256-character-files-and-agent-autonomy.md) A 单冻结合同，B 落地 backend/external 只读与统一脱敏。
+状态：**C current**（self 空间与通用文件工具已落地）；D–G 仍拟议。工单 [256](../cc-tasks/256-character-files-and-agent-autonomy.md) A 单冻结合同，B 落地 backend/external 只读与统一脱敏。
 日期：2026-09-18。基线 SHA：`b1ebe0d`（工单源码表对照 `e35d0ec`，差异见 §0）。
 
 权限限制能做什么，不规定角色应该追求什么。仍是同一角色的聊天主链与持久工作副链，不引入第二个人格。
@@ -123,11 +123,11 @@
 | `write_artifact` / `read_artifact` / `list_artifacts` | artifacts | write/read | 无 | uid+char | `chat_artifacts` | 非 workspace | `/observability/chat-artifacts` |
 | 动态 `mcp__*` | mcp | 按 local policy | 按 policy | MCP session | 外部 | 未知结果 fail-closed | MCP 设置 |
 
-**本单拟议新增（未落地）：** `self_list/read/create/update/move/delete/restore`；reminder `list/get/update/cancel/restore`；`start_agent_task` / `get_agent_task` / `cancel_agent_task`。名称施工时统一，上表为合同名。
+**C current：** `self_list` / `self_read` / `self_create` / `self_update` / `self_move` / `self_delete` / `self_restore`（category `info`，写工具默认 grant、不经 danger 闸，autonomy 沙盒白名单含 self 写）。**仍拟议：** reminder `list/get/update/cancel/restore`；`start_agent_task` / `get_agent_task` / `cancel_agent_task`。
 
 ### 2.3 Autonomy 可用集合
 
-`core.autonomy.policy.tool_eligibility()`：危险/需确认工具一律不准入。write 仅沙盒白名单 **`water_garden`**。显式 autonomy allowlist 或只读 MCP `global_read_inheritance` 才能进入 schema。本单拟议：backend 读、self CRUD、发起 Agent task 进入 autonomy **须单独准入评审**，不得因为聊天 Path C 可见就自动无人值守写 workspace/process。self 默认可整理自己的笔记；workspace 写与 process 仍要 grant/确认。
+`core.autonomy.policy.tool_eligibility()`：危险/需确认工具一律不准入。write 沙盒白名单 **`water_garden` 与 self 写工具**（`self_create/update/move/delete/restore`）。显式 autonomy allowlist 或只读 MCP `global_read_inheritance` 才能进入 schema。backend 读已随 B 进入聊天/autonomy 发现面；发起 Agent task 进入 autonomy **须单独准入评审**（F），不得因为聊天 Path C 可见就自动无人值守写 workspace/process。self 默认可整理自己的笔记；workspace 写与 process 仍要 grant/确认。
 
 ### 2.4 post_process writers（非角色工具）
 
@@ -171,7 +171,7 @@ data/runtime/self_meta/{char_id}/{uid}/      # 系统维护，self 工具不可�
   revisions/  trash/  audit.jsonl  quota.json
 ```
 
-| accessor（拟议名） | durability | domain | scope | git |
+| accessor（C current） | durability | domain | scope | git |
 |---|---|---|---|---|
 | `character_self_root(uid, char_id=)` | canonical | reality | per_char_user | ignore |
 | `character_self_meta_root(uid, char_id=)` | runtime | reality | per_char_user | ignore |
@@ -227,10 +227,10 @@ workspace/process 限额延续现状（单文件 5 MiB、总量 50 MiB、并发 
 | 拟议端点 | 内容 |
 |---|---|
 | `GET /observability/backend-read` | **current**：configured/effective、关闭原因、脱敏版本与计数 |
-| `GET /observability/character-self` | 配额余量、grant revision、文件计数、最近操作元数据（C/G） |
+| `GET /observability/character-self` | **C current**：配额余量、grant revision、文件计数、最近操作元数据；不含私有正文 |
 | 复用 `GET /observability/agent-runtime-tasks` | Agent task 生命周期；角色查询走工具，不把 admin DELETE 暴露给模型（F/G） |
 
-Brief 229 自身仍“不新增端点”；backend-read 属于 256 B 续篇落地。self / Agent-task 观测仍拟议。
+Brief 229 自身仍“不新增端点”；backend-read 属于 256 B 续篇落地；character-self 属于 256 C。Agent-task 观测仍拟议。
 
 ---
 

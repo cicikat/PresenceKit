@@ -526,6 +526,20 @@ fs_access:
   max_list_entries: 100           # 单次列目录条数上限
   max_read_seconds: 5             # 单次读/列耗时上限
 
+# 角色自有文件空间（工单 256 C）：Reality owner+char 桶，默认授予，管理员可撤。
+# 不是 workspace，也不是 manage_self_capability。配额耗尽返回 quota_exhausted，不静默删现文件。
+self_access:
+  max_file_bytes: 262144          # 单文件默认 256 KiB，硬上限 2 MiB
+  max_total_bytes: 8388608        # 每桶总量默认 8 MiB，硬上限 64 MiB
+  max_files: 200                  # 每桶文件数默认 200，硬上限 2000
+  max_revisions: 20               # 每文件历史，先到 20 条或 14 天
+  revision_ttl_days: 14
+  max_trash: 50                   # 回收站条目，先到 50 或 30 天
+  trash_ttl_days: 30
+  max_list_entries: 100
+  max_list_depth: 2
+  max_read_chars: 12000
+
 # 受控 workspace 文件能力（Brief 233）：显式根目录与分操作权限，默认关闭。
 workspace_access:
   enabled: false
