@@ -1,4 +1,4 @@
-# 功能控制面事实清单（最后核对：2026-09-18 H4 wrapper）
+# 功能控制面事实清单（最后核对：2026-09-18 256 B backend-read）
 
 > 本文是后端功能开关、effective state、权限和观测入口的权威文档。跨仓调用方只记录
 > 自己的设置归属与接入差异，完整映射请查 [三仓文档总索引](three-repo-doc-index.md) 和
@@ -403,12 +403,17 @@ Brief 237 closes legacy scheduler execution lanes: due schedules use the normal 
 adapter, the reminder JSON fallback is retired, and manual direct-trigger execution is unavailable.
 Task cancellation is admin-only via the metadata endpoint in the interface catalog.
 
-Work order 256 (proposed, not current) adds backend/external read effective state, per-character
-self quotas/grants, and Agent-task observation. Historical sentence above remains true for Brief
-229 itself. See [character-files-and-agent-autonomy.md](character-files-and-agent-autonomy.md).
-Current `fs_access` remains a default-off allow-roots gate with whole `data/` deny and substring
-`deny_names`; there is no dedicated HTTP observability beyond in-process `effective_state()`.
-`workspace_access` and process/browser capabilities are unchanged.
+Work order 256 B is current for backend/external read effective state. Historical sentence
+above remains true for Brief 229 itself. See
+[character-files-and-agent-autonomy.md](character-files-and-agent-autonomy.md).
+`fs_access.backend_read` defaults on unless explicitly `false`; `external_read` follows the
+new key or legacy `enabled`. `allow_roots` are discovery hints, not the sole admission for
+ordinary external files. Whole `data/` deny and substring `deny_names` are retired for fs
+reads. `GET /observability/backend-read` (`state.read`) reports configured/effective,
+blocking reasons, redaction version and counts; no file body, secret, or full path.
+Self quotas/grants and Agent-task observation remain proposed (C–G).
+`workspace_access` and process/browser capabilities are unchanged except that their
+model-facing reads/outputs reuse the same redaction service.
 
 ## Brief 232 Agent Work Sessions
 
@@ -649,6 +654,6 @@ mobile offers a text snapshot, not this requested on-demand image capture. See d
 current / open / roadmap / observe 与验证证据见 [admin-design-implementation.md](admin-design-implementation.md)。
 roadmap：逐请求的视觉、权限、队列、发送、ack/TTL 尚未合并入十类全局状态表，不能据此宣称端到端链路全部可观测。observe：原生容器与真实服务未联调。
 
-工单 253.4：owner 私聊 Path C 的 11.5_file_path_hints 提供有界路径候选，不自动读取、不改变授权。fs_read 相对路径在授权根内解析，同名歧义要求完整路径，NUL 文本按二进制拒绝。管理面工具页显示 file_access enabled/configured/effective、阻断原因、授权根及来源；远程仍禁用，无新客户端设置或协议。
+工单 253.4：owner 私聊 Path C 的 11.5_file_path_hints 提供有界路径候选，不自动读取、不改变授权。256 B 之后：相对路径仍以 allow_roots 为发现提示，绝对普通外部文件不再因跨根拒绝；同名歧义仍 `path_not_found`；NUL 文本按二进制拒绝。管理面工具页继续显示 file_access enabled/configured/effective；`remote_server` 保留 fs schema 以读本进程 backend，外部本机路径路径级拒绝。无新客户端设置或协议。
 
 工单 253.6：语音页新增 STT 命名连接、voice_message 用途和默认关闭的感知开关。GET/PUT /stt-presets* 为 admin；客户端仅传音频和短期凭据，不维护后端权限副本。完整兼容、有效状态和超时语义见 [audio-perception.md](audio-perception.md)。

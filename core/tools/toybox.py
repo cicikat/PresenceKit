@@ -46,6 +46,11 @@ def read_toy_file(file_key: str) -> str:
         content = target.read_text(encoding="utf-8")
     except UnicodeDecodeError as exc:
         raise ValueError("玩具文件不是 UTF-8 文本") from exc
+    from core.sensitive_redaction import redact_for_export, RedactionError
+    try:
+        content = redact_for_export(content)
+    except RedactionError:
+        return "sensitive_redaction_failed"
     if len(content) > _TOY_FILE_CHAR_CAP:
         return content[:_TOY_FILE_CHAR_CAP] + "\n（内容过长，读取结果已截断）"
     return content

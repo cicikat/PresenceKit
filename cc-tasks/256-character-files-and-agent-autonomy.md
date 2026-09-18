@@ -1,6 +1,6 @@
 # 229 — 单角色文件、自有空间与 Agent 自主能力扩展
 
-日期：2026-09-18。状态：A 拟议合同已提交；B–G 功能施工未开始；H 本轮不执行。
+日期：2026-09-18。状态：A 拟议合同已提交；B current；C–G 功能施工未开始；H 本轮不执行。
 
 本单历史权威见 [Agent Runtime](../docs/agent-runtime-architecture.md)。
 
@@ -56,13 +56,13 @@
 
 依赖 A。以 `fs_read/fs_list` 兼容升级，backend 默认读可用，allow_roots 降为外部常用目录/发现提示，不再是外部普通文件读取的唯一准入。
 
-- [ ] B1 独立解析 backend 与外部目标；配置显式关闭仍生效，旧配置迁移展示 effective state。保留文件分页、目录深度、条数、字节和耗时限制；不默认枚举全盘。普通未知扩展名先做受限文本检测；PDF/Office 等走已有安全解析器或明确 unsupported，不承诺任意二进制均可理解。
-- [ ] B2 建立统一 sensitive-redaction 服务：结构化键值及文本上下文识别 API key、token/Bearer、password/secret、cookie/session credential、URL 认证参数、Authorization header；配置嵌套/数组、多行、日志与代码字面值均纳入。保留字段名、模型名、代码结构、正常数字和英文。
-- [ ] B3 私钥、密码库、浏览器凭据库、keystore 等采用精确文件类型/内容判定拒绝或整体隐藏；高风险判定不得只靠扩展名。禁止旧 `token` 子串规则误杀普通源文件。脱敏失败返回拒绝，不退回原文；不声称能识别所有未知秘密编码。
-- [ ] B4 脱敏先于截断、分页、模型调用及任何可读回缓存；多行秘密跨页仍不泄露。逐项接入 fs、workspace_read、self read/prompt、Agent 输入/产物/命令输出与其他可绕回同一文件的工具；复用已有脱敏而非各工具各写一套。审计/异常/观测不保存原始秘密。
-- [ ] B5 规范 Windows drive、UNC、ADS、设备路径、junction/symlink/reparse、hardlink 和路径替换竞态；普通读不因跨 allow_roots 拒绝，仍不能通过别名读凭据或跨角色桶。UNC 可能涉及网络认证，不当作普通本机文件隐式访问。写保护不能只做字符串前缀判断。
-- [ ] B6 使用合成秘密测试配置/代码/日志正常可读且秘密不出模型请求、工具结果、cache、错误及审计；覆盖 PEM 跨页、脱敏故障、并发替换、非文本、大文件、目录限额、scope 和 remote 行为。复用 `tests/test_fs_browse.py` 等，替换旧整目录禁止断言。
-- [ ] B7 同单提供只读 effective/redaction 观测（版本、计数、原因，不含正文）；更新 tools/security_model/控制面，验证后独立提交。
+- [x] B1 独立解析 backend 与外部目标；配置显式关闭仍生效，旧配置迁移展示 effective state。保留文件分页、目录深度、条数、字节和耗时限制；不默认枚举全盘。普通未知扩展名先做受限文本检测；PDF/Office 等走已有安全解析器或明确 unsupported，不承诺任意二进制均可理解。
+- [x] B2 建立统一 sensitive-redaction 服务：结构化键值及文本上下文识别 API key、token/Bearer、password/secret、cookie/session credential、URL 认证参数、Authorization header；配置嵌套/数组、多行、日志与代码字面值均纳入。保留字段名、模型名、代码结构、正常数字和英文。
+- [x] B3 私钥、密码库、浏览器凭据库、keystore 等采用精确文件类型/内容判定拒绝或整体隐藏；高风险判定不得只靠扩展名。禁止旧 `token` 子串规则误杀普通源文件。脱敏失败返回拒绝，不退回原文；不声称能识别所有未知秘密编码。
+- [x] B4 脱敏先于截断、分页、模型调用及任何可读回缓存；多行秘密跨页仍不泄露。逐项接入 fs、workspace_read、self read/prompt、Agent 输入/产物/命令输出与其他可绕回同一文件的工具；复用已有脱敏而非各工具各写一套。审计/异常/观测不保存原始秘密。
+- [x] B5 规范 Windows drive、UNC、ADS、设备路径、junction/symlink/reparse、hardlink 和路径替换竞态；普通读不因跨 allow_roots 拒绝，仍不能通过别名读凭据或跨角色桶。UNC 可能涉及网络认证，不当作普通本机文件隐式访问。写保护不能只做字符串前缀判断。
+- [x] B6 使用合成秘密测试配置/代码/日志正常可读且秘密不出模型请求、工具结果、cache、错误及审计；覆盖 PEM 跨页、脱敏故障、并发替换、非文本、大文件、目录限额、scope 和 remote 行为。复用 `tests/test_fs_browse.py` 等，替换旧整目录禁止断言。
+- [x] B7 同单提供只读 effective/redaction 观测（版本、计数、原因，不含正文）；更新 tools/security_model/控制面，验证后独立提交。
 
 ## C — self 持久空间及通用文件工具
 
@@ -137,7 +137,7 @@
 | 子单 | commit | 定向验证 | 运行验收/限制 |
 |---|---|---|---|
 | A | 本提交（SHA 见 git log） | 对照 `_TOOL_REGISTRY` / autonomy policy / reminder+fs+toybox 源码；链接与 LF 换行核对 | 纯文档拟议合同，无代码行为、无生产数据迁移；运行验收不适用 |
-| B | 待施工 | 待执行 | 模型出口秘密不泄露 |
+| B | 本提交（SHA 见 git log） | `.venv` Python 3.12：`test_sensitive_redaction` / `test_fs_browse` / `test_file_path_hints` / `test_brief171_owner_turn_diary` / workspace / chat_artifacts / process_runner / admin i18n+fragment 相关 97 通过。同文件 `test_qixi_uses_lunar_conversion_and_adjacent_dates_do_not_match` 失败，与本单无关（该文件本单只改 fragment 缓存版本）。换行 `diff --stat` 与 `--ignore-cr-at-eol --stat` 一致，`diff --check` 无警告。 | 模型出口：合成秘密不出现在 fs/workspace/process/artifact 结果；TestClient 对 `/observability/backend-read` 无 token 401、有 token 200 且仅元数据。管理面 8080 静态页已含 call-records 选项与 `v1-256-backend-read-1` 缓存；该进程未重载，live GET 该端点 404。浏览器硬刷新交互未完成。未改生产数据。 |
 | C | 待施工 | 待执行 | self 生命周期 |
 | D | 待施工 | 待执行 | prompt 与迁移恢复 |
 | E | 待施工 | 待执行 | 提醒竞态与交付 |

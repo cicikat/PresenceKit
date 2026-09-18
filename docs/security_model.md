@@ -197,9 +197,12 @@ PresenceKit-desktop 已完成 Tauri Rust native bridge header 迁移；SEC-WS-1 
 
 `core/sandbox.py` 是路径集中管理和测试数据隔离，不是权限隔离。它不能阻止任意代码读取项目外文件，也不能限制第三方插件能力。未来插件化必须另做权限模型。
 
-工单 256 拟议的 backend/external 只读取消「按 `config.yaml` / `data/` / 项目目录整类拒绝」，
-但保留 owner/char/realm 隔离、统一脱敏和高风险凭据库拒绝。脱敏失败必须拒绝，不得退回原文。
-模型不能指定 owner/char/realm 或自签授权。UNC、ADS、设备路径和 reparse 不是普通本机文件。
+工单 256 B 已落地 backend/external 只读：取消「按 `config.yaml` / `data/` / 项目目录整类拒绝」，
+但保留 owner/char/realm 隔离。统一脱敏（`core.sensitive_redaction`）先于截断、分页、模型与
+可读缓存；失败返回 `sensitive_redaction_failed`，不得退回原文。高风险凭据库按类型/内容拒绝，
+禁止 `token` 子串误杀源文件。模型不能指定 owner/char/realm 或自签授权。UNC、ADS、设备路径
+和 reparse 不是普通本机文件。观测 `GET /observability/backend-read` 只含元数据。self 写工具
+与 Agent task 仍属 C–G，尚未 current。
 
 ### 导入/社区包体系未成型
 

@@ -21,7 +21,8 @@ def test_remote_capability_matrix_is_fail_closed(monkeypatch):
         lambda: {"deployment": {"mode": "remote_server"}},
     )
 
-    assert tool_allowed("fs_read") == (False, "disabled_remote_server_local_capability")
+    assert tool_allowed("fs_read") == (True, None)
+    assert tool_allowed("workspace_read") == (False, "disabled_remote_server_local_capability")
     assert tool_allowed("get_time") == (True, None)
     rows = {row.logical_name: row for row in capability_projection()}
     assert rows["device_shutdown"].status == "disabled"

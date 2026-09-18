@@ -20,7 +20,7 @@ from core.sandbox import get_paths
 
 _DENY_NAMES = frozenset({
     "secrets", ".env", ".git", "node_modules", "__pycache__", "config.yaml",
-    "token", "credentials", "password", "cookies", "browser", "profiles",
+    "credentials", "password", "cookies", "browser", "profiles",
 })
 _TEXT_EXTENSIONS = frozenset({
     ".txt", ".md", ".json", ".yaml", ".yml", ".toml", ".csv", ".log",
@@ -94,11 +94,15 @@ def _within(path: Path, root: Path) -> bool:
 
 
 def _deny(path: Path) -> None:
+    from core.sensitive_redaction import inspect_high_risk
     names = _DENY_NAMES | {str(x).lower() for x in (_cfg().get("deny_names") or [])}
     for part in path.parts:
         lowered = part.lower()
-        if any(item in lowered for item in names):
+        if lowered in names:
             raise WorkspaceError("sensitive_path_denied")
+    decision = inspect_high_risk(name=path.name, parts=path.parts)
+    if decision.denied:
+        raise WorkspaceError(decision.code or "high_risk_secret_denied")
 
 
 def _project_data() -> Path:
@@ -329,12 +333,20 @@ def read_workspace(principal: TaskPrincipal, path: str) -> str:
     _check_name(target)
     _check_size(target)
     raw = target.read_bytes()
+    from core.sensitive_redaction import inspect_high_risk, redact_for_export, RedactionError
+    decision = inspect_high_risk(name=target.name, data=raw, parts=target.parts)
+    if decision.denied:
+        raise WorkspaceError(decision.code or "high_risk_secret_denied")
     try:
         text = raw.decode("utf-8")
     except UnicodeDecodeError as exc:
         raise WorkspaceError("text_decode_failed") from exc
+    try:
+        redacted = redact_for_export(text)
+    except RedactionError as exc:
+        raise WorkspaceError("sensitive_redaction_failed") from exc
     max_chars = min(int(_cfg().get("max_read_chars", 10000) or 1), 100000)
-    return text[:max_chars]
+    return redacted[:max_chars]
 
 
 def write_workspace(principal: TaskPrincipal, path: str, content: str, *, overwrite: bool = False, operation: str = "create") -> dict[str, Any]:

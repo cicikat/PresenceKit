@@ -423,10 +423,16 @@ async def _execute(
         reason = "resource_limit"
     if truncated and not reason:
         reason = "output_limit"
+    from core.sensitive_redaction import redact_for_export, RedactionError
+    try:
+        stdout_text = redact_for_export(stdout.decode("utf-8", errors="replace"))
+        stderr_text = redact_for_export(stderr.decode("utf-8", errors="replace"))
+    except RedactionError as exc:
+        raise ProcessRunnerError("sensitive_redaction_failed") from exc
     return {
         "returncode": process.returncode,
-        "stdout": stdout.decode("utf-8", errors="replace"),
-        "stderr": stderr.decode("utf-8", errors="replace"),
+        "stdout": stdout_text,
+        "stderr": stderr_text,
         "stdout_bytes": len(stdout),
         "stderr_bytes": len(stderr),
         "truncated": truncated,

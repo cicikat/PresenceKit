@@ -9,7 +9,8 @@
 | State | What exists |
 |---|---|
 | current | Brief 230 Reality Task Manager (`runtime/agent_runtime/reality`); Brief 231 registered trigger adapters; Brief 232 same-character work sessions; Brief 233 workspace capability with `causation_ref.kind=tool_request`; Brief 234 local process runner; Brief 239 browser confirmation hardening |
-| proposed (256 A, not current) | Character self space, backend/external read without whole-class directory bans, reminder lifecycle tools, and a bounded coding worker launched from chat/autonomy. Contract: [character-files-and-agent-autonomy.md](character-files-and-agent-autonomy.md). Implementation is tickets B–G. |
+| current (256 B) | `fs_list`/`fs_read` backend vs external split, unified sensitive-redaction, `GET /observability/backend-read`. Writes, self space, reminders, and Agent task remain later tickets. |
+| proposed (256 C–G, not current) | Character self space, reminder lifecycle tools, and a bounded coding worker launched from chat/autonomy. Contract: [character-files-and-agent-autonomy.md](character-files-and-agent-autonomy.md). |
 | roadmap | Briefs 235-237 remaining gated capabilities, coverage proof, and old-path removal together with guards/tests/docs; Dream-side Task Runtime with its own root; `letter_writer` Task/副链 artifact migration; visible completion notification via a fresh Reality `EventContext` |
 | non-goal | universal EventBus, `kind=task/tool/activity` dispatcher, or a second acting subject |
 
@@ -215,7 +216,7 @@ a durable 副链 does not by itself mean the foreground 主链 cannot use that c
 |---|---|---|
 | `get_time`, `weather`, `web_search` | clock/network information | foreground bounded read/untrusted output |
 | `add_reminder` | scheduler | structured durable task (Brief 235). Character list/get/update/cancel/restore are proposed by 256 E, not current |
-| `fs_list`, `fs_read` | backend/external read | current: allow-roots plus whole `data/` deny. 256 B proposes backend default-read, allow_roots as discovery hints, unified redaction |
+| `fs_list`, `fs_read` | backend/external read | current (256 B): backend default-read, allow_roots as discovery hints, unified redaction before truncate; owner/char/realm isolation remains |
 | `read_toy_file`, `write_toy_file` | fixed authored document | enum targets in the shared toy directory, not workspace and not per-char self. 256 C/D propose self tools and migration |
 | `start_agent_task`, `get_agent_task`, `cancel_agent_task` | same-character bounded coding worker | **proposed (256 F)**; not registered. Receipt creation ≠ coding complete |
 | `read_diary`, `search_diary`, `read_watch`, `get_profile`, `get_episodic`, `read_life_records` | memory/document | Reality-scoped read |
@@ -311,9 +312,10 @@ and `daily_journal` retain separate names, counters, and lifecycles.
 Future durable state requires a same-change read-only backend observation endpoint and, where consumed,
 admin/desktop/mobile catalog updates. Brief 229 itself adds no endpoint, setting, or client field.
 Work order 256 may add read-only observability for backend-read, self, and Agent-task effective
-state when those capabilities land; that does not rewrite the historical 229 sentence. Proposed
-endpoints are listed in [character-files-and-agent-autonomy.md](character-files-and-agent-autonomy.md)
-and stay non-current until B–G implement them.
+state when those capabilities land; that does not rewrite the historical 229 sentence.
+`GET /observability/backend-read` is current with ticket B. Self and Agent-task endpoints
+stay non-current until C–G implement them. See
+[character-files-and-agent-autonomy.md](character-files-and-agent-autonomy.md).
 
 ## Brief 232 Agent Work Sessions
 

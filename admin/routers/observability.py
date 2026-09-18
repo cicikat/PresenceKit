@@ -272,6 +272,15 @@ async def agent_runtime_workspace(_auth=Depends(require_scopes("state.read"))):
     from core.agent_runtime.workspace import capability_snapshot
     return capability_snapshot()
 
+
+@router.get(
+    "/observability/backend-read",
+    summary="读取 backend/external 只读与脱敏 effective 状态（不含正文）",
+)
+async def backend_read_observability(_auth=Depends(require_scopes("state.read"))):
+    from core.tools.fs_browse import observability_snapshot
+    return observability_snapshot()
+
 @router.get(
     "/observability/agent-runtime-work-sessions",
     summary="读取同一角色 Agent Work Session（durable 副链）脱敏生命周期观测",

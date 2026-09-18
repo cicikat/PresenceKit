@@ -1,6 +1,6 @@
 # 单角色文件、自有空间与 Agent 自主能力（拟议合同）
 
-状态：**拟议**。工单 [256](../cc-tasks/256-character-files-and-agent-autonomy.md) A 单冻结；B–G 落地前不得写成 current。
+状态：**B current**；C–G 仍拟议。工单 [256](../cc-tasks/256-character-files-and-agent-autonomy.md) A 单冻结合同，B 落地 backend/external 只读与统一脱敏。
 日期：2026-09-18。基线 SHA：`b1ebe0d`（工单源码表对照 `e35d0ec`，差异见 §0）。
 
 权限限制能做什么，不规定角色应该追求什么。仍是同一角色的聊天主链与持久工作副链，不引入第二个人格。
@@ -17,7 +17,7 @@
 
 | 落点 | `e35d0ec` 工单记录 | `b1ebe0d` 仍真 |
 |---|---|---|
-| `fs_browse.py` | allow_roots 强制；`data/` 整类拒绝；`token` 子串 deny；无统一脱敏 | 仍如此。`remote_server` 仍关本地 fs |
+| `fs_browse.py` | allow_roots 强制；`data/` 整类拒绝；`token` 子串 deny；无统一脱敏 | **B current**：backend/external 独立开关；allow_roots 为发现提示；统一脱敏；`remote_server` 可读本进程 backend，拒外部本机路径 |
 | `toybox.py` | 三枚举、4000 字、无自由建/删 | 仍如此。wrapper 在有 `uid+char_id` 时额外镜像到 character library，**不是** self 桶 |
 | `very_formal_project_dir()` | 无 `char_id`，共享目录 | 仍 `canonical/shared/global` |
 | `toy_autogrow.py` | 直写旧目录并裁头 | 仍如此；冷却按 `{char_id}:{uid}` |
@@ -114,7 +114,7 @@
 | `phone_control_start` | phone_control | write | 既有 | 手机 adapter | `phone_control_tasks` | 任务终态 | phone 任务文件（管理） |
 | `toy_vibrate` / `toy_stop` / `toy_pattern` / `toy_job_status` | desktop | actuate/read | Intiface opt-in + owner 私聊 | owner | `hardware_jobs` | stop | `/hardware/jobs` |
 | `read_toy_file` / `write_toy_file` | desktop | read/write | danger（desktop 类） | **共享 toy 目录**；wrapper 可镜像 library | `very_formal_project/` | 无删除/版本 | 无 self 观测 |
-| `fs_list` / `fs_read` | fs | read | 无（不受 danger） | allow_roots；拒 `data/` | 外部路径 | 无 | `fs_browse.effective_state()` 无独立 HTTP |
+| `fs_list` / `fs_read` | fs | read | 无（不受 danger） | frozen uid+char；backend 默认开；external 跟随 `external_read`/`enabled` | 仓库/`data`/config（脱敏）+ 本机普通文件 | 无 | `GET /observability/backend-read` |
 | `workspace_list/read` | fs | read | grant | workspace roots | 用户目录；版本在 runtime | 无 | `/observability/agent-runtime-workspace` |
 | `workspace_create/update/delete/undo` | fs | write | update/delete/undo 需 `confirmed` | 同上 + Task receipt | 同上 | undo 最近版本 | 同上 + tasks |
 | `process_run` | system | execute | dangerous | workspace 内程序 | workspace | 无通用撤销 | `/observability/agent-runtime-processes` |
@@ -210,13 +210,13 @@ workspace/process 限额延续现状（单文件 5 MiB、总量 50 MiB、并发 
 
 ---
 
-## 5. 读取、脱敏与 Agent task（B/F 预告，合同约束）
+## 5. 读取、脱敏与 Agent task（B current / F 预告）
 
-- backend 与 external 独立解析。显式关闭仍生效；旧 `fs_access.enabled`/`allow_roots` 迁移为 effective state：allow_roots 变为发现提示，不是外部普通文件唯一准入。
-- 统一 sensitive-redaction：先于截断、分页、模型、缓存。失败拒绝。禁止 `token` 子串误杀源码。
-- 高风险凭据库按类型/内容判定，不只靠扩展名。
-- `start_agent_task` 立即返回 `task_id`；coding worker 复用 Task Manager + Work Session + workspace + 受限 process，不新造任务库，不新增无限 shell。
-- 审批绑定 principal、动作、目标、payload digest、有效期、grant revision。
+- **B current**：backend 与 external 独立解析。显式关闭仍生效；旧 `fs_access.enabled`/`allow_roots` 迁移为 effective state：allow_roots 变为发现提示，不是外部普通文件唯一准入。
+- **B current**：统一 sensitive-redaction：先于截断、分页、模型、缓存。失败拒绝。禁止 `token` 子串误杀源码。workspace_read、toy 读、artifact 读、process stdout/stderr 复用同一服务。
+- **B current**：高风险凭据库按类型/内容判定，不只靠扩展名。
+- `start_agent_task` 立即返回 `task_id`；coding worker 复用 Task Manager + Work Session + workspace + 受限 process，不新造任务库，不新增无限 shell（F，未落地）。
+- 审批绑定 principal、动作、目标、payload digest、有效期、grant revision（F）。
 
 ---
 
@@ -226,11 +226,11 @@ workspace/process 限额延续现状（单文件 5 MiB、总量 50 MiB、并发 
 
 | 拟议端点 | 内容 |
 |---|---|
-| `GET /observability/backend-read` | configured/effective、关闭原因、脱敏版本与计数 |
-| `GET /observability/character-self` | 配额余量、grant revision、文件计数、最近操作元数据 |
-| 复用 `GET /observability/agent-runtime-tasks` | Agent task 生命周期；角色查询走工具，不把 admin DELETE 暴露给模型 |
+| `GET /observability/backend-read` | **current**：configured/effective、关闭原因、脱敏版本与计数 |
+| `GET /observability/character-self` | 配额余量、grant revision、文件计数、最近操作元数据（C/G） |
+| 复用 `GET /observability/agent-runtime-tasks` | Agent task 生命周期；角色查询走工具，不把 admin DELETE 暴露给模型（F/G） |
 
-Brief 229 自身仍“不新增端点”；上表属于 256 续篇拟议，落地时改 current。
+Brief 229 自身仍“不新增端点”；backend-read 属于 256 B 续篇落地。self / Agent-task 观测仍拟议。
 
 ---
 

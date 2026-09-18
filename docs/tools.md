@@ -422,73 +422,72 @@ route_pretool(..., categories=None, exposure_path="path_a")
 
 `core/deployment_capabilities.py` is the central policy seam for
 `deployment.mode`. In `remote_server`, `device_shutdown`, `device_sleep`,
-`exit_yandere`, `fs_list`, and `fs_read` are removed from schema/probe
-exposure and fail closed through direct `execute()` as well. The decision is
-process configuration only; callers cannot widen it through request fields or
-prompt text.
+`exit_yandere`, workspace CRUD/undo, and `process_run` are removed from
+schema/probe exposure and fail closed through direct `execute()` as well.
+`fs_list` / `fs_read` remain in schema so the same character can read this
+process's backend files after redaction; path-level guards still reject
+user-PC external paths with `disabled_remote_server_local_capability`.
+The decision is process configuration only; callers cannot widen it through
+request fields or prompt text.
 
 Desktop action tools remain client capabilities. In remote mode they require
 an online desktop WebSocket and a successful ack; server-local file fallback
 is disabled. `GET /observability/deployment-capabilities` reports the redacted
 logical status and recent ack time.
 
-## fs 只读浏览工具（Brief 31）
+## fs 只读浏览工具（Brief 31；工单 256 B current）
 
-文件：`core/tools/fs_browse.py`。让角色能"自己翻电脑"——列目录、读文件，范围严格限于
-config 声明的允许根目录，**只读**。当前写入面不是单一出口：toybox 枚举文件、workspace
-突变、chat artifacts、记忆修订、花园、硬件与 self-capability 都是独立写路径。
-工单 256 拟议把 backend/external 读从整类 `data/` 封禁改为脱敏只读，并把 toybox 迁到
-per-char self；合同见 [character-files-and-agent-autonomy.md](character-files-and-agent-autonomy.md)，
-落地前本节描述的仍是 current。默认两条路径都不含 `fs`；需要在
-`tool_exposure.path_a/path_c` 或对应角色覆盖中明确加入。Path A 开启后 QQ、desktop、mobile
-共享同一只读浏览能力。
+文件：`core/tools/fs_browse.py`。`fs_list` / `fs_read` 仍是只读。写入面不是单一出口：
+toybox 枚举文件、workspace 突变、chat artifacts、记忆修订、花园、硬件与
+`manage_self_capability` 都是独立写路径。256 C 才会落地 per-char self 写工具。
+合同见 [character-files-and-agent-autonomy.md](character-files-and-agent-autonomy.md)。
+
+默认两条路径都不含 `fs`；需要在 `tool_exposure.path_a/path_c` 或对应角色覆盖中明确加入。
+Path A 开启后 QQ、desktop、mobile 共享同一只读浏览能力。principal 由
+`execute_structured(user_id=, char_id=)` 冻结传入；模型参数里的 `user_id` /
+`uid` / `char_id` / `owner` / `realm` 一律 `grant_principal_mismatch`。
 
 ```yaml
 fs_access:
-  enabled: false                  # 总开关，默认关
-  allow_roots:                    # 只读允许根，绝对路径，用户手填
-    - "D:/some/dir"
-  deny_names:                     # 命中即拒（对路径任一段做大小写不敏感子串匹配）
-    - "secrets"
-    - ".env"
-    - ".git"
-    - "node_modules"
-    - "__pycache__"
-    - "config.yaml"
-    - "token"
-  max_read_chars: 10000           # 单次读取截断
-  max_list_entries: 100           # 单次列目录条数上限
+  enabled: false                  # 旧总开关：未写 external_read 时沿用它控制外部读
+  backend_read: true              # 本进程仓库/配置/日志/内部文件；省略则默认开
+  external_read: false            # 本机普通文件；省略时跟随 enabled
+  allow_roots: []                  # 外部发现提示与相对路径解析根，不是唯一准入
+  max_read_chars: 12000           # 脱敏后的单次截断
+  max_list_entries: 100
+  max_read_seconds: 5
 ```
 
-- **deny_names 底线集不可清空**：`_DENY_NAMES_BASELINE` 写死在代码里，与 config 的
-  `deny_names` 做集合并集——config 只能追加，永远无法移除底线集里的项（防手滑清空）。
-- **`data/` 目录永远隐式拒绝**：即使被 `allow_roots` 包含，`fs_list`/`fs_read` 仍会拒绝
-  项目自身沙盒目录（`Path("data").resolve()`），列目录时也不会把它列出来。
-- **守卫顺序**（`_resolve_and_guard`，每次调用先过 `enabled` 总开关，再顺序执行）：
-  1. `enabled` 为假 → 直接返回"文件浏览未开启"，不碰文件系统。
-  2. `Path(path).resolve()` 后必须是某个 `allow_roots` resolve 结果的子路径，否则拒绝
-     （`data/` 隐式拒绝在这一步之前先判）。
-  3. resolve 前后的路径逐段过 `deny_names`（底线集 ∪ config 追加集），命中拒绝。
-  4. 路径本身若是软链直接拒绝——即使软链目标落在允许范围内也拒绝（与 `toybox` 的
-     `read_toy_file`/`write_toy_file` 同策略，防 allow 区内放链指向外部）。
-  5. `fs_read` 额外校验单文件大小上限 5MB（超过不读，防内存）。
-- **fs_list**：`path` 省略时返回 `allow_roots` 列表本身，作为角色的"入口地图"；
-  `depth` 只接受 1 或 2（非法值回落 1）。目录/文件条数超过 `max_list_entries` 截断并注明。
-- **fs_read**：只读文本类扩展名白名单（txt/md/py/js/ts/json/yaml/toml/csv/log/html/ini
-  等），其他扩展名或无法解码的文件返回"这是二进制/不支持的文件类型"提示而不抛错；
-  UTF-8 优先，失败尝试 GBK。超 `max_read_chars` 截断并注明字数，v1 不做分页偏移。
-- **探针默认不覆盖 fs 类**：默认 Path A 是 info/desktop；若管理员明确把 fs 放进
-  `tool_exposure.path_a`，QQ、desktop、mobile 都会收到同一受 allow_roots 约束的只读 schema。
-- **不受安全/危险模式闸约束**：`_MODE_RESTRICTED_CATEGORIES` 含 `desktop`/`system`/`phone_control`，
-  `fs` 类不在其中——门控完全交给自身的 `enabled`/`allow_roots`/`deny_names`，不需要额外
-  切到危险模式。
-- **action_trace 自动生效**：`trace_args: ["path"]`（路径本身已在 allowlist 内，不敏感，
-  落痕迹方便追问溯源），收口埋点在 `tool_dispatcher.execute_structured()`，无需额外记账代码。
-- **风险**：文件内容是不可信输入（与 web_search/MCP 结果同级），可能含提示注入文本，
-  v1 接受现状，见 `docs/known-issues.md`。256 B 拟议统一脱敏先于截断/模型/缓存，
-  脱敏失败拒绝而不是退回原文；未落地前仍直接返回文本。
-- **不做什么**：写入/删除/移动（永远不进 `fs` 类）；`fs_search`/grep；分页读取；探针暴露；
-  图片/PDF 解析（走既有 `media_processor` 通道，不在此重复）。256 不把 fs 升级为写工具。
+- **backend 与 external 独立解析**：仓库根、`data/` 沙盒根、`config.yaml` 是 backend；
+  其余本机普通文件是 external。显式 `backend_read: false` / `external_read: false`
+  仍生效。旧 `enabled: true` 在未写 `external_read` 时打开外部读。
+- **allow_roots 不是唯一准入**：绝对路径的普通外部文件只要 OS 允许即可读，不必落在
+  allow_roots 内。相对路径仍按 allow_roots 解析；多根命中同一相对名返回
+  `path_not_found`。省略 path 的 `fs_list` 只返回发现提示，不枚举全盘。
+- **隔离仍在**：取消的是整类 `data/` / 项目目录封禁，不是 owner/char/realm 隔离。
+  其他角色桶、Dream 树、auth token 库、self_meta 审计库分别返回
+  `cross_char_denied` / `cross_owner_denied` / `dream_isolation_denied` /
+  `credential_store_denied` / `audit_store_denied`。列目录时隐藏隔离子项。
+- **统一脱敏**：`core.sensitive_redaction` 先于截断、分页、模型出口和可读缓存。
+  失败返回 `sensitive_redaction_failed`，不退回原文。私钥/密码库/浏览器凭据库按
+  类型与内容拒绝（`high_risk_secret_denied` / `credential_store_denied`），禁止
+  `token` 子串误杀 `tokenizer.py` 这类源文件。
+- **路径形态**：UNC `unc_network_denied`；ADS `ads_denied`；设备名
+  `device_path_denied`；symlink/junction/reparse `reparse_denied`。读后 `st_size`
+  变化视为并发替换，返回 `path_not_found`。
+- **限额**：单次 12_000 字符（硬上限 32_000）、文件 5 MiB（硬上限 8 MiB）、
+  列 100 条/深度 2（硬上限 200/3）、耗时 5s（硬上限 15s）。超限返回稳定拒绝码；
+  列表截断行含 `list_limit_exceeded`。`fs_read` 的 `offset` 是脱敏后的字符分页。
+- **文件类型**：已知文本扩展名走 UTF-8/GBK；未知扩展名先做受限文本检测（含 NUL
+  则拒绝）；`.docx`/`.doc` 走既有 `parse_file_bytes`；其余非文本
+  `unsupported_file_type`。不承诺任意二进制均可理解。
+- **remote_server**：schema 仍暴露 fs，以便读本进程 backend；外部本机路径拒绝。
+- **探针默认不覆盖 fs 类**：默认 Path A 是 info/desktop。
+- **不受危险模式闸约束**：`fs` 不在 `_MODE_RESTRICTED_CATEGORIES`。
+- **action_trace**：`trace_args: ["path"]`，收口在 `execute_structured()`。
+- **观测**：`GET /observability/backend-read`（`state.read`）返回 configured/
+  effective、关闭原因、脱敏版本与计数；不含正文、秘密或完整路径。
+- **不做什么**：写入/删除/移动；`fs_search`/grep；全盘枚举；把 fs 升级为写工具。
 
 ---
 
@@ -677,10 +676,10 @@ dispatcher 在有 `uid+char_id` 时会把写入镜像进 character library，这
 
 | 工具名 | 用途 | 备注 |
 |---|---|---|
-| `fs_list` | 列出允许范围内的目录内容 | `path` 省略返回 `allow_roots` 入口地图；`depth` 1 或 2 |
-| `fs_read` | 读取允许范围内的文本文件 | 只读文本白名单扩展名，超限截断，不抛错 |
+| `fs_list` | 列出 backend/external 目录 | 省略 path 返回发现提示；`depth` 1 或 2；隔离子项隐藏 |
+| `fs_read` | 读取 backend/external 文本 | 先脱敏再截断/分页；高风险凭据拒绝；稳定拒绝码 |
 
-详见上方「fs 只读浏览工具（Brief 31）」一节。
+详见上方「fs 只读浏览工具（Brief 31；工单 256 B current）」一节。
 
 ---
 
@@ -971,7 +970,7 @@ historical tool receipts. Client evidence: docs/tool-activity-2026-09-12.md in t
 
 实现及构建/定向测试通过，真实双设备、锁屏、OEM 后台及 VLM/消息联合验收保持 open。管理面既有国际化测试 3 项失败保持 open，详见施工记录，不能将静态检查作为真实设备验收。
 
-工单 253.4：owner 私聊 Path C 的 11.5_file_path_hints 提供有界路径候选，不自动读取、不改变授权。fs_read 相对路径在授权根内解析，同名歧义要求完整路径，NUL 文本按二进制拒绝。管理面工具页显示 file_access enabled/configured/effective、阻断原因、授权根及来源；远程仍禁用，无新客户端设置或协议。
+工单 253.4：owner 私聊 Path C 的 11.5_file_path_hints 提供有界路径候选，不自动读取、不改变授权。256 B 之后：相对路径仍以 allow_roots 为发现提示，绝对普通外部文件不再因跨根拒绝；同名歧义仍 `path_not_found`；NUL 文本按二进制拒绝。管理面工具页继续显示 file_access enabled/configured/effective；`remote_server` 保留 fs schema 以读本进程 backend，外部本机路径路径级拒绝。无新客户端设置或协议。
 
 ### Brief 253.5：低存在感喝酒
 

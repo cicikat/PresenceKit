@@ -1,14 +1,21 @@
-from tests.fixtures.public_assets import TEST_CHAR_ID
-"""Read-only fs browsing tool contracts (Brief 31 · fs_list / fs_read)."""
+"""Read-only fs browsing: backend/external split and sensitive export (256 B)."""
+
+import json
 
 import pytest
+from fastapi.testclient import TestClient
 
 from core import tool_dispatcher
 from core.tools import fs_browse
+from tests.fixtures.public_assets import TEST_CHAR_ID
 
 
-def test_fs_read_default_limit_is_10k():
-    assert fs_browse._DEFAULT_MAX_READ_CHARS == 10000
+_UID = "owner-one"
+_CHAR = TEST_CHAR_ID
+
+
+def test_fs_read_default_limit_is_12k():
+    assert fs_browse._DEFAULT_MAX_READ_CHARS == 12000
 
 _FS_TOOL_SPECS = {
     name: dict(tool_dispatcher._TOOL_REGISTRY[name])
@@ -40,37 +47,62 @@ def _patch_fs_config(monkeypatch, tmp_path, allow_roots=None, **overrides):
     cfg = {
         "fs_access": {
             "enabled": True,
+            "backend_read": True,
+            "external_read": True,
             "allow_roots": allow_roots,
-            "deny_names": [],
             "max_read_chars": 4000,
             "max_list_entries": 100,
         }
     }
     cfg["fs_access"].update(overrides)
     monkeypatch.setattr("core.config_loader.get_config", lambda: cfg)
-    # 隔离项目 data/ 沙盒判定，避免测试碰真实仓库 data 目录
-    fake_data_dir = (tmp_path / "data").resolve()
+    fake_data_dir = (tmp_path / "internal-data").resolve()
+    fake_data_dir.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(fs_browse, "_project_data_dir", lambda: fake_data_dir)
+    monkeypatch.setattr(fs_browse, "_repo_root", lambda: (tmp_path / "internal-repo").resolve())
     return allow_root, fake_data_dir
 
 
-# ── 1. 越界：全拒 ────────────────────────────────────────────────────────────
+def _bind_sandbox_backend(sandbox, data_dir):
+    """Keep scoped backend files inside the patched data root.
 
-def test_fs_read_rejects_outside_allow_roots(monkeypatch, tmp_path):
+    pytest's sandbox fixture uses tmp_path as DataPaths._base.  If fs_browse
+    also treats that directory as the project data root, ordinary files such
+    as tmp_path/plain.txt are misclassified as backend.  Point the sandbox
+    at the sibling internal-data directory instead so tmp_path peers stay
+    external.
+    """
+    sandbox._base = data_dir
+
+
+def _read(path, **kwargs):
+    return fs_browse.fs_read(str(path), user_id=kwargs.get("user_id", _UID), char_id=kwargs.get("char_id", _CHAR))
+
+
+def _list(path=None, **kwargs):
+    return fs_browse.fs_list(None if path is None else str(path), user_id=kwargs.get("user_id", _UID), char_id=kwargs.get("char_id", _CHAR), depth=kwargs.get("depth", 1))
+
+
+# ── 1. 外部普通文件不再因跨 allow_roots 拒绝 ──────────────────────────────────
+
+def test_fs_read_allows_ordinary_file_outside_allow_roots(monkeypatch, tmp_path):
     allow_root, _ = _patch_fs_config(monkeypatch, tmp_path)
     outside = tmp_path / "outside.txt"
-    outside.write_text("secret stuff", encoding="utf-8")
+    outside.write_text("hello outside", encoding="utf-8")
+    assert _read(outside) == "hello outside"
+    assert "hello outside" in _read(allow_root / ".." / "outside.txt")
 
-    assert "不在允许浏览的范围内" in fs_browse.fs_read(str(outside))
 
-
-def test_fs_read_rejects_dotdot_traversal(monkeypatch, tmp_path):
+def test_fs_read_rejects_symlink_even_inside_allow_root(monkeypatch, tmp_path):
     allow_root, _ = _patch_fs_config(monkeypatch, tmp_path)
-    outside = tmp_path / "outside.txt"
-    outside.write_text("secret stuff", encoding="utf-8")
-    traversal_path = str(allow_root / ".." / "outside.txt")
-
-    assert "不在允许浏览的范围内" in fs_browse.fs_read(traversal_path)
+    target = allow_root / "real.txt"
+    target.write_text("real content", encoding="utf-8")
+    link = allow_root / "link.txt"
+    try:
+        link.symlink_to(target)
+    except OSError as exc:
+        pytest.skip(f"symlink unavailable: {exc}")
+    assert _read(link) == "reparse_denied"
 
 
 def test_fs_read_rejects_symlink_pointing_outside(monkeypatch, tmp_path):
@@ -82,78 +114,91 @@ def test_fs_read_rejects_symlink_pointing_outside(monkeypatch, tmp_path):
         link.symlink_to(outside)
     except OSError as exc:
         pytest.skip(f"symlink unavailable: {exc}")
-
-    result = fs_browse.fs_read(str(link))
-    assert "不在允许浏览的范围内" in result or "软链接" in result
+    assert _read(link) == "reparse_denied"
 
 
-def test_fs_read_rejects_symlink_pointing_inside_allow_root(monkeypatch, tmp_path):
+# ── 2. 高风险凭据按类型/内容拒绝，不再用 token 子串 ──────────────────────────
+
+def test_fs_read_allows_tokenizer_source(monkeypatch, tmp_path):
     allow_root, _ = _patch_fs_config(monkeypatch, tmp_path)
-    target = allow_root / "real.txt"
-    target.write_text("real content", encoding="utf-8")
-    link = allow_root / "link.txt"
-    try:
-        link.symlink_to(target)
-    except OSError as exc:
-        pytest.skip(f"symlink unavailable: {exc}")
-
-    assert "软链接" in fs_browse.fs_read(str(link))
+    source = allow_root / "tokenizer.py"
+    source.write_text("token_count = 3\n", encoding="utf-8", newline="\n")
+    assert _read(source) == "token_count = 3\n"
 
 
-# ── 2. deny_names：拒绝 + 底线集不可清空 ─────────────────────────────────────
-
-def test_fs_read_rejects_deny_name_segment(monkeypatch, tmp_path):
+def test_fs_read_rejects_env_and_private_key(monkeypatch, tmp_path):
     allow_root, _ = _patch_fs_config(monkeypatch, tmp_path)
-    secret_dir = allow_root / "secrets"
-    secret_dir.mkdir()
-    secret_file = secret_dir / "data.txt"
-    secret_file.write_text("nope", encoding="utf-8")
-
-    assert "被禁止访问的名称" in fs_browse.fs_read(str(secret_file))
-
-
-def test_fs_deny_baseline_survives_config_wipe_attempt(monkeypatch, tmp_path):
-    allow_root, _ = _patch_fs_config(monkeypatch, tmp_path, deny_names=[])
-    git_dir = allow_root / ".git"
-    git_dir.mkdir()
-    git_file = git_dir / "config"
-    git_file.write_text("nope", encoding="utf-8")
-
-    assert "被禁止访问的名称" in fs_browse.fs_read(str(git_file))
+    env = allow_root / ".env"
+    env.write_text("API_KEY=should-not-leak", encoding="utf-8")
+    assert _read(env) == "credential_store_denied"
+    key = allow_root / "notes.md"
+    key.write_text("-----BEGIN PRIVATE KEY-----\nMIIHIDE\n-----END PRIVATE KEY-----\n", encoding="utf-8")
+    assert _read(key) == "high_risk_secret_denied"
 
 
-# ── 3. data/ 隐式拒绝 ─────────────────────────────────────────────────────────
-
-def test_fs_read_rejects_project_data_dir_even_if_allowed(monkeypatch, tmp_path):
-    fake_data_dir = (tmp_path / "data").resolve()
-    fake_data_dir.mkdir(parents=True)
-    target = fake_data_dir / "secret.txt"
-    target.write_text("nope", encoding="utf-8")
-    _patch_fs_config(monkeypatch, tmp_path, allow_roots=[str(fake_data_dir)])
-
-    assert "项目内部沙盒目录" in fs_browse.fs_read(str(target))
-
-
-def test_fs_list_hides_project_data_dir_from_listing(monkeypatch, tmp_path):
-    allow_root, fake_data_dir = _patch_fs_config(monkeypatch, tmp_path)
-    (allow_root / "data").mkdir()
-    (allow_root / "data" / "secret.txt").write_text("nope", encoding="utf-8")
-    (allow_root / "visible.txt").write_text("hi", encoding="utf-8")
-    monkeypatch.setattr(fs_browse, "_project_data_dir", lambda: (allow_root / "data").resolve())
-
-    result = fs_browse.fs_list(str(allow_root))
-    assert "visible.txt" in result
-    assert "data/" not in result
+def test_fs_read_redacts_secrets_before_truncate(monkeypatch, tmp_path):
+    allow_root, _ = _patch_fs_config(monkeypatch, tmp_path, max_read_chars=20)
+    f = allow_root / "config.json"
+    secret = "sk-live-this-must-not-appear-even-across-pages"
+    f.write_text('{"model":"demo","api_key":"%s"}' % secret, encoding="utf-8")
+    result = _read(f)
+    assert secret not in result
+    assert "demo" in result or "api_key" in result
+    page2 = fs_browse.fs_read(str(f), offset=20, user_id=_UID, char_id=_CHAR)
+    assert secret not in page2
 
 
-# ── 4. 截断 ──────────────────────────────────────────────────────────────────
+# ── 3. backend 可读；其他角色桶隔离 ───────────────────────────────────────────
+
+def test_fs_read_backend_sandbox_file_when_same_scope(monkeypatch, tmp_path, sandbox):
+    _, data_dir = _patch_fs_config(monkeypatch, tmp_path)
+    _bind_sandbox_backend(sandbox, data_dir)
+    target = sandbox.user_memory_root(_UID, char_id=_CHAR) / "note.md"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("own memory note", encoding="utf-8")
+    assert "own memory note" in fs_browse.fs_read(str(target), user_id=_UID, char_id=_CHAR)
+
+
+def test_fs_read_rejects_other_character_memory(monkeypatch, tmp_path, sandbox):
+    _, data_dir = _patch_fs_config(monkeypatch, tmp_path)
+    _bind_sandbox_backend(sandbox, data_dir)
+    other = sandbox.user_memory_root(_UID, char_id="other-char") / "secret.md"
+    other.parent.mkdir(parents=True, exist_ok=True)
+    other.write_text("other char private", encoding="utf-8")
+    assert fs_browse.fs_read(str(other), user_id=_UID, char_id=_CHAR) == "cross_char_denied"
+
+
+def test_fs_read_rejects_dream_tree(monkeypatch, tmp_path, sandbox):
+    _, data_dir = _patch_fs_config(monkeypatch, tmp_path)
+    _bind_sandbox_backend(sandbox, data_dir)
+    dream = sandbox.dream_state_path(_UID, char_id=_CHAR)
+    dream.parent.mkdir(parents=True, exist_ok=True)
+    dream.write_text("{}", encoding="utf-8")
+    assert fs_browse.fs_read(str(dream), user_id=_UID, char_id=_CHAR) == "dream_isolation_denied"
+
+
+def test_fs_list_hides_isolated_children(monkeypatch, tmp_path, sandbox):
+    _, data_dir = _patch_fs_config(monkeypatch, tmp_path)
+    _bind_sandbox_backend(sandbox, data_dir)
+    memory_root = sandbox.user_memory_root(_UID, char_id=_CHAR)
+    memory_root.mkdir(parents=True, exist_ok=True)
+    (memory_root / "visible.md").write_text("ok", encoding="utf-8")
+    other = sandbox.user_memory_root(_UID, char_id="other-char")
+    other.mkdir(parents=True, exist_ok=True)
+    (other / "hidden.md").write_text("nope", encoding="utf-8")
+    parent = memory_root.parent.parent  # runtime/memory
+    listed = fs_browse.fs_list(str(parent), user_id=_UID, char_id=_CHAR)
+    assert _CHAR in listed
+    assert "other-char" not in listed
+
+
+# ── 4. 截断 / 限额 ────────────────────────────────────────────────────────────
 
 def test_fs_read_truncates_long_file(monkeypatch, tmp_path):
     allow_root, _ = _patch_fs_config(monkeypatch, tmp_path, max_read_chars=5)
     f = allow_root / "long.txt"
     f.write_text("0123456789", encoding="utf-8")
-
-    result = fs_browse.fs_read(str(f))
+    result = _read(f)
     assert result.startswith("01234")
     assert "已截断" in result
     assert "共 10 字" in result
@@ -163,77 +208,189 @@ def test_fs_list_truncates_long_directory(monkeypatch, tmp_path):
     allow_root, _ = _patch_fs_config(monkeypatch, tmp_path, max_list_entries=2)
     for i in range(5):
         (allow_root / f"file{i}.txt").write_text("x", encoding="utf-8")
-
-    result = fs_browse.fs_list(str(allow_root))
+    result = _list(allow_root)
     assert "已达 2 条上限" in result
+    assert "list_limit_exceeded" in result
     assert len([line for line in result.splitlines() if "file" in line]) == 2
 
 
 def test_fs_read_rejects_oversized_file(monkeypatch, tmp_path):
     allow_root, _ = _patch_fs_config(monkeypatch, tmp_path)
-    monkeypatch.setattr(fs_browse, "_MAX_READ_FILE_BYTES", 10)
+    monkeypatch.setattr(fs_browse, "_max_file_bytes", lambda: 10)
     f = allow_root / "big.txt"
     f.write_text("x" * 20, encoding="utf-8")
-
-    result = fs_browse.fs_read(str(f))
-    assert "5MB" in result
+    assert _read(f) == "file_size_limit_exceeded"
 
 
-# ── 5. 编码 ──────────────────────────────────────────────────────────────────
+# ── 5. 编码 / 非文本 ──────────────────────────────────────────────────────────
 
 def test_fs_read_decodes_gbk_file(monkeypatch, tmp_path):
     allow_root, _ = _patch_fs_config(monkeypatch, tmp_path)
     f = allow_root / "gbk.txt"
     f.write_bytes("你好世界".encode("gbk"))
+    assert _read(f) == "你好世界"
 
-    assert fs_browse.fs_read(str(f)) == "你好世界"
 
-
-def test_fs_read_binary_extension_returns_type_hint_without_raising(monkeypatch, tmp_path):
+def test_fs_read_binary_extension_returns_unsupported(monkeypatch, tmp_path):
     allow_root, _ = _patch_fs_config(monkeypatch, tmp_path)
     f = allow_root / "image.bin"
     f.write_bytes(bytes(range(256)))
-
-    result = fs_browse.fs_read(str(f))
-    assert "二进制" in result or "不支持的文件类型" in result
+    assert _read(f) == "unsupported_file_type"
 
 
-def test_fs_read_undecodable_text_extension_returns_type_hint(monkeypatch, tmp_path):
+def test_fs_read_undecodable_text_extension_returns_unsupported(monkeypatch, tmp_path):
     allow_root, _ = _patch_fs_config(monkeypatch, tmp_path)
     f = allow_root / "garbled.txt"
     f.write_bytes(b"\xff\xfe\x00\x01\x02\x03")
-
-    result = fs_browse.fs_read(str(f))
-    assert "二进制" in result or "不支持的文件类型" in result
+    assert _read(f) == "unsupported_file_type"
 
 
-# ── 6. 开关关 ─────────────────────────────────────────────────────────────────
+def test_fs_read_unknown_extension_text_detect(monkeypatch, tmp_path):
+    allow_root, _ = _patch_fs_config(monkeypatch, tmp_path)
+    f = allow_root / "notes.unknown"
+    f.write_text("plain unknown", encoding="utf-8")
+    assert _read(f) == "plain unknown"
 
-def test_fs_tools_return_disabled_message_when_off(monkeypatch, tmp_path):
+
+def test_fs_read_redaction_failure_does_not_return_raw(monkeypatch, tmp_path):
+    allow_root, _ = _patch_fs_config(monkeypatch, tmp_path)
+    secret = "sk-live-must-not-leak-on-failure"
+    f = allow_root / "cfg.json"
+    f.write_text('{"api_key":"%s"}' % secret, encoding="utf-8")
+
+    def boom(_text):
+        raise RuntimeError("broken")
+
+    monkeypatch.setattr("core.tools.fs_browse.redact_for_export", boom)
+    result = _read(f)
+    assert result == "sensitive_redaction_failed"
+    assert secret not in result
+
+
+def test_fs_read_concurrent_replace_is_denied(monkeypatch, tmp_path):
+    from pathlib import Path
+
+    allow_root, _ = _patch_fs_config(monkeypatch, tmp_path)
+    f = allow_root / "swap.txt"
+    f.write_text("hello", encoding="utf-8")
+    original = Path.read_bytes
+
+    def swap(self, *args, **kwargs):
+        data = original(self, *args, **kwargs)
+        try:
+            same = Path(self).resolve() == f.resolve()
+        except OSError:
+            same = False
+        if same:
+            f.write_bytes(data + b"x" * 99)
+        return data
+
+    monkeypatch.setattr(Path, "read_bytes", swap)
+    assert _read(f) == "path_not_found"
+
+
+def test_fs_list_respects_depth(monkeypatch, tmp_path):
+    allow_root, _ = _patch_fs_config(monkeypatch, tmp_path)
+    nested = allow_root / "sub"
+    nested.mkdir()
+    (nested / "inner.txt").write_text("x", encoding="utf-8")
+    shallow = _list(allow_root, depth=1)
+    assert "sub/" in shallow
+    assert "inner.txt" not in shallow
+    deep = fs_browse.fs_list(str(allow_root), user_id=_UID, char_id=_CHAR, depth=2)
+    assert "inner.txt" in deep
+
+
+# ── 6. 独立开关 / 发现提示 / remote ───────────────────────────────────────────
+
+def test_backend_disabled_does_not_block_external(monkeypatch, tmp_path, sandbox):
+    _, data_dir = _patch_fs_config(monkeypatch, tmp_path, backend_read=False, external_read=True)
+    _bind_sandbox_backend(sandbox, data_dir)
+    note = sandbox.user_memory_root(_UID, char_id=_CHAR) / "ok.md"
+    note.parent.mkdir(parents=True, exist_ok=True)
+    note.write_text("backend hidden", encoding="utf-8")
+    assert fs_browse.fs_read(str(note), user_id=_UID, char_id=_CHAR) == "backend_read_disabled"
+    outside = tmp_path / "plain.txt"
+    outside.write_text("ext ok", encoding="utf-8")
+    assert fs_browse.fs_read(str(outside), user_id=_UID, char_id=_CHAR) == "ext ok"
+
+
+def test_backend_repo_source_readable_when_external_off(monkeypatch, tmp_path):
+    _patch_fs_config(monkeypatch, tmp_path, external_read=False, backend_read=True)
+    repo = tmp_path / "repo"
+    src = repo / "core" / "tokenizer.py"
+    src.parent.mkdir(parents=True, exist_ok=True)
+    src.write_text("token_count = 3\n", encoding="utf-8", newline="\n")
+    monkeypatch.setattr(fs_browse, "_repo_root", lambda: repo.resolve())
+    assert fs_browse.fs_read(str(src), user_id=_UID, char_id=_CHAR) == "token_count = 3\n"
+
+
+def test_external_disabled_does_not_block_backend(monkeypatch, tmp_path, sandbox):
+    _, data_dir = _patch_fs_config(monkeypatch, tmp_path, enabled=False, external_read=False, backend_read=True)
+    _bind_sandbox_backend(sandbox, data_dir)
+    outside = tmp_path / "plain.txt"
+    outside.write_text("ext", encoding="utf-8")
+    assert fs_browse.fs_read(str(outside), user_id=_UID, char_id=_CHAR) == "external_read_disabled"
+    note = sandbox.user_memory_root(_UID, char_id=_CHAR) / "ok.md"
+    note.parent.mkdir(parents=True, exist_ok=True)
+    note.write_text("backend ok", encoding="utf-8")
+    assert "backend ok" in fs_browse.fs_read(str(note), user_id=_UID, char_id=_CHAR)
+
+
+def test_legacy_enabled_false_disables_external_only(monkeypatch, tmp_path):
     allow_root, _ = _patch_fs_config(monkeypatch, tmp_path, enabled=False)
+    cfg = {"fs_access": {"enabled": False, "allow_roots": [str(allow_root)]}}
+    monkeypatch.setattr("core.config_loader.get_config", lambda: cfg)
     f = allow_root / "file.txt"
     f.write_text("hi", encoding="utf-8")
-
-    assert fs_browse.fs_list(str(allow_root)) == "文件浏览未开启"
-    assert fs_browse.fs_read(str(f)) == "文件浏览未开启"
+    assert _read(f) == "external_read_disabled"
 
 
-def test_fs_list_without_path_returns_allow_roots(monkeypatch, tmp_path):
+def test_fs_list_without_path_returns_discovery_map(monkeypatch, tmp_path):
     allow_root, _ = _patch_fs_config(monkeypatch, tmp_path)
-
-    result = fs_browse.fs_list()
+    result = _list(None)
+    assert "发现提示" in result
     assert str(allow_root) in result
 
 
-# ── 7. schema：per-char tool_categories 暴露面 ────────────────────────────────
+def test_unc_and_ads_denied(monkeypatch, tmp_path):
+    _patch_fs_config(monkeypatch, tmp_path)
+    assert fs_browse.fs_read(r"\\server\share\file.txt", user_id=_UID, char_id=_CHAR) == "unc_network_denied"
+    ads = str(tmp_path / "allow" / "file.txt") + ":secret"
+    assert fs_browse.fs_read(ads, user_id=_UID, char_id=_CHAR) == "ads_denied"
+
+
+def test_missing_principal_is_mismatch(monkeypatch, tmp_path):
+    allow_root, _ = _patch_fs_config(monkeypatch, tmp_path)
+    f = allow_root / "a.txt"
+    f.write_text("x", encoding="utf-8")
+    assert fs_browse.fs_read(str(f)) == "grant_principal_mismatch"
+
+
+def test_remote_server_allows_backend_denies_external(monkeypatch, tmp_path, sandbox):
+    _, data_dir = _patch_fs_config(monkeypatch, tmp_path)
+    _bind_sandbox_backend(sandbox, data_dir)
+    monkeypatch.setattr("core.deployment_capabilities.is_remote_server", lambda: True)
+    outside = tmp_path / "pc.txt"
+    outside.write_text("user-pc", encoding="utf-8")
+    assert fs_browse.fs_read(str(outside), user_id=_UID, char_id=_CHAR) == "disabled_remote_server_local_capability"
+    note = sandbox.user_memory_root(_UID, char_id=_CHAR) / "ok.md"
+    note.parent.mkdir(parents=True, exist_ok=True)
+    note.write_text("server backend", encoding="utf-8")
+    assert "server backend" in fs_browse.fs_read(str(note), user_id=_UID, char_id=_CHAR)
+    state = fs_browse.effective_state()
+    assert state["backend_read"]["effective"] is True
+    assert state["external_read"]["blocking_reason"] == "disabled_remote_server_local_capability"
+    assert state["redaction"]["version"]
+
+
+# ── 7. schema / execute ───────────────────────────────────────────────────────
 
 def test_fs_tools_only_visible_with_fs_category(monkeypatch):
     _install_fs_tool_specs(monkeypatch)
     monkeypatch.setattr(tool_dispatcher, "_is_tool_enabled", lambda _: True)
-
     with_fs = {s["function"]["name"] for s in tool_dispatcher.get_tools_schema(categories=["info", "fs"])}
     without_fs = {s["function"]["name"] for s in tool_dispatcher.get_tools_schema(categories=["info", "desktop", "memory"])}
-
     assert {"fs_list", "fs_read"} <= with_fs
     assert not ({"fs_list", "fs_read"} & without_fs)
 
@@ -258,8 +415,6 @@ def test_fs_registry_contract(monkeypatch):
     assert not tool_dispatcher.is_side_effect_tool("fs_read")
 
 
-# ── execute_structured() 集成：fs 类不受 desktop/system 安全模式闸约束 ──────
-
 @pytest.mark.asyncio
 async def test_fs_tools_execute_without_danger_mode(monkeypatch, tmp_path):
     _install_fs_tool_specs(monkeypatch)
@@ -267,10 +422,49 @@ async def test_fs_tools_execute_without_danger_mode(monkeypatch, tmp_path):
     allow_root, _ = _patch_fs_config(monkeypatch, tmp_path)
     f = allow_root / "note.txt"
     f.write_text("hello", encoding="utf-8")
-
     result = await tool_dispatcher.execute_structured(
         "fs_read", {"path": str(f)}, "u1", "u1", False, _Session(),
         origin="user_live", char_id=TEST_CHAR_ID,
     )
     assert "hello" in result.result
     assert result.confirmation_request is None
+
+
+@pytest.mark.asyncio
+async def test_model_cannot_inject_principal(monkeypatch, tmp_path):
+    _install_fs_tool_specs(monkeypatch)
+    monkeypatch.setattr(tool_dispatcher, "_is_tool_enabled", lambda _: True)
+    allow_root, _ = _patch_fs_config(monkeypatch, tmp_path)
+    f = allow_root / "note.txt"
+    f.write_text("hello", encoding="utf-8")
+    result = await tool_dispatcher.execute_structured(
+        "fs_read",
+        {"path": str(f), "user_id": "other", "char_id": "other-char"},
+        _UID, _UID, False, _Session(),
+        origin="user_live", char_id=_CHAR,
+    )
+    assert "grant_principal_mismatch" in result.result
+
+
+def test_backend_read_observability_is_metadata_only(monkeypatch, tmp_path):
+    secret = "backend-read-obs-secret"
+    monkeypatch.setattr("admin.auth.get_admin_secret", lambda: secret)
+    _patch_fs_config(monkeypatch, tmp_path)
+    from admin.admin_server import app
+
+    client = TestClient(app, raise_server_exceptions=False)
+    assert client.get("/observability/backend-read").status_code == 401
+    response = client.get(
+        "/observability/backend-read",
+        headers={"Authorization": f"Bearer {secret}"},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    blob = json.dumps(payload)
+    assert payload["capability"] == "backend-read.v1"
+    assert payload["backend_read"]["effective"] is True
+    assert payload["redaction"]["version"]
+    assert "allow_roots_count" in payload["external_read"]
+    assert str(tmp_path) not in blob
+    assert "sk-" not in blob
+    assert "api_key" not in blob

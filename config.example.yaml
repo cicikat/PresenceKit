@@ -514,21 +514,17 @@ mcp_servers:
 
   # 兼容模式：删除/设为 false 后保留旧 MCP 注册行为，但会记录 legacy unclassified policy 警告。
 
-# fs 只读浏览工具（Brief 31）：fs_list / fs_read，只读，范围严格限于 allow_roots。
+# fs 只读浏览工具（工单 256 B）：fs_list / fs_read。backend 默认可读；
+# allow_roots 是外部常用目录/发现提示，不是外部普通文件的唯一准入。
 # 与 MCP 同策略——只经 tool loop 暴露，角色卡 presence_ext.tool_categories 含 "fs" 才看得见。
 fs_access:
-  enabled: false                  # 总开关，默认关
-  allow_roots: []                  # 只读允许根，绝对路径，用户手填，如 "D:/some/dir"
-  deny_names:                      # 命中即拒（对路径任一段做大小写不敏感子串匹配）
-  - secrets
-  - .env
-  - .git
-  - node_modules
-  - __pycache__
-  - config.yaml
-  - token
-  max_read_chars: 4000            # 单次读取截断
+  enabled: false                  # 旧总开关：未写 external_read 时沿用它控制外部读
+  backend_read: true              # 后端代码/配置/日志默认开；显式 false 关闭
+  external_read: false            # 本机外部普通文件；省略时跟随 enabled
+  allow_roots: []                  # 外部发现提示/相对路径解析根，不是唯一准入
+  max_read_chars: 12000           # 单次读取截断（脱敏后）
   max_list_entries: 100           # 单次列目录条数上限
+  max_read_seconds: 5             # 单次读/列耗时上限
 
 # 受控 workspace 文件能力（Brief 233）：显式根目录与分操作权限，默认关闭。
 workspace_access:

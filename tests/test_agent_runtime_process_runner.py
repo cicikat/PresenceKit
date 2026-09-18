@@ -32,6 +32,25 @@ def _script(root, name, body):
     return name
 
 
+def test_process_runner_redacts_secret_stdout(monkeypatch, tmp_path, sandbox):
+    root = tmp_path / "workspace"
+    root.mkdir()
+    _config(monkeypatch, root)
+    secret = "sk-live-process-secret-value"
+    _script(root, "secret.py", f"print('api_key = {secret}')")
+    from core.agent_runtime import TaskPrincipal
+    from core.agent_runtime.process_runner import run_process_task
+
+    result = asyncio.run(run_process_task(
+        TaskPrincipal.reality("proc-owner", "proc-char"),
+        program="secret.py",
+        idempotency_key="secret-out",
+    ))
+    assert secret not in result["stdout"]
+    assert "api_key" in result["stdout"]
+    assert secret not in str(result["receipt"])
+
+
 def test_process_runner_success_and_metadata_redaction(monkeypatch, tmp_path, sandbox):
     root = tmp_path / "workspace"
     root.mkdir()

@@ -198,8 +198,8 @@ async def _test_fs_list(uid: str, char_id: str) -> dict:
         WAITING_CONFIRM = "waiting_confirm"
 
     try:
-        # 不传 path：按 fs_list 自身文档，省略时返回 fs_access.allow_roots 允许浏览的
-        # 入口目录列表——这是唯一不依赖具体 allow_roots 配置、随时能跑通的安全调用形态。
+        # 不传 path：返回 backend/external 发现提示。不依赖具体 allow_roots，
+        # 也不会枚举全盘。
         tool_outcome = await execute_structured(
             tool_name="fs_list",
             tool_args={},

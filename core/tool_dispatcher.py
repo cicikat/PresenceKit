@@ -577,14 +577,26 @@ async def _reread_image_wrapper(user_id: str, sha256: str, instruction: str = ""
     return await reread_cached_image(sha256, instruction, mode=mode)
 
 
-async def _fs_list_wrapper(path: str | None = None, depth: int = 1) -> str:
+async def _fs_list_wrapper(
+    path: str | None = None,
+    depth: int = 1,
+    *,
+    user_id: str | None = None,
+    char_id: str | None = None,
+) -> str:
     from core.tools.fs_browse import fs_list
-    return fs_list(path=path, depth=depth)
+    return fs_list(path=path, depth=depth, user_id=user_id, char_id=char_id)
 
 
-async def _fs_read_wrapper(path: str) -> str:
+async def _fs_read_wrapper(
+    path: str,
+    offset: int = 0,
+    *,
+    user_id: str | None = None,
+    char_id: str | None = None,
+) -> str:
     from core.tools.fs_browse import fs_read
-    return fs_read(path=path)
+    return fs_read(path=path, offset=offset, user_id=user_id, char_id=char_id)
 
 
 async def _workspace_list_wrapper(path: str | None = None, depth: int = 1, *, user_id: str | None = None, char_id: str | None = None) -> str:
@@ -1592,8 +1604,9 @@ _TOOL_REGISTRY["write_toy_file"] = {
 _TOOL_REGISTRY["fs_list"] = {
     "func": _fs_list_wrapper,
     "description": (
-        "列出 fs_access.allow_roots 允许范围内目录的文件和子目录；此工具只读。"
-        "省略 path 时返回可浏览的入口目录。需要读取文件正文时使用 fs_read。"
+        "列出后端仓库/内部目录或本机普通目录的文件和子目录；此工具只读。"
+        "省略 path 时返回发现提示（含常用 allow_roots）。需要读取文件正文时使用 fs_read。"
+        "远程部署只能列本进程后端资料，不能列用户电脑。"
     ),
     "dangerous": False,
     "category": "fs",
@@ -1602,7 +1615,7 @@ _TOOL_REGISTRY["fs_list"] = {
         "properties": {
             "path": {
                 "type": "string",
-                "description": "要浏览的绝对目录路径；省略时返回允许浏览的根目录列表。",
+                "description": "要浏览的目录路径；相对路径按常用 allow_roots 解析。省略时返回发现提示。",
             },
             "depth": {
                 "type": "integer",
@@ -1620,8 +1633,8 @@ _TOOL_REGISTRY["fs_list"] = {
 _TOOL_REGISTRY["fs_read"] = {
     "func": _fs_read_wrapper,
     "description": (
-        "读取 fs_access.allow_roots 允许范围内的文本文件；此工具只读。"
-        "仅支持文本扩展名，超大或二进制文件只返回状态说明。"
+        "读取后端代码/配置/日志或本机普通文本文件；此工具只读。"
+        "敏感值会先脱敏再截断。私钥和凭据库会被拒绝。远程部署只能读本进程后端资料。"
     ),
     "dangerous": False,
     "category": "fs",
@@ -1630,7 +1643,11 @@ _TOOL_REGISTRY["fs_read"] = {
         "properties": {
             "path": {
                 "type": "string",
-                "description": "要读取的绝对文件路径，必须位于允许的浏览根目录内。",
+                "description": "要读取的文件路径；相对路径按常用 allow_roots 解析，绝对路径可以是本机普通文件。",
+            },
+            "offset": {
+                "type": "integer",
+                "description": "脱敏后的字符偏移，用于分页；省略时从开头读取。",
             },
         },
         "required": ["path"],
@@ -2590,10 +2607,16 @@ async def _execute_structured_impl(
         elif tool_name in ("read_toy_file", "write_toy_file", "write_artifact", "read_artifact", "list_artifacts", "drink_with_user"):
             result = await func(user_id=user_id, char_id=char_id, **tool_args)
         elif tool_name in {
+            "fs_list", "fs_read",
             "workspace_list", "workspace_read", "workspace_create",
             "workspace_update", "workspace_delete", "workspace_undo", "process_run",
         }:
-            result = await func(user_id=user_id, char_id=char_id, **tool_args)
+            for key in ("user_id", "uid", "char_id", "owner", "realm"):
+                if key in tool_args:
+                    result = "grant_principal_mismatch"
+                    break
+            else:
+                result = await func(user_id=user_id, char_id=char_id, **tool_args)
         elif tool_name in ("add_reminder", "read_watch"):
             result = await func(user_id=user_id, **tool_args)
         elif tool_name in (

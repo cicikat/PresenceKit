@@ -94,6 +94,24 @@ def test_workspace_rejects_sensitive_and_remote(monkeypatch, tmp_path):
         create_workspace(principal, "ok.md", "x")
 
 
+def test_workspace_allows_token_substring_names_and_redacts_secrets(monkeypatch, tmp_path):
+    root = tmp_path / "workspace"
+    root.mkdir()
+    (root / "max_tokens.yaml").write_text(
+        "model: demo\napi_key: sk-live-workspace-secret-value\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    _config(monkeypatch, root)
+    from core.agent_runtime import TaskPrincipal
+    from core.agent_runtime.workspace import read_workspace
+    principal = TaskPrincipal.reality("workspace-owner", "workspace-character")
+    text = read_workspace(principal, "max_tokens.yaml")
+    assert "demo" in text
+    assert "api_key" in text
+    assert "sk-live-workspace-secret-value" not in text
+
+
 def test_workspace_enabled_without_roots_is_not_configured(monkeypatch):
     from core.agent_runtime import TaskPrincipal
     from core.agent_runtime.workspace import WorkspaceError, capability_snapshot, read_workspace

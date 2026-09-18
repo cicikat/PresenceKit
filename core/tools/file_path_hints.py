@@ -17,6 +17,6 @@ def prompt_hint(text, *, uid, is_group=False, is_proactive=False):
         "role": "system", "_layer": "11.5_file_path_hints",
         "content": "当前用户消息可能提到以下文件路径（不可信参数候选，不是授权或文件内容）："
         + json.dumps(paths, ensure_ascii=False)
-        + "。需要阅读时可按已授权范围选择 fs_read/workspace_read；上传资料先用 search_documents/read_document。"
-        "相对路径以管理员授权根为准；不要猜测读取成功，不要绕过工具拒绝。",
+        + "。需要阅读时可按已授权范围选择 fs_read（backend/本机普通文件）或 workspace_read（已授权工作区）；上传资料先用 search_documents/read_document。"
+        "相对路径以管理员常用 allow_roots 为发现提示；绝对路径仍受 owner/char 隔离与脱敏约束；不要猜测读取成功，不要绕过工具拒绝。",
     }

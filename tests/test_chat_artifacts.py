@@ -57,6 +57,17 @@ def test_write_read_list_roundtrip(sandbox):
     assert read["truncated"] is False
 
 
+def test_read_artifact_redacts_secrets_before_truncate(sandbox):
+    secret = "sk-live-artifact-secret-value"
+    written = _write(content='{"model":"demo","api_key":"%s"}' % secret)
+    read = json.loads(chat_artifacts.read_artifact(
+        written["id"], user_id="u1", char_id=TEST_CHAR_ID,
+    ))
+    assert "demo" in read["content"]
+    assert "api_key" in read["content"]
+    assert secret not in read["content"]
+
+
 def test_public_payload_strips_body_and_absolute_path(sandbox):
     written = _write()
     record = chat_artifacts.get_artifact_record(

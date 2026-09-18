@@ -22,8 +22,6 @@ REMOTE_BLOCKED_TOOLS = frozenset({
     "device_shutdown",
     "device_sleep",
     "exit_yandere",
-    "fs_list",
-    "fs_read",
     "workspace_list",
     "workspace_read",
     "workspace_create",
@@ -110,6 +108,13 @@ def capability_projection(*, desktop_ws_online: bool = False, last_ack_at: float
             status="disabled" if remote else "enabled",
             reason=("server-local operation is disabled in remote_server mode"
                     if remote else "local deployment"),
+        ))
+    for name in ("fs_list", "fs_read"):
+        decisions.append(CapabilityDecision(
+            logical_name=name,
+            status="enabled",
+            reason=("backend read remains available; local external paths stay denied"
+                    if remote else "backend and local external read"),
         ))
     for name in sorted(REMOTE_CLIENT_ACTIONS):
         decisions.append(CapabilityDecision(

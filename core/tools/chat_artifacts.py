@@ -293,6 +293,11 @@ def read_artifact(
     if record is None:
         raise ArtifactError("找不到这个产物文件")
     text = read_artifact_text(record)
+    from core.sensitive_redaction import redact_for_export, RedactionError
+    try:
+        text = redact_for_export(text)
+    except RedactionError as exc:
+        raise ArtifactError("sensitive_redaction_failed") from exc
     truncated = len(text) > MAX_READ_CHARS
     body = text[:MAX_READ_CHARS]
     return json.dumps({

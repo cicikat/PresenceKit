@@ -707,15 +707,16 @@ question.
 | `process_run` | Backend Reality tool loop; structured args, allowlisted interpreter/program type, configured workspace root, explicit confirmation | `current`, backend; local-only, bounded, no shell/network, Dream and `remote_server` fail closed |
 | Desktop/mobile Agent Runtime task/result UI | No REST mutation, WS, relay, Tauri, Flutter, or Android contract added | `roadmap`; clients must not infer capability from tool names |
 
-## Work order 256 / character self, backend read, Agent task (proposed)
+## Work order 256 / character self, backend read, Agent task
 
-Backend-only proposed contract, not current. No desktop/mobile settings, WS, or protocol fields
-are authorized by ticket A. If B–G land durable state, they must add read-only observability in
-the same change. Details: [character-files-and-agent-autonomy.md](character-files-and-agent-autonomy.md).
+Backend-only. No desktop/mobile settings, WS, or protocol fields are authorized by ticket A.
+Ticket B landed backend-read observability in the same change. Self and Agent-task endpoints
+remain proposed until C–G. Details:
+[character-files-and-agent-autonomy.md](character-files-and-agent-autonomy.md).
 
 | Interface / path | Scope / consumers | Status |
 |---|---|---|
-| `GET /observability/backend-read` | Admin `state.read`; configured/effective, redaction version/counts, no file body | `proposed` |
+| `GET /observability/backend-read` | Admin `state.read`; configured/effective, redaction version/counts, no file body | `current`, admin-only |
 | `GET /observability/character-self` | Admin `state.read`; quota remaining, grant revision, file counts, no private notes | `proposed` |
 | Character tools `self_*`, reminder list/update/cancel, `start_agent_task` | Reality tool loop / autonomy after explicit admission | `proposed`; not in `_TOOL_REGISTRY` |
 | Desktop/mobile confirmation UI for Agent-task grants | Reuse existing authenticated channels; missing UI waits on admin approval | `proposed`; do not claim client support |
@@ -976,7 +977,7 @@ observe：两端真实锁屏、输入事件与后台生命周期验收未执行�
 
 三个产物工具及 owner-turn → turn sink → desktop/mobile payload 已接入；下载 chat scope，观测 state.read。HTML 预览为 sandbox iframe，响应与 srcdoc 内置 CSP 禁止脚本和联网。桌面 live 卡片实现，手机 UI 与历史卡片重放为 roadmap。后端相关回归 103 通过；两条既有全站 i18n 测试因 IME/生活记录裸文案失败，非产物页。桌面定向 5 项、build、cargo check 通过。隔离管理面硬刷新后 HTML 预览可见且测试脚本未执行；下载 HTTP 内容/鉴权通过，内置浏览器点击无报错但下载事件未返回，文件保存与原生 Tauri 实测为 observe。
 
-工单 253.4：owner 私聊 Path C 的 11.5_file_path_hints 提供有界路径候选，不自动读取、不改变授权。fs_read 相对路径在授权根内解析，同名歧义要求完整路径，NUL 文本按二进制拒绝。管理面工具页显示 file_access enabled/configured/effective、阻断原因、授权根及来源；远程仍禁用，无新客户端设置或协议。
+工单 253.4：owner 私聊 Path C 的 11.5_file_path_hints 提供有界路径候选，不自动读取、不改变授权。256 B 之后：相对路径仍以 allow_roots 为发现提示，绝对普通外部文件不再因跨根拒绝；同名歧义仍 `path_not_found`；NUL 文本按二进制拒绝。管理面工具页继续显示 file_access enabled/configured/effective；`remote_server` 保留 fs schema 以读本进程 backend，外部本机路径路径级拒绝。无新客户端设置或协议。
 
 ### Brief 253.5 drinking — current
 
