@@ -30,6 +30,13 @@
   <p id="tools-intiface-status" class="tools-status-note"></p>
 </div>
 
+<div class="card" id="tools-weather-card">
+  <div class="card-header"><h3 data-i18n="tools.weather_title">天气查询</h3></div>
+  <p class="tools-status-note" data-i18n="tools.weather_hint">角色可通过 weather 工具读取当前天气。默认直连 wttr.in，不走全局代理；梯子环境下直连通常更稳。需要走代理时再打开下面的开关。</p>
+  <label class="checkbox-row"><input id="tools-weather-use-proxy" type="checkbox" onchange="saveWeatherProxy()"><span data-i18n="tools.weather_use_proxy">天气请求走全局代理</span></label>
+  <p id="tools-weather-status" class="tools-status-note" role="status"></p>
+</div>
+
 <div class="card">
   <div class="card-header"><h3 data-i18n="tools.binding_title">模型工具预设</h3><button class="btn btn-ghost btn-sm" data-action="loadToolsPage" data-i18n="common.refresh">刷新</button></div>
   <div class="form-row">

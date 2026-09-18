@@ -64,6 +64,9 @@ def test_tools_page_exposes_editable_global_default_mode():
     assert 'id="tools-save-preset"' in page
     assert "global_default_tools" in tools_source
     assert "saveGlobalToolDefault" in tools_source
+    assert 'id="tools-weather-use-proxy"' in page
+    assert "saveWeatherProxy" in tools_source
+    assert "weather: { use_proxy:" in tools_source
 
 
 def test_removed_legacy_pet_and_chat_panels_have_no_static_entrypoint():

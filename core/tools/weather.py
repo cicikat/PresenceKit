@@ -11,12 +11,30 @@ from core.error_handler import log_error
 from core.proxy_config import get_aiohttp_proxy
 
 
+def weather_use_proxy() -> bool:
+    """Whether weather HTTP calls should inherit the global proxy.
+
+    Default is direct (False): wttr.in often fails through a local ladder.
+    Admin can turn the proxy back on via tools.weather.use_proxy.
+    """
+    from core.config_loader import get_config
+
+    block = get_config().get("tools", {}).get("weather", {})
+    if isinstance(block, dict):
+        return bool(block.get("use_proxy", False))
+    return False
+
+
+def _weather_proxy() -> str | None:
+    return get_aiohttp_proxy() if weather_use_proxy() else None
+
+
 async def get_weather(city: str) -> str:
     """查询指定城市的当前天气，返回一行天气描述文本"""
     from core.no_outbound import assert_outbound_allowed
     assert_outbound_allowed("weather")
     url = f"https://wttr.in/{city}?format=3&lang=zh"
-    proxy = get_aiohttp_proxy()
+    proxy = _weather_proxy()
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(
@@ -54,7 +72,7 @@ async def get_weather_detail(city: str) -> dict:
     from core.no_outbound import assert_outbound_allowed
     assert_outbound_allowed("weather")
     url = f"https://wttr.in/{city}?format=j1&lang=zh"
-    proxy = get_aiohttp_proxy()
+    proxy = _weather_proxy()
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(

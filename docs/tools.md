@@ -872,6 +872,7 @@ tools:
     enabled: false
   weather:
     enabled: true
+    use_proxy: false  # 默认直连 wttr.in；需要走全局代理时再设 true
   # 其他工具默认 enabled: true
 ```
 
@@ -882,6 +883,7 @@ tools:
 - 当前状态：`GET /system/meta-mode` 返回 `{mode, expires_at}`；danger 时 `expires_at` 恒为 null；状态文件损坏时 fail-closed 为 `safe`
 - 状态文件：`data/runtime/meta_mode.json`，路径通过 `get_paths().meta_mode()` 获取
 - 单工具 `config.tools.<name>.enabled` 仍保留；`device_shutdown` / `device_sleep` 在 danger 模式下仍需确认
+- `weather` 是角色可读的 info 工具；`tools.weather.use_proxy` 默认 `false`（直连，不继承全局 `proxy`）。管理面功能开关总览里天气走内置工具执行开关；直连/代理细分在「工具」页。`GET/PUT /settings/tools` 的 `weather.use_proxy` 热更新该字段
 
 ---
 

@@ -112,6 +112,12 @@ function _renderToolsPage() {
     : t('tools.intiface_frozen', 'Intiface 硬件能力：冻结（默认关闭；toy_* 工具不会进入聊天、自主唤醒或自主管理能力）');
   const fileAccess = document.getElementById('tools-file-access');
   if (fileAccess) fileAccess.textContent = JSON.stringify(_toolsControl.file_access || {}, null, 2);
+  const weatherProxy = document.getElementById('tools-weather-use-proxy');
+  if (weatherProxy) weatherProxy.checked = _toolsControl.weather?.use_proxy === true;
+  const weatherStatus = document.getElementById('tools-weather-status');
+  if (weatherStatus) weatherStatus.textContent = _toolsControl.weather?.use_proxy
+    ? t('tools.weather_proxy_on', '当前天气请求走全局代理')
+    : t('tools.weather_proxy_off', '当前天气请求直连，不走全局代理');
   _toolsPresetButtons();
   _renderPathExposure();
   _renderToolsRegistry();
@@ -289,4 +295,17 @@ async function saveToolExecution(name) {
     toast(t('tools.execution_saved', '全局执行开关已热更新'), 'ok');
     _renderToolsPage();
   } catch (error) { toast(error.message, 'err'); await loadToolsPage(); }
+}
+
+async function saveWeatherProxy() {
+  const input = document.getElementById('tools-weather-use-proxy');
+  if (!input) return;
+  try {
+    _toolsControl = await api('PUT', '/settings/tools', { weather: { use_proxy: input.checked } });
+    toast(t('tools.weather_saved', '天气直连设置已热更新'), 'ok');
+    _renderToolsPage();
+  } catch (error) {
+    toast(error.message, 'err');
+    await loadToolsPage();
+  }
 }

@@ -1,4 +1,12 @@
-# 功能控制面事实清单（最后核对：2026-09-18 256 C character-self）
+# 功能控制面事实清单（最后核对：2026-09-18 257 runtime recovery）
+
+## 天气查询直连（2026-09-18）
+
+`weather` 仍是已注册 info 工具，角色可读取当前天气。`tools.weather.use_proxy` 默认
+`false`：请求直连 wttr.in，不继承全局 `proxy`。梯子环境下直连通常更稳；需要走代理时
+在管理面「功能开关总览」打开天气工具后，到「工具」页勾选「天气请求走全局代理」。
+`GET/PUT /settings/tools` 读写 `weather.use_proxy`，热更新，无新端点。桌面/手机无独立
+天气设置。
 
 > 本文是后端功能开关、effective state、权限和观测入口的权威文档。跨仓调用方只记录
 > 自己的设置归属与接入差异，完整映射请查 [三仓文档总索引](three-repo-doc-index.md) 和

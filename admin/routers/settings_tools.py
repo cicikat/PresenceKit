@@ -33,12 +33,17 @@ class ToolExposureInput(BaseModel):
     exclude_tools: Optional[list[str]] = None
 
 
+class WeatherSettingsUpdate(BaseModel):
+    use_proxy: bool
+
+
 class ToolControlUpdate(BaseModel):
     tool_presets: Optional[list[ToolPresetInput]] = None
     model_bindings: Optional[dict[str, Optional[str]]] = None
     execution_enabled: Optional[dict[str, bool]] = None
     global_default_tools: Optional[list[str]] = None
     exposure: Optional[dict[str, ToolExposureInput]] = None
+    weather: Optional[WeatherSettingsUpdate] = None
 
 
 def _static_tool_enabled(name: str, tools_config: dict) -> bool:
@@ -48,6 +53,14 @@ def _static_tool_enabled(name: str, tools_config: dict) -> bool:
     if value is not None:
         return bool(value)
     return name != "read_xiaohongshu"
+
+
+def _weather_settings(tools_config: dict) -> dict:
+    block = tools_config.get("weather")
+    use_proxy = False
+    if isinstance(block, dict):
+        use_proxy = bool(block.get("use_proxy", False))
+    return {"use_proxy": use_proxy}
 
 
 class XiaohongshuSettings(BaseModel):
@@ -184,6 +197,7 @@ def _response(cfg: dict) -> dict:
         "global_categories": global_categories,
         "global_exclude_tools": global_excluded,
         "path_exposure": path_exposure,
+        "weather": _weather_settings(cfg.get("tools", {}) if isinstance(cfg.get("tools"), dict) else {}),
     }
 
 
@@ -320,6 +334,19 @@ async def update_tool_controls(body: ToolControlUpdate, auth=Depends(require_sco
                 if unknown:
                     raise HTTPException(status_code=422, detail=f"{path} 含未注册工具: {', '.join(unknown)}")
                 block["exclude_tools"] = selected
+
+    if body.weather is not None:
+        tools_config = full_cfg.setdefault("tools", {})
+        current = tools_config.get("weather")
+        if isinstance(current, dict):
+            current["use_proxy"] = bool(body.weather.use_proxy)
+        elif current is None:
+            tools_config["weather"] = {"enabled": True, "use_proxy": bool(body.weather.use_proxy)}
+        else:
+            tools_config["weather"] = {
+                "enabled": bool(current),
+                "use_proxy": bool(body.weather.use_proxy),
+            }
 
     write_config_file(CONFIG_FILE, full_cfg)
     from core import config_loader

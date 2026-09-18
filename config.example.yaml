@@ -179,6 +179,7 @@ xiaohongshu:
     enabled: true
   weather:
     enabled: true
+    use_proxy: false  # 默认直连 wttr.in，不走全局代理；梯子环境下直连更稳
   web_search:
     enabled: false
   add_reminder:
