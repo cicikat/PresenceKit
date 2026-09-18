@@ -83,7 +83,7 @@ def test_i18n_runtime_is_wired_with_persistent_chinese_default():
     assert 'data-i18n="settings_center.backend_read"' in read_admin_page("call-records")
     assert "/observability/character-self" in read_admin_page("call-records")
     assert 'data-i18n="settings_center.character_self"' in read_admin_page("call-records")
-    assert '<script src="/static/js/observability.js?v=v1-1-0-spend-reader-1"></script>' in index
+    assert '<script src="/static/js/observability.js?v=v1-257-runtime-recovery-2"></script>' in index
     assert '<script src="/static/js/character.js?v=v1-1-0-ci-1"></script>' in index
     assert 'id="ds-private-truths"' in read_admin_page("dream-settings")
     assert "dream.scenario.policy_reveal_required" in runtime

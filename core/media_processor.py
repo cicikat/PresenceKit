@@ -21,6 +21,22 @@ from core.sandbox import get_paths
 logger = logging.getLogger(__name__)
 
 _MAX_FILE_BYTES = 5 * 1024 * 1024
+
+
+class MediaIngestError(Exception):
+    """Typed ingest failure so HTTP layers do not collapse missing deps into invalid_image."""
+
+    def __init__(self, code: str, message: str):
+        super().__init__(message)
+        self.code = code
+        self.message = message
+
+
+def _missing_dep_error(package: str, feature: str) -> MediaIngestError:
+    return MediaIngestError(
+        "dependency_unavailable",
+        f"缺少运行依赖 {package}，无法处理{feature}。请按完整依赖清单重新安装。",
+    )
 SUPPORTED_SUFFIXES = {".txt", ".md", ".docx"}
 from core.audio_perception import SUFFIXES as SUPPORTED_AUDIO_SUFFIXES, ingest_audio_bytes
 SUPPORTED_IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".heif", ".bmp"}
@@ -139,11 +155,16 @@ def _normalize_image(data: bytes, filename: str) -> tuple[bytes, str]:
     suffix = Path(filename).suffix.lower()
     try:
         if suffix in (".heic", ".heif"):
-            import pillow_heif
-
+            try:
+                import pillow_heif
+            except ImportError as e:
+                raise _missing_dep_error("pillow-heif", "HEIC/HEIF 图片") from e
             pillow_heif.register_heif_opener()
 
-        from PIL import Image
+        try:
+            from PIL import Image
+        except ImportError as e:
+            raise _missing_dep_error("pillow", "图片") from e
 
         with Image.open(io.BytesIO(data)) as img:
             target_format = img.format or ""
@@ -183,8 +204,10 @@ def _normalize_image(data: bytes, filename: str) -> tuple[bytes, str]:
                 save_kwargs["quality"] = 90
             img.save(out, format=target_format, **save_kwargs)
             return out.getvalue(), media_type
+    except MediaIngestError:
+        raise
     except Exception as e:
-        raise ValueError(f"图片归一化失败:{filename}") from e
+        raise MediaIngestError("invalid_image", f"图片归一化失败:{filename}") from e
 
 
 from core.conversation_stats import attributed as _stats_attributed
@@ -222,10 +245,10 @@ async def ingest_image_bytes(
             suffix = Path(filename or "").suffix.lower()
             if suffix not in SUPPORTED_IMAGE_SUFFIXES:
                 logger.info(f"[media_processor] 不支持的图片格式:{suffix}")
-                return None
+                raise MediaIngestError("unsupported_image", f"不支持的图片格式:{suffix}")
             if len(data) > MAX_IMAGE_SIZE:
                 logger.warning(f"[media_processor] 图片超过10MB，拒绝处理: {filename} {len(data)} bytes")
-                return None
+                raise MediaIngestError("image_too_large", "图片超过 10MB 上限")
 
             sha256 = _hash_bytes(data)
             cached = _load_image_cache(sha256, signature)
@@ -243,7 +266,10 @@ async def ingest_image_bytes(
 
             normalized, media_type = _normalize_image(data, filename)
             if recognition["mode"] == "ocr" and media_type == "image/gif":
-                from PIL import Image
+                try:
+                    from PIL import Image
+                except ImportError as e:
+                    raise _missing_dep_error("pillow", "图片") from e
                 with Image.open(io.BytesIO(normalized)) as img:
                     out = io.BytesIO()
                     img.convert("RGB").save(out, format="PNG")
@@ -288,7 +314,7 @@ async def ingest_image_bytes(
                     record_failure(uid=uid, char_id=char_id, reason="vision_empty")
                 except Exception:
                     logger.debug("[media_processor] character library vision telemetry failed", exc_info=True)
-            return None
+            raise MediaIngestError("vision_failed", "图片识别服务未返回结果")
 
         inbox_dir = get_paths().inbox_dir()
         ts = int(time.time())
@@ -325,10 +351,13 @@ async def ingest_image_bytes(
             descriptions[item["index"]] = description
 
         return [desc or "" for desc in descriptions]
+    except MediaIngestError:
+        LAST_IMAGE_STORED_PATHS = []
+        raise
     except Exception as e:
         log_error("media_processor.ingest_image_bytes", e)
         LAST_IMAGE_STORED_PATHS = []
-        return None
+        raise MediaIngestError("vision_failed", "图片识别失败") from e
 
 
 def _split_vision_result(result: str, count: int) -> list[str]:
@@ -379,13 +408,17 @@ def parse_file_bytes(data: bytes, filename: str) -> str | None:
     if suffix in (".docx", ".doc"):
         try:
             from docx import Document
-
+        except ImportError as e:
+            raise _missing_dep_error("python-docx", "Word 文档") from e
+        try:
             doc = Document(io.BytesIO(data))
             paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
             return "\n".join(paragraphs)
+        except MediaIngestError:
+            raise
         except Exception as e:
             logger.warning(f"[media_processor] Word文件解析失败: {filename} {e}")
-            return None
+            raise MediaIngestError("file_parse_failed", f"Word 文件解析失败: {filename}") from e
 
     return None
 
@@ -542,7 +575,16 @@ async def ingest_file_bytes(data: bytes, filename: str, *, uid: str = "", char_i
         counter += 1
 
     path.write_bytes(data)
-    text = parse_file_bytes(data, original_name)
+    try:
+        text = parse_file_bytes(data, original_name)
+    except MediaIngestError:
+        if uid and char_id:
+            try:
+                from core.character_document_library import record_failure
+                record_failure(uid=uid, char_id=char_id, reason="file_parse")
+            except Exception:
+                logger.debug("[media_processor] character library parse telemetry failed", exc_info=True)
+        raise
     if text is None:
         logger.warning(f"[media_processor] 文件解析失败，已保留落盘文件: {path}")
         if uid and char_id:
@@ -551,7 +593,7 @@ async def ingest_file_bytes(data: bytes, filename: str, *, uid: str = "", char_i
                 record_failure(uid=uid, char_id=char_id, reason="file_parse")
             except Exception:
                 logger.debug("[media_processor] character library parse telemetry failed", exc_info=True)
-        return "", path
+        raise MediaIngestError("file_parse_failed", f"文件解析失败: {original_name}")
     if uid and char_id:
         try:
             from core.character_document_library import store_upload
@@ -620,6 +662,9 @@ async def process_file_with_evidence(file_info: dict, *, uid: str = "", char_id:
         logger.info(f"[media_processor] 文件已落盘: {stored_path}")
         return text if text else None, evidence
 
+    except MediaIngestError as e:
+        log_error("media_processor.process_file", e)
+        return None, {**_media_ref("file", name, data if "data" in locals() else None, availability="unavailable"), "error": e.code}
     except Exception as e:
         log_error("media_processor.process_file", e)
     return None, _media_ref("file", name, None, availability="unavailable")

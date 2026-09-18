@@ -1942,6 +1942,7 @@ const _RC_STATUS_BADGE = {
   ok:            { bg: '#1a3a1a', color: '#86efac', text: '正常' },
   off:           { bg: '#2d2d2d', color: '#9ca3af', text: '开关关闭' },
   missing_asset: { bg: '#3a2a1a', color: '#fbbf24', text: '缺素材' },
+  missing_dep:   { bg: '#3a1a1a', color: '#f87171', text: '缺依赖' },
   unknown:       { bg: '#3a1a1a', color: '#f87171', text: '检查异常' },
 };
 

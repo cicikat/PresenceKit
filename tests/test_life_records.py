@@ -81,12 +81,37 @@ def test_snapshot_pagination_during_updates(client):
 
 def test_invalid_images_decimal_and_server_owned_fields(client):
     body=operation();body.update(image_base64='invalid',image_mime='image/png')
-    assert post(client,body).status_code==422
+    response=post(client,body)
+    assert response.status_code==422
+    detail=response.json()['detail']
+    assert detail['code']=='invalid_image'
+    assert detail['message']=='invalid_image'
     body=operation();body['record']['items'][0]['amount']='NaN'
     assert post(client,body).status_code==422
     body=operation();body['record'].update(deleted=True,recognition_status='processing',revision=900)
     result=post(client,body).json()['record']
     assert not result.get('deleted') and result['revision']==1 and result['recognition_status']=='ready'
+
+
+def test_missing_pillow_is_dependency_unavailable_not_invalid_image(client, monkeypatch):
+    raw = io.BytesIO(); Image.new('RGB', (1, 1)).save(raw, format='PNG')
+    body = operation()
+    body.update(image_base64=base64.b64encode(raw.getvalue()).decode(), image_mime='image/png')
+
+    import builtins
+    real_import = builtins.__import__
+
+    def _blocked(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == 'PIL' or name.startswith('PIL.'):
+            raise ImportError("No module named 'PIL'")
+        return real_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, '__import__', _blocked)
+    response = post(client, body)
+    assert response.status_code == 422
+    detail = response.json()['detail']
+    assert detail['code'] == 'dependency_unavailable'
+    assert 'pillow' in detail['message']
 
 
 def test_read_only_observation_does_not_create_storage(client,sandbox):

@@ -96,7 +96,9 @@ async def sync(body: Sync, auth=Depends(require_scopes('life_records'))):
                 if Image.MIME.get(parsed.format) != body.image_mime: raise ValueError()
                 parsed.verify()
         except HTTPException: raise
-        except Exception: raise HTTPException(422, 'invalid_image') from None
+        except ImportError as e:
+            raise HTTPException(status_code=422, detail={'code': 'dependency_unavailable', 'message': '缺少运行依赖 pillow，无法校验生活记录图片'}) from e
+        except Exception: raise HTTPException(status_code=422, detail={'code': 'invalid_image', 'message': 'invalid_image'}) from None
     try:
         return await asyncio.to_thread(store.sync, uid, auth.label, body.model_dump(mode='json'), image)
     except store.Conflict as exc:

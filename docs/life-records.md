@@ -18,7 +18,7 @@ GET /settings/life-records 增加无正文 continuity 观测；管理面显示�
 - GET `/life-records/observability?owner_id=...`：无正文/图片/密钥的任务、失败类型、设备回执和操作审计。
 - GET/PUT `/settings/life-records`、POST `/settings/life-records/{id}/retry`：admin-only 管理面入口。
 
-单图最大 10MiB，JPEG/PNG/WebP，实际图片格式须与 MIME 一致、像素数有界。字段与十进制字符串校验，amount 不转浮点、不混算币种；items 的扩展字段保留。captured_at 规范到 UTC，校正时保持原始拍摄时间。客户端不能设置 deleted、revision、recognition_status 等服务端字段。
+单图最大 10MiB，JPEG/PNG/WebP，实际图片格式须与 MIME 一致、像素数有界。字段与十进制字符串校验，amount 不转浮点、不混算币种；items 的扩展字段保留。captured_at 规范到 UTC，校正时保持原始拍摄时间。客户端不能设置 deleted、revision、recognition_status 等服务端字段。缺 Pillow 时 `POST /life-records/sync` 返回 `422 {code: dependency_unavailable}`，不得伪装成 `invalid_image`；损坏图片仍是 `invalid_image`。
 
 ## 存储、恢复与删除
 

@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 #   ok             — 开关已开，素材/配置齐全
 #   off            — 功能存在，开关关着（用户主动选择，非缺陷）
 #   missing_asset  — 开关已开，但缺少必需素材/配置（真正的"漏"）
+#   missing_dep    — 完整运行依赖未安装（Pillow / python-docx 等）
 #   unknown        — 检查过程本身异常，无法判断（fail-soft 兜底，不冒充 ok）
 
 
@@ -46,6 +47,28 @@ def _safe_check(check_id: str, label: str, fn) -> CheckResult:
     except Exception as e:
         logger.warning("[resource_completeness] 检查 %s 失败: %s", check_id, e)
         return CheckResult(id=check_id, label=label, status="unknown", detail=f"检查异常: {e}")
+
+
+def _check_runtime_deps() -> CheckResult:
+    from core.runtime_deps import missing_runtime_imports
+
+    missing = missing_runtime_imports()
+    if missing:
+        detail = "、".join(f"{item['name']}（{item['label']}）" for item in missing)
+        return CheckResult(
+            id="runtime_deps",
+            label="完整运行依赖",
+            status="missing_dep",
+            detail=f"当前解释器缺少：{detail}。安装/更新应同步 requirements.lock。",
+            category="asset",
+        )
+    return CheckResult(
+        id="runtime_deps",
+        label="完整运行依赖",
+        status="ok",
+        detail="Pillow / Word / PDF / 搜索 / 邮件 / MCP 等完整运行包可导入",
+        category="asset",
+    )
 
 
 def _check_sticker() -> CheckResult:
@@ -240,6 +263,7 @@ def _check_active_character_assets() -> CheckResult:
 
 
 _CHECKS: list[tuple[str, str, Any]] = [
+    ("runtime_deps", "完整运行依赖", _check_runtime_deps),
     ("sticker", "表情包", _check_sticker),
     ("tts", "TTS 合成服务", _check_tts),
     ("desktop_voice_bar", "桌宠手动语音条", _check_desktop_voice_bar),

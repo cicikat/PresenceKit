@@ -203,6 +203,51 @@ def test_upload_ingest_omits_stored_paths(sandbox, monkeypatch):
     assert "kind" in body["media_refs"][0]
 
 
+def test_upload_ingest_returns_typed_media_error(sandbox, monkeypatch):
+    from admin.routers import chat as chat_router
+    from core.media_processor import MediaIngestError
+
+    async def _fail_ingest(items, *, uid="", char_id=""):
+        raise MediaIngestError("dependency_unavailable", "缺少运行依赖 pillow，无法处理图片。请按完整依赖清单重新安装。")
+
+    monkeypatch.setattr("core.media_processor.ingest_image_bytes", _fail_ingest)
+    monkeypatch.setattr(chat_router, "run_owner_chat_turn", lambda *_args, **_kwargs: None)
+    client = _client(monkeypatch)
+    _scoped(sandbox, "emt_chat", ["chat"])
+    response = client.post(
+        "/upload/ingest",
+        headers={"Authorization": "Bearer emt_chat"},
+        files=[("files", ("photo.png", PNG, "image/png"))],
+        data={"channel": "mobile"},
+    )
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert detail["code"] == "dependency_unavailable"
+    assert "pillow" in detail["message"]
+
+
+def test_upload_ingest_word_parse_failure_is_typed(sandbox, monkeypatch):
+    from admin.routers import chat as chat_router
+    from core.media_processor import MediaIngestError
+
+    async def _fail_file(data, filename, *, uid="", char_id=""):
+        raise MediaIngestError("file_parse_failed", f"Word 文件解析失败: {filename}")
+
+    monkeypatch.setattr("core.media_processor.ingest_file_bytes", _fail_file)
+    monkeypatch.setattr(chat_router, "run_owner_chat_turn", lambda *_args, **_kwargs: None)
+    client = _client(monkeypatch)
+    _scoped(sandbox, "emt_chat", ["chat"])
+    response = client.post(
+        "/upload/ingest",
+        headers={"Authorization": "Bearer emt_chat"},
+        files=[("files", ("note.docx", b"not-a-docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"))],
+        data={"channel": "mobile"},
+    )
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert detail["code"] == "file_parse_failed"
+
+
 def test_tombstone_releases_live_ref_for_gc(sandbox):
     from core import media_processor
     from core.chat_media import invalidate_live_media_cache

@@ -556,8 +556,11 @@ def _decode_text(raw: bytes) -> str | None:
 
 def _parse_non_text(raw: bytes, filename: str, suffix: str) -> str | None:
     if suffix in _OFFICE_EXTENSIONS:
-        from core.media_processor import parse_file_bytes
-        return parse_file_bytes(raw, filename)
+        from core.media_processor import MediaIngestError, parse_file_bytes
+        try:
+            return parse_file_bytes(raw, filename)
+        except MediaIngestError:
+            return None
     return None
 
 

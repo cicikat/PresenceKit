@@ -81,7 +81,9 @@ def test_resource_completeness_requires_auth_and_returns_shape(sandbox, monkeypa
     assert "checks" in payload and "summary" in payload and "known_gaps" in payload
     assert len(payload["checks"]) > 0
     for c in payload["checks"]:
-        assert c["status"] in ("ok", "off", "missing_asset", "unknown")
+        assert c["status"] in ("ok", "off", "missing_asset", "missing_dep", "unknown")
+    runtime = next(c for c in payload["checks"] if c["id"] == "runtime_deps")
+    assert runtime["status"] in ("ok", "missing_dep")
     assert len(payload["known_gaps"]) > 0
     for g in payload["known_gaps"]:
         assert g["id"] and g["label"] and g["source"]
@@ -137,6 +139,34 @@ def test_resource_completeness_observes_tts_and_desktop_voice_bar(monkeypatch):
     assert "desktop_voice_bar_decouple" not in gaps
     assert "desktop_tts_auto_play" not in gaps
     assert "mobile_tts_delivery" not in gaps
+
+
+def test_resource_completeness_reports_runtime_deps(monkeypatch):
+    import core.resource_completeness as _rc
+
+    monkeypatch.setattr(
+        "core.runtime_deps.missing_runtime_imports",
+        lambda: [{"name": "pillow", "import_name": "PIL", "label": "图片处理（聊天图 / 生活记录）"}],
+    )
+    checks = {item["id"]: item for item in _rc.run_all_checks()["checks"]}
+    runtime = checks["runtime_deps"]
+    assert runtime["status"] == "missing_dep"
+    assert "pillow" in runtime["detail"]
+
+    monkeypatch.setattr("core.runtime_deps.missing_runtime_imports", lambda: [])
+    checks = {item["id"]: item for item in _rc.run_all_checks()["checks"]}
+    assert checks["runtime_deps"]["status"] == "ok"
+
+
+def test_resource_completeness_ui_shows_missing_dep_badge():
+    from pathlib import Path
+
+    script = (
+        Path(__file__).resolve().parents[1] / "admin" / "static" / "js" / "observability.js"
+    ).read_text(encoding="utf-8")
+    assert "missing_dep:" in script
+    assert "缺依赖" in script
+    assert "loadResourceCompleteness" in script
 
 
 def test_api_contract_check_requires_auth_and_returns_shape(sandbox, monkeypatch):

@@ -988,9 +988,12 @@ async def upload_ingest(
         active_char = grant.char_id if grant is not None else (
             getattr(pipeline_registry.get(), "_active_character_id", None) or DEFAULT_CHAR_ID
         )
-        result = await media_processor.ingest_file_bytes(data, fname, uid=owner_uid, char_id=active_char)
+        try:
+            result = await media_processor.ingest_file_bytes(data, fname, uid=owner_uid, char_id=active_char)
+        except media_processor.MediaIngestError as e:
+            raise HTTPException(status_code=422, detail={"code": e.code, "message": e.message}) from e
         if result is None:
-            raise HTTPException(status_code=422, detail="文件读取失败")
+            raise HTTPException(status_code=422, detail={"code": "file_read_failed", "message": "文件读取失败"})
 
         text, stored_path = result
 
@@ -1041,9 +1044,12 @@ async def upload_ingest(
         active_char = grant.char_id if grant is not None else (
             getattr(pipeline_registry.get(), "_active_character_id", None) or DEFAULT_CHAR_ID
         )
-        descriptions = await media_processor.ingest_image_bytes(items, uid=owner_uid, char_id=active_char)
+        try:
+            descriptions = await media_processor.ingest_image_bytes(items, uid=owner_uid, char_id=active_char)
+        except media_processor.MediaIngestError as e:
+            raise HTTPException(status_code=422, detail={"code": e.code, "message": e.message}) from e
         if descriptions is None:
-            raise HTTPException(status_code=422, detail="图片识别失败")
+            raise HTTPException(status_code=422, detail={"code": "vision_failed", "message": "图片识别失败"})
 
         if len(descriptions) == 1:
             media_context = f"(你看到了用户发来的一张图,内容:{descriptions[0]})"

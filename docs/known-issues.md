@@ -337,7 +337,7 @@ TestFetchContextSemanticHitsTraceUnpack`。
 
 **2026-07-25 新增工具**：管理面板「观测」区新增三块面板，供日常自查：
 - `GET /observability/resource-completeness`（`core/resource_completeness.py`）——扫描
-  各功能开关/素材配置状态，标出"关着"和"开了但缺素材"；附一份人工维护的"功能压根还没
+  各功能开关/素材配置状态，标出"关着"、"开了但缺素材"和"缺依赖"；附一份人工维护的"功能压根还没
   做"清单（当前含移动端 TTS 投递、桌宠语音条 UI 解耦、Live2D/3D 绑定前端消费三项，来源
   见 `cc-tasks/124`/`125`/`docs/tools.md`）。
 - `GET /observability/api-contract-check`（`core/api_contract_check.py`）——扫后端
