@@ -309,8 +309,7 @@ def get_history(user_id: str, max_turns: int | None = None, *, char_id: str = DE
     参数：
         user_id   - 用户 QQ 号
         max_turns - 最多返回多少轮（一轮 = user + assistant 各一条）
-                    None 时从 config.yaml 的 memory.short_term_rounds 读取（owner），
-                    再 fallback 到 context.max_turns（deprecated alias），默认 20
+                    None 时从 config.yaml 的 memory.short_term_rounds 读取，默认 20
         char_id   - 角色桶 id（默认 "yexuan"，生产调用方须显式传入）
 
     返回：
@@ -318,12 +317,7 @@ def get_history(user_id: str, max_turns: int | None = None, *, char_id: str = DE
     """
     if max_turns is None:
         cfg = get_config()
-        # owner: memory.short_term_rounds；context.max_turns 是 deprecated alias
-        max_turns = (
-            cfg.get("memory", {}).get("short_term_rounds")
-            or cfg.get("context", {}).get("max_turns")  # deprecated alias
-            or 20
-        )
+        max_turns = cfg.get("memory", {}).get("short_term_rounds") or 20
 
     history = load(user_id, char_id=char_id)
     groups = _group_turns(history)

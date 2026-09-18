@@ -49,12 +49,6 @@ def record_filtered_query() -> None:
         _OBSERVABILITY["policy_filtered_query_count"] += 1
 
 
-def record_rejections(count: int) -> None:
-    """Deprecated compatibility shim; count inventory is intentionally ignored."""
-    if count > 0:
-        record_filtered_query()
-
-
 def observability_snapshot() -> dict[str, int]:
     with _LOCK:
         return dict(_OBSERVABILITY)

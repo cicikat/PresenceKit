@@ -39,12 +39,7 @@ class ContextConfigUpdate(BaseModel):
 @router.get("/context-config", summary="获取上下文轮数配置")
 async def get_context_config(auth=Depends(require_scopes("admin"))):
     cfg = get_config()
-    # owner: memory.short_term_rounds；context.max_turns 是 deprecated alias
-    max_turns = (
-        cfg.get("memory", {}).get("short_term_rounds")
-        or cfg.get("context", {}).get("max_turns")  # deprecated alias
-        or 20
-    )
+    max_turns = cfg.get("memory", {}).get("short_term_rounds") or 20
     return {"max_turns": max_turns}
 
 

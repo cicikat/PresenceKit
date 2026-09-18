@@ -722,24 +722,6 @@ def clear(user_id: str, *, char_id: str = DEFAULT_CHAR_ID):
     mutate(user_id, reset_owned_fields, char_id=char_id)
 
 
-# ─── 生理期 ────────────────────────────────────────────────────────────────────
-
-def get_period_info(user_id: str) -> dict:
-    """Deprecated compatibility shim for the uid-global period state."""
-    logger.warning("user_profile.get_period_info is deprecated; use health_state.get_period_info")
-    from core.memory.health_state import get_period_info as _get_period_info
-
-    return _get_period_info(user_id)
-
-
-def set_period_date(user_id: str, date_str: str):
-    """Deprecated compatibility shim for the uid-global period state."""
-    logger.warning("user_profile.set_period_date is deprecated; use health_state.set_period_date")
-    from core.memory.health_state import set_period_date as _set_period_date
-
-    return _set_period_date(user_id, date_str)
-
-
 class UserProfile:
     """用户画像类，封装模块级函数，供外部按类方式导入使用"""
 

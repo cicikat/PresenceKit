@@ -2,22 +2,18 @@
 tests/test_r7_config_truth.py — Fable R7-A: config truth unification
 
 Verifies that memory.short_term_rounds is the single owner for the
-short-term context budget, and that context.max_turns is only a
-deprecated read-alias with no new write path.
+short-term context budget. context.max_turns is not a read alias.
 
 Coverage:
 1.  get_history() reads memory.short_term_rounds (owner) when set.
-2.  get_history() falls back to context.max_turns (legacy alias) when
-    memory.short_term_rounds is absent.
-3.  When both exist, memory.short_term_rounds wins.
+2.  get_history() does not read context.max_turns when the owner is absent.
+3.  When both exist, memory.short_term_rounds still wins.
 4.  load_for_prompt() reads memory.short_term_rounds.
 5.  Admin PUT /context-config writes memory.short_term_rounds.
 6.  Admin PUT /context-config does NOT write context.max_turns.
 7.  Admin GET /context-config returns value from memory.short_term_rounds.
-8.  Admin GET /context-config falls back to context.max_turns when
-    memory.short_term_rounds is absent.
-9.  Docs (known-issues.md) no longer describe context.max_turns as
-    current owner / not-yet-fixed.
+8.  Admin GET /context-config does not fall back to context.max_turns.
+9.  Docs no longer describe context.max_turns as current owner.
 """
 from __future__ import annotations
 from tests.fixtures.public_assets import TEST_CHAR_ID
@@ -76,11 +72,11 @@ def test_get_history_reads_memory_short_term_rounds(sandbox, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# 2. get_history falls back to context.max_turns (legacy alias)
+# 2. get_history ignores leftover context.max_turns
 # ---------------------------------------------------------------------------
 
-def test_get_history_legacy_alias_fallback(sandbox, monkeypatch):
-    """get_history() accepts context.max_turns when memory.short_term_rounds is absent."""
+def test_get_history_ignores_legacy_context_max_turns(sandbox, monkeypatch):
+    """get_history() uses the default 20 when memory.short_term_rounds is absent."""
     import core.memory.short_term as st
 
     monkeypatch.setattr(st, "get_config", lambda: {"context": {"max_turns": 3}})
@@ -89,7 +85,9 @@ def test_get_history_legacy_alias_fallback(sandbox, monkeypatch):
         st.append("u2", "assistant", f"rep {i}", char_id=TEST_CHAR_ID)
 
     result = st.get_history("u2", char_id=TEST_CHAR_ID)
-    assert len(result) <= 6, f"Expected ≤6 msgs for 3-round legacy budget, got {len(result)}"
+    assert len(result) == 20, (
+        f"Expected default 20-round budget (10 rounds × 2 msgs) when owner absent; got {len(result)}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -202,11 +200,11 @@ def test_admin_get_reads_memory_short_term_rounds(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# 8. Admin GET falls back to context.max_turns (legacy alias)
+# 8. Admin GET ignores leftover context.max_turns
 # ---------------------------------------------------------------------------
 
-def test_admin_get_legacy_alias_fallback(monkeypatch):
-    """GET /context-config falls back to context.max_turns when memory key absent."""
+def test_admin_get_ignores_legacy_context_max_turns(monkeypatch):
+    """GET /context-config uses the default 20 when memory.short_term_rounds is absent."""
     import admin.routers.settings_misc as sm
     monkeypatch.setattr(
         sm, "get_config",
@@ -220,7 +218,7 @@ def test_admin_get_legacy_alias_fallback(monkeypatch):
     client = TestClient(app)
     resp = client.get("/context-config", headers={"Authorization": f"Bearer {VALID_TOKEN}"})
     assert resp.status_code == 200
-    assert resp.json()["max_turns"] == 7
+    assert resp.json()["max_turns"] == 20
 
 
 # ---------------------------------------------------------------------------

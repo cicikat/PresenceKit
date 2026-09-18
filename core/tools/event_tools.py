@@ -180,7 +180,7 @@ async def search_events_wrapper(
     if limit < 1 or limit > MAX_EVENTS:
         return _unknown("limit_exceeded")
     if source and not source_policy.role_source_allowed(source):
-        source_policy.record_rejections(1)
+        source_policy.record_filtered_query()
         return _unknown("source_not_available")
     try:
         result = event_query.search(

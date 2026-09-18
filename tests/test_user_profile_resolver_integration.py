@@ -219,4 +219,3 @@ def test_period_info_is_uid_global(sandbox):
     _up.save(_UID, {"last_period_date": "2026-06-01"}, char_id="character_b")
 
     assert health_state.get_period_info(_UID)["last_period_date"] == "2026-08-01"
-    assert _up.get_period_info(_UID)["last_period_date"] == "2026-08-01"

@@ -614,8 +614,6 @@ pseudo_stream:
       interval_min_ms: 50
       interval_max_ms: 120
       max_duration_ms: 5000
-context:
-  max_turns: 30
 chat:
   mode: chat
   style: chat

@@ -182,12 +182,3 @@ def test_period_operations_write_only_to_sandbox(sandbox):
     assert _manifest(production_data) == before
     sandbox_paths = {path.relative_to(sandbox._base).as_posix() for path in sandbox._base.rglob("health_state.json")}
     assert all(f"runtime/memory/global/{uid}/health_state.json" in sandbox_paths for uid in ("u1", "owner1", "test_char"))
-
-
-def test_deprecated_profile_shims_forward_without_character_scope(sandbox, caplog):
-    from core.memory import user_profile
-
-    with caplog.at_level(logging.WARNING):
-        user_profile.set_period_date("owner1", "2026-07-30")
-        assert user_profile.get_period_info("owner1") == {"last_period_date": "2026-07-30"}
-    assert "deprecated" in caplog.text
