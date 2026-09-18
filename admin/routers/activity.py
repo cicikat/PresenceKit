@@ -5,11 +5,13 @@ GET /activity/current  — 当前角色活动状态（activity_manager 维护的
 """
 
 from datetime import datetime
+from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from admin.auth import require_scopes
 from admin.routers._common import active_char_id as _active_char_id
+from admin.routers._common import resolve_requested_char_id
 from core import activity_manager
 
 router = APIRouter()
@@ -69,8 +71,11 @@ def _get_activity_text(char_id: str) -> str:
 
 
 @router.get("/current", summary="获取当前活动状态")
-async def get_activity_state(auth=Depends(require_scopes("state.read"))):
-    char_id = _active_char_id()
+async def get_activity_state(
+    char_id: Optional[str] = Query(default=None, description="角色 id；缺省 = active char"),
+    auth=Depends(require_scopes("state.read")),
+):
+    char_id = resolve_requested_char_id(char_id, fallback=_active_char_id)
     state = activity_manager.get_current(char_id=char_id)
 
     started_at = None

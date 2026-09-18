@@ -222,7 +222,11 @@ async def test_activity_current_endpoint_includes_char_id(sandbox, monkeypatch):
     import admin.routers.activity as _activity_router
     from core.asset_registry import get_registry
 
-    monkeypatch.setattr(get_registry(), "resolve", lambda cid, kind: cid)
+    monkeypatch.setattr(
+        get_registry(),
+        "resolve",
+        lambda cid, kind: type("_Entry", (), {"hidden": False})(),
+    )
 
     captured_char_ids = []
 
@@ -241,3 +245,36 @@ async def test_activity_current_endpoint_includes_char_id(sandbox, monkeypatch):
     assert result["char_id"] == "character_a"
     assert result["text"] == "character_a 在种花"
     assert captured_char_ids == ["character_a", "character_a"]
+
+
+@pytest.mark.asyncio
+async def test_activity_current_explicit_char_id_ignores_active(sandbox, monkeypatch):
+    p = sandbox.active_prompt_assets()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps({"active_character": "character_a"}), encoding="utf-8")
+
+    import admin.routers.activity as _activity_router
+    from core.asset_registry import get_registry
+
+    monkeypatch.setattr(
+        get_registry(),
+        "resolve",
+        lambda cid, kind: type("_Entry", (), {"hidden": False})(),
+    )
+
+    captured_char_ids = []
+
+    def _fake_get_current(char_id=TEST_CHAR_ID):
+        captured_char_ids.append(char_id)
+        return {"current": f"{char_id} 在种花", "arc": "afternoon", "expected_until_ts": 0}
+
+    monkeypatch.setattr(_activity_router.activity_manager, "get_current", _fake_get_current)
+    monkeypatch.setattr(
+        _activity_router, "_get_activity_text",
+        lambda char_id: _activity_router.activity_manager.get_current(char_id=char_id)["current"],
+    )
+
+    result = await _activity_router.get_activity_state(char_id="character_b")
+
+    assert result["char_id"] == "character_b"
+    assert captured_char_ids == ["character_b", "character_b"]

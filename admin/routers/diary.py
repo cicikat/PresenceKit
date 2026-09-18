@@ -11,6 +11,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from admin.auth import require_scopes
+from admin.routers._common import resolve_requested_char_id
 from core.sandbox import get_paths
 
 router = APIRouter()
@@ -81,7 +82,7 @@ async def list_diary(
     char_id: Optional[str] = Query(default=None, description="角色 id；缺省 = active char"),
     auth=Depends(require_scopes("memory.read")),
 ):
-    cid = (char_id or "").strip() or _active_char_id()
+    cid = resolve_requested_char_id(char_id, fallback=_active_char_id)
     entries = []
     diary_dir = get_paths().yexuan_inner_diary(char_id=cid)
     if diary_dir.exists():
@@ -108,7 +109,7 @@ async def get_diary(
 ):
     if not _DATE_RE.match(date):
         raise HTTPException(status_code=422, detail="date format must be YYYY-MM-DD")
-    cid = (char_id or "").strip() or _active_char_id()
+    cid = resolve_requested_char_id(char_id, fallback=_active_char_id)
     path = get_paths().yexuan_inner_diary(char_id=cid) / f"{date}.md"
     if not path.exists():
         raise HTTPException(status_code=404, detail="diary not found")

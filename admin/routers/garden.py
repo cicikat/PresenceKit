@@ -4,9 +4,12 @@
 
 import json
 
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from admin.auth import require_scopes
+from admin.routers._common import resolve_requested_char_id
 from core.garden import manager as garden_manager
 from core.sandbox import get_paths as _get_paths
 
@@ -33,5 +36,9 @@ def _active_char_id() -> str:
 
 
 @router.get("/state", summary="获取花园状态")
-async def get_garden_state(auth=Depends(require_scopes("state.read"))):
-    return garden_manager.get_state(char_id=_active_char_id())
+async def get_garden_state(
+    char_id: Optional[str] = Query(default=None, description="角色 id；缺省 = active char"),
+    auth=Depends(require_scopes("state.read")),
+):
+    resolved = resolve_requested_char_id(char_id, fallback=_active_char_id)
+    return garden_manager.get_state(char_id=resolved)

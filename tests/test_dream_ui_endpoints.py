@@ -46,7 +46,15 @@ def test_state_get_is_readonly_no_file_writes(sandbox):
     GET /dream/state never writes any file.
     Positive control: writing dream_settings.json DOES create a file.
     """
+    import json
     from admin.routers.dream import dream_state_get
+
+    # Omit-query resolves live active; seed it first so GET does not first-run
+    # initialize active_prompt_assets.json.
+    sandbox.active_prompt_assets().write_text(
+        json.dumps({"active_character": TEST_CHAR_ID}),
+        encoding="utf-8",
+    )
 
     pre = set(sandbox._base.rglob("*")) if sandbox._base.exists() else set()
 
@@ -121,6 +129,17 @@ def test_state_get_no_dream_returns_reality_chat(sandbox):
     assert result["char_tension"] == 0.0
     assert "yexuan_tension" not in result
     assert result["body"] == {"heat": 0.0, "sensitivity": 0.0, "tension": 0.0}
+
+
+def test_state_get_unknown_char_id_is_character_unavailable(sandbox):
+    from admin.routers.dream import dream_state_get
+    from fastapi import HTTPException
+
+    with patch("admin.routers.dream._owner_uid", return_value=_UID):
+        with pytest.raises(HTTPException) as exc_info:
+            asyncio.run(dream_state_get(char_id="ghost_char_xyz"))
+    assert exc_info.value.status_code == 422
+    assert exc_info.value.detail == "character_unavailable"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

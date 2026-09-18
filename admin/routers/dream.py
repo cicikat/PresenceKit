@@ -30,8 +30,8 @@ from pathlib import Path
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 
 from admin.auth import require_scopes
+from admin.routers._common import requested_char_id, resolve_requested_char_id
 from core.config_loader import get_config
-from core.data_paths import DEFAULT_CHAR_ID
 from core.sandbox import get_paths
 
 router = APIRouter()
@@ -76,12 +76,13 @@ _PATCH_ALLOWED = frozenset({
 })
 
 @router.get("/dream/invariants", summary="跨世界身份稳定性（只读）")
-async def dream_invariants_get(_auth=Depends(require_scopes("activity"))):
-    from core.pipeline_registry import get as _get_pipeline
+async def dream_invariants_get(
+    char_id: str | None = Query(default=None),
+    _auth=Depends(require_scopes("activity")),
+):
     from core.dream.invariants import load
-    pl = _get_pipeline()
-    char_id = (pl._active_character_id if pl else None) or DEFAULT_CHAR_ID
-    entries = load(_owner_uid(), char_id=char_id)
+    selected_char = _validated_live_char_id(char_id)
+    entries = load(_owner_uid(), char_id=selected_char)
     entries.sort(key=lambda item: (bool(item.get("contradicted_by")), int(item.get("count") or 0)), reverse=True)
     return {"entries": entries}
 
@@ -100,11 +101,28 @@ def _active_dream_char_id() -> str:
     from core.pipeline_registry import get as _get_pipeline
 
     pl = _get_pipeline()
-    return str((getattr(pl, "_active_character_id", None) if pl else None) or DEFAULT_CHAR_ID)
+    cid = str((getattr(pl, "_active_character_id", None) if pl else None) or "").strip()
+    if cid:
+        return resolve_requested_char_id(cid)
+    from admin.routers._common import active_char_id
+    return active_char_id()
 
 
-def _validated_archive_char_id(char_id: str | None) -> str:
-    value = str(char_id or _active_dream_char_id()).strip()
+def _validated_live_char_id(char_id: object | None = None) -> str:
+    value = resolve_requested_char_id(char_id, fallback=_active_dream_char_id)
+    if not _SAFE_DREAM_ID_RE.fullmatch(value):
+        raise HTTPException(status_code=422, detail="char_id 不合法")
+    return value
+
+
+def _validated_archive_char_id(char_id: object | None = None) -> str:
+    """Archive buckets keep historical ids; live pages fail-loud instead."""
+    requested = requested_char_id(char_id)
+    if requested:
+        if not _SAFE_DREAM_ID_RE.fullmatch(requested):
+            raise HTTPException(status_code=422, detail="char_id 不合法")
+        return requested
+    value = _active_dream_char_id()
     if not _SAFE_DREAM_ID_RE.fullmatch(value):
         raise HTTPException(status_code=422, detail="char_id 不合法")
     return value
@@ -358,9 +376,9 @@ async def dream_enter(body: dict = {}, _auth=Depends(require_scopes("activity"))
     pl = _get_pipeline()
     if pl is None:
         raise HTTPException(status_code=503, detail="pipeline not initialized")
-    char_id = pl._active_character_id
-    if not char_id:
-        raise HTTPException(status_code=503, detail="active character not set")
+    char_id = resolve_requested_char_id(
+        body.get("char_id"), fallback=_active_dream_char_id,
+    )
 
     result = await enter_dream(
         uid, entry_reason=entry_reason, char_id=char_id,
@@ -748,7 +766,10 @@ def _compute_hud_v0(state: dict, settings: dict, body) -> dict:
 
 
 @router.get("/dream/state", summary="读取梦境状态（只读 UI 面板字段）")
-async def dream_state_get(_auth=Depends(require_scopes("activity"))):
+async def dream_state_get(
+    char_id: str | None = Query(default=None),
+    _auth=Depends(require_scopes("activity")),
+):
     """
     Read-only UI panel. Returns safe defaults when no dream is active.
 
@@ -764,6 +785,7 @@ async def dream_state_get(_auth=Depends(require_scopes("activity"))):
       physiological_arousal — all int 0–100.
     """
     uid = _owner_uid()
+    selected_char = _validated_live_char_id(char_id)
     from core.dream.dream_state import (
         read_state, DreamStatus, DreamGuardStatus,
         derive_dream_state_projection, get_reality_guard_status,
@@ -774,7 +796,7 @@ async def dream_state_get(_auth=Depends(require_scopes("activity"))):
 
     state = read_state(uid)
     body = BodyState.from_dict(state.get("body_state") or {})
-    settings = _load_settings(uid, char_id=_active_dream_char_id())
+    settings = _load_settings(uid, char_id=selected_char)
 
     dream_mode = state.get("dream_mode", "sandbox")
     scenario_info: dict | None = None
@@ -1156,20 +1178,24 @@ async def delete_standalone_dream_preset(
 
 
 @router.get("/dream/stats", summary="梦境次数统计（只读，有效梦 > N 轮）")
-async def dream_stats_get(_auth=Depends(require_scopes("activity"))):
-    from core.pipeline_registry import get as _get_pipeline
+async def dream_stats_get(
+    char_id: str | None = Query(default=None),
+    _auth=Depends(require_scopes("activity")),
+):
     from core.dream.dream_log import count_valid_dreams
-    pl = _get_pipeline()
-    char_id = (pl._active_character_id if pl else None) or DEFAULT_CHAR_ID
-    return count_valid_dreams(char_id=char_id)
+    selected_char = _validated_live_char_id(char_id)
+    return count_valid_dreams(char_id=selected_char)
 
 
 @router.get("/dream/settings", summary="读取梦境设置（全字段）")
-async def dream_settings_get(_auth=Depends(require_scopes("activity"))):
+async def dream_settings_get(
+    char_id: str | None = Query(default=None),
+    _auth=Depends(require_scopes("activity")),
+):
     """Read-only: returns all dream settings fields with defaults applied."""
     uid = _owner_uid()
     from core.dream.dream_settings import load as _load
-    return _load(uid, char_id=_active_dream_char_id())
+    return _load(uid, char_id=_validated_live_char_id(char_id))
 
 
 @router.patch("/dream/settings", summary="部分更新梦境设置（校验枚举值；仅影响下一场梦）")
@@ -1186,7 +1212,9 @@ async def dream_settings_patch(body: dict, _auth=Depends(require_scopes("activit
       Changing world_layer while DREAM_ACTIVE does NOT change the current dream.
     """
     uid = _owner_uid()
-    char_id = _active_dream_char_id()
+    char_id = resolve_requested_char_id(
+        body.get("char_id"), fallback=_active_dream_char_id,
+    )
     from core.dream.dream_settings import load as _load, save as _save
 
     updates = {k: v for k, v in body.items() if k in _PATCH_ALLOWED}

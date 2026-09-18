@@ -307,18 +307,18 @@ Flutter/Android 字段或设置面。Agent Runtime 是同一角色的 durable / 
 | `/mobile/chat`、`/mobile/activate`、`/mobile/deactivate`、`/mobile/poll`、`/mobile/ack`、`/mobile/push` | POST/GET | 手机、后台服务、管理面测试 | `current`；poll 是非销毁式 durable queue |
 | `/upload/ingest`、`/transcribe` | POST | 桌面、手机 | `current`；上传必须带 Bearer，文件路径不由客户端直接写后端 data |
 | `/memory/{user_id}/short-term`、`/chat-log/dates`、`/chat-log/{date}` | GET；短期记忆另有 DELETE | 桌面、手机、管理面 | `current`；客户端不假定后端文件布局。`/chat-log/dates` 与 `/chat-log/{date}` 按请求角色读 canonical 桶；uid-only 旧日志仅冻结的历史默认角色可 union，非归属角色看不到那些历史日期。日历统计仍只扫 canonical 桶。不删除旧日志、不自动分配 ownership |
-| `/diary/list`、`/diary/{date}` | GET | 桌面、手机、管理面 | `current`；只读，`emotion` 若为空必须安全显示 |
-| `/garden/state` | GET | 桌面、手机、管理面 | `current`；现阶段客户端是只读状态页 |
-| `/mood/state`、`/activity/current`、`/period` | GET/PUT/DELETE | 桌面、手机、管理面 | `current`；手机只消费允许的状态字段 |
+| `/diary/list`、`/diary/{date}` | GET | 桌面、手机、管理面 | `current`；只读，`emotion` 若为空必须安全显示。可选 query `char_id` 读指定角色；未知/隐藏角色 `422 character_unavailable`，省略则跟 live active |
+| `/garden/state` | GET | 桌面、手机、管理面 | `current`；现阶段客户端是只读状态页。可选 query `char_id`；未知/隐藏角色 `422 character_unavailable`，省略则跟 live active |
+| `/mood/state`、`/activity/current`、`/period` | GET/PUT/DELETE | 桌面、手机、管理面 | `current`；手机只消费允许的状态字段。`/mood/state` 与 `/activity/current` 可选 query `char_id`；未知/隐藏角色 `422 character_unavailable`，省略则跟 live active |
 
 ### 3.2 Dream、Stage 和活动
 
 | 路由族 | 主要操作 | 调用方 | 状态/备注 |
 |---|---|---|---|
-| `/dream/state`、`/dream/invariants`、`/dream/stats`、`/dream/operations` | GET | 桌面、手机、管理面 | `current`；只读状态/运维投影 |
-| `/dream/enter`、`/dream/chat`、`/dream/exit`、`/dream/wake`、`/dream/resume` | POST | 桌面、手机 | `current`；`wake` 可能返回 retained，硬退出仍必须可达 |
+| `/dream/state`、`/dream/invariants`、`/dream/stats`、`/dream/operations` | GET | 桌面、手机、管理面 | `current`；只读状态/运维投影。`/dream/state`、`/dream/invariants`、`/dream/stats` 可选 query `char_id`，未知/隐藏角色 `422 character_unavailable`；省略则跟当前 Dream 角色，不套用 Reality session |
+| `/dream/enter`、`/dream/chat`、`/dream/exit`、`/dream/wake`、`/dream/resume` | POST | 桌面、手机 | `current`；`wake` 可能返回 retained，硬退出仍必须可达。`/dream/enter` 可选 body `char_id` 指定入梦角色，未知/隐藏角色 `422 character_unavailable` |
 | `/dream/archive`、`/dream/archive/{dream_id}` | GET | 桌面回放 | `current`；只读，不回流 Reality pipeline |
-| `/dream/settings`、`/dream/presets*`、`/dream/worlds*`、`/dream/scenarios*` | GET/PATCH/CRUD | 桌面、手机部分设置、管理面 | `current`；Reality Prompt Assets 与 Dream 设置分离。`/dream/settings` 按当前角色隔离（per-character），旧 uid-only 文件仅冻结历史默认角色可读 |
+| `/dream/settings`、`/dream/presets*`、`/dream/worlds*`、`/dream/scenarios*` | GET/PATCH/CRUD | 桌面、手机部分设置、管理面 | `current`；Reality Prompt Assets 与 Dream 设置分离。`GET /dream/settings` 可选 query `char_id`；`PATCH` 可选 body `char_id`。未知/隐藏角色 `422 character_unavailable`，省略则跟当前 Dream 角色。旧 uid-only 文件仅冻结历史默认角色可读 |
 | `/group/list`、`/group/create`、`/group/{id}/*` | GET/POST/PATCH/DELETE | 桌面、手机、管理面 | `current`；Stage transcript 和 roster 由后端拥有 |
 | `/group/{id}/dream/state|enter|send|exit|transcript|settings` | GET/POST/PATCH | 桌面、手机部分消费、管理面 | `current`；群梦回复通过 dream-domain WS/轮询读取 |
 | `/activity/reading/*` | GET/POST | 桌面、手机 | `current`；含书库、翻页、聊天、关闭 |

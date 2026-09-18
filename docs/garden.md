@@ -145,6 +145,8 @@ _check_garden_water()
 
 `GET /garden/state`
 
+可选 query `char_id` 读取指定角色花园；未知或隐藏角色返回 `422 character_unavailable`。省略时跟 live active。
+
 需要管理面板 token，返回：
 
 - `slots`：五个花槽的展示数据，含 `stage_progress`

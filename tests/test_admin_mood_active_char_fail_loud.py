@@ -135,6 +135,24 @@ async def test_mood_get_state_passes_hongcha_to_load(sandbox):
     assert captured == [TEST_THIRD_CHAR_ID], f"expected char_id=TEST_THIRD_CHAR_ID, got {captured}"
 
 
+@pytest.mark.asyncio
+async def test_mood_get_state_explicit_char_id_ignores_active(sandbox):
+    """GET /mood/state?char_id=... must not follow a different live active."""
+    _write_active(sandbox, TEST_CHAR_ID)
+
+    captured = []
+
+    def _spy_load(**kw):
+        captured.append(kw.get("char_id"))
+        return {"current": "neutral", "intensity": 0.0, "previous": "neutral", "updated_at": 0.0}
+
+    with patch.object(_mood_state_mod, "load", side_effect=_spy_load):
+        from admin.routers.mood import get_mood_state
+        await get_mood_state(char_id=TEST_THIRD_CHAR_ID)
+
+    assert captured == [TEST_THIRD_CHAR_ID], f"expected explicit char, got {captured}"
+
+
 # ── 6. active=yexuan → _active_char_id returns TEST_CHAR_ID (valid path, not fallback) ──
 
 def test_mood_active_yexuan_returns_yexuan(sandbox):

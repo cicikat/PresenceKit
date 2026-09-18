@@ -120,6 +120,31 @@ def test_http_settings_follow_active_character_not_peer_bucket(sandbox, monkeypa
     assert load(_UID, char_id=TEST_CHAR_ID)["world_layer"] == "abo"
 
 
+def test_http_settings_explicit_char_id_ignores_active(sandbox, monkeypatch):
+    from admin.routers.dream import dream_settings_get, dream_settings_patch
+    from core.dream.dream_settings import load, save
+    from core.pipeline_registry import register
+
+    class _Fake:
+        def __init__(self, char_id):
+            self._active_character_id = char_id
+
+    save(_UID, {"world_layer": "abo"}, char_id=TEST_CHAR_ID)
+    save(_UID, {"world_layer": "vampire"}, char_id=TEST_PEER_CHAR_ID)
+    register(_Fake(TEST_CHAR_ID))
+    monkeypatch.setattr("admin.routers.dream._owner_uid", lambda: _UID)
+
+    got = __import__("asyncio").run(dream_settings_get(char_id=TEST_PEER_CHAR_ID))
+    assert got["world_layer"] == "vampire"
+
+    patched = __import__("asyncio").run(
+        dream_settings_patch({"lucid_mode": "non_lucid", "char_id": TEST_PEER_CHAR_ID})
+    )
+    assert patched["ok"]
+    assert load(_UID, char_id=TEST_PEER_CHAR_ID)["lucid_mode"] == "non_lucid"
+    assert load(_UID, char_id=TEST_CHAR_ID)["lucid_mode"] == "lucid_shared"
+
+
 def test_world_rename_does_not_rewrite_peer_character_settings(sandbox, monkeypatch):
     from admin.routers.dream import rename_dream_world
     from core.dream.dream_settings import load, save

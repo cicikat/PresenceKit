@@ -49,6 +49,8 @@ Dream settings 归属走工单 F，本文只映射 domain 名称，不决定 Dre
 | `POST /desktop/wake` Path B | `perceive_event` 返回的 `char_id`（gate 时的 active）；gate 后禁止第二次 active 查找 | `chat` | 不生成新 turn_id/msg_id | 桌面 |
 | `POST /desktop/activate` | 通道级，无角色 | `chat` | 非会话 | 桌面 |
 | `GET /chat-log/dates`、`GET /chat-log/{date}` | query `char_id` 或 live active；uid-only 旧日志仅冻结历史默认角色可 union | `memory.read` | query 角色不是会话冻结；省略则跟 active 走 | 桌面、手机、管理面 |
+| `GET /diary/list`、`GET /diary/{date}`、`GET /garden/state`、`GET /mood/state`、`GET /activity/current` | 可选 query `char_id`；未知/隐藏 `422 character_unavailable`；省略则 live active | `memory.read` / `state.read` | 不是 Reality session 冻结；手机按本机所选角色带 query | 桌面、手机、管理面 |
+| `GET /dream/state`、`GET /dream/settings`、`GET /dream/stats`、`POST /dream/enter` | 可选 query/body `char_id`；未知/隐藏 `422 character_unavailable`；省略则当前 Dream 角色 | `activity` | Dream 独立域，不套用 Reality `X-Presence-Session` | 桌面、手机、管理面 |
 | `GET /chat-log/stats/calendar` | 同上解析，只扫 canonical 桶 | `memory.read` + `state.read` | 无 session 句柄 | 管理面 |
 | `GET /chat/turns/{turn_id}/reasoning` | 只按 persisted `turn_id` | `memory.read` | 持有 turn_id ≠ 角色读权；无 char/session 闸 | 桌面、手机 |
 | WS `/ws/desktop` `message_stream_*` / `channel_message` / `message_segments` | 可选 `char_id`/`domain`/`round_id`；桌面流式先 mint `_stream_msg_id`，start 当前可不带 char_id；canonical 后补 char_id | `ws.desktop` | 早期无 turn_id；迟到/乱序/重连无显式 bind 事件 | 桌面 |

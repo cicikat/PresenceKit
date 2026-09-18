@@ -192,11 +192,34 @@ async def test_garden_admin_route_passes_active_char_id(sandbox, character_b_reg
         return real_get_state(char_id=char_id)
 
     with patch.object(garden_manager, "get_state", side_effect=spy_get_state):
-        from admin.routers.garden import _active_char_id
-        resolved = _active_char_id()
+        from admin.routers.garden import get_garden_state
+        await get_garden_state()
 
-    assert resolved == "character_b", (
-        f"admin garden router must resolve active char_id='character_b', got {resolved!r}"
+    assert captured == ["character_b"], (
+        f"admin garden router must resolve active char_id='character_b', got {captured}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_garden_admin_route_explicit_char_id_ignores_active(
+    sandbox, character_b_registered,
+):
+    """GET /garden/state?char_id=character_b must not follow a different active."""
+    _write_active(sandbox, TEST_CHAR_ID)
+
+    captured = []
+    real_get_state = garden_manager.get_state
+
+    def spy_get_state(*, char_id=TEST_CHAR_ID):
+        captured.append(char_id)
+        return real_get_state(char_id=char_id)
+
+    with patch.object(garden_manager, "get_state", side_effect=spy_get_state):
+        from admin.routers.garden import get_garden_state
+        await get_garden_state(char_id="character_b")
+
+    assert captured == ["character_b"], (
+        f"explicit char_id must win over active, got {captured}"
     )
 
 
