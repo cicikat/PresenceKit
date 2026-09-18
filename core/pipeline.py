@@ -1500,7 +1500,7 @@ class Pipeline:
                         # 展示文本收尾，不残留花括号、不吞掉内容。
                         outcome = ("natural", display_text)
                         return
-                    outcome = ("natural", turn.content)
+                    outcome = ("natural", display_text)
                     return
                 # The protocol adapter returns zero or more protocol-neutral
                 # continuation items. Chat Completions contributes one assistant

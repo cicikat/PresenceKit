@@ -802,6 +802,37 @@ async def test_tail_brace_relay_unresolved_falls_back_to_natural_text(monkeypatc
     assert "{true" not in result and "}" not in result
 
 
+@pytest.mark.parametrize("stream", [False, True], ids=["non_stream", "stream"])
+@pytest.mark.parametrize("model_text, expected", [
+    ("普通回复{false}", "普通回复"),
+    ("普通回复{ false }", "普通回复"),
+    ("普通回复{FALSE}", "普通回复"),
+    ("不含 marker 的普通回复", "不含 marker 的普通回复"),
+])
+@pytest.mark.asyncio
+async def test_tail_brace_false_marker_never_reaches_final_display(
+        monkeypatch, model_text, expected, stream):
+    """无工具自然收尾必须使用解析后的展示文本，stream/non-stream 行为一致。"""
+    _patch_tool_loop_config(monkeypatch)
+    _patch_tools_schema(monkeypatch, ["web_search"])
+    _script_chat_turn(monkeypatch, [
+        ChatTurn(
+            content=model_text,
+            tool_calls=[],
+            assistant_message={"role": "assistant", "content": model_text},
+        ),
+    ])
+
+    result = await _make_pipeline().run_agentic_loop(
+        [{"role": "user", "content": "你好"}], uid="u1", char_id=TEST_CHAR_ID,
+        session_state=object(), stream=stream,
+    )
+    displayed = "".join([piece async for piece in result]) if stream else result
+
+    assert displayed == expected
+    assert "{false" not in displayed.lower()
+
+
 @pytest.mark.parametrize("tag, expected_display, expected_intent", [
     # 正常闭合 + 半角冒号
     ("我去看看{true: 需要打开浏览器}", "我去看看", "需要打开浏览器"),
