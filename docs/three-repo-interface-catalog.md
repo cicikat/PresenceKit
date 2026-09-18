@@ -1,6 +1,16 @@
 # 三仓接口总览与闭环审计
 
-## 固定会话 scope（2026-09-17，backend current / consumers open）
+## 257 运行时回归（2026-09-19）
+
+`current`：R1–R7 已落地。R8 复用既有测试形成验收记录
+[`runtime-recovery-257.md`](runtime-recovery-257.md)。手机 session-scope 消费者（发现/
+绑定/角色归属/失败气泡 `request_id` 复用）与日记/花园/mood/activity/Dream `char_id`
+查询已自动化覆盖。天气直连开关与模型分类超时已单独诊断，不并入架构回归。
+`open`：桌面 session-scope 消费者；固定 SHA 三仓 matrix；真机冷启动、前后台、重连、
+后台、撤权。手机 `seq` 仍是 owner 共享游标。天气实网与 LLM 超时 soak 为 `observe`。
+本轮不宣称其余功能全部正常。
+
+## 固定会话 scope（2026-09-17，backend current / mobile current / desktop open）
 
 `current`：`GET /auth/whoami` 广告 `capabilities.session_scope=v1`；`POST /v1/sessions`
 按 chat token、服务端 owner 与角色资产签发 24 小时进程内 grant。带

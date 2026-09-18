@@ -64,3 +64,4 @@ CI **不会自动证明**以下内容：
 - scheduler / relay / mobile queue、Dream 期间 reality park、sensor 到真实发送的完整链路仍需要跨进程或真机证据，单元测试不能替代。
 - `pytest.ini` 注册了 `audit`、`contract`、`smoke` marker，但当前测试文件没有实际使用这些 marker；如果要按层级筛选，需先补标记或删除无效配置。
 - [`test_record.md`](test_record.md) 只是历史手工记录模板，不是可复现测试规范；新的手工验收应记录日期、版本、环境、命令、输入、结果和证据位置。
+- 工单 257 R8 复用测试与缺口见 [`runtime-recovery-257.md`](runtime-recovery-257.md)。该记录不是全量套件或真机 soak；桌面消费者、SHA matrix、真机重连/后台/撤权仍 open。

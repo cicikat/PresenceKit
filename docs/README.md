@@ -22,6 +22,7 @@
   [desktop-client-protocol.md](desktop-client-protocol.md)。
 - [dev-environment.md](dev-environment.md)：Windows 沙箱开发与验证。
 - [testing-matrix.md](testing-matrix.md)：后端自动化测试、评测脚本、CI 范围与发布验收矩阵。
+- [runtime-recovery-257.md](runtime-recovery-257.md)：工单 257 R8 验收记录、天气/超时独立诊断与未完成项。
 - [known-issues.md](known-issues.md)：当前问题、观察项和技术债。
 - [docs-truth-census.md](docs-truth-census.md)：三仓文档导航清单与漂移分类；它不是代码实现 authority。
 

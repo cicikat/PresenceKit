@@ -1,5 +1,16 @@
 # docs/known-issues.md — 已知问题与技术债
 
+## 257 运行时回归验收（2026-09-19）
+
+`current`：R1–R7 已按工单独立提交。R8 复用后端/手机既有测试形成验收记录
+[`runtime-recovery-257.md`](runtime-recovery-257.md)；自动化覆盖冷启动时序、会话重绑、
+角色归属、历史/附件、生活记录、主动消息落盘、日记/花园/Dream 与失败气泡 `request_id`
+复用。天气失败与模型超时已单独诊断，不并入架构回归。
+`open`：桌面 session-scope 消费者、固定 SHA 三仓 matrix、真机冷启动/前后台/重连/后台/撤权、
+手机 owner 共享 `seq`。
+`observe`：天气实网（wttr.in / 环境代理）、记忆固化与主聊天超时 soak。
+本轮测试通过不能写成其余功能全部正常。
+
 ## 文档真值与兼容删除候选（2026-09-18）
 
 `current`：ARCHITECTURE / agent-runtime 已按实现改 current/roadmap。Dream Stage 是
@@ -36,7 +47,9 @@ prompt。观测端点投影 `retirement_draft`，分母已钉死，但 `status=p
 `current`：后端广告 `session_scope=v1`，签发 token/owner/角色绑定的 24 小时 session；
 chat、上传、wake、媒体、历史、calendar、reasoning 使用同一可选 session header，
 并提供有界 request receipt 与脱敏观测。无 header 的 legacy 行为不变。
-`open`：桌面/手机消费者接入与真实多端、重连、后台/真机验收；手机共享 `seq` 仍要求
+手机消费者已接入发现/绑定/角色归属与失败气泡 `request_id` 复用（2026-09-19 自动化验收，
+见 [`runtime-recovery-257.md`](runtime-recovery-257.md)）。
+`open`：桌面消费者接入；真实重连、后台、撤权与真机验收；手机共享 `seq` 仍要求
 先持久化所有角色信封再 ack。固定 SHA 三仓 matrix 尚未更新，不能写成联调完成。
 
 ## 聊天媒体读取（2026-09-17）

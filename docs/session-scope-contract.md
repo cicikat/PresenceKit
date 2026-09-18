@@ -1,7 +1,9 @@
 # 固定会话 scope 契约
 
 状态：后端 `current`（`session_scope=v1`）；手机消费者已接入发现/绑定/角色归属/
-失败气泡 `request_id` 复用；桌面消费者接入待完成。日期：2026-09-19。
+失败气泡 `request_id` 复用（2026-09-19 自动化验收见
+[runtime-recovery-257.md](runtime-recovery-257.md)）；桌面消费者接入待完成。
+日期：2026-09-19。
 本文是给 C 与桌面/手机接入评审的合同，不是已发布协议，也不是 OpenAPI 现状。
 本页第 1 节保留 B 阶段的上线前基线，后续章节保留设计理由；当前实现差异以紧随其后的清单为准。
 权威仍是运行中的 `/openapi.json`、[api-reference.md](api-reference.md) 与现有 v0.1 通道实现。

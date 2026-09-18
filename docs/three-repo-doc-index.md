@@ -1,6 +1,6 @@
 # PresenceKit 三仓文档总索引
 
-> 最后核对：2026-09-18
+> 最后核对：2026-09-19
 > 适用仓库：`Emerald-presence`（后端）、`Emerald-client`（桌面）、`Emerald-mobile`（手机）
 
 这份文档是三仓文档的第一入口。先按功能直达；如果要了解某个仓库的全部文档，再看后面的逐仓清单。
@@ -24,7 +24,7 @@
 | 想查什么 | 直接去这里 | 还需要看什么 |
 |---|---|---|
 | 系统全貌、启动边界、运行生命周期 | [`ARCHITECTURE.md`](../ARCHITECTURE.md)、[`runtime-lifecycle.md`](runtime-lifecycle.md) | 设计准入看 [`DESIGN.md`](../DESIGN.md)，事件边界看 [`interaction-event-model.md`](interaction-event-model.md)。 |
-| Windows 开发、pytest、构建和沙箱 | [`dev-environment.md`](dev-environment.md)、[`testing-matrix.md`](testing-matrix.md) | Desktop 看 [`Emerald-client/docs/testing.md`](../../Emerald-client/docs/testing.md)，Mobile 看 [`Emerald-mobile/docs/quality/testing-and-dev.md`](../../Emerald-mobile/docs/quality/testing-and-dev.md)。 |
+| Windows 开发、pytest、构建和沙箱 | [`dev-environment.md`](dev-environment.md)、[`testing-matrix.md`](testing-matrix.md) | Desktop 看 [`Emerald-client/docs/testing.md`](../../Emerald-client/docs/testing.md)，Mobile 看 [`Emerald-mobile/docs/quality/testing-and-dev.md`](../../Emerald-mobile/docs/quality/testing-and-dev.md)。257 运行时回归验收看 [`runtime-recovery-257.md`](runtime-recovery-257.md)。 |
 | 后端 HTTP/WS 端点 | [`api-reference.md`](api-reference.md)、[`channels.md`](channels.md) | 跨仓字段和调用方看 [`three-repo-interface-catalog.md`](three-repo-interface-catalog.md)。拟议固定会话 scope 看 [`session-scope-contract.md`](session-scope-contract.md)（未上线）。 |
 | Desktop 消息格式、WS、Tauri IPC | [`Emerald-client/docs/protocol-v0.md`](../../Emerald-client/docs/protocol-v0.md) | 后端落点看 [`desktop-client-protocol.md`](desktop-client-protocol.md)，关联/重试看 [`Emerald-client/docs/chat-correlation.md`](../../Emerald-client/docs/chat-correlation.md)。 |
 | Mobile 聊天、后台主动消息、poll/ack | [`Emerald-mobile/docs/protocols/mobile-channel.md`](../../Emerald-mobile/docs/protocols/mobile-channel.md) | 后端路由看 [`Emerald-mobile/docs/backend/integration.md`](../../Emerald-mobile/docs/backend/integration.md)，Android 服务看 [`Emerald-mobile/docs/mobile/background-notification-design.md`](../../Emerald-mobile/docs/mobile/background-notification-design.md)。 |
@@ -69,6 +69,7 @@
 | [`protocol-compatibility-workflow.md`](protocol-compatibility-workflow.md) | current | 协议变更、兼容性核对和跨端验证流程。 |
 | [`runtime-lifecycle.md`](runtime-lifecycle.md) | authority | 启动、运行、停止、资源和生命周期边界。 |
 | [`testing-matrix.md`](testing-matrix.md) | authority | 后端自动化测试、评测脚本、CI 和发布验收范围。 |
+| [`runtime-recovery-257.md`](runtime-recovery-257.md) | current | 工单 257 R8 验收记录：复用测试范围、天气/超时独立诊断与未完成项。 |
 
 ### API、通道、设置与跨仓
 

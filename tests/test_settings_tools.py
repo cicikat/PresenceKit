@@ -33,6 +33,7 @@ def test_tool_control_saves_preset_binding_and_builtin_execution(tmp_path, monke
     monkeypatch.setattr(st, "CONFIG_FILE", path)
     monkeypatch.setattr("admin.auth.get_admin_secret", lambda: VALID_TOKEN)
     monkeypatch.setattr(st, "get_config", lambda: yaml.safe_load(path.read_text(encoding="utf-8")))
+    monkeypatch.setattr("core.tools.fs_browse.effective_state", lambda: {"enabled": False})
 
     with patch("core.config_loader.reload_config", return_value=None):
         app = FastAPI()
@@ -69,6 +70,7 @@ def test_deleting_tool_preset_clears_existing_model_bindings(tmp_path, monkeypat
     monkeypatch.setattr(st, "CONFIG_FILE", path)
     monkeypatch.setattr("admin.auth.get_admin_secret", lambda: VALID_TOKEN)
     monkeypatch.setattr(st, "get_config", lambda: yaml.safe_load(path.read_text(encoding="utf-8")))
+    monkeypatch.setattr("core.tools.fs_browse.effective_state", lambda: {"enabled": False})
 
     with patch("core.config_loader.reload_config", return_value=None):
         app = FastAPI()
