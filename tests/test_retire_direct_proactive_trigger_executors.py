@@ -384,13 +384,12 @@ async def test_sensor_aware_handle_tick_queues_signal_without_delivery(sandbox, 
 
     monkeypatch.setattr(sensor_aware.sensor_events, "tick", lambda: [event])
     monkeypatch.setattr(sensor_aware.sensor_judge, "judge", fake_judge)
-    monkeypatch.setattr(sensor_aware, "_pipeline_send", forbidden)
+    monkeypatch.setattr("core.scheduler.loop._pipeline_send", forbidden)
     monkeypatch.setattr(sensor_aware, "_owner_id", lambda: "owner")
     monkeypatch.setattr("core.scheduler.loop._owner_id", lambda: "owner")
     monkeypatch.setattr("core.scheduler.loop._active_char_id_or_none", lambda: "char")
     monkeypatch.setattr("core.scheduler.proactive_ledger.can_send", lambda *_a, **_k: (True, "ok"))
     monkeypatch.setattr("core.scheduler.triggers.dnd.is_dnd", lambda *_a, **_k: False)
-    monkeypatch.setattr(sensor_aware.sensor_events, "get_last_proactive_at", lambda: None)
 
     await sensor_aware.handle_tick()
 

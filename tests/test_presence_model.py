@@ -8,7 +8,6 @@ Covers the 7 assertions mandated by the P1 spec:
   4. sleep window + idle>=300 → SLEEPING, empty summary
   5. chat gap < 2min → ACTIVE_CHATTING
   6. sensor_judge template: no bare minute fields, has {presence_summary}
-  7. sensor_aware narrative: FOCUSED_SILENT → no forbidden; GENUINELY_ABSENT → non-empty
 """
 
 import pytest
@@ -279,54 +278,3 @@ class TestSensorJudgeTemplate:
     def test_presence_summary_field_present(self):
         import core.scheduler.sensor_judge as sj
         assert "{presence_summary}" in sj._USER_TEMPLATE
-
-
-# ── 7. sensor_aware narrative contracts ─────────────────────────────────────
-
-class TestSensorAwareNarrative:
-    def test_focused_silent_no_forbidden(self):
-        from core.scheduler.triggers.sensor_aware import _presence_narrative
-        ctx = {
-            "presence_attribution": "FOCUSED_SILENT",
-            "presence_summary":     "她在桌前专注做事",
-            "presence":             "active",
-        }
-        result = _presence_narrative(ctx)
-        _assert_no_forbidden(result)
-        assert result  # non-empty
-
-    def test_focused_silent_has_focus_keyword(self):
-        from core.scheduler.triggers.sensor_aware import _presence_narrative
-        ctx = {
-            "presence_attribution": "FOCUSED_SILENT",
-            "presence_summary":     "她在桌前专注做事",
-            "presence":             "active",
-        }
-        result = _presence_narrative(ctx)
-        assert "专注" in result or "桌前" in result
-
-    def test_genuinely_absent_non_empty(self):
-        from core.scheduler.triggers.sensor_aware import _presence_narrative
-        ctx = {
-            "presence_attribution": "GENUINELY_ABSENT",
-            "presence_summary":     "她离开有一阵了",
-            "presence":             "away",
-        }
-        result = _presence_narrative(ctx)
-        assert result  # absent semantics allowed → non-empty
-
-    def test_sleeping_returns_empty(self):
-        from core.scheduler.triggers.sensor_aware import _presence_narrative
-        ctx = {
-            "presence_attribution": "SLEEPING",
-            "presence_summary":     "",
-            "presence":             "away",
-        }
-        result = _presence_narrative(ctx)
-        assert result == ""
-
-    def test_fallback_without_attribution(self):
-        from core.scheduler.triggers.sensor_aware import _presence_narrative
-        ctx = {"presence": "active"}
-        result = _presence_narrative(ctx)
-        assert result  # falls back to _presence_phrase, non-empty

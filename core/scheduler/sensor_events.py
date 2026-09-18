@@ -78,7 +78,6 @@ _last_presence_changed_at: Optional[float] = None
 _last_app: Optional[str] = None
 _last_app_category: Optional[str] = None
 _last_chat_at: Optional[float] = None
-_last_proactive_at: Optional[float] = None
 _last_presence_was_sleep_guarded: bool = False
 _focus_window_in_app_started_at: Optional[float] = None
 _focus_window_in_app_name: Optional[str] = None
@@ -126,7 +125,7 @@ def _build_context(snap: dict, presence: str) -> dict:
         idle_seconds=idle_secs,
         continuous_at_desk_seconds=at_desk_secs,
         last_chat_at=_last_chat_at,
-        last_proactive_at=_last_proactive_at,
+        last_proactive_at=None,
         now=now,
         away_since=away_since,
     )
@@ -178,16 +177,6 @@ def notify_chat_happened() -> None:
     _last_chat_at = time.time()
     _cooldowns.pop(SILENT_TOGETHER, None)
     _cooldowns.pop(LONG_FOCUS, None)
-
-
-def mark_proactive_sent() -> None:
-    """sensor_aware trigger 发送成功后调用。"""
-    global _last_proactive_at
-    _last_proactive_at = time.time()
-
-
-def get_last_proactive_at() -> Optional[float]:
-    return _last_proactive_at
 
 
 def tick() -> list[dict]:

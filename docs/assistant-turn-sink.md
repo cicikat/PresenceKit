@@ -137,7 +137,7 @@ async def record_assistant_turn(
 - **不替换 `_pipeline_send`**：它继续作为"跑完 pipeline 拿到文本"的封装，发言路径由 `record_assistant_turn` 统一完成 critical 落盘、fanout 与 slow 段调度。触发器代码层面无感。
 - **不改 `capture_turn`**：它仍然是写入原语，签名稳定。
 - **不改 `channels.registry.broadcast`**：record_assistant_turn 内部就是调用它。
-- **behavior 通道**：`DesktopChannel.send(text, user_id, behavior=...)` 与 `MobileChannel.send` 仍支持既有 action payload；但当前 sensor signal-first 路径只把 `behavior_id` 作为 autonomy evidence，不自动构造 `build_action_packet()`，因此不会把旧 action 直接送到 channel。恢复该能力需要单独的 autonomy payload/协议设计。
+- **behavior 通道**：`DesktopChannel.send(text, user_id, behavior=...)` 与 `MobileChannel.send` 仍支持既有 action payload；但当前 sensor signal-first 路径只把 `behavior_id` 作为 autonomy evidence，不构造桌宠 action，因此不会把旧 action 直接送到 channel。恢复该能力需要单独的 autonomy payload/协议设计。
   - 非 sensor 的既有调用方仍可传 behavior；`QQChannel.send` 忽略 behavior。
 
 ### 3.4 当前追加：Narrative Message 双轨
@@ -171,7 +171,7 @@ segments 是只读展示视图，不得替换 Dream archive 中的原始回复�
 | `core/scheduler/triggers/garden_daily.py` 各事件 | 同上 | 同上 | 同上 |
 | `core/scheduler/triggers/watch.py`（hr_high / hr_critical） | 统一 scheduler gating → `_pipeline_send` | `hr_critical` 用 `bypass_state_machine=True`，但仍进入 per-uid `conversation_lock`；不是 `bypass_gate=True` | 极高优先级可绕过状态机，但仍保持写入/LLM 串行 |
 | `core/scheduler/loop.py::reminders` 分支 | `_pipeline_send` | 不动 | 同上 |
-| **`core/scheduler/triggers/sensor_aware.py`** | 旧 `_pipeline_send(output_mode="return") + desktop_ws.push_message` | 提交 sensor signal，统一由 autonomy `talk_owner` 调 `record_assistant_turn` | 不再有独立直推出口 |
+| **`core/scheduler/triggers/sensor_aware.py`** | 旧 `_pipeline_send(output_mode="return") + desktop_ws.push_message`（已删除） | 提交 sensor signal，统一由 autonomy `talk_owner` 调 `record_assistant_turn` | 不再有独立直推出口 |
 | **`admin/routers/watch.py::_flush_sleep_buffer`** | 历史实现曾直接 broadcast、没有 `trigger_name`，并把 sleep buffer 写成 user+assistant | 当前由 `scheduler.on_watch_event` 进入 autonomy `talk_owner`，再由 `record_assistant_turn(source=WATCH, trigger_name="sleep_end", ...)` 统一回写与 fanout | **已修复：user 行不再被污染，watch 事件流不再被绕过** |
 
 ---
@@ -457,7 +457,7 @@ mobile 队列，后台也就没有横幅可弹。
 | 没有统一的"assistant turn 完整 hook" | 新增 `record_assistant_turn` 作为唯一汇聚点 |
 | 触发器弱于 /desktop/chat（无 gate、post_process 不 await） | conversation_gate 共享 + 默认 await 关键块 |
 | trigger 分支只写 assistant 行 | 保持现有契约，本就是预期行为，元数据加全 |
-| sensor_aware 绕过 broadcast 直推 WS | 旧直推已封存；当前 signal-first 走 autonomy/turn sink。channel 仍负责既有 behavior payload 的序列化，但 sensor 当前只携带候选 evidence |
+| sensor_aware 绕过 broadcast 直推 WS | 旧直推已删除；当前 signal-first 走 autonomy/turn sink。channel 仍负责既有 behavior payload 的序列化，但 sensor 当前只携带候选 evidence |
 | sleep_end 没传 trigger_name 污染 user 行 | 用 `WATCH` source + `trigger_name="sleep_end"` 修正 |
 | garden 事件冷却名挂着但未节流 | 已由 `_is_ready` / `_mark` / `would_mark` 接入；后续仅保留验收观测 |
 

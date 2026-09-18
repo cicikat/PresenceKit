@@ -5,7 +5,7 @@
 `current`：ARCHITECTURE / agent-runtime 已按实现改 current/roadmap。Dream Stage 是
 sandbox-mode 已实现，不是全局 fail-closed。`self_management.enabled=false` 只关 overlay。
 `core/paths.py` 标为显式 experimental，生产零引用。`GET /spend/mandates` 仍是预留只读。
-`open` / 未授权删除：下表与 G4 传感死分支、tuple `execute()` wrapper 均待单独删除授权。
+`open` / 未授权删除：下表与 tuple `execute()` wrapper 均待单独删除授权。G4 传感死分支已删。
 
 | 候选 | 现存消费者 | 迁移条件 | 联删范围（获授权后） |
 |---|---|---|---|
@@ -259,17 +259,16 @@ signal-first/autonomy 契约审计。后续必须单独决定它是迁移到 aut
 
 ### SENSOR-1：sensor signal-first 尚未恢复旧行为 action payload
 
-**状态**：`open`（文档/代码边界已确认，未在本轮改业务代码）
+**状态**：`open`（直发已删；action payload 仍需另立设计）
 
-`core/scheduler/triggers/sensor_aware.py::handle_tick()` 在 signal-first 分支只把
-`behavior_id` 等事实放入 `emit_trigger_signal()`，随后由 autonomy `talk_owner` 通过
-`talk_gate.send()` 进入普通 `record_assistant_turn()`。旧的 `build_action_packet()`、
-`DesktopChannel.send(..., behavior=...)` 组装和 `SENSOR` turn sink 分支位于显式 `return`
-之后，当前不可达。因此 `passive_speak` 等文字候选仍可进入 autonomy 评估，但
+`core/scheduler/triggers/sensor_aware.py::handle_tick()` 只把 `behavior_id` 等事实放入
+`emit_trigger_signal()`，随后由 autonomy `talk_owner` 通过 `talk_gate.send()` 进入普通
+`record_assistant_turn()`。旧的 `build_action_packet()`、`_pipeline_send(output_mode="return")`
+和 `SENSOR` turn sink 直发已删除。因此 `passive_speak` 等文字候选仍可进入 autonomy 评估，但
 `pet_emote` / `notify` / `execute` 不能从这条 signal 自动执行。
 
 若要恢复行为动作，需另立 autonomy payload、危险模式闸门、desktop/mobile 协议和验收方案；
-不能仅把旧的不可达分支重新放开。
+不能恢复已删除的直发。
 
 ### PROF-1：user_profile 场景类字段的反抖动阈值曾经"锁死"（已修复 2026-07-25）
 

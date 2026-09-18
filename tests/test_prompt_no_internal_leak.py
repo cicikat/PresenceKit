@@ -10,8 +10,7 @@ Contract assertions (all static source-level unless noted as runtime):
   L4  Layer 3.8 activity snapshot: no [屏幕感知] tag
   L5  author_note extras: no [人设纠偏: / [输出风格: bracket forms
   L6  Memory protocol: no code/git/仓库/日志/测试/checkpoint dev vocab
-  L7  sensor_aware build_situation_narrative: focus_app raw string never in focus_str
-      (runtime: _app_category maps unknown app to neutral phrase, not raw name)
+  L7  sensor_events._app_category: unknown app maps to a neutral phrase, not raw name
   L8  APP_CATEGORY_CHANGED narrative: no raw app names in the narrative f-string
   L9  Regression: layer 3.7 still builds _parts list (data not deleted, just re-worded)
   L10 Regression: layer 3.8 still calls _load_activity_snapshot (not removed)
@@ -200,39 +199,10 @@ class TestMemoryProtocolDevVocab:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# L7 — sensor_aware build_situation_narrative: no raw app name
+# L7 — sensor_events._app_category: unknown app never leaks as raw name
 # ─────────────────────────────────────────────────────────────────────────────
 
-class TestSensorAwareNarrative:
-    _SA = "core/scheduler/triggers/sensor_aware.py"
-
-    def test_no_raw_focus_app_in_focus_str(self):
-        src = _src(self._SA)
-        # The old leak: f"正在用 {focus_app}" or f"正在用 {focus_app}（{title_hint}）"
-        assert "正在用 {focus_app}" not in src, \
-            "Raw focus_app must not be interpolated into focus_str"
-        assert "正在用 {focus_app}（{title_hint}）" not in src, \
-            "Raw focus_app/title_hint must not be interpolated into focus_str"
-
-    def test_title_hint_not_in_prompt(self):
-        src = _src(self._SA)
-        # title_hint should not appear in any f-string that builds focus_str
-        lines = src.splitlines()
-        for line in lines:
-            if "focus_str" in line and "title_hint" in line and "=" in line and "f\"" in line:
-                pytest.fail(f"title_hint found in focus_str assignment: {line!r}")
-
-    def test_category_phrases_defined(self):
-        src = _src(self._SA)
-        assert "_APP_CATEGORY_PHRASES" in src, \
-            "_APP_CATEGORY_PHRASES dict must be defined in sensor_aware.py"
-
-    def test_app_category_called(self):
-        src = _src(self._SA)
-        assert "_get_app_category" in src or "_app_category" in src, \
-            "App categorisation function must be called in sensor_aware.py"
-
-    # Runtime: unknown app name → neutral phrase, never raw string
+class TestSensorAppCategory:
     def test_app_category_neutralizes_unknown_app(self):
         from core.scheduler.sensor_events import _app_category
         raw_app = "Visual Studio Code"

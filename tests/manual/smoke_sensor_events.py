@@ -58,7 +58,6 @@ def _reset():
     se._last_app                 = None
     se._last_app_category        = None
     se._last_chat_at             = None
-    se._last_proactive_at        = None
     se._focus_window_in_app_started_at = None
     se._focus_window_in_app_name       = None
     se._recent_switch_events.clear()

@@ -1,6 +1,6 @@
 # 9.17 后端综合工单：角色隔离、固定会话与架构债收敛
 
-状态：A/B/C/E 已提交；D 自动化收尾完成、运行联调待执行；F 已提交；G 已提交（G4 删除候选未授权，保持未勾）；H1/H2/H3/H4 已提交；I 已提交（阈值 pending_approval，退场保持 open）；J 已提交（删除候选未授权，保持未勾）。日期：2026-09-17。
+状态：A/B/C/E 已提交；D 自动化收尾完成、运行联调待执行；F 已提交；G/G4 已提交；H1/H2/H3/H4 已提交；I 已提交（阈值 pending_approval，退场保持 open）；J 已提交（删除候选未授权，保持未勾）。日期：2026-09-17。
 用户已授权按本单施工。每张施工子单完成相关验证与差异检查后独立 commit，再开始下一张。
 勾选规则：完成一项且具备证据才勾一项；源码存在、自动测试通过、部署验收分别记账。每张施工子单完成相关验证与差异检查后独立 commit，再开始下一张。
 
@@ -86,8 +86,8 @@
 - [x] G1 已按 registry 盘点：migrated 为 signal producer；maintenance-only 为状态/产物工人；`letter_writer` 为 gating `active` SMTP executor；未注册名走 compat `_pipeline_send` 或拒绝。双 gate 不是 live 已复现双发；未移除有效 admission。
 - [x] G2 已从 live gather 删除已迁移发言 `_check_*`；保留天气缓存、sensor 候选、Runtime 备忘录与维护扫描。`letter_writer` 仍由 gating active executor 发送。force=`legacy_tick_should_send(True)` 仍放行；manual migrated 只排队 autonomy；maintenance 返回 queued；未注册拒绝直发。
 - [x] G3 发言冷却只写 `{char_id}:{name}`，不再双写裸 `name`。读者 `_is_ready` / `triggered_on_logical_day` / gating / overflow / presence_nag 按角色；维护省略 `char_id` 保持 uid 全局。`ProactiveLedger.can_send(uid=)` 仍是跨触发器全局限流。测试覆盖多角色互不抑制与 ledger 跨角色 gap。
-- [ ] G4 删除候选：sensor return 后旧 LLM/action/send/sink/cooldown 分支及无生产引用 helper；同删仅保护死分支的测试/守卫/文档，保留 signal-first 行为测试。取得该删除范围施工授权后执行。
-- [x] G5 定向回归 154 + 40 passed：migrated winner 只产 signal、不跑历史 executor；weather/inner_diary 维护正常；sensor `handle_tick` 不直发；compat `_pipeline_send` 仍对未迁移名开放。已修 registry/ledger 注释与 scheduler/autonomy/memory 文档。G4 未执行。独立提交。
+- [x] G4 已删除 sensor `handle_tick()` 在 `signal_queued` 之后的 LLM/action/send/sink/cooldown 死分支，以及无生产引用的 `build_situation_narrative` / `build_action_packet` / 8 分钟空冷却 / `mark_proactive_sent`。联删仅保护死分支的测试与文档措辞；保留 signal-first 行为测试与 `_audit_*` 审计字段。SENSOR-1 action payload 仍为 open，需另立设计。定向 86 passed；manual smoke_sensor_aware / v2 全 PASS。独立提交。
+- [x] G5 定向回归 154 + 40 passed：migrated winner 只产 signal、不跑历史 executor；weather/inner_diary 维护正常；sensor `handle_tick` 不直发；compat `_pipeline_send` 仍对未迁移名开放。已修 registry/ledger 注释与 scheduler/autonomy/memory 文档。独立提交。
 
 ## H — P1：工具决策 authority 与 causation 身份
 
@@ -116,7 +116,7 @@
 - [x] J3 已保留 Dream tension alias、sensor `_audit_*` raw fields、flat `llm:` 合成。兼容窗口写最低版本条件/弃用提示/退出版本，不指定发布日期。
 - [x] J4 `core/paths.py` 生产零引用，标为显式 experimental，本轮不删。`GET /spend/mandates` 无 writer，标 reserved read-only；不删端点与历史行。
 - [x] J5 `self_management.enabled=false` 已明确为关 overlay、恢复 global 默认，不是关能力。已修控制面、feature-flags 文案与管理面展示；未改字段名。
-- [x] J6 定向回归 65 passed；普通 diff 与 `--ignore-cr-at-eol` 一致，文件 LF。管理面缓存 `?v=v1-1-0-compat-hygiene-1`。隔离 18080 核对 overlay 文案。独立提交。G4 与 J2 删除候选未授权，保持未勾。
+- [x] J6 定向回归 65 passed；普通 diff 与 `--ignore-cr-at-eol` 一致，文件 LF。管理面缓存 `?v=v1-1-0-compat-hygiene-1`。隔离 18080 核对 overlay 文案。独立提交。J2 删除候选未授权，保持未勾。
 
 ## 执行顺序与交付边界
 

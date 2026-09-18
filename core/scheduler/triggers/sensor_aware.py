@@ -1,25 +1,21 @@
 """
-sensor_aware.py — sensor 触发主动开口的实际出口。三层架构：
+sensor_aware.py — sensor 候选事实的 signal-first 出口。
 
   sensor_events.tick()
     → sensor_judge.judge()  (客观评分)
     → BehaviorPlanner.plan()  (硬代码行为决策)
-  → _pipeline_send(output_mode="return", record_turn=False)  (LLM 生成发言文本)
-  → record_assistant_turn(fanout=["desktop", "mobile"])  (统一写入 + 推送)
+    → emit_trigger_signal()  (入 autonomy signal store；不直发)
 """
 import logging
 import time
-from datetime import datetime
 from typing import Optional
 
 from core.scheduler import sensor_events, sensor_judge
-from core.scheduler.loop import _char_name, _owner_id, _pipeline_send
+from core.scheduler.loop import _owner_id
 from core.scheduler.triggers import sensor_aware_audit as _audit
-from core.turn_sink import TurnSource, record_assistant_turn
 
 logger = logging.getLogger(__name__)
 
-_PROACTIVE_COOLDOWN_SECS = 8 * 60  # 全局兜底：距上次主动发言 < 8min 不再发
 _LAST_DECISION: dict = {
     "ts": None,
     "stage": "never",
@@ -63,92 +59,6 @@ LEVEL_THRESHOLDS = {
     "attention_grab": 65,
     "direct_act":     80,
 }
-
-# ── 行为级别 → WS action_type（None = 只推 channel_message）─────────────────
-
-LEVEL_TO_ACTION_TYPE: dict[str, Optional[str]] = {
-    "passive_speak":  None,
-    "soft_hint":      "pet_emote",    # 桌宠表情切换（客户端待实现）
-    "attention_grab": "notify",       # 系统通知 + 置顶
-    "direct_act":     "execute",      # 执行 behavior_id 对应的具体动作
-}
-
-
-# ── 叙事化辅助函数 ────────────────────────────────────────────────────────────
-
-def _time_phrase(local_hour: int) -> str:
-    if 5 <= local_hour <= 8:
-        return "清晨"
-    if 9 <= local_hour <= 11:
-        return "上午"
-    if 12 <= local_hour <= 13:
-        return "中午"
-    if 14 <= local_hour <= 17:
-        return "下午"
-    if 18 <= local_hour <= 20:
-        return "傍晚"
-    if 21 <= local_hour <= 23:
-        return "晚上"
-    return "深夜"  # 0-4
-
-
-def _chat_phrase(minutes: int | None) -> str:
-    if minutes is None:
-        return "今天还没说过话"
-    if minutes < 10:
-        return "刚刚"
-    if minutes < 30:
-        return "几分钟前"
-    if minutes < 120:
-        return "一两小时前"
-    return "已经很久没说话了"
-
-
-def _at_desk_phrase(secs: int) -> str:
-    if secs < 1800:
-        return "刚坐下"
-    if secs < 3600:
-        return "快一小时"
-    if secs < 7200:
-        return "一个多小时"
-    if secs < 10800:
-        return "两个多小时"
-    if secs < 14400:
-        return "三个多小时"
-    return "超过四小时"
-
-
-def _presence_phrase(presence: str) -> str:
-    if presence == "active":
-        return "在"
-    if presence == "idle":
-        return "暂时离开"
-    return "已经离开很久"
-
-
-def _presence_narrative(ctx: dict) -> str:
-    """
-    Return an attribution-aware presence phrase for LLM situation narratives.
-
-    Uses PresenceState.attribution to select the correct semantic framing:
-    - FOCUSED_SILENT → "专注做事" (never "没理我/冷落")
-    - SLEEPING        → "" (caller should suppress presence line entirely)
-    - GENUINELY_ABSENT is the only attribution where absence semantics apply
-    Falls back to _presence_phrase() when new context fields are absent.
-    """
-    from core.scheduler.presence_model import Attribution
-
-    attribution = ctx.get("presence_attribution", "")
-    summary     = ctx.get("presence_summary", "")
-
-    if not attribution:
-        return _presence_phrase(ctx.get("presence", "unknown"))
-
-    if attribution == Attribution.SLEEPING.value:
-        return ""
-
-    return summary or _presence_phrase(ctx.get("presence", "unknown"))
-
 
 # ── BehaviorPlanner（纯硬代码，模块级函数）──────────────────────────────────
 
@@ -228,86 +138,6 @@ def plan(event: dict, score: int) -> Optional[dict]:
         "facts":       event.get("context", {}),
         "narrative":   event.get("narrative", ""),
     }
-
-
-# ── 情境描述生成 ──────────────────────────────────────────────────────────────
-
-_LEVEL_OPENERS = {
-    "passive_speak":  "（{char}看着她，想说点什么。",
-    "soft_hint":      "（{char}觉得该跟她说一句。",
-    "attention_grab": "（{char}坐不住了，得让她注意到。",
-    "direct_act":     "（{char}决定动一下。",
-}
-
-
-def build_situation_narrative(behavior: dict) -> str:
-    """
-    把 behavior 转成括号叙事，作为 _pipeline_send 的 prompt。
-    LLM 看到后用角色的语气产出一句回应。
-    """
-    char = _char_name()
-    level = behavior["level"]
-    ctx = behavior["facts"]
-    narrative = behavior["narrative"]
-
-    local_hour   = int(ctx.get("local_hour", datetime.now().hour))
-    focus_app    = ctx.get("focus_app", "")
-    title_hint   = ctx.get("focus_title_hint", "")
-    at_desk_secs = int(ctx.get("continuous_at_desk_seconds") or 0)
-
-    time_str     = _time_phrase(local_hour)
-    presence_str = _presence_narrative(ctx)  # attribution-aware, never "没理我"
-    at_desk_str  = _at_desk_phrase(at_desk_secs)
-
-    if focus_app:
-        from core.scheduler.sensor_events import _app_category as _get_app_category
-        _APP_CATEGORY_PHRASES = {
-            "work":     "在忙工作上的事",
-            "leisure":  "在放松",
-            "takeout":  "在点餐",
-            "shopping": "在逛东西",
-        }
-        _cat = _get_app_category(focus_app)
-        focus_str = _APP_CATEGORY_PHRASES.get(_cat, "在做自己的事")
-    else:
-        focus_str = ""
-
-    state_parts = []
-    if presence_str:
-        state_parts.append(presence_str)
-    if focus_str:
-        state_parts.append(focus_str)
-    state_line = "，".join(state_parts) if state_parts else "她的状态未知"
-
-    opener = _LEVEL_OPENERS.get(level, "（{char}想说点什么。").format(char=char)
-
-    return (
-        f"{opener}现在是{time_str}，{state_line}，\n"
-        f"已经{at_desk_str}了。{narrative}）"
-    )
-
-
-# ── Action Packet 组装 ────────────────────────────────────────────────────────
-
-def build_action_packet(behavior: dict, reply_text: str) -> Optional[dict]:
-    """
-    返回传给 channel behavior 的 action dict。
-    passive_speak 返回 None（只推 channel_message，无 action）。
-    """
-    action_type = LEVEL_TO_ACTION_TYPE.get(behavior["level"])
-    if action_type is None:
-        return None
-
-    if action_type == "pet_emote":
-        params: dict = {"behavior_id": behavior["behavior_id"]}
-    elif action_type == "notify":
-        params = {"text": reply_text, "bring_to_front": True}
-    elif action_type == "execute":
-        params = {"behavior_id": behavior["behavior_id"]}
-    else:
-        params = {}
-
-    return {"action_type": action_type, "params": params}
 
 
 # ── 对外接口 ─────────────────────────────────────────────────────────────────
@@ -418,10 +248,8 @@ async def handle_tick() -> None:
             return
 
         # ── A3/B: sensor_aware 纳管 —— ProactiveLedger 全局间隔+预算 + DND ──────
-        # 之前 handle_tick() 完全旁路 gating._decide()：无状态机、无 DND、无全局间隔，
-        # 只有自己的 8 分钟私有冷却，且发送后也不记账，导致其他触发器感知不到它刚说过
-        # 话（RC1）。这里在 judge/LLM 之前补上检查，被拦时直接省掉整条 pipeline 开销；
-        # 私有 8 分钟冷却继续保留，但只作下限。
+        # handle_tick() 旁路 gating._decide()：无状态机。judge 之后、入队之前做
+        # ledger/DND 只读闸门；真正送达由 autonomy talk_owner 记账。
         from core.scheduler.proactive_ledger import can_send as _ledger_can_send
         from core.scheduler.triggers.dnd import is_dnd
 
@@ -473,35 +301,6 @@ async def handle_tick() -> None:
             snapshot["final_stage"] = "dnd_blocked"
             return
 
-        # 全局兜底：8 分钟内已有主动发言 → 拦截
-        last_proactive = sensor_events.get_last_proactive_at()
-        if last_proactive is not None and (time.time() - last_proactive) < _PROACTIVE_COOLDOWN_SECS:
-            remaining = round(_PROACTIVE_COOLDOWN_SECS - (time.time() - last_proactive))
-            # 冷却期内每 tick 都会命中，持续状态非转换，降 DEBUG。
-            logger.debug(
-                "[sensor_aware] candidates=%d picked=%s score=%d tier=%s "
-                "level=%s behavior_id=%s proactive_cooldown=blocked sent=false",
-                len(candidates), best_type, best_score, best_tier,
-                behavior["level"], behavior["behavior_id"],
-            )
-            _record_decision(
-                stage="cooldown_blocked",
-                sent=False,
-                reason="8 分钟主动发言冷却中",
-                candidates_count=len(candidates),
-                picked=_event_summary(best_event),
-                score=best_score,
-                tier=best_tier,
-                behavior=behavior,
-                cooldown_remaining_seconds=remaining,
-            )
-            snapshot["final_stage"] = "cooldown_blocked"
-            snapshot["cooldown_remaining_seconds"] = remaining
-            return
-
-        # Signal-first migration: the selected sensor fact is queued for
-        # autonomy evaluation; the historical LLM/action branch below is kept
-        # unreachable as a compatibility archive during rollout.
         _sensor_oid = _owner_id()
         try:
             from core.scheduler.loop import _active_char_id_or_none
@@ -526,111 +325,6 @@ async def handle_tick() -> None:
                 urgency=min(1.0, max(0.1, best_score / 100.0)),
             )
         snapshot["final_stage"] = "signal_queued"
-        return
-
-        # ── 4. _pipeline_send 入参组装 ────────────────────────────────────────
-        prompt = build_situation_narrative(behavior)
-        snapshot["pipeline_send_prompt"] = prompt
-
-        logger.info(
-            "[sensor_aware] candidates=%d picked=%s score=%d tier=%s "
-            "level=%s behavior_id=%s proactive_cooldown=ok sent=true",
-            len(candidates), best_type, best_score, best_tier,
-            behavior["level"], behavior["behavior_id"],
-        )
-
-        # ── 5. _pipeline_send 返回 ────────────────────────────────────────────
-        try:
-            reply = await _pipeline_send(
-                prompt,
-                trigger_name="sensor_aware",
-                output_mode="return",
-                record_turn=False,
-                recall_policy="none",
-            )
-        except Exception:
-            logger.error("[sensor_aware] _pipeline_send 失败，不更新冷却")
-            logger.exception("[sensor_aware] _pipeline_send 异常详情")
-            _record_decision(
-                stage="pipeline_error",
-                sent=False,
-                reason="LLM pipeline 失败",
-                candidates_count=len(candidates),
-                picked=_event_summary(best_event),
-                score=best_score,
-                tier=best_tier,
-                behavior=behavior,
-            )
-            snapshot["final_stage"] = "pipeline_error"
-            return
-
-        snapshot["pipeline_send_reply"] = reply
-
-        if not reply:
-            logger.warning("[sensor_aware] _pipeline_send 返回空 reply，不更新冷却")
-            _record_decision(
-                stage="empty_reply",
-                sent=False,
-                reason="LLM 返回空内容",
-                candidates_count=len(candidates),
-                picked=_event_summary(best_event),
-                score=best_score,
-                tier=best_tier,
-                behavior=behavior,
-            )
-            snapshot["final_stage"] = "empty_reply"
-            return
-
-        # ── 6. Action Packet 组装 + 统一写入/推送 ────────────────────────────
-        try:
-            action = build_action_packet(behavior, reply)
-            snapshot["action_packet"] = action
-            payload = {"behavior": action} if action is not None else None
-            from core.write_envelope import stamp_sensor
-            result = await record_assistant_turn(
-                assistant_text=reply,
-                uid=_owner_id(),
-                source=TurnSource.SENSOR,
-                trigger_name="sensor_aware",
-                fanout=["desktop", "mobile"],
-                payload=payload,
-                envelope=stamp_sensor(),
-            )
-            if result.fanout_failures:
-                logger.warning("[sensor_aware] fanout 部分失败: %s", result.fanout_failures)
-        except Exception:
-            logger.error("[sensor_aware] turn_sink 推送失败，不更新冷却")
-            logger.exception("[sensor_aware] turn_sink 异常详情")
-            _record_decision(
-                stage="turn_sink_error",
-                sent=False,
-                reason="统一写入/推送失败",
-                candidates_count=len(candidates),
-                picked=_event_summary(best_event),
-                score=best_score,
-                tier=best_tier,
-                behavior=behavior,
-            )
-            snapshot["final_stage"] = "turn_sink_error"
-            return
-
-        sensor_events.mark_proactive_sent()
-        # A3/B: 让其他触发器感知到 sensor_aware 刚说过话（RC1 的另一半修复）。
-        from core.scheduler.proactive_ledger import record_send as _ledger_record
-        _ledger_record("sensor_aware", channel="desktop,mobile", gist=reply)
-        _record_decision(
-            stage="sent",
-            sent=True,
-            reason="已广播到活跃通道",
-            candidates_count=len(candidates),
-            picked=_event_summary(best_event),
-            score=best_score,
-            tier=best_tier,
-            behavior=behavior,
-            reply_preview=reply[:120],
-        )
-        # ── 7. 最终阶段 ───────────────────────────────────────────────────────
-        snapshot["final_stage"] = "sent"
 
     finally:
         try:
