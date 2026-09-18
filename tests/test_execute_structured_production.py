@@ -1,4 +1,4 @@
-"""H4: production tool routing uses structured outcomes; tuple execute stays compatibility-only."""
+"""H4: production tool routing uses structured outcomes only; tuple execute is gone."""
 from __future__ import annotations
 
 import ast
@@ -15,6 +15,7 @@ PRODUCTION_CALLERS = (
     ROOT / "core" / "character_permissions.py",
     ROOT / "core" / "pretool_router.py",
 )
+DISPATCHER = ROOT / "core" / "tool_dispatcher.py"
 
 
 def _imported_dispatcher_names(path: Path) -> set[str]:
@@ -38,6 +39,14 @@ def _uses_dispatcher_attr(path: Path, attr: str) -> bool:
     return False
 
 
+def _has_async_execute_def(path: Path) -> bool:
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "execute":
+            return True
+    return False
+
+
 def test_production_callers_use_structured_not_tuple_execute():
     for path in PRODUCTION_CALLERS:
         imported = _imported_dispatcher_names(path)
@@ -46,7 +55,6 @@ def test_production_callers_use_structured_not_tuple_execute():
         )
         assert "execute" not in imported, f"{path.name} still imports tuple execute"
         if path.name != "tool_dispatcher.py":
-            # Attribute execute on the dispatcher module would still be the tuple API.
             source = path.read_text(encoding="utf-8")
             assert "tool_dispatcher.execute(" not in source, path.name
 
@@ -62,40 +70,30 @@ def test_no_new_production_tuple_execute_importers():
     assert leftovers == [], leftovers
 
 
+def test_tuple_execute_wrapper_is_gone():
+    assert not _has_async_execute_def(DISPATCHER)
+    source = DISPATCHER.read_text(encoding="utf-8")
+    assert "Compatibility tuple API" not in source
+    assert "return outcome.result, outcome.confirmation_request" not in source
+
+
 @pytest.mark.asyncio
-async def test_tuple_wrapper_keeps_confirmation_and_unknown_shape(monkeypatch):
-    from core import tool_dispatcher
-    from core.tool_dispatcher import ToolExecutionOutcome, execute, execute_structured
+async def test_origin_reject_returns_structured_outcome_not_tuple():
+    from core.tool_dispatcher import ToolExecutionOutcome, execute_structured
+    import core.tool_dispatcher as td
+
+    assert "execute" not in td.__dict__
 
     class _State:
         WAITING_CONFIRM = "waiting_confirm"
         status = "idle"
 
-        def set_waiting_confirm(self, *_args):
-            self.status = self.WAITING_CONFIRM
-
-    async def _confirm(*_args, **_kwargs):
-        return ToolExecutionOutcome(
-            status="confirmation_required",
-            confirmation_request="请确认",
-        )
-
-    monkeypatch.setattr(tool_dispatcher, "execute_structured", _confirm)
-    result, ask = await execute(
-        "device_shutdown", {}, "u1", "u1", False, _State(),
-        origin="assistant_loop", char_id="c1",
+    outcome = await execute_structured(
+        "get_time", {}, "u1", "u1", False, _State(),
+        origin="not_a_real_origin", char_id="c1",
     )
-    assert result is None
-    assert ask == "请确认"
-
-    async def _unknown(*_args, **_kwargs):
-        return ToolExecutionOutcome(status="outcome_unknown", result="动作可能已经送达")
-
-    monkeypatch.setattr(tool_dispatcher, "execute_structured", _unknown)
-    result, ask = await execute(
-        "mcp__demo__call", {}, "u1", "u1", False, _State(),
-        origin="assistant_loop", char_id="c1",
-    )
-    assert result == "动作可能已经送达"
-    assert ask is None
-    assert callable(execute_structured)
+    assert isinstance(outcome, ToolExecutionOutcome)
+    assert outcome.status == "tool_failed"
+    assert outcome.result is None
+    assert outcome.confirmation_request is None
+    assert not isinstance(outcome, tuple)

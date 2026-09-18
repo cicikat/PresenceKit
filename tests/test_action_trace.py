@@ -4,7 +4,7 @@ tests/test_action_trace.py
 Brief 27 · 工具动作痕迹层测试。
 
 覆盖 cc-tasks/27-工具动作痕迹层.md §3 的测试清单（1-7；8 不适用，本任务未改 tag_rules.py）：
-  1. execute() 成功/失败/pending_confirm/origin 拒绝 的落痕迹行为
+  1. execute_structured() 成功/失败/pending_confirm/origin 拒绝 的落痕迹行为
   2. 环形上限 30 条
   3. trace_args 白名单
   4. 层 10.5 注入 / 不注入
@@ -40,7 +40,7 @@ def _controlled_config(overrides: dict | None = None) -> dict:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 1. execute() 落痕迹行为
+# 1. execute_structured() 落痕迹行为
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestExecuteRecording:
@@ -52,11 +52,11 @@ class TestExecuteRecording:
 
         monkeypatch.setattr(td, "get_config", lambda: _controlled_config())
         state = SessionState()
-        result, ask = await td.execute(
+        outcome = await td.execute_structured(
             tool_name="get_time", tool_args={}, user_id="u_ok", target_id="u_ok",
             is_group=False, session_state=state, origin="user_live", char_id=DEFAULT_CHAR_ID,
         )
-        assert result is not None and ask is None
+        assert outcome.result is not None and outcome.confirmation_request is None
         entries = action_trace.recent("u_ok", DEFAULT_CHAR_ID, max_items=10, window_hours=999)
         assert len(entries) == 1
         assert entries[0]["tool"] == "get_time"
@@ -76,7 +76,7 @@ class TestExecuteRecording:
         monkeypatch.setitem(td._TOOL_REGISTRY["get_time"], "func", _boom)
 
         state = SessionState()
-        await td.execute(
+        await td.execute_structured(
             tool_name="get_time", tool_args={}, user_id="u_fail", target_id="u_fail",
             is_group=False, session_state=state, origin="user_live", char_id=DEFAULT_CHAR_ID,
         )
@@ -94,12 +94,12 @@ class TestExecuteRecording:
         monkeypatch.setattr("core.user_relation.has_permission", lambda *a, **k: True)
 
         state = SessionState()
-        result, ask = await td.execute(
+        outcome = await td.execute_structured(
             tool_name="device_shutdown", tool_args={}, user_id="u_confirm", target_id="u_confirm",
             is_group=False, session_state=state, origin="user_live", char_id=DEFAULT_CHAR_ID,
         )
-        assert result is None
-        assert ask is not None
+        assert outcome.result is None
+        assert outcome.confirmation_request is not None
         assert state.status == SessionState.WAITING_CONFIRM
         entries = action_trace.recent("u_confirm", DEFAULT_CHAR_ID, max_items=10, window_hours=999)
         assert len(entries) == 1
@@ -112,16 +112,17 @@ class TestExecuteRecording:
 
         monkeypatch.setattr(td, "get_config", lambda: _controlled_config())
         state = SessionState()
-        result, ask = await td.execute(
+        outcome = await td.execute_structured(
             tool_name="get_time", tool_args={}, user_id="u_reject", target_id="u_reject",
             is_group=False, session_state=state, origin="not_a_real_origin", char_id=DEFAULT_CHAR_ID,
         )
-        assert result is None and ask is None
+        assert outcome.status == "tool_failed"
+        assert outcome.result is None and outcome.confirmation_request is None
         entries = action_trace.recent("u_reject", DEFAULT_CHAR_ID, max_items=10, window_hours=999)
         assert entries == []
 
     async def test_tool_result_safe_summary_is_the_only_success_output(self, monkeypatch, caplog):
-        """execute() must not stringify ToolResult and leak raw_data downstream."""
+        """execute_structured() must not stringify ToolResult and leak raw_data downstream."""
         import logging
 
         import core.tool_dispatcher as td
@@ -140,14 +141,14 @@ class TestExecuteRecording:
         monkeypatch.setattr(action_trace, "record", lambda *args, **kwargs: records.append(kwargs))
 
         with caplog.at_level(logging.INFO, logger="core.tool_dispatcher"):
-            result, ask = await td.execute(
+            outcome = await td.execute_structured(
                 tool_name="p0_safe_tool", tool_args={}, user_id="u_safe", target_id="u_safe",
                 is_group=False, session_state=SessionState(), origin="user_live", char_id=DEFAULT_CHAR_ID,
             )
 
-        assert ask is None
-        assert result == "工具已执行：p0_safe_tool，结果：SAFE"
-        assert "SECRET" not in result
+        assert outcome.confirmation_request is None
+        assert outcome.result == "工具已执行：p0_safe_tool，结果：SAFE"
+        assert "SECRET" not in outcome.result
         assert records[0]["result_digest"] == "SAFE"
         assert "SECRET" not in caplog.text
         assert "result_len=6" in caplog.text
@@ -440,7 +441,7 @@ class TestPeekScreenSensitive:
         monkeypatch.setitem(td._TOOL_REGISTRY["peek_screen_content"], "func", _fake_peek)
 
         state = SessionState()
-        await td.execute(
+        await td.execute_structured(
             tool_name="peek_screen_content", tool_args={}, user_id="u_peek", target_id="u_peek",
             is_group=False, session_state=state, origin="user_live", char_id=DEFAULT_CHAR_ID,
         )

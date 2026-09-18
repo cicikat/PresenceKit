@@ -27,5 +27,5 @@ async def test_execute_defensive_gate(monkeypatch):
     monkeypatch.setitem(td._TOOL_REGISTRY,"mcp__art__inpaint",{"func":lambda:None,"description":"x","dangerous":False,"category":"mcp","parameters":{}})
     monkeypatch.setattr("core.growth.mcp_proficiency.is_tool_allowed",lambda *a,**k:False)
     class S: WAITING_CONFIRM="w"; status="x"
-    result,confirm=await td.execute("mcp__art__inpaint",{},"u","u",False,S(),origin="assistant_loop",char_id="c")
-    assert result=="这项操作现在还做不了。" and confirm is None
+    result=await td.execute_structured("mcp__art__inpaint",{},"u","u",False,S(),origin="assistant_loop",char_id="c")
+    assert result.result=="这项操作现在还做不了。" and result.confirmation_request is None

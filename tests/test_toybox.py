@@ -92,21 +92,21 @@ async def test_toybox_tools_follow_safe_and_danger_mode_gate(sandbox, monkeypatc
     monkeypatch.setattr(tool_dispatcher, "_is_tool_enabled", lambda _: True)
     args = {"file_key": "wishlist", "content": "一起去看海"}
 
-    result, confirm = await tool_dispatcher.execute(
+    result = await tool_dispatcher.execute_structured(
         "write_toy_file", args, "u1", "u1", False, _Session(), origin="user_live", char_id=TEST_CHAR_ID
     )
-    assert "安全模式" in result
-    assert confirm is None
+    assert "安全模式" in result.result
+    assert result.confirmation_request is None
     assert not sandbox.very_formal_project_dir().exists()
 
     _write_danger_mode(sandbox)
-    result, confirm = await tool_dispatcher.execute(
+    result = await tool_dispatcher.execute_structured(
         "write_toy_file", args, "u1", "u1", False, _Session(), origin="user_live", char_id=TEST_CHAR_ID
     )
-    assert result == "工具已执行：write_toy_file，结果：玩具文件写好了。"
-    assert confirm is None
+    assert result.result == "工具已执行：write_toy_file，结果：玩具文件写好了。"
+    assert result.confirmation_request is None
 
-    result, confirm = await tool_dispatcher.execute(
+    result = await tool_dispatcher.execute_structured(
         "read_toy_file",
         {"file_key": "wishlist"},
         "u1",
@@ -116,8 +116,8 @@ async def test_toybox_tools_follow_safe_and_danger_mode_gate(sandbox, monkeypatc
         origin="user_live",
         char_id=TEST_CHAR_ID,
     )
-    assert result == "工具已执行：read_toy_file，结果：一起去看海"
-    assert confirm is None
+    assert result.result == "工具已执行：read_toy_file，结果：一起去看海"
+    assert result.confirmation_request is None
 
 
 def test_toybox_registry_contract(monkeypatch):

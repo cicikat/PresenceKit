@@ -720,17 +720,17 @@ worker 在到期、异常、断线、显式取消和进程关闭时尝试停止�
   3. `cleanup_stale()`：根目录扫超24h文件；processing 目录扫 mtime 超1h的文件
 - 时间前缀自动计算：`[刚刚]` / `[N秒前]` / `[N分钟前]`
 
-## execute() origin 闸门
+## execute_structured() origin 闸门
 
-生产路径走 `tool_dispatcher.execute_structured()`，返回 `ToolExecutionOutcome`
+生产路径只走 `tool_dispatcher.execute_structured()`，返回 `ToolExecutionOutcome`
 （`status` / `result` / `confirmation_request` / `missing_parameters`）。
-`execute()` 仍是兼容 tuple 封装，解包为 `(result, confirmation_request)`；
-本轮不删除 wrapper，也不把 tuple 形状当生产合同。`origin: str` 仍是**必填**关键字参数（无默认值）。
+tuple `execute()` 已删除，不再解包为 `(result, confirmation_request)`。
+`origin: str` 仍是**必填**关键字参数（无默认值）。
 
 | 情形 | 行为 |
 |---|---|
 | 漏传（调用方未写 `origin=`） | `TypeError`，调用即崩，杜绝静默绕过 |
-| 传入值不在白名单 | structured `status=tool_failed`；兼容 tuple `(None, None)` + `logger.warning`，零副作用（fail-closed） |
+| 传入值不在白名单 | `status=tool_failed`（result / confirmation_request 均为 None）+ `logger.warning`，零副作用（fail-closed） |
 | `origin="user_live"` | Path A 正常执行 |
 | `origin="assistant_loop"` | Path C（Brief 28 tool loop）自主多步调用，`Pipeline.run_agentic_loop()` 专用 |
 | `origin="autonomy_loop"` | autonomy runner 受限工具调用；schema 与执行复查共用 `AutonomyToolDecision` |
@@ -858,7 +858,7 @@ class ToolResult:
 
 ### 安全收口位置
 
-唯一注入点：`core/prompt_builder.py` layer 10（`10_tool_result`）。Path A 经 `route_pretool()` 的 `execute_structured()` 结果注入；Path C 把同轮 bounded `role=tool` 消息带回主生成。兼容 `execute()` 不另开注入路径。
+唯一注入点：`core/prompt_builder.py` layer 10（`10_tool_result`）。Path A 经 `route_pretool()` 的 `execute_structured()` 结果注入；Path C 把同轮 bounded `role=tool` 消息带回主生成。不另开 tuple `execute()` 注入路径。
 
 ---
 

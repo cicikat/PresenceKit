@@ -258,7 +258,7 @@ def test_fs_registry_contract(monkeypatch):
     assert not tool_dispatcher.is_side_effect_tool("fs_read")
 
 
-# ── execute() 集成：fs 类不受 desktop/system 安全模式闸约束 ──────────────────
+# ── execute_structured() 集成：fs 类不受 desktop/system 安全模式闸约束 ──────
 
 @pytest.mark.asyncio
 async def test_fs_tools_execute_without_danger_mode(monkeypatch, tmp_path):
@@ -268,9 +268,9 @@ async def test_fs_tools_execute_without_danger_mode(monkeypatch, tmp_path):
     f = allow_root / "note.txt"
     f.write_text("hello", encoding="utf-8")
 
-    result, confirm = await tool_dispatcher.execute(
+    result = await tool_dispatcher.execute_structured(
         "fs_read", {"path": str(f)}, "u1", "u1", False, _Session(),
         origin="user_live", char_id=TEST_CHAR_ID,
     )
-    assert "hello" in result
-    assert confirm is None
+    assert "hello" in result.result
+    assert result.confirmation_request is None

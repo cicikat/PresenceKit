@@ -309,18 +309,18 @@ async def test_write_calls_without_confirmation_and_explicit_write_confirmation_
     monkeypatch.setattr("core.self_management.policy.tool_allowed", lambda *args, **kwargs: True)
     monkeypatch.setattr("core.memory.action_trace.record", lambda *args, **kwargs: None)
 
-    result, ask = await td.execute(
+    result = await td.execute_structured(
         "mcp__srv__send_message", {}, "u1", "u1", False, _ConfirmState(),
         origin="assistant_loop", char_id="c1",
     )
-    assert result and "sent" in result and ask is None and calls == ["write"]
+    assert result.result and "sent" in result.result and result.confirmation_request is None and calls == ["write"]
 
     state = _ConfirmState()
-    result, ask = await td.execute(
+    result = await td.execute_structured(
         "mcp__srv__create_reply", {}, "u1", "u1", False, state,
         origin="assistant_loop", char_id="c1",
     )
-    assert result is None and ask is not None
+    assert result.result is None and result.confirmation_request is not None
     assert state.waiting == ("mcp__srv__create_reply", {})
     assert calls == ["write"]
 
@@ -350,17 +350,17 @@ async def test_explicit_actuate_confirmation_and_emergency_override(monkeypatch)
     monkeypatch.setattr("core.memory.action_trace.record", lambda *args, **kwargs: None)
 
     pulse_state = _ConfirmState()
-    result, ask = await td.execute(
+    result = await td.execute_structured(
         "mcp__srv__hardware_pulse", {}, "u1", "u1", False, pulse_state,
         origin="assistant_loop", char_id="c1",
     )
-    assert result is None and ask is not None and calls == []
+    assert result.result is None and result.confirmation_request is not None and calls == []
 
-    result, ask = await td.execute(
+    result = await td.execute_structured(
         "mcp__srv__hardware_stop", {}, "u1", "u1", False, _ConfirmState(),
         origin="assistant_loop", char_id="c1",
     )
-    assert result and "stopped" in result and ask is None and calls == ["stop"]
+    assert result.result and "stopped" in result.result and result.confirmation_request is None and calls == ["stop"]
 
 
 def test_effect_drives_side_effect_classification_without_changing_local_fallback(monkeypatch):

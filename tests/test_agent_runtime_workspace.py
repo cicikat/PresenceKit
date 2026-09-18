@@ -157,19 +157,19 @@ async def test_workspace_tool_create_then_read_has_one_receipt(monkeypatch, tmp_
     from core import tool_dispatcher
     from core.agent_runtime.task_manager import observability_snapshot
 
-    created, confirm = await tool_dispatcher.execute(
+    created = await tool_dispatcher.execute_structured(
         "workspace_create", {"path": "result.md", "content": "finished"},
         "workspace-owner", "workspace-owner", False, _Session(),
         origin="assistant_loop", char_id="workspace-character",
     )
-    assert confirm is None
-    assert "result.md" in created
-    read, _ = await tool_dispatcher.execute(
+    assert created.confirmation_request is None
+    assert "result.md" in created.result
+    read = await tool_dispatcher.execute_structured(
         "workspace_read", {"path": "result.md"},
         "workspace-owner", "workspace-owner", False, _Session(),
         origin="assistant_loop", char_id="workspace-character",
     )
-    assert "finished" in read
+    assert "finished" in read.result
     tasks = observability_snapshot(uid="workspace-owner", char_id="workspace-character")
     assert tasks["status_counts"] == {"succeeded": 1}
     entry = tasks["entries"][0]
@@ -201,11 +201,11 @@ async def test_workspace_duplicate_running_receipt_never_reexecutes(monkeypatch,
     )
     assert claim_next(principal, task_id=task["task_id"], capabilities={"workspace.create"}) is not None
 
-    result, confirm = await tool_dispatcher.execute(
+    result = await tool_dispatcher.execute_structured(
         "workspace_create", {"path": "pending.md", "content": "content"},
         "workspace-owner", "workspace-owner", False, _Session(),
         origin="assistant_loop", char_id="workspace-character",
     )
-    assert confirm is None
-    assert '"duplicate": true' in result
+    assert result.confirmation_request is None
+    assert '"duplicate": true' in result.result
     assert not (root / "pending.md").exists()

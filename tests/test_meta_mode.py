@@ -84,18 +84,18 @@ async def test_safe_mode_blocks_desktop_but_not_info(sandbox, monkeypatch):
     monkeypatch.setattr(tool_dispatcher, "_is_tool_enabled", lambda _: True)
 
     session = _Session()
-    result, confirm = await tool_dispatcher.execute(
+    result = await tool_dispatcher.execute_structured(
         "_test_desktop", {}, "u1", "u1", False, session, origin="user_live", char_id=TEST_CHAR_ID
     )
-    assert "安全模式" in result
-    assert confirm is None
+    assert "安全模式" in result.result
+    assert result.confirmation_request is None
     assert called == []
 
-    result, confirm = await tool_dispatcher.execute(
+    result = await tool_dispatcher.execute_structured(
         "_test_info", {}, "u1", "u1", False, session, origin="user_live", char_id=TEST_CHAR_ID
     )
-    assert result == "工具已执行：_test_info，结果：info-ok"
-    assert confirm is None
+    assert result.result == "工具已执行：_test_info，结果：info-ok"
+    assert result.confirmation_request is None
     assert called == [("info", {})]
 
 
@@ -121,10 +121,10 @@ async def test_danger_mode_allows_desktop_action(sandbox, monkeypatch):
     )
     monkeypatch.setattr(tool_dispatcher, "_is_tool_enabled", lambda _: True)
 
-    result, confirm = await tool_dispatcher.execute(
+    result = await tool_dispatcher.execute_structured(
         "_test_desktop", {}, "u1", "u1", False, _Session(), origin="user_live", char_id=TEST_CHAR_ID
     )
-    assert (result, confirm) == ("工具已执行：_test_desktop，结果：desktop-ok", None)
+    assert (result.result, result.confirmation_request) == ("工具已执行：_test_desktop，结果：desktop-ok", None)
     assert called == [{}]
 
 
@@ -150,10 +150,10 @@ async def test_legacy_expired_danger_mode_stays_on(sandbox, monkeypatch):
     )
     monkeypatch.setattr(tool_dispatcher, "_is_tool_enabled", lambda _: True)
 
-    result, confirm = await tool_dispatcher.execute(
+    result = await tool_dispatcher.execute_structured(
         "_test_desktop", {}, "u1", "u1", False, _Session(), origin="user_live", char_id=TEST_CHAR_ID
     )
-    assert (result, confirm) == ("工具已执行：_test_desktop，结果：desktop-ok", None)
+    assert (result.result, result.confirmation_request) == ("工具已执行：_test_desktop，结果：desktop-ok", None)
     assert called == [{}]
 
 
@@ -164,11 +164,11 @@ async def test_shutdown_still_requires_confirmation_in_danger_mode(sandbox, monk
     monkeypatch.setattr("core.user_relation.has_permission", lambda *_: True)
     session = _Session()
 
-    result, confirm = await tool_dispatcher.execute(
+    result = await tool_dispatcher.execute_structured(
         "device_shutdown", {}, "u1", "u1", False, session, origin="user_live", char_id=TEST_CHAR_ID
     )
-    assert result is None
-    assert confirm
+    assert result.result is None
+    assert result.confirmation_request
     assert session.pending == ("device_shutdown", {})
 
 

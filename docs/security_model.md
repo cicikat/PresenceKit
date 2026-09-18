@@ -11,7 +11,7 @@
 ### 后端白名单执行
 
 LLM 不能直接执行系统能力。所有工具都必须在 `core/tool_dispatcher.py` 的 `_TOOL_REGISTRY`
-注册，通过 `execute_structured()` 做开关、危险标记、权限和确认流程。`execute()` 仍是兼容 tuple 封装。
+注册，通过 `execute_structured()` 做开关、危险标记、权限和确认流程。tuple `execute()` 已删除。
 
 - 探针只暴露 `info` / `desktop` 类工具：`get_tools_schema(categories=["info", "desktop"])`
 - 全局默认处于 `safe` 模式；`desktop` / `system` 类工具只有在用户通过受鉴权的

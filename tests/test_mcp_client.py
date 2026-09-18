@@ -720,13 +720,13 @@ class TestCallTool:
         monkeypatch.setattr("core.growth.mcp_proficiency.is_tool_allowed", lambda *args, **kwargs: True)
         monkeypatch.setattr("core.memory.action_trace.record", lambda *args, **kwargs: None)
 
-        result, confirm = await td.execute(
+        result = await td.execute_structured(
             "mcp__hardware__hardware_sequence", {}, "owner", "owner", False,
             _NoConfirmSession(), origin="assistant_loop", char_id="char",
         )
-        assert confirm is None
-        assert result is not None
-        payload = json.loads(result)
+        assert result.confirmation_request is None
+        assert result.result is not None
+        payload = json.loads(result.result)
         assert payload["outcome"] == "outcome_unknown"
         assert payload["request_id"] == "request-123"
 
@@ -906,14 +906,14 @@ class TestMcpServerErrorPassthrough:
             raises=RuntimeError("MCP 工具返回错误: 【cedartoy】command 参数必填"),
         )
 
-        result, confirm = await td.execute(
+        result = await td.execute_structured(
             "mcp__cedar_toy__play", {"game": "fishing", "action": "cast"},
             "owner", "owner", False, _NoConfirmSession(),
             origin="assistant_loop", char_id=TEST_CHAR_ID,
         )
 
-        assert confirm is None
-        assert result == "工具调用未成功：【cedartoy】command 参数必填"
+        assert result.confirmation_request is None
+        assert result.result == "工具调用未成功：【cedartoy】command 参数必填"
 
     async def test_infra_error_falls_back_to_generic_fallback(self, monkeypatch, sandbox):
         self._register_fake_tool(
@@ -921,15 +921,15 @@ class TestMcpServerErrorPassthrough:
             raises=RuntimeError("MCP 工具调用失败且重连未恢复: 连接超时"),
         )
 
-        result, confirm = await td.execute(
+        result = await td.execute_structured(
             "mcp__cedar_toy__play", {"game": "fishing", "action": "cast"},
             "owner", "owner", False, _NoConfirmSession(),
             origin="assistant_loop", char_id=TEST_CHAR_ID,
         )
 
-        assert confirm is None
+        assert result.confirmation_request is None
         # 基础设施故障没有可操作的具体原因，不应把内部异常文本暴露给模型。
-        assert result == "工具暂时不可用"
+        assert result.result == "工具暂时不可用"
 
 
 class TestMcpServerReportedErrorHelper:

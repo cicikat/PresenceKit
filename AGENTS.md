@@ -25,7 +25,7 @@
 | 改 Agent Runtime、长期任务、同一角色的 durable/specialized 副链工作会话、capability 适配或迁移 | `docs/agent-runtime-architecture.md`；再读对应 Brief 230-237。Agent Runtime 不是第二个 Agent，走 Work Session 只代表执行链不同 |
 | 改记忆相关逻辑（episodic / user_identity / growth legacy / mood / event_log / fixation_pipeline / user_hidden_state） | `docs/memory.md` |
 | 改 prompt 层结构、tag 规则、token 裁剪 | `docs/prompt-layers.md` |
-| 改工具系统（新增工具、探针规则、桌面动作、execute() origin 闸门） | `docs/tools.md` |
+| 改工具系统（新增工具、探针规则、桌面动作、execute_structured() origin 闸门） | `docs/tools.md` |
 | 改调度器（定时触发、主动消息） | `docs/scheduler.md` |
 | 改 QQ / 桌宠通道、广播、WebSocket、跨通道接续 | `docs/channels.md`；三仓协议总账见 `docs/three-repo-interface-catalog.md`，桌面 v0.1 字段见 `Emerald-client/docs/protocol-v0.md` |
 | 整理或修改三仓接口、跨端设置/观测、调用链 | `docs/three-repo-interface-catalog.md`；精确 REST schema 以 `/openapi.json` 为准 |
@@ -119,9 +119,9 @@
 | web 与梦境来源同等隔离，不固化 | `web_recall_result` 非空时 `post_process` 携带 `web_echo=True`，`fixation_pipeline.handler_summarize_to_midterm` 与 dream_echo 同路跳过 mid_term/episodic/identity 写入；同一判定经 `event_log.append(source=)` 写入 event_log meta，`event_log_salvage` 抢救链按块过滤 `source:` 非空内容（Brief 79，见 `docs/memory.md` §三点八「来源隔离」） |
 | 工具探针（声明式） | `core/tool_dispatcher.py` → `get_probe_prompt()` / `_TOOL_REGISTRY` |
 | 工具已读指纹日志（P2，去重防重读） | `core/memory/tool_read_log.py`（`persist=True` 工具：read_diary / read_watch / read_toy_file / search_diary） |
-| 工具动作痕迹（Brief 27，跨轮"你最近做过的操作"，层 `10.5_action_trace`） | `core/memory/action_trace.py`（`execute()` 收口埋点 + `event_log_echo` 经 `capture_turn` 回流） |
+| 工具动作痕迹（Brief 27，跨轮"你最近做过的操作"，层 `10.5_action_trace`） | `core/memory/action_trace.py`（`execute_structured()` 收口埋点 + `event_log_echo` 经 `capture_turn` 回流） |
 | trusted_user_text / probe grounding | `main.py` `_trusted_user_text` 在 media merge 前捕获；`admin/routers/chat.py` `run_owner_chat_turn(trusted_user_text=)` |
-| execute() origin 闸门 | `core/tool_dispatcher.py` → `_EXECUTE_ALLOWED_ORIGINS`（`user_live` / `assistant_loop` / `assistant_loop_relay`） / `execute(origin=)` |
+| execute_structured() origin 闸门 | `core/tool_dispatcher.py` → `_EXECUTE_ALLOWED_ORIGINS`（`user_live` / `assistant_loop` / `assistant_loop_relay`） / `execute_structured(origin=)` |
 | tool loop 多步工具执行器（Path C，function_calling 模型专用） | `core/tool_dispatcher.py` → `tool_loop_active(uid)`；`core/pipeline.py` → `run_agentic_loop()`；全局 `config.tool_loop.enabled` 默认关，活跃角色卡可用 `presence_ext.tool_loop: "on"|"off"` 覆盖；设置接口 `admin/routers/settings_tool_loop.py` |
 | MCP（Model Context Protocol）外部工具客户端（Brief 29 · 4，只接工具不接 resources/prompts/记忆库，默认关） | `core/mcp_client.py`（`init_mcp_servers()` / `shutdown_mcp_servers()`）；配置 `config.mcp_servers`；工具只经 tool loop 暴露 |
 | per-char 兼容钩子（Brief 29 · "本我"模式：注入过滤/路由/发言闸门/工具暴露面） | 角色卡 `presence_ext` 块 → `core/character_loader.py`（解析 + `is_proactive_disabled()`）；消费点分别在 `core/prompt_ablation.py` / `core/model_registry.py` / `core/scheduler/gating.py`+`execution.py` / `core/pipeline.py::run_agentic_loop()`；示例卡 `bundled/examples/benwo.example.json`（发行内置模板/示例统一位于 `bundled/`） |

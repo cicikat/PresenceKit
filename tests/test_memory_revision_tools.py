@@ -14,19 +14,19 @@ class _Session:
 async def test_revise_memory_weakens_old_episode_adds_correction_and_records_audit(sandbox):
     from core.memory.episodic_memory import list_episodes, write_episode
     from core.memory.provenance_log import query
-    from core.tool_dispatcher import execute
+    from core.tool_dispatcher import execute_structured
 
     write_episode("owner", {
         "id": "ep-old", "timestamp": 1.0, "summary": "用户喜欢熬夜", "narrative_summary": "用户喜欢熬夜",
         "strength": 0.8, "tags": ["sleep"], "topic_keywords": ["睡眠"],
     })
-    result, confirm = await execute(
+    result = await execute_structured(
         "revise_memory", {"episode_id": "ep-old", "correction": "用户其实在规律早睡。"},
         "owner", "owner", False, _Session(), origin="assistant_loop", char_id=TEST_CHAR_ID,
     )
 
-    assert confirm is None
-    assert "已更正" in result
+    assert result.confirmation_request is None
+    assert "已更正" in result.result
     entries = list_episodes("owner")
     old = next(item for item in entries if item["id"] == "ep-old")
     correction = next(item for item in entries if item.get("corrects_episode_id") == "ep-old")
@@ -39,15 +39,15 @@ async def test_revise_memory_weakens_old_episode_adds_correction_and_records_aud
 async def test_revise_user_profile_writes_identity_provenance_and_action_trace(sandbox):
     from core.memory.action_trace import recent
     from core.memory.provenance_log import query
-    from core.tool_dispatcher import execute
+    from core.tool_dispatcher import execute_structured
 
-    result, confirm = await execute(
+    result = await execute_structured(
         "revise_user_profile", {"field": "sleep_pattern", "correction": "用户通常在23点前休息。"},
         "owner", "owner", False, _Session(), origin="assistant_loop", char_id=TEST_CHAR_ID,
     )
 
-    assert confirm is None
-    assert "已更新" in result
+    assert result.confirmation_request is None
+    assert "已更新" in result.result
     records = query("owner", TEST_CHAR_ID, artifact="user_identity", field="sleep_pattern")
     assert records[0]["origin"]["tool"] == "revise_user_profile"
     assert any(item["tool"] == "revise_user_profile" and item["status"] == "ok" for item in recent("owner", TEST_CHAR_ID))
@@ -57,19 +57,19 @@ async def test_revise_user_profile_writes_identity_provenance_and_action_trace(s
 async def test_forget_episodic_downgrades_topic_excludes_recall_and_records_audit(sandbox):
     from core.memory.episodic_memory import list_episodes, retrieve, write_episode
     from core.memory.provenance_log import query
-    from core.tool_dispatcher import execute
+    from core.tool_dispatcher import execute_structured
 
     write_episode("owner", {
         "id": "ep-forget", "timestamp": 1.0, "summary": "用户为考试焦虑", "narrative_summary": "用户为考试焦虑",
         "strength": 0.8, "tags": ["考试"], "topic_keywords": ["考试"], "is_core": True,
     })
-    result, confirm = await execute(
+    result = await execute_structured(
         "forget_episodic", {"topic": "考试"},
         "owner", "owner", False, _Session(), origin="assistant_loop", char_id=TEST_CHAR_ID,
     )
 
-    assert confirm is None
-    assert "降级" in result
+    assert result.confirmation_request is None
+    assert "降级" in result.result
     episode = next(item for item in list_episodes("owner") if item["id"] == "ep-forget")
     assert episode["strength"] == 0.1
     assert episode["status"] == "forgotten"
@@ -81,34 +81,34 @@ async def test_forget_episodic_downgrades_topic_excludes_recall_and_records_audi
 
 @pytest.mark.asyncio
 async def test_forget_episodic_requires_episode_id_or_topic(sandbox):
-    from core.tool_dispatcher import _TOOL_REGISTRY, execute
+    from core.tool_dispatcher import _TOOL_REGISTRY, execute_structured
 
     params = _TOOL_REGISTRY["forget_episodic"]["parameters"]
     assert "anyOf" not in params
     assert "oneOf" not in params
 
-    result, confirm = await execute(
+    result = await execute_structured(
         "forget_episodic", {},
         "owner", "owner", False, _Session(), origin="assistant_loop", char_id=TEST_CHAR_ID,
     )
-    assert confirm is None
-    assert "episode_id" in result and "topic" in result
+    assert result.confirmation_request is None
+    assert "episode_id" in result.result and "topic" in result.result
 
 
 @pytest.mark.asyncio
 async def test_clear_midterm_clears_current_bucket_and_records_audit(sandbox):
     from core.memory import mid_term
     from core.memory.provenance_log import query
-    from core.tool_dispatcher import execute
+    from core.tool_dispatcher import execute_structured
 
     mid_term.append("owner", "临时的近况", char_id=TEST_CHAR_ID)
-    result, confirm = await execute(
+    result = await execute_structured(
         "clear_midterm", {},
         "owner", "owner", False, _Session(), origin="assistant_loop", char_id=TEST_CHAR_ID,
     )
 
-    assert confirm is None
-    assert "已清空当前 1 条" in result
+    assert result.confirmation_request is None
+    assert "已清空当前 1 条" in result.result
     assert mid_term.load("owner", char_id=TEST_CHAR_ID) == []
     records = query("owner", TEST_CHAR_ID, artifact="mid_term", field="all")
     assert records[0]["origin"]["tool"] == "clear_midterm"

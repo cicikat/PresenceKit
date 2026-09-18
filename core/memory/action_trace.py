@@ -5,7 +5,7 @@ Brief 27 · 工具动作痕迹层：让角色跨轮记得"自己刚才做过什�
 
 工具结果此前只在执行当轮注入 prompt（层 10_tool_result），下一轮就"失忆"。
 这里给每次 tool_dispatcher.execute_structured() 落一条精简痕迹，环形保留最近 30 条，
-供层 10.5_action_trace 注入"你最近做过的操作"。兼容 execute() 只解包同一结果。
+供层 10.5_action_trace 注入"你最近做过的操作"。
 
 不变量：
   - result_digest 只消费 core.tools.tool_result 的 safe_summary 出口，永不碰 raw_data。

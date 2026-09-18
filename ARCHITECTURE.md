@@ -7,8 +7,8 @@ Agent Runtime 的分层、身份边界、现有 trigger/tool/store 映射和 Rea
 不是角色外的第二个 Agent；走 Work Session 只代表执行链不同。
 
 current（Briefs 230–234 / 239）：Reality Task Manager、Work Session、workspace、
-local process runner 与 browser confirmation hardening 已落地。生产路径走
-`execute_structured()`；tuple `execute()` 仍是兼容封装。
+local process runner 与 browser confirmation hardening 已落地。生产路径只走
+`execute_structured()`；tuple `execute()` 已删除。
 roadmap：Briefs 235–237 的其余 gated capability、覆盖证明与旧路径联删；Dream 侧独立
 runtime；`letter_writer` 的 Task/副链产物迁移。Brief 229 本身仍是架构合同，不新增
 客户端字段。运行细节以本文和各专题文档为准。
@@ -195,7 +195,7 @@ owner private turn
 - memory 类工具不走探针，靠 LLM 在正式对话中自主调用
 - QQ 入口（`main.py`）和 owner HTTP 入口（`admin/routers/chat.py`）共用同一个 `get_probe_prompt()` 函数
 - **trusted_user_text**：探针只消费 media merge 之前的原始用户输入。QQ 在 media merge（`main.py` line ~276）前捕获 `_trusted_user_text`；desktop/mobile media 端点在 `run_owner_chat_turn` 调用前捕获。media 抽取文本只进 `build_prompt`，不进 probe。
-- **execute() origin 闸门**：生产路径走 `tool_dispatcher.execute_structured()`；`execute()` 仍是兼容 tuple 封装。`origin` 不在白名单则 fail-closed：structured `status=tool_failed`，兼容 tuple 返回 `(None, None)` + warning。
+- **execute_structured() origin 闸门**：生产路径只走 `tool_dispatcher.execute_structured()`。`origin` 不在白名单则 fail-closed：`status=tool_failed`（result / confirmation_request 均为 None）+ warning。
 
 ---
 

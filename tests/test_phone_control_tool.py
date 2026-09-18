@@ -37,7 +37,7 @@ def test_phone_control_start_registered_as_dangerous_and_gated():
 @pytest.mark.asyncio
 async def test_safe_mode_blocks_phone_control_with_phone_specific_message(sandbox, monkeypatch):
     monkeypatch.setattr(tool_dispatcher, "_is_tool_enabled", lambda _: True)
-    result, confirm = await tool_dispatcher.execute(
+    result = await tool_dispatcher.execute_structured(
         "phone_control_start",
         {"task": "帮我点杯奶茶"},
         "u1",
@@ -47,10 +47,10 @@ async def test_safe_mode_blocks_phone_control_with_phone_specific_message(sandbo
         origin="user_live",
         char_id=TEST_CHAR_ID,
     )
-    assert "安全模式" in result
-    assert "手机" in result
-    assert "电脑" not in result
-    assert confirm is None
+    assert "安全模式" in result.result
+    assert "手机" in result.result
+    assert "电脑" not in result.result
+    assert result.confirmation_request is None
 
 
 @pytest.mark.asyncio
@@ -59,10 +59,10 @@ async def test_danger_mode_still_asks_confirmation_before_executing(sandbox, mon
     monkeypatch.setattr(tool_dispatcher, "_is_tool_enabled", lambda _: True)
     session = _Session()
 
-    # dangerous=True 的确认闸在 execute() 里发生在读 tool_info["func"] 之前
+    # dangerous=True 的确认闸在 execute_structured() 里发生在读 tool_info["func"] 之前
     # （session_state.status != WAITING_CONFIRM 直接 return，不会真的调用 wrapper），
     # 所以这里不需要也不应该替身 wrapper——真替换了反而会污染 _TOOL_REGISTRY 全局状态。
-    result, confirm = await tool_dispatcher.execute(
+    result = await tool_dispatcher.execute_structured(
         "phone_control_start",
         {"task": "帮我点杯奶茶"},
         "u1",
@@ -73,9 +73,9 @@ async def test_danger_mode_still_asks_confirmation_before_executing(sandbox, mon
         char_id=TEST_CHAR_ID,
     )
     # dangerous=True 工具第一次调用永远先要求确认，不管危险模式是否已开——两道闸独立，不能互相替代。
-    assert result is None
-    assert confirm is not None
-    assert "帮我点杯奶茶" in confirm
+    assert result.result is None
+    assert result.confirmation_request is not None
+    assert "帮我点杯奶茶" in result.confirmation_request
     assert session.pending == ("phone_control_start", {"task": "帮我点杯奶茶"})
 
 

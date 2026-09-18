@@ -123,7 +123,7 @@ async def test_artifact_tools_are_path_c_not_probe(sandbox, monkeypatch):
     prompt = tool_dispatcher.get_probe_prompt("nowhere")
     assert "write_artifact" not in prompt
     assert "read_artifact" not in prompt
-    result, confirm = await tool_dispatcher.execute(
+    result = await tool_dispatcher.execute_structured(
         "write_artifact",
         {"filename": "ok.md", "content": "hello"},
         "u1",
@@ -133,8 +133,8 @@ async def test_artifact_tools_are_path_c_not_probe(sandbox, monkeypatch):
         origin="assistant_loop",
         char_id=TEST_CHAR_ID,
     )
-    assert confirm is None
-    assert "written" in result
+    assert result.confirmation_request is None
+    assert "written" in result.result
     assert tool_dispatcher.is_side_effect_tool("write_artifact")
     spec = tool_dispatcher._TOOL_REGISTRY["write_artifact"]
     assert spec["category"] == "artifacts"

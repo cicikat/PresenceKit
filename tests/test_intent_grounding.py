@@ -1,4 +1,4 @@
-"""Regression coverage for probe grounding and execute() origin validation."""
+"""Regression coverage for probe grounding and execute_structured() origin validation."""
 
 import logging
 
@@ -49,7 +49,7 @@ def test_media_injection_trusted_text_excludes_media_span(sandbox):
 
 @pytest.mark.asyncio
 async def test_execute_unknown_origins_rejected(sandbox):
-    from core.tool_dispatcher import _EXECUTE_ALLOWED_ORIGINS, execute
+    from core.tool_dispatcher import _EXECUTE_ALLOWED_ORIGINS, execute_structured
 
     class FakeState:
         status = "idle"
@@ -68,7 +68,7 @@ async def test_execute_unknown_origins_rejected(sandbox):
     try:
         for bad_origin in ("", None, "memory", "dream", "scheduler", "assistant"):
             captured_warnings.clear()
-            result = await execute(
+            result = await execute_structured(
                 tool_name="get_time",
                 tool_args={},
                 user_id="u1",
@@ -78,13 +78,14 @@ async def test_execute_unknown_origins_rejected(sandbox):
                 origin=bad_origin,
                 char_id="test_char",
             )
-            assert result == (None, None)
+            assert result.status == "tool_failed"
+            assert result.result is None and result.confirmation_request is None
             assert captured_warnings
     finally:
         tool_logger.removeHandler(handler)
 
     with pytest.raises(TypeError):
-        await execute(
+        await execute_structured(
             tool_name="get_time",
             tool_args={},
             user_id="u1",

@@ -151,7 +151,7 @@ async def test_process_run_tool_uses_reality_scope(monkeypatch, tmp_path, sandbo
     )
     from core import tool_dispatcher
 
-    output, confirmation = await tool_dispatcher.execute(
+    output = await tool_dispatcher.execute_structured(
         "process_run",
         {"program": "tool.py"},
         "proc-owner",
@@ -161,5 +161,5 @@ async def test_process_run_tool_uses_reality_scope(monkeypatch, tmp_path, sandbo
         origin="assistant_loop",
         char_id="proc-char",
     )
-    assert confirmation is None
-    assert "tool-ok" in output
+    assert output.confirmation_request is None
+    assert "tool-ok" in output.result

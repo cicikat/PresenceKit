@@ -906,12 +906,12 @@ async def test_console_origin_runs_through_dispatcher(monkeypatch, sandbox):
     })
     monkeypatch.setattr("core.growth.mcp_proficiency.is_tool_allowed", lambda *args, **kwargs: False)
     monkeypatch.setattr("core.memory.action_trace.record", lambda *args, **kwargs: None)
-    result, ask = await td.execute(
+    result = await td.execute_structured(
         "mcp__cedar_toy__toy_status", {}, "owner", "owner", False,
         mod._ConsoleSessionState(), origin="admin_console", char_id="char",
     )
-    assert ask is None
-    assert result == "工具已执行：mcp__cedar_toy__toy_status，结果：ok"
+    assert result.confirmation_request is None
+    assert result.result == "工具已执行：mcp__cedar_toy__toy_status，结果：ok"
 
 
 @pytest.mark.asyncio

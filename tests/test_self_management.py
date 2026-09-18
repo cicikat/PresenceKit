@@ -82,22 +82,22 @@ def test_tool_overlay_applies_to_chat_schema_and_autonomy_allowlist(sandbox):
 def test_management_tool_is_hidden_from_regular_schema_and_rejects_regular_origin(sandbox):
     import asyncio
 
-    from core.tool_dispatcher import execute, get_tools_schema
+    from core.tool_dispatcher import execute_structured, get_tools_schema
 
     assert "manage_self_capability" not in {schema["function"]["name"] for schema in get_tools_schema(uid="u1", char_id="char_a")}
-    result, confirm = asyncio.run(execute("manage_self_capability", {"action": "disable", "capability_id": "autonomy.enabled", "reason": "quiet", "expected_revision": 0, "action_id": "a1"}, "u1", "u1", False, object(), origin="assistant_loop", char_id="char_a"))
-    assert confirm is None
-    assert "自主管理" in result
+    result = asyncio.run(execute_structured("manage_self_capability", {"action": "disable", "capability_id": "autonomy.enabled", "reason": "quiet", "expected_revision": 0, "action_id": "a1"}, "u1", "u1", False, object(), origin="assistant_loop", char_id="char_a"))
+    assert result.confirmation_request is None
+    assert "自主管理" in result.result
 
 
 def test_self_management_origin_cannot_execute_a_business_tool(sandbox):
     import asyncio
 
-    from core.tool_dispatcher import execute
+    from core.tool_dispatcher import execute_structured
 
-    result, confirm = asyncio.run(execute("get_time", {}, "u1", "u1", False, object(), origin="autonomy_self_management", char_id="char_a"))
-    assert confirm is None
-    assert "只能修改自身能力" in result
+    result = asyncio.run(execute_structured("get_time", {}, "u1", "u1", False, object(), origin="autonomy_self_management", char_id="char_a"))
+    assert result.confirmation_request is None
+    assert "只能修改自身能力" in result.result
 
 
 def test_admin_routes_use_active_owner_character_scope(sandbox, monkeypatch):

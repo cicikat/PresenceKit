@@ -195,19 +195,13 @@ def test_character_permissions_test_readiness_check_for_desktop_does_not_execute
     _active(sandbox)
     client = _client(monkeypatch)
 
-    from core.tool_dispatcher import execute as _real_execute
     from core.tool_dispatcher import execute_structured as _real_execute_structured
     execute_calls = []
-
-    async def _spy_execute(*a, **kw):
-        execute_calls.append(kw.get("tool_name") or (a[0] if a else None))
-        return await _real_execute(*a, **kw)
 
     async def _spy_execute_structured(*a, **kw):
         execute_calls.append(kw.get("tool_name") or (a[0] if a else None))
         return await _real_execute_structured(*a, **kw)
 
-    monkeypatch.setattr("core.tool_dispatcher.execute", _spy_execute)
     monkeypatch.setattr("core.tool_dispatcher.execute_structured", _spy_execute_structured)
 
     response = client.post(
@@ -219,7 +213,7 @@ def test_character_permissions_test_readiness_check_for_desktop_does_not_execute
     payload = response.json()
     assert payload["executed"] is False
     assert "checklist" in payload
-    assert execute_calls == [], "desktop 类目测试不应真的调用 tool_dispatcher.execute"
+    assert execute_calls == [], "desktop 类目测试不应真的调用 tool_dispatcher.execute_structured"
 
 
 def test_character_permissions_test_identity_consolidation_actually_calls_pipeline(sandbox, monkeypatch):

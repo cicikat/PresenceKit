@@ -74,7 +74,7 @@ class TestPushPayloadMatchesPathB:
 class TestDesktopModeGate:
     @pytest.mark.asyncio
     async def test_toy_invite_blocked_in_safe_mode(self, monkeypatch):
-        """desktop 分类工具在 execute() 层受 _MODE_RESTRICTED_CATEGORIES 闸门约束，
+        """desktop 分类工具在 execute_structured() 层受 _MODE_RESTRICTED_CATEGORIES 闸门约束，
         安全模式下不得真的推送桌面动作。"""
         from core import tool_dispatcher as td
 
@@ -83,10 +83,10 @@ class TestDesktopModeGate:
             "core.tool_dispatcher._push_desktop_action",
             new=AsyncMock(return_value="ok"),
         ) as mock_push:
-            result, _ = await td.execute(
+            result = await td.execute_structured(
                 "toy_invite", {}, user_id="owner", target_id="owner",
                 is_group=False, session_state={}, origin="user_live",
                 char_id="test_char",
             )
         mock_push.assert_not_awaited()
-        assert "安全模式" in (result or "")
+        assert "安全模式" in (result.result or "")

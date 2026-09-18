@@ -5,14 +5,16 @@
 `current`：ARCHITECTURE / agent-runtime 已按实现改 current/roadmap。Dream Stage 是
 sandbox-mode 已实现，不是全局 fail-closed。`self_management.enabled=false` 只关 overlay。
 `core/paths.py` 标为显式 experimental，生产零引用。`GET /spend/mandates` 仍是预留只读。
-`open` / 未授权删除：tuple `execute()` wrapper 待单独删除授权。G4 传感死分支与
-J2 三个 shim（`record_rejections`、period shim、`context.max_turns` 读 fallback）已删。
+`open` / 未授权删除：无。G4 传感死分支、J2 三个 shim
+（`record_rejections`、period shim、`context.max_turns` 读 fallback）与
+tuple `execute()` wrapper 已删。
 
 | 已删候选 | 当前路径 |
 |---|---|
 | `source_policy.record_rejections` | `event_tools` 直接 `record_filtered_query()` |
 | `user_profile.get_period_info` / `set_period_date` | 生产与测试均走 `health_state` |
 | `context.max_turns` 只读 alias | `get_history` / `GET /context-config` 只读 `memory.short_term_rounds`；`PUT` 仍只写该 owner |
+| tuple `execute()` wrapper | 生产与测试均走 `execute_structured()` / `ToolExecutionOutcome` |
 
 ## Memory Event 退场阈值（2026-09-18）
 

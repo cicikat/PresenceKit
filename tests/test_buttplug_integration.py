@@ -177,7 +177,7 @@ async def test_toy_tools_reject_non_owner_and_group(monkeypatch):
     monkeypatch.setattr(tool_dispatcher, "_current_mode", lambda: "danger")
 
     for user_id, is_group in (("other", False), ("owner", True)):
-        result, confirm = await tool_dispatcher.execute(
+        result = await tool_dispatcher.execute_structured(
             "toy_stop",
             {},
             user_id=user_id,
@@ -187,8 +187,8 @@ async def test_toy_tools_reject_non_owner_and_group(monkeypatch):
             origin="user_live",
             char_id=TEST_CHAR_ID,
         )
-        assert result == "硬件控制只允许 owner 私聊触发"
-        assert confirm is None
+        assert result.result == "硬件控制只允许 owner 私聊触发"
+        assert result.confirmation_request is None
 
 
 async def test_toy_tool_executes_for_owner_private_turn(monkeypatch):
@@ -209,7 +209,7 @@ async def test_toy_tool_executes_for_owner_private_turn(monkeypatch):
     monkeypatch.setattr(tool_dispatcher, "_current_mode", lambda: "danger")
     monkeypatch.setitem(tool_dispatcher._TOOL_REGISTRY["toy_stop"], "func", fake_stop)
 
-    result, confirm = await tool_dispatcher.execute(
+    result = await tool_dispatcher.execute_structured(
         "toy_stop",
         {},
         user_id="owner",
@@ -219,8 +219,8 @@ async def test_toy_tool_executes_for_owner_private_turn(monkeypatch):
         origin="user_live",
         char_id=TEST_CHAR_ID,
     )
-    assert result == "工具已执行：toy_stop，结果：已停止"
-    assert confirm is None
+    assert result.result == "工具已执行：toy_stop，结果：已停止"
+    assert result.confirmation_request is None
 
 
 async def test_toy_tool_direct_dispatch_rejected_while_frozen(monkeypatch):
@@ -234,12 +234,12 @@ async def test_toy_tool_direct_dispatch_rejected_while_frozen(monkeypatch):
         "scheduler": {"owner_id": "owner"},
         "hardware": {"intiface_opt_in": False},
     })
-    result, confirm = await tool_dispatcher.execute(
+    result = await tool_dispatcher.execute_structured(
         "toy_stop", {}, user_id="owner", target_id="owner", is_group=False,
         session_state=FakeState(), origin="user_live", char_id=TEST_CHAR_ID,
     )
-    assert result == "Intiface 硬件能力当前处于冻结状态，需要显式 opt-in"
-    assert confirm is None
+    assert result.result == "Intiface 硬件能力当前处于冻结状态，需要显式 opt-in"
+    assert result.confirmation_request is None
 
 
 async def _wait_for_terminal(job_id: str) -> dict:

@@ -1,6 +1,6 @@
 # 9.17 后端综合工单：角色隔离、固定会话与架构债收敛
 
-状态：A/B/C/E 已提交；D 自动化收尾完成、运行联调待执行；F 已提交；G/G4 已提交；H1/H2/H3/H4 已提交；I 已提交（阈值 pending_approval，退场保持 open）；J/J2 已提交。日期：2026-09-17。
+状态：A/B/C/E 已提交；D 自动化收尾完成、运行联调待执行；F 已提交；G/G4 已提交；H1/H2/H3/H4 已提交（含 tuple `execute()` wrapper 删除）；I 已提交（阈值 pending_approval，退场保持 open）；J/J2 已提交。日期：2026-09-17。
 用户已授权按本单施工。每张施工子单完成相关验证与差异检查后独立 commit，再开始下一张。
 勾选规则：完成一项且具备证据才勾一项；源码存在、自动测试通过、部署验收分别记账。每张施工子单完成相关验证与差异检查后独立 commit，再开始下一张。
 
@@ -96,7 +96,7 @@
 - [x] H1 已统一 `AutonomyToolDecision`：`tool_eligibility()` 只做 allowlist 准入；schema / `GET /admin/autonomy/tools` / 管理面矩阵 / run audit 共用 `allowed`+`decision_source`（`autonomy_allowlist` 或 `global_read_inheritance`）。全局只读 MCP 继承保留，执行前仍复查当前矩阵。定向 83 passed；管理面浏览器验收留 H2。
 - [x] H2 回归 global/deployment/self-capability/MCP/autonomy policy、危险操作与确认，以及展示允许但执行时撤权。控制面沿用 H1 `AutonomyToolDecision` 合同，未改字段。管理面浏览器验收在当前代码隔离端口完成。
 - [x] H3 Workspace 无 canonical `turn_id`，mutating tools 改为 `CausationRef("tool_request", fingerprint)` + `request_fingerprint`；类型校验新增 `tool_request`，观测只暴露 kind/digest，不把 hash 标成 `reality_turn`，不重写历史证据。
-- [x] H4 生产消费者已迁 `execute_structured()`：Path C pipeline、autonomy runner、MCP console、character-permissions fs 探针；Path A 本就 structured。保留 origin/confirmation/unknown；tuple `execute()` 与 shape-only 测试本轮不删。零生产依赖守卫见 `tests/test_execute_structured_production.py`。删除 wrapper 待兼容窗口结束另授权。
+- [x] H4 生产消费者已迁 `execute_structured()`：Path C pipeline、autonomy runner、MCP console、character-permissions fs 探针；Path A 本就 structured。保留 origin/confirmation/unknown。tuple `execute()` wrapper 与 shape-only 测试已删；模块级入口与 `ToolDispatcher` 只留 `execute_structured()`。守卫见 `tests/test_execute_structured_production.py`。
 
 ## I — P1/P2：Memory 迁移退场标准与观测所有权
 

@@ -2367,12 +2367,10 @@ async def _execute_structured_impl(
     allowed_tool_names: frozenset[str] | None = None,
 ) -> ToolExecutionOutcome:
     """
-    执行工具，返回 (tool_result, ask_confirm_text)
+    执行工具，返回 ToolExecutionOutcome。
 
-    tool_result:      工具执行结果字符串，None 表示无结果
-    ask_confirm_text: 高危工具等待确认时的询问文字，None 表示无需确认
-
-    origin 必填，不在白名单则 fail-closed：返回 (None, None) + 记 warning。
+    origin 必填，不在白名单则 fail-closed：status=tool_failed（result / confirmation_request
+    均为 None）+ 记 warning。
     白名单：user_live（Path A 用户发起）/ assistant_loop（Path C tool loop 自主多步调用，
     Brief 28）/ assistant_loop_relay（Path C
     尾部花括号二次调用兜底，Brief 120——与 assistant_loop 区分开，是为了让 action_trace /
@@ -2724,38 +2722,6 @@ async def execute_structured(
     )
 
 
-async def execute(
-    tool_name: str,
-    tool_args: dict,
-    user_id: str,
-    target_id: str,
-    is_group: bool,
-    session_state,
-    *,
-    origin: str,
-    char_id: str,
-    bypass_read_log: bool = False,
-    tool_status_observer=None,
-    allowed_tool_names: frozenset[str] | None = None,
-) -> tuple[str | None, str | None]:
-    """Compatibility tuple API.
-
-    Production routing uses execute_structured(). This wrapper unpacks
-    (result, confirmation_request) for remaining tests and leftover callers.
-    Keep it until the compatibility window ends; do not treat tuple shape as
-    the production contract.
-    """
-    outcome = await execute_structured(
-        tool_name, tool_args, user_id, target_id, is_group, session_state,
-        origin=origin,
-        char_id=char_id,
-        bypass_read_log=bypass_read_log,
-        tool_status_observer=tool_status_observer,
-        allowed_tool_names=allowed_tool_names,
-    )
-    return outcome.result, outcome.confirmation_request
-
-
 def _build_confirm_ask(tool_name: str, tool_args: dict) -> str:
     descriptions = {
         "device_shutdown": f"关机（{tool_args.get('delay_seconds', 60)}秒后）",
@@ -2775,8 +2741,8 @@ class ToolDispatcher:
     def get_tools_schema(self, categories: list[str] | None = None, *, char_id: str | None = None, uid: str | None = None) -> list:
         return get_tools_schema(categories=categories, char_id=char_id, uid=uid)
 
-    async def execute(self, tool_name, tool_args, user_id, target_id, is_group, session_state, *, origin: str, char_id: str, bypass_read_log: bool = False, tool_status_observer=None, allowed_tool_names: frozenset[str] | None = None):
-        return await execute(
+    async def execute_structured(self, tool_name, tool_args, user_id, target_id, is_group, session_state, *, origin: str, char_id: str, bypass_read_log: bool = False, tool_status_observer=None, allowed_tool_names: frozenset[str] | None = None):
+        return await execute_structured(
             tool_name=tool_name,
             tool_args=tool_args,
             user_id=user_id,

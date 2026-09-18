@@ -56,8 +56,8 @@ async def test_execute_bypass_read_log_allows_reread_and_refreshes_fingerprint(s
         status = "idle"
         WAITING_CONFIRM = "waiting_confirm"
 
-    async def _run(uid: str, *, bypass: bool) -> tuple:
-        return await _td.execute(
+    async def _run(uid: str, *, bypass: bool):
+        return await _td.execute_structured(
             tool_name="read_diary",
             tool_args={},
             user_id=uid,
@@ -74,15 +74,15 @@ async def test_execute_bypass_read_log_allows_reread_and_refreshes_fingerprint(s
     assert len(read_diary_calls) == 1
 
     # 第二次普通读取（无显式短语）：被已读指纹拦，不再调用底层 func（回归）
-    result, _ = await _run("u_bypass_case", bypass=False)
+    result = await _run("u_bypass_case", bypass=False)
     assert len(read_diary_calls) == 1
-    assert "跳过" in (result or "")
+    assert "跳过" in (result.result or "")
 
     # 第三次带显式重读短语（bypass=True）：放行且指纹继续刷新
     await _run("u_bypass_case", bypass=True)
     assert len(read_diary_calls) == 2
 
     # 之后没有显式短语的第四次读取：仍被拦（bypass 不是永久解除）
-    result, _ = await _run("u_bypass_case", bypass=False)
+    result = await _run("u_bypass_case", bypass=False)
     assert len(read_diary_calls) == 2
-    assert "跳过" in (result or "")
+    assert "跳过" in (result.result or "")

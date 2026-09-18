@@ -236,20 +236,20 @@ async def test_dispatcher_confirmation_and_invalid_args_do_not_queue(monkeypatch
     })
     statuses = []
 
-    invalid, ask = await tool_dispatcher.execute(
+    invalid = await tool_dispatcher.execute_structured(
         "ephemeral_test", {}, "u1", "u1", False, _State(), origin="assistant_loop", char_id="c1",
         tool_status_observer=lambda kind, **kwargs: statuses.append(kind),
     )
-    assert invalid.startswith("工具参数不完整")
-    assert ask is None
+    assert invalid.result.startswith("工具参数不完整")
+    assert invalid.confirmation_request is None
     assert statuses == []
 
-    result, ask = await tool_dispatcher.execute(
+    result = await tool_dispatcher.execute_structured(
         "ephemeral_test", {"value": "x"}, "u1", "u1", False, _State(), origin="assistant_loop", char_id="c1",
         tool_status_observer=lambda kind, **kwargs: statuses.append(kind),
     )
-    assert result is None
-    assert ask
+    assert result.result is None
+    assert result.confirmation_request
     assert statuses == ["pending_confirmation"]
 
 
