@@ -89,6 +89,10 @@ Companion receipt/session 文件只保存 caller、opaque ID、digest、状态�
 玩具文件工具只接受 `diary` / `wishlist` / `doodle` 三个枚举 key，不接受 LLM 提供的路径。
 目标统一解析到 `get_paths().very_formal_project_dir()`，写入前会校验目标文件、原子写临时文件
 和玩具箱目录本身均未通过软链或 `..` 越过边界。该工具属于 `desktop` 类，仅 danger 模式可用。
+工单 256 拟议把这套共享 toybox 迁到 Reality `owner+char` 的 self 桶，默认授予本角色读写、
+不依赖 danger 模式；workspace 写权限不随 self 放开。合同见
+[character-files-and-agent-autonomy.md](character-files-and-agent-autonomy.md)，落地前以上
+仍是 current。
 
 ### 上传和媒体限制
 
@@ -192,6 +196,10 @@ PresenceKit-desktop 已完成 Tauri Rust native bridge header 迁移；SEC-WS-1 
 ### sandbox 不是安全沙箱
 
 `core/sandbox.py` 是路径集中管理和测试数据隔离，不是权限隔离。它不能阻止任意代码读取项目外文件，也不能限制第三方插件能力。未来插件化必须另做权限模型。
+
+工单 256 拟议的 backend/external 只读取消「按 `config.yaml` / `data/` / 项目目录整类拒绝」，
+但保留 owner/char/realm 隔离、统一脱敏和高风险凭据库拒绝。脱敏失败必须拒绝，不得退回原文。
+模型不能指定 owner/char/realm 或自签授权。UNC、ADS、设备路径和 reparse 不是普通本机文件。
 
 ### 导入/社区包体系未成型
 

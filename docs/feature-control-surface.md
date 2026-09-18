@@ -403,6 +403,13 @@ Brief 237 closes legacy scheduler execution lanes: due schedules use the normal 
 adapter, the reminder JSON fallback is retired, and manual direct-trigger execution is unavailable.
 Task cancellation is admin-only via the metadata endpoint in the interface catalog.
 
+Work order 256 (proposed, not current) adds backend/external read effective state, per-character
+self quotas/grants, and Agent-task observation. Historical sentence above remains true for Brief
+229 itself. See [character-files-and-agent-autonomy.md](character-files-and-agent-autonomy.md).
+Current `fs_access` remains a default-off allow-roots gate with whole `data/` deny and substring
+`deny_names`; there is no dedicated HTTP observability beyond in-process `effective_state()`.
+`workspace_access` and process/browser capabilities are unchanged.
+
 ## Brief 232 Agent Work Sessions
 
 Agent Work Sessions are backend-only and have no client setting. They are the same character's

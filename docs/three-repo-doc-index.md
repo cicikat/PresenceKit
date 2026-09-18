@@ -1,6 +1,6 @@
 # PresenceKit 三仓文档总索引
 
-> 最后核对：2026-09-17
+> 最后核对：2026-09-18
 > 适用仓库：`Emerald-presence`（后端）、`Emerald-client`（桌面）、`Emerald-mobile`（手机）
 
 这份文档是三仓文档的第一入口。先按功能直达；如果要了解某个仓库的全部文档，再看后面的逐仓清单。
@@ -32,6 +32,7 @@
 | 鉴权、token、scope、轮换 | [`security.md`](security.md)、[`token-rotation.md`](token-rotation.md) | 威胁模型看 [`security_model.md`](security_model.md)，客户端接入看各仓 backend integration。 |
 | 设置页、功能开关、effective state | [`feature-control-surface.md`](feature-control-surface.md) | Desktop 设置归属看 [`Emerald-client/docs/settings-control-audit.md`](../../Emerald-client/docs/settings-control-audit.md)。历史重组讨论看 [`settings-reorganization-audit-2026-09-10.md`](settings-reorganization-audit-2026-09-10.md)，不要把它当当前实现。 |
 | Agent Runtime、工具循环、MCP | [`agent-runtime-architecture.md`](agent-runtime-architecture.md)、[`tools.md`](tools.md) | Agent Runtime 是同一角色的 durable/specialized 副链，不是第二个 Agent。路由/能力看 [`model-presets.md`](model-presets.md)，浏览器 worker 看 [`agent-runtime-browser-route-matrix.md`](agent-runtime-browser-route-matrix.md)。 |
+| 角色自有文件、backend/external 只读、聊天发起 Agent task | [`character-files-and-agent-autonomy.md`](character-files-and-agent-autonomy.md) | 工单 256 拟议合同，落地前不是 current。实现仍以 tools / security_model / agent-runtime / data-taxonomy 为准。 |
 | Prompt、tag、token 裁剪、风格 | [`prompt-layers.md`](prompt-layers.md)、[`prompt-unification-audit.md`](prompt-unification-audit.md) | 角色模型方案看 [`model-presets.md`](model-presets.md)。后者是审计记录，规则以代码和 `prompt-layers.md` 为准。 |
 | 记忆、事件、向量、数据路径 | [`memory.md`](memory.md)、[`data-taxonomy.md`](data-taxonomy.md)、[`vector-store.md`](vector-store.md) | 迁移/资产盘点看 [`authored-root-migration.md`](authored-root-migration.md)、[`c1-root-asset-inventory.md`](c1-root-asset-inventory.md)。 |
 | 对话写入、短期记忆、turn sink | [`assistant-turn-sink.md`](assistant-turn-sink.md) | 通道链路看 [`channels.md`](channels.md)，客户端展示边界看 [`Emerald-client/docs/memory.md`](../../Emerald-client/docs/memory.md)。 |
@@ -55,6 +56,7 @@
 | [`README.md`](README.md) | current | 后端文档入口；本索引是三仓入口。 |
 | [`three-repo-doc-index.md`](three-repo-doc-index.md) | authority | 三仓文档总入口、按功能直达和逐仓全量清单。 |
 | [`agent-runtime-architecture.md`](agent-runtime-architecture.md) | authority | Agent Runtime 分层、同一角色主链/副链语义、身份/realm 和迁移边界。 |
+| [`character-files-and-agent-autonomy.md`](character-files-and-agent-autonomy.md) | proposed | 工单 256 拟议：backend/external 只读、self 空间、提醒生命周期、聊天发起 Agent task。A 冻结；B–G 落地前不是 current。 |
 | [`agent-runtime-browser-route-matrix.md`](agent-runtime-browser-route-matrix.md) | current | Agent Runtime 浏览器路线、路由和验收矩阵。 |
 | [`api-reference.md`](api-reference.md) | authority | 后端 HTTP/WS API 目录和调用方。 |
 | [`channels.md`](channels.md) | authority | QQ、Desktop、Mobile、WebSocket、广播和跨通道接续。 |

@@ -9,6 +9,7 @@
 | State | What exists |
 |---|---|
 | current | Brief 230 Reality Task Manager (`runtime/agent_runtime/reality`); Brief 231 registered trigger adapters; Brief 232 same-character work sessions; Brief 233 workspace capability with `causation_ref.kind=tool_request`; Brief 234 local process runner; Brief 239 browser confirmation hardening |
+| proposed (256 A, not current) | Character self space, backend/external read without whole-class directory bans, reminder lifecycle tools, and a bounded coding worker launched from chat/autonomy. Contract: [character-files-and-agent-autonomy.md](character-files-and-agent-autonomy.md). Implementation is tickets B–G. |
 | roadmap | Briefs 235-237 remaining gated capabilities, coverage proof, and old-path removal together with guards/tests/docs; Dream-side Task Runtime with its own root; `letter_writer` Task/副链 artifact migration; visible completion notification via a fresh Reality `EventContext` |
 | non-goal | universal EventBus, `kind=task/tool/activity` dispatcher, or a second acting subject |
 
@@ -213,7 +214,10 @@ a durable 副链 does not by itself mean the foreground 主链 cannot use that c
 | Tools | Target capability | Constraint |
 |---|---|---|
 | `get_time`, `weather`, `web_search` | clock/network information | foreground bounded read/untrusted output |
-| `add_reminder` | scheduler | structured durable task (Brief 235) |
+| `add_reminder` | scheduler | structured durable task (Brief 235). Character list/get/update/cancel/restore are proposed by 256 E, not current |
+| `fs_list`, `fs_read` | backend/external read | current: allow-roots plus whole `data/` deny. 256 B proposes backend default-read, allow_roots as discovery hints, unified redaction |
+| `read_toy_file`, `write_toy_file` | fixed authored document | enum targets in the shared toy directory, not workspace and not per-char self. 256 C/D propose self tools and migration |
+| `start_agent_task`, `get_agent_task`, `cancel_agent_task` | same-character bounded coding worker | **proposed (256 F)**; not registered. Receipt creation ≠ coding complete |
 | `read_diary`, `search_diary`, `read_watch`, `get_profile`, `get_episodic`, `read_life_records` | memory/document | Reality-scoped read |
 | `search_events`, `expand_event_window`, `get_related_events` | memory evidence | explicit Reality read; receipts never indexed |
 | `reread_image` | media recall | owner-scoped image reread; cached/vision/ocr, never a write |
@@ -230,8 +234,6 @@ a durable 副链 does not by itself mean the foreground 主链 cannot use that c
 | `phone_control_start` | mobile delegated task | separate mobile adapter until migration |
 | `water_garden` | garden mutation | sandboxed allowlist and policy |
 | `toy_vibrate`, `toy_stop`, `toy_pattern`, `toy_job_status` | hardware job | existing hardware manager remains owner |
-| `read_toy_file`, `write_toy_file` | fixed authored document | enum targets, not workspace |
-| `fs_list`, `fs_read` | workspace read | Brief 233 adapter; existing allow-roots |
 | `workspace_list`, `workspace_read`, `workspace_create`, `workspace_update`, `workspace_delete`, `workspace_undo` | workspace capability | Brief 233; explicit roots/operation grants, Reality-only, bounded receipts |
 | `process_run` | bounded process capability | Brief 234; local-only, workspace program, structured args, allowlisted interpreter, no shell/network, bounded resources |
 | `browser_automation` | isolated browser capability | Brief 239 hardening; Reality-only, explicit domain allowlist, immutable `browser-request.v1` fingerprint, one-shot owner confirmation, bounded redacted result, Workspace-only file transfer |
@@ -308,6 +310,10 @@ and `daily_journal` retain separate names, counters, and lifecycles.
 
 Future durable state requires a same-change read-only backend observation endpoint and, where consumed,
 admin/desktop/mobile catalog updates. Brief 229 itself adds no endpoint, setting, or client field.
+Work order 256 may add read-only observability for backend-read, self, and Agent-task effective
+state when those capabilities land; that does not rewrite the historical 229 sentence. Proposed
+endpoints are listed in [character-files-and-agent-autonomy.md](character-files-and-agent-autonomy.md)
+and stay non-current until B–G implement them.
 
 ## Brief 232 Agent Work Sessions
 
@@ -325,9 +331,10 @@ artifact.
 
 ## Brief 233 workspace capability
 
-The workspace adapter is separate from the legacy read-only `fs_access` tools. It accepts only explicit
+The workspace adapter is separate from the legacy read-only `fs_access` tools and from the proposed
+per-character self space (256). It accepts only explicit
 configured roots, rejects project `data/`, sensitive names, symlinks, unsupported text types, and
-`remote_server` mode. `read`, `list`, `create`, `update`, and `delete` are independent permissions;
+`remote_server` mode. Self grants never propagate into workspace roots. `read`, `list`, `create`, `update`, and `delete` are independent permissions;
 writes use atomic replacement and bounded file/total/concurrency limits. Mutating tool calls create a
 Reality Task Manager receipt and expose only metadata (`task_id`, operation, size, digest, version),
 never content or absolute paths. The receipt's `causation_ref.kind` is `tool_request` with the request

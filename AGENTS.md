@@ -23,6 +23,7 @@
 |---|---|
 | 理解系统全貌、pipeline 流程 | `ARCHITECTURE.md` |
 | 改 Agent Runtime、长期任务、同一角色的 durable/specialized 副链工作会话、capability 适配或迁移 | `docs/agent-runtime-architecture.md`；再读对应 Brief 230-237。Agent Runtime 不是第二个 Agent，走 Work Session 只代表执行链不同 |
+| 改角色自有文件空间、backend/external 只读、self 工具或从聊天发起 Agent task | `docs/character-files-and-agent-autonomy.md`（256 拟议合同，落地前不是 current）；实现仍以 tools / security_model / agent-runtime / data-taxonomy 为准 |
 | 改记忆相关逻辑（episodic / user_identity / growth legacy / mood / event_log / fixation_pipeline / user_hidden_state） | `docs/memory.md` |
 | 改 prompt 层结构、tag 规则、token 裁剪 | `docs/prompt-layers.md` |
 | 改工具系统（新增工具、探针规则、桌面动作、execute_structured() origin 闸门） | `docs/tools.md` |

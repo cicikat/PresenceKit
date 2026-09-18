@@ -435,8 +435,11 @@ logical status and recent ack time.
 ## fs 只读浏览工具（Brief 31）
 
 文件：`core/tools/fs_browse.py`。让角色能"自己翻电脑"——列目录、读文件，范围严格限于
-config 声明的允许根目录，**只读**。不新增任何写入入口（唯一写出口仍是
-`core/tools/toybox.py` 的 `write_toy_file`）。默认两条路径都不含 `fs`；需要在
+config 声明的允许根目录，**只读**。当前写入面不是单一出口：toybox 枚举文件、workspace
+突变、chat artifacts、记忆修订、花园、硬件与 self-capability 都是独立写路径。
+工单 256 拟议把 backend/external 读从整类 `data/` 封禁改为脱敏只读，并把 toybox 迁到
+per-char self；合同见 [character-files-and-agent-autonomy.md](character-files-and-agent-autonomy.md)，
+落地前本节描述的仍是 current。默认两条路径都不含 `fs`；需要在
 `tool_exposure.path_a/path_c` 或对应角色覆盖中明确加入。Path A 开启后 QQ、desktop、mobile
 共享同一只读浏览能力。
 
@@ -482,9 +485,10 @@ fs_access:
 - **action_trace 自动生效**：`trace_args: ["path"]`（路径本身已在 allowlist 内，不敏感，
   落痕迹方便追问溯源），收口埋点在 `tool_dispatcher.execute_structured()`，无需额外记账代码。
 - **风险**：文件内容是不可信输入（与 web_search/MCP 结果同级），可能含提示注入文本，
-  v1 接受现状，见 `docs/known-issues.md`。
+  v1 接受现状，见 `docs/known-issues.md`。256 B 拟议统一脱敏先于截断/模型/缓存，
+  脱敏失败拒绝而不是退回原文；未落地前仍直接返回文本。
 - **不做什么**：写入/删除/移动（永远不进 `fs` 类）；`fs_search`/grep；分页读取；探针暴露；
-  图片/PDF 解析（走既有 `media_processor` 通道，不在此重复）。
+  图片/PDF 解析（走既有 `media_processor` 通道，不在此重复）。256 不把 fs 升级为写工具。
 
 ---
 
@@ -516,8 +520,8 @@ fs_access:
 | `toy_stop` | 用户要求立即停止设备 | Intiface Central / Buttplug v3 |
 | `toy_pattern` | 用户明确要求预设振动模式 | Intiface Central / Buttplug v3 |
 | `toy_job_status` | 查询硬件后台任务状态 | 只读硬件 job 状态 |
-| `read_toy_file` | 读取玩具项目白名单文件 | `data/very_formal_project/`，仅接受枚举 `file_key` |
-| `write_toy_file` | 覆盖或追加玩具项目白名单文件 | UTF-8 文本，文件总长最多 4000 字，原子写入 |
+| `read_toy_file` | 读取玩具项目白名单文件 | `data/very_formal_project/`，仅接受枚举 `file_key`；256 拟议迁 self |
+| `write_toy_file` | 覆盖或追加玩具项目白名单文件 | UTF-8 文本，文件总长最多 4000 字，原子写入；不是唯一写出口 |
 
 ### artifacts 类（仅 Path C，不进 Path A 探针）
 
@@ -555,8 +559,11 @@ worker 在到期、异常、断线、显式取消和进程关闭时尝试停止�
 `POST /hardware/jobs/{job_id}/stop`（另有 `/cancel` 兼容别名）执行显式停止，均需 `hardware` scope。
 
 `read_toy_file` / `write_toy_file` 只操作 `get_paths().very_formal_project_dir()` 下的
-`diary`（思考笔记）、`wishlist`（愿望清单）、`doodle`（涂鸦板）。LLM 不接触路径；
+`diary`（思考笔记）、`wishlist`（愿望清单）、`doodle`（涂鸦板）。该 accessor 不接收
+`char_id`，目录是共享位置。LLM 不接触路径；
 后端会再次校验解析后的目标和临时文件均未越过玩具箱目录，并拒绝目录或文件软链穿越。
+dispatcher 在有 `uid+char_id` 时会把写入镜像进 character library，这不是 self 桶。
+256 C/D 拟议 per-char self 通用文件工具并冻结旧 writer；未迁移前禁止把共享目录复制给每个角色。
 
 #### toy 自主写入（autogrow）— 系统行为，不走探针
 

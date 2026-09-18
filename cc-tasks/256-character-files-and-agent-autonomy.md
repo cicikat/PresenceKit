@@ -1,10 +1,10 @@
 # 229 — 单角色文件、自有空间与 Agent 自主能力扩展
 
-日期：2026-09-18。状态：工单已编制，功能施工未开始。
+日期：2026-09-18。状态：A 拟议合同已提交；B–G 功能施工未开始；H 本轮不执行。
 
 本单历史权威见 [Agent Runtime](../docs/agent-runtime-architecture.md)。
 
-前置假设：[9.17 后端综合工单](2026-09-17-backend-audit-session-scope-work-order.md)全部收尾。本次按该假设设计，但没有替前单勾选、宣称其实际完成；开工时必须复核其最终提交与 scope 合同。当前源码核对基线为 `e35d0ec`，下述缺口届时按差异复核。
+前置假设：[255 后端综合工单](255-backend-audit-session-scope-work-order.md)全部收尾。本次按该假设设计，但没有替前单勾选、宣称其实际完成；开工时必须复核其最终提交与 scope 合同。工单编制时源码表对照 `e35d0ec`；A 单复核基线为 `b1ebe0d`，剩余缺口见 [拟议合同 §0](../docs/character-files-and-agent-autonomy.md)。
 
 执行规则：先落工单，再逐项实施；有证据才勾选。A–H 每张子单完成相关验证和差异/换行检查后，立即独立 commit，再开始下一张。运行验收与自动测试分别记账；不得为了勾选而扩大无关修复。此次仅新增此文档，不迁移生产数据、不修改功能。
 
@@ -45,12 +45,12 @@
 
 先读 tools/security_model/security、agent-runtime-architecture、data-taxonomy、memory 并发章节；按变化读控制面与接口总账。
 
-- [ ] A1 复核前单完成证据和最终 SHA；记录与本单现状表的差异，只处理剩余缺口。
-- [ ] A2 枚举 `_TOOL_REGISTRY`、autonomy 可用集合、post_process writer、scheduler writer、Runtime adapter；记录 origin、角色来源、realm、部署、读/写/删/执行、物理路径 accessor、确认方式、回滚和观测。管理 API 存在不等于角色可调用。
-- [ ] A3 落定 backend/external/self/workspace 权限合同和稳定拒绝码；读取脱敏与写入授权分开；grant 由服务端冻结 principal 获取，模型不能指定 owner/char/realm 或自签授权。
-- [ ] A4 自有空间确定为 Reality 的 owner+char 桶，经 `get_paths()` accessor 和 data registry 登记；建议逻辑布局 `self/AGENT.md`、`notes/`、`habits/`、`ledger/`，这些目录只是示例，无业务枚举限制。用户内容与系统维护的 revision/trash/audit 分库存储。
-- [ ] A5 规定配额与预算的默认值、上限及授权调整方式：文件大小/总量/数量、历史保留、读取字节/时间、任务 token/时间/步骤/并发/费用。耗尽可查询可调整，不能无声裁掉角色记录。
-- [ ] A6 更新对应权威文档的拟议合同，完成链接/差异/换行核对并独立提交。
+- [x] A1 复核前单完成证据和最终 SHA；记录与本单现状表的差异，只处理剩余缺口。
+- [x] A2 枚举 `_TOOL_REGISTRY`、autonomy 可用集合、post_process writer、scheduler writer、Runtime adapter；记录 origin、角色来源、realm、部署、读/写/删/执行、物理路径 accessor、确认方式、回滚和观测。管理 API 存在不等于角色可调用。
+- [x] A3 落定 backend/external/self/workspace 权限合同和稳定拒绝码；读取脱敏与写入授权分开；grant 由服务端冻结 principal 获取，模型不能指定 owner/char/realm 或自签授权。
+- [x] A4 自有空间确定为 Reality 的 owner+char 桶，经 `get_paths()` accessor 和 data registry 登记；建议逻辑布局 `self/AGENT.md`、`notes/`、`habits/`、`ledger/`，这些目录只是示例，无业务枚举限制。用户内容与系统维护的 revision/trash/audit 分库存储。
+- [x] A5 规定配额与预算的默认值、上限及授权调整方式：文件大小/总量/数量、历史保留、读取字节/时间、任务 token/时间/步骤/并发/费用。耗尽可查询可调整，不能无声裁掉角色记录。
+- [x] A6 更新对应权威文档的拟议合同，完成链接/差异/换行核对并独立提交。
 
 ## B — 统一只读访问与敏感信息出口
 
@@ -136,7 +136,7 @@
 
 | 子单 | commit | 定向验证 | 运行验收/限制 |
 |---|---|---|---|
-| A | 待施工 | 待执行 | 合同与能力矩阵 |
+| A | 本提交（SHA 见 git log） | 对照 `_TOOL_REGISTRY` / autonomy policy / reminder+fs+toybox 源码；链接与 LF 换行核对 | 纯文档拟议合同，无代码行为、无生产数据迁移；运行验收不适用 |
 | B | 待施工 | 待执行 | 模型出口秘密不泄露 |
 | C | 待施工 | 待执行 | self 生命周期 |
 | D | 待施工 | 待执行 | prompt 与迁移恢复 |

@@ -173,7 +173,7 @@ Prompt、API key、base URL 或模型自由文本。校准任务只在进程生�
 | `profile.json` | 层 5 画像与低频传感数据 |
 | `identity.yaml` | 层 6a 稳定行为模式 |
 | `diary_context.txt` | 层 6d 用户近期日记上下文 |
-| `reminders.json` | 待办备忘 |
+| `reminders.json` | 待办备忘（legacy JSON；`add_reminder` 已写 Runtime scheduler，get/mark_done 仍读此文件） |
 | `fixation_state.json` | 固化 pipeline 状态 |
 
 `DataPaths.history()`、`mid_term()`、`profiles()` 等分类型 accessor 仍保留给少量兼容调用方；
@@ -218,6 +218,10 @@ Dream domain 独立落在 `data/runtime/dreams/{char_id}/`，不进入 reality m
   fail-open，最近 7 天；只读查询见 `GET /observability/api-calls`）
 - 支出账本：`data/runtime/spend/ledger.jsonl`，`GET /spend/ledger` / `GET /spend/budget` / `POST /spend/check`（admin）。预留 `GET /spend/mandates` 读面已删；confirm/reject writer、购买执行器和商家 adapter 仍不存在（Brief 63/64/226）。历史 `mandates.jsonl` 若存在不由代码清掉。
 - Agent Runtime Reality 根：`data/runtime/agent_runtime/reality/`（tasks / work_sessions / workspace_versions / browser_profiles）
+- 共享 toy 目录（current）：`data/very_formal_project/`，`very_formal_project_dir()` 无 `char_id`
+- 角色 self 空间（256 拟议，未落地）：`data/runtime/self/{char_id}/{uid}/` 用户内容与
+  `data/runtime/self_meta/{char_id}/{uid}/` 系统 revision/trash/audit 分库；
+  见 [character-files-and-agent-autonomy.md](character-files-and-agent-autonomy.md)
 - forensic 日志与 DLQ：`data/logs/`
 - 上传文件与视觉缓存：`data/inbox/`、`data/cache/image_cache/`
 
@@ -262,6 +266,7 @@ canonical 桶为空，也不得读到旧树。
 | `data/runtime/dreams/_stage/{group_id}/` | 群聊梦境（Dream Stage）整棵树，Brief 100 |
 | `data/inbox/` | 上传原始文件 |
 | `data/cache/image_cache/` | 图片描述缓存 |
+| `data/runtime/self_meta/`（拟议） | self 的 revision/trash/audit；用户内容在 `self/` 经工具读取，meta 不进 prompt |
 
 注意：`core/tools/diary_reader.py` 会对配置的日记根目录按文件名递归查找。不要把日记根目录
 指向整个 `data/`，否则同名 `YYYY-MM-DD.md` 可能被误读。

@@ -50,7 +50,8 @@ Reality `1_system_prompt` 绑定当前角色，并使用用户所选称谓（默
 | `5_profile` | 用户画像 core（名字/位置/职业/宠物；不含兴趣或自由文本） | 白名单且总长度 ≤360 字符 | `user_profile.select_for_prompt()` |
 | `5_profile_pref` | 用户偏好/习惯类事实（pref.*/habit/health tag） | recency/tag 命中；最多 6 条且总长度 ≤360 字符 | `user_profile.select_for_prompt()` |
 | `5.1_user_facts` | 跨角色全局用户事实（uid-only，与角色主观记忆无关，标题明确区分不是角色记忆） | `user_facts_text` 非空 | `core/memory/user_facts.py` → `format_for_prompt()` |
-| `5.2_reminders` | 待办备忘录列表 | 有待办即注 | `get_reminders()` |
+| `5.2_reminders` | 待办备忘录列表 | 有待办即注 | `get_reminders()`（legacy JSON；256 E 拟议改读 Runtime scheduler 安全投影） |
+| `6i_self_agent_md`（拟议） | 角色自己写的 `self/AGENT.md` 工作习惯 | 文件非空且未损坏；聊天/主动/副链复用同一 scoped 快照 | 256 D；self-authored，低于系统安全/权限和用户指令；进入模型前脱敏；本轮冻结，修改下一轮生效。未落地，无 `_layer` |
 | `5.5_lore` | 世界书条目 | LoreEngine 命中时 | `lore_engine.match()` |
 | `6a_user_identity` | 用户稳定行为模式 | `user_identity_text` 非空 | `core/memory/user_identity.py`，confidence >= 0.5 的维度 |
 | `6a_user_identity_coldstart` | identity 冷启动期轻量提示："还在慢慢认识你"，不描述具体事实，与 `6a_user_identity` 互斥 | `user_identity_text` 为空 且 `identity_coldstart=True`（已有真实交互历史，复用 `core/scheduler/rhythm.has_real_interaction_history()` 同一冷启动阈值） | `core/pipeline.py::fetch_context()` 计算 → `prompt_builder.build(identity_coldstart=)`；观测端点见 `admin/routers/memory.py` → `/memory/fixation/identity-coldstart-summary`（Brief 104 §3，对应 `docs/known-issues.md` identity-2） |

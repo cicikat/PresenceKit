@@ -707,6 +707,19 @@ question.
 | `process_run` | Backend Reality tool loop; structured args, allowlisted interpreter/program type, configured workspace root, explicit confirmation | `current`, backend; local-only, bounded, no shell/network, Dream and `remote_server` fail closed |
 | Desktop/mobile Agent Runtime task/result UI | No REST mutation, WS, relay, Tauri, Flutter, or Android contract added | `roadmap`; clients must not infer capability from tool names |
 
+## Work order 256 / character self, backend read, Agent task (proposed)
+
+Backend-only proposed contract, not current. No desktop/mobile settings, WS, or protocol fields
+are authorized by ticket A. If B–G land durable state, they must add read-only observability in
+the same change. Details: [character-files-and-agent-autonomy.md](character-files-and-agent-autonomy.md).
+
+| Interface / path | Scope / consumers | Status |
+|---|---|---|
+| `GET /observability/backend-read` | Admin `state.read`; configured/effective, redaction version/counts, no file body | `proposed` |
+| `GET /observability/character-self` | Admin `state.read`; quota remaining, grant revision, file counts, no private notes | `proposed` |
+| Character tools `self_*`, reminder list/update/cancel, `start_agent_task` | Reality tool loop / autonomy after explicit admission | `proposed`; not in `_TOOL_REGISTRY` |
+| Desktop/mobile confirmation UI for Agent-task grants | Reuse existing authenticated channels; missing UI waits on admin approval | `proposed`; do not claim client support |
+
 ## Brief 239 / Browser worker confirmation hardening
 
 | Interface / path | Scope / consumers | Status |
