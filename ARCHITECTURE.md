@@ -265,7 +265,7 @@ data/
 │   ├── dreams/_stage/{group_id}/ # 群聊 Dream Stage；不进入 reality loader
 │   ├── groups/{group_id}/        # reality Stage 的 meta/transcript/arbiter trace
 │   ├── agent_runtime/reality/    # Task Manager / work sessions / workspace versions
-│   ├── spend/mandates.jsonl      # Brief 63 预留只读；当前无 writer
+│   ├── spend/ledger.jsonl        # Brief 57 支出账本；意向单读面已删，历史 jsonl 文件不由代码清掉
 │   ├── companion/                # owner-turn receipts
 │   ├── perception/visual_trace.jsonl
 │   ├── observability/api_calls-YYYY-MM-DD.jsonl

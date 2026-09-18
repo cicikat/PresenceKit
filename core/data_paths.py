@@ -572,10 +572,6 @@ class DataPaths:
         """Brief 57 append-only spending mandate ledger."""
         return self._p("runtime", "spend", "ledger.jsonl")
 
-    def spend_mandates(self) -> Path:
-        """Brief 63 purchase-intent journal; it is absent until that feature is enabled."""
-        return self._p("runtime", "spend", "mandates.jsonl")
-
     def interest_state(self, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
         return self._p("runtime", "characters", char_id, "inner", "interest_state.json")
 

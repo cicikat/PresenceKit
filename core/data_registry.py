@@ -134,8 +134,6 @@ REGISTRY: dict[str, PathMeta] = {
 
     # ── canonical · shared: 跨角色/全局业务真值 ──────────────────────────────
     "char_relation":          PathMeta("canonical", "shared",          "global",        "ignore"),
-    # Brief 63 尚未启用 writer，但只读兼容接口已公开；保留治理登记避免接口漂移。
-    "spend_mandates":         PathMeta("canonical", "shared",          "global",        "ignore"),
 
     # ── canonical · character_inner: 角色状态真值 ─────────────────────────────
     # S5: global → per_char（路径迁至 characters/{char_id}/inner/）

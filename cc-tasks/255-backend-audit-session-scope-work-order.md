@@ -114,7 +114,7 @@
 - [x] J1 已对照实现更新 ARCHITECTURE 与 agent-runtime current/roadmap。Dream Stage 为 Brief 100 v1 sandbox（非全局 fail-closed）。taxonomy / ARCHITECTURE 补 `agent_runtime/reality` 与 spend 预留读面。
 - [x] J2 已删除三个 shim：`event_tools` 改调 `record_filtered_query()` 后删 `record_rejections`；period 测试改走 `health_state` 后删 `user_profile.get_period_info`/`set_period_date`；确认 `memory.short_term_rounds` 已是 owner 后去掉 `context.max_turns` 读 fallback，`PUT` 仍只写 owner。联删仅保护 shim 的守卫/测试/文档。定向 49 + 9 passed；`config.example.yaml` 去掉残留 alias。独立提交。
 - [x] J3 已保留 Dream tension alias、sensor `_audit_*` raw fields、flat `llm:` 合成。兼容窗口写最低版本条件/弃用提示/退出版本，不指定发布日期。
-- [x] J4 `core/paths.py` 生产零引用，标为显式 experimental，本轮不删。`GET /spend/mandates` 无 writer，标 reserved read-only；不删端点与历史行。
+- [x] J4 已删 `core/paths.py` 与预留 `GET /spend/mandates` 读面（含 UI fetch、PathMeta、测试、文档声明）。`/spend/ledger`、`/spend/budget`、`POST /spend/check` 保留；历史 `mandates.jsonl` 不由代码清掉。
 - [x] J5 `self_management.enabled=false` 已明确为关 overlay、恢复 global 默认，不是关能力。已修控制面、feature-flags 文案与管理面展示；未改字段名。
 - [x] J6 定向回归 65 passed；普通 diff 与 `--ignore-cr-at-eol` 一致，文件 LF。管理面缓存 `?v=v1-1-0-compat-hygiene-1`。隔离 18080 核对 overlay 文案。独立提交。
 

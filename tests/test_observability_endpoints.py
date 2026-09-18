@@ -52,7 +52,9 @@ def test_visual_spend_digest_and_group_empty_views(sandbox, monkeypatch):
     client = _client(monkeypatch)
     assert client.get("/perception/visual-trace", headers=_headers()).json()["entries"] == []
     assert client.get("/perception/visual-trace?date=bad", headers=_headers()).status_code == 422
-    assert client.get("/spend/mandates", headers=_headers()).json()["entries"] == []
+    assert client.get("/spend/mandates", headers=_headers()).status_code == 404
+    assert client.get("/spend/ledger", headers=_headers()).json()["entries"] == []
+    assert client.get("/spend/budget", headers=_headers()).status_code == 200
     assert client.get("/memory/digest/u1", headers=_headers()).json()["content"] == ""
 
 

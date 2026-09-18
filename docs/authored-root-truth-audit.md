@@ -193,7 +193,7 @@ examples/
 | `tests/test_dream_world_fallback.py` 等 | temporary legacy fixture | 只测试旧 `characters/dream_worlds` fallback/field fallback；不证明生产旧目录仍有数据 |
 | `docs/data-taxonomy.md`、`docs/dream.md`、`docs/c1-root-asset-inventory.md` | current/supporting docs | userdata-first、defaults seed、legacy fallback；代码对 first-match/write-back 的事实优先 |
 | `docs/tools.md`、`docs/docs-truth-census.*` | docs/example + known drift | census 已指出部分示例仍提示 `characters/`；不能作为当前 writer 证据 |
-| `docs/archive/opensource-v0.1-checklist.md`、`core/paths.py` | archive / explicit experimental | `core/paths.py` 生产零引用；删除或真正迁移另授权，不是静默遗留 |
+| `docs/archive/opensource-v0.1-checklist.md` | archive | 开源清单归档；路径权威仍是 `core.sandbox.get_paths()` / `core.data_paths.DataPaths` |
 
 ## 4. 真实读取/写入优先级
 

@@ -752,9 +752,9 @@ async function loadObserveVisual() {
 async function loadObserveSpend(){
   const el=document.getElementById('obs-spend-content'); if(!el)return; el.innerHTML='<div class="card empty">加载中…</div>';
   try{
-    const [budget,ledger,mandates]=await Promise.all([api('GET','/spend/budget'),api('GET','/spend/ledger'),api('GET','/spend/mandates')]);
-    const mandateRows=mandates.entries||[], ledgerRows=ledger.entries||[];
-    el.innerHTML=`<div class="card"><h3>额度用量</h3><div>今日：${budget.daily_used||0} / ${budget.daily_cap||'—'}</div>${observeBar(budget.daily_used,budget.daily_cap)}<div style="margin-top:12px">本月：${budget.monthly_used||0} / ${budget.monthly_cap||'—'}</div>${observeBar(budget.monthly_used,budget.monthly_cap)}</div><div class="card"><h3>支出意向单</h3>${mandateRows.length?mandateRows.slice().reverse().map(r=>`<div style="padding:8px 0;border-bottom:1px solid var(--border)"><strong>${escapeHtml(r.payee||r.action||r.mandate_id||'—')}</strong> <span class="badge">${escapeHtml(r.status||'—')}</span><div>${escapeHtml(String(r.amount||r.max_price||0))} ${escapeHtml(r.currency||'')}</div></div>`).join(''):observeEmpty()}<div style="margin-top:10px;color:var(--muted)">安全门未落地前保持只读，不提供确认或拒绝操作。</div></div><div class="card"><h3>台账流水</h3>${ledgerRows.length?ledgerRows.slice().reverse().map(r=>`<div style="padding:8px 0;border-bottom:1px solid var(--border)">${escapeHtml(observeTime(r.ts))} · ${escapeHtml(r.payee||r.action||'—')} · ${escapeHtml(String(r.amount||0))} ${escapeHtml(r.currency||'')} <span class="badge">${escapeHtml(r.status||'—')}</span></div>`).join(''):observeEmpty()}</div>`;
+    const [budget,ledger]=await Promise.all([api('GET','/spend/budget'),api('GET','/spend/ledger')]);
+    const ledgerRows=ledger.entries||[];
+    el.innerHTML=`<div class="card"><h3>额度用量</h3><div>今日：${budget.daily_used||0} / ${budget.daily_cap||'—'}</div>${observeBar(budget.daily_used,budget.daily_cap)}<div style="margin-top:12px">本月：${budget.monthly_used||0} / ${budget.monthly_cap||'—'}</div>${observeBar(budget.monthly_used,budget.monthly_cap)}</div><div class="card"><h3>台账流水</h3>${ledgerRows.length?ledgerRows.slice().reverse().map(r=>`<div style="padding:8px 0;border-bottom:1px solid var(--border)">${escapeHtml(observeTime(r.ts))} · ${escapeHtml(r.payee||r.action||'—')} · ${escapeHtml(String(r.amount||0))} ${escapeHtml(r.currency||'')} <span class="badge">${escapeHtml(r.status||'—')}</span></div>`).join(''):observeEmpty()}</div>`;
   }catch(e){el.innerHTML=`<div class="card">${observeEmpty('加载失败：'+e.message)}</div>`;}
 }
 

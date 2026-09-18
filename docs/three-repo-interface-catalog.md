@@ -587,7 +587,7 @@ ack 和游标推进，不得另造一套消息真值。
 | 状态 | 缺口 | 影响和下一步 |
 |---|---|---|
 | `open` | sensor signal-first 尚未恢复 action payload | 文字 signal 可进入 autonomy，但 `pet_emote` / `notify` / `execute` 不能沿该链自动执行；需另立 payload、危险模式、桌面/手机协议和验收，不能恢复已删除的直发 |
-| `open` / `roadmap` | 支出意向单只有 `/spend/mandates` 只读观测 | confirm/reject writer、购买执行器和商家 adapter 仍不存在（Brief 63/64/226）。端点与 `data/runtime/spend/mandates.jsonl` 历史行均保留；删除前须查全部消费者与 admin 权限。客户端不能猜路由补写 |
+| `open` / `roadmap` | 支出意向单没有公开读面 | confirm/reject writer、购买执行器和商家 adapter 仍不存在（Brief 63/64/226）。预留 `GET /spend/mandates` 已删；`/spend/ledger`、`/spend/budget`、`POST /spend/check` 保留。历史 `mandates.jsonl` 不由代码清掉。客户端不能猜路由补写 |
 | `open` | 桌面 Reality park/退梦 flush 仍缺真实后端跨进程验收 | 静态实现存在，但需真实 WS 注入确认 Dream 不显示、退梦只 flush 一次且分段不重复 |
 | `post-v0.1` | 桌面 v1 WS envelope、`user_message`、`client_event`、`state_update` | 当前 HTTP `/desktop/chat` + legacy WS 是正式协议，不应半接入新协议 |
 | `post-v0.1` | 桌面花园 harvest/vase 详情与交互、日记 `emotion` 数据 | 当前接口/UI 只保证槽位、正文等已有字段；需先冻结后端 schema 再做客户端 |
