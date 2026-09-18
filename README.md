@@ -212,7 +212,7 @@ The LLM cannot execute system capabilities directly. Tools are further constrain
 
 ### Windows zip / source shortcuts
 
-1. `AA1安装并启动.bat` — uv installs Python 3.12, `.venv`, syncs `requirements.lock`; copies `config.example.yaml` → `config.yaml` if missing.
+1. `AA1安装并启动.bat` — uv installs Python 3.12, `.venv`, syncs the full runtime from `requirements.lock` (Pillow / Word / search extras included) and verifies imports; copies `config.example.yaml` → `config.yaml` if missing.
 2. `AA2鉴权初始化.bat` — `python scripts/setup_auth.py`, writes gitignored `secrets.local.yaml`.
 3. `AA3启动.bat` — `python main.py`. Set `standalone_mode: true` if you are not using QQ.
 4. Open the panel with `admin_secret`. Fill the base chat model and `owner_id` (use your QQ number if you have one; a different id later starts a separate memory thread).

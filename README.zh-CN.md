@@ -212,7 +212,7 @@ LLM **不能**直接执行系统能力。工具还受角色权限、分类暴露
 
 ### Windows 发行包 / 源码快捷方式
 
-1. `AA1安装并启动.bat` — uv 安装 Python 3.12、`.venv`、按 `requirements.lock` 装依赖；无 `config.yaml` 则从 example 复制。
+1. `AA1安装并启动.bat` — uv 安装 Python 3.12、`.venv`、按 `requirements.lock` 装完整运行依赖（含 Pillow / Word / 搜索等），并核对导入；无 `config.yaml` 则从 example 复制。
 2. `AA2鉴权初始化.bat` — `python scripts/setup_auth.py`，写入 gitignore 的 `secrets.local.yaml`。
 3. `AA3启动.bat` — `python main.py`。不接 QQ 时设 `standalone_mode: true`。
 4. 浏览器打开面板，用 `admin_secret` 登录；填基础聊天模型 + `owner_id`（建议用 QQ 号，否则以后接 QQ 会另起记忆）。

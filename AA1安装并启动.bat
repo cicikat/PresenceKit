@@ -50,6 +50,10 @@ echo 正在按锁文件安装依赖（requirements.lock，保证版本可复现�
 "%UV_EXE%" pip sync requirements.lock --python .venv\Scripts\python.exe
 if errorlevel 1 goto :fail
 
+echo 正在核对完整运行依赖（图片/Word/搜索等）...
+".venv\Scripts\python.exe" scripts\check_runtime_deps.py
+if errorlevel 1 goto :fail
+
 if not exist "config.yaml" (
     copy config.example.yaml config.yaml >nul
     echo.

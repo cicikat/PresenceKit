@@ -66,6 +66,14 @@ if errorlevel 1 (
     exit /b 1
 )
 
+echo 正在核对完整运行依赖（图片/Word/搜索等）...
+".venv\Scripts\python.exe" scripts\check_runtime_deps.py
+if errorlevel 1 (
+    echo 依赖已同步，但完整运行包未通过导入核对。请检查上方缺失项后重试。
+    pause
+    exit /b 1
+)
+
 for /f "usebackq delims=" %%V in (`git describe --tags --always 2^>nul`) do set "VERSION=%%V"
 if "%VERSION%"=="" set "VERSION=当前提交"
 echo 更新完成，当前版本：%VERSION%

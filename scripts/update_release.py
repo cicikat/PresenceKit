@@ -527,6 +527,9 @@ def sync_dependencies(root: Path) -> None:
     result = subprocess.run(command, cwd=root, check=False)
     if result.returncode:
         raise UpdateError("依赖同步失败；程序文件已更新但没有回滚，请检查网络或终端错误后重试。")
+    check = subprocess.run([str(python), "scripts/check_runtime_deps.py"], cwd=root, check=False)
+    if check.returncode:
+        raise UpdateError("依赖已同步，但完整运行包未通过导入核对；图片/Word/搜索等功能仍不可用。")
 
 
 def choose_release(releases: list[dict[str, Any]], noninteractive: bool) -> dict[str, Any]:
