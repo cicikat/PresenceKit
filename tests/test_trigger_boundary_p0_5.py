@@ -203,6 +203,40 @@ class TestCaptureTurnAuditExtrasForwarded(unittest.TestCase):
         self.assertEqual(call_kwargs.get("dedupe_key"), "dk-fwd")
         self.assertEqual(call_kwargs.get("gate_result"), "accepted")
 
+    def test_unknown_audit_extras_do_not_interrupt_capture(self):
+        from core.memory.fixation_pipeline import capture_turn
+        from core.write_envelope import stamp_trigger
+
+        with patch("core.memory.event_log.append", return_value=True), \
+             patch("core.reality_output_scrubber.scrub_reality_output_text",
+                   side_effect=lambda x: x), \
+             patch("core.memory.fixation_pipeline.safe_append_jsonl") as append_jsonl, \
+             patch("core.memory.fixation_pipeline.get_paths") as paths:
+            audit_dir = Path(tempfile.mkdtemp())
+            paths.return_value._p.return_value = audit_dir
+            capture_turn(
+                uid="u1",
+                user_msg="（触发描述）",
+                reply="主动开口",
+                trigger_name="autonomy",
+                envelope=stamp_trigger(),
+                char_id=TEST_CHAR_ID,
+                audit_extras={
+                    "source": "autonomy",
+                    "trigger_source": "idle",
+                    "run_id": "run-1",
+                    "correlation_id": "corr-1",
+                    "not_a_real_field": object(),
+                },
+            )
+            self.assertTrue(append_jsonl.called)
+            record = append_jsonl.call_args.args[1]
+            self.assertEqual(record["run_id"], "run-1")
+            self.assertEqual(record["correlation_id"], "corr-1")
+            self.assertEqual(record["trigger_source"], "idle")
+            self.assertNotIn("not_a_real_field", record)
+            self.assertEqual(record.get("source"), "autonomy")
+
 
 # ── TC: BLOCK_UNCERTAIN emits WARNING ─────────────────────────────────────────
 

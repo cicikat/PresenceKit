@@ -416,6 +416,46 @@ async def test_post_process_capture_turn_retry_scope_payload(
     assert p["scope"] == expected, (
         f"capture_turn_retry scope must match active char scope, got {p['scope']!r}"
     )
+    assert p.get("audit_extras") is None or p.get("audit_extras") == {}
+
+
+@pytest.mark.asyncio
+async def test_post_process_capture_turn_retry_keeps_audit_extras(
+    chars_tree, monkeypatch, sandbox, registry
+):
+    from core.write_envelope import WriteEnvelope, SourceType
+
+    pipeline = _make_pipeline("character_b", registry)
+    _write_active(sandbox, "character_b")
+    extras = {
+        "source": "autonomy",
+        "trigger_source": "idle",
+        "run_id": "run-1",
+        "correlation_id": "corr-1",
+    }
+    enqueued: list[dict] = []
+
+    def _spy_enqueue(name, payload):
+        enqueued.append({"name": name, "payload": payload})
+
+    env = WriteEnvelope(source=SourceType.INGEST, can_write_memory=True, can_affect_mood=False)
+    with (
+        patch("core.config_loader.get_config",
+              return_value={"memory": {"summary_every_n_rounds": 20}}),
+        patch("core.memory.short_term.load", return_value=[]),
+        patch("core.memory.fixation_pipeline.capture_turn",
+              side_effect=RuntimeError("forced failure")),
+        patch("core.post_process.slow_queue.enqueue", side_effect=_spy_enqueue),
+        patch("core.memory.pending_perception.confirm_delivered", return_value=None),
+        patch("core.mood_helpers.maybe_mark_sleepy_from_time", new=AsyncMock(return_value=None)),
+    ):
+        await pipeline.post_process_critical(
+            user_id="u1", content="hello", reply="hi", envelope=env, audit_extras=extras,
+        )
+
+    retry_payloads = [e for e in enqueued if e["name"] == "capture_turn_retry"]
+    assert retry_payloads
+    assert retry_payloads[0]["payload"]["audit_extras"] == extras
 
 
 # ── 11. post_process user_profile_update scope_payload ────────────────────────

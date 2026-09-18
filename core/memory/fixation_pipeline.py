@@ -475,6 +475,47 @@ def _validate_growth_content(observer: str) -> bool:
 # Job 1 — capture_turn（同步，在 uid_lock 内、detect_emotion 后调用）
 # ═══════════════════════════════════════════════════════════════════════════════
 
+# capture_turn 会把 audit_extras 透传到这里。发送方可能带上关联字段
+# （autonomy 的 run_id / correlation_id，companion 的 provenance 等）；
+# 未声明的键必须丢弃，不能 **kwargs 直接展开，否则 TypeError 会打断正文落盘。
+_TRIGGER_AUDIT_EXTRA_FIELDS: frozenset[str] = frozenset({
+    "event_id",
+    "dedupe_key",
+    "source",
+    "kind",
+    "trust",
+    "dream_guard_status",
+    "gate_result",
+    "did_generate_reply",
+    "provider",
+    "external_id_hash",
+    "raw_hash",
+    "run_id",
+    "correlation_id",
+    "trigger_source",
+    "delivery_kind",
+    "dream_id",
+    "provenance_origin",
+    "user_authored",
+})
+
+
+def _forward_audit_extras(audit_extras: dict | None) -> dict:
+    """Keep only fields _write_trigger_audit_log accepts; drop the rest."""
+    if not audit_extras:
+        return {}
+    return {
+        key: value
+        for key, value in audit_extras.items()
+        if key in _TRIGGER_AUDIT_EXTRA_FIELDS
+    }
+
+
+def _bounded_audit_text(value, *, limit: int = 128) -> str:
+    text = str(value or "").strip()
+    return text[:limit]
+
+
 def _write_trigger_audit_log(
     uid: str,
     turn_id: str,
@@ -494,6 +535,13 @@ def _write_trigger_audit_log(
     provider: str = "",
     external_id_hash: str = "",
     raw_hash: str = "",
+    run_id: str = "",
+    correlation_id: str = "",
+    trigger_source: str = "",
+    delivery_kind: str = "",
+    dream_id: str = "",
+    provenance_origin: str = "",
+    user_authored: bool | None = None,
 ) -> None:
     """Write trigger turn metadata to trigger_audit.jsonl (per-uid, under event_log dir).
 
@@ -501,8 +549,9 @@ def _write_trigger_audit_log(
     Called in place of short_term.append for trigger turns (P0 boundary rule).
 
     Structured provenance fields (event_id, dedupe_key, gate_result, dream_guard_status,
-    source, trust) are populated when threaded from _pipeline_send via audit_extras; they
-    default to empty strings for paths that don't thread them (e.g. slow_queue retry).
+    source, trust, run_id, correlation_id, trigger_source) are populated when threaded
+    from talk_gate / _pipeline_send via audit_extras; they default to empty for paths
+    that don't thread them (e.g. slow_queue retry without extras).
     """
     import hashlib
     try:
@@ -541,6 +590,26 @@ def _write_trigger_audit_log(
             record["external_id_hash"] = external_id_hash
         if raw_hash:
             record["raw_hash"] = raw_hash
+        run_id_text = _bounded_audit_text(run_id)
+        if run_id_text:
+            record["run_id"] = run_id_text
+        correlation_text = _bounded_audit_text(correlation_id)
+        if correlation_text:
+            record["correlation_id"] = correlation_text
+        trigger_source_text = _bounded_audit_text(trigger_source)
+        if trigger_source_text:
+            record["trigger_source"] = trigger_source_text
+        delivery_kind_text = _bounded_audit_text(delivery_kind)
+        if delivery_kind_text:
+            record["delivery_kind"] = delivery_kind_text
+        dream_id_text = _bounded_audit_text(dream_id)
+        if dream_id_text:
+            record["dream_id"] = dream_id_text
+        provenance_text = _bounded_audit_text(provenance_origin)
+        if provenance_text:
+            record["provenance_origin"] = provenance_text
+        if user_authored is not None:
+            record["user_authored"] = bool(user_authored)
         audit_path = get_paths()._p("event_log") / _suid(uid) / "trigger_audit.jsonl"
         audit_path.parent.mkdir(parents=True, exist_ok=True)
         safe_append_jsonl(audit_path, record)
@@ -850,7 +919,7 @@ def capture_turn(
         # user turn has context.  The forensic audit path is unchanged for all triggers.
         _write_trigger_audit_log(
             uid, turn_id, trigger_name, _scrubbed_reply, emotion, char_id,
-            **(audit_extras or {}),
+            **_forward_audit_extras(audit_extras),
         )
         writes = [
             event_log.append(uid, "assistant", _scrubbed_reply, emotion=emotion, turn_id=turn_id, trigger_name=trigger_name, char_id=char_id, source=source)
@@ -1767,6 +1836,8 @@ async def handler_capture_turn_retry(payload: dict) -> None:
         }
         if event_context is not None:
             capture_kwargs["event_context"] = event_context
+        if payload.get("audit_extras"):
+            capture_kwargs["audit_extras"] = payload["audit_extras"]
         capture_turn(
             uid,
             payload["user_content"],

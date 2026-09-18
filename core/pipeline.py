@@ -1788,6 +1788,7 @@ class Pipeline:
                         "char_id": char_id,
                         "scope": scope_payload,
                         "event_context": _turn_context.to_payload() if _turn_context is not None else None,
+                        "audit_extras": audit_extras,
                     })
 
         if pending_paths:

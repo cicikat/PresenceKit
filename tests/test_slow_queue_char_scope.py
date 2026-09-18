@@ -350,6 +350,39 @@ async def test_handler_capture_turn_retry_passes_char_id(sandbox):
     )
 
 
+@pytest.mark.asyncio
+async def test_handler_capture_turn_retry_forwards_audit_extras(sandbox):
+    """retry payload 必须把 talk_gate 审计字段原样交给 capture_turn。"""
+    import core.memory.fixation_pipeline as _fp
+
+    captured: list[dict] = []
+
+    def _spy_capture_turn(uid, user_msg, reply, emotion="neutral", turn_id=None,
+                          trigger_name="", envelope=None, *, char_id=TEST_CHAR_ID,
+                          audit_extras=None):
+        captured.append(audit_extras)
+        return turn_id or f"{uid}_spy"
+
+    extras = {
+        "source": "autonomy",
+        "trigger_source": "idle",
+        "run_id": "run-1",
+        "correlation_id": "corr-1",
+    }
+    with patch.object(_fp, "capture_turn", side_effect=_spy_capture_turn):
+        await _fp.handler_capture_turn_retry({
+            "uid": "u_test",
+            "turn_id": "turn_retry",
+            "user_content": "内容",
+            "reply": "回复",
+            "emotion": "neutral",
+            "char_id": "character_b",
+            "audit_extras": extras,
+        })
+
+    assert captured == [extras]
+
+
 # ── Test 8: legacy DLQ payload 缺 char_id 不炸，WARN fallback ─────────────────
 
 @pytest.mark.asyncio
