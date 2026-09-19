@@ -57,3 +57,99 @@ def test_manifest_and_control_are_resumable_and_default_deferred(sandbox):
     assert history_reconciliation.status(scope)["counts"]["deferred"] >= 1
     history_reconciliation.set_paused(scope, True, reason="test")
     assert history_reconciliation.apply_dry_run(scope)["status"] == "paused"
+
+
+def test_backup_helper_records_verified_snapshot(monkeypatch, tmp_path):
+    from core.memory import history_reconciliation
+
+    calls = {}
+
+    def fake_create_snapshot(installation, output, *, protection_mode):
+        calls.update({"installation": installation, "output": output, "protection_mode": protection_mode})
+        return {"ok": True, "backup_id": "backup-fixture", "backup_path": str(output), "file_count": 7}
+
+    monkeypatch.setattr("core.backup_state.create_snapshot", fake_create_snapshot)
+    result = history_reconciliation.create_verified_backup(tmp_path / "snapshot")
+
+    assert result == {
+        "verified": True,
+        "backup_id": "backup-fixture",
+        "backup_path": str(tmp_path / "snapshot"),
+        "file_count": 7,
+    }
+    assert calls["protection_mode"] == "protected_volume"
+
+
+def test_recovery_drill_verifies_before_restoring(monkeypatch, tmp_path):
+    from core.memory import history_reconciliation
+
+    calls = []
+
+    def fake_verify(snapshot):
+        calls.append(("verify", snapshot))
+        return {"ok": True, "errors": []}
+
+    def fake_restore(installation, snapshot, target, *, startup_check):
+        calls.append(("restore", installation, snapshot, target, startup_check))
+        return {"ok": True, "backup_id": "backup-fixture", "target_path": str(target)}
+
+    monkeypatch.setattr("core.backup_state.verify_snapshot", fake_verify)
+    monkeypatch.setattr("core.backup_state.restore_snapshot", fake_restore)
+    snapshot = tmp_path / "snapshot"
+    target = tmp_path / "restored"
+    result = history_reconciliation.recovery_drill(snapshot, target)
+
+    assert result["ok"] is True
+    assert result["stage"] == "restore"
+    assert calls[0] == ("verify", snapshot)
+    assert calls[1] == ("restore", __import__("pathlib").Path.cwd(), snapshot, target, False)
+
+
+def test_verified_backup_releases_deferred_items_and_commits_ledger(sandbox, monkeypatch):
+    from core.memory import history_reconciliation
+    from core.memory.scope import MemoryScope
+
+    scope = MemoryScope.reality_scope("reconcile-transition", TEST_CHAR_ID)
+    history_reconciliation.create_manifest(scope, now=1)
+    deferred = history_reconciliation.apply_dry_run(scope, backup_verified=False)
+    assert deferred["status"] == "deferred"
+
+    monkeypatch.setattr("core.memory.event_migration.scan_legacy", lambda _scope: {
+        "indeterminate": False,
+        "source_digest": "source-fixture",
+        "entries": [],
+        "would_write": 0,
+        "comparison_status": "comparable",
+    })
+    result = history_reconciliation.apply_dry_run(scope, backup_verified=True)
+
+    assert result["status"] == "committed"
+    assert history_reconciliation.status(scope)["counts"]["committed"] >= 1
+
+
+def test_apply_batch_commits_the_corresponding_ledger_item(sandbox, monkeypatch):
+    from core.memory import history_reconciliation
+    from core.memory.scope import MemoryScope
+
+    scope = MemoryScope.reality_scope("reconcile-apply", TEST_CHAR_ID)
+    history_reconciliation.create_manifest(scope, now=1)
+    monkeypatch.setattr("core.memory.event_migration.scan_legacy", lambda _scope: {
+        "indeterminate": False,
+        "source_digest": "source-fixture",
+        "entries": [],
+        "would_write": 0,
+        "comparison_status": "comparable",
+    })
+    monkeypatch.setattr("core.memory.event_migration.apply_batch", lambda *args, **kwargs: {
+        "status": "committed",
+        "written": 0,
+    })
+
+    result = history_reconciliation.apply_batch(
+        scope,
+        backup={"verified": True, "backup_id": "backup-fixture"},
+        dry_run=False,
+    )
+
+    assert result["status"] == "committed"
+    assert history_reconciliation.status(scope)["counts"]["committed"] >= 1
