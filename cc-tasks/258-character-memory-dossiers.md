@@ -45,11 +45,11 @@
 
 ## A — 冻结存储、权限与 writer 合同
 
-- [ ] A1 盘点证据、episodic、identity、storyline、实时感知及旧修订工具的 writer/read/prompt 路径，确定新旧权威与依赖引用；禁止双向摘要回灌。
-- [ ] A2 落定上述 schema、唯一键、时间语义、source policy、跨主题关联、重命名/合并/拆分与可逆退役协议；保留 legacy_unknown，不伪造血缘。
-- [ ] A3 冻结主链和后台 grant、可自主修改的派生对象范围及 scope；维护任务不得继承 workspace/process 权限，principal 不来自模型参数。
-- [ ] A4 设计 259 的版本化源清单、提交账本、跨库恢复协议；明确事件删除/更正、角色撤权和源 revision 改变如何使产物失效。
-- [ ] A5 记录与旧 writer/召回共存、切换、回滚表；更新任务对应合同，独立提交。
+- [x] A1 盘点证据、episodic、identity、storyline、实时感知及旧修订工具的 writer/read/prompt 路径，确定新旧权威与依赖引用；禁止双向摘要回灌。
+- [x] A2 落定上述 schema、唯一键、时间语义、source policy、跨主题关联、重命名/合并/拆分与可逆退役协议；保留 legacy_unknown，不伪造血缘。
+- [x] A3 冻结主链和后台 grant、可自主修改的派生对象范围及 scope；维护任务不得继承 workspace/process 权限，principal 不来自模型参数。
+- [x] A4 设计 259 的版本化源清单、提交账本、跨库恢复协议；明确事件删除/更正、角色撤权和源 revision 改变如何使产物失效。
+- [x] A5 记录与旧 writer/召回共存、切换、回滚表；更新任务对应合同，独立提交。
 
 ## B — 主题档案与受控修订 capability
 
@@ -112,4 +112,5 @@
 
 | 子单 | commit | 验证 | 运行/生产边界 |
 |---|---|---|---|
-| A–G | 未施工 | 未执行 | 未启用、未迁移、首夜未运行 |
+| A | 待本次提交 | 文档链接/diff/换行检查 | 合同冻结；未启用、未迁移、首夜未运行 |
+| B–G | 未施工 | 未执行 | 未启用、未迁移、首夜未运行 |

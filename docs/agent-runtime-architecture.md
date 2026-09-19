@@ -1,5 +1,15 @@
 # Agent Runtime Architecture Contract (Brief 229)
 
+## Brief 258 memory consolidation capability
+
+The frozen capability boundary is defined in
+[character-memory-dossiers.md](character-memory-dossiers.md). The owner-chat
+chain receives dedicated dossier read/write grants. A maintenance Work Session
+receives only `memory.consolidation`; it never inherits workspace, process,
+browser, conversation-send, or evidence-write authority. The server freezes the
+Reality principal and grant revision before a model call and rechecks them at
+commit. Registration and execution remain disabled until Brief 258 D.
+
 > Status: frozen architecture contract. Briefs 230-234 and 239 are implemented
 > foundations. Client protocols, visible completion notification, and EventBus remain
 > unchanged. Remaining briefs (235-237) are roadmap.

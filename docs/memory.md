@@ -1,5 +1,14 @@
 # docs/memory.md — 记忆子系统设计
 
+## Character topic dossiers (Brief 258)
+
+The current storage, authority, grant, invalidation, coexistence and rollback
+contract is in [character-memory-dossiers.md](character-memory-dossiers.md).
+Dossiers are derived Reality-scoped state: they cite event evidence but never
+write their summaries back into the evidence ledger or legacy memory writers.
+The feature remains disabled until its later implementation stages satisfy the
+control-plane and rollout gates.
+
 ## 资料接续回执（2026-09-13）
 
 经用户授权，owner 上传与生活记录增加有界自动投影；主动工具 safe_summary 增加 24 小时历史参考。
