@@ -2,12 +2,15 @@
 
 This module deliberately does not create ledgers, call a model, or mutate any
 memory store.  It produces a versioned inventory and stable source revisions so
-an independently authorized batch worker can later consume it.
+an independently authorized batch worker can later consume it.  Derived-store
+receipts are recorded as evidence-only processing items; source files remain
+untouched.
 """
 from __future__ import annotations
 
 import hashlib
 import json
+import sqlite3
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -225,8 +228,44 @@ def apply_batch(scope: MemoryScope, *, backup: dict[str, Any], batch_size: int =
         state["items"] = items
     state["last_apply"] = {"status": result.get("status"), "source_digest": plan.get("source_digest", ""),
                             "updated_at": time.time()}
+    # Once the event adapter has passed its conflict gate, reconcile the
+    # remaining derived stores in bounded evidence-only receipts.  Their
+    # source files are never rewritten and no semantic dossier claim is made.
+    if str(result.get("status") or "") in {"committed", "completed", "paused"}:
+        derived_results: dict[str, Any] = {}
+        for store_kind in ("event_store", "mid_term", "episodic", "storyline", "user_identity"):
+            source_item = next((value for value in items.values()
+                                if value.get("store_kind") == store_kind), None)
+            if not isinstance(source_item, dict) or source_item.get("status") in {"committed", "excluded"}:
+                continue
+            try:
+                derived = _commit_derived_source_batch(
+                    scope, store_kind, source_item, backup=backup, batch_size=batch_size,
+                )
+            except (OSError, ValueError, TypeError, sqlite3.Error) as exc:
+                derived = {"status": "retryable_failed", "reason": type(exc).__name__}
+            derived_results[store_kind] = derived
+            source_item["next_offset"] = int(derived.get("next_offset") or source_item.get("next_offset") or 0)
+            source_item["total"] = int(derived.get("total") or source_item.get("total") or 0)
+            source_item["attempt"] = int(source_item.get("attempt") or 0) + 1
+            if derived.get("status") in {"committed", "completed"} and source_item["next_offset"] >= source_item["total"]:
+                source_item["status"] = "committed"
+                source_item["last_error"] = ""
+            elif derived.get("status") == "committed":
+                source_item["status"] = "pending"
+                source_item["last_error"] = ""
+            elif derived.get("status") == "deferred":
+                source_item["status"] = "deferred"
+                source_item["last_error"] = str(derived.get("reason") or "deferred")[:128]
+            else:
+                source_item["status"] = "retryable_failed"
+                source_item["last_error"] = str(derived.get("reason") or "apply_failed")[:128]
+        if derived_results:
+            state["derived"] = derived_results
+            state["items"] = items
     safe_write_json(_state_path(scope), state, keep_bak=True)
-    return {"status": result.get("status", "retryable_failed"), "migration": result}
+    return {"status": result.get("status", "retryable_failed"), "migration": result,
+            "derived": state.get("derived", {})}
 
 
 def verify_backup_snapshot(snapshot: Path) -> dict[str, Any]:
@@ -235,6 +274,79 @@ def verify_backup_snapshot(snapshot: Path) -> dict[str, Any]:
 
     result = verify_snapshot(Path(snapshot))
     return {"verified": bool(result.get("ok")), "errors": result.get("errors", [])}
+
+
+def _derived_source_items(scope: MemoryScope, store_kind: str, source_revision: str) -> list[dict[str, Any]]:
+    """Read a derived store and produce content-free, evidence-only receipts."""
+    path = resolve_path(scope, {"event_store": "event_store", "mid_term": "mid_term",
+                                "episodic": "episodic", "storyline": "storyline",
+                                "user_identity": "identity"}[store_kind])
+    values: list[tuple[str, Any]] = []
+    if store_kind == "event_store":
+        if path.exists():
+            with sqlite3.connect(path) as connection:
+                values = [(str(row[0]), {"event_id": str(row[0])})
+                          for row in connection.execute("SELECT event_id FROM events ORDER BY rowid")]
+    elif store_kind == "mid_term":
+        if path.exists():
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            values = [(str(item.get("mid_id") or f"mid:{index}"), item)
+                      for index, item in enumerate(raw.get("events", [])) if isinstance(item, dict)]
+    elif store_kind == "episodic":
+        if path.exists():
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(raw, list):
+                raise ValueError("episodic_not_list")
+            values = [(str(item.get("id") or f"episode:{index}"), item)
+                      for index, item in enumerate(raw) if isinstance(item, dict)]
+    elif store_kind == "storyline":
+        if path.exists():
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            arcs = raw.get("arcs", []) if isinstance(raw, dict) else []
+            for index, arc in enumerate(arcs):
+                if not isinstance(arc, dict):
+                    continue
+                arc_id = str(arc.get("arc_id") or arc.get("id") or f"arc:{index}")
+                values.append((arc_id, arc))
+                for node_index, node in enumerate(arc.get("nodes", []) or []):
+                    if isinstance(node, dict):
+                        values.append((str(node.get("node_id") or f"{arc_id}:node:{node_index}"), node))
+    elif store_kind == "user_identity":
+        if path.exists():
+            import yaml
+            raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            if not isinstance(raw, dict):
+                raise ValueError("identity_not_mapping")
+            values = [(str(key), value) for key, value in sorted(raw.items())]
+    result = []
+    for sequence, (source_id, value) in enumerate(values, start=1):
+        digest = hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True,
+                                           separators=(",", ":"), default=str).encode("utf-8")).hexdigest()
+        result.append({"store_kind": store_kind, "source_id": source_id[:512],
+                       "source_revision": source_revision, "ingest_sequence": sequence,
+                       "input_digest": digest, "semantic_outcomes": ["evidence_only"]})
+    return result
+
+
+def _commit_derived_source_batch(scope: MemoryScope, store_kind: str, item: dict[str, Any],
+                                 *, backup: dict[str, Any], batch_size: int) -> dict[str, Any]:
+    if backup.get("verified") is not True:
+        return {"status": "deferred", "reason": "backup_not_verified"}
+    records = _derived_source_items(scope, store_kind, str(item.get("source_revision") or ""))
+    offset = max(0, int(item.get("next_offset") or 0))
+    batch = records[offset:offset + max(1, int(batch_size))]
+    if not batch:
+        return {"status": "completed", "next_offset": offset, "total": len(records), "processed": 0}
+    from core.memory import dossiers
+    operation_id = hashlib.sha256(
+        f"history:{scope.uid}:{scope.character_id}:{store_kind}:{item.get('source_revision')}:{offset}".encode()
+    ).hexdigest()[:32]
+    dossiers.apply_operations(scope, [], operation_id=operation_id,
+                              actor=f"character:{scope.character_id}", chain="maintenance",
+                              processing_items=batch)
+    next_offset = offset + len(batch)
+    return {"status": "committed" if next_offset < len(records) else "completed",
+            "next_offset": next_offset, "total": len(records), "processed": len(batch)}
 
 
 async def consolidate_imported_events(scope: MemoryScope, *, preset: str = "便宜小模型grok-see") -> dict[str, Any]:
@@ -294,6 +406,8 @@ async def run_first_night(
         last = result
         batches += 1
         if result.get("status") not in {"committed", "completed"}:
+            if result.get("status") == "paused" and status(scope)["counts"].get("pending", 0) > 0:
+                continue
             break
         migration = result.get("migration") or {}
         if int(migration.get("next_offset", 0)) >= int(migration.get("total", 0)):

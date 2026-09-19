@@ -157,6 +157,35 @@ def test_apply_batch_commits_the_corresponding_ledger_item(sandbox, monkeypatch)
     assert history_reconciliation.status(scope)["counts"]["committed"] >= 1
 
 
+def test_apply_batch_records_derived_sources_without_rewriting_them(sandbox, monkeypatch):
+    import json
+    from core.memory import history_reconciliation
+    from core.memory.path_resolver import resolve_path
+    from core.memory.scope import MemoryScope
+
+    scope = MemoryScope.reality_scope("reconcile-derived", TEST_CHAR_ID)
+    mid_path = resolve_path(scope, "mid_term")
+    mid_path.parent.mkdir(parents=True, exist_ok=True)
+    original = {"events": [{"mid_id": "mid-fixture", "summary": "evidence"}]}
+    mid_path.write_text(json.dumps(original), encoding="utf-8")
+    manifest = history_reconciliation.create_manifest(scope, now=1)
+    history_reconciliation.freeze_manifest(scope, manifest_revision=manifest["manifest_revision"])
+    monkeypatch.setattr("core.memory.event_migration.scan_legacy", lambda _scope: {
+        "indeterminate": False, "source_digest": "source-fixture", "entries": [],
+        "would_write": 0, "comparison_status": "comparable",
+    })
+    monkeypatch.setattr("core.memory.event_migration.apply_batch", lambda *args, **kwargs: {
+        "status": "completed", "written": 0, "next_offset": 0, "total": 0,
+    })
+    result = history_reconciliation.apply_batch(
+        scope, backup={"verified": True, "backup_id": "backup-fixture"},
+        batch_size=10, dry_run=False,
+    )
+    assert result["status"] == "completed"
+    assert history_reconciliation.status(scope)["counts"]["pending"] == 0
+    assert json.loads(mid_path.read_text(encoding="utf-8")) == original
+
+
 def test_verified_apply_requires_frozen_manifest(sandbox, monkeypatch):
     from core.memory import history_reconciliation
     from core.memory.scope import MemoryScope
