@@ -1,0 +1,536 @@
+"""Scoped, revisioned character topic memory (Brief 258 B).
+
+This store is derived state. It references the Reality evidence ledger but does
+not copy evidence prose and never writes to an evidence or legacy-memory store.
+All mutations enter through :func:`apply_operations`.
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import re
+import sqlite3
+import threading
+import time
+import uuid
+from contextlib import contextmanager
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Iterable, Mapping
+
+from core.memory.path_resolver import resolve_path
+from core.memory.scope import MemoryScope
+
+SCHEMA_VERSION = 1
+SOURCE_POLICY_REVISION = "memory-dossier-source-policy.v1"
+RULES_REVISION = "memory-dossier-rules.v1"
+MAX_BATCH_OPERATIONS = 100
+MAX_TEXT_CHARS = 4000
+_ID_RE = re.compile(r"^[0-9a-f]{32}$")
+_VALID_CHAINS = frozenset({"owner_chat", "maintenance", "admin_recovery"})
+_locks: dict[str, threading.RLock] = {}
+_locks_guard = threading.Lock()
+
+
+class DossierError(RuntimeError):
+    def __init__(self, code: str):
+        super().__init__(code)
+        self.code = code
+
+
+@dataclass(frozen=True)
+class SchemaStatus:
+    exists: bool
+    healthy: bool
+    schema_version: int
+    error_code: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "exists": self.exists, "healthy": self.healthy,
+            "schema_version": self.schema_version, "error_code": self.error_code,
+        }
+
+
+def _scope(scope: MemoryScope) -> MemoryScope:
+    if not isinstance(scope, MemoryScope) or scope.domain != "reality" or not scope.character_id:
+        raise DossierError("invalid_scope")
+    return scope
+
+
+def _path(scope: MemoryScope) -> Path:
+    return resolve_path(_scope(scope), "memory_dossiers")
+
+
+def _lock(path: Path) -> threading.RLock:
+    key = str(path.resolve())
+    with _locks_guard:
+        return _locks.setdefault(key, threading.RLock())
+
+
+def _json(value: object) -> str:
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def _digest(value: object) -> str:
+    return hashlib.sha256(_json(value).encode("utf-8")).hexdigest()
+
+
+def _text(value: object, *, required: bool = False, limit: int = MAX_TEXT_CHARS) -> str:
+    if not isinstance(value, str):
+        raise DossierError("invalid_text")
+    value = value.strip()
+    if (required and not value) or len(value) > limit:
+        raise DossierError("invalid_text")
+    return value
+
+
+def _id(value: object, field: str = "id") -> str:
+    value = str(value or "")
+    if not _ID_RE.fullmatch(value):
+        raise DossierError(f"invalid_{field}")
+    return value
+
+
+def _new_id() -> str:
+    return uuid.uuid4().hex
+
+
+def _connect(path: Path, *, readonly: bool = False) -> sqlite3.Connection:
+    if readonly:
+        connection = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True, timeout=0.25)
+    else:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        connection = sqlite3.connect(path, timeout=0.25)
+    connection.row_factory = sqlite3.Row
+    connection.execute("PRAGMA foreign_keys=ON")
+    connection.execute("PRAGMA busy_timeout=250")
+    return connection
+
+
+def _initialize(connection: sqlite3.Connection) -> None:
+    version = int(connection.execute("PRAGMA user_version").fetchone()[0])
+    if version not in {0, SCHEMA_VERSION}:
+        raise DossierError("schema_mismatch")
+    connection.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS dossiers (
+          dossier_id TEXT PRIMARY KEY, title TEXT NOT NULL, aliases_json TEXT NOT NULL,
+          description TEXT NOT NULL, status TEXT NOT NULL,
+          redirect_dossier_id TEXT, revision INTEGER NOT NULL,
+          active_understanding_id TEXT, needs_recompute INTEGER NOT NULL DEFAULT 0,
+          created_at REAL NOT NULL, updated_at REAL NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS occurrences (
+          occurrence_id TEXT PRIMARY KEY, occurrence_key TEXT,
+          participants_json TEXT NOT NULL, occurred_from REAL, occurred_to REAL,
+          time_certainty TEXT NOT NULL, assertion_kind TEXT NOT NULL,
+          status TEXT NOT NULL, revision INTEGER NOT NULL,
+          created_at REAL NOT NULL, updated_at REAL NOT NULL
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_occurrence_key
+          ON occurrences(occurrence_key) WHERE occurrence_key IS NOT NULL;
+        CREATE TABLE IF NOT EXISTS occurrence_evidence (
+          occurrence_id TEXT NOT NULL REFERENCES occurrences(occurrence_id),
+          reference_kind TEXT NOT NULL, source_id TEXT NOT NULL,
+          source_revision TEXT NOT NULL, valid INTEGER NOT NULL DEFAULT 1,
+          PRIMARY KEY(occurrence_id, reference_kind, source_id, source_revision)
+        );
+        CREATE INDEX IF NOT EXISTS idx_evidence_reverse
+          ON occurrence_evidence(reference_kind, source_id, valid);
+        CREATE TABLE IF NOT EXISTS memberships (
+          dossier_id TEXT NOT NULL REFERENCES dossiers(dossier_id),
+          occurrence_id TEXT NOT NULL REFERENCES occurrences(occurrence_id),
+          status TEXT NOT NULL, created_at REAL NOT NULL, updated_at REAL NOT NULL,
+          PRIMARY KEY(dossier_id, occurrence_id)
+        );
+        CREATE TABLE IF NOT EXISTS relations (
+          relation_id TEXT PRIMARY KEY, from_dossier_id TEXT NOT NULL REFERENCES dossiers(dossier_id),
+          to_dossier_id TEXT NOT NULL REFERENCES dossiers(dossier_id), relation_type TEXT NOT NULL,
+          tentative INTEGER NOT NULL, status TEXT NOT NULL, revision INTEGER NOT NULL,
+          created_at REAL NOT NULL, updated_at REAL NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS understandings (
+          understanding_id TEXT PRIMARY KEY, dossier_id TEXT NOT NULL REFERENCES dossiers(dossier_id),
+          revision INTEGER NOT NULL, summary TEXT NOT NULL, conditions_json TEXT NOT NULL,
+          occurred_from REAL, occurred_to REAL, supporting_json TEXT NOT NULL,
+          counterexamples_json TEXT NOT NULL, confidence_reason TEXT NOT NULL,
+          character_feeling INTEGER NOT NULL, coverage_ingest_seq INTEGER NOT NULL,
+          source_policy_revision TEXT NOT NULL, supersedes_id TEXT,
+          status TEXT NOT NULL, created_at REAL NOT NULL,
+          UNIQUE(dossier_id, revision)
+        );
+        CREATE TABLE IF NOT EXISTS operations (
+          operation_id TEXT PRIMARY KEY, request_digest TEXT NOT NULL,
+          actor TEXT NOT NULL, chain TEXT NOT NULL, status TEXT NOT NULL,
+          expected_revisions_json TEXT NOT NULL, committed_revisions_json TEXT NOT NULL,
+          source_policy_revision TEXT NOT NULL, rules_revision TEXT NOT NULL,
+          reversal_of TEXT, result_json TEXT NOT NULL, created_at REAL NOT NULL,
+          committed_at REAL
+        );
+        CREATE TABLE IF NOT EXISTS invalidations (
+          invalidation_id TEXT PRIMARY KEY, reference_kind TEXT NOT NULL,
+          source_id TEXT NOT NULL, reason TEXT NOT NULL, created_at REAL NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS source_items (
+          store_kind TEXT NOT NULL, source_id TEXT NOT NULL, source_revision TEXT NOT NULL,
+          ingest_sequence INTEGER NOT NULL, status TEXT NOT NULL, semantic_outcomes_json TEXT NOT NULL,
+          attempt INTEGER NOT NULL DEFAULT 0, operation_id TEXT, input_digest TEXT NOT NULL,
+          last_error TEXT NOT NULL, revisit_condition TEXT NOT NULL, updated_at REAL NOT NULL,
+          PRIMARY KEY(store_kind, source_id, source_revision)
+        );
+        CREATE TABLE IF NOT EXISTS processing_commits (
+          commit_id TEXT PRIMARY KEY, operation_id TEXT NOT NULL,
+          store_kind TEXT NOT NULL, source_id TEXT NOT NULL, source_revision TEXT NOT NULL,
+          ingest_sequence INTEGER NOT NULL, created_at REAL NOT NULL,
+          UNIQUE(store_kind, source_id, source_revision, operation_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_dossier_status_title ON dossiers(status, title);
+        CREATE INDEX IF NOT EXISTS idx_membership_occurrence ON memberships(occurrence_id, status);
+        """
+    )
+    connection.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
+
+
+def initialize(scope: MemoryScope) -> SchemaStatus:
+    path = _path(scope)
+    with _lock(path):
+        try:
+            with _connect(path) as connection:
+                _initialize(connection)
+                connection.commit()
+            return SchemaStatus(True, True, SCHEMA_VERSION)
+        except DossierError as exc:
+            return SchemaStatus(True, False, 0, exc.code)
+        except (OSError, sqlite3.Error):
+            return SchemaStatus(True, False, 0, "database_error")
+
+
+def schema_status(scope: MemoryScope) -> SchemaStatus:
+    path = _path(scope)
+    if not path.exists():
+        return SchemaStatus(False, False, 0, "not_initialized")
+    with _lock(path):
+        try:
+            with _connect(path, readonly=True) as connection:
+                version = int(connection.execute("PRAGMA user_version").fetchone()[0])
+                tables = {str(row[0]) for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            required = {"dossiers", "occurrences", "occurrence_evidence", "memberships", "relations", "understandings", "operations", "invalidations", "source_items", "processing_commits"}
+            return SchemaStatus(True, version == SCHEMA_VERSION and required <= tables, version,
+                                "" if version == SCHEMA_VERSION and required <= tables else "schema_mismatch")
+        except (OSError, sqlite3.Error):
+            return SchemaStatus(True, False, 0, "database_error")
+
+
+def _row(connection: sqlite3.Connection, table: str, key: str, value: str) -> sqlite3.Row:
+    row = connection.execute(f"SELECT * FROM {table} WHERE {key}=?", (value,)).fetchone()
+    if row is None:
+        raise DossierError(f"{table[:-1]}_not_found")
+    return row
+
+
+def _expect_revision(row: sqlite3.Row, operation: Mapping[str, Any]) -> None:
+    expected = operation.get("expected_revision")
+    if not isinstance(expected, int) or isinstance(expected, bool):
+        raise DossierError("expected_revision_required")
+    if int(row["revision"]) != expected:
+        raise DossierError("revision_conflict")
+
+
+def _event_refs(operations: Iterable[Mapping[str, Any]]) -> list[str]:
+    result: list[str] = []
+    for operation in operations:
+        if operation.get("action") == "create_occurrence":
+            for ref in operation.get("evidence", []):
+                if isinstance(ref, Mapping) and ref.get("reference_kind") == "event":
+                    result.append(str(ref.get("source_id") or ""))
+    return result
+
+
+def _validate_events(scope: MemoryScope, ids: Iterable[str]) -> None:
+    from core.memory.event_query import get_event
+    for event_id in set(ids):
+        if not event_id or get_event(scope, event_id) is None:
+            raise DossierError("evidence_not_found")
+
+
+def _create_dossier(connection: sqlite3.Connection, op: Mapping[str, Any], now: float) -> dict[str, Any]:
+    dossier_id = _id(op.get("dossier_id") or _new_id(), "dossier_id")
+    title = _text(op.get("title"), required=True, limit=200)
+    aliases = op.get("aliases", [])
+    if not isinstance(aliases, list) or len(aliases) > 20:
+        raise DossierError("invalid_aliases")
+    aliases = [_text(item, required=True, limit=200) for item in aliases]
+    connection.execute("INSERT INTO dossiers VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                       (dossier_id, title, _json(aliases), _text(op.get("description", "")), "active", None, 1, None, 0, now, now))
+    return {"dossier_id": dossier_id, "revision": 1}
+
+
+def _rename(connection: sqlite3.Connection, op: Mapping[str, Any], now: float) -> dict[str, Any]:
+    dossier_id = _id(op.get("dossier_id"), "dossier_id")
+    row = _row(connection, "dossiers", "dossier_id", dossier_id); _expect_revision(row, op)
+    revision = int(row["revision"]) + 1
+    connection.execute("UPDATE dossiers SET title=?, revision=?, updated_at=? WHERE dossier_id=?",
+                       (_text(op.get("title"), required=True, limit=200), revision, now, dossier_id))
+    return {"dossier_id": dossier_id, "revision": revision}
+
+
+def _create_occurrence(connection: sqlite3.Connection, op: Mapping[str, Any], now: float) -> dict[str, Any]:
+    occurrence_id = _id(op.get("occurrence_id") or _new_id(), "occurrence_id")
+    key = _text(op.get("occurrence_key", ""), limit=256) or None
+    if key and connection.execute("SELECT occurrence_id FROM occurrences WHERE occurrence_key=?", (key,)).fetchone():
+        raise DossierError("duplicate_occurrence_candidate")
+    participants = op.get("participants", [])
+    if not isinstance(participants, list) or len(participants) > 20:
+        raise DossierError("invalid_participants")
+    certainty = str(op.get("time_certainty") or "unknown")
+    assertion = str(op.get("assertion_kind") or "legacy_unknown")
+    if certainty not in {"exact", "bounded", "unknown"} or assertion not in {"user_stated", "observed", "inferred", "legacy_unknown"}:
+        raise DossierError("invalid_occurrence")
+    start, end = op.get("occurred_from"), op.get("occurred_to")
+    if start is not None: start = float(start)
+    if end is not None: end = float(end)
+    if start is not None and end is not None and start > end:
+        raise DossierError("invalid_time_range")
+    evidence = op.get("evidence", [])
+    if not isinstance(evidence, list) or not evidence:
+        raise DossierError("evidence_required")
+    connection.execute("INSERT INTO occurrences VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                       (occurrence_id, key, _json(participants), start, end, certainty, assertion, "active", 1, now, now))
+    for ref in evidence:
+        if not isinstance(ref, Mapping): raise DossierError("invalid_evidence")
+        kind = str(ref.get("reference_kind") or "")
+        if kind not in {"event", "legacy_unknown", "ephemeral"}: raise DossierError("invalid_evidence")
+        source_id = _text(ref.get("source_id"), required=True, limit=512)
+        if kind == "ephemeral": raise DossierError("ephemeral_evidence_not_durable")
+        connection.execute("INSERT INTO occurrence_evidence VALUES(?,?,?,?,1)",
+                           (occurrence_id, kind, source_id, _text(str(ref.get("source_revision") or "unknown"), required=True, limit=256)))
+    return {"occurrence_id": occurrence_id, "revision": 1}
+
+
+def _attach(connection: sqlite3.Connection, op: Mapping[str, Any], now: float) -> dict[str, Any]:
+    dossier_id = _id(op.get("dossier_id"), "dossier_id"); occurrence_id = _id(op.get("occurrence_id"), "occurrence_id")
+    dossier = _row(connection, "dossiers", "dossier_id", dossier_id); _expect_revision(dossier, op)
+    _row(connection, "occurrences", "occurrence_id", occurrence_id)
+    connection.execute("INSERT INTO memberships VALUES(?,?, 'active',?,?) ON CONFLICT(dossier_id,occurrence_id) DO UPDATE SET status='active',updated_at=excluded.updated_at",
+                       (dossier_id, occurrence_id, now, now))
+    revision = int(dossier["revision"]) + 1
+    connection.execute("UPDATE dossiers SET revision=?,updated_at=? WHERE dossier_id=?", (revision, now, dossier_id))
+    return {"dossier_id": dossier_id, "occurrence_id": occurrence_id, "revision": revision}
+
+
+def _revise(connection: sqlite3.Connection, op: Mapping[str, Any], now: float) -> dict[str, Any]:
+    dossier_id = _id(op.get("dossier_id"), "dossier_id")
+    dossier = _row(connection, "dossiers", "dossier_id", dossier_id); _expect_revision(dossier, op)
+    support = [_id(item, "occurrence_id") for item in op.get("supporting_occurrence_ids", [])]
+    counters = [_id(item, "occurrence_id") for item in op.get("counterexample_occurrence_ids", [])]
+    for occurrence_id in set(support + counters): _row(connection, "occurrences", "occurrence_id", occurrence_id)
+    revision = int(dossier["revision"]) + 1; understanding_id = _new_id()
+    prior = dossier["active_understanding_id"]
+    if prior:
+        connection.execute("UPDATE understandings SET status='superseded' WHERE understanding_id=?", (prior,))
+    connection.execute("INSERT INTO understandings VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (
+        understanding_id, dossier_id, revision, _text(op.get("summary"), required=True),
+        _json(op.get("conditions", [])), op.get("occurred_from"), op.get("occurred_to"),
+        _json(support), _json(counters), _text(op.get("confidence_reason", "")),
+        int(bool(op.get("character_feeling"))), max(0, int(op.get("coverage_ingest_seq") or 0)),
+        SOURCE_POLICY_REVISION, prior, "active", now))
+    connection.execute("UPDATE dossiers SET active_understanding_id=?,revision=?,needs_recompute=0,updated_at=? WHERE dossier_id=?",
+                       (understanding_id, revision, now, dossier_id))
+    return {"dossier_id": dossier_id, "understanding_id": understanding_id, "revision": revision}
+
+
+def _relate(connection: sqlite3.Connection, op: Mapping[str, Any], now: float) -> dict[str, Any]:
+    source = _id(op.get("from_dossier_id"), "dossier_id"); target = _id(op.get("to_dossier_id"), "dossier_id")
+    if source == target: raise DossierError("invalid_relation")
+    source_row = _row(connection, "dossiers", "dossier_id", source); _expect_revision(source_row, op)
+    _row(connection, "dossiers", "dossier_id", target)
+    kind = str(op.get("relation_type") or "related")
+    if kind not in {"related", "follows", "tentative_cause"}: raise DossierError("invalid_relation")
+    tentative = 1 if kind == "tentative_cause" or bool(op.get("tentative")) else 0
+    relation_id = _id(op.get("relation_id") or _new_id(), "relation_id")
+    connection.execute("INSERT INTO relations VALUES(?,?,?,?,?,'active',1,?,?)",
+                       (relation_id, source, target, kind, tentative, now, now))
+    revision = int(source_row["revision"]) + 1
+    connection.execute("UPDATE dossiers SET revision=?,updated_at=? WHERE dossier_id=?", (revision, now, source))
+    return {"relation_id": relation_id, "dossier_id": source, "revision": revision}
+
+
+def _status(connection: sqlite3.Connection, op: Mapping[str, Any], now: float) -> dict[str, Any]:
+    dossier_id = _id(op.get("dossier_id"), "dossier_id")
+    row = _row(connection, "dossiers", "dossier_id", dossier_id); _expect_revision(row, op)
+    status = str(op.get("status") or "")
+    if status not in {"active", "dormant", "retired"}: raise DossierError("invalid_status")
+    revision = int(row["revision"]) + 1
+    connection.execute("UPDATE dossiers SET status=?,redirect_dossier_id=NULL,revision=?,updated_at=? WHERE dossier_id=?",
+                       (status, revision, now, dossier_id))
+    return {"dossier_id": dossier_id, "status": status, "revision": revision}
+
+
+def _merge(connection: sqlite3.Connection, op: Mapping[str, Any], now: float) -> dict[str, Any]:
+    target = _id(op.get("target_dossier_id"), "dossier_id")
+    target_row = _row(connection, "dossiers", "dossier_id", target)
+    expected_target = op.get("expected_target_revision")
+    if not isinstance(expected_target, int) or int(target_row["revision"]) != expected_target: raise DossierError("revision_conflict")
+    sources = [_id(item, "dossier_id") for item in op.get("source_dossier_ids", [])]
+    if not sources or target in sources: raise DossierError("invalid_merge")
+    expected = op.get("expected_source_revisions", {})
+    for source in sources:
+        row = _row(connection, "dossiers", "dossier_id", source)
+        if not isinstance(expected, Mapping) or expected.get(source) != int(row["revision"]): raise DossierError("revision_conflict")
+        connection.execute("UPDATE dossiers SET status='merged',redirect_dossier_id=?,revision=revision+1,updated_at=? WHERE dossier_id=?", (target, now, source))
+        connection.execute("INSERT OR IGNORE INTO memberships SELECT ?,occurrence_id,status,?,? FROM memberships WHERE dossier_id=? AND status='active'", (target, now, now, source))
+    target_revision = int(target_row["revision"]) + 1
+    connection.execute("UPDATE dossiers SET revision=?,updated_at=? WHERE dossier_id=?", (target_revision, now, target))
+    return {"dossier_id": target, "revision": target_revision, "merged": sources}
+
+
+def _split(connection: sqlite3.Connection, op: Mapping[str, Any], now: float) -> dict[str, Any]:
+    source = _id(op.get("source_dossier_id"), "dossier_id")
+    row = _row(connection, "dossiers", "dossier_id", source); _expect_revision(row, op)
+    created = _create_dossier(connection, op.get("new_dossier", {}), now)
+    occurrence_ids = [_id(item, "occurrence_id") for item in op.get("occurrence_ids", [])]
+    if not occurrence_ids: raise DossierError("invalid_split")
+    for occurrence_id in occurrence_ids:
+        membership = connection.execute("SELECT status FROM memberships WHERE dossier_id=? AND occurrence_id=?", (source, occurrence_id)).fetchone()
+        if membership is None or membership["status"] != "active": raise DossierError("membership_not_found")
+        connection.execute("UPDATE memberships SET status='retired',updated_at=? WHERE dossier_id=? AND occurrence_id=?", (now, source, occurrence_id))
+        connection.execute("INSERT INTO memberships VALUES(?,?,'active',?,?)", (created["dossier_id"], occurrence_id, now, now))
+    revision = int(row["revision"]) + 1
+    connection.execute("UPDATE dossiers SET revision=?,updated_at=? WHERE dossier_id=?", (revision, now, source))
+    return {"dossier_id": source, "revision": revision, "split_dossier_id": created["dossier_id"]}
+
+
+_HANDLERS = {"create_dossier": _create_dossier, "rename_dossier": _rename,
+             "create_occurrence": _create_occurrence, "attach_occurrence": _attach,
+             "revise_understanding": _revise, "relate_dossiers": _relate,
+             "set_dossier_status": _status, "merge_dossiers": _merge,
+             "split_dossier": _split}
+
+
+def apply_operations(scope: MemoryScope, operations: list[Mapping[str, Any]], *, operation_id: str,
+                     actor: str, chain: str, source_policy_revision: str = SOURCE_POLICY_REVISION,
+                     reversal_of: str = "", now: float | None = None) -> dict[str, Any]:
+    """Validate and atomically commit one bounded, idempotent operation batch."""
+    scope = _scope(scope); operation_id = _id(operation_id, "operation_id")
+    if chain not in _VALID_CHAINS: raise DossierError("invalid_chain")
+    actor = _text(actor, required=True, limit=200)
+    if not isinstance(operations, list) or not 1 <= len(operations) <= MAX_BATCH_OPERATIONS:
+        raise DossierError("invalid_operation_batch")
+    if source_policy_revision != SOURCE_POLICY_REVISION: raise DossierError("source_policy_changed")
+    for operation in operations:
+        if not isinstance(operation, Mapping) or operation.get("action") not in _HANDLERS:
+            raise DossierError("invalid_operation")
+    request = {"operations": operations, "actor": actor, "chain": chain,
+               "source_policy_revision": source_policy_revision, "reversal_of": reversal_of}
+    request_digest = _digest(request); timestamp = time.time() if now is None else float(now)
+    path = _path(scope)
+    # Receipts are authoritative for outcome-unknown recovery. Check one before
+    # consulting mutable evidence so a committed operation remains replayable
+    # after its source is later withdrawn.
+    if path.exists():
+        with _lock(path), _connect(path, readonly=True) as connection:
+            existing = connection.execute("SELECT * FROM operations WHERE operation_id=?", (operation_id,)).fetchone()
+            if existing is not None:
+                if existing["request_digest"] != request_digest: raise DossierError("idempotency_conflict")
+                return json.loads(existing["result_json"])
+    _validate_events(scope, _event_refs(operations))
+    with _lock(path):
+        with _connect(path) as connection:
+            _initialize(connection)
+            existing = connection.execute("SELECT * FROM operations WHERE operation_id=?", (operation_id,)).fetchone()
+            if existing is not None:
+                if existing["request_digest"] != request_digest: raise DossierError("idempotency_conflict")
+                return json.loads(existing["result_json"])
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                results = [_HANDLERS[str(op["action"])](connection, op, timestamp) for op in operations]
+                committed = {item["dossier_id"]: item["revision"] for item in results if "dossier_id" in item and "revision" in item}
+                result = {"ok": True, "operation_id": operation_id, "results": results, "committed_revisions": committed}
+                connection.execute("INSERT INTO operations VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", (
+                    operation_id, request_digest, actor, chain, "committed", "{}", _json(committed),
+                    source_policy_revision, RULES_REVISION, reversal_of or None, _json(result), timestamp, timestamp))
+                connection.commit()
+            except Exception:
+                connection.rollback(); raise
+    try:
+        from core.memory import provenance_log
+        source_ids = _event_refs(operations)
+        provenance_log.append(scope.uid, scope.character_id or "", artifact="memory_dossier",
+                              field="batch", after_gist=f"{len(operations)} operations",
+                              trigger_signal=chain, source_event_ids=source_ids,
+                              origin={"operation_id": operation_id, "actor": actor, "chain": chain})
+    except Exception:
+        pass
+    return result
+
+
+def invalidate_source(scope: MemoryScope, source_id: str, *, reason: str,
+                      reference_kind: str = "event", now: float | None = None) -> dict[str, int]:
+    """Immediately suppress conclusions depending on a withdrawn source."""
+    scope = _scope(scope); source_id = _text(source_id, required=True, limit=512)
+    reason = _text(reason, required=True, limit=200); path = _path(scope)
+    if not path.exists(): return {"occurrences": 0, "dossiers": 0}
+    timestamp = time.time() if now is None else float(now)
+    with _lock(path), _connect(path) as connection:
+        _initialize(connection); connection.execute("BEGIN IMMEDIATE")
+        rows = connection.execute("SELECT occurrence_id FROM occurrence_evidence WHERE reference_kind=? AND source_id=? AND valid=1", (reference_kind, source_id)).fetchall()
+        occurrence_ids = [str(row[0]) for row in rows]
+        if occurrence_ids:
+            placeholders = ",".join("?" for _ in occurrence_ids)
+            connection.execute("UPDATE occurrence_evidence SET valid=0 WHERE reference_kind=? AND source_id=?", (reference_kind, source_id))
+            connection.execute(f"UPDATE occurrences SET status='needs_recompute',revision=revision+1,updated_at=? WHERE occurrence_id IN ({placeholders})", (timestamp, *occurrence_ids))
+            dossiers = connection.execute(f"SELECT DISTINCT dossier_id FROM memberships WHERE status='active' AND occurrence_id IN ({placeholders})", occurrence_ids).fetchall()
+        else: dossiers = []
+        dossier_ids = [str(row[0]) for row in dossiers]
+        for dossier_id in dossier_ids:
+            connection.execute("UPDATE dossiers SET needs_recompute=1,active_understanding_id=NULL,revision=revision+1,updated_at=? WHERE dossier_id=?", (timestamp, dossier_id))
+            connection.execute("UPDATE understandings SET status='invalidated' WHERE dossier_id=? AND status='active'", (dossier_id,))
+        connection.execute("INSERT INTO invalidations VALUES(?,?,?,?,?)", (_new_id(), reference_kind, source_id, reason, timestamp))
+        connection.commit()
+    return {"occurrences": len(occurrence_ids), "dossiers": len(dossier_ids)}
+
+
+def search(scope: MemoryScope, query: str = "", *, limit: int = 3) -> list[dict[str, Any]]:
+    scope = _scope(scope)
+    if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 20: raise DossierError("invalid_limit")
+    path = _path(scope)
+    if not path.exists(): return []
+    needle = f"%{str(query or '').strip()}%"
+    with _lock(path), _connect(path, readonly=True) as connection:
+        rows = connection.execute("""SELECT d.*,u.summary,u.occurred_from,u.occurred_to,u.coverage_ingest_seq
+          FROM dossiers d LEFT JOIN understandings u ON u.understanding_id=d.active_understanding_id
+          WHERE d.status IN ('active','dormant') AND d.needs_recompute=0
+            AND (?='%%' OR d.title LIKE ? OR d.aliases_json LIKE ? OR COALESCE(u.summary,'') LIKE ?)
+          ORDER BY d.updated_at DESC,d.dossier_id LIMIT ?""", (needle, needle, needle, needle, limit)).fetchall()
+    return [{"dossier_id": row["dossier_id"], "title": row["title"], "status": row["status"],
+             "revision": row["revision"], "summary": row["summary"] or "",
+             "occurred_from": row["occurred_from"], "occurred_to": row["occurred_to"],
+             "coverage_ingest_seq": row["coverage_ingest_seq"] or 0} for row in rows]
+
+
+def read(scope: MemoryScope, dossier_id: str) -> dict[str, Any] | None:
+    scope = _scope(scope); dossier_id = _id(dossier_id, "dossier_id"); path = _path(scope)
+    if not path.exists(): return None
+    with _lock(path), _connect(path, readonly=True) as connection:
+        row = connection.execute("SELECT * FROM dossiers WHERE dossier_id=?", (dossier_id,)).fetchone()
+        if row is None: return None
+        understanding = connection.execute("SELECT * FROM understandings WHERE understanding_id=?", (row["active_understanding_id"],)).fetchone() if row["active_understanding_id"] else None
+        occurrences = connection.execute("""SELECT o.* FROM occurrences o JOIN memberships m ON m.occurrence_id=o.occurrence_id
+          WHERE m.dossier_id=? AND m.status='active' ORDER BY o.occurred_to DESC,o.created_at DESC""", (dossier_id,)).fetchall()
+        relations = connection.execute("SELECT * FROM relations WHERE (from_dossier_id=? OR to_dossier_id=?) AND status='active'", (dossier_id, dossier_id)).fetchall()
+    result = dict(row); result["aliases"] = json.loads(result.pop("aliases_json")); result["occurrences"] = [dict(item) for item in occurrences]
+    result["relations"] = [dict(item) for item in relations]; result["understanding"] = dict(understanding) if understanding else None
+    if result["understanding"]:
+        for key in ("conditions_json", "supporting_json", "counterexamples_json"):
+            result["understanding"][key.removesuffix("_json")] = json.loads(result["understanding"].pop(key))
+    return result
+
+
+def operation_receipt(scope: MemoryScope, operation_id: str) -> dict[str, Any] | None:
+    scope = _scope(scope); operation_id = _id(operation_id, "operation_id"); path = _path(scope)
+    if not path.exists(): return None
+    with _lock(path), _connect(path, readonly=True) as connection:
+        row = connection.execute("SELECT * FROM operations WHERE operation_id=?", (operation_id,)).fetchone()
+    if row is None: return None
+    result = dict(row); result["result"] = json.loads(result.pop("result_json")); return result

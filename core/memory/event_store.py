@@ -721,6 +721,14 @@ def tombstone_event(scope: MemoryScope, event_id: str) -> TombstoneResult:
                 invalidate_live_media_cache()
             except Exception:
                 pass
+            try:
+                # Dossiers are derived state. Evidence withdrawal must suppress
+                # dependent conclusions immediately, but dossier failure cannot
+                # make the evidence tombstone fail.
+                from core.memory.dossiers import invalidate_source
+                invalidate_source(scope, clean_id, reason="event_tombstoned")
+            except Exception:
+                logger.warning("[event_store] dossier invalidation failed", exc_info=True)
             return TombstoneResult(True, True, clean_id)
         except Exception as exc:
             logger.warning("[event_store] tombstone failed: %s", exc)
