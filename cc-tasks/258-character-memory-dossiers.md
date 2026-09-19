@@ -110,7 +110,7 @@
 
 每张 A–G 子单完成相关验证、diff/换行检查后立即独立 commit，再开始下一张。有证据才勾选。本次文档检查不勾施工项。
 
-E evidence: 355 focused backend/admin/security/static regression tests passed;
+E evidence: 356 focused backend/admin/security/static regression tests passed;
 the isolated Playwright check `py -3.14 tests/memory_consolidation_browser.py`
 passed after a cache-cleared desktop/mobile hard refresh. The baseline and
 post-change semantic scenario matrix is recorded in
