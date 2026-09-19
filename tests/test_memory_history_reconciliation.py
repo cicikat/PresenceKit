@@ -43,3 +43,17 @@ def test_inventory_endpoint_requires_state_read_and_is_empty_without_data(sandbo
     assert response.status_code == 200
     assert response.json()["read_only"] is True
     assert client.get(f"/observability/memory-history-inventory?uid=inventory-empty&char_id={TEST_CHAR_ID}").status_code == 401
+
+
+def test_manifest_and_control_are_resumable_and_default_deferred(sandbox):
+    from core.memory import history_reconciliation
+    from core.memory.scope import MemoryScope
+
+    scope = MemoryScope.reality_scope("reconcile-owner", TEST_CHAR_ID)
+    manifest = history_reconciliation.create_manifest(scope, now=1)
+    assert manifest["dry_run"] is True
+    result = history_reconciliation.apply_dry_run(scope, backup_verified=False)
+    assert result["status"] == "deferred"
+    assert history_reconciliation.status(scope)["counts"]["deferred"] >= 1
+    history_reconciliation.set_paused(scope, True, reason="test")
+    assert history_reconciliation.apply_dry_run(scope)["status"] == "paused"

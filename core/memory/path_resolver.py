@@ -24,6 +24,7 @@ REALITY_USER_ARTIFACTS: frozenset[str] = frozenset({
     "event_store",
     "event_query_trace",
     "event_migration_state",  # Brief 205: resumable legacy evidence import state
+    "history_reconciliation_state",  # Brief 259: resumable cross-store batch ledger
     "memory_dossiers",  # Brief 258: revisioned derived topic memory
     "mid_term",
     "episodic",
@@ -132,6 +133,9 @@ def resolve_path(scope: MemoryScope, artifact: str) -> Path:
 
     if artifact == "event_migration_state":
         return paths.user_memory_root(uid, char_id=char_id) / "event_migration_state.json"
+
+    if artifact == "history_reconciliation_state":
+        return paths.user_memory_root(uid, char_id=char_id) / "history_reconciliation_state.json"
 
     if artifact == "memory_dossiers":
         return paths.user_memory_root(uid, char_id=char_id) / "memory_dossiers.sqlite3"

@@ -101,6 +101,45 @@ async def observe_memory_history_inventory(
         raise HTTPException(status_code=503, detail={"code": str(exc)[:128]}) from exc
 
 
+@router.get("/observability/memory-history-reconciliation", summary="Reconciliation batch ledger status")
+async def observe_memory_history_reconciliation(
+    uid: str = Query(..., min_length=1, max_length=128),
+    char_id: str = Query(..., min_length=1, max_length=128),
+    _auth=Depends(require_scopes("state.read")),
+):
+    from core.memory.history_reconciliation import status
+    _scope(uid, char_id)
+    return status(MemoryScope.reality_scope(uid, char_id))
+
+
+@router.post("/memory-history-reconciliation/manifest", summary="Create a dry-run reconciliation manifest")
+async def create_memory_history_manifest(
+    uid: str = Query(..., min_length=1, max_length=128),
+    char_id: str = Query(..., min_length=1, max_length=128),
+    _auth=Depends(require_scopes("admin")),
+):
+    from core.memory.history_reconciliation import create_manifest
+    _scope(uid, char_id)
+    return create_manifest(MemoryScope.reality_scope(uid, char_id))
+
+
+@router.post("/memory-history-reconciliation/control", summary="Pause, resume, or dry-run reconciliation")
+async def control_memory_history_reconciliation(
+    body: dict,
+    _auth=Depends(require_scopes("admin")),
+):
+    action = str(body.get("action") or "")
+    uid, char_id = str(body.get("uid") or ""), str(body.get("char_id") or "")
+    if action not in {"pause", "resume", "dry_run"} or not uid or not char_id:
+        raise HTTPException(status_code=422, detail={"code": "invalid_reconciliation_control"})
+    _scope(uid, char_id)
+    from core.memory import history_reconciliation
+    scope = MemoryScope.reality_scope(uid, char_id)
+    if action == "dry_run":
+        return history_reconciliation.apply_dry_run(scope, backup_verified=False)
+    return history_reconciliation.set_paused(scope, action == "pause", reason=str(body.get("reason") or "admin"))
+
+
 @router.get("/memory/dossiers", summary="Search character memory dossiers")
 async def search_memory_dossiers(
     uid: str = Query(..., min_length=1, max_length=128),
