@@ -33,7 +33,9 @@ idempotency keys.
   (`active|dormant|merged|retired`), revision, redirect target, timestamps.
 * `occurrences`: stable ID, optional occurrence key, participants, time lower and
   upper bounds, time certainty, assertion kind
-  (`user_stated|observed|inferred|legacy_unknown`), status, revision. An
+  (`user_stated|observed|inferred|legacy_unknown`), experience state
+  (`confirmed|planned|cancelled|reported|hypothetical|assistant_suggestion`),
+  status, revision. An
   occurrence has one or more evidence references; it stores no evidence prose.
 * `occurrence_evidence`: occurrence ID, reference kind, source ID and source
   revision. `event` references must resolve in the same scope. Missing historical
@@ -125,3 +127,21 @@ No phase feeds dossier prose into an old writer. Rollback disables new claims an
 dossier prompt injection, restores the selected derived revision where needed,
 and preserves evidence and user corrections received during the rollout.
 
+## Owner-chat tools and prompt recall
+
+The memory category exposes `search_memory_dossiers`, `read_memory_dossier`,
+`search_dossier_events`, `update_memory_dossier`,
+`request_memory_consolidation`, and `get_memory_consolidation_status`. Each tool
+uses the server-frozen owner and character; group calls are rejected. Detail
+reads are offset-paged and capped at 50 occurrence references. A full-history
+request only creates a durable `memory.consolidation` task and returns its task
+ID; it never scans history in the owner-chat request.
+
+Automatic recall injects at most three dossiers and 1200 characters in layer
+`6b_memory_dossiers`. It follows ledger ingest order (not occurrence time) to
+show matching late/new evidence next to the last current understanding. Such
+evidence is explicitly marked unreviewed. When a topic is owned by a dossier,
+the pipeline suppresses the overlapping event-log and episodic prompt prose for
+that turn while retaining their diagnostic retrieval trace. With no dossier
+hit, legacy recall remains the identifiable fallback. The layer participates in
+normal prompt trimming and ablation.

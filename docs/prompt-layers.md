@@ -980,3 +980,12 @@ Brief 256 G：主动链既有 `autonomy_policy` 层会根据本轮实际工具 s
 能力不进入提示；提示明确这些能力按具体理由使用，不要求日更账本或固定业务目录。
 没有新增 Reality prompt 层，因此不触发 tag eval；`6i_self_agent_md` 的顺序、
 裁剪和下一轮生效语义不变。
+## Brief 258 topic dossier layer
+
+`6b_memory_dossiers` is a bounded Reality layer containing at most three current
+topic understandings, their coverage, any matching unreviewed evidence after the
+stored ingest watermark, and detail IDs. It is capped at 1200 characters, has
+`_drop_priority=65`, and can be disabled through the ordinary ablation control.
+When present, the pipeline omits overlapping `6b_event_search` and
+`6c_episodic` prose for the turn; those legacy retrievals remain available as
+diagnostic traces and remain the fallback for topics no dossier owns.

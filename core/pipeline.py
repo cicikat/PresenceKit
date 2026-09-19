@@ -441,6 +441,20 @@ class Pipeline:
         # uid-only global facts — no char_id, no fallback
         user_facts_text      = user_facts.format_for_prompt(uid)
 
+        # Brief 258: an owned topic has one current-understanding output. The
+        # dossier read is local and bounded; legacy retrieval still runs for
+        # its independent trace, but overlapping prose is not injected.
+        memory_dossier_context = ""
+        if not _skip_recall:
+            try:
+                from core.memory.dossiers import build_recall_context
+                _dossier_recall = await loop.run_in_executor(
+                    None, lambda: build_recall_context(scope, content),
+                )
+                memory_dossier_context = str(_dossier_recall.get("text") or "")
+            except Exception as _de:
+                logger.debug("[pipeline.fetch_context] dossier recall skip: %s", _de)
+
         from core.tools.reminder import get_reminders
         reminders = get_reminders(uid, char_id=char_id)
         from core.memory.diary_context import load as _load_diary, load_meta as _load_diary_meta
@@ -677,12 +691,13 @@ class Pipeline:
             "user_identity_text":  user_identity_text,
             "identity_coldstart":  identity_coldstart,
             "user_facts_text":     user_facts_text,
-            "event_search_result": event_search_result,
+            "event_search_result": "" if memory_dossier_context else event_search_result,
             "lore_entries":        lore_entries,
             "reminders":           reminders,
             "diary_context":       diary_context,
-            "episodic_result":          episodic_result,
-            "episodic_fallback_result": episodic_fallback_result,
+            "episodic_result":          "" if memory_dossier_context else episodic_result,
+            "episodic_fallback_result": "" if memory_dossier_context else episodic_fallback_result,
+            "memory_dossier_context":   memory_dossier_context,
             "mid_term":                 mid_term_text,
             "dream_impression_text":    dream_impression_text,
             "coplay_context_text":      coplay_context_text,
@@ -783,6 +798,7 @@ class Pipeline:
             diary_context=context.get("diary_context", ""),
             episodic_result=context.get("episodic_result", ""),
             episodic_fallback_result=context.get("episodic_fallback_result", ""),
+            memory_dossier_context=context.get("memory_dossier_context", ""),
             mid_term_context=context.get("mid_term", ""),
             tags=_tags,
             dream_impression_text=context.get("dream_impression_text", ""),

@@ -976,6 +976,19 @@ runtime 写入失败不会静默回落到 legacy reminder 文件。workspace/pro
 统一持有，visible delivery 必须经过新的 Reality ingress/turn，不能在后台调用 `capture_turn()`。
 Workspace mutating tools currently have no canonical `turn_id` on `execute_structured()`; their causation is
 `tool_request` plus the request fingerprint, never a hash labeled `reality_turn`.
+
+## Brief 258 memory dossier tools
+
+The owner Path C tool surface includes six Reality-scoped tools:
+`search_memory_dossiers`, `read_memory_dossier`, `search_dossier_events`,
+`update_memory_dossier`, `request_memory_consolidation`, and
+`get_memory_consolidation_status`. They have registry `examples` and `keywords`
+and therefore participate in function-calling discovery and the declarative
+probe. The server supplies `uid + char_id`; model arguments cannot override the
+principal. Group execution is rejected. Updates accept only the structured
+dossier operation schema with CAS and an idempotent operation ID. Full-history
+work returns a Task Manager reference instead of blocking the chat turn.
+
 ## Brief 238 Browser worker
 
 Brief 239 binds each task to a normalized `http/https` URL (fragment removed, query retained),

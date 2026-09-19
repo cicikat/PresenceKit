@@ -125,7 +125,7 @@ def _initialize(connection: sqlite3.Connection) -> None:
           occurrence_id TEXT PRIMARY KEY, occurrence_key TEXT,
           participants_json TEXT NOT NULL, occurred_from REAL, occurred_to REAL,
           time_certainty TEXT NOT NULL, assertion_kind TEXT NOT NULL,
-          status TEXT NOT NULL, revision INTEGER NOT NULL,
+          experience_state TEXT NOT NULL, status TEXT NOT NULL, revision INTEGER NOT NULL,
           created_at REAL NOT NULL, updated_at REAL NOT NULL
         );
         CREATE UNIQUE INDEX IF NOT EXISTS idx_occurrence_key
@@ -285,7 +285,10 @@ def _create_occurrence(connection: sqlite3.Connection, op: Mapping[str, Any], no
         raise DossierError("invalid_participants")
     certainty = str(op.get("time_certainty") or "unknown")
     assertion = str(op.get("assertion_kind") or "legacy_unknown")
-    if certainty not in {"exact", "bounded", "unknown"} or assertion not in {"user_stated", "observed", "inferred", "legacy_unknown"}:
+    experience_state = str(op.get("experience_state") or "confirmed")
+    if (certainty not in {"exact", "bounded", "unknown"}
+            or assertion not in {"user_stated", "observed", "inferred", "legacy_unknown"}
+            or experience_state not in {"confirmed", "planned", "cancelled", "reported", "hypothetical", "assistant_suggestion"}):
         raise DossierError("invalid_occurrence")
     start, end = op.get("occurred_from"), op.get("occurred_to")
     if start is not None: start = float(start)
@@ -295,8 +298,9 @@ def _create_occurrence(connection: sqlite3.Connection, op: Mapping[str, Any], no
     evidence = op.get("evidence", [])
     if not isinstance(evidence, list) or not evidence:
         raise DossierError("evidence_required")
-    connection.execute("INSERT INTO occurrences VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-                       (occurrence_id, key, _json(participants), start, end, certainty, assertion, "active", 1, now, now))
+    connection.execute("INSERT INTO occurrences VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                       (occurrence_id, key, _json(participants), start, end, certainty, assertion,
+                        experience_state, "active", 1, now, now))
     for ref in evidence:
         if not isinstance(ref, Mapping): raise DossierError("invalid_evidence")
         kind = str(ref.get("reference_kind") or "")
@@ -519,8 +523,13 @@ def read(scope: MemoryScope, dossier_id: str) -> dict[str, Any] | None:
         occurrences = connection.execute("""SELECT o.* FROM occurrences o JOIN memberships m ON m.occurrence_id=o.occurrence_id
           WHERE m.dossier_id=? AND m.status='active' ORDER BY o.occurred_to DESC,o.created_at DESC""", (dossier_id,)).fetchall()
         relations = connection.execute("SELECT * FROM relations WHERE (from_dossier_id=? OR to_dossier_id=?) AND status='active'", (dossier_id, dossier_id)).fetchall()
+        confirmed_count = connection.execute("""SELECT COUNT(*) FROM occurrences o
+          JOIN memberships m ON m.occurrence_id=o.occurrence_id
+          WHERE m.dossier_id=? AND m.status='active' AND o.status='active'
+            AND o.experience_state='confirmed'""", (dossier_id,)).fetchone()[0]
     result = dict(row); result["aliases"] = json.loads(result.pop("aliases_json")); result["occurrences"] = [dict(item) for item in occurrences]
     result["relations"] = [dict(item) for item in relations]; result["understanding"] = dict(understanding) if understanding else None
+    result["confirmed_occurrence_count"] = int(confirmed_count)
     if result["understanding"]:
         for key in ("conditions_json", "supporting_json", "counterexamples_json"):
             result["understanding"][key.removesuffix("_json")] = json.loads(result["understanding"].pop(key))
@@ -534,3 +543,116 @@ def operation_receipt(scope: MemoryScope, operation_id: str) -> dict[str, Any] |
         row = connection.execute("SELECT * FROM operations WHERE operation_id=?", (operation_id,)).fetchone()
     if row is None: return None
     result = dict(row); result["result"] = json.loads(result.pop("result_json")); return result
+
+
+def dossier_events(scope: MemoryScope, dossier_id: str, *, offset: int = 0,
+                   limit: int = 20) -> dict[str, Any]:
+    """Return bounded occurrence/evidence metadata; never copies evidence text."""
+    scope = _scope(scope); dossier_id = _id(dossier_id, "dossier_id")
+    if not isinstance(offset, int) or isinstance(offset, bool) or offset < 0:
+        raise DossierError("invalid_offset")
+    if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 50:
+        raise DossierError("invalid_limit")
+    path = _path(scope)
+    if not path.exists(): return {"items": [], "next_offset": None, "truncated": False}
+    with _lock(path), _connect(path, readonly=True) as connection:
+        _row(connection, "dossiers", "dossier_id", dossier_id)
+        rows = connection.execute("""SELECT o.* FROM occurrences o
+          JOIN memberships m ON m.occurrence_id=o.occurrence_id
+          WHERE m.dossier_id=? AND m.status='active'
+          ORDER BY COALESCE(o.occurred_to,o.occurred_from,o.created_at) DESC,o.occurrence_id
+          LIMIT ? OFFSET ?""", (dossier_id, limit + 1, offset)).fetchall()
+        items = []
+        for row in rows[:limit]:
+            evidence = connection.execute("""SELECT reference_kind,source_id,source_revision,valid
+              FROM occurrence_evidence WHERE occurrence_id=? ORDER BY reference_kind,source_id""",
+              (row["occurrence_id"],)).fetchall()
+            item = dict(row); item["participants"] = json.loads(item.pop("participants_json"))
+            item["evidence"] = [dict(ref) for ref in evidence]; items.append(item)
+    truncated = len(rows) > limit
+    return {"items": items, "next_offset": offset + limit if truncated else None, "truncated": truncated}
+
+
+def _query_terms(query: str) -> list[str]:
+    value = str(query or "").strip().casefold()
+    if not value: return []
+    terms = [item for item in re.split(r"[\s,.;:!?，。；：！？、]+", value) if len(item) >= 2]
+    return terms[:8] or [value[:80]]
+
+
+def _unprocessed_evidence(scope: MemoryScope, *, after_sequence: int, query: str,
+                          limit: int = 4) -> list[dict[str, Any]]:
+    """Read late/new evidence by ledger ingest order (SQLite rowid), fail closed."""
+    from core.memory import event_store, source_policy
+    event_path = resolve_path(scope, "event_store")
+    if not event_path.exists(): return []
+    terms = _query_terms(query)
+    clauses = ["LOWER(COALESCE(NULLIF(memory_text,''),visible_text)) LIKE ?" for _ in terms]
+    params: list[Any] = [scope.uid, scope.character_id, scope.domain, int(after_sequence)]
+    source_clause, source_params = source_policy.sql_predicate()
+    params.extend(source_params)
+    params.extend(f"%{term}%" for term in terms)
+    params.append(limit)
+    query_clause = " AND (" + " OR ".join(clauses) + ")" if clauses else ""
+    try:
+        with event_store._lock_for(event_path), sqlite3.connect(
+            f"{event_path.resolve().as_uri()}?mode=ro", uri=True, timeout=0.25,
+        ) as connection:
+            connection.row_factory = sqlite3.Row
+            rows = connection.execute("""SELECT rowid AS ingest_sequence,event_id,occurred_at,
+                actor,kind,COALESCE(NULLIF(memory_text,''),visible_text) AS text
+              FROM events WHERE uid=? AND char_id=? AND realm=? AND rowid>?""" +
+              source_clause + query_clause + " ORDER BY rowid DESC LIMIT ?", params).fetchall()
+        return [{"ingest_sequence": int(row["ingest_sequence"]), "event_id": row["event_id"],
+                 "occurred_at": row["occurred_at"], "actor": row["actor"], "kind": row["kind"],
+                 "text": str(row["text"] or "")[:240]} for row in rows]
+    except (OSError, sqlite3.Error):
+        return []
+
+
+def build_recall_context(scope: MemoryScope, query: str, *, max_dossiers: int = 3,
+                         max_chars: int = 1200) -> dict[str, Any]:
+    """Build the bounded automatic layer with current and unprocessed evidence."""
+    max_dossiers = min(3, max(1, int(max_dossiers)))
+    max_chars = min(1200, max(200, int(max_chars)))
+    rows = search(scope, query, limit=max_dossiers)
+    if not rows: return {"text": "", "dossier_ids": [], "truncated": False, "unreviewed": False}
+    parts: list[str] = []
+    remaining = max_chars
+    unreviewed = False
+    for row in rows:
+        line = f"[{row['title']}] {row['summary'] or '尚无稳定理解'}"
+        if row["occurred_from"] is not None or row["occurred_to"] is not None:
+            line += f"；覆盖时间 {row['occurred_from'] or '?'}..{row['occurred_to'] or '?'}"
+        new_events = _unprocessed_evidence(scope, after_sequence=int(row["coverage_ingest_seq"] or 0), query=query)
+        if new_events:
+            unreviewed = True
+            line += "\n未整理的新证据（与旧理解并列，尚未归纳）：" + "；".join(
+                f"{item['event_id']} {item['text']}" for item in new_events
+            )
+        line += f"\n详情入口 dossier_id={row['dossier_id']}"
+        if len(line) > remaining:
+            line = line[:max(0, remaining - 1)] + "…"
+        if line:
+            parts.append(line); remaining -= len(line) + 1
+        if remaining <= 1: break
+    text = "\n".join(parts)
+    return {"text": text, "dossier_ids": [row["dossier_id"] for row in rows[:len(parts)]],
+            "truncated": len(text) >= max_chars - 1, "unreviewed": unreviewed}
+
+
+def status_snapshot(scope: MemoryScope) -> dict[str, Any]:
+    """Content-free scope status used by tools and the later control plane."""
+    scope = _scope(scope); status = schema_status(scope); path = _path(scope)
+    result = {**status.to_dict(), "scope": {"char_id": scope.character_id, "realm": "reality"},
+              "dossiers": 0, "active": 0, "needs_recompute": 0, "operations": 0,
+              "pending_sources": 0, "latest_operation_at": None}
+    if not status.healthy or not path.exists(): return result
+    with _lock(path), _connect(path, readonly=True) as connection:
+        row = connection.execute("SELECT COUNT(*),SUM(status='active'),SUM(needs_recompute) FROM dossiers").fetchone()
+        op = connection.execute("SELECT COUNT(*),MAX(committed_at) FROM operations WHERE status='committed'").fetchone()
+        pending = connection.execute("SELECT COUNT(*) FROM source_items WHERE status IN ('pending','running','retryable_failed')").fetchone()[0]
+    result.update({"dossiers": int(row[0] or 0), "active": int(row[1] or 0),
+                   "needs_recompute": int(row[2] or 0), "operations": int(op[0] or 0),
+                   "latest_operation_at": op[1], "pending_sources": int(pending or 0)})
+    return result

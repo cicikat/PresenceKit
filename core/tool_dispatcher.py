@@ -182,6 +182,16 @@ async def _get_episodic_wrapper(user_id: str, topic: str = "", *, char_id: str) 
     return format_for_prompt(memories, char_name=get_char_name(char_id)) if memories else "暂无相关记忆"
 
 
+from core.tools.memory_dossiers import (
+    get_memory_consolidation_status as _get_memory_consolidation_status_wrapper,
+    read_memory_dossier as _read_memory_dossier_wrapper,
+    request_memory_consolidation as _request_memory_consolidation_wrapper,
+    search_dossier_events as _search_dossier_events_wrapper,
+    search_memory_dossiers as _search_memory_dossiers_wrapper,
+    update_memory_dossier as _update_memory_dossier_wrapper,
+)
+
+
 async def _revise_memory_wrapper(user_id: str, episode_id: str, correction: str, *, char_id: str) -> str:
     from core.memory.episodic_memory import revise_episode
     correction_id = revise_episode(user_id, episode_id, correction, char_id=char_id)
@@ -246,6 +256,8 @@ _MODE_RESTRICTED_CATEGORIES: frozenset[str] = frozenset({"desktop", "system", "p
 _SCOPED_MEMORY_READ_TOOLS: frozenset[str] = frozenset({
     "get_profile", "get_episodic", "search_events", "expand_event_window", "get_related_events",
     "search_documents", "read_document", "search_character_notes",
+    "search_memory_dossiers", "read_memory_dossier", "search_dossier_events",
+    "get_memory_consolidation_status",
 })
 
 
@@ -1263,6 +1275,82 @@ _TOOL_REGISTRY["get_episodic"] = {
         "required": [],
     },
     "trace_args": ["topic"],
+}
+
+_TOOL_REGISTRY["search_memory_dossiers"] = {
+    "func": _search_memory_dossiers_wrapper,
+    "description": "按主题检索当前角色维护的记忆档案。需要核对当前理解或找到 dossier_id 时调用；最多返回三本。",
+    "dangerous": False, "category": "memory", "echo_event_log": False,
+    "examples": ["查一下我们关于饮食的记忆档案", "你现在怎么理解我最近的偏好"],
+    "keywords": ["记忆档案", "当前理解", "偏好变化", "主题记忆"],
+    "trace_args": ["query"],
+    "parameters": {"type": "object", "properties": {
+        "query": {"type": "string", "description": "主题或关键词。"},
+        "limit": {"type": "integer", "minimum": 1, "maximum": 3},
+    }, "required": ["query"]},
+}
+
+_TOOL_REGISTRY["read_memory_dossier"] = {
+    "func": _read_memory_dossier_wrapper,
+    "description": "读取检索结果中的一本记忆档案及当前理解、经历成员和关系；只使用真实返回的 dossier_id。",
+    "dangerous": False, "category": "memory", "echo_event_log": False,
+    "examples": ["读取刚才找到的记忆档案详情"],
+    "keywords": ["档案详情", "读取档案", "当前理解详情"],
+    "trace_args": ["dossier_id"],
+    "parameters": {"type": "object", "properties": {
+        "dossier_id": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
+    }, "required": ["dossier_id"]},
+}
+
+_TOOL_REGISTRY["search_dossier_events"] = {
+    "func": _search_dossier_events_wrapper,
+    "description": "分页读取一本档案关联的经历与证据引用。需要细查事件链时才调用，单页有硬上限。",
+    "dangerous": False, "category": "memory", "echo_event_log": False,
+    "examples": ["看看这本档案里具体有哪些经历", "继续读下一页档案事件"],
+    "keywords": ["档案事件", "具体经历", "证据引用", "下一页"],
+    "trace_args": ["dossier_id", "offset"],
+    "parameters": {"type": "object", "properties": {
+        "dossier_id": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
+        "offset": {"type": "integer", "minimum": 0},
+        "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+    }, "required": ["dossier_id"]},
+}
+
+_TOOL_REGISTRY["update_memory_dossier"] = {
+    "func": _update_memory_dossier_wrapper,
+    "description": "以受限结构化操作创建或修订当前角色的派生记忆档案。必须携带新的 operation_id 和当前 revision；不能修改原始证据、文件或 SQL。",
+    "dangerous": False, "category": "memory", "effect": "write", "echo_event_log": False,
+    "examples": ["把我刚才的明确纠正写进相关档案", "撤回你自己的错误概括"],
+    "keywords": ["更正记忆档案", "修订理解", "撤回概括", "合并主题"],
+    "trace_args": ["operation_id"],
+    "parameters": {"type": "object", "properties": {
+        "operation_id": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
+        "operations": {"type": "array", "minItems": 1, "maxItems": 100,
+                       "items": {"type": "object"}},
+    }, "required": ["operation_id", "operations"]},
+}
+
+_TOOL_REGISTRY["get_memory_consolidation_status"] = {
+    "func": _get_memory_consolidation_status_wrapper,
+    "description": "读取当前角色记忆档案与整理积压的元数据状态，不返回正文。",
+    "dangerous": False, "category": "memory", "echo_event_log": False,
+    "examples": ["记忆整理到哪里了", "还有多少记忆待整理"],
+    "keywords": ["记忆整理状态", "整理进度", "记忆积压"],
+    "trace_args": [],
+    "parameters": {"type": "object", "properties": {}, "required": []},
+}
+
+_TOOL_REGISTRY["request_memory_consolidation"] = {
+    "func": _request_memory_consolidation_wrapper,
+    "description": "请求耐久的增量或全历史记忆整理，立即返回 task_id，不在聊天请求内扫描或等待。",
+    "dangerous": False, "category": "memory", "effect": "write", "echo_event_log": False,
+    "examples": ["后台整理一下新记忆", "开始分批整理全部历史记忆"],
+    "keywords": ["后台整理记忆", "全历史整理", "分批整理", "记忆任务"],
+    "trace_args": ["request_id", "scope_mode"],
+    "parameters": {"type": "object", "properties": {
+        "request_id": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
+        "scope_mode": {"type": "string", "enum": ["incremental", "full_history"]},
+    }, "required": ["request_id"]},
 }
 
 _TOOL_REGISTRY["search_documents"] = {
@@ -2538,7 +2626,7 @@ async def _execute_structured_impl(
         except Exception as _at_err:
             logger.debug("[tool_dispatcher] action_trace record error: %s", _at_err)
 
-    if tool_name in {"search_events", "expand_event_window", "get_related_events", "read_life_records", "reread_image", "write_artifact", "read_artifact", "list_artifacts"} and is_group:
+    if tool_name in {"search_events", "expand_event_window", "get_related_events", "search_memory_dossiers", "read_memory_dossier", "search_dossier_events", "update_memory_dossier", "get_memory_consolidation_status", "request_memory_consolidation", "read_life_records", "reread_image", "write_artifact", "read_artifact", "list_artifacts"} and is_group:
         _trace("failed", "reality_event_tools_forbidden_in_group")
         return _execution_outcome("tool_failed")
 
@@ -2698,6 +2786,9 @@ async def _execute_structured_impl(
             _require_memory_read_scope(user_id, char_id)
             result = await func(user_id=user_id, char_id=char_id, **tool_args)
         elif tool_name in _SCOPED_MEMORY_READ_TOOLS:
+            _require_memory_read_scope(user_id, char_id)
+            result = await func(user_id=user_id, char_id=char_id, **tool_args)
+        elif tool_name in {"update_memory_dossier", "request_memory_consolidation"}:
             _require_memory_read_scope(user_id, char_id)
             result = await func(user_id=user_id, char_id=char_id, **tool_args)
         elif tool_name in ("read_diary", "search_diary"):

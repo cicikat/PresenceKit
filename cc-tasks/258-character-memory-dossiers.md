@@ -63,13 +63,13 @@
 
 拟议工具：search_memory_dossiers、read_memory_dossier、search_dossier_events、update_memory_dossier（受限结构化操作）、get_memory_consolidation_status。最终命名在注册时统一；不是任意 SQL、文件写入或 shell。
 
-- [ ] C1 工具注册、examples/keywords、function-calling discovery、origin 与 scope 全链接通；主聊天链可读可修订，耗时全历史整理返回任务引用，不同步扫描等待。
-- [ ] C2 召回仅给相关档案的短理解、覆盖时间、冲突/新变化及详情入口；默认最多 3 本、合计 1200 中文字符（待评估可调，有硬上限），详细事件只按需有界分页读取。
-- [ ] C3 以源 ingest sequence / revision watermark 追踪增量，不能只用 occurred_at（补录和迟到事件也须识别）；当前未落账输入/感知仍能参与本轮接续但不得伪造 event ID。
-- [ ] C4 旧理解 + 未整理的相关新证据并列呈现。显式更正/撤回立即抑制冲突结论，不等待夜间模型；保留观察、用户声明和模型推测差异。
-- [ ] C5 主链和后台同时改同一档案时 CAS 冲突，后台重新读取并重算，不覆盖用户刚刚纠正的版本。新源/政策 revision 在提交时复核。
-- [ ] C6 新 prompt 层包含 _layer、裁剪/消融、来源隔离；function calling 不可用时提供有界摘要和未细查状态，不虚称已经核对详情；避免旧新重复注入。
-- [ ] C7 验收多次提及一次购买、买前计划取消、偏好变化、实时否定、迟到资料、工具未调用/失败、错主题命中与漏召回；独立提交。
+- [x] C1 工具注册、examples/keywords、function-calling discovery、origin 与 scope 全链接通；主聊天链可读可修订，耗时全历史整理返回任务引用，不同步扫描等待。
+- [x] C2 召回仅给相关档案的短理解、覆盖时间、冲突/新变化及详情入口；默认最多 3 本、合计 1200 中文字符（待评估可调，有硬上限），详细事件只按需有界分页读取。
+- [x] C3 以源 ingest sequence / revision watermark 追踪增量，不能只用 occurred_at（补录和迟到事件也须识别）；当前未落账输入/感知仍能参与本轮接续但不得伪造 event ID。
+- [x] C4 旧理解 + 未整理的相关新证据并列呈现。显式更正/撤回立即抑制冲突结论，不等待夜间模型；保留观察、用户声明和模型推测差异。
+- [x] C5 主链和后台同时改同一档案时 CAS 冲突，后台重新读取并重算，不覆盖用户刚刚纠正的版本。新源/政策 revision 在提交时复核。
+- [x] C6 新 prompt 层包含 _layer、裁剪/消融、来源隔离；function calling 不可用时提供有界摘要和未细查状态，不虚称已经核对详情；避免旧新重复注入。
+- [x] C7 验收多次提及一次购买、买前计划取消、偏好变化、实时否定、迟到资料、工具未调用/失败、错主题命中与漏召回；独立提交。
 
 ## D — 同角色静默后台整理
 
@@ -114,4 +114,5 @@
 |---|---|---|---|
 | A | 待本次提交 | 文档链接/diff/换行检查 | 合同冻结；未启用、未迁移、首夜未运行 |
 | B | 待本次提交 | `pytest tests/test_memory_dossiers.py tests/test_memory_event_store.py -q`（18 passed） | 派生库实现；未接 prompt/工具/调度，未迁移 |
-| C–G | 未施工 | 未执行 | 未启用、未迁移、首夜未运行 |
+| C | 待本次提交 | 相关 pytest 29 passed；`python tests/run_eval.py` 20/20 | 实时工具/召回已接线；后台未运行、未迁移 |
+| D–G | 未施工 | 未执行 | 后台未启用、未迁移、首夜未运行 |

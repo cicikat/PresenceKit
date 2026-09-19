@@ -416,6 +416,7 @@ def build(
     diary_context: str = "",
     episodic_result: str = "",
     episodic_fallback_result: str = "",
+    memory_dossier_context: str = "",
     mid_term_context: str = "",
     tags: set[str] | None = None,
     dream_impression_text: str = "",
@@ -1024,6 +1025,20 @@ def build(
                 "mode": "scored",
                 "rag_query": user_message[:200],
             },
+        })
+
+    if memory_dossier_context:
+        messages.append({
+            "role": "system",
+            "content": (
+                "<主题记忆档案>\n【当前有效理解】\n"
+                f"{memory_dossier_context}\n"
+                "其中标为未整理的新证据只能与旧理解并列参考，不代表已经核对或形成新结论。"
+                "需要具体事件时使用档案工具有界细查。\n</主题记忆档案>"
+            ),
+            "_layer": "6b_memory_dossiers",
+            "_drop_priority": 65,
+            "_provenance": {"mode": "derived_with_live_delta", "rag_query": user_message[:200]},
         })
 
     # 层 6c：情景记忆（角色视角的情节片段）
@@ -1890,6 +1905,7 @@ KNOWN_LAYERS: list[tuple[str, str]] = [
     ("6a_user_identity", "用户稳定行为模式"),
     ("6a_user_identity_coldstart", "identity 冷启动期轻量提示（还在慢慢认识你，不编造记忆）"),
     ("6b_event_search", "相关往事（event_log 语义搜索）"),
+    ("6b_memory_dossiers", "角色主题记忆档案（当前理解 + 未整理新证据）"),
     ("6c_episodic", "情景记忆片段（含 fallback，两者共用此层名）"),
     ("mid_term", "过去 12 小时事件压缩视图"),
     ("6d_diary_context", "用户近期日记（tagged）"),
