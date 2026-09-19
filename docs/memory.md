@@ -12,9 +12,10 @@ remains gated by Brief 259 A-C and the separately authorized Brief 258 F rollout
 
 Brief 259 now has a redacted inventory, resumable manifest state, verified
 offline-backup gate, recovery-drill helper, and an admin-only bounded event-log
-apply endpoint. These are preparation capabilities, not historical semantic
-reconciliation: mid-term/episodic/storyline/identity remain deferred, and no
-production first-night apply has run.
+apply endpoint. The apply path can admit one same-scope dossier pass using the
+configured cheap `便宜小模型grok-see` preset; mid-term/episodic/storyline/
+identity source adapters remain deferred, and no production first-night apply
+has run.
 
 ## 资料接续回执（2026-09-13）
 

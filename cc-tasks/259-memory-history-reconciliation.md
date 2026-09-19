@@ -104,9 +104,11 @@
 ## Current blockers
 
 The current apply adapter is bounded to the existing event-log migration
-adapter. It does not yet perform model-assisted dossier classification for
-mid-term, episodic, storyline, or identity sources, nor does it provide a
-production-frozen first-night manifest and morning closeout report. Production
+adapter. After a successful import, the admin apply path can admit one
+same-scope 258 dossier pass using the configured cheap
+`便宜小模型grok-see` preset; it still does not perform source-specific
+classification for mid-term, episodic, storyline, or identity. It also does
+not yet provide a production-frozen first-night manifest and morning closeout report. Production
 enablement therefore remains blocked on semantic calibration, a real verified
 offline snapshot and recovery acceptance, scope/budget freeze, and explicit
 operator authorization.

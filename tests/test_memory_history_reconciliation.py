@@ -153,3 +153,24 @@ def test_apply_batch_commits_the_corresponding_ledger_item(sandbox, monkeypatch)
 
     assert result["status"] == "committed"
     assert history_reconciliation.status(scope)["counts"]["committed"] >= 1
+
+
+def test_imported_event_consolidation_pins_scope_and_bulk_preset(monkeypatch):
+    from core.memory import history_reconciliation
+    from core.memory.scope import MemoryScope
+
+    seen = {}
+
+    async def fake_tick(*, only_principal, preset_override, **kwargs):
+        seen.update(principal=only_principal, preset=preset_override)
+        return {"status": "disabled", "model_calls": 0}
+
+    monkeypatch.setattr("core.memory.consolidation_worker.tick", fake_tick)
+    scope = MemoryScope.reality_scope("history-owner", TEST_CHAR_ID)
+    import asyncio
+    result = asyncio.run(history_reconciliation.consolidate_imported_events(scope))
+
+    assert result["status"] == "disabled"
+    assert seen["principal"].uid == scope.uid
+    assert seen["principal"].char_id == scope.character_id
+    assert seen["preset"] == "便宜小模型grok-see"

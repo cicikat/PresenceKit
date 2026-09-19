@@ -743,7 +743,9 @@ requires a server-side verified offline snapshot path and a bounded batch size.
 The apply path is default-off at the operational level and is not a production
 rollout switch.
 
-The current adapter only applies the existing event-log migration in bounded
-batches. Other historical stores remain deferred. No production snapshot,
-semantic calibration, first-night manifest, or morning closeout has been
-performed.
+The current adapter applies the existing event-log migration in bounded
+batches. When `consolidate=true` (the admin apply default), it then admits one
+same-scope dossier pass through the existing `memory.consolidation` capability,
+pinned to the configured cheap `便宜小模型grok-see` preset. Other historical
+stores remain deferred. No production snapshot, semantic calibration,
+first-night manifest, or morning closeout has been performed.

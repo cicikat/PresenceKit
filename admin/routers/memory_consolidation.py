@@ -148,10 +148,16 @@ async def control_memory_history_reconciliation(
         batch_size = int(body.get("batch_size") or 10)
         if not 1 <= batch_size <= 100:
             raise HTTPException(status_code=422, detail={"code": "invalid_batch_size"})
-        return history_reconciliation.apply_batch(
+        result = history_reconciliation.apply_batch(
             scope, backup={"verified": True, "backup_path": backup_path},
             batch_size=batch_size, dry_run=False,
         )
+        # Historical event import and dossier understanding are separate
+        # receipts. The latter is opt-in through the existing consolidation
+        # capability and uses the configured cheap bulk preset.
+        if bool(body.get("consolidate", True)) and result.get("status") in {"committed", "completed"}:
+            result["dossier_pass"] = await history_reconciliation.consolidate_imported_events(scope)
+        return result
     return history_reconciliation.set_paused(scope, action == "pause", reason=str(body.get("reason") or "admin"))
 
 

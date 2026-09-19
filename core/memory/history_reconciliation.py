@@ -217,6 +217,23 @@ def verify_backup_snapshot(snapshot: Path) -> dict[str, Any]:
     return {"verified": bool(result.get("ok")), "errors": result.get("errors", [])}
 
 
+async def consolidate_imported_events(scope: MemoryScope, *, preset: str = "便宜小模型grok-see") -> dict[str, Any]:
+    """Run one bounded dossier pass for this imported scope.
+
+    The existing consolidation capability owns model calls, grants, budgets,
+    foreground yielding, and atomic dossier commits. This wrapper only pins
+    the scope and the requested cheap bulk preset; it never enables the global
+    scheduler or sends a conversation message.
+    """
+    from core.agent_runtime.models import TaskPrincipal
+    from core.memory import consolidation_worker
+
+    return await consolidation_worker.tick(
+        only_principal=TaskPrincipal.reality(scope.uid, scope.character_id),
+        preset_override=preset,
+    )
+
+
 def status(scope: MemoryScope) -> dict[str, Any]:
     state = read_state(scope); items = state.get("items") or {}
     counts = {name: sum(1 for item in items.values() if item.get("status") == name) for name in STATES}

@@ -376,9 +376,12 @@ def _reconcile_unknown(principal: TaskPrincipal) -> None:
         )
 
 
-async def tick(*, now: datetime | None = None) -> dict[str, Any]:
+async def tick(*, now: datetime | None = None, only_principal: TaskPrincipal | None = None,
+               preset_override: str | None = None) -> dict[str, Any]:
     """Admit at most one fair scope and one model call per scheduler tick."""
     cfg = config()
+    if preset_override:
+        cfg["background_preset"] = str(preset_override)[:128]
     if not cfg["enabled"]: return {"status": "disabled", "model_calls": 0}
     if cfg["paused"]: return {"status": "paused", "model_calls": 0}
     if not _night_window(cfg, now): return {"status": "outside_window", "model_calls": 0}
@@ -386,7 +389,7 @@ async def tick(*, now: datetime | None = None) -> dict[str, Any]:
     if not _global_budget_allows(cfg): return {"status": "budget_exhausted", "model_calls": 0}
     if _GLOBAL_SEMAPHORE.locked(): return {"status": "busy", "model_calls": 0}
     from core.agent_runtime import task_manager
-    principals = _discover_scopes()
+    principals = [only_principal] if only_principal is not None else _discover_scopes()
     if not principals: return {"status": "no_scope", "model_calls": 0}
     with _state_lock:
         state = _state(); cursor = int(state.get("round_robin_cursor") or 0) % len(principals)
