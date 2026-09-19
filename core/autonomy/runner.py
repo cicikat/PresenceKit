@@ -194,6 +194,13 @@ def _context_messages(
     hardware_message = _hardware_job_message(now=now)
     if hardware_message is not None:
         messages.append(hardware_message)
+    try:
+        from core.character_self import format_agent_md_layer, load_agent_md_snapshot
+        agent_md_msg = format_agent_md_layer(load_agent_md_snapshot(uid, char_id))
+        if agent_md_msg is not None:
+            messages.append(agent_md_msg)
+    except Exception as exc:
+        logger.debug("[autonomy] self-authored AGENT.md snapshot failed: %s", exc)
     return messages
 
 

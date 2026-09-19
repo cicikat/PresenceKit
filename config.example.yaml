@@ -540,6 +540,7 @@ self_access:
   max_list_entries: 100
   max_list_depth: 2
   max_read_chars: 12000
+  agent_md_chars: 2000            # self/AGENT.md 注入预算，硬上限 4000
 
 # 受控 workspace 文件能力（Brief 233）：显式根目录与分操作权限，默认关闭。
 workspace_access:
@@ -761,9 +762,9 @@ error:
   retry_delay_seconds: 2
   fallback_message: 我现在有点累，等会儿再聊～
 toy_autogrow:
-  enabled: false           # true=他每轮判断后自主写入思考笔记；false=退回纯手动玩具
+  enabled: false           # true=每轮判断后自主 append 到 self 映射文件；false=角色停用该习惯
   min_interval_hours: 6   # 同一角色/用户最短写入间隔（小时）
-  target: diary            # 写入目标文件键：diary=思考笔记，wishlist=愿望清单，doodle=涂鸦板
+  target: diary            # 兼容 file_key：diary/wishlist/doodle，写入走统一 self writer，不裁头
 
 web_autosearch:
   enabled: false           # true=他可在author_note提示下自主调用web_search；false=纯反应式（用户明确要求才搜）

@@ -10,8 +10,9 @@
 |---|---|
 | current | Brief 230 Reality Task Manager (`runtime/agent_runtime/reality`); Brief 231 registered trigger adapters; Brief 232 same-character work sessions; Brief 233 workspace capability with `causation_ref.kind=tool_request`; Brief 234 local process runner; Brief 239 browser confirmation hardening |
 | current (256 B) | `fs_list`/`fs_read` backend vs external split, unified sensitive-redaction, `GET /observability/backend-read`. |
-| current (256 C) | Character self space `self_list/read/create/update/move/delete/restore`, `GET /observability/character-self`. Reminders and Agent task remain later tickets. |
-| proposed (256 D–G, not current) | self-authored AGENT.md + old-note migration, reminder lifecycle tools, and a bounded coding worker launched from chat/autonomy. Contract: [character-files-and-agent-autonomy.md](character-files-and-agent-autonomy.md). |
+| current (256 C) | Character self space `self_list/read/create/update/move/delete/restore`, `GET /observability/character-self`. |
+| current (256 D) | self-authored `AGENT.md` prompt layer, thin toy `file_key` mapping onto self notes, frozen shared-archive migration. Reminders and Agent task remain later tickets. |
+| proposed (256 E–G, not current) | reminder lifecycle tools and a bounded coding worker launched from chat/autonomy. Contract: [character-files-and-agent-autonomy.md](character-files-and-agent-autonomy.md). |
 | roadmap | Briefs 235-237 remaining gated capabilities, coverage proof, and old-path removal together with guards/tests/docs; Dream-side Task Runtime with its own root; `letter_writer` Task/副链 artifact migration; visible completion notification via a fresh Reality `EventContext` |
 | non-goal | universal EventBus, `kind=task/tool/activity` dispatcher, or a second acting subject |
 

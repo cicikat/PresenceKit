@@ -1,9 +1,9 @@
 """
-toy_autogrow.py — 角色自主写入思考笔记（沙盒自生长雏形）
+toy_autogrow.py — 角色自主写入思考笔记（self writer 调用方）
 
 慢队列 handler：每轮回复后用轻量 LLM 判断是否值得记录一句话，
-命中则 rollover append 到目标玩具文件。
-直接操作文件，绕开探针与 desktop 模式限制（自主写入是系统行为）。
+命中则 append 到映射后的 self 文件。不静默裁头，不写旧共享目录。
+角色可通过 config.toy_autogrow.enabled=false 停用该习惯。
 """
 
 import json
@@ -56,39 +56,19 @@ def _mark_written(char_id: str, uid: str) -> None:
     _save_state(state)
 
 
-def _rollover_append(file_key: str, note: str) -> None:
-    """Append note to the toy file; roll over (trim from head) if it would exceed the char cap."""
-    from core.tools.toybox import _TOYBOX_FILES, _TOY_FILE_CHAR_CAP, _assert_within
+def _append_note(file_key: str, note: str, *, uid: str, char_id: str) -> dict:
+    """Append via the unified self writer. Never trims existing content."""
+    from core.tools.toybox import mapped_self_path
+    from core.character_self import append_self_text
 
-    if file_key not in _TOYBOX_FILES:
-        raise ValueError(f"未知玩具文件键: {file_key}")
-
-    root = get_paths().very_formal_project_dir()
-    target = root / _TOYBOX_FILES[file_key]
-    _assert_within(root, target)
-    target.parent.mkdir(parents=True, exist_ok=True)
-
-    existing = ""
-    if target.exists() and target.is_file():
-        try:
-            existing = target.read_text(encoding="utf-8")
-        except UnicodeDecodeError:
-            existing = ""
-
-    sep = "" if (not existing or existing.endswith("\n")) else "\n"
-    combined = existing + sep + note
-
-    if len(combined) > _TOY_FILE_CHAR_CAP:
-        # Trim from head, align to next line boundary to avoid mid-line cuts
-        overflow = len(combined) - _TOY_FILE_CHAR_CAP
-        cut = combined[overflow:]
-        nl = cut.find("\n")
-        if 0 <= nl < len(cut) - 1:
-            cut = cut[nl + 1:]
-        combined = cut
-
-    if not safe_write_text(target, combined):
-        raise OSError("玩具文件自主写入失败")
+    path = mapped_self_path(file_key)
+    return append_self_text(
+        path,
+        note if note.endswith("\n") else note + "\n",
+        user_id=uid,
+        char_id=char_id,
+        origin="post_process",
+    )
 
 
 async def _judge_turn(user_content: str, reply: str, char_name: str) -> str:
@@ -108,8 +88,6 @@ async def _judge_turn(user_content: str, reply: str, char_name: str) -> str:
         "只输出日记正文或 SKIP，不要解释。"
     )
     try:
-        # This is a low-frequency personal note, so use the chat/persona route
-        # instead of the terse summary route that naturally produces minutes.
         mc = get_model_client("chat")
         from core.llm_protocol import create as create_protocol_response
         response = await create_protocol_response(
@@ -129,7 +107,7 @@ async def _judge_turn(user_content: str, reply: str, char_name: str) -> str:
 
 
 async def handler_toy_autogrow(payload: dict) -> None:
-    """慢队列 handler：判断并自主写入玩具文件。"""
+    """慢队列 handler：判断并自主写入映射后的 self 文件。"""
     from core.config_loader import get_config
 
     cfg = get_config()
@@ -152,8 +130,8 @@ async def handler_toy_autogrow(payload: dict) -> None:
         return
 
     try:
-        from core.character_loader import get_active_char_name
-        char_name = get_active_char_name()
+        from core.character_name_provider import get_char_name
+        char_name = get_char_name(char_id)
     except Exception:
         char_name = char_id
 
@@ -166,6 +144,12 @@ async def handler_toy_autogrow(payload: dict) -> None:
     ts = datetime.datetime.now().strftime("%m-%d %H:%M")
     line = f"[{ts}] {note}"
 
-    _rollover_append(file_key, line)
+    result = _append_note(file_key, line, uid=uid, char_id=char_id)
+    if not result.get("ok"):
+        logger.warning(
+            "[toy_autogrow] self writer 拒绝 uid=%s char=%s code=%s",
+            uid, char_id, result.get("code"),
+        )
+        return
     _mark_written(char_id, uid)
     logger.info("[toy_autogrow] 自主写入成功 uid=%s char=%s: %s", uid, char_id, line[:60])

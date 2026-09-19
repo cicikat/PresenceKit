@@ -17,6 +17,7 @@ _SANDBOXED_WRITE_TOOLS = frozenset({
     "self_move",
     "self_delete",
     "self_restore",
+    "write_toy_file",
 })
 
 DECISION_SOURCE_ALLOWLIST = "autonomy_allowlist"

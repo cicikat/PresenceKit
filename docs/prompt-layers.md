@@ -51,7 +51,7 @@ Reality `1_system_prompt` 绑定当前角色，并使用用户所选称谓（默
 | `5_profile_pref` | 用户偏好/习惯类事实（pref.*/habit/health tag） | recency/tag 命中；最多 6 条且总长度 ≤360 字符 | `user_profile.select_for_prompt()` |
 | `5.1_user_facts` | 跨角色全局用户事实（uid-only，与角色主观记忆无关，标题明确区分不是角色记忆） | `user_facts_text` 非空 | `core/memory/user_facts.py` → `format_for_prompt()` |
 | `5.2_reminders` | 待办备忘录列表 | 有待办即注 | `get_reminders()`（legacy JSON；256 E 拟议改读 Runtime scheduler 安全投影） |
-| `6i_self_agent_md`（拟议） | 角色自己写的 `self/AGENT.md` 工作习惯 | 文件非空且未损坏；聊天/主动/副链复用同一 scoped 快照 | 256 D；self-authored，低于系统安全/权限和用户指令；进入模型前脱敏；本轮冻结，修改下一轮生效。未落地，无 `_layer` |
+| `6i_self_agent_md` | 角色自己写的 `self/AGENT.md` 工作习惯 | 文件非空且未损坏；聊天/主动/副链复用同一 scoped 快照 | 256 D current；self-authored，低于系统安全/权限和用户指令；进入模型前脱敏；本轮冻结，修改下一轮生效；`_drop_priority=75` |
 | `5.5_lore` | 世界书条目 | LoreEngine 命中时 | `lore_engine.match()` |
 | `6a_user_identity` | 用户稳定行为模式 | `user_identity_text` 非空 | `core/memory/user_identity.py`，confidence >= 0.5 的维度 |
 | `6a_user_identity_coldstart` | identity 冷启动期轻量提示："还在慢慢认识你"，不描述具体事实，与 `6a_user_identity` 互斥 | `user_identity_text` 为空 且 `identity_coldstart=True`（已有真实交互历史，复用 `core/scheduler/rhythm.has_real_interaction_history()` 同一冷启动阈值） | `core/pipeline.py::fetch_context()` 计算 → `prompt_builder.build(identity_coldstart=)`；观测端点见 `admin/routers/memory.py` → `/memory/fixation/identity-coldstart-summary`（Brief 104 §3，对应 `docs/known-issues.md` identity-2） |
@@ -398,6 +398,7 @@ token_estimate = sum(len(m["content"]) for m in messages)
 | 60 | `6e_inner_diary` | 角色昨天日记（事件层 + 感受层，同 priority 整批丢；prompt 投影把文件里的今日标题改成昨日） |
 | 65 | `6h_storyline` | 叙事弧回忆，tag 门控命中时最多注入一条，质量高于中期压缩、低于精筛情景记忆 |
 | 70 | `6c_episodic` | LLM 压缩 + MMR 筛选的情景记忆，高质量，靠后丢 |
+| 75 | `6i_self_agent_md` | 角色自写 AGENT.md 工作习惯；低于系统安全与用户指令，晚于情景记忆、早于世界书丢 |
 | 80 | `5.5_lore` | 世界书设定，最后丢 |
 | 85 | `coplay_context` | 陪玩模式游戏进度/动态 + 剧透压制约束，内容很小，比 lore 更晚丢 |
 

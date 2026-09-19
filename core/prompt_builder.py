@@ -437,6 +437,7 @@ def build(
     required_tool_names: list[str] | set[str] | tuple[str, ...] = (),
     hardware_jobs_text: str = "",
     continuity_messages: list[dict] | None = None,
+    self_agent_md_snapshot: dict | None = None,
 ) -> tuple[list[dict], dict]:
     """
     组装完整的 prompt 消息列表
@@ -945,6 +946,26 @@ def build(
             "role": "system",
             "content": "<待办备忘>\n【待办备忘录】\n" + "\n".join(reminder_lines) + "\n</待办备忘>",
             "_layer": "5.2_reminders",
+        })
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # 层 6i：self-authored AGENT.md（角色自己写的工作习惯，不是仓库 AGENTS.md）
+    # 低于系统安全/权限和用户指令。本轮冻结快照；修改从下一轮生效。
+    # 文件内引用不递归加载。空/缺失不注入；损坏可观测降级且不进正文。
+    # ─────────────────────────────────────────────────────────────────────────
+    from core.character_self import format_agent_md_layer as _format_agent_md_layer
+    _agent_md_msg = _format_agent_md_layer(self_agent_md_snapshot)
+    if _agent_md_msg is not None:
+        messages.append({
+            "role": _agent_md_msg.get("role") or "system",
+            "content": _agent_md_msg.get("content") or "",
+            "_layer": "6i_self_agent_md",
+            "_drop_priority": 75,
+            "_budget_chars": _agent_md_msg.get("_budget_chars"),
+            "_provenance": _agent_md_msg.get("_provenance") or {
+                "source": "character_self_agent_md",
+                "self_authored": True,
+            },
         })
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -1864,6 +1885,7 @@ KNOWN_LAYERS: list[tuple[str, str]] = [
     ("5_profile_pref", "用户偏好/习惯类事实"),
     ("5.1_user_facts", "跨角色全局用户事实"),
     ("5.2_reminders", "待办备忘录"),
+    ("6i_self_agent_md", "角色自己写的 self/AGENT.md 工作习惯（self-authored，低于系统安全与用户指令）"),
     ("5.5_lore", "世界书条目"),
     ("6a_user_identity", "用户稳定行为模式"),
     ("6a_user_identity_coldstart", "identity 冷启动期轻量提示（还在慢慢认识你，不编造记忆）"),

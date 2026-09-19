@@ -218,11 +218,11 @@ Dream domain 独立落在 `data/runtime/dreams/{char_id}/`，不进入 reality m
   fail-open，最近 7 天；只读查询见 `GET /observability/api-calls`）
 - 支出账本：`data/runtime/spend/ledger.jsonl`，`GET /spend/ledger` / `GET /spend/budget` / `POST /spend/check`（admin）。预留 `GET /spend/mandates` 读面已删；confirm/reject writer、购买执行器和商家 adapter 仍不存在（Brief 63/64/226）。历史 `mandates.jsonl` 若存在不由代码清掉。
 - Agent Runtime Reality 根：`data/runtime/agent_runtime/reality/`（tasks / work_sessions / workspace_versions / browser_profiles）
-- 共享 toy 目录（current）：`data/very_formal_project/`，`very_formal_project_dir()` 无 `char_id`
-- 角色 self 空间（256 C current）：`data/runtime/self/{char_id}/{uid}/` 用户内容与
+- 共享 toy 目录（冻结历史档案）：`data/very_formal_project/`，`very_formal_project_dir()` 无 `char_id`；活写走 character_self。归属 freeze：`legacy_toy_owner_record()`；迁移报告：`legacy_toy_migration_report()`；源文件保留 90 天
+- 角色 self 空间（256 D current）：`data/runtime/self/{char_id}/{uid}/` 用户内容与
   `data/runtime/self_meta/{char_id}/{uid}/` 系统 revision/trash/audit 分库；
   accessor `character_self_root` / `character_self_meta_root` / `character_self_audit`；
-  见 [character-files-and-agent-autonomy.md](character-files-and-agent-autonomy.md)
+  `self/AGENT.md` 为角色自写工作习惯；见 [character-files-and-agent-autonomy.md](character-files-and-agent-autonomy.md)
 - forensic 日志与 DLQ：`data/logs/`
 - 上传文件与视觉缓存：`data/inbox/`、`data/cache/image_cache/`
 

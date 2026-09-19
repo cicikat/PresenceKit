@@ -419,10 +419,13 @@ new key or legacy `enabled`. `allow_roots` are discovery hints, not the sole adm
 ordinary external files. Whole `data/` deny and substring `deny_names` are retired for fs
 reads. `GET /observability/backend-read` (`state.read`) reports configured/effective,
 blocking reasons, redaction version and counts; no file body, secret, or full path.
-Self space is C current: default grant, admin revoke, quotas in `self_access`,
-tools `self_*` in category `info`, observability `GET /observability/character-self`
-(`state.read`) with remaining quota, grant revision, file counts and recent op
-metadata; no private notes. Agent-task observation remains proposed (F–G).
+Self space is D current: default grant, admin revoke, quotas in `self_access`
+(including `agent_md_chars`, default 2000 / hard 4000), tools `self_*` plus thin
+`read_toy_file`/`write_toy_file` mapping in category `info`, observability
+`GET /observability/character-self` (`state.read`) with remaining quota, grant
+revision, file counts, AGENT.md inject status (no body), legacy toy ownership
+and recent op metadata; no private notes. `toy_autogrow.enabled` remains the
+character habit switch. Agent-task observation remains proposed (F–G).
 `workspace_access` and process/browser capabilities are unchanged except that their
 model-facing reads/outputs reuse the same redaction service.
 

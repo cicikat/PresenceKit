@@ -223,6 +223,7 @@ def test_quota_exhausted_does_not_delete_live_file(sandbox, monkeypatch):
         "max_list_entries": 100,
         "max_list_depth": 2,
         "max_read_chars": 12000,
+        "agent_md_chars": 2000,
     })
     first = _create("a.md", "12345")
     second = _create("b.md", "12345")

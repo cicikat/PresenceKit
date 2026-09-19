@@ -466,6 +466,14 @@ class DataPaths:
         """Append-only self-file operation audit; never prompt-loaded."""
         return self.character_self_meta_root(user_id, char_id=char_id) / "audit.jsonl"
 
+    def legacy_toy_owner_record(self) -> Path:
+        """Frozen historical owner of the shared very_formal_project archive."""
+        return self._p("runtime", "self_meta", "legacy_toy_owner.json")
+
+    def legacy_toy_migration_report(self) -> Path:
+        """Latest dry-run/apply report for the shared toy archive; never prompt-loaded."""
+        return self._p("runtime", "self_meta", "legacy_toy_migration_report.json")
+
     def wake_delivery_ledger(self, user_id: str | int) -> Path:
         assert_production_identity_allowed(user_id, mode=self.mode)
         return self._p("wake_delivery", f"{safe_user_id(user_id)}.json")
@@ -1165,7 +1173,7 @@ class DataPaths:
         return self._p("runtime", "hardware_jobs.json")
 
     def very_formal_project_dir(self) -> Path:
-        """data/very_formal_project/ — whitelisted toy files only."""
+        """data/very_formal_project/ — frozen historical shared toy archive."""
         return self._p("very_formal_project")
 
     # ── Stage / multi-character group session ───────────────────────────────

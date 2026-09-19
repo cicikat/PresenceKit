@@ -438,8 +438,8 @@ logical status and recent ack time.
 ## fs 只读浏览工具（Brief 31；工单 256 B current）
 
 文件：`core/tools/fs_browse.py`。`fs_list` / `fs_read` 仍是只读。写入面不是单一出口：
-toybox 枚举文件、self 通用文件、workspace 突变、chat artifacts、记忆修订、花园、硬件与
-`manage_self_capability` 都是独立写路径。per-char self 写工具属 256 C current。
+toybox 兼容入口、self 通用文件、workspace 突变、chat artifacts、记忆修订、花园、硬件与
+`manage_self_capability` 都是独立写路径。per-char self 写工具与 AGENT.md 属 256 D current。
 合同见 [character-files-and-agent-autonomy.md](character-files-and-agent-autonomy.md)。
 
 默认两条路径都不含 `fs`；需要在 `tool_exposure.path_a/path_c` 或对应角色覆盖中明确加入。
@@ -489,7 +489,7 @@ fs_access:
   effective、关闭原因、脱敏版本与计数；不含正文、秘密或完整路径。
 - **不做什么**：写入/删除/移动；`fs_search`/grep；全盘枚举；把 fs 升级为写工具。
 
-## 角色自有文件工具（工单 256 C current）
+## 角色自有文件工具（工单 256 D current）
 
 文件：`core/character_self.py`（存储）+ `core/tools/character_self.py`（注册）。
 `self_list` / `self_read` / `self_create` / `self_update` / `self_move` / `self_delete` /
@@ -508,6 +508,7 @@ self_access:
   max_list_entries: 100
   max_list_depth: 2
   max_read_chars: 12000
+  agent_md_chars: 2000            # self/AGENT.md 注入预算，硬上限 4000
 ```
 
 - **默认授予、管理员可撤**：无 `grant.json` 时 `allowed=true`；`set_grant(allowed=false)`
@@ -527,7 +528,11 @@ self_access:
 - **不受危险模式闸约束**：category `info`，不在 `_MODE_RESTRICTED_CATEGORIES`。
 - **autonomy**：写工具在 `_SANDBOXED_WRITE_TOOLS`；仍须显式 allowlist `enabled`。
 - **观测**：`GET /observability/character-self`（`state.read`）返回配额余量、grant
-  revision、文件计数、最近操作元数据；不含私有正文、秘密或绝对路径。
+  revision、文件计数、最近操作元数据、AGENT.md 注入状态（无正文）和 legacy toy
+  迁移计数；不含私有正文、秘密或绝对路径。
+- **AGENT.md**：`self/AGENT.md` 是角色自写工作习惯，不是仓库 `AGENTS.md`，也不是
+  grant 入口。聊天 / autonomy / 日记副链复用同一 scoped 快照；本轮冻结，修改下一轮
+  生效。层 `6i_self_agent_md`，预算 2000 / 硬上限 4000，`_drop_priority=75`。
 
 ---
 
@@ -566,8 +571,8 @@ self_access:
 | `toy_stop` | 用户要求立即停止设备 | Intiface Central / Buttplug v3 |
 | `toy_pattern` | 用户明确要求预设振动模式 | Intiface Central / Buttplug v3 |
 | `toy_job_status` | 查询硬件后台任务状态 | 只读硬件 job 状态 |
-| `read_toy_file` | 读取玩具项目白名单文件 | `data/very_formal_project/`，仅接受枚举 `file_key`；256 拟议迁 self |
-| `write_toy_file` | 覆盖或追加玩具项目白名单文件 | UTF-8 文本，文件总长最多 4000 字，原子写入；不是唯一写出口 |
+| `read_toy_file` | 读取旧玩具文件键映射的 self 笔记 | `notes/思考笔记.txt` 等；空文件正常返回；256 D current |
+| `write_toy_file` | 覆盖或追加映射后的 self 笔记 | UTF-8 文本，单次最多 4000 字，走统一 self writer；不双写旧目录 |
 
 ### artifacts 类（仅 Path C，不进 Path A 探针）
 
@@ -604,25 +609,22 @@ worker 在到期、异常、断线、显式取消和进程关闭时尝试停止�
 管理端 `GET /hardware/jobs`、`GET /hardware/jobs/{job_id}` 提供只读观测，
 `POST /hardware/jobs/{job_id}/stop`（另有 `/cancel` 兼容别名）执行显式停止，均需 `hardware` scope。
 
-`read_toy_file` / `write_toy_file` 只操作 `get_paths().very_formal_project_dir()` 下的
-`diary`（思考笔记）、`wishlist`（愿望清单）、`doodle`（涂鸦板）。该 accessor 不接收
-`char_id`，目录是共享位置。LLM 不接触路径；
-后端会再次校验解析后的目标和临时文件均未越过玩具箱目录，并拒绝目录或文件软链穿越。
-dispatcher 在有 `uid+char_id` 时会把写入镜像进 character library，这不是 self 桶。
-256 C 已落地 per-char self 通用文件工具；旧 toybox writer 仍 current，D 单才迁移并冻结。
-未迁移前禁止把共享目录复制给每个角色。
+`read_toy_file` / `write_toy_file` 是旧 `file_key` 到 self 文件的薄兼容入口
+（`diary`→`notes/思考笔记.txt`，`wishlist`→`notes/愿望清单.md`，`doodle`→`notes/涂鸦板.txt`）。
+写入走统一 self writer，需要冻结的 `uid+char_id`；不再写
+`very_formal_project/`，也不镜像 character library。category 为 `info`，不经 danger 闸。
+旧共享目录冻结为历史档案，只能按可验证历史归属导入单一角色。
 
 #### toy 自主写入（autogrow）— 系统行为，不走探针
 
-`core/post_process/toy_autogrow.py` 实现「叶瑄自生长」路径：
+`core/post_process/toy_autogrow.py` 实现角色自生长笔记路径：
 
 - **触发**：每轮 `post_process` 在 uid_lock 释放后入慢队列（`toy_autogrow` 任务）。
 - **判断**：慢队列 handler 用人格 chat 路由（max_tokens=80，temperature=0.9）判断本轮是否值得记录。返回 `SKIP` 或 1～3 句第一人称随手日记，不写事件摘要。
-- **写入**：服务端直接操作文件（`_rollover_append`），绕开 desktop 模式限制——QQ 模式和桌宠模式均可自主写入。
-- **限频**：每角色/用户 `toy_autogrow.min_interval_hours`（默认 6 小时）最多写一次。状态存 `data/very_formal_project/.autogrow_state.json`（JSON 字典，key = `{char_id}:{uid}`，value = Unix timestamp）。
-- **滚动**：文件超过 4000 字时截去头部（按行对齐），不抛错，始终保留最新内容。
-- **开关**：`config.toy_autogrow.enabled: false`（默认关）退回纯手动玩具，原 `read_toy_file`/`write_toy_file` 探针路径不受影响。
-- **目标文件**：`config.toy_autogrow.target`（默认 `diary`）。
+- **写入**：`append_self_text` 追加到映射后的 self 文件；不静默裁头，不写旧共享目录。
+- **限频**：每角色/用户 `toy_autogrow.min_interval_hours`（默认 6 小时）最多写一次。冷却状态仍存档案 `data/very_formal_project/.autogrow_state.json`（JSON 字典，key = `{char_id}:{uid}`，value = Unix timestamp）。
+- **开关**：`config.toy_autogrow.enabled: false`（默认关）表示角色停用该习惯；`read_toy_file`/`write_toy_file` 兼容入口仍可用。
+- **目标文件**：`config.toy_autogrow.target`（默认 `diary`，映射到 `notes/思考笔记.txt`）。
 
 ### memory 类（已注册，但当前未自动接入正式对话）
 

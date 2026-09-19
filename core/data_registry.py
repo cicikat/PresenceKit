@@ -81,6 +81,8 @@ REGISTRY: dict[str, PathMeta] = {
     "character_self_root":    PathMeta("canonical", "reality",         "per_char_user", "ignore"),
     "character_self_meta_root": PathMeta("runtime", "reality",         "per_char_user", "ignore"),
     "character_self_audit":   PathMeta("forensic",  "reality",         "per_char_user", "ignore"),
+    "legacy_toy_owner_record": PathMeta("runtime", "shared",           "global",        "ignore"),
+    "legacy_toy_migration_report": PathMeta("forensic", "shared",      "global",        "ignore"),
     "wake_delivery_ledger":   PathMeta("canonical", "shared",          "per_user",      "ignore"),
     "wake_bridge_root":       PathMeta("canonical", "shared",          "global",        "ignore"),
     "wake_bridge_state":      PathMeta("canonical", "shared",          "per_char_user", "ignore"),
@@ -243,7 +245,7 @@ REGISTRY: dict[str, PathMeta] = {
     "dream_prompt_layer_ablation": PathMeta("runtime", "dream",        "global",        "ignore"),
     "hardware_jobs":          PathMeta("canonical", "shared",          "global",        "ignore"),
 
-    # ── canonical: shared toy-project files, writable only through whitelist ─
+    # Frozen historical shared toy archive; live writes go through character_self.
     "very_formal_project_dir": PathMeta("canonical", "shared",         "global",        "ignore"),
     "character_document_root": PathMeta("canonical", "character_inner", "per_char_user", "ignore"),
     "character_document_index": PathMeta("canonical", "character_inner", "per_char_user", "ignore"),

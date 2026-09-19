@@ -809,6 +809,11 @@ class Pipeline:
             _prompt_kwargs['continuity_messages'] = continuity_messages(user_id, _char_id)
         if _hardware_jobs_for_prompt:
             _prompt_kwargs["hardware_jobs_text"] = _hardware_jobs_for_prompt
+        try:
+            from core.character_self import load_agent_md_snapshot
+            _prompt_kwargs["self_agent_md_snapshot"] = load_agent_md_snapshot(user_id, _char_id)
+        except Exception:
+            _prompt_kwargs["self_agent_md_snapshot"] = None
         messages, debug_info = prompt_builder.build(**_prompt_kwargs)
         if _char_id == self._active_character_id:
             self.author_note_extra = ""

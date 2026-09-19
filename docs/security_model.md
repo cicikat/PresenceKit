@@ -202,7 +202,7 @@ PresenceKit-desktop 已完成 Tauri Rust native bridge header 迁移；SEC-WS-1 
 可读缓存；失败返回 `sensitive_redaction_failed`，不得退回原文。高风险凭据库按类型/内容拒绝，
 禁止 `token` 子串误杀源文件。模型不能指定 owner/char/realm 或自签授权。UNC、ADS、设备路径
 和 reparse 不是普通本机文件。观测 `GET /observability/backend-read` 只含元数据。
-self 写工具与 `GET /observability/character-self` 属 256 C current。Agent task 仍属 F/G。
+self 写工具、AGENT.md 注入与 `GET /observability/character-self` 属 256 D current。Agent task 仍属 F/G。
 
 ### 导入/社区包体系未成型
 

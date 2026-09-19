@@ -526,17 +526,8 @@ async def _toy_job_status_wrapper(job_id: str | None = None) -> str:
 
 
 async def _read_toy_file_wrapper(file_key: str, *, user_id: str | None = None, char_id: str | None = None) -> str:
-    if user_id and char_id:
-        from core.character_document_library import read as read_document
-        from core.character_document_library import search as search_documents
-        for row in search_documents(user_id, char_id, source="character_note"):
-            if row.get("filename") == file_key:
-                scoped = read_document(user_id, char_id, str(row.get("document_id") or ""))
-                if scoped is not None:
-                    return str(scoped.get("content") or "")
-        return "No scoped toybox note found."
     from core.tools.toybox import read_toy_file
-    return read_toy_file(file_key=file_key)
+    return read_toy_file(file_key=file_key, user_id=user_id, char_id=char_id)
 
 async def _write_toy_file_wrapper(
     file_key: str,
@@ -546,18 +537,8 @@ async def _write_toy_file_wrapper(
     user_id: str | None = None,
     char_id: str | None = None,
 ) -> str:
-    from core.tools.toybox import read_toy_file, write_toy_file
-    result = write_toy_file(file_key=file_key, content=content, mode=mode)
-    if user_id and char_id:
-        from core.character_document_library import store_upload
-        import hashlib
-        mirrored = read_toy_file(file_key=file_key)
-        store_upload(
-            uid=user_id, char_id=char_id, filename=file_key,
-            media_type="text/plain", sha256=hashlib.sha256(mirrored.encode("utf-8")).hexdigest(),
-            searchable_text=mirrored, source="character_note",
-        )
-    return result
+    from core.tools.toybox import write_toy_file
+    return write_toy_file(file_key=file_key, content=content, mode=mode, user_id=user_id, char_id=char_id)
 
 
 async def _peek_screen_content_wrapper() -> str:
@@ -1547,11 +1528,12 @@ _TOOL_REGISTRY["toy_job_status"] = {
 _TOOL_REGISTRY["read_toy_file"] = {
     "func": _read_toy_file_wrapper,
     "description": (
-        "读取玩具项目中允许的用户协作文本文件。只能通过 file_key 选择思考笔记、愿望清单或涂鸦板；"
-        "不能读取系统文件。"
+        "读取本角色自有空间里由旧玩具文件键映射的笔记（思考笔记、愿望清单或涂鸦板）。"
+        "这是 self 文件的兼容入口，不是共享目录，也不能改权限。"
     ),
     "dangerous": False,
-    "category": "desktop",
+    "category": "info",
+    "effect": "read",
     "persist": True,
     "parameters": {
         "type": "object",
@@ -1572,11 +1554,12 @@ _TOOL_REGISTRY["read_toy_file"] = {
 _TOOL_REGISTRY["write_toy_file"] = {
     "func": _write_toy_file_wrapper,
     "description": (
-        "写入玩具项目中允许的用户协作文本文件。仅在用户明确要求记录内容时调用；"
-        "只能通过 file_key 选择思考笔记、愿望清单或涂鸦板，不能修改系统文件。"
+        "写入本角色自有空间里由旧玩具文件键映射的笔记。仅在用户明确要求记录内容时调用；"
+        "只能通过 file_key 选择思考笔记、愿望清单或涂鸦板。写入走统一 self writer，不再写旧共享目录。"
     ),
     "dangerous": False,
-    "category": "desktop",
+    "category": "info",
+    "effect": "write",
     "parameters": {
         "type": "object",
         "properties": {

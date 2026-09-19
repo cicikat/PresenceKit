@@ -1,6 +1,6 @@
 # 单角色文件、自有空间与 Agent 自主能力（拟议合同）
 
-状态：**C current**（self 空间与通用文件工具已落地）；D–G 仍拟议。工单 [256](../cc-tasks/256-character-files-and-agent-autonomy.md) A 单冻结合同，B 落地 backend/external 只读与统一脱敏。
+状态：**D current**（self-authored AGENT.md 与旧笔记迁移已落地）；E–G 仍拟议。工单 [256](../cc-tasks/256-character-files-and-agent-autonomy.md) A 单冻结合同，B 落地 backend/external 只读与统一脱敏，C 落地 self 空间。
 日期：2026-09-18。基线 SHA：`b1ebe0d`（工单源码表对照 `e35d0ec`，差异见 §0）。
 
 权限限制能做什么，不规定角色应该追求什么。仍是同一角色的聊天主链与持久工作副链，不引入第二个人格。
@@ -18,9 +18,9 @@
 | 落点 | `e35d0ec` 工单记录 | `b1ebe0d` 仍真 |
 |---|---|---|
 | `fs_browse.py` | allow_roots 强制；`data/` 整类拒绝；`token` 子串 deny；无统一脱敏 | **B current**：backend/external 独立开关；allow_roots 为发现提示；统一脱敏；`remote_server` 可读本进程 backend，拒外部本机路径 |
-| `toybox.py` | 三枚举、4000 字、无自由建/删 | 仍如此。wrapper 在有 `uid+char_id` 时额外镜像到 character library，**不是** self 桶 |
-| `very_formal_project_dir()` | 无 `char_id`，共享目录 | 仍 `canonical/shared/global` |
-| `toy_autogrow.py` | 直写旧目录并裁头 | 仍如此；冷却按 `{char_id}:{uid}` |
+| `toybox.py` | 三枚举、4000 字、无自由建/删 | **D current**：`file_key` 薄映射到 `self/notes/`，不双写旧目录或 character library |
+| `very_formal_project_dir()` | 无 `char_id`，共享目录 | 冻结为历史共享档案；归属 freeze 后才导入单一角色 |
+| `toy_autogrow.py` | 直写旧目录并裁头 | **D current**：统一 self writer append，不裁头；`enabled: false` 停用习惯 |
 | `reminder.py` | add 走 Runtime；get/mark_done/prune 仍 legacy JSON；add 用 `DEFAULT_CHAR_ID` | 仍如此。`list_schedules()` 剥掉 `content`。`schedules/` 路径未登记 DataPaths |
 | `_TOOL_REGISTRY` | reminder 仅 `add_reminder` | 仍无 list/update/cancel/restore |
 | work sessions | digest/长度，有限 artifact kind | 仍非通用 coding worker |
@@ -133,7 +133,7 @@
 
 | handler | 写什么 | accessor | 本单 |
 |---|---|---|---|
-| `toy_autogrow` | 旧 toy 文件 + `.autogrow_state.json`，超限裁头 | `very_formal_project_dir()` | D 改为 self writer 调用方 |
+| `toy_autogrow` | 映射后的 self 笔记 + 档案内 `.autogrow_state.json`；不裁头 | `append_self_text` / `very_formal_project_dir()` 仅冷却 | **D current** |
 | `capture_turn_retry` | 重试 capture_turn | `user_memory_root` | 不改 |
 | `summarize_to_midterm` / `reflect_to_episodic` / `consolidate_to_identity` / `storyline_evicted_input` | 记忆 | `user_memory_root` | self 内容不自动固化 |
 | `user_profile_update` / `trait_tracker_update` / `update_char_relations` / `practice_session` / `consistency_check` | 各域 | 既有 | 不改 |
@@ -179,7 +179,7 @@ data/runtime/self_meta/{char_id}/{uid}/      # 系统维护，self 工具不可�
 
 `AGENT.md`、`notes/`、`habits/`、`ledger/` 只是示例目录，无业务枚举。角色可自由组织相对路径。禁止 self 指向系统文件、其他角色桶、workspace roots、Dream 树或 meta 库。
 
-旧 `data/very_formal_project/` 冻结为历史共享档案，**不**自动复制给每个角色；归属不明保留待认领（D 单迁移）。
+旧 `data/very_formal_project/` 冻结为历史共享档案，**不**自动复制给每个角色。D current：首次盘点冻结配置默认角色+owner，归属不明保留待认领；导入 `self/notes/` 可重入，冲突不覆盖较新 self 文件。源文件保留 90 天；回滚只恢复档案备份，不覆盖导入后改过的 self 文件。
 
 Never Prompt Load：`self_meta` 的 revisions/trash/audit 默认不进 prompt；角色读 self 用户文件须走 B 单脱敏。
 
@@ -227,7 +227,7 @@ workspace/process 限额延续现状（单文件 5 MiB、总量 50 MiB、并发 
 | 拟议端点 | 内容 |
 |---|---|
 | `GET /observability/backend-read` | **current**：configured/effective、关闭原因、脱敏版本与计数 |
-| `GET /observability/character-self` | **C current**：配额余量、grant revision、文件计数、最近操作元数据；不含私有正文 |
+| `GET /observability/character-self` | **D current**：配额余量、grant revision、文件计数、最近操作元数据、AGENT.md 注入状态（无正文）、legacy toy 归属/迁移计数；不含私有正文 |
 | 复用 `GET /observability/agent-runtime-tasks` | Agent task 生命周期；角色查询走工具，不把 admin DELETE 暴露给模型（F/G） |
 
 Brief 229 自身仍“不新增端点”；backend-read 属于 256 B 续篇落地；character-self 属于 256 C。Agent-task 观测仍拟议。
