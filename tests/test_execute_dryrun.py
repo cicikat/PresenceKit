@@ -121,9 +121,6 @@ async def test_native_proposal_executes_dryrun_for_each_registered_trigger(monke
         timenode.propose(ctx),
         festival.propose_festival(ctx),
         festival.propose_holiday_boost(ctx),
-        reminders.propose({"now_dt": datetime(2026, 5, 25, 12, 30), "due_reminders": [
-            {"id": "r1", "content": "交材料", "remind_at": "2026-05-25 12:00"}
-        ]}),
         memory.propose(ctx),
         garden_water.propose_garden_bloom({"now_ts": 1_000.0, "garden_bloom_events": [
             {"type": "bloom", "name": "雏菊", "received_at": 990.0}
@@ -178,8 +175,14 @@ async def test_native_proposal_executes_dryrun_for_each_registered_trigger(monke
         "garden_handle_gift",
         "garden_handle_self",
         "garden_vase_wilted",
-        "reminders",
     }
+    reminder_proposal = reminders.propose({"now_dt": datetime(2026, 5, 25, 12, 30), "due_reminders": [
+        {"id": "r1", "schedule_id": "r1", "content": "交材料", "remind_at": "2026-05-25 12:00"}
+    ]})
+    assert reminder_proposal is not None
+    assert reminder_proposal.trigger_name == "reminders"
+    assert reminder_proposal.execute is None
+    assert (reminder_proposal.metadata or {}).get("observation_only") is True
     assert sandbox.execute_dryrun_log().exists()
 
 
@@ -468,8 +471,7 @@ def test_random_message_lives_on_proposer_not_legacy_check():
     assert callable(time_based.propose_random_message)
 
 
-@pytest.mark.asyncio
-async def test_reminder_execute_captures_mark_done_id(monkeypatch, sandbox):
+def test_reminder_proposal_is_observation_only(monkeypatch, sandbox):
     from core.scheduler.triggers import reminders
 
     monkeypatch.setattr("core.scheduler.loop._owner_id", lambda: "u1")
@@ -479,34 +481,10 @@ async def test_reminder_execute_captures_mark_done_id(monkeypatch, sandbox):
         "due_reminders": [{"id": "r42", "content": "交材料", "remind_at": "2026-05-25 12:00"}],
     })
 
-    result = await proposal.execute(dry_run=True)
-
-    assert result.would_mark_done == ["r42"]
-
-
-@pytest.mark.asyncio
-async def test_reminder_execute_live_marks_done(monkeypatch, sandbox):
-    from core.scheduler import loop
-    from core.scheduler.triggers import reminders
-
-    done = []
-
-    async def fake_send(prompt, search_query="", trigger_name="", **kwargs):
-        return "reply"
-
-    monkeypatch.setattr(loop, "_pipeline_send", fake_send)
-    monkeypatch.setattr("core.scheduler.loop._owner_id", lambda: "u1")
-    monkeypatch.setattr("core.tools.reminder.mark_done", lambda uid, rid: done.append((uid, rid)))
-
-    proposal = reminders.propose({
-        "now_dt": datetime(2026, 5, 25, 12, 30),
-        "due_reminders": [{"id": "r42", "content": "交材料", "remind_at": "2026-05-25 12:00"}],
-    })
-
-    result = await proposal.execute(dry_run=False)
-
-    assert result.sent is True
-    assert done == [("u1", "r42")]
+    assert proposal is not None
+    assert proposal.execute is None
+    assert (proposal.metadata or {}).get("observation_only") is True
+    assert proposal.metadata.get("schedule_id") == "r42"
 
 
 @pytest.mark.asyncio

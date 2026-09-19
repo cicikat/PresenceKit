@@ -589,7 +589,7 @@ owner QQ 消息
 | period_reminder | period.py | proposer 接管；legacy `_check_period` 已删除 |
 | birthday_midnight/eve/afternoon/night | birthday.py | proposer 接管；legacy `_check_birthday_*` 已删除 |
 | timenode, festival, holiday_boost | timenode.py / festival.py | proposer 接管；legacy `_check_*` 已删除 |
-| reminders | reminders.py | proposer 接管；Runtime due schedules 另由 `_check_reminders()` 经 talk_gate 投递 |
+| reminders | reminders.py | proposer 仅观测（`execute=None`，不入 autonomy 发言队列）；live 投递由 `_check_reminders()` 读 Runtime `due_across_owner`，经 `begin_delivery` / talk_gate / `finish_delivery` |
 | topic_followup | memory.py | proposer 接管；legacy stub 已删除 |
 | garden_bloom | garden_water.py | legacy 通过 `legacy_send` 变量门控 + proposer 接管 |
 | garden_harvest_expired/handle_ask/handle_gift/handle_self/vase_wilted | garden_daily.py | 同上 |
@@ -759,9 +759,9 @@ active window 决策已完全收入 `gating._decide()`（R2-C 后），以 `POLI
 - 普通主动消息被 gating 拦截时，`execute()` 不被调用，`_mark()` 不被调用。
 - execute live 路径里，`execute_prompt()` 收到 `None` 后只写 `execute_dryrun.jsonl` 的
   `blocked=true` 观测，不调用 `after_send`，不执行 `_mark()`，也不 `mark_done()`。
-- reminders proposal 由 `core/agent_runtime/scheduler_capability.py` 持有；到点后通过
-  `talk_gate` 的新 Reality ingress/turn 投递，成功后才完成 Task receipt。旧 reminder JSON
-  不再是写入或投递路径。
+- reminders proposal 由 `core/agent_runtime/scheduler_capability.py` 持有；shadow proposer
+  只观测（`execute=None`），不入 autonomy 发言队列。到点后通过 `talk_gate` 的 Reality
+  ingress/turn 投递，成功后才完成 Task receipt。旧 reminder JSON 不再是写入或投递路径。
 
 当前已收口的“未发送不 mark”语义覆盖 execute live 路径和 Runtime reminder delivery：被
 策略拦截、无通道或发送前异常时，不完成 Task receipt。其他 legacy trigger 若仍在
@@ -817,7 +817,7 @@ active window 决策已完全收入 `gating._decide()`（R2-C 后），以 `POLI
 | `presence_nag` | 2h | 低 | presence_nag | 高活跃配置 + 60min 无互动 + 负面情绪时，下发可强制全关的桌面存在感弹窗 |
 | `dream_exit` | 1h | 普通 | dream_exit | 出梦后由 dream_state.char_id 对应角色主动开口；QUIET-only、一梦一次；无 afterglow 时按有限时段降级为中性问候 |
 | `letter_writer` | 周频契约 | 低 | letter_writer | 每个 uid + char_id 每 ISO 周最多成功发送一封；失败不封周，梦境、久未对话、强记忆、纪念日前夕或 hidden state 溢出可作为写信缘由 |
-| reminders（备忘录） | 无冷却 | 低 | loop.py内联 | 到点即发，发完标记完成 |
+| reminders（备忘录） | 无冷却 | 低 | loop.py内联 + Runtime store | 到点经 begin/finish 投递；CAS 更新；cancel 可恢复；完成 lease 不可复活 |
 
 ---
 
@@ -1115,8 +1115,11 @@ curl -H "Authorization: Bearer <token>" \
 ### Brief 237 旧路径退役
 
 `_check_reminders()` 通过 `talk_gate` 的 Reality interaction adapter 投递，不再调用
-`_pipeline_send()`；`manual_trigger()` 对 retired/unregistered 名称 fail-closed。旧 reminder
-JSON 仅保留读取兼容函数，不再作为 `add_reminder()` 的写入 fallback。
+`_pipeline_send()`；交付前 `begin_delivery` 复核 revision/取消，发送中标 in-flight，
+`finish_delivery` 结束该次；重复轮次生成新 Task Manager task。shadow `reminders`
+proposer 仅观测，不直发也不入 autonomy 发言队列。`manual_trigger()` 对
+retired/unregistered 名称 fail-closed。legacy reminder JSON 只作迁移档案，live 查询
+不回落。
 
 `dream_postcards` 是独立 `active` 的定时产物投递，不是 `dream_exit` 别名。proposer 每日扫描梦境
 archive 出站明信片的 schedule；到期未发送的条目复用 Gmail 链路投递，不进入 assistant speech

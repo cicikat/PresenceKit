@@ -442,6 +442,26 @@ class DataPaths:
             safe_user_id(char_id), safe_user_id(user_id),
         )
 
+    def agent_runtime_schedules_root(self) -> Path:
+        """Root of Reality scheduler-capability payloads (uid then char file)."""
+        return self._p("runtime", "agent_runtime", "reality", "schedules")
+
+    def agent_runtime_schedule_state(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
+        """Durable schedule payload for one Reality owner+character."""
+        assert_production_identity_allowed(user_id, mode=self.mode)
+        return self._p(
+            "runtime", "agent_runtime", "reality", "schedules",
+            safe_user_id(user_id), f"{safe_user_id(char_id)}.json",
+        )
+
+    def legacy_reminder_owner_record(self) -> Path:
+        """Frozen historical owner for uid-only leftover reminder JSON."""
+        return self._p("runtime", "agent_runtime", "reality", "legacy_reminder_owner.json")
+
+    def legacy_reminder_migration_report(self) -> Path:
+        """Latest dry-run/apply report for legacy reminder JSON; never prompt-loaded."""
+        return self._p("runtime", "agent_runtime", "reality", "legacy_reminder_migration_report.json")
+
     def self_management_state(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
         """Character-scoped Self Capability state; never shares autonomy state."""
         assert_production_identity_allowed(user_id, mode=self.mode)

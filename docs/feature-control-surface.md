@@ -425,7 +425,10 @@ Self space is D current: default grant, admin revoke, quotas in `self_access`
 `GET /observability/character-self` (`state.read`) with remaining quota, grant
 revision, file counts, AGENT.md inject status (no body), legacy toy ownership
 and recent op metadata; no private notes. `toy_autogrow.enabled` remains the
-character habit switch. Agent-task observation remains proposed (F–G).
+character habit switch. Reminders are E current: tools
+`list/get/add/update/cancel/restore_reminder` write Runtime schedules for the
+frozen character; `GET /observability/character-reminders` (`state.read`) is
+metadata-only. Agent-task observation remains proposed (F–G).
 `workspace_access` and process/browser capabilities are unchanged except that their
 model-facing reads/outputs reuse the same redaction service.
 

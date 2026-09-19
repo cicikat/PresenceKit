@@ -101,7 +101,7 @@ get_tags()（build_prompt 内计算；部分入口可显式传入复用）
   ├─ lore_engine.match()        → lore_entries          [同步]
   ├─ episodic_memory.retrieve() → episodic_result       [同步]
   ├─ episodic_memory.retrieve_fallback() → episodic_fallback_result  [同步]
-  ├─ get_reminders()            → reminders             [同步]
+  ├─ get_reminders(uid, char_id=) → reminders           [同步，Runtime scheduler 安全投影]
   ├─ diary_context.load()       → diary_context         [同步]
   ├─ user_profile.load()        → profile               [异步线程]
   ├─ mid_term.format_for_prompt() → mid_term_context    [异步线程]

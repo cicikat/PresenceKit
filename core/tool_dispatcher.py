@@ -48,6 +48,11 @@ _TOOL_FALLBACKS = {
     "web_search": "网络暂时有些不稳定，没搜到",
     "get_time": "时间获取出了点问题",
     "add_reminder": "备忘录暂时写不进去，稍后再试",
+    "list_reminders": "备忘录暂时读不到",
+    "get_reminder": "备忘录暂时读不到",
+    "update_reminder": "备忘录暂时改不了，稍后再试",
+    "cancel_reminder": "备忘录暂时取消不了，稍后再试",
+    "restore_reminder": "备忘录暂时恢复不了，稍后再试",
     "read_diary": "日记暂时读不到",
     "read_watch": "身体数据暂时读取不到",
     "search_documents": "资料暂时检索不到",
@@ -109,11 +114,6 @@ async def _get_current_time() -> str:
     now = datetime.now()
     week = ["一", "二", "三", "四", "五", "六", "日"][now.weekday()]
     return now.strftime(f"%Y年%m月%d日 %H:%M 星期{week}")
-
-
-async def _add_reminder_wrapper(user_id: str, content: str, remind_at: str) -> str:
-    from core.tools.reminder import add_reminder
-    return add_reminder(user_id, content, remind_at)
 
 
 def _weather_wrapper(city: str):
@@ -813,30 +813,6 @@ _TOOL_REGISTRY["get_time"] = {
     },
     "examples": ["几点了", "现在几点", "今天几号", "星期几"],
     "keywords": ["几点", "时间", "几号", "星期"],
-}
-
-_TOOL_REGISTRY["add_reminder"] = {
-    "func": _add_reminder_wrapper,
-    "description": "创建一条定时提醒。仅在用户明确要求记录事项并在指定时间提醒时调用。",
-    "dangerous": False,
-    "category": "info",
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "content": {
-                "type": "string",
-                "description": "要提醒用户做什么；使用简短、完整的事项文本。",
-            },
-            "remind_at": {
-                "type": "string",
-                "description": "提醒的本地时间，格式为 HH:MM、MM-DD HH:MM 或 YYYY-MM-DD HH:MM。",
-            },
-        },
-        "required": ["content", "remind_at"],
-    },
-    "examples": ["提醒我8点吃药", "明天下午三点记得开会", "帮我记一下"],
-    "keywords": ["提醒", "记得", "帮我记"],
-    "trace_args": ["remind_at"],
 }
 
 _TOOL_REGISTRY["weather"] = {
@@ -1811,7 +1787,8 @@ _INTIFACE_TOOL_NAMES: frozenset[str] = frozenset({
 #   高风险 / side_effect=True ：
 #     - 所有 dangerous=True 的工具（device_shutdown / device_sleep）
 #     - desktop 控制类（向外推送动作：minimize / open_url / play_pause / notify / play_song）
-#     - 写状态的工具（add_reminder / water_garden / exit_yandere）
+#     - 写状态的工具（add_reminder / update_reminder / cancel_reminder /
+#       restore_reminder / water_garden / exit_yandere）
 #   低风险 / side_effect=False：
 #     - 纯读类（get_time / weather / web_search / read_diary /
 #               read_watch / search_diary / get_profile / get_episodic）
@@ -1822,6 +1799,8 @@ from core.tools.drinking import register_tools as _register_drinking_tools
 _register_drinking_tools(_TOOL_REGISTRY)
 from core.tools.character_self import register_tools as _register_self_tools
 _register_self_tools(_TOOL_REGISTRY)
+from core.tools.reminder_tools import register_tools as _register_reminder_tools
+_register_reminder_tools(_TOOL_REGISTRY)
 
 
 _SIDE_EFFECT_TOOLS: frozenset[str] = frozenset({
@@ -1837,6 +1816,9 @@ _SIDE_EFFECT_TOOLS: frozenset[str] = frozenset({
     "write_toy_file",
     # 写状态的工具
     "add_reminder",
+    "update_reminder",
+    "cancel_reminder",
+    "restore_reminder",
     "water_garden",
     "self_create",
     "self_update",
@@ -1912,7 +1894,10 @@ def _is_tool_enabled(tool_name: str) -> bool:
         group = "device_control"
     elif tool_name == "set_timer":
         group = "timer"
-    elif tool_name == "add_reminder":
+    elif tool_name in (
+        "add_reminder", "list_reminders", "get_reminder",
+        "update_reminder", "cancel_reminder", "restore_reminder",
+    ):
         group = "reminder"
     return cfg.get(group, {}).get("enabled", True)
 
@@ -2602,6 +2587,8 @@ async def _execute_structured_impl(
             "workspace_update", "workspace_delete", "workspace_undo", "process_run",
             "self_list", "self_read", "self_create", "self_update",
             "self_move", "self_delete", "self_restore",
+            "list_reminders", "get_reminder", "add_reminder",
+            "update_reminder", "cancel_reminder", "restore_reminder",
         }:
             for key in ("user_id", "uid", "char_id", "owner", "realm"):
                 if key in tool_args:
@@ -2609,7 +2596,7 @@ async def _execute_structured_impl(
                     break
             else:
                 result = await func(user_id=user_id, char_id=char_id, **tool_args)
-        elif tool_name in ("add_reminder", "read_watch"):
+        elif tool_name in ("read_watch",):
             result = await func(user_id=user_id, **tool_args)
         elif tool_name in (
             "revise_memory", "forget_episodic", "clear_midterm", "revise_user_profile",

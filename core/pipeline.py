@@ -442,7 +442,7 @@ class Pipeline:
         user_facts_text      = user_facts.format_for_prompt(uid)
 
         from core.tools.reminder import get_reminders
-        reminders = get_reminders(uid)
+        reminders = get_reminders(uid, char_id=char_id)
         from core.memory.diary_context import load as _load_diary, load_meta as _load_diary_meta
         diary_context = _load_diary(uid)
         if diary_context:

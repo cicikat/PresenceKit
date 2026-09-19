@@ -39,6 +39,11 @@ _TOOL_RESULT_NAME_RE = re.compile(r"^工具已执行：([^，]+)，")
 _ACTION_LABELS: dict[str, str] = {
     "get_time": "看了时间",
     "add_reminder": "加了条提醒",
+    "list_reminders": "看了提醒列表",
+    "get_reminder": "看了一条提醒",
+    "update_reminder": "改了条提醒",
+    "cancel_reminder": "取消了条提醒",
+    "restore_reminder": "恢复了条提醒",
     "weather": "查了天气",
     "device_shutdown": "准备关机",
     "device_sleep": "让设备休眠",

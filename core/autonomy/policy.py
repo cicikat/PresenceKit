@@ -8,8 +8,9 @@ from core.autonomy.models import Disposition
 
 # Autonomous writes are deliberately narrower than the normal tool-loop
 # surface. New entries require an explicit review here; a configurable
-# allowlist must never turn a reminder, memory edit, desktop action, or device
-# control into an unattended side effect.
+# allowlist must never turn a memory edit, desktop action, or device
+# control into an unattended side effect. Reminder writes are sandboxed
+# because they stay inside this character's Reality schedule bucket.
 _SANDBOXED_WRITE_TOOLS = frozenset({
     "water_garden",
     "self_create",
@@ -18,6 +19,10 @@ _SANDBOXED_WRITE_TOOLS = frozenset({
     "self_delete",
     "self_restore",
     "write_toy_file",
+    "add_reminder",
+    "update_reminder",
+    "cancel_reminder",
+    "restore_reminder",
 })
 
 DECISION_SOURCE_ALLOWLIST = "autonomy_allowlist"

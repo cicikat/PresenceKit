@@ -534,6 +534,29 @@ self_access:
   grant 入口。聊天 / autonomy / 日记副链复用同一 scoped 快照；本轮冻结，修改下一轮
   生效。层 `6i_self_agent_md`，预算 2000 / 硬上限 4000，`_drop_priority=75`。
 
+### 角色提醒（256 E current）
+
+有到期/重复语义的提醒归 Runtime scheduler；无时间的自由笔记放 self。往 self
+文件里写“明天提醒”不会隐式建定时任务。
+
+- **工具**：`list_reminders` / `get_reminder` / `add_reminder` / `update_reminder` /
+  `cancel_reminder` / `restore_reminder`。category `info`，写工具不经 danger 闸。
+  frozen uid/char 由 dispatcher 注入；模型 JSON 指定 principal 返回
+  `grant_principal_mismatch`。角色靠 `schedule_id` + `expected_revision` 操作，
+  不靠文字匹配删除。内部 `task_id` 只关联 Task Manager lease，不出现在角色投影。
+- **生命周期**：CAS 更新；cancel 停止未来提醒并可恢复；restore 生成新的可运行
+  lease，不能复活已完成那一次。到期投递前复核 revision/取消；已进入发送标
+  in-flight，已发送不能撤回。重复提醒每轮新 task，避免完成后再旁路发送。
+- **权威**：live 查询只读 Runtime store；legacy `reminders.json` 仅档案/迁移源。
+  迁移脚本 `scripts/migrate_legacy_reminders.py`：dry-run 默认，归属冻结一次，
+  已完成/取消不重新调度，回滚不覆盖较新 Runtime 行。
+- **autonomy**：reminder 写工具在 `_SANDBOXED_WRITE_TOOLS`，仍须显式 allowlist。
+- **观测**：`GET /observability/character-reminders`（`state.read`）返回状态计数、
+  revision、到期、重复种类和 legacy 迁移计数；不含正文、秘密或绝对路径。
+- **prompt**：层 `5.2_reminders` 读本角色 Runtime 安全投影；新加即可见。
+- **时间**：`remind_at` 按后端本机本地 naive datetime 解析，不附加时区；过去的 `HH:MM`
+  滚到明天，无年份的 `MM-DD HH:MM` 若已过则滚到明年。
+
 ---
 
 ## 工具注册表
@@ -548,6 +571,11 @@ self_access:
 | `weather` | 用户问天气/温度/下雨 | `core/tools/weather.py` |
 | `web_search` | 确认信息/帮用户找资料；结果自动沉淀向量库（source="web"） | `core/tools/web_search.py`（DuckDuckGo）|
 | `add_reminder` | "提醒我X点做Y"/"帮我记" | `core/tools/reminder.py` |
+| `list_reminders` | "看看有哪些提醒" | `core/tools/reminder.py` |
+| `get_reminder` | 按 schedule_id 读一条提醒 | `core/tools/reminder.py` |
+| `update_reminder` | 按 schedule_id + expected_revision 改提醒 | `core/tools/reminder.py` |
+| `cancel_reminder` | 取消未来提醒，可恢复 | `core/tools/reminder.py` |
+| `restore_reminder` | 按 revision 恢复已取消提醒 | `core/tools/reminder.py` |
 | `water_garden` | 角色在花园相关对话上下文中决定维护花园 | `core/tools/garden_tools.py` |
 | `self_list` | 列出本角色自有文件空间 | `core/tools/character_self.py` |
 | `self_read` | 读取自有空间文本（先脱敏） | `core/tools/character_self.py` |
@@ -943,8 +971,8 @@ Agent Runtime 是同一角色的 durable / specialized 副链运行时，不是�
 Agent。能力是否允许在 foreground 主链主动使用，由 origin / permission / confirmation /
 deployment 闸门决定，而不是由「是否走 Work Session」决定。
 
-`add_reminder` 已统一进入 scheduler capability/Task Manager；runtime 写入失败不会静默回落到
-legacy reminder 文件。workspace/process/browser 工具的 task receipt 仍由 Reality Task Manager
+`list/get/add/update/cancel/restore_reminder` 已统一进入 scheduler capability/Task Manager；
+runtime 写入失败不会静默回落到 legacy reminder 文件。workspace/process/browser 工具的 task receipt 仍由 Reality Task Manager
 统一持有，visible delivery 必须经过新的 Reality ingress/turn，不能在后台调用 `capture_turn()`。
 Workspace mutating tools currently have no canonical `turn_id` on `execute_structured()`; their causation is
 `tool_request` plus the request fingerprint, never a hash labeled `reality_turn`.

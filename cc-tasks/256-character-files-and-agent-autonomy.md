@@ -1,6 +1,6 @@
 # 229 — 单角色文件、自有空间与 Agent 自主能力扩展
 
-日期：2026-09-18。状态：A/B/C/D current；E–G 功能施工未开始；H 本轮不执行。
+日期：2026-09-18。状态：A/B/C/D/E current；F–G 功能施工未开始；H 本轮不执行。
 
 本单历史权威见 [Agent Runtime](../docs/agent-runtime-architecture.md)。
 
@@ -90,12 +90,12 @@
 
 依赖 A/B；与 C/D 内容区分：无时间的自由笔记放 self，有到期/重复语义的提醒归 Runtime scheduler。self 写“明天提醒”不会隐式创建定时任务。
 
-- [ ] E1 提供角色工具 list/get/add/update/cancel/restore；返回稳定 schedule_id、revision、正文安全投影、到期时间、重复规则和状态；内部 task_id 仅关联，不让角色靠文字匹配删除。
-- [ ] E2 principal 由 frozen scope 传入到 store/dispatch；授权内角色可自主修改、取消自己的提醒，包括用户交办的本角色提醒；保留修订记录及恢复，不要求用户再次说“删除”。不能操作其他角色/realm 的提醒。
-- [ ] E3 更新正文/时间/周期使用 CAS 和原子一致性策略，scheduler payload 与 Task Manager 状态不可分裂；cancel/delete 的用户语义是停止未来提醒并可恢复，不物理删除审计；恢复生成可运行的新生命周期关联，不能复活已完成 lease。
-- [ ] E4 明确 due 与 update/cancel 的竞态：未交付旧 revision 作废；交付前复核 revision/取消状态，已进入发送的标记 in-flight，已发送不能撤回。修正重复提醒 task 终态与后续轮次关系，避免 task 完成后仍靠旁路发送。
-- [ ] E5 legacy JSON 做 dry-run、备份、明确历史归属与幂等导入；禁止失败回落双权威。统一查询及 prompt/管理面读者，防止新增成功但列表看不见；已完成/取消不再次调度。
-- [ ] E6 覆盖时区、过去时间、跨年、重启、重复规则、并发增改删、取消/发送竞态、持久化失败、跨角色；同单给后端观测，更新文档，独立提交。
+- [x] E1 提供角色工具 list/get/add/update/cancel/restore；返回稳定 schedule_id、revision、正文安全投影、到期时间、重复规则和状态；内部 task_id 仅关联，不让角色靠文字匹配删除。
+- [x] E2 principal 由 frozen scope 传入到 store/dispatch；授权内角色可自主修改、取消自己的提醒，包括用户交办的本角色提醒；保留修订记录及恢复，不要求用户再次说“删除”。不能操作其他角色/realm 的提醒。
+- [x] E3 更新正文/时间/周期使用 CAS 和原子一致性策略，scheduler payload 与 Task Manager 状态不可分裂；cancel/delete 的用户语义是停止未来提醒并可恢复，不物理删除审计；恢复生成可运行的新生命周期关联，不能复活已完成 lease。
+- [x] E4 明确 due 与 update/cancel 的竞态：未交付旧 revision 作废；交付前复核 revision/取消状态，已进入发送的标记 in-flight，已发送不能撤回。修正重复提醒 task 终态与后续轮次关系，避免 task 完成后仍靠旁路发送。
+- [x] E5 legacy JSON 做 dry-run、备份、明确历史归属与幂等导入；禁止失败回落双权威。统一查询及 prompt/管理面读者，防止新增成功但列表看不见；已完成/取消不再次调度。
+- [x] E6 覆盖时区、过去时间、跨年、重启、重复规则、并发增改删、取消/发送竞态、持久化失败、跨角色；同单给后端观测，更新文档，独立提交。
 
 ## F — 从聊天/主动循环调用可执行的 Agent task
 
@@ -139,8 +139,8 @@
 | A | 本提交（SHA 见 git log） | 对照 `_TOOL_REGISTRY` / autonomy policy / reminder+fs+toybox 源码；链接与 LF 换行核对 | 纯文档拟议合同，无代码行为、无生产数据迁移；运行验收不适用 |
 | B | 本提交（SHA 见 git log） | `.venv` Python 3.12：`test_sensitive_redaction` / `test_fs_browse` / `test_file_path_hints` / `test_brief171_owner_turn_diary` / workspace / chat_artifacts / process_runner / admin i18n+fragment 相关 97 通过。同文件 `test_qixi_uses_lunar_conversion_and_adjacent_dates_do_not_match` 失败，与本单无关（该文件本单只改 fragment 缓存版本）。换行 `diff --stat` 与 `--ignore-cr-at-eol --stat` 一致，`diff --check` 无警告。 | 模型出口：合成秘密不出现在 fs/workspace/process/artifact 结果；TestClient 对 `/observability/backend-read` 无 token 401、有 token 200 且仅元数据。管理面 8080 静态页已含 call-records 选项与 `v1-256-backend-read-1` 缓存；该进程未重载，live GET 该端点 404。浏览器硬刷新交互未完成。未改生产数据。 |
 | C | 本提交（SHA 见 git log） | `.venv` Python 3.12：`tests/test_character_self.py` 21 通过。同批 `test_data_registry` / admin i18n+fragment / `test_fs_browse` / autonomy write sandbox 相关合计 301 通过。`test_brief195_mcp_autonomy_signal_delivery.py::test_qixi_uses_lunar_conversion_and_adjacent_dates_do_not_match` 失败，与本单无关（该文件本单只改 fragment 缓存版本）。换行 `diff --stat` 与 `--ignore-cr-at-eol --stat` 一致，`diff --check` 无警告；新文件 LF。 | self 生命周期：CRUD/move/restore、隔离、逃逸（含 UNC/ADS/设备名）、配额不删现文件、损坏 revision 状态、磁盘失败后 CAS 可重试、撤权、脱敏、discovery/autonomy/非 danger、principal mismatch、观测元数据、remote 保持 self。管理面静态已含 call-records 选项与 `v1-256-character-self-1` 缓存。浏览器硬刷新交互未完成。未改生产数据。未开始 D–G，未执行 H。 |
-| D | 待施工 | 待执行 | prompt 与迁移恢复 |
-| E | 待施工 | 待执行 | 提醒竞态与交付 |
+| D | `78bdbbd` | `.venv` Python 3.12：`tests/test_character_self_agent_md.py` / `tests/test_character_self_migration.py` 及相关 prompt/toy 回归已在 D 提交前通过。换行 `diff --stat` 与 `--ignore-cr-at-eol --stat` 一致。 | AGENT.md 注入、legacy toy 冻结归属与回滚不覆盖新版本。浏览器硬刷新未做。未改生产数据。未开始 E–G，未执行 H。 |
+| E | 本提交（SHA 见 git log） | `.venv` Python 3.12：`tests/test_character_reminders.py` / `tests/test_character_reminder_migration.py` / `tests/test_retire_direct_proactive_trigger_executors.py` / `tests/test_execute_dryrun.py` / `tests/test_native_proposals.py` / `tests/test_data_registry.py` / admin i18n+fragment 相关合计 338 通过。换行检查见本提交。 | Runtime 为唯一 live 权威；list/get/add/update/cancel/restore 返回 schedule_id；CAS/交付竞态/重复轮次新 task；legacy dry-run 迁移不复制给所有角色；`GET /observability/character-reminders` 仅元数据。管理面静态含 `v1-256-character-reminders-1`。浏览器硬刷新交互未完成。未改生产数据。未开始 F–G，未执行 H。 |
 | F | 待施工 | 待执行 | 真实 coding worker |
 | G | 待施工 | 待执行 | 管理面/消费端按影响面 |
 | H | 未授权删除 | 不执行 | 精确范围另确认 |

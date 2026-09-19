@@ -296,6 +296,27 @@ async def character_self_observability(
 
 
 @router.get(
+    "/observability/character-reminders",
+    summary="读取角色提醒生命周期元数据（不含正文）",
+    description=(
+        "仅返回状态计数、revision、到期时间、重复种类和 legacy 迁移计数；"
+        "不返回提醒正文、秘密或绝对路径。"
+    ),
+)
+async def character_reminders_observability(
+    uid: str = Query("", max_length=128),
+    char_id: str = Query("", max_length=128),
+    _auth=Depends(require_scopes("state.read")),
+):
+    from core.agent_runtime.scheduler_capability import ScheduleError, observability_snapshot
+
+    try:
+        return observability_snapshot(uid=uid or None, char_id=char_id or None)
+    except ScheduleError as exc:
+        raise HTTPException(status_code=422, detail={"code": exc.code}) from exc
+
+
+@router.get(
     "/observability/agent-runtime-work-sessions",
     summary="读取同一角色 Agent Work Session（durable 副链）脱敏生命周期观测",
 )

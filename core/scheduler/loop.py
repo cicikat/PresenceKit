@@ -812,24 +812,56 @@ async def _check_reminders():
         return
     try:
         from core.agent_runtime.models import TaskPrincipal
-        from core.agent_runtime.scheduler_capability import due_schedules, mark_delivered
-        char_id = _active_char_id_or_none() or "default"
-        principal = TaskPrincipal.reality(oid, char_id)
-        due = due_schedules(principal)
+        from core.agent_runtime.scheduler_capability import (
+            begin_delivery,
+            due_across_owner,
+            finish_delivery,
+        )
+        from core.autonomy.models import Disposition
         from core.autonomy.talk_gate import send as deliver_schedule
+        due = due_across_owner(oid)
         for item in due:
-            occurrence = f"schedule:{item['schedule_id']}:{int(float(item.get('due_at') or 0))}"
-            sent, _reason = await deliver_schedule(
+            char_id = str(item.get("char_id") or "")
+            schedule_id = str(item.get("schedule_id") or "")
+            if not char_id or not schedule_id:
+                continue
+            principal = TaskPrincipal.reality(oid, char_id)
+            revision = int(item.get("revision") or 0)
+            due_at = int(float(item.get("due_at") or 0))
+            attempts = int(item.get("delivery_attempts") or 0)
+            occurrence = str(
+                item.get("in_flight_occurrence")
+                or f"schedule:{schedule_id}:{due_at}:{revision}:a{attempts}"
+            )
+            claimed = begin_delivery(
+                principal,
+                schedule_id,
+                expected_revision=revision,
+                occurrence=occurrence,
+            )
+            if claimed is None:
+                continue
+            try:
+                from core.character_name_provider import get_char_name
+                spoken_name = get_char_name(char_id)
+            except Exception:
+                spoken_name = "(角色未加载)"
+            sent, reason = await deliver_schedule(
                 oid,
                 char_id,
-                f"备忘录提醒时间到了：{item['content']}，用{_char_name()}的方式提醒你",
+                (
+                    f"备忘录提醒时间到了：{claimed.get('content')}，"
+                    f"用{spoken_name}的方式提醒你"
+                ),
                 source="user_schedule",
                 run_id=occurrence,
                 correlation_id=occurrence,
                 bypass_soft_once=True,
             )
-            if sent:
-                mark_delivered(principal, item["schedule_id"])
+            delivered = bool(sent) or reason == Disposition.DUPLICATE.value
+            finish_delivery(
+                principal, schedule_id, sent=delivered, occurrence=occurrence,
+            )
     except Exception as e:
         log_error("scheduler._check_reminders", e)
 

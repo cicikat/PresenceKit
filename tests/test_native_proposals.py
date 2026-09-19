@@ -248,6 +248,8 @@ def test_reminders_propose_bypasses_state_machine(monkeypatch):
 
     assert proposal.trigger_name == "reminders"
     assert proposal.bypass_state_machine is True
+    assert proposal.execute is None
+    assert (proposal.metadata or {}).get("observation_only") is True
     assert 0.70 <= proposal.urgency <= 0.89
 
 

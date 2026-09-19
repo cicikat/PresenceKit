@@ -184,6 +184,8 @@ xiaohongshu:
     enabled: false
   add_reminder:
     enabled: true
+  # list_reminders / get_reminder / update_reminder / cancel_reminder /
+  # restore_reminder share tools.reminder.enabled when not named here.
   read_diary:
     enabled: true
   search_diary:

@@ -76,6 +76,10 @@ REGISTRY: dict[str, PathMeta] = {
     "agent_runtime_work_sessions_root": PathMeta("runtime", "reality", "global", "ignore"),
     "agent_runtime_browser_profiles_root": PathMeta("runtime", "reality", "global", "ignore"),
     "agent_runtime_workspace_versions_dir": PathMeta("runtime", "reality", "per_char_user", "ignore"),
+    "agent_runtime_schedules_root": PathMeta("runtime", "reality", "global", "ignore"),
+    "agent_runtime_schedule_state": PathMeta("runtime", "reality", "per_char_user", "ignore"),
+    "legacy_reminder_owner_record": PathMeta("runtime", "shared", "global", "ignore"),
+    "legacy_reminder_migration_report": PathMeta("forensic", "shared", "global", "ignore"),
     "self_management_state":  PathMeta("runtime",   "shared",          "per_char_user", "ignore"),
     "self_management_audit":  PathMeta("forensic",  "shared",          "per_char_user", "ignore"),
     "character_self_root":    PathMeta("canonical", "reality",         "per_char_user", "ignore"),
@@ -371,7 +375,7 @@ RETENTION_POLICY: dict[str, str] = {
     # forensic — 可丢，不影响业务
     "dead_letter_queue": "count-cap  max_files=200       超出时删最旧；保持可监控但不无限增长",
     # canonical — 仅删 done 项，活跃数据不受影响
-    "reminders":         "done-prune prune_done_days=30  done=True 且 remind_at 过期 N 天后清理",
+    "reminders":         "legacy JSON archive; Runtime schedules are the authority (256 E). prune is a no-op on the live store",
     # archive — loader 不读，可无损删旧
     "dreams_archive_dir":"count-cap  max_files=200       最旧先删；distill/summary 仅在 close 时读一次",
     # canonical · compaction（非 forensic rotation）— 保留语义，不删业务数据

@@ -217,7 +217,7 @@ a durable 副链 does not by itself mean the foreground 主链 cannot use that c
 | Tools | Target capability | Constraint |
 |---|---|---|
 | `get_time`, `weather`, `web_search` | clock/network information | foreground bounded read/untrusted output |
-| `add_reminder` | scheduler | structured durable task (Brief 235). Character list/get/update/cancel/restore are proposed by 256 E, not current |
+| `list_reminders`, `get_reminder`, `add_reminder`, `update_reminder`, `cancel_reminder`, `restore_reminder` | scheduler | current (256 E): Reality owner+char schedules; CAS update; cancel recoverable; completed lease not revived; delivery rechecks revision |
 | `fs_list`, `fs_read` | backend/external read | current (256 B): backend default-read, allow_roots as discovery hints, unified redaction before truncate; owner/char/realm isolation remains |
 | `read_toy_file`, `write_toy_file` | fixed authored document | enum targets in the shared toy directory, not workspace and not per-char self. 256 C landed `self_*`; D migrates old notes |
 | `self_list/read/create/update/move/delete/restore` | character self space | current (256 C): Reality owner+char bucket, default grant, admin may revoke; not danger-gated; writes use lock+CAS+trash |

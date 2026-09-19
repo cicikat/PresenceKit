@@ -173,7 +173,7 @@ Prompt、API key、base URL 或模型自由文本。校准任务只在进程生�
 | `profile.json` | 层 5 画像与低频传感数据 |
 | `identity.yaml` | 层 6a 稳定行为模式 |
 | `diary_context.txt` | 层 6d 用户近期日记上下文 |
-| `reminders.json` | 待办备忘（legacy JSON；`add_reminder` 已写 Runtime scheduler，get/mark_done 仍读此文件） |
+| `reminders.json` | 待办备忘 leftover 档案（256 E：live 权威是 Runtime `agent_runtime_schedule_state`；本文件仅迁移源/回滚档案） |
 | `fixation_state.json` | 固化 pipeline 状态 |
 
 `DataPaths.history()`、`mid_term()`、`profiles()` 等分类型 accessor 仍保留给少量兼容调用方；
@@ -217,7 +217,8 @@ Dream domain 独立落在 `data/runtime/dreams/{char_id}/`，不进入 reality m
 - 外部 API 调用总账：`data/runtime/observability/api_calls-YYYY-MM-DD.jsonl`（只记调用元数据，
   fail-open，最近 7 天；只读查询见 `GET /observability/api-calls`）
 - 支出账本：`data/runtime/spend/ledger.jsonl`，`GET /spend/ledger` / `GET /spend/budget` / `POST /spend/check`（admin）。预留 `GET /spend/mandates` 读面已删；confirm/reject writer、购买执行器和商家 adapter 仍不存在（Brief 63/64/226）。历史 `mandates.jsonl` 若存在不由代码清掉。
-- Agent Runtime Reality 根：`data/runtime/agent_runtime/reality/`（tasks / work_sessions / workspace_versions / browser_profiles）
+- Agent Runtime Reality 根：`data/runtime/agent_runtime/reality/`（tasks / work_sessions / workspace_versions / browser_profiles / schedules）
+- 角色提醒权威（256 E）：`data/runtime/agent_runtime/reality/schedules/{uid}/{char_id}.json`，accessor `agent_runtime_schedule_state`；legacy 归属 freeze：`legacy_reminder_owner_record()`；迁移报告：`legacy_reminder_migration_report()`；源 JSON 保留 90 天
 - 共享 toy 目录（冻结历史档案）：`data/very_formal_project/`，`very_formal_project_dir()` 无 `char_id`；活写走 character_self。归属 freeze：`legacy_toy_owner_record()`；迁移报告：`legacy_toy_migration_report()`；源文件保留 90 天
 - 角色 self 空间（256 D current）：`data/runtime/self/{char_id}/{uid}/` 用户内容与
   `data/runtime/self_meta/{char_id}/{uid}/` 系统 revision/trash/audit 分库；

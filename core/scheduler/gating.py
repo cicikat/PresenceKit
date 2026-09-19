@@ -192,8 +192,9 @@ def write_shadow_tick(uid: str) -> Optional[TriggerProposal]:
     proposals = _collect_native_proposals(ctx)
     picked, reason, candidates = _decide(uid, proposals)
     if picked is not None and trigger_migration_status(picked.trigger_name) == "migrated":
+        metadata = picked.metadata if isinstance(picked.metadata, dict) else {}
         char_id = str(picked.char_id or ctx.get("char_id") or "")
-        if char_id:
+        if char_id and not metadata.get("observation_only"):
             try:
                 from core.autonomy.signal_adapters import emit_scheduler_proposal_signal
 
@@ -245,6 +246,9 @@ async def decide_and_execute_event(
     if picked is None or picked.execute is None:
         return picked, reason, None
     if trigger_migration_status(picked.trigger_name) == "migrated":
+        metadata = picked.metadata if isinstance(picked.metadata, dict) else {}
+        if metadata.get("observation_only"):
+            return picked, "observation_only", None
         from core.autonomy.signal_adapters import emit_scheduler_proposal_signal
         from core.scheduler.loop import _active_char_id_or_none
         char_id = picked.char_id or _active_char_id_or_none()

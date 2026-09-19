@@ -1,6 +1,6 @@
 # 单角色文件、自有空间与 Agent 自主能力（拟议合同）
 
-状态：**D current**（self-authored AGENT.md 与旧笔记迁移已落地）；E–G 仍拟议。工单 [256](../cc-tasks/256-character-files-and-agent-autonomy.md) A 单冻结合同，B 落地 backend/external 只读与统一脱敏，C 落地 self 空间。
+状态：**E current**（备忘录生命周期已收口到 Runtime scheduler）；F–G 仍拟议。工单 [256](../cc-tasks/256-character-files-and-agent-autonomy.md) A 单冻结合同，B 落地 backend/external 只读与统一脱敏，C 落地 self 空间，D 落地 AGENT.md。
 日期：2026-09-18。基线 SHA：`b1ebe0d`（工单源码表对照 `e35d0ec`，差异见 §0）。
 
 权限限制能做什么，不规定角色应该追求什么。仍是同一角色的聊天主链与持久工作副链，不引入第二个人格。
@@ -21,8 +21,8 @@
 | `toybox.py` | 三枚举、4000 字、无自由建/删 | **D current**：`file_key` 薄映射到 `self/notes/`，不双写旧目录或 character library |
 | `very_formal_project_dir()` | 无 `char_id`，共享目录 | 冻结为历史共享档案；归属 freeze 后才导入单一角色 |
 | `toy_autogrow.py` | 直写旧目录并裁头 | **D current**：统一 self writer append，不裁头；`enabled: false` 停用习惯 |
-| `reminder.py` | add 走 Runtime；get/mark_done/prune 仍 legacy JSON；add 用 `DEFAULT_CHAR_ID` | 仍如此。`list_schedules()` 剥掉 `content`。`schedules/` 路径未登记 DataPaths |
-| `_TOOL_REGISTRY` | reminder 仅 `add_reminder` | 仍无 list/update/cancel/restore |
+| `reminder.py` | add 走 Runtime；get/mark_done/prune 仍 legacy JSON；add 用 `DEFAULT_CHAR_ID` | **E current**：list/get/add/update/cancel/restore 全部走 Runtime；frozen uid/char；legacy JSON 仅档案/迁移源 |
+| `_TOOL_REGISTRY` | reminder 仅 `add_reminder` | **E current**：六件套已注册；模型不能指定 principal |
 | work sessions | digest/长度，有限 artifact kind | 仍非通用 coding worker |
 | process_runner | 受限 interpreter/program/args，无 shell | 仍如此 |
 
@@ -97,7 +97,7 @@
 | `get_time` | info | read | 无 | 实时 | 无 | 无 | 无独立端点 |
 | `weather` | info | read | 无 | 网络 | 无 | 无 | api-calls |
 | `web_search` | info | read（结果可入 vector `source=web`） | 无 | 网络 | vector_store | 不固化 identity | api-calls |
-| `add_reminder` | info | write | 无 | frozen 应为会话 char；**现状 add 用 `DEFAULT_CHAR_ID`** | Runtime schedules + Task；legacy JSON 仍被 get/mark_done 读写 | 无角色 cancel/restore | agent-runtime-tasks（无正文） |
+| `list_reminders` / `get_reminder` / `add_reminder` / `update_reminder` / `cancel_reminder` / `restore_reminder` | info | read/write | 无 | frozen 会话 uid+char | Runtime `agent_runtime_schedule_state` + Task Manager lease | cancel 可恢复；完成 lease 不可复活 | `GET /observability/character-reminders` |
 | `water_garden` | info | write | 无 | 会话 char | garden 角色树 | 花园自身状态 | garden 管理面 |
 | `drink_with_user` | info | write | 无 | 会话 char | `drinking_state` | 自然衰减 | `/observability/drinking` |
 | `read_life_records` | info/memory | read | 无 | frozen uid+char | life records | 无 | life-records observability |
@@ -123,11 +123,11 @@
 | `write_artifact` / `read_artifact` / `list_artifacts` | artifacts | write/read | 无 | uid+char | `chat_artifacts` | 非 workspace | `/observability/chat-artifacts` |
 | 动态 `mcp__*` | mcp | 按 local policy | 按 policy | MCP session | 外部 | 未知结果 fail-closed | MCP 设置 |
 
-**C current：** `self_list` / `self_read` / `self_create` / `self_update` / `self_move` / `self_delete` / `self_restore`（category `info`，写工具默认 grant、不经 danger 闸，autonomy 沙盒白名单含 self 写）。**仍拟议：** reminder `list/get/update/cancel/restore`；`start_agent_task` / `get_agent_task` / `cancel_agent_task`。
+**C current：** `self_list` / `self_read` / `self_create` / `self_update` / `self_move` / `self_delete` / `self_restore`（category `info`，写工具默认 grant、不经 danger 闸，autonomy 沙盒白名单含 self 写）。**E current：** reminder `list/get/add/update/cancel/restore`。**仍拟议：** `start_agent_task` / `get_agent_task` / `cancel_agent_task`。
 
 ### 2.3 Autonomy 可用集合
 
-`core.autonomy.policy.tool_eligibility()`：危险/需确认工具一律不准入。write 沙盒白名单 **`water_garden` 与 self 写工具**（`self_create/update/move/delete/restore`）。显式 autonomy allowlist 或只读 MCP `global_read_inheritance` 才能进入 schema。backend 读已随 B 进入聊天/autonomy 发现面；发起 Agent task 进入 autonomy **须单独准入评审**（F），不得因为聊天 Path C 可见就自动无人值守写 workspace/process。self 默认可整理自己的笔记；workspace 写与 process 仍要 grant/确认。
+`core.autonomy.policy.tool_eligibility()`：危险/需确认工具一律不准入。write 沙盒白名单 **`water_garden`、self 写工具与 reminder 写工具**（`add/update/cancel/restore_reminder`）。显式 autonomy allowlist 或只读 MCP `global_read_inheritance` 才能进入 schema。backend 读已随 B 进入聊天/autonomy 发现面；发起 Agent task 进入 autonomy **须单独准入评审**（F），不得因为聊天 Path C 可见就自动无人值守写 workspace/process。self 默认可整理自己的笔记；workspace 写与 process 仍要 grant/确认。
 
 ### 2.4 post_process writers（非角色工具）
 
@@ -140,7 +140,7 @@
 
 ### 2.5 Scheduler writers
 
-migrated 触发器产 signal，不直发。maintenance 工人写各自状态（garden、hidden_state、storyline、event_log_salvage、memory_janitor、inner_diary_write、interest/practice 等）。`reminders` 提案仍读 **legacy** `get_due_reminders()` 并 `mark_done` legacy JSON，与 Runtime `create_schedule` 双权威——E 单收口。`scheduler_capability` 的 `schedules/{uid}/{char_id}.json` 尚未登记 registry。
+migrated 触发器产 signal，不直发。maintenance 工人写各自状态（garden、hidden_state、storyline、event_log_salvage、memory_janitor、inner_diary_write、interest/practice 等）。**E current：** 到期投递由 `_check_reminders()` 读 Runtime `due_across_owner()`，`begin_delivery` / `finish_delivery` 复核 revision/取消；shadow `reminders` 提案 `execute=None` 且 `observation_only`，不入 autonomy 发言队列、不写 legacy JSON。`agent_runtime_schedule_state` 已登记 DataPaths/registry。
 
 ### 2.6 Runtime adapters
 
@@ -151,7 +151,7 @@ migrated 触发器产 signal，不直发。maintenance 工人写各自状态（g
 | workspace | tool_request fingerprint | reality | 本地 | 分操作 grant | 配置 roots；versions per_char_user | 写/删/undo | 最近版本 undo | GET workspace |
 | process_runner | lease | reality | 本地 | 受限执行 | workspace 内程序 | dangerous 工具 | 不宣称可撤销副作用 | GET processes |
 | browser | 指纹 | reality | 本地 | 隔离 profile | 非 data 根 | 高风险 one-shot | 无 | 设置面 |
-| scheduler_capability | principal | reality | 全 | create/list/cancel；无 update；list 无 content | `schedules/` **未登记 accessor** | 无 | cancel 标 canceled | 仅经 tasks 投影 |
+| scheduler_capability | frozen principal | reality | 全 | create/get/list/update/cancel/restore；交付 begin/finish；list 含安全正文投影 | `agent_runtime_schedule_state` | 无 danger | cancel 可恢复；完成 lease 不可复活；重复轮次新 task | `GET /observability/character-reminders` |
 
 管理面 `DELETE /observability/agent-runtime-tasks/{id}` 是 admin 取消，不是角色工具。
 
@@ -228,9 +228,10 @@ workspace/process 限额延续现状（单文件 5 MiB、总量 50 MiB、并发 
 |---|---|
 | `GET /observability/backend-read` | **current**：configured/effective、关闭原因、脱敏版本与计数 |
 | `GET /observability/character-self` | **D current**：配额余量、grant revision、文件计数、最近操作元数据、AGENT.md 注入状态（无正文）、legacy toy 归属/迁移计数；不含私有正文 |
+| `GET /observability/character-reminders` | **E current**：状态计数、revision、到期、重复种类、legacy 迁移计数；不含提醒正文 |
 | 复用 `GET /observability/agent-runtime-tasks` | Agent task 生命周期；角色查询走工具，不把 admin DELETE 暴露给模型（F/G） |
 
-Brief 229 自身仍“不新增端点”；backend-read 属于 256 B 续篇落地；character-self 属于 256 C。Agent-task 观测仍拟议。
+Brief 229 自身仍“不新增端点”；backend-read 属于 256 B 续篇落地；character-self 属于 256 C；character-reminders 属于 256 E。Agent-task 观测仍拟议。
 
 ---
 

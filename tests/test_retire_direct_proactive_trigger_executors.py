@@ -98,10 +98,10 @@ def test_reminder_runtime_failure_does_not_write_legacy_store(sandbox, monkeypat
     from core.tools import reminder
 
     monkeypatch.setattr(
-        "core.agent_runtime.scheduler_capability.create_schedule",
+        reminder, "create_schedule",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("runtime down")),
     )
-    result = reminder.add_reminder("owner", "test reminder", "23:59")
+    result = reminder.add_reminder("owner", "test reminder", "23:59", char_id="fixture_character")
     assert "无法创建" in result
     assert reminder._load("owner") == []
 
