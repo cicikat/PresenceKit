@@ -767,6 +767,38 @@ def maintenance_candidates(scope: MemoryScope, *, limit: int = 100,
     return result
 
 
+def reopen_evidence_only(scope: MemoryScope, *, source_ids: list[str] | None = None) -> int:
+    """Requeue explicit evidence-only receipts for a later semantic pass."""
+    scope = _scope(scope); path = _path(scope)
+    if not path.exists():
+        return 0
+    with _lock(path), _connect(path) as connection:
+        _initialize(connection)
+        params: list[Any] = []
+        clause = "store_kind='event' AND status='committed' AND semantic_outcomes_json LIKE '%evidence_only%'"
+        if source_ids:
+            placeholders = ",".join("?" for _ in source_ids)
+            clause += f" AND source_id IN ({placeholders})"
+            params.extend(str(value) for value in source_ids)
+        rows = connection.execute(
+            f"SELECT source_id,ingest_sequence FROM source_items WHERE {clause}", params,
+        ).fetchall()
+        if not rows:
+            return 0
+        connection.execute(
+            f"UPDATE source_items SET status='pending',semantic_outcomes_json='[\"evidence_only\"]',last_error='reopened_for_semantic_pass' WHERE {clause}",
+            params,
+        )
+        minimum = min(int(row[1]) for row in rows)
+        connection.execute(
+            "INSERT INTO maintenance_state VALUES('event_checkpoint',?,?) "
+            "ON CONFLICT(state_key) DO UPDATE SET value_json=excluded.value_json,updated_at=excluded.updated_at",
+            (_json(max(0, minimum - 1)), time.time()),
+        )
+        connection.commit()
+    return len(rows)
+
+
 def begin_maintenance_run(scope: MemoryScope, *, run_id: str, task_id: str,
                           work_session_id: str, input_count: int, input_chars: int,
                           token_budget: int, model: str, preset: str,

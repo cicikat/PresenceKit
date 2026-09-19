@@ -354,3 +354,21 @@ def test_reconcile_unknown_closes_durable_failed_run(sandbox, monkeypatch):
     consolidation_worker._reconcile_unknown(principal)
     assert seen["succeeded"] is False
     assert seen["error_code"] == "provider_timeout"
+
+
+def test_reopen_evidence_only_requeues_event_checkpoint(sandbox):
+    from core.memory import dossiers
+    from core.memory.event_store import append_event
+
+    scope = _scope(uid="reopen-evidence")
+    event_id = _event(scope.uid, scope.character_id, suffix="reopen")
+    candidate = dossiers.maintenance_candidates(scope)[0]
+    dossiers.apply_operations(
+        scope, [], operation_id="c" * 32, actor="character:test", chain="admin_recovery",
+        processing_items=[{key: candidate[key] for key in (
+            "store_kind", "source_id", "source_revision", "ingest_sequence", "input_digest",
+        )} | {"semantic_outcomes": ["evidence_only"]}],
+    )
+    assert dossiers.maintenance_candidates(scope) == []
+    assert dossiers.reopen_evidence_only(scope, source_ids=[event_id]) == 1
+    assert dossiers.maintenance_candidates(scope)[0]["source_id"] == event_id
