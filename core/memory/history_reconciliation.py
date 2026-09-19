@@ -211,6 +211,13 @@ def apply_batch(scope: MemoryScope, *, backup: dict[str, Any], batch_size: int =
     result = event_migration.apply_batch(
         scope, plan, batch_size=batch_size, backup=backup, skip_conflicts=True,
     )
+    if int(result.get("conflict") or 0) and str(result.get("status") or "") == "completed":
+        try:
+            result["conflict_preservation"] = event_migration.preserve_conflicts(
+                scope, plan, backup=backup,
+            )
+        except (OSError, ValueError, TypeError):
+            result["conflict_preservation"] = {"status": "retryable_failed", "preserved": 0}
     state = read_state(scope)
     items = state.get("items") if isinstance(state.get("items"), dict) else {}
     event_items = [item for item in items.values() if item.get("store_kind") == "event_log"]

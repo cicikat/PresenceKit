@@ -536,3 +536,45 @@ def apply_batch(
     if not safe_write_json(_state_path(scope), state, keep_bak=True):
         raise RuntimeError("migration_state_write_failed")
     return migration_status(scope)
+
+
+def preserve_conflicts(scope: MemoryScope, plan: dict[str, Any], *, backup: dict[str, Any]) -> dict[str, Any]:
+    """Retain conflicting legacy evidence under isolated, deterministic IDs.
+
+    This never overwrites the live event.  The original Markdown remains the
+    content authority; the inserted row is a tombstone-like reference that is
+    excluded from normal Reality recall until an operator resolves it.
+    """
+    if backup.get("verified") is not True:
+        raise ValueError("backup_not_verified")
+    conflict_ids = set(plan.get("conflicted_event_ids") or ())
+    conflict_ids.update(
+        event_id for event_id, classification in (plan.get("ledger_classifications") or {}).items()
+        if classification == "conflict"
+    )
+    preserved = 0
+    for entry in plan.get("entries", ()):
+        if entry.event_id not in conflict_ids:
+            continue
+        conflict_id = f"legacy-conflict-{_sha(f'{entry.event_id}:{entry.block_hash}')[:32]}"
+        event = entry.event()
+        event.update({
+            "event_id": conflict_id,
+            "kind": "legacy_unknown",
+            "actor": "legacy_unknown",
+            "occurred_at": 0.0,
+            "source": "legacy_unknown",
+            "raw_text": "",
+            "visible_text": f"[legacy_conflict:{entry.legacy_ref}]",
+            "memory_text": f"[legacy_conflict:{entry.legacy_ref}]",
+            "raw_payload_json": {
+                "legacy_ref": entry.legacy_ref,
+                "legacy_block_sha256": entry.block_hash,
+                "conflict_of_event_id": entry.event_id,
+                "legacy_conflict": True,
+            },
+        })
+        result = event_store.append_event(scope, event)
+        if result.ok:
+            preserved += int(result.inserted)
+    return {"status": "completed", "conflicts": len(conflict_ids), "preserved": preserved}

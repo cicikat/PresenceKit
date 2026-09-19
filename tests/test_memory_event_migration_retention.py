@@ -107,6 +107,20 @@ def test_migration_conflict_is_counted_without_overwrite(sandbox, tmp_path):
     assert status["duplicate"] == 1
 
 
+def test_conflicts_can_be_preserved_as_isolated_evidence(sandbox, tmp_path):
+    from core.memory import event_migration, event_store
+
+    scope = _scope("migration-conflict-preserve")
+    plan = event_migration.scan_legacy(scope, source_dir=_legacy_log(tmp_path / "legacy-preserve"))
+    entry = plan["entries"][0]
+    assert event_store.append_event(scope, {**entry.event(), "memory_text": "different evidence"}).inserted
+    plan = event_migration.scan_legacy(scope, source_dir=_legacy_log(tmp_path / "legacy-preserve"))
+    result = event_migration.preserve_conflicts(scope, plan, backup={"verified": True})
+    assert result["status"] == "completed"
+    assert result["conflicts"] == 1
+    assert result["preserved"] == 1
+
+
 def test_migration_counts_existing_live_canonical_event_without_duplicate(sandbox, tmp_path):
     from core.memory import event_migration, event_store
 
