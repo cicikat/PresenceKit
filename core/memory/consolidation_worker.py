@@ -271,8 +271,16 @@ async def _run_claimed(principal: TaskPrincipal, lease, cfg: dict[str, Any]) -> 
         dossiers.finish_maintenance_run(scope, run_id, status="failed", error_code=code, wall_seconds=elapsed)
         _record_wall(elapsed, error=code, backoff_seconds=int(cfg["retry_backoff_seconds"]))
         work_sessions.fail_work_session(principal, session["work_session_id"], error_code=code)
-        return task_manager.fail_task(principal, lease, error_code=code, retry=True,
-                                      retry_delay_seconds=int(cfg["retry_backoff_seconds"]))
+        try:
+            return task_manager.fail_task(principal, lease, error_code=code, retry=True,
+                                          retry_delay_seconds=int(cfg["retry_backoff_seconds"]))
+        except Exception as lease_error:
+            # The provider can outlive the task lease. Preserve the failed
+            # maintenance receipt without crashing the worker process; the
+            # runtime reconciler will mark the task outcome_unknown safely.
+            logger.warning("maintenance task lease lost after model failure: %s", lease_error)
+            return {"status": "outcome_unknown", "task_id": lease.task_id,
+                    "error_code": "lease_lost_after_model_failure"}
     elapsed = time.monotonic() - started; _record_wall(elapsed)
     current = task_manager.get_task(principal, lease.task_id)
     if current.get("cancel_requested"):
