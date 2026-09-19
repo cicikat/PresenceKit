@@ -131,11 +131,18 @@ async def control_memory_history_reconciliation(
 ):
     action = str(body.get("action") or "")
     uid, char_id = str(body.get("uid") or ""), str(body.get("char_id") or "")
-    if action not in {"pause", "resume", "dry_run", "apply"} or not uid or not char_id:
+    if action not in {"pause", "resume", "dry_run", "freeze", "apply"} or not uid or not char_id:
         raise HTTPException(status_code=422, detail={"code": "invalid_reconciliation_control"})
     _scope(uid, char_id)
     from core.memory import history_reconciliation
     scope = MemoryScope.reality_scope(uid, char_id)
+    if action == "freeze":
+        try:
+            return history_reconciliation.freeze_manifest(
+                scope, manifest_revision=str(body.get("manifest_revision") or "") or None,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail={"code": str(exc)}) from exc
     if action == "dry_run":
         return history_reconciliation.apply_dry_run(scope, backup_verified=False)
     if action == "apply":

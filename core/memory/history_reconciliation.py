@@ -130,6 +130,21 @@ def set_paused(scope: MemoryScope, paused: bool, *, reason: str = "") -> dict[st
     return {"paused": state["paused"], "pause_reason": state["pause_reason"]}
 
 
+def freeze_manifest(scope: MemoryScope, *, manifest_revision: str | None = None) -> dict[str, Any]:
+    """Freeze one manifest revision before any first-night apply."""
+    state = read_state(scope)
+    manifest = state.get("manifest") if isinstance(state.get("manifest"), dict) else None
+    revision = str((manifest or {}).get("manifest_revision") or "")
+    if not revision or (manifest_revision and manifest_revision != revision):
+        raise ValueError("manifest_revision_mismatch")
+    state["frozen_manifest_revision"] = revision
+    state["frozen_at"] = time.time()
+    state["updated_at"] = state["frozen_at"]
+    if not safe_write_json(_state_path(scope), state, keep_bak=True):
+        raise OSError("history_reconciliation_state_write_failed")
+    return {"frozen": True, "manifest_revision": revision, "frozen_at": state["frozen_at"]}
+
+
 def apply_dry_run(scope: MemoryScope, *, backup_verified: bool = False) -> dict[str, Any]:
     """Advance only the batch ledger; source stores remain untouched.
 
@@ -181,6 +196,10 @@ def apply_batch(scope: MemoryScope, *, backup: dict[str, Any], batch_size: int =
         return {"status": "paused", "reason": state.get("pause_reason", "")}
     if not isinstance(backup, dict) or backup.get("verified") is not True:
         return apply_dry_run(scope, backup_verified=False)
+    state = read_state(scope)
+    manifest = state.get("manifest") if isinstance(state.get("manifest"), dict) else {}
+    if str(state.get("frozen_manifest_revision") or "") != str(manifest.get("manifest_revision") or ""):
+        return {"status": "deferred", "reason": "manifest_not_frozen"}
     from core.memory import event_migration
     plan = event_migration.scan_legacy(scope)
     if plan.get("indeterminate"):
@@ -240,6 +259,8 @@ def status(scope: MemoryScope) -> dict[str, Any]:
     return {"schema_version": "memory-reconciliation-status.v1", "paused": bool(state.get("paused")),
             "pause_reason": str(state.get("pause_reason") or ""), "counts": counts,
             "total": sum(counts.values()), "manifest_revision": (state.get("manifest") or {}).get("manifest_revision", ""),
+            "frozen_manifest_revision": str(state.get("frozen_manifest_revision") or ""),
+            "frozen_at": state.get("frozen_at"),
             "last_error": str(state.get("last_error") or "")[:128]}
 
 

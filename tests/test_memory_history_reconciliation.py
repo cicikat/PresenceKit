@@ -110,7 +110,8 @@ def test_verified_backup_releases_deferred_items_and_commits_ledger(sandbox, mon
     from core.memory.scope import MemoryScope
 
     scope = MemoryScope.reality_scope("reconcile-transition", TEST_CHAR_ID)
-    history_reconciliation.create_manifest(scope, now=1)
+    manifest = history_reconciliation.create_manifest(scope, now=1)
+    history_reconciliation.freeze_manifest(scope, manifest_revision=manifest["manifest_revision"])
     deferred = history_reconciliation.apply_dry_run(scope, backup_verified=False)
     assert deferred["status"] == "deferred"
 
@@ -132,7 +133,8 @@ def test_apply_batch_commits_the_corresponding_ledger_item(sandbox, monkeypatch)
     from core.memory.scope import MemoryScope
 
     scope = MemoryScope.reality_scope("reconcile-apply", TEST_CHAR_ID)
-    history_reconciliation.create_manifest(scope, now=1)
+    manifest = history_reconciliation.create_manifest(scope, now=1)
+    history_reconciliation.freeze_manifest(scope, manifest_revision=manifest["manifest_revision"])
     monkeypatch.setattr("core.memory.event_migration.scan_legacy", lambda _scope: {
         "indeterminate": False,
         "source_digest": "source-fixture",
@@ -153,6 +155,19 @@ def test_apply_batch_commits_the_corresponding_ledger_item(sandbox, monkeypatch)
 
     assert result["status"] == "committed"
     assert history_reconciliation.status(scope)["counts"]["committed"] >= 1
+
+
+def test_verified_apply_requires_frozen_manifest(sandbox, monkeypatch):
+    from core.memory import history_reconciliation
+    from core.memory.scope import MemoryScope
+
+    scope = MemoryScope.reality_scope("reconcile-unfrozen", TEST_CHAR_ID)
+    history_reconciliation.create_manifest(scope, now=1)
+    monkeypatch.setattr("core.memory.event_migration.scan_legacy", lambda _scope: {"entries": [], "indeterminate": False})
+    result = history_reconciliation.apply_batch(
+        scope, backup={"verified": True}, dry_run=False,
+    )
+    assert result == {"status": "deferred", "reason": "manifest_not_frozen"}
 
 
 def test_imported_event_consolidation_pins_scope_and_bulk_preset(monkeypatch):
