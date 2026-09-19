@@ -159,6 +159,33 @@ def apply_dry_run(scope: MemoryScope, *, backup_verified: bool = False) -> dict[
     return result
 
 
+def apply_batch(scope: MemoryScope, *, backup: dict[str, Any], batch_size: int = 10,
+                dry_run: bool = True) -> dict[str, Any]:
+    """Apply one bounded event-log batch after an explicit verified backup.
+
+    ``dry_run`` is the default and never writes source evidence.  A non-dry
+    invocation delegates to the existing atomic event migration adapter; other
+    source kinds remain deferred in this first A-C slice.
+    """
+    if dry_run:
+        return apply_dry_run(scope, backup_verified=False)
+    state = read_state(scope)
+    if state.get("paused"):
+        return {"status": "paused", "reason": state.get("pause_reason", "")}
+    if not isinstance(backup, dict) or backup.get("verified") is not True:
+        return apply_dry_run(scope, backup_verified=False)
+    from core.memory import event_migration
+    plan = event_migration.scan_legacy(scope)
+    if plan.get("indeterminate"):
+        return {"status": "deferred", "reason": plan.get("comparison_status", "indeterminate")}
+    result = event_migration.apply_batch(scope, plan, batch_size=batch_size, backup=backup)
+    state = read_state(scope)
+    state["last_apply"] = {"status": result.get("status"), "source_digest": plan.get("source_digest", ""),
+                            "updated_at": time.time()}
+    safe_write_json(_state_path(scope), state, keep_bak=True)
+    return {"status": result.get("status", "retryable_failed"), "migration": result}
+
+
 def status(scope: MemoryScope) -> dict[str, Any]:
     state = read_state(scope); items = state.get("items") or {}
     counts = {name: sum(1 for item in items.values() if item.get("status") == name) for name in STATES}
