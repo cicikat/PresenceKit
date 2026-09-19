@@ -1041,6 +1041,21 @@ Validation: 57 backend regressions, 7 client regressions, build and Edge IPC fix
 open: native Tauri/restarted backend integration. roadmap: mobile tool chain UI and full unbounded
 historical tool receipts. Client evidence: docs/tool-activity-2026-09-12.md in the desktop repository.
 
+## Brief 256 F: executable Agent tasks
+
+`start_agent_task`, `get_agent_task`, and `cancel_agent_task` are Reality-scoped
+`info` tools for the same character's bounded background work session. Start is
+asynchronous and returns a Task Manager ID immediately. The server freezes the
+owner/character principal and resolves only a configured workspace ID; model
+arguments cannot select a path root, principal, shell, manifest, or confirmation
+ticket. Coding actions are limited to manifest-granted text read/create/update and
+the existing no-shell process runner. Every step rechecks cancellation, time/step
+budgets, and manifest revision. Autonomy additionally requires its explicit
+allowlist and character capability. Private goal/input/model/output payloads expire
+after 30 days and never enter task receipts, memory, or action-trace results.
+The worker performs one routed model call; `max_tokens` is the available cost bound
+because model presets do not currently declare currency pricing metadata.
+
 
 ## 按需截图三端接入（2026-09-12，partial）
 

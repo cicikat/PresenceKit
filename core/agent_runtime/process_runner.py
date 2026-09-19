@@ -208,7 +208,7 @@ def _validate_args(args: Iterable[str] | None) -> list[str]:
     return clean
 
 
-def _resolve_program(program: str) -> tuple[Path, Path]:
+def _resolve_program(program: str, *, workspace_id: str | None = None) -> tuple[Path, Path]:
     if not isinstance(program, str) or not program.strip() or len(program) > MAX_PROGRAM_CHARS:
         raise ProcessRunnerError("invalid_program")
     if Path(program).is_absolute() or ".." in Path(program).parts:
@@ -221,7 +221,7 @@ def _resolve_program(program: str) -> tuple[Path, Path]:
 
     try:
         workspace._permission("read")
-        target, root = workspace._resolve(program)
+        target, root = workspace._resolve(program, workspace_id=workspace_id)
     except Exception as exc:
         code = getattr(exc, "code", "program_path_denied")
         raise ProcessRunnerError(code) from exc
@@ -232,6 +232,34 @@ def _resolve_program(program: str) -> tuple[Path, Path]:
     except ValueError as exc:
         raise ProcessRunnerError("program_path_denied") from exc
     return target, root
+
+
+async def run_workspace_program(
+    principal: TaskPrincipal,
+    *,
+    workspace_id: str,
+    program: str,
+    args: Iterable[str] | None = None,
+    interpreter: str = "python",
+    limits: ProcessLimits | dict[str, Any] | None = None,
+    cancel_check: Any = None,
+) -> dict[str, Any]:
+    """Execute one bounded program for an already leased parent capability.
+
+    The caller owns the Task Manager lease. This adapter adds no second task
+    receipt and accepts neither a shell command nor an absolute path.
+    """
+    _validate_principal(principal)
+    target, workspace_root = _resolve_program(program, workspace_id=workspace_id)
+    values = _validate_args(args)
+    return await _execute(
+        target,
+        workspace_root,
+        values,
+        interpreter,
+        _limits(limits),
+        cancel_check=cancel_check,
+    )
 
 
 def _allowed_extensions() -> frozenset[str]:

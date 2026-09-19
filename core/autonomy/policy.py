@@ -23,6 +23,8 @@ _SANDBOXED_WRITE_TOOLS = frozenset({
     "update_reminder",
     "cancel_reminder",
     "restore_reminder",
+    "start_agent_task",
+    "cancel_agent_task",
 })
 
 DECISION_SOURCE_ALLOWLIST = "autonomy_allowlist"

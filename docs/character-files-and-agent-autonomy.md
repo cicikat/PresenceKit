@@ -23,8 +23,8 @@
 | `toy_autogrow.py` | 直写旧目录并裁头 | **D current**：统一 self writer append，不裁头；`enabled: false` 停用习惯 |
 | `reminder.py` | add 走 Runtime；get/mark_done/prune 仍 legacy JSON；add 用 `DEFAULT_CHAR_ID` | **E current**：list/get/add/update/cancel/restore 全部走 Runtime；frozen uid/char；legacy JSON 仅档案/迁移源 |
 | `_TOOL_REGISTRY` | reminder 仅 `add_reminder` | **E current**：六件套已注册；模型不能指定 principal |
-| work sessions | digest/长度，有限 artifact kind | 仍非通用 coding worker |
-| process_runner | 受限 interpreter/program/args，无 shell | 仍如此 |
+| work sessions | digest/长度，有限 artifact kind | **F current**：增加 `agent_task_result`；私有 payload 保存有期输入/结果，receipt 仍无正文 |
+| process_runner | 受限 interpreter/program/args，无 shell | **F current**：worker 复用受限 workspace program adapter；仍无 shell |
 
 255 已改变、工单表未写的相关事实：session scope v1 可冻结 owner/char；workspace 突变 `causation_ref.kind=tool_request`；tuple `execute()` 已删；autonomy 决策矩阵统一 `allowed+decision_source`。本单 grant 必须吃冻结 principal，不得再让模型或 wrapper 默认 `DEFAULT_CHAR_ID`。
 
@@ -127,7 +127,7 @@
 
 ### 2.3 Autonomy 可用集合
 
-`core.autonomy.policy.tool_eligibility()`：危险/需确认工具一律不准入。write 沙盒白名单 **`water_garden`、self 写工具与 reminder 写工具**（`add/update/cancel/restore_reminder`）。显式 autonomy allowlist 或只读 MCP `global_read_inheritance` 才能进入 schema。backend 读已随 B 进入聊天/autonomy 发现面；发起 Agent task 进入 autonomy **须单独准入评审**（F），不得因为聊天 Path C 可见就自动无人值守写 workspace/process。self 默认可整理自己的笔记；workspace 写与 process 仍要 grant/确认。
+`core.autonomy.policy.tool_eligibility()`：危险/需确认工具一律不准入。write 沙盒白名单 **`water_garden`、self 写工具、reminder 写工具与 Agent task start/cancel**。显式 autonomy allowlist 或只读 MCP `global_read_inheritance` 才能进入 schema。backend 读已随 B 进入聊天/autonomy 发现面；**F current** 对 `start_agent_task` 做了单独准入，仍需角色 capability、显式 autonomy allowlist、deployment、workspace manifest 与每步实际操作权限的交集，不会因为聊天 Path C 可见就自动无人值守写 workspace/process。self 默认可整理自己的笔记；workspace 写与 process 仍要 grant。
 
 ### 2.4 post_process writers（非角色工具）
 
@@ -210,13 +210,13 @@ workspace/process 限额延续现状（单文件 5 MiB、总量 50 MiB、并发 
 
 ---
 
-## 5. 读取、脱敏与 Agent task（B current / F 预告）
+## 5. 读取、脱敏与 Agent task（B/F current）
 
 - **B current**：backend 与 external 独立解析。显式关闭仍生效；旧 `fs_access.enabled`/`allow_roots` 迁移为 effective state：allow_roots 变为发现提示，不是外部普通文件唯一准入。
 - **B current**：统一 sensitive-redaction：先于截断、分页、模型、缓存。失败拒绝。禁止 `token` 子串误杀源码。workspace_read、toy 读、artifact 读、process stdout/stderr 复用同一服务。
 - **B current**：高风险凭据库按类型/内容判定，不只靠扩展名。
-- `start_agent_task` 立即返回 `task_id`；coding worker 复用 Task Manager + Work Session + workspace + 受限 process，不新造任务库，不新增无限 shell（F，未落地）。
-- 审批绑定 principal、动作、目标、payload digest、有效期、grant revision（F）。
+- **F current**：`start_agent_task` 立即返回 `task_id`；coding/inspect worker 复用 Task Manager + Work Session + workspace + 受限 process，不新造任务库，不新增无限 shell。
+- workspace manifest 绑定 frozen principal、workspace ID、操作集合、payload digest、有效期与 revision；每步重检，模型参数不是授权。当前 worker 对 update 使用 workspace 版本库；delete/undo 不在 worker manifest 中。
 
 ---
 
@@ -229,9 +229,9 @@ workspace/process 限额延续现状（单文件 5 MiB、总量 50 MiB、并发 
 | `GET /observability/backend-read` | **current**：configured/effective、关闭原因、脱敏版本与计数 |
 | `GET /observability/character-self` | **D current**：配额余量、grant revision、文件计数、最近操作元数据、AGENT.md 注入状态（无正文）、legacy toy 归属/迁移计数；不含私有正文 |
 | `GET /observability/character-reminders` | **E current**：状态计数、revision、到期、重复种类、legacy 迁移计数；不含提醒正文 |
-| 复用 `GET /observability/agent-runtime-tasks` | Agent task 生命周期；角色查询走工具，不把 admin DELETE 暴露给模型（F/G） |
+| 复用 `GET /observability/agent-runtime-tasks` | **F current**：Agent task 生命周期；角色查询走工具，不把 admin DELETE 暴露给模型 |
 
-Brief 229 自身仍“不新增端点”；backend-read 属于 256 B 续篇落地；character-self 属于 256 C；character-reminders 属于 256 E。Agent-task 观测仍拟议。
+Brief 229 自身仍“不新增端点”；backend-read 属于 256 B 续篇落地；character-self 属于 256 C；character-reminders 属于 256 E。Agent-task 生命周期观测由 F 复用既有 Task Manager 端点；G 仍负责专用管理控制面。
 
 ---
 

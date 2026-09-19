@@ -28,6 +28,8 @@ CAPABILITY_MANIFESTS: dict[str, frozenset[str]] = {
     "authored_diary": frozenset({"authored_diary"}),
     "document_summary": frozenset({"document_summary"}),
     "workspace_artifact": frozenset({"workspace_artifact"}),
+    "agent.coding": frozenset({"agent_task_result"}),
+    "agent.inspect": frozenset({"agent_task_result"}),
 }
 _ARTIFACT_KINDS = frozenset().union(*CAPABILITY_MANIFESTS.values())
 _TERMINAL = frozenset({"succeeded", "failed", "canceled", "outcome_unknown"})
@@ -465,7 +467,10 @@ async def run_work_session(
         )
     except Exception as exc:
         code = exc.code if isinstance(exc, WorkSessionError) else "worker_failed"
-        fail_work_session(principal, work_session_id, error_code=code)
+        if code == "cancel_requested":
+            cancel_work_session(principal, work_session_id)
+        else:
+            fail_work_session(principal, work_session_id, error_code=code)
         if isinstance(exc, WorkSessionError):
             raise
         raise WorkSessionError(code) from exc

@@ -430,6 +430,21 @@ class DataPaths:
         """Root used only to enumerate redacted Reality work-session state."""
         return self._p("runtime", "agent_runtime", "reality", "work_sessions")
 
+    def agent_runtime_agent_task_payload(
+        self, user_id: str | int, task_id: str, *, char_id: str = _DEFAULT_CHAR_ID
+    ) -> Path:
+        """Private bounded inputs/results for one executable Agent task."""
+        assert_production_identity_allowed(user_id, mode=self.mode)
+        safe_task_id = safe_user_id(task_id)
+        return self._p(
+            "runtime", "agent_runtime", "reality", "agent_tasks",
+            safe_user_id(char_id), safe_user_id(user_id), f"{safe_task_id}.json",
+        )
+
+    def agent_runtime_agent_tasks_root(self) -> Path:
+        """Root used for private Agent-task payload lifecycle maintenance."""
+        return self._p("runtime", "agent_runtime", "reality", "agent_tasks")
+
     def agent_runtime_browser_profiles_root(self) -> Path:
         """Private per-task browser profiles; never exposed to receipts."""
         return self._p("runtime", "agent_runtime", "reality", "browser_profiles")

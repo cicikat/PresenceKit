@@ -68,10 +68,14 @@ def _path_has_symlink(path: Path) -> bool:
     return False
 
 
-def _roots() -> list[Path]:
-    result: list[Path] = []
-    for raw in _cfg().get("roots") or _cfg().get("allow_roots") or []:
-        if not isinstance(raw, str) or not raw.strip():
+def _root_entries() -> list[tuple[str, Path]]:
+    result: list[tuple[str, Path]] = []
+    for index, raw in enumerate(_cfg().get("roots") or _cfg().get("allow_roots") or []):
+        workspace_id = "default" if index == 0 else f"workspace-{index + 1}"
+        if isinstance(raw, dict):
+            workspace_id = str(raw.get("id") or "").strip()
+            raw = raw.get("path")
+        if not isinstance(raw, str) or not raw.strip() or not re.fullmatch(r"[a-z][a-z0-9_-]{0,63}", workspace_id):
             continue
         try:
             lexical = Path(raw).expanduser().absolute()
@@ -80,9 +84,18 @@ def _roots() -> list[Path]:
             path = lexical.resolve(strict=False)
         except (OSError, RuntimeError):
             continue
-        if path not in result:
-            result.append(path)
+        if path not in {item[1] for item in result} and workspace_id not in {item[0] for item in result}:
+            result.append((workspace_id, path))
     return result
+
+
+def _roots() -> list[Path]:
+    return [path for _workspace_id, path in _root_entries()]
+
+
+def workspace_ids() -> list[str]:
+    """Return configured stable IDs without exposing physical roots."""
+    return [workspace_id for workspace_id, _path in _root_entries()]
 
 
 def _within(path: Path, root: Path) -> bool:
@@ -110,10 +123,17 @@ def _project_data() -> Path:
     return get_paths().root_dir().resolve()
 
 
-def _resolve(raw_path: str, *, allow_missing: bool = False) -> tuple[Path, Path]:
+def _resolve(
+    raw_path: str, *, allow_missing: bool = False, workspace_id: str | None = None
+) -> tuple[Path, Path]:
     if not isinstance(raw_path, str) or not raw_path.strip() or len(raw_path) > _MAX_PATH_CHARS:
         raise WorkspaceError("invalid_workspace_path")
-    roots = _roots()
+    entries = _root_entries()
+    if workspace_id is not None:
+        entries = [item for item in entries if item[0] == workspace_id]
+        if not entries:
+            raise WorkspaceError("workspace_id_not_found")
+    roots = [path for _id, path in entries]
     if not roots:
         raise WorkspaceError("workspace_not_configured")
     candidate = Path(raw_path).expanduser()
@@ -138,6 +158,18 @@ def _resolve(raw_path: str, *, allow_missing: bool = False) -> tuple[Path, Path]
     if not allow_missing and not resolved.exists():
         raise WorkspaceError("path_not_found")
     return resolved, root
+
+
+def resolve_workspace_path(
+    workspace_id: str, relative_path: str, *, allow_missing: bool = False
+) -> Path:
+    """Resolve one model-facing relative path inside a server-selected root."""
+    if not isinstance(relative_path, str) or Path(relative_path).is_absolute() or ".." in Path(relative_path).parts:
+        raise WorkspaceError("workspace_relative_path_required")
+    target, _root = _resolve(
+        relative_path, allow_missing=allow_missing, workspace_id=str(workspace_id or "")
+    )
+    return target
 
 
 def _permission(operation: str) -> None:
@@ -466,6 +498,7 @@ def capability_snapshot() -> dict[str, Any]:
         "desired_enabled": desired_enabled,
         "status": status,
         "root_count": len(configured_roots),
+        "workspace_ids": workspace_ids(),
         "permissions": {name: bool((cfg.get("permissions") or {}).get(name, False)) for name in ("read", "list", "create", "update", "delete")},
         "limits": {"max_file_bytes": int(cfg.get("max_file_bytes", 5 * 1024 * 1024) or 1), "max_total_bytes": int(cfg.get("max_total_bytes", 50 * 1024 * 1024) or 1), "max_concurrent_tasks": int(cfg.get("max_concurrent_tasks", 2) or 2)},
     }

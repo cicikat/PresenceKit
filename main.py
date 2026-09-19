@@ -868,6 +868,9 @@ async def _main_with_services():
         from core.agent_runtime.work_sessions import recover_all_work_sessions
         work_recovery = recover_all_work_sessions()
         logger.info("Agent Runtime work-session recovery complete: %s", work_recovery)
+        from core.agent_runtime.agent_tasks import resume_queued_tasks
+        agent_task_recovery = await resume_queued_tasks()
+        logger.info("Agent Runtime executable-task recovery complete: %s", agent_task_recovery)
         from core.agent_runtime.browser import start_worker as _start_browser_worker
         await _start_browser_worker()
     except Exception:
@@ -998,6 +1001,11 @@ async def _main_with_services():
         await _buttplug_client.disconnect()
         await _slow_queue.shutdown()
         await mcp_client.shutdown_mcp_servers()
+        try:
+            from core.agent_runtime.agent_tasks import shutdown as _stop_agent_tasks
+            await _stop_agent_tasks()
+        except Exception:
+            logger.warning("Agent Runtime executable-task workers failed to stop", exc_info=True)
         try:
             from core.agent_runtime.browser import stop_worker as _stop_browser_worker
             await _stop_browser_worker()

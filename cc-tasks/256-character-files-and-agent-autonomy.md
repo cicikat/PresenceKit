@@ -1,6 +1,6 @@
 # 229 — 单角色文件、自有空间与 Agent 自主能力扩展
 
-日期：2026-09-18。状态：A/B/C/D/E current；F–G 功能施工未开始；H 本轮不执行。
+日期：2026-09-18。状态：A/B/C/D/E/F current；G 功能施工未开始；H 本轮不执行。
 
 本单历史权威见 [Agent Runtime](../docs/agent-runtime-architecture.md)。
 
@@ -101,14 +101,14 @@
 
 依赖 A/B/C；复用 Task Manager、Work Session、workspace、process_runner，不另造任务数据库。D 的 authored prompt 可随后接入，但 F 最终验收需包含它。
 
-- [ ] F1 注册 `start_agent_task`、`get_agent_task`、`cancel_agent_task`；入参为目标、授权 workspace_id、任务类型、有限输入引用和请求预算。服务端取冻结 principal/causation，解析 registry manifest 和 grants；模型不能注入 shell、任意 manifest、确认票据或路径越权。
-- [ ] F2 补齐真正的 bounded coding worker：加载脱敏上下文→模型规划/工具调用→获准读写/受限程序执行→产物检查→完成/失败/待确认。选择既有角色模型路由，保留 char_id。任务 receipt 创建成功不等于 coding 已完成。
-- [ ] F3 Context digest 之外新增有期限的 scoped 输入/产物引用，支持恢复必要输入；不把原始聊天、凭据或执行全文塞进 Task receipt。按既有 store 边界保存，所有模型出口接 B。
-- [ ] F4 发起工具立即返回 task_id/status，不等待长任务阻塞回复。可查询进度、结果摘要、产物引用和验证状态；任务结束通知走既有 Interaction/new ingress，保留关联而不复用原 turn，不直接写入记忆证据。
-- [ ] F5 授权 = origin/realm/deployment/角色策略/workspace grant/manifest/实际操作/预算交集。审批绑定 principal、动作、目标、payload digest、有效期和 grant revision；模型传 `confirmed=true` 无效。撤权后下一步停止，重复票据不能重放。
-- [ ] F6 同一调用重试幂等，同目标的新请求可建新任务；限并发、递归派生、步骤/token/时间/费用；每步验证 lease/cancel。重启未知副作用保留 outcome_unknown，不盲重跑；部分产物和可回滚变更清单保留，不能宣称所有副作用可撤销。
-- [ ] F7 不新增无限 shell。本单编码验收用现有受限 process capability；若实际 executor 不能覆盖所需安全边界，明确 unsupported，另列受控 shell/sandbox 扩展，不用字符串转义冒充隔离。
-- [ ] F8 验证聊天及 autonomy 发起→worker 实际修改授权样例文件→运行获准检查→产物/摘要返回；覆盖拒绝/审批/撤权/超限/取消/重启/重复请求/离线结果通知。独立提交。
+- [x] F1 注册 `start_agent_task`、`get_agent_task`、`cancel_agent_task`；入参为目标、授权 workspace_id、任务类型、有限输入引用和请求预算。服务端取冻结 principal/causation，解析 registry manifest 和 grants；模型不能注入 shell、任意 manifest、确认票据或路径越权。
+- [x] F2 补齐真正的 bounded coding worker：加载脱敏上下文→模型规划/工具调用→获准读写/受限程序执行→产物检查→完成/失败/待确认。选择既有角色模型路由，保留 char_id。任务 receipt 创建成功不等于 coding 已完成。
+- [x] F3 Context digest 之外新增有期限的 scoped 输入/产物引用，支持恢复必要输入；不把原始聊天、凭据或执行全文塞进 Task receipt。按既有 store 边界保存，所有模型出口接 B。
+- [x] F4 发起工具立即返回 task_id/status，不等待长任务阻塞回复。可查询进度、结果摘要、产物引用和验证状态；任务结束通知走既有 Interaction/new ingress，保留关联而不复用原 turn，不直接写入记忆证据。
+- [x] F5 授权 = origin/realm/deployment/角色策略/workspace grant/manifest/实际操作/预算交集。审批绑定 principal、动作、目标、payload digest、有效期和 grant revision；模型传 `confirmed=true` 无效。撤权后下一步停止，重复票据不能重放。
+- [x] F6 同一调用重试幂等，同目标的新请求可建新任务；限并发、递归派生、步骤/token/时间/费用；每步验证 lease/cancel。重启未知副作用保留 outcome_unknown，不盲重跑；部分产物和可回滚变更清单保留，不能宣称所有副作用可撤销。
+- [x] F7 不新增无限 shell。本单编码验收用现有受限 process capability；若实际 executor 不能覆盖所需安全边界，明确 unsupported，另列受控 shell/sandbox 扩展，不用字符串转义冒充隔离。
+- [x] F8 验证聊天及 autonomy 发起→worker 实际修改授权样例文件→运行获准检查→产物/摘要返回；覆盖拒绝/审批/撤权/超限/取消/重启/重复请求/离线结果通知。独立提交。
 
 ## G — 控制面、工具可达性与完整验收
 

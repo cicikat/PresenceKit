@@ -560,6 +560,25 @@ workspace_access:
   max_read_chars: 10000
   max_list_entries: 100
 
+# Same-character background coding/inspection tasks. Each manifest narrows one
+# configured workspace root by stable ID and is rechecked before every action.
+# String workspace roots retain the compatibility IDs default, workspace-2, ...;
+# object form is recommended when Agent tasks are enabled.
+agent_tasks:
+  enabled: false
+  max_concurrent_per_character: 1
+  max_steps: 12
+  max_seconds: 900
+  max_tokens: 4000
+  workspace_manifests: {}
+  # example:
+  # workspace_manifests:
+  #   project:
+  #     enabled: true
+  #     revision: 1
+  #     expires_at: 0  # Unix timestamp; 0 means no additional grant expiry.
+  #     operations: [read, create, update, run]
+
 # Browser automation is an opt-in local experiment. Keep disabled until a
 # separately reviewed worker adapter, domain allowlist, and owner confirmation
 # flow are configured.

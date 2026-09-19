@@ -202,7 +202,12 @@ PresenceKit-desktop 已完成 Tauri Rust native bridge header 迁移；SEC-WS-1 
 可读缓存；失败返回 `sensitive_redaction_failed`，不得退回原文。高风险凭据库按类型/内容拒绝，
 禁止 `token` 子串误杀源文件。模型不能指定 owner/char/realm 或自签授权。UNC、ADS、设备路径
 和 reparse 不是普通本机文件。观测 `GET /observability/backend-read` 只含元数据。
-self 写工具、AGENT.md 注入与 `GET /observability/character-self` 属 256 D current。Agent task 仍属 F/G。
+self 写工具与 AGENT.md 注入属 256 D current。256 F 已增加默认关闭的
+`agent_tasks`：只接受 server-defined workspace ID/manifest，冻结 Reality
+owner+char principal，每步重检 manifest revision、取消和预算；执行仅复用
+workspace 文本操作与无 shell 的 process runner。目标、输入快照、模型计划和
+程序输出不进 Task receipt/记忆，私有 payload 有 30 天保留期限。autonomy 还需
+显式工具 allowlist 与角色 capability。G 的管理控制面仍未落地。
 
 ### 导入/社区包体系未成型
 

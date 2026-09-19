@@ -738,6 +738,74 @@ async def _process_run_wrapper(
     }, ensure_ascii=False)
 
 
+async def _start_agent_task_wrapper(
+    goal: str,
+    workspace_id: str,
+    request_id: str,
+    task_type: str = "coding",
+    input_refs: list[str] | None = None,
+    budget: dict | None = None,
+    *,
+    user_id: str,
+    char_id: str,
+    origin: str,
+) -> str:
+    from core.agent_runtime.agent_tasks import AgentTaskError, start_agent_task
+    from core.agent_runtime.models import CausationRef, TaskPrincipal
+
+    fingerprint = hashlib.sha256(
+        json.dumps(
+            [origin, request_id, goal, workspace_id, task_type, input_refs or [], budget or {}],
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    try:
+        result = await start_agent_task(
+            TaskPrincipal.reality(user_id, char_id),
+            goal=goal,
+            workspace_id=workspace_id,
+            task_type=task_type,
+            input_refs=input_refs,
+            requested_budget=budget,
+            idempotency_key=f"agent-task:{origin}:{request_id}",
+            causation_ref=CausationRef("tool_request", fingerprint),
+            source="autonomy" if origin == "autonomy_loop" else "tool",
+        )
+        return json.dumps(result, ensure_ascii=False)
+    except AgentTaskError as exc:
+        return json.dumps({"status": "failed", "error_code": exc.code}, ensure_ascii=False)
+
+
+async def _get_agent_task_wrapper(
+    task_id: str, *, user_id: str, char_id: str, origin: str
+) -> str:
+    from core.agent_runtime.agent_tasks import get_agent_task
+    from core.agent_runtime.models import TaskPrincipal
+
+    try:
+        result = get_agent_task(TaskPrincipal.reality(user_id, char_id), task_id)
+        return json.dumps(result, ensure_ascii=False)
+    except Exception as exc:
+        code = getattr(exc, "code", "agent_task_not_found")
+        return json.dumps({"status": "failed", "error_code": code}, ensure_ascii=False)
+
+
+async def _cancel_agent_task_wrapper(
+    task_id: str, *, user_id: str, char_id: str, origin: str
+) -> str:
+    from core.agent_runtime.agent_tasks import cancel_agent_task
+    from core.agent_runtime.models import TaskPrincipal
+
+    try:
+        result = cancel_agent_task(TaskPrincipal.reality(user_id, char_id), task_id)
+        return json.dumps(result, ensure_ascii=False)
+    except Exception as exc:
+        code = getattr(exc, "code", "agent_task_not_found")
+        return json.dumps({"status": "failed", "error_code": code}, ensure_ascii=False)
+
+
 async def _browser_automation_wrapper(
     url: str,
     operation: str,
@@ -1698,6 +1766,55 @@ _TOOL_REGISTRY["process_run"] = {
     "trace_args": ["program", "interpreter"],
 }
 
+_TOOL_REGISTRY["start_agent_task"] = {
+    "func": _start_agent_task_wrapper,
+    "description": (
+        "启动一个当前角色的有界后台工作任务，并立即返回 task_id。"
+        "仅选择服务端已授权的 workspace_id；不要提供 shell、绝对路径、确认票据或身份字段。"
+        "同一次工具调用重试必须复用 request_id；新的明确请求使用新的 request_id。"
+    ),
+    "dangerous": False,
+    "category": "info",
+    "effect": "write",
+    "parameters": {"type": "object", "additionalProperties": False, "properties": {
+        "goal": {"type": "string", "minLength": 1, "maxLength": 2000, "description": "后台任务的具体目标。"},
+        "workspace_id": {"type": "string", "minLength": 1, "maxLength": 64, "description": "服务端配置的稳定 workspace ID。"},
+        "request_id": {"type": "string", "minLength": 8, "maxLength": 128, "description": "本次调用的幂等 ID；重试时保持不变。"},
+        "task_type": {"type": "string", "enum": ["coding", "inspect"], "description": "coding 可按 manifest 修改并验证；inspect 只读。"},
+        "input_refs": {"type": "array", "maxItems": 8, "items": {"type": "string", "maxLength": 1024}, "description": "workspace 内有限相对文件引用。"},
+        "budget": {"type": "object", "additionalProperties": False, "properties": {
+            "steps": {"type": "integer", "minimum": 1, "maximum": 32},
+            "seconds": {"type": "integer", "minimum": 10, "maximum": 1800},
+            "tokens": {"type": "integer", "minimum": 256, "maximum": 16000},
+        }},
+    }, "required": ["goal", "workspace_id", "request_id"]},
+    "examples": ["在已授权工作区后台修改样例并运行检查", "后台检查这个项目文件"],
+    "keywords": ["后台任务", "Agent task", "修改并验证", "稍后完成"],
+    "trace_args": ["workspace_id", "task_type"],
+}
+
+_TOOL_REGISTRY["get_agent_task"] = {
+    "func": _get_agent_task_wrapper,
+    "description": "查询当前角色在当前用户范围内的后台 Agent task 进度、脱敏摘要、相对产物引用和验证状态。",
+    "dangerous": False, "category": "info", "effect": "read",
+    "parameters": {"type": "object", "additionalProperties": False, "properties": {
+        "task_id": {"type": "string", "minLength": 32, "maxLength": 32},
+    }, "required": ["task_id"]},
+    "examples": ["查看刚才后台任务的进度"], "keywords": ["任务进度", "后台结果"],
+    "trace_args": ["task_id"],
+}
+
+_TOOL_REGISTRY["cancel_agent_task"] = {
+    "func": _cancel_agent_task_wrapper,
+    "description": "取消当前角色在当前用户范围内的后台 Agent task；运行中的任务会在下一个有界检查点停止。",
+    "dangerous": False, "category": "info", "effect": "write",
+    "parameters": {"type": "object", "additionalProperties": False, "properties": {
+        "task_id": {"type": "string", "minLength": 32, "maxLength": 32},
+    }, "required": ["task_id"]},
+    "examples": ["取消刚才的后台任务"], "keywords": ["取消任务", "停止后台任务"],
+    "trace_args": ["task_id"],
+}
+
 _TOOL_REGISTRY["browser_automation"] = {
     "func": _browser_automation_wrapper,
     "description": "在显式允许的网页域名中执行隔离浏览器操作；页面结果有界且不会暴露凭据、cookie、header 或 profile。高风险操作需要 confirmed=true。",
@@ -2589,13 +2706,17 @@ async def _execute_structured_impl(
             "self_move", "self_delete", "self_restore",
             "list_reminders", "get_reminder", "add_reminder",
             "update_reminder", "cancel_reminder", "restore_reminder",
+            "start_agent_task", "get_agent_task", "cancel_agent_task",
         }:
             for key in ("user_id", "uid", "char_id", "owner", "realm"):
                 if key in tool_args:
                     result = "grant_principal_mismatch"
                     break
             else:
-                result = await func(user_id=user_id, char_id=char_id, **tool_args)
+                if tool_name in {"start_agent_task", "get_agent_task", "cancel_agent_task"}:
+                    result = await func(user_id=user_id, char_id=char_id, origin=origin, **tool_args)
+                else:
+                    result = await func(user_id=user_id, char_id=char_id, **tool_args)
         elif tool_name in ("read_watch",):
             result = await func(user_id=user_id, **tool_args)
         elif tool_name in (

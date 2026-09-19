@@ -428,9 +428,24 @@ and recent op metadata; no private notes. `toy_autogrow.enabled` remains the
 character habit switch. Reminders are E current: tools
 `list/get/add/update/cancel/restore_reminder` write Runtime schedules for the
 frozen character; `GET /observability/character-reminders` (`state.read`) is
-metadata-only. Agent-task observation remains proposed (F–G).
-`workspace_access` and process/browser capabilities are unchanged except that their
-model-facing reads/outputs reuse the same redaction service.
+metadata-only. Agent-task lifecycle observation reuses the existing metadata-only
+`GET /observability/agent-runtime-tasks`; G still owns any dedicated management UI.
+`agent_tasks.enabled` is the separate, default-off admission gate for the F worker.
+`start_agent_task/get_agent_task/cancel_agent_task` use the frozen owner+character
+principal and a server-defined `workspace_manifests.<workspace_id>` revision/expiry. A
+manifest narrows operations to `read/create/update/run`; it cannot add an operation
+disabled by `workspace_access` or `process_runner`. Chat tool visibility grants no
+autonomy authority: autonomy also requires its existing explicit tool allowlist,
+character capability, deployment gate, and the same manifest. `max_steps`,
+`max_seconds`, `max_tokens`, and `max_concurrent_per_character` are hard-capped by
+the worker. The worker makes one routed model call, so token capping is also its
+current cost bound; no currency estimate is exposed because presets have no pricing
+metadata. Task receipt observation remains metadata-only; private goals, bounded
+input text, model plans, and command output stay in the Agent-task payload store.
+
+`workspace_access` roots now also accept `{id, path}` entries. Legacy string roots
+retain compatibility IDs (`default`, `workspace-2`, ...). Process/browser behavior
+is otherwise unchanged and model-facing reads/outputs reuse the same redaction service.
 
 ## Brief 232 Agent Work Sessions
 

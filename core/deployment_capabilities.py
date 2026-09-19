@@ -29,6 +29,9 @@ REMOTE_BLOCKED_TOOLS = frozenset({
     "workspace_delete",
     "workspace_undo",
     "process_run",
+    "start_agent_task",
+    "get_agent_task",
+    "cancel_agent_task",
 })
 
 REMOTE_CLIENT_ACTIONS = frozenset({

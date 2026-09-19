@@ -11,8 +11,8 @@
 | current | Brief 230 Reality Task Manager (`runtime/agent_runtime/reality`); Brief 231 registered trigger adapters; Brief 232 same-character work sessions; Brief 233 workspace capability with `causation_ref.kind=tool_request`; Brief 234 local process runner; Brief 239 browser confirmation hardening |
 | current (256 B) | `fs_list`/`fs_read` backend vs external split, unified sensitive-redaction, `GET /observability/backend-read`. |
 | current (256 C) | Character self space `self_list/read/create/update/move/delete/restore`, `GET /observability/character-self`. |
-| current (256 D) | self-authored `AGENT.md` prompt layer, thin toy `file_key` mapping onto self notes, frozen shared-archive migration. Reminders and Agent task remain later tickets. |
-| proposed (256 E–G, not current) | reminder lifecycle tools and a bounded coding worker launched from chat/autonomy. Contract: [character-files-and-agent-autonomy.md](character-files-and-agent-autonomy.md). |
+| current (256 D) | self-authored `AGENT.md` prompt layer, thin toy `file_key` mapping onto self notes, frozen shared-archive migration. |
+| current (256 E–F) | reminder lifecycle tools and a bounded coding/inspection worker launched asynchronously from chat or an explicitly admitted autonomy tool. Contract: [character-files-and-agent-autonomy.md](character-files-and-agent-autonomy.md). |
 | roadmap | Briefs 235-237 remaining gated capabilities, coverage proof, and old-path removal together with guards/tests/docs; Dream-side Task Runtime with its own root; `letter_writer` Task/副链 artifact migration; visible completion notification via a fresh Reality `EventContext` |
 | non-goal | universal EventBus, `kind=task/tool/activity` dispatcher, or a second acting subject |
 
@@ -220,8 +220,8 @@ a durable 副链 does not by itself mean the foreground 主链 cannot use that c
 | `list_reminders`, `get_reminder`, `add_reminder`, `update_reminder`, `cancel_reminder`, `restore_reminder` | scheduler | current (256 E): Reality owner+char schedules; CAS update; cancel recoverable; completed lease not revived; delivery rechecks revision |
 | `fs_list`, `fs_read` | backend/external read | current (256 B): backend default-read, allow_roots as discovery hints, unified redaction before truncate; owner/char/realm isolation remains |
 | `read_toy_file`, `write_toy_file` | fixed authored document | enum targets in the shared toy directory, not workspace and not per-char self. 256 C landed `self_*`; D migrates old notes |
-| `self_list/read/create/update/move/delete/restore` | character self space | current (256 C): Reality owner+char bucket, default grant, admin may revoke; not danger-gated; writes use lock+CAS+trash |
-| `start_agent_task`, `get_agent_task`, `cancel_agent_task` | same-character bounded coding worker | **proposed (256 F)**; not registered. Receipt creation ≠ coding complete |
+| `self_list`, `self_read`, `self_create`, `self_update`, `self_move`, `self_delete`, `self_restore` | character self space | current (256 C): Reality owner+char bucket, default grant, admin may revoke; not danger-gated; writes use lock+CAS+trash |
+| `start_agent_task`, `get_agent_task`, `cancel_agent_task` | same-character bounded coding worker | **current (256 F)**; starts asynchronously, rechecks manifest revision and budgets per step, and exposes only bounded result projection. Receipt creation ≠ coding complete |
 | `read_diary`, `search_diary`, `read_watch`, `get_profile`, `get_episodic`, `read_life_records` | memory/document | Reality-scoped read |
 | `search_events`, `expand_event_window`, `get_related_events` | memory evidence | explicit Reality read; receipts never indexed |
 | `reread_image` | media recall | owner-scoped image reread; cached/vision/ocr, never a write |

@@ -74,6 +74,8 @@ REGISTRY: dict[str, PathMeta] = {
     "agent_runtime_task_state": PathMeta("runtime", "reality",         "per_char_user", "ignore"),
     "agent_runtime_work_session_state": PathMeta("runtime", "reality", "per_char_user", "ignore"),
     "agent_runtime_work_sessions_root": PathMeta("runtime", "reality", "global", "ignore"),
+    "agent_runtime_agent_task_payload": PathMeta("runtime", "reality", "per_char_user", "ignore"),
+    "agent_runtime_agent_tasks_root": PathMeta("runtime", "reality", "global", "ignore"),
     "agent_runtime_browser_profiles_root": PathMeta("runtime", "reality", "global", "ignore"),
     "agent_runtime_workspace_versions_dir": PathMeta("runtime", "reality", "per_char_user", "ignore"),
     "agent_runtime_schedules_root": PathMeta("runtime", "reality", "global", "ignore"),
