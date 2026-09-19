@@ -376,6 +376,35 @@ async def consolidate_imported_events(scope: MemoryScope, *, preset: str = "ä¾¿å
     )
 
 
+def settle_evidence_only(scope: MemoryScope, *, reason: str, operator: str = "admin") -> dict[str, Any]:
+    """Close remaining dossier inputs without making semantic claims.
+
+    This is an explicit operator action for provider outages or calibration
+    pauses.  It records ``evidence_only`` processing receipts and leaves the
+    source event and dossier tables unchanged.
+    """
+    reason = str(reason or "").strip()[:256]
+    if not reason:
+        raise ValueError("evidence_only_reason_required")
+    from core.memory import dossiers
+    events = dossiers.maintenance_candidates(scope, limit=100, max_chars=24000)
+    if not events:
+        return {"status": "no_work", "processed": 0, "reason": reason}
+    items = [{"store_kind": event["store_kind"], "source_id": event["source_id"],
+              "source_revision": event["source_revision"], "ingest_sequence": event["ingest_sequence"],
+              "input_digest": event["input_digest"], "semantic_outcomes": ["evidence_only"]}
+             for event in events]
+    operation_id = hashlib.sha256(
+        f"evidence-only:{scope.uid}:{scope.character_id}:{reason}:{items[-1]['ingest_sequence']}".encode()
+    ).hexdigest()[:32]
+    result = dossiers.apply_operations(
+        scope, [], operation_id=operation_id, actor=f"character:{scope.character_id}",
+        chain="admin_recovery", processing_items=items,
+    )
+    return {"status": "committed", "processed": result["processed"],
+            "reason": reason, "operator": str(operator)[:128], "operation_id": operation_id}
+
+
 async def run_first_night(
     scope: MemoryScope,
     *,

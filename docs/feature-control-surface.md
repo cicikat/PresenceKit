@@ -751,5 +751,14 @@ The current adapter applies the existing event-log migration in bounded
 batches. When `consolidate=true` (the admin apply default), it then admits one
 same-scope dossier pass through the existing `memory.consolidation` capability,
 pinned to the configured cheap `便宜小模型grok-see` preset. Other historical
-stores remain deferred. No production snapshot, semantic calibration,
+derived historical stores may be closed only as `evidence_only` when the
+provider is unavailable; this is not semantic calibration or an active dossier
+conclusion. The verified offline snapshot and recovery drill are recorded
+outside this control surface. No production snapshot, semantic calibration,
 first-night manifest, or morning closeout has been performed.
+
+When the configured provider is unavailable, admin may explicitly use
+`action=evidence_only` with a non-empty `reason`. This closes only the
+processing receipt as `evidence_only`; it creates no dossier fact or inference
+and does not alter source evidence. Provider timeout remains observable in the
+consolidation task and work-session status.

@@ -246,3 +246,23 @@ def test_imported_event_consolidation_pins_scope_and_bulk_preset(monkeypatch):
     assert seen["principal"].uid == scope.uid
     assert seen["principal"].char_id == scope.character_id
     assert seen["preset"] == "便宜小模型grok-see"
+def test_settle_evidence_only_requires_reason_and_closes_backlog(sandbox):
+    import pytest
+    from core.memory import dossiers, history_reconciliation
+    from core.memory.event_store import append_event
+    from core.memory.scope import MemoryScope
+
+    scope = MemoryScope.reality_scope("evidence-only-owner", TEST_CHAR_ID)
+    assert append_event(scope, {
+        "event_id": "evidence-only-event", "turn_id": "evidence-only-turn", "seq": 1,
+        "occurred_at": 1.0, "ingested_at": 2.0, "uid": scope.uid,
+        "char_id": scope.character_id, "realm": "reality", "kind": "chat",
+        "actor": "user", "channel": "test", "source": "fixture",
+        "visible_text": "fixture", "memory_text": "fixture",
+    }).ok
+    with pytest.raises(ValueError, match="reason"):
+        history_reconciliation.settle_evidence_only(scope, reason="")
+    result = history_reconciliation.settle_evidence_only(scope, reason="provider_timeout")
+    assert result["status"] == "committed"
+    assert result["processed"] == 1
+    assert dossiers.maintenance_status(scope)["backlog"] == 0
