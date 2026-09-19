@@ -8,7 +8,8 @@ chain receives dedicated dossier read/write grants. A maintenance Work Session
 receives only `memory.consolidation`; it never inherits workspace, process,
 browser, conversation-send, or evidence-write authority. The server freezes the
 Reality principal and grant revision before a model call and rechecks them at
-commit. Registration and execution remain disabled until Brief 258 D.
+commit. The `memory.consolidation` manifest and worker are implemented but
+default-off; production execution remains gated by Brief 259 A-C and Brief 258 F.
 
 > Status: frozen architecture contract. Briefs 230-234 and 239 are implemented
 > foundations. Client protocols, visible completion notification, and EventBus remain
@@ -23,6 +24,7 @@ commit. Registration and execution remain disabled until Brief 258 D.
 | current (256 C) | Character self space `self_list/read/create/update/move/delete/restore`, `GET /observability/character-self`. |
 | current (256 D) | self-authored `AGENT.md` prompt layer, thin toy `file_key` mapping onto self notes, frozen shared-archive migration. |
 | current (256 E–F) | reminder lifecycle tools and a bounded coding/inspection worker launched asynchronously from chat or an explicitly admitted autonomy tool. Contract: [character-files-and-agent-autonomy.md](character-files-and-agent-autonomy.md). |
+| current (258 D-E) | default-off `memory.consolidation` maintenance Work Session, durable task/session recovery, budget and backoff state, and metadata-only admin control/observability. |
 | roadmap | Briefs 235-237 remaining gated capabilities, coverage proof, and old-path removal together with guards/tests/docs; Dream-side Task Runtime with its own root; `letter_writer` Task/副链 artifact migration; visible completion notification via a fresh Reality `EventContext` |
 | non-goal | universal EventBus, `kind=task/tool/activity` dispatcher, or a second acting subject |
 

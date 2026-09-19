@@ -84,11 +84,11 @@
 
 ## E — 控制面与端到端验证
 
-- [ ] E1 后端集中展示 configured/effective、夜窗、预算/余量、当前批次、覆盖截止、积压、失败/待核实及暂停原因。state.read 只含元数据；正文、证据及修订详情使用 memory.read。
-- [ ] E2 配置/启停/撤权/恢复沿既有受鉴权管理面；同步 feature-control-surface、memory、tools、scheduler、agent-runtime、data-taxonomy 与实际受影响接口文档。
-- [ ] E3 不新增桌面/手机协议或设置；检查现有聊天工具结果通路，只有真实跨端字段变化才扩展对应仓库。
-- [ ] E4 运行任务相关回归与记忆质量场景集：正确命中、完整事件链、重复计数、反例、错误更正、失效传播、按需查证、token 上限、前台资源让行。记录基线与变更后结果，不用 schema 成功替代语义验收。
-- [ ] E5 管理面静态变更统一更新缓存版本，硬刷新浏览器验证；记录实际服务/浏览器/客户端 not-run 项，独立提交。
+- [x] E1 后端集中展示 configured/effective、夜窗、预算/余量、当前批次、覆盖截止、积压、失败/待核实及暂停原因。state.read 只含元数据；正文、证据及修订详情使用 memory.read。
+- [x] E2 配置/启停/撤权/恢复沿既有受鉴权管理面；同步 feature-control-surface、memory、tools、scheduler、agent-runtime、data-taxonomy 与实际受影响接口文档。
+- [x] E3 不新增桌面/手机协议或设置；检查现有聊天工具结果通路，只有真实跨端字段变化才扩展对应仓库。
+- [x] E4 运行任务相关回归与记忆质量场景集：正确命中、完整事件链、重复计数、反例、错误更正、失效传播、按需查证、token 上限、前台资源让行。记录基线与变更后结果，不用 schema 成功替代语义验收。
+- [x] E5 管理面静态变更统一更新缓存版本，硬刷新浏览器验证；记录实际服务/浏览器/客户端 not-run 项，独立提交。
 
 ## F — 首夜上线与翌晨验收（依赖 259 A–C）
 
@@ -110,9 +110,22 @@
 
 每张 A–G 子单完成相关验证、diff/换行检查后立即独立 commit，再开始下一张。有证据才勾选。本次文档检查不勾施工项。
 
+E evidence: 355 focused backend/admin/security/static regression tests passed;
+the isolated Playwright check `py -3.14 tests/memory_consolidation_browser.py`
+passed after a cache-cleared desktop/mobile hard refresh. The baseline and
+post-change semantic scenario matrix is recorded in
+`docs/character-memory-dossiers-validation.md`. `test_admin_static_split.py`
+still reports two pre-existing orphan inline CSS selectors (`admin-inline-103`
+and `admin-inline-131`); they are unrelated to this page and were not deleted
+or faked into use. No production model call, migration, enablement, or native
+client build was performed.
+
 | 子单 | commit | 验证 | 运行/生产边界 |
 |---|---|---|---|
 | A | 待本次提交 | 文档链接/diff/换行检查 | 合同冻结；未启用、未迁移、首夜未运行 |
 | B | 待本次提交 | `pytest tests/test_memory_dossiers.py tests/test_memory_event_store.py -q`（18 passed） | 派生库实现；未接 prompt/工具/调度，未迁移 |
 | C | 待本次提交 | 相关 pytest 29 passed；`python tests/run_eval.py` 20/20 | 实时工具/召回已接线；后台未运行、未迁移 |
-| D–G | 未施工 | 未执行 | 后台未启用、未迁移、首夜未运行 |
+| D | `518c63c` | 80 passed | 后台实现但默认关闭，未迁移 |
+| E | 待本次提交 | 355 focused tests + isolated Playwright pass | 控制面已验收；生产未启用、未迁移 |
+| F | 未施工 | 依赖 259 A-C 与生产授权 | 首夜未运行 |
+| G | 未施工 | 待清单审计 | 未授权删除 |

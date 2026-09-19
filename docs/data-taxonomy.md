@@ -175,6 +175,7 @@ Prompt、API key、base URL 或模型自由文本。校准任务只在进程生�
 | `diary_context.txt` | 层 6d 用户近期日记上下文 |
 | `reminders.json` | 待办备忘 leftover 档案（256 E：live 权威是 Runtime `agent_runtime_schedule_state`；本文件仅迁移源/回滚档案） |
 | `fixation_state.json` | 固化 pipeline 状态 |
+| `memory_dossiers.sqlite3` | Brief 258 可重建的主题 dossier、证据成员、revision、操作回执与维护 checkpoint（derived；Reality per-char-user） |
 
 `DataPaths.history()`、`mid_term()`、`profiles()` 等分类型 accessor 仍保留给少量兼容调用方；
 新增 per-user 读写优先使用 `user_memory_root()`。
@@ -218,6 +219,7 @@ Dream domain 独立落在 `data/runtime/dreams/{char_id}/`，不进入 reality m
   fail-open，最近 7 天；只读查询见 `GET /observability/api-calls`）
 - 支出账本：`data/runtime/spend/ledger.jsonl`，`GET /spend/ledger` / `GET /spend/budget` / `POST /spend/check`（admin）。预留 `GET /spend/mandates` 读面已删；confirm/reject writer、购买执行器和商家 adapter 仍不存在（Brief 63/64/226）。历史 `mandates.jsonl` 若存在不由代码清掉。
 - Agent Runtime Reality 根：`data/runtime/agent_runtime/reality/`（tasks / work_sessions / workspace_versions / browser_profiles / schedules）
+- dossier 整合运行态：`data/runtime/memory_consolidation_state.json`（global runtime；仅预算、退避和调度元数据，可重建且无记忆正文）
 - 角色提醒权威（256 H）：`data/runtime/agent_runtime/reality/schedules/{uid}/{char_id}.json`，accessor `agent_runtime_schedule_state`；legacy 归属与迁移报告保留供 90 天备份回滚审计，live reader/writer 已删除
 - 旧共享 toy 目录（256 H）：`very_formal_project_dir()` 仅供离线迁移/回滚；live 读写走 character_self，冷却走 character_self_meta。生产源在备份与恢复校验后清理，备份保留 90 天
 - 角色 self 空间（256 D current）：`data/runtime/self/{char_id}/{uid}/` 用户内容与

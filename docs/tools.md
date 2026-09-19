@@ -989,6 +989,12 @@ principal. Group execution is rejected. Updates accept only the structured
 dossier operation schema with CAS and an idempotent operation ID. Full-history
 work returns a Task Manager reference instead of blocking the chat turn.
 
+The tools are available only in an owner Reality turn and always use the
+server-frozen scope. Automatic maintenance is a separate default-off Work
+Session capability; it cannot send conversation messages or acquire workspace,
+process, browser, or evidence-write authority. Admin inspection and control use
+REST scopes rather than model tools.
+
 ## Brief 238 Browser worker
 
 Brief 239 binds each task to a normalized `http/https` URL (fragment removed, query retained),

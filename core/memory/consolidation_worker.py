@@ -32,7 +32,7 @@ _scope_locks_guard = threading.Lock()
 _state_lock = threading.RLock()
 
 _DEFAULTS: dict[str, Any] = {
-    "enabled": False, "grant_revision": 1,
+    "enabled": False, "paused": False, "pause_reason": "", "grant_revision": 1,
     "night_start_hour": 23, "night_end_hour": 7, "idle_seconds": 600,
     "max_global_workers": 1, "batch_size": 100, "max_input_chars": 24000,
     "max_tokens_per_call": 1200, "daily_call_budget": 8,
@@ -61,6 +61,8 @@ def config() -> dict[str, Any]:
         try: value[key] = min(high, max(low, int(value[key])))
         except (TypeError, ValueError): value[key] = _DEFAULTS[key]
     value["enabled"] = bool(value.get("enabled"))
+    value["paused"] = bool(value.get("paused"))
+    value["pause_reason"] = str(value.get("pause_reason") or "")[:128]
     value["background_preset"] = str(value.get("background_preset") or "")[:128]
     return value
 
@@ -282,6 +284,17 @@ async def _run_claimed(principal: TaskPrincipal, lease, cfg: dict[str, Any]) -> 
         work_sessions.cancel_work_session(principal, session["work_session_id"])
         return task_manager.acknowledge_pause(principal, lease)
     fresh_cfg = config()
+    if fresh_cfg["paused"]:
+        dossiers.finish_maintenance_run(
+            scope, run_id, status="paused", error_code="control_paused", wall_seconds=elapsed,
+        )
+        work_sessions.fail_work_session(
+            principal, session["work_session_id"], error_code="control_paused",
+        )
+        return task_manager.fail_task(
+            principal, lease, error_code="control_paused", retry=True,
+            retry_delay_seconds=int(cfg["retry_backoff_seconds"]),
+        )
     if not fresh_cfg["enabled"] or int(fresh_cfg["grant_revision"]) != int(cfg["grant_revision"]):
         dossiers.finish_maintenance_run(scope, run_id, status="revoked", error_code="grant_changed", wall_seconds=elapsed)
         work_sessions.fail_work_session(principal, session["work_session_id"], error_code="grant_changed")
@@ -367,6 +380,7 @@ async def tick(*, now: datetime | None = None) -> dict[str, Any]:
     """Admit at most one fair scope and one model call per scheduler tick."""
     cfg = config()
     if not cfg["enabled"]: return {"status": "disabled", "model_calls": 0}
+    if cfg["paused"]: return {"status": "paused", "model_calls": 0}
     if not _night_window(cfg, now): return {"status": "outside_window", "model_calls": 0}
     if _backoff_active(): return {"status": "backoff", "model_calls": 0}
     if not _global_budget_allows(cfg): return {"status": "budget_exhausted", "model_calls": 0}
@@ -407,13 +421,112 @@ async def tick(*, now: datetime | None = None) -> dict[str, Any]:
     return {"status": "no_work", "model_calls": 0}
 
 
-def runtime_snapshot() -> dict[str, Any]:
+def _effective_reason(cfg: dict[str, Any]) -> str:
+    if not cfg["enabled"]: return "disabled"
+    if cfg["paused"]: return cfg["pause_reason"] or "paused"
+    if not _night_window(cfg): return "outside_night_window"
+    if _backoff_active(): return "failure_backoff"
+    if not _global_budget_allows(cfg): return "global_budget_exhausted"
+    return "ready"
+
+
+def runtime_snapshot(*, uid: str | None = None, char_id: str | None = None) -> dict[str, Any]:
     cfg = config(); state = _state(); day, _ = _day_bounds(); usage = (state.get("days") or {}).get(day, {})
-    return {"schema_version": "memory-consolidation-status.v1", "configured": bool(cfg["enabled"]),
-        "effective": bool(cfg["enabled"] and _night_window(cfg) and not _backoff_active()),
+    reason = _effective_reason(cfg)
+    result = {"schema_version": "memory-consolidation-status.v1", "configured": bool(cfg["enabled"]),
+        "effective": reason == "ready", "effective_reason": reason,
+        "paused": bool(cfg["paused"]), "pause_reason": cfg["pause_reason"],
+        "grant_revision": cfg["grant_revision"],
         "night_window": {"start_hour": cfg["night_start_hour"], "end_hour": cfg["night_end_hour"]},
         "idle_seconds": cfg["idle_seconds"], "budgets": {"calls": int(usage.get("calls") or 0),
         "call_limit": cfg["daily_call_budget"], "tokens": int(usage.get("tokens") or 0),
         "token_limit": cfg["daily_token_budget"], "wall_seconds": float(usage.get("wall_seconds") or 0),
         "wall_limit": cfg["daily_wall_seconds"]}, "backoff_until": float(state.get("backoff_until") or 0),
-        "last_error": str(state.get("last_error") or ""), "global_worker_limit": 1}
+        "last_error": str(state.get("last_error") or ""), "global_worker_limit": 1,
+        "limits": {"batch_size": cfg["batch_size"], "max_input_chars": cfg["max_input_chars"],
+                   "max_tokens_per_call": cfg["max_tokens_per_call"]},
+        "background_preset": cfg["background_preset"],
+    }
+    result["budgets"].update({
+        "calls_remaining": max(0, cfg["daily_call_budget"] - result["budgets"]["calls"]),
+        "tokens_remaining": max(0, cfg["daily_token_budget"] - result["budgets"]["tokens"]),
+        "wall_seconds_remaining": max(0.0, cfg["daily_wall_seconds"] - result["budgets"]["wall_seconds"]),
+    })
+    if uid is not None or char_id is not None:
+        if not uid or not char_id:
+            raise ValueError("uid_and_char_id_required")
+        from core.agent_runtime import task_manager, work_sessions
+        from core.memory import dossiers
+        principal = TaskPrincipal.reality(uid, char_id)
+        tasks = task_manager.list_tasks(principal, capability=CAPABILITY, limit=100)
+        sessions = [item for item in work_sessions.list_work_sessions(principal, limit=100)
+                    if item["capability"] == CAPABILITY]
+        task_counts: dict[str, int] = {}
+        for item in tasks: task_counts[item["status"]] = task_counts.get(item["status"], 0) + 1
+        session_counts: dict[str, int] = {}
+        for item in sessions: session_counts[item["status"]] = session_counts.get(item["status"], 0) + 1
+        result["scope"] = {"char_id": char_id, "realm": "reality"}
+        result["scope_status"] = dossiers.maintenance_status(MemoryScope.reality_scope(uid, char_id))
+        result["scope_status"]["task_status_counts"] = dict(sorted(task_counts.items()))
+        result["scope_status"]["work_session_status_counts"] = dict(sorted(session_counts.items()))
+        result["scope_status"]["unverified"] += int(task_counts.get("outcome_unknown", 0))
+    return result
+
+
+def reset_failure_backoff() -> None:
+    with _state_lock:
+        state = _state()
+        state["consecutive_failures"] = 0
+        state["last_error"] = ""
+        state["backoff_until"] = 0.0
+        _save_state(state)
+
+
+def control_scope(principal: TaskPrincipal, action: str) -> dict[str, int]:
+    """Apply an explicit task lifecycle action without touching memory content."""
+    from core.agent_runtime import task_manager, work_sessions
+
+    if action not in {"pause", "resume", "revoke", "recover_unknown"}:
+        raise ValueError("invalid_control_action")
+    unknown_before = sum(
+        item["status"] == "outcome_unknown"
+        for item in task_manager.list_tasks(principal, capability=CAPABILITY, limit=100)
+    )
+    _reconcile_unknown(principal)
+    unknown_after = sum(
+        item["status"] == "outcome_unknown"
+        for item in task_manager.list_tasks(principal, capability=CAPABILITY, limit=100)
+    )
+    counts = {
+        "changed": 0,
+        "receipts_reconciled": max(0, unknown_before - unknown_after),
+        "unknown_failed": 0,
+    }
+    tasks = task_manager.list_tasks(principal, capability=CAPABILITY, limit=100)
+    sessions = work_sessions.list_work_sessions(principal, limit=100)
+    sessions_by_task = {item["task_id"]: item for item in sessions if item["capability"] == CAPABILITY}
+    for task in tasks:
+        before = task["status"]
+        if action == "pause" and before in {"created", "queued", "running"}:
+            task_manager.request_pause(principal, task["task_id"])
+        elif action == "resume" and before == "paused":
+            task_manager.resume_task(principal, task["task_id"])
+        elif action == "revoke" and before not in {"succeeded", "failed", "canceled", "expired", "outcome_unknown"}:
+            task_manager.request_cancel(principal, task["task_id"], reason_code="grant_revoked")
+        elif action == "recover_unknown" and before == "outcome_unknown":
+            session = sessions_by_task.get(task["task_id"])
+            if session and session["status"] == "outcome_unknown":
+                work_sessions.reconcile_unknown_work_session(
+                    principal, session["work_session_id"], artifact_id="", artifact_version=0,
+                    succeeded=False, error_code="outcome_unverified",
+                )
+            task_manager.reconcile_outcome_unknown(
+                principal, task["task_id"], succeeded=False, error_code="outcome_unverified",
+                result_metadata={"outcome_code": "outcome_unverified"},
+            )
+            counts["unknown_failed"] += 1
+        after = task_manager.get_task(principal, task["task_id"])["status"]
+        counts["changed"] += int(after != before)
+    if action == "recover_unknown":
+        reset_failure_backoff()
+    return counts

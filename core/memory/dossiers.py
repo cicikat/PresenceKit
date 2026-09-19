@@ -808,3 +808,64 @@ def committed_maintenance_run(scope: MemoryScope, task_id: str) -> dict[str, Any
     with _lock(path), _connect(path, readonly=True) as connection:
         row = connection.execute("SELECT * FROM maintenance_runs WHERE task_id=? AND status='committed' ORDER BY finished_at DESC LIMIT 1", (task_id,)).fetchone()
     return dict(row) if row else None
+
+
+def maintenance_status(scope: MemoryScope) -> dict[str, Any]:
+    """Return content-free consolidation progress for the authenticated control plane."""
+    from core.memory import event_store, source_policy
+
+    scope = _scope(scope)
+    checkpoint = maintenance_checkpoint(scope)
+    path = _path(scope)
+    source_counts: dict[str, int] = {}
+    run_counts: dict[str, int] = {}
+    rows: list[sqlite3.Row] = []
+    if path.exists():
+        with _lock(path), _connect(path, readonly=True) as connection:
+            source_counts = {str(row[0]): int(row[1]) for row in connection.execute(
+                "SELECT status,COUNT(*) FROM source_items GROUP BY status"
+            )}
+            run_counts = {str(row[0]): int(row[1]) for row in connection.execute(
+                "SELECT status,COUNT(*) FROM maintenance_runs GROUP BY status"
+            )}
+            rows = connection.execute(
+                """SELECT run_id,task_id,work_session_id,status,input_count,input_chars,
+                          token_budget,model,preset,identity_revision,prompt_revision,
+                          rules_revision,error_code,started_at,finished_at,wall_seconds
+                   FROM maintenance_runs ORDER BY started_at DESC LIMIT 20"""
+            ).fetchall()
+    backlog = 0
+    event_path = resolve_path(scope, "event_store")
+    if event_path.exists():
+        source_clause, source_params = source_policy.sql_predicate()
+        try:
+            with event_store._lock_for(event_path), sqlite3.connect(
+                f"{event_path.resolve().as_uri()}?mode=ro", uri=True, timeout=0.25,
+            ) as connection:
+                backlog = int(connection.execute(
+                    "SELECT COUNT(*) FROM events WHERE uid=? AND char_id=? AND realm=? AND rowid>?" +
+                    source_clause,
+                    (scope.uid, scope.character_id, scope.domain, checkpoint, *source_params),
+                ).fetchone()[0])
+        except sqlite3.Error:
+            backlog = -1
+    runs = []
+    for row in rows:
+        item = dict(row)
+        item["run_digest"] = hashlib.sha256(item.pop("run_id").encode()).hexdigest()[:16]
+        item["task_digest"] = hashlib.sha256(item.pop("task_id").encode()).hexdigest()[:16]
+        item["work_session_digest"] = hashlib.sha256(
+            item.pop("work_session_id").encode()
+        ).hexdigest()[:16]
+        runs.append(item)
+    return {
+        "coverage_ingest_sequence": checkpoint,
+        "backlog": backlog,
+        "source_status_counts": dict(sorted(source_counts.items())),
+        "run_status_counts": dict(sorted(run_counts.items())),
+        "current_batch": next((item for item in runs if item["status"] == "running"), None),
+        "recent_runs": runs,
+        # A running batch is visible as current_batch. Only an explicitly
+        # unknown durable outcome is counted as unverified by the worker.
+        "unverified": 0,
+    }

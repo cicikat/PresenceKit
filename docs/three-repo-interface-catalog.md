@@ -1005,3 +1005,16 @@ GET /observability/drinking（state.read）返回当前角色强度、decay_per_
 ### Brief 253.6 audio perception — current / observe
 
 admin 的 GET /stt-presets、PUT /stt-presets/presets/{name}、PUT /stt-presets/routes 管理命名连接、voice_message 用途和 effective state。新感知默认关闭。chat scope 的 POST /transcribe 保留 text，新路径增加 tone/audio_perception_id；POST /desktop/chat 与 /mobile/chat 接受可选凭据，原文字兼容。凭据绑定 owner/char/channel/text，5 分钟、一次性、内存上限 128，不改变 WS/poll/ack。QQ record 和 /upload/ingest 单音频也支持转写；各通道失败降级见 [audio-perception.md](audio-perception.md)。桌面 Tauri 仅透传可选字段，手机请求层同样只对原样转写文本发送凭据，无新设置或权限。真实麦克风、QQ 和远端 STT 联调为 observe。
+
+## Brief 258 character memory dossiers (backend-only control plane)
+
+`current`: owner-chat uses the existing function-call/result path for bounded
+dossier tools and the existing prompt pipeline for layer `6b_memory_dossiers`.
+Admin adds `GET /observability/memory-consolidation` (`state.read`), bounded
+`GET /memory/dossiers*` (`memory.read`), and settings/lifecycle control
+(`admin`). No desktop/mobile REST, WebSocket, IPC, poll, relay, notification,
+ack, TTL, correlation-key, permission, or native settings contract changed.
+
+`open`: production rollout and real first-night/next-morning evidence are gated
+by Brief 259 A-C and Brief 258 F. Backend tests and admin browser inspection do
+not constitute production migration evidence.

@@ -80,6 +80,7 @@ REGISTRY: dict[str, PathMeta] = {
     "agent_runtime_workspace_versions_dir": PathMeta("runtime", "reality", "per_char_user", "ignore"),
     "agent_runtime_schedules_root": PathMeta("runtime", "reality", "global", "ignore"),
     "agent_runtime_schedule_state": PathMeta("runtime", "reality", "per_char_user", "ignore"),
+    "memory_consolidation_runtime_state": PathMeta("runtime", "reality", "global", "ignore"),
     "legacy_reminder_owner_record": PathMeta("runtime", "shared", "global", "ignore"),
     "legacy_reminder_migration_report": PathMeta("forensic", "shared", "global", "ignore"),
     "self_management_state":  PathMeta("runtime",   "shared",          "per_char_user", "ignore"),

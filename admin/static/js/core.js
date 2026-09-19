@@ -20,7 +20,7 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'v1-256-character-autonomy-1';
+const ADMIN_UI_FRAGMENT_VERSION = 'v1-258-memory-dossiers-1';
 
 const ADMIN_PAGE_ALIASES = Object.freeze({memory: 'observe-memory'});
 
@@ -38,6 +38,7 @@ const ADMIN_PAGE_CONTEXT = Object.freeze({
   'owner-turn-api': {related: ['auth-tokens', 'status']},
   'agent-runtime-browser': {related: ['tools', 'owner-turn-api']},
   'relationship-facts': {related: ['character', 'observe-memory']},
+  'memory-consolidation': {related: ['observe-memory-events', 'model-routing']},
   'auth-tokens': {related: ['users']},
   status: {related: ['model-routing', 'auth-tokens']},
 });
@@ -340,6 +341,7 @@ async function goto(page, {reloadFragment = false, fromHistory = false} = {}) {
     'observe-spend':   loadObserveSpend,
     'observe-group-arbiter': initObserveGroupArbiter,
     'observe-memory-summary': () => initObserveCharacters('obs-memory-summary-char'),
+    'memory-consolidation': () => initObserveCharacters('memory-consolidation-char', loadMemoryConsolidationStatus),
     'observe-prompt':  () => { loadObservePromptUidList(); },
     'observe-tools':   () => loadObserveToolUidList(),
     'observe-dream-prompt': () => loadObserveDreamPromptUidList(),

@@ -145,3 +145,26 @@ the pipeline suppresses the overlapping event-log and episodic prompt prose for
 that turn while retaining their diagnostic retrieval trace. With no dossier
 hit, legacy recall remains the identifiable fallback. The layer participates in
 normal prompt trimming and ablation.
+
+## Implemented control plane and rollout status
+
+The implementation is default-off. `memory_consolidation.enabled` controls
+automatic claims; `paused` is a fail-closed global stop, and per-scope task
+pause/cancel remains durable in Task Manager. The worker runs only in the
+configured local night window after the idle threshold, with one global worker,
+per-scope fairness, global/per-scope daily budgets, provider backoff, and a
+post-model grant/policy recheck before commit. Empty evidence performs no model
+call. Unknown external outcomes are never automatically replayed without a
+matching durable maintenance receipt.
+
+The admin surface exposes content-free effective state and backlog through
+`GET /observability/memory-consolidation` (`state.read`), bounded dossier detail
+through `GET /memory/dossiers*` (`memory.read`), and configuration/control through
+`PATCH /settings/memory-consolidation` plus
+`POST /memory-consolidation/control` (`admin`). Identifiers in metadata-only
+observability are hashed; dossier prose and evidence remain behind `memory.read`.
+
+Production enablement is not implied by implementation or tests. It requires
+Brief 259 A-C plus the separately authorized Brief 258 F shadow, scoped and
+expansion gates. Desktop/mobile protocols, queues, ack/TTL and native settings
+are unchanged.

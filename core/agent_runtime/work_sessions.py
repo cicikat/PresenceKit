@@ -312,12 +312,16 @@ def reconcile_unknown_work_session(
     *,
     artifact_id: str,
     artifact_version: int,
+    succeeded: bool = True,
+    error_code: str = "reconciled_failed",
     now: float | None = None,
 ) -> dict[str, Any]:
     """Resolve an unknown session after its capability verifies a durable receipt."""
     principal = _validate_principal(principal)
-    if not artifact_id or not _NAME_RE.fullmatch(artifact_id) or artifact_version <= 0:
+    if succeeded and (not artifact_id or not _NAME_RE.fullmatch(artifact_id) or artifact_version <= 0):
         raise WorkSessionError("artifact_not_created")
+    if not succeeded:
+        error_code = _validate_name(error_code, "error_code")
     timestamp = time.time() if now is None else float(now)
     with task_store.scope_lock(principal.uid, principal.char_id):
         state, rows = _load(principal)
@@ -326,11 +330,11 @@ def reconcile_unknown_work_session(
             raise WorkSessionError("work_session_not_found")
         if row.status != "outcome_unknown":
             return _project(row)
-        row.status = "succeeded"
-        row.error_code = ""
+        row.status = "succeeded" if succeeded else "failed"
+        row.error_code = "" if succeeded else error_code
         row.updated_at = timestamp
-        row.artifact_id = artifact_id
-        row.artifact_version = int(artifact_version)
+        row.artifact_id = artifact_id if succeeded else ""
+        row.artifact_version = int(artifact_version) if succeeded else 0
         _save(principal, state, rows)
         return _project(row)
 

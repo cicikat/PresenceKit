@@ -2239,3 +2239,133 @@ async function loadObserveDrinking() {
   try { host.textContent = JSON.stringify(await api('GET', '/observability/drinking'), null, 2); }
   catch (error) { host.textContent = error.message; }
 }
+
+function _memoryConsolidationScope() {
+  return {
+    uid: document.getElementById('memory-consolidation-uid')?.value.trim() || '',
+    charId: document.getElementById('memory-consolidation-char')?.value || '',
+  };
+}
+
+function _memoryConsolidationQueryPath(path) {
+  const {uid, charId} = _memoryConsolidationScope();
+  if (!uid || !charId) throw new Error('需要用户 ID 和角色');
+  const joiner = path.includes('?') ? '&' : '?';
+  return `${path}${joiner}uid=${encodeURIComponent(uid)}&char_id=${encodeURIComponent(charId)}`;
+}
+
+function _setMemoryConsolidationSettings(data) {
+  const map = {
+    'memory-consolidation-enabled': ['configured', Boolean],
+    'memory-consolidation-start': ['night_window.start_hour', Number],
+    'memory-consolidation-end': ['night_window.end_hour', Number],
+    'memory-consolidation-idle': ['idle_seconds', Number],
+    'memory-consolidation-batch': ['limits.batch_size', Number],
+    'memory-consolidation-tokens': ['limits.max_tokens_per_call', Number],
+    'memory-consolidation-calls': ['budgets.call_limit', Number],
+    'memory-consolidation-daily-tokens': ['budgets.token_limit', Number],
+    'memory-consolidation-wall': ['budgets.wall_limit', Number],
+    'memory-consolidation-preset': ['background_preset', String],
+  };
+  const read = path => path.split('.').reduce((value, key) => value?.[key], data);
+  Object.entries(map).forEach(([id, [path, cast]]) => {
+    const element = document.getElementById(id);
+    if (!element) return;
+    const value = read(path);
+    if (element.type === 'checkbox') element.checked = Boolean(value);
+    else element.value = value == null ? '' : cast(value);
+  });
+}
+
+async function loadMemoryConsolidationStatus() {
+  const host = document.getElementById('memory-consolidation-status');
+  if (!host) return;
+  host.className = 'loading';
+  host.textContent = '加载中…';
+  try {
+    const {uid, charId} = _memoryConsolidationScope();
+    const suffix = uid && charId ? `?uid=${encodeURIComponent(uid)}&char_id=${encodeURIComponent(charId)}` : '';
+    const data = await api('GET', `/observability/memory-consolidation${suffix}`);
+    _setMemoryConsolidationSettings(data);
+    const budget = data.budgets || {};
+    const scope = data.scope_status || {};
+    const current = scope.current_batch || {};
+    const cards = [
+      ['生效状态', data.effective ? '运行就绪' : '未生效', data.effective_reason || '-'],
+      ['调用预算', `${budget.calls || 0} / ${budget.call_limit || 0}`, `剩余 ${budget.calls_remaining || 0}`],
+      ['Token 预算', `${budget.tokens || 0} / ${budget.token_limit || 0}`, `剩余 ${budget.tokens_remaining || 0}`],
+      ['覆盖截止', scope.coverage_ingest_sequence ?? '-', `积压 ${scope.backlog ?? '-'}`],
+      ['当前批次', current.status || '无', current.input_count == null ? '-' : `${current.input_count} 条`],
+      ['待核实', scope.unverified || 0, data.last_error || '-'],
+    ];
+    const runs = (scope.recent_runs || []).slice(0, 10);
+    host.className = '';
+    host.innerHTML = `<div class="autonomy-overview-grid">${cards.map(([label, value, detail]) =>
+      `<div class="stat"><div class="val">${escapeHtml(String(value))}</div><div class="lbl">${escapeHtml(label)}</div><div class="detail">${escapeHtml(String(detail))}</div></div>`
+    ).join('')}</div>${runs.length ? `<div class="tbl-wrap"><table><thead><tr><th>状态</th><th>输入</th><th>模型 / preset</th><th>耗时</th><th>错误</th></tr></thead><tbody>${runs.map(run =>
+      `<tr><td>${escapeHtml(run.status || '')}</td><td>${Number(run.input_count || 0)} 条 / ${Number(run.input_chars || 0)} 字符</td><td>${escapeHtml(run.model || '-')} / ${escapeHtml(run.preset || '-')}</td><td>${Number(run.wall_seconds || 0).toFixed(2)}s</td><td>${escapeHtml(run.error_code || '-')}</td></tr>`
+    ).join('')}</tbody></table></div>` : ''}`;
+  } catch (error) {
+    host.className = 'empty';
+    host.textContent = `加载失败：${error.message}`;
+  }
+}
+
+async function saveMemoryConsolidationSettings() {
+  const number = id => Number(document.getElementById(id).value);
+  try {
+    await api('PATCH', '/settings/memory-consolidation', {
+      enabled: document.getElementById('memory-consolidation-enabled').checked,
+      night_start_hour: number('memory-consolidation-start'),
+      night_end_hour: number('memory-consolidation-end'),
+      idle_seconds: number('memory-consolidation-idle'),
+      batch_size: number('memory-consolidation-batch'),
+      max_tokens_per_call: number('memory-consolidation-tokens'),
+      daily_call_budget: number('memory-consolidation-calls'),
+      daily_token_budget: number('memory-consolidation-daily-tokens'),
+      daily_wall_seconds: number('memory-consolidation-wall'),
+      background_preset: document.getElementById('memory-consolidation-preset').value.trim(),
+    });
+    toast('配置已保存', 'ok');
+    await loadMemoryConsolidationStatus();
+  } catch (error) { toast(`保存失败：${error.message}`, 'err'); }
+}
+
+async function controlMemoryConsolidation(action) {
+  const {uid, charId} = _memoryConsolidationScope();
+  const scoped = ['pause', 'resume', 'revoke', 'recover_unknown'].includes(action) && uid && charId;
+  try {
+    await api('POST', '/memory-consolidation/control', {
+      action,
+      ...(scoped ? {uid, char_id: charId} : {}),
+      reason: action === 'pause' ? 'admin_paused' : '',
+    });
+    toast('操作已完成', 'ok');
+    await loadMemoryConsolidationStatus();
+  } catch (error) { toast(`操作失败：${error.message}`, 'err'); }
+}
+
+async function searchMemoryConsolidationDossiers() {
+  const host = document.getElementById('memory-consolidation-dossiers');
+  try {
+    const query = document.getElementById('memory-consolidation-query').value.trim();
+    const data = await api('GET', _memoryConsolidationQueryPath(`/memory/dossiers?q=${encodeURIComponent(query)}`));
+    const rows = data.items || [];
+    host.className = rows.length ? '' : 'empty';
+    host.innerHTML = rows.length ? `<div class="tbl-wrap"><table><thead><tr><th>主题</th><th>状态</th><th>修订</th><th>理解</th><th></th></tr></thead><tbody>${rows.map(row =>
+      `<tr><td>${escapeHtml(row.title || '')}</td><td>${escapeHtml(row.status || '')}</td><td>${Number(row.revision || 0)}</td><td>${escapeHtml(row.summary || '-')}</td><td><button class="btn btn-ghost btn-sm" data-action="readMemoryConsolidationDossier" data-action-args='${escapeHtml(JSON.stringify([row.dossier_id]))}'>查看</button></td></tr>`
+    ).join('')}</tbody></table></div>` : '暂无结果';
+    bindPageActions(host);
+  } catch (error) {
+    host.className = 'empty'; host.textContent = `搜索失败：${error.message}`;
+  }
+}
+
+async function readMemoryConsolidationDossier(dossierId) {
+  const host = document.getElementById('memory-consolidation-detail');
+  try {
+    const path = _memoryConsolidationQueryPath(`/memory/dossiers/${encodeURIComponent(dossierId)}`);
+    const data = await api('GET', path);
+    host.textContent = JSON.stringify(data.dossier, null, 2);
+  } catch (error) { host.textContent = `读取失败：${error.message}`; }
+}

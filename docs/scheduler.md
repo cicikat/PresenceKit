@@ -37,6 +37,7 @@ core/scheduler/triggers/         ← 各触发器独立文件
     hidden_state_decay.py        用户隐性状态衰减（12h）+ 基线收敛（7d），不发言
     event_log_salvage.py         event_log 归档前抢救持久事实（24h，每次上限3文件），不发言
     memory_janitor.py            闲时整合 pass：episodic 近似重复合并 + 向量库一致性核对（24h，深夜时段），不发言
+    memory_consolidation.py      默认关闭的 dossier 静默整合：夜窗/空闲/预算/公平调度，不发言
     event_edge_proposer.py       有界模型候选关联边（per-scope cooldown + daily budget），不发言
     private_exchange.py          角色间私下往来：深夜/闲时低频受限会话，产物只回流关系层（Brief 86），不发言
     spend_monitor.py             API 余额每日检测；仅生成充值提醒和台账，绝不自动付款
@@ -131,7 +132,7 @@ winner（含 Watch 事件到达路径）均先经 `gating._decide()`，再由
 与缓存刷新（天气、sensor 候选、Runtime 备忘录投递、`letter_writer` 由 gating 的
 active executor 发送 SMTP）。已迁移发言 `_check_*` 已从 gather 删除；它们的
 proposer 只经 `run_shadow_tick()` 产 signal，不再有 live 模式让路垫片。维护型扫描
-（如 `garden_water`、`garden_daily`、`episodic_sweep`、`log_maintenance`、`hidden_state_decay`、`hidden_state_consolidate`、`event_log_salvage`、`memory_janitor`）仍需执行状态变更。
+（如 `garden_water`、`garden_daily`、`episodic_sweep`、`log_maintenance`、`hidden_state_decay`、`hidden_state_consolidate`、`event_log_salvage`、`memory_janitor`、`memory_consolidation`）仍需执行状态变更。
 
 ```
 owner turn ──notify_owner_turn──→ state_machine
@@ -617,6 +618,7 @@ owner QQ 消息
 | hidden_state_decay, hidden_state_consolidate | hidden_state_decay.py |
 | event_log_salvage | event_log_salvage.py |
 | memory_janitor | memory_janitor.py |
+| memory_consolidation | memory_consolidation.py |
 | private_exchange | private_exchange.py |
 | diary_inject | diary.py（维护型：读日记存 diary_context，无 legacy_tick_should_send 检查）|
 
@@ -807,6 +809,7 @@ active window 决策已完全收入 `gating._decide()`（R2-C 后），以 `POLI
 | `hidden_state_consolidate` | 7天 | 维护 | hidden_state_decay | consolidate_baselines：sensitivity/touch baseline 轻推向 SCALAR_CENTER；不发言，stamp_trigger |
 | `event_log_salvage` | 24h | 维护 | event_log_salvage | 抢救 age 27-29 天、尚未归档的 event_log 日文件里的持久事实，产出走 Brief 45 冲突裁决入口；每次上限3文件；不发言，stamp_trigger |
 | `memory_janitor` | 24h | 维护 | memory_janitor | 闲时整合 pass（深夜时段）：episodic 存量近似重复合并（复用写入时去重同一相似度函数，核心记忆不参与，单轮上限10对）+ vec_meta 对照 episodic/近30天event_log 孤儿向量核对（超阈值触发 rebuild）；不发言，stamp_trigger |
+| `memory_consolidation` | scheduler poll；仅配置夜窗与空闲阈值满足时 | 维护 | memory_consolidation | 默认关闭。为同一角色创建/恢复 `memory.consolidation` Task 与 Work Session，按 scope 公平和日预算处理 dossier 证据；不发言、不写旧记忆链，失败退避，未知结果禁止盲重放。 |
 | `event_edge_proposer` | 60s scheduler poll; per-scope configurable cooldown | 维护 | event_edge_proposer | 默认关闭。仅发送有限 reality event 窗口给独立模型类别，写未审核候选边和预算台账；不发言、不进 pipeline、不改 recall 或事实。 |
 | `private_exchange` | 2h（+ 独立每日 `daily_limit` 会话预算，默认1对） | 维护 | private_exchange | 角色间私下往来（深夜时段，Brief 86）：pair 选择纯规则零 LLM，单次会话 ≤`max_turns`（默认6）次轻量调用；产物只回流 char_relations（既有6h冷却路径）+ 12h presence 提示，transcript 全文不入五大记忆库/event_log/向量库；不发言，stamp_trigger |
 | `sensor_aware`（tick） | 30s（可配置） | 低 | sensor_aware | sensor 实时状态主动开口，默认关闭 |

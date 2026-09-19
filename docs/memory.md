@@ -6,8 +6,9 @@ The current storage, authority, grant, invalidation, coexistence and rollback
 contract is in [character-memory-dossiers.md](character-memory-dossiers.md).
 Dossiers are derived Reality-scoped state: they cite event evidence but never
 write their summaries back into the evidence ledger or legacy memory writers.
-The feature remains disabled until its later implementation stages satisfy the
-control-plane and rollout gates.
+Storage, bounded chat recall/tools, the silent maintenance worker, and the admin
+control plane are implemented. The feature is default-off; production enablement
+remains gated by Brief 259 A-C and the separately authorized Brief 258 F rollout.
 
 ## 资料接续回执（2026-09-13）
 

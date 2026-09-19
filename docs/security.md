@@ -229,6 +229,21 @@ scope 端点→rotate 后旧值失效→delete 后 401）、限速阈值触发�
 `tests/test_sec_ws1_auth.py`：WS token 提取（仅 header，拒绝 query）、access log 不泄漏
 token 值等 SEC-WS-1 契约，已随 `authenticate_ws` 签名变化同步更新。
 
+## Brief 258 dossier scopes
+
+- `state.read`: `GET /observability/memory-consolidation`; metadata only, with
+  owner/task/session/run identifiers hashed and no dossier or evidence prose.
+- `memory.read`: bounded search/detail/event-reference reads under a required
+  validated `uid + char_id` Reality scope.
+- `admin`: configuration and lifecycle control. The server derives the task
+  principal; request/model data cannot select a realm or grant.
+
+The owner-chat tools keep their existing trusted owner-turn origin gate and
+server-frozen scope. The maintenance Work Session has only
+`memory.consolidation`; it cannot send/capture conversation turns or use
+workspace, process, browser, arbitrary files, or evidence writers. Revocation
+is checked again before derived revisions commit.
+
 
 ## Life records v1 backend (2026-09-11)
 

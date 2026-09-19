@@ -699,3 +699,23 @@ state, blocking reasons, quotas, grant revisions, and redaction version. Agent-t
 execution remains default-off under `agent_tasks.enabled`; each workspace also
 needs a live server-defined manifest. Desktop and mobile gain no setting or
 confirmation field. An absent grant is reported as waiting for admin approval.
+
+## Brief 258 memory dossier consolidation
+
+`config.yaml:memory_consolidation` is the backend authority. It is default-off.
+The admin page writes it through `PATCH /settings/memory-consolidation` (`admin`)
+and can start, stop, pause, resume, revoke, or explicitly resolve unverified
+scope outcomes through `POST /memory-consolidation/control` (`admin`). Revocation
+increments `grant_revision`, disables new work, and causes any in-flight patch to
+fail its commit-time authority check.
+
+`GET /observability/memory-consolidation` (`state.read`) reports
+configured/effective state, blocking reason, night window, limits and remaining
+daily budgets, backoff, current batch, checkpoint, backlog, status counts and
+hashed run/task/session identifiers. With `uid + char_id` it adds one Reality
+scope; without them it returns only global state. Dossier text, evidence and
+revision detail are excluded and require `memory.read` through
+`GET /memory/dossiers*`.
+
+The controls are backend-admin only. Desktop and mobile have no duplicated
+switch, permission, protocol field, queue, acknowledgement or TTL change.

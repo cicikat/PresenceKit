@@ -425,6 +425,8 @@ action_trace:
 # inventory/backup rehearsal (Brief 259) and an explicit production rollout.
 memory_consolidation:
   enabled: false
+  paused: false
+  pause_reason: ""
   grant_revision: 1
   night_start_hour: 23
   night_end_hour: 7
