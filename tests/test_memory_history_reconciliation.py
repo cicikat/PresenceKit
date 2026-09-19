@@ -225,6 +225,7 @@ def test_first_night_runner_stops_at_cutoff_and_uses_verified_gate(sandbox, monk
     assert result["status"] == "stopped"
     assert result["batches"] == 0
     assert calls["count"] == 0
+    assert history_reconciliation.status(scope)["last_closeout"]["status"] == "stopped"
 
 
 def test_imported_event_consolidation_pins_scope_and_bulk_preset(monkeypatch):

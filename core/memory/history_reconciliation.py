@@ -460,8 +460,13 @@ async def run_first_night(
             break
     current = status(scope)
     terminal = "completed" if current["counts"].get("pending", 0) == 0 and current["counts"].get("running", 0) == 0 else "stopped"
-    return {"status": terminal, "batches": batches, "dossier_passes": dossier_passes,
-            "stopped_at": datetime.now(timezone.utc).isoformat(), "ledger": current, "last": last}
+    closeout = {"status": terminal, "batches": batches, "dossier_passes": dossier_passes,
+                "stopped_at": datetime.now(timezone.utc).isoformat(), "ledger": current,
+                "last": {key: value for key, value in last.items() if key != "migration"}}
+    state = read_state(scope)
+    state["last_closeout"] = closeout
+    safe_write_json(_state_path(scope), state, keep_bak=True)
+    return {**closeout, "last": last}
 
 
 def status(scope: MemoryScope) -> dict[str, Any]:
@@ -472,7 +477,8 @@ def status(scope: MemoryScope) -> dict[str, Any]:
             "total": sum(counts.values()), "manifest_revision": (state.get("manifest") or {}).get("manifest_revision", ""),
             "frozen_manifest_revision": str(state.get("frozen_manifest_revision") or ""),
             "frozen_at": state.get("frozen_at"),
-            "last_error": str(state.get("last_error") or "")[:128]}
+            "last_error": str(state.get("last_error") or "")[:128],
+            "last_closeout": state.get("last_closeout") if isinstance(state.get("last_closeout"), dict) else None}
 
 
 def create_verified_backup(output: Path) -> dict[str, Any]:
