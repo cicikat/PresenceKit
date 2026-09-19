@@ -30,6 +30,7 @@ CAPABILITY_MANIFESTS: dict[str, frozenset[str]] = {
     "workspace_artifact": frozenset({"workspace_artifact"}),
     "agent.coding": frozenset({"agent_task_result"}),
     "agent.inspect": frozenset({"agent_task_result"}),
+    "memory.consolidation": frozenset({"memory_consolidation_receipt"}),
 }
 _ARTIFACT_KINDS = frozenset().union(*CAPABILITY_MANIFESTS.values())
 _TERMINAL = frozenset({"succeeded", "failed", "canceled", "outcome_unknown"})
@@ -303,6 +304,35 @@ def cancel_work_session(principal: TaskPrincipal, work_session_id: str, *, now: 
 
 def unknown_work_session(principal: TaskPrincipal, work_session_id: str, *, now: float | None = None) -> dict[str, Any]:
     return _finish(principal, work_session_id, "outcome_unknown", error_code="work_session_outcome_unknown", now=now)
+
+
+def reconcile_unknown_work_session(
+    principal: TaskPrincipal,
+    work_session_id: str,
+    *,
+    artifact_id: str,
+    artifact_version: int,
+    now: float | None = None,
+) -> dict[str, Any]:
+    """Resolve an unknown session after its capability verifies a durable receipt."""
+    principal = _validate_principal(principal)
+    if not artifact_id or not _NAME_RE.fullmatch(artifact_id) or artifact_version <= 0:
+        raise WorkSessionError("artifact_not_created")
+    timestamp = time.time() if now is None else float(now)
+    with task_store.scope_lock(principal.uid, principal.char_id):
+        state, rows = _load(principal)
+        row = next((item for item in rows if item.session_id == work_session_id), None)
+        if row is None:
+            raise WorkSessionError("work_session_not_found")
+        if row.status != "outcome_unknown":
+            return _project(row)
+        row.status = "succeeded"
+        row.error_code = ""
+        row.updated_at = timestamp
+        row.artifact_id = artifact_id
+        row.artifact_version = int(artifact_version)
+        _save(principal, state, rows)
+        return _project(row)
 
 
 def retry_work_session(principal: TaskPrincipal, work_session_id: str, *, now: float | None = None) -> dict[str, Any]:

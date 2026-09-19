@@ -21,7 +21,7 @@ from typing import Any, Iterable, Mapping
 from core.memory.path_resolver import resolve_path
 from core.memory.scope import MemoryScope
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 SOURCE_POLICY_REVISION = "memory-dossier-source-policy.v1"
 RULES_REVISION = "memory-dossier-rules.v1"
 MAX_BATCH_OPERATIONS = 100
@@ -110,7 +110,7 @@ def _connect(path: Path, *, readonly: bool = False) -> sqlite3.Connection:
 
 def _initialize(connection: sqlite3.Connection) -> None:
     version = int(connection.execute("PRAGMA user_version").fetchone()[0])
-    if version not in {0, SCHEMA_VERSION}:
+    if version not in {0, 1, SCHEMA_VERSION}:
         raise DossierError("schema_mismatch")
     connection.executescript(
         """
@@ -185,6 +185,17 @@ def _initialize(connection: sqlite3.Connection) -> None:
           ingest_sequence INTEGER NOT NULL, created_at REAL NOT NULL,
           UNIQUE(store_kind, source_id, source_revision, operation_id)
         );
+        CREATE TABLE IF NOT EXISTS maintenance_runs (
+          run_id TEXT PRIMARY KEY, task_id TEXT NOT NULL, work_session_id TEXT NOT NULL,
+          status TEXT NOT NULL, input_count INTEGER NOT NULL, input_chars INTEGER NOT NULL,
+          token_budget INTEGER NOT NULL, model TEXT NOT NULL, preset TEXT NOT NULL,
+          identity_revision TEXT NOT NULL, prompt_revision TEXT NOT NULL,
+          rules_revision TEXT NOT NULL, error_code TEXT NOT NULL,
+          started_at REAL NOT NULL, finished_at REAL, wall_seconds REAL NOT NULL DEFAULT 0
+        );
+        CREATE TABLE IF NOT EXISTS maintenance_state (
+          state_key TEXT PRIMARY KEY, value_json TEXT NOT NULL, updated_at REAL NOT NULL
+        );
         CREATE INDEX IF NOT EXISTS idx_dossier_status_title ON dossiers(status, title);
         CREATE INDEX IF NOT EXISTS idx_membership_occurrence ON memberships(occurrence_id, status);
         """
@@ -215,7 +226,7 @@ def schema_status(scope: MemoryScope) -> SchemaStatus:
             with _connect(path, readonly=True) as connection:
                 version = int(connection.execute("PRAGMA user_version").fetchone()[0])
                 tables = {str(row[0]) for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-            required = {"dossiers", "occurrences", "occurrence_evidence", "memberships", "relations", "understandings", "operations", "invalidations", "source_items", "processing_commits"}
+            required = {"dossiers", "occurrences", "occurrence_evidence", "memberships", "relations", "understandings", "operations", "invalidations", "source_items", "processing_commits", "maintenance_runs", "maintenance_state"}
             return SchemaStatus(True, version == SCHEMA_VERSION and required <= tables, version,
                                 "" if version == SCHEMA_VERSION and required <= tables else "schema_mismatch")
         except (OSError, sqlite3.Error):
@@ -414,19 +425,40 @@ _HANDLERS = {"create_dossier": _create_dossier, "rename_dossier": _rename,
 
 def apply_operations(scope: MemoryScope, operations: list[Mapping[str, Any]], *, operation_id: str,
                      actor: str, chain: str, source_policy_revision: str = SOURCE_POLICY_REVISION,
-                     reversal_of: str = "", now: float | None = None) -> dict[str, Any]:
+                     reversal_of: str = "", processing_items: list[Mapping[str, Any]] | None = None,
+                     maintenance_run_id: str = "", maintenance_wall_seconds: float = 0,
+                     now: float | None = None) -> dict[str, Any]:
     """Validate and atomically commit one bounded, idempotent operation batch."""
     scope = _scope(scope); operation_id = _id(operation_id, "operation_id")
     if chain not in _VALID_CHAINS: raise DossierError("invalid_chain")
     actor = _text(actor, required=True, limit=200)
-    if not isinstance(operations, list) or not 1 <= len(operations) <= MAX_BATCH_OPERATIONS:
+    if maintenance_run_id:
+        maintenance_run_id = _id(maintenance_run_id, "run_id")
+    processing_items = processing_items or []
+    if (not isinstance(operations, list) or len(operations) > MAX_BATCH_OPERATIONS
+            or not isinstance(processing_items, list) or len(processing_items) > MAX_BATCH_OPERATIONS
+            or (not operations and not processing_items)):
         raise DossierError("invalid_operation_batch")
     if source_policy_revision != SOURCE_POLICY_REVISION: raise DossierError("source_policy_changed")
     for operation in operations:
         if not isinstance(operation, Mapping) or operation.get("action") not in _HANDLERS:
             raise DossierError("invalid_operation")
-    request = {"operations": operations, "actor": actor, "chain": chain,
-               "source_policy_revision": source_policy_revision, "reversal_of": reversal_of}
+    normalized_items: list[dict[str, Any]] = []
+    for item in processing_items:
+        if not isinstance(item, Mapping): raise DossierError("invalid_processing_item")
+        store_kind = _text(item.get("store_kind"), required=True, limit=64)
+        source_id = _text(item.get("source_id"), required=True, limit=512)
+        source_revision = _text(item.get("source_revision"), required=True, limit=256)
+        ingest_sequence = int(item.get("ingest_sequence") or 0)
+        input_digest = _text(item.get("input_digest"), required=True, limit=128)
+        outcomes = item.get("semantic_outcomes", ["evidence_only"])
+        if not isinstance(outcomes, list) or not outcomes: raise DossierError("invalid_processing_item")
+        normalized_items.append({"store_kind": store_kind, "source_id": source_id,
+            "source_revision": source_revision, "ingest_sequence": ingest_sequence,
+            "input_digest": input_digest, "semantic_outcomes": [str(value)[:64] for value in outcomes]})
+    request = {"operations": operations, "processing_items": normalized_items, "actor": actor, "chain": chain,
+               "source_policy_revision": source_policy_revision, "reversal_of": reversal_of,
+               "maintenance_run_id": maintenance_run_id}
     request_digest = _digest(request); timestamp = time.time() if now is None else float(now)
     path = _path(scope)
     # Receipts are authoritative for outcome-unknown recovery. Check one before
@@ -450,10 +482,39 @@ def apply_operations(scope: MemoryScope, operations: list[Mapping[str, Any]], *,
                 connection.execute("BEGIN IMMEDIATE")
                 results = [_HANDLERS[str(op["action"])](connection, op, timestamp) for op in operations]
                 committed = {item["dossier_id"]: item["revision"] for item in results if "dossier_id" in item and "revision" in item}
-                result = {"ok": True, "operation_id": operation_id, "results": results, "committed_revisions": committed}
+                for item in normalized_items:
+                    connection.execute("""INSERT INTO source_items
+                      (store_kind,source_id,source_revision,ingest_sequence,status,semantic_outcomes_json,
+                       attempt,operation_id,input_digest,last_error,revisit_condition,updated_at)
+                      VALUES(?,?,?,?, 'committed',?,1,?,?, '', '',?)
+                      ON CONFLICT(store_kind,source_id,source_revision) DO UPDATE SET
+                        ingest_sequence=excluded.ingest_sequence,status='committed',
+                        semantic_outcomes_json=excluded.semantic_outcomes_json,
+                        operation_id=excluded.operation_id,input_digest=excluded.input_digest,
+                        last_error='',updated_at=excluded.updated_at""",
+                      (item["store_kind"], item["source_id"], item["source_revision"], item["ingest_sequence"],
+                       _json(item["semantic_outcomes"]), operation_id, item["input_digest"], timestamp))
+                    connection.execute("INSERT OR IGNORE INTO processing_commits VALUES(?,?,?,?,?,?,?)",
+                      (_new_id(), operation_id, item["store_kind"], item["source_id"],
+                       item["source_revision"], item["ingest_sequence"], timestamp))
+                if normalized_items:
+                    checkpoint = max(item["ingest_sequence"] for item in normalized_items)
+                    connection.execute("""INSERT INTO maintenance_state VALUES('event_checkpoint',?,?)
+                      ON CONFLICT(state_key) DO UPDATE SET value_json=excluded.value_json,
+                      updated_at=excluded.updated_at""", (_json(checkpoint), timestamp))
+                result = {"ok": True, "operation_id": operation_id, "results": results,
+                          "committed_revisions": committed, "processed": len(normalized_items)}
                 connection.execute("INSERT INTO operations VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", (
                     operation_id, request_digest, actor, chain, "committed", "{}", _json(committed),
                     source_policy_revision, RULES_REVISION, reversal_of or None, _json(result), timestamp, timestamp))
+                if maintenance_run_id:
+                    cursor = connection.execute(
+                        """UPDATE maintenance_runs SET status='committed',error_code='',finished_at=?,wall_seconds=?
+                           WHERE run_id=? AND status='running'""",
+                        (timestamp, max(0.0, float(maintenance_wall_seconds)), maintenance_run_id),
+                    )
+                    if cursor.rowcount != 1:
+                        raise DossierError("maintenance_run_not_running")
                 connection.commit()
             except Exception:
                 connection.rollback(); raise
@@ -656,3 +717,94 @@ def status_snapshot(scope: MemoryScope) -> dict[str, Any]:
                    "needs_recompute": int(row[2] or 0), "operations": int(op[0] or 0),
                    "latest_operation_at": op[1], "pending_sources": int(pending or 0)})
     return result
+
+
+def maintenance_checkpoint(scope: MemoryScope) -> int:
+    scope = _scope(scope); path = _path(scope)
+    if not path.exists(): return 0
+    with _lock(path), _connect(path) as connection:
+        _initialize(connection)
+        connection.commit()
+        row = connection.execute("SELECT value_json FROM maintenance_state WHERE state_key='event_checkpoint'").fetchone()
+    try: return max(0, int(json.loads(row[0]))) if row else 0
+    except (TypeError, ValueError, json.JSONDecodeError): return 0
+
+
+def maintenance_candidates(scope: MemoryScope, *, limit: int = 100,
+                           max_chars: int = 24000) -> list[dict[str, Any]]:
+    """Read a bounded source batch after the durable ingest checkpoint."""
+    from core.memory import event_store, source_policy
+    scope = _scope(scope); checkpoint = maintenance_checkpoint(scope)
+    event_path = resolve_path(scope, "event_store")
+    if not event_path.exists(): return []
+    limit = min(100, max(1, int(limit))); max_chars = min(48000, max(1000, int(max_chars)))
+    source_clause, source_params = source_policy.sql_predicate()
+    with event_store._lock_for(event_path):
+        try:
+            with sqlite3.connect(f"{event_path.resolve().as_uri()}?mode=ro", uri=True, timeout=0.25) as connection:
+                connection.row_factory = sqlite3.Row
+                rows = connection.execute("""SELECT rowid AS ingest_sequence,event_id,occurred_at,
+                  ingested_at,actor,kind,source,redaction_state,
+                  COALESCE(NULLIF(memory_text,''),visible_text) AS text
+                  FROM events WHERE uid=? AND char_id=? AND realm=? AND rowid>?""" + source_clause +
+                  " ORDER BY rowid ASC LIMIT ?", (scope.uid, scope.character_id, scope.domain,
+                  checkpoint, *source_params, limit)).fetchall()
+        except sqlite3.Error as exc:
+            raise DossierError("evidence_read_failed") from exc
+    result, used = [], 0
+    for row in rows:
+        text = str(row["text"] or "")[:1000]
+        size = len(text)
+        if result and used + size > max_chars: break
+        revision = hashlib.sha256(_json({"event_id": row["event_id"], "ingested_at": row["ingested_at"],
+            "redaction_state": row["redaction_state"], "text": text}).encode("utf-8")).hexdigest()
+        result.append({"store_kind": "event", "source_id": str(row["event_id"]),
+            "source_revision": revision, "ingest_sequence": int(row["ingest_sequence"]),
+            "occurred_at": float(row["occurred_at"] or 0), "actor": str(row["actor"] or ""),
+            "kind": str(row["kind"] or ""), "text": text,
+            "input_digest": hashlib.sha256(text.encode("utf-8")).hexdigest()})
+        used += size
+    return result
+
+
+def begin_maintenance_run(scope: MemoryScope, *, run_id: str, task_id: str,
+                          work_session_id: str, input_count: int, input_chars: int,
+                          token_budget: int, model: str, preset: str,
+                          identity_revision: str, prompt_revision: str,
+                          now: float | None = None) -> None:
+    scope = _scope(scope); run_id = _id(run_id, "run_id"); path = _path(scope)
+    timestamp = time.time() if now is None else float(now)
+    with _lock(path), _connect(path) as connection:
+        _initialize(connection)
+        connection.execute("INSERT OR IGNORE INTO maintenance_runs VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)",
+          (run_id, _id(task_id, "task_id"), _id(work_session_id, "work_session_id"), "running",
+           int(input_count), int(input_chars), int(token_budget), str(model)[:160], str(preset)[:160],
+           str(identity_revision)[:128], str(prompt_revision)[:128], RULES_REVISION, "", timestamp, None))
+        connection.commit()
+
+
+def finish_maintenance_run(scope: MemoryScope, run_id: str, *, status: str,
+                           error_code: str = "", wall_seconds: float = 0,
+                           now: float | None = None) -> None:
+    scope = _scope(scope); run_id = _id(run_id, "run_id"); path = _path(scope)
+    timestamp = time.time() if now is None else float(now)
+    with _lock(path), _connect(path) as connection:
+        connection.execute("UPDATE maintenance_runs SET status=?,error_code=?,finished_at=?,wall_seconds=? WHERE run_id=?",
+                           (str(status)[:32], str(error_code)[:64], timestamp, max(0.0, float(wall_seconds)), run_id))
+        connection.commit()
+
+
+def maintenance_budget(scope: MemoryScope, *, since: float) -> dict[str, float | int]:
+    scope = _scope(scope); path = _path(scope)
+    if not path.exists(): return {"calls": 0, "tokens": 0, "wall_seconds": 0.0}
+    with _lock(path), _connect(path, readonly=True) as connection:
+        row = connection.execute("SELECT COUNT(*),COALESCE(SUM(token_budget),0),COALESCE(SUM(wall_seconds),0) FROM maintenance_runs WHERE started_at>=?", (float(since),)).fetchone()
+    return {"calls": int(row[0] or 0), "tokens": int(row[1] or 0), "wall_seconds": float(row[2] or 0)}
+
+
+def committed_maintenance_run(scope: MemoryScope, task_id: str) -> dict[str, Any] | None:
+    scope = _scope(scope); task_id = _id(task_id, "task_id"); path = _path(scope)
+    if not path.exists(): return None
+    with _lock(path), _connect(path, readonly=True) as connection:
+        row = connection.execute("SELECT * FROM maintenance_runs WHERE task_id=? AND status='committed' ORDER BY finished_at DESC LIMIT 1", (task_id,)).fetchone()
+    return dict(row) if row else None

@@ -421,6 +421,27 @@ action_trace:
   inject_window_hours: 24    # 只注入这个时间窗内的痕迹
   event_log_echo: true       # status=ok 时是否回流一条到 event_log（供日记/往事检索看见）
 
+# Brief 258 · same-character silent topic-memory consolidation. Disabled until
+# inventory/backup rehearsal (Brief 259) and an explicit production rollout.
+memory_consolidation:
+  enabled: false
+  grant_revision: 1
+  night_start_hour: 23
+  night_end_hour: 7
+  idle_seconds: 600
+  max_global_workers: 1
+  batch_size: 100
+  max_input_chars: 24000
+  max_tokens_per_call: 1200
+  daily_call_budget: 8
+  daily_token_budget: 9600
+  daily_wall_seconds: 600
+  per_scope_daily_calls: 4
+  per_scope_daily_tokens: 4800
+  call_timeout_seconds: 90
+  retry_backoff_seconds: 900
+  background_preset: ""       # optional dedicated preset/provider quota
+
 # Brief 28 · tool loop 多步工具执行器：只在 chat preset 为 function_calling 模式的
 # owner 真实私聊（QQ / desktop）生效，小模型 xml_fallback / 探针路径零改动。
 # enabled: false 即完全回到现状（所有分支都在 tool_loop_active() 判断之后）。

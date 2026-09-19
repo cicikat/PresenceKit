@@ -61,6 +61,7 @@ _COOLDOWNS: dict[str, int] = {
     "storyline_weekly":          7 * 24 * 3600,    # storyline 叙事弧周频聚合（Brief 80 §2）：7天
     "event_log_salvage":         24 * 3600,        # event_log 过期前抢救持久事实：24小时
     "memory_janitor":            24 * 3600,        # 闲时整合 pass：episodic 近似重复合并 + 向量库一致性核对：24小时
+    "memory_consolidation":      60,
     "event_edge_proposer":        60,               # per-scope persistent cooldown is enforced by the ledger
     "private_exchange":           2 * 3600,        # 角色间私聊：会话间隔下限（真正的每日总量闸是独立的 daily_limit 预算，Brief 86）
     "spend_monitor":             24 * 3600,
@@ -1026,6 +1027,7 @@ async def _loop():
                 )
                 from core.scheduler.triggers.event_log_salvage import _check_event_log_salvage
                 from core.scheduler.triggers.memory_janitor import _check_memory_janitor
+                from core.scheduler.triggers.memory_consolidation import _check_memory_consolidation
                 from core.scheduler.triggers.event_edge_proposer import _check_event_edge_proposer
                 from core.scheduler.triggers.private_exchange import _check_private_exchange
                 from core.scheduler.triggers.storyline_weekly import _check_storyline_weekly
@@ -1104,7 +1106,7 @@ async def _loop():
                     "episodic_sweep", "garden_water", "garden_daily",
                     "hidden_state_decay", "hidden_state_consolidate",
                     "storyline_weekly",
-                    "event_log_salvage", "memory_janitor", "private_exchange",
+                    "event_log_salvage", "memory_janitor", "memory_consolidation", "private_exchange",
                     "event_edge_proposer",
                     "sensor_aware", "coplay_watch",
                     "spend_monitor",
@@ -1127,6 +1129,7 @@ async def _loop():
                     _check_storyline_weekly(),
                     _check_event_log_salvage(),
                     _check_memory_janitor(),
+                    _check_memory_consolidation(),
                     _check_event_edge_proposer(),
                     _check_private_exchange(),
                     _check_sensor_aware(),

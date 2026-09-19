@@ -430,6 +430,10 @@ class DataPaths:
         """Root used only to enumerate redacted Reality work-session state."""
         return self._p("runtime", "agent_runtime", "reality", "work_sessions")
 
+    def memory_consolidation_runtime_state(self) -> Path:
+        """Global persisted budgets/fairness for the memory consolidation worker."""
+        return self._p("runtime", "agent_runtime", "reality", "memory_consolidation", "state.json")
+
     def agent_runtime_agent_task_payload(
         self, user_id: str | int, task_id: str, *, char_id: str = _DEFAULT_CHAR_ID
     ) -> Path:

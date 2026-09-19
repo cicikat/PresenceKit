@@ -73,14 +73,14 @@
 
 ## D — 同角色静默后台整理
 
-- [ ] D1 注册 maintenance trigger → Task Manager → 同角色 Work Session → memory capability。新增 manifest，不借用 workspace_artifact；后台不进入 conversation_gate、主聊天发送/slow_queue，不 capture_turn。
-- [ ] D2 使用同一角色身份和模型路由、裁剪后的角色上下文与有限证据；冻结身份 revision，记录模型/提示/规则版本。内容由角色判断，程序只执行合法 patch。
-- [ ] D3 增量优先，有新证据/失效档案才工作；每批带检查点，支持取消、暂停、重启恢复、撤权。outcome_unknown 先查 operation receipt，不能盲重跑。
-- [ ] D4 全局与 per-scope 并发、模型调用/token/费用/墙钟预算持久化，跨重启不重置；新增量与历史共用预算，按 scope 公平调度。候选默认全局 1 worker、每批至多 100 条源记录且受 token 上限约束。
-- [ ] D5 夜窗默认本地 23:00–07:00，空闲 10 分钟后准入；前台请求出现立即停止准入下一次后台模型调用，当前请求有超时，不持有前台所需锁/信号量。核对共享 provider 限流，单独队列不等于没有资源竞争。
-- [ ] D6 若需要严格资源隔离，支持显式配置独立后台 preset/provider 配额；不擅自换低质量模型或无限重试。用户回来不等待当前整理完成才能聊天。
-- [ ] D7 无新素材零模型调用；持续失败退避，状态进入管理面，不主动发消息。外部不可取消调用的费用与延迟如实计入。
-- [ ] D8 验收静默、前台插入、取消、进程重启、额度耗尽、provider 限流、同 scope 多 worker 争抢和跨角色隔离，独立提交。
+- [x] D1 注册 maintenance trigger → Task Manager → 同角色 Work Session → memory capability。新增 manifest，不借用 workspace_artifact；后台不进入 conversation_gate、主聊天发送/slow_queue，不 capture_turn。
+- [x] D2 使用同一角色身份和模型路由、裁剪后的角色上下文与有限证据；冻结身份 revision，记录模型/提示/规则版本。内容由角色判断，程序只执行合法 patch。
+- [x] D3 增量优先，有新证据/失效档案才工作；每批带检查点，支持取消、暂停、重启恢复、撤权。outcome_unknown 先查 operation receipt，不能盲重跑。
+- [x] D4 全局与 per-scope 并发、模型调用/token/费用/墙钟预算持久化，跨重启不重置；新增量与历史共用预算，按 scope 公平调度。候选默认全局 1 worker、每批至多 100 条源记录且受 token 上限约束。
+- [x] D5 夜窗默认本地 23:00–07:00，空闲 10 分钟后准入；前台请求出现立即停止准入下一次后台模型调用，当前请求有超时，不持有前台所需锁/信号量。核对共享 provider 限流，单独队列不等于没有资源竞争。
+- [x] D6 若需要严格资源隔离，支持显式配置独立后台 preset/provider 配额；不擅自换低质量模型或无限重试。用户回来不等待当前整理完成才能聊天。
+- [x] D7 无新素材零模型调用；持续失败退避，状态进入管理面，不主动发消息。外部不可取消调用的费用与延迟如实计入。
+- [x] D8 验收静默、前台插入、取消、进程重启、额度耗尽、provider 限流、同 scope 多 worker 争抢和跨角色隔离，独立提交。
 
 ## E — 控制面与端到端验证
 

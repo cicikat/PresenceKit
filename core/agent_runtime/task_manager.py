@@ -658,6 +658,55 @@ def fail_task(
         return _receipt(task)
 
 
+def acknowledge_cancel(
+    principal: TaskPrincipal,
+    lease: TaskLease,
+    *,
+    now: float | None = None,
+) -> dict[str, Any]:
+    """Let a running worker checkpoint and honor an existing cancel request."""
+    principal = _validate_principal(principal)
+    timestamp = _now(now)
+    with task_store.scope_lock(principal.uid, principal.char_id):
+        state, records, changed = _load_records(principal, timestamp)
+        task = _find(records, lease.task_id)
+        if changed:
+            _save_records(principal, state, records, now=timestamp)
+        _require_lease(task, lease, timestamp)
+        if not task.cancel_requested_at:
+            raise TaskManagerError("cancel_not_requested")
+        _terminalize(task, TaskStatus.CANCELED.value, timestamp, error_code="task_canceled")
+        _save_records(principal, state, records, now=timestamp)
+        return _receipt(task)
+
+
+def reconcile_outcome_unknown(
+    principal: TaskPrincipal,
+    task_id: str,
+    *,
+    succeeded: bool,
+    result_metadata: dict[str, Any] | None = None,
+    error_code: str = "reconciled_failed",
+    now: float | None = None,
+) -> dict[str, Any]:
+    """Resolve an unknown task only after a capability-owned durable receipt check."""
+    principal = _validate_principal(principal)
+    metadata = _normalize_result_metadata(result_metadata)
+    timestamp = _now(now)
+    with task_store.scope_lock(principal.uid, principal.char_id):
+        state, records, changed = _load_records(principal, timestamp)
+        task = _find(records, task_id)
+        if task.status != TaskStatus.OUTCOME_UNKNOWN.value:
+            if changed: _save_records(principal, state, records, now=timestamp)
+            return _receipt(task)
+        task.result_metadata = metadata
+        _terminalize(task, TaskStatus.SUCCEEDED.value if succeeded else TaskStatus.FAILED.value,
+                     timestamp, error_code="" if succeeded else _validate_code(error_code, "error_code"),
+                     recovery_reason="durable_receipt_reconciled")
+        _save_records(principal, state, records, now=timestamp)
+        return _receipt(task)
+
+
 def request_cancel(
     principal: TaskPrincipal,
     task_id: str,
@@ -825,27 +874,6 @@ def unknown_task(
             _save_records(principal, state, records, now=timestamp)
         _require_lease(task, lease, timestamp)
         _terminalize(task, TaskStatus.OUTCOME_UNKNOWN.value, timestamp, error_code=code, recovery_reason=recovery_reason)
-        _save_records(principal, state, records, now=timestamp)
-        return _receipt(task)
-
-
-def acknowledge_cancel(
-    principal: TaskPrincipal,
-    lease: TaskLease,
-    *,
-    now: float | None = None,
-) -> dict[str, Any]:
-    principal = _validate_principal(principal)
-    timestamp = _now(now)
-    with task_store.scope_lock(principal.uid, principal.char_id):
-        state, records, changed = _load_records(principal, timestamp)
-        task = _find(records, lease.task_id)
-        if changed:
-            _save_records(principal, state, records, now=timestamp)
-        _require_lease(task, lease, timestamp)
-        if not task.cancel_requested_at:
-            raise TaskManagerError("cancel_not_requested")
-        _terminalize(task, TaskStatus.CANCELED.value, timestamp, error_code="task_canceled")
         _save_records(principal, state, records, now=timestamp)
         return _receipt(task)
 

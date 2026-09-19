@@ -78,6 +78,7 @@ MAINTENANCE_ONLY_TRIGGERS: frozenset[str] = frozenset({
     "storyline_weekly",
     "event_log_salvage",
     "memory_janitor",
+    "memory_consolidation",
     "private_exchange",
     "spend_monitor",
     "interest_seed",
