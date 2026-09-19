@@ -27,23 +27,30 @@ def _digest(value: Any) -> str:
 
 
 def _file_info(path: Path) -> dict[str, Any]:
-    if not path.exists() or not path.is_file():
-        return {"exists": False, "bytes": 0, "revision": "missing"}
-    stat = path.stat()
+    if not path.exists():
+        return {"exists": False, "bytes": 0, "revision": "missing", "readable": True}
+    if not path.is_file():
+        return {"exists": True, "bytes": 0, "revision": "not_a_file", "readable": False}
+    try:
+        stat = path.stat()
+    except OSError:
+        return {"exists": True, "bytes": 0, "revision": "stat_failed", "readable": False}
     # Hash metadata only. Inventory never reads or emits private content.
     revision = _digest({"size": stat.st_size, "mtime_ns": stat.st_mtime_ns})
-    return {"exists": True, "bytes": int(stat.st_size), "revision": revision}
+    return {"exists": True, "bytes": int(stat.st_size), "revision": revision, "readable": True}
 
 
 def _scope_files(uid: str, char_id: str) -> dict[str, list[Path]]:
-    root = get_paths().memory_char_root(char_id=char_id) / str(uid)
+    scope = MemoryScope.reality_scope(uid, char_id)
+    root = get_paths().user_memory_root(uid, char_id=char_id)
+    event_log = resolve_path(scope, "event_log")
     return {
-        "event_store": [root / "event_store.sqlite3"],
-        "event_log": sorted(root.glob("event_log*.jsonl")),
-        "mid_term": [root / "mid_term.json"],
-        "episodic": [root / "episodic.json"],
-        "storyline": [root / "storyline.json", root / "storyline_inbox.json"],
-        "user_identity": [root / "user_identity.json"],
+        "event_store": [resolve_path(scope, "event_store")],
+        "event_log": sorted(event_log.glob("*.md")) if event_log.is_dir() else [],
+        "mid_term": [resolve_path(scope, "mid_term")],
+        "episodic": [resolve_path(scope, "episodic")],
+        "storyline": [resolve_path(scope, "storyline"), resolve_path(scope, "storyline_inbox")],
+        "user_identity": [resolve_path(scope, "identity")],
     }
 
 
@@ -60,7 +67,7 @@ def build_inventory(uid: str, char_id: str, *, now: float | None = None) -> dict
             "file_count": sum(int(item["exists"]) for item in entries),
             "bytes": sum(int(item["bytes"]) for item in entries),
             "source_revision": _digest(entries),
-            "readable": all(item["revision"] != "missing" or not item["exists"] for item in entries),
+            "readable": all(bool(item.get("readable")) for item in entries),
             "isolated": kind in {"event_store", "event_log", "mid_term", "episodic", "storyline", "user_identity"},
         })
     total = len(items)
@@ -180,10 +187,34 @@ def apply_batch(scope: MemoryScope, *, backup: dict[str, Any], batch_size: int =
         return {"status": "deferred", "reason": plan.get("comparison_status", "indeterminate")}
     result = event_migration.apply_batch(scope, plan, batch_size=batch_size, backup=backup)
     state = read_state(scope)
+    items = state.get("items") if isinstance(state.get("items"), dict) else {}
+    event_items = [item for item in items.values() if item.get("store_kind") == "event_log"]
+    if event_items:
+        migration_status = str(result.get("status") or "")
+        if migration_status in {"completed", "committed"}:
+            next_status = "committed"
+            error = ""
+        elif migration_status in {"paused", "deferred"}:
+            next_status = "deferred"
+            error = str(result.get("last_error") or result.get("status") or "deferred")[:128]
+        else:
+            next_status = "retryable_failed"
+            error = str(result.get("last_error") or result.get("status") or "apply_failed")[:128]
+        for item in event_items:
+            item.update({"status": next_status, "attempt": int(item.get("attempt") or 0) + 1, "last_error": error})
+        state["items"] = items
     state["last_apply"] = {"status": result.get("status"), "source_digest": plan.get("source_digest", ""),
                             "updated_at": time.time()}
     safe_write_json(_state_path(scope), state, keep_bak=True)
     return {"status": result.get("status", "retryable_failed"), "migration": result}
+
+
+def verify_backup_snapshot(snapshot: Path) -> dict[str, Any]:
+    """Verify an offline snapshot and return only safe metadata for apply admission."""
+    from core.backup_state import verify_snapshot
+
+    result = verify_snapshot(Path(snapshot))
+    return {"verified": bool(result.get("ok")), "errors": result.get("errors", [])}
 
 
 def status(scope: MemoryScope) -> dict[str, Any]:

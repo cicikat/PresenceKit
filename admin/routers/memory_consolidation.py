@@ -1,6 +1,7 @@
 """Authenticated control and observation for character memory dossiers."""
 from __future__ import annotations
 
+from pathlib import Path as FilePath
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
@@ -130,13 +131,27 @@ async def control_memory_history_reconciliation(
 ):
     action = str(body.get("action") or "")
     uid, char_id = str(body.get("uid") or ""), str(body.get("char_id") or "")
-    if action not in {"pause", "resume", "dry_run"} or not uid or not char_id:
+    if action not in {"pause", "resume", "dry_run", "apply"} or not uid or not char_id:
         raise HTTPException(status_code=422, detail={"code": "invalid_reconciliation_control"})
     _scope(uid, char_id)
     from core.memory import history_reconciliation
     scope = MemoryScope.reality_scope(uid, char_id)
     if action == "dry_run":
         return history_reconciliation.apply_dry_run(scope, backup_verified=False)
+    if action == "apply":
+        backup_path = str(body.get("backup_path") or "").strip()
+        if not backup_path:
+            raise HTTPException(status_code=422, detail={"code": "backup_path_required"})
+        verification = history_reconciliation.verify_backup_snapshot(FilePath(backup_path))
+        if not verification["verified"]:
+            raise HTTPException(status_code=409, detail={"code": "backup_not_verified", "errors": verification["errors"]})
+        batch_size = int(body.get("batch_size") or 10)
+        if not 1 <= batch_size <= 100:
+            raise HTTPException(status_code=422, detail={"code": "invalid_batch_size"})
+        return history_reconciliation.apply_batch(
+            scope, backup={"verified": True, "backup_path": backup_path},
+            batch_size=batch_size, dry_run=False,
+        )
     return history_reconciliation.set_paused(scope, action == "pause", reason=str(body.get("reason") or "admin"))
 
 

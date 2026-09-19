@@ -730,3 +730,20 @@ revision detail are excluded and require `memory.read` through
 
 The controls are backend-admin only. Desktop and mobile have no duplicated
 switch, permission, protocol field, queue, acknowledgement or TTL change.
+
+## Brief 259 history reconciliation
+
+The read-only inventory is exposed at
+`GET /observability/memory-history-inventory` (`state.read`). A persisted,
+content-free manifest and status ledger are created with
+`POST /memory-history-reconciliation/manifest` and read through
+`GET /observability/memory-history-reconciliation`. Admin pause/resume/dry-run
+uses `POST /memory-history-reconciliation/control`; `action=apply` additionally
+requires a server-side verified offline snapshot path and a bounded batch size.
+The apply path is default-off at the operational level and is not a production
+rollout switch.
+
+The current adapter only applies the existing event-log migration in bounded
+batches. Other historical stores remain deferred. No production snapshot,
+semantic calibration, first-night manifest, or morning closeout has been
+performed.

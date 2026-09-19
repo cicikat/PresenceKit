@@ -1,8 +1,8 @@
 # 259 — 历史记忆盘点、分批整理与首夜回填
 
-日期：2026-09-19。状态：规划完成，A–F 全部未施工。依赖 [258](258-character-memory-dossiers.md) 的受控存储、工具、后台与实时接续；A 的只读盘点可先行，生产 apply 必须等待相关能力验收。
+日期：2026-09-19。状态：A 只读盘点、B 基础可恢复状态机、C backup gate 已实现；D–F 的生产运行、语义回填和退役仍未完成。依赖 [258](258-character-memory-dossiers.md) 的受控存储、工具、后台与实时接续。
 
-本单单列旧数据运行工程：数据量、历史格式、来源缺失、进度和恢复与新增量不同；语义判断仍交给同一角色、同一个 capability，不另造分类模型或另一套记忆权威。本次只写工单，未扫描生产正文、未备份、未调用模型、未处理历史。
+本单单列旧数据运行工程：数据量、历史格式、来源缺失、进度和恢复与新增量不同；语义判断仍交给同一角色、同一个 capability，不另造分类模型或另一套记忆权威。当前实现只在隔离测试数据上运行；没有生产扫描、生产备份、生产模型调用或生产回填。
 
 ## 原则与来源
 
@@ -95,4 +95,18 @@
 
 | 子单 | commit | 自动/结构验证 | 生产运行 |
 |---|---|---|---|
-| A–F | 未施工 | 未执行 | 未盘点、未备份、未调用模型、未回填 |
+| A | `d404e9b` | read-only inventory / redaction tests | 未扫描生产正文 |
+| B | `19bae90` | resumable manifest/status tests；状态写入经 sandbox resolver | 不是完整逐 source-item ledger；生产未运行 |
+| C | `30a5f84`, `f5dc200` | verified-backup gate、verify-before-restore recovery drill、ledger transition tests；26 focused tests passed | 仅隔离 fixture；未创建生产 snapshot |
+| D | 未完成 | apply endpoint 已存在，但无生产首夜 manifest/运行证据 | 首夜未运行 |
+| E–F | 未施工 | 未执行 | 未滚动整理、未退役、未删除 |
+
+## Current blockers
+
+The current apply adapter is bounded to the existing event-log migration
+adapter. It does not yet perform model-assisted dossier classification for
+mid-term, episodic, storyline, or identity sources, nor does it provide a
+production-frozen first-night manifest and morning closeout report. Production
+enablement therefore remains blocked on semantic calibration, a real verified
+offline snapshot and recovery acceptance, scope/budget freeze, and explicit
+operator authorization.

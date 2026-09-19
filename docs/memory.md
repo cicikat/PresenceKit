@@ -10,6 +10,12 @@ Storage, bounded chat recall/tools, the silent maintenance worker, and the admin
 control plane are implemented. The feature is default-off; production enablement
 remains gated by Brief 259 A-C and the separately authorized Brief 258 F rollout.
 
+Brief 259 now has a redacted inventory, resumable manifest state, verified
+offline-backup gate, recovery-drill helper, and an admin-only bounded event-log
+apply endpoint. These are preparation capabilities, not historical semantic
+reconciliation: mid-term/episodic/storyline/identity remain deferred, and no
+production first-night apply has run.
+
 ## 资料接续回执（2026-09-13）
 
 经用户授权，owner 上传与生活记录增加有界自动投影；主动工具 safe_summary 增加 24 小时历史参考。
