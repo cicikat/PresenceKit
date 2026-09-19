@@ -170,6 +170,34 @@ def test_verified_apply_requires_frozen_manifest(sandbox, monkeypatch):
     assert result == {"status": "deferred", "reason": "manifest_not_frozen"}
 
 
+def test_first_night_runner_stops_at_cutoff_and_uses_verified_gate(sandbox, monkeypatch, tmp_path):
+    from core.memory import history_reconciliation
+    from core.memory.scope import MemoryScope
+
+    scope = MemoryScope.reality_scope("first-night-owner", TEST_CHAR_ID)
+    manifest = history_reconciliation.create_manifest(scope, now=1)
+    history_reconciliation.freeze_manifest(scope, manifest_revision=manifest["manifest_revision"])
+    monkeypatch.setattr(history_reconciliation, "verify_backup_snapshot", lambda path: {"verified": True, "errors": []})
+    calls = {"count": 0}
+
+    def fake_apply(*args, **kwargs):
+        calls["count"] += 1
+        return {"status": "committed", "migration": {"next_offset": 1, "total": 1}}
+
+    async def fake_consolidate(*args, **kwargs):
+        return {"status": "disabled", "model_calls": 0}
+
+    monkeypatch.setattr(history_reconciliation, "apply_batch", fake_apply)
+    monkeypatch.setattr(history_reconciliation, "consolidate_imported_events", fake_consolidate)
+    result = __import__("asyncio").run(history_reconciliation.run_first_night(
+        scope, backup_snapshot=tmp_path / "snapshot", manifest_revision=manifest["manifest_revision"],
+        stop_at=0,
+    ))
+    assert result["status"] == "stopped"
+    assert result["batches"] == 0
+    assert calls["count"] == 0
+
+
 def test_imported_event_consolidation_pins_scope_and_bulk_preset(monkeypatch):
     from core.memory import history_reconciliation
     from core.memory.scope import MemoryScope

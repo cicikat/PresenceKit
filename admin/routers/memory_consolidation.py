@@ -131,7 +131,7 @@ async def control_memory_history_reconciliation(
 ):
     action = str(body.get("action") or "")
     uid, char_id = str(body.get("uid") or ""), str(body.get("char_id") or "")
-    if action not in {"pause", "resume", "dry_run", "freeze", "apply"} or not uid or not char_id:
+    if action not in {"pause", "resume", "dry_run", "freeze", "apply", "run"} or not uid or not char_id:
         raise HTTPException(status_code=422, detail={"code": "invalid_reconciliation_control"})
     _scope(uid, char_id)
     from core.memory import history_reconciliation
@@ -165,6 +165,20 @@ async def control_memory_history_reconciliation(
         if bool(body.get("consolidate", True)) and result.get("status") in {"committed", "completed"}:
             result["dossier_pass"] = await history_reconciliation.consolidate_imported_events(scope)
         return result
+    if action == "run":
+        backup_path = str(body.get("backup_path") or "").strip()
+        manifest_revision = str(body.get("manifest_revision") or "").strip()
+        if not backup_path or not manifest_revision:
+            raise HTTPException(status_code=422, detail={"code": "backup_and_manifest_required"})
+        try:
+            batch_size = int(body.get("batch_size") or 10)
+            stop_at = float(body["stop_at"]) if body.get("stop_at") is not None else None
+            return await history_reconciliation.run_first_night(
+                scope, backup_snapshot=FilePath(backup_path), manifest_revision=manifest_revision,
+                batch_size=batch_size, stop_at=stop_at,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail={"code": str(exc)}) from exc
     return history_reconciliation.set_paused(scope, action == "pause", reason=str(body.get("reason") or "admin"))
 
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -251,6 +252,59 @@ async def consolidate_imported_events(scope: MemoryScope, *, preset: str = "便�
         only_principal=TaskPrincipal.reality(scope.uid, scope.character_id),
         preset_override=preset,
     )
+
+
+async def run_first_night(
+    scope: MemoryScope,
+    *,
+    backup_snapshot: Path,
+    manifest_revision: str,
+    batch_size: int = 10,
+    stop_at: float | None = None,
+    preset: str = "便宜小模型grok-see",
+) -> dict[str, Any]:
+    """Run bounded historical import batches until a cutoff or terminal state.
+
+    This is an explicit operator action, never a scheduler default. Every
+    batch reuses the verified snapshot and frozen manifest gate. The report is
+    metadata-only and deliberately distinguishes imported event evidence from
+    dossier passes and deferred source adapters.
+    """
+    if not 1 <= int(batch_size) <= 100:
+        raise ValueError("invalid_batch_size")
+    verification = verify_backup_snapshot(Path(backup_snapshot))
+    if not verification["verified"]:
+        return {"status": "deferred", "reason": "backup_not_verified", "errors": verification["errors"]}
+    state = read_state(scope)
+    if str(state.get("frozen_manifest_revision") or "") != str(manifest_revision):
+        return {"status": "deferred", "reason": "manifest_not_frozen"}
+    deadline = float(stop_at) if stop_at is not None else time.time() + 600
+    batches = 0
+    dossier_passes = 0
+    last: dict[str, Any] = {}
+    while time.time() < deadline:
+        state = read_state(scope)
+        if state.get("paused"):
+            return {"status": "paused", "reason": state.get("pause_reason", ""), "batches": batches,
+                    "dossier_passes": dossier_passes, "last": last}
+        result = apply_batch(
+            scope, backup={"verified": True, "backup_path": str(backup_snapshot)},
+            batch_size=int(batch_size), dry_run=False,
+        )
+        last = result
+        batches += 1
+        if result.get("status") not in {"committed", "completed"}:
+            break
+        migration = result.get("migration") or {}
+        if int(migration.get("next_offset", 0)) >= int(migration.get("total", 0)):
+            dossier_result = await consolidate_imported_events(scope, preset=preset)
+            dossier_passes += int(dossier_result.get("model_calls") or 0)
+            last["dossier_pass"] = dossier_result
+            break
+    current = status(scope)
+    terminal = "completed" if current["counts"].get("pending", 0) == 0 and current["counts"].get("running", 0) == 0 else "stopped"
+    return {"status": terminal, "batches": batches, "dossier_passes": dossier_passes,
+            "stopped_at": datetime.now(timezone.utc).isoformat(), "ledger": current, "last": last}
 
 
 def status(scope: MemoryScope) -> dict[str, Any]:

@@ -741,6 +741,9 @@ content-free manifest and status ledger are created with
 uses `POST /memory-history-reconciliation/control`; `action=freeze` pins the
 manifest revision before apply, and `action=apply` additionally
 requires a server-side verified offline snapshot path and a bounded batch size.
+`action=run` is the explicit first-night runner: it additionally requires the
+frozen manifest revision and a stop deadline, then returns a metadata-only
+closeout report. It is never invoked by the scheduler automatically.
 The apply path is default-off at the operational level and is not a production
 rollout switch.
 
