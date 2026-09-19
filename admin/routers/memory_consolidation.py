@@ -86,6 +86,21 @@ async def observe_memory_consolidation(
         raise HTTPException(status_code=503, detail={"code": str(exc)[:128]}) from exc
 
 
+@router.get("/observability/memory-history-inventory", summary="Read-only history reconciliation inventory")
+async def observe_memory_history_inventory(
+    uid: str = Query(..., min_length=1, max_length=128),
+    char_id: str = Query(..., min_length=1, max_length=128),
+    _auth=Depends(require_scopes("state.read")),
+):
+    """Expose only redacted counts/revisions; this endpoint never initializes data."""
+    _scope(uid, char_id)
+    from core.memory.history_reconciliation import build_inventory
+    try:
+        return build_inventory(uid, char_id)
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=503, detail={"code": str(exc)[:128]}) from exc
+
+
 @router.get("/memory/dossiers", summary="Search character memory dossiers")
 async def search_memory_dossiers(
     uid: str = Query(..., min_length=1, max_length=128),

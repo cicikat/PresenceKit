@@ -1014,6 +1014,10 @@ Admin adds `GET /observability/memory-consolidation` (`state.read`), bounded
 `GET /memory/dossiers*` (`memory.read`), and settings/lifecycle control
 (`admin`). No desktop/mobile REST, WebSocket, IPC, poll, relay, notification,
 ack, TTL, correlation-key, permission, or native settings contract changed.
+The read-only Brief 259 inventory is exposed as
+`GET /observability/memory-history-inventory?uid=...&char_id=...`
+(`state.read`); it returns only redacted counts and source revisions and has no
+desktop/mobile consumer.
 
 `open`: production rollout and real first-night/next-morning evidence are gated
 by Brief 259 A-C and Brief 258 F. Backend tests and admin browser inspection do

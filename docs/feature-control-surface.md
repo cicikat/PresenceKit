@@ -700,6 +700,17 @@ execution remains default-off under `agent_tasks.enabled`; each workspace also
 needs a live server-defined manifest. Desktop and mobile gain no setting or
 confirmation field. An absent grant is reported as waiting for admin approval.
 
+## Brief 259 history reconciliation inventory
+
+`GET /observability/memory-history-inventory?uid=...&char_id=...` (`state.read`)
+returns a versioned, content-free inventory of the scoped history stores. It is
+strictly read-only: it does not initialize stores, create migration state,
+invoke a model, or change production memory. The inventory reports source
+counts, byte totals, and metadata revisions so a separately authorized batch
+manifest can detect source changes before retrying. Background consolidation
+continues to use the existing `memory_consolidation.background_preset`; set it
+to the configured cheap `grok-see` preset for bulk work.
+
 ## Brief 258 memory dossier consolidation
 
 `config.yaml:memory_consolidation` is the backend authority. It is default-off.
