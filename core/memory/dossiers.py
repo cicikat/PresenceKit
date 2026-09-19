@@ -810,6 +810,19 @@ def committed_maintenance_run(scope: MemoryScope, task_id: str) -> dict[str, Any
     return dict(row) if row else None
 
 
+def latest_maintenance_run(scope: MemoryScope, task_id: str) -> dict[str, Any] | None:
+    """Return the latest durable run receipt for outcome reconciliation."""
+    scope = _scope(scope); task_id = _id(task_id, "task_id"); path = _path(scope)
+    if not path.exists():
+        return None
+    with _lock(path), _connect(path, readonly=True) as connection:
+        row = connection.execute(
+            "SELECT * FROM maintenance_runs WHERE task_id=? ORDER BY started_at DESC LIMIT 1",
+            (task_id,),
+        ).fetchone()
+    return dict(row) if row else None
+
+
 def maintenance_status(scope: MemoryScope) -> dict[str, Any]:
     """Return content-free consolidation progress for the authenticated control plane."""
     from core.memory import event_store, source_policy

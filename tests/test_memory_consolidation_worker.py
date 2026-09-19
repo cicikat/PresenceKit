@@ -336,3 +336,21 @@ def test_unknown_without_receipt_blocks_automatic_replay(sandbox, monkeypatch):
     assert asyncio.run(scenario())["status"] == "no_work"
     tasks = task_manager.list_tasks(principal, limit=100)
     assert [(item["task_id"], item["status"]) for item in tasks] == [(task["task_id"], "outcome_unknown")]
+def test_reconcile_unknown_closes_durable_failed_run(sandbox, monkeypatch):
+    from core.memory import consolidation_worker
+
+    principal = _principal(uid="failed-reconcile", char_id=TEST_CHAR_ID)
+    task = {"capability": "memory.consolidation", "status": "outcome_unknown", "task_id": "a" * 32}
+    seen = {}
+
+    monkeypatch.setattr("core.agent_runtime.task_manager.list_tasks", lambda *args, **kwargs: [task])
+    monkeypatch.setattr("core.memory.dossiers.committed_maintenance_run", lambda *args, **kwargs: None)
+    monkeypatch.setattr("core.memory.dossiers.latest_maintenance_run", lambda *args, **kwargs: {
+        "status": "failed", "work_session_id": "b" * 32, "error_code": "provider_timeout",
+    })
+    monkeypatch.setattr("core.agent_runtime.work_sessions.reconcile_unknown_work_session", lambda *args, **kwargs: None)
+    monkeypatch.setattr("core.agent_runtime.task_manager.reconcile_outcome_unknown",
+                        lambda *args, **kwargs: seen.update(kwargs))
+    consolidation_worker._reconcile_unknown(principal)
+    assert seen["succeeded"] is False
+    assert seen["error_code"] == "provider_timeout"

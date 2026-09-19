@@ -360,6 +360,20 @@ def _reconcile_unknown(principal: TaskPrincipal) -> None:
             continue
         run = dossiers.committed_maintenance_run(scope, task["task_id"])
         if run is None:
+            latest = dossiers.latest_maintenance_run(scope, task["task_id"])
+            if latest and latest.get("status") in {"failed", "canceled", "paused", "revoked"}:
+                try:
+                    work_sessions.reconcile_unknown_work_session(
+                        principal, latest["work_session_id"], artifact_id="", artifact_version=0,
+                        succeeded=False, error_code=str(latest.get("error_code") or "outcome_unverified"),
+                    )
+                except work_sessions.WorkSessionError:
+                    pass
+                task_manager.reconcile_outcome_unknown(
+                    principal, task["task_id"], succeeded=False,
+                    error_code=str(latest.get("error_code") or "outcome_unverified"),
+                    result_metadata={"outcome_code": "durable_failure_reconciled"},
+                )
             continue
         checkpoint = dossiers.maintenance_checkpoint(scope)
         artifact_id = f"memory:{task['task_id']}"
