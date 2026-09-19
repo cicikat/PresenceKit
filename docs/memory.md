@@ -2008,3 +2008,12 @@ an optionally retained raw blob.
 current: talk_owner stamps the trigger write envelope; autonomy is conversational. The existing capture/slow pipeline records assistant-only history and trigger-aware memory with existing provenance. No candidate signal is represented as a user message. New trigger event-log blocks have timestamps and the reader handles assistant-only entries and canonical turn_id. The canonical ledger keeps inline display markup separately from sanitized memory text. /chat-log/{date} adds optional assistant_display_text by scope and turn ID; desktop replays it through the existing inline renderer with plain-text fallback. No new store, scope, notification or ack policy.
 
 Validation: 48 related regressions plus 3 focused persistence/reload tests passed; desktop TypeScript and production build passed. observe: native desktop restart/phone rendering has not been tested; mobile optional styled history consumption remains roadmap. Historical stripped styles and previously unrecorded proactive messages cannot be reconstructed.
+
+## Brief 256 Agent-task memory boundary
+
+Agent-task goals, workspace inputs, model plans, and outputs are private Runtime
+payloads rather than memory evidence. They do not enter short-term, event-log,
+mid-term, episodic, identity, storyline, or prompt recall. Terminal notification
+uses the existing bounded autonomy signal and ordinary assistant delivery path;
+only a later real conversation turn may enter memory through the existing
+provenance rules.

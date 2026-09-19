@@ -775,6 +775,16 @@ async def _start_agent_task_wrapper(
         )
         return json.dumps(result, ensure_ascii=False)
     except AgentTaskError as exc:
+        if exc.code in {
+            "workspace_id_not_found",
+            "workspace_manifest_denied",
+            "workspace_manifest_expired",
+        }:
+            return json.dumps({
+                "status": "waiting_approval",
+                "error_code": "workspace_grant_required",
+                "message": "等待管理面授权该 workspace 后再重试；当前请求未执行。",
+            }, ensure_ascii=False)
         return json.dumps({"status": "failed", "error_code": exc.code}, ensure_ascii=False)
 
 
@@ -1991,6 +2001,10 @@ def _is_tool_enabled(tool_name: str) -> bool:
     """检查 config.yaml tools 配置中工具是否启用（默认启用）。
     优先查 tools.<tool_name>.enabled，再回退到旧的 group 键。
     """
+    if tool_name == "start_agent_task":
+        from core.agent_runtime.agent_tasks import capability_snapshot
+        state = capability_snapshot()
+        return bool(state["configured"] and state["workspace_status"] == "enabled")
     if tool_name == "read_xiaohongshu":
         from core.tools.xiaohongshu import settings
         return settings(get_config())["effective"]

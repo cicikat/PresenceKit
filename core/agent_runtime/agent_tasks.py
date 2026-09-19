@@ -567,10 +567,78 @@ async def resume_queued_tasks() -> dict[str, int]:
 
 
 def capability_snapshot() -> dict[str, Any]:
+    from core.deployment_capabilities import is_remote_server
+    from core.sensitive_redaction import REDACTION_VERSION, observability_snapshot as redaction_observability
+
+    cfg = _cfg()
+    configured = bool(cfg.get("enabled", False))
+    remote = is_remote_server()
+    workspace_state = workspace.capability_snapshot()
+    now = time.time()
+    raw_manifests = cfg.get("workspace_manifests") or {}
+    grants: list[dict[str, Any]] = []
+    if isinstance(raw_manifests, dict):
+        known = set(workspace.workspace_ids())
+        for workspace_id, raw in sorted(raw_manifests.items()):
+            if not isinstance(raw, dict):
+                continue
+            expires_at = float(raw.get("expires_at") or 0)
+            operations = sorted(
+                {str(item) for item in (raw.get("operations") or [])}
+                & {"read", "create", "update", "run"}
+            )
+            grants.append({
+                "workspace_id": str(workspace_id),
+                "configured": bool(raw.get("enabled", False)),
+                "effective": bool(
+                    configured
+                    and not remote
+                    and workspace_state["enabled"]
+                    and raw.get("enabled", False)
+                    and workspace_id in known
+                    and "read" in operations
+                    and (not expires_at or expires_at > now)
+                ),
+                "revision": int(raw.get("revision", 1) or 1),
+                "expires_at": expires_at,
+                "expired": bool(expires_at and expires_at <= now),
+                "operations": operations,
+                "workspace_known": workspace_id in known,
+            })
+    effective = configured and not remote and workspace_state["enabled"] and any(item["effective"] for item in grants)
+    if not configured:
+        blocking_reason = "agent_tasks_disabled"
+    elif remote:
+        blocking_reason = "remote_server_policy"
+    elif not workspace_state["enabled"]:
+        blocking_reason = "workspace_capability_unavailable"
+    elif not grants:
+        blocking_reason = "workspace_grant_required"
+    elif not effective:
+        blocking_reason = "no_effective_workspace_grant"
+    else:
+        blocking_reason = ""
     return {
         "schema_version": SCHEMA_VERSION,
+        "capability": "agent-tasks.v1",
+        "configured": configured,
+        "effective": effective,
+        "blocking_reason": blocking_reason,
         "enabled": _enabled(),
         "workspace_ids": workspace.workspace_ids(),
+        "workspace_status": workspace_state["status"],
+        "workspace_grants": grants,
         "limits": _budget(None),
+        "quota": {
+            "max_concurrent_per_character": min(
+                2, max(1, int(cfg.get("max_concurrent_per_character", 1) or 1))
+            ),
+            "payload_retention_days": PAYLOAD_RETENTION_SECONDS // (24 * 60 * 60),
+        },
         "running": sum(1 for task in _running.values() if not task.done()),
+        "redaction": {
+            "version": REDACTION_VERSION,
+            "counts": redaction_observability()["counts"],
+        },
+        "note": "metadata only; no goals, file bodies, credentials, or absolute paths",
     }

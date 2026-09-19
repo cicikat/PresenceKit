@@ -112,6 +112,25 @@ def test_update_move_delete_restore_and_restart(sandbox):
     assert again["content"] == "coffee"
 
 
+def test_ledger_and_music_notes_can_be_organized_and_restored(sandbox):
+    ledger = _create("notes/ledger.md", "entry one")
+    music = _create("notes/music.md", "track one")
+    updated = self_mod.update_self(
+        "notes/music.md", "track two", expected_revision=music["revision"],
+        user_id=_UID, char_id=_CHAR,
+    )
+    deleted = self_mod.delete_self(
+        "notes/music.md", expected_revision=updated["revision"],
+        user_id=_UID, char_id=_CHAR,
+    )
+    restored = self_mod.restore_self(
+        "notes/music.md", revision=deleted["revision"], user_id=_UID, char_id=_CHAR,
+    )
+    assert ledger["ok"] is True
+    assert restored["ok"] is True
+    assert _read("notes/music.md")["content"] == "track two"
+
+
 def test_move_overwrite_requires_explicit_flag(sandbox):
     src = _create("a.md", "src")
     dst = _create("b.md", "dst")

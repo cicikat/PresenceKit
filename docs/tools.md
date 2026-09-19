@@ -1056,6 +1056,14 @@ after 30 days and never enter task receipts, memory, or action-trace results.
 The worker performs one routed model call; `max_tokens` is the available cost bound
 because model presets do not currently declare currency pricing metadata.
 
+Ticket G adds one capability-aware autonomy hint derived from the current schema:
+backend/external read, scoped self organization, and authorized Agent-task start
+are described only when those tools are present. It does not prescribe a daily
+ledger or fixed directory layout. Chat Path C still requires a function-calling
+preset; incompatible presets keep the established non-tool fallback. A missing or
+expired workspace grant returns `waiting_approval` and performs no operation until
+an administrator updates the server-owned manifest.
+
 
 ## 按需截图三端接入（2026-09-12，partial）
 

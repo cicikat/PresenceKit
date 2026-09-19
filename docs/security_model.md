@@ -266,3 +266,12 @@ Lv3：带权限 manifest 的插件系统
 ## 当前结论
 
 当前安全模型适合“单用户、本机、可信客户端”的开发阶段。真正的风险不是核心 pipeline，而是把未配对的客户端入口、社区资源和插件能力暴露到不可信环境。准备开放生态前，优先补 WS/mobile/desktop 配对、导入导出白名单、统一 source/privacy 策略。
+
+## Brief 256 G: character files and Agent-task control surface
+
+`GET /observability/character-file-autonomy` is a `state.read` protected,
+metadata-only projection of backend/external read, character self, and bounded
+Agent tasks. It exposes effective state, blocking reasons, limits, redaction
+version, and server-owned grant revisions. It never exposes file bodies, task
+goals, credentials, or physical workspace roots. Missing grants wait for admin
+configuration; model arguments and client fields are not confirmation authority.

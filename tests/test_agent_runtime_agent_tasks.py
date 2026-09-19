@@ -222,6 +222,73 @@ def test_autonomy_requires_explicit_allowlist_and_manifest(monkeypatch, tmp_path
     )
 
 
+def test_start_discovery_requires_server_gate_but_can_report_missing_grant(monkeypatch, tmp_path):
+    root = tmp_path / "workspace"
+    root.mkdir()
+    cfg = _config(monkeypatch, root)
+    from core.tool_dispatcher import get_tools_schema
+
+    names = {item["function"]["name"] for item in get_tools_schema(categories=["info"])}
+    assert "start_agent_task" in names
+    cfg["agent_tasks"]["workspace_manifests"] = {}
+    names = {item["function"]["name"] for item in get_tools_schema(categories=["info"])}
+    assert "start_agent_task" in names
+    cfg["agent_tasks"]["enabled"] = False
+    names = {item["function"]["name"] for item in get_tools_schema(categories=["info"])}
+    assert "start_agent_task" not in names
+
+
+@pytest.mark.asyncio
+async def test_missing_workspace_grant_waits_for_admin_approval(monkeypatch, tmp_path):
+    root = tmp_path / "workspace"
+    root.mkdir()
+    cfg = _config(monkeypatch, root)
+    cfg["agent_tasks"]["workspace_manifests"] = {}
+    from core import tool_dispatcher
+
+    outcome = await tool_dispatcher.execute_structured(
+        "start_agent_task",
+        {"goal": "Inspect the project", "workspace_id": "project", "request_id": "request-approval"},
+        UID, UID, False, _Session(), origin="assistant_loop", char_id=CHAR,
+    )
+    body = json.loads(outcome.result[outcome.result.index("{"):])
+    assert body == {
+        "status": "waiting_approval",
+        "error_code": "workspace_grant_required",
+        "message": "等待管理面授权该 workspace 后再重试；当前请求未执行。",
+    }
+
+
+def test_central_observability_is_authenticated_and_metadata_only(monkeypatch, tmp_path):
+    root = tmp_path / "workspace"
+    root.mkdir()
+    _config(monkeypatch, root)
+    secret = "agent-task-observability-secret"
+    monkeypatch.setattr("admin.auth.get_admin_secret", lambda: secret)
+    from admin.admin_server import app
+    from fastapi.testclient import TestClient
+
+    client = TestClient(app, raise_server_exceptions=False)
+    assert client.get("/observability/character-file-autonomy").status_code == 401
+    response = client.get(
+        "/observability/character-file-autonomy",
+        params={"uid": UID, "char_id": CHAR},
+        headers={"Authorization": f"Bearer {secret}"},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    task_state = payload["capabilities"]["agent_tasks"]
+    assert task_state["configured"] is True
+    assert task_state["effective"] is True
+    assert task_state["workspace_grants"][0]["revision"] == 1
+    assert task_state["quota"]["max_concurrent_per_character"] == 1
+    assert task_state["redaction"]["version"]
+    blob = json.dumps(payload)
+    assert str(root) not in blob
+    assert "Inspect the project" not in blob
+    assert "api_key" not in blob
+
+
 @pytest.mark.asyncio
 async def test_budget_limit_and_running_cancel_are_terminal(monkeypatch, tmp_path):
     root = tmp_path / "workspace"

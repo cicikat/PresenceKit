@@ -360,3 +360,11 @@ Reality-scoped bucket containing `index.json`, `stats.json`, and optional
 raw bytes are retained only when `character_document_library.retain_raw_uploads`
 is explicitly enabled. Deleted records remain as tombstones and this bucket is
 not a prompt layer or a memory-consolidation source.
+
+## Brief 256 Agent-task private payloads
+
+`data/runtime/agent_runtime/agent_tasks/{char_id}/{uid}/` stores bounded private
+worker payloads for at most 30 days. Goals, input excerpts, plans, and result text
+remain here and do not enter Task Manager receipts, observability, action traces,
+or memory. Public projections contain only task IDs, lifecycle metadata, relative
+artifact references, digests, verification status, limits, and grant revisions.

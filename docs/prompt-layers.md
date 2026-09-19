@@ -974,3 +974,9 @@ Reality `/prompt-ablation` 与 Dream `/dream-prompt-ablation` 完全分离，修
 Brief 253.5：`1.6_drinking` 是自然衰减的虚构角色体感软层，零网络调用；可选停顿/重复，不要求表演，不改变用户事实。
 
 Brief 253.6：`3.8_audio_impression` 只随本轮已转写音频或有效一次性凭据注入。语调枚举来自 STT 可选旁路字段，缺失为 unclear；提示明确是不确定印象，不写入用户人格事实。纯文字不注入，详见 [audio-perception.md](audio-perception.md)。
+
+Brief 256 G：主动链既有 `autonomy_policy` 层会根据本轮实际工具 schema
+说明可选的 backend/external 读取、self 整理和已授权 Agent task。缺失的
+能力不进入提示；提示明确这些能力按具体理由使用，不要求日更账本或固定业务目录。
+没有新增 Reality prompt 层，因此不触发 tag eval；`6i_self_agent_md` 的顺序、
+裁剪和下一轮生效语义不变。

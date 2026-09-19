@@ -317,8 +317,10 @@ admin/desktop/mobile catalog updates. Brief 229 itself adds no endpoint, setting
 Work order 256 may add read-only observability for backend-read, self, and Agent-task effective
 state when those capabilities land; that does not rewrite the historical 229 sentence.
 `GET /observability/backend-read` is current with ticket B.
-`GET /observability/character-self` is current with ticket C. Agent-task endpoints
-stay non-current until F–G implement them. See
+`GET /observability/character-self` is current with ticket C. Ticket F made the
+bounded Agent-task tools current; ticket G added the `state.read` protected
+`GET /observability/character-file-autonomy` metadata projection. It exposes
+effective grants and limits without task goals, file bodies, credentials, or paths. See
 [character-files-and-agent-autonomy.md](character-files-and-agent-autonomy.md).
 
 ## Brief 232 Agent Work Sessions

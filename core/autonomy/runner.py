@@ -35,7 +35,14 @@ _MEMORY_CLAIM_RE = re.compile(
 )
 
 
-def _system_prompt(*, talk_available: bool, talk_unavailable_reason: str = "", character=None, screen_available: bool = False) -> str:
+def _system_prompt(
+    *,
+    talk_available: bool,
+    talk_unavailable_reason: str = "",
+    character=None,
+    screen_available: bool = False,
+    available_tool_names: set[str] | None = None,
+) -> str:
     talk_note = (
         "talk_owner is available only for a deliberate final message."
         if talk_available
@@ -56,11 +63,27 @@ def _system_prompt(*, talk_available: bool, talk_unavailable_reason: str = "", c
         name = str(getattr(character, "name", "") or "")
         description = str(getattr(character, "description", "") or "").strip()
         identity = f" You are {name}." + (f" {description[:1200]}" if description else "")
+    tool_names = available_tool_names or set()
+    optional_capabilities: list[str] = []
+    if tool_names & {"fs_list", "fs_read"}:
+        optional_capabilities.append("read permitted backend or external files")
+    if tool_names & {"self_list", "self_read", "self_create", "self_update", "self_move", "self_delete", "self_restore"}:
+        optional_capabilities.append("organize your scoped self files")
+    if "start_agent_task" in tool_names:
+        optional_capabilities.append(
+            "request an authorized bounded Agent task; a missing workspace grant waits for admin approval"
+        )
+    capability_note = ""
+    if optional_capabilities:
+        capability_note = (
+            "Available optional capabilities include: " + ", ".join(optional_capabilities) + ". "
+            "Use them only for a concrete reason; do not create daily ledgers or fixed business directories by default. "
+        )
     return (
         "You are running an internal autonomous opportunity. This is not a chat turn. "
         "Your ordinary text is private and will never be delivered. You may call allowed tools, "
         "then either explicitly call talk_owner once or finish silently. Do not narrate tool calls. "
-        + screen_note +
+        + screen_note + capability_note +
         "Treat opportunity evidence as a candidate reason to evaluate, never as dialogue that already happened. "
         "Only the bounded memory-query result and recent-history layers are historical anchors. "
         "Every historical claim in talk_owner.text must be traceable to an anchor with source, time, and speaker provenance. "
@@ -516,6 +539,7 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
             talk_unavailable_reason=talk_unavailable_reason,
             character=_character_for(job.char_id),
             screen_available=any((item.get("function") or item).get("name") == "observe_user_screen" for item in tools),
+            available_tool_names={(item.get("function") or item).get("name") for item in tools},
         ),
         "_layer": "autonomy_policy",
         "_budget_chars": 1800,
@@ -560,6 +584,7 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
                 talk_unavailable_reason=talk_unavailable_reason,
                 character=_character_for(job.char_id),
                 screen_available=any((item.get("function") or item).get("name") == "observe_user_screen" for item in active_tools),
+                available_tool_names={(item.get("function") or item).get("name") for item in active_tools},
             )
             remaining = deadline - time.monotonic()
             if remaining <= 0:

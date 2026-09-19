@@ -1,6 +1,6 @@
 # 229 — 单角色文件、自有空间与 Agent 自主能力扩展
 
-日期：2026-09-18。状态：A/B/C/D/E/F current；G 功能施工未开始；H 本轮不执行。
+日期：2026-09-18。状态：A/B/C/D/E/F/G current；H 本轮不执行。
 
 本单历史权威见 [Agent Runtime](../docs/agent-runtime-architecture.md)。
 
@@ -114,13 +114,13 @@
 
 依赖 B–F。
 
-- [ ] G1 后端集中展示 backend read、external read、self、Agent task 的 configured/effective、拒绝原因、配额、grant revision、脱敏版本；复用现有观测端点，按敏感度选 scope；凭据和私有正文不进入公共观测。
-- [ ] G2 检查聊天工具发现、autonomy admission、模型 function calling 不可用的降级；主动提示明确“可读后端、可整理 self、可发起授权工作任务”，不强制每天写账本或使用固定业务目录。
-- [ ] G3 用户确认复用真实受鉴权渠道；若客户端缺确认 UI，明确等待管理面审批，不能自动放行或假称客户端支持。结果摘要复用普通聊天路径；仅有新客户端字段/交互时才改对应端与协议总账。
-- [ ] G4 同步 tools、security_model/security、agent-runtime-architecture、data-taxonomy、prompt-layers、memory（仅受影响部分）、feature-control-surface 与受影响接口文档；修正历史“229 不新增端点”在续篇实施后的适用范围，保留历史事实。
-- [ ] G5 复用 fs_browse/toybox/agent_runtime workspace、work_sessions、task_manager、process_runner 既有测试；只补覆盖不足的回归。阅读 dev-environment，使用支持的 Python，隔离测试数据。tag 规则若改动运行 run_eval；纯新增层按其裁剪/消融回归。
-- [ ] G6 场景验收：读脱敏配置解释自己的模型路由；按外部路径读普通文件；自主创建账本与音乐笔记并删改恢复；修改 AGENT.md 后下一轮生效；修改/取消提醒且旧时间不发送；聊天及主动启动实际 coding task；未授权 core 写入被拒。
-- [ ] G7 管理面静态改动统一 bump 对应缓存版本，启动/复用本地服务硬刷新并验收。逐项记录自动测试、真实服务、浏览器、桌面/手机哪些完成、哪些 not-run；缺口按实际范围记 known-issues/接口总账。完成后独立提交。
+- [x] G1 后端集中展示 backend read、external read、self、Agent task 的 configured/effective、拒绝原因、配额、grant revision、脱敏版本；复用现有观测端点，按敏感度选 scope；凭据和私有正文不进入公共观测。
+- [x] G2 检查聊天工具发现、autonomy admission、模型 function calling 不可用的降级；主动提示明确“可读后端、可整理 self、可发起授权工作任务”，不强制每天写账本或使用固定业务目录。
+- [x] G3 用户确认复用真实受鉴权渠道；若客户端缺确认 UI，明确等待管理面审批，不能自动放行或假称客户端支持。结果摘要复用普通聊天路径；仅有新客户端字段/交互时才改对应端与协议总账。
+- [x] G4 同步 tools、security_model/security、agent-runtime-architecture、data-taxonomy、prompt-layers、memory（仅受影响部分）、feature-control-surface 与受影响接口文档；修正历史“229 不新增端点”在续篇实施后的适用范围，保留历史事实。
+- [x] G5 复用 fs_browse/toybox/agent_runtime workspace、work_sessions、task_manager、process_runner 既有测试；只补覆盖不足的回归。阅读 dev-environment，使用支持的 Python，隔离测试数据。tag 规则若改动运行 run_eval；纯新增层按其裁剪/消融回归。
+- [x] G6 场景验收：读脱敏配置解释自己的模型路由；按外部路径读普通文件；自主创建账本与音乐笔记并删改恢复；修改 AGENT.md 后下一轮生效；修改/取消提醒且旧时间不发送；聊天及主动启动实际 coding task；未授权 core 写入被拒。
+- [x] G7 管理面静态改动统一 bump 对应缓存版本，启动/复用本地服务硬刷新并验收。逐项记录自动测试、真实服务、浏览器、桌面/手机哪些完成、哪些 not-run；缺口按实际范围记 known-issues/接口总账。完成后独立提交。
 
 ## H — 删除候选与迁移收口（本轮仅列候选）
 
@@ -141,8 +141,8 @@
 | C | 本提交（SHA 见 git log） | `.venv` Python 3.12：`tests/test_character_self.py` 21 通过。同批 `test_data_registry` / admin i18n+fragment / `test_fs_browse` / autonomy write sandbox 相关合计 301 通过。`test_brief195_mcp_autonomy_signal_delivery.py::test_qixi_uses_lunar_conversion_and_adjacent_dates_do_not_match` 失败，与本单无关（该文件本单只改 fragment 缓存版本）。换行 `diff --stat` 与 `--ignore-cr-at-eol --stat` 一致，`diff --check` 无警告；新文件 LF。 | self 生命周期：CRUD/move/restore、隔离、逃逸（含 UNC/ADS/设备名）、配额不删现文件、损坏 revision 状态、磁盘失败后 CAS 可重试、撤权、脱敏、discovery/autonomy/非 danger、principal mismatch、观测元数据、remote 保持 self。管理面静态已含 call-records 选项与 `v1-256-character-self-1` 缓存。浏览器硬刷新交互未完成。未改生产数据。未开始 D–G，未执行 H。 |
 | D | `78bdbbd` | `.venv` Python 3.12：`tests/test_character_self_agent_md.py` / `tests/test_character_self_migration.py` 及相关 prompt/toy 回归已在 D 提交前通过。换行 `diff --stat` 与 `--ignore-cr-at-eol --stat` 一致。 | AGENT.md 注入、legacy toy 冻结归属与回滚不覆盖新版本。浏览器硬刷新未做。未改生产数据。未开始 E–G，未执行 H。 |
 | E | 本提交（SHA 见 git log） | `.venv` Python 3.12：`tests/test_character_reminders.py` / `tests/test_character_reminder_migration.py` / `tests/test_retire_direct_proactive_trigger_executors.py` / `tests/test_execute_dryrun.py` / `tests/test_native_proposals.py` / `tests/test_data_registry.py` / admin i18n+fragment 相关合计 338 通过。换行检查见本提交。 | Runtime 为唯一 live 权威；list/get/add/update/cancel/restore 返回 schedule_id；CAS/交付竞态/重复轮次新 task；legacy dry-run 迁移不复制给所有角色；`GET /observability/character-reminders` 仅元数据。管理面静态含 `v1-256-character-reminders-1`。浏览器硬刷新交互未完成。未改生产数据。未开始 F–G，未执行 H。 |
-| F | 待施工 | 待执行 | 真实 coding worker |
-| G | 待施工 | 待执行 | 管理面/消费端按影响面 |
+| F | `c9691ae` | `.venv` Python 3.12：Agent task、workspace、process runner、work session、Task Manager、autonomy、观测、安全守卫相关 331 项通过。 | 聊天工具实际异步修改授权样例并运行检查；覆盖幂等、撤权、超限、取消、remote、结果通知。无真实外部服务写入。 |
+| G | 本提交（SHA 见 git log） | `.venv` Python 3.12：跨 backend/external、self/AGENT.md、toy、reminder、Agent Runtime、tool discovery/loop、autonomy、admin/auth/换行守卫 600 项通过；补充场景与最终 UI/API 回归 200 项通过；JS syntax 通过。 | 独立本地 uvicorn + Edge headless 使用现有 admin 鉴权并清缓存 profile 验收：集中页面可见 4 项能力及 configured/effective、阻断原因、授权/脱敏版本、配额。真实配置只读查询完成，未改生产配置或正文。桌面/手机 not-run：本单无新字段、设置、WS/poll/ack/TTL 或确认 UI，接口总账明确缺 grant 等待管理面；无实际跨端影响。未执行 H。 |
 | H | 未授权删除 | 不执行 | 精确范围另确认 |
 
 每次提交前逐文件比较普通 diff stat 与 ignore-cr-at-eol stat，执行 diff --check；只暂存本单文件，不覆盖并行修改。失败与未执行项如实保留，不能用源码存在或 mock 成功替代运行验收。

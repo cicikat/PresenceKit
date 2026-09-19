@@ -148,6 +148,22 @@ def test_fs_read_redacts_secrets_before_truncate(monkeypatch, tmp_path):
     assert secret not in page2
 
 
+def test_model_routing_config_remains_explainable_after_redaction(monkeypatch, tmp_path):
+    allow_root, _ = _patch_fs_config(monkeypatch, tmp_path)
+    config = allow_root / "routing.yaml"
+    secret = "sk-live-routing-secret-value"
+    config.write_text(
+        "model_presets:\n  active_routing: balanced\n  presets:\n    chat-main:\n"
+        f"      model: example-chat\n      api_key: {secret}\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    result = _read(config)
+    assert "active_routing: balanced" in result
+    assert "model: example-chat" in result
+    assert secret not in result
+
+
 # ── 3. backend 可读；其他角色桶隔离 ───────────────────────────────────────────
 
 def test_fs_read_backend_sandbox_file_when_same_scope(monkeypatch, tmp_path, sandbox):

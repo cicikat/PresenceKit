@@ -312,10 +312,19 @@ async function openCenterRecords(source) {
   return loadUnifiedRecords();
 }
 function centerRecordRows(data) {
+  if (data.capabilities && typeof data.capabilities === 'object') {
+    return Object.entries(data.capabilities).map(([name, state]) => ({
+      ...(state || {}),
+      _capability_name: name,
+      _redaction_version: state?.redaction?.version || data.redaction?.version || '',
+    }));
+  }
   return data.entries || data.tasks?.entries || (Array.isArray(data.tasks)?data.tasks:undefined) || data.sessions || data.records || [];
 }
 function centerRecordStatus(row) {
-  const status=typeof row.ok==='boolean'?(row.ok?'succeeded':'failed'):row.status||row.state||'unknown';
+  const status=typeof row.ok==='boolean'?(row.ok?'succeeded':'failed'):
+    typeof row.effective==='boolean'?(row.effective?'enabled':row.configured===false?'disabled':'unavailable'):
+    row.status||row.state||'unknown';
   return t('settings_center.record_status_'+status,status);
 }
 function centerRecordTime(row) {
@@ -334,10 +343,26 @@ async function loadUnifiedRecords(){
     const rows=centerRecordRows(data).filter(row=>!query||JSON.stringify(row).toLowerCase().includes(query));
     const capability=data.capability||(typeof data.enabled==='boolean'?data:null);
     const summary=capability?`<p>${escapeHtml(centerRecordStatus(capability))} · ${t('settings_center.workspace_roots','授权目录数')}：${escapeHtml(String(capability.root_count??'—'))}</p>`:'';
-    root.innerHTML=summary+`<p>${t('settings_center.records_count','显示 {count} 条记录',{count:rows.length})}${data.truncated||data.tasks?.truncated?' · '+t('settings_center.records_truncated','仅显示最近记录'):''}</p>`+
-      (rows.length?rows.map(row=>`<section class="card"><h3>${escapeHtml(centerRecordStatus(row))} · ${escapeHtml(row.caller||row.capability||row.kind||'—')}</h3><p>${escapeHtml(centerRecordTime(row))} · ${escapeHtml(row.provider||row.scope?.char_id||'—')} · ${escapeHtml(row.model||row.purpose||row.source||'—')}</p><p>${escapeHtml(row.error_category||row.error_code||row.blocking_reason||'')}${row.duration_ms!==undefined?' · '+escapeHtml(String(row.duration_ms))+' ms':''}</p><details><summary>${t('settings_center.record_details',"详细记录")}</summary><pre>${escapeHtml(JSON.stringify(row,null,2))}</pre></details></section>`).join(''):t('settings_center.no_records',"暂无记录"))+
+    const capabilityRows=Boolean(data.capabilities);
+    root.innerHTML=summary+`<p>${capabilityRows?t('settings_center.capabilities_count','显示 {count} 项能力',{count:rows.length}):t('settings_center.records_count','显示 {count} 条记录',{count:rows.length})}${data.truncated||data.tasks?.truncated?' · '+t('settings_center.records_truncated','仅显示最近记录'):''}</p>`+
+      (rows.length?rows.map(row=>capabilityRows?centerCapabilityCard(row):`<section class="card"><h3>${escapeHtml(centerRecordStatus(row))} · ${escapeHtml(row.caller||row.capability||row.kind||'—')}</h3><p>${escapeHtml(centerRecordTime(row))} · ${escapeHtml(row.provider||row.scope?.char_id||'—')} · ${escapeHtml(row.model||row.purpose||row.source||'—')}</p><p>${escapeHtml(row.error_category||row.error_code||row.blocking_reason||'')}${row.duration_ms!==undefined?' · '+escapeHtml(String(row.duration_ms))+' ms':''}</p><details><summary>${t('settings_center.record_details',"详细记录")}</summary><pre>${escapeHtml(JSON.stringify(row,null,2))}</pre></details></section>`).join(''):t('settings_center.no_records',"暂无记录"))+
       `<details><summary>${t('settings_center.ledger_status',"台账状态")}</summary><pre>${escapeHtml(JSON.stringify(data,null,2))}</pre></details>`;
   }catch(error){if(generation===centerRecordsGeneration)centerError(root,error);}
+}
+function centerCapabilityCard(row){
+  const key=`settings_center.capability_${row._capability_name}`;
+  const label=t(key,String(row._capability_name||'').replaceAll('_',' '));
+  const configured=row.configured??row.enabled??'—';
+  const effective=row.effective??row.enabled??'—';
+  const reason=row.blocking_reason||'—';
+  const revisions=row.workspace_grants?.map(item=>`${item.workspace_id}@${item.revision}`).join(', ')||row.grant_revision||'—';
+  const quota=row.quota||row.limits||{};
+  return `<section class="card"><h3>${escapeHtml(label)} · ${escapeHtml(centerRecordStatus(row))}</h3>`+
+    `<p>${t('settings_center.capability_configured','配置值')}：${escapeHtml(String(configured))} · ${t('settings_center.capability_effective','生效值')}：${escapeHtml(String(effective))}</p>`+
+    `<p>${t('settings_center.capability_blocking_reason','阻断原因')}：${escapeHtml(String(reason))}</p>`+
+    `<p>${t('settings_center.capability_grant_revisions','授权版本')}：${escapeHtml(String(revisions))} · ${t('settings_center.capability_redaction_version','脱敏版本')}：${escapeHtml(String(row._redaction_version||'—'))}</p>`+
+    `<p>${t('settings_center.capability_quota','配额/限制')}：${escapeHtml(JSON.stringify(quota))}</p>`+
+    `<details><summary>${t('settings_center.record_details','详细记录')}</summary><pre>${escapeHtml(JSON.stringify(row,null,2))}</pre></details></section>`;
 }
 async function saveRoleAssets(){
   const select=document.getElementById('binding-character'), id=select.value, generation=roleBindingGeneration;

@@ -44,6 +44,11 @@ def test_workspace_read_and_list_are_scoped(monkeypatch, tmp_path):
     assert any(item["name"] == "note.md" for item in list_workspace(principal)["entries"])
     with pytest.raises(ValueError):
         read_workspace(principal, str(tmp_path / "outside.md"))
+    protected = root / "project-data"
+    protected.mkdir()
+    (protected / "core.txt").write_text("protected", encoding="utf-8")
+    with pytest.raises(ValueError, match="project_data_denied"):
+        read_workspace(principal, "project-data/core.txt")
 
 
 def test_workspace_writes_require_independent_grants_and_confirmation(monkeypatch, tmp_path):

@@ -296,6 +296,50 @@ async def character_self_observability(
 
 
 @router.get(
+    "/observability/character-file-autonomy",
+    summary="读取角色文件与 Agent task 集中脱敏状态",
+    description=(
+        "集中返回 backend/external read、character self 与 Agent task 的 effective 元数据；"
+        "不返回文件正文、任务目标、凭据或绝对路径。"
+    ),
+)
+async def character_file_autonomy_observability(
+    uid: str = Query("", max_length=128),
+    char_id: str = Query("", max_length=128),
+    _auth=Depends(require_scopes("state.read")),
+):
+    from core.agent_runtime.agent_tasks import capability_snapshot as agent_task_snapshot
+    from core.character_self import observability_snapshot as self_snapshot
+    from core.config_loader import get_config
+    from core.data_paths import DEFAULT_CHAR_ID
+    from core.pipeline_registry import get as get_pipeline
+    from core.tools.fs_browse import observability_snapshot as backend_snapshot
+
+    owner = uid.strip() or str((get_config().get("scheduler") or {}).get("owner_id") or "").strip()
+    selected = char_id.strip()
+    if not selected:
+        pipeline = get_pipeline()
+        selected = str(
+            (getattr(pipeline, "_active_character_id", None) if pipeline else None)
+            or DEFAULT_CHAR_ID
+        )
+    backend = backend_snapshot()
+    self_state = self_snapshot(uid=owner or None, char_id=selected if owner else None)
+    return {
+        "contract_version": "character-file-autonomy-observability.v1",
+        "scope": {"uid_configured": bool(owner), "char_id": selected},
+        "capabilities": {
+            "backend_read": backend["backend_read"],
+            "external_read": backend["external_read"],
+            "character_self": self_state,
+            "agent_tasks": agent_task_snapshot(),
+        },
+        "redaction": backend["redaction"],
+        "note": "metadata only; no private content, credentials, or absolute paths",
+    }
+
+
+@router.get(
     "/observability/character-reminders",
     summary="读取角色提醒生命周期元数据（不含正文）",
     description=(

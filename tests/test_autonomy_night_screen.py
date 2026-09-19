@@ -67,6 +67,20 @@ def test_prompt_omits_screenshot_nudge_but_preserves_talk():
     assert "observe_user_screen" in runner._system_prompt(talk_available=True, screen_available=True)
 
 
+def test_prompt_names_only_current_optional_file_and_task_capabilities():
+    prompt = runner._system_prompt(
+        talk_available=False,
+        available_tool_names={"fs_read", "self_create", "start_agent_task"},
+    )
+    assert "read permitted backend or external files" in prompt
+    assert "organize your scoped self files" in prompt
+    assert "request an authorized bounded Agent task" in prompt
+    assert "missing workspace grant waits for admin approval" in prompt
+    assert "do not create daily ledgers or fixed business directories by default" in prompt
+    empty = runner._system_prompt(talk_available=False, available_tool_names={"get_time"})
+    assert "Available optional capabilities" not in empty
+
+
 @pytest.mark.asyncio
 async def test_activity_expiring_during_model_call_denies_capture(clock):
     result, outcome = await runner._execute_tool("observe_user_screen", {}, None, None, {}, None)

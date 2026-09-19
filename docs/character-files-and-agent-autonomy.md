@@ -1,6 +1,6 @@
-# 单角色文件、自有空间与 Agent 自主能力（拟议合同）
+# 单角色文件、自有空间与 Agent 自主能力（现行合同）
 
-状态：**E current**（备忘录生命周期已收口到 Runtime scheduler）；F–G 仍拟议。工单 [256](../cc-tasks/256-character-files-and-agent-autonomy.md) A 单冻结合同，B 落地 backend/external 只读与统一脱敏，C 落地 self 空间，D 落地 AGENT.md。
+状态：**G current**。工单 [256](../cc-tasks/256-character-files-and-agent-autonomy.md) A–G 已落地；H 删除候选仍未授权、未执行。
 日期：2026-09-18。基线 SHA：`b1ebe0d`（工单源码表对照 `e35d0ec`，差异见 §0）。
 
 权限限制能做什么，不规定角色应该追求什么。仍是同一角色的聊天主链与持久工作副链，不引入第二个人格。
@@ -230,8 +230,9 @@ workspace/process 限额延续现状（单文件 5 MiB、总量 50 MiB、并发 
 | `GET /observability/character-self` | **D current**：配额余量、grant revision、文件计数、最近操作元数据、AGENT.md 注入状态（无正文）、legacy toy 归属/迁移计数；不含私有正文 |
 | `GET /observability/character-reminders` | **E current**：状态计数、revision、到期、重复种类、legacy 迁移计数；不含提醒正文 |
 | 复用 `GET /observability/agent-runtime-tasks` | **F current**：Agent task 生命周期；角色查询走工具，不把 admin DELETE 暴露给模型 |
+| `GET /observability/character-file-autonomy` | **G current**：集中展示 backend/external read、self 与 Agent task 的 configured/effective、阻断原因、配额、grant revision 与脱敏版本；不含正文、任务目标、凭据或绝对路径 |
 
-Brief 229 自身仍“不新增端点”；backend-read 属于 256 B 续篇落地；character-self 属于 256 C；character-reminders 属于 256 E。Agent-task 生命周期观测由 F 复用既有 Task Manager 端点；G 仍负责专用管理控制面。
+Brief 229 自身仍“不新增端点”；这是历史范围，不约束后续施工单。backend-read 属于 256 B，character-self 属于 256 C，character-reminders 属于 256 E，Agent-task 生命周期属于 256 F；G 增加上述集中只读投影。
 
 ---
 
