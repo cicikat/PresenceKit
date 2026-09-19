@@ -14,14 +14,13 @@ import json
 import shutil
 import time
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from core.character_self import create_self, read_self
 from core.data_paths import DEFAULT_CHAR_ID, safe_user_id
 from core.safe_write import safe_write_json
 from core.sandbox import get_paths
-from core.tools.toybox import TOY_KEY_TO_SELF_PATH
 
 SCHEMA = "character-self-toy-migration.v1"
 OWNER_SCHEMA = "character-self-legacy-toy-owner.v1"
@@ -36,6 +35,11 @@ _LEGACY_FILES: dict[str, str] = {
     "diary": "思考笔记.txt",
     "wishlist": "愿望清单.md",
     "doodle": "涂鸦板.txt",
+}
+_SELF_TARGETS: dict[str, str] = {
+    "diary": "notes/思考笔记.txt",
+    "wishlist": "notes/愿望清单.md",
+    "doodle": "notes/涂鸦板.txt",
 }
 
 
@@ -134,7 +138,7 @@ def inventory_legacy_toys(*, char_id: str | None = None, uid: str | None = None)
     actions: dict[str, int] = {"import": 0, "skip": 0, "conflict": 0, "unclaimed": 0, "missing": 0}
     for key, filename in _LEGACY_FILES.items():
         source = archive / filename
-        target = TOY_KEY_TO_SELF_PATH[key]
+        target = _SELF_TARGETS[key]
         item: dict[str, Any] = {
             "file_key": key,
             "source_name": filename,
@@ -157,6 +161,11 @@ def inventory_legacy_toys(*, char_id: str | None = None, uid: str | None = None)
             continue
         item["sha256"] = _sha256_bytes(data)
         item["size"] = len(data)
+        try:
+            source_text = data.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
+            item["content_sha256"] = _sha256_bytes(source_text.encode("utf-8"))
+        except UnicodeDecodeError:
+            item["content_sha256"] = None
         if not claimed:
             item["action"] = "unclaimed"
             actions["unclaimed"] += 1
@@ -165,7 +174,7 @@ def inventory_legacy_toys(*, char_id: str | None = None, uid: str | None = None)
         existing = read_self(target, user_id=owner["uid"], char_id=owner["char_id"], origin="migration")
         if existing.get("ok"):
             dest_hash = _sha256_bytes(str(existing.get("content") or "").encode("utf-8"))
-            if dest_hash == item["sha256"]:
+            if dest_hash == item.get("content_sha256"):
                 item["action"] = "skip"
                 actions["skip"] += 1
             else:
@@ -185,7 +194,7 @@ def inventory_legacy_toys(*, char_id: str | None = None, uid: str | None = None)
     autogrow = {
         "exists": autogrow_state.is_file(),
         "sha256": _sha256_file(autogrow_state) if autogrow_state.is_file() else None,
-        "note": "cooldown state stays in the archive; live writes no longer dual-write old files",
+        "note": "matching owner cooldown is migrated into scoped self metadata on apply",
     }
     report = {
         "schema": SCHEMA,
@@ -231,7 +240,7 @@ def apply_legacy_toy_import(
     results: list[dict[str, Any]] = []
     for item in plan["files"]:
         row = dict(item)
-        if item["action"] != "import":
+        if item["action"] not in {"import", "conflict"}:
             results.append(row)
             continue
         source = archive / item["source_name"]
@@ -242,8 +251,12 @@ def apply_legacy_toy_import(
             row["code"] = "unsupported_file_type"
             results.append(row)
             continue
+        target = item["target"]
+        if item["action"] == "conflict":
+            target = _conflict_archive_target(item["target"], str(item.get("sha256") or ""))
+            row["archive_target"] = target
         created = create_self(
-            item["target"],
+            target,
             text,
             user_id=owner["uid"],
             char_id=owner["char_id"],
@@ -252,13 +265,16 @@ def apply_legacy_toy_import(
         if created.get("ok"):
             row["imported"] = True
             row["revision"] = created.get("revision")
+            if item["action"] == "conflict":
+                row["action"] = "archive"
         elif created.get("code") == "already_exists":
             existing = read_self(
-                item["target"], user_id=owner["uid"], char_id=owner["char_id"], origin="migration",
+                target, user_id=owner["uid"], char_id=owner["char_id"], origin="migration",
             )
             dest_hash = _sha256_bytes(str(existing.get("content") or "").encode("utf-8"))
-            if dest_hash == item.get("sha256"):
-                row["action"] = "skip"
+            source_hash = _sha256_bytes(text.encode("utf-8"))
+            if dest_hash == source_hash:
+                row["action"] = "archive" if item["action"] == "conflict" else "skip"
                 row["imported"] = False
             else:
                 row["action"] = "conflict"
@@ -269,6 +285,7 @@ def apply_legacy_toy_import(
             row["imported"] = False
             row["code"] = created.get("code")
         results.append(row)
+    autogrow = _migrate_autogrow_state(archive, owner)
     applied = {
         **plan,
         "mode": "apply",
@@ -276,6 +293,7 @@ def apply_legacy_toy_import(
         "files": results,
         "backup": backup_meta,
         "actions": _recount(results),
+        "autogrow_state": autogrow,
     }
     _store_report(applied)
     return applied
@@ -299,7 +317,7 @@ def rollback_legacy_toy_import(backup_dir: Path, *, overwrite_newer: bool = Fals
     owner = _read_frozen_owner() or {}
     self_skipped: list[str] = []
     if owner.get("uid") and owner.get("char_id"):
-        for _key, target in TOY_KEY_TO_SELF_PATH.items():
+        for _key, target in _SELF_TARGETS.items():
             existing = read_self(target, user_id=owner["uid"], char_id=owner["char_id"], origin="migration")
             if existing.get("ok"):
                 self_skipped.append(target)
@@ -326,8 +344,46 @@ def _backup_archive(archive: Path, backup_dir: Path | None) -> dict[str, Any]:
     return {"dir_name": dest.name, "files": copied, "created_at": stamp}
 
 
+def _conflict_archive_target(target: str, sha256: str) -> str:
+    path = PurePosixPath(target)
+    suffix = path.suffix
+    stem = path.name[:-len(suffix)] if suffix else path.name
+    return str(PurePosixPath("notes", "legacy", f"{stem}.legacy-{sha256[:12]}{suffix}"))
+
+
+def _migrate_autogrow_state(archive: Path, owner: dict[str, Any]) -> dict[str, Any]:
+    source = archive / ".autogrow_state.json"
+    result: dict[str, Any] = {
+        "exists": source.is_file(),
+        "sha256": _sha256_file(source) if source.is_file() else None,
+        "action": "missing",
+    }
+    if not source.is_file():
+        return result
+    try:
+        raw = json.loads(source.read_text(encoding="utf-8"))
+        timestamp = float(raw[f"{owner['char_id']}:{owner['uid']}"])
+    except (OSError, UnicodeDecodeError, ValueError, TypeError, KeyError):
+        result["action"] = "archive_only"
+        return result
+    target = get_paths().character_self_meta_root(
+        owner["uid"], char_id=owner["char_id"],
+    ) / "toy_autogrow_state.json"
+    current = 0.0
+    try:
+        current = float(json.loads(target.read_text(encoding="utf-8")).get("last_written_at") or 0)
+    except (OSError, UnicodeDecodeError, ValueError, TypeError, AttributeError):
+        pass
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if safe_write_json(target, {"last_written_at": max(current, timestamp)}):
+        result["action"] = "import"
+    else:
+        result["action"] = "conflict"
+    return result
+
+
 def _recount(files: list[dict[str, Any]]) -> dict[str, int]:
-    counts = {"import": 0, "skip": 0, "conflict": 0, "unclaimed": 0, "missing": 0}
+    counts = {"import": 0, "archive": 0, "skip": 0, "conflict": 0, "unclaimed": 0, "missing": 0}
     for item in files:
         action = str(item.get("action") or "missing")
         if action not in counts:

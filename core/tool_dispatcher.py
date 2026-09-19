@@ -1594,8 +1594,7 @@ _TOOL_REGISTRY["read_toy_file"] = {
         "properties": {
             "file_key": {
                 "type": "string",
-                "enum": ["diary", "wishlist", "doodle"],
-                "description": "要读取的协作文件：diary（思考笔记）、wishlist（愿望清单）或 doodle（涂鸦板）。",
+                "description": "self 相对路径；兼容 diary、wishlist、doodle 三个历史别名。",
             },
         },
         "required": ["file_key"],
@@ -1608,8 +1607,8 @@ _TOOL_REGISTRY["read_toy_file"] = {
 _TOOL_REGISTRY["write_toy_file"] = {
     "func": _write_toy_file_wrapper,
     "description": (
-        "写入本角色自有空间里由旧玩具文件键映射的笔记。仅在用户明确要求记录内容时调用；"
-        "只能通过 file_key 选择思考笔记、愿望清单或涂鸦板。写入走统一 self writer，不再写旧共享目录。"
+        "写入本角色自有空间里的文本文档。仅在用户明确要求记录内容时调用；"
+        "file_key 接受 self 相对路径及三个历史别名，写入走统一 self writer。"
     ),
     "dangerous": False,
     "category": "info",
@@ -1619,12 +1618,11 @@ _TOOL_REGISTRY["write_toy_file"] = {
         "properties": {
             "file_key": {
                 "type": "string",
-                "enum": ["diary", "wishlist", "doodle"],
-                "description": "要写入的协作文件：diary（思考笔记）、wishlist（愿望清单）或 doodle（涂鸦板）。",
+                "description": "self 相对路径；兼容 diary、wishlist、doodle 三个历史别名。",
             },
             "content": {
                 "type": "string",
-                "description": "要写入的纯文本内容，最多 4000 个字符。",
+                "description": "要写入的纯文本内容，受统一 self 配额约束。",
             },
             "mode": {
                 "type": "string",

@@ -76,6 +76,9 @@ def test_freeze_uses_configured_default_not_active(sandbox, monkeypatch):
 
 def test_apply_is_reentrant_and_does_not_copy_to_other_character(sandbox, monkeypatch):
     archive = _seed_archive(sandbox)
+    (archive / ".autogrow_state.json").write_text(
+        json.dumps({f"{_CHAR}:{_UID}": 1234.5}), encoding="utf-8",
+    )
     monkeypatch.setattr(
         "core.config_loader.get_config",
         lambda: {"character": {"default": _CHAR}, "owner_id": _UID},
@@ -83,6 +86,9 @@ def test_apply_is_reentrant_and_does_not_copy_to_other_character(sandbox, monkey
     first = apply_legacy_toy_import(uid=_UID, char_id=_CHAR)
     assert first["applied"] is True
     assert first["actions"]["import"] == 3
+    assert first["autogrow_state"]["action"] == "import"
+    state_path = sandbox.character_self_meta_root(_UID, char_id=_CHAR) / "toy_autogrow_state.json"
+    assert json.loads(state_path.read_text(encoding="utf-8")) == {"last_written_at": 1234.5}
     diary = self_mod.read_self("notes/思考笔记.txt", user_id=_UID, char_id=_CHAR)
     assert diary["ok"] is True
     assert diary["content"] == "日记原文"
@@ -98,7 +104,7 @@ def test_apply_is_reentrant_and_does_not_copy_to_other_character(sandbox, monkey
     assert again["revision"] == diary["revision"]
 
 
-def test_conflict_does_not_overwrite_newer_self_file(sandbox, monkeypatch):
+def test_conflict_archives_source_without_overwriting_newer_self_file(sandbox, monkeypatch):
     _seed_archive(sandbox, diary="旧共享日记")
     monkeypatch.setattr(
         "core.config_loader.get_config",
@@ -116,8 +122,19 @@ def test_conflict_does_not_overwrite_newer_self_file(sandbox, monkeypatch):
     assert live["content"] == "角色后来写的新版本"
     assert live["revision"] == created["revision"]
     diary_applied = next(item for item in applied["files"] if item["file_key"] == "diary")
-    assert diary_applied["action"] == "conflict"
-    assert diary_applied.get("imported") is not True
+    assert diary_applied["action"] == "archive"
+    assert diary_applied.get("imported") is True
+    archived = self_mod.read_self(
+        diary_applied["archive_target"], user_id=_UID, char_id=_CHAR,
+    )
+    assert archived["content"] == "旧共享日记"
+    repeated = apply_legacy_toy_import(uid=_UID, char_id=_CHAR)
+    repeated_diary = next(item for item in repeated["files"] if item["file_key"] == "diary")
+    assert repeated_diary["action"] == "archive"
+    assert repeated_diary.get("imported") is False
+    assert self_mod.read_self(
+        repeated_diary["archive_target"], user_id=_UID, char_id=_CHAR,
+    )["revision"] == archived["revision"]
 
 
 def test_rollback_restores_archive_and_leaves_newer_self(sandbox, monkeypatch, tmp_path):

@@ -218,8 +218,8 @@ Dream domain 独立落在 `data/runtime/dreams/{char_id}/`，不进入 reality m
   fail-open，最近 7 天；只读查询见 `GET /observability/api-calls`）
 - 支出账本：`data/runtime/spend/ledger.jsonl`，`GET /spend/ledger` / `GET /spend/budget` / `POST /spend/check`（admin）。预留 `GET /spend/mandates` 读面已删；confirm/reject writer、购买执行器和商家 adapter 仍不存在（Brief 63/64/226）。历史 `mandates.jsonl` 若存在不由代码清掉。
 - Agent Runtime Reality 根：`data/runtime/agent_runtime/reality/`（tasks / work_sessions / workspace_versions / browser_profiles / schedules）
-- 角色提醒权威（256 E）：`data/runtime/agent_runtime/reality/schedules/{uid}/{char_id}.json`，accessor `agent_runtime_schedule_state`；legacy 归属 freeze：`legacy_reminder_owner_record()`；迁移报告：`legacy_reminder_migration_report()`；源 JSON 保留 90 天
-- 共享 toy 目录（冻结历史档案）：`data/very_formal_project/`，`very_formal_project_dir()` 无 `char_id`；活写走 character_self。归属 freeze：`legacy_toy_owner_record()`；迁移报告：`legacy_toy_migration_report()`；源文件保留 90 天
+- 角色提醒权威（256 H）：`data/runtime/agent_runtime/reality/schedules/{uid}/{char_id}.json`，accessor `agent_runtime_schedule_state`；legacy 归属与迁移报告保留供 90 天备份回滚审计，live reader/writer 已删除
+- 旧共享 toy 目录（256 H）：`very_formal_project_dir()` 仅供离线迁移/回滚；live 读写走 character_self，冷却走 character_self_meta。生产源在备份与恢复校验后清理，备份保留 90 天
 - 角色 self 空间（256 D current）：`data/runtime/self/{char_id}/{uid}/` 用户内容与
   `data/runtime/self_meta/{char_id}/{uid}/` 系统 revision/trash/audit 分库；
   accessor `character_self_root` / `character_self_meta_root` / `character_self_audit`；

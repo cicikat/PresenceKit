@@ -599,8 +599,8 @@ self_access:
 | `toy_stop` | 用户要求立即停止设备 | Intiface Central / Buttplug v3 |
 | `toy_pattern` | 用户明确要求预设振动模式 | Intiface Central / Buttplug v3 |
 | `toy_job_status` | 查询硬件后台任务状态 | 只读硬件 job 状态 |
-| `read_toy_file` | 读取旧玩具文件键映射的 self 笔记 | `notes/思考笔记.txt` 等；空文件正常返回；256 D current |
-| `write_toy_file` | 覆盖或追加映射后的 self 笔记 | UTF-8 文本，单次最多 4000 字，走统一 self writer；不双写旧目录 |
+| `read_toy_file` | 读取 self 文本文档 | 接受 self 相对路径；三个旧 key 是兼容别名；空文件正常返回 |
+| `write_toy_file` | 覆盖或追加 self 文本文档 | 走统一 self writer 与统一配额；不写旧共享目录 |
 
 ### artifacts 类（仅 Path C，不进 Path A 探针）
 
@@ -637,8 +637,8 @@ worker 在到期、异常、断线、显式取消和进程关闭时尝试停止�
 管理端 `GET /hardware/jobs`、`GET /hardware/jobs/{job_id}` 提供只读观测，
 `POST /hardware/jobs/{job_id}/stop`（另有 `/cancel` 兼容别名）执行显式停止，均需 `hardware` scope。
 
-`read_toy_file` / `write_toy_file` 是旧 `file_key` 到 self 文件的薄兼容入口
-（`diary`→`notes/思考笔记.txt`，`wishlist`→`notes/愿望清单.md`，`doodle`→`notes/涂鸦板.txt`）。
+`read_toy_file` / `write_toy_file` 接受 self 相对路径；旧 `file_key`
+（`diary`→`notes/思考笔记.txt`，`wishlist`→`notes/愿望清单.md`，`doodle`→`notes/涂鸦板.txt`）继续作为兼容别名。
 写入走统一 self writer，需要冻结的 `uid+char_id`；不再写
 `very_formal_project/`，也不镜像 character library。category 为 `info`，不经 danger 闸。
 旧共享目录冻结为历史档案，只能按可验证历史归属导入单一角色。
@@ -650,7 +650,7 @@ worker 在到期、异常、断线、显式取消和进程关闭时尝试停止�
 - **触发**：每轮 `post_process` 在 uid_lock 释放后入慢队列（`toy_autogrow` 任务）。
 - **判断**：慢队列 handler 用人格 chat 路由（max_tokens=80，temperature=0.9）判断本轮是否值得记录。返回 `SKIP` 或 1～3 句第一人称随手日记，不写事件摘要。
 - **写入**：`append_self_text` 追加到映射后的 self 文件；不静默裁头，不写旧共享目录。
-- **限频**：每角色/用户 `toy_autogrow.min_interval_hours`（默认 6 小时）最多写一次。冷却状态仍存档案 `data/very_formal_project/.autogrow_state.json`（JSON 字典，key = `{char_id}:{uid}`，value = Unix timestamp）。
+- **限频**：每角色/用户 `toy_autogrow.min_interval_hours`（默认 6 小时）最多写一次。冷却状态存于该 owner/char 的 `character_self_meta_root()/toy_autogrow_state.json`。
 - **开关**：`config.toy_autogrow.enabled: false`（默认关）表示角色停用该习惯；`read_toy_file`/`write_toy_file` 兼容入口仍可用。
 - **目标文件**：`config.toy_autogrow.target`（默认 `diary`，映射到 `notes/思考笔记.txt`）。
 

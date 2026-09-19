@@ -23,13 +23,13 @@ from core.agent_runtime.scheduler_capability import (
     restore_schedule,
     update_schedule,
 )
-from core.data_paths import DEFAULT_CHAR_ID, safe_user_id
+from core.data_paths import safe_user_id
 from core.error_handler import log_error
-from core.sandbox import get_paths
 from core.sensitive_redaction import RedactionError
 
 
 logger = logging.getLogger(__name__)
+
 
 _TIME_FMTS = [
     "%Y-%m-%d %H:%M",
@@ -280,35 +280,6 @@ def restore_reminder(
         )
     except Exception as exc:
         return _wrap(exc)
-
-
-def _legacy_path(user_id: str, *, char_id: str = DEFAULT_CHAR_ID):
-    uid = safe_user_id(user_id)
-    return get_paths().user_memory_root(uid, char_id=char_id) / "reminders.json"
-
-
-def _load(user_id: str) -> list:
-    """Read leftover legacy JSON. Live list/get never fall back here."""
-    p = _legacy_path(user_id)
-    try:
-        if p.exists():
-            with open(p, "r", encoding="utf-8") as f:
-                raw = json.load(f)
-                return raw if isinstance(raw, list) else []
-    except Exception as e:
-        log_error("reminder._load", e)
-    return []
-
-
-def mark_done(user_id: str, reminder_id: str):
-    """No-op on the live Runtime store. Legacy JSON is archive-only (256 E)."""
-    logger.info("[reminder] mark_done is a no-op on the Runtime store uid=%s id=%s", user_id, reminder_id)
-
-
-def prune_done_reminders(user_id: str, cutoff_days: int = 30) -> int:
-    """No-op on the live Runtime store. Completed/cancelled stay recoverable."""
-    logger.info("[reminder] prune_done_reminders is a no-op on the Runtime store uid=%s", user_id)
-    return 0
 
 
 def get_due_reminders(user_id: str, *, char_id: str | None = None) -> list:

@@ -1,6 +1,6 @@
 # 单角色文件、自有空间与 Agent 自主能力（现行合同）
 
-状态：**G current**。工单 [256](../cc-tasks/256-character-files-and-agent-autonomy.md) A–G 已落地；H 删除候选仍未授权、未执行。
+状态：**H current**。工单 [256](../cc-tasks/256-character-files-and-agent-autonomy.md) A–H 已落地。
 日期：2026-09-18。基线 SHA：`b1ebe0d`（工单源码表对照 `e35d0ec`，差异见 §0）。
 
 权限限制能做什么，不规定角色应该追求什么。仍是同一角色的聊天主链与持久工作副链，不引入第二个人格。
@@ -18,10 +18,10 @@
 | 落点 | `e35d0ec` 工单记录 | `b1ebe0d` 仍真 |
 |---|---|---|
 | `fs_browse.py` | allow_roots 强制；`data/` 整类拒绝；`token` 子串 deny；无统一脱敏 | **B current**：backend/external 独立开关；allow_roots 为发现提示；统一脱敏；`remote_server` 可读本进程 backend，拒外部本机路径 |
-| `toybox.py` | 三枚举、4000 字、无自由建/删 | **D current**：`file_key` 薄映射到 `self/notes/`，不双写旧目录或 character library |
-| `very_formal_project_dir()` | 无 `char_id`，共享目录 | 冻结为历史共享档案；归属 freeze 后才导入单一角色 |
+| `toybox.py` | 三枚举、4000 字、无自由建/删 | **H current**：`file_key` 接受 self 相对路径；三个旧 key 仅作兼容别名；容量由统一 self 配额控制 |
+| `very_formal_project_dir()` | 无 `char_id`，共享目录 | 仅供离线迁移/回滚读取；live 读写者已删除 |
 | `toy_autogrow.py` | 直写旧目录并裁头 | **D current**：统一 self writer append，不裁头；`enabled: false` 停用习惯 |
-| `reminder.py` | add 走 Runtime；get/mark_done/prune 仍 legacy JSON；add 用 `DEFAULT_CHAR_ID` | **E current**：list/get/add/update/cancel/restore 全部走 Runtime；frozen uid/char；legacy JSON 仅档案/迁移源 |
+| `reminder.py` | add 走 Runtime；get/mark_done/prune 仍 legacy JSON；add 用 `DEFAULT_CHAR_ID` | **H current**：list/get/add/update/cancel/restore 全部走 Runtime；legacy reader、mark_done/prune 旁路及 scheduler 回退已删除 |
 | `_TOOL_REGISTRY` | reminder 仅 `add_reminder` | **E current**：六件套已注册；模型不能指定 principal |
 | work sessions | digest/长度，有限 artifact kind | **F current**：增加 `agent_task_result`；私有 payload 保存有期输入/结果，receipt 仍无正文 |
 | process_runner | 受限 interpreter/program/args，无 shell | **F current**：worker 复用受限 workspace program adapter；仍无 shell |
@@ -113,7 +113,7 @@
 | `device_shutdown` / `device_sleep` / `exit_yandere` | system | actuate | danger + 确认 | 本机 | 无 | 无 | meta-mode |
 | `phone_control_start` | phone_control | write | 既有 | 手机 adapter | `phone_control_tasks` | 任务终态 | phone 任务文件（管理） |
 | `toy_vibrate` / `toy_stop` / `toy_pattern` / `toy_job_status` | desktop | actuate/read | Intiface opt-in + owner 私聊 | owner | `hardware_jobs` | stop | `/hardware/jobs` |
-| `read_toy_file` / `write_toy_file` | desktop | read/write | danger（desktop 类） | **共享 toy 目录**；wrapper 可镜像 library | `very_formal_project/` | 无删除/版本 | 无 self 观测 |
+| `read_toy_file` / `write_toy_file` | info | read/write | 无 | frozen uid+char；self 相对路径，兼容三个旧 key | `character_self_root` | self revision/trash | character-self |
 | `fs_list` / `fs_read` | fs | read | 无（不受 danger） | frozen uid+char；backend 默认开；external 跟随 `external_read`/`enabled` | 仓库/`data`/config（脱敏）+ 本机普通文件 | 无 | `GET /observability/backend-read` |
 | `workspace_list/read` | fs | read | grant | workspace roots | 用户目录；版本在 runtime | 无 | `/observability/agent-runtime-workspace` |
 | `workspace_create/update/delete/undo` | fs | write | update/delete/undo 需 `confirmed` | 同上 + Task receipt | 同上 | undo 最近版本 | 同上 + tasks |
@@ -123,7 +123,7 @@
 | `write_artifact` / `read_artifact` / `list_artifacts` | artifacts | write/read | 无 | uid+char | `chat_artifacts` | 非 workspace | `/observability/chat-artifacts` |
 | 动态 `mcp__*` | mcp | 按 local policy | 按 policy | MCP session | 外部 | 未知结果 fail-closed | MCP 设置 |
 
-**C current：** `self_list` / `self_read` / `self_create` / `self_update` / `self_move` / `self_delete` / `self_restore`（category `info`，写工具默认 grant、不经 danger 闸，autonomy 沙盒白名单含 self 写）。**E current：** reminder `list/get/add/update/cancel/restore`。**仍拟议：** `start_agent_task` / `get_agent_task` / `cancel_agent_task`。
+**C current：** `self_list` / `self_read` / `self_create` / `self_update` / `self_move` / `self_delete` / `self_restore`（category `info`，写工具默认 grant、不经 danger 闸，autonomy 沙盒白名单含 self 写）。**E current：** reminder `list/get/add/update/cancel/restore`。**F current：** `start_agent_task` / `get_agent_task` / `cancel_agent_task`。
 
 ### 2.3 Autonomy 可用集合
 
@@ -133,7 +133,7 @@
 
 | handler | 写什么 | accessor | 本单 |
 |---|---|---|---|
-| `toy_autogrow` | 映射后的 self 笔记 + 档案内 `.autogrow_state.json`；不裁头 | `append_self_text` / `very_formal_project_dir()` 仅冷却 | **D current** |
+| `toy_autogrow` | self 笔记 + owner/char scoped 冷却；不裁头 | `append_self_text` / `character_self_meta_root()` | **H current** |
 | `capture_turn_retry` | 重试 capture_turn | `user_memory_root` | 不改 |
 | `summarize_to_midterm` / `reflect_to_episodic` / `consolidate_to_identity` / `storyline_evicted_input` | 记忆 | `user_memory_root` | self 内容不自动固化 |
 | `user_profile_update` / `trait_tracker_update` / `update_char_relations` / `practice_session` / `consistency_check` | 各域 | 既有 | 不改 |
@@ -179,7 +179,7 @@ data/runtime/self_meta/{char_id}/{uid}/      # 系统维护，self 工具不可�
 
 `AGENT.md`、`notes/`、`habits/`、`ledger/` 只是示例目录，无业务枚举。角色可自由组织相对路径。禁止 self 指向系统文件、其他角色桶、workspace roots、Dream 树或 meta 库。
 
-旧 `data/very_formal_project/` 冻结为历史共享档案，**不**自动复制给每个角色。D current：首次盘点冻结配置默认角色+owner，归属不明保留待认领；导入 `self/notes/` 可重入，冲突不覆盖较新 self 文件。源文件保留 90 天；回滚只恢复档案备份，不覆盖导入后改过的 self 文件。
+旧 `data/very_formal_project/` 不会复制给每个角色。H current：首次盘点冻结配置默认角色+owner；导入 `self/notes/` 可重入，冲突源保存在 `self/notes/legacy/` 的哈希命名文件，不覆盖较新 self 文件；autogrow 冷却迁入 scoped self meta。生产 live 源已在备份及恢复校验后清理，备份保留 90 天；回滚只恢复档案备份，不覆盖 self 文件。
 
 Never Prompt Load：`self_meta` 的 revisions/trash/audit 默认不进 prompt；角色读 self 用户文件须走 B 单脱敏。
 
@@ -240,5 +240,4 @@ Brief 229 自身仍“不新增端点”；这是历史范围，不约束后续�
 
 - 第二人格、万能 EventBus、无限 shell
 - 把 self 笔记自动写入 identity/episodic
-- 未授权删除生产 toybox/reminder 历史（H 单仅列候选）
 - 桌面/手机新设置 UI（除非出现新客户端字段；本单默认管理面+角色工具）

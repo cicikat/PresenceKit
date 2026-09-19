@@ -1,12 +1,12 @@
 # 229 — 单角色文件、自有空间与 Agent 自主能力扩展
 
-日期：2026-09-18。状态：A/B/C/D/E/F/G current；H 本轮不执行。
+日期：2026-09-18。状态：A/B/C/D/E/F/G/H current。
 
 本单历史权威见 [Agent Runtime](../docs/agent-runtime-architecture.md)。
 
 前置假设：[255 后端综合工单](255-backend-audit-session-scope-work-order.md)全部收尾。本次按该假设设计，但没有替前单勾选、宣称其实际完成；开工时必须复核其最终提交与 scope 合同。工单编制时源码表对照 `e35d0ec`；A 单复核基线为 `b1ebe0d`，剩余缺口见 [拟议合同 §0](../docs/character-files-and-agent-autonomy.md)。
 
-执行规则：先落工单，再逐项实施；有证据才勾选。A–H 每张子单完成相关验证和差异/换行检查后，立即独立 commit，再开始下一张。运行验收与自动测试分别记账；不得为了勾选而扩大无关修复。此次仅新增此文档，不迁移生产数据、不修改功能。
+执行规则：先落工单，再逐项实施；有证据才勾选。A–H 每张子单完成相关验证和差异/换行检查后，立即独立 commit，再开始下一张。运行验收与自动测试分别记账；不得为了勾选而扩大无关修复。工单创建提交仅新增文档；后续实现及生产迁移按各子单授权和证据执行。
 
 ## 一、确定的产品决策
 
@@ -122,15 +122,15 @@
 - [x] G6 场景验收：读脱敏配置解释自己的模型路由；按外部路径读普通文件；自主创建账本与音乐笔记并删改恢复；修改 AGENT.md 后下一轮生效；修改/取消提醒且旧时间不发送；聊天及主动启动实际 coding task；未授权 core 写入被拒。
 - [x] G7 管理面静态改动统一 bump 对应缓存版本，启动/复用本地服务硬刷新并验收。逐项记录自动测试、真实服务、浏览器、桌面/手机哪些完成、哪些 not-run；缺口按实际范围记 known-issues/接口总账。完成后独立提交。
 
-## H — 删除候选与迁移收口（本轮仅列候选）
+## H — 删除与迁移收口
 
-依赖迁移验收及明确删除范围授权。未授权不执行；不因新增 self 自动删除生产历史。
+用户已明确授权完成工单全部项目。生产历史只在归属冻结、导入、备份与恢复证明通过后按精确清单清理。
 
-- [ ] H1 删除不再有读写者的 toybox 固定容量/枚举实现，保留必要兼容别名；同删仅测试旧限制的断言与文档。
-- [ ] H2 删除 legacy reminder JSON 的 writer/reader、mark_done/prune 旁路及旧 scheduler 回退，前提是迁移报告和所有读者验收通过；连同僵尸守卫/测试/配置说明收口。
-- [ ] H3 删除旧 fs 的整类目录封禁和重复敏感字符串规则（由 B 替换，不留下两个策略权威）；保留有效 scope/路径/高风险拒绝回归。
-- [ ] H4 删除 autogrow 直写旧目录/静默裁剪实现及错误“唯一写出口”描述；保留角色自主整理和统一 writer 测试。
-- [ ] H5 生产旧文件物理清理另交付精确清单、备份和恢复证明；未授权只保留只读档案。完成相关验证后独立提交。
+- [x] H1 删除不再有读写者的 toybox 固定容量/枚举实现，保留必要兼容别名；同删仅测试旧限制的断言与文档。
+- [x] H2 删除 legacy reminder JSON 的 writer/reader、mark_done/prune 旁路及旧 scheduler 回退，前提是迁移报告和所有读者验收通过；连同僵尸守卫/测试/配置说明收口。
+- [x] H3 删除旧 fs 的整类目录封禁和重复敏感字符串规则（由 B 替换，不留下两个策略权威）；保留有效 scope/路径/高风险拒绝回归。
+- [x] H4 删除 autogrow 直写旧目录/静默裁剪实现及错误“唯一写出口”描述；保留角色自主整理和统一 writer 测试。
+- [x] H5 生产旧文件物理清理另交付精确清单、备份和恢复证明；完成相关验证后独立提交。
 
 ## 交付证据表（施工时填写，不提前勾选）
 
@@ -143,6 +143,7 @@
 | E | 本提交（SHA 见 git log） | `.venv` Python 3.12：`tests/test_character_reminders.py` / `tests/test_character_reminder_migration.py` / `tests/test_retire_direct_proactive_trigger_executors.py` / `tests/test_execute_dryrun.py` / `tests/test_native_proposals.py` / `tests/test_data_registry.py` / admin i18n+fragment 相关合计 338 通过。换行检查见本提交。 | Runtime 为唯一 live 权威；list/get/add/update/cancel/restore 返回 schedule_id；CAS/交付竞态/重复轮次新 task；legacy dry-run 迁移不复制给所有角色；`GET /observability/character-reminders` 仅元数据。管理面静态含 `v1-256-character-reminders-1`。浏览器硬刷新交互未完成。未改生产数据。未开始 F–G，未执行 H。 |
 | F | `c9691ae` | `.venv` Python 3.12：Agent task、workspace、process runner、work session、Task Manager、autonomy、观测、安全守卫相关 331 项通过。 | 聊天工具实际异步修改授权样例并运行检查；覆盖幂等、撤权、超限、取消、remote、结果通知。无真实外部服务写入。 |
 | G | 本提交（SHA 见 git log） | `.venv` Python 3.12：跨 backend/external、self/AGENT.md、toy、reminder、Agent Runtime、tool discovery/loop、autonomy、admin/auth/换行守卫 600 项通过；补充场景与最终 UI/API 回归 200 项通过；JS syntax 通过。 | 独立本地 uvicorn + Edge headless 使用现有 admin 鉴权并清缓存 profile 验收：集中页面可见 4 项能力及 configured/effective、阻断原因、授权/脱敏版本、配额。真实配置只读查询完成，未改生产配置或正文。桌面/手机 not-run：本单无新字段、设置、WS/poll/ack/TTL 或确认 UI，接口总账明确缺 grant 等待管理面；无实际跨端影响。未执行 H。 |
+| H | 本提交（SHA 见 git log） | `.venv` Python 3.12：toy/self migration/reminder/scheduler/fs security/tool loop/autonomy/data registry/换行守卫相关 448 项通过；补充冲突归档重入后定向回归通过。普通 diff stat 与 ignore-CR stat 一致，`diff --check` 无警告。 | 生产 reminder 1 项导入 Runtime；toy 冲突源归档到 scoped self，autogrow 冷却迁入 scoped meta。精确清理 `very_formal_project/思考笔记.txt`、`.autogrow_state.json` 与 frozen owner 的 `reminders.json`；原始备份目录保留 90 天，逐文件 SHA-256 相等的临时恢复证明通过。 |
 | H | 未授权删除 | 不执行 | 精确范围另确认 |
 
 每次提交前逐文件比较普通 diff stat 与 ignore-cr-at-eol stat，执行 diff --check；只暂存本单文件，不覆盖并行修改。失败与未执行项如实保留，不能用源码存在或 mock 成功替代运行验收。

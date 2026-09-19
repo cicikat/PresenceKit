@@ -219,7 +219,7 @@ a durable 副链 does not by itself mean the foreground 主链 cannot use that c
 | `get_time`, `weather`, `web_search` | clock/network information | foreground bounded read/untrusted output |
 | `list_reminders`, `get_reminder`, `add_reminder`, `update_reminder`, `cancel_reminder`, `restore_reminder` | scheduler | current (256 E): Reality owner+char schedules; CAS update; cancel recoverable; completed lease not revived; delivery rechecks revision |
 | `fs_list`, `fs_read` | backend/external read | current (256 B): backend default-read, allow_roots as discovery hints, unified redaction before truncate; owner/char/realm isolation remains |
-| `read_toy_file`, `write_toy_file` | fixed authored document | enum targets in the shared toy directory, not workspace and not per-char self. 256 C landed `self_*`; D migrates old notes |
+| `read_toy_file`, `write_toy_file` | character self document | current (256 H): self-relative path under frozen owner+char; three historical keys remain aliases; unified self quota/revision/security |
 | `self_list`, `self_read`, `self_create`, `self_update`, `self_move`, `self_delete`, `self_restore` | character self space | current (256 C): Reality owner+char bucket, default grant, admin may revoke; not danger-gated; writes use lock+CAS+trash |
 | `start_agent_task`, `get_agent_task`, `cancel_agent_task` | same-character bounded coding worker | **current (256 F)**; starts asynchronously, rechecks manifest revision and budgets per step, and exposes only bounded result projection. Receipt creation ≠ coding complete |
 | `read_diary`, `search_diary`, `read_watch`, `get_profile`, `get_episodic`, `read_life_records` | memory/document | Reality-scoped read |

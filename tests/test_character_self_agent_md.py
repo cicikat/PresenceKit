@@ -264,6 +264,9 @@ async def test_autogrow_disabled_habit_and_unified_writer(sandbox, monkeypatch):
     body = self_mod.read_self("notes/思考笔记.txt", user_id=_UID, char_id=_CHAR)["content"]
     assert body.startswith("保留头部\n")
     assert "不该写入" in body
+    state_path = sandbox.character_self_meta_root(_UID, char_id=_CHAR) / "toy_autogrow_state.json"
+    assert state_path.is_file()
+    assert not (sandbox.very_formal_project_dir() / ".autogrow_state.json").exists()
     archive = sandbox.very_formal_project_dir() / "思考笔记.txt"
     assert not archive.exists()
     library = sandbox.character_document_root(_UID, char_id=_CHAR)

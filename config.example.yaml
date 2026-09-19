@@ -681,8 +681,6 @@ retention:
     max_files: 500
   dead_letter_queue:
     max_files: 200
-  reminders:
-    prune_done_days: 30
   dreams_archive:
     max_files: 200
   observations:

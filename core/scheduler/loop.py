@@ -764,11 +764,6 @@ async def _check_log_maintenance():
     except Exception as e:
         log_error("scheduler.log_maintenance.event_log.registry", e)
     try:
-        from core.tools.reminder import prune_done_reminders
-        prune_done_reminders(oid, cutoff_days=int(ret.get("reminders", {}).get("prune_done_days", 30)))
-    except Exception as e:
-        log_error("scheduler.log_maintenance.reminders", e)
-    try:
         from core.dream.dream_log import prune_archive
         prune_archive(max_files=int(ret.get("dreams_archive", {}).get("max_files", 200)))
     except Exception as e:

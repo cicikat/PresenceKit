@@ -103,7 +103,9 @@ def test_reminder_runtime_failure_does_not_write_legacy_store(sandbox, monkeypat
     )
     result = reminder.add_reminder("owner", "test reminder", "23:59", char_id="fixture_character")
     assert "无法创建" in result
-    assert reminder._load("owner") == []
+    assert not hasattr(reminder, "_load")
+    assert not hasattr(reminder, "mark_done")
+    assert not hasattr(reminder, "prune_done_reminders")
 
 
 def test_scheduler_reminder_checker_has_no_legacy_pipeline_send():

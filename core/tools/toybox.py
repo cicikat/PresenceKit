@@ -16,24 +16,23 @@ from core.character_self import (
     update_self,
 )
 
-# Historical enum keys → self relative paths (notes/ is an example directory).
-TOY_KEY_TO_SELF_PATH: dict[str, str] = {
+# Historical keys remain aliases; every other value is a self-relative path.
+_LEGACY_KEY_ALIASES: dict[str, str] = {
     "diary": "notes/思考笔记.txt",
     "wishlist": "notes/愿望清单.md",
     "doodle": "notes/涂鸦板.txt",
 }
-_TOYBOX_FILES = TOY_KEY_TO_SELF_PATH  # backward alias for tests that patched the map
-_TOY_FILE_CHAR_CAP = 4000
 _EMPTY = "这个玩具文件还是空的。"
 _FROZEN_WRITER = "旧玩具箱写入器已冻结；请使用 self 文件工具或兼容 file_key。"
 
 
 def mapped_self_path(file_key: str) -> str:
-    if not isinstance(file_key, str) or file_key not in TOY_KEY_TO_SELF_PATH:
+    if not isinstance(file_key, str) or not file_key.strip():
         raise ValueError("未知的玩具文件")
-    if file_key == AGENT_MD_REL:
+    path = _LEGACY_KEY_ALIASES.get(file_key.strip(), file_key.strip())
+    if path.casefold() == AGENT_MD_REL.casefold():
         raise ValueError("未知的玩具文件")
-    return TOY_KEY_TO_SELF_PATH[file_key]
+    return path
 
 
 def _require_scope(user_id: str | None, char_id: str | None) -> tuple[str, str]:
@@ -61,8 +60,6 @@ def read_toy_file(file_key: str, *, user_id: str | None = None, char_id: str | N
     content = str(result.get("content") or "")
     if not content.strip():
         return _EMPTY
-    if len(content) > _TOY_FILE_CHAR_CAP:
-        return content[:_TOY_FILE_CHAR_CAP] + "\n（内容过长，读取结果已截断）"
     return content
 
 
@@ -78,20 +75,13 @@ def write_toy_file(
         raise ValueError("玩具文件只接受文本内容")
     if mode not in {"overwrite", "append"}:
         raise ValueError("写入模式只能是 overwrite 或 append")
-    if len(content) > _TOY_FILE_CHAR_CAP:
-        raise ValueError(f"单次写入不能超过 {_TOY_FILE_CHAR_CAP} 字")
     path = mapped_self_path(file_key)
     uid, cid = _require_scope(user_id, char_id)
     if mode == "append":
-        current = read_self(path, user_id=uid, char_id=cid, origin="tool")
-        if current.get("ok") and len(str(current.get("content") or "") + content) > _TOY_FILE_CHAR_CAP:
-            raise ValueError(f"玩具文件总长度不能超过 {_TOY_FILE_CHAR_CAP} 字")
         result = append_self_text(path, content, user_id=uid, char_id=cid, origin="tool")
     else:
         existing = read_self(path, user_id=uid, char_id=cid, origin="tool")
         if existing.get("ok"):
-            if len(content) > _TOY_FILE_CHAR_CAP:
-                raise ValueError(f"玩具文件总长度不能超过 {_TOY_FILE_CHAR_CAP} 字")
             result = update_self(
                 path,
                 content,

@@ -419,17 +419,17 @@ new key or legacy `enabled`. `allow_roots` are discovery hints, not the sole adm
 ordinary external files. Whole `data/` deny and substring `deny_names` are retired for fs
 reads. `GET /observability/backend-read` (`state.read`) reports configured/effective,
 blocking reasons, redaction version and counts; no file body, secret, or full path.
-Self space is D current: default grant, admin revoke, quotas in `self_access`
+Self space is H current: default grant, admin revoke, quotas in `self_access`
 (including `agent_md_chars`, default 2000 / hard 4000), tools `self_*` plus thin
-`read_toy_file`/`write_toy_file` mapping in category `info`, observability
+`read_toy_file`/`write_toy_file` self-relative compatibility entry in category `info`, observability
 `GET /observability/character-self` (`state.read`) with remaining quota, grant
 revision, file counts, AGENT.md inject status (no body), legacy toy ownership
 and recent op metadata; no private notes. `toy_autogrow.enabled` remains the
-character habit switch. Reminders are E current: tools
+character habit switch; its cooldown is owner+char scoped in self meta. Reminders are H current: tools
 `list/get/add/update/cancel/restore_reminder` write Runtime schedules for the
 frozen character; `GET /observability/character-reminders` (`state.read`) is
-metadata-only. Agent-task lifecycle observation reuses the existing metadata-only
-`GET /observability/agent-runtime-tasks`; G still owns any dedicated management UI.
+metadata-only; legacy JSON live readers and maintenance fallbacks are retired. Agent-task
+lifecycle observation reuses the existing metadata-only `GET /observability/agent-runtime-tasks`.
 `agent_tasks.enabled` is the separate, default-off admission gate for the F worker.
 `start_agent_task/get_agent_task/cancel_agent_task` use the frozen owner+character
 principal and a server-defined `workspace_manifests.<workspace_id>` revision/expiry. A

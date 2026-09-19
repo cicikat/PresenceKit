@@ -57,28 +57,32 @@ def test_toybox_requires_scope(sandbox):
     assert not sandbox.character_self_root(_UID, char_id=_CHAR).exists()
 
 
-@pytest.mark.parametrize("file_key", ["../escape", "unknown", "", None])
+@pytest.mark.parametrize("file_key", ["../escape", "", None, "AGENT.md"])
 def test_toybox_rejects_invalid_file_key_without_writing(sandbox, file_key):
-    with pytest.raises(ValueError, match="未知的玩具文件"):
-        toybox.write_toy_file(file_key, "nope", user_id=_UID, char_id=_CHAR)
+    result = None
+    try:
+        result = toybox.write_toy_file(file_key, "nope", user_id=_UID, char_id=_CHAR)
+    except ValueError as exc:
+        assert "未知的玩具文件" in str(exc)
+    if result is not None:
+        assert "self_" in result and "denied" in result
     assert not sandbox.very_formal_project_dir().exists()
     listed = self_mod.list_self(user_id=_UID, char_id=_CHAR)
     assert listed.get("ok") is True
     assert listed.get("entries") == []
 
 
-def test_toybox_rejects_traversal_even_if_whitelist_is_tampered(sandbox, monkeypatch):
-    monkeypatch.setitem(toybox.TOY_KEY_TO_SELF_PATH, "diary", "../escape.txt")
-    monkeypatch.setitem(toybox._TOYBOX_FILES, "diary", "../escape.txt")
-    result = toybox.write_toy_file("diary", "nope", user_id=_UID, char_id=_CHAR)
+def test_toybox_rejects_traversal_through_unified_writer(sandbox):
+    result = toybox.write_toy_file("../escape.txt", "nope", user_id=_UID, char_id=_CHAR)
     assert "self_escape_denied" in result
     assert not (sandbox.character_self_root(_UID, char_id=_CHAR).parent / "escape.txt").exists()
     assert not (sandbox.very_formal_project_dir().parent / "escape.txt").exists()
 
 
-def test_toybox_rejects_oversized_content(sandbox):
-    with pytest.raises(ValueError, match="4000"):
-        toybox.write_toy_file("doodle", "x" * 4001, user_id=_UID, char_id=_CHAR)
+def test_toybox_accepts_generic_self_path_without_legacy_cap(sandbox):
+    content = "x" * 4001
+    assert toybox.write_toy_file("notes/freeform.md", content, user_id=_UID, char_id=_CHAR) == "玩具文件写好了。"
+    assert toybox.read_toy_file("notes/freeform.md", user_id=_UID, char_id=_CHAR) == content
     assert not sandbox.very_formal_project_dir().exists()
 
 
@@ -125,11 +129,7 @@ def test_toybox_registry_contract(monkeypatch):
         assert spec.get("require_confirm") is not True
         assert spec["examples"]
         assert spec["keywords"]
-        assert spec["parameters"]["properties"]["file_key"]["enum"] == [
-            "diary",
-            "wishlist",
-            "doodle",
-        ]
+        assert "enum" not in spec["parameters"]["properties"]["file_key"]
         eligible, reason = tool_eligibility(
             name, {"enabled": True}, registry=tool_dispatcher._TOOL_REGISTRY, effect=spec["effect"],
         )

@@ -17,12 +17,12 @@ from core.sandbox import get_paths
 logger = logging.getLogger(__name__)
 
 
-def _state_path() -> Path:
-    return get_paths().very_formal_project_dir() / ".autogrow_state.json"
+def _state_path(char_id: str, uid: str) -> Path:
+    return get_paths().character_self_meta_root(uid, char_id=char_id) / "toy_autogrow_state.json"
 
 
-def _load_state() -> dict:
-    p = _state_path()
+def _load_state(char_id: str, uid: str) -> dict:
+    p = _state_path(char_id, uid)
     if not p.exists():
         return {}
     try:
@@ -31,29 +31,23 @@ def _load_state() -> dict:
         return {}
 
 
-def _save_state(state: dict) -> None:
-    p = _state_path()
+def _save_state(state: dict, char_id: str, uid: str) -> None:
+    p = _state_path(char_id, uid)
     p.parent.mkdir(parents=True, exist_ok=True)
     if not safe_write_text(p, json.dumps(state, ensure_ascii=False, indent=2)):
         logger.warning("[toy_autogrow] state 写入失败")
 
 
-def _rate_key(char_id: str, uid: str) -> str:
-    return f"{char_id}:{uid}"
-
-
 def _in_cooldown(char_id: str, uid: str, min_hours: float) -> bool:
-    state = _load_state()
-    last_ts = state.get(_rate_key(char_id, uid))
+    state = _load_state(char_id, uid)
+    last_ts = state.get("last_written_at")
     if last_ts is None:
         return False
     return (time.time() - float(last_ts)) < min_hours * 3600
 
 
 def _mark_written(char_id: str, uid: str) -> None:
-    state = _load_state()
-    state[_rate_key(char_id, uid)] = time.time()
-    _save_state(state)
+    _save_state({"last_written_at": time.time()}, char_id, uid)
 
 
 def _append_note(file_key: str, note: str, *, uid: str, char_id: str) -> dict:

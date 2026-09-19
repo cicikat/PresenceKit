@@ -86,12 +86,12 @@ Companion receipt/session 文件只保存 caller、opaque ID、digest、状态�
 - `safe_write_text/json/bytes()`：写临时文件后 replace
 - `safe_append_jsonl()`：追加 jsonl，用于日志类观测文件
 
-玩具文件工具只接受 `diary` / `wishlist` / `doodle` 三个枚举 key，不接受 LLM 提供的路径。
-目标统一解析到 `get_paths().very_formal_project_dir()`，写入前会校验目标文件、原子写临时文件
-和玩具箱目录本身均未通过软链或 `..` 越过边界。该工具属于 `desktop` 类，仅 danger 模式可用。
+玩具文件兼容工具接受 self 相对路径，`diary` / `wishlist` / `doodle` 仅为三个历史别名。
+所有读写都经过统一 character self 路径、owner/char 隔离、配额、revision 与逃逸检查；工具属于
+`info` 类，不依赖 danger 模式。旧共享目录只供离线迁移和回滚读取。
 工单 256 C 已落地 Reality `owner+char` 的 self 桶（`self_list/read/create/update/move/delete/restore`），
 默认授予本角色读写、不依赖 danger 模式；管理员可撤。workspace 写权限不随 self 放开。
-旧 toybox 三枚举入口仍 current，迁移在 D。合同见
+旧 toybox 的枚举和 4000 字限制已删除。合同见
 [character-files-and-agent-autonomy.md](character-files-and-agent-autonomy.md)。
 
 ### 上传和媒体限制
