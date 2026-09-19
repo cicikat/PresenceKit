@@ -738,7 +738,8 @@ The read-only inventory is exposed at
 content-free manifest and status ledger are created with
 `POST /memory-history-reconciliation/manifest` and read through
 `GET /observability/memory-history-reconciliation`. Admin pause/resume/dry-run
-uses `POST /memory-history-reconciliation/control`; `action=apply` additionally
+uses `POST /memory-history-reconciliation/control`; `action=freeze` pins the
+manifest revision before apply, and `action=apply` additionally
 requires a server-side verified offline snapshot path and a bounded batch size.
 The apply path is default-off at the operational level and is not a production
 rollout switch.

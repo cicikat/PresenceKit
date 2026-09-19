@@ -97,7 +97,7 @@
 |---|---|---|---|
 | A | `d404e9b` | read-only inventory / redaction tests | 未扫描生产正文 |
 | B | `19bae90` | resumable manifest/status tests；状态写入经 sandbox resolver | 不是完整逐 source-item ledger；生产未运行 |
-| C | `30a5f84`, `f5dc200` | verified-backup gate、verify-before-restore recovery drill、ledger transition tests；26 focused tests passed | 仅隔离 fixture；未创建生产 snapshot |
+| C | `30a5f84`, `f5dc200`, `01a73a6` | verified-backup gate、verify-before-restore recovery drill、manifest freeze/revision gate、ledger transition tests；26 focused tests passed | 仅隔离 fixture；未创建生产 snapshot |
 | D | 未完成 | apply endpoint 已存在，但无生产首夜 manifest/运行证据 | 首夜未运行 |
 | E–F | 未施工 | 未执行 | 未滚动整理、未退役、未删除 |
 
