@@ -414,8 +414,14 @@ def apply_batch(
     *,
     batch_size: int,
     backup: dict[str, Any],
+    skip_conflicts: bool = False,
 ) -> dict[str, Any]:
-    """Append at most one deterministic batch and persist resumable progress."""
+    """Append at most one deterministic batch and persist resumable progress.
+
+    ``skip_conflicts`` is reserved for the reconciler: a conflicting entry is
+    advanced as deferred while independent entries in the same batch continue.
+    The default remains fail-closed and pauses at the first conflict.
+    """
     if batch_size < 1 or batch_size > 100:
         raise ValueError("batch_size must be between 1 and 100")
     if backup.get("verified") is not True:
@@ -468,6 +474,9 @@ def apply_batch(
     for index, entry in enumerate(entries[start:start + batch_size], start=start):
         if entry.event_id in set(plan.get("conflicted_event_ids") or ()):
             state["last_error"] = "plan_conflict"
+            if skip_conflicts:
+                state["next_offset"] = index + 1
+                continue
             break
         evidence_status, existing = event_store.migration_evidence_status(scope, entry.event_id)
         if evidence_status not in {"ok", "not_found", "missing_ledger"}:
@@ -504,6 +513,9 @@ def apply_batch(
                 state["ledger_conflict"] += 1
                 state["would_write"] = max(0, state["would_write"] - 1)
             state["last_error"] = "conflict"
+            if skip_conflicts:
+                state["next_offset"] = index + 1
+                continue
             break
         result = event_store.append_event(scope, entry.event())
         if result.inserted:

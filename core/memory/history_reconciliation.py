@@ -208,15 +208,18 @@ def apply_batch(scope: MemoryScope, *, backup: dict[str, Any], batch_size: int =
     plan = event_migration.scan_legacy(scope)
     if plan.get("indeterminate"):
         return {"status": "deferred", "reason": plan.get("comparison_status", "indeterminate")}
-    result = event_migration.apply_batch(scope, plan, batch_size=batch_size, backup=backup)
+    result = event_migration.apply_batch(
+        scope, plan, batch_size=batch_size, backup=backup, skip_conflicts=True,
+    )
     state = read_state(scope)
     items = state.get("items") if isinstance(state.get("items"), dict) else {}
     event_items = [item for item in items.values() if item.get("store_kind") == "event_log"]
     if event_items:
         migration_status = str(result.get("status") or "")
         if migration_status in {"completed", "committed"}:
-            next_status = "committed"
-            error = ""
+            conflict_count = int(result.get("conflict") or 0)
+            next_status = "deferred" if conflict_count else "committed"
+            error = "conflict" if conflict_count else ""
         elif migration_status in {"paused", "deferred"}:
             next_status = "deferred"
             error = str(result.get("last_error") or result.get("status") or "deferred")[:128]
@@ -406,7 +409,11 @@ async def run_first_night(
         last = result
         batches += 1
         if result.get("status") not in {"committed", "completed"}:
-            if result.get("status") == "paused" and status(scope)["counts"].get("pending", 0) > 0:
+            migration = result.get("migration") or {}
+            if result.get("status") == "paused" and (
+                status(scope)["counts"].get("pending", 0) > 0
+                or int(migration.get("next_offset", 0)) < int(migration.get("total", 0))
+            ):
                 continue
             break
         migration = result.get("migration") or {}
