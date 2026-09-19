@@ -98,17 +98,15 @@
 | A | `d404e9b` | read-only inventory / redaction tests | 未扫描生产正文 |
 | B | `19bae90` | resumable manifest/status tests；状态写入经 sandbox resolver | 不是完整逐 source-item ledger；生产未运行 |
 | C | `30a5f84`, `f5dc200`, `01a73a6` | verified-backup gate、verify-before-restore recovery drill、manifest freeze/revision gate、ledger transition tests；26 focused tests passed | 仅隔离 fixture；未创建生产 snapshot |
-| D | 未完成 | explicit `action=run` first-night runner now exists with stop deadline, frozen manifest and verified backup gates; no production run evidence | 首夜未运行 |
-| E–F | 未施工 | 未执行 | 未滚动整理、未退役、未删除 |
+| D | 已运行（部分语义 pass） | explicit `action=run` executed against the verified offline snapshot; closeout is persisted; one real same-scope grok-see dossier pass committed | provider timeout runs remain failed receipts; no user notification |
+| E–F | E evidence-only 收口；F 未授权 | derived stores have durable evidence-only receipts and explicit reopen path; no physical deletion performed | semantic quality/retirement remain separate follow-up |
 
 ## Current blockers
 
-The current apply adapter is bounded to the existing event-log migration
-adapter. After a successful import, the admin apply path can admit one
-same-scope 258 dossier pass using the configured cheap
-`便宜小模型grok-see` preset; it still does not perform source-specific
-classification for mid-term, episodic, storyline, or identity. It also does
-not yet provide a production-frozen first-night manifest and morning closeout report. Production
-enablement therefore remains blocked on semantic calibration, a real verified
-offline snapshot and recovery acceptance, scope/budget freeze, and explicit
-operator authorization.
+The adapter imports event evidence in bounded batches and records derived
+stores as source-specific evidence-only receipts; it never treats old prose as
+a new fact. The verified offline snapshot and recovery drill passed, and the
+first-night closeout is persisted in the reconciliation ledger. A real
+same-scope dossier pass has committed once through the configured cheap
+`便宜小模型grok-see` preset. Provider timeouts remain explicit failed receipts;
+they do not block evidence completion or get reported as semantic success.
