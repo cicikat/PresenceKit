@@ -267,3 +267,23 @@ def test_settle_evidence_only_requires_reason_and_closes_backlog(sandbox):
     assert result["status"] == "committed"
     assert result["processed"] == 1
     assert dossiers.maintenance_status(scope)["backlog"] == 0
+
+
+def test_rollback_reopens_evidence_receipts_without_touching_source(sandbox):
+    from core.memory import dossiers, history_reconciliation
+    from core.memory.event_store import append_event
+    from core.memory.scope import MemoryScope
+
+    scope = MemoryScope.reality_scope("rollback-owner", TEST_CHAR_ID)
+    assert append_event(scope, {
+        "event_id": "rollback-event", "turn_id": "rollback-turn", "seq": 1,
+        "occurred_at": 1.0, "ingested_at": 2.0, "uid": scope.uid,
+        "char_id": scope.character_id, "realm": "reality", "kind": "chat",
+        "actor": "user", "channel": "test", "source": "fixture",
+        "visible_text": "fixture", "memory_text": "fixture",
+    }).ok
+    assert history_reconciliation.settle_evidence_only(scope, reason="calibration_pause")["processed"] == 1
+    result = history_reconciliation.rollback_batch(scope, reason="operator_review")
+    assert result["status"] == "rolled_back"
+    assert result["reopened"] == 1
+    assert dossiers.maintenance_status(scope)["backlog"] == 1

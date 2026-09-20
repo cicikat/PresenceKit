@@ -24,6 +24,7 @@ from core.safe_write import safe_write_json
 SCHEMA_VERSION = "memory-history-inventory.v1"
 SOURCES = ("event_store", "event_log", "mid_term", "episodic", "storyline", "user_identity")
 STATES = ("pending", "running", "committed", "retryable_failed", "deferred", "excluded")
+RULES_VERSION = "history-reconciliation-rules.v1"
 
 
 def _digest(value: Any) -> str:
@@ -115,6 +116,11 @@ def create_manifest(scope: MemoryScope, *, now: float | None = None) -> dict[str
         status = previous.get("status") if previous.get("status") in STATES else "pending"
         items[key] = {"store_kind": item["store_kind"], "source_revision": item["source_revision"],
                       "status": status, "attempt": int(previous.get("attempt") or 0),
+                      "target_revision": str(previous.get("target_revision") or ""),
+                      "operation_receipt": str(previous.get("operation_receipt") or ""),
+                      "rule_version": RULES_VERSION,
+                      "input_digest": str(previous.get("input_digest") or item["source_revision"]),
+                      "revisit_condition": str(previous.get("revisit_condition") or "source_revision_changed")[:128],
                       "last_error": str(previous.get("last_error") or "")[:128]}
     manifest = {"schema_version": "memory-reconciliation-manifest.v1", "inventory": inventory,
                 "items": items, "dry_run": True, "created_at": float(time.time() if now is None else now),
@@ -257,6 +263,13 @@ def apply_batch(scope: MemoryScope, *, backup: dict[str, Any], batch_size: int =
             derived_results[store_kind] = derived
             source_item["next_offset"] = int(derived.get("next_offset") or source_item.get("next_offset") or 0)
             source_item["total"] = int(derived.get("total") or source_item.get("total") or 0)
+            source_item["input_digest"] = _digest({"store_kind": store_kind,
+                                                     "source_revision": source_item.get("source_revision"),
+                                                     "next_offset": source_item["next_offset"]})
+            source_item["target_revision"] = str(derived.get("target_revision") or "")
+            source_item["operation_receipt"] = str(derived.get("operation_id") or "")
+            source_item["rule_version"] = RULES_VERSION
+            source_item["revisit_condition"] = "source_revision_changed" if derived.get("status") in {"committed", "completed"} else str(derived.get("reason") or "retryable")[:128]
             source_item["attempt"] = int(source_item.get("attempt") or 0) + 1
             if derived.get("status") in {"committed", "completed"} and source_item["next_offset"] >= source_item["total"]:
                 source_item["status"] = "committed"
@@ -276,6 +289,35 @@ def apply_batch(scope: MemoryScope, *, backup: dict[str, Any], batch_size: int =
     safe_write_json(_state_path(scope), state, keep_bak=True)
     return {"status": result.get("status", "retryable_failed"), "migration": result,
             "derived": state.get("derived", {})}
+
+
+def rollback_batch(scope: MemoryScope, *, source_ids: list[str] | None = None,
+                   reason: str = "operator_rollback") -> dict[str, Any]:
+    """Reopen derived receipts without deleting source evidence.
+
+    Rollback is deliberately reversible: dossier evidence-only receipts are
+    moved back to pending, while source ledgers and legacy files remain intact.
+    """
+    reason = str(reason or "").strip()[:128]
+    if not reason:
+        raise ValueError("rollback_reason_required")
+    from core.memory import dossiers
+    reopened = dossiers.reopen_evidence_only(scope, source_ids=source_ids)
+    state = read_state(scope)
+    items = state.get("items") if isinstance(state.get("items"), dict) else {}
+    for item in items.values():
+        if not isinstance(item, dict) or item.get("status") not in {"committed", "deferred"}:
+            continue
+        if source_ids and item.get("store_kind") not in {"event_store", "event_log"}:
+            continue
+        item["status"] = "pending"
+        item["last_error"] = "rolled_back:" + reason
+        item["revisit_condition"] = "operator_reopened"
+    state["items"] = items
+    state["last_rollback"] = {"reason": reason, "reopened": reopened, "updated_at": time.time()}
+    if not safe_write_json(_state_path(scope), state, keep_bak=True):
+        raise OSError("history_reconciliation_state_write_failed")
+    return {"status": "rolled_back", "reopened": reopened, "reason": reason}
 
 
 def verify_backup_snapshot(snapshot: Path) -> dict[str, Any]:
