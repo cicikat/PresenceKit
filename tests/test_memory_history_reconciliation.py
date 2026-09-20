@@ -54,7 +54,11 @@ def test_manifest_and_control_are_resumable_and_default_deferred(sandbox):
     assert manifest["dry_run"] is True
     result = history_reconciliation.apply_dry_run(scope, backup_verified=False)
     assert result["status"] == "deferred"
-    assert history_reconciliation.status(scope)["counts"]["deferred"] >= 1
+    snapshot = history_reconciliation.status(scope)
+    assert snapshot["counts"]["deferred"] >= 1
+    assert snapshot["total"] == sum(snapshot["counts"].values())
+    assert snapshot["ratios"]["deferred"] > 0
+    assert snapshot["executable"] == 0
     history_reconciliation.set_paused(scope, True, reason="test")
     assert history_reconciliation.apply_dry_run(scope)["status"] == "paused"
 

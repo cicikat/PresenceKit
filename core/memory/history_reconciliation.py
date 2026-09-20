@@ -514,9 +514,13 @@ async def run_first_night(
 def status(scope: MemoryScope) -> dict[str, Any]:
     state = read_state(scope); items = state.get("items") or {}
     counts = {name: sum(1 for item in items.values() if item.get("status") == name) for name in STATES}
+    total = sum(counts.values())
+    ratios = {name: (counts[name] / total if total else 0.0) for name in STATES}
     return {"schema_version": "memory-reconciliation-status.v1", "paused": bool(state.get("paused")),
             "pause_reason": str(state.get("pause_reason") or ""), "counts": counts,
-            "total": sum(counts.values()), "manifest_revision": (state.get("manifest") or {}).get("manifest_revision", ""),
+            "ratios": ratios, "executable": counts["pending"] + counts["retryable_failed"],
+            "incremental_pending": counts["pending"], "total": total,
+            "manifest_revision": (state.get("manifest") or {}).get("manifest_revision", ""),
             "frozen_manifest_revision": str(state.get("frozen_manifest_revision") or ""),
             "frozen_at": state.get("frozen_at"),
             "last_error": str(state.get("last_error") or "")[:128],
