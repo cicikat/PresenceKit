@@ -52,17 +52,17 @@
 - [ ] B1 经 sandbox/data registry 落地清单、每项状态/去向/理由、attempt、目标档案 revision、operation receipt、规则版本、输入 digest、last_error、重访条件。正文保留在各权威存储，运行台账不复制。
 - [ ] B2 批次小而有界，按源稳定排序；同主题跨批次可查询已有档案和相关旧证据，不能每批生成一本重名档案。成员列表和主题名不作为幂等键。
 - [ ] B3 接入 258 的原子派生提交和 durable operation receipt；跨库崩溃先 reconcile 再重试。模型成功但写失败不得标 committed；进度写失败不能导致重复计数。
-- [ ] B4 状态互斥且覆盖整个冻结清单：total = pending + running + committed + retryable_failed + deferred + excluded。分类去向可组合，禁止用去向数量冒充完成数。
+- [x] B4 状态互斥且覆盖整个冻结清单：total = pending + running + committed + retryable_failed + deferred + excluded。分类去向可组合，禁止用去向数量冒充完成数。
 - [ ] B5 同时报告 committed/total、excluded/total、deferred/total、剩余可执行项及新增量积压；全部排除不能显示“记忆全部整理完成”。删除/源更新后旧完成标志不继续代表当前版本已处理。
 - [ ] B6 管理面元数据展示暂停/恢复/预算/错误/批次；memory.read 受控查判定与证据。覆盖重启、重复执行、锁冲突、坏数据与断电提交恢复；独立提交。
 
 ## C — 隔离演练、备份与首夜准入
 
-- [ ] C1 在隔离副本 dry-run；原生产源不改。保存 proposed patch、理由、血缘、样本统计；“生成建议”与“已生效”明确区分。
+- [x] C1 在隔离副本 dry-run；原生产源不改。保存 proposed patch、理由、血缘、样本统计；“生成建议”与“已生效”明确区分。
 - [ ] C2 同角色副链小样本校准调用耗时、输入/输出 token、重试率和人工抽检质量。重点检查重复事实、感受冒充事实、错误丢弃、分类碎片化、旧结论未退役。
 - [ ] C3 输出实际速率区间：预期工时依据待处理 token/批次实测耗时和共享配额，留出限流/失败/前台让行余量；不以记录数乘固定常数假装精确。首次预算未定不得无限额运行。
 - [ ] C4 首夜范围优先：明确更正/撤回依赖 → 活跃主题及关联旧证据 → 最近 30 天候选 → 剩余历史时间段；30 天仅初始建议，按实际盘点冻结。保留部分预算公平推进冷门主题，避免永久饥饿。
-- [ ] C5 对准备改动的生产派生库和相关状态做一致性备份，记录安全备份位置（本地运行配置，不进 track 文档），实际验证恢复；复用既有 backup-state 要求，不能拿旧快照冒充本批备份。
+- [x] C5 对准备改动的生产派生库和相关状态做一致性备份，记录安全备份位置（本地运行配置，不进 track 文档），实际验证恢复；复用既有 backup-state 要求，不能拿旧快照冒充本批备份。
 - [ ] C6 冻结上线日期、时区、首夜 manifest、范围总量、角色授权、preset、调用/token/费用硬预算、停止点与恢复策略。仅当 258 B–E、恢复与抽检通过才准入生产。
 - [ ] C7 独立提交校准和准入记录；未满足则明确 blocker，不能为赶“今晚”跳过完整性保障。
 
@@ -110,3 +110,9 @@ first-night closeout is persisted in the reconciliation ledger. A real
 same-scope dossier pass has committed once through the configured cheap
 `便宜小模型grok-see` preset. Provider timeouts remain explicit failed receipts;
 they do not block evidence completion or get reported as semantic success.
+
+本轮施工（2026-09-20）：`34d0688` 增加外层账本的规则版本、输入摘要、目标
+revision、operation receipt、重访条件，并新增 admin `action=rollback`。回滚只
+重新打开 evidence-only receipt 为 pending，保留源证据，不执行物理删除。相关
+聚焦回归为 17 passed。B1 的逐 source-item 完整清单、C2-C4 校准、C6-C7
+生产准入仍是 blocker，不能用本轮回滚能力代替。
