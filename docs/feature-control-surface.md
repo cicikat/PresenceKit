@@ -749,8 +749,12 @@ ordered slice `running` with a recoverable lease; related dossiers are looked
 up by evidence ID, not title. Bounded item receipts and processing reasons are
 read with `GET /memory/history-source-items`
 (`memory.read`). Admin pause/resume/dry-run uses
-`POST /memory-history-reconciliation/control`; `action=freeze` pins the
-manifest revision before apply, and `action=apply` additionally
+`POST /memory-history-reconciliation/control`; `action=calibrate` runs an
+isolated same-character side-chain sample (latency, estimated tokens, retry
+rate, structural quality flags, rate band with headroom) and freezes the
+first-night priority range. It does not apply patches, enable the scheduler, or
+admit production first-night. `action=freeze` pins the
+manifest revision and that frozen range before apply, and `action=apply` additionally
 requires a server-side verified offline snapshot path and a bounded batch size.
 `action=run` is the explicit first-night runner: it additionally requires the
 frozen manifest revision and a stop deadline, then returns a metadata-only
@@ -765,8 +769,9 @@ pinned to the configured cheap `便宜小模型grok-see` preset. Other historica
 derived historical stores may be closed only as `evidence_only` when the
 provider is unavailable; this is not semantic calibration or an active dossier
 conclusion. The verified offline snapshot and recovery drill are recorded
-outside this control surface. No production snapshot, semantic calibration,
-first-night manifest, or morning closeout has been performed.
+outside this control surface. Isolated calibration may freeze a first-night
+range from inventory; that freeze is not production admission. No production
+snapshot, first-night manifest, or morning closeout has been performed.
 
 When the configured provider is unavailable, admin may explicitly use
 `action=evidence_only` with a non-empty `reason`. This closes only the

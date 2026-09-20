@@ -104,7 +104,8 @@ def main():
                 history_status = page.locator("#memory-history-status").inner_text()
                 assert "暂停" in history_status, history_status.encode("unicode_escape")
                 assert page.locator("[data-action='createMemoryHistoryManifest']").count() == 1
-                assert page.locator("[data-action='controlMemoryHistoryReconciliation']").count() == 3
+                assert page.locator("[data-action='controlMemoryHistoryReconciliation']").count() == 4
+                assert page.locator("[data-action-args='[\"calibrate\"]']").count() == 1
                 assert page.locator("[data-action='searchMemoryHistorySourceItems']").count() == 1
                 items = page.locator("#memory-history-items").inner_text()
                 assert "暂无源项" in items, items.encode("unicode_escape")

@@ -59,9 +59,9 @@
 ## C — 隔离演练、备份与首夜准入
 
 - [x] C1 在隔离副本 dry-run；原生产源不改。保存 proposed patch、理由、血缘、样本统计；“生成建议”与“已生效”明确区分。
-- [ ] C2 同角色副链小样本校准调用耗时、输入/输出 token、重试率和人工抽检质量。重点检查重复事实、感受冒充事实、错误丢弃、分类碎片化、旧结论未退役。
-- [ ] C3 输出实际速率区间：预期工时依据待处理 token/批次实测耗时和共享配额，留出限流/失败/前台让行余量；不以记录数乘固定常数假装精确。首次预算未定不得无限额运行。
-- [ ] C4 首夜范围优先：明确更正/撤回依赖 → 活跃主题及关联旧证据 → 最近 30 天候选 → 剩余历史时间段；30 天仅初始建议，按实际盘点冻结。保留部分预算公平推进冷门主题，避免永久饥饿。
+- [x] C2 同角色副链小样本校准调用耗时、输入/输出 token、重试率和人工抽检质量。重点检查重复事实、感受冒充事实、错误丢弃、分类碎片化、旧结论未退役。
+- [x] C3 输出实际速率区间：预期工时依据待处理 token/批次实测耗时和共享配额，留出限流/失败/前台让行余量；不以记录数乘固定常数假装精确。首次预算未定不得无限额运行。
+- [x] C4 首夜范围优先：明确更正/撤回依赖 → 活跃主题及关联旧证据 → 最近 30 天候选 → 剩余历史时间段；30 天仅初始建议，按实际盘点冻结。保留部分预算公平推进冷门主题，避免永久饥饿。
 - [x] C5 对准备改动的生产派生库和相关状态做一致性备份，记录安全备份位置（本地运行配置，不进 track 文档），实际验证恢复；复用既有 backup-state 要求，不能拿旧快照冒充本批备份。
 - [ ] C6 冻结上线日期、时区、首夜 manifest、范围总量、角色授权、preset、调用/token/费用硬预算、停止点与恢复策略。仅当 258 B–E、恢复与抽检通过才准入生产。
 - [ ] C7 独立提交校准和准入记录；未满足则明确 blocker，不能为赶“今晚”跳过完整性保障。
@@ -98,6 +98,7 @@
 | A | `d404e9b`, `b3f9d00` | read-only inventory / redaction tests；隔离数据上的分母、时间范围、首夜候选与剩余历史 | 未扫描生产正文 |
 | B | `19bae90`, `07cda48`, `03e375a`, `2dc503f`, `0120b00` | resumable manifest/status tests；状态写入经 sandbox resolver；逐 source-item seed/list；有界领取/证据查档/lease 收据恢复；管理面缓存清除后桌面/手机布局验收 | 生产未运行 |
 | C | `30a5f84`, `f5dc200`, `01a73a6` | verified-backup gate、verify-before-restore recovery drill、manifest freeze/revision gate、ledger transition tests；26 focused tests passed | 仅隔离 fixture；未创建生产 snapshot |
+| C2–C4 | 本轮提交 | 隔离副链校准记录耗时/估算 token/重试/结构质量旗标与速率带；冻结首夜优先级与冷门份额；管理面 `action=calibrate` 去敏展示 | 未调用生产模型、未 apply、未开调度器 |
 | D | 已运行（部分语义 pass） | explicit `action=run` executed against the verified offline snapshot; closeout is persisted; one real same-scope grok-see dossier pass committed | provider timeout runs remain failed receipts; no user notification |
 | E–F | E evidence-only 收口；F 未授权 | derived stores have durable evidence-only receipts and explicit reopen path; no physical deletion performed | semantic quality/retirement remain separate follow-up |
 
@@ -117,8 +118,8 @@ event_store / event_log / mid_term / episodic / storyline / identity 的稳定
 身份写入 scoped `source_items`。有界领取按 store_kind + ingest_sequence +
 source_id 稳定排序，并按证据 ID 查询已有档案；标题和成员列表不是幂等键。
 lease 过期先对 `processing_commits` reconcile，有收据才标 committed，否则
-回到 retryable_failed。写失败释放领取，不记完成。C2-C4 校准、C6-C7 生产准入
-仍是 blocker，不能用盘点或领取能力代替。
+回到 retryable_failed。写失败释放领取，不记完成。C2–C4 隔离校准可冻结首夜
+范围并给出速率带，但 C6–C7 生产准入仍是 blocker：校准不是生产首夜。
 
 未勾选项的准入边界：D1-D6、E1-E5 需要真实首夜/滚动运行、次晨抽检和费用证据；
 F1-F3 涉及退役或删除范围，需单独批准。没有对应运行证据或批准，不得勾选。

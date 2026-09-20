@@ -85,6 +85,55 @@ def test_history_source_items_require_memory_read(sandbox):
     assert "private dossier evidence" not in allowed.text
 
 
+def test_calibrate_control_is_isolated_and_redacted(sandbox, monkeypatch):
+    from core.memory.event_store import append_event
+    from core.memory.scope import MemoryScope
+
+    scope = MemoryScope.reality_scope("admin-calibrate", TEST_CHAR_ID)
+    secret = "private dossier evidence"
+    assert append_event(scope, {
+        "event_id": "admin-calibrate-event", "turn_id": "admin-calibrate-event", "seq": 1,
+        "occurred_at": 1.0, "ingested_at": 2.0, "uid": scope.uid,
+        "char_id": scope.character_id, "realm": "reality", "kind": "owner_chat",
+        "actor": "user", "channel": "desktop", "source": "fixture",
+        "visible_text": secret, "memory_text": secret, "redaction_state": "scrubbed",
+    }).ok
+
+    async def fake_calibrate(scope_arg, **kwargs):
+        assert kwargs.get("sample_size") == 2
+        return {
+            "isolated": True,
+            "production_first_night": False,
+            "sample_size": 1,
+            "model_calls": 1,
+            "samples": [{"applied": False, "input_tokens": 12, "output_tokens": 1, "retries": 0}],
+            "quality": {"hits": {"classification_fragmentation": False}},
+            "rate_band": {"unlimited_run_allowed": False, "budget_unset": False},
+            "frozen": True,
+            "first_night_range": {"priority_order": ["correction", "active_theme", "recent", "remaining"]},
+        }
+
+    monkeypatch.setattr("core.memory.history_reconciliation.calibrate_side_chain", fake_calibrate)
+    client = _client_with_tokens(sandbox)
+    denied = client.post(
+        "/memory-history-reconciliation/control",
+        json={"action": "calibrate", "uid": scope.uid, "char_id": scope.character_id, "sample_size": 2},
+        headers=_headers("state-token"),
+    )
+    allowed = client.post(
+        "/memory-history-reconciliation/control",
+        json={"action": "calibrate", "uid": scope.uid, "char_id": scope.character_id, "sample_size": 2},
+        headers=_headers("admin-token"),
+    )
+    assert denied.status_code == 403
+    assert allowed.status_code == 200
+    payload = allowed.json()
+    assert payload["isolated"] is True
+    assert payload["production_first_night"] is False
+    assert payload["samples"][0]["applied"] is False
+    assert secret not in allowed.text
+
+
 def test_observability_is_metadata_only_and_scope_protected(sandbox):
     from core.memory.scope import MemoryScope
 

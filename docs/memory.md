@@ -21,9 +21,13 @@ identities into `source_items` without copying prose. Bounded claims take a
 stably ordered slice, inspect already-linked dossiers by evidence ID (not
 title), and recover expired leases from durable receipts before retry. The apply
 path can admit one same-scope dossier pass using the configured cheap
-`便宜小模型grok-see` preset; semantic calibration and production first-night
-apply remain separately gated. Isolated inventory counts are not a production
-scan.
+`便宜小模型grok-see` preset. Isolated same-character side-chain calibration
+records latency, estimated tokens, retry rate, structural quality flags and a
+rate band with quota/failure/foreground headroom; it never applies patches or
+admits production first-night. Claims freeze a first-night range
+(correction → active theme → recent 30-day candidates → remaining) and keep a
+cold-theme share so remaining history is not starved. Isolated inventory
+counts are not a production scan.
 
 ## 资料接续回执（2026-09-13）
 

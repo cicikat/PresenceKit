@@ -1020,8 +1020,11 @@ The read-only Brief 259 inventory is exposed as
 source revisions and has no desktop/mobile consumer. Per-source-item processing
 receipts are listed at
 `GET /memory/history-source-items` (`memory.read`) and remain backend-admin
-only.
+only. Isolated calibration is an admin control
+(`POST /memory-history-reconciliation/control`, `action=calibrate`); status
+exposes redacted rate-band and frozen first-night range metadata with no
+desktop/mobile consumer.
 
 `open`: production rollout and real first-night/next-morning evidence are gated
-by Brief 259 A-C and Brief 258 F. Backend tests and admin browser inspection do
-not constitute production migration evidence.
+by Brief 259 C6-C7 plus D and Brief 258 F. Isolated calibration and admin
+browser inspection do not constitute production migration evidence.

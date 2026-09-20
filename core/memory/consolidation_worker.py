@@ -25,7 +25,7 @@ from core.sandbox import get_paths
 logger = logging.getLogger(__name__)
 CAPABILITY = "memory.consolidation"
 ARTIFACT_KIND = "memory_consolidation_receipt"
-PROMPT_REVISION = "memory-consolidation-prompt.v1"
+PROMPT_REVISION = "memory-consolidation-prompt.v2"
 _GLOBAL_SEMAPHORE = asyncio.Semaphore(1)
 _scope_locks: dict[tuple[str, str], asyncio.Lock] = {}
 _scope_locks_guard = threading.Lock()
@@ -184,7 +184,9 @@ def _prompt(identity: str, current: list[dict[str, Any]], events: list[dict[str,
         "share one occurrence; if uncertain, leave the material evidence_only by returning []. "
         "Every edit of an existing dossier needs its current expected_revision. Causes are tentative. "
         "Related dossiers already cite this batch's evidence: reuse those dossier_id values. "
-        "Titles, aliases and member lists are presentation only and are not idempotency keys.\n"
+        "Titles, aliases and member lists are presentation only and are not idempotency keys. "
+        "Do not invent extra dossiers for one experience. If a related understanding is stale, "
+        "revise or retire it instead of leaving the old conclusion in recall.\n"
         f"Character context (frozen): {identity}\n"
         "Related dossiers for this batch's evidence: " +
         json.dumps(related, ensure_ascii=False, separators=(",", ":")) + "\n"
@@ -328,11 +330,22 @@ async def _run_claimed(principal: TaskPrincipal, lease, cfg: dict[str, Any]) -> 
     checkpoint = max(item["ingest_sequence"] for item in events)
     work_sessions.complete_work_session(principal, session["work_session_id"],
         artifact_id=f"memory:{lease.task_id}", artifact_version=max(1, checkpoint))
+    quality_hits = 0
+    try:
+        from core.memory import history_reconciliation
+        quality = history_reconciliation._inspect_quality(operations, events, related)
+        quality_hits = sum(1 for hit in (quality.get("hits") or {}).values() if hit)
+    except Exception:
+        quality_hits = 0
     return task_manager.complete_task(principal, lease, result_metadata={
         "outcome_code": "consolidation_committed",
         "artifact_ids": [f"memory:{lease.task_id}"],
         "counters": {"processed": len(events), "operations": len(result["results"]),
-                     "coverage_ingest_sequence": checkpoint},
+                     "coverage_ingest_sequence": checkpoint,
+                     "input_tokens": max(1, (len(prompt) + 3) // 4),
+                     "output_tokens": max(0, (len(str(raw or "")) + 3) // 4),
+                     "wall_seconds": round(elapsed, 4),
+                     "quality_hits": quality_hits},
     })
 
 

@@ -572,3 +572,178 @@ def test_expired_running_batch_is_reconciled_before_retry(sandbox):
     assert retry["count"] == 1
     assert retry["items"][0]["source_id"] == "hist-lease"
     assert retry["reconciled"]["released"] == 0
+
+
+def test_first_night_priority_orders_corrections_before_recent_and_keeps_cold_share(sandbox):
+    from core.memory import dossiers, history_reconciliation
+    from core.memory.event_store import append_event
+    from core.memory.path_resolver import resolve_path
+    from core.memory.scope import MemoryScope
+    import json
+    import uuid
+
+    now = 2_000_000_000.0
+    scope = MemoryScope.reality_scope("priority-owner", TEST_CHAR_ID)
+    secret = "PRIVATE_SOURCE_BODY_259C"
+    assert append_event(scope, {
+        "event_id": "priority-old", "turn_id": "priority-old", "seq": 1,
+        "occurred_at": now - history_reconciliation.FIRST_NIGHT_WINDOW_SECONDS - 86_400,
+        "ingested_at": now - history_reconciliation.FIRST_NIGHT_WINDOW_SECONDS - 3_600,
+        "uid": scope.uid, "char_id": scope.character_id, "realm": "reality",
+        "kind": "chat", "actor": "user", "channel": "test", "source": "fixture",
+        "visible_text": secret, "memory_text": secret,
+    }).ok
+    assert append_event(scope, {
+        "event_id": "priority-recent", "turn_id": "priority-recent", "seq": 2,
+        "occurred_at": now - 3_600, "ingested_at": now - 1_800,
+        "uid": scope.uid, "char_id": scope.character_id, "realm": "reality",
+        "kind": "chat", "actor": "user", "channel": "test", "source": "fixture",
+        "visible_text": secret, "memory_text": secret,
+    }).ok
+    assert append_event(scope, {
+        "event_id": "priority-correction", "turn_id": "priority-correction", "seq": 3,
+        "occurred_at": now - history_reconciliation.FIRST_NIGHT_WINDOW_SECONDS - 10_000,
+        "ingested_at": now - history_reconciliation.FIRST_NIGHT_WINDOW_SECONDS - 9_000,
+        "uid": scope.uid, "char_id": scope.character_id, "realm": "reality",
+        "kind": "chat", "actor": "user", "channel": "test", "source": "fixture",
+        "visible_text": secret, "memory_text": secret,
+        "correction_of": "priority-old",
+    }).ok
+    assert append_event(scope, {
+        "event_id": "priority-stale", "turn_id": "priority-stale", "seq": 4,
+        "occurred_at": now - history_reconciliation.FIRST_NIGHT_WINDOW_SECONDS - 200_000,
+        "ingested_at": now - history_reconciliation.FIRST_NIGHT_WINDOW_SECONDS - 199_000,
+        "uid": scope.uid, "char_id": scope.character_id, "realm": "reality",
+        "kind": "chat", "actor": "user", "channel": "test", "source": "fixture",
+        "visible_text": secret, "memory_text": secret,
+    }).ok
+    dossier_id = uuid.uuid4().hex
+    occurrence_id = uuid.uuid4().hex
+    dossiers.apply_operations(scope, [
+        {"action": "create_dossier", "dossier_id": dossier_id, "title": "Active Theme",
+         "aliases": [], "description": ""},
+        {"action": "create_occurrence", "occurrence_id": occurrence_id, "participants": [],
+         "time_certainty": "unknown", "assertion_kind": "user_stated",
+         "evidence": [{"reference_kind": "event", "source_id": "priority-old",
+                       "source_revision": "1"}]},
+        {"action": "attach_occurrence", "dossier_id": dossier_id, "occurrence_id": occurrence_id,
+         "expected_revision": 1},
+    ], operation_id=uuid.uuid4().hex, actor="character", chain="owner_chat")
+    storyline = resolve_path(scope, "storyline")
+    storyline.parent.mkdir(parents=True, exist_ok=True)
+    storyline.write_text(json.dumps({"arcs": [{"arc_id": "arc-cold", "title": "cold",
+                                               "updated_at": now - history_reconciliation.FIRST_NIGHT_WINDOW_SECONDS - 1}]}),
+                         encoding="utf-8")
+    manifest = history_reconciliation.create_manifest(scope, now=now)
+    freeze = history_reconciliation.freeze_manifest(scope, manifest_revision=manifest["manifest_revision"])
+    claimed = history_reconciliation.claim_batch(scope, batch_size=4, now=now)
+    classes = [item["priority_class"] for item in claimed["items"] if item["store_kind"] == "event"]
+    assert classes[:3] == ["correction", "active_theme", "recent"]
+    assert freeze["first_night_range"]["cold_theme_share"] == 0.25
+    assert freeze["first_night_range"]["source_item_priority_counts"]["remaining"] >= 1
+    leftover = history_reconciliation.claim_batch(scope, batch_size=8, now=now + 1)
+    leftover_classes = [item["priority_class"] for item in leftover["items"]]
+    assert leftover_classes.count("remaining") >= 1
+    snapshot = history_reconciliation.status(scope)
+    assert snapshot["first_night_range"]["priority_order"][0] == "correction"
+    assert secret not in str(freeze)
+    assert secret not in str(claimed)
+
+
+def test_isolated_calibration_records_latency_tokens_and_does_not_apply(sandbox, monkeypatch):
+    from core.memory import dossiers, history_reconciliation
+    from core.memory.event_store import append_event
+    from core.memory.scope import MemoryScope
+    import asyncio
+    import json
+
+    scope = MemoryScope.reality_scope("calibrate-owner", TEST_CHAR_ID)
+    secret = "PRIVATE_SOURCE_BODY_259C2"
+    assert append_event(scope, {
+        "event_id": "calibrate-event", "turn_id": "calibrate-event", "seq": 1,
+        "occurred_at": 10.0, "ingested_at": 11.0, "uid": scope.uid,
+        "char_id": scope.character_id, "realm": "reality", "kind": "chat",
+        "actor": "user", "channel": "test", "source": "fixture",
+        "visible_text": secret, "memory_text": secret,
+    }).ok
+    from core.memory.consolidation_worker import _DEFAULTS
+    monkeypatch.setattr("core.memory.consolidation_worker.config", lambda: {
+        **_DEFAULTS,
+        "enabled": False, "daily_token_budget": 9600, "daily_call_budget": 8,
+        "daily_wall_seconds": 600, "max_input_chars": 24000, "max_tokens_per_call": 1200,
+    })
+    monkeypatch.setattr(
+        "core.memory.consolidation_worker._identity_context",
+        lambda _char_id: ('{"name":"fixture"}', "identity-revision"),
+    )
+    calls = {"count": 0}
+
+    async def fake_chat(messages, **_kwargs):
+        calls["count"] += 1
+        assert secret in messages[0]["content"]
+        return json.dumps([{
+            "action": "create_dossier", "title": "Duplicate Title", "aliases": [], "description": "",
+        }, {
+            "action": "create_dossier", "title": "Duplicate Title", "aliases": [], "description": "",
+        }])
+
+    result = asyncio.run(history_reconciliation.calibrate_side_chain(
+        scope, sample_size=1, chat=fake_chat, now=20,
+    ))
+    assert result["isolated"] is True
+    assert result["production_first_night"] is False
+    assert result["model_calls"] == 1
+    assert calls["count"] == 1
+    assert result["samples"][0]["applied"] is False
+    assert result["samples"][0]["input_tokens"] > 0
+    assert result["rate_band"]["unlimited_run_allowed"] is False
+    assert result["rate_band"]["budget_unset"] is False
+    assert result["quality"]["hits"]["classification_fragmentation"] is True
+    assert result["frozen"] is True
+    assert result["first_night_range"]["priority_order"][0] == "correction"
+    snapshot = history_reconciliation.status(scope)
+    assert snapshot["last_calibration"]["model_calls"] == 1
+    assert snapshot["last_calibration"]["unlimited_run_allowed"] is False
+    assert secret not in str(snapshot["last_calibration"])
+    assert dossiers.maintenance_checkpoint(scope) == 0
+
+
+def test_calibration_quality_flags_feeling_as_fact_and_stale_conclusion():
+    from core.memory import history_reconciliation
+
+    quality = history_reconciliation._inspect_quality(
+        [{"action": "create_occurrence", "assertion_kind": "user_stated",
+          "character_feeling": True, "evidence": [{"source_id": "evt-1"}]}],
+        [{"source_id": "evt-1", "priority_class": "recent"}],
+        [{"matching_source_ids": ["evt-1"], "needs_recompute": 1}],
+    )
+    assert quality["hits"]["feeling_as_fact"] is True
+    assert quality["hits"]["stale_conclusion"] is True
+    empty_correction = history_reconciliation._inspect_quality(
+        [], [{"source_id": "evt-2", "priority_class": "correction"}], [],
+    )
+    assert empty_correction["hits"]["false_discard"] is True
+
+
+def test_rate_band_keeps_headroom_and_refuses_unset_budget():
+    from core.memory import history_reconciliation
+
+    measured = history_reconciliation._rate_band(
+        [{"wall_seconds": 2.0, "input_tokens": 100, "output_tokens": 20, "retries": 0}],
+        remaining_tokens=1200, daily_token_budget=9600, daily_call_budget=8, daily_wall_seconds=600,
+    )
+    assert measured["sample_calls"] == 1
+    assert measured["unlimited_run_allowed"] is False
+    assert measured["admitted_tokens_per_second"] < measured["measured_tokens_per_second"]
+    unset = history_reconciliation._rate_band(
+        [{"wall_seconds": 2.0, "input_tokens": 100, "output_tokens": 20, "retries": 0}],
+        remaining_tokens=1200, daily_token_budget=0, daily_call_budget=8, daily_wall_seconds=600,
+    )
+    assert unset["budget_unset"] is True
+    assert unset["unlimited_run_allowed"] is False
+    assert unset["binding_limit"] == "budget_unset"
+    empty = history_reconciliation._rate_band(
+        [], remaining_tokens=1200, daily_token_budget=9600, daily_call_budget=8, daily_wall_seconds=600,
+    )
+    assert empty["binding_limit"] == "no_sample"
+    assert empty["estimated_seconds"] is None

@@ -131,7 +131,7 @@ async def control_memory_history_reconciliation(
 ):
     action = str(body.get("action") or "")
     uid, char_id = str(body.get("uid") or ""), str(body.get("char_id") or "")
-    if action not in {"pause", "resume", "dry_run", "freeze", "apply", "run", "rollback", "evidence_only"} or not uid or not char_id:
+    if action not in {"pause", "resume", "dry_run", "freeze", "apply", "run", "rollback", "evidence_only", "calibrate"} or not uid or not char_id:
         raise HTTPException(status_code=422, detail={"code": "invalid_reconciliation_control"})
     _scope(uid, char_id)
     from core.memory import history_reconciliation
@@ -148,6 +148,17 @@ async def control_memory_history_reconciliation(
             return history_reconciliation.rollback_batch(
                 scope, source_ids=body.get("source_ids"),
                 reason=str(body.get("reason") or "operator_rollback"),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail={"code": str(exc)}) from exc
+    if action == "calibrate":
+        try:
+            sample_size = int(body.get("sample_size") or 3)
+            if not 1 <= sample_size <= 8:
+                raise ValueError("invalid_sample_size")
+            return await history_reconciliation.calibrate_side_chain(
+                scope, sample_size=sample_size,
+                preset=str(body.get("preset") or "便宜小模型grok-see"),
             )
         except ValueError as exc:
             raise HTTPException(status_code=422, detail={"code": str(exc)}) from exc

@@ -61,7 +61,9 @@ idempotency keys.
   manifest seeds pending rows without copying source prose; a changed revision
   leaves the old row and opens a new pending row. Bounded claims take a stably
   ordered
-  `pending`/`retryable_failed` slice, mark it `running` with a task id and
+  `pending`/`retryable_failed` slice by `priority_class`
+  (correction → active_theme → recent → remaining), keep a cold-theme share for
+  remaining history, mark the slice `running` with a task id and
   lease, and look up already-linked dossiers by evidence ID. Titles, aliases
   and membership lists are presentation only and are never idempotency keys.
   An expired lease is reconciled against `processing_commits` before retry: a
@@ -177,10 +179,13 @@ The admin surface exposes content-free effective state and backlog through
 through `GET /memory/dossiers*` (`memory.read`), history-item receipts through
 `GET /memory/history-source-items` (`memory.read`), and configuration/control
 through `PATCH /settings/memory-consolidation` plus
-`POST /memory-consolidation/control` (`admin`). Identifiers in metadata-only
+`POST /memory-consolidation/control` (`admin`). Isolated calibration is
+`POST /memory-history-reconciliation/control` with `action=calibrate`; it
+records redacted latency/token/retry facts and freezes the first-night range
+without applying patches. Identifiers in metadata-only
 observability are hashed; dossier prose and evidence remain behind `memory.read`.
 
 Production enablement is not implied by implementation or tests. It requires
-Brief 259 A-C plus the separately authorized Brief 258 F shadow, scoped and
+Brief 259 C6-C7 plus D and the separately authorized Brief 258 F shadow, scoped and
 expansion gates. Desktop/mobile protocols, queues, ack/TTL and native settings
 are unchanged.

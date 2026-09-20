@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 import sqlite3
 import threading
@@ -21,12 +22,13 @@ from typing import Any, Iterable, Mapping
 from core.memory.path_resolver import resolve_path
 from core.memory.scope import MemoryScope
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 SOURCE_POLICY_REVISION = "memory-dossier-source-policy.v1"
 RULES_REVISION = "memory-dossier-rules.v1"
 MAX_BATCH_OPERATIONS = 100
 MAX_CLAIM_BATCH = 100
 DEFAULT_LEASE_SECONDS = 900
+DEFAULT_COLD_THEME_SHARE = 0.25
 MAX_TEXT_CHARS = 4000
 _ID_RE = re.compile(r"^[0-9a-f]{32}$")
 _VALID_CHAINS = frozenset({"owner_chat", "maintenance", "admin_recovery"})
@@ -112,7 +114,7 @@ def _connect(path: Path, *, readonly: bool = False) -> sqlite3.Connection:
 
 def _initialize(connection: sqlite3.Connection) -> None:
     version = int(connection.execute("PRAGMA user_version").fetchone()[0])
-    if version not in {0, 1, 2, 3, SCHEMA_VERSION}:
+    if version not in {0, 1, 2, 3, 4, SCHEMA_VERSION}:
         raise DossierError("schema_mismatch")
     connection.executescript(
         """
@@ -181,6 +183,7 @@ def _initialize(connection: sqlite3.Connection) -> None:
           last_error TEXT NOT NULL, revisit_condition TEXT NOT NULL, updated_at REAL NOT NULL,
           rule_version TEXT NOT NULL DEFAULT '', target_revision TEXT NOT NULL DEFAULT '',
           lease_until REAL NOT NULL DEFAULT 0, task_id TEXT NOT NULL DEFAULT '',
+          priority_class TEXT NOT NULL DEFAULT 'remaining',
           PRIMARY KEY(store_kind, source_id, source_revision)
         );
         CREATE TABLE IF NOT EXISTS processing_commits (
@@ -203,6 +206,8 @@ def _initialize(connection: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_dossier_status_title ON dossiers(status, title);
         CREATE INDEX IF NOT EXISTS idx_membership_occurrence ON memberships(occurrence_id, status);
         CREATE INDEX IF NOT EXISTS idx_source_items_status ON source_items(status, store_kind, ingest_sequence);
+        CREATE INDEX IF NOT EXISTS idx_source_items_priority
+          ON source_items(status, priority_class, store_kind, ingest_sequence);
         """
     )
     columns = {str(row[1]) for row in connection.execute("PRAGMA table_info(source_items)")}
@@ -214,6 +219,10 @@ def _initialize(connection: sqlite3.Connection) -> None:
         connection.execute("ALTER TABLE source_items ADD COLUMN lease_until REAL NOT NULL DEFAULT 0")
     if "task_id" not in columns:
         connection.execute("ALTER TABLE source_items ADD COLUMN task_id TEXT NOT NULL DEFAULT ''")
+    if "priority_class" not in columns:
+        connection.execute(
+            "ALTER TABLE source_items ADD COLUMN priority_class TEXT NOT NULL DEFAULT 'remaining'"
+        )
     connection.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
 
 
@@ -817,11 +826,57 @@ def reopen_evidence_only(scope: MemoryScope, *, source_ids: list[str] | None = N
 
 
 _SOURCE_ITEM_STATES = ("pending", "running", "committed", "retryable_failed", "deferred", "excluded")
+PRIORITY_CLASSES = ("correction", "active_theme", "recent", "remaining")
+_PRIORITY_RANK = {name: index for index, name in enumerate(PRIORITY_CLASSES)}
+
+
+def _priority_class(value: object) -> str:
+    name = str(value or "remaining").strip()
+    return name if name in _PRIORITY_RANK else "remaining"
+
+
+def _priority_order_sql() -> str:
+    cases = " ".join(
+        f"WHEN '{name}' THEN {rank}" for name, rank in _PRIORITY_RANK.items()
+    )
+    return f"CASE priority_class {cases} ELSE {len(_PRIORITY_RANK)} END"
+
+
+def _claim_slot_split(limit: int, cold_theme_share: float, has_remaining: bool) -> tuple[int, int]:
+    """Reserve a fair remaining/cold slice so high-priority work cannot starve it."""
+    if not has_remaining or limit <= 1:
+        return limit, 0
+    share = min(0.5, max(0.0, float(cold_theme_share)))
+    if share <= 0:
+        return limit, 0
+    reserved = min(limit - 1, max(1, math.ceil(limit * share)))
+    return limit - reserved, reserved
+
+
+def _select_claim_rows(hot_rows: list[sqlite3.Row], cold_rows: list[sqlite3.Row],
+                       hot_slots: int, cold_slots: int, limit: int) -> list[sqlite3.Row]:
+    selected = list(hot_rows[:hot_slots])
+    selected.extend(cold_rows[:cold_slots])
+    if len(selected) < limit:
+        used = {(row["store_kind"], row["source_id"], row["source_revision"]) for row in selected}
+        leftovers = [
+            row for row in list(hot_rows) + list(cold_rows)
+            if (row["store_kind"], row["source_id"], row["source_revision"]) not in used
+        ]
+        selected.extend(leftovers[:limit - len(selected)])
+    selected.sort(key=lambda row: (
+        _PRIORITY_RANK.get(_priority_class(row["priority_class"] if "priority_class" in row.keys() else "remaining"),
+                           len(_PRIORITY_RANK)),
+        str(row["store_kind"]),
+        int(row["ingest_sequence"] or 0),
+        str(row["source_id"]),
+    ))
+    return selected[:limit]
 
 
 def _source_item_select_extras(connection: sqlite3.Connection) -> str:
     columns = {str(row[1]) for row in connection.execute("PRAGMA table_info(source_items)")}
-    extras = [name for name in ("rule_version", "target_revision", "lease_until", "task_id")
+    extras = [name for name in ("rule_version", "target_revision", "lease_until", "task_id", "priority_class")
               if name in columns]
     return ("," + ",".join(extras)) if extras else ""
 
@@ -837,6 +892,7 @@ def _source_item_payload(row: sqlite3.Row) -> dict[str, Any]:
     item.setdefault("target_revision", "")
     item.setdefault("lease_until", 0.0)
     item.setdefault("task_id", "")
+    item["priority_class"] = _priority_class(item.get("priority_class"))
     return item
 
 
@@ -868,6 +924,7 @@ def seed_source_items(scope: MemoryScope, items: list[Mapping[str, Any]], *,
                 input_digest = _text(item.get("input_digest") or source_revision, required=True, limit=128)
                 rule_version = _text(item.get("rule_version") or RULES_REVISION, required=True, limit=128)
                 revisit = _text(item.get("revisit_condition") or "source_revision_changed", limit=128)
+                priority = _priority_class(item.get("priority_class"))
                 existing = connection.execute(
                     "SELECT status FROM source_items WHERE store_kind=? AND source_id=? AND source_revision=?",
                     (store_kind, source_id, source_revision),
@@ -879,10 +936,10 @@ def seed_source_items(scope: MemoryScope, items: list[Mapping[str, Any]], *,
                     """INSERT INTO source_items
                       (store_kind,source_id,source_revision,ingest_sequence,status,semantic_outcomes_json,
                        attempt,operation_id,input_digest,last_error,revisit_condition,updated_at,
-                       rule_version,target_revision)
-                      VALUES(?,?,?,?,'pending','[]',0,'',?, '', ?, ?, ?, '')""",
+                       rule_version,target_revision,priority_class)
+                      VALUES(?,?,?,?,'pending','[]',0,'',?, '', ?, ?, ?, '', ?)""",
                     (store_kind, source_id, source_revision, ingest_sequence, input_digest,
-                     revisit, timestamp, rule_version),
+                     revisit, timestamp, rule_version, priority),
                 )
                 inserted += 1
             connection.commit()
@@ -944,6 +1001,30 @@ def source_item_counts(scope: MemoryScope) -> dict[str, int]:
     return counts
 
 
+def source_item_priority_counts(scope: MemoryScope) -> dict[str, int]:
+    """Return pending/retryable_failed counts by first-night priority class."""
+    scope = _scope(scope)
+    path = _path(scope)
+    counts = {name: 0 for name in PRIORITY_CLASSES}
+    if not path.exists():
+        return counts
+    with _lock(path), _connect(path, readonly=True) as connection:
+        columns = {str(row[1]) for row in connection.execute("PRAGMA table_info(source_items)")}
+        if "priority_class" not in columns:
+            remaining = connection.execute(
+                "SELECT COUNT(*) FROM source_items WHERE status IN ('pending','retryable_failed')"
+            ).fetchone()
+            counts["remaining"] = int(remaining[0] or 0)
+            return counts
+        rows = connection.execute(
+            "SELECT priority_class,COUNT(*) FROM source_items "
+            "WHERE status IN ('pending','retryable_failed') GROUP BY priority_class"
+        )
+        for name, total in rows:
+            counts[_priority_class(name)] += int(total)
+    return counts
+
+
 def _reconcile_source_item_leases_unlocked(connection: sqlite3.Connection, now: float) -> dict[str, int]:
     """Recover expired running rows from durable receipts before any retry."""
     extras = _source_item_select_extras(connection)
@@ -1002,7 +1083,8 @@ def reconcile_source_item_leases(scope: MemoryScope, *, now: float | None = None
 
 
 def claim_source_items(scope: MemoryScope, *, limit: int = 10, lease_seconds: int = DEFAULT_LEASE_SECONDS,
-                       task_id: str = "", store_kind: str = "", now: float | None = None) -> dict[str, Any]:
+                       task_id: str = "", store_kind: str = "", now: float | None = None,
+                       cold_theme_share: float = DEFAULT_COLD_THEME_SHARE) -> dict[str, Any]:
     """Claim a bounded, stably ordered source-item batch with a recoverable lease."""
     scope = _scope(scope)
     limit = min(MAX_CLAIM_BATCH, max(1, int(limit)))
@@ -1026,13 +1108,32 @@ def claim_source_items(scope: MemoryScope, *, limit: int = 10, lease_seconds: in
                 filters.append("store_kind=?")
                 params.append(kind)
             extras = _source_item_select_extras(connection)
-            rows = connection.execute(
+            select_sql = (
                 f"""SELECT store_kind,source_id,source_revision,ingest_sequence,status,semantic_outcomes_json,
                            attempt,operation_id,input_digest,last_error,revisit_condition,updated_at{extras}
-                    FROM source_items WHERE {' AND '.join(filters)}
-                    ORDER BY store_kind,ingest_sequence,source_id LIMIT ?""",
-                (*params, limit),
-            ).fetchall()
+                    FROM source_items WHERE """
+            )
+            where = " AND ".join(filters)
+            columns = {str(row[1]) for row in connection.execute("PRAGMA table_info(source_items)")}
+            if "priority_class" in columns:
+                hot_rows = connection.execute(
+                    select_sql + where + " AND priority_class!='remaining' "
+                    f"ORDER BY {_priority_order_sql()},store_kind,ingest_sequence,source_id LIMIT ?",
+                    (*params, limit),
+                ).fetchall()
+                cold_rows = connection.execute(
+                    select_sql + where + " AND priority_class='remaining' "
+                    "ORDER BY store_kind,ingest_sequence,source_id LIMIT ?",
+                    (*params, limit),
+                ).fetchall()
+                hot_slots, cold_slots = _claim_slot_split(limit, cold_theme_share, bool(cold_rows))
+                rows = _select_claim_rows(hot_rows, cold_rows, hot_slots, cold_slots, limit)
+            else:
+                rows = connection.execute(
+                    select_sql + where +
+                    " ORDER BY store_kind,ingest_sequence,source_id LIMIT ?",
+                    (*params, limit),
+                ).fetchall()
             items: list[dict[str, Any]] = []
             for row in rows:
                 connection.execute(

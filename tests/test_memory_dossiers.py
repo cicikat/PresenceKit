@@ -195,6 +195,46 @@ def test_claim_is_bounded_stable_and_does_not_use_title_as_key(sandbox):
     assert dossiers.list_source_items(scope, status="pending")["total"] == 0
 
 
+def test_claim_orders_priority_class_before_store_kind(sandbox):
+    from core.memory import dossiers
+
+    scope = _scope(uid="priority-claim-owner")
+    dossiers.seed_source_items(scope, [
+        {"store_kind": "event", "source_id": "evt-remaining", "source_revision": "r1",
+         "ingest_sequence": 1, "input_digest": "d1", "priority_class": "remaining"},
+        {"store_kind": "event", "source_id": "evt-recent", "source_revision": "r1",
+         "ingest_sequence": 2, "input_digest": "d2", "priority_class": "recent"},
+        {"store_kind": "event", "source_id": "evt-theme", "source_revision": "r1",
+         "ingest_sequence": 3, "input_digest": "d3", "priority_class": "active_theme"},
+        {"store_kind": "event", "source_id": "evt-fix", "source_revision": "r1",
+         "ingest_sequence": 4, "input_digest": "d4", "priority_class": "correction"},
+    ], now=10)
+    claimed = dossiers.claim_source_items(scope, limit=4, now=20, cold_theme_share=0.0)
+    assert [item["source_id"] for item in claimed["items"]] == [
+        "evt-fix", "evt-theme", "evt-recent", "evt-remaining",
+    ]
+    assert dossiers.source_item_priority_counts(scope)["correction"] == 0
+
+
+def test_claim_reserves_remaining_cold_share(sandbox):
+    from core.memory import dossiers
+
+    scope = _scope(uid="cold-share-owner")
+    items = [
+        {"store_kind": "event", "source_id": f"evt-hot-{index}", "source_revision": "r1",
+         "ingest_sequence": index, "input_digest": f"h{index}", "priority_class": "recent"}
+        for index in range(1, 5)
+    ] + [
+        {"store_kind": "event", "source_id": "evt-cold", "source_revision": "r1",
+         "ingest_sequence": 99, "input_digest": "cold", "priority_class": "remaining"},
+    ]
+    dossiers.seed_source_items(scope, items, now=10)
+    claimed = dossiers.claim_source_items(scope, limit=4, now=20, cold_theme_share=0.25)
+    classes = [item["priority_class"] for item in claimed["items"]]
+    assert classes.count("remaining") == 1
+    assert "evt-cold" in [item["source_id"] for item in claimed["items"]]
+
+
 def test_related_dossiers_follow_source_ids_not_titles(sandbox):
     from core.memory import dossiers
 

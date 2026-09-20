@@ -2384,12 +2384,18 @@ async function loadMemoryHistoryReconciliation() {
   try {
     const data = await api('GET', _memoryConsolidationQueryPath('/observability/memory-history-reconciliation'));
     const counts = data.source_item_counts || data.counts || {};
+    const calibration = data.last_calibration || {};
+    const range = data.first_night_range || {};
+    const qualityHits = Object.entries(calibration.quality_hits || {}).filter(([, hit]) => hit).map(([name]) => name);
     const cards = [
       ['暂停', data.paused ? '是' : '否', data.pause_reason || '-'],
       ['源项总量', data.source_item_total ?? data.total ?? 0, `可执行 ${data.source_item_executable ?? data.executable ?? 0}`],
       ['已提交', counts.committed || 0, `排除 ${counts.excluded || 0}`],
       ['待核实', counts.deferred || 0, `失败 ${counts.retryable_failed || 0}`],
       ['清单修订', data.manifest_revision || '-', data.frozen_manifest_revision ? '已冻结' : '未冻结'],
+      ['首夜范围', range.priority_order ? range.priority_order.join(' → ') : '-', `冷门份额 ${range.cold_theme_share ?? '-'}`],
+      ['隔离校准', calibration.updated_at ? `${calibration.mean_wall_seconds ?? '-'}s` : '未校准', calibration.unlimited_run_allowed === false ? '禁止无限额' : '-'],
+      ['质量旗标', qualityHits.length ? qualityHits.join(',') : '无', calibration.budget_unset ? '预算未定' : `重试 ${calibration.retry_rate ?? 0}`],
     ];
     host.className = '';
     host.innerHTML = `<div class="autonomy-overview-grid">${cards.map(([label, value, detail]) =>
@@ -2430,6 +2436,10 @@ async function controlMemoryHistoryReconciliation(action) {
         const status = await api('GET', _memoryConsolidationQueryPath('/observability/memory-history-reconciliation'));
         body.manifest_revision = status.manifest_revision || '';
       }
+    }
+    if (action === 'calibrate') {
+      body.sample_size = 3;
+      body.preset = '便宜小模型grok-see';
     }
     await api('POST', '/memory-history-reconciliation/control', body);
     toast('操作已完成', 'ok');

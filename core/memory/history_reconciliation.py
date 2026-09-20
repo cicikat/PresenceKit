@@ -25,6 +25,15 @@ SOURCES = ("event_store", "event_log", "mid_term", "episodic", "storyline", "use
 STATES = ("pending", "running", "committed", "retryable_failed", "deferred", "excluded")
 RULES_VERSION = "history-reconciliation-rules.v1"
 FIRST_NIGHT_WINDOW_SECONDS = 30 * 24 * 3600
+CALIBRATION_SCHEMA = "memory-history-calibration.v1"
+DEFAULT_COLD_THEME_SHARE = 0.25
+HEADROOM_RATE = 0.25
+HEADROOM_FAIL = 0.15
+HEADROOM_FOREGROUND = 0.20
+QUALITY_CLASSES = (
+    "duplicate_facts", "feeling_as_fact", "false_discard",
+    "classification_fragmentation", "stale_conclusion",
+)
 _DAY_NAME_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})\.md$")
 
 
@@ -405,6 +414,69 @@ def read_state(scope: MemoryScope) -> dict[str, Any]:
                 "last_error": "state_corrupt"}
 
 
+def _event_priority_flags(scope: MemoryScope) -> dict[str, dict[str, bool]]:
+    """Return content-free correction / active-theme flags keyed by event ID."""
+    path = resolve_path(scope, "event_store")
+    flags: dict[str, dict[str, bool]] = {}
+    if not path.exists():
+        return flags
+    from core.memory import dossiers
+    with sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True, timeout=0.25) as connection:
+        connection.row_factory = sqlite3.Row
+        for row in connection.execute(
+            """SELECT event_id,redaction_state,relation_hints_json FROM events
+               WHERE uid=? AND char_id=? AND realm=?""",
+            (scope.uid, scope.character_id, scope.domain),
+        ):
+            event_id = str(row["event_id"] or "")
+            hints = {}
+            try:
+                parsed = json.loads(str(row["relation_hints_json"] or "{}"))
+                if isinstance(parsed, dict):
+                    hints = parsed
+            except (TypeError, ValueError, json.JSONDecodeError):
+                hints = {}
+            flags[event_id] = {
+                "correction": (
+                    str(row["redaction_state"] or "") == "tombstoned"
+                    or bool(str(hints.get("correction_of") or "").strip())
+                ),
+                "active_theme": False,
+            }
+    event_ids = list(flags)
+    related: list[dict[str, Any]] = []
+    for offset in range(0, len(event_ids), 100):
+        related.extend(dossiers.related_dossiers_for_sources(
+            scope,
+            [{"store_kind": "event", "source_id": event_id} for event_id in event_ids[offset:offset + 100]],
+            limit=50,
+        ))
+    for item in related:
+        if item.get("status") != "active" or int(item.get("needs_recompute") or 0):
+            continue
+        for source_id in item.get("matching_source_ids") or []:
+            current = flags.setdefault(str(source_id), {"correction": False, "active_theme": False})
+            current["active_theme"] = True
+    return flags
+
+
+def _priority_for_item(store_kind: str, source_id: str, stamp: float | None, cutoff: float,
+                       flags: dict[str, dict[str, bool]]) -> str:
+    if store_kind == "storyline":
+        if stamp is not None and float(stamp) >= cutoff:
+            return "active_theme"
+        return "remaining"
+    if store_kind == "event":
+        current = flags.get(source_id) or {}
+        if current.get("correction"):
+            return "correction"
+        if current.get("active_theme"):
+            return "active_theme"
+    if stamp is not None and float(stamp) >= cutoff:
+        return "recent"
+    return "remaining"
+
+
 def _event_log_source_items(scope: MemoryScope) -> list[dict[str, Any]]:
     """Enumerate event-log files by filename and metadata hash; never store paths or bodies."""
     directory = resolve_path(scope, "event_log")
@@ -415,6 +487,11 @@ def _event_log_source_items(scope: MemoryScope) -> list[dict[str, Any]]:
         info = _file_info(path)
         if not info["exists"] or not info["readable"]:
             continue
+        match = _DAY_NAME_RE.match(path.name)
+        stamp = None
+        if match:
+            day = datetime.strptime(match.group(1), "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            stamp = day.timestamp()
         items.append({
             "store_kind": "event_log",
             "source_id": path.name[:512],
@@ -423,21 +500,33 @@ def _event_log_source_items(scope: MemoryScope) -> list[dict[str, Any]]:
             "input_digest": str(info["revision"]),
             "rule_version": RULES_VERSION,
             "revisit_condition": "source_revision_changed",
+            "occurred_at": stamp,
         })
     return items
 
 
-def enumerate_source_items(scope: MemoryScope) -> list[dict[str, Any]]:
+def enumerate_source_items(scope: MemoryScope, *, now: float | None = None) -> list[dict[str, Any]]:
     """Return content-free source-item identities for the frozen inventory kinds."""
-    inventory = {item["store_kind"]: item for item in build_inventory(scope.uid, scope.character_id)["items"]}
+    generated_at = float(time.time() if now is None else now)
+    cutoff = generated_at - FIRST_NIGHT_WINDOW_SECONDS
+    inventory = {item["store_kind"]: item for item in build_inventory(scope.uid, scope.character_id, now=generated_at)["items"]}
     records: list[dict[str, Any]] = []
     for store_kind in ("event_store", "mid_term", "episodic", "storyline", "user_identity"):
         revision = str((inventory.get(store_kind) or {}).get("source_revision") or "")
         records.extend(_derived_source_items(scope, store_kind, revision))
     records.extend(_event_log_source_items(scope))
+    flags = _event_priority_flags(scope)
     for item in records:
         item.setdefault("rule_version", RULES_VERSION)
         item.setdefault("revisit_condition", "source_revision_changed")
+        stamp = item.get("occurred_at")
+        if not isinstance(stamp, (int, float)):
+            stamp = item.get("ingested_at")
+        item["priority_class"] = _priority_for_item(
+            str(item["store_kind"]), str(item["source_id"]),
+            float(stamp) if isinstance(stamp, (int, float)) else None,
+            cutoff, flags,
+        )
     records.sort(key=lambda item: (str(item["store_kind"]), int(item["ingest_sequence"]), str(item["source_id"])))
     return records
 
@@ -460,7 +549,7 @@ def create_manifest(scope: MemoryScope, *, now: float | None = None) -> dict[str
                       "input_digest": str(previous.get("input_digest") or item["source_revision"]),
                       "revisit_condition": str(previous.get("revisit_condition") or "source_revision_changed")[:128],
                       "last_error": str(previous.get("last_error") or "")[:128]}
-    source_records = enumerate_source_items(scope)
+    source_records = enumerate_source_items(scope, now=now)
     from core.memory import dossiers
     seeded = {"inserted": 0, "skipped": 0, "total": 0}
     for offset in range(0, len(source_records), 1000):
@@ -491,18 +580,282 @@ def set_paused(scope: MemoryScope, paused: bool, *, reason: str = "") -> dict[st
 
 
 def freeze_manifest(scope: MemoryScope, *, manifest_revision: str | None = None) -> dict[str, Any]:
-    """Freeze one manifest revision before any first-night apply."""
+    """Freeze one manifest revision and its first-night priority range."""
     state = read_state(scope)
     manifest = state.get("manifest") if isinstance(state.get("manifest"), dict) else None
     revision = str((manifest or {}).get("manifest_revision") or "")
     if not revision or (manifest_revision and manifest_revision != revision):
         raise ValueError("manifest_revision_mismatch")
+    from core.memory import dossiers
+    inventory = (manifest or {}).get("inventory") if isinstance((manifest or {}).get("inventory"), dict) else {}
+    watermark = inventory.get("watermark") if isinstance(inventory.get("watermark"), dict) else {}
+    ranges = inventory.get("ranges") if isinstance(inventory.get("ranges"), dict) else {}
+    first_night_range = {
+        "priority_order": ["correction", "active_theme", "recent", "remaining"],
+        "first_night_cutoff": watermark.get("first_night_cutoff"),
+        "first_night_window_seconds": int(
+            watermark.get("first_night_window_seconds") or FIRST_NIGHT_WINDOW_SECONDS
+        ),
+        "inventory_first_night_candidates": int(ranges.get("first_night_candidates") or 0),
+        "inventory_remaining_history": int(ranges.get("remaining_history") or 0),
+        "source_item_priority_counts": dossiers.source_item_priority_counts(scope),
+        "cold_theme_share": DEFAULT_COLD_THEME_SHARE,
+        "note": "30-day recent window is the initial suggestion; freeze uses this inventory snapshot.",
+    }
     state["frozen_manifest_revision"] = revision
     state["frozen_at"] = time.time()
     state["updated_at"] = state["frozen_at"]
+    state["first_night_range"] = first_night_range
     if not safe_write_json(_state_path(scope), state, keep_bak=True):
         raise OSError("history_reconciliation_state_write_failed")
-    return {"frozen": True, "manifest_revision": revision, "frozen_at": state["frozen_at"]}
+    return {"frozen": True, "manifest_revision": revision, "frozen_at": state["frozen_at"],
+            "first_night_range": first_night_range}
+
+
+def _inspect_quality(operations: list[dict[str, Any]], events: list[dict[str, Any]],
+                     related: list[dict[str, Any]]) -> dict[str, Any]:
+    """Flag structural quality risks; this is not a semantic score."""
+    hits = {name: False for name in QUALITY_CLASSES}
+    source_ids = [str(item.get("source_id") or "") for item in events]
+    related_sources = {
+        str(source_id)
+        for item in related
+        for source_id in (item.get("matching_source_ids") or [])
+    }
+    titles: list[str] = []
+    cited: list[str] = []
+    created_dossiers = 0
+    revises = 0
+    retires = 0
+    for operation in operations:
+        action = str(operation.get("action") or "")
+        if action == "create_dossier":
+            created_dossiers += 1
+            titles.append(str(operation.get("title") or "").strip().lower())
+        elif action == "create_occurrence":
+            evidence_ids = [
+                str(ref.get("source_id") or "")
+                for ref in (operation.get("evidence") or [])
+                if isinstance(ref, dict)
+            ]
+            cited.extend(evidence_ids)
+            if not operation.get("occurrence_key") and set(evidence_ids) & related_sources:
+                hits["duplicate_facts"] = True
+            if str(operation.get("assertion_kind") or "") == "user_stated" and operation.get("character_feeling"):
+                hits["feeling_as_fact"] = True
+        elif action == "revise_understanding":
+            revises += 1
+            if operation.get("character_feeling"):
+                hits["feeling_as_fact"] = True
+        elif action == "set_dossier_status" and str(operation.get("status") or "") == "retired":
+            retires += 1
+    if len(titles) != len(set(title for title in titles if title)):
+        hits["classification_fragmentation"] = True
+    if created_dossiers > 1 or (created_dossiers and related):
+        hits["classification_fragmentation"] = True
+    if cited:
+        from collections import Counter
+        if any(count > 1 for count in Counter(cited).values()):
+            hits["duplicate_facts"] = True
+    needs_recompute = any(int(item.get("needs_recompute") or 0) for item in related)
+    if needs_recompute and revises == 0 and retires == 0:
+        hits["stale_conclusion"] = True
+    correction_sources = {str(item.get("source_id") or "") for item in events if item.get("priority_class") == "correction"}
+    if not operations and correction_sources:
+        hits["false_discard"] = True
+    if operations and not cited and source_ids and created_dossiers == 0 and revises == 0:
+        hits["false_discard"] = True
+    return {
+        "classes": QUALITY_CLASSES,
+        "hits": hits,
+        "operations": len(operations),
+        "empty_patch": not operations,
+        "note": "structural flags only; empty patch is evidence_only unless it drops a correction",
+    }
+
+
+def _rate_band(samples: list[dict[str, Any]], *, remaining_tokens: int,
+               daily_token_budget: int, daily_call_budget: int,
+               daily_wall_seconds: int) -> dict[str, Any]:
+    calls = len(samples)
+    budget_unset = daily_token_budget <= 0 or daily_call_budget <= 0 or daily_wall_seconds <= 0
+    remaining = max(0, int(remaining_tokens))
+    headroom = 1.0 / ((1.0 - HEADROOM_RATE) * (1.0 - HEADROOM_FAIL) * (1.0 - HEADROOM_FOREGROUND))
+    empty = {
+        "sample_calls": 0,
+        "mean_wall_seconds": 0.0,
+        "mean_input_tokens": 0,
+        "mean_output_tokens": 0,
+        "retry_rate": 0.0,
+        "measured_tokens_per_second": 0.0,
+        "admitted_tokens_per_second": 0.0,
+        "headroom": {
+            "rate_limit": HEADROOM_RATE,
+            "failure": HEADROOM_FAIL,
+            "foreground": HEADROOM_FOREGROUND,
+            "combined": round(headroom, 4),
+        },
+        "remaining_tokens": remaining,
+        "estimated_seconds": None,
+        "daily_token_budget": int(daily_token_budget),
+        "daily_call_budget": int(daily_call_budget),
+        "daily_wall_seconds": int(daily_wall_seconds),
+        "budget_unset": budget_unset,
+        "unlimited_run_allowed": False,
+        "binding_limit": "no_sample" if not calls else ("budget_unset" if budget_unset else "admitted_rate"),
+        "notes": "Expected hours use measured tokens/latency plus quota, failure and foreground headroom; record counts are not a rate.",
+    }
+    if not calls:
+        return empty
+    latencies = [float(item.get("wall_seconds") or 0) for item in samples]
+    input_tokens = [int(item.get("input_tokens") or 0) for item in samples]
+    output_tokens = [int(item.get("output_tokens") or 0) for item in samples]
+    retries = sum(int(item.get("retries") or 0) for item in samples)
+    mean_latency = sum(latencies) / calls
+    mean_input = sum(input_tokens) / calls
+    mean_output = sum(output_tokens) / calls
+    retry_rate = retries / max(1, calls + retries)
+    tokens_per_call = max(1.0, mean_input + mean_output)
+    seconds_per_call = max(0.001, mean_latency) * (1.0 + retry_rate)
+    measured_tokens_per_second = tokens_per_call / seconds_per_call
+    admitted_tokens_per_second = measured_tokens_per_second / headroom
+    estimated_seconds = remaining / admitted_tokens_per_second if admitted_tokens_per_second else None
+    empty.update({
+        "sample_calls": calls,
+        "mean_wall_seconds": round(mean_latency, 4),
+        "mean_input_tokens": int(round(mean_input)),
+        "mean_output_tokens": int(round(mean_output)),
+        "retry_rate": round(retry_rate, 4),
+        "measured_tokens_per_second": round(measured_tokens_per_second, 4),
+        "admitted_tokens_per_second": round(admitted_tokens_per_second, 4),
+        "estimated_seconds": None if estimated_seconds is None else round(estimated_seconds, 2),
+        "binding_limit": "budget_unset" if budget_unset else "admitted_rate",
+    })
+    return empty
+
+
+async def calibrate_side_chain(
+    scope: MemoryScope,
+    *,
+    sample_size: int = 3,
+    preset: str = "便宜小模型grok-see",
+    chat=None,
+    now: float | None = None,
+) -> dict[str, Any]:
+    """Run an isolated same-character side-chain sample; never a production first-night."""
+    sample_size = min(8, max(1, int(sample_size)))
+    generated_at = float(time.time() if now is None else now)
+    inventory = build_inventory(scope.uid, scope.character_id, now=generated_at)
+    from core.memory import consolidation_worker, dossiers
+    cfg = consolidation_worker.config()
+    events = dossiers.maintenance_candidates(scope, limit=sample_size, max_chars=int(cfg["max_input_chars"]))
+    related = dossiers.related_dossiers_for_sources(scope, events) if events else []
+    identity, identity_revision = consolidation_worker._identity_context(scope.character_id)
+    current = [{**item, "summary": str(item.get("summary") or "")[:320]}
+               for item in dossiers.search(scope, "", limit=20)]
+    flags = _event_priority_flags(scope)
+    for event in events:
+        event["priority_class"] = _priority_for_item(
+            "event", str(event["source_id"]), event.get("ingested_at") or event.get("occurred_at"),
+            generated_at - FIRST_NIGHT_WINDOW_SECONDS, flags,
+        )
+    samples: list[dict[str, Any]] = []
+    quality = _inspect_quality([], events, related)
+    if events:
+        prompt = consolidation_worker._prompt(identity, current, events, related)
+        input_tokens = _estimate_tokens(prompt)
+        raw = ""
+        retries = 0
+        operations: list[dict[str, Any]] = []
+        error = ""
+        started = time.monotonic()
+        caller = chat
+        if caller is None:
+            from core import llm_client
+            async def caller(messages, **kwargs):
+                return await llm_client.chat(
+                    messages, max_tokens_override=int(cfg["max_tokens_per_call"]),
+                    call_category="consolidation", char_id=scope.character_id,
+                    preset_name=preset,
+                )
+        for attempt in range(2):
+            try:
+                raw = await caller([{"role": "system", "content": prompt}])
+                operations = consolidation_worker._parse(raw)
+                error = ""
+                break
+            except Exception as exc:
+                retries += 1
+                error = type(exc).__name__[:64]
+                raw = ""
+                operations = []
+        wall_seconds = time.monotonic() - started
+        output_tokens = _estimate_tokens(str(raw or ""))
+        quality = _inspect_quality(operations, events, related)
+        samples.append({
+            "wall_seconds": round(wall_seconds, 4),
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "retries": retries,
+            "error": error,
+            "operations": len(operations),
+            "applied": False,
+        })
+    rate = _rate_band(
+        samples,
+        remaining_tokens=int(inventory.get("estimated_tokens") or 0),
+        daily_token_budget=int(cfg["daily_token_budget"]),
+        daily_call_budget=int(cfg["daily_call_budget"]),
+        daily_wall_seconds=int(cfg["daily_wall_seconds"]),
+    )
+    freeze = None
+    state = read_state(scope)
+    if not isinstance((state.get("manifest") or {}), dict) or not (state.get("manifest") or {}).get("manifest_revision"):
+        create_manifest(scope, now=generated_at)
+        state = read_state(scope)
+    try:
+        freeze = freeze_manifest(scope, manifest_revision=str((state.get("manifest") or {}).get("manifest_revision") or "") or None)
+    except ValueError:
+        freeze = {"frozen": False, "reason": "manifest_revision_mismatch"}
+    report = {
+        "schema_version": CALIBRATION_SCHEMA,
+        "isolated": True,
+        "production_first_night": False,
+        "preset": str(preset)[:128],
+        "identity_revision": identity_revision,
+        "sample_size": len(events),
+        "model_calls": 1 if events else 0,
+        "samples": samples,
+        "quality": quality,
+        "rate_band": rate,
+        "first_night_range": None if freeze is None else freeze.get("first_night_range"),
+        "frozen": bool((freeze or {}).get("frozen")),
+        "inventory_revision": inventory.get("inventory_revision"),
+        "note": "Calibration records redacted latency/token/retry facts only; it does not admit production first-night.",
+    }
+    state = read_state(scope)
+    state["last_calibration"] = {
+        "schema_version": CALIBRATION_SCHEMA,
+        "isolated": True,
+        "production_first_night": False,
+        "preset": report["preset"],
+        "sample_size": report["sample_size"],
+        "model_calls": report["model_calls"],
+        "mean_wall_seconds": rate["mean_wall_seconds"],
+        "mean_input_tokens": rate["mean_input_tokens"],
+        "mean_output_tokens": rate["mean_output_tokens"],
+        "retry_rate": rate["retry_rate"],
+        "admitted_tokens_per_second": rate["admitted_tokens_per_second"],
+        "budget_unset": rate["budget_unset"],
+        "unlimited_run_allowed": False,
+        "quality_hits": quality["hits"],
+        "frozen": report["frozen"],
+        "first_night_cutoff": None if freeze is None else (freeze.get("first_night_range") or {}).get("first_night_cutoff"),
+        "updated_at": generated_at,
+    }
+    if not safe_write_json(_state_path(scope), state, keep_bak=True):
+        raise OSError("history_reconciliation_state_write_failed")
+    return report
 
 
 def apply_dry_run(scope: MemoryScope, *, backup_verified: bool = False) -> dict[str, Any]:
@@ -695,7 +1048,7 @@ def _derived_source_items(scope: MemoryScope, store_kind: str, source_revision: 
             with sqlite3.connect(path) as connection:
                 connection.row_factory = sqlite3.Row
                 event_rows = connection.execute(
-                    """SELECT rowid AS ingest_sequence,event_id,ingested_at,redaction_state,
+                    """SELECT rowid AS ingest_sequence,event_id,ingested_at,occurred_at,redaction_state,
                               COALESCE(NULLIF(memory_text,''),visible_text) AS text
                        FROM events ORDER BY rowid"""
                 ).fetchall()
@@ -710,7 +1063,9 @@ def _derived_source_items(scope: MemoryScope, store_kind: str, source_revision: 
                 result.append({"store_kind": item_store_kind, "source_id": str(row["event_id"])[:512],
                                "source_revision": revision, "ingest_sequence": int(row["ingest_sequence"]),
                                "input_digest": hashlib.sha256(text.encode("utf-8")).hexdigest(),
-                               "store_watermark": store_watermark, "semantic_outcomes": ["evidence_only"]})
+                               "store_watermark": store_watermark, "semantic_outcomes": ["evidence_only"],
+                               "ingested_at": float(row["ingested_at"] or 0),
+                               "occurred_at": float(row["occurred_at"] or 0)})
             return result
     elif store_kind == "mid_term":
         if path.exists():
@@ -748,23 +1103,36 @@ def _derived_source_items(scope: MemoryScope, store_kind: str, source_revision: 
     for sequence, (source_id, value) in enumerate(values, start=1):
         digest = hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True,
                                            separators=(",", ":"), default=str).encode("utf-8")).hexdigest()
+        stamp = None
+        if isinstance(value, dict):
+            for field in ("occurred_at", "event_time", "updated_at", "created_at", "timestamp", "ts"):
+                if isinstance(value.get(field), (int, float)):
+                    stamp = float(value[field])
+                    break
         result.append({"store_kind": item_store_kind, "source_id": source_id[:512],
                        "source_revision": digest, "ingest_sequence": sequence,
                        "input_digest": digest, "store_watermark": store_watermark,
-                       "semantic_outcomes": ["evidence_only"]})
+                       "semantic_outcomes": ["evidence_only"], "occurred_at": stamp})
     return result
 
 
 def claim_batch(scope: MemoryScope, *, batch_size: int = 10, store_kind: str = "",
-                task_id: str = "", now: float | None = None) -> dict[str, Any]:
+                task_id: str = "", now: float | None = None,
+                cold_theme_share: float | None = None) -> dict[str, Any]:
     """Claim a bounded history batch and inspect already-linked dossiers.
 
     Titles, aliases and membership lists are not used as idempotency keys.
     The lookup only returns dossier IDs, revisions and matching source IDs.
     """
     from core.memory import dossiers
+    share = DEFAULT_COLD_THEME_SHARE if cold_theme_share is None else float(cold_theme_share)
+    state = read_state(scope)
+    frozen_range = state.get("first_night_range") if isinstance(state.get("first_night_range"), dict) else {}
+    if cold_theme_share is None and isinstance(frozen_range.get("cold_theme_share"), (int, float)):
+        share = float(frozen_range["cold_theme_share"])
     claimed = dossiers.claim_source_items(
         scope, limit=max(1, int(batch_size)), store_kind=store_kind, task_id=task_id, now=now,
+        cold_theme_share=share,
     )
     related = dossiers.related_dossiers_for_sources(scope, claimed["items"])
     return {**claimed, "related_dossiers": related}
@@ -955,6 +1323,9 @@ def status(scope: MemoryScope) -> dict[str, Any]:
             "manifest_revision": (state.get("manifest") or {}).get("manifest_revision", ""),
             "frozen_manifest_revision": str(state.get("frozen_manifest_revision") or ""),
             "frozen_at": state.get("frozen_at"),
+            "first_night_range": state.get("first_night_range") if isinstance(state.get("first_night_range"), dict) else None,
+            "source_item_priority_counts": dossiers.source_item_priority_counts(scope),
+            "last_calibration": state.get("last_calibration") if isinstance(state.get("last_calibration"), dict) else None,
             "last_error": str(state.get("last_error") or "")[:128],
             "last_closeout": state.get("last_closeout") if isinstance(state.get("last_closeout"), dict) else None}
 
