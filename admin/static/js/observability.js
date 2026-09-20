@@ -2373,6 +2373,12 @@ async function readMemoryConsolidationDossier(dossierId) {
 async function loadMemoryHistoryReconciliation() {
   const host = document.getElementById('memory-history-status');
   if (!host) return;
+  const {uid, charId} = _memoryConsolidationScope();
+  if (!uid || !charId) {
+    host.className = 'empty';
+    host.textContent = '需要用户 ID 和角色';
+    return;
+  }
   host.className = 'loading';
   host.textContent = '加载中…';
   try {
@@ -2434,6 +2440,12 @@ async function controlMemoryHistoryReconciliation(action) {
 async function searchMemoryHistorySourceItems() {
   const host = document.getElementById('memory-history-items');
   if (!host) return;
+  const {uid, charId} = _memoryConsolidationScope();
+  if (!uid || !charId) {
+    host.className = 'empty';
+    host.textContent = '需要用户 ID 和角色';
+    return;
+  }
   try {
     const store = document.getElementById('memory-history-store')?.value.trim() || '';
     const status = document.getElementById('memory-history-item-status')?.value.trim() || '';

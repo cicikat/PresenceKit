@@ -72,8 +72,10 @@ def main():
 
                 def intercept(route):
                     url = route.request.url
-                    if "/static/" in url or "/observability/memory-consolidation" in url or "/memory/dossiers" in url:
+                    if "/static/" in url or "/observability/memory-consolidation" in url or "/observability/memory-history-reconciliation" in url or "/memory/dossiers" in url or "/memory/history-source-items" in url or "/memory-history-reconciliation/" in url:
                         return route.continue_()
+                    if "/characters" in url:
+                        return route.fulfill(json={"characters": [{"id": "fixture_character", "label": "Fixture Companion"}], "active_id": "fixture_character"})
                     return route.fulfill(json={})
 
                 page.route("**/*", intercept)
@@ -91,12 +93,21 @@ def main():
                     select.replaceChildren(new Option('Fixture Companion', 'fixture_character'));
                     document.getElementById('memory-consolidation-uid').value = 'fixture_owner';
                     await loadMemoryConsolidationStatus();
+                    await loadMemoryHistoryReconciliation();
+                    await searchMemoryHistorySourceItems();
                 }""")
                 status = page.locator("#memory-consolidation-status")
                 assert "未生效" in status.inner_text(), status.inner_text()
                 assert "剩余 8" in status.inner_text(), status.inner_text()
                 assert page.locator("#memory-consolidation-start").input_value() == "23"
                 assert page.locator("[data-action='controlMemoryConsolidation']").count() == 6
+                history_status = page.locator("#memory-history-status").inner_text()
+                assert "暂停" in history_status, history_status.encode("unicode_escape")
+                assert page.locator("[data-action='createMemoryHistoryManifest']").count() == 1
+                assert page.locator("[data-action='controlMemoryHistoryReconciliation']").count() == 3
+                assert page.locator("[data-action='searchMemoryHistorySourceItems']").count() == 1
+                items = page.locator("#memory-history-items").inner_text()
+                assert "暂无源项" in items, items.encode("unicode_escape")
                 page.evaluate("""async () => {
                     const select = document.getElementById('memory-consolidation-char');
                     select.replaceChildren(new Option('Fixture Companion', 'fixture_character'));
