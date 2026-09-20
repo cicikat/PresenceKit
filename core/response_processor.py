@@ -46,6 +46,9 @@ def _process_reply(
         return []
 
     try:
+        from core.control_markers import strip_control_markers
+        reply = strip_control_markers(reply)
+
         # 步骤1：移除 xml_fallback 模式的 <tool_call> 标记
         reply = _remove_tool_call_tags(reply)
 

@@ -47,9 +47,10 @@ async def send(
     # Reality output sanitation is intentionally applied before deciding that
     # this is a legal talk. A tool loop cannot turn markup/narration into a
     # visible proactive message merely by calling this capability.
+    from core.control_markers import strip_control_markers
     from core.response_processor import strip_render_tags
     from core.reality_output_scrubber import scrub_reality_output_text
-    text = (scrub_reality_output_text(strip_render_tags(text)) or "").strip()
+    text = (scrub_reality_output_text(strip_render_tags(strip_control_markers(text))) or "").strip()
     if not text: return False, "empty_text"
     mode, reason = check(uid, allow_soft=True)
     if mode == "hard" or (mode == "soft" and not bypass_soft_once): return False, reason

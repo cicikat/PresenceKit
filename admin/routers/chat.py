@@ -457,7 +457,10 @@ async def _execute_owner_chat_turn_locked(
         from core.coplay.session import is_active as _coplay_is_active
         _web_echo = bool(context.get("web_recall_result"))
         _coplay_echo = _coplay_is_active(user_id, char_id=_frozen_scope.character_id)
+        from core.control_markers import strip_control_markers
         visible_source = _clean_reply(reply, _turn_char_name) or reply
+        visible_source = strip_control_markers(visible_source)
+        reply = strip_control_markers(reply)
         _t0 = time.monotonic()
         turn_result = await record_assistant_turn(
             assistant_text=reply,

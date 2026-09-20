@@ -122,10 +122,11 @@ def _clean_reply(raw: object) -> str:
     if not isinstance(raw, str):
         return ""
     try:
+        from core.control_markers import strip_control_markers
         from core.reality_output_guard import clean_reality_reply_text
         from core.response_processor import strip_render_tags
 
-        value = clean_reality_reply_text(strip_render_tags(raw), "") or ""
+        value = clean_reality_reply_text(strip_render_tags(strip_control_markers(raw)), "") or ""
     except Exception:
         value = str(raw)
     return value.strip()[:4000]

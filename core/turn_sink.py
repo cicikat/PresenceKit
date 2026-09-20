@@ -155,12 +155,14 @@ async def _fanout(
             if channel is not None and channel.is_active:
                 targets.append(channel)
 
+    from core.control_markers import strip_control_markers
     from core.response_processor import strip_render_tags as _strip_tags
 
     # Visible output: strip render/NMP tags only so action descriptions survive
     # for chat texture.  Action descriptions are cleaned on the memory path
     # (memory_text in record_assistant_turn) — not here.
-    _visible_text = _strip_tags(assistant_text)
+    # Control markers are internal protocol, never user-visible.
+    _visible_text = _strip_tags(strip_control_markers(assistant_text))
 
     sent_targets: list[str] = []
     failures: dict[str, str] = {}
@@ -172,7 +174,7 @@ async def _fanout(
             send_kwargs = {"behavior": behavior}
             if name == "mobile":
                 from core.response_processor import inline_display_text
-                styled = inline_display_text(assistant_text)
+                styled = inline_display_text(strip_control_markers(assistant_text))
                 if styled != _visible_text:
                     send_kwargs["display_text"] = styled
             if char_id is not None:
@@ -281,11 +283,14 @@ async def record_assistant_turn(
     # The authoritative final scrub is in capture_turn — do not remove this call,
     # but also do not rely on it as the sole scrub guard.
     # (scrub_reality_output_text is idempotent; double-scrub with capture_turn is safe.)
+    from core.control_markers import strip_control_markers
     from core.response_processor import strip_render_tags as _strip_tags
     from core.reality_output_scrubber import scrub_reality_output_text as _scrub
-    memory_text = _scrub(_strip_tags(assistant_text)) or ""
+    memory_text = _scrub(_strip_tags(strip_control_markers(assistant_text))) or ""
     from core.response_processor import inline_display_text
-    visible_text = inline_display_text(visible_assistant_text or assistant_text)
+    visible_text = inline_display_text(
+        strip_control_markers(visible_assistant_text or assistant_text)
+    )
     ledger_channel = event_channel or exclude_origin_channel or (
         "scheduler" if source != TurnSource.USER_CHAT else "unknown"
     )
@@ -421,10 +426,12 @@ async def record_assistant_turn(
                 # part, so bubble #0's segmentedContent became the WHOLE message while
                 # later bubbles kept their raw paragraph — rendering duplicated text
                 # that looked like a double-send for multi-paragraph trigger messages.
+                from core.control_markers import strip_control_markers
                 from core.narrative_parser import build_say_segments
-                _say_content, _say_segs = build_say_segments(assistant_text)
+                _segment_source = strip_control_markers(assistant_text)
+                _say_content, _say_segs = build_say_segments(_segment_source)
                 from core.perform_mapper import enrich_say_segments
-                _say_segs = await enrich_say_segments(assistant_text, _say_segs, char_id=char_id)
+                _say_segs = await enrich_say_segments(_segment_source, _say_segs, char_id=char_id)
                 segment_kwargs = {"msg_id": _ws_msg_id}
                 if char_id is not None:
                     segment_kwargs["char_id"] = char_id

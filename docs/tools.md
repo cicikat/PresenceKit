@@ -162,6 +162,9 @@ hello 字段或协商流程。
   模型不主动调工具的问题。只在 loop 首次组装 messages 时注入一次，只存在于本轮
   `loop_msgs` 副本里，不进 short_term history，也不经过 prompt_builder 的层级消融机制
   （那套只覆盖 `build()` 组装出的 messages，与 loop 的一次性 messages 是两条链路）。
+  有工具能力的步骤仍保留 `{true: 意图}` 二次调用协议；不需要再调用时不要输出内部标记。
+  工具关闭后的收尾生成会去掉这条 nudge，最终展示、流式 delta、turn sink、history 与
+  event_log 只保留剥离后的正文。程序过滤才是防线，提示词只降低产生概率。
 
   明确意图 grounding：`route_pretool()` 将关键词命中结果作为本轮上下文元数据传给
   `run_agentic_loop(tool_call_required=True)`。即使工具没有出现在 schema、调用失败或

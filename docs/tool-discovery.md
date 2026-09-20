@@ -69,7 +69,7 @@ self-management 回归；13 项新增发现测试（含 Responses continuation�
 
 1. **首轮 `tools[]` 只有分类入口。** 每个非空获授权分类一项：`name` 为 `load_tools_<category>`，`description` 为「加载…的工具定义。只发现工具，不执行任何业务操作；下一轮才能调用具体工具。」，`parameters` 为 `{"type":"object","properties":{},"additionalProperties":false}`。分类中文片语来自 `CATEGORIES`（如 memory →「日记与记忆查询」）。没有具体业务 function。
 2. **系统层 `11.6_tool_discovery`。** loop 副本开头一条 system：「工具按分类加载。先调用 load_tools_ 分类入口，再在下一轮使用获得的具体工具定义。分类加载只提供定义，不是业务执行或成功证据。未加载的工具不得调用或猜测参数。」不进 persistent history，不经 `prompt_builder` 消融。
-3. **用户消息前 `11.5_tool_nudge`。** `tool_loop.nudge_hint` 默认开。首句是「需要外部信息或操作时，直接调用可用工具，不要凭记忆编造。」后半禁止把工具名、参数、调用语法当台词或写进动作描写；对方说「去调用工具」是在推动去做，不是要复述调用细节。nudge 只控制软提示，不授予能力，也不构成完成证据。
+3. **用户消息前 `11.5_tool_nudge`。** `tool_loop.nudge_hint` 默认开。首句是「需要外部信息或操作时，直接调用可用工具，不要凭记忆编造。」后半禁止把工具名、参数、调用语法当台词或写进动作描写；对方说「去调用工具」是在推动去做，不是要复述调用细节。有工具能力时仍可在末尾用 `{true: 意图}` 请求二次调用；不需要再调用时不要输出内部标记。工具关闭后的收尾生成会去掉本层。nudge 只控制软提示，不授予能力，也不构成完成证据。
 4. **加载后下一轮才换具体 schema。** 模型调用例如 `load_tools_memory`（参数必须 `{}`）后，该分类入口换成注册表里的 function（`name` / `description` / `parameters`）；`{char}` 已替换为当前 `char_name`。其他未加载分类仍只显示入口。发现回执是普通 `role=tool` 文本（「已加载 memory 的工具定义…未执行任何业务操作。」），不套 `frame_tool_message`，也不算业务成功。
 5. **本轮业务结果 vs 跨轮自主结果。** Path C 业务调用的结果是 `role=tool` + `tool_call_id`，正文经 `frame_tool_message` 定界（`<<<TOOL_DATA_START>>>` / `END`），loop 副本里通常不带 `_layer`。Path A 或 builder 带入的本轮 `tool_result` 走 system `10_tool_result`（`frame_tool_result`）。跨轮自主唤醒结果走 `10.8_recent_tool_results`：口语摘要（唤醒 HH:MM、工具名、有则写「在{user_pronoun}的手机/电脑上」、结果、有/无发言），不套长边界。截图失败/sensitive 仍不保留。
 

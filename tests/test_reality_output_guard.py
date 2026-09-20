@@ -74,6 +74,12 @@ def test_no_tool_tags_unchanged():
     assert _guard(text) == text
 
 
+def test_tail_control_marker_stripped_ordinary_braces_kept():
+    assert _guard("普通回复{false}") == "普通回复"
+    assert _guard("我去看看{true: 再搜一次}") == "我去看看"
+    assert _guard("集合 {a, b} 和 {falsehood}") == "集合 {a, b} 和 {falsehood}"
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # G3. AI self-censor phrases filtered sentence-by-sentence
 # ═══════════════════════════════════════════════════════════════════════════════

@@ -618,7 +618,8 @@ async def test_nudge_hint_teaches_tail_brace_convention(monkeypatch):
 
     nudge = next(m for m in chat_turn_calls[0]["messages"] if m.get("_layer") == "11.5_tool_nudge")
     assert "{true" in nudge["content"]
-    assert "{false" in nudge["content"]
+    assert "不需要再调用工具时什么都不加" in nudge["content"]
+    assert "加「{false}」" not in nudge["content"]
 
 
 # ── 12c. nudge_hint 必须明确"调用工具不等于把调用过程念出来"（Brief 122）────
@@ -876,6 +877,21 @@ def test_parse_tail_brace_no_tag_passthrough():
     assert intent is None
 
 
+def test_parse_tail_brace_keeps_ordinary_braces_and_mid_text_examples():
+    from core.tool_dispatcher import parse_tail_brace
+
+    cases = [
+        "今天 {天气} 不错",
+        "例如可以写 {false} 当字面示例，然后继续说话",
+        "代码里有 {true: x} 只是举例，后面还有正文",
+        "这不是协议 {falsehood} 标记",
+    ]
+    for text in cases:
+        display, intent = parse_tail_brace(text)
+        assert display == text
+        assert intent is None
+
+
 @pytest.mark.asyncio
 async def test_relay_prompt_covers_current_loop_categories_including_mcp(monkeypatch):
     """relay 解析用的类目应覆盖本轮 run_agentic_loop 实际暴露的 categories（含 mcp），
@@ -963,3 +979,305 @@ async def test_model_tool_preset_does_not_recatalogue_dynamic_mcp_tools(monkeypa
     )
 
     assert [tool["function"]["name"] for tool in chat_turn_calls[0]["tools"]] == ["web_search", "dynamic_mcp_tool"]
+
+
+def _assert_no_internal_marker(text: str) -> None:
+    lowered = text.lower()
+    assert "{false" not in lowered
+    assert "{true" not in lowered
+
+
+def _script_char_stream(monkeypatch, text: str, *, raise_after: int | None = None):
+    calls: list[list[dict]] = []
+
+    async def _fake(messages, max_tokens_override=None, call_category="chat", char_id=None,
+                     is_proactive=False):
+        calls.append([dict(m) for m in messages])
+        for index, ch in enumerate(text):
+            if raise_after is not None and index >= raise_after:
+                raise RuntimeError("stream cut")
+            yield ch
+
+    monkeypatch.setattr("core.llm_client.chat_stream", _fake)
+    return calls
+
+
+def test_control_marker_stream_filter_holds_prefix_and_keeps_ordinary_braces():
+    from core.control_markers import ControlMarkerStreamFilter
+
+    filt = ControlMarkerStreamFilter()
+    out = []
+    for ch in "普通回复{false}":
+        piece = filt.feed(ch)
+        if piece:
+            out.append(piece)
+            _assert_no_internal_marker(piece)
+    tail = filt.finish()
+    if tail:
+        out.append(tail)
+        _assert_no_internal_marker(tail)
+    assert "".join(out) == "普通回复"
+
+    filt = ControlMarkerStreamFilter()
+    out = [filt.feed(ch) for ch in "集合 {a, b} 保留"]
+    out.append(filt.finish())
+    assert "".join(out) == "集合 {a, b} 保留"
+
+    filt = ControlMarkerStreamFilter()
+    held = []
+    for ch in "你好{fal":
+        piece = filt.feed(ch)
+        if piece:
+            held.append(piece)
+            _assert_no_internal_marker(piece)
+    tail = filt.finish()
+    if tail:
+        held.append(tail)
+        _assert_no_internal_marker(tail)
+    assert "".join(held) == "你好"
+
+
+@pytest.mark.parametrize("stream", [False, True], ids=["non_stream", "stream"])
+@pytest.mark.asyncio
+async def test_tool_used_closing_generation_strips_false_marker(monkeypatch, stream):
+    """Isolation from 261-D: native tool then closing generation must not leak {false}."""
+    _patch_tool_loop_config(monkeypatch)
+    _patch_tools_schema(monkeypatch, ["web_search"])
+    _script_chat_turn(monkeypatch, [
+        ChatTurn(
+            content="",
+            tool_calls=[{"id": "call_1", "name": "web_search", "arguments": {"query": "天气"}}],
+            assistant_message={"role": "assistant", "content": None},
+        ),
+        ChatTurn(content="查到了", tool_calls=[], assistant_message={"role": "assistant", "content": "查到了"}),
+    ])
+    execute_calls = _script_execute(monkeypatch, [("晴，25度", None)])
+    if stream:
+        closing_calls = _script_char_stream(monkeypatch, "今天挺晴朗的～{false}")
+    else:
+        closing_calls = _patch_final_chat(monkeypatch, text="今天挺晴朗的～{false}")
+
+    result = await _make_pipeline().run_agentic_loop(
+        [{"role": "user", "content": "今天天气"}], uid="u1", char_id=TEST_CHAR_ID,
+        session_state=object(), stream=stream,
+    )
+    chunks = [piece async for piece in result] if stream else [result]
+    displayed = "".join(chunks)
+    assert displayed == "今天挺晴朗的～"
+    for piece in chunks:
+        _assert_no_internal_marker(piece)
+    assert len(execute_calls) == 1
+    closing_messages = closing_calls[-1]
+    assert any(m.get("role") == "system" and "工具用完了" in m.get("content", "") for m in closing_messages)
+    assert all(m.get("_layer") != "11.5_tool_nudge" for m in closing_messages)
+
+
+@pytest.mark.asyncio
+async def test_tool_used_stream_deltas_never_flash_marker(monkeypatch):
+    _patch_tool_loop_config(monkeypatch)
+    _patch_tools_schema(monkeypatch, ["web_search"])
+    _script_chat_turn(monkeypatch, [
+        ChatTurn(
+            content="",
+            tool_calls=[{"id": "call_1", "name": "web_search", "arguments": {"query": "天气"}}],
+            assistant_message={"role": "assistant", "content": None},
+        ),
+        ChatTurn(content="查到了", tool_calls=[], assistant_message={"role": "assistant", "content": "查到了"}),
+    ])
+    _script_execute(monkeypatch, [("晴，25度", None)])
+    _script_char_stream(monkeypatch, "今天挺晴朗的～{false}")
+
+    gen = await _make_pipeline().run_agentic_loop(
+        [{"role": "user", "content": "今天天气"}], uid="u1", char_id=TEST_CHAR_ID,
+        session_state=object(), stream=True,
+    )
+    chunks = [piece async for piece in gen]
+    displayed = "".join(chunks)
+    assert displayed == "今天挺晴朗的～"
+    for piece in chunks:
+        _assert_no_internal_marker(piece)
+
+
+@pytest.mark.asyncio
+async def test_empty_and_exhausted_closing_strips_marker_and_drops_nudge(monkeypatch):
+    _patch_tool_loop_config(monkeypatch, max_steps=1)
+    _patch_tools_schema(monkeypatch, ["web_search"])
+    _script_chat_turn(monkeypatch, [
+        ChatTurn(
+            content="",
+            tool_calls=[{"id": "call_1", "name": "web_search", "arguments": {"query": "x"}}],
+            assistant_message={"role": "assistant", "content": None},
+        ),
+    ])
+    _script_execute(monkeypatch, [("r1", None)])
+    final_calls = _patch_final_chat(monkeypatch, text="收尾回复{false}")
+
+    result = await _make_pipeline().run_agentic_loop(
+        [{"role": "user", "content": "查一次"}], uid="u1", char_id=TEST_CHAR_ID, session_state=object(),
+    )
+    assert result == "收尾回复"
+    _assert_no_internal_marker(result)
+    assert all(m.get("_layer") != "11.5_tool_nudge" for m in final_calls[-1])
+
+    _script_chat_turn(monkeypatch, [
+        ChatTurn(content="", tool_calls=[], assistant_message={"role": "assistant", "content": ""}),
+    ])
+    empty_calls = _patch_final_chat(monkeypatch, text="降级后的正常回复{true: 再查一次}")
+    empty_result = await _make_pipeline().run_agentic_loop(
+        [{"role": "user", "content": "你好"}], uid="u1", char_id=TEST_CHAR_ID, session_state=object(),
+    )
+    assert empty_result == "降级后的正常回复"
+    _assert_no_internal_marker(empty_result)
+    assert all(m.get("_layer") != "11.5_tool_nudge" for m in empty_calls[-1])
+
+
+@pytest.mark.asyncio
+async def test_budget_timeout_closing_strips_marker(monkeypatch):
+    _patch_tool_loop_config(monkeypatch, max_steps=5, total_timeout_s=0.01)
+    _patch_tools_schema(monkeypatch, ["web_search"])
+
+    async def _slow_turn(messages, tools, **kw):
+        await __import__("asyncio").sleep(0.05)
+        return ChatTurn(
+            content="",
+            tool_calls=[{"id": "call_1", "name": "web_search", "arguments": {"query": "x"}}],
+            assistant_message={"role": "assistant", "content": None},
+        )
+
+    monkeypatch.setattr("core.llm_client.chat_turn", _slow_turn)
+    _script_execute(monkeypatch, [("r1", None)])
+    final_calls = _patch_final_chat(monkeypatch, text="超时收尾{false}")
+
+    result = await _make_pipeline().run_agentic_loop(
+        [{"role": "user", "content": "查一下"}], uid="u1", char_id=TEST_CHAR_ID, session_state=object(),
+    )
+    assert result == "超时收尾"
+    _assert_no_internal_marker(result)
+    assert all(m.get("_layer") != "11.5_tool_nudge" for m in final_calls[-1])
+
+
+@pytest.mark.asyncio
+async def test_anti_collapse_retry_strips_marker(monkeypatch):
+    pipeline = _make_pipeline()
+    monkeypatch.setattr(
+        "core.config_loader.get_config",
+        lambda: {"anti_collapse": {"prefix_retry": True}},
+    )
+    monkeypatch.setattr(
+        "core.memory.short_term.detect_reply_homogeneity_prefix",
+        lambda _hist: "嗯。",
+    )
+    monkeypatch.setattr("core.memory.short_term.is_filler_prefix", lambda prefix: True)
+
+    async def _retry(_messages, **_kwargs):
+        return "嗯。换了个说法{false}"
+
+    monkeypatch.setattr("core.llm_client.chat", _retry)
+    result = await pipeline._anti_collapse_prefix_retry(
+        [{"role": "assistant", "content": "嗯。历史", "_layer": "9_history"}],
+        "嗯。原始回复{false}",
+    )
+    assert result == "换了个说法"
+    _assert_no_internal_marker(result)
+
+
+@pytest.mark.asyncio
+async def test_stream_zero_output_fallback_strips_marker(monkeypatch):
+    _patch_tool_loop_config(monkeypatch)
+    _patch_tools_schema(monkeypatch, ["web_search"])
+    _script_chat_turn(monkeypatch, [
+        ChatTurn(content="", tool_calls=[], assistant_message={"role": "assistant", "content": ""}),
+    ])
+    _script_execute(monkeypatch, [])
+
+    async def _empty_stream(messages, max_tokens_override=None, call_category="chat", char_id=None,
+                             is_proactive=False):
+        if False:
+            yield ""
+        return
+
+    monkeypatch.setattr("core.llm_client.chat_stream", _empty_stream)
+    _patch_final_chat(monkeypatch, text="降级后的正常回复{false}")
+
+    gen = await _make_pipeline().run_agentic_loop(
+        [{"role": "user", "content": "你好"}], uid="u1", char_id=TEST_CHAR_ID,
+        session_state=object(), stream=True,
+    )
+    chunks = [piece async for piece in gen]
+    displayed = "".join(chunks)
+    assert displayed == "降级后的正常回复"
+    for piece in chunks:
+        _assert_no_internal_marker(piece)
+
+
+@pytest.mark.asyncio
+async def test_stream_cut_mid_marker_does_not_flash_prefix(monkeypatch):
+    _patch_tool_loop_config(monkeypatch)
+    _patch_tools_schema(monkeypatch, ["web_search"])
+    _script_chat_turn(monkeypatch, [
+        ChatTurn(
+            content="",
+            tool_calls=[{"id": "call_1", "name": "web_search", "arguments": {"query": "x"}}],
+            assistant_message={"role": "assistant", "content": None},
+        ),
+        ChatTurn(content="终止", tool_calls=[], assistant_message={"role": "assistant", "content": "终止"}),
+    ])
+    _script_execute(monkeypatch, [("搜索结果", None)])
+    _script_char_stream(monkeypatch, "你好呀{false}", raise_after=len("你好呀{fa"))
+
+    gen = await _make_pipeline().run_agentic_loop(
+        [{"role": "user", "content": "查一下"}], uid="u1", char_id=TEST_CHAR_ID,
+        session_state=object(), stream=True,
+    )
+    chunks = [piece async for piece in gen]
+    displayed = "".join(chunks)
+    assert displayed == "你好呀"
+    for piece in chunks:
+        _assert_no_internal_marker(piece)
+
+
+@pytest.mark.asyncio
+async def test_ordinary_braces_survive_stream_and_closing(monkeypatch):
+    _patch_tool_loop_config(monkeypatch)
+    _patch_tools_schema(monkeypatch, ["web_search"])
+    _script_chat_turn(monkeypatch, [
+        ChatTurn(
+            content="",
+            tool_calls=[{"id": "call_1", "name": "web_search", "arguments": {"query": "x"}}],
+            assistant_message={"role": "assistant", "content": None},
+        ),
+        ChatTurn(content="终止", tool_calls=[], assistant_message={"role": "assistant", "content": "终止"}),
+    ])
+    _script_execute(monkeypatch, [("ok", None)])
+    text = "集合 {a, b} 和字面 {falsehood} 都要保留"
+    _script_char_stream(monkeypatch, text)
+
+    gen = await _make_pipeline().run_agentic_loop(
+        [{"role": "user", "content": "查一下"}], uid="u1", char_id=TEST_CHAR_ID,
+        session_state=object(), stream=True,
+    )
+    chunks = [piece async for piece in gen]
+    assert "".join(chunks) == text
+
+
+@pytest.mark.asyncio
+async def test_display_defense_does_not_replay_true_marker_as_tool(monkeypatch):
+    _patch_tool_loop_config(monkeypatch)
+    _patch_tools_schema(monkeypatch, ["web_search"])
+    _script_chat_turn(monkeypatch, [
+        ChatTurn(
+            content="",
+            tool_calls=[{"id": "call_1", "name": "web_search", "arguments": {"query": "x"}}],
+            assistant_message={"role": "assistant", "content": None},
+        ),
+        ChatTurn(content="终止", tool_calls=[], assistant_message={"role": "assistant", "content": "终止"}),
+    ])
+    execute_calls = _script_execute(monkeypatch, [("ok", None)])
+    _patch_final_chat(monkeypatch, text="收尾{true: 再搜一次}")
+
+    result = await _make_pipeline().run_agentic_loop(
+        [{"role": "user", "content": "查一下"}], uid="u1", char_id=TEST_CHAR_ID, session_state=object(),
+    )
+    assert result == "收尾"
+    assert len(execute_calls) == 1
+    _assert_no_internal_marker(result)

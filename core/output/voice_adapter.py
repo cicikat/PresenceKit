@@ -587,7 +587,9 @@ def clean_tts_text(text: str) -> str:
     This is deliberately shared by QQ's proactive TTS and HTTP clients so a
     Dream reply never has a different narration rule depending on the channel.
     """
-    cleaned = re.sub(r"（[^）]*）", "", str(text or ""))
+    from core.control_markers import strip_control_markers
+    cleaned = strip_control_markers(str(text or ""))
+    cleaned = re.sub(r"（[^）]*）", "", cleaned)
     cleaned = re.sub(r"\([^)]*\)", "", cleaned)
     # Render tags are visual-only and should never become literal spoken words.
     cleaned = re.sub(r"<[^>\n]{0,80}>", "", cleaned)

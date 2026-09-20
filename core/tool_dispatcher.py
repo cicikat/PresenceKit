@@ -21,6 +21,7 @@ from typing import Callable
 
 from core.config_loader import get_config
 from core.character_name_provider import get_active_char_name, get_char_name
+from core.control_markers import parse_tail_brace  # noqa: F401  — public re-export
 from core.error_handler import log_error
 from core.tools.garden_tools import water_garden
 
@@ -129,6 +130,11 @@ def _web_search_wrapper(query: str, uid: str | None = None, char_id: str | None 
 async def _read_diary_wrapper(user_id: str, date: str = "", *, char_id: str | None = None) -> str:
     from core.tools.character_recall import read_character_diary_for_user
     return await read_character_diary_for_user(user_id, char_id or _active_char_id(), date_str=date)
+
+
+async def _backfill_diary_wrapper(user_id: str, date: str = "", *, char_id: str) -> str:
+    from core.tools.diary_backfill import backfill_diary
+    return await backfill_diary(user_id, char_id, date)
 
 
 async def _read_watch_wrapper(user_id: str, query: str = "") -> str:
@@ -1037,6 +1043,24 @@ _TOOL_REGISTRY["read_xiaohongshu"] = {
     "keywords": ["小红书", "xhslink.com", "xiaohongshu.com"],
     "trace_args": [],
 }
+
+_TOOL_REGISTRY["backfill_diary"] = {
+    "func": _backfill_diary_wrapper,
+    "description": (
+        "用户要求补写时，补写当前角色自己的缺失日记。当天仅本地时间23点后允许；"
+        "昨天可在今天全天补写；更早日期不允许。已有日记绝不覆盖，无记录不编造。"
+        "工具自行核验是否缺失；不需要先读日记。"
+    ),
+    "dangerous": False, "category": "info", "effect": "write",
+    "echo_event_log": False,
+    "parameters": {"type": "object", "additionalProperties": False, "properties": {
+        "date": {"type": "string", "description": "今天、昨天或 YYYY-MM-DD；省略时23点前补昨天，23点起补今天。"},
+    }, "required": []},
+    "examples": ["补写一下你昨天的日记", "今天的日记没写，帮我补上", "昨晚报错了，把你的日记补一下"],
+    "keywords": ["补写日记", "补日记", "日记没写", "日记补一下", "日记补上"],
+    "trace_args": ["date"],
+}
+
 
 _TOOL_REGISTRY["read_diary"] = {
     "func": _read_diary_wrapper,
@@ -2358,36 +2382,6 @@ def get_tool_loop_relay_prompt(
     )
 
 
-_TAIL_BRACE_RE = re.compile(r"\{\s*(true|false)\s*[:：]?", re.IGNORECASE)
-
-
-def parse_tail_brace(text: str) -> tuple[str, str | None]:
-    """宽容解析自然语言回复末尾的 ``{true: 意图}`` / ``{false}`` 标记（Brief 120）。
-
-    刻意不做严格 JSON/格式校验：只要出现 ``{true``（大小写、全半角冒号皆兼容）就判定
-    为"要调用"，截到下一个 ``}``，找不到闭合括号就直接截到字符串结尾——哪怕模型漏了个
-    符号，顶多截取的意图文本多带点噪音，不会导致整段解析失败、啥都执行不了。这是相对
-    结构化 function-call 的核心优势，禁止把这里改成严格校验。
-
-    返回 (display_text, intent_text)：
-    - display_text 是剥离标记后、可以展示给用户的文本（未命中标记时原样返回）。
-    - intent_text 非 None 时表示命中 {true...}，是待解析的干净意图文本；
-      未命中，或命中 {false}，均返回 None。
-    """
-    if not text:
-        return text, None
-    m = _TAIL_BRACE_RE.search(text)
-    if not m:
-        return text, None
-    display_text = text[: m.start()].rstrip()
-    if m.group(1).lower() == "false":
-        return display_text, None
-    rest = text[m.end():]
-    close = rest.find("}")
-    intent = (rest[:close] if close != -1 else rest).strip()
-    return display_text, (intent or None)
-
-
 _EXECUTE_ALLOWED_ORIGINS: frozenset[str] = frozenset({
     "user_live", "assistant_loop", "assistant_loop_relay", "autonomy_loop", "admin_console",
     "assistant_self_management", "autonomy_self_management",
@@ -2630,6 +2624,11 @@ async def _execute_structured_impl(
         _trace("failed", "reality_event_tools_forbidden_in_group")
         return _execution_outcome("tool_failed")
 
+    if tool_name == "backfill_diary" and (
+        is_group or origin not in {"user_live", "assistant_loop", "assistant_loop_relay"}
+    ):
+        return _execution_outcome("tool_failed", "补写日记仅允许在用户私聊请求中执行。")
+
     async def _notify_status(kind: str, *, attempt: int = 1) -> None:
         """UI-only hook; it runs after dispatcher gates and never affects execution."""
         if tool_status_observer is None:
@@ -2789,6 +2788,9 @@ async def _execute_structured_impl(
             _require_memory_read_scope(user_id, char_id)
             result = await func(user_id=user_id, char_id=char_id, **tool_args)
         elif tool_name in {"update_memory_dossier", "request_memory_consolidation"}:
+            _require_memory_read_scope(user_id, char_id)
+            result = await func(user_id=user_id, char_id=char_id, **tool_args)
+        elif tool_name == "backfill_diary":
             _require_memory_read_scope(user_id, char_id)
             result = await func(user_id=user_id, char_id=char_id, **tool_args)
         elif tool_name in ("read_diary", "search_diary"):

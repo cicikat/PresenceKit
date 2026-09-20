@@ -909,6 +909,8 @@ PUT /prompt-ablation    body: {"disabled_layers": [...], "perception_block_disab
 `docs/tools.md`）**不在这套消融机制的管辖范围内**：它不经过 `prompt_builder.build()`，
 只存在于 loop 的一次性 `loop_msgs` 副本里，因此故意不登记进 `KNOWN_LAYERS`——登记了也不会
 有任何过滤效果，属于两条独立链路。控制它的开关是 `config.tool_loop.nudge_hint`。
+有工具能力的步骤保留 `{true: 意图}` 协议；工具关闭后的收尾生成会去掉本层，避免再鼓励
+输出内部 `{false}` / `{true}` 标记。程序过滤才是展示防线。
 
 ### `11.7_inner_monologue` 层（Brief 32 · 内部思考链，前置独白路线）
 

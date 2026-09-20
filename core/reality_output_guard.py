@@ -56,6 +56,8 @@ def _clean_reality_reply_text(
     if not text:
         return text
     try:
+        from core.control_markers import strip_control_markers
+        text = strip_control_markers(text)
         text = _remove_tool_call_tags(text)
         if character_name:
             text = _remove_character_prefix(text, character_name)

@@ -34,6 +34,11 @@ _AVATAR_DIRECTIVE_LAST: dict[str, tuple[str, float]] = {}  # char_id → (emotio
 _AVATAR_DIRECTIVE_COOLDOWN_SEC = 5.0
 
 
+def _drop_relay_nudge(messages: list[dict]) -> list[dict]:
+    """Closing, tool-free generation must not still ask for `{true}` / `{false}`."""
+    return [m for m in messages if m.get("_layer") != "11.5_tool_nudge"]
+
+
 def _voice_reanchor(char_id: str) -> str:
     """Brief 28 · tool loop 收尾锚定：工具轮之后主生成容易滑进"报告腔"，
     用这条静态 system 提示把声音收回角色本身。char_name 走 get_char_name()，
@@ -869,8 +874,9 @@ class Pipeline:
         reply = await self._anti_collapse_prefix_retry(
             messages, reply, char_id=char_id, is_proactive=is_proactive,
         )
+        from core.control_markers import strip_control_markers
         from core.tool_grounding import guard_completion_claim
-        return guard_completion_claim(reply, messages)
+        return guard_completion_claim(strip_control_markers(reply), messages)
 
     @staticmethod
     def _homogeneity_hist_for_check(messages: list[dict]) -> list[dict]:
@@ -901,9 +907,10 @@ class Pipeline:
         非填充词前缀不做硬剥离，只接受重试结果。fail-open：任何异常都返回原始 reply。
         """
         try:
+            from core.control_markers import strip_control_markers
             from core.config_loader import get_config
             if not get_config().get("anti_collapse", {}).get("prefix_retry", True):
-                return reply
+                return strip_control_markers(reply)
 
             from core.memory.short_term import (
                 detect_reply_homogeneity_prefix,
@@ -912,7 +919,7 @@ class Pipeline:
             hist_for_check = self._homogeneity_hist_for_check(messages)
             prefix = detect_reply_homogeneity_prefix(hist_for_check)
             if not prefix or not reply.strip().startswith(prefix):
-                return reply
+                return strip_control_markers(reply)
 
             logger.info("[anti_collapse] prefix retry")
             from core import llm_client
@@ -925,12 +932,13 @@ class Pipeline:
             )
             if retry_reply.strip().startswith(prefix) and is_filler_prefix(prefix):
                 stripped = retry_reply.strip()[len(prefix):].lstrip()
-                return stripped or retry_reply
-            return retry_reply
+                return strip_control_markers(stripped or retry_reply)
+            return strip_control_markers(retry_reply)
         except Exception as e:
             from core.error_handler import log_error
             log_error("pipeline._anti_collapse_prefix_retry", e)
-            return reply
+            from core.control_markers import strip_control_markers
+            return strip_control_markers(reply)
 
     def _check_stream_collapse(
         self, messages: list[dict], reply: str, *, char_id: str | None, user_id: str,
@@ -980,13 +988,21 @@ class Pipeline:
         user_id: 反坍缩软降级信号（ACT-2）归属的用户；不传则跳过检测（无法定位下一轮读取位置）。
         """
         from core import llm_client
+        from core.control_markers import ControlMarkerStreamFilter
         got_any = False
         pieces: list[str] = []
+        marker_filter = ControlMarkerStreamFilter()
         try:
             async for piece in llm_client.chat_stream(messages, char_id=char_id, is_proactive=is_proactive):
                 got_any = True
-                pieces.append(piece)
-                yield piece
+                visible = marker_filter.feed(piece)
+                if visible:
+                    pieces.append(visible)
+                    yield visible
+            tail = marker_filter.finish()
+            if tail:
+                pieces.append(tail)
+                yield tail
             # 流正常结束
             if got_any:
                 from core.context_continuity import acknowledge
@@ -998,7 +1014,8 @@ class Pipeline:
             from core.error_handler import log_error
             log_error("pipeline.run_llm_stream", e)
             if got_any:
-                # 已推出部分 token，中止而非追加以免重复
+                # 已推出部分 token，中止而非追加以免重复。
+                # 未闭合的协议标记前缀留在 filter 里，不 flush，避免闪现。
                 return
         full = await self.run_llm(messages, char_id=char_id, is_proactive=is_proactive)
         if full:
@@ -1217,8 +1234,7 @@ class Pipeline:
                     "工具调用；只有确实没法走结构化调用时，才在这次自然语言回复的末尾附加"
                     "「{true: 具体要做什么，参数是什么}」，系统会据此把这个动作真正执行掉——"
                     "只是嘴上说说而不加这个标记，动作不会真的发生，禁止只用文字暗示。"
-                    "不需要再调用工具就什么都不加，或加「{false}」；这个标记本身不会被"
-                    "展示给对方，放心用。"
+                    "不需要再调用工具时什么都不加，不要输出内部协议标记。"
                     "工具调用这个动作本身是系统内部静默完成的，不是说给对方听、也不是"
                     "演给对方看的内容：禁止把工具名、参数、调用语法当成台词念出来或写进"
                     "（）动作描写里；对方说「去调用工具玩一下」只是在推动你去做这件事，"
@@ -1574,7 +1590,9 @@ class Pipeline:
                 yield text
 
         kind, text = outcome
+        from core.control_markers import strip_control_markers
         if kind == "confirm":
+            text = strip_control_markers(text)
             return _single_chunk(text) if stream else text
 
         if kind == "natural" and not used_tool:
@@ -1584,11 +1602,14 @@ class Pipeline:
             )
             from core.tool_grounding import guard_completion_claim
             final_text = guard_completion_claim(
-                final_text, loop_msgs, successful_tool_call=successful_tool_call,
+                strip_control_markers(final_text), loop_msgs,
+                successful_tool_call=successful_tool_call,
             )
             return _single_chunk(final_text) if stream else final_text
 
         # natural（用过工具）或 exhausted：强制收尾，注入声音锚定，走不带 tools 的出口。
+        # 工具已关闭，收尾生成不得再携带鼓励输出 relay 标记的专用指令。
+        loop_msgs[:] = _drop_relay_nudge(loop_msgs)
         loop_msgs.append({"role": "system", "content": _voice_reanchor(char_id)})
         if stream:
             if successful_tool_call or not required_from_messages(loop_msgs):
@@ -1601,9 +1622,10 @@ class Pipeline:
                     loop_msgs, char_id=char_id, is_proactive=is_proactive, user_id=uid,
                 ):
                     _pieces.append(_piece)
+                from core.control_markers import strip_control_markers
                 from core.tool_grounding import guard_completion_claim
                 _guarded = guard_completion_claim(
-                    "".join(_pieces), loop_msgs,
+                    strip_control_markers("".join(_pieces)), loop_msgs,
                     successful_tool_call=successful_tool_call,
                 )
                 if _guarded:
@@ -1614,7 +1636,8 @@ class Pipeline:
         )
         from core.tool_grounding import guard_completion_claim
         return guard_completion_claim(
-            final_text, loop_msgs, successful_tool_call=successful_tool_call,
+            strip_control_markers(final_text), loop_msgs,
+            successful_tool_call=successful_tool_call,
         )
 
     # ──────────────────────────────────────────────────────────────────────────
