@@ -53,7 +53,7 @@
 - [ ] B2 批次小而有界，按源稳定排序；同主题跨批次可查询已有档案和相关旧证据，不能每批生成一本重名档案。成员列表和主题名不作为幂等键。
 - [ ] B3 接入 258 的原子派生提交和 durable operation receipt；跨库崩溃先 reconcile 再重试。模型成功但写失败不得标 committed；进度写失败不能导致重复计数。
 - [x] B4 状态互斥且覆盖整个冻结清单：total = pending + running + committed + retryable_failed + deferred + excluded。分类去向可组合，禁止用去向数量冒充完成数。
-- [ ] B5 同时报告 committed/total、excluded/total、deferred/total、剩余可执行项及新增量积压；全部排除不能显示“记忆全部整理完成”。删除/源更新后旧完成标志不继续代表当前版本已处理。
+- [x] B5 同时报告 committed/total、excluded/total、deferred/total、剩余可执行项及新增量积压；全部排除不能显示“记忆全部整理完成”。删除/源更新后旧完成标志不继续代表当前版本已处理。
 - [ ] B6 管理面元数据展示暂停/恢复/预算/错误/批次；memory.read 受控查判定与证据。覆盖重启、重复执行、锁冲突、坏数据与断电提交恢复；独立提交。
 
 ## C — 隔离演练、备份与首夜准入
@@ -114,5 +114,9 @@ they do not block evidence completion or get reported as semantic success.
 本轮施工（2026-09-20）：`34d0688` 增加外层账本的规则版本、输入摘要、目标
 revision、operation receipt、重访条件，并新增 admin `action=rollback`。回滚只
 重新打开 evidence-only receipt 为 pending，保留源证据，不执行物理删除。相关
-聚焦回归为 17 passed。B1 的逐 source-item 完整清单、C2-C4 校准、C6-C7
-生产准入仍是 blocker，不能用本轮回滚能力代替。
+聚焦回归为 17 passed；`56ed0ce` 增加 committed/excluded/deferred 比例、可执行
+量和增量积压观测。B1 的逐 source-item 完整清单、C2-C4 校准、C6-C7 生产准入
+仍是 blocker，不能用本轮回滚能力代替。
+
+未勾选项的准入边界：D1-D6、E1-E5 需要真实首夜/滚动运行、次晨抽检和费用证据；
+F1-F3 涉及退役或删除范围，需单独批准。没有对应运行证据或批准，不得勾选。
