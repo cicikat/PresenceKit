@@ -333,7 +333,7 @@ def test_first_night_runner_stops_at_cutoff_and_uses_verified_gate(sandbox, monk
         return {"status": "committed", "migration": {"next_offset": 1, "total": 1}}
 
     async def fake_consolidate(*args, **kwargs):
-        return {"status": "disabled", "model_calls": 0}
+        return {"status": "no_work", "model_calls": 0}
 
     monkeypatch.setattr(history_reconciliation, "apply_batch", fake_apply)
     monkeypatch.setattr(history_reconciliation, "consolidate_imported_events", fake_consolidate)
@@ -343,6 +343,9 @@ def test_first_night_runner_stops_at_cutoff_and_uses_verified_gate(sandbox, monk
     ))
     assert result["status"] == "stopped"
     assert result["batches"] == 0
+    assert result["conversation_messages"] == 0
+    assert result["scheduler_enabled"] is False
+    assert result["understood_complete"] is False
     assert calls["count"] == 0
     assert admission["admitted"] is True
     assert history_reconciliation.status(scope)["last_closeout"]["status"] == "stopped"
@@ -355,19 +358,192 @@ def test_imported_event_consolidation_pins_scope_and_bulk_preset(monkeypatch):
 
     seen = {}
 
-    async def fake_tick(*, only_principal, preset_override, **kwargs):
-        seen.update(principal=only_principal, preset=preset_override)
-        return {"status": "disabled", "model_calls": 0}
+    async def fake_pass(principal, *, preset_override=None, stop_at=None):
+        seen.update(principal=principal, preset=preset_override, stop_at=stop_at)
+        return {"status": "no_work", "model_calls": 0}
 
-    monkeypatch.setattr("core.memory.consolidation_worker.tick", fake_tick)
+    monkeypatch.setattr("core.memory.consolidation_worker.run_operator_pass", fake_pass)
     scope = MemoryScope.reality_scope("history-owner", TEST_CHAR_ID)
     import asyncio
-    result = asyncio.run(history_reconciliation.consolidate_imported_events(scope))
+    result = asyncio.run(history_reconciliation.consolidate_imported_events(scope, stop_at=12.5))
 
-    assert result["status"] == "disabled"
+    assert result["status"] == "no_work"
     assert seen["principal"].uid == scope.uid
     assert seen["principal"].char_id == scope.character_id
     assert seen["preset"] == "便宜小模型grok-see"
+    assert seen["stop_at"] == 12.5
+
+
+def test_first_night_runner_checks_conservation_and_keeps_other_progress(sandbox, monkeypatch, tmp_path):
+    import time
+    from core.memory import history_reconciliation
+    from core.memory.scope import MemoryScope
+
+    scope = MemoryScope.reality_scope("first-night-conservation", TEST_CHAR_ID)
+    manifest = history_reconciliation.create_manifest(scope, now=1)
+    history_reconciliation.freeze_manifest(scope, manifest_revision=manifest["manifest_revision"])
+    state = history_reconciliation.read_state(scope)
+    state["last_calibration"] = {"unlimited_run_allowed": False, "budget_unset": False}
+    history_reconciliation.safe_write_json(history_reconciliation._state_path(scope), state, keep_bak=True)
+    _admit(scope, monkeypatch, now=1_700_000_000.0)
+    monkeypatch.setattr(history_reconciliation, "verify_backup_snapshot", lambda path: {"verified": True, "errors": []})
+    before = {
+        "paused": False,
+        "source_item_executable": 2,
+        "source_item_counts": {"pending": 2, "running": 0, "committed": 0, "retryable_failed": 0, "deferred": 0, "excluded": 0},
+        "counts": {"pending": 1, "running": 0, "committed": 0, "retryable_failed": 0, "deferred": 0, "excluded": 0},
+        "executable": 1,
+        "frozen_manifest_revision": manifest["manifest_revision"],
+        "source_item_total": 2,
+        "admission": {},
+    }
+    after = {
+        **before,
+        "source_item_executable": 0,
+        "source_item_counts": {"pending": 0, "running": 0, "committed": 1, "retryable_failed": 0, "deferred": 0, "excluded": 0},
+        "source_item_total": 1,
+    }
+    seen = {"n": 0}
+
+    def fake_status(_scope):
+        seen["n"] += 1
+        return after if seen["n"] > 1 else before
+
+    def fake_apply(*args, **kwargs):
+        return {"status": "committed", "migration": {"next_offset": 1, "total": 1}}
+
+    consolidate_calls = {"count": 0}
+
+    async def forbidden(*args, **kwargs):
+        consolidate_calls["count"] += 1
+        raise AssertionError("conservation failure must not start a dossier pass")
+
+    monkeypatch.setattr(history_reconciliation, "status", fake_status)
+    monkeypatch.setattr(history_reconciliation, "apply_batch", fake_apply)
+    monkeypatch.setattr(history_reconciliation, "consolidate_imported_events", forbidden)
+    result = __import__("asyncio").run(history_reconciliation.run_first_night(
+        scope, backup_snapshot=tmp_path / "snapshot", manifest_revision=manifest["manifest_revision"],
+        stop_at=time.time() + 30,
+    ))
+    assert result["status"] == "stopped"
+    assert result["reason"] == "source_item_total_regressed"
+    assert result["last"]["conservation"]["ok"] is False
+    assert consolidate_calls["count"] == 0
+    assert result["conversation_messages"] == 0
+    assert result["scheduler_enabled"] is False
+
+
+def test_closeout_does_not_treat_excluded_or_deferred_as_understood(monkeypatch):
+    from core.memory import history_reconciliation
+
+    current = {
+        "source_item_counts": {"pending": 0, "running": 0, "committed": 2, "retryable_failed": 0, "deferred": 1, "excluded": 1},
+        "source_item_total": 4,
+        "frozen_manifest_revision": "frozen",
+        "admission": {"range_totals": {"first_night_candidates": 4}},
+        "paused": False,
+    }
+    monkeypatch.setattr(history_reconciliation, "status", lambda _scope: current)
+    monkeypatch.setattr("core.memory.dossiers.source_item_outcome_counts", lambda _scope: {"evidence_only": 3, "attach": 1})
+    monkeypatch.setattr("core.memory.dossiers.maintenance_status", lambda _scope: {"coverage_ingest_sequence": 9, "backlog": 0})
+    monkeypatch.setattr("core.memory.dossiers.status_snapshot", lambda _scope: {"needs_recompute": 0})
+    closeout = history_reconciliation._closeout_report(
+        object(), batches=1, dossier_passes=0, last={"status": "committed"}, reason="morning_cutoff",
+    )
+    assert closeout["understood_complete"] is False
+    assert closeout["processed"]["deferred"] == 1
+    assert closeout["processed"]["excluded"] == 1
+    assert closeout["semantic_outcomes"]["evidence_only"] == 3
+    assert "excluded/deferred" in closeout["note"]
+    assert closeout["conversation_messages"] == 0
+    assert closeout["scheduler_enabled"] is False
+
+
+def test_new_chat_evidence_stays_on_incremental_path_after_freeze(sandbox):
+    from core.memory import dossiers, history_reconciliation
+    from core.memory.event_store import append_event
+    from core.memory.scope import MemoryScope
+
+    scope = MemoryScope.reality_scope("incremental-owner", TEST_CHAR_ID)
+    secret_old = "OLD_PRIVATE_BODY_259D"
+    secret_new = "NEW_PRIVATE_BODY_259D"
+
+    def _append(event_id, text):
+        assert append_event(scope, {
+            "event_id": event_id, "turn_id": event_id, "seq": 1,
+            "occurred_at": 1.0, "ingested_at": 2.0, "uid": scope.uid,
+            "char_id": scope.character_id, "realm": "reality", "kind": "chat",
+            "actor": "user", "channel": "test", "source": "fixture",
+            "visible_text": text, "memory_text": text,
+        }).ok
+
+    _append("incremental-old", secret_old)
+    manifest = history_reconciliation.create_manifest(scope, now=1)
+    history_reconciliation.freeze_manifest(scope, manifest_revision=manifest["manifest_revision"])
+    frozen = history_reconciliation.status(scope)["frozen_manifest_revision"]
+    old = dossiers.maintenance_candidates(scope, limit=10)
+    assert [item["source_id"] for item in old] == ["incremental-old"]
+    dossiers.apply_operations(
+        scope, [], operation_id="e" * 32, actor="character", chain="maintenance",
+        processing_items=[{key: old[0][key] for key in (
+            "store_kind", "source_id", "source_revision", "ingest_sequence", "input_digest",
+        )} | {"semantic_outcomes": ["evidence_only"]}],
+    )
+    assert dossiers.maintenance_candidates(scope) == []
+    _append("incremental-new", secret_new)
+    fresh = dossiers.maintenance_candidates(scope, limit=10)
+    assert [item["source_id"] for item in fresh] == ["incremental-new"]
+    snapshot = history_reconciliation.status(scope)
+    assert snapshot["frozen_manifest_revision"] == frozen
+    listed = dossiers.list_source_items(scope, store_kind="event", source_id="incremental-new")
+    assert listed["total"] == 0
+    assert secret_old not in str(snapshot)
+    assert secret_new not in str(snapshot)
+
+
+def test_foreground_edit_marks_recompute_and_rereads_unprocessed_evidence(sandbox):
+    from core.memory import dossiers
+    from core.memory.event_store import append_event
+    from core.memory.scope import MemoryScope
+    from tests.test_memory_dossiers import _create, _op_id
+
+    scope = MemoryScope.reality_scope("recompute-owner", TEST_CHAR_ID)
+    event_id = "recompute-event"
+    assert append_event(scope, {
+        "event_id": event_id, "turn_id": event_id, "seq": 1,
+        "occurred_at": 1.0, "ingested_at": 2.0, "uid": scope.uid,
+        "char_id": scope.character_id, "realm": "reality", "kind": "chat",
+        "actor": "user", "channel": "test", "source": "fixture",
+        "visible_text": "likes tea", "memory_text": "likes tea",
+    }).ok
+    dossier_id, _ = _create(scope, title="Preference")
+    occurrence_id = __import__("uuid").uuid4().hex
+    dossiers.apply_operations(scope, [
+        {"action": "create_occurrence", "occurrence_id": occurrence_id, "participants": [],
+         "time_certainty": "unknown", "assertion_kind": "user_stated",
+         "evidence": [{"reference_kind": "event", "source_id": event_id, "source_revision": "1"}]},
+        {"action": "attach_occurrence", "dossier_id": dossier_id, "occurrence_id": occurrence_id,
+         "expected_revision": 1},
+        {"action": "revise_understanding", "dossier_id": dossier_id, "expected_revision": 2,
+         "summary": "User likes tea", "conditions": [], "supporting_occurrence_ids": [occurrence_id],
+         "counterexample_occurrence_ids": [], "confidence_reason": "one statement",
+         "coverage_ingest_seq": 1},
+    ], operation_id=_op_id(), actor="character", chain="owner_chat")
+    assert append_event(scope, {
+        "event_id": "recompute-new", "turn_id": "recompute-new", "seq": 2,
+        "occurred_at": 3.0, "ingested_at": 4.0, "uid": scope.uid,
+        "char_id": scope.character_id, "realm": "reality", "kind": "chat",
+        "actor": "user", "channel": "test", "source": "fixture",
+        "visible_text": "now prefers coffee not tea", "memory_text": "now prefers coffee not tea",
+    }).ok
+    recall = dossiers.build_recall_context(scope, "tea")
+    assert recall["unreviewed"] is True
+    assert "recompute-new" in recall["text"]
+    invalidated = dossiers.invalidate_source(scope, event_id, reason="user_correction")
+    assert invalidated["dossiers"] == 1
+    assert dossiers.status_snapshot(scope)["needs_recompute"] == 1
+
+
 def test_settle_evidence_only_requires_reason_and_closes_backlog(sandbox):
     import pytest
     from core.memory import dossiers, history_reconciliation

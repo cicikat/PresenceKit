@@ -406,3 +406,68 @@ def test_reopen_evidence_only_requeues_event_checkpoint(sandbox):
     assert dossiers.maintenance_candidates(scope) == []
     assert dossiers.reopen_evidence_only(scope, source_ids=[event_id]) == 1
     assert dossiers.maintenance_candidates(scope)[0]["source_id"] == event_id
+
+
+def test_operator_pass_bypasses_disabled_scheduler_without_enabling(sandbox, monkeypatch):
+    from core.memory import consolidation_worker, dossiers
+
+    _patch_runtime(monkeypatch)
+    monkeypatch.setattr("core.memory.consolidation_worker.config", lambda: _cfg(enabled=False))
+    monkeypatch.setattr("core.memory.consolidation_worker._backoff_active", lambda: False)
+    monkeypatch.setattr("core.memory.consolidation_worker._global_budget_allows", lambda _cfg: True)
+    monkeypatch.setattr("core.memory.consolidation_worker._foreground_active", lambda *_args, **_kwargs: False)
+    principal = _principal(uid="operator-pass-owner")
+    _event(principal.uid, suffix="operator")
+
+    async def scenario():
+        consolidation_worker._GLOBAL_SEMAPHORE = asyncio.Semaphore(1)
+        disabled = await consolidation_worker.tick()
+        result = await consolidation_worker.run_operator_pass(principal)
+        return disabled, result
+
+    disabled, result = asyncio.run(scenario())
+    assert disabled["status"] == "disabled"
+    assert result["status"] == "succeeded"
+    assert result["model_calls"] == 1
+    assert dossiers.maintenance_checkpoint(_scope(principal.uid)) >= 1
+    assert consolidation_worker.config()["enabled"] is False
+
+
+def test_operator_pass_yields_to_foreground_without_model_call(sandbox, monkeypatch):
+    from core.memory import consolidation_worker
+
+    monkeypatch.setattr("core.memory.consolidation_worker.config", lambda: _cfg(enabled=False))
+    monkeypatch.setattr("core.memory.consolidation_worker._backoff_active", lambda: False)
+    monkeypatch.setattr("core.memory.consolidation_worker._global_budget_allows", lambda _cfg: True)
+    monkeypatch.setattr("core.memory.consolidation_worker._foreground_active", lambda *_args, **_kwargs: True)
+    principal = _principal(uid="operator-fg-owner")
+    _event(principal.uid, suffix="fg")
+    result = asyncio.run(consolidation_worker.run_operator_pass(principal))
+    assert result == {"status": "foreground_active", "model_calls": 0}
+
+
+def test_claimed_operator_pass_does_not_treat_disabled_scheduler_as_grant_change(sandbox, monkeypatch):
+    from core.agent_runtime import task_manager
+    from core.memory import consolidation_worker, dossiers
+
+    _patch_runtime(monkeypatch)
+    monkeypatch.setattr("core.memory.consolidation_worker.config", lambda: _cfg(enabled=False))
+    principal = _principal(uid="claimed-operator-owner")
+    _event(principal.uid, suffix="claimed")
+    blocked_task = _task(principal, key="scheduler-claimed")
+    blocked_lease = task_manager.claim_next(
+        principal, task_id=blocked_task["task_id"], capabilities={"memory.consolidation"},
+    )
+    blocked = asyncio.run(consolidation_worker._run_claimed(
+        principal, blocked_lease, _cfg(enabled=False), operator_pass=False,
+    ))
+    assert blocked["status"] == "failed"
+    assert blocked["error_code"] == "grant_changed"
+    assert dossiers.maintenance_candidates(_scope(principal.uid))
+
+    task = _task(principal, key="operator-claimed")
+    lease = task_manager.claim_next(principal, task_id=task["task_id"], capabilities={"memory.consolidation"})
+    result = asyncio.run(consolidation_worker._run_claimed(
+        principal, lease, _cfg(enabled=False), operator_pass=True,
+    ))
+    assert result["status"] == "succeeded"

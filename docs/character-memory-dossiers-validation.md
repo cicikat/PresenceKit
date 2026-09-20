@@ -34,5 +34,8 @@ environmental not-run items are recorded in the Brief 258 task evidence table
 at commit time.
 
 No production model call, memory migration, feature enablement, desktop/mobile
-native build, or first-night claim was performed. Those remain Brief 258 F
-after Brief 259 A-C and explicit production authorization.
+native build, or first-night claim was performed. Isolated tests now cover the
+operator first-night bypass, conservation stop, incremental watermark and
+closeout denominator. Those remain Brief 258 F after Brief 259 A-C and
+explicit production authorization; Brief 259 D stays unchecked until a real
+first-night plus next-morning run exists.

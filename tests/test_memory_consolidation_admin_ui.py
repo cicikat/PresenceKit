@@ -12,9 +12,9 @@ def test_memory_consolidation_page_is_registered_and_cache_busted():
 
     assert 'data-page="memory-consolidation"' in index
     assert 'id="page-memory-consolidation"' in index
-    assert "ADMIN_UI_FRAGMENT_VERSION = 'v1-259-history-admission-1'" in core
-    assert '<script src="/static/js/core.js?v=v1-259-history-admission-1"></script>' in index
-    assert '<script src="/static/js/observability.js?v=v1-259-history-admission-1"></script>' in index
+    assert "ADMIN_UI_FRAGMENT_VERSION = 'v1-259-history-closeout-1'" in core
+    assert '<script src="/static/js/core.js?v=v1-259-history-closeout-1"></script>' in index
+    assert '<script src="/static/js/observability.js?v=v1-259-history-closeout-1"></script>' in index
     assert "loadMemoryConsolidationStatus" in script
     assert "/observability/memory-consolidation" in script
     assert "/settings/memory-consolidation" in script
@@ -23,6 +23,7 @@ def test_memory_consolidation_page_is_registered_and_cache_busted():
     assert "/observability/memory-history-reconciliation" in script
     assert "/memory/history-source-items" in script
     assert "loadMemoryHistoryReconciliation" in script
+    assert "last_closeout" in script
     assert 'data-action="controlMemoryConsolidation"' in page
     assert "onclick=" not in page
 

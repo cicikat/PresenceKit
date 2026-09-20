@@ -188,7 +188,9 @@ strategy; it does not run first-night. Identifiers in metadata-only
 observability are hashed; dossier prose and evidence remain behind `memory.read`.
 
 Production enablement is not implied by implementation or tests. C6-C7 admits
-the freeze record only. Real first-night/next-morning evidence still requires
-Brief 259 D and the separately authorized Brief 258 F shadow, scoped and
-expansion gates. Desktop/mobile protocols, queues, ack/TTL and native settings
-are unchanged.
+the freeze record only. Explicit `action=run` uses `run_operator_pass` so a
+disabled scheduler can still execute one bounded same-scope pass, records
+`last_closeout`, and never treats excluded/deferred as understood. Real
+first-night/next-morning evidence still requires Brief 259 D and the separately
+authorized Brief 258 F shadow, scoped and expansion gates. Desktop/mobile
+protocols, queues, ack/TTL and native settings are unchanged.

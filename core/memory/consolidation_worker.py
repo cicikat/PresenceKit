@@ -1,9 +1,11 @@
 """Silent same-character dossier consolidation worker (Brief 258 D).
 
-The scheduler is the only automatic entrypoint. It claims Task Manager work,
-creates a bounded Work Session, calls the configured model without holding a
-memory lock, then submits a validated patch to the shared dossier capability.
-It never sends/captures a turn or touches the conversation slow queue.
+The scheduler is the only automatic entrypoint. Explicit operator first-night
+uses ``run_operator_pass`` and never flips ``memory_consolidation.enabled``.
+Both paths claim Task Manager work, create a bounded Work Session, call the
+configured model without holding a memory lock, then submit a validated patch
+to the shared dossier capability. They never send/capture a turn or touch the
+conversation slow queue.
 """
 from __future__ import annotations
 
@@ -26,6 +28,7 @@ logger = logging.getLogger(__name__)
 CAPABILITY = "memory.consolidation"
 ARTIFACT_KIND = "memory_consolidation_receipt"
 PROMPT_REVISION = "memory-consolidation-prompt.v2"
+OPERATOR_SOURCE = "operator_first_night"
 _GLOBAL_SEMAPHORE = asyncio.Semaphore(1)
 _scope_locks: dict[tuple[str, str], asyncio.Lock] = {}
 _scope_locks_guard = threading.Lock()
@@ -210,7 +213,8 @@ def _processing_items(events: list[dict[str, Any]], operations: list[dict[str, A
             {"semantic_outcomes": [outcome]} for item in events]
 
 
-async def _run_claimed(principal: TaskPrincipal, lease, cfg: dict[str, Any]) -> dict[str, Any]:
+async def _run_claimed(principal: TaskPrincipal, lease, cfg: dict[str, Any],
+                       *, operator_pass: bool = False) -> dict[str, Any]:
     from core.agent_runtime import task_manager, work_sessions
     from core.memory import dossiers
     from core.model_registry import resolve_category_info
@@ -312,7 +316,9 @@ async def _run_claimed(principal: TaskPrincipal, lease, cfg: dict[str, Any]) -> 
             principal, lease, error_code="control_paused", retry=True,
             retry_delay_seconds=int(cfg["retry_backoff_seconds"]),
         )
-    if not fresh_cfg["enabled"] or int(fresh_cfg["grant_revision"]) != int(cfg["grant_revision"]):
+    grant_changed = int(fresh_cfg["grant_revision"]) != int(cfg["grant_revision"])
+    scheduler_disabled = (not operator_pass) and (not fresh_cfg["enabled"])
+    if grant_changed or scheduler_disabled:
         dossiers.finish_maintenance_run(scope, run_id, status="revoked", error_code="grant_changed", wall_seconds=elapsed)
         work_sessions.fail_work_session(principal, session["work_session_id"], error_code="grant_changed")
         return task_manager.fail_task(principal, lease, error_code="grant_changed", retry=False)
@@ -416,6 +422,62 @@ def _reconcile_unknown(principal: TaskPrincipal) -> None:
             succeeded=True,
             result_metadata={"outcome_code": "durable_receipt_reconciled"},
         )
+
+
+async def run_operator_pass(
+    principal: TaskPrincipal,
+    *,
+    preset_override: str | None = None,
+    stop_at: float | None = None,
+) -> dict[str, Any]:
+    """Run one bounded same-scope pass for an explicit operator action.
+
+    This bypasses scheduler enablement and the night window, but keeps grant,
+    pause, budget, backoff, and foreground yielding. It never sends or captures
+    a conversation message and never flips ``memory_consolidation.enabled``.
+    """
+    cfg = config()
+    if preset_override:
+        cfg["background_preset"] = str(preset_override)[:128]
+    if cfg["paused"]:
+        return {"status": "paused", "model_calls": 0, "reason": cfg["pause_reason"] or "paused"}
+    if stop_at is not None and time.time() >= float(stop_at):
+        return {"status": "stopped", "model_calls": 0, "reason": "stop_deadline_passed"}
+    if _backoff_active():
+        return {"status": "backoff", "model_calls": 0}
+    if not _global_budget_allows(cfg):
+        return {"status": "budget_exhausted", "model_calls": 0}
+    if _GLOBAL_SEMAPHORE.locked():
+        return {"status": "busy", "model_calls": 0}
+    from core.agent_runtime import task_manager
+    async with _GLOBAL_SEMAPHORE:
+        async with _scope_lock(principal.uid, principal.char_id):
+            _reconcile_unknown(principal)
+            if _foreground_active(principal.uid, cfg):
+                return {"status": "foreground_active", "model_calls": 0}
+            scope = MemoryScope.reality_scope(principal.uid, principal.char_id)
+            events = __import__("core.memory.dossiers", fromlist=["maintenance_candidates"]).maintenance_candidates(
+                scope, limit=int(cfg["batch_size"]), max_chars=int(cfg["max_input_chars"]))
+            tasks = task_manager.list_tasks(principal, limit=100)
+            if any(item["capability"] == CAPABILITY and item["status"] == "outcome_unknown" for item in tasks):
+                return {"status": "outcome_unknown", "model_calls": 0}
+            queued = [item for item in tasks if item["capability"] == CAPABILITY and item["status"] == "queued"]
+            if not queued and events:
+                high = events[-1]["ingest_sequence"]
+                task_manager.create_task(
+                    principal, capability=CAPABILITY, source=OPERATOR_SOURCE,
+                    idempotency_key=f"first-night:{principal.char_id}:{principal.uid}:{high}",
+                    ttl_seconds=86400, retry_policy="safe", max_attempts=3,
+                    request_context={"through": high},
+                    request_summary={"source_count": len(events), "through": high},
+                )
+            lease_seconds = min(900, int(cfg["call_timeout_seconds"]) + 120)
+            lease = task_manager.claim_next(principal, capabilities={CAPABILITY}, lease_seconds=lease_seconds)
+            if lease is None:
+                return {"status": "no_work", "model_calls": 0}
+            result = await _run_claimed(principal, lease, cfg, operator_pass=True)
+            return {"status": result["status"], "task_id": result["task_id"],
+                    "model_calls": 1 if events else 0}
 
 
 async def tick(*, now: datetime | None = None, only_principal: TaskPrincipal | None = None,

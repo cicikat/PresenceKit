@@ -2387,6 +2387,8 @@ async function loadMemoryHistoryReconciliation() {
     const calibration = data.last_calibration || {};
     const range = data.first_night_range || {};
     const admission = data.admission || {};
+    const closeout = data.last_closeout || {};
+    const processed = closeout.processed || {};
     const qualityHits = Object.entries(calibration.quality_hits || {}).filter(([, hit]) => hit).map(([name]) => name);
     const cards = [
       ['暂停', data.paused ? '是' : '否', data.pause_reason || '-'],
@@ -2398,6 +2400,7 @@ async function loadMemoryHistoryReconciliation() {
       ['隔离校准', calibration.updated_at ? `${calibration.mean_wall_seconds ?? '-'}s` : '未校准', calibration.unlimited_run_allowed === false ? '禁止无限额' : '-'],
       ['质量旗标', qualityHits.length ? qualityHits.join(',') : '无', calibration.budget_unset ? '预算未定' : `重试 ${calibration.retry_rate ?? 0}`],
       ['生产准入', admission.admitted ? `${admission.go_live_date || '-'} ${admission.timezone || ''}` : '未准入', admission.admitted ? `停止 ${admission.stop_at_local || '-'} / 恢复 ${admission.restore_strategy || '-'}` : '冻结清单与校准后才可准入'],
+      ['首夜收口', closeout.status || '未运行', closeout.understood_complete ? `批次 ${closeout.batches ?? 0} / 档案 ${closeout.dossier_passes ?? 0}` : (closeout.note || `未处理 ${processed.unprocessed ?? '-'}`)],
     ];
     host.className = '';
     host.innerHTML = `<div class="autonomy-overview-grid">${cards.map(([label, value, detail]) =>

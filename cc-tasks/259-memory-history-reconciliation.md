@@ -99,8 +99,8 @@
 | B | `19bae90`, `07cda48`, `03e375a`, `2dc503f`, `0120b00` | resumable manifest/status tests；状态写入经 sandbox resolver；逐 source-item seed/list；有界领取/证据查档/lease 收据恢复；管理面缓存清除后桌面/手机布局验收 | 生产未运行 |
 | C | `30a5f84`, `f5dc200`, `01a73a6` | verified-backup gate、verify-before-restore recovery drill、manifest freeze/revision gate、ledger transition tests；26 focused tests passed | 仅隔离 fixture；未创建生产 snapshot |
 | C2–C4 | `8ef7efb` | 隔离副链校准记录耗时/估算 token/重试/结构质量旗标与速率带；冻结首夜优先级与冷门份额；管理面 `action=calibrate` 去敏展示 | 未调用生产模型、未 apply、未开调度器 |
-| C6–C7 | 本轮提交 | 生产准入冻结上线日期/时区/manifest/范围总量/grant/preset/硬预算/晨间停止/恢复策略；`action=run` 未准入则 deferred；管理面 `action=admit` | 未跑生产首夜、未开调度器、未发对话消息 |
-| D | 已运行（部分语义 pass） | explicit `action=run` executed against the verified offline snapshot; closeout is persisted; one real same-scope grok-see dossier pass committed | provider timeout runs remain failed receipts; no user notification |
+| C6–C7 | `f673bea` | 生产准入冻结上线日期/时区/manifest/范围总量/grant/preset/硬预算/晨间停止/恢复策略；`action=run` 未准入则 deferred；管理面 `action=admit` | 未跑生产首夜、未开调度器、未发对话消息 |
+| D | 本轮提交（代码与隔离测试；D1–D6 未勾） | operator-pass 绕过调度器 enable/夜窗、批次守恒停批、晨间截止收口、增量 watermark 与前台重算测试；管理面展示 `last_closeout` | 未跑生产 `action=run`，无次晨抽检，不得勾选 |
 | E–F | E evidence-only 收口；F 未授权 | derived stores have durable evidence-only receipts and explicit reopen path; no physical deletion performed | semantic quality/retirement remain separate follow-up |
 
 ## Current blockers
@@ -122,6 +122,9 @@ lease 过期先对 `processing_commits` reconcile，有收据才标 committed，
 回到 retryable_failed。写失败释放领取，不记完成。C2–C4 隔离校准可冻结首夜
 范围并给出速率带。C6–C7 把上线日期、时区、硬预算、晨间停止和恢复策略写入
 准入记录；校准 freeze 仍不是生产首夜。`action=run` 在未准入时 deferred。
+D 切片补齐 operator-pass：不开调度器也能跑有界同角色档案 pass，每批核对
+守恒，晨间截止后写 `last_closeout`，excluded/deferred 不算已理解。新聊天
+证据走增量 checkpoint，不写进冻结历史 watermark。没有真实生产首夜不得勾 D。
 
 未勾选项的准入边界：D1-D6、E1-E5 需要真实首夜/滚动运行、次晨抽检和费用证据；
 F1-F3 涉及退役或删除范围，需单独批准。没有对应运行证据或批准，不得勾选。

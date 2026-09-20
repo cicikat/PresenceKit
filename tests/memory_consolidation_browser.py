@@ -103,6 +103,7 @@ def main():
                 assert page.locator("[data-action='controlMemoryConsolidation']").count() == 6
                 history_status = page.locator("#memory-history-status").inner_text()
                 assert "暂停" in history_status, history_status.encode("unicode_escape")
+                assert "首夜收口" in history_status, history_status.encode("unicode_escape")
                 assert page.locator("[data-action='createMemoryHistoryManifest']").count() == 1
                 assert page.locator("[data-action='controlMemoryHistoryReconciliation']").count() == 5
                 assert page.locator("[data-action-args='[\"calibrate\"]']").count() == 1

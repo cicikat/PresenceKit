@@ -987,6 +987,29 @@ def list_source_items(scope: MemoryScope, *, store_kind: str = "", status: str =
             "items": [_source_item_payload(row) for row in rows]}
 
 
+def source_item_outcome_counts(scope: MemoryScope) -> dict[str, int]:
+    """Count combinable semantic outcomes; this is not a completion denominator."""
+    scope = _scope(scope)
+    path = _path(scope)
+    counts: dict[str, int] = {}
+    if not path.exists():
+        return counts
+    with _lock(path), _connect(path, readonly=True) as connection:
+        rows = connection.execute("SELECT semantic_outcomes_json FROM source_items").fetchall()
+    for row in rows:
+        try:
+            outcomes = json.loads(row[0] or "[]")
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(outcomes, list):
+            continue
+        for name in outcomes:
+            key = str(name or "").strip()[:64]
+            if key:
+                counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
 def source_item_counts(scope: MemoryScope) -> dict[str, int]:
     """Return processing-status counts over the per-source-item ledger."""
     scope = _scope(scope)

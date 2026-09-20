@@ -1026,8 +1026,9 @@ exposes redacted rate-band and frozen first-night range metadata with no
 desktop/mobile consumer. Production admission is the same admin control with
 `action=admit`; status exposes go-live date/timezone, hard budgets, morning
 stop and restore strategy. Admission does not enable the scheduler or invoke
-`action=run`.
+`action=run`. Status also exposes metadata-only `last_closeout` after an
+explicit first-night runner; that field is still empty until a real run.
 
 `open`: real first-night/next-morning evidence remains gated by Brief 259 D
-and Brief 258 F. Isolated calibration, admission freeze, and admin browser
-inspection do not constitute production migration evidence.
+and Brief 258 F. Isolated calibration, admission freeze, operator-pass tests,
+and admin browser inspection do not constitute production migration evidence.

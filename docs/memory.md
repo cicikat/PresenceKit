@@ -31,7 +31,13 @@ separate freeze: go-live date, timezone, first-night manifest, range totals,
 character grant, preset, call/token/cost hard budgets, morning stop, and
 verified-snapshot restore strategy. `action=run` remains blocked until that
 record exists; admission itself does not enable the scheduler or send a
-conversation message. Isolated inventory counts are not a production scan.
+conversation message. The explicit first-night runner (`action=run`) uses
+`run_operator_pass` so a disabled scheduler can still execute one bounded
+same-scope pass; it keeps pause, grant, budget, backoff and foreground
+yielding, records a metadata-only `last_closeout`, and never treats
+excluded/deferred as understood. Isolated inventory counts are not a
+production scan, and this runner still needs a real first-night plus
+next-morning check before Brief 259 D is accepted.
 
 ## 资料接续回执（2026-09-13）
 

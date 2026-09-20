@@ -1408,21 +1408,100 @@ def _commit_derived_source_batch(scope: MemoryScope, store_kind: str, item: dict
             "reconciled": claimed["reconciled"]}
 
 
-async def consolidate_imported_events(scope: MemoryScope, *, preset: str = "便宜小模型grok-see") -> dict[str, Any]:
+async def consolidate_imported_events(
+    scope: MemoryScope,
+    *,
+    preset: str = "便宜小模型grok-see",
+    stop_at: float | None = None,
+) -> dict[str, Any]:
     """Run one bounded dossier pass for this imported scope.
 
     The existing consolidation capability owns model calls, grants, budgets,
-    foreground yielding, and atomic dossier commits. This wrapper only pins
-    the scope and the requested cheap bulk preset; it never enables the global
-    scheduler or sends a conversation message.
+    foreground yielding, and atomic dossier commits. This explicit operator
+    wrapper never enables the global scheduler or sends a conversation
+    message; it bypasses only the night-window/enabled gate.
     """
     from core.agent_runtime.models import TaskPrincipal
     from core.memory import consolidation_worker
 
-    return await consolidation_worker.tick(
-        only_principal=TaskPrincipal.reality(scope.uid, scope.character_id),
+    return await consolidation_worker.run_operator_pass(
+        TaskPrincipal.reality(scope.uid, scope.character_id),
         preset_override=preset,
+        stop_at=stop_at,
     )
+
+
+def _batch_conservation(before: dict[str, Any], after: dict[str, Any]) -> dict[str, Any]:
+    """Compare store-level and source-item counts without treating outcomes as completion."""
+    errors: list[str] = []
+    for label, key in (("store", "counts"), ("source_item", "source_item_counts")):
+        previous = before.get(key) if isinstance(before.get(key), dict) else {}
+        current = after.get(key) if isinstance(after.get(key), dict) else {}
+        before_total = sum(int(previous.get(name) or 0) for name in STATES)
+        after_total = sum(int(current.get(name) or 0) for name in STATES)
+        if after_total < before_total:
+            errors.append(f"{label}_total_regressed")
+        if int(current.get("committed") or 0) < int(previous.get("committed") or 0):
+            errors.append(f"{label}_committed_regressed")
+    frozen = str(before.get("frozen_manifest_revision") or "")
+    if frozen and frozen != str(after.get("frozen_manifest_revision") or ""):
+        errors.append("manifest_revision_changed")
+    return {"ok": not errors, "errors": errors}
+
+
+def _closeout_report(scope: MemoryScope, *, batches: int, dossier_passes: int,
+                     last: dict[str, Any], reason: str = "") -> dict[str, Any]:
+    current = status(scope)
+    from core.memory import dossiers
+    source_counts = current.get("source_item_counts") if isinstance(current.get("source_item_counts"), dict) else {}
+    executable = int(source_counts.get("pending") or 0) + int(source_counts.get("retryable_failed") or 0) + int(source_counts.get("running") or 0)
+    outcomes = dossiers.source_item_outcome_counts(scope)
+    understood = int(source_counts.get("committed") or 0)
+    deferred = int(source_counts.get("deferred") or 0)
+    excluded = int(source_counts.get("excluded") or 0)
+    maintenance = dossiers.maintenance_status(scope)
+    closeout = {
+        "status": "stopped",
+        "reason": str(reason or "")[:128],
+        "batches": batches,
+        "dossier_passes": dossier_passes,
+        "stopped_at": datetime.now(timezone.utc).isoformat(),
+        "processed": {
+            "committed": int(source_counts.get("committed") or 0),
+            "retryable_failed": int(source_counts.get("retryable_failed") or 0),
+            "deferred": deferred,
+            "excluded": excluded,
+            "pending": int(source_counts.get("pending") or 0),
+            "running": int(source_counts.get("running") or 0),
+            "unprocessed": executable,
+        },
+        "semantic_outcomes": outcomes,
+        "understood_complete": False,
+        "note": "excluded/deferred are not treated as understood; pending/failed remain unprocessed.",
+        "dossiers": {
+            "coverage_ingest_sequence": maintenance.get("coverage_ingest_sequence"),
+            "backlog": maintenance.get("backlog"),
+            "needs_recompute": int((dossiers.status_snapshot(scope).get("needs_recompute") or 0)),
+        },
+        "denominator": {
+            "source_item_total": current.get("source_item_total"),
+            "frozen_manifest_revision": current.get("frozen_manifest_revision"),
+            "range_totals": ((current.get("admission") or {}) if isinstance(current.get("admission"), dict) else {}).get("range_totals"),
+        },
+        "ledger": current,
+        "last": {key: value for key, value in last.items() if key != "migration"},
+        "conversation_messages": 0,
+        "scheduler_enabled": False,
+    }
+    finished_cleanly = reason in {"no_work", "completed", "succeeded"} or (
+        reason == "morning_cutoff" and (batches > 0 or dossier_passes > 0)
+    )
+    closeout["status"] = "completed" if executable == 0 and finished_cleanly else "stopped"
+    closeout["understood_complete"] = (
+        executable == 0 and deferred == 0 and excluded == 0 and understood > 0
+        and finished_cleanly
+    )
+    return closeout
 
 
 def settle_evidence_only(scope: MemoryScope, *, reason: str, operator: str = "admin") -> dict[str, Any]:
@@ -1491,36 +1570,49 @@ async def run_first_night(
     batches = 0
     dossier_passes = 0
     last: dict[str, Any] = {}
+    stop_reason = "morning_cutoff"
     while time.time() < deadline:
-        state = read_state(scope)
-        if state.get("paused"):
-            return {"status": "paused", "reason": state.get("pause_reason", ""), "batches": batches,
-                    "dossier_passes": dossier_passes, "last": last}
-        result = apply_batch(
-            scope, backup={"verified": True, "backup_path": str(backup_snapshot)},
-            batch_size=int(batch_size), dry_run=False,
+        before = status(scope)
+        if before.get("paused"):
+            stop_reason = str(before.get("pause_reason") or "paused")
+            break
+        leftover = (
+            int(before.get("source_item_executable") or 0)
+            + int((before.get("source_item_counts") or {}).get("running") or 0)
+            + int(before.get("executable") or 0)
         )
-        last = result
-        batches += 1
-        if result.get("status") not in {"committed", "completed"}:
-            migration = result.get("migration") or {}
-            if result.get("status") == "paused" and (
-                status(scope)["counts"].get("pending", 0) > 0
-                or int(migration.get("next_offset", 0)) < int(migration.get("total", 0))
-            ):
-                continue
+        if leftover > 0:
+            result = apply_batch(
+                scope, backup={"verified": True, "backup_path": str(backup_snapshot)},
+                batch_size=int(batch_size), dry_run=False,
+            )
+            last = result
+            batches += 1
+            after = status(scope)
+            conservation = _batch_conservation(before, after)
+            last["conservation"] = conservation
+            if not conservation["ok"]:
+                stop_reason = conservation["errors"][0]
+                break
+            if result.get("status") not in {"committed", "completed"}:
+                stop_reason = str(result.get("reason") or result.get("status") or "batch_stopped")
+                break
+            continue
+        if time.time() >= deadline:
+            stop_reason = "morning_cutoff"
             break
-        migration = result.get("migration") or {}
-        if int(migration.get("next_offset", 0)) >= int(migration.get("total", 0)):
-            dossier_result = await consolidate_imported_events(scope, preset=preset)
-            dossier_passes += int(dossier_result.get("model_calls") or 0)
-            last["dossier_pass"] = dossier_result
+        dossier_result = await consolidate_imported_events(scope, preset=preset, stop_at=deadline)
+        last["dossier_pass"] = dossier_result
+        dossier_passes += 1
+        if int(dossier_result.get("model_calls") or 0) <= 0:
+            stop_reason = str(dossier_result.get("status") or "no_work")
             break
-    current = status(scope)
-    terminal = "completed" if current["counts"].get("pending", 0) == 0 and current["counts"].get("running", 0) == 0 else "stopped"
-    closeout = {"status": terminal, "batches": batches, "dossier_passes": dossier_passes,
-                "stopped_at": datetime.now(timezone.utc).isoformat(), "ledger": current,
-                "last": {key: value for key, value in last.items() if key != "migration"}}
+        if str(dossier_result.get("status") or "") in {"paused", "stopped", "backoff", "budget_exhausted", "busy", "foreground_active", "outcome_unknown"}:
+            stop_reason = str(dossier_result.get("status") or "dossier_pass")
+            break
+    closeout = _closeout_report(
+        scope, batches=batches, dossier_passes=dossier_passes, last=last, reason=stop_reason,
+    )
     state = read_state(scope)
     state["last_closeout"] = closeout
     safe_write_json(_state_path(scope), state, keep_bak=True)
@@ -1550,6 +1642,7 @@ def status(scope: MemoryScope) -> dict[str, Any]:
             "source_item_priority_counts": dossiers.source_item_priority_counts(scope),
             "last_calibration": state.get("last_calibration") if isinstance(state.get("last_calibration"), dict) else None,
             "admission": state.get("admission") if isinstance(state.get("admission"), dict) else None,
+            "source_item_outcomes": dossiers.source_item_outcome_counts(scope),
             "last_error": str(state.get("last_error") or "")[:128],
             "last_closeout": state.get("last_closeout") if isinstance(state.get("last_closeout"), dict) else None}
 
