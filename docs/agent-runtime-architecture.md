@@ -347,7 +347,9 @@ second acting subject. The migrated `inner_diary_write` scheduler task creates a
 records, invokes the existing fact/feeling generator, and completes the authored artifact without
 creating an assistant turn. `daily_journal` remains a proactive signal. Work-session failures and
 unknown outcomes never become user facts; only an explicit later fixation flow may promote an
-artifact.
+artifact. A failed session may be explicitly retried while its task is queued, or while a
+claimed worker already holds a valid lease for that same task; unknown and canceled sessions
+never replay.
 
 ## Brief 233 workspace capability
 

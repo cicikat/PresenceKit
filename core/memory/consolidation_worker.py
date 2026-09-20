@@ -174,6 +174,14 @@ def _identity_context(char_id: str) -> tuple[str, str]:
     return text, hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def _request_messages(prompt: str) -> list[dict[str, str]]:
+    """Keep a user turn so providers that reject system-only chats stay usable."""
+    return [
+        {"role": "system", "content": prompt},
+        {"role": "user", "content": "Return the JSON array now."},
+    ]
+
+
 def _prompt(identity: str, current: list[dict[str, Any]], events: list[dict[str, Any]],
             related: list[dict[str, Any]] | None = None) -> str:
     public_events = [{key: item[key] for key in ("source_id", "ingest_sequence", "occurred_at", "actor", "kind", "text")} for item in events]
@@ -226,6 +234,10 @@ async def _run_claimed(principal: TaskPrincipal, lease, cfg: dict[str, Any],
     session = work_sessions.create_work_session(principal, task_id=lease.task_id,
         capability=CAPABILITY, artifact_kind=ARTIFACT_KIND, context=context,
         idempotency_key=f"memory:{lease.task_id}:{events[-1]['ingest_sequence'] if events else 'empty'}")
+    if session.get("status") == "failed":
+        session = work_sessions.retry_work_session(
+            principal, session["work_session_id"], lease=lease,
+        )
     session = work_sessions.start_work_session(principal, session["work_session_id"])
     if not events:
         work_sessions.complete_work_session(principal, session["work_session_id"],
@@ -274,7 +286,7 @@ async def _run_claimed(principal: TaskPrincipal, lease, cfg: dict[str, Any],
     try:
         from core import llm_client
         raw = await asyncio.wait_for(llm_client.chat(
-            [{"role": "system", "content": prompt}], max_tokens_override=int(cfg["max_tokens_per_call"]),
+            _request_messages(prompt), max_tokens_override=int(cfg["max_tokens_per_call"]),
             call_category="consolidation", char_id=principal.char_id,
             preset_name=cfg["background_preset"] or None,
         ), timeout=float(cfg["call_timeout_seconds"]))

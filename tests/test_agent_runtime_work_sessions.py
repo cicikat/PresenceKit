@@ -156,6 +156,38 @@ def test_work_session_requires_task_lease_and_explicit_retry(sandbox):
     assert get_work_session(principal, row["work_session_id"])["artifact_id"] is None
 
 
+def test_work_session_claimed_retry_reopens_failed_session_with_lease(sandbox):
+    from core.agent_runtime.task_manager import claim_next, fail_task
+    from core.agent_runtime.work_sessions import (
+        WorkSessionError,
+        create_work_session,
+        fail_work_session,
+        retry_work_session,
+        start_work_session,
+    )
+
+    principal, task = _create(
+        sandbox, "workspace_artifact", "claimed-retry-task", retry_policy="safe", max_attempts=3,
+    )
+    row = create_work_session(
+        principal, task_id=task["task_id"], capability="workspace_artifact",
+        artifact_kind="workspace_artifact", context="bounded", idempotency_key="claimed-retry",
+    )
+    first = claim_next(principal, task_id=task["task_id"], capabilities={"workspace_artifact"})
+    start_work_session(principal, row["work_session_id"])
+    fail_work_session(principal, row["work_session_id"], error_code="model_error")
+    fail_task(principal, first, error_code="model_error", retry=True)
+    second = claim_next(
+        principal, task_id=task["task_id"], capabilities={"workspace_artifact"},
+    )
+    with pytest.raises(WorkSessionError, match="task_not_queued"):
+        retry_work_session(principal, row["work_session_id"])
+    retried = retry_work_session(principal, row["work_session_id"], lease=second)
+    assert retried["status"] == "created"
+    started = start_work_session(principal, row["work_session_id"])
+    assert started["status"] == "running"
+
+
 def test_work_session_module_has_no_interaction_or_memory_writer_dependency():
     import inspect
     from core.agent_runtime import work_sessions

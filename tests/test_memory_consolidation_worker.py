@@ -446,6 +446,69 @@ def test_operator_pass_yields_to_foreground_without_model_call(sandbox, monkeypa
     assert result == {"status": "foreground_active", "model_calls": 0}
 
 
+def test_claimed_retry_reopens_failed_work_session(sandbox, monkeypatch):
+    from core.agent_runtime import task_manager
+    from core.memory import consolidation_worker, dossiers
+
+    _patch_runtime(monkeypatch)
+    principal = _principal(uid="retry-session-owner")
+    _event(principal.uid, suffix="retry")
+    task = _task(principal, key="retry-session")
+    first_lease = task_manager.claim_next(
+        principal, task_id=task["task_id"], capabilities={"memory.consolidation"},
+    )
+
+    async def boom(*_args, **_kwargs):
+        raise RuntimeError("provider 400")
+
+    monkeypatch.setattr("core.llm_client.chat", boom)
+    failed = asyncio.run(consolidation_worker._run_claimed(
+        principal, first_lease, _cfg(retry_backoff_seconds=1), operator_pass=True,
+    ))
+    assert failed["status"] == "queued"
+    assert failed["error_code"] == "model_error"
+    assert dossiers.maintenance_candidates(_scope(principal.uid))
+
+    _patch_runtime(monkeypatch)
+    later = float(failed["updated_at"]) + 2
+    retry_lease = task_manager.claim_next(
+        principal, task_id=task["task_id"], capabilities={"memory.consolidation"},
+        now=later,
+    )
+    assert retry_lease is not None
+    result = asyncio.run(consolidation_worker._run_claimed(
+        principal, retry_lease, _cfg(), operator_pass=True,
+    ))
+    assert result["status"] == "succeeded"
+    assert dossiers.maintenance_checkpoint(_scope(principal.uid)) >= 1
+
+
+def test_maintenance_prompt_keeps_a_user_turn(sandbox, monkeypatch):
+    from core.agent_runtime import task_manager
+    from core.memory import consolidation_worker
+
+    captured = {}
+
+    async def fake_chat(messages, **_kwargs):
+        captured["messages"] = messages
+        return "[]"
+
+    _patch_runtime(monkeypatch)
+    monkeypatch.setattr("core.llm_client.chat", fake_chat)
+    principal = _principal(uid="user-turn-owner")
+    _event(principal.uid, suffix="user-turn")
+    task = _task(principal, key="user-turn")
+    lease = task_manager.claim_next(
+        principal, task_id=task["task_id"], capabilities={"memory.consolidation"},
+    )
+    result = asyncio.run(consolidation_worker._run_claimed(
+        principal, lease, _cfg(), operator_pass=True,
+    ))
+    assert result["status"] == "succeeded"
+    assert [item["role"] for item in captured["messages"]] == ["system", "user"]
+    assert "Return the JSON array now." in captured["messages"][1]["content"]
+
+
 def test_claimed_operator_pass_does_not_treat_disabled_scheduler_as_grant_change(sandbox, monkeypatch):
     from core.agent_runtime import task_manager
     from core.memory import consolidation_worker, dossiers

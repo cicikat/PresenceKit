@@ -1005,7 +1005,7 @@ async def calibrate_side_chain(
                 )
         for attempt in range(2):
             try:
-                raw = await caller([{"role": "system", "content": prompt}])
+                raw = await caller(consolidation_worker._request_messages(prompt))
                 operations = consolidation_worker._parse(raw)
                 error = ""
                 break

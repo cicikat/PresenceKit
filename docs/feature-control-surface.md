@@ -455,6 +455,8 @@ durable/specialized 副链 sessions, not a second acting subject. The scheduler'
 `work_session_id` store. `GET /observability/agent-runtime-work-sessions` exposes bounded lifecycle,
 artifact-kind, digest, and error metadata only; it never exposes work context, prompts, diary正文, or
 paths. `daily_journal` remains governed by the existing autonomy signal controls.
+A failed session may be explicitly retried while its task is queued, or while a
+claimed worker already holds a valid lease for that same task.
 
 ## Brief 233 workspace capability
 
@@ -767,7 +769,8 @@ a stop deadline no later than the admitted morning cutoff, then returns a
 metadata-only closeout report. Dossier passes go through
 `run_operator_pass`, which bypasses only scheduler enablement and the night
 window; it never flips `memory_consolidation.enabled` or sends a conversation
-message. Conservation checks after each batch stop that batch on count/revision
+message. A later claimed attempt reopens a failed work session for the same
+task, and the maintenance request keeps a user turn. Conservation checks after each batch stop that batch on count/revision
 regression while leaving other scopes untouched. Status exposes `last_closeout`
 and combinable `source_item_outcomes`; excluded/deferred are never treated as
 understood. It is never invoked by the scheduler automatically. The apply path

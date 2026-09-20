@@ -171,7 +171,10 @@ pause/cancel remains durable in Task Manager. The worker runs only in the
 configured local night window after the idle threshold, with one global worker,
 per-scope fairness, global/per-scope daily budgets, provider backoff, and a
 post-model grant/policy recheck before commit. Empty evidence performs no model
-call. Unknown external outcomes are never automatically replayed without a
+call. The maintenance request keeps a user turn so providers that reject
+system-only chats stay usable. A failed work session for the same task
+idempotency key is reopened on a later claimed attempt instead of remaining
+terminal. Unknown external outcomes are never automatically replayed without a
 matching durable maintenance receipt.
 
 The admin surface exposes content-free effective state and backlog through

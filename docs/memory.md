@@ -35,7 +35,9 @@ conversation message. The explicit first-night runner (`action=run`) uses
 `run_operator_pass` so a disabled scheduler can still execute one bounded
 same-scope pass; it keeps pause, grant, budget, backoff and foreground
 yielding, records a metadata-only `last_closeout`, and never treats
-excluded/deferred as understood. Isolated inventory counts are not a
+excluded/deferred as understood. A later claimed attempt reopens a failed
+work session for the same task instead of treating it as terminal, and the
+maintenance request includes a user turn. Isolated inventory counts are not a
 production scan, and this runner still needs a real first-night plus
 next-morning check before Brief 259 D is accepted.
 

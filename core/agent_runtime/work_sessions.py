@@ -17,7 +17,7 @@ from dataclasses import asdict, dataclass
 from typing import Any, Awaitable, Callable
 
 from core.agent_runtime import task_store
-from core.agent_runtime.models import TaskPrincipal
+from core.agent_runtime.models import TaskLease, TaskPrincipal
 from core.safe_write import safe_write_json
 from core.sandbox import get_paths
 
@@ -339,8 +339,20 @@ def reconcile_unknown_work_session(
         return _project(row)
 
 
-def retry_work_session(principal: TaskPrincipal, work_session_id: str, *, now: float | None = None) -> dict[str, Any]:
-    """Explicitly requeue a failed session; unknown/canceled sessions never replay."""
+def retry_work_session(
+    principal: TaskPrincipal,
+    work_session_id: str,
+    *,
+    now: float | None = None,
+    lease: TaskLease | None = None,
+) -> dict[str, Any]:
+    """Explicitly requeue a failed session; unknown/canceled sessions never replay.
+
+    Safe retries normally happen while the task is still queued. A claimed
+    worker that already holds a valid lease may also reopen the same failed
+    session for that attempt, so idempotent create+start does not see a
+    terminal work session after ``fail_task(..., retry=True)``.
+    """
     principal = _validate_principal(principal)
     timestamp = time.time() if now is None else float(now)
     current = get_work_session(principal, work_session_id)
@@ -349,7 +361,14 @@ def retry_work_session(principal: TaskPrincipal, work_session_id: str, *, now: f
         task = get_task(principal, current["task_id"], now=timestamp)
     except TaskManagerError as exc:
         raise WorkSessionError("task_not_found") from exc
-    if task["status"] != "queued":
+    claimed_retry = (
+        lease is not None
+        and task["status"] == "running"
+        and lease.task_id == current["task_id"]
+        and task.get("lease_until")
+        and float(task["lease_until"]) > timestamp
+    )
+    if task["status"] != "queued" and not claimed_retry:
         raise WorkSessionError("task_not_queued")
     with task_store.scope_lock(principal.uid, principal.char_id):
         state, rows = _load(principal)

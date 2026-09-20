@@ -913,6 +913,7 @@ def test_isolated_calibration_records_latency_tokens_and_does_not_apply(sandbox,
 
     async def fake_chat(messages, **_kwargs):
         calls["count"] += 1
+        assert [item["role"] for item in messages] == ["system", "user"]
         assert secret in messages[0]["content"]
         return json.dumps([{
             "action": "create_dossier", "title": "Duplicate Title", "aliases": [], "description": "",
