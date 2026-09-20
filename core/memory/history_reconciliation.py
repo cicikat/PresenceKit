@@ -1,10 +1,9 @@
-"""Read-only, content-free inventory for Brief 259 history reconciliation.
+"""Content-free inventory and source-item ledger for Brief 259 history reconciliation.
 
-This module deliberately does not create ledgers, call a model, or mutate any
-memory store.  It produces a versioned inventory and stable source revisions so
-an independently authorized batch worker can later consume it.  Derived-store
-receipts are recorded as evidence-only processing items; source files remain
-untouched.
+Inventory and dry-run manifests never copy source prose or call a model.
+Creating a manifest seeds pending `source_items` in the scoped dossier store
+so later authorized batches can resume from stable identities. Source files
+remain the authority for bodies.
 """
 from __future__ import annotations
 
