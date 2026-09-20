@@ -43,6 +43,13 @@
     <button class="btn btn-ghost" data-action="controlMemoryHistoryReconciliation" data-action-args='["resume"]' data-i18n="memory_dossiers.history_resume">恢复回填</button>
     <button class="btn btn-ghost" data-action="controlMemoryHistoryReconciliation" data-action-args='["freeze"]' data-i18n="memory_dossiers.history_freeze">冻结清单</button>
     <button class="btn btn-ghost" data-action="controlMemoryHistoryReconciliation" data-action-args='["calibrate"]' data-i18n="memory_dossiers.history_calibrate">隔离校准</button>
+    <button class="btn btn-ghost" data-action="controlMemoryHistoryReconciliation" data-action-args='["admit"]' data-i18n="memory_dossiers.history_admit">冻结准入</button>
+  </div>
+  <div class="form-row">
+    <label class="field"><span data-i18n="memory_dossiers.history_go_live">上线日期</span><input id="memory-history-go-live" type="date"></label>
+    <label class="field"><span data-i18n="memory_dossiers.history_timezone">时区</span><input id="memory-history-timezone" type="text" maxlength="64" value="Asia/Shanghai"></label>
+    <label class="field"><span data-i18n="memory_dossiers.history_stop_local">晨间停止</span><input id="memory-history-stop-local" type="time" value="07:00"></label>
+    <label class="field"><span data-i18n="memory_dossiers.history_cost_budget">每日费用上限</span><input id="memory-history-cost-budget" type="number" min="0.01" max="10000" step="0.01" value="1"></label>
   </div>
   <div class="form-row">
     <label class="field"><span data-i18n="memory_dossiers.history_store">来源库</span><input id="memory-history-store" type="text" maxlength="64"></label>

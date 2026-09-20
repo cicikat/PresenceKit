@@ -12,9 +12,10 @@ import json
 import re
 import sqlite3
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone, tzinfo
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from core.memory.path_resolver import resolve_path
 from core.memory.scope import MemoryScope
@@ -26,6 +27,7 @@ STATES = ("pending", "running", "committed", "retryable_failed", "deferred", "ex
 RULES_VERSION = "history-reconciliation-rules.v1"
 FIRST_NIGHT_WINDOW_SECONDS = 30 * 24 * 3600
 CALIBRATION_SCHEMA = "memory-history-calibration.v1"
+ADMISSION_SCHEMA = "memory-history-admission.v1"
 DEFAULT_COLD_THEME_SHARE = 0.25
 HEADROOM_RATE = 0.25
 HEADROOM_FAIL = 0.15
@@ -34,7 +36,24 @@ QUALITY_CLASSES = (
     "duplicate_facts", "feeling_as_fact", "false_discard",
     "classification_fragmentation", "stale_conclusion",
 )
+RESTORE_STRATEGIES = ("verified_snapshot_rollback",)
+PRECONDITION_KEYS = (
+    "brief_258_b_e",
+    "recovery_drill",
+    "spot_check",
+)
 _DAY_NAME_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})\.md$")
+_DATE_RE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})$")
+_OFFSET_RE = re.compile(r"^UTC([+-])(\d{2}):(\d{2})$")
+_KNOWN_ZONE_OFFSETS = {
+    "UTC": 0,
+    "Etc/UTC": 0,
+    "Asia/Shanghai": 8 * 3600,
+    "Asia/Hong_Kong": 8 * 3600,
+    "Asia/Taipei": 8 * 3600,
+    "Asia/Tokyo": 9 * 3600,
+    "America/New_York": -5 * 3600,
+}
 
 
 def _digest(value: Any) -> str:
@@ -610,6 +629,201 @@ def freeze_manifest(scope: MemoryScope, *, manifest_revision: str | None = None)
         raise OSError("history_reconciliation_state_write_failed")
     return {"frozen": True, "manifest_revision": revision, "frozen_at": state["frozen_at"],
             "first_night_range": first_night_range}
+
+
+def _parse_go_live_date(value: Any) -> str:
+    text = str(value or "").strip()
+    match = _DATE_RE.fullmatch(text)
+    if not match:
+        raise ValueError("invalid_go_live_date")
+    year, month, day = (int(part) for part in match.groups())
+    try:
+        datetime(year, month, day)
+    except ValueError as exc:
+        raise ValueError("invalid_go_live_date") from exc
+    return text
+
+
+def _parse_timezone(value: Any) -> str:
+    name = str(value or "").strip()
+    if not name:
+        raise ValueError("invalid_timezone")
+    try:
+        ZoneInfo(name)
+        return name
+    except (ZoneInfoNotFoundError, ValueError):
+        pass
+    if name in _KNOWN_ZONE_OFFSETS or _OFFSET_RE.fullmatch(name):
+        return name
+    raise ValueError("invalid_timezone")
+
+
+def _timezone_info(name: str) -> tzinfo:
+    try:
+        return ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError):
+        if name in _KNOWN_ZONE_OFFSETS:
+            return timezone(timedelta(seconds=_KNOWN_ZONE_OFFSETS[name]))
+        match = _OFFSET_RE.fullmatch(name)
+        if match:
+            sign = 1 if match.group(1) == "+" else -1
+            seconds = sign * (int(match.group(2)) * 3600 + int(match.group(3)) * 60)
+            return timezone(timedelta(seconds=seconds))
+        raise ValueError("invalid_timezone")
+
+
+def _positive_int(value: Any, *, field: str, high: int) -> int:
+    try:
+        number = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(field) from exc
+    if number <= 0 or number > high:
+        raise ValueError(field)
+    return number
+
+
+def _preconditions(raw: Any) -> dict[str, bool]:
+    payload = raw if isinstance(raw, dict) else {}
+    result = {key: bool(payload.get(key)) for key in PRECONDITION_KEYS}
+    if not all(result.values()):
+        raise ValueError("preconditions_incomplete")
+    return result
+
+
+def _range_totals(frozen_range: dict[str, Any]) -> dict[str, int]:
+    counts = frozen_range.get("source_item_priority_counts")
+    counts = counts if isinstance(counts, dict) else {}
+    return {
+        "first_night_candidates": int(frozen_range.get("inventory_first_night_candidates") or 0),
+        "remaining_history": int(frozen_range.get("inventory_remaining_history") or 0),
+        "correction": int(counts.get("correction") or 0),
+        "active_theme": int(counts.get("active_theme") or 0),
+        "recent": int(counts.get("recent") or 0),
+        "remaining": int(counts.get("remaining") or 0),
+    }
+
+
+def _go_live_deadline(go_live_date: str, timezone_name: str, stop_at_local: str) -> float:
+    hour, minute = (int(part) for part in str(stop_at_local).split(":", 1))
+    local = datetime.fromisoformat(f"{go_live_date}T{hour:02d}:{minute:02d}:00").replace(
+        tzinfo=_timezone_info(timezone_name),
+    )
+    return local.timestamp()
+
+
+def admit_first_night(
+    scope: MemoryScope,
+    *,
+    go_live_date: str,
+    timezone_name: str,
+    manifest_revision: str | None = None,
+    grant_revision: int,
+    preset: str = "便宜小模型grok-see",
+    daily_call_budget: int,
+    daily_token_budget: int,
+    daily_cost_budget: float,
+    stop_at_local: str = "07:00",
+    restore_strategy: str = "verified_snapshot_rollback",
+    preconditions: dict[str, bool] | None = None,
+    now: float | None = None,
+) -> dict[str, Any]:
+    """Freeze production-admission artifacts. This does not run first-night."""
+    date = _parse_go_live_date(go_live_date)
+    zone = _parse_timezone(timezone_name)
+    stop = str(stop_at_local or "").strip()
+    if not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", stop):
+        raise ValueError("invalid_stop_at_local")
+    strategy = str(restore_strategy or "").strip()
+    if strategy not in RESTORE_STRATEGIES:
+        raise ValueError("invalid_restore_strategy")
+    grant = _positive_int(grant_revision, field="invalid_grant_revision", high=1_000_000)
+    calls = _positive_int(daily_call_budget, field="invalid_call_budget", high=100)
+    tokens = _positive_int(daily_token_budget, field="invalid_token_budget", high=100_000)
+    try:
+        cost = float(daily_cost_budget)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("invalid_cost_budget") from exc
+    if cost <= 0 or cost > 10_000:
+        raise ValueError("invalid_cost_budget")
+    named_preset = str(preset or "").strip()[:128]
+    if not named_preset:
+        raise ValueError("invalid_preset")
+    checks = _preconditions(preconditions)
+    state = read_state(scope)
+    frozen = str(state.get("frozen_manifest_revision") or "")
+    revision = str(manifest_revision or frozen)
+    if not frozen or frozen != revision:
+        raise ValueError("manifest_not_frozen")
+    frozen_range = state.get("first_night_range") if isinstance(state.get("first_night_range"), dict) else {}
+    if not frozen_range:
+        raise ValueError("first_night_range_missing")
+    calibration = state.get("last_calibration") if isinstance(state.get("last_calibration"), dict) else {}
+    if calibration.get("unlimited_run_allowed") is not False:
+        raise ValueError("calibration_incomplete")
+    if calibration.get("budget_unset") is True:
+        raise ValueError("budget_unset")
+    from core.memory import consolidation_worker
+    cfg = consolidation_worker.config()
+    if int(cfg["grant_revision"]) != grant:
+        raise ValueError("grant_revision_mismatch")
+    deadline = _go_live_deadline(date, zone, stop)
+    admitted_at = float(time.time() if now is None else now)
+    admission = {
+        "schema_version": ADMISSION_SCHEMA,
+        "admitted": True,
+        "production_first_night": False,
+        "go_live_date": date,
+        "timezone": zone,
+        "manifest_revision": frozen,
+        "range_totals": _range_totals(frozen_range),
+        "grant_revision": grant,
+        "preset": named_preset,
+        "hard_budgets": {
+            "daily_call_budget": calls,
+            "daily_token_budget": tokens,
+            "daily_cost_budget": round(cost, 4),
+        },
+        "stop_at_local": stop,
+        "stop_at": deadline,
+        "restore_strategy": strategy,
+        "preconditions": checks,
+        "admitted_at": admitted_at,
+        "note": "Admission freezes go-live artifacts; it does not enable the scheduler or run first-night.",
+    }
+    state["admission"] = admission
+    state["updated_at"] = admitted_at
+    if not safe_write_json(_state_path(scope), state, keep_bak=True):
+        raise OSError("history_reconciliation_state_write_failed")
+    return admission
+
+
+def _require_admission(scope: MemoryScope, *, manifest_revision: str) -> dict[str, Any]:
+    state = read_state(scope)
+    admission = state.get("admission") if isinstance(state.get("admission"), dict) else None
+    if not admission or admission.get("admitted") is not True:
+        return {"ok": False, "reason": "not_admitted"}
+    if str(admission.get("schema_version") or "") != ADMISSION_SCHEMA:
+        return {"ok": False, "reason": "admission_schema_mismatch"}
+    if str(state.get("frozen_manifest_revision") or "") != str(manifest_revision):
+        return {"ok": False, "reason": "manifest_not_frozen"}
+    if str(admission.get("manifest_revision") or "") != str(manifest_revision):
+        return {"ok": False, "reason": "admission_manifest_mismatch"}
+    if admission.get("unlimited_run_allowed") is True:
+        return {"ok": False, "reason": "unlimited_run_forbidden"}
+    budgets = admission.get("hard_budgets") if isinstance(admission.get("hard_budgets"), dict) else {}
+    if not all(float(budgets.get(name) or 0) > 0 for name in ("daily_call_budget", "daily_token_budget", "daily_cost_budget")):
+        return {"ok": False, "reason": "budget_unset"}
+    if str(admission.get("restore_strategy") or "") not in RESTORE_STRATEGIES:
+        return {"ok": False, "reason": "invalid_restore_strategy"}
+    checks = admission.get("preconditions") if isinstance(admission.get("preconditions"), dict) else {}
+    if not all(bool(checks.get(key)) for key in PRECONDITION_KEYS):
+        return {"ok": False, "reason": "preconditions_incomplete"}
+    from core.memory import consolidation_worker
+    if int(consolidation_worker.config()["grant_revision"]) != int(admission.get("grant_revision") or 0):
+        return {"ok": False, "reason": "grant_revision_mismatch"}
+    if float(admission.get("stop_at") or 0) <= 0:
+        return {"ok": False, "reason": "invalid_stop_at"}
+    return {"ok": True, "admission": admission}
 
 
 def _inspect_quality(operations: list[dict[str, Any]], events: list[dict[str, Any]],
@@ -1252,19 +1466,28 @@ async def run_first_night(
     """Run bounded historical import batches until a cutoff or terminal state.
 
     This is an explicit operator action, never a scheduler default. Every
-    batch reuses the verified snapshot and frozen manifest gate. The report is
-    metadata-only and deliberately distinguishes imported event evidence from
-    dossier passes and deferred source adapters.
+    batch reuses the verified snapshot, frozen manifest, and production
+    admission gates. The report is metadata-only and deliberately distinguishes
+    imported event evidence from dossier passes and deferred source adapters.
+    Admission itself never enables the scheduler or sends a conversation
+    message.
     """
     if not 1 <= int(batch_size) <= 100:
         raise ValueError("invalid_batch_size")
     verification = verify_backup_snapshot(Path(backup_snapshot))
     if not verification["verified"]:
         return {"status": "deferred", "reason": "backup_not_verified", "errors": verification["errors"]}
-    state = read_state(scope)
-    if str(state.get("frozen_manifest_revision") or "") != str(manifest_revision):
-        return {"status": "deferred", "reason": "manifest_not_frozen"}
-    deadline = float(stop_at) if stop_at is not None else time.time() + 600
+    gate = _require_admission(scope, manifest_revision=str(manifest_revision))
+    if not gate["ok"]:
+        return {"status": "deferred", "reason": gate["reason"]}
+    admission = gate["admission"]
+    admitted_stop = float(admission["stop_at"])
+    requested = float(stop_at) if stop_at is not None else admitted_stop
+    deadline = min(requested, admitted_stop)
+    stamp = time.time()
+    if stamp >= admitted_stop:
+        return {"status": "deferred", "reason": "stop_deadline_passed"}
+    preset = str(admission.get("preset") or preset)[:128]
     batches = 0
     dossier_passes = 0
     last: dict[str, Any] = {}
@@ -1326,6 +1549,7 @@ def status(scope: MemoryScope) -> dict[str, Any]:
             "first_night_range": state.get("first_night_range") if isinstance(state.get("first_night_range"), dict) else None,
             "source_item_priority_counts": dossiers.source_item_priority_counts(scope),
             "last_calibration": state.get("last_calibration") if isinstance(state.get("last_calibration"), dict) else None,
+            "admission": state.get("admission") if isinstance(state.get("admission"), dict) else None,
             "last_error": str(state.get("last_error") or "")[:128],
             "last_closeout": state.get("last_closeout") if isinstance(state.get("last_closeout"), dict) else None}
 

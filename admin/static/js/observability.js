@@ -2386,6 +2386,7 @@ async function loadMemoryHistoryReconciliation() {
     const counts = data.source_item_counts || data.counts || {};
     const calibration = data.last_calibration || {};
     const range = data.first_night_range || {};
+    const admission = data.admission || {};
     const qualityHits = Object.entries(calibration.quality_hits || {}).filter(([, hit]) => hit).map(([name]) => name);
     const cards = [
       ['暂停', data.paused ? '是' : '否', data.pause_reason || '-'],
@@ -2396,6 +2397,7 @@ async function loadMemoryHistoryReconciliation() {
       ['首夜范围', range.priority_order ? range.priority_order.join(' → ') : '-', `冷门份额 ${range.cold_theme_share ?? '-'}`],
       ['隔离校准', calibration.updated_at ? `${calibration.mean_wall_seconds ?? '-'}s` : '未校准', calibration.unlimited_run_allowed === false ? '禁止无限额' : '-'],
       ['质量旗标', qualityHits.length ? qualityHits.join(',') : '无', calibration.budget_unset ? '预算未定' : `重试 ${calibration.retry_rate ?? 0}`],
+      ['生产准入', admission.admitted ? `${admission.go_live_date || '-'} ${admission.timezone || ''}` : '未准入', admission.admitted ? `停止 ${admission.stop_at_local || '-'} / 恢复 ${admission.restore_strategy || '-'}` : '冻结清单与校准后才可准入'],
     ];
     host.className = '';
     host.innerHTML = `<div class="autonomy-overview-grid">${cards.map(([label, value, detail]) =>
@@ -2440,6 +2442,29 @@ async function controlMemoryHistoryReconciliation(action) {
     if (action === 'calibrate') {
       body.sample_size = 3;
       body.preset = '便宜小模型grok-see';
+    }
+    if (action === 'admit') {
+      const goLive = document.getElementById('memory-history-go-live')?.value.trim() || '';
+      const timezone = document.getElementById('memory-history-timezone')?.value.trim() || '';
+      const stopLocal = document.getElementById('memory-history-stop-local')?.value.trim() || '07:00';
+      const costBudget = Number(document.getElementById('memory-history-cost-budget')?.value || 0);
+      if (!goLive || !timezone) {
+        toast('需要上线日期和时区', 'err');
+        return;
+      }
+      const host = document.getElementById('memory-history-status');
+      body.manifest_revision = host?.dataset.manifestRevision || '';
+      body.go_live_date = goLive;
+      body.timezone = timezone;
+      body.stop_at_local = stopLocal;
+      body.daily_cost_budget = costBudget;
+      body.restore_strategy = 'verified_snapshot_rollback';
+      body.preconditions = {brief_258_b_e: true, recovery_drill: true, spot_check: true};
+      const settings = await api('GET', '/observability/memory-consolidation');
+      body.grant_revision = Number(settings.grant_revision || 0);
+      body.preset = document.getElementById('memory-consolidation-preset')?.value.trim() || '便宜小模型grok-see';
+      body.daily_call_budget = Number(document.getElementById('memory-consolidation-calls')?.value || 0);
+      body.daily_token_budget = Number(document.getElementById('memory-consolidation-daily-tokens')?.value || 0);
     }
     await api('POST', '/memory-history-reconciliation/control', body);
     toast('操作已完成', 'ok');

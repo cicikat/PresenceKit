@@ -131,7 +131,7 @@ async def control_memory_history_reconciliation(
 ):
     action = str(body.get("action") or "")
     uid, char_id = str(body.get("uid") or ""), str(body.get("char_id") or "")
-    if action not in {"pause", "resume", "dry_run", "freeze", "apply", "run", "rollback", "evidence_only", "calibrate"} or not uid or not char_id:
+    if action not in {"pause", "resume", "dry_run", "freeze", "apply", "run", "rollback", "evidence_only", "calibrate", "admit"} or not uid or not char_id:
         raise HTTPException(status_code=422, detail={"code": "invalid_reconciliation_control"})
     _scope(uid, char_id)
     from core.memory import history_reconciliation
@@ -166,6 +166,24 @@ async def control_memory_history_reconciliation(
         try:
             return history_reconciliation.freeze_manifest(
                 scope, manifest_revision=str(body.get("manifest_revision") or "") or None,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail={"code": str(exc)}) from exc
+    if action == "admit":
+        try:
+            return history_reconciliation.admit_first_night(
+                scope,
+                go_live_date=str(body.get("go_live_date") or ""),
+                timezone_name=str(body.get("timezone") or ""),
+                manifest_revision=str(body.get("manifest_revision") or "") or None,
+                grant_revision=int(body.get("grant_revision") or 0),
+                preset=str(body.get("preset") or "便宜小模型grok-see"),
+                daily_call_budget=int(body.get("daily_call_budget") or 0),
+                daily_token_budget=int(body.get("daily_token_budget") or 0),
+                daily_cost_budget=float(body.get("daily_cost_budget") or 0),
+                stop_at_local=str(body.get("stop_at_local") or "07:00"),
+                restore_strategy=str(body.get("restore_strategy") or "verified_snapshot_rollback"),
+                preconditions=body.get("preconditions") if isinstance(body.get("preconditions"), dict) else None,
             )
         except ValueError as exc:
             raise HTTPException(status_code=409, detail={"code": str(exc)}) from exc

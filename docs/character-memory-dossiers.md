@@ -182,10 +182,13 @@ through `PATCH /settings/memory-consolidation` plus
 `POST /memory-consolidation/control` (`admin`). Isolated calibration is
 `POST /memory-history-reconciliation/control` with `action=calibrate`; it
 records redacted latency/token/retry facts and freezes the first-night range
-without applying patches. Identifiers in metadata-only
+without applying patches. `action=admit` freezes go-live date, timezone,
+manifest, range totals, grant, preset, hard budgets, morning stop and restore
+strategy; it does not run first-night. Identifiers in metadata-only
 observability are hashed; dossier prose and evidence remain behind `memory.read`.
 
-Production enablement is not implied by implementation or tests. It requires
-Brief 259 C6-C7 plus D and the separately authorized Brief 258 F shadow, scoped and
+Production enablement is not implied by implementation or tests. C6-C7 admits
+the freeze record only. Real first-night/next-morning evidence still requires
+Brief 259 D and the separately authorized Brief 258 F shadow, scoped and
 expansion gates. Desktop/mobile protocols, queues, ack/TTL and native settings
 are unchanged.

@@ -263,6 +263,55 @@ def test_verified_apply_requires_frozen_manifest(sandbox, monkeypatch):
     assert result == {"status": "deferred", "reason": "manifest_not_frozen"}
 
 
+def _admit(scope, monkeypatch, *, now=1_700_000_000.0, stop_at_local="07:00", **overrides):
+    from core.memory import history_reconciliation
+    from core.memory.consolidation_worker import _DEFAULTS
+
+    monkeypatch.setattr("core.memory.consolidation_worker.config", lambda: {
+        **_DEFAULTS, "enabled": False, "grant_revision": 1,
+        "daily_call_budget": 8, "daily_token_budget": 9600, "daily_wall_seconds": 600,
+    })
+    kwargs = {
+        "go_live_date": "2099-01-02",
+        "timezone_name": "Asia/Shanghai",
+        "grant_revision": 1,
+        "preset": "便宜小模型grok-see",
+        "daily_call_budget": 8,
+        "daily_token_budget": 9600,
+        "daily_cost_budget": 1.0,
+        "stop_at_local": stop_at_local,
+        "restore_strategy": "verified_snapshot_rollback",
+        "preconditions": {"brief_258_b_e": True, "recovery_drill": True, "spot_check": True},
+        "now": now,
+    }
+    kwargs.update(overrides)
+    return history_reconciliation.admit_first_night(scope, **kwargs)
+
+
+def test_first_night_runner_requires_admission_before_verified_backup(sandbox, monkeypatch, tmp_path):
+    from core.memory import history_reconciliation
+    from core.memory.scope import MemoryScope
+
+    scope = MemoryScope.reality_scope("first-night-owner", TEST_CHAR_ID)
+    manifest = history_reconciliation.create_manifest(scope, now=1)
+    history_reconciliation.freeze_manifest(scope, manifest_revision=manifest["manifest_revision"])
+    monkeypatch.setattr(history_reconciliation, "verify_backup_snapshot", lambda path: {"verified": True, "errors": []})
+    calls = {"count": 0}
+
+    def fake_apply(*args, **kwargs):
+        calls["count"] += 1
+        return {"status": "committed", "migration": {"next_offset": 1, "total": 1}}
+
+    monkeypatch.setattr(history_reconciliation, "apply_batch", fake_apply)
+    blocked = __import__("asyncio").run(history_reconciliation.run_first_night(
+        scope, backup_snapshot=tmp_path / "snapshot", manifest_revision=manifest["manifest_revision"],
+        stop_at=0,
+    ))
+    assert blocked == {"status": "deferred", "reason": "not_admitted"}
+    assert calls["count"] == 0
+    assert history_reconciliation.status(scope)["admission"] is None
+
+
 def test_first_night_runner_stops_at_cutoff_and_uses_verified_gate(sandbox, monkeypatch, tmp_path):
     from core.memory import history_reconciliation
     from core.memory.scope import MemoryScope
@@ -270,6 +319,12 @@ def test_first_night_runner_stops_at_cutoff_and_uses_verified_gate(sandbox, monk
     scope = MemoryScope.reality_scope("first-night-owner", TEST_CHAR_ID)
     manifest = history_reconciliation.create_manifest(scope, now=1)
     history_reconciliation.freeze_manifest(scope, manifest_revision=manifest["manifest_revision"])
+    state = history_reconciliation.read_state(scope)
+    state["last_calibration"] = {
+        "unlimited_run_allowed": False, "budget_unset": False, "isolated": True,
+    }
+    history_reconciliation.safe_write_json(history_reconciliation._state_path(scope), state, keep_bak=True)
+    admission = _admit(scope, monkeypatch, now=1_700_000_000.0)
     monkeypatch.setattr(history_reconciliation, "verify_backup_snapshot", lambda path: {"verified": True, "errors": []})
     calls = {"count": 0}
 
@@ -289,7 +344,9 @@ def test_first_night_runner_stops_at_cutoff_and_uses_verified_gate(sandbox, monk
     assert result["status"] == "stopped"
     assert result["batches"] == 0
     assert calls["count"] == 0
+    assert admission["admitted"] is True
     assert history_reconciliation.status(scope)["last_closeout"]["status"] == "stopped"
+    assert history_reconciliation.status(scope)["admission"]["go_live_date"] == "2099-01-02"
 
 
 def test_imported_event_consolidation_pins_scope_and_bulk_preset(monkeypatch):
@@ -747,3 +804,82 @@ def test_rate_band_keeps_headroom_and_refuses_unset_budget():
     )
     assert empty["binding_limit"] == "no_sample"
     assert empty["estimated_seconds"] is None
+
+
+def test_admit_first_night_freezes_go_live_artifacts_without_running(sandbox, monkeypatch):
+    from core.memory import history_reconciliation
+    from core.memory.scope import MemoryScope
+
+    scope = MemoryScope.reality_scope("admit-owner", TEST_CHAR_ID)
+    manifest = history_reconciliation.create_manifest(scope, now=1)
+    history_reconciliation.freeze_manifest(scope, manifest_revision=manifest["manifest_revision"])
+    state = history_reconciliation.read_state(scope)
+    state["last_calibration"] = {"unlimited_run_allowed": False, "budget_unset": False}
+    history_reconciliation.safe_write_json(history_reconciliation._state_path(scope), state, keep_bak=True)
+    admission = _admit(scope, monkeypatch, now=1_700_000_000.0)
+    snapshot = history_reconciliation.status(scope)
+    assert admission["schema_version"] == "memory-history-admission.v1"
+    assert admission["admitted"] is True
+    assert admission["production_first_night"] is False
+    assert admission["go_live_date"] == "2099-01-02"
+    assert admission["timezone"] == "Asia/Shanghai"
+    assert admission["stop_at_local"] == "07:00"
+    assert admission["stop_at"] > admission["admitted_at"]
+    assert admission["hard_budgets"]["daily_call_budget"] == 8
+    assert admission["hard_budgets"]["daily_token_budget"] == 9600
+    assert admission["hard_budgets"]["daily_cost_budget"] == 1.0
+    assert admission["restore_strategy"] == "verified_snapshot_rollback"
+    assert admission["preconditions"] == {
+        "brief_258_b_e": True, "recovery_drill": True, "spot_check": True,
+    }
+    assert snapshot["admission"]["manifest_revision"] == manifest["manifest_revision"]
+    assert snapshot["last_closeout"] is None
+
+
+def test_admit_first_night_rejects_incomplete_preconditions_and_unset_budget(sandbox, monkeypatch):
+    from core.memory import history_reconciliation
+    from core.memory.scope import MemoryScope
+
+    scope = MemoryScope.reality_scope("admit-block", TEST_CHAR_ID)
+    try:
+        history_reconciliation.admit_first_night(
+            scope, go_live_date="2099-01-02", timezone_name="Asia/Shanghai",
+            grant_revision=1, daily_call_budget=8, daily_token_budget=9600,
+            daily_cost_budget=1.0,
+            preconditions={"brief_258_b_e": True, "recovery_drill": True, "spot_check": True},
+        )
+        raise AssertionError("expected freeze before admit")
+    except ValueError as exc:
+        assert str(exc) == "manifest_not_frozen"
+    manifest = history_reconciliation.create_manifest(scope, now=1)
+    history_reconciliation.freeze_manifest(scope, manifest_revision=manifest["manifest_revision"])
+    try:
+        _admit(scope, monkeypatch)
+        raise AssertionError("expected calibration before admit")
+    except ValueError as exc:
+        assert str(exc) == "calibration_incomplete"
+    state = history_reconciliation.read_state(scope)
+    state["last_calibration"] = {"unlimited_run_allowed": False, "budget_unset": True}
+    history_reconciliation.safe_write_json(history_reconciliation._state_path(scope), state, keep_bak=True)
+    try:
+        _admit(scope, monkeypatch)
+        raise AssertionError("expected budget before admit")
+    except ValueError as exc:
+        assert str(exc) == "budget_unset"
+    state["last_calibration"] = {"unlimited_run_allowed": False, "budget_unset": False}
+    history_reconciliation.safe_write_json(history_reconciliation._state_path(scope), state, keep_bak=True)
+    try:
+        _admit(scope, monkeypatch, preconditions={"brief_258_b_e": True, "recovery_drill": True, "spot_check": False})
+        raise AssertionError("expected complete preconditions")
+    except ValueError as exc:
+        assert str(exc) == "preconditions_incomplete"
+    try:
+        _admit(scope, monkeypatch, grant_revision=9)
+        raise AssertionError("expected matching grant")
+    except ValueError as exc:
+        assert str(exc) == "grant_revision_mismatch"
+    try:
+        _admit(scope, monkeypatch, timezone_name="Not/AZone")
+        raise AssertionError("expected valid timezone")
+    except ValueError as exc:
+        assert str(exc) == "invalid_timezone"

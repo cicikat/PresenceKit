@@ -756,11 +756,17 @@ first-night priority range. It does not apply patches, enable the scheduler, or
 admit production first-night. `action=freeze` pins the
 manifest revision and that frozen range before apply, and `action=apply` additionally
 requires a server-side verified offline snapshot path and a bounded batch size.
+`action=admit` freezes production-admission artifacts: go-live date, timezone,
+first-night manifest revision, range totals, character grant, preset,
+call/token/cost hard budgets, morning stop, and verified-snapshot restore
+strategy. It records 258 B–E, recovery drill, and spot-check as preconditions
+and never enables the scheduler. Isolated calibration freeze is not admission.
 `action=run` is the explicit first-night runner: it additionally requires the
-frozen manifest revision and a stop deadline, then returns a metadata-only
-closeout report. It is never invoked by the scheduler automatically.
-The apply path is default-off at the operational level and is not a production
-rollout switch.
+frozen manifest revision, a verified snapshot, a matching admission record, and
+a stop deadline no later than the admitted morning cutoff, then returns a
+metadata-only closeout report. It is never invoked by the scheduler
+automatically. The apply path is default-off at the operational level and is
+not a production rollout switch.
 
 The current adapter applies the existing event-log migration in bounded
 batches. When `consolidate=true` (the admin apply default), it then admits one
@@ -770,8 +776,10 @@ derived historical stores may be closed only as `evidence_only` when the
 provider is unavailable; this is not semantic calibration or an active dossier
 conclusion. The verified offline snapshot and recovery drill are recorded
 outside this control surface. Isolated calibration may freeze a first-night
-range from inventory; that freeze is not production admission. No production
-snapshot, first-night manifest, or morning closeout has been performed.
+range from inventory; that freeze is not production admission. Production
+admission may freeze go-live artifacts after 258 B–E, recovery, and
+spot-check; it still does not run first-night. No production snapshot,
+first-night apply, or morning closeout has been performed in this slice.
 
 When the configured provider is unavailable, admin may explicitly use
 `action=evidence_only` with a non-empty `reason`. This closes only the

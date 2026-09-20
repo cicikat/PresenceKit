@@ -26,8 +26,12 @@ records latency, estimated tokens, retry rate, structural quality flags and a
 rate band with quota/failure/foreground headroom; it never applies patches or
 admits production first-night. Claims freeze a first-night range
 (correction → active theme → recent 30-day candidates → remaining) and keep a
-cold-theme share so remaining history is not starved. Isolated inventory
-counts are not a production scan.
+cold-theme share so remaining history is not starved. Production admission is a
+separate freeze: go-live date, timezone, first-night manifest, range totals,
+character grant, preset, call/token/cost hard budgets, morning stop, and
+verified-snapshot restore strategy. `action=run` remains blocked until that
+record exists; admission itself does not enable the scheduler or send a
+conversation message. Isolated inventory counts are not a production scan.
 
 ## 资料接续回执（2026-09-13）
 

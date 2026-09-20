@@ -1023,8 +1023,11 @@ receipts are listed at
 only. Isolated calibration is an admin control
 (`POST /memory-history-reconciliation/control`, `action=calibrate`); status
 exposes redacted rate-band and frozen first-night range metadata with no
-desktop/mobile consumer.
+desktop/mobile consumer. Production admission is the same admin control with
+`action=admit`; status exposes go-live date/timezone, hard budgets, morning
+stop and restore strategy. Admission does not enable the scheduler or invoke
+`action=run`.
 
-`open`: production rollout and real first-night/next-morning evidence are gated
-by Brief 259 C6-C7 plus D and Brief 258 F. Isolated calibration and admin
-browser inspection do not constitute production migration evidence.
+`open`: real first-night/next-morning evidence remains gated by Brief 259 D
+and Brief 258 F. Isolated calibration, admission freeze, and admin browser
+inspection do not constitute production migration evidence.

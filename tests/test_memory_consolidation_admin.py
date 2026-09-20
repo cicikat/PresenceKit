@@ -134,6 +134,52 @@ def test_calibrate_control_is_isolated_and_redacted(sandbox, monkeypatch):
     assert secret not in allowed.text
 
 
+def test_admit_control_requires_admin_and_does_not_run(sandbox, monkeypatch):
+    from core.memory.scope import MemoryScope
+
+    scope = MemoryScope.reality_scope("admin-admit", TEST_CHAR_ID)
+
+    def fake_admit(scope_arg, **kwargs):
+        assert kwargs["go_live_date"] == "2099-01-02"
+        assert kwargs["timezone_name"] == "Asia/Shanghai"
+        assert kwargs["preconditions"]["spot_check"] is True
+        return {
+            "admitted": True,
+            "production_first_night": False,
+            "go_live_date": "2099-01-02",
+            "timezone": "Asia/Shanghai",
+            "restore_strategy": "verified_snapshot_rollback",
+        }
+
+    monkeypatch.setattr("core.memory.history_reconciliation.admit_first_night", fake_admit)
+    client = _client_with_tokens(sandbox)
+    denied = client.post(
+        "/memory-history-reconciliation/control",
+        json={"action": "admit", "uid": scope.uid, "char_id": scope.character_id,
+              "go_live_date": "2099-01-02", "timezone": "Asia/Shanghai",
+              "grant_revision": 1, "daily_call_budget": 8, "daily_token_budget": 9600,
+              "daily_cost_budget": 1, "preconditions": {
+                  "brief_258_b_e": True, "recovery_drill": True, "spot_check": True,
+              }},
+        headers=_headers("state-token"),
+    )
+    allowed = client.post(
+        "/memory-history-reconciliation/control",
+        json={"action": "admit", "uid": scope.uid, "char_id": scope.character_id,
+              "go_live_date": "2099-01-02", "timezone": "Asia/Shanghai",
+              "grant_revision": 1, "daily_call_budget": 8, "daily_token_budget": 9600,
+              "daily_cost_budget": 1, "preconditions": {
+                  "brief_258_b_e": True, "recovery_drill": True, "spot_check": True,
+              }},
+        headers=_headers("admin-token"),
+    )
+    assert denied.status_code == 403
+    assert allowed.status_code == 200
+    payload = allowed.json()
+    assert payload["admitted"] is True
+    assert payload["production_first_night"] is False
+
+
 def test_observability_is_metadata_only_and_scope_protected(sandbox):
     from core.memory.scope import MemoryScope
 
