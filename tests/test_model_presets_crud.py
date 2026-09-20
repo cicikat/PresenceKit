@@ -245,6 +245,31 @@ def test_rename_preset_updates_every_routing_profile_reference(admin_client):
     }
 
 
+def test_rename_preset_rewrites_fallback_routes(admin_client):
+    client, temp_cfg = admin_client
+    model_presets = {
+        **_BASE_MODEL_PRESETS,
+        "presets": {
+            **_BASE_MODEL_PRESETS["presets"],
+            "spare": {"provider_kind": "openai", "model": "gpt-4"},
+        },
+        "routing_profiles": {"default": {"chat": "spare"}},
+        "fallback_routes": {"default": {"chat": "deepseek-default"}},
+    }
+    _write_cfg(temp_cfg, model_presets=model_presets)
+
+    resp = client.post(
+        "/model-presets/presets/deepseek-default/rename",
+        json={"new_name": "deepseek-relay"},
+        headers=_auth(),
+    )
+    assert resp.status_code == 200
+    assert "fallback_routes.default.chat" in resp.json()["updated_references"]
+    saved = yaml.safe_load(temp_cfg.read_text(encoding="utf-8"))
+    assert saved["model_presets"]["fallback_routes"]["default"]["chat"] == "deepseek-relay"
+    assert "deepseek-default" not in saved["model_presets"]["presets"]
+
+
 def test_rename_preset_rewrites_default_preset(admin_client):
     client, temp_cfg = admin_client
     model_presets = {
@@ -351,6 +376,26 @@ def test_delete_referenced_preset_409(admin_client):
     assert "deepseek-default" in saved["model_presets"]["presets"]
 
 
+def test_delete_preset_referenced_only_by_fallback_routes_409(admin_client):
+    client, temp_cfg = admin_client
+    mp = {
+        **_BASE_MODEL_PRESETS,
+        "presets": {
+            **_BASE_MODEL_PRESETS["presets"],
+            "spare": {"provider_kind": "openai", "model": "gpt-4"},
+        },
+        "routing_profiles": {"default": {"chat": "spare"}},
+        "fallback_routes": {"default": {"chat": "deepseek-default"}},
+    }
+    _write_cfg(temp_cfg, model_presets=mp)
+
+    resp = client.delete("/model-presets/presets/deepseek-default", headers=_auth())
+    assert resp.status_code == 409
+    assert "fallback_routes.default.chat" in resp.json()["detail"]
+    saved = yaml.safe_load(temp_cfg.read_text(encoding="utf-8"))
+    assert "deepseek-default" in saved["model_presets"]["presets"]
+
+
 def test_delete_default_preset_409(admin_client):
     client, temp_cfg = admin_client
     mp = {
@@ -446,6 +491,73 @@ def test_put_routing_profile_empty_string_clears_mapping(admin_client):
     assert profile["chat"] == "deepseek-default"
 
 
+def test_put_routing_profile_fallback_is_independent_and_omitting_does_not_smash(admin_client):
+    client, temp_cfg = admin_client
+    mp = {
+        **_BASE_MODEL_PRESETS,
+        "presets": {
+            **_BASE_MODEL_PRESETS["presets"],
+            "spare": {"provider_kind": "openai", "model": "gpt-4"},
+        },
+    }
+    _write_cfg(temp_cfg, model_presets=mp)
+
+    created = client.put(
+        "/model-presets/routing-profiles/default",
+        json={"chat": "deepseek-default", "fallback": {"chat": "spare"}},
+        headers=_auth(),
+    )
+    assert created.status_code == 200
+    assert created.json()["fallback"] == {"chat": "spare"}
+    saved = yaml.safe_load(temp_cfg.read_text(encoding="utf-8"))
+    assert saved["model_presets"]["fallback_routes"]["default"]["chat"] == "spare"
+    assert saved["model_presets"]["routing_profiles"]["default"]["chat"] == "deepseek-default"
+
+    omitted = client.put(
+        "/model-presets/routing-profiles/default",
+        json={"probe": "spare"},
+        headers=_auth(),
+    )
+    assert omitted.status_code == 200
+    assert "fallback" not in omitted.json()
+    saved = yaml.safe_load(temp_cfg.read_text(encoding="utf-8"))
+    assert saved["model_presets"]["fallback_routes"]["default"]["chat"] == "spare"
+    assert saved["model_presets"]["routing_profiles"]["default"]["probe"] == "spare"
+
+    same = client.put(
+        "/model-presets/routing-profiles/default",
+        json={"fallback": {"chat": "deepseek-default"}},
+        headers=_auth(),
+    )
+    assert same.status_code == 422
+    saved = yaml.safe_load(temp_cfg.read_text(encoding="utf-8"))
+    assert saved["model_presets"]["fallback_routes"]["default"]["chat"] == "spare"
+
+    cleared = client.put(
+        "/model-presets/routing-profiles/default",
+        json={"fallback": {"chat": ""}},
+        headers=_auth(),
+    )
+    assert cleared.status_code == 200
+    assert cleared.json()["fallback"] == {}
+    saved = yaml.safe_load(temp_cfg.read_text(encoding="utf-8"))
+    assert "default" not in (saved["model_presets"].get("fallback_routes") or {})
+
+
+def test_put_routing_profile_unknown_fallback_preset_rejected(admin_client):
+    client, temp_cfg = admin_client
+    _write_cfg(temp_cfg)
+
+    resp = client.put(
+        "/model-presets/routing-profiles/default",
+        json={"fallback": {"chat": "does-not-exist"}},
+        headers=_auth(),
+    )
+    assert resp.status_code == 422
+    saved = yaml.safe_load(temp_cfg.read_text(encoding="utf-8"))
+    assert not saved["model_presets"].get("fallback_routes")
+
+
 # ── POST /model-presets/routing-profiles/{name}/rename ─────────────────────────
 
 def test_rename_routing_profile_updates_active_routing_and_character_cards(admin_client, tmp_path, monkeypatch):
@@ -520,6 +632,43 @@ def test_rename_routing_profile_updates_active_routing_and_character_cards(admin
     assert saved["model_presets"]["active_routing"] == "claude-primary"
     assert json.loads(bound.read_text(encoding="utf-8"))["presence_ext"]["model_routing"] == "claude-primary"
     assert json.loads(other.read_text(encoding="utf-8"))["presence_ext"]["model_routing"] == "default"
+
+
+def test_rename_routing_profile_rewrites_fallback_routes_key(admin_client, tmp_path, monkeypatch):
+    client, temp_cfg = admin_client
+    model_presets = {
+        **_BASE_MODEL_PRESETS,
+        "presets": {
+            **_BASE_MODEL_PRESETS["presets"],
+            "spare": {"provider_kind": "openai", "model": "gpt-4"},
+        },
+        "active_routing": "claude-main",
+        "routing_profiles": {
+            "default": {"chat": "deepseek-default"},
+            "claude-main": {"chat": "deepseek-default"},
+        },
+        "fallback_routes": {"claude-main": {"chat": "spare"}},
+    }
+    _write_cfg(temp_cfg, model_presets=model_presets)
+
+    import core.asset_registry as _reg_mod
+    from core.asset_registry import AssetRegistry
+
+    registry = AssetRegistry.__new__(AssetRegistry)
+    registry._by_id_kind = {}
+    monkeypatch.setattr(_reg_mod, "get_registry", lambda: registry)
+    monkeypatch.setattr(_reg_mod, "reload_registry", lambda: registry)
+
+    resp = client.post(
+        "/model-presets/routing-profiles/claude-main/rename",
+        json={"new_name": "claude-primary"},
+        headers=_auth(),
+    )
+    assert resp.status_code == 200
+    saved = yaml.safe_load(temp_cfg.read_text(encoding="utf-8"))
+    routes = saved["model_presets"]["fallback_routes"]
+    assert "claude-main" not in routes
+    assert routes["claude-primary"]["chat"] == "spare"
 
 
 def test_rename_routing_profile_rejects_blank_or_existing_without_writing(admin_client):
@@ -598,6 +747,41 @@ def test_delete_routing_profile_switches_active_and_clears_character_bindings(ad
     assert "claude-main" not in saved["model_presets"]["routing_profiles"]
     assert saved["model_presets"]["active_routing"] == "default"
     assert "model_routing" not in json.loads(bound.read_text(encoding="utf-8"))["presence_ext"]
+
+
+def test_delete_routing_profile_drops_its_fallback_routes(admin_client, tmp_path, monkeypatch):
+    client, temp_cfg = admin_client
+    model_presets = {
+        **_BASE_MODEL_PRESETS,
+        "presets": {
+            **_BASE_MODEL_PRESETS["presets"],
+            "spare": {"provider_kind": "openai", "model": "gpt-4"},
+        },
+        "routing_profiles": {
+            "default": {"chat": "deepseek-default"},
+            "claude-main": {"chat": "deepseek-default"},
+        },
+        "fallback_routes": {
+            "default": {"chat": "spare"},
+            "claude-main": {"chat": "spare"},
+        },
+    }
+    _write_cfg(temp_cfg, model_presets=model_presets)
+
+    import core.asset_registry as _reg_mod
+    from core.asset_registry import AssetRegistry
+
+    registry = AssetRegistry.__new__(AssetRegistry)
+    registry._by_id_kind = {}
+    monkeypatch.setattr(_reg_mod, "get_registry", lambda: registry)
+    monkeypatch.setattr(_reg_mod, "reload_registry", lambda: registry)
+
+    resp = client.delete("/model-presets/routing-profiles/claude-main", headers=_auth())
+    assert resp.status_code == 200
+    saved = yaml.safe_load(temp_cfg.read_text(encoding="utf-8"))
+    routes = saved["model_presets"]["fallback_routes"]
+    assert "claude-main" not in routes
+    assert routes["default"]["chat"] == "spare"
 
 
 def test_delete_last_routing_profile_409(admin_client):

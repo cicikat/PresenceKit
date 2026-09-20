@@ -304,6 +304,60 @@ class TestRoutingFallback:
             reg._get_preset_config = original
         assert info["effective_preset"] == "cheap"
         assert info["source"] == "default_preset"
+        assert info["fallback_preset"] == ""
+        assert info["fallback_source"] == "off"
+        assert info["fallback_refused_reason"] == ""
+
+    def test_resolve_fallback_route_is_independent_of_missing_config_chain(self):
+        import core.model_registry as reg
+        mp = {
+            "active_routing": "default",
+            "presets": {"ds": {}, "cheap": {}},
+            "routing_profiles": {"default": {"chat": "ds"}},
+            "fallback_routes": {"default": {"probe": "cheap"}},
+        }
+        original = reg._get_preset_config
+        reg._get_preset_config = lambda: mp
+        try:
+            primary = reg._resolve_preset_name("probe")
+            info = reg.resolve_fallback_route("probe", primary_preset=primary, mp=mp)
+            category = reg.resolve_category_info("probe")
+        finally:
+            reg._get_preset_config = original
+        assert primary == "ds"
+        assert info["preset"] == "cheap"
+        assert info["source"] == "configured"
+        assert category["fallback_preset"] == "cheap"
+        assert category["fallback_source"] == "configured"
+
+    def test_same_as_primary_and_unknown_preset_are_refused(self):
+        import core.model_registry as reg
+        mp = {
+            "active_routing": "default",
+            "presets": {"ds": {}},
+            "routing_profiles": {"default": {"chat": "ds"}},
+            "fallback_routes": {"default": {"chat": "ds", "probe": "ghost"}},
+        }
+        same = reg.resolve_fallback_route("chat", primary_preset="ds", mp=mp)
+        unknown = reg.resolve_fallback_route("probe", primary_preset="ds", mp=mp)
+        missing = reg.resolve_fallback_route("summary", primary_preset="ds", mp=mp)
+        assert same["refused_reason"] == "same_as_primary"
+        assert unknown["refused_reason"] == "unknown_preset"
+        assert missing["source"] == "off"
+        assert missing["preset"] == ""
+
+    def test_normalize_fallback_routes_drops_empty_and_non_maps(self):
+        import core.model_registry as reg
+        mp = {
+            "fallback_routes": {
+                "default": {"chat": "spare", "probe": ""},
+                "broken": "not-a-map",
+                "": {"chat": "spare"},
+            }
+        }
+        assert reg.normalize_fallback_routes(mp) == {"default": {"chat": "spare"}}
+        assert reg.normalize_fallback_routes({}) == {}
+        assert reg.normalize_fallback_routes(None) == {}
 
 
 # ===========================================================================

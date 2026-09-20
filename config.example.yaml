@@ -97,6 +97,13 @@ model_presets:
       monologue:      deepseek-default
       rpg_kp:         deepseek-default
 
+  # 失败兜底：按 profile/category 独立映射，不嵌进上面的 category 字符串。
+  # 空/缺省 = 关闭。主路由用尽现有重试后最多换一次；不自动替你选模型。
+  # fallback_routes:
+  #   default:
+  #     chat: claude-sonnet
+  #     sensor_judge: local-qwen
+
 # High-sensitivity troubleshooting only.  When enabled, stores the semantic LLM
 # request (messages, tools and generation params) for admin inspection.  Prompt
 # content is retained, but credential-looking fields and image data URLs are

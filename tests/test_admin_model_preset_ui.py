@@ -28,3 +28,16 @@ def test_preset_editor_exposes_native_reasoning_escape_hatch():
     assert "body.reasoning_native =" in SCRIPT
     assert "body.reasoning_extra_body = extraBody;" in SCRIPT
     assert "body.reasoning_extra_body = {};" in SCRIPT
+
+
+def test_profile_editor_exposes_independent_fallback_selects():
+    assert 'data-i18n="routing.failover.hint"' in PAGE
+    assert 'id="mr-failover-stats"' in PAGE
+    assert "mr-profile-fallback-${cat}" in SCRIPT
+    assert "body.fallback = fallback;" in SCRIPT
+    assert "function loadLlmFailoverStats()" in SCRIPT
+    assert "bindPageActions(el);" in SCRIPT
+    assert "/observability/llm-failover?window_hours=" in SCRIPT
+    records = (ROOT / "admin/static/pages/call-records.html").read_text(encoding="utf-8")
+    assert "/observability/llm-failover?window_hours=24" in records
+    assert 'data-i18n="settings_center.llm_failover"' in records

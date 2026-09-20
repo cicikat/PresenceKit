@@ -16,8 +16,8 @@ PUT    /model-presets/active-routing          — 切换当前生效的路由方
 PUT    /model-presets/default-preset          — 设置未映射 category 的默认 preset
 PUT    /model-presets/presets/{name}          — 新增或更新一个 preset
 POST   /model-presets/presets/{name}/rename   — 重命名 preset 并更新 routing 引用
-DELETE /model-presets/presets/{name}          — 删除一个 preset（被 routing_profiles / default_preset 引用时拒绝）
-PUT    /model-presets/routing-profiles/{name} — 新增或更新一个 routing profile
+DELETE /model-presets/presets/{name}          — 删除一个 preset（被 routing_profiles / default_preset / fallback_routes 引用时拒绝）
+PUT    /model-presets/routing-profiles/{name} — 新增或更新一个 routing profile（可选独立 fallback 映射）
 POST   /model-presets/routing-profiles/{name}/rename — 重命名 routing profile 并改写角色卡绑定
 DELETE /model-presets/routing-profiles/{name} — 删除 routing profile（不能删最后一个）
 POST   /model-presets/presets/{name}/test     — 连通性测试：发一条 1 token ping，返回延迟/错误
@@ -842,11 +842,13 @@ async def get_model_presets(auth=Depends(require_scopes("admin"))):
         }
         for profile_name in mp.get("routing_profiles", {})
     }
+    from core.model_registry import normalize_fallback_routes
     return {
         "active_routing":    mp.get("active_routing", "default"),
         "default_preset":    str(mp.get("default_preset") or ""),
         "presets":           _mask_presets(mp.get("presets", {})),
         "routing_profiles":  mp.get("routing_profiles", {}),
+        "fallback_routes":   normalize_fallback_routes(mp),
         "defaults":          mp.get("defaults", {}),
         "active_character_routing": _active_character_routing_override(),
         "routing_effective": routing_effective,
@@ -983,7 +985,7 @@ async def list_routing_profiles(auth=Depends(require_scopes("persona"))):
     persona scope（非 admin-only）：不暴露 preset 的 api_key/base_url，
     只暴露 profile 结构本身，供角色模型绑定下拉框使用。
     """
-    from core.model_registry import _get_preset_config, resolve_category_info
+    from core.model_registry import _get_preset_config, normalize_fallback_routes, resolve_category_info
     try:
         mp = _get_preset_config()
     except ValueError as exc:
@@ -995,6 +997,7 @@ async def list_routing_profiles(auth=Depends(require_scopes("persona"))):
             {
                 "name": name,
                 "categories": dict(mapping),
+                "fallback": dict(normalize_fallback_routes(mp).get(name) or {}),
                 "effective": {
                     "scenario_reconcile": resolve_category_info("scenario_reconcile", profile_name=name),
                     "event_edge_proposer": resolve_category_info("event_edge_proposer", profile_name=name),
@@ -1193,6 +1196,10 @@ async def rename_preset(name: str, body: PresetRename, auth=Depends(require_scop
         if mp.get("default_preset") == name:
             mp["default_preset"] = new_name
             updated_references.append("default_preset")
+        from core.model_registry import rewrite_fallback_preset_references
+        updated_references.extend(
+            rewrite_fallback_preset_references(mp, old_name=name, new_name=new_name)
+        )
 
         await _persist_model_presets(full_cfg)
 
@@ -1219,12 +1226,14 @@ async def delete_preset(name: str, auth=Depends(require_scopes("admin"))):
     if len(presets) <= 1:
         raise HTTPException(status_code=409, detail="不能删除唯一的 preset，至少保留一个")
 
+    from core.model_registry import collect_fallback_preset_references
     referencing = [
         f"{profile_name}.{category}"
         for profile_name, profile in mp.get("routing_profiles", {}).items()
         for category, preset_name in profile.items()
         if preset_name == name
     ]
+    referencing.extend(collect_fallback_preset_references(mp, name))
     if referencing:
         raise HTTPException(
             status_code=409,
@@ -1251,33 +1260,82 @@ async def delete_preset(name: str, auth=Depends(require_scopes("admin"))):
 # /model-presets/routing-profiles/{name} — routing profile CRUD（Phase 4）
 # ---------------------------------------------------------------------------
 
+def _split_routing_profile_body(body: dict) -> tuple[dict[str, str], dict[str, str] | None]:
+    """Keep category→preset strings independent of optional fallback mapping."""
+    if not isinstance(body, dict) or not body:
+        raise HTTPException(status_code=422, detail="body 不能为空，至少提供一个 call_category")
+    fallback_raw = body.get("fallback") if "fallback" in body else None
+    categories: dict[str, str] = {}
+    for key, value in body.items():
+        if key == "fallback":
+            continue
+        if not isinstance(key, str) or not key.strip():
+            raise HTTPException(status_code=422, detail=f"非法 category: {key!r}")
+        if value is None:
+            categories[key] = ""
+            continue
+        if not isinstance(value, str):
+            raise HTTPException(status_code=422, detail=f"{key} 必须是 preset 名字符串")
+        categories[key] = value
+    fallback_map: dict[str, str] | None = None
+    if fallback_raw is not None:
+        if not isinstance(fallback_raw, dict):
+            raise HTTPException(status_code=422, detail="fallback 必须是 category → preset 映射")
+        fallback_map = {}
+        for key, value in fallback_raw.items():
+            if not isinstance(key, str) or not key.strip():
+                raise HTTPException(status_code=422, detail=f"非法兜底 category: {key!r}")
+            fallback_map[key] = "" if value is None else str(value)
+    if not categories and fallback_map is None:
+        raise HTTPException(status_code=422, detail="body 不能为空，至少提供一个 call_category")
+    return categories, fallback_map
+
+
 @router.put("/model-presets/routing-profiles/{name}", summary="新增或更新一个 routing profile")
-async def upsert_routing_profile(name: str, body: dict[str, str], auth=Depends(require_scopes("admin"))):
+async def upsert_routing_profile(name: str, body: dict, auth=Depends(require_scopes("admin"))):
     """合并更新指定 routing profile 的 call_category → preset 映射。
 
     body 例：{"chat": "claude-sonnet", "probe": "deepseek-default"}
     只传入需要修改的 category；未传入的沿用已有映射。所有非空值必须是已存在的 preset 名。
     空字符串清除该 category 映射，解析时走 default_preset → chat → 第一个 preset。
+    可选 ``fallback`` 是独立的失败兜底映射，不嵌进 category 字符串；缺省表示不改已有兜底。
     """
-    if not body:
-        raise HTTPException(status_code=422, detail="body 不能为空，至少提供一个 call_category")
+    categories, fallback_map = _split_routing_profile_body(body)
 
     full_cfg = read_config_file(CONFIG_FILE)
 
     mp = _require_model_presets_block(full_cfg)
     presets = mp.get("presets", {})
-    unknown = sorted({v for v in body.values() if v and v not in presets})
+    unknown = sorted({v for v in categories.values() if v and v not in presets})
     if unknown:
         raise HTTPException(status_code=422, detail=f"routing profile 引用了不存在的 preset: {unknown}")
 
     profiles = mp.setdefault("routing_profiles", {})
     profile = dict(profiles.get(name, {}))
-    for category, preset_name in body.items():
+    for category, preset_name in categories.items():
         if preset_name:
             profile[category] = preset_name
         else:
             profile.pop(category, None)
     profiles[name] = profile
+
+    fallback_result: dict[str, str] | None = None
+    if fallback_map is not None:
+        from core.model_registry import validate_fallback_mapping
+        cleaned, errors = validate_fallback_mapping(
+            fallback_map, presets=presets, primary=profile,
+        )
+        if errors:
+            raise HTTPException(status_code=422, detail="; ".join(errors))
+        routes = mp.setdefault("fallback_routes", {})
+        if not isinstance(routes, dict):
+            routes = {}
+            mp["fallback_routes"] = routes
+        if cleaned:
+            routes[name] = cleaned
+        else:
+            routes.pop(name, None)
+        fallback_result = cleaned
 
     write_config_file(CONFIG_FILE, full_cfg)
 
@@ -1285,7 +1343,10 @@ async def upsert_routing_profile(name: str, body: dict[str, str], auth=Depends(r
     config_loader.reload_config()
     await llm_client.reload_client()
 
-    return {"message": f"routing profile '{name}' 已更新", "name": name, "profile": profile}
+    payload = {"message": f"routing profile '{name}' 已更新", "name": name, "profile": profile}
+    if fallback_result is not None:
+        payload["fallback"] = fallback_result
+    return payload
 
 
 @router.post("/model-presets/routing-profiles/{name}/rename", summary="重命名 routing profile 并改写角色卡绑定")
@@ -1311,6 +1372,8 @@ async def rename_routing_profile(name: str, body: PresetRename, auth=Depends(req
         }
         if mp.get("active_routing") == name:
             mp["active_routing"] = new_name
+        from core.model_registry import rewrite_fallback_profile_name
+        rewrite_fallback_profile_name(mp, old_name=name, new_name=new_name)
         rewritten_cards = _rewrite_character_model_routing(old_name=name, new_name=new_name)
         await _persist_model_presets(full_cfg)
 
@@ -1341,6 +1404,8 @@ async def delete_routing_profile(name: str, auth=Depends(require_scopes("admin")
     remaining = list(profiles)
     if mp.get("active_routing") == name:
         mp["active_routing"] = "default" if "default" in profiles else remaining[0]
+    from core.model_registry import drop_fallback_profile
+    drop_fallback_profile(mp, name)
     rewritten_cards = _rewrite_character_model_routing(old_name=name, new_name=None)
     await _persist_model_presets(full_cfg)
     return {

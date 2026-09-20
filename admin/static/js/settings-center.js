@@ -319,6 +319,33 @@ function centerRecordRows(data) {
       _redaction_version: state?.redaction?.version || data.redaction?.version || '',
     }));
   }
+  if (data.attempts && data.logical && data.fallback && !data.entries) {
+    const rows = [{
+      ok: Number(data.logical.failed || 0) === 0,
+      caller: 'llm_failover',
+      purpose: 'window',
+      ts: data.until_ts,
+      error_category: `attempts ${data.attempts.failed || 0}/${data.attempts.total || 0}; logical ${data.logical.failed || 0}/${data.logical.total || 0}; fallback ${data.fallback.succeeded || 0}/${data.fallback.issued || 0}`,
+    }];
+    for (const item of (data.skip_top || [])) {
+      rows.push({
+        ok: false,
+        caller: 'llm_failover',
+        purpose: item.reason,
+        error_category: String(item.count),
+      });
+    }
+    if (data.last_switch) {
+      rows.push({
+        ok: Boolean(data.last_switch.ok),
+        caller: 'llm_failover',
+        purpose: data.last_switch.purpose || 'switch',
+        ts: data.last_switch.ts,
+        error_category: data.last_switch.reason || '',
+      });
+    }
+    return rows;
+  }
   return data.entries || data.tasks?.entries || (Array.isArray(data.tasks)?data.tasks:undefined) || data.sessions || data.records || [];
 }
 function centerRecordStatus(row) {

@@ -171,3 +171,6 @@ def test_list_routing_profiles():
     assert default_effective["rpg_kp"]["source"] == "chat_fallback"
     assert default_effective["sensor_judge"]["effective_preset"] == "ds"
     assert default_effective["monologue"]["effective_preset"] == "ds"
+    default_row = next(p for p in result["profiles"] if p["name"] == "default")
+    assert default_row["fallback"] == {}
+    assert default_effective["rpg_kp"]["fallback_source"] == "off"

@@ -1015,6 +1015,8 @@ async def _main_with_services():
             logger.warning("Agent Runtime browser worker failed to stop", exc_info=True)
         from core.runtime_service_state import clear_marker as _clear_service_marker
         _clear_service_marker()
+        from core.llm_failover import mark_shutdown
+        mark_shutdown()
         from core.runtime_warning_log import shutdown_runtime_warning_handler
         shutdown_runtime_warning_handler()
 

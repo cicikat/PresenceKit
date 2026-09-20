@@ -813,7 +813,7 @@ async function saveEventShadowRecallSettings() {
     loadFeatureFlags();
   } catch (e) { toast(e.message, 'err'); }
 }
-let _mrData = { presets: {}, routing_profiles: {}, active_routing: 'default', default_preset: '' };
+let _mrData = { presets: {}, routing_profiles: {}, fallback_routes: {}, routing_effective: {}, active_routing: 'default', default_preset: '' };
 let _mrEditingPresetName = null;
 let _mrEditingProfileName = null;
 const MR_CATEGORIES = ['chat', 'intent', 'probe', 'summary', 'detect_emotion', 'consolidation', 'perform', 'monologue', 'sensor_judge', 'ime_judge', 'scenario_reconcile', 'event_edge_proposer', 'rpg_kp'];
@@ -883,7 +883,8 @@ async function loadModelRouting() {
     _renderActiveCharacterRoutingWarning(data.active_character_routing);
 
     _renderPresetsTable(data.presets || {});
-    _renderProfilesTable(data.routing_profiles || {}, data.presets || {});
+    _renderProfilesTable(data.routing_profiles || {}, data.presets || {}, data.fallback_routes || {}, data.routing_effective || {});
+    if (typeof loadLlmFailoverStats === 'function') loadLlmFailoverStats();
   } catch (e) {
     _renderActiveCharacterRoutingWarning(null);
     document.getElementById('mr-presets-body').innerHTML = `<div class="empty">加载失败: ${e.message}</div>`;
@@ -944,31 +945,44 @@ function _renderPresetsTable(presets) {
   </table></div>`;
 }
 
-function _renderProfilesTable(profiles, presets) {
+function _renderProfilesTable(profiles, presets, fallbackRoutes, routingEffective) {
   const el = document.getElementById('mr-profiles-body');
   const names = Object.keys(profiles);
   if (!names.length) { el.innerHTML = '<div class="empty">暂无 routing profile</div>'; return; }
+  const fallbacks = fallbackRoutes || {};
+  const effective = routingEffective || {};
   const rows = names.map(name => {
-    const profile = profiles[name];
-    const chips = Object.entries(profile).map(([cat, preset]) =>
-      `<span class="badge" style="margin:2px">${cat}→${preset}</span>`
+    const profile = profiles[name] || {};
+    const fallback = fallbacks[name] || {};
+    const chips = Object.entries(profile).map(([cat, preset]) => {
+      const fb = fallback[cat] || '';
+      const fbLabel = fb ? ` / ${escapeHtml(fb)}` : '';
+      return `<span class="badge admin-inline-margin-2">${escapeHtml(cat)}→${escapeHtml(preset)}${fbLabel}</span>`;
+    }).join('');
+    const extraFallback = Object.entries(fallback).filter(([cat]) => !profile[cat]).map(([cat, preset]) =>
+      `<span class="badge admin-inline-margin-2">${escapeHtml(cat)}→${t('routing.fallback.off', '关闭')} / ${escapeHtml(preset)}</span>`
     ).join('');
     const escapedName = escapeHtml(name);
+    const refused = Object.values(effective[name] || {}).filter(info => info && info.fallback_refused_reason);
+    const refuseHint = refused.length
+      ? `<div class="admin-inline-012">${escapeHtml(t('routing.fallback.refused', '有 {count} 项兜底未生效', {count: refused.length}))}</div>`
+      : '';
     return `
       <tr>
         <td><strong>${escapedName}</strong>${name === _mrData.active_routing ? ' <span class="badge badge-success">生效中</span>' : ''}</td>
-        <td>${chips}</td>
-        <td style="white-space:nowrap">
-          <button class="btn btn-ghost btn-sm" data-profile-name="${escapedName}" onclick="openProfileModal(this.dataset.profileName)">编辑</button>
-          <button class="btn btn-ghost btn-sm" data-profile-name="${escapedName}" onclick="confirmDeleteProfile(this.dataset.profileName)">删除</button>
+        <td>${chips}${extraFallback}${refuseHint}</td>
+        <td class="admin-inline-nowrap">
+          <button class="btn btn-ghost btn-sm" data-profile-name="${escapedName}" data-action="openProfileModal">${t('common.edit', '编辑')}</button>
+          <button class="btn btn-ghost btn-sm" data-profile-name="${escapedName}" data-action="confirmDeleteProfile">${t('common.delete', '删除')}</button>
         </td>
       </tr>
     `;
   }).join('');
   el.innerHTML = `<div class="tbl-wrap"><table>
-    <tr><th>名称</th><th>映射</th><th></th></tr>
+    <tr><th>${t('routing.profile.name', '名称')}</th><th>${t('routing.mapping', '主 Preset / 兜底 Preset')}</th><th></th></tr>
     ${rows}
   </table></div>`;
+  bindPageActions(el);
 }
 
 async function testPreset(button) {
@@ -1193,22 +1207,35 @@ function confirmDeletePreset(name) {
 
 function openProfileModal(name) {
   document.getElementById('mr-profile-err').textContent = '';
+  if (name && typeof name === 'object' && name.dataset) {
+    name = name.dataset.profileName || '';
+  }
   const existingName = (typeof name === 'string' && name) ? name : '';
   _mrEditingProfileName = existingName || null;
   const nameInput = document.getElementById('mr-profile-name');
   nameInput.value = existingName;
   nameInput.disabled = false;
   const existing = (existingName && _mrData.routing_profiles[existingName]) || {};
+  const existingFallback = (existingName && (_mrData.fallback_routes || {})[existingName]) || {};
   const presetNames = Object.keys(_mrData.presets || {});
   const catsEl = document.getElementById('mr-profile-categories');
   catsEl.innerHTML = MR_CATEGORIES.map(cat => `
-    <label class="field" style="margin-bottom:8px">
-      <span>${cat} <span style="font-size:11px;color:var(--muted);font-weight:normal">—— ${MR_CATEGORY_DESC[cat] || ''}</span></span>
-      <select id="mr-profile-cat-${cat}">
-        <option value="">（清除映射，走默认 preset / chat）</option>
-        ${presetNames.map(p => `<option value="${p}" ${existing[cat] === p ? 'selected' : ''}>${p}</option>`).join('')}
-      </select>
-    </label>
+    <div class="admin-inline-profile-cat">
+      <label class="field">
+        <span>${escapeHtml(cat)} <span class="admin-inline-012">${escapeHtml(MR_CATEGORY_DESC[cat] || '')}</span></span>
+        <select id="mr-profile-cat-${cat}">
+          <option value="">${t('routing.clear_mapping', '（清除映射，走默认 preset / chat）')}</option>
+          ${presetNames.map(p => `<option value="${escapeHtml(p)}" ${existing[cat] === p ? 'selected' : ''}>${escapeHtml(p)}</option>`).join('')}
+        </select>
+      </label>
+      <label class="field">
+        <span>${t('routing.fallback.preset', '兜底 Preset（可不选）')}</span>
+        <select id="mr-profile-fallback-${cat}">
+          <option value="">${t('routing.fallback.off', '关闭')}</option>
+          ${presetNames.map(p => `<option value="${escapeHtml(p)}" ${existingFallback[cat] === p ? 'selected' : ''}>${escapeHtml(p)}</option>`).join('')}
+        </select>
+      </label>
+    </div>
   `).join('');
   document.getElementById('mr-profile-modal').classList.add('open');
 }
@@ -1222,9 +1249,12 @@ async function submitProfileModal() {
   const errEl = document.getElementById('mr-profile-err');
   if (!name) { errEl.textContent = '名称不能为空'; return; }
   const body = {};
+  const fallback = {};
   for (const cat of MR_CATEGORIES) {
     body[cat] = document.getElementById(`mr-profile-cat-${cat}`).value;
+    fallback[cat] = document.getElementById(`mr-profile-fallback-${cat}`).value;
   }
+  body.fallback = fallback;
   try {
     if (previousName && previousName !== name) {
       await api('POST', `/model-presets/routing-profiles/${encodeURIComponent(previousName)}/rename`, { new_name: name });
@@ -1238,7 +1268,44 @@ async function submitProfileModal() {
   }
 }
 
+async function loadLlmFailoverStats() {
+  const root = document.getElementById('mr-failover-stats');
+  if (!root) return;
+  root.textContent = t('common.loading', '加载中…');
+  try {
+    const hours = Number(document.getElementById('mr-failover-window')?.value || 24);
+    const data = await api('GET', `/observability/llm-failover?window_hours=${encodeURIComponent(hours)}`);
+    const attempts = data.attempts || {};
+    const logical = data.logical || {};
+    const fallback = data.fallback || {};
+    const skipTop = (data.skip_top || []).map(item => `${item.reason} × ${item.count}`).join(' · ')
+      || t('routing.failover.no_skips', '本窗无跳过');
+    const last = data.last_switch;
+    const lastLine = last
+      ? t('routing.failover.last_switch', '最近切换 {iso} · {purpose} · {reason} · {status}', {
+          iso: last.iso || '—',
+          purpose: last.purpose || '—',
+          reason: last.reason || '—',
+          status: last.ok ? t('routing.failover.recovered', '兜底成功') : t('routing.failover.still_failed', '仍失败'),
+        })
+      : t('routing.failover.no_switch', '本窗无切换');
+    root.innerHTML = `
+      <p>${t('routing.failover.attempts', '尝试失败率')}：${Number(attempts.failure_rate || 0).toFixed(3)} (${attempts.failed || 0}/${attempts.total || 0})</p>
+      <p>${t('routing.failover.logical', '逻辑最终失败率')}：${Number(logical.failure_rate || 0).toFixed(3)} (${logical.failed || 0}/${logical.total || 0})</p>
+      <p>${t('routing.failover.success', '兜底成功率')}：${Number(fallback.success_rate || 0).toFixed(3)} (${fallback.succeeded || 0}/${fallback.issued || 0})</p>
+      <p>${t('routing.failover.skips', '跳过原因')}：${escapeHtml(skipTop)}</p>
+      <p>${escapeHtml(lastLine)}</p>
+      <p class="admin-inline-012">${escapeHtml((data.notes && data.notes.attempt_denominator) || '')}</p>
+    `;
+  } catch (e) {
+    root.textContent = t('routing.failover.load_failed', '读取失败：{error}', {error: e.message || e});
+  }
+}
+
 function confirmDeleteProfile(name) {
+  if (name && typeof name === 'object' && name.dataset) {
+    name = name.dataset.profileName || '';
+  }
   _openAtConfirm(`删除 routing profile '${name}'`, '不能删最后一个。若删的是当前生效方案会切到剩余方案（优先 default）。绑定该方案的角色卡会改为跟随全局。', async () => {
     try {
       await api('DELETE', `/model-presets/routing-profiles/${encodeURIComponent(name)}`);

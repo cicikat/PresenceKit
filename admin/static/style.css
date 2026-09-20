@@ -880,6 +880,10 @@ textarea { resize: vertical; min-height: 72px; }
 .admin-inline-208{width:64px;padding:4px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:var(--bg-secondary);color:var(--text)}
 .admin-inline-209{width:70px;padding:4px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:var(--bg-secondary);color:var(--text)}
 .admin-inline-210{width:72px;margin-left:4px}
+.admin-inline-margin-2{margin:2px}
+.admin-inline-nowrap{white-space:nowrap}
+.admin-inline-profile-cat{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;margin-bottom:8px}
+@media (max-width:760px){.admin-inline-profile-cat{grid-template-columns:1fr}}
 
 /* Brief 163: read-only status summaries and semantic configuration controls. */
 .status-summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}

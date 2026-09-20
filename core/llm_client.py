@@ -19,6 +19,13 @@ from core import thinking
 from core.config_loader import get_config
 from core.error_handler import log_error
 from core.model_registry import ModelClient, get_model_client, reload_registry
+from core.llm_failover import (
+    AttemptOutcome,
+    PreparedAttempt,
+    category_timeout,
+    execute_create,
+    execute_stream,
+)
 from core.llm_protocol import (
     UpstreamResponseFormatError,
     create as create_protocol_response,
@@ -80,6 +87,13 @@ def _record_api_call(
     output_hint: str = "",
     error_category: str = "",
     protocol: str = "",
+    logical_call_id: str = "",
+    attempt_id: str = "",
+    route_role: str = "",
+    switch_reason: str = "",
+    skip_reason: str = "",
+    logical_final: bool | None = None,
+    sdk_retry_policy: str = "",
 ) -> None:
     from core.api_call_log import append
 
@@ -93,6 +107,13 @@ def _record_api_call(
         output_hint=output_hint,
         error_category=error_category,
         protocol=protocol,
+        logical_call_id=logical_call_id,
+        attempt_id=attempt_id,
+        route_role=route_role,
+        switch_reason=switch_reason,
+        skip_reason=skip_reason,
+        logical_final=logical_final,
+        sdk_retry_policy=sdk_retry_policy,
     )
 
 
@@ -126,13 +147,6 @@ def _log_completed_call(*, provider: str, model: str, purpose: str, started_at: 
         purpose,
         duration_ms,
     )
-    _record_api_call(
-        provider=provider,
-        model=model,
-        purpose=purpose,
-        started_at=started_at,
-        ok=True,
-    )
 
 # Vision clients stay outside text-model preset routing. The default singleton
 # covers the legacy ``vision:`` block; named image_presets reuse it when the
@@ -144,21 +158,7 @@ _vision_clients: dict[tuple[str, str], AsyncOpenAI] = {}
 # -- Call-category timeouts (seconds) ----------------------------------------
 # probe: 15 s; intent/detect_emotion: 10 s; summary/consolidation: 30 s
 # chat: main turn 90 s; vision: 30 s
-_CALL_TIMEOUTS: dict[str, float] = {
-    "probe":          15.0,
-    "intent":         10.0,
-    "detect_emotion": 10.0,
-    "summary":        30.0,
-    "consolidation":  30.0,
-    "chat":           90.0,
-    "vision":         30.0,
-    "perform":        10.0,
-    "monologue":      10.0,
-    "scenario_reconcile": 8.0,
-    "event_edge_proposer": 30.0,
-    "rpg_kp":        30.0,
-}
-_DEFAULT_CALL_TIMEOUT: float = 90.0
+from core.llm_failover import CATEGORY_TIMEOUTS as _CALL_TIMEOUTS, DEFAULT_CALL_TIMEOUT as _DEFAULT_CALL_TIMEOUT
 
 
 def _get_proxy_url() -> str | None:
@@ -332,7 +332,7 @@ async def chat(
     """
     from core.no_outbound import assert_outbound_allowed
     assert_outbound_allowed("llm")
-    _timeout = _CALL_TIMEOUTS.get(call_category, _DEFAULT_CALL_TIMEOUT)
+    _timeout = category_timeout(call_category)
 
     # vision 模式走独立 vision client，不经过文本 preset 路由
     if use_vision:
@@ -365,6 +365,14 @@ async def chat(
                     purpose="vision",
                     started_at=started_at,
                 )
+                _record_api_call(
+                    provider=str(vision_cfg.get("provider") or "vision"),
+                    model=str(vision_cfg.get("model") or ""),
+                    purpose="vision",
+                    started_at=started_at,
+                    ok=True,
+                    protocol="chat_completions",
+                )
                 return choice.message.content or ""
             except Exception as e:
                 _record_api_call(
@@ -395,37 +403,32 @@ async def chat(
 
     # Brief 32：monologue 路线在 prompt_style 转换前注入（作为普通 system 消息一并转换）；
     # native 路线可追加角色心声文风提示；思考开关参数仍由下面的 extra_body 控制。
+    # Inject once against the primary client; fallback rebuilds protocol/style
+    # from this already-injected semantic input, never from a rewritten body.
     messages = await thinking.maybe_apply(
         messages, call_category=call_category, char_id=char_id, is_proactive=is_proactive, mc=mc,
     )
+    semantic_messages = list(messages)
 
-    # Phase 2: apply prompt style BEFORE sanitize so _layer is still available
-    messages = apply_prompt_style(messages, mc.prompt_style)
-    messages = sanitize_messages(messages)
-
-    model = mc.model
-    mode = mc.tool_call_mode
-    started_at = time.perf_counter()
-
-    # Build generation kwargs from preset params; max_tokens_override wins
-    _gen_kwargs: dict[str, Any] = dict(mc.params)
-    if max_tokens_override is not None:
-        _gen_kwargs["max_tokens"] = max_tokens_override
-    _gen_kwargs["timeout"] = _timeout
-    _gen_kwargs.update(
-        thinking.build_reasoning_kwargs(mc, call_category=call_category, is_proactive=is_proactive)
-    )
-
-    try:
-        request_messages = messages
+    def _prepare_chat(target: ModelClient) -> PreparedAttempt:
+        styled = apply_prompt_style(semantic_messages, target.prompt_style)
+        styled = sanitize_messages(styled)
+        gen_kwargs: dict[str, Any] = dict(target.params)
+        if max_tokens_override is not None:
+            gen_kwargs["max_tokens"] = max_tokens_override
+        gen_kwargs["timeout"] = _timeout
+        gen_kwargs.update(
+            thinking.build_reasoning_kwargs(target, call_category=call_category, is_proactive=is_proactive)
+        )
+        mode = target.tool_call_mode
+        request_messages = styled
         request_tools = tools if mode == "function_calling" and tools else None
-        request_debug: dict[str, Any] = dict(_gen_kwargs)
+        request_debug: dict[str, Any] = dict(gen_kwargs)
         if request_tools:
             request_debug["tool_choice"] = "auto"
-        # ── xml_fallback 模式（不支持 FC 的模型）────────────────────────────
         if mode == "xml_fallback" and tools:
             tool_desc = _build_xml_tool_desc(tools)
-            request_messages = list(messages)
+            request_messages = list(styled)
             injected = False
             for i, m in enumerate(request_messages):
                 if m["role"] == "system":
@@ -438,49 +441,61 @@ async def chat(
             if not injected:
                 request_messages.insert(0, {"role": "system", "content": tool_desc})
             request_debug["tool_encoding"] = "xml_fallback"
-
-        _record_debug_request(
-            provider=mc.provider_kind, model=mc.model, purpose=call_category,
-            messages=request_messages, tools=request_tools or (tools if mode == "xml_fallback" else None),
-            request_kwargs={"api_protocol": getattr(mc, "api_protocol", "chat_completions"), **request_debug,
-                            "stream": getattr(mc, "force_stream", False) is True},
-        )
-        purpose_token = _purpose_token(call_category)
-        try:
-            normalized = await create_protocol_response(
-                mc,
-                request_messages,
-                tools=request_tools,
-                tool_choice="auto" if request_tools else None,
-                gen_kwargs=_gen_kwargs,
+            request_tools = None
+        if tools and mode not in {"function_calling", "xml_fallback"}:
+            return PreparedAttempt(
+                messages=request_messages,
+                refuse_reason="tool_mode_incompatible",
             )
-        finally:
-            reset_capture_purpose(purpose_token)
-        if request_tools and normalized.tool_calls:
-            tool_calls = [
-                {"name": call.name, "arguments": call.arguments}
-                for call in normalized.tool_calls
-            ]
-            _log_completed_call(provider=mc.provider_kind, model=mc.model, purpose=call_category, started_at=started_at)
-            return "__TOOL_CALL__:" + json.dumps(tool_calls, ensure_ascii=False)
-        _log_completed_call(provider=mc.provider_kind, model=mc.model, purpose=call_category, started_at=started_at)
-        content = thinking.strip_think_tags(normalized.assistant_text) or ""
-        _log_empty_completion(mc, normalized, content)
-        return content
-
-    except Exception as e:
-        _record_api_call(
-            provider=mc.provider_kind,
-            model=model,
-            purpose=call_category,
-            started_at=started_at,
-            ok=False,
-            output_hint=type(e).__name__,
-            error_category=error_category_for_exception(e),
-            protocol=str(getattr(mc, "api_protocol", "") or ""),
+        _record_debug_request(
+            provider=target.provider_kind, model=target.model, purpose=call_category,
+            messages=request_messages, tools=request_tools or (tools if mode == "xml_fallback" else None),
+            request_kwargs={"api_protocol": getattr(target, "api_protocol", "chat_completions"), **request_debug,
+                            "stream": getattr(target, "force_stream", False) is True},
         )
+        return PreparedAttempt(
+            messages=request_messages,
+            tools=request_tools,
+            tool_choice="auto" if request_tools else None,
+            gen_kwargs=gen_kwargs,
+        )
+
+    started_at = time.perf_counter()
+    purpose_token = _purpose_token(call_category)
+    try:
+        outcome = await execute_create(
+            call_category=call_category,
+            prepare=_prepare_chat,
+            caller="llm_client",
+            char_id=char_id,
+            primary_mc=mc,
+            explicit_preset=preset_name is not None,
+        )
+    except Exception as e:
         log_error(f"llm_client.chat[{call_category}]", e)
         raise
+    finally:
+        reset_capture_purpose(purpose_token)
+
+    used = outcome.mc or mc
+    if not outcome.ok:
+        log_error(f"llm_client.chat[{call_category}]", outcome.error or RuntimeError(outcome.error_category or "llm_failed"))
+        if outcome.error is not None:
+            raise outcome.error
+        raise RuntimeError(outcome.skip_reason or outcome.error_category or "llm_failed")
+
+    normalized = outcome.value
+    if normalized.tool_calls:
+        tool_calls = [
+            {"name": call.name, "arguments": call.arguments}
+            for call in normalized.tool_calls
+        ]
+        _log_completed_call(provider=used.provider_kind, model=used.model, purpose=call_category, started_at=started_at)
+        return "__TOOL_CALL__:" + json.dumps(tool_calls, ensure_ascii=False)
+    _log_completed_call(provider=used.provider_kind, model=used.model, purpose=call_category, started_at=started_at)
+    content = thinking.strip_think_tags(normalized.assistant_text) or ""
+    _log_empty_completion(used, normalized, content)
+    return content
 
 
 def _prepare_call(
@@ -506,7 +521,7 @@ def _prepare_call(
     gen_kwargs: dict[str, Any] = dict(mc.params)
     if max_tokens_override is not None:
         gen_kwargs["max_tokens"] = max_tokens_override
-    gen_kwargs["timeout"] = _CALL_TIMEOUTS.get(call_category, _DEFAULT_CALL_TIMEOUT)
+    gen_kwargs["timeout"] = category_timeout(call_category)
     gen_kwargs.update(
         thinking.build_reasoning_kwargs(mc, call_category=call_category, is_proactive=is_proactive)
     )
@@ -571,6 +586,7 @@ async def chat_turn(
     mc, prepared, gen_kwargs = _prepare_call(
         messages, call_category, max_tokens_override, char_id=char_id, is_proactive=is_proactive,
     )
+    semantic_messages = list(messages)
     if mc.tool_call_mode == 'xml_fallback' and allow_xml_fallback:
         # Autonomy must work with the configured character model too. Keep the
         # native FC API strict for existing callers and opt in explicitly.
@@ -590,47 +606,61 @@ async def chat_turn(
             raise ValueError('autonomy_tool_encoding_invalid')
         calls = [{'id': uuid4().hex, **call} for call in parsed.tool_calls]
         return ChatTurn('', calls, {'role': 'assistant', 'content': response})
-    if mc.tool_call_mode != "function_calling":
-        raise ValueError(
-            f"[llm_client.chat_turn] preset '{mc.name}' tool_call_mode="
-            f"{mc.tool_call_mode!r}，chat_turn 仅支持 function_calling"
+    started_at = time.perf_counter()
+
+    def _prepare_turn(target: ModelClient) -> PreparedAttempt:
+        if target.tool_call_mode != "function_calling":
+            return PreparedAttempt(messages=[], refuse_reason="tool_mode_incompatible")
+        styled = apply_prompt_style(semantic_messages, target.prompt_style)
+        styled = sanitize_messages(styled)
+        turn_kwargs: dict[str, Any] = dict(target.params)
+        if max_tokens_override is not None:
+            turn_kwargs["max_tokens"] = max_tokens_override
+        turn_kwargs["timeout"] = category_timeout(call_category)
+        turn_kwargs.update(
+            thinking.build_reasoning_kwargs(target, call_category=call_category, is_proactive=is_proactive)
+        )
+        _record_debug_request(
+            provider=target.provider_kind,
+            model=target.model,
+            purpose=call_category,
+            messages=styled,
+            tools=tools,
+            request_kwargs={"api_protocol": getattr(target, "api_protocol", "chat_completions"), "tool_choice": "auto", **turn_kwargs,
+                            "stream": getattr(target, "force_stream", False) is True},
+        )
+        return PreparedAttempt(
+            messages=styled,
+            tools=tools,
+            tool_choice="auto",
+            gen_kwargs=turn_kwargs,
         )
 
-    started_at = time.perf_counter()
+    purpose_token = _purpose_token(call_category)
     try:
-        _record_debug_request(
-            provider=mc.provider_kind,
-            model=mc.model,
-            purpose=call_category,
-            messages=prepared,
-            tools=tools,
-            request_kwargs={"api_protocol": getattr(mc, "api_protocol", "chat_completions"), "tool_choice": "auto", **gen_kwargs,
-                            "stream": getattr(mc, "force_stream", False) is True},
+        outcome = await execute_create(
+            call_category=call_category,
+            prepare=_prepare_turn,
+            caller="llm_client",
+            char_id=char_id,
+            primary_mc=mc,
         )
-        purpose_token = _purpose_token(call_category)
-        try:
-            normalized = await create_protocol_response(
-                mc, prepared, tools=tools, tool_choice="auto", gen_kwargs=gen_kwargs,
-            )
-        finally:
-            reset_capture_purpose(purpose_token)
     except Exception as e:
-        _record_api_call(
-            provider=mc.provider_kind,
-            model=mc.model,
-            purpose=call_category,
-            started_at=started_at,
-            ok=False,
-            output_hint=type(e).__name__,
-            error_category=error_category_for_exception(e),
-            protocol=str(getattr(mc, "api_protocol", "") or ""),
-        )
         log_error(f"llm_client.chat_turn[{call_category}]", e)
         raise
+    finally:
+        reset_capture_purpose(purpose_token)
 
+    used = outcome.mc or mc
+    if not outcome.ok:
+        log_error(f"llm_client.chat_turn[{call_category}]", outcome.error or RuntimeError(outcome.error_category or "llm_failed"))
+        if outcome.error is not None:
+            raise outcome.error
+        raise RuntimeError(outcome.skip_reason or outcome.error_category or "llm_failed")
+    normalized = outcome.value
     _log_completed_call(
-        provider=mc.provider_kind,
-        model=mc.model,
+        provider=used.provider_kind,
+        model=used.model,
         purpose=call_category,
         started_at=started_at,
     )
@@ -715,33 +745,34 @@ async def chat_stream(
     确认不含泄漏特征的部分才真正 yield 给调用方（进而推给前端）；一旦在缓冲区里
     扫到泄漏特征，判定这条流已经脏了，本次剩余内容全部丢弃、不再展示。
     """
-    _timeout = _CALL_TIMEOUTS.get(call_category, _DEFAULT_CALL_TIMEOUT)
+    _timeout = category_timeout(call_category)
 
     mc: ModelClient = get_model_client(call_category, char_id=char_id)
 
     messages = await thinking.maybe_apply(
         messages, call_category=call_category, char_id=char_id, is_proactive=is_proactive, mc=mc,
     )
+    semantic_messages = list(messages)
 
-    messages = apply_prompt_style(messages, mc.prompt_style)
-    messages = sanitize_messages(messages)
-
-    _gen_kwargs: dict[str, Any] = dict(mc.params)
-    if max_tokens_override is not None:
-        _gen_kwargs["max_tokens"] = max_tokens_override
-    _gen_kwargs["timeout"] = _timeout
-    _gen_kwargs.update(
-        thinking.build_reasoning_kwargs(mc, call_category=call_category, is_proactive=is_proactive)
-    )
-
-    _record_debug_request(
-        provider=mc.provider_kind,
-        model=mc.model,
-        purpose=call_category,
-        messages=messages,
-        tools=None,
-        request_kwargs={"api_protocol": getattr(mc, "api_protocol", "chat_completions"), "stream": True, **_gen_kwargs},
-    )
+    def _prepare_stream(target: ModelClient) -> PreparedAttempt:
+        styled = apply_prompt_style(semantic_messages, target.prompt_style)
+        styled = sanitize_messages(styled)
+        gen_kwargs: dict[str, Any] = dict(target.params)
+        if max_tokens_override is not None:
+            gen_kwargs["max_tokens"] = max_tokens_override
+        gen_kwargs["timeout"] = _timeout
+        gen_kwargs.update(
+            thinking.build_reasoning_kwargs(target, call_category=call_category, is_proactive=is_proactive)
+        )
+        _record_debug_request(
+            provider=target.provider_kind,
+            model=target.model,
+            purpose=call_category,
+            messages=styled,
+            tools=None,
+            request_kwargs={"api_protocol": getattr(target, "api_protocol", "chat_completions"), "stream": True, **gen_kwargs},
+        )
+        return PreparedAttempt(messages=styled, gen_kwargs=gen_kwargs)
 
     think_filter = thinking.ThinkTextFilter()
 
@@ -787,7 +818,13 @@ async def chat_stream(
     from contextlib import aclosing
     purpose_token = _purpose_token(call_category)
     try:
-        async with aclosing(stream_text(mc, messages, gen_kwargs=_gen_kwargs)) as source:
+        async with aclosing(execute_stream(
+            call_category=call_category,
+            prepare=_prepare_stream,
+            caller="llm_client",
+            char_id=char_id,
+            primary_mc=mc,
+        )) as source:
             async for piece in source:
                 safe = _leak_scan(think_filter.feed(piece))
                 if safe:
@@ -986,25 +1023,36 @@ async def summarize_turn(
             if is_trigger_turn
             else f"用户:{user_msg}\n回复:{reply}"
         )
-        purpose_token = _purpose_token("summary")
-        try:
-            response = await create_protocol_response(
-                mc,
-                [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_content},
-                ],
-                tools=None,
-                tool_choice=None,
+        semantic = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_content},
+        ]
+
+        def _prepare_summary(target: ModelClient) -> PreparedAttempt:
+            styled = apply_prompt_style(semantic, target.prompt_style)
+            styled = sanitize_messages(styled)
+            return PreparedAttempt(
+                messages=styled,
                 gen_kwargs={
                     "max_tokens": 80 if is_group_projection else 40,
                     "temperature": 0.3,
-                    "timeout": _CALL_TIMEOUTS["summary"],
+                    "timeout": category_timeout("summary"),
                 },
+            )
+
+        purpose_token = _purpose_token("summary")
+        try:
+            outcome = await execute_create(
+                call_category="summary",
+                prepare=_prepare_summary,
+                caller="llm_client",
+                primary_mc=mc,
             )
         finally:
             reset_capture_purpose(purpose_token)
-        result = response.assistant_text.strip()
+        if not outcome.ok:
+            raise outcome.error or RuntimeError(outcome.skip_reason or "summary_failed")
+        result = outcome.value.assistant_text.strip()
         result = result.strip('"\'"""''')
         result = result[:60 if is_group_projection else 30]
         if not result:
@@ -1029,22 +1077,43 @@ async def detect_emotion(text: str) -> str:
     )
     try:
         mc = get_model_client("detect_emotion")
-        purpose_token = _purpose_token("detect_emotion")
-        try:
-            response = await create_protocol_response(
-                mc,
-                [{"role": "user", "content": prompt}],
-                tools=None,
-                tool_choice=None,
+        semantic = [{"role": "user", "content": prompt}]
+
+        def _prepare_emotion(target: ModelClient) -> PreparedAttempt:
+            styled = apply_prompt_style(semantic, target.prompt_style)
+            styled = sanitize_messages(styled)
+            return PreparedAttempt(
+                messages=styled,
                 gen_kwargs={
                     "max_tokens": 10,
                     "temperature": 0.0,
-                    "timeout": _CALL_TIMEOUTS["detect_emotion"],
+                    "timeout": category_timeout("detect_emotion"),
                 },
+            )
+
+        purpose_token = _purpose_token("detect_emotion")
+        try:
+            outcome = await execute_create(
+                call_category="detect_emotion",
+                prepare=_prepare_emotion,
+                caller="llm_client",
+                primary_mc=mc,
+                reset_breaker_on_http_success=False,
             )
         finally:
             reset_capture_purpose(purpose_token)
-        result = response.assistant_text.strip().lower()
+        if not outcome.ok:
+            raise outcome.error or RuntimeError(outcome.skip_reason or "detect_emotion_failed")
+        used = outcome.mc or mc
+        if outcome.value.assistant_text.strip().lower() in _VALID_EMOTIONS or any(
+            label in outcome.value.assistant_text.strip().lower() for label in _VALID_EMOTIONS
+        ):
+            from core.llm_failover import confirm_business_success
+            confirm_business_success(used.name, "detect_emotion")
+        else:
+            from core.llm_failover import confirm_format_failure
+            confirm_format_failure(used.name, "detect_emotion")
+        result = outcome.value.assistant_text.strip().lower()
         if result in _VALID_EMOTIONS:
             return result
         # 小模型有时不严格按"只返回一个词"的指令走（夹带标点/多余文字/中文），
@@ -1101,22 +1170,33 @@ async def detect_affection(text: str) -> bool:
     )
     try:
         mc = get_model_client("detect_emotion")   # 复用轻量档，无需新模型
-        purpose_token = _purpose_token("detect_emotion")
-        try:
-            resp = await create_protocol_response(
-                mc,
-                [{"role": "user", "content": prompt}],
-                tools=None,
-                tool_choice=None,
+        semantic = [{"role": "user", "content": prompt}]
+
+        def _prepare_affection(target: ModelClient) -> PreparedAttempt:
+            styled = apply_prompt_style(semantic, target.prompt_style)
+            styled = sanitize_messages(styled)
+            return PreparedAttempt(
+                messages=styled,
                 gen_kwargs={
                     "max_tokens": 3,
                     "temperature": 0.0,
-                    "timeout": _CALL_TIMEOUTS["detect_emotion"],
+                    "timeout": category_timeout("detect_emotion"),
                 },
+            )
+
+        purpose_token = _purpose_token("detect_emotion")
+        try:
+            outcome = await execute_create(
+                call_category="detect_emotion",
+                prepare=_prepare_affection,
+                caller="llm_client",
+                primary_mc=mc,
             )
         finally:
             reset_capture_purpose(purpose_token)
-        return resp.assistant_text.strip().lower().startswith("y")
+        if not outcome.ok:
+            raise outcome.error or RuntimeError(outcome.skip_reason or "detect_affection_failed")
+        return outcome.value.assistant_text.strip().lower().startswith("y")
     except Exception as e:
         log_error("llm_client.detect_affection", e)
         return False

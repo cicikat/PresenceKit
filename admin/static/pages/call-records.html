@@ -2,6 +2,7 @@
 <p data-i18n="settings_center.read_only_records_ledgers_remain_separate_similar_timestamps_do_not_imply_the_same_call">只读查询。不同台账分开展示，不把相近时间的记录误认为同一次调用。</p>
 <label class="field"><span data-i18n="settings_center.record_type">记录类型</span><select id="record-source" onchange="loadUnifiedRecords()">
 <option value="/observability/api-calls" data-i18n="settings_center.external_service_calls">外部服务调用</option>
+<option value="/observability/llm-failover?window_hours=24" data-i18n="settings_center.llm_failover">文本模型失败兜底</option>
 <option value="/observability/api-calls?caller=tts" data-i18n="settings_center.voice_call_records">语音调用记录</option>
 <option value="/observability/mail-executions" data-i18n="settings_center.mail_channel">邮件通道</option>
 <option value="/observability/agent-runtime-tasks" data-i18n="settings_center.long_running_tasks">长期任务</option>

@@ -155,5 +155,11 @@ def test_model_routing_override_copy_is_localized_in_both_languages():
         "routing.default_preset",
         "routing.default_preset_hint",
         "routing.save_default_preset",
+        "routing.profile_short",
+        "routing.failover.hint",
+        "routing.failover.title",
+        "routing.fallback.off",
+        "routing.fallback.preset",
+        "settings_center.llm_failover",
     ):
         assert i18n.count(f"'{key}'") == 2

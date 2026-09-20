@@ -29,7 +29,14 @@ async def test_sensor_judge_failure_is_ledgered_and_fail_closed(monkeypatch):
 
     sj._BREAKERS.clear()
     calls = []
-    mc = SimpleNamespace(name="sensor", provider_kind="openai", model="small", api_protocol="chat_completions", request_timeout_s=0.01)
+    mc = SimpleNamespace(
+        name="sensor",
+        provider_kind="openai",
+        model="small",
+        api_protocol="chat_completions",
+        prompt_style="narrative",
+        request_timeout_s=0.01,
+    )
     monkeypatch.setattr(sj, "get_model_client", lambda category: mc)
 
     async def fail(*args, **kwargs):
@@ -43,7 +50,7 @@ async def test_sensor_judge_failure_is_ledgered_and_fail_closed(monkeypatch):
     assert result["intent_tier"] == "drop"
     assert calls[0]["caller"] == "sensor_judge"
     assert calls[0]["ok"] is False
-    assert calls[0]["error_category"] == "auth_or_forbidden"
+    assert calls[0]["error_category"] == "upstream_unavailable"
     assert "prompt" not in calls[0]
 
 

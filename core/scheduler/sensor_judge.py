@@ -5,13 +5,16 @@ sensor_judge.py — sensor 候选事件裁决器。
 
 调用方式：result = await judge(event)
 """
-import asyncio
 import json
 import logging
-import time
-from dataclasses import dataclass
 from typing import Optional
 
+from core.llm_failover import (
+    PreparedAttempt,
+    breaker_permits,
+    clear_breakers,
+    execute_create,
+)
 from core.model_registry import get_model_client
 
 logger = logging.getLogger(__name__)
@@ -32,53 +35,41 @@ def _score_to_tier(score: int) -> str:
 _FAILURE: dict = {"score": 0, "reason": "裁决失败", "intent_tier": "drop"}
 _BREAKER_THRESHOLD = 3
 _BREAKER_COOLDOWN_S = 60.0
-
-
-@dataclass
-class _Breaker:
-    failures: int = 0
-    open_until: float = 0.0
-    half_open_in_flight: bool = False
-
-
-_BREAKERS: dict[tuple[str, str], _Breaker] = {}
+_BREAKERS = None  # kept for tests that clear the shared breaker via this name
 
 
 def _failure_category(exc: Exception) -> str:
-    status = getattr(exc, "status_code", None)
-    text = str(exc).lower()
-    if isinstance(exc, TimeoutError) or "timeout" in text:
-        return "timeout"
-    if status in (401, 403) or "forbidden" in text or "unauthorized" in text:
-        return "auth_or_forbidden"
-    if status == 429 or "rate limit" in text:
+    from core.llm_failover import breaker_category_for, classify_exception
+
+    category, reason = classify_exception(exc)
+    if reason == "geo_blocked":
+        return "geo_blocked"
+    mapped = breaker_category_for(category)
+    if mapped == "upstream_rate_limited":
         return "rate_limited"
-    if isinstance(status, int) and status >= 500:
-        return "upstream_5xx"
-    return "transport"
+    if mapped == "connection_error":
+        return "transport"
+    return mapped
 
 
 def _breaker_permits(key: tuple[str, str], now: float) -> bool:
-    breaker = _BREAKERS.setdefault(key, _Breaker())
-    if breaker.open_until <= now:
-        if breaker.open_until and breaker.half_open_in_flight:
-            return False
-        if breaker.open_until:
-            breaker.half_open_in_flight = True
-        return True
-    return False
+    return breaker_permits(key[0], key[1], now=now)
 
 
 def _breaker_record(key: tuple[str, str], category: str, *, ok: bool, now: float) -> None:
-    breaker = _BREAKERS.setdefault(key, _Breaker())
-    breaker.half_open_in_flight = False
-    if ok:
-        breaker.failures = 0
-        breaker.open_until = 0.0
-    elif category in {"auth_or_forbidden", "upstream_5xx"}:
-        breaker.failures += 1
-        if breaker.failures >= _BREAKER_THRESHOLD:
-            breaker.open_until = now + _BREAKER_COOLDOWN_S
+    from core.llm_failover import breaker_record
+
+    breaker_record(key[0], key[1], category, ok=ok, now=now)
+
+
+class _BreakerProxy:
+    """Compatibility shim so existing tests can still ``_BREAKERS.clear()``."""
+
+    def clear(self) -> None:
+        clear_breakers()
+
+
+_BREAKERS = _BreakerProxy()
 
 
 # ── 字段叙事化辅助 ────────────────────────────────────────────────────────────
@@ -186,60 +177,79 @@ async def judge(event: dict) -> dict:
 
     try:
         mc = get_model_client("sensor_judge")
-        breaker_key = (mc.name, "sensor_judge")
-        started = time.monotonic()
-        if not _breaker_permits(breaker_key, started):
-            logger.info("[sensor_judge] circuit open preset=%s", mc.name)
+
+        def _prepare(_target) -> PreparedAttempt:
+            from core.prompt_layer import sanitize_messages
+            from core.prompt_style import apply_prompt_style
+
+            styled = apply_prompt_style(messages, _target.prompt_style)
+            styled = sanitize_messages(styled)
+            return PreparedAttempt(
+                messages=styled,
+                gen_kwargs={
+                    "max_tokens": 80,
+                    "temperature": 0.1,
+                    "timeout": _target.request_timeout_s,
+                },
+            )
+
+        def _validate_json(value) -> None:
+            text = (getattr(value, "assistant_text", None) or "").strip()
+            if text.startswith("```"):
+                text = text.strip("`").lstrip("json").strip()
+            data = json.loads(text)
+            score = data.get("score")
+            if not isinstance(score, int) or not (0 <= score <= 100):
+                raise ValueError("sensor_judge score invalid")
+
+        outcome = await execute_create(
+            call_category="sensor_judge",
+            prepare=_prepare,
+            caller="sensor_judge",
+            primary_mc=mc,
+            validate=_validate_json,
+            reset_breaker_on_http_success=False,
+        )
+        if not outcome.ok:
+            if outcome.skip_reason == "breaker_open":
+                logger.info("[sensor_judge] circuit open preset=%s", (outcome.mc or mc).name)
+            elif outcome.error_category == "response_format":
+                raw_fail = ""
+                if outcome.value is not None:
+                    raw_fail = (getattr(outcome.value, "assistant_text", None) or "")
+                logger.warning(
+                    "[sensor_judge] 非 JSON 响应 event=%s chars=%s",
+                    event_type,
+                    len(raw_fail),
+                )
+                return {
+                    **dict(_FAILURE),
+                    "judge_input_prompt": audit_prompt,
+                    "judge_output_raw": raw_fail or None,
+                }
+            else:
+                logger.warning(
+                    "[sensor_judge] LLM 调用失败 event=%s category=%s",
+                    event_type, outcome.error_category or outcome.skip_reason,
+                )
             return {**dict(_FAILURE), "judge_input_prompt": audit_prompt, "judge_output_raw": None}
-        from core.llm_protocol import create as create_protocol_response
-        response = await asyncio.wait_for(create_protocol_response(
-            mc, messages, tools=None, tool_choice=None,
-            gen_kwargs={"max_tokens": 80, "temperature": 0.1, "timeout": mc.request_timeout_s},
-        ), timeout=mc.request_timeout_s)
-        raw = response.assistant_text.strip()
-        _breaker_record(breaker_key, "", ok=True, now=time.monotonic())
+        raw = outcome.value.assistant_text.strip()
+        used = outcome.mc or mc
     except Exception as e:
         category = _failure_category(e)
-        if "breaker_key" in locals():
-            _breaker_record(breaker_key, category, ok=False, now=time.monotonic())
-        try:
-            from core.api_call_log import append
-            append(caller="sensor_judge", purpose="sensor_judge", provider=getattr(locals().get("mc", None), "provider_kind", "unknown"), model=getattr(locals().get("mc", None), "model", "unknown"), duration_ms=int((time.monotonic() - locals().get("started", time.monotonic())) * 1000), ok=False, protocol=getattr(locals().get("mc", None), "api_protocol", ""), error_category=category)
-        except Exception:
-            pass
         logger.warning("[sensor_judge] LLM 调用失败 event=%s category=%s", event_type, category)
         return {**dict(_FAILURE), "judge_input_prompt": audit_prompt, "judge_output_raw": None}
 
-    # 解析 JSON（容错 markdown 代码块包裹）
-    try:
-        if raw.startswith("```"):
-            raw = raw.strip("`").lstrip("json").strip()
-        data = json.loads(raw)
-    except (json.JSONDecodeError, ValueError):
-        logger.warning(
-            "[sensor_judge] 非 JSON 响应 event=%s chars=%s",
-            event_type,
-            len(raw),
-        )
-        try:
-            from core.api_call_log import append
-            append(caller="sensor_judge", purpose="sensor_judge", provider=mc.provider_kind, model=mc.model, duration_ms=int((time.monotonic() - started) * 1000), ok=False, protocol=mc.api_protocol, error_category="response_format")
-        except Exception:
-            pass
-        return {**dict(_FAILURE), "judge_input_prompt": audit_prompt, "judge_output_raw": raw}
-
-    score = data.get("score")
-    if not isinstance(score, int) or not (0 <= score <= 100):
-        logger.warning(
-            "[sensor_judge] score 非法 event=%s score_type=%s",
-            event_type,
-            type(score).__name__,
-        )
-        return {**dict(_FAILURE), "judge_input_prompt": audit_prompt, "judge_output_raw": raw}
+    parsed = raw
+    if parsed.startswith("```"):
+        parsed = parsed.strip("`").lstrip("json").strip()
+    data = json.loads(parsed)
+    from core.llm_failover import confirm_business_success
+    confirm_business_success(used.name, "sensor_judge")
     return {
-        "score":                score,
+        "score":                int(data["score"]),
         "reason":               str(data.get("reason", "")),
-        "intent_tier":          _score_to_tier(score),
+        "intent_tier":          _score_to_tier(int(data["score"])),
         "judge_input_prompt":   audit_prompt,
         "judge_output_raw":     raw,
     }

@@ -194,6 +194,15 @@ async def api_calls(caller: str = "", provider: str = "", limit: int = Query(100
     return {"entries": entries, "count": len(entries), "by_provider": grouped}
 
 
+@router.get("/observability/llm-failover", summary="读取文本模型失败兜底统计（不含正文）")
+async def llm_failover_stats(
+    window_hours: float = Query(24.0, ge=1.0, le=168.0),
+    _auth=Depends(require_scopes("state.read")),
+):
+    from core.api_call_log import failover_stats
+    return failover_stats(window_hours=window_hours)
+
+
 @router.get("/observability/mail-executions", summary="读取脱敏邮件执行台账")
 async def mail_executions(
     uid: str = "", char_id: str = "", execution_id: str = "",

@@ -46,6 +46,7 @@ _FALLBACK_PROFILE = PROVIDER_PROFILES["openai"]
 
 _DEFAULT_CALL_TIMEOUT: float = 90.0
 _SENSOR_JUDGE_POLICY: dict[str, float | int] = {"timeout_s": 10.0, "max_retries": 0}
+_FAILOVER_POLICY: dict[str, float | int] = {"timeout_s": 10.0, "max_retries": 0}
 
 
 @dataclass
@@ -294,6 +295,12 @@ def resolve_category_info(
         else:
             preset_name = str(next(iter(mp.get("presets", {})), "legacy"))
     preset = mp.get("presets", {}).get(preset_name, {})
+    fallback = resolve_fallback_route(
+        call_category,
+        profile_name=active,
+        primary_preset=preset_name,
+        mp=mp,
+    )
     return {
         "category": call_category,
         "effective_profile": active,
@@ -302,7 +309,180 @@ def resolve_category_info(
         "provider_kind": preset.get("provider_kind", "openai"),
         "model": preset.get("model", ""),
         "model_version": preset.get("model_version", ""),
+        "fallback_preset": fallback.get("preset") or "",
+        "fallback_source": fallback.get("source") or "off",
+        "fallback_refused_reason": fallback.get("refused_reason") or "",
     }
+
+
+def _normalize_fallback_map(raw: Any) -> dict[str, dict[str, str]]:
+    """Coerce model_presets.fallback_routes into profile → category → preset."""
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, dict[str, str]] = {}
+    for profile_name, mapping in raw.items():
+        if not isinstance(profile_name, str) or not profile_name.strip():
+            continue
+        if not isinstance(mapping, dict):
+            continue
+        cats: dict[str, str] = {}
+        for category, preset in mapping.items():
+            if not isinstance(category, str) or not category.strip():
+                continue
+            name = str(preset or "").strip()
+            if name:
+                cats[category] = name
+        if cats:
+            out[profile_name] = cats
+    return out
+
+
+def normalize_fallback_routes(mp: dict | None) -> dict[str, dict[str, str]]:
+    """Public helper for admin CRUD: empty/missing maps stay empty (off)."""
+    if not isinstance(mp, dict):
+        return {}
+    return _normalize_fallback_map(mp.get("fallback_routes"))
+
+
+def _effective_profile_name(
+    mp: dict,
+    *,
+    char_id: str | None = None,
+    profile_name: str | None = None,
+) -> str:
+    profiles = mp.get("routing_profiles", {})
+    active = profile_name or mp.get("active_routing", "default")
+    if not profile_name:
+        char_routing = _char_model_routing(char_id) if char_id else _active_char_model_routing()
+        if char_routing in profiles:
+            active = char_routing
+    return active if isinstance(active, str) else "default"
+
+
+def resolve_fallback_route(
+    call_category: str,
+    *,
+    char_id: str | None = None,
+    profile_name: str | None = None,
+    primary_preset: str | None = None,
+    mp: dict | None = None,
+) -> dict[str, str]:
+    """Resolve an optional failure-failover preset for one category.
+
+    Empty / missing config is off. Same-as-primary, unknown preset, or a
+    mapping that is not a string name is refused rather than silently used.
+    This is independent of the missing-config chain in ``_resolve_preset_name``.
+    """
+    mp = mp if mp is not None else _get_preset_config()
+    profiles = mp.get("routing_profiles", {}) or {}
+    presets = mp.get("presets", {}) or {}
+    active = _effective_profile_name(mp, char_id=char_id, profile_name=profile_name)
+    routes = _normalize_fallback_map(mp.get("fallback_routes"))
+    mapping = routes.get(active) or {}
+    raw = mapping.get(call_category)
+    if not raw:
+        return {"preset": "", "source": "off", "profile": active, "refused_reason": ""}
+    if raw not in presets:
+        logger.warning(
+            "[model_registry] fallback_routes[%s][%s]=%r is not a known preset; refusing",
+            active, call_category, raw,
+        )
+        return {
+            "preset": "",
+            "source": "invalid_config",
+            "profile": active,
+            "refused_reason": "unknown_preset",
+        }
+    if primary_preset and raw == primary_preset:
+        logger.warning(
+            "[model_registry] fallback_routes[%s][%s]=%r equals primary; refusing",
+            active, call_category, raw,
+        )
+        return {
+            "preset": "",
+            "source": "invalid_config",
+            "profile": active,
+            "refused_reason": "same_as_primary",
+        }
+    if active not in profiles:
+        return {
+            "preset": "",
+            "source": "invalid_config",
+            "profile": active,
+            "refused_reason": "unknown_profile",
+        }
+    return {"preset": raw, "source": "configured", "profile": active, "refused_reason": ""}
+
+
+def rewrite_fallback_preset_references(mp: dict, *, old_name: str, new_name: str) -> list[str]:
+    """Rewrite fallback_routes values after a preset rename. Returns changed keys."""
+    routes = mp.get("fallback_routes")
+    if not isinstance(routes, dict):
+        return []
+    updated: list[str] = []
+    for profile_name, mapping in routes.items():
+        if not isinstance(mapping, dict):
+            continue
+        for category, preset_name in list(mapping.items()):
+            if preset_name == old_name:
+                mapping[category] = new_name
+                updated.append(f"fallback_routes.{profile_name}.{category}")
+    return updated
+
+
+def collect_fallback_preset_references(mp: dict, name: str) -> list[str]:
+    routes = mp.get("fallback_routes")
+    if not isinstance(routes, dict):
+        return []
+    return [
+        f"fallback_routes.{profile_name}.{category}"
+        for profile_name, mapping in routes.items()
+        if isinstance(mapping, dict)
+        for category, preset_name in mapping.items()
+        if preset_name == name
+    ]
+
+
+def rewrite_fallback_profile_name(mp: dict, *, old_name: str, new_name: str) -> None:
+    routes = mp.get("fallback_routes")
+    if not isinstance(routes, dict) or old_name not in routes:
+        return
+    mp["fallback_routes"] = {
+        (new_name if profile_name == old_name else profile_name): mapping
+        for profile_name, mapping in routes.items()
+    }
+
+
+def drop_fallback_profile(mp: dict, name: str) -> None:
+    routes = mp.get("fallback_routes")
+    if isinstance(routes, dict):
+        routes.pop(name, None)
+
+
+def validate_fallback_mapping(
+    mapping: dict[str, str],
+    *,
+    presets: dict,
+    primary: dict[str, str] | None = None,
+) -> tuple[dict[str, str], list[str]]:
+    """Return (cleaned mapping, error messages). Empty values are omitted (off)."""
+    cleaned: dict[str, str] = {}
+    errors: list[str] = []
+    for category, preset_name in mapping.items():
+        if not isinstance(category, str) or not category.strip():
+            errors.append(f"非法 category: {category!r}")
+            continue
+        name = str(preset_name or "").strip()
+        if not name:
+            continue
+        if name not in presets:
+            errors.append(f"{category} 引用了不存在的兜底 preset: {name}")
+            continue
+        if primary and primary.get(category) == name:
+            errors.append(f"{category} 的兜底 preset 与主 preset 相同: {name}")
+            continue
+        cleaned[category] = name
+    return cleaned, errors
 
 
 # ---------------------------------------------------------------------------
@@ -405,12 +585,14 @@ def get_model_client(
     *,
     char_id: str | None = None,
     preset_name: str | None = None,
+    failover: bool = False,
 ) -> ModelClient:
     """Resolve a routing category or explicit preset to a cached ModelClient.
 
     char_id=None（默认）：按活跃角色解析，与现状完全一致。
     char_id 给定：按该角色卡自己的 model_routing 解析（Brief 30 · char 维度穿线）。
     preset_name 给定：直接选择同名 preset，不经过 routing profile；不存在时明确抛错。
+    failover=True：零 SDK retry，独立缓存，不改写主 preset 的健康策略。
     """
     if preset_name is not None:
         resolved_name = preset_name.strip()
@@ -418,10 +600,19 @@ def get_model_client(
             raise ValueError("[model_registry] explicit preset name must not be empty")
     else:
         resolved_name = _resolve_preset_name(call_category, char_id=char_id)
-    policy_name = "sensor_judge" if call_category in {"sensor_judge", "ime_judge"} else "default"
+    if failover:
+        policy_name = "failover"
+        policy: dict[str, float | int] | None = dict(_FAILOVER_POLICY)
+        from core.llm_failover import category_timeout
+        policy["timeout_s"] = category_timeout(call_category)
+    elif call_category in {"sensor_judge", "ime_judge"}:
+        policy_name = "sensor_judge"
+        policy = _SENSOR_JUDGE_POLICY
+    else:
+        policy_name = "default"
+        policy = None
     cache_key = (resolved_name, policy_name)
     if cache_key not in _model_clients:
-        policy = _SENSOR_JUDGE_POLICY if policy_name == "sensor_judge" else None
         _model_clients[cache_key] = _build_model_client(resolved_name, request_policy=policy)
     return _model_clients[cache_key]
 

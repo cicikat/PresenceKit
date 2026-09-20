@@ -260,6 +260,12 @@ model_presets:
       perform:        deepseek-default
       monologue:      deepseek-default
       rpg_kp:         deepseek-default
+
+  # 失败兜底：独立的 profile → category → preset 映射，不嵌进 category 字符串。
+  # 空/缺省 = 关闭。主路由用尽现有重试后最多换一次；旧配置默认关闭。
+  # fallback_routes:
+  #   default:
+  #     chat: claude-sonnet
 ```
 
 ### `api_protocol`
@@ -334,11 +340,15 @@ policy、连接、registry、角色 proficiency 和 exclude_tools 之后继续�
    preset（参照下方 `claude-main` 样例）。
 1. 取 `routing_profiles[active_routing]`（第 0 步可能已替换）。
 2. 用 `call_category` 查 preset 名；查不到 → `model_presets.default_preset`（若该名仍存在）；再查不到 → 该 profile 的 `chat`；再查不到 → 第一个 preset。
+   这是缺配置时的路由选择，不是请求失败后的跨 preset 兜底。失败兜底走独立的
+   `fallback_routes`（profile → category → preset）；空/缺省关闭，不自动替用户选模型。
    `sensor_judge` 是例外的兼容链：`sensor_judge → intent → chat → first preset`。所有新建
    profile 应显式声明它，并指向稳定、低成本的 `chat_completions` preset；旧 profile 缺失时仍可
    安全运行。该类别使用 10 秒超时与零 SDK 重试，且按 `preset + category` 独立缓存，不影响同一
    preset 的主聊天策略。失败 fail-closed 为不主动发言的裁决；失败台账经
    `GET /observability/api-calls` 以 `caller=sensor_judge` 查询，记录安全错误分类而不记录 prompt。
+   文本模型失败兜底统计另见 `GET /observability/llm-failover`（`state.read`），分母是尝试次数、
+   逻辑调用和实际发出的兜底尝试，不保存 prompt/正文/密钥。
    `scenario_reconcile` 使用独立的安全路由：`scenario_reconcile → intent → chat → first preset`；
    旧 profile 缺失该 category 时仍兼容，默认单次超时 8 秒、零 SDK retry，且调用发生在
    可见 Dream 回复之后。模型路由管理面展示实际 effective preset 和来源；reconciler 审计
@@ -464,16 +474,17 @@ fail-loud，不再静默合成 `legacy` preset。残留的顶层 `llm:` 键不�
 
 | 端点 | 说明 |
 |---|---|
-| `GET /model-presets` | 返回 presets（api_key 打码，含 `api_protocol`）、routing_profiles、active_routing、default_preset；`routing_effective` 含 `scenario_reconcile` / `event_edge_proposer` / `rpg_kp` / `sensor_judge` / `monologue` 的解析摘要；活动角色有有效固定绑定时附带 `active_character_routing`（角色、profile、实际 chat preset），供管理面提示全局切换不会影响它 |
+| `GET /model-presets` | 返回 presets（api_key 打码，含 `api_protocol`）、routing_profiles、独立 `fallback_routes`、active_routing、default_preset；`routing_effective` 含 `scenario_reconcile` / `event_edge_proposer` / `rpg_kp` / `sensor_judge` / `monologue` 的解析摘要（含 `fallback_preset` / `fallback_source` / `fallback_refused_reason`）；活动角色有有效固定绑定时附带 `active_character_routing`（角色、profile、实际 chat preset），供管理面提示全局切换不会影响它 |
 | `PUT /model-presets/active-routing` | 切换 active_routing 并热重载（仅 model_presets 模式） |
 | `PUT /model-presets/default-preset` | 设置未映射 category 的默认 preset；空字符串清除；必须是已存在的 preset 名 |
 | `PUT /model-presets/presets/{name}` | 新增或更新一个 preset（合并更新；新建须提供 provider_kind；仅 model_presets 模式） |
-| `POST /model-presets/presets/{name}/rename` | 重命名 preset；同一次原子写入会更新所有 routing profile 的 category→preset 引用和 `default_preset` 并热重载；目标名不能为空且不得已存在 |
-| `DELETE /model-presets/presets/{name}` | 删除一个 preset；被任意 routing_profile 引用、仍是 `default_preset`、或是唯一剩余 preset 时 409 |
-| `PUT /model-presets/routing-profiles/{name}` | 新增或更新一个 routing profile 的 call_category → preset 映射（合并更新；非空值须是已存在的 preset；空字符串清除该 category，走 default_preset） |
-| `POST /model-presets/routing-profiles/{name}/rename` | 重命名 routing profile；同步 `active_routing`，并改写角色卡 `presence_ext.model_routing` |
-| `DELETE /model-presets/routing-profiles/{name}` | 删除 routing profile；不能删最后一个；若删的是当前生效方案则切到剩余方案（优先名为 `default` 的）；绑定该方案的角色卡清除为跟随全局 |
-| `GET /model-presets/routing-profiles` | 可选 profile 清单（名字 + 各 category→preset 映射摘要），角色绑定下拉框数据源 |
+| `POST /model-presets/presets/{name}/rename` | 重命名 preset；同一次原子写入会更新所有 routing profile 的 category→preset 引用、`default_preset` 和 `fallback_routes` 并热重载；目标名不能为空且不得已存在 |
+| `DELETE /model-presets/presets/{name}` | 删除一个 preset；被任意 routing_profile / `fallback_routes` 引用、仍是 `default_preset`、或是唯一剩余 preset 时 409 |
+| `PUT /model-presets/routing-profiles/{name}` | 新增或更新一个 routing profile 的 call_category → preset 映射（合并更新；非空值须是已存在的 preset；空字符串清除该 category，走 default_preset）。可选独立 `fallback` 映射不嵌进 category 字符串；缺省不改已有兜底；空字符串关闭该 category 的失败兜底 |
+| `POST /model-presets/routing-profiles/{name}/rename` | 重命名 routing profile；同步 `active_routing` 与 `fallback_routes` 键，并改写角色卡 `presence_ext.model_routing` |
+| `DELETE /model-presets/routing-profiles/{name}` | 删除 routing profile；不能删最后一个；若删的是当前生效方案则切到剩余方案（优先名为 `default` 的）；绑定该方案的角色卡清除为跟随全局；该 profile 的 `fallback_routes` 一并删除 |
+| `GET /model-presets/routing-profiles` | 可选 profile 清单（名字 + 各 category→preset 映射摘要 + 独立 `fallback`），角色绑定下拉框数据源 |
+| `GET /observability/llm-failover` | `state.read` 只读失败兜底统计：尝试失败率、逻辑最终失败率、兜底成功率、跳过原因；不含 prompt/正文/密钥 |
 | `POST /model-presets/presets/{name}/test` | 连通性测试：实际发一条 `max_tokens=1` 的请求，返回 `{ok, latency_ms, error?}`，不经缓存 |
 | `GET /llm-params` | 读取当前 chat preset 的生成参数 |
 | `PUT /llm-params` | 修改当前 chat preset 的生成参数并热重载；无 `model_presets` 时 400 |

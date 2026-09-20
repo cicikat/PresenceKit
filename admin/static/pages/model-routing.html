@@ -66,7 +66,8 @@
           <select id="mr-default-preset-select" class="admin-inline-171"></select>
           <button class="btn btn-primary btn-sm" data-action="saveDefaultPreset" data-i18n="routing.save_default_preset">保存默认</button>
         </label>
-        <p class="admin-inline-087" data-i18n="routing.default_preset_hint">未选或新建 profile 未填的 category 解析到这个 preset，再回退 chat → 第一个 preset。</p>
+        <p class="admin-inline-087" data-i18n="routing.default_preset_hint">未选或新建 profile 未填的 category 解析到这个 preset，再回退 chat → 第一个 preset。这是缺配置解析，不是请求失败后的跨模型兜底。</p>
+        <p class="admin-inline-087" data-i18n="routing.failover.hint">失败兜底是另一套独立映射：主路由用尽现有重试后，最多换一次已配置的兜底 Preset。旧配置默认关闭，不自动替你选模型。</p>
         <p class="admin-inline-087" data-i18n="routing.active_binding_hint">只有清除角色卡的模型绑定后才会跟随全局；名为 <code>default</code> 的 profile 也属于固定绑定。</p>
         <div id="mr-active-character-routing-warning" role="status" aria-live="polite" class="admin-inline-087 admin-routing-warning"></div>
         <div id="mr-event-proposer-route-status" class="config-item-meta">event_edge_proposer: -</div>
@@ -89,7 +90,7 @@
           <h3>Routing Profiles</h3>
           <button class="btn btn-primary btn-sm" data-action="openProfileModal">+ 新建/编辑 Profile</button>
         </div>
-        <p class="admin-description" data-i18n="routing.preset_short">地址、密钥和模型组成一个连接。保存后可分配用途。</p>
+        <p class="admin-description" data-i18n="routing.profile_short">把不同用途分配给模型连接；每行显示主 Preset / 兜底 Preset（可不选）。留空项按缺配置回退，不是请求失败后的跨模型兜底。</p>
         <details class="admin-inline-126">
           <summary class="admin-inline-013">各 category 是干什么的？点开看</summary>
           <div class="admin-inline-141">
@@ -109,5 +110,20 @@
           </div>
         </details>
         <div id="mr-profiles-body"><div class="loading">加载中…</div></div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <h3 data-i18n="routing.failover.title">失败兜底观测</h3>
+          <button class="btn btn-ghost btn-sm" data-action="loadLlmFailoverStats" data-i18n="common.refresh">刷新</button>
+        </div>
+        <p class="admin-description" data-i18n="routing.failover.stats_hint">分别展示尝试失败率、逻辑最终失败率和兜底成功率。分母写在卡片里；不保存 prompt、正文或密钥。SDK 内部重试不算独立尝试。</p>
+        <label class="field admin-inline-019">
+          <span data-i18n="routing.failover.window">时间窗</span>
+          <select id="mr-failover-window" class="admin-inline-171" data-action="loadLlmFailoverStats">
+            <option value="24" selected>24h</option>
+            <option value="168">7d</option>
+          </select>
+        </label>
+        <div id="mr-failover-stats" role="status" class="admin-inline-087" data-i18n="common.loading">加载中…</div>
       </div>
 <section class="card"><button class="btn btn-primary" data-action="goto" data-action-args='["role-bindings"]' data-i18n="settings_center.character_model_bindings_and_reset">角色模型绑定与重置</button></section>
