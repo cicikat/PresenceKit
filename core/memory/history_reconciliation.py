@@ -9,21 +9,23 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import sqlite3
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from core.sandbox import get_paths
 from core.memory.path_resolver import resolve_path
 from core.memory.scope import MemoryScope
 from core.safe_write import safe_write_json
 
-SCHEMA_VERSION = "memory-history-inventory.v1"
+SCHEMA_VERSION = "memory-history-inventory.v2"
 SOURCES = ("event_store", "event_log", "mid_term", "episodic", "storyline", "user_identity")
 STATES = ("pending", "running", "committed", "retryable_failed", "deferred", "excluded")
 RULES_VERSION = "history-reconciliation-rules.v1"
+FIRST_NIGHT_WINDOW_SECONDS = 30 * 24 * 3600
+_DAY_NAME_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})\.md$")
 
 
 def _digest(value: Any) -> str:
@@ -46,7 +48,6 @@ def _file_info(path: Path) -> dict[str, Any]:
 
 def _scope_files(uid: str, char_id: str) -> dict[str, list[Path]]:
     scope = MemoryScope.reality_scope(uid, char_id)
-    root = get_paths().user_memory_root(uid, char_id=char_id)
     event_log = resolve_path(scope, "event_log")
     return {
         "event_store": [resolve_path(scope, "event_store")],
@@ -55,6 +56,239 @@ def _scope_files(uid: str, char_id: str) -> dict[str, list[Path]]:
         "episodic": [resolve_path(scope, "episodic")],
         "storyline": [resolve_path(scope, "storyline"), resolve_path(scope, "storyline_inbox")],
         "user_identity": [resolve_path(scope, "identity")],
+        "memory_digest": [resolve_path(scope, "memory_digest")],
+        "storyline_archive": [resolve_path(scope, "storyline_archive")],
+    }
+
+
+def _empty_metrics() -> dict[str, Any]:
+    return {
+        "item_count": 0, "legacy_unknown": 0, "lineage_missing": 0, "old_format": 0,
+        "time_min": None, "time_max": None, "first_night_candidates": 0,
+        "remaining_history": 0, "estimated_tokens": 0, "independent_experiences": "unknown",
+        "denominator": "derived_summaries",
+    }
+
+
+def _merge_times(metrics: dict[str, Any], value: float | None) -> None:
+    if value is None:
+        return
+    stamp = float(value)
+    current_min = metrics["time_min"]
+    current_max = metrics["time_max"]
+    metrics["time_min"] = stamp if current_min is None else min(float(current_min), stamp)
+    metrics["time_max"] = stamp if current_max is None else max(float(current_max), stamp)
+
+
+def _window(metrics: dict[str, Any], stamp: float | None, cutoff: float) -> None:
+    if stamp is None:
+        metrics["remaining_history"] += 1
+        return
+    if float(stamp) >= cutoff:
+        metrics["first_night_candidates"] += 1
+    else:
+        metrics["remaining_history"] += 1
+
+
+def _estimate_tokens(text: str) -> int:
+    return max(1, (len(text) + 3) // 4) if text else 0
+
+
+def _has_lineage(value: Any) -> bool:
+    if isinstance(value, list):
+        return any(str(item).strip() for item in value)
+    return bool(str(value or "").strip())
+
+
+def _load_json(path: Path) -> Any:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _event_store_metrics(path: Path, cutoff: float) -> dict[str, Any]:
+    metrics = _empty_metrics()
+    metrics["denominator"] = "evidence_rows"
+    if not path.exists():
+        return metrics
+    from core.memory import event_store
+    with event_store._lock_for(path), sqlite3.connect(
+        f"{path.resolve().as_uri()}?mode=ro", uri=True, timeout=0.25,
+    ) as connection:
+        row = connection.execute(
+            "SELECT COUNT(*),MIN(ingested_at),MAX(ingested_at),"
+            "SUM(CASE WHEN ingested_at>=? THEN 1 ELSE 0 END),"
+            "SUM(CASE WHEN ingested_at-occurred_at>=86400 THEN 1 ELSE 0 END),"
+            "COALESCE(SUM(LENGTH(COALESCE(NULLIF(memory_text,''),visible_text))),0) "
+            "FROM events",
+            (cutoff,),
+        ).fetchone()
+    metrics["item_count"] = int(row[0] or 0)
+    if row[1] is not None:
+        metrics["time_min"] = float(row[1])
+        metrics["time_max"] = float(row[2])
+    metrics["first_night_candidates"] = int(row[3] or 0)
+    metrics["remaining_history"] = metrics["item_count"] - metrics["first_night_candidates"]
+    metrics["late_arrivals"] = int(row[4] or 0)
+    metrics["estimated_tokens"] = max(0, (int(row[5] or 0) + 3) // 4)
+    metrics["independent_experiences"] = "unknown"
+    return metrics
+
+
+def _event_log_metrics(paths: list[Path], cutoff: float) -> dict[str, Any]:
+    metrics = _empty_metrics()
+    metrics["denominator"] = "archive_files"
+    for path in paths:
+        info = _file_info(path)
+        if not info["exists"] or not info["readable"]:
+            continue
+        metrics["item_count"] += 1
+        metrics["estimated_tokens"] += max(1, (int(info["bytes"]) + 3) // 4)
+        match = _DAY_NAME_RE.match(path.name)
+        if match:
+            day = datetime.strptime(match.group(1), "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            stamp = day.timestamp()
+            _merge_times(metrics, stamp)
+            _window(metrics, stamp, cutoff)
+            continue
+        metrics["old_format"] += 1
+        _window(metrics, None, cutoff)
+    return metrics
+
+
+def _mid_term_metrics(path: Path, cutoff: float) -> dict[str, Any]:
+    metrics = _empty_metrics()
+    metrics["denominator"] = "derived_summaries"
+    if not path.exists():
+        return metrics
+    raw = _load_json(path)
+    events = raw.get("events", []) if isinstance(raw, dict) else []
+    for item in events:
+        if not isinstance(item, dict):
+            continue
+        metrics["item_count"] += 1
+        stamp = item.get("occurred_at") if isinstance(item.get("occurred_at"), (int, float)) else item.get("ts")
+        stamp = float(stamp) if isinstance(stamp, (int, float)) else None
+        _merge_times(metrics, stamp)
+        _window(metrics, stamp, cutoff)
+        if not _has_lineage(item.get("source_event_ids")):
+            metrics["legacy_unknown"] += 1
+            metrics["lineage_missing"] += 1
+        metrics["estimated_tokens"] += _estimate_tokens(str(item.get("summary") or ""))
+    return metrics
+
+
+def _episodic_metrics(path: Path, cutoff: float) -> dict[str, Any]:
+    metrics = _empty_metrics()
+    metrics["denominator"] = "derived_summaries"
+    if not path.exists():
+        return metrics
+    raw = _load_json(path)
+    if not isinstance(raw, list):
+        raise ValueError("episodic_not_list")
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        metrics["item_count"] += 1
+        stamp = item.get("event_time") if isinstance(item.get("event_time"), (int, float)) else item.get("timestamp")
+        stamp = float(stamp) if isinstance(stamp, (int, float)) else None
+        _merge_times(metrics, stamp)
+        _window(metrics, stamp, cutoff)
+        if not _has_lineage(item.get("source_event_ids")) and not _has_lineage(item.get("source_mid_ids")):
+            metrics["legacy_unknown"] += 1
+            metrics["lineage_missing"] += 1
+        if "narrative_summary" not in item and "summary" in item:
+            metrics["old_format"] += 1
+        text = str(item.get("narrative_summary") or item.get("summary") or "")
+        metrics["estimated_tokens"] += _estimate_tokens(text)
+    return metrics
+
+
+def _storyline_metrics(paths: list[Path], cutoff: float) -> dict[str, Any]:
+    metrics = _empty_metrics()
+    metrics["denominator"] = "derived_summaries"
+    for path in paths:
+        if not path.exists():
+            continue
+        raw = _load_json(path)
+        if isinstance(raw, dict):
+            arcs = raw.get("arcs", [])
+            for arc in arcs if isinstance(arcs, list) else []:
+                if not isinstance(arc, dict):
+                    continue
+                metrics["item_count"] += 1
+                stamp = arc.get("updated_at") if isinstance(arc.get("updated_at"), (int, float)) else arc.get("created_at")
+                stamp = float(stamp) if isinstance(stamp, (int, float)) else None
+                _merge_times(metrics, stamp)
+                _window(metrics, stamp, cutoff)
+                nodes = arc.get("nodes") if isinstance(arc.get("nodes"), list) else []
+                lineage = any(_has_lineage(node.get("source_ids") or node.get("source_event_ids"))
+                              for node in nodes if isinstance(node, dict))
+                if not lineage:
+                    metrics["legacy_unknown"] += 1
+                    metrics["lineage_missing"] += 1
+                metrics["estimated_tokens"] += _estimate_tokens(str(arc.get("title") or ""))
+                for node in nodes:
+                    if isinstance(node, dict):
+                        metrics["estimated_tokens"] += _estimate_tokens(str(node.get("summary") or node.get("text") or ""))
+            continue
+        if isinstance(raw, list):
+            for item in raw:
+                if not isinstance(item, dict):
+                    continue
+                metrics["item_count"] += 1
+                stamp = item.get("timestamp") if isinstance(item.get("timestamp"), (int, float)) else item.get("ts")
+                stamp = float(stamp) if isinstance(stamp, (int, float)) else None
+                _merge_times(metrics, stamp)
+                _window(metrics, stamp, cutoff)
+                if not _has_lineage(item.get("source_event_ids")):
+                    metrics["legacy_unknown"] += 1
+                    metrics["lineage_missing"] += 1
+                metrics["estimated_tokens"] += _estimate_tokens(str(item.get("summary") or item.get("narrative_summary") or ""))
+    return metrics
+
+
+def _identity_metrics(path: Path, cutoff: float) -> dict[str, Any]:
+    metrics = _empty_metrics()
+    metrics["denominator"] = "derived_summaries"
+    if not path.exists():
+        return metrics
+    import yaml
+    try:
+        raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError as exc:
+        raise ValueError("identity_unreadable") from exc
+    if not isinstance(raw, dict):
+        raise ValueError("identity_not_mapping")
+    for key, value in raw.items():
+        metrics["item_count"] += 1
+        stamp = None
+        if isinstance(value, dict):
+            for field in ("updated_at", "ts", "timestamp"):
+                if isinstance(value.get(field), (int, float)):
+                    stamp = float(value[field])
+                    break
+            if not _has_lineage(value.get("source_event_ids")):
+                metrics["legacy_unknown"] += 1
+                metrics["lineage_missing"] += 1
+            metrics["estimated_tokens"] += _estimate_tokens(str(value.get("text") or value.get("summary") or key))
+        else:
+            metrics["legacy_unknown"] += 1
+            metrics["lineage_missing"] += 1
+            metrics["estimated_tokens"] += _estimate_tokens(str(value))
+        _merge_times(metrics, stamp)
+        _window(metrics, stamp, cutoff)
+    return metrics
+
+
+def _archive_metrics(path: Path) -> dict[str, Any]:
+    info = _file_info(path)
+    return {
+        "exists": bool(info["exists"]),
+        "bytes": int(info["bytes"]),
+        "readable": bool(info["readable"]),
+        "source_revision": str(info["revision"]),
+        "file_count": 1 if info["exists"] else 0,
+        "denominator": "archive_files",
+        "isolated": True,
     }
 
 
@@ -62,27 +296,95 @@ def build_inventory(uid: str, char_id: str, *, now: float | None = None) -> dict
     """Return a deterministic, redacted source inventory for one scope."""
     if not str(uid).strip() or not str(char_id).strip():
         raise ValueError("uid_and_char_id_required")
+    generated_at = float(time.time() if now is None else now)
+    cutoff = generated_at - FIRST_NIGHT_WINDOW_SECONDS
     files = _scope_files(str(uid), str(char_id))
     items: list[dict[str, Any]] = []
+    denominators = {"evidence_rows": 0, "derived_summaries": 0, "archive_files": 0, "independent_experiences": "unknown"}
+    unknown: list[str] = []
     for kind in SOURCES:
         entries = [_file_info(path) for path in files[kind]]
-        items.append({
+        try:
+            if kind == "event_store":
+                metrics = _event_store_metrics(files[kind][0], cutoff)
+            elif kind == "event_log":
+                metrics = _event_log_metrics(files[kind], cutoff)
+            elif kind == "mid_term":
+                metrics = _mid_term_metrics(files[kind][0], cutoff)
+            elif kind == "episodic":
+                metrics = _episodic_metrics(files[kind][0], cutoff)
+            elif kind == "storyline":
+                metrics = _storyline_metrics(files[kind], cutoff)
+            else:
+                metrics = _identity_metrics(files[kind][0], cutoff)
+        except (OSError, ValueError, TypeError, json.JSONDecodeError, sqlite3.Error, UnicodeDecodeError):
+            metrics = _empty_metrics()
+            metrics["readable"] = False
+            unknown.append(kind)
+        item = {
             "store_kind": kind,
-            "file_count": sum(int(item["exists"]) for item in entries),
-            "bytes": sum(int(item["bytes"]) for item in entries),
+            "file_count": sum(int(entry["exists"]) for entry in entries),
+            "bytes": sum(int(entry["bytes"]) for entry in entries),
             "source_revision": _digest(entries),
-            "readable": all(bool(item.get("readable")) for item in entries),
-            "isolated": kind in {"event_store", "event_log", "mid_term", "episodic", "storyline", "user_identity"},
-        })
-    total = len(items)
+            "readable": all(bool(entry.get("readable")) for entry in entries) and metrics.get("readable", True),
+            "isolated": True,
+            **metrics,
+        }
+        items.append(item)
+        if item["denominator"] in denominators and isinstance(denominators[item["denominator"]], int):
+            denominators[item["denominator"]] += int(item["item_count"])
+        if int(item["legacy_unknown"]) or int(item["lineage_missing"]):
+            unknown.append(f"{kind}:legacy_unknown")
+    archives = {
+        "memory_digest": _archive_metrics(files["memory_digest"][0]),
+        "storyline_archive": _archive_metrics(files["storyline_archive"][0]),
+    }
+    denominators["archive_files"] += sum(int(item["file_count"]) for item in archives.values())
+    first_night = sum(int(item["first_night_candidates"]) for item in items)
+    remaining = sum(int(item["remaining_history"]) for item in items)
+    times = [item["time_min"] for item in items if item.get("time_min") is not None]
+    times_max = [item["time_max"] for item in items if item.get("time_max") is not None]
+    cross_year = False
+    if times and times_max:
+        start = datetime.fromtimestamp(min(float(value) for value in times), tz=timezone.utc)
+        end = datetime.fromtimestamp(max(float(value) for value in times_max), tz=timezone.utc)
+        cross_year = start.year != end.year
+    sample_class_hits = {
+        "recent": first_night > 0,
+        "stale": remaining > 0,
+        "duplicate": "unknown",
+        "contradiction": "unknown",
+        "missing_lineage": any(int(item["lineage_missing"]) for item in items),
+        "cross_year": cross_year,
+        "late_arrival": any(int(item.get("late_arrivals") or 0) for item in items),
+        "active_theme_chain": any(
+            item["store_kind"] == "storyline" and int(item["item_count"]) > 0 for item in items
+        ),
+    }
     return {
         "schema_version": SCHEMA_VERSION,
         "scope": {"uid_digest": _digest(str(uid))[:16], "char_id": str(char_id), "realm": "reality"},
-        "generated_at": float(time.time() if now is None else now),
+        "generated_at": generated_at,
         "read_only": True,
         "model_calls": 0,
-        "total_sources": total,
+        "total_sources": len(items),
         "items": items,
+        "denominators": denominators,
+        "watermark": {
+            "inventory_revision": _digest(items),
+            "generated_at": generated_at,
+            "first_night_cutoff": cutoff,
+            "first_night_window_seconds": FIRST_NIGHT_WINDOW_SECONDS,
+        },
+        "ranges": {
+            "first_night_candidates": first_night,
+            "remaining_history": remaining,
+            "unknown": sorted(set(unknown)),
+        },
+        "sample_classes": list(sample_class_hits),
+        "sample_class_hits": sample_class_hits,
+        "estimated_tokens": sum(int(item["estimated_tokens"]) for item in items),
+        "archives": archives,
         "inventory_revision": _digest(items),
     }
 

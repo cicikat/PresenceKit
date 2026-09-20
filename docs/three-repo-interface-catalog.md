@@ -1016,8 +1016,9 @@ Admin adds `GET /observability/memory-consolidation` (`state.read`), bounded
 ack, TTL, correlation-key, permission, or native settings contract changed.
 The read-only Brief 259 inventory is exposed as
 `GET /observability/memory-history-inventory?uid=...&char_id=...`
-(`state.read`); it returns only redacted counts and source revisions and has no
-desktop/mobile consumer. Per-source-item processing receipts are listed at
+(`state.read`); it returns only redacted counts, time ranges, denominators and
+source revisions and has no desktop/mobile consumer. Per-source-item processing
+receipts are listed at
 `GET /memory/history-source-items` (`memory.read`) and remain backend-admin
 only.
 

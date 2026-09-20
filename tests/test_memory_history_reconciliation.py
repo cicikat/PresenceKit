@@ -21,12 +21,72 @@ def test_inventory_is_redacted_and_revisioned(sandbox):
         "redaction_state": "scrubbed",
     }).ok
     result = build_inventory(scope.uid, scope.character_id, now=10)
-    assert result["schema_version"] == "memory-history-inventory.v1"
+    assert result["schema_version"] == "memory-history-inventory.v2"
     assert result["read_only"] is True
     assert result["model_calls"] == 0
     assert result["scope"]["uid_digest"] != scope.uid
     assert "secret evidence" not in str(result)
     assert {item["store_kind"] for item in result["items"]} >= {"event_store", "event_log", "episodic"}
+
+
+def test_inventory_separates_denominators_and_first_night_range(sandbox):
+    import json
+    from core.memory.history_reconciliation import FIRST_NIGHT_WINDOW_SECONDS, build_inventory
+    from core.memory.path_resolver import resolve_path
+    from core.memory.scope import MemoryScope
+    from core.memory.event_store import append_event
+
+    now = 2_000_000_000.0
+    scope = MemoryScope.reality_scope("inventory-range-owner", TEST_CHAR_ID)
+    secret = "PRIVATE_SOURCE_BODY_259A"
+    assert append_event(scope, {
+        "event_id": "inventory-recent", "turn_id": "inventory-recent", "seq": 1,
+        "occurred_at": now - 3 * 86_400, "ingested_at": now - 3_600, "uid": scope.uid,
+        "char_id": scope.character_id, "realm": "reality", "kind": "chat",
+        "actor": "user", "channel": "test", "source": "fixture",
+        "visible_text": secret, "memory_text": secret,
+    }).ok
+    assert append_event(scope, {
+        "event_id": "inventory-stale", "turn_id": "inventory-stale", "seq": 2,
+        "occurred_at": now - FIRST_NIGHT_WINDOW_SECONDS - 86_400,
+        "ingested_at": now - FIRST_NIGHT_WINDOW_SECONDS - 3_600,
+        "uid": scope.uid, "char_id": scope.character_id, "realm": "reality",
+        "kind": "chat", "actor": "user", "channel": "test", "source": "fixture",
+        "visible_text": secret, "memory_text": secret,
+    }).ok
+    mid_path = resolve_path(scope, "mid_term")
+    mid_path.parent.mkdir(parents=True, exist_ok=True)
+    mid_path.write_text(json.dumps({"events": [
+        {"mid_id": "mid-legacy", "summary": secret, "occurred_at": now - 10_000, "source_event_ids": []},
+        {"mid_id": "mid-linked", "summary": secret, "occurred_at": now - FIRST_NIGHT_WINDOW_SECONDS - 10,
+         "source_event_ids": ["inventory-stale"]},
+    ]}), encoding="utf-8")
+    event_log = resolve_path(scope, "event_log")
+    event_log.mkdir(parents=True, exist_ok=True)
+    (event_log / "2020-01-01.md").write_text("# day\n", encoding="utf-8")
+    (event_log / "full_log.md").write_text(secret, encoding="utf-8")
+    digest = resolve_path(scope, "memory_digest")
+    digest.write_text("old digest", encoding="utf-8")
+    result = build_inventory(scope.uid, scope.character_id, now=now)
+    by_kind = {item["store_kind"]: item for item in result["items"]}
+    assert result["denominators"]["evidence_rows"] == 2
+    assert result["denominators"]["derived_summaries"] >= 2
+    assert result["denominators"]["archive_files"] >= 2
+    assert result["denominators"]["independent_experiences"] == "unknown"
+    assert by_kind["event_store"]["first_night_candidates"] == 1
+    assert by_kind["event_store"]["remaining_history"] == 1
+    assert by_kind["event_store"]["late_arrivals"] == 1
+    assert by_kind["mid_term"]["legacy_unknown"] == 1
+    assert by_kind["event_log"]["old_format"] == 1
+    assert result["ranges"]["first_night_candidates"] >= 1
+    assert result["ranges"]["remaining_history"] >= 1
+    assert "mid_term:legacy_unknown" in result["ranges"]["unknown"]
+    assert result["sample_class_hits"]["missing_lineage"] is True
+    assert result["sample_class_hits"]["late_arrival"] is True
+    assert result["archives"]["memory_digest"]["exists"] is True
+    assert result["watermark"]["first_night_cutoff"] == now - FIRST_NIGHT_WINDOW_SECONDS
+    assert secret not in str(result)
+    assert str(mid_path) not in str(result)
 
 
 def test_inventory_endpoint_requires_state_read_and_is_empty_without_data(sandbox):

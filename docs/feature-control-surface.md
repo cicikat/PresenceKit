@@ -706,10 +706,14 @@ confirmation field. An absent grant is reported as waiting for admin approval.
 returns a versioned, content-free inventory of the scoped history stores. It is
 strictly read-only: it does not initialize stores, create migration state,
 invoke a model, or change production memory. The inventory reports source
-counts, byte totals, and metadata revisions so a separately authorized batch
-manifest can detect source changes before retrying. Background consolidation
-continues to use the existing `memory_consolidation.background_preset`; set it
-to the configured cheap `grok-see` preset for bulk work.
+counts, byte totals, ingest time ranges, separate evidence/derived/archive
+denominators, lineage-missing counts, estimated tokens, and a 30-day first-night
+candidate cut versus remaining history. Independent experience counts stay
+`unknown` until a later semantic pass. Metadata revisions still let a separately
+authorized batch manifest detect source changes before retrying. Background
+consolidation continues to use the existing
+`memory_consolidation.background_preset`; set it to the configured cheap
+`grok-see` preset for bulk work.
 
 ## Brief 258 memory dossier consolidation
 

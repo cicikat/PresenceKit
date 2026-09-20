@@ -13,13 +13,17 @@ remains gated by Brief 259 A-C and the separately authorized Brief 258 F rollout
 Brief 259 now has a redacted inventory, a per-source-item processing ledger in
 the scoped dossier store, resumable store-level manifest state, verified
 offline-backup gate, recovery-drill helper, and an admin-only bounded event-log
-apply endpoint. Creating a dry-run manifest enumerates event_store / event_log /
-mid_term / episodic / storyline / identity identities into `source_items`
-without copying prose. Bounded claims take a stably ordered slice, inspect
-already-linked dossiers by evidence ID (not title), and recover expired leases
-from durable receipts before retry. The apply path can admit one same-scope
-dossier pass using the configured cheap `便宜小模型grok-see` preset; semantic
-calibration and production first-night apply remain separately gated.
+apply endpoint. The inventory reports separate evidence / derived / archive
+denominators, ingest time ranges, lineage-missing counts, and a 30-day first-
+night candidate cut versus remaining history. Creating a dry-run manifest
+enumerates event_store / event_log / mid_term / episodic / storyline / identity
+identities into `source_items` without copying prose. Bounded claims take a
+stably ordered slice, inspect already-linked dossiers by evidence ID (not
+title), and recover expired leases from durable receipts before retry. The apply
+path can admit one same-scope dossier pass using the configured cheap
+`便宜小模型grok-see` preset; semantic calibration and production first-night
+apply remain separately gated. Isolated inventory counts are not a production
+scan.
 
 ## 资料接续回执（2026-09-13）
 

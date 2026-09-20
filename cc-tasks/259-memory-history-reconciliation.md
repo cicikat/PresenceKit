@@ -41,11 +41,11 @@
 
 ## A — 只读历史清单与工作量估算
 
-- [ ] A1 按真实 scope/source 列出上述存储的计数、字节、时间范围、可读性、来源关联覆盖率、旧格式及隔离项；不打印私有正文、真实标识或本机路径到 track 文档。
-- [ ] A2 区分证据条数、独立经历数（尚未知则标未知）、派生摘要数、归档文件数，禁止把不同分母混算。旧摘要溯源不足单列。
-- [ ] A3 定义版本化清单与源变更检测、回填 snapshot watermark、新增量分界和 manifest 分片；盘点只读，不创建/迁移源证据库。
-- [ ] A4 选取经脱敏的代表样本：近期/陈旧、重复/矛盾、来源缺失、跨年/迟到、活跃主题长链、不同角色；先估 token，模型校准留到 C。
-- [ ] A5 形成首夜候选范围和剩余历史范围，报告未知项；新增持久盘点状态须有只读观测。独立提交。
+- [x] A1 按真实 scope/source 列出上述存储的计数、字节、时间范围、可读性、来源关联覆盖率、旧格式及隔离项；不打印私有正文、真实标识或本机路径到 track 文档。
+- [x] A2 区分证据条数、独立经历数（尚未知则标未知）、派生摘要数、归档文件数，禁止把不同分母混算。旧摘要溯源不足单列。
+- [x] A3 定义版本化清单与源变更检测、回填 snapshot watermark、新增量分界和 manifest 分片；盘点只读，不创建/迁移源证据库。
+- [x] A4 选取经脱敏的代表样本：近期/陈旧、重复/矛盾、来源缺失、跨年/迟到、活跃主题长链、不同角色；先估 token，模型校准留到 C。
+- [x] A5 形成首夜候选范围和剩余历史范围，报告未知项；新增持久盘点状态须有只读观测。独立提交。
 
 ## B — 可恢复批次与进度台账
 
@@ -111,13 +111,14 @@ same-scope dossier pass has committed once through the configured cheap
 `便宜小模型grok-see` preset. Provider timeouts remain explicit failed receipts;
 they do not block evidence completion or get reported as semantic success.
 
-本轮施工（2026-09-20）：dry-run manifest 会把 event_store / event_log /
-mid_term / episodic / storyline / identity 的稳定身份写入 scoped
-`source_items`，不复制正文。有界领取按 store_kind + ingest_sequence +
+本轮施工（2026-09-20）：只读盘点在隔离数据上报告分母、时间范围、溯源缺失、
+30 天首夜候选与剩余历史，不复制正文、不扫生产。dry-run manifest 会把
+event_store / event_log / mid_term / episodic / storyline / identity 的稳定
+身份写入 scoped `source_items`。有界领取按 store_kind + ingest_sequence +
 source_id 稳定排序，并按证据 ID 查询已有档案；标题和成员列表不是幂等键。
 lease 过期先对 `processing_commits` reconcile，有收据才标 committed，否则
 回到 retryable_failed。写失败释放领取，不记完成。C2-C4 校准、C6-C7 生产准入
-仍是 blocker，不能用领取能力代替。
+仍是 blocker，不能用盘点或领取能力代替。
 
 未勾选项的准入边界：D1-D6、E1-E5 需要真实首夜/滚动运行、次晨抽检和费用证据；
 F1-F3 涉及退役或删除范围，需单独批准。没有对应运行证据或批准，不得勾选。

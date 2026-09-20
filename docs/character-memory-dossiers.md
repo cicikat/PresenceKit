@@ -55,9 +55,12 @@ idempotency keys.
   timestamps. Reuse with another digest fails closed.
 * `source_items` and `processing_commits`: the Brief 259 per-item ledger.
   Keys are scope + store kind + stable source ID + source revision. Processing
-  status and semantic outcome are separate. Creating a dry-run history manifest
-  seeds pending rows without copying source prose; a changed revision leaves the
-  old row and opens a new pending row. Bounded claims take a stably ordered
+  status and semantic outcome are separate. The read-only inventory reports
+  evidence/derived/archive denominators, ingest time ranges and a 30-day
+  first-night candidate cut without copying prose. Creating a dry-run history
+  manifest seeds pending rows without copying source prose; a changed revision
+  leaves the old row and opens a new pending row. Bounded claims take a stably
+  ordered
   `pending`/`retryable_failed` slice, mark it `running` with a task id and
   lease, and look up already-linked dossiers by evidence ID. Titles, aliases
   and membership lists are presentation only and are never idempotency keys.
