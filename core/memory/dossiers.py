@@ -206,8 +206,6 @@ def _initialize(connection: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_dossier_status_title ON dossiers(status, title);
         CREATE INDEX IF NOT EXISTS idx_membership_occurrence ON memberships(occurrence_id, status);
         CREATE INDEX IF NOT EXISTS idx_source_items_status ON source_items(status, store_kind, ingest_sequence);
-        CREATE INDEX IF NOT EXISTS idx_source_items_priority
-          ON source_items(status, priority_class, store_kind, ingest_sequence);
         """
     )
     columns = {str(row[1]) for row in connection.execute("PRAGMA table_info(source_items)")}
@@ -223,6 +221,11 @@ def _initialize(connection: sqlite3.Connection) -> None:
         connection.execute(
             "ALTER TABLE source_items ADD COLUMN priority_class TEXT NOT NULL DEFAULT 'remaining'"
         )
+    # Existing v2 stores lack priority_class; add the column before this index.
+    connection.execute(
+        """CREATE INDEX IF NOT EXISTS idx_source_items_priority
+           ON source_items(status, priority_class, store_kind, ingest_sequence)"""
+    )
     connection.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
 
 

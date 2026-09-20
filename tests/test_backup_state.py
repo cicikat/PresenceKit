@@ -87,6 +87,46 @@ def test_create_rejects_running_or_unknown_service(tmp_path: Path, state: backup
     assert not target.exists()
 
 
+def test_windows_marker_pid_alive_is_running_not_unknown(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    marker = tmp_path / "service_state.json"
+    marker.write_text(
+        json.dumps({"pid": os.getpid(), "installation_root": str(tmp_path.resolve())}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        backup,
+        "paths_for_installation",
+        lambda _installation: SimpleNamespace(service_state=lambda: marker),
+    )
+    monkeypatch.setattr(backup.os, "name", "nt")
+    monkeypatch.setattr(backup, "_pid_is_alive", lambda pid: True if pid == os.getpid() else None)
+
+    assert backup.service_state(tmp_path) is backup.ServiceState.RUNNING
+
+
+def test_windows_stale_marker_falls_through_to_offline_scan(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    marker = tmp_path / "service_state.json"
+    marker.write_text(
+        json.dumps({"pid": 1, "installation_root": str(tmp_path.resolve())}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        backup,
+        "paths_for_installation",
+        lambda _installation: SimpleNamespace(service_state=lambda: marker),
+    )
+    monkeypatch.setattr(backup.os, "name", "nt")
+    monkeypatch.setattr(backup, "_pid_is_alive", lambda _pid: False)
+
+    class FakeCompleted:
+        returncode = 0
+        stdout = "[]"
+        stderr = ""
+
+    monkeypatch.setattr(backup.subprocess, "run", lambda *args, **kwargs: FakeCompleted())
+    assert backup.service_state(tmp_path) is backup.ServiceState.OFFLINE
+
+
 def test_linux_service_scan_ignores_backup_process_itself(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     current = SimpleNamespace(
         pid=os.getpid(),

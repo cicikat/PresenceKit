@@ -50,6 +50,49 @@ class ServiceState(str, Enum):
     UNKNOWN = "unknown"
 
 
+def _pid_is_alive(pid: int) -> bool | None:
+    """True if the pid is running, False if absent, None if inspection failed.
+
+    Windows ``os.kill(pid, 0)`` is not a liveness probe: signal 0 is invalid
+    there and raises ``OSError``, which previously made a live marker look
+    UNKNOWN and blocked verified snapshots.
+    """
+    if not isinstance(pid, int) or pid <= 0:
+        return None
+    if os.name == "nt":
+        try:
+            import ctypes
+            from ctypes import wintypes
+        except ImportError:
+            return None
+        process_query_limited_information = 0x1000
+        still_active = 259
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.OpenProcess(process_query_limited_information, False, pid)
+        if handle:
+            code = wintypes.DWORD()
+            ok = kernel32.GetExitCodeProcess(handle, ctypes.byref(code))
+            kernel32.CloseHandle(handle)
+            if not ok:
+                return None
+            return int(code.value) == still_active
+        error = int(kernel32.GetLastError() or 0)
+        if error == 5:  # ERROR_ACCESS_DENIED: process exists
+            return True
+        if error == 87:  # ERROR_INVALID_PARAMETER: typically no such pid
+            return False
+        return None
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return None
+
+
 @dataclass(frozen=True)
 class ProtectionRoot:
     """A classified private write root, expressed relative to an installation."""
@@ -235,10 +278,12 @@ def service_state(installation: Path) -> ServiceState:
             expected_root = Path(payload["installation_root"]).resolve()
             if not isinstance(pid, int) or expected_root != installation.resolve():
                 return ServiceState.UNKNOWN
-            os.kill(pid, 0)
-            return ServiceState.RUNNING
-        except ProcessLookupError:
-            pass  # Stale marker after a crash; scan below protects old installs too.
+            alive = _pid_is_alive(pid)
+            if alive is True:
+                return ServiceState.RUNNING
+            if alive is None:
+                return ServiceState.UNKNOWN
+            # Stale marker after a crash; scan below protects old installs too.
         except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
             return ServiceState.UNKNOWN
     if os.name == "nt":

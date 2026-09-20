@@ -51,6 +51,46 @@ def test_dossier_store_is_scoped_and_read_status_does_not_create(sandbox):
     assert not resolve_path(second, "memory_dossiers").exists()
 
 
+def test_initialize_upgrades_v2_source_items_before_priority_index(sandbox):
+    from core.memory import dossiers
+    from core.memory.path_resolver import resolve_path
+
+    scope = _scope(uid="v2-upgrade-owner")
+    path = resolve_path(scope, "memory_dossiers")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(path) as connection:
+        connection.executescript(
+            """
+            CREATE TABLE source_items (
+              store_kind TEXT NOT NULL, source_id TEXT NOT NULL, source_revision TEXT NOT NULL,
+              ingest_sequence INTEGER NOT NULL, status TEXT NOT NULL, semantic_outcomes_json TEXT NOT NULL,
+              attempt INTEGER NOT NULL DEFAULT 0, operation_id TEXT, input_digest TEXT NOT NULL,
+              last_error TEXT NOT NULL, revisit_condition TEXT NOT NULL, updated_at REAL NOT NULL,
+              PRIMARY KEY(store_kind, source_id, source_revision)
+            );
+            CREATE TABLE maintenance_state (
+              state_key TEXT PRIMARY KEY, value_json TEXT NOT NULL, updated_at REAL NOT NULL
+            );
+            INSERT INTO source_items VALUES(
+              'event','evt-old','r1',1,'pending','[]',0,NULL,'digest','','',1.0
+            );
+            PRAGMA user_version=2;
+            """
+        )
+    assert dossiers.initialize(scope).healthy
+    with sqlite3.connect(path) as connection:
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(source_items)")}
+        assert "priority_class" in columns
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == dossiers.SCHEMA_VERSION
+        indexes = {row[1] for row in connection.execute("PRAGMA index_list(source_items)")}
+        assert "idx_source_items_priority" in indexes
+    assert dossiers.maintenance_checkpoint(scope) == 0
+    claimed = dossiers.claim_source_items(scope, limit=1, now=20, cold_theme_share=0.0)
+    assert claimed["count"] == 1
+    assert claimed["items"][0]["source_id"] == "evt-old"
+    assert claimed["items"][0]["priority_class"] == "remaining"
+
+
 def test_atomic_batch_cas_idempotency_and_no_evidence_copy(sandbox):
     from core.memory.dossiers import DossierError, apply_operations, read
     from core.memory.path_resolver import resolve_path

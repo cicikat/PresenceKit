@@ -303,7 +303,7 @@ sudo reboot
 |---|---|
 | `.venv/Scripts/python.exe` 找不到 | 这是 Windows 路径；Ubuntu 使用 `.venv/bin/python`。 |
 | `git fetch origin <短哈希>` 找不到 remote ref | 短 commit ID 不一定是远端 ref；获取 branch/tag，或使用完整可达 commit。 |
-| backup 报 `service_state_unknown` | 先确认服务和残留进程已停止；更新到包含 Linux 自进程排除修复的版本。 |
+| backup 报 `service_state_unknown` | 先确认服务和残留进程已停止；更新到包含 Linux 自进程排除与 Windows pid 探测修复的版本。 |
 | `systemctl enable` 说 unit 没有 installation config | unit 缺 `[Install]`/`WantedBy`；完整修正文件后 reload。 |
 | `Resolve-DnsName`、`curl.exe` 在 Ubuntu 找不到 | 这是 Windows PowerShell 命令，应退出 SSH 后在 Windows 终端执行。`exit` 正常会结束 SSH 会话。 |
 | `curl -I` 返回 405 | 服务已响应，但根路由不接受 HEAD；改用 GET 或 health endpoint。 |

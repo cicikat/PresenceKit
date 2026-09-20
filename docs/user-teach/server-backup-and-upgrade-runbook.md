@@ -62,7 +62,7 @@ ps -ef | grep '[p]ython.*main.py'
 ls -l data/runtime/service_state.json 2>/dev/null
 ```
 
-先确认没有残留后端进程。不要为了绕过保护直接手工打包 live data。Linux 进程自识别问题已在 `90a3f7c` 修复；旧版部署应更新到包含该修复的版本。
+先确认没有残留后端进程。不要为了绕过保护直接手工打包 live data。Linux 进程自识别问题已在 `90a3f7c` 修复；Windows 上 `os.kill(pid, 0)` 不是存活探测，会把有效 marker 误报成 `service_state_unknown`，需更新到包含 Windows pid 探测修复的版本。
 
 ### 3. 压缩并生成传输哈希
 
