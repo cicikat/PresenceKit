@@ -15,7 +15,7 @@ def test_memory_event_query_page_is_registered_and_cache_busted():
     assert "ADMIN_UI_FRAGMENT_VERSION = 'v1-259-history-closeout-1'" in core
     assert '<script src="/static/js/core.js?v=v1-259-history-closeout-1"></script>' in index
     assert '<script src="/static/js/observability.js?v=v1-259-history-closeout-1"></script>' in index
-    assert '<script src="/static/i18n.js?v=v1-259-history-closeout-1"></script>' in index
+    assert '<script src="/static/i18n.js?v=v1-262-diary-backfill-1"></script>' in index
     assert "loadMemoryEventSearch" in script
     assert "/memory-events/query-trace" in script
     assert "tombstoneMemoryEvent" in script

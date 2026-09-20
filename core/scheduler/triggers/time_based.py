@@ -3,7 +3,7 @@ import json
 import random
 import re
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from hashlib import sha1
 
 from core.character_name_provider import get_char_name
@@ -337,12 +337,22 @@ def _diary_char_ids() -> list[str]:
     return [_active_char_id_or_none() or DEFAULT_CHAR_ID]
 
 
-def _prepare_diary_work_context(oid: str, char_id: str) -> dict[str, str] | None:
+def _prepare_diary_work_context(
+    oid: str, char_id: str, *, target_date: str | None = None,
+) -> dict[str, str] | None:
     """Build the exact bounded input consumed by the same-character diary 副链 worker."""
     from core.memory.event_log import get_recent_days
 
     days = 2 if datetime.now().hour < LOGICAL_DAY_CUTOFF_HOUR else 1
-    today_log = (get_recent_days(oid, days=days, char_id=char_id) or "")[-9000:]
+    if target_date is not None:
+        start = datetime.strptime(target_date, "%Y-%m-%d")
+        today_log = get_recent_days(
+            oid, char_id=char_id, since_ts=start.timestamp(),
+            until_ts=(start + timedelta(days=1)).timestamp(),
+        )
+    else:
+        today_log = get_recent_days(oid, days=days, char_id=char_id)
+    today_log = (today_log or "")[-9000:]
     if not today_log:
         return None
     persona_hint, voice_example, mood_hint = _collect_diary_voice(char_id)
@@ -355,6 +365,8 @@ def _prepare_diary_work_context(oid: str, char_id: str) -> dict[str, str] | None
         "self_agent_md": "",
         "self_agent_md_revision": "0",
     }
+    if target_date is not None:
+        context["target_date"] = target_date
     try:
         from core.character_self import load_agent_md_snapshot
         snap = load_agent_md_snapshot(oid, char_id)
@@ -390,6 +402,12 @@ async def _generate_diary_material(
 
     char_name = work_context["char_name"]
     today_log = work_context["today_log"]
+    if work_context.get("target_date"):
+        today_log = (
+            f"日记日期：{work_context['target_date']}。这是该自然日的补写，"
+            "下文的今天均指该日期，不是当前日期；仅依据以下记录，不补造经历。\n"
+            + today_log
+        )
 
     # ── 事件层：客观分析器 ──
     facts_prompt = f"""你是一个对话记录分析器。请从下面的对话日志里提取今天发生的客观事件，只输出事件列表，不要任何分析或感受：
@@ -470,14 +488,16 @@ def _store_diary_artifact(
     logical_date: str | None = None,
 ) -> dict[str, object]:
     """Write one authored diary to its fixed capability-owned target."""
-    from core.safe_write import safe_write_text
+    import os
     from core.sandbox import get_paths
     from core.scheduler.rhythm import logical_day
 
     today = logical_date or logical_day().strftime("%Y-%m-%d")
-    diary_dir = get_paths().yexuan_inner_diary(char_id=char_id)
+    diary_dir = get_paths().character_inner_diary(char_id=char_id)
     diary_dir.mkdir(parents=True, exist_ok=True)
     diary_file = diary_dir / f"{today}.md"
+    if diary_file.exists():
+        raise FileExistsError("authored diary already exists")
     parts = [f"# {today}\n"]
     if material.get("facts"):
         parts.append(material["facts"])
@@ -485,10 +505,62 @@ def _store_diary_artifact(
         parts.append(f"\n## 今日感受\n{material['feeling']}")
     if len(parts) == 1:
         raise IOError("authored diary artifact is empty")
-    if not safe_write_text(diary_file, "\n".join(parts) + "\n"):
-        raise IOError("authored diary artifact write failed")
+    payload = ("\n".join(parts) + "\n").encode("utf-8")
+    # Exclusive create: never replace an existing diary, including an empty file
+    # created while the model is still running. Failed attempts unlink so a later
+    # request can retry. os.link is not reliable on Windows.
+    flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
+    if hasattr(os, "O_BINARY"):
+        flags |= os.O_BINARY
+    try:
+        fd = os.open(diary_file, flags)
+    except FileExistsError:
+        raise FileExistsError("authored diary already exists") from None
+    except OSError as exc:
+        import errno
+        if getattr(exc, "errno", None) == errno.EEXIST:
+            raise FileExistsError("authored diary already exists") from exc
+        raise
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+    except BaseException:
+        try:
+            os.unlink(diary_file)
+        except OSError:
+            pass
+        raise
     logger.info("[scheduler] 角色日记已存储（双层）: %s", today)
     return {"artifact_id": f"diary-{today}", "artifact_version": 1}
+
+
+async def _write_missing_diary(
+    char_id: str,
+    context: dict[str, str],
+    target_date: str,
+    *,
+    before_write=None,
+) -> dict[str, object]:
+    """Serialize scheduler/tool generation for the same character and date."""
+    from core.memory.locks import global_lock
+    from core.sandbox import get_paths
+    from core.agent_runtime.work_sessions import WorkSessionError
+
+    async with global_lock(f"authored_diary:{char_id}:{target_date}"):
+        path = get_paths().character_inner_diary(char_id=char_id) / f"{target_date}.md"
+        if path.exists():
+            raise WorkSessionError("diary_already_exists")
+        material = await _generate_diary_material(context, char_id)
+        if not material:
+            raise WorkSessionError("artifact_not_created")
+        if before_write is not None:
+            before_write()
+        try:
+            return _store_diary_artifact(char_id, material, logical_date=target_date)
+        except FileExistsError as exc:
+            raise WorkSessionError("diary_already_exists") from exc
 
 
 async def _generate_and_store_diary(
@@ -501,10 +573,8 @@ async def _generate_and_store_diary(
     context = work_context or _prepare_diary_work_context(oid, char_id)
     if not context:
         return False
-    material = await _generate_diary_material(context, char_id)
-    if not material:
-        return False
-    _store_diary_artifact(char_id, material)
+    from core.scheduler.rhythm import logical_day
+    await _write_missing_diary(char_id, context, logical_day().isoformat())
     return True
 
 
@@ -525,7 +595,7 @@ async def _check_inner_diary_write():
     retry_pending = False
     for _cid in _diary_char_ids():
         # 幂等主闸：当日（logical day）文件已存在则跳过，不发 LLM 调用
-        diary_file = get_paths().yexuan_inner_diary(char_id=_cid) / f"{logical_day().strftime('%Y-%m-%d')}.md"
+        diary_file = get_paths().character_inner_diary(char_id=_cid) / f"{logical_day().strftime('%Y-%m-%d')}.md"
         if diary_file.exists():
             continue
         try:
@@ -572,11 +642,7 @@ async def _check_inner_diary_write():
                 continue
 
             async def _worker():
-                material = await _generate_diary_material(work_context, _cid)
-                if not material:
-                    from core.agent_runtime.work_sessions import WorkSessionError
-                    raise WorkSessionError("artifact_not_created")
-                return _store_diary_artifact(_cid, material, logical_date=logical_date)
+                return await _write_missing_diary(_cid, work_context, logical_date)
 
             try:
                 await run_work_session(principal, session["work_session_id"], _worker)

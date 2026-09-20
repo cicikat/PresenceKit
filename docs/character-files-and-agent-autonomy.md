@@ -103,6 +103,7 @@
 | `read_life_records` | info/memory | read | 无 | frozen uid+char | life records | 无 | life-records observability |
 | `read_xiaohongshu` | info | read | 无 | 用户 URL | 无持久私有桶 | 无 | api-calls |
 | `read_diary` / `search_diary` | info | read | 无 | 配置日记根 + char | 日记文件 | 无 | 无正文观测 |
+| `backfill_diary` | info | write | 无 | frozen 会话 uid+char；仅 owner 私聊 | 角色日记文件 | 失败可重试，已有文件不覆盖 | Agent Runtime task / work-session 只读端点 |
 | `read_watch` | info | read | 无 | owner 健康 | health_state | 无 | watch/sensor |
 | `get_profile` / `get_episodic` | memory | read | 无 | Reality scope | `user_memory_root` | 无 | memory 管理面 |
 | `search_documents` / `read_document` / `search_character_notes` / `reread_image` | memory | read | 无 | uid+char library | character_library | 无 | `/observability/character-library` |

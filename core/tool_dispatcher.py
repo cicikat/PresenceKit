@@ -2624,10 +2624,15 @@ async def _execute_structured_impl(
         _trace("failed", "reality_event_tools_forbidden_in_group")
         return _execution_outcome("tool_failed")
 
-    if tool_name == "backfill_diary" and (
-        is_group or origin not in {"user_live", "assistant_loop", "assistant_loop_relay"}
-    ):
-        return _execution_outcome("tool_failed", "补写日记仅允许在用户私聊请求中执行。")
+    if tool_name == "backfill_diary":
+        owner_id = str(get_config().get("scheduler", {}).get("owner_id") or "")
+        if (
+            is_group
+            or origin not in {"user_live", "assistant_loop", "assistant_loop_relay"}
+            or not owner_id
+            or str(user_id) != owner_id
+        ):
+            return _execution_outcome("tool_failed", "补写日记仅允许在用户私聊请求中执行。")
 
     async def _notify_status(kind: str, *, attempt: int = 1) -> None:
         """UI-only hook; it runs after dispatcher gates and never affects execution."""

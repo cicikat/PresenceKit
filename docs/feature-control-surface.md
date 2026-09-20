@@ -458,6 +458,14 @@ paths. `daily_journal` remains governed by the existing autonomy signal controls
 A failed session may be explicitly retried while its task is queued, or while a
 claimed worker already holds a valid lease for that same task.
 
+`backfill_diary` is an owner-private info write tool (`tools.backfill_diary.enabled`，默认启用)
+that reuses the same authored_diary Work Session, fact/feeling generator, and
+`authored_diary:{char_id}:{date}` lock. Local time 23:00 onwards may backfill today;
+yesterday may be backfilled all day. Existing files, including empty files, are never
+overwritten. Missing records are not invented. Desktop/mobile keep consuming the existing
+diary and chat interfaces; there is no new protocol or settings UI. Observation reuses
+Agent Runtime task / work-session read endpoints and the existing diary read tools.
+
 ## Brief 233 workspace capability
 
 `workspace_access` is a local deployment capability with explicit roots and independent read/list/create/

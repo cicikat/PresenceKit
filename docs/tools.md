@@ -107,8 +107,9 @@ hello 字段或协商流程。
 
 **memory 类工具默认不走探针，路径C（tool loop）激活时才对主 LLM 可见。** 管理员可在
 `tool_exposure.path_a` 显式加入该类；这会同时影响 QQ、desktop 和 mobile，不能只为一个端开启。
-`read_diary/read_watch/search_diary/get_profile/get_episodic` 已注册且 `execute_structured()` 能执行，
-但路径A不把 memory 类喂给探针。Fable R5 已修复与 Author's Note 工具承诺的落差：
+`read_diary`/`backfill_diary`/`read_watch`/`search_diary`/`get_profile`/`get_episodic` 已注册且 `execute_structured()` 能执行。
+`backfill_diary` 是 info 写工具，沿用工具开关、角色授权和冻结会话 `uid+char_id`，仅 owner 私聊的 `user_live` / `assistant_loop` / `assistant_loop_relay` 可执行。
+路径A不把 memory 类喂给探针。Fable R5 已修复与 Author's Note 工具承诺的落差：
 层11 Author's Note 现在是条件分支，有 `tool_result` 时提示已提供，无时明确禁止编造，
 不再承诺主 LLM 可以调用工具。见 `docs/known-issues.md` F11。
 
@@ -661,7 +662,8 @@ worker 在到期、异常、断线、显式取消和进程关闭时尝试停止�
 
 | 工具名 | 用途 | 备注 |
 |---|---|---|
-| `read_diary` | 读用户日记 | 用户明确要求时由探针触发（category=info）；主 LLM 无 tools schema，R5 后 Author's Note 不再要求主 LLM 调用 |
+| `read_diary` | 读角色日记 | 用户明确要求时由探针触发（category=info）；主 LLM 无 tools schema，R5 后 Author's Note 不再要求主 LLM 调用 |
+| `backfill_diary` | 限时补写当前角色缺失日记 | 仅 owner 私聊；当天本地 23:00 后可补当天，昨天可全天补写；已有文件（含空文件）不覆盖，无记录不编造 |
 | `read_watch` | 读睡眠/心率/运动数据 | |
 | `search_diary` | 按关键词搜索最近 30 天日记 | |
 | `get_profile` | 获取用户画像 | profile 已由 fetch_context 自动注入，此工具是第二路径 |
@@ -684,8 +686,10 @@ worker 在到期、异常、断线、显式取消和进程关闭时尝试停止�
 | 文件 | 职责 |
 |---|---|
 | `core/tools/diary_reader.py` | 底层读取，从 Obsidian 目录读 .md 文件 |
-| `core/tools/diary_tool.py` | `read_diary` 工具实现，按日期读，读完调 `mark_diary_shared()` |
-| `core/tools/diary_search.py` | `search_diary` 工具实现，按关键词搜最近30天 |
+| `core/tools/diary_tool.py` | 用户日记读取兼容入口；当前 `read_diary` 走角色日记 recall |
+| `core/tools/diary_search.py` | 用户日记搜索兼容入口；当前 `search_diary` 走角色日记 recall |
+| `core/tools/character_recall.py` | `read_diary` / `search_diary` 读取当前角色自己的日记 |
+| `core/tools/diary_backfill.py` | `backfill_diary`：限时补写缺失的角色日记，复用 authored_diary Work Session |
 | `core/memory/diary_context.py` | 存储层，用户日记上下文单独存 txt，只进 prompt 层6d，不参与检索 |
 
 ### persist 工具已读指纹（P2 / Brief 82）
@@ -862,7 +866,7 @@ Path A 的 pending confirmation、missing input、快速路径和普通探针均
 - `args_digest`：只拼接工具在 `_TOOL_REGISTRY` 里声明的 `trace_args: [...]` 白名单字段
   （截断 60 字）；未声明 `trace_args` 的工具只记工具名，不记参数——防 secrets/长文本入痕迹。
   已声明字段的工具：`add_reminder`(`remind_at`)、`weather`(`city`)、`web_search`(`query`)、
-  `read_diary`(`date`)、`read_watch`(`query`)、`search_diary`(`query`)、
+  `read_diary`(`date`)、`backfill_diary`(`date`)、`read_watch`(`query`)、`search_diary`(`query`)、
   `desktop_minimize`(`window`)、`desktop_open_url`(`url`)、`play_song`(`song_name`)、
   `get_episodic`(`topic`)、`toy_pattern`(`pattern_name`)、`read_toy_file`(`file_key`)。
 - `result_digest`：取 `to_tool_result().safe_summary` 前 80 字（复用 `core/tools/tool_result.py`
@@ -1035,6 +1039,9 @@ the explicit `character_document_library.retain_raw_uploads` flag. The admin-onl
 without content or filesystem paths. `search_character_notes` also includes
 only toybox mirror records from the same `uid + char_id` bucket; `read_diary`
 and `search_diary` use the active character diary path. All are bounded reads.
+`backfill_diary` writes the same character diary path through the authored_diary
+Work Session; it never overwrites an existing file and does not invent a day
+with no records.
 
 ## 小红书分享工具（2026-09-11）
 

@@ -235,6 +235,7 @@ a durable 副链 does not by itself mean the foreground 主链 cannot use that c
 | `self_list`, `self_read`, `self_create`, `self_update`, `self_move`, `self_delete`, `self_restore` | character self space | current (256 C): Reality owner+char bucket, default grant, admin may revoke; not danger-gated; writes use lock+CAS+trash |
 | `start_agent_task`, `get_agent_task`, `cancel_agent_task` | same-character bounded coding worker | **current (256 F)**; starts asynchronously, rechecks manifest revision and budgets per step, and exposes only bounded result projection. Receipt creation ≠ coding complete |
 | `read_diary`, `search_diary`, `read_watch`, `get_profile`, `get_episodic`, `read_life_records` | memory/document | Reality-scoped read |
+| `backfill_diary` | authored diary write | owner-private missing-only backfill of today after 23:00 or yesterday; never overwrites; no records → no file |
 | `search_events`, `expand_event_window`, `get_related_events` | memory evidence | explicit Reality read; receipts never indexed |
 | `reread_image` | media recall | owner-scoped image reread; cached/vision/ocr, never a write |
 | `read_xiaohongshu` | network information | untrusted public post fetch from an owner-supplied share URL |
@@ -345,7 +346,8 @@ observation are independent from EventContext, `turn_sink`, short-term history, 
 episodic memory, and identity. Independence here is an execution-chain and writer boundary, not a
 second acting subject. The migrated `inner_diary_write` scheduler task creates and claims both
 records, invokes the existing fact/feeling generator, and completes the authored artifact without
-creating an assistant turn. `daily_journal` remains a proactive signal. Work-session failures and
+creating an assistant turn. Owner-private `backfill_diary` reuses the same Work Session, generator,
+and exclusive missing-only writer for today after 23:00 or yesterday. `daily_journal` remains a proactive signal. Work-session failures and
 unknown outcomes never become user facts; only an explicit later fixation flow may promote an
 artifact. A failed session may be explicitly retried while its task is queued, or while a
 claimed worker already holds a valid lease for that same task; unknown and canceled sessions

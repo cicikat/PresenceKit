@@ -188,6 +188,8 @@ xiaohongshu:
   # restore_reminder share tools.reminder.enabled when not named here.
   read_diary:
     enabled: true
+  backfill_diary:
+    enabled: true
   search_diary:
     enabled: true
 character_document_library:

@@ -49,6 +49,7 @@ _ACTION_LABELS: dict[str, str] = {
     "device_sleep": "让设备休眠",
     "web_search": "搜了一下",
     "read_diary": "看了日记",
+    "backfill_diary": "补写了日记",
     "read_watch": "看了身体数据",
     "search_diary": "翻了日记",
     "desktop_minimize": "最小化了窗口",
