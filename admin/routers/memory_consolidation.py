@@ -197,6 +197,30 @@ async def control_memory_history_reconciliation(
     return history_reconciliation.set_paused(scope, action == "pause", reason=str(body.get("reason") or "admin"))
 
 
+@router.get("/memory/history-source-items", summary="List history reconciliation source-item receipts")
+async def list_memory_history_source_items(
+    uid: str = Query(..., min_length=1, max_length=128),
+    char_id: str = Query(..., min_length=1, max_length=128),
+    store_kind: str = Query("", max_length=64),
+    status: str = Query("", max_length=32),
+    source_id: str = Query("", max_length=512),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
+    _auth=Depends(require_scopes("memory.read")),
+):
+    from core.memory import dossiers
+
+    scope = _scope(uid, char_id)
+    try:
+        result = dossiers.list_source_items(
+            scope, store_kind=store_kind, status=status, source_id=source_id,
+            offset=offset, limit=limit,
+        )
+    except dossiers.DossierError as exc:
+        raise HTTPException(status_code=422, detail={"code": exc.code}) from exc
+    return {"scope": {"char_id": char_id, "realm": "reality"}, **result}
+
+
 @router.get("/memory/dossiers", summary="Search character memory dossiers")
 async def search_memory_dossiers(
     uid: str = Query(..., min_length=1, max_length=128),

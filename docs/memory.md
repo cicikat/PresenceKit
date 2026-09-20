@@ -10,12 +10,14 @@ Storage, bounded chat recall/tools, the silent maintenance worker, and the admin
 control plane are implemented. The feature is default-off; production enablement
 remains gated by Brief 259 A-C and the separately authorized Brief 258 F rollout.
 
-Brief 259 now has a redacted inventory, resumable manifest state, verified
+Brief 259 now has a redacted inventory, a per-source-item processing ledger in
+the scoped dossier store, resumable store-level manifest state, verified
 offline-backup gate, recovery-drill helper, and an admin-only bounded event-log
-apply endpoint. The apply path can admit one same-scope dossier pass using the
-configured cheap `便宜小模型grok-see` preset; mid-term/episodic/storyline/
-identity source adapters remain deferred, and no production first-night apply
-has run.
+apply endpoint. Creating a dry-run manifest enumerates event_store / event_log /
+mid_term / episodic / storyline / identity identities into `source_items`
+without copying prose. The apply path can admit one same-scope dossier pass using
+the configured cheap `便宜小模型grok-see` preset; semantic calibration and
+production first-night apply remain separately gated.
 
 ## 资料接续回执（2026-09-13）
 

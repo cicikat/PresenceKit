@@ -35,6 +35,26 @@
 </div>
 
 <div class="card">
+  <div class="card-header"><h3 data-i18n="memory_dossiers.history">历史整理进度</h3><button class="btn btn-ghost btn-sm" data-action="loadMemoryHistoryReconciliation" data-i18n="common.refresh">刷新</button></div>
+  <div id="memory-history-status" class="empty" data-i18n="memory_dossiers.history_not_loaded">尚未读取历史清单</div>
+  <div class="admin-action-group">
+    <button class="btn btn-ghost" data-action="createMemoryHistoryManifest" data-i18n="memory_dossiers.history_manifest">生成清单</button>
+    <button class="btn btn-ghost" data-action="controlMemoryHistoryReconciliation" data-action-args='["pause"]' data-i18n="memory_dossiers.history_pause">暂停回填</button>
+    <button class="btn btn-ghost" data-action="controlMemoryHistoryReconciliation" data-action-args='["resume"]' data-i18n="memory_dossiers.history_resume">恢复回填</button>
+    <button class="btn btn-ghost" data-action="controlMemoryHistoryReconciliation" data-action-args='["freeze"]' data-i18n="memory_dossiers.history_freeze">冻结清单</button>
+  </div>
+  <div class="form-row">
+    <label class="field"><span data-i18n="memory_dossiers.history_store">来源库</span><input id="memory-history-store" type="text" maxlength="64"></label>
+    <label class="field"><span data-i18n="memory_dossiers.history_status">处理状态</span><input id="memory-history-item-status" type="text" maxlength="32"></label>
+    <label class="field"><span data-i18n="memory_dossiers.history_source_id">来源 ID</span><input id="memory-history-source-id" type="text" maxlength="512"></label>
+  </div>
+  <div class="admin-action-group">
+    <button class="btn btn-ghost btn-sm" data-action="searchMemoryHistorySourceItems" data-i18n="memory_dossiers.history_search">查询判定</button>
+  </div>
+  <div id="memory-history-items" class="empty" data-i18n="memory_dossiers.history_no_items">暂无源项</div>
+</div>
+
+<div class="card">
   <div class="card-header"><h3 data-i18n="memory_dossiers.query">档案查询</h3><button class="btn btn-ghost btn-sm" data-action="searchMemoryConsolidationDossiers" data-i18n="memory_dossiers.search">搜索</button></div>
   <div class="form-row"><label class="field"><span data-i18n="memory_dossiers.keyword">关键词</span><input id="memory-consolidation-query" type="search" maxlength="256"></label></div>
   <div id="memory-consolidation-dossiers" class="empty" data-i18n="memory_dossiers.no_results">暂无结果</div>

@@ -735,10 +735,15 @@ switch, permission, protocol field, queue, acknowledgement or TTL change.
 
 The read-only inventory is exposed at
 `GET /observability/memory-history-inventory` (`state.read`). A persisted,
-content-free manifest and status ledger are created with
+content-free store-level manifest and status ledger are created with
 `POST /memory-history-reconciliation/manifest` and read through
-`GET /observability/memory-history-reconciliation`. Admin pause/resume/dry-run
-uses `POST /memory-history-reconciliation/control`; `action=freeze` pins the
+`GET /observability/memory-history-reconciliation`. Creating a manifest also
+seeds the scoped dossier `source_items` table with one pending receipt per
+stable source identity; it never copies source prose. Status reports both
+store-level counts and `source_item_counts`. Bounded item receipts and
+processing reasons are read with `GET /memory/history-source-items`
+(`memory.read`). Admin pause/resume/dry-run uses
+`POST /memory-history-reconciliation/control`; `action=freeze` pins the
 manifest revision before apply, and `action=apply` additionally
 requires a server-side verified offline snapshot path and a bounded batch size.
 `action=run` is the explicit first-night runner: it additionally requires the

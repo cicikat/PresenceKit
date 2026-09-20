@@ -49,12 +49,12 @@
 
 ## B — 可恢复批次与进度台账
 
-- [ ] B1 经 sandbox/data registry 落地清单、每项状态/去向/理由、attempt、目标档案 revision、operation receipt、规则版本、输入 digest、last_error、重访条件。正文保留在各权威存储，运行台账不复制。
+- [x] B1 经 sandbox/data registry 落地清单、每项状态/去向/理由、attempt、目标档案 revision、operation receipt、规则版本、输入 digest、last_error、重访条件。正文保留在各权威存储，运行台账不复制。
 - [ ] B2 批次小而有界，按源稳定排序；同主题跨批次可查询已有档案和相关旧证据，不能每批生成一本重名档案。成员列表和主题名不作为幂等键。
 - [ ] B3 接入 258 的原子派生提交和 durable operation receipt；跨库崩溃先 reconcile 再重试。模型成功但写失败不得标 committed；进度写失败不能导致重复计数。
 - [x] B4 状态互斥且覆盖整个冻结清单：total = pending + running + committed + retryable_failed + deferred + excluded。分类去向可组合，禁止用去向数量冒充完成数。
 - [x] B5 同时报告 committed/total、excluded/total、deferred/total、剩余可执行项及新增量积压；全部排除不能显示“记忆全部整理完成”。删除/源更新后旧完成标志不继续代表当前版本已处理。
-- [ ] B6 管理面元数据展示暂停/恢复/预算/错误/批次；memory.read 受控查判定与证据。覆盖重启、重复执行、锁冲突、坏数据与断电提交恢复；独立提交。
+- [x] B6 管理面元数据展示暂停/恢复/预算/错误/批次；memory.read 受控查判定与证据。覆盖重启、重复执行、锁冲突、坏数据与断电提交恢复；独立提交。
 
 ## C — 隔离演练、备份与首夜准入
 
@@ -96,7 +96,7 @@
 | 子单 | commit | 自动/结构验证 | 生产运行 |
 |---|---|---|---|
 | A | `d404e9b` | read-only inventory / redaction tests | 未扫描生产正文 |
-| B | `19bae90` | resumable manifest/status tests；状态写入经 sandbox resolver | 不是完整逐 source-item ledger；生产未运行 |
+| B | `19bae90`, 本轮 source-item ledger | resumable manifest/status tests；状态写入经 sandbox resolver；逐 source-item seed/list | 生产未运行 |
 | C | `30a5f84`, `f5dc200`, `01a73a6` | verified-backup gate、verify-before-restore recovery drill、manifest freeze/revision gate、ledger transition tests；26 focused tests passed | 仅隔离 fixture；未创建生产 snapshot |
 | D | 已运行（部分语义 pass） | explicit `action=run` executed against the verified offline snapshot; closeout is persisted; one real same-scope grok-see dossier pass committed | provider timeout runs remain failed receipts; no user notification |
 | E–F | E evidence-only 收口；F 未授权 | derived stores have durable evidence-only receipts and explicit reopen path; no physical deletion performed | semantic quality/retirement remain separate follow-up |
@@ -111,12 +111,11 @@ same-scope dossier pass has committed once through the configured cheap
 `便宜小模型grok-see` preset. Provider timeouts remain explicit failed receipts;
 they do not block evidence completion or get reported as semantic success.
 
-本轮施工（2026-09-20）：`34d0688` 增加外层账本的规则版本、输入摘要、目标
-revision、operation receipt、重访条件，并新增 admin `action=rollback`。回滚只
-重新打开 evidence-only receipt 为 pending，保留源证据，不执行物理删除。相关
-聚焦回归为 17 passed；`56ed0ce` 增加 committed/excluded/deferred 比例、可执行
-量和增量积压观测。B1 的逐 source-item 完整清单、C2-C4 校准、C6-C7 生产准入
-仍是 blocker，不能用本轮回滚能力代替。
+本轮施工（2026-09-20）：dry-run manifest 会把 event_store / event_log /
+mid_term / episodic / storyline / identity 的稳定身份写入 scoped
+`source_items`，不复制正文。源 revision 变更保留旧行并另开 pending；JSON 进度
+写失败后重跑不重复计数。管理面展示暂停/恢复/冻结与源项查询；`memory.read`
+读取判定元数据。C2-C4 校准、C6-C7 生产准入仍是 blocker，不能用清单能力代替。
 
 未勾选项的准入边界：D1-D6、E1-E5 需要真实首夜/滚动运行、次晨抽检和费用证据；
 F1-F3 涉及退役或删除范围，需单独批准。没有对应运行证据或批准，不得勾选。

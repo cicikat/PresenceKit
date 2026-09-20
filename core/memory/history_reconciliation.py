@@ -104,6 +104,43 @@ def read_state(scope: MemoryScope) -> dict[str, Any]:
                 "last_error": "state_corrupt"}
 
 
+def _event_log_source_items(scope: MemoryScope) -> list[dict[str, Any]]:
+    """Enumerate event-log files by filename and metadata hash; never store paths or bodies."""
+    directory = resolve_path(scope, "event_log")
+    if not directory.is_dir():
+        return []
+    items: list[dict[str, Any]] = []
+    for sequence, path in enumerate(sorted(directory.glob("*.md"), key=lambda item: item.name), start=1):
+        info = _file_info(path)
+        if not info["exists"] or not info["readable"]:
+            continue
+        items.append({
+            "store_kind": "event_log",
+            "source_id": path.name[:512],
+            "source_revision": str(info["revision"]),
+            "ingest_sequence": sequence,
+            "input_digest": str(info["revision"]),
+            "rule_version": RULES_VERSION,
+            "revisit_condition": "source_revision_changed",
+        })
+    return items
+
+
+def enumerate_source_items(scope: MemoryScope) -> list[dict[str, Any]]:
+    """Return content-free source-item identities for the frozen inventory kinds."""
+    inventory = {item["store_kind"]: item for item in build_inventory(scope.uid, scope.character_id)["items"]}
+    records: list[dict[str, Any]] = []
+    for store_kind in ("event_store", "mid_term", "episodic", "storyline", "user_identity"):
+        revision = str((inventory.get(store_kind) or {}).get("source_revision") or "")
+        records.extend(_derived_source_items(scope, store_kind, revision))
+    records.extend(_event_log_source_items(scope))
+    for item in records:
+        item.setdefault("rule_version", RULES_VERSION)
+        item.setdefault("revisit_condition", "source_revision_changed")
+    records.sort(key=lambda item: (str(item["store_kind"]), int(item["ingest_sequence"]), str(item["source_id"])))
+    return records
+
+
 def create_manifest(scope: MemoryScope, *, now: float | None = None) -> dict[str, Any]:
     """Create a persisted, content-free manifest; this is always a dry-run."""
     inventory = build_inventory(scope.uid, scope.character_id, now=now)
@@ -122,11 +159,23 @@ def create_manifest(scope: MemoryScope, *, now: float | None = None) -> dict[str
                       "input_digest": str(previous.get("input_digest") or item["source_revision"]),
                       "revisit_condition": str(previous.get("revisit_condition") or "source_revision_changed")[:128],
                       "last_error": str(previous.get("last_error") or "")[:128]}
+    source_records = enumerate_source_items(scope)
+    from core.memory import dossiers
+    seeded = {"inserted": 0, "skipped": 0, "total": 0}
+    for offset in range(0, len(source_records), 1000):
+        chunk = dossiers.seed_source_items(scope, source_records[offset:offset + 1000], now=now)
+        seeded["inserted"] += int(chunk["inserted"])
+        seeded["skipped"] += int(chunk["skipped"])
+        seeded["total"] += int(chunk["total"])
+    source_counts = dossiers.source_item_counts(scope)
     manifest = {"schema_version": "memory-reconciliation-manifest.v1", "inventory": inventory,
                 "items": items, "dry_run": True, "created_at": float(time.time() if now is None else now),
-                "manifest_revision": _digest(items)}
+                "manifest_revision": _digest(items),
+                "source_item_total": int(sum(source_counts.values())),
+                "source_items_seeded": seeded}
     state = {"schema_version": "memory-reconciliation-state.v1", "manifest": manifest,
-             "items": items, "paused": bool(old.get("paused")), "updated_at": manifest["created_at"]}
+             "items": items, "paused": bool(old.get("paused")), "updated_at": manifest["created_at"],
+             "source_item_counts": source_counts}
     if not safe_write_json(_state_path(scope), state, keep_bak=True):
         raise OSError("history_reconciliation_state_write_failed")
     return manifest
@@ -329,16 +378,39 @@ def verify_backup_snapshot(snapshot: Path) -> dict[str, Any]:
 
 
 def _derived_source_items(scope: MemoryScope, store_kind: str, source_revision: str) -> list[dict[str, Any]]:
-    """Read a derived store and produce content-free, evidence-only receipts."""
+    """Read a derived store and produce content-free, evidence-only receipts.
+
+    ``source_revision`` on each item is the item digest, not the store-file
+    watermark. A later store rewrite therefore only opens pending rows for
+    identities whose content hash actually changed.
+    """
     path = resolve_path(scope, {"event_store": "event_store", "mid_term": "mid_term",
                                 "episodic": "episodic", "storyline": "storyline",
                                 "user_identity": "identity"}[store_kind])
     values: list[tuple[str, Any]] = []
+    item_store_kind = "event" if store_kind == "event_store" else store_kind
     if store_kind == "event_store":
         if path.exists():
             with sqlite3.connect(path) as connection:
-                values = [(str(row[0]), {"event_id": str(row[0])})
-                          for row in connection.execute("SELECT event_id FROM events ORDER BY rowid")]
+                connection.row_factory = sqlite3.Row
+                event_rows = connection.execute(
+                    """SELECT rowid AS ingest_sequence,event_id,ingested_at,redaction_state,
+                              COALESCE(NULLIF(memory_text,''),visible_text) AS text
+                       FROM events ORDER BY rowid"""
+                ).fetchall()
+            result = []
+            store_watermark = str(source_revision or "")
+            for row in event_rows:
+                text = str(row["text"] or "")[:1000]
+                payload = {"event_id": row["event_id"], "ingested_at": row["ingested_at"],
+                           "redaction_state": str(row["redaction_state"] or ""), "text": text}
+                revision = hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True,
+                                                     separators=(",", ":")).encode("utf-8")).hexdigest()
+                result.append({"store_kind": item_store_kind, "source_id": str(row["event_id"])[:512],
+                               "source_revision": revision, "ingest_sequence": int(row["ingest_sequence"]),
+                               "input_digest": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+                               "store_watermark": store_watermark, "semantic_outcomes": ["evidence_only"]})
+            return result
     elif store_kind == "mid_term":
         if path.exists():
             raw = json.loads(path.read_text(encoding="utf-8"))
@@ -371,12 +443,14 @@ def _derived_source_items(scope: MemoryScope, store_kind: str, source_revision: 
                 raise ValueError("identity_not_mapping")
             values = [(str(key), value) for key, value in sorted(raw.items())]
     result = []
+    store_watermark = str(source_revision or "")
     for sequence, (source_id, value) in enumerate(values, start=1):
         digest = hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True,
                                            separators=(",", ":"), default=str).encode("utf-8")).hexdigest()
-        result.append({"store_kind": store_kind, "source_id": source_id[:512],
-                       "source_revision": source_revision, "ingest_sequence": sequence,
-                       "input_digest": digest, "semantic_outcomes": ["evidence_only"]})
+        result.append({"store_kind": item_store_kind, "source_id": source_id[:512],
+                       "source_revision": digest, "ingest_sequence": sequence,
+                       "input_digest": digest, "store_watermark": store_watermark,
+                       "semantic_outcomes": ["evidence_only"]})
     return result
 
 
@@ -516,10 +590,17 @@ def status(scope: MemoryScope) -> dict[str, Any]:
     counts = {name: sum(1 for item in items.values() if item.get("status") == name) for name in STATES}
     total = sum(counts.values())
     ratios = {name: (counts[name] / total if total else 0.0) for name in STATES}
+    from core.memory import dossiers
+    source_counts = dossiers.source_item_counts(scope)
+    source_total = sum(source_counts.values())
+    source_ratios = {name: (source_counts[name] / source_total if source_total else 0.0) for name in STATES}
     return {"schema_version": "memory-reconciliation-status.v1", "paused": bool(state.get("paused")),
             "pause_reason": str(state.get("pause_reason") or ""), "counts": counts,
             "ratios": ratios, "executable": counts["pending"] + counts["retryable_failed"],
             "incremental_pending": counts["pending"], "total": total,
+            "source_item_counts": source_counts, "source_item_total": source_total,
+            "source_item_ratios": source_ratios,
+            "source_item_executable": source_counts["pending"] + source_counts["retryable_failed"],
             "manifest_revision": (state.get("manifest") or {}).get("manifest_revision", ""),
             "frozen_manifest_revision": str(state.get("frozen_manifest_revision") or ""),
             "frozen_at": state.get("frozen_at"),

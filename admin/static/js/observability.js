@@ -2369,3 +2369,88 @@ async function readMemoryConsolidationDossier(dossierId) {
     host.textContent = JSON.stringify(data.dossier, null, 2);
   } catch (error) { host.textContent = `读取失败：${error.message}`; }
 }
+
+async function loadMemoryHistoryReconciliation() {
+  const host = document.getElementById('memory-history-status');
+  if (!host) return;
+  host.className = 'loading';
+  host.textContent = '加载中…';
+  try {
+    const data = await api('GET', _memoryConsolidationQueryPath('/observability/memory-history-reconciliation'));
+    const counts = data.source_item_counts || data.counts || {};
+    const cards = [
+      ['暂停', data.paused ? '是' : '否', data.pause_reason || '-'],
+      ['源项总量', data.source_item_total ?? data.total ?? 0, `可执行 ${data.source_item_executable ?? data.executable ?? 0}`],
+      ['已提交', counts.committed || 0, `排除 ${counts.excluded || 0}`],
+      ['待核实', counts.deferred || 0, `失败 ${counts.retryable_failed || 0}`],
+      ['清单修订', data.manifest_revision || '-', data.frozen_manifest_revision ? '已冻结' : '未冻结'],
+    ];
+    host.className = '';
+    host.innerHTML = `<div class="autonomy-overview-grid">${cards.map(([label, value, detail]) =>
+      `<div class="stat"><div class="val">${escapeHtml(String(value))}</div><div class="lbl">${escapeHtml(label)}</div><div class="detail">${escapeHtml(String(detail))}</div></div>`
+    ).join('')}</div>`;
+    host.dataset.manifestRevision = data.manifest_revision || '';
+  } catch (error) {
+    host.className = 'empty';
+    host.textContent = `加载失败：${error.message}`;
+  }
+}
+
+async function createMemoryHistoryManifest() {
+  const {uid, charId} = _memoryConsolidationScope();
+  if (!uid || !charId) {
+    toast('需要用户 ID 和角色', 'err');
+    return;
+  }
+  try {
+    await api('POST', `/memory-history-reconciliation/manifest?uid=${encodeURIComponent(uid)}&char_id=${encodeURIComponent(charId)}`);
+    toast('清单已生成', 'ok');
+    await loadMemoryHistoryReconciliation();
+  } catch (error) { toast(`生成失败：${error.message}`, 'err'); }
+}
+
+async function controlMemoryHistoryReconciliation(action) {
+  const {uid, charId} = _memoryConsolidationScope();
+  if (!uid || !charId) {
+    toast('需要用户 ID 和角色', 'err');
+    return;
+  }
+  try {
+    const body = {action, uid, char_id: charId};
+    if (action === 'freeze') {
+      const host = document.getElementById('memory-history-status');
+      body.manifest_revision = host?.dataset.manifestRevision || '';
+      if (!body.manifest_revision) {
+        const status = await api('GET', _memoryConsolidationQueryPath('/observability/memory-history-reconciliation'));
+        body.manifest_revision = status.manifest_revision || '';
+      }
+    }
+    await api('POST', '/memory-history-reconciliation/control', body);
+    toast('操作已完成', 'ok');
+    await loadMemoryHistoryReconciliation();
+  } catch (error) { toast(`操作失败：${error.message}`, 'err'); }
+}
+
+async function searchMemoryHistorySourceItems() {
+  const host = document.getElementById('memory-history-items');
+  if (!host) return;
+  try {
+    const store = document.getElementById('memory-history-store')?.value.trim() || '';
+    const status = document.getElementById('memory-history-item-status')?.value.trim() || '';
+    const sourceId = document.getElementById('memory-history-source-id')?.value.trim() || '';
+    const query = new URLSearchParams();
+    if (store) query.set('store_kind', store);
+    if (status) query.set('status', status);
+    if (sourceId) query.set('source_id', sourceId);
+    const suffix = query.toString() ? `&${query.toString()}` : '';
+    const data = await api('GET', _memoryConsolidationQueryPath(`/memory/history-source-items${suffix}`));
+    const rows = data.items || [];
+    host.className = rows.length ? '' : 'empty';
+    host.innerHTML = rows.length ? `<div class="tbl-wrap"><table><thead><tr><th>来源库</th><th>来源 ID</th><th>状态</th><th>去向</th><th>尝试</th><th>错误</th></tr></thead><tbody>${rows.map(row =>
+      `<tr><td>${escapeHtml(row.store_kind || '')}</td><td>${escapeHtml(row.source_id || '')}</td><td>${escapeHtml(row.status || '')}</td><td>${escapeHtml((row.semantic_outcomes || []).join(',') || '-')}</td><td>${Number(row.attempt || 0)}</td><td>${escapeHtml(row.last_error || '-')}</td></tr>`
+    ).join('')}</tbody></table></div>` : '暂无源项';
+  } catch (error) {
+    host.className = 'empty';
+    host.textContent = `查询失败：${error.message}`;
+  }
+}

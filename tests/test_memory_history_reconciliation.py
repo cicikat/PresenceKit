@@ -273,6 +273,147 @@ def test_settle_evidence_only_requires_reason_and_closes_backlog(sandbox):
     assert dossiers.maintenance_status(scope)["backlog"] == 0
 
 
+def test_manifest_seeds_per_source_item_ledger_without_copying_bodies(sandbox):
+    import json
+    from core.memory import dossiers, history_reconciliation
+    from core.memory.event_store import append_event
+    from core.memory.path_resolver import resolve_path
+    from core.memory.scope import MemoryScope
+
+    scope = MemoryScope.reality_scope("source-item-owner", TEST_CHAR_ID)
+    secret = "PRIVATE_SOURCE_BODY_2591"
+    assert append_event(scope, {
+        "event_id": "source-item-event", "turn_id": "source-item-turn", "seq": 1,
+        "occurred_at": 1.0, "ingested_at": 2.0, "uid": scope.uid,
+        "char_id": scope.character_id, "realm": "reality", "kind": "chat",
+        "actor": "user", "channel": "test", "source": "fixture",
+        "visible_text": secret, "memory_text": secret,
+    }).ok
+    mid_path = resolve_path(scope, "mid_term")
+    mid_path.parent.mkdir(parents=True, exist_ok=True)
+    mid_path.write_text(json.dumps({"events": [{"mid_id": "mid-source", "summary": secret}]}), encoding="utf-8")
+    manifest = history_reconciliation.create_manifest(scope, now=1)
+    snapshot = history_reconciliation.status(scope)
+    listed = dossiers.list_source_items(scope, store_kind="event")
+    mid_listed = dossiers.list_source_items(scope, store_kind="mid_term")
+    assert manifest["source_item_total"] >= 2
+    assert snapshot["source_item_counts"]["pending"] >= 2
+    assert snapshot["source_item_total"] == sum(snapshot["source_item_counts"].values())
+    assert listed["total"] == 1
+    assert listed["items"][0]["source_id"] == "source-item-event"
+    assert listed["items"][0]["status"] == "pending"
+    assert listed["items"][0]["rule_version"]
+    assert listed["items"][0]["operation_id"] == ""
+    assert mid_listed["items"][0]["source_id"] == "mid-source"
+    assert secret not in json.dumps(listed)
+    assert secret not in json.dumps(mid_listed)
+    assert secret not in json.dumps(snapshot)
+    assert secret not in str(resolve_path(scope, "memory_dossiers").read_bytes())
+
+
+def test_manifest_seed_is_conservative_and_revision_change_opens_new_pending(sandbox):
+    import json
+    from core.memory import dossiers, history_reconciliation
+    from core.memory.path_resolver import resolve_path
+    from core.memory.scope import MemoryScope
+
+    scope = MemoryScope.reality_scope("source-item-revision", TEST_CHAR_ID)
+    mid_path = resolve_path(scope, "mid_term")
+    mid_path.parent.mkdir(parents=True, exist_ok=True)
+    mid_path.write_text(json.dumps({"events": [{"mid_id": "mid-rev", "summary": "first"}]}), encoding="utf-8")
+    first = history_reconciliation.create_manifest(scope, now=1)
+    second = history_reconciliation.create_manifest(scope, now=2)
+    assert second["source_items_seeded"]["inserted"] == 0
+    assert second["source_items_seeded"]["skipped"] >= first["source_items_seeded"]["inserted"]
+    before = dossiers.list_source_items(scope, store_kind="mid_term", source_id="mid-rev")
+    assert before["total"] == 1
+    mid_path.write_text(json.dumps({"events": [{"mid_id": "mid-rev", "summary": "changed"}]}), encoding="utf-8")
+    history_reconciliation.create_manifest(scope, now=3)
+    after = dossiers.list_source_items(scope, store_kind="mid_term", source_id="mid-rev")
+    revisions = {item["source_revision"] for item in after["items"]}
+    assert after["total"] == 2
+    assert len(revisions) == 2
+    assert all(item["status"] == "pending" for item in after["items"])
+    assert before["items"][0]["source_revision"] in revisions
+
+
+def test_json_state_write_failure_does_not_duplicate_source_items(sandbox, monkeypatch):
+    from core.memory import dossiers, history_reconciliation
+    from core.memory.event_store import append_event
+    from core.memory.scope import MemoryScope
+
+    scope = MemoryScope.reality_scope("source-item-write-fail", TEST_CHAR_ID)
+    assert append_event(scope, {
+        "event_id": "write-fail-event", "turn_id": "write-fail-turn", "seq": 1,
+        "occurred_at": 1.0, "ingested_at": 2.0, "uid": scope.uid,
+        "char_id": scope.character_id, "realm": "reality", "kind": "chat",
+        "actor": "user", "channel": "test", "source": "fixture",
+        "visible_text": "fixture", "memory_text": "fixture",
+    }).ok
+    monkeypatch.setattr("core.memory.history_reconciliation.safe_write_json", lambda *args, **kwargs: False)
+    try:
+        history_reconciliation.create_manifest(scope, now=1)
+    except OSError as exc:
+        assert "history_reconciliation_state_write_failed" in str(exc)
+    else:
+        raise AssertionError("expected write failure")
+    listed = dossiers.list_source_items(scope, store_kind="event")
+    assert listed["total"] == 1
+    assert listed["items"][0]["status"] == "pending"
+    assert listed["items"][0]["operation_id"] == ""
+    assert history_reconciliation.status(scope)["manifest_revision"] == ""
+    monkeypatch.setattr(
+        "core.memory.history_reconciliation.safe_write_json",
+        __import__("core.safe_write", fromlist=["safe_write_json"]).safe_write_json,
+    )
+    retry = history_reconciliation.create_manifest(scope, now=2)
+    assert retry["source_items_seeded"]["inserted"] == 0
+    assert dossiers.list_source_items(scope, store_kind="event")["total"] == 1
+
+
+def test_source_item_endpoint_requires_memory_read_and_is_metadata_only(sandbox):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    import yaml
+    from admin import token_registry
+    from admin.routers.memory_consolidation import router
+    from core.memory import history_reconciliation
+    from core.memory.event_store import append_event
+    from core.memory.scope import MemoryScope
+
+    scope = MemoryScope.reality_scope("source-item-api", TEST_CHAR_ID)
+    secret = "PRIVATE_SOURCE_BODY_2592"
+    assert append_event(scope, {
+        "event_id": "api-source-event", "turn_id": "api-source-turn", "seq": 1,
+        "occurred_at": 1.0, "ingested_at": 2.0, "uid": scope.uid,
+        "char_id": scope.character_id, "realm": "reality", "kind": "chat",
+        "actor": "user", "channel": "test", "source": "fixture",
+        "visible_text": secret, "memory_text": secret,
+    }).ok
+    history_reconciliation.create_manifest(scope, now=1)
+    path = sandbox.auth_tokens_file()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(yaml.safe_dump({"tokens": [
+        {"label": "state", "hash": token_registry.hash_token("state"), "scopes": ["state.read"]},
+        {"label": "memory", "hash": token_registry.hash_token("memory"), "scopes": ["memory.read"]},
+    ]}), encoding="utf-8")
+    token_registry._records = None
+    token_registry._mtime = None
+    app = FastAPI()
+    app.include_router(router)
+    client = TestClient(app)
+    query = f"/memory/history-source-items?uid={scope.uid}&char_id={scope.character_id}&store_kind=event"
+    denied = client.get(query, headers={"Authorization": "Bearer state"})
+    allowed = client.get(query, headers={"Authorization": "Bearer memory"})
+    assert denied.status_code == 403
+    assert allowed.status_code == 200
+    payload = allowed.json()
+    assert payload["total"] == 1
+    assert payload["items"][0]["source_id"] == "api-source-event"
+    assert payload["items"][0]["status"] == "pending"
+    assert secret not in allowed.text
+
+
 def test_rollback_reopens_evidence_receipts_without_touching_source(sandbox):
     from core.memory import dossiers, history_reconciliation
     from core.memory.event_store import append_event

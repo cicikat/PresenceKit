@@ -53,10 +53,13 @@ idempotency keys.
   records actor, chain (`owner_chat|maintenance|admin_recovery`), expected and
   committed revisions, source-policy/rules revision, result, reversal link and
   timestamps. Reuse with another digest fails closed.
-* `source_items` and `processing_commits`: the Brief 259 manifest authority.
+* `source_items` and `processing_commits`: the Brief 259 per-item ledger.
   Keys are scope + store kind + stable source ID + source revision. Processing
-  status and semantic outcome are separate. A committed source watermark is an
-  ingest sequence/revision, never only `occurred_at`.
+  status and semantic outcome are separate. Creating a dry-run history manifest
+  seeds pending rows without copying source prose; a changed revision leaves the
+  old row and opens a new pending row. A committed source watermark is an ingest
+  sequence/revision, never only `occurred_at`. Store-level JSON progress remains
+  an operator snapshot, not the item authority.
 
 Times are UTC instants. Uncertain experience time is an inclusive lower/upper
 interval and retains its certainty label. Ingest sequence is monotonic within
@@ -159,8 +162,9 @@ matching durable maintenance receipt.
 
 The admin surface exposes content-free effective state and backlog through
 `GET /observability/memory-consolidation` (`state.read`), bounded dossier detail
-through `GET /memory/dossiers*` (`memory.read`), and configuration/control through
-`PATCH /settings/memory-consolidation` plus
+through `GET /memory/dossiers*` (`memory.read`), history-item receipts through
+`GET /memory/history-source-items` (`memory.read`), and configuration/control
+through `PATCH /settings/memory-consolidation` plus
 `POST /memory-consolidation/control` (`admin`). Identifiers in metadata-only
 observability are hashed; dossier prose and evidence remain behind `memory.read`.
 

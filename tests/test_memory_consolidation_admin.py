@@ -60,6 +60,31 @@ def _headers(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
+def test_history_source_items_require_memory_read(sandbox):
+    from core.memory import history_reconciliation
+    from core.memory.event_store import append_event
+    from core.memory.scope import MemoryScope
+
+    scope = MemoryScope.reality_scope("admin-source-item", TEST_CHAR_ID)
+    assert append_event(scope, {
+        "event_id": "admin-source-event", "turn_id": "admin-source-turn", "seq": 1,
+        "occurred_at": 1.0, "ingested_at": 2.0, "uid": scope.uid,
+        "char_id": scope.character_id, "realm": "reality", "kind": "owner_chat",
+        "actor": "user", "channel": "desktop", "source": "fixture",
+        "visible_text": "private dossier evidence", "memory_text": "private dossier evidence",
+        "redaction_state": "scrubbed",
+    }).ok
+    history_reconciliation.create_manifest(scope, now=1)
+    client = _client_with_tokens(sandbox)
+    path = f"/memory/history-source-items?uid={scope.uid}&char_id={scope.character_id}&store_kind=event"
+    denied = client.get(path, headers=_headers("state-token"))
+    allowed = client.get(path, headers=_headers("memory-token"))
+    assert denied.status_code == 403
+    assert allowed.status_code == 200
+    assert allowed.json()["items"][0]["source_id"] == "admin-source-event"
+    assert "private dossier evidence" not in allowed.text
+
+
 def test_observability_is_metadata_only_and_scope_protected(sandbox):
     from core.memory.scope import MemoryScope
 

@@ -20,7 +20,7 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'v1-258-memory-dossiers-1';
+const ADMIN_UI_FRAGMENT_VERSION = 'v1-259-history-source-items-1';
 
 const ADMIN_PAGE_ALIASES = Object.freeze({memory: 'observe-memory'});
 
@@ -341,7 +341,7 @@ async function goto(page, {reloadFragment = false, fromHistory = false} = {}) {
     'observe-spend':   loadObserveSpend,
     'observe-group-arbiter': initObserveGroupArbiter,
     'observe-memory-summary': () => initObserveCharacters('obs-memory-summary-char'),
-    'memory-consolidation': () => initObserveCharacters('memory-consolidation-char', loadMemoryConsolidationStatus),
+    'memory-consolidation': () => initObserveCharacters('memory-consolidation-char', () => { loadMemoryConsolidationStatus(); loadMemoryHistoryReconciliation(); }),
     'observe-prompt':  () => { loadObservePromptUidList(); },
     'observe-tools':   () => loadObserveToolUidList(),
     'observe-dream-prompt': () => loadObserveDreamPromptUidList(),

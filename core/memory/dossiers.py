@@ -21,7 +21,7 @@ from typing import Any, Iterable, Mapping
 from core.memory.path_resolver import resolve_path
 from core.memory.scope import MemoryScope
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 SOURCE_POLICY_REVISION = "memory-dossier-source-policy.v1"
 RULES_REVISION = "memory-dossier-rules.v1"
 MAX_BATCH_OPERATIONS = 100
@@ -110,7 +110,7 @@ def _connect(path: Path, *, readonly: bool = False) -> sqlite3.Connection:
 
 def _initialize(connection: sqlite3.Connection) -> None:
     version = int(connection.execute("PRAGMA user_version").fetchone()[0])
-    if version not in {0, 1, SCHEMA_VERSION}:
+    if version not in {0, 1, 2, SCHEMA_VERSION}:
         raise DossierError("schema_mismatch")
     connection.executescript(
         """
@@ -177,6 +177,7 @@ def _initialize(connection: sqlite3.Connection) -> None:
           ingest_sequence INTEGER NOT NULL, status TEXT NOT NULL, semantic_outcomes_json TEXT NOT NULL,
           attempt INTEGER NOT NULL DEFAULT 0, operation_id TEXT, input_digest TEXT NOT NULL,
           last_error TEXT NOT NULL, revisit_condition TEXT NOT NULL, updated_at REAL NOT NULL,
+          rule_version TEXT NOT NULL DEFAULT '', target_revision TEXT NOT NULL DEFAULT '',
           PRIMARY KEY(store_kind, source_id, source_revision)
         );
         CREATE TABLE IF NOT EXISTS processing_commits (
@@ -198,8 +199,14 @@ def _initialize(connection: sqlite3.Connection) -> None:
         );
         CREATE INDEX IF NOT EXISTS idx_dossier_status_title ON dossiers(status, title);
         CREATE INDEX IF NOT EXISTS idx_membership_occurrence ON memberships(occurrence_id, status);
+        CREATE INDEX IF NOT EXISTS idx_source_items_status ON source_items(status, store_kind, ingest_sequence);
         """
     )
+    columns = {str(row[1]) for row in connection.execute("PRAGMA table_info(source_items)")}
+    if "rule_version" not in columns:
+        connection.execute("ALTER TABLE source_items ADD COLUMN rule_version TEXT NOT NULL DEFAULT ''")
+    if "target_revision" not in columns:
+        connection.execute("ALTER TABLE source_items ADD COLUMN target_revision TEXT NOT NULL DEFAULT ''")
     connection.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
 
 
@@ -227,8 +234,8 @@ def schema_status(scope: MemoryScope) -> SchemaStatus:
                 version = int(connection.execute("PRAGMA user_version").fetchone()[0])
                 tables = {str(row[0]) for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
             required = {"dossiers", "occurrences", "occurrence_evidence", "memberships", "relations", "understandings", "operations", "invalidations", "source_items", "processing_commits", "maintenance_runs", "maintenance_state"}
-            return SchemaStatus(True, version == SCHEMA_VERSION and required <= tables, version,
-                                "" if version == SCHEMA_VERSION and required <= tables else "schema_mismatch")
+            healthy = version == SCHEMA_VERSION and required <= tables
+            return SchemaStatus(True, healthy, version, "" if healthy else "schema_mismatch")
         except (OSError, sqlite3.Error):
             return SchemaStatus(True, False, 0, "database_error")
 
@@ -485,15 +492,18 @@ def apply_operations(scope: MemoryScope, operations: list[Mapping[str, Any]], *,
                 for item in normalized_items:
                     connection.execute("""INSERT INTO source_items
                       (store_kind,source_id,source_revision,ingest_sequence,status,semantic_outcomes_json,
-                       attempt,operation_id,input_digest,last_error,revisit_condition,updated_at)
-                      VALUES(?,?,?,?, 'committed',?,1,?,?, '', '',?)
+                       attempt,operation_id,input_digest,last_error,revisit_condition,updated_at,
+                       rule_version,target_revision)
+                      VALUES(?,?,?,?, 'committed',?,1,?,?, '', '',?,?,?)
                       ON CONFLICT(store_kind,source_id,source_revision) DO UPDATE SET
                         ingest_sequence=excluded.ingest_sequence,status='committed',
                         semantic_outcomes_json=excluded.semantic_outcomes_json,
                         operation_id=excluded.operation_id,input_digest=excluded.input_digest,
-                        last_error='',updated_at=excluded.updated_at""",
+                        last_error='',updated_at=excluded.updated_at,
+                        rule_version=excluded.rule_version""" ,
                       (item["store_kind"], item["source_id"], item["source_revision"], item["ingest_sequence"],
-                       _json(item["semantic_outcomes"]), operation_id, item["input_digest"], timestamp))
+                       _json(item["semantic_outcomes"]), operation_id, item["input_digest"], timestamp,
+                       RULES_REVISION, ""))
                     connection.execute("INSERT OR IGNORE INTO processing_commits VALUES(?,?,?,?,?,?,?)",
                       (_new_id(), operation_id, item["store_kind"], item["source_id"],
                        item["source_revision"], item["ingest_sequence"], timestamp))
@@ -797,6 +807,124 @@ def reopen_evidence_only(scope: MemoryScope, *, source_ids: list[str] | None = N
         )
         connection.commit()
     return len(rows)
+
+
+_SOURCE_ITEM_STATES = ("pending", "running", "committed", "retryable_failed", "deferred", "excluded")
+
+
+def seed_source_items(scope: MemoryScope, items: list[Mapping[str, Any]], *,
+                      now: float | None = None) -> dict[str, int]:
+    """Insert pending source-item receipts without copying source prose.
+
+    Existing rows for the same store_kind/source_id/source_revision keep their
+    processing status. A changed source revision leaves the old row in place
+    and opens a new pending row.
+    """
+    scope = _scope(scope)
+    if not isinstance(items, list) or len(items) > 10_000:
+        raise DossierError("invalid_source_item_batch")
+    timestamp = time.time() if now is None else float(now)
+    inserted = skipped = 0
+    path = _path(scope)
+    with _lock(path), _connect(path) as connection:
+        _initialize(connection)
+        connection.execute("BEGIN IMMEDIATE")
+        try:
+            for item in items:
+                if not isinstance(item, Mapping):
+                    raise DossierError("invalid_processing_item")
+                store_kind = _text(item.get("store_kind"), required=True, limit=64)
+                source_id = _text(item.get("source_id"), required=True, limit=512)
+                source_revision = _text(item.get("source_revision"), required=True, limit=256)
+                ingest_sequence = int(item.get("ingest_sequence") or 0)
+                input_digest = _text(item.get("input_digest") or source_revision, required=True, limit=128)
+                rule_version = _text(item.get("rule_version") or RULES_REVISION, required=True, limit=128)
+                revisit = _text(item.get("revisit_condition") or "source_revision_changed", limit=128)
+                existing = connection.execute(
+                    "SELECT status FROM source_items WHERE store_kind=? AND source_id=? AND source_revision=?",
+                    (store_kind, source_id, source_revision),
+                ).fetchone()
+                if existing is not None:
+                    skipped += 1
+                    continue
+                connection.execute(
+                    """INSERT INTO source_items
+                      (store_kind,source_id,source_revision,ingest_sequence,status,semantic_outcomes_json,
+                       attempt,operation_id,input_digest,last_error,revisit_condition,updated_at,
+                       rule_version,target_revision)
+                      VALUES(?,?,?,?,'pending','[]',0,'',?, '', ?, ?, ?, '')""",
+                    (store_kind, source_id, source_revision, ingest_sequence, input_digest,
+                     revisit, timestamp, rule_version),
+                )
+                inserted += 1
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+    return {"inserted": inserted, "skipped": skipped, "total": inserted + skipped}
+
+
+def list_source_items(scope: MemoryScope, *, store_kind: str = "", status: str = "",
+                      source_id: str = "", offset: int = 0, limit: int = 50) -> dict[str, Any]:
+    """Return a bounded, content-free page of source-item processing receipts."""
+    scope = _scope(scope)
+    path = _path(scope)
+    offset = max(0, int(offset))
+    limit = min(100, max(1, int(limit)))
+    empty = {"total": 0, "offset": offset, "limit": limit, "items": []}
+    if not path.exists():
+        return empty
+    filters = ["1=1"]
+    params: list[Any] = []
+    if store_kind:
+        filters.append("store_kind=?")
+        params.append(_text(store_kind, required=True, limit=64))
+    if status:
+        if status not in _SOURCE_ITEM_STATES:
+            raise DossierError("invalid_source_item_status")
+        filters.append("status=?")
+        params.append(status)
+    if source_id:
+        filters.append("source_id=?")
+        params.append(_text(source_id, required=True, limit=512))
+    where = " AND ".join(filters)
+    with _lock(path), _connect(path, readonly=True) as connection:
+        columns = {str(row[1]) for row in connection.execute("PRAGMA table_info(source_items)")}
+        extras = ",rule_version,target_revision" if "rule_version" in columns else ""
+        total = int(connection.execute(f"SELECT COUNT(*) FROM source_items WHERE {where}", params).fetchone()[0])
+        rows = connection.execute(
+            f"""SELECT store_kind,source_id,source_revision,ingest_sequence,status,semantic_outcomes_json,
+                       attempt,operation_id,input_digest,last_error,revisit_condition,updated_at{extras}
+                FROM source_items WHERE {where}
+                ORDER BY store_kind,ingest_sequence,source_id LIMIT ? OFFSET ?""",
+            (*params, limit, offset),
+        ).fetchall()
+    items = []
+    for row in rows:
+        item = dict(row)
+        try:
+            outcomes = json.loads(item.pop("semantic_outcomes_json") or "[]")
+        except json.JSONDecodeError:
+            outcomes = []
+        item["semantic_outcomes"] = outcomes if isinstance(outcomes, list) else []
+        item.setdefault("rule_version", "")
+        item.setdefault("target_revision", "")
+        items.append(item)
+    return {"total": total, "offset": offset, "limit": limit, "items": items}
+
+
+def source_item_counts(scope: MemoryScope) -> dict[str, int]:
+    """Return processing-status counts over the per-source-item ledger."""
+    scope = _scope(scope)
+    path = _path(scope)
+    counts = {name: 0 for name in _SOURCE_ITEM_STATES}
+    if not path.exists():
+        return counts
+    with _lock(path), _connect(path, readonly=True) as connection:
+        for status, total in connection.execute("SELECT status,COUNT(*) FROM source_items GROUP BY status"):
+            if status in counts:
+                counts[str(status)] = int(total)
+    return counts
 
 
 def begin_maintenance_run(scope: MemoryScope, *, run_id: str, task_id: str,

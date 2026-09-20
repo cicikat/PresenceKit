@@ -12,14 +12,17 @@ def test_memory_consolidation_page_is_registered_and_cache_busted():
 
     assert 'data-page="memory-consolidation"' in index
     assert 'id="page-memory-consolidation"' in index
-    assert "ADMIN_UI_FRAGMENT_VERSION = 'v1-258-memory-dossiers-1'" in core
-    assert '<script src="/static/js/core.js?v=v1-258-memory-dossiers-1"></script>' in index
-    assert '<script src="/static/js/observability.js?v=v1-258-memory-dossiers-1"></script>' in index
+    assert "ADMIN_UI_FRAGMENT_VERSION = 'v1-259-history-source-items-1'" in core
+    assert '<script src="/static/js/core.js?v=v1-259-history-source-items-1"></script>' in index
+    assert '<script src="/static/js/observability.js?v=v1-259-history-source-items-1"></script>' in index
     assert "loadMemoryConsolidationStatus" in script
     assert "/observability/memory-consolidation" in script
     assert "/settings/memory-consolidation" in script
     assert "/memory-consolidation/control" in script
     assert "/memory/dossiers" in script
+    assert "/observability/memory-history-reconciliation" in script
+    assert "/memory/history-source-items" in script
+    assert "loadMemoryHistoryReconciliation" in script
     assert 'data-action="controlMemoryConsolidation"' in page
     assert "onclick=" not in page
 
@@ -32,5 +35,8 @@ def test_memory_consolidation_page_has_required_status_and_controls():
         "memory-consolidation-calls", "memory-consolidation-daily-tokens",
         "memory-consolidation-wall", "recover_unknown", "revoke",
         "memory-consolidation-dossiers", "memory-consolidation-detail",
+        "memory-history-status", "memory-history-items",
+        "controlMemoryHistoryReconciliation", "searchMemoryHistorySourceItems",
+        "createMemoryHistoryManifest",
     ):
         assert marker in page
