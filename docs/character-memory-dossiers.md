@@ -57,9 +57,16 @@ idempotency keys.
   Keys are scope + store kind + stable source ID + source revision. Processing
   status and semantic outcome are separate. Creating a dry-run history manifest
   seeds pending rows without copying source prose; a changed revision leaves the
-  old row and opens a new pending row. A committed source watermark is an ingest
-  sequence/revision, never only `occurred_at`. Store-level JSON progress remains
-  an operator snapshot, not the item authority.
+  old row and opens a new pending row. Bounded claims take a stably ordered
+  `pending`/`retryable_failed` slice, mark it `running` with a task id and
+  lease, and look up already-linked dossiers by evidence ID. Titles, aliases
+  and membership lists are presentation only and are never idempotency keys.
+  An expired lease is reconciled against `processing_commits` before retry: a
+  receipt makes the item `committed`, otherwise it returns to `retryable_failed`.
+  A write failure releases the claim without a receipt. A committed source
+  watermark is an ingest sequence/revision, never only `occurred_at`.
+  Store-level JSON progress remains an operator snapshot, not the item
+  authority.
 
 Times are UTC instants. Uncertain experience time is an inclusive lower/upper
 interval and retains its certainty label. Ingest sequence is monotonic within
@@ -113,9 +120,11 @@ reference is later attached.
 
 The operation receipt is checked before retrying an unknown outcome. A source
 item becomes committed only in the same transaction that publishes its derived
-revision and processing commit. A crash before commit leaves it claimable; a
+revision and processing commit. A crash before commit leaves the claim running
+until the lease expires, then reconcile returns it to `retryable_failed`. A
 crash after commit is recovered from the receipt and cannot create another
-active conclusion.
+active conclusion. Model success with a failed write does not mark the item
+committed.
 
 ## Coexistence, cutover, and rollback
 

@@ -21,10 +21,12 @@ from typing import Any, Iterable, Mapping
 from core.memory.path_resolver import resolve_path
 from core.memory.scope import MemoryScope
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 SOURCE_POLICY_REVISION = "memory-dossier-source-policy.v1"
 RULES_REVISION = "memory-dossier-rules.v1"
 MAX_BATCH_OPERATIONS = 100
+MAX_CLAIM_BATCH = 100
+DEFAULT_LEASE_SECONDS = 900
 MAX_TEXT_CHARS = 4000
 _ID_RE = re.compile(r"^[0-9a-f]{32}$")
 _VALID_CHAINS = frozenset({"owner_chat", "maintenance", "admin_recovery"})
@@ -110,7 +112,7 @@ def _connect(path: Path, *, readonly: bool = False) -> sqlite3.Connection:
 
 def _initialize(connection: sqlite3.Connection) -> None:
     version = int(connection.execute("PRAGMA user_version").fetchone()[0])
-    if version not in {0, 1, 2, SCHEMA_VERSION}:
+    if version not in {0, 1, 2, 3, SCHEMA_VERSION}:
         raise DossierError("schema_mismatch")
     connection.executescript(
         """
@@ -178,6 +180,7 @@ def _initialize(connection: sqlite3.Connection) -> None:
           attempt INTEGER NOT NULL DEFAULT 0, operation_id TEXT, input_digest TEXT NOT NULL,
           last_error TEXT NOT NULL, revisit_condition TEXT NOT NULL, updated_at REAL NOT NULL,
           rule_version TEXT NOT NULL DEFAULT '', target_revision TEXT NOT NULL DEFAULT '',
+          lease_until REAL NOT NULL DEFAULT 0, task_id TEXT NOT NULL DEFAULT '',
           PRIMARY KEY(store_kind, source_id, source_revision)
         );
         CREATE TABLE IF NOT EXISTS processing_commits (
@@ -207,6 +210,10 @@ def _initialize(connection: sqlite3.Connection) -> None:
         connection.execute("ALTER TABLE source_items ADD COLUMN rule_version TEXT NOT NULL DEFAULT ''")
     if "target_revision" not in columns:
         connection.execute("ALTER TABLE source_items ADD COLUMN target_revision TEXT NOT NULL DEFAULT ''")
+    if "lease_until" not in columns:
+        connection.execute("ALTER TABLE source_items ADD COLUMN lease_until REAL NOT NULL DEFAULT 0")
+    if "task_id" not in columns:
+        connection.execute("ALTER TABLE source_items ADD COLUMN task_id TEXT NOT NULL DEFAULT ''")
     connection.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
 
 
@@ -500,7 +507,7 @@ def apply_operations(scope: MemoryScope, operations: list[Mapping[str, Any]], *,
                         semantic_outcomes_json=excluded.semantic_outcomes_json,
                         operation_id=excluded.operation_id,input_digest=excluded.input_digest,
                         last_error='',updated_at=excluded.updated_at,
-                        rule_version=excluded.rule_version""" ,
+                        rule_version=excluded.rule_version,lease_until=0""" ,
                       (item["store_kind"], item["source_id"], item["source_revision"], item["ingest_sequence"],
                        _json(item["semantic_outcomes"]), operation_id, item["input_digest"], timestamp,
                        RULES_REVISION, ""))
@@ -812,6 +819,27 @@ def reopen_evidence_only(scope: MemoryScope, *, source_ids: list[str] | None = N
 _SOURCE_ITEM_STATES = ("pending", "running", "committed", "retryable_failed", "deferred", "excluded")
 
 
+def _source_item_select_extras(connection: sqlite3.Connection) -> str:
+    columns = {str(row[1]) for row in connection.execute("PRAGMA table_info(source_items)")}
+    extras = [name for name in ("rule_version", "target_revision", "lease_until", "task_id")
+              if name in columns]
+    return ("," + ",".join(extras)) if extras else ""
+
+
+def _source_item_payload(row: sqlite3.Row) -> dict[str, Any]:
+    item = dict(row)
+    try:
+        outcomes = json.loads(item.pop("semantic_outcomes_json") or "[]")
+    except json.JSONDecodeError:
+        outcomes = []
+    item["semantic_outcomes"] = outcomes if isinstance(outcomes, list) else []
+    item.setdefault("rule_version", "")
+    item.setdefault("target_revision", "")
+    item.setdefault("lease_until", 0.0)
+    item.setdefault("task_id", "")
+    return item
+
+
 def seed_source_items(scope: MemoryScope, items: list[Mapping[str, Any]], *,
                       now: float | None = None) -> dict[str, int]:
     """Insert pending source-item receipts without copying source prose.
@@ -889,8 +917,7 @@ def list_source_items(scope: MemoryScope, *, store_kind: str = "", status: str =
         params.append(_text(source_id, required=True, limit=512))
     where = " AND ".join(filters)
     with _lock(path), _connect(path, readonly=True) as connection:
-        columns = {str(row[1]) for row in connection.execute("PRAGMA table_info(source_items)")}
-        extras = ",rule_version,target_revision" if "rule_version" in columns else ""
+        extras = _source_item_select_extras(connection)
         total = int(connection.execute(f"SELECT COUNT(*) FROM source_items WHERE {where}", params).fetchone()[0])
         rows = connection.execute(
             f"""SELECT store_kind,source_id,source_revision,ingest_sequence,status,semantic_outcomes_json,
@@ -899,18 +926,8 @@ def list_source_items(scope: MemoryScope, *, store_kind: str = "", status: str =
                 ORDER BY store_kind,ingest_sequence,source_id LIMIT ? OFFSET ?""",
             (*params, limit, offset),
         ).fetchall()
-    items = []
-    for row in rows:
-        item = dict(row)
-        try:
-            outcomes = json.loads(item.pop("semantic_outcomes_json") or "[]")
-        except json.JSONDecodeError:
-            outcomes = []
-        item["semantic_outcomes"] = outcomes if isinstance(outcomes, list) else []
-        item.setdefault("rule_version", "")
-        item.setdefault("target_revision", "")
-        items.append(item)
-    return {"total": total, "offset": offset, "limit": limit, "items": items}
+    return {"total": total, "offset": offset, "limit": limit,
+            "items": [_source_item_payload(row) for row in rows]}
 
 
 def source_item_counts(scope: MemoryScope) -> dict[str, int]:
@@ -925,6 +942,215 @@ def source_item_counts(scope: MemoryScope) -> dict[str, int]:
             if status in counts:
                 counts[str(status)] = int(total)
     return counts
+
+
+def _reconcile_source_item_leases_unlocked(connection: sqlite3.Connection, now: float) -> dict[str, int]:
+    """Recover expired running rows from durable receipts before any retry."""
+    extras = _source_item_select_extras(connection)
+    rows = connection.execute(
+        f"""SELECT store_kind,source_id,source_revision,ingest_sequence,status,semantic_outcomes_json,
+                   attempt,operation_id,input_digest,last_error,revisit_condition,updated_at{extras}
+            FROM source_items WHERE status='running' AND lease_until>0 AND lease_until<?""",
+        (now,),
+    ).fetchall()
+    committed = released = 0
+    for row in rows:
+        receipt = connection.execute(
+            """SELECT operation_id FROM processing_commits
+               WHERE store_kind=? AND source_id=? AND source_revision=?
+               ORDER BY created_at DESC LIMIT 1""",
+            (row["store_kind"], row["source_id"], row["source_revision"]),
+        ).fetchone()
+        if receipt is not None:
+            connection.execute(
+                """UPDATE source_items SET status='committed',operation_id=?,last_error='',
+                   lease_until=0,updated_at=?
+                   WHERE store_kind=? AND source_id=? AND source_revision=? AND status='running'""",
+                (str(receipt["operation_id"]), now, row["store_kind"], row["source_id"],
+                 row["source_revision"]),
+            )
+            committed += 1
+            continue
+        connection.execute(
+            """UPDATE source_items SET status='retryable_failed',last_error='lease_expired',
+               lease_until=0,updated_at=?
+               WHERE store_kind=? AND source_id=? AND source_revision=? AND status='running'""",
+            (now, row["store_kind"], row["source_id"], row["source_revision"]),
+        )
+        released += 1
+    return {"committed": committed, "released": released, "inspected": len(rows)}
+
+
+def reconcile_source_item_leases(scope: MemoryScope, *, now: float | None = None) -> dict[str, int]:
+    """Mark expired running items from receipts; otherwise return them to retryable_failed."""
+    scope = _scope(scope)
+    path = _path(scope)
+    timestamp = time.time() if now is None else float(now)
+    empty = {"committed": 0, "released": 0, "inspected": 0}
+    if not path.exists():
+        return empty
+    with _lock(path), _connect(path) as connection:
+        _initialize(connection)
+        connection.execute("BEGIN IMMEDIATE")
+        try:
+            result = _reconcile_source_item_leases_unlocked(connection, timestamp)
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+    return result
+
+
+def claim_source_items(scope: MemoryScope, *, limit: int = 10, lease_seconds: int = DEFAULT_LEASE_SECONDS,
+                       task_id: str = "", store_kind: str = "", now: float | None = None) -> dict[str, Any]:
+    """Claim a bounded, stably ordered source-item batch with a recoverable lease."""
+    scope = _scope(scope)
+    limit = min(MAX_CLAIM_BATCH, max(1, int(limit)))
+    lease_seconds = min(3600, max(1, int(lease_seconds)))
+    task = _text(task_id, limit=64) if task_id else ""
+    kind = _text(store_kind, required=True, limit=64) if store_kind else ""
+    timestamp = time.time() if now is None else float(now)
+    lease_until = timestamp + lease_seconds
+    path = _path(scope)
+    empty = {"items": [], "count": 0, "reconciled": {"committed": 0, "released": 0, "inspected": 0}}
+    if not path.exists():
+        return empty
+    with _lock(path), _connect(path) as connection:
+        _initialize(connection)
+        connection.execute("BEGIN IMMEDIATE")
+        try:
+            reconciled = _reconcile_source_item_leases_unlocked(connection, timestamp)
+            filters = ["status IN ('pending','retryable_failed')"]
+            params: list[Any] = []
+            if kind:
+                filters.append("store_kind=?")
+                params.append(kind)
+            extras = _source_item_select_extras(connection)
+            rows = connection.execute(
+                f"""SELECT store_kind,source_id,source_revision,ingest_sequence,status,semantic_outcomes_json,
+                           attempt,operation_id,input_digest,last_error,revisit_condition,updated_at{extras}
+                    FROM source_items WHERE {' AND '.join(filters)}
+                    ORDER BY store_kind,ingest_sequence,source_id LIMIT ?""",
+                (*params, limit),
+            ).fetchall()
+            items: list[dict[str, Any]] = []
+            for row in rows:
+                connection.execute(
+                    """UPDATE source_items SET status='running',attempt=attempt+1,lease_until=?,
+                       task_id=?,last_error='',updated_at=?
+                       WHERE store_kind=? AND source_id=? AND source_revision=?
+                         AND status IN ('pending','retryable_failed')""",
+                    (lease_until, task, timestamp, row["store_kind"], row["source_id"],
+                     row["source_revision"]),
+                )
+                item = _source_item_payload(row)
+                item.update({"status": "running", "attempt": int(row["attempt"] or 0) + 1,
+                             "lease_until": lease_until, "task_id": task, "updated_at": timestamp,
+                             "last_error": ""})
+                items.append(item)
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+    return {"items": items, "count": len(items), "reconciled": reconciled}
+
+
+def fail_source_item_claim(scope: MemoryScope, items: list[Mapping[str, Any]], *,
+                           error: str, now: float | None = None) -> int:
+    """Return a claimed batch to retryable_failed without recording a commit."""
+    scope = _scope(scope)
+    path = _path(scope)
+    if not path.exists() or not items:
+        return 0
+    timestamp = time.time() if now is None else float(now)
+    message = _text(error, required=True, limit=128)
+    updated = 0
+    with _lock(path), _connect(path) as connection:
+        _initialize(connection)
+        connection.execute("BEGIN IMMEDIATE")
+        try:
+            for item in items:
+                if not isinstance(item, Mapping):
+                    continue
+                cursor = connection.execute(
+                    """UPDATE source_items SET status='retryable_failed',last_error=?,lease_until=0,
+                       updated_at=?
+                       WHERE store_kind=? AND source_id=? AND source_revision=? AND status='running'""",
+                    (message, timestamp,
+                     _text(item.get("store_kind"), required=True, limit=64),
+                     _text(item.get("source_id"), required=True, limit=512),
+                     _text(item.get("source_revision"), required=True, limit=256)),
+                )
+                updated += int(cursor.rowcount or 0)
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+    return updated
+
+
+def related_dossiers_for_sources(scope: MemoryScope, refs: list[Mapping[str, Any]], *,
+                                 limit: int = 20) -> list[dict[str, Any]]:
+    """Return dossiers that already cite these source identities.
+
+    Titles, aliases and membership lists are presentation only and are not
+    idempotency keys. Callers must use dossier_id plus revision. Evidence
+    prose is never copied.
+    """
+    scope = _scope(scope)
+    if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 50:
+        raise DossierError("invalid_limit")
+    if not isinstance(refs, list) or not refs:
+        return []
+    pairs: list[tuple[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for ref in refs[:MAX_CLAIM_BATCH]:
+        if not isinstance(ref, Mapping):
+            continue
+        kind = str(ref.get("store_kind") or ref.get("reference_kind") or "").strip()
+        source_id = str(ref.get("source_id") or "").strip()
+        if not kind or not source_id:
+            continue
+        pair = (_text(kind, required=True, limit=64), _text(source_id, required=True, limit=512))
+        if pair in seen:
+            continue
+        seen.add(pair)
+        pairs.append(pair)
+    if not pairs:
+        return []
+    path = _path(scope)
+    if not path.exists():
+        return []
+    clauses = " OR ".join("(e.reference_kind=? AND e.source_id=?)" for _ in pairs)
+    params: list[Any] = [item for pair in pairs for item in pair]
+    with _lock(path), _connect(path, readonly=True) as connection:
+        rows = connection.execute(
+            f"""SELECT d.dossier_id,d.title,d.status,d.revision,d.needs_recompute,
+                       COALESCE(u.summary,'') AS summary,e.reference_kind,e.source_id,e.occurrence_id
+                FROM occurrence_evidence e
+                JOIN memberships m ON m.occurrence_id=e.occurrence_id AND m.status='active'
+                JOIN dossiers d ON d.dossier_id=m.dossier_id
+                LEFT JOIN understandings u ON u.understanding_id=d.active_understanding_id
+                WHERE d.status IN ('active','dormant') AND e.valid=1 AND ({clauses})
+                ORDER BY d.updated_at DESC,d.dossier_id""",
+            params,
+        ).fetchall()
+    grouped: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        item = grouped.get(row["dossier_id"])
+        if item is None:
+            if len(grouped) >= limit:
+                continue
+            item = {"dossier_id": row["dossier_id"], "title": row["title"], "status": row["status"],
+                    "revision": int(row["revision"]), "needs_recompute": int(row["needs_recompute"] or 0),
+                    "summary": str(row["summary"] or "")[:320], "matching_source_ids": [],
+                    "occurrence_ids": []}
+            grouped[row["dossier_id"]] = item
+        if row["source_id"] not in item["matching_source_ids"]:
+            item["matching_source_ids"].append(str(row["source_id"]))
+        if row["occurrence_id"] not in item["occurrence_ids"]:
+            item["occurrence_ids"].append(str(row["occurrence_id"]))
+    return list(grouped.values())
 
 
 def begin_maintenance_run(scope: MemoryScope, *, run_id: str, task_id: str,

@@ -129,6 +129,40 @@ def test_success_is_silent_and_commits_checkpoint(sandbox, monkeypatch):
     assert result["result_metadata"]["outcome_code"] == "consolidation_committed"
 
 
+def test_related_dossiers_are_injected_into_maintenance_prompt(sandbox, monkeypatch):
+    from core.agent_runtime import task_manager
+    from core.memory import consolidation_worker, dossiers
+
+    principal = _principal(uid="related-prompt-owner")
+    event_id = _event(principal.uid, suffix="related")
+    from tests.test_memory_dossiers import _create, _op_id, _scope as dossier_scope
+    scope = dossier_scope(uid=principal.uid)
+    dossier_id, _ = _create(scope, title="Existing Topic")
+    occurrence_id = uuid.uuid4().hex
+    dossiers.apply_operations(scope, [
+        {"action": "create_occurrence", "occurrence_id": occurrence_id, "participants": [],
+         "time_certainty": "unknown", "assertion_kind": "user_stated",
+         "evidence": [{"reference_kind": "event", "source_id": event_id, "source_revision": "1"}]},
+        {"action": "attach_occurrence", "dossier_id": dossier_id, "occurrence_id": occurrence_id,
+         "expected_revision": 1},
+    ], operation_id=_op_id(), actor="character", chain="owner_chat")
+    captured = {}
+
+    async def fake_chat(messages, **_kwargs):
+        captured["prompt"] = messages[0]["content"]
+        return "[]"
+
+    _patch_runtime(monkeypatch)
+    monkeypatch.setattr("core.llm_client.chat", fake_chat)
+    task = _task(principal, key="related-prompt")
+    lease = task_manager.claim_next(principal, task_id=task["task_id"], capabilities={"memory.consolidation"})
+    result = asyncio.run(consolidation_worker._run_claimed(principal, lease, _cfg()))
+    assert result["status"] == "succeeded", json.dumps(result, sort_keys=True)
+    assert dossier_id in captured["prompt"]
+    assert "Related dossiers for this batch" in captured["prompt"]
+    assert "not idempotency keys" in captured["prompt"]
+
+
 @pytest.mark.parametrize("control", ["cancel", "pause"])
 def test_running_control_is_honored_before_commit(sandbox, monkeypatch, control):
     from core.agent_runtime import task_manager

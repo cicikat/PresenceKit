@@ -168,3 +168,105 @@ def test_failed_batch_does_not_leave_partial_rows(sandbox):
     with sqlite3.connect(resolve_path(scope, "memory_dossiers")) as connection:
         assert connection.execute("SELECT COUNT(*) FROM dossiers").fetchone()[0] == 0
         assert connection.execute("SELECT COUNT(*) FROM operations").fetchone()[0] == 0
+
+
+def test_claim_is_bounded_stable_and_does_not_use_title_as_key(sandbox):
+    from core.memory import dossiers
+
+    scope = _scope(uid="claim-owner")
+    dossiers.seed_source_items(scope, [
+        {"store_kind": "event", "source_id": "evt-b", "source_revision": "r1",
+         "ingest_sequence": 2, "input_digest": "d2"},
+        {"store_kind": "event", "source_id": "evt-a", "source_revision": "r1",
+         "ingest_sequence": 1, "input_digest": "d1"},
+        {"store_kind": "event", "source_id": "evt-c", "source_revision": "r1",
+         "ingest_sequence": 3, "input_digest": "d3"},
+        {"store_kind": "mid_term", "source_id": "mid-a", "source_revision": "r1",
+         "ingest_sequence": 1, "input_digest": "d4"},
+    ], now=10)
+    first = dossiers.claim_source_items(scope, limit=2, task_id="a" * 32, now=20)
+    assert first["count"] == 2
+    assert [item["source_id"] for item in first["items"]] == ["evt-a", "evt-b"]
+    assert all(item["status"] == "running" and item["task_id"] == "a" * 32 for item in first["items"])
+    leftover = dossiers.list_source_items(scope, status="pending")
+    assert leftover["total"] == 2
+    second = dossiers.claim_source_items(scope, limit=10, now=21)
+    assert [item["source_id"] for item in second["items"]] == ["evt-c", "mid-a"]
+    assert dossiers.list_source_items(scope, status="pending")["total"] == 0
+
+
+def test_related_dossiers_follow_source_ids_not_titles(sandbox):
+    from core.memory import dossiers
+
+    scope = _scope(uid="related-owner")
+    event_id = "related-event"
+    assert _event(scope, event_id).ok
+    dossier_id, _ = _create(scope, title="Shared Title")
+    other_id, _ = _create(scope, title="Shared Title")
+    occurrence_id = uuid.uuid4().hex
+    dossiers.apply_operations(scope, [
+        {"action": "create_occurrence", "occurrence_id": occurrence_id, "participants": [],
+         "time_certainty": "unknown", "assertion_kind": "user_stated",
+         "evidence": [{"reference_kind": "event", "source_id": event_id, "source_revision": "1"}]},
+        {"action": "attach_occurrence", "dossier_id": dossier_id, "occurrence_id": occurrence_id,
+         "expected_revision": 1},
+    ], operation_id=_op_id(), actor="character", chain="owner_chat")
+    related = dossiers.related_dossiers_for_sources(scope, [
+        {"store_kind": "event", "source_id": event_id},
+    ])
+    assert [item["dossier_id"] for item in related] == [dossier_id]
+    assert related[0]["revision"] >= 2
+    assert event_id in related[0]["matching_source_ids"]
+    assert other_id not in {item["dossier_id"] for item in related}
+
+
+def test_expired_lease_reconciles_from_receipt_or_releases(sandbox):
+    from core.memory import dossiers
+    from core.memory.path_resolver import resolve_path
+
+    scope = _scope(uid="lease-owner")
+    dossiers.seed_source_items(scope, [
+        {"store_kind": "event", "source_id": "lease-a", "source_revision": "r1",
+         "ingest_sequence": 1, "input_digest": "d1"},
+        {"store_kind": "event", "source_id": "lease-b", "source_revision": "r1",
+         "ingest_sequence": 2, "input_digest": "d2"},
+    ], now=1)
+    claimed = dossiers.claim_source_items(scope, limit=2, lease_seconds=10, now=100)
+    assert claimed["count"] == 2
+    with sqlite3.connect(resolve_path(scope, "memory_dossiers")) as connection:
+        connection.execute(
+            "INSERT INTO processing_commits VALUES(?,?,?,?,?,?,?)",
+            ("c" * 32, "o" * 32, "event", "lease-a", "r1", 1, 100),
+        )
+        connection.commit()
+    recovered = dossiers.reconcile_source_item_leases(scope, now=200)
+    assert recovered["committed"] == 1
+    assert recovered["released"] == 1
+    listed = {item["source_id"]: item for item in dossiers.list_source_items(scope, store_kind="event")["items"]}
+    assert listed["lease-a"]["status"] == "committed"
+    assert listed["lease-a"]["operation_id"] == "o" * 32
+    assert listed["lease-b"]["status"] == "retryable_failed"
+    assert listed["lease-b"]["last_error"] == "lease_expired"
+    retry = dossiers.claim_source_items(scope, limit=10, now=201)
+    assert [item["source_id"] for item in retry["items"]] == ["lease-b"]
+
+
+def test_failed_commit_does_not_mark_claimed_items_committed(sandbox):
+    from core.memory import dossiers
+
+    scope = _scope(uid="fail-claim-owner")
+    dossiers.seed_source_items(scope, [
+        {"store_kind": "event", "source_id": "fail-a", "source_revision": "r1",
+         "ingest_sequence": 1, "input_digest": "d1"},
+    ], now=1)
+    claimed = dossiers.claim_source_items(scope, limit=1, now=2)
+    with pytest.raises(dossiers.DossierError, match="invalid_operation"):
+        dossiers.apply_operations(scope, [{"action": "not-a-handler"}],
+                                  operation_id=_op_id(), actor="character", chain="maintenance",
+                                  processing_items=claimed["items"])
+    released = dossiers.fail_source_item_claim(scope, claimed["items"], error="commit_error", now=3)
+    assert released == 1
+    listed = dossiers.list_source_items(scope, store_kind="event")
+    assert listed["items"][0]["status"] == "retryable_failed"
+    assert listed["items"][0]["last_error"] == "commit_error"
+    assert dossiers.operation_receipt(scope, "f" * 32) is None

@@ -432,3 +432,83 @@ def test_rollback_reopens_evidence_receipts_without_touching_source(sandbox):
     assert result["status"] == "rolled_back"
     assert result["reopened"] == 1
     assert dossiers.maintenance_status(scope)["backlog"] == 1
+
+
+def test_claim_batch_is_bounded_and_returns_related_dossier_ids(sandbox):
+    from core.memory import dossiers, history_reconciliation
+    from core.memory.event_store import append_event
+    from core.memory.scope import MemoryScope
+    import uuid
+
+    scope = MemoryScope.reality_scope("history-claim-owner", TEST_CHAR_ID)
+    secret = "PRIVATE_SOURCE_BODY_2593"
+    assert append_event(scope, {
+        "event_id": "history-claim-event", "turn_id": "history-claim-turn", "seq": 1,
+        "occurred_at": 1.0, "ingested_at": 2.0, "uid": scope.uid,
+        "char_id": scope.character_id, "realm": "reality", "kind": "chat",
+        "actor": "user", "channel": "test", "source": "fixture",
+        "visible_text": secret, "memory_text": secret,
+    }).ok
+    history_reconciliation.create_manifest(scope, now=1)
+    dossier_id = uuid.uuid4().hex
+    occurrence_id = uuid.uuid4().hex
+    dossiers.apply_operations(scope, [
+        {"action": "create_dossier", "dossier_id": dossier_id, "title": "Shared Title",
+         "aliases": [], "description": ""},
+        {"action": "create_occurrence", "occurrence_id": occurrence_id, "participants": [],
+         "time_certainty": "unknown", "assertion_kind": "user_stated",
+         "evidence": [{"reference_kind": "event", "source_id": "history-claim-event",
+                       "source_revision": "1"}]},
+        {"action": "attach_occurrence", "dossier_id": dossier_id, "occurrence_id": occurrence_id,
+         "expected_revision": 1},
+    ], operation_id=uuid.uuid4().hex, actor="character", chain="owner_chat")
+    claimed = history_reconciliation.claim_batch(scope, batch_size=1, store_kind="event", now=2)
+    assert claimed["count"] == 1
+    assert claimed["items"][0]["source_id"] == "history-claim-event"
+    assert claimed["items"][0]["status"] == "running"
+    assert [item["dossier_id"] for item in claimed["related_dossiers"]] == [dossier_id]
+    assert secret not in str(claimed)
+    leftover = dossiers.list_source_items(scope, store_kind="event", status="pending")
+    assert leftover["total"] == 0
+
+
+def test_derived_commit_write_failure_releases_claim_without_receipt(sandbox, monkeypatch):
+    from core.memory import dossiers, history_reconciliation
+    from core.memory.path_resolver import resolve_path
+    from core.memory.scope import MemoryScope
+    import json
+
+    scope = MemoryScope.reality_scope("history-fail-owner", TEST_CHAR_ID)
+    mid_path = resolve_path(scope, "mid_term")
+    mid_path.parent.mkdir(parents=True, exist_ok=True)
+    mid_path.write_text(json.dumps({"events": [{"mid_id": "mid-fail", "summary": "fixture"}]}), encoding="utf-8")
+    history_reconciliation.create_manifest(scope, now=1)
+    monkeypatch.setattr("core.memory.dossiers.apply_operations", lambda *args, **kwargs: (_ for _ in ()).throw(OSError("disk")))
+    result = history_reconciliation._commit_derived_source_batch(
+        scope, "mid_term", {"source_revision": "unused", "next_offset": 0},
+        backup={"verified": True}, batch_size=10,
+    )
+    assert result["status"] == "retryable_failed"
+    listed = dossiers.list_source_items(scope, store_kind="mid_term")
+    assert listed["items"][0]["status"] == "retryable_failed"
+    assert listed["items"][0]["operation_id"] == ""
+    assert dossiers.operation_receipt(scope, "a" * 32) is None
+
+
+def test_expired_running_batch_is_reconciled_before_retry(sandbox):
+    from core.memory import dossiers, history_reconciliation
+    from core.memory.scope import MemoryScope
+
+    scope = MemoryScope.reality_scope("history-reconcile-owner", TEST_CHAR_ID)
+    dossiers.seed_source_items(scope, [
+        {"store_kind": "event", "source_id": "hist-lease", "source_revision": "r1",
+         "ingest_sequence": 1, "input_digest": "d1"},
+    ], now=1)
+    first = history_reconciliation.claim_batch(scope, batch_size=1, store_kind="event", now=10)
+    assert first["count"] == 1
+    recovered = dossiers.reconcile_source_item_leases(scope, now=10 + 901)
+    assert recovered["released"] == 1
+    retry = history_reconciliation.claim_batch(scope, batch_size=1, store_kind="event", now=920)
+    assert retry["count"] == 1
+    assert retry["items"][0]["source_id"] == "hist-lease"
+    assert retry["reconciled"]["released"] == 0

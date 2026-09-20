@@ -453,25 +453,75 @@ def _derived_source_items(scope: MemoryScope, store_kind: str, source_revision: 
     return result
 
 
+def claim_batch(scope: MemoryScope, *, batch_size: int = 10, store_kind: str = "",
+                task_id: str = "", now: float | None = None) -> dict[str, Any]:
+    """Claim a bounded history batch and inspect already-linked dossiers.
+
+    Titles, aliases and membership lists are not used as idempotency keys.
+    The lookup only returns dossier IDs, revisions and matching source IDs.
+    """
+    from core.memory import dossiers
+    claimed = dossiers.claim_source_items(
+        scope, limit=max(1, int(batch_size)), store_kind=store_kind, task_id=task_id, now=now,
+    )
+    related = dossiers.related_dossiers_for_sources(scope, claimed["items"])
+    return {**claimed, "related_dossiers": related}
+
+
+def _item_store_kind(store_kind: str) -> str:
+    return "event" if store_kind == "event_store" else store_kind
+
+
 def _commit_derived_source_batch(scope: MemoryScope, store_kind: str, item: dict[str, Any],
                                  *, backup: dict[str, Any], batch_size: int) -> dict[str, Any]:
     if backup.get("verified") is not True:
         return {"status": "deferred", "reason": "backup_not_verified"}
-    records = _derived_source_items(scope, store_kind, str(item.get("source_revision") or ""))
-    offset = max(0, int(item.get("next_offset") or 0))
-    batch = records[offset:offset + max(1, int(batch_size))]
-    if not batch:
-        return {"status": "completed", "next_offset": offset, "total": len(records), "processed": 0}
     from core.memory import dossiers
+    item_kind = _item_store_kind(store_kind)
+    claimed = claim_batch(scope, batch_size=max(1, int(batch_size)), store_kind=item_kind)
+    batch = claimed["items"]
+    related = claimed["related_dossiers"]
+    if not batch:
+        return {"status": "completed", "next_offset": int(item.get("next_offset") or 0),
+                "total": int(item.get("total") or 0), "processed": 0,
+                "related_dossiers": related, "reconciled": claimed["reconciled"]}
+    processing_items = []
+    for row in batch:
+        outcomes = row.get("semantic_outcomes") or ["evidence_only"]
+        processing_items.append({
+            "store_kind": row["store_kind"], "source_id": row["source_id"],
+            "source_revision": row["source_revision"], "ingest_sequence": row["ingest_sequence"],
+            "input_digest": row["input_digest"], "semantic_outcomes": outcomes,
+        })
     operation_id = hashlib.sha256(
-        f"history:{scope.uid}:{scope.character_id}:{store_kind}:{item.get('source_revision')}:{offset}".encode()
+        (
+            f"history:{scope.uid}:{scope.character_id}:{item_kind}:"
+            + ":".join(f"{row['source_id']}:{row['source_revision']}" for row in batch)
+        ).encode("utf-8")
     ).hexdigest()[:32]
-    dossiers.apply_operations(scope, [], operation_id=operation_id,
-                              actor=f"character:{scope.character_id}", chain="maintenance",
-                              processing_items=batch)
-    next_offset = offset + len(batch)
-    return {"status": "committed" if next_offset < len(records) else "completed",
-            "next_offset": next_offset, "total": len(records), "processed": len(batch)}
+    try:
+        result = dossiers.apply_operations(
+            scope, [], operation_id=operation_id,
+            actor=f"character:{scope.character_id}", chain="maintenance",
+            processing_items=processing_items,
+        )
+    except (OSError, ValueError, TypeError, sqlite3.Error, dossiers.DossierError) as exc:
+        dossiers.fail_source_item_claim(scope, batch, error=type(exc).__name__[:128])
+        return {"status": "retryable_failed", "reason": type(exc).__name__,
+                "processed": 0, "related_dossiers": related,
+                "reconciled": claimed["reconciled"]}
+    leftover = 0
+    for status in ("pending", "retryable_failed", "running"):
+        leftover += int(dossiers.list_source_items(
+            scope, store_kind=item_kind, status=status, limit=1,
+        )["total"])
+    processed = int(result.get("processed") or len(batch))
+    next_offset = int(item.get("next_offset") or 0) + processed
+    total = next_offset + leftover
+    return {"status": "completed" if leftover == 0 else "committed",
+            "next_offset": next_offset, "total": total, "processed": processed,
+            "operation_id": operation_id, "related_dossiers": related,
+            "reconciled": claimed["reconciled"]}
 
 
 async def consolidate_imported_events(scope: MemoryScope, *, preset: str = "便宜小模型grok-see") -> dict[str, Any]:

@@ -740,8 +740,10 @@ content-free store-level manifest and status ledger are created with
 `GET /observability/memory-history-reconciliation`. Creating a manifest also
 seeds the scoped dossier `source_items` table with one pending receipt per
 stable source identity; it never copies source prose. Status reports both
-store-level counts and `source_item_counts`. Bounded item receipts and
-processing reasons are read with `GET /memory/history-source-items`
+store-level counts and `source_item_counts`. Bounded claims mark a stably
+ordered slice `running` with a recoverable lease; related dossiers are looked
+up by evidence ID, not title. Bounded item receipts and processing reasons are
+read with `GET /memory/history-source-items`
 (`memory.read`). Admin pause/resume/dry-run uses
 `POST /memory-history-reconciliation/control`; `action=freeze` pins the
 manifest revision before apply, and `action=apply` additionally

@@ -171,8 +171,10 @@ def _identity_context(char_id: str) -> tuple[str, str]:
     return text, hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def _prompt(identity: str, current: list[dict[str, Any]], events: list[dict[str, Any]]) -> str:
+def _prompt(identity: str, current: list[dict[str, Any]], events: list[dict[str, Any]],
+            related: list[dict[str, Any]] | None = None) -> str:
     public_events = [{key: item[key] for key in ("source_id", "ingest_sequence", "occurred_at", "actor", "kind", "text")} for item in events]
+    related = related or []
     return (
         "You are the same character maintaining your derived topic-memory dossiers. "
         "Return only a JSON array of legal operations accepted by update_memory_dossier. "
@@ -180,8 +182,12 @@ def _prompt(identity: str, current: list[dict[str, Any]], events: list[dict[str,
         "assistant suggestions, observations, user statements and inference distinct. "
         "Do not turn feelings into user facts. Duplicate mentions of one experience must "
         "share one occurrence; if uncertain, leave the material evidence_only by returning []. "
-        "Every edit of an existing dossier needs its current expected_revision. Causes are tentative.\n"
+        "Every edit of an existing dossier needs its current expected_revision. Causes are tentative. "
+        "Related dossiers already cite this batch's evidence: reuse those dossier_id values. "
+        "Titles, aliases and member lists are presentation only and are not idempotency keys.\n"
         f"Character context (frozen): {identity}\n"
+        "Related dossiers for this batch's evidence: " +
+        json.dumps(related, ensure_ascii=False, separators=(",", ":")) + "\n"
         "Current dossiers (bounded; IDs and revisions are authoritative): " +
         json.dumps(current, ensure_ascii=False, separators=(",", ":")) + "\nEvents: " +
         json.dumps(public_events, ensure_ascii=False, separators=(",", ":"))
@@ -237,7 +243,8 @@ async def _run_claimed(principal: TaskPrincipal, lease, cfg: dict[str, Any]) -> 
     identity, identity_revision = _identity_context(principal.char_id)
     current = [{**item, "summary": str(item.get("summary") or "")[:320]}
                for item in dossiers.search(scope, "", limit=20)]
-    prompt = _prompt(identity, current, events)
+    related = dossiers.related_dossiers_for_sources(scope, events)
+    prompt = _prompt(identity, current, events, related)
     model_info = resolve_category_info("consolidation", char_id=principal.char_id)
     preset = cfg["background_preset"] or str(model_info.get("effective_preset") or "")
     model = str(model_info.get("model") or "")

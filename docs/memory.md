@@ -15,9 +15,11 @@ the scoped dossier store, resumable store-level manifest state, verified
 offline-backup gate, recovery-drill helper, and an admin-only bounded event-log
 apply endpoint. Creating a dry-run manifest enumerates event_store / event_log /
 mid_term / episodic / storyline / identity identities into `source_items`
-without copying prose. The apply path can admit one same-scope dossier pass using
-the configured cheap `便宜小模型grok-see` preset; semantic calibration and
-production first-night apply remain separately gated.
+without copying prose. Bounded claims take a stably ordered slice, inspect
+already-linked dossiers by evidence ID (not title), and recover expired leases
+from durable receipts before retry. The apply path can admit one same-scope
+dossier pass using the configured cheap `便宜小模型grok-see` preset; semantic
+calibration and production first-night apply remain separately gated.
 
 ## 资料接续回执（2026-09-13）
 
