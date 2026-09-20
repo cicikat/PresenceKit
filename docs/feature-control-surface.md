@@ -1,4 +1,4 @@
-# 功能控制面事实清单（最后核对：2026-09-19 257 runtime recovery）
+# 功能控制面事实清单（最后核对：2026-09-21 261 runtime warnings）
 
 ## 天气查询直连（2026-09-18）
 
@@ -337,7 +337,12 @@ must not be collapsed into one health claim.
 「系统状态」是只读摘要页：`/status` supplies runtime/data-environment basics;
 `/model-presets`, `/proxy`, `/settings/relay`, `/scheduler/status`,
 `/settings/feature-flags`, `/tts-config`, and the bounded error-log query supply
-the remaining summaries. Each card shows its current value, source, effective
+the remaining summaries. The logs page also exposes a separate admin-only
+`GET /logs/runtime-warnings` window over WARNING+ JSONL (UTC start/end, level,
+logger substring, offset/limit). It reports retention, truncated days, and
+write/read faults; an unreadable rotated file is never shown as “no warnings”.
+Clearing still only empties `error.log`. Desktop/mobile do not consume this
+endpoint; no new client settings. Each card shows its current value, source, effective
 scope, refresh result, and a conservative note when configuration does not prove
 external health. Editing is routed to 「高级设置 → 运行配置」, 「高级设置 →
 TTS 配置」, Model Routing, or Scheduler.

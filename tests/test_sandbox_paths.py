@@ -66,6 +66,8 @@ def test_init_paths_test_mode_sets_env_not_config_yaml(monkeypatch):
         expected_prefix = str(paths._base).replace("\\", "/")
         assert os.environ.get("YEXUAN_DATA_PREFIX") == expected_prefix
     finally:
+        from core.runtime_warning_log import shutdown_runtime_warning_handler
+        shutdown_runtime_warning_handler()
         _sandbox._instance = saved_instance
         monkeypatch.delenv("YEXUAN_DATA_PREFIX", raising=False)
 

@@ -216,7 +216,11 @@ async def judge(event: dict) -> dict:
             raw = raw.strip("`").lstrip("json").strip()
         data = json.loads(raw)
     except (json.JSONDecodeError, ValueError):
-        logger.warning(f"[sensor_judge] 非 JSON 响应 event={event_type}: {raw!r}")
+        logger.warning(
+            "[sensor_judge] 非 JSON 响应 event=%s chars=%s",
+            event_type,
+            len(raw),
+        )
         try:
             from core.api_call_log import append
             append(caller="sensor_judge", purpose="sensor_judge", provider=mc.provider_kind, model=mc.model, duration_ms=int((time.monotonic() - started) * 1000), ok=False, protocol=mc.api_protocol, error_category="response_format")
@@ -227,7 +231,9 @@ async def judge(event: dict) -> dict:
     score = data.get("score")
     if not isinstance(score, int) or not (0 <= score <= 100):
         logger.warning(
-            f"[sensor_judge] score 非法 event={event_type}: score={score!r}"
+            "[sensor_judge] score 非法 event=%s score_type=%s",
+            event_type,
+            type(score).__name__,
         )
         return {**dict(_FAILURE), "judge_input_prompt": audit_prompt, "judge_output_raw": raw}
     return {

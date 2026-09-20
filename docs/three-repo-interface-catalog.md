@@ -371,6 +371,7 @@ Flutter/Android 字段或设置面。Agent Runtime 是同一角色的 durable / 
 | 路由族 | 用途 | 状态 |
 |---|---|---|
 | `/status`、`/system/health`、`/system/logs`、`/system/reload`、`/system/data-path` | 启动、健康、日志、数据根和热重载 | `admin-only` / read scope；客户端只消费明确允许的诊断字段 |
+| `GET /logs/runtime-warnings` | WARNING+ 轮转 JSONL 只读查询（UTC 时间窗 / 级别 / logger / 分页） | `current`；`admin`；管理面错误日志页消费；不接受文件路径；桌面/手机不消费 |
 | `/observability/*`、`/observe/*`、`/debug/*`、`/provenance/*` | API 调用、stimulus、runtime signal、recall、来源和落盘追溯 | `current`；新增落盘状态必须增加只读观测端点 |
 | `/observability/dream-settings` | Dream settings 归属：effective char、canonical 是否存在、legacy 资格 | `current`；`state.read`，无正文；桌面/手机不消费 |
 | `/observability/memory-event-ledger` | Memory Event 双写成功率、失败计数、角色/realm 聚合，以及热路径/来源拒绝计数 | `current`；后端 `state.read` 观测面，进程内脱敏计数，桌面/手机不消费 |

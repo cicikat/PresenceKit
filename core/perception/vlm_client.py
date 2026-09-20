@@ -135,7 +135,7 @@ async def describe_with_status(image_bytes: bytes, context_hint: str = "") -> tu
     except Exception as exc:
         from core.api_call_log import append
         append(caller="visual_perception", purpose="shadow_observation", provider=str(cfg.get("provider") or "openai_compatible"), model=model, duration_ms=int((time.perf_counter() - started_at) * 1000), ok=False, output_hint=type(exc).__name__)
-        logger.warning("[vlm] describe failed: %s", exc)
+        logger.warning("[vlm] describe failed type=%s", type(exc).__name__)
         return None, "error"
 
 

@@ -1,18 +1,48 @@
 
-      <h1 class="page-title">错误日志</h1>
+      <h1 class="page-title" data-i18n="logs.title">错误日志</h1>
+      <p class="admin-source-hint" data-i18n="logs.subtitle">traceback 错误日志与 WARNING+ 运行日志分开展示；清空只作用于 error.log。</p>
       <div class="card">
         <div class="card-header">
-          <h3>最近日志</h3>
+          <h3 data-i18n="logs.recent">最近错误日志</h3>
           <div class="admin-card-actions admin-inline-038">
             <select id="log-lines" onchange="loadLogs()" class="admin-inline-197">
-              <option value="100">100 行</option>
-              <option value="200" selected>200 行</option>
-              <option value="500">500 行</option>
+              <option value="100" data-i18n="logs.rows_100">100 行</option>
+              <option value="200" selected data-i18n="logs.rows_200">200 行</option>
+              <option value="500" data-i18n="logs.rows_500">500 行</option>
             </select>
-            <button class="btn btn-ghost btn-sm" data-action="loadLogs">刷新</button>
-            <button class="btn btn-danger btn-sm" data-action="clearLogs">清空日志</button>
+            <button class="btn btn-ghost btn-sm" data-action="loadLogs" data-i18n="common.refresh">刷新</button>
+            <button class="btn btn-danger btn-sm" data-action="clearLogs" data-i18n="logs.clear">清空错误日志</button>
           </div>
         </div>
-        <div class="log-box" id="log-box">加载中…</div>
+        <div class="log-box" id="log-box" data-i18n="common.loading">加载中…</div>
         <div id="log-meta" class="admin-inline-090"></div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <h3 data-i18n="logs.runtime.title">运行 WARNING+</h3>
+          <div class="admin-card-actions admin-inline-038">
+            <button class="btn btn-ghost btn-sm" data-action="reloadRuntimeWarnings" data-i18n="common.refresh">刷新</button>
+          </div>
+        </div>
+        <p class="admin-inline-087" data-i18n="logs.runtime.hint">只读查询当前沙箱下的轮转 JSONL。时间窗为 UTC。文件不可读时会单独标明，不会显示成没有 warning。</p>
+        <div class="form-row col-2">
+          <label class="field"><span data-i18n="logs.runtime.start">开始（UTC）</span><input type="datetime-local" id="rw-start"></label>
+          <label class="field"><span data-i18n="logs.runtime.end">结束（UTC）</span><input type="datetime-local" id="rw-end"></label>
+          <label class="field"><span data-i18n="logs.runtime.level">级别</span>
+            <select id="rw-level">
+              <option value="" data-i18n="logs.runtime.level_all">全部</option>
+              <option value="WARNING">WARNING</option>
+              <option value="ERROR">ERROR</option>
+              <option value="CRITICAL">CRITICAL</option>
+            </select>
+          </label>
+          <label class="field"><span data-i18n="logs.runtime.logger">Logger</span><input type="text" id="rw-logger" data-i18n-placeholder="logs.runtime.logger_placeholder" placeholder="例如 core.scheduler"></label>
+        </div>
+        <div id="rw-meta" class="admin-inline-090"></div>
+        <div id="rw-faults" class="admin-inline-090"></div>
+        <div class="log-box" id="rw-box" data-i18n="common.loading">加载中…</div>
+        <div class="admin-card-actions admin-inline-038">
+          <button class="btn btn-ghost btn-sm" data-action="runtimeWarningsPrev" data-i18n="logs.runtime.prev">上一页</button>
+          <button class="btn btn-ghost btn-sm" data-action="runtimeWarningsNext" data-i18n="logs.runtime.next">下一页</button>
+        </div>
       </div>

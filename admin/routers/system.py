@@ -67,6 +67,43 @@ async def get_logs(lines: int = 200, auth=Depends(require_scopes("admin"))):
         return {"error": str(e)}
 
 
+@router.get("/logs/runtime-warnings", summary="按时间窗查询 WARNING+ 运行日志")
+async def get_runtime_warnings(
+    start: str = "",
+    end: str = "",
+    level: str = "",
+    logger: str = "",
+    offset: int = 0,
+    limit: int = 50,
+    auth=Depends(require_scopes("admin")),
+):
+    from fastapi import HTTPException
+
+    from core.runtime_warning_log import parse_iso_datetime, query_runtime_warnings
+
+    if offset < 0:
+        raise HTTPException(status_code=422, detail="offset 不能为负")
+    if limit < 1 or limit > 200:
+        raise HTTPException(status_code=422, detail="limit 必须在 1-200")
+    start_dt = parse_iso_datetime(start) if start else None
+    end_dt = parse_iso_datetime(end) if end else None
+    if start and start_dt is None:
+        raise HTTPException(status_code=422, detail="start 不是合法 ISO 时间")
+    if end and end_dt is None:
+        raise HTTPException(status_code=422, detail="end 不是合法 ISO 时间")
+    try:
+        return query_runtime_warnings(
+            start=start_dt,
+            end=end_dt,
+            level=level,
+            logger_name=logger,
+            offset=offset,
+            limit=limit,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
 @router.delete("/logs", summary="清空错误日志")
 async def clear_logs(auth=Depends(require_scopes("admin"))):
     try:

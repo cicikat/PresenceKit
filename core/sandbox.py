@@ -39,6 +39,8 @@ def init_paths(mode: str | None = None, test_session_id: str | None = None) -> D
             f"[sandbox] TEST 模式已激活 session={_instance.test_session_id} "
             f"数据根目录={_instance._base}"
         )
+    from core.runtime_warning_log import install_runtime_warning_handler
+    install_runtime_warning_handler()
     return _instance
 
 

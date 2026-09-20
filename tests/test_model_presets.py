@@ -553,3 +553,33 @@ async def test_sensor_judge_uses_sensor_judge_preset_model(monkeypatch):
         f"LLM call must use intent preset model 'model-B', got {captured['model']!r}"
     )
     assert result["score"] == 55
+
+
+@pytest.mark.asyncio
+async def test_sensor_judge_non_json_warning_omits_raw_body(monkeypatch, caplog):
+    import core.scheduler.sensor_judge as sj
+    from core.model_registry import ModelClient
+
+    class FakeResponse:
+        assistant_text = '{"not json secret-window-title": true'
+
+    async def fake_create(*_args, **_kwargs):
+        return FakeResponse()
+
+    fake_mc = ModelClient(
+        name="intent-preset",
+        provider_kind="deepseek",
+        model="model-B",
+        tool_call_mode="function_calling",
+        prompt_style="narrative",
+        params={},
+        client=object(),
+    )
+    monkeypatch.setattr(sj, "get_model_client", lambda _cat: fake_mc)
+    monkeypatch.setattr("core.llm_protocol.create", fake_create)
+    caplog.set_level("WARNING", logger="core.scheduler.sensor_judge")
+    result = await sj.judge({"type": "TEST", "narrative": "x", "context": {}})
+    assert result["intent_tier"] == "drop"
+    text = "\n".join(record.getMessage() for record in caplog.records)
+    assert "chars=" in text
+    assert "secret-window-title" not in text

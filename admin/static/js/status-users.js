@@ -300,27 +300,151 @@ async function removeBlacklist(uid) {
 // ══════════════════════════════════════════════════════════
 //  Logs page
 // ══════════════════════════════════════════════════════════
+let _runtimeWarningOffset = 0;
+const _RUNTIME_WARNING_LIMIT = 50;
+
+function _runtimeWarningIso(id) {
+  const raw = document.getElementById(id)?.value || '';
+  if (!raw) return '';
+  return raw.length === 16 ? `${raw}:00Z` : `${raw}Z`;
+}
+
+function _formatRuntimeWarningRow(item) {
+  const ts = item.ts || '';
+  const level = item.level || '';
+  const loggerName = item.logger || '';
+  const message = item.message || '';
+  const extra = item.exc ? `\n${item.exc}` : '';
+  return `${ts} [${level}] ${loggerName}: ${message}${extra}`;
+}
+
+function _bindRuntimeWarningFilters() {
+  ['rw-start', 'rw-end', 'rw-level', 'rw-logger'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el || el.dataset.rwBound === 'true') return;
+    el.addEventListener('change', () => {
+      _runtimeWarningOffset = 0;
+      loadRuntimeWarnings();
+    });
+    el.dataset.rwBound = 'true';
+  });
+}
+
 async function loadLogs() {
   const lines = document.getElementById('log-lines').value;
   try {
     const d = await api('GET', `/logs?lines=${lines}`);
     const box = document.getElementById('log-box');
-    box.textContent = d.logs || '（日志为空）';
+    box.textContent = d.logs || t('dynamic.logs.empty', '（日志为空）');
     box.scrollTop = box.scrollHeight;
     if (d.total_lines !== undefined) {
-      document.getElementById('log-meta').textContent = `共 ${d.total_lines} 行，显示最后 ${lines} 行`;
+      document.getElementById('log-meta').textContent = t(
+        'logs.meta',
+        '共 {total} 行，显示最后 {lines} 行',
+        {total: d.total_lines, lines},
+      );
     }
-  } catch(e) { toast('加载日志失败: ' + e.message, 'err'); }
+  } catch(e) { toast(t('dynamic.logs.load_failed', '加载日志失败: {error}', {error: e.message}), 'err'); }
+  _bindRuntimeWarningFilters();
+  loadRuntimeWarnings();
 }
 
 async function clearLogs() {
-  if (!confirm('确定清空错误日志吗？')) return;
+  if (!confirm(t('dynamic.logs.clear_confirm', '确定清空错误日志吗？'))) return;
   try {
     const d = await api('DELETE', '/logs');
     toast(d.message, 'ok');
-    document.getElementById('log-box').textContent = '（日志已清空）';
+    document.getElementById('log-box').textContent = t('dynamic.logs.cleared', '（日志已清空）');
     document.getElementById('log-meta').textContent = '';
-  } catch(e) { toast('清空失败: ' + e.message, 'err'); }
+  } catch(e) { toast(t('dynamic.logs.clear_failed', '清空失败: {error}', {error: e.message}), 'err'); }
+}
+
+async function loadRuntimeWarnings() {
+  const box = document.getElementById('rw-box');
+  const meta = document.getElementById('rw-meta');
+  const faults = document.getElementById('rw-faults');
+  if (!box) return;
+  const params = new URLSearchParams();
+  const start = _runtimeWarningIso('rw-start');
+  const end = _runtimeWarningIso('rw-end');
+  const level = document.getElementById('rw-level')?.value || '';
+  const loggerName = document.getElementById('rw-logger')?.value.trim() || '';
+  if (start) params.set('start', start);
+  if (end) params.set('end', end);
+  if (level) params.set('level', level);
+  if (loggerName) params.set('logger', loggerName);
+  params.set('offset', String(_runtimeWarningOffset));
+  params.set('limit', String(_RUNTIME_WARNING_LIMIT));
+  try {
+    const d = await api('GET', `/logs/runtime-warnings?${params.toString()}`);
+    const items = Array.isArray(d.items) ? d.items : [];
+    box.textContent = items.length
+      ? items.map(_formatRuntimeWarningRow).join('\n\n')
+      : t('logs.runtime.empty', '（当前时间窗没有 WARNING+ 记录）');
+    const unread = (d.unreadable_days || []).length;
+    const truncated = (d.truncated_days || []).length;
+    meta.textContent = t(
+      'logs.runtime.meta',
+      '保留 {from} 至 {to}（{days} 天，UTC）；共 {total} 条，显示 {offset}-{end}；截断日 {truncated}；不可读日 {unreadable}',
+      {
+        from: d.retention_from || '—',
+        to: d.retention_to || '—',
+        days: d.retention_days || 14,
+        total: d.total || 0,
+        offset: d.offset || 0,
+        end: (d.offset || 0) + items.length,
+        truncated,
+        unreadable: unread,
+      },
+    );
+    const faultNotes = [];
+    if (unread) {
+      faultNotes.push(t(
+        'logs.runtime.unreadable',
+        '有 {count} 个轮转文件不可读，不能当作没有 warning。{error}',
+        {count: unread, error: d.unreadable_error || ''},
+      ));
+    }
+    if (truncated) {
+      faultNotes.push(t(
+        'logs.runtime.truncated',
+        '容量上限已截断：{days}',
+        {days: (d.truncated_days || []).join(', ')},
+      ));
+    }
+    if ((d.dropped_records || 0) > 0) {
+      faultNotes.push(t(
+        'logs.runtime.dropped',
+        '写入失败丢弃 {count} 条',
+        {count: d.dropped_records},
+      ));
+    }
+    faults.textContent = faultNotes.join(' · ');
+    window._runtimeWarningHasMore = Boolean(d.has_more);
+  } catch(e) {
+    box.textContent = t('logs.runtime.load_failed', '加载运行日志失败: {error}', {error: e.message});
+    if (meta) meta.textContent = '';
+    if (faults) faults.textContent = t('logs.runtime.query_failed_not_empty', '查询失败，不能当作没有 warning。');
+    window._runtimeWarningHasMore = false;
+    toast(t('logs.runtime.load_failed', '加载运行日志失败: {error}', {error: e.message}), 'err');
+  }
+}
+
+function reloadRuntimeWarnings() {
+  _runtimeWarningOffset = 0;
+  loadRuntimeWarnings();
+}
+
+function runtimeWarningsPrev() {
+  if (_runtimeWarningOffset <= 0) return;
+  _runtimeWarningOffset = Math.max(0, _runtimeWarningOffset - _RUNTIME_WARNING_LIMIT);
+  loadRuntimeWarnings();
+}
+
+function runtimeWarningsNext() {
+  if (window._runtimeWarningHasMore !== true) return;
+  _runtimeWarningOffset += _RUNTIME_WARNING_LIMIT;
+  loadRuntimeWarnings();
 }
 
 // ══════════════════════════════════════════════════════════

@@ -107,6 +107,7 @@ REGISTRY: dict[str, PathMeta] = {
 
     # ── forensic: 日志 / 观测 / DLQ，业务可丢 ────────────────────────────────
     "error_log":              PathMeta("forensic",  "shared",          "global",        "ignore"),
+    "runtime_warning_log":    PathMeta("forensic",  "shared",          "global",        "ignore"),
     "dead_letter_queue":      PathMeta("forensic",  "shared",          "global",        "ignore"),
     "fixation_log":           PathMeta("forensic",  "shared",          "global",        "ignore"),
     "trigger_state_log":      PathMeta("forensic",  "shared",          "global",        "ignore"),
@@ -377,6 +378,7 @@ RETENTION_POLICY: dict[str, str] = {
     "image_cache_dir":   "age+lru    max_age_days=30, max_files=500   sha256 视觉缓存；live-ref 守卫，条数+龄双重 GC",
     # forensic — 可丢，不影响业务
     "dead_letter_queue": "count-cap  max_files=200       超出时删最旧；保持可监控但不无限增长",
+    "runtime_warning_log": "age-gc+size-cap  max_age_days=14, max_day_bytes=8MiB, max_total_bytes=48MiB  仅新增 WARNING+ JSONL；不触碰 error.log",
     # canonical — 仅删 done 项，活跃数据不受影响
     "reminders":         "legacy JSON archive; Runtime schedules are the authority (256 E). prune is a no-op on the live store",
     # archive — loader 不读，可无损删旧

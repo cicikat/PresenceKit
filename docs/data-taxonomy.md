@@ -97,6 +97,7 @@ data/
 ├── cache/image_cache/
 ├── logs/
 │   ├── error.log
+│   ├── runtime_warnings-YYYY-MM-DD.jsonl  # WARNING+ 轮转；保留 14 天
 │   ├── dead_letter_queue/
 │   ├── fixation.jsonl
 │   ├── trigger_state.jsonl

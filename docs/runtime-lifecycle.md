@@ -29,6 +29,8 @@ main.py
 |
 +-- 加载配置
 |
++-- 在 sandbox 路径已知后安装 WARNING+ JSONL handler
+|
 +-- 校验 admin authentication
 |
 +-- 加载 active character
@@ -51,6 +53,8 @@ main.py
 |
 +-- 启动 HTTP/admin service
 ```
+
+WARNING+ 运行日志：`core.runtime_warning_log` 在 `sandbox.init_paths()` 之后安装（生产 `main._init_modules` 在首次 `get_paths()` 后再确保一次）。只持久化 WARNING/ERROR/CRITICAL，按日 JSONL，UTC 时间戳，默认保留 14 天并有单日/总量上限。安装幂等；进程关闭时 flush/close。早于 sandbox 初始化的记录只走控制台 StreamHandler，不写入任何数据目录。写失败只记内存故障计数，不递归进同一 handler，也不阻断聊天。`error.log` traceback 仍由 `core.error_handler` 单独追加，本 handler 不清空或迁移它。管理面 `GET /logs/runtime-warnings` 只读查询当前沙箱文件，不接受路径参数。
 
 ---
 

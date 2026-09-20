@@ -20,7 +20,7 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'v1-259-history-closeout-1';
+const ADMIN_UI_FRAGMENT_VERSION = 'v1-261-runtime-warnings-1';
 
 const ADMIN_PAGE_ALIASES = Object.freeze({memory: 'observe-memory'});
 
@@ -313,7 +313,7 @@ async function goto(page, {reloadFragment = false, fromHistory = false} = {}) {
     'tts-config':     async () => { await Promise.all([loadTtsConfig(), loadSttConfig()]); },
     status:          loadStatus,
     users:           () => { loadUsers(); loadBlacklist(); },
-    logs:            loadLogs,
+    logs:            () => { _runtimeWarningOffset = 0; loadLogs(); },
     'auth-tokens':   () => { loadAuthTokens(); loadChannelToggles(); },
     overview:        loadOverview,
     'model-routing': loadModelRouting,

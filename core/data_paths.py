@@ -389,6 +389,10 @@ class DataPaths:
     def error_log(self) -> Path:
         return self._p("logs", "error.log")
 
+    def runtime_warning_log(self) -> Path:
+        """Daily-rotated WARNING+ JSONL; writers append dated siblings, not this stem."""
+        return self._p("logs", "runtime_warnings.jsonl")
+
     def scheduler_cooldowns(self) -> Path:
         return self._p("scheduler_cooldowns.json")
 

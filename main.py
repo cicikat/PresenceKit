@@ -107,6 +107,8 @@ def _init_modules():
     logger.info(f"[startup] config.yaml 路径: {os.path.abspath('config.yaml')}")
 
     from core.sandbox import get_paths as _get_paths_for_log
+    from core.runtime_warning_log import ensure_runtime_warning_handler_after_paths
+    ensure_runtime_warning_handler_after_paths()
     logger.info(f"[startup] 数据根目录: {_get_paths_for_log()._base.resolve()}")
 
     # 安全 P0（Brief 33 §1.2）：占位/空 secret 且 registry 无 token → 阻断启动。
@@ -1013,6 +1015,8 @@ async def _main_with_services():
             logger.warning("Agent Runtime browser worker failed to stop", exc_info=True)
         from core.runtime_service_state import clear_marker as _clear_service_marker
         _clear_service_marker()
+        from core.runtime_warning_log import shutdown_runtime_warning_handler
+        shutdown_runtime_warning_handler()
 
 
 if __name__ == "__main__":

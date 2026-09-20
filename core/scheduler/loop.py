@@ -794,6 +794,11 @@ async def _check_log_maintenance():
         cleanup_visual_trace()
     except Exception as e:
         log_error("scheduler.log_maintenance.visual_trace", e)
+    try:
+        from core.runtime_warning_log import prune_runtime_warning_logs
+        prune_runtime_warning_logs()
+    except Exception as e:
+        log_error("scheduler.log_maintenance.runtime_warnings", e)
     _mark("log_maintenance")  # 无论各步是否失败，都标记以免 24h 内重复触发
 
 

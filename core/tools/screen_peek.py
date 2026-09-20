@@ -46,7 +46,7 @@ async def peek_screen_content() -> str:
         from core.memory import realtime_state
         snap = realtime_state.get()
     except Exception as e:
-        logger.warning("[screen_peek] 读取 realtime_state 失败: %s", e)
+        logger.warning("[screen_peek] 读取 realtime_state 失败 type=%s", type(e).__name__)
         return "暂时无法读取屏幕内容。"
 
     if snap is None:

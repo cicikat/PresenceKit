@@ -74,3 +74,32 @@ async def test_producer_preflight_returns_only_gate_and_cooldown(monkeypatch):
     result = await router.get_visual_producer_config(True)
 
     assert result == {"enabled": True, "cooldown_seconds": 300}
+
+
+@pytest.mark.asyncio
+async def test_vlm_describe_failure_logs_exception_type_not_body(monkeypatch, caplog):
+    import builtins
+    import sys
+
+    from core.perception import vlm_client
+
+    monkeypatch.setattr(
+        "core.perception.vlm_client.get_visual_perception_config",
+        lambda: {"enabled": True, "base_url": "http://vlm", "model": "local", "timeout_s": 1, "provider": "local"},
+    )
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "aiohttp":
+            raise RuntimeError("secret window title Payment-1234")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    sys.modules.pop("aiohttp", None)
+    caplog.set_level("WARNING", logger="core.perception.vlm_client")
+    observation, reason = await vlm_client.describe_with_status(b"image")
+    assert observation is None and reason == "error"
+    text = "\n".join(record.getMessage() for record in caplog.records)
+    assert "RuntimeError" in text
+    assert "Payment-1234" not in text
+    assert "secret window title" not in text
