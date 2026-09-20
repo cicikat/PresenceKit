@@ -174,8 +174,11 @@ post-model grant/policy recheck before commit. Empty evidence performs no model
 call. The maintenance request keeps a user turn so providers that reject
 system-only chats stay usable. A failed work session for the same task
 idempotency key is reopened on a later claimed attempt instead of remaining
-terminal. Unknown external outcomes are never automatically replayed without a
-matching durable maintenance receipt.
+terminal. After a terminal failed first-night task, a later operator pass
+opens a new claimable task instead of reporting no work while backlog remains.
+Unknown external outcomes are never automatically replayed without a
+matching durable maintenance receipt. Closeout does not treat leftover
+dossier backlog as understood.
 
 The admin surface exposes content-free effective state and backlog through
 `GET /observability/memory-consolidation` (`state.read`), bounded dossier detail

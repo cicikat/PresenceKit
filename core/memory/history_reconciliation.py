@@ -1504,13 +1504,14 @@ def _closeout_report(scope: MemoryScope, *, batches: int, dossier_passes: int,
         "conversation_messages": 0,
         "scheduler_enabled": False,
     }
+    dossier_backlog = int((maintenance.get("backlog") or 0))
     finished_cleanly = reason in {"no_work", "completed", "succeeded"} or (
         reason == "morning_cutoff" and (batches > 0 or dossier_passes > 0)
     )
-    closeout["status"] = "completed" if executable == 0 and finished_cleanly else "stopped"
+    closeout["status"] = "completed" if executable == 0 and dossier_backlog == 0 and finished_cleanly else "stopped"
     closeout["understood_complete"] = (
-        executable == 0 and deferred == 0 and excluded == 0 and understood > 0
-        and finished_cleanly
+        executable == 0 and dossier_backlog == 0 and deferred == 0 and excluded == 0
+        and understood > 0 and finished_cleanly
     )
     return closeout
 

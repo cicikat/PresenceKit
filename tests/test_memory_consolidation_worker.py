@@ -408,6 +408,44 @@ def test_reopen_evidence_only_requeues_event_checkpoint(sandbox):
     assert dossiers.maintenance_candidates(scope)[0]["source_id"] == event_id
 
 
+def test_operator_pass_opens_new_task_after_terminal_failure(sandbox, monkeypatch):
+    from core.agent_runtime import task_manager
+    from core.memory import consolidation_worker, dossiers
+
+    _patch_runtime(monkeypatch)
+    monkeypatch.setattr("core.memory.consolidation_worker.config", lambda: _cfg(enabled=False))
+    monkeypatch.setattr("core.memory.consolidation_worker._backoff_active", lambda: False)
+    monkeypatch.setattr("core.memory.consolidation_worker._global_budget_allows", lambda _cfg: True)
+    monkeypatch.setattr("core.memory.consolidation_worker._foreground_active", lambda *_args, **_kwargs: False)
+    principal = _principal(uid="terminal-retry-owner")
+    _event(principal.uid, suffix="terminal")
+    leftover = dossiers.maintenance_candidates(_scope(principal.uid))
+    high = leftover[-1]["ingest_sequence"]
+    failed_task, _ = task_manager.create_task(
+        principal, capability="memory.consolidation", source="operator_first_night",
+        idempotency_key=f"first-night:{principal.char_id}:{principal.uid}:{high}",
+        ttl_seconds=86400, retry_policy="safe", max_attempts=3,
+        request_context={"through": high},
+        request_summary={"source_count": len(leftover), "through": high},
+    )
+    lease = task_manager.claim_next(
+        principal, task_id=failed_task["task_id"], capabilities={"memory.consolidation"},
+    )
+    task_manager.fail_task(principal, lease, error_code="model_error", retry=False)
+    assert task_manager.get_task(principal, failed_task["task_id"])["status"] == "failed"
+
+    result = asyncio.run(consolidation_worker.run_operator_pass(principal))
+    assert result["status"] == "succeeded"
+    assert result["model_calls"] == 1
+    later = [
+        item for item in task_manager.list_tasks(principal, limit=100)
+        if item["capability"] == "memory.consolidation" and item["task_id"] != failed_task["task_id"]
+    ]
+    assert later
+    assert (later[0].get("request_summary") or {}).get("attempt") == 2
+    assert dossiers.maintenance_checkpoint(_scope(principal.uid)) >= 1
+
+
 def test_operator_pass_bypasses_disabled_scheduler_without_enabling(sandbox, monkeypatch):
     from core.memory import consolidation_worker, dossiers
 

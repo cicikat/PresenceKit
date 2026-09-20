@@ -459,6 +459,29 @@ def test_closeout_does_not_treat_excluded_or_deferred_as_understood(monkeypatch)
     assert closeout["scheduler_enabled"] is False
 
 
+def test_closeout_does_not_treat_no_work_with_dossier_backlog_as_complete(monkeypatch):
+    from core.memory import history_reconciliation
+
+    current = {
+        "source_item_counts": {"pending": 0, "running": 0, "committed": 3937, "retryable_failed": 0, "deferred": 0, "excluded": 0},
+        "source_item_total": 3937,
+        "frozen_manifest_revision": "frozen",
+        "admission": {"range_totals": {"first_night_candidates": 0}},
+        "paused": False,
+    }
+    monkeypatch.setattr(history_reconciliation, "status", lambda _scope: current)
+    monkeypatch.setattr("core.memory.dossiers.source_item_outcome_counts", lambda _scope: {"evidence_only": 3937})
+    monkeypatch.setattr("core.memory.dossiers.maintenance_status", lambda _scope: {"coverage_ingest_sequence": 3727, "backlog": 28})
+    monkeypatch.setattr("core.memory.dossiers.status_snapshot", lambda _scope: {"needs_recompute": 0})
+    closeout = history_reconciliation._closeout_report(
+        object(), batches=0, dossier_passes=1, last={"dossier_pass": {"status": "no_work"}},
+        reason="no_work",
+    )
+    assert closeout["status"] == "stopped"
+    assert closeout["understood_complete"] is False
+    assert closeout["dossiers"]["backlog"] == 28
+
+
 def test_new_chat_evidence_stays_on_incremental_path_after_freeze(sandbox):
     from core.memory import dossiers, history_reconciliation
     from core.memory.event_store import append_event

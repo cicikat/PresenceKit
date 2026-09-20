@@ -387,6 +387,46 @@ def _backoff_active() -> bool:
     with _state_lock: return time.time() < float(_state().get("backoff_until") or 0)
 
 
+_TERMINAL_TASK_STATUSES = frozenset({"failed", "canceled", "expired", "succeeded"})
+
+
+def _ensure_claimable_task(principal: TaskPrincipal, events: list[dict[str, Any]], *,
+                           source: str, key_prefix: str) -> None:
+    """Create a claimable maintenance task, bumping the key after a terminal failure.
+
+    Idempotent ``create_task`` returns the existing row. After a failed first-night
+    attempt that exhausted retries, that row is no longer queued, so a later
+    operator pass would otherwise report ``no_work`` while backlog remains.
+    """
+    from core.agent_runtime import task_manager
+
+    high = events[-1]["ingest_sequence"]
+    digest = f"{principal.char_id}:{principal.uid}:{high}"
+    for attempt in range(1, 8):
+        if attempt == 1:
+            key = f"{key_prefix}:{digest}"
+            context = {"through": high}
+            summary = {"source_count": len(events), "through": high}
+        else:
+            key = f"{key_prefix}:{digest}:{attempt}"
+            context = {"through": high, "attempt": attempt}
+            summary = {"source_count": len(events), "through": high, "attempt": attempt}
+        try:
+            receipt, created = task_manager.create_task(
+                principal, capability=CAPABILITY, source=source, idempotency_key=key,
+                ttl_seconds=86400, retry_policy="safe", max_attempts=3,
+                request_context=context, request_summary=summary,
+            )
+        except task_manager.TaskManagerError as exc:
+            if getattr(exc, "code", str(exc)) == "idempotency_conflict":
+                continue
+            raise
+        if receipt.get("status") in {"created", "queued"}:
+            return
+        if created or receipt.get("status") not in _TERMINAL_TASK_STATUSES:
+            return
+
+
 def _reconcile_unknown(principal: TaskPrincipal) -> None:
     """Resolve only outcomes proven by an atomically committed dossier receipt."""
     from core.agent_runtime import task_manager, work_sessions
@@ -475,13 +515,8 @@ async def run_operator_pass(
                 return {"status": "outcome_unknown", "model_calls": 0}
             queued = [item for item in tasks if item["capability"] == CAPABILITY and item["status"] == "queued"]
             if not queued and events:
-                high = events[-1]["ingest_sequence"]
-                task_manager.create_task(
-                    principal, capability=CAPABILITY, source=OPERATOR_SOURCE,
-                    idempotency_key=f"first-night:{principal.char_id}:{principal.uid}:{high}",
-                    ttl_seconds=86400, retry_policy="safe", max_attempts=3,
-                    request_context={"through": high},
-                    request_summary={"source_count": len(events), "through": high},
+                _ensure_claimable_task(
+                    principal, events, source=OPERATOR_SOURCE, key_prefix="first-night",
                 )
             lease_seconds = min(900, int(cfg["call_timeout_seconds"]) + 120)
             lease = task_manager.claim_next(principal, capabilities={CAPABILITY}, lease_seconds=lease_seconds)
@@ -525,11 +560,9 @@ async def tick(*, now: datetime | None = None, only_principal: TaskPrincipal | N
                     continue
                 queued = [item for item in tasks if item["capability"] == CAPABILITY and item["status"] == "queued"]
                 if not queued and events:
-                    high = events[-1]["ingest_sequence"]
-                    task_manager.create_task(principal, capability=CAPABILITY, source="maintenance_trigger",
-                        idempotency_key=f"auto:{principal.char_id}:{principal.uid}:{high}", ttl_seconds=86400,
-                        retry_policy="safe", max_attempts=3, request_context={"through": high},
-                        request_summary={"source_count": len(events), "through": high})
+                    _ensure_claimable_task(
+                        principal, events, source="maintenance_trigger", key_prefix="auto",
+                    )
                 lease_seconds = min(900, int(cfg["call_timeout_seconds"]) + 120)
                 lease = task_manager.claim_next(
                     principal, capabilities={CAPABILITY}, lease_seconds=lease_seconds,
