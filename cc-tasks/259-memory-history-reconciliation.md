@@ -95,7 +95,7 @@
 
 | 子单 | commit | 自动/结构验证 | 生产运行 |
 |---|---|---|---|
-| A | `d404e9b` | read-only inventory / redaction tests | 未扫描生产正文 |
+| A | `d404e9b`, `b3f9d00` | read-only inventory / redaction tests；隔离数据上的分母、时间范围、首夜候选与剩余历史 | 未扫描生产正文 |
 | B | `19bae90`, `07cda48`, `03e375a`, `2dc503f`, `0120b00` | resumable manifest/status tests；状态写入经 sandbox resolver；逐 source-item seed/list；有界领取/证据查档/lease 收据恢复；管理面缓存清除后桌面/手机布局验收 | 生产未运行 |
 | C | `30a5f84`, `f5dc200`, `01a73a6` | verified-backup gate、verify-before-restore recovery drill、manifest freeze/revision gate、ledger transition tests；26 focused tests passed | 仅隔离 fixture；未创建生产 snapshot |
 | D | 已运行（部分语义 pass） | explicit `action=run` executed against the verified offline snapshot; closeout is persisted; one real same-scope grok-see dossier pass committed | provider timeout runs remain failed receipts; no user notification |
