@@ -703,12 +703,23 @@ def _range_totals(frozen_range: dict[str, Any]) -> dict[str, int]:
     }
 
 
-def _go_live_deadline(go_live_date: str, timezone_name: str, stop_at_local: str) -> float:
+def _go_live_deadline(
+    go_live_date: str,
+    timezone_name: str,
+    stop_at_local: str,
+    *,
+    now: float | None = None,
+) -> float:
     hour, minute = (int(part) for part in str(stop_at_local).split(":", 1))
     local = datetime.fromisoformat(f"{go_live_date}T{hour:02d}:{minute:02d}:00").replace(
         tzinfo=_timezone_info(timezone_name),
     )
-    return local.timestamp()
+    stamp = local.timestamp()
+    current = float(time.time() if now is None else now)
+    if stamp <= current:
+        local = local + timedelta(days=1)
+        stamp = local.timestamp()
+    return stamp
 
 
 def admit_first_night(
@@ -766,8 +777,8 @@ def admit_first_night(
     cfg = consolidation_worker.config()
     if int(cfg["grant_revision"]) != grant:
         raise ValueError("grant_revision_mismatch")
-    deadline = _go_live_deadline(date, zone, stop)
     admitted_at = float(time.time() if now is None else now)
+    deadline = _go_live_deadline(date, zone, stop, now=admitted_at)
     admission = {
         "schema_version": ADMISSION_SCHEMA,
         "admitted": True,

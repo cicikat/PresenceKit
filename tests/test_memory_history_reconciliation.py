@@ -1012,6 +1012,30 @@ def test_admit_first_night_freezes_go_live_artifacts_without_running(sandbox, mo
     assert snapshot["last_closeout"] is None
 
 
+def test_admit_rolls_stop_at_to_next_morning_when_same_day_cutoff_passed(sandbox, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from core.memory import history_reconciliation
+    from core.memory.scope import MemoryScope
+
+    scope = MemoryScope.reality_scope("admit-rollover-owner", TEST_CHAR_ID)
+    manifest = history_reconciliation.create_manifest(scope, now=1)
+    history_reconciliation.freeze_manifest(scope, manifest_revision=manifest["manifest_revision"])
+    state = history_reconciliation.read_state(scope)
+    state["last_calibration"] = {"unlimited_run_allowed": False, "budget_unset": False}
+    history_reconciliation.safe_write_json(history_reconciliation._state_path(scope), state, keep_bak=True)
+    zone = timezone(timedelta(hours=8))
+    evening = datetime(2026, 9, 20, 20, 46, tzinfo=zone).timestamp()
+    admission = _admit(
+        scope, monkeypatch, now=evening,
+        go_live_date="2026-09-20", stop_at_local="07:00",
+    )
+    next_morning = datetime(2026, 9, 21, 7, 0, tzinfo=zone).timestamp()
+    assert admission["go_live_date"] == "2026-09-20"
+    assert admission["stop_at_local"] == "07:00"
+    assert admission["stop_at"] == next_morning
+    assert admission["stop_at"] > evening
+
+
 def test_admit_first_night_rejects_incomplete_preconditions_and_unset_budget(sandbox, monkeypatch):
     from core.memory import history_reconciliation
     from core.memory.scope import MemoryScope
