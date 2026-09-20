@@ -85,7 +85,7 @@ observe：真实手机安装、不同应用删除反馈、断网后上传以及�
 
 管理服务的设置面分三层：
 
-RPG Dream's `rpg_kp` route is a backend capability, not a client setting; it is now selectable in admin Routing Profiles alongside `sensor_judge` and `monologue`（前置独白 / 额外思考链）. Effective routes remain visible with the other model categories. Desktop/mobile do not gain a new toggle.
+RPG Dream's `rpg_kp` route is a backend capability, not a client setting; it is now selectable in admin Routing Profiles alongside `sensor_judge` and `monologue`（前置独白）. Effective routes remain visible with the other model categories. Unmapped ordinary categories resolve `default_preset → chat → first preset`; do not describe this as “未配置直接回落 chat”. Desktop/mobile do not gain a new toggle.
 
 后台练习盲评不属于管理面热更新 API，但其模型选择遵循同一模型路由真值：
 `practice.reviewer_category` 是 routing profile category（默认 `consolidation`）；可选旧字段
@@ -597,6 +597,10 @@ current：管理面「模型连接与分工」通过既有 GET/POST /settings/th
 和 display_prefer_monologue（默认 true，只改气泡顺序：有独白先显示独白）。
 开关（生成思考 / 角色心声 / 应用于主动消息 / 气泡优先显示前置独白）用 `admin-toolbar` +
 `checkbox-row` 分组，方式与独白预算单独一组 `field`，仍一次保存，不逐项 PATCH。
+思考卡片只读展示当前角色实际生效的前置独白路由（profile / 主 Preset / 兜底 Preset / 继承来源 / 启用状态）
+与最近一次独白状态；native 使用 chat preset，auto 说明实际解析。角色固定绑定时标明覆盖，
+不把正在编辑的 profile 报成当前生效方案。GET 附加 `monologue_route` / `last_monologue` 为脱敏元数据，
+不返回独白正文，桌面/手机不新增设置或权限。
 「聊天方式与思考」只留跳转。voice_preview 给出当前拼接提示、
 情绪/稳定变体和 enabled/effective/blocking_reason；output_guaranteed=false 明确其只是通用
 提示引导。native 不增加 LLM 调用，monologue 复用已有前置调用。可能影响最终回复。

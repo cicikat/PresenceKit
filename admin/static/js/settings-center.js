@@ -430,20 +430,111 @@ async function loadConversationSettings(){
   const thinkingJump=`<section class="card" id="conversation-thinking-jump"><h3>${t('settings_center.reasoning',"思考")}</h3><p>${t('routing.thinking_moved',"思考总开关、方式和心声已移到「模型连接与分工」。桌面客户端只负责展开显示。")}</p><button class="btn btn-ghost btn-sm" data-action="goto" data-action-args='["model-routing"]'>${t('nav.page.model-routing',"模型连接与分工")}</button></section>`;
   root.innerHTML=conversationFields().map(([title,path,method,fields],i)=>{const result=results[i];if(result.status==='rejected')return `<section class="card"><h3>${title}</h3><p>${t('settings_center.could_not_load_refresh_to_retry',"读取失败，请刷新重试")}</p></section>`; const data=result.value;if(path==='/chat-multi-message')data.enabled=data.multi_message;return `<section class="card" id="conversation-form-${i}"><h3>${title}</h3>${fields.map(([key,label,type,a,b])=>`<label class="field">${label}${Array.isArray(type)?`<select data-field="${key}">${type.map((value,j)=>`<option value="${value}" ${data[key]===value?'selected':''}>${a[j]}</option>`).join('')}</select>`:`<input data-field="${key}" type="${type==='boolean'?'checkbox':type}" ${type==='boolean'?(data[key]?'checked':''):`value="${escapeHtml(String(data[key]??''))}"`} ${type==='number'?`min="${a}" max="${b}"`:''}>`}</label>`).join('')}<button class="btn btn-primary" data-action="saveConversationSection" data-action-args='[${i}]'>${t('settings_center.save',"保存")}</button><p role="status" data-save-status></p></section>`;}).join('')+thinkingJump;bindPageActions(root);loadOutputSegmentEnforce();loadContextConfig();loadLlmParams();
 }
+function _thinkingSourceLabel(source) {
+  const key = {
+    category: 'routing.source.category',
+    default_preset: 'routing.source.default_preset',
+    chat_fallback: 'routing.source.chat_fallback',
+    first_preset: 'routing.source.first_preset',
+    off: 'routing.fallback.off',
+    configured: 'routing.source.configured',
+    invalid_config: 'routing.source.invalid_config',
+  }[source] || '';
+  const fallbacks = {
+    'routing.source.category': '该用途已单独映射',
+    'routing.source.default_preset': '未单独映射，使用 default_preset',
+    'routing.source.chat_fallback': '未单独映射，回退同一 profile 的 chat',
+    'routing.source.first_preset': '未单独映射，使用第一个 preset',
+    'routing.fallback.off': '关闭',
+    'routing.source.configured': '已配置失败兜底',
+    'routing.source.invalid_config': '兜底配置无效，已拒绝',
+  };
+  return key ? t(key, fallbacks[key] || source) : (source || t('routing.source.unknown', '未知来源'));
+}
+function _lastMonologueStatusLabel(status) {
+  const map = {
+    disabled: ['routing.monologue.status.disabled', '未启用'],
+    not_applicable: ['routing.monologue.status.not_applicable', '未适用'],
+    success: ['routing.monologue.status.success', '成功'],
+    fallback_success: ['routing.monologue.status.fallback_success', '兜底成功'],
+    timeout: ['routing.monologue.status.timeout', '超时'],
+    empty_or_format: ['routing.monologue.status.empty_or_format', '格式/空正文失败'],
+    skipped: ['routing.monologue.status.skipped', '最终跳过'],
+  };
+  const pair = map[status] || ['routing.monologue.status.unknown', status || '未知'];
+  return t(pair[0], pair[1]);
+}
+let _mrLastThinking = null;
+function _jumpToMonologueCategory() {
+  const profiles = document.getElementById('mr-profiles-body');
+  if (profiles) profiles.scrollIntoView({behavior: 'smooth', block: 'start'});
+  const route = (_mrLastThinking && _mrLastThinking.monologue_route) || {};
+  const name = route.effective_profile || (_mrData && _mrData.active_routing);
+  if (typeof openProfileModal === 'function' && name) openProfileModal(name);
+  requestAnimationFrame(() => {
+    const row = document.getElementById('mr-profile-cat-monologue');
+    if (row) {
+      row.scrollIntoView({behavior: 'smooth', block: 'center'});
+      row.focus();
+    }
+  });
+}
+function showThinkingRouteStatus(data, root) {
+  _mrLastThinking = data || {};
+  const host = root || document.getElementById('mr-thinking-card');
+  const box = document.getElementById('mr-thinking-route');
+  if (!host || !box) return;
+  const route = data?.monologue_route || {};
+  const last = data?.last_monologue || {};
+  const resolved = route.resolved_mode || last.resolved_mode || '';
+  const enabled = Boolean(data?.enabled);
+  const modeHint = !enabled
+    ? t('routing.thinking.mode_off', '思考总开关关闭，不生成前置独白或原生思考。')
+    : resolved === 'native'
+      ? t('routing.thinking.mode_native', '当前走原生思考，使用角色实际生效的 chat preset「{preset}」，不另发前置独白。', {preset: route.chat_preset || '—'})
+      : resolved === 'monologue'
+        ? t('routing.thinking.mode_monologue', '当前走前置独白，使用下方 monologue 用途的实际解析结果。')
+        : t('routing.thinking.mode_unknown', '当前思考路线未解析。');
+  const autoHint = data?.mode === 'auto'
+    ? (data.chat_preset_reasoning_native
+      ? t('routing.thinking_auto_native', '当前 chat 连接声明了原生思考，自动模式会走 native。')
+      : t('routing.thinking_auto_monologue', '当前 chat 连接未声明原生思考，自动模式会走前置独白。'))
+    : '';
+  const binding = route.binding_source === 'character'
+    ? t('routing.thinking.character_override', '当前角色固定绑定 profile「{profile}」，不是正在编辑的那一行。', {profile: route.effective_profile || route.character_binding || '—'})
+    : t('routing.thinking.global_profile', '当前角色跟随全局 profile「{profile}」。正在编辑的其他 profile 不会立刻变成当前生效方案。', {profile: route.effective_profile || route.global_profile || '—'});
+  const fallback = route.fallback_preset
+    ? route.fallback_preset
+    : (route.fallback_refused_reason
+      ? t('routing.thinking.fallback_refused', '未生效（{reason}）', {reason: route.fallback_refused_reason})
+      : t('routing.fallback.off', '关闭'));
+  const lastMeta = [last.iso, last.skip_reason, last.error_category, last.switch_reason].filter(Boolean).join(' · ');
+  box.innerHTML =
+    `<p>${escapeHtml(modeHint)} ${escapeHtml(autoHint)}</p>` +
+    `<p>${t('routing.thinking.live_profile', '实际 profile')}：<code>${escapeHtml(route.effective_profile || '—')}</code> · ` +
+    `${t('routing.thinking.primary_preset', '主 Preset')}：<code>${escapeHtml(route.primary_preset || '—')}</code> · ` +
+    `${t('routing.thinking.fallback_preset', '兜底 Preset')}：<code>${escapeHtml(String(fallback))}</code></p>` +
+    `<p>${t('routing.thinking.source', '继承来源')}：${escapeHtml(_thinkingSourceLabel(route.source))} · ` +
+    `${t('routing.thinking.enabled_state', '当前启用')}：${escapeHtml(enabled && resolved === 'monologue' ? t('settings_center.enabled', '已启用') : t('settings_center.currently_unavailable', '未启用'))}</p>` +
+    `<p>${escapeHtml(binding)}</p>` +
+    `<p>${t('routing.thinking.last_status', '最近一次独白')}：${escapeHtml(_lastMonologueStatusLabel(last.status))}` +
+    `${lastMeta ? ` · ${escapeHtml(lastMeta)}` : ''}</p>` +
+    `<button type="button" class="btn btn-ghost btn-sm" data-action="jumpToMonologueCategory">${t('routing.thinking.jump_row', '定位到前置独白用途行')}</button>`;
+  bindPageActions(box);
+}
 function showThinkingVoicePreview(data, root) {
   const host = root || document.getElementById('mr-thinking-card');
-  if (!host || !data?.voice_preview) return;
+  if (!host) return;
+  showThinkingRouteStatus(data, host);
   host.querySelector('[data-voice-preview]')?.remove();
+  if (!data?.voice_preview) return;
   const voice = data.voice_preview;
   const box = document.createElement('div');
   box.dataset.voicePreview = 'true';
   const status = document.createElement('p');
-  const autoHint = data.chat_preset_reasoning_native
-    ? t('routing.thinking_auto_native',"当前 chat 连接声明了原生思考，自动模式会走 native。")
-    : t('routing.thinking_auto_monologue',"当前 chat 连接未声明原生思考，自动模式会走前置独白。");
   const stateLabel = voice.effective ? t('settings_center.enabled',"已启用") : t('settings_center.currently_unavailable',"未启用");
   const reason = voice.blocking_reason || t('routing.thinking_with_main',"随主生成发送");
-  status.textContent = `${t('routing.thinking_voice_status','心声引导：{state} · {reason}。风格约 24 小时轮换；情绪沿用现有平滑状态。原生摘要是否遵从由模型决定，通用提示可能影响回复措辞。',{state: stateLabel, reason})} ${autoHint}`;
+  status.textContent = t('routing.thinking_voice_status','心声引导：{state} · {reason}。风格约 24 小时轮换；情绪沿用现有平滑状态。原生摘要是否遵从由模型决定，通用提示可能影响回复措辞。',{state: stateLabel, reason});
   const details = document.createElement('details');
   const heading = document.createElement('summary');
   heading.textContent = t('routing.thinking_preview',"查看当前拼接提示");
@@ -453,6 +544,9 @@ function showThinkingVoicePreview(data, root) {
   details.append(heading, prompt);
   box.append(status, details);
   host.append(box);
+}
+function jumpToMonologueCategory() {
+  _jumpToMonologueCategory();
 }
 async function loadThinkingSettings(){
   const fields=document.getElementById('mr-thinking-fields');

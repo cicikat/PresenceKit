@@ -20,7 +20,7 @@ def test_creation_assets_are_split_setting_rows():
     assert "data-action=\"saveCreationAssets\"" in source
     assert "data-action=\"uploadCreationAvatar\"" in source
     assert "PATCH','/settings/prompt-assets'" in source
-    assert '<script src="/static/js/settings-center.js?v=v1-261-llm-failover-2"></script>' in index
+    assert '<script src="/static/js/settings-center.js?v=v1-261-monologue-route-1"></script>' in index
 
 
 def test_thinking_controls_live_on_model_routing_not_conversation_page():
@@ -35,6 +35,11 @@ def test_thinking_controls_live_on_model_routing_not_conversation_page():
     assert "thinking_moved" in source
     assert "function loadThinkingSettings()" in source
     assert "function saveThinkingSettings()" in source
+    assert "function showThinkingRouteStatus" in source
+    assert "jumpToMonologueCategory" in source
+    assert 'id="mr-thinking-route"' in routing
+    assert "routing.thinking.live_profile" in source
+    assert "未配置直接回落 chat" not in routing
     assert "if (typeof loadThinkingSettings === 'function') loadThinkingSettings();" in settings
     assert "['enabled'" in source
     assert "['mode'" in source

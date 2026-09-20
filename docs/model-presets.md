@@ -245,8 +245,8 @@ model_presets:
       consolidation:  deepseek-default
       event_edge_proposer: deepseek-default # optional bounded Memory Event candidate relations
       perform:        deepseek-default   # 句级表演意图映射（仅 performance_mapping.provider=llm 时用到）
-      monologue:      deepseek-default   # 前置独白 / 额外思考链；缺省回落 chat
-      rpg_kp:         deepseek-default   # RPG Dream 中立裁决；缺省回落 chat
+      monologue:      deepseek-default   # 前置独白；缺省按 default_preset → chat → 第一个 preset 解析
+      rpg_kp:         deepseek-default   # RPG Dream 中立裁决；缺省按同一条缺配置链解析
 
     claude-main:                 # 主对话走 Claude，杂活留 DS 省钱
       chat:           claude-sonnet
@@ -358,9 +358,11 @@ policy、连接、registry、角色 proficiency 和 exclude_tools 之后继续�
    `tests/test_model_presets.py::TestRoutingFallback`）。管理面板「配置」页 §1 的
    probe/summary 只读展示（`GET /character/{char_id}/model-routing` /
    `resolve_routing_info()`）读的就是这份真实解析结果，不是另一套展示专用逻辑。
-   `rpg_kp` 走普通 category → chat 回退（30 秒超时、零 SDK retry），管理面 Routing Profiles
+   `rpg_kp` 走普通 category → `default_preset` → chat → 第一个 preset（30 秒超时、零 SDK retry），管理面 Routing Profiles
    与 `GET /model-presets` 的 `routing_effective` 会展示其 effective preset。`monologue`
-   是前置独白 / 额外思考链，缺省同样回落 chat。`sensor_judge` 已进入同一编辑器，不必再手改 yaml。
+   是前置独白，缺省同样按这条缺配置链解析，不是“未配置直接回落 chat”。思考卡片只读当前角色实际生效的
+   profile / 主 preset / 兜底 / 来源，不把正在编辑的 profile 当成当前生效方案；角色卡固定绑定时会标明覆盖。
+   `sensor_judge` 已进入同一编辑器，不必再手改 yaml。
    少数明确声明“直接 preset 名”的配置可通过 `preset_name` 绕过这条回退链；显式 preset
    不存在时抛 `ValueError`。`practice.reviewer_preset` 使用此严格语义；常规配置推荐用
    `practice.reviewer_category: consolidation`，继续继承 per-character routing profile。

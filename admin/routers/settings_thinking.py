@@ -4,6 +4,7 @@ GET  /settings/thinking   — 读取当前 thinking 配置 + 只读的 auto 模�
 POST /settings/thinking   — 部分更新 enabled / mode / apply_to_proactive / display_prefer_monologue 并热重载
 
 管理面入口在「模型连接与分工」；GET/POST /settings/thinking 仍是 persona API。桌面只展开显示，不新增设置。
+GET 的 monologue_route / last_monologue 是管理面只读元数据；桌面不消费，也不返回独白正文。
 """
 
 from pathlib import Path
@@ -31,20 +32,55 @@ _DEFAULTS = {
 }
 
 
+def _live_char_id() -> str | None:
+    """Active character for live monologue routing, not the profile being edited."""
+    try:
+        from admin.routers.settings_llm import _active_character_id_for_routing_warning
+        return _active_character_id_for_routing_warning()
+    except Exception:
+        return None
+
+
 def _chat_preset_reasoning_native() -> bool:
     """当前 chat preset 是否声明 reasoning_native（供前端展示 auto 会走哪条路）。
 
     只读 preset 配置字段，不走 get_model_client()（避免为一次只读检查顺带建出
     真实的 AsyncOpenAI/httpx 客户端，同 settings_tool_loop._chat_preset_supports_fc）。
     """
-    from core.model_registry import _get_preset_config, _resolve_preset_name
-    try:
-        mp = _get_preset_config()
-        preset_name = _resolve_preset_name("chat")
-    except ValueError:
-        return False
-    preset = mp.get("presets", {}).get(preset_name, {})
-    return bool(preset.get("reasoning_native", False))
+    from core.thinking import describe_monologue_route
+    return bool(describe_monologue_route(char_id=_live_char_id()).get("chat_preset_reasoning_native"))
+
+
+def _thinking_read_payload(cfg: dict) -> dict:
+    from core.thinking import describe_monologue_route, last_monologue_status
+    from core.thinking_voice import preview
+    voice_enabled = bool(cfg.get("character_voice", True))
+    voice = preview()
+    voice.update({
+        "enabled": voice_enabled,
+        "effective": bool(cfg.get("enabled", False)) and voice_enabled,
+        "blocking_reason": "thinking_disabled" if not cfg.get("enabled", False) else ("voice_disabled" if not voice_enabled else ""),
+        "control": "prompt_guidance", "output_guaranteed": False,
+    })
+    route = describe_monologue_route(char_id=_live_char_id())
+    last = last_monologue_status(
+        chat_reasoning_native=bool(route.get("chat_preset_reasoning_native")),
+    )
+    last.pop("body", None)
+    return {
+        "enabled": bool(cfg.get("enabled", _DEFAULTS["enabled"])),
+        "mode": cfg.get("mode", _DEFAULTS["mode"]),
+        "monologue_max_tokens": cfg.get("monologue_max_tokens", _DEFAULTS["monologue_max_tokens"]),
+        "apply_to_proactive": bool(cfg.get("apply_to_proactive", _DEFAULTS["apply_to_proactive"])),
+        "chat_preset_reasoning_native": bool(route.get("chat_preset_reasoning_native")),
+        "character_voice": voice_enabled,
+        "display_prefer_monologue": bool(
+            cfg.get("display_prefer_monologue", _DEFAULTS["display_prefer_monologue"])
+        ),
+        "voice_preview": voice,
+        "monologue_route": route,
+        "last_monologue": last,
+    }
 
 
 class ThinkingUpdate(BaseModel):
@@ -58,28 +94,7 @@ class ThinkingUpdate(BaseModel):
 
 @router.get("/settings/thinking", summary="获取思考开关配置")
 async def get_thinking(auth=Depends(require_scopes("persona"))):
-    cfg = get_config().get("thinking", {})
-    from core.thinking_voice import preview
-    voice_enabled = bool(cfg.get("character_voice", True))
-    voice = preview()
-    voice.update({
-        "enabled": voice_enabled,
-        "effective": bool(cfg.get("enabled", False)) and voice_enabled,
-        "blocking_reason": "thinking_disabled" if not cfg.get("enabled", False) else ("voice_disabled" if not voice_enabled else ""),
-        "control": "prompt_guidance", "output_guaranteed": False,
-    })
-    return {
-        "enabled": bool(cfg.get("enabled", _DEFAULTS["enabled"])),
-        "mode": cfg.get("mode", _DEFAULTS["mode"]),
-        "monologue_max_tokens": cfg.get("monologue_max_tokens", _DEFAULTS["monologue_max_tokens"]),
-        "apply_to_proactive": bool(cfg.get("apply_to_proactive", _DEFAULTS["apply_to_proactive"])),
-        "chat_preset_reasoning_native": _chat_preset_reasoning_native(),
-        "character_voice": voice_enabled,
-        "display_prefer_monologue": bool(
-            cfg.get("display_prefer_monologue", _DEFAULTS["display_prefer_monologue"])
-        ),
-        "voice_preview": voice,
-    }
+    return _thinking_read_payload(get_config().get("thinking", {}))
 
 
 @router.post("/settings/thinking", summary="更新思考开关配置并热重载")
@@ -108,17 +123,18 @@ async def update_thinking(body: ThinkingUpdate, auth=Depends(require_scopes("per
     from core import config_loader
     config_loader.reload_config()
 
+    payload = _thinking_read_payload(th)
     return {
         "message": "思考开关配置已更新",
         "thinking": {
-            "enabled": bool(th.get("enabled", _DEFAULTS["enabled"])),
-            "mode": th.get("mode", _DEFAULTS["mode"]),
-            "monologue_max_tokens": th.get("monologue_max_tokens", _DEFAULTS["monologue_max_tokens"]),
-            "apply_to_proactive": bool(th.get("apply_to_proactive", _DEFAULTS["apply_to_proactive"])),
-            "character_voice": bool(th.get("character_voice", True)),
-            "display_prefer_monologue": bool(
-                th.get("display_prefer_monologue", _DEFAULTS["display_prefer_monologue"])
-            ),
+            "enabled": payload["enabled"],
+            "mode": payload["mode"],
+            "monologue_max_tokens": payload["monologue_max_tokens"],
+            "apply_to_proactive": payload["apply_to_proactive"],
+            "character_voice": payload["character_voice"],
+            "display_prefer_monologue": payload["display_prefer_monologue"],
         },
-        "chat_preset_reasoning_native": _chat_preset_reasoning_native(),
+        "chat_preset_reasoning_native": payload["chat_preset_reasoning_native"],
+        "monologue_route": payload["monologue_route"],
+        "last_monologue": payload["last_monologue"],
     }

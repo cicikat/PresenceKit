@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import logging
 import re
+import time
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from core.config_loader import get_config
@@ -113,6 +115,216 @@ def character_voice_enabled() -> bool:
 def display_prefer_monologue() -> bool:
     """Bubble order only: prefixed monologue before native reasoning when both exist."""
     return bool(_cfg().get("display_prefer_monologue", True))
+
+
+# Last monologue attempt metadata only (no body). Process-local, fail-open.
+_LAST_MONOLOGUE: dict[str, Any] | None = None
+
+_MONOLOGUE_TIMEOUT = frozenset({"timeout", "budget_exhausted"})
+_MONOLOGUE_EMPTY = frozenset({"empty_or_format", "response_format", "empty_body"})
+
+
+def _stamp_last_monologue(status: str, **meta: Any) -> None:
+    """Record redacted last-status; never store monologue text."""
+    global _LAST_MONOLOGUE
+    now = float(meta.pop("ts", 0) or 0) or time.time()
+    row = {
+        "status": status,
+        "ts": now,
+        "iso": datetime.fromtimestamp(now).isoformat(timespec="seconds"),
+    }
+    for key in (
+        "reason", "skip_reason", "error_category", "switch_reason",
+        "route_role", "logical_call_id", "model",
+    ):
+        value = meta.get(key)
+        if value:
+            row[key] = str(value)[:64]
+    _LAST_MONOLOGUE = row
+
+
+def reset_last_monologue_status() -> None:
+    """Test helper."""
+    global _LAST_MONOLOGUE
+    _LAST_MONOLOGUE = None
+
+
+def _chat_preset_reasoning_native(char_id: str | None = None) -> bool:
+    try:
+        from core.model_registry import _get_preset_config, _resolve_preset_name
+        mp = _get_preset_config()
+        preset_name = _resolve_preset_name("chat", char_id=char_id)
+    except ValueError:
+        return False
+    preset = mp.get("presets", {}).get(preset_name, {})
+    return bool(preset.get("reasoning_native", False))
+
+
+def resolve_configured_mode(*, chat_reasoning_native: bool | None = None) -> str | None:
+    """Current thinking path from config + chat preset, ignoring per-turn gates."""
+    if not is_enabled():
+        return None
+    mode = get_mode()
+    if mode == "native":
+        return "native"
+    if mode == "monologue":
+        return "monologue"
+    if chat_reasoning_native is None:
+        chat_reasoning_native = _chat_preset_reasoning_native()
+    return "native" if chat_reasoning_native else "monologue"
+
+
+def describe_monologue_route(*, char_id: str | None = None) -> dict[str, Any]:
+    """Live monologue/chat route for admin. Never uses the profile being edited."""
+    empty = {
+        "effective_profile": "",
+        "primary_preset": "",
+        "source": "",
+        "fallback_preset": "",
+        "fallback_source": "off",
+        "fallback_refused_reason": "",
+        "binding_source": "global",
+        "global_profile": "",
+        "character_binding": "",
+        "chat_preset": "",
+        "chat_preset_reasoning_native": False,
+        "resolved_mode": None,
+        "monologue_active": False,
+        "native_uses": "chat",
+    }
+    try:
+        from core.model_registry import (
+            _get_preset_config,
+            _resolve_preset_name,
+            resolve_category_info,
+            resolve_routing_info,
+        )
+
+        info = resolve_category_info("monologue", char_id=char_id)
+        chat_preset = _resolve_preset_name("chat", char_id=char_id)
+        mp = _get_preset_config()
+        chat_native = bool(mp.get("presets", {}).get(chat_preset, {}).get("reasoning_native", False))
+        global_profile = str(mp.get("active_routing") or "")
+        binding_source = "global"
+        character_binding = ""
+        if char_id:
+            routing = resolve_routing_info(char_id)
+            binding_source = str(routing.get("binding_source") or "global")
+            character_binding = str(routing.get("model_routing") or "")
+            global_profile = str(routing.get("global_profile") or global_profile)
+    except Exception:
+        return empty
+    resolved = resolve_configured_mode(chat_reasoning_native=chat_native)
+    return {
+        "effective_profile": str(info.get("effective_profile") or ""),
+        "primary_preset": str(info.get("effective_preset") or ""),
+        "source": str(info.get("source") or ""),
+        "fallback_preset": str(info.get("fallback_preset") or ""),
+        "fallback_source": str(info.get("fallback_source") or "off"),
+        "fallback_refused_reason": str(info.get("fallback_refused_reason") or ""),
+        "binding_source": binding_source,
+        "global_profile": global_profile,
+        "character_binding": character_binding,
+        "chat_preset": chat_preset,
+        "chat_preset_reasoning_native": chat_native,
+        "resolved_mode": resolved,
+        "monologue_active": bool(is_enabled() and resolved == "monologue"),
+        "native_uses": "chat",
+    }
+
+
+def _classify_monologue_ledger(row: dict[str, Any]) -> str:
+    skip = str(row.get("skip_reason") or "")
+    error = str(row.get("error_category") or "")
+    hint = str(row.get("output_hint") or "")
+    tokens = {skip, error, hint}
+    if tokens & _MONOLOGUE_EMPTY:
+        return "empty_or_format"
+    if row.get("fallback_ok"):
+        return "fallback_success"
+    if row.get("ok"):
+        return "success"
+    if tokens & _MONOLOGUE_TIMEOUT:
+        return "timeout"
+    return "skipped"
+
+
+def last_monologue_status(*, chat_reasoning_native: bool | None = None) -> dict[str, Any]:
+    """Redacted last prefixed-monologue status. Never returns the monologue body."""
+    resolved = resolve_configured_mode(chat_reasoning_native=chat_reasoning_native)
+    base = {
+        "status": "disabled",
+        "resolved_mode": resolved,
+        "reason": "",
+        "ts": 0.0,
+        "iso": "",
+        "skip_reason": "",
+        "error_category": "",
+        "switch_reason": "",
+        "route_role": "",
+        "logical_call_id": "",
+        "model": "",
+        "body": None,
+    }
+    if resolved is None:
+        base["reason"] = "thinking_disabled"
+        return base
+    if resolved == "native":
+        base["status"] = "not_applicable"
+        base["reason"] = "native_uses_chat_preset"
+        return base
+    ledger = None
+    try:
+        from core.api_call_log import last_purpose_call
+        ledger = last_purpose_call("monologue")
+    except Exception:
+        ledger = None
+    local = _LAST_MONOLOGUE
+    chosen: dict[str, Any] | None = None
+    if local:
+        # Process-local stamp is the source of truth for this process: empty
+        # HTTP-success bodies are classified here, not from older ledger rows.
+        chosen = local
+    else:
+        chosen = ledger
+    if not chosen:
+        base["status"] = "not_applicable"
+        base["reason"] = "no_recent_call"
+        return base
+    status = chosen.get("status") if chosen is local and chosen.get("status") else _classify_monologue_ledger(chosen)
+    base.update({
+        "status": status,
+        "reason": str(chosen.get("reason") or chosen.get("skip_reason") or chosen.get("error_category") or ""),
+        "ts": float(chosen.get("ts") or 0),
+        "iso": str(chosen.get("iso") or ""),
+        "skip_reason": str(chosen.get("skip_reason") or ""),
+        "error_category": str(chosen.get("error_category") or ""),
+        "switch_reason": str(chosen.get("switch_reason") or ""),
+        "route_role": str(chosen.get("route_role") or ""),
+        "logical_call_id": str(chosen.get("logical_call_id") or ""),
+        "model": str(chosen.get("model") or ""),
+        "body": None,
+    })
+    return base
+
+
+def _record_empty_monologue_ledger() -> None:
+    try:
+        from core.api_call_log import append
+        append(
+            caller="thinking",
+            purpose="monologue",
+            provider="",
+            model="",
+            duration_ms=0,
+            ok=False,
+            skip_reason="empty_or_format",
+            error_category="empty_or_format",
+            output_hint="empty_body",
+            logical_final=True,
+        )
+    except Exception:
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -250,17 +462,39 @@ async def _run_monologue_call(messages: list[dict], *, char_id: str | None) -> s
         )
         reply = strip_think_tags(reply) or ""
         reply = reply.strip()
-        if reply:
-            try:
-                from core.llm_reasoning_store import archive_text
-                await archive_text("monologue", reply, purpose="monologue")
-            except Exception as archive_exc:
-                from core.error_handler import log_error
-                log_error("thinking.monologue_archive", archive_exc)
-        return reply or None
+        if not reply:
+            _stamp_last_monologue("empty_or_format", reason="empty_body")
+            _record_empty_monologue_ledger()
+            return None
+        try:
+            from core.api_call_log import last_purpose_call
+            ledger = last_purpose_call("monologue")
+        except Exception:
+            ledger = None
+        status = "fallback_success" if ledger and ledger.get("fallback_ok") else "success"
+        _stamp_last_monologue(status, **(ledger or {}))
+        try:
+            from core.llm_reasoning_store import archive_text
+            await archive_text("monologue", reply, purpose="monologue")
+        except Exception as archive_exc:
+            from core.error_handler import log_error
+            log_error("thinking.monologue_archive", archive_exc)
+        return reply
     except Exception as e:
         from core.error_handler import log_error
         log_error("thinking.monologue", e)
+        try:
+            from core.llm_failover import classify_exception
+            category, _reason = classify_exception(e)
+        except Exception:
+            category = type(e).__name__
+        if category in _MONOLOGUE_TIMEOUT:
+            status = "timeout"
+        elif category in _MONOLOGUE_EMPTY:
+            status = "empty_or_format"
+        else:
+            status = "skipped"
+        _stamp_last_monologue(status, error_category=category, reason=category)
         return None
 
 

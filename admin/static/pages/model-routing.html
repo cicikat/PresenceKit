@@ -43,8 +43,9 @@
     <h3 data-i18n="settings_center.reasoning">思考</h3>
     <button class="btn btn-ghost btn-sm" data-action="loadThinkingSettings" data-i18n="common.refresh">刷新</button>
   </div>
-  <p class="admin-description" data-i18n="routing.thinking_hint">总开关和方式在这里改。原生思考走当前 chat 连接的网关方言；前置独白走下方 routing 的 monologue 用途。前置独白更容易用 prompt 控文风；气泡优先显示独白，没有再用原生思考。桌面客户端只负责展开显示，不新增设置。</p>
+  <p class="admin-description" data-i18n="routing.thinking_hint">总开关和方式在这里改。原生思考走当前角色实际生效的 chat 连接；前置独白走下方 routing 的「前置独白」用途。这里显示的是当前角色实际生效的 profile，不是正在编辑的那一行。桌面客户端只负责展开显示，不新增设置。</p>
   <div id="mr-thinking-fields"></div>
+  <div id="mr-thinking-route" class="admin-inline-087"></div>
   <div class="admin-card-actions">
     <button class="btn btn-primary btn-sm" data-action="saveThinkingSettings" data-i18n="common.save">保存</button>
     <p role="status" id="mr-thinking-status"></p>
@@ -66,7 +67,7 @@
           <select id="mr-default-preset-select" class="admin-inline-171"></select>
           <button class="btn btn-primary btn-sm" data-action="saveDefaultPreset" data-i18n="routing.save_default_preset">保存默认</button>
         </label>
-        <p class="admin-inline-087" data-i18n="routing.default_preset_hint">未选或新建 profile 未填的 category 解析到这个 preset，再回退 chat → 第一个 preset。这是缺配置解析，不是请求失败后的跨模型兜底。</p>
+        <p class="admin-inline-087" data-i18n="routing.default_preset_hint">未选或新建 profile 未填的 category 按 default_preset → 同一 profile 的 chat → 第一个 preset 解析。这是缺配置解析，不是请求失败后的跨模型兜底。</p>
         <p class="admin-inline-087" data-i18n="routing.failover.hint">失败兜底是另一套独立映射：主路由用尽现有重试后，最多换一次已配置的兜底 Preset。旧配置默认关闭，不自动替你选模型。</p>
         <p class="admin-inline-087" data-i18n="routing.active_binding_hint">只有清除角色卡的模型绑定后才会跟随全局；名为 <code>default</code> 的 profile 也属于固定绑定。</p>
         <div id="mr-active-character-routing-warning" role="status" aria-live="polite" class="admin-inline-087 admin-routing-warning"></div>
@@ -102,7 +103,7 @@
             <div><code class="admin-inline-073">detect_emotion</code> —— 识别文字里的情绪标签，配便宜模型即可。</div>
             <div><code class="admin-inline-073">consolidation</code> —— 把短期记忆整理沉淀为长期记忆、提炼关系事实等后台整理，配便宜模型即可。</div>
             <div><code class="admin-inline-073">perform</code> —— 把回复文字映射成动作/表情演出指令（只有开启"表演意图映射"功能时才会用到）。</div>
-            <div><code class="admin-inline-073">monologue</code> <span data-i18n="routing.category.monologue">—— 前置独白 / 额外思考链：角色说话前的内心独白草稿（只有开启"思考链"功能时才会用到）。</span></div>
+            <div><code class="admin-inline-073">monologue</code> <span data-i18n="routing.category.monologue">—— 前置独白：角色说话前的内心独白草稿（只有开启思考链时才会用到）。未单独映射时按 default_preset → chat → 第一个 preset 解析，不是“直接回落 chat”。</span></div>
             <div><code class="admin-inline-073">sensor_judge</code> <span data-i18n="routing.category.sensor_judge">—— 后台 sensor 裁决；未配置时沿用 intent / chat。短超时、零 SDK 重试。</span></div>
             <div><code class="admin-inline-073">ime_judge</code> <span data-i18n="routing.category.ime_judge">—— IME 活动和有价值线索判断；未配置时沿用 sensor_judge / intent / chat。</span></div>
             <div><code class="admin-inline-073">rpg_kp</code> <span data-i18n="routing.category.rpg_kp">—— RPG Dream 中立裁决（KP）；未配置时回退 chat。30 秒超时、零 SDK 重试。</span></div>

@@ -242,6 +242,126 @@ async def test_apply_to_proactive_gates_monologue(monkeypatch):
     assert called is False
 
 
+@pytest.mark.asyncio
+async def test_monologue_primary_and_fallback_failure_still_continues_chat(monkeypatch):
+    """Both monologue attempts failing must skip injection and still produce the main reply."""
+    from core import llm_client
+
+    _enable_thinking(monkeypatch, mode="monologue")
+    captured: list = []
+    mc = _make_fake_mc(content="主回复照常", captured=captured)
+    monkeypatch.setattr(llm_client, "get_model_client", lambda cat, char_id=None, **kwargs: mc)
+
+    async def fail_monologue(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(thinking, "_run_monologue_call", fail_monologue)
+    result = await llm_client.chat([{"role": "user", "content": "你好"}])
+    assert result == "主回复照常"
+    sent = captured[0]["messages"]
+    assert all(m.get("content") != "你好" or m.get("role") == "user" for m in sent)
+    assert all(m.get("_layer") != "11.7_inner_monologue" for m in sent)
+
+
+@pytest.mark.asyncio
+async def test_monologue_failure_classifies_timeout_vs_empty(monkeypatch):
+    thinking.reset_last_monologue_status()
+    _enable_thinking(monkeypatch, mode="monologue")
+    from core import llm_client
+
+    async def timeout_chat(*args, **kwargs):
+        raise TimeoutError("timed out")
+
+    monkeypatch.setattr("core.api_call_log.last_purpose_call", lambda *args, **kwargs: None)
+    monkeypatch.setattr(llm_client, "chat", timeout_chat)
+    assert await thinking._run_monologue_call([{"role": "user", "content": "在吗"}], char_id=None) is None
+    status = thinking.last_monologue_status(chat_reasoning_native=False)
+    assert status["status"] == "timeout"
+    assert status["body"] is None
+
+    async def empty_chat(*args, **kwargs):
+        return "   "
+
+    monkeypatch.setattr(llm_client, "chat", empty_chat)
+    assert await thinking._run_monologue_call([{"role": "user", "content": "在吗"}], char_id=None) is None
+    status = thinking.last_monologue_status(chat_reasoning_native=False)
+    assert status["status"] == "empty_or_format"
+    assert "内心" not in str(status)
+
+
+def test_last_monologue_status_native_is_not_applicable(monkeypatch):
+    thinking.reset_last_monologue_status()
+    _enable_thinking(monkeypatch, mode="native")
+    status = thinking.last_monologue_status(chat_reasoning_native=True)
+    assert status["status"] == "not_applicable"
+    assert status["reason"] == "native_uses_chat_preset"
+    assert status["body"] is None
+
+
+def test_describe_monologue_route_uses_live_character_not_edited_profile(monkeypatch):
+    _enable_thinking(monkeypatch, mode="monologue")
+    mp = {
+        "active_routing": "global-main",
+        "default_preset": "cheap",
+        "presets": {
+            "cheap": {"reasoning_native": False},
+            "bound-chat": {"reasoning_native": True},
+        },
+        "routing_profiles": {
+            "global-main": {"chat": "cheap"},
+            "bound-profile": {"chat": "bound-chat", "monologue": "cheap"},
+        },
+        "fallback_routes": {"bound-profile": {"monologue": "bound-chat"}},
+    }
+    monkeypatch.setattr("core.model_registry._get_preset_config", lambda: mp)
+    monkeypatch.setattr("core.model_registry._char_model_routing", lambda char_id: "bound-profile")
+    monkeypatch.setattr("core.model_registry._active_char_model_routing", lambda: "global-main")
+    route = thinking.describe_monologue_route(char_id="pinned-card")
+    assert route["effective_profile"] == "bound-profile"
+    assert route["primary_preset"] == "cheap"
+    assert route["source"] == "category"
+    assert route["fallback_preset"] == "bound-chat"
+    assert route["binding_source"] == "character"
+    assert route["global_profile"] == "global-main"
+    assert route["chat_preset"] == "bound-chat"
+    assert route["native_uses"] == "chat"
+    assert route["resolved_mode"] == "monologue"
+
+
+@pytest.mark.asyncio
+async def test_injected_monologue_never_enters_chat_turn_history(monkeypatch):
+    """Injected inner monologue stays on the request copy and never becomes assistant history."""
+    from core import llm_client
+
+    _enable_thinking(monkeypatch, mode="monologue")
+    captured: list = []
+    mc = _make_fake_mc(content="对外回复", captured=captured)
+
+    async def fake_monologue_call(messages, *, char_id):
+        return "这段独白不该进对话记忆"
+
+    monkeypatch.setattr(thinking, "_run_monologue_call", fake_monologue_call)
+    monkeypatch.setattr(llm_client, "get_model_client", lambda cat, char_id=None, **kwargs: mc)
+
+    result = await llm_client.chat([{"role": "user", "content": "你好"}])
+    sent = captured[0]["messages"]
+    assert any("这段独白不该进对话记忆" in (m.get("content") or "") for m in sent)
+    assert result == "对外回复"
+    assert "这段独白不该进对话记忆" not in result
+    captured.clear()
+    turn = await llm_client.chat_turn(
+        [
+            {"role": "system", "content": "（你此刻的内心活动，不要直接复述：这段独白不该进对话记忆）", "_layer": "11.7_inner_monologue"},
+            {"role": "user", "content": "你好"},
+        ],
+        tools=[],
+    )
+    assert turn.content == "对外回复"
+    assert turn.assistant_message["content"] == "对外回复"
+    assert "这段独白不该进对话记忆" not in str(turn.assistant_message)
+    assert "这段独白不该进对话记忆" not in (turn.content or "")
+
+
 # ===========================================================================
 # 3 + 6. auto 模式判定 + native 路线剥离内联 <think> 标签（非流式）
 # ===========================================================================

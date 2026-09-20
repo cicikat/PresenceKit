@@ -80,3 +80,61 @@ def test_api_call_log_uses_daily_files_and_prunes_expired_days(tmp_path):
     api_call_log._prune_daily_logs(ledger, today)
 
     assert not old_path.exists()
+
+
+def test_last_purpose_call_redacts_and_groups_fallback(tmp_path, monkeypatch):
+    ledger = tmp_path / "api_calls.jsonl"
+    monkeypatch.setattr(
+        api_call_log,
+        "get_paths",
+        lambda: SimpleNamespace(api_call_log=lambda: ledger),
+    )
+    api_call_log.append(
+        caller="llm_client",
+        purpose="monologue",
+        provider="openai",
+        model="primary",
+        duration_ms=12,
+        ok=False,
+        error_category="timeout",
+        logical_call_id="mono-1",
+        attempt_id="mono-1:primary",
+        route_role="primary",
+        switch_reason="timeout",
+        logical_final=False,
+    )
+    api_call_log.append(
+        caller="llm_client",
+        purpose="monologue",
+        provider="openai",
+        model="backup",
+        duration_ms=8,
+        ok=True,
+        output_hint="ok",
+        logical_call_id="mono-1",
+        attempt_id="mono-1:fallback",
+        route_role="fallback",
+        logical_final=True,
+        sdk_retry_policy="zero",
+    )
+    api_call_log.append(
+        caller="llm_client",
+        purpose="chat",
+        provider="openai",
+        model="chat-main",
+        duration_ms=20,
+        ok=True,
+        logical_call_id="chat-1",
+        logical_final=True,
+    )
+    latest = api_call_log.last_purpose_call("monologue")
+    assert latest is not None
+    assert latest["logical_call_id"] == "mono-1"
+    assert latest["ok"] is True
+    assert latest["fallback_ok"] is True
+    assert latest["fallback_issued"] is True
+    assert latest["model"] == "backup"
+    assert "prompt" not in latest
+    assert "body" not in latest
+    assert "api_key" not in latest
+    assert api_call_log.last_purpose_call("unknown") is None

@@ -111,6 +111,37 @@ async def test_settings_expose_effective_preview_and_toggle(monkeypatch, tmp_pat
     config = {'thinking': {'enabled': False}}
     monkeypatch.setattr(routes, 'get_config', lambda: config)
     monkeypatch.setattr(routes, '_chat_preset_reasoning_native', lambda: True)
+    monkeypatch.setattr(routes, '_live_char_id', lambda: None)
+    monkeypatch.setattr(
+        thinking,
+        'describe_monologue_route',
+        lambda *, char_id=None: {
+            'effective_profile': 'live-profile',
+            'primary_preset': 'mono-cheap',
+            'source': 'default_preset',
+            'fallback_preset': '',
+            'fallback_source': 'off',
+            'fallback_refused_reason': '',
+            'binding_source': 'global',
+            'global_profile': 'live-profile',
+            'character_binding': '',
+            'chat_preset': 'chat-main',
+            'chat_preset_reasoning_native': True,
+            'resolved_mode': None,
+            'monologue_active': False,
+            'native_uses': 'chat',
+        },
+    )
+    monkeypatch.setattr(
+        thinking,
+        'last_monologue_status',
+        lambda *, chat_reasoning_native=None: {
+            'status': 'disabled', 'resolved_mode': None, 'reason': 'thinking_disabled',
+            'ts': 0, 'iso': '', 'skip_reason': '', 'error_category': '',
+            'switch_reason': '', 'route_role': '', 'logical_call_id': '',
+            'model': '', 'body': 'must-not-leak',
+        },
+    )
     monkeypatch.setattr(routes, 'read_config_file', lambda _: config)
     monkeypatch.setattr(routes, 'write_config_file', lambda *args: None)
     monkeypatch.setattr(config_loader, 'reload_config', lambda: None)
@@ -119,6 +150,10 @@ async def test_settings_expose_effective_preview_and_toggle(monkeypatch, tmp_pat
     assert state['character_voice'] is True
     assert state['display_prefer_monologue'] is True
     assert state['voice_preview']['effective'] is False
+    assert state['monologue_route']['effective_profile'] == 'live-profile'
+    assert state['monologue_route']['primary_preset'] == 'mono-cheap'
+    assert state['last_monologue']['status'] == 'disabled'
+    assert 'body' not in state['last_monologue'] or state['last_monologue']['body'] is None
     await routes.update_thinking(routes.ThinkingUpdate(enabled=True, character_voice=False, display_prefer_monologue=False))
     state = await routes.get_thinking()
     assert state['voice_preview']['blocking_reason'] == 'voice_disabled'
@@ -127,3 +162,4 @@ async def test_settings_expose_effective_preview_and_toggle(monkeypatch, tmp_pat
     assert state['voice_preview']['effective'] is True
     assert state['voice_preview']['output_guaranteed'] is False
     assert state['display_prefer_monologue'] is False
+    assert state['monologue_route']['native_uses'] == 'chat'

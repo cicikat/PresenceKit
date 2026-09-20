@@ -830,7 +830,7 @@ const MR_CATEGORY_DESC = {
   detect_emotion: '识别文字里的情绪标签（便宜模型即可）',
   consolidation:  '短期记忆整理沉淀为长期记忆等后台整理（便宜模型即可）',
   perform:        '回复文字映射成动作/表情演出指令（仅开启该功能时用到）',
-  monologue:      '前置独白 / 额外思考链（说话前的内心独白草稿；仅开启思考链功能时用到）',
+  monologue:      '前置独白（说话前的内心独白草稿；仅开启思考链功能时用到。未单独映射时按 default_preset → chat → 第一个 preset 解析）',
 };
 
 function _renderActiveCharacterRoutingWarning(override) {
@@ -875,7 +875,7 @@ async function loadModelRouting() {
     const defaultSel = document.getElementById('mr-default-preset-select');
     if (defaultSel) {
       const currentDefault = data.default_preset || '';
-      defaultSel.innerHTML = `<option value="">（不设默认，未填 category 回退 chat）</option>` +
+      defaultSel.innerHTML = `<option value="">${t('routing.default_preset_none', '（不设默认：未填 category 走 default_preset → chat → 第一个 preset）')}</option>` +
         Object.keys(data.presets || {}).map(name =>
           `<option value="${escapeHtml(name)}" ${name === currentDefault ? 'selected' : ''}>${escapeHtml(name)}</option>`
         ).join('');
@@ -1220,11 +1220,11 @@ function openProfileModal(name) {
   const presetNames = Object.keys(_mrData.presets || {});
   const catsEl = document.getElementById('mr-profile-categories');
   catsEl.innerHTML = MR_CATEGORIES.map(cat => `
-    <div class="admin-inline-profile-cat">
+    <div class="admin-inline-profile-cat" id="mr-profile-cat-${cat}" tabindex="-1">
       <label class="field">
         <span>${escapeHtml(cat)} <span class="admin-inline-012">${escapeHtml(MR_CATEGORY_DESC[cat] || '')}</span></span>
-        <select id="mr-profile-cat-${cat}">
-          <option value="">${t('routing.clear_mapping', '（清除映射，走默认 preset / chat）')}</option>
+        <select id="mr-profile-cat-select-${cat}">
+          <option value="">${t('routing.clear_mapping', '（清除映射：走 default_preset → chat → 第一个 preset）')}</option>
           ${presetNames.map(p => `<option value="${escapeHtml(p)}" ${existing[cat] === p ? 'selected' : ''}>${escapeHtml(p)}</option>`).join('')}
         </select>
       </label>
@@ -1251,7 +1251,7 @@ async function submitProfileModal() {
   const body = {};
   const fallback = {};
   for (const cat of MR_CATEGORIES) {
-    body[cat] = document.getElementById(`mr-profile-cat-${cat}`).value;
+    body[cat] = document.getElementById(`mr-profile-cat-select-${cat}`).value;
     fallback[cat] = document.getElementById(`mr-profile-fallback-${cat}`).value;
   }
   body.fallback = fallback;

@@ -36,6 +36,11 @@ monologue 路线复用同一拼接器，并把当轮已构建的 `2_char_desc` �
 ## 控制面与跨端
 
 管理面入口在「模型连接与分工」：总开关、mode、心声、独白预算和主动消息开关都在该页编辑。
+思考卡片同时展示当前角色实际生效的前置独白路由：profile、主 preset、兜底 preset、继承来源、
+当前是否启用，以及最近一次独白状态（未启用 / 未适用 / 成功 / 兜底成功 / 超时 / 格式或空正文失败 / 最终跳过）。
+native 明确使用 chat preset；auto 说明实际解析结果。这些字段来自 registry 的 `resolve_category_info("monologue")`
+和 API 台账，不把正在编辑的 profile 当成当前角色生效方案；角色固定绑定时显示覆盖提示。
+不返回独白正文，桌面/手机不新增设置或 admin 权限。
 「聊天方式与思考」只保留跳转，不删 `GET/POST /settings/thinking`。Preset 编辑器暴露
 `reasoning_native` 与 `reasoning_extra_body`。桌面客户端只负责展开显示，不新增设置。
 回合思考读取关联主聊天 `purpose=chat` 以及前置独白 `source=monologue`；探针/摘要和独白
@@ -46,6 +51,8 @@ display_prefer_monologue；GET 的 voice_preview
 返回 register/emotion/variant/rotation_hours/prompt、enabled/effective/blocking_reason，以及
 control=prompt_guidance/output_guaranteed=false。effective 表示提示发送条件满足，不表示
 上游已返回思考或已通过文风验收。预览是当前状态，不是历史回合的实际请求快照。
+GET 另附只读 `monologue_route` 与 `last_monologue`（脱敏元数据，`body` 恒为 null）；
+桌面协议桥可忽略这些附加字段。
 
 桌面现有“展开思考”和本地显示开关继续消费原协议，不增加 IPC/WS 字段或权限。
 手机目前无 reasoning 展开 UI（roadmap）；主聊天同样使用后端生成链。未改 poll/ack/TTL、

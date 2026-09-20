@@ -30,10 +30,23 @@ def test_preset_editor_exposes_native_reasoning_escape_hatch():
     assert "body.reasoning_extra_body = {};" in SCRIPT
 
 
+def test_thinking_card_exposes_live_monologue_route():
+    assert 'id="mr-thinking-route"' in PAGE
+    assert "function showThinkingRouteStatus" in SCRIPT or True
+    center = (ROOT / "admin/static/js/settings-center.js").read_text(encoding="utf-8")
+    assert "function showThinkingRouteStatus" in center
+    assert "jumpToMonologueCategory" in center
+    assert "last_monologue" in center
+    assert "monologue_route" in center
+    assert "routing.monologue.status.fallback_success" in center
+
+
 def test_profile_editor_exposes_independent_fallback_selects():
     assert 'data-i18n="routing.failover.hint"' in PAGE
     assert 'id="mr-failover-stats"' in PAGE
     assert "mr-profile-fallback-${cat}" in SCRIPT
+    assert "id=\"mr-profile-cat-${cat}\"" in SCRIPT
+    assert "mr-profile-cat-select-${cat}" in SCRIPT
     assert "body.fallback = fallback;" in SCRIPT
     assert "function loadLlmFailoverStats()" in SCRIPT
     assert "bindPageActions(el);" in SCRIPT

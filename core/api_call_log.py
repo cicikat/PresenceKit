@@ -270,3 +270,63 @@ def failover_stats(*, window_hours: float = 24.0, now: float | None = None) -> d
             "bodies_stored": False,
         },
     }
+
+
+def last_purpose_call(purpose: str, *, now: float | None = None) -> dict | None:
+    """Latest logical call for one purpose, redacted: no prompt, body, or secrets."""
+    now = time.time() if now is None else now
+    try:
+        rows = _iter_rows(until_ts=now)
+    except Exception:
+        return None
+    wanted = str(purpose or "").strip()
+    if not wanted:
+        return None
+    groups: dict[str, list[dict]] = {}
+    for row in rows:
+        if str(row.get("purpose") or "") != wanted:
+            continue
+        key = str(row.get("logical_call_id") or "") or f"legacy:{id(row)}"
+        groups.setdefault(key, []).append(row)
+    latest: dict | None = None
+    latest_ts = -1.0
+    for members in groups.values():
+        ts = max(float(r.get("ts") or 0) for r in members)
+        if ts < latest_ts:
+            continue
+        latest_ts = ts
+        has_fallback = any(r.get("route_role") == "fallback" for r in members)
+        fallback_ok = any(r.get("route_role") == "fallback" and r.get("ok") for r in members)
+        finals = [r for r in members if r.get("logical_final")]
+        if finals:
+            ok = any(r.get("ok") for r in finals)
+        else:
+            ok = any(r.get("ok") for r in members)
+        skip = next(
+            (str(r.get("skip_reason") or "").strip() for r in reversed(members) if r.get("skip_reason")),
+            "",
+        )
+        error = next(
+            (str(r.get("error_category") or "").strip() for r in reversed(members) if r.get("error_category")),
+            "",
+        )
+        switch = next(
+            (str(r.get("switch_reason") or "").strip() for r in reversed(members) if r.get("switch_reason")),
+            "",
+        )
+        last_row = max(members, key=lambda r: float(r.get("ts") or 0))
+        latest = {
+            "ts": ts,
+            "iso": datetime.fromtimestamp(ts).isoformat(timespec="seconds") if ts else "",
+            "ok": bool(ok),
+            "fallback_issued": bool(has_fallback),
+            "fallback_ok": bool(fallback_ok),
+            "skip_reason": skip,
+            "error_category": error,
+            "switch_reason": switch,
+            "route_role": str(last_row.get("route_role") or ""),
+            "model": str(last_row.get("model") or "")[:64],
+            "logical_call_id": str(last_row.get("logical_call_id") or "")[:64],
+            "output_hint": str(last_row.get("output_hint") or "")[:64],
+        }
+    return latest
