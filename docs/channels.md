@@ -75,7 +75,7 @@ QQ 收消息 → main.handle_message → Pipeline → text_output.send() 直发 
 | `POST /mobile/push` | 后端工具/调试入口：通过 `MobileChannel.send()` 写入一条主动消息 |
 
 上述接口使用管理面板 Bearer token。手机端当前不连接 `/ws/desktop`，因此不会抢占桌宠 WebSocket。
-`tool_status` 与聊天里的 `tool_activity` 都是桌宠可选 UI 帧，发送超时后丢弃，不能阻塞 `/mobile/activate`、`/mobile/poll` 或 `/mobile/chat`。
+桌宠 `/ws/desktop` 与管理面、手机 HTTP 共用同一条 asyncio 循环：`send_text` 超过 0.5s 即丢弃该帧并关掉半开连接，避免心跳或 `tool_status` / `tool_activity` 卡住 `/mobile/activate`、`/mobile/poll` 或 `/mobile/chat`。
 `POST /mobile/push` 可选接收 `char_id`，写入主动消息信封供新客户端渲染发言人。
 
 MobileChannel 的活跃状态有 120 秒 TTL：手机端持续轮询时保持活跃；停止轮询后，调度器广播不会再写入手机队列。

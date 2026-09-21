@@ -44,7 +44,20 @@ def _new_msg_id() -> str:
     return uuid4().hex
 
 
-_TOOL_STATUS_SEND_TIMEOUT_S = 0.2
+# Bound every desktop send. A half-open client makes send_text hang on the
+# shared asyncio loop and freezes HTTP too, including /mobile/activate.
+_SEND_TIMEOUT_S = 0.5
+_TOOL_STATUS_SEND_TIMEOUT_S = _SEND_TIMEOUT_S  # alias kept for existing tests
+
+
+async def _close_stalled(ws: WebSocket) -> None:
+    try:
+        await asyncio.wait_for(
+            ws.close(code=1001, reason="send timeout"),
+            timeout=min(0.2, _SEND_TIMEOUT_S),
+        )
+    except Exception:
+        pass
 
 
 async def _send_json(payload: dict) -> bool:
@@ -53,8 +66,17 @@ async def _send_json(payload: dict) -> bool:
     if ws is None:
         return False
     try:
-        await ws.send_text(json.dumps(payload, ensure_ascii=False))
+        await asyncio.wait_for(
+            ws.send_text(json.dumps(payload, ensure_ascii=False)),
+            timeout=_SEND_TIMEOUT_S,
+        )
         return True
+    except asyncio.TimeoutError:
+        logger.warning("[desktop_ws] send timed out; closing stalled socket")
+        if _current_ws is ws:
+            _current_ws = None
+        await _close_stalled(ws)
+        return False
     except Exception as e:
         logger.warning(f"[desktop_ws] 发送失败: {e}")
         return False
@@ -150,17 +172,7 @@ async def push_tool_status(event) -> bool:
         "attempt": event.attempt,
         "ttl_ms": int(event.ttl_s * 1000),
     }
-    try:
-        return await asyncio.wait_for(
-            _send_json(payload),
-            timeout=_TOOL_STATUS_SEND_TIMEOUT_S,
-        )
-    except asyncio.TimeoutError:
-        logger.debug("[desktop_ws] tool_status send timed out")
-        return False
-    except Exception as e:
-        logger.warning(f"[desktop_ws] tool_status 发送失败: {e}")
-        return False
+    return await _send_json(payload)
 
 
 async def push_stream_start(

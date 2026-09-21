@@ -278,25 +278,43 @@ async def test_desktop_tool_status_uses_only_ephemeral_contract_fields(monkeypat
     }]
 
 
+class _HangingDesktopWS:
+    async def send_text(self, _text):
+        await asyncio.sleep(1)
+
+    async def close(self, code=1000, reason=""):
+        return
+
+
 @pytest.mark.asyncio
-async def test_desktop_tool_status_timeout_does_not_block_http(monkeypatch):
+async def test_desktop_send_timeout_does_not_block_event_loop(monkeypatch):
     from channels import desktop_ws
     from core.tool_ephemeral import ToolEphemeralEvent
 
-    monkeypatch.setattr(desktop_ws, "_TOOL_STATUS_SEND_TIMEOUT_S", 0.01)
+    monkeypatch.setattr(desktop_ws, "_SEND_TIMEOUT_S", 0.05)
+    monkeypatch.setattr(desktop_ws, "_TOOL_STATUS_SEND_TIMEOUT_S", 0.05)
+    desktop_ws._current_ws = _HangingDesktopWS()
+    loop = asyncio.get_running_loop()
+    started = loop.time()
+    concurrent_ran = asyncio.Event()
 
-    async def _hang(_payload):
-        await asyncio.sleep(1)
-        return True
+    async def _simulate_mobile_activate():
+        await asyncio.sleep(0)
+        concurrent_ran.set()
 
-    monkeypatch.setattr(desktop_ws, "_send_json", _hang)
+    probe = asyncio.create_task(_simulate_mobile_activate())
     event = ToolEphemeralEvent(
         status_id="status-timeout", kind="queued", tool_name="observe_user_screen",
         ui_label="看一眼屏幕", index=1, total=1, attempt=1, ttl_s=20,
     )
-    started = asyncio.get_running_loop().time()
-    assert await desktop_ws.push_tool_status(event) is False
-    assert asyncio.get_running_loop().time() - started < 0.2
+    try:
+        assert await desktop_ws.push_tool_status(event) is False
+        await asyncio.wait_for(probe, timeout=0.2)
+        assert concurrent_ran.is_set()
+        assert loop.time() - started < 0.3
+        assert desktop_ws.is_connected() is False
+    finally:
+        desktop_ws._current_ws = None
 
 
 def test_owner_chat_binds_tool_status_without_turn_start_snapshot():

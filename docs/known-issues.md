@@ -717,7 +717,10 @@ settings continue to control persistence. No mobile poll/ack/relay contract chan
 Validation: 57 backend regressions, 7 client regressions, build and Edge IPC fixture passed.
 open: native Tauri/restarted backend integration after the 2026-09-21 observer
 rebinding (chat/QQ attach `push_tool_status` at emit time; autonomy NOW overlay
-now forwards when desktop WS is connected). roadmap: mobile tool chain UI and full unbounded
+now forwards when desktop WS is connected). A half-open desktop WS used to
+block the shared asyncio loop; desktop send is now 0.5s-bounded and closes
+the stalled socket. Restart the running `main.py` to load that timeout.
+roadmap: mobile tool chain UI and full unbounded
 historical tool receipts. Client evidence: docs/tool-activity-2026-09-12.md in the desktop repository.
 
 ## Autonomy XML compatibility and cadence (2026-09-12, partial)
