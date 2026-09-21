@@ -181,11 +181,34 @@ tempo、STFT chroma；旋律状态只能是 `unknown | distribution_only | unava
 多声部、坏编码、超长、超时、缓存键和并发 1，断言数值/质量退化。合成夹具不是听感
 准确率证明。
 
-C–G 仍未施工：分析器尚未接入 STT/凭据/`3.8_audio_impression`，管理面不展示开关为可用。
+C 已接入现有语音链（见下节）。D–G 仍未施工；管理面不展示 `audio_music` 开关为可用。
+
+## 工单 260 C：语音链、凭据与印象层
+
+运行时入口仍是 `core/audio_perception.py`。`audio_music.speech_analysis` 默认关闭：关闭时保持
+253.6，供应商 `tone` 仍是最终印象，不调用分析器。开启后 STT 成功才附加声学摘要；分析失败、
+超时、缺 numpy 或坏编码时 `tone`/`impression` 为 `unclear`，文字照常发送，供应商字段只作
+`provider_tone_hint`。声学结果不能制造转写文本。
+
+凭据仍绑定 owner/char/channel/原文摘要，5 分钟、容量 128、单次消费。服务端可存 compact
+acoustic（状态、质量、中位音高、pace、能量、有声占比、规则版本），HTTP `/transcribe` 对外
+仍只返回 `text`、`tone`、`audio_perception_id`，客户端不能自报特征。编辑文字、换角色、跨
+通道、重复消费、过期或关闭 STT 均丢弃凭据。
+
+`3.8_audio_impression` 在有声学摘要时注入少量可读特征 + 不确定印象，完整 pitch 曲线不进
+prompt；无摘要时保持 253.6 短句。普通文字无此层。
+
+入口验证边界（自动化覆盖转写/凭据/失败不挡文字；真机为 observe）：
+
+| 入口 | C 行为 | 验证 |
+|---|---|---|
+| QQ record | `process_audio_url` → `ingest_audio_bytes`，同轮 `impression()` | 单元：失败返回未听清；分析失败保留文字。真机 amr/silk observe |
+| `/upload/ingest` 单音频 | 同上，直接注入本轮 | 单元：STT 失败继续聊天；成功注入层 |
+| 桌面 `/transcribe` + `/desktop/chat` | 凭据只随原样转写文字 | 单元：跨通道/编辑/重复丢弃；客户端无声学字段 |
+| 手机 `/transcribe` + `/mobile/chat` | 同上，channel=mobile | 同桌面凭据规则；不增加手机播放器 |
 
 ### 后续阶段与未完成项
 
-C：接入现有语音链、凭据、保守标签和 prompt。
 D：音乐存储、注释、统计、只读观测。
 E：Player Adapter 与自有播放器真实闭环。
 F：工具、stimulus → autonomy、反馈循环抑制。

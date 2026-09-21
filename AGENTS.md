@@ -95,6 +95,7 @@
 | 表情包输出（QQ 图片 + desktop/mobile sticker payload） | `core/output/sticker.py`；通道 payload 见 `docs/channels.md` |
 | 音频/音乐感知冻结合同（工单 260） | `core/audio_music_contract.py`；说明见 `docs/audio-perception.md` |
 | 共享语音/音乐声学分析（工单 260 B） | `core/audio_analysis.py`（PCM WAV + numpy；显式 speech/music 模式） |
+| 语音链凭据与印象层（工单 260 C） | `core/audio_perception.py`（`audio_music.speech_analysis` 默认关） |
 | 媒体文件解析与落盘 | `core/media_processor.py` |
 | 沙盒路径管理 | `core/sandbox.py` ← 所有 data/ 路径必须经过此处 |
 | 管理面鉴权（scoped tokens，SEC-AUTH-2） | `admin/auth.py`（`resolve_token` / `require_scopes` / `authenticate_ws`）/ `admin/scopes.py`（scope+profile 表）/ `admin/token_registry.py`（token 加载/热重载/create/rotate/delete/set_disabled） |

@@ -2,6 +2,7 @@
 
 Brief 253.6：QQ record、单音频上传与桌面/手机既有 `/transcribe` 入口接入可选 STT。
 桌面/mobile chat 可附带 `audio_perception_id`，只关联未编辑的本轮转写语调；原通知、poll/ack 和 WS 不变。
+工单 260 C：同一凭据可携带服务端声学摘要；客户端协议字段不变，不能自报特征。
 字段、作用域和失败降级见 [audio-perception.md](audio-perception.md)。
 
 ---

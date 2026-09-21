@@ -195,12 +195,142 @@ async def test_audio_upload_reaches_chat_without_tone_on_failure(configured, mon
         return {"message": message, "hint": audio.prompt_hint()}
     monkeypatch.setattr(chat, "run_owner_chat_turn", turn)
     monkeypatch.setattr(audio, "_request", AsyncMock(side_effect=TimeoutError()))
-    response = await chat.upload_ingest(file=UploadFile(io.BytesIO(b"x"), filename="x.wav"),
-                                       files=None, message="hi", channel="desktop", _auth={})
+    response = await chat.upload_ingest(
+        file=UploadFile(io.BytesIO(b"x"), filename="x.wav"),
+        files=None, message="hi", channel="desktop", request_id="", _auth={},
+    )
     assert "未能听清" in response["message"]
     assert response["hint"] is None
     monkeypatch.setattr(audio, "_request", AsyncMock(return_value={"text": "hello", "tone": "calm"}))
-    response = await chat.upload_ingest(file=UploadFile(io.BytesIO(b"x"), filename="x.wav"),
-                                       files=None, message="", channel="desktop", _auth={})
+    response = await chat.upload_ingest(
+        file=UploadFile(io.BytesIO(b"x"), filename="x.wav"),
+        files=None, message="", channel="desktop", request_id="", _auth={},
+    )
     assert response["message"] == "hello"
     assert response["hint"]["_layer"] == "3.8_audio_impression"
+
+
+def _enable_speech_analysis(configured):
+    configured.setdefault("audio_music", {})["speech_analysis"] = True
+
+
+def _pcm_tone_wav(freq_hz=180.0, duration_s=0.8, sr=16000):
+    import math
+    import struct
+    import wave
+
+    n = int(sr * duration_s)
+    frames = b"".join(
+        struct.pack("<h", int(0.35 * 32767 * math.sin(2 * math.pi * freq_hz * i / sr)))
+        for i in range(n)
+    )
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as handle:
+        handle.setnchannels(1)
+        handle.setsampwidth(2)
+        handle.setframerate(sr)
+        handle.writeframes(frames)
+    return buf.getvalue()
+
+
+@pytest.mark.asyncio
+async def test_stt_success_analysis_failure_keeps_text(configured, monkeypatch):
+    _enable_speech_analysis(configured)
+    monkeypatch.setattr(audio, "_request", AsyncMock(return_value={"text": "hello", "tone": "calm"}))
+    async def boom(*args, **kwargs):
+        raise RuntimeError("analyzer-down")
+    monkeypatch.setattr("core.audio_analysis.analyze_audio", boom)
+    result = await audio.ingest_audio_bytes(b"fixture", "x.wav")
+    assert result["text"] == "hello"
+    assert result["tone"] == "unclear"
+    assert result["acoustic"]["analysis_status"] == "failed"
+    assert result["provider_tone_hint"] == "calm"
+    with audio.impression(result):
+        hint = audio.prompt_hint()
+        assert hint["_layer"] == "3.8_audio_impression"
+        assert "hello" not in hint["content"]
+        assert "unclear" in hint["content"]
+        assert "供应商旁路" in hint["content"]
+        assert "完整音高曲线未注入" in hint["content"]
+
+
+@pytest.mark.asyncio
+async def test_speech_analysis_off_keeps_provider_tone(configured, monkeypatch):
+    configured.setdefault("audio_music", {})["speech_analysis"] = False
+    monkeypatch.setattr(audio, "_request", AsyncMock(return_value={"text": "hello", "tone": "tired"}))
+    called = AsyncMock()
+    monkeypatch.setattr("core.audio_analysis.analyze_audio", called)
+    result = await audio.ingest_audio_bytes(b"fixture", "x.wav")
+    assert result == {"text": "hello", "tone": "tired"}
+    called.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_speech_analysis_overrides_provider_on_ok_or_unclear(configured, monkeypatch, sandbox):
+    _enable_speech_analysis(configured)
+    monkeypatch.setattr(audio, "_request", AsyncMock(return_value={"text": "hello", "tone": "bright"}))
+    wav = _pcm_tone_wav()
+    result = await audio.ingest_audio_bytes(wav, "clip.wav")
+    assert result["text"] == "hello"
+    assert result["tone"] in audio.TONES
+    assert result["acoustic"]["analysis_status"] in {"ok", "partial", "failed", "timeout"}
+    assert result["acoustic"]["provider_tone_hint"] == "bright"
+    with audio.impression(result):
+        content = audio.prompt_hint()["content"]
+        assert "不是情绪" in content
+        assert "完整音高曲线未注入" in content
+        assert "pitch_curve" not in content
+
+
+def test_receipt_does_not_follow_edited_or_cross_channel(configured):
+    result = {
+        "text": "hello",
+        "tone": "unclear",
+        "acoustic": {"analysis_status": "failed", "quality": "insufficient",
+                     "impression": "unclear", "analysis_version": "audio-analysis.v0"},
+    }
+    key = audio.issue_receipt(result, "desktop")
+    assert audio.consume_receipt(key, "hello", "mobile") is None
+    key = audio.issue_receipt(result, "desktop")
+    assert audio.consume_receipt(key, "edited hello", "desktop") is None
+    key = audio.issue_receipt(result, "desktop")
+    consumed = audio.consume_receipt(key, "hello", "desktop")
+    assert consumed["tone"] == "unclear"
+    assert consumed["acoustic"]["analysis_status"] == "failed"
+    assert audio.consume_receipt(key, "hello", "desktop") is None
+
+
+def test_receipt_drops_on_char_switch_and_disable(configured, monkeypatch):
+    result = {"text": "hello", "tone": "calm"}
+    key = audio.issue_receipt(result, "desktop")
+    monkeypatch.setattr("core.scheduler.loop._active_char_id_or_none", lambda: "other_character")
+    assert audio.consume_receipt(key, "hello", "desktop") is None
+    key = audio.issue_receipt(result, "desktop")
+    configured["stt_presets"]["enabled"] = False
+    assert audio.consume_receipt(key, "hello", "desktop") is None
+
+
+@pytest.mark.asyncio
+async def test_plain_text_has_no_audio_layer(configured):
+    @audio.voice_context("desktop")
+    async def endpoint(body):
+        return audio.prompt_hint()
+    assert await endpoint({"message": "just text"}) is None
+
+
+@pytest.mark.asyncio
+async def test_transcribe_hides_acoustic_payload(configured, monkeypatch):
+    from admin.routers.transcribe import transcribe_audio
+    _enable_speech_analysis(configured)
+    monkeypatch.setattr(audio, "_request", AsyncMock(return_value={"text": "hello", "tone": "tired"}))
+    monkeypatch.setattr(
+        "core.audio_analysis.analyze_audio",
+        AsyncMock(return_value={"analysis_status": "failed", "quality": "insufficient",
+                                "pitch_summary": {}, "pace": {}, "energy": {}, "voiced_ratio": {}}),
+    )
+    value = await transcribe_audio(UploadFile(io.BytesIO(b"x"), filename="x.wav"), "desktop", {})
+    assert set(value) == {"text", "tone", "audio_perception_id"}
+    assert value["text"] == "hello"
+    assert value["tone"] == "unclear"
+    stored = audio.consume_receipt(value["audio_perception_id"], "hello", "desktop")
+    assert stored["acoustic"]["analysis_status"] == "failed"

@@ -93,7 +93,11 @@ async def transcribe_audio(
         result = await ingest_audio_bytes(data, file.filename or "voice.webm")
         if not result:
             raise HTTPException(status_code=422, detail="语音识别未启用、未配置或未能听清，请重试或输入文字")
-        return {**result, "audio_perception_id": issue_receipt(result, channel)}
+        return {
+            "text": result["text"],
+            "tone": result["tone"],
+            "audio_perception_id": issue_receipt(result, channel),
+        }
 
     # 根据文件名或 content-type 决定扩展名（影响 ffmpeg 解码路径）
     suffix = ".webm"

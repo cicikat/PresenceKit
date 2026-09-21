@@ -1,13 +1,14 @@
-# 功能控制面事实清单（最后核对：2026-09-21 260 audio/music B）
+# 功能控制面事实清单（最后核对：2026-09-21 260 audio/music C）
 
-## 音频分析与共同听歌（2026-09-21，A 冻结 / B 分析器 / C–G 未实现）
+## 音频分析与共同听歌（2026-09-21，A 冻结 / B 分析器 / C 语音链 / D–G 未实现）
 
 工单 260 A 冻结四路默认关闭开关，配置根 `audio_music`：`speech_analysis`、
 `music_analysis`、`music_control`、`music_autonomy`。STT 已配置不等于声学分析可用。
 B 提供 `core/audio_analysis.py`（PCM WAV + numpy）；缺 numpy 或解码失败时分析
-`unavailable`/`failed`，不挡现有转写。C 接入前管理面仍不展示这些开关为可用。
-设置写 admin；分析/adapter 元数据 state.read；听歌历史与角色注释 memory.read；转写凭据
-仍 chat；未来自有播放宿主走 ws.desktop。精确单位、状态机、计数口径和宿主盘点见
+`unavailable`/`failed`，不挡现有转写。C：`speech_analysis` 开启后接入凭据与
+`3.8_audio_impression`；关闭时仍只注入 253.6 tone。管理面本轮不展示这些开关为可用
+（G 阶段）。设置写 admin；分析/adapter 元数据 state.read；听歌历史与角色注释 memory.read；
+转写凭据仍 chat；未来自有播放宿主走 ws.desktop。精确单位、状态机、计数口径和宿主盘点见
 [audio-perception.md](audio-perception.md)。桌面/手机无新设置。旧 `play_netease` /
 媒体键不是本控制面。
 

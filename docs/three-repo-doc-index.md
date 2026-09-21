@@ -43,7 +43,7 @@
 | ESP32 / Intiface / 具身设备 | [`presence-device-firmware.md`](presence-device-firmware.md)、[`perform-mapping.md`](perform-mapping.md) | 传感器输入还看 [`manual-sensor-evidence.md`](manual-sensor-evidence.md) 和 Mobile [`protocols/sensor-event-protocol.md`](../../Emerald-mobile/docs/protocols/sensor-event-protocol.md)。 |
 | 生活记录、资料接续、聊天日历 | [`life-records.md`](life-records.md)、[`conversation-calendar.md`](conversation-calendar.md) | 手机接入看 [`Emerald-mobile/docs/backend/integration.md`](../../Emerald-mobile/docs/backend/integration.md)，手机 UI 看 [`Emerald-mobile/docs/mobile/conversation-calendar.md`](../../Emerald-mobile/docs/mobile/conversation-calendar.md)。 |
 | 媒体连续性、语音、思考旁白 | [`media-continuity-2026-09-13.md`](media-continuity-2026-09-13.md)、[`thinking-voice.md`](thinking-voice.md) | Desktop 展示看 [`Emerald-client/docs/brief-244-reasoning.md`](../../Emerald-client/docs/brief-244-reasoning.md)，Mobile 行为看 [`Emerald-mobile/docs/backend/integration.md`](../../Emerald-mobile/docs/backend/integration.md)。 |
-| 语音听觉印象、共同听歌合同 | [`audio-perception.md`](audio-perception.md) | 253.6 current；工单 260 A 冻结、B 分析器内部落地，C–G 接入前不是对外 current。 |
+| 语音听觉印象、共同听歌合同 | [`audio-perception.md`](audio-perception.md) | 253.6 current；工单 260 A 冻结、B 分析器、C 语音链已接入，D–G 未落地。 |
 | 发布、首次配置、备份恢复 | [`v1-release-contract.md`](v1-release-contract.md)、[`release-guide.md`](release-guide.md)、[`fresh-clone-testing.md`](fresh-clone-testing.md) | 数据备份看 [`offline-state-backup.md`](offline-state-backup.md)，Mobile 签名状态看 [`Emerald-mobile/docs/v1-release-readiness.md`](../../Emerald-mobile/docs/v1-release-readiness.md)。 |
 | Mobile 正式签名、升级 lineage | [`Emerald-mobile/docs/v1-release-readiness.md`](../../Emerald-mobile/docs/v1-release-readiness.md)、[`Emerald-mobile/docs/android/release-signing-and-upgrade.md`](../../Emerald-mobile/docs/android/release-signing-and-upgrade.md) | 当前仍需正式候选包、keystore 和真机升级证据；不要以旧 `known-issues` 段落代替。 |
 | 当前 bug、open、observe、roadmap | 后端 [`known-issues.md`](known-issues.md)、桌面 [`Emerald-client/docs/known-issues.md`](../../Emerald-client/docs/known-issues.md)、手机 [`Emerald-mobile/docs/known-issues.md`](../../Emerald-mobile/docs/known-issues.md) | 三仓交叉状态再登记到 [`three-repo-interface-catalog.md`](three-repo-interface-catalog.md)。 |
@@ -99,7 +99,7 @@
 | [`prompt-layers.md`](prompt-layers.md) | authority | Prompt 层、tag 激活、裁剪和注入顺序。 |
 | [`scheduler.md`](scheduler.md) | authority | scheduler 主循环、trigger、gating、主动调度。 |
 | [`thinking-voice.md`](thinking-voice.md) | current | 思考旁白、语音和跨端展示契约。 |
-| [`audio-perception.md`](audio-perception.md) | mixed | 253.6 STT/凭据/印象层 current；260 A 冻结、B 共享分析已实现，C–G 未接入。 |
+| [`audio-perception.md`](audio-perception.md) | mixed | 253.6 STT/凭据/印象层 current；260 A 冻结、B 分析、C 语音链已接入，D–G 未落地。 |
 | [`tool-discovery.md`](tool-discovery.md) | current | 工具探针、发现、能力暴露和工具分类。 |
 | [`tools.md`](tools.md) | authority | 工具注册、调度、探针、execute origin 和 tool loop。 |
 
