@@ -1,6 +1,6 @@
 # 语音识别与听觉印象（Brief 253.6 + 工单 260）
 
-管理面「语音合成与声音」末尾提供命名 STT 连接及 `voice_message` 用途。
+管理面「语音合成与声音（TTS、STT）」页首提供命名 STT 连接及 `voice_message` 用途。
 `stt_presets.enabled` 默认 false；`presets` 保存连接名对应的 `base_url`、`model`、
 `api_key` 和 `timeout_seconds`，`routes.voice_message` 选择连接。Base URL 是兼容
 `audio/transcriptions` 服务的 API 根；转写请求使用 multipart，不依赖聊天模型协议。

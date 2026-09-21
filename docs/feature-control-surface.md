@@ -730,7 +730,7 @@ roadmap：逐请求的视觉、权限、队列、发送、ack/TTL 尚未合并�
 
 工单 253.4：owner 私聊 Path C 的 11.5_file_path_hints 提供有界路径候选，不自动读取、不改变授权。256 B 之后：相对路径仍以 allow_roots 为发现提示，绝对普通外部文件不再因跨根拒绝；同名歧义仍 `path_not_found`；NUL 文本按二进制拒绝。管理面工具页继续显示 file_access enabled/configured/effective；`remote_server` 保留 fs schema 以读本进程 backend，外部本机路径路径级拒绝。无新客户端设置或协议。
 
-工单 253.6：语音页新增 STT 命名连接、voice_message 用途和默认关闭的感知开关。GET/PUT /stt-presets* 为 admin；客户端仅传音频和短期凭据，不维护后端权限副本。完整兼容、有效状态和超时语义见 [audio-perception.md](audio-perception.md)。
+工单 253.6：语音页「语音合成与声音（TTS、STT）」提供 STT 命名连接、voice_message 用途和默认关闭的感知开关。GET/PUT /stt-presets* 为 admin；客户端仅传音频和短期凭据，不维护后端权限副本。完整兼容、有效状态和超时语义见 [audio-perception.md](audio-perception.md)。
 
 ## Brief 256 G: character file and Agent-task effective state
 

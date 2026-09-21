@@ -32,6 +32,9 @@ def test_status_page_is_read_only_summary_with_explicit_configuration_entries():
     assert 'onchange="saveCenterSwitch(this)"' in (static / 'js' / 'settings-center.js').read_text(encoding='utf-8')
     assert 'data-action="saveProxy"' in (static / 'pages' / 'network-config.html').read_text(encoding='utf-8')
     assert 'data-action="saveTtsConfig"' in tts
+    assert 'id="stt-config-card"' in tts
+    assert 'data-action="saveSttConnection"' in tts
+    assert 'card.id === \'stt-config-card\'' in (static / 'js' / 'admin-design.js').read_text(encoding='utf-8')
     assert '<details class="card tts-advanced"' in tts
     assert 'id="tts-provider-api-key"' in tts
     assert 'id="tts-ref-audio"' in tts

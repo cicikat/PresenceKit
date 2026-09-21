@@ -265,6 +265,6 @@ def test_logs_page_wires_runtime_warning_query():
     assert "/logs/runtime-warnings" in script
     assert "不能当作没有 warning" in script or "query_failed_not_empty" in script
     assert "window._runtimeWarningHasMore !== true" in script
-    assert "ADMIN_UI_FRAGMENT_VERSION = 'v1-260-admin-surface-1'" in core
+    assert "ADMIN_UI_FRAGMENT_VERSION = 'v1-262-voice-stt-1'" in core
     assert "clearLogs" in script
     assert "DELETE" in script and "/logs" in script

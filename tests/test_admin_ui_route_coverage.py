@@ -128,7 +128,7 @@ NO_ADMIN_UI_WHITELIST: dict[tuple[str, str], str] = {
         "细粒度覆盖单个 user_identity 维度的 API，暂无客户端单独调用；如确认无用可另开工单清理"
     ),
     ("PUT", "/stt-presets/presets/{name}"): (
-        "语音识别命名连接由角色绑定页 character.js 保存；扫描源是拆分后的管理面静态包，"
+        "语音识别命名连接由语音页 tts-config.html + character.js 保存；扫描源是拆分后的管理面静态包，"
         "不要求路径字面量出现在 index.html 壳里"
     ),
 }

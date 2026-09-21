@@ -34,6 +34,7 @@ function decorateSettingsPanels(page, root) {
     if (card.querySelector(':scope > details.settings-disclosure')) continue;
     // Do not hide plain switches, lists, or already expandable connection editors.
     const fields = card.querySelectorAll('input:not([type=checkbox]):not([type=hidden]), select, textarea');
+    if (card.id === 'stt-config-card') continue;
     if (fields.length < 2 || card.querySelector('.vision-editor, .card, details')) continue;
     const header = card.querySelector(':scope > .card-header');
     const title = header?.querySelector('h3') || card.querySelector(':scope > h3');

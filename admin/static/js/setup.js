@@ -256,7 +256,7 @@ async function _loadSetupOptional() {
       <div class="setup-optional-model-summary">
         <div class="setup-optional-summary-row">
           <span>TTS: ${tts ? (tts.enabled ? `<span class="badge badge-success">${enabled}</span>` : `<span class="badge">${disabled}</span>`) : `<span class="badge">${unknown}</span>`}</span>
-          <button class="btn btn-ghost btn-sm" data-action="goto" data-action-args='["tts-config"]'>${escapeHtml(t('setup.go_tts', '前往 TTS 配置'))}</button>
+          <button class="btn btn-ghost btn-sm" data-action="goto" data-action-args='["tts-config"]'>${escapeHtml(t('setup.go_tts', '前往语音合成与声音（TTS、STT）'))}</button>
         </div>
         <div class="setup-optional-summary-row">
           <span>Vision: ${vision ? (vision.enabled ? `<span class="badge badge-success">${escapeHtml(t('setup.vision_enabled', '已启用（{model}）', {model: vision.model || t('setup.no_model', '未填模型')}))}</span>` : `<span class="badge">${disabled}</span>`) : `<span class="badge">${unknown}</span>`}</span>

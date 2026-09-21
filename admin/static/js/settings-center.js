@@ -240,7 +240,7 @@ async function loadServiceCenter() {
     [t('settings_center.owner_profile',"所有者资料"),'/settings/setup-status','setup',d=>[d.owner?.configured,'']],
     [t('settings_center.image_recognition',"图片识别"),'/vision-params','model-routing',d=>[typeof d.model==='string'&&typeof d.base_url==='string'?Boolean(d.model&&d.base_url):undefined,d.model]],
     [t('settings_center.text_recognition_ocr',"文字识别（OCR）"),'/image-recognition','model-routing',d=>[d.ocr?.configured??d.configured, '生活记录账单固定使用 OCR；饮食与购物车使用视觉']],
-    [t('settings_center.speech_synthesis',"语音合成"),'/tts-config','tts-config',d=>[d.provider_status?.ready,d.provider]],
+    [t('nav.page.tts-config',"语音合成与声音（TTS、STT）"),'/tts-config','tts-config',d=>[d.provider_status?.ready,d.provider]],
     [t('settings_center.external_tool_services',"外部工具服务"),'/settings/mcp','mcp',d=>[Array.isArray(d.servers)?d.servers.length>0:undefined,Array.isArray(d.servers)?t('settings_center.server_count','{count} 个服务；连接状态见详情',{count:d.servers.length}):t('settings_center.service_status_not_returned',"服务状态未返回")]],
     [t('settings_center.mail',"邮件"),'/settings/mail','mail-config',d=>[d.configured,'']],
     [t('settings_center.diary_source',"日记数据源"),'/settings/diary','diary-config',d=>[d.configured,'']],
