@@ -967,6 +967,14 @@ class ToolResult:
 
 ---
 
+## 工单 260 A：听歌工具名称冻结（尚未注册）
+
+计划工具：`get_listening_state` / `get_listening_queue` / `get_listening_history` /
+`get_track_note` / `write_track_note` / `choose_next_track`。F 阶段才进入 `_TOOL_REGISTRY`。
+现有 `desktop_play_pause` 与 `play_song` 仍是独立桌面动作，不视为 Player Adapter，本轮不删。
+选择下一首仅限已启用会话中的可用曲库/队列，并携带 revision。工具结果不得再包装成
+`perceive_event`。合同见 [audio-perception.md](audio-perception.md)。
+
 ## 当前未注册的旧网易云 wrapper
 
 当前 `core/tool_dispatcher.py` 中未发现 `_desktop_launch_netease_wrapper` / `_desktop_play_netease_wrapper` 这类旧 wrapper。

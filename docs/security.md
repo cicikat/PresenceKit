@@ -229,6 +229,22 @@ scope 端点→rotate 后旧值失效→delete 后 401）、限速阈值触发�
 `tests/test_sec_ws1_auth.py`：WS token 提取（仅 header，拒绝 query）、access log 不泄漏
 token 值等 SEC-WS-1 契约，已随 `authenticate_ws` 签名变化同步更新。
 
+## Ticket 260 A audio / music scopes
+
+No new token scope. Frozen mapping:
+
+| surface | scope | notes |
+|---|---|---|
+| analysis / player / music switches | `admin` | four default-off flags under `audio_music`; STT remains `stt_presets` |
+| analysis success/failure, adapter capabilities, live playback metadata, count definitions | `state.read` | redacted; no audio bytes, notes, or raw vendor payloads |
+| listening history, listen counts tied to tracks, character song notes | `memory.read` | high-sensitivity; not on generic status tokens |
+| `/transcribe`, `audio_perception_id` | `chat` | existing 253.6 receipts; clients cannot self-report features |
+| first-party player host commands/events | `ws.desktop` | identity bound by backend; host cannot pick owner/char |
+
+Desktop/mobile profiles gain no extra permission this round. Phone keeps transcription
+credentials only. Admin UI that later lists notes or history must not dump them onto a
+`state.read` observability card.
+
 ## Brief 258 dossier scopes
 
 - `state.read`: `GET /observability/memory-consolidation`; metadata only, with

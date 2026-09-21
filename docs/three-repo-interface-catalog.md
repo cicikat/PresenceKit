@@ -1004,6 +1004,15 @@ observe：两端真实锁屏、输入事件与后台生命周期验收未执行�
 
 GET /observability/drinking（state.read）返回当前角色强度、decay_per_hour、effective 和阻断原因；管理面「存在」可见。聊天仅明确邀请才暴露工具，桌面沿用 perform.posture/energy，手机无新增字段或设置。真实桌面动作表现 observe。
 
+### 工单 260 A audio + music foundation — freeze / not current
+
+`freeze`：后端合同 `audio-music-perception.v0`（`core/audio_music_contract.py`）。
+不新增 REST/WS/IPC 字段、客户端设置或桌面 action。手机保持 253.6 转写凭据兼容，不增加
+手机播放器。自有播放器尚未实现；网易云 `play_netease` 与 `media_play_pause` 仍是独立
+v0.1 desktop action，不是 Player Adapter。TTS 播放队列不是音乐宿主。后续 transport
+拟走 `ws.desktop`，身份由后端绑定。精确 schema/scope 见
+[audio-perception.md](audio-perception.md)。
+
 ### Brief 253.6 audio perception — current / observe
 
 admin 的 GET /stt-presets、PUT /stt-presets/presets/{name}、PUT /stt-presets/routes 管理命名连接、voice_message 用途和 effective state。新感知默认关闭。chat scope 的 POST /transcribe 保留 text，新路径增加 tone/audio_perception_id；POST /desktop/chat 与 /mobile/chat 接受可选凭据，原文字兼容。凭据绑定 owner/char/channel/text，5 分钟、一次性、内存上限 128，不改变 WS/poll/ack。QQ record 和 /upload/ingest 单音频也支持转写；各通道失败降级见 [audio-perception.md](audio-perception.md)。桌面 Tauri 仅透传可选字段，手机请求层同样只对原样转写文本发送凭据，无新设置或权限。真实麦克风、QQ 和远端 STT 联调为 observe。

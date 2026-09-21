@@ -368,6 +368,16 @@ REGISTRY: dict[str, PathMeta] = {
     "coplay_game_log_path":   PathMeta("canonical", "reality",         "per_char_user", "ignore"),
     # afterglow 是纯 TTL 软提示残留，过期即无意义，等价于 dream_hud_state 的定位
     "coplay_afterglow_path":  PathMeta("runtime",   "reality",         "per_char_user", "ignore"),
+
+    # ── listening / music perception (ticket 260 A freeze; writers land in D/E)
+    "listening_root":         PathMeta("canonical", "reality",         "per_user",      "ignore"),
+    "music_library_db":       PathMeta("canonical", "reality",         "per_user",      "ignore"),
+    "listening_session":      PathMeta("runtime",   "reality",         "per_user",      "ignore"),
+    "listening_history_db":   PathMeta("canonical", "reality",         "per_user",      "ignore"),
+    "listening_stats_db":     PathMeta("derived",   "reality",         "per_user",      "ignore"),
+    "music_audio_blob_dir":   PathMeta("canonical", "reality",         "per_user",      "ignore"),
+    "character_track_notes":  PathMeta("canonical", "character_inner", "per_char_user", "ignore"),
+    "audio_analysis_cache_dir": PathMeta("derived", "shared",          "global",        "ignore"),
 }
 
 # ── retention 策略（由 scheduler.log_maintenance 每 24 小时执行，参数见 config.yaml retention.*）
@@ -379,6 +389,9 @@ RETENTION_POLICY: dict[str, str] = {
     # forensic — 可丢，不影响业务
     "dead_letter_queue": "count-cap  max_files=200       超出时删最旧；保持可监控但不无限增长",
     "runtime_warning_log": "age-gc+size-cap  max_age_days=14, max_day_bytes=8MiB, max_total_bytes=48MiB  仅新增 WARNING+ JSONL；不触碰 error.log",
+    "audio_analysis_cache_dir": "age-gc+size-cap  max_age_days=30, max_total_bytes=512MiB  按内容摘要+分析版本重建；不含原始语音",
+    "listening_history_db": "count-cap  max_occurrences=2000  超出删最旧 occurrence；stats 必须可从剩余历史重建",
+    "music_audio_blob_dir": "live-ref  仅在对应 track 删除后回收；不按墙钟删除用户提供音频",
     # canonical — 仅删 done 项，活跃数据不受影响
     "reminders":         "legacy JSON archive; Runtime schedules are the authority (256 E). prune is a no-op on the live store",
     # archive — loader 不读，可无损删旧

@@ -1357,6 +1357,45 @@ class DataPaths:
             char_id, safe_user_id(uid), activity_type, safe_user_id(session_id),
         )
 
+    def listening_root(self, user_id: str | int) -> Path:
+        """Owner listening ledger root: data/runtime/listening/{uid}/."""
+        assert_production_identity_allowed(user_id, mode=self.mode)
+        return self._p("runtime", "listening", safe_user_id(user_id))
+
+    def music_library_db(self, user_id: str | int) -> Path:
+        """Canonical track catalog for one owner. Same title does not merge rows."""
+        return self.listening_root(user_id) / "library.sqlite3"
+
+    def listening_session(self, user_id: str | int) -> Path:
+        """Current playback session snapshot; restart must query the host."""
+        return self.listening_root(user_id) / "session.json"
+
+    def listening_history_db(self, user_id: str | int) -> Path:
+        """Idempotent playback occurrence ledger used to rebuild stats."""
+        return self.listening_root(user_id) / "history.sqlite3"
+
+    def listening_stats_db(self, user_id: str | int) -> Path:
+        """Derived listen counters; rebuild from history, never from wall-clock."""
+        return self.listening_root(user_id) / "stats.sqlite3"
+
+    def music_audio_blob_dir(self, user_id: str | int) -> Path:
+        """Controlled user-provided audio blobs; not a generic path/URL proxy."""
+        return self.listening_root(user_id) / "audio"
+
+    def character_track_notes(
+        self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID,
+    ) -> Path:
+        """Subjective per-character song notes, isolated from listen counts."""
+        assert_production_identity_allowed(user_id, mode=self.mode)
+        return self._p(
+            "runtime", "characters", char_id, "listening",
+            safe_user_id(user_id), "track_notes.sqlite3",
+        )
+
+    def audio_analysis_cache_dir(self) -> Path:
+        """Derived acoustic summaries keyed by content hash + analysis version."""
+        return self._p("cache", "audio_analysis")
+
     def cleanup(self):
         if self.mode != "test":
             raise RuntimeError("只有 test 模式才能执行 cleanup()")

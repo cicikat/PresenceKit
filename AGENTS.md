@@ -29,6 +29,7 @@
 | 改工具系统（新增工具、探针规则、桌面动作、execute_structured() origin 闸门） | `docs/tools.md` |
 | 改调度器（定时触发、主动消息） | `docs/scheduler.md` |
 | 改 QQ / 桌宠通道、广播、WebSocket、跨通道接续 | `docs/channels.md`；三仓协议总账见 `docs/three-repo-interface-catalog.md`，桌面 v0.1 字段见 `Emerald-client/docs/protocol-v0.md` |
+| 改语音听觉印象、音乐分析、共同听歌或自有播放器 | `docs/audio-perception.md`；冻结合同 `core/audio_music_contract.py`（工单 260） |
 | 整理或修改三仓接口、跨端设置/观测、调用链 | `docs/three-repo-interface-catalog.md`；精确 REST schema 以 `/openapi.json` 为准 |
 | 改多角色群聊、Stage session、共享 transcript、回合仲裁 | `docs/stage.md` |
 | 改花园系统（情绪花槽、自动/被动浇水、采后处理、管理面板状态） | `docs/garden.md` |
@@ -92,6 +93,7 @@
 | 花园管理面板接口 | `admin/routers/garden.py` |
 | 用户私有 authored 资产（贴纸/角色卡/reality/dream 素材；非 `data/`） | `core/data_paths.py`（`userdata_*` / fallback accessor）+ `core/asset_registry.py`；分类见 `docs/data-taxonomy.md` |
 | 表情包输出（QQ 图片 + desktop/mobile sticker payload） | `core/output/sticker.py`；通道 payload 见 `docs/channels.md` |
+| 音频/音乐感知冻结合同（工单 260） | `core/audio_music_contract.py`；说明见 `docs/audio-perception.md` |
 | 媒体文件解析与落盘 | `core/media_processor.py` |
 | 沙盒路径管理 | `core/sandbox.py` ← 所有 data/ 路径必须经过此处 |
 | 管理面鉴权（scoped tokens，SEC-AUTH-2） | `admin/auth.py`（`resolve_token` / `require_scopes` / `authenticate_ws`）/ `admin/scopes.py`（scope+profile 表）/ `admin/token_registry.py`（token 加载/热重载/create/rotate/delete/set_disabled） |

@@ -35,6 +35,7 @@ data/
 │   ├── channel_queue.json
 │   ├── mobile_queue.json
 │   ├── agent_actions.json
+│   ├── listening/{uid}/               # 工单 260 A：曲库/session/history/stats/受控音频
 │   ├── companion/
 │   │   ├── receipts/{caller_label}/
 │   │   ├── sessions/{caller_label}.json
@@ -74,6 +75,7 @@ data/
 │   │   ├── works/{interest_id}/
 │   │   ├── notes/{interest_id}.md
 │   │   ├── garden/{plants.json,storage.json}
+│   │   ├── listening/{uid}/track_notes.sqlite3  # 工单 260 A：角色歌曲注释
 │   │   ├── pet.json
 │   │   └── character_growth/  # 历史遗留文件；Brief 35 已移除代码读写
 │   └── dreams/{char_id}/
@@ -95,6 +97,7 @@ data/
 ├── group_context/
 ├── inbox/
 ├── cache/image_cache/
+├── cache/audio_analysis/              # 工单 260 A：内容摘要+分析版本缓存；不含原始语音
 ├── logs/
 │   ├── error.log
 │   ├── runtime_warnings-YYYY-MM-DD.jsonl  # WARNING+ 轮转；保留 14 天
@@ -191,6 +194,25 @@ Prompt、API key、base URL 或模型自由文本。校准任务只在进程生�
 
 `interest_state.json`、`works/{interest_id}/` 与 `notes/{interest_id}.md` 是当前成长系统的
 角色级 canonical 真值；物理位置虽在 `runtime/` 树下，仍不可按临时缓存清理。
+
+### Listening / music (ticket 260 A freeze)
+
+共同听歌账本按 owner 落在 `data/runtime/listening/{uid}/`；角色注释按 char 隔离。A 阶段只
+登记路径与分类，D 才写库。语音临时音频不进这些目录。
+
+| accessor | 当前用途 | durability / domain / scope |
+|---|---|---|
+| `listening_root` | owner 听歌根 | canonical · reality · per_user |
+| `music_library_db` | track 目录；同名不合并 | canonical · reality · per_user |
+| `listening_session` | 当前宿主 session 快照；重启须重查宿主 | runtime · reality · per_user |
+| `listening_history_db` | occurrence 账本，计数权威 | canonical · reality · per_user |
+| `listening_stats_db` | 从 history 重建的计数 | derived · reality · per_user |
+| `music_audio_blob_dir` | 用户提供的受控音频；非通用路径代理 | canonical · reality · per_user |
+| `character_track_notes` | 角色主观歌曲注释 | canonical · character_inner · per_char_user |
+| `audio_analysis_cache_dir` | 内容摘要 + 分析版本缓存 | derived · shared · global |
+
+分析缓存 30 天 / 512 MiB；history 保留最近 2000 条 occurrence。原始语音不持久保存。
+完整 schema 与计数口径见 [audio-perception.md](audio-perception.md)「工单 260 A」。
 
 ### Dream
 
