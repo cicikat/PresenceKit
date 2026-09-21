@@ -105,7 +105,7 @@ function centerSwitch(label, checked, source, name, disabled=false, note='') {
   return `<div class="admin-toolbar" data-feature-row><label class="checkbox-row"><input type="checkbox" ${checked?'checked':''} ${disabled?'disabled':''} data-center-source="${source}" data-center-name="${escapeHtml(name)}" onchange="saveCenterSwitch(this)"><span>${escapeHtml(label)}</span></label><span class="admin-source-hint">${escapeHtml(note)}</span>${centerLink(edit,t('settings_center.detailed_settings',"细分设置"))}${centerLink(observe,t('settings_center.view_records',"查看记录"))}</div>`;
 }
 function centerAutonomyControls(config) {
-  const daily = Number(config.daily_evaluation_budget ?? 12);
+  const daily = Number(config.daily_evaluation_budget ?? 96);
   const interval = Number(config.min_interval_seconds ?? 900);
   return `<div class="admin-toolbar" data-feature-row data-autonomy-controls>
     <label class="checkbox-row"><input type="checkbox" ${config.enabled?'checked':''} data-center-source="autonomy" data-center-name="enabled" onchange="saveCenterSwitch(this)"><span>${escapeHtml(t('settings_center.autonomous_activity','自主活动'))}</span></label>

@@ -287,7 +287,10 @@ async def _execute_owner_chat_turn_locked(
         # 保持非流式，确保完整消息语义。
         from channels import desktop_ws as _dws
         from channels import ui_push as _ui_push
-        _tool_status_observer = _dws.push_tool_status if _dws.is_connected() else None
+        # Bind the NOW overlay at emit time. A turn-start snapshot of
+        # is_connected() would drop tool_status for the whole turn if the
+        # desktop WS connected after /desktop/chat started.
+        _tool_status_observer = _dws.push_tool_status
 
         _t_first_delta = None
         _t_stream = None

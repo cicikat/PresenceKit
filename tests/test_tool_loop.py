@@ -1157,6 +1157,29 @@ async def test_budget_timeout_closing_strips_marker(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_inner_chat_timeout_is_not_logged_as_total_budget(monkeypatch, caplog):
+    import logging
+    _patch_tool_loop_config(monkeypatch, max_steps=5, total_timeout_s=90)
+    _patch_tools_schema(monkeypatch, ["web_search"])
+
+    async def _inner_timeout(messages, tools, **kw):
+        raise TimeoutError()
+
+    monkeypatch.setattr("core.llm_client.chat_turn", _inner_timeout)
+    final_calls = _patch_final_chat(monkeypatch, text="内层超时收尾")
+    caplog.set_level(logging.WARNING, logger="core.pipeline")
+
+    result = await _make_pipeline().run_agentic_loop(
+        [{"role": "user", "content": "查一下"}], uid="u1", char_id=TEST_CHAR_ID, session_state=object(),
+    )
+    assert result == "内层超时收尾"
+    joined = "\n".join(record.getMessage() for record in caplog.records)
+    assert "内层调用超时" in joined
+    assert "总预算 90s 超时" not in joined
+    assert all(m.get("_layer") != "11.5_tool_nudge" for m in final_calls[-1])
+
+
+@pytest.mark.asyncio
 async def test_anti_collapse_retry_strips_marker(monkeypatch):
     pipeline = _make_pipeline()
     monkeypatch.setattr(

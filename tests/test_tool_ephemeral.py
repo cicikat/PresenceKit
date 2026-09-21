@@ -276,3 +276,14 @@ async def test_desktop_tool_status_uses_only_ephemeral_contract_fields(monkeypat
         "label": "查询设备状态", "index": 1, "total": 2, "attempt": 1,
         "ttl_ms": 20_000,
     }]
+
+
+def test_owner_chat_binds_tool_status_without_turn_start_snapshot():
+    from pathlib import Path
+
+    chat = (Path(__file__).resolve().parents[1] / "admin" / "routers" / "chat.py").read_text(encoding="utf-8")
+    main = (Path(__file__).resolve().parents[1] / "main.py").read_text(encoding="utf-8")
+    assert "push_tool_status if _dws.is_connected() else None" not in chat
+    assert "tool_event_observer=_dws.push_tool_status" in chat or "_tool_status_observer = _dws.push_tool_status" in chat
+    assert "push_tool_status if _desktop_ws.is_connected() else None" not in main
+    assert "tool_event_observer=_desktop_ws.push_tool_status" in main

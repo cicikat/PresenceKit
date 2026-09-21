@@ -21,7 +21,7 @@ _scope_locks_guard = Lock()
 DEFAULT_CONFIG = {
     "enabled": False,
     "talk_enabled": True,
-    "daily_evaluation_budget": 12,
+    "daily_evaluation_budget": 96,
     "min_interval_seconds": 15 * 60,
     "max_steps": 4,
     "max_tools": 4,

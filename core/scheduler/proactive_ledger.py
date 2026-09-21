@@ -9,7 +9,7 @@
 
 接管原先分散在 `loop.py`（`_next_proactive_ts` 全局间隔 + jitter 一次性采样，A2）和
 执行出口里的状态，新增当日发送预算
-（`scheduler.max_daily_proactive`，默认 8，emergency 豁免但仍记账）。
+（`scheduler.max_daily_proactive`，默认 16，emergency 豁免但仍记账）。
 
 RC5 修复：此前 `_mark_global_proactive()` 只在 `execution.execute_prompt()` 成功后调用，
 sensor_aware / manual_trigger 等出口完全不记账，导致 gating 看到的
@@ -55,7 +55,7 @@ def _gap_seconds() -> float:
 
 
 def _daily_budget() -> int:
-    return int(_cfg().get("max_daily_proactive", 8))
+    return int(_cfg().get("max_daily_proactive", 16))
 
 
 def _logical_day_str(now_ts: float | None = None) -> str:

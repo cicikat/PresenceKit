@@ -165,6 +165,15 @@ async def put_sched_config(body: dict, auth=Depends(require_scopes("admin"))):
             raise HTTPException(status_code=422, detail="signatures 必须为数组")
         cfg["signatures"] = [str(s).strip() for s in sigs if str(s).strip()]
 
+    if "max_daily_proactive" in body:
+        try:
+            daily = int(body["max_daily_proactive"])
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=422, detail="max_daily_proactive 必须是正整数")
+        if isinstance(body["max_daily_proactive"], bool) or not 1 <= daily <= 64:
+            raise HTTPException(status_code=422, detail="max_daily_proactive 需在 1–64 内")
+        cfg["max_daily_proactive"] = daily
+
     _save_sched_cfg(cfg)
     return {"message": "调度器配置已保存", "config": cfg}
 

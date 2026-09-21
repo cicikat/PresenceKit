@@ -1086,7 +1086,9 @@ under memory.read, replacing a matching action_trace echo by event_id. Older ech
 Desktop defaults chat.toolActivityVisible=true; the switch is display-only. Backend action_trace
 settings continue to control persistence. No mobile poll/ack/relay contract changes.
 Validation: 57 backend regressions, 7 client regressions, build and Edge IPC fixture passed.
-open: native Tauri/restarted backend integration. roadmap: mobile tool chain UI and full unbounded
+open: native Tauri/restarted backend integration after the 2026-09-21 observer
+rebinding (chat/QQ attach `push_tool_status` at emit time; autonomy NOW overlay
+now forwards when desktop WS is connected). roadmap: mobile tool chain UI and full unbounded
 historical tool receipts. Client evidence: docs/tool-activity-2026-09-12.md in the desktop repository.
 
 ## Brief 256 F: executable Agent tasks

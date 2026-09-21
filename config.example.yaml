@@ -780,7 +780,7 @@ scheduler:
     enabled: true
     tick_interval_seconds: 30
   global_proactive_min_gap_seconds: 5400   # 主动消息全局最小间隔：90分钟（±20% jitter，一次性采样，只增不减）；想更克制就调大。对应 admin PUT /scheduler/config 的 global_proactive_min_gap_hours=1.5。改后 ≤60s 内经 config 热加载生效，无需重启（core/config_loader.py mtime 检查）。
-  max_daily_proactive: 8   # 当日主动消息总条数上限（ProactiveLedger，按 rhythm.py 逻辑日重置，5点前算前一天）；emergency 优先级触发器豁免但仍计入统计。
+  max_daily_proactive: 16   # 当日主动消息总条数上限（ProactiveLedger，按 rhythm.py 逻辑日重置，5点前算前一天）；emergency 优先级触发器豁免但仍计入统计。
   gating_shadow:
     enabled: true
     max_size_mb: 5

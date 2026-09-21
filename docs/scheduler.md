@@ -240,7 +240,7 @@ snapshot() -> dict
 采样一次）；`can_send()` 的间隔检查退化为 `now >= next_allowed_ts`，不再每次检查都
 重新抽签。
 
-**当日发送预算**：`scheduler.max_daily_proactive`（默认 8），按 `rhythm.logical_day()`
+**当日发送预算**：`scheduler.max_daily_proactive`（默认 16），按 `rhythm.logical_day()`
 逻辑日重置（凌晨 5 点前算前一天）。这是比"最小间隔"更符合直觉的总闸：间隔管
 "别连珠炮"，预算管"一天别太吵"。emergency 优先级触发器豁免预算但仍计入统计。
 
@@ -272,11 +272,12 @@ snapshot() -> dict
 ```yaml
 scheduler:
   global_proactive_min_gap_seconds: 5400   # 90 分钟；想更克制就调大；改后 ≤60s 内热加载生效
-  max_daily_proactive: 8                    # 当日主动消息总条数上限；emergency 豁免但仍计数
+  max_daily_proactive: 16                   # 当日主动消息总条数上限；emergency 豁免但仍计数
 ```
 
-**读写字段名**：`PUT /scheduler/config` 只接受 `global_proactive_min_gap_hours`（小时，
-校验范围 `(0, 24]`），换算后落盘为 `global_proactive_min_gap_seconds`；`_hours` 这个 key
+**读写字段名**：`PUT /scheduler/config` 接受 `global_proactive_min_gap_hours`（小时，
+校验范围 `(0, 24]`），换算后落盘为 `global_proactive_min_gap_seconds`；以及
+`max_daily_proactive`（1–64，热加载后立即作为当日主动发言上限）。`_hours` 这个 key
 本身从不落盘。`GET /scheduler/config` 补两类派生字段做对称/一致性回显：
 `global_proactive_min_gap_hours`（由 `_seconds` 换算，避免调用方 PUT hours 后在 GET
 里读不到同名字段，Brief 08 #5 止血修复的 key mismatch）；`effective_gap_seconds` +

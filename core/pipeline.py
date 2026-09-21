@@ -1573,13 +1573,31 @@ class Pipeline:
                               context={"business_steps": business_steps, "discovery_steps": discovery_steps})
             outcome = ("exhausted", "")
 
+        # wait_for() cannot distinguish its own deadline from an inner
+        # TimeoutError (Python 3.11+ aliases asyncio.TimeoutError to TimeoutError).
+        # A chat_turn 90s timeout would otherwise be logged as a 720s budget miss.
+        _loop_started = time.monotonic()
         try:
             await asyncio.wait_for(_run_steps(), timeout=total_timeout_s)
         except asyncio.TimeoutError:
-            _record_discovery(category="tool_loop_discovery", code="timeout", status="attention")
-            logger.warning(
-                "[pipeline.run_agentic_loop] 总预算 %.0fs 超时，按步数耗尽处理", total_timeout_s
-            )
+            elapsed = time.monotonic() - _loop_started
+            remaining = total_timeout_s - elapsed
+            if remaining > 0.05:
+                logger.warning(
+                    "[pipeline.run_agentic_loop] 内层调用超时 elapsed=%.1fs remaining=%.1fs，按步数耗尽处理",
+                    elapsed, remaining,
+                )
+                _record_discovery(
+                    category="tool_loop_discovery",
+                    code="inner_timeout",
+                    status="attention",
+                    context={"elapsed_s": round(elapsed, 1), "remaining_s": round(remaining, 1)},
+                )
+            else:
+                logger.warning(
+                    "[pipeline.run_agentic_loop] 总预算 %.0fs 超时，按步数耗尽处理", total_timeout_s
+                )
+                _record_discovery(category="tool_loop_discovery", code="timeout", status="attention")
             outcome = ("exhausted", "")
         finally:
             from core.tools.drinking import end_turn as _end_drinking_turn

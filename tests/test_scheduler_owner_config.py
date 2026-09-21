@@ -48,6 +48,18 @@ def test_put_owner_birthday_rejects_impossible_date(monkeypatch):
     assert exc.value.status_code == 422
 
 
+def test_put_max_daily_proactive_persists_and_rejects_out_of_range(monkeypatch):
+    saved = {}
+    monkeypatch.setattr(scheduler, "_sched_cfg", lambda: {"max_daily_proactive": 8})
+    monkeypatch.setattr(scheduler, "_save_sched_cfg", lambda cfg: saved.update(cfg))
+    result = asyncio.run(scheduler.put_sched_config({"max_daily_proactive": 16}, auth=None))
+    assert saved["max_daily_proactive"] == 16
+    assert result["config"]["max_daily_proactive"] == 16
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(scheduler.put_sched_config({"max_daily_proactive": 0}, auth=None))
+    assert exc.value.status_code == 422
+
+
 def test_put_owner_birthday_accepts_valid_mm_dd(monkeypatch):
     saved = {}
     monkeypatch.setattr(scheduler, "_sched_cfg", lambda: {})

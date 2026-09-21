@@ -1,4 +1,10 @@
-# 功能控制面事实清单（最后核对：2026-09-21 260 audio/music G）
+# 功能控制面事实清单（最后核对：2026-09-21 每日互动预算加倍）
+
+## 每日互动预算加倍（2026-09-21，current）
+
+`scheduler.max_daily_proactive` 默认 16；`PUT /scheduler/config` 可写 1–64，管理面调度器页可改。
+自主评估默认 `daily_evaluation_budget` 96（API 上限仍 100）。屏幕观察本身没有独立日计数，
+卡点是评估预算与主动发言账本。热加载后当日剩余额度立即按新上限计算。桌面/手机无新设置。
 
 ## 音频分析与共同听歌（2026-09-21，A–G current）
 
@@ -705,15 +711,17 @@ under memory.read, replacing a matching action_trace echo by event_id. Older ech
 Desktop defaults chat.toolActivityVisible=true; the switch is display-only. Backend action_trace
 settings continue to control persistence. No mobile poll/ack/relay contract changes.
 Validation: 57 backend regressions, 7 client regressions, build and Edge IPC fixture passed.
-open: native Tauri/restarted backend integration. roadmap: mobile tool chain UI and full unbounded
+open: native Tauri/restarted backend integration after the 2026-09-21 observer
+rebinding (chat/QQ attach `push_tool_status` at emit time; autonomy NOW overlay
+now forwards when desktop WS is connected). roadmap: mobile tool chain UI and full unbounded
 historical tool receipts. Client evidence: docs/tool-activity-2026-09-12.md in the desktop repository.
 
 ## Autonomy XML compatibility and cadence (2026-09-12, partial)
 Autonomy opts into existing XML tool encoding in chat_turn; ordinary native-only callers keep
 strict FC semantics. Parsed tools remain bounded by the exposed names; private prose never sends.
 Existing run.events now retain safe evaluation_error/error_type metadata. No new store or scope.
-Runtime settings were updated through admin APIs and read back: interval 30 minutes, 48 evaluations/day,
-global proactive gap 45 minutes; daily talk cap 8 and evaluation minimum interval 15 minutes unchanged.
+Runtime settings were updated through admin APIs and read back: interval 30 minutes, 96 evaluations/day,
+global proactive gap 45 minutes; daily talk cap 16 and evaluation minimum interval 15 minutes unchanged.
 open: restart backend to activate code and observe real delivery/circuit recovery. No real test message sent.
 Screenshot planning remains separate: desktop visual sampling is shadow-only and local consent is off;
 mobile offers a text snapshot, not this requested on-demand image capture. See desktop docs/proactivity-2026-09-12.md.
