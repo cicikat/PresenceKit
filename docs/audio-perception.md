@@ -181,7 +181,8 @@ tempo、STFT chroma；旋律状态只能是 `unknown | distribution_only | unava
 多声部、坏编码、超长、超时、缓存键和并发 1，断言数值/质量退化。合成夹具不是听感
 准确率证明。
 
-C 已接入现有语音链（见下节）。D–G 仍未施工；管理面不展示 `audio_music` 开关为可用。
+C 已接入现有语音链（见下节）。D 已落地听歌账本与只读观测；E–G 仍未施工。
+管理面本轮不展示 `audio_music` 开关为可用。
 
 ## 工单 260 C：语音链、凭据与印象层
 
@@ -207,9 +208,36 @@ prompt；无摘要时保持 253.6 短句。普通文字无此层。
 | 桌面 `/transcribe` + `/desktop/chat` | 凭据只随原样转写文字 | 单元：跨通道/编辑/重复丢弃；客户端无声学字段 |
 | 手机 `/transcribe` + `/mobile/chat` | 同上，channel=mobile | 同桌面凭据规则；不增加手机播放器 |
 
+## 工单 260 D：音乐存储、角色注释、统计与只读观测
+
+权威实现：`core/listening_store.py`。播放事件必须先幂等提交账本，才允许后续主动性候选。
+本阶段不启动播放器、不注册选歌工具。
+
+Track 以 `provider + source_id` 为身份，同名标题不合并。occurrence 由后端 mint，宿主上报的
+`occurrence_id` 忽略。进度必须带 `played_delta_s`；暂停、seek、墙钟差和当前位置都不计入
+听歌时长。`listen-threshold.v0`：累计实际播放达到 `min(30s, 50% 曲长)` 才把该 occurrence
+的 `listen_count` 记一次，未知曲长用 30 秒。重播或换曲产生新 occurrence；同一首正在播放时
+`started`/`changed` 合并。角色切换只影响之后的新 occurrence，不改写已提交记录，也不把
+同一次播放重复计数。进程重启走 `reconcile_after_restart`：状态落到 stopped/disconnected，
+`claimed_playing=false`，不把断连时间补成已听。
+
+角色注释按 owner/char/track 隔离，带 revision；与听歌计数分开，不自动归给所有角色。
+受控音频只接受 `register_audio_blob()` 的 blob 摘要引用，禁止把本机路径或 URL 当通用读文件。
+`music_analysis` 关闭、或 `audio_access` 不是 `backend_readable` 时，分析状态保持
+`unavailable`，不能凭歌名声称听到了声音结构。
+
+只读观测：
+
+| 端点 | scope | 内容 |
+|---|---|---|
+| `GET /observability/listening` | `state.read` | 计数口径、分析状态计数、session 元数据、最近事件 kind；不含标题、注释、occurrence 正文、音频 |
+| `GET /listening/history` | `memory.read` | occurrence 与可重建 stats |
+| `GET /listening/notes` | `memory.read` | 指定角色的歌曲注释 |
+
+桌面/手机本轮不消费这些端点。E 才接 Player Adapter 与自有播放器。
+
 ### 后续阶段与未完成项
 
-D：音乐存储、注释、统计、只读观测。
 E：Player Adapter 与自有播放器真实闭环。
 F：工具、stimulus → autonomy、反馈循环抑制。
 G：管理面、静态版本、浏览器验收与文档闭环。

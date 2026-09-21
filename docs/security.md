@@ -20,8 +20,8 @@
 |---|---|---|
 | `admin` | 全权：settings 写、系统运维、token 管理、记忆写删 | `/system/reload`、`PUT /llm-params`、`/users/*` |
 | `chat` | owner 对话回合 + 通道生命周期 + 上传/转写 | `/desktop/chat`、`/mobile/*`、`/desktop/wake\|activate`、`/upload/ingest`、`/transcribe`、`/group/*` |
-| `state.read` | 低敏状态只读 | `/mood/state`、`/activity/current`、`/garden/state`、`/sensor/realtime`、`/watch/status`、`GET /status`、`/observability/wake-bridge`、`/observability/dream-settings`、`/observability/backend-read`、`/observability/character-self`、`/observability/character-file-autonomy` |
-| `memory.read` | 高敏内容只读 | `/diary/*`、`/chat-log/*`、`/history`、`/memory/*`（GET）、`/debug/user-hidden-state`、provenance/observe、relations（GET） |
+| `state.read` | 低敏状态只读 | `/mood/state`、`/activity/current`、`/garden/state`、`/sensor/realtime`、`/watch/status`、`GET /status`、`/observability/wake-bridge`、`/observability/dream-settings`、`/observability/backend-read`、`/observability/character-self`、`/observability/character-file-autonomy`、`GET /observability/listening` |
+| `memory.read` | 高敏内容只读 | `/diary/*`、`/chat-log/*`、`/history`、`/memory/*`（GET）、`/debug/user-hidden-state`、provenance/observe、relations（GET）、`GET /listening/history`、`GET /listening/notes` |
 | `sensor.write` | 感知数据写入，以及仅服务于写入前 fail-closed 预检的低敏开关读取 | `POST /sensor/push`、`POST /watch/event`、`GET /perception/visual/config` |
 | `integration.write` | 外部只读来源的标准化 stimulus ingress | `POST /integrations/forum/events` |
 | `companion.write` | 独立 external companion opportunity/phone ingress | `POST /integrations/companion/events` |
@@ -229,17 +229,17 @@ scope 端点→rotate 后旧值失效→delete 后 401）、限速阈值触发�
 `tests/test_sec_ws1_auth.py`：WS token 提取（仅 header，拒绝 query）、access log 不泄漏
 token 值等 SEC-WS-1 契约，已随 `authenticate_ws` 签名变化同步更新。
 
-## Ticket 260 A audio / music scopes
+## Ticket 260 A / D audio / music scopes
 
-No new token scope. Frozen mapping:
+No new token scope. Frozen mapping; D landed the redacted read APIs:
 
 | surface | scope | notes |
 |---|---|---|
 | analysis / player / music switches | `admin` | four default-off flags under `audio_music`; STT remains `stt_presets` |
-| analysis success/failure, adapter capabilities, live playback metadata, count definitions | `state.read` | redacted; no audio bytes, notes, or raw vendor payloads |
-| listening history, listen counts tied to tracks, character song notes | `memory.read` | high-sensitivity; not on generic status tokens |
+| `GET /observability/listening` | `state.read` | count definitions, analysis status counts, session metadata; no titles, notes, occurrence bodies, or audio |
+| `GET /listening/history`, `GET /listening/notes` | `memory.read` | high-sensitivity history and per-character notes; not on generic status tokens |
 | `/transcribe`, `audio_perception_id` | `chat` | existing 253.6 receipts; clients cannot self-report features |
-| first-party player host commands/events | `ws.desktop` | identity bound by backend; host cannot pick owner/char |
+| first-party player host commands/events | `ws.desktop` | identity bound by backend; host cannot pick owner/char; E 阶段才接 transport |
 
 Desktop/mobile profiles gain no extra permission this round. Phone keeps transcription
 credentials only. Admin UI that later lists notes or history must not dump them onto a

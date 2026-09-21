@@ -61,6 +61,8 @@ scope；只读端点通常允许对应的 read scope。
 | GET/POST | `/spend/ledger`、`/spend/budget`、`/spend/check` | admin | 只读支出余额观测、人工检查与台账浏览。预留 `/spend/mandates` 读面已删；历史 jsonl 不由代码清掉 |
 | GET | `/observe/*`、`/debug/recall`、`/provenance/*`、`/debug/user-hidden-state` | observe | 管理面与桌面客户端诊断；`/debug/recall?uid=` 是 recall trace 兼容入口 |
 | GET | `/observability/api-calls`、`/observability/llm-failover`、`/observability/perceive-events`、`/observability/runtime-signals`、`/observability/owner-turns` | state.read | 外部 API 调用总账、文本模型失败兜底统计（不含正文）、reality stimulus 审计、运行信号和脱敏 owner-turn receipt 观测；均为只读查询。 |
+| GET | `/observability/listening` | `state.read` | 听歌账本元数据：计数口径、分析状态计数、session 在线/revision、最近事件 kind；不含标题、注释、occurrence 正文或音频 |
+| GET | `/listening/history`、`/listening/notes` | `memory.read` | 听歌 occurrence/stats 与角色歌曲注释；桌面/手机本轮不消费 |
 | GET | `/perception/visual-trace` | state.read | 本地 VLM shadow 观察（不含原图，不进入 prompt/记忆） |
 | GET/PUT/POST | `/tts-config`、`/tts-config/test` | admin | TTS provider 安全配置与已就绪 provider 的试听 |
 | GET/POST/PATCH/DELETE | `/auth/*` | auth | Token 管理页。`GET /auth/whoami` 回 `label`/`scopes` 与 `capabilities.session_scope=v1` |

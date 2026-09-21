@@ -62,6 +62,7 @@ from admin.routers import (
     group, group_dream, relationship_facts,
     transcribe, provenance,
     auth_tokens, coplay, perception, spend, growth, observability, wake_bridge, integrations, autonomy, self_management,
+    listening,
     phone_control, control_center, user_data, deployment, companion, event_memory, character_library,
     memory_consolidation,
 )
@@ -136,6 +137,7 @@ app.include_router(perception.router,           prefix="", tags=["视觉感知"]
 app.include_router(spend.router,                prefix="", tags=["支出台账"])
 app.include_router(growth.router,               prefix="", tags=["成长观测"])
 app.include_router(observability.router,        prefix="", tags=["观测"])
+app.include_router(listening.router,            prefix="", tags=["听歌"])
 app.include_router(character_library.router,    prefix="", tags=["角色资料库"])
 app.include_router(wake_bridge.router,          prefix="", tags=["外部集成"])
 app.include_router(autonomy.router,             prefix="", tags=["观测"])
