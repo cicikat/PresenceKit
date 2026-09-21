@@ -30,11 +30,22 @@ async def listening_observability(
     uid: str = Query(""),
     _auth=Depends(require_scopes("state.read")),
 ):
+    from core.audio_perception import audio_music_flags_snapshot
     from core.listening_store import metadata_snapshot
+    from core.player_adapter import capabilities, music_control_enabled
 
     snapshot = metadata_snapshot(_owner_or_config(uid))
     snapshot["notes_omitted"] = True
     snapshot["history_bodies_omitted"] = True
+    snapshot["music_control_enabled"] = music_control_enabled()
+    snapshot["capabilities"] = {
+        key: capabilities()[key]
+        for key in (
+            "adapter", "adapter_version", "disconnect_policy",
+            "netease_or_media_key", "tts_queue_is_music_host", "mock_closes_e",
+        )
+    }
+    snapshot["audio_music"] = audio_music_flags_snapshot()
     return snapshot
 
 

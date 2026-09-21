@@ -1,0 +1,20 @@
+<h1 class="page-title" data-i18n="observe.listening.title">共同听歌状态</h1>
+<p class="admin-source-hint" data-i18n="observe.listening.hint">只读账本与播放器元数据。不含歌曲标题、角色注释、occurrence 正文或音频。历史与注释走 memory.read，不在本页展开。</p>
+<div class="admin-action-group">
+  <button class="btn btn-ghost" data-action="loadObserveListening" data-i18n="common.refresh">刷新</button>
+  <button class="btn btn-ghost" data-action="goto" data-action-args='["listening-player"]' data-i18n="nav.page.listening-player">共同听歌播放器</button>
+  <button class="btn btn-ghost" data-action="goto" data-action-args='["feature-center"]' data-i18n="nav.page.feature-center">功能开关总览</button>
+</div>
+<label class="field"><span data-i18n="listening_player.uid">Owner uid</span><input id="obs-listening-uid" type="text" autocomplete="off"></label>
+<section class="card">
+  <h3 data-i18n="observe.listening.switches">开关 desired / effective</h3>
+  <div id="obs-listening-flags" class="admin-inline-111" data-i18n="observe.listening.unloaded">尚未加载。</div>
+</section>
+<section class="card">
+  <h3 data-i18n="observe.listening.player">播放器与账本</h3>
+  <div id="obs-listening-player" class="admin-inline-111" data-i18n="observe.listening.unloaded">尚未加载。</div>
+</section>
+<section class="card">
+  <h3 data-i18n="observe.listening.events">最近事件 kind</h3>
+  <pre id="obs-listening-events" class="admin-inline-157 i18n-raw"></pre>
+</section>

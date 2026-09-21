@@ -1,8 +1,20 @@
 import asyncio
 
+import pytest
 import yaml
 
 from admin.routers import settings_feature_flags as mod
+
+
+@pytest.fixture(autouse=True)
+def _stub_screen_observation_state(monkeypatch):
+    from core.perception import screen_observation
+
+    monkeypatch.setattr(
+        screen_observation,
+        "state",
+        lambda: {"enabled": False, "active_device": None},
+    )
 
 
 def test_feature_flags_update_is_allowlisted(tmp_path, monkeypatch):
@@ -141,3 +153,55 @@ def test_memory_event_flags_report_desired_and_effective_state(monkeypatch):
     assert result["event_shadow_recall"]["desired_enabled"] is False
     assert result["event_shadow_recall"]["effective_state"] == "allowlist-active"
     assert result["event_shadow_recall"]["apply_mode"] == "hot_reload"
+
+
+def test_audio_music_flags_are_exposed_default_off_and_consumed(tmp_path, monkeypatch):
+    path = tmp_path / "config.yaml"
+    path.write_text("audio_music:\n  speech_analysis: false\n", encoding="utf-8")
+    monkeypatch.setattr(mod, "CONFIG_FILE", path)
+    read_config = lambda: yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    monkeypatch.setattr(mod, "get_config", read_config)
+    from core import audio_perception, config_loader
+    from core.audio_perception import speech_analysis_enabled
+    from core.listening_store import music_analysis_enabled
+    from core.music_playback_stimulus import music_autonomy_enabled
+    from core.player_adapter import music_control_enabled
+    monkeypatch.setattr(config_loader, "get_config", read_config)
+    monkeypatch.setattr(audio_perception, "get_config", read_config)
+    monkeypatch.setattr(config_loader, "reload_config", lambda: None)
+
+    flags = asyncio.run(mod.get_feature_flags(auth=None))["flags"]
+    for name in ("speech_analysis", "music_analysis", "music_control", "music_autonomy"):
+        assert flags[name]["enabled"] is False
+        assert flags[name]["desired_enabled"] is False
+        assert flags[name]["effective_state"] == "disabled"
+        assert flags[name]["apply_mode"] == "hot_reload"
+    assert "STT" in flags["speech_analysis"]["description"]
+
+    result = asyncio.run(mod.update_feature_flags(
+        mod.FeatureFlagsUpdate(flags={
+            "speech_analysis": True,
+            "music_analysis": True,
+            "music_control": True,
+            "music_autonomy": True,
+        }),
+        auth=None,
+    ))
+    written = yaml.safe_load(path.read_text(encoding="utf-8"))["audio_music"]
+    assert written == {
+        "speech_analysis": True,
+        "music_analysis": True,
+        "music_control": True,
+        "music_autonomy": True,
+    }
+    assert speech_analysis_enabled() is True
+    assert music_analysis_enabled() is True
+    assert music_control_enabled() is True
+    assert music_autonomy_enabled() is True
+    assert result["reload_status"] == "reloaded"
+    assert result["flags"]["speech_analysis"]["desired_enabled"] is True
+    assert result["flags"]["music_control"]["effective_state"] == "enabled"
+    assert result["flags"]["music_autonomy"]["effective_state"] == "enabled"
+    assert result["flags"]["speech_analysis"]["effective_state"] in {
+        "stt-not-effective", "missing-dependency", "enabled",
+    }

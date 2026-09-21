@@ -311,3 +311,47 @@ def test_player_http_upload_and_audio(sandbox, monkeypatch):
     assert audio.status_code == 200
     assert audio.headers["content-type"].startswith("audio/wav")
     assert audio.content[:4] == b"RIFF"
+
+
+def test_observability_listening_exposes_switch_effective_state(sandbox, monkeypatch):
+    monkeypatch.setattr("core.player_adapter.music_control_enabled", lambda: True)
+    from admin.routers import listening
+
+    app = FastAPI()
+    app.include_router(listening.router)
+    client = TestClient(app)
+    state = _auth_headers(sandbox, [("emt_state", ["state.read"])])["emt_state"]
+    body = client.get("/observability/listening", params={"uid": "owner"}, headers=state).json()
+    assert body["notes_omitted"] is True
+    assert body["history_bodies_omitted"] is True
+    assert body["music_control_enabled"] is True
+    assert body["audio_music"]["music_control"]["effective_state"] == "enabled"
+    assert body["audio_music"]["speech_analysis"]["desired_enabled"] is False
+    assert body["capabilities"]["adapter"] == "first_party_admin"
+    assert body["capabilities"]["mock_closes_e"] is False
+
+
+def test_observe_listening_page_is_registered_and_cache_busted():
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    index = (root / "admin/static/index.html").read_text(encoding="utf-8")
+    core = (root / "admin/static/js/core.js").read_text(encoding="utf-8")
+    script = (root / "admin/static/js/observability.js").read_text(encoding="utf-8")
+    fragment = (root / "admin/static/pages/observe-listening.html").read_text(encoding="utf-8")
+    i18n = (root / "admin/static/i18n.js").read_text(encoding="utf-8")
+
+    assert 'data-page="observe-listening"' in index
+    assert 'id="page-observe-listening"' in index
+    assert "ADMIN_UI_FRAGMENT_VERSION = 'v1-260-admin-surface-1'" in core
+    assert '<script src="/static/js/core.js?v=v1-260-admin-surface-1"></script>' in index
+    assert '<script src="/static/js/observability.js?v=v1-260-admin-surface-1"></script>' in index
+    assert '<script src="/static/js/listening-player.js?v=v1-260-admin-surface-1"></script>' in index
+    assert "loadObserveListening" in script
+    assert "loadObserveListening" in core
+    assert 'id="obs-listening-flags"' in fragment
+    assert 'id="obs-listening-player"' in fragment
+    assert "/observability/listening" in script
+    assert "'page_context.observe-listening.purpose'" in i18n
+    assert "'flag.speech_analysis'" in i18n
+    assert "'flag.music_control'" in i18n

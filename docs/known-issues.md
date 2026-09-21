@@ -12,9 +12,10 @@
 E 已落地管理面 HTMLAudioElement 宿主与 Player Adapter；`music_control` 默认关；
 fake adapter 不能关闭本单。
 F 已注册听歌工具与 `music_playback` stimulus；选歌反馈循环冷却 600 s，每会话最多 2 次开口。
-`open`：G（管理面开关与浏览器真实出声验收）。
+G 已把四路 `audio_music` 开关做成功能总览热开关，并提供 `observe-listening` 只读观测；
+隔离管理面 Playwright 证明 HTMLAudioElement 真实出声并暂停同页 TTS peer。
 `observe`：真实语音听感、歌曲特征、端到端共同听歌、QQ/供应商编码、桌面窗口与 TTS
-共存；WAV 以外编码。
+共存；WAV 以外编码。独立 demo 工单仍未施工。
 
 ## 工具循环尾部控制标记（2026-09-20）
 

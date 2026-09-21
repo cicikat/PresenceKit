@@ -444,6 +444,13 @@ def test_http_scopes_split_metadata_and_notes(sandbox):
     assert body["notes_omitted"] is True
     assert body["history_bodies_omitted"] is True
     assert "occurrences" not in body
+    assert body["music_control_enabled"] is False
+    assert body["audio_music"]["speech_analysis"]["desired_enabled"] is False
+    assert body["audio_music"]["music_control"]["effective_state"] == "disabled"
+    assert body["capabilities"]["adapter"] == "first_party_admin"
+    assert body["capabilities"]["netease_or_media_key"] is False
+    assert body["capabilities"]["tts_queue_is_music_host"] is False
+    assert "mock_closes_e" in body["capabilities"]
     assert client.get(
         "/listening/history", params={"uid": "owner"}, headers=state_headers,
     ).status_code == 403

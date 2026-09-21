@@ -53,7 +53,11 @@ function _pauseTtsIfNeeded() {
   const audio = _listeningAudio();
   const others = [...document.querySelectorAll('audio, video')].filter(el => el !== audio && !el.paused);
   _lp().ttsWasPlaying = others.length > 0;
-  others.forEach(el => { try { el.pause(); } catch (_error) { /* best effort */ } });
+  others.forEach(el => {
+    try { el.pause(); } catch (_error) { /* best effort */ }
+    el.dataset.listeningPausedPeer = 'true';
+  });
+  if (audio) audio.dataset.ttsCoexistPaused = others.length ? 'true' : 'false';
 }
 
 async function _sendListeningEvent(kind, extra) {

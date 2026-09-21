@@ -36,7 +36,7 @@ DISCONNECT_POLICY = "local_may_continue_unsynced"
 
 def music_control_enabled() -> bool:
     from core.config_loader import get_config
-    block = get_config().get(CONFIG_ROOT) or {}
+    block = (get_config() or {}).get(CONFIG_ROOT) or {}
     return block.get("music_control") is True
 
 

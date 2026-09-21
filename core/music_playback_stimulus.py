@@ -31,7 +31,7 @@ _CHOOSE_COMMANDS_CAP = 32
 
 def music_autonomy_enabled() -> bool:
     from core.config_loader import get_config
-    block = get_config().get(CONFIG_ROOT) or {}
+    block = (get_config() or {}).get(CONFIG_ROOT) or {}
     return block.get("music_autonomy") is True
 
 

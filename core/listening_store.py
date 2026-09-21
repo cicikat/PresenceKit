@@ -803,7 +803,7 @@ def list_notes(uid: str, char_id: str, *, limit: int = 50) -> list[dict[str, Any
 
 def music_analysis_enabled() -> bool:
     from core.config_loader import get_config
-    block = get_config().get(CONFIG_ROOT) or {}
+    block = (get_config() or {}).get(CONFIG_ROOT) or {}
     return block.get("music_analysis") is True
 
 

@@ -70,6 +70,8 @@ function centerFeatureNames() { return {
   web_autosearch:t('settings_center.autonomous_web_search',"自主联网搜索"), performance_mapping:t('settings_center.performance_annotations',"表演标注"), private_exchange:t('settings_center.private_character_exchanges',"角色私下往来"),
   event_edge_proposer:t('settings_center.memory_event_relations',"记忆事件关联"), event_shadow_recall:t('settings_center.memory_recall_comparison',"记忆召回对照实验"),
   screen_observation:t('settings_center.on_demand_screenshot',"按需截图"), ime_ingest:t('settings_center.ime_ingest',"IME 草稿接收"), ime_awareness:t('settings_center.ime_awareness',"IME 活动理解"),
+  speech_analysis:t('flag.speech_analysis',"语音声学分析"), music_analysis:t('flag.music_analysis',"音乐声音分析"),
+  music_control:t('flag.music_control',"共同听歌控制"), music_autonomy:t('flag.music_autonomy',"听歌主动性"),
 }; }
 const CENTER_GROUPED_FLAGS = {
   perception:['visual_perception','screen_observation'],
@@ -88,6 +90,8 @@ const CENTER_FLAG_DESTINATIONS = {
   mcp_servers:['mcp','observe-tools'], self_management:['autonomy-settings','observe-autonomy'], fs_access:['tools','observe-tools'],
   workspace_access:['tools','call-records'], coplay:['coplay-config','observe-tools'], action_trace:['tools','observe-tools'],
   anti_collapse:['conversation-settings','observe-prompt'], performance_mapping:['output-settings','observe-prompt'],
+  speech_analysis:['tts-config','observe-listening'], music_analysis:['listening-player','observe-listening'],
+  music_control:['listening-player','observe-listening'], music_autonomy:['autonomy-settings','observe-autonomy'],
 };
 function centerDestination(source,name) {
   return (source==='flag'?CENTER_FLAG_DESTINATIONS[name]:CENTER_DESTINATIONS[source]) || ['runtime-config','observe-runtime'];
@@ -114,6 +118,10 @@ function centerAutonomyControls(config) {
 }
 function centerFlagNote(item, name) {
   if (name === 'self_management') return t('flag.self_management_hint',"关闭后 overlay 休眠、管理网关隐藏；全局工具/自主默认恢复。不删除授权或审计，也不是能力总闸。");
+  if (name === 'speech_analysis') return t('flag.speech_analysis_hint',"STT 已配置不等于声学分析可用；分析失败不挡文字。");
+  if (name === 'music_analysis') return t('flag.music_analysis_hint',"只能分析受控可读音频；关闭或不可读时保持 unavailable。");
+  if (name === 'music_control') return t('flag.music_control_hint',"开启后管理面自有播放器可接受命令；网易云/媒体键不是这个开关。");
+  if (name === 'music_autonomy') return t('flag.music_autonomy_hint',"关闭时账本仍可记账，但不入队 music_playback。");
   return item.restart_required?t('settings_center.restart_required_after_saving',"保存后需重启"):t('settings_center.global_configuration_effective_availability_below',"全局配置；实际可用性见下方");
 }
 function centerFlagSwitch(flags, name, fallbackLabel) {

@@ -182,7 +182,8 @@ tempo、STFT chroma；旋律状态只能是 `unknown | distribution_only | unava
 准确率证明。
 
 C 已接入现有语音链（见下节）。D 已落地听歌账本与只读观测；E 已接管理面自有播放器。
-管理面本轮仍不把 `audio_music` 四路开关做成可用设置卡（G）。
+G 已把 `audio_music` 四路开关做成功能总览可用设置卡，并提供观测页
+`observe-listening`。
 
 ## 工单 260 C：语音链、凭据与印象层
 
@@ -266,9 +267,9 @@ TTS 队列。旧 `play_netease` / `media_play_pause` 仍是独立桌面动作。
 | `POST /player/host/bind`、`/player/host/disconnect`、`/player/command`、`/player/event` | `admin` | 绑定/离线、命令账本、真实事件提交 |
 | `GET /player/library`、`POST /player/tracks`、`GET /player/audio/{track_id}` | `admin` | 受控曲库与 blob；不含角色注释 |
 
-管理面页面：`#page-listening-player`。静态版本 `v1-260-listening-player-2`。
-真实浏览器出声与 TTS 共存验收在 G；本阶段自动化覆盖命令账本、离线不计时、HTTP
-上传/取流和 fake-host 回归。
+管理面页面：`#page-listening-player`。静态版本 `v1-260-admin-surface-1`。
+G 已用隔离管理面 Playwright 证明真实 HTMLAudioElement 出声，并暂停同页 TTS peer；
+fake adapter 仍不能关闭本单。
 
 ## 工单 260 F：工具、stimulus 与反馈循环抑制
 
@@ -281,9 +282,26 @@ occurrence 不回滚。选歌命令的 `causation_command_id` 首次抑制为 `c
 （started/changed/finished）。进度有最小间隔。关闭开关或宿主重绑后不积压补发。
 工具结果不重新包装 stimulus。主动发言仍只经 autonomy 与 `talk_owner`；事件存在不保证开口。
 
-### 后续阶段与未完成项
+## 工单 260 G：管理面开关、观测与浏览器真实出声
 
-G：管理面设置开关、浏览器真实出声验收与文档闭环。
+四路开关进入 `GET/PUT /settings/feature-flags` 白名单，配置段 `audio_music`，默认关、
+热生效。desired 来自配置；effective：
+
+| 开关 | effective |
+|---|---|
+| `speech_analysis` | 关=disabled；开但仍无有效 STT=`stt-not-effective`；缺 numpy=`missing-dependency`；否则 enabled。STT 已配置不等于分析可用 |
+| `music_analysis` | 关=disabled；缺 numpy=`missing-dependency`；否则 enabled。单曲仍需 backend_readable |
+| `music_control` | 关=disabled；开=enabled。命令接受跟开关，真实出声仍看绑定宿主 |
+| `music_autonomy` | 关=disabled；控制关=`music-control-off`；否则 enabled。关开关不积压补发 |
+
+管理面观测页 `#page-observe-listening` 读 `GET /observability/listening`（state.read）：
+开关 desired/effective、宿主在线、声称播放、revision/generation、计数口径、adapter
+能力与最近事件 kind。不含标题、注释、occurrence 正文或音频。历史/注释仍走
+`memory.read`，不在观测卡展开。
+
+隔离管理面浏览器验收：`tests/listening_player_browser.py` 启动独立 uvicorn（非生产
+8080），导入受控 WAV，用真实 `HTMLAudioElement.play()`，断言 constructor、src、
+绑定宿主，并证明同页 TTS peer 被暂停。mock 播放或静态截图不能关闭本阶段。
 
 observe：真实语音听感、歌曲特征、端到端共同听歌、QQ/供应商编码、桌面真实窗口与 TTS
 共存均未做。B 的合成夹具不是准确率证明；WAV 以外编码仍待后续解码器。独立 demo

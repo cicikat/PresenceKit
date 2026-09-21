@@ -37,6 +37,10 @@ FLAGS = {
     "private_exchange": ("private_exchange", "enabled", "角色私下往来"),
     "event_edge_proposer": ("event_edge_proposer", "enabled", "Memory Event 候选关联边"),
     "event_shadow_recall": ("event_shadow_recall", "enabled", "Memory Event shadow recall"),
+    "speech_analysis": ("audio_music", "speech_analysis", "语音声学分析"),
+    "music_analysis": ("audio_music", "music_analysis", "音乐声音分析"),
+    "music_control": ("audio_music", "music_control", "共同听歌控制"),
+    "music_autonomy": ("audio_music", "music_autonomy", "听歌主动性"),
 }
 RESTART_REQUIRED_FLAGS = frozenset({"qq"})
 _DEFAULT_ENABLED_FLAGS = frozenset({"self_management"})
@@ -99,6 +103,13 @@ async def get_feature_flags(auth=Depends(require_scopes("admin"))):
             item["description"] = (
                 "关闭 overlay、恢复全局工具/自主默认；不删除授权或审计，也不是能力总闸"
             )
+        elif name in {"speech_analysis", "music_analysis", "music_control", "music_autonomy"}:
+            from core.audio_perception import audio_music_flags_snapshot
+
+            switch = audio_music_flags_snapshot()[name]
+            item["effective_state"] = switch["effective_state"]
+            item["blocking_reason"] = switch.get("blocking_reason") or ""
+            item["description"] = switch["description"]
         else:
             item["effective_state"] = "enabled" if enabled else "disabled"
         flags[name] = item

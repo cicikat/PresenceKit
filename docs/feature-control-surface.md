@@ -1,20 +1,24 @@
-# 功能控制面事实清单（最后核对：2026-09-21 260 audio/music F）
+# 功能控制面事实清单（最后核对：2026-09-21 260 audio/music G）
 
-## 音频分析与共同听歌（2026-09-21，A 冻结 / B 分析器 / C 语音链 / D 账本 / E 自有播放器 / F 工具与主动性 / G 未实现）
+## 音频分析与共同听歌（2026-09-21，A–G current）
 
-工单 260 A 冻结四路默认关闭开关，配置根 `audio_music`：`speech_analysis`、
+工单 260 四路默认关闭开关，配置根 `audio_music`：`speech_analysis`、
 `music_analysis`、`music_control`、`music_autonomy`。STT 已配置不等于声学分析可用。
-B 提供 `core/audio_analysis.py`（PCM WAV + numpy）；缺 numpy 或解码失败时分析
-`unavailable`/`failed`，不挡现有转写。C：`speech_analysis` 开启后接入凭据与
-`3.8_audio_impression`；关闭时仍只注入 253.6 tone。D：`core/listening_store.py` 维护
-曲库/session/history/stats/角色注释；`GET /observability/listening`（state.read，无标题/
-注释/正文）与 `GET /listening/history`、`GET /listening/notes`（memory.read）。
+管理面功能开关总览热读写这四路；`GET /settings/feature-flags` 同时返回 desired 与
+effective（语音分析还看 STT effective 与 numpy）。B 提供 `core/audio_analysis.py`
+（PCM WAV + numpy）；缺 numpy 或解码失败时分析 `unavailable`/`failed`，不挡现有转写。
+C：`speech_analysis` 开启后接入凭据与 `3.8_audio_impression`；关闭时仍只注入 253.6 tone。
+D：`core/listening_store.py` 维护曲库/session/history/stats/角色注释；
+`GET /observability/listening`（state.read，无标题/注释/正文，含开关 effective 与
+adapter 元数据）与 `GET /listening/history`、`GET /listening/notes`（memory.read）。
 `music_analysis` 关闭或音频非 backend_readable 时分析保持 unavailable。
 E：`music_control` 默认关；开启后 `core/player_adapter.py` 接受命令，真实事件由管理面
 HTMLAudioElement 宿主经 `/player/*`（admin，状态只读走 state.read）写入账本。断连策略
 `local_may_continue_unsynced`。
 F：六项听歌工具挂在 `music_control`；`music_autonomy` 关闭时不入队 `music_playback`。
-管理面本轮仍不把四路开关做成可用设置卡（G 阶段）。
+G：管理面观测页 `observe-listening` 只读展示账本/播放器/开关；静态版本
+`v1-260-admin-surface-1`。隔离管理面 Playwright 证明真实 HTMLAudioElement 出声并暂停
+同页 TTS peer。
 设置写 admin；转写凭据仍 chat；正式桌面 transport 仍预留 ws.desktop，本轮不扩展
 v0.1 desktop action。桌面/手机无新设置。旧 `play_netease` / 媒体键不是本控制面。
 精确单位、状态机、计数口径和宿主盘点见 [audio-perception.md](audio-perception.md)。

@@ -1,3 +1,40 @@
+async function loadObserveListening() {
+  const flagsEl = document.getElementById('obs-listening-flags');
+  const playerEl = document.getElementById('obs-listening-player');
+  const eventsEl = document.getElementById('obs-listening-events');
+  if (!flagsEl || !playerEl) return;
+  flagsEl.textContent = playerEl.textContent = t('common.loading', '加载中…');
+  if (eventsEl) eventsEl.textContent = '';
+  const uid = (document.getElementById('obs-listening-uid')?.value || '').trim();
+  const query = uid ? `?uid=${encodeURIComponent(uid)}` : '';
+  try {
+    const data = await api('GET', `/observability/listening${query}`);
+    const flags = data.audio_music || {};
+    flagsEl.innerHTML = ['speech_analysis', 'music_analysis', 'music_control', 'music_autonomy'].map(name => {
+      const item = flags[name] || {};
+      return `<p><strong>${escapeHtml(t('flag.' + name, name))}</strong> · desired ${item.desired_enabled ? 'on' : 'off'} · effective ${escapeHtml(item.effective_state || 'unknown')}${item.blocking_reason ? ' · ' + escapeHtml(item.blocking_reason) : ''}</p>`;
+    }).join('');
+    const session = data.session || {};
+    const caps = data.capabilities || {};
+    playerEl.innerHTML = [
+      `${t('observe.listening.host_online', '宿主在线')}：${session.host_online ? 'yes' : 'no'}`,
+      `${t('observe.listening.claimed_playing', '声称正在播放')}：${session.claimed_playing ? 'yes' : 'no'}`,
+      `${t('observe.listening.revision', '队列 revision')}：${escapeHtml(String(session.revision ?? '—'))}`,
+      `${t('observe.listening.generation', 'generation')}：${escapeHtml(String(session.generation ?? '—'))}`,
+      `${t('observe.listening.state', '播放状态')}：${escapeHtml(String(session.state || '—'))}`,
+      `${t('observe.listening.threshold', '计数口径')}：${escapeHtml(String(data.listen_threshold_rule || ''))}`,
+      `${t('observe.listening.adapter', 'adapter')}：${escapeHtml(String(caps.adapter || '—'))} · ${escapeHtml(String(caps.disconnect_policy || ''))}`,
+      `${t('observe.listening.not_netease', '网易云/媒体键不是这个宿主')}：${caps.netease_or_media_key === false ? 'ok' : '—'}`,
+      `${t('observe.listening.notes_omitted', '注释与历史正文已省略')}：${data.notes_omitted && data.history_bodies_omitted ? 'yes' : 'no'}`,
+      `${t('observe.listening.suppress', '最近 stimulus 抑制')}：${escapeHtml(String((data.music_autonomy || {}).last_suppress_reason || '—'))}`,
+    ].map(line => `<p>${line}</p>`).join('');
+    if (eventsEl) eventsEl.textContent = JSON.stringify(data.last_events || [], null, 2);
+  } catch (error) {
+    flagsEl.textContent = t('observe.listening.load_failed', '加载失败：{error}', {error: error.message});
+    playerEl.textContent = '';
+  }
+}
+
 async function loadObserveMood() {
   const moodEl   = document.getElementById('obs-mood-raw');
   const gardenEl = document.getElementById('obs-garden-raw');

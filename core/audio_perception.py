@@ -20,8 +20,6 @@ from core.audio_music_contract import (
     RECEIPT_TTL_S,
     conservative_impression,
 )
-from core.config_loader import get_config
-
 SUFFIXES = {".wav", ".mp3", ".ogg", ".flac", ".m4a", ".webm", ".opus", ".amr", ".silk"}
 MAX_BYTES = 25 * 1024 * 1024
 TONES = frozenset({"calm", "tired", "bright", "tense", "unclear"})
@@ -29,8 +27,13 @@ _current = ContextVar("audio_impression", default=None)
 _receipts = {}
 
 
+def get_config():
+    from core.config_loader import get_config as live_get_config
+    return live_get_config()
+
+
 def config():
-    block = get_config().get("stt_presets") or {}
+    block = (get_config() or {}).get("stt_presets") or {}
     return {"enabled": block.get("enabled") is True, "presets": block.get("presets") or {},
             "routes": block.get("routes") or {}}
 
@@ -57,17 +60,118 @@ def snapshot():
     result.update(configured=ready, effective=stt_effective,
                   blocking_reason="disabled" if not block["enabled"] else ("" if ready else "missing_connection"),
                   source="stt_presets", purpose="voice_message",
-                  legacy_local_transcribe="stt_presets" not in get_config(),
+                  legacy_local_transcribe="stt_presets" not in (get_config() or {}),
                   speech_analysis_enabled=analysis_on,
                   analysis_deps_ready=analysis_deps,
                   speech_analysis_effective=stt_effective and analysis_on and analysis_deps)
+    result["audio_music"] = audio_music_flags_snapshot(
+        stt_effective=stt_effective,
+        stt_blocking_reason=result["blocking_reason"],
+        analysis_deps=analysis_deps,
+        speech_on=analysis_on,
+    )
     return result
 
 
 def speech_analysis_enabled() -> bool:
     """``audio_music.speech_analysis``; missing or non-true is off. STT ≠ analysis."""
-    block = get_config().get(CONFIG_ROOT) or {}
+    block = (get_config() or {}).get(CONFIG_ROOT) or {}
     return block.get("speech_analysis") is True
+
+
+def audio_music_flags_snapshot(
+    *,
+    stt_effective: bool | None = None,
+    stt_blocking_reason: str = "",
+    analysis_deps: bool | None = None,
+    speech_on: bool | None = None,
+) -> dict:
+    """Desired vs effective for the four default-off ``audio_music`` switches.
+
+    STT already configured is not speech analysis available. Host presence is
+    observational for ``music_control``; command acceptance follows the switch.
+    """
+    from core.listening_store import music_analysis_enabled
+    from core.music_playback_stimulus import music_autonomy_enabled
+    from core.player_adapter import music_control_enabled
+
+    if analysis_deps is None:
+        try:
+            from core.audio_analysis import deps_ready
+            analysis_deps = bool(deps_ready())
+        except Exception:
+            analysis_deps = False
+    if stt_effective is None:
+        block = config()
+        try:
+            name = block["routes"].get("voice_message", "")
+            validate_preset(block["presets"].get(name) or {})
+            ready = True
+        except (ValueError, TypeError):
+            ready = False
+        stt_effective = block["enabled"] and ready
+        stt_blocking_reason = "disabled" if not block["enabled"] else ("" if ready else "missing_connection")
+    if speech_on is None:
+        speech_on = speech_analysis_enabled()
+    music_on = music_analysis_enabled()
+    control_on = music_control_enabled()
+    autonomy_on = music_autonomy_enabled()
+
+    def _speech_state() -> tuple[str, str]:
+        if not speech_on:
+            return "disabled", "disabled"
+        if not stt_effective:
+            return "stt-not-effective", stt_blocking_reason or "stt-not-effective"
+        if not analysis_deps:
+            return "missing-dependency", "missing_dependency"
+        return "enabled", ""
+
+    def _music_state() -> tuple[str, str]:
+        if not music_on:
+            return "disabled", "disabled"
+        if not analysis_deps:
+            return "missing-dependency", "missing_dependency"
+        return "enabled", ""
+
+    def _autonomy_state() -> tuple[str, str]:
+        if not autonomy_on:
+            return "disabled", "disabled"
+        if not control_on:
+            return "music-control-off", "music_control_disabled"
+        return "enabled", ""
+
+    speech_state, speech_block = _speech_state()
+    music_state, music_block = _music_state()
+    autonomy_state, autonomy_block = _autonomy_state()
+    return {
+        "speech_analysis": {
+            "desired_enabled": speech_on,
+            "effective_state": speech_state,
+            "blocking_reason": speech_block,
+            "stt_effective": stt_effective,
+            "analysis_deps_ready": analysis_deps,
+            "description": "STT 已配置不等于声学分析可用；分析失败不挡文字",
+        },
+        "music_analysis": {
+            "desired_enabled": music_on,
+            "effective_state": music_state,
+            "blocking_reason": music_block,
+            "analysis_deps_ready": analysis_deps,
+            "description": "只能分析 backend_readable 受控音频；关开关或非可读时保持 unavailable",
+        },
+        "music_control": {
+            "desired_enabled": control_on,
+            "effective_state": "enabled" if control_on else "disabled",
+            "blocking_reason": "" if control_on else "disabled",
+            "description": "开启后管理面 HTMLAudioElement 宿主可接受命令；网易云/媒体键不是这个开关",
+        },
+        "music_autonomy": {
+            "desired_enabled": autonomy_on,
+            "effective_state": autonomy_state,
+            "blocking_reason": autonomy_block,
+            "description": "关闭时账本仍可记账，但不入队 music_playback；发言仍经 autonomy",
+        },
+    }
 
 
 def validate_preset(preset):
