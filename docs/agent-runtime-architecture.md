@@ -351,7 +351,9 @@ and exclusive missing-only writer for today after 23:00 or yesterday. `daily_jou
 unknown outcomes never become user facts; only an explicit later fixation flow may promote an
 artifact. A failed session may be explicitly retried while its task is queued, or while a
 claimed worker already holds a valid lease for that same task; unknown and canceled sessions
-never replay.
+never replay. If that day's diary file is still missing after the Reality task
+is terminal, the next `inner_diary_write` tick mints a fresh task instead of
+reusing the exhausted key.
 
 ## Brief 233 workspace capability
 

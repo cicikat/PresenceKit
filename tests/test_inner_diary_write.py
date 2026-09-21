@@ -193,6 +193,61 @@ async def test_inner_diary_write_failure_remains_retryable_without_cooldown(monk
 
 
 @pytest.mark.asyncio
+async def test_inner_diary_write_retries_after_task_is_terminal(monkeypatch, sandbox):
+    """Exhausted Reality tasks must not lock the remaining 23:00–05:00 window."""
+    import time as time_mod
+    from core.agent_runtime import TaskPrincipal
+    from core.agent_runtime.task_manager import list_tasks
+    from core.scheduler.triggers import time_based
+
+    _patch_now(monkeypatch, time_based, 2026, 5, 25, 23, 30)
+    marks = []
+    clock = {"now": time_mod.time()}
+    monkeypatch.setattr(time_based, "_is_ready", lambda name: True)
+    monkeypatch.setattr(time_based, "_mark", lambda name: marks.append(name))
+    monkeypatch.setattr(time_based, "_owner_id", lambda: "u1")
+    monkeypatch.setattr(time_based, "_diary_char_ids", lambda: [TEST_CHAR_ID])
+    monkeypatch.setattr(
+        "core.agent_runtime.task_manager._now",
+        lambda value=None: clock["now"] if value is None else float(value),
+    )
+    monkeypatch.setattr(
+        "core.agent_runtime.work_sessions.time.time",
+        lambda: clock["now"],
+    )
+    monkeypatch.setattr(
+        "core.memory.event_log.get_recent_days",
+        lambda oid, days=1, **kw: "## 14:30\n**用户**：测试失败\n---\n",
+    )
+
+    async def failed_chat(**kwargs):
+        raise RuntimeError("llm unavailable")
+
+    monkeypatch.setattr("core.llm_client.chat", failed_chat)
+    await time_based._check_inner_diary_write()
+    clock["now"] += 301
+    await time_based._check_inner_diary_write()
+
+    principal = TaskPrincipal.reality("u1", TEST_CHAR_ID)
+    assert marks == []
+    assert [row["status"] for row in list_tasks(principal)] == ["failed"]
+    diary_file = sandbox.yexuan_inner_diary(char_id=TEST_CHAR_ID) / "2026-05-25.md"
+    assert not diary_file.exists()
+
+    chat_calls = []
+    monkeypatch.setattr("core.llm_client.chat", _fake_chat_factory(chat_calls))
+    clock["now"] += 1
+    await time_based._check_inner_diary_write()
+
+    assert diary_file.exists()
+    assert marks == ["inner_diary_write"]
+    assert len(chat_calls) == 2
+    statuses = [row["status"] for row in list_tasks(principal)]
+    assert statuses.count("succeeded") == 1
+    assert statuses.count("failed") == 1
+
+
+@pytest.mark.asyncio
 async def test_daily_journal_proposal_no_longer_writes_diary(monkeypatch, sandbox):
     """回归：propose_daily_journal 的 proposal 不再有写日记的 after_send 副作用。"""
     from core.scheduler.triggers import time_based

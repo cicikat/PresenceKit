@@ -278,6 +278,27 @@ async def test_desktop_tool_status_uses_only_ephemeral_contract_fields(monkeypat
     }]
 
 
+@pytest.mark.asyncio
+async def test_desktop_tool_status_timeout_does_not_block_http(monkeypatch):
+    from channels import desktop_ws
+    from core.tool_ephemeral import ToolEphemeralEvent
+
+    monkeypatch.setattr(desktop_ws, "_TOOL_STATUS_SEND_TIMEOUT_S", 0.01)
+
+    async def _hang(_payload):
+        await asyncio.sleep(1)
+        return True
+
+    monkeypatch.setattr(desktop_ws, "_send_json", _hang)
+    event = ToolEphemeralEvent(
+        status_id="status-timeout", kind="queued", tool_name="observe_user_screen",
+        ui_label="看一眼屏幕", index=1, total=1, attempt=1, ttl_s=20,
+    )
+    started = asyncio.get_running_loop().time()
+    assert await desktop_ws.push_tool_status(event) is False
+    assert asyncio.get_running_loop().time() - started < 0.2
+
+
 def test_owner_chat_binds_tool_status_without_turn_start_snapshot():
     from pathlib import Path
 

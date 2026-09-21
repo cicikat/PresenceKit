@@ -324,6 +324,39 @@ def _collect_diary_voice(char_id: str) -> tuple[str, str, str]:
     return persona_hint, voice_example, mood_hint
 
 
+def _open_authored_diary_task(principal, char_id: str, logical_date: str):
+    """Return a claimable diary task for this logical day.
+
+    File existence is the write authority. A terminal Reality task for the
+    stable ``inner-diary:{char_id}:{date}`` key must not block the rest of
+    the 23:00–05:00 window: mint a fresh key and continue.
+    """
+    import uuid
+    from core.agent_runtime import CausationRef
+    from core.agent_runtime.models import TERMINAL_STATUSES
+    from core.agent_runtime.task_manager import RetryPolicy, TaskManagerError, create_task
+
+    kwargs = dict(
+        capability="authored_diary",
+        source="scheduler",
+        ttl_seconds=6 * 3600,
+        retry_policy=RetryPolicy.SAFE.value,
+        max_attempts=2,
+        causation_ref=CausationRef("signal", "inner_diary_write"),
+    )
+    idem = f"inner-diary:{char_id}:{logical_date}"
+    try:
+        receipt, _ = create_task(principal, idempotency_key=idem, **kwargs)
+    except TaskManagerError as exc:
+        if exc.code != "idempotency_conflict":
+            raise
+        receipt = {"status": "failed"}
+    if receipt["status"] in TERMINAL_STATUSES:
+        idem = f"inner-diary:{char_id}:{logical_date}:{uuid.uuid4().hex}"
+        receipt, _ = create_task(principal, idempotency_key=idem, **kwargs)
+    return receipt, idem
+
+
 def _diary_char_ids() -> list[str]:
     """返回本晚需要生成日记的角色列表。
 
@@ -602,9 +635,9 @@ async def _check_inner_diary_write():
             # A diary is an authored artifact, not a chat turn.  Register a
             # Reality task and an independent bounded work session so restart
             # recovery/observability never touches EventContext or memory.
-            from core.agent_runtime import CausationRef, TaskPrincipal
+            from core.agent_runtime import TaskPrincipal
             from core.agent_runtime.task_manager import (
-                RetryPolicy, claim_next, complete_task, create_task, fail_task,
+                claim_next, complete_task, fail_task,
             )
             from core.agent_runtime.work_sessions import (
                 create_work_session, run_work_session,
@@ -614,17 +647,7 @@ async def _check_inner_diary_write():
             if not work_context:
                 continue
             principal = TaskPrincipal.reality(oid, _cid)
-            idem = f"inner-diary:{_cid}:{logical_date}"
-            task_receipt, _ = create_task(
-                principal,
-                capability="authored_diary",
-                source="scheduler",
-                idempotency_key=idem,
-                ttl_seconds=6 * 3600,
-                retry_policy=RetryPolicy.SAFE.value,
-                max_attempts=2,
-                causation_ref=CausationRef("signal", "inner_diary_write"),
-            )
+            task_receipt, idem = _open_authored_diary_task(principal, _cid, logical_date)
             session = create_work_session(
                 principal,
                 task_id=task_receipt["task_id"],
@@ -638,7 +661,7 @@ async def _check_inner_diary_write():
                 session = retry_work_session(principal, session["work_session_id"])
             lease = claim_next(principal, task_id=task_receipt["task_id"], capabilities={"authored_diary"})
             if lease is None:
-                retry_pending = retry_pending or task_receipt["status"] == "queued"
+                retry_pending = True
                 continue
 
             async def _worker():
@@ -653,13 +676,13 @@ async def _check_inner_diary_write():
                 )
             except Exception:
                 try:
-                    failed_receipt = fail_task(
+                    fail_task(
                         principal, lease, error_code="work_session_failed",
                         retry=True, retry_delay_seconds=300,
                     )
-                    retry_pending = retry_pending or failed_receipt["status"] == "queued"
                 except Exception:
                     logger.debug("[inner_diary_write] task terminalization failed", exc_info=True)
+                retry_pending = True
                 raise
         except Exception as e:
             log_error(f"scheduler._check_inner_diary_write[{_cid}]", e)

@@ -294,7 +294,7 @@ signal-first/autonomy 契约审计。后续必须单独决定它是迁移到 aut
 **状态**：`roadmap`（大工单；当前不改变触发器行为）
 
 当前角色日记仍由 scheduler 在 23:00-05:00 维护窗口内直接生成，并以 logical day 文件存在性做幂等。
-进程重启、LLM 超时或维护轮次中断时，仍可能错过当日窗口；这不是本次 `AMBIENT` 回归的修复范围。
+同一窗口内 Reality task 两次失败后会另开新任务继续写；进程重启仍可能错过当日窗口。这不是本次 `AMBIENT` 回归的完整持久任务化。
 
 长期方案应评估带幂等键的后台维护 job，例如
 `inner_diary_write:{char_id}:{logical_day}`：scheduler tick 只负责发现并入队，worker 负责锁、重试、

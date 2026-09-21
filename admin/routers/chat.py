@@ -289,7 +289,10 @@ async def _execute_owner_chat_turn_locked(
         from channels import ui_push as _ui_push
         # Bind the NOW overlay at emit time. A turn-start snapshot of
         # is_connected() would drop tool_status for the whole turn if the
-        # desktop WS connected after /desktop/chat started.
+        # desktop WS connected after /desktop/chat started. Mobile HTTP
+        # still uses this same owner-turn helper; the observer itself
+        # must stay fail-open so a desktop WS stall cannot freeze
+        # /mobile/activate or /mobile/chat.
         _tool_status_observer = _dws.push_tool_status
 
         _t_first_delta = None

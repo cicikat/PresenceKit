@@ -490,7 +490,9 @@ durable/specialized 副链 sessions, not a second acting subject. The scheduler'
 artifact-kind, digest, and error metadata only; it never exposes work context, prompts, diary正文, or
 paths. `daily_journal` remains governed by the existing autonomy signal controls.
 A failed session may be explicitly retried while its task is queued, or while a
-claimed worker already holds a valid lease for that same task.
+claimed worker already holds a valid lease for that same task. If that day's
+Reality task is already terminal and the diary file is still missing, the next
+scheduler tick mints a fresh task instead of reusing the exhausted key.
 
 `backfill_diary` is an owner-private info write tool (`tools.backfill_diary.enabled`，默认启用)
 that reuses the same authored_diary Work Session, fact/feeling generator, and

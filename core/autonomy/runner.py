@@ -1039,17 +1039,20 @@ async def _execute_tool(name: str, args: dict, job: Job, session, cfg: dict, run
         from channels.desktop_ws import is_connected, push_tool_status
         if not is_connected():
             return
-        from core.tool_ephemeral import DEFAULT_TTL_S, ToolEphemeralEvent
-        await push_tool_status(ToolEphemeralEvent(
-            status_id=f"autonomy_{run.id}_{job.id}_{name}",
-            kind=kind,
-            tool_name=name,
-            ui_label=ui_label,
-            index=1,
-            total=1,
-            attempt=attempt,
-            ttl_s=DEFAULT_TTL_S,
-        ))
+        from core.tool_ephemeral import DEFAULT_TTL_S, ToolEphemeralEvent, notify as notify_tool_event
+        await notify_tool_event(
+            push_tool_status,
+            ToolEphemeralEvent(
+                status_id=f"autonomy_{run.id}_{job.id}_{name}",
+                kind=kind,
+                tool_name=name,
+                ui_label=ui_label,
+                index=1,
+                total=1,
+                attempt=attempt,
+                ttl_s=DEFAULT_TTL_S,
+            ),
+        )
 
     origin = "autonomy_self_management" if name == "manage_self_capability" else "autonomy_loop"
     try:

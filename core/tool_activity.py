@@ -1,6 +1,7 @@
 """Owner-only tool display events; arguments and results never leave this boundary."""
 from contextvars import ContextVar
 from functools import wraps
+import asyncio
 import time
 from uuid import uuid4
 
@@ -44,8 +45,11 @@ async def execute_visible(function, tool_name, tool_args, user_id, target_id,
     token = _call.set(event)
     async def publish():
         try:
-            from channels.desktop_ws import _send_json
-            await _send_json(dict(event))
+            from channels.desktop_ws import _TOOL_STATUS_SEND_TIMEOUT_S, _send_json
+            await asyncio.wait_for(
+                _send_json(dict(event)),
+                timeout=_TOOL_STATUS_SEND_TIMEOUT_S,
+            )
         except Exception:
             pass  # Display cannot change tool execution.
     await publish()

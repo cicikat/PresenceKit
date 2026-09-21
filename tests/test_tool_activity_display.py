@@ -1,4 +1,5 @@
 import asyncio
+import time
 from types import SimpleNamespace
 
 from core import tool_activity
@@ -22,6 +23,29 @@ def test_chain_and_status_without_arguments_or_results(monkeypatch):
     assert len({item['chain_id'] for item in events}) == 1
     assert len({item['event_id'] for item in events}) == 2
     assert 'private' not in str(events)
+
+
+def test_tool_activity_send_timeout_does_not_block_execution(monkeypatch):
+    monkeypatch.setattr('core.config_loader.get_config', lambda: {'scheduler': {'owner_id': 'owner'}})
+    monkeypatch.setattr('core.memory.action_trace.finalize_display', lambda *args: None)
+    monkeypatch.setattr('channels.desktop_ws._TOOL_STATUS_SEND_TIMEOUT_S', 0.01)
+
+    async def hang(_event):
+        await asyncio.sleep(1)
+        return True
+
+    monkeypatch.setattr('channels.desktop_ws._send_json', hang)
+
+    async def execute(*args, **kwargs):
+        return SimpleNamespace(status='tool_executed', confirmation_request=None, result='ok')
+
+    started = time.perf_counter()
+    outcome = asyncio.run(tool_activity.execute_visible(
+        execute, 'get_time', {}, 'owner', 'owner', False, None,
+        origin='assistant_loop', char_id='char',
+    ))
+    assert outcome.status == 'tool_executed'
+    assert time.perf_counter() - started < 0.4
 
 
 def test_group_does_not_emit_owner_display(monkeypatch):

@@ -44,12 +44,16 @@ def _new_msg_id() -> str:
     return uuid4().hex
 
 
+_TOOL_STATUS_SEND_TIMEOUT_S = 0.2
+
+
 async def _send_json(payload: dict) -> bool:
     global _current_ws
-    if _current_ws is None:
+    ws = _current_ws
+    if ws is None:
         return False
     try:
-        await _current_ws.send_text(json.dumps(payload, ensure_ascii=False))
+        await ws.send_text(json.dumps(payload, ensure_ascii=False))
         return True
     except Exception as e:
         logger.warning(f"[desktop_ws] 发送失败: {e}")
@@ -136,7 +140,7 @@ async def push_tool_status(event) -> bool:
     """
     if not event.should_deliver():
         return False
-    return await _send_json({
+    payload = {
         "type": "tool_status",
         "status_id": event.status_id,
         "kind": event.kind,
@@ -145,7 +149,18 @@ async def push_tool_status(event) -> bool:
         "total": event.total,
         "attempt": event.attempt,
         "ttl_ms": int(event.ttl_s * 1000),
-    })
+    }
+    try:
+        return await asyncio.wait_for(
+            _send_json(payload),
+            timeout=_TOOL_STATUS_SEND_TIMEOUT_S,
+        )
+    except asyncio.TimeoutError:
+        logger.debug("[desktop_ws] tool_status send timed out")
+        return False
+    except Exception as e:
+        logger.warning(f"[desktop_ws] tool_status 发送失败: {e}")
+        return False
 
 
 async def push_stream_start(
