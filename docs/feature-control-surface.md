@@ -1,6 +1,6 @@
-# 功能控制面事实清单（最后核对：2026-09-21 260 audio/music E）
+# 功能控制面事实清单（最后核对：2026-09-21 260 audio/music F）
 
-## 音频分析与共同听歌（2026-09-21，A 冻结 / B 分析器 / C 语音链 / D 账本 / E 自有播放器 / F–G 未实现）
+## 音频分析与共同听歌（2026-09-21，A 冻结 / B 分析器 / C 语音链 / D 账本 / E 自有播放器 / F 工具与主动性 / G 未实现）
 
 工单 260 A 冻结四路默认关闭开关，配置根 `audio_music`：`speech_analysis`、
 `music_analysis`、`music_control`、`music_autonomy`。STT 已配置不等于声学分析可用。
@@ -12,7 +12,9 @@ B 提供 `core/audio_analysis.py`（PCM WAV + numpy）；缺 numpy 或解码失�
 `music_analysis` 关闭或音频非 backend_readable 时分析保持 unavailable。
 E：`music_control` 默认关；开启后 `core/player_adapter.py` 接受命令，真实事件由管理面
 HTMLAudioElement 宿主经 `/player/*`（admin，状态只读走 state.read）写入账本。断连策略
-`local_may_continue_unsynced`。管理面本轮仍不把四路开关做成可用设置卡（G 阶段）。
+`local_may_continue_unsynced`。
+F：六项听歌工具挂在 `music_control`；`music_autonomy` 关闭时不入队 `music_playback`。
+管理面本轮仍不把四路开关做成可用设置卡（G 阶段）。
 设置写 admin；转写凭据仍 chat；正式桌面 transport 仍预留 ws.desktop，本轮不扩展
 v0.1 desktop action。桌面/手机无新设置。旧 `play_netease` / 媒体键不是本控制面。
 精确单位、状态机、计数口径和宿主盘点见 [audio-perception.md](audio-perception.md)。

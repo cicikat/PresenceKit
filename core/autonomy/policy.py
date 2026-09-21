@@ -25,6 +25,8 @@ _SANDBOXED_WRITE_TOOLS = frozenset({
     "restore_reminder",
     "start_agent_task",
     "cancel_agent_task",
+    "write_track_note",
+    "choose_next_track",
 })
 
 DECISION_SOURCE_ALLOWLIST = "autonomy_allowlist"

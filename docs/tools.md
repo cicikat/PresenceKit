@@ -588,6 +588,12 @@ self_access:
 | `self_move` | 自有空间内移动；覆盖须 overwrite | `core/tools/character_self.py` |
 | `self_delete` | 放入有界回收站，可按 revision 恢复 | `core/tools/character_self.py` |
 | `self_restore` | 按 revision 从回收站恢复 | `core/tools/character_self.py` |
+| `get_listening_state` | 读取共同听歌状态和有界声音摘要 | `core/listening_tools.py` |
+| `get_listening_queue` | 读取队列和 revision | `core/listening_tools.py` |
+| `get_listening_history` | 读取本角色有界听歌记录 | `core/listening_tools.py` |
+| `get_track_note` | 读取本角色对一首歌的短注释 | `core/listening_tools.py` |
+| `write_track_note` | 按 expected_revision 写本角色歌曲注释 | `core/listening_tools.py` |
+| `choose_next_track` | 在已启用会话里选择下一首受控歌曲 | `core/listening_tools.py` |
 
 ### desktop 类（探针覆盖）
 
@@ -967,13 +973,18 @@ class ToolResult:
 
 ---
 
-## 工单 260 A：听歌工具名称冻结（尚未注册）
+## 工单 260 F：听歌工具已注册
 
-计划工具：`get_listening_state` / `get_listening_queue` / `get_listening_history` /
-`get_track_note` / `write_track_note` / `choose_next_track`。F 阶段才进入 `_TOOL_REGISTRY`。
-现有 `desktop_play_pause` 与 `play_song` 仍是独立桌面动作，不视为 Player Adapter，本轮不删。
-选择下一首仅限已启用会话中的可用曲库/队列，并携带 revision。工具结果不得再包装成
-`perceive_event`。合同见 [audio-perception.md](audio-perception.md)。
+`get_listening_state` / `get_listening_queue` / `get_listening_history` /
+`get_track_note` / `write_track_note` / `choose_next_track` 已进入 `_TOOL_REGISTRY`，
+实现位于 `core/listening_tools.py`。总闸是 `audio_music.music_control`（默认关）；关闭时
+不进 schema，也不能执行。uid/char 由 dispatcher 冻结，模型 JSON 里的
+`user_id`/`uid`/`char_id`/`owner` 记 `grant_principal_mismatch`。写注释和选下一首是
+sandboxed info 写工具；选歌只改已启用会话的队列，不在没有会话时启动声音，
+`started_sound` 恒为 false。工具结果是不可信摘要，不得再包装成 `perceive_event`。
+真实播放事件经 `commit_host_event` 先记账，再由 `core/music_playback_stimulus.py`
+按 `music_autonomy` 入队 `source=music_playback`。现有 `desktop_play_pause` 与
+`play_song` 仍是独立桌面动作，本轮不删。合同见 [audio-perception.md](audio-perception.md)。
 
 ## 当前未注册的旧网易云 wrapper
 

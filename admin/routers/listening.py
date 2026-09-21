@@ -124,9 +124,9 @@ async def player_command(body: PlayerCommandBody, _auth=Depends(require_scopes("
 
 @router.post("/player/event", summary="提交真实播放事件")
 async def player_event(body: PlayerEventBody, _auth=Depends(require_scopes("admin"))):
-    from core.player_adapter import ingest_host_event
+    from core.player_adapter import commit_host_event
 
-    return ingest_host_event(_owner_or_config(body.uid), body.event)
+    return await commit_host_event(_owner_or_config(body.uid), body.event)
 
 
 @router.get("/player/library", summary="读取受控曲库元数据")

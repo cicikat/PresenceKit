@@ -6,10 +6,10 @@
 
 本文定义 v1 的 proactive 工作边界。scheduler 或 sensor 可以报告事实，但不能生成面向用户的一句话。`core.autonomy` 是唯一的 proactive 决策与交付路径；`talk_owner` 是唯一的用户可见出口。
 
-工单 260 A 冻结：真实播放生命周期事件在幂等记账后可作为 low-trust `source=music_playback`
+工单 260 F：真实播放生命周期事件在幂等记账后可作为 low-trust `source=music_playback`
 候选进入既有 perceive → autonomy 路径；Dream 阻断发言不阻断记账。命令 tool result 不再
 入 stimulus。抑制「角色选歌→自己被切歌唤醒→再选歌」（冷却 600 s，每会话最多 2 次开口）。
-事件存在不保证开口。实现在 F；当前无该 signal producer。
+事件存在不保证开口。Producer：`core/music_playback_stimulus.py`，总闸 `audio_music.music_autonomy`。
 
 `tool_eligibility()` 只判断一项工具能否被 autonomy allowlist 显式打开；已连接的全局只读 MCP 仍可经 `global_read_inheritance` 进入工具面，不要求 `mcp_explicit`。schema、`GET /admin/autonomy/tools` 和管理面矩阵共用 `AutonomyToolDecision`（`allowed`、`decision_source`、global/deployment/self-capability/MCP/autonomy policy、danger、confirmation）。执行前仍复查当前矩阵，展示允许但执行时撤权记 `tool_call_denied`。
 

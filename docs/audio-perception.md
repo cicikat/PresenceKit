@@ -145,7 +145,7 @@ v0.1 桌面 action allowlist 不在本阶段扩展。正式 transport 走后续 
 
 ### 工具、主动性与权限
 
-计划工具（F 阶段注册，A 只冻结名称）：`get_listening_state`、`get_listening_queue`、
+F 已注册工具：`get_listening_state`、`get_listening_queue`、
 `get_listening_history`、`get_track_note`、`write_track_note`、`choose_next_track`。
 选择仅限可用曲库/队列，携带 revision。允许角色在**已启用的共同听歌会话**中选歌，不表示
 可以无会话启动声音。工具结果不重新包装成 `perceive_event`。
@@ -270,9 +270,19 @@ TTS 队列。旧 `play_netease` / `media_play_pause` 仍是独立桌面动作。
 真实浏览器出声与 TTS 共存验收在 G；本阶段自动化覆盖命令账本、离线不计时、HTTP
 上传/取流和 fake-host 回归。
 
+## 工单 260 F：工具、stimulus 与反馈循环抑制
+
+权威实现：`core/listening_tools.py`、`core/music_playback_stimulus.py`。
+`music_control` 关闭时六项工具不暴露；`music_autonomy` 关闭时账本仍可提交，但不入队
+`source=music_playback`。HTTP `POST /player/event` 走 `commit_host_event`：先
+`ingest_host_event`，再 `maybe_emit_after_ledger`。Dream 阻断候选时 `ledger_committed=true`，
+occurrence 不回滚。选歌命令的 `causation_command_id` 首次抑制为 `choose_next_feedback`，
+随后 600 s 为 `choose_next_cooldown`；每段会话最多 2 次 reflect 开口
+（started/changed/finished）。进度有最小间隔。关闭开关或宿主重绑后不积压补发。
+工具结果不重新包装 stimulus。主动发言仍只经 autonomy 与 `talk_owner`；事件存在不保证开口。
+
 ### 后续阶段与未完成项
 
-F：工具、stimulus → autonomy、反馈循环抑制。
 G：管理面设置开关、浏览器真实出声验收与文档闭环。
 
 observe：真实语音听感、歌曲特征、端到端共同听歌、QQ/供应商编码、桌面真实窗口与 TTS

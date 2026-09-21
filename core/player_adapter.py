@@ -262,6 +262,14 @@ def ingest_host_event(uid: str, event: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+async def commit_host_event(uid: str, event: dict[str, Any]) -> dict[str, Any]:
+    """Commit the ledger first, then optionally enqueue a music_playback candidate."""
+    result = ingest_host_event(uid, event)
+    from core.music_playback_stimulus import maybe_emit_after_ledger
+    result["stimulus"] = await maybe_emit_after_ledger(uid, event, result)
+    return result
+
+
 def mark_outcome_unknown(uid: str, command_id: str) -> dict[str, Any]:
     uid = _owner(uid)
     with listening_lock(uid):
@@ -321,6 +329,22 @@ class FakePlayerHost:
         }
         event.update(extra)
         return ingest_host_event(self.uid, event)
+
+    async def commit(self, kind: str, **extra: Any) -> dict[str, Any]:
+        self.sequence += 1
+        session = load_session(self.uid)
+        event = {
+            "event_id": f"{kind}-{self.sequence}-{uuid.uuid4().hex[:8]}",
+            "kind": kind,
+            "generation": session["generation"],
+            "session_id": session["session_id"],
+            "sequence": self.sequence,
+            "track_id": extra.pop("track_id", session.get("track_id")),
+            "position_s": extra.pop("position_s", self.position_s),
+            "occurred_at": time.time(),
+        }
+        event.update(extra)
+        return await commit_host_event(self.uid, event)
 
     def play(self, track_id: str) -> dict[str, Any]:
         command = dispatch_command(self.uid, {

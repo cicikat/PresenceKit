@@ -1005,7 +1005,7 @@ observe：两端真实锁屏、输入事件与后台生命周期验收未执行�
 
 GET /observability/drinking（state.read）返回当前角色强度、decay_per_hour、effective 和阻断原因；管理面「存在」可见。聊天仅明确邀请才暴露工具，桌面沿用 perform.posture/energy，手机无新增字段或设置。真实桌面动作表现 observe。
 
-### 工单 260 A/B/C/D/E audio + music foundation — freeze + analyzer + speech + ledger + player
+### 工单 260 A/B/C/D/E/F audio + music foundation — freeze + analyzer + speech + ledger + player + tools
 
 `freeze`：后端合同 `audio-music-perception.v0`（`core/audio_music_contract.py`）。
 B `current`（后端内部）：`core/audio_analysis.py` 共享 PCM WAV 解码与 speech/music 特征。
@@ -1015,11 +1015,12 @@ C `current`（后端）：`audio_music.speech_analysis` 默认关；开启后扩
 D `current`（后端）：听歌账本 / 注释 / 统计与 redacted 观测。
 E `current`（后端管理面）：`core/player_adapter.py` + 管理面 HTMLAudioElement 宿主。
 `GET /player/state` 为 `state.read`；bind/command/event/library/upload/audio 为 `admin`。
+F `current`（后端内部）：六项听歌工具 + `source=music_playback` 候选；无新 REST/WS/权限。
 无新桌面/手机 REST、WS、IPC、poll、ack、TTL、权限或设置。不扩展 v0.1 desktop action
 allowlist。手机保持 253.6 转写凭据兼容，不增加手机播放器。网易云 `play_netease` 与
 `media_play_pause` 仍是独立桌面动作。TTS 播放队列不是音乐宿主。正式后续 transport
 仍预留 `ws.desktop`。精确 schema/scope 见 [audio-perception.md](audio-perception.md)。
-F–G 未落地。
+G 未落地（管理面四路开关与浏览器真实出声）。
 
 ### Brief 253.6 audio perception — current / observe
 

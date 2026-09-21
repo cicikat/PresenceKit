@@ -221,6 +221,8 @@ def _empty_session(uid: str) -> dict[str, Any]:
         "host_online": False,
         "claimed_playing": False,
         "command_cache": [],
+        "choose_command_ids": [],
+        "music_feedback": {},
         "updated_at": 0.0,
     }
 
@@ -284,6 +286,8 @@ def bind_host(
         session["session_id"] = session["session_id"] or uuid.uuid4().hex
         session["host_online"] = True
         session["claimed_playing"] = False
+        session["choose_command_ids"] = []
+        session["music_feedback"] = {}
         if session["state"] in {"playing", "paused", "loading"}:
             session["state"] = "stopped"
             session["occurrence_id"] = None
@@ -874,6 +878,10 @@ def metadata_snapshot(uid: str) -> dict[str, Any]:
             "participant_bound": bool(session.get("participant_char_id")),
         },
         "last_events": last_events,
+        "music_autonomy": {
+            "last_suppress_reason": str((session.get("music_feedback") or {}).get("last_reason") or ""),
+            "session_talks": int((session.get("music_feedback") or {}).get("session_talks") or 0),
+        },
     }
 
 

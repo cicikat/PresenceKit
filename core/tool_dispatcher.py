@@ -2038,6 +2038,8 @@ from core.tools.character_self import register_tools as _register_self_tools
 _register_self_tools(_TOOL_REGISTRY)
 from core.tools.reminder_tools import register_tools as _register_reminder_tools
 _register_reminder_tools(_TOOL_REGISTRY)
+from core.listening_tools import register_tools as _register_listening_tools
+_register_listening_tools(_TOOL_REGISTRY)
 
 
 _SIDE_EFFECT_TOOLS: frozenset[str] = frozenset({
@@ -2062,6 +2064,8 @@ _SIDE_EFFECT_TOOLS: frozenset[str] = frozenset({
     "self_move",
     "self_delete",
     "self_restore",
+    "write_track_note",
+    "choose_next_track",
     "exit_yandere",
     "forget_episodic",
     "clear_midterm",
@@ -2124,6 +2128,13 @@ def _is_tool_enabled(tool_name: str) -> bool:
             return False
     if tool_name in _INTIFACE_TOOL_NAMES and not intiface_opted_in():
         return False
+    if tool_name in (
+        "get_listening_state", "get_listening_queue", "get_listening_history",
+        "get_track_note", "write_track_note", "choose_next_track",
+    ):
+        from core.player_adapter import music_control_enabled
+        if not music_control_enabled():
+            return False
     cfg = get_config().get("tools", {})
     if tool_name in cfg:
         v = cfg[tool_name]
@@ -2710,6 +2721,14 @@ async def _execute_structured_impl(
         _msg = "工具参数格式不正确"
         _trace("failed", _msg)
         return _execution_outcome("arguments_invalid", _msg)
+    if tool_name in {
+        "get_listening_state", "get_listening_queue", "get_listening_history",
+        "get_track_note", "write_track_note", "choose_next_track",
+    }:
+        for key in ("user_id", "uid", "char_id", "owner"):
+            if key in tool_args:
+                _trace("failed", "grant_principal_mismatch")
+                return _execution_outcome("tool_failed", "grant_principal_mismatch")
     _schema = tool_info.get("parameters") or {}
     _required = _schema.get("required") if isinstance(_schema, dict) else None
     if isinstance(_required, list):
@@ -2808,6 +2827,16 @@ async def _execute_structured_impl(
                 result = await func(user_id=user_id, **tool_args)
         elif tool_name in ("read_toy_file", "write_toy_file", "write_artifact", "read_artifact", "list_artifacts", "drink_with_user"):
             result = await func(user_id=user_id, char_id=char_id, **tool_args)
+        elif tool_name in {
+            "get_listening_state", "get_listening_queue", "get_listening_history",
+            "get_track_note", "write_track_note", "choose_next_track",
+        }:
+            for key in ("user_id", "uid", "char_id", "owner"):
+                if key in tool_args:
+                    result = "grant_principal_mismatch"
+                    break
+            else:
+                result = await func(user_id=user_id, char_id=char_id, **tool_args)
         elif tool_name in {
             "fs_list", "fs_read",
             "workspace_list", "workspace_read", "workspace_create",
