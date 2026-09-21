@@ -1,0 +1,49 @@
+<h1 class="page-title" data-i18n="listening_player.title">共同听歌播放器</h1>
+<p class="admin-source-hint" data-i18n="listening_player.hint">这是后端自有的最小真实播放宿主。导入的音频在本页用 HTMLAudioElement 出声，并把 started/paused/resumed/finished/stopped/progress 回报账本。网易云和系统媒体键不是这个播放器。断连后本页可以继续出声，但后端不再累计听歌时间。</p>
+
+<div class="card">
+  <div class="card-header">
+    <h3 data-i18n="listening_player.host">宿主与开关</h3>
+    <button type="button" class="btn btn-ghost btn-sm" data-action="refreshListeningPlayer" data-i18n="common.refresh">刷新</button>
+  </div>
+  <p id="listening-control-state" class="admin-inline-087"></p>
+  <div class="form-row">
+    <label class="field"><span data-i18n="listening_player.uid">Owner uid</span><input id="listening-uid" type="text" autocomplete="off"></label>
+    <label class="field"><span data-i18n="listening_player.host_id">Host id</span><input id="listening-host-id" type="text" value="admin-html-audio"></label>
+  </div>
+  <div class="admin-action-group">
+    <button type="button" class="btn btn-primary btn-sm" data-action="bindListeningHost" data-i18n="listening_player.bind">绑定本页宿主</button>
+    <button type="button" class="btn btn-ghost btn-sm" data-action="disconnectListeningHost" data-i18n="listening_player.disconnect">标记离线</button>
+  </div>
+  <pre id="listening-session" class="admin-inline-157"></pre>
+</div>
+
+<div class="card">
+  <div class="card-header"><h3 data-i18n="listening_player.library">受控曲库</h3></div>
+  <p class="admin-inline-087" data-i18n="listening_player.library_hint">只接受用户提供的受控上传。任意本机路径或 URL 不会变成通用读文件。</p>
+  <div class="form-row">
+    <label class="field"><span data-i18n="listening_player.file">音频文件</span><input id="listening-file" type="file" accept="audio/wav,audio/mpeg,audio/ogg,audio/flac,audio/mp4,audio/webm,.wav,.mp3,.ogg,.flac,.m4a,.webm"></label>
+    <label class="field"><span data-i18n="listening_player.title_field">标题</span><input id="listening-title" type="text"></label>
+  </div>
+  <button type="button" class="btn btn-primary btn-sm" data-action="uploadListeningTrack" data-i18n="listening_player.upload">导入并登记</button>
+  <ul id="listening-library" class="admin-settings-list"></ul>
+</div>
+
+<div class="card">
+  <div class="card-header"><h3 data-i18n="listening_player.now">当前播放</h3></div>
+  <p id="listening-now" class="admin-inline-087" data-i18n="listening_player.empty">尚未选择曲目。</p>
+  <audio id="listening-audio" controls preload="metadata"></audio>
+  <div class="admin-action-group">
+    <button type="button" class="btn btn-primary btn-sm" data-action="listeningPlay" data-i18n="listening_player.play">播放</button>
+    <button type="button" class="btn btn-ghost btn-sm" data-action="listeningPause" data-i18n="listening_player.pause">暂停</button>
+    <button type="button" class="btn btn-ghost btn-sm" data-action="listeningResume" data-i18n="listening_player.resume">继续</button>
+    <button type="button" class="btn btn-ghost btn-sm" data-action="listeningStop" data-i18n="listening_player.stop">停止</button>
+    <button type="button" class="btn btn-ghost btn-sm" data-action="listeningNext" data-i18n="listening_player.next">下一首</button>
+  </div>
+  <p id="listening-status" role="status"></p>
+</div>
+
+<div class="card">
+  <div class="card-header"><h3 data-i18n="listening_player.debug">连接与事件</h3></div>
+  <pre id="listening-events" class="admin-inline-157"></pre>
+</div>

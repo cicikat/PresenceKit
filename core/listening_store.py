@@ -247,13 +247,17 @@ def load_session(uid: str) -> dict[str, Any]:
     return session
 
 
-def _save_session(session: dict[str, Any]) -> None:
+def persist_session(session: dict[str, Any]) -> None:
     uid = session["uid"]
     path = get_paths().listening_session(uid)
     cache = list(session.get("command_cache") or [])[-COMMAND_RESULT_CACHE_CAP:]
     session["command_cache"] = cache
     session["updated_at"] = time.time()
     safe_write_json(path, session, keep_bak=False)
+
+
+def _save_session(session: dict[str, Any]) -> None:
+    persist_session(session)
 
 
 def bind_host(
@@ -367,6 +371,20 @@ def get_track(uid: str, track_id: str) -> dict[str, Any] | None:
         return dict(row) if row else None
 
 
+def list_tracks(uid: str, *, limit: int = 200) -> list[dict[str, Any]]:
+    uid = _owner_uid(uid)
+    limit = max(1, min(int(limit), LIBRARY_TRACK_CAP))
+    with _library(uid, write=False) as db:
+        rows = db.execute(
+            "SELECT * FROM tracks ORDER BY created_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+
+_BLOB_SUFFIXES = {".wav", ".mp3", ".ogg", ".flac", ".m4a", ".webm", ".opus", ".aac"}
+
+
 def register_audio_blob(uid: str, data: bytes, *, filename: str = "track.wav") -> str:
     """Store a controlled blob. Arbitrary host paths/URLs are not accepted."""
     uid = _owner_uid(uid)
@@ -375,17 +393,38 @@ def register_audio_blob(uid: str, data: bytes, *, filename: str = "track.wav") -
     if len(data) > AUDIO_BLOB_BUDGET_BYTES:
         raise ValueError("blob_oversize")
     digest = hashlib.sha256(bytes(data)).hexdigest()
+    suffix = str(filename or "").rsplit(".", 1)
+    ext = f".{suffix[-1].lower()}" if len(suffix) == 2 else ""
+    if ext not in _BLOB_SUFFIXES:
+        ext = ".wav" if bytes(data[:4]) == b"RIFF" and b"WAVE" in bytes(data[:12]) else ".bin"
     folder = get_paths().music_audio_blob_dir(uid)
     folder.mkdir(parents=True, exist_ok=True)
     used = sum(path.stat().st_size for path in folder.glob("*") if path.is_file())
-    target = folder / f"{digest}.bin"
+    target = folder / f"{digest}{ext}"
     if not target.exists() and used + len(data) > AUDIO_BLOB_BUDGET_BYTES:
         raise ValueError("blob_budget")
     if not target.exists():
-        tmp = target.with_suffix(".bin.tmp")
+        tmp = target.with_suffix(target.suffix + ".tmp")
         tmp.write_bytes(bytes(data))
         tmp.replace(target)
-    return f"blob:{digest}"
+    return f"blob:{digest}{ext}"
+
+
+def resolve_audio_blob(uid: str, audio_ref: str):
+    """Resolve a blob: digest reference inside the sandbox. No host paths."""
+    uid = _owner_uid(uid)
+    ref = str(audio_ref or "")
+    if not ref.startswith("blob:"):
+        return None
+    name = ref.split(":", 1)[1]
+    if not name or "/" in name or "\\" in name or ".." in name:
+        return None
+    path = get_paths().music_audio_blob_dir(uid) / name
+    if path.is_file() and path.resolve().is_relative_to(
+        get_paths().music_audio_blob_dir(uid).resolve()
+    ):
+        return path
+    return None
 
 
 def set_participant(uid: str, char_id: str) -> dict[str, Any]:
@@ -561,6 +600,9 @@ def apply_event(uid: str, event: dict[str, Any]) -> dict[str, Any]:
         session = load_session(uid)
         if _seen_event(uid, event_id):
             return {"ok": True, "reason": "duplicate", "session": session}
+        if not session.get("host_online"):
+            _record_event(uid, event, accepted=False)
+            return {"ok": False, "reason": "host_offline", "session": session}
         if int(event.get("generation") or 0) != int(session["generation"]):
             _record_event(uid, event, accepted=False)
             return {"ok": False, "reason": "stale_host", "session": session}
@@ -777,17 +819,13 @@ def refresh_track_analysis(uid: str, track_id: str) -> dict[str, Any]:
         )
         return get_track(uid, track_id) or track
     ref = str(track.get("audio_ref") or "")
-    if not ref.startswith("blob:"):
+    path = resolve_audio_blob(uid, ref)
+    if path is None:
         status = "unavailable"
     else:
-        digest = ref.split(":", 1)[1]
-        path = get_paths().music_audio_blob_dir(uid) / f"{digest}.bin"
-        if not path.is_file():
-            status = "unavailable"
-        else:
-            from core.audio_analysis import analyze_audio_bytes
-            result = analyze_audio_bytes(path.read_bytes(), mode="music", use_cache=True)
-            status = result.get("analysis_status") or "failed"
+        from core.audio_analysis import analyze_audio_bytes
+        result = analyze_audio_bytes(path.read_bytes(), mode="music", use_cache=True)
+        status = result.get("analysis_status") or "failed"
     upsert_track(
         uid, provider=track["provider"], source_id=track["source_id"],
         title=track["title"], author=track.get("author") or "",

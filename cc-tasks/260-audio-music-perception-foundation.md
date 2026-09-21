@@ -1,6 +1,6 @@
 # 260 — Audio + Music Perception Foundation v0
 
-日期：2026-09-20。状态：施工中。A 已冻结；B 已落地共享分析；C 已接入语音链；D 已落地账本/注释/观测；E–G 未施工。
+日期：2026-09-20。状态：施工中。A 已冻结；B 已落地共享分析；C 已接入语音链；D 已落地账本/注释/观测；E 已落地 Player Adapter 与管理面自有播放器；F–G 未施工。
 运行时合同以 `core/audio_music_contract.py` 与 [audio-perception.md](../docs/audio-perception.md) 为准。
 
 目标：同一套音频分析底座支持语音听觉印象和音乐声音特征；后端维护共同听歌状态与角色注释，经统一 Player Adapter 控制自有播放器，并让真实播放事件成为既有主动性的候选来源。不是只做播放器，也不是把 STT 的情绪字段当成听觉分析。

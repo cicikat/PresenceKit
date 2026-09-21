@@ -340,10 +340,14 @@ def test_notes_do_not_change_listen_stats(sandbox):
 
 
 def test_blob_ref_is_digest_not_path(sandbox):
-    ref = register_audio_blob("owner", b"pcm-bytes")
+    ref = register_audio_blob("owner", b"pcm-bytes", filename="raw")
     assert ref.startswith("blob:")
     assert "\\" not in ref and "/" not in ref
-    assert ":" not in ref[5:]
+    name = ref.split(":", 1)[1]
+    assert ":" not in name
+    assert name.endswith(".bin")
+    wav = register_audio_blob("owner", b"RIFF....WAVE", filename="tone.wav")
+    assert wav.endswith(".wav")
 
 
 def test_refresh_analysis_unavailable_without_switch_or_readable_audio(sandbox, monkeypatch):

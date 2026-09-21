@@ -239,7 +239,7 @@ No new token scope. Frozen mapping; D landed the redacted read APIs:
 | `GET /observability/listening` | `state.read` | count definitions, analysis status counts, session metadata; no titles, notes, occurrence bodies, or audio |
 | `GET /listening/history`, `GET /listening/notes` | `memory.read` | high-sensitivity history and per-character notes; not on generic status tokens |
 | `/transcribe`, `audio_perception_id` | `chat` | existing 253.6 receipts; clients cannot self-report features |
-| first-party player host commands/events | `ws.desktop` | identity bound by backend; host cannot pick owner/char; E 阶段才接 transport |
+| first-party player host commands/events | `admin` HTTP `/player/*` this round; formal later transport remains `ws.desktop` | identity bound by backend; host cannot pick owner/char; `GET /player/state` is `state.read` |
 
 Desktop/mobile profiles gain no extra permission this round. Phone keeps transcription
 credentials only. Admin UI that later lists notes or history must not dump them onto a

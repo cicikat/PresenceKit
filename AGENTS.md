@@ -97,6 +97,7 @@
 | 共享语音/音乐声学分析（工单 260 B） | `core/audio_analysis.py`（PCM WAV + numpy；显式 speech/music 模式） |
 | 语音链凭据与印象层（工单 260 C） | `core/audio_perception.py`（`audio_music.speech_analysis` 默认关） |
 | 听歌账本 / 角色注释 / 统计（工单 260 D） | `core/listening_store.py`；只读观测 `admin/routers/listening.py` |
+| Player Adapter / 自有播放器（工单 260 E） | `core/player_adapter.py`；管理面宿主 `admin/static/pages/listening-player.html` + `/player/*` |
 | 媒体文件解析与落盘 | `core/media_processor.py` |
 | 沙盒路径管理 | `core/sandbox.py` ← 所有 data/ 路径必须经过此处 |
 | 管理面鉴权（scoped tokens，SEC-AUTH-2） | `admin/auth.py`（`resolve_token` / `require_scopes` / `authenticate_ws`）/ `admin/scopes.py`（scope+profile 表）/ `admin/token_registry.py`（token 加载/热重载/create/rotate/delete/set_disabled） |

@@ -2,7 +2,7 @@
 function designText(zh, en) { return window.AdminI18n?.getLanguage() === 'en' ? en : zh; }
 
 function decorateSettingsPanels(page, root) {
-  const pages = new Set(['model-routing', 'scheduler', 'autonomy-settings', 'embedding-config', 'mail-config', 'tts-config', 'network-config', 'device-policy', 'conversation-settings', 'output-settings', 'tools', 'mcp', 'runtime-config', 'coplay-config', 'diary-config']);
+  const pages = new Set(['model-routing', 'scheduler', 'autonomy-settings', 'embedding-config', 'mail-config', 'tts-config', 'listening-player', 'network-config', 'device-policy', 'conversation-settings', 'output-settings', 'tools', 'mcp', 'runtime-config', 'coplay-config', 'diary-config']);
   if (!pages.has(page) || !root?.isConnected) return;
   const pageTitle = root.querySelector('.page-title');
   const navigationLabel = document.querySelector(`nav a[data-page="${page}"] [data-i18n]`);

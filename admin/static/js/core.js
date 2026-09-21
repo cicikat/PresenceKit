@@ -20,7 +20,7 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'v1-261-monologue-route-1';
+const ADMIN_UI_FRAGMENT_VERSION = 'v1-260-listening-player-2';
 
 const ADMIN_PAGE_ALIASES = Object.freeze({memory: 'observe-memory'});
 
@@ -28,6 +28,7 @@ const ADMIN_PAGE_CONTEXT = Object.freeze({
   setup: {related: ['model-routing', 'character']},
   'runtime-config': {related: ['status', 'scheduler', 'model-routing']},
   'tts-config': {related: ['status', 'character', 'user-data']},
+  'listening-player': {related: ['tts-config', 'status']},
   character: {related: ['lorebook', 'tools']},
   lorebook: {related: ['character']},
   'dream-settings': {related: ['character']},
@@ -311,6 +312,7 @@ async function goto(page, {reloadFragment = false, fromHistory = false} = {}) {
     setup:           loadSetupPage,
     'runtime-config': loadRuntimeConfig,
     'tts-config':     async () => { await Promise.all([loadTtsConfig(), loadSttConfig()]); },
+    'listening-player': refreshListeningPlayer,
     status:          loadStatus,
     users:           () => { loadUsers(); loadBlacklist(); },
     logs:            () => { _runtimeWarningOffset = 0; loadLogs(); },

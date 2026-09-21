@@ -181,8 +181,8 @@ tempo、STFT chroma；旋律状态只能是 `unknown | distribution_only | unava
 多声部、坏编码、超长、超时、缓存键和并发 1，断言数值/质量退化。合成夹具不是听感
 准确率证明。
 
-C 已接入现有语音链（见下节）。D 已落地听歌账本与只读观测；E–G 仍未施工。
-管理面本轮不展示 `audio_music` 开关为可用。
+C 已接入现有语音链（见下节）。D 已落地听歌账本与只读观测；E 已接管理面自有播放器。
+管理面本轮仍不把 `audio_music` 四路开关做成可用设置卡（G）。
 
 ## 工单 260 C：语音链、凭据与印象层
 
@@ -234,13 +234,47 @@ Track 以 `provider + source_id` 为身份，同名标题不合并。occurrence 
 | `GET /listening/history` | `memory.read` | occurrence 与可重建 stats |
 | `GET /listening/notes` | `memory.read` | 指定角色的歌曲注释 |
 
-桌面/手机本轮不消费这些端点。E 才接 Player Adapter 与自有播放器。
+桌面/手机本轮不消费这些端点。E 已接 Player Adapter 与管理面自有播放器。
+
+## 工单 260 E：Player Adapter 与自有播放器
+
+权威实现：`core/player_adapter.py`。后端拥有期望队列与命令账本；真实声音由绑定宿主
+回报。`music_control` 默认关闭：关闭时 `capabilities`/`get_state` 仍可读，播放命令与
+宿主事件一律拒绝。fake/mock adapter 只用于回归，`mock_closes_e=false`，不能关闭本阶段。
+
+首个真实宿主是管理面 **HTMLAudioElement**（`adapter=first_party_admin`，
+`device=admin_html_audio`），不是桌宠 v0.1 allowlist 扩展，也不是网易云/媒体键。
+正式后续 transport 仍预留 `ws.desktop`；本轮用专用 HTTP `/player/*`，身份由后端绑定，
+不信任客户端指定 owner/char。浏览器 File/blob 默认 `local_playable_backend_unread`；
+只有 `POST /player/tracks` 登记的受控 blob 才是 `backend_readable`。任意本机路径或
+URL 不会变成通用读文件。
+
+断连策略 `local_may_continue_unsynced`：本页音频可以继续出声，但 `host_online=false`
+后事件被拒绝，后端不再累计听歌时长，宿主也不能一边离线改队列一边声称已同步。
+TTS `playbackQueue` 不是音乐宿主；播放页在出声前暂停同页其他 `audio/video`，不复用
+TTS 队列。旧 `play_netease` / `media_play_pause` 仍是独立桌面动作。
+
+命令：`command_id` 重复返回缓存结果，不重放 `next`。过期 generation 为 `stale_host`，
+队列 revision 冲突为 `revision_conflict`。`play`/`pause`/`resume`/`stop`/`next`/`seek`
+先 `accepted` + `awaiting_host`，真实事件带 `causation_command_id` 才升为
+`confirmed` 或 `failed`。进程重启后 `outcome_unknown` 的 next 不得自动重放。
+`idle` 不能直接声称 playing。
+
+| 端点 | scope | 内容 |
+|---|---|---|
+| `GET /player/state` | `state.read` | session 元数据、capabilities、`music_control_enabled` |
+| `POST /player/host/bind`、`/player/host/disconnect`、`/player/command`、`/player/event` | `admin` | 绑定/离线、命令账本、真实事件提交 |
+| `GET /player/library`、`POST /player/tracks`、`GET /player/audio/{track_id}` | `admin` | 受控曲库与 blob；不含角色注释 |
+
+管理面页面：`#page-listening-player`。静态版本 `v1-260-listening-player-2`。
+真实浏览器出声与 TTS 共存验收在 G；本阶段自动化覆盖命令账本、离线不计时、HTTP
+上传/取流和 fake-host 回归。
 
 ### 后续阶段与未完成项
 
-E：Player Adapter 与自有播放器真实闭环。
 F：工具、stimulus → autonomy、反馈循环抑制。
-G：管理面、静态版本、浏览器验收与文档闭环。
+G：管理面设置开关、浏览器真实出声验收与文档闭环。
 
 observe：真实语音听感、歌曲特征、端到端共同听歌、QQ/供应商编码、桌面真实窗口与 TTS
-共存均未做。B 的合成夹具不是准确率证明；WAV 以外编码仍待后续解码器。
+共存均未做。B 的合成夹具不是准确率证明；WAV 以外编码仍待后续解码器。独立 demo
+`cc-tasks/standalone-lightweight-player-demo.md` 仍未施工，不能写成 260 已完成。
