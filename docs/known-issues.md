@@ -3,11 +3,12 @@
 ## 工单 260 音频与音乐感知（2026-09-21）
 
 `current`：A 已冻结 schema、预算、scope、状态机、计数口径和宿主盘点
-（`core/audio_music_contract.py`、[audio-perception.md](audio-perception.md)）。
+（`core/audio_music_contract.py`）。B 已落地共享 PCM WAV 解码与 speech/music 特征
+（`core/audio_analysis.py`，numpy 可选，无 librosa）。运行时尚未接入语音链。
 没有可复用自有播放器；`play_netease` / 媒体键保持独立桌面动作；TTS 队列不是音乐宿主；
 手机不增加播放器。供应商 tone 仍是 253.6 最终印象来源，删除候选未授权。
-`open`：B–G（分析实现、语音链接入、存储、真实播放器、工具/主动性、管理面验收）。
-`observe`：真实语音听感、歌曲特征、端到端共同听歌、QQ/供应商编码。
+`open`：C–G（语音链接入、存储、真实播放器、工具/主动性、管理面验收）。
+`observe`：真实语音听感、歌曲特征、端到端共同听歌、QQ/供应商编码；WAV 以外编码。
 
 ## 工具循环尾部控制标记（2026-09-20）
 

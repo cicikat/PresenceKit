@@ -1004,14 +1004,15 @@ observe：两端真实锁屏、输入事件与后台生命周期验收未执行�
 
 GET /observability/drinking（state.read）返回当前角色强度、decay_per_hour、effective 和阻断原因；管理面「存在」可见。聊天仅明确邀请才暴露工具，桌面沿用 perform.posture/energy，手机无新增字段或设置。真实桌面动作表现 observe。
 
-### 工单 260 A audio + music foundation — freeze / not current
+### 工单 260 A/B audio + music foundation — freeze + analyzer / not current
 
 `freeze`：后端合同 `audio-music-perception.v0`（`core/audio_music_contract.py`）。
-不新增 REST/WS/IPC 字段、客户端设置或桌面 action。手机保持 253.6 转写凭据兼容，不增加
-手机播放器。自有播放器尚未实现；网易云 `play_netease` 与 `media_play_pause` 仍是独立
-v0.1 desktop action，不是 Player Adapter。TTS 播放队列不是音乐宿主。后续 transport
-拟走 `ws.desktop`，身份由后端绑定。精确 schema/scope 见
-[audio-perception.md](audio-perception.md)。
+B `current`（后端内部）：`core/audio_analysis.py` 共享 PCM WAV 解码与 speech/music
+特征；无新 REST/WS/IPC 字段、客户端设置或桌面 action。手机保持 253.6 转写凭据兼容，
+不增加手机播放器。自有播放器尚未实现；网易云 `play_netease` 与 `media_play_pause`
+仍是独立 v0.1 desktop action，不是 Player Adapter。TTS 播放队列不是音乐宿主。后续
+transport 拟走 `ws.desktop`，身份由后端绑定。精确 schema/scope 见
+[audio-perception.md](audio-perception.md)。C–G 接入前不是对外 current。
 
 ### Brief 253.6 audio perception — current / observe
 

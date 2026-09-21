@@ -1,4 +1,4 @@
-# 语音识别与听觉印象（Brief 253.6 + 工单 260 A）
+# 语音识别与听觉印象（Brief 253.6 + 工单 260）
 
 管理面「语音合成与声音」末尾提供命名 STT 连接及 `voice_message` 用途。
 `stt_presets.enabled` 默认 false；`presets` 保存连接名对应的 `base_url`、`model`、
@@ -28,11 +28,12 @@ QQ record 消息经过有界下载与转写；HTTP `/upload/ingest` 支持单个
 
 observe：真实录音、QQ 编码、各供应商语调字段和三端联合表现未实测；不把合成夹具测试当准确率证明。
 
-## 工单 260 A：音频与音乐感知底座合同（冻结，未实现分析/播放）
+## 工单 260 A：音频与音乐感知底座合同（冻结）
 
 权威代码：`core/audio_music_contract.py`，`contract_version=audio-music-perception.v0`。
-本阶段只冻结 schema、单位、预算、scope、状态机、计数和播放宿主盘点；B–G 才落地分析、
-存储、adapter、工具和管理面。导入该模块不得解码音频、启动播放器或写生产数据。
+A 只冻结 schema、单位、预算、scope、状态机、计数和播放宿主盘点。B 已落地共享解码与
+特征分析；C–G 才接入语音链、存储、adapter、工具和管理面。导入冻结合同模块不得解码
+音频、启动播放器或写生产数据。
 
 253.6 的命名 STT、一次性凭据和 `3.8_audio_impression` 继续作为入口。本单扩展同一凭据链，
 不另造转写。供应商 `tone` 在 v0 仍可出现在凭据里，但只能当独立 optional hint；声学失败、
@@ -80,8 +81,9 @@ null，禁止补 0 Hz）、仅在有效有声帧上的 pitch summary、RMS/dBFS 
 `music_control`、`music_autonomy`。STT 已配置不等于分析可用；effective 必须同时看对应开关
 和可选分析依赖。
 
-B 阶段才加入可选解码依赖，并在 `requirements-full.txt` / `core.runtime_deps` 登记；
-当前 core runtime 没有 numpy/scipy/librosa/soundfile。缺失依赖时分析不可用，不得假装完成。
+B 已落地共享分析（见下节）。numpy 是 `requirements-full.txt` / `core.runtime_deps`
+的可选运行时依赖；进程启动不因缺 numpy 崩溃，分析结果为 `unavailable`。
+不引入 scipy / librosa / soundfile。
 
 ### 听歌状态、计数与注释
 
@@ -157,9 +159,32 @@ perceive gate 与 autonomy。Dream 阻断发言候选不阻断播放记账。进
 注释 `memory.read`；转写/凭据仍 `chat`；宿主 transport `ws.desktop`。不能把注释或完整
 历史无差别暴露给通用 `state.read`。错误不含原始语音、密钥或完整供应商响应。
 
+## 工单 260 B：共享解码与 speech/music 特征分析
+
+权威实现：`core/audio_analysis.py`。入口 `analyze_audio_bytes()` / `analyze_audio()`。
+调用方必须显式传 `mode=speech|music`；`filename` 只是元数据，扩展名不选分析器。
+结果永不发明转写文本。语音临时音频不落盘；缓存只写内容摘要 + `audio-analysis.v0`
+的结构化 JSON。
+
+v0 解码范围：标准库 `wave` 的未压缩 PCM WAV（8/16/32-bit，单声道或混成单声道）。
+mp3/ogg/flac/m4a/webm/opus/amr/silk 返回 `analysis_status=failed`、`reason=decode_error`，
+不假装分析成功。numpy 缺失时 `unavailable` / `missing_dependency`。输入超过 25 MiB
+为 `oversize`。全局并发 1；语音硬超时 3 s、音乐 8 s；超时结果不进缓存。音乐超过
+180 s 只分析前窗，`analysis_status=partial` 并记录覆盖区间/比例。
+
+语音：ACF pitch（60–400 Hz），无声帧 `f0_hz` 为 null 永不补 0 Hz；pace 为 voiced-onset
+率；能量 RMS/dBFS；质量不足时印象为 `unclear`。音乐：50 ms 能量曲线、onset-flux ACF
+tempo、STFT chroma；旋律状态只能是 `unknown | distribution_only | unavailable`，
+不把单声道语音 F0 冒充整曲旋律，也不输出 tired/tense 等人的情绪枚举。
+
+夹具：`tests/test_audio_analysis.py` 覆盖静音、已知频率、斜坡、短音频、削波、噪声、
+多声部、坏编码、超长、超时、缓存键和并发 1，断言数值/质量退化。合成夹具不是听感
+准确率证明。
+
+C–G 仍未施工：分析器尚未接入 STT/凭据/`3.8_audio_impression`，管理面不展示开关为可用。
+
 ### 后续阶段与未完成项
 
-B：共享解码与 speech/music 特征，隔离夹具断言数值/质量退化。
 C：接入现有语音链、凭据、保守标签和 prompt。
 D：音乐存储、注释、统计、只读观测。
 E：Player Adapter 与自有播放器真实闭环。
@@ -167,4 +192,4 @@ F：工具、stimulus → autonomy、反馈循环抑制。
 G：管理面、静态版本、浏览器验收与文档闭环。
 
 observe：真实语音听感、歌曲特征、端到端共同听歌、QQ/供应商编码、桌面真实窗口与 TTS
-共存均未做。A 阶段冻结不等于分析或播放已可用。
+共存均未做。B 的合成夹具不是准确率证明；WAV 以外编码仍待后续解码器。

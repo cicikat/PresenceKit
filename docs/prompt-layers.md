@@ -978,7 +978,8 @@ Brief 253.5：`1.6_drinking` 是自然衰减的虚构角色体感软层，零网
 Brief 253.6：`3.8_audio_impression` 只随本轮已转写音频或有效一次性凭据注入。语调枚举来自 STT 可选旁路字段，缺失为 unclear；提示明确是不确定印象，不写入用户人格事实。纯文字不注入，详见 [audio-perception.md](audio-perception.md)。
 
 工单 260 A：同一层将扩展为少量可读声学特征 + 保守印象；完整 pitch 曲线不进 prompt。
-供应商 tone 只作 optional hint，不能覆盖声学失败。C 阶段落地前运行时仍只注入 253.6 tone。
+供应商 tone 只作 optional hint，不能覆盖声学失败。B 已实现分析器，C 接入前运行时仍只
+注入 253.6 tone。
 
 Brief 256 G：主动链既有 `autonomy_policy` 层会根据本轮实际工具 schema
 说明可选的 backend/external 读取、self 整理和已授权 Agent task。缺失的

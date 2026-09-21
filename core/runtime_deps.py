@@ -28,6 +28,7 @@ RUNTIME_OPTIONAL_DEPS: tuple[dict[str, str], ...] = (
     {"name": "python-chess", "import_name": "chess", "label": "棋类陪玩"},
     {"name": "rapidocr-onnxruntime", "import_name": "rapidocr_onnxruntime", "label": "本地 OCR"},
     {"name": "python-socks", "import_name": "python_socks", "label": "代理 SOCKS 支持"},
+    {"name": "numpy", "import_name": "numpy", "label": "音频分析（语音/音乐特征）"},
 )
 
 _REQ_LINE = re.compile(r"^([A-Za-z0-9_.-]+)")

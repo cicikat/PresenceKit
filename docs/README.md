@@ -29,7 +29,7 @@
 ## 核心运行时
 
 - [channels.md](channels.md)、[scheduler.md](scheduler.md)、[tools.md](tools.md)、[assistant-turn-sink.md](assistant-turn-sink.md)、[wake-bridge.md](wake-bridge.md)
-- [audio-perception.md](audio-perception.md)：253.6 STT 与印象层；工单 260 A 音频/音乐底座冻结合同
+- [audio-perception.md](audio-perception.md)：253.6 STT 与印象层；工单 260 A 冻结合同、B 共享分析
 - [prompt-layers.md](prompt-layers.md)、[model-presets.md](model-presets.md)
 - [mcp-server-authoring-template.md](mcp-server-authoring-template.md)：新建独立 MCP Server 时可复制的设计先行模板、数据契约与 Emerald 接入参考。
 - [memory.md](memory.md)、[memory-storage-architecture-assessment.md](memory-storage-architecture-assessment.md)、[vector-store.md](vector-store.md)、[data-taxonomy.md](data-taxonomy.md)、[c1-root-asset-inventory.md](c1-root-asset-inventory.md)
