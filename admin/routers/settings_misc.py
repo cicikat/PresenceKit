@@ -69,6 +69,7 @@ class TtsConfigUpdate(BaseModel):
     api_url:         Optional[str]   = None
     ref_audio:       Optional[str]   = None
     prompt_text:     Optional[str]   = None
+    reference_texts: Optional[dict[str, str]] = None
     speed:           Optional[float] = None
     emotion_enabled: Optional[bool]  = None
     emotions:        Optional[dict]  = None
@@ -137,6 +138,7 @@ async def get_tts_config(char_id: Optional[str] = None, auth=Depends(require_sco
         "api_url":         resolved_cfg.get("api_url",         "http://127.0.0.1:9880"),
         "ref_audio":       resolved_cfg.get("ref_audio",       ""),
         "prompt_text":     resolved_cfg.get("prompt_text",     ""),
+        "reference_texts": resolved_cfg.get("reference_texts", {}),
         "speed":           float(resolved_cfg.get("speed",     1.0)),
         "emotion_enabled": resolved_cfg.get("emotion_enabled", False),
         "emotions":        resolved_cfg.get("emotions",        {}),
@@ -206,6 +208,12 @@ async def get_tts_resources(char_id: str = DEFAULT_CHAR_ID, auth=Depends(require
 async def update_tts_config(body: TtsConfigUpdate, auth=Depends(require_scopes("admin"))):
     if body.speed is not None and not (0.5 <= body.speed <= 2.0):
         raise HTTPException(status_code=422, detail="speed 必须在 0.5~2.0 之间")
+    if body.reference_texts is not None:
+        if len(body.reference_texts) > 64 or any(
+            not key or len(key) > 255 or any(ord(ch) < 32 for ch in key)
+            or len(value) > 500 for key, value in body.reference_texts.items()
+        ):
+            raise HTTPException(status_code=422, detail="参考音频文本映射最多 64 项；音频名和文本长度超限")
 
     full_cfg = read_config_file(CONFIG_FILE)
 
@@ -232,6 +240,8 @@ async def update_tts_config(body: TtsConfigUpdate, auth=Depends(require_scopes("
         tts_cfg["ref_audio"] = body.ref_audio
     if body.prompt_text is not None:
         tts_cfg["prompt_text"] = body.prompt_text
+    if body.reference_texts is not None:
+        tts_cfg["reference_texts"] = body.reference_texts
     if body.speed is not None:
         tts_cfg["speed"] = body.speed
     if body.emotion_enabled is not None:

@@ -1,6 +1,20 @@
 let _ttsProviderParamsByProvider = {};
 let _ttsLoadedProvider = 'gsv';
 let _ttsLoadGeneration = 0;
+let _ttsReferenceTexts = {};
+let _ttsCurrentAudio = '';
+
+function _storeTtsReferenceTextDraft() {
+  if (!_ttsCurrentAudio) return;
+  const value = document.getElementById('tts-prompt-text').value.trim();
+  if (value || Object.hasOwn(_ttsReferenceTexts, _ttsCurrentAudio)) _ttsReferenceTexts[_ttsCurrentAudio] = value;
+}
+
+function onTtsReferenceAudioChange() {
+  _storeTtsReferenceTextDraft();
+  _ttsCurrentAudio = document.getElementById('tts-ref-audio').value;
+  document.getElementById('tts-prompt-text').value = _ttsReferenceTexts[_ttsCurrentAudio] || '';
+}
 
 async function _loadTtsCharacters() {
   const select = document.getElementById('tts-char-select');
@@ -42,7 +56,7 @@ function _renderTtsResourceSelect(id, rows, current) {
 
 function _renderTtsProvider(provider) {
   const params = _ttsProviderParamsByProvider[provider] || {};
-  renderKeyValueEditor('tts-provider-params', params, { exclude: ['api_key', 'api_url', 'ref_audio', 'gpt_model_path', 'sovits_model_path', 'prompt_text', 'speed'] });
+  renderKeyValueEditor('tts-provider-params', params, { exclude: ['api_key', 'api_url', 'ref_audio', 'gpt_model_path', 'sovits_model_path', 'prompt_text', 'reference_texts', 'speed'] });
   document.getElementById('tts-api-url').value = params.api_url || '';
   document.getElementById('tts-ref-audio').value = params.ref_audio || '';
   document.getElementById('tts-gpt-model-path').value = params.gpt_model_path || '';
@@ -98,6 +112,12 @@ async function loadTtsConfig() {
     const options = d.resource_options || {};
     const params = d.provider_params || {};
     _renderTtsResourceSelect('tts-ref-audio', options.reference_audio, params.ref_audio || d.ref_audio || '');
+    _ttsReferenceTexts = {...(d.reference_texts && typeof d.reference_texts === 'object' ? d.reference_texts : {})};
+    _ttsCurrentAudio = document.getElementById('tts-ref-audio').value;
+    if (_ttsCurrentAudio && !Object.keys(_ttsReferenceTexts).length && (params.prompt_text || d.prompt_text)) {
+      _ttsReferenceTexts[_ttsCurrentAudio] = params.prompt_text || d.prompt_text;
+    }
+    document.getElementById('tts-prompt-text').value = _ttsReferenceTexts[_ttsCurrentAudio] || '';
     _renderTtsResourceSelect('tts-gpt-model-path', options.gpt_model, params.gpt_model_path || '');
     _renderTtsResourceSelect('tts-sovits-model-path', options.sovits_model, params.sovits_model_path || '');
     if (document.getElementById('tts-emotion-tiers')) {
@@ -111,6 +131,7 @@ async function loadTtsConfig() {
 }
 async function saveTtsConfig() {
   const charId = document.getElementById('tts-char-select')?.value || '';
+  _storeTtsReferenceTextDraft();
   let providerParams;
   try { providerParams = readKeyValueEditor('tts-provider-params'); }
   catch (e) { toast(e.message, 'err'); return; }
@@ -137,6 +158,7 @@ async function saveTtsConfig() {
     api_url: document.getElementById('tts-api-url').value.trim(),
     ref_audio: document.getElementById('tts-ref-audio').value.trim(),
     prompt_text: document.getElementById('tts-prompt-text').value.trim(),
+    reference_texts: _ttsReferenceTexts,
     speed: parseFloat(document.getElementById('tts-speed').value),
     emotions,
     provider,

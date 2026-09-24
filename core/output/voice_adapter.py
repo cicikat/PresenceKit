@@ -179,7 +179,7 @@ def get_provider_config(cfg: dict | None = None) -> tuple[str, dict]:
     legacy_gsv = {
         key: cfg[key]
         for key in (
-            "api_url", "ref_audio", "prompt_text", "speed", "emotion_enabled",
+            "api_url", "ref_audio", "prompt_text", "reference_texts", "speed", "emotion_enabled",
             "emotions", "how_to_cut", "top_k", "top_p", "temperature",
             "ref_free", "if_freeze", "sample_steps", "if_sr", "pause_second",
             "gpt_model_path", "sovits_model_path", "gpt_model_fallback", "sovits_model_fallback",
@@ -218,6 +218,19 @@ def get_safe_provider_params(cfg: dict | None = None) -> dict:
     """Return editable active-provider settings without ever returning api_key."""
     _provider, selected = get_provider_config(cfg)
     return {key: value for key, value in selected.items() if key != "api_key"}
+
+
+def reference_prompt_text(cfg: dict, ref_audio: str, *, emotion_text: str = "") -> str:
+    """Use the saved text for the selected audio, including emotion overrides."""
+    if emotion_text:
+        return emotion_text.strip()
+    texts = cfg.get("reference_texts")
+    if isinstance(texts, dict) and texts:
+        for key in (ref_audio, Path(ref_audio).name, Path(ref_audio).stem):
+            if key in texts:
+                return str(texts[key]).strip()
+        return ""
+    return str(cfg.get("prompt_text") or "").strip()
 
 
 def _is_cjk_character(char: str) -> bool:
@@ -423,11 +436,11 @@ class GsvProvider:
             emotions = cfg.get("emotions", {})
             ecfg = emotions.get(emotion) or emotions.get("neutral") or {}
             ref_audio = str(ecfg.get("ref_audio", "")).strip() or str(cfg.get("ref_audio", "")).strip()
-            prompt_txt = str(ecfg.get("prompt_text", "")).strip() or str(cfg.get("prompt_text", "")).strip()
+            prompt_txt = reference_prompt_text(cfg, ref_audio, emotion_text=str(ecfg.get("prompt_text", "")))
             speed = float(ecfg.get("speed") or cfg.get("speed", 1.0))
         else:
             ref_audio = str(cfg.get("ref_audio", "")).strip()
-            prompt_txt = str(cfg.get("prompt_text", "")).strip()
+            prompt_txt = reference_prompt_text(cfg, ref_audio)
             speed = float(cfg.get("speed", 1.0))
         ref_audio = _resolve_audio_path(ref_audio, char_id=char_id)
         if not ref_audio:

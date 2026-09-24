@@ -53,12 +53,25 @@ async def test_role_save_creates_separate_route_without_changing_global(monkeypa
     monkeypatch.setattr("core.config_loader.reload_config", lambda: None)
     await settings_misc.update_tts_config(settings_misc.TtsConfigUpdate(
         char_id="role_one", ref_audio="中文参考", provider="gsv",
+        reference_texts={"中文参考": "这是一段参考文本。", "另一份": "另一个文本。"},
         provider_params={"ref_audio": "中文参考"}), auth=None)
     tts = written[0]["tts"]
     name = voice_adapter.role_tts_generated_name("role_one")
     assert tts["ref_audio"] == "global.wav"
     assert tts["role_routes"]["role_one"] == name
     assert tts["presets"][name]["providers"]["gsv"]["ref_audio"] == "中文参考"
+    assert tts["presets"][name]["reference_texts"]["另一份"] == "另一个文本。"
+
+
+def test_reference_text_matches_selected_audio_and_preserves_legacy_fallback():
+    from core.output.voice_adapter import reference_prompt_text
+
+    cfg = {"prompt_text": "旧文本", "reference_texts": {"念诗": "念诗对应文字", "温柔": "温柔对应文字"}}
+    assert reference_prompt_text(cfg, "念诗") == "念诗对应文字"
+    assert reference_prompt_text(cfg, "userdata/characters/authored/role_one/voice/温柔.mp3") == "温柔对应文字"
+    assert reference_prompt_text(cfg, "其他音频") == ""
+    assert reference_prompt_text(cfg, "念诗", emotion_text="情绪专用文字") == "情绪专用文字"
+    assert reference_prompt_text({"prompt_text": "旧文本"}, "念诗") == "旧文本"
 
 
 def test_listed_unicode_reference_resolves_only_inside_role_voice_dir(monkeypatch, tmp_path):

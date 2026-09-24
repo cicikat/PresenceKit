@@ -379,7 +379,7 @@ Flutter/Android 字段或设置面。Agent Runtime 是同一角色的 durable / 
 | `/lorebook*`、`/jailbreak-entries*` | Prompt 资产 CRUD | 管理面完整编辑；手机仅提供受限启停/读取 |
 | `/settings/feature-flags`、`/settings/tools`、`/settings/tool-loop`、`/settings/thinking`、`/settings/mcp` | 功能开关、工具暴露、tool loop、思考、MCP | `admin-only`；思考编辑在模型连接页；MCP 热重载区分 reloaded / connection_failed / restart_required；桌面不新增这些设置 |
 | `/settings/model-routing`、`/model-presets/*`、`/llm-params`、`/vision-params` | 模型连接和路由 | 密钥留在后端管理面；桌面只切已有 profile |
-| `/settings/tts-*`、`/tts-config*`、`/tts/synthesize` | TTS provider、按 `char_id` 独立角色路由、桌面播放、自动播放、合成 | 后端管理面默认跟随活跃角色；参考音频取 authored `voice`，GPT/SoVITS 权重按后缀从角色 authored 目录及子目录发现；桌面保留播放设置，合成按角色解析 |
+| `/settings/tts-*`、`/tts-config*`、`/tts/synthesize` | TTS provider、按 `char_id` 独立角色路由与 `reference_texts` 音频文本绑定、桌面播放、自动播放、合成 | 后端管理面默认跟随活跃角色；参考音频取 authored `voice`，GPT/SoVITS 权重按后缀从角色 authored 目录及子目录发现；桌面保留播放设置，合成按角色解析 |
 | `/chat-mode`、`/chat-style`、`/chat-multi-message`、`/output-segment-enforce` | 对话行为和输出兜底 | 桌面可见设置必须与后端读写接口同单更新 |
 | `/scheduler/*`、`/system/meta-mode`、`/coplay/*`、`/settings/relay`、`/settings/screen-peek` | 调度、安全模式、陪玩、中继、屏幕查看 | 主要是管理面或本地设置；danger 常驻到手动关闭，忽略 ttl；不能只改 config 而没有 effective-state/观测 |
 
