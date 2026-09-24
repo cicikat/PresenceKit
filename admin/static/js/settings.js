@@ -181,7 +181,8 @@ function editImagePreset(name) {
   editor?.querySelector('input,select,button')?.focus();
 }
 async function saveImagePreset() {
-  const name = document.getElementById('image-preset-name').value.trim();
+  const nameInput = document.getElementById('image-preset-name');
+  let name = nameInput.value.trim();
   if (!name) { toast(t('routing.connection_name_required', '连接名不能为空'), 'err'); return; }
   const kind = document.getElementById('image-preset-kind').value;
   const body = {kind};
@@ -201,6 +202,24 @@ async function saveImagePreset() {
     body.base_url = document.getElementById('vision-base-url').value.trim();
     const key = document.getElementById('vision-api-key').value.trim();
     if (key) body.api_key = key;
+  }
+  const namePattern = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
+  // Provider IDs can contain '/' and ':'. Preserve the ID while deriving an internal key.
+  if (!namePattern.test(name) && !_editingImagePreset && !body.model && /^[A-Za-z]/.test(name)) {
+    body.model = name;
+    name = name.replace(/[^A-Za-z0-9_-]+/g, '_').slice(0, 64);
+    nameInput.value = name;
+    document.getElementById(kind === 'ocr' ? 'ocr-model' : 'vision-model-select').value = body.model;
+  }
+  if (!namePattern.test(name)) {
+    toast('连接名只能以字母开头，后续使用字母、数字、下划线或短横线，最多 64 字符；完整模型 ID 请填在「模型」栏', 'err');
+    nameInput.focus();
+    return;
+  }
+  if (!body.model) {
+    toast('请填写模型 ID', 'err');
+    document.getElementById(kind === 'ocr' ? 'ocr-model' : 'vision-model-select').focus();
+    return;
   }
   try {
     await api('PUT', `/image-presets/presets/${encodeURIComponent(name)}`, body);

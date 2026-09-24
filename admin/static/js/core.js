@@ -20,7 +20,7 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'v1-263-daily-budget-1';
+const ADMIN_UI_FRAGMENT_VERSION = 'v1-264-image-preset-1';
 
 const ADMIN_PAGE_ALIASES = Object.freeze({memory: 'observe-memory'});
 
