@@ -152,7 +152,7 @@ def _log_completed_call(*, provider: str, model: str, purpose: str, started_at: 
 # covers the legacy ``vision:`` block; named image_presets reuse it when the
 # endpoint matches, otherwise they get a keyed client.
 _vision_client: AsyncOpenAI | None = None
-_vision_clients: dict[tuple[str, str], AsyncOpenAI] = {}
+_vision_clients: dict[tuple[str, str, bool], AsyncOpenAI] = {}
 
 
 # -- Call-category timeouts (seconds) ----------------------------------------
@@ -193,7 +193,13 @@ def _resolve_vision_config(vision_purpose: str | None = None) -> dict:
             return {}
         if route.get("kind") != "vision":
             return {}
-        return dict(route.get("config") or {})
+        cfg = dict(route.get("config") or {})
+        if vision_purpose == "video_call":
+            from core.image_presets import video_call_ready
+            if not video_call_ready(cfg)[0]:
+                return {}
+            cfg["_local_only"] = True
+        return cfg
     return dict(get_config().get("vision") or {})
 
 
@@ -206,16 +212,16 @@ def _get_vision_client(cfg: dict | None = None) -> AsyncOpenAI | None:
     base_url = str(cfg.get("base_url") or "")
     if not base_url or not cfg.get("model"):
         return None
-    key = (base_url, str(cfg.get("api_key") or ""))
+    key = (base_url, str(cfg.get("api_key") or ""), bool(cfg.get("_local_only")))
     cached = _vision_clients.get(key)
     if cached is not None:
         return cached
     if _vision_client is not None:
         # Tests (and reload) inject a single shared client; reuse it when the
         # cache is empty so existing monkeypatches keep working.
-        if not _vision_clients:
+        if not _vision_clients and not cfg.get("_local_only"):
             return _vision_client
-    proxy_url = _get_proxy_url()
+    proxy_url = None if cfg.get("_local_only") else _get_proxy_url()
     http_client = _make_http_client(proxy_url)
     client = AsyncOpenAI(
         api_key=cfg.get("api_key") or "none",
@@ -344,14 +350,15 @@ async def chat(
             started_at = time.perf_counter()
             response = None
             try:
-                _record_debug_request(
-                    provider=str(vision_cfg.get("provider") or "vision"),
-                    model=str(vision_cfg.get("model") or ""),
-                    purpose="vision",
-                    messages=safe_msgs,
-                    tools=None,
-                    request_kwargs={"max_tokens": 1000, "timeout": _CALL_TIMEOUTS["vision"]},
-                )
+                if vision_purpose != "video_call":
+                    _record_debug_request(
+                        provider=str(vision_cfg.get("provider") or "vision"),
+                        model=str(vision_cfg.get("model") or ""),
+                        purpose="vision",
+                        messages=safe_msgs,
+                        tools=None,
+                        request_kwargs={"max_tokens": 1000, "timeout": _CALL_TIMEOUTS["vision"]},
+                    )
                 response = await vision_client.chat.completions.create(
                     model=vision_cfg["model"],
                     messages=safe_msgs,

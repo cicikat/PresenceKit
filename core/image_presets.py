@@ -23,6 +23,7 @@ PURPOSES = (
     "life_cart",
     "life_bill",
     "phone_automation",
+    "video_call",
 )
 VISION_KINDS = frozenset({"vision"})
 OCR_KINDS = frozenset({"ocr"})
@@ -73,11 +74,12 @@ def snapshot(config: dict | None = None) -> dict:
     for purpose in PURPOSES:
         name = cat["routes"].get(purpose, "")
         preset = cat["presets"].get(name, {})
+        ready = video_call_ready(preset)[0] if purpose == "video_call" else connection_ready(preset) if preset else False
         purposes.append({
             "purpose": purpose,
             "connection": name,
             "kind": preset.get("kind", ""),
-            "ready": connection_ready(preset) if preset else False,
+            "ready": ready,
             "source": "image_presets" if not cat["synthesized"] else "legacy",
         })
     return {
@@ -152,6 +154,21 @@ def connection_ready(preset: dict | None) -> bool:
     if preset.get("enabled") is False:
         return False
     return bool(preset.get("base_url") and preset.get("model"))
+
+
+def video_call_ready(preset: dict | None) -> tuple[bool, str]:
+    """Video frames may use only an enabled loopback Chat Completions vision model."""
+    if not preset or preset.get("kind") != "vision":
+        return False, "vision_connection_required"
+    if not connection_ready(preset):
+        return False, "connection_not_ready"
+    if preset.get("api_protocol") != "chat_completions":
+        return False, "chat_completions_required"
+    parsed = urlsplit(str(preset.get("base_url") or ""))
+    if (parsed.scheme != "http" or parsed.hostname not in {"localhost", "127.0.0.1", "::1"}
+            or parsed.username or parsed.password or parsed.query or parsed.fragment):
+        return False, "loopback_http_required"
+    return True, ""
 
 
 def referencing_purposes(name: str, config: dict | None = None) -> list[str]:
@@ -246,6 +263,7 @@ def _default_routes(config: dict, presets: dict) -> dict:
         "life_cart": vision_name or next(iter(presets), ""),
         "life_bill": ocr_name or next(iter(presets), ""),
         "phone_automation": phone_name or vision_name or next(iter(presets), ""),
+        "video_call": "",
     }
 
 

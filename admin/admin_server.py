@@ -60,7 +60,7 @@ from admin.routers import (
     reading, gomoku, dream_seed,
     hidden_state_debug, hardware, observe,
     group, group_dream, relationship_facts,
-    transcribe, provenance,
+    transcribe, video_call, provenance,
     auth_tokens, coplay, perception, spend, growth, observability, wake_bridge, integrations, autonomy, self_management,
     listening,
     phone_control, control_center, user_data, deployment, companion, event_memory, character_library,
@@ -128,6 +128,7 @@ app.include_router(group.router,    prefix="/group",    tags=["群聊"])
 app.include_router(group_dream.router, prefix="/group", tags=["群聊梦境"])
 app.include_router(relationship_facts.router, prefix="", tags=["关系事实"])
 app.include_router(transcribe.router,          prefix="", tags=["语音转写"])
+app.include_router(video_call.router,          prefix="", tags=["视频电话"])
 app.include_router(provenance.router,          prefix="", tags=["观测"])
 app.include_router(auth_tokens.router,         prefix="", tags=["鉴权"])
 app.include_router(coplay.router,              prefix="", tags=["陪玩"])

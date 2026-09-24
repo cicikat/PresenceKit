@@ -62,6 +62,7 @@ const IMAGE_PURPOSE_LABELS = {
   life_cart: () => t('routing.life_cart', '生活记录 · 购物车'),
   life_bill: () => t('routing.life_ocr', '生活记录 · 账单'),
   phone_automation: () => t('routing.phone_automation', '手机自动化'),
+  video_call: () => '视频电话 · 本机摄像头',
 };
 function toggleVisionEditor(id) {
   const editor = document.getElementById(id);
@@ -96,11 +97,22 @@ function renderImageRoutes() {
   if (!root) return;
   const presets = _imagePresetCatalog.presets || {};
   const names = Object.keys(presets);
-  const purposes = ['chat_upload', 'life_diet', 'life_cart', 'life_bill', 'phone_automation'];
+  const purposes = ['chat_upload', 'life_diet', 'life_cart', 'life_bill', 'phone_automation', 'video_call'];
   const routes = _imagePresetCatalog.routes || {};
   root.innerHTML = purposes.map(purpose => {
     const selected = routes[purpose] || '';
-    const options = names.map(name => `<option value="${escapeHtml(name)}" ${name === selected ? 'selected' : ''} data-i18n-skip>${escapeHtml(name)}</option>`).join('');
+    const available = purpose === 'video_call' ? names.filter(name => {
+      const preset = presets[name] || {};
+      try {
+        const url = new URL(preset.base_url || '');
+        return preset.kind === 'vision' && preset.enabled !== false && preset.model
+          && preset.api_protocol === 'chat_completions' && url.protocol === 'http:'
+          && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
+          && !url.username && !url.password && !url.search && !url.hash;
+      } catch { return false; }
+    }) : names;
+    const options = (purpose === 'video_call' ? '<option value="">关闭 · 未指定本机视觉连接</option>' : '')
+      + available.map(name => `<option value="${escapeHtml(name)}" ${name === selected ? 'selected' : ''} data-i18n-skip>${escapeHtml(name)}</option>`).join('');
     return `<tr><td>${escapeHtml(IMAGE_PURPOSE_LABELS[purpose] ? IMAGE_PURPOSE_LABELS[purpose]() : purpose)}</td><td><select id="image-route-${purpose}">${options}</select></td></tr>`;
   }).join('');
   const chatKind = (presets[routes.chat_upload] || {}).kind;
@@ -118,6 +130,9 @@ function renderImageRoutes() {
   }
   const summary = document.getElementById('vision-phone-summary');
   if (summary) summary.textContent = routes.phone_automation || t('status.phone_vision.inherit', '继承通用配置');
+  const videoState = document.getElementById('vision-video-summary');
+  if (videoState) videoState.textContent = routes.video_call
+    ? `视频电话仅使用本机视觉连接：${routes.video_call}` : '视频电话视觉未配置，摄像头预览仍可用。';
 }
 function _toggleImageKindFields() {
   const kind = document.getElementById('image-preset-kind')?.value || 'vision';
@@ -241,9 +256,9 @@ async function deleteImagePreset(name) {
 }
 async function saveImageRoutes() {
   const body = {};
-  for (const purpose of ['chat_upload', 'life_diet', 'life_cart', 'life_bill', 'phone_automation']) {
+  for (const purpose of ['chat_upload', 'life_diet', 'life_cart', 'life_bill', 'phone_automation', 'video_call']) {
     const select = document.getElementById('image-route-' + purpose);
-    if (select && select.value) body[purpose] = select.value;
+    if (select && (select.value || purpose === 'video_call')) body[purpose] = select.value;
   }
   try {
     await api('PUT', '/image-presets/routes', body);

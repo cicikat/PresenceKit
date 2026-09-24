@@ -653,6 +653,7 @@ class ImageRoutesUpdate(BaseModel):
     life_cart: Optional[str] = None
     life_bill: Optional[str] = None
     phone_automation: Optional[str] = None
+    video_call: Optional[str] = None
 
 
 @router.get("/image-presets", summary="命名图像连接与用途路由")
@@ -713,7 +714,7 @@ async def delete_image_preset(name: str, auth=Depends(require_scopes("admin"))):
 
 @router.put("/image-presets/routes", summary="保存图像用途到连接的映射")
 async def update_image_routes(body: ImageRoutesUpdate, auth=Depends(require_scopes("admin"))):
-    from core.image_presets import PURPOSES, snapshot
+    from core.image_presets import PURPOSES, snapshot, video_call_ready
     full_cfg = read_config_file(CONFIG_FILE)
     block = _image_presets_block(full_cfg)
     presets = block.get("presets") or {}
@@ -722,8 +723,15 @@ async def update_image_routes(body: ImageRoutesUpdate, auth=Depends(require_scop
     for purpose, name in updates.items():
         if purpose not in PURPOSES:
             raise HTTPException(status_code=422, detail=f"未知用途 {purpose}")
+        if purpose == "video_call" and not name:
+            routes.pop(purpose, None)
+            continue
         if name not in presets:
             raise HTTPException(status_code=422, detail=f"未知图像连接 {name}")
+        if purpose == "video_call":
+            ready, reason = video_call_ready(presets[name])
+            if not ready:
+                raise HTTPException(status_code=422, detail=f"视频电话只允许本机 HTTP 视觉连接: {reason}")
         routes[purpose] = name
     block["routes"] = routes
     write_config_file(CONFIG_FILE, full_cfg)
@@ -1480,6 +1488,37 @@ class SttConnection(BaseModel):
 class SttPurpose(BaseModel):
     enabled: bool = False
     voice_message: str = ""
+
+
+class SttVocabularyEntry(BaseModel):
+    heard: str
+    canonical: str
+
+
+class SttVocabularyUpdate(BaseModel):
+    enabled: bool = False
+    entries: list[SttVocabularyEntry] = []
+
+
+@router.get("/stt-vocabulary", summary="语音识别自定义词")
+async def get_stt_vocabulary(_auth=Depends(require_scopes("admin"))):
+    from core.stt_vocabulary import settings
+    return settings()
+
+
+@router.put("/stt-vocabulary", summary="保存语音识别自定义词")
+async def save_stt_vocabulary(body: SttVocabularyUpdate, _auth=Depends(require_scopes("admin"))):
+    from core.stt_vocabulary import validate
+    try:
+        block = validate(body.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    cfg = read_config_file(CONFIG_FILE)
+    cfg["stt_vocabulary"] = block
+    write_config_file(CONFIG_FILE, cfg)
+    from core.config_loader import reload_config
+    reload_config()
+    return block
 
 
 @router.get("/stt-presets", summary="语音识别命名连接与有效状态")

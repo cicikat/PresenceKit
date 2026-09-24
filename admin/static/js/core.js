@@ -20,7 +20,7 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'v1-264-image-preset-1';
+const ADMIN_UI_FRAGMENT_VERSION = 'v1-264-stt-vocabulary-1';
 
 const ADMIN_PAGE_ALIASES = Object.freeze({memory: 'observe-memory'});
 
@@ -312,7 +312,7 @@ async function goto(page, {reloadFragment = false, fromHistory = false} = {}) {
     'generation-debug': () => { loadPromptAblation(); loadMcpDebugRequests(); loadLatestAutonomyPrompt(); },
     setup:           loadSetupPage,
     'runtime-config': loadRuntimeConfig,
-    'tts-config':     async () => { await Promise.all([loadTtsConfig(), loadSttConfig()]); },
+    'tts-config':     async () => { await Promise.all([loadTtsConfig(), loadSttConfig(), loadSttVocabulary()]); },
     'listening-player': refreshListeningPlayer,
     'observe-listening': loadObserveListening,
     status:          loadStatus,

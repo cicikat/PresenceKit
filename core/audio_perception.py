@@ -5,6 +5,7 @@ from contextvars import ContextVar
 from copy import deepcopy
 from functools import wraps
 import hashlib
+import importlib.util
 import json
 from pathlib import Path
 import secrets
@@ -50,7 +51,8 @@ def snapshot():
         ready = True
     except (ValueError, TypeError):
         ready = False
-    stt_effective = block["enabled"] and ready
+    legacy_local = "stt_presets" not in (get_config() or {})
+    stt_effective = (block["enabled"] and ready) or (legacy_local and local_stt_installed())
     analysis_on = speech_analysis_enabled()
     try:
         from core.audio_analysis import deps_ready
@@ -58,9 +60,9 @@ def snapshot():
     except Exception:
         analysis_deps = False
     result.update(configured=ready, effective=stt_effective,
-                  blocking_reason="disabled" if not block["enabled"] else ("" if ready else "missing_connection"),
-                  source="stt_presets", purpose="voice_message",
-                  legacy_local_transcribe="stt_presets" not in (get_config() or {}),
+                  blocking_reason="" if stt_effective else ("missing_dependency" if legacy_local else "disabled" if not block["enabled"] else "missing_connection"),
+                  source="legacy_local" if legacy_local else "stt_presets", purpose="voice_message",
+                  legacy_local_transcribe=legacy_local,
                   speech_analysis_enabled=analysis_on,
                   analysis_deps_ready=analysis_deps,
                   speech_analysis_effective=stt_effective and analysis_on and analysis_deps)
@@ -77,6 +79,10 @@ def speech_analysis_enabled() -> bool:
     """``audio_music.speech_analysis``; missing or non-true is off. STT ≠ analysis."""
     block = (get_config() or {}).get(CONFIG_ROOT) or {}
     return block.get("speech_analysis") is True
+
+
+def local_stt_installed() -> bool:
+    return bool(importlib.util.find_spec("faster_whisper") or importlib.util.find_spec("whisper"))
 
 
 def audio_music_flags_snapshot(
@@ -109,8 +115,9 @@ def audio_music_flags_snapshot(
             ready = True
         except (ValueError, TypeError):
             ready = False
-        stt_effective = block["enabled"] and ready
-        stt_blocking_reason = "disabled" if not block["enabled"] else ("" if ready else "missing_connection")
+        legacy_local = "stt_presets" not in (get_config() or {})
+        stt_effective = (block["enabled"] and ready) or (legacy_local and local_stt_installed())
+        stt_blocking_reason = "" if stt_effective else ("missing_dependency" if legacy_local else "disabled" if not block["enabled"] else "missing_connection")
     if speech_on is None:
         speech_on = speech_analysis_enabled()
     music_on = music_analysis_enabled()
@@ -194,6 +201,10 @@ async def _request(data, filename, preset):
     form.add_field("file", data, filename=Path(filename).name, content_type="application/octet-stream")
     form.add_field("model", preset["model"])
     form.add_field("response_format", "json")
+    from core.stt_vocabulary import prompt
+    hint = prompt()
+    if hint:
+        form.add_field("prompt", hint)
     headers = {"Authorization": "Bearer " + preset["api_key"]} if preset.get("api_key") else {}
     from core.proxy_config import get_aiohttp_proxy
     async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=preset["timeout_seconds"])) as session:
@@ -224,7 +235,8 @@ async def ingest_audio_bytes(data, filename):
         # Optional provider field only; never infer emotion from transcript words.
         tone = result.get("tone", "unclear")
         tone = tone if isinstance(tone, str) and tone in TONES else "unclear"
-        payload = {"text": text.strip()[:12000], "tone": tone}
+        from core.stt_vocabulary import correct
+        payload = {"text": correct(text.strip()[:12000]), "tone": tone}
     except Exception:
         # No payload, URL, key or provider exception is logged.
         return None
@@ -392,7 +404,8 @@ def consume_receipt(key, text, channel):
     if not isinstance(key, str) or len(key) > 128:
         return None
     row = _receipts.pop(key, None)
-    if not row or not config()["enabled"] or row[0] <= time.monotonic() or row[1] != _scope(channel):
+    active = config()["enabled"] or ("stt_presets" not in (get_config() or {}) and speech_analysis_enabled())
+    if not row or not active or row[0] <= time.monotonic() or row[1] != _scope(channel):
         return None
     if row[2] != hashlib.sha256(text.strip().encode()).hexdigest():
         return None
@@ -409,7 +422,11 @@ def voice_context(channel):
         @wraps(func)
         async def wrapped(*args, **kwargs):
             body = kwargs.get("body") or (args[0] if args else {})
-            value = consume_receipt(body.get("audio_perception_id"), body.get("message") or "", channel)
+            message = body.get("message") or ""
+            receipt_text = body.get("audio_perception_text")
+            if not isinstance(receipt_text, str) or not receipt_text.strip() or receipt_text.strip() not in message:
+                receipt_text = message
+            value = consume_receipt(body.get("audio_perception_id"), receipt_text, channel)
             with impression(value):
                 return await func(*args, **kwargs)
         return wrapped

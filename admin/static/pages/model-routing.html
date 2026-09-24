@@ -28,6 +28,8 @@
   <div class="card-header"><h3 data-i18n="routing.image_profiles">Routing · 图像用途</h3><button class="btn btn-primary btn-sm" data-action="saveImageRoutes" data-i18n="common.save">保存</button></div>
   <p data-i18n="routing.image_profiles_hint">每行自选一个已保存的图像连接。聊天图、生活记录和手机自动化互不影响。</p>
   <p id="image-recognition-state" role="status"></p>
+  <p id="vision-video-summary" role="status">视频电话视觉未配置，摄像头预览仍可用。</p>
+  <p>视频电话只允许已启用的本机 HTTP 视觉连接（localhost、127.0.0.1 或 ::1），协议为 OpenAI Chat Completions。拍摄的帧仅在通话中分析，不保存原图；模型名可使用完整本地 ID。</p>
   <div class="tbl-wrap"><table><thead><tr><th data-i18n="routing.purpose">用途</th><th data-i18n="routing.connection">连接</th></tr></thead><tbody id="image-routes-body"></tbody></table></div>
       <div class="vision-editor" id="vision-phone-editor" hidden>
         <div class="card-header"><h3 data-i18n="status.phone_vision.title">手机自动化视觉覆盖</h3><div><button class="btn btn-ghost btn-sm" data-action="loadPhoneControlVisionParams" data-i18n="common.refresh">刷新</button><button class="btn btn-primary btn-sm" data-action="savePhoneControlVisionParams" data-i18n="common.save">保存</button></div></div>

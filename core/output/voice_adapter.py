@@ -630,7 +630,15 @@ async def synthesize(text: str, emotion: str = "neutral", *, char_id: str | None
         logger.warning("[voice_adapter] unsupported provider=%s", provider)
         return None
     try:
-        audio_bytes = await adapter.synthesize(text, emotion, provider_cfg)
+        from urllib.parse import urlsplit
+        endpoint = str(provider_cfg.get("api_url") or provider_cfg.get("base_url") or "")
+        local_tts = urlsplit(endpoint).hostname in {"localhost", "127.0.0.1", "::1"}
+        if local_tts:
+            from core.video_call import local_resource
+            async with local_resource():
+                audio_bytes = await adapter.synthesize(text, emotion, provider_cfg)
+        else:
+            audio_bytes = await adapter.synthesize(text, emotion, provider_cfg)
         from core.api_call_log import append
         append(caller="tts", purpose="synthesize", provider=provider, model="", duration_ms=int((time.perf_counter() - started_at) * 1000), ok=bool(audio_bytes), output_hint=f"{len(audio_bytes)}_bytes" if audio_bytes else "empty_audio")
         if audio_bytes:

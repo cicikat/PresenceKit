@@ -14,6 +14,12 @@
   <label class="field"><span data-i18n="stt.purpose">语音消息使用连接</span><select id="stt-route"></select></label>
   <button class="btn btn-primary" data-action="saveSttPurpose" data-i18n="stt.route_save">保存用途与开关</button>
   <pre id="stt-state"></pre>
+  <div class="card-header"><h4>自定义识别词</h4><button class="btn btn-ghost btn-sm" data-action="loadSttVocabulary">刷新</button></div>
+  <p>每行填写“拼音或常见误识别词 =&gt; 正确写法”，例如 <code>jiao se =&gt; 角色名</code>。保存后作为转写提示，并只替换明确匹配的词；不会根据声调猜测名字。</p>
+  <label class="checkbox-row"><input id="stt-vocabulary-enabled" type="checkbox"><span>启用自定义识别词</span></label>
+  <label class="field"><span>读音或误识别词映射（最多 32 行）</span><textarea id="stt-vocabulary-lines" rows="5" placeholder="jiao se => 角色名"></textarea></label>
+  <button class="btn btn-primary" data-action="saveSttVocabulary">保存自定义词</button>
+  <span id="stt-vocabulary-state" role="status"></span>
   <div class="config-item-meta"><span data-i18n="stt.source">来源：stt_presets 命名连接；默认关闭。STT 已配置不等于声学分析可用。</span><span data-i18n="runtime_config.apply_reload">保存后热重载</span></div>
 </div>
 

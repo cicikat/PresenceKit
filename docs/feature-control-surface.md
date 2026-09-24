@@ -181,6 +181,14 @@ TTS provider 由管理面（admin token）经 `GET/PUT /tts-config` 管理：`tt
 legacy 槽位并热重载；手机覆盖空字段继承通用视觉。`/phone_control/status` 继续按解析后的
 `base_url` 与 `model` 判断 `vision_configured`。删除仍被用途引用的连接返回 409。
 
+工单 264：`video_call` 是独立图像用途，默认未路由；管理面只接受启用的本机 HTTP
+Chat Completions 视觉连接（`localhost`、`127.0.0.1`、`::1`），拒绝远端与 OCR。
+`GET /video-call/state`（chat）返回 effective 与阻断原因；`GET /observability/video-call`
+（state.read）另含无图像内容的处理计数。摄像头预览可在路由无效时独立显示，但不会送帧。
+本机 TTS 与视频视觉共用推理锁；视觉忙时跳过帧，TTS 按已有播放队列等待。
+`GET/PUT /stt-vocabulary`（admin）保存最多 32 条发音/误识别词映射，默认关闭；
+本地 Whisper 使用提示词与热词，兼容 STT 使用提示词，仅对确切匹配文本做有界纠正。
+
 表情包由管理面（admin token）经 `GET/PUT /sticker-config` 管理：`sticker.enabled` 是总开关，`sticker.trigger_prob` 是 0–1 的每轮独立触发概率。缺失该配置块时保持兼容行为（启用、0.06）；关闭时不会发送或广播表情包。TTS 的概率单独掷骰，不会抢占或缩减表情包的配置概率。GET 返回当前有效值，兼作该落盘配置的只读观测面；若已命中概率但目标情绪目录无图，服务端会记录目录路径以便排查。
 
 MCP server 由管理面（admin token）经 `GET/PATCH /settings/mcp`、`POST /settings/mcp/test`、

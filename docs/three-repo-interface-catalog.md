@@ -222,6 +222,18 @@ observe：77 项回归和管理面清缓存浏览器验证通过；两次真实�
 
 ### Image recognition routing (2026-09-09)
 
+- `current`（工单 264）：`video_call` 图像用途默认空路由，保存时只接受本机 HTTP
+  `chat_completions` 视觉连接。桌面 `GET /video-call/state`（chat）读取 effective；
+  `POST /video-call/observe`（chat，multipart JPEG）返回 `ready` 时的一次性
+  `observation_id`，`busy` 时丢帧，不返回或持久化图像描述。
+  `POST /desktop/chat` 可带 `video_observation_id`，凭据绑定 owner、角色和 token 标签，
+  45 秒有效。`GET /observability/video-call`（state.read）只读计数和状态。
+- `current`（工单 264）：`GET/PUT /stt-vocabulary`（admin）保存有界转写词表；
+  `/transcribe` 旧本地路径可在声学分析启用时返回 `tone/audio_perception_id`。
+  桌面持续录音合并文字时可附加 `audio_perception_text`，后端仅在该原转写段
+  出现在消息中时消费对应一次性凭据。手机仍用原样全文匹配，不变更其请求层。
+- `observe`：真实摄像头、麦克风、本地图像模型与 TTS 在桌面窗口的联合延迟和设备释放。
+
 - `current`, `admin-only`: `GET /image-presets`, `PUT/DELETE /image-presets/presets/{name}`
   and `PUT /image-presets/routes` own named image connections and purpose routing.
   Legacy `GET/PUT /image-recognition` still configures the OCR slot and chat-upload

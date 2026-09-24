@@ -63,12 +63,15 @@ def _transcribe_sync(audio_path: str) -> str:
     if _stt_backend == "unavailable":
         raise RuntimeError("STT 未安装，请 pip install faster-whisper 或 openai-whisper")
     backend_name, model = _stt_backend  # type: ignore[misc]
+    from core.stt_vocabulary import prompt, hotwords, correct
+    hint = prompt()
     if backend_name == "faster_whisper":
-        segments, _ = model.transcribe(audio_path, language="zh")
-        return "".join(seg.text for seg in segments).strip()
+        options = {"initial_prompt": hint or None, "hotwords": hotwords() or None}
+        segments, _ = model.transcribe(audio_path, language="zh", **options)
+        return correct("".join(seg.text for seg in segments).strip())
     else:
-        result = model.transcribe(audio_path, language="zh")
-        return result["text"].strip()
+        result = model.transcribe(audio_path, language="zh", initial_prompt=hint or None)
+        return correct(result["text"].strip())
 
 
 # ── 接口 ─────────────────────────────────────────────────────────────────────
@@ -140,4 +143,10 @@ async def transcribe_audio(
 
     if not text:
         raise HTTPException(status_code=422, detail="没有识别到语音，请重试或输入文字")
+    from core.audio_perception import speech_analysis_enabled, _attach_acoustic, issue_receipt
+    if speech_analysis_enabled():
+        acoustic = await _attach_acoustic(data, file.filename or "voice.webm", "unclear")
+        result = {"text": text, **acoustic}
+        return {"text": text, "tone": result["tone"],
+                "audio_perception_id": issue_receipt(result, channel)}
     return {"text": text}

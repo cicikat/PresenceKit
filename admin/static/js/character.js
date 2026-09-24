@@ -668,3 +668,34 @@ async function saveSttPurpose() {
     await loadSttConfig();
   } catch (error) { toast(error.message, 'err'); }
 }
+
+async function loadSttVocabulary() {
+  const state = document.getElementById('stt-vocabulary-state');
+  if (!state) return;
+  try {
+    const data = await api('GET', '/stt-vocabulary');
+    document.getElementById('stt-vocabulary-enabled').checked = data.enabled === true;
+    document.getElementById('stt-vocabulary-lines').value = (data.entries || [])
+      .map(item => `${item.heard} => ${item.canonical}`).join('\n');
+    state.textContent = `已加载 ${data.entries?.length || 0} 条`;
+  } catch (error) { state.textContent = error.message; }
+}
+
+async function saveSttVocabulary() {
+  const lines = document.getElementById('stt-vocabulary-lines').value.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  if (lines.length > 32 || lines.some(line => !line.includes('=>'))) {
+    toast('最多 32 行，每行使用“读音或误识别词 => 正确写法”', 'err');
+    return;
+  }
+  const entries = lines.map(line => {
+    const split = line.indexOf('=>');
+    return { heard: line.slice(0, split).trim(), canonical: line.slice(split + 2).trim() };
+  });
+  try {
+    await api('PUT', '/stt-vocabulary', {
+      enabled: document.getElementById('stt-vocabulary-enabled').checked, entries,
+    });
+    await loadSttVocabulary();
+    toast('自定义识别词已保存', 'ok');
+  } catch (error) { toast(`保存失败：${error.message}`, 'err'); }
+}
