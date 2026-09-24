@@ -87,7 +87,42 @@ def test_unicode_character_id_can_index_its_own_voice_directory(monkeypatch, tmp
         def character_voice_dirs(self, *, char_id):
             assert char_id == "角色甲"
             return voice, tmp_path / "missing"
+        def user_authored_character_dir(self, *, char_id):
+            assert char_id == "角色甲"
+            return voice.parent
+        def legacy_authored_character_dir(self, *, char_id):
+            return tmp_path / "missing"
     monkeypatch.setattr(userdata_assets, "_paths", lambda: Paths())
     options = settings_misc._tts_resource_options("角色甲")
     assert [row["logical_id"] for row in options["reference_audio"]] == ["参考"]
     assert options["gpt_model"] == []
+
+
+def test_role_model_weights_are_listed_by_suffix_and_resolve_within_role(monkeypatch, tmp_path):
+    from core import userdata_assets
+
+    role_root = tmp_path / "authored" / "role_one"
+    role_root.mkdir(parents=True)
+    gpt = role_root / "example-e15.ckpt"
+    gpt.write_bytes(b"gpt")
+    sovits = role_root / "weights" / "example_e4_s84.pth"
+    sovits.parent.mkdir()
+    sovits.write_bytes(b"sovits")
+    (tmp_path / "authored" / "role_two").mkdir()
+
+    class Paths:
+        def user_authored_character_dir(self, *, char_id):
+            return tmp_path / "authored" / char_id
+        def legacy_authored_character_dir(self, *, char_id):
+            return tmp_path / "legacy" / char_id
+        def character_voice_dirs(self, *, char_id):
+            return self.user_authored_character_dir(char_id=char_id) / "voice", self.legacy_authored_character_dir(char_id=char_id) / "voice"
+
+    monkeypatch.setattr(userdata_assets, "_paths", lambda: Paths())
+    options = settings_misc._tts_resource_options("role_one")
+    assert [row["name"] for row in options["gpt_model"]] == [gpt.name]
+    assert [row["name"] for row in options["sovits_model"]] == [sovits.name]
+    assert userdata_assets.resolve_asset_path(category="gpt_model", logical_id=gpt.stem, char_id="role_one") == gpt
+    assert userdata_assets.resolve_asset_path(category="sovits_model", logical_id=sovits.stem, char_id="role_one") == sovits
+    assert userdata_assets.resolve_asset_path(category="gpt_model", logical_id=gpt.stem, char_id="role_two") is None
+    assert userdata_assets.resolve_asset_path(category="sovits_model", logical_id="../example_e4_s84", char_id="role_one") is None

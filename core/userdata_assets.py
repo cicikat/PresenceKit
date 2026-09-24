@@ -37,8 +37,8 @@ class AssetSpec:
 
 ASSET_SPECS: dict[str, AssetSpec] = {
     "reference_audio": AssetSpec("reference_audio", "参考音频", frozenset({".wav", ".mp3", ".flac", ".ogg", ".mp4"}), "character", "voice", ("char_id", "logical_id", "file")),
-    "gpt_model": AssetSpec("gpt_model", "GPT 模型", frozenset({".ckpt", ".pt", ".pth", ".safetensors"}), "character", "voice", ("char_id", "logical_id", "file")),
-    "sovits_model": AssetSpec("sovits_model", "SoVITS 模型", frozenset({".pth", ".ckpt", ".safetensors"}), "character", "voice", ("char_id", "logical_id", "file")),
+    "gpt_model": AssetSpec("gpt_model", "GPT 模型", frozenset({".ckpt", ".pt"}), "character", "voice", ("char_id", "logical_id", "file")),
+    "sovits_model": AssetSpec("sovits_model", "SoVITS 模型", frozenset({".pth", ".safetensors"}), "character", "voice", ("char_id", "logical_id", "file")),
     "sticker": AssetSpec("sticker", "通用表情包", frozenset({".png", ".jpg", ".jpeg", ".gif", ".webp"}), "global", "stickers", ("logical_id", "file", "emotion")),
     "sticker_pack": AssetSpec("sticker_pack", "角色表情包", frozenset({".png", ".jpg", ".jpeg", ".gif", ".webp"}), "character", "stickers", ("char_id", "pack", "emotion", "logical_id", "file")),
     # These are intentionally backend-only in this brief.  The status field is
@@ -124,6 +124,12 @@ def _listing_roots(category: str, *, char_id: str) -> tuple[tuple[Path, str], ..
         return ((paths.user_stickers_dir(), "user"), (paths.legacy_stickers_dir(), "legacy"))
     if category == "sticker_pack":
         return ((paths.sticker_packs_root(), "user"),)
+    if category in {"gpt_model", "sovits_model"}:
+        char_id = validate_character_id(char_id)
+        return (
+            (paths.user_authored_character_dir(char_id=char_id), "user"),
+            (paths.legacy_authored_character_dir(char_id=char_id), "legacy"),
+        )
     user_root, legacy_root = _category_root(category, char_id=char_id)
     return ((user_root, "user"), (legacy_root, "legacy"))
 
@@ -228,6 +234,8 @@ def list_assets(*, category: str | None = None, char_id: str = DEFAULT_CHAR_ID) 
         roots = _listing_roots(cat, char_id=char_id)
         for root, source in roots:
             for path in _iter_files(root):
+                if cat in {"reference_audio", "gpt_model", "sovits_model"} and path.suffix.lower() not in spec.extensions:
+                    continue
                 try:
                     rel = _safe_relative(root, path)
                 except ValueError:
@@ -267,10 +275,19 @@ def resolve_asset_path(*, category: str, logical_id: str, char_id: str = DEFAULT
     if (not logical_id or len(logical_id) > 255 or logical_id in {".", ".."}
             or "/" in logical_id or "\\" in logical_id or "\x00" in logical_id):
         return None
-    user_root, legacy_root = _category_root(category, char_id=char_id)
-    for root in (user_root, legacy_root):
+    if category in {"gpt_model", "sovits_model"}:
+        roots = tuple(root for root, _source in _listing_roots(category, char_id=char_id))
+    else:
+        user_root, legacy_root = _category_root(category, char_id=char_id)
+        roots = (user_root, legacy_root)
+    for root in roots:
         for path in _iter_files(root):
-            if path.stem == logical_id or path.name == logical_id:
+            try:
+                _safe_relative(root, path)
+            except ValueError:
+                continue
+            if (path.suffix.lower() in ASSET_SPECS[category].extensions
+                    and (path.stem == logical_id or path.name == logical_id)):
                 return path
     return None
 
