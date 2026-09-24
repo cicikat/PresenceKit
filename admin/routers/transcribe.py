@@ -125,7 +125,9 @@ async def transcribe_audio(
         worker_path, tmp_path = tmp_path, None
         text = await asyncio.wait_for(loop.run_in_executor(None, run_and_cleanup, worker_path), timeout=20)
     except RuntimeError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except asyncio.TimeoutError as e:
+        raise HTTPException(status_code=504, detail="语音转写超时，请缩短录音或稍后重试") from e
     except Exception as e:
         logger.warning(f"[transcribe] 转写失败: {e}")
         raise HTTPException(status_code=422, detail="语音转写失败")
@@ -136,4 +138,6 @@ async def transcribe_audio(
             except OSError:
                 pass
 
+    if not text:
+        raise HTTPException(status_code=422, detail="没有识别到语音，请重试或输入文字")
     return {"text": text}

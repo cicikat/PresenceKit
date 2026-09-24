@@ -1,0 +1,3 @@
+# Optional local STT for the legacy /transcribe route. Install into the
+# interpreter used to run main.py; the first request downloads the base model.
+faster-whisper>=1.2.1,<2

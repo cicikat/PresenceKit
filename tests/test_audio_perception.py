@@ -141,6 +141,24 @@ async def test_transcribe_compatible_text_and_receipt(configured, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_legacy_transcribe_reports_backend_and_empty_audio(monkeypatch):
+    from admin.routers import transcribe as endpoint
+
+    monkeypatch.setattr("core.config_loader.get_config", lambda: {})
+    def unavailable(_path):
+        raise RuntimeError("STT 未安装")
+    monkeypatch.setattr(endpoint, "_transcribe_sync", unavailable)
+    with pytest.raises(HTTPException) as error:
+        await endpoint.transcribe_audio(UploadFile(io.BytesIO(b"audio"), filename="x.wav"), "desktop", {})
+    assert error.value.status_code == 503
+    monkeypatch.setattr(endpoint, "_transcribe_sync", lambda _path: "")
+    with pytest.raises(HTTPException) as error:
+        await endpoint.transcribe_audio(UploadFile(io.BytesIO(b"audio"), filename="x.wav"), "desktop", {})
+    assert error.value.status_code == 422
+    assert "没有识别到语音" in error.value.detail
+
+
+@pytest.mark.asyncio
 async def test_voice_decorator_plain_text_and_reset(configured):
     @audio.voice_context("desktop")
     async def endpoint(body):
