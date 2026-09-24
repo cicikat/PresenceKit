@@ -1,7 +1,9 @@
 import io
+import httpx
 
 import pytest
 from PIL import Image
+from openai import APIConnectionError, APITimeoutError
 
 from core import video_call
 from core.image_presets import video_call_ready
@@ -60,3 +62,41 @@ async def test_camera_observation_rejects_remote_route_and_oversized_frame(monke
     monkeypatch.setattr("core.config_loader.get_config", _config)
     with pytest.raises(ValueError, match="frame_size_invalid"):
         await video_call.observe(b"x" * (video_call.MAX_FRAME_BYTES + 1), uid="owner", char_id="character", token_label="desktop")
+
+
+@pytest.mark.asyncio
+async def test_unavailable_local_model_skips_following_frames_without_queue(monkeypatch):
+    monkeypatch.setattr("core.config_loader.get_config", _config)
+    monkeypatch.setattr(video_call, "_unavailable_until", 0.0)
+    calls = []
+
+    async def disconnected(*_args, **_kwargs):
+        calls.append(True)
+        raise APIConnectionError(request=httpx.Request("POST", "http://127.0.0.1:11434/v1/chat/completions"))
+
+    monkeypatch.setattr("core.llm_client.chat", disconnected)
+    first = await video_call.observe(_jpeg(), uid="owner", char_id="character", token_label="desktop")
+    second = await video_call.observe(_jpeg(), uid="owner", char_id="character", token_label="desktop")
+    assert first["status"] == second["status"] == "unavailable"
+    assert len(calls) == 1
+    monkeypatch.setattr(video_call, "_unavailable_until", 0.0)
+
+    async def recovered(*_args, **_kwargs):
+        return "恢复后的当前画面"
+
+    monkeypatch.setattr("core.llm_client.chat", recovered)
+    recovered_frame = await video_call.observe(_jpeg(), uid="owner", char_id="character", token_label="desktop")
+    assert recovered_frame["status"] == "ready"
+
+
+@pytest.mark.asyncio
+async def test_model_timeout_is_distinct_from_disconnection(monkeypatch):
+    monkeypatch.setattr("core.config_loader.get_config", _config)
+    monkeypatch.setattr(video_call, "_unavailable_until", 0.0)
+
+    async def timed_out(*_args, **_kwargs):
+        raise APITimeoutError(request=httpx.Request("POST", "http://127.0.0.1:11434/v1/chat/completions"))
+
+    monkeypatch.setattr("core.llm_client.chat", timed_out)
+    result = await video_call.observe(_jpeg(), uid="owner", char_id="character", token_label="desktop")
+    assert result["status"] == "timeout"

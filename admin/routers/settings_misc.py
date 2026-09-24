@@ -154,7 +154,14 @@ async def get_tts_config(char_id: Optional[str] = None, auth=Depends(require_sco
 
 
 def _tts_resource_options(char_id: str) -> dict:
-    from core.userdata_assets import list_assets
+    from core.userdata_assets import list_assets, validate_id
+    try:
+        validate_id(char_id, field="char_id")
+    except ValueError:
+        # TTS configuration and existing external reference audio remain readable
+        # even when a legacy character ID cannot index authored assets.
+        return {"reference_audio": [], "gpt_model": [], "sovits_model": [],
+                "blocking_reason": "character_id_not_supported_for_assets"}
     return {
         "reference_audio": list_assets(category="reference_audio", char_id=char_id),
         "gpt_model": list_assets(category="gpt_model", char_id=char_id),

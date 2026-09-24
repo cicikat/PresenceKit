@@ -66,9 +66,15 @@ def _transcribe_sync(audio_path: str) -> str:
     from core.stt_vocabulary import prompt, hotwords, correct
     hint = prompt()
     if backend_name == "faster_whisper":
-        options = {"initial_prompt": hint or None, "hotwords": hotwords() or None}
+        options = {"initial_prompt": hint or None, "hotwords": hotwords() or None,
+                   "vad_filter": True}
         segments, _ = model.transcribe(audio_path, language="zh", **options)
-        return correct("".join(seg.text for seg in segments).strip())
+        accepted = (
+            seg.text for seg in segments
+            if getattr(seg, "no_speech_prob", 0.0) < 0.6
+            and getattr(seg, "avg_logprob", 0.0) > -1.0
+        )
+        return correct("".join(accepted).strip())
     else:
         result = model.transcribe(audio_path, language="zh", initial_prompt=hint or None)
         return correct(result["text"].strip())

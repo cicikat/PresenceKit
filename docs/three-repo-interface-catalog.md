@@ -233,6 +233,10 @@ observe：77 项回归和管理面清缓存浏览器验证通过；两次真实�
   桌面持续录音合并文字时可附加 `audio_perception_text`，后端仅在该原转写段
   出现在消息中时消费对应一次性凭据。手机仍用原样全文匹配，不变更其请求层。
 - `observe`：真实摄像头、麦克风、本地图像模型与 TTS 在桌面窗口的联合延迟和设备释放。
+- `current`（工单 264 复测）：`POST /video-call/observe` 另有 `unavailable`
+  （本地服务不可达，含短期重试秒数）与 `timeout` 状态；均不排队。`POST /desktop/chat`
+  对附带声学凭据的请求可返回 `audio_perception_applied`，仅表示本轮提示已构建听觉层，
+  不代表模型正确判断情绪。无声分段由桌面跳过，真实转写失败仍可见。
 
 - `current`, `admin-only`: `GET /image-presets`, `PUT/DELETE /image-presets/presets/{name}`
   and `PUT /image-presets/routes` own named image connections and purpose routing.

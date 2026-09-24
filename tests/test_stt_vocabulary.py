@@ -54,3 +54,18 @@ async def test_continuous_voice_receipt_uses_only_transcript_contained_in_messag
     assert await endpoint(body={"message": "先前一句 新识别的语句 补充文字", "audio_perception_id": "one", "audio_perception_text": "新识别的语句"})
     assert await endpoint(body={"message": "先前一句", "audio_perception_id": "two", "audio_perception_text": "伪造的语句"})
     assert checked == [("one", "新识别的语句", "desktop"), ("two", "先前一句", "desktop")]
+
+
+@pytest.mark.asyncio
+async def test_audio_receipt_reports_prompt_injection_only_when_built(monkeypatch):
+    from core import audio_perception
+
+    monkeypatch.setattr(audio_perception, "consume_receipt", lambda *_args: {"tone": "unclear", "acoustic": {"quality": "insufficient"}})
+
+    @audio_perception.voice_context("desktop")
+    async def endpoint(*, body):
+        assert audio_perception.prompt_hint()["_layer"] == "3.8_audio_impression"
+        return {"reply": "ok"}
+
+    response = await endpoint(body={"message": "转写文字", "audio_perception_id": "receipt"})
+    assert response["audio_perception_applied"] is True

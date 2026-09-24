@@ -6,10 +6,12 @@ from copy import deepcopy
 from functools import wraps
 import hashlib
 import importlib.util
+import io
 import json
 from pathlib import Path
 import secrets
 import time
+import wave
 from urllib.parse import urlsplit
 
 import aiohttp
@@ -284,11 +286,32 @@ def _compact_acoustic(analysis: dict | None, provider_tone: str) -> dict:
     }
 
 
+def _decode_short_speech_wav(data: bytes) -> bytes:
+    """Decode a short browser recording in memory for the PCM-only analyzer."""
+    from faster_whisper.audio import decode_audio
+    import numpy as np
+
+    samples = decode_audio(io.BytesIO(data), sampling_rate=16000)
+    if not 0 < len(samples) <= 16000 * 120:
+        raise ValueError("speech duration outside analysis budget")
+    pcm = (np.clip(samples, -1, 1) * 32767).astype("<i2").tobytes()
+    output = io.BytesIO()
+    with wave.open(output, "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(16000)
+        wav.writeframes(pcm)
+    return output.getvalue()
+
+
 async def _attach_acoustic(data: bytes, filename: str, provider_tone: str) -> dict:
     """Fail-open: analysis errors never invent transcript text or block STT."""
     analysis = None
     try:
         from core.audio_analysis import analyze_audio
+        if Path(filename).suffix.lower() in {".webm", ".ogg", ".opus", ".m4a", ".mp3"} and len(data) <= 2 * 1024 * 1024:
+            data = await asyncio.wait_for(asyncio.to_thread(_decode_short_speech_wav, data), timeout=2)
+            filename = "voice.wav"
         analysis = await analyze_audio(data, mode="speech", filename=filename)
     except Exception:
         analysis = None
@@ -344,6 +367,7 @@ def prompt_hint():
     value = _current.get()
     if not value:
         return None
+    value["_prompt_built"] = True
     tone = value.get("tone")
     if tone not in TONES:
         tone = "unclear"
@@ -428,6 +452,9 @@ def voice_context(channel):
                 receipt_text = message
             value = consume_receipt(body.get("audio_perception_id"), receipt_text, channel)
             with impression(value):
-                return await func(*args, **kwargs)
+                result = await func(*args, **kwargs)
+            if channel == "desktop" and isinstance(result, dict) and body.get("audio_perception_id"):
+                return {**result, "audio_perception_applied": bool(value and value.get("_prompt_built"))}
+            return result
         return wrapped
     return decorate

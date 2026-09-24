@@ -8,6 +8,7 @@ from io import BytesIO
 import secrets
 import time
 from typing import Any
+from openai import APIConnectionError, APITimeoutError
 
 from core.image_presets import catalog, video_call_ready
 
@@ -18,7 +19,8 @@ OBSERVATION_TTL_SECONDS = 45
 _MAX_RECEIPTS = 32
 _local_resource = asyncio.Lock()
 _receipts: OrderedDict[str, tuple[float, str, str, str, str]] = OrderedDict()
-_counts = {"accepted": 0, "busy": 0, "failed": 0}
+_counts = {"accepted": 0, "busy": 0, "failed": 0, "unavailable": 0}
+_unavailable_until = 0.0
 
 
 def local_resource() -> asyncio.Lock:
@@ -37,7 +39,8 @@ def connection_state(config: dict[str, Any]) -> dict[str, Any]:
 
 def snapshot(config: dict[str, Any]) -> dict[str, Any]:
     return {**connection_state(config), "vision_busy": _local_resource.locked(),
-            "pending_observations": len(_receipts), "counts": dict(_counts)}
+            "pending_observations": len(_receipts), "counts": dict(_counts),
+            "retry_after_seconds": max(0, round(_unavailable_until - time.monotonic()))}
 
 
 def validate_frame(data: bytes) -> None:
@@ -64,6 +67,7 @@ def _prune(now: float) -> None:
 
 
 async def observe(frame: bytes, *, uid: str, char_id: str, token_label: str) -> dict[str, Any]:
+    global _unavailable_until
     from core.config_loader import get_config
     from core.llm_client import chat
 
@@ -71,6 +75,8 @@ async def observe(frame: bytes, *, uid: str, char_id: str, token_label: str) -> 
     if not state["effective"]:
         raise ValueError(state["blocking_reason"])
     validate_frame(frame)
+    if time.monotonic() < _unavailable_until:
+        return {"status": "unavailable", "retry_after_seconds": max(1, round(_unavailable_until - time.monotonic()))}
     if _local_resource.locked():
         _counts["busy"] += 1
         return {"status": "busy"}
@@ -87,6 +93,13 @@ async def observe(frame: bytes, *, uid: str, char_id: str, token_label: str) -> 
             description = await asyncio.wait_for(
                 chat(messages, use_vision=True, vision_purpose="video_call"), timeout=20,
             )
+        except (APITimeoutError, asyncio.TimeoutError):
+            _counts["failed"] += 1
+            return {"status": "timeout"}
+        except APIConnectionError:
+            _counts["unavailable"] += 1
+            _unavailable_until = time.monotonic() + 15
+            return {"status": "unavailable", "retry_after_seconds": 15}
         except Exception:
             _counts["failed"] += 1
             return {"status": "failed"}

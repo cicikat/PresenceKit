@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import httpx
-from openai import AsyncOpenAI
+from openai import APIConnectionError, APITimeoutError, AsyncOpenAI
 
 from core import thinking
 from core.config_loader import get_config
@@ -227,6 +227,7 @@ def _get_vision_client(cfg: dict | None = None) -> AsyncOpenAI | None:
         api_key=cfg.get("api_key") or "none",
         base_url=base_url,
         http_client=http_client,
+        max_retries=0 if cfg.get("_local_only") else 2,
     )
     _vision_clients[key] = client
     if _vision_client is None:
@@ -362,8 +363,8 @@ async def chat(
                 response = await vision_client.chat.completions.create(
                     model=vision_cfg["model"],
                     messages=safe_msgs,
-                    max_tokens=1000,
-                    timeout=_CALL_TIMEOUTS["vision"],
+                    max_tokens=240 if vision_purpose == "video_call" else 1000,
+                    timeout=18 if vision_purpose == "video_call" else _CALL_TIMEOUTS["vision"],
                 )
                 choice = _first_chat_choice(response, operation="chat[vision]")
                 _log_completed_call(
@@ -389,9 +390,13 @@ async def chat(
                     started_at=started_at,
                     ok=False,
                     output_hint=type(e).__name__,
-                    error_category=error_category_for_exception(e),
+                    error_category=("timeout" if isinstance(e, APITimeoutError) else
+                                    "connection_error" if isinstance(e, APIConnectionError) else
+                                    error_category_for_exception(e)),
                     protocol="chat_completions",
                 )
+                if vision_purpose == "video_call":
+                    raise
                 log_error("llm_client.chat.vision", e)
                 return ""
             finally:
