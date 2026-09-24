@@ -173,6 +173,8 @@ TTS 有三个层次的开关：`tts.enabled` 是服务端能力总开关；`tts.
 
 TTS provider 由管理面（admin token）经 `GET/PUT /tts-config` 管理：`tts.provider` 当前支持 `gsv` 与明确标注为预留的 `openai_compatible`，每个 provider 可放在 `tts.providers.<provider>`。`GET` 会分别返回各 provider 的脱敏参数块，面板切换 provider 时显示对应参数且保存互不污染；预留 provider 在面板禁用，绝不猜测或发起云厂商请求。GSV 可选 `gpt_model_path` / `sovits_model_path`，留空时分别切回 v3 / v2ProPlus 默认底模；模型切换是 GSV 服务的全局状态，后端会把切换与同次合成串行化，路径错误时自动回退对应底模。GSV 默认启用后端分句：清洗控制/格式字符并识别实际、字面 `\\n` 与 `/n` 换行，按 `。！？；……` 优先切分，只有超过 `segment_max_chars`（默认 42）才在逗号或破折号处兜底；每段以 GSV `不切` 请求、按中文/英文脚本选择语言模式，再校验 PCM WAV 参数并插入 `segment_pause_seconds`（默认 0.25 秒）静音拼接。`external_segment_enabled: false` 可临时恢复 GSV 内部切分。旧有顶层 GSV 字段（`api_url`、`ref_audio`、情绪参数等）会自动映射，保持已有本地 GPT-SoVITS 部署行为不变。`POST /tts-config/test` 只试听已就绪 provider，`GET /observability/api-calls?caller=tts` 可查询最近合成结果与失败类别（`state.read`）。
 
+TTS 管理页默认选择当前活跃角色，也可切换到其他角色或全局默认。`PUT /tts-config` 携带 `char_id` 时写入该角色的命名 preset 和 `tts.role_routes` 显式路由；不携带时修改全局回退。运行时优先使用显式路由，再使用角色卡 `presence_ext.tts_preset`，最后使用全局值。参考音频从该角色 authored `voice` 目录按逻辑名解析，已有中文文件名可直接选择；旧外部路径仍可读。视频电话本地视觉冷启动总时限为 48 秒，仅一个帧请求在途，后续帧不排队。
+
 视觉模型不进 LLM 的 `routing_profiles`：管理面「模型路由」页用 `GET /image-presets` +
 `PUT/DELETE /image-presets/presets/{name}` + `PUT /image-presets/routes` 管理命名图像连接
 （`kind: vision|ocr`）及用途（聊天图 / 生活记录饮食·购物车·账单 / 手机自动化）。无

@@ -21,6 +21,7 @@
 
 import asyncio
 import base64
+import hashlib
 from io import BytesIO
 import logging
 import re
@@ -122,6 +123,17 @@ def _char_tts_preset_name(char_id: str) -> str | None:
         return None
 
 
+def role_tts_preset_name(char_id: str, tts: dict | None = None) -> str | None:
+    """An explicit admin route takes precedence over a character-card binding."""
+    tts = tts if tts is not None else get_config().get("tts", {})
+    routes = tts.get("role_routes") if isinstance(tts.get("role_routes"), dict) else {}
+    return routes.get(char_id) or _char_tts_preset_name(char_id)
+
+
+def role_tts_generated_name(char_id: str) -> str:
+    return "role_" + hashlib.sha256(char_id.encode("utf-8")).hexdigest()[:16]
+
+
 def resolve_tts_config(char_id: str | None = None) -> dict:
     """把 ``tts.presets.<name>`` 命名预设叠加在全局 ``tts:`` 配置之上（角色资产路由）。
 
@@ -139,7 +151,7 @@ def resolve_tts_config(char_id: str | None = None) -> dict:
     base = dict(get_config().get("tts", {}))
     if not char_id:
         return base
-    preset_name = _char_tts_preset_name(char_id)
+    preset_name = role_tts_preset_name(char_id, base)
     if not preset_name:
         return base
     presets = base.get("presets") if isinstance(base.get("presets"), dict) else {}

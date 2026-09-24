@@ -63,6 +63,7 @@ async def update_context_config(body: ContextConfigUpdate, auth=Depends(require_
 # ─── TTS 配置 ──────────────────────────────────────────────────────────────────
 
 class TtsConfigUpdate(BaseModel):
+    char_id:        Optional[str]   = None
     enabled:         Optional[bool]  = None
     desktop_enabled: Optional[bool]  = None
     api_url:         Optional[str]   = None
@@ -124,15 +125,15 @@ async def get_tts_config(char_id: Optional[str] = None, auth=Depends(require_sco
     cfg = get_config().get("tts", {})
     from core.output.voice_adapter import get_provider_status, get_safe_provider_params, resolve_tts_config
     resolved_cfg = resolve_tts_config(char_id) if char_id else cfg
-    provider_blocks = cfg.get("providers") if isinstance(cfg.get("providers"), dict) else {}
+    provider_blocks = resolved_cfg.get("providers") if isinstance(resolved_cfg.get("providers"), dict) else {}
     safe_provider_blocks = {
         str(name): {key: value for key, value in dict(params or {}).items() if key != "api_key"}
         for name, params in provider_blocks.items()
         if isinstance(params, dict)
     }
     return {
-        "enabled":         cfg.get("enabled",         False),
-        "desktop_enabled": cfg.get("desktop_enabled", False),
+        "enabled":         resolved_cfg.get("enabled",         False),
+        "desktop_enabled": resolved_cfg.get("desktop_enabled", False),
         "api_url":         resolved_cfg.get("api_url",         "http://127.0.0.1:9880"),
         "ref_audio":       resolved_cfg.get("ref_audio",       ""),
         "prompt_text":     resolved_cfg.get("prompt_text",     ""),
@@ -145,7 +146,7 @@ async def get_tts_config(char_id: Optional[str] = None, auth=Depends(require_sco
         "provider_status": get_provider_status(resolved_cfg),
         "char_id": char_id,
         "character_binding": _tts_character_binding(char_id) if char_id else None,
-        "resource_options": _tts_resource_options(char_id or DEFAULT_CHAR_ID),
+        "resource_options": _tts_resource_options(char_id or _current_tts_character_id()),
         "available_providers": [
             {"id": "gsv", "label": "GPT-SoVITS / GSV", "active": True},
             {"id": "openai_compatible", "label": "OpenAI-compatible / cloud", "active": False},
@@ -153,19 +154,23 @@ async def get_tts_config(char_id: Optional[str] = None, auth=Depends(require_sco
     }
 
 
+def _current_tts_character_id() -> str:
+    from admin.routers.character import _active_character_id
+    return _active_character_id() or DEFAULT_CHAR_ID
+
+
 def _tts_resource_options(char_id: str) -> dict:
-    from core.userdata_assets import list_assets, validate_id
+    from core.userdata_assets import list_assets, validate_character_id
     try:
-        validate_id(char_id, field="char_id")
+        validate_character_id(char_id)
     except ValueError:
         # TTS configuration and existing external reference audio remain readable
         # even when a legacy character ID cannot index authored assets.
         return {"reference_audio": [], "gpt_model": [], "sovits_model": [],
                 "blocking_reason": "character_id_not_supported_for_assets"}
     return {
-        "reference_audio": list_assets(category="reference_audio", char_id=char_id),
-        "gpt_model": list_assets(category="gpt_model", char_id=char_id),
-        "sovits_model": list_assets(category="sovits_model", char_id=char_id),
+        category: [row for row in list_assets(category=category, char_id=char_id) if row["valid"]]
+        for category in ("reference_audio", "gpt_model", "sovits_model")
     }
 
 
@@ -174,12 +179,14 @@ def _tts_character_binding(char_id: str) -> dict | None:
         from core import character_loader
         char = character_loader.load(char_id)
         ext = getattr(char, "presence_ext", {}) or {}
-        preset = ext.get("tts_preset") or None
+        from core.output.voice_adapter import role_tts_preset_name
+        preset = role_tts_preset_name(char_id)
         presets = get_config().get("tts", {}).get("presets", {})
         return {
             "char_id": char_id,
             "name": getattr(char, "name", char_id),
             "tts_preset": preset,
+            "card_tts_preset": ext.get("tts_preset") or None,
             "preset_exists": bool(preset and isinstance(presets, dict) and preset in presets),
         }
     except Exception:
@@ -202,7 +209,19 @@ async def update_tts_config(body: TtsConfigUpdate, auth=Depends(require_scopes("
 
     full_cfg = read_config_file(CONFIG_FILE)
 
-    tts_cfg = full_cfg.setdefault("tts", {})
+    tts_root = full_cfg.setdefault("tts", {})
+    if body.char_id:
+        from core.asset_registry import get_registry
+        from core.output.voice_adapter import role_tts_generated_name
+        try:
+            get_registry().resolve(body.char_id, "character")
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail="未知角色 ID") from exc
+        preset_name = role_tts_generated_name(body.char_id)
+        tts_cfg = tts_root.setdefault("presets", {}).setdefault(preset_name, {})
+        tts_root.setdefault("role_routes", {})[body.char_id] = preset_name
+    else:
+        tts_cfg = tts_root
     if body.enabled is not None:
         tts_cfg["enabled"] = body.enabled
     if body.desktop_enabled is not None:

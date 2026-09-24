@@ -91,7 +91,7 @@ async def observe(frame: bytes, *, uid: str, char_id: str, token_label: str) -> 
         ]}]
         try:
             description = await asyncio.wait_for(
-                chat(messages, use_vision=True, vision_purpose="video_call"), timeout=20,
+                chat(messages, use_vision=True, vision_purpose="video_call"), timeout=48,
             )
         except (APITimeoutError, asyncio.TimeoutError):
             _counts["failed"] += 1

@@ -1,5 +1,6 @@
 let _ttsProviderParamsByProvider = {};
 let _ttsLoadedProvider = 'gsv';
+let _ttsLoadGeneration = 0;
 
 async function _loadTtsCharacters() {
   const select = document.getElementById('tts-char-select');
@@ -12,6 +13,9 @@ async function _loadTtsCharacters() {
       option.textContent = char.label || char.id || '';
       select.appendChild(option);
     }
+    if (data.active_id && Array.from(select.options).some(option => option.value === data.active_id)) {
+      select.value = data.active_id;
+    }
     select.dataset.loaded = 'true';
   } catch (_error) { /* keep global-only mode */ }
 }
@@ -19,6 +23,9 @@ async function _loadTtsCharacters() {
 function _renderTtsResourceSelect(id, rows, current) {
   const select = document.getElementById(id);
   if (!select) return;
+  const oldName = String(current || '').split(/[\\/]/).pop();
+  const matching = (rows || []).find(row => row.logical_id === current || row.name === current || row.name === oldName);
+  if (matching) current = matching.logical_id;
   const options = ['<option value="">未选择</option>'];
   for (const row of (rows || [])) {
     options.push(`<option value="${escapeHtml(row.logical_id)}">${escapeHtml(row.name || row.logical_id)} · ${escapeHtml(row.source || '')}</option>`);
@@ -60,10 +67,13 @@ function onTtsProviderChange() {
 }
 
 async function loadTtsConfig() {
+  const generation = ++_ttsLoadGeneration;
   try {
     await _loadTtsCharacters();
+    if (generation !== _ttsLoadGeneration) return;
     const charId = document.getElementById('tts-char-select')?.value || '';
     const d = await api('GET', `/tts-config${charId ? `?char_id=${encodeURIComponent(charId)}` : ''}`);
+    if (generation !== _ttsLoadGeneration || charId !== (document.getElementById('tts-char-select')?.value || '')) return;
     document.getElementById('tts-enabled').checked = !!d.enabled;
     document.getElementById('tts-emotion-enabled').checked = !!d.emotion_enabled;
     document.getElementById('tts-desktop-enabled').checked = !!d.desktop_enabled;
@@ -100,10 +110,7 @@ async function loadTtsConfig() {
   } catch (e) { toast(t('status.tts.load_error', '读取 TTS 配置失败: {error}', {error: e.message}), 'err'); }
 }
 async function saveTtsConfig() {
-  if (document.getElementById('tts-char-select')?.value) {
-    toast(t('status.tts.role_binding_managed', 'Role TTS bindings are managed by named presets on the character page.'), 'err');
-    return;
-  }
+  const charId = document.getElementById('tts-char-select')?.value || '';
   let providerParams;
   try { providerParams = readKeyValueEditor('tts-provider-params'); }
   catch (e) { toast(e.message, 'err'); return; }
@@ -123,6 +130,7 @@ async function saveTtsConfig() {
     catch (e) { toast(e.message, 'err'); return; }
   }
   const body = {
+    char_id: charId || null,
     enabled: document.getElementById('tts-enabled').checked,
     emotion_enabled: document.getElementById('tts-emotion-enabled').checked,
     desktop_enabled: document.getElementById('tts-desktop-enabled').checked,
@@ -137,6 +145,7 @@ async function saveTtsConfig() {
   try {
     await api('PUT', '/tts-config', body);
     toast(t('status.tts.saved', 'TTS 配置已保存'), 'ok');
+    await loadTtsConfig();
   } catch (e) { toast(t('common.save_failed', '保存失败: {error}', {error: e.message}), 'err'); }
 }
 function addTtsProviderParam() { addKeyValueRow('tts-provider-params'); }

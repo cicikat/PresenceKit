@@ -36,7 +36,7 @@ class AssetSpec:
 
 
 ASSET_SPECS: dict[str, AssetSpec] = {
-    "reference_audio": AssetSpec("reference_audio", "参考音频", frozenset({".wav", ".mp3", ".flac", ".ogg"}), "character", "voice", ("char_id", "logical_id", "file")),
+    "reference_audio": AssetSpec("reference_audio", "参考音频", frozenset({".wav", ".mp3", ".flac", ".ogg", ".mp4"}), "character", "voice", ("char_id", "logical_id", "file")),
     "gpt_model": AssetSpec("gpt_model", "GPT 模型", frozenset({".ckpt", ".pt", ".pth", ".safetensors"}), "character", "voice", ("char_id", "logical_id", "file")),
     "sovits_model": AssetSpec("sovits_model", "SoVITS 模型", frozenset({".pth", ".ckpt", ".safetensors"}), "character", "voice", ("char_id", "logical_id", "file")),
     "sticker": AssetSpec("sticker", "通用表情包", frozenset({".png", ".jpg", ".jpeg", ".gif", ".webp"}), "global", "stickers", ("logical_id", "file", "emotion")),
@@ -60,6 +60,15 @@ def validate_id(value: str, *, field: str = "logical_id") -> str:
     return value
 
 
+def validate_character_id(value: str) -> str:
+    """Allow existing Unicode character IDs while rejecting path syntax."""
+    value = str(value or "").strip()
+    if not (value and len(value) <= 64 and value[0].isalnum()
+            and all(char.isalnum() or char in "_-" for char in value)):
+        raise ValueError("invalid char_id")
+    return value
+
+
 def validate_filename(filename: str, *, allowed: Iterable[str]) -> str:
     raw = str(filename or "")
     # Reject path syntax even when Path.name would normalize it away.
@@ -75,7 +84,7 @@ def _category_root(category: str, *, char_id: str = DEFAULT_CHAR_ID, emotion: st
     paths = _paths()
     spec = ASSET_SPECS[category]
     if spec.scope == "character":
-        char_id = validate_id(char_id, field="char_id")
+        char_id = validate_character_id(char_id)
     if category in {"reference_audio", "gpt_model", "sovits_model"}:
         user, legacy = paths.character_voice_dirs(char_id=char_id)
         return user, legacy
@@ -87,10 +96,10 @@ def _category_root(category: str, *, char_id: str = DEFAULT_CHAR_ID, emotion: st
         emotion = validate_id(emotion or "neutral", field="emotion")
         return paths.sticker_pack_dir(pack) / emotion, None
     if category == "live2d":
-        char_id = validate_id(char_id, field="char_id")
+        char_id = validate_character_id(char_id)
         return paths.user_live2d_root() / char_id, None
     if category == "model3d":
-        char_id = validate_id(char_id, field="char_id")
+        char_id = validate_character_id(char_id)
         return paths.user_model3d_root() / char_id, None
     raise ValueError("unsupported asset category")
 
@@ -252,7 +261,12 @@ def resolve_asset_path(*, category: str, logical_id: str, char_id: str = DEFAULT
     """Resolve a logical asset id internally without exposing it to clients."""
     if category not in ASSET_SPECS:
         return None
-    logical_id = validate_id(logical_id)
+    # Existing authored files can have Chinese stems. Keep upload IDs stricter,
+    # but resolve a listed filename without accepting path syntax from callers.
+    logical_id = str(logical_id or "")
+    if (not logical_id or len(logical_id) > 255 or logical_id in {".", ".."}
+            or "/" in logical_id or "\\" in logical_id or "\x00" in logical_id):
+        return None
     user_root, legacy_root = _category_root(category, char_id=char_id)
     for root in (user_root, legacy_root):
         for path in _iter_files(root):

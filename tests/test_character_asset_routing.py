@@ -12,6 +12,21 @@ from unittest.mock import MagicMock, patch
 
 
 class TestTtsPresetRouting:
+    def test_admin_role_route_overrides_card_binding(self):
+        from core.output import voice_adapter
+
+        base = {
+            "ref_audio": "global.wav",
+            "role_routes": {"role_one": "role_voice"},
+            "presets": {"role_voice": {"ref_audio": "role.wav"}, "card_voice": {"ref_audio": "card.wav"}},
+        }
+        char = MagicMock()
+        char.presence_ext = {"tts_preset": "card_voice"}
+        with patch("core.output.voice_adapter.get_config", return_value={"tts": base}), \
+             patch("core.character_loader.load", return_value=char):
+            assert voice_adapter.resolve_tts_config("role_one")["ref_audio"] == "role.wav"
+            assert voice_adapter.resolve_tts_config("role_two")["ref_audio"] == "card.wav"
+
     def test_no_char_id_returns_base_config_unchanged(self):
         from core.output import voice_adapter
 

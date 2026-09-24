@@ -363,8 +363,8 @@ async def chat(
                 response = await vision_client.chat.completions.create(
                     model=vision_cfg["model"],
                     messages=safe_msgs,
-                    max_tokens=240 if vision_purpose == "video_call" else 1000,
-                    timeout=18 if vision_purpose == "video_call" else _CALL_TIMEOUTS["vision"],
+                    max_tokens=120 if vision_purpose == "video_call" else 1000,
+                    timeout=45 if vision_purpose == "video_call" else _CALL_TIMEOUTS["vision"],
                 )
                 choice = _first_chat_choice(response, operation="chat[vision]")
                 _log_completed_call(
