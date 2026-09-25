@@ -572,6 +572,8 @@ historical tool receipts. Client evidence: docs/tool-activity-2026-09-12.md in t
 
 ## 按需截图三端接入（2026-09-12，partial）
 
+视频电话摄像头另走工单 265 的 `/video-call/camera/poll`、`/video-call/camera/result` 与 `/video-call/close`（chat scope），仅桌面视频电话窗口在摄像头开启时轮询；角色工具领取新帧，原有周期摄像头观察同时可按时间间隔进入 autonomy。此链不使用屏幕截图 poll/result、实验性视觉 shadow 或手机通道。
+
 详见仓库 `docs/screen-observation-2026-09-12.md`。后端 `observe_user_screen` 通过独立 HTTP poll/result 请求活跃电脑或手机的新截图，UUID/凭据绑定、20 秒 TTL、30 秒设备新鲜度和本地授权均参与门控；图像只在内存中处理。
 
 管理面提供全局开关、effective state 与 `/perception/screen/status` 无正文观测；电脑视觉观察页、手机系统配置页各有独立本地授权，默认关闭。全局开启时自主工具继承启用，显式工具禁用优先；角色消息继续走原通知/免打扰链路。桌面 IPC 新增可选 onDemandEnabled；手机使用专用 screen_observation 通道与无障碍 worker，不改 mobile poll/ack/relay。

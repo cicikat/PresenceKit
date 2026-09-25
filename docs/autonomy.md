@@ -20,7 +20,7 @@ Signal 使用 `autonomy-signal.v1`：
 ```json
 {
   "version": "autonomy-signal.v1",
-  "source": "sensor|scheduler|desktop_wake|interval|schedule|overflow|music_playback",
+  "source": "sensor|scheduler|desktop_wake|interval|schedule|overflow|music_playback|video_call_camera",
   "evidence": [{"fact": "..."}],
   "reason": "A bounded explanation for considering this opportunity.",
   "expiry": 0,
@@ -38,6 +38,8 @@ Signal 使用 `autonomy-signal.v1`：
 ```
 
 `evidence` 是系统提供的事实数据，不是用户陈述。`expiry` 是 Unix timestamp；零表示没有显式过期时间。`memory_query` 是可选的、有 anchor 的查询，不能从 greeting 或 time-of-day label 推断。
+
+工单 265 的 `video_call_camera` 在摄像头持续开启时按至少 60 秒间隔产生候选，画面相同也允许。事实是独立 `video_call` 图像路由生成的不可信描述；关闭/过期会话丢弃候选，`talk_owner` 仍须通过主动性门控。它不消费实验性的周期屏幕视觉 shadow。
 
 同一个 scheduler tick 产生的 signal 会在 job 入队前合并为一个 `autonomy-opportunity.v1`：
 

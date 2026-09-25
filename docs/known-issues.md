@@ -773,3 +773,7 @@ schema 兼容修复。实现与定向回归见 [tool-discovery.md](tool-discover
 - Brief 253.5 observe：喝酒模拟状态与现有 perform 映射已完成，真实桌面姿态表现待设备回归；不代表现实酒精测量。
 
 - Brief 253.6 observe：命名 STT、语调层与三端语音凭据已接入；真实麦克风、QQ amr/silk 服务兼容和语调准确率未验收。普通 STT 缺少 tone 字段时只给 unclear。旧本地 Whisper 超时后推理线程可能继续至结束，清理随线程完成；详细边界见 [audio-perception.md](audio-perception.md)。
+
+# 工单 265 验收缺口：视频电话摄像头主动观察
+
+`observe_video_call_camera` 的新帧 poll/result、定时 autonomy signal、关闭撤销及 `video_call` 独立图像路由已有定向测试和桌面构建验证。真实 Windows 摄像头、本地视觉模型响应、静默时角色主动决策/通知、关闭与换角色并发尚未联合实测；状态为 `observe`，不能把构建或 mock 测试视为设备验收。

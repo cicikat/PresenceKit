@@ -228,6 +228,7 @@ observe：77 项回归和管理面清缓存浏览器验证通过；两次真实�
   `observation_id`，`busy` 时丢帧，不返回或持久化图像描述。
   `POST /desktop/chat` 可带 `video_observation_id`，凭据绑定 owner、角色和 token 标签，
   45 秒有效。`GET /observability/video-call`（state.read）只读计数和状态。
+- `current`（工单 265）：桌面视频电话开着摄像头时，周期观察按 60 秒节流进入既有 autonomy signal；静止画面也可产生候选，Dream/DND/预算与发言门控仍有效。`POST /video-call/camera/poll` 领取角色按需查看摄像头的新帧请求，`POST /video-call/camera/result` 回传新 JPEG；请求 10 秒过期、只领一次并绑定现有 chat 身份。`POST /video-call/close` 撤销会话和未消费观察。按需工具 `observe_video_call_camera` 只使用 `image_presets.routes.video_call`；`observe_user_screen` 保留原独立屏幕识别链，实验性 `/perception/visual` 不作主动候选来源。真实摄像头、视觉模型和通知联合验收仍为 `observe`。
 - `current`（工单 264）：`GET/PUT /stt-vocabulary`（admin）保存有界转写词表；
   `/transcribe` 旧本地路径可在声学分析启用时返回 `tone/audio_perception_id`。
   桌面持续录音合并文字时可附加 `audio_perception_text`，后端仅在该原转写段
