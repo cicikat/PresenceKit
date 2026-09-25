@@ -1,6 +1,7 @@
 """TTS control plane keeps existing settings readable for legacy role IDs."""
 
 import pytest
+from fastapi import HTTPException
 
 from admin.routers import settings_misc
 
@@ -54,13 +55,23 @@ async def test_role_save_creates_separate_route_without_changing_global(monkeypa
     await settings_misc.update_tts_config(settings_misc.TtsConfigUpdate(
         char_id="role_one", ref_audio="中文参考", provider="gsv",
         reference_texts={"中文参考": "这是一段参考文本。", "另一份": "另一个文本。"},
-        provider_params={"ref_audio": "中文参考"}), auth=None)
+        provider_params={"ref_audio": "中文参考", "gsv_version": "v2Pro",
+                         "version_models": {"v2Pro": {"gpt_model_path": "gpt.ckpt", "sovits_model_path": "voice.pth"}}}), auth=None)
     tts = written[0]["tts"]
     name = voice_adapter.role_tts_generated_name("role_one")
     assert tts["ref_audio"] == "global.wav"
     assert tts["role_routes"]["role_one"] == name
     assert tts["presets"][name]["providers"]["gsv"]["ref_audio"] == "中文参考"
+    assert tts["presets"][name]["providers"]["gsv"]["version_models"]["v2Pro"]["sovits_model_path"] == "voice.pth"
     assert tts["presets"][name]["reference_texts"]["另一份"] == "另一个文本。"
+
+
+@pytest.mark.asyncio
+async def test_tts_config_rejects_unknown_version_route():
+    with pytest.raises(HTTPException) as exc:
+        await settings_misc.update_tts_config(settings_misc.TtsConfigUpdate(
+            provider_params={"gsv_version": "v5", "version_models": {}}), auth=None)
+    assert exc.value.status_code == 422
 
 
 def test_reference_text_matches_selected_audio_and_preserves_legacy_fallback():

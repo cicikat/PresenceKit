@@ -43,6 +43,7 @@ _OPENAI_COMPAT_PROVIDER = "openai_compatible"
 _PROVIDER_ALIASES = {"gpt_sovits": _GSV_PROVIDER, "gsv": _GSV_PROVIDER}
 _DEFAULT_GPT_MODEL = "不训练直接推v3底模！"
 _DEFAULT_SOVITS_MODEL = "不训练直接推v2ProPlus底模！"
+_GSV_VERSIONS = frozenset({"v2", "v3", "v2Pro", "v2ProPlus"})
 _GSV_SYNTHESIS_LOCK = asyncio.Lock()
 _GSV_ACTIVE_MODELS: dict[str, tuple[str, str]] = {}
 _GSV_HARD_BOUNDARIES = frozenset("。！？；!?")
@@ -183,6 +184,7 @@ def get_provider_config(cfg: dict | None = None) -> tuple[str, dict]:
             "emotions", "how_to_cut", "top_k", "top_p", "temperature",
             "ref_free", "if_freeze", "sample_steps", "if_sr", "pause_second",
             "gpt_model_path", "sovits_model_path", "gpt_model_fallback", "sovits_model_fallback",
+            "gsv_version", "version_models",
             "external_segment_enabled", "segment_pause_seconds", "segment_max_chars",
         )
         if key in cfg
@@ -199,6 +201,10 @@ def get_provider_status(cfg: dict | None = None) -> dict:
     if provider == _GSV_PROVIDER:
         ready = bool(selected.get("api_url") and selected.get("ref_audio"))
         reason = "" if ready else "GSV requires api_url and ref_audio"
+        if ready and selected.get("gsv_version", "auto") != "auto":
+            models = selected_gsv_models(selected)
+            ready = bool(models)
+            reason = "" if ready else "Selected GSV version requires both GPT and SoVITS weights"
     elif provider == _OPENAI_COMPAT_PROVIDER:
         ready = bool(selected.get("base_url"))
         reason = "" if ready else "openai_compatible requires base_url (api_key optional for unauthenticated local deployments)"
@@ -231,6 +237,25 @@ def reference_prompt_text(cfg: dict, ref_audio: str, *, emotion_text: str = "") 
                 return str(texts[key]).strip()
         return ""
     return str(cfg.get("prompt_text") or "").strip()
+
+
+def selected_gsv_models(cfg: dict) -> tuple[str, str] | None:
+    """Choose a saved version pair; legacy auto keeps its existing fallbacks."""
+    version = str(cfg.get("gsv_version") or "auto")
+    if version == "auto":
+        return (
+            str(cfg.get("gpt_model_path") or cfg.get("gpt_model_fallback") or _DEFAULT_GPT_MODEL),
+            str(cfg.get("sovits_model_path") or cfg.get("sovits_model_fallback") or _DEFAULT_SOVITS_MODEL),
+        )
+    if version not in _GSV_VERSIONS:
+        return None
+    routes = cfg.get("version_models")
+    pair = routes.get(version) if isinstance(routes, dict) else None
+    if not isinstance(pair, dict):
+        return None
+    gpt = str(pair.get("gpt_model_path") or "").strip()
+    sovits = str(pair.get("sovits_model_path") or "").strip()
+    return (gpt, sovits) if gpt and sovits else None
 
 
 def _is_cjk_character(char: str) -> bool:
@@ -447,8 +472,12 @@ class GsvProvider:
             logger.warning("[voice_adapter] GSV ref_audio is not configured")
             return None
 
-        gpt_model = _gsv_model_target(cfg, "gpt_model_path", "gpt_model_fallback", _DEFAULT_GPT_MODEL, char_id=char_id, category="gpt_model")
-        sovits_model = _gsv_model_target(cfg, "sovits_model_path", "sovits_model_fallback", _DEFAULT_SOVITS_MODEL, char_id=char_id, category="sovits_model")
+        model_pair = selected_gsv_models(cfg)
+        if model_pair is None:
+            logger.warning("[voice_adapter] selected GSV version lacks a complete model pair")
+            return None
+        gpt_model = _resolve_gsv_model_path(model_pair[0], char_id=char_id, category="gpt_model")
+        sovits_model = _resolve_gsv_model_path(model_pair[1], char_id=char_id, category="sovits_model")
         segments = split_gsv_segments(text, cfg)
         if not segments:
             logger.warning("[voice_adapter] no speakable GSV text remains after sanitization")

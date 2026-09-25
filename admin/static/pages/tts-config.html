@@ -44,6 +44,8 @@
     <label class="field"><span data-i18n="status.tts.api_url">API URL</span><input type="url" id="tts-api-url" placeholder="http://tts.example:9880"></label>
   </div>
   <p class="admin-inline-087" data-i18n="tts_config.resource_hint">资源选择器只显示 authored 资源的逻辑名称和来源，不提供本机物理路径输入。</p>
+  <label class="field"><span data-i18n="tts_config.gsv_version">GPT-SoVITS 版本路由</span><select id="tts-gsv-version" onchange="onTtsVersionChange()"><option value="auto" data-i18n="tts_config.gsv_auto">自动（沿用旧配置）</option><option value="v2">v2</option><option value="v3">v3</option><option value="v2Pro">v2Pro</option><option value="v2ProPlus">v2ProPlus</option></select></label>
+  <p class="admin-inline-087" data-i18n="tts_config.gsv_version_hint">每个版本分别保存 GPT 与 SoVITS 权重。明确版本须配齐两项；自动沿用旧权重与底模回退。实际模型架构由 GPT-SoVITS 从权重识别。</p>
   <div class="form-row">
     <label class="field"><span data-i18n="status.tts.ref_audio">参考音频资源</span><select id="tts-ref-audio" onchange="onTtsReferenceAudioChange()"><option value="" data-i18n="status.tts.unselected">未选择</option></select></label>
     <label class="field"><span data-i18n="status.tts.gpt_model">GPT 模型资源</span><select id="tts-gpt-model-path"><option value="" data-i18n="status.tts.unselected">未选择</option></select></label>

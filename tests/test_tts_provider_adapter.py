@@ -60,6 +60,22 @@ def test_gsv_model_paths_use_explicit_values_or_default_base_models():
     ) == voice_adapter._DEFAULT_SOVITS_MODEL
 
 
+def test_gsv_version_routes_require_a_complete_pair_and_keep_legacy_auto():
+    cfg = {
+        "api_url": "http://127.0.0.1:9872", "ref_audio": "sample.wav",
+        "gpt_model_path": "old.ckpt", "sovits_model_path": "old.pth",
+        "gsv_version": "v2ProPlus",
+        "version_models": {"v2ProPlus": {"gpt_model_path": "plus.ckpt", "sovits_model_path": "plus.pth"}},
+    }
+    assert voice_adapter.selected_gsv_models(cfg) == ("plus.ckpt", "plus.pth")
+    assert voice_adapter.get_provider_status(cfg)["ready"] is True
+    cfg["gsv_version"] = "v2"
+    assert voice_adapter.selected_gsv_models(cfg) is None
+    assert voice_adapter.get_provider_status(cfg)["ready"] is False
+    cfg["gsv_version"] = "auto"
+    assert voice_adapter.selected_gsv_models(cfg) == ("old.ckpt", "old.pth")
+
+
 def test_gsv_segments_clean_newline_forms_invalid_characters_and_route_languages():
     segments = voice_adapter.split_gsv_segments(
         "第一句。\\nSecond line! /n第三句\u200b",
@@ -125,6 +141,18 @@ async def test_gsv_switches_models_before_synthesis(tmp_path, monkeypatch):
     assert calls[0] == {"sovits_path": "custom.pth", "api_name": "/change_sovits_weights"}
     assert calls[1] == {"gpt_path": "custom.ckpt", "api_name": "/change_gpt_weights"}
     assert calls[2]["api_name"] == "/get_tts_wav"
+
+    calls.clear()
+    audio = await voice_adapter.GsvProvider().synthesize("你好。", "neutral", {
+        "api_url": "http://gsv-test", "ref_audio": str(reference),
+        "gpt_model_path": "custom.ckpt", "sovits_model_path": "custom.pth",
+        "gsv_version": "v2Pro", "version_models": {
+            "v2Pro": {"gpt_model_path": "pro.ckpt", "sovits_model_path": "pro.pth"},
+        },
+    })
+    assert audio == b"wav"
+    assert calls[0] == {"sovits_path": "pro.pth", "api_name": "/change_sovits_weights"}
+    assert calls[1] == {"gpt_path": "pro.ckpt", "api_name": "/change_gpt_weights"}
 
 
 @pytest.mark.asyncio

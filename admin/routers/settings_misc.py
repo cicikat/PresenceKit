@@ -214,6 +214,19 @@ async def update_tts_config(body: TtsConfigUpdate, auth=Depends(require_scopes("
             or len(value) > 500 for key, value in body.reference_texts.items()
         ):
             raise HTTPException(status_code=422, detail="参考音频文本映射最多 64 项；音频名和文本长度超限")
+    if body.provider_params is not None:
+        version = body.provider_params.get("gsv_version", "auto")
+        routes = body.provider_params.get("version_models", {})
+        if version not in {"auto", "v2", "v3", "v2Pro", "v2ProPlus"}:
+            raise HTTPException(status_code=422, detail="不支持的 GPT-SoVITS 版本")
+        if not isinstance(routes, dict) or any(
+            name not in {"v2", "v3", "v2Pro", "v2ProPlus"}
+            or not isinstance(pair, dict)
+            or any(key not in {"gpt_model_path", "sovits_model_path"} or not isinstance(value, str) or len(value) > 255
+                   for key, value in pair.items())
+            for name, pair in routes.items()
+        ):
+            raise HTTPException(status_code=422, detail="GPT-SoVITS 版本模型路由无效")
 
     full_cfg = read_config_file(CONFIG_FILE)
 
