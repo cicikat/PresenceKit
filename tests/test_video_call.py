@@ -224,3 +224,28 @@ async def test_video_call_invite_timeout_and_late_response(monkeypatch):
     monkeypatch.setattr(desktop_ws, "push_video_call_invite", push)
     assert (await video_call_invite.invite("owner", "character"))["status"] == "unanswered"
     assert video_call_invite.respond("owner", "character", sent[0], "accepted") is False
+
+
+@pytest.mark.asyncio
+async def test_video_call_tool_is_scoped_and_autonomy_eligible(monkeypatch):
+    import json
+    from core import tool_dispatcher
+    from core.autonomy.policy import tool_eligibility
+
+    called = []
+
+    async def invite(uid, char_id):
+        called.append((uid, char_id))
+        return {"status": "declined"}
+
+    monkeypatch.setattr("core.video_call_invite.invite", invite)
+    monkeypatch.setattr(tool_dispatcher, "get_config", lambda: {
+        "tools": {"invite_video_call": {"enabled": True, "allowed_char_ids": ["allowed"]}}
+    })
+    wrapper = tool_dispatcher._invite_video_call_wrapper
+    assert json.loads(await wrapper("owner", "other"))["status"] == "not_allowed_for_character"
+    assert json.loads(await wrapper("owner", "allowed"))["status"] == "declined"
+    assert called == [("owner", "allowed")]
+    info = tool_dispatcher._TOOL_REGISTRY["invite_video_call"]
+    assert tool_eligibility("invite_video_call", {"enabled": True},
+                            registry=tool_dispatcher._TOOL_REGISTRY, effect=info["effect"])[0]

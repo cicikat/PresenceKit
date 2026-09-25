@@ -1601,6 +1601,28 @@ _TOOL_REGISTRY["observe_video_call_camera"] = {
 }
 
 
+async def _invite_video_call_wrapper(user_id: str, char_id: str) -> str:
+    import json
+    from core.video_call_invite import invite
+
+    settings = get_config().get("tools", {}).get("invite_video_call") or {}
+    allowed = settings.get("allowed_char_ids") or [] if isinstance(settings, dict) else []
+    if char_id not in allowed:
+        return json.dumps({"status": "not_allowed_for_character"})
+    return json.dumps(await invite(user_id, char_id), ensure_ascii=False)
+
+
+_TOOL_REGISTRY["invite_video_call"] = {
+    "func": _invite_video_call_wrapper,
+    "description": "向主人桌面发起一次视频电话邀请。来电 10 秒无人接听会返回 unanswered；拒绝返回 declined；接通返回 accepted。只有接通后才进入视频通话，不会自动开启摄像头或麦克风。",
+    "dangerous": False, "category": "info", "effect": "write",
+    "trace_result": False, "echo_event_log": False,
+    "parameters": {"type": "object", "properties": {}, "required": []},
+    "examples": ["给我打个视频电话", "现在视频聊聊"],
+    "keywords": ["视频电话", "视频通话", "打视频", "来电"],
+}
+
+
 _TOOL_REGISTRY["peek_screen_content"] = {
     "func": _peek_screen_content_wrapper,
     "description": (
@@ -2229,6 +2251,11 @@ def get_tools_schema(
     char_name = get_active_char_name()
     schemas = []
     for name, info in _TOOL_REGISTRY.items():
+        if name == "invite_video_call" and char_id is not None:
+            settings = get_config().get("tools", {}).get(name) or {}
+            allowed = settings.get("allowed_char_ids") or [] if isinstance(settings, dict) else []
+            if char_id not in allowed:
+                continue
         if info.get("self_management"):
             # The gateway is added only by trusted agent loops.
             continue
@@ -2822,7 +2849,7 @@ async def _execute_structured_impl(
         record("tool_call", uid=user_id, char_id=char_id)
         if tool_info.get("self_management"):
             result = await func(user_id=user_id, char_id=char_id, origin=origin, **tool_args)
-        elif tool_name in {"observe_user_screen", "observe_video_call_camera"}:
+        elif tool_name in {"observe_user_screen", "observe_video_call_camera", "invite_video_call"}:
             if is_group:
                 raise ValueError("device observation is owner-only")
             result = await func(user_id=user_id, char_id=char_id)
