@@ -61,7 +61,7 @@ def _resolve_audio_path(path: str, *, char_id: str | None = None) -> str:
             from core.userdata_assets import resolve_asset_path
             logical = resolve_asset_path(category="reference_audio", logical_id=str(path), char_id=char_id)
             if logical is not None:
-                return str(logical)
+                return str(logical.resolve())
         except Exception:
             pass
     p = Path(path) if Path(path).is_absolute() else _PROJECT_ROOT / path
@@ -98,8 +98,9 @@ def _resolve_gsv_model_path(path: str, *, char_id: str | None = None, category: 
                 return str(logical)
         except Exception:
             pass
-    candidate = Path(raw) if Path(raw).is_absolute() else _PROJECT_ROOT / raw
-    return str(candidate) if candidate.is_file() else raw
+    local_path = Path(raw.replace("\\", "/"))
+    candidate = local_path if local_path.is_absolute() else _PROJECT_ROOT / local_path
+    return str(candidate.resolve()) if candidate.is_file() else raw
 
 
 def _gsv_model_target(cfg: dict, key: str, fallback_key: str, default: str, *, char_id: str | None = None, category: str = "gpt_model") -> str:

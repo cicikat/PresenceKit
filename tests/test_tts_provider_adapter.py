@@ -60,6 +60,16 @@ def test_gsv_model_paths_use_explicit_values_or_default_base_models():
     ) == voice_adapter._DEFAULT_SOVITS_MODEL
 
 
+def test_local_gsv_model_paths_are_absolute_for_external_server(tmp_path, monkeypatch):
+    monkeypatch.setattr(voice_adapter, "_PROJECT_ROOT", tmp_path)
+    model = tmp_path / "userdata" / "characters" / "authored" / "sample.ckpt"
+    model.parent.mkdir(parents=True, exist_ok=True)
+    model.write_bytes(b"weight")
+    assert voice_adapter._resolve_gsv_model_path(
+        r"userdata\characters\authored\sample.ckpt"
+    ) == str(model.resolve())
+
+
 def test_gsv_version_routes_require_a_complete_pair_and_keep_legacy_auto():
     cfg = {
         "api_url": "http://127.0.0.1:9872", "ref_audio": "sample.wav",
