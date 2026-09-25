@@ -221,7 +221,7 @@ Brief 137 增加每 server 的可选 `metadata_mapping`、按远端工具精确�
 schema 校验、连接或 proficiency。selector 缺失时保持旧行为；启用时只收窄已经授权的本轮 schema，
 `include_unclassified: true` 保留普通无 metadata server。管理面逐工具分开展示“已发现 / 已授权 /
 当前会话可暴露”，并允许选择使用远端分类、本地覆盖或忽略远端分类。`GET /settings/mcp` 不返回
-完整 `_meta`、原始 description 或完整参数 schema；控制台显示有界参数摘要，调用时仍由服务端用
+完整 `_meta` 或完整参数 schema；管理面工具目录返回最多 1000 字符的远端 description 供管理员核对，控制台显示有界参数摘要，调用时仍由服务端用
 完整 registry schema 校验。直接加载的 MCP JS、i18n 和 page fragment 使用同一静态资源版本。
 
 管理面「运维 → 工具」经 admin-only `GET/PUT /settings/tools` 统一观察内置已注册工具、读写

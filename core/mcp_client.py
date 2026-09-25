@@ -566,6 +566,7 @@ def _tool_details(listed, server_cfg: dict) -> list[dict]:
             )
             details.append({
                 "name": name,
+                "description": description[:1000],
                 "suggestion": suggestion,
                 **summarize_tool_metadata(tool, server_cfg),
             })

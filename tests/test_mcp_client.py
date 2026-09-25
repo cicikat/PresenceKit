@@ -273,6 +273,7 @@ class TestHttpHeadersAndProbe:
 
         assert tools == [{
             "name": "inspect",
+            "description": "inspect status",
             "suggestion": {
                 "effect": "read",
                 "source": "name_description",
