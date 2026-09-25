@@ -46,7 +46,7 @@ def test_camera_tool_uses_video_call_route_only(monkeypatch):
     assert "observe_user_screen" in tool_dispatcher._TOOL_REGISTRY
 
 
-def test_camera_signal_waits_for_change_and_interval(monkeypatch):
+def test_camera_signal_uses_interval_even_when_scene_is_unchanged(monkeypatch):
     from core.autonomy import store
     queued = []
     monkeypatch.setattr(store, "enqueue_signal", lambda uid, char_id, signal, **kwargs: (
@@ -60,9 +60,9 @@ def test_camera_signal_waits_for_change_and_interval(monkeypatch):
     assert queued[0][2].source == "video_call_camera"
     assert queued[0][2].evidence[0]["description"] == "书桌"
     video_call._queue_camera_signal("owner", "character", session, "书桌", 200.0)
-    video_call._queue_camera_signal("owner", "character", session, "窗边", 201.0)
+    video_call._queue_camera_signal("owner", "character", session, "书桌", 201.0)
     assert len(queued) == 1
-    video_call._queue_camera_signal("owner", "character", session, "窗边", 162.0 + video_call.CAMERA_SIGNAL_INTERVAL_SECONDS)
+    video_call._queue_camera_signal("owner", "character", session, "书桌", 162.0 + video_call.CAMERA_SIGNAL_INTERVAL_SECONDS)
     assert len(queued) == 2
 
 

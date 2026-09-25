@@ -475,12 +475,9 @@ async def run_job(job: Job) -> Run:
         signal_count=len(opportunity.get("signals") or []),
         evaluation_status="evaluating",
     )
-    signals = [s for s in opportunity.get("signals") or [] if isinstance(s, dict)]
-    if signals and all(s.get("source") == "video_call_camera" for s in signals):
-        from core.video_call import camera_session
-        if camera_session(job.uid, job.char_id) is None:
-            run.disposition = Disposition.EXPIRED.value
-            return _finish(run)
+    if _camera_only_and_closed(job):
+        run.disposition = Disposition.EXPIRED.value
+        return _finish(run)
     ime_job = any(s.get('source') == 'ime' for s in (job.opportunity or {}).get('signals', []) if isinstance(s, dict))
     if ime_job:
         from core.ime_awareness import effective_state
@@ -641,6 +638,9 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
                         run.disposition = Disposition.TOOL_CALL_DENIED.value
                         return _finish(run)
                 if name == "talk_owner":
+                    if _camera_only_and_closed(job):
+                        run.disposition = Disposition.EXPIRED.value
+                        return _finish(run)
                     if _talk_text_has_unsupported_memory_claim(
                         str(args.get("text") or ""),
                         memory_anchor_available=_memory_anchor_available(messages),
@@ -670,6 +670,9 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
                         run.disposition = reason if reason in Disposition._value2member_map_ else Disposition.TALK_CANCELED.value
                     return _finish(run)
                 if name == "confirm_talk" and confirm_available:
+                    if _camera_only_and_closed(job):
+                        run.disposition = Disposition.EXPIRED.value
+                        return _finish(run)
                     action = str(args.get("action") or "cancel")
                     if action != "send_anyway":
                         run.disposition = Disposition.TALK_SOFT_BLOCKED_THEN_CANCELED.value
@@ -1010,6 +1013,14 @@ def _self_change_audit(uid: str, char_id: str, action_id: str) -> dict | None:
 def _autonomy_still_enabled(uid: str, char_id: str, state: dict) -> bool:
     from core.autonomy.effective_state import autonomy_enabled
     return autonomy_enabled(uid, char_id, state)
+
+
+def _camera_only_and_closed(job: Job) -> bool:
+    signals = [s for s in (job.opportunity or {}).get("signals") or [] if isinstance(s, dict)]
+    if not signals or not all(s.get("source") == "video_call_camera" for s in signals):
+        return False
+    from core.video_call import camera_session
+    return camera_session(job.uid, job.char_id) is None
 
 
 def _user_became_active(uid: str) -> bool:

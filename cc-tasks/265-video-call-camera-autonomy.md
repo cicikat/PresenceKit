@@ -2,7 +2,7 @@
 
 ## 需求与现状
 
-视频电话摄像头已按约 4 秒间隔送 `POST /video-call/observe`，经独立 `image_presets.routes.video_call` 识别；结果只生成一次性回执，下一次文字或 STT 聊天才通过 `/desktop/chat` 消费。静默时角色收不到该观察。电脑屏幕的周期视觉 shadow 和 `observe_user_screen` 按需截图是另一套输入，不能借用其图像模型路由或设备请求。
+视频电话摄像头已按约 4 秒间隔送 `POST /video-call/observe`，经独立 `image_presets.routes.video_call` 识别；结果只生成一次性回执，下一次文字或 STT 聊天才通过 `/desktop/chat` 消费。静默时角色收不到该观察。电脑屏幕的实验性周期视觉 shadow 不参与本工单；新帧按需请求参考已落地的 `observe_user_screen` 合同，但摄像头不能借用它的图像模型路由或设备请求。
 
 ## 边界
 
@@ -15,9 +15,9 @@
 ## 施工与勾选
 
 - [x] A. 后端摄像头会话/观察合同：独立有效状态、短期最新描述与过期/关闭清理、只读观测；保留现有聊天回执。`tests/test_video_call.py` 5 passed；独立 commit。
-- [x] B. 周期摄像头描述进入主动 signal：有界事实、变化去重与 60 秒节流、会话/角色绑定，交给既有 autonomy 出口；关闭/过期时丢弃。相关测试 9 passed；独立 commit。
+- [x] B. 周期摄像头描述进入主动 signal：有界事实、60 秒定时节流（画面未变也允许）、会话/角色绑定，交给既有 autonomy 出口；关闭/过期时丢弃。相关测试 9 passed；独立 commit，后按用户校正补充修订。
 - [x] C. `observe_video_call_camera` 后端按需工具与新帧 poll/result 合同：10 秒 TTL、单次领取/授权、独立 `video_call` 识别、工具注册与自主策略；保留 `observe_user_screen`。后端相关测试 32 passed；独立 commit。桌面采集接线在 D。
-- [ ] D. 桌面视频电话接线：摄像头启停登记、周期观察携带会话、按需轮询抓帧；关闭后清理。构建和相关测试，独立 commit。
+- [x] D. 桌面视频电话接线：摄像头启停登记、周期观察与按需请求沿现有后端身份、按需轮询抓帧；关闭后清理。桌面构建、Rust cargo check、API 测试 7 passed；桌面仓独立 commit。真实摄像头验收待办。
 - [ ] E. 文档与验收：控制面、三仓接口总账、工具/通道说明同步；核对字段、作用域、并发、TTL、主动消息队列与屏幕路由隔离。纯文档差异检查，独立 commit。
 
 ## 验证边界

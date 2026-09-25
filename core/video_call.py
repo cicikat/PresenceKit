@@ -49,17 +49,15 @@ def close_camera(uid: str, char_id: str, token_label: str) -> None:
 
 
 def _queue_camera_signal(uid: str, char_id: str, session: dict[str, Any], description: str, now: float) -> None:
-    if description == session.get("last_signaled_description"):
-        return
     if now - session.get("last_signal_at", session["opened_at"]) < CAMERA_SIGNAL_INTERVAL_SECONDS:
         return
     from core.autonomy.models import ActionMode, Signal
     from core.autonomy import store
     signal = Signal(
         source="video_call_camera",
-        evidence=[{"fact": "video_call_camera_changed", "description": description[:300],
+        evidence=[{"fact": "video_call_camera_interval", "description": description[:300],
                    "trust": "untrusted_visual_description"}],
-        reason="The active video call camera scene changed; decide whether to act or stay silent.",
+        reason="The active video call camera interval elapsed; decide whether to act or stay silent.",
         expiry=time.time() + 45,
         priority=0.35,
         action_mode=ActionMode.REFLECT.value,
@@ -69,7 +67,6 @@ def _queue_camera_signal(uid: str, char_id: str, session: dict[str, Any], descri
                                      dedupe_key=f"video-call-camera:{uid}:{char_id}:{int(time.time() // 60)}")
     if queued:
         session["last_signal_at"] = now
-        session["last_signaled_description"] = description
 
 
 def camera_status() -> dict[str, Any]:
