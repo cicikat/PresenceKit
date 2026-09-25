@@ -244,6 +244,9 @@ def decide_autonomy_tools(uid: str, char_id: str, state: dict) -> list[AutonomyT
         if name == "observe_user_screen" and name not in configured:
             from core.perception.screen_observation import enabled as screen_enabled
             configured_policy = {"enabled": screen_enabled()}
+        if name == "observe_video_call_camera" and name not in configured:
+            from core.video_call import camera_session
+            configured_policy = {"enabled": camera_session(uid, char_id) is not None}
         if name in {'read_life_records', 'search_documents', 'read_document', 'reread_image'} and name not in configured:
             from core.life_records import settings as life_settings
             life_cfg = life_settings()

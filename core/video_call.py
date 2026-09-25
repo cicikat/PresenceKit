@@ -23,6 +23,7 @@ _counts = {"accepted": 0, "busy": 0, "failed": 0, "unavailable": 0}
 _unavailable_until = 0.0
 CAMERA_ACTIVE_SECONDS = 15.0
 CAMERA_SIGNAL_INTERVAL_SECONDS = 60.0
+CAMERA_REQUEST_TTL_SECONDS = 10.0
 _camera_sessions: dict[tuple[str, str], dict[str, Any]] = {}
 
 
@@ -37,6 +38,9 @@ def close_camera(uid: str, char_id: str, token_label: str) -> None:
     row = _camera_sessions.get((uid, char_id))
     if row is not None and row["token_label"] == token_label:
         _camera_sessions.pop((uid, char_id), None)
+        pending = row.get("pending")
+        if pending and not pending["future"].done():
+            pending["future"].set_result(None)
         for receipt, details in list(_receipts.items()):
             if details[1:4] == (uid, char_id, token_label):
                 _receipts.pop(receipt, None)
@@ -71,7 +75,68 @@ def _queue_camera_signal(uid: str, char_id: str, session: dict[str, Any], descri
 def camera_status() -> dict[str, Any]:
     now = time.monotonic()
     return {"active_sessions": sum(now - row["seen_at"] < CAMERA_ACTIVE_SECONDS
-                                   for row in _camera_sessions.values())}
+                                   for row in _camera_sessions.values()),
+            "pending_camera_requests": sum(bool(row.get("pending")) for row in _camera_sessions.values())}
+
+
+def poll_camera(uid: str, char_id: str, token_label: str) -> dict[str, Any]:
+    row = _camera_sessions.get((uid, char_id))
+    if row is None or row["token_label"] != token_label:
+        return {"request": None}
+    row["seen_at"] = time.monotonic()
+    pending = row.get("pending")
+    if not pending or pending["claimed"] or time.monotonic() >= pending["deadline"]:
+        return {"request": None}
+    pending["claimed"] = True
+    return {"request": {"request_id": pending["id"],
+                        "ttl_seconds": max(0, pending["deadline"] - time.monotonic())}}
+
+
+def accept_camera_frame(uid: str, char_id: str, token_label: str,
+                        request_id: str, frame: bytes | None) -> bool:
+    row = camera_session(uid, char_id)
+    if row is None or row["token_label"] != token_label:
+        return False
+    pending = row.get("pending")
+    if not pending or pending["id"] != request_id or not pending["claimed"]:
+        return False
+    if pending["future"].done() or time.monotonic() >= pending["deadline"]:
+        return False
+    if frame is not None:
+        validate_frame(frame)
+    pending["future"].set_result(frame)
+    return True
+
+
+async def observe_fresh_camera(uid: str, char_id: str) -> dict[str, Any]:
+    from core.config_loader import get_config
+    row = camera_session(uid, char_id)
+    if row is None or not connection_state(get_config())["effective"]:
+        return {"status": "camera_unavailable"}
+    if row.get("pending"):
+        return {"status": "busy"}
+    future = asyncio.get_running_loop().create_future()
+    pending = {"id": secrets.token_urlsafe(18), "claimed": False,
+               "deadline": time.monotonic() + CAMERA_REQUEST_TTL_SECONDS,
+               "future": future}
+    row["pending"] = pending
+    try:
+        frame = await asyncio.wait_for(future, CAMERA_REQUEST_TTL_SECONDS)
+        if frame is None or camera_session(uid, char_id) is not row:
+            return {"status": "camera_unavailable"}
+        result = await observe(frame, uid=uid, char_id=char_id,
+                               token_label=row["token_label"], emit_signal=False,
+                               wait_for_resource=True)
+        if result.get("status") != "ready":
+            return {"status": result.get("status", "failed")}
+        description = consume(result["observation_id"], uid=uid, char_id=char_id,
+                              token_label=row["token_label"])
+        return {"status": "ok", "description": description} if description else {"status": "camera_unavailable"}
+    except asyncio.TimeoutError:
+        return {"status": "timeout"}
+    finally:
+        if row.get("pending") is pending:
+            row.pop("pending", None)
 
 
 def local_resource() -> asyncio.Lock:
@@ -118,7 +183,8 @@ def _prune(now: float) -> None:
         _receipts.popitem(last=False)
 
 
-async def observe(frame: bytes, *, uid: str, char_id: str, token_label: str) -> dict[str, Any]:
+async def observe(frame: bytes, *, uid: str, char_id: str, token_label: str,
+                  emit_signal: bool = True, wait_for_resource: bool = False) -> dict[str, Any]:
     global _unavailable_until
     from core.config_loader import get_config
     from core.llm_client import chat
@@ -138,7 +204,7 @@ async def observe(frame: bytes, *, uid: str, char_id: str, token_label: str) -> 
         session["seen_at"] = time.monotonic()
     if time.monotonic() < _unavailable_until:
         return {"status": "unavailable", "retry_after_seconds": max(1, round(_unavailable_until - time.monotonic()))}
-    if _local_resource.locked():
+    if _local_resource.locked() and not wait_for_resource:
         _counts["busy"] += 1
         return {"status": "busy"}
     async with _local_resource:
@@ -172,11 +238,12 @@ async def observe(frame: bytes, *, uid: str, char_id: str, token_label: str) -> 
     if _camera_sessions.get(key) is not session:
         return {"status": "closed"}
     session.update(seen_at=now, description=description)
-    try:
-        _queue_camera_signal(uid, char_id, session, description, now)
-    except Exception:
-        # Camera observation and chat receipts remain available if autonomy state is unavailable.
-        pass
+    if emit_signal:
+        try:
+            _queue_camera_signal(uid, char_id, session, description, now)
+        except Exception:
+            # Camera observation and chat receipts remain available if autonomy state is unavailable.
+            pass
     _prune(now)
     receipt = secrets.token_urlsafe(24)
     _receipts[receipt] = (now + OBSERVATION_TTL_SECONDS, uid, char_id, token_label, description)

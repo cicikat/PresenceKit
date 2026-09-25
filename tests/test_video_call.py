@@ -1,4 +1,6 @@
 import io
+import asyncio
+import time
 import httpx
 
 import pytest
@@ -34,6 +36,16 @@ def test_video_call_requires_loopback_vision():
     assert video_call_ready({**local, "kind": "ocr"})[0] is False
 
 
+def test_camera_tool_uses_video_call_route_only(monkeypatch):
+    from core import tool_dispatcher
+    monkeypatch.setattr(tool_dispatcher, "get_config", _config)
+    assert tool_dispatcher._is_tool_enabled("observe_video_call_camera")
+    monkeypatch.setattr(tool_dispatcher, "get_config", lambda: _config("https://remote.example/v1"))
+    assert not tool_dispatcher._is_tool_enabled("observe_video_call_camera")
+    assert "observe_video_call_camera" in tool_dispatcher._TOOL_REGISTRY
+    assert "observe_user_screen" in tool_dispatcher._TOOL_REGISTRY
+
+
 def test_camera_signal_waits_for_change_and_interval(monkeypatch):
     from core.autonomy import store
     queued = []
@@ -52,6 +64,30 @@ def test_camera_signal_waits_for_change_and_interval(monkeypatch):
     assert len(queued) == 1
     video_call._queue_camera_signal("owner", "character", session, "窗边", 162.0 + video_call.CAMERA_SIGNAL_INTERVAL_SECONDS)
     assert len(queued) == 2
+
+
+@pytest.mark.asyncio
+async def test_camera_tool_requests_fresh_frame_on_video_call_route(monkeypatch):
+    monkeypatch.setattr("core.config_loader.get_config", _config)
+    monkeypatch.setattr(video_call, "_unavailable_until", 0.0)
+    async def fake_chat(messages, **kwargs):
+        assert kwargs["vision_purpose"] == "video_call"
+        return "窗边有一本书"
+    monkeypatch.setattr("core.llm_client.chat", fake_chat)
+    video_call._camera_sessions[("owner-tool", "character-tool")] = {
+        "seen_at": time.monotonic(), "opened_at": time.monotonic(),
+        "token_label": "desktop", "description": "旧画面",
+    }
+    task = asyncio.create_task(video_call.observe_fresh_camera("owner-tool", "character-tool"))
+    await asyncio.sleep(0)
+    request = video_call.poll_camera("owner-tool", "character-tool", "desktop")["request"]
+    assert request and request["request_id"]
+    assert video_call.poll_camera("owner-tool", "character-tool", "desktop")["request"] is None
+    assert not video_call.accept_camera_frame("owner-tool", "character-tool", "other", request["request_id"], _jpeg())
+    assert video_call.accept_camera_frame("owner-tool", "character-tool", "desktop", request["request_id"], _jpeg())
+    assert not video_call.accept_camera_frame("owner-tool", "character-tool", "desktop", request["request_id"], _jpeg())
+    assert await task == {"status": "ok", "description": "窗边有一本书"}
+    video_call.close_camera("owner-tool", "character-tool", "desktop")
 
 
 @pytest.mark.asyncio

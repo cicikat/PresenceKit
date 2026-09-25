@@ -1072,7 +1072,8 @@ async def _execute_tool(name: str, args: dict, job: Job, session, cfg: dict, run
                     name, args, job.uid, job.uid, False, session,
                     origin=origin, char_id=job.char_id, tool_status_observer=observe,
                 ),
-                timeout=float(cfg.get("tool_timeout_seconds") or 30),
+                timeout=(125 if name == "observe_video_call_camera"
+                         else float(cfg.get("tool_timeout_seconds") or 30)),
             )
     except asyncio.TimeoutError:
         return "tool timeout", "failed"
