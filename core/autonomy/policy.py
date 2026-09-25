@@ -133,7 +133,7 @@ class AutonomyToolDecision:
 
 
 def admission(uid: str, char_id: str, state: dict, *, allow_observed_activity: bool = False,
-              allow_camera_silence: bool = False) -> str | None:
+              allow_camera_silence: bool = False, allow_post_call: bool = False) -> str | None:
     cfg = state["config"]
     if not cfg.get("enabled", False):
         return Disposition.SUPPRESSED_PROACTIVE_OFF.value
@@ -161,7 +161,7 @@ def admission(uid: str, char_id: str, state: dict, *, allow_observed_activity: b
         time.time() - float(snapshot(uid).get("last_owner_turn_ts") or 0) >= 120
     )
     if trigger_state != TriggerState.QUIET and not (
-        (allow_observed_activity and trigger_state == TriggerState.RESTLESS) or camera_silent
+        (allow_observed_activity and trigger_state == TriggerState.RESTLESS) or camera_silent or allow_post_call
     ):
         return Disposition.BLOCKED_USER_ACTIVE.value
     from core.conversation_gate import conversation_lock
@@ -206,7 +206,7 @@ def admission(uid: str, char_id: str, state: dict, *, allow_observed_activity: b
     )
     import time
     effective_minimum = autonomy_min_interval(uid, char_id, state)
-    if latest and time.time() - latest < effective_minimum:
+    if not allow_post_call and latest and time.time() - latest < effective_minimum:
         return Disposition.DUPLICATE.value
     return None
 

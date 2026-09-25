@@ -365,6 +365,11 @@ def _user_active_recently(window_seconds: int = 120) -> bool:
     return (time.time() - _last_user_message_time) < window_seconds
 
 
+def last_user_message_time() -> float:
+    """Read-only activity timestamp for one-shot post-call autonomy cancellation."""
+    return _last_user_message_time
+
+
 async def _pipeline_send(
     prompt: str,
     search_query: str = "",

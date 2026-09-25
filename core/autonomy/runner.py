@@ -486,7 +486,10 @@ async def run_job(job: Job) -> Run:
             return _finish(run)
     camera_job = any(s.get('source') == 'video_call_camera' for s in
                      (job.opportunity or {}).get('signals', []) if isinstance(s, dict))
-    if camera_job:
+    hangup_job = _is_video_call_hangup(job)
+    if hangup_job:
+        blocked = policy.admission(job.uid, job.char_id, state, allow_post_call=True)
+    elif camera_job:
         blocked = policy.admission(job.uid, job.char_id, state,
                                    allow_observed_activity=True, allow_camera_silence=True)
     elif ime_job:
@@ -579,7 +582,7 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
     try:
         from core import llm_client
         for _ in range(max_steps):
-            if _user_became_active(job.uid):
+            if _user_became_active_for_job(job):
                 run.disposition = Disposition.CANCELED_BY_USER_ACTIVITY.value; break
             tools, self_context = _runtime_tools(job.uid, job.char_id, state)
             if talk_available:
@@ -622,7 +625,7 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
                         run.disposition = Disposition.EXPIRED.value
                         return _finish(run)
                 name, args = call["name"], call["arguments"]
-                if _user_became_active(job.uid):
+                if _user_became_active_for_job(job):
                     run.disposition = Disposition.CANCELED_BY_USER_ACTIVITY.value; break
                 allowed_names = {((item.get("function") or item).get("name")) for item in active_tools}
                 if name not in allowed_names:
@@ -1035,6 +1038,21 @@ def _camera_signal_closed(job: Job) -> bool:
 def _user_became_active(uid: str) -> bool:
     from core.scheduler.loop import _user_active_recently
     return bool(_user_active_recently())
+
+
+def _is_video_call_hangup(job: Job) -> bool:
+    return any(isinstance(signal, dict) and signal.get("source") == "video_call_hangup"
+               for signal in (job.opportunity or {}).get("signals") or [])
+
+
+def _user_became_active_for_job(job: Job) -> bool:
+    if not _is_video_call_hangup(job):
+        return _user_became_active(job.uid)
+    from core.scheduler.loop import last_user_message_time
+    hangup_at = max((float(signal.get("created_at") or 0) for signal in
+                     (job.opportunity or {}).get("signals") or []
+                     if isinstance(signal, dict) and signal.get("source") == "video_call_hangup"), default=0)
+    return last_user_message_time() > hangup_at
 
 
 def _is_write_tool(name: str) -> bool:
