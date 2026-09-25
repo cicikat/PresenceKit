@@ -475,6 +475,12 @@ async def run_job(job: Job) -> Run:
         signal_count=len(opportunity.get("signals") or []),
         evaluation_status="evaluating",
     )
+    signals = [s for s in opportunity.get("signals") or [] if isinstance(s, dict)]
+    if signals and all(s.get("source") == "video_call_camera" for s in signals):
+        from core.video_call import camera_session
+        if camera_session(job.uid, job.char_id) is None:
+            run.disposition = Disposition.EXPIRED.value
+            return _finish(run)
     ime_job = any(s.get('source') == 'ime' for s in (job.opportunity or {}).get('signals', []) if isinstance(s, dict))
     if ime_job:
         from core.ime_awareness import effective_state
@@ -821,6 +827,10 @@ def _opportunity_context(job: Job) -> str:
     for signal in opportunity.get("signals") or []:
         if not isinstance(signal, dict):
             continue
+        if signal.get("source") == "video_call_camera":
+            from core.video_call import camera_session
+            if camera_session(job.uid, job.char_id) is None:
+                continue
         evidence = signal.get("evidence") or []
         facts.append({
             "source": signal.get("source", ""),
@@ -1117,6 +1127,15 @@ async def tick(uid: str, char_id: str) -> None:
     # assistant turn.  Drain once per tick so every currently pending source is
     # merged into the same durable opportunity.
     for signal in store.drain_pending_signals(uid, char_id):
+        if signal.source == "video_call_camera":
+            from core.video_call import camera_session
+            if camera_session(uid, char_id) is None:
+                store.record_signal_outcome(
+                    uid, char_id, signal,
+                    disposition=Disposition.EXPIRED.value,
+                    event_status="camera_session_closed",
+                )
+                continue
         if signal.expiry > 0 and signal.expiry <= now:
             store.record_signal_outcome(
                 uid,

@@ -22,6 +22,7 @@ _receipts: OrderedDict[str, tuple[float, str, str, str, str]] = OrderedDict()
 _counts = {"accepted": 0, "busy": 0, "failed": 0, "unavailable": 0}
 _unavailable_until = 0.0
 CAMERA_ACTIVE_SECONDS = 15.0
+CAMERA_SIGNAL_INTERVAL_SECONDS = 60.0
 _camera_sessions: dict[tuple[str, str], dict[str, Any]] = {}
 
 
@@ -39,6 +40,32 @@ def close_camera(uid: str, char_id: str, token_label: str) -> None:
         for receipt, details in list(_receipts.items()):
             if details[1:4] == (uid, char_id, token_label):
                 _receipts.pop(receipt, None)
+        from core.autonomy import store
+        store.discard_pending_signals_by_source(uid, char_id, {"video_call_camera"})
+
+
+def _queue_camera_signal(uid: str, char_id: str, session: dict[str, Any], description: str, now: float) -> None:
+    if description == session.get("last_signaled_description"):
+        return
+    if now - session.get("last_signal_at", session["opened_at"]) < CAMERA_SIGNAL_INTERVAL_SECONDS:
+        return
+    from core.autonomy.models import ActionMode, Signal
+    from core.autonomy import store
+    signal = Signal(
+        source="video_call_camera",
+        evidence=[{"fact": "video_call_camera_changed", "description": description[:300],
+                   "trust": "untrusted_visual_description"}],
+        reason="The active video call camera scene changed; decide whether to act or stay silent.",
+        expiry=time.time() + 45,
+        priority=0.35,
+        action_mode=ActionMode.REFLECT.value,
+        confidence=0.6,
+    )
+    queued, _ = store.enqueue_signal(uid, char_id, signal,
+                                     dedupe_key=f"video-call-camera:{uid}:{char_id}:{int(time.time() // 60)}")
+    if queued:
+        session["last_signal_at"] = now
+        session["last_signaled_description"] = description
 
 
 def camera_status() -> dict[str, Any]:
@@ -103,7 +130,9 @@ async def observe(frame: bytes, *, uid: str, char_id: str, token_label: str) -> 
     key = (uid, char_id)
     session = camera_session(uid, char_id)
     if session is None or session["token_label"] != token_label:
-        session = {"seen_at": time.monotonic(), "token_label": token_label, "description": ""}
+        opened = time.monotonic()
+        session = {"seen_at": opened, "opened_at": opened,
+                   "token_label": token_label, "description": ""}
         _camera_sessions[key] = session
     else:
         session["seen_at"] = time.monotonic()
@@ -143,6 +172,11 @@ async def observe(frame: bytes, *, uid: str, char_id: str, token_label: str) -> 
     if _camera_sessions.get(key) is not session:
         return {"status": "closed"}
     session.update(seen_at=now, description=description)
+    try:
+        _queue_camera_signal(uid, char_id, session, description, now)
+    except Exception:
+        # Camera observation and chat receipts remain available if autonomy state is unavailable.
+        pass
     _prune(now)
     receipt = secrets.token_urlsafe(24)
     _receipts[receipt] = (now + OBSERVATION_TTL_SECONDS, uid, char_id, token_label, description)
