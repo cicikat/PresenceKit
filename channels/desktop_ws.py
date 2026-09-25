@@ -247,6 +247,14 @@ async def push_action_and_wait(
         _pending_acks.pop(msg_id, None)
 
 
+async def push_video_call_invite(invite_id: str, char_id: str, expires_in_seconds: int) -> bool:
+    """Invite notification only; the user's decision returns on the scoped HTTP endpoint."""
+    return await _send_json({
+        "type": "video_call_invite",
+        "invite_id": invite_id,
+        "char_id": char_id,
+        "expires_in_seconds": expires_in_seconds,
+    })
 async def handle_connection(ws: WebSocket) -> None:
     """处理一个新 WS 连接的完整生命周期。由路由层调用。"""
     global _current_ws, _last_pong, _connect_time, _heartbeat_task
@@ -254,6 +262,8 @@ async def handle_connection(ws: WebSocket) -> None:
 
     async with _lock:
         if _current_ws is not None:
+            from core.video_call_invite import disconnect as disconnect_video_invites
+            disconnect_video_invites()
             try:
                 await _current_ws.close(code=1000, reason="replaced by new connection")
             except Exception:
@@ -290,6 +300,8 @@ async def handle_connection(ws: WebSocket) -> None:
             if _current_ws is ws:
                 _current_ws = None
                 _connect_time = 0.0
+                from core.video_call_invite import disconnect as disconnect_video_invites
+                disconnect_video_invites()
                 if ch is not None:
                     ch.set_active(False)
         logger.info("[desktop_ws] 连接已清理")

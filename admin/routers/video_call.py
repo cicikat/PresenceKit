@@ -29,7 +29,39 @@ async def video_call_state(_auth=Depends(require_scopes("chat"))):
 @router.get("/observability/video-call", summary="视频电话视觉处理计数")
 async def video_call_observability(_auth=Depends(require_scopes("state.read"))):
     from core.config_loader import get_config
-    return video_call.snapshot(get_config())
+    from core.video_call_invite import snapshot as invite_snapshot
+    return {**video_call.snapshot(get_config()), "invites": invite_snapshot()}
+
+
+class VideoCallInviteDecision(BaseModel):
+    invite_id: str
+    status: str
+
+
+@router.post("/video-call/invite/respond", summary="响应角色来电")
+async def respond_video_call_invite(
+    body: VideoCallInviteDecision,
+    x_presence_session: str | None = Header(None, alias="X-Presence-Session"),
+    auth=Depends(require_scopes("chat")),
+):
+    from core.video_call_invite import respond
+    uid, char_id, _label = _camera_scope(x_presence_session, auth)
+    if not respond(uid, char_id, body.invite_id, body.status):
+        raise HTTPException(status_code=409, detail="invite_unavailable")
+    return {"accepted": True}
+
+
+@router.post("/video-call/invite/hangup", summary="报告主人挂断已接通视频电话")
+async def hangup_video_call_invite(
+    body: VideoCallInviteDecision,
+    x_presence_session: str | None = Header(None, alias="X-Presence-Session"),
+    auth=Depends(require_scopes("chat")),
+):
+    from core.video_call_invite import hangup
+    uid, char_id, _label = _camera_scope(x_presence_session, auth)
+    if not hangup(uid, char_id, body.invite_id):
+        raise HTTPException(status_code=409, detail="call_unavailable")
+    return {"accepted": True}
 
 
 @router.post("/video-call/close", summary="关闭当前视频电话摄像头观察")
