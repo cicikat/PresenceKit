@@ -54,7 +54,7 @@ PresenceKit（本仓，后端 / 唯一业务真相源）
 - 自动付款、自动发帖、任意 shell/文件系统权限。Agent Runtime 的 process/browser/workspace 都是有界能力，默认关。
 - 已实现的统一 EventBus / 新桌面 WS v1。那些是历史/延后设计，见 [docs/interaction-event-model.md](docs/interaction-event-model.md)、[docs/v1-release-contract.md](docs/v1-release-contract.md)。
 
-保守默认：scheduler、autonomy、MCP、硬件、IME、视觉按需截图、生活记录角色可读、小红书读取等多半默认关。能聊天 ≠ 会主动找你、会截屏、会动硬件。
+保守默认：scheduler、autonomy、MCP、硬件、IME、视觉按需截图、视频电话摄像头观察、生活记录角色可读、小红书读取等多半默认关。能聊天 ≠ 会主动找你、会截屏、会动硬件。
 
 ---
 
@@ -67,6 +67,7 @@ PresenceKit（本仓，后端 / 唯一业务真相源）
 - **主动下行**：桌宠优先 `/ws/desktop`，瞬时失败可降级文件队列（remote 部署不写本机 fallback）；手机走 durable `/mobile/poll` + `/mobile/ack`，可选 ntfy/relay **只发 signal**；ESP32 走 `/ws/device`（无文件降级）。
 - **跨通道接续**：切换通道时注入接续提示；canonical 回复文本是记忆真相，桌面 `message_segments` 只是叙事视图。
 - **媒体**：图片识别（独立视觉连接 + OCR + 手机覆盖）、上传 ingest、可选 STT（命名连接或本地 Whisper）、TTS（GPT-SoVITS 等）、情绪表情包（与 TTS 互斥；QQ 走图片段，桌宠/手机走自包含 sticker payload）。
+- **桌面视频电话**：可进入与当前角色的 3D/Live2D 视频电话房间，并按需播放 TTS。用户可以明确打开桌面摄像头并保留本地预览；只有独立的 `image_presets.routes.video_call` 路由生效后，摄像头帧才会送入视觉识别。该用途默认未配置/关闭，只接受启用的本机回环（`localhost`、`127.0.0.1` 或 `::1`）Chat Completions 视觉连接。建议使用本地 VLM，降低隐私和延迟风险。后端不持久化原始帧，识别结果有界、短时有效且只能消费一次。该摄像头合同仅供桌面端使用；周期观察可产生主动候选，但仍受免打扰、Dream、预算、冷却和发言闸门约束。真实摄像头与模型联合验收仍属于 `observe` 边界。控制面与跨仓契约见 [docs/feature-control-surface.md](docs/feature-control-surface.md)、[docs/three-repo-interface-catalog.md](docs/three-repo-interface-catalog.md)。
 - **思考/独白**：可选 native reasoning 归档（不进记忆）、前置独白、角色心声文风；桌面可展开，手机思考 UI 仍为 roadmap。见 [docs/thinking-voice.md](docs/thinking-voice.md)、[docs/audio-perception.md](docs/audio-perception.md)。
 
 ### 记忆（后端独占）

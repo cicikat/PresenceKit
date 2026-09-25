@@ -54,7 +54,7 @@ Cross-repo contracts and gaps: [docs/three-repo-doc-index.md](docs/three-repo-do
 - Automatic payment, automatic posting, or unbounded shell/filesystem power. Agent Runtime process/browser/workspace capabilities are bounded and off by default.
 - A shipped unified EventBus or desktop WebSocket v1. Those remain historical / deferred: [docs/interaction-event-model.md](docs/interaction-event-model.md), [docs/v1-release-contract.md](docs/v1-release-contract.md).
 
-Conservative defaults: scheduler, autonomy, MCP, hardware, IME, on-demand screenshots, character-readable life records, and Xiaohongshu reading are mostly **off**. Being able to chat does not mean the character will message first, capture the screen, or move hardware.
+Conservative defaults: scheduler, autonomy, MCP, hardware, IME, on-demand screenshots, video-call camera observation, character-readable life records, and Xiaohongshu reading are mostly **off**. Being able to chat does not mean the character will message first, capture the screen, or move hardware.
 
 ---
 
@@ -67,6 +67,7 @@ Conservative defaults: scheduler, autonomy, MCP, hardware, IME, on-demand screen
 - **Proactive delivery**: desktop prefers `/ws/desktop` (file-queue fallback only for transient local failure; remote deploys do not write a local fallback); mobile uses durable `/mobile/poll` + `/mobile/ack`, optional ntfy/relay **signals only**; ESP32 uses `/ws/device` (no file fallback).
 - **Cross-channel continuity**: switching channels injects a pickup hint. Canonical reply text is the memory source of truth; desktop `message_segments` is a narrative view only.
 - **Media**: image recognition (named vision connections + OCR + phone override), upload ingest, optional STT (named remote connection or local Whisper), TTS (e.g. GPT-SoVITS), mood stickers (mutually exclusive with TTS; QQ image segment vs self-contained desktop/mobile sticker payload).
+- **Desktop video calls**: enter a 3D/Live2D call room with the active character, with optional TTS playback. The user can explicitly open the desktop camera and keep a local preview; camera frames are sent for observation only after the separate `image_presets.routes.video_call` route is effective. This route is unconfigured/off by default and accepts only an enabled loopback (`localhost`, `127.0.0.1`, or `::1`) Chat Completions vision connection. A local VLM is recommended for privacy and latency. Raw frames are not persisted by the backend; observations are bounded, short-lived, and one-time. The camera contract is desktop-only; periodic observations may create autonomy candidates but still pass DND, Dream, budget, cooldown, and speech gates. Real hardware/model joint acceptance remains an `observe` boundary. Control and cross-repo details: [docs/feature-control-surface.md](docs/feature-control-surface.md), [docs/three-repo-interface-catalog.md](docs/three-repo-interface-catalog.md).
 - **Thinking / monologue**: optional native-reasoning archive (not memory), prefixed monologue, character-voice style. Desktop can expand the bubble; mobile thinking UI is still roadmap. See [docs/thinking-voice.md](docs/thinking-voice.md), [docs/audio-perception.md](docs/audio-perception.md).
 
 ### Memory (backend-owned)
