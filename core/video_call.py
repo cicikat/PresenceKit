@@ -21,6 +21,30 @@ _local_resource = asyncio.Lock()
 _receipts: OrderedDict[str, tuple[float, str, str, str, str]] = OrderedDict()
 _counts = {"accepted": 0, "busy": 0, "failed": 0, "unavailable": 0}
 _unavailable_until = 0.0
+CAMERA_ACTIVE_SECONDS = 15.0
+_camera_sessions: dict[tuple[str, str], dict[str, Any]] = {}
+
+
+def camera_session(uid: str, char_id: str) -> dict[str, Any] | None:
+    row = _camera_sessions.get((uid, char_id))
+    if row is None or time.monotonic() - row["seen_at"] >= CAMERA_ACTIVE_SECONDS:
+        return None
+    return row
+
+
+def close_camera(uid: str, char_id: str, token_label: str) -> None:
+    row = _camera_sessions.get((uid, char_id))
+    if row is not None and row["token_label"] == token_label:
+        _camera_sessions.pop((uid, char_id), None)
+        for receipt, details in list(_receipts.items()):
+            if details[1:4] == (uid, char_id, token_label):
+                _receipts.pop(receipt, None)
+
+
+def camera_status() -> dict[str, Any]:
+    now = time.monotonic()
+    return {"active_sessions": sum(now - row["seen_at"] < CAMERA_ACTIVE_SECONDS
+                                   for row in _camera_sessions.values())}
 
 
 def local_resource() -> asyncio.Lock:
@@ -40,6 +64,7 @@ def connection_state(config: dict[str, Any]) -> dict[str, Any]:
 def snapshot(config: dict[str, Any]) -> dict[str, Any]:
     return {**connection_state(config), "vision_busy": _local_resource.locked(),
             "pending_observations": len(_receipts), "counts": dict(_counts),
+            **camera_status(),
             "retry_after_seconds": max(0, round(_unavailable_until - time.monotonic()))}
 
 
@@ -75,6 +100,13 @@ async def observe(frame: bytes, *, uid: str, char_id: str, token_label: str) -> 
     if not state["effective"]:
         raise ValueError(state["blocking_reason"])
     validate_frame(frame)
+    key = (uid, char_id)
+    session = camera_session(uid, char_id)
+    if session is None or session["token_label"] != token_label:
+        session = {"seen_at": time.monotonic(), "token_label": token_label, "description": ""}
+        _camera_sessions[key] = session
+    else:
+        session["seen_at"] = time.monotonic()
     if time.monotonic() < _unavailable_until:
         return {"status": "unavailable", "retry_after_seconds": max(1, round(_unavailable_until - time.monotonic()))}
     if _local_resource.locked():
@@ -108,6 +140,9 @@ async def observe(frame: bytes, *, uid: str, char_id: str, token_label: str) -> 
         _counts["failed"] += 1
         return {"status": "failed"}
     now = time.monotonic()
+    if _camera_sessions.get(key) is not session:
+        return {"status": "closed"}
+    session.update(seen_at=now, description=description)
     _prune(now)
     receipt = secrets.token_urlsafe(24)
     _receipts[receipt] = (now + OBSERVATION_TTL_SECONDS, uid, char_id, token_label, description)

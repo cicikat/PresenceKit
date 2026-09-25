@@ -43,11 +43,17 @@ async def test_camera_observation_is_ephemeral_scoped_and_busy_drops(monkeypatch
         return "桌面上有一本书"
     monkeypatch.setattr("core.llm_client.chat", fake_chat)
     result = await video_call.observe(_jpeg(), uid="owner", char_id="character", token_label="desktop")
+    assert video_call.camera_session("owner", "character")["description"] == "桌面上有一本书"
+    assert video_call.camera_status()["active_sessions"] >= 1
     assert result["status"] == "ready"
     receipt = result["observation_id"]
     assert video_call.consume(receipt, uid="owner", char_id="wrong", token_label="desktop") is None
     assert video_call.consume(receipt, uid="owner", char_id="character", token_label="desktop") == "桌面上有一本书"
     assert video_call.consume(receipt, uid="owner", char_id="character", token_label="desktop") is None
+    video_call.close_camera("owner", "character", "other-device")
+    assert video_call.camera_session("owner", "character") is not None
+    video_call.close_camera("owner", "character", "desktop")
+    assert video_call.camera_session("owner", "character") is None
     result = await video_call.observe(_jpeg(), uid="owner", char_id="character", token_label="desktop")
     assert video_call.consume(result["observation_id"], uid="owner", char_id="character", token_label="desktop") == "桌面上有一本书"
     async with video_call.local_resource():

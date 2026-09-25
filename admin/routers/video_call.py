@@ -21,6 +21,19 @@ async def video_call_observability(_auth=Depends(require_scopes("state.read"))):
     return video_call.snapshot(get_config())
 
 
+@router.post("/video-call/close", summary="关闭当前视频电话摄像头观察")
+async def close_camera(
+    x_presence_session: str | None = Header(None, alias="X-Presence-Session"),
+    auth=Depends(require_scopes("chat")),
+):
+    from admin.routers.chat import _owner_media_scope, _session_grant
+    label = getattr(auth, "label", "legacy-admin")
+    grant = _session_grant(x_presence_session, label)
+    uid, char_id = (grant.owner_id, grant.char_id) if grant else _owner_media_scope()
+    video_call.close_camera(uid, char_id, label)
+    return {"closed": True}
+
+
 @router.post("/video-call/observe", summary="观察当前摄像头 JPEG 帧")
 async def observe_camera_frame(
     file: UploadFile = File(...),
