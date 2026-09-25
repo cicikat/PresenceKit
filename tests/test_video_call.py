@@ -1,6 +1,7 @@
 import io
 import asyncio
 import time
+from types import SimpleNamespace
 import httpx
 
 import pytest
@@ -44,6 +45,17 @@ def test_camera_tool_uses_video_call_route_only(monkeypatch):
     assert not tool_dispatcher._is_tool_enabled("observe_video_call_camera")
     assert "observe_video_call_camera" in tool_dispatcher._TOOL_REGISTRY
     assert "observe_user_screen" in tool_dispatcher._TOOL_REGISTRY
+
+
+def test_closed_camera_blocks_merged_autonomy_talk(monkeypatch):
+    from core.autonomy import runner
+    monkeypatch.setattr(video_call, "camera_session", lambda uid, char_id: None)
+    job = SimpleNamespace(uid="owner", char_id="character", opportunity={"signals": [
+        {"source": "video_call_camera"}, {"source": "interval"},
+    ]})
+    assert runner._camera_signal_closed(job)
+    job.opportunity = {"signals": [{"source": "interval"}]}
+    assert not runner._camera_signal_closed(job)
 
 
 def test_camera_signal_uses_interval_even_when_scene_is_unchanged(monkeypatch):
