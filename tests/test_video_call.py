@@ -175,3 +175,52 @@ async def test_model_timeout_is_distinct_from_disconnection(monkeypatch):
     monkeypatch.setattr("core.llm_client.chat", timed_out)
     result = await video_call.observe(_jpeg(), uid="owner", char_id="character", token_label="desktop")
     assert result["status"] == "timeout"
+
+
+@pytest.mark.asyncio
+async def test_video_call_invite_accept_and_hangup_once(monkeypatch):
+    from core import video_call_invite
+    from core.autonomy import store
+    from channels import desktop_ws
+
+    video_call_invite.disconnect()
+    monkeypatch.setattr(desktop_ws, "is_connected", lambda: True)
+    sent = []
+
+    async def push(invite_id, char_id, seconds):
+        sent.append((invite_id, char_id, seconds))
+        return True
+
+    monkeypatch.setattr(desktop_ws, "push_video_call_invite", push)
+    queued = []
+    monkeypatch.setattr(store, "enqueue_signal", lambda *args, **kwargs: (queued.append((args, kwargs)) or True, "queued"))
+    task = asyncio.create_task(video_call_invite.invite("owner", "character"))
+    await asyncio.sleep(0)
+    invite_id = sent[0][0]
+    assert video_call_invite.respond("other", "character", invite_id, "accepted") is False
+    assert video_call_invite.respond("owner", "character", invite_id, "accepted") is True
+    assert video_call_invite.respond("owner", "character", invite_id, "declined") is False
+    assert (await task)["status"] == "accepted"
+    assert video_call_invite.hangup("owner", "character", invite_id) is True
+    assert video_call_invite.hangup("owner", "character", invite_id) is False
+    assert len(queued) == 1
+    assert queued[0][0][2].source == "video_call_hangup"
+
+
+@pytest.mark.asyncio
+async def test_video_call_invite_timeout_and_late_response(monkeypatch):
+    from core import video_call_invite
+    from channels import desktop_ws
+
+    video_call_invite.disconnect()
+    monkeypatch.setattr(video_call_invite, "INVITE_SECONDS", 0.01)
+    monkeypatch.setattr(desktop_ws, "is_connected", lambda: True)
+    sent = []
+
+    async def push(invite_id, char_id, seconds):
+        sent.append(invite_id)
+        return True
+
+    monkeypatch.setattr(desktop_ws, "push_video_call_invite", push)
+    assert (await video_call_invite.invite("owner", "character"))["status"] == "unanswered"
+    assert video_call_invite.respond("owner", "character", sent[0], "accepted") is False
