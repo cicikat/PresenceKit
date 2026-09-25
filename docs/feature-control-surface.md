@@ -193,6 +193,7 @@ Chat Completions 视觉连接（`localhost`、`127.0.0.1`、`::1`），拒绝远
 仍返回现有 TTS 设置和外部参考音频，资源列表置空并给出 `blocking_reason`。
 
 工单 265：视频电话摄像头开启且 `video_call` 路由有效时，周期识别结果每隔至少 60 秒可形成一次有期限的 autonomy 候选，即使画面没有变化；候选有效期 10 分钟，通话持续且最近 120 秒无用户发言时可进入主动评估。角色仍通过梦境、免打扰、预算、冷却与发言门控决定是否通知。`observe_video_call_camera` 仅在活跃视频电话中请求新帧，走 `/video-call/camera/poll` 与 `/video-call/camera/result` 的 10 秒单次请求，再用 `video_call` 路由识别。`POST /video-call/close` 清除会话与待消费结果；`GET /observability/video-call` 增加活跃会话及待领取请求数，不返回图像或描述正文。屏幕的 `observe_user_screen`、实验性 `/perception/visual` 和 `visual_perception` 配置均不参与摄像头链。
+工单 266：`tools.invite_video_call.enabled` 与 `allowed_char_ids` 限制发起角色；autonomy 另需该工具的显式 allowlist，不能由普通对话开关推导为主动可用。来电 10 秒超时，接通只进入视频页，主人仍自己决定摄像头和麦克风。挂断生成一次主动候选，是否通知仍遵循 Dream、DND、预算及发言间隔。只读观测见 `/observability/video-call.invites`。
 `GET/PUT /stt-vocabulary`（admin）保存最多 32 条发音/误识别词映射，默认关闭；
 本地 Whisper 使用提示词与热词，兼容 STT 使用提示词，仅对确切匹配文本做有界纠正。
 

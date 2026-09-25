@@ -1119,6 +1119,8 @@ an administrator updates the server-owned manifest.
 
 视频电话摄像头另有 `observe_video_call_camera`（工单 265）：仅活跃本机视频电话可用，借鉴屏幕按需工具的单次新帧请求、TTL 与撤销检查，但使用独立 `video_call` 图像路由。结果只作为不可信观察事实；摄像头关闭或没有有效路由时不返回旧画面。`observe_user_screen` 的设备、授权与识别路由均不变。
 
+工单 266：`invite_video_call` 是角色范围受 `tools.invite_video_call.allowed_char_ids` 控制的主人私聊工具，也可由已启用的 autonomy 工具 allowlist 调用。它向已连接桌面端送一次来电并等待最多 10 秒，返回 `accepted`、`declined`、`unanswered`、`disconnected` 或不可用状态。它不替主人接通、不打开摄像头或麦克风。主人在已接通页面挂断后，仅产生一次 `video_call_hangup` 主动候选；是否再行动或发言仍由原有闸门决定。
+
 详见仓库 `docs/screen-observation-2026-09-12.md`。后端 `observe_user_screen` 通过独立 HTTP poll/result 请求活跃电脑或手机的新截图，UUID/凭据绑定、20 秒 TTL、30 秒设备新鲜度和本地授权均参与门控；图像只在内存中处理。
 
 管理面提供全局开关、effective state 与 `/perception/screen/status` 无正文观测；电脑视觉观察页、手机系统配置页各有独立本地授权，默认关闭。全局开启时自主工具继承启用，显式工具禁用优先；角色消息继续走原通知/免打扰链路。桌面 IPC 新增可选 onDemandEnabled；手机使用专用 screen_observation 通道与无障碍 worker，不改 mobile poll/ack/relay。

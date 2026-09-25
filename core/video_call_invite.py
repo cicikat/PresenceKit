@@ -61,7 +61,6 @@ def hangup(uid: str, char_id: str, invite_id: str) -> bool:
     key = (str(uid), str(char_id))
     if _active.get(key) != invite_id:
         return False
-    _active.pop(key, None)
     from core.autonomy.models import ActionMode, Signal
     from core.autonomy import store
 
@@ -73,6 +72,7 @@ def hangup(uid: str, char_id: str, invite_id: str) -> bool:
         priority=0.7,
         action_mode=ActionMode.REFLECT.value,
     ), dedupe_key=f"video-call-hangup:{invite_id}")
+    _active.pop(key, None)
     return True
 
 
