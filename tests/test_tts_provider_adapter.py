@@ -143,6 +143,16 @@ async def test_gsv_switches_models_before_synthesis(tmp_path, monkeypatch):
     assert calls[2]["api_name"] == "/get_tts_wav"
 
     calls.clear()
+    await voice_adapter.GsvProvider().synthesize("你好。", "neutral", {
+        "api_url": "http://gsv-test", "ref_audio": str(reference),
+        "gpt_model_path": "custom.ckpt", "sovits_model_path": "custom.pth",
+        "prompt_text": "旧参考句", "ref_free": True,
+    })
+    synthesis = next(call for call in calls if call["api_name"] == "/get_tts_wav")
+    assert synthesis["ref_free"] is True
+    assert synthesis["prompt_text"] == ""
+
+    calls.clear()
     audio = await voice_adapter.GsvProvider().synthesize("你好。", "neutral", {
         "api_url": "http://gsv-test", "ref_audio": str(reference),
         "gpt_model_path": "custom.ckpt", "sovits_model_path": "custom.pth",

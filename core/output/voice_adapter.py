@@ -467,6 +467,8 @@ class GsvProvider:
             ref_audio = str(cfg.get("ref_audio", "")).strip()
             prompt_txt = reference_prompt_text(cfg, ref_audio)
             speed = float(cfg.get("speed", 1.0))
+        if cfg.get("ref_free", False):
+            prompt_txt = ""
         ref_audio = _resolve_audio_path(ref_audio, char_id=char_id)
         if not ref_audio:
             logger.warning("[voice_adapter] GSV ref_audio is not configured")
