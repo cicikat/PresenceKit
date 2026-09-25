@@ -95,7 +95,7 @@ def _resolve_gsv_model_path(path: str, *, char_id: str | None = None, category: 
             from core.userdata_assets import resolve_asset_path
             logical = resolve_asset_path(category=category, logical_id=raw, char_id=char_id)
             if logical is not None:
-                return str(logical)
+                return str(logical.resolve())
         except Exception:
             pass
     local_path = Path(raw.replace("\\", "/"))

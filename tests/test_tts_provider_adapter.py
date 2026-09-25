@@ -70,6 +70,18 @@ def test_local_gsv_model_paths_are_absolute_for_external_server(tmp_path, monkey
     ) == str(model.resolve())
 
 
+def test_logical_gsv_model_path_is_absolute_for_external_server(tmp_path, monkeypatch):
+    from core import userdata_assets
+
+    model = tmp_path / "sample.ckpt"
+    model.write_bytes(b"weight")
+    monkeypatch.setattr(userdata_assets, "resolve_asset_path", lambda **kwargs: model.relative_to(tmp_path))
+    monkeypatch.chdir(tmp_path)
+    assert voice_adapter._resolve_gsv_model_path(
+        "sample", char_id="example", category="gpt_model"
+    ) == str(model.resolve())
+
+
 def test_gsv_version_routes_require_a_complete_pair_and_keep_legacy_auto():
     cfg = {
         "api_url": "http://127.0.0.1:9872", "ref_audio": "sample.wav",
