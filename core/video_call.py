@@ -23,6 +23,7 @@ _counts = {"accepted": 0, "busy": 0, "failed": 0, "unavailable": 0}
 _unavailable_until = 0.0
 CAMERA_ACTIVE_SECONDS = 15.0
 CAMERA_SIGNAL_INTERVAL_SECONDS = 60.0
+CAMERA_SIGNAL_TTL_SECONDS = 10 * 60
 CAMERA_REQUEST_TTL_SECONDS = 10.0
 _camera_sessions: dict[tuple[str, str], dict[str, Any]] = {}
 
@@ -58,7 +59,7 @@ def _queue_camera_signal(uid: str, char_id: str, session: dict[str, Any], descri
         evidence=[{"fact": "video_call_camera_interval", "description": description[:300],
                    "trust": "untrusted_visual_description"}],
         reason="The active video call camera interval elapsed; decide whether to act or stay silent.",
-        expiry=time.time() + 45,
+        expiry=time.time() + CAMERA_SIGNAL_TTL_SECONDS,
         priority=0.35,
         action_mode=ActionMode.REFLECT.value,
         confidence=0.6,

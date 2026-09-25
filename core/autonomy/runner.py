@@ -484,8 +484,15 @@ async def run_job(job: Job) -> Run:
         if not effective_state(job.uid, job.char_id)['effective']:
             run.disposition = Disposition.SUPPRESSED_PROACTIVE_OFF.value
             return _finish(run)
-    blocked = (policy.admission(job.uid, job.char_id, state, allow_observed_activity=True)
-               if ime_job else policy.admission(job.uid, job.char_id, state))
+    camera_job = any(s.get('source') == 'video_call_camera' for s in
+                     (job.opportunity or {}).get('signals', []) if isinstance(s, dict))
+    if camera_job:
+        blocked = policy.admission(job.uid, job.char_id, state,
+                                   allow_observed_activity=True, allow_camera_silence=True)
+    elif ime_job:
+        blocked = policy.admission(job.uid, job.char_id, state, allow_observed_activity=True)
+    else:
+        blocked = policy.admission(job.uid, job.char_id, state)
     if blocked:
         _record_dream_exit_lifecycle(
             job,

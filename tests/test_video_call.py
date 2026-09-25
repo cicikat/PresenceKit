@@ -71,6 +71,7 @@ def test_camera_signal_uses_interval_even_when_scene_is_unchanged(monkeypatch):
     assert len(queued) == 1
     assert queued[0][2].source == "video_call_camera"
     assert queued[0][2].evidence[0]["description"] == "书桌"
+    assert queued[0][2].expiry - queued[0][2].created_at > 9 * 60
     video_call._queue_camera_signal("owner", "character", session, "书桌", 200.0)
     video_call._queue_camera_signal("owner", "character", session, "书桌", 201.0)
     assert len(queued) == 1

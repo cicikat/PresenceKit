@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+import time
 from typing import Any
 
 from core.autonomy.models import Disposition
@@ -130,7 +131,8 @@ class AutonomyToolDecision:
         }
 
 
-def admission(uid: str, char_id: str, state: dict, *, allow_observed_activity: bool = False) -> str | None:
+def admission(uid: str, char_id: str, state: dict, *, allow_observed_activity: bool = False,
+              allow_camera_silence: bool = False) -> str | None:
     cfg = state["config"]
     if not cfg.get("enabled", False):
         return Disposition.SUPPRESSED_PROACTIVE_OFF.value
@@ -152,9 +154,14 @@ def admission(uid: str, char_id: str, state: dict, *, allow_observed_activity: b
         return Disposition.BLOCKED_DREAM_UNCERTAIN.value
     if guard != DreamGuardStatus.ALLOW:
         return Disposition.BLOCKED_DREAM.value
-    from core.scheduler.state_machine import TriggerState, get_state
+    from core.scheduler.state_machine import TriggerState, get_state, snapshot
     trigger_state = get_state(uid)
-    if trigger_state != TriggerState.QUIET and not (allow_observed_activity and trigger_state == TriggerState.RESTLESS):
+    camera_silent = allow_camera_silence and trigger_state == TriggerState.CHATTING and (
+        time.time() - float(snapshot(uid).get("last_owner_turn_ts") or 0) >= 120
+    )
+    if trigger_state != TriggerState.QUIET and not (
+        (allow_observed_activity and trigger_state == TriggerState.RESTLESS) or camera_silent
+    ):
         return Disposition.BLOCKED_USER_ACTIVE.value
     from core.conversation_gate import conversation_lock
     if conversation_lock(uid).locked():
