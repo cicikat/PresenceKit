@@ -642,6 +642,7 @@ async def update_dream_prompt_ablation(
 
 class MailSettingsUpdate(BaseModel):
     enabled:        Optional[bool] = None
+    connection_mode: Optional[Literal["auto", "direct", "proxy"]] = None
     smtp_host:      Optional[str]  = None
     smtp_port:      Optional[int]  = None
     proxy_url:      Optional[str]  = None
@@ -664,6 +665,7 @@ def _mail_view(cfg: dict) -> dict:
     )
     return {
         "enabled":         bool(target.get("enabled", False)),
+        "connection_mode": target.get("connection_mode", "auto"),
         "smtp_host":       "" if _looks_placeholder(target.get("smtp_host", "")) else target.get("smtp_host", ""),
         "smtp_port":       int(target.get("smtp_port", 587) or 587),
         "proxy_url":       "" if _looks_placeholder(target.get("proxy_url", "")) else target.get("proxy_url", ""),
@@ -687,6 +689,8 @@ async def get_mail_settings(auth=Depends(require_scopes("admin"))):
 async def update_mail_settings(body: MailSettingsUpdate, auth=Depends(require_scopes("admin"))):
     if body.smtp_port is not None and not (1 <= body.smtp_port <= 65535):
         raise HTTPException(status_code=422, detail="smtp_port 必须在 1~65535 之间")
+    if body.connection_mode == "proxy" and not (body.proxy_url or get_config().get("mail", {}).get("proxy_url")):
+        raise HTTPException(status_code=422, detail="代理模式需要 proxy_url")
 
     full_cfg = read_config_file(CONFIG_FILE)
 

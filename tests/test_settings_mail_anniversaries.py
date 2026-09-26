@@ -57,6 +57,16 @@ def test_mail_write_and_read_back_masked(tmp_path, monkeypatch):
     assert cfg["mail"]["smtp_host"] == "smtp.gmail.com"  # 未传入，不清空
 
 
+def test_mail_direct_mode_keeps_existing_proxy_address(tmp_path, monkeypatch):
+    path = _write(tmp_path, "mail:\n  enabled: true\n  proxy_url: http://127.0.0.1:7897\n")
+    _patch(monkeypatch, path)
+    result = asyncio.run(mod.update_mail_settings(
+        mod.MailSettingsUpdate(connection_mode="direct"), auth=None,
+    ))
+    assert result["connection_mode"] == "direct"
+    assert yaml.safe_load(path.read_text(encoding="utf-8"))["mail"]["proxy_url"]
+
+
 def test_mail_update_rejects_empty_body(tmp_path, monkeypatch):
     path = _write(tmp_path, "mail:\n  enabled: false\n")
     _patch(monkeypatch, path)

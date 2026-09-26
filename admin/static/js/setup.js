@@ -116,6 +116,7 @@ async function _loadSetupMail() {
     document.getElementById('setup-mail-to-addr').value = mail.to_addr || '';
     document.getElementById('setup-mail-subject-prefix').value = mail.subject_prefix || '';
     document.getElementById('setup-mail-proxy-url').value = mail.proxy_url || '';
+    document.getElementById('setup-mail-connection-mode').value = mail.connection_mode || 'auto';
     document.getElementById('setup-mail-status').innerHTML = _setupBadge(mail.configured);
   } catch (e) {
     toast(t('setup.mail.load_error', '加载邮件通道配置失败: {error}', {error: _setupErrMsg(e)}), 'err');
@@ -125,6 +126,7 @@ async function _loadSetupMail() {
 async function saveSetupMail() {
   const body = {
     enabled: document.getElementById('setup-mail-enabled').checked,
+    connection_mode: document.getElementById('setup-mail-connection-mode').value,
   };
   const host   = document.getElementById('setup-mail-host').value.trim();
   const port   = document.getElementById('setup-mail-port').value.trim();

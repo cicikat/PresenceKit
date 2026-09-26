@@ -52,6 +52,14 @@
         </div>
         <div class="form-row col-1">
           <label class="field">
+            <span data-i18n="setup.mail.connection_mode">SMTP 连接方式</span>
+            <select id="setup-mail-connection-mode">
+              <option value="auto" data-i18n="setup.mail.connection_auto">自动（有代理地址时使用代理）</option>
+              <option value="direct" data-i18n="setup.mail.connection_direct">直连（绕过邮件代理）</option>
+              <option value="proxy" data-i18n="setup.mail.connection_proxy">代理</option>
+            </select>
+          </label>
+          <label class="field">
             <span data-i18n="setup.mail.proxy_label">proxy_url（可选，SMTP 端口被墙时用）</span>
             <input type="text" id="setup-mail-proxy-url" placeholder="http://127.0.0.1:7897">
           </label>

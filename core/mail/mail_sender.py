@@ -72,7 +72,11 @@ async def send_letter_detailed(subject: str, body_text: str) -> MailSendResult:
     from_name = str(cfg.get("from_name") or "角色").strip()
     to_addr = str(cfg["to_addr"]).strip()
     prefix = str(cfg.get("subject_prefix") or "")
-    proxy_url = str(cfg.get("proxy_url") or "").strip()
+    connection_mode = str(cfg.get("connection_mode") or "auto")
+    proxy_url = str(cfg.get("proxy_url") or "").strip() if connection_mode != "direct" else ""
+    if connection_mode == "proxy" and not proxy_url:
+        logger.error("[mail] proxy mode selected without proxy_url")
+        return MailSendResult(False, "smtp_connection_error")
     use_tls = bool(cfg.get("smtp_use_tls", smtp_port == 465))
     start_tls = bool(cfg.get("smtp_start_tls", not use_tls))
 

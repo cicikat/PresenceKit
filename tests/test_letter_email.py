@@ -272,6 +272,30 @@ def test_mail_sender_uses_proxy_socket(monkeypatch):
     assert captured["kwargs"]["sock"] is proxy_sock
 
 
+def test_mail_sender_direct_mode_bypasses_configured_proxy(monkeypatch):
+    from core.mail import mail_sender
+
+    captured = {}
+
+    async def unexpected_proxy(*_args):
+        raise AssertionError("direct mode must not open a proxy socket")
+
+    async def fake_send(_msg, **kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr("core.config_loader.get_config", lambda: {"mail": {
+        "enabled": True, "smtp_host": "smtp.example.com", "smtp_port": 587,
+        "connection_mode": "direct", "proxy_url": "http://127.0.0.1:7897",
+        "smtp_user": "from@example.com", "smtp_password": "secret",
+        "to_addr": "to@example.com",
+    }})
+    monkeypatch.setattr(mail_sender, "_open_proxy_socket", unexpected_proxy)
+    monkeypatch.setitem(sys.modules, "aiosmtplib", SimpleNamespace(send=fake_send))
+    assert asyncio.run(mail_sender.send_letter("标题", "正文")) is True
+    assert captured["port"] == 587
+    assert captured["sock"] is None
+
+
 # ── letter_reference helpers ──────────────────────────────────────────────────
 
 def _fake_letter_paths(samples_dir: Path, knowledge_dir: Path, sent_path: Path):
