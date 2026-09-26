@@ -89,7 +89,7 @@ async def evaluate_letter(letter: str) -> int:
         raw = await llm_client.chat(
             [{"role": "user", "content": prompt}],
             call_category="letter_eval",
-            max_tokens_override=5,
+            max_tokens_override=64,
         )
         match = re.search(r"[1-5]", str(raw or ""))
         return int(match.group(0)) if match else 0

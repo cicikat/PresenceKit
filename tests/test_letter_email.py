@@ -296,6 +296,18 @@ def test_mail_sender_direct_mode_bypasses_configured_proxy(monkeypatch):
     assert captured["sock"] is None
 
 
+def test_letter_quality_request_allows_model_minimum_output_budget(monkeypatch):
+    from core.mail import letter_writer
+
+    async def fake_chat(_messages, *, call_category, max_tokens_override):
+        assert call_category == "letter_eval"
+        assert max_tokens_override >= 32
+        return "4"
+
+    monkeypatch.setattr("core.llm_client.chat", fake_chat)
+    assert asyncio.run(letter_writer.evaluate_letter("正文" * 80)) == 4
+
+
 # ── letter_reference helpers ──────────────────────────────────────────────────
 
 def _fake_letter_paths(samples_dir: Path, knowledge_dir: Path, sent_path: Path):
