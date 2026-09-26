@@ -2725,6 +2725,23 @@ async def _execute_structured_impl(
     if allowed_tool_names is not None and tool_name not in allowed_tool_names:
         return _execution_outcome("tool_failed", "这项能力不在本次调用范围内。")
 
+    # A video call belongs to the desktop invite flow, even if the model picked
+    # the similarly named phone automation tool. Re-enter the normal gates for
+    # the actual tool; never enqueue this task on the mobile device.
+    if tool_name == "phone_control_start" and isinstance(tool_args, dict):
+        task = tool_args.get("task")
+        if isinstance(task, str) and any(word in task for word in ("视频通话", "视频电话", "视频聊天", "打视频")) and any(
+            word in task for word in ("邀请", "发起", "拨打", "打给", "来电", "打开视频通话")
+        ):
+            if is_group or (allowed_tool_names is not None and "invite_video_call" not in allowed_tool_names):
+                return _execution_outcome("tool_failed", "视频电话只能在已授权的桌面私聊中发起。")
+            logger.info("[tool_dispatcher] 将误选的手机自动化视频邀请转到桌面来电工具")
+            return await _execute_structured_impl(
+                "invite_video_call", {}, user_id, target_id, is_group, session_state,
+                origin=origin, char_id=char_id, bypass_read_log=bypass_read_log,
+                tool_status_observer=tool_status_observer, allowed_tool_names=allowed_tool_names,
+            )
+
     tool_info = _TOOL_REGISTRY[tool_name]
     if tool_name in _INTIFACE_TOOL_NAMES and not intiface_opted_in():
         _msg = "Intiface 硬件能力当前处于冻结状态，需要显式 opt-in"

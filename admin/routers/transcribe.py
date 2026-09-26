@@ -69,11 +69,15 @@ def _transcribe_sync(audio_path: str) -> str:
         options = {"initial_prompt": hint or None, "hotwords": hotwords() or None,
                    "vad_filter": True}
         segments, _ = model.transcribe(audio_path, language="zh", **options)
-        accepted = (
-            seg.text for seg in segments
-            if getattr(seg, "no_speech_prob", 0.0) < 0.6
-            and getattr(seg, "avg_logprob", 0.0) > -1.0
-        )
+        accepted = []
+        filtered = 0
+        for seg in segments:
+            if getattr(seg, "no_speech_prob", 0.0) >= 0.8 or getattr(seg, "avg_logprob", 0.0) <= -1.5:
+                filtered += 1
+                continue
+            accepted.append(seg.text)
+        if not accepted:
+            logger.info("[transcribe] 未识别到可用语音片段（低置信度过滤 %d 段）", filtered)
         return correct("".join(accepted).strip())
     else:
         result = model.transcribe(audio_path, language="zh", initial_prompt=hint or None)

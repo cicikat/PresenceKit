@@ -86,6 +86,27 @@ async def test_wrapper_rejects_empty_task(sandbox):
 
 
 @pytest.mark.asyncio
+async def test_video_call_mistaken_for_phone_control_routes_to_desktop(sandbox, monkeypatch):
+    calls = []
+
+    async def fake_invite(user_id, char_id):
+        calls.append((user_id, char_id))
+        return '{"status": "desktop_offline"}'
+
+    monkeypatch.setattr(tool_dispatcher, "_invite_video_call_wrapper", fake_invite)
+    monkeypatch.setitem(tool_dispatcher._TOOL_REGISTRY["invite_video_call"], "func", fake_invite)
+    monkeypatch.setattr(tool_dispatcher, "_is_tool_enabled", lambda _: True)
+    result = await tool_dispatcher.execute_structured(
+        "phone_control_start",
+        {"task": "发起与角色的视频通话邀请，打开视频通话界面"},
+        "u1", "u1", False, _Session(), origin="user_live", char_id=TEST_CHAR_ID,
+    )
+    assert result.confirmation_request is None
+    assert calls == [("u1", TEST_CHAR_ID)]
+    assert not sandbox.mobile_queue().exists()
+
+
+@pytest.mark.asyncio
 async def test_wrapper_starts_task_and_queues_mobile_behavior(sandbox, monkeypatch):
     from channels import registry
     from channels.mobile import MobileChannel

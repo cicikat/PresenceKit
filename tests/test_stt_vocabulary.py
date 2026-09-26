@@ -40,6 +40,20 @@ def test_local_whisper_receives_hints_and_keeps_model_name_out_of_internal_key(m
     assert transcribe._transcribe_sync("fixture.wav") == "我叫 暮星"
 
 
+def test_local_whisper_keeps_short_speech_with_moderate_confidence(monkeypatch):
+    from admin.routers import transcribe
+
+    class Model:
+        def transcribe(self, _path, **_kwargs):
+            segment = type("Segment", (), {
+                "text": "你好", "no_speech_prob": 0.65, "avg_logprob": -1.2,
+            })()
+            return ([segment], None)
+
+    monkeypatch.setattr(transcribe, "_stt_backend", ("faster_whisper", Model()))
+    assert transcribe._transcribe_sync("fixture.wav") == "你好"
+
+
 @pytest.mark.asyncio
 async def test_continuous_voice_receipt_uses_only_transcript_contained_in_message(monkeypatch):
     from core import audio_perception
