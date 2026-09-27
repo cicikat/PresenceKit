@@ -875,7 +875,9 @@ and does not alter source evidence. Provider timeout remains observable in the
 consolidation task and work-session status.
 # HDS 本地心率接收
 
-`hds_local.enabled`、`host`、`port`、`allowed_subnets` 仅在本地 `config.yaml`
-配置，默认关闭，修改后重启。独立 HTTP 接收端口不走代理；
+`GET/PUT /settings/hds-local`（`admin`）由调度器管理页读写本机 `config.yaml`
+中的 `enabled`、`port`、`source_mode`、`interface`、`allowed_subnets`。
+默认关闭；自动模式按选中网卡实时发现地址和网段，不保存当前 IP。
+开关启用或端口变更需要重启后端；来源网段变化即时生效。独立 HTTP 接收端口不走代理；
 `GET /watch/hds-local`（`state.read`）只读显示留存样本和最近接收状态。
 此功能不提供桌面或手机设置入口。

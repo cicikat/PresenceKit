@@ -5,6 +5,7 @@ from __future__ import annotations
 import ipaddress
 import json
 import math
+import socket
 import statistics
 import time
 from threading import Lock
@@ -24,12 +25,41 @@ def enabled() -> bool:
     return config().get("enabled") is True
 
 
+def interfaces() -> list[dict]:
+    """Discover LAN addresses at read time so DHCP changes need no config edit."""
+    try:
+        import psutil
+    except ImportError:
+        return []
+    result = []
+    for name, addresses in psutil.net_if_addrs().items():
+        for item in addresses:
+            if item.family != socket.AF_INET:
+                continue
+            try:
+                address = ipaddress.IPv4Address(item.address)
+                network = ipaddress.IPv4Network(f"{address}/{item.netmask}", strict=False)
+            except (ValueError, TypeError):
+                continue
+            if not address.is_private or address.is_loopback or address.is_link_local:
+                continue
+            if address in ipaddress.IPv4Network("198.18.0.0/15"):
+                continue
+            result.append({"name": name, "address": str(address), "network": str(network)})
+    return result
+
+
 def allowed_source(host: str) -> bool:
     try:
         address = ipaddress.ip_address(host)
         if not (address.is_private or address.is_loopback) or address.is_link_local:
             return False
-        networks = config().get("allowed_subnets") or []
+        settings = config()
+        if settings.get("source_mode", "auto") == "auto":
+            selected = settings.get("interface") or ""
+            networks = [item["network"] for item in interfaces() if not selected or item["name"] == selected]
+        else:
+            networks = settings.get("allowed_subnets") or []
         return bool(networks) and any(address in ipaddress.ip_network(item, strict=False) for item in networks)
     except (ValueError, TypeError):
         return False

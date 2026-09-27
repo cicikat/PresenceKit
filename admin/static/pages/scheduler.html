@@ -44,6 +44,20 @@
         </div>
       </div>
 
+      <div class="card" data-hide-settings-functions>
+        <div class="card-header"><h3 data-i18n="scheduler.hds.title">HDS 本地实时心率</h3><button class="btn btn-primary btn-sm" data-action="saveHdsLocalSettings" data-i18n="common.save">保存</button></div>
+        <div class="form-row">
+          <label class="checkbox-row"><input type="checkbox" id="hds-enabled"><span data-i18n="scheduler.hds.enabled">启用本地接收</span></label>
+          <label class="field"><span data-i18n="scheduler.hds.port">接收端口</span><input type="number" id="hds-port" min="1024" max="65535"></label>
+          <label class="field"><span data-i18n="scheduler.hds.interface">手表所在网卡</span><select id="hds-interface"></select></label>
+          <label class="field"><span data-i18n="scheduler.hds.source_mode">允许来源</span><select id="hds-source-mode"><option value="auto" data-i18n="scheduler.hds.auto">自动：选中网卡同网段</option><option value="manual" data-i18n="scheduler.hds.manual">手动填写网段</option></select></label>
+        </div>
+        <label class="field" id="hds-subnets-row" style="display:none"><span data-i18n="scheduler.hds.subnets">允许网段（每行一个 CIDR）</span><textarea id="hds-subnets" rows="2"></textarea></label>
+        <p><span id="hds-url" class="admin-source-hint"></span> <button class="btn btn-ghost btn-sm" data-action="copyHdsAddress" data-i18n="scheduler.hds.copy">复制地址</button></p>
+        <p id="hds-effective" class="admin-source-hint"></p>
+        <p id="hds-latest" class="admin-source-hint"></p>
+      </div>
+
       <!-- 手表设备测试 -->
       <div class="card">
         <div class="card-header"><h3 data-i18n="scheduler.watch_test_title">手表设备事件测试</h3></div>

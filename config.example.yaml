@@ -148,8 +148,9 @@ hds_local:
   enabled: false
   host: "0.0.0.0"
   port: 3476
-  allowed_subnets:
-    - "192.168.1.0/24"  # Replace with the Watch's actual LAN subnet.
+  source_mode: auto
+  interface: ""  # Optional network-interface name, chosen in the admin panel.
+  allowed_subnets: []  # Used only when source_mode is manual.
 
 admin:
   enabled: true

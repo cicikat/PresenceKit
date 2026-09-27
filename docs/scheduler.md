@@ -5,7 +5,9 @@
 ## HDS 本地心率
 
 `hds_local.enabled` 默认关闭。启用后独立监听 `hds_local.host:port`（默认 3476），
-接受 HDS 本地模式发往根路径的 HTTP `PUT`。只接收 `allowed_subnets` 中的来源，
+接受 HDS 本地模式发往根路径的 HTTP `PUT`。`source_mode: auto` 按选中网卡
+当前 IPv4 网段限制来源；`manual` 才使用 `allowed_subnets`。电脑 DHCP 地址变化
+无需修改配置，管理面调度器页会显示当前可填写的局域网 URL。
 单条报文最多 8 KiB；该入站链不使用系统 HTTP 代理。示例配置见 `config.example.yaml`。
 样本保存到 uid 全局 `health_state.hds_samples`，最多保留 1440 条，并有只读
 `GET /watch/hds-local`（`state.read`）可查看最近 20 条和最新接收时间。

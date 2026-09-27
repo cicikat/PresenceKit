@@ -81,6 +81,7 @@ async function loadRelaySettings(){try{const d=await api('GET','/settings/relay'
 async function saveRelaySettings(){const body={relay_base_url:document.getElementById('relay-base-url').value.trim(),relay_topic:document.getElementById('relay-topic').value.trim()};const token=document.getElementById('relay-token').value.trim();if(token)body.relay_token=token;try{await api('PUT','/settings/relay',body);toast(t('status.relay.saved','中继配置已保存'),'ok');loadRelaySettings();}catch(e){toast(t('common.save_failed','保存失败: {error}',{error:e.message}),'err');}}
 async function loadScheduler() {
   loadSchedulerConfig();
+  loadHdsLocalSettings();
   _startWatchStatusPoller();
   loadProactiveLedger();
   try {
@@ -117,6 +118,97 @@ async function loadScheduler() {
   }
 }
 
+let _hdsInterfaces = [];
+async function loadHdsLocalSettings() {
+  const enabled = document.getElementById('hds-enabled');
+  if (!enabled) return;
+  try {
+    const [settings, status] = await Promise.all([
+      api('GET', '/settings/hds-local'), api('GET', '/watch/hds-local'),
+    ]);
+    _hdsInterfaces = settings.interfaces || [];
+    enabled.checked = settings.enabled;
+    document.getElementById('hds-port').value = settings.port;
+    const selection = document.getElementById('hds-interface');
+    selection.innerHTML = `<option value="">${escapeHtml(_scText('scheduler.hds.all_interfaces', '全部本机网卡'))}</option>` +
+      _hdsInterfaces.map(item => `<option value="${escapeHtml(item.name)}">${escapeHtml(item.name)} · ${escapeHtml(item.address)}</option>`).join('');
+    selection.value = settings.interface || '';
+    document.getElementById('hds-source-mode').value = settings.source_mode;
+    document.getElementById('hds-subnets').value = (settings.allowed_subnets || []).join('\n');
+    _showHdsMode();
+    _showHdsAddress(settings.port);
+    document.getElementById('hds-effective').textContent = settings.restart_required
+      ? _scText('scheduler.hds.restart', '设置已保存；接收监听变更需要重启后端。')
+      : settings.effective_listening
+        ? _scText('scheduler.hds.listening', '接收服务正在监听。')
+        : _scText('scheduler.hds.stopped', '接收服务未启动。');
+    const latest = status.latest;
+    document.getElementById('hds-latest').textContent = latest
+      ? _scText('scheduler.hds.latest', '最近心率：{value} bpm，时间：{time}；已留存 {count} 条。', {value: latest.value, time: new Date(latest.received_at * 1000).toLocaleString(), count: status.sample_count_retained})
+      : _scText('scheduler.hds.no_samples', '尚未收到 HDS 心率样本。');
+  } catch (e) { toast(_scText('scheduler.hds.load_failed', '读取 HDS 设置失败：{error}', {error: e.message}), 'err'); }
+}
+
+function _showHdsMode() {
+  const manual = document.getElementById('hds-source-mode')?.value === 'manual';
+  document.getElementById('hds-subnets-row').style.display = manual ? '' : 'none';
+  document.getElementById('hds-interface').disabled = manual;
+}
+
+function _showHdsAddress(port) {
+  const selected = document.getElementById('hds-interface')?.value || '';
+  const urls = _hdsInterfaces.filter(item => !selected || item.name === selected)
+    .map(item => `http://${item.address}:${port}/`);
+  document.getElementById('hds-url').textContent = urls.length
+    ? _scText('scheduler.hds.address', '手表 HDS 中填写：{urls}', {urls: urls.join('  ·  ')})
+    : _scText('scheduler.hds.no_address', '未发现可用的局域网 IPv4 地址。');
+}
+
+async function copyHdsAddress() {
+  const selected = document.getElementById('hds-interface')?.value || '';
+  if (!selected) {
+    toast(_scText('scheduler.hds.choose_interface', '先选择手表所在网卡'), 'warn');
+    return;
+  }
+  const item = _hdsInterfaces.find(entry => entry.name === selected);
+  if (!item) return;
+  const url = `http://${item.address}:${document.getElementById('hds-port').value}/`;
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(url);
+    } else {
+      const field = document.createElement('textarea');
+      field.value = url;
+      document.body.appendChild(field);
+      field.select();
+      const copied = document.execCommand('copy');
+      field.remove();
+      if (!copied) throw new Error('copy unavailable');
+    }
+    toast(_scText('scheduler.hds.copied', '地址已复制'), 'ok');
+  } catch (error) { toast(_scText('scheduler.hds.copy_failed', '无法复制地址，请手动选择文本'), 'warn'); }
+}
+
+async function saveHdsLocalSettings() {
+  const body = {
+    enabled: document.getElementById('hds-enabled').checked,
+    port: Number(document.getElementById('hds-port').value),
+    source_mode: document.getElementById('hds-source-mode').value,
+    interface: document.getElementById('hds-interface').value,
+    allowed_subnets: document.getElementById('hds-subnets').value.split(/\s+/).filter(Boolean),
+  };
+  try {
+    await api('PUT', '/settings/hds-local', body);
+    toast(_scText('scheduler.hds.saved', 'HDS 设置已保存'), 'ok');
+    await loadHdsLocalSettings();
+  } catch (e) { toast(_scText('common.save_failed', '保存失败: {error}', {error:e.message}), 'err'); }
+}
+
+document.addEventListener('change', event => {
+  if (event.target?.id === 'hds-source-mode') _showHdsMode();
+  if (event.target?.id === 'hds-interface' || event.target?.id === 'hds-port') _showHdsAddress(document.getElementById('hds-port').value);
+});
+
 function _fmtSec(s) {
   if (s < 60)  return _scText('scheduler.duration.seconds', '{count} 秒', {count: s});
   if (s < 3600) return _scText('scheduler.duration.minutes', '{count} 分钟', {count: Math.round(s / 60)});
@@ -150,6 +242,7 @@ async function testWatchEvent(type) {
 let _watchStatusTimer = null;
 
 async function loadWatchStatus() {
+  loadHdsLocalStatus();
   try {
     const d = await api('GET', '/watch/status');
     const hr    = document.getElementById('ws-hr');
@@ -182,6 +275,18 @@ async function loadWatchStatus() {
 
     last.textContent = `${_scTriggerLabel(d.event_type)} · ${d.timestamp || ''}`;
   } catch(e) { /* 静默失败 */ }
+}
+
+async function loadHdsLocalStatus() {
+  const el = document.getElementById('hds-latest');
+  if (!el) return;
+  try {
+    const status = await api('GET', '/watch/hds-local');
+    const latest = status.latest;
+    el.textContent = latest
+      ? _scText('scheduler.hds.latest', '最近心率：{value} bpm，时间：{time}；已留存 {count} 条。', {value: latest.value, time: new Date(latest.received_at * 1000).toLocaleString(), count: status.sample_count_retained})
+      : _scText('scheduler.hds.no_samples', '尚未收到 HDS 心率样本。');
+  } catch (e) { /* 状态轮询静默失败 */ }
 }
 
 // 调度器页面激活时启动 Watch 状态自动刷新

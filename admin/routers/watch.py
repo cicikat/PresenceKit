@@ -14,6 +14,9 @@ Watch 事件接收路由
 from datetime import datetime, datetime as _dt
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
+
+from admin.config_control import read_config_file, write_config_file
 
 from admin.auth import require_scopes
 from core.config_loader import get_config
@@ -34,6 +37,76 @@ def _append_heart_rate_event(user_id: str, value: int, triggered: bool):
     health_state.mutate(user_id, append_event)
 
 router = APIRouter()
+
+
+class HdsLocalSettings(BaseModel):
+    enabled: bool
+    port: int = Field(ge=1024, le=65535)
+    source_mode: str
+    interface: str = ""
+    allowed_subnets: list[str] = Field(default_factory=list, max_length=8)
+
+
+@router.get("/settings/hds-local", summary="HDS 本地接收设置")
+async def get_hds_local_settings(auth=Depends(require_scopes("admin"))):
+    from core.hds_local import config, interfaces
+    from admin.hds_server import bound_port
+
+    settings = config()
+    candidates = interfaces()
+    port = int(settings.get("port") or 3476)
+    return {
+        "enabled": settings.get("enabled") is True,
+        "port": port,
+        "source_mode": settings.get("source_mode", "auto"),
+        "interface": settings.get("interface") or "",
+        "allowed_subnets": settings.get("allowed_subnets") or [],
+        "interfaces": candidates,
+        "urls": [f"http://{item['address']}:{port}/" for item in candidates],
+        "effective_listening": bound_port() is not None,
+        "effective_port": bound_port(),
+        "restart_required": (settings.get("enabled") is True) != (bound_port() is not None)
+        or (bound_port() is not None and port != bound_port()),
+    }
+
+
+@router.put("/settings/hds-local", summary="保存 HDS 本地接收设置")
+async def update_hds_local_settings(body: HdsLocalSettings, auth=Depends(require_scopes("admin"))):
+    import ipaddress
+    from admin.hds_server import bound_port
+    from core.hds_local import interfaces
+    from core.config_loader import get_config_path
+
+    if body.source_mode not in {"auto", "manual"}:
+        raise HTTPException(422, "source_mode must be auto or manual")
+    if body.source_mode == "auto" and body.interface and body.interface not in {item["name"] for item in interfaces()}:
+        raise HTTPException(422, "network interface unavailable")
+    if body.source_mode == "manual":
+        if not body.allowed_subnets:
+            raise HTTPException(422, "manual mode needs at least one subnet")
+        try:
+            for subnet in body.allowed_subnets:
+                network = ipaddress.ip_network(subnet, strict=False)
+                if network.version != 4 or network.prefixlen < 16 or not network.is_private:
+                    raise ValueError("subnet must be private IPv4 with prefix >= 16")
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    config_path = get_config_path()
+    full_cfg = read_config_file(config_path)
+    full_cfg["hds_local"] = {
+        "enabled": body.enabled,
+        "host": "0.0.0.0",
+        "port": body.port,
+        "source_mode": body.source_mode,
+        "interface": body.interface if body.source_mode == "auto" else "",
+        "allowed_subnets": body.allowed_subnets if body.source_mode == "manual" else [],
+    }
+    write_config_file(config_path, full_cfg)
+    from core.config_loader import reload_config
+    reload_config()
+    return {"saved": True, "restart_required": body.enabled != (bound_port() is not None)
+            or (bound_port() is not None and body.port != bound_port())}
 
 
 @router.get("/watch/hds-local", summary="HDS 本地心率只读状态")

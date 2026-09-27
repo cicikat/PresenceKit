@@ -54,7 +54,7 @@ function decorateSettingsPanels(page, root) {
     };
     updateSummary(); heading.append(subtitle); summary.append(heading);
     const functions = [...new Set([...card.querySelectorAll('[data-action]')].map(el=>el.dataset.action).filter(name=>name.startsWith('save')))];
-    if (functions.length) {
+    if (functions.length && !card.hasAttribute('data-hide-settings-functions')) {
       const names = document.createElement('small'); names.className = 'settings-functions'; names.textContent = functions.join(' · '); heading.append(names);
     }
     // Existing server-backed status nodes remain live, with their original IDs.

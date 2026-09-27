@@ -6,6 +6,11 @@ from core import hds_local
 from core.config_loader import get_config
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+_bound_port: int | None = None
+
+
+def bound_port() -> int | None:
+    return _bound_port
 
 
 @app.put("/")
@@ -21,9 +26,14 @@ async def receive(request: Request):
         raise HTTPException(400, "invalid content length") from None
     if declared_size > 8192:
         raise HTTPException(413, "payload too large")
-    body = await request.body()
-    if len(body) > 8192:
-        raise HTTPException(413, "payload too large")
+    parts = []
+    received = 0
+    async for chunk in request.stream():
+        received += len(chunk)
+        if received > 8192:
+            raise HTTPException(413, "payload too large")
+        parts.append(chunk)
+    body = b"".join(parts)
     try:
         payload = __import__("json").loads(body)
         uid = str(get_config().get("scheduler", {}).get("owner_id") or "")
@@ -36,14 +46,20 @@ async def receive(request: Request):
 
 async def start():
     import uvicorn
+    global _bound_port
 
     settings = hds_local.config()
+    port = int(settings.get("port") or 3476)
     server = uvicorn.Server(uvicorn.Config(
         app=app,
         host=str(settings.get("host") or "0.0.0.0"),
-        port=int(settings.get("port") or 3476),
+        port=port,
         loop="asyncio",
         log_level="info",
         proxy_headers=False,
     ))
-    await server.serve()
+    _bound_port = port
+    try:
+        await server.serve()
+    finally:
+        _bound_port = None
