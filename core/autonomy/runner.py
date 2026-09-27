@@ -1230,10 +1230,10 @@ async def tick(uid: str, char_id: str) -> None:
             adapt_memory_reactivation,
             adapt_topic_followup,
         )
-        from core.scheduler.triggers.watch import get_last_heart_rate_event
+        from core.hds_local import latest_change
 
         external: list[Signal] = []
-        heart_rate = adapt_heart_rate(get_last_heart_rate_event(), now=now)
+        heart_rate = adapt_heart_rate(latest_change(uid, now=now), now=now)
         if heart_rate is not None:
             external.append(heart_rate)
         try:

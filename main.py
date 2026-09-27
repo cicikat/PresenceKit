@@ -960,6 +960,9 @@ async def _main_with_services():
         logger.warning("Dream Reality continuation recovery failed to start", exc_info=True)
 
     tasks = []
+    if cfg.get("hds_local", {}).get("enabled") is True:
+        from admin.hds_server import start as start_hds_local
+        tasks.append(asyncio.create_task(_run_long_lived_service("hds_local", start_hds_local())))
     from core import xiaohongshu_service
     await xiaohongshu_service.startup()
     admin_cfg = cfg.get("admin", {})

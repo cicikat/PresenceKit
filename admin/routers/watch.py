@@ -35,6 +35,23 @@ def _append_heart_rate_event(user_id: str, value: int, triggered: bool):
 
 router = APIRouter()
 
+
+@router.get("/watch/hds-local", summary="HDS 本地心率只读状态")
+async def get_hds_local_status(auth=Depends(require_scopes("state.read"))):
+    from core.hds_local import config
+    from core.memory import health_state
+
+    oid = str(get_config().get("scheduler", {}).get("owner_id") or "")
+    samples = (health_state.load(oid).get("hds_samples") or []) if oid else []
+    settings = config()
+    return {
+        "enabled": settings.get("enabled") is True,
+        "port": settings.get("port", 3476),
+        "sample_count_retained": len(samples),
+        "latest": samples[-1] if samples else None,
+        "recent": samples[-20:],
+    }
+
 # 最近一次 Watch 事件快照（内存缓存，重启清零）
 _last_watch_data: dict = {}
 

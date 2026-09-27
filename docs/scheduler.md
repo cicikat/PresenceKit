@@ -2,6 +2,19 @@
 
 ## IME 扫描
 
+## HDS 本地心率
+
+`hds_local.enabled` 默认关闭。启用后独立监听 `hds_local.host:port`（默认 3476），
+接受 HDS 本地模式发往根路径的 HTTP `PUT`。只接收 `allowed_subnets` 中的来源，
+单条报文最多 8 KiB；该入站链不使用系统 HTTP 代理。示例配置见 `config.example.yaml`。
+样本保存到 uid 全局 `health_state.hds_samples`，最多保留 1440 条，并有只读
+`GET /watch/hds-local`（`state.read`）可查看最近 20 条和最新接收时间。
+
+autonomy 每 tick 读取近 3 分钟样本，至少 3 条、跨度至少 15 秒；结合近 30 分钟
+基线识别持续高位或相对变化，同方向 20 分钟内至多产生一次候选。
+候选仍走 autonomy 的准入与发言闸门。旧 `/watch/event` 心率捷径不进入此链。
+该规则只用于对话时机，不作医疗判断。
+
 既有 scheduler 循环在 autonomy tick 前执行 core.ime_awareness.tick，外层45秒上限；没有新增全局 worker，接收 HTTP 不调用模型。
 
 
