@@ -998,7 +998,7 @@ def _completed_disposition(saw_tool: bool, saw_self_change: bool) -> str:
 def _self_context_message(context: dict) -> dict:
     return {
         "role": "system",
-        "content": f"Self Capability control state: {json.dumps(context, ensure_ascii=False)}. You may use manage_self_capability only for these IDs, with this revision and a new action_id.",
+        "content": f"Self Capability control state: {json.dumps(context, ensure_ascii=False)}. You may use manage_self_capability only for these IDs, with this revision and a new action_id. Read read_self_action_history before claiming any prior capability change or failure.",
         "_layer": "autonomy_self_management",
     }
 
@@ -1014,6 +1014,14 @@ def _runtime_tools(uid: str, char_id: str, state: dict) -> tuple[list[dict], dic
         tools.append({"type": "function", "function": {"name": "manage_self_capability", "description": gateway["description"], "parameters": gateway["parameters"]}})
     else:
         context = None
+    from core.self_management.policy import feature_enabled
+    if feature_enabled():
+        for name in ("list_self_capabilities", "read_self_action_history"):
+            info = _TOOL_REGISTRY[name]
+            if _is_tool_enabled(name):
+                tools.append({"type": "function", "function": {
+                    "name": name, "description": info["description"], "parameters": info["parameters"],
+                }})
     return tools, context
 
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import time
+from collections import deque
 from copy import deepcopy
 from typing import Any
 
@@ -75,3 +76,38 @@ def read_audit(uid: str, char_id: str, *, limit: int = 50) -> list[dict[str, Any
         return rows[-max(1, min(int(limit), 200)):]
     except Exception:
         return []
+
+
+def query_audit(uid: str, char_id: str, *, time_range: str = "24h",
+                capability_id: str = "", status: str = "") -> list[dict[str, Any]]:
+    """Read bounded, agent-safe Self Capability receipts from the durable audit."""
+    seconds = {"24h": 86400, "7d": 604800, "30d": 2592000}.get(time_range, 86400)
+    cutoff = time.time() - seconds
+    rows: deque[dict[str, Any]] = deque(maxlen=50)
+    try:
+        path = get_paths().self_management_audit(uid, char_id=char_id)
+        with path.open(encoding="utf-8") as stream:
+            for line in stream:
+                item = json.loads(line)
+                if not isinstance(item, dict) or float(item.get("timestamp") or 0) < cutoff:
+                    continue
+                if item.get("actor") != "agent":
+                    continue
+                if capability_id and item.get("capability_id") != capability_id:
+                    continue
+                if status and ("success" if item.get("result") in {"applied", "idempotent"} else "failed") != status:
+                    continue
+                receipt = {key: item.get(key) for key in (
+                    "timestamp", "event_id", "action_id", "run_id", "job_id", "source",
+                    "capability_id", "requested_action", "requested_value", "result", "old_value", "new_value",
+                    "old_effective_value", "new_effective_value", "revision_before", "revision_after",
+                )}
+                for key in ("old_value", "new_value", "old_effective_value", "new_effective_value"):
+                    if not isinstance(receipt[key], (bool, int)) and receipt[key] is not None:
+                        receipt[key] = "<structured or redacted>"
+                rows.append(receipt)
+    except FileNotFoundError:
+        pass
+    except Exception:
+        return []
+    return list(reversed(rows))

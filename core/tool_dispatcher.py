@@ -877,6 +877,7 @@ async def _manage_self_capability_wrapper(
 ) -> str:
     """Narrow internal gateway; it never accepts a config path or secret."""
     from core.self_management.models import CapabilityChange
+    from core.self_management.registry import _canonical
     from core.self_management.service import agent_change
 
     result = agent_change(
@@ -892,9 +893,48 @@ async def _manage_self_capability_wrapper(
         ),
         source=origin,
     )
-    if result.ok:
-        return f"Self capability updated: {capability_id}; revision={result.revision}."
-    return f"Self capability change was not applied: {result.code}; revision={result.revision}."
+    from core.self_management.service import view
+
+    canonical_id = _canonical(capability_id)
+    row = next((item for item in view(user_id, char_id)["capabilities"]
+                if item["capability_id"] == canonical_id), None)
+    return json.dumps({
+        "operation_succeeded": result.ok,
+        "error_code": None if result.ok else result.code,
+        "capability_id": canonical_id,
+        "current_value": row.get("effective_value") if row and isinstance(row.get("effective_value"), (bool, int)) else None,
+        "revision": result.revision,
+    }, ensure_ascii=False)
+
+
+async def _list_self_capabilities_wrapper(*, user_id: str, char_id: str) -> str:
+    from core.self_management.service import view
+
+    snapshot = view(user_id, char_id)
+    rows = []
+    for row in snapshot["capabilities"]:
+        grant = row.get("grant") or {}
+        rows.append({
+            "key": row["capability_id"], "type": row["value_type"],
+            "current_value": row.get("effective_value") if isinstance(row.get("effective_value"), (bool, int)) else None,
+            "allowed_values": grant.get("constraints") or {},
+            "can_self_modify": bool(row.get("system_available") and grant.get("allowed")
+                                    and grant.get("mutable_by_agent") and not row.get("locked")
+                                    and not row.get("high_risk")),
+            "requires_owner_authorization": bool(not grant.get("allowed") or not grant.get("mutable_by_agent")
+                                                  or row.get("locked") or row.get("high_risk")),
+        })
+    return json.dumps({"revision": snapshot["revision"], "capabilities": rows}, ensure_ascii=False)
+
+
+async def _read_self_action_history_wrapper(
+    time_range: str = "24h", capability_id: str = "", status: str = "",
+    *, user_id: str, char_id: str,
+) -> str:
+    from core.self_management.store import query_audit
+
+    return json.dumps({"actions": query_audit(user_id, char_id, time_range=time_range,
+                                                capability_id=capability_id, status=status)}, ensure_ascii=False)
 
 
 _TOOL_REGISTRY["get_time"] = {
@@ -2045,6 +2085,30 @@ _TOOL_REGISTRY["manage_self_capability"] = {
     "self_management": True,
 }
 
+_TOOL_REGISTRY["list_self_capabilities"] = {
+    "func": _list_self_capabilities_wrapper,
+    "description": "List current Self Capability keys, types, values, constraints and whether this character may change each one.",
+    "dangerous": False, "category": "self_management", "effect": "read",
+    "parameters": {"type": "object", "properties": {}, "required": []},
+    "examples": ["What capabilities can I change?"],
+    "keywords": ["self capabilities", "my settings"],
+    "self_management_read": True, "echo_event_log": False,
+}
+
+_TOOL_REGISTRY["read_self_action_history"] = {
+    "func": _read_self_action_history_wrapper,
+    "description": "Read recorded Self Capability change attempts and outcomes before describing past changes.",
+    "dangerous": False, "category": "self_management", "effect": "read",
+    "parameters": {"type": "object", "properties": {
+        "time_range": {"type": "string", "enum": ["24h", "7d", "30d"]},
+        "capability_id": {"type": "string", "maxLength": 160},
+        "status": {"type": "string", "enum": ["success", "failed"]},
+    }, "required": []},
+    "examples": ["Which self capability changes failed yesterday?"],
+    "keywords": ["self action history", "capability audit"],
+    "self_management_read": True, "echo_event_log": False,
+}
+
 
 # Brief 151: Intiface is a dormant reserve capability.  Keep these entries in
 # the registry so a future, explicit opt-in can reuse the implementation, but
@@ -2256,7 +2320,7 @@ def get_tools_schema(
             allowed = settings.get("allowed_char_ids") or [] if isinstance(settings, dict) else []
             if char_id not in allowed:
                 continue
-        if info.get("self_management"):
+        if info.get("self_management") or info.get("self_management_read"):
             # The gateway is added only by trusted agent loops.
             continue
         from core.deployment_capabilities import tool_allowed
@@ -2679,6 +2743,11 @@ async def _execute_structured_impl(
         except Exception as _at_err:
             logger.debug("[tool_dispatcher] action_trace record error: %s", _at_err)
 
+    if tool_name in {"list_self_capabilities", "read_self_action_history"}:
+        from core.self_management.policy import feature_enabled
+        if is_group or origin not in {"assistant_loop", "autonomy_loop"} or not feature_enabled():
+            return _execution_outcome("tool_failed", "Self Capability history is unavailable in this context.")
+
     if tool_name in {"search_events", "expand_event_window", "get_related_events", "search_memory_dossiers", "read_memory_dossier", "search_dossier_events", "update_memory_dossier", "get_memory_consolidation_status", "request_memory_consolidation", "read_life_records", "reread_image", "write_artifact", "read_artifact", "list_artifacts"} and is_group:
         _trace("failed", "reality_event_tools_forbidden_in_group")
         return _execution_outcome("tool_failed")
@@ -2766,6 +2835,9 @@ async def _execute_structured_impl(
         if origin not in {"assistant_self_management", "autonomy_self_management"}:
             _trace("failed", "self-management origin rejected")
             return _execution_outcome("tool_failed", "这项自主管理能力不能在当前上下文中调用。")
+    elif tool_info.get("self_management_read"):
+        if origin not in {"assistant_loop", "autonomy_loop"}:
+            return _execution_outcome("tool_failed", "Self Capability read is unavailable in this context.")
     else:
         if origin in {"assistant_self_management", "autonomy_self_management"}:
             _trace("failed", "self-management origin may not execute a business tool")
@@ -2866,6 +2938,8 @@ async def _execute_structured_impl(
         record("tool_call", uid=user_id, char_id=char_id)
         if tool_info.get("self_management"):
             result = await func(user_id=user_id, char_id=char_id, origin=origin, **tool_args)
+        elif tool_info.get("self_management_read"):
+            result = await func(user_id=user_id, char_id=char_id, **tool_args)
         elif tool_name in {"observe_user_screen", "observe_video_call_camera", "invite_video_call"}:
             if is_group:
                 raise ValueError("device observation is owner-only")

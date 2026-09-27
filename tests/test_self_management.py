@@ -84,7 +84,8 @@ def test_management_tool_is_hidden_from_regular_schema_and_rejects_regular_origi
 
     from core.tool_dispatcher import execute_structured, get_tools_schema
 
-    assert "manage_self_capability" not in {schema["function"]["name"] for schema in get_tools_schema(uid="u1", char_id="char_a")}
+    regular_names = {schema["function"]["name"] for schema in get_tools_schema(uid="u1", char_id="char_a")}
+    assert not {"manage_self_capability", "list_self_capabilities", "read_self_action_history"} & regular_names
     result = asyncio.run(execute_structured("manage_self_capability", {"action": "disable", "capability_id": "autonomy.enabled", "reason": "quiet", "expected_revision": 0, "action_id": "a1"}, "u1", "u1", False, object(), origin="assistant_loop", char_id="char_a"))
     assert result.confirmation_request is None
     assert "自主管理" in result.result
@@ -122,3 +123,33 @@ def test_audit_contains_only_capability_state_not_transport_secrets(sandbox):
     rendered = repr(store.read_audit("u1", "char_a"))
     assert "authorization" not in rendered.lower()
     assert "bearer" not in rendered.lower()
+
+
+def test_self_capability_read_tools_and_explicit_change_result(sandbox):
+    import asyncio
+    import json
+
+    from core.self_management.service import user_grant
+    from core.tool_dispatcher import (
+        _list_self_capabilities_wrapper, _manage_self_capability_wrapper,
+        _read_self_action_history_wrapper,
+    )
+
+    assert user_grant("u1", "char_a", capability_id="autonomy.enabled", allowed=True,
+                      mutable_by_agent=True, constraints={}, reason="allow").ok
+    listed = json.loads(asyncio.run(_list_self_capabilities_wrapper(user_id="u1", char_id="char_a")))
+    row = next(item for item in listed["capabilities"] if item["key"] == "autonomy.enabled")
+    assert row["can_self_modify"] is True
+    changed = json.loads(asyncio.run(_manage_self_capability_wrapper(
+        "disable", "autonomy.enabled", reason="quiet", expected_revision=1,
+        action_id="change-1", user_id="u1", char_id="char_a", origin="assistant_self_management",
+    )))
+    assert changed["operation_succeeded"] is True
+    assert changed["current_value"] is False
+    history = json.loads(asyncio.run(_read_self_action_history_wrapper(
+        status="success", user_id="u1", char_id="char_a",
+    )))
+    assert len(history["actions"]) == 1
+    assert history["actions"][0]["capability_id"] == "autonomy.enabled"
+    assert history["actions"][0]["new_value"] is False
+    assert history["actions"][0]["requested_value"] is False

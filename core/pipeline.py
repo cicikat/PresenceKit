@@ -1152,6 +1152,15 @@ class Pipeline:
                     "revision": _self_management_state.get("revision", 0),
                     "capabilities": [{"id": row["capability_id"], "current": row.get("agent_selected_state"), "constraints": (row.get("grant") or {}).get("constraints", {})} for row in _mutable_rows],
                 }
+            if _self_management_enabled():
+                for _read_name in ("list_self_capabilities", "read_self_action_history"):
+                    if (_read_name not in excluded_tool_names
+                            and (caller_allowed_tool_names is None or _read_name in caller_allowed_tool_names)):
+                        _info = _TOOL_REGISTRY[_read_name]
+                        tools.append({"type": "function", "function": {
+                            "name": _read_name, "description": _info["description"],
+                            "parameters": _info["parameters"],
+                        }})
         except Exception:
             logger.warning("[pipeline.run_agentic_loop] self-management schema unavailable", exc_info=True)
         # A named tool preset is a final, model-specific *exposure* filter.  It
@@ -1210,6 +1219,12 @@ class Pipeline:
                 loop_msgs.insert(max(0, len(loop_msgs) - 1), _grounding)
         if self_management_context is not None:
             loop_msgs.insert(0, {"role": "system", "content": f"Self Capability control state: {json.dumps(self_management_context, ensure_ascii=False)}. You may use manage_self_capability only for these IDs, with this revision and a new action_id.", "_layer": "11.4_self_management"})
+        if any((tool.get("function") or tool).get("name") == "read_self_action_history" for tool in tools):
+            loop_msgs.insert(0, {"role": "system", "content": (
+                "When asked what Self Capability changes you made or which failed, read_self_action_history first. "
+                "State only recorded capability IDs and outcomes; if the audit has no matching entry, say so. "
+                "A successful operation can leave current_value=false."
+            ), "_layer": "11.4_self_action_grounding"})
         # 工具意愿软提示（Brief 29 · 5，Brief 28 补丁；Brief 120 补充尾部花括号约定，
         # Brief 122 补充"调用过程本身不入台词"）：利用 recency 位置，插在用户消息
         # 之前；只在 loop 首步注入一次，不进 short_term history（loop_msgs 本就是

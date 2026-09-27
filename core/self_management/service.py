@@ -14,6 +14,7 @@ from core.self_management.models import CapabilityChange, ChangeResult
 
 _MUTATION_LOCK = RLock()
 _AUDIT_CONTEXT: ContextVar[dict[str, str]] = ContextVar("self_management_audit_context", default={})
+_AGENT_ATTEMPT: ContextVar[dict[str, Any]] = ContextVar("self_management_agent_attempt", default={})
 _ACTION_ID_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
 
 
@@ -76,6 +77,8 @@ def _audit(uid: str, char_id: str, *, action_id: str, actor: str, source: str, c
         "old_effective_value": _safe_value(old_effective_value),
         "new_effective_value": _safe_value(new_effective_value),
     }
+    if actor == "agent":
+        record.update(_AGENT_ATTEMPT.get())
     record.update(_AUDIT_CONTEXT.get())
     store.append_audit(uid, char_id, record)
 
@@ -98,6 +101,17 @@ def _constraints_valid(capability_id: str, grant: dict, value: object) -> bool:
 
 
 def agent_change(uid: str, char_id: str, change: CapabilityChange, *, source: str) -> ChangeResult:
+    attempted = change.value if change.action == "set_value" else change.action == "enable"
+    if not isinstance(attempted, (bool, int)):
+        attempted = "<structured or redacted>"
+    token = _AGENT_ATTEMPT.set({"requested_action": str(change.action)[:32], "requested_value": attempted})
+    try:
+        return _agent_change_impl(uid, char_id, change, source=source)
+    finally:
+        _AGENT_ATTEMPT.reset(token)
+
+
+def _agent_change_impl(uid: str, char_id: str, change: CapabilityChange, *, source: str) -> ChangeResult:
     if source not in {"assistant_self_management", "autonomy_self_management"}:
         return ChangeResult(False, "invalid_source", store.load(uid, char_id)["revision"])
     capability_id = registry._canonical(change.capability_id)

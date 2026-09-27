@@ -839,6 +839,12 @@ tuple `execute()` 已删除，不再解包为 `(result, confirmation_request)`�
 统一 dispatcher 内标记调用来源，不改变权限或类别边界。`manage_self_capability` 只有在全局 Self
 Capability 开启、当前角色存在用户已授权且 `mutable_by_agent` 的未锁定能力时才加入 Path C 或 autonomy
 schema；Path C 的 `exclude_tools`、调用方白名单和 chat tool preset 仍可将它排除。
+`list_self_capabilities` 与 `read_self_action_history` 是同一 owner/角色范围的只读入口，仅在
+Self Capability 开启时向 Path C 与 autonomy 暴露，群聊及 Path A 不能调用。前者返回能力 ID、
+类型、当前标量值、约束、角色能否修改及是否需要主人授权；后者按 24h/7d/30d、能力 ID 与
+成功/失败筛选最近 50 条角色变更尝试。审计保留 action/run/job ID、请求动作及安全值、
+旧/新值、revision 与结果码；结构化值在角色视图中脱敏。`manage_self_capability` 回执明确分开
+`operation_succeeded` 和 `current_value`，所以成功设置为 `false` 不会被误读为失败。
 Path A 的 pending confirmation、missing input、快速路径和普通探针均由
 `core.pretool_router.route_pretool()` 收口，并显式传入 `origin="user_live"`；旧入口只保留兼容薄封装。
 
