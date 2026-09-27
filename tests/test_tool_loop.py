@@ -202,6 +202,29 @@ async def test_same_life_records_query_runs_once_per_chat_turn(monkeypatch):
     assert [call["tool_name"] for call in execute_calls] == ["read_life_records"]
 
 
+@pytest.mark.asyncio
+async def test_past_action_question_gets_audit_before_model_answer(monkeypatch):
+    _patch_tool_loop_config(monkeypatch, exclude_tools=[])
+    _patch_tools_schema(monkeypatch, ["get_time"])
+    monkeypatch.setattr("core.tool_audit.query", lambda *args, **kwargs: [{
+        "tool": "read_life_records", "status": "success", "time": "2026-09-26T01:00:00+00:00",
+    }])
+    monkeypatch.setattr("core.self_management.store.query_audit", lambda *args, **kwargs: [])
+    calls = _script_chat_turn(monkeypatch, [
+        ChatTurn(content="有记录", tool_calls=[], assistant_message={"role": "assistant", "content": "有记录"}),
+    ])
+
+    await _make_pipeline().run_agentic_loop(
+        [{"role": "user", "content": "昨晚你调用了什么工具？"}], uid="u1",
+        char_id=TEST_CHAR_ID, session_state=object(),
+    )
+
+    audit_messages = [message for message in calls[0]["messages"]
+                      if message.get("_layer") == "11.4_tool_audit_grounding"]
+    assert len(audit_messages) == 1
+    assert "read_life_records" in audit_messages[0]["content"]
+
+
 # ── 1. 自然终止（从未调用工具）───────────────────────────────────────────────
 
 @pytest.mark.asyncio

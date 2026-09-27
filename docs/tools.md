@@ -849,6 +849,9 @@ Path C 与 autonomy 在单次运行内复用相同参数的生活记录、自身
 能力变更后清空这些只读缓存。某能力变更失败且 revision 未变化时，下一次变更需先调用清单或
 审计查询；否则返回 `inspect_required`，阻止跨自主运行的盲试。原有 action ID 幂等及 revision
 CAS 仍生效。
+审计复核发现重复把布尔设置写成当前值仍会被旧实现记为 `applied` 并递增 revision；
+现在同值请求记为 `unchanged`，操作成功但不写盘、不递增 revision，也不算 autonomy 的
+实际能力变更。失败后检查规则仍保留。
 Path A 的 pending confirmation、missing input、快速路径和普通探针均由
 `core.pretool_router.route_pretool()` 收口，并显式传入 `origin="user_live"`；旧入口只保留兼容薄封装。
 
@@ -870,6 +873,17 @@ Path A 的 pending confirmation、missing input、快速路径和普通探针均
 
 **存储：** `data/runtime/memory/{char_id}/{uid}/action_trace.json`，JSON 数组，环形上限
 30 条，原子写（`core/safe_write.py`）。单条 schema：
+
+独立的持久审计 `core/tool_audit.py` 从 `execute_structured()` 外层对每次允许 origin 的调用追加
+按日 JSONL 回执，不受上述 30 条 UI/提示词痕迹容量限制。回执保留时间、工具、origin、白名单关键
+参数及参数指纹、执行状态、错误码、before/after（通用工具无可比状态时为 null）、request_id；
+`manage_self_capability` 的结果、请求值与前后有效值从 Self Capability 审计回执关联取得。
+原始工具参数、结果及凭据不进入该审计。`GET /observability/tool-audit/{uid}`（`memory.read`）
+按角色、24h/7d/30d、工具、状态有界读取；`read_self_action_history` 同时返回该工具执行审计
+和角色能力变更审计。新审计只记录部署后的调用，不补写旧的 action_trace。
+
+用户询问过去的工具调用或能力变更时，Path C 在模型生成前查询近七日审计并注入有界事实；
+无对应记录时不得补造具体能力名、参数或结果。常规对话不读取整份审计。
 
 ```json
 {"ts": 1789000000.0, "tool": "web_search", "origin": "user_live",

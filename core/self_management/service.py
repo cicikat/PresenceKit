@@ -129,7 +129,7 @@ def _agent_change_impl(uid: str, char_id: str, change: CapabilityChange, *, sour
         recent_audit = store.read_audit(uid, char_id, limit=200)
         last_attempt = next((row for row in reversed(recent_audit)
                              if row.get("actor") == "agent" and row.get("capability_id") == capability_id), None)
-        if (last_attempt and last_attempt.get("result") not in {"applied", "idempotent"}
+        if (last_attempt and last_attempt.get("result") not in {"applied", "idempotent", "unchanged"}
                 and int(last_attempt.get("revision_after") or 0) == revision):
             inspected = any(row.get("actor") == "agent_inspection"
                             and row.get("event_id") != last_attempt.get("event_id")
@@ -162,6 +162,13 @@ def _agent_change_impl(uid: str, char_id: str, change: CapabilityChange, *, sour
                 new_value = change.value
             from core.self_management import settings
             old_value = settings.read(uid, char_id, capability_id)
+            valid_value, _ = settings._validate_value(capability_id, new_value, spec)
+            if valid_value and type(old_value) is type(new_value) and old_value == new_value:
+                _audit(uid, char_id, action_id=change.action_id, actor="agent", source=source,
+                       capability_id=capability_id, old_value=old_value, new_value=old_value,
+                       reason=change.reason, before=revision, after=revision, result="unchanged",
+                       old_effective_value=old_value, new_effective_value=old_value)
+                return ChangeResult(True, "unchanged", revision, old_value)
             if capability_id not in state.setdefault("agent_baseline", {}):
                 state["agent_baseline"][capability_id] = old_value
             old_effective_value = policy.effective(capability_id, uid, char_id)[1]
@@ -188,6 +195,13 @@ def _agent_change_impl(uid: str, char_id: str, change: CapabilityChange, *, sour
             _audit(uid, char_id, action_id=change.action_id, actor="agent", source=source, capability_id=capability_id, old_value=state.setdefault("agent_state", {}).get(capability_id), new_value=None, reason=change.reason, before=revision, after=revision, result="invalid_action")
             return ChangeResult(False, "invalid_action", revision)
         old_value = state.setdefault("agent_state", {}).get(capability_id)
+        if type(old_value) is type(new_value) and old_value == new_value:
+            effective_value = policy.effective(capability_id, uid, char_id)[1]
+            _audit(uid, char_id, action_id=change.action_id, actor="agent", source=source,
+                   capability_id=capability_id, old_value=old_value, new_value=old_value,
+                   reason=change.reason, before=revision, after=revision, result="unchanged",
+                   old_effective_value=effective_value, new_effective_value=effective_value)
+            return ChangeResult(True, "unchanged", revision, old_value)
         old_effective_value = policy.effective(capability_id, uid, char_id)[1]
         state["agent_state"][capability_id] = new_value
         state["revision"] = revision + 1

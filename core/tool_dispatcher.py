@@ -932,16 +932,19 @@ async def _list_self_capabilities_wrapper(*, user_id: str, char_id: str) -> str:
 
 
 async def _read_self_action_history_wrapper(
-    time_range: str = "24h", capability_id: str = "", status: str = "",
+    time_range: str = "24h", capability_id: str = "", tool: str = "", status: str = "",
     *, user_id: str, char_id: str,
 ) -> str:
     from core.self_management.store import append_audit, query_audit
+    from core.tool_audit import query as query_tool_audit
 
     actions = query_audit(user_id, char_id, time_range=time_range,
                           capability_id=capability_id, status=status)
     append_audit(user_id, char_id, {"actor": "agent_inspection", "result": "inspected",
                                     "event_id": uuid.uuid4().hex, "capability_id": capability_id or "*"})
-    return json.dumps({"actions": actions}, ensure_ascii=False)
+    tool_calls = query_tool_audit(user_id, char_id, time_range=time_range,
+                                  tool=tool, status=status, limit=50)
+    return json.dumps({"actions": actions, "tool_calls": tool_calls}, ensure_ascii=False)
 
 
 _TOOL_REGISTRY["get_time"] = {
@@ -2104,11 +2107,12 @@ _TOOL_REGISTRY["list_self_capabilities"] = {
 
 _TOOL_REGISTRY["read_self_action_history"] = {
     "func": _read_self_action_history_wrapper,
-    "description": "Read recorded Self Capability change attempts and outcomes before describing past changes.",
+    "description": "Read past tool-call receipts and Self Capability change attempts before describing past actions or failures.",
     "dangerous": False, "category": "self_management", "effect": "read",
     "parameters": {"type": "object", "properties": {
         "time_range": {"type": "string", "enum": ["24h", "7d", "30d"]},
         "capability_id": {"type": "string", "maxLength": 160},
+        "tool": {"type": "string", "maxLength": 128},
         "status": {"type": "string", "enum": ["success", "failed"]},
     }, "required": []},
     "examples": ["Which self capability changes failed yesterday?"],
@@ -3119,7 +3123,7 @@ async def execute_structured(
     allowed_tool_names: frozenset[str] | None = None,
 ) -> ToolExecutionOutcome:
     from core.tool_activity import execute_visible
-    return await execute_visible(
+    outcome = await execute_visible(
         _execute_structured_impl,
         tool_name, tool_args, user_id, target_id, is_group, session_state,
         origin=origin,
@@ -3128,6 +3132,10 @@ async def execute_structured(
         tool_status_observer=tool_status_observer,
         allowed_tool_names=allowed_tool_names,
     )
+    if origin in _EXECUTE_ALLOWED_ORIGINS:
+        from core.tool_audit import record as record_tool_audit
+        record_tool_audit(user_id, char_id, tool=tool_name, args=tool_args, origin=origin, outcome=outcome)
+    return outcome
 
 
 def _build_confirm_ask(tool_name: str, tool_args: dict) -> str:

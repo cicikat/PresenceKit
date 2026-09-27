@@ -736,14 +736,17 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
                     return _finish(run)
                 if name == "manage_self_capability":
                     record = _self_change_audit(job.uid, job.char_id, str(args.get("action_id") or ""))
-                    if record is None or record.get("result") not in {"applied", "idempotent"}:
+                    if record is None or record.get("result") not in {"applied", "idempotent", "unchanged"}:
                         _record_event(run, "self_capability_rejected", tool_name=name, action_id=str(args.get("action_id") or ""), reason=str((record or {}).get("result") or "audit_missing"))
                         run.disposition = Disposition.SELF_CAPABILITY_REJECTED.value
                         return _finish(run)
                     change = {"action_id": record.get("action_id"), "capability_id": record.get("capability_id"), "revision_before": record.get("revision_before"), "revision_after": record.get("revision_after"), "old_agent_value": record.get("old_value"), "new_agent_value": record.get("new_value"), "old_effective_value": record.get("old_effective_value"), "new_effective_value": record.get("new_effective_value")}
-                    run.self_capability_changes.append(change)
-                    _record_event(run, "self_capability_changed", **change)
-                    saw_self_change = True
+                    if record.get("result") == "unchanged":
+                        _record_event(run, "self_capability_unchanged", **change)
+                    else:
+                        run.self_capability_changes.append(change)
+                        _record_event(run, "self_capability_changed", **change)
+                        saw_self_change = True
                     tools, self_context = _runtime_tools(job.uid, job.char_id, state)
                     if self_context is not None:
                         messages.append(_self_context_message(self_context))

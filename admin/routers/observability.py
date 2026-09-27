@@ -744,6 +744,25 @@ async def tool_traces(
     }
 
 
+@router.get("/observability/tool-audit/{uid}", summary="读取持久工具执行审计（只读）")
+async def tool_audit(
+    uid: str,
+    char_id: str = "",
+    time_range: str = Query("24h", pattern="^(24h|7d|30d)$"),
+    tool: str = "",
+    status: str = "",
+    limit: int = Query(50, ge=1, le=100),
+    _auth=Depends(require_scopes("memory.read")),
+):
+    from admin.routers.provenance import _resolve_char_id
+    from core.tool_audit import query
+
+    resolved_char_id = _resolve_char_id(char_id)
+    return {"uid": uid, "char_id": resolved_char_id,
+            "entries": query(uid, resolved_char_id, time_range=time_range,
+                             tool=tool, status=status, limit=limit)}
+
+
 @router.get("/observability/perceive-events", summary="读取 reality stimulus 审计记录")
 async def perceive_events(
     source: str = "",

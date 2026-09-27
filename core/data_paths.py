@@ -495,6 +495,13 @@ class DataPaths:
         assert_production_identity_allowed(user_id, mode=self.mode)
         return self._p("runtime", "self_management", safe_user_id(char_id), safe_user_id(user_id), "audit.jsonl")
 
+    def tool_audit(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID, day: str) -> Path:
+        """Daily append-only tool execution receipts for one owner and character."""
+        assert_production_identity_allowed(user_id, mode=self.mode)
+        if len(day) != 10 or day[4] != "-" or day[7] != "-" or not day.replace("-", "").isdigit():
+            raise ValueError("invalid tool audit day")
+        return self._p("runtime", "tool_audit", safe_user_id(char_id), safe_user_id(user_id), f"{day}.jsonl")
+
     def character_self_root(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
         """Reality owner+char user-content bucket for the character's self files."""
         assert_production_identity_allowed(user_id, mode=self.mode)

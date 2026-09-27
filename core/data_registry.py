@@ -85,6 +85,7 @@ REGISTRY: dict[str, PathMeta] = {
     "legacy_reminder_migration_report": PathMeta("forensic", "shared", "global", "ignore"),
     "self_management_state":  PathMeta("runtime",   "shared",          "per_char_user", "ignore"),
     "self_management_audit":  PathMeta("forensic",  "shared",          "per_char_user", "ignore"),
+    "tool_audit":             PathMeta("forensic",  "reality",         "per_char_user", "ignore"),
     "character_self_root":    PathMeta("canonical", "reality",         "per_char_user", "ignore"),
     "character_self_meta_root": PathMeta("runtime", "reality",         "per_char_user", "ignore"),
     "character_self_audit":   PathMeta("forensic",  "reality",         "per_char_user", "ignore"),

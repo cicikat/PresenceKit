@@ -1195,6 +1195,19 @@ class Pipeline:
         mcp_opaque_params_note = format_mcp_opaque_params_note(tools)
 
         loop_msgs = list(messages)
+        from core.tool_audit import is_recap_request, query as query_tool_audit
+        latest_user_text = next((item.get("content") for item in reversed(messages)
+                                 if item.get("role") == "user" and isinstance(item.get("content"), str)), "")
+        if is_recap_request(latest_user_text):
+            from core.self_management.store import query_audit
+            tool_receipts = query_tool_audit(uid, char_id, time_range="7d", limit=30)
+            self_receipts = query_audit(uid, char_id, time_range="7d")[:20]
+            recap = json.dumps({"tool_calls": tool_receipts, "self_changes": self_receipts}, ensure_ascii=False)
+            loop_msgs.insert(0, {"role": "system", "_layer": "11.4_tool_audit_grounding", "content": (
+                "Recorded actions for this owner and character follow. Use these receipts before claiming what you did. "
+                "The list is bounded; if a specific action is absent, say the available audit does not show it. "
+                "Do not invent capability names, outcomes, or parameters. " + recap[:6000]
+            )})
         loop_msgs.insert(0, {"role": "system", "_layer": "11.6_tool_discovery", "content": (
             "工具按分类加载。先调用 load_tools_ 分类入口，再在下一轮使用获得的具体工具定义。"
             "分类加载只提供定义，不是业务执行或成功证据。未加载的工具不得调用或猜测参数。"

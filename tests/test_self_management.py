@@ -162,3 +162,21 @@ def test_self_capability_read_tools_and_explicit_change_result(sandbox):
     assert history["actions"][0]["capability_id"] == "autonomy.enabled"
     assert history["actions"][0]["new_value"] is False
     assert history["actions"][0]["requested_value"] is False
+
+
+def test_setting_same_value_is_audited_without_revision_change(sandbox):
+    from core.self_management import store
+    from core.self_management.models import CapabilityChange
+    from core.self_management.service import agent_change, user_grant
+
+    assert user_grant("u1", "char_a", capability_id="setting.autonomy.talk_enabled",
+                      allowed=True, mutable_by_agent=True, constraints={}, reason="allow").ok
+    first = agent_change("u1", "char_a", CapabilityChange(
+        "disable", "setting.autonomy.talk_enabled", None, "quiet", 1, "change-1",
+    ), source="assistant_self_management")
+    assert first.ok and first.revision == 2
+    second = agent_change("u1", "char_a", CapabilityChange(
+        "disable", "setting.autonomy.talk_enabled", None, "still quiet", 2, "change-2",
+    ), source="assistant_self_management")
+    assert second.ok and second.code == "unchanged" and second.revision == 2
+    assert store.read_audit("u1", "char_a")[-1]["result"] == "unchanged"

@@ -95,7 +95,7 @@ def query_audit(uid: str, char_id: str, *, time_range: str = "24h",
                     continue
                 if capability_id and item.get("capability_id") != capability_id:
                     continue
-                if status and ("success" if item.get("result") in {"applied", "idempotent"} else "failed") != status:
+                if status and ("success" if item.get("result") in {"applied", "idempotent", "unchanged"} else "failed") != status:
                     continue
                 receipt = {key: item.get(key) for key in (
                     "timestamp", "event_id", "action_id", "run_id", "job_id", "source",

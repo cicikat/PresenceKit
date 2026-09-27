@@ -57,9 +57,9 @@ def test_agent_can_change_global_server_allowlist_and_preset(sandbox, monkeypatc
     high_risk = agent_change("u1", "char_a", _change("mcp.server:cedar.policy:status", {"effect": "unrestricted"}, 5, "a6-policy"), source="assistant_self_management")
     assert high_risk.code == "high_risk_requires_admin"
     preset = agent_change("u1", "char_a", _change("tool_loop.preset:read_only", ["get_time"], 5, "a6"), source="assistant_self_management")
-    assert preset.ok
-    scheduler = agent_change("u1", "char_a", _change(registry.SCHEDULER_ENABLED, False, 6, "a7"), source="assistant_self_management")
-    assert scheduler.ok and cfg["scheduler"]["enabled"] is False
+    assert preset.ok and preset.code == "unchanged" and preset.revision == 5
+    scheduler = agent_change("u1", "char_a", _change(registry.SCHEDULER_ENABLED, True, 5, "a7"), source="assistant_self_management")
+    assert scheduler.ok and cfg["scheduler"]["enabled"] is True
     restored = restore_user_setting("u1", "char_a", capability_id=registry.TOOL_LOOP_ENABLED, reason="restore")
     assert restored.ok and cfg["tool_loop"]["enabled"] is False
 
@@ -94,9 +94,9 @@ def test_setting_mutation_uses_revision_and_audit(sandbox):
     from core.self_management import registry, store
     from core.self_management.service import agent_change
 
-    first = agent_change("u1", "char_a", _change(registry.AUTONOMY_SETTING_ENABLED, False, 0, "autonomy-off"), source="assistant_self_management")
+    first = agent_change("u1", "char_a", _change(registry.AUTONOMY_SETTING_ENABLED, True, 0, "autonomy-on"), source="assistant_self_management")
     assert first.ok and first.revision == 1
-    conflict = agent_change("u1", "char_a", _change(registry.AUTONOMY_SETTING_ENABLED, True, 0, "stale"), source="assistant_self_management")
+    conflict = agent_change("u1", "char_a", _change(registry.AUTONOMY_SETTING_ENABLED, False, 0, "stale"), source="assistant_self_management")
     assert conflict.code == "revision_conflict"
     audit = store.read_audit("u1", "char_a", limit=10)
     assert any(item.get("result") == "revision_conflict" for item in audit)
