@@ -251,7 +251,7 @@ async def test_handler_creates_trait_state_file(sandbox, public_default_traits):
 
 
 async def test_handler_does_not_inherit_default_traits_for_non_default_role(
-    sandbox, public_default_traits,
+    sandbox, public_default_traits, caplog,
 ):
     """A public default schema must not become an arbitrary role's traits."""
     from core.pipeline import _handler_trait_tracker_update
@@ -267,6 +267,7 @@ async def test_handler_does_not_inherit_default_traits_for_non_default_role(
     await _handler_trait_tracker_update(payload)
 
     assert not sandbox.trait_state(char_id=TEST_CHAR_ID).exists()
+    assert "traits schema unsupported" not in caplog.text
 
 
 # ── 6. author_note_rotator 读取路径与 handler 写入路径一致 ─────────────────────

@@ -2312,6 +2312,14 @@ async def _handler_trait_tracker_update(payload: dict) -> None:
     char_id = scope.character_id
 
     traits_path = get_paths().yexuan_traits(char_id=char_id)
+    # The path accessor falls back to the public default asset for characters
+    # without authored traits. That asset is an example, not their trait schema.
+    if char_id != "default" and traits_path in {
+        get_paths().bundled_default_character_dir() / "traits.yaml",
+        get_paths().legacy_authored_character_dir(char_id="default") / "traits.yaml",
+    }:
+        logger.debug("[pipeline.trait_tracker] no character traits: char_id=%s", char_id)
+        return
     try:
         with open(traits_path, encoding="utf-8") as _f:
             data = yaml.safe_load(_f)
