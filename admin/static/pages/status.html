@@ -49,14 +49,15 @@
     <div class="card-header"><h3 data-i18n="status.proxy.title">代理摘要</h3><button class="btn btn-ghost btn-sm" data-action="loadStatus" data-i18n="common.refresh">刷新</button></div>
     <div class="status-summary-item"><span data-i18n="status.proxy.enable">状态</span><strong id="s-proxy-status">-</strong><small data-i18n="status.proxy.source">来源：全局代理配置</small></div>
     <div class="status-summary-item"><span data-i18n="status.proxy.effective">生效范围</span><strong id="s-proxy-scope">-</strong><small data-i18n="status.proxy.health_note">仅表示配置生效，不表示外部目标可达</small></div>
-    <div class="status-summary-footer"><span id="s-proxy-result" class="status-result">-</span><button class="btn btn-ghost btn-sm" data-action="goto" data-action-args='["runtime-config"]' data-i18n="status.open_runtime_config">打开运行配置</button></div>
+    <div class="status-summary-item"><span data-i18n="status.proxy.model_mode">模型请求连接方式</span><strong id="s-proxy-model-mode">-</strong><small data-i18n="status.proxy.model_status_note">编辑入口在代理与中继页</small></div>
+    <div class="status-summary-footer"><span id="s-proxy-result" class="status-result">-</span><button class="btn btn-ghost btn-sm" data-action="goto" data-action-args='["network-config"]' data-i18n="status.open_network_config">打开代理与中继</button></div>
   </div>
 
   <div class="card status-summary-card" id="status-relay-card">
     <div class="card-header"><h3 data-i18n="status.relay.title">中继唤醒摘要</h3><button class="btn btn-ghost btn-sm" data-action="loadStatus" data-i18n="common.refresh">刷新</button></div>
     <div class="status-summary-item"><span data-i18n="status.relay.summary_status">配置状态</span><strong id="s-relay-status">-</strong><small data-i18n="status.relay.source">来源：全局 relay 设置</small></div>
     <div class="status-summary-item"><span data-i18n="status.relay.summary_scope">生效范围</span><strong id="s-relay-scope">-</strong><small data-i18n="status.relay.health_note">仅表示本地配置状态，不承诺中继服务健康</small></div>
-    <div class="status-summary-footer"><span id="s-relay-result" class="status-result">-</span><button class="btn btn-ghost btn-sm" data-action="goto" data-action-args='["runtime-config"]' data-i18n="status.open_runtime_config">打开运行配置</button></div>
+    <div class="status-summary-footer"><span id="s-relay-result" class="status-result">-</span><button class="btn btn-ghost btn-sm" data-action="goto" data-action-args='["network-config"]' data-i18n="status.open_network_config">打开代理与中继</button></div>
   </div>
 
   <div class="card status-summary-card" id="status-scheduler-card">

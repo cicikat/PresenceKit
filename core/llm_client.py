@@ -163,17 +163,14 @@ from core.llm_failover import CATEGORY_TIMEOUTS as _CALL_TIMEOUTS, DEFAULT_CALL_
 
 def _get_proxy_url() -> str | None:
     """读取代理配置，未启用时返回 None（vision client 专用；preset clients 在 model_registry 中建）"""
-    proxy_cfg = get_config().get("proxy", {})
-    if proxy_cfg.get("enabled", False):
-        return proxy_cfg.get("http") or None
-    return None
+    from core.model_network import model_proxy_settings
+    return model_proxy_settings()[1]
 
 
 def _make_http_client(proxy_url: str | None) -> httpx.AsyncClient:
+    from core.model_network import make_model_http_client
     base_timeout = httpx.Timeout(timeout=_DEFAULT_CALL_TIMEOUT, connect=10.0)
-    if proxy_url:
-        return httpx.AsyncClient(proxy=proxy_url, timeout=base_timeout)
-    return httpx.AsyncClient(trust_env=False, timeout=base_timeout)
+    return make_model_http_client(proxy_url, base_timeout)
 
 
 def _get_client() -> AsyncOpenAI:

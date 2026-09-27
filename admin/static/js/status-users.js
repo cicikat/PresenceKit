@@ -85,8 +85,16 @@ async function _loadStatusTts() {
 
 async function _loadStatusProxy() {
   const d = await api('GET', '/proxy');
+  const modeLabels = {
+    follow_global: t('status.proxy.model_follow', '跟随全局代理开关'),
+    auto: t('status.proxy.model_auto', '自动按 DNS 选路'),
+    direct: t('status.proxy.model_direct', '始终直连'),
+    proxy: t('status.proxy.model_proxy', '始终使用代理'),
+  };
+  const mode = d.model_connection_mode || 'follow_global';
   _statusSet('s-proxy-status', d.enabled ? t('common.enabled', '已启用') : t('common.disabled', '未启用'));
   _statusSet('s-proxy-scope', t('status.proxy.scope_value', '后端出站请求'));
+  _statusSet('s-proxy-model-mode', modeLabels[mode] || modeLabels.follow_global);
   _statusSet('s-proxy-result', t('status.read_only_effective', '已读取；未探测外部目标'));
 }
 

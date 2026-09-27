@@ -79,17 +79,14 @@ _model_clients: dict[tuple[str, str], ModelClient] = {}
 # ---------------------------------------------------------------------------
 
 def _get_proxy_url() -> str | None:
-    proxy_cfg = get_config().get("proxy", {})
-    if proxy_cfg.get("enabled", False):
-        return proxy_cfg.get("http") or None
-    return None
+    from core.model_network import model_proxy_settings
+    return model_proxy_settings()[1]
 
 
 def _make_http_client(proxy_url: str | None, *, timeout_s: float = _DEFAULT_CALL_TIMEOUT) -> httpx.AsyncClient:
+    from core.model_network import make_model_http_client
     base_timeout = httpx.Timeout(timeout=timeout_s, connect=min(10.0, timeout_s))
-    if proxy_url:
-        return httpx.AsyncClient(proxy=proxy_url, timeout=base_timeout)
-    return httpx.AsyncClient(trust_env=False, timeout=base_timeout)
+    return make_model_http_client(proxy_url, base_timeout)
 
 
 # ---------------------------------------------------------------------------

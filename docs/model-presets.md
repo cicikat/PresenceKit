@@ -1,5 +1,14 @@
 # docs/model-presets.md — 多模型 Preset 系统
 
+## 模型出站连接模式（2026-09-28）
+
+文本 preset 与视觉客户端共用 `proxy.model_connection_mode`。默认 `follow_global`，与旧
+`proxy.enabled` 行为一致。`auto` 在每次请求解析 `base_url` 主机：Fake-IP
+（`198.18.0.0/15`）或 DNS 失败走已配置 `proxy.http`，其余直连，DNS 变化无需重启。
+`direct` 始终忽略代理；`proxy` 始终使用 `proxy.http`。地址仍由本机 `config.yaml` 和管理面
+维护，代码不写死运行地址。保存 `/proxy` 后热重载模型与视觉客户端。手机聊天继续复用后端
+模型连接。
+
 ## Chat Completions 工具续轮白名单（2026-09-15）
 
 Chat Completions 出口重建消息与工具，不再把 SDK `model_dump()` 或内部键送进中转。

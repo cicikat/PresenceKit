@@ -9,6 +9,15 @@
     <label class="field"><span data-i18n="status.proxy.http">HTTP 代理地址</span><input type="url" id="proxy-http" placeholder="http://proxy.example:7897"></label>
     <label class="field"><span data-i18n="status.proxy.https">HTTPS 代理地址</span><input type="url" id="proxy-https" placeholder="http://proxy.example:7897"></label>
   </div>
+  <label class="field"><span data-i18n="status.proxy.model_mode">模型请求连接方式</span>
+    <select id="proxy-model-mode">
+      <option value="follow_global" data-i18n="status.proxy.model_follow">跟随全局代理开关</option>
+      <option value="auto" data-i18n="status.proxy.model_auto">自动按 DNS 选路</option>
+      <option value="direct" data-i18n="status.proxy.model_direct">始终直连</option>
+      <option value="proxy" data-i18n="status.proxy.model_proxy">始终使用代理</option>
+    </select>
+  </label>
+  <p id="proxy-model-hint" class="admin-inline-087" data-i18n="status.proxy.model_hint">自动模式每次请求检查模型域名：Fake-IP 或 DNS 失败时用 HTTP 代理地址，其他地址直连。自动和始终代理都要先填 HTTP 代理地址；若直连仍不可达，请选“始终使用代理”。此设置只影响模型与视觉请求，手机聊天沿用后端模型连接。</p>
   <div class="config-item-meta"><span data-i18n="runtime_config.source_global">来源：全局配置</span><span data-i18n="runtime_config.apply_reload">保存后热重载</span></div>
   <button class="btn btn-primary btn-sm" data-action="saveProxy" data-i18n="common.save">保存</button>
 </div><div class="card">

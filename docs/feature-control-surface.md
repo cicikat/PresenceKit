@@ -1,4 +1,15 @@
-# 功能控制面事实清单（最后核对：2026-09-21 每日互动预算加倍）
+# 功能控制面事实清单（最后核对：2026-09-28 模型出站网络自适应）
+
+## 模型出站网络自适应（2026-09-28，current）
+
+`proxy.model_connection_mode` 默认 `follow_global`，兼容旧配置：全局代理开则模型走
+`proxy.http`，关则直连。可选 `auto` / `direct` / `proxy`。`auto` 每次模型请求解析目标
+DNS：`198.18.0.0/15` Fake-IP 或解析失败时用已配置 HTTP 代理，其余直连；DNS 变化不需
+重启。`auto`/`proxy` 保存时要求有效 `proxy.http`。`GET/PUT /proxy` 读写该字段，保存后
+热重载文本模型与视觉客户端。管理面「代理与中继」提供下拉与说明；系统状态摘要只读展示
+当前模式，编辑入口仍在该页。手机聊天继续复用后端模型连接，桌面/手机无新设置。真实模型
+网络与手机端验收 observe。静态版本 `v1-model-network-auto-1`。其他出站工具仍用各自代理
+策略。
 
 ## 每日互动预算加倍（2026-09-21，current）
 
@@ -132,6 +143,7 @@ RPG Dream's `rpg_kp` route is a backend capability, not a client setting; it is 
   fail-open 记 warning，旧实例已从 registry 摘除，新请求只会按新配置惰性建 client。
 - admin 功能开关白名单：`GET/PUT /settings/feature-flags`。只接受 `settings_feature_flags.FLAGS` 中已有运行时消费者的布尔字段，不接受密钥、路径、额度或任意 YAML。每项返回 `apply_mode` / `restart_required`，PUT 返回 `reload_status` 和本次确实改变且需要重启的字段。`qq.enabled` 只在 `main.py` 启动阶段注册通道、回调和监听任务，因此明确为 `restart_required`，不得显示成热生效；`mail` 及其余逐次读配置的功能仍是 `hot_reload`。`private_exchange.enabled` 与 `qq`/`mail` 两个通道总开关均走这条白名单；desktop/mobile/device 通道没有独立 enabled 字段，是否可用只取决于对应 token 是否配置且未停用。管理面编辑入口为「高级设置 → 运行配置」；「系统状态」只读展示通道摘要，不再承载保存控件。
 - 邮件连接页 `GET/PUT /settings/mail` 提供 `connection_mode=auto|direct|proxy`。`auto` 兼容旧配置（有 `proxy_url` 时走代理）；`direct` 即使保留代理地址也让 SMTP 直连；`proxy` 要求代理地址。邮件发送逐次读取该值，保存后热生效。
+- `GET/PUT /proxy` 增加 `model_connection_mode=follow_global|auto|direct|proxy`。默认跟随全局 `proxy.enabled`；`auto` 按每次请求的 DNS 选路，命中 Fake-IP 或解析失败时用 `proxy.http`；`auto`/`proxy` 需要有效 HTTP 代理地址。保存后热重载模型与视觉客户端。管理面入口为「代理与中继」；系统状态只读展示当前模式。桌面/手机无新设置。
 - admin 配置中心（Brief 93 §1，管理面板「配置」页，`GET/PUT /settings/base-model`、`GET/PUT /settings/embedding`、`GET /settings/setup-status`）：`/settings/base-model` 只读写 `model_presets` 主聊天 preset；缺少该块时 GET 标 `mode=missing`、PUT 返回 400。扁平 `llm:` 合成已退出，不引入第三套真值来源。`/settings/embedding` 读写 `embedding:` 块（缺失时向量召回 fail-open 降级为关键词路径，不算必填）；`/settings/setup-status` 的 `needs_setup` 驱动面板首次登录自动跳转与顶部红色横幅，判定标准是 base_url/api_key/model 三者均非空且不是 `config.example.yaml` 里 `YOUR_`/`YOUR-` 前缀的占位符。
 - 密钥本快捷入口（Brief 93 §2，`GET /system/secrets-book`、`POST /system/secrets-book/open`）：仅当请求方 `request.client.host` 是 `127.0.0.1`/`::1`/`localhost` 时可用，用系统默认程序打开 `secrets.local.yaml`；非本机请求悬浮按钮隐藏、`open` 端点直接 403。
 

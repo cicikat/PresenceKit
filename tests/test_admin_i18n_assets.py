@@ -75,10 +75,10 @@ def test_i18n_runtime_is_wired_with_persistent_chinese_default():
     core_js = (ROOT / "admin" / "static" / "js" / "core.js").read_text(encoding="utf-8")
 
     assert '<link rel="stylesheet" href="/static/style.css?v=v1-261-monologue-route-1">' in index
-    assert '<script src="/static/i18n.js?v=v1-265-mail-connection-1"></script>' in index
-    assert '<script src="/static/js/core.js?v=v1-265-mail-connection-1"></script>' in index
+    assert '<script src="/static/i18n.js?v=v1-model-network-auto-1"></script>' in index
+    assert '<script src="/static/js/core.js?v=v1-model-network-auto-1"></script>' in index
     assert '<script src="/static/js/dream-settings.js?v=brief-223-rpg-dream-admin-2"></script>' in index
-    assert "ADMIN_UI_FRAGMENT_VERSION = 'v1-265-mail-connection-1'" in core_js
+    assert "ADMIN_UI_FRAGMENT_VERSION = 'v1-model-network-auto-1'" in core_js
     assert "/observability/backend-read" in read_admin_page("call-records")
     assert 'data-i18n="settings_center.backend_read"' in read_admin_page("call-records")
     assert "/observability/character-self" in read_admin_page("call-records")
@@ -94,7 +94,7 @@ def test_i18n_runtime_is_wired_with_persistent_chinese_default():
     assert "dream.scenario.policy_reveal_required" in runtime
     assert '<script src="/static/js/overview.js?v=brief-180-admin-static-1"></script>' in index
     assert '<script src="/static/js/mcp.js?v=brief-252-mcp-no-flash-1"></script>' in index
-    assert '<script src="/static/js/scheduler.js?v=v1-263-daily-budget-1"></script>' in index
+    assert '<script src="/static/js/scheduler.js?v=v1-hds-local-settings-1"></script>' in index
     assert '<script src="/static/js/integrations.js?v=brief-160-garden-freeze-1"></script>' in index
     assert "flag.self_management_hint" in runtime
     assert "自主管理 overlay（关=恢复全局默认）" in runtime

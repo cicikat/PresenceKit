@@ -459,14 +459,21 @@ async function savePhoneControlVisionParams() {
 // ══════════════════════════════════════════════════════════
 //  Proxy settings
 // ══════════════════════════════════════════════════════════
+let _proxyLoadGeneration = 0;
 async function loadProxy() {
+  const generation = ++_proxyLoadGeneration;
   try {
     const data = await api('GET', '/proxy');
+    if (generation !== _proxyLoadGeneration) return;
     document.getElementById('proxy-enabled').checked = !!data.enabled;
     document.getElementById('proxy-http').value   = data.http  || '';
     document.getElementById('proxy-https').value  = data.https || '';
+    const mode = document.getElementById('proxy-model-mode');
+    if (mode) mode.value = data.model_connection_mode || 'follow_global';
     _updateProxyBadge(!!data.enabled);
+    _syncProxyModelHint();
   } catch(e) {
+    if (generation !== _proxyLoadGeneration) return;
     toast(t('status.proxy.load_error', '读取代理配置失败: {error}', {error: e.message}), 'err');
   }
 }
@@ -478,19 +485,44 @@ function _updateProxyBadge(enabled) {
   badge.className    = 'badge ' + (enabled ? 'badge-success' : 'badge-danger');
 }
 
-// 启用开关改变时实时更新徽标（视觉反馈）
-document.addEventListener('DOMContentLoaded', () => {
-  const cb = document.getElementById('proxy-enabled');
-  if (cb) cb.addEventListener('change', () => _updateProxyBadge(cb.checked));
-});
+function _syncProxyModelHint() {
+  const hint = document.getElementById('proxy-model-hint');
+  const mode = document.getElementById('proxy-model-mode');
+  if (!hint || !mode) return;
+  const needsProxy = mode.value === 'auto' || mode.value === 'proxy';
+  hint.textContent = needsProxy
+    ? t('status.proxy.model_hint_need_url', '自动和始终代理都要先填 HTTP 代理地址。自动模式每次请求检查模型域名：Fake-IP 或 DNS 失败时用该地址，其他地址直连；若直连仍不可达，请选“始终使用代理”。此设置只影响模型与视觉请求，手机聊天沿用后端模型连接。')
+    : t('status.proxy.model_hint', '自动模式每次请求检查模型域名：Fake-IP 或 DNS 失败时用 HTTP 代理地址，其他地址直连。自动和始终代理都要先填 HTTP 代理地址；若直连仍不可达，请选“始终使用代理”。此设置只影响模型与视觉请求，手机聊天沿用后端模型连接。');
+}
+
+function _bindProxyControls() {
+  const enabled = document.getElementById('proxy-enabled');
+  if (enabled && !enabled.dataset.proxyBound) {
+    enabled.dataset.proxyBound = 'true';
+    enabled.addEventListener('change', () => _updateProxyBadge(enabled.checked));
+  }
+  const mode = document.getElementById('proxy-model-mode');
+  if (mode && !mode.dataset.proxyBound) {
+    mode.dataset.proxyBound = 'true';
+    mode.addEventListener('change', _syncProxyModelHint);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', _bindProxyControls);
 
 async function saveProxy() {
   const enabled = document.getElementById('proxy-enabled').checked;
   const http    = document.getElementById('proxy-http').value.trim();
   const https_  = document.getElementById('proxy-https').value.trim();
+  const model_connection_mode = document.getElementById('proxy-model-mode').value;
+  if ((model_connection_mode === 'auto' || model_connection_mode === 'proxy') && !/^https?:\/\//i.test(http)) {
+    toast(t('status.proxy.model_need_url', '自动/代理模式需要有效的 HTTP 代理地址'), 'err');
+    return;
+  }
   try {
-    await api('PUT', '/proxy', { enabled, http, https: https_ });
+    await api('PUT', '/proxy', { enabled, http, https: https_, model_connection_mode });
     _updateProxyBadge(enabled);
+    _syncProxyModelHint();
     toast(t('status.proxy.saved', '代理配置已保存并热重载'), 'ok');
   } catch(e) {
     toast(t('common.save_failed', '保存失败: {error}', {error: e.message}), 'err');

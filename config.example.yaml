@@ -182,6 +182,7 @@ proxy:
   enabled: false
   http: http://127.0.0.1:7897
   https: http://127.0.0.1:7897
+  model_connection_mode: follow_global  # follow_global / auto / direct / proxy；auto 按每次请求的 DNS 结果选路
 tools:
   read_xiaohongshu:
     enabled: false
