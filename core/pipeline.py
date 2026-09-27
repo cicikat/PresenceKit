@@ -1423,6 +1423,7 @@ class Pipeline:
             nonlocal used_tool, successful_tool_call, outcome, tools
             business_steps = 0
             discovery_steps = 0
+            life_record_reads: dict[str, ToolExecutionOutcome] = {}
             while business_steps < max_steps:
                 tools = discovery.schemas()
                 _record_discovery(category="tool_loop_discovery", code="request_surface", status="ok",
@@ -1454,9 +1455,21 @@ class Pipeline:
                         # Local protocol receipt; not a dispatcher execute.
                         return ToolExecutionOutcome(status="discovery", result=result)
                     used_tool = True
-                    return await _execute_with_ephemeral_status(
+                    read_key = (json.dumps(tc["arguments"], sort_keys=True, ensure_ascii=False)
+                                if name in {"read_life_records", "list_self_capabilities", "read_self_action_history"} else None)
+                    if read_key is not None and read_key in life_record_reads:
+                        previous = life_record_reads[read_key]
+                        _record_discovery(category="tool_loop_dedupe", code="same_read_reused", status="ok",
+                                          context={"tool": name})
+                        return previous
+                    tool_outcome = await _execute_with_ephemeral_status(
                         tc["id"], name, tc["arguments"], index=index, total=total, origin=origin,
                     )
+                    if read_key is not None and tool_outcome.status != "outcome_unknown":
+                        life_record_reads[read_key] = tool_outcome
+                    elif name in {"manage_self_capability", "revise_memory", "revise_user_profile"}:
+                        life_record_reads.clear()
+                    return tool_outcome
 
                 def _charge(calls):
                     nonlocal business_steps, discovery_steps

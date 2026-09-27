@@ -16,7 +16,10 @@ def test_agent_changes_are_scoped_by_uid_and_character(sandbox):
 
 
 def test_agent_change_requires_grant_lock_revision_and_idempotency(sandbox):
+    import asyncio
+
     from core.self_management.service import agent_change, set_lock, user_grant
+    from core.tool_dispatcher import _list_self_capabilities_wrapper
 
     request = CapabilityChange("disable", "autonomy.enabled", None, "quiet", 0, "a1")
     assert agent_change("u1", "char_a", request, source="assistant_self_management").code == "not_granted"
@@ -24,6 +27,8 @@ def test_agent_change_requires_grant_lock_revision_and_idempotency(sandbox):
     assert agent_change("u1", "char_a", request, source="assistant_self_management").code == "revision_conflict"
     from core.self_management import store
     assert store.read_audit("u1", "char_a", limit=10)[-1]["result"] == "revision_conflict"
+    assert agent_change("u1", "char_a", CapabilityChange("disable", "autonomy.enabled", None, "quiet", 1, "a2"), source="assistant_self_management").code == "inspect_required"
+    asyncio.run(_list_self_capabilities_wrapper(user_id="u1", char_id="char_a"))
     applied = agent_change("u1", "char_a", CapabilityChange("disable", "autonomy.enabled", None, "quiet", 1, "a1"), source="assistant_self_management")
     assert applied.ok and applied.revision == 2
     assert agent_change("u1", "char_a", CapabilityChange("disable", "autonomy.enabled", None, "quiet", 2, "a1"), source="assistant_self_management").code == "idempotent"
@@ -32,11 +37,15 @@ def test_agent_change_requires_grant_lock_revision_and_idempotency(sandbox):
 
 
 def test_minimum_interval_is_constrained_and_restorable(sandbox):
+    import asyncio
+
     from core.self_management import policy
     from core.self_management.service import agent_change, restore_user_setting, user_grant
+    from core.tool_dispatcher import _list_self_capabilities_wrapper
 
     assert user_grant("u1", "char_a", capability_id="autonomy.min_interval_seconds", allowed=True, mutable_by_agent=True, constraints={"minimum": 120, "maximum": 300}, reason="bounded").ok
     assert agent_change("u1", "char_a", CapabilityChange("set_value", "autonomy.min_interval_seconds", 60, "shorten", 1, "a1"), source="assistant_self_management").code == "value_out_of_constraints"
+    asyncio.run(_list_self_capabilities_wrapper(user_id="u1", char_id="char_a"))
     changed = agent_change("u1", "char_a", CapabilityChange("set_value", "autonomy.min_interval_seconds", 180, "normal", 1, "a2"), source="assistant_self_management")
     assert changed.ok
     assert policy.autonomy_min_interval("u1", "char_a", 900) == 180

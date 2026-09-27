@@ -181,6 +181,27 @@ async def test_without_per_turn_exclusion_native_fc_can_call_get_time(monkeypatc
     assert "get_time" in exposed_names
 
 
+@pytest.mark.asyncio
+async def test_same_life_records_query_runs_once_per_chat_turn(monkeypatch):
+    _patch_tool_loop_config(monkeypatch, exclude_tools=[])
+    _patch_tools_schema(monkeypatch, ["read_life_records"])
+    _script_chat_turn(monkeypatch, [
+        ChatTurn(content="", tool_calls=[{"id": "read1", "name": "read_life_records", "arguments": {"date_from": "2026-09-26"}}], assistant_message={"role": "assistant", "content": None}),
+        ChatTurn(content="", tool_calls=[{"id": "read2", "name": "read_life_records", "arguments": {"date_from": "2026-09-26"}}], assistant_message={"role": "assistant", "content": None}),
+        ChatTurn(content="done", tool_calls=[], assistant_message={"role": "assistant", "content": "done"}),
+    ])
+    execute_calls = _script_execute(monkeypatch, [("工具已执行：read_life_records，结果：找到记录", None)])
+    _patch_final_chat(monkeypatch, text="已查到。")
+
+    result = await _make_pipeline().run_agentic_loop(
+        [{"role": "user", "content": "查昨天记录"}], uid="u1", char_id=TEST_CHAR_ID,
+        session_state=object(),
+    )
+
+    assert result == "已查到。"
+    assert [call["tool_name"] for call in execute_calls] == ["read_life_records"]
+
+
 # ── 1. 自然终止（从未调用工具）───────────────────────────────────────────────
 
 @pytest.mark.asyncio

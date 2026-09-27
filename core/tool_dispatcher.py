@@ -16,6 +16,7 @@ import logging
 import platform
 import re
 import subprocess
+import uuid
 from dataclasses import dataclass
 from typing import Callable
 
@@ -909,6 +910,7 @@ async def _manage_self_capability_wrapper(
 
 async def _list_self_capabilities_wrapper(*, user_id: str, char_id: str) -> str:
     from core.self_management.service import view
+    from core.self_management.store import append_audit
 
     snapshot = view(user_id, char_id)
     rows = []
@@ -924,6 +926,8 @@ async def _list_self_capabilities_wrapper(*, user_id: str, char_id: str) -> str:
             "requires_owner_authorization": bool(not grant.get("allowed") or not grant.get("mutable_by_agent")
                                                   or row.get("locked") or row.get("high_risk")),
         })
+    append_audit(user_id, char_id, {"actor": "agent_inspection", "result": "inspected",
+                                    "event_id": uuid.uuid4().hex, "capability_id": "*"})
     return json.dumps({"revision": snapshot["revision"], "capabilities": rows}, ensure_ascii=False)
 
 
@@ -931,10 +935,13 @@ async def _read_self_action_history_wrapper(
     time_range: str = "24h", capability_id: str = "", status: str = "",
     *, user_id: str, char_id: str,
 ) -> str:
-    from core.self_management.store import query_audit
+    from core.self_management.store import append_audit, query_audit
 
-    return json.dumps({"actions": query_audit(user_id, char_id, time_range=time_range,
-                                                capability_id=capability_id, status=status)}, ensure_ascii=False)
+    actions = query_audit(user_id, char_id, time_range=time_range,
+                          capability_id=capability_id, status=status)
+    append_audit(user_id, char_id, {"actor": "agent_inspection", "result": "inspected",
+                                    "event_id": uuid.uuid4().hex, "capability_id": capability_id or "*"})
+    return json.dumps({"actions": actions}, ensure_ascii=False)
 
 
 _TOOL_REGISTRY["get_time"] = {

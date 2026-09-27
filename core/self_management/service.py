@@ -126,6 +126,20 @@ def _agent_change_impl(uid: str, char_id: str, change: CapabilityChange, *, sour
         if isinstance(previous, dict):
             _audit(uid, char_id, action_id=change.action_id, actor="agent", source=source, capability_id=capability_id, old_value=previous.get("value"), new_value=previous.get("value"), reason=change.reason, before=revision, after=revision, result="idempotent")
             return ChangeResult(bool(previous.get("ok")), "idempotent", revision, previous.get("value"))
+        recent_audit = store.read_audit(uid, char_id, limit=200)
+        last_attempt = next((row for row in reversed(recent_audit)
+                             if row.get("actor") == "agent" and row.get("capability_id") == capability_id), None)
+        if (last_attempt and last_attempt.get("result") not in {"applied", "idempotent"}
+                and int(last_attempt.get("revision_after") or 0) == revision):
+            inspected = any(row.get("actor") == "agent_inspection"
+                            and row.get("event_id") != last_attempt.get("event_id")
+                            and float(row.get("timestamp") or 0) >= float(last_attempt.get("timestamp") or 0)
+                            for row in recent_audit)
+            if not inspected:
+                _audit(uid, char_id, action_id=change.action_id, actor="agent", source=source,
+                       capability_id=capability_id, old_value=None, new_value=None,
+                       reason=change.reason, before=revision, after=revision, result="inspect_required")
+                return ChangeResult(False, "inspect_required", revision)
         if change.expected_revision != revision:
             _audit(uid, char_id, action_id=change.action_id, actor="agent", source=source, capability_id=capability_id, old_value=None, new_value=None, reason=change.reason, before=revision, after=revision, result="revision_conflict")
             return ChangeResult(False, "revision_conflict", revision)

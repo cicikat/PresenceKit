@@ -74,6 +74,36 @@ def test_tools_only_run_never_imports_or_calls_turn_sink(sandbox, monkeypatch):
     assert run.prompt_snapshot[-1]["role"] == "user"
 
 
+def test_same_life_records_query_runs_once_per_autonomy_run(sandbox, monkeypatch):
+    from core.autonomy import runner, store
+    from core.autonomy.models import Job, Run
+
+    state = store.load("owner", "char")
+    state["config"].update({"enabled": True, "max_tools": 4})
+    monkeypatch.setattr(runner.policy, "admission", lambda *args: None)
+    monkeypatch.setattr(runner.policy, "allowed_tools", lambda *args: [
+        {"type": "function", "function": {"name": "read_life_records", "parameters": {}}},
+    ])
+    monkeypatch.setattr(runner.talk_gate, "check", lambda *args, **kwargs: ("hard", "suppressed_unanswered_cap"))
+    calls = iter([
+        SimpleNamespace(tool_calls=[{"id": "one", "name": "read_life_records", "arguments": {"date_from": "2026-09-26"}}], continuation_items=[], assistant_message={}),
+        SimpleNamespace(tool_calls=[{"id": "two", "name": "read_life_records", "arguments": {"date_from": "2026-09-26"}}], continuation_items=[], assistant_message={}),
+        SimpleNamespace(tool_calls=[], continuation_items=[], assistant_message={}),
+    ])
+    async def chat_turn(*_args, **_kwargs): return next(calls)
+    invoked = []
+    async def execute(name, *_args, **_kwargs): invoked.append(name); return "records", "ok"
+    monkeypatch.setattr("core.llm_client.chat_turn", chat_turn)
+    monkeypatch.setattr(runner, "_execute_tool", execute)
+
+    run = asyncio.run(runner._run_locked(
+        Job(uid="owner", char_id="char", source="manual"), state,
+        Run(uid="owner", char_id="char", source="manual", job_id="job"),
+    ))
+    assert run.disposition == "completed_tools_only"
+    assert invoked == ["read_life_records"]
+
+
 def test_soft_block_allows_only_one_confirm_decision(sandbox, monkeypatch):
     from core.autonomy import runner, store
     from core.autonomy.models import Job, Run

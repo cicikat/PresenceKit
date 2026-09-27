@@ -845,6 +845,10 @@ Self Capability 开启时向 Path C 与 autonomy 暴露，群聊及 Path A 不�
 成功/失败筛选最近 50 条角色变更尝试。审计保留 action/run/job ID、请求动作及安全值、
 旧/新值、revision 与结果码；结构化值在角色视图中脱敏。`manage_self_capability` 回执明确分开
 `operation_succeeded` 和 `current_value`，所以成功设置为 `false` 不会被误读为失败。
+Path C 与 autonomy 在单次运行内复用相同参数的生活记录、自身能力清单及能力审计读取结果；
+能力变更后清空这些只读缓存。某能力变更失败且 revision 未变化时，下一次变更需先调用清单或
+审计查询；否则返回 `inspect_required`，阻止跨自主运行的盲试。原有 action ID 幂等及 revision
+CAS 仍生效。
 Path A 的 pending confirmation、missing input、快速路径和普通探针均由
 `core.pretool_router.route_pretool()` 收口，并显式传入 `origin="user_live"`；旧入口只保留兼容薄封装。
 

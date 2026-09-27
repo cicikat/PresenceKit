@@ -578,6 +578,7 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
     confirm_available = False
     write_tool_count = 0
     memory_candidates_evaluated = False
+    read_cache: dict[tuple[str, str], tuple[str | None, str]] = {}
     deadline = time.monotonic() + max(1.0, float(cfg.get("total_timeout_seconds") or 120))
     try:
         from core import llm_client
@@ -714,7 +715,17 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
                 if name != "manage_self_capability" and _is_write_tool(name) and write_tool_count >= max_write_tools:
                     messages.append({"role": "tool", "tool_call_id": call["id"], "content": "write tool budget exhausted for this autonomy run"})
                     continue
-                result, outcome = await _execute_tool(name, args, job, session, cfg, run)
+                cache_key = ((name, json.dumps(args, sort_keys=True, ensure_ascii=False))
+                             if name in {"read_life_records", "list_self_capabilities", "read_self_action_history"} else None)
+                if cache_key is not None and cache_key in read_cache:
+                    result, outcome = read_cache[cache_key]
+                    _record_event(run, "tool_read_reused", tool_name=name)
+                else:
+                    result, outcome = await _execute_tool(name, args, job, session, cfg, run)
+                    if cache_key is not None and outcome == "ok":
+                        read_cache[cache_key] = (result, outcome)
+                    elif name == "manage_self_capability":
+                        read_cache.clear()
                 run.tool_names.append(name)
                 if outcome == "outcome_unknown": run.disposition = Disposition.TOOL_OUTCOME_UNKNOWN.value; return _finish(run)
                 if outcome == "denied":
