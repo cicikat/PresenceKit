@@ -222,6 +222,8 @@ def user_grant(uid: str, char_id: str, *, capability_id: str, allowed: bool, mut
     if constraints is not None and not isinstance(constraints, dict):
         return ChangeResult(False, "invalid_constraints", store.load(uid, char_id)["revision"])
     spec = registry.resolve(capability_id)
+    if mutable_by_agent and spec is not None and not spec.mutable_by_agent:
+        return ChangeResult(False, "managed_by_user_only", store.load(uid, char_id)["revision"])
     normalized_constraints = _safe_value(constraints or {})
     if not isinstance(normalized_constraints, dict):
         normalized_constraints = {}

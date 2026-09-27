@@ -520,7 +520,7 @@ async function loadSelfManagement() {
       const id = escapeHtml(row.capability_id);
       const grant = row.grant || {};
       const locked = !!row.locked;
-      return `<tr><td>${id}</td><td>${row.system_available ? '是' : '否'}</td><td>${grant.allowed ? (grant.mutable_by_agent ? '可修改' : '仅用户可改') : '未授权'}<br><small>${escapeHtml(JSON.stringify(grant.constraints || {}))}</small></td><td>${escapeHtml(String(row.agent_selected_state ?? '默认'))}</td><td>${locked ? '已锁定' : '开放'}</td><td class="actions"><button class="btn btn-ghost btn-sm" data-action="selfManagementChange" data-action-args='["grant","${id}"]'>授权</button><button class="btn btn-ghost btn-sm" data-action="selfManagementChange" data-action-args='["revoke","${id}"]'>撤销授权</button><button class="btn btn-ghost btn-sm" data-action="selfManagementChange" data-action-args='["${locked ? 'unlock' : 'lock'}","${id}"]'>${locked ? '解锁' : '锁定'}</button><button class="btn btn-ghost btn-sm" data-action="selfManagementChange" data-action-args='["restore","${id}"]'>恢复</button><button class="btn btn-ghost btn-sm" data-action="selfManagementChange" data-action-args='["undo","${id}"]'>撤销上一步</button></td></tr>`;
+      return `<tr><td>${id}</td><td>${row.system_available ? '是' : '否'}</td><td>${grant.allowed ? (row.mutable_by_agent && grant.mutable_by_agent ? '可修改' : '仅用户可改') : '未授权'}<br><small>${escapeHtml(JSON.stringify(grant.constraints || {}))}</small></td><td>${escapeHtml(String(row.agent_selected_state ?? '默认'))}</td><td>${locked ? '已锁定' : '开放'}</td><td class="actions"><button class="btn btn-ghost btn-sm" data-action="selfManagementChange" data-action-args='["grant","${id}",${!!row.mutable_by_agent}]'>授权</button><button class="btn btn-ghost btn-sm" data-action="selfManagementChange" data-action-args='["revoke","${id}"]'>撤销授权</button><button class="btn btn-ghost btn-sm" data-action="selfManagementChange" data-action-args='["${locked ? 'unlock' : 'lock'}","${id}"]'>${locked ? '解锁' : '锁定'}</button><button class="btn btn-ghost btn-sm" data-action="selfManagementChange" data-action-args='["restore","${id}"]'>恢复</button><button class="btn btn-ghost btn-sm" data-action="selfManagementChange" data-action-args='["undo","${id}"]'>撤销上一步</button></td></tr>`;
     }).join('')}</tbody></table>`;
     bindPageActions(capabilities);
     const events = data.audit || [];
@@ -530,13 +530,13 @@ async function loadSelfManagement() {
   }
 }
 
-async function selfManagementChange(action, capabilityId) {
+async function selfManagementChange(action, capabilityId, selfMutable = false) {
   const reason = window.prompt('请输入此次用户覆盖的原因：', '用户覆盖');
   if (!reason) return;
   let path, body;
   if (action === 'grant' || action === 'revoke') {
     const constraints = capabilityId === 'autonomy.min_interval_seconds' ? {minimum: 60, maximum: 86400} : {};
-    path = '/admin/self-management/grants'; body = {capability_id: capabilityId, allowed: action === 'grant', mutable_by_agent: action === 'grant', constraints, reason};
+    path = '/admin/self-management/grants'; body = {capability_id: capabilityId, allowed: action === 'grant', mutable_by_agent: action === 'grant' && selfMutable, constraints, reason};
   } else if (action === 'lock' || action === 'unlock') {
     path = '/admin/self-management/locks'; body = {capability_id: capabilityId, locked: action === 'lock', reason};
   } else if (action === 'restore') {

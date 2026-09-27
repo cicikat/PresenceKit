@@ -26,6 +26,14 @@ _PROTECTED_PREFIXES = (
 )
 _SCHEMA_REVISION = 0
 
+# Only character-scoped, low-risk preferences may be changed by the character.
+# Global tool/MCP/scheduler controls and read access remain owner-controlled.
+_SELF_MUTABLE_SETTINGS = frozenset({
+    "setting.autonomy.talk_enabled",
+    "setting.autonomy.min_interval_seconds",
+    "setting.autonomy.interval.seconds",
+})
+
 
 def rebuild_effective_schema() -> int:
     """Invalidate the lightweight registry view after a setting mutation."""
@@ -51,8 +59,8 @@ class CapabilitySpec:
     value_type: str = "bool"
 
 
-def _management(capability_id: str, *, value_type: str = "bool", default: bool = True,
-                mutable: bool = True, high_risk: bool = False,
+def _management(capability_id: str, *, value_type: str = "bool", default: bool = False,
+                mutable: bool = False, high_risk: bool = False,
                 confirmation: bool = False) -> CapabilitySpec:
     return CapabilitySpec(
         capability_id, "setting", default_grant=default, mutable_by_agent=mutable,
@@ -144,7 +152,7 @@ def _dynamic_setting(capability_id: str) -> CapabilitySpec | None:
         if not isinstance(info, dict) or info.get("self_management"):
             return None
         high_risk = bool(info.get("dangerous") or info.get("effect") in {"actuate", "emergency"})
-        return _management(value, default=not high_risk, mutable=not high_risk, high_risk=high_risk, confirmation=high_risk)
+        return _management(value, high_risk=high_risk, confirmation=high_risk)
     if value.startswith("setting.mcp.server:"):
         rest = value[len("setting.mcp.server:"):]
         name, sep, field = rest.rpartition(".")
@@ -181,9 +189,12 @@ def _dynamic_setting(capability_id: str) -> CapabilitySpec | None:
         bool_fields = {"enabled", "talk_enabled", "interval.enabled", "overflow.enabled", "schedule.enabled"}
         int_fields = {"min_interval_seconds", "daily_evaluation_budget", "max_steps", "max_tools", "max_write_tools", "total_timeout_seconds", "tool_timeout_seconds", "interval.seconds"}
         if field in bool_fields:
-            return _management(value)
+            return _management(value, default=value in _SELF_MUTABLE_SETTINGS,
+                               mutable=value in _SELF_MUTABLE_SETTINGS)
         if field in int_fields:
-            return _management(value, value_type="integer")
+            return _management(value, value_type="integer",
+                               default=value in _SELF_MUTABLE_SETTINGS,
+                               mutable=value in _SELF_MUTABLE_SETTINGS)
         return None
     return None
 
@@ -191,9 +202,9 @@ def _dynamic_setting(capability_id: str) -> CapabilitySpec | None:
 def resolve(capability_id: str) -> CapabilitySpec | None:
     value = _canonical(capability_id)
     if value == AUTONOMY_ENABLED:
-        return CapabilitySpec(value, "autonomy_enabled")
+        return CapabilitySpec(value, "autonomy_enabled", mutable_by_agent=True)
     if value == AUTONOMY_MIN_INTERVAL:
-        return CapabilitySpec(value, "autonomy_min_interval", value_type="integer")
+        return CapabilitySpec(value, "autonomy_min_interval", mutable_by_agent=True, value_type="integer")
     if value.startswith("tool.use:"):
         tool_name = value[len("tool.use:"):]
         if capability_for_tool(tool_name) == value:

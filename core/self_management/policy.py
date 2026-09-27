@@ -102,6 +102,8 @@ def can_agent_manage(uid: str, char_id: str, capability_id: str) -> tuple[bool, 
         if registry.is_protected(capability_id):
             return False, "protected_setting"
         return False, "unknown_capability"
+    if not spec.mutable_by_agent:
+        return False, "managed_by_user_only"
     grant = _grant(state, capability_id)
     if grant is None and spec.kind == "setting" and spec.default_grant:
         grant = {"allowed": True, "mutable_by_agent": spec.mutable_by_agent}

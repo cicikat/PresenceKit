@@ -279,20 +279,25 @@ policy 和 `reload_status` 是管理面的唯一状态来源；未连接或没�
 `allow_tools` 是零授权；legacy 非严格模式才保留空白即全开的兼容语义。
 # Brief 152: Self Capability management controls
 
-Self Capability management IDs are separate from admin API scopes.  A fresh
-installation exposes safe, reversible `setting.*` controls through the internal
-management gateway: Tool Loop switches and exposure/presets, ordinary tool
-execution switches, the MCP global switch plus configured-server enablement and
-allowlists, and ordinary scheduler/autonomy switches, budgets, and intervals.
+Self Capability management IDs are separate from admin API scopes. The
+character's default self-mutable setting allowlist is limited to
+`setting.autonomy.talk_enabled`, `setting.autonomy.min_interval_seconds`, and
+`setting.autonomy.interval.seconds`, all scoped to the owner and character.
+The legacy `autonomy.enabled` and `autonomy.min_interval_seconds` IDs still
+require an explicit owner grant. Tool switches, Tool Loop exposure and presets,
+MCP server/policy controls, global scheduler controls, device, account, file,
+and privacy-read permissions remain owner-controlled.
 
 The registry publishes `default_grant`, `mutable_by_agent`, `user_lockable`,
 `requires_confirmation`, `high_risk`, and `value_type` for every management
-capability.  MCP capabilities identify a configured server by name; the model
-cannot provide a URL, headers, or transport configuration.  Secrets, auth/token
-profiles and scopes, proxy/bind/listen settings, destructive deletion/retention,
-and MCP imports are protected with stable rejection codes.  High-risk tool
-policies remain observable but are never agent-mutable; only an explicit admin
-action can enable them.
+capability. An owner grant cannot make a capability mutable when its registry
+spec marks it owner-only; requests to create such grants return
+`managed_by_user_only`, and old stored broad grants are rejected at execution.
+Owner-managed tool-use grants still govern actual tool availability. MCP
+capabilities identify a configured server by name; the model cannot provide a
+URL, headers, or transport configuration. Secrets, auth/token profiles and
+scopes, proxy/bind/listen settings, destructive deletion/retention, and MCP
+imports remain protected.
 
 Every accepted mutation uses the character-scoped optimistic revision and an
 idempotent action ID, appends an audit record, and increments the effective
@@ -301,10 +306,10 @@ passwords, API keys, and raw tool results.  The admin read endpoint is
 `GET /admin/self-management` (with `policy_matrix` and `audit`), while the
 agent has only the dedicated `manage_self_capability` gateway.
 
-Configured MCP tools may expose a safe `setting.mcp.server:<name>.policy:<tool>`
-control for ordinary `read`/`write` policy and confirmation flags. Existing
-`actuate`, `emergency`, and `unrestricted` policies are marked high risk and
-cannot be changed by the agent.
+Configured MCP policies remain visible for owner review but cannot be changed
+through the character's management gateway, including ordinary read/write
+policies. Existing actuate, emergency, and unrestricted policies retain their
+high-risk markers.
 
 ## Brief 203 Memory Event candidate relations
 

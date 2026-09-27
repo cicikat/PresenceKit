@@ -915,6 +915,7 @@ async def _manage_self_capability_wrapper(
 
 
 async def _list_self_capabilities_wrapper(*, user_id: str, char_id: str) -> str:
+    from core.self_management.policy import can_agent_manage
     from core.self_management.service import view
     from core.self_management.store import append_audit
 
@@ -922,15 +923,13 @@ async def _list_self_capabilities_wrapper(*, user_id: str, char_id: str) -> str:
     rows = []
     for row in snapshot["capabilities"]:
         grant = row.get("grant") or {}
+        can_modify, _ = can_agent_manage(user_id, char_id, row["capability_id"])
         rows.append({
             "key": row["capability_id"], "type": row["value_type"],
             "current_value": row.get("effective_value") if isinstance(row.get("effective_value"), (bool, int)) else None,
             "allowed_values": grant.get("constraints") or {},
-            "can_self_modify": bool(row.get("system_available") and grant.get("allowed")
-                                    and grant.get("mutable_by_agent") and not row.get("locked")
-                                    and not row.get("high_risk")),
-            "requires_owner_authorization": bool(not grant.get("allowed") or not grant.get("mutable_by_agent")
-                                                  or row.get("locked") or row.get("high_risk")),
+            "can_self_modify": can_modify,
+            "requires_owner_authorization": not can_modify,
         })
     append_audit(user_id, char_id, {"actor": "agent_inspection", "result": "inspected",
                                     "event_id": uuid.uuid4().hex, "capability_id": "*"})

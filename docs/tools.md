@@ -851,6 +851,11 @@ Path C 与 autonomy 在单次运行内复用相同参数的生活记录、自身
 能力变更后清空这些只读缓存。某能力变更失败且 revision 未变化时，下一次变更需先调用清单或
 审计查询；否则返回 `inspect_required`，阻止跨自主运行的盲试。原有 action ID 幂等及 revision
 CAS 仍生效。
+角色可自行修改的 setting 只包括本角色的 `autonomy.talk_enabled`、
+`autonomy.min_interval_seconds`、`autonomy.interval.seconds`；旧 `autonomy.enabled` 与
+`autonomy.min_interval_seconds` capability ID 仍须主人逐项授权。全局工具开关、Tool Loop、
+MCP、scheduler、设备/账号/文件/隐私读取设置保持主人控制；已有宽泛 grant 也不能绕过
+registry 的硬闸。
 审计复核发现重复把布尔设置写成当前值仍会被旧实现记为 `applied` 并递增 revision；
 现在同值请求记为 `unchanged`，操作成功但不写盘、不递增 revision，也不算 autonomy 的
 实际能力变更。失败后检查规则仍保留。

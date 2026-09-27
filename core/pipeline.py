@@ -1135,10 +1135,10 @@ class Pipeline:
         self_management_context = None
         try:
             from core.self_management.service import view as _self_management_view
-            from core.self_management.policy import feature_enabled as _self_management_enabled
+            from core.self_management.policy import can_agent_manage as _can_agent_manage, feature_enabled as _self_management_enabled
             _self_management_state = _self_management_view(uid, char_id) if _self_management_enabled() else {"capabilities": []}
             _rows = _self_management_state.get("capabilities", [])
-            _mutable_rows = [row for row in _rows if row.get("system_available") and (row.get("grant") or {}).get("allowed") and (row.get("grant") or {}).get("mutable_by_agent") and not row.get("locked")]
+            _mutable_rows = [row for row in _rows if _can_agent_manage(uid, char_id, row["capability_id"])[0]]
             _gateway_name = "manage_self_capability"
             _gateway_allowed_by_call = (
                 _gateway_name not in excluded_tool_names

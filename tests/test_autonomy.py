@@ -162,7 +162,7 @@ def test_write_tool_budget_prevents_second_write(sandbox, monkeypatch):
     assert run.tool_names == ["write_a"]
 
 
-def test_self_capability_enables_mcp_for_a_later_call_in_the_same_run(sandbox, monkeypatch):
+def test_agent_cannot_reenable_owner_controlled_mcp_in_same_run(sandbox, monkeypatch):
     from core.autonomy import runner, store
     from core.autonomy.models import Job, Run
     from core.self_management import policy as self_policy, store as self_store
@@ -181,7 +181,7 @@ def test_self_capability_enables_mcp_for_a_later_call_in_the_same_run(sandbox, m
         "func": mcp_status, "description": "test mcp status", "parameters": {"type": "object", "properties": {}},
         "category": "mcp", "mcp_server": "test", "mcp_tool": "status", "effect": "read", "dangerous": False,
     })
-    assert user_grant("owner", "char", capability_id=capability_id, allowed=True, mutable_by_agent=True, constraints={}, reason="allow").ok
+    assert user_grant("owner", "char", capability_id=capability_id, allowed=True, mutable_by_agent=False, constraints={}, reason="allow").ok
     capability_state = self_store.load("owner", "char")
     capability_state["agent_state"][capability_id] = False
     assert self_store.save("owner", "char", capability_state)
@@ -210,17 +210,14 @@ def test_self_capability_enables_mcp_for_a_later_call_in_the_same_run(sandbox, m
 
     monkeypatch.setattr("core.llm_client.chat_turn", chat_turn)
     run = asyncio.run(runner._run_locked(Job(uid="owner", char_id="char", source="manual", id="job-e2e"), state, Run(uid="owner", char_id="char", source="manual", job_id="job-e2e", id="run-e2e")))
-    assert tool_name not in exposed[0] and tool_name in exposed[1]
-    assert called == [True]
-    assert run.disposition == "completed_tools_only"
-    assert any(event["status"] == "self_capability_changed" for event in run.events)
-    mcp_event = next(event for event in run.events if event.get("tool_name") == tool_name)
-    assert mcp_event["mcp_audit_id"] == "autonomy:run-e2e:job-e2e"
+    assert tool_name not in exposed[0]
+    assert called == []
+    assert run.disposition == "self_capability_rejected"
     audit = self_store.read_audit("owner", "char", limit=10)
-    assert any(row.get("action_id") == "enable-mcp" and row.get("run_id") == "run-e2e" and row.get("job_id") == "job-e2e" for row in audit)
+    assert any(row.get("action_id") == "enable-mcp" and row.get("result") == "managed_by_user_only" for row in audit)
 
 
-def test_self_capability_disable_denies_following_call_before_dispatch(sandbox, monkeypatch):
+def test_agent_cannot_disable_owner_controlled_mcp(sandbox, monkeypatch):
     from core.autonomy import runner, store
     from core.autonomy.models import Job, Run
     from core.self_management.service import user_grant
@@ -238,7 +235,7 @@ def test_self_capability_disable_denies_following_call_before_dispatch(sandbox, 
         "func": mcp_status, "description": "test mcp status", "parameters": {"type": "object", "properties": {}},
         "category": "mcp", "mcp_server": "test", "mcp_tool": "status", "effect": "read", "dangerous": False,
     })
-    assert user_grant("owner", "char", capability_id=capability_id, allowed=True, mutable_by_agent=True, constraints={}, reason="allow").ok
+    assert user_grant("owner", "char", capability_id=capability_id, allowed=True, mutable_by_agent=False, constraints={}, reason="allow").ok
     state = store.load("owner", "char")
     state["config"].update({"enabled": True, "max_steps": 2, "max_tools": 2})
     schema = {"type": "function", "function": {"name": tool_name, "parameters": {"type": "object", "properties": {}}}}
@@ -252,8 +249,8 @@ def test_self_capability_disable_denies_following_call_before_dispatch(sandbox, 
     monkeypatch.setattr("core.llm_client.chat_turn", lambda *_args, **_kwargs: _async_next(calls))
     run = asyncio.run(runner._run_locked(Job(uid="owner", char_id="char", source="manual"), state, Run(uid="owner", char_id="char", source="manual", job_id="job")))
     assert called == []
-    assert run.disposition == "tool_call_denied"
-    assert run.events[-1] == {"status": "tool_call_denied", "tool_name": tool_name, "reason": "not_in_current_effective_allowlist"}
+    assert run.disposition == "self_capability_rejected"
+    assert run.events[-1]["reason"] == "managed_by_user_only"
 
 
 async def _async_next(values):
@@ -365,7 +362,7 @@ def test_connected_readonly_mcp_inherits_without_allowlist(sandbox, monkeypatch)
         "registered_tools": [tool_name],
     })
     monkeypatch.setattr("core.config_loader.get_config", lambda: {"mcp_servers": {}})
-    assert user_grant("owner", "char", capability_id=capability_id, allowed=True, mutable_by_agent=True, constraints={}, reason="allow").ok
+    assert user_grant("owner", "char", capability_id=capability_id, allowed=True, mutable_by_agent=False, constraints={}, reason="allow").ok
     state = store.load("owner", "char")
     row = next(item for item in policy.tool_decisions("owner", "char", state) if item["name"] == tool_name)
     assert row["eligible"] is False
@@ -403,7 +400,7 @@ def test_allowlist_and_inheritance_share_one_denied_reason(sandbox, monkeypatch)
         "registered_tools": [tool_name],
     })
     monkeypatch.setattr("core.config_loader.get_config", lambda: {"mcp_servers": {}})
-    assert user_grant("owner", "char", capability_id=capability_id, allowed=True, mutable_by_agent=True, constraints={}, reason="allow").ok
+    assert user_grant("owner", "char", capability_id=capability_id, allowed=True, mutable_by_agent=False, constraints={}, reason="allow").ok
     state = store.load("owner", "char")
     row = next(item for item in policy.tool_decisions("owner", "char", state) if item["name"] == tool_name)
     assert row["allowed"] is False
@@ -453,7 +450,7 @@ def test_global_disable_blocks_inherited_mcp(sandbox, monkeypatch):
         "registered_tools": [tool_name],
     })
     monkeypatch.setattr("core.config_loader.get_config", lambda: {"mcp_servers": {}})
-    assert user_grant("owner", "char", capability_id=capability_id, allowed=True, mutable_by_agent=True, constraints={}, reason="allow").ok
+    assert user_grant("owner", "char", capability_id=capability_id, allowed=True, mutable_by_agent=False, constraints={}, reason="allow").ok
     row = next(item for item in policy.tool_decisions("owner", "char", store.load("owner", "char")) if item["name"] == tool_name)
     assert row["allowed"] is False
     assert row["denial_reason"] == "globally_disabled"
@@ -507,7 +504,7 @@ def test_self_capability_revoke_blocks_inherited_mcp(sandbox, monkeypatch):
         "registered_tools": [tool_name],
     })
     monkeypatch.setattr("core.config_loader.get_config", lambda: {"mcp_servers": {}})
-    assert user_grant("owner", "char", capability_id=capability_id, allowed=False, mutable_by_agent=True, constraints={}, reason="revoke").ok
+    assert user_grant("owner", "char", capability_id=capability_id, allowed=False, mutable_by_agent=False, constraints={}, reason="revoke").ok
     row = next(item for item in policy.tool_decisions("owner", "char", store.load("owner", "char")) if item["name"] == tool_name)
     assert row["allowed"] is False
     assert row["self_capability"] is False
@@ -542,7 +539,7 @@ def test_require_confirm_mcp_does_not_inherit(sandbox, monkeypatch):
         "registered_tools": [tool_name],
     })
     monkeypatch.setattr("core.config_loader.get_config", lambda: {"mcp_servers": {}})
-    assert user_grant("owner", "char", capability_id=capability_id, allowed=True, mutable_by_agent=True, constraints={}, reason="allow").ok
+    assert user_grant("owner", "char", capability_id=capability_id, allowed=True, mutable_by_agent=False, constraints={}, reason="allow").ok
     row = next(item for item in policy.tool_decisions("owner", "char", store.load("owner", "char")) if item["name"] == tool_name)
     assert row["eligible"] is False
     assert row["allowed"] is False
@@ -583,7 +580,7 @@ def test_mcp_local_policy_blocks_allowlisted_mcp(sandbox, monkeypatch):
             "servers": [{"name": "inherit", "allow_tools": [], "tool_policy": {}}],
         }
     })
-    assert user_grant("owner", "char", capability_id=capability_id, allowed=True, mutable_by_agent=True, constraints={}, reason="allow").ok
+    assert user_grant("owner", "char", capability_id=capability_id, allowed=True, mutable_by_agent=False, constraints={}, reason="allow").ok
     state = store.load("owner", "char")
     state["config"]["tools"] = {
         tool_name: {"enabled": True, "mcp_explicit": True, "outcome_unknown": "fail_closed"}

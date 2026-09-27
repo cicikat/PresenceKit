@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-from copy import deepcopy
-
-from admin.config_control import ConfigDocument
 from core.self_management.models import CapabilityChange
 
 
@@ -16,52 +13,47 @@ def test_fresh_install_exposes_safe_management_matrix(sandbox):
 
     snapshot = view("u1", "char_a")
     row = next(item for item in snapshot["capabilities"] if item["capability_id"] == registry.TOOL_LOOP_ENABLED)
-    assert row["grant"]["default"] is True
-    assert row["grant"]["mutable_by_agent"] is True
+    assert row["grant"] is None
+    assert row["mutable_by_agent"] is False
     assert row["high_risk"] is False
+    talk = next(item for item in snapshot["capabilities"] if item["capability_id"] == "setting.autonomy.talk_enabled")
+    assert talk["grant"]["default"] is True
+    assert talk["mutable_by_agent"] is True
     context = agent_gateway_context("u1", "char_a")
-    assert context and any(item["id"] == registry.TOOL_LOOP_ENABLED for item in context["mutable_capabilities"])
+    assert context and any(item["id"] == "setting.autonomy.talk_enabled" for item in context["mutable_capabilities"])
+    assert all(item["id"] != registry.TOOL_LOOP_ENABLED for item in context["mutable_capabilities"])
 
 
-def test_agent_can_change_global_server_allowlist_and_preset(sandbox, monkeypatch):
-    import core.config_loader as loader
-    from core.self_management import registry, settings
-    from core.self_management.service import agent_change, restore_user_setting
+def test_global_and_privacy_controls_remain_owner_only_with_stale_grants(sandbox):
+    import asyncio
+    import json
 
-    cfg = {
-        "tool_loop": {"enabled": False, "tool_presets": [{"name": "read_only", "tools": ["get_time"]}]},
-        "mcp_servers": {"enabled": False, "servers": [{"name": "cedar", "enabled": False, "allow_tools": ["status"], "tool_policy": {"status": {"effect": "read", "require_confirm": False}}}]},
-        "scheduler": {},
-    }
-    monkeypatch.setattr(loader, "get_config", lambda: cfg)
-    monkeypatch.setattr(settings, "get_config", lambda: cfg)
-    monkeypatch.setattr(settings, "reload_config", lambda: cfg)
-    monkeypatch.setattr(settings, "read_config_file", lambda _path: ConfigDocument(cfg))
+    from core.self_management import policy, registry, store
+    from core.self_management.service import agent_change, agent_gateway_context, user_grant
+    from core.tool_dispatcher import _list_self_capabilities_wrapper
 
-    def persist(_path, document):
-        cfg.clear()
-        cfg.update(deepcopy(dict(document)))
-
-    monkeypatch.setattr(settings, "write_config_file", persist)
-
-    enabled = agent_change("u1", "char_a", _change(registry.TOOL_LOOP_ENABLED, True, 0, "a1"), source="assistant_self_management")
-    assert enabled.ok and cfg["tool_loop"]["enabled"] is True
-    mcp = agent_change("u1", "char_a", _change(registry.MCP_ENABLED, True, 1, "a2"), source="assistant_self_management")
-    assert mcp.ok and cfg["mcp_servers"]["enabled"] is True
-    server = agent_change("u1", "char_a", _change("mcp.server:cedar.enabled", True, 2, "a3"), source="assistant_self_management")
-    assert server.ok and cfg["mcp_servers"]["servers"][0]["enabled"] is True
-    allow = agent_change("u1", "char_a", _change("mcp.server:cedar.allowlist", ["status"], 3, "a4"), source="assistant_self_management")
-    assert allow.ok and cfg["mcp_servers"]["servers"][0]["allow_tools"] == ["status"]
-    policy = agent_change("u1", "char_a", _change("mcp.server:cedar.policy:status", {"require_confirm": True}, 4, "a5-policy"), source="assistant_self_management")
-    assert policy.ok and cfg["mcp_servers"]["servers"][0]["tool_policy"]["status"]["require_confirm"] is True
-    high_risk = agent_change("u1", "char_a", _change("mcp.server:cedar.policy:status", {"effect": "unrestricted"}, 5, "a6-policy"), source="assistant_self_management")
-    assert high_risk.code == "high_risk_requires_admin"
-    preset = agent_change("u1", "char_a", _change("tool_loop.preset:read_only", ["get_time"], 5, "a6"), source="assistant_self_management")
-    assert preset.ok and preset.code == "unchanged" and preset.revision == 5
-    scheduler = agent_change("u1", "char_a", _change(registry.SCHEDULER_ENABLED, True, 5, "a7"), source="assistant_self_management")
-    assert scheduler.ok and cfg["scheduler"]["enabled"] is True
-    restored = restore_user_setting("u1", "char_a", capability_id=registry.TOOL_LOOP_ENABLED, reason="restore")
-    assert restored.ok and cfg["tool_loop"]["enabled"] is False
+    owner_only = (
+        registry.TOOL_LOOP_ENABLED, registry.MCP_ENABLED, registry.SCHEDULER_ENABLED,
+        registry.AUTONOMY_SETTING_ENABLED, "setting.tool_loop.exposure:path_c",
+        "setting.tool.read_life_records.enabled", "setting.tool.fs_read.enabled",
+    )
+    state = store.load("u1", "char_a")
+    for capability_id in owner_only:
+        assert registry.resolve(capability_id) is not None
+        assert not user_grant("u1", "char_a", capability_id=capability_id,
+                              allowed=True, mutable_by_agent=True, constraints={}, reason="old grant").ok
+        state["grants"][capability_id] = {"allowed": True, "mutable_by_agent": True}
+    assert store.save("u1", "char_a", state)
+    for index, capability_id in enumerate(owner_only):
+        assert policy.can_agent_manage("u1", "char_a", capability_id) == (False, "managed_by_user_only")
+        result = agent_change("u1", "char_a", _change(capability_id, True, 0, f"attempt-{index}"),
+                              source="assistant_self_management")
+        assert result.code == "managed_by_user_only"
+    context = agent_gateway_context("u1", "char_a")
+    assert context and not set(owner_only) & {item["id"] for item in context["mutable_capabilities"]}
+    listed = json.loads(asyncio.run(_list_self_capabilities_wrapper(user_id="u1", char_id="char_a")))
+    rows = {row["key"]: row for row in listed["capabilities"]}
+    assert all(rows[capability_id]["can_self_modify"] is False for capability_id in owner_only)
 
 
 def test_protected_secret_auth_and_url_changes_are_rejected(sandbox):
@@ -83,20 +75,23 @@ def test_high_risk_tool_policy_is_visible_but_not_agent_mutable(sandbox):
         # The registry may omit an optional tool in a minimal installation.
         return
     assert spec.high_risk is True
-    assert user_grant("u1", "char_a", capability_id=capability_id, allowed=True, mutable_by_agent=True, constraints={}, reason="admin review").ok
+    assert not user_grant("u1", "char_a", capability_id=capability_id, allowed=True, mutable_by_agent=True, constraints={}, reason="admin review").ok
+    assert user_grant("u1", "char_a", capability_id=capability_id, allowed=True, mutable_by_agent=False, constraints={}, reason="owner only").ok
     result = agent_change("u1", "char_a", _change(capability_id, True, 1, "danger"), source="assistant_self_management")
-    assert result.code == "high_risk_requires_admin"
+    assert result.code == "managed_by_user_only"
     row = next(item for item in view("u1", "char_a")["capabilities"] if item["capability_id"] == capability_id)
     assert row["high_risk"] is True
 
 
 def test_setting_mutation_uses_revision_and_audit(sandbox):
-    from core.self_management import registry, store
+    from core.self_management import settings, store
     from core.self_management.service import agent_change
 
-    first = agent_change("u1", "char_a", _change(registry.AUTONOMY_SETTING_ENABLED, True, 0, "autonomy-on"), source="assistant_self_management")
+    capability_id = "setting.autonomy.talk_enabled"
+    original = settings.read("u1", "char_a", capability_id)
+    first = agent_change("u1", "char_a", _change(capability_id, not original, 0, "talk-toggle"), source="assistant_self_management")
     assert first.ok and first.revision == 1
-    conflict = agent_change("u1", "char_a", _change(registry.AUTONOMY_SETTING_ENABLED, False, 0, "stale"), source="assistant_self_management")
+    conflict = agent_change("u1", "char_a", _change(capability_id, original, 0, "stale"), source="assistant_self_management")
     assert conflict.code == "revision_conflict"
     audit = store.read_audit("u1", "char_a", limit=10)
     assert any(item.get("result") == "revision_conflict" for item in audit)

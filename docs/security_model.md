@@ -25,6 +25,9 @@ LLM 不能直接执行系统能力。所有工具都必须在 `core/tool_dispatc
   `autonomy_loop`、`admin_console`，以及只允许 `manage_self_capability` 的两个 self-management origin。
   未知 origin fail-closed；self-management gateway 仅在用户授权、角色可修改且未锁定时进入对应 schema，
   不接受 URL、header、token 或任意原始 payload。
+  角色默认可改范围限于本角色的主动发言开关与间隔；全局工具/MCP/调度控制、设备、账号、
+  文件和隐私读取能力保持 owner-only。旧授权文件即使写着 `mutable_by_agent=true`，
+  服务层仍以 registry 的可修改标记拒绝超出范围的变更。
 
 ### 管理接口 Bearer token（SEC-AUTH-1 / SEC-AUTH-1B，2026-06-11 收口）
 
