@@ -113,6 +113,7 @@ async def update_hds_local_settings(body: HdsLocalSettings, auth=Depends(require
 async def get_hds_local_status(auth=Depends(require_scopes("state.read"))):
     from core.hds_local import config
     from core.memory import health_state
+    from admin.hds_server import request_stats
 
     oid = str(get_config().get("scheduler", {}).get("owner_id") or "")
     samples = (health_state.load(oid).get("hds_samples") or []) if oid else []
@@ -123,6 +124,7 @@ async def get_hds_local_status(auth=Depends(require_scopes("state.read"))):
         "sample_count_retained": len(samples),
         "latest": samples[-1] if samples else None,
         "recent": samples[-20:],
+        "ingress": request_stats(),
     }
 
 # 最近一次 Watch 事件快照（内存缓存，重启清零）

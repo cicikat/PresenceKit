@@ -9,6 +9,7 @@ from core.memory import health_state
 def test_hds_http_receiver_enforces_lan_and_size(sandbox, monkeypatch):
     from fastapi.testclient import TestClient
     from admin.hds_server import app
+    from admin.hds_server import request_stats
 
     monkeypatch.setattr(hds_local, "config", lambda: {"enabled": True, "allowed_subnets": ["127.0.0.1/32"]})
     monkeypatch.setattr("admin.hds_server.get_config", lambda: {"scheduler": {"owner_id": "hds-http"}})
@@ -18,6 +19,9 @@ def test_hds_http_receiver_enforces_lan_and_size(sandbox, monkeypatch):
     assert client.put("/", json={"data": json.dumps({"heartRate": 91})}).status_code == 200
     assert client.put("/", json={"data": "bad"}).status_code == 422
     assert client.put("/", content=b"x" * 8193).status_code == 413
+    stats = request_stats()
+    assert stats["methods"]["PUT"] >= 4
+    assert all(stats["statuses"].get(code, 0) >= 1 for code in ("200", "403", "413", "422"))
 
 
 def test_hds_envelope_persistence_and_change(sandbox, monkeypatch):
