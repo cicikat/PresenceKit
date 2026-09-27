@@ -361,6 +361,8 @@ class Pipeline:
 
         # 同步读取（内存/小文件，不值得并发）
         history          = short_term.load_for_prompt(uid, char_id=char_id)
+        # 旧的失败条目在本轮历史投影完成后重试；本轮使用裁剪兜底。
+        short_term.schedule_long_user_summaries(uid, char_id=char_id)
         recent_group_ctx = group_context.get_recent(group_id)
         relation         = user_relation.get_relation(uid)
         lore_entries, _lore_trace = scoped_lore_engine.match(content, history, return_trace=True)
@@ -1947,6 +1949,10 @@ class Pipeline:
         _turn_id = critical_result["turn_id"]
         _should_update_profile = critical_result["should_update_profile"]
         _profile_recent = critical_result["profile_recent"]
+
+        if not trigger_name and envelope.can_write_memory:
+            from core.memory.short_term import schedule_long_user_summaries
+            schedule_long_user_summaries(user_id, char_id=char_id)
 
         # ── detect_emotion（带超时，只依赖 reply 文本）──
         try:

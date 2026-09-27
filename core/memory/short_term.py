@@ -5,6 +5,7 @@
 """
 
 import json
+import asyncio
 import logging
 import re
 import time
@@ -22,6 +23,85 @@ logger = logging.getLogger(__name__)
 
 # 近场承载对话连续性，必须优先保留最近几轮的上下文。
 NEAR_K = 10
+LONG_USER_LIMIT = 1000
+_summary_inflight: set[tuple[str, str]] = set()
+
+
+def schedule_long_user_summaries(user_id: str, *, char_id: str = DEFAULT_CHAR_ID) -> None:
+    """仅在已有事件循环时排队；每个作用域同时最多一次摘要任务。"""
+    key = (str(user_id), char_id)
+    if key in _summary_inflight or not pending_long_user_messages(user_id, char_id=char_id):
+        return
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    _summary_inflight.add(key)
+
+    async def run() -> None:
+        try:
+            from core.llm_client import summarize_long_user_message
+            for sequence in pending_long_user_messages(user_id, char_id=char_id):
+                archive = _load_long_messages(user_id, char_id=char_id)
+                item = archive.get("messages", {}).get(str(sequence), {})
+                if item.get("status") != "pending":
+                    continue
+                summary = await summarize_long_user_message(str(item.get("content", "")))
+                if summary:
+                    set_long_user_summary(user_id, sequence, summary, char_id=char_id)
+        finally:
+            _summary_inflight.discard(key)
+
+    loop.create_task(run())
+
+
+def _long_messages_path(user_id: str, *, char_id: str = DEFAULT_CHAR_ID) -> Path:
+    return _history_path(user_id, char_id=char_id).parent / "long_user_messages.json"
+
+
+def _load_long_messages(user_id: str, *, char_id: str = DEFAULT_CHAR_ID) -> dict:
+    path = _long_messages_path(user_id, char_id=char_id)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        logger.exception("[short_term] long user message archive unreadable")
+        return {}
+
+
+def read_long_user_message(user_id: str, sequence: int, *, offset: int = 0,
+                           char_id: str = DEFAULT_CHAR_ID) -> str:
+    """按当前用户和角色读取原文片段；不会从其他作用域回退。"""
+    if not isinstance(sequence, int) or sequence < 1 or not isinstance(offset, int) or offset < 0:
+        return "序号或偏移无效。"
+    archive = _load_long_messages(user_id, char_id=char_id)
+    item = archive.get("messages", {}).get(str(sequence))
+    if not isinstance(item, dict) or not isinstance(item.get("content"), str):
+        return "找不到这条长消息。"
+    content = item["content"]
+    if offset >= len(content):
+        return f"长消息序号 {sequence} 已到末尾；全文 {len(content)} 字。"
+    return f"长消息序号 {sequence}，第 {offset + 1}-{min(offset + 1400, len(content))} 字，共 {len(content)} 字：\n{content[offset:offset + 1400]}"
+
+
+def pending_long_user_messages(user_id: str, *, char_id: str = DEFAULT_CHAR_ID) -> list[int]:
+    archive = _load_long_messages(user_id, char_id=char_id)
+    return [int(seq) for seq, item in archive.get("messages", {}).items()
+            if isinstance(item, dict) and item.get("status") == "pending" and str(seq).isdigit()]
+
+
+def set_long_user_summary(user_id: str, sequence: int, summary: str, *,
+                          char_id: str = DEFAULT_CHAR_ID) -> bool:
+    summary = summary.strip()
+    if not summary:
+        return False
+    archive = _load_long_messages(user_id, char_id=char_id)
+    item = archive.get("messages", {}).get(str(sequence))
+    if not isinstance(item, dict):
+        return False
+    item["summary"] = summary[:500]
+    item["status"] = "ready"
+    return safe_write_json(_long_messages_path(user_id, char_id=char_id), archive)
 
 # 内容越长，越可能包含具体事件、约束或连续叙述。
 LENGTH_SIGNAL_WEIGHT = 1.0
@@ -332,6 +412,17 @@ def get_history(user_id: str, max_turns: int | None = None, *, char_id: str = DE
 def load_for_prompt(user_id, *, budget_rounds=None, near_k=NEAR_K, char_id: str = DEFAULT_CHAR_ID) -> list[dict]:
     """读取已 sanitize 的 short_term，并按 turn-group 加权选择 prompt 子集。"""
     raw = load(user_id, char_id=char_id)
+    archive = _load_long_messages(user_id, char_id=char_id)
+    for msg in raw:
+        seq = msg.get("_long_user_sequence")
+        if msg.get("role") != "user" or not isinstance(seq, int):
+            continue
+        item = archive.get("messages", {}).get(str(seq), {})
+        if item.get("status") == "ready" and item.get("summary"):
+            content = str(item["summary"])
+        else:
+            content = str(msg.get("content", ""))[:LONG_USER_LIMIT] + "（已裁剪）"
+        msg["content"] = f"[长消息序号 {seq}] {content}"
     # trigger_stub 是系统触发锚点（内容含内部 trigger_name 明文），绝不能投影进 prompt。
     # 此前仅靠 _score_turn_group 评 0 分淘汰，但近场 NEAR_K 与 ≤budget 全量两条路径
     # 都绕过评分，导致 [触发: xxx] 被当成用户消息喂给 LLM。这里在入口统一剔除，
@@ -417,7 +508,8 @@ def append(
         item.get("_turn_id") == turn_id
         and item.get("role") == role
         and _speaker_id(item) == resolved_speaker_id
-        and item.get("content") == content
+        and (item.get("content") == content or (role == "user" and len(content) > LONG_USER_LIMIT
+             and item.get("_long_user_sequence") is not None))
         for item in history
     ):
         return True
@@ -432,6 +524,16 @@ def append(
         entry["_turn_id"] = turn_id
     if source:
         entry["_source"] = source
+    if role == "user" and source != "trigger_stub" and len(content) > LONG_USER_LIMIT:
+        archive = _load_long_messages(user_id, char_id=char_id)
+        messages = archive.setdefault("messages", {})
+        sequence = max([int(archive.get("last_sequence", 0))]
+                       + [int(key) for key in messages if str(key).isdigit()]) + 1
+        messages[str(sequence)] = {"content": content, "status": "pending", "turn_id": turn_id}
+        archive["last_sequence"] = sequence
+        if safe_write_json(_long_messages_path(user_id, char_id=char_id), archive):
+            entry["_long_user_sequence"] = sequence
+            entry["content"] = content[:LONG_USER_LIMIT] + "（已裁剪）"
     history.append(entry)
 
     # 超出上限时按完整 turn-group 移除，不能截出孤儿发言。
@@ -720,6 +822,9 @@ def consume_stream_collapse_signal(
 def clear(user_id: str, *, char_id: str = DEFAULT_CHAR_ID):
     """清空指定用户的短期历史（admin 用）"""
     _save(user_id, [], char_id=char_id)
+    archive = _long_messages_path(user_id, char_id=char_id)
+    archive.unlink(missing_ok=True)
+    archive.with_suffix(archive.suffix + ".bak").unlink(missing_ok=True)
 
 
 class ShortTermMemory:

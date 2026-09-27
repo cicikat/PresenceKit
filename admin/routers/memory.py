@@ -153,7 +153,10 @@ async def get_short_term(
     from core.memory import short_term
     resolved = _resolve_char_id(char_id)
     history = short_term.load(user_id, char_id=resolved)
-    return {"user_id": user_id, "char_id": resolved, "history": history, "count": len(history)}
+    return {
+        "user_id": user_id, "char_id": resolved, "history": history, "count": len(history),
+        "long_user_summary_pending": short_term.pending_long_user_messages(user_id, char_id=resolved),
+    }
 
 
 @router.delete("/{user_id}/short-term", summary="清除短期记忆")

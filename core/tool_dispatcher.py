@@ -189,6 +189,12 @@ async def _get_episodic_wrapper(user_id: str, topic: str = "", *, char_id: str) 
     return format_for_prompt(memories, char_name=get_char_name(char_id)) if memories else "暂无相关记忆"
 
 
+async def _read_long_user_message_wrapper(user_id: str, sequence: int, offset: int = 0,
+                                          *, char_id: str) -> str:
+    from core.memory.short_term import read_long_user_message
+    return read_long_user_message(user_id, sequence, offset=offset, char_id=char_id)
+
+
 from core.tools.memory_dossiers import (
     get_memory_consolidation_status as _get_memory_consolidation_status_wrapper,
     read_memory_dossier as _read_memory_dossier_wrapper,
@@ -261,7 +267,7 @@ from pathlib import Path as _Path
 
 _MODE_RESTRICTED_CATEGORIES: frozenset[str] = frozenset({"desktop", "system", "phone_control"})
 _SCOPED_MEMORY_READ_TOOLS: frozenset[str] = frozenset({
-    "get_profile", "get_episodic", "search_events", "expand_event_window", "get_related_events",
+    "get_profile", "get_episodic", "read_long_user_message", "search_events", "expand_event_window", "get_related_events",
     "search_documents", "read_document", "search_character_notes",
     "search_memory_dossiers", "read_memory_dossier", "search_dossier_events",
     "get_memory_consolidation_status",
@@ -1349,6 +1355,19 @@ _TOOL_REGISTRY["get_episodic"] = {
         "required": [],
     },
     "trace_args": ["topic"],
+}
+
+_TOOL_REGISTRY["read_long_user_message"] = {
+    "func": _read_long_user_message_wrapper,
+    "description": "按历史里的长消息序号查用户那条消息的原文。概述不足以回答具体细节时调用；用 offset 继续读取。",
+    "dangerous": False, "category": "memory", "echo_event_log": False,
+    "examples": ["查长消息序号 3 的原文", "继续读序号 3 从第 1401 字开始的内容"],
+    "keywords": ["长消息", "原文", "概述", "序号", "已裁剪"],
+    "trace_args": ["sequence", "offset"],
+    "parameters": {"type": "object", "properties": {
+        "sequence": {"type": "integer", "minimum": 1, "description": "历史中标出的长消息序号"},
+        "offset": {"type": "integer", "minimum": 0, "description": "从第几字开始，默认 0；每次最多 1400 字"},
+    }, "required": ["sequence"]},
 }
 
 _TOOL_REGISTRY["search_memory_dossiers"] = {
@@ -2759,7 +2778,7 @@ async def _execute_structured_impl(
         if is_group or origin not in {"assistant_loop", "autonomy_loop"} or not feature_enabled():
             return _execution_outcome("tool_failed", "Self Capability history is unavailable in this context.")
 
-    if tool_name in {"search_events", "expand_event_window", "get_related_events", "search_memory_dossiers", "read_memory_dossier", "search_dossier_events", "update_memory_dossier", "get_memory_consolidation_status", "request_memory_consolidation", "read_life_records", "reread_image", "write_artifact", "read_artifact", "list_artifacts"} and is_group:
+    if tool_name in {"read_long_user_message", "search_events", "expand_event_window", "get_related_events", "search_memory_dossiers", "read_memory_dossier", "search_dossier_events", "update_memory_dossier", "get_memory_consolidation_status", "request_memory_consolidation", "read_life_records", "reread_image", "write_artifact", "read_artifact", "list_artifacts"} and is_group:
         _trace("failed", "reality_event_tools_forbidden_in_group")
         return _execution_outcome("tool_failed")
 

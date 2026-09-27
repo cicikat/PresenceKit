@@ -567,6 +567,8 @@ self_access:
 
 文件：`core/tool_dispatcher.py` → `_TOOL_REGISTRY`
 
+`read_long_user_message(sequence, offset=0)`：在当前用户、当前角色的现实私聊中，按层 9 历史显示的稳定序号读取单条超长用户消息原文，每次最多 1400 字。只读、分段返回；群聊禁用，不接受调用方指定其他用户或角色。概述不足以回答细节时再查，工具结果走常规有界层 10。
+
 ### info 类（探针覆盖）
 
 | 工具名 | 触发描述 | 实现位置 |

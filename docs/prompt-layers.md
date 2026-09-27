@@ -72,6 +72,8 @@ Reality `1_system_prompt` 绑定当前角色，并使用用户所选称谓（默
 | `coplay_recall` | 聊天提到玩过的游戏名/别名时，回忆上次游玩摘要（`<陪玩回忆>`定界） | 命中 `game_state` 里任一已玩游戏的 `game_name`/`aliases` 子串，且非 active | `core/coplay/game_state.py::build_game_log_recall_text()` |
 | `7_mes_example_item` | 对话示例（few-shot），前后各有 `<语气示例>` / `</语气示例>` 定界标签，明示"仅作风格参考，非真实对话" | always（有内容） | 角色卡 mes_example |
 | `9_history` | 短期对话历史，前后各有 `<对话记录>` / `</对话记录>` 定界标签，明示"以下是真实发生的对话"；近场保留 + 远场加权择优；投影时跳过 `_source=="trigger_stub"` 防触发器名泄露 | always | `short_term.load_for_prompt()` |
+
+单条用户消息超过 1000 字时，本轮生成仍用原文；写入短期历史时另存原文，历史原位置先放前 1000 字和“（已裁剪）”。发送后的 summary preset 异步生成概述；成功后历史投影在原位置显示概述及稳定的长消息序号。失败保留待处理状态，下次加载历史后重新尝试，期间仍只投影裁剪文本。序号可传给工具层的 `read_long_user_message` 按偏移查询原文。
 | `9_anti_repeat` | 跨轮开头去同质：取最近 2–3 条 assistant 回复的起手（首 8 字），以软约束告知模型别用相同开头/句式；fail-open，无历史时不注入 | 有近期 assistant 回复时 | `_recent_openings()` 从 history 提取 |
 | `9.5_episodic_top` | 最相关情景记忆1条（attention sweet spot） | episodic_result 非空 | 从已召回结果取第一条，不重复召回 |
 | `10_tool_result` | 本轮工具执行结果（带生成时间与有效性） | 有工具调用结果时 | `tool_dispatcher.execute_structured()` 裸输出经 `core/tools/tool_result.py` 截断+定界框定后注入（`safe_summary`）；失败/结果不明明确不是完成事实 |
