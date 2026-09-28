@@ -157,10 +157,12 @@ function _showHdsMode() {
 
 function _showHdsAddress(port) {
   const selected = document.getElementById('hds-interface')?.value || '';
-  const urls = _hdsInterfaces.filter(item => !selected || item.name === selected)
-    .map(item => `http://${item.address}:${port}/`);
-  document.getElementById('hds-url').textContent = urls.length
-    ? _scText('scheduler.hds.address', '手表 HDS 中填写：{urls}', {urls: urls.join('  ·  ')})
+  const ips = _hdsInterfaces.filter(item => !selected || item.name === selected)
+    .map(item => item.address);
+  document.getElementById('hds-url').textContent = ips.length
+    ? Number(port) === 3476
+      ? _scText('scheduler.hds.address', '手表 HDS 的 Local Connection 只填 IP：{ips}（关闭 Advanced IP entry）', {ips: ips.join('  ·  ')})
+      : _scText('scheduler.hds.nondefault_port', '当前端口 {port}；此版 HDS 普通 IP 输入使用默认端口 3476，请将接收端口改回 3476。', {port})
     : _scText('scheduler.hds.no_address', '未发现可用的局域网 IPv4 地址。');
 }
 
@@ -172,13 +174,13 @@ async function copyHdsAddress() {
   }
   const item = _hdsInterfaces.find(entry => entry.name === selected);
   if (!item) return;
-  const url = `http://${item.address}:${document.getElementById('hds-port').value}/`;
+  const address = item.address;
   try {
     if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(url);
+      await navigator.clipboard.writeText(address);
     } else {
       const field = document.createElement('textarea');
-      field.value = url;
+      field.value = address;
       document.body.appendChild(field);
       field.select();
       const copied = document.execCommand('copy');

@@ -5,6 +5,7 @@ from __future__ import annotations
 import ipaddress
 import json
 import math
+import re
 import socket
 import statistics
 import time
@@ -67,10 +68,13 @@ def allowed_source(host: str) -> bool:
 
 def _heart_rate(payload: object) -> int | None:
     if isinstance(payload, str):
-        try:
-            payload = json.loads(payload)
-        except ValueError:
-            return None
+        if payload.startswith("heartRate:"):
+            payload = {"heartRate": payload.partition(":")[2]}
+        else:
+            try:
+                payload = json.loads(payload)
+            except ValueError:
+                return None
     if not isinstance(payload, dict):
         return None
     for key in ("heartRate", "heart_rate", "heartRateBpm", "bpm", "hr"):
@@ -91,6 +95,9 @@ def _heart_rate(payload: object) -> int | None:
 
 
 def ingest(uid: str, payload: object, *, now: float | None = None) -> dict:
+    data = payload.get("data") if isinstance(payload, dict) else None
+    if isinstance(data, str) and re.match(r"^[A-Za-z][A-Za-z0-9_]*:", data) and not data.startswith("heartRate:"):
+        return {"accepted": False, "ignored": True}
     value = _heart_rate(payload)
     if value is None:
         raise ValueError("HDS payload has no valid heart rate")

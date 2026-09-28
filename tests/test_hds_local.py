@@ -17,6 +17,9 @@ def test_hds_http_receiver_enforces_lan_and_size(sandbox, monkeypatch):
     assert client.put("/", json={"heartRate": 91}).status_code == 403
     monkeypatch.setattr(hds_local, "allowed_source", lambda _: True)
     assert client.put("/", json={"data": json.dumps({"heartRate": 91})}).status_code == 200
+    assert client.put("/", json={"data": "heartRate:74"}).json() == {"accepted": True, "value": 74}
+    assert client.put("/", json={"data": "motion:[0.1,0.2,0.3]"}).json() == {"accepted": False, "ignored": True}
+    assert client.put("/", json={"data": "calories:10"}).json() == {"accepted": False, "ignored": True}
     assert client.put("/", json={"data": "bad"}).status_code == 422
     assert client.put("/", content=b"x" * 8193).status_code == 413
     stats = request_stats()

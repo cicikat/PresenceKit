@@ -893,3 +893,6 @@ consolidation task and work-session status.
 开关启用或端口变更需要重启后端；来源网段变化即时生效。独立 HTTP 接收端口不走代理；
 `GET /watch/hds-local`（`state.read`）只读显示留存样本和最近接收状态。
 此功能不提供桌面或手机设置入口。
+实机 HDS 普通 IP 输入只填当前网卡 IP（不含协议、端口和斜线），关闭 Advanced IP entry；
+该模式使用默认 3476 端口。接收端会确认并忽略非心率的 motion/calories 报文，
+仅留存 `heartRate:<bpm>` 样本。
