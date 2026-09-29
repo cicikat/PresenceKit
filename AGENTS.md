@@ -224,6 +224,18 @@ brief，遵循“删除必须连同守卫、测试和文档条目一起删除”
 
 在当前会话首次运行测试或跨仓验证前，按需读 `docs/dev-environment.md` 的相关环境章节；已读且未变化时复用。测试范围统一遵循上面的“测试”规则。
 
+### Bash 工具的 Shell 陷阱（先读再动手）
+
+Agent 的 Bash 工具是 Windows 上的 Git Bash（POSIX 语法），不是 PowerShell，也不是真 Linux。下面这些坑已经踩过，不要重复：
+
+- **路径用正斜杠盘符形式**：`/d/ai/<仓库名>/...`。不要在 Bash 里写 `C:\Users\10434...` 这类会话展示用的路径，也不要写带反斜杠的盘符路径，更不要用 `$var` 拼路径：反斜杠会被吃掉，变成 `D:aiEmerald-client` 这类不存在的路径。直接写字面路径。
+- **`/tmp` 实际是 `/d/tmp`**，不是系统临时目录。临时脚本放 `/d/tmp/`，用完删除；放进仓库的临时文件必须删掉，不要提交。
+- **Python 是 Windows 版，不认 Git Bash 路径**：传给 `python3` 的脚本里不要写绝对路径（会被改写成带反斜杠的盘符路径，触发转义错误或 FileNotFoundError）；先 `cd /d/ai/<仓库名>`，脚本里只用相对路径。
+- **不要在命令行或 heredoc 里内联含反斜杠转义（换行符转义、盘符路径）或中文的 Python/sed**：反斜杠和编码会被 shell 改写。改成用 Write 工具写脚本文件，再运行 `python3 -X utf8 /d/tmp/xxx.py`；运行前先 Grep 检查脚本里没有被改写的路径或转义。
+- **多行编辑前先查换行**：`git ls-files --eol <文件>`。Edit 工具的多行匹配失败时，先怀疑 CRLF/LF 混用；脚本里先把 CRLF 统一成 LF 再替换，改完再按本仓约定写回。
+- **文件必须是 UTF-8**。读到整段乱码多半是被按 GBK 写入过，先 `iconv -f GBK -t UTF-8` 验证，再重写，不要照乱码继续改。
+- **失败先看路径，不要原样重试**：先 `pwd` / `ls` 确认命令实际落在哪里，再换写法。
+
 ## Windows 换行（必读，提交前核对）
 
 仓库文本以 `.gitattributes` 为准：已跟踪文本 **LF**，`*.bat` / `*.cmd` **CRLF**。本机保持 `core.autocrlf=false`，不要用改 `autocrlf` 代替 gitattributes。守卫测试：`tests/test_line_endings.py`。
