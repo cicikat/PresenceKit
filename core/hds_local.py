@@ -122,7 +122,8 @@ def latest_change(uid: str, *, now: float | None = None) -> dict | None:
     if not enabled():
         return None
     now = time.time() if now is None else now
-    samples = health_state.load(uid).get("hds_samples") or []
+    state = health_state.load(uid)
+    samples = state.get("hds_samples") or []
     recent = [s for s in samples if 0 <= now - s.get("received_at", 0) <= 180]
     if len(recent) < 3:
         return None
@@ -132,19 +133,54 @@ def latest_change(uid: str, *, now: float | None = None) -> dict | None:
     value = int(statistics.median(s["value"] for s in tail))
     baseline = [s["value"] for s in samples if 180 < now - s.get("received_at", 0) <= 1800]
     previous = int(statistics.median(baseline)) if len(baseline) >= 3 else None
-    if value < 110 and (previous is None or abs(value - previous) < 25):
-        return None
-    if previous is None and value < 125:
-        return None
     direction = "up" if previous is None or value >= previous else "down"
-    last = health_state.load(uid).get("hds_last_signal") or {}
-    if now - float(last.get("at") or 0) < 1200 and last.get("direction") == direction:
+    last = state.get("hds_last_signal") or {}
+    meaningful = not (value < 110 and (previous is None or abs(value - previous) < 25))
+    meaningful = meaningful and not (previous is None and value < 125)
+    cooldown = meaningful and now - float(last.get("at") or 0) < 1200 and last.get("direction") == direction
+    outcome = "ordinary" if not meaningful else "cooldown" if cooldown else "candidate"
+    analysis = {
+        "evaluated_at": now,
+        "measured_at": tail[-1]["received_at"],
+        "value": value,
+        "previous_value": previous,
+        "direction": direction,
+        "outcome": outcome,
+    }
+    if (state.get("hds_last_analysis") or {}).get("measured_at") != analysis["measured_at"] or (state.get("hds_last_analysis") or {}).get("outcome") != outcome:
+        health_state.mutate(uid, lambda current: current.__setitem__("hds_last_analysis", analysis))
+    if not meaningful or cooldown:
         return None
-    health_state.mutate(uid, lambda state: state.__setitem__("hds_last_signal", {"at": now, "direction": direction}))
+    health_state.mutate(uid, lambda current: current.__setitem__("hds_last_signal", analysis | {"at": now}))
     return {
         "value": value,
         "previous_value": previous,
         "measured_at": tail[-1]["received_at"],
         "urgency": 0.8 if value >= 125 else 0.5,
         "confidence": 0.75,
+    }
+
+
+def read_status(uid: str, *, now: float | None = None) -> dict:
+    """Read HDS facts without running or consuming the autonomy classifier."""
+    now = time.time() if now is None else now
+    state = health_state.load(uid)
+    samples = state.get("hds_samples") or []
+    latest = samples[-1] if samples else None
+    age = max(0, now - latest["received_at"]) if latest else None
+    recent = [s["value"] for s in samples if 0 <= now - s.get("received_at", 0) <= 180]
+    return {
+        "enabled": enabled(),
+        "sample_count_retained": len(samples),
+        "latest": latest,
+        "latest_age_seconds": round(age) if age is not None else None,
+        "live": bool(enabled() and age is not None and age <= 30),
+        "recent_3m": {
+            "count": len(recent),
+            "median_bpm": round(statistics.median(recent)) if recent else None,
+            "min_bpm": min(recent) if recent else None,
+            "max_bpm": max(recent) if recent else None,
+        },
+        "last_automation_analysis": state.get("hds_last_analysis") or None,
+        "last_candidate": state.get("hds_last_signal") or None,
     }

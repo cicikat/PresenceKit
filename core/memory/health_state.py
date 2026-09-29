@@ -22,13 +22,14 @@ DEFAULT_HEALTH_STATE = {
     "heart_rate_events": [],
     "hds_samples": [],
     "hds_last_signal": {},
+    "hds_last_analysis": {},
     "phone_sensor_log": [],
     "phone_sensor_today": None,
     "last_period_date": None,
 }
 
 _HEALTH_FIELDS = tuple(DEFAULT_HEALTH_STATE)
-_LEGACY_OBJECTIVE_HEALTH_FIELDS = tuple(field for field in _HEALTH_FIELDS if field not in {"last_period_date", "hds_samples", "hds_last_signal"})
+_LEGACY_OBJECTIVE_HEALTH_FIELDS = tuple(field for field in _HEALTH_FIELDS if field not in {"last_period_date", "hds_samples", "hds_last_signal", "hds_last_analysis"})
 _PERIOD_MIGRATION_MARKER = "_period_date_migration_complete"
 _health_locks: dict[str, RLock] = {}
 _health_locks_guard = Lock()

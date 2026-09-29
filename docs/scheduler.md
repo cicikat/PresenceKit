@@ -11,6 +11,7 @@
 单条报文最多 8 KiB；该入站链不使用系统 HTTP 代理。示例配置见 `config.example.yaml`。
 样本保存到 uid 全局 `health_state.hds_samples`，最多保留 1440 条，并有只读
 `GET /watch/hds-local`（`state.read`）可查看最近 20 条和最新接收时间。
+角色可通过只读工具 `read_hds_heart_rate` 按需读取最新样本及其新鲜度、近 3 分钟统计、上次自动化评估和候选；调用工具本身不运行推断、不产生候选。
 
 autonomy 每 tick 读取近 3 分钟样本，至少 3 条、跨度至少 15 秒；结合近 30 分钟
 基线识别持续高位或相对变化，同方向 20 分钟内至多产生一次候选。

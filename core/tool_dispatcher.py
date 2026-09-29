@@ -57,6 +57,7 @@ _TOOL_FALLBACKS = {
     "restore_reminder": "备忘录暂时恢复不了，稍后再试",
     "read_diary": "日记暂时读不到",
     "read_watch": "身体数据暂时读取不到",
+    "read_hds_heart_rate": "HDS 心率状态暂时读取不到",
     "search_documents": "资料暂时检索不到",
     "read_document": "资料暂时读取不到",
     "search_character_notes": "角色手记暂时检索不到",
@@ -141,6 +142,11 @@ async def _backfill_diary_wrapper(user_id: str, date: str = "", *, char_id: str)
 async def _read_watch_wrapper(user_id: str, query: str = "") -> str:
     from core.tools.watch_tool import read_watch_for_user
     return read_watch_for_user(user_id, query)
+
+
+async def _read_hds_heart_rate_wrapper(user_id: str) -> str:
+    from core.hds_local import read_status
+    return json.dumps(read_status(user_id), ensure_ascii=False)
 
 
 async def _search_diary_wrapper(
@@ -1166,6 +1172,18 @@ _TOOL_REGISTRY["read_watch"] = {
         "required": [],
     },
     "trace_args": ["query"],
+}
+
+_TOOL_REGISTRY["read_hds_heart_rate"] = {
+    "func": _read_hds_heart_rate_wrapper,
+    "description": "只读查询 Apple Watch HDS 当前心率样本、实时新鲜度、近 3 分钟统计，以及上次自动化心率评估和候选；想了解用户当前身体状态或心率变化时可主动调用。样本过期时不得称为实时，不作医疗诊断。",
+    "dangerous": False,
+    "category": "memory",
+    "examples": ["看看我手表现在的心率", "最近心率有什么变化", "上次心率自动化判断出了什么"],
+    "keywords": ["手表心率", "实时心率", "HDS", "心率变化", "心率判断"],
+    "parameters": {"type": "object", "properties": {}, "required": []},
+    "trace_args": [],
+    "write_short_term": False,
 }
 
 _TOOL_REGISTRY["search_diary"] = {
@@ -3024,7 +3042,10 @@ async def _execute_structured_impl(
                     result = await func(user_id=user_id, char_id=char_id, origin=origin, **tool_args)
                 else:
                     result = await func(user_id=user_id, char_id=char_id, **tool_args)
-        elif tool_name in ("read_watch",):
+        elif tool_name == "read_hds_heart_rate":
+            _require_memory_read_scope(user_id, char_id)
+            result = await func(user_id=user_id, **tool_args)
+        elif tool_name == "read_watch":
             result = await func(user_id=user_id, **tool_args)
         elif tool_name in (
             "revise_memory", "forget_episodic", "clear_midterm", "revise_user_profile",

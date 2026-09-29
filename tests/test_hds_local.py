@@ -36,9 +36,36 @@ def test_hds_envelope_persistence_and_change(sandbox, monkeypatch):
     change = hds_local.latest_change(uid, now=1260)
     assert change["value"] == 133
     assert change["previous_value"] == 75
+    state = health_state.load(uid)
+    assert state["hds_last_analysis"]["outcome"] == "candidate"
+    assert state["hds_last_signal"]["value"] == 133
     assert hds_local.latest_change(uid, now=1261) is None
+    assert health_state.load(uid)["hds_last_analysis"]["outcome"] == "cooldown"
     assert hds_local.allowed_source("192.168.1.50")
     assert not hds_local.allowed_source("192.168.2.50")
+
+
+@pytest.mark.asyncio
+async def test_hds_read_tool_reports_live_and_stale_without_consuming_signal(sandbox, monkeypatch):
+    from core.tool_dispatcher import _TOOL_REGISTRY, _read_hds_heart_rate_wrapper, get_tools_schema
+
+    monkeypatch.setattr(hds_local, "config", lambda: {"enabled": True})
+    uid = "hds-read"
+    for offset, value in [(0, 70), (20, 72), (40, 71)]:
+        hds_local.ingest(uid, {"data": f"heartRate:{value}"}, now=1000 + offset)
+    assert hds_local.latest_change(uid, now=1040) is None
+    before = health_state.load(uid)
+    live = hds_local.read_status(uid, now=1050)
+    assert live["live"] is True
+    assert live["recent_3m"]["median_bpm"] == 71
+    assert live["last_automation_analysis"]["outcome"] == "ordinary"
+    assert hds_local.read_status(uid, now=1400)["live"] is False
+    assert health_state.load(uid) == before
+    assert "read_hds_heart_rate" in {item["function"]["name"] for item in get_tools_schema(["memory"])}
+    assert _TOOL_REGISTRY["read_hds_heart_rate"]["examples"]
+    assert _TOOL_REGISTRY["read_hds_heart_rate"]["keywords"]
+    monkeypatch.setattr(hds_local.time, "time", lambda: 1050)
+    assert json.loads(await _read_hds_heart_rate_wrapper(uid))["latest"]["value"] == 71
 
 
 def test_auto_source_follows_interface_address(monkeypatch):
