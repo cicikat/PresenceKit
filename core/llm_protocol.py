@@ -157,19 +157,37 @@ def _chat_tool_calls(calls: Any) -> list[dict[str, Any]]:
             call_id = call.get("id")
             name = function.get("name")
             arguments = function.get("arguments")
+            extra_content = call.get("extra_content")
         else:
             function = getattr(call, "function", None)
             call_id = getattr(call, "id", None)
             name = getattr(function, "name", None)
             arguments = getattr(function, "arguments", None)
+            extra_content = _tool_call_extra_content(call)
         if not isinstance(call_id, str) or not call_id or not isinstance(name, str) or not name:
             raise ValueError("assistant tool history is missing id or name")
-        result.append({
+        item: dict[str, Any] = {
             "id": call_id,
             "type": "function",
             "function": {"name": name, "arguments": _chat_tool_call_arguments(arguments)},
-        })
+        }
+        # Gemini (OpenAI-compatible) returns extra_content.google.thought_signature
+        # on tool calls; it must be echoed back verbatim within the same turn or
+        # the next tool-loop request is rejected with HTTP 400.
+        if isinstance(extra_content, dict) and extra_content:
+            item["extra_content"] = extra_content
+        result.append(item)
     return result
+
+
+def _tool_call_extra_content(call: Any) -> Any:
+    """Read vendor extra_content from an SDK tool call (attribute or pydantic extra)."""
+    value = getattr(call, "extra_content", None)
+    if value is None:
+        extra = getattr(call, "model_extra", None)
+        if isinstance(extra, dict):
+            value = extra.get("extra_content")
+    return value
 
 
 def _chat_message_content(content: Any, *, allow_parts: bool) -> str | list[Any]:
@@ -828,8 +846,11 @@ async def _collect_chat_stream(mc, messages, kwargs, capture) -> NormalizedRespo
                 index = getattr(call, "index", None)
                 if type(index) is not int or index < 0:
                     raise _format_error(mc, "Chat stream tool call is missing index")
-                accumulated = calls.setdefault(index, {"id": "", "name": "", "arguments": ""})
+                accumulated = calls.setdefault(index, {"id": "", "name": "", "arguments": "", "extra_content": None})
                 function = getattr(call, "function", None)
+                extra_content = _tool_call_extra_content(call)
+                if isinstance(extra_content, dict) and extra_content:
+                    accumulated["extra_content"] = extra_content
                 for key, fragment in (
                     ("id", getattr(call, "id", None)),
                     ("name", getattr(function, "name", None)),
@@ -852,7 +873,7 @@ async def _collect_chat_stream(mc, messages, kwargs, capture) -> NormalizedRespo
                 message=SimpleNamespace(
                     content="".join(parts),
                     tool_calls=[SimpleNamespace(
-                        id=call["id"], type="function",
+                        id=call["id"], type="function", extra_content=call["extra_content"],
                         function=SimpleNamespace(name=call["name"], arguments=call["arguments"]),
                     ) for _, call in sorted(calls.items())],
                 ),

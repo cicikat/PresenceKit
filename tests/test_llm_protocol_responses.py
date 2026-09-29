@@ -562,3 +562,82 @@ def test_error_category_for_exception_maps_http_and_protocol_failures():
     assert error_category_for_exception(FakeHttpError()) == "upstream_request_rejected"
     assert error_category_for_exception(UpstreamResponseFormatError("bad", http_status=404)) == "upstream_not_found"
     assert error_category_for_exception(RuntimeError("offline")) == "protocol_incompatible"
+
+
+_GEMINI_EXTRA = {"google": {"thought_signature": "sig-abc"}}
+_LOOKUP_TOOLS = [{"type": "function", "function": {"name": "lookup", "parameters": {"type": "object"}}}]
+
+
+async def _second_step_messages(mc, calls):
+    first = await create(
+        mc, [{"role": "user", "content": "search"}],
+        tools=_LOOKUP_TOOLS, tool_choice="auto", gen_kwargs={"timeout": 8},
+    )
+    assert first.continuation_items[0]["tool_calls"][0]["extra_content"] == _GEMINI_EXTRA
+    await create(
+        mc,
+        first.continuation_items + [{"role": "tool", "tool_call_id": "call_g", "content": "wet"}],
+        tools=_LOOKUP_TOOLS, tool_choice="auto", gen_kwargs={"timeout": 8},
+    )
+    return calls[1]["messages"]
+
+
+@pytest.mark.asyncio
+async def test_chat_completions_tool_loop_echoes_gemini_thought_signature():
+    calls = []
+
+    async def fake_create(**kwargs):
+        calls.append(kwargs)
+        call = SimpleNamespace(
+            id="call_g", type="function",
+            function=SimpleNamespace(name="lookup", arguments='{"q":"rain"}'),
+            model_extra={"extra_content": _GEMINI_EXTRA},
+        )
+        message = SimpleNamespace(content=None, tool_calls=[call])
+        return SimpleNamespace(choices=[SimpleNamespace(message=message, finish_reason="tool_calls")])
+
+    mc = _chat_mc(SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=fake_create))))
+    messages = await _second_step_messages(mc, calls)
+    assert messages[0]["tool_calls"][0]["extra_content"] == _GEMINI_EXTRA
+
+
+@pytest.mark.asyncio
+async def test_chat_completions_stream_tool_loop_echoes_gemini_thought_signature():
+    calls = []
+
+    class _Stream:
+        def __init__(self, chunks):
+            self._chunks = iter(chunks)
+
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            try:
+                return next(self._chunks)
+            except StopIteration:
+                raise StopAsyncIteration
+
+        async def close(self):
+            pass
+
+    def _chunk(delta, finish=None):
+        return SimpleNamespace(usage=None, choices=[SimpleNamespace(index=0, delta=delta, finish_reason=finish)])
+
+    async def fake_create(**kwargs):
+        calls.append(kwargs)
+        return _Stream([
+            _chunk(SimpleNamespace(content=None, tool_calls=[SimpleNamespace(
+                index=0, id="call_g", extra_content=_GEMINI_EXTRA,
+                function=SimpleNamespace(name="lookup", arguments='{"q":'),
+            )])),
+            _chunk(SimpleNamespace(content=None, tool_calls=[SimpleNamespace(
+                index=0, id=None, function=SimpleNamespace(name=None, arguments='"rain"}'),
+            )]), finish="tool_calls"),
+        ])
+
+    mc = _chat_mc(SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=fake_create))))
+    mc.force_stream = True
+    messages = await _second_step_messages(mc, calls)
+    assert messages[0]["tool_calls"][0]["extra_content"] == _GEMINI_EXTRA
+    assert messages[0]["tool_calls"][0]["function"]["arguments"] == '{"q":"rain"}'
