@@ -220,6 +220,55 @@ async def test_gsv_synthesizes_each_language_segment_without_internal_cutting(tm
     assert all(call["how_to_cut"] == "不切" for call in synthesis)
 
 
+@pytest.mark.asyncio
+async def test_local_tts_hands_shared_lock_to_vision_between_segments(tmp_path, monkeypatch):
+    import asyncio
+    from core import video_call
+
+    reference = tmp_path / "reference.wav"
+    output = tmp_path / "output.wav"
+    reference.write_bytes(b"reference")
+    output.write_bytes(_pcm_wav())
+    monkeypatch.setattr(video_call, "_local_resource", asyncio.Lock())
+    order = []
+
+    class FakeClient:
+        def __init__(self, api_url):
+            pass
+
+        def predict(self, **kwargs):
+            if kwargs["api_name"] == "/get_tts_wav":
+                order.append("tts:" + kwargs["text"])
+                return str(output)
+            return None
+
+    monkeypatch.setitem(sys.modules, "gradio_client", SimpleNamespace(Client=FakeClient, handle_file=lambda path: path))
+    voice_adapter._GSV_ACTIVE_MODELS.pop("http://gsv-yield", None)
+
+    async def vision_frame():
+        async with video_call.local_resource():
+            order.append("vision")
+
+    async def tts():
+        async with video_call.local_resource():
+            token = voice_adapter._HOLDS_LOCAL_RESOURCE.set(True)
+            try:
+                return await voice_adapter.GsvProvider().synthesize(
+                    "第一句。第二句。第三句。", "neutral",
+                    {"api_url": "http://gsv-yield", "ref_audio": str(reference)})
+            finally:
+                voice_adapter._HOLDS_LOCAL_RESOURCE.reset(token)
+
+    speaking = asyncio.create_task(tts())
+    await asyncio.sleep(0)
+    frame = asyncio.create_task(vision_frame())
+    assert await speaking is not None
+    await frame
+    # The frame ran in a sentence gap rather than after the whole reply.
+    assert order.index("vision") < len(order) - 1
+    assert sum(item.startswith("tts:") for item in order) == 3
+
+
 def test_openai_compatible_without_base_url_not_ready_and_does_not_leak_secret():
     cfg = {
         "provider": "openai_compatible",

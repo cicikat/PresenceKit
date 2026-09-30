@@ -21,6 +21,7 @@
 
 import asyncio
 import base64
+import contextvars
 import hashlib
 from io import BytesIO
 import logging
@@ -45,6 +46,10 @@ _DEFAULT_GPT_MODEL = "不训练直接推v3底模！"
 _DEFAULT_SOVITS_MODEL = "不训练直接推v2ProPlus底模！"
 _GSV_VERSIONS = frozenset({"v2", "v3", "v2Pro", "v2ProPlus"})
 _GSV_SYNTHESIS_LOCK = asyncio.Lock()
+# True only inside the ``local_resource()`` block in synthesize(), so a provider
+# never releases a lock it does not hold.
+_HOLDS_LOCAL_RESOURCE: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "presence_holds_local_resource", default=False)
 _GSV_ACTIVE_MODELS: dict[str, tuple[str, str]] = {}
 _GSV_HARD_BOUNDARIES = frozenset("。！？；!?")
 _GSV_SOFT_BOUNDARIES = frozenset("，,、:：—–-")
@@ -449,6 +454,26 @@ def _join_pcm_wavs(wavs: list[bytes], pause_seconds: float) -> bytes | None:
         return None
 
 
+async def _yield_shared_local_resource() -> None:
+    """Release and re-take the shared local-model lock held by this synthesis.
+
+    Local TTS and local vision must not run at once (one GPU), but holding the
+    lock for a whole multi-sentence reply starved the video-call camera.  Only the
+    call that took the lock may hand it back, hence the ContextVar guard.
+    """
+    from core.video_call import local_resource
+
+    if not _HOLDS_LOCAL_RESOURCE.get():
+        return
+    lock = local_resource()
+    lock.release()
+    try:
+        # Let a waiting vision request win the lock before we ask for it back.
+        await asyncio.sleep(0)
+    finally:
+        await lock.acquire()
+
+
 class TtsProvider(Protocol):
     async def synthesize(self, text: str, emotion: str, cfg: dict) -> bytes | None:
         """Synthesize an audio payload, returning None when the provider fails."""
@@ -490,7 +515,7 @@ class GsvProvider:
         except (TypeError, ValueError):
             pause_seconds = _GSV_DEFAULT_SEGMENT_PAUSE_SECONDS
 
-        def _sync_call():
+        def _build_client():
             import os
             from gradio_client import Client, handle_file
 
@@ -531,38 +556,54 @@ class GsvProvider:
                     fallback=_DEFAULT_GPT_MODEL,
                 )
                 _GSV_ACTIVE_MODELS[api_url] = (active_gpt, active_sovits)
+            return client
+
+        def _synthesize_segment(client, segment_text: str, segment_language: str) -> bytes:
+            from gradio_client import handle_file
+
+            result = client.predict(
+                ref_wav_path=handle_file(ref_audio),
+                prompt_text=prompt_txt,
+                prompt_language=str(cfg.get("prompt_language") or "中文"),
+                text=segment_text,
+                text_language=segment_language,
+                # We have already segmented this request.  Letting GSV cut
+                # again reintroduces the v2 sentence-initial word loss.
+                how_to_cut="不切",
+                top_k=int(cfg.get("top_k", 15)),
+                top_p=float(cfg.get("top_p", 1.0)),
+                temperature=float(cfg.get("temperature", 1.0)),
+                ref_free=bool(cfg.get("ref_free", False)),
+                speed=speed,
+                if_freeze=bool(cfg.get("if_freeze", False)),
+                inp_refs=None,
+                sample_steps=int(cfg.get("sample_steps", 8)),
+                if_sr=bool(cfg.get("if_sr", False)),
+                pause_second=float(cfg.get("pause_second", 0.3)),
+                api_name="/get_tts_wav",
+            )
+            with open(result, "rb") as source:
+                return source.read()
+
+        yield_between_segments = (
+            bool(cfg.get("yield_shared_resource_between_segments", True))
+            and len(segments) >= int(cfg.get("yield_shared_resource_min_segments", 2))
+        )
+        async with _GSV_SYNTHESIS_LOCK:
+            loop = asyncio.get_event_loop()
+            client = await loop.run_in_executor(None, _build_client)
             wavs: list[bytes] = []
-            for segment_text, segment_language in segments:
-                result = client.predict(
-                    ref_wav_path=handle_file(ref_audio),
-                    prompt_text=prompt_txt,
-                    prompt_language=str(cfg.get("prompt_language") or "中文"),
-                    text=segment_text,
-                    text_language=segment_language,
-                    # We have already segmented this request.  Letting GSV cut
-                    # again reintroduces the v2 sentence-initial word loss.
-                    how_to_cut="不切",
-                    top_k=int(cfg.get("top_k", 15)),
-                    top_p=float(cfg.get("top_p", 1.0)),
-                    temperature=float(cfg.get("temperature", 1.0)),
-                    ref_free=bool(cfg.get("ref_free", False)),
-                    speed=speed,
-                    if_freeze=bool(cfg.get("if_freeze", False)),
-                    inp_refs=None,
-                    sample_steps=int(cfg.get("sample_steps", 8)),
-                    if_sr=bool(cfg.get("if_sr", False)),
-                    pause_second=float(cfg.get("pause_second", 0.3)),
-                    api_name="/get_tts_wav",
-                )
-                with open(result, "rb") as source:
-                    wavs.append(source.read())
+            for index, (segment_text, segment_language) in enumerate(segments):
+                if index and yield_between_segments:
+                    # Hand the shared local-model lock back between sentences so a
+                    # video-call frame can slip into the gap instead of starving.
+                    await _yield_shared_local_resource()
+                wavs.append(await loop.run_in_executor(
+                    None, _synthesize_segment, client, segment_text, segment_language))
             joined = _join_pcm_wavs(wavs, pause_seconds)
             if joined is None:
                 raise RuntimeError("GSV returned incompatible WAV segments")
             return joined
-
-        async with _GSV_SYNTHESIS_LOCK:
-            return await asyncio.get_event_loop().run_in_executor(None, _sync_call)
 
 
 class OpenAICompatibleProvider:
@@ -693,7 +734,11 @@ async def synthesize(text: str, emotion: str = "neutral", *, char_id: str | None
         if local_tts:
             from core.video_call import local_resource
             async with local_resource():
-                audio_bytes = await adapter.synthesize(text, emotion, provider_cfg)
+                token = _HOLDS_LOCAL_RESOURCE.set(True)
+                try:
+                    audio_bytes = await adapter.synthesize(text, emotion, provider_cfg)
+                finally:
+                    _HOLDS_LOCAL_RESOURCE.reset(token)
         else:
             audio_bytes = await adapter.synthesize(text, emotion, provider_cfg)
         from core.api_call_log import append

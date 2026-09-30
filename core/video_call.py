@@ -18,8 +18,14 @@ MAX_OBSERVATION_CHARS = 800
 OBSERVATION_TTL_SECONDS = 45
 _MAX_RECEIPTS = 32
 _local_resource = asyncio.Lock()
+# Local TTS and local vision share one GPU (see the video-call work order, risk 1):
+# they stay mutually exclusive, but a periodic frame waits briefly instead of
+# giving up the moment TTS is speaking.
+VISION_LOCK_WAIT_SECONDS = 3.0
 _receipts: OrderedDict[str, tuple[float, str, str, str, str]] = OrderedDict()
-_counts = {"accepted": 0, "busy": 0, "failed": 0, "unavailable": 0}
+_counts = {"accepted": 0, "busy": 0, "failed": 0, "unavailable": 0,
+           "vision_lock_waited": 0, "vision_lock_timeout": 0,
+           "signal_from_stale_description": 0}
 _unavailable_until = 0.0
 CAMERA_ACTIVE_SECONDS = 15.0
 CAMERA_SIGNAL_INTERVAL_SECONDS = 60.0
@@ -49,9 +55,9 @@ def close_camera(uid: str, char_id: str, token_label: str) -> None:
         store.discard_pending_signals_by_source(uid, char_id, {"video_call_camera"})
 
 
-def _queue_camera_signal(uid: str, char_id: str, session: dict[str, Any], description: str, now: float) -> None:
+def _queue_camera_signal(uid: str, char_id: str, session: dict[str, Any], description: str, now: float) -> bool:
     if now - session.get("last_signal_at", session["opened_at"]) < CAMERA_SIGNAL_INTERVAL_SECONDS:
-        return
+        return False
     from core.autonomy.models import ActionMode, Signal
     from core.autonomy import store
     signal = Signal(
@@ -68,6 +74,7 @@ def _queue_camera_signal(uid: str, char_id: str, session: dict[str, Any], descri
                                      dedupe_key=f"video-call-camera:{uid}:{char_id}:{int(time.time() // 60)}")
     if queued:
         session["last_signal_at"] = now
+    return bool(queued)
 
 
 def camera_status() -> dict[str, Any]:
@@ -138,8 +145,48 @@ async def observe_fresh_camera(uid: str, char_id: str) -> dict[str, Any]:
 
 
 def local_resource() -> asyncio.Lock:
-    """Shared by local TTS and camera vision; frame requests never wait in line."""
+    """Shared by local TTS and camera vision so two local models never load at once."""
     return _local_resource
+
+
+async def _acquire_vision_lock(wait_for_resource: bool) -> bool:
+    """Take the shared local-model lock, waiting a bounded time for local TTS."""
+    if not _local_resource.locked():
+        await _local_resource.acquire()
+        return True
+    if wait_for_resource:
+        await _local_resource.acquire()
+        return True
+    _counts["vision_lock_waited"] += 1
+    try:
+        await asyncio.wait_for(_local_resource.acquire(), VISION_LOCK_WAIT_SECONDS)
+    except asyncio.TimeoutError:
+        return False
+    return True
+
+
+def _signal_from_last_description(uid: str, char_id: str, session: dict[str, Any] | None) -> None:
+    """Keep proactivity alive when TTS held the GPU: reuse the last description.
+
+    Without this the busy path returned before ``_queue_camera_signal()``, so the
+    character got no chance to speak for as long as local TTS kept talking.
+    """
+    if not session:
+        return
+    described_at = session.get("described_at")
+    description = str(session.get("description") or "")
+    if not description or described_at is None:
+        return
+    now = time.monotonic()
+    age = max(0, round(now - described_at))
+    try:
+        queued = _queue_camera_signal(uid, char_id, session,
+                                      f"（约 {age} 秒前采集的画面）{description}", now)
+    except Exception:
+        # Autonomy state being unavailable must not break the frame path.
+        return
+    if queued:
+        _counts["signal_from_stale_description"] += 1
 
 
 def connection_state(config: dict[str, Any]) -> dict[str, Any]:
@@ -202,10 +249,13 @@ async def observe(frame: bytes, *, uid: str, char_id: str, token_label: str,
         session["seen_at"] = time.monotonic()
     if time.monotonic() < _unavailable_until:
         return {"status": "unavailable", "retry_after_seconds": max(1, round(_unavailable_until - time.monotonic()))}
-    if _local_resource.locked() and not wait_for_resource:
+    if not await _acquire_vision_lock(wait_for_resource):
         _counts["busy"] += 1
+        _counts["vision_lock_timeout"] += 1
+        if emit_signal:
+            _signal_from_last_description(uid, char_id, session)
         return {"status": "busy"}
-    async with _local_resource:
+    try:
         image_url = "data:image/jpeg;base64," + base64.b64encode(frame).decode("ascii")
         messages = [{"role": "user", "content": [
             {"type": "text", "text": (
@@ -228,6 +278,8 @@ async def observe(frame: bytes, *, uid: str, char_id: str, token_label: str,
         except Exception:
             _counts["failed"] += 1
             return {"status": "failed"}
+    finally:
+        _local_resource.release()
     description = str(description or "").strip()[:MAX_OBSERVATION_CHARS]
     if not description:
         _counts["failed"] += 1
@@ -235,7 +287,7 @@ async def observe(frame: bytes, *, uid: str, char_id: str, token_label: str,
     now = time.monotonic()
     if _camera_sessions.get(key) is not session:
         return {"status": "closed"}
-    session.update(seen_at=now, description=description)
+    session.update(seen_at=now, description=description, described_at=now)
     if emit_signal:
         try:
             _queue_camera_signal(uid, char_id, session, description, now)

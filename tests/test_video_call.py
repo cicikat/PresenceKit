@@ -12,6 +12,12 @@ from core import video_call
 from core.image_presets import video_call_ready
 
 
+@pytest.fixture(autouse=True)
+def _fresh_local_resource(monkeypatch):
+    # A contended asyncio.Lock binds to the first running loop; each test has its own.
+    monkeypatch.setattr(video_call, "_local_resource", asyncio.Lock())
+
+
 def _config(base_url="http://127.0.0.1:11434/v1"):
     return {"image_presets": {
         "presets": {"local_vision": {
@@ -127,6 +133,74 @@ async def test_camera_observation_is_ephemeral_scoped_and_busy_drops(monkeypatch
     assert video_call.consume(result["observation_id"], uid="owner", char_id="character", token_label="desktop") == "桌面上有一本书"
     async with video_call.local_resource():
         assert (await video_call.observe(_jpeg(), uid="owner", char_id="character", token_label="desktop"))["status"] == "busy"
+
+
+@pytest.mark.asyncio
+async def test_periodic_frame_waits_out_a_short_tts_hold(monkeypatch):
+    monkeypatch.setattr("core.config_loader.get_config", _config)
+    monkeypatch.setattr(video_call, "_unavailable_until", 0.0)
+    monkeypatch.setattr(video_call, "VISION_LOCK_WAIT_SECONDS", 1.0)
+
+    async def fake_chat(*_args, **_kwargs):
+        return "等到锁之后看到的画面"
+
+    monkeypatch.setattr("core.llm_client.chat", fake_chat)
+
+    async def hold_briefly():
+        async with video_call.local_resource():
+            await asyncio.sleep(0.05)
+
+    holder = asyncio.create_task(hold_briefly())
+    await asyncio.sleep(0)
+    result = await video_call.observe(_jpeg(), uid="owner-wait", char_id="character",
+                                      token_label="desktop")
+    await holder
+    assert result["status"] == "ready"
+    video_call.close_camera("owner-wait", "character", "desktop")
+
+
+@pytest.mark.asyncio
+async def test_starved_frame_still_emits_a_signal_from_the_last_description(monkeypatch):
+    from core.autonomy import store
+    monkeypatch.setattr("core.config_loader.get_config", _config)
+    monkeypatch.setattr(video_call, "_unavailable_until", 0.0)
+    monkeypatch.setattr(video_call, "VISION_LOCK_WAIT_SECONDS", 0.01)
+    queued = []
+    monkeypatch.setattr(store, "enqueue_signal", lambda uid, char_id, signal, **kwargs: (
+        queued.append(signal) or True, "queued"))
+
+    opened = time.monotonic() - 10 * video_call.CAMERA_SIGNAL_INTERVAL_SECONDS
+    video_call._camera_sessions[("owner-starved", "character")] = {
+        "seen_at": time.monotonic(), "opened_at": opened, "token_label": "desktop",
+        "description": "书桌上的台灯", "described_at": time.monotonic() - 8,
+    }
+    async with video_call.local_resource():
+        result = await video_call.observe(_jpeg(), uid="owner-starved", char_id="character",
+                                          token_label="desktop")
+    assert result["status"] == "busy"
+    assert len(queued) == 1
+    assert queued[0].source == "video_call_camera"
+    assert "秒前采集" in queued[0].evidence[0]["description"]
+    assert queued[0].evidence[0]["trust"] == "untrusted_visual_description"
+    video_call.close_camera("owner-starved", "character", "desktop")
+
+
+@pytest.mark.asyncio
+async def test_starved_frame_without_history_emits_no_signal(monkeypatch):
+    from core.autonomy import store
+    monkeypatch.setattr("core.config_loader.get_config", _config)
+    monkeypatch.setattr(video_call, "_unavailable_until", 0.0)
+    monkeypatch.setattr(video_call, "VISION_LOCK_WAIT_SECONDS", 0.01)
+    queued = []
+    monkeypatch.setattr(store, "enqueue_signal", lambda *args, **kwargs: (
+        queued.append(args) or True, "queued"))
+
+    async with video_call.local_resource():
+        result = await video_call.observe(_jpeg(), uid="owner-fresh", char_id="character",
+                                          token_label="desktop")
+    assert result["status"] == "busy"
+    assert queued == []
+    video_call.close_camera("owner-fresh", "character", "desktop")
 
 
 @pytest.mark.asyncio
