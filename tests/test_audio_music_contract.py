@@ -5,11 +5,13 @@ from core.audio_music_contract import (
     ADAPTER_EVENTS,
     ANALYSIS_MODES,
     ANALYSIS_VERSION,
+    ANALYSIS_VERSION_V0,
     AUDIO_ACCESS,
     AUTONOMY_SIGNAL_SOURCE,
     COMMAND_OUTCOMES,
     CONFIG_ROOT,
     CONTRACT_VERSION,
+    CONTRACT_VERSION_V0,
     COUNT_FIELDS,
     DELETION_AUTHORIZED,
     DELETION_CANDIDATES,
@@ -17,6 +19,8 @@ from core.audio_music_contract import (
     FEATURE_SWITCHES,
     HOST_INVENTORY,
     IMPRESSIONS,
+    IMPRESSIONS_V0,
+    IMPRESSIONS_V1_ADDED,
     INDEPENDENT_DESKTOP_ACTIONS,
     LEGAL_TRANSITIONS,
     LISTEN_THRESHOLD_VERSION,
@@ -35,6 +39,7 @@ from core.audio_music_contract import (
     SPEECH_ANALYSIS_TIMEOUT_S,
     UNVOICED_F0,
     conservative_impression,
+    conservative_impression_v0,
     is_legal_transition,
     listen_threshold_seconds,
     pitch_point,
@@ -47,12 +52,19 @@ from core.data_registry import REGISTRY, RETENTION_POLICY
 
 
 def test_contract_versions_and_modes():
-    assert CONTRACT_VERSION == "audio-music-perception.v0"
-    assert ANALYSIS_VERSION == "audio-analysis.v0"
+    # v1 (video-call work order E) is an additive contract change; v0 constants stay.
+    assert CONTRACT_VERSION == "audio-music-perception.v1"
+    assert ANALYSIS_VERSION == "audio-analysis.v1"
+    assert CONTRACT_VERSION_V0 == "audio-music-perception.v0"
+    assert ANALYSIS_VERSION_V0 == "audio-analysis.v0"
     assert LISTEN_THRESHOLD_VERSION == "listen-threshold.v0"
     assert PLAYER_ADAPTER_VERSION == "player-adapter.v0"
     assert ANALYSIS_MODES == {"speech", "music"}
-    assert IMPRESSIONS == {"calm", "tired", "bright", "tense", "unclear"}
+    assert IMPRESSIONS_V0 == {"calm", "tired", "bright", "tense", "unclear"}
+    assert IMPRESSIONS_V1_ADDED == {"unsteady", "breathy", "low_toned"}
+    assert IMPRESSIONS == IMPRESSIONS_V0 | IMPRESSIONS_V1_ADDED  # nothing removed or renamed
+    # Deliberately unsupported: no baseline / formant / jitter features exist.
+    assert not IMPRESSIONS & {"crying", "pinched", "tight", "sad"}
     assert PROMPT_LAYER == "3.8_audio_impression"
     assert CONFIG_ROOT == "audio_music"
     assert FEATURE_SWITCHES == (
@@ -91,8 +103,18 @@ def test_impression_is_conservative_and_ignores_provider_override():
         quality="ok", median_hz=120.0, variation=0.05, pace=1.6,
         energy_dbfs=-28.0, provider_tone="bright",
     )
-    assert tired["impression"] == "tired"
+    # v1: slow + low + not-quiet is the weaker, literal "low_toned"; "tired" needs quiet too.
+    assert tired["impression"] == "low_toned"
     assert tired["provider_tone_hint"] == "bright"
+    quiet = conservative_impression(
+        quality="ok", median_hz=120.0, variation=0.05, pace=1.6, energy_dbfs=-40.0,
+    )
+    assert quiet["impression"] == "tired"
+    # The frozen v0 mapping is untouched and still answers with v0 semantics.
+    v0 = conservative_impression_v0(
+        quality="ok", median_hz=120.0, variation=0.05, pace=1.6, energy_dbfs=-28.0,
+    )
+    assert v0["impression"] == "tired" and v0["rule"] == ANALYSIS_VERSION_V0
     pitch_only = conservative_impression(
         quality="ok", median_hz=120.0, variation=0.05, pace=3.5,
         energy_dbfs=-20.0,
@@ -205,3 +227,61 @@ def test_sandbox_paths_stay_under_test_prefix():
     target = paths.listening_root("owner")
     assert "test_sandbox/audio_music_a" in target.as_posix().replace("\\", "/")
     assert target.resolve().is_relative_to(paths.root_dir().resolve())
+
+
+def _v1(**kw):
+    base = dict(quality="ok", median_hz=180.0, variation=0.12, pace=3.0, energy_dbfs=-25.0)
+    base.update(kw)
+    return conservative_impression(**base)
+
+
+def test_unsteady_needs_wide_variation_and_a_non_linear_contour():
+    assert _v1(variation=0.30, linear_r2=0.2)["impression"] == "unsteady"
+    assert _v1(variation=0.29, linear_r2=0.2)["impression"] != "unsteady"      # just under
+    assert _v1(variation=0.40, linear_r2=0.5)["impression"] != "unsteady"      # a steady ramp, not a wobble
+    assert _v1(variation=0.40, linear_r2=None)["impression"] != "unsteady"     # feature missing: no label
+    assert _v1(variation=0.40, linear_r2=0.49)["impression"] == "unsteady"
+
+
+def test_breathy_needs_high_frequency_share_over_threshold():
+    assert _v1(hf_ratio=0.16)["impression"] == "breathy"
+    assert _v1(hf_ratio=0.15)["impression"] != "breathy"                        # boundary is exclusive
+    assert _v1(hf_ratio=0.04)["impression"] != "breathy"
+    assert _v1(hf_ratio=None)["impression"] != "breathy"                        # budget skipped: no label
+
+
+def test_low_toned_is_absolute_and_never_claims_a_baseline():
+    quiet_enough = _v1(median_hz=120.0, variation=0.05, pace=1.6, energy_dbfs=-28.0)
+    assert quiet_enough["impression"] == "low_toned"
+    assert _v1(median_hz=150.0, variation=0.05, pace=1.6)["impression"] != "low_toned"  # not low enough
+    assert _v1(median_hz=120.0, variation=0.05, pace=3.5)["impression"] != "low_toned"  # not slow
+    import core.audio_perception as perception
+    gloss = perception.TONE_GLOSS["low_toned"]
+    assert "比平时" not in gloss and "没有个人基线" in gloss
+
+
+def test_conflicting_criteria_fall_back_to_unclear_never_a_list():
+    both = _v1(variation=0.35, linear_r2=0.1, hf_ratio=0.25)
+    assert both["impression"] == "unclear" and both["quality"] == "conflict"
+    mixed = _v1(median_hz=120.0, variation=0.05, pace=1.6, hf_ratio=0.25)  # low_toned + breathy
+    assert mixed["impression"] == "unclear" and mixed["quality"] == "conflict"
+    assert isinstance(both["impression"], str)
+
+
+def test_failed_quality_still_wins_over_new_features():
+    failed = conservative_impression(
+        quality="failed", median_hz=180.0, variation=0.4, pace=3.0, energy_dbfs=-20.0,
+        linear_r2=0.0, hf_ratio=0.5, provider_tone="breathy",
+    )
+    assert failed["impression"] == "unclear"
+    assert failed["provider_tone_hint"] == "breathy"   # hint recorded, never promoted
+
+
+def test_a_specific_voice_quality_finding_replaces_calm_but_not_substantive_labels():
+    # Steady, moderate voice (v0 "calm") with breathy noise: the specific label wins.
+    calm = _v1(variation=0.05, pace=3.0, energy_dbfs=-25.0)
+    assert calm["impression"] == "calm"
+    assert _v1(variation=0.05, pace=3.0, energy_dbfs=-25.0, hf_ratio=0.25)["impression"] == "breathy"
+    # A substantive v0 label still conflicts with a new one -> unclear, not a list.
+    tense = _v1(variation=0.30, pace=5.0, energy_dbfs=-10.0, hf_ratio=0.25)
+    assert tense["impression"] == "unclear" and tense["quality"] == "conflict"

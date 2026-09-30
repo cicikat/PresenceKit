@@ -188,7 +188,7 @@ perceive gate 与 autonomy。Dream 阻断发言候选不阻断播放记账。进
 权威实现：`core/audio_analysis.py`。入口 `analyze_audio_bytes()` / `analyze_audio()`。
 调用方必须显式传 `mode=speech|music`；`filename` 只是元数据，扩展名不选分析器。
 结果永不发明转写文本。语音临时音频不落盘；缓存只写内容摘要 + `audio-analysis.v0`
-的结构化 JSON。
+的结构化 JSON（现为 `audio-analysis.v1`，见下方 E）。
 
 v0 解码范围：标准库 `wave` 的未压缩 PCM WAV（8/16/32-bit，单声道或混成单声道）。
 mp3/ogg/flac/m4a/webm/opus/amr/silk 返回 `analysis_status=failed`、`reason=decode_error`，
@@ -232,6 +232,46 @@ prompt；无摘要时保持 253.6 短句。普通文字无此层。
 | `/upload/ingest` 单音频 | 同上，直接注入本轮 | 单元：STT 失败继续聊天；成功注入层 |
 | 桌面 `/transcribe` + `/desktop/chat` | 凭据只随原样转写文字 | 单元：跨通道/编辑/重复丢弃；客户端无声学字段 |
 | 手机 `/transcribe` + `/mobile/chat` | 同上，channel=mobile | 同桌面凭据规则；不增加手机播放器 |
+
+## 工单 E（视频通话工单组）：细粒度声线印象，合同升 v1
+
+`CONTRACT_VERSION` / `ANALYSIS_VERSION` 升到 `audio-music-perception.v1` / `audio-analysis.v1`。
+**v0 不删**：`CONTRACT_VERSION_V0`、`ANALYSIS_VERSION_V0`、`IMPRESSIONS_V0`、`conservative_impression_v0()`
+原样保留，旧 receipt / trace 仍可解释；`DELETION_AUTHORIZED` 仍为 `False`。分析缓存键含版本号，
+升版后旧 v0 缓存自然失效（音乐分析共用这个版本号，会重算一次）。
+
+| 标签 | 判据（全部只用 numpy，无新依赖） | 说明 |
+|---|---|---|
+| `unsteady` 忽高忽低 | IQR/中位数 ≥ 0.30 **且** 有声 F0 对时间的线性拟合 R² < 0.5 | R² 用来区分"来回晃"与"单调上升/下降"（疑问句的正常升调不算） |
+| `breathy` 带着气声 | 有声帧里 2.5 kHz 以上功率占 80 Hz–7 kHz 总功率 > 0.15 | 高频占比是谐噪比的廉价替身，不是 dB HNR |
+| `low_toned` 语气低沉（弱版） | v0 的"低音高 + 慢语速"，且能量不低于 -35 dBFS | 只按**绝对**音高与语速，文案写"没有个人基线"，不出现"比平时" |
+
+v0→v1 的行为差异（请知悉）：
+- v0 里"低音高 + 慢语速 + 非高能量"一律叫 `tired`；v1 里只有能量也低（< -35 dBFS）才仍叫 `tired`，
+  否则叫更字面的 `low_toned`。两个标签判据天然重叠，必须有一条区分规则，取"多一份证据才用更强的词"。
+- `calm` 只表示"没发现什么显著特征"，出现具体声线标签时被它取代（否则气声几乎永远被 `calm` 顶成
+  冲突）。`tired/bright/tense` 这类有实质内容的标签与新标签同时成立时仍回落 `unclear`（`quality: conflict`），
+  **不做多标签并列输出**。
+- 新特征缺失（预算不足、有声帧不够、tracker 跟不住）时新标签就不会触发，不影响 v0 标签与 STT。
+
+预算：`SPEECH_ANALYSIS_TIMEOUT_S = 3.0` 不变。合成 60 秒语音整体约 0.36 s，其中新特征约 60 ms；
+剩余预算小于 0.6 s 时整块跳过（`feature_skipped_budget` 计数），特征内部超时也只丢特征不丢分析。
+观测：`GET /stt-presets`（`admin`）的 `voice_analysis_stats` 给出印象标签分布、特征调用数、平均/最大
+耗时、跳过数与 `breathy` 发出数，不新增端点。`3.8_audio_impression` 仍是同一层：新特征进"可读特征"行
+（音高起伏、2.5 kHz 以上占比），标签另附一句释义，断言行沿用"不是情绪、健康或人格事实"。
+
+**局限（必须读）**：阈值只在合成信号上标定（谐波源 + 偏高频噪声，HNR 40–3 dB：干净声 hf 占比 ≤ 0.04，
+HNR ≤ 6 dB 时 ≥ 0.15），**没有用真实录音核对过**。真实语音的 hf 占比会受麦克风、降噪、opus 压缩、
+擦音/送气音影响；`unsteady` 的变异指标也会被自相关 pitch 的八度误判抬高。110 Hz 以下的低嗓会被现有
+有声帧门限滤掉，因此拿不到 `breathy`。工单要求"故意压低嗓子 / 故意气声 / 故意起伏说同一句话看标签是否
+跟着变"——这一步**尚未做**，在做完之前不要把新标签当可靠信号；误判率高就提高阈值或直接停发，
+宁缺毋滥优先于覆盖率。
+
+**为什么不做哭腔 / 夹嗓子**（留档，避免重复讨论）：哭腔需要 jitter / shimmer + 呼吸断续的联合判据，
+夹嗓子需要共振峰或 CPP；numpy 手写在 3 s 预算内不可靠，误判代价高。更根本的是这类标签是**相对该用户平时**
+的偏移，没有个体声纹基线就只能用绝对阈值，必然误判；做基线要跨轮持久化用户嗓音统计，属于新的隐私面和
+新的记忆写入点，需要独立 brief 与单独授权，不在本组范围。`tests/test_audio_music_contract.py` 有断言守住
+`IMPRESSIONS` 不含 crying / pinched / tight。
 
 ## 工单 260 D：音乐存储、角色注释、统计与只读观测
 

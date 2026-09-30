@@ -18,6 +18,7 @@ import aiohttp
 from core.audio_music_contract import (
     ANALYSIS_VERSION,
     CONFIG_ROOT,
+    IMPRESSIONS,
     PROMPT_LAYER,
     RECEIPT_CAPACITY,
     RECEIPT_TTL_S,
@@ -25,7 +26,14 @@ from core.audio_music_contract import (
 )
 SUFFIXES = {".wav", ".mp3", ".ogg", ".flac", ".m4a", ".webm", ".opus", ".amr", ".silk"}
 MAX_BYTES = 25 * 1024 * 1024
-TONES = frozenset({"calm", "tired", "bright", "tense", "unclear"})
+TONES = IMPRESSIONS  # v1 label set (v0's five plus unsteady / breathy / low_toned)
+# Plain-language gloss for the prompt. No label claims an emotion, and low_toned is an
+# absolute pitch + pace statement: there is no personal baseline to compare against.
+TONE_GLOSS = {
+    "unsteady": "音高起伏不定",
+    "breathy": "气声成分偏多",
+    "low_toned": "音高偏低且语速偏慢（仅按绝对音高与语速判断，没有个人基线）",
+}
 _current = ContextVar("audio_impression", default=None)
 _receipts = {}
 
@@ -61,6 +69,11 @@ def snapshot():
         analysis_deps = bool(deps_ready())
     except Exception:
         analysis_deps = False
+    try:
+        from core.audio_analysis import analysis_stats
+        result["voice_analysis_stats"] = analysis_stats()
+    except Exception:
+        result["voice_analysis_stats"] = None
     result.update(configured=ready, effective=stt_effective,
                   blocking_reason="" if stt_effective else ("missing_dependency" if legacy_local else "disabled" if not block["enabled"] else "missing_connection"),
                   source="legacy_local" if legacy_local else "stt_presets", purpose="voice_message",
@@ -263,6 +276,7 @@ def _compact_acoustic(analysis: dict | None, provider_tone: str) -> dict:
     status = (analysis or {}).get("analysis_status") or "failed"
     quality = (analysis or {}).get("quality") or "insufficient"
     usable = status == "ok" and quality == "ok"
+    voice = (analysis or {}).get("voice_quality") or {}
     impression = conservative_impression(
         quality="ok" if usable else (quality if quality != "ok" else "insufficient"),
         median_hz=summary.get("median_hz") if usable else None,
@@ -270,6 +284,8 @@ def _compact_acoustic(analysis: dict | None, provider_tone: str) -> dict:
         pace=pace.get("value") if usable else None,
         energy_dbfs=energy.get("dbfs") if usable else None,
         provider_tone=provider_tone,
+        linear_r2=voice.get("linear_r2") if usable else None,
+        hf_ratio=voice.get("hf_ratio") if usable else None,
     )
     return {
         "analysis_status": status,
@@ -279,6 +295,8 @@ def _compact_acoustic(analysis: dict | None, provider_tone: str) -> dict:
         "pace_unit": pace.get("unit"),
         "energy_dbfs": energy.get("dbfs"),
         "voiced_ratio": voiced.get("value"),
+        "hf_ratio": voice.get("hf_ratio") if usable else None,
+        "variation": summary.get("variation") if usable else None,
         "impression": impression["impression"],
         "impression_quality": impression["quality"],
         "analysis_version": (analysis or {}).get("analysis_version") or ANALYSIS_VERSION,
@@ -351,8 +369,14 @@ def _acoustic_prompt(tone: str, acoustic: dict) -> str:
         )
     if acoustic.get("analysis_status") == "ok" and acoustic.get("voiced_ratio") is not None:
         features.append("有声占比约 %.0f%%" % (100.0 * float(acoustic["voiced_ratio"])))
+    if acoustic.get("analysis_status") == "ok" and acoustic.get("variation") is not None:
+        features.append("音高起伏（四分位距/中位数）约 %.2f" % float(acoustic["variation"]))
+    if acoustic.get("analysis_status") == "ok" and acoustic.get("hf_ratio") is not None:
+        features.append("2.5 kHz 以上能量占比约 %.0f%%" % (100.0 * float(acoustic["hf_ratio"])))
     if features:
         parts.append("可读特征：" + "，".join(features) + "。")
+    if tone in TONE_GLOSS:
+        parts.append("该印象指" + TONE_GLOSS[tone] + "。")
     hint = acoustic.get("provider_tone_hint")
     if isinstance(hint, str) and hint in TONES:
         parts.append("供应商旁路 tone 仅作独立 hint：" + hint + "，不能覆盖声学失败。")
@@ -400,7 +424,8 @@ def _receipt_payload(result):
             key: acoustic.get(key)
             for key in (
                 "analysis_status", "quality", "median_hz", "pace", "pace_unit",
-                "energy_dbfs", "voiced_ratio", "impression", "impression_quality",
+                "energy_dbfs", "voiced_ratio", "hf_ratio", "variation",
+                "impression", "impression_quality",
                 "analysis_version", "provider_tone_hint",
             )
         }

@@ -344,4 +344,104 @@ async def test_analysis_concurrency_is_one(sandbox, monkeypatch):
     assert second["mode"] == "speech"
 
 
+# ── v1 voice-quality labels (video-call work order E) ───────────────────────
 
+def _voice(f0: float, seconds: float, hnr_db: float, *, wobble: float = 0.0, seed: int = 0):
+    """Harmonic source with 1/n spectrum + noise leaning high (aspiration-like).
+
+    Synthetic only: it demonstrates the features respond in the intended direction; it
+    is not evidence about real recordings.
+    """
+    rng = np.random.default_rng(seed)
+    sr = 16000
+    t = np.arange(int(sr * seconds)) / sr
+    # Pitch swings up and down (1.3 Hz) with no overall direction; ``wobble`` is its depth.
+    inst = f0 * (1.0 + 0.01 * np.sin(2 * np.pi * 4 * t) + wobble * np.sin(2 * np.pi * 1.3 * t))
+    phase = 2 * np.pi * np.cumsum(inst) / sr
+    signal = sum(np.sin(n * phase) / n for n in range(1, 30) if n * f0 < 5000)
+    signal = signal / np.max(np.abs(signal))
+    noise = np.diff(rng.standard_normal(len(t)), prepend=0.0)
+    noise = noise / np.std(noise) * np.sqrt(np.mean(signal ** 2)) / (10 ** (hnr_db / 20))
+    mixed = signal + noise
+    return 0.3 * mixed / np.max(np.abs(mixed))
+
+
+def test_clean_voice_has_low_high_frequency_share_and_no_new_label(sandbox):
+    result = analyze_audio_bytes(_wav_bytes(_voice(200.0, 2.0, 40.0)), mode="speech", use_cache=False)
+    voice = result["voice_quality"]
+    assert voice["computed"] is True and voice["hf_ratio"] < 0.06
+    assert result["impression"]["impression"] not in {"breathy", "unsteady"}
+    assert result["analysis_version"] == ANALYSIS_VERSION == "audio-analysis.v1"
+
+
+def test_noisy_voiced_signal_is_labelled_breathy(sandbox):
+    result = analyze_audio_bytes(_wav_bytes(_voice(200.0, 2.0, 5.0)), mode="speech", use_cache=False)
+    assert result["voice_quality"]["hf_ratio"] > 0.15
+    assert result["impression"]["impression"] == "breathy"
+    assert result["impression"]["rule"] == ANALYSIS_VERSION
+
+
+def test_wandering_pitch_is_labelled_unsteady_but_a_steady_ramp_is_not(sandbox):
+    wobbly = analyze_audio_bytes(_wav_bytes(_voice(180.0, 3.0, 40.0, wobble=0.25)),
+                                 mode="speech", use_cache=False)
+    assert wobbly["pitch_summary"]["variation"] >= 0.30
+    assert wobbly["voice_quality"]["linear_r2"] < 0.5
+    assert wobbly["impression"]["impression"] == "unsteady"
+    ramp = analyze_audio_bytes(_wav_bytes(_chirp(110.0, 300.0, duration_s=2.5)), mode="speech", use_cache=False)
+    assert ramp["voice_quality"]["linear_r2"] > 0.8
+    assert ramp["impression"]["impression"] != "unsteady"
+
+
+def test_new_features_fit_the_three_second_budget_with_room_to_spare(sandbox):
+    started = time.monotonic()
+    result = analyze_audio_bytes(_wav_bytes(_voice(200.0, 60.0, 15.0)), mode="speech", use_cache=False)
+    assert result["analysis_status"] == "ok"
+    assert result["voice_quality"]["computed"] is True
+    assert result["voice_quality"]["elapsed_ms"] < 1000   # the feature alone, 60 s of audio
+    assert (time.monotonic() - started) < 3.0
+
+
+def test_feature_is_skipped_not_fatal_when_little_budget_remains(sandbox, monkeypatch):
+    from core import audio_analysis as module
+    monkeypatch.setattr(module, "BREATHINESS_MIN_BUDGET_S", 10_000.0)   # always "not enough budget"
+    module.reset_stats_for_tests()
+    result = analyze_audio_bytes(_wav_bytes(_voice(200.0, 2.0, 5.0)), mode="speech", use_cache=False)
+    assert result["analysis_status"] == "ok"                 # analysis and STT unaffected
+    assert result["voice_quality"]["computed"] is False
+    assert result["impression"]["impression"] != "breathy"   # no feature, no label
+    assert module.analysis_stats()["feature_skipped_budget"] == 1
+
+
+def test_feature_timeout_inside_the_feature_does_not_fail_the_analysis(sandbox, monkeypatch):
+    from core import audio_analysis as module
+    calls = {"n": 0}
+    real = module._check_deadline
+
+    def flaky(deadline):
+        calls["n"] += 1
+        if calls["n"] > 40:     # let decode + pitch finish, time out inside the new feature
+            raise TimeoutError("analysis_timeout")
+        return real(deadline)
+
+    monkeypatch.setattr(module, "_check_deadline", flaky)
+    calls["n"] = 0
+    result = analyze_audio_bytes(_wav_bytes(_voice(200.0, 0.6, 5.0)), mode="speech", use_cache=False)
+    assert result["analysis_status"] in {"ok", "timeout"}    # never an exception
+
+
+def test_stats_expose_label_distribution_and_feature_cost(sandbox):
+    from core import audio_analysis as module
+    module.reset_stats_for_tests()
+    analyze_audio_bytes(_wav_bytes(_voice(200.0, 2.0, 5.0)), mode="speech", use_cache=False)
+    analyze_audio_bytes(_wav_bytes(_voice(200.0, 2.0, 40.0)), mode="speech", use_cache=False)
+    stats = module.analysis_stats()
+    assert sum(stats["impressions"].values()) == 2
+    assert stats["breathy_emitted"] == 1
+    assert stats["feature_calls"] == 2 and stats["feature_ms_max"] >= stats["feature_ms_avg"] > 0
+
+
+def test_old_v0_cache_entries_are_not_reused(sandbox):
+    from core import audio_analysis as module
+    assert module._read_cache("missing") is None
+    key = module._content_key(b"x", "speech")
+    assert key.endswith("audio-analysis.v1")

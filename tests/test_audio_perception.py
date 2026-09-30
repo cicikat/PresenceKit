@@ -352,3 +352,57 @@ async def test_transcribe_hides_acoustic_payload(configured, monkeypatch):
     assert value["tone"] == "unclear"
     stored = audio.consume_receipt(value["audio_perception_id"], "hello", "desktop")
     assert stored["acoustic"]["analysis_status"] == "failed"
+
+
+# ── v1 labels in the perception layer (video-call work order E) ─────────────
+
+def _acoustic(tone, **extra):
+    base = {"analysis_status": "ok", "quality": "ok", "median_hz": 200.0, "pace": 3.0,
+            "energy_dbfs": -22.0, "voiced_ratio": 0.6, "hf_ratio": None, "variation": None,
+            "impression": tone, "impression_quality": "ok", "analysis_version": "audio-analysis.v1"}
+    base.update(extra)
+    return base
+
+
+def test_tones_include_v1_labels_and_keep_the_v0_ones():
+    assert {"calm", "tired", "bright", "tense", "unclear"} <= audio.TONES
+    assert {"unsteady", "breathy", "low_toned"} <= audio.TONES
+
+
+def test_prompt_explains_new_labels_without_claiming_emotion_or_a_baseline(configured):
+    for tone in ("unsteady", "breathy", "low_toned"):
+        result = {"text": "hello", "tone": tone, "acoustic": _acoustic(tone, hf_ratio=0.22, variation=0.35)}
+        with audio.impression(result):
+            hint = audio.prompt_hint()
+        content = hint["content"]
+        assert hint["_layer"] == "3.8_audio_impression"               # still the one existing layer
+        assert audio.TONE_GLOSS[tone] in content
+        assert "不是情绪、健康或人格事实" in content
+        assert "比平时" not in content
+        assert "2.5 kHz 以上能量占比约 22%" in content               # readable-feature line, not an assertion line
+
+
+def test_low_toned_wording_states_absolute_judgement_only(configured):
+    result = {"text": "hello", "tone": "low_toned", "acoustic": _acoustic("low_toned")}
+    with audio.impression(result):
+        content = audio.prompt_hint()["content"]
+    assert "没有个人基线" in content and "比平时" not in content
+
+
+def test_receipt_carries_the_new_readable_features(configured):
+    result = {"text": "hello", "tone": "breathy", "acoustic": _acoustic("breathy", hf_ratio=0.21, variation=0.1)}
+    key = audio.issue_receipt(result, "desktop")
+    consumed = audio.consume_receipt(key, "hello", "desktop")
+    assert consumed["tone"] == "breathy"
+    assert consumed["acoustic"]["hf_ratio"] == 0.21 and consumed["acoustic"]["variation"] == 0.1
+
+
+def test_provider_tone_with_a_new_label_still_cannot_override_failed_analysis():
+    compact = audio._compact_acoustic({"analysis_status": "failed", "quality": "noisy"}, "breathy")
+    assert compact["impression"] == "unclear"
+    assert compact["provider_tone_hint"] == "breathy"      # recorded as a hint only
+
+
+def test_snapshot_reports_voice_analysis_stats(configured):
+    stats = audio.snapshot()["voice_analysis_stats"]
+    assert {"impressions", "feature_calls", "feature_ms_avg", "feature_skipped_budget"} <= set(stats)

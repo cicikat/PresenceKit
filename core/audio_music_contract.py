@@ -10,15 +10,36 @@ from __future__ import annotations
 from typing import Any
 
 
-CONTRACT_VERSION = "audio-music-perception.v0"
-ANALYSIS_VERSION = "audio-analysis.v0"
+# v1 (video-call work order E) adds impression labels; nothing from v0 is removed.
+# The v0 constants and ``conservative_impression_v0`` stay so older receipts, traces
+# and cached results remain explainable (DELETION_AUTHORIZED is still False).
+CONTRACT_VERSION_V0 = "audio-music-perception.v0"
+ANALYSIS_VERSION_V0 = "audio-analysis.v0"
+CONTRACT_VERSION = "audio-music-perception.v1"
+ANALYSIS_VERSION = "audio-analysis.v1"
 LISTEN_THRESHOLD_VERSION = "listen-threshold.v0"
 PLAYER_ADAPTER_VERSION = "player-adapter.v0"
 PROMPT_LAYER = "3.8_audio_impression"
 
 ANALYSIS_MODES = frozenset({"speech", "music"})
-IMPRESSIONS = frozenset({"calm", "tired", "bright", "tense", "unclear"})
+IMPRESSIONS_V0 = frozenset({"calm", "tired", "bright", "tense", "unclear"})
+# unsteady = pitch swings widely and a straight line explains little of it (not a simple
+# rise/fall); breathy = an unusually large share of voiced-frame power above 2.5 kHz;
+# low_toned = low absolute pitch AND slow pace at normal loudness (no personal baseline
+# exists, so it never means "lower than usual").
+# Deliberately NOT here: crying voice, pinched/tight voice — see docs/audio-perception.md.
+IMPRESSIONS_V1_ADDED = frozenset({"unsteady", "breathy", "low_toned"})
+IMPRESSIONS = IMPRESSIONS_V0 | IMPRESSIONS_V1_ADDED
 PROVIDER_TONE_HINTS = IMPRESSIONS
+
+# v1 thresholds. They were calibrated on synthetic signals only (harmonic source + noise
+# leaning high, HNR 40..3 dB): clean voices gave hf_ratio <= 0.04, HNR <= 6 dB gave
+# >= 0.15.  Real recordings have NOT been checked yet; prefer no label over a wrong one.
+UNSTEADY_VARIATION = 0.30
+UNSTEADY_MAX_LINEAR_R2 = 0.5
+BREATHY_HF_RATIO_MIN = 0.15
+HF_BAND_LOW_HZ = 2500.0
+BREATHINESS_MIN_BUDGET_S = 0.6
 
 PITCH_UNITS = {
     "time": "seconds",
@@ -280,13 +301,62 @@ def conservative_impression(
     pace: float | None | str,
     energy_dbfs: float | None,
     provider_tone: str | None = None,
+    linear_r2: float | None = None,
+    hf_ratio: float | None = None,
 ) -> dict[str, Any]:
-    """Map acoustics to a conservative label. Provider tone never overrides failure."""
+    """v1 mapping: the v0 label plus the new ones, never several at once.
+
+    Exactly one label is returned. Any disagreement between criteria falls back to
+    ``unclear`` with quality ``conflict``, as in v0.  Provider tone never overrides
+    failure.  Missing new features (``linear_r2`` / ``hf_ratio`` None, e.g. the
+    feature budget was skipped) simply mean the new labels cannot fire.
+    """
+    base = conservative_impression_v0(
+        quality=quality, median_hz=median_hz, variation=variation, pace=pace,
+        energy_dbfs=energy_dbfs, provider_tone=provider_tone,
+    )
+    if quality != "ok" or median_hz is None:
+        return {**base, "rule": ANALYSIS_VERSION}
+    labels = set() if base["impression"] == "unclear" else {base["impression"]}
+    low_energy = energy_dbfs is not None and energy_dbfs < -35
+    if "tired" in labels and not low_energy:
+        # v0 called any slow, low voice "tired"; v1 keeps that for quiet voices only.
+        labels.discard("tired")
+        labels.add("low_toned")
+    if (variation is not None and variation >= UNSTEADY_VARIATION
+            and linear_r2 is not None and linear_r2 < UNSTEADY_MAX_LINEAR_R2):
+        labels.add("unsteady")
+    if hf_ratio is not None and hf_ratio > BREATHY_HF_RATIO_MIN:
+        labels.add("breathy")
+    if "calm" in labels and labels & IMPRESSIONS_V1_ADDED:
+        # ``calm`` only means "nothing salient was found"; a specific voice-quality
+        # finding is more informative and does not contradict it.  Substantive labels
+        # (tired / bright / tense / ...) still conflict with each other -> unclear.
+        labels.discard("calm")
+    label = next(iter(labels)) if len(labels) == 1 else "unclear"
+    return {
+        "impression": label,
+        "quality": "ok" if label != "unclear" else "conflict",
+        "rule": ANALYSIS_VERSION,
+        "provider_tone_hint": _hint(provider_tone),
+    }
+
+
+def conservative_impression_v0(
+    *,
+    quality: str,
+    median_hz: float | None,
+    variation: float | None,
+    pace: float | None | str,
+    energy_dbfs: float | None,
+    provider_tone: str | None = None,
+) -> dict[str, Any]:
+    """The frozen v0 mapping (five labels). Kept verbatim; v1 builds on it."""
     if quality != "ok" or median_hz is None:
         return {
             "impression": "unclear",
             "quality": quality if quality != "ok" else "insufficient",
-            "rule": ANALYSIS_VERSION,
+            "rule": ANALYSIS_VERSION_V0,
             "provider_tone_hint": _hint(provider_tone),
         }
     pace_value = pace if isinstance(pace, (int, float)) else None
@@ -314,7 +384,7 @@ def conservative_impression(
     return {
         "impression": label,
         "quality": "ok" if label != "unclear" else "conflict",
-        "rule": ANALYSIS_VERSION,
+        "rule": ANALYSIS_VERSION_V0,
         "provider_tone_hint": _hint(provider_tone),
     }
 

@@ -1,5 +1,12 @@
 # docs/known-issues.md — 已知问题与技术债
 
+## 声线印象 v1 未经真实录音核对（2026-09-30，observe）
+
+`unsteady` / `breathy` / `low_toned` 的阈值只在合成信号上标定，工单要求的"故意压低嗓子 / 气声 / 起伏各说
+一遍"的人工核对尚未做；真实麦克风、降噪与 opus 压缩会改变高频占比，110 Hz 以下低嗓拿不到 `breathy`。
+核对前不要把新标签当可靠信号；误判率高就调高 `core/audio_music_contract.py` 里的阈值或停发。
+详见 `docs/audio-perception.md` 工单 E 一节。
+
 ## 视频通话持续录音段边界丢音（2026-09-30，observe）
 
 `useContinuousCallVoice.ts` 在 `onstop` 里才重启 MediaRecorder，段边界有短暂丢音窗口；

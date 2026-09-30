@@ -26,11 +26,14 @@ from core.audio_music_contract import (
     MAX_DECODE_MEMORY_BYTES,
     MAX_INPUT_BYTES,
     MIN_VOICED_FRAMES_SUMMARY,
+    MIN_VOICED_FRAMES_TREND,
     MUSIC_ANALYSIS_TIMEOUT_S,
     MUSIC_MAX_ANALYZE_DURATION_S,
     PACE_METHOD,
     PACE_UNIT,
     PACE_UNKNOWN,
+    BREATHINESS_MIN_BUDGET_S,
+    HF_BAND_LOW_HZ,
     PITCH_F0_MAX_HZ,
     PITCH_F0_MIN_HZ,
     PITCH_FRAME_MS,
@@ -211,9 +214,10 @@ def _frame_signal(samples: Any, sr: int, frame_ms: int, hop_ms: int) -> Any:
     return np.stack([samples[i:i + frame] for i in starts]).astype(np.float32)
 
 
-def _pitch_track(samples: Any, sr: int, deadline: float) -> list[dict[str, Any]]:
+def _pitch_track(samples: Any, sr: int, deadline: float, frames: Any = None) -> list[dict[str, Any]]:
     np = _numpy()
-    frames = _frame_signal(samples, sr, PITCH_FRAME_MS, PITCH_HOP_MS)
+    if frames is None:
+        frames = _frame_signal(samples, sr, PITCH_FRAME_MS, PITCH_HOP_MS)
     hop = max(1, int(sr * PITCH_HOP_MS / 1000))
     window = np.hanning(frames.shape[1]).astype(np.float32) if frames.size else None
     min_lag = max(2, int(sr / PITCH_F0_MAX_HZ))
@@ -258,6 +262,87 @@ def _pace(points: list[dict[str, Any]], duration_s: float) -> dict[str, Any]:
     }
 
 
+# Observability for the v1 voice-quality features (see docs/audio-perception.md).
+_STATS: dict[str, Any] = {"impressions": {}, "feature_calls": 0, "feature_ms_total": 0.0,
+                          "feature_ms_max": 0.0, "feature_skipped_budget": 0,
+                          "breathy_emitted": 0}
+
+
+def analysis_stats() -> dict[str, Any]:
+    """Impression label distribution and feature cost, for the audio observation surface."""
+    calls = _STATS["feature_calls"]
+    return {**{k: v for k, v in _STATS.items() if k != "impressions"},
+            "impressions": dict(_STATS["impressions"]),
+            "feature_ms_avg": (_STATS["feature_ms_total"] / calls) if calls else 0.0}
+
+
+def reset_stats_for_tests() -> None:
+    _STATS.update(impressions={}, feature_calls=0, feature_ms_total=0.0, feature_ms_max=0.0,
+                  feature_skipped_budget=0, breathy_emitted=0)
+
+
+def _linear_r2(points: list[dict[str, Any]]) -> float | None:
+    """R² of a straight-line fit of voiced F0 over time: ~1 for a steady rise/fall,
+    low for a pitch that wanders. Used only to tell "wobbly" from "a normal ramp"."""
+    np = _numpy()
+    voiced = [(row["t"], row["f0_hz"]) for row in points if row.get("f0_hz") is not None]
+    if len(voiced) < MIN_VOICED_FRAMES_TREND:
+        return None
+    t = np.array([v[0] for v in voiced], dtype=np.float64)
+    f = np.array([v[1] for v in voiced], dtype=np.float64)
+    total = float(np.sum((f - f.mean()) ** 2))
+    if total <= 0 or float(np.ptp(t)) <= 0:
+        return None
+    slope, intercept = np.polyfit(t, f, 1)
+    residual = float(np.sum((f - (slope * t + intercept)) ** 2))
+    return max(0.0, 1.0 - residual / total)
+
+
+def _voice_quality_features(frames: Any, points: list[dict[str, Any]], sr: int, deadline: float) -> dict[str, Any]:
+    """numpy-only feature for the v1 "breathy" label, on voiced frames only.
+
+    ``hf_ratio``: share of spectral power above ``HF_BAND_LOW_HZ`` (within 80 Hz – 7 kHz).
+    Aspiration noise puts more power up there.  A cheap proxy, not a dB harmonics-to-noise
+    ratio.  Voiced-frame selection reuses the pitch tracker's gate, so voices the tracker
+    cannot follow (e.g. very low ones) yield no feature and therefore no label.
+
+    Budget-safe: skipped (returns ``computed: False``) when too little of the 3 s
+    analysis budget remains, and never raises ``TimeoutError`` past this function, so a
+    slow machine loses the label, not the analysis.
+    """
+    started = time.monotonic()
+    _STATS["feature_calls"] += 1
+    empty = {"hf_ratio": None, "computed": False, "elapsed_ms": 0.0}
+    if deadline - started < BREATHINESS_MIN_BUDGET_S:
+        _STATS["feature_skipped_budget"] += 1
+        return empty
+    np = _numpy()
+    try:
+        voiced = np.array([row.get("f0_hz") is not None and (row.get("voicing") or 0) >= 0.45
+                           for row in points], dtype=bool)
+        n = min(len(voiced), frames.shape[0])
+        voiced = voiced[:n]
+        if int(voiced.sum()) < MIN_VOICED_FRAMES_SUMMARY:
+            return {**empty, "elapsed_ms": (time.monotonic() - started) * 1000}
+        chosen = frames[:n][voiced]
+        chosen = chosen - chosen.mean(axis=1, keepdims=True)
+        window = np.hanning(chosen.shape[1]).astype(np.float32)
+        power = np.abs(np.fft.rfft(chosen * window, n=512, axis=1)) ** 2
+        freqs = np.fft.rfftfreq(512, 1.0 / sr)
+        band = (freqs >= 80.0) & (freqs <= min(7000.0, sr / 2.0 - 1.0))
+        high = band & (freqs >= HF_BAND_LOW_HZ)
+        total = float(power[:, band].sum())
+        _check_deadline(deadline)
+        hf_ratio = float(power[:, high].sum() / total) if total > 0 else None
+        elapsed = (time.monotonic() - started) * 1000
+        _STATS["feature_ms_total"] += elapsed
+        _STATS["feature_ms_max"] = max(_STATS["feature_ms_max"], elapsed)
+        return {"hf_ratio": hf_ratio, "computed": hf_ratio is not None, "elapsed_ms": elapsed}
+    except TimeoutError:
+        _STATS["feature_skipped_budget"] += 1
+        return {**empty, "elapsed_ms": (time.monotonic() - started) * 1000}
+
+
 def _quality(samples: Any, duration_s: float, voiced_frames: int, total_frames: int) -> str:
     np = _numpy()
     if duration_s < 0.25 or total_frames < MIN_VOICED_FRAMES_SUMMARY:
@@ -274,7 +359,8 @@ def _quality(samples: Any, duration_s: float, voiced_frames: int, total_frames: 
 
 
 def _speech_result(samples: Any, sr: int, source_duration: float, analyzed: float, deadline: float) -> dict[str, Any]:
-    points = _pitch_track(samples, sr, deadline)
+    frames = _frame_signal(samples, sr, PITCH_FRAME_MS, PITCH_HOP_MS)
+    points = _pitch_track(samples, sr, deadline, frames)
     summary = pitch_summary(points)
     voiced_frames = int(summary["voiced_frames"])
     total_frames = len(points)
@@ -286,13 +372,24 @@ def _speech_result(samples: Any, sr: int, source_duration: float, analyzed: floa
     rms = _rms(samples)
     dbfs = _dbfs(rms)
     pace = _pace(points, analyzed)
+    voice = (_voice_quality_features(frames, points, sr, deadline) if quality == "ok"
+             else {"hf_ratio": None, "computed": False, "elapsed_ms": 0.0})
+    del frames
+    linear_r2 = _linear_r2(points) if quality == "ok" else None
+    voice["linear_r2"] = linear_r2
     impression = conservative_impression(
         quality="ok" if quality == "ok" else quality,
         median_hz=summary.get("median_hz"),
         variation=summary.get("variation"),
         pace=pace.get("value"),
         energy_dbfs=dbfs,
+        linear_r2=linear_r2,
+        hf_ratio=voice["hf_ratio"],
     )
+    label = impression["impression"]
+    _STATS["impressions"][label] = _STATS["impressions"].get(label, 0) + 1
+    if label == "breathy":
+        _STATS["breathy_emitted"] += 1
     ratio = 0.0 if source_duration <= 0 else min(1.0, analyzed / source_duration)
     status = "ok" if quality == "ok" else "partial" if quality == "clipped" and voiced_frames else "failed"
     if quality in {"silent", "short", "noisy"}:
@@ -317,6 +414,7 @@ def _speech_result(samples: Any, sr: int, source_duration: float, analyzed: floa
             "note": "device_gain_distance_compression",
         },
         "pace": pace,
+        "voice_quality": voice,
         "voiced_ratio": {
             "value": 0.0 if total_frames == 0 else voiced_frames / total_frames,
             "voiced_frames": voiced_frames,
