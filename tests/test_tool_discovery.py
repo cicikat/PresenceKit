@@ -68,7 +68,10 @@ async def test_first_request_only_categories_then_selected_schema(harness):
     assert requests[0]["names"] == ["load_tools_info", "load_tools_memory"]
     assert requests[1]["names"] == ["web_search", "load_tools_memory"]
     assert [e[0] for e in executions] == ["web_search"]
-    assert "get_episodic" not in json.dumps(requests[0]["tools"])
+    # 折叠隐藏定义，但入口描述要点出 get_episodic 的存在，参数 schema 仍不下发。
+    entry = next(t for t in requests[0]["tools"] if t["function"]["name"] == "load_tools_memory")
+    assert "get_episodic" in entry["function"]["description"]
+    assert entry["function"]["parameters"]["properties"] == {}
 
 
 @pytest.mark.asyncio
@@ -177,6 +180,10 @@ def test_all_categories_no_truncation_and_schema_integrity():
             }}})
     discovery = ToolDiscovery(schemas, registry)
     assert len(discovery.schemas()) == 10
+    # 入口描述必须列出分类内的工具名（有界），否则模型无法得知折叠后面有什么。
+    for entry in discovery.schemas():
+        description = entry["function"]["description"]
+        assert "test_" in description and "等 25 个" in description
     for category in CATEGORIES:
         assert discovery.load("load_tools_" + category, {})[1]
     assert len(discovery.schemas()) == 250

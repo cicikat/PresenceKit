@@ -128,6 +128,7 @@ async function loadHdsLocalSettings() {
     ]);
     _hdsInterfaces = settings.interfaces || [];
     enabled.checked = settings.enabled;
+    document.getElementById('hds-character-read').checked = settings.character_read_enabled !== false;
     document.getElementById('hds-port').value = settings.port;
     const selection = document.getElementById('hds-interface');
     selection.innerHTML = `<option value="">${escapeHtml(_scText('scheduler.hds.all_interfaces', '全部本机网卡'))}</option>` +
@@ -146,7 +147,20 @@ async function loadHdsLocalSettings() {
     document.getElementById('hds-latest').textContent = latest
       ? _scText('scheduler.hds.latest', '最近心率：{value} bpm，时间：{time}；已留存 {count} 条。', {value: latest.value, time: new Date(latest.received_at * 1000).toLocaleString(), count: status.sample_count_retained})
       : _scText('scheduler.hds.no_samples', '尚未收到 HDS 心率样本。');
+    _renderHdsReads(status);
   } catch (e) { toast(_scText('scheduler.hds.load_failed', '读取 HDS 设置失败：{error}', {error: e.message}), 'err'); }
+}
+
+// 只有命中数能区分「工具没暴露」和「暴露了但角色没调用」。
+function _renderHdsReads(status) {
+  const target = document.getElementById('hds-reads');
+  if (!target) return;
+  const reads = status.character_reads || {};
+  target.textContent = status.character_read_effective
+    ? _scText('scheduler.hds.reads', '角色可读取；read_hds_heart_rate 近 24 小时 {day} 次、近 7 天 {week} 次{last}。',
+        {day: reads.last_24h || 0, week: reads.last_7d || 0,
+         last: reads.latest_time ? _scText('scheduler.hds.reads_last', '，最近一次 {time}', {time: new Date(reads.latest_time).toLocaleString()}) : ''})
+    : _scText('scheduler.hds.reads_off', '角色当前不能读取心率，read_hds_heart_rate 不会下发给模型。');
 }
 
 function _showHdsMode() {
@@ -198,6 +212,7 @@ async function saveHdsLocalSettings() {
     source_mode: document.getElementById('hds-source-mode').value,
     interface: document.getElementById('hds-interface').value,
     allowed_subnets: document.getElementById('hds-subnets').value.split(/\s+/).filter(Boolean),
+    character_read_enabled: document.getElementById('hds-character-read').checked,
   };
   try {
     await api('PUT', '/settings/hds-local', body);
@@ -288,6 +303,7 @@ async function loadHdsLocalStatus() {
     el.textContent = latest
       ? _scText('scheduler.hds.latest', '最近心率：{value} bpm，时间：{time}；已留存 {count} 条。', {value: latest.value, time: new Date(latest.received_at * 1000).toLocaleString(), count: status.sample_count_retained})
       : _scText('scheduler.hds.no_samples', '尚未收到 HDS 心率样本。');
+    _renderHdsReads(status);
   } catch (e) { /* 状态轮询静默失败 */ }
 }
 

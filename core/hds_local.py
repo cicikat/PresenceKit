@@ -26,6 +26,16 @@ def enabled() -> bool:
     return config().get("enabled") is True
 
 
+def character_read_enabled() -> bool:
+    """Whether the character may read heart-rate samples via ``read_hds_heart_rate``.
+
+    Receiving samples and letting the character read them are separate consents:
+    the owner may want the watch feed recorded without it entering conversation.
+    Defaults to True so existing installs keep the tool they already had.
+    """
+    return enabled() and config().get("character_read_enabled", True) is not False
+
+
 def interfaces() -> list[dict]:
     """Discover LAN addresses at read time so DHCP changes need no config edit."""
     try:

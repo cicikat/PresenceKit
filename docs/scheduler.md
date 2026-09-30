@@ -12,6 +12,10 @@
 样本保存到 uid 全局 `health_state.hds_samples`，最多保留 1440 条，并有只读
 `GET /watch/hds-local`（`state.read`）可查看最近 20 条和最新接收时间。
 角色可通过只读工具 `read_hds_heart_rate` 按需读取最新样本及其新鲜度、近 3 分钟统计、上次自动化评估和候选；调用工具本身不运行推断、不产生候选。
+`hds_local.character_read_enabled`（默认 true，管理面调度器页「允许角色读取心率」）是接收之外的第二层同意：
+关掉后 `read_hds_heart_rate` 不再下发给模型，接收与自动化评估不受影响。
+调度器页同时显示该工具近 24 小时 / 近 7 天的命中数与最近一次时间，取自 `GET /watch/hds-local` 的
+`character_reads`（源自工具审计，不含参数或结果），用于区分「工具没暴露」和「暴露了但角色没调用」。
 
 autonomy 每 tick 读取近 3 分钟样本，至少 3 条、跨度至少 15 秒；结合近 30 分钟
 基线识别持续高位或相对变化，同方向 20 分钟内至多产生一次候选。

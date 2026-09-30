@@ -2280,6 +2280,10 @@ def _is_tool_enabled(tool_name: str) -> bool:
         from core.perception.screen_observation import enabled
         if not enabled():
             return False
+    if tool_name == "read_hds_heart_rate":
+        from core.hds_local import character_read_enabled
+        if not character_read_enabled():
+            return False
     if tool_name in _INTIFACE_TOOL_NAMES and not intiface_opted_in():
         return False
     if tool_name in (

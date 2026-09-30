@@ -108,7 +108,7 @@ hello 字段或协商流程。
 **memory 类工具默认不走探针，路径C（tool loop）激活时才对主 LLM 可见。** 管理员可在
 `tool_exposure.path_a` 显式加入该类；这会同时影响 QQ、desktop 和 mobile，不能只为一个端开启。
 `read_diary`/`backfill_diary`/`read_watch`/`search_diary`/`get_profile`/`get_episodic` 已注册且 `execute_structured()` 能执行。
-`read_hds_heart_rate` 是独立的只读 memory 工具，按 owner uid 读取 HDS 最新样本、新鲜度、近 3 分钟统计与上次自动化评估/候选；查询不会重新运行推断或消耗候选冷却。只有实际启用 memory 工具暴露面时，角色才能自主调用。
+`read_hds_heart_rate` 是独立的只读 memory 工具，按 owner uid 读取 HDS 最新样本、新鲜度、近 3 分钟统计与上次自动化评估/候选；查询不会重新运行推断或消耗候选冷却。只有实际启用 memory 工具暴露面时，角色才能自主调用，且受 `hds_local.character_read_enabled` 二次门控（详见 `docs/scheduler.md`）。
 `backfill_diary` 是 info 写工具，沿用工具开关、角色授权和冻结会话 `uid+char_id`，仅 owner 私聊的 `user_live` / `assistant_loop` / `assistant_loop_relay` 可执行。
 路径A不把 memory 类喂给探针。Fable R5 已修复与 Author's Note 工具承诺的落差：
 层11 Author's Note 现在是条件分支，有 `tool_result` 时提示已提供，无时明确禁止编造，

@@ -151,6 +151,7 @@ hds_local:
   source_mode: auto
   interface: ""  # Optional network-interface name, chosen in the admin panel.
   allowed_subnets: []  # Used only when source_mode is manual.
+  character_read_enabled: true  # Second consent layer: whether read_hds_heart_rate is exposed to the model.
 
 admin:
   enabled: true

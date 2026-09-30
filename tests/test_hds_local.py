@@ -131,3 +131,41 @@ async def test_hds_admin_reports_current_address_and_restart_need(monkeypatch):
     result = await watch.get_hds_local_settings(auth={})
     assert result["urls"] == ["http://192.168.7.42:3476/"]
     assert result["restart_required"] is True
+
+
+def test_character_read_is_a_second_consent_layer(monkeypatch):
+    """接收样本和「允许角色读取」是两层同意；缺字段时保持既有安装的行为不变。"""
+    from core.tool_dispatcher import _is_tool_enabled
+
+    monkeypatch.setattr(hds_local, "config", lambda: {"enabled": True})
+    assert hds_local.character_read_enabled() is True
+    monkeypatch.setattr(hds_local, "config", lambda: {"enabled": True, "character_read_enabled": False})
+    assert hds_local.character_read_enabled() is False
+    assert _is_tool_enabled("read_hds_heart_rate") is False
+    # 接收本身关掉时，角色自然也读不到。
+    monkeypatch.setattr(hds_local, "config", lambda: {"enabled": False, "character_read_enabled": True})
+    assert hds_local.character_read_enabled() is False
+
+
+@pytest.mark.asyncio
+async def test_hds_admin_surfaces_character_read_toggle_and_hit_counts(sandbox, monkeypatch):
+    """暴露着但零调用是本次的实际故障模式，观测必须能区分这两种情况。"""
+    from admin.routers import watch
+
+    monkeypatch.setattr(hds_local, "config", lambda: {
+        "enabled": True, "port": 3476, "source_mode": "auto", "character_read_enabled": False,
+    })
+    monkeypatch.setattr(hds_local, "interfaces", lambda: [])
+    monkeypatch.setattr("admin.hds_server.bound_port", lambda: 3476)
+    settings = await watch.get_hds_local_settings(auth={})
+    assert settings["character_read_enabled"] is False
+    assert settings["character_read_effective"] is False
+
+    monkeypatch.setattr("admin.hds_server.request_stats", lambda: {})
+    monkeypatch.setattr(watch, "get_config", lambda: {"scheduler": {"owner_id": "hds-reads"}})
+    monkeypatch.setattr("core.tool_audit.query", lambda *a, **kw: [
+        {"tool": "read_hds_heart_rate", "timestamp": 1e12, "time": "2026-09-28T10:00:00+00:00"},
+    ])
+    status = await watch.get_hds_local_status(auth={})
+    assert status["character_read_effective"] is False
+    assert status["character_reads"]["last_7d"] == 1

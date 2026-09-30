@@ -21,6 +21,7 @@ CATEGORIES = {
     "system": "系统与设备管理",
 }
 PREFIX = "load_tools_"
+MAX_LISTED_TOOLS = 24
 
 
 class ToolDiscovery:
@@ -33,6 +34,19 @@ class ToolDiscovery:
                 self.groups.setdefault(category, []).append(deepcopy(schema))
         self.loaded: set[str] = set()
 
+    def _contents(self, category: str) -> str:
+        """List the tool names behind one entry so folding hides definitions, not existence.
+
+        Without this the model only sees a category label and cannot tell that,
+        say, a heart-rate reader lives behind ``memory`` — which made several
+        exposed tools effectively unreachable.
+        """
+        names = [(schema.get("function") or schema).get("name", "") for schema in self.groups[category]]
+        names = [name for name in names if name]
+        shown, rest = names[:MAX_LISTED_TOOLS], max(0, len(names) - MAX_LISTED_TOOLS)
+        listed = "、".join(shown) + (f" 等 {len(names)} 个" if rest else "")
+        return f"含：{listed}。" if listed else ""
+
     def schemas(self) -> list[dict]:
         result = []
         for category, description in CATEGORIES.items():
@@ -43,7 +57,8 @@ class ToolDiscovery:
             else:
                 result.append({"type": "function", "function": {
                     "name": PREFIX + category,
-                    "description": f"加载{description}的工具定义。只发现工具，不执行任何业务操作；下一轮才能调用具体工具。",
+                    "description": (f"加载{description}的工具定义。{self._contents(category)}"
+                                    "只发现工具，不执行任何业务操作；下一轮才能调用具体工具。"),
                     "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
                 }})
         return deepcopy(result)

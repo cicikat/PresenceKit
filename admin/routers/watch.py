@@ -45,6 +45,7 @@ class HdsLocalSettings(BaseModel):
     source_mode: str
     interface: str = ""
     allowed_subnets: list[str] = Field(default_factory=list, max_length=8)
+    character_read_enabled: bool = True
 
 
 @router.get("/settings/hds-local", summary="HDS 本地接收设置")
@@ -55,9 +56,13 @@ async def get_hds_local_settings(auth=Depends(require_scopes("admin"))):
     settings = config()
     candidates = interfaces()
     port = int(settings.get("port") or 3476)
+    from core.hds_local import character_read_enabled
     return {
         "enabled": settings.get("enabled") is True,
         "port": port,
+        # 收样本和「允许角色读取」是两层同意：接收开着也可以不让心率进对话。
+        "character_read_enabled": settings.get("character_read_enabled", True) is not False,
+        "character_read_effective": character_read_enabled(),
         "source_mode": settings.get("source_mode", "auto"),
         "interface": settings.get("interface") or "",
         "allowed_subnets": settings.get("allowed_subnets") or [],
@@ -101,6 +106,7 @@ async def update_hds_local_settings(body: HdsLocalSettings, auth=Depends(require
         "source_mode": body.source_mode,
         "interface": body.interface if body.source_mode == "auto" else "",
         "allowed_subnets": body.allowed_subnets if body.source_mode == "manual" else [],
+        "character_read_enabled": body.character_read_enabled,
     }
     write_config_file(config_path, full_cfg)
     from core.config_loader import reload_config
@@ -115,16 +121,41 @@ async def get_hds_local_status(auth=Depends(require_scopes("state.read"))):
     from core.memory import health_state
     from admin.hds_server import request_stats
 
+    from core.hds_local import character_read_enabled
+
     oid = str(get_config().get("scheduler", {}).get("owner_id") or "")
     samples = (health_state.load(oid).get("hds_samples") or []) if oid else []
     settings = config()
     return {
         "enabled": settings.get("enabled") is True,
         "port": settings.get("port", 3476),
+        "character_read_effective": character_read_enabled(),
         "sample_count_retained": len(samples),
         "latest": samples[-1] if samples else None,
         "recent": samples[-20:],
         "ingress": request_stats(),
+        # 「工具暴露着但角色从没用过」只能靠命中数看出来，否则无从判断是没暴露还是没调用。
+        "character_reads": _character_read_stats(oid),
+    }
+
+
+def _character_read_stats(owner_id: str) -> dict:
+    """Bounded read-hit counts for ``read_hds_heart_rate``, no arguments or results."""
+    from admin.routers.provenance import _resolve_char_id
+    from core.tool_audit import query
+
+    if not owner_id:
+        return {"last_24h": 0, "last_7d": 0, "latest_time": None}
+    try:
+        char_id = _resolve_char_id("")
+        recent = query(owner_id, char_id, time_range="7d", tool="read_hds_heart_rate", limit=100)
+    except Exception:
+        return {"last_24h": 0, "last_7d": 0, "latest_time": None}
+    cutoff = _dt.now().timestamp() - 86400
+    return {
+        "last_24h": sum(1 for item in recent if float(item.get("timestamp") or 0) >= cutoff),
+        "last_7d": len(recent),
+        "latest_time": recent[0].get("time") if recent else None,
     }
 
 # 最近一次 Watch 事件快照（内存缓存，重启清零）
