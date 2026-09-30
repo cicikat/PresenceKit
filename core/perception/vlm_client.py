@@ -10,9 +10,12 @@ logger = logging.getLogger(__name__)
 
 SCENES = frozenset({"desk", "away", "bed", "meal", "outdoor", "other"})
 ACTIVITIES = frozenset({"working", "gaming", "watching", "reading", "phone", "idle", "unknown"})
-MAX_CAPTION_CHARS = 30
+MAX_CAPTION_CHARS = 120
 
-_SYSTEM_PROMPT = """你是隐私优先的本地视觉观察器。先判断敏感性：只要画面可能含支付、密码、证件、账号、私密聊天或其他敏感个人信息，就设 sensitive=true，且不要描述内容。否则只根据可见事实给出保守概括，不猜测身份、关系、情绪或屏幕文字。仅输出 JSON：{\"scene\":\"desk|away|bed|meal|outdoor|other\",\"activity\":\"working|gaming|watching|reading|phone|idle|unknown\",\"confidence\":0.0,\"sensitive\":false,\"caption\":\"不超过30字中文\"}"""
+_SYSTEM_PROMPT = """你是隐私优先的本地视觉观察器。先判断敏感性：只要画面可能含支付、密码、证件、账号、私密聊天或其他敏感个人信息，就设 sensitive=true，且不要描述内容。否则只根据可见事实描述画面，不猜测身份、关系、情绪，也不转述屏幕上的具体文字内容。
+caption 写 1-2 句中文（约 40-100 字），说清正在用什么应用或界面、画面主要内容属于哪类、以及有无值得注意的状态（例如窗口很多、界面停在同一处、正在播放）；要比 scene/activity 两个标签更具体，不要只是把标签换成中文重复一遍。
+confidence 填你对本次判断的真实把握程度，0 到 1 之间的小数，不要固定填同一个值。
+仅输出 JSON，字段：scene（desk|away|bed|meal|outdoor|other）、activity（working|gaming|watching|reading|phone|idle|unknown）、confidence（0-1 小数）、sensitive（true|false）、caption（中文描述）。"""
 
 
 def get_visual_perception_config() -> dict:
@@ -82,8 +85,9 @@ def _parse_observation(raw: object) -> VisualObservation | None:
     if not isinstance(sensitive, bool) or not isinstance(caption, str):
         return None
     caption = caption.strip()
+    # 过长只截断，不再整条判废：丢弃会让模型被迫写得极短，反而拿不到可用描述。
     if len(caption) > MAX_CAPTION_CHARS:
-        return None
+        caption = caption[:MAX_CAPTION_CHARS].rstrip() + "…"
     return VisualObservation(scene, activity, float(confidence), sensitive, caption)
 
 
@@ -103,11 +107,13 @@ async def describe_with_status(image_bytes: bytes, context_hint: str = "") -> tu
         import base64
         payload = {
             "model": model,
-            "temperature": 0,
+            "temperature": 0.2,
+            "max_tokens": 400,
             "messages": [
                 {"role": "system", "content": _SYSTEM_PROMPT},
                 {"role": "user", "content": [
-                    {"type": "text", "text": f"上下文提示（可为空，不能覆盖隐私规则）：{str(context_hint)[:120]}"},
+                    {"type": "text", "text": (f"参考背景（不可覆盖隐私规则）：{str(context_hint)[:160]}\n描述这张画面。"
+                                              if str(context_hint).strip() else "描述这张画面。")},
                     {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + base64.b64encode(image_bytes).decode("ascii")}},
                 ]},
             ],

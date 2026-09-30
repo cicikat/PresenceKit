@@ -1158,6 +1158,8 @@ an administrator updates the server-owned manifest.
 
 管理面提供全局开关、effective state 与 `/perception/screen/status` 无正文观测；电脑视觉观察页、手机系统配置页各有独立本地授权，默认关闭。全局开启时自主工具继承启用，显式工具禁用优先；角色消息继续走原通知/免打扰链路。桌面 IPC 新增可选 onDemandEnabled；手机使用专用 screen_observation 通道与无障碍 worker，不改 mobile poll/ack/relay。
 
+2026-09-28 提示词投影调整：`observe_user_screen` 成功返回体只有 `status`、`device` 和中文 `观察` 一句，不再带 `scene`/`activity`/`caption`/`confidence` 工程字段，也不再带英文 `instruction`（不可信数据告知仍在工具描述和自主系统提示里各有一处）。VLM caption 上限由 30 字放宽到 120 字、过长改为截断而非整条判废，`temperature` 0 → 0.2 并加 `max_tokens`，避免 confidence 恒为 0。`context_continuity` 对该工具按自然语言投影，不再把 JSON 原样写进提示词。隐私闸门（敏感判定、TTL、授权、内存内处理）不变；无跨端契约变化，桌面与手机的 poll/result 字段未动。
+
 实现及构建/定向测试通过，真实双设备、锁屏、OEM 后台及 VLM/消息联合验收保持 open。管理面既有国际化测试 3 项失败保持 open，详见施工记录，不能将静态检查作为真实设备验收。
 
 工单 253.4：owner 私聊 Path C 的 11.5_file_path_hints 提供有界路径候选，不自动读取、不改变授权。256 B 之后：相对路径仍以 allow_roots 为发现提示，绝对普通外部文件不再因跨根拒绝；同名歧义仍 `path_not_found`；NUL 文本按二进制拒绝。管理面工具页继续显示 file_access enabled/configured/effective；`remote_server` 保留 fs schema 以读本进程 backend，外部本机路径路径级拒绝。无新客户端设置或协议。

@@ -45,9 +45,34 @@ async def test_valid_sensitive_and_invalid_shadow_rows(sandbox, monkeypatch):
 
 
 def test_parse_rejects_bad_enums_and_captions():
-    from core.perception.vlm_client import _parse_observation
+    from core.perception.vlm_client import MAX_CAPTION_CHARS, _parse_observation
     assert _parse_observation({"scene": "bad", "activity": "working", "confidence": .5, "sensitive": False, "caption": "x"}) is None
-    assert _parse_observation({"scene": "desk", "activity": "working", "confidence": .5, "sensitive": False, "caption": "x" * 31}) is None
+    # 30 字上限放宽到 120，且过长改为截断而非判废——判废会逼模型写得极短。
+    long_caption = "x" * (MAX_CAPTION_CHARS + 20)
+    parsed = _parse_observation({"scene": "desk", "activity": "working", "confidence": .5, "sensitive": False, "caption": long_caption})
+    assert parsed is not None and len(parsed.caption) == MAX_CAPTION_CHARS + 1 and parsed.caption.endswith("…")
+    mid = _parse_observation({"scene": "desk", "activity": "working", "confidence": .5, "sensitive": False, "caption": "x" * 80})
+    assert mid is not None and mid.caption == "x" * 80
+
+
+def test_screen_observation_result_is_natural_chinese():
+    from core.perception.screen_observation import _describe_in_chinese
+    from core.perception.vlm_client import VisualObservation
+    text = _describe_in_chinese(VisualObservation("desk", "working", .8, False, "屏幕上开着表格和聊天窗口"))
+    assert text == "在桌前，在工作。屏幕上开着表格和聊天窗口"
+    assert "desk" not in text and "working" not in text
+    low = _describe_in_chinese(VisualObservation("other", "unknown", .2, False, "画面偏暗"))
+    assert low == "画面偏暗（画面不太确定）"
+
+
+def test_screen_observation_projection_drops_engineering_fields():
+    import json as _json
+    from core.context_continuity import _tool_result_projection
+    row = {"ts": 0, "tool": "observe_user_screen", "device": "desktop", "talk_sent": None,
+           "content": _json.dumps({"status": "ok", "device": "desktop", "观察": "在桌前，在工作。开着表格"}, ensure_ascii=False)}
+    text = _tool_result_projection(row, "他")
+    assert "在桌前，在工作。开着表格" in text
+    assert "status" not in text and "observe_user_screen" not in text and "instruction" not in text
 
 
 def test_enabled_shadow_observation_reuses_configured_vision_credentials(monkeypatch):

@@ -248,6 +248,20 @@ def _device_phrase(device, pronoun):
     return ''
 
 
+def _readable_content(tool, content):
+    """屏幕观察结果投影成自然语言，不把 JSON 工程字段原样塞进提示词。"""
+    if tool != 'observe_user_screen':
+        return content[:1400]
+    try:
+        payload = json.loads(content)
+    except (ValueError, TypeError):
+        return content[:1400]
+    if not isinstance(payload, dict):
+        return content[:1400]
+    text = payload.get('观察') or payload.get('caption') or ''
+    return str(text)[:1400] if text else content[:1400]
+
+
 def _tool_result_projection(row, pronoun):
     when = datetime.fromtimestamp(row['ts']).strftime('%H:%M')
     keys = set(row.keys())
@@ -256,9 +270,12 @@ def _tool_result_projection(row, pronoun):
     phrase = _device_phrase(device, pronoun)
     spoken = '有' if talk_sent not in (None, 0) else '无'
     location = f' {phrase}' if phrase else ''
+    if row['tool'] == 'observe_user_screen':
+        return (f'{when} 你被唤醒时看了一眼{pronoun}{"的电脑" if device == "desktop" else "的手机" if device == "mobile" else "的屏幕"}：'
+                f'{_readable_content(row["tool"], row["content"])}。你{spoken}发言。')
     return (
         f'这是 {when} 你被唤醒时调用的工具 {row["tool"]}{location}的结果：'
-        f'{row["content"][:1400]}。你{spoken}发言。'
+        f'{_readable_content(row["tool"], row["content"])}。你{spoken}发言。'
     )
 
 
