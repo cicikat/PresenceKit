@@ -157,9 +157,22 @@ async def generate_postcard(
         invariant_hint = "" if not invariant else ("\n\u53ef\u81ea\u7136\u5730\u81f3\u591a\u4e00\u6b21\u63d0\u53ca\u8fd9\u6761\u8de8\u68a6\u89c2\u5bdf\uff08\u4e0d\u89e3\u91ca\u5176\u6765\u6e90\uff0c\u4e0d\u8981\u7167\u6284\uff09\uff1a" + f"\u5f53{invariant['situation']}\uff0c\u4ed6\u5f80\u5f80{invariant['response']}\u3002")
         dream_ts = next((float(t["ts"]) for t in turns if t.get("ts")), 0.0)
         dream_time = datetime.fromtimestamp(dream_ts or datetime.now().timestamp()).strftime("%Y-%m-%d %H:%M")
-        dialogue = "\n".join(f"[{t.get('role')}] {str(t.get('content') or '')[:240]}" for t in turns[-12:])
+        # 归档里 role 是 user/assistant；直接抛给模型，再配上只说"第一人称"
+        # 而不说是谁的模板，会让模型认领 user 视角，写成用户给角色的信。
+        char_name = _char_display_name(char_id)
+        speakers = {"assistant": char_name, "user": "对方"}
+        dialogue = "\n".join(
+            f"[{speakers.get(str(t.get('role')), str(t.get('role')))}] {str(t.get('content') or '')[:240]}"
+            for t in turns[-12:]
+        )
+        perspective = (
+            f"\n你就是{char_name}。这封信由{char_name}以第一人称写给对方（梦里与{char_name}相处的那个人）。"
+            f"“我”只能指{char_name}，“你”只能指对方；不要反过来，不要替对方写信，也不要写成第三人称旁述。"
+            f"归档片段里 [{char_name}] 是你自己说过的话，[对方] 是对方说的话。"
+        )
         letter = await llm_client.chat([
-            {"role": "system", "content": template + invariant_hint + "\n只输出信正文。信内日期必须是：" + dream_time},
+            {"role": "system", "content": template + perspective + invariant_hint
+             + "\n只输出信正文。信内日期必须是：" + dream_time},
             {"role": "user", "content": "梦境归档片段：\n" + dialogue},
         ], call_category="chat", char_id=char_id, max_tokens_override=450)
         letter = str(letter).strip()
@@ -194,12 +207,22 @@ async def generate_postcard(
         })
         _save_schedule(char_id, entries)
 
+def _char_display_name(char_id: str) -> str:
+    """Character name for the letter's voice; never fail generation over a name."""
+    try:
+        from core.character_name_provider import get_char_name
+        name = str(get_char_name(char_id) or "").strip()
+    except Exception:
+        name = ""
+    return name if name and name != "(角色未加载)" else "写信的人"
+
+
 def _template_text(template_id: str) -> str:
     from core.sandbox import get_paths
 
     bundled = get_paths().bundled_templates_dir() / "dream_postcards" / f"{template_id}.md"
     path = bundled if bundled.exists() else Path("characters") / "dream_postcards" / "templates" / f"{template_id}.md"
-    return path.read_text(encoding="utf-8") if path.exists() else "写一封克制的梦后短笺，以角色第一人称写给用户。"
+    return path.read_text(encoding="utf-8") if path.exists() else "写一封克制的梦后短笺。"
 
 async def deliver_due_postcards(*, char_id: str = DEFAULT_CHAR_ID, today: date | None = None) -> int:
     """Retry every due unsent entry; only SMTP success flips sent=True."""

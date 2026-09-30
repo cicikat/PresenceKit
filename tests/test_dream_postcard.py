@@ -193,3 +193,31 @@ def test_postcard_isolation_contract_has_positive_control():
     for forbidden in ("mid_term", "episodic", "user_identity", "mood_state", "hidden_state"):
         assert forbidden not in source
     assert "dreams_archive_dir" in source
+
+
+@pytest.mark.asyncio
+async def test_postcard_prompt_pins_the_character_as_the_writer():
+    """归档 role 直接抛给模型时，模型会认领 user 视角，写成用户给角色的信。"""
+    from core.dream import postcard
+
+    chat = AsyncMock(return_value="letter")
+    turns = [{"role": "assistant", "content": "我在这里", "ts": 1_700_000_000},
+             *_turns(4),
+             {"role": "user", "content": "别走", "ts": 1_700_000_000}]
+    with (
+        patch.object(postcard, "_load_schedule", return_value=[]),
+        patch.object(postcard, "_archive_turns", return_value=postcard.ArchiveSnapshot(turns, True)),
+        patch.object(postcard, "_save_schedule", return_value=True),
+        patch.object(postcard, "_template_text", return_value="template"),
+        patch.object(postcard, "_char_display_name", return_value="测试角色"),
+        patch("core.dream.invariants.select_for_postcard", return_value=None),
+        patch("core.llm_client.chat", chat),
+    ):
+        await postcard.generate_postcard("u", "d", "soft_exit")
+
+    system = chat.await_args.args[0][0]["content"]
+    assert "你就是测试角色" in system and "不要替对方写信" in system
+    # 归档片段用具体说话人替代裸 role，避免模型把 [user] 当成自己。
+    dialogue = chat.await_args.args[0][1]["content"]
+    assert "[测试角色] 我在这里" in dialogue and "[对方] 别走" in dialogue
+    assert "[assistant]" not in dialogue and "[user]" not in dialogue

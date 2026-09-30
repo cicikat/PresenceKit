@@ -78,6 +78,8 @@
 - 合格 sandbox 梦（归档完整可读、至少五个 assistant 轮、completion 为 complete、每个 dream_id 至多一次）会在 summary 后冻结成一封信；模板随机，投递日随机延迟 1–356 天。资格判断使用同一次 archive snapshot，同时携带 turns 与可读性证据；损坏或不存在的 JSONL 绝不调用 LLM，也不写入明信片 schedule。
 - 明信片只读 dream summary/archive，并只写 `postcards/schedule.json` 与 SMTP；它是 archive 的第一个合法程序化读者，方向为梦 → 用户眼睛。
 - 它绝不写 memory / mood / hidden_state / impression，绝不进入任何 prompt loader；世界专有词可留在用户面对的信内。
+- 2026-09-28 人称修正：生成提示词此前只说「第一人称」，归档片段又把裸 `[user]` / `[assistant]` 抛给模型，模型会认领 user 视角，写成用户给角色的信。现在系统提示显式钉住「你就是<角色名>，写给对方」，并把归档 role 替换成角色名 / 「对方」。
+- 发信走 `mail.connection_mode`（独立于 `proxy.model_connection_mode`）：文字模型继续走代理时，把它设为 `direct` 即可让 SMTP 直连，详见 `docs/model-presets.md`。
 
 **世界包（v1）**
 - 六世界包 `userdata/characters/dream/worlds/{reality_derived,abo,vampire,cat,flower_bud,custom}/`，各含 `ruleset.md` / `mes_example.md` / `vocab.json` / `lorebook.yaml`(骨架)

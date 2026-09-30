@@ -9,6 +9,13 @@
 维护，代码不写死运行地址。保存 `/proxy` 后热重载模型与视觉客户端。手机聊天继续复用后端
 模型连接。
 
+SMTP 出站不受此设置影响：邮件走独立 `mail.connection_mode`（`auto|direct|proxy`，
+面板「邮件配置 → SMTP 连接方式」，逐次发送时读取）。梦境信封发信即走这条链，
+因此「文字模型继续走代理、发信直连」只需把 `mail.connection_mode` 设为 `direct`，
+无需改动模型连接模式。代理节点常封 SMTP 端口，发信失败日志会点明这一点。
+
+loopback（127.0.0.1 / localhost / ::1）vision 连接另有强制直连，见下文 `image_presets` 条目。
+
 ## Chat Completions 工具续轮白名单（2026-09-15）
 
 Chat Completions 出口重建消息与工具，不再把 SDK `model_dump()` 或内部键送进中转。

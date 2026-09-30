@@ -351,6 +351,10 @@ mail:
   enabled: false  # 纯增值功能(角色写信)，默认关；面板「通道开关」可开，需自备 SMTP 凭据
   smtp_host: smtp.gmail.com
   smtp_port: 587
+  # SMTP 出站独立于 proxy.model_connection_mode：文字模型继续走代理时，
+  # 发信可设 direct 直连（代理节点常封 SMTP 端口）。auto / direct / proxy，
+  # 面板「邮件配置 → SMTP 连接方式」可改。
+  connection_mode: auto
   proxy_url: http://127.0.0.1:YOUR-端口
   smtp_user: YOUR-接收的邮箱
   smtp_password: YOUR-邮箱通行密码
