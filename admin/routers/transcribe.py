@@ -11,7 +11,7 @@ import asyncio
 import logging
 import os
 import tempfile
-import threading
+import time
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -23,51 +23,34 @@ logger = logging.getLogger(__name__)
 
 MAX_AUDIO_BYTES = 25 * 1024 * 1024  # 25 MB
 
-# ── 懒加载 STT 后端 ──────────────────────────────────────────────────────────
-
-_stt_lock = threading.Lock()
-_stt_backend: tuple | str | None = None  # None=未初始化, 'unavailable'=无可用库, tuple=(name, model)
-
-
-def _init_stt() -> None:
-    global _stt_backend
-    with _stt_lock:
-        if _stt_backend is not None:
-            return
-        try:
-            from faster_whisper import WhisperModel
-            model = WhisperModel("base", device="cpu", compute_type="int8")
-            _stt_backend = ("faster_whisper", model)
-            logger.info("[transcribe] 使用 faster-whisper base 模型")
-            return
-        except ImportError:
-            pass
-        except Exception as e:
-            logger.warning(f"[transcribe] faster-whisper 加载失败: {e}")
-        try:
-            import whisper as _whisper
-            model = _whisper.load_model("base")
-            _stt_backend = ("whisper", model)
-            logger.info("[transcribe] 使用 openai-whisper base 模型")
-            return
-        except ImportError:
-            pass
-        except Exception as e:
-            logger.warning(f"[transcribe] openai-whisper 加载失败: {e}")
-        _stt_backend = "unavailable"
-        logger.warning("[transcribe] 未安装可用 STT 库，请 pip install faster-whisper 或 openai-whisper")
+# ── 本地 STT 后端：模型/设备/精度见 core/stt_local.py（config `stt_local`，可热切换）──
 
 
 def _transcribe_sync(audio_path: str) -> str:
-    _init_stt()
-    if _stt_backend == "unavailable":
-        raise RuntimeError("STT 未安装，请 pip install faster-whisper 或 openai-whisper")
-    backend_name, model = _stt_backend  # type: ignore[misc]
+    from core import stt_local
+    cfg = stt_local.settings()
+    backend = stt_local.get_backend(cfg)
+    started = time.perf_counter()
+    ok = False
+    try:
+        text = _run_backend(backend, cfg, audio_path)
+        ok = True
+        return text
+    finally:
+        from core.api_call_log import append
+        append(caller="stt", purpose="transcribe_local", provider=backend["backend"],
+               model=f"{backend['model_size']}/{backend['device']}/{backend['compute_type']}",
+               duration_ms=int((time.perf_counter() - started) * 1000), ok=ok,
+               output_hint="fallback:" + backend["fallback"]["from"] if backend["fallback"] else "")
+
+
+def _run_backend(backend: dict, cfg: dict, audio_path: str) -> str:
     from core.stt_vocabulary import prompt, hotwords, correct
     hint = prompt()
-    if backend_name == "faster_whisper":
+    model = backend["model"]
+    if backend["backend"] == "faster_whisper":
         options = {"initial_prompt": hint or None, "hotwords": hotwords() or None,
-                   "vad_filter": True}
+                   "vad_filter": True, "beam_size": cfg["beam_size"]}
         segments, _ = model.transcribe(audio_path, language="zh", **options)
         accepted = []
         filtered = 0
@@ -79,9 +62,13 @@ def _transcribe_sync(audio_path: str) -> str:
         if not accepted:
             logger.info("[transcribe] 未识别到可用语音片段（低置信度过滤 %d 段）", filtered)
         return correct("".join(accepted).strip())
-    else:
-        result = model.transcribe(audio_path, language="zh", initial_prompt=hint or None)
-        return correct(result["text"].strip())
+    result = model.transcribe(audio_path, language="zh", initial_prompt=hint or None)
+    return correct(result["text"].strip())
+
+
+def _timeout_seconds() -> float:
+    from core import stt_local
+    return stt_local.settings()["timeout_seconds"]
 
 
 # ── 接口 ─────────────────────────────────────────────────────────────────────
@@ -136,7 +123,7 @@ async def transcribe_audio(
                 except OSError:
                     pass
         worker_path, tmp_path = tmp_path, None
-        text = await asyncio.wait_for(loop.run_in_executor(None, run_and_cleanup, worker_path), timeout=20)
+        text = await asyncio.wait_for(loop.run_in_executor(None, run_and_cleanup, worker_path), timeout=_timeout_seconds())
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
     except asyncio.TimeoutError as e:

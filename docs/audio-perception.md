@@ -30,9 +30,17 @@ QQ record 消息经过有界下载与转写；HTTP `/upload/ingest` 支持单个
 工单 264：未配置 `stt_presets` 时，本地 Whisper 仍是有效的旧转写路径；管理面
 `/stt-vocabulary` 只保存词表，不会建立或启用命名 STT。词表最多 32 条，提供转写提示，
 并按完整拼音词边界或明确的汉字误写做替换；不根据语调推断名字。旧本地路径开启
-`audio_music.speech_analysis` 后也可返回声学凭据。视频电话持续录音每 6 秒分段转写，
-最多暂存 3 段；若与输入文字合并发送，凭据只绑定实际包含在消息中的原转写段。
+`audio_music.speech_analysis` 后也可返回声学凭据。视频电话持续录音每 6 秒分段转写
+（`MAX_SEGMENT_MS`，此前代码写 12 秒、文档写 6 秒，已对齐到 6 秒），最多暂存 6 段；若与输入文字合并发送，凭据只绑定实际包含在消息中的原转写段。
 声学分析依赖不齐、语音不清或转写太慢时，文字对话仍可继续。
+
+本地 Whisper 选型（`core/stt_local.py`，配置块 `stt_local`）：默认 `small` + `cpu/int8`
+（`device: auto`，只在 CUDA 真能跑通一次极短推理时才用 GPU，否则回落 CPU 并记录原因；
+显式 `cuda` 不可用返回 503 并写明缺少的运行库）。本机 CPU 实测：`base/int8` 12 秒段 RTF 1.26，
+`small/int8` 同段 RTF 0.31，所以"延迟高"的主因是段落长 + `base` 在长段上退化，而不是模型太大。
+合成音会放大 `base` 的重复解码退化，真实语音差距应更小，数字不可直接采信。
+配置变更后下一次转写会重建单例（旧实例在途请求继续用旧的）；转写耗时、模型/设备进入
+`/observability/api-calls`（`caller=stt`，`output_hint=fallback:cuda` 表示发生了回落）。
 
 工单 264 复测修正：桌面持续录音按有声与短暂停顿切段，静音段不上传；后端
 faster-whisper 启用 VAD 并过滤低置信度片段。`/transcribe` 对无语音仍保留 422，

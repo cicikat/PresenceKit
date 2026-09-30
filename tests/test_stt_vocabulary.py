@@ -26,6 +26,11 @@ def test_vocabulary_rejects_unbounded_or_injectable_entries():
         vocabulary.validate({"enabled": True, "entries": [{"heard": "mu xing", "canonical": "暮星"}] * 33})
 
 
+def _backend(model):
+    return {"model": model, "backend": "faster_whisper", "model_size": "small",
+            "device": "cpu", "compute_type": "int8", "fallback": None}
+
+
 def test_local_whisper_receives_hints_and_keeps_model_name_out_of_internal_key(monkeypatch):
     from admin.routers import transcribe
     from core import config_loader
@@ -36,7 +41,7 @@ def test_local_whisper_receives_hints_and_keeps_model_name_out_of_internal_key(m
             assert "暮星" in kwargs["initial_prompt"]
             assert kwargs["hotwords"] == "暮星"
             return ([type("Segment", (), {"text": "我叫 mu xing"})()], None)
-    monkeypatch.setattr(transcribe, "_stt_backend", ("faster_whisper", Model()))
+    monkeypatch.setattr("core.stt_local.get_backend", lambda cfg=None: _backend(Model()))
     assert transcribe._transcribe_sync("fixture.wav") == "我叫 暮星"
 
 
@@ -50,7 +55,7 @@ def test_local_whisper_keeps_short_speech_with_moderate_confidence(monkeypatch):
             })()
             return ([segment], None)
 
-    monkeypatch.setattr(transcribe, "_stt_backend", ("faster_whisper", Model()))
+    monkeypatch.setattr("core.stt_local.get_backend", lambda cfg=None: _backend(Model()))
     assert transcribe._transcribe_sync("fixture.wav") == "你好"
 
 

@@ -11,6 +11,16 @@ DNS：`198.18.0.0/15` Fake-IP 或解析失败时用已配置 HTTP 代理，其�
 网络与手机端验收 observe。静态版本 `v1-model-network-auto-1`。其他出站工具仍用各自代理
 策略。
 
+## 本地 STT 运行参数 `stt_local`（2026-09-30，backend current）
+
+配置块 `stt_local`：`model_size`（tiny/base/small/medium/large-v3，默认 `small`）、
+`device`（auto/cpu/cuda，默认 `auto`）、`compute_type`（int8/int8_float16/float16/float32，
+默认 `int8`）、`beam_size`（1–10，默认 5）、`timeout_seconds`（5–120，默认 20）。
+仅管本机 faster-whisper；远程 OpenAI 兼容连接仍在 `stt_presets`，两处不重叠。
+生效方式：下一次 `/transcribe` 发现配置与已加载实例不一致即重建，新模型加载并跑通后才替换，
+失败时保留旧实例；手写无效值退回默认。`auto` 回落 CPU 与原因可在 `core.stt_local.snapshot()`
+看到（管理面页面见工单 D2）。观测：`/observability/api-calls`（`state.read`）。
+
 ## 每日互动预算加倍（2026-09-21，current）
 
 `scheduler.max_daily_proactive` 默认 16；`PUT /scheduler/config` 可写 1–64，管理面调度器页可改。

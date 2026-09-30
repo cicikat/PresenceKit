@@ -1,5 +1,11 @@
 # docs/known-issues.md — 已知问题与技术债
 
+## 视频通话持续录音段边界丢音（2026-09-30，observe）
+
+`useContinuousCallVoice.ts` 在 `onstop` 里才重启 MediaRecorder，段边界有短暂丢音窗口；
+分段从 12 秒缩到 6 秒后边界出现频率翻倍。若验收听感变差，另立项改双 recorder 交替或
+AudioWorklet 连续采集。真实录音的 STT 延迟复测也尚未做（合成音数字不可直接采信）。
+
 ## 视频通话 TTS 重复播报（2026-09-30，observe）
 
 `current`：后端 `msg_id` 每轮唯一且跨通道共享（`core/turn_sink.py`）；`channels/desktop_ws.py` 无补发缓冲，
