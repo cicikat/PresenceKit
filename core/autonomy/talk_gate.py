@@ -11,7 +11,9 @@ def confirm_schema() -> dict:
     return {"type": "function", "function": {"name": "confirm_talk", "description": "One-time decision after a soft timing block. cancel ends the talk attempt; send_anyway sends once after hard-policy recheck.", "parameters": {"type": "object", "properties": {"action": {"type": "string", "enum": ["cancel", "send_anyway"]}, "revised_text": {"type": "string", "maxLength": 600}}, "required": ["action"]}}}
 
 
-def check(uid: str, *, allow_soft: bool = True) -> tuple[str, str]:
+def check(uid: str, *, allow_soft: bool = True, call_char_id: str | None = None) -> tuple[str, str]:
+    """``call_char_id`` set => camera job in a live call: the per-call cap and gap
+    replace the global gap/daily check (hard rules and ledger accounting stay)."""
     from core.scheduler.proactive_ledger import can_send, continuity_status
     continuity = continuity_status(uid)
     if continuity["consecutive_unanswered_talks"] >= 2:
@@ -25,6 +27,12 @@ def check(uid: str, *, allow_soft: bool = True) -> tuple[str, str]:
     except Exception: return "hard", Disposition.BLOCKED_DREAM_UNCERTAIN.value
     if guard == DreamGuardStatus.BLOCK_UNCERTAIN: return "hard", Disposition.BLOCKED_DREAM_UNCERTAIN.value
     if guard != DreamGuardStatus.ALLOW: return "hard", Disposition.BLOCKED_DREAM.value
+    if call_char_id is not None:
+        from core.video_call_presence import talk_check
+        mode, why = talk_check(uid, call_char_id)
+        if mode == "allow":
+            return "allow", "ok"
+        return ("soft" if mode == "soft" and allow_soft else "hard"), why
     allowed, why = can_send("autonomy", priority="normal", uid=uid)
     if not allowed:
         if why == "daily_budget_exceeded": return "hard", Disposition.SUPPRESSED_DAILY_BUDGET.value
@@ -41,6 +49,7 @@ async def send(
     run_id: str,
     correlation_id: str = "",
     bypass_soft_once: bool = False,
+    call_scoped: bool = False,
 ) -> tuple[bool, str]:
     text = str(text or "").strip()
     if not text or len(text) > 600: return False, "empty_text"
@@ -52,7 +61,7 @@ async def send(
     from core.reality_output_scrubber import scrub_reality_output_text
     text = (scrub_reality_output_text(strip_render_tags(strip_control_markers(text))) or "").strip()
     if not text: return False, "empty_text"
-    mode, reason = check(uid, allow_soft=True)
+    mode, reason = check(uid, allow_soft=True, call_char_id=char_id if call_scoped else None)
     if mode == "hard" or (mode == "soft" and not bypass_soft_once): return False, reason
     from core import pipeline_registry
     pipeline = pipeline_registry.get()
@@ -97,4 +106,7 @@ async def send(
     if not result.fanout_targets: return False, "no_delivery_channel"
     from core.scheduler.proactive_ledger import record_send
     record_send("autonomy", channel="autonomy", gist=text, uid=uid, char_id=char_id)
+    if call_scoped:
+        from core.video_call_presence import record_talk
+        record_talk(uid, char_id)
     return True, "sent"

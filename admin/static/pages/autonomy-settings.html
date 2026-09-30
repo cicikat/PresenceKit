@@ -43,3 +43,21 @@
     <div id="self-management-capabilities" class="tbl-wrap" data-i18n="common.loading">Loading...</div>
     <div id="self-management-audit" class="tbl-wrap" data-i18n="common.loading">Loading...</div>
   </div>
+
+  <div class="card" id="video-call-presence-card">
+    <div class="card-header"><div><h3 data-i18n="video_call_presence.title">视频通话内的主动插话</h3><p class="autonomy-hint" data-i18n="video_call_presence.hint">默认关闭。开启后，只在摄像头通话进行时，把「用户要安静多久才能插话」「两次插话的间隔」换成下面的通话内数值，并按每通电话限制条数；免打扰、连续未回应硬停和记账规则不变。通话结束即恢复全局规则。</p></div></div>
+    <div class="form-row">
+      <label class="checkbox-row"><input id="vcp-enabled" type="checkbox"><span data-i18n="video_call_presence.enabled">启用通话内放宽</span></label>
+      <label class="field"><span data-i18n="video_call_presence.max_talks">每通电话最多主动发言（条，1–10）</span><input id="vcp-max-talks" type="number" min="1" max="10" step="1"></label>
+      <label class="field"><span data-i18n="video_call_presence.min_gap">两次通话内发言的最小间隔（秒，30–3600）</span><input id="vcp-min-gap" type="number" min="30" max="3600" step="1"></label>
+    </div>
+    <div class="form-row">
+      <label class="field"><span data-i18n="video_call_presence.silence">用户静默多久后才可插话（秒，5–120；全局为 120）</span><input id="vcp-silence" type="number" min="5" max="120" step="1"></label>
+      <label class="field"><span data-i18n="video_call_presence.signal_interval">摄像头信号最小间隔（秒，15–600）</span><input id="vcp-signal-interval" type="number" min="15" max="600" step="1"></label>
+    </div>
+    <p class="autonomy-hint" id="vcp-stats" role="status"></p>
+    <div class="modal-footer admin-inline-124">
+      <button class="btn btn-ghost" data-action="loadVideoCallPresence" data-i18n="common.refresh">刷新</button>
+      <button class="btn btn-primary" data-action="saveVideoCallPresence" data-i18n="common.save">保存</button>
+    </div>
+  </div>

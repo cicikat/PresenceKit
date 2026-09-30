@@ -20,7 +20,7 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'v1-local-runtime-1';
+const ADMIN_UI_FRAGMENT_VERSION = 'v1-call-presence-1';
 
 const ADMIN_PAGE_ALIASES = Object.freeze({memory: 'observe-memory'});
 
@@ -294,7 +294,7 @@ async function goto(page, {reloadFragment = false, fromHistory = false} = {}) {
   const loaders = {
     guide: () => {},
     'call-records': loadUnifiedRecords,
-    'autonomy-settings': loadAutonomySettings,
+    'autonomy-settings': async () => { await loadAutonomySettings(); await loadVideoCallPresence(); },
     'output-settings': loadStickerConfig,
     'device-policy': () => { loadScreenPeekSettings(); loadMetaMode(); },
     'network-config': async () => { _bindProxyControls(); await Promise.all([loadProxy(), loadRelaySettings()]); },

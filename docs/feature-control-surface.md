@@ -8,8 +8,28 @@ DNS：`198.18.0.0/15` Fake-IP 或解析失败时用已配置 HTTP 代理，其�
 重启。`auto`/`proxy` 保存时要求有效 `proxy.http`。`GET/PUT /proxy` 读写该字段，保存后
 热重载文本模型与视觉客户端。管理面「代理与中继」提供下拉与说明；系统状态摘要只读展示
 当前模式，编辑入口仍在该页。手机聊天继续复用后端模型连接，桌面/手机无新设置。真实模型
-网络与手机端验收 observe。静态版本 `v1-local-runtime-1`。其他出站工具仍用各自代理
+网络与手机端验收 observe。静态版本 `v1-call-presence-1`。其他出站工具仍用各自代理
 策略。
+
+## 通话内主动性放宽 `video_call_presence`（2026-09-30，默认关闭）
+
+配置块 `video_call_presence`：`enabled`（默认 `false`）、`max_talks_per_call`（1–10，默认 3）、
+`min_gap_seconds`（30–3600，默认 180）、`silence_seconds`（5–120，默认 30；全局规则是 120）、
+`camera_signal_interval_seconds`（15–600，默认 60，与原常量相同）。管理面「自主活动安排」页有卡片，
+`GET/PUT /video-call/presence`（`admin` scope，含本进程发言计数与被拦下的闸分布，同样并入
+`/observability/video-call` 的 `presence` 字段）。桌面/手机无新设置。
+
+生效条件：开关开、摄像头会话存活、且 job 带 `video_call_camera` 信号。此时只放宽三件事：
+`camera_silent` 准入的静默窗口与循环内"用户又说话了"取消窗口（两处同一判据）、相机来源的最小评估
+间隔（取全局值与 `min_gap_seconds` 的较小者）、全局发言间隔与每日上限改为**每通电话**上限 + 间隔
+（计数放在摄像头会话里，挂断即恢复，下一通从 0 开始）。不放宽：免打扰、梦境守卫、连续未回应硬停、
+熔断、`record_send` 记账（豁免的是"能不能发"，不是"要不要记"）。
+
+与开关无关的修复：`policy.admission()` 里 `latest` 原取所有 source 的 `last_evaluated_at` 最大值，
+interval / topic_followup 每 tick 刷新它，相机信号总被判 `duplicate`；现在**只有相机 job**（
+`allow_camera_silence`）按 `video_call_camera` 自己的时钟判定，其余 source（ime、desktop_wake 等）语义不变。
+同文件还修了一个既有崩溃：函数内的 `import time` 使 `time` 成为局部变量，`camera_silent` 那一行在
+CHATTING 状态下 `UnboundLocalError`，即通话中用户一说话相机 job 就在准入处崩掉。
 
 ## 本地 STT 运行参数 `stt_local`（2026-09-30，backend current）
 

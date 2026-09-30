@@ -133,7 +133,11 @@ class AutonomyToolDecision:
 
 
 def admission(uid: str, char_id: str, state: dict, *, allow_observed_activity: bool = False,
-              allow_camera_silence: bool = False, allow_post_call: bool = False) -> str | None:
+              allow_camera_silence: bool = False, allow_post_call: bool = False,
+              call_scoped: bool = False) -> str | None:
+    """``call_scoped`` (camera job during a live call, feature on) swaps three global
+    rules for call-scoped ones; see core/video_call_presence.py.  The per-source
+    ``latest`` below applies to every camera job, scoped or not."""
     cfg = state["config"]
     if not cfg.get("enabled", False):
         return Disposition.SUPPRESSED_PROACTIVE_OFF.value
@@ -157,8 +161,12 @@ def admission(uid: str, char_id: str, state: dict, *, allow_observed_activity: b
         return Disposition.BLOCKED_DREAM.value
     from core.scheduler.state_machine import TriggerState, get_state, snapshot
     trigger_state = get_state(uid)
+    silence = 120
+    if call_scoped:
+        from core.video_call_presence import silence_window
+        silence = silence_window(uid, char_id)
     camera_silent = allow_camera_silence and trigger_state == TriggerState.CHATTING and (
-        time.time() - float(snapshot(uid).get("last_owner_turn_ts") or 0) >= 120
+        time.time() - float(snapshot(uid).get("last_owner_turn_ts") or 0) >= silence
     )
     if trigger_state != TriggerState.QUIET and not (
         (allow_observed_activity and trigger_state == TriggerState.RESTLESS) or camera_silent or allow_post_call
@@ -200,12 +208,20 @@ def admission(uid: str, char_id: str, state: dict, *, allow_observed_activity: b
     # protects older state and any remaining counter leak.
     if budget > 0 and evaluations >= budget and talks > 0:
         return Disposition.SUPPRESSED_DAILY_BUDGET.value
-    latest = max(
-        (float((value or {}).get("last_evaluated_at") or 0) for value in state.get("sources", {}).values()),
-        default=0.0,
-    )
-    import time
+    if allow_camera_silence:
+        # A camera job is judged against the camera source's own clock.  Taking the
+        # max over every source let the 60 s interval / topic_followup ticks keep
+        # the window shut, so camera signals were always "duplicate".
+        latest = float((state.get("sources", {}).get("video_call_camera") or {}).get("last_evaluated_at") or 0)
+    else:
+        latest = max(
+            (float((value or {}).get("last_evaluated_at") or 0) for value in state.get("sources", {}).values()),
+            default=0.0,
+        )
     effective_minimum = autonomy_min_interval(uid, char_id, state)
+    if call_scoped:
+        from core.video_call_presence import settings as presence_settings
+        effective_minimum = min(effective_minimum, presence_settings()["min_gap_seconds"])
     if not allow_post_call and latest and time.time() - latest < effective_minimum:
         return Disposition.DUPLICATE.value
     return None

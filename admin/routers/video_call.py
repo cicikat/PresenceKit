@@ -26,6 +26,38 @@ async def video_call_state(_auth=Depends(require_scopes("chat"))):
     return video_call.snapshot(get_config())
 
 
+class VideoCallPresenceUpdate(BaseModel):
+    enabled: bool | None = None
+    max_talks_per_call: int | None = None
+    min_gap_seconds: int | None = None
+    silence_seconds: int | None = None
+    camera_signal_interval_seconds: int | None = None
+
+
+@router.get("/video-call/presence", summary="通话内主动性放宽设置与运行计数")
+async def get_video_call_presence(_auth=Depends(require_scopes("admin"))):
+    from core.config_loader import get_config
+    from core.video_call_presence import snapshot
+    return snapshot(get_config())
+
+
+@router.put("/video-call/presence", summary="保存通话内主动性放宽设置（默认关闭）")
+async def put_video_call_presence(body: VideoCallPresenceUpdate, _auth=Depends(require_scopes("admin"))):
+    from pathlib import Path
+    from admin.config_control import read_config_file, write_config_file
+    from core import config_loader, video_call_presence
+    current = video_call_presence.settings(config_loader.get_config())
+    merged = {**current, **{k: v for k, v in body.model_dump().items() if v is not None}}
+    try:
+        cfg = video_call_presence.validate(merged)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    full_cfg = read_config_file(Path("config.yaml"))
+    full_cfg["video_call_presence"] = cfg
+    write_config_file(Path("config.yaml"), full_cfg)
+    return video_call_presence.snapshot(config_loader.reload_config())
+
+
 @router.get("/observability/video-call", summary="视频电话视觉处理计数")
 async def video_call_observability(_auth=Depends(require_scopes("state.read"))):
     from core.config_loader import get_config

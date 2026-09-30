@@ -32,6 +32,9 @@ CAMERA_ACTIVE_SECONDS = 15.0
 CAMERA_SIGNAL_INTERVAL_SECONDS = 60.0
 CAMERA_SIGNAL_TTL_SECONDS = 10 * 60
 CAMERA_REQUEST_TTL_SECONDS = 10.0
+# The on-demand tool gets its own image route so a heavier or differently-tuned
+# local model can answer "look at me now" without changing periodic observation.
+TOOL_PURPOSE = "video_call_tool"
 _camera_sessions: dict[tuple[str, str], dict[str, Any]] = {}
 
 
@@ -58,7 +61,8 @@ def close_camera(uid: str, char_id: str, token_label: str) -> None:
 
 def _queue_camera_signal(uid: str, char_id: str, session: dict[str, Any], description: str, now: float,
                          *, age_seconds: int = 0) -> bool:
-    if now - session.get("last_signal_at", session["opened_at"]) < CAMERA_SIGNAL_INTERVAL_SECONDS:
+    from core.video_call_presence import camera_signal_interval
+    if now - session.get("last_signal_at", session["opened_at"]) < camera_signal_interval(session):
         return False
     from core.autonomy.models import ActionMode, Signal
     from core.autonomy import store
@@ -118,7 +122,7 @@ def accept_camera_frame(uid: str, char_id: str, token_label: str,
 async def observe_fresh_camera(uid: str, char_id: str) -> dict[str, Any]:
     from core.config_loader import get_config
     row = camera_session(uid, char_id)
-    if row is None or not connection_state(get_config())["effective"]:
+    if row is None or not connection_state(get_config(), TOOL_PURPOSE)["effective"]:
         return {"status": "camera_unavailable"}
     if row.get("pending"):
         return {"status": "busy"}
@@ -133,7 +137,7 @@ async def observe_fresh_camera(uid: str, char_id: str) -> dict[str, Any]:
             return {"status": "camera_unavailable"}
         result = await observe(frame, uid=uid, char_id=char_id,
                                token_label=row["token_label"], emit_signal=False,
-                               wait_for_resource=True)
+                               wait_for_resource=True, purpose=TOOL_PURPOSE)
         if result.get("status") != "ready":
             return {"status": result.get("status", "failed")}
         consumed = consume(result["observation_id"], uid=uid, char_id=char_id,
@@ -196,17 +200,21 @@ def _signal_from_last_description(uid: str, char_id: str, session: dict[str, Any
         _counts["signal_from_stale_description"] += 1
 
 
-def connection_state(config: dict[str, Any]) -> dict[str, Any]:
+def connection_state(config: dict[str, Any], purpose: str = "video_call") -> dict[str, Any]:
     cat = catalog(config)
-    name = cat["routes"].get("video_call") or ""
+    name = cat["routes"].get(purpose) or ""
     preset = cat["presets"].get(name)
     ready, reason = video_call_ready(preset)
-    return {"connection": name, "effective": ready,
+    return {"purpose": purpose, "connection": name, "effective": ready,
             "blocking_reason": reason if name else "not_routed"}
 
 
 def snapshot(config: dict[str, Any]) -> dict[str, Any]:
-    return {**connection_state(config), "vision_busy": _local_resource.locked(),
+    from core.video_call_presence import snapshot as presence_snapshot
+    return {**connection_state(config),
+            "tool_connection": connection_state(config, TOOL_PURPOSE),
+            "vision_busy": _local_resource.locked(),
+            "presence": presence_snapshot(config),
             "pending_observations": len(_receipts), "counts": dict(_counts),
             **camera_status(),
             "retry_after_seconds": max(0, round(_unavailable_until - time.monotonic()))}
@@ -236,12 +244,13 @@ def _prune(now: float) -> None:
 
 
 async def observe(frame: bytes, *, uid: str, char_id: str, token_label: str,
-                  emit_signal: bool = True, wait_for_resource: bool = False) -> dict[str, Any]:
+                  emit_signal: bool = True, wait_for_resource: bool = False,
+                  purpose: str = "video_call") -> dict[str, Any]:
     global _unavailable_until
     from core.config_loader import get_config
     from core.llm_client import chat
 
-    state = connection_state(get_config())
+    state = connection_state(get_config(), purpose)
     if not state["effective"]:
         raise ValueError(state["blocking_reason"])
     validate_frame(frame)
@@ -273,7 +282,7 @@ async def observe(frame: bytes, *, uid: str, char_id: str, token_label: str,
         ]}]
         try:
             description = await asyncio.wait_for(
-                chat(messages, use_vision=True, vision_purpose="video_call"), timeout=110,
+                chat(messages, use_vision=True, vision_purpose=purpose), timeout=110,
             )
         except (APITimeoutError, asyncio.TimeoutError):
             _counts["failed"] += 1

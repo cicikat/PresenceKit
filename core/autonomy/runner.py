@@ -487,11 +487,17 @@ async def run_job(job: Job) -> Run:
     camera_job = any(s.get('source') == 'video_call_camera' for s in
                      (job.opportunity or {}).get('signals', []) if isinstance(s, dict))
     hangup_job = _is_video_call_hangup(job)
+    from core.video_call_presence import job_is_call_scoped
+    call_scoped = camera_job and job_is_call_scoped(job)
     if hangup_job:
         blocked = policy.admission(job.uid, job.char_id, state, allow_post_call=True)
     elif camera_job:
         blocked = policy.admission(job.uid, job.char_id, state,
-                                   allow_observed_activity=True, allow_camera_silence=True)
+                                   allow_observed_activity=True, allow_camera_silence=True,
+                                   call_scoped=call_scoped)
+        if blocked and call_scoped:
+            from core.video_call_presence import record_block
+            record_block(blocked)
     elif ime_job:
         blocked = policy.admission(job.uid, job.char_id, state, allow_observed_activity=True)
     else:
@@ -533,7 +539,9 @@ async def run_job(job: Job) -> Run:
 @display_chain
 async def _run_locked(job: Job, state: dict, run: Run) -> Run:
     tools, self_context = _runtime_tools(job.uid, job.char_id, state)
-    mode, talk_reason = talk_gate.check(job.uid)
+    from core.video_call_presence import job_is_call_scoped
+    call_char = job.char_id if job_is_call_scoped(job) else None
+    mode, talk_reason = talk_gate.check(job.uid, call_char_id=call_char)
     # A soft limit still exposes talk once so the model can make one explicit
     # re-decision. Hard limits remove it at schema construction time.
     from core.autonomy.effective_state import autonomy_talk_enabled
@@ -659,7 +667,7 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
                         _record_event(run, "talk_grounding_rejected", reason="unsupported_memory_claim")
                         run.disposition = Disposition.TALK_CANCELED.value
                         return _finish(run)
-                    gate_mode, gate_reason = talk_gate.check(job.uid, allow_soft=True)
+                    gate_mode, gate_reason = talk_gate.check(job.uid, allow_soft=True, call_char_id=call_char)
                     if gate_mode == "soft" and not confirm_available:
                         pending_talk_text = str(args.get("text") or "")
                         confirm_available = True; run.talk_soft_blocked = True
@@ -672,6 +680,7 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
                         source=job.source,
                         run_id=run.id,
                         correlation_id=run.opportunity_id or job.id,
+                        call_scoped=call_char is not None,
                     )
                     run.talk_sent = ok
                     if ok:
@@ -704,6 +713,7 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
                         run_id=run.id,
                         correlation_id=run.opportunity_id or job.id,
                         bypass_soft_once=True,
+                        call_scoped=call_char is not None,
                     )
                     run.talk_sent = ok
                     if ok:
@@ -1069,6 +1079,12 @@ def _is_video_call_hangup(job: Job) -> bool:
 
 def _user_became_active_for_job(job: Job) -> bool:
     if not _is_video_call_hangup(job):
+        from core.video_call_presence import job_is_call_scoped, silence_window
+        if job_is_call_scoped(job):
+            # Same call-scoped quiet window the admission used, so a relaxed
+            # admission is not cancelled the moment the loop starts.
+            from core.scheduler.loop import last_user_message_time
+            return time.time() - last_user_message_time() < silence_window(job.uid, job.char_id)
         return _user_became_active(job.uid)
     from core.scheduler.loop import last_user_message_time
     hangup_at = max((float(signal.get("created_at") or 0) for signal in
