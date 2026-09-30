@@ -105,7 +105,9 @@ async def test_camera_tool_requests_fresh_frame_on_video_call_route(monkeypatch)
     assert not video_call.accept_camera_frame("owner-tool", "character-tool", "other", request["request_id"], _jpeg())
     assert video_call.accept_camera_frame("owner-tool", "character-tool", "desktop", request["request_id"], _jpeg())
     assert not video_call.accept_camera_frame("owner-tool", "character-tool", "desktop", request["request_id"], _jpeg())
-    assert await task == {"status": "ok", "description": "窗边有一本书"}
+    fresh = await task
+    assert fresh["status"] == "ok" and fresh["description"] == "窗边有一本书"
+    assert fresh["captured"] == "刚拉取的新帧" and fresh["age_seconds"] < 5
     video_call.close_camera("owner-tool", "character-tool", "desktop")
 
 
@@ -123,14 +125,16 @@ async def test_camera_observation_is_ephemeral_scoped_and_busy_drops(monkeypatch
     assert result["status"] == "ready"
     receipt = result["observation_id"]
     assert video_call.consume(receipt, uid="owner", char_id="wrong", token_label="desktop") is None
-    assert video_call.consume(receipt, uid="owner", char_id="character", token_label="desktop") == "桌面上有一本书"
+    consumed = video_call.consume(receipt, uid="owner", char_id="character", token_label="desktop")
+    assert consumed[0] == "桌面上有一本书"
+    assert 0 <= consumed[1] < 5
     assert video_call.consume(receipt, uid="owner", char_id="character", token_label="desktop") is None
     video_call.close_camera("owner", "character", "other-device")
     assert video_call.camera_session("owner", "character") is not None
     video_call.close_camera("owner", "character", "desktop")
     assert video_call.camera_session("owner", "character") is None
     result = await video_call.observe(_jpeg(), uid="owner", char_id="character", token_label="desktop")
-    assert video_call.consume(result["observation_id"], uid="owner", char_id="character", token_label="desktop") == "桌面上有一本书"
+    assert video_call.consume(result["observation_id"], uid="owner", char_id="character", token_label="desktop")[0] == "桌面上有一本书"
     async with video_call.local_resource():
         assert (await video_call.observe(_jpeg(), uid="owner", char_id="character", token_label="desktop"))["status"] == "busy"
 
@@ -181,6 +185,7 @@ async def test_starved_frame_still_emits_a_signal_from_the_last_description(monk
     assert len(queued) == 1
     assert queued[0].source == "video_call_camera"
     assert "秒前采集" in queued[0].evidence[0]["description"]
+    assert queued[0].evidence[0]["age_seconds"] >= 8
     assert queued[0].evidence[0]["trust"] == "untrusted_visual_description"
     video_call.close_camera("owner-starved", "character", "desktop")
 
@@ -201,6 +206,33 @@ async def test_starved_frame_without_history_emits_no_signal(monkeypatch):
     assert result["status"] == "busy"
     assert queued == []
     video_call.close_camera("owner-fresh", "character", "desktop")
+
+
+def test_receipt_age_advances_with_time_and_expiry_still_rejects(monkeypatch):
+    clock = {"now": 1000.0}
+    monkeypatch.setattr(video_call.time, "monotonic", lambda: clock["now"])
+    video_call._receipts["r-age"] = (clock["now"] + 45, "owner", "character", "desktop", "书桌", clock["now"])
+    clock["now"] += 30
+    description, age = video_call.consume("r-age", uid="owner", char_id="character", token_label="desktop")
+    assert description == "书桌" and age == pytest.approx(30.0)
+    video_call._receipts["r-old"] = (clock["now"] + 45, "owner", "character", "desktop", "书桌", clock["now"])
+    clock["now"] += 46
+    assert video_call.consume("r-old", uid="owner", char_id="character", token_label="desktop") is None
+
+
+def test_age_label_is_coarse_and_never_claims_current():
+    assert video_call.age_label(0) == "刚刚"
+    assert video_call.age_label(32) == "约 30 秒前"
+    assert video_call.age_label(40) == "约 40 秒前"
+    assert video_call.age_label(130) == "约 2 分钟前"
+    assert "当前" not in "".join(video_call.age_label(n) for n in (0, 10, 50, 200))
+
+
+def test_injected_observation_states_its_age_instead_of_current():
+    text = video_call.observation_prefix("桌上有杯子", 42)
+    assert "约 40 秒前" in text and "桌上有杯子" in text
+    assert "当前" not in text
+    assert "刚刚" in video_call.observation_prefix("桌上有杯子", 1)
 
 
 @pytest.mark.asyncio
