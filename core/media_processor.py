@@ -305,7 +305,12 @@ async def ingest_image_bytes(
                       for block in content_blocks if block["type"] == "image_url"]
             result = "\n".join(parsed)
         else:
-            result = await llm_client.chat(vision_messages, use_vision=True, vision_purpose='chat_upload')
+            try:
+                result = await llm_client.chat(vision_messages, use_vision=True, vision_purpose='chat_upload')
+            except llm_client.VisionRouteError as exc:
+                # 让用户看到真实原因（路由不可用 / 拒连 / 超时 / 401），
+                # 而不是笼统的「图片识别服务未返回结果」。
+                raise MediaIngestError("vision_failed", f"图片识别失败：{exc.reason}") from exc
             parsed = _split_vision_result(result, len(prepared)) if result else []
         if not result:
             if uid and char_id:
@@ -471,6 +476,9 @@ async def reread_cached_image(sha256: str, instruction: str = "请重新仔细�
             {"type": "image_url", "image_url": {"url": f"data:{media_type};base64,{base64.b64encode(normalized).decode()}"}},
         ]}], use_vision=True, vision_purpose='chat_upload')
         return str(result or "视觉模型没有返回结果。")
+    except llm_client.VisionRouteError as exc:
+        logger.warning("[media_processor] reread image vision route failed: %s", exc)
+        return f"重新读取图片失败：{exc.reason}。"
     except Exception as exc:
         logger.warning("[media_processor] reread image failed: %s", exc)
         return "重新读取图片失败，请稍后再试。"

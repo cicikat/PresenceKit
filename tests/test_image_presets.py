@@ -167,3 +167,82 @@ def test_aliases_still_resolve_after_rename():
     assert resolve_connection("phone", cfg)["name"] == "scene"
     assert resolve_connection("scene", cfg)["name"] == "scene"
     assert "phone_automation" in referencing_purposes("scene", cfg)
+
+
+def _local_vision_cfg(purpose="chat_upload", **extra):
+    return {
+        "image_presets": {
+            "presets": {"local": {"kind": "vision", "enabled": True, "model": "qwen-vl",
+                                  "base_url": "http://127.0.0.1:8000/v1",
+                                  "api_protocol": "chat_completions", **extra}},
+            "routes": {purpose: "local"},
+        },
+    }
+
+
+def test_any_loopback_vision_route_bypasses_the_proxy(monkeypatch):
+    """`_local_only` 此前只给 video_call；全局代理会吞掉 127.0.0.1 的图片上传请求。"""
+    from core import llm_client
+
+    monkeypatch.setattr("core.config_loader.get_config", lambda: _local_vision_cfg())
+    assert llm_client._resolve_vision_config("chat_upload")["_local_only"] is True
+    # 远端连接不应被误标为直连。
+    remote = _local_vision_cfg()
+    remote["image_presets"]["presets"]["local"]["base_url"] = "https://vision.example/v1"
+    monkeypatch.setattr("core.config_loader.get_config", lambda: remote)
+    assert "_local_only" not in llm_client._resolve_vision_config("chat_upload")
+
+
+@pytest.mark.asyncio
+async def test_missing_vision_route_never_falls_back_to_the_text_model(monkeypatch):
+    """静默回落会把图片块发给主聊天模型，看起来本地模型在用，实际从未打到它。"""
+    from core import llm_client
+
+    monkeypatch.setattr(llm_client, "_resolve_vision_config", lambda purpose=None: {})
+    with pytest.raises(llm_client.VisionRouteError) as exc:
+        await llm_client.chat([{"role": "user", "content": "x"}], use_vision=True,
+                              vision_purpose="chat_upload")
+    assert exc.value.reason == "vision_route_unavailable"
+
+
+@pytest.mark.asyncio
+async def test_vision_failure_reason_reaches_the_caller(monkeypatch):
+    """非 video_call 分支此前把异常吞成空串，真实原因只剩在 api_call_log。"""
+    from openai import APIConnectionError
+    from core import llm_client, media_processor
+
+    monkeypatch.setattr(llm_client, "_resolve_vision_config",
+                        lambda purpose=None: {"enabled": True, "model": "m",
+                                              "base_url": "http://127.0.0.1:8000/v1",
+                                              "_local_only": True})
+
+    class _Client:
+        class chat:
+            class completions:
+                @staticmethod
+                async def create(**kwargs):
+                    raise APIConnectionError(request=None)
+
+    monkeypatch.setattr(llm_client, "_get_vision_client", lambda cfg=None: _Client)
+    with pytest.raises(llm_client.VisionRouteError) as exc:
+        await llm_client.chat([{"role": "user", "content": "x"}], use_vision=True,
+                              vision_purpose="chat_upload")
+    assert exc.value.reason == "connection_error"
+    # 调用方把原因带进 vision_failed，而不是笼统「未返回结果」。
+    assert issubclass(media_processor.MediaIngestError, Exception)
+
+
+@pytest.mark.asyncio
+async def test_unsupported_vision_protocol_is_rejected_not_mislogged(monkeypatch):
+    """vision 分支此前忽略 preset 的 api_protocol，一律按 chat.completions 发出。"""
+    from core import llm_client
+
+    monkeypatch.setattr(llm_client, "_resolve_vision_config",
+                        lambda purpose=None: {"enabled": True, "model": "m",
+                                              "base_url": "https://a.example/v1",
+                                              "api_protocol": "anthropic_messages"})
+    monkeypatch.setattr(llm_client, "_get_vision_client", lambda cfg=None: object())
+    with pytest.raises(llm_client.VisionRouteError) as exc:
+        await llm_client.chat([{"role": "user", "content": "x"}], use_vision=True,
+                              vision_purpose="chat_upload")
+    assert "anthropic_messages" in exc.value.reason

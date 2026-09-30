@@ -379,6 +379,18 @@ policy、连接、registry、角色 proficiency 和 exclude_tools 之后继续�
    无该块时从 `vision:` / `image_recognition:` / `phone_control_vision:` 合成，语义不变。
    手机自动化用途可选任意 vision 连接；旧覆盖槽位在合成模式下仍空字段继承通用 `vision`。
 
+   2026-09-28：本地图像模型此前只对视频通话生效。三处修正——
+   (a) 任何 loopback（127.0.0.1 / localhost / ::1）vision 连接都设 `_local_only`（禁代理、
+   `max_retries=0`），不再只给 `video_call`；此前 `chat_upload` 会走 `_get_proxy_url()`，
+   全局代理为 follow_global/auto 时 127.0.0.1 请求被送进代理，本地模型根本收不到。
+   (b) 带 `vision_purpose` 的调用失败或路由不可用时抛 `llm_client.VisionRouteError`
+   （含 `reason`），不再吞成空串或静默回落到文本 preset（那会把图片块发给主聊天模型）；
+   `media_processor` 把 `reason` 带进 `vision_failed` 的 422 message。`video_call` 行为不变，
+   仍直接 `raise`。(c) vision 分支遵循 preset 的 `api_protocol`：支持 `chat_completions` 与
+   `responses`，其他值明确拒绝，不再一律按 `chat.completions` 发出并把日志 protocol 写死。
+   注意 `video_call` 仍有额外硬约束 `video_call_ready`（仅 loopback + http + chat_completions）；
+   其他用途只要 `connection_ready`。
+
 ModelClient 缓存（`core.model_registry._model_clients`）以**解析出的 preset 名**为 key，不是
 call_category 或 profile 名——每次调用都重新走上面 0~2 步解析 preset 名，天然随角色切换取到
 正确的 client，无需额外失效逻辑。

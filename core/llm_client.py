@@ -180,6 +180,27 @@ def _get_client() -> AsyncOpenAI:
     return get_model_client("chat").client
 
 
+class VisionRouteError(RuntimeError):
+    """A vision purpose has no usable connection; callers must not fall back silently.
+
+    Falling back to the text preset would send image blocks to the main chat
+    model, which looks like a working local route while never reaching it.
+    """
+
+    def __init__(self, purpose: str | None, reason: str):
+        self.purpose = purpose or ""
+        self.reason = reason
+        super().__init__(f"vision route unavailable purpose={self.purpose!r} reason={reason}")
+
+
+def _is_loopback_base_url(base_url: object) -> bool:
+    from urllib.parse import urlsplit
+    try:
+        return urlsplit(str(base_url or "")).hostname in {"localhost", "127.0.0.1", "::1"}
+    except ValueError:
+        return False
+
+
 def _resolve_vision_config(vision_purpose: str | None = None) -> dict:
     """Resolve a vision connection; ``vision_purpose`` uses image_presets routes."""
     if vision_purpose:
@@ -195,6 +216,10 @@ def _resolve_vision_config(vision_purpose: str | None = None) -> dict:
             from core.image_presets import video_call_ready
             if not video_call_ready(cfg)[0]:
                 return {}
+        # Any loopback vision connection must bypass the proxy and skip retries,
+        # not just video_call: a global proxy set to follow_global/auto otherwise
+        # swallows 127.0.0.1 requests, so a local image model is never reached.
+        if _is_loopback_base_url(cfg.get("base_url")):
             cfg["_local_only"] = True
         return cfg
     return dict(get_config().get("vision") or {})
@@ -342,7 +367,16 @@ async def chat(
     if use_vision:
         vision_cfg = _resolve_vision_config(vision_purpose)
         vision_client = _get_vision_client(vision_cfg)
+        if vision_client is None and vision_purpose:
+            # 不能静默回落到文本 preset：那会把图片块发给主聊天模型，
+            # 看起来"本地图像模型在用"，实际请求从未打到它。
+            raise VisionRouteError(vision_purpose, "vision_route_unavailable")
         if vision_client:
+            # Honour the preset's declared wire protocol instead of always using
+            # chat.completions and logging "chat_completions" regardless.
+            protocol = str(vision_cfg.get("api_protocol") or "chat_completions")
+            if protocol not in {"chat_completions", "responses"}:
+                raise VisionRouteError(vision_purpose, f"unsupported_api_protocol:{protocol}")
             # Vision branch: sanitize only (no prompt_style transform needed)
             safe_msgs = sanitize_messages(messages)
             started_at = time.perf_counter()
@@ -357,13 +391,25 @@ async def chat(
                         tools=None,
                         request_kwargs={"max_tokens": 1000, "timeout": _CALL_TIMEOUTS["vision"]},
                     )
-                response = await vision_client.chat.completions.create(
-                    model=vision_cfg["model"],
-                    messages=safe_msgs,
-                    max_tokens=120 if vision_purpose == "video_call" else 1000,
-                    timeout=105 if vision_purpose == "video_call" else _CALL_TIMEOUTS["vision"],
-                )
-                choice = _first_chat_choice(response, operation="chat[vision]")
+                max_tokens = 120 if vision_purpose == "video_call" else 1000
+                timeout = 105 if vision_purpose == "video_call" else _CALL_TIMEOUTS["vision"]
+                if protocol == "responses":
+                    from core.llm_protocol import responses_input
+                    endpoint = getattr(vision_client, "responses", None)
+                    if endpoint is None or not callable(getattr(endpoint, "create", None)):
+                        raise VisionRouteError(vision_purpose, "responses_unsupported_by_sdk")
+                    response = await endpoint.create(
+                        model=vision_cfg["model"], input=responses_input(safe_msgs),
+                        store=False, max_output_tokens=max_tokens, timeout=timeout,
+                    )
+                    text = getattr(response, "output_text", None)
+                    content = text if isinstance(text, str) else ""
+                else:
+                    response = await vision_client.chat.completions.create(
+                        model=vision_cfg["model"], messages=safe_msgs,
+                        max_tokens=max_tokens, timeout=timeout,
+                    )
+                    content = _first_chat_choice(response, operation="chat[vision]").message.content or ""
                 _log_completed_call(
                     provider=str(vision_cfg.get("provider") or "vision"),
                     model=str(vision_cfg.get("model") or ""),
@@ -376,10 +422,13 @@ async def chat(
                     purpose="vision",
                     started_at=started_at,
                     ok=True,
-                    protocol="chat_completions",
+                    protocol=protocol,
                 )
-                return choice.message.content or ""
+                return content
             except Exception as e:
+                category = ("timeout" if isinstance(e, APITimeoutError) else
+                            "connection_error" if isinstance(e, APIConnectionError) else
+                            error_category_for_exception(e))
                 _record_api_call(
                     provider=str(vision_cfg.get("provider") or "vision"),
                     model=str(vision_cfg.get("model") or ""),
@@ -387,14 +436,16 @@ async def chat(
                     started_at=started_at,
                     ok=False,
                     output_hint=type(e).__name__,
-                    error_category=("timeout" if isinstance(e, APITimeoutError) else
-                                    "connection_error" if isinstance(e, APIConnectionError) else
-                                    error_category_for_exception(e)),
-                    protocol="chat_completions",
+                    error_category=category,
+                    protocol=protocol,
                 )
-                if vision_purpose == "video_call":
+                if vision_purpose == "video_call" or isinstance(e, VisionRouteError):
                     raise
                 log_error("llm_client.chat.vision", e)
+                if vision_purpose:
+                    # 吞成空串会让调用方只看到笼统的 vision_failed，真实原因
+                    # （拒连/超时/401/404/代理错）只剩在 api_call_log 里。
+                    raise VisionRouteError(vision_purpose, category) from e
                 return ""
             finally:
                 from core.conversation_stats import record
