@@ -2273,8 +2273,8 @@ def _is_tool_enabled(tool_name: str) -> bool:
         from core.tools.xiaohongshu import settings
         return settings(get_config())["effective"]
     if tool_name == "observe_video_call_camera":
-        from core.video_call import connection_state
-        if not connection_state(get_config())["effective"]:
+        from core.video_call import TOOL_PURPOSE, connection_state
+        if not connection_state(get_config(), TOOL_PURPOSE)["effective"]:
             return False
     if tool_name == "observe_user_screen":
         from core.perception.screen_observation import enabled

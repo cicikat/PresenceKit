@@ -212,8 +212,8 @@ def _resolve_vision_config(vision_purpose: str | None = None) -> dict:
         if route.get("kind") != "vision":
             return {}
         cfg = dict(route.get("config") or {})
-        if vision_purpose == "video_call":
-            from core.image_presets import video_call_ready
+        from core.image_presets import LOOPBACK_ONLY_PURPOSES, video_call_ready
+        if vision_purpose in LOOPBACK_ONLY_PURPOSES:
             if not video_call_ready(cfg)[0]:
                 return {}
         # Any loopback vision connection must bypass the proxy and skip retries,
@@ -381,8 +381,10 @@ async def chat(
             safe_msgs = sanitize_messages(messages)
             started_at = time.perf_counter()
             response = None
+            from core.image_presets import LOOPBACK_ONLY_PURPOSES as _CAMERA_PURPOSES
+            camera_frame = vision_purpose in _CAMERA_PURPOSES
             try:
-                if vision_purpose != "video_call":
+                if not camera_frame:
                     _record_debug_request(
                         provider=str(vision_cfg.get("provider") or "vision"),
                         model=str(vision_cfg.get("model") or ""),
@@ -391,8 +393,8 @@ async def chat(
                         tools=None,
                         request_kwargs={"max_tokens": 1000, "timeout": _CALL_TIMEOUTS["vision"]},
                     )
-                max_tokens = 120 if vision_purpose == "video_call" else 1000
-                timeout = 105 if vision_purpose == "video_call" else _CALL_TIMEOUTS["vision"]
+                max_tokens = 120 if camera_frame else 1000
+                timeout = 105 if camera_frame else _CALL_TIMEOUTS["vision"]
                 if protocol == "responses":
                     from core.llm_protocol import responses_input
                     endpoint = getattr(vision_client, "responses", None)
@@ -439,7 +441,7 @@ async def chat(
                     error_category=category,
                     protocol=protocol,
                 )
-                if vision_purpose == "video_call" or isinstance(e, VisionRouteError):
+                if camera_frame or isinstance(e, VisionRouteError):
                     raise
                 log_error("llm_client.chat.vision", e)
                 if vision_purpose:

@@ -24,7 +24,11 @@ PURPOSES = (
     "life_bill",
     "phone_automation",
     "video_call",
+    "video_call_tool",
 )
+# Camera frames may leave only to a loopback vision model, whichever chain asks:
+# the periodic video-call observation or the on-demand fresh-frame tool.
+LOOPBACK_ONLY_PURPOSES = frozenset({"video_call", "video_call_tool"})
 VISION_KINDS = frozenset({"vision"})
 OCR_KINDS = frozenset({"ocr"})
 KINDS = VISION_KINDS | OCR_KINDS
@@ -57,9 +61,18 @@ def catalog(config: dict | None = None) -> dict:
         for purpose, name in stored_routes.items():
             if purpose in PURPOSES and isinstance(name, str) and name in presets:
                 routes[purpose] = name
+        _inherit_video_call_tool(routes, "video_call_tool" in stored_routes)
         return {"presets": presets, "routes": routes, "synthesized": False}
     synthesized = _synthesize(config)
+    _inherit_video_call_tool(synthesized["routes"], False)
     return {**synthesized, "synthesized": True}
+
+
+def _inherit_video_call_tool(routes: dict, configured: bool) -> None:
+    """An unset on-demand route follows the periodic one; an explicit empty stays off."""
+    if configured or routes.get("video_call_tool"):
+        return
+    routes["video_call_tool"] = routes.get("video_call", "")
 
 
 def snapshot(config: dict | None = None) -> dict:
@@ -74,7 +87,10 @@ def snapshot(config: dict | None = None) -> dict:
     for purpose in PURPOSES:
         name = cat["routes"].get(purpose, "")
         preset = cat["presets"].get(name, {})
-        ready = video_call_ready(preset)[0] if purpose == "video_call" else connection_ready(preset) if preset else False
+        if purpose in LOOPBACK_ONLY_PURPOSES:
+            ready = video_call_ready(preset)[0]
+        else:
+            ready = connection_ready(preset) if preset else False
         purposes.append({
             "purpose": purpose,
             "connection": name,
@@ -264,6 +280,7 @@ def _default_routes(config: dict, presets: dict) -> dict:
         "life_bill": ocr_name or next(iter(presets), ""),
         "phone_automation": phone_name or vision_name or next(iter(presets), ""),
         "video_call": "",
+        "video_call_tool": "",
     }
 
 

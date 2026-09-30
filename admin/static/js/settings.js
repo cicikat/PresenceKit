@@ -62,8 +62,10 @@ const IMAGE_PURPOSE_LABELS = {
   life_cart: () => t('routing.life_cart', '生活记录 · 购物车'),
   life_bill: () => t('routing.life_ocr', '生活记录 · 账单'),
   phone_automation: () => t('routing.phone_automation', '手机自动化'),
-  video_call: () => '视频电话 · 本机摄像头',
+  video_call: () => '视频电话 · 本机摄像头（周期观察）',
+  video_call_tool: () => '视频电话 · 按需查看摄像头（角色主动拉新帧）',
 };
+const LOOPBACK_ONLY_PURPOSES = ['video_call', 'video_call_tool'];
 function toggleVisionEditor(id) {
   const editor = document.getElementById(id);
   editor.hidden = !editor.hidden;
@@ -97,11 +99,11 @@ function renderImageRoutes() {
   if (!root) return;
   const presets = _imagePresetCatalog.presets || {};
   const names = Object.keys(presets);
-  const purposes = ['chat_upload', 'life_diet', 'life_cart', 'life_bill', 'phone_automation', 'video_call'];
+  const purposes = ['chat_upload', 'life_diet', 'life_cart', 'life_bill', 'phone_automation', 'video_call', 'video_call_tool'];
   const routes = _imagePresetCatalog.routes || {};
   root.innerHTML = purposes.map(purpose => {
     const selected = routes[purpose] || '';
-    const available = purpose === 'video_call' ? names.filter(name => {
+    const available = LOOPBACK_ONLY_PURPOSES.includes(purpose) ? names.filter(name => {
       const preset = presets[name] || {};
       try {
         const url = new URL(preset.base_url || '');
@@ -111,7 +113,7 @@ function renderImageRoutes() {
           && !url.username && !url.password && !url.search && !url.hash;
       } catch { return false; }
     }) : names;
-    const options = (purpose === 'video_call' ? '<option value="">关闭 · 未指定本机视觉连接</option>' : '')
+    const options = (LOOPBACK_ONLY_PURPOSES.includes(purpose) ? '<option value="">关闭 · 未指定本机视觉连接</option>' : '')
       + available.map(name => `<option value="${escapeHtml(name)}" ${name === selected ? 'selected' : ''} data-i18n-skip>${escapeHtml(name)}</option>`).join('');
     return `<tr><td>${escapeHtml(IMAGE_PURPOSE_LABELS[purpose] ? IMAGE_PURPOSE_LABELS[purpose]() : purpose)}</td><td><select id="image-route-${purpose}">${options}</select></td></tr>`;
   }).join('');
@@ -131,8 +133,13 @@ function renderImageRoutes() {
   const summary = document.getElementById('vision-phone-summary');
   if (summary) summary.textContent = routes.phone_automation || t('status.phone_vision.inherit', '继承通用配置');
   const videoState = document.getElementById('vision-video-summary');
-  if (videoState) videoState.textContent = routes.video_call
-    ? `视频电话仅使用本机视觉连接：${routes.video_call}` : '视频电话视觉未配置，摄像头预览仍可用。';
+  if (videoState) {
+    const periodic = routes.video_call
+      ? `周期观察：${routes.video_call}` : '周期观察未配置，摄像头预览仍可用。';
+    const tool = routes.video_call_tool
+      ? `按需查看：${routes.video_call_tool}` : '按需查看未配置，角色无法主动拉新帧。';
+    videoState.textContent = `视频电话仅使用本机视觉连接。${periodic} · ${tool}`;
+  }
 }
 function _toggleImageKindFields() {
   const kind = document.getElementById('image-preset-kind')?.value || 'vision';
@@ -256,9 +263,9 @@ async function deleteImagePreset(name) {
 }
 async function saveImageRoutes() {
   const body = {};
-  for (const purpose of ['chat_upload', 'life_diet', 'life_cart', 'life_bill', 'phone_automation', 'video_call']) {
+  for (const purpose of ['chat_upload', 'life_diet', 'life_cart', 'life_bill', 'phone_automation', 'video_call', 'video_call_tool']) {
     const select = document.getElementById('image-route-' + purpose);
-    if (select && (select.value || purpose === 'video_call')) body[purpose] = select.value;
+    if (select && (select.value || LOOPBACK_ONLY_PURPOSES.includes(purpose))) body[purpose] = select.value;
   }
   try {
     await api('PUT', '/image-presets/routes', body);

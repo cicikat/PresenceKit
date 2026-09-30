@@ -43,6 +43,30 @@ def test_video_call_requires_loopback_vision():
     assert video_call_ready({**local, "kind": "ocr"})[0] is False
 
 
+def test_camera_tool_route_is_separately_configurable(monkeypatch):
+    """按需查看有自己的路由；未配置时沿用周期观察，配置后独立生效。"""
+    from core.image_presets import catalog
+    inherited = _config()
+    assert catalog(inherited)["routes"]["video_call_tool"] == "local_vision"
+    assert video_call.connection_state(inherited, video_call.TOOL_PURPOSE)["effective"] is True
+
+    split = _config()
+    split["image_presets"]["presets"]["local_tool_vision"] = {
+        **split["image_presets"]["presets"]["local_vision"], "model": "vendor/bigger:tag",
+    }
+    split["image_presets"]["routes"]["video_call_tool"] = "local_tool_vision"
+    assert video_call.connection_state(split, video_call.TOOL_PURPOSE)["connection"] == "local_tool_vision"
+    assert video_call.connection_state(split)["connection"] == "local_vision"
+
+    disabled = _config()
+    disabled["image_presets"]["routes"]["video_call_tool"] = ""
+    monkeypatch.setattr("core.config_loader.get_config", lambda: disabled)
+    from core import tool_dispatcher
+    monkeypatch.setattr(tool_dispatcher, "get_config", lambda: disabled)
+    assert not tool_dispatcher._is_tool_enabled("observe_video_call_camera")
+    assert video_call.connection_state(disabled)["effective"] is True
+
+
 def test_camera_tool_uses_video_call_route_only(monkeypatch):
     from core import tool_dispatcher
     monkeypatch.setattr(tool_dispatcher, "get_config", _config)
@@ -86,11 +110,11 @@ def test_camera_signal_uses_interval_even_when_scene_is_unchanged(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_camera_tool_requests_fresh_frame_on_video_call_route(monkeypatch):
+async def test_camera_tool_requests_fresh_frame_on_its_own_route(monkeypatch):
     monkeypatch.setattr("core.config_loader.get_config", _config)
     monkeypatch.setattr(video_call, "_unavailable_until", 0.0)
     async def fake_chat(messages, **kwargs):
-        assert kwargs["vision_purpose"] == "video_call"
+        assert kwargs["vision_purpose"] == video_call.TOOL_PURPOSE
         return "窗边有一本书"
     monkeypatch.setattr("core.llm_client.chat", fake_chat)
     video_call._camera_sessions[("owner-tool", "character-tool")] = {
