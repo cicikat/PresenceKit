@@ -8,7 +8,7 @@ DNS：`198.18.0.0/15` Fake-IP 或解析失败时用已配置 HTTP 代理，其�
 重启。`auto`/`proxy` 保存时要求有效 `proxy.http`。`GET/PUT /proxy` 读写该字段，保存后
 热重载文本模型与视觉客户端。管理面「代理与中继」提供下拉与说明；系统状态摘要只读展示
 当前模式，编辑入口仍在该页。手机聊天继续复用后端模型连接，桌面/手机无新设置。真实模型
-网络与手机端验收 observe。静态版本 `v1-model-network-auto-1`。其他出站工具仍用各自代理
+网络与手机端验收 observe。静态版本 `v1-local-runtime-1`。其他出站工具仍用各自代理
 策略。
 
 ## 本地 STT 运行参数 `stt_local`（2026-09-30，backend current）
@@ -19,7 +19,14 @@ DNS：`198.18.0.0/15` Fake-IP 或解析失败时用已配置 HTTP 代理，其�
 仅管本机 faster-whisper；远程 OpenAI 兼容连接仍在 `stt_presets`，两处不重叠。
 生效方式：下一次 `/transcribe` 发现配置与已加载实例不一致即重建，新模型加载并跑通后才替换，
 失败时保留旧实例；手写无效值退回默认。`auto` 回落 CPU 与原因可在 `core.stt_local.snapshot()`
-看到（管理面页面见工单 D2）。观测：`/observability/api-calls`（`state.read`）。
+看到。观测：`/observability/api-calls`（`state.read`）。
+
+管理面页面「本地模型运行」（`local-model-runtime`，服务分组，`admin` scope）只接本地 STT：
+`GET /settings/local-runtime`（configured / effective / 回落原因 / 最近一次切换结果）、
+`GET /settings/local-runtime/hardware`（只读探测，不加载模型，缺运行库时给出下一步）、
+`PUT /settings/local-runtime/stt`（先热切换，成功后才写 `config.yaml`；失败返回 409，
+`saved:false` 并带仍在使用的实例，配置与旧实例都不动）。每个选项旁标注内存/速度/精度代价。
+桌面与手机无新设置。
 
 ## 每日互动预算加倍（2026-09-21，current）
 

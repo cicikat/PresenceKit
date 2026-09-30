@@ -52,7 +52,7 @@ from admin.routers import (
     users, memory, relations,
     system, lorebook,
     settings_proxy, settings_llm, settings_misc, settings_prompt_assets,
-    settings_screen_peek, settings_tool_loop, settings_thinking, settings_relay, settings_feature_flags, settings_mcp, settings_tools, settings_browser,
+    settings_screen_peek, settings_tool_loop, settings_thinking, settings_relay, settings_feature_flags, settings_local_runtime, settings_mcp, settings_tools, settings_browser,
     character, chat, owner_turn, diary_sync,
     scheduler, watch, sensor, period,
     garden, mobile, diary, chat_log,
@@ -91,6 +91,7 @@ app.include_router(settings_tool_loop.router,     prefix="", tags=["设置-工�
 app.include_router(settings_thinking.router,      prefix="", tags=["设置-思考"])
 app.include_router(settings_relay.router,         prefix="", tags=["设置-中继"])
 app.include_router(settings_feature_flags.router, prefix="", tags=["设置-功能开关"])
+app.include_router(settings_local_runtime.router, prefix="", tags=["设置-本地模型运行"])
 app.include_router(settings_mcp.router,           prefix="", tags=["设置-MCP"])
 app.include_router(settings_tools.router,         prefix="", tags=["设置-工具"])
 app.include_router(settings_browser.router,        prefix="", tags=["设置-浏览器"])

@@ -343,8 +343,8 @@ def test_observe_listening_page_is_registered_and_cache_busted():
 
     assert 'data-page="observe-listening"' in index
     assert 'id="page-observe-listening"' in index
-    assert "ADMIN_UI_FRAGMENT_VERSION = 'v1-model-network-auto-1'" in core
-    assert '<script src="/static/js/core.js?v=v1-model-network-auto-1"></script>' in index
+    assert "ADMIN_UI_FRAGMENT_VERSION = 'v1-local-runtime-1'" in core
+    assert '<script src="/static/js/core.js?v=v1-local-runtime-1"></script>' in index
     assert '<script src="/static/js/observability.js?v=self-tool-audit-5"></script>' in index
     assert '<script src="/static/js/listening-player.js?v=v1-260-admin-surface-1"></script>' in index
     assert "loadObserveListening" in script

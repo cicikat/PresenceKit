@@ -20,7 +20,7 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'v1-model-network-auto-1';
+const ADMIN_UI_FRAGMENT_VERSION = 'v1-local-runtime-1';
 
 const ADMIN_PAGE_ALIASES = Object.freeze({memory: 'observe-memory'});
 
@@ -29,6 +29,7 @@ const ADMIN_PAGE_CONTEXT = Object.freeze({
   'runtime-config': {related: ['status', 'scheduler', 'model-routing']},
   'tts-config': {related: ['status', 'character', 'user-data']},
   'listening-player': {related: ['tts-config', 'observe-listening', 'feature-center']},
+  'local-model-runtime': {related: ['tts-config', 'status']},
   'observe-listening': {related: ['listening-player', 'feature-center', 'observe-autonomy']},
   character: {related: ['lorebook', 'tools']},
   lorebook: {related: ['character']},
@@ -302,6 +303,7 @@ async function goto(page, {reloadFragment = false, fromHistory = false} = {}) {
     'diary-config': _loadSetupDiary,
     'mail-config': _loadSetupMail,
     'embedding-config': loadSetupEmbedding,
+    'local-model-runtime': loadLocalModelRuntime,
     'creation-center': loadCreationAssets,
     'observation-center': loadImeObservation,
     'operations-center': () => {},

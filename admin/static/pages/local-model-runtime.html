@@ -1,0 +1,52 @@
+<h1 class="page-title" data-i18n="nav.page.local-model-runtime">本地模型运行</h1>
+<div class="card">
+  <div class="card-header">
+    <h3 data-i18n="local_runtime.stt.title">本地语音识别（Whisper）</h3>
+    <span id="local-runtime-stt-status" class="admin-inline-082"></span>
+  </div>
+  <p class="admin-inline-087" data-i18n="local_runtime.stt.intro">只管本机运行的 Whisper 的硬件与精度。远程 OpenAI 兼容语音识别连接在「语音合成与声音（TTS、STT）」页配置，两处不重叠。保存时先热切换，成功后才写入配置；失败会保留原来能用的设置。</p>
+
+  <div class="card" id="local-runtime-effective">
+    <h4 data-i18n="local_runtime.effective.title">实际生效状态</h4>
+    <div id="local-runtime-effective-body" role="status" aria-live="polite"></div>
+  </div>
+
+  <div class="card" id="local-runtime-hardware">
+    <h4 data-i18n="local_runtime.hardware.title">本机硬件检测</h4>
+    <div id="local-runtime-hardware-body"></div>
+  </div>
+
+  <div class="form-row">
+    <label class="field">
+      <span data-i18n="local_runtime.field.model_size">模型尺寸</span>
+      <select id="local-runtime-model-size"></select>
+    </label>
+    <label class="field">
+      <span data-i18n="local_runtime.field.device">运行设备</span>
+      <select id="local-runtime-device"></select>
+    </label>
+  </div>
+  <p class="admin-inline-087" id="local-runtime-size-note"></p>
+  <p class="admin-inline-087" id="local-runtime-device-note"></p>
+  <div class="form-row">
+    <label class="field">
+      <span data-i18n="local_runtime.field.compute_type">计算精度</span>
+      <select id="local-runtime-compute-type"></select>
+    </label>
+    <label class="field">
+      <span data-i18n="local_runtime.field.beam_size">束搜索宽度 beam_size（1–10）</span>
+      <input type="number" id="local-runtime-beam-size" min="1" max="10" step="1">
+    </label>
+    <label class="field">
+      <span data-i18n="local_runtime.field.timeout">转写超时（秒，5–120）</span>
+      <input type="number" id="local-runtime-timeout" min="5" max="120" step="1">
+    </label>
+  </div>
+  <p class="admin-inline-087" id="local-runtime-compute-note"></p>
+  <p class="admin-inline-087" data-i18n="local_runtime.beam_note">beam_size 越大越准但越慢；延迟要紧时可调小。第一次换更大的模型可能要联网下载权重，保存会等到加载完成，可能需要几分钟。</p>
+  <div id="local-runtime-result" role="status" aria-live="polite"></div>
+  <div class="modal-footer admin-inline-124">
+    <button class="btn btn-ghost" data-action="loadLocalModelRuntime" data-i18n="local_runtime.refresh">刷新状态</button>
+    <button class="btn btn-primary" id="local-runtime-save" data-action="saveLocalSttRuntime" data-i18n="local_runtime.save">保存并切换</button>
+  </div>
+</div>
