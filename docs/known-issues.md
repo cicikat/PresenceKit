@@ -1,5 +1,14 @@
 # docs/known-issues.md — 已知问题与技术债
 
+## 视频通话 TTS 重复播报（2026-09-30，observe）
+
+`current`：后端 `msg_id` 每轮唯一且跨通道共享（`core/turn_sink.py`）；`channels/desktop_ws.py` 无补发缓冲，
+`channels/desktop.py` 的 `channel_queue` 文件队列目前没有客户端读取方，读码未发现投递侧重复路径。
+客户端去重已加固（`callSpeechDedup.ts`：模块级、按时间窗过期、统计 `enqueued` / `duplicateHits`）。
+`observe`：**"投递重复"与"原文重复"尚未判定**——需要复现一次通话，看控制台
+`[video-call] duplicate speech ignored` 是否出现，以及重复两行的 id 是同 msg_id 不同 index（原文重复，属生成层，
+另立项，不在播放层删重复句）还是同 msg_id 同 index（投递重复）。
+
 ## 工单 260 音频与音乐感知（2026-09-21）
 
 `current`：A 已冻结 schema、预算、scope、状态机、计数口径和宿主盘点
