@@ -34,6 +34,18 @@ QQ record 消息经过有界下载与转写；HTTP `/upload/ingest` 支持单个
 （`MAX_SEGMENT_MS`，此前代码写 12 秒、文档写 6 秒，已对齐到 6 秒），最多暂存 6 段；若与输入文字合并发送，凭据只绑定实际包含在消息中的原转写段。
 声学分析依赖不齐、语音不清或转写太慢时，文字对话仍可继续。
 
+工单组「语音链路 · 工具文本泄漏 · 视频帧差分」工单 A：ASR 的 `prompt`/`initial_prompt`
+偏置提示（Whisper 家族）在音频短、含静音或含糊不清时会被解码器当成"已经说过的上文"
+原样复读进转写结果，表现为固定模板文案或词表本身混进聊天。远程与本地两条路径现在都只传
+`stt_vocabulary.hotwords()` 的纯词表字符串（逗号分隔，无「以下是语音中的专有名词」这类
+自然语言前缀），不再传 `prompt()` 的整句模板；`correct()` 的 `heard→canonical` 事后纠正
+不受影响。两条路径在拿到转写结果后都会用 `stt_vocabulary.is_prompt_echo(text, hint)`
+与本次请求实际发出的 `hint` 比对（命中固定模板短语，或与 `hint` 的
+`difflib.SequenceMatcher` 相似度 ≥ 0.6），判定为回声时按现有「未能听清」路径处理
+（远程：`ingest_audio_bytes` 返回 `None`；本地 faster-whisper：该分段被剔除且计入日志；
+本地 legacy whisper：整段转写结果置空），不会把回声文本当作用户发言写入对话。
+纯词表只降低复述概率，不消除机制，所以这道检测即使模板前缀已去掉也必须保留。
+
 本地 Whisper 选型（`core/stt_local.py`，配置块 `stt_local`）：默认 `small` + `cpu/int8`
 （`device: auto`，只在 CUDA 真能跑通一次极短推理时才用 GPU，否则回落 CPU 并记录原因；
 显式 `cuda` 不可用返回 503 并写明缺少的运行库）。本机 CPU 实测：`base/int8` 12 秒段 RTF 1.26，

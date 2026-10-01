@@ -1,10 +1,19 @@
 """Owner-configured pronunciation hints and exact transcription corrections."""
 from __future__ import annotations
 
+from difflib import SequenceMatcher
 import re
 from typing import Any
 
 MAX_ENTRIES = 32
+
+# Literal substrings that only ever appear because the ASR decoder echoed the
+# biasing hint back as "transcription" (see docs/audio-perception.md). A real
+# utterance saying these words verbatim is not a realistic false positive.
+_ECHO_PHRASES = ("以下是语音中的专有名词", "读音或常见误写")
+# Below this ratio against the hint actually sent for this request, the text
+# is treated as ordinary speech rather than a repeat of the prompt/hotwords.
+_ECHO_SIMILARITY_THRESHOLD = 0.6
 
 
 def validate(payload: dict[str, Any]) -> dict[str, Any]:
@@ -48,6 +57,26 @@ def hotwords(config: dict[str, Any] | None = None) -> str:
     if not block["enabled"]:
         return ""
     return ", ".join(dict.fromkeys(item["canonical"] for item in block["entries"]))[:800]
+
+
+def is_prompt_echo(text: str, hint: str) -> bool:
+    """True if ``text`` looks like the ASR decoder repeated ``hint`` back as output.
+
+    Two independent checks, either is sufficient (see docs/audio-perception.md
+    结论 1): a literal hit on the fixed template wording, or high similarity
+    against the exact hint string sent for this request (covers the
+    hotwords-only fallback, where the template is gone but the word list
+    itself can still be echoed).
+    """
+    text = (text or "").strip()
+    if not text:
+        return False
+    if any(phrase in text for phrase in _ECHO_PHRASES):
+        return True
+    hint = (hint or "").strip()
+    if not hint:
+        return False
+    return SequenceMatcher(None, text, hint).ratio() >= _ECHO_SIMILARITY_THRESHOLD
 
 
 def correct(text: str, config: dict[str, Any] | None = None) -> str:

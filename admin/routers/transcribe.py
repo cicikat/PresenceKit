@@ -45,25 +45,36 @@ def _transcribe_sync(audio_path: str) -> str:
 
 
 def _run_backend(backend: dict, cfg: dict, audio_path: str) -> str:
-    from core.stt_vocabulary import prompt, hotwords, correct
-    hint = prompt()
+    from core.stt_vocabulary import hotwords, correct, is_prompt_echo
+    # Both engines' `initial_prompt` is a Whisper-family biasing hint, same
+    # echo risk as the remote path (docs/audio-perception.md 结论 1 / 已拍板
+    # 的决定 1): send the bare word list, not the natural-language template.
+    hint = hotwords()
     model = backend["model"]
     if backend["backend"] == "faster_whisper":
-        options = {"initial_prompt": hint or None, "hotwords": hotwords() or None,
+        options = {"initial_prompt": hint or None, "hotwords": hint or None,
                    "vad_filter": True, "beam_size": cfg["beam_size"]}
         segments, _ = model.transcribe(audio_path, language="zh", **options)
         accepted = []
         filtered = 0
+        echoed = 0
         for seg in segments:
             if getattr(seg, "no_speech_prob", 0.0) >= 0.8 or getattr(seg, "avg_logprob", 0.0) <= -1.5:
                 filtered += 1
                 continue
+            if hint and is_prompt_echo(seg.text, hint):
+                echoed += 1
+                continue
             accepted.append(seg.text)
         if not accepted:
-            logger.info("[transcribe] 未识别到可用语音片段（低置信度过滤 %d 段）", filtered)
+            logger.info("[transcribe] 未识别到可用语音片段（低置信度过滤 %d 段，回声剔除 %d 段）", filtered, echoed)
         return correct("".join(accepted).strip())
     result = model.transcribe(audio_path, language="zh", initial_prompt=hint or None)
-    return correct(result["text"].strip())
+    text = result["text"].strip()
+    if hint and is_prompt_echo(text, hint):
+        logger.info("[transcribe] 回声剔除（legacy whisper）")
+        return ""
+    return correct(text)
 
 
 def _timeout_seconds() -> float:

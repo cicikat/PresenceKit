@@ -216,8 +216,12 @@ async def _request(data, filename, preset):
     form.add_field("file", data, filename=Path(filename).name, content_type="application/octet-stream")
     form.add_field("model", preset["model"])
     form.add_field("response_format", "json")
-    from core.stt_vocabulary import prompt
-    hint = prompt()
+    # OpenAI-compatible /audio/transcriptions only has a free-text `prompt`
+    # field, no separate hotwords parameter. We send the bare comma-joined
+    # word list (no natural-language template) to cut the Whisper decoder's
+    # prompt-echo risk — see docs/audio-perception.md 结论 1 / 已拍板的决定 1.
+    from core.stt_vocabulary import hotwords
+    hint = hotwords()
     if hint:
         form.add_field("prompt", hint)
     headers = {"Authorization": "Bearer " + preset["api_key"]} if preset.get("api_key") else {}
@@ -243,15 +247,22 @@ async def ingest_audio_bytes(data, filename):
         return None
     try:
         preset = validate_preset(block["presets"][block["routes"]["voice_message"]])
+        from core.stt_vocabulary import hotwords, is_prompt_echo
+        hint = hotwords()
         result = await asyncio.wait_for(_request(data, filename, preset), preset["timeout_seconds"])
         text = result.get("text")
         if not isinstance(text, str) or not text.strip():
+            return None
+        text = text.strip()[:12000]
+        if hint and is_prompt_echo(text, hint):
+            # Decoder repeated the biasing hint back as "transcription" — not
+            # a real utterance. Treat exactly like "didn't catch it".
             return None
         # Optional provider field only; never infer emotion from transcript words.
         tone = result.get("tone", "unclear")
         tone = tone if isinstance(tone, str) and tone in TONES else "unclear"
         from core.stt_vocabulary import correct
-        payload = {"text": correct(text.strip()[:12000]), "tone": tone}
+        payload = {"text": correct(text), "tone": tone}
     except Exception:
         # No payload, URL, key or provider exception is logged.
         return None

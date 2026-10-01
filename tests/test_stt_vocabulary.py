@@ -17,6 +17,24 @@ def test_vocabulary_hints_and_exact_corrections():
     assert vocabulary.correct("木星", {"stt_vocabulary": {"enabled": False, "entries": CFG["stt_vocabulary"]["entries"]}}) == "木星"
 
 
+def test_is_prompt_echo_detects_literal_template_phrases():
+    assert vocabulary.is_prompt_echo("以下是语音中的专有名词，请按实际听到的内容转写：暮星", "暮星")
+    assert vocabulary.is_prompt_echo("暮星（读音或常见误写：mu xing）", "暮星")
+    assert not vocabulary.is_prompt_echo("今天天气真好", "暮星")
+
+
+def test_is_prompt_echo_catches_bare_wordlist_repeats_by_similarity():
+    hint = "暮星, 星野, 苍穹"
+    assert vocabulary.is_prompt_echo("暮星 星野 苍穹", hint)
+    assert not vocabulary.is_prompt_echo("我们去爬山吧", hint)
+
+
+def test_is_prompt_echo_empty_inputs_are_not_echo():
+    assert not vocabulary.is_prompt_echo("", "暮星")
+    assert not vocabulary.is_prompt_echo("你好", "")
+    assert not vocabulary.is_prompt_echo("", "")
+
+
 def test_vocabulary_rejects_unbounded_or_injectable_entries():
     with pytest.raises(ValueError):
         vocabulary.validate({"enabled": True, "entries": [{"heard": "a", "canonical": "暮星"}]})
@@ -31,18 +49,47 @@ def _backend(model):
             "device": "cpu", "compute_type": "int8", "fallback": None}
 
 
-def test_local_whisper_receives_hints_and_keeps_model_name_out_of_internal_key(monkeypatch):
+def test_local_whisper_receives_bare_wordlist_not_template(monkeypatch):
     from admin.routers import transcribe
     from core import config_loader
 
     monkeypatch.setattr(config_loader, "get_config", lambda: CFG)
     class Model:
         def transcribe(self, _path, **kwargs):
-            assert "暮星" in kwargs["initial_prompt"]
+            # initial_prompt must be the bare hotwords string, never the
+            # "以下是语音中的专有名词" template (echo risk, 工单 A 结论 1).
+            assert kwargs["initial_prompt"] == "暮星"
             assert kwargs["hotwords"] == "暮星"
             return ([type("Segment", (), {"text": "我叫 mu xing"})()], None)
     monkeypatch.setattr("core.stt_local.get_backend", lambda cfg=None: _backend(Model()))
     assert transcribe._transcribe_sync("fixture.wav") == "我叫 暮星"
+
+
+def test_local_whisper_drops_prompt_echo_segment_as_unheard(monkeypatch):
+    from admin.routers import transcribe
+    from core import config_loader
+
+    monkeypatch.setattr(config_loader, "get_config", lambda: CFG)
+    class Model:
+        def transcribe(self, _path, **kwargs):
+            segment = type("Segment", (), {"text": "暮星（读音或常见误写：mu xing）"})()
+            return ([segment], None)
+    monkeypatch.setattr("core.stt_local.get_backend", lambda cfg=None: _backend(Model()))
+    assert transcribe._transcribe_sync("fixture.wav") == ""
+
+
+def test_legacy_whisper_drops_prompt_echo_as_unheard(monkeypatch):
+    from admin.routers import transcribe
+    from core import config_loader
+
+    monkeypatch.setattr(config_loader, "get_config", lambda: CFG)
+    class Model:
+        def transcribe(self, _path, **_kwargs):
+            return {"text": "以下是语音中的专有名词，请按实际听到的内容转写：暮星"}
+    backend = _backend(Model())
+    backend["backend"] = "whisper"
+    monkeypatch.setattr("core.stt_local.get_backend", lambda cfg=None: backend)
+    assert transcribe._transcribe_sync("fixture.wav") == ""
 
 
 def test_local_whisper_keeps_short_speech_with_moderate_confidence(monkeypatch):

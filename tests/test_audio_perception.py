@@ -80,6 +80,67 @@ def test_receipt_scope_text_ttl_and_single_use(configured, monkeypatch):
     assert audio.consume_receipt(key, "hello", "desktop") is None
 
 
+@pytest.mark.asyncio
+async def test_request_sends_bare_hotwords_not_template(configured, monkeypatch):
+    from core import stt_vocabulary
+    monkeypatch.setattr(stt_vocabulary, "settings", lambda config=None: {"enabled": True, "entries": [
+        {"heard": "mu xing", "canonical": "暮星"}]})
+    captured = {}
+    async def fake_request(data, filename, preset):
+        return {"text": "hello"}
+    monkeypatch.setattr(audio, "aiohttp", audio.aiohttp)
+    class FormData:
+        def __init__(self):
+            self.fields = []
+        def add_field(self, name, value, **kwargs):
+            self.fields.append((name, value))
+    monkeypatch.setattr(audio.aiohttp, "FormData", FormData)
+    class Response:
+        def raise_for_status(self):
+            pass
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *a):
+            pass
+        content = type("C", (), {"iter_chunked": lambda self, size: _chunks()})()
+    async def _chunks():
+        yield b'{"text": "hello"}'
+    class Session:
+        def __init__(self, **kwargs):
+            pass
+        def post(self, url, data=None, **kwargs):
+            captured["fields"] = data.fields
+            return Response()
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *a):
+            pass
+    monkeypatch.setattr(audio.aiohttp, "ClientSession", Session)
+    await audio.ingest_audio_bytes(b"fixture", "x.wav")
+    prompt_fields = [value for name, value in captured["fields"] if name == "prompt"]
+    assert prompt_fields == ["暮星"]
+    assert "以下是语音中的专有名词" not in str(prompt_fields)
+
+
+@pytest.mark.asyncio
+async def test_remote_prompt_echo_is_treated_as_unheard(configured, monkeypatch):
+    from core import stt_vocabulary
+    monkeypatch.setattr(stt_vocabulary, "settings", lambda config=None: {"enabled": True, "entries": [
+        {"heard": "mu xing", "canonical": "暮星"}]})
+    monkeypatch.setattr(audio, "_request", AsyncMock(return_value={"text": "暮星（读音或常见误写：mu xing）"}))
+    assert await audio.ingest_audio_bytes(b"fixture", "x.wav") is None
+
+
+@pytest.mark.asyncio
+async def test_remote_clear_speech_is_not_mistaken_for_echo(configured, monkeypatch):
+    from core import stt_vocabulary
+    monkeypatch.setattr(stt_vocabulary, "settings", lambda config=None: {"enabled": True, "entries": [
+        {"heard": "mu xing", "canonical": "暮星"}]})
+    monkeypatch.setattr(audio, "_request", AsyncMock(return_value={"text": "今天我们去爬山吧", "tone": "calm"}))
+    result = await audio.ingest_audio_bytes(b"fixture", "x.wav")
+    assert result["text"] == "今天我们去爬山吧"
+
+
 def test_snapshot_masks_secrets(configured):
     state = audio.snapshot()
     assert state["effective"]
