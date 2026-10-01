@@ -109,6 +109,13 @@ def _init_modules():
     from core.sandbox import get_paths as _get_paths_for_log
     from core.runtime_warning_log import ensure_runtime_warning_handler_after_paths
     ensure_runtime_warning_handler_after_paths()
+    # error.log：启动时一次性把迁移前的未脱敏历史改名并后台脱敏归档为 .gz，再按保留期清理。
+    try:
+        from core import error_log as _error_log
+        _error_log.ensure_migration_started()
+        _error_log.maybe_prune()
+    except Exception:
+        logger.warning("[startup] error.log 轮转初始化失败，不影响启动", exc_info=True)
     logger.info(f"[startup] 数据根目录: {_get_paths_for_log()._base.resolve()}")
 
     # 安全 P0（Brief 33 §1.2）：占位/空 secret 且 registry 无 token → 阻断启动。

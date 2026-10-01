@@ -390,6 +390,7 @@ RETENTION_POLICY: dict[str, str] = {
     # forensic — 可丢，不影响业务
     "dead_letter_queue": "count-cap  max_files=200       超出时删最旧；保持可监控但不无限增长",
     "runtime_warning_log": "age-gc+size-cap  max_age_days=14, max_day_bytes=8MiB, max_total_bytes=48MiB  仅新增 WARNING+ JSONL；不触碰 error.log",
+    "error_log": "age-gc+size-cap  与 runtime_warning_log 同值（14 天 / 8MiB 日 / 48MiB 总）  active 保持 error.log，UTC 日轮转为 error-YYYY-MM-DD.log；写入前脱敏；迁移前历史归档为 .gz（同保留期），不物理丢内容",
     "audio_analysis_cache_dir": "age-gc+size-cap  max_age_days=30, max_total_bytes=512MiB  按内容摘要+分析版本重建；不含原始语音",
     "listening_history_db": "count-cap  max_occurrences=2000  超出删最旧 occurrence；stats 必须可从剩余历史重建",
     "music_audio_blob_dir": "live-ref  仅在对应 track 删除后回收；不按墙钟删除用户提供音频",

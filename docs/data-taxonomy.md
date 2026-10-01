@@ -99,7 +99,8 @@ data/
 ├── cache/image_cache/
 ├── cache/audio_analysis/              # 工单 260 A：内容摘要+分析版本缓存；不含原始语音
 ├── logs/
-│   ├── error.log
+│   ├── error.log                          # 当日活跃文件（脱敏纯文本）；UTC 日轮转为 error-YYYY-MM-DD.log，保留 14 天
+│   ├── error-YYYY-MM-DD.log[.gz]          # 轮转文件 / 迁移前历史归档（同保留期，见 docs/runtime-lifecycle.md 日志台账）
 │   ├── runtime_warnings-YYYY-MM-DD.jsonl  # WARNING+ 轮转；保留 14 天
 │   ├── dead_letter_queue/
 │   ├── fixation.jsonl

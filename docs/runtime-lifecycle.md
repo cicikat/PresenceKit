@@ -56,6 +56,18 @@ main.py
 
 WARNING+ 运行日志：`core.runtime_warning_log` 在 `sandbox.init_paths()` 之后安装（生产 `main._init_modules` 在首次 `get_paths()` 后再确保一次）。只持久化 WARNING/ERROR/CRITICAL，按日 JSONL，UTC 时间戳，默认保留 14 天并有单日/总量上限。安装幂等；进程关闭时 flush/close。早于 sandbox 初始化的记录只走控制台 StreamHandler，不写入任何数据目录。写失败只记内存故障计数，不递归进同一 handler，也不阻断聊天。`error.log` traceback 仍由 `core.error_handler` 单独追加，本 handler 不清空或迁移它。管理面 `GET /logs/runtime-warnings` 只读查询当前沙箱文件，不接受路径参数。
 
+### 日志台账：排障该查哪里（工单 E）
+
+两条台账各管一半，**`error.log` 不是全量 ERROR 视图**：
+
+| 台账 | 谁写 | 内容 | 怎么查 |
+|---|---|---|---|
+| `data/logs/error.log`（及 `error-YYYY-MM-DD.log[.gz]`） | `core.error_handler`：`log_error()` 与 `with_retry` 的每次失败（`core/error_log.py`） | 带 traceback 的异常，纯文本，可直接 `tail` | `GET /logs?lines=N`（admin）；每个文件首行写明「只含 error_handler 路径」 |
+| `data/logs/runtime_warnings-YYYY-MM-DD.jsonl` | root logger 上所有 WARNING+ 记录（`core.runtime_warning_log`） | 包括**只走 `logging.error()`/`logging.warning()`、从不进 `error.log`** 的记录，例如 `[scheduler] autonomy tick failed` | `GET /logs/runtime-warnings`（admin，按时间窗/级别/logger 过滤） |
+
+经 `log_error()` 的异常两边都有（`log_error` 同时调 `logging.error`）；只走 `logging.error()` 的只在后者。所以查「系统最近出了什么错」要以 `runtime-warnings` 为准，`error.log` 用来看完整 traceback。
+`error.log` 的轮转/保留/上限直接取 `runtime_warning_log` 的同一组值（14 天、单日 8 MiB、总量 48 MiB）：活跃文件保持 `error.log` 名字，首次在新的 UTC 日写入时改名为 `error-YYYY-MM-DD.log`；单日超限后当日后续记录丢弃并计数（`GET /logs` 的 `ledger.dropped_records` / `truncated_days`）；每条写入前过 `admin.log_filter.redact_log_text`。迁移前的旧 `error.log`（无首行标记、未脱敏）在启动时被改名为 `error.log.legacy-migrating`，后台逐行脱敏后写成 `error-<最后写入日>.log.gz` 再删除原文件——一次性、可重入（中断后下次启动继续），归档同样按 14 天保留期淘汰，期间内容完整保留。管理面「清空」现在删除活跃文件、轮转文件与归档。
+
 ---
 
 ## 3. 核心 Runtime Owner

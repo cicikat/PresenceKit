@@ -56,15 +56,16 @@ async def get_status(auth=Depends(require_scopes("state.read"))):
 
 @router.get("/logs", summary="获取最近错误日志")
 async def get_logs(lines: int = 200, auth=Depends(require_scopes("admin"))):
-    log_file = get_paths().error_log()
-    if not log_file.exists():
-        return {"logs": "", "message": "日志文件不存在"}
+    """tail error.log（含按日轮转出的近期明文文件）；不含只走 logging.error() 的记录，
+    那部分见 GET /logs/runtime-warnings。"""
+    from core import error_log
     try:
-        with open(log_file, "r", encoding="utf-8") as f:
-            all_lines = f.readlines()
-        return {"logs": "".join(all_lines[-lines:]), "total_lines": len(all_lines)}
+        text, total = error_log.read_tail(lines)
     except Exception as e:
         return {"error": str(e)}
+    if not text and total == 0:
+        return {"logs": "", "message": "日志文件不存在"}
+    return {"logs": text, "total_lines": total, "ledger": error_log.snapshot()}
 
 
 @router.get("/logs/runtime-warnings", summary="按时间窗查询 WARNING+ 运行日志")
@@ -107,9 +108,8 @@ async def get_runtime_warnings(
 @router.delete("/logs", summary="清空错误日志")
 async def clear_logs(auth=Depends(require_scopes("admin"))):
     try:
-        log_file = get_paths().error_log()
-        log_file.parent.mkdir(parents=True, exist_ok=True)
-        log_file.write_text("", encoding="utf-8")
+        from core import error_log
+        error_log.clear()
         return {"message": "错误日志已清空"}
     except Exception as e:
         return {"error": str(e)}

@@ -31,16 +31,17 @@ def get_tool_fail_response() -> str:
     return random.choice(TOOL_FAIL_RESPONSES)
 
 def _write_error_log(module_name: str, error: Exception):
-    """把错误信息写入 error.log，格式：时间戳 + 模块名 + 错误内容"""
+    """把错误信息写入 error.log，格式：时间戳 + 模块名 + 错误内容
+
+    落盘经 core.error_log：脱敏、按 UTC 日轮转、保留期/单日/总量上限与
+    runtime_warnings 台账同值；本文件不是全量 ERROR 视图，见 core/error_log.py 顶部说明。
+    """
     try:
-        from core.sandbox import get_paths
-        log_file = get_paths().error_log()
-        log_file.parent.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         error_text = traceback.format_exc()
         line = f"[{timestamp}] [{module_name}] {type(error).__name__}: {error}\n{error_text}\n"
-        with open(log_file, "a", encoding="utf-8") as f:
-            f.write(line)
+        from core import error_log
+        error_log.append(line)
     except Exception:
         # 日志本身写失败，只能打印到控制台，不再抛出
         logging.error(f"无法写入错误日志文件: {traceback.format_exc()}")
