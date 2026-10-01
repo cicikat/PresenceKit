@@ -31,12 +31,6 @@
   <p id="vision-video-summary" role="status" data-i18n="routing.video_unconfigured">视频电话视觉未配置，摄像头预览仍可用。</p>
   <p data-i18n="routing.video_local_hint">视频电话只允许已启用的本机 HTTP 视觉连接（localhost、127.0.0.1 或 ::1），协议为 OpenAI Chat Completions。拍摄的帧仅在通话中分析，不保存原图；模型名可使用完整本地 ID。</p>
   <div class="tbl-wrap"><table><thead><tr><th data-i18n="routing.purpose">用途</th><th data-i18n="routing.connection">连接</th></tr></thead><tbody id="image-routes-body"></tbody></table></div>
-      <div class="vision-editor" id="vision-phone-editor" hidden>
-        <div class="card-header"><h3 data-i18n="status.phone_vision.title">手机自动化视觉覆盖</h3><div><button class="btn btn-ghost btn-sm" data-action="loadPhoneControlVisionParams" data-i18n="common.refresh">刷新</button><button class="btn btn-primary btn-sm" data-action="savePhoneControlVisionParams" data-i18n="common.save">保存</button></div></div>
-        <p data-i18n="status.phone_vision.hint">仅覆盖手机自动化的视觉模型。留空即继承上方通用视觉配置；通常只需要填写模型名。</p>
-        <div class="form-row"><label class="field"><span data-i18n="status.phone_vision.enabled">启用状态</span><select id="phone-vision-enabled"><option value="" data-i18n="status.phone_vision.inherit">继承通用配置</option><option value="true" data-i18n="status.phone_vision.enabled_true">启用</option><option value="false" data-i18n="status.phone_vision.enabled_false">关闭</option></select></label><label class="field"><span data-i18n="status.vision.model">模型</span><input id="phone-vision-model" type="text" data-i18n-placeholder="status.phone_vision.model_placeholder" placeholder="留空则继承通用模型"></label></div>
-        <div class="form-row"><label class="field"><span data-i18n="status.phone_vision.base_url">Base URL 覆盖</span><input id="phone-vision-base-url" type="text" data-i18n-placeholder="status.phone_vision.base_url_placeholder" placeholder="留空则继承通用 Base URL"></label><label class="field"><span data-i18n="status.phone_vision.api_key">API Key 覆盖</span><input id="phone-vision-api-key" type="password" autocomplete="off" data-i18n-placeholder="status.phone_vision.api_key_placeholder" placeholder="留空则继承通用 API Key"></label></div>
-      </div>
 
 </section>
 <h2 class="vision-section-title" data-i18n="routing.text_heading">文本模型</h2>

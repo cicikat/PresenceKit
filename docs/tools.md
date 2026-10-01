@@ -252,8 +252,7 @@ hello 字段或协商流程。
 
 图像识别（vision）刻意不纳入角色资产路由：识图能力本身通用，不该按角色分裂成多份
 配置。只在"日常环境观察"（`vision`，Brief 56）和"桌面自动化专用"（`use_computer_vision`，
-新增，2026-07-25，与 `core/phone_control/vision_client.py` 的 `phone_control_vision`
-同构：dedicated 字段覆盖 > 回落 `vision`）之间分两个全局槽位——桌面自动化往往需要
+新增，2026-07-25：dedicated 字段覆盖 > 回落 `vision`；手机自动化已并入 `screen` 路由，不再与它同构）之间分两个全局槽位——桌面自动化往往需要
 更强/更贵的 UI grounding 模型，不该让日常 vision 调用背这个成本。`use_computer_vision`
 目前只占位（无消费方，`desktop`/`system` 工具类目今天还是坐标无关的窗口级操作），
 供以后真正做"看屏幕点像素"类工具时直接复用配置层，见
@@ -764,7 +763,7 @@ worker 在到期、异常、断线、显式取消和进程关闭时尝试停止�
 | `GET /phone_control/status` | `chat` | 只读诊断：兼容字段 `tool_enabled`（Path C）以及 `path_a_enabled`/`path_c_enabled`，均按角色覆盖后的共享暴露策略解析；另含 `vision_configured` 和 `char_id`，供手机端能力页展示 |
 | `POST /phone_control/debug/start` | `chat` | 调试用：跳过 LLM 判断和 chat 内二次确认，直接调 `tool_dispatcher._phone_control_start_wrapper()` 发起任务；**仍然过danger-mode 门禁**（复用 `tool_dispatcher._current_mode()`），不因为是调试端点就放宽 |
 
-视觉模型走 `config.yaml` 的 `vision`（或专用 `phone_control_vision` 覆盖）段，与 `core/perception/vlm_client.py` 共用同一种 OpenAI-compatible 调用方式。角色级手机控制授权使用正式的 `presence_ext.tool_categories_path_a/path_c` 字段；旧 `tool_categories` 只作为 Path C 兼容别名。
+视觉模型走 `image_presets` 的 `screen` 路由（主连接 + 可选备用连接，`core/phone_control/vision_client.py::phone_vision_chain()`），与影子观测、按需看屏幕共用同一条配置；调用方式与 `core/perception/vlm_client.py` 相同（OpenAI-compatible）。专用 `phone_control_vision` 覆盖已退役。角色级手机控制授权使用正式的 `presence_ext.tool_categories_path_a/path_c` 字段；旧 `tool_categories` 只作为 Path C 兼容别名。
 
 ### fs 类（默认不暴露）
 

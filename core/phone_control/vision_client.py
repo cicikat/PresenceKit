@@ -1,12 +1,14 @@
 """手机自动化循环的视觉决策客户端。
 
 跟 core/perception/vlm_client.py 用的是同一种 OpenAI-compatible chat/completions +
-image_url 调用方式（GLM-4V 等视觉模型走这个协议）。config 读取顺序：
+image_url 调用方式（GLM-4V 等视觉模型走这个协议）。连接来自 image_presets 的 screen 路由
+（主连接 + 可选备用连接），与影子观测、按需看屏幕共用同一条配置：
 
-    phone_control_vision（专用，可选） > vision（通用视觉模型配置，Brief 56 已有）
+    image_presets.routes.screen → 主连接；image_presets.fallbacks.screen → 备用连接
 
-用户自己在 config.yaml 接线：只要 `vision.base_url/model/api_key` 填好，这里不用改代码就能用；
-想给手机自动化单独配一个更强/更贵的视觉模型，再加 `phone_control_vision` 段覆盖。
+主连接连不上（超时/连接失败/5xx 等，规则同文本模型 failover）时，由备用连接重答同一屏；
+模型回了但内容不合格（invalid）不换连接重试——同一张截图不为没有新信息的重复付费。
+旧的 `phone_control_vision` 专用覆盖已退役：只在首次把旧配置迁入命名连接时读取一次。
 
 调用方（/phone_control/step）必须先过 sensitive_filter.check_observation()，只有通过了才
 会走到这里——但这里的 system prompt 仍然要求模型自己也判断一次敏感页面，双重防线，不是因为
@@ -49,27 +51,16 @@ class NextAction:
     message: str | None = None
 
 
-def get_phone_control_vision_config() -> dict:
-    from core.config_loader import get_config
-    from core.image_presets import resolve_purpose
+def phone_vision_chain() -> list[dict]:
+    """Connections phone automation may use, primary first; ``[]`` when unrouted.
 
-    cfg = get_config()
-    try:
-        route = resolve_purpose("phone_automation", cfg)
-        if route.get("kind") == "vision":
-            merged = dict(route.get("config") or {})
-            if route.get("synthesized") or route.get("name") in ("phone", "general"):
-                dedicated = dict(cfg.get("phone_control_vision") or {})
-                merged.update({k: v for k, v in dedicated.items() if v is not None and v != ""})
-            return merged
-    except KeyError:
-        pass
-    dedicated = dict(cfg.get("phone_control_vision") or {})
-    general = dict(cfg.get("vision") or {})
-    merged = dict(general)
-    # 空字符串表示“继承通用 vision”；False 是合法的显式布尔覆盖，不能被当成空值丢掉。
-    merged.update({k: v for k, v in dedicated.items() if v is not None and v != ""})
-    return merged
+    Unlike shadow observation this is not behind ``visual_perception.enabled`` —
+    phone control has its own consent (danger mode + per-task confirmation).
+    """
+    from core.config_loader import get_config
+    from core.image_presets import screen_vision_chain
+
+    return screen_vision_chain(get_config())
 
 
 def _parse_action_payload(raw: object) -> NextAction | None:
@@ -125,12 +116,15 @@ async def decide_next_action(
 
     error_reason 为 None 时表示成功；否则是 "disabled"/"unconfigured"/"invalid"/"error" 之一，
     调用方（/phone_control/step）在任一失败时都必须把 status 降级为 refused，不能假装继续。
+
+    依次尝试 screen 路由的主连接与备用连接：只有"连不上"类失败才换连接，
+    模型已回复但内容不合格（invalid）直接终止。
     """
-    cfg = get_phone_control_vision_config()
-    base_url = str(cfg.get("base_url") or "").rstrip("/")
-    model = str(cfg.get("model") or "")
-    if not base_url or not model:
-        logger.warning("[phone_control.vision] base_url/model 未配置，phone_control_start 无法真正执行")
+    from core.image_presets import should_try_fallback
+
+    chain = phone_vision_chain()
+    if not chain:
+        logger.warning("[phone_control.vision] screen 路由未配置，phone_control_start 无法真正执行")
         return None, "unconfigured"
 
     user_content: list[dict] = [
@@ -148,6 +142,28 @@ async def decide_next_action(
             "type": "image_url",
             "image_url": {"url": "data:image/jpeg;base64," + screenshot_base64},
         })
+
+    parsed, reason = None, "error"
+    for index, row in enumerate(chain):
+        parsed, reason, category = await _decide_once(row["config"], user_content)
+        if parsed is not None or reason == "invalid":
+            return parsed, reason
+        if index + 1 < len(chain) and should_try_fallback(category):
+            logger.warning("[phone_control.vision] screen 主连接失败（%s），改用备用连接", category)
+            continue
+        break
+    return parsed, reason
+
+
+async def _decide_once(
+    cfg: dict, user_content: list[dict],
+) -> tuple[NextAction | None, str | None, str]:
+    """One connection attempt. Returns (action, error_reason, error_category)."""
+    base_url = str(cfg.get("base_url") or "").rstrip("/")
+    model = str(cfg.get("model") or "")
+    if not base_url or not model:
+        logger.warning("[phone_control.vision] 连接缺 base_url/model，跳过")
+        return None, "unconfigured", "unconfigured"
 
     payload = {
         "model": model,
@@ -180,14 +196,16 @@ async def decide_next_action(
                 duration_ms=duration_ms, ok=False, output_hint="invalid_response",
             )
             logger.warning("[phone_control.vision] 响应解析失败 model=%s raw=%r", model, raw)
-            return None, "invalid"
+            return None, "invalid", "invalid_response"
         append(
             caller="phone_control", purpose="next_action",
             provider=str(cfg.get("provider") or "openai_compatible"), model=model,
             duration_ms=duration_ms, ok=True,
         )
-        return parsed, None
+        return parsed, None, ""
     except Exception as exc:
+        from core.image_presets import aiohttp_error_category
+        category = aiohttp_error_category(exc)
         duration_ms = int((time.perf_counter() - started_at) * 1000)
         try:
             from core.api_call_log import append
@@ -195,8 +213,9 @@ async def decide_next_action(
                 caller="phone_control", purpose="next_action",
                 provider=str(cfg.get("provider") or "openai_compatible"), model=model,
                 duration_ms=duration_ms, ok=False, output_hint=type(exc).__name__,
+                error_category=category,
             )
         except Exception:
             pass
-        logger.warning("[phone_control.vision] 调用失败: %s", exc)
-        return None, "error"
+        logger.warning("[phone_control.vision] 调用失败 category=%s: %s", category, exc)
+        return None, "error", category

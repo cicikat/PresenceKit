@@ -18,12 +18,30 @@ confidence 填你对本次判断的真实把握程度，0 到 1 之间的小数�
 仅输出 JSON，字段：scene（desk|away|bed|meal|outdoor|other）、activity（working|gaming|watching|reading|phone|idle|unknown）、confidence（0-1 小数）、sensitive（true|false）、caption（中文描述）。"""
 
 
-def get_visual_perception_config() -> dict:
-    """Resolve shadow-observation config, reusing ``vision`` credentials when asked.
+def screen_route_chain() -> list[dict]:
+    """Connections the screen route offers, primary first.
 
-    ``visual_perception`` is an explicit privacy gate.  Only when that gate is
-    enabled may its blank connection fields inherit the already-configured
-    general VLM client (the common GLM setup); a disabled gate never inherits.
+    ``visual_perception.enabled`` stays the privacy gate; the model behind the
+    gate now comes from ``image_presets.routes.screen`` (plus its fallback) so
+    every screenshot chain is configured in one place in the admin UI.
+    """
+    from core.config_loader import get_config
+    from core.image_presets import screen_vision_chain
+
+    cfg = get_config()
+    if not (cfg.get("visual_perception") or {}).get("enabled", False):
+        return []
+    timeout_s = (cfg.get("visual_perception") or {}).get("timeout_s", 20)
+    return [{**row, "config": {**row["config"], "timeout_s": timeout_s}}
+            for row in screen_vision_chain(cfg)]
+
+
+def get_visual_perception_config() -> dict:
+    """Resolve the screen route's primary connection behind the privacy gate.
+
+    ``visual_perception`` remains an explicit privacy gate; a disabled gate
+    resolves nothing. Callers that need the fallback too use
+    :func:`screen_route_chain`.
     """
     from core.config_loader import get_config
 
@@ -31,19 +49,21 @@ def get_visual_perception_config() -> dict:
     shadow = dict(cfg.get("visual_perception") or {})
     if not shadow.get("enabled", False):
         return shadow
-    vision = dict(cfg.get("vision") or {})
-    for field in ("base_url", "model", "api_key"):
-        if not shadow.get(field):
-            shadow[field] = vision.get(field, "")
-    shadow["provider"] = shadow.get("provider") or vision.get("provider") or "openai_compatible"
-    return shadow
+    chain = screen_route_chain()
+    if not chain:
+        return {"enabled": True, "base_url": "", "model": "",
+                "provider": shadow.get("provider") or "openai_compatible",
+                "timeout_s": shadow.get("timeout_s", 20)}
+    primary = dict(chain[0]["config"])
+    primary["enabled"] = True
+    primary["provider"] = primary.get("provider") or "openai_compatible"
+    return primary
 
 
 def get_use_computer_vision_config() -> dict:
     """Resolve the desktop-automation ("use computer") vision config.
 
-    与 core/phone_control/vision_client.py::get_phone_control_vision_config() 同构：
-    这是通用视觉能力的第二个专用槽位（第一个是手机自动化），不按角色区分——图像识别
+    这是通用视觉能力的独立槽位（手机自动化已并入 screen 路由），不按角色区分——图像识别
     本身是通用能力，不走角色资产路由；只在"看一眼环境/描述画面"（``vision``）和
     "为了精确点击/操作而需要抓取 UI 元素坐标"（``use_computer_vision``）两种用途之间
     分槽，因为后者往往需要更强/更贵、专精 UI grounding 的模型，不该让日常 vision 调用
@@ -92,17 +112,41 @@ def _parse_observation(raw: object) -> VisualObservation | None:
 
 
 async def describe_with_status(image_bytes: bytes, context_hint: str = "") -> tuple[VisualObservation | None, str | None]:
-    """Internal variant that preserves the shadow trace's invalid/error distinction."""
-    cfg = get_visual_perception_config()
-    if not cfg.get("enabled", False) or not image_bytes:
+    """Internal variant that preserves the shadow trace's invalid/error distinction.
+
+    Walks the screen route's chain: if the primary connection cannot be reached,
+    the owner's declared fallback answers instead. A reply that did arrive but
+    failed validation is final — retrying it on a second model would pay twice
+    for the same image without new information.
+    """
+    from core.image_presets import should_try_fallback
+
+    chain = screen_route_chain()
+    if not chain or not image_bytes:
         return None, "disabled"
+    observation, reason = None, "error"
+    for index, row in enumerate(chain):
+        observation, reason, category = await _describe_once(
+            row["config"], image_bytes, context_hint)
+        if observation is not None or reason == "invalid":
+            return observation, reason
+        if index + 1 < len(chain) and should_try_fallback(category):
+            logger.warning("[vlm] screen primary failed (%s); trying the fallback", category)
+            continue
+        break
+    return observation, reason
+
+
+async def _describe_once(cfg: dict, image_bytes: bytes,
+                         context_hint: str) -> tuple[VisualObservation | None, str | None, str]:
+    """One connection attempt. Returns (observation, trace_reason, error_category)."""
     base_url = str(cfg.get("base_url") or "").rstrip("/")
     model = str(cfg.get("model") or "")
     if not base_url or not model:
-        logger.warning("[vlm] enabled but base_url/model missing provider=%s", cfg.get("provider"))
-        return None, "error"
+        logger.warning("[vlm] route resolved but base_url/model missing provider=%s", cfg.get("provider"))
+        return None, "error", "unconfigured"
+    started_at = time.perf_counter()
     try:
-        started_at = time.perf_counter()
         import aiohttp
         import base64
         payload = {
@@ -133,16 +177,18 @@ async def describe_with_status(image_bytes: bytes, context_hint: str = "") -> tu
             from core.api_call_log import append
             append(caller="visual_perception", purpose="shadow_observation", provider=str(cfg.get("provider") or "openai_compatible"), model=model, duration_ms=int((time.perf_counter() - started_at) * 1000), ok=False, output_hint="invalid_response")
             logger.warning("[vlm] observation response rejected as invalid model=%s", model)
-            return None, "invalid"
+            return None, "invalid", "invalid_response"
         from core.api_call_log import append
         append(caller="visual_perception", purpose="shadow_observation", provider=str(cfg.get("provider") or "openai_compatible"), model=model, duration_ms=int((time.perf_counter() - started_at) * 1000), ok=True)
         logger.info("[vlm] initialized provider=%s model=%s", cfg.get("provider"), model)
-        return observation, None
+        return observation, None, ""
     except Exception as exc:
+        from core.image_presets import aiohttp_error_category
+        category = aiohttp_error_category(exc)
         from core.api_call_log import append
-        append(caller="visual_perception", purpose="shadow_observation", provider=str(cfg.get("provider") or "openai_compatible"), model=model, duration_ms=int((time.perf_counter() - started_at) * 1000), ok=False, output_hint=type(exc).__name__)
-        logger.warning("[vlm] describe failed type=%s", type(exc).__name__)
-        return None, "error"
+        append(caller="visual_perception", purpose="shadow_observation", provider=str(cfg.get("provider") or "openai_compatible"), model=model, duration_ms=int((time.perf_counter() - started_at) * 1000), ok=False, output_hint=type(exc).__name__, error_category=category)
+        logger.warning("[vlm] describe failed type=%s category=%s", type(exc).__name__, category)
+        return None, "error", category
 
 
 async def describe(image_bytes: bytes, context_hint: str = "") -> VisualObservation | None:

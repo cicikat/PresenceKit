@@ -1,9 +1,9 @@
 """
 tests/test_use_computer_vision_config.py
 
-get_use_computer_vision_config()：桌面自动化专用视觉槽位，与
-core/phone_control/vision_client.py::get_phone_control_vision_config() 同构
-（dedicated > 通用 vision 回落）。不按角色路由——图像识别是通用能力。
+get_use_computer_vision_config()：桌面自动化自己的第二个视觉槽位
+（dedicated > 通用 vision 回落）；手机自动化已并入 screen 路由，不再与它同构。
+不按角色路由——图像识别是通用能力。
 """
 
 from unittest.mock import patch

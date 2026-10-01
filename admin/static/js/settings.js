@@ -130,8 +130,6 @@ function renderImageRoutes() {
         })
       : '';
   }
-  const summary = document.getElementById('vision-phone-summary');
-  if (summary) summary.textContent = routes.phone_automation || t('status.phone_vision.inherit', '继承通用配置');
   const videoState = document.getElementById('vision-video-summary');
   if (videoState) {
     const periodic = routes.video_call
@@ -281,7 +279,7 @@ async function loadImageConnections() {
     kind.addEventListener('change', _toggleImageKindFields);
     kind.dataset.bound = 'true';
   }
-  await Promise.allSettled([loadNamedImagePresets(), loadVisionParams(), loadImageRecognition(), loadPhoneControlVisionParams()]);
+  await Promise.allSettled([loadNamedImagePresets(), loadVisionParams(), loadImageRecognition()]);
 }
 async function loadNamedImagePresets() {
   try {
@@ -428,38 +426,6 @@ async function saveImageRecognition() {
     toast(t('common.saved', '已保存'), 'ok');
   } catch (e) {
     toast(t('common.save_failed', '保存失败: {error}', {error: e.message}), 'err');
-  }
-}
-
-async function loadPhoneControlVisionParams() {
-  try {
-    const data = await api('GET', '/vision-params/phone-control');
-    const enabled = document.getElementById('phone-vision-enabled');
-    enabled.value = data.enabled === true ? 'true' : data.enabled === false ? 'false' : '';
-    document.getElementById('phone-vision-model').value = data.model || '';
-    document.getElementById('phone-vision-base-url').value = data.base_url || '';
-    document.getElementById('phone-vision-api-key').value = data.api_key || '';
-    const summary = document.getElementById('vision-phone-summary');
-    if (summary) summary.textContent = data.enabled === false ? t('routing.disabled','已关闭') : data.model || t('status.phone_vision.inherit','继承通用配置');
-  } catch (e) {
-    toast(t('status.phone_vision.load_error', '读取手机自动化视觉覆盖失败: {error}', {error: e.message || e}), 'err');
-  }
-}
-
-async function savePhoneControlVisionParams() {
-  const enabled = document.getElementById('phone-vision-enabled').value;
-  const body = {
-    enabled: enabled === '' ? null : enabled === 'true',
-    model: document.getElementById('phone-vision-model').value.trim(),
-    base_url: document.getElementById('phone-vision-base-url').value.trim(),
-    api_key: document.getElementById('phone-vision-api-key').value.trim(),
-  };
-  try {
-    await api('PUT', '/vision-params/phone-control', body);
-    await loadPhoneControlVisionParams();
-    toast(t('status.phone_vision.saved', '手机自动化视觉覆盖已保存'), 'ok');
-  } catch (e) {
-    toast(t('common.save_failed', '保存失败: {error}', {error: e.message || e}), 'err');
   }
 }
 

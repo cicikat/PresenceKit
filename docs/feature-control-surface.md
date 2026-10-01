@@ -227,11 +227,14 @@ TTS 管理页默认选择当前活跃角色，也可切换到其他角色或全�
 
 视觉模型不进 LLM 的 `routing_profiles`：管理面「模型路由」页用 `GET /image-presets` +
 `PUT/DELETE /image-presets/presets/{name}` + `PUT /image-presets/routes` 管理命名图像连接
-（`kind: vision|ocr`）及用途（聊天图 / 生活记录饮食·购物车·账单 / 手机自动化）。无
-`image_presets` 块时从 `vision:` / `image_recognition:` / `phone_control_vision:` 合成，
-不改运行语义。旧 `GET/PUT /vision-params` 与 `GET/PUT /vision-params/phone-control` 仍写
-legacy 槽位并热重载；手机覆盖空字段继承通用视觉。`/phone_control/status` 继续按解析后的
-`base_url` 与 `model` 判断 `vision_configured`。删除仍被用途引用的连接返回 409。
+（`kind: vision|ocr`）及用途（聊天图 / 生活记录饮食·购物车·账单 / 屏幕 / 摄像头）。无
+`image_presets` 块时从 `vision:` / `image_recognition:` / 旧 `phone_control_vision:` 合成，
+不改运行语义。旧 `GET/PUT /vision-params` 仍写 legacy 槽位并热重载；
+`/vision-params/phone-control` 已退役（手机自动化并入 `screen` 路由）。
+`screen` 是按需看屏幕、影子观测、手机自动化共用的一条路由，可经 `image_presets.fallbacks.screen`
+指定备用连接：主连接连不上（超时/连接失败/5xx 等，规则同文本模型 failover）才换备用，
+模型已回复但内容不合格不换连接重试。`/phone_control/status` 按 `screen` 主连接的
+`base_url` 与 `model` 判断 `vision_configured`。删除仍被用途引用的连接（含仅作备用）返回 409。
 
 工单 264：`video_call` 是独立图像用途，默认未路由；管理面只接受启用的本机 HTTP
 Chat Completions 视觉连接（`localhost`、`127.0.0.1`、`::1`），拒绝远端与 OCR。

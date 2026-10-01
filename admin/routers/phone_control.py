@@ -94,11 +94,11 @@ async def phone_control_status(auth=Depends(require_scopes("chat"))):
 
     - tool_enabled：保留为 Path C 是否暴露 ``phone_control`` 的兼容字段；同时返回
       path_a_enabled/path_c_enabled，二者都由共享 tool_exposure 解析器计算。
-    - vision_configured：core/phone_control/vision_client.get_phone_control_vision_config()
-      合并出来的 base_url + model 是否都非空（不检查 api_key 是否真的有效，只检查有没有填）。
+    - vision_configured：screen 路由主连接（core/phone_control/vision_client.phone_vision_chain()）
+      的 base_url + model 是否都非空（不检查 api_key 是否真的有效，只检查有没有填）。
     """
     from admin.routers.character import _active_character_id
-    from core.phone_control.vision_client import get_phone_control_vision_config
+    from core.phone_control.vision_client import phone_vision_chain
 
     path_a_enabled = False
     path_c_enabled = False
@@ -122,7 +122,8 @@ async def phone_control_status(auth=Depends(require_scopes("chat"))):
         except Exception:
             pass
 
-    vision_cfg = get_phone_control_vision_config()
+    chain = phone_vision_chain()
+    vision_cfg = chain[0]["config"] if chain else {}
     vision_configured = bool(vision_cfg.get("base_url")) and bool(vision_cfg.get("model"))
 
     return {

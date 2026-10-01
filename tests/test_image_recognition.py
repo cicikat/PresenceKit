@@ -116,7 +116,7 @@ async def test_upload_multimage_cache_model_switch_and_reread(sandbox, monkeypat
 async def test_admin_save_read_masking_and_phone_inheritance(tmp_path, monkeypatch):
     from admin.routers import settings_llm as admin
     from core import config_loader, llm_client
-    from core.phone_control.vision_client import get_phone_control_vision_config
+    from core.phone_control.vision_client import phone_vision_chain
     path = tmp_path / "config.yaml"
     path.write_text(yaml.safe_dump({"vision": {"model": "screen-model", "api_key": "vision-secret", "enabled": True,
                                               "base_url": "https://vision.example/v1"}}), encoding="utf-8")
@@ -131,8 +131,11 @@ async def test_admin_save_read_masking_and_phone_inheritance(tmp_path, monkeypat
     assert "ocr-secret" not in str(result)
     await admin.update_image_recognition(admin.ImageRecognitionUpdate(api_key=" "))
     assert read()["image_recognition"]["api_key"] == "ocr-secret"
-    assert get_phone_control_vision_config()["model"] == "screen-model"
-    assert get_phone_control_vision_config()["api_key"] == "vision-secret"
+    # Phone automation no longer has its own override: it follows the screen
+    # route, which an unsaved install inherits from the general vision slot.
+    primary = phone_vision_chain()[0]["config"]
+    assert primary["model"] == "screen-model"
+    assert primary["api_key"] == "vision-secret"
     result = await admin.update_vision_params(admin.VisionParamsUpdate(api_key="", base_url="https://changed.example/v1"))
     assert read()["vision"]["api_key"] == "vision-secret"
     assert "vision-secret" not in str(result)

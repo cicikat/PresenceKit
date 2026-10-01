@@ -12,8 +12,10 @@
 - MCP 页折叠/展开只改当前卡片 DOM，不整页 `loadMcpPage()`；已有内容刷新不再先刷「加载中」。总开关写盘后信号入队即返回。
 - 思考卡开关（生成思考 / 角色心声 / 应用于主动消息 / 气泡优先显示前置独白）与功能开关总览相同，用 `admin-toolbar` + `checkbox-row` 分组；方式与独白预算单独一组 `field`，仍一次保存。
 - 图像连接和用途分离：Presets 列表可新建/编辑/删除命名连接（vision 或 OCR），名称不锁死；
-  用途表每行自选连接（聊天图、生活记录饮食/购物车/账单、手机自动化）。无 `image_presets`
-  块时从 `vision:` / `image_recognition:` / `phone_control_vision:` 合成，语义不变。
+  用途表每行自选连接（聊天图、生活记录饮食/购物车/账单、屏幕、摄像头）。屏幕路由 `screen`
+  是所有截图链路（按需看屏幕、影子观测、手机自动化）共用的一条配置，可另选一个备用连接。
+  无 `image_presets` 块时从 `vision:` / `image_recognition:` / 旧 `phone_control_vision:` 合成，语义不变。
+  手机自动化专用视觉覆盖卡已退役，不再有单独的覆盖入口。
   空密钥保留、OCR 协议决定 URL 字段、删除被引用连接返回 409。配置就绪不宣称服务可用。
 - 图像连接测试：POST /image-recognition/test/{connection}，接受连接名及 general/ocr/phone 别名，admin-only，
   使用已保存设置与本地生成的 TEST 123 图片，25 秒总超时；视觉 SDK 零重试。

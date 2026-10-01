@@ -39,8 +39,8 @@ async def test_status_reports_enabled_when_category_present(monkeypatch):
         lambda char_id: _FakeChar({"tool_categories_path_c": ["info", "phone_control"]}),
     )
     monkeypatch.setattr(
-        "core.phone_control.vision_client.get_phone_control_vision_config",
-        lambda: {"base_url": "https://example.com", "model": "glm-4.6v", "api_key": "k"},
+        "core.phone_control.vision_client.phone_vision_chain",
+        lambda: [{"config": {"base_url": "https://example.com", "model": "glm-4.6v", "api_key": "k"}}],
     )
 
     result = await pc.phone_control_status(auth=None)
@@ -64,8 +64,8 @@ async def test_status_reports_disabled_when_category_missing(monkeypatch):
         lambda char_id: _FakeChar({"model_routing": "default"}),  # 没有 tool_categories
     )
     monkeypatch.setattr(
-        "core.phone_control.vision_client.get_phone_control_vision_config",
-        lambda: {"base_url": "", "model": "", "api_key": ""},
+        "core.phone_control.vision_client.phone_vision_chain",
+        lambda: [{"config": {"base_url": "", "model": "", "api_key": ""}}],
     )
 
     result = await pc.phone_control_status(auth=None)
@@ -90,8 +90,8 @@ async def test_status_handles_character_load_failure(monkeypatch):
 
     monkeypatch.setattr("core.character_loader.load", _raise)
     monkeypatch.setattr(
-        "core.phone_control.vision_client.get_phone_control_vision_config",
-        lambda: {"base_url": "https://example.com", "model": "glm-4.6v"},
+        "core.phone_control.vision_client.phone_vision_chain",
+        lambda: [{"config": {"base_url": "https://example.com", "model": "glm-4.6v"}}],
     )
 
     result = await pc.phone_control_status(auth=None)
@@ -110,8 +110,8 @@ async def test_status_uses_path_c_global_exposure_when_character_has_no_legacy_f
         lambda: {"tool_exposure": {"path_c": {"categories": ["phone_control"]}}},
     )
     monkeypatch.setattr(
-        "core.phone_control.vision_client.get_phone_control_vision_config",
-        lambda: {"base_url": "https://example.com", "model": "vision"},
+        "core.phone_control.vision_client.phone_vision_chain",
+        lambda: [{"config": {"base_url": "https://example.com", "model": "vision"}}],
     )
 
     result = await pc.phone_control_status(auth=None)

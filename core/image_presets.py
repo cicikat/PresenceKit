@@ -195,6 +195,44 @@ def resolve_purpose_chain(purpose: str, config: dict | None = None) -> list[dict
     return chain
 
 
+def screen_vision_chain(config: dict | None = None) -> list[dict]:
+    """The screen route's vision connections, primary first; ``[]`` when unrouted.
+
+    Shared by every screenshot chain (shadow ingress, on-demand tool, phone
+    automation) so none of them keeps its own copy of the route lookup. Gates
+    such as ``visual_perception.enabled`` stay with the caller.
+    """
+    try:
+        chain = resolve_purpose_chain("screen", config)
+    except KeyError:
+        return []
+    return [row for row in chain if row.get("kind") == "vision"]
+
+
+def aiohttp_error_category(exc: BaseException) -> str:
+    """Classify a raw-aiohttp vision failure the way llm_client classifies its own.
+
+    The screenshot chains talk to their models over plain aiohttp rather than the
+    OpenAI SDK, so they cannot reuse ``error_category_for_exception``; without a
+    shared vocabulary the fallback decision would differ per chain.
+    """
+    import asyncio
+
+    import aiohttp
+    from core.llm_protocol import _http_error_category
+
+    if isinstance(exc, (asyncio.TimeoutError, TimeoutError)):
+        return "timeout"
+    status = getattr(exc, "status", None)
+    if isinstance(status, int):
+        return _http_error_category(status)
+    if isinstance(exc, aiohttp.ClientConnectionError):
+        return "connection_error"
+    if isinstance(exc, aiohttp.ClientError):
+        return "protocol_incompatible"
+    return "error"
+
+
 def should_try_fallback(error_category: str) -> bool:
     """Reuse the text-model failover rules so one policy covers both.
 
