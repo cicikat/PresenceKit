@@ -15,7 +15,18 @@ import re
 from copy import deepcopy
 from urllib.parse import urlsplit
 
-from core.config_loader import get_config
+from core import config_loader
+
+
+def get_config() -> dict:
+    """Look the loader up at call time.
+
+    Binding ``config_loader.get_config`` into this module at import time made the
+    repo-wide ``monkeypatch.setattr("core.config_loader.get_config", ...)`` a
+    no-op here: routes resolved against the real sandbox config while the test
+    believed it had supplied one.
+    """
+    return config_loader.get_config()
 
 PURPOSES = (
     "chat_upload",
@@ -25,10 +36,16 @@ PURPOSES = (
     "phone_automation",
     "video_call",
     "video_call_tool",
+    "screen",
 )
-# Camera frames may leave only to a loopback vision model, whichever chain asks:
-# the periodic video-call observation or the on-demand fresh-frame tool.
-LOOPBACK_ONLY_PURPOSES = frozenset({"video_call", "video_call_tool"})
+# Real-world camera frames may leave only to a loopback vision model, whichever
+# chain asks: periodic video-call observation or the on-demand fresh-frame tool.
+CAMERA_PURPOSES = ("video_call", "video_call_tool")
+LOOPBACK_ONLY_PURPOSES = frozenset(CAMERA_PURPOSES)
+# Every screenshot chain — the on-demand tool (desktop and phone), the shadow
+# ingress, and phone automation — shares one route, and may name one fallback.
+SCREEN_PURPOSES = ("screen",)
+FALLBACK_PURPOSES = frozenset(SCREEN_PURPOSES)
 VISION_KINDS = frozenset({"vision"})
 OCR_KINDS = frozenset({"ocr"})
 KINDS = VISION_KINDS | OCR_KINDS
@@ -61,18 +78,38 @@ def catalog(config: dict | None = None) -> dict:
         for purpose, name in stored_routes.items():
             if purpose in PURPOSES and isinstance(name, str) and name in presets:
                 routes[purpose] = name
-        _inherit_video_call_tool(routes, "video_call_tool" in stored_routes)
-        return {"presets": presets, "routes": routes, "synthesized": False}
+        _inherit_routes(routes, stored_routes)
+        fallbacks = _read_fallbacks(block, presets, routes)
+        return {"presets": presets, "routes": routes, "fallbacks": fallbacks,
+                "synthesized": False}
     synthesized = _synthesize(config)
-    _inherit_video_call_tool(synthesized["routes"], False)
-    return {**synthesized, "synthesized": True}
+    _inherit_routes(synthesized["routes"], {})
+    return {**synthesized, "fallbacks": {}, "synthesized": True}
 
 
-def _inherit_video_call_tool(routes: dict, configured: bool) -> None:
-    """An unset on-demand route follows the periodic one; an explicit empty stays off."""
-    if configured or routes.get("video_call_tool"):
-        return
-    routes["video_call_tool"] = routes.get("video_call", "")
+def _inherit_routes(routes: dict, stored_routes: dict) -> None:
+    """An unset derived route follows its parent; an explicit empty stays off."""
+    if "video_call_tool" not in stored_routes and not routes.get("video_call_tool"):
+        routes["video_call_tool"] = routes.get("video_call", "")
+    # phone_automation predates the unified screen route; until the owner saves
+    # the new row once, keep their phone-automation model answering screenshots.
+    if "screen" not in stored_routes and not routes.get("screen"):
+        routes["screen"] = routes.get("phone_automation", "")
+
+
+def _read_fallbacks(block: dict, presets: dict, routes: dict) -> dict:
+    """Second connection per purpose; never the primary, never a non-vision kind."""
+    stored = block.get("fallbacks") if isinstance(block.get("fallbacks"), dict) else {}
+    chosen = {}
+    for purpose, name in stored.items():
+        if purpose not in FALLBACK_PURPOSES or not isinstance(name, str):
+            continue
+        if name not in presets or name == routes.get(purpose):
+            continue
+        if presets[name].get("kind") != "vision":
+            continue
+        chosen[purpose] = name
+    return chosen
 
 
 def snapshot(config: dict | None = None) -> dict:
@@ -91,17 +128,24 @@ def snapshot(config: dict | None = None) -> dict:
             ready = video_call_ready(preset)[0]
         else:
             ready = connection_ready(preset) if preset else False
+        fallback = cat["fallbacks"].get(purpose, "")
         purposes.append({
             "purpose": purpose,
             "connection": name,
             "kind": preset.get("kind", ""),
             "ready": ready,
+            "fallback": fallback,
+            "fallback_ready": connection_ready(cat["presets"].get(fallback)) if fallback else False,
+            "supports_fallback": purpose in FALLBACK_PURPOSES,
+            "group": ("camera" if purpose in CAMERA_PURPOSES
+                      else "screen" if purpose in SCREEN_PURPOSES else "other"),
             "source": "image_presets" if not cat["synthesized"] else "legacy",
         })
     return {
         "synthesized": cat["synthesized"],
         "presets": presets,
         "routes": dict(cat["routes"]),
+        "fallbacks": dict(cat["fallbacks"]),
         "purposes": purposes,
     }
 
@@ -123,6 +167,42 @@ def resolve_purpose(purpose: str, config: dict | None = None) -> dict:
         "ready": connection_ready(preset),
         "synthesized": cat["synthesized"],
     }
+
+
+def resolve_purpose_chain(purpose: str, config: dict | None = None) -> list[dict]:
+    """Ordered connections to try: the primary first, then its fallback if any.
+
+    Screenshot chains walk this instead of calling :func:`resolve_purpose` once,
+    so a local model that is down hands off to a remote one. An empty list means
+    nothing is routed — callers must fail loudly rather than reach for a default.
+    """
+    if purpose not in PURPOSES:
+        raise KeyError(purpose)
+    config = get_config() if config is None else config
+    cat = catalog(config)
+    chain: list[dict] = []
+    try:
+        chain.append({**resolve_purpose(purpose, config), "route_role": "primary"})
+    except KeyError:
+        pass
+    name = cat["fallbacks"].get(purpose)
+    if name and name in cat["presets"]:
+        preset = deepcopy(cat["presets"][name])
+        chain.append({"purpose": purpose, "name": name, "route_role": "fallback",
+                      "kind": preset.get("kind", "vision"), "config": preset,
+                      "ready": connection_ready(preset),
+                      "synthesized": cat["synthesized"]})
+    return chain
+
+
+def should_try_fallback(error_category: str) -> bool:
+    """Reuse the text-model failover rules so one policy covers both.
+
+    A reply the model did produce but we rejected (bad JSON, schema mismatch) is
+    not a reason to pay a second provider for the same image.
+    """
+    from core.llm_failover import FAILOVER_ELIGIBLE
+    return error_category in FAILOVER_ELIGIBLE
 
 
 def resolve_connection(name: str, config: dict | None = None) -> dict:
@@ -188,8 +268,12 @@ def video_call_ready(preset: dict | None) -> tuple[bool, str]:
 
 
 def referencing_purposes(name: str, config: dict | None = None) -> list[str]:
+    """Purposes that would break if ``name`` were deleted, fallbacks included."""
     cat = catalog(config)
-    return [purpose for purpose, conn in cat["routes"].items() if conn == name]
+    refs = [purpose for purpose, conn in cat["routes"].items() if conn == name]
+    refs += [f"{purpose}:fallback" for purpose, conn in cat["fallbacks"].items()
+             if conn == name and purpose not in refs]
+    return refs
 
 
 def _ocr_settings(config: dict | None) -> dict:
@@ -281,6 +365,7 @@ def _default_routes(config: dict, presets: dict) -> dict:
         "phone_automation": phone_name or vision_name or next(iter(presets), ""),
         "video_call": "",
         "video_call_tool": "",
+        "screen": "",
     }
 
 
