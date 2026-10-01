@@ -115,7 +115,13 @@ The admin Model Routing page owns named image connections at
 `PUT /image-presets/routes` (admin scope). `image_presets.presets` holds
 `kind: vision|ocr` connections; `image_presets.routes` maps `chat_upload`,
 `life_diet`, `life_cart`, `life_bill`, `screen` and the camera purposes to those
-names; `image_presets.fallbacks.screen` names an optional second connection.
+names; `image_presets.fallbacks.screen` names an optional second connection
+(`PUT /image-presets/routes` accepts `screen` and `fallbacks: {screen: name}`; an empty
+`screen` keeps the route off, an empty fallback clears it; the screen route and its
+fallback must be `vision` connections and may not be the same). The admin routes table
+groups rows as Camera / Screen / Other; `phone_automation` has no row any more.
+`POST /perception/visual` splits by `source`: `screen` uses the screen chain, `camera`
+only the loopback camera route, never a fallback.
 Every screenshot chain (on-demand screen tool, shadow observation, phone
 automation) shares the `screen` route and walks primary → fallback, falling back
 only on transport failures. When the named block is absent, connections and

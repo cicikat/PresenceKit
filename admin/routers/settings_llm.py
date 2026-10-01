@@ -595,6 +595,9 @@ class ImageRoutesUpdate(BaseModel):
     phone_automation: Optional[str] = None
     video_call: Optional[str] = None
     video_call_tool: Optional[str] = None
+    screen: Optional[str] = None
+    # purpose -> fallback connection name; "" clears it. Only screen purposes accept one.
+    fallbacks: Optional[dict[str, str]] = None
 
 
 @router.get("/image-presets", summary="命名图像连接与用途路由")
@@ -655,18 +658,24 @@ async def delete_image_preset(name: str, auth=Depends(require_scopes("admin"))):
 
 @router.put("/image-presets/routes", summary="保存图像用途到连接的映射")
 async def update_image_routes(body: ImageRoutesUpdate, auth=Depends(require_scopes("admin"))):
-    from core.image_presets import (LOOPBACK_ONLY_PURPOSES, PURPOSES, snapshot,
-                                    video_call_ready)
+    from core.image_presets import (FALLBACK_PURPOSES, LOOPBACK_ONLY_PURPOSES, PURPOSES,
+                                    SCREEN_PURPOSES, snapshot, video_call_ready)
     full_cfg = read_config_file(CONFIG_FILE)
     block = _image_presets_block(full_cfg)
     presets = block.get("presets") or {}
     routes = dict(block.get("routes") or {})
     updates = body.model_dump(exclude_none=True)
+    fallback_updates = updates.pop("fallbacks", {})
     for purpose, name in updates.items():
         if purpose not in PURPOSES:
             raise HTTPException(status_code=422, detail=f"未知用途 {purpose}")
         if purpose in LOOPBACK_ONLY_PURPOSES and not name:
             routes.pop(purpose, None)
+            continue
+        if purpose in SCREEN_PURPOSES and not name:
+            # An explicit empty route stays off; popping it would let the legacy
+            # phone_automation inheritance switch the screen chain back on.
+            routes[purpose] = ""
             continue
         if name not in presets:
             raise HTTPException(status_code=422, detail=f"未知图像连接 {name}")
@@ -674,8 +683,26 @@ async def update_image_routes(body: ImageRoutesUpdate, auth=Depends(require_scop
             ready, reason = video_call_ready(presets[name])
             if not ready:
                 raise HTTPException(status_code=422, detail=f"视频电话只允许本机 HTTP 视觉连接: {reason}")
+        if purpose in SCREEN_PURPOSES and presets[name].get("kind") != "vision":
+            raise HTTPException(status_code=422, detail="屏幕用途需要 vision 类型连接")
         routes[purpose] = name
     block["routes"] = routes
+    if fallback_updates:
+        fallbacks = dict(block.get("fallbacks") or {})
+        for purpose, name in fallback_updates.items():
+            if purpose not in FALLBACK_PURPOSES:
+                raise HTTPException(status_code=422, detail=f"用途 {purpose} 不支持备用连接")
+            if not name:
+                fallbacks.pop(purpose, None)
+                continue
+            if name not in presets:
+                raise HTTPException(status_code=422, detail=f"未知图像连接 {name}")
+            if presets[name].get("kind") != "vision":
+                raise HTTPException(status_code=422, detail="备用连接需要 vision 类型")
+            if name == routes.get(purpose):
+                raise HTTPException(status_code=422, detail="备用连接不能与主连接相同")
+            fallbacks[purpose] = name
+        block["fallbacks"] = fallbacks
     write_config_file(CONFIG_FILE, full_cfg)
     from core import config_loader, llm_client
     config_loader.reload_config()

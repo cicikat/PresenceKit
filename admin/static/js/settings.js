@@ -64,8 +64,18 @@ const IMAGE_PURPOSE_LABELS = {
   phone_automation: () => t('routing.phone_automation', '手机自动化'),
   video_call: () => '视频电话 · 本机摄像头（周期观察）',
   video_call_tool: () => '视频电话 · 按需查看摄像头（角色主动拉新帧）',
+  screen: () => t('routing.screen_purpose', '屏幕截图 · 影子观察、按需看屏幕、手机自动化'),
 };
 const LOOPBACK_ONLY_PURPOSES = ['video_call', 'video_call_tool'];
+// phone_automation is not listed: phone automation now follows the screen route,
+// so the old row would be a control with no consumer.
+const IMAGE_ROUTE_GROUPS = [
+  {id: 'camera', label: () => t('routing.group.camera', '摄像头'), purposes: ['video_call', 'video_call_tool']},
+  {id: 'screen', label: () => t('routing.group.screen', '屏幕'), purposes: ['screen']},
+  {id: 'other', label: () => t('routing.group.other', '其他'), purposes: ['chat_upload', 'life_diet', 'life_cart', 'life_bill']},
+];
+const IMAGE_ROUTE_PURPOSES = IMAGE_ROUTE_GROUPS.flatMap(group => group.purposes);
+const FALLBACK_PURPOSES = ['screen'];
 function toggleVisionEditor(id) {
   const editor = document.getElementById(id);
   editor.hidden = !editor.hidden;
@@ -99,11 +109,12 @@ function renderImageRoutes() {
   if (!root) return;
   const presets = _imagePresetCatalog.presets || {};
   const names = Object.keys(presets);
-  const purposes = ['chat_upload', 'life_diet', 'life_cart', 'life_bill', 'phone_automation', 'video_call', 'video_call_tool'];
   const routes = _imagePresetCatalog.routes || {};
-  root.innerHTML = purposes.map(purpose => {
+  const fallbacks = _imagePresetCatalog.fallbacks || {};
+  const renderRow = purpose => {
     const selected = routes[purpose] || '';
-    const available = LOOPBACK_ONLY_PURPOSES.includes(purpose) ? names.filter(name => {
+    const loopback = LOOPBACK_ONLY_PURPOSES.includes(purpose);
+    const available = loopback ? names.filter(name => {
       const preset = presets[name] || {};
       try {
         const url = new URL(preset.base_url || '');
@@ -112,11 +123,24 @@ function renderImageRoutes() {
           && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
           && !url.username && !url.password && !url.search && !url.hash;
       } catch { return false; }
-    }) : names;
-    const options = (LOOPBACK_ONLY_PURPOSES.includes(purpose) ? '<option value="">关闭 · 未指定本机视觉连接</option>' : '')
+    }) : FALLBACK_PURPOSES.includes(purpose) ? names.filter(name => (presets[name] || {}).kind === 'vision') : names;
+    const offOption = loopback ? '<option value="">关闭 · 未指定本机视觉连接</option>'
+      : FALLBACK_PURPOSES.includes(purpose) ? `<option value="">${t('routing.screen_off', '关闭 · 不分析屏幕截图')}</option>` : '';
+    const options = offOption
       + available.map(name => `<option value="${escapeHtml(name)}" ${name === selected ? 'selected' : ''} data-i18n-skip>${escapeHtml(name)}</option>`).join('');
-    return `<tr><td>${escapeHtml(IMAGE_PURPOSE_LABELS[purpose] ? IMAGE_PURPOSE_LABELS[purpose]() : purpose)}</td><td><select id="image-route-${purpose}">${options}</select></td></tr>`;
-  }).join('');
+    let fallbackCell = '';
+    if (FALLBACK_PURPOSES.includes(purpose)) {
+      const chosen = fallbacks[purpose] || '';
+      const fallbackOptions = `<option value="">${t('routing.fallback.none', '无备用连接')}</option>`
+        + available.filter(name => name !== selected).map(name => `<option value="${escapeHtml(name)}" ${name === chosen ? 'selected' : ''} data-i18n-skip>${escapeHtml(name)}</option>`).join('');
+      fallbackCell = `<div><label>${t('routing.fallback.connection', '备用连接（主连接不可达时才启用）')} <select id="image-fallback-${purpose}">${fallbackOptions}</select></label></div>`;
+    }
+    return `<tr><td>${escapeHtml(IMAGE_PURPOSE_LABELS[purpose] ? IMAGE_PURPOSE_LABELS[purpose]() : purpose)}</td><td><select id="image-route-${purpose}">${options}</select>${fallbackCell}</td></tr>`;
+  };
+  root.innerHTML = IMAGE_ROUTE_GROUPS.map(group =>
+    `<tr class="image-route-group"><th colspan="2" scope="colgroup">${escapeHtml(group.label())}</th></tr>`
+    + group.purposes.map(renderRow).join('')
+  ).join('');
   const chatKind = (presets[routes.chat_upload] || {}).kind;
   const mode = document.getElementById('image-recognition-mode');
   if (mode) mode.value = chatKind === 'ocr' ? 'ocr' : 'vision';
@@ -261,10 +285,22 @@ async function deleteImagePreset(name) {
 }
 async function saveImageRoutes() {
   const body = {};
-  for (const purpose of ['chat_upload', 'life_diet', 'life_cart', 'life_bill', 'phone_automation', 'video_call', 'video_call_tool']) {
+  for (const purpose of IMAGE_ROUTE_PURPOSES) {
     const select = document.getElementById('image-route-' + purpose);
-    if (select && (select.value || LOOPBACK_ONLY_PURPOSES.includes(purpose))) body[purpose] = select.value;
+    const clearable = LOOPBACK_ONLY_PURPOSES.includes(purpose) || FALLBACK_PURPOSES.includes(purpose);
+    if (select && (select.value || clearable)) body[purpose] = select.value;
   }
+  const fallbacks = {};
+  for (const purpose of FALLBACK_PURPOSES) {
+    const select = document.getElementById('image-fallback-' + purpose);
+    if (select) fallbacks[purpose] = select.value;
+  }
+  // A fallback equal to the (possibly just changed) primary is meaningless; clear it
+  // rather than let the save bounce with a 422 the owner did not cause.
+  for (const purpose of FALLBACK_PURPOSES) {
+    if (fallbacks[purpose] && fallbacks[purpose] === body[purpose]) fallbacks[purpose] = '';
+  }
+  if (Object.keys(fallbacks).length) body.fallbacks = fallbacks;
   try {
     await api('PUT', '/image-presets/routes', body);
     await loadImageConnections();
