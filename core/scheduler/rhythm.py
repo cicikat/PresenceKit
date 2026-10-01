@@ -9,8 +9,10 @@ from datetime import date, datetime, time as dt_time, timedelta
 LOGICAL_DAY_CUTOFF_HOUR = 5
 
 # TODO(policy.yaml): move presence thresholds to scheduler policy.
-PRESENCE_FRESHNESS_SECONDS = 90
-PRESENCE_IDLE_THRESHOLD_SECONDS = 300
+from core.memory.realtime_state import (  # 统一在场口径，见 realtime_state 常量说明
+    IDLE_LEFT_THRESHOLD as PRESENCE_IDLE_THRESHOLD_SECONDS,
+    PRESENCE_FRESHNESS_SECONDS,
+)
 
 # TODO(policy.yaml): move nightly rhythm window end to scheduler policy.
 NIGHT_WINDOW_END_HOUR = 2

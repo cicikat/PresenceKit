@@ -67,7 +67,7 @@ core/scheduler/triggers/         ← 各触发器独立文件
     spend_monitor.py             API 余额每日检测；仅生成充值提醒和台账，绝不自动付款
     watch.py                     Apple Watch 心率 / 睡眠事件
     reminders.py                 到点备忘录 proposer
-    sensor_aware.py              sensor 实时状态 → 主动开口（默认关闭）
+    sensor_aware.py              sensor 实时状态 → 主动开口（代码默认关闭；`config.example.yaml` 与实际部署为开启，见下文 sensor_aware 一节）
     overflow.py                  多种真实理由累计溢出后主动联系
     dream_exit.py                出梦后由做梦角色主动开口一次
     letter_writer.py             情感事件驱动的真实邮件来信
@@ -473,6 +473,22 @@ R2-C 后的状态：
 - **可观测**：`get_queue_snapshot(uid)` 返回当前队列快照，含 `enqueue_ts` 和 `age_secs`；
   候选序列化中新增 `force_send` 和 `deferred_age_secs` 字段，写入 `gating_shadow.jsonl`。
 
+### 键鼠在场信号融入 gating（工单 E3）
+
+`gating._decide()` 的 `user_active` 不再只看聊天（`_user_active_recently()` 120s），
+还融合桌面键鼠在场（`gating._desk_busy_signal()`，复用 `presence_model.derive_presence_state`）：
+
+| 条件 | 结果 |
+|---|---|
+| 键鼠数据新鲜且 physical=present、归因 `PRESENT_IDLE`（2~30 分钟前聊过、此刻仍在操作） | 「在场但在忙」，等同 `user_active`，走既有 active_window / defer 队列 |
+| 归因 `FOCUSED_SILENT`（聊天沉默 >=30 分钟、仍在操作） | 不拦截 |
+| 无数据或快照 >90s（桌面未开、macOS/Linux 未采集） | `presence=unknown`，只按聊天信号判定，不额外放行或拦截 |
+
+观测：`gating_shadow.jsonl` 每个候选带 `desk_presence`、`desk_attribution`、`user_active_reason`（`chat`/`desk_busy`/null）。
+在场口径统一在 `core/memory/realtime_state.py` 常量：新鲜度 90s（`get_presence()`/`rhythm.is_present()`/`sensor_events.tick()` 共用）、
+active<60s、away>=300s；`get_presence()` 在无数据/过期时返回 `"unknown"` 而非 `"active"`。
+键鼠历史仅存内存（<=600s、<=40 条，每 30s 一个窗口），绝不落盘。`sensor_aware` 事件链未改动。
+
 ### 当前配置表（defer 触发器）
 
 | 触发器 | max_defer_age_secs | on_defer_expire |
@@ -837,7 +853,7 @@ active window 决策已完全收入 `gating._decide()`（R2-C 后），以 `POLI
 | `memory_consolidation` | scheduler poll；仅配置夜窗与空闲阈值满足时 | 维护 | memory_consolidation | 默认关闭。为同一角色创建/恢复 `memory.consolidation` Task 与 Work Session，按 scope 公平和日预算处理 dossier 证据；不发言、不写旧记忆链，失败退避，未知结果禁止盲重放。 |
 | `event_edge_proposer` | 60s scheduler poll; per-scope configurable cooldown | 维护 | event_edge_proposer | 默认关闭。仅发送有限 reality event 窗口给独立模型类别，写未审核候选边和预算台账；不发言、不进 pipeline、不改 recall 或事实。 |
 | `private_exchange` | 2h（+ 独立每日 `daily_limit` 会话预算，默认1对） | 维护 | private_exchange | 角色间私下往来（深夜时段，Brief 86）：pair 选择纯规则零 LLM，单次会话 ≤`max_turns`（默认6）次轻量调用；产物只回流 char_relations（既有6h冷却路径）+ 12h presence 提示，transcript 全文不入五大记忆库/event_log/向量库；不发言，stamp_trigger |
-| `sensor_aware`（tick） | 30s（可配置） | 低 | sensor_aware | sensor 实时状态主动开口，默认关闭 |
+| `sensor_aware`（tick） | 30s（可配置） | 低 | sensor_aware | sensor 实时状态主动开口；代码默认关闭，example 与实际部署均为 `enabled: true` |
 | `hr_high` | 30min | 低 | watch | 心率>100 提醒 |
 | `hr_critical` | 1h | **高** | watch | 心率>120 告警 |
 | `sleep_end` | 2h | 低 | watch | 睡眠结束感知；`admin/routers/watch.py` 合并睡眠片段后回到 `watch.on_watch_event("sleep_end", ...)` |
@@ -1026,7 +1042,7 @@ sensor 实时状态感知触发器，是"他主动开口"链路的最终出口�
 |---|---|
 | 配置位置 | `scheduler.sensor_aware.enabled` |
 | tick 间隔 | `scheduler.sensor_aware.tick_interval_seconds`（默认 30） |
-| 默认状态 | **disabled**（`enabled: false`） |
+| 默认状态 | 代码默认 **disabled**（`loop.py` 缺省 `False`）；`config.example.yaml` 为 `enabled: true`，实际部署已确认为 `true`。新部署若未沿用 example 才需手动开启 |
 | 启用方式 | `config.yaml` 设置 `enabled: true`，重启服务 |
 | 全局发言冷却 | 先由 `proactive_ledger.can_send("sensor_aware")` 做只读闸门；信号入队另有 15 分钟 dedupe bucket。真正送达后由 autonomy `talk_gate.send()` 记账 `record_send("autonomy")` |
 | 所在文件 | `core/scheduler/triggers/sensor_aware.py` |

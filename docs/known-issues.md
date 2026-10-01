@@ -1,5 +1,14 @@
 # docs/known-issues.md — 已知问题与技术债
 
+## 键鼠在场信号三个采集缺口与 edit_hint（工单 E，open）
+
+1. 桌面与手机共写同一个 `realtime_state` 内存字典，无设备维度，最后写入者赢；键鼠历史与 gating 在场判定会被另一端覆盖。
+2. Windows `idle_seconds` 是桌面进程内对 `device_query` 100Hz 轮询的计时，不是系统级 `GetLastInputInfo`，进程刚启动时视为刚活跃。
+3. macOS / Linux 桌面端未采集键鼠，等同无数据：`get_presence()` 返回 `unknown`，gating 回退为纯聊天信号。
+4. 桌面 publisher 从不发送 `input.edit_hint`，且不上报退格数，后端无法推导「反复修改（deleting）」。层 3.9 现用后端内存键鼠短历史推导「持续打字」补位；`edit_hint` 分支保留为兼容（字段存在才用），`editing` / `deleting` 仍是桌面端未实现。
+
+跨仓部分见 `docs/three-repo-interface-catalog.md` §3.3。
+
 ## 声线印象 v1 未经真实录音核对（2026-09-30，observe）
 
 `unsteady` / `breathy` / `low_toned` 的阈值只在合成信号上标定，工单要求的"故意压低嗓子 / 气声 / 起伏各说

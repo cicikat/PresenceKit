@@ -318,13 +318,63 @@ def _collect_native_proposals(ctx: dict) -> list[TriggerProposal]:
     return proposals
 
 
+def _desk_busy_signal(now: Optional[float] = None) -> dict:
+    """键鼠在场信号 -> 「在场但在忙」判定（工单 E3）。
+
+    复用 presence_model.derive_presence_state 的归因，不在 gating 内另造一套：
+      - PRESENT_IDLE 且 physical=present：刚聊过（2~30 分钟前）且此刻仍在键鼠操作
+        -> 视为 user_active（别插话，defer 类触发器走既有 defer 队列，到龄会 force_send）
+      - FOCUSED_SILENT（聊天沉默 >=30 分钟且在操作）：不拦截，长静默后的主动开口仍合适
+      - 键鼠无数据 / 快照过期（桌面未开、macOS/Linux 无采集）：busy=False，
+        完全按聊天信号判定（fail-closed：不因缺数据而额外放行或拦截）
+    返回 dict 供候选审计落盘（gating_shadow_log）。
+    """
+    from core.memory import realtime_state
+
+    current = time.time() if now is None else float(now)
+    presence = realtime_state.get_presence(current)
+    result: dict = {"presence": presence, "attribution": None, "busy": False}
+    if presence == realtime_state.PRESENCE_UNKNOWN:
+        return result
+    snap = realtime_state.get()
+    if snap is None:
+        return result
+    try:
+        from core.scheduler import loop as _loop
+        from core.scheduler.presence_model import (
+            Attribution, PhysicalPresence, derive_presence_state,
+        )
+
+        last_chat = float(getattr(_loop, "_last_user_message_time", 0.0) or 0.0)
+        state = derive_presence_state(
+            idle_seconds=int(snap.get("input", {}).get("idle_seconds", 0)),
+            continuous_at_desk_seconds=realtime_state.get_continuous_at_desk_seconds(),
+            # 本进程尚无聊天记录 -> 视为长静默（FOCUSED_SILENT，不拦截）
+            last_chat_at=last_chat if last_chat > 0 else current - 86400,
+            last_proactive_at=None,
+            now=current,
+        )
+        result["attribution"] = state.attribution.value
+        result["busy"] = (
+            state.physical == PhysicalPresence.PRESENT
+            and state.attribution == Attribution.PRESENT_IDLE
+        )
+    except Exception as exc:
+        logger.warning("[gating] desk presence derive failed: %s", exc)
+    return result
+
+
 def _decide(uid: str, proposals: list[TriggerProposal]) -> tuple[Optional[TriggerProposal], str, list[dict]]:
     # Deferred imports to avoid circular dependency (gating ↔ loop / dnd).
     from core.scheduler.loop import _user_active_recently
     from core.scheduler.triggers.dnd import is_dnd
 
     state = get_current_state(uid)
-    user_active = _user_active_recently()
+    chat_active = _user_active_recently()
+    desk = _desk_busy_signal()
+    user_active = chat_active or bool(desk["busy"])
+    user_active_reason = "chat" if chat_active else ("desk_busy" if desk["busy"] else None)
+    desk_audit = {**desk, "user_active_reason": user_active_reason}
     dnd_active = is_dnd(uid)
 
     # ── proactive=off 闸门（Brief 29 · 3.3）：活跃角色卡关闭主动发言时，拒绝全部
@@ -333,7 +383,10 @@ def _decide(uid: str, proposals: list[TriggerProposal]) -> tuple[Optional[Trigge
     from core.character_loader import is_proactive_disabled
     if proposals and is_proactive_disabled():
         candidates = [
-            _serialize_candidate(p, state, uid=uid, user_active=user_active, dnd_active=dnd_active)
+            _serialize_candidate(
+                p, state, uid=uid, user_active=user_active, dnd_active=dnd_active,
+                desk_audit=desk_audit,
+            )
             for p in proposals
         ]
         return None, "proactive_off", candidates
@@ -351,6 +404,7 @@ def _decide(uid: str, proposals: list[TriggerProposal]) -> tuple[Optional[Trigge
             user_active=user_active,
             dnd_active=dnd_active,
             force_send_names=force_send_names,
+            desk_audit=desk_audit,
         )
         for p in proposals
     ]
@@ -537,6 +591,7 @@ def _serialize_candidate(
     user_active: bool = False,
     dnd_active: bool = False,
     force_send_names: frozenset[str] | None = None,
+    desk_audit: dict | None = None,
 ) -> dict:
     required = [_state_value(s) for s in proposal.requires_state]
     state_allowed = (
@@ -575,6 +630,10 @@ def _serialize_candidate(
         "dnd_blocked": dnd_blocked,
         "force_send": _force_send,
         "deferred_age_secs": deferred_age_secs,
+        # 工单 E3：键鼠在场信号对 user_active 的贡献（无数据时 presence=unknown、busy=False）
+        "desk_presence": (desk_audit or {}).get("presence"),
+        "desk_attribution": (desk_audit or {}).get("attribution"),
+        "user_active_reason": (desk_audit or {}).get("user_active_reason"),
     }
 
 

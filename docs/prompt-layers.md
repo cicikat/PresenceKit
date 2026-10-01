@@ -46,7 +46,7 @@ Reality `1_system_prompt` 绑定当前角色，并使用用户所选称谓（默
 | `3.7_sensor` | 手机传感器（步数/电量/位置/亮屏次数，以角色旁白注入，无方括号标签/时间戳/数据来源描述） | 当天有数据即注（无 tag 门控） | `health_state.phone_sensor_today`（uid-global） |
 | `3.8_activity` | 屏幕活动快照（以角色旁白注入，无方括号标签；内容来自 activity_snapshot 的类别字段，不含原始应用名） | tagged（见下） | `data/runtime/characters/{char_id}/inner/activity_snapshot.json`（TTL 5分钟） |
 | `3.8_growth_self` | 角色自身近期兴趣、等级与最新心得；软提示，不作数据播报 | tagged：成长 domain 或直接询问角色近况 | `core/growth/interest_state.py` + `core/growth/notes.py`（只读、失败不注入） |
-| `3.9_screen_awareness` | 桌面实时感知摘要（粗粒度应用/活动类别 + 模糊编辑状态；不注入窗口标题或屏幕原文） | 活动相关 tagged 快照 5 分钟内，或用户活跃且快照 3 分钟内 | `core.memory.realtime_state`（纯内存，重启清零） |
+| `3.9_screen_awareness` | 桌面实时感知摘要（粗粒度应用/活动类别 + 近 5 分钟键鼠频率的定性短语（如「近几分钟在快速打字」「只是偶尔动一下鼠标」，不含裸数字）；不注入窗口标题或屏幕原文。桌面端不发 `edit_hint`，键鼠短语由后端内存短历史推导，仅在 idle<120s 且无 `edit_hint` 时出现；注入条件不变，不常驻） | 活动相关 tagged 快照 5 分钟内，或用户活跃且快照 3 分钟内 | `core.memory.realtime_state`（纯内存，重启清零；键鼠历史 <=600s 且 <=40 条，绝不落盘） |
 | `5_profile` | 用户画像 core（名字/位置/职业/宠物；不含兴趣或自由文本） | 白名单且总长度 ≤360 字符 | `user_profile.select_for_prompt()` |
 | `5_profile_pref` | 用户偏好/习惯类事实（pref.*/habit/health tag） | recency/tag 命中；最多 6 条且总长度 ≤360 字符 | `user_profile.select_for_prompt()` |
 | `5.1_user_facts` | 跨角色全局用户事实（uid-only，与角色主观记忆无关，标题明确区分不是角色记忆） | `user_facts_text` 非空 | `core/memory/user_facts.py` → `format_for_prompt()` |

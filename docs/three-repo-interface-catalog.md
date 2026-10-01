@@ -364,7 +364,8 @@ Flutter/Android 字段或设置面。Agent Runtime 是同一角色的 durable / 
 | `POST /sensor/push` | 手机 → 后端 | `BackendClient.pushSensorData()` | `current`；步数、电量、亮屏次数等 objective sensor，写 health state，不是 `/sensor/realtime` |
 | `GET /sensor/status`、`GET /sensor/today` | 后端 → 客户端 | 管理面/诊断 | `current`；手机端不应把它们当长期记忆写入口 |
 | `POST /sensor/realtime` | 桌面/手机 → 后端 | 桌面 Rust sensor、Flutter screen context | `current`；实时短期上下文，服务端再次敏感窗口 fail-closed |
-| `GET /sensor/realtime` | 后端 → 客户端 | 桌面、手机 | `current`；无快照返回 `{ "_no_data": true }` |
+| `GET /sensor/realtime` | 后端 → 客户端 | 桌面、手机 | `current`；无快照返回 `{ "_no_data": true }`；快照超过 90s 时 `presence` 为 `"unknown"`（客户端枚举需容错） |
+| 键鼠在场采集缺口 | 桌面/手机 → 后端 | 桌面 Rust sensor | `open`：(1) 桌面与手机共写同一内存字典、无设备维度；(2) Windows `idle_seconds` 为进程内计时而非系统级；(3) macOS/Linux 未采集；(4) 桌面不发 `edit_hint`/退格数。后端已按无数据 fail-closed 处理，见 `docs/known-issues.md` |
 | `GET /sensor/behavior/status` | 后端 → 客户端 | 手机能力检查、管理面 | `current`；只读最近行为裁决 |
 | `/watch/event`、`/watch/status` | POST/GET | Watch/管理面 | `current`；外部事件进入后端状态/观测链 |
 | `/perception/visual`、`/perception/visual/config`、`/perception/visual-trace` | GET/POST | 桌面视觉 sidecar、管理面 | `current`；原图不进 prompt/记忆，是否上传受本地 opt-in 与后端开关共同约束 |

@@ -203,7 +203,7 @@ def tick() -> list[dict]:
         return []
 
     now = time.time()
-    if now - snap.get("received_at", 0) > 90:
+    if now - snap.get("received_at", 0) > realtime_state.PRESENCE_FRESHNESS_SECONDS:
         return []
 
     presence  = realtime_state.get_presence()

@@ -238,6 +238,10 @@ def _format_realtime_awareness(tags: set[str], *, now: float | None = None) -> s
             parts.append("像是在反复修改")
         elif idle_seconds >= 120:
             parts.append("暂时停下来了")
+        else:
+            # 桌面端目前不发 edit_hint（known-issues）；改由后端内存短历史推导的
+            # 定性键鼠频率短语补位（近 5 分钟，纯内存，无裸数字）。
+            parts.extend(realtime_state.describe_input_activity(current_time))
 
         return "，".join(parts)
     except Exception as exc:
