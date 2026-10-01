@@ -92,14 +92,14 @@ function renderImageConnections() {
   const presets = _imagePresetCatalog.presets || {};
   const names = Object.keys(presets);
   if (!names.length) {
-    root.innerHTML = `<tr><td colspan="6">${t('routing.load_unavailable','尚未读取或读取失败')}</td></tr>`;
+    root.innerHTML = `<tr><td colspan="7">${t('routing.load_unavailable','尚未读取或读取失败')}</td></tr>`;
     return;
   }
   root.innerHTML = names.map(name => {
     const d = presets[name] || {};
     const ready = _imagePresetReady(d);
     const kindLabel = d.kind === 'ocr' ? 'OCR' : t('routing.kind.vision', '视觉理解');
-    return `<tr><td data-i18n-skip>${escapeHtml(name)}</td><td>${escapeHtml(kindLabel)}</td><td>${escapeHtml(d.provider || '—')}</td><td data-i18n-skip>${escapeHtml(d.model || '—')}</td><td>${ready ? t('routing.ready_unchecked','已配置 · 未测试') : t('routing.not_ready','未配置或未启用')}</td><td><button class="btn btn-ghost btn-sm" data-action="editImagePreset" data-action-args='${JSON.stringify([name])}'>${t('common.edit','编辑')}</button><button class="btn btn-ghost btn-sm" data-action="testImageConnection" data-action-args='${JSON.stringify([name])}' ${ready ? '' : 'disabled'}>${t('routing.test_saved','测试已保存连接')}</button><button class="btn btn-ghost btn-sm" data-action="deleteImagePreset" data-action-args='${JSON.stringify([name])}'>${t('common.delete','删除')}</button><span id="vision-test-${escapeHtml(name)}" role="status"></span></td></tr>`;
+    return `<tr><td data-i18n-skip>${escapeHtml(name)}</td><td>${escapeHtml(kindLabel)}</td><td>${escapeHtml(d.provider || '—')}</td><td data-i18n-skip>${escapeHtml(d.model || '—')}</td><td>${d.is_local ? `<span class="badge" title="${escapeHtml(t('routing.is_local_badge_title','已手动标记为本地模型'))}">${escapeHtml(t('routing.is_local_badge','本地'))}</span>` : `<span style="opacity:.6">${escapeHtml(t('routing.is_cloud_badge','云端'))}</span>`}</td><td>${ready ? t('routing.ready_unchecked','已配置 · 未测试') : t('routing.not_ready','未配置或未启用')}</td><td><button class="btn btn-ghost btn-sm" data-action="editImagePreset" data-action-args='${JSON.stringify([name])}'>${t('common.edit','编辑')}</button><button class="btn btn-ghost btn-sm" data-action="testImageConnection" data-action-args='${JSON.stringify([name])}' ${ready ? '' : 'disabled'}>${t('routing.test_saved','测试已保存连接')}</button><button class="btn btn-ghost btn-sm" data-action="deleteImagePreset" data-action-args='${JSON.stringify([name])}'>${t('common.delete','删除')}</button><span id="vision-test-${escapeHtml(name)}" role="status"></span></td></tr>`;
   }).join('');
   bindPageActions(root);
   renderImageRoutes();
@@ -170,6 +170,56 @@ function _toggleImageKindFields() {
   if (vision) vision.hidden = kind !== 'vision';
   if (ocr) ocr.hidden = kind !== 'ocr';
   if (kind === 'ocr') renderOcrProtocol();
+  refreshImageLocalHint(false);
+}
+function _imageEditorAddress() {
+  const kind = document.getElementById('image-preset-kind')?.value || 'vision';
+  if (kind === 'ocr') {
+    return (document.getElementById('ocr-protocol')?.value === 'chat_completions'
+      ? document.getElementById('ocr-base-url')?.value : document.getElementById('ocr-endpoint')?.value) || '';
+  }
+  return document.getElementById('vision-base-url')?.value || '';
+}
+function _isLoopbackAddress(address) {
+  try {
+    const host = new URL(String(address || '').trim()).hostname;
+    return ['localhost', '127.0.0.1', '[::1]', '::1'].includes(host);
+  } catch { return false; }
+}
+// Loopback inference is only a hint: it seeds the default for new connections and
+// warns on mismatch. It never blocks saving and never overrides a stored value.
+function refreshImageLocalHint(fromAddressInput) {
+  const box = document.getElementById('image-preset-is-local');
+  const warn = document.getElementById('image-preset-is-local-warn');
+  if (!box) return;
+  const address = _imageEditorAddress().trim();
+  const loopback = _isLoopbackAddress(address);
+  if (fromAddressInput && !_editingImagePreset && !box.dataset.touched) box.checked = loopback;
+  let message = '';
+  if (address) {
+    if (box.checked && !loopback) message = t('routing.is_local_warn_remote', '已勾选本地，但地址不是 localhost / 127.0.0.1。若是局域网自建服务可忽略。');
+    else if (!box.checked && loopback) message = t('routing.is_local_warn_loopback', '地址是本机回环，但未勾选本地。若经反向代理转发到云端可忽略。');
+  }
+  if (warn) { warn.textContent = message; warn.hidden = !message; }
+}
+function _bindImageLocalHint() {
+  const box = document.getElementById('image-preset-is-local');
+  if (box && !box.dataset.bound) {
+    box.addEventListener('change', () => { box.dataset.touched = 'true'; refreshImageLocalHint(false); });
+    box.dataset.bound = 'true';
+  }
+  for (const id of ['vision-base-url', 'ocr-base-url', 'ocr-endpoint']) {
+    const el = document.getElementById(id);
+    if (el && !el.dataset.localBound) {
+      el.addEventListener('input', () => refreshImageLocalHint(true));
+      el.dataset.localBound = 'true';
+    }
+  }
+  const protocol = document.getElementById('ocr-protocol');
+  if (protocol && !protocol.dataset.localBound) {
+    protocol.addEventListener('change', () => refreshImageLocalHint(false));
+    protocol.dataset.localBound = 'true';
+  }
 }
 function openCreateImagePreset() {
   _editingImagePreset = null;
@@ -192,7 +242,11 @@ function openCreateImagePreset() {
   document.getElementById('ocr-base-url').value = '';
   document.getElementById('ocr-endpoint').value = '';
   document.getElementById('ocr-api-key').value = '';
+  _bindImageLocalHint();
+  const localBox = document.getElementById('image-preset-is-local');
+  if (localBox) { localBox.checked = false; delete localBox.dataset.touched; }
   _toggleImageKindFields();
+  refreshImageLocalHint(false);
   name?.focus();
 }
 function editImagePreset(name) {
@@ -221,7 +275,11 @@ function editImagePreset(name) {
     document.getElementById('vision-api-key').value = '';
     onVisionProviderChange();
   }
+  _bindImageLocalHint();
+  const localBox = document.getElementById('image-preset-is-local');
+  if (localBox) { localBox.checked = preset.is_local === true; localBox.dataset.touched = 'true'; }
   _toggleImageKindFields();
+  refreshImageLocalHint(false);
   editor?.querySelector('input,select,button')?.focus();
 }
 async function saveImagePreset() {
@@ -229,7 +287,7 @@ async function saveImagePreset() {
   let name = nameInput.value.trim();
   if (!name) { toast(t('routing.connection_name_required', '连接名不能为空'), 'err'); return; }
   const kind = document.getElementById('image-preset-kind').value;
-  const body = {kind};
+  const body = {kind, is_local: !!document.getElementById('image-preset-is-local')?.checked};
   if (kind === 'ocr') {
     body.provider = document.getElementById('ocr-provider').value.trim();
     body.api_protocol = document.getElementById('ocr-protocol').value;

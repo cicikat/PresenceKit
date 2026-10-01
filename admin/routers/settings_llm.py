@@ -585,6 +585,7 @@ class ImagePresetUpsert(BaseModel):
     base_url: Optional[str] = None
     endpoint_url: Optional[str] = None
     api_key: Optional[str] = None
+    is_local: Optional[bool] = None
 
 
 class ImageRoutesUpdate(BaseModel):

@@ -4,7 +4,7 @@
 <section class="card">
   <div class="card-header"><h3 data-i18n="routing.image_presets">Presets · 图像连接</h3><div><button class="btn btn-primary btn-sm" data-action="openCreateImagePreset" data-i18n="routing.image_preset.new">+ 新建连接</button><button class="btn btn-ghost btn-sm" data-action="loadImageConnections" data-i18n="common.refresh">刷新</button></div></div>
   <p data-i18n="routing.image_presets_hint">命名图像连接。vision 负责理解图片，OCR 负责提取文字。用途表可把连接指派给聊天图、生活记录、屏幕截图（含手机自动化）或本机摄像头。</p>
-  <div class="tbl-wrap"><table><thead><tr><th data-i18n="routing.connection">连接</th><th data-i18n="routing.kind">类型</th><th>Provider</th><th data-i18n="status.vision.model">模型</th><th data-i18n="common.status">状态</th><th data-i18n="common.actions">操作</th></tr></thead><tbody id="vision-connections-body"></tbody></table></div>
+  <div class="tbl-wrap"><table><thead><tr><th data-i18n="routing.connection">连接</th><th data-i18n="routing.kind">类型</th><th>Provider</th><th data-i18n="status.vision.model">模型</th><th data-i18n="routing.is_local">本地模型</th><th data-i18n="common.status">状态</th><th data-i18n="common.actions">操作</th></tr></thead><tbody id="vision-connections-body"></tbody></table></div>
       <div class="vision-editor" id="vision-image-editor" hidden>
         <div class="card-header"><h3 id="image-preset-editor-title" data-i18n="status.vision.title">视觉模型配置（图片识别）</h3><button class="btn btn-primary btn-sm" data-action="saveImagePreset" data-i18n="common.save">保存</button></div>
         <div class="form-row"><label class="field"><span data-i18n="routing.connection_name">连接名</span><input id="image-preset-name" type="text" autocomplete="off" placeholder="本地连接别名，如 local_vision" data-i18n-placeholder="routing.connection_placeholder"><small data-i18n="routing.connection_hint">内部别名：字母开头，最多 64 字符；完整模型 ID 填在下方「模型」。</small></label><label class="field"><span data-i18n="routing.kind">类型</span><select id="image-preset-kind"><option value="vision" data-i18n="routing.kind.vision">视觉理解</option><option value="ocr">OCR</option></select></label></div>
@@ -19,6 +19,7 @@
         <div class="form-row"><label class="field" id="ocr-endpoint-field"><span data-i18n="settings_center.endpoint_url">Endpoint URL（完整地址）</span><input id="ocr-endpoint" type="url"></label><label class="field" id="ocr-base-field" hidden><span>Base URL</span><input id="ocr-base-url" type="url"></label><label class="field"><span>API Key <small id="ocr-key-state"></small></span><input id="ocr-api-key" type="password" autocomplete="off" placeholder="留空则保留已有 API Key"></label></div>
         <p>请求地址：<code id="ocr-request-url" class="settings-url">-</code></p>
         </div>
+        <div class="form-row"><label class="field"><span data-i18n="routing.is_local">本地模型</span><input type="checkbox" id="image-preset-is-local"><small data-i18n="routing.is_local_hint">手动声明：此连接运行在你自己的机器或局域网内，图像不会发往第三方云端。默认未勾选（按云端处理）。</small><small id="image-preset-is-local-warn" class="warn" role="status" hidden></small></label></div>
       </div>
       <select id="image-recognition-mode" hidden><option value="vision">vision</option><option value="ocr">ocr</option></select>
       <button hidden data-action="saveImageRoute" type="button"></button>

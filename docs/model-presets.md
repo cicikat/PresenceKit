@@ -130,6 +130,17 @@ routes are synthesized from `vision:`, `image_recognition:` and the legacy
 endpoint and card are retired) so runtime stays unchanged. Legacy `GET/PUT /image-recognition` and `GET/PUT /vision-params`
 remain for the original slots and still seed synthesis. OCR is independent of
 screen/`use_computer_vision`; screen automation never inherits OCR.
+Each image connection also carries an explicit privacy attribution
+`image_presets.presets.{name}.is_local` (bool, default `false`, fail-closed: any
+non-`true` value reads as cloud; historical connections are never auto-promoted).
+It is a hand-ticked declaration that the connection runs on the user's own machine or
+LAN, and is distinct from the text preset's `provider_kind: local` (a parameter
+compatibility profile). Loopback URL inference is only an admin-UI hint (new connections
+default the box from the address; a mismatch shows a non-blocking warning). Read it
+via `GET /image-presets`: `presets.{name}.is_local`, or `purposes[].is_local` (incl. `screen`) and `purposes[].fallback_is_local` for the fallback connection (false when none), for the
+connection a purpose resolves to; in code use `catalog()["presets"][name]["is_local"]`
+or `resolve_purpose(purpose)["config"]["is_local"]` (fallback connections must be
+resolved and judged separately). No runtime consumer yet (work order C is the first).
 The UI follows the model connection fields: provider, explicit protocol, model, address,
 and write-only key. Provider selection does not lock or overwrite an edited address.
 

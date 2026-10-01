@@ -236,6 +236,13 @@ TTS 管理页默认选择当前活跃角色，也可切换到其他角色或全�
 模型已回复但内容不合格不换连接重试。`/phone_control/status` 按 `screen` 主连接的
 `base_url` 与 `model` 判断 `vision_configured`。删除仍被用途引用的连接（含仅作备用）返回 409。
 
+图像连接新增显式隐私标记 `image_presets.presets.{name}.is_local`（bool，默认 false，
+fail-closed）：管理面「模型路由」连接编辑器手动勾选「本地模型」，连接列表显示「本地 / 云端」
+标识；新建连接时按 loopback 地址给默认勾选，勾选与地址不一致仅给提示、不阻断保存，已有连接
+升级后保持 false。`GET /image-presets` 的 `presets.{name}.is_local` 与 `purposes[].is_local`（含 screen）与 `purposes[].fallback_is_local`（fallback 连接单独判定，无 fallback 为 false）
+可读。本字段目前无运行时消费方，不改变任何识图行为；与文本 preset 的 `provider_kind: local`
+无关。
+
 工单 264：`video_call` 是独立图像用途，默认未路由；管理面只接受启用的本机 HTTP
 Chat Completions 视觉连接（`localhost`、`127.0.0.1`、`::1`），拒绝远端与 OCR。
 `GET /video-call/state`（chat）返回 effective 与阻断原因；`GET /observability/video-call`

@@ -139,6 +139,8 @@ def snapshot(config: dict | None = None) -> dict:
             "supports_fallback": purpose in FALLBACK_PURPOSES,
             "group": ("camera" if purpose in CAMERA_PURPOSES
                       else "screen" if purpose in SCREEN_PURPOSES else "other"),
+            "is_local": bool(preset.get("is_local")) if preset else False,
+            "fallback_is_local": bool(cat["presets"].get(fallback, {}).get("is_local")) if fallback else False,
             "source": "image_presets" if not cat["synthesized"] else "legacy",
         })
     return {
@@ -469,6 +471,7 @@ def _normalize_preset(payload: dict) -> dict:
             "base_url": str(payload.get("base_url") or ""),
             "endpoint_url": str(payload.get("endpoint_url") or ""),
             "api_key": str(payload.get("api_key") or ""),
+            "is_local": _as_is_local(payload.get("is_local")),
         }
     protocol = payload.get("api_protocol") or "chat_completions"
     if protocol not in _VISION_PROTOCOLS:
@@ -482,7 +485,16 @@ def _normalize_preset(payload: dict) -> dict:
         "model": str(payload.get("model") or ""),
         "base_url": str(payload.get("base_url") or ""),
         "api_key": str(payload.get("api_key") or ""),
+        "is_local": _as_is_local(payload.get("is_local")),
     }
+
+
+def _as_is_local(value) -> bool:
+    """Explicit, hand-ticked privacy attribution: only a real True counts (fail-closed).
+
+    Never inferred from base_url; loopback inference is only an admin-UI default hint.
+    """
+    return value is True
 
 
 def _ocr_request_url(cfg: dict) -> str:

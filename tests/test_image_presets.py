@@ -246,3 +246,54 @@ async def test_unsupported_vision_protocol_is_rejected_not_mislogged(monkeypatch
         await llm_client.chat([{"role": "user", "content": "x"}], use_vision=True,
                               vision_purpose="chat_upload")
     assert "anthropic_messages" in exc.value.reason
+
+
+def test_is_local_defaults_false_and_is_explicit_only():
+    from core.image_presets import snapshot, validate_preset
+
+    cfg = {"image_presets": {
+        "presets": {
+            "loop": {"kind": "vision", "model": "m", "base_url": "http://127.0.0.1:1234/v1"},
+            "lan": {"kind": "vision", "model": "m", "base_url": "http://192.168.1.5/v1", "is_local": True},
+            "str": {"kind": "vision", "model": "m", "base_url": "http://x/v1", "is_local": "true"},
+            "ocr1": {"kind": "ocr", "api_protocol": "chat_completions", "model": "m",
+                     "base_url": "http://192.168.1.5/v1", "is_local": True},
+        },
+        "routes": {"chat_upload": "lan", "life_bill": "ocr1"},
+    }}
+    presets = catalog(cfg)["presets"]
+    assert presets["loop"]["is_local"] is False  # loopback is never auto-inferred
+    assert presets["lan"]["is_local"] is True
+    assert presets["str"]["is_local"] is False  # fail-closed on non-bool
+    assert presets["ocr1"]["is_local"] is True
+    snap = snapshot(cfg)
+    assert snap["presets"]["lan"]["is_local"] is True
+    by_purpose = {p["purpose"]: p for p in snap["purposes"]}
+    assert by_purpose["chat_upload"]["is_local"] is True
+    assert by_purpose["life_bill"]["is_local"] is True
+    assert validate_preset({"kind": "vision", "model": "m", "is_local": True})["is_local"] is True
+    assert validate_preset({"kind": "vision", "model": "m"})["is_local"] is False
+    assert catalog(LEGACY)["presets"]["general"]["is_local"] is False
+
+
+
+def test_is_local_covers_screen_primary_and_fallback_separately():
+    from core.image_presets import resolve_connection, resolve_purpose, snapshot
+
+    cfg = {"image_presets": {
+        "presets": {
+            "mine": {"kind": "vision", "model": "m", "base_url": "http://192.168.1.5/v1", "is_local": True},
+            "cloud": {"kind": "vision", "model": "m", "base_url": "https://v.example/v1"},
+        },
+        "routes": {"chat_upload": "mine", "screen": "mine"},
+        "fallbacks": {"screen": "cloud"},
+    }}
+    row = {p["purpose"]: p for p in snapshot(cfg)["purposes"]}["screen"]
+    assert row["connection"] == "mine" and row["is_local"] is True
+    assert row["fallback"] == "cloud" and row["fallback_is_local"] is False
+    assert resolve_purpose("screen", cfg)["config"]["is_local"] is True
+    assert resolve_connection(catalog(cfg)["fallbacks"]["screen"], cfg)["is_local"] is False
+    # no fallback configured -> fail-closed False
+    cfg["image_presets"]["fallbacks"] = {}
+    row = {p["purpose"]: p for p in snapshot(cfg)["purposes"]}["screen"]
+    assert row["fallback"] == "" and row["fallback_is_local"] is False
