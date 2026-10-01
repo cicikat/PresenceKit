@@ -1,5 +1,14 @@
 # docs/known-issues.md — 已知问题与技术债
 
+## 语音转写整段等齐才开始（工单 B，2026-10-01，open）
+
+两条转写路径（本地 faster-whisper、远程 `audio/transcriptions`）都是整段音频到齐才开始识别，没有流式/
+分段，这是长语音延迟的结构性上限；改动涉及桌面/手机录音协议，不在埋点工单范围，跨仓部分见
+`docs/three-repo-interface-catalog.md` 开头。`observe`：工单 B 要求给出远程 STT 的 P50/P95 与本地首次 vs
+后续耗时，埋点（`api_call_log` `caller=stt`，`purpose=transcribe_remote|transcribe_local`）刚落地、
+本机没有远程 STT 连接，**没有实测延迟分布**，也没有做预热前后首次转写对比；`beam_size`/`model_size` 默认值未改，
+调参结论要等 `GET /observability/api-calls?caller=stt` 积累数据后再判断。
+
 ## 轻量模型路由整体不可用（工单 F/G 诊断，2026-10-01，open · 配置问题）
 
 `current` 实测（`data/runtime/observability/api_calls-*.jsonl`，2026-09-25 至 10-01，约 1.6 万条）：
