@@ -774,11 +774,22 @@ def propose_spontaneous_recall(ctx: dict | None = None):
     )
 
 
+_DLQ_LAST_COUNT: int | None = None   # 上次检查看到的积压数（进程内）
+_DLQ_LAST_WARN_AT = 0.0
+_DLQ_REPEAT_WARN_SECONDS = 24 * 3600
+
+
 async def _check_dlq_monitor():
-    """每日扫描 DLQ 目录，文件数 > 0 时 log warning。不发送任何消息，纯观测。"""
+    """每 6 小时扫描 DLQ；不发送任何消息，纯观测（工单 G）。
+
+    可见性规则：首次检查、积压增长、或距上次告警满 24 小时才升 WARNING（稳定的每日信号），
+    其余检查降为 INFO；告警里带按任务类型/失败原因的分组和真实的错误末行（旧版取的是
+    traceback 第一行，永远是 "Traceback (most recent call last):"，样本毫无信息量）。
+    """
     if not _is_ready("dlq_monitor"):
         return
 
+    global _DLQ_LAST_COUNT, _DLQ_LAST_WARN_AT
     try:
         from core.sandbox import get_paths
         dlq_dir = get_paths().dead_letter_queue()
@@ -787,46 +798,42 @@ async def _check_dlq_monitor():
             _mark("dlq_monitor")
             return
 
-        import json as _json
+        from core.config_loader import get_config
+        from core.dlq_inspect import scan
+        max_files = int(get_config().get("retention", {}).get("dead_letter_queue", {}).get("max_files", 200))
+        summary = scan(dlq_dir, max_files=max_files)
+        total = summary["count"]
+        previous, _DLQ_LAST_COUNT = _DLQ_LAST_COUNT, total
 
-        json_files = list(dlq_dir.glob("*.json"))
-
-        if not json_files:
+        if total == 0:
             _mark("dlq_monitor")
             return
 
-        # 按 task_type 分组计数，文件名格式：{ms_ts}_{task_type}.json
-        from collections import Counter
-        type_counts: Counter = Counter()
-        for f in json_files:
-            parts = f.stem.split("_", 1)
-            task_type = parts[1] if len(parts) == 2 else "unknown"
-            type_counts[task_type] += 1
-
-        total = len(json_files)
-        breakdown = ", ".join(f"{t}: {c}" for t, c in type_counts.most_common())
-
-        # 取最近 3 个文件，读 error 字段首行作摘要
-        recent = sorted(json_files, key=lambda f: f.stat().st_mtime, reverse=True)[:3]
-        samples = []
-        for f in recent:
-            try:
-                data = _json.loads(f.read_text(encoding="utf-8-sig"))
-                err = str(data.get("error", "")).split("\n")[0].strip()
-                if err:
-                    samples.append(f"[{f.name}] {err}")
-            except Exception:
-                pass
-
-        sample_str = "; ".join(samples) if samples else "（无法读取错误信息）"
-        logger.warning(
-            f"DLQ 中有 {total} 个未处理失败任务 ({breakdown})。最近错误样本: {sample_str}"
+        breakdown = ", ".join(f"{name}: {info['count']}" for name, info in summary["by_task_type"].items())
+        reasons = ", ".join(f"{name}: {count}" for name, count in
+                            sorted(summary["reasons"].items(), key=lambda item: -item[1]))
+        samples = "; ".join(f"[{item['task_type']}] {item['reason']}: {item['error']}"
+                            for item in summary["recent_samples"][:3]) or "（无法读取错误信息）"
+        if previous is None:
+            trend = ""
+        else:
+            trend = f"，较上次检查 {total - previous:+d}"
+        now = time.time()
+        grew = previous is not None and total > previous
+        loud = previous is None or grew or now - _DLQ_LAST_WARN_AT >= _DLQ_REPEAT_WARN_SECONDS
+        if loud:
+            _DLQ_LAST_WARN_AT = now
+        logger.log(
+            logging.WARNING if loud else logging.INFO,
+            "DLQ 中有 %d 个未处理失败任务 (%s)%s。失败原因: %s。最早积压: %s。最近错误样本: %s",
+            total, breakdown, trend, reasons, summary["oldest_failed_at"] or "未知", samples,
         )
-        # 超出条数上限时删最旧（文件名以 ms_ts 开头，字典序 = 时间序）
-        from core.config_loader import get_config
-        max_files = int(get_config().get("retention", {}).get("dead_letter_queue", {}).get("max_files", 200))
+
+        # 超出条数上限时删最旧（文件名以 ms_ts 开头，字典序 = 时间序）。
+        # 这是既有的物理删除上限（默认 200）；本单不改它，也不新增任何删除或重放——积压里是待处理的
+        # 记忆数据，失败原因（见 known-issues）未消除前重放只会再失败一次。
         if total > max_files:
-            oldest = sorted(json_files, key=lambda f: f.name)[:total - max_files]
+            oldest = sorted(dlq_dir.glob("*.json"), key=lambda f: f.name)[:total - max_files]
             pruned = 0
             for f in oldest:
                 try:
@@ -835,7 +842,7 @@ async def _check_dlq_monitor():
                 except Exception:
                     pass
             if pruned:
-                logger.info("[dlq_monitor] 已删除 %d 个最旧 DLQ 文件（上限 %d）", pruned, max_files)
+                logger.warning("[dlq_monitor] 已删除 %d 个最旧 DLQ 文件（上限 %d）", pruned, max_files)
     except Exception as e:
         log_error("scheduler._check_dlq_monitor", e)
 

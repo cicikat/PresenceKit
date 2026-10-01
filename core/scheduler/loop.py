@@ -45,7 +45,7 @@ _COOLDOWNS: dict[str, int] = {
     "episodic_decay":      20 * 3600,   # 情景记忆衰减：20小时
     "inner_diary_write":    2 * 3600,   # 角色内心日记静默写入：2小时冷却（幂等靠文件存在性）
     "spontaneous_recall":   4 * 3600,   # 主动回忆：4小时冷却
-    "dlq_monitor":         24 * 3600,   # DLQ 扫描：24小时
+    "dlq_monitor":          6 * 3600,   # DLQ 扫描：6小时（升 WARNING 的规则见 _check_dlq_monitor：首次/增长/满24h）
     "log_maintenance":     24 * 3600,   # forensic 日志归档/滚动：24小时
     "episodic_sweep":      30 * 60,     # mid_term 老化扫描：30分钟
     "garden_water":       300 * 60,     # 花园自动浇水：300分钟

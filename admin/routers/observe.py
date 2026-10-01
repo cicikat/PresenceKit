@@ -41,26 +41,21 @@ def _slow_queue_state() -> dict:
 
 
 def _dlq_state() -> dict:
+    """DLQ 积压现状：总数、按任务类型/失败原因分组、最早积压时间、最近样本。
+
+    只读；不返回 task 载荷（里面是待处理的记忆数据），错误样本经脱敏且截断。
+    保留旧字段 count / recent 以兼容既有消费者。
+    """
     try:
-        import time
-        from core.sandbox import get_paths
-        dlq_dir = get_paths().dead_letter_queue()
-        if not dlq_dir.exists():
-            return {"count": 0, "recent": []}
-        files = sorted(dlq_dir.glob("*.json"), key=lambda f: f.stat().st_mtime, reverse=True)
-        recent = []
-        for f in files[:10]:
-            stem = f.stem  # e.g. "1718000000000_summarize_to_midterm"
-            parts = stem.split("_", 1)
-            ts_ms = int(parts[0]) if parts[0].isdigit() else 0
-            task_type = parts[1] if len(parts) > 1 else "unknown"
-            from datetime import datetime, timezone
-            ts_str = (
-                datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc).isoformat()
-                if ts_ms else ""
-            )
-            recent.append({"filename": f.name, "task_type": task_type, "failed_at": ts_str})
-        return {"count": len(files), "recent": recent}
+        from core.config_loader import get_config
+        from core.dlq_inspect import scan
+        max_files = int(get_config().get("retention", {}).get("dead_letter_queue", {}).get("max_files", 200))
+        summary = scan(max_files=max_files)
+        summary["recent"] = [
+            {"filename": item["filename"], "task_type": item["task_type"], "failed_at": item["failed_at"]}
+            for item in summary["recent_samples"]
+        ]
+        return summary
     except Exception as exc:
         logger.warning("[observe/runtime] DLQ read failed: %s", exc)
         return {"error": "读取失败"}

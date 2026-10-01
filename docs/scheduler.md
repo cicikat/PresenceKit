@@ -824,7 +824,7 @@ active window 决策已完全收入 `gating._decide()`（R2-C 后），以 `POLI
 | `episodic_decay` | 20h | 低 | time_based | 情景记忆每日衰减 |
 | `inner_diary_write` | 2h | 维护 | time_based | 同一角色 specialized 副链静默写内心日记，与 daily_journal 发言解耦；不是第二个 Agent；23:00–次日05:00 窗口，落盘幂等靠当日日记文件是否存在。同一 logical day 的 Reality task 两次失败后会另开新任务继续写，不因稳定幂等键终态锁死窗口。与 `backfill_diary` 共用 `authored_diary:{char_id}:{date}` 生成锁和独占创建落盘，已有文件（含空文件）不覆盖 |
 | `spontaneous_recall` | 4h | 低 | time_based | 主动回忆触发 |
-| `dlq_monitor` | 24h | 低 | time_based | 扫 DLQ 目录，文件数 > 0 时 log warning；R8-A：legacy task 超 30 天自动归档到 `expired/` |
+| `dlq_monitor` | 6h | 低 | time_based | 经 `core/dlq_inspect.py` 扫 DLQ 目录（只读、不返回 task 载荷）：按任务类型/失败原因分组、最早积压、最近错误末行；首次检查、积压增长或距上次告警满 24h 才升 WARNING，其余 INFO；条数超 `retention.dead_letter_queue.max_files`（默认 200）时**物理删除最旧**（既有行为，现在以 WARNING 记录）。此前文档写的「legacy task 超 30 天自动归档到 `expired/`」在代码里并不存在，已更正 |
 | `log_maintenance` | 24h | 维护 | loop.py 内联 | 清理 event_log、done reminders、dream archive、inbox/image cache，并压缩 observations |
 | `diary_reminder` | 20h | 低 | diary | 提醒用户写日记；冷启动门控见下 |
 | `diary_inject` | 6h | 低 | diary | 日记上下文注入 |

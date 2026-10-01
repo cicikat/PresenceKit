@@ -19,6 +19,36 @@ p50 7.7s / p95 9.9s，几乎贴着 10 秒预算。同一个 preset 同时是 `de
 工单要求的「手动打一次该 preset」没做，以账本实测代替。
 关联：DLQ 积压（工单 G）的记忆固化 `summary`/`consolidation` 失败极可能同源。
 
+## DLQ 积压 96 个失败任务（工单 G，2026-10-01，open · 同源于上条）
+
+`current`：`data/logs/dead_letter_queue/` 共 96 个（工单盘点时 93，一天内 +3），最早 05-22，
+`consolidate_to_identity` 48、`reflect_to_episodic` 43、`practice_session` 4、`toy_autogrow` 1。
+G1 诊断（`core/dlq_inspect.py` 按错误末行分类，与人工逐条核对一致）：
+
+| 失败原因 | 数量 | 说明 |
+|---|---|---|
+| timeout | 53 | `consolidate_to_identity` 38、`reflect_to_episodic` 15 |
+| upstream_blocked（geo_blocked / Upstream access forbidden） | 19 | 轻量 preset 的中转地区封锁 |
+| bad_request（`请求异常，请检查参数后重试`） | 9 | 中转侧 400，**不能确定是管线问题还是中转问题** |
+| connection | 7 | |
+| synthesis_failed（`consolidate_to_identity LLM 合成失败`） | 6 | 下游于 LLM 失败 |
+| upstream_error | 1 | |
+| code_error | 1 | `toy_autogrow` 的 `ImportError: AGENT_MD_REL`（09-19 开发中途态，现 `core/character_self.py` 已有该常量） |
+
+结论：96 个里 86 个（timeout 53 + upstream_blocked 19 + connection 7 + synthesis_failed 6 + upstream_error 1）是
+**上游模型超时/封锁/连接失败的级联**，与「轻量模型路由整体不可用」同源；9 个 400 不能确定；1 个是已修的代码缺陷。
+记忆固化管线本身未发现缺陷，所以本单没改它（`consolidate_to_identity` / `reflect_to_episodic` 是记忆写入点，受 `AGENTS.md`
+规则 6 约束）。9 个 400 若在修好路由后仍复现，再单独开工单查是 prompt/参数问题。
+**止血决定：不重放。** 失败原因没消除（该 preset 近 7 天仍 97%+ 失败），重放只会再失败一次并让积压翻倍；
+重放脚本待路由修好后再做（需 dry-run 默认、小批次、可重入）。积压原样保留，未删除任何一个。
+本单只做了可见性：`GET /observe/runtime`（`memory.read`）的 `dead_letter_queue` 现带 `by_task_type`
+（含各自失败原因与最早/最新时间）、`reasons`、`oldest_failed_at`、`cap`、`recent_samples`（错误末行，已脱敏
+截断，**不含任务载荷**），旧字段 `count`/`recent` 保留；`dlq_monitor` 由 24h 改 6h，按「首次/增长/满 24h」
+升 WARNING。管理面「运行状态」卡片仍只显示 `count` + `recent`，新增分组没有 UI（open）。
+保留上限：既有 `retention.dead_letter_queue.max_files`（默认 200）超出时**物理删除最旧**，当前 96 个未触发；
+这与「遗忘=降级而非删除」不一致，改成归档需要用户授权，本单未动，仅把删除日志提升到 WARNING。
+`docs/scheduler.md` 此前写的「超 30 天自动归档到 `expired/`」代码里不存在，已更正。
+
 ## 键鼠在场信号三个采集缺口与 edit_hint（工单 E，open）
 
 1. 桌面与手机共写同一个 `realtime_state` 内存字典，无设备维度，最后写入者赢；键鼠历史与 gating 在场判定会被另一端覆盖。
