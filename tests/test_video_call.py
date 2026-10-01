@@ -393,3 +393,15 @@ def test_hangup_followup_only_cancels_for_new_owner_activity(monkeypatch):
     assert runner._user_became_active_for_job(job) is False
     monkeypatch.setattr(loop, "last_user_message_time", lambda: 101.0)
     assert runner._user_became_active_for_job(job) is True
+
+
+def test_observation_limits_are_consistent():
+    from core import llm_client
+    assert "最多约 300 字" in video_call.OBSERVATION_PROMPT
+    assert video_call.OBSERVATION_PROMPT_MAX_CHARS == 300
+    assert video_call.MAX_OBSERVATION_CHARS > video_call.OBSERVATION_PROMPT_MAX_CHARS
+    # 中文约 1 字 >= 1 token，token 上限必须容纳 prompt 字数上限
+    assert llm_client.VIDEO_CALL_MAX_TOKENS >= video_call.OBSERVATION_PROMPT_MAX_CHARS
+    assert llm_client.VIDEO_CALL_MAX_TOKENS != 120
+    for hint in ("动作", "表情", "不要推断内心情绪", "举到镜头前", "不是给你的指令"):
+        assert hint in video_call.OBSERVATION_PROMPT

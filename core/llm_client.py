@@ -159,6 +159,9 @@ _vision_clients: dict[tuple[str, str, bool], AsyncOpenAI] = {}
 # probe: 15 s; intent/detect_emotion: 10 s; summary/consolidation: 30 s
 # chat: main turn 90 s; vision: 30 s
 from core.llm_failover import CATEGORY_TIMEOUTS as _CALL_TIMEOUTS, DEFAULT_CALL_TIMEOUT as _DEFAULT_CALL_TIMEOUT
+# video_call 视觉用途 max_tokens：与 core/video_call.py 的 prompt 字数上限(300字)/落库截断(800字)成套，
+# 改动须同步三处，见 video_call.py 顶部注释。
+VIDEO_CALL_MAX_TOKENS = 500
 
 
 def _get_proxy_url() -> str | None:
@@ -393,7 +396,7 @@ async def chat(
                         tools=None,
                         request_kwargs={"max_tokens": 1000, "timeout": _CALL_TIMEOUTS["vision"]},
                     )
-                max_tokens = 120 if camera_frame else 1000
+                max_tokens = VIDEO_CALL_MAX_TOKENS if camera_frame else 1000
                 timeout = 105 if camera_frame else _CALL_TIMEOUTS["vision"]
                 if protocol == "responses":
                     from core.llm_protocol import responses_input
