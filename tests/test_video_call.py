@@ -417,6 +417,9 @@ class _DiffEnv:
     """Scripted vision replies + captured prompts/signals for diff-mode tests."""
 
     def __init__(self, monkeypatch, replies, *, config=None, gate_status="accepted"):
+        # Import modules that bind get_config at import time before patching it (see
+        # tests/test_f_log_noise.py): otherwise they would keep the patched lambda.
+        from core import llm_client  # noqa: F401
         from core.autonomy import store
         from core import perceive_event
         self.replies = list(replies)

@@ -375,6 +375,22 @@ through the character's management gateway, including ordinary read/write
 policies. Existing actuate, emergency, and unrestricted policies retain their
 high-risk markers.
 
+## 轻量判定与外部依赖失败降噪（工单 F）
+
+失败仍可查，但不再每次写一条 ERROR 栈。统一口径：每次失败都计入 `runtime_signal_observability`
+（`GET /observability/runtime-signals`，`state.read`），日志只留每个 context 的首条与每 20 条一条。
+
+| 来源 | 计数 `category/code` | 日志/台账变化 |
+|---|---|---|
+| wttr.in 天气（`core/tools/weather.py`） | `third_party_upstream/weather_unavailable` | 网络/证书/超时/HTTP 非 200 不再进 `error.log`；每次失败写 `api_call_log`（`caller=weather`，`error_category=upstream_unavailable`）。`get_weather` 带 45 分钟内存缓存，失败时回「（这是约 N 分钟前的缓存天气…不是此刻的实况）」；解析异常等真 bug 仍走 `log_error` |
+| 爱意探针 `detect_affection`（具身爱心） | `model_quality/probe_failed` | 不再 `log_error`；`detect_affection_checked()` 区分「判定为否」与「探针失败」（None） |
+| 爱心触发 `core/embodiment/heart.py` | `model_quality/heart_probe_skipped`（`reason=backoff\|sampled_out`） | 探针连续失败退避 `min(60·2^(n-1), 900)` 秒，一次成功判定清零；新增 `embodiment.heart.sample_rate`（0–1，默认 `1.0` = 每条回复都判，健康时行为不变）。管理面无专属 UI，只能改 `config.yaml`，`config.example.yaml` 已示例 |
+| `sensor_judge` | `model_quality/sensor_judge_failed` | 只聚合日志，**不采样**：每次调用对应一个真实传感器事件，且失败是 fail-closed（丢弃该事件），跳过调用会改变哪些主动决策被做出，不只是降噪 |
+| `event_edge_proposer` scope 超时 | `model_quality/edge_proposer_scope_timeout` | 只聚合日志，**不调高** `scope_timeout_seconds`：实测超时是持续性的（上游模型本身不可用，见 known-issues「轻量模型路由整体不可用」），加大阈值只会把系统性过慢藏得更深 |
+
+熔断器本身（阈值与恢复）未改；熔断拒绝（`breaker_open`）现在只计数。`empty_completion`、`detect_emotion`
+主路径与调用时机不在本单范围。
+
 ## Brief 203 Memory Event candidate relations
 
 `event_edge_proposer.enabled` is exposed through the existing hot-reloaded

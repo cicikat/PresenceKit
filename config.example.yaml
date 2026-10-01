@@ -349,6 +349,7 @@ embodiment:
     enabled: false
     cooldown_sec: 45     # 同一角色两次画爱心之间的最短间隔
     duration_ms: 4000    # 单次爱心显示时长
+    sample_rate: 1.0     # 0–1：每条回复以此概率才调爱意探针（默认 1.0 = 每条都判）；探针连续失败时另有 60s→15min 指数退避
 mail:
   enabled: false  # 纯增值功能(角色写信)，默认关；面板「通道开关」可开，需自备 SMTP 凭据
   smtp_host: smtp.gmail.com

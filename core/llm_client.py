@@ -1270,17 +1270,43 @@ async def detect_emotion(text: str) -> str:
         return "neutral"
 
 
+def _note_probe_failure(purpose: str, reason: str, preset: str) -> None:
+    """Count a failed lightweight probe and log only the first / every 20th per context.
+
+    These probes are fail-open and run on every reply, so during an upstream outage a
+    per-failure traceback in error.log buries real problems (工单 F). The counters stay
+    queryable via ``GET /observability/runtime-signals``.
+    """
+    from core.runtime_signal_observability import record_and_should_log
+
+    if record_and_should_log(
+        category="model_quality", code="probe_failed", status="attention",
+        context={"purpose": purpose, "reason": reason[:60], "model": preset},
+    ):
+        logger.warning(
+            "[%s] probe failed, fail-open: preset=%s reason=%s", purpose, preset, reason,
+        )
+
+
 async def detect_affection(text: str) -> bool:
     """判断这条回复是否在【表达爱意/喜欢/亲昵】（表白、撒娇、比心、想念、深情）。
     轻量调用，失败返回 False。"""
+    return bool(await detect_affection_checked(text))
+
+
+async def detect_affection_checked(text: str) -> bool | None:
+    """同 detect_affection，但区分「判定为否」与「探针失败」：True/False = 已判定，
+    None = 探针本身失败（调用方可据此退避，避免上游不稳时每轮打空炮）。"""
     prompt = (
         "下面是角色对用户说的话。判断她是否在直接向用户表达"
         "爱意/喜欢/亲昵（如表白、撒娇、比心、想你、深情告白）。"
         "只回一个词：yes 或 no。\n"
         f"文本：{text}"
     )
+    preset = "unresolved"
     try:
         mc = get_model_client("detect_emotion")   # 复用轻量档，无需新模型
+        preset = getattr(mc, "name", "unresolved")
         semantic = [{"role": "user", "content": prompt}]
 
         def _prepare_affection(target: ModelClient) -> PreparedAttempt:
@@ -1306,11 +1332,14 @@ async def detect_affection(text: str) -> bool:
         finally:
             reset_capture_purpose(purpose_token)
         if not outcome.ok:
-            raise outcome.error or RuntimeError(outcome.skip_reason or "detect_affection_failed")
+            reason = outcome.skip_reason or outcome.error_category or (
+                type(outcome.error).__name__ if outcome.error is not None else "detect_affection_failed")
+            _note_probe_failure("detect_affection", reason, preset)
+            return None
         return outcome.value.assistant_text.strip().lower().startswith("y")
     except Exception as e:
-        log_error("llm_client.detect_affection", e)
-        return False
+        _note_probe_failure("detect_affection", type(e).__name__, preset)
+        return None
 
 
 class LLMClient:

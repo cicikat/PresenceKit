@@ -110,7 +110,7 @@ async def test_heart_success_log_requires_device_ack(monkeypatch, caplog):
     async def rejected(_action):
         return "设备端离线，动作未执行"
 
-    monkeypatch.setattr(heart.llm_client, "detect_affection", affectionate)
+    monkeypatch.setattr(heart.llm_client, "detect_affection_checked", affectionate)
     monkeypatch.setattr("core.tool_dispatcher._push_desktop_action", rejected)
     monkeypatch.setattr(heart.config_loader, "get_config", lambda: {
         "embodiment": {"heart": {"enabled": True, "cooldown_sec": 45}}

@@ -128,7 +128,24 @@ _USER_TEMPLATE = """\
 """
 
 
+
 # ── 对外接口 ─────────────────────────────────────────────────────────────────
+
+def _log_judge_failure(event_type: str, category: str) -> None:
+    """Judge failures are fail-closed (the event is dropped) and arrive in long streaks when
+    the upstream is down: count every one, log the first and every 20th per category.
+
+    Deliberately not sampled: each call is one real sensor event, and skipping the call would
+    silently change which proactive decisions get made, not merely reduce noise (工单 F).
+    """
+    from core.runtime_signal_observability import record_and_should_log
+
+    if record_and_should_log(
+        category="model_quality", code="sensor_judge_failed", status="attention",
+        context={"event": str(event_type)[:40], "reason": str(category)[:60]},
+    ):
+        logger.warning("[sensor_judge] LLM 调用失败 event=%s category=%s", event_type, category)
+
 
 async def judge(event: dict) -> dict:
     """
@@ -228,16 +245,13 @@ async def judge(event: dict) -> dict:
                     "judge_output_raw": raw_fail or None,
                 }
             else:
-                logger.warning(
-                    "[sensor_judge] LLM 调用失败 event=%s category=%s",
-                    event_type, outcome.error_category or outcome.skip_reason,
-                )
+                _log_judge_failure(event_type, outcome.error_category or outcome.skip_reason or "unknown")
             return {**dict(_FAILURE), "judge_input_prompt": audit_prompt, "judge_output_raw": None}
         raw = outcome.value.assistant_text.strip()
         used = outcome.mc or mc
     except Exception as e:
         category = _failure_category(e)
-        logger.warning("[sensor_judge] LLM 调用失败 event=%s category=%s", event_type, category)
+        _log_judge_failure(event_type, category)
         return {**dict(_FAILURE), "judge_input_prompt": audit_prompt, "judge_output_raw": None}
 
     parsed = raw

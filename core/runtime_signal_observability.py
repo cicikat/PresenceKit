@@ -135,6 +135,25 @@ def record_counts(
     return _record(category=category, code=code, status=status, context=context)
 
 
+def record_and_should_log(
+    *,
+    category: str,
+    code: str,
+    status: SignalStatus = "attention",
+    context: Mapping[str, Any] | None = None,
+    every: int = 20,
+) -> bool:
+    """Count every occurrence, but tell the caller to log only the first and every Nth.
+
+    For fail-open background calls (lightweight judges, third-party lookups) that can
+    fail in long streaks: the fact is always preserved in the counters, while the log
+    gets one line per new context and then one per ``every`` repeats.
+    """
+    _, total, context_count = _record(category=category, code=code, status=status, context=context)
+    count = context_count or total
+    return count == 1 or (every > 0 and count % every == 0)
+
+
 def snapshot() -> dict[str, Any]:
     """Return a copy suitable for the ``state.read`` admin endpoint."""
     with _LOCK:

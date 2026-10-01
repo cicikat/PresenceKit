@@ -1,5 +1,24 @@
 # docs/known-issues.md — 已知问题与技术债
 
+## 轻量模型路由整体不可用（工单 F/G 诊断，2026-10-01，open · 配置问题）
+
+`current` 实测（`data/runtime/observability/api_calls-*.jsonl`，2026-09-25 至 10-01，约 1.6 万条）：
+当前 `active_routing` 下，`detect_emotion` 指向的轻量 preset（grok-4.5 中转）**失败率 97.6%**
+（3553/3641）：timeout 1746、cancelled 945、breaker_open 446、geo_blocked 376，成功的 88 次
+p50 7.7s / p95 9.9s，几乎贴着 10 秒预算。同一个 preset 同时是 `default_preset`，
+未单独映射的类别同样整体失败：`summary` 99.2%、`event_edge_proposer` 99.7%、`ime_judge` 100%、
+`sensor_judge` 99.8%（成功样本也要 8–25 秒）。`detect_affection` 复用 `detect_emotion` 路由，
+所以每天 100–300 条错误（爱心功能已开启，每条回复都会打一次空炮）。
+
+这是**配置问题，不是代码问题**：该 preset 对轻量调用实际不可用（超时 + 地区封锁），代码侧
+降噪（见 feature-control-surface「轻量判定与外部依赖失败降噪」）不会让它变好。需要把
+`detect_emotion` / `summary` / `consolidation` / `event_edge_proposer` / `ime_judge` /
+`sensor_judge` 重新路由到可用 preset 或为其配置 `fallback_routes`。换哪个模型/供应商涉及费用与
+数据去向，**本单没有改 `config.yaml`**，等用户决定。
+`observe`：修配置后失败率是否归零、降噪后 `error.log`/`runtime_warnings` 的实际增长量，都还没有实测数字；
+工单要求的「手动打一次该 preset」没做，以账本实测代替。
+关联：DLQ 积压（工单 G）的记忆固化 `summary`/`consolidation` 失败极可能同源。
+
 ## 键鼠在场信号三个采集缺口与 edit_hint（工单 E，open）
 
 1. 桌面与手机共写同一个 `realtime_state` 内存字典，无设备维度，最后写入者赢；键鼠历史与 gating 在场判定会被另一端覆盖。

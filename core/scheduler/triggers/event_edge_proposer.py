@@ -272,7 +272,12 @@ async def _check_event_edge_proposer() -> None:
                 counters["completed_scopes"] += 1
             except asyncio.TimeoutError:
                 counters["timed_out_scopes"] += 1
-                logger.warning("[event_edge_proposer] scope timed out char_id=%s", char_id)
+                # 超时是持续性的（上游模型本身过慢/不可用，见 docs/known-issues.md），不靠加大
+                # 阈值掩盖：每次都计数，日志只留首条与每 20 条一条。
+                from core.runtime_signal_observability import record_and_should_log
+                if record_and_should_log(category="model_quality", code="edge_proposer_scope_timeout",
+                                         status="attention", context={"timeout_s": int(_scope_timeout_seconds(cfg))}):
+                    logger.warning("[event_edge_proposer] scope timed out char_id=%s", char_id)
             except Exception:
                 counters["failed_scopes"] += 1
                 logger.exception("[event_edge_proposer] scope failed char_id=%s", char_id)
