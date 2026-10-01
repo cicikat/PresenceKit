@@ -14,4 +14,6 @@
 
 处理前置条件与节流：`visual_perception.enabled=true`（隐私闸门）；视觉连接按 `source` 分流：`screen` 走 `image_presets.routes.screen`（主连接，传输失败才切到 `fallbacks.screen`），`camera` 只走摄像头路由（`video_call`，其次 `video_call_tool`）里通过本机 loopback 校验的连接，永不使用备用连接，没有合格连接时丢弃（trace 记 `vlm_error`）。同一 `source` 成功接收后冷却 5 分钟；冷却或关闭时仍返回 202 与 `accepted=true`，但 `processing=false`。生产者可按固定周期在内存中采样并作场景变化比对，但只在显著变化时上传，不应周期性上传屏幕。
 
+视频电话摄像头不走本接口，而是专用 `POST /video-call/observe`。该链路可选开启帧差分（`video_call_frame_diff.enabled`，默认关闭）：首帧全量描述、之后只描述变化并按 `[major]` 触发主动候选；按需拍照工具始终全量。完整行为与观测见 [feature-control-surface.md](feature-control-surface.md) 的「视频通话帧差分」。
+
 响应 `{"accepted": true, "processing": true|false}`。结果只进入 shadow trace，不注入角色 prompt 或主记忆。管理面以 `GET /perception/visual-trace`（`state.read`）只读查看；trace 仅保存抽取后的场景/活动/置信度/短描述或丢弃原因，保留 30 天。

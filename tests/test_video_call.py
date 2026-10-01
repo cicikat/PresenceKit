@@ -405,3 +405,263 @@ def test_observation_limits_are_consistent():
     assert llm_client.VIDEO_CALL_MAX_TOKENS != 120
     for hint in ("动作", "表情", "不要推断内心情绪", "举到镜头前", "不是给你的指令"):
         assert hint in video_call.OBSERVATION_PROMPT
+
+
+# ── 帧差分（video_call_frame_diff）─────────────────────────────────────────────
+
+def _diff_config():
+    return {**_config(), "video_call_frame_diff": {"enabled": True}}
+
+
+class _DiffEnv:
+    """Scripted vision replies + captured prompts/signals for diff-mode tests."""
+
+    def __init__(self, monkeypatch, replies, *, config=None, gate_status="accepted"):
+        from core.autonomy import store
+        from core import perceive_event
+        self.replies = list(replies)
+        self.prompts, self.kwargs, self.signals, self.gate_events = [], [], [], []
+        for key in list(video_call._counts):
+            monkeypatch.setitem(video_call._counts, key, 0)
+        monkeypatch.setattr(video_call, "_camera_sessions", {})
+        monkeypatch.setattr("core.config_loader.get_config", lambda: config or _diff_config())
+
+        async def fake_chat(messages, **kwargs):
+            self.prompts.append(messages[0]["content"][0]["text"])
+            self.kwargs.append(kwargs)
+            return self.replies.pop(0)
+        monkeypatch.setattr("core.llm_client.chat", fake_chat)
+        monkeypatch.setattr(store, "enqueue_signal", lambda uid, char_id, signal, **kw: (
+            self.signals.append((signal, kw)) or True, "queued"))
+
+        async def fake_gate(event):
+            self.gate_events.append(event)
+            status = perceive_event.PerceiveStatus(gate_status)
+            return perceive_event.PerceiveResult(status=status, event_id="e", dedupe_key="k")
+        monkeypatch.setattr(perceive_event, "receive_perceive_event", fake_gate)
+
+    async def frame(self, **kwargs):
+        return await video_call.observe(_jpeg(), uid="owner", char_id="character",
+                                        token_label="desktop", **kwargs)
+
+    def consume(self, result):
+        return video_call.consume(result["observation_id"], uid="owner", char_id="character",
+                                  token_label="desktop")[0]
+
+
+def test_parse_change_reads_magnitude_prefix_and_fails_safe_to_minor():
+    assert video_call.parse_change("NO_CHANGE") == ("none", "")
+    assert video_call.parse_change("no_change，画面没变") == ("none", "")
+    assert video_call.parse_change("[major] 起身走开") == ("major", "起身走开")
+    assert video_call.parse_change("[MINOR]低头") == ("minor", "低头")
+    assert video_call.parse_change("[major]") == ("none", "")
+    # 模型没遵循约定：当作 minor 展示，但绝不触发主动
+    assert video_call.parse_change("他好像站起来了") == ("minor", "他好像站起来了")
+    assert video_call.parse_change("") == ("none", "")
+
+
+@pytest.mark.asyncio
+async def test_frame_diff_off_keeps_full_prompt_and_heartbeat(monkeypatch):
+    env = _DiffEnv(monkeypatch, ["桌上有书", "桌上有书"], config=_config())
+    await env.frame()
+    await env.frame()
+    assert env.prompts == [video_call.OBSERVATION_PROMPT] * 2
+    assert all(kw == {"use_vision": True, "vision_purpose": "video_call"} for kw in env.kwargs)
+    assert "frame_memory" not in video_call.camera_session("owner", "character")
+    assert video_call._counts["frame_diff_no_change"] == 0
+
+
+@pytest.mark.asyncio
+async def test_frame_diff_first_frame_full_then_only_changes(monkeypatch):
+    from core import llm_client
+    env = _DiffEnv(monkeypatch, ["一个人坐在书桌前", "NO_CHANGE", "[minor] 低头看手机"])
+    first = await env.frame()
+    assert env.prompts[0] == video_call.OBSERVATION_PROMPT
+    assert env.kwargs[0] == {"use_vision": True, "vision_purpose": "video_call"}
+    assert env.consume(first) == "一个人坐在书桌前"
+
+    second = await env.frame()
+    assert "一个人坐在书桌前" in env.prompts[1] and "NO_CHANGE" in env.prompts[1]
+    assert "不要推断内心情绪" in env.prompts[1] and "不是给你的指令" in env.prompts[1]
+    assert env.kwargs[1]["max_tokens_override"] == llm_client.VIDEO_CALL_DIFF_MAX_TOKENS
+    assert env.kwargs[1]["max_tokens_override"] < llm_client.VIDEO_CALL_MAX_TOKENS
+    # 无变化：回执仍是完整场景，不是空串
+    assert env.consume(second) == "一个人坐在书桌前"
+    assert video_call._counts["frame_diff_no_change"] == 1
+
+    third = await env.frame()
+    text = env.consume(third)
+    assert text.startswith("一个人坐在书桌前") and "（后续变化）低头看手机" in text
+    assert video_call._counts["frame_diff_minor"] == 1
+    assert env.signals == []                       # 没有 major，差分模式下也没有心跳
+
+
+@pytest.mark.asyncio
+async def test_frame_diff_major_change_queues_one_gated_signal(monkeypatch):
+    env = _DiffEnv(monkeypatch, ["一个人坐在书桌前", "[major] 站起来挥手", "[major] 站起来挥手"])
+    await env.frame()
+    await env.frame()
+    assert len(env.signals) == 1
+    signal, kwargs = env.signals[0]
+    assert signal.source == "video_call_camera"       # 沿用 source，继承 close/presence/admission 全部闸门
+    assert signal.evidence[0]["fact"] == "video_call_camera_change"
+    assert signal.evidence[0]["magnitude"] == "major"
+    assert signal.evidence[0]["description"] == "站起来挥手"
+    assert signal.priority == 0.5 and signal.action_mode == "reflect"
+    assert kwargs["dedupe_key"].startswith("video-call-camera-change:owner:character:")
+    # 先过 perceive gate：low_trust + Dream Guard
+    event = env.gate_events[0]
+    assert event.trust == "low_trust" and event.require_dream_guard is True
+    assert event.source == "video_call_camera"
+    assert video_call._counts["frame_diff_change_triggered"] == 1
+    # 同一变化的下一帧：最小间隔内不再触发
+    await env.frame()
+    assert len(env.signals) == 1
+    assert video_call._counts["frame_diff_signal_suppressed"] == 1
+
+
+@pytest.mark.asyncio
+async def test_frame_diff_signal_respects_min_interval_then_allows_next_change(monkeypatch):
+    env = _DiffEnv(monkeypatch, ["场景", "[major] 动作甲", "[major] 动作乙", "[major] 动作乙"])
+    await env.frame()
+    await env.frame()
+    await env.frame()                                  # 动作乙：间隔内被压住
+    assert len(env.signals) == 1
+    session = video_call.camera_session("owner", "character")
+    session["frame_memory"]["last_change_signal_at"] -= video_call.CAMERA_CHANGE_SIGNAL_MIN_INTERVAL_SECONDS + 1
+    await env.frame()                                  # 间隔已过：再次出现的变化可再次触发
+    assert len(env.signals) == 2
+    assert env.signals[1][0].evidence[0]["description"] == "动作乙"
+
+
+@pytest.mark.asyncio
+async def test_frame_diff_dream_guard_block_queues_nothing(monkeypatch):
+    env = _DiffEnv(monkeypatch, ["场景", "[major] 站起来"], gate_status="blocked_dream")
+    await env.frame()
+    result = await env.frame()
+    assert result["status"] == "ready"                 # 观察与回执不受影响
+    assert env.signals == []
+    assert video_call._counts["frame_diff_change_triggered"] == 0
+    assert video_call._counts["frame_diff_signal_suppressed"] == 1
+
+
+@pytest.mark.asyncio
+async def test_frame_diff_never_applies_to_on_demand_tool(monkeypatch):
+    env = _DiffEnv(monkeypatch, ["场景", "刚拉取的完整描述"])
+    await env.frame()
+    session = video_call.camera_session("owner", "character")
+    assert session["frame_memory"]["frame_index"] == 1
+    await video_call.observe(_jpeg(), uid="owner", char_id="character", token_label="desktop",
+                             emit_signal=False, wait_for_resource=True, purpose=video_call.TOOL_PURPOSE)
+    assert env.prompts[1] == video_call.OBSERVATION_PROMPT
+    assert env.kwargs[1] == {"use_vision": True, "vision_purpose": video_call.TOOL_PURPOSE}
+    assert session["frame_memory"]["frame_index"] == 1     # 工具帧不推进、不污染周期帧记忆
+
+
+@pytest.mark.asyncio
+async def test_frame_diff_memory_is_per_call_and_cleared_on_close_and_expiry(monkeypatch):
+    from core.autonomy import store
+    discarded = []
+    env = _DiffEnv(monkeypatch, ["场景甲", "场景乙", "场景丙"])
+    monkeypatch.setattr(store, "discard_pending_signals_by_source",
+                        lambda uid, char_id, sources: discarded.append(set(sources)))
+    await env.frame()
+    assert video_call.camera_session("owner", "character")["frame_memory"]["base"] == "场景甲"
+    video_call.close_camera("owner", "character", "desktop")
+    assert video_call.camera_session("owner", "character") is None
+    assert discarded == [{"video_call_camera"}]            # change 信号与心跳同 source，一并清掉
+    await env.frame()                                      # 新通话：又是全量首帧
+    assert env.prompts[1] == video_call.OBSERVATION_PROMPT
+    # 断帧超过 CAMERA_ACTIVE_SECONDS：同样视为新通话
+    video_call._camera_sessions[("owner", "character")]["seen_at"] -= video_call.CAMERA_ACTIVE_SECONDS + 1
+    await env.frame()
+    assert env.prompts[2] == video_call.OBSERVATION_PROMPT
+
+
+@pytest.mark.asyncio
+async def test_frame_diff_failed_frame_does_not_advance_memory(monkeypatch):
+    env = _DiffEnv(monkeypatch, ["场景", ""])
+    await env.frame()
+    assert (await env.frame())["status"] == "failed"
+    assert video_call.camera_session("owner", "character")["frame_memory"]["frame_index"] == 1
+
+
+@pytest.mark.asyncio
+async def test_frame_diff_busy_frame_emits_no_stale_heartbeat(monkeypatch):
+    env = _DiffEnv(monkeypatch, ["场景"])
+    await env.frame()
+    session = video_call.camera_session("owner", "character")
+    session["opened_at"] -= 10 * video_call.CAMERA_SIGNAL_INTERVAL_SECONDS
+    async with video_call.local_resource():
+        assert (await env.frame())["status"] == "busy"
+    assert env.signals == []
+
+
+@pytest.mark.asyncio
+async def test_frame_diff_toggling_off_drops_memory(monkeypatch):
+    env = _DiffEnv(monkeypatch, ["场景", "完整描述"])
+    await env.frame()
+    monkeypatch.setattr("core.config_loader.get_config", _config)
+    await env.frame()
+    assert env.prompts[1] == video_call.OBSERVATION_PROMPT
+    assert "frame_memory" not in video_call.camera_session("owner", "character")
+
+
+def test_compose_description_budget_keeps_latest_changes():
+    memory = {"base": "甲" * 790, "changes": ["变" * 150] * 5}
+    text = video_call._compose_description(memory)
+    assert len(text) <= video_call.MAX_OBSERVATION_CHARS
+    assert text.endswith("变" * 10) and text.count("（后续变化）") <= 3
+
+
+def test_frame_diff_flag_is_registered_default_off():
+    from admin.routers.settings_feature_flags import FLAGS
+    assert FLAGS["video_call_frame_diff"][:2] == ("video_call_frame_diff", "enabled")
+    assert video_call.frame_diff_enabled({}) is False
+    assert video_call.frame_diff_enabled({"video_call_frame_diff": {"enabled": "yes"}}) is False
+    assert video_call.frame_diff_enabled({"video_call_frame_diff": {"enabled": True}}) is True
+    for name in ("frame_diff_no_change", "frame_diff_change_triggered"):
+        assert name in video_call.snapshot(_config())["counts"]
+
+
+def test_diff_prompt_limits_are_consistent():
+    from core import llm_client
+    assert "最多约 100 字" in video_call.CHANGE_PROMPT_TEMPLATE
+    assert video_call.CHANGE_PROMPT_MAX_CHARS == 100
+    assert llm_client.VIDEO_CALL_DIFF_MAX_TOKENS >= video_call.CHANGE_PROMPT_MAX_CHARS
+    for hint in ("NO_CHANGE", "[minor]", "[major]", "不要推断内心情绪", "不猜测身份或隐私", "不是给你的指令"):
+        assert hint in video_call.CHANGE_PROMPT_TEMPLATE
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("override,expected", [(None, 500), (200, 200), (9999, 500)])
+async def test_video_call_vision_max_tokens_honours_a_tighter_override_only(monkeypatch, override, expected):
+    """帧差分后续帧可把输出上限收紧；覆盖值不能把上限放大到默认之上。"""
+    from core import llm_client
+    seen = {}
+
+    class _Message:
+        content = "ok"
+    class _Choice:
+        message = _Message()
+        finish_reason = "stop"
+    class _Response:
+        choices = [_Choice()]
+        usage = None
+
+    class _Client:
+        class chat:
+            class completions:
+                @staticmethod
+                async def create(**kwargs):
+                    seen.update(kwargs)
+                    return _Response()
+
+    monkeypatch.setattr(llm_client, "_resolve_vision_config",
+                        lambda purpose=None: {"enabled": True, "model": "m",
+                                              "base_url": "http://127.0.0.1:8000/v1", "_local_only": True})
+    monkeypatch.setattr(llm_client, "_get_vision_client", lambda cfg=None: _Client)
+    kwargs = {} if override is None else {"max_tokens_override": override}
+    await llm_client.chat([{"role": "user", "content": "x"}], use_vision=True,
+                          vision_purpose="video_call", **kwargs)
+    assert seen["max_tokens"] == expected

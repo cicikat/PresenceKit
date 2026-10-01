@@ -162,6 +162,10 @@ from core.llm_failover import CATEGORY_TIMEOUTS as _CALL_TIMEOUTS, DEFAULT_CALL_
 # video_call 视觉用途 max_tokens：与 core/video_call.py 的 prompt 字数上限(300字)/落库截断(800字)成套，
 # 改动须同步三处，见 video_call.py 顶部注释。
 VIDEO_CALL_MAX_TOKENS = 500
+# 帧差分后续帧（video_call_frame_diff 开启）只描述变化，prompt 要求约 100 字，
+# 上限收紧到 200 token，容纳 [major]/[minor] 前缀并避免半句截断；仅在调用方显式传
+# max_tokens_override 时生效，默认全量帧仍用 VIDEO_CALL_MAX_TOKENS。
+VIDEO_CALL_DIFF_MAX_TOKENS = 200
 
 
 def _get_proxy_url() -> str | None:
@@ -397,6 +401,8 @@ async def chat(
                         request_kwargs={"max_tokens": 1000, "timeout": _CALL_TIMEOUTS["vision"]},
                     )
                 max_tokens = VIDEO_CALL_MAX_TOKENS if camera_frame else 1000
+                if camera_frame and max_tokens_override is not None:
+                    max_tokens = min(max_tokens, max(1, int(max_tokens_override)))
                 timeout = 105 if camera_frame else _CALL_TIMEOUTS["vision"]
                 if protocol == "responses":
                     from core.llm_protocol import responses_input

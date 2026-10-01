@@ -41,6 +41,7 @@ FLAGS = {
     "music_analysis": ("audio_music", "music_analysis", "音乐声音分析"),
     "music_control": ("audio_music", "music_control", "共同听歌控制"),
     "music_autonomy": ("audio_music", "music_autonomy", "听歌主动性"),
+    "video_call_frame_diff": ("video_call_frame_diff", "enabled", "视频通话帧差分（首帧全量、后续只描述变化）"),
 }
 RESTART_REQUIRED_FLAGS = frozenset({"qq"})
 _DEFAULT_ENABLED_FLAGS = frozenset({"self_management"})
