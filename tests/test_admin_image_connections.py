@@ -136,3 +136,32 @@ async def test_vision_probe_budget_and_output_status(monkeypatch, protocol, endi
     assert audit.call_args.kwargs['error_category'] == expected
     assert 'private' not in str(result)
     context.__aexit__.assert_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('base_url,expected_proxy', [
+    ('http://127.0.0.1:11435/v1', None),
+    ('http://localhost:11435/v1', None),
+    ('https://example.test/v1', 'http://proxy.test:7897'),
+])
+async def test_vision_probe_bypasses_proxy_only_for_loopback(monkeypatch, base_url, expected_proxy):
+    import openai
+    from types import SimpleNamespace
+    from core import api_call_log, llm_client
+
+    client = MagicMock()
+    client.chat.completions.create = AsyncMock(return_value=SimpleNamespace(choices=[SimpleNamespace(
+        finish_reason='stop', message=SimpleNamespace(content='TEST 123'))]))
+    context = MagicMock()
+    context.__aenter__ = AsyncMock(return_value=client)
+    context.__aexit__ = AsyncMock()
+    monkeypatch.setattr(openai, 'AsyncOpenAI', lambda **kw: context)
+    seen = []
+    monkeypatch.setattr(llm_client, '_make_http_client', lambda proxy: seen.append(proxy))
+    monkeypatch.setattr(llm_client, '_get_proxy_url', lambda: 'http://proxy.test:7897')
+    monkeypatch.setattr(api_call_log, 'append', MagicMock())
+    monkeypatch.setattr(router, 'get_config', lambda: {'vision': {
+        'enabled': True, 'model': 'vision-fixture', 'base_url': base_url,
+        'api_protocol': 'chat_completions'}})
+    assert (await router.test_image_connection('general', auth=None))['ok']
+    assert seen == [expected_proxy]

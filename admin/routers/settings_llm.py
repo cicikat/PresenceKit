@@ -411,7 +411,7 @@ async def test_image_connection(
     import time
     from PIL import Image, ImageDraw
     from core import image_recognition, api_call_log, image_presets
-    from core.llm_client import _make_http_client, _get_proxy_url
+    from core.llm_client import _make_http_client, _get_proxy_url, _is_loopback_base_url
     from openai import AsyncOpenAI
 
     cfg = get_config()
@@ -443,7 +443,8 @@ async def test_image_connection(
             if kind == "ocr":
                 return await image_recognition.recognize_ocr(uri, resolved)
             async with AsyncOpenAI(api_key=vision.get("api_key") or "none", base_url=vision["base_url"],
-                http_client=_make_http_client(_get_proxy_url()), timeout=20, max_retries=0) as client:
+                http_client=_make_http_client(None if _is_loopback_base_url(vision["base_url"]) else _get_proxy_url()),
+                timeout=20, max_retries=0) as client:
                 if vision.get("api_protocol", "chat_completions") == "responses":
                     response = await client.responses.create(model=vision["model"], max_output_tokens=output_budget,
                         input=[{"role": "user", "content": [{"type": "input_text", "text": "Read the text in this image. Return only that text."}, {"type": "input_image", "image_url": uri}]}])
