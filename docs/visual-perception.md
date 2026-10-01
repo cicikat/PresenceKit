@@ -12,6 +12,6 @@
 `sensor.write`）。响应只含 `enabled` 和 `cooldown_seconds`，不含视觉模型、地址或密钥；
 请求失败按关闭处理，客户端不得截图。该预检与本地用户开关共同构成双闸。
 
-处理前置条件与节流：`visual_perception.enabled=true`；视觉连接参数优先取 `visual_perception`，缺失字段继承 `vision`。同一 `source` 成功接收后冷却 5 分钟；冷却或关闭时仍返回 202 与 `accepted=true`，但 `processing=false`。生产者可按固定周期在内存中采样并作场景变化比对，但只在显著变化时上传，不应周期性上传屏幕。
+处理前置条件与节流：`visual_perception.enabled=true`（隐私闸门）；视觉连接按 `source` 分流：`screen` 走 `image_presets.routes.screen`（主连接，传输失败才切到 `fallbacks.screen`），`camera` 只走摄像头路由（`video_call`，其次 `video_call_tool`）里通过本机 loopback 校验的连接，永不使用备用连接，没有合格连接时丢弃（trace 记 `vlm_error`）。同一 `source` 成功接收后冷却 5 分钟；冷却或关闭时仍返回 202 与 `accepted=true`，但 `processing=false`。生产者可按固定周期在内存中采样并作场景变化比对，但只在显著变化时上传，不应周期性上传屏幕。
 
 响应 `{"accepted": true, "processing": true|false}`。结果只进入 shadow trace，不注入角色 prompt 或主记忆。管理面以 `GET /perception/visual-trace`（`state.read`）只读查看；trace 仅保存抽取后的场景/活动/置信度/短描述或丢弃原因，保留 30 天。

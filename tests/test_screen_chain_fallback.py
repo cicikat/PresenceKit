@@ -117,3 +117,36 @@ async def test_phone_chain_unrouted_is_unconfigured(config):
     result = await vision_client.decide_next_action(
         task="t", package_name="p", screen_title="s", nodes=[], screenshot_base64=None)
     assert result == (None, "unconfigured")
+
+
+def test_camera_frames_only_ever_see_the_loopback_camera_route(config):
+    # The screen route's remote fallback must never receive a camera frame.
+    config["cfg"]["image_presets"]["routes"]["video_call"] = "local"
+    chain = vlm_client.route_chain("camera")
+    assert [row["name"] for row in chain] == ["local"]
+    assert chain[0]["config"]["timeout_s"] == 7
+    assert [row["name"] for row in vlm_client.route_chain("screen")] == ["local", "remote"]
+
+
+def test_camera_route_is_empty_when_the_connection_is_not_loopback(config):
+    config["cfg"]["image_presets"]["routes"]["video_call"] = "local"
+    config["cfg"]["image_presets"]["presets"]["local"]["base_url"] = "https://vision.example/v1"
+    assert vlm_client.route_chain("camera") == []
+
+
+def test_camera_route_is_empty_when_unrouted_even_if_screen_is_routed(config):
+    assert vlm_client.route_chain("camera") == []
+
+
+@pytest.mark.asyncio
+async def test_camera_upload_never_reaches_the_screen_fallback(config, monkeypatch):
+    config["cfg"]["image_presets"]["routes"]["video_call"] = "local"
+    seen = []
+
+    async def fake(cfg, image, hint):
+        seen.append(cfg["model"])
+        return None, "error", "connection_error"
+
+    monkeypatch.setattr(vlm_client, "_describe_once", fake)
+    assert await vlm_client.describe_with_status(b"img", "", "camera") == (None, "error")
+    assert seen == ["local-vl"]

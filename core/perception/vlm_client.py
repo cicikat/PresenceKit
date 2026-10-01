@@ -36,6 +36,36 @@ def screen_route_chain() -> list[dict]:
             for row in screen_vision_chain(cfg)]
 
 
+def camera_route_chain() -> list[dict]:
+    """The camera route's single loopback connection; never a fallback.
+
+    Real-world camera frames may only reach a loopback vision model, so a
+    connection that fails ``video_call_ready`` yields nothing instead of a remote
+    handoff — the same rule the video-call chains enforce.
+    """
+    from core.config_loader import get_config
+    from core.image_presets import CAMERA_PURPOSES, resolve_purpose, video_call_ready
+
+    cfg = get_config()
+    gate = cfg.get("visual_perception") or {}
+    if not gate.get("enabled", False):
+        return []
+    for purpose in CAMERA_PURPOSES:
+        try:
+            row = resolve_purpose(purpose, cfg)
+        except KeyError:
+            continue
+        if video_call_ready(row["config"])[0]:
+            return [{**row, "route_role": "primary",
+                     "config": {**row["config"], "timeout_s": gate.get("timeout_s", 20)}}]
+    return []
+
+
+def route_chain(source: str = "screen") -> list[dict]:
+    """Connections that may see an uploaded frame of this source, primary first."""
+    return camera_route_chain() if source == "camera" else screen_route_chain()
+
+
 def get_visual_perception_config() -> dict:
     """Resolve the screen route's primary connection behind the privacy gate.
 
@@ -111,17 +141,19 @@ def _parse_observation(raw: object) -> VisualObservation | None:
     return VisualObservation(scene, activity, float(confidence), sensitive, caption)
 
 
-async def describe_with_status(image_bytes: bytes, context_hint: str = "") -> tuple[VisualObservation | None, str | None]:
+async def describe_with_status(image_bytes: bytes, context_hint: str = "",
+                               source: str = "screen") -> tuple[VisualObservation | None, str | None]:
     """Internal variant that preserves the shadow trace's invalid/error distinction.
 
-    Walks the screen route's chain: if the primary connection cannot be reached,
-    the owner's declared fallback answers instead. A reply that did arrive but
+    ``source`` picks the route: screenshots walk the screen chain (if the primary
+    cannot be reached the owner's declared fallback answers instead), camera
+    frames only ever see the loopback camera route. A reply that did arrive but
     failed validation is final — retrying it on a second model would pay twice
     for the same image without new information.
     """
     from core.image_presets import should_try_fallback
 
-    chain = screen_route_chain()
+    chain = route_chain(source)
     if not chain or not image_bytes:
         return None, "disabled"
     observation, reason = None, "error"

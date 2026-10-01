@@ -49,7 +49,7 @@ def cleanup_visual_trace() -> int:
 async def process_visual_image(image_bytes: bytes, source: str, context_hint: str = "") -> None:
     """Background-only VLM work. image_bytes is deliberately never written to disk."""
     from core.perception.vlm_client import describe_with_status
-    observation, reason = await describe_with_status(image_bytes, context_hint)
+    observation, reason = await describe_with_status(image_bytes, context_hint, source)
     if observation is None:
         _append_trace(source=source, dropped="invalid" if reason == "invalid" else "vlm_error")
         logger.warning("[perception] visual observation dropped source=%s reason=%s", source, reason)
