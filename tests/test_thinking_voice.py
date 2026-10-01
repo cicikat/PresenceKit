@@ -163,3 +163,11 @@ async def test_settings_expose_effective_preview_and_toggle(monkeypatch, tmp_pat
     assert state['voice_preview']['output_guaranteed'] is False
     assert state['display_prefer_monologue'] is False
     assert state['monologue_route']['native_uses'] == 'chat'
+
+
+def test_native_message_scope_restriction_precedes_style(monkeypatch):
+    monkeypatch.setattr(voice, 'preview', lambda _=None: {'prompt': 'STYLE_BODY'})
+    text = voice.native_message()['content']
+    head = text[:text.index('STYLE_BODY')]
+    assert '适用范围' in head and '思考摘要区' in head and '回复正文' in head
+    assert text.rstrip().endswith('仍按原有要求进行。')
