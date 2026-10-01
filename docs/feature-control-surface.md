@@ -257,7 +257,8 @@ Chat Completions 视觉连接（`localhost`、`127.0.0.1`、`::1`），拒绝远
 
 摄像头描写（周期帧与 `observe_video_call_camera` 共用同一 prompt）：以镜头内人物的动作、姿态、表情、视线为首要且写细腻（只描写可见状态，不推断内心情绪），环境只给轮廓，人物与物件互动或举物展示时才展开该物件；总长约 300 字。`video_call` 视觉用途的 `max_tokens` 由 120 放开到 500（`core/llm_client.py::VIDEO_CALL_MAX_TOKENS`），落库截断 `MAX_OBSERVATION_CHARS=800` 保持兜底，三者须一致（见 `core/video_call.py` 顶部注释）；回执 TTL 仍为 45 秒，单帧耗时逼近时优先降 `max_tokens`。
 `GET/PUT /stt-vocabulary`（admin）保存最多 32 条发音/误识别词映射，默认关闭；
-本地 Whisper 使用提示词与热词，兼容 STT 使用提示词，仅对确切匹配文本做有界纠正。
+本地 Whisper 与兼容 STT 都只收到词表的纯词表字符串（逗号分隔，不再带「以下是语音中的专有名词」前缀），
+仅对确切匹配文本做有界纠正；转写结果若与本次提示词高度相似（Whisper 把提示当成转写复读）会被丢弃并按「未能听清」处理。
 
 表情包由管理面（admin token）经 `GET/PUT /sticker-config` 管理：`sticker.enabled` 是总开关，`sticker.trigger_prob` 是 0–1 的每轮独立触发概率。缺失该配置块时保持兼容行为（启用、0.06）；关闭时不会发送或广播表情包。TTS 的概率单独掷骰，不会抢占或缩减表情包的配置概率。GET 返回当前有效值，兼作该落盘配置的只读观测面；若已命中概率但目标情绪目录无图，服务端会记录目录路径以便排查。
 
