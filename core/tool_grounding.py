@@ -12,6 +12,46 @@ import re
 
 GROUNDING_LAYER = "11_tool_grounding"
 
+# ── 工具 meta 文本泄漏闸门（工单 C）─────────────────────────────────────────
+#
+# 不是系统把工具执行结果当回复发出——是模型复述了它在 system 消息里看到的
+# 工具目录描述（core/tool_discovery.py 的分类折叠 schema，或 xml_fallback
+# 注入的工具说明文本）。用具体短语组合识别，不用单个宽泛关键词，避免误杀
+# 正常对话里提到"工具""不执行"这类词。见 docs/work-orders/
+# stt-tool-leak-and-video-diff.md「零、结论 3」。
+
+_TOOL_META_PHRASES = (
+    "只发现工具，不执行任何业务操作",
+    "下一轮才能调用具体工具",
+    "的工具定义。",
+    "该分类已加载。请使用当前提供的具体工具",
+)
+_DISCOVERY_PREFIX = "load_tools_"
+_DENSE_TOOL_NAME_THRESHOLD = 3
+
+
+def detect_tool_meta_leak(text: str, tool_names: "set[str] | frozenset[str]" = frozenset()) -> bool:
+    """True if ``text`` looks like it is reciting tool/discovery metadata to the user.
+
+    Any one of three independent signals is sufficient:
+      1. a fixed phrase lifted straight from ``core.tool_discovery`` 的折叠描述
+         or load() 回执;
+      2. the ``load_tools_`` discovery-tool name prefix appearing in prose;
+      3. three or more registered tool names enumerated in the same text —
+         a human writing about "the tools" doesn't list call signatures.
+    """
+    if not text:
+        return False
+    if any(phrase in text for phrase in _TOOL_META_PHRASES):
+        return True
+    if _DISCOVERY_PREFIX in text:
+        return True
+    if tool_names:
+        hits = sum(1 for name in tool_names if name and name in text)
+        if hits >= _DENSE_TOOL_NAME_THRESHOLD:
+            return True
+    return False
+
 _COMPLETION_CLAIM_RE = re.compile(
     r"(?:已经|已|刚刚|刚才|现在已经|已经帮你|已帮你)"
     r"(?:查到|查过|搜到|搜过|看过|读到|读过|控制|操作|完成|打开|关闭|发送|发出|"

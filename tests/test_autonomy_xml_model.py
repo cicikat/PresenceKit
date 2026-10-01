@@ -37,6 +37,29 @@ def test_xml_prose_is_private_silence(monkeypatch):
     assert result.tool_calls == []
 
 
+def test_xml_fallback_tool_meta_leak_is_discarded_not_returned(monkeypatch):
+    """工单 C2：parse 失败时原样放行会把 xml_fallback 注入的工具描述复述出来。"""
+    monkeypatch.setattr(llm_client, '_prepare_call', lambda *args, **kwargs: (SimpleNamespace(tool_call_mode='xml_fallback'), [], {}))
+    leaked = ("加载电脑桌面与应用操作的工具定义。含：desktop_minimize。"
+              "只发现工具，不执行任何业务操作；下一轮才能调用具体工具。")
+    async def chat(*args, **kwargs): return leaked
+    monkeypatch.setattr(llm_client, 'chat', chat)
+    tools = [{'type': 'function', 'function': {'name': 'desktop_minimize'}}]
+    result = asyncio.run(llm_client.chat_turn([], tools, allow_xml_fallback=True))
+    assert result.tool_calls == []
+    assert result.content == ''
+    assert '只发现工具' not in result.content
+
+
+def test_xml_fallback_ordinary_silence_is_unaffected_by_leak_gate(monkeypatch):
+    monkeypatch.setattr(llm_client, '_prepare_call', lambda *args, **kwargs: (SimpleNamespace(tool_call_mode='xml_fallback'), [], {}))
+    async def chat(*args, **kwargs): return 'I will stay quiet.'
+    monkeypatch.setattr(llm_client, 'chat', chat)
+    tools = [{'type': 'function', 'function': {'name': 'talk_owner'}}]
+    result = asyncio.run(llm_client.chat_turn([], tools, allow_xml_fallback=True))
+    assert result.content == 'I will stay quiet.'
+
+
 def test_existing_callers_remain_native_only(monkeypatch):
     monkeypatch.setattr(llm_client, '_prepare_call', lambda *args, **kwargs: (SimpleNamespace(name='fixture', tool_call_mode='xml_fallback'), [], {}))
     with pytest.raises(ValueError, match='function_calling'):

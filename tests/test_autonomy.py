@@ -660,6 +660,24 @@ def test_talk_does_not_enter_turn_sink_without_a_delivery_channel(sandbox, monke
     assert invoked == []
 
 
+def test_talk_rejects_tool_meta_leak_before_sending(sandbox, monkeypatch):
+    """工单 C1：talk_owner.text 本身是工具目录描述时拒绝发送，不进 turn_sink。"""
+    from core.autonomy import talk_gate
+    monkeypatch.setattr(talk_gate, "check", lambda *_args, **_kwargs: ("allow", "ok"))
+    monkeypatch.setattr("core.pipeline_registry.get", lambda: object())
+    monkeypatch.setattr("channels.registry.get_active", lambda: [object()])
+    monkeypatch.setattr("core.response_processor.strip_render_tags", lambda text: text)
+    monkeypatch.setattr("core.reality_output_scrubber.scrub_reality_output_text", lambda text: text)
+    invoked = []
+    async def forbidden(**_kwargs): invoked.append(True)
+    monkeypatch.setattr("core.turn_sink.record_assistant_turn", forbidden)
+    leaked = ("加载电脑桌面与应用操作的工具定义。只发现工具，不执行任何业务操作；"
+              "下一轮才能调用具体工具。")
+    sent, reason = asyncio.run(talk_gate.send("owner", "char", leaked, source="manual", run_id="run"))
+    assert not sent and reason == "tool_meta_leak"
+    assert invoked == []
+
+
 def test_temporary_retry_is_durably_backed_off(sandbox):
     from core.autonomy import store
     from core.autonomy.models import Run

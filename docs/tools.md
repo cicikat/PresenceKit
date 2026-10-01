@@ -6,6 +6,38 @@
 
 Brief 249：删除未被生产链调用的旧工具名单生成器；Path A 仍使用 probe builder，Path C 仍使用经过 exposure 过滤的 schema。Author's Note 的工具事实规则现在适用于每一步实际返回，不再用初始“无工具结果”否定后续调用。nudge 开关只控制软提示，不改变成功/失败证据要求。
 
+## 工具 meta 文本泄漏闸门（工单组「语音链路 · 工具文本泄漏 · 视频帧差分」工单 C）
+
+症状：聊天里出现「加载…的工具定义。含：…只发现工具，不执行任何业务操作；下一轮才能调用具体工具。」
+这类文本。它不是系统把工具结果当回复发出（`role: tool` 消息只参与下一轮推理，不会成为 outcome），
+而是模型复述了 system 里看到的工具目录：分类折叠发现的 `load_tools_<category>` schema `description`
+（`core/tool_discovery.py`），或 xml_fallback 把 schema 描述按文本拼进 system 的 `_build_xml_tool_desc()`。
+
+检测函数 `core/tool_grounding.py::detect_tool_meta_leak(text, tool_names)`，命中任一即判泄漏：
+`tool_discovery` 的固定短语（「只发现工具，不执行任何业务操作」「下一轮才能调用具体工具」
+「的工具定义。」「该分类已加载。请使用当前提供的具体工具」）、`load_tools_` 前缀、同一文本里
+列出 ≥3 个已暴露工具名。刻意用短语组合而非「工具」「不执行」这类单词，普通对话提到工具不会误杀。
+
+三个接入点（都在「已决定发送」之前，不在 `_sanitize_assistant_message` / `turn_sink`，那里只管
+history 落盘，拦不住已发出的回复）：
+
+| 路径 | 位置 | 命中后 |
+|---|---|---|
+| 聊天 Path C 自然结束且未调用过工具 | `Pipeline._guard_tool_meta_leak()`（`run_agentic_loop` 在 `guard_completion_claim` 之后） | 追加 system 指令静默重试一次；重试仍泄漏则返回固定兜底话术，不发泄漏文本；重试异常 fail-open 保持原回复 |
+| autonomy 的 `talk_owner.text` | `core/autonomy/talk_gate.py::send()` | 拒绝本次发言，返回 `tool_meta_leak`（run 落成 `talk_canceled`），不进 turn_sink；无生成上下文可重试 |
+| xml_fallback 解析失败兜底 | `llm_client.chat_turn()` 的 xml_fallback 分支 | 丢弃泄漏文本（`ChatTurn.content=""`、无工具调用），不再原样当 content 返回 |
+
+观测：每次命中记 `runtime_signal_observability`（`category=tool_loop_discovery`，
+`code=tool_meta_leak`；重试仍泄漏另记 `tool_meta_leak_retry_failed`），经既有
+`GET /observability/runtime-signals`（`state.read`）读取，不含正文。
+
+未覆盖：Path C 用过工具后的强制收尾出口、流式直出出口目前不过该闸门（流式 token 已对用户可见，
+不能事后撤回）；这些出口是不带 tools 的收尾生成，理论上看不到工具目录，但**没有做过实测**，
+若出现泄漏再单独扩展。`tool_discovery.py` 的折叠描述文案本单未改（现有措辞已能被上述短语识别）。
+xml_fallback 的工具暴露策略（`_build_xml_tool_desc()` 仍把 schema 描述拼进 system）本单未改，
+只在输出端兜底；`docs/model-presets.md` 因此无需变更。observe：未用真实 xml_fallback preset
+做端到端复现与回归，单测只覆盖检测函数与三个接入点。
+
 ---
 
 ## MCP optional authentication (Brief 195)

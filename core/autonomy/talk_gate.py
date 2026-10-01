@@ -61,6 +61,15 @@ async def send(
     from core.reality_output_scrubber import scrub_reality_output_text
     text = (scrub_reality_output_text(strip_render_tags(strip_control_markers(text))) or "").strip()
     if not text: return False, "empty_text"
+    # 工单 C1：autonomy 走 talk_owner 工具参数发言，不经 pipeline.run_agentic_loop
+    # 的发送前闸门；xml_fallback 解析失败时模型可能把工具目录描述当成了
+    # talk_owner.text 的内容。这里不重试（没有生成上下文可追加 system 指令），
+    # 命中直接拒绝本次发言，等待下一轮机会，而不是把泄漏文本发给用户。
+    from core.tool_grounding import detect_tool_meta_leak
+    if detect_tool_meta_leak(text):
+        from core.runtime_signal_observability import record as _record_discovery
+        _record_discovery(category="tool_loop_discovery", code="tool_meta_leak", status="attention")
+        return False, "tool_meta_leak"
     mode, reason = check(uid, allow_soft=True, call_char_id=char_id if call_scoped else None)
     if mode == "hard" or (mode == "soft" and not bypass_soft_once): return False, reason
     from core import pipeline_registry

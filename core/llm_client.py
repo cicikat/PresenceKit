@@ -665,6 +665,16 @@ async def chat_turn(
         response = await chat(xml_messages, tools=tools, call_category=call_category,
                               max_tokens_override=max_tokens_override, char_id=char_id, is_proactive=is_proactive)
         if '<tool_call' not in response and '</tool_call>' not in response and not response.startswith('__TOOL_CALL__:'):
+            # 工单 C2：xml_fallback 把工具 schema 的 description 文本直接拼进了
+            # system 消息，对这类模型来说那是货真价实的可读 prompt 文本，不是
+            # 元数据；解析失败时原样放行会把它复述出来（结论 3 路径一）。
+            # 这里不改调用方语义（仍是"自然结束，无工具调用"），只替换掉
+            # 泄漏文本本身，不把它当 content 返回。
+            from core.tool_grounding import detect_tool_meta_leak
+            tool_names = {(item.get('function') or item).get('name') for item in tools}
+            if detect_tool_meta_leak(response, tool_names):
+                logger.warning("[llm_client.chat_turn] xml_fallback tool meta leak detected, discarding content")
+                response = ''
             return ChatTurn(response, [], {'role': 'assistant', 'content': response})
         parsed = parse_probe_response(response, allowed_tool_names={item.get('function', item).get('name') for item in tools})
         if parsed.status != 'tool_selected':
