@@ -1436,6 +1436,12 @@ HH:MM 发生了什么
 
 **规则纠察**：事件层写入前跑 `check_diary_facts()`，不合规则清空事件层，感受层仍正常写入
 
+**素材取样**（工单 F）：`_prepare_diary_work_context()` 把当天（或补写目标日）event_log 原文交给 `core/memory/event_log_sampling.py::sample_event_log_by_period()`，不再 `[-9000:]` 尾部硬截断，也不再在二次裁剪里从头部砍。
+- 按（日期，时段：上午 / 下午 / 傍晚 / 夜间）切段，各段均摊预算，用不满的份额让给更大的段；段内超额保留头尾、中间换成一行省略标记。
+- 预算按实际可用值算：`MAX_CONTEXT_CHARS`（12000，不变）减去 persona_hint / voice_example / mood / agent_md / 字段名的实际 JSON 序列化占用，并循环修正中文 JSON 转义膨胀；`self_agent_md` 仍只在日志取空后才被缩短或去掉。
+- 取样前先过 `event_log_source.block_is_recallable`：dream / web / coplay 等隔离来源块不进日记（日记会被次日 prompt 层 6e 注入，属于「固化为长期材料」，遵守上文来源隔离契约；此前这条路径漏接）。重复的日期头只留一份，`> emotion/speaker` meta 行与角色前缀原样保留。
+- `diary_backfill` 与 23:00 触发同走此函数；产物 `## 今日事件` / `## 今日感受` 结构与两段 prompt 不变。
+
 ### 用户日记上下文（diary_context，prompt 层 6d）
 
 `core/memory/diary_context.py`：每 6 小时由调度器 `_check_diary_inject()` 读取最近 2 天日记写入独立快照。

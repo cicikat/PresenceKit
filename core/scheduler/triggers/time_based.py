@@ -375,6 +375,7 @@ def _prepare_diary_work_context(
 ) -> dict[str, str] | None:
     """Build the exact bounded input consumed by the same-character diary 副链 worker."""
     from core.memory.event_log import get_recent_days
+    from core.memory.event_log_sampling import sample_event_log_by_period
 
     days = 2 if datetime.now().hour < LOGICAL_DAY_CUTOFF_HOUR else 1
     if target_date is not None:
@@ -385,7 +386,7 @@ def _prepare_diary_work_context(
         )
     else:
         today_log = get_recent_days(oid, days=days, char_id=char_id)
-    today_log = (today_log or "")[-9000:]
+    today_log = today_log or ""
     if not today_log:
         return None
     persona_hint, voice_example, mood_hint = _collect_diary_voice(char_id)
@@ -410,11 +411,19 @@ def _prepare_diary_work_context(
         context["self_agent_md"] = ""
         context["self_agent_md_revision"] = "0"
     from core.agent_runtime.work_sessions import MAX_CONTEXT_CHARS
-    serialized = json.dumps(context, ensure_ascii=False, sort_keys=True)
-    while len(serialized) > MAX_CONTEXT_CHARS and context["today_log"]:
-        excess = len(serialized) - MAX_CONTEXT_CHARS
-        context["today_log"] = context["today_log"][min(len(context["today_log"]), excess):]
+    # 取样预算按「上限 - 其余字段实际占用」算；JSON 转义膨胀由回路修正。
+    # 一层取样、一层预算：不再有按尾部/头部硬截断的第二次裁剪（工单 F）。
+    raw_log = today_log
+    context["today_log"] = ""
+    overhead = len(json.dumps(context, ensure_ascii=False, sort_keys=True))
+    budget = MAX_CONTEXT_CHARS - overhead
+    serialized = ""
+    for _ in range(12):
+        context["today_log"] = sample_event_log_by_period(raw_log, budget)
         serialized = json.dumps(context, ensure_ascii=False, sort_keys=True)
+        if len(serialized) <= MAX_CONTEXT_CHARS or not context["today_log"]:
+            break
+        budget = min(budget - (len(serialized) - MAX_CONTEXT_CHARS), len(context["today_log"]) - 1)
     while len(serialized) > MAX_CONTEXT_CHARS and context["self_agent_md"]:
         excess = len(serialized) - MAX_CONTEXT_CHARS
         context["self_agent_md"] = context["self_agent_md"][:-min(len(context["self_agent_md"]), excess)]
