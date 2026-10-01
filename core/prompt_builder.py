@@ -762,7 +762,12 @@ def build(
             if _sensor.get("steps") is not None:
                 _s_parts.append(f"{_sensor['steps']}步")
             if _sensor.get("battery") is not None:
-                _s_parts.append(f"电量{_sensor['battery']}%")
+                # 只有确定在充电时才加后缀。charging 缺失是"没读到"，
+                # 说成"未充电"就是替手机编一件它没说过的事。
+                _charging_suffix = "（正在充电）" if _sensor.get("charging") is True else ""
+                _s_parts.append(f"电量{_sensor['battery']}%{_charging_suffix}")
+            elif _sensor.get("charging") is True:
+                _s_parts.append("手机正在充电")
             if _sensor.get("location"):
                 _s_parts.append(_sensor["location"])
             if _s_parts:

@@ -6,6 +6,8 @@
   {
     "steps": 3200,
     "battery": 85,
+    "charging": true,
+    "plugged": "usb",
     "location": "杭州",
     "screen_sessions": 12,
     "timestamp": 1714000000
@@ -29,6 +31,9 @@ router = APIRouter()
 
 # 最近一次手机传感器快照（内存缓存，重启清零）
 _last_sensor_data: dict = {}
+
+# 供电方式白名单，与手机端 BatteryStatus.pluggedValues 对齐。
+_PLUGGED_VALUES = {"ac", "usb", "wireless", "none"}
 
 _SENSITIVE_WINDOW_KEYWORDS = (
     "密码", "password", "银行", "bank", "支付", "payment",
@@ -56,6 +61,8 @@ def _save_sensor_to_health_state(data: dict):
             "time":            datetime.now().strftime("%Y-%m-%d %H:%M"),
             "steps":           data.get("steps"),
             "battery":         data.get("battery"),
+            "charging":        data.get("charging"),
+            "plugged":         data.get("plugged"),
             "location":        data.get("location"),
             "screen_sessions": data.get("screen_sessions"),
         })
@@ -69,6 +76,12 @@ def _save_sensor_to_health_state(data: dict):
             summary["steps"] = max(summary.get("steps", 0), data["steps"])
         if data.get("battery") is not None:
             summary["battery"] = data["battery"]
+        # 充电状态只在这次上报确实读到时才覆盖摘要；缺失不清空上一次的已知值，
+        # 也不写 False —— "不知道" 和 "没在充电" 不能塌成同一个字段。
+        if data.get("charging") is not None:
+            summary["charging"] = data["charging"]
+        if data.get("plugged") is not None:
+            summary["plugged"] = data["plugged"]
         if data.get("location"):
             summary["location"] = data["location"]
         if data.get("screen_sessions") is not None:
@@ -88,6 +101,8 @@ async def receive_sensor_data(body: dict, auth=Depends(require_scopes("sensor.wr
     body字段（均可选，有什么传什么）：
       steps          — 今日步数
       battery        — 当前电量（0-100）
+      charging       — 是否正在充电（bool；读不到时省略该 key，不要发 false）
+      plugged        — 供电方式（ac / usb / wireless / none）
       location       — 城市名（可选）
       screen_sessions — 今日亮屏次数
       timestamp      — 时间戳（可选，不传用服务器时间）
@@ -96,6 +111,8 @@ async def receive_sensor_data(body: dict, auth=Depends(require_scopes("sensor.wr
     # 基础校验
     steps = body.get("steps")
     battery = body.get("battery")
+    charging = body.get("charging")
+    plugged = body.get("plugged")
 
     if steps is not None:
         try:
@@ -113,9 +130,24 @@ async def receive_sensor_data(body: dict, auth=Depends(require_scopes("sensor.wr
         except (TypeError, ValueError):
             raise HTTPException(status_code=422, detail="battery 必须为 0-100 的整数")
 
+    # bool 而非 truthy：1 / "true" 一律拒绝，否则客户端一处笔误就会把
+    # "不知道" 静默变成 "正在充电"。
+    if charging is not None and not isinstance(charging, bool):
+        raise HTTPException(status_code=422, detail="charging 必须为布尔值")
+
+    if plugged is not None:
+        plugged = str(plugged).strip().lower()
+        if plugged not in _PLUGGED_VALUES:
+            raise HTTPException(
+                status_code=422,
+                detail=f"plugged 必须为 {'/'.join(sorted(_PLUGGED_VALUES))} 之一",
+            )
+
     data = {
         "steps":           steps,
         "battery":         battery,
+        "charging":        charging,
+        "plugged":         plugged,
         "location":        str(body.get("location", "")).strip() or None,
         "screen_sessions": body.get("screen_sessions"),
     }
