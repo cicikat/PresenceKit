@@ -31,15 +31,29 @@ interval / topic_followup 每 tick 刷新它，相机信号总被判 `duplicate`
 同文件还修了一个既有崩溃：函数内的 `import time` 使 `time` 成为局部变量，`camera_silent` 那一行在
 CHATTING 状态下 `UnboundLocalError`，即通话中用户一说话相机 job 就在准入处崩掉。
 
-## 本地 STT 运行参数 `stt_local`（2026-09-30，backend current）
+## 本地 STT 运行参数 `stt_local`（2026-09-30，backend current；工单 H 增加 sherpa-onnx 引擎）
 
-配置块 `stt_local`：`model_size`（tiny/base/small/medium/large-v3，默认 `small`）、
-`device`（auto/cpu/cuda，默认 `auto`）、`compute_type`（int8/int8_float16/float16/float32，
-默认 `int8`）、`beam_size`（1–10，默认 5）、`timeout_seconds`（5–120，默认 20）。
-仅管本机 faster-whisper；远程 OpenAI 兼容连接仍在 `stt_presets`，两处不重叠。
+配置块 `stt_local`：`engine`（`faster_whisper` | `sherpa_onnx`，**默认 `faster_whisper`**，不改变现有部署）、
+`timeout_seconds`（5–120，默认 20，两个引擎共用），以及按引擎分组的参数：
+
+* faster-whisper 组（保持原有扁平键）：`model_size`（tiny/base/small/medium/large-v3，默认 `small`）、
+  `device`（auto/cpu/cuda，默认 `auto`）、`compute_type`（int8/int8_float16/float16/float32，默认 `int8`）、
+  `beam_size`（1–10，默认 5）。
+* sherpa-onnx 组（子块 `sherpa_onnx`）：`model`（目前一个：`zipformer-bilingual-zh-en-2023-02-20`）、
+  `decoding_method`（`modified_beam_search` 默认 | `greedy_search`；热词只在束搜索下生效）、`num_threads`（1–16，默认 2）、
+  `max_active_paths`（1–16，默认 4）、`hotwords_score`（0–10，默认 1.5）、`endpoint_silence_seconds`（0.3–5，默认 0.8，
+  句间停顿切分）、`repeat_collapse_min_run`（3–20，默认 4：连续相同字 ≥N 折成 2 个）、`download_base`（模型下载源，默认
+  HuggingFace，可填镜像；下载始终按 SHA-256 校验）。
+
+只严格校验**当前引擎**那一组；另一组按有效值保留、无效值退回默认，所以来回切换不丢参数。实例身份（`_key`）含引擎，
+切换必重建。远程 OpenAI 兼容连接仍在 `stt_presets`，两处不重叠；**配置里存在 `stt_presets` 块时 `POST /transcribe`
+远程优先**，此时这里选的本地引擎不会被用到（管理面页会提示）。
 生效方式：下一次 `/transcribe` 发现配置与已加载实例不一致即重建，新模型加载并跑通后才替换，
-失败时保留旧实例；手写无效值退回默认。`auto` 回落 CPU 与原因可在 `core.stt_local.snapshot()`
-看到。观测：`/observability/api-calls`（`state.read`）。
+失败时保留旧实例；手写无效值退回默认。**选了 sherpa-onnx 而缺包/缺模型/校验失败/自检失败时明确报错，绝不回落到 Whisper。**
+`auto` 回落 CPU 与原因可在 `core.stt_local.snapshot()`
+看到。观测：`/observability/api-calls`（`state.read`；`provider=sherpa_onnx|faster_whisper`，`model` 含模型 id）。
+模型权重不进 git：显式下载到 `get_paths().stt_model_dir()`（`data/cache/stt_models/<model>/`，约 200 MB），
+`POST /settings/local-runtime/stt/sherpa/download`（`admin`，后台线程，进度见 `GET /settings/local-runtime` 的 `sherpa.download`）。
 
 管理面页面「本地模型运行」（`local-model-runtime`，服务分组，`admin` scope）只接本地 STT：
 `GET /settings/local-runtime`（configured / effective / 回落原因 / 最近一次切换结果）、

@@ -343,6 +343,23 @@ hardware:
   intiface_opt_in: false  # Brief 151: dormant reserve; explicit opt-in required
   buttplug_ws: ws://127.0.0.1:12345
   max_job_duration_ms: 900000  # 单个后台硬件动作最长 15 分钟
+# 本地语音识别引擎（POST /transcribe 在没有 stt_presets 块时使用；有该块时远程优先）。管理面「本地模型运行」页可视化编辑。
+# stt_local:
+#   engine: faster_whisper      # faster_whisper（默认）| sherpa_onnx
+#   timeout_seconds: 20         # 两个引擎共用
+#   model_size: small           # ── faster-whisper 组 ──
+#   device: auto
+#   compute_type: int8
+#   beam_size: 5
+#   sherpa_onnx:                # ── sherpa-onnx 组（需另装 pip install sherpa-onnx 并在管理面下载模型）──
+#     model: zipformer-bilingual-zh-en-2023-02-20
+#     decoding_method: modified_beam_search   # greedy_search 更快但不支持热词、更易重复
+#     num_threads: 2
+#     max_active_paths: 4
+#     hotwords_score: 1.5
+#     endpoint_silence_seconds: 0.8
+#     repeat_collapse_min_run: 4
+#     download_base: https://huggingface.co   # 访问不通时可填镜像；下载始终按 SHA-256 校验
 # 爱意探针命中时请求板子画爱心，独立于 hardware（振动等）之外的具身反馈通道
 embodiment:
   heart:

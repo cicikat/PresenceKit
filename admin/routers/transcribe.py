@@ -51,6 +51,17 @@ def _run_backend(backend: dict, cfg: dict, audio_path: str) -> str:
     # 的决定 1): send the bare word list, not the natural-language template.
     hint = hotwords()
     model = backend["model"]
+    if backend["backend"] == "sherpa_onnx":
+        # Explicit branch: must never fall into the openai-whisper `else` below. sherpa has no
+        # initial_prompt (its hotwords bias the decoder, built into the recognizer), but the echo
+        # guard stays: it protects against "a hint shown up as the result" in general.
+        from core import stt_sherpa
+        text = stt_sherpa.transcribe(backend, audio_path,
+                                     repeat_min_run=cfg["sherpa_onnx"]["repeat_collapse_min_run"])
+        if hint and is_prompt_echo(text, hint):
+            logger.info("[transcribe] 回声剔除（sherpa_onnx）")
+            return ""
+        return correct(text)
     if backend["backend"] == "faster_whisper":
         options = {"initial_prompt": hint or None, "hotwords": hint or None,
                    "vad_filter": True, "beam_size": cfg["beam_size"]}

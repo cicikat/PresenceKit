@@ -38,8 +38,12 @@ def _patch(monkeypatch, *, cuda_devices=1, cuda_error=None, loads=None):
 
 def test_defaults_suit_unknown_cpu_hardware():
     cfg = stt_local.settings({})
-    assert cfg == {"model_size": "small", "device": "auto", "compute_type": "int8",
-                   "beam_size": 5, "timeout_seconds": 20.0}
+    # The faster-whisper group is exactly what it was before the engine switch existed, and the default
+    # engine is still faster_whisper, so existing installs behave identically.
+    assert {key: cfg[key] for key in ("model_size", "device", "compute_type", "beam_size", "timeout_seconds")} == {
+        "model_size": "small", "device": "auto", "compute_type": "int8", "beam_size": 5, "timeout_seconds": 20.0}
+    assert cfg["engine"] == "faster_whisper"
+    assert set(cfg) == {"engine", "model_size", "device", "compute_type", "beam_size", "timeout_seconds", "sherpa_onnx"}
 
 
 def test_validation_rejects_bad_fields_and_cpu_with_gpu_only_precision():

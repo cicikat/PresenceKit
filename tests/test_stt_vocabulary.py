@@ -29,6 +29,14 @@ def test_is_prompt_echo_catches_bare_wordlist_repeats_by_similarity():
     assert not vocabulary.is_prompt_echo("我们去爬山吧", hint)
 
 
+def test_is_prompt_echo_never_drops_a_lone_vocabulary_word_said_for_real():
+    # A one-word hint is indistinguishable from real speech: saying the name must survive.
+    assert not vocabulary.is_prompt_echo("暮星", "暮星")
+    assert not vocabulary.is_prompt_echo("暮星", "暮星, 星野")           # 单词发言，多词提示：相似度低于阈值
+    # 但固定模板旁白无论词表多大都要剔除
+    assert vocabulary.is_prompt_echo("以下是语音中的专有名词：暮星", "暮星")
+
+
 def test_is_prompt_echo_empty_inputs_are_not_echo():
     assert not vocabulary.is_prompt_echo("", "暮星")
     assert not vocabulary.is_prompt_echo("你好", "")

@@ -1403,6 +1403,13 @@ class DataPaths:
         """Derived acoustic summaries keyed by content hash + analysis version."""
         return self._p("cache", "audio_analysis")
 
+    def stt_model_dir(self) -> Path:
+        """Downloaded local STT model weights (sherpa-onnx), one subdirectory per model id.
+
+        Re-downloadable and SHA-256 verified, so ``derived``; never committed.
+        """
+        return self._p("cache", "stt_models")
+
     def cleanup(self):
         if self.mode != "test":
             raise RuntimeError("只有 test 模式才能执行 cleanup()")

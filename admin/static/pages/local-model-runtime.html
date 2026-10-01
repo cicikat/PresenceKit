@@ -1,10 +1,11 @@
 <h1 class="page-title" data-i18n="nav.page.local-model-runtime">本地模型运行</h1>
 <div class="card">
   <div class="card-header">
-    <h3 data-i18n="local_runtime.stt.title">本地语音识别（Whisper）</h3>
+    <h3 data-i18n="local_runtime.stt.title">本地语音识别</h3>
     <span id="local-runtime-stt-status" class="admin-inline-082"></span>
   </div>
-  <p class="admin-inline-087" data-i18n="local_runtime.stt.intro">只管本机运行的 Whisper 的硬件与精度。远程 OpenAI 兼容语音识别连接在「语音合成与声音（TTS、STT）」页配置，两处不重叠。保存时先热切换，成功后才写入配置；失败会保留原来能用的设置。</p>
+  <p class="admin-inline-087" data-i18n="local_runtime.stt.intro">只管本机运行的语音识别引擎（faster-whisper 或 sherpa-onnx）。远程 OpenAI 兼容语音识别连接在「语音合成与声音（TTS、STT）」页配置，两处不重叠。保存时先热切换，成功后才写入配置；失败会保留原来能用的设置。</p>
+  <p class="admin-inline-087" id="local-runtime-remote-note" role="status" hidden></p>
 
   <div class="card" id="local-runtime-effective">
     <h4 data-i18n="local_runtime.effective.title">实际生效状态</h4>
@@ -18,32 +19,93 @@
 
   <div class="form-row">
     <label class="field">
-      <span data-i18n="local_runtime.field.model_size">模型尺寸</span>
-      <select id="local-runtime-model-size"></select>
-    </label>
-    <label class="field">
-      <span data-i18n="local_runtime.field.device">运行设备</span>
-      <select id="local-runtime-device"></select>
-    </label>
-  </div>
-  <p class="admin-inline-087" id="local-runtime-size-note"></p>
-  <p class="admin-inline-087" id="local-runtime-device-note"></p>
-  <div class="form-row">
-    <label class="field">
-      <span data-i18n="local_runtime.field.compute_type">计算精度</span>
-      <select id="local-runtime-compute-type"></select>
-    </label>
-    <label class="field">
-      <span data-i18n="local_runtime.field.beam_size">束搜索宽度 beam_size（1–10）</span>
-      <input type="number" id="local-runtime-beam-size" min="1" max="10" step="1">
+      <span data-i18n="local_runtime.field.engine">识别引擎</span>
+      <select id="local-runtime-engine"></select>
     </label>
     <label class="field">
       <span data-i18n="local_runtime.field.timeout">转写超时（秒，5–120）</span>
       <input type="number" id="local-runtime-timeout" min="5" max="120" step="1">
     </label>
   </div>
-  <p class="admin-inline-087" id="local-runtime-compute-note"></p>
-  <p class="admin-inline-087" data-i18n="local_runtime.beam_note">beam_size 越大越准但越慢；延迟要紧时可调小。第一次换更大的模型可能要联网下载权重，保存会等到加载完成，可能需要几分钟。</p>
+  <p class="admin-inline-087" id="local-runtime-engine-note"></p>
+
+  <div id="local-runtime-whisper-group">
+    <div class="form-row">
+      <label class="field">
+        <span data-i18n="local_runtime.field.model_size">模型尺寸</span>
+        <select id="local-runtime-model-size"></select>
+      </label>
+      <label class="field">
+        <span data-i18n="local_runtime.field.device">运行设备</span>
+        <select id="local-runtime-device"></select>
+      </label>
+    </div>
+    <p class="admin-inline-087" id="local-runtime-size-note"></p>
+    <p class="admin-inline-087" id="local-runtime-device-note"></p>
+    <div class="form-row">
+      <label class="field">
+        <span data-i18n="local_runtime.field.compute_type">计算精度</span>
+        <select id="local-runtime-compute-type"></select>
+      </label>
+      <label class="field">
+        <span data-i18n="local_runtime.field.beam_size">束搜索宽度 beam_size（1–10）</span>
+        <input type="number" id="local-runtime-beam-size" min="1" max="10" step="1">
+      </label>
+    </div>
+    <p class="admin-inline-087" id="local-runtime-compute-note"></p>
+    <p class="admin-inline-087" data-i18n="local_runtime.beam_note">beam_size 越大越准但越慢；延迟要紧时可调小。第一次换更大的模型可能要联网下载权重，保存会等到加载完成，可能需要几分钟。</p>
+  </div>
+
+  <div id="local-runtime-sherpa-group" hidden>
+    <div class="card" id="local-runtime-sherpa-assets">
+      <h4 data-i18n="local_runtime.sherpa.assets_title">sherpa-onnx 模型文件</h4>
+      <div id="local-runtime-sherpa-assets-body" role="status" aria-live="polite"></div>
+      <div class="modal-footer admin-inline-124">
+        <button class="btn btn-ghost" id="local-runtime-sherpa-download" data-action="downloadSherpaModel" data-i18n="local_runtime.sherpa.download">下载模型</button>
+      </div>
+    </div>
+    <div class="form-row">
+      <label class="field">
+        <span data-i18n="local_runtime.sherpa.model">模型</span>
+        <select id="local-runtime-sherpa-model"></select>
+      </label>
+      <label class="field">
+        <span data-i18n="local_runtime.sherpa.decoding_method">解码方式</span>
+        <select id="local-runtime-sherpa-decoding"></select>
+      </label>
+    </div>
+    <p class="admin-inline-087" id="local-runtime-sherpa-decoding-note"></p>
+    <div class="form-row">
+      <label class="field">
+        <span data-i18n="local_runtime.sherpa.num_threads">计算线程数（1–16）</span>
+        <input type="number" id="local-runtime-sherpa-threads" min="1" max="16" step="1">
+      </label>
+      <label class="field">
+        <span data-i18n="local_runtime.sherpa.max_active_paths">束宽 max_active_paths（1–16）</span>
+        <input type="number" id="local-runtime-sherpa-paths" min="1" max="16" step="1">
+      </label>
+      <label class="field">
+        <span data-i18n="local_runtime.sherpa.hotwords_score">热词加分 hotwords_score（0–10）</span>
+        <input type="number" id="local-runtime-sherpa-hotwords" min="0" max="10" step="0.1">
+      </label>
+    </div>
+    <div class="form-row">
+      <label class="field">
+        <span data-i18n="local_runtime.sherpa.endpoint">句间停顿切分（秒，0.3–5）</span>
+        <input type="number" id="local-runtime-sherpa-endpoint" min="0.3" max="5" step="0.1">
+      </label>
+      <label class="field">
+        <span data-i18n="local_runtime.sherpa.repeat">重复折叠阈值（连续相同字 ≥ N 时折成 2 个，3–20）</span>
+        <input type="number" id="local-runtime-sherpa-repeat" min="3" max="20" step="1">
+      </label>
+    </div>
+    <label class="field">
+      <span data-i18n="local_runtime.sherpa.download_base">模型下载源（访问 HuggingFace 不通时可填镜像地址；下载内容仍会按 SHA-256 校验）</span>
+      <input type="text" id="local-runtime-sherpa-base" autocomplete="off" spellcheck="false">
+    </label>
+    <p class="admin-inline-087" data-i18n="local_runtime.sherpa.note">sherpa-onnx 只做整段离线转写，不是边说边出字。它会按停顿切句、用束搜索解码，并折叠异常连续重复；专有名词词表会作为热词偏置（只在束搜索下生效）。选了它而加载失败时不会偷偷换回 Whisper，会明确报错。</p>
+  </div>
+
   <div id="local-runtime-result" role="status" aria-live="polite"></div>
   <div class="modal-footer admin-inline-124">
     <button class="btn btn-ghost" data-action="loadLocalModelRuntime" data-i18n="local_runtime.refresh">刷新状态</button>

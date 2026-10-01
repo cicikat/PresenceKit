@@ -60,6 +60,39 @@ URL、密钥或供应商响应正文。进程启动时 `core.stt_local.warmup()`
 首次真实请求仍会按原有逻辑自己重试一次冷启动。本单不改 `beam_size`/`model_size` 默认值、
 不做流式转写，延迟调参留给埋点数据落地之后再评估。
 
+工单 H：本地 STT 引擎可自选，新增 sherpa-onnx。`stt_local.engine`（`faster_whisper` 默认 | `sherpa_onnx`）；
+参数、校验、观测见 `docs/feature-control-surface.md`「本地 STT 运行参数」。实现 `core/stt_sherpa.py`，
+沿用 `core/stt_local.py` 的热切换/自检/`api_call_log` 生命周期，`admin/routers/transcribe.py::_run_backend` 对它有
+**显式分支**（不会落进 openai-whisper 的 else）。要点：
+
+* **选型**：默认且目前唯一的模型是 `csukuangfj/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20`
+  （固定 commit，int8 编码器/联合网络 + fp32 解码器，约 200 MB，每个文件有 SHA-256）。这是用户已在输入法里用过并觉得
+  「还 ok」的模型，官方维护者发布，且 sherpa-onnx 文档里热词（`cjkchar+bpe`）正是用它举例。查过官方当前列表，**没有**选更新更大的：
+  `streaming-zipformer-zh-xlarge-int8-2025-06-30` 编码器 726 MB 且只有中文；HuggingFace 上还有 2026-06 的
+  `x-asr` zh-en zipformer 系列（第三方模型，仅由 sherpa-onnx 维护者转成 onnx），来源与效果我没法担保，**没有评估也没有收录**。
+  在 `MODELS` 里加一项即可提供更多模型。
+* **不静默回落**：缺包、缺模型文件、SHA-256 不符、自检失败都抛 `SttLocalError` 并给出下一步，不会偷偷换回 Whisper。
+* **模型文件不进 git**：显式下载（约 200 MB，不能挂在一次请求上）到 `get_paths().stt_model_dir()`，逐文件校验大小与 SHA-256，
+  失败即丢弃；`download_base` 可填镜像。需要另装 `pip install sherpa-onnx`（`requirements-stt.txt` 里是注释行，不会默认装）。
+  我只确认了 `cp312` Windows 有预编译 wheel；3.10/3.11 未逐一核对。
+* **单字重复防护**（用户抱怨过）：输入法侧是关端点 + 纯贪心 + 无后处理。这里 ① 开端点检测，整段音频按停顿切句而不是一个
+  stream 跑到底；② 默认 `modified_beam_search`（热词也要求它）；③ `collapse_repeats` 兜底：连续相同字/词 ≥ `repeat_collapse_min_run`
+  （默认 4）折成 2 个。阈值依据：合法叠字 好好/看看（2）与 对对对/哈哈哈（3）不动，解码器 bug 的重复是几十个；真实的 4 个以上笑声会被折短，
+  可接受。数字和标点永不折叠。该函数有单测。
+* **热词**复用 `stt_vocabulary.hotwords()`，写成热词文件传给识别器构造函数（文档确认过的 `hotwords_file`/`modeling_unit`/`bpe_vocab` 参数），
+  词表变化会进入实例 key 触发重建；英文热词转大写（模型输出大写英文）。只在束搜索下生效，贪心时显式标 `disabled_greedy_search`。热词初始化失败时
+  同一引擎不带热词继续并标 `error:*`（不是换引擎）。**热词格式未在真实引擎上验证。**
+* 输出的 4 个以上字母的大写英文单词转小写（模型没有大小写信息），`stt_vocabulary.correct()` 之后还原专有名词写法。
+* 仍保留工单 A 的回声剔除；同时修了它的一个误伤：**只有一个词的提示**不再按相似度判回声（否则用户真的只说出那个词会被丢弃），固定模板短语照常剔除。
+* **只做整段离线转写**，不是流式。接流式要改三仓录音协议（见「语音转写整段等齐才开始」）。
+
+**未实测（必须读）**：本机没有运行过真实的 sherpa-onnx 引擎——安装依赖被环境策略拦下，我没有绕过。自动化测试用假的 `sherpa_onnx` 模块驱动
+真实适配代码，只证明「我们怎样调用它」（构造参数、端点循环、校验、下载、fail-loud、切换重建），**不证明**：识别准确率、相对 faster-whisper 的延迟改善幅度
+（工单要的前后对比数字**没有**）、热词是否真的起效、重复是否被真实音频触发后消除、`create_stream`/热词文件的实际行为。管理面页面已在真实浏览器里
+验收（隔离的 Playwright：引擎下拉、分组显示、缺包时的明确失败且不保存、下载进度、保存回显、来回切换保值、`stt_presets` 优先提示），
+但那里的引擎与下载是假的。要验证真实效果，需要在运行环境 `pip install sherpa-onnx`、点「下载模型」，再用同一批音频对比两个引擎的
+`GET /observability/api-calls?caller=stt`。
+
 本地 Whisper 选型（`core/stt_local.py`，配置块 `stt_local`）：默认 `small` + `cpu/int8`
 （`device: auto`，只在 CUDA 真能跑通一次极短推理时才用 GPU，否则回落 CPU 并记录原因；
 显式 `cuda` 不可用返回 503 并写明缺少的运行库）。本机 CPU 实测：`base/int8` 12 秒段 RTF 1.26，

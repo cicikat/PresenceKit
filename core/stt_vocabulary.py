@@ -37,7 +37,7 @@ def validate(payload: dict[str, Any]) -> dict[str, Any]:
 def settings(config: dict[str, Any] | None = None) -> dict[str, Any]:
     if config is None:
         from core.config_loader import get_config
-        config = get_config()
+        config = get_config() or {}
     try:
         return validate(config.get("stt_vocabulary") or {})
     except ValueError:
@@ -75,6 +75,12 @@ def is_prompt_echo(text: str, hint: str) -> bool:
         return True
     hint = (hint or "").strip()
     if not hint:
+        return False
+    # A hint with a single word cannot be told apart from real speech: someone simply saying
+    # the vocabulary word (e.g. the character's name) would be dropped. An echoed lone word is
+    # harmless (it is the canonical spelling, not system narration), so only multi-word hints
+    # are compared by similarity; the fixed-template check above still catches the narration.
+    if len([item for item in re.split(r"[,，、;；\s]+", hint) if item]) < 2:
         return False
     return SequenceMatcher(None, text, hint).ratio() >= _ECHO_SIMILARITY_THRESHOLD
 

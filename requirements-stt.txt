@@ -1,3 +1,6 @@
 # Optional local STT for the legacy /transcribe route. Install into the
 # interpreter used to run main.py; the first request downloads the base model.
 faster-whisper>=1.2.1,<2
+# Optional second engine (stt_local.engine: sherpa_onnx, see docs/audio-perception.md).
+# Not installed by default; the model weights (~200 MB) are downloaded separately from the admin page.
+# sherpa-onnx>=1.12,<2

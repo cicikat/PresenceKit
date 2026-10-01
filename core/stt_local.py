@@ -1,13 +1,24 @@
-"""Local speech-to-text runtime (faster-whisper) with explicit, hot-swappable settings.
+"""Local speech-to-text runtime with explicit, hot-swappable settings.
+
+Two engines, chosen by ``stt_local.engine`` (default ``faster_whisper`` so existing installs are unchanged):
+
+* ``faster_whisper`` — the flat keys below, plus the openai-whisper compatibility fallback.
+* ``sherpa_onnx``    — streaming zipformer transducer, see ``core/stt_sherpa.py``; its parameters live in
+                       the ``sherpa_onnx`` sub-block so the two groups never share vocabulary.
 
 Config block ``stt_local`` (defaults are chosen for unknown, CPU-only hardware):
 
     stt_local:
-      model_size: small        # tiny | base | small | medium | large-v3
-      device: auto             # auto | cpu | cuda
-      compute_type: int8       # int8 | int8_float16 | float16 | float32
-      beam_size: 5
-      timeout_seconds: 20
+      engine: faster_whisper   # faster_whisper | sherpa_onnx
+      model_size: small        # tiny | base | small | medium | large-v3     (faster_whisper group)
+      device: auto             # auto | cpu | cuda                           (faster_whisper group)
+      compute_type: int8       # int8 | int8_float16 | float16 | float32     (faster_whisper group)
+      beam_size: 5                                                           (faster_whisper group)
+      timeout_seconds: 20      # shared
+      sherpa_onnx: {...}       # sherpa group, see core/stt_sherpa.py DEFAULTS
+
+Only the active engine's group is validated strictly; the other group is kept (leniently sanitised) so
+switching back and forth never loses its values.
 
 Measured on the dev box (CPU): ``small/int8`` is ~4x faster than ``base/int8`` on
 12 s segments and more accurate.  GPU is opt-in: ``auto`` only adopts CUDA after a
@@ -15,7 +26,8 @@ real tiny inference succeeds, otherwise it falls back to CPU *and records why*.
 An explicit ``cuda`` that cannot run is an error, never a silent downgrade.
 
 This is the local-runtime half; the remote OpenAI-compatible connection stays in
-``stt_presets`` (``core/audio_perception.py``).
+``stt_presets`` (``core/audio_perception.py``), and still takes priority in ``POST /transcribe``
+whenever ``stt_presets`` exists in the config.
 """
 from __future__ import annotations
 
@@ -25,17 +37,22 @@ import threading
 import time
 from typing import Any
 
+from core import stt_sherpa
+
 logger = logging.getLogger(__name__)
 
+ENGINES = ("faster_whisper", "sherpa_onnx")
 MODEL_SIZES = ("tiny", "base", "small", "medium", "large-v3")
 DEVICES = ("auto", "cpu", "cuda")
 COMPUTE_TYPES = ("int8", "int8_float16", "float16", "float32")
 DEFAULTS: dict[str, Any] = {
+    "engine": "faster_whisper",
     "model_size": "small",
     "device": "auto",
     "compute_type": "int8",
     "beam_size": 5,
     "timeout_seconds": 20.0,
+    "sherpa_onnx": dict(stt_sherpa.DEFAULTS),
 }
 _CUDA_ONLY_COMPUTE = {"float16", "int8_float16"}
 _FAILURE_RETRY_SECONDS = 30.0
@@ -47,10 +64,8 @@ class SttLocalError(RuntimeError):
 
 # ── settings ────────────────────────────────────────────────────────────────
 
-def validate(payload: dict[str, Any]) -> dict[str, Any]:
-    """Strict validation for admin writes; raises ValueError naming the bad field."""
-    block = payload if isinstance(payload, dict) else {}
-    out = dict(DEFAULTS)
+def _validate_whisper(block: dict[str, Any], out: dict[str, Any]) -> None:
+    """The faster-whisper group (flat keys); raises ValueError naming the bad field."""
     if "model_size" in block:
         if block["model_size"] not in MODEL_SIZES:
             raise ValueError(f"model_size 必须是 {'/'.join(MODEL_SIZES)}")
@@ -68,13 +83,41 @@ def validate(payload: dict[str, Any]) -> dict[str, Any]:
         if isinstance(beam, bool) or not isinstance(beam, int) or not 1 <= beam <= 10:
             raise ValueError("beam_size 必须是 1–10 的整数")
         out["beam_size"] = beam
+    if out["device"] == "cpu" and out["compute_type"] in _CUDA_ONLY_COMPUTE:
+        raise ValueError(f"compute_type={out['compute_type']} 只能在 cuda 上使用，cpu 请选 int8 或 float32")
+
+
+def validate(payload: dict[str, Any]) -> dict[str, Any]:
+    """Strict validation for admin writes; raises ValueError naming the bad field.
+
+    Only the active engine's group can raise.  The inactive group is carried over when valid and reset to
+    its defaults when not, so a stale value there never blocks saving the engine you actually use.
+    """
+    block = payload if isinstance(payload, dict) else {}
+    out = dict(DEFAULTS)
+    out["sherpa_onnx"] = dict(stt_sherpa.DEFAULTS)
+    engine = block.get("engine", DEFAULTS["engine"])
+    if engine not in ENGINES:
+        raise ValueError(f"engine 必须是 {'/'.join(ENGINES)}")
+    out["engine"] = engine
     if "timeout_seconds" in block:
         timeout = block["timeout_seconds"]
         if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not 5 <= timeout <= 120:
             raise ValueError("timeout_seconds 必须在 5–120 之间")
         out["timeout_seconds"] = float(timeout)
-    if out["device"] == "cpu" and out["compute_type"] in _CUDA_ONLY_COMPUTE:
-        raise ValueError(f"compute_type={out['compute_type']} 只能在 cuda 上使用，cpu 请选 int8 或 float32")
+    if engine == "faster_whisper":
+        _validate_whisper(block, out)
+        try:
+            out["sherpa_onnx"] = stt_sherpa.validate(block.get("sherpa_onnx"))
+        except ValueError:
+            pass                                    # inactive group: keep defaults, never block this save
+    else:
+        out["sherpa_onnx"] = stt_sherpa.validate(block.get("sherpa_onnx"))
+        try:
+            _validate_whisper(block, out)
+        except ValueError:
+            for key in ("model_size", "device", "compute_type", "beam_size"):
+                out[key] = DEFAULTS[key]
     return out
 
 
@@ -87,11 +130,15 @@ def settings(config: dict[str, Any] | None = None) -> dict[str, Any]:
         return validate(config.get("stt_local") or {})
     except ValueError as error:
         logger.warning("[stt_local] 配置无效，使用默认值: %s", error)
-        return dict(DEFAULTS)
+        return {**DEFAULTS, "sherpa_onnx": dict(stt_sherpa.DEFAULTS)}
 
 
 def _key(cfg: dict[str, Any]) -> tuple:
-    return (cfg["model_size"], cfg["device"], cfg["compute_type"])
+    """Identity of a running instance.  The engine is part of it, so switching engines always rebuilds
+    instead of reusing the previous engine's resident model."""
+    if cfg.get("engine", "faster_whisper") == "sherpa_onnx":
+        return ("sherpa_onnx", *stt_sherpa.key_fields(cfg["sherpa_onnx"]), stt_sherpa.hotwords_signature())
+    return ("faster_whisper", cfg["model_size"], cfg["device"], cfg["compute_type"])
 
 
 # ── hardware probing ────────────────────────────────────────────────────────
@@ -111,9 +158,9 @@ def diagnose(error: BaseException | str) -> str:
 
 
 def probe_hardware() -> dict[str, Any]:
-    """Read-only capability probe for the admin page; never loads a Whisper model."""
+    """Read-only capability probe for the admin page; never loads a model of either engine."""
     info: dict[str, Any] = {"faster_whisper": False, "cuda_devices": 0, "devices": ["cpu"],
-                            "missing_runtime": "", "hint": ""}
+                            "missing_runtime": "", "hint": "", "sherpa_onnx": stt_sherpa.probe()}
     try:
         import faster_whisper  # noqa: F401
         info["faster_whisper"] = True
@@ -209,15 +256,19 @@ def _build_legacy(cfg: dict[str, Any]) -> dict[str, Any]:
 
 def _activate(cfg: dict[str, Any]) -> dict[str, Any]:
     global _active
-    try:
-        built = _build(cfg)
-    except ImportError:
-        built = _build_legacy(cfg)
+    if cfg.get("engine", "faster_whisper") == "sherpa_onnx":
+        # Explicitly selected: any failure is an error with a next step, never a fallback to Whisper.
+        built = stt_sherpa.build(cfg["sherpa_onnx"])
+    else:
+        try:
+            built = _build(cfg)
+        except ImportError:
+            built = _build_legacy(cfg)
     built["key"] = _key(cfg)
     built["loaded_at"] = time.time()
     _active = built
     _failures.pop(_key(cfg), None)
-    logger.info("[stt_local] 已加载 %s/%s/%s%s", built["model_size"], built["device"],
+    logger.info("[stt_local] 已加载 %s %s/%s/%s%s", built["backend"], built["model_size"], built["device"],
                 built["compute_type"],
                 f"（回落：{built['fallback']['reason']}）" if built["fallback"] else "")
     return built
@@ -268,7 +319,7 @@ def reload(cfg: dict[str, Any] | None = None) -> dict[str, Any]:
 def _effective(active: dict[str, Any]) -> dict[str, Any]:
     return {"backend": active["backend"], "model_size": active["model_size"],
             "device": active["device"], "compute_type": active["compute_type"],
-            "fallback": active["fallback"]}
+            "fallback": active["fallback"], "hotwords": active.get("hotwords", "")}
 
 
 def snapshot(config: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -282,6 +333,7 @@ def snapshot(config: dict[str, Any] | None = None) -> dict[str, Any]:
         "matches_config": bool(active and active["key"] == _key(cfg)),
         "blocking_reason": failure[1] if failure else "",
         "last_change": dict(_last_change),
+        "sherpa_download": stt_sherpa.download_status(),
     }
 
 
@@ -308,6 +360,11 @@ def _local_stt_selected() -> bool:
             return False
     except Exception:  # noqa: BLE001 - never block warmup decision on this
         pass
+    if settings().get("engine") == "sherpa_onnx":
+        # Only warm up when the package and the downloaded model are both there; otherwise the first
+        # real request reports the actionable error instead of startup logging a failure nobody asked for.
+        model = settings()["sherpa_onnx"]["model"]
+        return bool(importlib.util.find_spec("sherpa_onnx") and stt_sherpa.asset_status(model)["present"])
     return bool(importlib.util.find_spec("faster_whisper") or importlib.util.find_spec("whisper"))
 
 

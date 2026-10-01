@@ -379,6 +379,7 @@ REGISTRY: dict[str, PathMeta] = {
     "music_audio_blob_dir":   PathMeta("canonical", "reality",         "per_user",      "ignore"),
     "character_track_notes":  PathMeta("canonical", "character_inner", "per_char_user", "ignore"),
     "audio_analysis_cache_dir": PathMeta("derived", "shared",          "global",        "ignore"),
+    "stt_model_dir":          PathMeta("derived",   "shared",          "global",        "ignore"),
 }
 
 # ── retention 策略（由 scheduler.log_maintenance 每 24 小时执行，参数见 config.yaml retention.*）
