@@ -899,6 +899,11 @@ async def _main_with_services():
     session_state.start_cleanup_task()
     logger.info("会话超时清理任务已启动")
 
+    # 本地 STT 预热（工单 B）：只在实际会用本地引擎时跑，fire-and-forget，
+    # 不 await；失败不影响启动，首次请求会自己重试一次冷启动。
+    from core import stt_local as _stt_local
+    asyncio.create_task(_stt_local.warmup_async())
+
     # MCP 客户端（Brief 29 · 4）：mcp_servers.enabled=false（默认）时零开销直接返回
     from core import mcp_client
     await mcp_client.init_mcp_servers()

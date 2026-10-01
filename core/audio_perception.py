@@ -8,6 +8,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import logging
 from pathlib import Path
 import secrets
 import time
@@ -36,6 +37,7 @@ TONE_GLOSS = {
 }
 _current = ContextVar("audio_impression", default=None)
 _receipts = {}
+logger = logging.getLogger(__name__)
 
 
 def get_config():
@@ -245,27 +247,43 @@ async def ingest_audio_bytes(data, filename):
     block = config()
     if not block["enabled"]:
         return None
+    started = time.perf_counter()
+    preset_name = block["routes"].get("voice_message", "")
+    ok = False
+    output_hint = ""
     try:
-        preset = validate_preset(block["presets"][block["routes"]["voice_message"]])
+        preset = validate_preset(block["presets"][preset_name])
         from core.stt_vocabulary import hotwords, is_prompt_echo
         hint = hotwords()
         result = await asyncio.wait_for(_request(data, filename, preset), preset["timeout_seconds"])
         text = result.get("text")
         if not isinstance(text, str) or not text.strip():
+            output_hint = "empty_text"
             return None
         text = text.strip()[:12000]
         if hint and is_prompt_echo(text, hint):
             # Decoder repeated the biasing hint back as "transcription" — not
             # a real utterance. Treat exactly like "didn't catch it".
+            output_hint = "prompt_echo"
             return None
         # Optional provider field only; never infer emotion from transcript words.
         tone = result.get("tone", "unclear")
         tone = tone if isinstance(tone, str) and tone in TONES else "unclear"
         from core.stt_vocabulary import correct
         payload = {"text": correct(text), "tone": tone}
-    except Exception:
-        # No payload, URL, key or provider exception is logged.
+        ok = True
+    except Exception as error:
+        # Never log payload, URL, key or provider response body — only the
+        # exception class, which carries no request/response content.
+        output_hint = type(error).__name__
+        logger.warning("[audio_perception] 远程 STT 转写失败: %s", output_hint)
         return None
+    finally:
+        from core.api_call_log import append
+        append(caller="stt", purpose="transcribe_remote", provider=preset_name,
+               model=str((block["presets"].get(preset_name) or {}).get("model", "")),
+               duration_ms=int((time.perf_counter() - started) * 1000), ok=ok,
+               output_hint=output_hint)
     if speech_analysis_enabled():
         try:
             payload.update(await _attach_acoustic(bytes(data), filename, payload["tone"]))

@@ -141,6 +141,35 @@ async def test_remote_clear_speech_is_not_mistaken_for_echo(configured, monkeypa
     assert result["text"] == "今天我们去爬山吧"
 
 
+@pytest.mark.asyncio
+async def test_remote_stt_success_is_logged_to_api_call_log(configured, monkeypatch):
+    calls = []
+    monkeypatch.setattr("core.api_call_log.append", lambda **kw: calls.append(kw))
+    monkeypatch.setattr(audio, "_request", AsyncMock(return_value={"text": "hello", "tone": "calm"}))
+    result = await audio.ingest_audio_bytes(b"fixture", "x.wav")
+    assert result["text"] == "hello"
+    assert len(calls) == 1
+    assert calls[0]["caller"] == "stt"
+    assert calls[0]["purpose"] == "transcribe_remote"
+    assert calls[0]["ok"] is True
+    assert calls[0]["duration_ms"] >= 0
+    assert "fixture-secret" not in str(calls)
+
+
+@pytest.mark.asyncio
+async def test_remote_stt_failure_is_logged_and_warned_without_leaking_details(configured, monkeypatch, caplog):
+    calls = []
+    monkeypatch.setattr("core.api_call_log.append", lambda **kw: calls.append(kw))
+    monkeypatch.setattr(audio, "_request", AsyncMock(side_effect=RuntimeError("private-provider-error")))
+    with caplog.at_level("WARNING"):
+        assert await audio.ingest_audio_bytes(b"x", "x.wav") is None
+    assert len(calls) == 1
+    assert calls[0]["ok"] is False
+    assert calls[0]["output_hint"] == "RuntimeError"
+    assert "private-provider-error" not in str(calls)
+    assert "private-provider-error" not in caplog.text
+
+
 def test_snapshot_masks_secrets(configured):
     state = audio.snapshot()
     assert state["effective"]

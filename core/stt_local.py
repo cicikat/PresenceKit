@@ -19,6 +19,7 @@ This is the local-runtime half; the remote OpenAI-compatible connection stays in
 """
 from __future__ import annotations
 
+import importlib.util
 import logging
 import threading
 import time
@@ -289,3 +290,47 @@ def reset_for_tests() -> None:
     _active = None
     _last_change = {}
     _failures.clear()
+
+
+# ── startup warmup（工单 B）──────────────────────────────────────────────────
+
+def _local_stt_selected() -> bool:
+    """True when this deployment will actually use the local backend.
+
+    A pure-remote deployment (``stt_presets`` configured and enabled) should
+    not pay the model-load cost. ``faster_whisper``/``whisper`` missing is
+    also "not selected" — ``get_backend()`` would just raise.
+    """
+    try:
+        from core import audio_perception
+        remote = audio_perception.config()
+        if remote.get("enabled"):
+            return False
+    except Exception:  # noqa: BLE001 - never block warmup decision on this
+        pass
+    return bool(importlib.util.find_spec("faster_whisper") or importlib.util.find_spec("whisper"))
+
+
+def warmup() -> None:
+    """Build (and smoke-test) the local backend now, off the event loop.
+
+    Fire-and-forget: callers must not await this to completion from the
+    startup path. Fails closed — any exception here only means the first
+    real request pays the cold-start cost it would have paid anyway.
+    """
+    try:
+        if not _local_stt_selected():
+            return
+        get_backend(settings())
+        logger.info("[stt_local] 启动预热完成")
+    except Exception as error:  # noqa: BLE001 - warmup must never crash startup
+        logger.warning("[stt_local] 启动预热失败（首次请求仍会重试）: %s", error)
+
+
+async def warmup_async() -> None:
+    """Awaitable wrapper so startup can ``asyncio.create_task`` without blocking."""
+    try:
+        import asyncio as _asyncio
+        await _asyncio.to_thread(warmup)
+    except Exception:  # noqa: BLE001 - see warmup()
+        logger.warning("[stt_local] 启动预热任务异常", exc_info=True)

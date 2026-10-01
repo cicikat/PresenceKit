@@ -159,6 +159,44 @@ def test_failure_is_not_retried_on_every_request(monkeypatch):
     assert len(loads) == 1
 
 
+def test_warmup_builds_backend_when_local_engine_is_selected(monkeypatch):
+    loads = _patch(monkeypatch, cuda_devices=0)
+    monkeypatch.setattr("core.audio_perception.config", lambda: {"enabled": False, "presets": {}, "routes": {}})
+    stt_local.warmup()
+    assert loads  # a model was actually built
+    assert stt_local.get_backend()["key"] == stt_local._key(stt_local.settings())
+
+
+def test_warmup_skips_when_remote_stt_is_enabled(monkeypatch):
+    loads = _patch(monkeypatch, cuda_devices=0)
+    monkeypatch.setattr("core.audio_perception.config", lambda: {"enabled": True, "presets": {}, "routes": {}})
+    stt_local.warmup()
+    assert not loads
+    assert stt_local._active is None
+
+
+def test_warmup_skips_when_no_local_engine_is_installed(monkeypatch):
+    loads = _patch(monkeypatch, cuda_devices=0)
+    monkeypatch.setattr("core.audio_perception.config", lambda: {"enabled": False, "presets": {}, "routes": {}})
+    monkeypatch.setattr(stt_local.importlib.util, "find_spec", lambda _name: None)
+    stt_local.warmup()
+    assert not loads
+
+
+def test_warmup_failure_does_not_raise(monkeypatch):
+    monkeypatch.setattr("core.audio_perception.config", lambda: {"enabled": False, "presets": {}, "routes": {}})
+    def boom(*_a, **_k):
+        raise RuntimeError("boom")
+    monkeypatch.setattr(stt_local, "get_backend", boom)
+    stt_local.warmup()  # must not raise
+
+
+@pytest.mark.asyncio
+async def test_warmup_async_runs_off_the_event_loop_and_never_raises(monkeypatch):
+    monkeypatch.setattr("core.audio_perception.config", lambda: {"enabled": True, "presets": {}, "routes": {}})
+    await stt_local.warmup_async()  # should return promptly, no exception
+
+
 def test_probe_hardware_explains_next_step_without_loading_a_model(monkeypatch):
     import types, sys
     fake = types.SimpleNamespace(get_cuda_device_count=lambda: 0)

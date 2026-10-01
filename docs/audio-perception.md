@@ -46,6 +46,20 @@ QQ record 消息经过有界下载与转写；HTTP `/upload/ingest` 支持单个
 本地 legacy whisper：整段转写结果置空），不会把回声文本当作用户发言写入对话。
 纯词表只降低复述概率，不消除机制，所以这道检测即使模板前缀已去掉也必须保留。
 
+工单 B：远程 STT 补齐可观测性，本地模型加启动预热。远程 `ingest_audio_bytes()` 现在
+围住整段请求计时，写入 `api_call_log.append(caller="stt", purpose="transcribe_remote", ...)`，
+与本地路径既有的 `purpose="transcribe_local"` 并列，经同一个 `GET /observability/api-calls`
+查询，按 `purpose` 区分两条路径；`provider` 字段是连接名（如 `routes.voice_message` 选中的
+`presets` key），不是厂商域名。异常不再静默：`except Exception` 分支记录
+`logging.warning` 并把 `output_hint` 置为异常类名（如 `TimeoutError`），从不记录请求体、
+URL、密钥或供应商响应正文。进程启动时 `core.stt_local.warmup()`
+（经 `main.py` 的 `asyncio.create_task(stt_local.warmup_async())`，不 await）会在真正会用
+本地引擎时主动构建一次模型并跑通 `_smoke()`，提前承担冷启动开销；判定「是否会用本地引擎」
+看 `stt_presets.enabled` 是否为真（真则纯远程部署，跳过预热）以及是否已安装
+`faster_whisper`/`whisper`（都没装也跳过）。预热失败只记一条 WARNING，不影响服务启动，
+首次真实请求仍会按原有逻辑自己重试一次冷启动。本单不改 `beam_size`/`model_size` 默认值、
+不做流式转写，延迟调参留给埋点数据落地之后再评估。
+
 本地 Whisper 选型（`core/stt_local.py`，配置块 `stt_local`）：默认 `small` + `cpu/int8`
 （`device: auto`，只在 CUDA 真能跑通一次极短推理时才用 GPU，否则回落 CPU 并记录原因；
 显式 `cuda` 不可用返回 503 并写明缺少的运行库）。本机 CPU 实测：`base/int8` 12 秒段 RTF 1.26，
