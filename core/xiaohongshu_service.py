@@ -86,6 +86,7 @@ class ReaderService:
         self.install_error = ''
         self.retry_at = 0.0
         self.started_at = 0.0
+        self._unmanaged_notified = False
         self.lock = asyncio.Lock()
         self.login_lock = asyncio.Lock()
 
@@ -109,6 +110,22 @@ class ReaderService:
         except Exception:
             return 'unavailable'
 
+    async def _notify_unmanaged(self, reason, url):
+        """后端不托管读取服务时只提示一次，并探测一次 /health；不通仅告警，不阻塞。"""
+        if self._unmanaged_notified:
+            return
+        self._unmanaged_notified = True
+        logger.info('小红书读取服务：后端不托管（%s），需外部启动', reason)
+        try:
+            assert_outbound_allowed('xiaohongshu.local_health')
+            async with httpx.AsyncClient(trust_env=False, timeout=2) as client:
+                response = await client.get(url.rstrip('/') + '/health', follow_redirects=False)
+            if response.status_code == 200:
+                return
+        except Exception:
+            pass
+        logger.warning('小红书读取服务 %s 健康探测未通过（可能未启动 Docker 容器或本地读取进程）', url)
+
     async def _stop(self):
         if self.process is not None:
             await asyncio.to_thread(_stop_process, self.process)
@@ -116,7 +133,11 @@ class ReaderService:
 
     async def reconcile(self):
         async with self.lock:
-            reason = _policy(get_config())
+            cfg = get_config()
+            reason = _policy(cfg)
+            if reason == 'remote_deployment':
+                await self._notify_unmanaged(
+                    reason, str(cfg.get('xiaohongshu', {}).get('reader_url') or LOCAL_URL))
             if reason:
                 await self._stop()
                 self.state = reason
@@ -144,6 +165,7 @@ class ReaderService:
                 return
             if not executable().is_file():
                 self.state = 'not_installed'
+                await self._notify_unmanaged('not_installed', LOCAL_URL)
                 return
             assert_outbound_allowed('xiaohongshu.local_start')
             env = os.environ.copy()

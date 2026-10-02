@@ -23,6 +23,23 @@ def local(monkeypatch, tmp_path):
     return cfg, exe
 
 
+async def test_remote_deployment_notifies_once_and_probe_failure_only_warns(local, monkeypatch, caplog):
+    cfg, _ = local
+    cfg['deployment'] = {'mode': 'remote_server'}
+    cfg['xiaohongshu']['reader_url'] = 'http://127.0.0.1:18060'
+    client = AsyncMock(); client.__aenter__.return_value = client
+    client.get.side_effect = service.httpx.ConnectError('refused')
+    monkeypatch.setattr(service.httpx, 'AsyncClient', lambda **kw: client)
+    monkeypatch.setattr(service, 'assert_outbound_allowed', lambda *a: None)
+    owner = service.ReaderService()
+    with caplog.at_level('INFO', logger=service.logger.name):
+        await owner.reconcile()
+        await owner.reconcile()
+    assert owner.state == 'remote_deployment'
+    assert client.get.await_count == 1
+    assert len([r for r in caplog.records if r.levelname == 'WARNING']) == 1
+
+
 async def test_missing_install_never_spawns(local, monkeypatch):
     owner = service.ReaderService()
     owner._health = AsyncMock(return_value='offline')

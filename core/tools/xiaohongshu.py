@@ -1,6 +1,7 @@
 """Read-only adapter for xpzouying/xiaohongshu-mcp's HTTP detail API."""
 import asyncio
 import json
+import logging
 import re
 import random
 import time
@@ -11,6 +12,7 @@ import httpx
 from core.config_loader import get_config
 from core.tools.tool_result import ToolResult, sanitize_for_prompt
 
+logger = logging.getLogger(__name__)
 _HOSTS = {'xhslink.com', 'www.xhslink.com', 'xhslink.cn', 'www.xhslink.cn', 'xiaohongshu.com', 'www.xiaohongshu.com'}
 _read_busy = False
 _next_read_at = 0.0
@@ -90,6 +92,20 @@ def normalize(payload, note_id, max_comments):
             'has_more_comments': comments.get('hasMore') if available else None}
 
 
+_OFFLINE_WARN_INTERVAL = 600
+_offline_warned_at: dict = {}
+
+
+def _warn_reader_offline(reader_url):
+    """读取服务失联：同一地址 10 分钟内只记一条 warning，避免刷屏。"""
+    now = time.monotonic()
+    last = _offline_warned_at.get(reader_url)
+    if last is not None and now - last < _OFFLINE_WARN_INTERVAL:
+        return
+    _offline_warned_at[reader_url] = now
+    logger.warning('[xiaohongshu] 读取服务 %s 无响应（可能未启动 Docker 容器或本地读取进程）', reader_url)
+
+
 async def read_post(share: str) -> ToolResult:
     global _read_busy, _next_read_at
     cfg = settings()
@@ -106,11 +122,15 @@ async def read_post(share: str) -> ToolResult:
         async def fetch():
             async with httpx.AsyncClient(timeout=20, trust_env=False) as client:
                 note_id, token = await resolve_share(client, share)
-                response = await client.post(cfg['reader_url'] + '/api/v1/feeds/detail', json={
-                    'feed_id': note_id, 'xsec_token': token, 'load_all_comments': False,
-                    'comment_config': {'max_comment_items': cfg['max_comments'],
-                                       'click_more_replies': False, 'scroll_speed': 'normal'},
-                }, timeout=55, follow_redirects=False)
+                try:
+                    response = await client.post(cfg['reader_url'] + '/api/v1/feeds/detail', json={
+                        'feed_id': note_id, 'xsec_token': token, 'load_all_comments': False,
+                        'comment_config': {'max_comment_items': cfg['max_comments'],
+                                           'click_more_replies': False, 'scroll_speed': 'normal'},
+                    }, timeout=55, follow_redirects=False)
+                except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
+                    _warn_reader_offline(cfg['reader_url'])
+                    raise ValueError('reader_offline') from exc
                 if response.status_code in (401, 403, 429):
                     raise ValueError('login_or_rate_limit')
                 if response.status_code != 200:
@@ -146,7 +166,7 @@ async def read_post(share: str) -> ToolResult:
     except (TimeoutError, httpx.TimeoutException):
         error = 'timeout'
     except ValueError as exc:
-        error = str(exc) if str(exc) in {'invalid_share', 'missing_share_token', 'share_unavailable', 'too_many_redirects', 'reader_http_error', 'reader_rejected', 'invalid_note', 'login_or_rate_limit'} else 'invalid_response'
+        error = str(exc) if str(exc) in {'invalid_share', 'missing_share_token', 'share_unavailable', 'too_many_redirects', 'reader_http_error', 'reader_rejected', 'invalid_note', 'login_or_rate_limit', 'reader_offline'} else 'invalid_response'
     except Exception:
         error = 'reader_unavailable'
     finally:
@@ -163,7 +183,8 @@ def _failure(reason):
              'cooldown': '小红书读取正在执行或冷却中，请稍后再试；不会并发重复请求。',
              'login_or_rate_limit': '小红书登录、访问限制或限流阻止了读取，已冷却五分钟，请先检查登录状态。',
              'missing_share_token': '链接缺少访问参数，请重新复制完整分享链接。',
-             'invalid_share': '没有找到有效的小红书分享链接。'}
+             'invalid_share': '没有找到有效的小红书分享链接。',
+             'reader_offline': '小红书读取服务没有响应（可能没有启动 Docker 容器或本地读取进程），请先启动读取服务。'}
     text = hints.get(reason, '未能读取帖子，请检查读取服务及其登录状态，或重新复制分享链接。')
     return ToolResult(raw_data='', safe_summary=text,
                       meta={'execution_status': 'outcome_unknown', 'validity': 'execution_failed', 'failure_reason': reason})

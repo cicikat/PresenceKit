@@ -87,6 +87,23 @@ async def test_rate_limit_enters_five_minute_cooldown(monkeypatch):
     assert xhs._read_busy is False
 
 
+async def test_reader_offline_is_distinct_and_warning_rate_limited(monkeypatch, caplog):
+    monkeypatch.setattr(xhs, 'get_config', lambda: {'tools': {'read_xiaohongshu': True}, 'xiaohongshu': {'reader_url': 'http://127.0.0.1:18060'}})
+    monkeypatch.setattr('core.no_outbound.assert_outbound_allowed', lambda *a: None)
+    monkeypatch.setattr(xhs, '_offline_warned_at', {})
+    client = AsyncMock(); client.__aenter__.return_value = client
+    client.post.side_effect = httpx.ConnectError('refused')
+    monkeypatch.setattr(xhs.httpx, 'AsyncClient', lambda **kw: client)
+    monkeypatch.setattr(xhs, 'resolve_share', AsyncMock(return_value=(NOTE, 'example')))
+    with caplog.at_level('WARNING', logger=xhs.logger.name):
+        first = await xhs.read_post(URL)
+        monkeypatch.setattr(xhs, '_next_read_at', 0)
+        second = await xhs.read_post(URL)
+    assert first.meta['failure_reason'] == 'reader_offline'
+    assert second.meta['failure_reason'] == 'reader_offline'
+    assert len([r for r in caplog.records if '无响应' in r.getMessage()]) == 1
+
+
 async def test_disabled_and_missing_service_are_explicit(monkeypatch):
     monkeypatch.setattr(xhs, 'get_config', lambda: {})
     assert (await xhs.read_post(URL)).meta['failure_reason'] == 'disabled'
