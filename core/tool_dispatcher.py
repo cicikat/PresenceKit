@@ -191,7 +191,8 @@ async def _get_profile_wrapper(user_id: str, *, char_id: str) -> str:
 async def _get_episodic_wrapper(user_id: str, topic: str = "", *, char_id: str) -> str:
     """召回情景记忆。"""
     from core.memory.episodic_memory import retrieve, format_for_prompt
-    memories = retrieve(user_id=user_id, topic=topic, top_k=3, char_id=char_id)
+    # M4：查询不再顺手给被查到的记忆加强度（allow_strengthen=False）
+    memories = retrieve(user_id=user_id, topic=topic, top_k=3, char_id=char_id, allow_strengthen=False)
     return format_for_prompt(memories, char_name=get_char_name(char_id)) if memories else "暂无相关记忆"
 
 

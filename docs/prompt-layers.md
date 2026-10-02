@@ -55,8 +55,8 @@ Reality `1_system_prompt` 绑定当前角色，并使用用户所选称谓（默
 | `5.5_lore` | 世界书条目 | LoreEngine 命中时 | `lore_engine.match()` |
 | `6a_user_identity` | 用户稳定行为模式 | `user_identity_text` 非空 | `core/memory/user_identity.py`，confidence >= 0.5 的维度 |
 | `6b_event_search` | 相关往事（event_log 搜索结果） | 搜索结果非空；`fetch_context(recall_policy="none")` 时整层跳过（CC 任务 19 · C） | `event_log.search()` |
-| `6c_episodic` | 情景记忆片段 | episodic_result 非空；`fetch_context(recall_policy="none")` 时整层跳过（CC 任务 19 · C） | `episodic_memory.retrieve()` + `format_for_prompt()` |
-| `6c_episodic_fallback` | 近期高强度记忆兜底 | episodic_result 为空且 fallback 非空；`recall_policy="none"` 时同样跳过 | `episodic_memory.retrieve_fallback()`；实际消息 `_layer` 仍写 `6c_episodic`，便于统一裁剪 |
+| `6c_episodic` | 情景记忆片段 | episodic_result 非空；`fetch_context(recall_policy="none")` 时整层跳过（CC 任务 19 · C） | `episodic_memory.retrieve_mixed()`（M4：recent/mid/long/repair 分桶，≤4 条；冲突条目连同修复结果渲染）+ `format_for_prompt()` |
+| `6c_episodic_fallback` | 长期/修复点记忆兜底（M4：不再取近 7 天高强度） | episodic_result 为空且 fallback 非空；`recall_policy="none"` 时同样跳过 | `episodic_memory.retrieve_fallback()`；实际消息 `_layer` 仍写 `6c_episodic`，便于统一裁剪 |
 | `mid_term` | 过去 12 小时对话压缩视图 | mid_term_context 非空 | `mid_term.format_for_prompt()`（12h 过期，最多 20 条，三时间桶渲染） |
 | `6d_diary_context` | 用户近期日记 | 有内容且命中 `emotion.down` / `emotion.indirect`；**新鲜度闸**：`diary_context.meta.json` 中 `latest_entry_date` 距今 >4 天（可配置 `diary.context_max_age_days`）或无 meta 时不注入；**低信息准入闸**：用户消息为 backchannel 时不注入 | `diary_context.load()` + `diary_context.load_meta()` |
 | `6e_inner_diary_facts` | 他昨天的记录（事件层，取前200字）；摘录里的 `今日事件` 改成 `昨日事件` | 昨日日记文件存在且含事件层 | `data/runtime/characters/{char_id}/inner/diary/` |
@@ -74,7 +74,7 @@ Reality `1_system_prompt` 绑定当前角色，并使用用户所选称谓（默
 
 单条用户消息超过 1000 字时，本轮生成仍用原文；写入短期历史时另存原文，历史原位置先放前 1000 字和“（已裁剪）”。发送后的 summary preset 异步生成概述；成功后历史投影在原位置显示概述及稳定的长消息序号。失败保留待处理状态，下次加载历史后重新尝试，期间仍只投影裁剪文本。序号可传给工具层的 `read_long_user_message` 按偏移查询原文。
 | `9_anti_repeat` | 跨轮开头去同质：取最近 2–3 条 assistant 回复的起手（首 8 字），以软约束告知模型别用相同开头/句式；fail-open，无历史时不注入 | 有近期 assistant 回复时 | `_recent_openings()` 从 history 提取 |
-| `9.5_episodic_top` | 最相关情景记忆1条（attention sweet spot） | episodic_result 非空 | 从已召回结果取第一条，不重复召回 |
+| `9.5_episodic_top` | 最相关情景记忆1条（attention sweet spot） | episodic_result 非空，且首条来自 long / repair 桶（M4：来自 recent / mid 桶时跳过——recent 本来就在 history 里；桶标记 `context["episodic_top_bucket"]` 为空的旧调用方保持原行为） | 从已召回结果取第一条，不重复召回 |
 | `10_tool_result` | 本轮工具执行结果（带生成时间与有效性） | 有工具调用结果时 | `tool_dispatcher.execute_structured()` 裸输出经 `core/tools/tool_result.py` 截断+定界框定后注入（`safe_summary`）；失败/结果不明明确不是完成事实 |
 | `10.5_action_trace` | 历史工具动作参考：你最近做过的操作（不是本轮结果） | `action_trace_entries` 非空（`recent()` 过滤后仍有条目） | `core/memory/action_trace.py` → `recent()` + `format_trace_block()`；历史条目带时间并明确标为参考 |
 | `10.6_hardware_jobs` | 当前硬件后台动作状态与系统计算的剩余时间 | 存在 `accepted`/`started` job | `core/hardware/jobs.py::format_prompt()`；只读系统状态，断线/失败/取消/过期任务不继续倒计时 |

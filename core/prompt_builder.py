@@ -419,6 +419,7 @@ def build(
     diary_context: str = "",
     episodic_result: str = "",
     episodic_fallback_result: str = "",
+    episodic_top_bucket: str = "",
     memory_dossier_context: str = "",
     mid_term_context: str = "",
     tags: set[str] | None = None,
@@ -1372,7 +1373,9 @@ def build(
 
     # 层 9.5：最相关情景记忆（1条，挪到 history 之后获得 recency 红利）
     # 从已召回的 episodic_result 原始列表里取第一条，不重复召回
-    if episodic_result:
+    # M4：首条来自 recent/mid 桶时跳过——recent 本来就在 history 里，再置顶一遍等于重复注入；
+    # 桶标记为空（旧调用方）保持原行为。
+    if episodic_result and episodic_top_bucket in ("", "long", "repair"):
         _lines = [l for l in episodic_result.splitlines() if l.startswith("- ")]
         if _lines:
             _top_memory = _lines[0]  # 第一条是最高分

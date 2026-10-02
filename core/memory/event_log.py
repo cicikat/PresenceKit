@@ -500,9 +500,8 @@ async def search(
             turn_match = next((_TURN_ID_RE.search(line) for line in block if _TURN_ID_RE.search(line)), None)
             turn_id = turn_match.group(1) if turn_match else ""
 
-            # 改动1: 7天外仅保留 intensity>=1 的块
-            if days_ago > 7 and intensity < 1:
-                continue
+            # M4：7 天外的块不再要求 intensity>=1，关键词命中即可入选，
+            # 避免"旧记忆只有吵过的才能浮现"；排序仍由相关性 × 时间衰减 决定。
 
             # intensity 归一化到 [0,1]（原始 0/1/2 量纲），供 score_recall 统一量纲
             strength_norm = min(intensity / 2.0, 1.0)

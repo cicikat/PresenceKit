@@ -77,11 +77,11 @@ def test_fallback_core_half_day_not_selected(sandbox):
 
 
 def test_fallback_noncore_not_affected_by_core_exclusion(sandbox):
-    """非核心记忆不受 is_core 排除影响，仍可通过 fallback。"""
-    write_episode(_UID, _ep("ep_nc_5d", occurred_at=_NOW - 5 * 86400 + 3600,
+    """非核心记忆不受 is_core 排除影响；M4 起 fallback 取 long 桶（>30 天），不再取近 7 天。"""
+    write_episode(_UID, _ep("ep_nc_40d", occurred_at=_NOW - 40 * 86400,
                             strength=0.8, is_core=False), char_id=_CHAR)
     result = retrieve_fallback(_UID, recent_history=[], char_id=_CHAR)
-    assert len(result) == 1, "非核心记忆在 7 天窗口内应通过 fallback"
+    assert len(result) == 1, "非核心的长期（>30 天）记忆应通过 fallback"
 
 
 def test_core_reachable_via_retrieve(sandbox):
@@ -99,19 +99,27 @@ def test_core_reachable_via_retrieve(sandbox):
 
 
 def test_fallback_nonecore_8days_not_selected(sandbox):
-    """occurred_at=8天前（timestamp=现在）→ 7天窗口不召回。"""
+    """occurred_at=8天前（mid 桶）→ M4 起既不是 long 也不是 repair，不召回。"""
     write_episode(_UID, _ep("ep_old_nc", occurred_at=_NOW - 8 * 86400,
                             strength=0.9, is_core=False), char_id=_CHAR)
     result = retrieve_fallback(_UID, recent_history=[], char_id=_CHAR)
-    assert len(result) == 0, "occurred_at 超 7 天不应入选"
+    assert len(result) == 0, "mid 桶不应经 fallback 入选"
 
 
-def test_fallback_nonecore_recent_selected(sandbox):
-    """occurred_at=2天前、非核心 → fallback 入选。"""
+def test_fallback_nonecore_recent_not_selected(sandbox):
+    """M4：近 7 天高强度记忆不再经 fallback 浮现（避免刚吵完的冲突每轮都中）。"""
     write_episode(_UID, _ep("ep_nc_recent", occurred_at=_NOW - 2 * 86400,
-                            strength=0.8, is_core=False), char_id=_CHAR)
+                            strength=0.9, is_core=False, emotion_peak="angry"), char_id=_CHAR)
     result = retrieve_fallback(_UID, recent_history=[], char_id=_CHAR)
-    assert len(result) == 1
+    assert len(result) == 0
+
+
+def test_fallback_repair_bucket_selected_even_when_recent(sandbox):
+    """已和好/澄清的冲突修复点（repair 桶）可经 fallback 浮现。"""
+    write_episode(_UID, _ep("ep_repaired", occurred_at=_NOW - 2 * 86400, strength=0.7,
+                            episode_kind="conflict", outcome="repaired", repair_note="已和好"), char_id=_CHAR)
+    result = retrieve_fallback(_UID, recent_history=[], char_id=_CHAR)
+    assert [m["id"] for m in result] == ["ep_repaired"]
 
 
 def test_fallback_no_occurred_at_falls_back_to_timestamp(sandbox):

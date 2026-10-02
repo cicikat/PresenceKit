@@ -901,7 +901,7 @@ parse_query_time_range(content, now)` 解析用户消息里的时间意图（纯
 ```
 relevance_bonus = 0.2 × min(命中关键词数 / 3, 1.0)
 decay = max(0.3, exp(-0.05 × 天数))   # 衰减有地板，老记忆不会完全消失
-score = strength × decay + emotion_bonus + relevance_bonus
+score = strength × decay + relevance_bonus     # M4：已删除 emotion_bonus（情绪同调回路）
 ```
 
 - 衰减项有地板 0.3，防止高 strength 的旧记忆被时间洗没
@@ -912,9 +912,25 @@ score = strength × decay + emotion_bonus + relevance_bonus
 - 后续每轮选 novelty 最大的（novelty = 1 - 与已选集合的最大 texture 相似度）
 - `emotion_texture` 缺失时跳过相似度惩罚，不影响入选
 
-**emotion_bonus 来源**：
-- 记忆的 `emotion_peak` == 他当前情绪（从 `mood_state.get_current()` 读）→ `+0.15 + intensity×0.15`
-- 否则 → `+0`
+**情绪同调已移除（M4）**：旧版「`emotion_peak` == 当前心情 → `+0.15 + intensity×0.15`」会形成
+「心情低落 → 优先想起难过的事 → 回复更负面 → 心情更低」的回路，现已删除；融合分里 `strength × decay` 项
+权重不变，但 M1 之后 strength 已是「长期代表性」而非情绪强度。
+
+**混合分桶召回：`retrieve_mixed()`（M4，`fetch_context` 主入口）**
+
+复用 `retrieve()` 的候选与打分（只读，不写回），按桶各取最优，总数 ≤4：
+
+| 桶 | 条件 | 数量 |
+|---|---|---|
+| repair | `outcome in (repaired, clarified)`（M2 的冲突修复点，连同修复一起渲染） | 1 |
+| long | >30 天或 `is_core` | 1 |
+| mid | 3-30 天 | 1 |
+| recent | <72h，且与 `history[-10:]` 相似的剔除（已在上下文里，不重复召回） | 1 |
+
+返回顺序 repair → long → mid → recent，每条带内存标记 `_bucket`（不落盘）。`long_term=True`（M5 长期问题）时
+recent 置 0，long / repair 各放宽到 2 条，且词面没命中时直接从 long / repair 桶按「强度×新近度」补足。
+`recall_trace.episodic_hits[*].bucket` 记录每条来自哪个桶。`get_episodic` 工具传 `allow_strengthen=False`，
+查询不再顺手给记忆加强度。`event_log.search` 的 >7 天块不再要求 `intensity>=1`，关键词命中即可入选。
 
 **浮起阈值**：score < 0.15 的记忆过滤掉，宁可不注入也不强行关联。
 
@@ -956,12 +972,12 @@ episodic_result = format_for_prompt(
 
 ### fallback 召回：retrieve_fallback()
 
-当主召回没有可注入结果时，prompt_builder 会尝试注入一条近期高强度兜底记忆：
+当主召回没有可注入结果时，prompt_builder 会尝试注入一条兜底记忆。**M4 起改为从 long / repair 桶取，
+不再取「近 7 天高强度」**（那会让刚吵完的冲突几乎每轮都中）：
 
-- **只看 `occurred_at`（事件真实时刻）7 天内的记忆**（P0-4）；旧数据缺失 `occurred_at` 时回退 `timestamp`
-- `strength >= 0.6`
-- 与最近 short_term 内容不相似
-- **核心记忆（`is_core=True`）额外限制**：`occurred_at` 超过 2 天不允许通过 fallback 复活，防止"生日/纪念日"一再浮起（P0-4）
+- long 桶：`occurred_at`（缺失回退 `timestamp`）超过 30 天的非核心记忆；repair 桶：`outcome in (repaired, clarified)`
+- `strength >= 0.3`（只挡噪声）；与最近 short_term 内容不相似
+- **核心记忆（`is_core=True`）完全不参与 fallback**，只经关键词主召回浮现（P0-4）
 - score = `strength × max(0.5, 1 / (age_days + 1))`，仅用于排序
 
 日志中的 `selected` 是 `score >= 0.4` 的统计计数，不是实际过滤阈值。
@@ -1290,7 +1306,7 @@ pending 与残留同时满足时只出 pending 句（避免一层堆两句情绪
 `detect_emotion`/漂移数学/consumer（episodic emotion_bonus、nudge、花园）。
 
 mood_state 目前影响：
-1. episodic_memory 召回时的 emotion_bonus 加分
+1. ~~episodic_memory 召回时的 emotion_bonus 加分~~（M4 已移除）
 2. nudge_from_memory 的情绪强度微调
 3. 三路触发写入：detect（每轮 post_process_slow，保留强度门槛）、trigger（yandere 关键词；工具 thinking 通过 helper 强制置位）、schedule（深夜 sleepy，post_process_critical 里调用 helper 强制置位——sleepy 本身不含 LLM/网络往返，留在关键段不影响 send 延迟）
 ---

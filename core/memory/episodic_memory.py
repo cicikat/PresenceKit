@@ -342,10 +342,6 @@ def retrieve(
     if not memories:
         return ([], []) if return_trace else []
 
-    from core.memory.mood_state import get_current as _get_mood, get_intensity as _get_intensity
-    _current_mood = _get_mood()
-    _mood_intensity = _get_intensity()
-
     index = _load_index(user_id, char_id=char_id)
     now = time.time()
 
@@ -454,10 +450,7 @@ def retrieve(
         days = (now - mem["timestamp"]) / 86400
         decay = max(0.3, math.exp(-0.05 * days))  # 地板 0.3，防止高强度旧记忆被时间洗没
         strength = mem.get("strength", 0.5)
-        if mem.get("emotion_peak") == _current_mood:
-            emotion_bonus = 0.15 + _mood_intensity * 0.15
-        else:
-            emotion_bonus = 0.0
+        # M4：不再按"记忆情绪 == 当前心情"加分（心情低落 → 想起难过的事 → 更低落 的同调回路）
         FACTS_WEIGHT = 0.3   # 纯 facts 命中的折扣（据 trace 可调）
         _kwm = kw_matched_map.get(mem["id"], set())
         _fact_only = matched_map.get(mem["id"], set()) - _kwm
@@ -468,7 +461,7 @@ def retrieve(
             relevance_norm = max(relevance_norm, 0.5)
         rel_map[mem["id"]] = relevance_norm
         sem_sim = sem_sim_map.get(mem["id"], 0.0)
-        base_score = _score_recall(sem_sim, relevance_norm, strength, decay) + emotion_bonus
+        base_score = _score_recall(sem_sim, relevance_norm, strength, decay)
         expires_at = mem.get("expires_at")
         is_expired = isinstance(expires_at, (int, float)) and now > expires_at
         # 到期降权只影响排序，不应在 MIN_SCORE 判定前就把降权后的分数当依据——
@@ -995,10 +988,146 @@ def _render_elapsed_summary(summary: str) -> str:
     return re.sub(r"(?:这周|本周|下周)?周末|下周[一二三四五六日天]", "那天", rendered)
 
 
+def _anchor_ts(mem: dict, default: float) -> float:
+    ts = mem.get("occurred_at")
+    if not isinstance(ts, (int, float)):
+        ts = mem.get("timestamp", default)
+    return ts if isinstance(ts, (int, float)) else default
+
+
+_REPAIR_OUTCOMES = ("repaired", "clarified")
+_RECENT_DAYS = 3
+_MID_DAYS = 30
+
+
+def _bucket_of(mem: dict, now: float) -> str:
+    """M4 分桶：repair（已和好/澄清的冲突）> long（>30 天或核心）> recent（<72h）> mid（3-30 天）。"""
+    if mem.get("outcome") in _REPAIR_OUTCOMES:
+        return "repair"
+    if mem.get("is_core"):
+        return "long"
+    age_days = max(0.0, (now - _anchor_ts(mem, now)) / 86400)
+    if age_days < _RECENT_DAYS:
+        return "recent"
+    if age_days <= _MID_DAYS:
+        return "mid"
+    return "long"
+
+
+def retrieve_mixed(
+    user_id: str,
+    topic: str = "",
+    *,
+    char_id: str = DEFAULT_CHAR_ID,
+    char_name: str = "",
+    history: list[str] | None = None,
+    long_term: bool = False,
+    return_trace: bool = False,
+    query_vec: list | None = None,
+    sem_hits: list | None = None,
+    since_ts: float | None = None,
+    until_ts: float | None = None,
+) -> list | tuple:
+    """M4 混合分桶召回：近期 / 中期 / 长期稳定 / 历史修复点各取代表，不再是"相似度 Top-K + 强度加权"。
+
+    复用 retrieve() 的候选与打分（只读，不写回 strength），再按桶各取最优：
+      recent（<72h）1 条，且与 history[-10:] 相似的剔除（已在上下文里的不重复召回）；
+      mid（3-30 天）1 条；long（>30 天或核心）1 条；repair（outcome in repaired/clarified）1 条。
+    总数 ≤4；返回顺序 repair → long → mid → recent，每条带 `_bucket`（仅内存，不落盘），
+    供 prompt_builder 的 9.5 层与 recall_trace 使用。
+    long_term=True（M5 长期问题）：recent 置 0，long / repair 各放宽到 2 条；词面没命中时直接从
+    long / repair 桶按「强度×新近度」补足，保证关系层记忆能被拉齐。
+    """
+    try:
+        memories = _load_memories(user_id, char_id=char_id)
+    except EpisodicCorruptError:
+        logger.error("[episodic.retrieve_mixed] 文件损坏，本轮跳过 episodic uid=%s", user_id)
+        return ([], []) if return_trace else []
+
+    now = time.time()
+    quotas = {"recent": 1, "mid": 1, "long": 1, "repair": 1}
+    if long_term:
+        quotas = {"recent": 0, "mid": 1, "long": 2, "repair": 2}
+
+    pool_size = max(50, len(memories))
+    hits, trace = retrieve(
+        user_id=user_id, topic=topic, top_k=pool_size, char_id=char_id, char_name=char_name,
+        allow_strengthen=False, return_trace=True, query_vec=query_vec, sem_hits=sem_hits,
+        since_ts=since_ts, until_ts=until_ts,
+    )
+    score_by_id = {t["id"]: t["score"] for t in trace if t.get("hop") == 1}
+    ranked = sorted(hits, key=lambda m: score_by_id.get(m["id"], 0.0), reverse=True)
+
+    recent_texts = [h for h in (history or [])[-10:] if h]
+
+    def _alive(m: dict) -> bool:
+        return m.get("status", "open") not in ("resolved", "elapsed", "forgotten")
+
+    chosen: dict[str, list[dict]] = {k: [] for k in quotas}
+    chosen_ids: set[str] = set()
+    for m in ranked:
+        if not _alive(m):
+            continue
+        bucket = _bucket_of(m, now)
+        if len(chosen[bucket]) >= quotas[bucket]:
+            continue
+        if bucket == "recent":
+            summary = m.get("narrative_summary") or m.get("summary", "")
+            if any(_is_similar(summary, h) for h in recent_texts):
+                continue
+        chosen[bucket].append(m)
+        chosen_ids.add(m["id"])
+
+    # 长期问题：词面没命中/不足时，从 long / repair 桶按 强度×新近度 补足（不依赖话题词）
+    if long_term:
+        def _fallback_score(m: dict) -> float:
+            age_days = max(0.0, (now - _anchor_ts(m, now)) / 86400)
+            return m.get("strength", 0.5) * max(0.5, 1.0 / (age_days + 1))
+
+        for bucket in ("repair", "long"):
+            if len(chosen[bucket]) >= quotas[bucket]:
+                continue
+            extra = sorted(
+                (m for m in memories
+                 if m["id"] not in chosen_ids and _alive(m) and _bucket_of(m, now) == bucket),
+                key=_fallback_score, reverse=True,
+            )
+            for m in extra[: quotas[bucket] - len(chosen[bucket])]:
+                chosen[bucket].append(m)
+                chosen_ids.add(m["id"])
+
+    result: list[dict] = []
+    for bucket in ("repair", "long", "mid", "recent"):
+        for m in chosen[bucket]:
+            tagged = dict(m)
+            tagged["_bucket"] = bucket
+            result.append(tagged)
+
+    if return_trace:
+        bucket_by_id = {m["id"]: m["_bucket"] for m in result}
+        trace_items = []
+        for t in trace:
+            item = dict(t)
+            item["bucket"] = _bucket_of(next((m for m in memories if m["id"] == t["id"]), {}), now) \
+                if t["id"] in score_by_id else ""
+            item["selected"] = t["id"] in bucket_by_id
+            trace_items.append(item)
+        for m in result:
+            if not any(t["id"] == m["id"] for t in trace_items):
+                trace_items.append({
+                    "id": m["id"], "score": 0.0, "hop": "long_term_fill", "bucket": m["_bucket"],
+                    "summary": (m.get("narrative_summary") or m.get("summary", ""))[:80],
+                    "strength": round(m.get("strength", 0.5), 3), "selected": True,
+                })
+        return result, trace_items
+    return result
+
+
 def retrieve_fallback(user_id: str, recent_history: list[str], top_k: int = 1, *, char_id: str = DEFAULT_CHAR_ID, return_trace: bool = False) -> list[dict] | tuple:
     """
-    tag 未命中时的兜底召回。不依赖 query，按强度+时间挑近期高强度记忆。
-    筛选条件：7天内、strength >= 0.6、不在最近 short_term 内容里。
+    tag 未命中时的兜底召回（M4）。不依赖 query，从 long / repair 桶取：
+    >30 天的稳定记忆，或已和好/澄清的冲突修复点；不再取"近 7 天高强度"
+    （那会让刚吵完的冲突几乎每轮都中）。核心记忆不参与兜底；已在最近 history 里的不重复。
 
     return_trace: 若 True，返回 (result, trace_items)。
     """
@@ -1012,24 +1141,21 @@ def retrieve_fallback(user_id: str, recent_history: list[str], top_k: int = 1, *
     for m in memories:
         if m.get("status", "open") in ("resolved", "elapsed", "forgotten"):
             continue
-        # P0-4: 用 occurred_at（事件真实时刻）卡 7 天窗口
-        anchor = m.get("occurred_at")
-        if not isinstance(anchor, (int, float)):
-            anchor = m.get("timestamp", now)
-        age_days = (now - anchor) / 86400
-        if age_days > 7:
-            continue
         # 核心记忆只经主相关性召回浮现，不参与 fallback 兜底
         # (confab-fixation-loop fix: is_core episodes must not be unconditionally
         # surfaced by fallback every turn — they should only reach the prompt via
         # keyword-matched retrieve())
         if m.get("is_core"):
             continue
-        if m.get("strength", 0) < 0.6:
+        bucket = _bucket_of(m, now)
+        if bucket not in ("long", "repair"):
+            continue
+        if m.get("strength", 0) < 0.3:
             continue
         summary = m.get("narrative_summary") or m.get("summary", "")
         if any(_is_similar(summary, h) for h in recent_history if h):
             continue
+        age_days = max(0.0, (now - _anchor_ts(m, now)) / 86400)
         # 衰减加地板，与主 retrieve 保持一致
         decay = max(0.5, 1.0 / (age_days + 1))
         score = m.get("strength", 0.5) * decay
@@ -1052,6 +1178,7 @@ def retrieve_fallback(user_id: str, recent_history: list[str], top_k: int = 1, *
                 "id": m["id"],
                 "score": round(score, 4),
                 "hop": "fallback",
+                "bucket": _bucket_of(m, now),
                 "summary": (m.get("narrative_summary") or m.get("summary", ""))[:80],
                 "strength": round(m.get("strength", 0.5), 3),
             }

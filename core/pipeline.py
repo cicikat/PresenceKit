@@ -378,7 +378,7 @@ class Pipeline:
         # 情景记忆检索
         # N2-A: fetch_context 是读路径，传 allow_strengthen=False 禁止写回 strength，
         # 避免"召回→增强→更易召回"的永动机效应。写回仍由写路径触发（post_process 等）。
-        from core.memory.episodic_memory import retrieve, format_for_prompt
+        from core.memory.episodic_memory import retrieve_mixed, format_for_prompt
         from core.memory.user_facts import get_user_pronoun as _get_pronoun
         _user_pronoun = _get_pronoun(uid)
         if recall_policy == "none":
@@ -387,13 +387,14 @@ class Pipeline:
             # low_info 场景下这条 retrieve() 一直是无条件执行的，这里不改变那部分行为。
             episodic_memories, _episodic_trace = [], []
         else:
-            episodic_memories, _episodic_trace = retrieve(
+            # M4：混合分桶召回（近期/中期/长期/修复点各取代表），history 用于剔除已在上下文里的近期条目
+            episodic_memories, _episodic_trace = retrieve_mixed(
                 user_id=uid,
                 topic=content,
-                top_k=3,
                 char_id=char_id,
                 char_name=scoped_character.name,
-                allow_strengthen=False,
+                history=[h.get("content", "") for h in history[-10:]],
+                long_term=False,
                 return_trace=True,
                 query_vec=_query_vec,
                 sem_hits=_episodic_sem_hits,
@@ -695,6 +696,8 @@ class Pipeline:
             "diary_context":       diary_context,
             "episodic_result":          "" if memory_dossier_context else episodic_result,
             "episodic_fallback_result": "" if memory_dossier_context else episodic_fallback_result,
+            # M4：首条记忆来自哪个桶（recent/mid/long/repair），9.5 层据此决定是否再注入一遍
+            "episodic_top_bucket":      (episodic_memories[0].get("_bucket", "") if episodic_memories else ""),
             "memory_dossier_context":   memory_dossier_context,
             "mid_term":                 mid_term_text,
             "dream_impression_text":    dream_impression_text,
@@ -795,6 +798,7 @@ class Pipeline:
             diary_context=context.get("diary_context", ""),
             episodic_result=context.get("episodic_result", ""),
             episodic_fallback_result=context.get("episodic_fallback_result", ""),
+            episodic_top_bucket=context.get("episodic_top_bucket", ""),
             memory_dossier_context=context.get("memory_dossier_context", ""),
             mid_term_context=context.get("mid_term", ""),
             tags=_tags,
