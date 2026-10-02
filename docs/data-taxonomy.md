@@ -250,6 +250,7 @@ Dream domain 独立落在 `data/runtime/dreams/{char_id}/`，不进入 reality m
 - 角色 self 空间（256 D current）：`data/runtime/self/{char_id}/{uid}/` 用户内容与
   `data/runtime/self_meta/{char_id}/{uid}/` 系统 revision/trash/audit 分库；
   accessor `character_self_root` / `character_self_meta_root` / `character_self_audit`；
+  `data/runtime/self_db/{char_id}/{uid}/self.db` 为角色自建结构化资料库（T2，accessor `character_self_db`，唯一副本、须备份，位于 self 根之外）；
   `self/AGENT.md` 为角色自写工作习惯；见 [character-files-and-agent-autonomy.md](character-files-and-agent-autonomy.md)
 - forensic 日志与 DLQ：`data/logs/`
 - 上传文件与视觉缓存：`data/inbox/`、`data/cache/image_cache/`

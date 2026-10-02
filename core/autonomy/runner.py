@@ -67,7 +67,8 @@ def _system_prompt(
     optional_capabilities: list[str] = []
     if tool_names & {"fs_list", "fs_read"}:
         optional_capabilities.append("read permitted backend or external files")
-    if tool_names & {"self_list", "self_read", "self_create", "self_update", "self_move", "self_delete", "self_restore"}:
+    if tool_names & {"self_list", "self_read", "self_create", "self_update", "self_move", "self_delete", "self_restore",
+                     "self_db_tables", "self_db_query", "self_db_insert"}:
         optional_capabilities.append("organize your scoped self files")
     if "start_agent_task" in tool_names:
         optional_capabilities.append(

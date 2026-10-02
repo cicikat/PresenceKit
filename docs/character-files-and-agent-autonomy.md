@@ -121,10 +121,11 @@
 | `process_run` | system | execute | dangerous | workspace 内程序 | workspace | 无通用撤销 | `/observability/agent-runtime-processes` |
 | `browser_automation` | browser | write | 高风险 one-shot | 域名 allowlist | 私有 profile | 无 | 设置面；旧 observability 路由已 retired |
 | `manage_self_capability` | self_management | write | expected_revision + action_id | overlay grant | self_management state | revision CAS | character-permissions |
+| `self_db_tables` / `self_db_create_table` / `self_db_insert` / `self_db_query` / `self_db_update` / `self_db_delete` / `self_db_drop_table`（T2） | self | read/write | where 必填；无原始 SQL | uid+char，同一 self grant | `data/runtime/self_db/{char}/{uid}/self.db`（self 根之外） | drop 进回收区，TTL 同 self trash | `/observability/character-self`.`self_db` |
 | `write_artifact` / `update_artifact` / `read_artifact` / `list_artifacts` | artifacts | write/read | 无 | uid+char | `chat_artifacts` | 非 workspace | `/observability/chat-artifacts` |
 | 动态 `mcp__*` | mcp | 按 local policy | 按 policy | MCP session | 外部 | 未知结果 fail-closed | MCP 设置 |
 
-**C current：** `self_list` / `self_read` / `self_create` / `self_update` / `self_move` / `self_delete` / `self_restore`（category `info`，写工具默认 grant、不经 danger 闸，autonomy 沙盒白名单含 self 写）。**E current：** reminder `list/get/add/update/cancel/restore`。**F current：** `start_agent_task` / `get_agent_task` / `cancel_agent_task`。
+**C current：** `self_list` / `self_read` / `self_create` / `self_update` / `self_move` / `self_delete` / `self_restore`（category `self`，T1 起从 `info` 拆出；写工具默认 grant、不经 danger 闸，autonomy 沙盒白名单含 self 写）。**E current：** reminder `list/get/add/update/cancel/restore`。**F current：** `start_agent_task` / `get_agent_task` / `cancel_agent_task`。
 
 ### 2.3 Autonomy 可用集合
 

@@ -122,6 +122,8 @@ def capability_projection(*, desktop_ws_online: bool = False, last_ack_at: float
     for name in (
         "self_list", "self_read", "self_create", "self_update",
         "self_move", "self_delete", "self_restore",
+        "self_db_tables", "self_db_create_table", "self_db_insert", "self_db_query",
+        "self_db_update", "self_db_delete", "self_db_drop_table",
     ):
         decisions.append(CapabilityDecision(
             logical_name=name,

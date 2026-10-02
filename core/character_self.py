@@ -809,6 +809,8 @@ def _run(
             "revision": payload.get("revision"),
             "origin": origin,
             "causation": payload.get("causation"),
+            # self_db operations report a row count (never row content).
+            **({"rows": payload["rows_affected"]} if "rows_affected" in payload else {}),
         })
     except Exception:
         pass
@@ -1565,6 +1567,7 @@ def observability_snapshot(uid: str | None = None, char_id: str | None = None) -
             "file_count": quota["used_files"],
             "trash_count": len(trash.get("items") or []),
             "recent_ops": _recent_ops(principal, limit=20),
+            "self_db": _self_db_obs(principal.uid, principal.char_id),
             "agent_md": {
                 "present": agent_md.get("present"),
                 "revision": agent_md.get("revision"),
@@ -1596,6 +1599,15 @@ def observability_snapshot(uid: str | None = None, char_id: str | None = None) -
     if str(root) in blob or str(meta) in blob:
         raise RuntimeError("character-self observability leaked an absolute path")
     return payload
+
+
+def _self_db_obs(uid: str, char_id: str) -> dict[str, Any]:
+    """Structured-library metadata: table names, row counts, file size. No row content."""
+    try:
+        from core.character_self_db import observability
+        return observability(uid, char_id)
+    except Exception as exc:
+        return {"present": False, "error": type(exc).__name__}
 
 
 def dumps(payload: dict[str, Any]) -> str:

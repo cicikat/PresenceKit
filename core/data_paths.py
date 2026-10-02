@@ -512,6 +512,15 @@ class DataPaths:
         assert_production_identity_allowed(user_id, mode=self.mode)
         return self._p("runtime", "self_meta", safe_user_id(char_id), safe_user_id(user_id))
 
+    def character_self_db(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
+        """SQLite file of the character's structured self library (T2).
+
+        Deliberately a sibling of, not inside, ``character_self_root`` so the
+        text-file ``self_*`` tools can never read or overwrite it.
+        """
+        assert_production_identity_allowed(user_id, mode=self.mode)
+        return self._p("runtime", "self_db", safe_user_id(char_id), safe_user_id(user_id), "self.db")
+
     def character_self_audit(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
         """Append-only self-file operation audit; never prompt-loaded."""
         return self.character_self_meta_root(user_id, char_id=char_id) / "audit.jsonl"

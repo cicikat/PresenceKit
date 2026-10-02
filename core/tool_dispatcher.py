@@ -2800,7 +2800,7 @@ async def _execute_structured_impl(
         if is_group or origin not in {"assistant_loop", "autonomy_loop"} or not feature_enabled():
             return _execution_outcome("tool_failed", "Self Capability history is unavailable in this context.")
 
-    if tool_name in {"read_long_user_message", "search_events", "expand_event_window", "get_related_events", "search_memory_dossiers", "read_memory_dossier", "search_dossier_events", "update_memory_dossier", "get_memory_consolidation_status", "request_memory_consolidation", "read_life_records", "reread_image", "write_artifact", "update_artifact", "read_artifact", "list_artifacts"} and is_group:
+    if tool_name in {"read_long_user_message", "search_events", "expand_event_window", "get_related_events", "search_memory_dossiers", "read_memory_dossier", "search_dossier_events", "update_memory_dossier", "get_memory_consolidation_status", "request_memory_consolidation", "read_life_records", "reread_image", "write_artifact", "update_artifact", "read_artifact", "list_artifacts", "self_db_tables", "self_db_create_table", "self_db_insert", "self_db_query", "self_db_update", "self_db_delete", "self_db_drop_table"} and is_group:
         _trace("failed", "reality_event_tools_forbidden_in_group")
         return _execution_outcome("tool_failed")
 
@@ -3034,6 +3034,8 @@ async def _execute_structured_impl(
             "workspace_update", "workspace_delete", "workspace_undo", "process_run",
             "self_list", "self_read", "self_create", "self_update",
             "self_move", "self_delete", "self_restore",
+            "self_db_tables", "self_db_create_table", "self_db_insert", "self_db_query",
+            "self_db_update", "self_db_delete", "self_db_drop_table",
             "list_reminders", "get_reminder", "add_reminder",
             "update_reminder", "cancel_reminder", "restore_reminder",
             "start_agent_task", "get_agent_task", "cancel_agent_task",

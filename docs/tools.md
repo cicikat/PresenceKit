@@ -562,6 +562,13 @@ self_access:
 - **脱敏**：`self_read` 先 `inspect_high_risk` 再 `redact_for_export`，失败拒绝不退原文。
 - **remote_server**：可写本进程 self 桶；不因此获得用户电脑外部写或 process。
 - **不受危险模式闸约束**：category `self`（T1 起从 `info` 拆出，旧 `info` 白名单自动展开包含），不在 `_MODE_RESTRICTED_CATEGORIES`。
+- **结构化资料库 `self_db_*`（T2）**：每个 owner+char 桶一个 SQLite（`character_self_db()`，位于 self 文本根之外，`self_*` 读不到）。
+  不开放原始 SQL：标识符正则 `^[A-Za-z_一-鿿][\w一-鿿]{0,31}$`（表名另不得以 `_` 开头）加双引号，值全部参数绑定；
+  列类型 text/number/bool/date；`where` 支持 eq/ne/gt/lt/contains/in，update/delete 必填 where；单次插入 ≤50 行、
+  查询 ≤50 行；配额：表 ≤20、每表行 ≤5000、文件 ≤ `self_access.max_total_bytes`，超限 `quota_exhausted` 并回滚、不静默删。
+  `self_db_drop_table` 把表改名进回收区（`_trash_<ts>_<table>`），按 self 的 trash TTL/上限清理。权限与 `self_*` 同一 grant
+  （`self_revoked` 全部冻结），写工具在 autonomy `_SANDBOXED_WRITE_TOOLS`，群聊禁用。审计复用 self 审计（操作、表名、行数，不含行内容）；
+  观测 `GET /observability/character-self` 的 `self_db`（表名、列数、行数、文件大小、回收数）。
 - **AGENT.md 可见性**：`self_create`/`self_update` 描述写明 AGENT.md 作用与 2000 字预算；`self_list` 在根目录无 AGENT.md 时返回 `hint`（提示不是错误）。
 - **autonomy**：写工具在 `_SANDBOXED_WRITE_TOOLS`；仍须显式 allowlist `enabled`。
 - **观测**：`GET /observability/character-self`（`state.read`）返回配额余量、grant
@@ -623,6 +630,7 @@ self_access:
 | `self_move` | 自有空间内移动；覆盖须 overwrite | `core/tools/character_self.py` |
 | `self_delete` | 放入有界回收站，可按 revision 恢复 | `core/tools/character_self.py` |
 | `self_restore` | 按 revision 从回收站恢复 | `core/tools/character_self.py` |
+| `self_db_tables` / `self_db_create_table` / `self_db_insert` / `self_db_query` / `self_db_update` / `self_db_delete` / `self_db_drop_table` | 角色自有结构化资料库（T2，见下） | `core/tools/character_self.py` / `core/character_self_db.py` |
 | `get_listening_state` | 读取共同听歌状态和有界声音摘要 | `core/listening_tools.py` |
 | `get_listening_queue` | 读取队列和 revision | `core/listening_tools.py` |
 | `get_listening_history` | 读取本角色有界听歌记录 | `core/listening_tools.py` |

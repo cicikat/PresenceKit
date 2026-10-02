@@ -89,6 +89,8 @@ REGISTRY: dict[str, PathMeta] = {
     "character_self_root":    PathMeta("canonical", "reality",         "per_char_user", "ignore"),
     "character_self_meta_root": PathMeta("runtime", "reality",         "per_char_user", "ignore"),
     "character_self_audit":   PathMeta("forensic",  "reality",         "per_char_user", "ignore"),
+    # 角色自建的结构化资料库：角色写入的唯一副本，丢失不可重建，须磁盘外备份。
+    "character_self_db":      PathMeta("canonical", "reality",         "per_char_user", "ignore-but-authored"),
     "legacy_toy_owner_record": PathMeta("runtime", "shared",           "global",        "ignore"),
     "legacy_toy_migration_report": PathMeta("forensic", "shared",      "global",        "ignore"),
     "wake_delivery_ledger":   PathMeta("canonical", "shared",          "per_user",      "ignore"),

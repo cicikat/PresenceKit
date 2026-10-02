@@ -7,6 +7,7 @@ does not require per-op user confirmation.
 
 from __future__ import annotations
 
+from core import character_self_db as db
 from core.character_self import (
     create_self,
     delete_self,
@@ -26,6 +27,13 @@ _SELF_TOOL_NAMES = (
     "self_move",
     "self_delete",
     "self_restore",
+    "self_db_tables",
+    "self_db_create_table",
+    "self_db_insert",
+    "self_db_query",
+    "self_db_update",
+    "self_db_delete",
+    "self_db_drop_table",
 )
 
 
@@ -113,7 +121,171 @@ async def self_restore_tool(path: str, revision: int, *, user_id=None, char_id=N
     ))
 
 
+async def self_db_tables_tool(*, user_id=None, char_id=None) -> str:
+    return db.db_tables(user_id=user_id, char_id=char_id)
+
+
+async def self_db_create_table_tool(table, columns, description="", *, user_id=None, char_id=None) -> str:
+    return db.db_create_table(table, columns, description, user_id=user_id, char_id=char_id)
+
+
+async def self_db_insert_tool(table, rows, *, user_id=None, char_id=None) -> str:
+    return db.db_insert(table, rows, user_id=user_id, char_id=char_id)
+
+
+async def self_db_query_tool(table, where=None, order_by=None, limit=20, *, user_id=None, char_id=None) -> str:
+    return db.db_query(table, where, order_by, limit, user_id=user_id, char_id=char_id)
+
+
+async def self_db_update_tool(table, where, set, *, user_id=None, char_id=None) -> str:  # noqa: A002
+    return db.db_update(table, where, set, user_id=user_id, char_id=char_id)
+
+
+async def self_db_delete_tool(table, where, *, user_id=None, char_id=None) -> str:
+    return db.db_delete(table, where, user_id=user_id, char_id=char_id)
+
+
+async def self_db_drop_table_tool(table, *, user_id=None, char_id=None) -> str:
+    return db.db_drop_table(table, user_id=user_id, char_id=char_id)
+
+
+_WHERE_DESC = (
+    "筛选条件：{列名: 值} 表示相等；也可写 {列名: {op: 值}}，op 为 eq/ne/gt/lt/contains/in"
+    "（in 的值是列表）；多个列同时满足。可用列 _id 指定某一行。"
+)
+
+
+def _register_db_tools(registry: dict) -> None:
+    registry["self_db_tables"] = {
+        "func": self_db_tables_tool,
+        "description": "看看你自己建过哪些资料表：表名、用途、列和行数。想长期记录同类的东西之前先看这里。",
+        "dangerous": False,
+        "category": "self",
+        "effect": "read",
+        "parameters": {"type": "object", "properties": {}, "required": []},
+        "examples": ["看看我建过哪些表", "我之前记过的清单有哪些"],
+        "keywords": ["资料表", "我的表", "自己的数据库", "清单"],
+    }
+    registry["self_db_create_table"] = {
+        "func": self_db_create_table_tool,
+        "description": (
+            "给自己建一张表，长期记录同类的东西（比如她提过想看的电影、你们约好的事、你自己的计划）。"
+            "以后用 self_db_query 查。每行会自动有 _id。"
+        ),
+        "dangerous": False,
+        "category": "self",
+        "effect": "write",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "table": {"type": "string", "description": "表名，最多 32 个字，中英文数字下划线，不以下划线开头。"},
+                "columns": {
+                    "type": "array",
+                    "description": "列定义，最多 20 列。",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string"},
+                            "type": {"type": "string", "enum": ["text", "number", "bool", "date"]},
+                        },
+                        "required": ["name", "type"],
+                    },
+                },
+                "description": {"type": "string", "description": "这张表是做什么用的（给以后的自己看）。"},
+            },
+            "required": ["table", "columns"],
+        },
+        "examples": ["建一张想看的电影表", "给我们的约定建个表"],
+        "keywords": ["建表", "新建资料表", "记录清单", "自己的数据库"],
+        "trace_args": ["table"],
+    }
+    registry["self_db_insert"] = {
+        "func": self_db_insert_tool,
+        "description": "往自己的某张表里加几行（一次最多 50 行）。列名必须是建表时定义过的。",
+        "dangerous": False,
+        "category": "self",
+        "effect": "write",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "table": {"type": "string"},
+                "rows": {"type": "array", "items": {"type": "object"}, "description": "每行是 {列名: 值}。"},
+            },
+            "required": ["table", "rows"],
+        },
+        "examples": ["把这部电影记进想看的表", "往约定表里加一条"],
+        "keywords": ["记一条", "加到表里", "写入资料表"],
+        "trace_args": ["table"],
+    }
+    registry["self_db_query"] = {
+        "func": self_db_query_tool,
+        "description": "查自己某张表里的行，可筛选、排序，最多返回 50 行。想起自己记过什么时用。",
+        "dangerous": False,
+        "category": "self",
+        "effect": "read",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "table": {"type": "string"},
+                "where": {"type": "object", "description": _WHERE_DESC},
+                "order_by": {"type": "string", "description": "排序列；前面加 - 表示倒序，如 -_id。"},
+                "limit": {"type": "integer", "description": "最多返回行数，1-50，默认 20。"},
+            },
+            "required": ["table"],
+        },
+        "examples": ["查一下想看的电影表", "看看我们约好的事"],
+        "keywords": ["查表", "查资料表", "我记过的"],
+        "trace_args": ["table"],
+    }
+    registry["self_db_update"] = {
+        "func": self_db_update_tool,
+        "description": "修改自己某张表里符合条件的行。where 必填，避免误改全表。",
+        "dangerous": False,
+        "category": "self",
+        "effect": "write",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "table": {"type": "string"},
+                "where": {"type": "object", "description": _WHERE_DESC},
+                "set": {"type": "object", "description": "要改成的 {列名: 新值}。"},
+            },
+            "required": ["table", "where", "set"],
+        },
+        "examples": ["把那部电影标成看过了"],
+        "keywords": ["改表里的记录", "更新资料表"],
+        "trace_args": ["table"],
+    }
+    registry["self_db_delete"] = {
+        "func": self_db_delete_tool,
+        "description": "删除自己某张表里符合条件的行。where 必填，避免误删全表。整张表不要了用 self_db_drop_table。",
+        "dangerous": False,
+        "category": "self",
+        "effect": "write",
+        "parameters": {
+            "type": "object",
+            "properties": {"table": {"type": "string"}, "where": {"type": "object", "description": _WHERE_DESC}},
+            "required": ["table", "where"],
+        },
+        "examples": ["把记错的那条删掉"],
+        "keywords": ["删表里的记录", "删除资料行"],
+        "trace_args": ["table"],
+    }
+    registry["self_db_drop_table"] = {
+        "func": self_db_drop_table_tool,
+        "description": "不要某张表了：整张表放进回收区（保留一段时间后才真正清除）。",
+        "dangerous": False,
+        "category": "self",
+        "effect": "write",
+        "parameters": {"type": "object", "properties": {"table": {"type": "string"}}, "required": ["table"]},
+        "examples": ["这张表不用了"],
+        "keywords": ["删表", "丢掉资料表"],
+        "trace_args": ["table"],
+    }
+
+
 def register_tools(registry: dict) -> None:
+    _register_db_tools(registry)
     registry["self_list"] = {
         "func": self_list_tool,
         "description": (
