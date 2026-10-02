@@ -1630,14 +1630,6 @@ async def consolidate_to_identity(uid: str, llm_client, *, char_id: str = DEFAUL
         for ep in new_episodes[:3]
     )
 
-    # identity-2 冷启动观测（Brief 104 §3）：记录该用户首次出现"有效维度"
-    # （confidence >= 0.5，即 format_for_prompt 实际会注入 prompt 的门槛）时的
-    # 真实轮数，供后续判断冷启动期时长、决定是否调阈值。只读观测，不影响写入逻辑。
-    _had_valid_before = any(
-        (old_identity.get(_k) or {}).get("confidence", 0.0) >= 0.5
-        for _k, _ in _ui.IDENTITY_DIMENSIONS
-    )
-
     # 非空 → 写 identity；空 dict 但有衰减 → 仍写回衰减结果；都没有 → 跳过写入，仍标记 episodes
     if new_identity or decay_events:
         to_save = {**decayed_identity, **new_identity}
@@ -1645,23 +1637,6 @@ async def consolidate_to_identity(uid: str, llm_client, *, char_id: str = DEFAUL
         if not ok:
             _log_fixation("consolidate_to_identity", uid, {}, "error", "identity 写入失败")
             raise RuntimeError(f"consolidate_to_identity identity 写入失败: uid={uid}")
-
-        if not _had_valid_before:
-            _first_valid_keys = [
-                _k for _k, _ in _ui.IDENTITY_DIMENSIONS
-                if (to_save.get(_k) or {}).get("confidence", 0.0) >= 0.5
-            ]
-            if _first_valid_keys:
-                from core.memory import event_log as _el
-                _log_fixation(
-                    "identity_coldstart", uid,
-                    {
-                        "char_id": char_id,
-                        "real_turns": _el.count_real_turns(uid, char_id=char_id),
-                        "dimensions": _first_valid_keys,
-                    },
-                    "ok", "首个有效 identity 维度（confidence>=0.5）出现",
-                )
 
         # Provenance: record each dimension whose text changed
         from core.memory.provenance_log import append as _prov_append

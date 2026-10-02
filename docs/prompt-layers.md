@@ -54,7 +54,6 @@ Reality `1_system_prompt` 绑定当前角色，并使用用户所选称谓（默
 | `6i_self_agent_md` | 角色自己写的 `self/AGENT.md` 工作习惯 | 文件非空且未损坏；聊天/主动/副链复用同一 scoped 快照 | 256 D current；self-authored，低于系统安全/权限和用户指令；进入模型前脱敏；本轮冻结，修改下一轮生效；`_drop_priority=75` |
 | `5.5_lore` | 世界书条目 | LoreEngine 命中时 | `lore_engine.match()` |
 | `6a_user_identity` | 用户稳定行为模式 | `user_identity_text` 非空 | `core/memory/user_identity.py`，confidence >= 0.5 的维度 |
-| `6a_user_identity_coldstart` | identity 冷启动期轻量提示："还在慢慢认识你"，不描述具体事实，与 `6a_user_identity` 互斥 | `user_identity_text` 为空 且 `identity_coldstart=True`（已有真实交互历史，复用 `core/scheduler/rhythm.has_real_interaction_history()` 同一冷启动阈值） | `core/pipeline.py::fetch_context()` 计算 → `prompt_builder.build(identity_coldstart=)`；观测端点见 `admin/routers/memory.py` → `/memory/fixation/identity-coldstart-summary`（Brief 104 §3，对应 `docs/known-issues.md` identity-2） |
 | `6b_event_search` | 相关往事（event_log 搜索结果） | 搜索结果非空；`fetch_context(recall_policy="none")` 时整层跳过（CC 任务 19 · C） | `event_log.search()` |
 | `6c_episodic` | 情景记忆片段 | episodic_result 非空；`fetch_context(recall_policy="none")` 时整层跳过（CC 任务 19 · C） | `episodic_memory.retrieve()` + `format_for_prompt()` |
 | `6c_episodic_fallback` | 近期高强度记忆兜底 | episodic_result 为空且 fallback 非空；`recall_policy="none"` 时同样跳过 | `episodic_memory.retrieve_fallback()`；实际消息 `_layer` 仍写 `6c_episodic`，便于统一裁剪 |
@@ -404,7 +403,7 @@ token_estimate = sum(len(m["content"]) for m in messages)
 | 80 | `5.5_lore` | 世界书设定，最后丢 |
 | 85 | `coplay_context` | 陪玩模式游戏进度/动态 + 剧透压制约束，内容很小，比 lore 更晚丢 |
 
-不在裁剪表里（无 `_drop_priority`）：`6a_user_identity`、`6a_user_identity_coldstart`（与 `6a_user_identity` 互斥、内容极小）、`5_profile`、`5_profile_pref`、`5.1_user_facts`、`9_history`、`11_author_note`、`11.5_post_history`、`10.5_action_trace`（够小且时效性强，不参与裁剪）、`10.6_hardware_jobs`（当前设备状态事实，不参与裁剪）、`anti_collapse_hint`（触发时才存在，内容是纠偏软提示，裁掉即失去纠偏效果，够小不参与裁剪）等核心层。
+不在裁剪表里（无 `_drop_priority`）：`6a_user_identity`、`5_profile`、`5_profile_pref`、`5.1_user_facts`、`9_history`、`11_author_note`、`11.5_post_history`、`10.5_action_trace`（够小且时效性强，不参与裁剪）、`10.6_hardware_jobs`（当前设备状态事实，不参与裁剪）、`anti_collapse_hint`（触发时才存在，内容是纠偏软提示，裁掉即失去纠偏效果，够小不参与裁剪）等核心层。
 
 ### 裁剪算法
 

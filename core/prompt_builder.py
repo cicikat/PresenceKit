@@ -409,7 +409,6 @@ def build(
     profile: dict,
     group_context: list[dict],
     user_identity_text: str = "",
-    identity_coldstart: bool = False,
     event_search_result: str = "",
     lore_entries: list[str] = None,
     tool_result: str | None = None,
@@ -458,8 +457,6 @@ def build(
         profile:             user_profile.load() 的返回值
         group_context:       group_context.get_recent() 的返回值
         user_identity_text:  user_identity.format_for_prompt() 的返回值（用户稳定行为模式）
-        identity_coldstart:  user_identity_text 为空、但已有真实交互历史时置真（Brief 104 §3）；
-                             注入"还在慢慢认识你"的轻量诚实提示，不编造记忆
         event_search_result: event_log.search() 的返回值（相关往事摘要）
         lore_entries:        lore_engine.match() 的返回值
         tool_result:         本轮工具执行结果（有则注入）
@@ -1003,19 +1000,6 @@ def build(
             "role": "system",
             "content": _identity_block,
             "_layer": "6a_user_identity",
-        })
-    elif identity_coldstart:
-        # identity-2 冷启动降级体验（Brief 104 §3）：还没形成稳定行为画像时，如实
-        # 表达"还在慢慢认识你"，而不是对用户背景保持沉默、显得毫无印象。这是纯提示
-        # 语气引导，不描述任何具体事实，不算伪造记忆（DESIGN.md 自产内容不固化原则）。
-        messages.append({
-            "role": "system",
-            "content": (
-                f"关于{user_pronoun}的长期观察：目前还没有形成稳定认识——你们认识不久，如实对待"
-                "这一点即可，可以自然流露出「还在慢慢了解对方」的状态，不要表现得像已经"
-                "很了解对方，也不要凭空编出还没发生过的过往。"
-            ),
-            "_layer": "6a_user_identity_coldstart",
         })
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -1912,7 +1896,6 @@ KNOWN_LAYERS: list[tuple[str, str]] = [
     ("6i_self_agent_md", "角色自己写的 self/AGENT.md 工作习惯（self-authored，低于系统安全与用户指令）"),
     ("5.5_lore", "世界书条目"),
     ("6a_user_identity", "用户稳定行为模式"),
-    ("6a_user_identity_coldstart", "identity 冷启动期轻量提示（还在慢慢认识你，不编造记忆）"),
     ("6b_event_search", "相关往事（event_log 语义搜索）"),
     ("6b_memory_dossiers", "角色主题记忆档案（当前理解 + 未整理新证据）"),
     ("6c_episodic", "情景记忆片段（含 fallback，两者共用此层名）"),

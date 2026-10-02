@@ -508,23 +508,9 @@ TestFetchContextSemanticHitsTraceUnpack`。
 
 ### identity-2：identity 注入有冷启动期
 
-**状态**：`observe`
+**状态**：`closed`
 
-新用户需经过 mid-term → episodic → consolidate 才开始注入。先观察首个有效维度需要的轮数，再决定是否调阈值。
-
-Brief 104 §3 已落地两块基础设施，供后续判断：
-- **量化**：`consolidate_to_identity()` 检测到某用户首次出现 confidence>=0.5 的维度时，
-  记一条 `identity_coldstart` 日志到 `fixation.jsonl`（真实轮数取自
-  `event_log.count_real_turns()`，即 full_log.md 里 `speaker:user` 计数，不受
-  short_term 20 轮滑窗影响）。跨用户汇总见
-  `GET /memory/fixation/identity-coldstart-summary`；单用户明细见
-  `GET /memory/fixation/status?uid=...`。
-- **降级体验**：`user_identity_text` 为空但已有真实交互历史（复用
-  `core/scheduler/rhythm.has_real_interaction_history()` 同一冷启动阈值）时，注入
-  `6a_user_identity_coldstart` 层，如实表达"还在慢慢认识你"，不编造记忆内容（详见
-  `docs/prompt-layers.md`）。
-- 积累到有意义的样本量后，再回来看 `avg_real_turns` 决定是否调
-  `_should_consolidate()` 的阈值。
+已移除冷启动提示层（2026-10），冷启动期不再注入任何关系时长判断；`identity_coldstart` 观测日志与 `/memory/fixation/identity-coldstart-summary` 端点一并删除。相识时长改由模型从记忆自行判断。
 
 ### TD-1：`sandbox.py` 兼容层
 

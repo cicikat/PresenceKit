@@ -246,7 +246,6 @@ class Pipeline:
             "relation":           dict,        # 用户关系配置
             "group_context":      str,         # 群消息流（私聊为 ""）
             "user_identity_text": str,         # 用户稳定行为模式描述（scoped by char_id）
-            "identity_coldstart": bool,        # user_identity_text 为空且已有真实交互史时为真
             "user_facts_text":    str,         # 跨角色全局用户事实（uid-only，无 char_id）
             "event_search_result": str,        # 事件日志语义搜索结果
             "lore_entries":       list[str],   # 命中的世界书条目
@@ -438,13 +437,6 @@ class Pipeline:
         profile              = await profile_future
         mid_term_text        = await mid_term_future
         user_identity_text   = await user_identity.format_for_prompt(uid, char_id=char_id)
-        # identity-2 冷启动降级体验（Brief 104 §3）：还没有任何有效维度，但真实交互已
-        # 建立到足以排除"零数据"误读时，走轻量诚实提示层而非对用户背景保持沉默。
-        # 复用 Brief 97 的冷启动判定阈值（COLD_START_MIN_REAL_TURNS），不新造门槛。
-        identity_coldstart = False
-        if not user_identity_text:
-            from core.scheduler.rhythm import has_real_interaction_history
-            identity_coldstart = has_real_interaction_history(uid, char_id=char_id)
         # uid-only global facts — no char_id, no fallback
         user_facts_text      = user_facts.format_for_prompt(uid)
 
@@ -696,7 +688,6 @@ class Pipeline:
             "relation":            relation,
             "group_context":       recent_group_ctx,
             "user_identity_text":  user_identity_text,
-            "identity_coldstart":  identity_coldstart,
             "user_facts_text":     user_facts_text,
             "event_search_result": "" if memory_dossier_context else event_search_result,
             "lore_entries":        lore_entries,
@@ -793,7 +784,6 @@ class Pipeline:
             profile=context["profile"],
             group_context=context["group_context"],
             user_identity_text=context["user_identity_text"],
-            identity_coldstart=context.get("identity_coldstart", False),
             user_facts_text=context.get("user_facts_text", ""),
             event_search_result=context["event_search_result"],
             lore_entries=context["lore_entries"],
