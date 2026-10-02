@@ -190,6 +190,8 @@ def commit_batch(
     last_aggregated_at: float,
     event_log_cursor: dict,
     consumed_material_ids: list[str],
+    rejected_ops: int = 0,
+    rejected_codes: list[str] | None = None,
 ) -> None:
     """Atomically persist arcs, cursor and bounded idempotency receipt."""
     committed = copy.deepcopy(data)
@@ -199,21 +201,45 @@ def commit_batch(
         "last_aggregated_at": float(last_aggregated_at),
         "event_log_cursor": dict(event_log_cursor),
         "consumed_material_ids": receipts,
-        "aggregation": {"status": "committed", "last_failure_code": "", "last_batch_at": time.time()},
+        "aggregation": {
+            "status": "committed", "last_failure_code": "", "last_batch_at": time.time(),
+            "consecutive_failures": 0, "next_retry_at": 0.0,
+            "rejected_ops": int(rejected_ops), "rejected_codes": list(rejected_codes or [])[:10],
+        },
     })
     committed["version"] = SCHEMA_VERSION
     _save(uid, committed, char_id=char_id)
     _record_batch_provenance(uid, committed, char_id=char_id)
 
 
-def record_failure(uid: str, *, char_id: str = DEFAULT_CHAR_ID, code: str, stage: str) -> None:
-    """Persist content-free failure state without advancing business cursors."""
+RETRY_BACKOFF_SECS = (6 * 3600, 12 * 3600, 24 * 3600)
+FAILURE_WARN_THRESHOLD = 3
+
+
+def record_failure(
+    uid: str, *, char_id: str = DEFAULT_CHAR_ID, code: str, stage: str, retry: bool = True,
+) -> None:
+    """Persist content-free failure state without advancing business cursors.
+
+    retry=True：consecutive_failures +1，并按 6h/12h/24h 退避写 next_retry_at（失败不消耗 7 天冷却）；
+    连续 FAILURE_WARN_THRESHOLD 次失败记一条 WARNING。retry=False（如 inbox 清理失败，批次已提交）只记状态。
+    """
     data = load(uid, char_id=char_id)
     aggregation = data.setdefault("meta", {}).setdefault("aggregation", {})
+    now = time.time()
     aggregation.update({
         "status": "failed", "last_failure_code": str(code)[:64],
-        "last_failure_stage": str(stage)[:32], "last_failure_at": time.time(),
+        "last_failure_stage": str(stage)[:32], "last_failure_at": now,
     })
+    if retry:
+        failures = int(aggregation.get("consecutive_failures") or 0) + 1
+        aggregation["consecutive_failures"] = failures
+        aggregation["next_retry_at"] = now + RETRY_BACKOFF_SECS[min(failures, len(RETRY_BACKOFF_SECS)) - 1]
+        if failures >= FAILURE_WARN_THRESHOLD:
+            logger.warning(
+                "[storyline] 周聚合连续失败 %d 次 uid=%s char=%s code=%s stage=%s",
+                failures, uid, char_id, code, stage,
+            )
     _save(uid, data, char_id=char_id)
 
 

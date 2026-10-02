@@ -84,6 +84,7 @@ async def get_storyline_state(
         "char_id": resolved,
         "meta": _storyline_meta_projection(data["meta"]),
         "inbox_count": inbox_count,
+        "pending_inbox": inbox_count,
         "arcs": [
             {
                 "arc_id": a["arc_id"],
@@ -116,6 +117,9 @@ def _storyline_meta_projection(meta: dict) -> dict:
         "event_log_checkpoints": checkpoints,
         "consumed_count": len(meta.get("consumed_material_ids") or []),
         "aggregation": meta.get("aggregation") or {},
+        "consecutive_failures": int((meta.get("aggregation") or {}).get("consecutive_failures") or 0),
+        "rejected_ops": int((meta.get("aggregation") or {}).get("rejected_ops") or 0),
+        "next_retry_at": float((meta.get("aggregation") or {}).get("next_retry_at") or 0.0),
     }
 
 

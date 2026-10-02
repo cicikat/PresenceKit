@@ -292,7 +292,7 @@ def test_event_log_source_tagged_blocks_filtered_from_llm_input(sandbox, fake_ll
     _run_weekly()
 
     fake_llm.chat.assert_awaited()
-    llm_input = fake_llm.chat.call_args.args[0][0]["content"]
+    llm_input = fake_llm.chat.call_args.args[0][1]["content"]
     assert "明天晴" not in llm_input, "source:web 块不应出现在 storyline 聚合 LLM 输入里"
     assert "辞职去学画画" in llm_input, "无 source 标记的块应正常进入聚合输入"
 
@@ -326,3 +326,85 @@ def test_empty_registry_skips(fake_llm, caplog):
 
     fake_llm.chat.assert_not_awaited()
     assert caplog.text
+
+
+# ── 7. M6：消息结构 / 分批 / 逐 op 校验 / 失败退避 ─────────────────────────────
+
+def test_llm_gets_system_and_user_messages_with_char_id(sandbox, fake_llm):
+    uid = "u_m6_msgs"
+    _write_episode(uid, TEST_CHAR_ID, "材料甲", ts=time.time())
+    _run_weekly()
+    messages = fake_llm.chat.call_args.args[0]
+    assert [m["role"] for m in messages] == ["system", "user"]
+    assert "材料甲" in messages[1]["content"] and "材料甲" not in messages[0]["content"]
+    assert fake_llm.chat.call_args.kwargs["char_id"] == TEST_CHAR_ID
+    assert fake_llm.chat.call_args.kwargs["max_tokens_override"] == 3000
+
+
+def test_oversized_input_is_split_into_batches(sandbox, fake_llm):
+    from core.memory import storyline as sl
+    uid = "u_m6_batches"
+    now = time.time()
+    _write_episode(uid, TEST_CHAR_ID, "触发遍历用", ts=now)
+    sl.append_to_inbox(uid, [
+        {"id": f"old{i}", "summary": f"碎片{i}", "ts": now - 1000 + i, "strength": 0.3}
+        for i in range(94)
+    ], char_id=TEST_CHAR_ID)
+    _run_weekly()
+    assert fake_llm.chat.await_count == 3  # 40 + 40 + 15
+    meta = sl.load(uid, char_id=TEST_CHAR_ID)["meta"]
+    assert meta["last_aggregated_at"] > 0
+    assert len(meta["consumed_material_ids"]) == 95
+    assert sl.load_inbox(uid, char_id=TEST_CHAR_ID) == []
+
+
+def test_partial_invalid_ops_do_not_block_valid_ones(sandbox, fake_llm):
+    from core.memory import storyline as sl
+    uid = "u_m6_partial"
+    _write_episode(uid, TEST_CHAR_ID, "某事", ts=time.time())
+    ts = time.time()
+    fake_llm.chat = AsyncMock(return_value=json.dumps([
+        {"op": "open_arc", "title": "好弧线", "tags": []},
+        {"op": "append_node", "arc_title": "不存在", "summary": "x", "ts": ts, "span": [ts, ts],
+         "source_material_ids": []},
+        {"op": "append_node", "arc_title": "好弧线", "summary": "进展", "ts": ts, "span": [ts, ts],
+         "source_material_ids": []},
+    ], ensure_ascii=False))
+    _run_weekly()
+    data = sl.load(uid, char_id=TEST_CHAR_ID)
+    assert len(data["arcs"]) == 1 and len(data["arcs"][0]["nodes"]) == 1
+    assert data["meta"]["aggregation"]["rejected_ops"] == 1
+    assert data["meta"]["aggregation"]["status"] == "committed"
+
+
+def test_failure_sets_backoff_and_does_not_consume_cooldown(sandbox, fake_llm):
+    from core.memory import storyline as sl
+    uid = "u_m6_retry"
+    _write_episode(uid, TEST_CHAR_ID, "某事", ts=time.time())
+    fake_llm.chat = AsyncMock(return_value="garbage")
+    from core.scheduler.triggers.storyline_weekly import _check_storyline_weekly
+    with patch("core.scheduler.loop._is_ready", return_value=True), \
+         patch("core.scheduler.loop._mark") as mark, \
+         patch("core.asset_registry.get_registry", return_value=_make_registry(TEST_CHAR_ID)):
+        asyncio.run(_check_storyline_weekly())
+    mark.assert_not_called()
+    agg = sl.load(uid, char_id=TEST_CHAR_ID)["meta"]["aggregation"]
+    assert agg["consecutive_failures"] == 1
+    assert 5.9 * 3600 < agg["next_retry_at"] - time.time() <= 6 * 3600 + 5
+    # 退避窗口内再次触发：不调用 LLM
+    fake_llm.chat.reset_mock()
+    _run_weekly()
+    fake_llm.chat.assert_not_awaited()
+
+
+def test_success_resets_failure_counter(sandbox, fake_llm):
+    from core.memory import storyline as sl
+    uid = "u_m6_reset"
+    _write_episode(uid, TEST_CHAR_ID, "某事", ts=time.time())
+    sl.record_failure(uid, char_id=TEST_CHAR_ID, code="invalid_llm_output", stage="llm")
+    data = sl.load(uid, char_id=TEST_CHAR_ID)
+    data["meta"]["aggregation"]["next_retry_at"] = 0.0
+    sl._save(uid, data, char_id=TEST_CHAR_ID)
+    _run_weekly()
+    agg = sl.load(uid, char_id=TEST_CHAR_ID)["meta"]["aggregation"]
+    assert agg["consecutive_failures"] == 0 and agg["status"] == "committed"

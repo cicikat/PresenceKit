@@ -1162,8 +1162,16 @@ identity），周频节奏在这条链上没有触发器；正确落点是 sched
    （Brief 79 标记，复用 `event_log_salvage._filter_salvageable_text` 的过滤写法）。
 
 LLM 输出 `[{op: "open_arc"|"append_node"|"set_status", ...}]` 操作列表，代码逐条经
-写 API 落盘——LLM 不直接产出全量文件，防止重写旧节点。LLM 失败/输出不合法：本轮放弃、
-不动 cursor、下周重来（fail-open，聚合是幂等增量）。无新素材（无新 episodic、无 inbox、
+写 API 落盘——LLM 不直接产出全量文件，防止重写旧节点。消息结构为 `[system(规则+已有弧线), user(本批素材)]`，
+`char_id` 显式传入，`max_tokens_override=3000`；prompt 说明「一段争执和后来的和好/澄清应作为同一弧线的前后节点」（叙事结构，非行为约束）。
+
+**分批与提交**：素材（episodic + inbox 按时间，再接 event_log 块）每批 ≤40 条、≤12000 字，逐批调用 LLM、
+逐批 `commit_batch`；非末批不动 `last_aggregated_at` 与 event_log cursor（已消费素材靠 `consumed_material_ids` 回执去重），
+末批才推进。**逐 op 校验**：批内非法 op 丢弃并计数（`meta.aggregation.rejected_ops` / `rejected_codes`），合法 op 照常提交。
+
+**失败重试**：LLM 输出不合法/校验/写盘失败时不动 cursor、**不消耗 7 天冷却**（`_mark` 仅在无失败时于本轮末尾执行），
+`record_failure` 累加 `consecutive_failures` 并按 6h→12h→24h 写 `next_retry_at`，窗口内该 uid 跳过；连续 3 次失败写一条 WARNING；
+成功提交清零。无新素材（无新 episodic、无 inbox、
 无新 event_log 内容）时不调用 LLM，直接 no-op。
 
 ### memory_digest 归并退役（00d 裁决 2）
@@ -1184,7 +1192,8 @@ summary，≤300 字），backchannel 低信息轮跳过（`recall_gate.is_low_i
 ### 观测端点
 
 `GET /memory/storyline/{user_id}?char_id=`（只读，`memory.read` scope）：返回 arcs 概要
-（id/title/status/tags/node 数/updated_at）+ meta + inbox 条数。
+（id/title/status/tags/node 数/updated_at）+ meta + inbox 条数（`inbox_count` / `pending_inbox`）。
+meta 另含 `consecutive_failures`、`rejected_ops`、`next_retry_at`（及 `aggregation` 全量）。
 
 ---
 
