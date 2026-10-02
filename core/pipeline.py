@@ -297,10 +297,18 @@ class Pipeline:
         _parsed_time_range = parse_query_time_range(content, _time.time())
         _since_ts, _until_ts = _parsed_time_range if _parsed_time_range else (None, None)
 
+        # M5：长期/关系层问题（认识多久、怎么看我…）——不等模型自己想起来调工具，系统直接拉齐关系层记忆
+        try:
+            from core.tag_rules import get_tags as _lt_get_tags
+            _long_term_query = "query.relationship_longterm" in _lt_get_tags(content)
+        except Exception:
+            _long_term_query = False
+
         from core.recall_gate import is_low_information as _is_low_info
         _low_info = _is_low_info(content)
         # C: recall_policy="none" 跳过 episodic/event_search/web_recall 检索层（RC6）。
         _skip_recall = _low_info or recall_policy == "none"
+        _long_term_query = _long_term_query and not _skip_recall
 
         # Memory Event shadow runs once after legacy results are available, so
         # comparison never observes an artificial empty legacy result set.
@@ -340,10 +348,21 @@ class Pipeline:
             event_search_task = None
             shadow_search_task = None
         else:
+            _search_days = 30
+            if _long_term_query:
+                try:
+                    _all_days = event_log.list_days(uid, char_id=char_id)
+                    if _all_days:
+                        from datetime import datetime as _dtm
+                        _span = (_dtm.now().date() - _dtm.strptime(min(_all_days), "%Y-%m-%d").date()).days + 1
+                        _search_days = max(30, min(_span, 3650))
+                except Exception as _de:
+                    logger.debug("[pipeline.fetch_context] long-term day span skip: %s", _de)
+            _search_extra = {"days": _search_days} if _search_days != 30 else {}
             event_search_task = asyncio.create_task(
                 event_log.search(uid, content, llm_client, char_id=char_id,
                                  return_trace=True, query_vec=_query_vec,
-                                 since_ts=_since_ts, until_ts=_until_ts)
+                                 since_ts=_since_ts, until_ts=_until_ts, **_search_extra)
             )
             from core.memory.event_shadow_recall import run_shadow_query as _run_shadow_query
             shadow_search_task = asyncio.create_task(
@@ -394,7 +413,7 @@ class Pipeline:
                 char_id=char_id,
                 char_name=scoped_character.name,
                 history=[h.get("content", "") for h in history[-10:]],
-                long_term=False,
+                long_term=_long_term_query,
                 return_trace=True,
                 query_vec=_query_vec,
                 sem_hits=_episodic_sem_hits,
@@ -411,7 +430,8 @@ class Pipeline:
 
         # 兜底召回：tag 未命中时备用，存入 context 供 prompt_builder 判断
         from core.memory.episodic_memory import retrieve_fallback
-        if _skip_recall:
+        if _skip_recall or _long_term_query:
+            # 长期问题已由 retrieve_mixed(long_term=True) 拉齐 long/repair 桶，兜底不再跑
             episodic_fallback, _episodic_fallback_trace = [], []
         else:
             _recent_texts = [h.get("content", "") for h in history[-5:]]
@@ -448,12 +468,25 @@ class Pipeline:
         if not _skip_recall:
             try:
                 from core.memory.dossiers import build_recall_context
+                # 长期问题：空查询取最近 3 份（功能默认关，这里只在启用时生效）
+                _dossier_query = "" if _long_term_query else content
                 _dossier_recall = await loop.run_in_executor(
-                    None, lambda: build_recall_context(scope, content),
+                    None, lambda: build_recall_context(scope, _dossier_query),
                 )
                 memory_dossier_context = str(_dossier_recall.get("text") or "")
             except Exception as _de:
                 logger.debug("[pipeline.fetch_context] dossier recall skip: %s", _de)
+
+        # M5：相识日期事实——只在长期问题时取，平时不常驻
+        _relationship_span_text = ""
+        _span_source = "none"
+        if _long_term_query:
+            try:
+                from core.memory.relationship_span import first_interaction_info, format_span_fact
+                _first_ts, _span_source = first_interaction_info(uid, char_id)
+                _relationship_span_text = format_span_fact(_first_ts)
+            except Exception as _rse:
+                logger.debug("[pipeline.fetch_context] relationship span skip: %s", _rse)
 
         from core.tools.reminder import get_reminders
         reminders = get_reminders(uid, char_id=char_id)
@@ -635,6 +668,8 @@ class Pipeline:
                 "char_id": char_id,
                 "query": content,
                 "episodic_hits": _episodic_trace,
+                "long_term_query": _long_term_query,
+                "relationship_span_source": _span_source,
                 "episodic_fallback_used": bool(episodic_fallback),
                 "episodic_fallback_hits": _episodic_fallback_trace,
                 "event_log_hits": _event_log_trace,
@@ -697,6 +732,8 @@ class Pipeline:
             "episodic_result":          "" if memory_dossier_context else episodic_result,
             "episodic_fallback_result": "" if memory_dossier_context else episodic_fallback_result,
             # M4：首条记忆来自哪个桶（recent/mid/long/repair），9.5 层据此决定是否再注入一遍
+            "long_term_query":          _long_term_query,
+            "relationship_span_text":   _relationship_span_text,
             "episodic_top_bucket":      (episodic_memories[0].get("_bucket", "") if episodic_memories else ""),
             "memory_dossier_context":   memory_dossier_context,
             "mid_term":                 mid_term_text,
@@ -799,6 +836,7 @@ class Pipeline:
             episodic_result=context.get("episodic_result", ""),
             episodic_fallback_result=context.get("episodic_fallback_result", ""),
             episodic_top_bucket=context.get("episodic_top_bucket", ""),
+            relationship_span_text=context.get("relationship_span_text", ""),
             memory_dossier_context=context.get("memory_dossier_context", ""),
             mid_term_context=context.get("mid_term", ""),
             tags=_tags,

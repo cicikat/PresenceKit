@@ -420,6 +420,7 @@ def build(
     episodic_result: str = "",
     episodic_fallback_result: str = "",
     episodic_top_bucket: str = "",
+    relationship_span_text: str = "",
     memory_dossier_context: str = "",
     mid_term_context: str = "",
     tags: set[str] | None = None,
@@ -623,6 +624,17 @@ def build(
             "role": "system",
             "content": f"{user_pronoun}上一条消息距现在{_fmt_gap(_msg_gap_secs)}",
             "_layer": "2.55_last_seen",
+        })
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # 层 2.56：相识日期事实（M5，只在长期/关系层问题时由 fetch_context 提供）
+    # 仅一句事实，不带评价；平时不常驻，持续时间由模型从召回的记忆里自己体会。
+    # ─────────────────────────────────────────────────────────────────────────
+    if relationship_span_text:
+        messages.append({
+            "role": "system",
+            "content": relationship_span_text,
+            "_layer": "2.56_relationship_span",
         })
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -1882,6 +1894,7 @@ KNOWN_LAYERS: list[tuple[str, str]] = [
     ("2_jailbreak", "破限预设 layer=2"),
     ("2.5_time", "当前时间"),
     ("2.55_last_seen", "上次说话时间差"),
+    ("2.56_relationship_span", "相识日期事实（仅长期/关系层问题）"),
     ("2.6_presence", "角色此刻在做什么（ambient presence）"),
     ("3_relation", "与该用户的关系"),
     ("3.5_period", "生理期感知（tagged）"),

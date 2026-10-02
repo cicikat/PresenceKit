@@ -439,9 +439,11 @@ async def search(
     query_vec: list | None = None,
     since_ts: float | None = None,
     until_ts: float | None = None,
+    days: int = 30,
 ) -> str | tuple:
+    # days：默认 30；M5 长期问题传全部可用天数（仍只取 top 5）
     recent_text = get_recent_days(
-        user_id, days=30, char_id=char_id, since_ts=since_ts, until_ts=until_ts
+        user_id, days=days, char_id=char_id, since_ts=since_ts, until_ts=until_ts
     )
     if not recent_text:
         return ("", []) if return_trace else ""

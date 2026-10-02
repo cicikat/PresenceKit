@@ -37,6 +37,7 @@ Reality `1_system_prompt` 绑定当前角色，并使用用户所选称谓（默
 | `2_jailbreak` | 破限预设 layer=2 | 文件存在且 enabled | stems + `get_paths().jailbreak_entries()`，按内容去重合并 |
 | `2.5_time` | 当前时间（年月日 时:分 星期X） | always | 实时生成 |
 | `2.55_last_seen` | 用户上一条消息距现在的精确时间差（如"约3小时12分钟"） | 非静默时段 且 gap ≥ 6 小时 | `core/presence.py` → `get_gap_from_history()` + `format_gap_text()` |
+| `2.56_relationship_span` | 相识日期事实：「你们第一次对话是在 YYYY-MM-DD（约 N 天前）。」仅此一句，不带评价（M5） | 仅当本轮命中 `query.relationship_longterm`（认识多久/怎么看我/我们的关系…）且能确定首次对话时间；平时不常驻 | `core/memory/relationship_span.py::first_interaction_info()`（账本 MIN(occurred_at) → event_log 最早日期 → episodic 最早，按天缓存）；`fetch_context` → `relationship_span_text` |
 | `2.6_presence` | 他此刻的 ambient presence 状态 | 对话开头（history 为空）或沉默超10分钟 | `activity_manager.get_prompt_fragment(char_id=char_id)`；不是 `core/activity/` 的共玩会话。每15-45分钟随机切换；近20h确有角色自身的有效 practice 时按 `presence.growth_activity_prob` 混入「在练X」，否则走静态池。用户 `pref.*` 事实不属于角色练习。若同轮触发 `3.8_growth_self`，growth 来源的 2.6 让位，避免重复 |
 | `3_relation` | 与该用户的关系 + 称呼 | `user_relation.has_configured_relation(user_id)` 为真（有用户专属条目或 relations.yaml 的全局 default 段）；全新用户/relations.yaml 无该条目时整层不注入，不写硬编码兜底 stranger（Brief 97 §5） | `user_relation` |
 | `4_group_context` | 群聊最近动态 | 群聊时 | `group_context.get_recent()` |

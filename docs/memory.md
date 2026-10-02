@@ -929,7 +929,16 @@ score = strength × decay + relevance_bonus     # M4：已删除 emotion_bonus�
 
 返回顺序 repair → long → mid → recent，每条带内存标记 `_bucket`（不落盘）。`long_term=True`（M5 长期问题）时
 recent 置 0，long / repair 各放宽到 2 条，且词面没命中时直接从 long / repair 桶按「强度×新近度」补足。
-`recall_trace.episodic_hits[*].bucket` 记录每条来自哪个桶。`get_episodic` 工具传 `allow_strengthen=False`，
+`recall_trace.episodic_hits[*].bucket` 记录每条来自哪个桶。
+
+**长期/关系层问题（M5）**：`core/tag_rules.py` 的 `query.relationship_longterm`（认识多久、怎么看我、我们之间、
+一路走来、我们的关系…；不含「我们」「之前」这类过泛单词）命中时，`fetch_context` 强制：
+`retrieve_mixed(long_term=True)`（recent=0、long/repair 各 2，词面没命中也从这两桶补足）；兜底召回不跑；
+`event_log.search` 时间窗放宽到全部可用天数（`days=`，仍取 top 5）；dossier 功能启用时（默认关，本改动不打开）用空查询取最近 3 份；
+并注入事实层 `2.56_relationship_span`（只一句日期事实，见 `docs/prompt-layers.md`）。相识日期由
+`core/memory/relationship_span.py::first_interaction_at(uid, char_id)` 三级回退取得：事件账本 `MIN(occurred_at)`
+→ `min(event_log.list_days())` → episodic 最小 `occurred_at`，全失败为 None（则不注入）。
+`recall_trace` 记录 `long_term_query` 与 `relationship_span_source`（ledger / event_log / episodic / none）。`get_episodic` 工具传 `allow_strengthen=False`，
 查询不再顺手给记忆加强度。`event_log.search` 的 >7 天块不再要求 `intensity>=1`，关键词命中即可入选。
 
 **浮起阈值**：score < 0.15 的记忆过滤掉，宁可不注入也不强行关联。
