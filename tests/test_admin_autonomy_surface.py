@@ -46,3 +46,12 @@ def test_autonomy_tools_matrix_renders_explainable_decision_columns():
         "item.danger || item.confirmation",
     ):
         assert marker in source
+
+
+def test_autonomy_bulk_tools_endpoint_and_card_are_wired():
+    from admin.admin_server import app
+
+    assert "/admin/autonomy/tools/bulk" in {route.path for route in app.routes}
+    source = read_admin_client_source()
+    for marker in ("autonomy-tools-card", "autonomyToolsBulk", "loadAutonomyTools"):
+        assert marker in source

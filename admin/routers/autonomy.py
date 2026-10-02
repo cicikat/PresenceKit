@@ -384,6 +384,47 @@ async def patch_tools(body: dict, auth=Depends(require_scopes("admin"))):
     store.replace_config(uid, char_id, state["config"]); return {"ok": True}
 
 
+@router.post("/admin/autonomy/tools/bulk", summary="批量开启/关闭主动时段可用工具")
+async def bulk_tools(body: dict, auth=Depends(require_scopes("admin"))):
+    """一键授权：只处理内置、非危险、无需确认且通过 tool_eligibility 的工具。
+
+    MCP 工具需要逐个确认「结果未知」策略，不在批量范围内。
+    """
+    from core.autonomy import store
+    from core.autonomy.policy import tool_eligibility
+    from core.tool_dispatcher import _TOOL_REGISTRY, get_tool_effect, is_side_effect_tool
+    uid, char_id = _scope()
+    enabled = bool(body.get("enabled", True))
+    names = body.get("names")
+    if names is not None and not isinstance(names, list):
+        raise HTTPException(status_code=422, detail="names 必须是列表")
+    state = store.load(uid, char_id)
+    tools_cfg = state["config"].setdefault("tools", {})
+    changed: list[str] = []
+    skipped: dict[str, str] = {}
+    for name in (names if names is not None else list(_TOOL_REGISTRY)):
+        info = _TOOL_REGISTRY.get(str(name))
+        if info is None or info.get("self_management"):
+            continue
+        if info.get("category") == "mcp":
+            skipped[str(name)] = "mcp_requires_explicit_enablement"
+            continue
+        effect = get_tool_effect(name) or ("write" if is_side_effect_tool(name) else "read")
+        policy = {"enabled": enabled, "mcp_explicit": False, "outcome_unknown": "fail_closed"}
+        eligible, reason = tool_eligibility(name, policy, registry=_TOOL_REGISTRY, effect=effect)
+        if enabled and not eligible:
+            if names is not None:
+                skipped[str(name)] = reason
+            continue
+        if (tools_cfg.get(name) or {}).get("enabled") == enabled:
+            continue
+        tools_cfg[name] = policy
+        changed.append(str(name))
+    if changed:
+        store.replace_config(uid, char_id, state["config"])
+    return {"ok": True, "enabled": enabled, "changed": changed, "skipped": skipped}
+
+
 @router.post("/admin/autonomy/test-enqueue", summary="排队一次内置唤醒测试")
 async def test_enqueue(body: dict | None = None, auth=Depends(require_scopes("admin"))):
     from core.autonomy import store

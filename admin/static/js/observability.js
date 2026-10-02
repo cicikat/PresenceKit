@@ -530,6 +530,41 @@ async function loadSelfManagement() {
   }
 }
 
+async function loadAutonomyTools() {
+  const host = document.getElementById('autonomy-tools-list');
+  if (!host) return;
+  try {
+    const data = await api('GET', '/admin/autonomy/tools');
+    const rows = (data.tools || []).filter(item => item.eligible && item.origin !== 'mcp');
+    if (!rows.length) { host.innerHTML = '<div class="empty">没有可开启的内置工具</div>'; return; }
+    const denial = {globally_disabled: '工具总开关已关', self_capability_disabled: '能力授权被撤销', schema_unavailable: '本角色/模式未暴露'};
+    host.innerHTML = `<table><thead><tr><th>工具</th><th>主动时段可用</th><th>类型</th><th>状态</th></tr></thead><tbody>${rows.map(item => {
+      const name = escapeHtml(item.name);
+      const note = item.allowed ? '生效中' : (item.autonomy_allowlist ? escapeHtml(denial[item.denial_reason] || item.denial_reason || '') : '未开启');
+      return `<tr><td>${name}</td><td><input type="checkbox" ${item.autonomy_allowlist ? 'checked' : ''} data-action="autonomyToolToggle" data-action-args='["${name}"]'></td><td>${item.effect === 'write' ? '会写入' : '只读'}</td><td>${note}</td></tr>`;
+    }).join('')}</tbody></table>`;
+    bindPageActions(host);
+  } catch (error) {
+    host.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+async function autonomyToolToggle(name, element) {
+  const enabled = !!(element && element.checked);
+  try { await api('POST', '/admin/autonomy/tools/bulk', {names: [name], enabled}); }
+  catch (error) { toast(`更新失败：${error.message}`, 'err'); }
+  await loadAutonomyTools();
+}
+
+async function autonomyToolsBulk(enabled) {
+  if (!window.confirm(enabled ? '开启全部内置、无危险副作用的工具（含会写入自己空间/提醒/任务的工具）？' : '关闭主动时段的全部工具？')) return;
+  try {
+    const r = await api('POST', '/admin/autonomy/tools/bulk', {enabled});
+    toast(`已${enabled ? '开启' : '关闭'} ${r.changed.length} 个工具`, 'ok');
+  } catch (error) { toast(`更新失败：${error.message}`, 'err'); }
+  await loadAutonomyTools();
+}
+
 async function selfManagementChange(action, capabilityId, selfMutable = false) {
   const reason = window.prompt('请输入此次用户覆盖的原因：', '用户覆盖');
   if (!reason) return;
@@ -683,6 +718,9 @@ window.loadObserveChatIdentity = loadObserveChatIdentity;
 window.loadObserveChatMedia = loadObserveChatMedia;
 window.loadObserveAutonomy = loadObserveAutonomy;
 window.loadSelfManagement = loadSelfManagement;
+window.loadAutonomyTools = loadAutonomyTools;
+window.autonomyToolToggle = autonomyToolToggle;
+window.autonomyToolsBulk = autonomyToolsBulk;
 window.selfManagementChange = selfManagementChange;
 window.saveAutonomyConfig = saveAutonomyConfig;
 window.enqueueAutonomyTest = enqueueAutonomyTest;

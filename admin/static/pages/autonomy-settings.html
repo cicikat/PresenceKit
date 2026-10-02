@@ -37,6 +37,11 @@
     </div>
   </div>
 
+  <div class="card" id="autonomy-tools-card">
+    <div class="card-header"><div><h3>主动时段可用工具</h3><p class="autonomy-hint">角色主动活动（没人跟她说话时）只能用这里打开的工具；聊天时的工具不受影响。一键开启只包含内置、无危险副作用的工具，MCP 工具需要单独确认。</p></div><div class="actions"><button class="btn btn-primary btn-sm" data-action="autonomyToolsBulk" data-action-args='[true]'>一键开启全部可用</button><button class="btn btn-ghost btn-sm" data-action="autonomyToolsBulk" data-action-args='[false]'>全部关闭</button></div></div>
+    <div id="autonomy-tools-list" class="tbl-wrap">Loading...</div>
+  </div>
+
   <div class="card" id="self-management-panel">
     <div class="card-header"><h3 data-i18n="autonomy.self.title">自主管理能力</h3><button class="btn btn-ghost btn-sm" data-action="loadSelfManagement" data-i18n="autonomy.self.refresh">刷新</button></div>
     <p class="autonomy-hint" data-i18n="autonomy.self.notice">这里只显示能力 ID 和安全状态，不显示连接地址或凭据。</p>
