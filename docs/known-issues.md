@@ -85,6 +85,8 @@ G1 诊断（`core/dlq_inspect.py` 按错误末行分类，与人工逐条核对�
 分段从 12 秒缩到 6 秒后边界出现频率翻倍。若验收听感变差，另立项改双 recorder 交替或
 AudioWorklet 连续采集。真实录音的 STT 延迟复测也尚未做（合成音数字不可直接采信）。
 
+2026-10 补注（工单 A4）：通话断句已改为 4s 后遇短停顿切、8s 绝对上限，自动发送等在途分段转写完且静音满 1.5s；分段边界丢音本身仍 open（需双 recorder / AudioWorklet）。
+
 ## 视频通话 TTS 重复播报（2026-09-30，observe）
 
 `current`：后端 `msg_id` 每轮唯一且跨通道共享（`core/turn_sink.py`）；`channels/desktop_ws.py` 无补发缓冲，
