@@ -1568,6 +1568,7 @@ def observability_snapshot(uid: str | None = None, char_id: str | None = None) -
             "trash_count": len(trash.get("items") or []),
             "recent_ops": _recent_ops(principal, limit=20),
             "self_db": _self_db_obs(principal.uid, principal.char_id),
+            "self_tools": _self_tools_obs(principal.uid, principal.char_id),
             "agent_md": {
                 "present": agent_md.get("present"),
                 "revision": agent_md.get("revision"),
@@ -1608,6 +1609,16 @@ def _self_db_obs(uid: str, char_id: str) -> dict[str, Any]:
         return observability(uid, char_id)
     except Exception as exc:
         return {"present": False, "error": type(exc).__name__}
+
+
+def _self_tools_obs(uid: str, char_id: str) -> dict[str, Any]:
+    """Names of the character's declarative recipes (``self/tools/*.json``); no step contents."""
+    try:
+        from core.self_tool_recipes import MAX_RECIPES, recipe_names
+        names = recipe_names(uid, char_id, limit=MAX_RECIPES)
+        return {"count": len(names), "names": names, "max_recipes": MAX_RECIPES}
+    except Exception as exc:
+        return {"count": 0, "names": [], "error": type(exc).__name__}
 
 
 def dumps(payload: dict[str, Any]) -> str:

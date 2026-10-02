@@ -39,7 +39,10 @@ MAX_LISTED_TOOLS = 24
 
 
 class ToolDiscovery:
-    def __init__(self, schemas: list[dict], registry: dict):
+    def __init__(self, schemas: list[dict], registry: dict, notes: dict[str, str] | None = None):
+        # notes: optional per-category suffix for the entry description (e.g. the
+        # character's own recipe names). Presentation only; never grants anything.
+        self.notes = dict(notes or {})
         self.groups: dict[str, list[dict]] = {}
         for schema in schemas:
             name = (schema.get("function") or schema).get("name", "")
@@ -59,7 +62,9 @@ class ToolDiscovery:
         names = [name for name in names if name]
         shown, rest = names[:MAX_LISTED_TOOLS], max(0, len(names) - MAX_LISTED_TOOLS)
         listed = "、".join(shown) + (f" 等 {len(names)} 个" if rest else "")
-        return f"含：{listed}。" if listed else ""
+        text = f"含：{listed}。" if listed else ""
+        note = self.notes.get(category)
+        return f"{text}{note}" if note else text
 
     def routing_hint(self) -> str:
         """Direction table: which entry fits which kind of intent (exposed ones only)."""

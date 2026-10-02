@@ -50,6 +50,12 @@
 - 模型参数不得指定 `owner` / `uid` / `char_id` / `realm`，不得自签授权，不得把 `confirmed=true` 当票据。
 - 读取脱敏与写入授权分开：能读 backend 不等于能写 workspace；能写 self 不等于能跑 process。
 - 自主创建可执行文本 ≠ 获准执行；`process_run` 必须再次走 Runtime capability。
+- **角色自制工具 = 声明式配方（T3），不是代码**：`self_tool_define/list/run`，配方是 self 空间里的 `tools/<name>.json`
+  （`{name, description, params, steps[{tool,args}]}`，`args` 里 `{参数名}` 只替换已声明参数，值不二次展开）。
+  步骤工具必须是本轮该角色实际暴露的（`tool_exposure.resolve` + 调用方 allowlist），不得属于 `system`/`browser`/`phone_control`/
+  `self_management`、不得是 `self_tool_*`（禁递归）、不得需要确认（`dangerous`）、不得带 `user_id/char_id` 等身份参数；≤5 步。
+  define 时校验，run 时**重新校验**（配方可被 `self_update` 改写）；每步走 `execute_structured(origin="assistant_loop")`，既有闸门/审计照常，
+  任一步失败即停并返回已完成步骤与失败原因。autonomy 与群聊不可 run。观测：`/observability/character-self` 的 `self_tools`（配方名，不含步骤）。
 
 ### 1.2 稳定拒绝码
 

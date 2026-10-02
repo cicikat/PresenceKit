@@ -1268,7 +1268,15 @@ class Pipeline:
             )
         from core.tool_discovery import ToolDiscovery, PREFIX as _discovery_prefix
         from core.runtime_signal_observability import record as _record_discovery
-        discovery = ToolDiscovery(tools, _TOOL_REGISTRY)
+        _discovery_notes: dict[str, str] = {}
+        try:
+            from core.self_tool_recipes import LISTED_RECIPE_NAMES, recipe_names
+            _own_tools = recipe_names(uid, char_id, limit=LISTED_RECIPE_NAMES)
+            if _own_tools:
+                _discovery_notes["self"] = "你做过的工具：" + "、".join(_own_tools) + "（用 self_tool_run 调用）。"
+        except Exception:
+            logger.debug("[pipeline.run_agentic_loop] self tool names unavailable", exc_info=True)
+        discovery = ToolDiscovery(tools, _TOOL_REGISTRY, notes=_discovery_notes)
         tools = discovery.schemas()
         _record_discovery(category="tool_loop_discovery", code="initial_surface", status="ok",
                           context={"category_count": len(discovery.groups), "schema_count": len(tools)})

@@ -569,6 +569,10 @@ self_access:
   `self_db_drop_table` 把表改名进回收区（`_trash_<ts>_<table>`），按 self 的 trash TTL/上限清理。权限与 `self_*` 同一 grant
   （`self_revoked` 全部冻结），写工具在 autonomy `_SANDBOXED_WRITE_TOOLS`，群聊禁用。审计复用 self 审计（操作、表名、行数，不含行内容）；
   观测 `GET /observability/character-self` 的 `self_db`（表名、列数、行数、文件大小、回收数）。
+- **自制工具（T3，声明式配方）**：`self_tool_define` / `self_tool_list` / `self_tool_run`（category `self`，`core/self_tool_recipes.py`）。
+  配方存 `self/tools/<name>.json`（复用 self 的 revision/trash/配额/审计），不执行任意代码、不碰 `process_run`。
+  步骤限制与重新校验规则见 [character-files-and-agent-autonomy.md](character-files-and-agent-autonomy.md)；
+  `load_tools_self` 入口描述会附「你做过的工具：…」（最多 10 个，读 `self/tools/` 目录）。上限 20 个配方。
 - **AGENT.md 可见性**：`self_create`/`self_update` 描述写明 AGENT.md 作用与 2000 字预算；`self_list` 在根目录无 AGENT.md 时返回 `hint`（提示不是错误）。
 - **autonomy**：写工具在 `_SANDBOXED_WRITE_TOOLS`；仍须显式 allowlist `enabled`。
 - **观测**：`GET /observability/character-self`（`state.read`）返回配额余量、grant
@@ -630,6 +634,7 @@ self_access:
 | `self_move` | 自有空间内移动；覆盖须 overwrite | `core/tools/character_self.py` |
 | `self_delete` | 放入有界回收站，可按 revision 恢复 | `core/tools/character_self.py` |
 | `self_restore` | 按 revision 从回收站恢复 | `core/tools/character_self.py` |
+| `self_tool_define` / `self_tool_list` / `self_tool_run` | 角色自制工具（声明式配方，T3，见下） | `core/self_tool_recipes.py` |
 | `self_db_tables` / `self_db_create_table` / `self_db_insert` / `self_db_query` / `self_db_update` / `self_db_delete` / `self_db_drop_table` | 角色自有结构化资料库（T2，见下） | `core/tools/character_self.py` / `core/character_self_db.py` |
 | `get_listening_state` | 读取共同听歌状态和有界声音摘要 | `core/listening_tools.py` |
 | `get_listening_queue` | 读取队列和 revision | `core/listening_tools.py` |

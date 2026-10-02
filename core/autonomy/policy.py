@@ -24,6 +24,8 @@ _SANDBOXED_WRITE_TOOLS = frozenset({
     "self_db_update",
     "self_db_delete",
     "self_db_drop_table",
+    "self_tool_define",
+    "self_tool_run",
     "write_toy_file",
     "add_reminder",
     "update_reminder",

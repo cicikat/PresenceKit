@@ -2800,7 +2800,7 @@ async def _execute_structured_impl(
         if is_group or origin not in {"assistant_loop", "autonomy_loop"} or not feature_enabled():
             return _execution_outcome("tool_failed", "Self Capability history is unavailable in this context.")
 
-    if tool_name in {"read_long_user_message", "search_events", "expand_event_window", "get_related_events", "search_memory_dossiers", "read_memory_dossier", "search_dossier_events", "update_memory_dossier", "get_memory_consolidation_status", "request_memory_consolidation", "read_life_records", "reread_image", "write_artifact", "update_artifact", "read_artifact", "list_artifacts", "self_db_tables", "self_db_create_table", "self_db_insert", "self_db_query", "self_db_update", "self_db_delete", "self_db_drop_table"} and is_group:
+    if tool_name in {"read_long_user_message", "search_events", "expand_event_window", "get_related_events", "search_memory_dossiers", "read_memory_dossier", "search_dossier_events", "update_memory_dossier", "get_memory_consolidation_status", "request_memory_consolidation", "read_life_records", "reread_image", "write_artifact", "update_artifact", "read_artifact", "list_artifacts", "self_db_tables", "self_db_create_table", "self_db_insert", "self_db_query", "self_db_update", "self_db_delete", "self_db_drop_table", "self_tool_define", "self_tool_list", "self_tool_run"} and is_group:
         _trace("failed", "reality_event_tools_forbidden_in_group")
         return _execution_outcome("tool_failed")
 
@@ -3028,6 +3028,17 @@ async def _execute_structured_impl(
                     break
             else:
                 result = await func(user_id=user_id, char_id=char_id, **tool_args)
+        elif tool_name in {"self_tool_define", "self_tool_list", "self_tool_run"}:
+            for key in ("user_id", "uid", "char_id", "owner", "realm", "origin"):
+                if key in tool_args:
+                    result = "grant_principal_mismatch"
+                    break
+            else:
+                result = await func(
+                    user_id=user_id, char_id=char_id, origin=origin, target_id=target_id,
+                    is_group=is_group, session_state=session_state,
+                    allowed_tool_names=allowed_tool_names, **tool_args,
+                )
         elif tool_name in {
             "fs_list", "fs_read",
             "workspace_list", "workspace_read", "workspace_create",

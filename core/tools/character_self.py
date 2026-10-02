@@ -284,8 +284,77 @@ def _register_db_tools(registry: dict) -> None:
     }
 
 
+def _register_recipe_tools(registry: dict) -> None:
+    from core import self_tool_recipes as recipes
+
+    registry["self_tool_define"] = {
+        "func": recipes.self_tool_define,
+        "description": (
+            "把常做的一串操作存成自己的工具，以后一句话调用。工具只是把你现在就能用的几个工具按顺序排好"
+            "（最多 5 步），不会执行任何代码。步骤参数里可以用 {参数名} 占位。"
+            "同名再定义会改写原来的配方。配方存在你自己空间的 tools/ 目录，可以用 self_read 看。"
+        ),
+        "dangerous": False,
+        "category": "self",
+        "effect": "write",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "工具名，最多 32 个字，中英文数字下划线。"},
+                "description": {"type": "string", "description": "什么时候用这个工具（给以后的自己看）。"},
+                "params": {
+                    "type": "object",
+                    "description": "参数声明 {参数名: 类型}，类型为 string/number/bool。",
+                },
+                "steps": {
+                    "type": "array",
+                    "description": "按顺序执行的步骤，每步 {tool: 工具名, args: {...}}，args 里可写 {参数名}。",
+                    "items": {
+                        "type": "object",
+                        "properties": {"tool": {"type": "string"}, "args": {"type": "object"}},
+                        "required": ["tool"],
+                    },
+                },
+            },
+            "required": ["name", "description", "params", "steps"],
+        },
+        "examples": ["把查电影再搜影评做成一个工具", "存一个自己常用的流程"],
+        "keywords": ["自制工具", "存成工具", "做个工具", "常用流程"],
+        "trace_args": ["name"],
+    }
+    registry["self_tool_list"] = {
+        "func": recipes.self_tool_list,
+        "description": "看看你自己做过哪些工具：名字、什么时候用、需要的参数和每一步用到的工具。",
+        "dangerous": False,
+        "category": "self",
+        "effect": "read",
+        "parameters": {"type": "object", "properties": {}, "required": []},
+        "examples": ["我做过哪些自己的工具"],
+        "keywords": ["自制工具列表", "我的工具"],
+    }
+    registry["self_tool_run"] = {
+        "func": recipes.self_tool_run,
+        "description": "运行自己做过的工具：按配方顺序调用其中的步骤，任一步失败就停下并告诉你做到哪了。",
+        "dangerous": False,
+        "category": "self",
+        "effect": "write",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "自制工具名。"},
+                "args": {"type": "object", "description": "按配方声明的参数 {参数名: 值}。"},
+            },
+            "required": ["name"],
+        },
+        "examples": ["用我做的查电影工具查一下", "跑一下自己存的那个流程"],
+        "keywords": ["运行自制工具", "用我的工具"],
+        "trace_args": ["name"],
+    }
+
+
 def register_tools(registry: dict) -> None:
     _register_db_tools(registry)
+    _register_recipe_tools(registry)
     registry["self_list"] = {
         "func": self_list_tool,
         "description": (
