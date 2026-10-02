@@ -9,10 +9,26 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
+# ``info`` used to hold the tools that now live in self/schedule/life. Existing
+# authored whitelists that only name ``info`` keep seeing them.
+_LEGACY_CATEGORY_EXPANSION = {"info": ("self", "schedule", "life")}
+
 _DEFAULTS = {
-    "path_a": {"categories": ["info", "desktop"], "tools": None, "exclude_tools": []},
-    "path_c": {"categories": ["info", "desktop", "memory", "artifacts"], "tools": None, "exclude_tools": []},
+    "path_a": {"categories": ["info", "self", "schedule", "life", "desktop"], "tools": None, "exclude_tools": []},
+    "path_c": {
+        "categories": ["info", "self", "schedule", "life", "desktop", "memory", "artifacts"],
+        "tools": None, "exclude_tools": [],
+    },
 }
+
+
+def expand_legacy_categories(categories) -> list[str]:
+    """Append categories split out of a legacy one, without duplicating explicit ones."""
+    result = list(dict.fromkeys(str(item).strip() for item in categories if str(item).strip()))
+    for legacy, extras in _LEGACY_CATEGORY_EXPANSION.items():
+        if legacy in result:
+            result.extend(extra for extra in extras if extra not in result)
+    return result
 
 
 @dataclass(frozen=True)
@@ -95,7 +111,7 @@ def resolve(path: str, *, char_id: str | None = None) -> ToolExposure:
 
     return ToolExposure(
         path=path,
-        categories=tuple(dict.fromkeys(str(item).strip() for item in categories if str(item).strip())),
+        categories=tuple(expand_legacy_categories(categories)),
         tools=None if tools is None else frozenset(tools),
         exclude_tools=frozenset(excludes),
         source=source,

@@ -90,7 +90,7 @@ def prompt_hint(char_id):
 
 def register_tools(registry):
     registry["drink_with_user"] = {
-        "func": drink_with_user, "category": "info", "effect": "write", "dangerous": False,
+        "func": drink_with_user, "category": "life", "effect": "write", "dangerous": False,
         "description": "仅本轮用户明确提起喝酒时，自主选择小酌、碰杯、倒酒或拒绝。角色可以不喝。",
         "parameters": {"type": "object", "properties": {
             "action": {"type": "string", "enum": ["sip", "toast", "pour", "refuse"], "description": "小酌、碰杯、倒酒或婉拒。"},

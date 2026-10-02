@@ -31,6 +31,10 @@ _SANDBOXED_WRITE_TOOLS = frozenset({
     "invite_video_call",
 })
 
+# ``info`` was split into info/self/schedule/life; sandboxed writes keep the
+# same eligibility they had when all of these lived under ``info``.
+_SANDBOXED_WRITE_CATEGORIES = frozenset({"info", "self", "schedule", "life"})
+
 DECISION_SOURCE_ALLOWLIST = "autonomy_allowlist"
 DECISION_SOURCE_INHERITANCE = "global_read_inheritance"
 
@@ -47,7 +51,7 @@ def tool_is_eligible(name: str, policy: dict, *, registry: dict, effect: str) ->
             and policy.get("outcome_unknown") == "fail_closed"
         )
     if effect == "write":
-        return name in _SANDBOXED_WRITE_TOOLS and info.get("category") == "info"
+        return name in _SANDBOXED_WRITE_TOOLS and info.get("category") in _SANDBOXED_WRITE_CATEGORIES
     return False
 
 

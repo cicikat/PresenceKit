@@ -5,7 +5,7 @@ import json
 import pytest
 
 from core.llm_client import ChatTurn
-from core.tool_discovery import CATEGORIES, ToolDiscovery
+from core.tool_discovery import CATEGORIES, MAX_LISTED_TOOLS, ToolDiscovery
 from tests.test_tool_loop import _make_pipeline, _patch_tool_loop_config, _patch_tools_schema
 
 
@@ -179,14 +179,14 @@ def test_all_categories_no_truncation_and_schema_integrity():
                 "type": "object", "properties": {"value": {"type": ["string", "null"]}},
             }}})
     discovery = ToolDiscovery(schemas, registry)
-    assert len(discovery.schemas()) == 10
+    assert len(discovery.schemas()) == len(CATEGORIES)
     # 入口描述必须列出分类内的工具名（有界），否则模型无法得知折叠后面有什么。
     for entry in discovery.schemas():
         description = entry["function"]["description"]
         assert "test_" in description and "等 25 个" in description
     for category in CATEGORIES:
         assert discovery.load("load_tools_" + category, {})[1]
-    assert len(discovery.schemas()) == 250
+    assert len(discovery.schemas()) == 25 * len(CATEGORIES)
     assert discovery.schemas() == schemas
     assert not discovery.load("load_tools_info", {})[1]
     assert not discovery.load("load_tools_unknown", {})[1]
@@ -229,3 +229,29 @@ async def test_self_management_grant_is_discovered_then_native_only(harness, mon
     assert "load_tools_self_management" in requests[0]["names"]
     assert "manage_self_capability" not in requests[0]["names"]
     assert executions[0][2]["origin"] == "assistant_self_management"
+
+
+def test_self_entry_lists_all_self_tools_and_never_folds():
+    from core.tool_dispatcher import _TOOL_REGISTRY
+    self_names = sorted(n for n, i in _TOOL_REGISTRY.items() if i.get("category") == "self")
+    assert {"self_list", "self_read", "self_create", "self_update", "self_move",
+            "self_delete", "self_restore"} <= set(self_names)
+    schemas = [{"type": "function", "function": {"name": n, "parameters": {"type": "object", "properties": {}}}}
+               for n in _TOOL_REGISTRY]
+    discovery = ToolDiscovery(schemas, _TOOL_REGISTRY)
+    entries = {e["function"]["name"]: e["function"]["description"] for e in discovery.schemas()}
+    assert "load_tools_self" in entries
+    for name in self_names:
+        assert name in entries["load_tools_self"]
+    # Splitting ``info`` must keep every entry under the listing cap (no "等 N 个" folding).
+    for category in ("self", "schedule", "life", "info"):
+        count = len(discovery.groups.get(category, []))
+        assert count <= MAX_LISTED_TOOLS, (category, count)
+
+
+def test_routing_hint_only_names_exposed_categories():
+    registry = {"a": {"category": "self"}, "b": {"category": "memory"}}
+    schemas = [{"type": "function", "function": {"name": n}} for n in registry]
+    hint = ToolDiscovery(schemas, registry).routing_hint()
+    assert "→ self" in hint and "→ memory" in hint
+    assert "→ schedule" not in hint

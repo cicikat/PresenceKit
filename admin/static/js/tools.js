@@ -1,6 +1,6 @@
 let _toolsControl = null;
 let _toolsTargetModel = '';
-const _KNOWN_TOOL_CATEGORIES = ['info', 'desktop', 'memory', 'system', 'fs', 'phone_control', 'self_management', 'mcp'];
+const _KNOWN_TOOL_CATEGORIES = ['info', 'self', 'schedule', 'life', 'desktop', 'memory', 'system', 'fs', 'phone_control', 'self_management', 'mcp'];
 
 function _toolCurrentPreset() {
   return _toolsControl?.model_bindings?.[_toolsTargetModel] || '';

@@ -1646,7 +1646,7 @@ _TOOL_REGISTRY["water_garden"] = {
     "func": water_garden,
     "description": "为{char}的花园浇一次水。用户明确要求浇花，或询问花园状态并请求采取浇水动作时调用。",
     "dangerous": False,
-    "category": "info",
+    "category": "life",
     "parameters": {
         "type": "object",
         "properties": {},
@@ -1824,7 +1824,7 @@ _TOOL_REGISTRY["read_toy_file"] = {
         "这是 self 文件的兼容入口，不是共享目录，也不能改权限。"
     ),
     "dangerous": False,
-    "category": "info",
+    "category": "life",
     "effect": "read",
     "persist": True,
     "parameters": {
@@ -1849,7 +1849,7 @@ _TOOL_REGISTRY["write_toy_file"] = {
         "file_key 接受 self 相对路径及三个历史别名，写入走统一 self writer。"
     ),
     "dangerous": False,
-    "category": "info",
+    "category": "life",
     "effect": "write",
     "parameters": {
         "type": "object",

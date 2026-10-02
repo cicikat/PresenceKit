@@ -93,11 +93,11 @@ def test_music_control_keeps_listening_tools_off_by_default():
 async def test_tools_are_discoverable_and_frozen_principal(sandbox, monkeypatch):
     _enable_control(monkeypatch)
     monkeypatch.setattr(tool_dispatcher, "_current_mode", lambda: "safe")
-    schemas = tool_dispatcher.get_tools_schema(categories=["info"])
+    schemas = tool_dispatcher.get_tools_schema(categories=["life"])
     names = {(item.get("function") or {}).get("name") for item in schemas}
     for name in PLANNED_TOOLS:
         spec = tool_dispatcher._TOOL_REGISTRY[name]
-        assert spec["category"] == "info"
+        assert spec["category"] == "life"
         assert spec["dangerous"] is False
         assert spec["examples"]
         assert spec["keywords"]

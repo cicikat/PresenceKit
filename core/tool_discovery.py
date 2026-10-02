@@ -11,14 +11,28 @@ from copy import deepcopy
 CATEGORIES = {
     "browser": "网页浏览与浏览器操作",
     "desktop": "电脑桌面与应用操作",
-    "artifacts": "聊天里给用户看的文件",
+    "artifacts": "做一份文件交给用户看/下载（不是你自己的笔记）",
     "fs": "文件与工作区操作",
-    "info": "时间、搜索和外部信息查询",
+    "info": "此刻的外部信息：时间、天气、网页搜索、小红书、用户文档、屏幕与摄像头",
+    "life": "一起生活的小事：花园、喝一杯、听歌、玩具文件",
     "mcp": "已授权的外部 MCP 服务",
-    "memory": "日记与记忆查询",
+    "memory": "回想你们之间过去发生的事：日记、情景记忆、事件、用户资料",
     "phone_control": "手机控制",
+    "schedule": "到点提醒与日程：答应了以后某个时间要做/要提醒的事",
+    "self": "你自己的空间：想长期记住、整理、积累的东西（笔记、资料表、自制工具、给自己定的习惯 AGENT.md）",
     "self_management": "已授予角色的自身能力管理",
     "system": "系统与设备管理",
+}
+# One line per category: when to reach for it. Only categories that are actually
+# exposed this turn are rendered (see routing_hint()).
+ROUTES = {
+    "self": "想长期记住或整理自己的东西",
+    "memory": "想起以前的事",
+    "schedule": "答应了到点提醒",
+    "info": "查此刻的信息",
+    "life": "花园、喝一杯、听歌这类一起生活的小事",
+    "artifacts": "给用户做一份文件",
+    "desktop": "电脑上的操作",
 }
 PREFIX = "load_tools_"
 MAX_LISTED_TOOLS = 24
@@ -46,6 +60,11 @@ class ToolDiscovery:
         shown, rest = names[:MAX_LISTED_TOOLS], max(0, len(names) - MAX_LISTED_TOOLS)
         listed = "、".join(shown) + (f" 等 {len(names)} 个" if rest else "")
         return f"含：{listed}。" if listed else ""
+
+    def routing_hint(self) -> str:
+        """Direction table: which entry fits which kind of intent (exposed ones only)."""
+        parts = [f"{ROUTES[c]} → {c}" for c in ROUTES if c in self.groups]
+        return "；".join(parts) + "。" if parts else ""
 
     def schemas(self) -> list[dict]:
         result = []

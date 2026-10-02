@@ -5,7 +5,17 @@
 旧 Path C 先做分类过滤，再一次性发送所有具体工具 schema；分类不是发现入口。
 本次在授权与预设过滤之后插入轮内 `ToolDiscovery`，保留原 schema 构造和执行器。
 首个模型请求只有非空的获授权分类入口 `load_tools_<category>`，参数为 `{}`。
-支持 browser、desktop、fs、info、mcp、memory、phone_control、self_management、system。
+支持 browser、desktop、artifacts、fs、info、life、mcp、memory、phone_control、schedule、self、self_management、system。
+
+2026-10-03（T1 分类重组）：原本全塞在 `info` 的自有空间 / 提醒 / 生活类工具拆出独立入口，入口标签写「什么时候用」：
+`self`（`self_*`，想长期记住、整理、积累的东西，含 AGENT.md）、`schedule`（提醒 6 个）、
+`life`（花园、喝一杯、听歌 6 个、玩具文件）；`info` 收窄为此刻的外部信息，`memory`/`artifacts` 标签同样改为用途描述。
+`11.6_tool_discovery` 末尾追加路由表（「想长期记住或整理自己的东西 → self；想起以前的事 → memory …」），
+只列本轮实际暴露的分类，只补方向不加限制。
+**旧白名单兼容**：`core/tool_exposure.py::_LEGACY_CATEGORY_EXPANSION` 把列表里的 `info` 自动并入 `self`/`schedule`/`life`
+（含角色卡 `presence_ext.tool_categories*`、`config.tool_exposure.*`、`tool_loop.categories`、owner_input 的
+`allowed_tool_categories`）；不含 `info` 的白名单不展开。autonomy 写工具资格（`_SANDBOXED_WRITE_CATEGORIES`）、
+危险模式闸等按 category 的判断，对新三类与原 `info` 同等对待。
 分类被选中后，下一次模型请求用该类完整具体 schema 替换入口，其他分类继续只显示入口。
 不截断工具数，不自动按关键词加载，不在日志层伪装缩减。
 

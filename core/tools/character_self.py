@@ -29,8 +29,20 @@ _SELF_TOOL_NAMES = (
 )
 
 
+AGENT_MD_HINT = (
+    "提示：你还没有 AGENT.md。在空间根目录用 self_create 写一份 AGENT.md，"
+    "写下想长期带着的工作习惯，写好后下一轮起每次都会自动带上（约 2000 字以内）。"
+)
+
+
 async def self_list_tool(path: str | None = None, depth: int = 1, *, user_id=None, char_id=None) -> str:
-    return dumps(list_self(path=path, depth=depth, user_id=user_id, char_id=char_id, origin="tool"))
+    result = list_self(path=path, depth=depth, user_id=user_id, char_id=char_id, origin="tool")
+    # Direction only: tell the model the file exists as an option, never an error.
+    if isinstance(result, dict) and result.get("ok") and not str(path or "").strip("/ "):
+        entries = result.get("entries") or []
+        if not any(isinstance(e, dict) and e.get("path") == "AGENT.md" for e in entries) and not result.get("truncated"):
+            result["hint"] = AGENT_MD_HINT
+    return dumps(result)
 
 
 async def self_read_tool(path: str, offset: int = 0, *, user_id=None, char_id=None) -> str:
@@ -106,10 +118,11 @@ def register_tools(registry: dict) -> None:
         "func": self_list_tool,
         "description": (
             "列出本角色自有文件空间中的相对路径；可自由组织目录。"
+            "想长期记住、整理、积累自己的东西时先看这里。"
             "这是角色自己的笔记空间，不是工作区，也不是系统权限。"
         ),
         "dangerous": False,
-        "category": "info",
+        "category": "self",
         "effect": "read",
         "parameters": {
             "type": "object",
@@ -127,7 +140,7 @@ def register_tools(registry: dict) -> None:
         "func": self_read_tool,
         "description": "读取本角色自有文件空间中的文本；敏感值会先脱敏。",
         "dangerous": False,
-        "category": "info",
+        "category": "self",
         "effect": "read",
         "parameters": {
             "type": "object",
@@ -143,9 +156,13 @@ def register_tools(registry: dict) -> None:
     }
     registry["self_create"] = {
         "func": self_create_tool,
-        "description": "在本角色自有文件空间新建文本文件；文件已存在时拒绝。创建可执行文本不等于获准执行。",
+        "description": (
+            "在本角色自有文件空间新建文本文件；文件已存在时拒绝。创建可执行文本不等于获准执行。"
+            "想长期记住、积累的东西可以写成笔记；根目录的 AGENT.md 是写给自己的习惯，"
+            "写了之后下一轮起会一直带着（约 2000 字以内）。"
+        ),
         "dangerous": False,
-        "category": "info",
+        "category": "self",
         "effect": "write",
         "parameters": {
             "type": "object",
@@ -161,9 +178,12 @@ def register_tools(registry: dict) -> None:
     }
     registry["self_update"] = {
         "func": self_update_tool,
-        "description": "更新本角色自有文件；必须带当前 expected_revision，冲突时拒绝且不覆盖。",
+        "description": (
+            "更新本角色自有文件；必须带当前 expected_revision，冲突时拒绝且不覆盖。"
+            "改 AGENT.md 即改写自己长期带着的习惯（约 2000 字以内，下一轮起生效）。"
+        ),
         "dangerous": False,
-        "category": "info",
+        "category": "self",
         "effect": "write",
         "parameters": {
             "type": "object",
@@ -186,7 +206,7 @@ def register_tools(registry: dict) -> None:
         "func": self_move_tool,
         "description": "在自有空间内移动文件；目标已存在时必须 overwrite=true，并校验源和目标 revision。",
         "dangerous": False,
-        "category": "info",
+        "category": "self",
         "effect": "write",
         "parameters": {
             "type": "object",
@@ -215,7 +235,7 @@ def register_tools(registry: dict) -> None:
         "func": self_delete_tool,
         "description": "把自有文件放进有界回收站，可按 revision 恢复；不需要用户再次确认。",
         "dangerous": False,
-        "category": "info",
+        "category": "self",
         "effect": "write",
         "parameters": {
             "type": "object",
@@ -237,7 +257,7 @@ def register_tools(registry: dict) -> None:
         "func": self_restore_tool,
         "description": "按 revision 从回收站恢复自有文件；目标已存在时拒绝。",
         "dangerous": False,
-        "category": "info",
+        "category": "self",
         "effect": "write",
         "parameters": {
             "type": "object",

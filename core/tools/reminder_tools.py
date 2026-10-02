@@ -97,7 +97,7 @@ def register_tools(registry: dict) -> None:
             "返回 schedule_id、revision、正文、到期时间和状态；不要靠文字匹配删除。"
         ),
         "dangerous": False,
-        "category": "info",
+        "category": "schedule",
         "effect": "read",
         "parameters": {
             "type": "object",
@@ -116,7 +116,7 @@ def register_tools(registry: dict) -> None:
         "func": get_reminder_tool,
         "description": "按 schedule_id 读取一条本角色提醒的安全投影。",
         "dangerous": False,
-        "category": "info",
+        "category": "schedule",
         "effect": "read",
         "parameters": {
             "type": "object",
@@ -136,7 +136,7 @@ def register_tools(registry: dict) -> None:
             "写进 self 笔记里的“明天提醒”不会自动变成定时任务。"
         ),
         "dangerous": False,
-        "category": "info",
+        "category": "schedule",
         "effect": "write",
         "parameters": {
             "type": "object",
@@ -164,7 +164,7 @@ def register_tools(registry: dict) -> None:
         "func": update_reminder_tool,
         "description": "按 schedule_id 和 expected_revision 修改本角色提醒；冲突时拒绝。可改用户交办给本角色的提醒。",
         "dangerous": False,
-        "category": "info",
+        "category": "schedule",
         "effect": "write",
         "parameters": {
             "type": "object",
@@ -189,7 +189,7 @@ def register_tools(registry: dict) -> None:
         "func": cancel_reminder_tool,
         "description": "取消本角色的未来提醒，可按 revision 恢复；不需要用户再说一次“删除”。已进入发送的不能撤回。",
         "dangerous": False,
-        "category": "info",
+        "category": "schedule",
         "effect": "write",
         "parameters": {
             "type": "object",
@@ -211,7 +211,7 @@ def register_tools(registry: dict) -> None:
         "func": restore_reminder_tool,
         "description": "按 revision 恢复已取消的提醒，生成新的可运行生命周期；不能复活已完成的那一次。",
         "dangerous": False,
-        "category": "info",
+        "category": "schedule",
         "effect": "write",
         "parameters": {
             "type": "object",

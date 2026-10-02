@@ -903,7 +903,7 @@ PUT /prompt-ablation    body: {"disabled_layers": [...], "perception_block_disab
 
 ### 角色看到的工具形态（Path C 轮内）
 
-`11.6_tool_discovery` 与 `11.5_tool_nudge` 只存在于 `run_agentic_loop()` 的 `loop_msgs` 副本，不进 `KNOWN_LAYERS`，也不经 builder 消融。首轮 `tools[]` 只有 `load_tools_<category>`（description「加载…的工具定义」，参数 `{}`）；加载后下一轮该分类换成具体 function schema，其余分类仍是入口。本轮 Path C 业务结果是 `role=tool`（`frame_tool_message`）；builder 带入的本轮 `tool_result` 才是 system `10_tool_result`；跨轮自主结果是 `10.8_recent_tool_results`。假数据示例见 [tool-discovery.md](tool-discovery.md)#角色实际看到的形态。
+`11.6_tool_discovery` 与 `11.5_tool_nudge` 只存在于 `run_agentic_loop()` 的 `loop_msgs` 副本，不进 `KNOWN_LAYERS`，也不经 builder 消融。`11.6_tool_discovery` 末尾带一行路由表（T1：「想长期记住或整理自己的东西 → self；想起以前的事 → memory；答应了到点提醒 → schedule …」，只列本轮暴露的分类，只补方向不加限制）。首轮 `tools[]` 只有 `load_tools_<category>`（description「加载…的工具定义」，参数 `{}`）；加载后下一轮该分类换成具体 function schema，其余分类仍是入口。本轮 Path C 业务结果是 `role=tool`（`frame_tool_message`）；builder 带入的本轮 `tool_result` 才是 system `10_tool_result`；跨轮自主结果是 `10.8_recent_tool_results`。假数据示例见 [tool-discovery.md](tool-discovery.md)#角色实际看到的形态。
 
 ### 与 tool loop 的 `11.5_tool_nudge` 层的区别
 

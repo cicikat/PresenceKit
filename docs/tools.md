@@ -561,7 +561,8 @@ self_access:
 - **创建可执行文本 ≠ process grant**：`.py`/脚本只是文本；执行仍走 Runtime process。
 - **脱敏**：`self_read` 先 `inspect_high_risk` 再 `redact_for_export`，失败拒绝不退原文。
 - **remote_server**：可写本进程 self 桶；不因此获得用户电脑外部写或 process。
-- **不受危险模式闸约束**：category `info`，不在 `_MODE_RESTRICTED_CATEGORIES`。
+- **不受危险模式闸约束**：category `self`（T1 起从 `info` 拆出，旧 `info` 白名单自动展开包含），不在 `_MODE_RESTRICTED_CATEGORIES`。
+- **AGENT.md 可见性**：`self_create`/`self_update` 描述写明 AGENT.md 作用与 2000 字预算；`self_list` 在根目录无 AGENT.md 时返回 `hint`（提示不是错误）。
 - **autonomy**：写工具在 `_SANDBOXED_WRITE_TOOLS`；仍须显式 allowlist `enabled`。
 - **观测**：`GET /observability/character-self`（`state.read`）返回配额余量、grant
   revision、文件计数、最近操作元数据、AGENT.md 注入状态（无正文）和 legacy toy
@@ -576,7 +577,7 @@ self_access:
 文件里写“明天提醒”不会隐式建定时任务。
 
 - **工具**：`list_reminders` / `get_reminder` / `add_reminder` / `update_reminder` /
-  `cancel_reminder` / `restore_reminder`。category `info`，写工具不经 danger 闸。
+  `cancel_reminder` / `restore_reminder`。category `schedule`（原 `info`），写工具不经 danger 闸。
   frozen uid/char 由 dispatcher 注入；模型 JSON 指定 principal 返回
   `grant_principal_mismatch`。角色靠 `schedule_id` + `expected_revision` 操作，
   不靠文字匹配删除。内部 `task_id` 只关联 Task Manager lease，不出现在角色投影。
@@ -685,7 +686,7 @@ worker 在到期、异常、断线、显式取消和进程关闭时尝试停止�
 `read_toy_file` / `write_toy_file` 接受 self 相对路径；旧 `file_key`
 （`diary`→`notes/思考笔记.txt`，`wishlist`→`notes/愿望清单.md`，`doodle`→`notes/涂鸦板.txt`）继续作为兼容别名。
 写入走统一 self writer，需要冻结的 `uid+char_id`；不再写
-`very_formal_project/`，也不镜像 character library。category 为 `info`，不经 danger 闸。
+`very_formal_project/`，也不镜像 character library。category 为 `life`（原 `info`），不经 danger 闸。
 旧共享目录冻结为历史档案，只能按可验证历史归属导入单一角色。
 
 #### toy 自主写入（autogrow）— 系统行为，不走探针

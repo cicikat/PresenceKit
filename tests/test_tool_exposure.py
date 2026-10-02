@@ -24,7 +24,7 @@ def test_path_a_is_channel_neutral_and_can_use_explicit_tool_allowlist(monkeypat
     )
 
     exposure = tool_exposure.resolve("path_a")
-    assert exposure.categories == ("info", "fs")
+    assert exposure.categories == ("info", "fs", "self", "schedule", "life")
     assert exposure.tools == frozenset({"get_time", "fs_list"})
     assert [item["function"]["name"] for item in tool_exposure.filter_schemas(
         [_schema("get_time"), _schema("fs_list"), _schema("weather")], exposure,
@@ -66,3 +66,31 @@ def test_path_c_preserves_legacy_category_override(monkeypatch):
     exposure = tool_exposure.resolve("path_c", char_id="char")
     assert exposure.categories == ("mcp", "fs")
     assert exposure.source == "presence_ext.tool_categories"
+
+
+def test_legacy_info_whitelist_expands_to_split_categories(monkeypatch):
+    from core import tool_exposure
+
+    monkeypatch.setattr("core.config_loader.get_config", lambda: {})
+    monkeypatch.setattr(
+        "core.character_loader.load",
+        lambda _char_id: SimpleNamespace(presence_ext={"tool_categories": ["info", "life"]}),
+    )
+    exposure = tool_exposure.resolve("path_c", char_id="char")
+    assert exposure.categories == ("info", "life", "self", "schedule")
+
+    monkeypatch.setattr(
+        "core.character_loader.load",
+        lambda _char_id: SimpleNamespace(presence_ext={"tool_categories": ["memory", "fs"]}),
+    )
+    exposure = tool_exposure.resolve("path_c", char_id="char")
+    assert exposure.categories == ("memory", "fs")
+    assert not {"self", "schedule", "life"} & set(exposure.categories)
+
+
+def test_expand_legacy_categories_for_caller_allowlist():
+    from core.tool_exposure import expand_legacy_categories
+
+    assert set(expand_legacy_categories(frozenset({"info", "memory"}))) == {
+        "info", "memory", "self", "schedule", "life",
+    }

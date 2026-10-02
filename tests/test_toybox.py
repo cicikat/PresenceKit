@@ -124,7 +124,7 @@ def test_toybox_registry_contract(monkeypatch):
     _install_toy_tool_specs(monkeypatch)
     for name in ("read_toy_file", "write_toy_file"):
         spec = tool_dispatcher._TOOL_REGISTRY[name]
-        assert spec["category"] == "info"
+        assert spec["category"] == "life"
         assert spec["dangerous"] is False
         assert spec.get("require_confirm") is not True
         assert spec["examples"]

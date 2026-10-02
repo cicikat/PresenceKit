@@ -1180,7 +1180,8 @@ class Pipeline:
         # categories/tools/excludes.
         from core.tool_exposure import filter_schemas as _filter_exposure, resolve as _resolve_exposure
         _exposure = _resolve_exposure("path_c", char_id=char_id)
-        categories = list(allowed_tool_categories) if allowed_tool_categories is not None else list(_exposure.categories)
+        from core.tool_exposure import expand_legacy_categories as _expand_cats
+        categories = _expand_cats(allowed_tool_categories) if allowed_tool_categories is not None else list(_exposure.categories)
         excluded_tool_names = set(_exposure.exclude_tools)
         excluded_tool_names.update(exclude_tools or ())
         if not _drinking_invited:
@@ -1291,6 +1292,7 @@ class Pipeline:
             "工具按分类加载。先调用 load_tools_ 分类入口，再在下一轮使用获得的具体工具定义。"
             "每个入口的描述里列出了该分类包含的工具名：需要其中某个工具时先加载对应分类，不要因为当前没看到定义就认为该能力不存在。"
             "分类加载只提供定义，不是业务执行或成功证据。未加载的工具不得调用或猜测参数。"
+            + (("找工具的方向：" + discovery.routing_hint()) if discovery.routing_hint() else "")
         )})
         image_refs = [
             ref for ref in (media_refs or [])
