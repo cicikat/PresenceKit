@@ -710,8 +710,14 @@ async def _check_episodic_decay():
     if not oid:
         return
     try:
+        from core.asset_registry import get_registry
         from core.memory.episodic_memory import decay_all
-        decay_all(oid)
+        char_ids = [e.id for e in get_registry().list_all("character")] or [DEFAULT_CHAR_ID]
+        for _cid in char_ids:
+            try:
+                decay_all(oid, char_id=_cid)
+            except Exception as e:
+                log_error(f"scheduler._check_episodic_decay[{_cid}]", e)
         _mark("episodic_decay")
         logger.info("[scheduler] 情景记忆衰减完成")
     except Exception as e:

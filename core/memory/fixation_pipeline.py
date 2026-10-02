@@ -67,7 +67,8 @@ _REFLECT_PROMPT_TEMPLATE = """\
   "is_state_change": true/false,
   "temporal_ref": "future/past/none 中选一个",
   "event_time_hint": "明天/周末/下周三/具体日期，无则空字符串",
-  "strength": 0到1之间的浮点数（事件越重要、情绪越强则越高）
+  "strength": 0到1之间的浮点数（以后回想你们的关系时，这件事有多大代表性、还需要记得多久。情绪激烈本身不代表重要；一次争执里的多轮来回只算一件事）,
+  "emotional_intensity": 0到1之间的浮点数（当时情绪有多激烈，仅作记录，不代表重要程度）
 }}
 完结/更新判定：用户明确表示先前提过的事情已经完成、结束、取消或状态已更新时，is_closure=true，
 例如“吃完了”“考完了”“不去了”“已经到了”；closure_keywords 只列被结束或更新的事情关键词。
@@ -255,6 +256,12 @@ def _validate_episode(data: dict) -> bool:
             return False
     except (TypeError, ValueError):
         return False
+    # emotional_intensity 可选：缺失/非法按 None 处理（旧输出兼容）
+    try:
+        ei = float(data["emotional_intensity"])
+        data["emotional_intensity"] = ei if 0.0 <= ei <= 1.0 else None
+    except (KeyError, TypeError, ValueError):
+        data["emotional_intensity"] = None
     return True
 
 
@@ -1227,6 +1234,7 @@ async def reflect_to_episodic(
             "event_time": None,
             "expires_at": None,
             "strength": data.get("strength", 0.5),
+            "emotional_intensity": data.get("emotional_intensity"),
             "retrieval_count": 0,
             "last_retrieved": None,
             # 血缘字段

@@ -238,20 +238,13 @@ def write_episode(user_id: str, episode: dict, *, char_id: str = DEFAULT_CHAR_ID
                 "scope": MemoryScope.reality_scope(str(user_id), char_id).to_payload(),
             })
 
-    # 双轨strength修正：LLM给初始值，规则叠加校正
+    # strength 只表示"对理解长期关系的代表性"，不再因情绪/冲突标签加成（M1）；
+    # 情绪激烈程度另存 emotional_intensity。
     s = episode.get("strength", 0.5)
-    ep = episode.get("emotion_peak", "neutral")
     tags = episode.get("topic_keywords") or episode.get("tags", [])
 
-    if ep in ("sad", "angry"):
-        s = min(1.0, s + 0.1)
-    if ep in ("happy", "surprised"):
-        s = min(1.0, s + 0.05)
     if len(tags) >= 4:
         s = min(1.0, s + 0.05)
-    conflict_tags = {"吵架", "道歉", "哭", "生气", "误会", "和好"}
-    if any(t in conflict_tags for t in tags):
-        s = min(1.0, s + 0.2)
     first_tags = {"第一次", "初次", "第一回", "生日", "纪念"}
     if any(t in first_tags for t in tags):
         s = min(1.0, s + 0.15)
@@ -864,30 +857,34 @@ def list_episodes(user_id: str, *, char_id: str = DEFAULT_CHAR_ID) -> list[dict]
     return sorted(memories, key=lambda m: m.get("timestamp", 0), reverse=True)
 
 
-def decay_all(user_id: str) -> None:
-    """每日衰减，按情绪强度和被提及次数差异化处理。核心记忆不衰减。"""
-    memories = _load_memories(user_id)
-    now = time.time()
+_DECAY_BASE_RATE = 0.03  # 统一衰减率，不按情绪区分（M1）
+
+
+def decay_all(user_id: str, *, char_id: str = DEFAULT_CHAR_ID, now: float | None = None) -> None:
+    """每日衰减：统一 base_rate，按被提及次数差异化。核心记忆不衰减。
+
+    只按「距上次衰减的天数」衰减（last_decay_at），避免用"创建至今天数"反复复利；
+    缺 last_decay_at 的条目本次只初始化该字段、不衰减。
+    """
+    memories = _load_memories(user_id, char_id=char_id)
+    if not memories:
+        return
+    now = time.time() if now is None else now
     for mem in memories:
         if mem.get("is_core"):
             continue
-        days = (now - mem["timestamp"]) / 86400
-        ep = mem.get("emotion_peak", "neutral")
+        last = mem.get("last_decay_at")
+        if not isinstance(last, (int, float)):
+            mem["last_decay_at"] = now
+            continue
+        days = max(0.0, (now - last) / 86400)
         retrieval = mem.get("retrieval_count", 0)
-
-        if ep in ("sad", "angry"):
-            base_rate = 0.015
-        elif ep == "neutral":
-            base_rate = 0.05
-        else:
-            base_rate = 0.03
-
         recall_factor = max(0.3, 1.0 - retrieval * 0.1)
-        rate = base_rate * recall_factor
-
+        rate = _DECAY_BASE_RATE * recall_factor
         mem["strength"] = max(0.05, mem.get("strength", 0.5) * math.exp(-rate * days))
+        mem["last_decay_at"] = now
 
-    _save_memories(user_id, memories)
+    _save_memories(user_id, memories, char_id=char_id)
 
 
 def format_for_prompt(

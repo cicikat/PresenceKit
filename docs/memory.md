@@ -793,21 +793,23 @@ prompt 格式：单轮 user 消息，客观分析器视角，要求 LLM 输出�
 - 用 LLM 把一批 mid_term 摘要反思成一条记忆（JSON 格式）
 - 若 LLM 标记 `is_closure=true`，先用 `closure_keywords` 关闭近 72 小时内匹配的非核心 open 记忆
 - `emotion_peak == "neutral"` 且 `strength < 0.4` → 跳过，不写入（避免平淡对话噪声）
-- 写入后规则叠加校正 strength（见下）
+- 写入后规则校正 strength（见下）；LLM 另输出 `emotional_intensity`（当时情绪多激烈，仅记录，不参与留存/召回排序；旧数据缺失按 `None`）
 - 回写 mid_term 的 `promoted_to_episodic_id`
 - 更新 `fixation_state`，达阈值后入队当前主链路 `consolidate_to_identity`
 
 `pipeline._do_compress_episode()` 仍保留给旧 DLQ 任务重试使用，新入队任务不走它。
 
-**strength 校正规则**（在 LLM 初始值基础上叠加）：
+**strength 语义（M1）**：`strength` 表示「以后回想你们的关系时，这件事有多大代表性/还需要记得多久」，
+**不再因情绪或冲突标签加成**（旧版 sad/angry +0.1、happy +0.05、冲突标签 +0.2 已删除；一次争执的多轮来回只算一件事）。
+情绪激烈程度另存 `emotional_intensity`。写入时仅保留下面两条规则校正：
 
 | 条件 | 加值 |
 |---|---|
-| emotion_peak 是 sad / angry | +0.1 |
-| emotion_peak 是 happy | +0.05 |
 | tags 超过 4 个 | +0.05 |
-| 含"吵架/哭/道歉/误会/和好"等 | +0.2 |
 | 含"第一次/生日/纪念"等 | +0.15，同时标记 `is_core=True` |
+
+存量数据重算：`python scripts/rebalance_episodic_strength.py`（默认 dry-run，只打印各桶改动数与强度分布；
+`--apply` 先备份 `episodic.json.pre_rebalance_<ts>.bak` 再按旧加成反向扣减并写 provenance，带 `rebalanced_at` 幂等）。
 
 **去重（P1-3 双防线）**：
 1. **血缘 exact-dup**（全量扫）：新 episode 的 `source_mid_ids` 与**任意**存量 episode 有重叠 → 跳过；血缘精确，不漏不误。
@@ -929,13 +931,10 @@ episodic_result = format_for_prompt(
 
 ### 衰减：decay_all()
 
-每日衰减，由调度器触发。核心记忆不衰减。
+每日衰减，由调度器触发（对 owner 的所有已注册角色桶逐个衰减，`decay_all(uid, char_id=)`）。核心记忆不衰减。
 
-| 情绪类型 | 基础衰减率 |
-|---|---|
-| sad / angry | 0.015（衰减最慢） |
-| neutral | 0.05（衰减最快） |
-| 其他 | 0.03 |
+统一基础衰减率 0.03，**不再按情绪区分**。只按「距上次衰减的天数」衰减：每条记录 `last_decay_at`
+（新写入时缺省，首次遇到时只初始化不衰减），避免旧实现用「创建至今天数」反复复利。
 
 召回次数越多，衰减越慢（`recall_factor = max(0.3, 1.0 - retrieval×0.1)`）。
 
