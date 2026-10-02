@@ -807,7 +807,62 @@ async def _check_log_maintenance():
     _mark("log_maintenance")  # 无论各步是否失败，都标记以免 24h 内重复触发
 
 
-# ── 备忘录到点提醒
+async def _compose_trigger_reply(
+    oid: str,
+    char_id: str | None,
+    prompt: str,
+    *,
+    search_query: str = "",
+    recall_policy: str = "anchored",
+) -> str | None:
+    """只生成、不落盘不发送：让角色按 prompt（导演注释）写出一条回复文本。
+
+    与 _pipeline_send 的生成段同构（scope freeze -> conversation_lock ->
+    fetch_context -> build_prompt -> run_llm），但不写 trigger stub、不调
+    record_assistant_turn、不经 MIGRATED_TRIGGERS 分流与 perceive_event dedupe
+    （投递侧 talk_gate 有 correlation 去重）。conversation_lock 不可重入，
+    必须在返回前释放，调用方随后的 talk_gate.send 才能再取锁。
+    失败或空回复返回 None。
+    """
+    try:
+        from core.pipeline_registry import get as _get_pipeline
+        _pipeline = _get_pipeline()
+        if _pipeline is None:
+            logger.warning("[scheduler._compose_trigger_reply] pipeline 未注入")
+            return None
+        resolved_char_id = char_id or _active_char_id_or_none()
+        try:
+            if resolved_char_id:
+                from core.memory.scope import MemoryScope
+                _frozen_scope = MemoryScope.reality_scope(oid, resolved_char_id)
+            else:
+                _frozen_scope = _pipeline._current_reality_scope(oid)
+        except (ValueError, RuntimeError) as _scope_err:
+            logger.error("[scheduler._compose_trigger_reply] scope freeze 失败: %s", _scope_err)
+            return None
+        from core.conversation_gate import conversation_lock as _conv_lock
+        async with _conv_lock(oid):
+            context = await _pipeline.fetch_context(
+                oid, search_query or prompt, frozen_scope=_frozen_scope,
+                recall_policy=recall_policy,
+            )
+            messages, _ = _pipeline.build_prompt(
+                oid, prompt, context, char_id=_frozen_scope.character_id
+            )
+            reply = await _pipeline.run_llm(
+                messages, is_proactive=True, char_id=_frozen_scope.character_id,
+            )
+        reply = (reply or "").strip()
+        return reply or None
+    except Exception as e:
+        log_error("scheduler._compose_trigger_reply", e)
+        return None
+
+
+# 提醒生成连续失败达到该次数后改发中性文案
+_REMINDER_MAX_COMPOSE_ATTEMPTS = 3
+
+
 async def _check_reminders():
     """Deliver due Runtime schedules through a fresh Reality interaction."""
     cfg = _cfg()
@@ -847,18 +902,33 @@ async def _check_reminders():
             )
             if claimed is None:
                 continue
-            try:
-                from core.character_name_provider import get_char_name
-                spoken_name = get_char_name(char_id)
-            except Exception:
-                spoken_name = "(角色未加载)"
+            reminder_content = str(claimed.get("content") or "").strip()
+            reply: str | None = None
+            if attempts < _REMINDER_MAX_COMPOSE_ATTEMPTS:
+                try:
+                    from core.config_loader import get_user_display_name
+                    user_name = get_user_display_name() or "对方"
+                except Exception:
+                    user_name = "对方"
+                directive = (
+                    f"（你之前设的提醒到时间了，事项是：{reminder_content}。"
+                    f"现在用你自己的口吻自然地提醒{user_name}。"
+                    "不要提到“备忘录”或复述这段说明。）"
+                )
+                reply = await _compose_trigger_reply(
+                    oid, char_id, directive,
+                    search_query=reminder_content, recall_policy="anchored",
+                )
+                if not reply:
+                    finish_delivery(principal, schedule_id, sent=False, occurrence=occurrence)
+                    continue
+            else:
+                # 多次生成失败：发最小中性文案，保证提醒不丢。
+                reply = f"到时间啦：{reminder_content}"
             sent, reason = await deliver_schedule(
                 oid,
                 char_id,
-                (
-                    f"备忘录提醒时间到了：{claimed.get('content')}，"
-                    f"用{spoken_name}的方式提醒你"
-                ),
+                reply,
                 source="user_schedule",
                 run_id=occurrence,
                 correlation_id=occurrence,

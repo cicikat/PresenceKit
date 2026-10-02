@@ -631,7 +631,7 @@ owner QQ 消息
 | period_reminder | period.py | proposer 接管；legacy `_check_period` 已删除 |
 | birthday_midnight/eve/afternoon/night | birthday.py | proposer 接管；legacy `_check_birthday_*` 已删除 |
 | timenode, festival, holiday_boost | timenode.py / festival.py | proposer 接管；legacy `_check_*` 已删除 |
-| reminders | reminders.py | proposer 仅观测（`execute=None`，不入 autonomy 发言队列）；live 投递由 `_check_reminders()` 读 Runtime `due_across_owner`，经 `begin_delivery` / talk_gate / `finish_delivery` |
+| reminders | reminders.py | proposer 仅观测（`execute=None`，不入 autonomy 发言队列）；live 投递由 `_check_reminders()` 读 Runtime `due_across_owner`，经 `begin_delivery` / `_compose_trigger_reply`（角色生成文本）/ talk_gate / `finish_delivery` |
 | topic_followup | memory.py | proposer 接管；legacy stub 已删除 |
 | garden_bloom | garden_water.py | legacy 通过 `legacy_send` 变量门控 + proposer 接管 |
 | garden_harvest_expired/handle_ask/handle_gift/handle_self/vase_wilted | garden_daily.py | 同上 |
@@ -1158,8 +1158,9 @@ curl -H "Authorization: Bearer <token>" \
 
 ### Brief 237 旧路径退役
 
-`_check_reminders()` 通过 `talk_gate` 的 Reality interaction adapter 投递，不再调用
-`_pipeline_send()`；交付前 `begin_delivery` 复核 revision/取消，发送中标 in-flight，
+`_check_reminders()` 先由 `_compose_trigger_reply()`（只生成、不落盘不发送，返回前释放 conversation_lock）
+让角色用自己的口吻写出提醒，再通过 `talk_gate` 的 Reality interaction adapter 投递，不再调用
+`_pipeline_send()`；生成失败则 `finish_delivery(sent=False)` 退回重试，`delivery_attempts>=3` 后改发中性文案「到时间啦：{content}」；交付前 `begin_delivery` 复核 revision/取消，发送中标 in-flight，
 `finish_delivery` 结束该次；重复轮次生成新 Task Manager task。shadow `reminders`
 proposer 仅观测，不直发也不入 autonomy 发言队列。`manual_trigger()` 对
 retired/unregistered 名称 fail-closed。legacy reminder JSON 只作迁移档案，live 查询

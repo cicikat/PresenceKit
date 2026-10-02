@@ -143,7 +143,7 @@ def register_tools(registry: dict) -> None:
             "properties": {
                 "content": {
                     "type": "string",
-                    "description": "要提醒用户做什么；使用简短、完整的事项文本。",
+                    "description": "要提醒用户做什么；使用简短、完整的事项文本。写成到时要提醒对方做的事本身（如“喝水休息”），不要写成给自己的备忘或提醒方式。",
                 },
                 "remind_at": {
                     "type": "string",

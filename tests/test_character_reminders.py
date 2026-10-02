@@ -382,6 +382,11 @@ async def test_check_reminders_uses_begin_finish_and_skips_stale(sandbox, monkey
     monkeypatch.setattr(loop, "_cfg", lambda: {"enabled": True})
     monkeypatch.setattr(loop, "_owner_id", lambda: _UID)
     monkeypatch.setattr("core.autonomy.talk_gate.send", fake_send)
+
+    async def fake_compose(oid, char_id, prompt, **kwargs):
+        return "该喝水啦"
+
+    monkeypatch.setattr(loop, "_compose_trigger_reply", fake_compose)
     await loop._check_reminders()
     row = sched.get_schedule(_principal(), created["schedule_id"])
     assert row["status"] == "completed"
@@ -390,6 +395,64 @@ async def test_check_reminders_uses_begin_finish_and_skips_stale(sandbox, monkey
     assert sent[0][1] == _CHAR
     await loop._check_reminders()
     assert len(sent) == 1
+
+
+@pytest.mark.asyncio
+async def test_check_reminders_delivers_generated_text_not_template(sandbox, monkeypatch):
+    from core.scheduler import loop
+
+    _create("喝水休息")
+    sent, prompts = [], []
+
+    async def fake_send(uid, char_id, text, **kwargs):
+        sent.append(text)
+        return True, "sent"
+
+    async def fake_compose(oid, char_id, prompt, **kwargs):
+        prompts.append((prompt, kwargs))
+        return "去喝点水吧，歇一歇"
+
+    monkeypatch.setattr(loop, "_cfg", lambda: {"enabled": True})
+    monkeypatch.setattr(loop, "_owner_id", lambda: _UID)
+    monkeypatch.setattr("core.autonomy.talk_gate.send", fake_send)
+    monkeypatch.setattr(loop, "_compose_trigger_reply", fake_compose)
+    await loop._check_reminders()
+    assert sent == ["去喝点水吧，歇一歇"]
+    assert len(prompts) == 1
+    assert "喝水休息" in prompts[0][0]
+    assert prompts[0][1]["recall_policy"] == "anchored"
+    assert prompts[0][1]["search_query"] == "喝水休息"
+    assert all("备忘录提醒时间到了" not in t for t in sent)
+
+
+@pytest.mark.asyncio
+async def test_check_reminders_compose_failure_retries_then_neutral(sandbox, monkeypatch):
+    from core.scheduler import loop
+
+    created = _create("吃药")
+    sent, calls = [], []
+
+    async def fake_send(uid, char_id, text, **kwargs):
+        sent.append(text)
+        return True, "sent"
+
+    async def failing_compose(oid, char_id, prompt, **kwargs):
+        calls.append(prompt)
+        return None
+
+    monkeypatch.setattr(loop, "_cfg", lambda: {"enabled": True})
+    monkeypatch.setattr(loop, "_owner_id", lambda: _UID)
+    monkeypatch.setattr("core.autonomy.talk_gate.send", fake_send)
+    monkeypatch.setattr(loop, "_compose_trigger_reply", failing_compose)
+    for _ in range(3):
+        await loop._check_reminders()
+    assert sent == []
+    assert len(calls) == 3
+    row = sched.get_schedule(_principal(), created["schedule_id"])
+    assert row["status"] == "scheduled"
+    await loop._check_reminders()
+    assert len(calls) == 3
+    assert sent == ["到时间啦：吃药"]
 
 
 def test_observability_is_metadata_only(sandbox, monkeypatch):
