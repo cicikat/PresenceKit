@@ -58,7 +58,14 @@ async def _check_episodic_sweep() -> None:
 
 async def _sweep_uid(uid: str, *, char_id: str) -> None:
     from core.memory import mid_term as _mt
+    from core.memory.fixation_pipeline import close_stale_emotional_run
     from core.post_process import slow_queue
+
+    # M2：打开中的情绪段落超过 30 分钟无新轮次 → 整段收尾入队（先于 11h 兜底 sweep）
+    try:
+        await close_stale_emotional_run(uid, char_id)
+    except Exception as e:
+        log_error(f"scheduler.episodic_sweep.close_run.{char_id}.{uid}", e)
 
     events = _mt.load(uid, char_id=char_id)
     now = time.time()

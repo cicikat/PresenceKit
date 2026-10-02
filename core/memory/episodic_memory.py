@@ -887,6 +887,14 @@ def decay_all(user_id: str, *, char_id: str = DEFAULT_CHAR_ID, now: float | None
     _save_memories(user_id, memories, char_id=char_id)
 
 
+_OUTCOME_ZH = {
+    "repaired": "已和好",
+    "clarified": "已说清楚",
+    "unresolved": "尚未解决",
+    "paused": "暂时搁置",
+}
+
+
 def format_for_prompt(
     memories: list,
     char_name: str = None,
@@ -967,6 +975,13 @@ def format_for_prompt(
             resolved_str = "（那时说要做的事应该已经发生了）"
         else:
             resolved_str = ""
+
+        if mem.get("episode_kind") == "conflict" and mem.get("outcome") in _OUTCOME_ZH:
+            note = (mem.get("repair_note") or "").strip()
+            summary = (
+                f"{summary} → 后来：{note}（{_OUTCOME_ZH[mem['outcome']]}）"
+                if note else f"{summary}（{_OUTCOME_ZH[mem['outcome']]}）"
+            )
 
         core_mark = "【重要】" if mem.get("is_core") else ""
         lines.append(f"- {core_mark}{time_str}，{summary}{resolved_str}{feeling_str}{arc_str}")

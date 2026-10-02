@@ -164,6 +164,25 @@ def _occurred_at(m: dict) -> float:
     return v if isinstance(v, (int, float)) else m.get("timestamp", 0) or 0
 
 
+_REPAIR_FIELDS = ("episode_kind", "outcome", "repair_note", "repaired_by", "repaired_at")
+_OUTCOME_RANK = {"repaired": 3, "clarified": 2, "paused": 1, "unresolved": 0}
+
+
+def _merge_repair_fields(survivor: dict, loser: dict) -> None:
+    """合并时保留修复字段（M2）：优先 repaired，不能被高强度一方覆盖丢失。"""
+    def rank(m: dict) -> int:
+        return _OUTCOME_RANK.get(m.get("outcome"), -1)
+
+    if rank(loser) > rank(survivor):
+        for key in _REPAIR_FIELDS:
+            if key in loser:
+                survivor[key] = loser[key]
+            else:
+                survivor.pop(key, None)
+    elif rank(survivor) < 0 and loser.get("episode_kind"):
+        survivor.setdefault("episode_kind", loser["episode_kind"])
+
+
 def _apply_merge(char_id: str, uid: str, survivor_id: str, loser_id: str) -> None:
     """保留 strength 较高者，血缘并集、召回次数求和、取较早 occurred_at；被并方经
     delete_episode() 删除（自动连删向量）；落一条 janitor_merge provenance。"""
@@ -187,6 +206,7 @@ def _apply_merge(char_id: str, uid: str, survivor_id: str, loser_id: str) -> Non
         loser.get("retrieval_count", 0) or 0
     )
     survivor["occurred_at"] = min(_occurred_at(survivor), _occurred_at(loser))
+    _merge_repair_fields(survivor, loser)
 
     _save_memories(uid, memories, char_id=char_id)
     _rebuild_index(uid, memories, char_id=char_id)

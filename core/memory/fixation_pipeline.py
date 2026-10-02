@@ -49,7 +49,16 @@ _STATE_DEFAULTS: dict = {
     "salvaged_dates": [],   # event_log_salvage 已处理的 YYYY-MM-DD 列表，滚动保留 60 个（Brief 46 §2）
     "janitor_last_run_at": 0.0,   # memory_janitor 上次运行时间（Brief 49）
     "janitor_merged_count": 0,    # memory_janitor 累计合并对数（Brief 49）
+    "open_emotional_run": None,   # M2：打开中的情绪段落 {started_at,last_at,mid_ids,calm_streak}
 }
+
+# M2：情绪段落（一次争执/情绪波动整段入库）关闭条件
+_RUN_CALM_CLOSE_TURNS = 3        # 连续 3 轮非 sad/angry 即收尾
+_RUN_MAX_LEN = 12                # 段落长度上限（防 mid_term 20 条上限把前面挤掉）
+_RUN_IDLE_SECONDS = 30 * 60      # 距上次追加超过 30 分钟视为已收尾
+_EPISODE_KINDS = {"conflict", "emotional", "ordinary"}
+_EPISODE_OUTCOMES = {"repaired", "clarified", "unresolved", "paused"}
+_REPAIR_LOOKBACK_SECONDS = 72 * 3600
 
 # ── LLM prompt 模板 ────────────────────────────────────────────────────────────
 _REFLECT_PROMPT_TEMPLATE = """\
@@ -62,6 +71,7 @@ _REFLECT_PROMPT_TEMPLATE = """\
   "emotion_arc": "情绪流动方向，10字以内，可留空",
   "user_state": "用户当时的状态短语，如 stressed_about_work / tired",
   "narrative_summary": "一句自然语言描述这段时期发生了什么，15字以内，供{char_name}回忆用",
+  "repairs_conflict": true/false,
   "is_closure": true/false,
   "closure_keywords": ["被结束或更新的事情关键词，如西瓜、考试；is_closure为false时为空数组"],
   "is_state_change": true/false,
@@ -70,6 +80,7 @@ _REFLECT_PROMPT_TEMPLATE = """\
   "strength": 0到1之间的浮点数（以后回想你们的关系时，这件事有多大代表性、还需要记得多久。情绪激烈本身不代表重要；一次争执里的多轮来回只算一件事）,
   "emotional_intensity": 0到1之间的浮点数（当时情绪有多激烈，仅作记录，不代表重要程度）
 }}
+修复判定：这段内容是在为之前发生过的争执/误会做澄清、道歉或和好时，repairs_conflict=true，否则为 false。
 完结/更新判定：用户明确表示先前提过的事情已经完成、结束、取消或状态已更新时，is_closure=true，
 例如“吃完了”“考完了”“不去了”“已经到了”；closure_keywords 只列被结束或更新的事情关键词。
 状态变更判定：is_closure=true 且这是持久状态的翻转（换了工作、搬了家、分手了、戒掉某习惯），
@@ -77,6 +88,15 @@ _REFLECT_PROMPT_TEMPLATE = """\
 时间判定：主要指向未来的计划或事件时 temporal_ref=future，并原样提取简短 event_time_hint；
 主要回顾过去时 temporal_ref=past；没有明确时间指向时 temporal_ref=none 且 event_time_hint 为空。
 重要：用第三人称客观陈述，不要使用文学化语言，不要写动作描写。"""
+
+_REFLECT_RUN_ADDENDUM = """
+
+这批摘要是同一段连续的情绪/争执过程（从起因到收尾），请把它作为【一条】完整记忆来写：包含起因、经过、澄清或道歉、最后的结果。
+在 JSON 里额外输出以下字段：
+  "episode_kind": "conflict/emotional/ordinary 中选一个（双方有分歧或争执为 conflict；单方情绪波动为 emotional）",
+  "outcome": "repaired/clarified/unresolved/paused 中选一个（和好=repaired；说清楚了但没道歉=clarified；还没解决=unresolved；暂时搁置=paused）",
+  "repair_note": "怎么收尾的（谁澄清了什么、谁道歉、最后状态），40字以内，没有则为空字符串"
+"""
 
 _IDENTITY_SYSTEM_PROMPT = """\
 你是一个客观分析器，负责归纳用户的稳定行为模式。
@@ -256,6 +276,14 @@ def _validate_episode(data: dict) -> bool:
             return False
     except (TypeError, ValueError):
         return False
+    # M2 可选字段：缺失/非法一律回退默认，不影响旧输出
+    data["repairs_conflict"] = data.get("repairs_conflict") is True
+    if data.get("episode_kind") not in _EPISODE_KINDS:
+        data["episode_kind"] = None
+    if data.get("outcome") not in _EPISODE_OUTCOMES:
+        data["outcome"] = None
+    note = data.get("repair_note")
+    data["repair_note"] = note.strip()[:40] if isinstance(note, str) else ""
     # emotional_intensity 可选：缺失/非法按 None 处理（旧输出兼容）
     try:
         ei = float(data["emotional_intensity"])
@@ -1067,8 +1095,18 @@ async def summarize_to_midterm(
         "mid_id": mid_id, "turn_id": turn_id, "duration_ms": duration_ms,
     }, "ok")
 
-    # eager 触发：情绪显著或强制反射（如群聊来源）则立即入队 reflect
-    if force_reflect or emotion in ("sad", "angry", "happy"):
+    # 情绪段落缓冲（M2）：sad/angry 轮不再逐轮 reflect，而是并入 open_emotional_run，
+    # 段落收尾时整段入队一次。happy / force_reflect 保持 eager。
+    eager = bool(force_reflect)
+    closed_runs: list[list[str]] = []
+    if not force_reflect:
+        async with locks.uid_lock(uid):
+            closed_runs, _in_run = _advance_emotional_run(uid, char_id, mid_id, emotion, time.time())
+        if emotion == "happy" and not _in_run:
+            eager = True
+    for run_mids in closed_runs:
+        _enqueue_emotional_run(uid, char_id, run_mids)
+    if eager:
         slow_queue.enqueue("reflect_to_episodic", {
             "uid": uid,
             "mid_ids": [mid_id],
@@ -1081,6 +1119,125 @@ async def summarize_to_midterm(
     return mid_id
 
 
+def _enqueue_emotional_run(uid: str, char_id: str, mid_ids: list[str]) -> None:
+    from core.post_process import slow_queue
+    slow_queue.enqueue("reflect_to_episodic", {
+        "uid": uid,
+        "mid_ids": list(mid_ids),
+        "trigger": "emotional_run",
+        "char_id": char_id,
+        "scope": MemoryScope.reality_scope(str(uid), char_id).to_payload(),
+    })
+    logger.info(f"[fixation] reflect_to_episodic emotional_run 已入队: uid={uid} mids={len(mid_ids)}")
+
+
+def _advance_emotional_run(
+    uid: str, char_id: str, mid_id: str, emotion: str, now: float,
+) -> tuple[list[list[str]], bool]:
+    """在调用方持有 uid_lock 时推进情绪段落缓冲。
+
+    返回 (本次需要入队 reflect 的已关闭段落 mid_ids 列表, 当前轮是否并入了打开中的段落)。
+    run 打开期间后续每轮（不论情绪）都追加；连续 3 轮非 sad/angry、距上次追加超 30 分钟、
+    或长度达 12 时关闭。
+    """
+    state = _load_fixation_state(uid, char_id=char_id)
+    run = state.get("open_emotional_run")
+    closed: list[list[str]] = []
+    dirty = False
+    hot = emotion in ("sad", "angry")
+
+    if isinstance(run, dict) and run.get("mid_ids"):
+        if now - float(run.get("last_at") or 0.0) > _RUN_IDLE_SECONDS:
+            closed.append(list(run["mid_ids"]))
+            run = None
+            dirty = True
+    else:
+        run = None
+
+    in_run = False
+    if run is None and hot:
+        run = {"started_at": now, "last_at": now, "mid_ids": [], "calm_streak": 0}
+    if run is not None:
+        run["mid_ids"].append(mid_id)
+        run["last_at"] = now
+        run["calm_streak"] = 0 if hot else int(run.get("calm_streak", 0)) + 1
+        in_run = True
+        dirty = True
+        if run["calm_streak"] >= _RUN_CALM_CLOSE_TURNS or len(run["mid_ids"]) >= _RUN_MAX_LEN:
+            closed.append(list(run["mid_ids"]))
+            run = None
+
+    if dirty:
+        state["open_emotional_run"] = run
+        _save_fixation_state(uid, state, char_id=char_id)
+    return closed, in_run
+
+
+async def close_stale_emotional_run(uid: str, char_id: str, now: float | None = None) -> bool:
+    """episodic_sweep 调用：打开中的情绪段落超过 30 分钟无新轮次则收尾入队。返回是否入队。"""
+    from core.memory import locks
+    now = time.time() if now is None else now
+    async with locks.uid_lock(uid):
+        state = _load_fixation_state(uid, char_id=char_id)
+        run = state.get("open_emotional_run")
+        if not isinstance(run, dict) or not run.get("mid_ids"):
+            return False
+        if now - float(run.get("last_at") or 0.0) <= _RUN_IDLE_SECONDS:
+            return False
+        mids = list(run["mid_ids"])
+        state["open_emotional_run"] = None
+        _save_fixation_state(uid, state, char_id=char_id)
+    _enqueue_emotional_run(uid, char_id, mids)
+    return True
+
+
+def _attach_repair_to_conflict(uid: str, char_id: str, new_ep: dict, repair_note: str = "") -> None:
+    """新 episode 在为之前的争执收尾：把 72h 内最近一条 unresolved/paused 冲突标为 repaired。
+
+    不设 status=resolved（resolved 会被召回排除），修复点与冲突都保持可召回。
+    调用方持有 uid_lock。"""
+    from core.memory import episodic_memory as _ep
+    from core.memory.provenance_log import append as _prov_append
+
+    try:
+        memories = _ep._load_memories(uid, char_id=char_id)
+    except Exception as exc:  # fail-open：挂回失败不影响新 episode
+        logger.warning("[fixation] repair attach load failed uid=%s: %s", uid, exc)
+        return
+    now = time.time()
+    candidates = [
+        m for m in memories
+        if m.get("id") != new_ep.get("id")
+        and m.get("episode_kind") == "conflict"
+        and m.get("outcome") in ("unresolved", "paused")
+        and isinstance(m.get("timestamp"), (int, float))
+        and 0 <= now - m["timestamp"] <= _REPAIR_LOOKBACK_SECONDS
+    ]
+    if not candidates:
+        return
+    target = max(candidates, key=lambda m: m["timestamp"])
+    before = target.get("outcome")
+    target["outcome"] = "repaired"
+    target["repair_note"] = (
+        repair_note
+        or new_ep.get("repair_note")
+        or (new_ep.get("narrative_summary") or "")
+    )[:40]
+    target["repaired_by"] = new_ep.get("id")
+    target["repaired_at"] = now
+    _ep._save_memories(uid, memories, char_id=char_id)
+    _ep._rebuild_index(uid, memories, char_id=char_id)
+    _prov_append(
+        uid, char_id,
+        artifact="episodic",
+        field=str(target.get("id") or ""),
+        before_gist=str(before),
+        after_gist=f"repaired_by={new_ep.get('id')}: {target['repair_note']}"[:120],
+        trigger_signal="conflict_repaired",
+        source_event_ids=new_ep.get("source_event_ids"),
+    )
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Job 3 — reflect_to_episodic（slow_queue handler）
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1088,7 +1245,7 @@ async def summarize_to_midterm(
 async def reflect_to_episodic(
     uid: str,
     mid_ids: list[str],
-    trigger: Literal["eager", "sweep"] = "eager",
+    trigger: Literal["eager", "sweep", "emotional_run"] = "eager",
     *,
     char_id: str = DEFAULT_CHAR_ID,
 ) -> str | None:
@@ -1163,6 +1320,8 @@ async def reflect_to_episodic(
             char_name=char_name,
             pronoun=_get_pronoun(uid),
         )
+        if trigger == "emotional_run":
+            prompt_system += _REFLECT_RUN_ADDENDUM
         base_user = f"对话摘要：\n{summaries_text}"
 
         # LLM 调用（最多 3 次）
@@ -1173,7 +1332,7 @@ async def reflect_to_episodic(
             suffix = "" if attempt == 0 else "\n\n上次输出不符合格式要求，请严格只输出JSON。"
             _last_raw = await llm_client.chat(
                 messages=[{"role": "user", "content": prompt_system + "\n\n" + base_user + suffix}],
-                max_tokens_override=400,
+                max_tokens_override=600 if trigger == "emotional_run" else 400,
                 call_category="consolidation",
                 char_id=char_id,
             )
@@ -1205,7 +1364,11 @@ async def reflect_to_episodic(
 
         # 过滤平淡内容。closure 已在此前执行，因此中性低强度完结事件也能关闭旧记忆。
         # group 来源（stage 群聊投影）豁免：给底分 0.4，确保群聊事实能进 episodic。
-        if data.get("emotion_peak") == "neutral" and data.get("strength", 0) < 0.4:
+        if (
+            data.get("emotion_peak") == "neutral"
+            and data.get("strength", 0) < 0.4
+            and not data.get("repairs_conflict")  # 为之前争执收尾的修复点不能被平淡过滤丢掉
+        ):
             _is_group_source = any(
                 str(e.get("source", "")).startswith("group:")
                 for e in to_process
@@ -1244,6 +1407,13 @@ async def reflect_to_episodic(
             ),
             "consolidated_at": None,
         }
+        _kind = data.get("episode_kind") or ("emotional" if trigger == "emotional_run" else None)
+        if _kind:
+            episode["episode_kind"] = _kind
+        if data.get("outcome") and _kind in ("conflict", "emotional"):
+            episode["outcome"] = data["outcome"]
+            if data.get("repair_note"):
+                episode["repair_note"] = data["repair_note"]
         event_time = _parse_event_time_hint(data.get("event_time_hint", ""))
         if event_time is not None:
             episode["event_time"] = event_time
@@ -1311,6 +1481,8 @@ async def reflect_to_episodic(
                 turn_id=ep_id,
                 source_event_ids=episode.get("source_event_ids"),
             )
+            if data.get("repairs_conflict"):
+                _attach_repair_to_conflict(uid, char_id, episode, data.get("repair_note") or "")
             # 语义索引（fail-open，不阻塞主流程）
             try:
                 from core.memory import vector_store as _vs

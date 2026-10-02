@@ -420,7 +420,7 @@ async def test_summarize_to_midterm_idempotent(sandbox):
 
 @pytest.mark.asyncio
 async def test_summarize_to_midterm_eager_enqueues_reflect(sandbox):
-    """emotion=sad 时 summarize_to_midterm 应向 slow_queue 入队 reflect_to_episodic。"""
+    """emotion=happy 时 summarize_to_midterm 仍应 eager 入队 reflect_to_episodic（sad/angry 改走情绪段落缓冲，见 M2）。"""
     import core.post_process.slow_queue as sq
     from core.memory.fixation_pipeline import summarize_to_midterm
 
@@ -434,7 +434,7 @@ async def test_summarize_to_midterm_eager_enqueues_reflect(sandbox):
     turn_id = f"{uid}_{int(time.time() * 1000)}"
 
     with patch.object(sq, "enqueue", side_effect=capture_enqueue):
-        await summarize_to_midterm(turn_id, uid, "哭了", "抱抱", [], "sad")
+        await summarize_to_midterm(turn_id, uid, "好开心", "太好了", [], "happy")
 
     reflect_tasks = [e for e in enqueued if e["task_type"] == "reflect_to_episodic"]
     assert len(reflect_tasks) == 1

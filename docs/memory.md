@@ -765,13 +765,27 @@ score = intensity * decay + relevance
 | `occurred_at` | **事件真实发生时刻**的最佳估计。`format_for_prompt()` 渲染时间锚（"刚刚" / "N个月前"）一律读此字段；旧数据缺失时回退 `timestamp`。 |
 | `temporal_ref` | `"future"` / `"past"` / `"none"`。`"past"` 时渲染层禁用刚刚/几小时前/今天等近期锚点，改为"之前" / "前几天" / "N个月前"，防止回顾型提及被渲染成刚发生的事。 |
 | `event_time` | **未来**事件的预定时刻（TTL/expires_at 用）。与 `occurred_at` 含义不同，勿混用。 |
+| `emotional_intensity` | M1：当时情绪激烈程度（0-1），仅记录；旧数据为 `None`。不参与留存/召回排序。 |
+| `last_decay_at` | M1：上次衰减时刻；`decay_all` 只按距此的天数衰减。 |
+| `episode_kind` / `outcome` / `repair_note` / `repaired_by` / `repaired_at` | M2：冲突整段入库与事后修复挂回，见下「写入」。 |
 
 ### 写入：reflect_to_episodic()
 
 当前主路径不再是"每轮直接压缩 episodic"。每轮先写入 `mid_term`，再由两类触发晋升为 episodic：
 
-- eager：`summarize_to_midterm` 完成后，如果本轮 emotion 属于 `sad/angry/happy`，立即入队 `reflect_to_episodic`
-- sweep：调度器 `episodic_sweep` 每 30 分钟扫描，处理 age > 11h 且尚未晋升的 mid_term
+- eager：`summarize_to_midterm` 完成后，如果本轮 emotion 是 `happy`（或 `force_reflect`），立即入队 `reflect_to_episodic`
+- **emotional_run（M2）**：`sad/angry` 轮不再逐轮 reflect，而是并入 `fixation_state.open_emotional_run`
+  （`{started_at, last_at, mid_ids, calm_streak}`，按 uid+char 一份）。run 打开期间后续每轮（不论情绪）都追加；
+  关闭条件任一：连续 3 轮非 sad/angry；距 `last_at` 超 30 分钟（下一次写入或 `episodic_sweep` 检查）；长度达 12。
+  关闭时整段入队一次 `reflect_to_episodic(trigger="emotional_run")`，生成**一条**含起因/经过/澄清/结果的记忆。
+- sweep：调度器 `episodic_sweep` 每 30 分钟扫描，处理 age > 11h 且尚未晋升的 mid_term；同时收尾已闲置的情绪段落
+
+**冲突/修复字段（M2）**：emotional_run 的 reflect 额外输出 `episode_kind`（conflict/emotional/ordinary）、
+`outcome`（repaired/clarified/unresolved/paused）、`repair_note`（≤40 字）。任一 reflect 还输出 `repairs_conflict`：
+为真时在同 scope 72 小时内找最近一条 `episode_kind=conflict` 且 `outcome in (unresolved, paused)` 的条目，更新为
+`outcome=repaired` + `repair_note` + `repaired_by`(新 episode id) + `repaired_at`，写 provenance（`conflict_repaired`）；
+**不设 `status=resolved`**（resolved 会被召回排除），所以冲突与修复点都保持可召回。`format_for_prompt` 把 conflict 渲染为
+「{摘要} → 后来：{repair_note}（已和好/已说清楚/尚未解决/暂时搁置）」。`memory_janitor` 合并时保留修复字段（repaired 优先）。
 
 ### 实际 prompt 结构
 
