@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 # ── 阈值常量 ──────────────────────────────────────────────────────────────────
 _HIGH_STRENGTH_THRESHOLD = 0.6     # episodic strength 达到此值算"高强度"
-_CONSOLIDATE_MIN_HIGH = 5          # 高强度 episodic 数量门槛（条件 1）
+_CONSOLIDATE_MIN_HIGH_DAYS = 3     # 高强度 episodic 覆盖的不同自然日数门槛（条件 1，M3：同一天多条只算 1）
 _CONSOLIDATE_MIN_STRENGTH_ACC = 4.0  # 累积 strength 门槛（条件 2）
 _CONSOLIDATE_MIN_HOURS = 24        # 时间门槛（小时，条件 3）
 _CONSOLIDATE_MIN_EPISODIC_COUNT = 3  # 条件 3 生效时最少 episodic 数
@@ -44,6 +44,7 @@ _STATE_DEFAULTS: dict = {
     "last_consolidated_at": 0.0,
     "episodic_since_last": 0,
     "high_strength_since_last": 0,   # 本字段为扩展，spec JSON 不含但向后兼容
+    "high_strength_days": [],        # M3：高强度 episodic 所覆盖的自然日（YYYY-MM-DD，去重）
     "strength_accumulated": 0.0,
     "last_sweep_at": 0.0,
     "salvaged_dates": [],   # event_log_salvage 已处理的 YYYY-MM-DD 列表，滚动保留 60 个（Brief 46 §2）
@@ -60,16 +61,27 @@ _EPISODE_KINDS = {"conflict", "emotional", "ordinary"}
 _EPISODE_OUTCOMES = {"repaired", "clarified", "unresolved", "paused"}
 _REPAIR_LOOKBACK_SECONDS = 72 * 3600
 
+def _episode_day(ep: dict) -> str:
+    """episode 所属自然日（本地日期）：优先 occurred_at，回退 timestamp。"""
+    ts = ep.get("occurred_at")
+    if not isinstance(ts, (int, float)):
+        ts = ep.get("timestamp")
+    if not isinstance(ts, (int, float)):
+        ts = time.time()
+    return datetime.fromtimestamp(ts).strftime("%Y-%m-%d")
+
+
 # ── LLM prompt 模板 ────────────────────────────────────────────────────────────
 _REFLECT_PROMPT_TEMPLATE = """\
 你是一个对话记录分析器。请分析下面这些近期对话摘要，提炼出一条情景记忆，只输出JSON，不要有任何多余文字：
 {{
-  "raw_facts": ["事实陈述1（{pronoun}说了/做了什么）", "事实2", "事实3"],
+  "user_said": ["{pronoun}明确说出的内容，尽量贴原话", "..."],
+  "char_reading": ["{char_name}当时的理解/推测（这是理解，不是{pronoun}说过的话）", "..."],
   "topic_keywords": ["话题词1", "话题词2", "话题词3"],
   "emotion_peak": "neutral/happy/sad/gentle/surprised/angry 中选一个",
   "emotion_texture": "最有重量的情绪质感描述，20字以内，可留空",
   "emotion_arc": "情绪流动方向，10字以内，可留空",
-  "user_state": "用户当时的状态短语，如 stressed_about_work / tired",
+  "user_state": "用户当时的状态短语，如 stressed_about_work / tired（这是{char_name}的推测，不是用户原话）",
   "narrative_summary": "一句自然语言描述这段时期发生了什么，15字以内，供{char_name}回忆用",
   "repairs_conflict": true/false,
   "is_closure": true/false,
@@ -120,7 +132,7 @@ _IDENTITY_SYSTEM_PROMPT = """\
 2. 严禁出现具体日期、时间戳、"上周""3 月 15 日"等时间锚点。可以用"经常""偶尔""有时"等频次词。
 3. 如果某个维度没有新证据或证据不足以判断，沿用旧版本的 text 不动，last_updated 可以保留旧值。如果是全新维度从未判断过，text 留空字符串。
 4. confidence 是你对此判断的把握度（0-1）。把握度低就写低，不要硬给高分。
-5. evidence_count 是你"看到了多少条相关 episode 才得出这个结论"，老实给数字。
+5. evidence_episodes 是你得出这个结论所依据的"最近发生的事"的编号列表（如 [1, 3, 4]）。只列真正支持该判断的编号，不要编造；证据数量由系统按这些 episode 覆盖的不同日期自行计算，你不需要给数字。
 6. 只把"跨多条 episode 反复出现"的特征写成模式。如果某个特征只在一两条 episode 里出现过，不要写成稳定人格，宁可留空或保持旧判断。
 7. 用户的单次情绪爆发、玩笑、自嘲、角色扮演式表达，不得固化为稳定人格。判断标准不是"这次是不是认真的"（你无法判断），而是"这个特征是否反复出现"。只出现一次的，一律不固化。
 8. 如果新证据与旧版印象冲突（比如旧版说"慢热"，但最近多次快速信任），不要直接推翻旧判断，而是：保留 text 但降低 confidence，并在返回的 counter_evidence_count 里反映冲突次数。让矛盾积累，而不是非黑即白地翻转。你报告的 counter_evidence_count 只需反映【本批新证据中】与旧判断冲突的次数，不需要累加历史——历史累积由系统负责。
@@ -130,7 +142,7 @@ _IDENTITY_SYSTEM_PROMPT = """\
 
 输出严格 JSON，结构：
 {
-  "trust_pattern": {"text": "...", "confidence": 0.7, "evidence_count": 12, "counter_evidence_count": 2},
+  "trust_pattern": {"text": "...", "confidence": 0.7, "evidence_episodes": [1, 3, 4], "counter_evidence_count": 2},
   "emotion_expression": {...},
   ...,
   "address_style": {"text": "...", "confidence": 0.8, "evidence_count": 5, "counter_evidence_count": 0}
@@ -193,8 +205,9 @@ def _should_consolidate(state: dict) -> bool:
     since = state.get("episodic_since_last", 0)
     hours_since = (time.time() - last_at) / 3600
 
-    # 条件 1：高强度 episodic 累计 ≥ 5
-    if high >= _CONSOLIDATE_MIN_HIGH:
+    # 条件 1：高强度 episodic 来自 ≥ 3 个不同自然日（一场争执拆成多条也只算一天）
+    days = state.get("high_strength_days")
+    if isinstance(days, list) and len(set(days)) >= _CONSOLIDATE_MIN_HIGH_DAYS:
         return True
     # 条件 2：累积 strength ≥ 4.0
     if strength_acc >= _CONSOLIDATE_MIN_STRENGTH_ACC:
@@ -261,6 +274,15 @@ def _validate_episode(data: dict) -> bool:
         data["event_time_hint"] = ""
     else:
         data["event_time_hint"] = data["event_time_hint"].strip()
+    # M3：user_said / char_reading 是新字段，raw_facts 保留为两者合并（兼容老读者）；
+    # 旧输出只有 raw_facts 时 user_said/char_reading 视为缺省。
+    for _k in ("user_said", "char_reading"):
+        _v = data.get(_k)
+        data[_k] = [x.strip() for x in _v if isinstance(x, str) and x.strip()] if isinstance(_v, list) else []
+    if not isinstance(data.get("raw_facts"), list) or not data.get("raw_facts"):
+        merged = [*data["user_said"], *data["char_reading"]]
+        if merged:
+            data["raw_facts"] = merged
     for key in ("raw_facts", "topic_keywords", "emotion_peak", "strength"):
         if key not in data:
             return False
@@ -1053,7 +1075,9 @@ async def summarize_to_midterm(
             logger.debug(f"[fixation] summarize_to_midterm 幂等命中: turn_id={turn_id}")
             return None
 
-    summary = await llm_client.summarize_turn(user_msg, reply, tags=tags, is_trigger_turn=bool(trigger_name))
+    summary = await llm_client.summarize_turn(
+        user_msg, reply, tags=tags, is_trigger_turn=bool(trigger_name), char_id=char_id,
+    )
     if not summary:
         return None
 
@@ -1117,6 +1141,43 @@ async def summarize_to_midterm(
         logger.info(f"[fixation] reflect_to_episodic eager 已入队: uid={uid} emotion={emotion}")
 
     return mid_id
+
+
+_QUOTE_PER_MSG = 120
+_QUOTE_TOTAL = 1200
+
+
+def _is_low_conf_voice(entry: dict) -> bool:
+    """A3 语音标记（input_modality=voice 且 asr_low_confidence）；字段缺失按非语音处理。"""
+    return entry.get("input_modality") == "voice" and bool(entry.get("asr_low_confidence"))
+
+
+def _collect_user_quotes(uid: str, char_id: str, entries: list[dict]) -> str:
+    """按 source_event_ids 取对应的用户原话（每条 ≤120 字、总 ≤1200 字）。fail-open，取不到返回空串。"""
+    try:
+        from core.memory import event_query
+        scope = MemoryScope.reality_scope(str(uid), char_id)
+        lines: list[str] = []
+        total = 0
+        for e in entries:
+            for event_id in e.get("source_event_ids") or []:
+                if not str(event_id).endswith(":user"):
+                    continue
+                event = event_query.get_event(scope, str(event_id))
+                if not event or event.get("tombstoned"):
+                    continue
+                text = (event.get("memory_text") or event.get("raw_text") or "").strip()
+                if not text:
+                    continue
+                text = text[:_QUOTE_PER_MSG]
+                if total + len(text) > _QUOTE_TOTAL:
+                    return "\n".join(lines)
+                lines.append(f"- {text}")
+                total += len(text)
+        return "\n".join(lines)
+    except Exception as exc:
+        logger.debug("[fixation] user quotes lookup failed (fail-open): %s", exc)
+        return ""
 
 
 def _enqueue_emotional_run(uid: str, char_id: str, mid_ids: list[str]) -> None:
@@ -1323,6 +1384,12 @@ async def reflect_to_episodic(
         if trigger == "emotional_run":
             prompt_system += _REFLECT_RUN_ADDENDUM
         base_user = f"对话摘要：\n{summaries_text}"
+        _quotes = _collect_user_quotes(uid, char_id, to_process)
+        if _quotes:
+            base_user += (
+                "\n\n用户原话（逐条截取，user_said 请尽量贴这里的原话；摘要里的归属若与原话不符，以原话为准）：\n"
+                + _quotes
+            )
 
         # LLM 调用（最多 3 次）
         _fail_key = f"reflect_to_episodic_{uid}"
@@ -1407,6 +1474,12 @@ async def reflect_to_episodic(
             ),
             "consolidated_at": None,
         }
+        if data.get("user_said"):
+            episode["user_said"] = data["user_said"]
+        if data.get("char_reading"):
+            episode["char_reading"] = data["char_reading"]
+        if to_process and all(_is_low_conf_voice(e) for e in to_process):
+            episode["voice_low_confidence"] = True  # A3 标记缺失时恒为 False，不写字段
         _kind = data.get("episode_kind") or ("emotional" if trigger == "emotional_run" else None)
         if _kind:
             episode["episode_kind"] = _kind
@@ -1509,6 +1582,11 @@ async def reflect_to_episodic(
         state["episodic_since_last"] = state.get("episodic_since_last", 0) + 1
         if strength >= _HIGH_STRENGTH_THRESHOLD:
             state["high_strength_since_last"] = state.get("high_strength_since_last", 0) + 1
+            _day = _episode_day(episode)
+            _days = [d for d in (state.get("high_strength_days") or []) if isinstance(d, str)]
+            if _day not in _days:
+                _days.append(_day)
+            state["high_strength_days"] = _days[-60:]
         state["strength_accumulated"] = round(
             state.get("strength_accumulated", 0.0) + strength, 3
         )
@@ -1658,13 +1736,21 @@ async def _synthesize_identity(
     else:
         old_identity_formatted = "（无旧版印象，请基于新证据初次归纳）"
 
-    # 格式化 episodes
+    # 格式化 episodes（M3）：只给「用户明确说过的」user_said + 日期，不给 char_reading / narrative_summary
+    # （角色的解读不能当事实证据）。低置信语音转写的 episode 不参与证据；旧 episode 没有 user_said 时退回 raw_facts。
+    eligible = [
+        ep for ep in new_episodes
+        if not ep.get("voice_low_confidence") and not _is_low_conf_voice(ep)
+    ]
+    if not eligible:
+        return {}, []
+    day_by_idx: dict[int, str] = {}
     episodes_lines = []
-    for ep in new_episodes:
-        summary = ep.get("narrative_summary") or ep.get("summary", "（无摘要）")
-        emotion = ep.get("emotion_peak", "neutral")
-        strength = ep.get("strength", 0.5)
-        episodes_lines.append(f"- {summary}（情绪: {emotion}，强度: {strength:.2f}）")
+    for idx, ep in enumerate(eligible, 1):
+        said = ep.get("user_said") or ep.get("raw_facts") or []
+        said_text = "；".join(str(x) for x in said if x) or "（无）"
+        day_by_idx[idx] = _episode_day(ep)
+        episodes_lines.append(f"[{idx}] {day_by_idx[idx]}：{said_text}")
     episodes_formatted = "\n".join(episodes_lines)
 
     # 格式化 user profile
@@ -1678,7 +1764,7 @@ async def _synthesize_identity(
     user_content = (
         f"旧版印象：\n{old_identity_formatted}\n\n"
         f"用户基本事实（仅供参考，这些不是行为模式）：\n{user_profile_formatted}\n\n"
-        f"最近发生的事（共 {len(new_episodes)} 条）：\n{episodes_formatted}"
+        f"最近发生的事（共 {len(eligible)} 条，均为用户明确说过的内容，带编号和日期）：\n{episodes_formatted}"
     )
 
     _fail_key = f"consolidate_to_identity_{uid}"
@@ -1706,7 +1792,8 @@ async def _synthesize_identity(
                 # 该段格式错误不得影响主产物解析（Brief 89）
                 _gf_raw = candidate.pop("global_facts", None)
                 if all(
-                    isinstance(v, dict) and {"text", "confidence", "evidence_count"} <= v.keys()
+                    isinstance(v, dict) and {"text", "confidence"} <= v.keys()
+                    and ("evidence_episodes" in v or "evidence_count" in v)
                     for v in candidate.values()
                 ):
                     data = candidate
@@ -1729,10 +1816,28 @@ async def _synthesize_identity(
             continue
 
         raw_conf = max(0.0, min(1.0, float(dim_raw.get("confidence", 0.5))))
-        ev = max(0, int(dim_raw.get("evidence_count", 0)))
         new_conflict = max(0, int(dim_raw.get("counter_evidence_count", 0)))
 
         old_dim = old_identity.get(key) or {}
+        # M3：证据数由代码按所引 episode 覆盖的不同自然日数计算（同一天多条只算 1），不再采信模型自报；
+        # 沿用旧 text 时与旧 evidence_days 取并集（累计跨日），重写 text 则重新计数。
+        refs = dim_raw.get("evidence_episodes")
+        cited_days = {
+            day_by_idx[i] for i in (refs if isinstance(refs, list) else [])
+            if isinstance(i, int) and i in day_by_idx
+        }
+        same_text = str(dim_raw.get("text", "")) == old_dim.get("text", "")
+        base_days = (
+            {d for d in (old_dim.get("evidence_days") or []) if isinstance(d, str)} if same_text else set()
+        )
+        all_days = base_days | cited_days
+        ev = len(all_days)
+        if not cited_days:
+            try:
+                claimed = max(0, int(dim_raw.get("evidence_count", 0)))
+            except (TypeError, ValueError):
+                claimed = 0
+            ev = max(ev, min(claimed, len(set(day_by_idx.values()))))
         old_cev = old_dim.get("counter_evidence_count", 0)
         # LLM 重写了 text → 新判断，counter 归零重新计数；沿用旧 text → 累积历史冲突
         if str(dim_raw.get("text", "")) != old_dim.get("text", ""):
@@ -1753,6 +1858,7 @@ async def _synthesize_identity(
             "text": str(dim_raw.get("text", "")),
             "confidence": final_conf,
             "evidence_count": ev,
+            "evidence_days": sorted(all_days)[-120:],
             "counter_evidence_count": cev,
             "last_updated": now,
             "last_conflict_at": last_conflict_at,
@@ -1867,6 +1973,7 @@ async def consolidate_to_identity(uid: str, llm_client, *, char_id: str = DEFAUL
         state = _load_fixation_state(uid, char_id=char_id)
         state["episodic_since_last"] = 0
         state["high_strength_since_last"] = 0
+        state["high_strength_days"] = []
         state["strength_accumulated"] = 0.0
         state["last_consolidated_at"] = now
         _save_fixation_state(uid, state, char_id=char_id)

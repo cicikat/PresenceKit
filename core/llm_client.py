@@ -1018,10 +1018,14 @@ def _build_xml_tool_desc(tools: list[dict]) -> str:
 
 _VALID_EMOTIONS = frozenset({"neutral", "happy", "sad", "gentle", "surprised", "angry", "thinking", "sleepy"})
 
-_SUMMARIZE_SYSTEM = (
-    "把下面这轮对话压缩成 8-15 字的客观陈述句，主语用「用户」，只描述发生了什么，"
-    "不要情感修饰，不要加引号。直接输出陈述句，不要任何前缀。"
-)
+def _build_summarize_system(char_name: str) -> str:
+    """mid_term 压缩 prompt：用户与角色分别归属（M3），不再强制主语为「用户」。"""
+    return (
+        "把下面这轮对话压缩成一句客观陈述，总长不超过 40 字，分别归属说话人，"
+        f"格式如「用户：说了/做了什么；{char_name}：回应了什么」。"
+        "用户的话和角色的话不要混写，角色的回应、判断和结论不要归到用户头上；"
+        "不要情感修饰，不要加引号。直接输出陈述句，不要任何前缀。"
+    )
 
 # Brief 97 §3：trigger 轮的 user_msg 是 scheduler/sensor 的种子旁白，不是真实用户发言——
 # 沿用 _SUMMARIZE_SYSTEM 会把旁白当"用户做了什么"概括进 mid_term，冷启动首轮典型产出
@@ -1107,8 +1111,17 @@ async def summarize_long_user_message(content: str) -> str | None:
     return None
 
 
+def _summarize_char_name(char_id: str | None) -> str:
+    from core.character_name_provider import get_char_name
+    try:
+        return get_char_name(char_id)
+    except Exception:
+        return get_char_name()
+
+
 async def summarize_turn(
-    user_msg: str, reply: str, tags: list[str] | None = None, *, is_trigger_turn: bool = False
+    user_msg: str, reply: str, tags: list[str] | None = None, *, is_trigger_turn: bool = False,
+    char_id: str | None = None,
 ) -> str:
     """把一轮对话压缩成 8-15 字客观陈述。失败/过短走规则 fallback。
 
@@ -1122,7 +1135,10 @@ async def summarize_turn(
         return _rule_fallback(user_msg, reply, tags, is_trigger_turn=is_trigger_turn)
     try:
         is_group_projection = "group_chat" in (tags or [])
-        system_prompt = _SUMMARIZE_SYSTEM_TRIGGER if is_trigger_turn else _SUMMARIZE_SYSTEM
+        system_prompt = (
+            _SUMMARIZE_SYSTEM_TRIGGER if is_trigger_turn
+            else _build_summarize_system(_summarize_char_name(char_id))
+        )
         if is_group_projection:
             system_prompt += (
                 "\n这是群聊投影：必须用第三人称并保留名字归属，例如“甲说了…，乙回应…”。"
@@ -1145,7 +1161,7 @@ async def summarize_turn(
             return PreparedAttempt(
                 messages=styled,
                 gen_kwargs={
-                    "max_tokens": 80 if is_group_projection else 40,
+                    "max_tokens": 120 if is_group_projection else 80,
                     "temperature": 0.3,
                     "timeout": category_timeout("summary"),
                 },
@@ -1165,7 +1181,7 @@ async def summarize_turn(
             raise outcome.error or RuntimeError(outcome.skip_reason or "summary_failed")
         result = outcome.value.assistant_text.strip()
         result = result.strip('"\'"""''')
-        result = result[:60 if is_group_projection else 30]
+        result = result[:60]
         if not result:
             return _rule_fallback(user_msg, reply, tags, is_trigger_turn=is_trigger_turn)
         return result

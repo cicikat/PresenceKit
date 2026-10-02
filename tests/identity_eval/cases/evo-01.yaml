@@ -4,9 +4,20 @@ sessions:
       trust_pattern: {text: "尚在谨慎观察，较少主动托付", confidence: 0.7, evidence_count: 10}
   - fixation:
       episodic:
-        - {id: evo01-e1, narrative_summary: "用户连续多次主动托付重要决定", topic_keywords: [信任], strength: 0.9}
+        - {id: evo01-e1, narrative_summary: "用户连续多次主动托付重要决定", user_said: ["用户连续多次主动托付重要决定"], topic_keywords: [信任], strength: 0.9, occurred_days_ago: 0}
+        - {id: evo01-e2, narrative_summary: "用户连续多次主动托付重要决定", user_said: ["用户连续多次主动托付重要决定"], topic_keywords: [信任], strength: 0.9, occurred_days_ago: 1}
+        - {id: evo01-e3, narrative_summary: "用户连续多次主动托付重要决定", user_said: ["用户连续多次主动托付重要决定"], topic_keywords: [信任], strength: 0.9, occurred_days_ago: 2}
+        - {id: evo01-e4, narrative_summary: "用户连续多次主动托付重要决定", user_said: ["用户连续多次主动托付重要决定"], topic_keywords: [信任], strength: 0.9, occurred_days_ago: 3}
+        - {id: evo01-e5, narrative_summary: "用户连续多次主动托付重要决定", user_said: ["用户连续多次主动托付重要决定"], topic_keywords: [信任], strength: 0.9, occurred_days_ago: 4}
+        - {id: evo01-e6, narrative_summary: "用户连续多次主动托付重要决定", user_said: ["用户连续多次主动托付重要决定"], topic_keywords: [信任], strength: 0.9, occurred_days_ago: 5}
+        - {id: evo01-e7, narrative_summary: "用户连续多次主动托付重要决定", user_said: ["用户连续多次主动托付重要决定"], topic_keywords: [信任], strength: 0.9, occurred_days_ago: 6}
+        - {id: evo01-e8, narrative_summary: "用户连续多次主动托付重要决定", user_said: ["用户连续多次主动托付重要决定"], topic_keywords: [信任], strength: 0.9, occurred_days_ago: 7}
+        - {id: evo01-e9, narrative_summary: "用户连续多次主动托付重要决定", user_said: ["用户连续多次主动托付重要决定"], topic_keywords: [信任], strength: 0.9, occurred_days_ago: 8}
+        - {id: evo01-e10, narrative_summary: "用户连续多次主动托付重要决定", user_said: ["用户连续多次主动托付重要决定"], topic_keywords: [信任], strength: 0.9, occurred_days_ago: 9}
+        - {id: evo01-e11, narrative_summary: "用户连续多次主动托付重要决定", user_said: ["用户连续多次主动托付重要决定"], topic_keywords: [信任], strength: 0.9, occurred_days_ago: 10}
+        - {id: evo01-e12, narrative_summary: "用户连续多次主动托付重要决定", user_said: ["用户连续多次主动托付重要决定"], topic_keywords: [信任], strength: 0.9, occurred_days_ago: 11}
       response:
-        trust_pattern: {text: "已逐渐愿意主动托付重要决定", confidence: 0.9, evidence_count: 12, counter_evidence_count: 0}
+        trust_pattern: {text: "已逐渐愿意主动托付重要决定", confidence: 0.9, evidence_episodes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], counter_evidence_count: 0}
 query: "我们的信任现在到了什么程度？"
 expect:
   identity_contains: ["已逐渐愿意主动托付重要决定"]

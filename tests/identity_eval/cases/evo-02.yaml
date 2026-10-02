@@ -4,9 +4,18 @@ sessions:
       sleep_pattern: {text: "习惯早睡早起", confidence: 0.8, evidence_count: 10}
   - fixation:
       episodic:
-        - {id: evo02-e1, narrative_summary: "近期稳定改为夜间工作、上午休息", topic_keywords: [作息], strength: 0.85}
+        - {id: evo02-e1, narrative_summary: "近期稳定改为夜间工作、上午休息", user_said: ["近期稳定改为夜间工作、上午休息"], topic_keywords: [作息], strength: 0.85, occurred_days_ago: 0}
+        - {id: evo02-e2, narrative_summary: "近期稳定改为夜间工作、上午休息", user_said: ["近期稳定改为夜间工作、上午休息"], topic_keywords: [作息], strength: 0.85, occurred_days_ago: 1}
+        - {id: evo02-e3, narrative_summary: "近期稳定改为夜间工作、上午休息", user_said: ["近期稳定改为夜间工作、上午休息"], topic_keywords: [作息], strength: 0.85, occurred_days_ago: 2}
+        - {id: evo02-e4, narrative_summary: "近期稳定改为夜间工作、上午休息", user_said: ["近期稳定改为夜间工作、上午休息"], topic_keywords: [作息], strength: 0.85, occurred_days_ago: 3}
+        - {id: evo02-e5, narrative_summary: "近期稳定改为夜间工作、上午休息", user_said: ["近期稳定改为夜间工作、上午休息"], topic_keywords: [作息], strength: 0.85, occurred_days_ago: 4}
+        - {id: evo02-e6, narrative_summary: "近期稳定改为夜间工作、上午休息", user_said: ["近期稳定改为夜间工作、上午休息"], topic_keywords: [作息], strength: 0.85, occurred_days_ago: 5}
+        - {id: evo02-e7, narrative_summary: "近期稳定改为夜间工作、上午休息", user_said: ["近期稳定改为夜间工作、上午休息"], topic_keywords: [作息], strength: 0.85, occurred_days_ago: 6}
+        - {id: evo02-e8, narrative_summary: "近期稳定改为夜间工作、上午休息", user_said: ["近期稳定改为夜间工作、上午休息"], topic_keywords: [作息], strength: 0.85, occurred_days_ago: 7}
+        - {id: evo02-e9, narrative_summary: "近期稳定改为夜间工作、上午休息", user_said: ["近期稳定改为夜间工作、上午休息"], topic_keywords: [作息], strength: 0.85, occurred_days_ago: 8}
+        - {id: evo02-e10, narrative_summary: "近期稳定改为夜间工作、上午休息", user_said: ["近期稳定改为夜间工作、上午休息"], topic_keywords: [作息], strength: 0.85, occurred_days_ago: 9}
       response:
-        sleep_pattern: {text: "近期稳定为夜间工作、上午休息", confidence: 0.8, evidence_count: 10, counter_evidence_count: 0}
+        sleep_pattern: {text: "近期稳定为夜间工作、上午休息", confidence: 0.8, evidence_episodes: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], counter_evidence_count: 0}
 query: "我最近的作息有什么变化？"
 expect:
   identity_contains: ["近期稳定为夜间工作、上午休息"]

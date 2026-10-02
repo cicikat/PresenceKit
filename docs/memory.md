@@ -792,7 +792,9 @@ score = intensity * decay + relevance
 位于 `core/memory/fixation_pipeline.py`，异步慢队列触发。
 
 prompt 格式：单轮 user 消息，客观分析器视角，要求 LLM 输出纯 JSON，字段如下：
-- raw_facts：用户说了什么的客观事实列表（list，3条左右）
+- user_said / char_reading（M3）：用户明确说出的内容（尽量贴原话） / 角色当时的理解推测（明确标为理解）。
+  输入除 mid_term 摘要外，还会按 `source_event_ids` 取对应**用户原话**（每条 ≤120 字、总 ≤1200 字，事件账本读取，fail-open）。
+  `raw_facts` 保留为两者合并（兼容老读者）；旧输出只有 `raw_facts` 时 `user_said` 视为缺省。`user_state` 标注为推测
 - topic_keywords：3到5个话题关键词，用于未来召回（list）
 - user_state：用户当时状态的短语，如 stressed_about_work / tired（str）
 - narrative_summary：一句自然语言描述发生了什么，15字以内（str）
@@ -1021,10 +1023,13 @@ LLM 异常时降级 warning，不阻塞主流程。
 消息框定（"场景旁白（非用户发言，不代表已发生的事）:..."），阻止旁白被当成"已发生
 的事"概括进 mid_term。此前的泄漏路径是 `post_process_slow` 把 `content`（即触发器的
 括号旁白文本）原样当 `user_content` 塞进 `summarize_to_midterm` payload，
-`_SUMMARIZE_SYSTEM` 又要求"主语用「用户」，只描述发生了什么"，两者叠加后
+旧版压缩 prompt 又要求"主语用「用户」，只描述发生了什么"，两者叠加后
 LLM 会把旁白编成"已发生的事"（冷启动首轮典型产出："她收到日记分析提醒并回复了
 近况"）。`reflect_to_episodic` 早已用 `is_trigger_turn` 过滤 trigger 轮不铸造 episodic
 （P0 trigger boundary），但 mid_term 本身此前没有同等隔离。
+
+**归属分开（M3）**：非 trigger 轮的压缩 prompt 改为「用户：说了/做了什么；{角色名}：回应了什么」，总长 ≤40 字，
+角色名经 `get_char_name(char_id)` 插值；不再强制主语为「用户」，避免角色的回应和结论被归到用户头上。
 
 ### 注入
 
@@ -1067,7 +1072,7 @@ prompt 层位于 `6c_episodic` 和 `6d_diary` 之间，参数名 `mid_term_conte
 每个维度字段：
 - `text`：第三人称"她"开头的短句
 - `confidence`：0-1，把握度
-- `evidence_count`：支持证据条数
+- `evidence_count`：证据覆盖的**不同自然日数**（M3：由代码按所引 episode 的日期计算，同一天多条只算 1；`evidence_days` 记录日期，沿用旧 text 时累计并集）
 - `last_updated`：更新时间
 - `counter_evidence_count` / `last_conflict_at`：冲突证据兼容字段，缺失时读取层补默认值
 
@@ -1082,7 +1087,10 @@ capture_turn → summarize_to_midterm → reflect_to_episodic → consolidate_to
 整条 slow_queue 链路均携带 `char_id`（入队时的角色快照），确保即使用户在任务执行前切换角色，写入也只落入对应角色桶。每个 handler 读取 payload 中的 `char_id`；缺失时 WARN fallback yexuan（DLQ 兼容层）。
 
 `consolidate_to_identity` 会读取旧 identity、未固化 episodic、user_profile，让 LLM 只固化跨多条
-episode 反复出现的模式。它写入 YAML 前会备份旧文件为 `.yaml.bak`，写完后标记对应 episodic 的
+episode 反复出现的模式。**输入只给每条 episode 的编号 + 日期 + `user_said`（用户明确说过的话）**，不再给
+`char_reading` / `narrative_summary`（角色解读不当事实证据；旧 episode 无 `user_said` 时退回 `raw_facts`）；
+`voice_low_confidence`（A3 的语音低置信标记，缺失按非语音）的 episode 不参与证据。LLM 输出每个维度的
+`evidence_episodes`（所依据的编号），证据数由代码按这些 episode 覆盖的不同自然日计算，不采信模型自报的 `evidence_count`。它写入 YAML 前会备份旧文件为 `.yaml.bak`，写完后标记对应 episodic 的
 `consolidated_at`，并重置 `fixation_state` 计数器。
 
 ---
@@ -1395,7 +1403,9 @@ episodic 上限裁剪淘汰的条目不再走 `consolidate_to_identity`/`reflect
 |---|---|
 | `last_consolidated_at` | 上次固化时间戳 |
 | `episodic_since_last` | 上次固化后新增 episodic 数量 |
-| `high_strength_since_last` | 其中 strength ≥ 0.6 的数量 |
+| `high_strength_since_last` | 其中 strength ≥ 0.6 的数量（观测用） |
+| `high_strength_days` | 这些高强度 episodic 覆盖的自然日（去重，M3 触发条件 1 使用） |
+| `open_emotional_run` | M2：打开中的情绪段落缓冲 |
 | `strength_accumulated` | 上次固化后累积 strength 和 |
 | `last_sweep_at` | 上次 sweep 时间戳 |
 | `salvaged_dates` | event_log_salvage 已处理的 `YYYY-MM-DD` 列表，滚动保留 60 个（Brief 46 §2） |
@@ -1404,7 +1414,7 @@ episodic 上限裁剪淘汰的条目不再走 `consolidate_to_identity`/`reflect
 
 | 条件 | 说明 |
 |---|---|
-| `high_strength_since_last ≥ 5` | 5条高强度记忆 |
+| `high_strength_days` 去重后 ≥ 3 | 高强度记忆来自 ≥3 个不同自然日（M3；一场争执拆成多条也只算一天） |
 | `strength_accumulated ≥ 4.0` | 累积强度达标 |
 | `距上次固化 ≥ 24h AND episodic_since_last ≥ 3` | 自然老化 |
 
@@ -1825,6 +1835,10 @@ Phase 6 之前现实对话对 hidden_state 零写入（只被 Dream 单向喂养
 
 ### important_facts 条目格式
 
+**抽取口径（M3）**：`user_profile.extract_and_update` 只喂用户轮，且只记用户**自己明确说出**的、关于自己的事实
+（生活习惯、重要经历、身体状况、明确偏好）；不再有「性格特点」「精神状态」「稳定的情感/关系」这类推断类目，
+不确定是否是用户原意的不写。`input_modality=="voice"` 且 `asr_low_confidence` 的轮次（A3 标记，缺失按非语音）不参与抽取。
+
 `important_facts` 元素升级为兼容 dict 格式：
 
 ```json
@@ -1841,7 +1855,7 @@ Phase 6 之前现实对话对 hidden_state 零写入（只被 Dream 单向喂养
 | `pref.food` | 饮食偏好 | recency 门控 |
 | `pref.media` | 影视/游戏偏好 | recency 门控 |
 | `habit` | 日常习惯 | recency 门控 |
-| `health` | 身体/精神状态 | recency 门控 |
+| `health` | 身体状况 | recency 门控 |
 | `stable` | 历史稳定自由文本 | archival，默认不注入 |
 | `misc` | 其他（旧数据默认） | archival，默认不注入 |
 

@@ -129,9 +129,13 @@ def test_load_fixation_state_missing_field(sandbox):
 
 def test_should_consolidate_condition1(sandbox):
     from core.memory.fixation_pipeline import _should_consolidate
+    # M3：高强度 episodic 需来自 ≥3 个不同自然日；同一天多条只算一天
     state = {"high_strength_since_last": 5, "strength_accumulated": 0.0,
+             "high_strength_days": ["2026-01-01", "2026-01-02", "2026-01-03"],
              "last_consolidated_at": time.time(), "episodic_since_last": 0}
     assert _should_consolidate(state) is True
+    state["high_strength_days"] = ["2026-01-01"]
+    assert _should_consolidate(state) is False
 
 
 def test_should_consolidate_condition2(sandbox):

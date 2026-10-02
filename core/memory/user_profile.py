@@ -534,7 +534,12 @@ async def extract_and_update(user_id: str, recent_messages: list[dict], *, char_
         return
 
     # 只喂用户轮——角色发言不是事实证据，防止角色幻觉被当事实写入画像
-    user_turns = [m for m in recent_messages if m.get("role") == "user"]
+    # 语音转写且低置信的轮次（A3 标记；缺字段按非语音处理）不参与事实抽取
+    user_turns = [
+        m for m in recent_messages
+        if m.get("role") == "user"
+        and not (m.get("input_modality") == "voice" and m.get("asr_low_confidence"))
+    ]
     conv_text = "\n".join(m["content"] for m in user_turns[-10:])
 
     existing_facts = load(user_id, char_id=char_id).get("important_facts") or []
@@ -563,10 +568,11 @@ async def extract_and_update(user_id: str, recent_messages: list[dict], *, char_
                 "- noop：新信息与某条现有事实语义重复（说的是同一件事，没有新增信息），"
                 "target_index 填该条 index，text 可留空。\n"
                 "没有可对照的新证据时，important_facts 填 []。\n"
-                "tag 从以下受控集合中选择：pref.music（音乐偏好）/ pref.food（饮食偏好）/ pref.media（影视/游戏偏好）/ habit（日常习惯）/ health（身体/精神状态）/ status.project（用户最近在做的事、在开发的项目、临时近况）/ stable（稳定的性格/观点/情感/关系等长期概况）/ misc（其他）。\n"
-                "情感、价值观、性格、关系定位 → stable；具体口味、在追的作品、手头项目、近期状态 → 对应 pref.*/status.project，不要塞进 stable。\n"
+                "tag 从以下受控集合中选择：pref.music（音乐偏好）/ pref.food（饮食偏好）/ pref.media（影视/游戏偏好）/ habit（日常习惯）/ health（身体状况）/ status.project（用户最近在做的事、在开发的项目、临时近况）/ stable（用户自己明确说出的长期观点、价值观）/ misc（其他）。\n"
+                "用户自己明确说出的长期观点/价值观 → stable；具体口味、在追的作品、手头项目、近期状态 → 对应 pref.*/status.project，不要塞进 stable。\n"
                 "ts 填写当前 Unix 时间戳（秒），用于判断事实新鲜度。\n"
-                "important_facts 只记录稳定的、有意义的个人事实，例如：性格特点、生活习惯、重要经历、身体状况（包括精神状态）、明确的偏好（喜欢/不喜欢）。\n"
+                "important_facts 只记录用户【自己明确说出】的、关于自己的稳定事实，例如：生活习惯、重要经历、身体状况、明确的偏好（喜欢/不喜欢）。\n"
+                "不要根据语气或上下文推断用户的性格、心理状态或情感关系；不确定是否是用户原意的，不写。\n"
                 "绝对不要记录：用户测试AI功能的行为、单次询问某件事、临时状态、对话中的玩笑或表情包、已经在其他字段记录的信息。\n"
                 "没有提到的字段填 null。"
             ),
