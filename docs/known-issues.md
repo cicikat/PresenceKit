@@ -49,7 +49,7 @@ G1 诊断（`core/dlq_inspect.py` 按错误末行分类，与人工逐条核对�
 记忆固化管线本身未发现缺陷，所以本单没改它（`consolidate_to_identity` / `reflect_to_episodic` 是记忆写入点，受 `AGENTS.md`
 规则 6 约束）。9 个 400 若在修好路由后仍复现，再单独开工单查是 prompt/参数问题。
 **止血决定：不重放。** 失败原因没消除（该 preset 近 7 天仍 97%+ 失败），重放只会再失败一次并让积压翻倍；
-重放脚本待路由修好后再做（需 dry-run 默认、小批次、可重入）。积压原样保留，未删除任何一个。
+**更新 2026-10-02**：用户已把路由换成 gemini-2.5-flash，真实调用 9/9 成功（detect_emotion/summary/consolidation，1–7 秒；detect_emotion 首次 6.6 秒贴近 10 秒预算）。已提供 `scripts/replay_dlq.py`（dry-run 默认、`--batch-size` 小批次、连续失败即停、成功才归档到 `dead_letter_queue/replayed/`、不删除、可重入、**服务运行时拒绝写入**，因为用户锁是进程内的）。干跑结果：97 个里 44 个 reflect 任务的 mid_term 早已被后续处理（免调模型，仅归档）、48 个 consolidate 只对应 3 个角色范围（只需 3 次模型调用，其余 45 个按「已覆盖」归档）、practice_session×4 与 toy_autogrow×1 与过去时刻绑定，不重放、原样保留。`open`：真实回放尚未执行（需先停后端）。
 本单只做了可见性：`GET /observe/runtime`（`memory.read`）的 `dead_letter_queue` 现带 `by_task_type`
 （含各自失败原因与最早/最新时间）、`reasons`、`oldest_failed_at`、`cap`、`recent_samples`（错误末行，已脱敏
 截断，**不含任务载荷**），旧字段 `count`/`recent` 保留；`dlq_monitor` 由 24h 改 6h，按「首次/增长/满 24h」
