@@ -875,7 +875,7 @@ def list_self(
                     continue
                 if not _is_within(final, root.resolve()):
                     continue
-                rel_child = str(child.relative_to(root)).replace("\\", "/")
+                rel_child = str(Path(os.path.realpath(child)).relative_to(root.resolve())).replace("\\", "/")
                 if child.is_dir():
                     entries.append({"path": rel_child, "kind": "directory", "size": 0})
                     if remaining > 1:

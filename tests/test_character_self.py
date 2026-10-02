@@ -454,3 +454,17 @@ def test_remote_server_keeps_self_tools(monkeypatch):
         assert allowed is True, (name, reason)
     projection = {item.logical_name: item for item in dep.capability_projection()}
     assert projection["self_create"].status == "enabled"
+
+
+def test_list_works_when_self_root_is_relative(sandbox, monkeypatch):
+    """生产里 data 根是相对路径，list 的子项由 resolve 后的绝对路径遍历而来。"""
+    _create("memory/a.md", "x")
+    real = sandbox.character_self_root
+    monkeypatch.setattr(
+        type(sandbox), "character_self_root",
+        lambda self, *a, **k: type(real(*a, **k))(os.path.relpath(real(*a, **k))),
+        raising=False,
+    )
+    listed = _list(depth=2)
+    assert listed["ok"] is True
+    assert {"path": "memory", "kind": "directory", "size": 0} in listed["entries"]
