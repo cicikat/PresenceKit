@@ -2799,7 +2799,7 @@ async def _execute_structured_impl(
         if is_group or origin not in {"assistant_loop", "autonomy_loop"} or not feature_enabled():
             return _execution_outcome("tool_failed", "Self Capability history is unavailable in this context.")
 
-    if tool_name in {"read_long_user_message", "search_events", "expand_event_window", "get_related_events", "search_memory_dossiers", "read_memory_dossier", "search_dossier_events", "update_memory_dossier", "get_memory_consolidation_status", "request_memory_consolidation", "read_life_records", "reread_image", "write_artifact", "read_artifact", "list_artifacts"} and is_group:
+    if tool_name in {"read_long_user_message", "search_events", "expand_event_window", "get_related_events", "search_memory_dossiers", "read_memory_dossier", "search_dossier_events", "update_memory_dossier", "get_memory_consolidation_status", "request_memory_consolidation", "read_life_records", "reread_image", "write_artifact", "update_artifact", "read_artifact", "list_artifacts"} and is_group:
         _trace("failed", "reality_event_tools_forbidden_in_group")
         return _execution_outcome("tool_failed")
 
@@ -3015,7 +3015,7 @@ async def _execute_structured_impl(
                 # Preserve the historical signature for test/local extensions
                 # that replace the legacy callable in the registry.
                 result = await func(user_id=user_id, **tool_args)
-        elif tool_name in ("read_toy_file", "write_toy_file", "write_artifact", "read_artifact", "list_artifacts", "drink_with_user"):
+        elif tool_name in ("read_toy_file", "write_toy_file", "write_artifact", "update_artifact", "read_artifact", "list_artifacts", "drink_with_user"):
             result = await func(user_id=user_id, char_id=char_id, **tool_args)
         elif tool_name in {
             "get_listening_state", "get_listening_queue", "get_listening_history",

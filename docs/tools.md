@@ -650,8 +650,9 @@ self_access:
 
 | 工具名 | 触发描述 | 执行方式 |
 |---|---|---|
-| `write_artifact` | 用户明确要一份可下载文本文件 | 沙盒 `runtime/chat_artifacts/{char_id}/{uid}/`，扩展名白名单，单文件 256k 字符 |
-| `read_artifact` | 读取本轮或近期产物正文 | 只读沙盒产物，截断 12k 字符 |
+| `write_artifact` | 用户明确要一份可下载文本文件 | 沙盒 `runtime/chat_artifacts/{char_id}/{uid}/`，扩展名白名单，单文件 256k 字符；超过 50 个上限淘汰最旧产物时写 INFO 日志 |
+| `update_artifact` | 改之前给对方的文件（不要再新建一份） | 原地覆盖同一 id，`revision+1`、更新 `updated_at`/`size`，只留一版 `{id}.prev{ext}`；可选 `expected_sha256`（取自 `read_artifact`）防并发覆盖；本轮 payload 带 `updated: true` |
+| `read_artifact` | 读取本轮或近期产物正文 | 只读沙盒产物，截断 12k 字符；返回 `revision` 与 `sha256` |
 | `list_artifacts` | 列出近期产物元数据 | 不含正文与绝对路径 |
 
 成功写入后本轮 `artifacts[]` 只给 desktop/mobile：id/filename/mime/size/download_url，可预览时加 preview_url。HTML/txt 预览走 `GET /chat/artifacts/{id}/preview`，CSP 禁脚本；js/py 可写不可预览。不是 workspace_*，也不是聊天里的 coding agent。

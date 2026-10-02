@@ -1,5 +1,10 @@
 # docs/known-issues.md — 已知问题与技术债
 
+## 聊天产物编辑的剩余缺口（工单 A6，2026-10，roadmap）
+
+`update_artifact` 已支持原地改文本产物（保留一版 `.prev`）。仍未做：前端产物文件列表与历史版本入口；
+二进制产物（目前仅文本扩展名白名单）。
+
 ## 语音转写整段等齐才开始（工单 B，2026-10-01，open）
 
 两条转写路径（本地 faster-whisper、远程 `audio/transcriptions`）都是整段音频到齐才开始识别，没有流式/

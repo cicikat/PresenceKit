@@ -121,7 +121,7 @@
 | `process_run` | system | execute | dangerous | workspace 内程序 | workspace | 无通用撤销 | `/observability/agent-runtime-processes` |
 | `browser_automation` | browser | write | 高风险 one-shot | 域名 allowlist | 私有 profile | 无 | 设置面；旧 observability 路由已 retired |
 | `manage_self_capability` | self_management | write | expected_revision + action_id | overlay grant | self_management state | revision CAS | character-permissions |
-| `write_artifact` / `read_artifact` / `list_artifacts` | artifacts | write/read | 无 | uid+char | `chat_artifacts` | 非 workspace | `/observability/chat-artifacts` |
+| `write_artifact` / `update_artifact` / `read_artifact` / `list_artifacts` | artifacts | write/read | 无 | uid+char | `chat_artifacts` | 非 workspace | `/observability/chat-artifacts` |
 | 动态 `mcp__*` | mcp | 按 local policy | 按 policy | MCP session | 外部 | 未知结果 fail-closed | MCP 设置 |
 
 **C current：** `self_list` / `self_read` / `self_create` / `self_update` / `self_move` / `self_delete` / `self_restore`（category `info`，写工具默认 grant、不经 danger 闸，autonomy 沙盒白名单含 self 写）。**E current：** reminder `list/get/add/update/cancel/restore`。**F current：** `start_agent_task` / `get_agent_task` / `cancel_agent_task`。

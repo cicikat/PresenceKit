@@ -118,7 +118,7 @@ Dream settings 归属为 per-character：`GET/PATCH /dream/settings` 读写当�
 
 ## 聊天产物文件（2026-09-16）
 
-Path C `artifacts` 类（`write_artifact` / `read_artifact` / `list_artifacts`）写出沙盒文本文件；不进 Path A 探针。没有独立客户端开关，暴露面由 tool loop categories / 角色 `presence_ext.tool_categories` 决定。管理面观测页 `observe-chat-artifacts` 只读元数据（state.read）；下载/预览走 chat scope。桌面气泡消费 live payload，不新增设置。手机 UI 为 roadmap。
+Path C `artifacts` 类（`write_artifact` / `update_artifact` / `read_artifact` / `list_artifacts`）写出沙盒文本文件；不进 Path A 探针。没有独立客户端开关，暴露面由 tool loop categories / 角色 `presence_ext.tool_categories` 决定。管理面观测页 `observe-chat-artifacts` 只读元数据（state.read）；下载/预览走 chat scope。桌面气泡消费 live payload，不新增设置。手机 UI 为 roadmap。
 
 ## 资料接续（2026-09-13）
 

@@ -13,7 +13,7 @@ from core.tools import chat_artifacts
 
 _ARTIFACT_TOOL_SPECS = {
     name: dict(tool_dispatcher._TOOL_REGISTRY[name])
-    for name in ("write_artifact", "read_artifact", "list_artifacts")
+    for name in ("write_artifact", "update_artifact", "read_artifact", "list_artifacts")
 }
 
 
@@ -55,6 +55,93 @@ def test_write_read_list_roundtrip(sandbox):
     ))
     assert read["content"] == "# hi"
     assert read["truncated"] is False
+
+
+def test_update_artifact_in_place_keeps_prev_and_revision(sandbox):
+    written = _write("plan.md", "v1")
+    chat_artifacts.begin_turn_collection()
+    updated = json.loads(chat_artifacts.update_artifact(
+        written["id"], "v2 内容", user_id="u1", char_id=TEST_CHAR_ID,
+    ))
+    pending = chat_artifacts.drain_turn_artifacts()
+    assert updated["status"] == "updated"
+    assert updated["id"] == written["id"]
+    assert updated["revision"] == 2
+    assert pending and pending[0]["id"] == written["id"] and pending[0]["updated"] is True
+    read = json.loads(chat_artifacts.read_artifact(
+        written["id"], user_id="u1", char_id=TEST_CHAR_ID,
+    ))
+    assert read["content"] == "v2 内容"
+    assert read["revision"] == 2
+    root = sandbox.chat_artifacts_dir("u1", char_id=TEST_CHAR_ID)
+    assert (root / f"{written['id']}.prev.md").read_text(encoding="utf-8") == "v1"
+    record = chat_artifacts.get_artifact_record(written["id"], uid="u1", char_id=TEST_CHAR_ID)
+    assert record["size"] == len("v2 内容".encode("utf-8"))
+    assert record["updated_at"] >= record["created_at"]
+    listed = json.loads(chat_artifacts.list_artifacts(user_id="u1", char_id=TEST_CHAR_ID))
+    assert listed["count"] == 1
+    json.loads(chat_artifacts.update_artifact(
+        written["id"], "v3", user_id="u1", char_id=TEST_CHAR_ID,
+    ))
+    assert (root / f"{written['id']}.prev.md").read_text(encoding="utf-8") == "v2 内容"
+
+
+def test_update_artifact_rejects_cross_scope_and_missing(sandbox):
+    written = _write("plan.md", "v1")
+    with pytest.raises(chat_artifacts.ArtifactError, match="找不到"):
+        chat_artifacts.update_artifact(written["id"], "x", user_id="u2", char_id=TEST_CHAR_ID)
+    with pytest.raises(chat_artifacts.ArtifactError, match="找不到"):
+        chat_artifacts.update_artifact(written["id"], "x", user_id="u1", char_id="other_char")
+    with pytest.raises(chat_artifacts.ArtifactError, match="找不到"):
+        chat_artifacts.update_artifact("f" * 32, "x", user_id="u1", char_id=TEST_CHAR_ID)
+    read = json.loads(chat_artifacts.read_artifact(written["id"], user_id="u1", char_id=TEST_CHAR_ID))
+    assert read["content"] == "v1"
+
+
+def test_update_artifact_sha_conflict(sandbox):
+    written = _write("plan.md", "v1")
+    sha = json.loads(chat_artifacts.read_artifact(
+        written["id"], user_id="u1", char_id=TEST_CHAR_ID,
+    ))["sha256"]
+    ok = json.loads(chat_artifacts.update_artifact(
+        written["id"], "v2", expected_sha256=sha, user_id="u1", char_id=TEST_CHAR_ID,
+    ))
+    assert ok["revision"] == 2
+    with pytest.raises(chat_artifacts.ArtifactError, match="sha256"):
+        chat_artifacts.update_artifact(
+            written["id"], "v3", expected_sha256=sha, user_id="u1", char_id=TEST_CHAR_ID,
+        )
+    read = json.loads(chat_artifacts.read_artifact(written["id"], user_id="u1", char_id=TEST_CHAR_ID))
+    assert read["content"] == "v2"
+
+
+def test_update_artifact_concurrent_sha_only_one_wins(sandbox):
+    from concurrent.futures import ThreadPoolExecutor
+    written = _write("plan.md", "v1")
+    sha = json.loads(chat_artifacts.read_artifact(
+        written["id"], user_id="u1", char_id=TEST_CHAR_ID,
+    ))["sha256"]
+
+    def attempt(text):
+        try:
+            chat_artifacts.update_artifact(
+                written["id"], text, expected_sha256=sha, user_id="u1", char_id=TEST_CHAR_ID,
+            )
+            return True
+        except chat_artifacts.ArtifactError:
+            return False
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        results = list(pool.map(attempt, [f"w{i}" for i in range(4)]))
+    assert results.count(True) == 1
+
+
+def test_overflow_eviction_logs_info(sandbox, caplog, monkeypatch):
+    monkeypatch.setattr(chat_artifacts, "MAX_FILES_PER_SCOPE", 2)
+    with caplog.at_level("INFO", logger=chat_artifacts.logger.name):
+        for i in range(3):
+            _write(f"n{i}.md", "x")
+    assert any("淘汰最旧产物" in r.getMessage() for r in caplog.records)
 
 
 def test_read_artifact_redacts_secrets_before_truncate(sandbox):
@@ -146,6 +233,21 @@ async def test_artifact_tools_are_path_c_not_probe(sandbox, monkeypatch):
     )
     assert result.confirmation_request is None
     assert "written" in result.result
+    written_id = json.loads(result.result[result.result.index("{"):])["id"]
+    updated = await tool_dispatcher.execute_structured(
+        "update_artifact",
+        {"artifact_id": written_id, "content": "hello again"},
+        "u1",
+        "u1",
+        False,
+        _Session(),
+        origin="assistant_loop",
+        char_id=TEST_CHAR_ID,
+    )
+    assert "updated" in updated.result
+    assert tool_dispatcher.is_side_effect_tool("update_artifact")
+    assert tool_dispatcher._TOOL_REGISTRY["update_artifact"]["category"] == "artifacts"
+    assert tool_dispatcher._TOOL_REGISTRY["update_artifact"]["examples"]
     assert tool_dispatcher.is_side_effect_tool("write_artifact")
     spec = tool_dispatcher._TOOL_REGISTRY["write_artifact"]
     assert spec["category"] == "artifacts"
@@ -186,6 +288,8 @@ def test_download_preview_and_observability_scopes(sandbox, monkeypatch):
     download = client.get(f"/chat/artifacts/{written['id']}", headers=chat_headers)
     assert download.status_code == 200
     assert download.content == b"<p>hi</p>"
+    chat_artifacts.update_artifact(written["id"], "<p>new</p>", user_id="u1", char_id=TEST_CHAR_ID)
+    assert client.get(f"/chat/artifacts/{written['id']}", headers=chat_headers).content == b"<p>new</p>"
     assert download.headers.get("x-content-type-options") == "nosniff"
     preview = client.get(f"/chat/artifacts/{written['id']}/preview", headers=chat_headers)
     assert preview.status_code == 200

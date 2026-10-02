@@ -7,8 +7,11 @@ or file bodies.
 
 from __future__ import annotations
 
+import hashlib
 import json
+import logging
 import re
+import shutil
 import threading
 import time
 import uuid
@@ -18,6 +21,8 @@ from pathlib import Path
 from core.data_paths import DEFAULT_CHAR_ID, safe_user_id
 from core.safe_write import safe_write_json, safe_write_text
 from core.sandbox import get_paths
+
+logger = logging.getLogger(__name__)
 
 MAX_CONTENT_CHARS = 256_000
 MAX_READ_CHARS = 12_000
@@ -204,13 +209,31 @@ def resolve_artifact_scope(artifact_id: str) -> dict | None:
     return {"id": artifact_id, "uid": uid, "char_id": char_id}
 
 
-def _collect(record: dict) -> None:
+def _collect(record: dict, *, updated: bool = False) -> None:
     bucket = _turn_artifacts.get()
     if bucket is None:
         return
+    payload = public_payload(record)
+    if updated:
+        payload["updated"] = True
+        for index, existing in enumerate(bucket):
+            if existing.get("id") == payload["id"]:
+                bucket[index] = payload
+                return
     if len(bucket) >= MAX_FILES_PER_TURN:
         raise ArtifactError(f"这一轮最多写 {MAX_FILES_PER_TURN} 个文件")
-    bucket.append(public_payload(record))
+    bucket.append(payload)
+
+
+def _prev_path(root: Path, artifact_id: str, filename: str) -> Path:
+    ext = Path(filename).suffix.lower()
+    target = root / f"{artifact_id}.prev{ext}"
+    _assert_within(root, target)
+    return target
+
+
+def _sha256_text(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def write_artifact(
@@ -248,6 +271,7 @@ def write_artifact(
             "mime": mime,
             "size": len(content.encode("utf-8")),
             "created_at": time.time(),
+            "revision": 1,
             "uid": uid,
             "char_id": cid,
         }
@@ -259,8 +283,15 @@ def write_artifact(
                 old_id = str(old.get("id") or "")
                 old_name = str(old.get("filename") or "")
                 old_file = _file_path(root, old_id, old_name)
+                logger.info(
+                    "[chat_artifacts] 超过 %d 个上限，淘汰最旧产物 id=%s filename=%s",
+                    MAX_FILES_PER_SCOPE, old_id, old_name,
+                )
                 if old_file.exists():
                     old_file.unlink()
+                old_prev = _prev_path(root, old_id, old_name)
+                if old_prev.exists():
+                    old_prev.unlink()
                 lookup = _lookup_path(old_id)
                 if lookup.exists():
                     lookup.unlink()
@@ -281,6 +312,76 @@ def write_artifact(
     }, ensure_ascii=False)
 
 
+def update_artifact(
+    artifact_id: str,
+    content: str,
+    *,
+    expected_sha256: str | None = None,
+    user_id: str | None = None,
+    char_id: str | None = None,
+) -> str:
+    """Overwrite an existing artifact in place (same id), keeping one previous version."""
+    if not isinstance(content, str):
+        raise ArtifactError("产物只接受文本内容")
+    if len(content) > MAX_CONTENT_CHARS:
+        raise ArtifactError(f"单次写入不能超过 {MAX_CONTENT_CHARS} 个字符")
+    uid, cid = _require_scope(user_id, char_id)
+    artifact_id = _validate_artifact_id(artifact_id)
+    paths = get_paths()
+    root = paths.chat_artifacts_dir(uid, char_id=cid)
+    index_path = paths.chat_artifacts_index(uid, char_id=cid)
+
+    with _lock_for(uid, cid):
+        items = _load_index(index_path)
+        position = next(
+            (i for i, item in enumerate(items)
+             if str(item.get("id") or "").lower() == artifact_id),
+            None,
+        )
+        if position is None:
+            raise ArtifactError("找不到这个产物文件")
+        record = dict(items[position])
+        filename = str(record.get("filename") or "")
+        target = _file_path(root, artifact_id, filename)
+        if not target.exists() or not target.is_file():
+            raise ArtifactError("找不到这个产物文件")
+        if expected_sha256:
+            try:
+                current = _sha256_text(target.read_text(encoding="utf-8"))
+            except UnicodeDecodeError as exc:
+                raise ArtifactError("产物文件不是 UTF-8 文本") from exc
+            if current != str(expected_sha256).strip().lower():
+                raise ArtifactError("文件在你读取之后已被修改（sha256 不一致），请先重新读取再更新")
+        pending = _turn_artifacts.get()
+        if (
+            pending is not None
+            and len(pending) >= MAX_FILES_PER_TURN
+            and not any(entry.get("id") == artifact_id for entry in pending)
+        ):
+            raise ArtifactError(f"这一轮最多写 {MAX_FILES_PER_TURN} 个文件")
+        shutil.copyfile(target, _prev_path(root, artifact_id, filename))
+        if not safe_write_text(target, content):
+            raise OSError("产物文件写入失败")
+        record["size"] = len(content.encode("utf-8"))
+        record["updated_at"] = time.time()
+        record["revision"] = int(record.get("revision") or 1) + 1
+        items[position] = record
+        _store_index(index_path, items)
+        _collect(record, updated=True)
+
+    payload = public_payload(record)
+    return json.dumps({
+        "status": "updated",
+        "id": payload["id"],
+        "filename": payload["filename"],
+        "mime": payload["mime"],
+        "size": payload["size"],
+        "revision": record["revision"],
+        "sha256": _sha256_text(content),
+        "note": "文件已原地更新。用户会在聊天气泡里看到已更新的文件卡片；不要说出工具名，也不要编造本机路径。",
+    }, ensure_ascii=False)
+
+
 def read_artifact(
     artifact_id: str,
     *,
@@ -293,6 +394,7 @@ def read_artifact(
     if record is None:
         raise ArtifactError("找不到这个产物文件")
     text = read_artifact_text(record)
+    digest = _sha256_text(text)
     from core.sensitive_redaction import redact_for_export, RedactionError
     try:
         text = redact_for_export(text)
@@ -306,6 +408,8 @@ def read_artifact(
         "mime": record["mime"],
         "size": record["size"],
         "truncated": truncated,
+        "revision": int(record.get("revision") or 1),
+        "sha256": digest,
         "content": body,
     }, ensure_ascii=False)
 
@@ -382,6 +486,8 @@ def observability_snapshot(*, uid: str = "", char_id: str = "", limit: int = 50)
                 {
                     **public_payload(item),
                     "created_at": item.get("created_at"),
+                    "updated_at": item.get("updated_at"),
+                    "revision": int(item.get("revision") or 1),
                     "uid": item.get("uid"),
                     "char_id": item.get("char_id"),
                 }
@@ -402,6 +508,12 @@ def register_tools(registry: dict) -> None:
     async def write(filename, content, *, user_id, char_id):
         return write_artifact(filename, content, user_id=user_id, char_id=char_id)
 
+    async def update(artifact_id, content, expected_sha256=None, *, user_id, char_id):
+        return update_artifact(
+            artifact_id, content, expected_sha256=expected_sha256,
+            user_id=user_id, char_id=char_id,
+        )
+
     async def read(artifact_id, *, user_id, char_id):
         return read_artifact(artifact_id, user_id=user_id, char_id=char_id)
 
@@ -413,6 +525,11 @@ def register_tools(registry: dict) -> None:
          {"filename": {"type": "string", "description": "产物文件名，含扩展名。"},
           "content": {"type": "string", "maxLength": MAX_CONTENT_CHARS, "description": "要写入产物的文本内容。"}},
          ["filename", "content"], ["生成文件", "做成文件"]),
+        ("update_artifact", update, "改你之前给对方的文件，用这个而不是 write_artifact 新建一份；原地覆盖同一产物并保留上一版。",
+         {"artifact_id": {"type": "string", "description": "要更新的产物 ID。"},
+          "content": {"type": "string", "maxLength": MAX_CONTENT_CHARS, "description": "更新后的完整文本内容。"},
+          "expected_sha256": {"type": "string", "description": "可选：read_artifact 返回的 sha256，用于防止覆盖他人新改动。"}},
+         ["artifact_id", "content"], ["修改文件", "更新文件", "改文件"]),
         ("read_artifact", read, "读取当前用户与角色的既有产物。",
          {"artifact_id": {"type": "string", "description": "要读取的产物 ID。"}}, ["artifact_id"], ["读取产物"]),
         ("list_artifacts", listing, "列出当前用户与角色的产物元数据。",
@@ -421,7 +538,7 @@ def register_tools(registry: dict) -> None:
         registry[name] = {
             "func": func, "description": description, "category": "artifacts",
             "parameters": {"type": "object", "properties": properties, "required": required},
-            "dangerous": False, "effect": "write" if name == "write_artifact" else "read",
+            "dangerous": False, "effect": "write" if name in {"write_artifact", "update_artifact"} else "read",
             "examples": keywords, "keywords": keywords, "trace_args": [],
             "trace_result": False, "echo_event_log": False,
         }
