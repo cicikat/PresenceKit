@@ -110,10 +110,13 @@ async def run_legacy_owner_turn(
     reply_to: dict | None = None,
     trusted_user_text: str | None = None,
     ingress_event_id: str = "",
+    audit_extras: dict | None = None,
     executor: Callable[..., Awaitable[dict]],
 ) -> dict:
     """Run the one existing reality chain with a fixed caller context."""
     kwargs = {"reply_to": reply_to}
+    if audit_extras:
+        kwargs["audit_extras"] = audit_extras
     if context.caller_kind != "desktop":
         kwargs["live_origin_channel"] = context.live_origin_channel
         kwargs["durable_mobile_mirror"] = context.durable_mobile_mirror

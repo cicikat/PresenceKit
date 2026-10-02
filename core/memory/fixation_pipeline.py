@@ -723,6 +723,8 @@ def _append_event_ledger(
     topics: set[str] | None = None,
     event_context=None,
     observer_started_at: float | None = None,
+    input_modality: str = "",
+    asr_low_confidence: bool = False,
 ) -> dict[str, object]:
     """Best-effort dual-write of message evidence; never affects legacy memory."""
     try:
@@ -756,7 +758,10 @@ def _append_event_ledger(
                 "seq": 0,
                 "actor": "user",
                 "kind": "user_message",
-                "raw_payload_json": {"role": "user"},
+                "raw_payload_json": (
+                    {"role": "user", "input_modality": "voice", "asr_low_confidence": bool(asr_low_confidence)}
+                    if input_modality == "voice" else {"role": "user"}
+                ),
                 "raw_text": raw_text,
                 "visible_text": raw_text,
                 "memory_text": user_msg,
@@ -918,6 +923,11 @@ def capture_turn(
 
     from core.memory import short_term, event_log
 
+    # A3：语音输入打标（由 owner 入口经 audit_extras 传入；缺失即非语音）。
+    _voice = bool(audit_extras) and audit_extras.get("input_modality") == "voice"
+    _voice_low = _voice and bool(audit_extras.get("asr_low_confidence"))
+    _voice_kw = {"input_modality": "voice", "asr_low_confidence": _voice_low} if _voice else {}
+
     ts = time.time()
     turn_id = turn_id or f"{uid}_{int(ts * 1000)}"
 
@@ -988,10 +998,10 @@ def capture_turn(
             )
     else:
         writes = [
-            short_term.append(uid, "user", user_msg, turn_id=turn_id, char_id=char_id),
+            short_term.append(uid, "user", user_msg, turn_id=turn_id, char_id=char_id, **_voice_kw),
             short_term.append(uid, "assistant", _scrubbed_reply, turn_id=turn_id, char_id=char_id)
             if _scrubbed_reply is not None else True,
-            event_log.append(uid, "user", user_msg, turn_id=turn_id, char_id=char_id, source=source),
+            event_log.append(uid, "user", user_msg, turn_id=turn_id, char_id=char_id, source=source, **_voice_kw),
             event_log.append(uid, "assistant", _scrubbed_reply, emotion=emotion, turn_id=turn_id, char_id=char_id, source=source)
             if _scrubbed_reply is not None else True,
         ]
@@ -1025,6 +1035,8 @@ def capture_turn(
         topics=_event_topics,
         event_context=event_context,
         observer_started_at=observer_started_at,
+        input_modality="voice" if _voice else "",
+        asr_low_confidence=_voice_low,
     )
     if not all(writes):
         raise RuntimeError(f"capture_turn 写入不完整: turn_id={turn_id} writes={writes}")
@@ -1054,6 +1066,8 @@ async def summarize_to_midterm(
     memory_strength: float = 1.0,
     force_reflect: bool = False,
     trigger_name: str = "",
+    input_modality: str = "",
+    asr_low_confidence: bool = False,
 ) -> str | None:
     """
     LLM 压缩单轮对话到 mid_term，写入血缘字段。
@@ -1094,6 +1108,12 @@ async def summarize_to_midterm(
             append_kwargs["memory_strength"] = memory_strength
         if trigger_name:
             append_kwargs["is_trigger_turn"] = True
+        if input_modality == "voice":
+            # A3：语音轮摘要加「（语音）」前缀并打标，供 M3 降权消费。
+            append_kwargs["input_modality"] = "voice"
+            append_kwargs["asr_low_confidence"] = bool(asr_low_confidence)
+            if not summary.startswith("（语音）"):
+                summary = "（语音）" + summary
         _mt.append(
             uid,
             summary,
@@ -2067,6 +2087,9 @@ async def handler_summarize_to_midterm(payload: dict) -> None:
         kwargs["force_reflect"] = True
     if payload.get("trigger_name"):
         kwargs["trigger_name"] = payload["trigger_name"]
+    if payload.get("input_modality") == "voice":
+        kwargs["input_modality"] = "voice"
+        kwargs["asr_low_confidence"] = bool(payload.get("asr_low_confidence"))
     await summarize_to_midterm(
         **kwargs,
     )

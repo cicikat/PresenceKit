@@ -24,6 +24,7 @@ async def mobile_chat(
     reply_to = body.get("reply_to")
 
     from admin.routers.chat import _check_reality_not_in_dream, run_owner_chat_turn
+    from core.audio_perception import current_voice_extras
     from core.owner_turn_service import legacy_mobile_context, run_legacy_owner_turn
     from core.config_loader import get_config
 
@@ -35,17 +36,20 @@ async def mobile_chat(
     if grant is None and any(key in body for key in ("char_id", "session_id", "request_id")):
         raise HTTPException(status_code=422, detail="session_scope_required")
 
+    voice_extras = current_voice_extras()  # A3：语音回执打标
+
     async def _execute():
         if grant is None:
             return await run_legacy_owner_turn(
-                message, context, reply_to=reply_to, executor=run_owner_chat_turn,
+                message, context, reply_to=reply_to, audit_extras=voice_extras,
+                executor=run_owner_chat_turn,
             )
         return await run_owner_chat_turn(
             message, context.provenance_channel,
             live_origin_channel=context.live_origin_channel,
             durable_mobile_mirror=context.durable_mobile_mirror,
             reply_to=reply_to, frozen_scope=grant.memory_scope,
-            request_id=str(body.get("request_id") or ""),
+            request_id=str(body.get("request_id") or ""), audit_extras=voice_extras,
         )
 
     result = (

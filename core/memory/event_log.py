@@ -291,6 +291,8 @@ def append(
     *,
     char_id: str = DEFAULT_CHAR_ID,
     source: str = "",
+    input_modality: str = "",
+    asr_low_confidence: bool = False,
 ) -> bool:
     """
     追加一条对话记录到当天日志和 full_log.md。
@@ -336,6 +338,10 @@ def append(
             _meta += f" turn_id:{turn_id}"
         if source:
             _meta += f" source:{source}"
+        if input_modality == "voice":
+            _meta += " modality:voice"
+            if asr_low_confidence:
+                _meta += " asr_low:1"
         footer = _meta + "\n"
 
     chunk = header + line + footer

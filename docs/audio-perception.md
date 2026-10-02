@@ -429,3 +429,19 @@ occurrence 不回滚。选歌命令的 `causation_command_id` 首次抑制为 `c
 observe：真实语音听感、歌曲特征、端到端共同听歌、QQ/供应商编码、桌面真实窗口与 TTS
 共存均未做。B 的合成夹具不是准确率证明；WAV 以外编码仍待后续解码器。独立 demo
 `cc-tasks/standalone-lightweight-player-demo.md` 仍未施工，不能写成 260 已完成。
+
+## 工单 A3：语音输入标记、ASR 不确定提示与记忆打标
+
+- `/transcribe` 所有路径都签发 `audio_perception_id`（本地 faster-whisper / sherpa / legacy whisper 也签；未开声学分析时回执只带
+  `voice_only` 与 `asr_quality`，不依赖 `stt_presets.enabled` 或 `audio_music.speech_analysis`）。响应可附 `asr_quality =
+  {avg_logprob_mean, avg_logprob_min, no_speech_max, dropped_segments}`：仅 faster-whisper 有，sherpa / legacy 为 null（不返回该字段）；
+  远程 preset 设 `verbose_json: true` 才请求 `response_format=verbose_json` 并取分段置信度，默认不变。
+- `prompt_hint()` 先输出「这条消息来自语音转写，可能有同音错字、漏字或断句错位……」；`avg_logprob_mean` 低于
+  `audio_music.asr_low_confidence_logprob`（默认 -0.8，合法范围 -5~0）或丢弃段 ≥1 时追加「这次识别质量偏低，拿不准的地方可以直接问」。
+  只说明输入可靠性，不规定角色如何回应。该阈值是 config.yaml 手改项，无管理面开关。
+- 一条消息可带多个回执：`voice_receipt_ids: list[str]`（可选 `voice_receipt_texts` 按位置给每段原文，每段需出现在 message 中），
+  兼容旧 `audio_perception_id`/`audio_perception_text`。全部消费，质量取最差（均值/最小值取最小、no_speech 取最大、丢弃段求和）。
+- 记忆打标：`desktop_chat`、`mobile_chat` 有语音回执时给 owner turn 传 `audit_extras={"input_modality":"voice","asr_low_confidence":bool}`；
+  `capture_turn` 写入 short_term 用户条目（`input_modality`/`asr_low_confidence`）、event_log meta（`modality:voice [asr_low:1]`）、
+  事件账本用户事件 `raw_payload_json`；`summarize_to_midterm` 对语音轮摘要加「（语音）」前缀并在 mid_term 条目上打标，M3 据此对低置信
+  语音降权（不参与 important_facts 抽取与 identity 证据）。QQ record / upload 入口本工单未打标。

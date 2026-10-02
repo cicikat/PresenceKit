@@ -63,6 +63,8 @@ def append(
     memory_strength: float = 1.0,
     is_trigger_turn: bool = False,
     occurred_at: float | None = None,
+    input_modality: str = "",
+    asr_low_confidence: bool = False,
 ) -> None:
     """追加事件；追加前先清理过期 + 截断到 MAX_EVENTS-1。
 
@@ -98,6 +100,9 @@ def append(
             "memory_strength": max(0.0, min(1.0, float(memory_strength))),
             "is_trigger_turn": is_trigger_turn,
         }
+        if input_modality == "voice":
+            entry["input_modality"] = "voice"
+            entry["asr_low_confidence"] = bool(asr_low_confidence)
         events.append(entry)
         safe_write_json(write_path, {"events": events})
     except Exception as e:

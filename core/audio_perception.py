@@ -210,14 +210,16 @@ def validate_preset(preset):
     if not 1 <= timeout <= 20:
         raise ValueError("STT timeout must be 1–20 seconds")
     return {"base_url": base, "model": model, "api_key": str(preset.get("api_key", "")),
-            "timeout_seconds": timeout, "protocol": "audio_transcriptions"}
+            "timeout_seconds": timeout, "protocol": "audio_transcriptions",
+            "verbose_json": preset.get("verbose_json") is True}
 
 
 async def _request(data, filename, preset):
     form = aiohttp.FormData()
     form.add_field("file", data, filename=Path(filename).name, content_type="application/octet-stream")
     form.add_field("model", preset["model"])
-    form.add_field("response_format", "json")
+    # 默认 json；preset.verbose_json=true 时请求 verbose_json 以取得分段置信度（A3）。
+    form.add_field("response_format", "verbose_json" if preset.get("verbose_json") else "json")
     # OpenAI-compatible /audio/transcriptions only has a free-text `prompt`
     # field, no separate hotwords parameter. We send the bare comma-joined
     # word list (no natural-language template) to cut the Whisper decoder's
@@ -271,6 +273,9 @@ async def ingest_audio_bytes(data, filename):
         tone = tone if isinstance(tone, str) and tone in TONES else "unclear"
         from core.stt_vocabulary import correct
         payload = {"text": correct(text), "tone": tone}
+        quality = quality_from_segments(result.get("segments")) if preset.get("verbose_json") else None
+        if quality:
+            payload["asr_quality"] = quality
         ok = True
     except Exception as error:
         # Never log payload, URL, key or provider response body — only the
@@ -295,6 +300,71 @@ async def ingest_audio_bytes(data, filename):
                 "acoustic": compact,
             })
     return payload
+
+
+BASE_VOICE_HINT = (
+    "这条消息来自语音转写，可能有同音错字、漏字或断句错位；"
+    "按整体意思理解，个别奇怪的词不一定是对方的原话。"
+)
+LOW_CONFIDENCE_HINT = "这次识别质量偏低，拿不准的地方可以直接问。"
+DEFAULT_LOW_CONFIDENCE_LOGPROB = -0.8
+
+
+def quality_from_segments(segments, dropped: int = 0) -> dict | None:
+    """faster-whisper / verbose_json 分段 -> 聚合质量；无可用分段且无丢弃返回 None。"""
+    logprobs, no_speech = [], []
+    for seg in segments or []:
+        if isinstance(seg, dict):
+            lp, ns = seg.get("avg_logprob"), seg.get("no_speech_prob")
+        else:
+            lp, ns = getattr(seg, "avg_logprob", None), getattr(seg, "no_speech_prob", None)
+        if isinstance(lp, (int, float)):
+            logprobs.append(float(lp))
+        if isinstance(ns, (int, float)):
+            no_speech.append(float(ns))
+    if not logprobs and not dropped:
+        return None
+    return {
+        "avg_logprob_mean": round(sum(logprobs) / len(logprobs), 4) if logprobs else None,
+        "avg_logprob_min": round(min(logprobs), 4) if logprobs else None,
+        "no_speech_max": round(max(no_speech), 4) if no_speech else None,
+        "dropped_segments": int(dropped),
+    }
+
+
+def merge_quality(items) -> dict | None:
+    """多段回执取最差：均值/最小值取最小、no_speech 取最大、丢弃段求和。"""
+    rows = [q for q in items if isinstance(q, dict)]
+    if not rows:
+        return None
+
+    def _nums(key):
+        return [float(q[key]) for q in rows if isinstance(q.get(key), (int, float))]
+
+    means, mins, nos = _nums("avg_logprob_mean"), _nums("avg_logprob_min"), _nums("no_speech_max")
+    return {
+        "avg_logprob_mean": min(means) if means else None,
+        "avg_logprob_min": min(mins) if mins else None,
+        "no_speech_max": max(nos) if nos else None,
+        "dropped_segments": sum(int(q.get("dropped_segments") or 0) for q in rows),
+    }
+
+
+def low_confidence_threshold() -> float:
+    block = (get_config() or {}).get(CONFIG_ROOT) or {}
+    value = block.get("asr_low_confidence_logprob")
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not -5 <= value <= 0:
+        return DEFAULT_LOW_CONFIDENCE_LOGPROB
+    return float(value)
+
+
+def is_low_confidence(quality) -> bool:
+    if not isinstance(quality, dict):
+        return False
+    mean = quality.get("avg_logprob_mean")
+    if isinstance(mean, (int, float)) and mean < low_confidence_threshold():
+        return True
+    return int(quality.get("dropped_segments") or 0) >= 1
 
 
 def _compact_acoustic(analysis: dict | None, provider_tone: str) -> dict:
@@ -425,14 +495,17 @@ def prompt_hint():
     if tone not in TONES:
         tone = "unclear"
     acoustic = value.get("acoustic") if isinstance(value.get("acoustic"), dict) else None
+    parts = [BASE_VOICE_HINT]
+    if is_low_confidence(value.get("asr_quality")):
+        parts.append(LOW_CONFIDENCE_HINT)
     if acoustic:
-        content = _acoustic_prompt(tone, acoustic)
-    else:
-        content = (
+        parts.append(_acoustic_prompt(tone, acoustic))
+    elif not value.get("voice_only"):
+        parts.append(
             "本轮确有语音转写。极粗听觉印象：" + tone
             + "。这是不确定的听觉印象，不是情绪、健康或人格事实；unclear 表示无法判断。不要据此断言用户感受。"
         )
-    return {"role": "system", "_layer": PROMPT_LAYER, "content": content}
+    return {"role": "system", "_layer": PROMPT_LAYER, "content": "".join(parts)}
 
 
 def _scope(channel):
@@ -444,6 +517,14 @@ def _scope(channel):
 def _receipt_payload(result):
     tone = result.get("tone") if isinstance(result, dict) else None
     payload = {"tone": tone if tone in TONES else "unclear"}
+    if isinstance(result, dict) and result.get("voice_only"):
+        payload["voice_only"] = True
+    quality = result.get("asr_quality") if isinstance(result, dict) else None
+    if isinstance(quality, dict):
+        payload["asr_quality"] = {
+            key: quality.get(key)
+            for key in ("avg_logprob_mean", "avg_logprob_min", "no_speech_max", "dropped_segments")
+        }
     hint = result.get("provider_tone_hint") if isinstance(result, dict) else None
     if hint in TONES:
         payload["provider_tone_hint"] = hint
@@ -482,17 +563,74 @@ def consume_receipt(key, text, channel):
     if not isinstance(key, str) or len(key) > 128:
         return None
     row = _receipts.pop(key, None)
-    active = config()["enabled"] or ("stt_presets" not in (get_config() or {}) and speech_analysis_enabled())
-    if not row or not active or row[0] <= time.monotonic() or row[1] != _scope(channel):
+    if not row or row[0] <= time.monotonic() or row[1] != _scope(channel):
+        return None
+    payload = row[3]
+    # 仅标记语音来源的回执（本地 STT、未开声学分析）不依赖 stt_presets / 声学开关。
+    marker_only = isinstance(payload, dict) and payload.get("voice_only") is True
+    active = marker_only or config()["enabled"] or (
+        "stt_presets" not in (get_config() or {}) and speech_analysis_enabled()
+    )
+    if not active:
         return None
     if row[2] != hashlib.sha256(text.strip().encode()).hexdigest():
         return None
-    payload = row[3]
     if isinstance(payload, str):
         return {"tone": payload if payload in TONES else "unclear"}
     if not isinstance(payload, dict):
         return {"tone": "unclear"}
     return dict(payload)
+
+
+def consume_receipts(keys, texts, channel, fallback_text=""):
+    """合并一条消息的多个回执（A3）：逐个按各自分段原文校验，质量取最差。
+
+    texts 与 keys 按位置对应；缺失位置用 fallback_text。至少一个回执有效才返回。
+    """
+    values = []
+    for index, key in enumerate(keys):
+        text = texts[index] if index < len(texts) and texts[index].strip() else fallback_text
+        value = consume_receipt(key, text, channel)
+        if value:
+            values.append(value)
+    if not values:
+        return None
+    merged = dict(values[-1])  # 声学印象沿用最后一段（与旧单回执行为一致）
+    quality = merge_quality(v.get("asr_quality") for v in values)
+    if quality:
+        merged["asr_quality"] = quality
+    if any(not v.get("voice_only") for v in values):
+        merged.pop("voice_only", None)
+    return merged
+
+
+def voice_audit_extras(value) -> dict | None:
+    """语音回执 -> capture_turn 的 audit_extras 打标；非语音返回 None。"""
+    if not value:
+        return None
+    return {"input_modality": "voice", "asr_low_confidence": bool(is_low_confidence(value.get("asr_quality")))}
+
+
+def current_voice_extras() -> dict | None:
+    """voice_context 内读取当前请求的语音打标；非语音返回 None。"""
+    return voice_audit_extras(_current.get())
+
+
+def _body_receipts(body, message):
+    """(ids, texts)：兼容旧单个 audio_perception_id 与新 voice_receipt_ids[+voice_receipt_texts]。"""
+    ids = body.get("voice_receipt_ids")
+    if isinstance(ids, list):
+        ids = [i for i in ids if isinstance(i, str)][:16]
+        texts = body.get("voice_receipt_texts")
+        texts = [t if isinstance(t, str) else "" for t in texts][:16] if isinstance(texts, list) else []
+        return ids, texts
+    single = body.get("audio_perception_id")
+    if isinstance(single, str):
+        receipt_text = body.get("audio_perception_text")
+        if not isinstance(receipt_text, str) or not receipt_text.strip() or receipt_text.strip() not in message:
+            receipt_text = message
+        return [single], [receipt_text]
+    return [], []
 
 
 def voice_context(channel):
@@ -501,13 +639,13 @@ def voice_context(channel):
         async def wrapped(*args, **kwargs):
             body = kwargs.get("body") or (args[0] if args else {})
             message = body.get("message") or ""
-            receipt_text = body.get("audio_perception_text")
-            if not isinstance(receipt_text, str) or not receipt_text.strip() or receipt_text.strip() not in message:
-                receipt_text = message
-            value = consume_receipt(body.get("audio_perception_id"), receipt_text, channel)
+            ids, texts = _body_receipts(body, message)
+            # 每个分段原文必须出现在 message 里，否则退回整条 message 校验（必然不匹配）。
+            texts = [t if t.strip() and t.strip() in message else message for t in texts]
+            value = consume_receipts(ids, texts, channel, fallback_text=message)
             with impression(value):
                 result = await func(*args, **kwargs)
-            if channel == "desktop" and isinstance(result, dict) and body.get("audio_perception_id"):
+            if channel == "desktop" and isinstance(result, dict) and ids:
                 return {**result, "audio_perception_applied": bool(value and value.get("_prompt_built"))}
             return result
         return wrapped

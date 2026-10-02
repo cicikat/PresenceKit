@@ -487,9 +487,12 @@ def append(
     char_id: str = DEFAULT_CHAR_ID,
     source: str | None = None,
     speaker_id: str | None = None,
+    input_modality: str | None = None,
+    asr_low_confidence: bool = False,
 ) -> bool:
     """
     追加一条消息到历史记录，并裁剪到最大轮数
+    input_modality: "voice" 表示该条 user 消息来自语音转写（A3）；asr_low_confidence 为低置信标记。
 
     role: OpenAI 兼容角色，当前 reality history 使用 "user" / "assistant"
     speaker_id: 实际发言人；user 默认 owner，assistant 默认当前 char_id
@@ -524,6 +527,9 @@ def append(
         entry["_turn_id"] = turn_id
     if source:
         entry["_source"] = source
+    if role == "user" and input_modality == "voice":
+        entry["input_modality"] = "voice"
+        entry["asr_low_confidence"] = bool(asr_low_confidence)
     if role == "user" and source != "trigger_stub" and len(content) > LONG_USER_LIMIT:
         archive = _load_long_messages(user_id, char_id=char_id)
         messages = archive.setdefault("messages", {})

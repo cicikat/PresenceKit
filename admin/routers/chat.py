@@ -867,6 +867,8 @@ async def desktop_chat(
         raise HTTPException(status_code=422, detail="invalid_video_observation_id")
 
     from core.owner_turn_service import legacy_desktop_context, run_legacy_owner_turn
+    from core.audio_perception import current_voice_extras
+    voice_extras = current_voice_extras()  # A3：有语音回执时打 input_modality / asr_low_confidence
     context = legacy_desktop_context(getattr(_auth, "label", "legacy-admin"))
     try:
         async def _execute():
@@ -884,11 +886,12 @@ async def desktop_chat(
             if grant is None:
                 return await run_legacy_owner_turn(
                     full_message, context, reply_to=reply_to,
-                    trusted_user_text=message, executor=run_owner_chat_turn,
+                    trusted_user_text=message, audit_extras=voice_extras,
+                    executor=run_owner_chat_turn,
                 )
             return await run_owner_chat_turn(
                 full_message, context.provenance_channel, reply_to=reply_to,
-                trusted_user_text=message,
+                trusted_user_text=message, audit_extras=voice_extras,
                 frozen_scope=grant.memory_scope, request_id=str(body.get("request_id") or ""),
             )
 

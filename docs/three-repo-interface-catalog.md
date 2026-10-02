@@ -240,7 +240,7 @@ observe：77 项回归和管理面清缓存浏览器验证通过；两次真实�
 - `current`（工单 265）：桌面视频电话开着摄像头时，周期观察按 60 秒节流进入既有 autonomy signal；静止画面也可产生候选，候选保留 10 分钟；最近 120 秒无用户发言的通话可进入主动评估，Dream/DND/预算与发言门控仍有效。`POST /video-call/camera/poll` 领取角色按需查看摄像头的新帧请求，`POST /video-call/camera/result` 回传新 JPEG；请求 10 秒过期、只领一次并绑定现有 chat 身份。`POST /video-call/close` 撤销会话和未消费观察。按需工具 `observe_video_call_camera` 使用独立的 `image_presets.routes.video_call_tool`（未配置时沿用 `video_call`）；`observe_user_screen` 保留原独立屏幕识别链，实验性 `/perception/visual` 不作主动候选来源。用户已确认真实 Windows 摄像头与本地视觉模型通过；静默主动通知仍为 `observe`。
 - `current`（工单 266）：角色工具 `invite_video_call` 可在主人聊天及显式允许的 autonomy 中发起桌面来电。WS `video_call_invite` 只传 `invite_id`、`char_id` 和 10 秒期限；桌面独立置顶窗口经 `POST /video-call/invite/respond`（chat + 固定会话身份）回传接通或拒绝，迟到/错角色回执返回 409。超时工具结果为 `unanswered`。接通后进入既有视频页，主人挂断走 `POST /video-call/invite/hangup`（chat）并只生成一次 `video_call_hangup` 候选；桌面断线撤销未决邀请。`GET /observability/video-call`（state.read）提供邀请计数，不含画面或正文。手机无消费链；真实 Windows 窗口和通知验收仍为 `observe`。
 - `current`（工单 264）：`GET/PUT /stt-vocabulary`（admin）保存有界转写词表；
-  `/transcribe` 旧本地路径可在声学分析启用时返回 `tone/audio_perception_id`。
+  `/transcribe` 旧本地路径可在声学分析启用时返回 `tone/audio_perception_id`。 工单 A3：所有 STT 路径都返回 `audio_perception_id`（本地路径未开声学分析时为仅语音来源标记），并可返回 `asr_quality`；`POST /desktop/chat`、`/mobile/chat` 接受 `voice_receipt_ids`（+`voice_receipt_texts`）累积多段回执，后端打 `input_modality=voice` 记忆标记。
   桌面持续录音合并文字时可附加 `audio_perception_text`，后端仅在该原转写段
   出现在消息中时消费对应一次性凭据。手机仍用原样全文匹配，不变更其请求层。
 - `observe`：真实摄像头、麦克风、本地图像模型与 TTS 在桌面窗口的联合延迟和设备释放。

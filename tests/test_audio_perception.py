@@ -237,11 +237,11 @@ async def test_legacy_transcribe_reports_backend_and_empty_audio(monkeypatch):
     monkeypatch.setattr("core.config_loader.get_config", lambda: {})
     def unavailable(_path):
         raise RuntimeError("STT 未安装")
-    monkeypatch.setattr(endpoint, "_transcribe_sync", unavailable)
+    monkeypatch.setattr(endpoint, "_transcribe_with_quality", unavailable)
     with pytest.raises(HTTPException) as error:
         await endpoint.transcribe_audio(UploadFile(io.BytesIO(b"audio"), filename="x.wav"), "desktop", {})
     assert error.value.status_code == 503
-    monkeypatch.setattr(endpoint, "_transcribe_sync", lambda _path: "")
+    monkeypatch.setattr(endpoint, "_transcribe_with_quality", lambda _path: ("", None))
     with pytest.raises(HTTPException) as error:
         await endpoint.transcribe_audio(UploadFile(io.BytesIO(b"audio"), filename="x.wav"), "desktop", {})
     assert error.value.status_code == 422

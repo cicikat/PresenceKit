@@ -2134,6 +2134,9 @@ class Pipeline:
                 _mt_payload["coplay_echo"] = True
             if provenance_source:
                 _mt_payload["source"] = provenance_source
+            if audit_extras and audit_extras.get("input_modality") == "voice":
+                _mt_payload["input_modality"] = "voice"
+                _mt_payload["asr_low_confidence"] = bool(audit_extras.get("asr_low_confidence"))
             slow_queue.enqueue("summarize_to_midterm", _mt_payload)
         slow_queue.enqueue("consistency_check", {
             "reply": reply,
