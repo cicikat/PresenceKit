@@ -44,14 +44,7 @@ discovery 返回的 bundled Python 可用于无需项目依赖的基础 Python �
 
 ### 本机遗留备用 pytest（Codex / Claude Code）
 
-仅无可用受支持环境时检查以下历史入口是否仍存在，不把它写成项目默认环境：
-
-```powershell
-& '<用户目录>\AppData\Local\Python\pythoncore-3.14-64\Scripts\pytest.exe' -n auto tests/test_stage* -q
-& '<用户目录>\AppData\Local\Python\pythoncore-3.14-64\Scripts\pytest.exe' --testmon
-```
-
-它对应 Python 3.14，超出项目支持范围；依赖可能与 requirements 不一致，运行结果不能替代受支持环境验收。不要误用 WindowsApps 别名或失效的 PATH 残留。若实际执行因沙箱拒绝而失败，对同一条范围明确的命令申请必要权限后重跑。
+仅无可用受支持环境时，按本机已确认的入口尝试一次；不要把具体用户路径复制进项目文档，也不要把它当成项目默认环境。该入口对应 Python 3.14，超出项目支持范围；依赖可能与 requirements 不一致，运行结果不能替代受支持环境验收。不要误用 WindowsApps 别名或失效的 PATH 残留。若实际执行因沙箱拒绝而失败，对同一条范围明确的命令申请必要权限后重跑。
 
 ### pytest 临时目录权限错误
 
@@ -67,7 +60,7 @@ PermissionError: [WinError 5] ... AppData\Local\Temp\pytest-of-...
 $env:TEMP="$PWD\.tmp"
 $env:TMP=$env:TEMP
 New-Item -ItemType Directory -Force $env:TEMP | Out-Null
-& '<用户目录>\AppData\Local\Python\pythoncore-3.14-64\Scripts\pytest.exe' -n auto -q
+<可用 Python> -m pytest -n auto -q
 ```
 
 完成后只能清理确认位于仓库内的 `.tmp`。删除前必须校验解析后的绝对路径仍在仓库根目录下，禁止对未校验的计算路径递归删除。
