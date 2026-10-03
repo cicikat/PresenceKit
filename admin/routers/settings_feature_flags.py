@@ -202,6 +202,104 @@ async def update_event_shadow_recall_settings(
     return {**_shadow_settings(), "reload_status": "reloaded"}
 
 
+class StateAuthorityUpdate(BaseModel):
+    shadow_enabled: bool | None = None
+    shadow_uids: list[str] | None = None
+    shadow_char_ids: list[str] | None = None
+    dossier_suppression: str | None = None
+    dossier_prompt_injection: bool | None = None
+    hidden_confidence_gating: bool | None = None
+    hidden_min_confidence: float | None = None
+    recall_semantic_min_similarity: float | None = None
+
+
+def _state_authority_settings() -> dict:
+    cfg = get_config()
+    shadow = (cfg.get("state_composer") or {}).get("shadow") or {}
+    dossiers = cfg.get("memory_dossiers") or {}
+    hidden = cfg.get("hidden_state") or {}
+    recall = cfg.get("recall") or {}
+    enabled = bool(shadow.get("enabled", False))
+    uids = [str(v) for v in (shadow.get("uids") or []) if str(v)]
+    char_ids = [str(v) for v in (shadow.get("char_ids") or []) if str(v)]
+    suppression = str(dossiers.get("suppression", "global") or "global")
+    return {
+        "state_composer_shadow": {
+            "enabled": enabled,
+            "uids": uids,
+            "char_ids": char_ids,
+            "effective_state": (
+                "enabled-for-all" if enabled
+                else "allowlist-active" if uids or char_ids
+                else "disabled"
+            ),
+        },
+        "memory_dossiers": {
+            "suppression": suppression if suppression in {"global", "overlap"} else "global",
+            "prompt_injection": bool(dossiers.get("prompt_injection", True)),
+        },
+        "hidden_state": {
+            "confidence_gating": bool(hidden.get("confidence_gating", False)),
+            "min_confidence": float(hidden.get("min_confidence", 0.3)),
+        },
+        "recall": {
+            "semantic_min_similarity": float(recall.get("semantic_min_similarity", 0.0) or 0.0),
+        },
+        "apply_mode": "hot_reload",
+    }
+
+
+def _clean_id_list(values: list[str]) -> list[str]:
+    cleaned = set()
+    for value in values[:100]:
+        value = str(value).strip()
+        if value and len(value) <= 128:
+            cleaned.add(value)
+    return sorted(cleaned)
+
+
+@router.get("/settings/state-authority", summary="读取状态权威相关开关（StatePacket 影子/Dossier/隐性状态置信度/召回相似度）")
+async def get_state_authority_settings(auth=Depends(require_scopes("admin"))):
+    return _state_authority_settings()
+
+
+@router.put("/settings/state-authority", summary="更新状态权威相关开关（热生效）")
+async def update_state_authority_settings(
+    body: StateAuthorityUpdate,
+    auth=Depends(require_scopes("admin")),
+):
+    if body.dossier_suppression is not None and body.dossier_suppression not in {"global", "overlap"}:
+        raise HTTPException(status_code=422, detail="dossier_suppression must be global or overlap")
+    for name in ("hidden_min_confidence", "recall_semantic_min_similarity"):
+        value = getattr(body, name)
+        if value is not None and not (0.0 <= value <= 1.0):
+            raise HTTPException(status_code=422, detail=f"{name} must be between 0 and 1")
+    full_cfg = read_config_file(CONFIG_FILE)
+    shadow = full_cfg.setdefault("state_composer", {}).setdefault("shadow", {})
+    if body.shadow_enabled is not None:
+        shadow["enabled"] = bool(body.shadow_enabled)
+    if body.shadow_uids is not None:
+        shadow["uids"] = _clean_id_list(body.shadow_uids)
+    if body.shadow_char_ids is not None:
+        shadow["char_ids"] = _clean_id_list(body.shadow_char_ids)
+    dossiers = full_cfg.setdefault("memory_dossiers", {})
+    if body.dossier_suppression is not None:
+        dossiers["suppression"] = body.dossier_suppression
+    if body.dossier_prompt_injection is not None:
+        dossiers["prompt_injection"] = bool(body.dossier_prompt_injection)
+    hidden = full_cfg.setdefault("hidden_state", {})
+    if body.hidden_confidence_gating is not None:
+        hidden["confidence_gating"] = bool(body.hidden_confidence_gating)
+    if body.hidden_min_confidence is not None:
+        hidden["min_confidence"] = float(body.hidden_min_confidence)
+    if body.recall_semantic_min_similarity is not None:
+        full_cfg.setdefault("recall", {})["semantic_min_similarity"] = float(body.recall_semantic_min_similarity)
+    write_config_file(CONFIG_FILE, full_cfg)
+    from core import config_loader
+    config_loader.reload_config()
+    return {**_state_authority_settings(), "reload_status": "reloaded"}
+
+
 @router.get("/settings/event-context-observer", summary="读取 EventContext 旁路观测设置")
 async def get_event_context_observer_settings(auth=Depends(require_scopes("admin"))):
     return _event_context_observer_settings()

@@ -205,3 +205,40 @@ def test_audio_music_flags_are_exposed_default_off_and_consumed(tmp_path, monkey
     assert result["flags"]["speech_analysis"]["effective_state"] in {
         "stt-not-effective", "missing-dependency", "enabled",
     }
+
+
+def test_state_authority_settings_roundtrip_and_validation(tmp_path, monkeypatch):
+    import pytest
+    from fastapi import HTTPException
+
+    path = tmp_path / "config.yaml"
+    path.write_text("memory_dossiers:\n  other: keep\n", encoding="utf-8")
+    monkeypatch.setattr(mod, "CONFIG_FILE", path)
+    monkeypatch.setattr(mod, "get_config", lambda: yaml.safe_load(path.read_text(encoding="utf-8")) or {})
+    from core import config_loader
+    monkeypatch.setattr(config_loader, "reload_config", lambda: None)
+
+    defaults = asyncio.run(mod.get_state_authority_settings(auth=None))
+    assert defaults["state_composer_shadow"]["effective_state"] == "disabled"
+    assert defaults["memory_dossiers"] == {"suppression": "global", "prompt_injection": True}
+    assert defaults["hidden_state"] == {"confidence_gating": False, "min_confidence": 0.3}
+    assert defaults["recall"]["semantic_min_similarity"] == 0.0
+
+    result = asyncio.run(mod.update_state_authority_settings(
+        mod.StateAuthorityUpdate(
+            shadow_uids=[" u1 ", "u1", ""], dossier_suppression="overlap",
+            dossier_prompt_injection=False, hidden_confidence_gating=True,
+            hidden_min_confidence=0.5, recall_semantic_min_similarity=0.2,
+        ), auth=None))
+    assert result["state_composer_shadow"]["uids"] == ["u1"]
+    assert result["state_composer_shadow"]["effective_state"] == "allowlist-active"
+    assert result["memory_dossiers"] == {"suppression": "overlap", "prompt_injection": False}
+    assert result["hidden_state"] == {"confidence_gating": True, "min_confidence": 0.5}
+    assert result["recall"]["semantic_min_similarity"] == 0.2
+    assert yaml.safe_load(path.read_text(encoding="utf-8"))["memory_dossiers"]["other"] == "keep"
+
+    for bad in ({"dossier_suppression": "x"}, {"hidden_min_confidence": 1.5},
+                {"recall_semantic_min_similarity": -0.1}):
+        with pytest.raises(HTTPException) as exc:
+            asyncio.run(mod.update_state_authority_settings(mod.StateAuthorityUpdate(**bad), auth=None))
+        assert exc.value.status_code == 422

@@ -420,11 +420,11 @@ consumes candidate-edge records.
 
 ## 工单 S1 召回兜底
 
-`recall.semantic_min_similarity`（config.yaml，默认 0.0 = 不过滤）：episodic 纯语义候选（无关键词命中）相似度低于该值时不进候选池。无管理面开关，改 config 后下一轮生效。`fetch_context(query_free_fallback=)` 为代码参数，非配置：普通聊天 False，调度器主动开口 True；recall_trace 新增 `episodic_fallback_mode`（`GET /observe/recall/{uid}`）。
+`recall.semantic_min_similarity`（config.yaml，默认 0.0 = 不过滤）：episodic 纯语义候选（无关键词命中）相似度低于该值时不进候选池。管理面见“工单 S 系列开关接入管理面”，下一轮生效。`fetch_context(query_free_fallback=)` 为代码参数，非配置：普通聊天 False，调度器主动开口 True；recall_trace 新增 `episodic_fallback_mode`（`GET /observe/recall/{uid}`）。
 
 ## 工单 S5b 隐性状态置信度门控
 
-`hidden_state.confidence_gating`（config.yaml，默认 false）与 `hidden_state.min_confidence`（默认 0.3）：开启后按字段置信度门控 overflow `hidden_need_score`、letter_writer 隐性原因与 dream 快照（不足输出 `unknown` 不渲染）。无管理面开关，改 config 后下一轮生效；关闭时行为与现状一致。观测：`GET /debug/user-hidden-state`（`scalar_views` / `evidence`）与 autonomy overflow Signal evidence 的 `hidden_need_raw/gated/confidence`。
+`hidden_state.confidence_gating`（config.yaml，默认 false）与 `hidden_state.min_confidence`（默认 0.3）：开启后按字段置信度门控 overflow `hidden_need_score`、letter_writer 隐性原因与 dream 快照（不足输出 `unknown` 不渲染）。管理面见“工单 S 系列开关接入管理面”，下一轮生效；关闭时行为与现状一致。观测：`GET /debug/user-hidden-state`（`scalar_views` / `evidence`）与 autonomy overflow Signal evidence 的 `hidden_need_raw/gated/confidence`。
 
 ## Brief 204 Memory Event shadow recall
 
@@ -1002,3 +1002,12 @@ consolidation task and work-session status.
 （现状）；`overlap` 只移除与本轮 dossier 引用证据（event id）有交集的 episodic 项。event_search 命中拿不到
 event id 时整体抑制并在 recall_trace `dossier_suppression.suppression_fallback` 标记。观测：
 `GET /observe/recall/{uid}` 的 `dossier_suppression`（mode / removed_episode_ids / removed_event_ids / kept_count）。
+
+## 工单 S 系列开关接入管理面（状态权威）
+
+`GET/PUT /settings/state-authority`（`admin` scope，热生效，写 config.yaml 后 `reload_config()`）统一管理：
+`state_composer.shadow`（enabled / uids / char_ids，观察用，默认关）、`memory_dossiers.suppression`（`global|overlap`，默认 global）、
+`memory_dossiers.prompt_injection`（默认 true）、`hidden_state.confidence_gating`（默认 false）与 `hidden_state.min_confidence`（0~1，默认 0.3；
+confidence 是估计的可信度而非强度）、`recall.semantic_min_similarity`（0~1，默认 0 = 不过滤，页面放“高级设置”）。取值非法返回 422。
+页面位置：管理面「运行配置」页“状态权威与记忆解释开关”卡片。所有默认值保持现状，关闭/恢复默认即回到现状。
+上方 S2 / S3 / S5b 小节中“无管理面开关”的描述以本节为准。

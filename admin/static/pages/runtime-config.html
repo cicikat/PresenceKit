@@ -22,6 +22,39 @@
 </div>
 
 <div class="card">
+  <div class="card-header"><h3>状态权威与记忆解释开关</h3><button class="btn btn-ghost btn-sm" data-action="loadStateAuthoritySettings">刷新</button></div>
+  <p class="admin-inline-087">以下开关均热生效，保存后下一轮对话起生效；默认值即现状，关闭或恢复默认即回到现状。</p>
+  <div class="config-item-meta"><span id="state-authority-shadow-effective">effective: -</span><span id="state-authority-apply-mode">apply: -</span></div>
+  <h4>StatePacket 影子记录（观察用）</h4>
+  <p class="admin-inline-087">默认关闭。只记录每轮各提示层的来源与权威级别，不改变提示词；可只对名单内的用户或角色灰度开启。关闭即回到现状。</p>
+  <div class="form-row">
+    <label class="checkbox-row"><input type="checkbox" id="state-authority-shadow-enabled"><span>全局启用</span></label>
+  </div>
+  <div class="form-row">
+    <label class="field"><span>UID 灰度名单（每行一个）</span><textarea id="state-authority-shadow-uids" rows="3" spellcheck="false"></textarea></label>
+    <label class="field"><span>角色 ID 灰度名单（每行一个）</span><textarea id="state-authority-shadow-char-ids" rows="3" spellcheck="false"></textarea></label>
+  </div>
+  <h4>Dossier 记忆档案</h4>
+  <p class="admin-inline-087">注入档案：默认开启；关闭后档案不进提示词，也不再压制旧召回（工具与夜间整理不受影响）。压制范围：默认“全局”（有档案就清掉旧召回文本，现状）；“按证据重叠”只去掉与档案证据重合的条目。</p>
+  <div class="form-row">
+    <label class="checkbox-row"><input type="checkbox" id="state-authority-dossier-injection"><span>向提示词注入 Dossier（默认开）</span></label>
+    <label class="field"><span>旧召回压制范围</span><select id="state-authority-dossier-suppression"><option value="global">global 全局（默认）</option><option value="overlap">overlap 按证据重叠</option></select></label>
+  </div>
+  <h4>隐性状态置信度门控</h4>
+  <p class="admin-inline-087">默认关闭。开启后，置信度不足的隐性状态字段不参与需求评分、写信原因与梦境快照。注意：置信度是“对该状态估计的可信度”，不是状态本身的强度。关闭即回到现状（仅在观测中记录原始值与门控值）。</p>
+  <div class="form-row">
+    <label class="checkbox-row"><input type="checkbox" id="state-authority-hidden-gating"><span>启用置信度门控</span></label>
+    <label class="field"><span>最低置信度（0~1，默认 0.3）</span><input type="number" id="state-authority-hidden-min" min="0" max="1" step="0.05"></label>
+  </div>
+  <details>
+    <summary>高级设置</summary>
+    <p class="admin-inline-087">语义召回最低相似度：只对没有关键词命中的纯语义候选生效，0 表示不过滤（默认，现状）。建议先看召回观测里的相似度分布再调高。</p>
+    <label class="field"><span>语义召回最低相似度（0~1）</span><input type="number" id="state-authority-semantic-min" min="0" max="1" step="0.05"></label>
+  </details>
+  <button class="btn btn-primary btn-sm" data-action="saveStateAuthoritySettings">保存</button>
+</div>
+
+<div class="card">
   <div class="card-header"><h3>EventContext observer</h3><button class="btn btn-ghost btn-sm" data-action="loadEventContextObserverSettings" data-i18n="common.refresh">Refresh</button></div>
   <p class="admin-inline-087">Records redacted propagation metadata only. It never changes the production write path.</p>
   <div class="config-item-meta"><span id="event-context-observer-effective">effective: -</span><span id="event-context-observer-state">state: -</span></div>
