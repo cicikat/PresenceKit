@@ -418,6 +418,10 @@ requires `state.read` and returns only content-free counters, daily budget use,
 and process-local discovery/timeout counts. No desktop or mobile channel
 consumes candidate-edge records.
 
+## 工单 S1 召回兜底
+
+`recall.semantic_min_similarity`（config.yaml，默认 0.0 = 不过滤）：episodic 纯语义候选（无关键词命中）相似度低于该值时不进候选池。无管理面开关，改 config 后下一轮生效。`fetch_context(query_free_fallback=)` 为代码参数，非配置：普通聊天 False，调度器主动开口 True；recall_trace 新增 `episodic_fallback_mode`（`GET /observe/recall/{uid}`）。
+
 ## Brief 204 Memory Event shadow recall
 
 `event_shadow_recall.enabled` is exposed through the hot-reloaded feature flag

@@ -181,4 +181,53 @@ def test_fetch_context_ordinary_question_has_no_span_and_default_window(chars_tr
     ctx = _run_fetch(pipeline, content="我们去吃饭吧")
     assert ctx["long_term_query"] is False and ctx["relationship_span_text"] == ""
     assert "days" not in search.call_args.kwargs  # 默认窗口（30 天）不额外传参
+    assert fb_calls == []  # S1：普通聊天不跑 query 无关兜底
+
+
+def _run_fetch_kw(pipeline, content, **kw):
+    import asyncio
+    return asyncio.run(pipeline.fetch_context(user_id="u1", content=content, **kw))
+
+
+def test_s1_query_free_fallback_true_runs_fallback(chars_tree, monkeypatch, sandbox, registry):
+    pipeline = _make_pipeline(TEST_CHAR_ID, registry)
+    _write_active(sandbox, TEST_CHAR_ID)
+    _apply_base_stubs(monkeypatch)
+    _, fb_calls, _ = _spy_env(monkeypatch)
+    _run_fetch_kw(pipeline, "我们去吃饭吧", query_free_fallback=True)
     assert fb_calls == [1]
+
+
+def test_s1_chat_default_skips_fallback_and_no_layer(chars_tree, monkeypatch, sandbox, registry):
+    pipeline = _make_pipeline(TEST_CHAR_ID, registry)
+    _write_active(sandbox, TEST_CHAR_ID)
+    _apply_base_stubs(monkeypatch)
+    _, fb_calls, _ = _spy_env(monkeypatch)
+    ctx = _run_fetch_kw(pipeline, "Python 为什么报这个错")
+    assert fb_calls == []
+    assert ctx["episodic_fallback_result"] == ""
+
+
+def test_s1_semantic_min_similarity_filters_pure_semantic(monkeypatch):
+    import core.memory.episodic_memory as em
+    import core.memory.vector_store as vs
+    import core.config_loader as cl
+    now = time.time()
+    mems = [_ep("sem1", now - DAY), _ep("kw1", now - DAY)]
+    mems[1]["topic_keywords"] = ["火锅"]
+    monkeypatch.setattr(em, "_load_memories", lambda *a, **k: mems)
+    monkeypatch.setattr(em, "_load_index", lambda *a, **k: {})
+    monkeypatch.setattr(vs, "dist_to_sim", lambda d: 1.0 - d)
+    hits = [("sem1", 0.8, now), ("kw1", 0.8, now)]
+    base = cl.get_config
+
+    def _run(floor):
+        monkeypatch.setattr(cl, "get_config", lambda *a, **k: {**dict(base()), "recall": {"semantic_min_similarity": floor}})
+        res, trace = em.retrieve("u1", "火锅", top_k=5, char_id=CHAR, allow_strengthen=False,
+                                 return_trace=True, query_vec=[0.0], sem_hits=hits)
+        return {t["id"]: t for t in trace}
+
+    assert "sem1" in _run(0.0)
+    t = _run(0.5)
+    assert "sem1" not in t and "kw1" in t
+    assert t["kw1"]["match"] == "keyword" and "sim" in t["kw1"]

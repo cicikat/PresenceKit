@@ -57,7 +57,7 @@ Reality `1_system_prompt` 绑定当前角色，并使用用户所选称谓（默
 | `6a_user_identity` | 用户稳定行为模式 | `user_identity_text` 非空 | `core/memory/user_identity.py`，confidence >= 0.5 的维度 |
 | `6b_event_search` | 相关往事（event_log 搜索结果） | 搜索结果非空；`fetch_context(recall_policy="none")` 时整层跳过（CC 任务 19 · C） | `event_log.search()` |
 | `6c_episodic` | 情景记忆片段 | episodic_result 非空；`fetch_context(recall_policy="none")` 时整层跳过（CC 任务 19 · C） | `episodic_memory.retrieve_mixed()`（M4：recent/mid/long/repair 分桶，≤4 条；冲突条目连同修复结果渲染）+ `format_for_prompt()` |
-| `6c_episodic_fallback` | 长期/修复点记忆兜底（M4：不再取近 7 天高强度） | episodic_result 为空且 fallback 非空；`recall_policy="none"` 时同样跳过 | `episodic_memory.retrieve_fallback()`；实际消息 `_layer` 仍写 `6c_episodic`，便于统一裁剪 |
+| `6c_episodic_fallback` | 长期/修复点记忆兜底（M4：不再取近 7 天高强度） | episodic_result 为空且 fallback 非空；`recall_policy="none"` 时同样跳过；**S1：仅主动回忆（调度器 `fetch_context(query_free_fallback=True)`）才会跑，普通聊天默认不跑**。保留的意图型补位：`retrieve_mixed(long_term=True)` 的 `long_term_fill`（query 命中 `relationship_longterm`）、时间窗兜底（query 含时间意图） | `episodic_memory.retrieve_fallback()`；实际消息 `_layer` 仍写 `6c_episodic`，便于统一裁剪 |
 | `mid_term` | 过去 12 小时对话压缩视图 | mid_term_context 非空 | `mid_term.format_for_prompt()`（12h 过期，最多 20 条，三时间桶渲染） |
 | `6d_diary_context` | 用户近期日记 | 有内容且命中 `emotion.down` / `emotion.indirect`；**新鲜度闸**：`diary_context.meta.json` 中 `latest_entry_date` 距今 >4 天（可配置 `diary.context_max_age_days`）或无 meta 时不注入；**低信息准入闸**：用户消息为 backchannel 时不注入 | `diary_context.load()` + `diary_context.load_meta()` |
 | `6e_inner_diary_facts` | 他昨天的记录（事件层，取前200字）；摘录里的 `今日事件` 改成 `昨日事件` | 昨日日记文件存在且含事件层 | `data/runtime/characters/{char_id}/inner/diary/` |
@@ -667,7 +667,7 @@ Reality prompt 环形缓冲按 uid 保存最近 10 轮，足够群聊页聚合�
 | `3.8_activity` | `tagged` | triggers: `topic.activity`、`query.what_doing` 等 |
 | `6b_event_search` | `scored` | rag_query = 用户消息前 200 字符 |
 | `6c_episodic` | `scored` | rag_query = 用户消息前 200 字符 |
-| `6c_episodic_fallback` | `scored` | rag_query = `"(fallback: recent high-strength)"` |
+| `6c_episodic_fallback` | `scored` | rag_query = `"(fallback: long/repair high-strength, query-independent)"` |
 | `6d_diary_context` | `tagged` | triggers: `emotion.down`、`emotion.indirect` |
 | `web_recall` | `scored` | rag_query = 用户消息前 200 字符；额外带 `source`（固定 `"vector_store:web"`）与 `hits`（`[(url, dist), ...]`，来自 `vs.query_with_preview(sources=["web"])`） |
 | `6e_inner_diary_feeling` | `tagged` | triggers: `emotion.down`、`emotion.indirect`、`emotion.deep`、`topic.relation` |

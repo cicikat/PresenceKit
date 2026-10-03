@@ -561,7 +561,7 @@ async def _pipeline_send(
         async with _conv_lock(oid):
             context = await _pipeline.fetch_context(
                 oid, search_query or prompt, frozen_scope=_frozen_scope,
-                recall_policy=recall_policy,
+                recall_policy=recall_policy, query_free_fallback=True,
             )
             # Tag this build_prompt() call as proactive so prompt_capture records
             # the trigger origin, seed prompt, and search query alongside the layers.
@@ -844,7 +844,7 @@ async def _compose_trigger_reply(
         async with _conv_lock(oid):
             context = await _pipeline.fetch_context(
                 oid, search_query or prompt, frozen_scope=_frozen_scope,
-                recall_policy=recall_policy,
+                recall_policy=recall_policy, query_free_fallback=True,
             )
             messages, _ = _pipeline.build_prompt(
                 oid, prompt, context, char_id=_frozen_scope.character_id

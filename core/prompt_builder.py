@@ -1074,7 +1074,7 @@ def build(
             "_drop_priority": 70,
             "_provenance": {
                 "mode": "scored",
-                "rag_query": "(fallback: recent high-strength)",
+                "rag_query": "(fallback: long/repair high-strength, query-independent)",
             },
         })
 

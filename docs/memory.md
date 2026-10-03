@@ -981,7 +981,13 @@ episodic_result = format_for_prompt(
 
 ### fallback 召回：retrieve_fallback()
 
-当主召回没有可注入结果时，prompt_builder 会尝试注入一条兜底记忆。**M4 起改为从 long / repair 桶取，
+**工单 S1：fallback 不看 query，仅限主动回忆。** `fetch_context(query_free_fallback=False)` 为默认（普通聊天不调用，
+recall_trace `episodic_fallback_mode=disabled_for_chat`）；调度器主动开口传 `True`（`used` / `empty`）。其余取值：
+`skipped_low_info` / `skipped_long_term`。保留的「有意图依据」补位：`retrieve_mixed(long_term=True)` 的 `long_term_fill`
+（query 命中 `relationship_longterm`）与时间窗兜底（query 含时间意图）；episodic 命中 trace 带 `sim` 与
+`match: keyword|semantic|time|long_term_fill`。`recall.semantic_min_similarity`（默认 0.0）可过滤低相似纯语义候选。
+
+当主召回没有可注入结果时，（仅主动回忆路径）prompt_builder 会尝试注入一条兜底记忆。**M4 起改为从 long / repair 桶取，
 不再取「近 7 天高强度」**（那会让刚吵完的冲突几乎每轮都中）：
 
 - long 桶：`occurred_at`（缺失回退 `timestamp`）超过 30 天的非核心记忆；repair 桶：`outcome in (repaired, clarified)`

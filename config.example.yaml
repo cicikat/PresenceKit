@@ -410,8 +410,10 @@ recall:
     kw: 0.3          # 关键词相关度权重
     strength: 0.3    # 强度×衰减权重
   batch_size: 32
+  # 工单 S1：纯语义候选（无关键词命中）的相似度下限；0 = 不过滤（现状）。
+  # 先看 recall_trace 里 episodic 命中项的 sim 分布再定阈值。
+  semantic_min_similarity: 0.0
 
-screen_peek:
   enabled: false           # 默认关；在设置页打开后他可自主查看屏幕内容
   cooldown_minutes: 30     # 同一文件/窗口最短间隔分钟数（范围 5–240）
 

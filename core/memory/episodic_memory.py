@@ -403,9 +403,18 @@ def retrieve(
         try:
             from core.memory.vector_store import dist_to_sim as _d2s
             _mem_by_id = {m["id"]: m for m in memories}
+            _sem_floor = 0.0
+            try:
+                from core.config_loader import get_config as _gc_sem
+                _sem_floor = float((_gc_sem().get("recall", {}) or {}).get("semantic_min_similarity", 0.0) or 0.0)
+            except Exception:
+                _sem_floor = 0.0
             for _src_id, _dist, _ts in (sem_hits or []):
                 sem_sim_map[_src_id] = _d2s(_dist)
                 if _src_id not in candidate_ids and _src_id in _mem_by_id:
+                    # S1：纯语义候选（无关键词命中）低于相似度下限不进候选池
+                    if _sem_floor > 0 and sem_sim_map[_src_id] < _sem_floor:
+                        continue
                     candidate_ids.add(_src_id)
         except Exception as _se:
             logger.debug("[episodic.retrieve] semantic lookup failed: %s", _se)
@@ -605,6 +614,13 @@ def retrieve(
                 "strength": round(mem.get("strength", 0.5), 3),
                 "emotion_peak": mem.get("emotion_peak", "neutral"),
                 "kw_src": "keyword" if kw_matched_map.get(mem["id"]) else ("semantic" if sem_sim_map.get(mem["id"]) else "facts"),
+                "sim": round(sem_sim_map.get(mem["id"], 0.0), 3),
+                "match": (
+                    "keyword" if kw_matched_map.get(mem["id"])
+                    else "semantic" if sem_sim_map.get(mem["id"])
+                    else "time" if (since_ts is not None or until_ts is not None)
+                    else "keyword"
+                ),
                 "selected": mem["id"] in _selected_ids,
             })
         for mem in hop2_added:
@@ -1105,6 +1121,7 @@ def retrieve_mixed(
             if not any(t["id"] == m["id"] for t in trace_items):
                 trace_items.append({
                     "id": m["id"], "score": 0.0, "hop": "long_term_fill", "bucket": m["_bucket"],
+                    "match": "long_term_fill", "sim": 0.0,
                     "summary": (m.get("narrative_summary") or m.get("summary", ""))[:80],
                     "strength": round(m.get("strength", 0.5), 3), "selected": True,
                 })

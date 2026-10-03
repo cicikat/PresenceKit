@@ -235,6 +235,7 @@ class Pipeline:
         group_id: str | None = None,
         frozen_scope: "MemoryScope | None" = None,
         recall_policy: str = "seed",
+        query_free_fallback: bool = False,
     ) -> dict:
         """
         并发拉取所有记忆数据并进行世界书关键词匹配。
@@ -263,6 +264,9 @@ class Pipeline:
             identity/mood/short_term/花园等状态层。主动触发的"由头"已经在种子 prompt 里
             写死（天气、想她了、看到她久坐），角色不需要再被 "今天" 这类宽泛词捞出的旧
             情景记忆带偏（RC6：乱召回导致"胡乱召回然后说一大堆废话"）。
+
+        query_free_fallback（工单 S1）：是否允许 retrieve_fallback()（不看 query 的
+        long/repair 高强度兜底回忆）。默认 False（普通聊天不跑）；仅调度器主动开口传 True。
         """
         # Guard: if frozen_scope provided, use it directly (turn-level scope freeze);
         # otherwise validate active_character and construct scope.
@@ -430,7 +434,16 @@ class Pipeline:
 
         # 兜底召回：tag 未命中时备用，存入 context 供 prompt_builder 判断
         from core.memory.episodic_memory import retrieve_fallback
-        if _skip_recall or _long_term_query:
+        # 工单 S1：fallback 不看 query，仅限主动回忆（调度器）；普通聊天默认关闭。
+        if _skip_recall:
+            _episodic_fallback_mode = "skipped_low_info"
+        elif _long_term_query:
+            _episodic_fallback_mode = "skipped_long_term"
+        elif not query_free_fallback:
+            _episodic_fallback_mode = "disabled_for_chat"
+        else:
+            _episodic_fallback_mode = "used"
+        if _episodic_fallback_mode != "used":
             # 长期问题已由 retrieve_mixed(long_term=True) 拉齐 long/repair 桶，兜底不再跑
             episodic_fallback, _episodic_fallback_trace = [], []
         else:
@@ -671,6 +684,10 @@ class Pipeline:
                 "long_term_query": _long_term_query,
                 "relationship_span_source": _span_source,
                 "episodic_fallback_used": bool(episodic_fallback),
+                "episodic_fallback_mode": (
+                    "empty" if _episodic_fallback_mode == "used" and not episodic_fallback
+                    else _episodic_fallback_mode
+                ),
                 "episodic_fallback_hits": _episodic_fallback_trace,
                 "event_log_hits": _event_log_trace,
                 "lore_hits": _lore_trace,
