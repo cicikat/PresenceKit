@@ -51,6 +51,125 @@ _GSV_SYNTHESIS_LOCK = asyncio.Lock()
 _HOLDS_LOCAL_RESOURCE: contextvars.ContextVar[bool] = contextvars.ContextVar(
     "presence_holds_local_resource", default=False)
 _GSV_ACTIVE_MODELS: dict[str, tuple[str, str]] = {}
+# Mutable {"held": bool} for the current synthesis; lets the yield helper and the
+# outer context agree on whether the shared lock is really owned (cancel-safe).
+_LOCAL_RESOURCE_STATE: contextvars.ContextVar[dict | None] = contextvars.ContextVar(
+    "presence_local_resource_state", default=None)
+_GSV_DEFAULT_SEGMENT_TIMEOUT = 30.0
+_GSV_DEFAULT_MODEL_SWITCH_TIMEOUT = 60.0
+_GSV_PROBE_TIMEOUT = 3.0
+_TTS_DEFAULT_MAX_PENDING = 4
+# Runtime observability (read by /tts-config -> runtime_status).
+_TTS_RUNTIME: dict = {
+    "pending": 0,
+    "dropped": 0,
+    "current": None,
+    "last_error": None,
+    "last_error_at": None,
+    "unhealthy_urls": {},
+}
+
+
+class TtsBusyError(RuntimeError):
+    """Raised when the TTS queue is full; the request is dropped, never parked."""
+
+
+class GsvTimeoutError(RuntimeError):
+    """A GSV call exceeded its hard timeout (the worker thread may still run)."""
+
+
+def get_tts_runtime_status() -> dict:
+    """Read-only snapshot: lock holder, queue length, last error, GSV health."""
+    from core.video_call import local_resource
+
+    current = _TTS_RUNTIME["current"]
+    return {
+        "pending": _TTS_RUNTIME["pending"],
+        "dropped": _TTS_RUNTIME["dropped"],
+        "current": dict(current) if current else None,
+        "local_resource_locked": local_resource().locked(),
+        "gsv_lock_locked": _GSV_SYNTHESIS_LOCK.locked(),
+        "last_error": _TTS_RUNTIME["last_error"],
+        "last_error_at": _TTS_RUNTIME["last_error_at"],
+        "healthy": not _TTS_RUNTIME["unhealthy_urls"],
+        "unhealthy_urls": dict(_TTS_RUNTIME["unhealthy_urls"]),
+    }
+
+
+def _record_tts_error(error: BaseException, api_url: str | None = None) -> None:
+    _TTS_RUNTIME["last_error"] = f"{type(error).__name__}: {str(error)[:200]}"
+    _TTS_RUNTIME["last_error_at"] = time.time()
+    if api_url:
+        # Any failure invalidates the model cache so the next call re-switches.
+        _GSV_ACTIVE_MODELS.pop(api_url, None)
+        if isinstance(error, GsvTimeoutError):
+            _TTS_RUNTIME["unhealthy_urls"][api_url] = time.time()
+
+
+def _probe_gsv_sync(api_url: str) -> bool:
+    import urllib.request
+
+    try:
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        opener.open(api_url, timeout=_GSV_PROBE_TIMEOUT).close()
+        return True
+    except Exception as error:  # HTTP error pages still prove the server is alive
+        return getattr(error, "code", None) is not None
+
+
+async def _ensure_gsv_healthy(api_url: str) -> None:
+    """After a timeout, probe before queueing more work behind a stuck server."""
+    if api_url not in _TTS_RUNTIME["unhealthy_urls"]:
+        return
+    loop = asyncio.get_running_loop()
+    try:
+        ok = await asyncio.wait_for(
+            loop.run_in_executor(None, _probe_gsv_sync, api_url), _GSV_PROBE_TIMEOUT + 1)
+    except asyncio.TimeoutError:
+        ok = False
+    if not ok:
+        raise RuntimeError("GSV is unhealthy (probe failed); request skipped")
+    _TTS_RUNTIME["unhealthy_urls"].pop(api_url, None)
+    _GSV_ACTIVE_MODELS.pop(api_url, None)
+
+
+async def _run_gsv_call(timeout: float, func, *args):
+    loop = asyncio.get_running_loop()
+    try:
+        return await asyncio.wait_for(loop.run_in_executor(None, func, *args), timeout)
+    except asyncio.TimeoutError as error:
+        raise GsvTimeoutError(f"GSV call timed out after {timeout:g}s") from error
+
+
+def _float_cfg(cfg: dict, key: str, default: float) -> float:
+    try:
+        value = float(cfg.get(key, default))
+        return value if value > 0 else default
+    except (TypeError, ValueError):
+        return default
+
+
+class _hold_local_resource:
+    """Take the shared local-model lock with explicit ownership tracking."""
+
+    async def __aenter__(self):
+        from core.video_call import local_resource
+
+        self._lock = local_resource()
+        await self._lock.acquire()
+        self._state = {"held": True}
+        self._tokens = (_HOLDS_LOCAL_RESOURCE.set(True), _LOCAL_RESOURCE_STATE.set(self._state))
+        return self
+
+    async def __aexit__(self, *exc):
+        _HOLDS_LOCAL_RESOURCE.reset(self._tokens[0])
+        _LOCAL_RESOURCE_STATE.reset(self._tokens[1])
+        if self._state["held"]:
+            self._state["held"] = False
+            self._lock.release()
+        return False
+
+
 _GSV_HARD_BOUNDARIES = frozenset("。！？；!?")
 _GSV_SOFT_BOUNDARIES = frozenset("，,、:：—–-")
 _GSV_DEFAULT_SEGMENT_MAX_CHARS = 42
@@ -463,15 +582,18 @@ async def _yield_shared_local_resource() -> None:
     """
     from core.video_call import local_resource
 
-    if not _HOLDS_LOCAL_RESOURCE.get():
+    state = _LOCAL_RESOURCE_STATE.get()
+    if not _HOLDS_LOCAL_RESOURCE.get() or not state or not state["held"]:
         return
     lock = local_resource()
     lock.release()
-    try:
-        # Let a waiting vision request win the lock before we ask for it back.
-        await asyncio.sleep(0)
-    finally:
-        await lock.acquire()
+    state["held"] = False
+    # Let a waiting vision request win the lock before we ask for it back.
+    # If cancelled here or inside acquire(), held stays False so the outer
+    # context never releases a lock it does not own.
+    await asyncio.sleep(0)
+    await lock.acquire()
+    state["held"] = True
 
 
 class TtsProvider(Protocol):
@@ -589,21 +711,32 @@ class GsvProvider:
             bool(cfg.get("yield_shared_resource_between_segments", True))
             and len(segments) >= int(cfg.get("yield_shared_resource_min_segments", 2))
         )
-        async with _GSV_SYNTHESIS_LOCK:
-            loop = asyncio.get_event_loop()
-            client = await loop.run_in_executor(None, _build_client)
-            wavs: list[bytes] = []
-            for index, (segment_text, segment_language) in enumerate(segments):
-                if index and yield_between_segments:
-                    # Hand the shared local-model lock back between sentences so a
-                    # video-call frame can slip into the gap instead of starving.
-                    await _yield_shared_local_resource()
-                wavs.append(await loop.run_in_executor(
-                    None, _synthesize_segment, client, segment_text, segment_language))
+        segment_timeout = _float_cfg(cfg, "segment_timeout_seconds", _GSV_DEFAULT_SEGMENT_TIMEOUT)
+        switch_timeout = _float_cfg(cfg, "model_switch_timeout_seconds", _GSV_DEFAULT_MODEL_SWITCH_TIMEOUT)
+        await _ensure_gsv_healthy(api_url)
+        try:
+            async with _GSV_SYNTHESIS_LOCK:
+                _TTS_RUNTIME["current"] = {
+                    "api_url": api_url, "segments": len(segments), "started_at": time.time()}
+                try:
+                    client = await _run_gsv_call(switch_timeout, _build_client)
+                    wavs: list[bytes] = []
+                    for index, (segment_text, segment_language) in enumerate(segments):
+                        if index and yield_between_segments:
+                            # Hand the shared local-model lock back between sentences so a
+                            # video-call frame can slip into the gap instead of starving.
+                            await _yield_shared_local_resource()
+                        wavs.append(await _run_gsv_call(
+                            segment_timeout, _synthesize_segment, client, segment_text, segment_language))
+                finally:
+                    _TTS_RUNTIME["current"] = None
             joined = _join_pcm_wavs(wavs, pause_seconds)
             if joined is None:
                 raise RuntimeError("GSV returned incompatible WAV segments")
             return joined
+        except BaseException as error:
+            _record_tts_error(error, api_url)
+            raise
 
 
 class OpenAICompatibleProvider:
@@ -708,7 +841,8 @@ async def synthesize(text: str, emotion: str = "neutral", *, char_id: str | None
     见 resolve_tts_config()）；省略时用全局 tts 配置（未接线调用点的现状行为）。
 
     成功返回 bytes，失败返回 None（已记录详细日志）。
-    超时 15 秒。
+    超时：GSV 每段默认 30s、模型切换默认 60s（segment_timeout_seconds /
+    model_switch_timeout_seconds）；等待队列上限 max_pending（默认 4），满则丢弃。
     """
     text = clean_tts_text(text)
     provider, provider_cfg = get_provider_config(resolve_tts_config(char_id))
@@ -728,17 +862,23 @@ async def synthesize(text: str, emotion: str = "neutral", *, char_id: str | None
         logger.warning("[voice_adapter] unsupported provider=%s", provider)
         return None
     try:
+        max_pending = int(provider_cfg.get("max_pending", _TTS_DEFAULT_MAX_PENDING))
+    except (TypeError, ValueError):
+        max_pending = _TTS_DEFAULT_MAX_PENDING
+    if _TTS_RUNTIME["pending"] >= max(1, max_pending):
+        from core.api_call_log import append
+        _TTS_RUNTIME["dropped"] += 1
+        append(caller="tts", purpose="synthesize", provider=provider, model="", duration_ms=0, ok=False, output_hint="queue_full")
+        logger.warning("[voice_adapter] TTS queue full (%d pending); request dropped", _TTS_RUNTIME["pending"])
+        return None
+    _TTS_RUNTIME["pending"] += 1
+    try:
         from urllib.parse import urlsplit
         endpoint = str(provider_cfg.get("api_url") or provider_cfg.get("base_url") or "")
         local_tts = urlsplit(endpoint).hostname in {"localhost", "127.0.0.1", "::1"}
         if local_tts:
-            from core.video_call import local_resource
-            async with local_resource():
-                token = _HOLDS_LOCAL_RESOURCE.set(True)
-                try:
-                    audio_bytes = await adapter.synthesize(text, emotion, provider_cfg)
-                finally:
-                    _HOLDS_LOCAL_RESOURCE.reset(token)
+            async with _hold_local_resource():
+                audio_bytes = await adapter.synthesize(text, emotion, provider_cfg)
         else:
             audio_bytes = await adapter.synthesize(text, emotion, provider_cfg)
         from core.api_call_log import append
@@ -752,6 +892,8 @@ async def synthesize(text: str, emotion: str = "neutral", *, char_id: str | None
         append(caller="tts", purpose="synthesize", provider=provider, model="", duration_ms=int((time.perf_counter() - started_at) * 1000), ok=False, output_hint=type(e).__name__)
         log_error("voice_adapter.synthesize", e)
         return None
+    finally:
+        _TTS_RUNTIME["pending"] -= 1
 
 
 async def send_voice(target_id: str, audio_bytes: bytes, is_group: bool = False):
@@ -776,16 +918,17 @@ async def send_voice(target_id: str, audio_bytes: bytes, is_group: bool = False)
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True
         )
         await qq_adapter.send_record(target_id, f"file:///{amr_path}", is_group)
-    except Exception:
+    except Exception as error:
+        logger.warning("[voice_adapter] ffmpeg/AMR path failed, falling back to base64 wav: %s", error)
         b64 = base64.b64encode(audio_bytes).decode("ascii")
         await qq_adapter.send_record(target_id, f"base64://{b64}", is_group)
     finally:
-        if wav_path:
-            try: os.unlink(wav_path)
-            except: pass
-        if amr_path:
-            try: os.unlink(amr_path)
-            except: pass
+        for path in (wav_path, amr_path):
+            if path:
+                try:
+                    os.unlink(path)
+                except OSError as error:
+                    logger.debug("[voice_adapter] temp cleanup failed for %s: %s", path, error)
 
 
 # ── 类封装 ─────────────────────────────────────────────────────────────────────

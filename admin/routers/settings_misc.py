@@ -124,7 +124,7 @@ async def update_sticker_config(body: StickerConfigUpdate, auth=Depends(require_
 @router.get("/tts-config", summary="获取 TTS 配置")
 async def get_tts_config(char_id: Optional[str] = None, auth=Depends(require_scopes("admin"))):
     cfg = get_config().get("tts", {})
-    from core.output.voice_adapter import get_provider_status, get_safe_provider_params, resolve_tts_config
+    from core.output.voice_adapter import get_provider_status, get_safe_provider_params, get_tts_runtime_status, resolve_tts_config
     resolved_cfg = resolve_tts_config(char_id) if char_id else cfg
     provider_blocks = resolved_cfg.get("providers") if isinstance(resolved_cfg.get("providers"), dict) else {}
     safe_provider_blocks = {
@@ -146,6 +146,7 @@ async def get_tts_config(char_id: Optional[str] = None, auth=Depends(require_sco
         "provider_params": get_safe_provider_params(resolved_cfg),
         "provider_params_by_provider": safe_provider_blocks,
         "provider_status": get_provider_status(resolved_cfg),
+        "runtime_status": get_tts_runtime_status(),
         "char_id": char_id,
         "character_binding": _tts_character_binding(char_id) if char_id else None,
         "resource_options": _tts_resource_options(char_id or _current_tts_character_id()),

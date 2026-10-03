@@ -250,14 +250,10 @@ async def test_local_tts_hands_shared_lock_to_vision_between_segments(tmp_path, 
             order.append("vision")
 
     async def tts():
-        async with video_call.local_resource():
-            token = voice_adapter._HOLDS_LOCAL_RESOURCE.set(True)
-            try:
-                return await voice_adapter.GsvProvider().synthesize(
-                    "第一句。第二句。第三句。", "neutral",
-                    {"api_url": "http://gsv-yield", "ref_audio": str(reference)})
-            finally:
-                voice_adapter._HOLDS_LOCAL_RESOURCE.reset(token)
+        async with voice_adapter._hold_local_resource():
+            return await voice_adapter.GsvProvider().synthesize(
+                "第一句。第二句。第三句。", "neutral",
+                {"api_url": "http://gsv-yield", "ref_audio": str(reference)})
 
     speaking = asyncio.create_task(tts())
     await asyncio.sleep(0)
@@ -388,3 +384,102 @@ async def test_unknown_provider_is_recorded_as_failed_call(monkeypatch):
     assert await voice_adapter.synthesize("hello") is None
     assert captured["ok"] is False
     assert captured["output_hint"] == "unsupported_provider"
+
+
+def _reset_runtime():
+    voice_adapter._TTS_RUNTIME.update(pending=0, dropped=0, current=None, last_error=None, last_error_at=None)
+    voice_adapter._TTS_RUNTIME["unhealthy_urls"] = {}
+
+
+@pytest.mark.asyncio
+async def test_gsv_hang_times_out_releases_lock_and_recovers(tmp_path, monkeypatch):
+    import threading
+    from core import video_call
+    import asyncio
+
+    _reset_runtime()
+    reference = tmp_path / "reference.wav"
+    output = tmp_path / "output.wav"
+    reference.write_bytes(b"reference")
+    output.write_bytes(_pcm_wav())
+    monkeypatch.setattr(video_call, "_local_resource", asyncio.Lock())
+    release = threading.Event()
+    state = {"hang": True}
+
+    class FakeClient:
+        def __init__(self, api_url):
+            pass
+
+        def predict(self, **kwargs):
+            if kwargs["api_name"] == "/get_tts_wav":
+                if state["hang"]:
+                    release.wait(5)
+                return str(output)
+            return None
+
+    monkeypatch.setitem(sys.modules, "gradio_client", SimpleNamespace(Client=FakeClient, handle_file=lambda p: p))
+    monkeypatch.setattr(voice_adapter, "_probe_gsv_sync", lambda url: True)
+    url = "http://127.0.0.1:59999"
+    voice_adapter._GSV_ACTIVE_MODELS[url] = ("a", "b")
+    cfg = {"api_url": url, "ref_audio": str(reference), "segment_timeout_seconds": 0.2}
+
+    with pytest.raises(voice_adapter.GsvTimeoutError):
+        async with voice_adapter._hold_local_resource():
+            await voice_adapter.GsvProvider().synthesize("你好。", "neutral", cfg)
+    release.set()
+    assert not voice_adapter._GSV_SYNTHESIS_LOCK.locked()
+    assert not video_call.local_resource().locked()
+    assert url not in voice_adapter._GSV_ACTIVE_MODELS
+    status = voice_adapter.get_tts_runtime_status()
+    assert status["healthy"] is False and "GsvTimeoutError" in status["last_error"]
+
+    state["hang"] = False
+    async with voice_adapter._hold_local_resource():
+        assert await voice_adapter.GsvProvider().synthesize("你好。", "neutral", cfg) is not None
+    assert voice_adapter.get_tts_runtime_status()["healthy"] is True
+
+
+@pytest.mark.asyncio
+async def test_cancel_during_yield_does_not_release_foreign_lock(tmp_path, monkeypatch):
+    import asyncio
+    from core import video_call
+
+    monkeypatch.setattr(video_call, "_local_resource", asyncio.Lock())
+    lock = video_call.local_resource()
+
+    async def speaker():
+        async with voice_adapter._hold_local_resource():
+            await asyncio.sleep(0.05)
+            await voice_adapter._yield_shared_local_resource()
+
+    async def vision_holder():
+        async with lock:
+            await asyncio.sleep(0.3)
+
+    task = asyncio.create_task(speaker())
+    await asyncio.sleep(0)
+    vision = asyncio.create_task(vision_holder())
+    await asyncio.sleep(0.15)  # speaker yielded, vision holds the lock
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert lock.locked()  # vision's lock was not released by the cancelled speaker
+    await vision
+    assert not lock.locked()
+
+
+@pytest.mark.asyncio
+async def test_full_queue_drops_request_without_hanging(monkeypatch):
+    _reset_runtime()
+    voice_adapter._TTS_RUNTIME["pending"] = 4
+    called = []
+
+    class Never:
+        async def synthesize(self, *a):
+            called.append(1)
+
+    monkeypatch.setitem(voice_adapter._PROVIDERS, "gsv", Never())
+    monkeypatch.setattr(voice_adapter, "resolve_tts_config", lambda c=None: {"provider": "gsv"})
+    assert await voice_adapter.synthesize("你好。") is None
+    assert not called and voice_adapter._TTS_RUNTIME["dropped"] == 1
+    _reset_runtime()

@@ -261,7 +261,7 @@ fail-closed）：管理面「模型路由」连接编辑器手动勾选「本地
 Chat Completions 视觉连接（`localhost`、`127.0.0.1`、`::1`），拒绝远端与 OCR。
 `GET /video-call/state`（chat）返回 effective 与阻断原因；`GET /observability/video-call`
 （state.read）另含无图像内容的处理计数。摄像头预览可在路由无效时独立显示，但不会送帧。
-本机 TTS 与视频视觉共用推理锁；视觉忙时跳过帧，TTS 按已有播放队列等待。
+本机 TTS 与视频视觉共用推理锁；视觉忙时跳过帧，TTS 按已有播放队列等待。GSV 调用有硬超时（`segment_timeout_seconds` 默认 30、`model_switch_timeout_seconds` 默认 60，写在 tts provider 配置块）；超时后该 `api_url` 标记不健康，下次请求先探测通过才进锁，任何失败都清除模型缓存。等待中的 TTS 请求上限 `max_pending`（默认 4），超出直接丢弃。`GET /admin/tts-config` 的 `runtime_status` 只读暴露锁持有者、队列长度、丢弃数、最近错误与健康状态。
 本地视觉连接拒绝时停止 SDK 自动重试，15 秒内跳过后续帧并在客户端提示服务不可达；
 推理超时与连接失败分别显示。TTS 配置读取若遇到不能作为 authored 资产索引的旧角色 ID，
 仍返回现有 TTS 设置和外部参考音频，资源列表置空并给出 `blocking_reason`。

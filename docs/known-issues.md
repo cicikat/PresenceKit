@@ -1,5 +1,9 @@
 # docs/known-issues.md — 已知问题与技术债
 
+## TTS 卡死与长回复堵塞（工单 B3，2026-10-03，部分修复）
+
+GSV 调用无超时导致两把锁永久占用、锁让出被取消时归属错乱、模型缓存失败不失效。已修：每次 GSV 调用硬超时、超时后健康探测恢复、`_hold_local_resource` 显式持有标记（取消安全）、失败清模型缓存、`max_pending` 有界等待与丢弃、`/tts-config` 的 `runtime_status` 观测、`send_voice` 裸 except 改日志。open：同 turn 多段合并成单任务与「同 turn 新请求取代旧请求」未做；超时线程无法强杀，可能残留至 GSV 自行返回。
+
 ## 聊天产物编辑的剩余缺口（工单 A6，2026-10，roadmap）
 
 `update_artifact` 已支持原地改文本产物（保留一版 `.prev`）。仍未做：前端产物文件列表与历史版本入口；
