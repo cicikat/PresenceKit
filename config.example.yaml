@@ -838,6 +838,14 @@ event_edge_proposer:
   max_tokens_per_call: 400
   # Bounds one discovered owner scope, including lock acquisition and model call.
   scope_timeout_seconds: 30
+state_composer:
+  # StatePacket shadow mode (work order S2): records per-turn layer manifest
+  # (ids and metrics only) to state_packet/{date}.jsonl; never changes the prompt.
+  shadow:
+    enabled: false
+    uids: []
+    char_ids: []
+
 memory_dossiers:
   # Work order S3. prompt_injection=false: 6b_memory_dossiers is neither injected
   # nor does it suppress legacy recall (dossier tools/workers unaffected).
@@ -852,14 +860,6 @@ event_shadow_recall:
   # overrides for a small rollout while enabled remains false.
   enabled: false
   uids: []
-state_composer:
-  # StatePacket shadow mode (work order S2): records per-turn layer manifest
-  # (ids and metrics only) to state_packet/{date}.jsonl; never changes the prompt.
-  shadow:
-    enabled: false
-    uids: []
-    char_ids: []
-
   char_ids: []
   seed_limit: 3
   window_before: 2

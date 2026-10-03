@@ -2261,6 +2261,7 @@ class Pipeline:
                 envelope=envelope,
                 prior_gap_seconds=critical_result.get("prior_gap_seconds"),
                 char_id=char_id,
+                turn_id=str(_turn_id or ""),
             )
         except Exception as _hs_err:
             logger.warning(f"[pipeline.post_process_slow] hidden_state reality signal 映射失败: {_hs_err}")
@@ -2330,7 +2331,6 @@ class Pipeline:
             if web_echo:
                 _mt_payload["web_echo"] = True
             if coplay_echo:
-                turn_id=str(_turn_id or ""),
                 _mt_payload["coplay_echo"] = True
             if provenance_source:
                 _mt_payload["source"] = provenance_source
