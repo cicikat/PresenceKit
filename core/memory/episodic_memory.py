@@ -274,7 +274,7 @@ def write_episode(user_id: str, episode: dict, *, char_id: str = DEFAULT_CHAR_ID
         episode["tags"] = []
     if not isinstance(episode.get("retrieval_count"), int):
         episode["retrieval_count"] = 0
-    if episode.get("status") not in ("open", "resolved", "elapsed", "forgotten"):
+    if episode.get("status") not in ("open", "resolved", "elapsed", "forgotten", "invalidated"):
         episode["status"] = "open"
     if not isinstance(episode.get("resolved_at"), (int, float)):
         episode["resolved_at"] = None
@@ -453,7 +453,7 @@ def retrieve(
         if mem["id"] not in candidate_ids:
             continue
         # 已解决事件默认不再召回；若未来需要偶尔浮起，可改为对 score 乘低权重。
-        if mem.get("status", "open") in ("resolved", "elapsed", "forgotten"):
+        if mem.get("status", "open") in ("resolved", "elapsed", "forgotten", "invalidated"):
             continue
 
         days = (now - mem["timestamp"]) / 86400
@@ -539,7 +539,7 @@ def retrieve(
                     if mid in _already or mid not in mem_by_id:
                         continue
                     m = mem_by_id[mid]
-                    if m.get("status", "open") in ("resolved", "elapsed", "forgotten"):
+                    if m.get("status", "open") in ("resolved", "elapsed", "forgotten", "invalidated"):
                         continue
                     if m.get("strength", 0) < 0.5:
                         continue
@@ -1066,7 +1066,7 @@ def retrieve_mixed(
     recent_texts = [h for h in (history or [])[-10:] if h]
 
     def _alive(m: dict) -> bool:
-        return m.get("status", "open") not in ("resolved", "elapsed", "forgotten")
+        return m.get("status", "open") not in ("resolved", "elapsed", "forgotten", "invalidated")
 
     chosen: dict[str, list[dict]] = {k: [] for k in quotas}
     chosen_ids: set[str] = set()
@@ -1145,7 +1145,7 @@ def retrieve_fallback(user_id: str, recent_history: list[str], top_k: int = 1, *
     now = time.time()
     candidates = []
     for m in memories:
-        if m.get("status", "open") in ("resolved", "elapsed", "forgotten"):
+        if m.get("status", "open") in ("resolved", "elapsed", "forgotten", "invalidated"):
             continue
         # 核心记忆只经主相关性召回浮现，不参与 fallback 兜底
         # (confab-fixation-loop fix: is_core episodes must not be unconditionally

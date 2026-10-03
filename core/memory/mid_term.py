@@ -208,7 +208,7 @@ def clear(uid: str, *, char_id: str = DEFAULT_CHAR_ID, origin: dict | None = Non
 
 def format_for_prompt(uid: str, *, char_id: str = DEFAULT_CHAR_ID) -> str:
     """读取 + 时间桶分组 + 渲染成 prompt 段落。空返空串。"""
-    events = load(uid, char_id=char_id)
+    events = [e for e in load(uid, char_id=char_id) if not e.get("invalidated")]
     if not events:
         return ""
     now = time.time()

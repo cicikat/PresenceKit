@@ -263,7 +263,16 @@ def _record_batch_provenance(uid: str, data: dict, *, char_id: str) -> None:
 def list_recallable_arcs(uid: str, *, char_id: str = DEFAULT_CHAR_ID) -> list[dict]:
     """供 prompt_builder 召回层使用：返回 status in {active, dormant} 的弧线（closed 不参与召回）。"""
     data = load(uid, char_id=char_id)
-    return [a for a in data["arcs"] if a.get("status") in ("active", "dormant")]
+    arcs: list[dict] = []
+    for a in data["arcs"]:
+        if a.get("status") not in ("active", "dormant"):
+            continue
+        nodes = a.get("nodes", [])
+        valid = [n for n in nodes if not n.get("invalidated")]
+        if nodes and not valid:
+            continue  # S4b: 全部节点证据已撤回
+        arcs.append({**a, "nodes": valid} if len(valid) != len(nodes) else a)
+    return arcs
 
 
 def _find_arc(data: dict, arc_id: str) -> dict | None:

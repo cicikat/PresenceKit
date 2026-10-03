@@ -28,6 +28,23 @@ async def dream_settings_observability(
     return observability_snapshot(owner, char_id=selected)
 
 
+@router.get("/observability/memory-invalidations", summary="读取删除级联失效台账（只含 ID 与计数）")
+async def memory_invalidations_observability(
+    uid: str = Query(..., min_length=1, max_length=128),
+    char_id: str = Query(..., min_length=1, max_length=128),
+    limit: int = Query(50, ge=1, le=500),
+    _auth=Depends(require_scopes("memory.read")),
+):
+    from core.memory.invalidation import read_ledger
+    from core.memory.scope import MemoryScope
+
+    try:
+        scope = MemoryScope.reality_scope(uid, char_id)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=422, detail={"code": "invalid_scope"}) from None
+    return {"scope": {"uid": uid, "char_id": char_id}, "items": read_ledger(scope, limit=limit)}
+
+
 @router.get("/observability/session-scope", summary="读取固定会话 scope 脱敏状态")
 async def session_scope_observability(
     limit: int = Query(100, ge=1, le=500),

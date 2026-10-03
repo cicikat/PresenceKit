@@ -181,6 +181,7 @@ class TombstoneResult:
     changed: bool
     event_id: str
     error_code: str = ""
+    derived: dict[str, Any] | None = None  # S4b: invalidation cascade summary
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -721,15 +722,17 @@ def tombstone_event(scope: MemoryScope, event_id: str) -> TombstoneResult:
                 invalidate_live_media_cache()
             except Exception:
                 pass
+            derived = None
             try:
-                # Dossiers are derived state. Evidence withdrawal must suppress
-                # dependent conclusions immediately, but dossier failure cannot
-                # make the evidence tombstone fail.
-                from core.memory.dossiers import invalidate_source
-                invalidate_source(scope, clean_id, reason="event_tombstoned")
+                # Derived state must stop presenting withdrawn evidence as fact
+                # (reversible marking). Cascade failure cannot fail the tombstone.
+                from core.memory.invalidation import invalidate_by_events
+                derived = invalidate_by_events(
+                    scope, [clean_id], reason="event_tombstoned", actor="tombstone_event"
+                )
             except Exception:
-                logger.warning("[event_store] dossier invalidation failed", exc_info=True)
-            return TombstoneResult(True, True, clean_id)
+                logger.warning("[event_store] invalidation cascade failed", exc_info=True)
+            return TombstoneResult(True, True, clean_id, derived=derived)
         except Exception as exc:
             logger.warning("[event_store] tombstone failed: %s", exc)
             return TombstoneResult(False, False, clean_id, "database_error")

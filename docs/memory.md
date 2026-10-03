@@ -2140,3 +2140,19 @@ mid-term, episodic, identity, storyline, or prompt recall. Terminal notification
 uses the existing bounded autonomy signal and ordinary assistant delivery path;
 only a later real conversation turn may enter memory through the existing
 provenance rules.
+
+## 遗忘级联（工单 S4b）
+
+事件被墓碑（`DELETE /memory-events/{id}` / `event_store.tombstone_event`）后，`core/memory/invalidation.py::invalidate_by_events` 把以它为证据的派生结论**可逆失效**（标记，不物理删除）。
+
+- dossier：沿用 `dossiers.invalidate_source`（需重算）。
+- mid_term：`source_event_ids` 相交的条目加 `invalidated`，`format_for_prompt` 跳过。
+- episodic：全部来源失效 → `status="invalidated"`（检索/fallback/置顶全部排除，并清向量，episode 本体保留）；部分失效 → 记 `invalid_source_event_ids`、强度上限 0.3、不排除；无 `source_event_ids` 的旧 episode 不处理，计入 `unlinked`。
+- storyline：node 的 `source_ids` 相交 → node 标 `invalidated`，`list_recallable_arcs` 过滤失效节点，arc 全部节点失效则不可召回。
+- event store 下游派生边（`derived_from` / `correction_of`）只在摘要 `downstream_events` 列出，不自动墓碑。
+- 无事件级 lineage 的存储（user_identity、important_facts、user_facts、relationship_facts）只在摘要 `manual_review` 提示，不做模糊匹配删除。
+- `delete_episode` / `forget_episodes` 不级联到 storyline（删 episode 不等于撤回证据）。
+
+台账 `memory_invalidations.jsonl` 每次一条，只含 ID/计数/回滚所需旧值，不含正文；被改动的存储各写一条 `provenance_log`（`trigger_signal="invalidation:<reason>"`）。重复调用幂等。`revert_invalidation(scope, invalidation_id)` 恢复标记；dossier 由 worker 重算，episodic 向量不自动重建（走 janitor 重建）。管理端暂不暴露 revert。观测：`GET /observability/memory-invalidations`（`memory.read`）。
+
+限制：级联为同步文件读改写，不持 uid 异步锁。

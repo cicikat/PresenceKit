@@ -181,6 +181,7 @@ Prompt、API key、base URL 或模型自由文本。校准任务只在进程生�
 | `reminders.json` | 待办备忘 leftover 档案（256 E：live 权威是 Runtime `agent_runtime_schedule_state`；本文件仅迁移源/回滚档案） |
 | `fixation_state.json` | 固化 pipeline 状态 |
 | `memory_dossiers.sqlite3` | Brief 258 可重建的主题 dossier、证据成员、revision、操作回执与维护 checkpoint（derived；Reality per-char-user） |
+| `memory_invalidations.jsonl` | S4b 删除级联失效台账（只记 ID/计数与回滚旧值；Reality per-char-user） |
 
 `DataPaths.history()`、`mid_term()`、`profiles()` 等分类型 accessor 仍保留给少量兼容调用方；
 新增 per-user 读写优先使用 `user_memory_root()`。
