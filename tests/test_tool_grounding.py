@@ -32,32 +32,138 @@ async def test_required_intent_is_marked_even_when_tool_is_not_exposed(monkeypat
     assert result.route == "skipped_for_tool_loop"
 
 
-def test_failed_required_call_replaces_completion_claim():
-    from core.tool_grounding import GROUNDING_LAYER, guard_completion_claim
-
-    messages = [{
+def _grounding_messages(validity="execution_failed", names=("weather",)):
+    from core.tool_grounding import GROUNDING_LAYER
+    return [{
         "role": "system",
         "_layer": GROUNDING_LAYER,
         "_tool_grounding": {
-            "required": True, "tool_names": ["weather"], "result_validity": "execution_failed",
+            "required": True, "tool_names": list(names), "result_validity": validity,
         },
     }]
-    guarded = guard_completion_claim("已经查到北京天气了。", messages)
-    assert "已经查到" not in guarded
-    assert "没有拿到可确认的成功结果" in guarded
+
+
+def test_failed_required_call_detects_claim_without_rewriting():
+    from core.tool_grounding import check_unverified_claim
+
+    hit = check_unverified_claim("已经查到北京天气了。", _grounding_messages())
+    assert hit and "已经查到" in hit["snippet"]
+    assert "execution_failed" in hit["basis"]
+
+
+@pytest.mark.asyncio
+async def test_pipeline_guard_rewrites_once_with_nudge_and_records_trace(monkeypatch):
+    from core import runtime_signal_observability as obs
+    obs._reset_for_tests()
+    pipeline = _make_pipeline()
+    seen = {"n": 0}
+
+    async def _fake_chat(messages, **_kwargs):
+        seen["n"] += 1
+        seen["last"] = messages[-1]["content"]
+        return "唔，这个我还没查成，等下再试试。"
+
+    monkeypatch.setattr("core.llm_client.chat", _fake_chat)
+    result = await pipeline._guard_unverified_claim(_grounding_messages(), "已经查到北京天气了。")
+    assert result == "唔，这个我还没查成，等下再试试。"
+    assert seen["n"] == 1
+    assert "没有得到可确认的成功结果" in seen["last"]
+    assert "我还没能实际完成这一步" not in result
+    codes = {(s["category"], s["code"]) for s in obs.snapshot()["signals"]}
+    assert ("tool_grounding", "unverified_claim") in codes
+
+
+@pytest.mark.asyncio
+async def test_pipeline_guard_passes_through_when_retry_still_claims(monkeypatch):
+    pipeline = _make_pipeline()
+    calls = {"n": 0}
+
+    async def _fake_chat(_messages, **_kwargs):
+        calls["n"] += 1
+        return "已经查到了呀"
+
+    monkeypatch.setattr("core.llm_client.chat", _fake_chat)
+    result = await pipeline._guard_unverified_claim(_grounding_messages(), "已经查到了")
+    assert result == "已经查到了呀"
+    assert calls["n"] == 1  # 最多重写 1 次
+
+
+@pytest.mark.asyncio
+async def test_pipeline_guard_no_llm_call_when_no_claim(monkeypatch):
+    pipeline = _make_pipeline()
+
+    async def _boom(_messages, **_kwargs):
+        raise AssertionError("must not call")
+
+    monkeypatch.setattr("core.llm_client.chat", _boom)
+    assert await pipeline._guard_unverified_claim(_grounding_messages(), "我在想怎么说") == "我在想怎么说"
+
+
+@pytest.mark.parametrize("text", [
+    "我刚才看到了你发的照片",
+    "你完成了吗？",
+    "你已经发送了吗",
+    "我还没完成这件事",
+    "没有查到相关的结果",
+    "你说「已经完成了」对吧",
+    "你发的那个文件我已经读过一点点点",
+])
+def test_claim_regex_ignores_negation_question_user_subject_and_quotes(text):
+    from core.tool_grounding import find_unverified_claim
+
+    assert find_unverified_claim(text) is None
+
+
+def test_claim_regex_still_catches_plain_claim():
+    from core.tool_grounding import find_unverified_claim
+
+    assert find_unverified_claim("好的。我已经打开了。") == "我已经打开了"
 
 
 def test_successful_current_tool_result_allows_claim():
-    from core.tool_grounding import GROUNDING_LAYER, guard_completion_claim
+    from core.tool_grounding import check_unverified_claim
 
-    messages = [{
-        "role": "system",
-        "_layer": GROUNDING_LAYER,
-        "_tool_grounding": {
-            "required": True, "tool_names": ["weather"], "result_validity": "current_turn",
-        },
+    assert check_unverified_claim(
+        "已经查到北京天气了。", _grounding_messages("current_turn"),
+    ) is None
+
+
+def test_non_loop_system_layer_tool_result_counts_as_success():
+    from core.tool_grounding import check_unverified_claim
+    from core.tools.tool_result import frame_tool_result
+
+    messages = _grounding_messages("none") + [{
+        "role": "system", "_layer": "10_tool_result",
+        "content": frame_tool_result("多云", char_name="C", validity="current_turn"),
     }]
-    assert guard_completion_claim("已经查到北京天气了。", messages) == "已经查到北京天气了。"
+    assert check_unverified_claim("已经查到北京天气了。", messages) is None
+
+
+@pytest.mark.parametrize("status,confirm,kind", [
+    ("tool_executed", None, "ok"),          # MCP / self_db / self_tool 成功均为 tool_executed
+    ("discovery", None, "info"),            # load_tools_* 回执
+    ("confirmation_required", "确认吗", "pending_confirm"),
+    ("tool_failed", None, "failed"),
+    ("outcome_unknown", None, "failed"),
+])
+def test_classify_tool_outcome(status, confirm, kind):
+    from core.tool_grounding import classify_tool_outcome
+
+    assert classify_tool_outcome(status, confirm) == kind
+
+
+@pytest.mark.parametrize("status,has_result,validity", [
+    (None, True, "current_turn"),
+    ("tool_executed", True, "current_turn"),
+    ("discovery", True, "none"),
+    ("confirmation_required", False, "none"),
+    ("tool_failed", True, "execution_failed"),
+    ("outcome_unknown", True, "outcome_unknown"),
+])
+def test_grounding_validity_for_status(status, has_result, validity):
+    from core.tool_grounding import grounding_validity_for_status
+
+    assert grounding_validity_for_status(status, has_result) == validity
 
 
 def test_history_trace_is_not_current_result():

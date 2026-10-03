@@ -56,9 +56,67 @@ _COMPLETION_CLAIM_RE = re.compile(
     r"(?:已经|已|刚刚|刚才|现在已经|已经帮你|已帮你)"
     r"(?:查到|查过|搜到|搜过|看过|读到|读过|控制|操作|完成|打开|关闭|发送|发出|"
     r"播放|暂停|浇过|浇了|写入|更新|删除|清空|执行)"
-    r"|(?:查到了|搜到了|看到了|读到了|控制好了|操作完成了|完成了|打开了|"
+    r"|(?:查到了|搜到了|读到了|控制好了|操作完成了|完成了|打开了|"
     r"关闭了|发送了|发出去了|正在播放)",
 )
+
+# 句级排除：疑问、否定、主语是「你」、引用用户内容的句子不算角色自己的完成声明。
+_SENTENCE_SPLIT_RE = re.compile(r"[。！？!?；;\n]+")
+_NEGATION_BEFORE_RE = re.compile(r"(?:没|没有|未|尚未|还没|并没|不|别|无法|不能|没能)\s*$")
+_QUESTION_RE = re.compile(r"[吗呢么]\s*$|是不是|有没有|是否|能不能|可不可以|要不要")
+_USER_SUBJECT_RE = re.compile(r"(?:你|您|用户)[^，,、]{0,6}$")
+_USER_CONTENT_RE = re.compile(r"你(?:发|说|写|给|传|的|刚)|你们")
+_QUOTE_SPAN_RE = re.compile(r"[「『“\"][^」』”\"]*[」』”\"]")
+
+
+def find_unverified_claim(reply: str) -> str | None:
+    """Return the first sentence fragment that reads as the speaker's own completion claim."""
+    if not reply:
+        return None
+    for sentence in _SENTENCE_SPLIT_RE.split(reply):
+        sentence = sentence.strip()
+        if not sentence:
+            continue
+        # 句末是问号的已被切分符吞掉，这里再按疑问词收尾/疑问短语排除。
+        if _QUESTION_RE.search(sentence):
+            continue
+        if _USER_CONTENT_RE.search(sentence):
+            continue
+        unquoted = _QUOTE_SPAN_RE.sub("", sentence)
+        for m in _COMPLETION_CLAIM_RE.finditer(unquoted):
+            before = unquoted[:m.start()]
+            if _NEGATION_BEFORE_RE.search(before):
+                continue
+            # 紧邻主语是「你」：「你完成了」「你已经发送」
+            if _USER_SUBJECT_RE.search(before):
+                continue
+            return sentence[:80]
+    return None
+
+
+def classify_tool_outcome(status: str | None, confirmation_request: str | None = None) -> str:
+    """Map a ToolExecutionOutcome.status to ok / failed / pending_confirm / info."""
+    if confirmation_request or status == "confirmation_required":
+        return "pending_confirm"
+    if status == "tool_executed":
+        return "ok"
+    if status in {"discovery", "info", "missing_parameters"}:
+        return "info"
+    return "failed"
+
+
+def grounding_validity_for_status(status: str | None, has_result: bool) -> str:
+    """Prompt-layer validity for a pre-tool result; info/pending statuses are not failures."""
+    if status is None:
+        return "current_turn" if has_result else "none"
+    kind = classify_tool_outcome(status)
+    if kind == "ok":
+        return "current_turn" if has_result else "none"
+    if status == "outcome_unknown":
+        return "outcome_unknown"
+    if kind in {"info", "pending_confirm"}:
+        return "none"
+    return "execution_failed"
 
 
 def grounding_message(
@@ -109,33 +167,56 @@ def required_from_messages(messages: list[dict]) -> dict | None:
 
 
 def has_successful_tool_message(messages: list[dict]) -> bool:
-    """Recognize only dispatcher success envelopes, never arbitrary model text."""
+    """Recognize only dispatcher success frames, never arbitrary model text.
+
+    Covers both Path C ``role=tool`` messages and the non-loop ``10_tool_result``
+    system layer (whose frame carries the current_turn validity text).
+    """
     for message in messages:
-        if message.get("role") != "tool":
-            continue
+        role = message.get("role")
         content = str(message.get("content") or "")
-        if "工具已执行：" in content and "<<<TOOL_DATA_START>>>" in content:
+        if "<<<TOOL_DATA_START>>>" not in content:
+            continue
+        if role == "tool" and "本轮刚生成" in content:
+            return True
+        if role == "system" and message.get("_layer") == "10_tool_result" and "本轮刚生成" in content:
             return True
     return False
 
 
-def guard_completion_claim(
+def check_unverified_claim(
     reply: str,
     messages: list[dict],
     *,
     successful_tool_call: bool | None = None,
-) -> str:
-    """Prevent completion claims when a required call did not succeed."""
+) -> dict | None:
+    """Detect an unverified completion claim; never rewrites the reply.
+
+    Returns ``{"snippet", "basis"}`` when a required tool call did not succeed
+    and the reply still reads as a completion claim; otherwise ``None``.
+    """
     if not reply:
-        return reply
+        return None
     grounding = required_from_messages(messages)
     if not grounding:
-        return reply
+        return None
     validity = str(grounding.get("result_validity") or "none")
     succeeded = successful_tool_call
     if succeeded is None:
         succeeded = validity == "current_turn" or has_successful_tool_message(messages)
-    if succeeded or not _COMPLETION_CLAIM_RE.search(reply):
-        return reply
-    return "我还没能实际完成这一步，刚才没有拿到可确认的成功结果。"
+    if succeeded:
+        return None
+    snippet = find_unverified_claim(reply)
+    if not snippet:
+        return None
+    return {"snippet": snippet, "basis": f"required_tool_not_succeeded:{validity}"}
+
+
+def build_claim_nudge(char_name: str, tool_names: list[str] | None = None) -> str:
+    names = "、".join(tool_names or []) or "所需工具"
+    return (
+        f"【系统提示】你刚才的回复声称事情已经办成，但本轮 {names} 并没有得到可确认的成功结果。"
+        f"请以{char_name}自己的口吻重写这条回复：如实、自然地表达还没办成或结果不确定，"
+        "不要声称已经查到、完成或执行，也不要提及系统提示或工具机制。"
+    )
 

@@ -909,8 +909,59 @@ class Pipeline:
             messages, reply, char_id=char_id, is_proactive=is_proactive,
         )
         from core.control_markers import strip_control_markers
-        from core.tool_grounding import guard_completion_claim
-        return guard_completion_claim(strip_control_markers(reply), messages)
+        return await self._guard_unverified_claim(
+            messages, strip_control_markers(reply),
+            char_id=char_id, is_proactive=is_proactive,
+        )
+
+    async def _guard_unverified_claim(
+        self,
+        messages: list[dict],
+        reply: str,
+        *,
+        successful_tool_call: bool | None = None,
+        char_id: str | None = None,
+        is_proactive: bool = False,
+    ) -> str:
+        """未经证实的完成声明：不改写文本，同轮 nudge 让模型用角色口吻重写 1 次。
+
+        重写后仍命中则原样放行；每次触发写 runtime signal trace。fail-open。
+        """
+        try:
+            from core.tool_grounding import (
+                build_claim_nudge, check_unverified_claim, required_from_messages,
+            )
+            hit = check_unverified_claim(reply, messages, successful_tool_call=successful_tool_call)
+            if not hit:
+                return reply
+            from core.runtime_signal_observability import record as _record_claim
+            ctx = {"snippet": hit["snippet"], "basis": hit["basis"]}
+            from core.character_name_provider import get_char_name
+            grounding = required_from_messages(messages) or {}
+            retry_messages = list(messages) + [
+                {"role": "assistant", "content": reply},
+                {"role": "system", "content": build_claim_nudge(
+                    get_char_name(), list(grounding.get("tool_names") or []),
+                )},
+            ]
+            from core import llm_client
+            from core.control_markers import strip_control_markers
+            retry_reply = strip_control_markers(await llm_client.chat(
+                retry_messages, char_id=char_id, is_proactive=is_proactive,
+            ))
+            if retry_reply and not check_unverified_claim(
+                retry_reply, messages, successful_tool_call=successful_tool_call,
+            ):
+                _record_claim(category="tool_grounding", code="unverified_claim", status="attention",
+                              context={**ctx, "action": "rewritten"})
+                return retry_reply
+            _record_claim(category="tool_grounding", code="unverified_claim", status="attention",
+                          context={**ctx, "action": "passed_through_after_retry"})
+            return retry_reply or reply
+        except Exception as e:
+            from core.error_handler import log_error
+            log_error("pipeline._guard_unverified_claim", e)
+            return reply
 
     @staticmethod
     def _homogeneity_hist_for_check(messages: list[dict]) -> list[dict]:
@@ -1462,6 +1513,7 @@ class Pipeline:
             *,
             generated_at: float | None = None,
             discovery_result: bool = False,
+            status: str | None = None,
         ) -> str:
             """Keep confirmation state outside the untrusted tool-data frame."""
             if discovery_result:
@@ -1471,7 +1523,14 @@ class Pipeline:
             if ask_confirm:
                 return ask_confirm
             if result:
-                validity = "current_turn" if str(result).startswith("工具已执行：") else "execution_failed"
+                from core.tool_grounding import classify_tool_outcome
+                kind = classify_tool_outcome(status)
+                validity = (
+                    "current_turn" if kind == "ok"
+                    else "outcome_unknown" if status == "outcome_unknown"
+                    else "unconfirmed" if kind == "info"
+                    else "execution_failed"
+                )
                 return frame_tool_message(result, generated_at=generated_at, validity=validity)
             return "（工具无结果或执行失败）"
 
@@ -1649,13 +1708,14 @@ class Pipeline:
                                     log_error("pipeline.run_agentic_loop.relay_execute", e)
                                     tool_outcome = ToolExecutionOutcome(status="tool_failed")
                                 result, ask_confirm = tool_outcome.result, tool_outcome.confirmation_request
-                                if result and str(result).startswith("工具已执行：") and not ask_confirm:
+                                if tool_outcome.status == "tool_executed" and not ask_confirm:
                                     successful_tool_call = True
                                 loop_msgs.append({
                                     "role": "tool",
                                     "tool_call_id": rc["id"],
                                     "content": _tool_message_content(result, ask_confirm, generated_at=time.time(),
-                                                                     discovery_result=rc["name"].startswith(_discovery_prefix)),
+                                                                     discovery_result=rc["name"].startswith(_discovery_prefix),
+                                                                     status=tool_outcome.status),
                                 })
                                 if ask_confirm:
                                     outcome = ("confirm", ask_confirm)
@@ -1687,14 +1747,15 @@ class Pipeline:
                         log_error("pipeline.run_agentic_loop.execute", e)
                         tool_outcome = ToolExecutionOutcome(status="tool_failed")
                     result, ask_confirm = tool_outcome.result, tool_outcome.confirmation_request
-                    if result and str(result).startswith("工具已执行：") and not ask_confirm:
+                    if tool_outcome.status == "tool_executed" and not ask_confirm:
                         successful_tool_call = True
                     loop_msgs.append({
                         "role": "tool",
                         "tool_call_id": tc["id"],
                         "_continuity_receipt": getattr(result, 'continuity_receipt', None),
                         "content": _tool_message_content(result, ask_confirm, generated_at=time.time(),
-                                                         discovery_result=tc["name"].startswith(_discovery_prefix)),
+                                                         discovery_result=tc["name"].startswith(_discovery_prefix),
+                                                         status=tool_outcome.status),
                     })
                     if ask_confirm:
                         outcome = ("confirm", ask_confirm)
@@ -1749,10 +1810,11 @@ class Pipeline:
             final_text = await self._anti_collapse_prefix_retry(
                 loop_msgs, text, char_id=char_id, is_proactive=is_proactive,
             )
-            from core.tool_grounding import guard_completion_claim
-            final_text = guard_completion_claim(
-                strip_control_markers(final_text), loop_msgs,
+            from core.control_markers import strip_control_markers
+            final_text = await self._guard_unverified_claim(
+                loop_msgs, strip_control_markers(final_text),
                 successful_tool_call=successful_tool_call,
+                char_id=char_id, is_proactive=is_proactive,
             )
             final_text = await self._guard_tool_meta_leak(
                 loop_msgs, final_text, char_id=char_id, is_proactive=is_proactive,
@@ -1775,10 +1837,10 @@ class Pipeline:
                 ):
                     _pieces.append(_piece)
                 from core.control_markers import strip_control_markers
-                from core.tool_grounding import guard_completion_claim
-                _guarded = guard_completion_claim(
-                    strip_control_markers("".join(_pieces)), loop_msgs,
+                _guarded = await self._guard_unverified_claim(
+                    loop_msgs, strip_control_markers("".join(_pieces)),
                     successful_tool_call=successful_tool_call,
+                    char_id=char_id, is_proactive=is_proactive,
                 )
                 if _guarded:
                     yield _guarded
@@ -1786,10 +1848,10 @@ class Pipeline:
         final_text = await self.run_llm(
             loop_msgs, is_proactive=is_proactive, char_id=char_id,
         )
-        from core.tool_grounding import guard_completion_claim
-        return guard_completion_claim(
-            strip_control_markers(final_text), loop_msgs,
+        return await self._guard_unverified_claim(
+            loop_msgs, strip_control_markers(final_text),
             successful_tool_call=successful_tool_call,
+            char_id=char_id, is_proactive=is_proactive,
         )
 
     # ──────────────────────────────────────────────────────────────────────────

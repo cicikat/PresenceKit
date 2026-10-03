@@ -1409,6 +1409,7 @@ def build(
         _result_validity = (
             "current_turn" if tool_result_status in (None, "tool_executed")
             else "outcome_unknown" if tool_result_status == "outcome_unknown"
+            else "unconfirmed" if tool_result_status in ("discovery", "info", "confirmation_required", "missing_parameters")
             else "execution_failed"
         )
         logger.debug(
@@ -1428,15 +1429,14 @@ def build(
             "_continuity_receipt": getattr(tool_result, 'continuity_receipt', None),
         })
 
-    from core.tool_grounding import grounding_message as _grounding_message
+    from core.tool_grounding import (
+        grounding_message as _grounding_message,
+        grounding_validity_for_status as _grounding_validity_for_status,
+    )
     _grounding = _grounding_message(
         required=tool_call_required,
         tool_names=required_tool_names,
-        result_validity=(
-            "current_turn" if tool_result_status in (None, "tool_executed") and tool_result
-            else "execution_failed" if tool_result_status and tool_result_status != "tool_executed"
-            else "none"
-        ),
+        result_validity=_grounding_validity_for_status(tool_result_status, bool(tool_result)),
     )
     if _grounding:
         messages.append(_grounding)

@@ -23,7 +23,7 @@ history 落盘，拦不住已发出的回复）：
 
 | 路径 | 位置 | 命中后 |
 |---|---|---|
-| 聊天 Path C 自然结束且未调用过工具 | `Pipeline._guard_tool_meta_leak()`（`run_agentic_loop` 在 `guard_completion_claim` 之后） | 追加 system 指令静默重试一次；重试仍泄漏则返回固定兜底话术，不发泄漏文本；重试异常 fail-open 保持原回复 |
+| 聊天 Path C 自然结束且未调用过工具 | `Pipeline._guard_tool_meta_leak()`（`run_agentic_loop` 在 `_guard_unverified_claim` 之后） | 追加 system 指令静默重试一次；重试仍泄漏则返回固定兜底话术，不发泄漏文本；重试异常 fail-open 保持原回复 |
 | autonomy 的 `talk_owner.text` | `core/autonomy/talk_gate.py::send()` | 拒绝本次发言，返回 `tool_meta_leak`（run 落成 `talk_canceled`），不进 turn_sink；无生成上下文可重试 |
 | xml_fallback 解析失败兜底 | `llm_client.chat_turn()` 的 xml_fallback 分支 | 丢弃泄漏文本（`ChatTurn.content=""`、无工具调用），不再原样当 content 返回 |
 
@@ -202,9 +202,14 @@ hello 字段或协商流程。
 
   明确意图 grounding：`route_pretool()` 将关键词命中结果作为本轮上下文元数据传给
   `run_agentic_loop(tool_call_required=True)`。即使工具没有出现在 schema、调用失败或
-  结果不明，最终收尾也会经过 `core.tool_grounding.guard_completion_claim()`，禁止完成式断言。
-  只有 dispatcher 成功 envelope（`工具已执行：...`）或层10明确标注 `current_turn` 才能
-  解除该闸；历史 `10.5_action_trace` 永远只作为参考。
+  结果不明，最终收尾也会经过 `Pipeline._guard_unverified_claim()`（`core.tool_grounding.check_unverified_claim()`）。
+  命中「未经证实的完成声明」时**不改写、不输出固定字面量**：同一轮追加一条 nudge（经 `char_name` 插值），
+  让模型用角色口吻重写，最多 1 次；重写后仍命中则原样放行。每次触发写 runtime signal
+  `tool_grounding/unverified_claim`（context：命中片段、判定依据、动作 `rewritten` / `passed_through_after_retry`，
+  观测面同其他 runtime signals）。检测正则按句排除疑问、否定、主语为「你」及引用用户内容的句子。
+  成功判定用结构化 `ToolExecutionOutcome.status`（`core.tool_grounding.classify_tool_outcome()` →
+  ok / failed / pending_confirm / info），不再匹配 `工具已执行：` 文本前缀；discovery 回执等 info 不算失败，
+  也不算成功证据。非循环路径下层10 `current_turn` frame 同样视为成功。历史 `10.5_action_trace` 永远只作为参考。
 ```
 
 ---

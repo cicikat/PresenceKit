@@ -98,7 +98,11 @@ async def test_discovery_preserves_single_business_step(harness, monkeypatch):
 async def test_discovery_does_not_grant_completion_evidence(harness, monkeypatch):
     script, requests, executions, run = harness
     flags = []
-    monkeypatch.setattr("core.tool_grounding.guard_completion_claim", lambda text, messages, **kw: flags.append(kw["successful_tool_call"]) or text)
+    async def _spy(self, messages, reply, *, successful_tool_call=None, **kw):
+        flags.append(successful_tool_call)
+        return reply
+
+    monkeypatch.setattr("core.pipeline.Pipeline._guard_unverified_claim", _spy)
     script.extend([turn(call("load_tools_info")), turn(content="已完成")])
     await run(tool_call_required=True, required_tool_names=["web_search"])
     assert executions == []
