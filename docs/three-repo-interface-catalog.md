@@ -846,7 +846,7 @@ profile 可读取已关联的 Reality owner 回合，返回 available/entries（
 
 ## 聊天产物文件（2026-09-16）
 
-`current`：Path C `artifacts` 类写出沙盒文件；owner 回合 HTTP/WS 可带有界 `artifacts[]`。`GET /chat/artifacts/{id}`（chat）下载，`GET /chat/artifacts/{id}/preview` CSP 预览，`GET /observability/chat-artifacts`（state.read）只读元数据。管理面观测页与桌面气泡文件卡走带鉴权下载；不新增 desktop action 类型。
+`current`：Path C `artifacts` 类写出沙盒文件；owner 回合 HTTP/WS 可带有界 `artifacts[]`。`GET /chat/artifacts/{id}`（chat）下载，`GET /chat/artifacts/{id}/preview` CSP 预览，`GET /observability/chat-artifacts`（state.read）只读元数据。管理面观测页、桌面与手机气泡文件卡走带鉴权下载（手机预览为应用内文本查看，保存走系统「另存为」；工单 M2）；不新增 desktop action 类型。聊天历史 `GET /chat-log/{date}` 的 entry 带持久化的 `artifacts[]`（仅元数据，按 `turn_id` 关联，FIFO 500 回合），观测 `GET /observability/chat-artifacts` 含 `turn_links`。`observe`：手机后台（原生 pending 队列）收到的消息暂不带 artifacts，回到前台刷新历史后出现。
 `observe`：真实写出 html 后的桌面预览/下载仍待运行中后端复测；管理面观测页需硬刷新。
 `roadmap`：手机产物卡 UI。产物下载与聊天原图读取分离：原图走 `GET /chat/media/{sha256}`。
 ## IME v2 接收预备（2026-09-11）

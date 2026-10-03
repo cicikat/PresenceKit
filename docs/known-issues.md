@@ -863,3 +863,7 @@ schema 兼容修复。实现与定向回归见 [tool-discovery.md](tool-discover
 # 工单 265 验收缺口：视频电话摄像头主动观察
 
 `observe_video_call_camera` 的新帧 poll/result、定时 autonomy signal、关闭撤销及 `video_call` 独立图像路由已有定向测试和桌面构建验证。真实 Windows 摄像头、本地视觉模型响应、静默时角色主动决策/通知、关闭与换角色并发尚未联合实测；状态为 `observe`，不能把构建或 mock 测试视为设备验收。
+
+# 工单 M2 遗留：聊天产物历史卡片
+
+`open`：后端已持久化 artifacts 元数据并由 `GET /chat-log/{date}` 返回，手机刷新历史后卡片仍在；桌面端历史回放（`ChatPanel.tsx` chat-log 初始化/loadMore）尚未读取 entry 的 `artifacts`，桌面刷新后卡片仍会消失（live 路径正常）。手机原生 pending 队列（后台收信）也尚未携带 artifacts，回前台刷新历史后出现。

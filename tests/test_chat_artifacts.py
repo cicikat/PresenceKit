@@ -335,3 +335,26 @@ def test_admin_observe_page_uses_authenticated_fetch():
     assert 'href="/chat/artifacts/' not in source
     page = (Path(__file__).parents[1] / "admin" / "static" / "pages" / "observe-chat-artifacts.html").read_text(encoding="utf-8")
     assert 'id="obs-artifacts-preview"' in page
+
+
+def test_turn_links_persist_metadata_only(sandbox):
+    written = _write()
+    payload = chat_artifacts.public_payload(written | {"mime": "text/markdown", "size": 4})
+    assert chat_artifacts.link_turn_artifacts(
+        "turn-1", [payload], uid="u1", char_id=TEST_CHAR_ID)
+    got = chat_artifacts.artifacts_for_turns(
+        ["turn-1", "turn-x"], uid="u1", char_id=TEST_CHAR_ID)
+    assert list(got) == ["turn-1"]
+    assert got["turn-1"][0]["id"] == written["id"]
+    assert got["turn-1"][0]["download_url"].endswith(written["id"])
+    snap = chat_artifacts.observability_snapshot(uid="u1", char_id=TEST_CHAR_ID)
+    assert snap["turn_links"] == 1
+
+
+def test_turn_links_fifo_cap(sandbox, monkeypatch):
+    monkeypatch.setattr(chat_artifacts, "MAX_TURN_LINKS", 2)
+    item = {"id": "a" * 32, "filename": "a.txt"}
+    for n in range(3):
+        chat_artifacts.link_turn_artifacts(f"t{n}", [item], uid="u1", char_id=TEST_CHAR_ID)
+    got = chat_artifacts.artifacts_for_turns(["t0", "t1", "t2"], uid="u1", char_id=TEST_CHAR_ID)
+    assert sorted(got) == ["t1", "t2"]

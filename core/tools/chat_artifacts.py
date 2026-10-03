@@ -474,11 +474,70 @@ def read_artifact_text(record: dict) -> str:
         raise ArtifactError("产物文件不是 UTF-8 文本") from exc
 
 
+MAX_TURN_LINKS = 500
+
+
+def _turn_links_path(uid: str, char_id: str) -> Path:
+    return get_paths().chat_artifacts_dir(uid, char_id=char_id) / "turn_links.json"
+
+
+def _load_turn_links(path: Path) -> dict:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return {}
+    links = data.get("turns") if isinstance(data, dict) else None
+    return links if isinstance(links, dict) else {}
+
+
+def link_turn_artifacts(
+    turn_id: str, artifacts: list[dict], *, uid: str, char_id: str
+) -> bool:
+    """Persist artifact metadata (public payload only, no file copy) for a turn.
+
+    Fail-open: history linkage must never break message delivery.
+    """
+    turn_id = str(turn_id or "").strip()
+    if not turn_id or not artifacts:
+        return False
+    try:
+        uid, char_id = _require_scope(uid, char_id)
+        payloads = [
+            public_payload(a) for a in artifacts
+            if isinstance(a, dict) and a.get("id")
+        ]
+        if not payloads:
+            return False
+        path = _turn_links_path(uid, char_id)
+        with _lock_for(uid, char_id):
+            links = _load_turn_links(path)
+            links.pop(turn_id, None)
+            links[turn_id] = payloads
+            while len(links) > MAX_TURN_LINKS:
+                links.pop(next(iter(links)))
+            return bool(safe_write_json(path, {"turns": links}))
+    except Exception:
+        logger.warning("[chat_artifacts] turn 关联写入失败 turn_id=%s", turn_id, exc_info=True)
+        return False
+
+
+def artifacts_for_turns(turn_ids, *, uid: str, char_id: str) -> dict[str, list[dict]]:
+    """Return {turn_id: [public payload]} for turns that have linked artifacts."""
+    try:
+        uid, char_id = _require_scope(uid, char_id)
+    except ArtifactError:
+        return {}
+    links = _load_turn_links(_turn_links_path(uid, char_id))
+    return {t: links[t] for t in turn_ids if t in links}
+
+
 def observability_snapshot(*, uid: str = "", char_id: str = "", limit: int = 50) -> dict:
     limit = max(1, min(int(limit), MAX_FILES_PER_SCOPE))
     if uid and char_id:
         items = list_artifact_records(uid=uid, char_id=char_id, limit=limit)
         return {
+            "turn_links": len(_load_turn_links(_turn_links_path(*_require_scope(uid, char_id)))),
+            "turn_links_retention": f"fifo_{MAX_TURN_LINKS}",
             "retention": f"fifo_{MAX_FILES_PER_SCOPE}",
             "max_chars": MAX_CONTENT_CHARS,
             "count": len(items),

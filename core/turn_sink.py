@@ -373,6 +373,9 @@ async def record_assistant_turn(
     _persisted_turn_id = str((post_info or {}).get("turn_id") or "").strip()
     _ws_msg_id = _persisted_turn_id or uuid4().hex
     _record_identity_outcome(persisted=bool(_persisted_turn_id), transport=bool(_ws_msg_id))
+    if artifacts and char_id:
+        from core.tools.chat_artifacts import link_turn_artifacts
+        link_turn_artifacts(_ws_msg_id, artifacts, uid=uid, char_id=char_id)
 
     targets, failures = await _fanout(
         assistant_text=visible_assistant_text or assistant_text,

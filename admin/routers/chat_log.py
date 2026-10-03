@@ -5,6 +5,7 @@ owner_qq 由后端从 config 读取，接口路径不暴露 QQ 号。
 """
 
 import json as _json
+import logging
 import re
 import asyncio
 import calendar
@@ -21,6 +22,7 @@ from core.memory.scope import MemoryScope
 from core.sandbox import get_paths, safe_user_id
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 _DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 
@@ -362,6 +364,17 @@ async def get_day(
         if media_refs:
             entry["media_refs"] = media_refs
     raw_fallback = len(entries) == 0 and bool(text.strip())
+    try:
+        from core.tools.chat_artifacts import artifacts_for_turns
+        linked = artifacts_for_turns(
+            [e["turn_id"] for e in entries if e.get("turn_id")],
+            uid=_owner_qq(), char_id=resolved,
+        )
+        for entry in entries:
+            if entry.get("turn_id") in linked:
+                entry["artifacts"] = linked[entry["turn_id"]]
+    except Exception:
+        logger.debug("[chat_log] artifacts 关联读取失败", exc_info=True)
 
     return {
         "date": date,

@@ -307,7 +307,7 @@ HTTP /desktop/chat 触发 turn
 
 ### 聊天产物 payload（可选字段，sticker 同模式）
 
-`channel_message` 与 mobile poll 队列可附带 `artifacts[]`：`id`/`filename`/`mime`/`size`/`download_url`，可预览文件加 `preview_url`。不含正文与本机绝对路径。只经 desktop/mobile `send()` kwargs 传递；QQ/设备不接此字段。旧客户端可忽略未知字段。手机 UI 仍为 roadmap。
+`channel_message` 与 mobile poll 队列可附带 `artifacts[]`：`id`/`filename`/`mime`/`size`/`download_url`，可预览文件加 `preview_url`。不含正文与本机绝对路径。只经 desktop/mobile `send()` kwargs 传递；QQ/设备不接此字段。旧客户端可忽略未知字段。手机 App 已解析并显示文件卡片（预览/下载，`current`，工单 M2）。artifacts 元数据按 `turn_id` 持久化为 `runtime/chat_artifacts/{char_id}/{uid}/turn_links.json`（仅公开 payload，FIFO 500 回合，不复制文件），`GET /chat-log/{date}` 的 entry 带 `artifacts[]`，刷新历史后卡片仍在；观测见 `GET /observability/chat-artifacts` 的 `turn_links`。
 
 **约束：**
 - QQ / mobile 链路不走流式，只收完整 `channel_message`。
