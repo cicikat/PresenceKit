@@ -209,6 +209,21 @@ class UserHiddenState:
     body_memory: BodyMemory = field(default_factory=BodyMemory)
     last_decay_tick: Optional[str] = None
     schema_version: int = 1
+    # 运行时标记，不序列化：磁盘数据来自未来版本时为 True，store 拒绝写回，避免覆盖真实文件。
+    read_only: bool = False
+
+
+class HiddenStateVersionError(ValueError):
+    """磁盘 schema_version 高于当前代码支持的版本（未来版本）。"""
+
+    def __init__(self, found: Any, supported: int):
+        super().__init__(f"hidden_state schema_version {found!r} > supported {supported}")
+        self.found = found
+        self.supported = supported
+
+
+# 版本迁移表：_MIGRATIONS[v] 把 v 版 dict 升级为 v+1 版 dict。当前 v1 为最新，暂无条目。
+_MIGRATIONS: dict[int, Any] = {}
 
 
 # ── C. Constants ───────────────────────────────────────────────────────────────
@@ -465,6 +480,7 @@ def nudge_current_sensitivity(
     """
     if not isinstance(source, UpdateSource):
         raise TypeError(f"source must be UpdateSource, got {type(source).__name__}")
+    delta = _clamp(delta, lo=-MAX_NUDGE_PER_EVENT, hi=MAX_NUDGE_PER_EVENT)
     state.sensitivity.current.value = _clamp(state.sensitivity.current.value + delta)
     state.sensitivity.current.last_updated = now
     state.sensitivity.current.last_update_source = source
@@ -706,7 +722,8 @@ def from_dict(data: dict[str, Any]) -> UserHiddenState:
     Unknown keys are ignored; missing keys fall back to default_hidden_state values.
 
     schema_version missing  → logs warning, proceeds with lenient deserialization.
-    schema_version mismatch → logs warning, returns default_hidden_state().
+    schema_version < current → 依次经 _MIGRATIONS 升级。
+    schema_version > current → raise HiddenStateVersionError（调用方不得覆盖原文件）。
     """
     if not isinstance(data, dict):
         _log.warning("[user_hidden_state] from_dict: expected dict, got %r — returning default", type(data).__name__)
@@ -718,12 +735,25 @@ def from_dict(data: dict[str, Any]) -> UserHiddenState:
         _log.warning("[user_hidden_state] from_dict: schema_version key missing — proceeding with lenient deserialization")
     else:
         sv = data["schema_version"]
-        if sv != defaults.schema_version:
+        try:
+            sv_int = int(sv)
+        except (TypeError, ValueError):
+            _log.warning("[user_hidden_state] from_dict: schema_version %r not an int — returning default", sv)
+            return default_hidden_state()
+        if sv_int > defaults.schema_version:
             _log.warning(
-                "[user_hidden_state] from_dict: schema_version mismatch (got %r, expected %r) — returning default",
+                "[user_hidden_state] from_dict: schema_version mismatch (got %r, supported %r) — future version",
                 sv, defaults.schema_version,
             )
-            return default_hidden_state()
+            raise HiddenStateVersionError(sv, defaults.schema_version)
+        while sv_int < defaults.schema_version:
+            mig = _MIGRATIONS.get(sv_int)
+            if mig is None:
+                _log.warning("[user_hidden_state] from_dict: no migration from v%r — returning default", sv_int)
+                return default_hidden_state()
+            data = mig(dict(data))
+            sv_int += 1
+            data["schema_version"] = sv_int
 
     def _scalar(raw: Any, dflt: ScalarState) -> ScalarState:
         if not isinstance(raw, dict):

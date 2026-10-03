@@ -32,10 +32,15 @@ import json
 import logging
 from pathlib import Path
 
+import shutil
+import time
+from contextlib import contextmanager
 from typing import Any
 
+from core.memory.locks import hidden_state_lock as _hidden_state_lock_for
 from core.memory.user_hidden_state import (
     AfterglowResidueInput,
+    HiddenStateVersionError,
     UserHiddenState,
     default_hidden_state,
     from_dict,
@@ -51,6 +56,23 @@ logger = logging.getLogger(__name__)
 
 HIDDEN_STATE_FILENAME = "hidden_state.json"
 AFTERGLOW_FILENAME = "afterglow_residue.json"
+
+
+@contextmanager
+def hidden_state_lock(uid: str | int, *, char_id: str = DEFAULT_CHAR_ID):
+    """同步锁：所有 load→modify→save 路径必须包在其中（按 (char_id, uid)，可重入）。"""
+    with _hidden_state_lock_for(char_id, str(uid)):
+        yield
+
+
+def _backup_corrupt(path: Path) -> None:
+    """损坏文件回落默认前先备份，避免下一次 save 抹掉可能可救的数据。"""
+    try:
+        dst = path.with_name(f"{path.name}.corrupt-{time.strftime('%Y%m%dT%H%M%S')}-{time.time_ns() % 1000000:06d}")
+        shutil.copy2(path, dst)
+        logger.error("[hidden_state] corrupt file backed up to %s", dst.name)
+    except OSError as exc:
+        logger.error("[hidden_state] corrupt backup failed for %s: %s", path, exc)
 
 
 def load_hidden_state(uid: str | int, *, char_id: str = DEFAULT_CHAR_ID) -> UserHiddenState:
@@ -83,12 +105,19 @@ def load_hidden_state(uid: str | int, *, char_id: str = DEFAULT_CHAR_ID) -> User
         data = json.loads(raw)
     except json.JSONDecodeError as exc:
         logger.warning("[hidden_state] corrupt JSON in %s: %s — returning default", path, exc)
+        _backup_corrupt(path)
         return default_hidden_state()
 
     try:
         return from_dict(data)
+    except HiddenStateVersionError as exc:
+        logger.error("[hidden_state] %s: %s — returning READ-ONLY default, file will not be overwritten", path, exc)
+        ro = default_hidden_state()
+        ro.read_only = True
+        return ro
     except Exception as exc:
         logger.warning("[hidden_state] from_dict failed for %s: %s — returning default", path, exc)
+        _backup_corrupt(path)
         return default_hidden_state()
 
 
@@ -186,6 +215,9 @@ def save_hidden_state(uid: str | int, state: UserHiddenState, *, char_id: str = 
     Path: user_memory_root(uid, char_id=char_id) / hidden_state.json
     """
     require_character_id(char_id)
+    if getattr(state, "read_only", False):
+        logger.error("[hidden_state] refusing to save read-only state (future schema) uid=%s", uid)
+        return False
     scope = MemoryScope.reality_scope(str(uid), char_id)
     path: Path = resolve_path(scope, "hidden_state")
     data = to_dict(state)

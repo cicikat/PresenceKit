@@ -397,7 +397,7 @@ class TestSensitivityUnderflow:
         """EC-33 underflow: nudge_current_sensitivity with delta=-200 must clamp
         sensitivity.current to SCALAR_MIN=0.0."""
         state = default_hidden_state()
-        state.sensitivity.current.value = SCALAR_CENTER  # 50.0
+        state.sensitivity.current.value = 3.0  # below MAX_NUDGE_PER_EVENT so the cap does not mask the floor clamp
 
         state = nudge_current_sensitivity(state, -200.0, UpdateSource.REALITY_BEHAVIOR, NOW)
 

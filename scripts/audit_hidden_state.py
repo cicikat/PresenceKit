@@ -195,8 +195,8 @@ def _print_source_distribution(raw: dict) -> None:
         print()
         print("  [!] CONCLUSION: 所有字段均由被动衰减/初始化驱动。")
         print("      现实对话从未写入 hidden_state。")
-        print("      integrate_event_and_save / integrate_impression_and_save 尚无调用方。")
-        print("      这是已搁置的写入链，非 bug。见 docs/known-issues.md § H1。")
+        print("      写入链已接线（pipeline.post_process_slow → process_reality_turn，Brief 88）；")
+        print("      若长期无 reality_behavior 来源，检查是否从未触发判定条件或写入被拒。")
     elif reality_sources:
         print()
         print("  [OK] 检测到 reality_behavior 写入记录 — 现实侧写入链已激活。")

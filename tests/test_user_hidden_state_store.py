@@ -8,7 +8,7 @@ Coverage:
   2. missing_file            — load returns default when file is absent
   3. corrupt_json            — load returns default on invalid JSON; logs warning
   4. schema_version_missing  — from_dict deserializes leniently; logs warning
-  5. schema_version_mismatch — from_dict returns default; logs warning
+  5. schema_version_mismatch — future version raises; load returns read-only; corrupt backup
 """
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ import logging
 import pytest
 
 from core.memory.user_hidden_state import (
+    HiddenStateVersionError,
     SCALAR_CENTER,
     UpdateSource,
     default_hidden_state,
@@ -59,14 +60,14 @@ class TestRoundTrip:
         """Phase-1 writable fields survive a save→load cycle."""
         state = default_hidden_state()
         state.touch_need.deficit.value = 30.0
-        state = nudge_current_sensitivity(state, 12.0, UpdateSource.REALITY_BEHAVIOR, NOW)
+        state = nudge_current_sensitivity(state, 6.0, UpdateSource.REALITY_BEHAVIOR, NOW)
         state = discharge_touch_deficit(state, 5.0, UpdateSource.REALITY_BEHAVIOR, NOW)
         state.last_decay_tick = NOW
 
         save_hidden_state(TEST_UID, state)
         loaded = load_hidden_state(TEST_UID)
 
-        assert loaded.sensitivity.current.value == pytest.approx(SCALAR_CENTER + 12.0)
+        assert loaded.sensitivity.current.value == pytest.approx(SCALAR_CENTER + 6.0)
         assert loaded.touch_need.deficit.value == pytest.approx(25.0)   # 30 - 5
         assert loaded.sensitivity.current.last_update_source == UpdateSource.REALITY_BEHAVIOR
         assert loaded.touch_need.deficit.last_update_source == UpdateSource.REALITY_BEHAVIOR
@@ -216,42 +217,78 @@ class TestSchemaVersionMissing:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class TestSchemaVersionMismatch:
-    def test_from_dict_mismatch_returns_default(self):
-        data = {
-            "schema_version": 99,
-            "sensitivity": {
-                "baseline": {"value": 70.0, "last_updated": None, "last_update_source": "init"},
-                "current":  {"value": 80.0, "last_updated": NOW,  "last_update_source": "reality_behavior"},
-            },
-        }
-        result = from_dict(data)
-        defaults = default_hidden_state()
-        assert result.sensitivity.current.value == defaults.sensitivity.current.value
-        assert result.schema_version == defaults.schema_version
+    """S5a：未来版本抛 HiddenStateVersionError，load 返回只读状态且不覆盖文件。"""
+
+    def test_from_dict_future_version_raises(self):
+        with pytest.raises(HiddenStateVersionError):
+            from_dict({"schema_version": 99})
 
     def test_from_dict_mismatch_logs_warning(self, caplog):
         with caplog.at_level(logging.WARNING, logger="core.memory.user_hidden_state"):
-            from_dict({"schema_version": 99})
+            with pytest.raises(HiddenStateVersionError):
+                from_dict({"schema_version": 99})
         assert any("mismatch" in r.message.lower() for r in caplog.records)
 
-    def test_from_dict_mismatch_does_not_use_stale_values(self):
-        data = {"schema_version": 2, "sensitivity": {"current": {"value": 99.0}}}
-        result = from_dict(data)
-        assert result.sensitivity.current.value != pytest.approx(99.0)
-
-    def test_load_hidden_state_mismatch_returns_default(self, sandbox):
+    def test_load_future_version_is_read_only_and_not_overwritten(self, sandbox):
         path = sandbox.user_memory_root(TEST_UID) / HIDDEN_STATE_FILENAME
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(
-            json.dumps({
-                "schema_version": 99,
-                "sensitivity": {
-                    "baseline": {"value": 99.0, "last_updated": None, "last_update_source": "init"},
-                    "current":  {"value": 99.0, "last_updated": None, "last_update_source": "init"},
-                },
-            }),
-            encoding="utf-8",
-        )
+        original = json.dumps({"schema_version": 99, "sensitivity": {"current": {"value": 99.0}}})
+        path.write_text(original, encoding="utf-8")
         result = load_hidden_state(TEST_UID)
-        defaults = default_hidden_state()
-        assert result.sensitivity.current.value == defaults.sensitivity.current.value
+        assert result.read_only is True
+        assert result.sensitivity.current.value == default_hidden_state().sensitivity.current.value
+        assert save_hidden_state(TEST_UID, result) is False
+        assert path.read_text(encoding="utf-8") == original
+
+    def test_corrupt_json_is_backed_up(self, sandbox):
+        path = sandbox.user_memory_root(TEST_UID) / HIDDEN_STATE_FILENAME
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("{not json", encoding="utf-8")
+        result = load_hidden_state(TEST_UID)
+        assert result.read_only is False
+        backups = list(path.parent.glob(HIDDEN_STATE_FILENAME + ".corrupt-*"))
+        assert len(backups) == 1
+        assert backups[0].read_text(encoding="utf-8") == "{not json"
+
+
+class TestConcurrentWrites:
+    def test_concurrent_integrations_both_preserved(self, sandbox):
+        import threading
+        from core.memory.user_hidden_state_integrator import integrate_event_and_save
+        from core.memory.user_hidden_state_integrator import RealityEventType
+        from core.write_envelope import stamp_user_chat
+
+        env = stamp_user_chat()
+        n = 8
+        barrier = threading.Barrier(n)
+
+        def work():
+            barrier.wait()
+            integrate_event_and_save(TEST_UID, next(iter(RealityEventType)), env, NOW)
+
+        # 基线：单次事件造成的位移
+        single = default_hidden_state()
+        from core.memory.user_hidden_state_integrator import integrate_event
+        single, res = integrate_event(next(iter(RealityEventType)), single, env, NOW)
+        threads = [threading.Thread(target=work) for _ in range(n)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        after = load_hidden_state(TEST_UID)
+        base = default_hidden_state()
+        one = abs(single.sensitivity.current.value - base.sensitivity.current.value) + abs(
+            single.touch_need.deficit.value - base.touch_need.deficit.value)
+        got = abs(after.sensitivity.current.value - base.sensitivity.current.value) + abs(
+            after.touch_need.deficit.value - base.touch_need.deficit.value)
+        if res.accepted and one > 0:
+            assert got > one  # 丢写时 n 次只会剩 1 次的位移
+
+
+class TestNudgeCap:
+    def test_nudge_current_sensitivity_capped(self):
+        from core.memory.user_hidden_state import MAX_NUDGE_PER_EVENT
+        st = default_hidden_state()
+        before = st.sensitivity.current.value
+        nudge_current_sensitivity(st, 1000.0, UpdateSource.REALITY_BEHAVIOR, NOW)
+        assert st.sensitivity.current.value - before == pytest.approx(MAX_NUDGE_PER_EVENT)

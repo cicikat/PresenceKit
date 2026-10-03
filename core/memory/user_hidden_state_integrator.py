@@ -59,7 +59,7 @@ from core.memory.user_hidden_state import (
     reinforce_body_memory,
 )
 from core.data_paths import DEFAULT_CHAR_ID
-from core.memory.user_hidden_state_store import load_hidden_state, save_hidden_state
+from core.memory.user_hidden_state_store import hidden_state_lock, load_hidden_state, save_hidden_state
 from core.write_envelope import SourceType, WriteEnvelope
 
 logger = logging.getLogger(__name__)
@@ -406,15 +406,16 @@ def integrate_event_and_save(
     """
     if not isinstance(uid, (str, int)):
         raise TypeError(f"uid must be str or int, got {type(uid).__name__}")
-    state = load_hidden_state(uid, char_id=char_id)
-    state, result = integrate_event(event_type, state, write_envelope, now)
-    if write_envelope.can_write_memory and result.accepted:
-        ok = save_hidden_state(uid, state, char_id=char_id)
-        if not ok:
-            logger.error(
-                "integrate_event_and_save: save failed [uid=%s event=%s]",
-                uid, event_type.value,
-            )
+    with hidden_state_lock(uid, char_id=char_id):
+        state = load_hidden_state(uid, char_id=char_id)
+        state, result = integrate_event(event_type, state, write_envelope, now)
+        if write_envelope.can_write_memory and result.accepted:
+            ok = save_hidden_state(uid, state, char_id=char_id)
+            if not ok:
+                logger.error(
+                    "integrate_event_and_save: save failed [uid=%s event=%s]",
+                    uid, event_type.value,
+                )
     return state, result
 
 
@@ -446,14 +447,15 @@ def integrate_impression_and_save(
     """
     if not isinstance(uid, (str, int)):
         raise TypeError(f"uid must be str or int, got {type(uid).__name__}")
-    state = load_hidden_state(uid, char_id=char_id)
-    state, result = integrate_impression(impression, state, write_envelope, now)
-    if write_envelope.can_write_memory and result.accepted:
-        ok = save_hidden_state(uid, state, char_id=char_id)
-        if not ok:
-            logger.error(
-                "integrate_impression_and_save: save failed [uid=%s]", uid,
-            )
+    with hidden_state_lock(uid, char_id=char_id):
+        state = load_hidden_state(uid, char_id=char_id)
+        state, result = integrate_impression(impression, state, write_envelope, now)
+        if write_envelope.can_write_memory and result.accepted:
+            ok = save_hidden_state(uid, state, char_id=char_id)
+            if not ok:
+                logger.error(
+                    "integrate_impression_and_save: save failed [uid=%s]", uid,
+                )
     return state, result
 
 
@@ -699,15 +701,16 @@ def integrate_afterglow_and_save(
     """
     if not isinstance(uid, (str, int)):
         raise TypeError(f"uid must be str or int, got {type(uid).__name__}")
-    state = load_hidden_state(uid, char_id=char_id)
-    state, result = integrate_afterglow(afterglow, state, write_envelope, now)
-    if write_envelope.can_write_memory and result.accepted:
-        ok = save_hidden_state(uid, state, char_id=char_id)
-        if not ok:
-            logger.error(
-                "integrate_afterglow_and_save: save failed [uid=%s tone=%s]",
-                uid, afterglow.tone,
-            )
+    with hidden_state_lock(uid, char_id=char_id):
+        state = load_hidden_state(uid, char_id=char_id)
+        state, result = integrate_afterglow(afterglow, state, write_envelope, now)
+        if write_envelope.can_write_memory and result.accepted:
+            ok = save_hidden_state(uid, state, char_id=char_id)
+            if not ok:
+                logger.error(
+                    "integrate_afterglow_and_save: save failed [uid=%s tone=%s]",
+                    uid, afterglow.tone,
+                )
     return state, result
 
 
@@ -736,12 +739,13 @@ def integrate_body_cue_and_save(
     """
     if not isinstance(uid, (str, int)):
         raise TypeError(f"uid must be str or int, got {type(uid).__name__}")
-    state = load_hidden_state(uid, char_id=char_id)
-    state, result = integrate_body_cue(cue, response_tag, strength, state, write_envelope, now)
-    if write_envelope.can_write_memory and result.accepted:
-        ok = save_hidden_state(uid, state, char_id=char_id)
-        if not ok:
-            logger.error(
-                "integrate_body_cue_and_save: save failed [uid=%s cue=%s]", uid, cue
-            )
+    with hidden_state_lock(uid, char_id=char_id):
+        state = load_hidden_state(uid, char_id=char_id)
+        state, result = integrate_body_cue(cue, response_tag, strength, state, write_envelope, now)
+        if write_envelope.can_write_memory and result.accepted:
+            ok = save_hidden_state(uid, state, char_id=char_id)
+            if not ok:
+                logger.error(
+                    "integrate_body_cue_and_save: save failed [uid=%s cue=%s]", uid, cue
+                )
     return state, result

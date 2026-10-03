@@ -104,7 +104,7 @@ def _check_no_interaction_for_uid(uid: str, char_id: str, now_iso: str) -> None:
 async def _check_hidden_state_decay() -> None:
     """12-hour tick: apply_time_decay for all registered chars × uids with hidden_state.json."""
     from core.memory.user_hidden_state import apply_time_decay
-    from core.memory.user_hidden_state_store import load_hidden_state, save_hidden_state
+    from core.memory.user_hidden_state_store import hidden_state_lock, load_hidden_state, save_hidden_state
     from core.scheduler.loop import _is_ready, _mark
     from core.write_envelope import stamp_trigger
     from core.asset_registry import get_registry
@@ -132,12 +132,13 @@ async def _check_hidden_state_decay() -> None:
         ]
         for uid in uids:
             try:
-                state = load_hidden_state(uid, char_id=char_id)
-                state = apply_time_decay(state, now)
-                if not save_hidden_state(uid, state, char_id=char_id):
-                    logger.error(
-                        "[hidden_state_decay] save failed uid=%s char_id=%s", uid, char_id
-                    )
+                with hidden_state_lock(uid, char_id=char_id):
+                    state = load_hidden_state(uid, char_id=char_id)
+                    state = apply_time_decay(state, now)
+                    if not save_hidden_state(uid, state, char_id=char_id):
+                        logger.error(
+                            "[hidden_state_decay] save failed uid=%s char_id=%s", uid, char_id
+                        )
             except Exception as exc:
                 logger.error(
                     "[hidden_state_decay] error uid=%s char_id=%s: %s", uid, char_id, exc
@@ -150,7 +151,7 @@ async def _check_hidden_state_decay() -> None:
 async def _check_hidden_state_consolidate() -> None:
     """7-day tick: consolidate_baselines for all registered chars × uids with hidden_state.json."""
     from core.memory.user_hidden_state import consolidate_baselines
-    from core.memory.user_hidden_state_store import load_hidden_state, save_hidden_state
+    from core.memory.user_hidden_state_store import hidden_state_lock, load_hidden_state, save_hidden_state
     from core.scheduler.loop import _is_ready, _mark
     from core.write_envelope import stamp_trigger
     from core.asset_registry import get_registry
@@ -178,12 +179,13 @@ async def _check_hidden_state_consolidate() -> None:
         ]
         for uid in uids:
             try:
-                state = load_hidden_state(uid, char_id=char_id)
-                state = consolidate_baselines(state, now)
-                if not save_hidden_state(uid, state, char_id=char_id):
-                    logger.error(
-                        "[hidden_state_consolidate] save failed uid=%s char_id=%s", uid, char_id
-                    )
+                with hidden_state_lock(uid, char_id=char_id):
+                    state = load_hidden_state(uid, char_id=char_id)
+                    state = consolidate_baselines(state, now)
+                    if not save_hidden_state(uid, state, char_id=char_id):
+                        logger.error(
+                            "[hidden_state_consolidate] save failed uid=%s char_id=%s", uid, char_id
+                        )
             except Exception as exc:
                 logger.error(
                     "[hidden_state_consolidate] error uid=%s char_id=%s: %s", uid, char_id, exc
