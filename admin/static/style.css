@@ -525,7 +525,13 @@ textarea { resize: vertical; min-height: 72px; }
 .autonomy-overview .stat { margin: 0; min-height: 96px; }
 .autonomy-overview .stat .val { font-size: 20px; overflow-wrap: anywhere; }
 .autonomy-overview .stat .detail { color: var(--muted); font-size: 11px; line-height: 1.45; margin-top: 5px; }
-.autonomy-source-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; margin-bottom: 24px; }
+.autonomy-source-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; margin-bottom: 24px; align-items: start; }
+@media (min-width: 1000px) { #page-autonomy-settings .autonomy-source-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.autonomy-card-footer { display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin-top: 16px; }
+.autonomy-dirty { color: var(--warn); font-size: 12px; }
+.autonomy-dirty[hidden], .autonomy-error[hidden] { display: none; }
+.autonomy-error { color: var(--danger, #ef4444); }
+.autonomy-group-title { font-size: 13px; margin: 16px 0 8px; }
 #page-autonomy-settings .autonomy-source-grid .form-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 24px; }
 #page-autonomy-settings .autonomy-source-grid .checkbox-row { grid-column: 1 / -1; }
 @media (max-width: 600px) { #page-autonomy-settings .autonomy-source-grid .form-row { grid-template-columns: minmax(0, 1fr); } }
@@ -545,7 +551,7 @@ textarea { resize: vertical; min-height: 72px; }
 .autonomy-state-off { color: var(--muted); }
 .autonomy-run-tools { color: var(--muted); font-size: 12px; max-width: 220px; overflow-wrap: anywhere; }
 .autonomy-prompt-view { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 520px; overflow: auto; margin: 0; font: 12px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; }
-@media (max-width: 767px) { .autonomy-page .observe-toolbar { align-items: stretch; flex-wrap: wrap; justify-content: flex-start; } .autonomy-test-source { width: 100%; } .autonomy-source-grid { grid-template-columns: 1fr; } }
+@media (max-width: 767px) { .autonomy-page .observe-toolbar { align-items: stretch; flex-wrap: wrap; justify-content: flex-start; } .autonomy-test-source { width: 100%; } }
 
 /* ── Toast ── */
 #toast {

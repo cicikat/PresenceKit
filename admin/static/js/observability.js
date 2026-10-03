@@ -681,28 +681,66 @@ async function loadAutonomyPrompt(runId) {
   }
 }
 
-async function saveAutonomyConfig() {
-  try {
-    const weekdays = document.getElementById('autonomy-schedule-weekdays').value.split(',').map(x => x.trim()).filter(Boolean).map(Number);
-    const start = document.getElementById('autonomy-window-start').value;
-    const end = document.getElementById('autonomy-window-end').value;
-    const config = await api('PATCH', '/admin/autonomy/config', {
-      enabled: document.getElementById('autonomy-enabled').checked,
-      talk_enabled: document.getElementById('autonomy-talk').checked,
-      daily_evaluation_budget: Number(document.getElementById('autonomy-daily').value),
-      min_interval_seconds: Number(document.getElementById('autonomy-min-interval').value),
-      interval: {enabled: document.getElementById('autonomy-interval-enabled').checked, seconds: Number(document.getElementById('autonomy-interval').value)},
-      overflow: {enabled: document.getElementById('autonomy-overflow-enabled').checked, threshold: Number(document.getElementById('autonomy-overflow-threshold').value)},
-      schedule: {enabled: document.getElementById('autonomy-schedule-enabled').checked, time: document.getElementById('autonomy-schedule-time').value, timezone: document.getElementById('autonomy-schedule-timezone').value || 'local', weekdays, window: start && end ? [start, end] : [], restart_miss_policy: document.getElementById('autonomy-miss-policy').value},
-    });
-    await loadAutonomySettings();
-    const enabled = config.enabled ? '已启用内置唤醒' : '已关闭内置唤醒';
-    const overflow = config.overflow?.enabled ? `溢出信号已启用（阈值 ${config.overflow.threshold}）` : '溢出信号已关闭';
-    const schedule = config.schedule?.enabled ? `定时唤醒已启用（${config.schedule.time}）` : '定时唤醒已关闭';
-    const interval = config.interval?.enabled ? `间隔唤醒已启用（${config.interval.seconds} 秒）` : '间隔唤醒已关闭';
-    toast(`${enabled}；${overflow}；${schedule}；${interval}`, 'ok');
-  } catch (e) { toast('保存失败：' + e.message, 'err'); }
+function _autonomyCardBody(card) {
+  const num = id => Number(document.getElementById(id).value);
+  const chk = id => document.getElementById(id).checked;
+  if (card === 'control') {
+    return {
+      enabled: chk('autonomy-enabled'), talk_enabled: chk('autonomy-talk'),
+      daily_evaluation_budget: num('autonomy-daily'), min_interval_seconds: num('autonomy-min-interval'),
+      max_steps: num('autonomy-max-steps'), max_tools: num('autonomy-max-tools'), max_write_tools: num('autonomy-max-write-tools'),
+      total_timeout_seconds: num('autonomy-total-timeout'), tool_timeout_seconds: num('autonomy-tool-timeout'),
+    };
+  }
+  if (card === 'overflow') return {overflow: {enabled: chk('autonomy-overflow-enabled'), threshold: num('autonomy-overflow-threshold')}};
+  if (card === 'interval') return {interval: {enabled: chk('autonomy-interval-enabled'), seconds: num('autonomy-interval')}};
+  const weekdays = document.getElementById('autonomy-schedule-weekdays').value.split(',').map(x => x.trim()).filter(Boolean).map(Number);
+  const start = document.getElementById('autonomy-window-start').value;
+  const end = document.getElementById('autonomy-window-end').value;
+  return {schedule: {enabled: chk('autonomy-schedule-enabled'), time: document.getElementById('autonomy-schedule-time').value, timezone: document.getElementById('autonomy-schedule-timezone').value || 'local', weekdays, window: start && end ? [start, end] : [], restart_miss_policy: document.getElementById('autonomy-miss-policy').value}};
 }
+
+function _autonomyCheckLimits() {
+  const tools = document.getElementById('autonomy-max-tools');
+  const write = document.getElementById('autonomy-max-write-tools');
+  const err = document.getElementById('autonomy-limits-error');
+  if (!tools || !write || !err) return true;
+  write.max = String(Math.min(8, Number(tools.value) || 0));
+  const bad = Number(write.value) > Number(tools.value);
+  err.hidden = !bad;
+  err.textContent = bad ? t('autonomy.limits_error', '写类工具次数不能超过每次最多工具次数') : '';
+  return !bad;
+}
+
+function _autonomyMarkDirty(card, dirty) {
+  const mark = document.querySelector(`[data-autonomy-card="${card}"] .autonomy-dirty`);
+  if (mark) mark.hidden = !dirty;
+}
+
+function _autonomyClearDirty() {
+  document.querySelectorAll('[data-autonomy-card] .autonomy-dirty').forEach(el => { el.hidden = true; });
+}
+
+document.addEventListener('input', event => {
+  const card = event.target.closest?.('#page-autonomy-settings [data-autonomy-card]');
+  if (!card) return;
+  _autonomyMarkDirty(card.dataset.autonomyCard, true);
+  if (card.dataset.autonomyCard === 'control') _autonomyCheckLimits();
+});
+document.addEventListener('change', event => {
+  const card = event.target.closest?.('#page-autonomy-settings [data-autonomy-card]');
+  if (card) _autonomyMarkDirty(card.dataset.autonomyCard, true);
+});
+
+async function saveAutonomyCard(card) {
+  if (card === 'control' && !_autonomyCheckLimits()) { toast(t('autonomy.limits_error', '写类工具次数不能超过每次最多工具次数'), 'err'); return; }
+  try {
+    await api('PATCH', '/admin/autonomy/config', _autonomyCardBody(card));
+    await loadAutonomySettings();
+    toast(t('autonomy.card_saved', '已保存'), 'ok');
+  } catch (e) { toast(t('autonomy.save_failed', '保存失败：') + e.message, 'err'); }
+}
+window.saveAutonomyCard = saveAutonomyCard;
 
 async function enqueueAutonomyTest() {
   try { const r = await api('POST', '/admin/autonomy/test-enqueue', {source: document.getElementById('autonomy-test-source').value}); toast(`已排队一次测试（任务 ${String(r.job_id).slice(0, 8)}）`, 'ok'); if(document.getElementById('page-observe-autonomy')?.classList.contains('active'))await loadObserveAutonomy(); }
@@ -722,7 +760,6 @@ window.loadAutonomyTools = loadAutonomyTools;
 window.autonomyToolToggle = autonomyToolToggle;
 window.autonomyToolsBulk = autonomyToolsBulk;
 window.selfManagementChange = selfManagementChange;
-window.saveAutonomyConfig = saveAutonomyConfig;
 window.enqueueAutonomyTest = enqueueAutonomyTest;
 
 // ── 检视器当前快照（导出 MD 用）──
@@ -2287,6 +2324,12 @@ async function loadAutonomySettings() {
     document.getElementById('autonomy-talk').checked = !!config.talk_enabled;
     document.getElementById('autonomy-daily').value = config.daily_evaluation_budget || 1;
     document.getElementById('autonomy-min-interval').value = config.min_interval_seconds || 0;
+    document.getElementById('autonomy-max-steps').value = config.max_steps ?? 3;
+    document.getElementById('autonomy-max-tools').value = config.max_tools ?? 0;
+    document.getElementById('autonomy-max-write-tools').value = config.max_write_tools ?? 0;
+    document.getElementById('autonomy-total-timeout').value = config.total_timeout_seconds ?? 60;
+    document.getElementById('autonomy-tool-timeout').value = config.tool_timeout_seconds ?? 20;
+    _autonomyCheckLimits(); _autonomyClearDirty();
     document.getElementById('autonomy-interval').value = (config.interval || {}).seconds || 60;
     document.getElementById('autonomy-interval-enabled').checked = !!(config.interval || {}).enabled;
     document.getElementById('autonomy-overflow-enabled').checked = !!(config.overflow || {}).enabled;

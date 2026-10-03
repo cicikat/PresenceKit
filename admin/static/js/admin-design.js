@@ -32,6 +32,8 @@ function decorateSettingsPanels(page, root) {
   }
   for (const card of root.querySelectorAll('.card')) {
     if (card.querySelector(':scope > details.settings-disclosure')) continue;
+    // Autonomy cards save themselves and stay flat so the grid aligns.
+    if (card.hasAttribute('data-autonomy-card')) continue;
     // Do not hide plain switches, lists, or already expandable connection editors.
     const fields = card.querySelectorAll('input:not([type=checkbox]):not([type=hidden]), select, textarea');
     if (card.id === 'stt-config-card') continue;
