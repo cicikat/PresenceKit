@@ -187,6 +187,7 @@ python run_test.py
     `<用户目录>`/`<仓库路径>` 这类通用占位。commit 前如发现已写入，直接改掉
     再提交，不要留到事后清理。
 12. **新增或修改工具时，schema 必须能通过 `tests/test_tool_schema_portable.py`，不得在工具侧为单个 provider 打补丁；兼容问题统一在 `core/llm_protocol.py` 出口（`portable_tool_spec`）处理。**
+13. **新增面向运营的 config 开关（功能开关、灰度、阈值、模式切换）时，同单必须接入管理面板热更新设置，不能只写 `config.example.yaml` 和文档。** 范本：`admin/routers/settings_feature_flags.py` 中 `event_shadow_recall` 的读写接口与对应设置页控件；需返回 effective state、校验取值、说明文字写清默认值与「关闭即回到现状」。「先观察再决定是否开启」类开关尤其需要，否则只能改 yaml 重启。纯内部调参或确无运营场景的字段可不接，但要在提交说明里写明理由。工单若只写了「同步 config.example.yaml 与 feature-control-surface.md」，施工者仍须按本条补管理面入口，或在交付说明中明确列为遗留。静态资源改动按「Admin Static Asset Cache」做浏览器验收。
 
 ## 测试
 
