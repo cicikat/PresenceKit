@@ -137,5 +137,4 @@ async def test_string_where_executes_via_dispatcher(monkeypatch):
         "self_db_query", {"table": "t", "where": '{"a": 1}'}, "u", "u", False, None,
         origin="assistant_loop", char_id="c",
     )
-    if seen:
-        assert seen.get("where") == {"a": 1}
+    assert seen.get("where") == {"a": 1}
