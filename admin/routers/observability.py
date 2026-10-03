@@ -852,3 +852,79 @@ async def drinking_state(_auth=Depends(require_scopes("state.read"))):
     from core.tools.drinking import snapshot
     char_id = _active_char_id_or_none()
     return snapshot(char_id) if char_id else {"enabled": False, "effective": False, "blocking_reason": "no_character"}
+
+
+@router.get(
+    "/observability/state-packet",
+    summary="读取 StatePacket 影子模式记录与聚合",
+    description=(
+        "只返回每轮各 prompt 层的来源、authority、字符数、reason 与 item id；"
+        "不含任何记忆正文。aggregate 给出最近 N 轮 query_free_layers / "
+        "duplicate_event_ids / untraced_sources 的出现频次。"
+    ),
+)
+async def state_packet(
+    uid: str,
+    char_id: str,
+    date: str = "",
+    limit: int = Query(20, ge=1, le=200),
+    _auth=Depends(require_scopes("state.read")),
+):
+    import json
+    from datetime import datetime, timedelta
+    from core.state_composer import packet_dir
+
+    if date:
+        try:
+            days = [datetime.strptime(date, "%Y-%m-%d").date()]
+        except ValueError:
+            raise HTTPException(status_code=422, detail="invalid_date") from None
+    else:
+        today = datetime.now().date()
+        days = [today - timedelta(days=offset) for offset in range(8)]
+
+    directory = packet_dir(uid, char_id)
+    records: list[dict] = []
+    for day in days:
+        path = directory / f"{day.isoformat()}.jsonl"
+        if not path.exists():
+            continue
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except Exception:
+            continue
+        for line in reversed(lines):
+            try:
+                records.append(json.loads(line))
+            except Exception:
+                continue
+            if len(records) >= limit:
+                break
+        if len(records) >= limit:
+            break
+    records.reverse()
+
+    query_free: dict[str, int] = {}
+    untraced: dict[str, int] = {}
+    duplicates = 0
+    for rec in records:
+        for name in rec.get("query_free_layers") or []:
+            query_free[name] = query_free.get(name, 0) + 1
+        for name in rec.get("untraced_sources") or []:
+            untraced[name] = untraced.get(name, 0) + 1
+        duplicates += int(rec.get("duplicate_event_ids") or 0)
+    return {
+        "uid": uid,
+        "char_id": char_id,
+        "count": len(records),
+        "records": records,
+        "aggregate": {
+            "turns": len(records),
+            "query_free_layers": query_free,
+            "untraced_sources": untraced,
+            "duplicate_event_ids_total": duplicates,
+            "turns_with_duplicates": sum(
+                1 for r in records if int(r.get("duplicate_event_ids") or 0) > 0
+            ),
+        },
+    }

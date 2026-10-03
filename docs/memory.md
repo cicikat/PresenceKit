@@ -347,6 +347,7 @@ the original evidence.
 | proactive | `core.scheduler.proactive_ledger` | uid gap/budget; speech cooldown `{char_id}:{name}` | daily budget plus last 3 sends; `continuity_by_uid` | `GET /scheduler/proactive-ledger` |
 | event evidence | `core.memory.event_store` | uid + char_id + realm=reality + event_id/turn_id | append-only; DELETE is tombstone pending owner policy | `GET /observability/memory-event-ledger` |
 | shadow recall | `core.memory.event_shadow_recall` | recall_trace date + mapped event/turn IDs | daily traces; observability scans 31d | `GET /observability/memory-event-shadow-recall` |
+| state packet | `core.state_composer` | `state_packet/{date}.jsonl`（recall_trace 同级目录），只记层/ID/指标 | 影子模式，默认关；观测默认扫 8 天 | `GET /observability/state-packet` |
 | event migration | `core.memory.event_migration` | uid + char_id + `event_migration_state.json` | resumable content-free progress; Markdown fallback remains | `GET /observability/memory-event-migration` |
 | action | `core.memory.action_trace` | uid + char_id + `execute_structured` traces | ring of last 30 | `GET /observability/tool-traces` |
 | mail | `core.mail.execution_ledger` | execution_id + uid + char_id + ISO week | append-only jsonl; query is bounded | `GET /observability/mail-executions` |

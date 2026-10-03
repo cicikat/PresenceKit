@@ -997,3 +997,27 @@ stored ingest watermark, and detail IDs. It is capped at 1200 characters, has
 When present, the pipeline omits overlapping `6b_event_search` and
 `6c_episodic` prose for the turn; those legacy retrievals remain available as
 diagnostic traces and remain the fallback for topics no dossier owns.
+
+## StatePacket 影子模式
+
+`core/state_composer.py` 在 `build_prompt()` 之后（`prompt_capture` 之后）为每轮生成
+content-free 清单，独立写入 `state_packet/{date}.jsonl`（与 `recall_trace/` 同级；
+recall_trace 在 `fetch_context()` 内先于 build 写入，故不回写该条记录）。开关
+`state_composer.shadow`，默认关，不改变任何 prompt 输出。层的归属登记表见
+`core/memory/authority.py`（`KNOWN_LAYERS` 全覆盖由测试守卫）。
+
+| authority | 含义 | 典型层 |
+|---|---|---|
+| canonical_evidence | 事件账本 | （暂无直接注入层） |
+| topic_authority | 主题 dossier | 6b_memory_dossiers |
+| identity_authority | user_identity | 6a_user_identity |
+| user_stated_fact | 用户明说的事实 | 5_profile、5.1_user_facts、11.7_pinned_facts、3_relation |
+| derived_compat | 派生/兼容召回 | 6c_episodic、mid_term、6b_event_search |
+| narrative | 叙事弧 | 6h_storyline |
+| ambient | 环境/氛围 | realtime、diary、dream、coplay、web |
+| character_self | 角色自身 | traits、author note、growth_self |
+| system | 系统/对话 | system prompt、history、tool grounding、user message |
+
+观测 `GET /observability/state-packet?uid&char_id&date&limit`（`state.read`），含
+`query_free_layers`、`duplicate_event_ids`、`untraced_sources`、`conflict_candidates`
+（只列不判）以及最近 N 轮的频次聚合。

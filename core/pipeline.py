@@ -735,6 +735,42 @@ class Pipeline:
         except Exception as _hje:
             logger.debug("[pipeline.fetch_context] hardware job state failed: %s", _hje)
 
+        # 工单 S2：StatePacket 影子模式只需要 ID/指标，关闭时不计算。
+        _state_trace: dict = {}
+        try:
+            from core.state_composer import enabled_for as _state_shadow_enabled
+            if _state_shadow_enabled(uid, char_id):
+                def _evt_ids(items) -> list:
+                    out: list = []
+                    for it in items or []:
+                        if isinstance(it, dict):
+                            out.extend(it.get("source_event_ids") or [])
+                    return out
+                _dossier_ids = list((_dossier_recall or {}).get("dossier_ids") or []) \
+                    if memory_dossier_context else []
+                _state_trace = {
+                    "episodic_ids": [m.get("id") for m in episodic_memories if isinstance(m, dict)],
+                    "episodic_event_ids": _evt_ids(episodic_memories),
+                    "episodic_matches": [
+                        t.get("match") for t in _episodic_trace
+                        if isinstance(t, dict) and t.get("selected")
+                    ],
+                    "fallback_ids": [m.get("id") for m in episodic_fallback if isinstance(m, dict)],
+                    "fallback_event_ids": _evt_ids(episodic_fallback),
+                    "event_log_ids": [
+                        t.get("turn_id") for t in _event_log_trace if isinstance(t, dict)
+                    ],
+                    "event_log_event_ids": [
+                        t.get("event_id") for t in _event_log_trace
+                        if isinstance(t, dict) and t.get("event_id")
+                    ],
+                    "dossier_ids": _dossier_ids,
+                    "time_intent": bool(_parsed_time_range),
+                    "long_term": bool(_long_term_query),
+                }
+        except Exception as _ste:
+            logger.debug("[pipeline.fetch_context] state trace skip: %s", _ste)
+
         return {
             "history":             history,
             "profile":             profile,
@@ -769,6 +805,7 @@ class Pipeline:
             "action_trace_entries": _action_trace_entries,
             "_continuity_private": not group_id,
             "hardware_jobs_text": _hardware_jobs_text,
+            "_state_trace": _state_trace,
         }
 
     # ──────────────────────────────────────────────────────────────────────────
@@ -894,6 +931,12 @@ class Pipeline:
         try:
             from core.observe.prompt_capture import capture as _capture_prompt
             _capture_prompt(user_id, messages, debug_info)
+        except Exception:
+            pass
+
+        try:
+            from core.state_composer import record_shadow_packet as _record_state_packet
+            _record_state_packet(user_id, _char_id, context, messages, debug_info, query=content)
         except Exception:
             pass
 

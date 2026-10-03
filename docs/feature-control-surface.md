@@ -982,3 +982,10 @@ consolidation task and work-session status.
 实机 HDS 普通 IP 输入只填当前网卡 IP（不含协议、端口和斜线），关闭 Advanced IP entry；
 该模式使用默认 3476 端口。接收端会确认并忽略非心率的 motion/calories 报文，
 仅留存 `heartRate:<bpm>` 样本。
+
+## 工单 S2 StatePacket 影子模式
+
+`state_composer.shadow`（`enabled` 默认 false，`uids` / `char_ids` 灰度名单，语义同
+`event_shadow_recall`）在 `build_prompt()` 之后记录每轮各 prompt 层的来源、authority、
+字符数、reason 与 item id，写入 recall_trace 同级的 `state_packet/{date}.jsonl`。
+关闭时不计算；不改变 prompt。观测：`GET /observability/state-packet`（`state.read`）。
