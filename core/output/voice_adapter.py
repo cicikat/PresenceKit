@@ -46,6 +46,8 @@ _DEFAULT_GPT_MODEL = "不训练直接推v3底模！"
 _DEFAULT_SOVITS_MODEL = "不训练直接推v2ProPlus底模！"
 _GSV_VERSIONS = frozenset({"v2", "v3", "v2Pro", "v2ProPlus"})
 _GSV_SYNTHESIS_LOCK = asyncio.Lock()
+# Serialises local TTS ahead of the shared local-model lock; see _hold_local_resource.
+_LOCAL_TTS_QUEUE_LOCK = asyncio.Lock()
 # True only inside the ``local_resource()`` block in synthesize(), so a provider
 # never releases a lock it does not hold.
 _HOLDS_LOCAL_RESOURCE: contextvars.ContextVar[bool] = contextvars.ContextVar(
@@ -89,6 +91,7 @@ def get_tts_runtime_status() -> dict:
         "current": dict(current) if current else None,
         "local_resource_locked": local_resource().locked(),
         "gsv_lock_locked": _GSV_SYNTHESIS_LOCK.locked(),
+        "tts_queue_locked": _LOCAL_TTS_QUEUE_LOCK.locked(),
         "last_error": _TTS_RUNTIME["last_error"],
         "last_error_at": _TTS_RUNTIME["last_error_at"],
         "healthy": not _TTS_RUNTIME["unhealthy_urls"],
@@ -150,13 +153,25 @@ def _float_cfg(cfg: dict, key: str, default: float) -> float:
 
 
 class _hold_local_resource:
-    """Take the shared local-model lock with explicit ownership tracking."""
+    """Take the shared local-model lock with explicit ownership tracking.
+
+    Local TTS requests queue on ``_LOCAL_TTS_QUEUE_LOCK`` before the shared lock.
+    A speaker hands the shared lock back between sentences while still holding
+    ``_GSV_SYNTHESIS_LOCK``; if a second TTS request were waiting on the shared
+    lock it would take it and then wait for the GSV lock, deadlocking both
+    forever.  With this outer queue, only vision can win the sentence gap.
+    """
 
     async def __aenter__(self):
         from core.video_call import local_resource
 
         self._lock = local_resource()
-        await self._lock.acquire()
+        await _LOCAL_TTS_QUEUE_LOCK.acquire()
+        try:
+            await self._lock.acquire()
+        except BaseException:
+            _LOCAL_TTS_QUEUE_LOCK.release()
+            raise
         self._state = {"held": True}
         self._tokens = (_HOLDS_LOCAL_RESOURCE.set(True), _LOCAL_RESOURCE_STATE.set(self._state))
         return self
@@ -164,9 +179,12 @@ class _hold_local_resource:
     async def __aexit__(self, *exc):
         _HOLDS_LOCAL_RESOURCE.reset(self._tokens[0])
         _LOCAL_RESOURCE_STATE.reset(self._tokens[1])
-        if self._state["held"]:
-            self._state["held"] = False
-            self._lock.release()
+        try:
+            if self._state["held"]:
+                self._state["held"] = False
+                self._lock.release()
+        finally:
+            _LOCAL_TTS_QUEUE_LOCK.release()
         return False
 
 

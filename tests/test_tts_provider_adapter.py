@@ -265,6 +265,46 @@ async def test_local_tts_hands_shared_lock_to_vision_between_segments(tmp_path, 
     assert sum(item.startswith("tts:") for item in order) == 3
 
 
+@pytest.mark.asyncio
+async def test_concurrent_local_tts_does_not_steal_sentence_gap_and_deadlock(tmp_path, monkeypatch):
+    import asyncio
+    from core import video_call
+
+    _reset_runtime()
+    reference = tmp_path / "reference.wav"
+    output = tmp_path / "output.wav"
+    reference.write_bytes(b"reference")
+    output.write_bytes(_pcm_wav())
+    monkeypatch.setattr(video_call, "_local_resource", asyncio.Lock())
+    monkeypatch.setattr(voice_adapter, "_LOCAL_TTS_QUEUE_LOCK", asyncio.Lock())
+    monkeypatch.setattr(voice_adapter, "_GSV_SYNTHESIS_LOCK", asyncio.Lock())
+
+    class FakeClient:
+        def __init__(self, api_url):
+            pass
+
+        def predict(self, **kwargs):
+            return str(output) if kwargs["api_name"] == "/get_tts_wav" else None
+
+    monkeypatch.setitem(sys.modules, "gradio_client", SimpleNamespace(Client=FakeClient, handle_file=lambda path: path))
+    cfg = {"api_url": "http://gsv-concurrent", "ref_audio": str(reference)}
+
+    async def tts(text):
+        async with voice_adapter._hold_local_resource():
+            return await voice_adapter.GsvProvider().synthesize(text, "neutral", cfg)
+
+    # A multi-sentence reply yields the shared lock between sentences; a second
+    # TTS request waiting at that moment used to grab it and deadlock both.
+    first = asyncio.create_task(tts("第一句。第二句。第三句。"))
+    await asyncio.sleep(0)
+    second = asyncio.create_task(tts("单独一句。"))
+    results = await asyncio.wait_for(asyncio.gather(first, second), timeout=5)
+    assert all(results)
+    assert not video_call.local_resource().locked()
+    assert not voice_adapter._GSV_SYNTHESIS_LOCK.locked()
+    assert not voice_adapter._LOCAL_TTS_QUEUE_LOCK.locked()
+
+
 def test_openai_compatible_without_base_url_not_ready_and_does_not_leak_secret():
     cfg = {
         "provider": "openai_compatible",
