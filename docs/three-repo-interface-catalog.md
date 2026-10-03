@@ -30,8 +30,14 @@ reasoning 全部复用冻结 owner/char；无 header 仍是 legacy live active�
 观测：`GET /observability/session-scope`（state.read，无正文/凭据）。provider fixture：
 `tests/protocol_fixtures/v1/session_scope.json`。
 手机 chat/upload 失败气泡保留同一 `request_id`；手动重试、会话重绑与 completed
-receipt 回放都复用该 ID，不另 mint。`in_flight` / unknown-result / 超时标失败后由
-用户用原 ID 再试。桌面消费者接入及真实重连/后台/撤权联调仍 `open`；固定 SHA matrix
+receipt 回放都复用该 ID，不另 mint。手机端消息状态 sending → sent / uncertain / failed（M3）：
+无 HTTP 状态的超时/断网、`in_flight`、unknown-result 标 `uncertain`（显示「确认中」、无重试钮），
+仅服务端明确 4xx/5xx 标 `failed`；`uncertain` 超过窗口（默认 5 分钟）仍未对上才转 `failed`。
+对账键是 `request_id`：`/mobile/poll` item 带 `request_id`（已有），手机端读取后清除对应本地消息
+状态；历史条目若带 `request_id`（可选，后端暂未提供，缺失时按文本+时钟/turn_id 对账）同理。
+响应缺 `turn_id` 不再算失败；不再有「最近一条」兜底标记。`/mobile/chat`、`/upload/ingest`
+对同 session 同 `request_id` 已幂等（completed 回放、in-flight 202、payload 冲突 409），
+重试不会重复跑回合。桌面消费者接入及真实重连/后台/撤权联调仍 `open`；固定 SHA matrix
 保留上一轮快照，待三仓同时升级后再更新。手机 `seq` 仍是 owner 共享游标，不能按角色
 跳过后推进 ack。
 Dream settings 归属为 per-character：`GET/PATCH /dream/settings` 读写当前角色树，
