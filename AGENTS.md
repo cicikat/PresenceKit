@@ -186,6 +186,7 @@ python run_test.py
     "旧 admin token（已轮换）"），不留原始明文；确需记录本机路径时用
     `<用户目录>`/`<仓库路径>` 这类通用占位。commit 前如发现已写入，直接改掉
     再提交，不要留到事后清理。
+12. **新增或修改工具时，schema 必须能通过 `tests/test_tool_schema_portable.py`，不得在工具侧为单个 provider 打补丁；兼容问题统一在 `core/llm_protocol.py` 出口（`portable_tool_spec`）处理。**
 
 ## 测试
 

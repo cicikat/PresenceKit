@@ -16,6 +16,10 @@ SMTP 出站不受此设置影响：邮件走独立 `mail.connection_mode`（`aut
 
 loopback（127.0.0.1 / localhost / ::1）vision 连接另有强制直连，见下文 `image_presets` 条目。
 
+## 中转站工具 schema 兼容（工单 B4）
+
+三条协议路径（chat_completions / responses / anthropic_messages）的工具定义统一经 `core/llm_protocol.py::portable_tool_spec` 清洗，规则见 `docs/tools.md`「Provider 兼容层」。严格中转站对空 `properties: {}` 报错时，可在 preset 上设 `tool_empty_params_placeholder: true`，给无参工具注入可选占位参数 `_noop`（执行前自动丢弃）；默认关闭。
+
 ## Chat Completions 工具续轮白名单（2026-09-15）
 
 Chat Completions 出口重建消息与工具，不再把 SDK `model_dump()` 或内部键送进中转。

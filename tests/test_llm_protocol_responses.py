@@ -121,7 +121,7 @@ async def test_responses_function_call_round_trips_same_call_id_into_tool_output
         ("call_weather", "get_weather", {"city": "Hangzhou"}),
     ]
     assert client.calls[0]["tools"] == [{
-        "type": "function", "name": "get_weather", "description": "weather", "parameters": {"type": "object"},
+        "type": "function", "name": "get_weather", "description": "weather", "parameters": {"type": "object", "properties": {}},
     }]
     continuation = responses_input(result.continuation_items + [{
         "role": "tool", "tool_call_id": "call_weather", "content": "sunny",
@@ -274,7 +274,7 @@ async def test_anthropic_messages_converts_system_tools_and_bearer_auth():
     assert captured["headers"]["anthropic-version"] == "2023-06-01"
     assert captured["json"]["system"] == "be concise"
     assert captured["json"]["tools"] == [{
-        "name": "weather", "description": "weather", "input_schema": {"type": "object"},
+        "name": "weather", "description": "weather", "input_schema": {"type": "object", "properties": {}},
     }]
     assert captured["json"]["tool_choice"] == {"type": "auto"}
     assert "timeout" not in captured["json"]

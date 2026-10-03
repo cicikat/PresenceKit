@@ -104,7 +104,7 @@ async def test_chat_turn_sends_portable_type_unions_without_mutating_tools(monke
     assert schema["properties"]["after"] == {"anyOf": [
         {"type": "number", "minimum": 0}, {"type": "null", "minimum": 0}]}
     assert schema["properties"]["nested"]["items"] == {"anyOf": [{"type": "string"}, {"type": "integer"}]}
-    assert schema["properties"]["type"] == original[0]["function"]["parameters"]["properties"]["type"]
+    assert schema["properties"]["type"] == {"type": "string"}  # default 由出口统一剥离（B4）
     assert schema["required"] == ["after"]
     assert tools == original
 

@@ -2768,7 +2768,12 @@ async def _execute_structured_impl(
         # 闸门拒绝不落痕迹——这不是角色做过的事（Brief 27 · 2.2）。
         return _execution_outcome("tool_failed")
 
-    # Brief 27：工具动作痕迹层，execute() 每条 return 前落一条精简痕迹（origin 闸门拒绝除外）。
+    # B4：出口把无 properties 的 object 参数降级成了 JSON 字符串，这里还原（dict 原样通过）。
+    _spec = _TOOL_REGISTRY.get(tool_name)
+    if isinstance(_spec, dict) and isinstance(tool_args, dict):
+        from core.llm_protocol import coerce_tool_args
+        tool_args = coerce_tool_args(_spec.get("parameters"), tool_args)
+
     _trace_started = _time.perf_counter()
     _trace_truncated = False
     _trace_failure_reason = ""

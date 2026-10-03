@@ -244,6 +244,14 @@ hello 字段或协商流程。
   `"off"` 关闭 Path C；字段缺失或非法值回落全局 `tool_loop.enabled`。它不会绕过 owner 私聊
   或 `function_calling` preset 两道硬闸。`examples/assistant.example.json` 是人机直连组合示例。
 
+### Provider 兼容层（工单 B4）
+
+- 所有工具 schema（内置、self_tool、MCP、discovery stub）只经 `core/llm_protocol.py::portable_tool_spec` 出口，chat completions / responses / anthropic 三条协议路径都走它；工具源码里的 schema 声明保持原样可读。
+- 新增或修改工具不得绕过出口，也不得在工具侧为单个 provider 打补丁，兼容问题统一在出口处理。
+- 出口会处理：工具名规范为 `^[A-Za-z0-9_-]{1,64}$`（非法字符替换为 `_`，被改动的名字加 hash 后缀，回程 tool_call 用 `internal_tool_name` 反查回内部名）；空 description 补成 `Tool <name>`；递归移除 `additionalProperties` / `$ref`（能内联则内联）/ `format` / `default` / `examples` / `$schema`；type 联合转 anyOf；无 properties 的 object 参数降级为 `type:string`（描述注明「JSON 对象字符串」），dispatcher 在 `_execute_structured_impl` 入口用 `coerce_tool_args` 还原为 dict（模型直接传 dict 也兼容）；空 `properties: {}` 默认保持，preset 开关 `tool_empty_params_placeholder` 可注入可选占位参数 `_noop`。
+- 禁用写法：工具 schema 里不要依赖上述被剥离关键字表达必需约束；需要自由对象参数时接受它会以 JSON 字符串到达，并由 dispatcher 还原。
+- 守门测试：`tests/test_tool_schema_portable.py`（遍历 `_TOOL_REGISTRY`、discovery stub、listening 工具与 MCP/self_tool 模拟，新增工具自动覆盖）。
+
 ### 模型专属工具预设
 
 管理面「运维 → 工具」将运行时注册表作为只读观测清单，并提供两层独立控制：
@@ -392,7 +400,8 @@ override。删除 mapping、override 或 selector 后立即回到普通 MCP 行�
   `use_proxy: true`（或管理面勾选）才使用全局 `proxy.http` / `proxy.https`，且全局代理未启用或
   未配置时连接会明确失败。
 - **工具注册**：转成 `_TOOL_REGISTRY` 动态条目，命名 `mcp__{server}__{tool}`，
-  `category="mcp"`，description/inputSchema 直接映射为 OpenAI function schema。与静态注册表
+  `category="mcp"`，description/inputSchema 登记为内部 schema，出站时统一经 `portable_tool_spec`
+  清洗（名称、additionalProperties、$ref 等，见「Provider 兼容层」）。与静态注册表
   同名冲突时 MCP 侧让位（记 warning，不覆盖）；连接关闭、断线重连失败后的摘除、单 server
   重载和总开关同步都会移除该 server 的动态条目。
 - **可选 metadata 解析**：`list_tools()` 成功后、动态 registry 生成前，

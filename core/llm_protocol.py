@@ -5,7 +5,9 @@ module is the only place that knows either wire format.
 """
 from __future__ import annotations
 
+import hashlib
 import json
+import re
 from types import SimpleNamespace
 from dataclasses import dataclass
 from typing import Any, AsyncIterator
@@ -28,6 +30,11 @@ class UpstreamResponseFormatError(RuntimeError):
         super().__init__(message)
         self.http_status = http_status
         self.category = category
+
+
+def _empty_placeholder(mc: Any) -> bool:
+    """Preset-level switch: inject an optional placeholder param into empty-parameter tools."""
+    return getattr(mc, "tool_empty_params_placeholder", False) is True
 
 
 def _protocol(mc: Any) -> str:
@@ -169,7 +176,7 @@ def _chat_tool_calls(calls: Any) -> list[dict[str, Any]]:
         item: dict[str, Any] = {
             "id": call_id,
             "type": "function",
-            "function": {"name": name, "arguments": _chat_tool_call_arguments(arguments)},
+            "function": {"name": wire_tool_name(name), "arguments": _chat_tool_call_arguments(arguments)},
         }
         # Gemini (OpenAI-compatible) returns extra_content.google.thought_signature
         # on tool calls; it must be echoed back verbatim within the same turn or
@@ -235,7 +242,7 @@ def _normalize_chat_completion(mc: Any, response: Any) -> NormalizedResponse:
             tool_calls.append(
                 NormalizedToolCall(
                     id=call_id,
-                    name=name,
+                    name=internal_tool_name(name),
                     arguments=_parse_arguments(mc, getattr(function, "arguments", None), response),
                 )
             )
@@ -308,7 +315,7 @@ def responses_input(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 result.append({
                     "type": "function_call",
                     "call_id": call_id,
-                    "name": name,
+                    "name": wire_tool_name(name),
                     "arguments": arguments,
                 })
         elif role == "tool":
@@ -325,19 +332,14 @@ def responses_input(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return result
 
 
-def responses_tools(tools: list[dict[str, Any]] | None) -> list[dict[str, Any]] | None:
+def responses_tools(
+    tools: list[dict[str, Any]] | None, *, empty_placeholder: bool = False,
+) -> list[dict[str, Any]] | None:
     if not tools:
         return None
     result: list[dict[str, Any]] = []
-    for tool in tools:
-        function = tool.get("function", tool)
-        name = function.get("name")
-        parameters = function.get("parameters") or {"type": "object", "properties": {}}
-        if not isinstance(name, str) or not name or not isinstance(parameters, dict):
-            raise ValueError("invalid function tool schema")
-        item: dict[str, Any] = {"type": "function", "name": name, "parameters": parameters}
-        if "description" in function:
-            item["description"] = function["description"]
+    for function, wire, desc, params in _tool_items(tools, empty_placeholder):
+        item: dict[str, Any] = {"type": "function", "name": wire, "parameters": params, "description": desc}
         if "strict" in function:
             item["strict"] = function["strict"]
         result.append(item)
@@ -394,20 +396,15 @@ def anthropic_messages_input(messages: list[dict[str, Any]]) -> tuple[str | None
     return ("\n\n".join(part for part in system_parts if part), result)
 
 
-def anthropic_messages_tools(tools: list[dict[str, Any]] | None) -> list[dict[str, Any]] | None:
+def anthropic_messages_tools(
+    tools: list[dict[str, Any]] | None, *, empty_placeholder: bool = False,
+) -> list[dict[str, Any]] | None:
     """Translate the existing OpenAI function schema to Anthropic's tool schema."""
     if not tools:
         return None
     result: list[dict[str, Any]] = []
-    for tool in tools:
-        function = tool.get("function", tool)
-        name = function.get("name")
-        parameters = function.get("parameters") or {"type": "object", "properties": {}}
-        if not isinstance(name, str) or not name or not isinstance(parameters, dict):
-            raise ValueError("invalid function tool schema")
-        item: dict[str, Any] = {"name": name, "input_schema": parameters}
-        if "description" in function:
-            item["description"] = function["description"]
+    for function, wire, desc, params in _tool_items(tools, empty_placeholder):
+        item: dict[str, Any] = {"name": wire, "input_schema": params, "description": desc}
         if "strict" in function:
             item["strict"] = function["strict"]
         result.append(item)
@@ -477,7 +474,7 @@ def _anthropic_messages_request(
     }
     if system:
         payload["system"] = system
-    converted_tools = anthropic_messages_tools(tools)
+    converted_tools = anthropic_messages_tools(tools, empty_placeholder=_empty_placeholder(mc))
     if converted_tools:
         payload["tools"] = converted_tools
         payload["tool_choice"] = _anthropic_tool_choice(tool_choice or "auto")
@@ -521,7 +518,7 @@ def _normalize_anthropic_messages(mc: Any, response: Any) -> NormalizedResponse:
                 raise _format_error(mc, "Anthropic tool_use block is missing id or name", response)
             if not isinstance(arguments, dict):
                 raise _format_error(mc, "Anthropic tool_use input must be an object", response)
-            tool_calls.append(NormalizedToolCall(id=call_id, name=name, arguments=dict(arguments)))
+            tool_calls.append(NormalizedToolCall(id=call_id, name=internal_tool_name(name), arguments=dict(arguments)))
             continuation_content.append({
                 "type": "tool_use", "id": call_id, "name": name, "input": dict(arguments),
             })
@@ -600,7 +597,7 @@ def _normalize_responses(mc: Any, response: Any) -> NormalizedResponse:
             arguments_raw = getattr(item, "arguments", None)
             tool_calls.append(NormalizedToolCall(
                 id=call_id,
-                name=name,
+                name=internal_tool_name(name),
                 arguments=_parse_arguments(mc, arguments_raw, response),
             ))
             continuation_items.append({
@@ -678,27 +675,156 @@ def _portable_tool_schema(schema):
     return result
 
 
-def chat_completions_tools(tools: list[dict[str, Any]] | None) -> list[dict[str, Any]] | None:
-    """Rebuild OpenAI function tools; drop SDK extras and encode type unions as anyOf."""
-    if not tools:
-        return None
-    result: list[dict[str, Any]] = []
+_WIRE_NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+_BANNED_SCHEMA_KEYS = ("additionalProperties", "$ref", "format", "default", "examples", "$schema")
+_JSON_OBJECT_HINT = "（JSON 对象字符串）"
+# wire name -> internal name; filled whenever a tool spec is exported.
+_WIRE_TO_INTERNAL: dict[str, str] = {}
+
+
+def wire_tool_name(name: str) -> str:
+    """Deterministic provider-safe name: ^[A-Za-z0-9_-]{1,64}$ (idempotent for valid names)."""
+    if _WIRE_NAME_RE.match(name):
+        return name
+    cleaned = re.sub(r"[^A-Za-z0-9_-]", "_", name) or "tool"
+    digest = hashlib.sha1(name.encode("utf-8")).hexdigest()[:8]
+    return f"{cleaned[:55].rstrip('_') or 'tool'}_{digest}"
+
+
+def internal_tool_name(name: str) -> str:
+    """Map a name returned by the provider back to the internal tool name."""
+    return _WIRE_TO_INTERNAL.get(name, name)
+
+
+def _inline_refs(schema: Any, defs: dict[str, Any], depth: int = 0) -> Any:
+    if isinstance(schema, list):
+        return [_inline_refs(v, defs, depth) for v in schema]
+    if not isinstance(schema, dict):
+        return schema
+    ref = schema.get("$ref")
+    if isinstance(ref, str):
+        target = defs.get(ref.rsplit("/", 1)[-1]) if depth < 5 else None
+        if isinstance(target, dict):
+            merged = {k: v for k, v in schema.items() if k != "$ref"}
+            return _inline_refs({**target, **merged}, defs, depth + 1)
+        desc = schema.get("description") or ""
+        return {"type": "string", "description": f"{desc}{_JSON_OBJECT_HINT}".strip()}
+    return {k: _inline_refs(v, defs, depth) for k, v in schema.items()}
+
+
+def _strip_schema(schema: Any, top: bool = False) -> Any:
+    if isinstance(schema, list):
+        return [_strip_schema(v) for v in schema]
+    if not isinstance(schema, dict):
+        return schema
+    result = {k: v for k, v in schema.items() if k not in _BANNED_SCHEMA_KEYS}
+    for key in ("$defs", "definitions"):
+        result.pop(key, None)
+    props = result.get("properties")
+    if isinstance(props, dict):
+        result["properties"] = {n: _strip_schema(v) for n, v in props.items()}
+    for key in ("items", "not", "contains", "if", "then", "else"):
+        if isinstance(result.get(key), dict):
+            result[key] = _strip_schema(result[key])
+    for key in ("anyOf", "oneOf", "allOf", "prefixItems"):
+        if isinstance(result.get(key), list):
+            result[key] = [_strip_schema(v) for v in result[key]]
+    if result.get("type") == "object" and not top and not (
+        isinstance(result.get("properties"), dict) and result["properties"]
+    ):
+        desc = str(result.get("description") or "").strip()
+        return {"type": "string", "description": f"{desc}{_JSON_OBJECT_HINT}".strip()}
+    return result
+
+
+def portable_tool_spec(
+    name: str, description: Any, schema: Any, *, empty_placeholder: bool = False,
+) -> tuple[str, str, dict[str, Any]]:
+    """Single egress cleaner for tool specs: (wire_name, description, parameters)."""
+    from copy import deepcopy
+
+    internal = str(name)
+    wire = wire_tool_name(internal)
+    if wire != internal:
+        _WIRE_TO_INTERNAL[wire] = internal
+    desc = description.strip() if isinstance(description, str) else ""
+    if not desc:
+        desc = f"Tool {internal}"
+    params = deepcopy(schema) if isinstance(schema, dict) and schema else {"type": "object", "properties": {}}
+    defs = {**(params.get("definitions") or {}), **(params.get("$defs") or {})}
+    params = _inline_refs(params, defs)
+    params = _portable_tool_schema(params)
+    params = _strip_schema(params, top=True)
+    if params.get("type") != "object":
+        params = {"type": "object", "properties": {}}
+    if not isinstance(params.get("properties"), dict):
+        params["properties"] = {}
+    if empty_placeholder and not params["properties"]:
+        params["properties"] = {"_noop": {"type": "string", "description": "unused, may be omitted"}}
+    return wire, desc, params
+
+
+def coerce_tool_args(schema: Any, args: Any) -> Any:
+    """Undo the string downgrade of property-less objects (json.loads; dicts pass through)."""
+    if not isinstance(schema, dict) or not isinstance(args, dict):
+        return args
+    props = schema.get("properties")
+    if not isinstance(props, dict):
+        return args
+
+    def _bare_obj(s: Any) -> bool:
+        return isinstance(s, dict) and s.get("type") == "object" and not s.get("properties")
+
+    def _loads(value: Any, want: type) -> Any:
+        if isinstance(value, str):
+            try:
+                parsed = json.loads(value)
+            except ValueError:
+                return value
+            if isinstance(parsed, want):
+                return parsed
+        return value
+
+    out = dict(args)
+    out.pop("_noop", None)
+    for key, sub in props.items():
+        if key not in out or not isinstance(sub, dict):
+            continue
+        if _bare_obj(sub):
+            out[key] = _loads(out[key], dict)
+        elif sub.get("type") == "array":
+            value = _loads(out[key], list)
+            if isinstance(value, list) and _bare_obj(sub.get("items")):
+                value = [_loads(v, dict) for v in value]
+            out[key] = value
+    return out
+
+
+def _tool_items(tools, empty_placeholder: bool):
     for tool in tools:
         function = tool.get("function", tool)
         name = function.get("name")
         parameters = function.get("parameters") or {"type": "object", "properties": {}}
         if not isinstance(name, str) or not name or not isinstance(parameters, dict):
             raise ValueError("invalid function tool schema")
+        wire, desc, params = portable_tool_spec(
+            name, function.get("description"), parameters, empty_placeholder=empty_placeholder,
+        )
+        yield function, wire, desc, params
+
+
+def chat_completions_tools(
+    tools: list[dict[str, Any]] | None, *, empty_placeholder: bool = False,
+) -> list[dict[str, Any]] | None:
+    """Rebuild OpenAI function tools via the portable egress cleaner."""
+    if not tools:
+        return None
+    result: list[dict[str, Any]] = []
+    for function, wire, desc, params in _tool_items(tools, empty_placeholder):
         item: dict[str, Any] = {
             "type": "function",
-            "function": {
-                "name": name,
-                "parameters": _portable_tool_schema(parameters),
-            },
+            "function": {"name": wire, "description": desc, "parameters": params},
         }
-        description = function.get("description")
-        if isinstance(description, str) and description:
-            item["function"]["description"] = description
         if "strict" in function:
             item["function"]["strict"] = function["strict"]
         result.append(item)
@@ -767,7 +893,7 @@ async def _create(
         kwargs = dict(gen_kwargs)
         try:
             wire_messages = chat_completions_input(messages)
-            converted_tools = chat_completions_tools(tools)
+            converted_tools = chat_completions_tools(tools, empty_placeholder=_empty_placeholder(mc))
         except ValueError as exc:
             raise _format_error(mc, str(exc)) from exc
         if converted_tools:
@@ -802,7 +928,7 @@ async def _create(
         input=responses_input(messages),
         store=False,
     )
-    converted_tools = responses_tools(tools)
+    converted_tools = responses_tools(tools, empty_placeholder=_empty_placeholder(mc))
     if converted_tools:
         kwargs["tools"] = converted_tools
         kwargs["tool_choice"] = tool_choice or "auto"

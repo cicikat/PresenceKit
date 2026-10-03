@@ -61,6 +61,7 @@ class ModelClient:
     client: Any
     api_protocol: str = "chat_completions"
     force_stream: bool = False
+    tool_empty_params_placeholder: bool = False
     base_url: str = ""
     api_key: str = ""
     anthropic_auth_mode: str = "x_api_key"
@@ -558,6 +559,7 @@ def _build_model_client(preset_name: str, *, request_policy: dict[str, float | i
         client=client,
         api_protocol=api_protocol,
         force_stream=force_stream,
+        tool_empty_params_placeholder=preset.get("tool_empty_params_placeholder", False) is True,
         base_url=base_url,
         api_key=api_key,
         anthropic_auth_mode=anthropic_auth_mode,
