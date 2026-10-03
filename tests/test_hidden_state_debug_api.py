@@ -52,7 +52,7 @@ def test_hs01_returns_schema_version(sandbox):
     """HS-01: schema_version 字段存在且为 1。"""
     save_hidden_state(_UID, default_hidden_state())
     result = _call_endpoint(sandbox)
-    assert result["schema_version"] == 1
+    assert result["schema_version"] == 2
 
 
 def test_hs02_sensitivity_fields_present(sandbox):
@@ -92,7 +92,7 @@ def test_hs03_dream_snapshot_fields_present(sandbox):
 def test_ms01_missing_file_returns_defaults(sandbox):
     """MS-01: 文件不存在时，返回默认值而不是报错。"""
     result = _call_endpoint(sandbox)
-    assert result["schema_version"] == 1
+    assert result["schema_version"] == 2
     assert abs(result["sensitivity"]["current"] - 50.0) < 0.01
     assert abs(result["touch_need"]["deficit"] - 0.0) < 0.01
     assert abs(result["embodied_ease"]["value"] - 50.0) < 0.01
@@ -191,7 +191,7 @@ def test_fc01_load_error_returns_defaults(sandbox):
     with patch("admin.routers.hidden_state_debug._owner_uid", side_effect=RuntimeError("cfg error")):
         result = asyncio.run(get_user_hidden_state_debug(auth=None))
 
-    assert result["schema_version"] == 1
+    assert result["schema_version"] == 2
     assert result["body_memory"] == []
     assert result["dream_snapshot"]["sensitivity"] == "mid"
 

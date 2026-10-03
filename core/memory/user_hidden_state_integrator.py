@@ -53,6 +53,7 @@ from core.memory.user_hidden_state import (
     UpdateSource,
     UserHiddenState,
     _clamp,
+    append_evidence,
     discharge_touch_deficit,
     nudge_current_sensitivity,
     nudge_embodied_ease,
@@ -188,6 +189,23 @@ class IntegratorResult:
         return bool(self.rejected_reasons) and not self.touched_fields
 
 
+def _record_evidence(
+    hidden_state: UserHiddenState,
+    result: IntegratorResult,
+    now: str,
+    source: str,
+    event_type: str,
+    ref: str,
+) -> None:
+    """把本次 FieldDelta 追加为对应 scalar 的 evidence（body_memory 忽略；不存原文）。"""
+    for fd in result.touched_fields:
+        append_evidence(
+            hidden_state, fd.field,
+            at=now, source=source, event_type=event_type,
+            delta=fd.new_value - fd.old_value, ref=ref,
+        )
+
+
 # ── C. integrate_event ────────────────────────────────────────────────────────
 
 
@@ -196,6 +214,7 @@ def integrate_event(
     hidden_state: UserHiddenState,
     write_envelope: WriteEnvelope,
     now: str,
+    ref: str = "",
 ) -> tuple[UserHiddenState, IntegratorResult]:
     """Apply a Reality event to the 中期层 fields of hidden_state.
 
@@ -301,6 +320,7 @@ def integrate_event(
         )
 
     if result.accepted:
+        _record_evidence(hidden_state, result, now, UpdateSource.REALITY_BEHAVIOR.value, event_type.value, ref)
         _bump_trigger_count(event_type.value)
 
     return hidden_state, result
@@ -314,6 +334,7 @@ def integrate_impression(
     hidden_state: UserHiddenState,
     write_envelope: WriteEnvelope,
     now: str,
+    ref: str = "",
 ) -> tuple[UserHiddenState, IntegratorResult]:
     """Apply a Dream-derived impression to sensitivity.current (increase only).
 
@@ -371,6 +392,7 @@ def integrate_impression(
     )
 
     if result.accepted:
+        _record_evidence(hidden_state, result, now, UpdateSource.DREAM_IMPRESSION.value, "impression", ref)
         _bump_trigger_count(UpdateSource.DREAM_IMPRESSION.value)
 
     return hidden_state, result
@@ -386,6 +408,7 @@ def integrate_event_and_save(
     now: str,
     *,
     char_id: str = DEFAULT_CHAR_ID,
+    ref: str = "",
 ) -> tuple[UserHiddenState, IntegratorResult]:
     """Load hidden state, apply a Reality event, and persist if permitted.
 
@@ -408,7 +431,7 @@ def integrate_event_and_save(
         raise TypeError(f"uid must be str or int, got {type(uid).__name__}")
     with hidden_state_lock(uid, char_id=char_id):
         state = load_hidden_state(uid, char_id=char_id)
-        state, result = integrate_event(event_type, state, write_envelope, now)
+        state, result = integrate_event(event_type, state, write_envelope, now, ref=ref)
         if write_envelope.can_write_memory and result.accepted:
             ok = save_hidden_state(uid, state, char_id=char_id)
             if not ok:
@@ -426,6 +449,7 @@ def integrate_impression_and_save(
     now: str,
     *,
     char_id: str = DEFAULT_CHAR_ID,
+    ref: str = "",
 ) -> tuple[UserHiddenState, IntegratorResult]:
     """Load hidden state, apply a Dream-derived impression, and persist if permitted.
 
@@ -449,7 +473,7 @@ def integrate_impression_and_save(
         raise TypeError(f"uid must be str or int, got {type(uid).__name__}")
     with hidden_state_lock(uid, char_id=char_id):
         state = load_hidden_state(uid, char_id=char_id)
-        state, result = integrate_impression(impression, state, write_envelope, now)
+        state, result = integrate_impression(impression, state, write_envelope, now, ref=ref)
         if write_envelope.can_write_memory and result.accepted:
             ok = save_hidden_state(uid, state, char_id=char_id)
             if not ok:
@@ -556,6 +580,7 @@ def integrate_afterglow(
     hidden_state: UserHiddenState,
     write_envelope: WriteEnvelope,
     now: str,
+    ref: str = "",
 ) -> tuple[UserHiddenState, IntegratorResult]:
     """Apply Dream afterglow residue to sensitivity.current and embodied_ease.
 
@@ -670,6 +695,7 @@ def integrate_afterglow(
         )
 
     if result.accepted:
+        _record_evidence(hidden_state, result, now, UpdateSource.DREAM_AFTERGLOW.value, "afterglow", ref)
         _bump_trigger_count(UpdateSource.DREAM_AFTERGLOW.value)
 
     return hidden_state, result
@@ -682,6 +708,7 @@ def integrate_afterglow_and_save(
     now: str,
     *,
     char_id: str = DEFAULT_CHAR_ID,
+    ref: str = "",
 ) -> tuple[UserHiddenState, IntegratorResult]:
     """Load hidden state, apply afterglow residue, and persist if permitted.
 
@@ -703,7 +730,7 @@ def integrate_afterglow_and_save(
         raise TypeError(f"uid must be str or int, got {type(uid).__name__}")
     with hidden_state_lock(uid, char_id=char_id):
         state = load_hidden_state(uid, char_id=char_id)
-        state, result = integrate_afterglow(afterglow, state, write_envelope, now)
+        state, result = integrate_afterglow(afterglow, state, write_envelope, now, ref=ref)
         if write_envelope.can_write_memory and result.accepted:
             ok = save_hidden_state(uid, state, char_id=char_id)
             if not ok:

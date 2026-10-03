@@ -154,7 +154,7 @@ class TestCorruptJson:
     def test_returns_default_on_empty_file(self, sandbox):
         self._write_raw(sandbox, TEST_UID, "")
         result = load_hidden_state(TEST_UID)
-        assert result.schema_version == 1
+        assert result.schema_version == 2
 
     def test_returns_default_on_json_null(self, sandbox):
         self._write_raw(sandbox, TEST_UID, "null")

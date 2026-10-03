@@ -493,6 +493,12 @@ memory_consolidation:
 # Brief 28 · tool loop 多步工具执行器：只在 chat preset 为 function_calling 模式的
 # owner 真实私聊（QQ / desktop）生效，小模型 xml_fallback / 探针路径零改动。
 # enabled: false 即完全回到现状（所有分支都在 tool_loop_active() 判断之后）。
+# S5b：隐性状态证据化。confidence_gating 开启后，hidden_need_score、letter_writer 隐性原因、
+# dream 快照按字段置信度（估计的可信度，非强度）门控；关闭时行为不变，仅在观测中记录 raw/gated。
+hidden_state:
+  confidence_gating: false
+  min_confidence: 0.3
+
 tool_loop:
   enabled: false
   max_steps: 5               # 单轮最多调用工具的步数，前端可调 1-8

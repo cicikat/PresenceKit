@@ -136,6 +136,12 @@ class ScalarState:
     value: float = 0.0
     last_updated: Optional[str] = None
     last_update_source: UpdateSource = UpdateSource.INIT
+    # schema v2：证据化。evidence 为环形缓冲（EVIDENCE_MAX 条），每条
+    # {at, source, event_type, delta, ref}，不存原文/命中词。
+    evidence: list[dict] = field(default_factory=list)
+    # 最近一次「非衰减、非合并」更新时间；衰减单独记在 last_decay_at。
+    last_confirmed_at: Optional[str] = None
+    last_decay_at: Optional[str] = None
 
 
 @dataclass
@@ -208,7 +214,7 @@ class UserHiddenState:
     embodied_ease: ScalarState = field(default_factory=ScalarState)
     body_memory: BodyMemory = field(default_factory=BodyMemory)
     last_decay_tick: Optional[str] = None
-    schema_version: int = 1
+    schema_version: int = 2
     # 运行时标记，不序列化：磁盘数据来自未来版本时为 True，store 拒绝写回，避免覆盖真实文件。
     read_only: bool = False
 
@@ -222,8 +228,53 @@ class HiddenStateVersionError(ValueError):
         self.supported = supported
 
 
-# 版本迁移表：_MIGRATIONS[v] 把 v 版 dict 升级为 v+1 版 dict。当前 v1 为最新，暂无条目。
-_MIGRATIONS: dict[int, Any] = {}
+def _migrate_v1_to_v2(data: dict[str, Any]) -> dict[str, Any]:
+    """v1 → v2：每个 scalar 补 evidence=[] / last_confirmed_at / last_decay_at。
+
+    last_confirmed_at 取原 last_updated（原 source 不是 time_decay / consolidation 时），否则为空。
+    """
+    def _fix(raw: Any) -> Any:
+        if not isinstance(raw, dict):
+            return raw
+        raw = dict(raw)
+        src = raw.get("last_update_source")
+        raw.setdefault("evidence", [])
+        if "last_confirmed_at" not in raw:
+            raw["last_confirmed_at"] = (
+                raw.get("last_updated")
+                if src not in ("time_decay", "consolidation", "init") else None
+            )
+        raw.setdefault("last_decay_at", None)
+        return raw
+
+    out = dict(data)
+    for grp, keys in (("sensitivity", ("baseline", "current")), ("touch_need", ("baseline", "deficit"))):
+        g = out.get(grp)
+        if isinstance(g, dict):
+            g = dict(g)
+            for k in keys:
+                if k in g:
+                    g[k] = _fix(g[k])
+            out[grp] = g
+    if "embodied_ease" in out:
+        out["embodied_ease"] = _fix(out["embodied_ease"])
+    return out
+
+
+# 版本迁移表：_MIGRATIONS[v] 把 v 版 dict 升级为 v+1 版 dict。
+_MIGRATIONS: dict[int, Any] = {1: _migrate_v1_to_v2}
+
+# ── 证据化常量（schema v2）──
+EVIDENCE_MAX: int = 12
+"""每个 scalar 的 evidence 环形缓冲上限。"""
+CONFIDENCE_RECENT_DAYS: float = 14.0
+"""n_recent 统计窗口：只数最近这么多天内的 evidence。"""
+CONFIDENCE_FULL_COUNT: float = 5.0
+"""n_recent 达到该条数时「证据量」因子封顶为 1。"""
+CONFIDENCE_CONFIRM_TAU_DAYS: float = 7.0
+"""距最近一次确认的指数衰减时间常数（天）。
+confidence = min(1, n_recent / FULL_COUNT) * exp(-days_since_confirmed / TAU)，
+表示「对该估计值的可信度」，不是「强度」。"""
 
 
 # ── C. Constants ───────────────────────────────────────────────────────────────
@@ -307,7 +358,7 @@ def default_hidden_state() -> UserHiddenState:
         embodied_ease=ScalarState(value=SCALAR_CENTER, last_update_source=UpdateSource.INIT),
         body_memory=BodyMemory(entries=[], max_entries=BODY_MEMORY_MAX_ENTRIES),
         last_decay_tick=None,
-        schema_version=1,
+        schema_version=2,
     )
 
 
@@ -413,7 +464,7 @@ def apply_time_decay(state: UserHiddenState, now: str) -> UserHiddenState:
         elapsed_days, CURRENT_SENS_REGRESS_HL_DAYS,
     ))
     state.sensitivity.current.last_updated = now
-    state.sensitivity.current.last_update_source = UpdateSource.TIME_DECAY
+    state.sensitivity.current.last_decay_at = now
 
     # sensitivity.baseline → SCALAR_CENTER
     state.sensitivity.baseline.value = _clamp(_regress(
@@ -421,7 +472,7 @@ def apply_time_decay(state: UserHiddenState, now: str) -> UserHiddenState:
         SCALAR_CENTER, elapsed_days, SENS_BASELINE_CENTER_HL_DAYS,
     ))
     state.sensitivity.baseline.last_updated = now
-    state.sensitivity.baseline.last_update_source = UpdateSource.TIME_DECAY
+    state.sensitivity.baseline.last_decay_at = now
 
     # touch_need.deficit → 0
     state.touch_need.deficit.value = _clamp(_regress(
@@ -429,7 +480,7 @@ def apply_time_decay(state: UserHiddenState, now: str) -> UserHiddenState:
         0.0, elapsed_days, TOUCH_DEFICIT_DECAY_HL_DAYS,
     ))
     state.touch_need.deficit.last_updated = now
-    state.touch_need.deficit.last_update_source = UpdateSource.TIME_DECAY
+    state.touch_need.deficit.last_decay_at = now
 
     # touch_need.baseline → SCALAR_CENTER
     state.touch_need.baseline.value = _clamp(_regress(
@@ -437,7 +488,7 @@ def apply_time_decay(state: UserHiddenState, now: str) -> UserHiddenState:
         SCALAR_CENTER, elapsed_days, TOUCH_BASELINE_CENTER_HL_DAYS,
     ))
     state.touch_need.baseline.last_updated = now
-    state.touch_need.baseline.last_update_source = UpdateSource.TIME_DECAY
+    state.touch_need.baseline.last_decay_at = now
 
     # embodied_ease → SCALAR_CENTER
     state.embodied_ease.value = _clamp(_regress(
@@ -445,7 +496,7 @@ def apply_time_decay(state: UserHiddenState, now: str) -> UserHiddenState:
         SCALAR_CENTER, elapsed_days, EMBODIED_EASE_CENTER_HL_DAYS,
     ))
     state.embodied_ease.last_updated = now
-    state.embodied_ease.last_update_source = UpdateSource.TIME_DECAY
+    state.embodied_ease.last_decay_at = now
 
     # body_memory weights → 0 (weights decay but entries are NOT evicted here)
     for entry in state.body_memory.entries:
@@ -685,6 +736,9 @@ def to_dict(state: UserHiddenState) -> dict[str, Any]:
             "value": s.value,
             "last_updated": s.last_updated,
             "last_update_source": s.last_update_source.value,
+            "evidence": [dict(e) for e in s.evidence],
+            "last_confirmed_at": s.last_confirmed_at,
+            "last_decay_at": s.last_decay_at,
         }
 
     def _entry(e: BodyMemoryEntry) -> dict[str, Any]:
@@ -764,10 +818,25 @@ def from_dict(data: dict[str, Any]) -> UserHiddenState:
                 source = UpdateSource(source_str)
             except ValueError:
                 source = dflt.last_update_source
+            ev_raw = raw.get("evidence", [])
+            evidence = [
+                {
+                    "at": str(e.get("at") or ""),
+                    "source": str(e.get("source") or ""),
+                    "event_type": str(e.get("event_type") or ""),
+                    "delta": float(e.get("delta") or 0.0),
+                    "ref": str(e.get("ref") or ""),
+                }
+                for e in (ev_raw if isinstance(ev_raw, list) else [])
+                if isinstance(e, dict)
+            ][-EVIDENCE_MAX:]
             return ScalarState(
                 value=float(raw.get("value", dflt.value)),
                 last_updated=raw.get("last_updated", dflt.last_updated),
                 last_update_source=source,
+                evidence=evidence,
+                last_confirmed_at=raw.get("last_confirmed_at"),
+                last_decay_at=raw.get("last_decay_at"),
             )
         except Exception:
             return dflt
@@ -830,6 +899,140 @@ def from_dict(data: dict[str, Any]) -> UserHiddenState:
         last_decay_tick=data.get("last_decay_tick", defaults.last_decay_tick),
         schema_version=sv_out,
     )
+
+
+# ── F2. Evidence / derived view（schema v2）─────────────────────────────────────
+
+
+FIELD_NAMES: tuple[str, ...] = (
+    "sensitivity.baseline",
+    "sensitivity.current",
+    "touch_need.baseline",
+    "touch_need.deficit",
+    "embodied_ease",
+)
+
+
+def _scalar_by_field(state: UserHiddenState, field_name: str) -> Optional[ScalarState]:
+    return {
+        "sensitivity.baseline": state.sensitivity.baseline,
+        "sensitivity.current": state.sensitivity.current,
+        "touch_need.baseline": state.touch_need.baseline,
+        "touch_need.deficit": state.touch_need.deficit,
+        "embodied_ease": state.embodied_ease,
+    }.get(field_name)
+
+
+def append_evidence(
+    state: UserHiddenState,
+    field_name: str,
+    *,
+    at: str,
+    source: str,
+    event_type: str,
+    delta: float,
+    ref: str = "",
+) -> None:
+    """向 scalar 追加一条证据（环形缓冲 EVIDENCE_MAX），并刷新 last_confirmed_at。
+
+    只存 ID/指标，不存原文。未知字段（如 body_memory）静默忽略。
+    """
+    sc = _scalar_by_field(state, field_name)
+    if sc is None:
+        return
+    sc.evidence.append({
+        "at": at,
+        "source": str(source or ""),
+        "event_type": str(event_type or ""),
+        "delta": round(float(delta), 4),
+        "ref": str(ref or ""),
+    })
+    if len(sc.evidence) > EVIDENCE_MAX:
+        del sc.evidence[: len(sc.evidence) - EVIDENCE_MAX]
+    sc.last_confirmed_at = at
+
+
+def scalar_view(state: UserHiddenState, field_name: str, now: Optional[str] = None) -> dict[str, Any]:
+    """读时计算的派生视图（不持久化）。
+
+    confidence = min(1, n_recent / 5) * exp(-days_since_confirmed / 7)；
+    无 last_confirmed_at → 0。evidence_refs / counterevidence_refs 按 delta 方向与
+    「value 相对中性值的偏离方向」是否同号分组（sensitivity.current 以 baseline 为中性，
+    deficit 以 0 为中性，其余以 SCALAR_CENTER）。
+    """
+    sc = _scalar_by_field(state, field_name)
+    if sc is None:
+        raise KeyError(field_name)
+    if now is None:
+        now = datetime.now(timezone.utc).isoformat()
+    try:
+        now_dt = _parse_iso_timestamp(now)
+    except (TypeError, ValueError):
+        now_dt = datetime.now(timezone.utc)
+    if now_dt.tzinfo is None:
+        now_dt = now_dt.replace(tzinfo=timezone.utc)
+
+    def _age_days(ts: Any) -> Optional[float]:
+        if not ts:
+            return None
+        try:
+            dt = _parse_iso_timestamp(str(ts))
+        except (TypeError, ValueError):
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return max(0.0, (now_dt - dt).total_seconds() / 86400.0)
+
+    n_recent = 0
+    for e in sc.evidence:
+        age = _age_days(e.get("at"))
+        if age is not None and age <= CONFIDENCE_RECENT_DAYS:
+            n_recent += 1
+    since = _age_days(sc.last_confirmed_at)
+    if since is None:
+        confidence = 0.0
+    else:
+        confidence = min(1.0, n_recent / CONFIDENCE_FULL_COUNT) * math.exp(-since / CONFIDENCE_CONFIRM_TAU_DAYS)
+
+    if field_name == "sensitivity.current":
+        neutral = state.sensitivity.baseline.value
+    elif field_name == "touch_need.deficit":
+        neutral = 0.0
+    else:
+        neutral = SCALAR_CENTER
+    dev = sc.value - neutral
+    sign = 1 if dev > 0 else (-1 if dev < 0 else 0)
+    evidence_refs: list[str] = []
+    counter_refs: list[str] = []
+    update_source: Optional[str] = None
+    for e in sc.evidence:
+        d = float(e.get("delta") or 0.0)
+        ref = e.get("ref") or ""
+        if e.get("source") not in ("time_decay", "consolidation"):
+            update_source = e.get("source") or update_source
+        if not ref or d == 0.0 or sign == 0:
+            continue
+        (evidence_refs if (d > 0) == (sign > 0) else counter_refs).append(ref)
+    return {
+        "value": sc.value,
+        "confidence": round(confidence, 4),
+        "evidence_refs": evidence_refs,
+        "counterevidence_refs": counter_refs,
+        "last_confirmed_at": sc.last_confirmed_at,
+        "update_source": update_source,
+    }
+
+
+def confidence_gating_settings() -> tuple[bool, float]:
+    """读取 hidden_state.confidence_gating / min_confidence（默认关 / 0.3）；fail-open 为关。"""
+    try:
+        from core.config_loader import get_config
+        cfg = (get_config() or {}).get("hidden_state") or {}
+        enabled = bool(cfg.get("confidence_gating", False))
+        min_conf = float(cfg.get("min_confidence", 0.3))
+        return enabled, min_conf
+    except Exception:
+        return False, 0.3
 
 
 # ── G. Input event dataclasses ─────────────────────────────────────────────────
@@ -1058,6 +1261,13 @@ def to_dream_snapshot(state: UserHiddenState, now: str) -> dict[str, Any]:
         # 中期层 → buckets (raw values intentionally excluded from output)
         sensitivity_bucket = _lmh(state.sensitivity.current.value)
         appetite_bucket = _lmh(state.touch_need.deficit.value)
+        # S5b：开启置信度门控后，证据不足的字段输出 "unknown"（消费端不渲染）
+        _gate_on, _gate_min = confidence_gating_settings()
+        if _gate_on:
+            if scalar_view(state, "sensitivity.current", now)["confidence"] < _gate_min:
+                sensitivity_bucket = "unknown"
+            if scalar_view(state, "touch_need.deficit", now)["confidence"] < _gate_min:
+                appetite_bucket = "unknown"
 
         # 长期层 → coarse label only (no raw numbers in output)
         ease_label = _ease(state.embodied_ease.value)

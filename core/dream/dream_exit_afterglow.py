@@ -113,6 +113,7 @@ def _do_wire(
             write_envelope=envelope,
             now=now_str,
             char_id=char_id,
+            ref=str(dream_id or ""),
         )
         if result.accepted:
             logger.info(

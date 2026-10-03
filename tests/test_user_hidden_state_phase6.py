@@ -323,7 +323,7 @@ class TestIsolationGuarantees:
         _write_summary(sandbox, _DREAM_ID, _make_gentle_summary(weight=0.8))
         captured_envelopes: list = []
 
-        def _capture(uid, residue, write_envelope, now, *, char_id=TEST_CHAR_ID):
+        def _capture(uid, residue, write_envelope, now, *, char_id=TEST_CHAR_ID, ref=""):
             captured_envelopes.append(write_envelope)
             return default_hidden_state(), MagicMock(
                 accepted=False, rejected=False, rejected_reasons=[], touched_fields=[]

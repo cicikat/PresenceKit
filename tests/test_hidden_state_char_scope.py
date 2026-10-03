@@ -160,7 +160,7 @@ def test_wire_afterglow_passes_char_id_to_integrator(sandbox):
 
     integrate_calls: list[dict] = []
 
-    def _mock_integrate(uid, residue, *, write_envelope, now=None, char_id=TEST_CHAR_ID):
+    def _mock_integrate(uid, residue, *, write_envelope, now=None, char_id=TEST_CHAR_ID, ref=""):
         integrate_calls.append({"uid": uid, "char_id": char_id, "tone": residue.tone})
         return MagicMock(), MagicMock(accepted=True, rejected=False,
                                       touched_fields=[], rejected_reasons=[])
@@ -211,7 +211,7 @@ def test_wire_afterglow_uses_session_char_id_not_active(sandbox):
 
     integrate_calls: list[dict] = []
 
-    def _mock_integrate(uid, residue, *, write_envelope, now=None, char_id=TEST_CHAR_ID):
+    def _mock_integrate(uid, residue, *, write_envelope, now=None, char_id=TEST_CHAR_ID, ref=""):
         integrate_calls.append({"char_id": char_id})
         return MagicMock(), MagicMock(accepted=True, rejected=False,
                                       touched_fields=[], rejected_reasons=[])

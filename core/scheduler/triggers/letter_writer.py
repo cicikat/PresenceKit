@@ -187,6 +187,14 @@ def _hidden_state_reason(uid: str, *, char_id: str) -> str | None:
         touch_baseline = max(float(state.touch_need.baseline.value), 1.0)
         sensitivity_ratio = float(state.sensitivity.current.value) / sensitivity_baseline
         touch_ratio = float(state.touch_need.deficit.value) / touch_baseline
+        from core.memory.user_hidden_state import confidence_gating_settings, scalar_view
+
+        _gate_on, _gate_min = confidence_gating_settings()
+        if _gate_on:
+            if scalar_view(state, "sensitivity.current")["confidence"] < _gate_min:
+                sensitivity_ratio = 0.0
+            if scalar_view(state, "touch_need.deficit")["confidence"] < _gate_min:
+                touch_ratio = 0.0
         if max(sensitivity_ratio, touch_ratio) > 1.5:
             return "有些感受比平时更满，想安静地写下来给你"
     except Exception:

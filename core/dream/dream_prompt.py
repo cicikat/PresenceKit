@@ -230,6 +230,8 @@ def _format_hidden_state_snapshot(snapshot_data: dict[str, Any]) -> str:
             val = snapshot_data.get(key)
             if not isinstance(val, str) or not val:
                 return ""  # malformed — never inject partial data
+            if val == "unknown":
+                continue  # S5b：置信度不足，不渲染该行
             lines.append(f"{key}: {val}")
         cues = snapshot_data.get("memory_cues")
         if isinstance(cues, list) and cues:

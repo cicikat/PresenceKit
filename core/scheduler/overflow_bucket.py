@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import logging
 import time
 
@@ -35,6 +35,10 @@ class OverflowSignals:
     mood_score: float = 0.0
     top_signal: str = ""
     top_signal_detail: str = ""
+    # S5b 观测：hidden_need 门控前后值与各字段置信度（不影响 bucket_score）
+    hidden_need_raw: float = 0.0
+    hidden_need_gated: float = 0.0
+    hidden_need_confidence: dict = field(default_factory=dict)
 
     def bucket_score(self) -> float:
         return (
@@ -122,7 +126,22 @@ def compute_signals(uid: str, *, char_id: str) -> OverflowSignals:
             - 15.0
         )
         touch_excess = float(state.touch_need.deficit.value) - 65.0
-        sig.hidden_need_score = _clamp_score(max(sensitivity_excess, touch_excess) / 35.0)
+        from core.memory.user_hidden_state import confidence_gating_settings, scalar_view
+
+        conf_s = scalar_view(state, "sensitivity.current")["confidence"]
+        conf_t = scalar_view(state, "touch_need.deficit")["confidence"]
+        _gate_on, _gate_min = confidence_gating_settings()
+        raw_s = _clamp_score(sensitivity_excess / 35.0)
+        raw_t = _clamp_score(touch_excess / 35.0)
+        gated_s = raw_s * conf_s if conf_s >= _gate_min else 0.0
+        gated_t = raw_t * conf_t if conf_t >= _gate_min else 0.0
+        sig.hidden_need_raw = _clamp_score(max(sensitivity_excess, touch_excess) / 35.0)
+        sig.hidden_need_gated = _clamp_score(max(gated_s, gated_t))
+        sig.hidden_need_confidence = {
+            "sensitivity.current": conf_s,
+            "touch_need.deficit": conf_t,
+        }
+        sig.hidden_need_score = sig.hidden_need_gated if _gate_on else sig.hidden_need_raw
         if sig.hidden_need_score > 0:
             details["hidden_need"] = "有一点想靠近她、确认她此刻好不好"
     except Exception as exc:

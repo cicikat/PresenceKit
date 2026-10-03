@@ -1658,6 +1658,12 @@ sensor privacy 全系统已经完成。
 | `load_hidden_state(uid)` | `user_hidden_state_store.py` | 从磁盘加载；文件缺失/损坏/schema 不匹配均返回 default，不抛异常 |
 | `save_hidden_state(uid, state)` | `user_hidden_state_store.py` | 原子写入（`safe_write_json`）；返回 bool，不抛异常 |
 
+**schema v2 证据化（工单 S5b）**：每个 `ScalarState` 新增 `evidence`（环形缓冲，最多 12 条 `{at, source, event_type, delta, ref}`，`ref` 为 turn_id / dream_id，不存原文与命中词）、`last_confirmed_at`（最近一次非衰减、非合并更新）、`last_decay_at`（衰减单独记录，`apply_time_decay` 不再覆盖 `last_update_source` / `last_confirmed_at`）。v1 经 `_MIGRATIONS[1]` 升级：evidence 为空，`last_confirmed_at` 取原 `last_updated`（原 source 为 time_decay/consolidation/init 时为空）。`integrate_event` / `integrate_impression` / `integrate_afterglow` 把 FieldDelta 追加为 evidence（`body_memory` 不记）。
+
+读时派生量 `scalar_view(state, field)`（不持久化）：`confidence = min(1, n_recent/5) * exp(-days_since_confirmed/7)`，`n_recent` 为 14 天内 evidence 条数，无 `last_confirmed_at` 为 0。它是「对该估计值的可信度」，不是「强度」。另输出 `evidence_refs` / `counterevidence_refs`（按 delta 与 value 偏离中性值方向同号/反号分组）、`last_confirmed_at`、`update_source`。
+
+门控开关 `hidden_state.confidence_gating`（默认 false）与 `hidden_state.min_confidence`（默认 0.3）：开启后 `hidden_need_score` 乘字段 confidence（低于阈值为 0）、letter_writer 隐性原因在置信不足时不触发、dream 快照置信不足字段输出 `unknown` 且 `_format_hidden_state_snapshot` / mirror 不渲染。关闭时行为不变，autonomy overflow Signal evidence 额外记录 `hidden_need_raw` / `hidden_need_gated` / `hidden_need_confidence`。观测：`GET /debug/user-hidden-state` 的 `scalar_views` 与 `evidence`。
+
 **路径**：`user_memory_root(uid) / hidden_state.json`
 
 **WriteEnvelope 说明**：store 本身不执行 envelope 门控。调用方在调用 `save_hidden_state` 前必须已持有 `WriteEnvelope(can_write_memory=True)`。

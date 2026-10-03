@@ -80,11 +80,11 @@ def _first_cue_tag_word(content: str, tags: set[str]) -> str | None:
     return None
 
 
-def _fire_event(uid, event_type, write_envelope, now: str, char_id: str, triggered: list[str]) -> None:
+def _fire_event(uid, event_type, write_envelope, now: str, char_id: str, triggered: list[str], ref: str = "") -> None:
     try:
         from core.memory.user_hidden_state_integrator import integrate_event_and_save
 
-        _, result = integrate_event_and_save(uid, event_type, write_envelope, now, char_id=char_id)
+        _, result = integrate_event_and_save(uid, event_type, write_envelope, now, char_id=char_id, ref=ref)
         if result.accepted:
             triggered.append(event_type.value)
     except Exception:
@@ -103,6 +103,7 @@ def process_reality_turn(
     envelope,
     prior_gap_seconds: float | None,
     char_id: str = DEFAULT_CHAR_ID,
+    turn_id: str = "",
 ) -> list[str]:
     """判定并落地本轮现实对话对 user_hidden_state 的全部信号映射。
 
@@ -126,21 +127,21 @@ def process_reality_turn(
         # SEEK_COMPANIONSHIP：(a) 开场轮 gap ≥ 6h，或 (b) 陪伴意图词表命中其一即触发
         is_opening = prior_gap_seconds is not None and prior_gap_seconds >= _SEEK_GAP_SECONDS
         if is_opening or _first_hit(content, _COMPANIONSHIP_WORDS) is not None:
-            _fire_event(uid, RealityEventType.SEEK_COMPANIONSHIP, write_envelope, now, char_id, triggered)
+            _fire_event(uid, RealityEventType.SEEK_COMPANIONSHIP, write_envelope, now, char_id, triggered, ref=turn_id)
 
         # RECEIVED_COMFORT：用户消息 tags 命中安抚相关 且 本轮 assistant emotion 为 gentle/sad
         if tags & _COMFORT_USER_TAGS and assistant_emotion in _COMFORT_ASSISTANT_EMOTIONS:
-            _fire_event(uid, RealityEventType.RECEIVED_COMFORT, write_envelope, now, char_id, triggered)
+            _fire_event(uid, RealityEventType.RECEIVED_COMFORT, write_envelope, now, char_id, triggered, ref=turn_id)
 
         # BODY_TOPIC：tags 命中 body_intimate/physical_closeness/query.body_state
         body_topic_hit = bool(tags & _BODY_TOPIC_TAGS)
         if body_topic_hit:
-            _fire_event(uid, RealityEventType.BODY_TOPIC, write_envelope, now, char_id, triggered)
+            _fire_event(uid, RealityEventType.BODY_TOPIC, write_envelope, now, char_id, triggered, ref=turn_id)
 
         # AFFECTION_EXPRESSED：亲昵表达词表命中
         affection_word = _first_hit(content, _AFFECTION_WORDS)
         if affection_word is not None:
-            _fire_event(uid, RealityEventType.AFFECTION_EXPRESSED, write_envelope, now, char_id, triggered)
+            _fire_event(uid, RealityEventType.AFFECTION_EXPRESSED, write_envelope, now, char_id, triggered, ref=turn_id)
 
         # §3 body_memory 长期层：AFFECTION_EXPRESSED / BODY_TOPIC 命中且调用方 envelope
         # 允许写记忆时，才以命中词为 cue 强化长期条件化线索。这里看的是调用方原始

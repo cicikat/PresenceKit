@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 _DEFAULT_RESPONSE = {
-    "schema_version": 1,
+    "schema_version": 2,
     "last_decay_tick": None,
     "sensitivity": {"baseline": 50.0, "current": 50.0, "last_update_source": "init"},
     "touch_need": {"baseline": 50.0, "deficit": 0.0, "last_update_source": "init"},
@@ -31,6 +31,9 @@ _DEFAULT_RESPONSE = {
         "memory_cues": [],
     },
     "trigger_counts": {},
+    "confidence_gating": {"enabled": False, "min_confidence": 0.3},
+    "scalar_views": {},
+    "evidence": {},
 }
 
 
@@ -56,6 +59,13 @@ def _active_char_id() -> str:
     return char_id
 
 
+def _field_scalar(raw: dict, field_name: str) -> dict:
+    cur = raw
+    for part in field_name.split("."):
+        cur = cur[part]
+    return cur
+
+
 @router.get(
     "/debug/user-hidden-state",
     summary="读取 UserHiddenState + Dream Snapshot（只读）",
@@ -75,7 +85,7 @@ def _active_char_id() -> str:
 )
 async def get_user_hidden_state_debug(auth=Depends(require_scopes("memory.read"))):
     try:
-        from core.memory.user_hidden_state import to_dict, to_dream_snapshot
+        from core.memory.user_hidden_state import FIELD_NAMES, confidence_gating_settings, scalar_view, to_dict, to_dream_snapshot
         from core.memory.user_hidden_state_store import load_hidden_state
         from core.memory.user_hidden_state_integrator import get_trigger_counts
 
@@ -124,6 +134,14 @@ async def get_user_hidden_state_debug(auth=Depends(require_scopes("memory.read")
             ],
             "dream_snapshot": snapshot,
             "trigger_counts": get_trigger_counts(),
+            "confidence_gating": {
+                "enabled": confidence_gating_settings()[0],
+                "min_confidence": confidence_gating_settings()[1],
+            },
+            "scalar_views": {f: scalar_view(state, f, now) for f in FIELD_NAMES},
+            "evidence": {
+                f: list(_field_scalar(raw, f).get("evidence", [])) for f in FIELD_NAMES
+            },
         }
 
     except Exception as exc:

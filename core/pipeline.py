@@ -2261,6 +2261,7 @@ class Pipeline:
             if web_echo:
                 _mt_payload["web_echo"] = True
             if coplay_echo:
+                turn_id=str(_turn_id or ""),
                 _mt_payload["coplay_echo"] = True
             if provenance_source:
                 _mt_payload["source"] = provenance_source

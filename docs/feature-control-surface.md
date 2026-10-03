@@ -422,6 +422,10 @@ consumes candidate-edge records.
 
 `recall.semantic_min_similarity`（config.yaml，默认 0.0 = 不过滤）：episodic 纯语义候选（无关键词命中）相似度低于该值时不进候选池。无管理面开关，改 config 后下一轮生效。`fetch_context(query_free_fallback=)` 为代码参数，非配置：普通聊天 False，调度器主动开口 True；recall_trace 新增 `episodic_fallback_mode`（`GET /observe/recall/{uid}`）。
 
+## 工单 S5b 隐性状态置信度门控
+
+`hidden_state.confidence_gating`（config.yaml，默认 false）与 `hidden_state.min_confidence`（默认 0.3）：开启后按字段置信度门控 overflow `hidden_need_score`、letter_writer 隐性原因与 dream 快照（不足输出 `unknown` 不渲染）。无管理面开关，改 config 后下一轮生效；关闭时行为与现状一致。观测：`GET /debug/user-hidden-state`（`scalar_views` / `evidence`）与 autonomy overflow Signal evidence 的 `hidden_need_raw/gated/confidence`。
+
 ## Brief 204 Memory Event shadow recall
 
 `event_shadow_recall.enabled` is exposed through the hot-reloaded feature flag
