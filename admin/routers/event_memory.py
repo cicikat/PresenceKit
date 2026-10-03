@@ -228,7 +228,7 @@ async def tombstone_memory_event(
         "changed": result.changed,
         "physical_delete": "disabled_pending_owner_policy",
         "edges": "retained",
-        "derived_memories": "manual_review_required",
+        "derived_memories": {"dossiers": "invalidated", "others": "not_cascaded"},
     }
 
 

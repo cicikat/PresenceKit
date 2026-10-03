@@ -349,3 +349,22 @@ def test_tombstone_retains_edges_and_hides_payload_in_admin_views(sandbox, monke
     old_delete = client.delete(f"/memory/{scope.uid}/event-log/2026-08-01", params={"char_id": TEST_CHAR_ID}, headers=_headers())
     assert old_delete.status_code == 409
     assert old_delete.json()["detail"]["code"] == "physical_delete_disabled_pending_owner_policy"
+
+
+def test_tombstone_route_reports_derived_memories_honestly(sandbox):
+    import asyncio
+    from admin.routers.event_memory import tombstone_memory_event
+    scope = _scope("s4a-route")
+    from core.memory.event_store import append_event
+    from core.memory import event_store  # noqa: F401
+    ev = {
+        "event_id": "s4a-r1", "turn_id": "s4a-r1", "seq": 1, "occurred_at": 1.0, "ingested_at": 2.0,
+        "uid": scope.uid, "char_id": scope.character_id, "realm": "reality",
+        "kind": "owner_chat", "actor": "user", "channel": "desktop", "source": "fixture",
+        "raw_payload_json": {}, "raw_text": "x", "visible_text": "x", "memory_text": "x",
+        "media_refs_json": [], "redaction_state": "scrubbed",
+    }
+    assert append_event(scope, ev).ok
+    out = asyncio.run(tombstone_memory_event(
+        event_id="s4a-r1", uid=scope.uid, char_id=scope.character_id, realm="reality", _auth=None))
+    assert out["derived_memories"] == {"dossiers": "invalidated", "others": "not_cascaded"}

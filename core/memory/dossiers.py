@@ -287,8 +287,11 @@ def _event_refs(operations: Iterable[Mapping[str, Any]]) -> list[str]:
 def _validate_events(scope: MemoryScope, ids: Iterable[str]) -> None:
     from core.memory.event_query import get_event
     for event_id in set(ids):
-        if not event_id or get_event(scope, event_id) is None:
+        event = get_event(scope, event_id) if event_id else None
+        if event is None:
             raise DossierError("evidence_not_found")
+        if event.get("tombstoned"):
+            raise DossierError("evidence_tombstoned")
 
 
 def _create_dossier(connection: sqlite3.Connection, op: Mapping[str, Any], now: float) -> dict[str, Any]:
@@ -775,7 +778,8 @@ def maintenance_candidates(scope: MemoryScope, *, limit: int = 100,
                 rows = connection.execute("""SELECT rowid AS ingest_sequence,event_id,occurred_at,
                   ingested_at,actor,kind,source,redaction_state,
                   COALESCE(NULLIF(memory_text,''),visible_text) AS text
-                  FROM events WHERE uid=? AND char_id=? AND realm=? AND rowid>?""" + source_clause +
+                  FROM events WHERE uid=? AND char_id=? AND realm=? AND rowid>?
+                  AND redaction_state != 'tombstoned'""" + source_clause +
                   " ORDER BY rowid ASC LIMIT ?", (scope.uid, scope.character_id, scope.domain,
                   checkpoint, *source_params, limit)).fetchall()
         except sqlite3.Error as exc:

@@ -350,3 +350,19 @@ def test_failed_commit_does_not_mark_claimed_items_committed(sandbox):
     assert listed["items"][0]["status"] == "retryable_failed"
     assert listed["items"][0]["last_error"] == "commit_error"
     assert dossiers.operation_receipt(scope, "f" * 32) is None
+
+
+def test_tombstoned_event_cannot_be_cited_or_maintained(sandbox):
+    from core.memory import event_store
+    from core.memory.dossiers import DossierError, apply_operations, maintenance_candidates
+
+    scope = _scope("s4a-owner"); event_id = "s4a-gone"; assert _event(scope, event_id).ok
+    assert any(c["source_id"] == event_id for c in maintenance_candidates(scope))
+    assert event_store.tombstone_event(scope, event_id).changed
+    assert not any(c["source_id"] == event_id for c in maintenance_candidates(scope))
+    with pytest.raises(DossierError, match="evidence_tombstoned"):
+        apply_operations(scope, [
+            {"action": "create_occurrence", "occurrence_id": uuid.uuid4().hex, "participants": [],
+             "time_certainty": "unknown", "assertion_kind": "user_stated",
+             "evidence": [{"reference_kind": "event", "source_id": event_id, "source_revision": "1"}]},
+        ], operation_id=_op_id(), actor="character", chain="owner_chat")

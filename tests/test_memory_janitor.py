@@ -202,3 +202,28 @@ def test_orphan_vectors_below_threshold_only_logs(sandbox, monkeypatch):
          patch("core.memory.vector_store.rebuild", new=AsyncMock(return_value=0)) as fake_rebuild:
         _run_janitor(monkeypatch)
         fake_rebuild.assert_not_awaited()
+
+
+def test_merge_unions_source_event_ids(sandbox, monkeypatch):
+    uid = "u_merge_events"
+    _seed(uid, [
+        _ep("e_a", narrative_summary="今天聊了西瓜的事", summary="今天聊了西瓜的事",
+            strength=0.5, source_event_ids=["ev1", "ev2"]),
+        _ep("e_b", narrative_summary="今天聊了西瓜的事", summary="今天聊了西瓜的事",
+            strength=0.8, source_event_ids=["ev2", "ev3"]),
+    ])
+    with patch("core.memory.vector_store.list_entries", return_value=[]):
+        _run_janitor(monkeypatch)
+    memories = _load_memories(uid, char_id=_CHAR)
+    assert [m["id"] for m in memories] == ["e_b"]
+    assert sorted(memories[0]["source_event_ids"]) == ["ev1", "ev2", "ev3"]
+
+
+def test_forget_episodes_does_not_feed_storyline(sandbox):
+    from core.memory.episodic_memory import forget_episodes
+    from core.post_process import slow_queue
+    uid = "u_forget_story"
+    _seed(uid, [_ep("f1")])
+    with patch.object(slow_queue, "enqueue") as enq:
+        assert forget_episodes(uid, episode_id="f1", char_id=_CHAR) == ["f1"]
+    assert not any(c.args and c.args[0] == "storyline_evicted_input" for c in enq.call_args_list)

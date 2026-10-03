@@ -732,19 +732,8 @@ def forget_episodes(
     _save_memories(user_id, memories, char_id=char_id)
     _rebuild_index(user_id, memories, char_id=char_id)
 
-    # Use the same deferred archive route as capacity eviction.  It preserves
-    # audit-grade storyline input without allowing ordinary recall to restore it.
-    try:
-        from core.memory.scope import MemoryScope
-        from core.post_process import slow_queue
-        slow_queue.enqueue("storyline_evicted_input", {
-            "uid": user_id,
-            "char_id": char_id,
-            "episodes": [item["memory"] for item in forgotten],
-            "scope": MemoryScope.reality_scope(str(user_id), char_id).to_payload(),
-        })
-    except Exception as exc:
-        logger.debug("[episodic] forget archive enqueue failed uid=%s: %s", user_id, exc)
+    # 用户要求遗忘 != 容量淘汰：不送 storyline_evicted_input，
+    # 否则周频聚合会把被遗忘内容重新写成叙事弧。
 
     try:
         from core.memory import provenance_log

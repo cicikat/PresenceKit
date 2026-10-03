@@ -202,6 +202,11 @@ def _apply_merge(char_id: str, uid: str, survivor_id: str, loser_id: str) -> Non
     survivor_mids = set(survivor.get("source_mid_ids") or [])
     loser_mids = set(loser.get("source_mid_ids") or [])
     survivor["source_mid_ids"] = sorted(survivor_mids | loser_mids)
+    survivor_events = [str(x) for x in (survivor.get("source_event_ids") or [])]
+    loser_events = [str(x) for x in (loser.get("source_event_ids") or [])]
+    merged_events = list(dict.fromkeys(survivor_events + loser_events))
+    if merged_events:
+        survivor["source_event_ids"] = merged_events
     survivor["retrieval_count"] = int(survivor.get("retrieval_count", 0) or 0) + int(
         loser.get("retrieval_count", 0) or 0
     )
@@ -223,6 +228,8 @@ def _apply_merge(char_id: str, uid: str, survivor_id: str, loser_id: str) -> Non
         before_gist=before_gist,
         after_gist=after_gist,
         trigger_signal="janitor_merge",
+        origin={"source": "memory_janitor", "merged_from": loser_id,
+                "merged_source_event_ids": loser_events},
     )
     logger.info(
         "[memory_janitor] 合并完成 uid=%s char_id=%s survivor=%s loser=%s",
