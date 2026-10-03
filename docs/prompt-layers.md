@@ -994,9 +994,14 @@ Brief 256 G：主动链既有 `autonomy_policy` 层会根据本轮实际工具 s
 topic understandings, their coverage, any matching unreviewed evidence after the
 stored ingest watermark, and detail IDs. It is capped at 1200 characters, has
 `_drop_priority=65`, and can be disabled through the ordinary ablation control.
-When present, the pipeline omits overlapping `6b_event_search` and
-`6c_episodic` prose for the turn; those legacy retrievals remain available as
-diagnostic traces and remain the fallback for topics no dossier owns.
+When present, suppression of legacy recall follows `memory_dossiers.suppression`:
+`global` (default) omits `6b_event_search`, `6c_episodic` and `6c_episodic_fallback`
+prose entirely for the turn; `overlap` only drops episodic items whose
+`source_event_ids` intersect the event ids cited by the injected dossiers (event_search
+falls back to whole suppression while its hits carry no event id, flagged
+`suppression_fallback`). `memory_dossiers.prompt_injection=false` disables both the layer
+and the suppression. Legacy retrievals remain diagnostic traces
+(`recall_trace.dossier_suppression`) and the fallback for topics no dossier owns.
 
 ## StatePacket 影子模式
 

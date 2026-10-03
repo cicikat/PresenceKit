@@ -993,3 +993,12 @@ consolidation task and work-session status.
 `event_shadow_recall`）在 `build_prompt()` 之后记录每轮各 prompt 层的来源、authority、
 字符数、reason 与 item id，写入 recall_trace 同级的 `state_packet/{date}.jsonl`。
 关闭时不计算；不改变 prompt。观测：`GET /observability/state-packet`（`state.read`）。
+
+## 工单 S3 Dossier 解释权收拢
+
+`memory_dossiers.prompt_injection`（默认 true）：false 时 `6b_memory_dossiers` 不注入且不触发
+对 episodic / event_search 的抑制；dossier 工具与夜间 worker 不受影响。
+`memory_dossiers.suppression`（`global` 默认 | `overlap`）：`global` 为 dossier 有文本即整体清空旧召回
+（现状）；`overlap` 只移除与本轮 dossier 引用证据（event id）有交集的 episodic 项。event_search 命中拿不到
+event id 时整体抑制并在 recall_trace `dossier_suppression.suppression_fallback` 标记。观测：
+`GET /observe/recall/{uid}` 的 `dossier_suppression`（mode / removed_episode_ids / removed_event_ids / kept_count）。

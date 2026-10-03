@@ -478,7 +478,18 @@ class Pipeline:
         # dossier read is local and bounded; legacy retrieval still runs for
         # its independent trace, but overlapping prose is not injected.
         memory_dossier_context = ""
-        if not _skip_recall:
+        _dossier_recall: dict = {}
+        try:
+            from core.config_loader import get_config as _get_cfg_dos
+            _dos_cfg = _get_cfg_dos().get("memory_dossiers") or {}
+        except Exception:
+            _dos_cfg = {}
+        # 工单 S3：prompt_injection=false 时不注入也不触发抑制
+        _dos_inject = _dos_cfg.get("prompt_injection", True) is not False
+        _dos_mode = str(_dos_cfg.get("suppression") or "global").strip().lower()
+        if _dos_mode not in ("global", "overlap"):
+            _dos_mode = "global"
+        if not _skip_recall and _dos_inject:
             try:
                 from core.memory.dossiers import build_recall_context
                 # 长期问题：空查询取最近 3 份（功能默认关，这里只在启用时生效）
@@ -489,6 +500,63 @@ class Pipeline:
                 memory_dossier_context = str(_dossier_recall.get("text") or "")
             except Exception as _de:
                 logger.debug("[pipeline.fetch_context] dossier recall skip: %s", _de)
+
+        # 工单 S3：dossier 抑制。global=整体清空旧召回（现状）；overlap=只移除与 dossier
+        # 引用证据（event id）有交集的 episodic / event_search 项。
+        _dossier_suppression: dict = {}
+        _suppress_all = bool(memory_dossier_context)
+        if memory_dossier_context and _dos_mode == "overlap":
+            _suppress_all = False
+            try:
+                _dos_eids = {str(e) for e in (_dossier_recall.get("event_ids") or [])}
+
+                def _split_overlap(items):
+                    kept, removed = [], []
+                    for it in items or []:
+                        ids = set(str(e) for e in (it.get("source_event_ids") or [])) if isinstance(it, dict) else set()
+                        (removed if ids & _dos_eids else kept).append(it)
+                    return kept, removed
+
+                _kept_ep, _removed_ep = _split_overlap(episodic_memories)
+                _kept_fb, _removed_fb = _split_overlap(episodic_fallback)
+                if _removed_ep:
+                    episodic_memories = _kept_ep
+                    episodic_result = format_for_prompt(
+                        episodic_memories, char_name=scoped_character.name,
+                        current_emotion=_get_mood(char_id=char_id), user_pronoun=_user_pronoun,
+                    ) if episodic_memories else ""
+                if _removed_fb:
+                    episodic_fallback = _kept_fb
+                    episodic_fallback_result = format_for_prompt(
+                        episodic_fallback, char_name=scoped_character.name,
+                        current_emotion=_get_mood2(char_id=char_id), user_pronoun=_user_pronoun,
+                    ) if episodic_fallback else ""
+                _removed_ev: list = []
+                _ev_fallback = False
+                if event_search_result:
+                    _ev_ids = [t.get("event_id") for t in _event_log_trace if isinstance(t, dict)]
+                    if _ev_ids and all(_ev_ids):
+                        # 拿得到 event id：有交集则整体移除（结果为渲染后的字符串，无法逐条拆）
+                        _removed_ev = [str(e) for e in _ev_ids if str(e) in _dos_eids]
+                        if _removed_ev:
+                            event_search_result = ""
+                    else:
+                        _ev_fallback = True
+                        event_search_result = ""
+                _kept_count = len(episodic_memories) + len(episodic_fallback) + (1 if event_search_result else 0)
+                _dossier_suppression = {
+                    "mode": "overlap",
+                    "removed_episode_ids": [m.get("id") for m in _removed_ep + _removed_fb if isinstance(m, dict)],
+                    "removed_event_ids": _removed_ev,
+                    "kept_count": _kept_count,
+                    "suppression_fallback": _ev_fallback,
+                }
+            except Exception as _se:
+                logger.debug("[pipeline.fetch_context] dossier overlap suppression failed: %s", _se)
+                _suppress_all = True
+        if memory_dossier_context and not _dossier_suppression:
+            _dossier_suppression = {"mode": "global", "removed_episode_ids": [], "removed_event_ids": [],
+                                    "kept_count": 0, "suppression_fallback": False}
 
         # M5：相识日期事实——只在长期问题时取，平时不常驻
         _relationship_span_text = ""
@@ -699,6 +767,7 @@ class Pipeline:
                 "semantic_hits": [(h[0], round(h[1], 4)) for h in _semantic_hits],
                 "web_recall_hits": _web_recall_hits,
                 "event_shadow_recall": _shadow_recall,
+                "dossier_suppression": _dossier_suppression or None,
                 "parsed_time_range": (
                     [round(_since_ts, 3) if _since_ts is not None else None,
                      round(_until_ts, 3) if _until_ts is not None else None]
@@ -778,12 +847,12 @@ class Pipeline:
             "group_context":       recent_group_ctx,
             "user_identity_text":  user_identity_text,
             "user_facts_text":     user_facts_text,
-            "event_search_result": "" if memory_dossier_context else event_search_result,
+            "event_search_result": "" if _suppress_all else event_search_result,
             "lore_entries":        lore_entries,
             "reminders":           reminders,
             "diary_context":       diary_context,
-            "episodic_result":          "" if memory_dossier_context else episodic_result,
-            "episodic_fallback_result": "" if memory_dossier_context else episodic_fallback_result,
+            "episodic_result":          "" if _suppress_all else episodic_result,
+            "episodic_fallback_result": "" if _suppress_all else episodic_fallback_result,
             # M4：首条记忆来自哪个桶（recent/mid/long/repair），9.5 层据此决定是否再注入一遍
             "long_term_query":          _long_term_query,
             "relationship_span_text":   _relationship_span_text,

@@ -703,16 +703,34 @@ def _unprocessed_evidence(scope: MemoryScope, *, after_sequence: int, query: str
         return []
 
 
+def referenced_event_ids(scope: MemoryScope, dossier_ids: list[str]) -> set[str]:
+    """Event IDs cited by the active evidence of the given dossiers (read-only, fail-open)."""
+    ids = [str(item) for item in dossier_ids or [] if item]
+    path = _path(_scope(scope))
+    if not ids or not path.exists(): return set()
+    try:
+        placeholders = ",".join("?" for _ in ids)
+        with _lock(path), _connect(path, readonly=True) as connection:
+            rows = connection.execute(f"""SELECT DISTINCT e.source_id FROM occurrence_evidence e
+              JOIN memberships m ON m.occurrence_id=e.occurrence_id
+              WHERE m.status='active' AND e.valid=1 AND e.reference_kind='event'
+                AND m.dossier_id IN ({placeholders})""", ids).fetchall()
+        return {str(row[0]) for row in rows}
+    except (OSError, sqlite3.Error):
+        return set()
+
+
 def build_recall_context(scope: MemoryScope, query: str, *, max_dossiers: int = 3,
                          max_chars: int = 1200) -> dict[str, Any]:
     """Build the bounded automatic layer with current and unprocessed evidence."""
     max_dossiers = min(3, max(1, int(max_dossiers)))
     max_chars = min(1200, max(200, int(max_chars)))
     rows = search(scope, query, limit=max_dossiers)
-    if not rows: return {"text": "", "dossier_ids": [], "truncated": False, "unreviewed": False}
+    if not rows: return {"text": "", "dossier_ids": [], "truncated": False, "unreviewed": False, "event_ids": []}
     parts: list[str] = []
     remaining = max_chars
     unreviewed = False
+    shown_new_event_ids: set[str] = set()
     for row in rows:
         line = f"[{row['title']}] {row['summary'] or '尚无稳定理解'}"
         if row["occurred_from"] is not None or row["occurred_to"] is not None:
@@ -720,6 +738,7 @@ def build_recall_context(scope: MemoryScope, query: str, *, max_dossiers: int = 
         new_events = _unprocessed_evidence(scope, after_sequence=int(row["coverage_ingest_seq"] or 0), query=query)
         if new_events:
             unreviewed = True
+            shown_new_event_ids.update(str(item["event_id"]) for item in new_events)
             line += "\n未整理的新证据（与旧理解并列，尚未归纳）：" + "；".join(
                 f"{item['event_id']} {item['text']}" for item in new_events
             )

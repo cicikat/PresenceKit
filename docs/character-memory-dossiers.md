@@ -18,6 +18,33 @@ storyline.
 | dossier | `core.memory.dossiers` controlled operations | dossier tools and bounded dossier prompt layer | sole authority for current topic understanding |
 | revision/provenance | dossier operation ledger plus existing fail-open provenance log | memory-detail/admin reads; not automatic prose | records the change, never acts as supporting evidence |
 
+### Interpretation authority map (work order S3)
+
+Authority classes follow `core/memory/authority.py`. Precedence when stores disagree:
+`canonical_evidence` > `user_stated_fact` > `topic_authority` (dossier) >
+`identity_authority` > `derived_compat`. `narrative`, `ambient` and `character_self`
+do not take part in factual arbitration. Cross-store arbitration is not yet enforced
+in code; this table is the contract later work orders implement.
+
+| store | conclusion held | writer | prompt layer | authority / lineage | overlap with dossier | wins on conflict |
+|---|---|---|---|---|---|---|
+| memory event store | raw reality evidence | `event_store.append_event()` | none automatic | canonical_evidence / event_ids | cited by event id | evidence |
+| profile important_facts | user-stated durable facts | profile writers | profile layer | user_stated_fact / none | same topic facts | important_facts (user-stated) |
+| pinned_facts | user-pinned facts | user/admin | facts layers | user_stated_fact / none | same | pinned_facts |
+| user_facts (global, uid-only) | user facts across characters | user_facts writers | user_facts layer | user_stated_fact / none | same | user_facts |
+| relationship_facts / user_relation | who we are to each other | relation writers | relationship layers | user_stated_fact / none | relationship topics | relationship_facts, then dossier |
+| dossier | current topic understanding | `core.memory.dossiers` | `6b_memory_dossiers` | topic_authority / event_ids | self | dossier over identity and derived |
+| user_identity | stable behavior patterns | identity writers | `6a` | identity_authority / days_only | pattern-level topics | below dossier |
+| episodic (incl. core memory) | derived episodes | fixation/reflection | `6c_episodic` | derived_compat / event_ids | same events | below dossier |
+| mid_term | derived summaries | fixation | mid_term layer | derived_compat / event_ids | same events | below dossier |
+| storyline | narrative arcs | storyline writer | `6h_storyline` | narrative / event_ids | may cite same event | not arbitrated |
+| user_hidden_state | decayed internal state | integrator | D4.5 / soft hints | ambient / none | none | not arbitrated |
+| traits / author note | character self | character writers | traits/author layers | character_self / none | none | not arbitrated |
+
+Roadmap (not in S3): identity vs dossier understanding conflict detection (S2
+`conflict_candidates` supplies candidates); lineage fields for important_facts and
+relationship_facts.
+
 The physical path is
 `runtime/memory/{char_id}/{uid}/memory_dossiers.sqlite3`, resolved only through
 `MemoryScope` and `path_resolver`. The database is derived and rebuildable. It

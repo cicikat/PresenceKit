@@ -838,6 +838,14 @@ event_edge_proposer:
   max_tokens_per_call: 400
   # Bounds one discovered owner scope, including lock acquisition and model call.
   scope_timeout_seconds: 30
+memory_dossiers:
+  # Work order S3. prompt_injection=false: 6b_memory_dossiers is neither injected
+  # nor does it suppress legacy recall (dossier tools/workers unaffected).
+  prompt_injection: true
+  # global: any dossier text clears event_search/episodic prose (current behavior).
+  # overlap: only drop items whose evidence event ids intersect the injected dossiers.
+  suppression: global
+
 event_shadow_recall:
   # Disabled by default: the event-ledger path is diagnostic only and never
   # injects event text into the prompt.  uids/char_ids are optional greylist
