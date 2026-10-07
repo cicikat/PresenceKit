@@ -139,6 +139,7 @@ def select_for_prompt(
     tags: set[str] | None = None,
     *,
     now: float | None = None,
+    food_names: tuple[str, ...] = (),
 ) -> dict:
     """Select the bounded, safe profile projection used by prompt layer 5.
 
@@ -189,7 +190,7 @@ def select_for_prompt(
     tagged_candidates: list[tuple[float, str, str]] = []
     recency_candidates: list[tuple[float, str, str]] = []
     archived_fact_count = 0
-    from core.food_memory import enabled as food_memory_enabled
+    from core.food_memory import enabled as food_memory_enabled, ambient_text
     hide_food = food_memory_enabled()
     for raw_fact in profile.get("important_facts") or []:
         norm = _normalize_fact(raw_fact)
@@ -200,6 +201,11 @@ def select_for_prompt(
         if fact_tag == "pref.food" and hide_food:
             archived_fact_count += 1
             continue
+        if hide_food:
+            text = ambient_text(text, food_names, dietary_topics=True)
+            if not text:
+                archived_fact_count += 1
+                continue
         if _is_sensitive_for_prompt(text):
             sensitive_blocked += 1
             if not _is_recency_tag(fact_tag):

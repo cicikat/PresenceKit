@@ -86,6 +86,41 @@ def test_migration_is_dry_run_first_and_idempotent(sandbox, monkeypatch):
     assert food.snapshot('u', 'c')['pending'] == 1
 
 
+def test_migration_reads_old_original_ledger_and_skips_isolated_or_deleted(sandbox, monkeypatch):
+    from scripts import migrate_food_memory as migration
+    from core.memory import event_store
+    from core.memory.scope import MemoryScope
+    scope = MemoryScope.reality_scope('u', 'c')
+    for key, source in (('old', 'user_chat'), ('web', 'web'), ('deleted', 'user_chat')):
+        event_store.append_event(scope, {'event_id': key + ':user', 'turn_id': key,
+            'kind': 'user_message', 'actor': 'user', 'source': source,
+            'raw_text': '我吃了水饺', 'occurred_at': 1000, 'redaction_state': 'memory_cleaned'})
+    event_store.tombstone_event(scope, 'deleted:user')
+    event_store.append_event(scope, {'event_id': 'orphan:assistant', 'actor': 'assistant',
+        'kind': 'assistant_message', 'occurred_at': 1000, 'redaction_state': 'tombstoned'})
+    monkeypatch.setattr('core.memory.short_term.load', lambda *a, **k: [
+        {'role': 'user', 'content': '我吃了水饺', 'timestamp': 1000, '_turn_id': 'deleted'},
+        {'role': 'user', 'content': '我吃了水饺', 'timestamp': 1000, '_turn_id': 'old'}])
+    rows = migration.candidates('u', 'c', 5000)
+    assert [row['message_id'] for row in rows] == ['old']
+
+
+@pytest.mark.asyncio
+async def test_migration_finish_reports_actual_extraction(sandbox, monkeypatch):
+    from scripts import migrate_food_memory as migration
+    monkeypatch.setattr('core.memory.short_term.load', lambda *a, **k: [
+        {'role': 'user', 'content': '我吃了水饺', 'timestamp': 1000}])
+    monkeypatch.setattr('core.llm_client.chat', AsyncMock(return_value=json.dumps([
+        event('水饺', '我吃了水饺', kind='ate', value='confirmed')], ensure_ascii=False)))
+    report = migration.migrate('u', 'c', apply=True)
+    result = await migration.finish('u', 'c', report)
+    assert result['completed'] == 1 and result['pending'] == 0
+    assert result['events'] == 1 and result['not_enqueued'] == 0
+    assert food.snapshot('u', 'c')['items'][0]['recorded_eaten_count'] == 1
+    with pytest.raises(ValueError):
+        await migration.finish('u', 'c', migration.migrate('u', 'c'))
+
+
 @pytest.mark.asyncio
 async def test_durable_inbox_retry_and_route(sandbox, monkeypatch):
     food.enqueue('u', 'c', 'turn1', '我不喜欢水饺')
@@ -104,6 +139,20 @@ def test_food_facts_are_not_ambient_profile(sandbox):
     from core.memory.user_profile import select_for_prompt
     profile = {'important_facts': [{'text': '常点某种水饺', 'tag': 'pref.food', 'ts': time.time()}]}
     assert '水饺' not in select_for_prompt(profile, ['food'])['pref_text']
+
+
+def test_mixed_habit_projection_keeps_non_food_and_original(sandbox):
+    from core.memory.user_profile import select_for_prompt
+    text = '日常饮食以外卖为主；习惯晚睡；喜欢某种水饺。'
+    profile = {'important_facts': [{'text': text, 'tag': 'habit', 'ts': time.time()}]}
+    rendered = select_for_prompt(profile, {'habit'}, food_names=('水饺',))['pref_text']
+    assert '晚睡' in rendered and '外卖' not in rendered and '水饺' not in rendered
+    assert profile['important_facts'][0]['text'] == text
+
+
+def test_ambient_food_projection_disabled_restores_original(monkeypatch):
+    monkeypatch.setattr(food, 'get_config', lambda: {'food_memory': {'enabled': False}})
+    assert food.ambient_text('喜欢水饺。', ('水饺',), dietary_topics=True) == '喜欢水饺。'
 
 
 def test_controls_scope_and_hot_reload(sandbox, tmp_path, monkeypatch):

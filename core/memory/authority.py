@@ -45,6 +45,7 @@ LAYER_AUTHORITY: dict[str, dict] = {
     "5_profile_pref": _e("profile", "user_stated_fact"),
     "5.1_user_facts": _e("user_facts", "user_stated_fact"),
     "5.2_reminders": _e("reminders", "system"),
+    "5.2_food_tastes": _e("food_memory", "user_stated_fact"),
     "6i_self_agent_md": _e("self_agent_md", "character_self"),
     "5.5_lore": _e("lore", "system"),
     "6a_user_identity": _e("user_identity", "identity_authority", "days_only"),

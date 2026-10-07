@@ -1,6 +1,8 @@
 ## 手机聊天关联与排序（2026-10-07，工单 267）
 
-F6 observe：desktop/mobile 引用稳定锚点及邻近消息工具已实现，真实设备/模型尚未验收。open：QQ引用未接 `reply_to.message_id`；旧日志无台账身份不可精确展开，不猜测作者与时间。
+F6 observe：desktop/mobile 引用稳定锚点及邻近消息工具已实现，真实设备/模型尚未验收。QQ 精确引用于2026-10-07由用户取消，保留普通消息/引用文本降级，不再列为待施工；旧日志无台账身份不可精确展开，不猜测作者与时间。
+
+2026-10-07 工具多轮模型实测 observe：活跃角色完整工具schema请求成功，隔离模型已调用双方收藏和搜索；后续上游503 model_not_found，重复尝试仍失败。备用小模型的多工具流被 choices after completion 校验拒绝，需脱敏chunk证据再判断网关格式问题或协议兼容缺口。没有为此修改生产模型路由；工具驻留等真实多轮验收未跑完。
 
 current：工具 receipt 关联真实 owner 回合；历史使用 ledger epoch，用户事件采用已有 EventContext ingress 时间；同作用域 grant 重绑保持 request 去重。observe：实际手机与真实工具调用；open：旧日志分钟级时间无法精确还原，trace/receipt 仍有界，后端重启后回执不持久。手机 native consume 崩溃窗口与 artifacts/sticker 完整 handoff 另列 mobile 工单 26，不将接口存在记为无损投递完成。
 

@@ -34,6 +34,31 @@ def enabled():
     return bool(get_config().get("food_memory", {}).get("enabled", True))
 
 
+def known_food_names(uid, char_id):
+    if not enabled():
+        return ()
+    with connection() as db:
+        return tuple(row[0] for row in db.execute(
+            "SELECT DISTINCT name FROM events WHERE uid=? AND char_id=? AND kind!='taste'",
+            (str(uid), char_id)))
+
+
+def ambient_text(text, names=(), *, dietary_topics=False):
+    """Read projection only: retain original non-food clauses, invent no taste."""
+    if not enabled():
+        return text
+    kept = []
+    for clause in re.split(r'(?<=[。！？；;])', text):
+        if any(name in clause if len(name) >= 2 else re.search(
+                r'(?:吃|喝|口味|饮食|外卖|食物|食品|喜欢|讨厌|偏好).{0,6}' + re.escape(name), clause)
+                for name in names if name):
+            continue
+        if dietary_topics and re.search(r'饮食|外卖|口味|吃喝|餐食|食品|食物|点单|早餐|午餐|晚餐|早饭|午饭|晚饭|夜宵|甜食|零食', clause):
+            continue
+        kept.append(clause)
+    return ''.join(kept).strip()
+
+
 @contextmanager
 def connection():
     path = get_paths().food_memory_db()

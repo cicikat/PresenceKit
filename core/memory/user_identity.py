@@ -209,6 +209,8 @@ async def format_for_prompt(user_id: str, min_confidence: float = 0.5, *, char_i
         return ""
 
     lines = []
+    from core.food_memory import ambient_text, known_food_names
+    food_names = known_food_names(user_id, char_id)
     for key, _ in IDENTITY_DIMENSIONS:
         dim = identity.get(key)
         if dim is None:
@@ -216,6 +218,7 @@ async def format_for_prompt(user_id: str, min_confidence: float = 0.5, *, char_i
         if dim.get("confidence", 0.0) < min_confidence:
             continue
         text = dim.get("text", "").strip()
+        text = ambient_text(text, food_names)
         if text:
             lines.append(f"- {text}")
 

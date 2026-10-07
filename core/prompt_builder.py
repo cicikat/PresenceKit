@@ -920,8 +920,8 @@ def build(
     # ─────────────────────────────────────────────────────────────────────────
     from core.memory.user_profile import select_for_prompt
 
-    _profile_selection = select_for_prompt(profile, tags)
-    from core.food_memory import taste_summary
+    from core.food_memory import taste_summary, known_food_names
+    _profile_selection = select_for_prompt(profile, tags, food_names=known_food_names(user_id, char_id))
     _food_tastes = taste_summary(user_id, char_id)
     if _food_tastes:
         messages.append({"role": "system", "content": _food_tastes,
@@ -1916,6 +1916,7 @@ KNOWN_LAYERS: list[tuple[str, str]] = [
     ("5_profile_pref", "用户偏好/习惯类事实"),
     ("5.1_user_facts", "跨角色全局用户事实"),
     ("5.2_reminders", "待办备忘录"),
+    ("5.2_food_tastes", "用户明确表达的一般口味"),
     ("6i_self_agent_md", "角色自己写的 self/AGENT.md 工作习惯（self-authored，低于系统安全与用户指令）"),
     ("5.5_lore", "世界书条目"),
     ("6a_user_identity", "用户稳定行为模式"),
