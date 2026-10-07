@@ -8,6 +8,7 @@ from contextlib import contextmanager
 from core.sandbox import get_paths
 from core.memory.scope import MemoryScope
 from core.memory.event_query import get_event
+from core.tools.message_context import get_message_event
 from datetime import datetime
 from core.tools.tool_result import ToolResult, sanitize_for_prompt
 
@@ -36,7 +37,7 @@ def save(uid, char_id, message_id, note='', related_event_ids=None):
     if not isinstance(related_event_ids, list) or len(related_event_ids) > 3 or any(not isinstance(i,str) or not 1 <= len(i) <= 256 for i in related_event_ids):
         raise ValueError('related_event_limit_3')
     scope = MemoryScope.reality_scope(str(uid), char_id)
-    event = get_event(scope, message_id)
+    event = get_message_event(scope, message_id)
     if not event or event.get('tombstoned') or event['kind'] not in {'user_message','assistant_message','trigger_assistant'}:
         raise ValueError('message_unavailable')
     text = str(event.get('visible_text') or '')
@@ -91,7 +92,7 @@ def read(uid,char_id,quote_id):
         related=get_event(MemoryScope.reality_scope(str(uid),char_id),item['event_id'])
         item['source_available']=bool(related and not related.get('tombstoned'))
     result['note_changes']=[dict(item) for item in changes]
-    event=get_event(MemoryScope.reality_scope(str(uid),char_id),result['message_id'])
+    event=get_message_event(MemoryScope.reality_scope(str(uid),char_id),result['message_id'])
     result['source_available']=bool(event and not event.get('tombstoned'))
     result['snapshot_note']='收藏当时的原话快照；来源后来不可用时仍保留收藏，删除请由用户管理。'
     return result

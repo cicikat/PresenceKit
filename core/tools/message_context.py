@@ -7,6 +7,14 @@ from core.memory.scope import MemoryScope
 from core.tools.event_tools import _success, _unknown, _query_error
 
 
+def get_message_event(scope,message_id):
+    from core.memory import source_policy
+    event=event_query.get_event(scope,message_id,include_isolated=True)
+    if event and event['source'] not in source_policy.ISOLATED_SOURCES-{'tool_pin'} and event['kind'] in {'user_message','assistant_message','trigger_assistant'}:
+        return event
+    return None
+
+
 def message_item(event):
     from core.memory.short_term import _sanitize_assistant_message
     text = str(event.get('visible_text') or event.get('memory_text') or '')

@@ -219,13 +219,19 @@ def window(
         try:
             if not source and not include_isolated:
                 _observe_default_source_filter()
-            target = _find(connection, scope, event_id, source=source, include_isolated=include_isolated)
+            target = _find(connection, scope, event_id, source=source, include_isolated=include_isolated or messages_only)
             if target is None:
+                return None
+            if messages_only and target['source'] in source_policy.ISOLATED_SOURCES - {'tool_pin'}:
                 return None
             message_kinds = ('user_message', 'assistant_message', 'trigger_assistant')
             if messages_only and (target['kind'] not in message_kinds or target['redaction_state'] == 'tombstoned'):
                 return None
             source_where, source_params = source_policy.sql_predicate(include_isolated=include_isolated)
+            if messages_only and not include_isolated:
+                excluded=tuple(sorted(source_policy.ISOLATED_SOURCES-{'tool_pin'}))
+                source_where=" AND COALESCE(source,'') NOT IN ("+','.join('?' for _ in excluded)+')'
+                source_params=excluded
             exact_source = source or None
             source_clause = " AND source = ?" if exact_source else source_where
             source_values: tuple[Any, ...] = (exact_source,) if exact_source else source_params

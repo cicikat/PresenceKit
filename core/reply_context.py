@@ -50,11 +50,11 @@ def build_reply_prefix(reply_to: dict | None, now: float | None = None, *, user_
     if not isinstance(reply_to, dict):
         return None
     if user_id is not None and char_id is not None and reply_to.get('message_id'):
-        from core.memory.event_query import get_event, EventQueryError
+        from core.memory.event_query import EventQueryError
         from core.memory.scope import MemoryScope
-        from core.tools.message_context import message_item
+        from core.tools.message_context import message_item,get_message_event
         try:
-            event = get_event(MemoryScope.reality_scope(str(user_id), char_id), str(reply_to['message_id']))
+            event = get_message_event(MemoryScope.reality_scope(str(user_id), char_id), str(reply_to['message_id']))
         except EventQueryError:
             event = None
         if event and not event.get('tombstoned') and event['kind'] in {'user_message', 'assistant_message', 'trigger_assistant'}:

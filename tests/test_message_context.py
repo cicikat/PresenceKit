@@ -20,6 +20,17 @@ def seed(uid='u', char_id='c'):
 
 
 @pytest.mark.asyncio
+async def test_pin_turns_remain_explicit_dialogue_but_not_automatic_recall(sandbox):
+    scope=MemoryScope.reality_scope('u','c')
+    event_store.append_event(scope,dict(event_id='pin:user',occurred_at=1700000000,actor='user',
+        kind='user_message',source='tool_pin',visible_text='用户本轮原话'))
+    from core.memory.event_query import get_event
+    assert get_event(scope,'pin:user') is None
+    assert '用户本轮原话' in (await read_message_context('u','pin:user',char_id='c')).safe_summary
+    assert '作者=用户' in build_reply_prefix({'message_id':'pin:user'},user_id='u',char_id='c')
+
+
+@pytest.mark.asyncio
 async def test_exact_anchor_and_bounded_direction(sandbox):
     seed()
     result = json.loads((await read_message_context('u', 't12:user', 'before', 10, char_id='c')).safe_summary)

@@ -46,6 +46,9 @@ def _db(uid, char_id, write=False):
             db.executescript('''
                 CREATE TABLE IF NOT EXISTS receipts(kind TEXT, id TEXT, revision TEXT, seen_at REAL, PRIMARY KEY(kind,id));
                 CREATE TABLE IF NOT EXISTS results(id INTEGER PRIMARY KEY, tool TEXT, ts REAL, content TEXT, device TEXT, talk_sent INTEGER);
+                CREATE TABLE IF NOT EXISTS pin_candidates(id TEXT PRIMARY KEY,tool TEXT,captured_at REAL,generated_at REAL,expires_at REAL,validity TEXT,content TEXT);
+                CREATE TABLE IF NOT EXISTS result_pins(id TEXT PRIMARY KEY,remaining INTEGER,revision TEXT);
+                CREATE TABLE IF NOT EXISTS pin_turns(turn_id TEXT PRIMARY KEY,ts REAL);
             ''')
             db.execute('BEGIN IMMEDIATE')
             columns = {row[1] for row in db.execute('PRAGMA table_info(results)')}
@@ -55,6 +58,9 @@ def _db(uid, char_id, write=False):
                 db.execute('ALTER TABLE results ADD COLUMN talk_sent INTEGER')
             db.execute('DELETE FROM receipts WHERE seen_at<?', (time.time() - 30 * WINDOW,))
             db.execute('DELETE FROM results WHERE ts<?', (time.time() - WINDOW,))
+            db.execute('DELETE FROM pin_candidates WHERE expires_at<?',(time.time(),))
+            db.execute('DELETE FROM result_pins WHERE id NOT IN (SELECT id FROM pin_candidates)')
+            db.execute('DELETE FROM pin_turns WHERE ts<?',(time.time()-30*WINDOW,))
         yield db
         if write:
             db.commit()
@@ -162,7 +168,9 @@ def messages(uid, char_id, *, now=None):
                 message.pop('_continuity_receipt')
             (pending if unread else recent).append((timestamp, message))
         selected = sorted(pending, key=lambda pair: pair[0])[:3] + sorted(recent, reverse=True, key=lambda pair: pair[0])[:1]
-        return [message for _, message in selected] + result_messages(uid, char_id, now=now)
+        from core.tool_result_pins import messages as pin_messages
+        pins = pin_messages(uid,char_id)
+        return [message for _, message in selected] + result_messages(uid, char_id, now=now) + pins
     except Exception:
         logger.warning('[context_continuity] projection unavailable', exc_info=True)
         return []
@@ -293,7 +301,11 @@ def result_messages(uid, char_id, *, now=None):
         rows = list(db.execute('SELECT * FROM results WHERE ts>? ORDER BY id DESC LIMIT 3', (now - WINDOW,))) if db else []
     pronoun = get_user_pronoun(uid)
     result = []
+    from core.tool_result_pins import view as pin_view, allowed as pin_allowed
+    pinned={(r['tool'],r['content']) for r in pin_view(uid,char_id) if pin_allowed(uid,char_id,r['tool'])}
     for row in rows:
+        if (row['tool'],row['content']) in pinned:
+            continue
         if not _is_tool_enabled(row['tool']) or not tool_allowed(uid, char_id, row['tool']):
             continue
         if row['tool'] == 'observe_user_screen':
@@ -306,6 +318,8 @@ def result_messages(uid, char_id, *, now=None):
 
 
 def observability(uid, char_id):
+    from core.tool_result_pins import view as pin_view
+    pins=[{k:r[k] for k in ('id','tool','generated_at','expires_at','remaining')} for r in pin_view(uid,char_id)]
     with _db(uid, char_id) as db:
         receipts = [dict(r) for r in db.execute('SELECT kind,id,seen_at FROM receipts ORDER BY seen_at DESC LIMIT 50')] if db else []
         results = [dict(r) for r in db.execute('SELECT id,tool,ts,length(content) chars FROM results WHERE ts>? ORDER BY id DESC', (time.time() - WINDOW,))] if db else []
@@ -313,4 +327,4 @@ def observability(uid, char_id):
     return {'pending_count': sum(m['_layer'] == '10.6_pending_material' for m in projected),
             'pending_count_is_bounded': True, 'receipts': receipts, 'tool_results': results,
             'tool_result_window_hours': 24, 'pending_window_days': 7,
-            'read_means': 'successful_model_evaluation_not_user_delivery'}
+            'read_means': 'successful_model_evaluation_not_user_delivery','pinned_results':pins}

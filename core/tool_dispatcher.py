@@ -1135,6 +1135,17 @@ _TOOL_REGISTRY['read_message_context'] = {
 }
 
 from core import quote_notebook as _quote_notebook
+from core import tool_result_pins as _tool_result_pins
+
+for _pin_name, _pin_description, _pin_properties, _pin_required in (
+    ('pin_tool_result','标记本次真实工具返回的 result_id，供后续1..10个成功用户对话轮临时复用。最多3项、摘要总计6000字，硬过期最多24小时；只保留历史快照，不保证仍然新鲜。',
+     {'result_id':{'type':'string','description':'成功工具返回附带的result_id，不得编造'},'rounds':{'type':'integer','minimum':1,'maximum':10,'description':'后续保留轮数，角色按需选择'}},['result_id','rounds']),
+    ('unpin_tool_result','取消临时驻留的工具结果，下一轮停止注入。',{'result_id':{'type':'string','description':'已标记的结果ID'}},['result_id']),
+    ('list_tool_result_pins','查看当前临时驻留的工具名称、result_id、获取时间和剩余轮数；不把驻留当成最新事实。',{},[]),
+):
+    _TOOL_REGISTRY[_pin_name]={'func':getattr(_tool_result_pins,_pin_name),'category':'memory','dangerous':False,
+        'description':_pin_description,'parameters':{'type':'object','additionalProperties':False,'properties':_pin_properties,'required':_pin_required},
+        'examples':[_pin_description],'keywords':['临时驻留','复用','标记工具结果'],'trace_args':list(_pin_properties),'echo_event_log':False}
 
 for _quote_tool, _quote_description, _quote_properties, _quote_required in (
     ('save_quote', '收藏用户或角色已经入账的原话到小本本。先从引用、search_events或read_message_context获取精确message_id；当前尚未完成的回复不能收藏。保存日期、来源及最多3条相关召回快照，可写笔记。',
@@ -3046,7 +3057,7 @@ async def _execute_structured_impl(
             if is_group:
                 raise ValueError("device observation is owner-only")
             result = await func(user_id=user_id, char_id=char_id)
-        elif tool_name in {"read_life_records", "reread_image", "read_food_preferences", "read_message_context", "save_quote", "search_quotes", "read_quote", "write_quote_note"}:
+        elif tool_name in {"read_life_records", "reread_image", "read_food_preferences", "read_message_context", "save_quote", "search_quotes", "read_quote", "write_quote_note", "pin_tool_result", "unpin_tool_result", "list_tool_result_pins"}:
             if is_group:
                 raise ValueError('owner memory tools are unavailable in group sessions')
             _require_memory_read_scope(user_id, char_id)
@@ -3181,6 +3192,14 @@ async def _execute_structured_impl(
         _trace("ok", tool_name if tool_name in {"search_events", "expand_event_window", "get_related_events"} else safe_summary)
         await _notify_status("finished")
         outward = f"工具已执行：{tool_name}，结果：{safe_summary}"
+        if not is_group and origin in {'user_live','assistant_loop','assistant_loop_relay','autonomy_loop'}:
+            try:
+                from core.tool_result_pins import retain as retain_pin_candidate
+                _result_id=retain_pin_candidate(user_id,char_id,tool_name,tool_result)
+                if _result_id:
+                    outward += f'\nresult_id={_result_id}（需要后续多轮复用时可调用 pin_tool_result，rounds=1..10）'
+            except Exception:
+                logger.warning('[tool_result_pins] candidate unavailable')
         if tool_result.meta.get('continuity_receipt'):
             from core.context_continuity import ReceiptText
             outward = ReceiptText(outward, tool_result.meta['continuity_receipt'])

@@ -9,7 +9,7 @@ from __future__ import annotations
 import threading
 from typing import Any
 
-ISOLATED_SOURCES = frozenset({"web", "dream_echo", "coplay", "legacy_unknown"})
+ISOLATED_SOURCES = frozenset({"web", "dream_echo", "coplay", "legacy_unknown", "tool_pin"})
 
 _LOCK = threading.Lock()
 _OBSERVABILITY: dict[str, int] = {

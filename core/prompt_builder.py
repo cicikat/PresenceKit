@@ -1950,5 +1950,6 @@ KNOWN_LAYERS: list[tuple[str, str]] = [
     ("10.6_pending_material", "待评估的用户上传资料"),
     ("10.7_recent_material", "近期已读资料接续"),
     ("10.8_recent_tool_results", "主动工具历史结果"),
+    ("10.9_pinned_tool_results", "临时驻留工具结果"),
     ("12_user_message", "用户当前消息（不可消融）"),
 ]

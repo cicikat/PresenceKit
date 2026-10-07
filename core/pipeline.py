@@ -981,6 +981,8 @@ class Pipeline:
             required_tool_names=required_tool_names,
         )
         _hardware_jobs_for_prompt = context.get("hardware_jobs_text", "") if hardware_jobs_text is None else hardware_jobs_text
+        from core.tool_result_pins import reset_projection
+        reset_projection(user_id, _char_id)
         if (channel in {'qq', 'wechat', 'desktop', 'mobile'} and context.get('_continuity_private')
                 and not context.get('stage_presence') and not context.get('stage_transcript')):
             from core.context_continuity import messages as continuity_messages
@@ -2064,6 +2066,8 @@ class Pipeline:
         from core.post_process import slow_queue
 
         _should_update_profile = False
+        from core.tool_result_pins import projected as pin_projected
+        _pin_echo = pin_projected(user_id,char_id)
         _profile_recent: list = []
         import time as _time
         _critical_started_at = _time.monotonic()
@@ -2101,7 +2105,7 @@ class Pipeline:
             try:
                 from core.memory.fixation_pipeline import capture_turn as _capture_turn
                 _dream_echo_for_source = _detect_dream_echo(user_id, char_id, content, reply)
-                _source = provenance_source or (
+                _source = 'tool_pin' if _pin_echo else provenance_source or (
                     "dream_echo" if _dream_echo_for_source
                     else "web" if web_echo
                     else "coplay" if coplay_echo
@@ -2183,7 +2187,14 @@ class Pipeline:
         if pending_paths:
             _pending_perception.confirm_delivered(pending_paths)
 
-        if _critical_written and envelope.can_write_memory and not trigger_name and not is_group and not web_echo and not coplay_echo and not _dream_echo_for_source:
+        if _critical_written and envelope.can_write_memory and not trigger_name and not is_group:
+            try:
+                from core.tool_result_pins import consume
+                consume(user_id,char_id,_turn_id)
+            except Exception:
+                logger.warning('[tool_result_pins] round commit unavailable')
+
+        if _critical_written and envelope.can_write_memory and not trigger_name and not is_group and not web_echo and not coplay_echo and not _dream_echo_for_source and not _pin_echo:
             if not (audit_extras or {}).get("asr_low_confidence"):
                 try:
                     from core.food_memory import enqueue as enqueue_food
@@ -2197,7 +2208,8 @@ class Pipeline:
             "emotion": "neutral",
             "char_id": char_id,
             "scope_payload": scope_payload,
-            "should_update_profile": _should_update_profile,
+            "should_update_profile": _should_update_profile and not _pin_echo,
+            "tool_pin_echo": _pin_echo,
             "profile_recent": _profile_recent,
             "prior_gap_seconds": _prior_gap_seconds,
         }
@@ -2241,6 +2253,7 @@ class Pipeline:
         _turn_id = critical_result["turn_id"]
         _should_update_profile = critical_result["should_update_profile"]
         _profile_recent = critical_result["profile_recent"]
+        web_echo = web_echo or bool(critical_result.get('tool_pin_echo'))
 
         if envelope.can_write_memory and not trigger_name and not is_group:
             slow_queue.enqueue("food_memory_update", {"uid": user_id, "char_id": char_id, "scope": scope_payload})
