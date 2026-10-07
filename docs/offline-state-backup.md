@@ -19,6 +19,19 @@ inventory 集中在 `core.backup_state.PROTECTION_ROOTS`。未来经过审计的
 
 ## 创建与验证
 
+### Windows 每周 ZIP
+
+在根目录双击 `备份数据.bat`。先手动停止服务；运行中或状态未知时拒绝打包。
+脚本复用 protection inventory，排除 `data/test_sandbox/` 和上述缓存，先在安装目录外
+创建并验证临时快照，再在根目录生成 `presencekit-data-<时间戳>-<随机后缀>.zip`。
+ZIP 内保留 manifest 和 checksum，逐文件解压读取并核对 SHA-256 后才发布最终文件。
+不覆盖或删除旧备份；失败清理本次临时文件。需要安装目录所在卷有足够的暂存空间。
+
+这是用户主动选择的本地未加密 ZIP，包含配置、凭据与私有记忆，不能当成加密便携归档。
+仅存放在可信存储；已加入 Git 忽略。每周复制到自行选择的备份介质。
+恢复时先解压到独立目录，再用下文的 `backup-state verify` / `restore`。
+此入口不改变原有 `backup-state create` 的输出边界与 portable encryption 限制。
+
 快照必须放在安装目录之外，包括其 `data/` 和 `userdata/` 根目录之外。输出路径不能已经存在。
 
 ```powershell

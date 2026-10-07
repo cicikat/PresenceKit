@@ -66,5 +66,8 @@ firmware/presence-device/include/secrets.h
 tools/uv.exe
 # 发行打包产物（scripts/build_release.py 输出，见 cc-tasks/92）
 dist/
+# Private weekly data archives (including incomplete writes).
+/presencekit-data-*.zip
+/presencekit-data-*.zip.partial
 # 含个人机器路径与用户名的本地权限列表，非团队共享配置
 .claude/settings.json

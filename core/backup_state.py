@@ -121,6 +121,7 @@ UNCLASSIFIED_PRIVATE_ROOTS: tuple[str, ...] = ()
 # These are the only exclusions below data/.  They correspond to data-registry
 # entries whose durability is derived or forensic, never canonical state.
 _EXCLUDED_DATA_PREFIXES = (
+    PurePosixPath("data/test_sandbox"),
     PurePosixPath("data/logs"),
     PurePosixPath("data/cache"),
     PurePosixPath("data/inbox"),
@@ -187,14 +188,20 @@ def _legacy_private_files(installation: Path) -> Iterable[Path]:
                     yield item
 
 
-def _walk_regular_files(root: Path) -> Iterable[Path]:
+def _walk_regular_files(root: Path, *, installation: Path | None = None) -> Iterable[Path]:
     if _is_reparse_point(root):
         raise BackupError("unsafe_link", "备份范围内存在符号链接、junction 或 reparse point。")
-    for entry in root.rglob("*"):
+    for entry in root.iterdir():
+        if installation is not None and _is_excluded_data_path(
+            PurePosixPath(entry.relative_to(installation).as_posix())
+        ):
+            continue
         if _is_reparse_point(entry):
             raise BackupError("unsafe_link", "备份范围内存在符号链接、junction 或 reparse point。")
         if entry.is_file():
             yield entry
+        elif entry.is_dir():
+            yield from _walk_regular_files(entry, installation=installation)
 
 
 def _selected_files(installation: Path) -> tuple[list[tuple[Path, str]], list[str]]:
@@ -227,7 +234,7 @@ def _selected_files(installation: Path) -> tuple[list[tuple[Path, str]], list[st
         else:
             selected.extend(
                 (path, root.root_id)
-                for path in _walk_regular_files(source)
+                for path in _walk_regular_files(source, installation=installation if root.root_id == "data" else None)
                 if not _is_excluded_data_path(_relative_to_installation(installation, path))
             )
     deduplicated: dict[PurePosixPath, tuple[Path, str]] = {}
