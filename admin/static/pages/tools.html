@@ -4,6 +4,7 @@
 <div class="card">
   <h3 data-i18n="xhs.title">小红书分享读取</h3>
   <p data-i18n="xhs.intro">读取正文、图片和评论样本。首次安装并扫码后，本地服务可随后端自动启动；图片使用已有图片识别配置。</p>
+  <p data-i18n="xhs.continue_hint">首读返回统计和续读引用，有效30分钟。可再读最多30条评论、按原序号看后续最多4张图、查看最多20个帖主公开主页标题。评论以扩大滚动加载加去重续读；主页仅已加载样本，不支持远端继续翻页。共用原读取开关、冷却和图片识别设置。</p>
   <label><input id="xhs-enabled" type="checkbox"><span data-i18n="xhs.enabled">允许读取小红书分享</span></label>
   <label><input id="xhs-local-service" type="checkbox" onchange="changeXiaohongshuMode()"><span data-i18n="xhs.local">随后端自动启动本地服务</span></label>
   <label class="field"><span data-i18n="xhs.address">读取服务地址（未托管时可连接外部服务）</span><input id="xhs-reader-url" type="url" placeholder="http://127.0.0.1:18060"></label>

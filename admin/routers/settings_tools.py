@@ -47,6 +47,8 @@ class ToolControlUpdate(BaseModel):
 
 
 def _static_tool_enabled(name: str, tools_config: dict) -> bool:
+    if name in {'continue_xiaohongshu_comments','read_xiaohongshu_images','read_xiaohongshu_author_posts'} and not _static_tool_enabled('read_xiaohongshu',tools_config):
+        return False
     value = tools_config.get(name)
     if isinstance(value, dict):
         return bool(value.get("enabled", True))

@@ -1031,3 +1031,5 @@ event id 时整体抑制并在 recall_trace `dossier_suppression.suppression_fal
 confidence 是估计的可信度而非强度）、`recall.semantic_min_similarity`（0~1，默认 0 = 不过滤，页面放“高级设置”）。取值非法返回 422。
 页面位置：管理面「运行配置」页“状态权威与记忆解释开关”卡片。所有默认值保持现状，关闭/恢复默认即回到现状。
 上方 S2 / S3 / S5b 小节中“无管理面开关”的描述以本节为准。
+
+小红书续读工具已接入同一控制面，具体统计、缓存、限额及远端分页边界见 [续读合同](xiaohongshu-continuation.md)。

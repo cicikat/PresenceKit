@@ -75,21 +75,48 @@ def normalize(payload, note_id, max_comments):
     comments = detail.get('comments')
     available = isinstance(comments, dict) and isinstance(comments.get('list'), list)
     items = comments['list'] if available else []
+    unique_items = []
+    seen_ids = set()
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        identifier = str(item.get('id') or '')
+        if identifier and identifier in seen_ids:
+            continue
+        if identifier:
+            seen_ids.add(identifier)
+        unique_items.append(item)
     images = []
-    for item in note.get('imageList') or []:
+    for index, item in enumerate((note.get('imageList') or [])[:60],1):
+        if not isinstance(item,dict):
+            images.append({'index':index,'url':'','description':'','status':'unavailable'})
+            continue
         url = item.get('urlDefault') or item.get('urlPre') or ''
         parsed = urlsplit(url)
         host = parsed.hostname or ''
-        if parsed.scheme in {'http', 'https'} and (host == 'xhscdn.com' or host.endswith('.xhscdn.com')):
-            images.append({'url': url, 'description': '', 'status': 'not_analyzed'})
+        if parsed.scheme in {'http', 'https'} and not parsed.username and not parsed.password and parsed.port in (None,80,443) and (host == 'xhscdn.com' or host.endswith('.xhscdn.com')):
+            images.append({'index':index,'url': url, 'description': '', 'status': 'not_analyzed'})
+        else:
+            images.append({'index':index,'url':'','description':'','status':'unavailable'})
+    interactions=note.get('interactInfo') or {}
+    def total(key):
+        value=interactions.get(key)
+        text=str(value) if value is not None else ''
+        return int(text) if re.fullmatch(r'\d{1,12}',text) else None
+    author=note.get('user') or {}
     return {'note_id': note_id, 'source_url': f'https://www.xiaohongshu.com/explore/{note_id}',
-            'title': str(note.get('title') or ''), 'content': str(note.get('desc') or ''),
+            'title': str(note.get('title') or '')[:400], 'content': str(note.get('desc') or '')[:24000],
+            'author_id':author.get('userId') if re.fullmatch(r'[a-fA-F0-9]{24}',str(author.get('userId') or '')) else None,
+            'author_name':str(author.get('nickname') or author.get('nickName') or '')[:80],
+            'total_comments':total('commentCount'),'likes':total('likedCount'),'favorites':total('collectedCount'),
+            'counts_display':{k:str(interactions.get(k) or '')[:30] for k in ('commentCount','likedCount','collectedCount')},
+            'image_count':len(note['imageList']) if isinstance(note.get('imageList'),list) else None,
             'images': images, 'comments': [
-                {'content': str(item.get('content') or ''),
-                 'replies': [str(reply.get('content') or '') for reply in (item.get('subComments') or [])[:3]]}
-                for item in items[:max_comments] if isinstance(item, dict)],
+                {'id':str(item.get('id') or '')[:100], 'content': str(item.get('content') or '')[:2000],
+                 'replies': [str(reply.get('content') or '')[:500] for reply in (item.get('subComments') or [])[:3] if isinstance(reply,dict)]}
+                for item in unique_items[:max_comments]],
             'comments_status': 'sample' if available else 'unavailable',
-            'has_more_comments': comments.get('hasMore') if available else None}
+            'has_more_comments': comments.get('hasMore') if available and isinstance(comments.get('hasMore'), bool) else None}
 
 
 _OFFLINE_WARN_INTERVAL = 600
@@ -106,7 +133,7 @@ def _warn_reader_offline(reader_url):
     logger.warning('[xiaohongshu] 读取服务 %s 无响应（可能未启动 Docker 容器或本地读取进程）', reader_url)
 
 
-async def read_post(share: str) -> ToolResult:
+async def read_post(share: str='', *, user_id=None, char_id=None, read_id='') -> ToolResult:
     global _read_busy, _next_read_at
     cfg = settings()
     if not cfg['effective']:
@@ -121,7 +148,12 @@ async def read_post(share: str) -> ToolResult:
     try:
         async def fetch():
             async with httpx.AsyncClient(timeout=20, trust_env=False) as client:
-                note_id, token = await resolve_share(client, share)
+                if read_id:
+                    from core.tools.xiaohongshu_continuation import reference
+                    row=reference(user_id,char_id,read_id)
+                    note_id,token=row['note_id'],row['token']
+                else:
+                    note_id, token = await resolve_share(client, share)
                 try:
                     response = await client.post(cfg['reader_url'] + '/api/v1/feeds/detail', json={
                         'feed_id': note_id, 'xsec_token': token, 'load_all_comments': False,
@@ -143,22 +175,25 @@ async def read_post(share: str) -> ToolResult:
                 try:
                     await asyncio.sleep(random.uniform(1, 2))
                     description = await asyncio.wait_for(process_image(image['url']), timeout=12)
-                    image['description'] = str(description or '')
+                    image['description'] = str(description or '')[:3000]
                     image['status'] = 'analyzed' if description else 'unavailable'
                 except Exception:
                     image['status'] = 'unavailable'
             # Balanced sections keep image/comment evidence when a post is long.
-            lines = [result['source_url'], '正文摘录：' + result['title'][:60] + '\n' + result['content'][:600],
+            from core.tools.xiaohongshu_continuation import cache, status_header
+            handle=cache(user_id,char_id,result,token,cfg['reader_url']) if user_id and char_id else ''
+            result['read_id']=handle
+            lines = [status_header(result), f'read_id={handle}；可调用评论续读、后续图片、帖主主页标题工具。',result['source_url'], '正文摘录：' + result['title'][:60] + '\n' + result['content'][:450],
                      f"图片共{len(result['images'])}张："]
             for i, image in enumerate(result['images'][:4], 1):
                 lines.append(f"图{i}: " + (image['description'][:100] if image['status'] == 'analyzed' else '尚未成功识别，不能推断图中内容'))
             lines.append('评论：仅已加载样本（含部分楼中楼），不代表全部评论。' if result['comments_status'] == 'sample' else '评论未取得，不能说没有评论。')
-            budget = max(15, 600 // max(1, len(result['comments'])))
+            budget = max(10, 500 // max(1, len(result['comments'])))
             for item in result['comments']:
                 lines.append((item['content'] + (' / 回复：' + '；'.join(item['replies']) if item['replies'] else ''))[:budget])
             summary = '\n'.join(lines)
             return ToolResult(raw_data=json.dumps(result, ensure_ascii=False), safe_summary=sanitize_for_prompt(summary),
-                              meta={'generated_at': time.time(), 'validity': 'current_turn', 'truncated': True})
+                              meta={'generated_at': time.time(), 'validity': 'current_turn', 'truncated': True,'read_id':handle})
         return await asyncio.wait_for(fetch(), timeout=90)
     except asyncio.CancelledError:
         error = 'cancelled'
@@ -166,7 +201,7 @@ async def read_post(share: str) -> ToolResult:
     except (TimeoutError, httpx.TimeoutException):
         error = 'timeout'
     except ValueError as exc:
-        error = str(exc) if str(exc) in {'invalid_share', 'missing_share_token', 'share_unavailable', 'too_many_redirects', 'reader_http_error', 'reader_rejected', 'invalid_note', 'login_or_rate_limit', 'reader_offline'} else 'invalid_response'
+        error = str(exc) if str(exc) in {'invalid_share', 'missing_share_token', 'share_unavailable', 'too_many_redirects', 'reader_http_error', 'reader_rejected', 'invalid_note', 'login_or_rate_limit', 'reader_offline','read_id_unavailable'} else 'invalid_response'
     except Exception:
         error = 'reader_unavailable'
     finally:
@@ -180,6 +215,14 @@ async def read_post(share: str) -> ToolResult:
 
 def _failure(reason):
     hints = {'disabled': '小红书读取未开启。', 'reader_not_configured': '尚未配置小红书读取服务。',
+             'read_id_unavailable':'续读引用已过期、已重启或不属于当前用户/角色，请重新首读。',
+             'comment_ids_unavailable':'服务没有返回稳定评论ID，无法可靠去重续读，不会把重抓首屏当新评论。',
+             'comment_limit_reached':'本次读取已达到300条有界加载上限，请改看其他帖子。',
+             'profile_unsupported':'读取服务不支持该公开主页接口或返回格式；无法声称读过后续标题。',
+             'author_unavailable':'帖子没有提供可核验的帖主引用，不能猜测其主页。',
+             'no_new_comments':'扩大滚动加载后没有取得新评论，无法确认下一页；不会重复报告已读评论。',
+             'invalid_count':'评论每次1..30条，主页标题每次1..20条；样本游标为0..100。',
+             'invalid_image_range':'图片从原帖1起编号，每次1..4张。',
              'cooldown': '小红书读取正在执行或冷却中，请稍后再试；不会并发重复请求。',
              'login_or_rate_limit': '小红书登录、访问限制或限流阻止了读取，已冷却五分钟，请先检查登录状态。',
              'missing_share_token': '链接缺少访问参数，请重新复制完整分享链接。',

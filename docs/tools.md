@@ -1236,3 +1236,5 @@ an administrator updates the server-owned manifest.
 ### Brief 253.5：低存在感喝酒
 
 `drink_with_user(action=sip|toast|pour|refuse, drink?)` 属于 info，仅 Path C 当前 owner 私聊明确提起喝酒时可见；Path A 不探测。角色卡 `presence_ext.drinking: "no"` 拒绝，强度过高拒绝续杯。per-char runtime/drinking 状态仅虚构体感 0–3，每小时衰减 1，不是生理 BAC，不写长期记忆；不存酒名。
+
+小红书续读工具已接入同一控制面，具体统计、缓存、限额及远端分页边界见 [续读合同](xiaohongshu-continuation.md)。
