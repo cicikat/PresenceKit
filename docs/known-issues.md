@@ -8,6 +8,32 @@ current：工具 receipt 关联真实 owner 回合；历史使用 ledger epoch�
 
 # docs/known-issues.md — 已知问题与技术债
 
+## 屏幕识图详细模式与细节回查（2026-10-07，工单 C，roadmap）
+
+静态核对：B（`f642735`）已在当前 main，图像连接的显式 `is_local` 标记与管理面已实现；
+C1/C2 均未实现。施工与验收以 [原工单 C](work-orders/perception-prompt-and-presence.md#工单-c屏幕识图详细模式限本地模型-细节回查工具)
+及该文档「零、约束 1、2、3」为准。
+
+- C1：`core/perception/vlm_client.py` 仍只有简略 prompt、caption 上限 120 字与 `max_tokens=400`，
+  没有消费 `is_local` 的详细模式。应先独立提交：只对实际调用的 screen 连接以 `is_local is True`
+  放行，主连接与命名 fallback 分别判断；标记缺失或非本地时保持简略模式。详细 prompt 与独立上限
+  需匹配，保留 scene/activity 枚举校验，强化敏感判定与禁止转述屏幕具体文字。
+- C2：尚无屏幕详细描述档案、指纹、TTL、缓存回查工具或对应只读观测。C1 后独立施工：
+  档案路径经 `sandbox.get_paths()`；tool result 与 `10.8_recent_tool_results` 只留短摘要、指纹和
+  回查提示；工具注册含 examples/keywords，观测使用窄 scope。详细内容不得进入 event_log、
+  episodic 或 visual_trace_log；保持 `echo_event_log=False` 与 action_trace 内容省略。
+- 留存边界待确认：`retain_result` 仍仅在 `origin == 'autonomy_loop'` 执行；该限制由
+  `d2a128e` 引入，现有视觉契约与该提交尚不足以证明它是专门的隐私设计或遗漏。
+  C2 开工前进一步核对设计与历史，不直接扩大聊天路径留存；若确属有意设计，回查仅覆盖 autonomy。
+
+优先级：可排期的体验/能力缺口，当前未发现由此引入的隐私回归或聊天阻断；简略观察仍可用，
+`sensitive` 命中仍只返回状态，屏幕工具不回流 event_log，动作摘要仍省略内容。本次只登记，
+没有开启详细输出或新增留存。仅完成源码与历史核对，未做真实截屏/模型验收。
+
+后续验收必须覆盖本地主连接、非本地主连接、非本地 fallback、敏感命中、短摘要投影、
+详细内容不回流、按指纹缓存回查与 TTL 过期；同步 visual-perception/tools/prompt-layers/
+feature-control-surface 文档。已知两个 phone-vision 残留 UI 断言失败不属于本单，不顺手修复。
+
 ## 个人微信 reference transport（2026-10-07，268，observe / open）
 
 observe：真实已登录 WeChatPadPro REST/WS 版本兼容、微信到达、跨端记忆延续与重连验收
