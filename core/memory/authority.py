@@ -80,6 +80,7 @@ LAYER_AUTHORITY: dict[str, dict] = {
     "10.6_pending_material": _e("material", "system"),
     "10.7_recent_material": _e("material", "system"),
     "10.8_recent_tool_results": _e("tool", "system"),
+    "10.9_pinned_tool_results": _e("tool_result_pins", _AMB),
     "12_user_message": _e("user_message", "system"),
 }
 

@@ -20,6 +20,8 @@ loopback（127.0.0.1 / localhost / ::1）vision 连接另有强制直连，见�
 
 ## 中转站工具 schema 兼容（工单 B4）
 
+非字符串 `enum` 在统一协议出口移入参数说明，保留 integer/number/boolean 等原类型；本地按原 schema 严格校验允许值。避免严格 Gemini 中转把数字枚举解析为字符串时拒绝整次请求。三协议及嵌套结构共用此转换，无新增运营设置。
+
 三条协议路径（chat_completions / responses / anthropic_messages）的工具定义统一经 `core/llm_protocol.py::portable_tool_spec` 清洗，规则见 `docs/tools.md`「Provider 兼容层」。严格中转站对空 `properties: {}` 报错时，可在 preset 上设 `tool_empty_params_placeholder: true`，给无参工具注入可选占位参数 `_noop`（执行前自动丢弃）；默认关闭。
 
 ## Chat Completions 工具续轮白名单（2026-09-15）

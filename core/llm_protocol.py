@@ -651,6 +651,15 @@ def _portable_tool_schema(schema):
     if not isinstance(schema, dict):
         return deepcopy(schema)
     result = deepcopy(schema)
+    enum = result.get("enum")
+    if isinstance(enum, list) and any(not isinstance(value, str) for value in enum):
+        # Gemini-compatible relays decode enum as repeated string even when the
+        # parameter itself is numeric. Keep its JSON type and describe choices;
+        # execute still checks the unchanged original schema's exact enum.
+        result.pop("enum")
+        choices = json.dumps(enum, ensure_ascii=False, separators=(",", ":"))
+        description = str(result.get("description") or "").strip()
+        result["description"] = f"{description} Allowed JSON values: {choices}.".strip()
     for key in ("properties", "$defs", "definitions", "patternProperties"):
         if isinstance(result.get(key), dict):
             result[key] = {name: _portable_tool_schema(value) for name, value in result[key].items()}

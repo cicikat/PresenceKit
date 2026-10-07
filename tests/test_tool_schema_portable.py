@@ -52,6 +52,8 @@ def _extra_tools():
 
 def _walk(schema, path="$", top=True):
     if isinstance(schema, dict):
+        if "enum" in schema:
+            assert all(isinstance(value, str) for value in schema["enum"]), path
         for key in schema:
             assert key not in BANNED, f"{path}.{key}"
         if schema.get("type") == "object" and not top:
@@ -108,6 +110,25 @@ def test_wire_name_maps_back_to_internal():
     assert wire != internal and NAME_RE.match(wire)
     assert lp.internal_tool_name(wire) == internal
     assert lp.wire_tool_name("ok_name-1") == "ok_name-1"
+
+
+def test_non_string_enum_keeps_type_and_local_validation():
+    schema = {"type": "object", "properties": {
+        "depth": {"type": "integer", "enum": [1, 2]},
+        "items": {"type": "array", "items": {"type": "boolean", "enum": [True]}},
+        "mode": {"type": "string", "enum": ["a", "b"]},
+    }}
+    tool = [{"type": "function", "function": {"name": "enum_test", "description": "test", "parameters": schema}}]
+    for _, items in _outputs(tool):
+        params = items[0][2]
+        assert params["properties"]["depth"]["type"] == "integer"
+        assert "[1,2]" in params["properties"]["depth"]["description"]
+        assert params["properties"]["items"]["items"]["type"] == "boolean"
+        assert params["properties"]["mode"]["enum"] == ["a", "b"]
+        _walk(params)
+    assert schema["properties"]["depth"]["enum"] == [1, 2]
+    assert td._schema_errors(1, schema["properties"]["depth"], "depth") == []
+    assert td._schema_errors(3, schema["properties"]["depth"], "depth")
 
 
 def test_bare_object_downgraded_and_args_coerced():
