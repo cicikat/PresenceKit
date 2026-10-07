@@ -949,8 +949,9 @@ async function saveEventShadowRecallSettings() {
 let _mrData = { presets: {}, routing_profiles: {}, fallback_routes: {}, routing_effective: {}, active_routing: 'default', default_preset: '' };
 let _mrEditingPresetName = null;
 let _mrEditingProfileName = null;
-const MR_CATEGORIES = ['chat', 'intent', 'probe', 'summary', 'detect_emotion', 'consolidation', 'perform', 'monologue', 'sensor_judge', 'ime_judge', 'scenario_reconcile', 'event_edge_proposer', 'rpg_kp'];
+const MR_CATEGORIES = ['chat', 'intent', 'probe', 'summary', 'detect_emotion', 'consolidation', 'perform', 'monologue', 'sensor_judge', 'ime_judge', 'scenario_reconcile', 'event_edge_proposer', 'rpg_kp', 'food_extract'];
 const MR_CATEGORY_DESC = {
+  food_extract: '饮食事实抽取：仅处理用户明确评价与实际吃过事件；建议轻量模型，未配置沿用默认模型路由。20秒超时，零 SDK 重试。',
   ime_judge: 'IME 活动和有价值线索判断；可选轻量模型，未配置时沿用 sensor_judge / intent / chat',
   sensor_judge: '后台 sensor 裁决；未配置时沿用 intent / chat。短超时、零 SDK 重试。',
   scenario_reconcile: 'Scenario assistant-turn semantic stage reconciliation; conservative background call.',

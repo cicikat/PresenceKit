@@ -921,6 +921,11 @@ def build(
     from core.memory.user_profile import select_for_prompt
 
     _profile_selection = select_for_prompt(profile, tags)
+    from core.food_memory import taste_summary
+    _food_tastes = taste_summary(user_id, char_id)
+    if _food_tastes:
+        messages.append({"role": "system", "content": _food_tastes,
+                         "_layer": "5.2_food_tastes", "_drop_priority": 40})
     if _profile_selection["core_text"]:
         messages.append({
             "role": "system",

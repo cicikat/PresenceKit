@@ -1,5 +1,7 @@
 # docs/model-presets.md — 多模型 Preset 系统
 
+`food_extract` 是饮食证据抽取的独立路由，管理面可配置小模型，遵循既有 fallback。发送后执行，20秒总限与零 SDK 重试；见 [food-memory.md](food-memory.md)。
+
 ## 模型出站连接模式（2026-09-28）
 
 文本 preset 与视觉客户端共用 `proxy.model_connection_mode`。默认 `follow_global`，与旧

@@ -1106,6 +1106,20 @@ _TOOL_REGISTRY["read_xiaohongshu"] = {
     "trace_args": [],
 }
 
+from core.food_memory import read_food_preferences as _read_food_preferences
+
+_TOOL_REGISTRY["read_food_preferences"] = {
+    "func": _read_food_preferences, "category": "memory", "dangerous": False,
+    "description": "推荐吃什么、讨论外卖或核对旧口味时，先查用户实际饮食评价与已记录吃过次数。最新用户表达优先；未知不猜测，吃过多不代表喜欢，暂时不想吃不代表永久讨厌。",
+    "parameters": {"type": "object", "additionalProperties": False, "properties": {
+        "query": {"type": "string", "description": "食品或店家名称片段；留空查看最近清单"},
+        "limit": {"type": "integer", "minimum": 1, "maximum": 50, "description": "最多返回多少项目，默认20"},
+    }, "required": []},
+    "examples": ["推荐外卖前查一下用户最近实际评价", "核对用户是否还喜欢某道菜"],
+    "keywords": ["吃什么", "外卖", "饮食", "口味", "吃过次数"], "trace_args": ["query", "limit"],
+    "echo_event_log": False,
+}
+
 _TOOL_REGISTRY["backfill_diary"] = {
     "func": _backfill_diary_wrapper,
     "description": (
@@ -3001,7 +3015,7 @@ async def _execute_structured_impl(
             if is_group:
                 raise ValueError("device observation is owner-only")
             result = await func(user_id=user_id, char_id=char_id)
-        elif tool_name in {"read_life_records", "reread_image"}:
+        elif tool_name in {"read_life_records", "reread_image", "read_food_preferences"}:
             _require_memory_read_scope(user_id, char_id)
             result = await func(user_id=user_id, char_id=char_id, **tool_args)
         elif tool_name in _SCOPED_MEMORY_READ_TOOLS:

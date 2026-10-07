@@ -1,5 +1,7 @@
 # docs/memory.md — 记忆子系统设计
 
+饮食证据独立台账、明确覆盖及口味投影见 [food-memory.md](food-memory.md)。写入带 provenance，梦境/群聊/web echo/低置信度 ASR 不进入记录；迁移默认 dry-run。
+
 ## Character topic dossiers (Brief 258)
 
 The current storage, authority, grant, invalidation, coexistence and rollback

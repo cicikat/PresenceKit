@@ -1,5 +1,7 @@
 # docs/tools.md — 工具系统
 
+`read_food_preferences(query, limit)` 属于 memory 类，按权威 uid/char 读取实际饮食评价与已记录餐次。描述说明推荐前、遇到拒绝或评价改变时查询。写入走发送后独立证据抽取；见 [food-memory.md](food-memory.md)。
+
 聊天 Path C 现使用[分类按需加载](tool-discovery.md)：授权和预设过滤后，首轮只给
 `load_tools_<category>` 入口；加载后下一轮才提供该类完整 schema。发现不执行业务、
 不产生成功证据；native 与 relay 共用轮内暴露面、预算及原执行闸门。

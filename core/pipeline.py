@@ -2183,6 +2183,14 @@ class Pipeline:
         if pending_paths:
             _pending_perception.confirm_delivered(pending_paths)
 
+        if _critical_written and envelope.can_write_memory and not trigger_name and not is_group and not web_echo and not coplay_echo and not _dream_echo_for_source:
+            if not (audit_extras or {}).get("asr_low_confidence"):
+                try:
+                    from core.food_memory import enqueue as enqueue_food
+                    enqueue_food(user_id, char_id, _turn_id, raw_user_text if raw_user_text is not None else content)
+                except Exception as exc:
+                    logger.warning("[food_memory] enqueue failed: %s", type(exc).__name__)
+
         return {
             "turn_id": _turn_id,
             "critical_written": _critical_written,
@@ -2233,6 +2241,9 @@ class Pipeline:
         _turn_id = critical_result["turn_id"]
         _should_update_profile = critical_result["should_update_profile"]
         _profile_recent = critical_result["profile_recent"]
+
+        if envelope.can_write_memory and not trigger_name and not is_group:
+            slow_queue.enqueue("food_memory_update", {"uid": user_id, "char_id": char_id, "scope": scope_payload})
 
         if not trigger_name and envelope.can_write_memory:
             from core.memory.short_term import schedule_long_user_summaries
@@ -2732,6 +2743,13 @@ def register_slow_handlers() -> None:
     slow_queue.register_handler("storyline_evicted_input",  handler_storyline_evicted_input)
     slow_queue.register_handler("consistency_check",       _handler_consistency_check)
     slow_queue.register_handler("user_profile_update",     _handler_user_profile_update)
+    from core.food_memory import process_pending as process_food_pending
+
+    async def handle_food(payload):
+        scope = _get_scope_from_payload(payload, "food_memory_update")
+        await process_food_pending(scope.uid, scope.character_id)
+
+    slow_queue.register_handler("food_memory_update", handle_food)
     slow_queue.register_handler("trait_tracker_update",    _handler_trait_tracker_update)
     from core.post_process.toy_autogrow import handler_toy_autogrow
     slow_queue.register_handler("toy_autogrow",            handler_toy_autogrow)

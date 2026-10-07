@@ -84,6 +84,7 @@ model_presets:
                                           # 缺省按 default_preset → chat → 第一个 preset 解析，
                                           # 不是“未配置直接回落 chat”
       rpg_kp:         deepseek-default   # RPG Dream 中立裁决；缺省回落 chat
+      food_extract:   deepseek-default   # 饮食明确事实抽取，建议轻量模型；管理面可热更新
 
     claude-main:                   # 主对话走 Claude，杂活留 DS
       chat:           claude-sonnet
@@ -97,6 +98,7 @@ model_presets:
       perform:        deepseek-default
       monologue:      deepseek-default
       rpg_kp:         deepseek-default
+      food_extract:   deepseek-default
 
   # 失败兜底：按 profile/category 独立映射，不嵌进上面的 category 字符串。
   # 空/缺省 = 关闭。主路由用尽现有重试后最多换一次；不自动替你选模型。
@@ -195,6 +197,9 @@ proxy:
   http: http://127.0.0.1:7897
   https: http://127.0.0.1:7897
   model_connection_mode: follow_global  # follow_global / auto / direct / proxy；auto 按每次请求的 DNS 结果选路
+food_memory:
+  enabled: true  # 发送后抽取明确饮食事实；关闭恢复旧饮食概要，保留记录
+
 tools:
   read_xiaohongshu:
     enabled: false

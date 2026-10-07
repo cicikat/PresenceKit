@@ -61,3 +61,20 @@
   <p class="tools-status-note" data-i18n="tools.path_hint">Path A 对 QQ、desktop、mobile 统一生效；Path C 仅控制工具循环。角色卡可进一步覆盖这两个全局默认值。</p>
   <div id="tools-path-exposure"><div class="loading" data-i18n="common.loading">加载中...</div></div>
 </div>
+<section class="card">
+  <h3 data-i18n="food.title">吃食清单与口味记录</h3>
+  <p data-i18n="food.hint">默认开启。只记录用户实际评价和明确吃过事件，禁止推测。关闭后停止抽取并恢复旧饮食概要；既有清单保留。轻量模型在“模型路由 → food_extract”选择。</p>
+  <label><input id="food-enabled" type="checkbox"><span data-i18n="food.enabled">自动记录明确饮食事实</span></label>
+  <button class="btn btn-primary" data-action="saveFoodSettings" data-i18n="common.save">保存</button>
+  <p id="food-status" role="status"></p>
+  <label><span data-i18n="food.character">角色 ID</span><input id="food-char" type="text" maxlength="100"></label>
+  <label><span data-i18n="food.query">食品或店名</span><input id="food-query" type="text" maxlength="100"></label>
+  <button class="btn btn-ghost" data-action="loadFoodRecords" data-i18n="food.read">查看清单</button>
+  <button class="btn btn-ghost" data-action="retryFoodRecords" data-i18n="food.retry">重试未完成抽取</button>
+  <div id="food-records"></div>
+  <p data-i18n="food.correct_hint">更正需要填写食品名称和本人明确评价原话；新评价覆盖当前喜恶，历史证据保留。</p>
+  <input id="food-correct-name" maxlength="100" aria-label="食品名称">
+  <input id="food-correct-quote" maxlength="800" aria-label="评价原话">
+  <select id="food-correct-value"><option value="like" data-i18n="food.like">喜欢</option><option value="dislike" data-i18n="food.dislike">不喜欢</option></select>
+  <button class="btn btn-ghost" data-action="correctFoodRecord" data-i18n="food.correct">提交更正</button>
+</section>

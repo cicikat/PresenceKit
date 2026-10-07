@@ -604,6 +604,9 @@ def get_model_client(
         policy: dict[str, float | int] | None = dict(_FAILOVER_POLICY)
         from core.llm_failover import category_timeout
         policy["timeout_s"] = category_timeout(call_category)
+    elif call_category == "food_extract":
+        policy_name = "food_extract"
+        policy = {"timeout_s": 20, "max_retries": 0}
     elif call_category in {"sensor_judge", "ime_judge"}:
         policy_name = "sensor_judge"
         policy = _SENSOR_JUDGE_POLICY

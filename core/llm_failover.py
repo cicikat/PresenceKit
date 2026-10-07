@@ -40,6 +40,7 @@ CATEGORY_TIMEOUTS: dict[str, float] = {
     "rpg_kp": 30.0,
     "sensor_judge": 10.0,
     "ime_judge": 10.0,
+    "food_extract": 20.0,
 }
 DEFAULT_CALL_TIMEOUT = 90.0
 
@@ -47,6 +48,7 @@ DEFAULT_CALL_TIMEOUT = 90.0
 TOTAL_WALL: dict[str, float] = {
     "sensor_judge": 20.0,
     "ime_judge": 20.0,
+    "food_extract": 20.0,
     "monologue": 20.0,
     "detect_emotion": 20.0,
     "perform": 20.0,

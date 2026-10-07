@@ -1,5 +1,7 @@
 # docs/prompt-layers.md — Prompt 层结构
 
+`5.2_food_tastes`（drop_priority=40）只包含明确口味及证据时间；启用饮食清单时 profile 的 `pref.food` 不进常驻投影。具体食品由工具按需读；见 [food-memory.md](food-memory.md)。
+
 ## 资料接续（2026-09-13）
 
 `10.6_pending_material`（最多 3 条未读资料）、`10.7_recent_material`（1 条近期已读参考）、

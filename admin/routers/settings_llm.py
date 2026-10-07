@@ -812,6 +812,7 @@ async def get_model_presets(auth=Depends(require_scopes("admin"))):
                 "event_edge_proposer", profile_name=profile_name
             ),
             "rpg_kp": resolve_category_info("rpg_kp", profile_name=profile_name),
+            "food_extract": resolve_category_info("food_extract", profile_name=profile_name),
             "sensor_judge": resolve_category_info(
                 "sensor_judge", profile_name=profile_name
             ),
@@ -981,6 +982,7 @@ async def list_routing_profiles(auth=Depends(require_scopes("persona"))):
                     "scenario_reconcile": resolve_category_info("scenario_reconcile", profile_name=name),
                     "event_edge_proposer": resolve_category_info("event_edge_proposer", profile_name=name),
                     "rpg_kp": resolve_category_info("rpg_kp", profile_name=name),
+                    "food_extract": resolve_category_info("food_extract", profile_name=name),
                     "sensor_judge": resolve_category_info("sensor_judge", profile_name=name),
                     "monologue": resolve_category_info("monologue", profile_name=name),
                 },

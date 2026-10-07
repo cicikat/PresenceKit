@@ -124,11 +124,60 @@ function _renderToolsPage() {
 }
 
 async function loadToolsPage() {
+  loadFoodSettings();
   loadXiaohongshuSettings();
   const root = document.getElementById('tools-registry-list');
   if (root) root.innerHTML = `<div class="loading">${escapeHtml(t('common.loading', '加载中…'))}</div>`;
   try { _toolsControl = await api('GET', '/settings/tools'); _renderToolsPage(); }
   catch (error) { if (root) root.innerHTML = `<div class="empty">${escapeHtml(t('common.load_failed', '加载失败: {error}', { error: error.message }))}</div>`; }
+}
+
+async function loadFoodSettings() {
+  try {
+    const value = await api('GET', '/settings/food-memory');
+    document.getElementById('food-enabled').checked = value.enabled;
+    document.getElementById('food-status').textContent = `${value.effective ? '已生效' : '已关闭或路由未就绪'} · food_extract → ${value.route.effective_preset || '未配置'} (${value.route.source})`;
+  } catch (error) { document.getElementById('food-status').textContent = error.message; }
+}
+
+async function saveFoodSettings() {
+  try {
+    await api('PUT', '/settings/food-memory', {enabled: document.getElementById('food-enabled').checked});
+    await loadFoodSettings();
+  } catch (error) { document.getElementById('food-status').textContent = error.message; }
+}
+
+async function loadFoodRecords() {
+  const root = document.getElementById('food-records');
+  try {
+    const charId = document.getElementById('food-char').value.trim();
+    const query = document.getElementById('food-query').value.trim();
+    if (!charId) throw new Error('请填写角色 ID');
+    const value = await api('GET', `/observability/food-memory?char_id=${encodeURIComponent(charId)}&query=${encodeURIComponent(query)}`);
+    root.innerHTML = `<p>待处理 ${Number(value.pending)} · 失败 ${Number(value.failed)} · 项目 ${Number(value.total)}</p><p>${escapeHtml(value.count_semantics)}</p><pre>${escapeHtml(JSON.stringify({items: value.items, tastes: value.tastes}, null, 2))}</pre>`;
+  } catch (error) { root.textContent = error.message; }
+}
+
+async function retryFoodRecords() {
+  try {
+    const charId = document.getElementById('food-char').value.trim();
+    if (!charId) throw new Error('请填写角色 ID');
+    await api('POST', `/settings/food-memory/retry?char_id=${encodeURIComponent(charId)}`);
+    document.getElementById('food-status').textContent = '已排队重试；稍后刷新清单查看结果';
+  } catch (error) { document.getElementById('food-status').textContent = error.message; }
+}
+
+async function correctFoodRecord() {
+  try {
+    const charId = document.getElementById('food-char').value.trim();
+    if (!charId) throw new Error('请填写角色 ID');
+    await api('POST', `/settings/food-memory/correct?char_id=${encodeURIComponent(charId)}`, {
+      name: document.getElementById('food-correct-name').value.trim(),
+      quote: document.getElementById('food-correct-quote').value.trim(),
+      evaluation: document.getElementById('food-correct-value').value,
+    });
+    await loadFoodRecords();
+  } catch (error) { document.getElementById('food-status').textContent = error.message; }
 }
 
 function showXiaohongshuSettings(data) {

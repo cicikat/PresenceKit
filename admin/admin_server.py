@@ -107,6 +107,8 @@ from admin.routers import ime_drafts
 app.include_router(ime_drafts.router, tags=["IME 接收"])
 from admin.routers import life_records
 app.include_router(life_records.router, tags=["生活记录"])
+from admin.routers import food_memory
+app.include_router(food_memory.router, tags=["饮食记忆"])
 app.include_router(period.router, prefix="", tags=["经期输入"])
 app.include_router(garden.router,   prefix="/garden",   tags=["花园"])
 app.include_router(mood.router,     prefix="/mood",     tags=["情绪状态"])

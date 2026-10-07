@@ -189,12 +189,17 @@ def select_for_prompt(
     tagged_candidates: list[tuple[float, str, str]] = []
     recency_candidates: list[tuple[float, str, str]] = []
     archived_fact_count = 0
+    from core.food_memory import enabled as food_memory_enabled
+    hide_food = food_memory_enabled()
     for raw_fact in profile.get("important_facts") or []:
         norm = _normalize_fact(raw_fact)
         text = norm["text"].strip()
         if not text:
             continue
         fact_tag = norm["tag"]
+        if fact_tag == "pref.food" and hide_food:
+            archived_fact_count += 1
+            continue
         if _is_sensitive_for_prompt(text):
             sensitive_blocked += 1
             if not _is_recency_tag(fact_tag):
@@ -547,6 +552,11 @@ async def extract_and_update(user_id: str, recent_messages: list[dict], *, char_
         f"{i}: {_normalize_fact(f)['text']}" for i, f in enumerate(existing_facts)
     ) or "（当前没有已记录的 important_facts）"
 
+    from core.food_memory import enabled as food_memory_enabled
+    food_instruction = (
+        "具体食品、店家、点单、吃过次数、饮食评价由独立饮食记录链处理，不写入此概要，也不混入 habit/misc 等条目；一般口味也交由该链。\n"
+        if food_memory_enabled() else ""
+    )
     prompt_messages = [
         {
             "role": "system",
@@ -572,6 +582,7 @@ async def extract_and_update(user_id: str, recent_messages: list[dict], *, char_
                 "用户自己明确说出的长期观点/价值观 → stable；具体口味、在追的作品、手头项目、近期状态 → 对应 pref.*/status.project，不要塞进 stable。\n"
                 "ts 填写当前 Unix 时间戳（秒），用于判断事实新鲜度。\n"
                 "important_facts 只记录用户【自己明确说出】的、关于自己的稳定事实，例如：生活习惯、重要经历、身体状况、明确的偏好（喜欢/不喜欢）。\n"
+                f"{food_instruction}"
                 "不要根据语气或上下文推断用户的性格、心理状态或情感关系；不确定是否是用户原意的，不写。\n"
                 "绝对不要记录：用户测试AI功能的行为、单次询问某件事、临时状态、对话中的玩笑或表情包、已经在其他字段记录的信息。\n"
                 "没有提到的字段填 null。"

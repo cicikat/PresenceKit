@@ -1,5 +1,9 @@
 # 功能控制面事实清单（最后核对：2026-09-28 模型出站网络自适应）
 
+## 饮食清单（F4）
+
+工具页 `food_memory.enabled` 默认开启，`GET/PUT /settings/food-memory` 热更新并返回 effective state；关闭恢复原偏好投影。模型路由页提供 `food_extract`，使用标准 fallback，20秒调用、SDK零重试。清单观测、用户原话更正和失败重试在工具页；scope 与数据边界见 [food-memory.md](food-memory.md)。桌面/手机无新增设置。
+
 ## 个人微信（2026-10-07，268）
 
 `wechat.enabled=false`、`proactive_enabled=false` 默认关闭；关闭通道即停止微信收发。
