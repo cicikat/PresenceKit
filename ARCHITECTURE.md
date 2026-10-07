@@ -17,6 +17,13 @@ runtime；`letter_writer` 的 Task/副链产物迁移。Brief 229 本身仍是�
 
 ## 系统全貌
 
+工单 268 增加个人微信文本私聊 reference transport：第三方 REST/WS 仅在
+`integrations/wechat/` 解码，经 `integrations/wechat_transport.py` 规范合同、
+`core/wechat_service.py` owner 绑定及 `core/im_ingress.py` admission 进入现有 main 私聊
+编排。QQ 使用既有默认参数；微信注入 channel/envelope/reply sender，沿用同一 Pipeline、
+conversation_lock、turn_sink 和记忆桶。详见 [通道](docs/channels.md) 与
+[微信 reference transport](docs/wechat-reference-transport.md)。真实微信验收 observe。
+
 角色通过 QQ、桌宠和调度器三个入口进入同一条 pipeline，输出再交给通道层发送：
 
 ```

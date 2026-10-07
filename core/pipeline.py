@@ -981,7 +981,7 @@ class Pipeline:
             required_tool_names=required_tool_names,
         )
         _hardware_jobs_for_prompt = context.get("hardware_jobs_text", "") if hardware_jobs_text is None else hardware_jobs_text
-        if (channel in {'qq', 'desktop', 'mobile'} and context.get('_continuity_private')
+        if (channel in {'qq', 'wechat', 'desktop', 'mobile'} and context.get('_continuity_private')
                 and not context.get('stage_presence') and not context.get('stage_transcript')):
             from core.context_continuity import messages as continuity_messages
             _prompt_kwargs['continuity_messages'] = continuity_messages(user_id, _char_id)

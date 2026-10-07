@@ -8,6 +8,13 @@
 
 ## 1. 进程入口
 
+工单 268：`main._main_with_services` 创建并注册 `WechatService` 与 `WeChatChannel`，
+supervisor 即使默认关闭也由 startup 持有，以支持管理面热启停。配置变更停止旧 receiver、
+关闭旧 transport，并拒绝旧 generation 的排队输入/发送；worker 不被配置变更中途取消，
+已开始的 turn 仍按原顺序落盘，停用后的外发拒绝。进程关闭取消 supervisor 并 await receiver、
+worker 与 transport.close；管理 router 不单独创建运行时服务。服务队列和去重为瞬态内存，
+无关闭后补发或自动重放。
+
 Backend entry point：
 
 ```text

@@ -4,6 +4,13 @@ current：工具 receipt 关联真实 owner 回合；历史使用 ledger epoch�
 
 # docs/known-issues.md — 已知问题与技术债
 
+## 个人微信 reference transport（2026-10-07，268，observe / open）
+
+observe：真实已登录 WeChatPadPro REST/WS 版本兼容、微信到达、跨端记忆延续与重连验收
+尚未执行；当前只有公开 849 profile 与本地 fixture 证据。open：公共 Swagger 未完整定义
+同步/发送响应，部署版需提供脱敏样例核对；不识别的发送成功封套保守标 unknown。进程内
+去重不能跨重启保证 exactly-once，没有持久补发、微信媒体/群聊或账号登录 UI。
+
 ## TTS 卡死与长回复堵塞（工单 B3，2026-10-03，部分修复）
 
 GSV 调用无超时导致两把锁永久占用、锁让出被取消时归属错乱、模型缓存失败不失效。已修：每次 GSV 调用硬超时、超时后健康探测恢复、`_hold_local_resource` 显式持有标记（取消安全）、失败清模型缓存、`max_pending` 有界等待与丢弃、`/tts-config` 的 `runtime_status` 观测、`send_voice` 裸 except 改日志。B3 后仍复发的根因是锁顺序反转：多句合成在句间让出 `local_resource` 时仍持 `_GSV_SYNTHESIS_LOCK`，排队的第二个 TTS 请求会抢到 `local_resource` 再等 GSV 锁，两者永久互等，`pending` 满 4 后全部 `queue_full`。已修：本地 TTS 先排 `_LOCAL_TTS_QUEUE_LOCK` 再取共享锁，句间空档只让给视觉（`runtime_status.tts_queue_locked` 可观测）。open：同 turn 多段合并成单任务与「同 turn 新请求取代旧请求」未做；超时线程无法强杀，可能残留至 GSV 自行返回。

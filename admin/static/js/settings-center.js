@@ -64,6 +64,7 @@ function centerError(root, error) {
   root.textContent = t('settings_center.load_error','读取失败：{error}',{error:error.message});
 }
 function centerFeatureNames() { return {
+  wechat:t('wechat.title', '个人微信'),
   qq:t('settings_center.qq_channel',"QQ 通道"), mail:t('settings_center.mail_channel',"邮件通道"), visual_perception:t('settings_center.screen_perception',"视觉感知"), spend:t('settings_center.spending_intentions',"支出意向"), practice:t('settings_center.autonomous_practice',"自主练习"),
   action_trace:t('settings_center.action_trace',"行为记录"), self_management:t('settings_center.self_management',"自主管理 overlay（关=恢复全局默认）"), mcp_servers:t('settings_center.external_tool_services',"外部工具服务"), fs_access:t('settings_center.read_only_file_access',"文件只读访问"),
   workspace_access:t('settings_center.workspace_files',"工作区文件"), anti_collapse:t('settings_center.output_stability',"输出稳定性"), coplay:t('settings_center.coplay',"陪玩"), toy_autogrow:t('settings_center.autonomous_toy_growth',"玩具自主生长"),
@@ -85,6 +86,7 @@ const CENTER_DESTINATIONS = {
   sticker:['output-settings','observe-prompt'], browser:['agent-runtime-browser','observe-tools'],
 };
 const CENTER_FLAG_DESTINATIONS = {
+  wechat:['runtime-config','runtime-config'],
   qq:['feature-center','status'], mail:['mail-config','call-records'], visual_perception:['device-policy','observe-visual'],
   screen_observation:['device-policy','observe-visual'],
   mcp_servers:['mcp','observe-tools'], self_management:['autonomy-settings','observe-autonomy'], fs_access:['tools','observe-tools'],

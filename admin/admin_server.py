@@ -148,6 +148,8 @@ app.include_router(integrations.router,         prefix="", tags=["外部集成"]
 app.include_router(companion.router,            prefix="", tags=["External Companion"])
 app.include_router(control_center.router,        prefix="", tags=["控制中心"])
 app.include_router(user_data.router,             prefix="", tags=["用户数据"])
+from admin.routers import wechat
+app.include_router(wechat.router, prefix="", tags=["WeChat"])
 
 # ── 桌宠端 WebSocket 端点 ─────────────────────────────────────────────────────
 app.include_router(deployment.router, prefix="", tags=["deployment"])

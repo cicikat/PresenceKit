@@ -1,5 +1,17 @@
 # 功能控制面事实清单（最后核对：2026-09-28 模型出站网络自适应）
 
+## 个人微信（2026-10-07，268）
+
+`wechat.enabled=false`、`proactive_enabled=false` 默认关闭；关闭通道即停止微信收发。
+`transport=wechatpadpro`、`base_url`、`account_id`、`owner_sender_id` 的管理面入口是
+「高级运行配置与实验 → 个人微信」，`GET/PUT /settings/wechat`（admin）。所有可见配置
+校验后热更新；开关总览也提供 wechat.enabled。凭据来自进程环境
+`WECHAT_TRANSPORT_TOKEN`，管理面仅返回 credential_configured，不读写明文密钥。
+有效状态与配置开关分开，缺绑定/未启动/连接中/在线均有状态；
+`GET /observability/wechat`（state.read）只读返回计数、连接、队列深度与稳定错误码。
+后端启动拥有 supervisor，独立于 standalone/QQ；桌面和手机没有新增设置或协议。
+微信 reference profile 和真收发验收边界见 [wechat-reference-transport.md](wechat-reference-transport.md)。
+
 ## 模型出站网络自适应（2026-09-28，current）
 
 `proxy.model_connection_mode` 默认 `follow_global`，兼容旧配置：全局代理开则模型走

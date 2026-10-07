@@ -17,6 +17,7 @@ class SourceType(str, Enum):
     UNKNOWN        = "unknown"
     USER_CHAT      = "user_chat"
     QQ             = "qq"
+    WECHAT         = "wechat"
     INGEST         = "ingest"
     TRIGGER        = "trigger"
     SENSOR         = "sensor"
@@ -62,6 +63,16 @@ def stamp_qq() -> WriteEnvelope:
     """QQ owner 消息路径。"""
     return WriteEnvelope(
         source=SourceType.QQ,
+        can_write_memory=True,
+        can_affect_mood=True,
+        perception_sensitivity=PerceptionSensitivity.OPEN,
+    )
+
+
+def stamp_wechat() -> WriteEnvelope:
+    """Explicitly bound real owner input received through WeChat."""
+    return WriteEnvelope(
+        source=SourceType.WECHAT,
         can_write_memory=True,
         can_affect_mood=True,
         perception_sensitivity=PerceptionSensitivity.OPEN,

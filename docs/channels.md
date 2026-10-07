@@ -46,6 +46,34 @@ QQ 收消息 → main.handle_message → Pipeline → text_output.send() 直发 
 
 ## 输出通道
 
+### 个人微信（268，reference transport 已实现，真实 bridge 验收 observe）
+
+`integrations/wechat_transport.py` 是独立协议抽象，仅向上提供规范化消息和
+`accepted/rejected/unknown` 投递结果。首个实现位于 `integrations/wechat/padpro.py`，
+REST/WS wire 字段与 API 全部隔离在该实现；不能传入 shared ingress、Pipeline、memory 或
+turn_sink。公开 reference profile 为 849 API family，来源及版本边界见
+[wechat-reference-transport.md](wechat-reference-transport.md)。
+
+`core/wechat_service.py` 管理生命周期、显式 owner 绑定及有界队列，规范消息经
+`core/im_ingress.py` admission/去重/canonical UID lock 进入 `main.handle_message` 的共享
+私聊编排。该入口接受 per-turn `IMContext`（来源、信封、回信函数、地址）；QQ 默认调用形状、
+解析、媒体、群聊与分段发送均保留。现实回复仍先 `record_assistant_turn` 后可见发送，微信
+来源使用 `stamp_wechat` 与 `event_channel=wechat`，不给 QQ 媒体后处理传微信地址。
+
+仅接受配置中绑定的 owner 文本私聊、发送者与接收账号都匹配的事件；拒绝群聊、媒体、自发
+回显及超过 5 分钟的同步历史（未来时间容忍 30 秒）。外部身份不作为记忆 UID，canonical
+UID 沿用 `scheduler.owner_id`；入口事件 ID 使用命名空间摘要。64 项瞬态队列、2048 项/24h
+进程内去重缓存不提供跨重启 exactly-once 或持久补发。未知发送结果停止余下分段，不盲重发。
+
+`wechat.enabled` 与 `wechat.proactive_enabled` 默认均关闭；独立于 QQ/standalone。
+`channels/wechat.py` 只在已连接且主动下行开启时参与广播，仅发文本到绑定 owner，忽略设备
+动作与贴纸。管理面「高级运行配置与实验 → 个人微信」提供连接、绑定、开关、凭据配置状态及
+计数；`GET/PUT /settings/wechat` 为 admin，`GET /observability/wechat` 为 state.read，
+只读投影不暴露身份、连接 URL、凭据或正文。后端主进程启动 supervisor；保存配置立即同步，
+手改配置至多下一秒同步。未启动 supervisor 时显示 runtime_not_started，不假报在线。
+
+第三方 bridge 的登录、扫码与部署由 bridge 自己负责。本单不新增桌面/手机输入接口或协议字段。
+
 | 通道 | 文件 | 激活方式 | 发送方式 |
 |---|---|---|---|
 | QQ | `channels/qq.py` | `standalone_mode=false` 且 `qq.enabled=true` 时由 `main.py` 注册 | `core/qq_adapter.send_message()` → NapCat |

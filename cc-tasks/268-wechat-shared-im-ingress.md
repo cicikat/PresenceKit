@@ -1,6 +1,6 @@
 # 268 个人微信接入与最小 shared IM ingress
 
-状态：施工中。用户已确定个人微信 WeChatPadPro REST/WebSocket 为 reference transport；通过独立 `wechat_transport` abstraction 隔离第三方 API/字段，不进入 shared ingress、Pipeline、memory 或 turn_sink。第三方下载放在仓库外指定目录。
+状态：A/B 代码施工及隔离验收完成；C 实桥验收 not-run。用户已确定个人微信 WeChatPadPro REST/WebSocket 为 reference transport；通过独立 `wechat_transport` abstraction 隔离第三方 API/字段，不进入 shared ingress、Pipeline、memory 或 turn_sink。第三方下载放在仓库外指定目录。
 
 ## 目标与现状
 
@@ -35,12 +35,12 @@
 
 ### 268-B：真实微信 transport 与 output
 
-- [ ] 确定 bridge 项目、版本、协议文档、样例事件与发送结果；明确登录、回调/轮询、鉴权、重连及可用部署方式。此项是依赖，不猜测 API。
-- [ ] 实现 `integrations/wechat/` transport 与 `channels/wechat.py`，接入已抽取 ingress，验证绑定、拒绝、重投去重、结果未知及连接恢复。
-- [ ] 完成启动注册、独立开关、热更新控制面、脱敏观测和 no_outbound 防线；启用微信不要求启动 NapCat，不改变 QQ 的 standalone_mode 语义。
-- [ ] 检查 pretool、tool loop 中 channel/target 使用及 QQ 专属发送工具，明确微信能力暴露与拒绝策略，保持核心执行算法不变。
-- [ ] 更新 `config.example.yaml`、`docs/channels.md`、架构入口说明、`docs/feature-control-surface.md` 与实际受影响的三仓总账条目；不改桌面/手机协议。
-- [ ] 静态管理面按 AGENTS.md 更新版本并浏览器验收；相关测试与 diff 检查通过后独立 commit。
+- [x] 固定公开 849 API family 的 reference REST/WS 合同与上游 commit；真实部署版本及同步/发送响应样例仍待 C 核对。登录交由桥接，普通 key 来自进程环境。
+- [x] 实现独立 `integrations/wechat_transport.py`、`integrations/wechat/` reference implementation 和 `channels/wechat.py`；本地真实 WS/HTTP fixture 验证协议收发、绑定拒绝、去重、unknown 不重发、supervisor 启停。实桥重连 observe。
+- [x] 启动注册、独立开关、管理面热更新/effective state、脱敏观测和 no_outbound 接线；微信不依赖 NapCat。仅微信新任务参与新增关闭清理，QQ 生命周期不扩改。
+- [x] 复用已有统一 pretool/tool loop 许可合同；审计确认注册工具未直接依赖 qq_adapter，全局 QQ send callback 当前无执行消费者。QQ TTS/图片路径的 target_id 对微信为空；未增加微信媒体能力。Pipeline 仅将 wechat 纳入已有私聊 continuity channel 集合，未改核心算法；memory/turn_sink/tool loop 实现未改。
+- [x] 更新配置示例、通道、架构、控制面、生命周期、known-issues 和三仓总账；桌面/手机代码和协议未改。
+- [x] 静态版本 wechat-268-1；隔离管理面浏览器验收通过（保存、启用回读 runtime_not_started、停用 disabled、凭据缺失、中文/英文），未连接生产服务。相关测试 187 passed；差异/换行核对后独立提交。
 
 ### 268-C：真实收发验收与交付
 
@@ -48,13 +48,13 @@
 - [ ] 未绑定微信不进入业务链；重复事件仅一次生成；断连/超时有可观测结果，且不误投 QQ。
 - [ ] QQ 私聊、群聊 @、媒体、guard、工具确认、tool loop、分段和主动下行回归；同时输入 QQ/微信/desktop/mobile 不并行写同 owner 的关键轮次。
 - [ ] 微信默认关闭时系统维持现状；关闭/重新开启不遗留连接，主动下行未开启不广播。
-- [ ] 真实 bridge、微信收发、管理面浏览器分别记录 pass / partial / not-run；fixture 与静态测试不能替代真微信验收。实际缺口才记 known-issues。
+- [x] 真实 bridge/微信收发 not-run；隔离管理面浏览器 pass；QQ/微信 business fixture pass；真实四端并发 observe。未配置或部署桥接，没有扫码、外发、生产配置/数据变更。
 
 ## 验证入口
 
 复用 `tests/test_r1d_qq_reality_reply_adapter.py`、`tests/test_r1b_qq_convergence_audit.py`、`tests/test_qq_tool_reply_chain.py`、`tests/test_qq_fast_path_tool_loop.py`、`tests/test_qq_dream_guard.py`、`tests/test_fix08_qq_trigger_segmented_send.py`、`tests/test_fix09_group_at_detection_and_isolation.py`、`tests/test_mark_user_active_owner_guard.py`、`tests/test_pretool_router.py`、`tests/test_turn_sink.py`。按实际影响补 envelope、工具 schema、安全与生命周期既有测试，不默认跑全量。
 
-每单提交前核对 `git diff --check`，对所有暂存目标比较普通 stat 与 `--ignore-cr-at-eol` stat。只暂存本单文件。当前仅新增工单，未运行功能测试，未连接微信或修改生产数据。
+每单提交前核对 `git diff --check`，对所有暂存目标比较普通 stat 与 `--ignore-cr-at-eol` stat。只暂存本单文件。A 提交 `9b2288e`；B 187 项定向测试通过。额外静态拆分页检查有 2 个既有失败（HDS inline style 与 admin-inline-103/131 孤立 CSS，均由 HEAD 证实原已存在），未顺手修改；该批为 191 passed / 2 failed，后续新增测试另完成定向复验。浏览器截图存于 ignored 测试产物目录。
 
 ## 删除 brief 候选（本次不执行）
 

@@ -6,6 +6,8 @@ by the application owner; no adapter or network API is imported here.
 from __future__ import annotations
 
 import time
+import hashlib
+import json
 from collections import OrderedDict
 from dataclasses import dataclass, replace
 from typing import Awaitable, Callable
@@ -74,6 +76,8 @@ class IMIngress:
                 "content": message.text,
                 "sender_name": message.canonical_uid,
                 "timestamp": message.timestamp,
-                "event_id": ":".join(key),
+                "event_id": message.channel + ":" + hashlib.sha256(
+                    json.dumps(key, ensure_ascii=False).encode("utf-8")
+                ).hexdigest(),
             }, ingress=replace(context, lock_owned=True))
         return True

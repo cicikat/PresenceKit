@@ -1,7 +1,38 @@
 function loadRuntimeConfig() {
+  loadWechatSettings();
   loadEventShadowRecallSettings();
   loadStateAuthoritySettings();
   loadEventContextObserverSettings();
+}
+
+async function loadWechatSettings() {
+  const root = document.getElementById('wechat-state');
+  if (!root) return;
+  try {
+    const s = await api('GET', '/settings/wechat');
+    document.getElementById('wechat-enabled').checked = s.enabled;
+    document.getElementById('wechat-proactive').checked = s.proactive_enabled;
+    ['base_url', 'account_id', 'owner_sender_id'].forEach(key => {
+      document.getElementById('wechat-' + key).value = s[key] || '';
+    });
+    root.textContent = `${s.effective_state} · credential: ${s.credential_configured ? 'configured' : 'missing'} · ${s.last_error || ''}`;
+    document.getElementById('wechat-counters').textContent = JSON.stringify(s.counters || {}, null, 2);
+  } catch (error) { root.textContent = error.message; }
+}
+
+async function saveWechatSettings() {
+  try {
+    await api('PUT', '/settings/wechat', {
+      enabled: document.getElementById('wechat-enabled').checked,
+      proactive_enabled: document.getElementById('wechat-proactive').checked,
+      transport: 'wechatpadpro',
+      base_url: document.getElementById('wechat-base_url').value.trim(),
+      account_id: document.getElementById('wechat-account_id').value.trim(),
+      owner_sender_id: document.getElementById('wechat-owner_sender_id').value.trim(),
+    });
+    toast(t('common.saved', '已保存'), 'ok');
+    await loadWechatSettings();
+  } catch (error) { toast(error.message, 'err'); }
 }
 
 function _stateAuthorityList(id) {

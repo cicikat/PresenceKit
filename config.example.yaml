@@ -142,6 +142,15 @@ vision:
 #   model: glm-4.6v      # 只覆盖需要的字段即可
 #   api_key: YOUR_KEY
 #   base_url: https://...
+wechat:
+  enabled: false  # 独立于 QQ / standalone_mode，管理面可热更新
+  proactive_enabled: false  # 默认不接收跨端广播
+  transport: wechatpadpro
+  base_url: ""  # 桥接 REST 根地址（可含版本前缀），不得含凭据或 query
+  account_id: ""  # 桥接已登录账号的外部身份
+  owner_sender_id: ""  # 显式绑定到 scheduler.owner_id 的个人微信发送者
+  # 桥接登录与扫码由桥接自行管理；进程环境 WECHAT_TRANSPORT_TOKEN 提供普通账号 key。
+
 qq:
   enabled: false  # 需要 QQ 机器人再开，并配置 NapCat；纯桌宠用户保持关闭即可
   host: 127.0.0.1

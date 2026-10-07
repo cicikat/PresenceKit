@@ -20,6 +20,7 @@ FLAGS = {
     "ime_ingest": ("ime_ingest", "enabled", "IME 草稿与编辑事件接收"),
     "ime_awareness": ("ime_awareness", "enabled", "IME 活动理解与主动关心"),
     "qq":   ("qq",   "enabled", "QQ 通道"),
+    "wechat": ("wechat", "enabled", "个人微信通道"),
     "mail": ("mail", "enabled", "邮件通道"),
     "visual_perception": ("visual_perception", "enabled", "视觉感知"),
     "spend": ("spend", "enabled", "支出意向"),
@@ -74,7 +75,11 @@ async def get_feature_flags(auth=Depends(require_scopes("admin"))):
             "apply_mode": "restart_required" if name in RESTART_REQUIRED_FLAGS else "hot_reload",
             "restart_required": name in RESTART_REQUIRED_FLAGS,
         }
-        if name == "screen_observation":
+        if name == "wechat":
+            from admin.routers.wechat import operational_state
+            item["effective_state"] = operational_state(enabled=enabled)["effective_state"]
+            item["description"] = "默认关闭；需绑定 owner 和连接凭据，关闭即停止微信收发；详见运行配置"
+        elif name == "screen_observation":
             from core.perception.screen_observation import state
             snapshot = state()
             item["effective_state"] = "ready" if snapshot["enabled"] and snapshot["active_device"] else "no-active-device" if snapshot["enabled"] else "disabled"
@@ -132,6 +137,11 @@ async def update_feature_flags(body: FeatureFlagsUpdate, auth=Depends(require_sc
     write_config_file(CONFIG_FILE, full_cfg)
     from core import config_loader
     config_loader.reload_config()
+    if "wechat" in body.flags:
+        from core.wechat_service import get_service
+        service = get_service()
+        if service:
+            await service.apply()
     if "mcp_servers" in body.flags:
         from core import mcp_client
         await mcp_client.sync_mcp_servers()

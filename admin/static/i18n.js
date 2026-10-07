@@ -7,6 +7,14 @@
 
   const I18N = {
     'zh-CN': {
+      'wechat.title': '个人微信',
+      'wechat.connection_settings': '连接与绑定设置',
+      'wechat.hint': '默认关闭，关闭即停止微信收发。首期仅绑定 owner 的文本私聊；主动下行默认关闭。登录由桥接管理，凭据使用后端进程环境 WECHAT_TRANSPORT_TOKEN，页面不显示密钥。',
+      'wechat.enable': '启用微信通道',
+      'wechat.proactive': '允许主动及跨端文本下行',
+      'wechat.url': '桥接 REST 根地址',
+      'wechat.account': '桥接登录账号 ID',
+      'wechat.owner': '绑定 owner 的微信发送者 ID',
       'scheduler.global_owner': '所有者资料（全局）',
       'routing.discover_models': '读取可用模型',
       'routing.discover_available': '获取可用模型',
@@ -3257,6 +3265,14 @@
       'owner_turn.deploy.diary': 'Diary sync',
     },
     en: {
+      'wechat.title': 'Personal WeChat',
+      'wechat.connection_settings': 'Connection and owner binding',
+      'wechat.hint': 'Disabled by default. Disabling stops WeChat delivery. Bound owner text messages only; proactive delivery is off by default. Login is managed by the bridge. Set WECHAT_TRANSPORT_TOKEN in the backend environment; credentials are never displayed here.',
+      'wechat.enable': 'Enable WeChat',
+      'wechat.proactive': 'Allow proactive and cross-channel text delivery',
+      'wechat.url': 'Bridge REST base URL',
+      'wechat.account': 'Logged-in bridge account ID',
+      'wechat.owner': 'WeChat sender ID bound to the owner',
       'scheduler.global_owner': 'Global owner profile',
       'routing.discover_models': 'Fetch available models',
       'routing.discover_available': 'Fetch available models',

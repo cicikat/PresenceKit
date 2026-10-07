@@ -248,6 +248,7 @@ def test_a3b_create_task_calls_are_startup_only():
         "_life_records_worker",
             "_stt_local.warmup_async",
             "start_hds_local",
+            "_wechat_service.run",
     }
     violations: list[str] = []
     for i, ln in enumerate(lines, 1):

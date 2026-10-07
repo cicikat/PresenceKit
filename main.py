@@ -961,6 +961,13 @@ async def _main_with_services():
     _device_channel = DeviceChannel()
     _reg_channel(_device_channel)
 
+    # Startup owns the service even when disabled, so admin hot enable does not
+    # need a restart or implicitly start NapCat in standalone mode.
+    from core.wechat_service import install_service
+    from channels.wechat import WeChatChannel
+    _wechat_service = install_service(handle_message)
+    _reg_channel(WeChatChannel(_wechat_service))
+
     if qq_runtime_enabled:
         from core import tool_dispatcher, qq_adapter, message_queue
         from channels.qq import QQChannel
@@ -993,6 +1000,8 @@ async def _main_with_services():
         logger.warning("Dream Reality continuation recovery failed to start", exc_info=True)
 
     tasks = []
+    _wechat_task = asyncio.create_task(_run_long_lived_service("wechat", _wechat_service.run()))
+    tasks.append(_wechat_task)
     if cfg.get("hds_local", {}).get("enabled") is True:
         from admin.hds_server import start as start_hds_local
         tasks.append(asyncio.create_task(_run_long_lived_service("hds_local", start_hds_local())))
@@ -1028,6 +1037,8 @@ async def _main_with_services():
         log_error("main", e)
         logger.error(f"主循环异常退出: {e}")
     finally:
+        _wechat_task.cancel()
+        await asyncio.gather(_wechat_task, return_exceptions=True)
         life_records_task.cancel()
         await asyncio.gather(life_records_task, return_exceptions=True)
         from core.dream.scenario_reconciler import shutdown as _shutdown_scenario_reconciler
