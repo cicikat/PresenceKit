@@ -1,5 +1,7 @@
 # docs/tools.md — 工具系统
 
+收藏工具 `save_quote/search_quotes/read_quote/write_quote_note` 属于 memory 类，复用精确消息锚点，保存双方原话并独立更新笔记。说明及观测权限见 [quote-notebook.md](quote-notebook.md)。
+
 `read_message_context(message_id, direction, count)` 精确展开引用上/下最多10条保留现实消息，带作者和完整时间；缺失、遗忘、跨作用域锚点不可用，不做同文匹配。详见 [backend-integration.md](backend-integration.md#引用回复reply_to)。
 
 `read_food_preferences(query, limit)` 属于 memory 类，按权威 uid/char 读取实际饮食评价与已记录餐次。描述说明推荐前、遇到拒绝或评价改变时查询。写入走发送后独立证据抽取；见 [food-memory.md](food-memory.md)。

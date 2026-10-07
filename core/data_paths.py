@@ -641,6 +641,9 @@ class DataPaths:
     def food_memory_db(self) -> Path:
         return self._p("runtime", "food_memory", "records.sqlite3")
 
+    def quote_notebook_db(self) -> Path:
+        return self._p('runtime', 'quote_notebook', 'records.sqlite3')
+
     def mail_execution_log(self) -> Path:
         """Sanitized forensic outcomes for scheduler-driven character letters."""
         return self._p("runtime", "observability", "mail_executions.jsonl")

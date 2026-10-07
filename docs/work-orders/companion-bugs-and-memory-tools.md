@@ -107,7 +107,7 @@
 | B2 | 实现完成，真实模型 observe | grounding/discovery 54 项通过；tool loop 等定向合计 110 项通过；既有 self-management 单项失败在原 pipeline 复现 | 本单提交 |
 | F3 | 未施工 | 服务能力待核查 | — |
 | F4 | 实现完成，真实模型 observe | 定向271项通过；隔离浏览器路由/开关/更正通过；真实历史未迁移 | 本单提交 |
-| F5 | 未施工 | 未运行 | — |
+| F5 | 实现完成，真实模型 observe | 双方收藏/来源遗忘/独立笔记/隔离回归；隔离浏览器打开及笔记刷新通过 | 本单提交 |
 | F6 | desktop/mobile 实现，QQ open，实机 observe | 后端定向29项；桌面 build；手机 analyze及恢复30项通过 | 本单提交 |
 | F7 | 未施工 | 未运行 | — |
 

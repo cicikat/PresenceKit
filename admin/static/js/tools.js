@@ -1,4 +1,48 @@
 let _toolsControl = null;
+let _openedNotebookQuote = '';
+let _openedNotebookScope = '';
+function notebookAuthor(author) { return author === 'user' ? t('quotes.user', '用户') : t('quotes.character', '角色'); }
+
+function notebookScope() {
+  const charId = document.getElementById('quotes-char').value.trim();
+  if (!charId) throw Error(t('quotes.need_char', '请填写角色 ID'));
+  return `char_id=${encodeURIComponent(charId)}`;
+}
+
+async function loadQuoteNotebook() {
+  try {
+    const data = await api('GET', `/observability/quotes?${notebookScope()}&query=${encodeURIComponent(document.getElementById('quotes-query').value)}`);
+    _openedNotebookQuote = '';
+    document.getElementById('quotes-choice').innerHTML = data.items.map(item => `<option value="${escapeHtml(item.quote_id)}">${escapeHtml(notebookAuthor(item.author))} · ${escapeHtml(new Date(item.message_ts * 1000).toLocaleString())} · ${escapeHtml(item.preview)}</option>`).join('');
+    document.getElementById('quotes-detail').textContent = `${data.total} ${t('quotes.count', '条收藏（本页最多20条）')}`;
+    document.getElementById('quotes-note').value = '';
+  } catch (error) { document.getElementById('quotes-detail').textContent = error.message; }
+}
+
+async function openNotebookQuote() {
+  try {
+    const id = document.getElementById('quotes-choice').value;
+    if (!id) return;
+    const data = await api('GET', `/observability/quotes/${encodeURIComponent(id)}?${notebookScope()}`);
+    _openedNotebookQuote = id;
+    _openedNotebookScope = notebookScope();
+    const memories = data.related_memories.map(item => `<p>${escapeHtml(new Date(item.occurred_at * 1000).toLocaleString())} · ${escapeHtml(item.text)}</p>`).join('') || `<p>${escapeHtml(t('quotes.no_related', '未关联召回'))}</p>`;
+    document.getElementById('quotes-detail').innerHTML = `<p>${escapeHtml(notebookAuthor(data.author))} · ${escapeHtml(new Date(data.message_ts * 1000).toLocaleString())}</p><blockquote style="white-space:pre-wrap">${escapeHtml(data.text)}</blockquote><p>${escapeHtml(t('quotes.saved_at', '收藏时间'))}: ${escapeHtml(new Date(data.saved_at * 1000).toLocaleString())}</p><p>${escapeHtml(data.source_available ? t('quotes.source_ok', '原消息仍可查询') : t('quotes.source_missing', '原消息已不可用；此处为收藏快照'))}</p>${memories}`;
+    document.getElementById('quotes-note').value = data.note;
+  } catch (error) { document.getElementById('quotes-detail').textContent = error.message; }
+}
+
+async function saveNotebookNote() {
+  if (!_openedNotebookQuote) return;
+  try { if (notebookScope() !== _openedNotebookScope) throw Error(t('quotes.scope_changed', '角色已切换，请重新打开收藏')); await api('PUT', `/settings/quotes/${encodeURIComponent(_openedNotebookQuote)}/note?${_openedNotebookScope}`, { note: document.getElementById('quotes-note').value }); await openNotebookQuote(); }
+  catch (error) { document.getElementById('quotes-detail').textContent = error.message; }
+}
+
+async function deleteNotebookQuote() {
+  if (!_openedNotebookQuote || !confirm(t('quotes.confirm_delete', '删除这条收藏及笔记？'))) return;
+  try { if (notebookScope() !== _openedNotebookScope) throw Error(t('quotes.scope_changed', '角色已切换，请重新打开收藏')); await api('DELETE', `/settings/quotes/${encodeURIComponent(_openedNotebookQuote)}?${_openedNotebookScope}`); await loadQuoteNotebook(); }
+  catch (error) { document.getElementById('quotes-detail').textContent = error.message; }
+}
 let _toolsTargetModel = '';
 const _KNOWN_TOOL_CATEGORIES = ['info', 'self', 'schedule', 'life', 'desktop', 'memory', 'system', 'fs', 'phone_control', 'self_management', 'mcp'];
 

@@ -2,6 +2,8 @@
 
 ## 饮食清单（F4）
 
+工具页增加收藏小本本的只读检索/详情（memory.read）及用户笔记更正、删除（admin）；无新开关，见 [quote-notebook.md](quote-notebook.md)。
+
 工具页 `food_memory.enabled` 默认开启，`GET/PUT /settings/food-memory` 热更新并返回 effective state；关闭恢复原偏好投影。模型路由页提供 `food_extract`，使用标准 fallback，20秒调用、SDK零重试。清单观测、用户原话更正和失败重试在工具页；scope 与数据边界见 [food-memory.md](food-memory.md)。桌面/手机无新增设置。
 
 ## 个人微信（2026-10-07，268）

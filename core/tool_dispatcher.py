@@ -1134,6 +1134,23 @@ _TOOL_REGISTRY['read_message_context'] = {
     'echo_event_log': False,
 }
 
+from core import quote_notebook as _quote_notebook
+
+for _quote_tool, _quote_description, _quote_properties, _quote_required in (
+    ('save_quote', '收藏用户或角色已经入账的原话到小本本。先从引用、search_events或read_message_context获取精确message_id；当前尚未完成的回复不能收藏。保存日期、来源及最多3条相关召回快照，可写笔记。',
+     {'message_id': {'type':'string','description':'精确消息ID'}, 'note': {'type':'string','description':'角色笔记，最多2000字'},
+      'related_event_ids': {'type':'array','items':{'type':'string'},'description':'最多3条已查证相关记忆event_id，不填则无关联'}}, ['message_id']),
+    ('search_quotes', '搜索双方收藏的小本本，可以按原话或笔记检索，默认20项、最多50项；返回quote_id供打开和补笔记。',
+     {'query':{'type':'string','description':'搜索原话或笔记，留空查看最近收藏'},'limit':{'type':'integer','minimum':1,'maximum':50,'description':'条数，默认20'}}, []),
+    ('read_quote', '打开收藏原话、作者、原消息及收藏时间、当时相关召回与笔记。快照保留原话，源消息后来不可用会标注；不是当前状态证据。',
+     {'quote_id':{'type':'string','description':'收藏ID'}}, ['quote_id']),
+    ('write_quote_note', '为收藏补写或显式更新自己的笔记；不覆盖原话和收藏时关联，旧笔记留变更记录。',
+     {'quote_id':{'type':'string','description':'收藏ID'},'note':{'type':'string','description':'新笔记正文，最多2000字'}}, ['quote_id','note']),
+):
+    _TOOL_REGISTRY[_quote_tool] = {'func':getattr(_quote_notebook,_quote_tool),'category':'memory','dangerous':False,
+        'description':_quote_description,'parameters':{'type':'object','additionalProperties':False,'properties':_quote_properties,'required':_quote_required},
+        'examples':[_quote_description], 'keywords':['收藏','小本本','原话','笔记'], 'trace_args':list(_quote_properties),'echo_event_log':False}
+
 _TOOL_REGISTRY["backfill_diary"] = {
     "func": _backfill_diary_wrapper,
     "description": (
@@ -3029,7 +3046,7 @@ async def _execute_structured_impl(
             if is_group:
                 raise ValueError("device observation is owner-only")
             result = await func(user_id=user_id, char_id=char_id)
-        elif tool_name in {"read_life_records", "reread_image", "read_food_preferences", "read_message_context"}:
+        elif tool_name in {"read_life_records", "reread_image", "read_food_preferences", "read_message_context", "save_quote", "search_quotes", "read_quote", "write_quote_note"}:
             if is_group:
                 raise ValueError('owner memory tools are unavailable in group sessions')
             _require_memory_read_scope(user_id, char_id)

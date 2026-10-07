@@ -78,3 +78,16 @@
   <select id="food-correct-value"><option value="like" data-i18n="food.like">喜欢</option><option value="dislike" data-i18n="food.dislike">不喜欢</option></select>
   <button class="btn btn-ghost" data-action="correctFoodRecord" data-i18n="food.correct">提交更正</button>
 </section>
+<section class="card">
+  <h3 data-i18n="quotes.title">收藏小本本</h3>
+  <p data-i18n="quotes.hint">收藏双方原话，保留消息时间、收藏时间和当时相关召回；笔记可以更新，原话不会改写。</p>
+  <label><span data-i18n="food.character">角色 ID</span><input id="quotes-char" maxlength="100"></label>
+  <label><span data-i18n="quotes.query">搜索原话或笔记</span><input id="quotes-query" maxlength="200"></label>
+  <button class="btn btn-ghost" data-action="loadQuoteNotebook" data-i18n="quotes.search">查看收藏</button>
+  <select id="quotes-choice" aria-label="收藏条目" data-i18n-aria-label="quotes.entry"></select>
+  <button class="btn btn-ghost" data-action="openNotebookQuote" data-i18n="quotes.open">打开收藏</button>
+  <div id="quotes-detail" role="status"></div>
+  <label><span data-i18n="quotes.note">角色笔记</span><textarea id="quotes-note" maxlength="2000"></textarea></label>
+  <button class="btn btn-primary" data-action="saveNotebookNote" data-i18n="quotes.save_note">更新笔记</button>
+  <button class="btn btn-ghost" data-action="deleteNotebookQuote" data-i18n="quotes.delete">删除收藏</button>
+</section>

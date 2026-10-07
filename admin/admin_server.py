@@ -109,6 +109,8 @@ from admin.routers import life_records
 app.include_router(life_records.router, tags=["生活记录"])
 from admin.routers import food_memory
 app.include_router(food_memory.router, tags=["饮食记忆"])
+from admin.routers import quote_notebook
+app.include_router(quote_notebook.router, tags=['收藏小本本'])
 app.include_router(period.router, prefix="", tags=["经期输入"])
 app.include_router(garden.router,   prefix="/garden",   tags=["花园"])
 app.include_router(mood.router,     prefix="/mood",     tags=["情绪状态"])
