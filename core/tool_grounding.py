@@ -28,6 +28,7 @@ _TOOL_META_PHRASES = (
 )
 _DISCOVERY_PREFIX = "load_tools_"
 _DENSE_TOOL_NAME_THRESHOLD = 3
+_TOOL_LOADING_RE = re.compile(r"(?:正在)?加载(?:辅助|相关|所需|需要的)?工具(?:中|定义|列表)?[，,。\s]*(?:请稍[后候]|稍等|请等待|中)")
 
 
 def detect_tool_meta_leak(text: str, tool_names: "set[str] | frozenset[str]" = frozenset()) -> bool:
@@ -42,6 +43,9 @@ def detect_tool_meta_leak(text: str, tool_names: "set[str] | frozenset[str]" = f
     """
     if not text:
         return False
+    # Only a standalone progress announcement, not a user quote or discussion.
+    if _TOOL_LOADING_RE.match(text.strip()):
+        return True
     if any(phrase in text for phrase in _TOOL_META_PHRASES):
         return True
     if _DISCOVERY_PREFIX in text:

@@ -31,9 +31,10 @@ history 落盘，拦不住已发出的回复）：
 `code=tool_meta_leak`；重试仍泄漏另记 `tool_meta_leak_retry_failed`），经既有
 `GET /observability/runtime-signals`（`state.read`）读取，不含正文。
 
-未覆盖：Path C 用过工具后的强制收尾出口、流式直出出口目前不过该闸门（流式 token 已对用户可见，
-不能事后撤回）；这些出口是不带 tools 的收尾生成，理论上看不到工具目录，但**没有做过实测**，
-若出现泄漏再单独扩展。`tool_discovery.py` 的折叠描述文案本单未改（现有措辞已能被上述短语识别）。
+2026-10-07 B2：Path C 用过工具后的强制收尾和流式出口已补入发送前检查；流式收尾先收齐，
+因此该路径首字显示延后。新增独立“加载辅助工具中，请稍后”播报检测；用户引用此句不会按播报匹配。
+重试异常时已确认泄漏的原回复也不发送，返回失败提示，取代上表旧 fail-open 行为。
+`tool_discovery.py` 的折叠描述文案不变，权限和执行合同不变。
 xml_fallback 的工具暴露策略（`_build_xml_tool_desc()` 仍把 schema 描述拼进 system）本单未改，
 只在输出端兜底；`docs/model-presets.md` 因此无需变更。observe：未用真实 xml_fallback preset
 做端到端复现与回归，单测只覆盖检测函数与三个接入点。

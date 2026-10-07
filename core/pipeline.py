@@ -1166,8 +1166,7 @@ class Pipeline:
         工单 C1：发送前过滤闸门——模型把它在 system 消息里看到的工具目录/发现层
         描述当成了要讲给用户听的说明文（结论 3：不是系统误发工具结果，是模型
         复述元数据）。命中后静默重试一次，显式要求不得提及工具内部结构；仍命中
-        则走兜底话术，不把泄漏文本发给用户。fail-open：任何异常都返回原始 reply，
-        不阻断正常发送。
+        则走兜底话术，不把泄漏文本发给用户。重试失败时已确认泄漏的文本也不发送。
         """
         try:
             from core.tool_grounding import detect_tool_meta_leak
@@ -1197,7 +1196,8 @@ class Pipeline:
         except Exception as e:
             from core.error_handler import log_error
             log_error("pipeline._guard_tool_meta_leak", e)
-            return reply
+            from core.tool_grounding import detect_tool_meta_leak
+            return "刚才没有完成查询，请再试一次。" if detect_tool_meta_leak(reply) else reply
 
     def _check_stream_collapse(
         self, messages: list[dict], reply: str, *, char_id: str | None, user_id: str,
@@ -1955,10 +1955,6 @@ class Pipeline:
         loop_msgs[:] = _drop_relay_nudge(loop_msgs)
         loop_msgs.append({"role": "system", "content": _voice_reanchor(char_id)})
         if stream:
-            if successful_tool_call or not required_from_messages(loop_msgs):
-                return self.run_llm_stream(
-                    loop_msgs, char_id=char_id, is_proactive=is_proactive, user_id=uid,
-                )
             async def _grounded_stream():
                 _pieces: list[str] = []
                 async for _piece in self.run_llm_stream(
@@ -1971,16 +1967,22 @@ class Pipeline:
                     successful_tool_call=successful_tool_call,
                     char_id=char_id, is_proactive=is_proactive,
                 )
+                _guarded = await self._guard_tool_meta_leak(
+                    loop_msgs, _guarded, char_id=char_id, is_proactive=is_proactive,
+                )
                 if _guarded:
                     yield _guarded
             return _grounded_stream()
         final_text = await self.run_llm(
             loop_msgs, is_proactive=is_proactive, char_id=char_id,
         )
-        return await self._guard_unverified_claim(
+        final_text = await self._guard_unverified_claim(
             loop_msgs, strip_control_markers(final_text),
             successful_tool_call=successful_tool_call,
             char_id=char_id, is_proactive=is_proactive,
+        )
+        return await self._guard_tool_meta_leak(
+            loop_msgs, final_text, char_id=char_id, is_proactive=is_proactive,
         )
 
     # ──────────────────────────────────────────────────────────────────────────

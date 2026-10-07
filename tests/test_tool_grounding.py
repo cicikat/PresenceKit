@@ -181,6 +181,13 @@ def test_history_trace_is_not_current_result():
 
 # ── 工单 C1：工具 meta 文本泄漏检测 ──────────────────────────────────────────
 
+@pytest.mark.parametrize("text", ["加载辅助工具中，请稍后...", "正在加载相关工具，请稍候。"])
+def test_tool_loading_announcement_is_meta_leak(text):
+    from core.tool_grounding import detect_tool_meta_leak
+    assert detect_tool_meta_leak(text)
+    assert not detect_tool_meta_leak("你刚才说‘" + text + "’，是什么意思？")
+
+
 def test_detect_tool_meta_leak_matches_discovery_fixed_phrases():
     from core.tool_grounding import detect_tool_meta_leak
 
@@ -278,7 +285,7 @@ async def test_guard_tool_meta_leak_is_fail_open_on_retry_error(monkeypatch):
 
     monkeypatch.setattr("core.llm_client.chat", _boom)
     result = await pipeline._guard_tool_meta_leak([], _LEAKED)
-    assert result == _LEAKED  # 异常不阻断发送，保持原行为
+    assert result and result != _LEAKED
 
 
 @pytest.mark.asyncio

@@ -75,6 +75,22 @@ async def test_first_request_only_categories_then_selected_schema(harness):
 
 
 @pytest.mark.asyncio
+async def test_used_tool_stream_does_not_publish_loading_announcement(harness, monkeypatch):
+    script, requests, executions, run = harness
+    script.extend([turn(call("load_tools_info")), turn(call("web_search", {"query": "天气"})), turn(content="好了")])
+
+    async def leaking_stream(*args, **kwargs):
+        yield "加载辅助"
+        yield "工具中，请稍后..."
+
+    monkeypatch.setattr("core.pipeline.Pipeline.run_llm_stream", leaking_stream)
+    result = await run(stream=True)
+    visible = "".join([piece async for piece in result])
+    assert executions
+    assert visible == "自然回复"
+
+
+@pytest.mark.asyncio
 async def test_unloaded_and_same_response_guesses_never_execute(harness):
     script, requests, executions, run = harness
     script.extend([turn(call("load_tools_info"), call("web_search"), call("get_episodic")),
