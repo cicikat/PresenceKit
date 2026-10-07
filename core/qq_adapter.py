@@ -5,6 +5,7 @@ QQ 协议适配器
 """
 
 import asyncio
+import base64
 import json
 import logging
 import re
@@ -159,7 +160,8 @@ async def send_image(target_id: str, file_path: str, is_group: bool = False):
         logger.error("[qq_adapter] WebSocket 未连接，无法发送图片")
         return
 
-    file_uri = "file:///" + str(Path(file_path).resolve()).replace("\\", "/")
+    encoded = base64.b64encode(await asyncio.to_thread(Path(file_path).read_bytes)).decode("ascii")
+    file_uri = f"base64://{encoded}"
     message_seg = [{"type": "image", "data": {"file": file_uri}}]
 
     if is_group:

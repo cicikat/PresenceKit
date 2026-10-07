@@ -935,7 +935,9 @@ async def send_voice(target_id: str, audio_bytes: bytes, is_group: bool = False)
             ["ffmpeg", "-y", "-i", wav_path, "-ar", "8000", "-ab", "12.2k", "-ac", "1", amr_path],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True
         )
-        await qq_adapter.send_record(target_id, f"file:///{amr_path}", is_group)
+        with open(amr_path, "rb") as converted_audio:
+            b64 = base64.b64encode(converted_audio.read()).decode("ascii")
+        await qq_adapter.send_record(target_id, f"base64://{b64}", is_group)
     except Exception as error:
         logger.warning("[voice_adapter] ffmpeg/AMR path failed, falling back to base64 wav: %s", error)
         b64 = base64.b64encode(audio_bytes).decode("ascii")

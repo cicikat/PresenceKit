@@ -46,6 +46,15 @@ QQ 收消息 → main.handle_message → Pipeline → text_output.send() 直发 
 
 ## 输出通道
 
+### QQ 与独立 NapCat 部署（269）
+
+NapCat 可在 Linux Docker 中运行，后端继续通过宿主映射的 OneBot WebSocket
+连接。容器内 OneBot 监听 `0.0.0.0`，宿主端口建议只绑定 `127.0.0.1`；
+后端连接地址使用 `127.0.0.1`，QQ 开关与 standalone 模式仍沿用现有设置。
+图片和转换后的 AMR 以 `base64://` 传内容，WAV fallback 同样内联，不依赖
+容器读取宿主文件路径。容器配置与 QQ 登录数据必须持久化；迁移时可能需要
+重新扫码。WebUI 可达不代表账号登录或消息实际送达。
+
 ### 个人微信（268，reference transport 已实现，真实 bridge 验收 observe）
 
 `integrations/wechat_transport.py` 是独立协议抽象，仅向上提供规范化消息和
