@@ -1,5 +1,7 @@
 ## 手机聊天关联与排序（2026-10-07，工单 267）
 
+F6 observe：desktop/mobile 引用稳定锚点及邻近消息工具已实现，真实设备/模型尚未验收。open：QQ引用未接 `reply_to.message_id`；旧日志无台账身份不可精确展开，不猜测作者与时间。
+
 current：工具 receipt 关联真实 owner 回合；历史使用 ledger epoch，用户事件采用已有 EventContext ingress 时间；同作用域 grant 重绑保持 request 去重。observe：实际手机与真实工具调用；open：旧日志分钟级时间无法精确还原，trace/receipt 仍有界，后端重启后回执不持久。手机 native consume 崩溃窗口与 artifacts/sticker 完整 handoff 另列 mobile 工单 26，不将接口存在记为无损投递完成。
 
 # docs/known-issues.md — 已知问题与技术债

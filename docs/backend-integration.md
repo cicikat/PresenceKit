@@ -49,17 +49,18 @@ mobile 端聊天发送入口复用同一套 `run_owner_chat_turn(reply_to=...)` 
 }
 ```
 
-v0.1 不建消息 ID 体系，只用「文本 + 时间戳」定位被回复的历史气泡——足够用且零迁移
-成本。
+F6 新增可选 `message_id`，复用 `turn_id:user` 或 `turn_id:assistant`。后端在冻结的
+owner/character reality scope 核验原文、作者和完整带时区时间。旧 text+ts 标为未经核验；
+缺失、已遗忘或跨作用域锚点明确不可核验，不按同文猜测。
 
 **服务端行为**：`core/reply_context.py::apply_reply_prefix()` 在 `run_owner_chat_turn()`
 入口处校验并拼接前缀：
 
 ```
-用户回复了你{相对时间}发送的这条消息「{text}」：{原始 message}
+用户引用回复：作者={用户或角色}，时间={ISO日期时间含时区}，message_id={稳定锚点}，原文「{text}」：{原始 message}
 ```
 
-相对时间格式化规则（`format_relative_time()`，按自然日边界判定）：
+旧相对时间 helper 保留兼容测试，当前引用使用完整时间，不省略年份：
 
 | 与当前时间的自然日差 | 格式 |
 |---|---|
@@ -83,3 +84,5 @@ v0.1 不建消息 ID 体系，只用「文本 + 时间戳」定位被回复的�
 （例如引用了一条包含"打开音乐"的历史消息）误判为当轮指令。
 
 **单测**：`tests/test_reply_context.py`（相对时间三档边界、非法输入降级、超长截断）。
+
+`read_message_context(message_id, direction, count)` 读取锚点上/下1..10条保留现实消息，返回作者、时间、稳定ID和裁剪状态；复用台账，无新数据库。web/dream/coplay隔离，非消息事件不计数，遗忘消息不可读。旧消息未入账时 unavailable。工具读取同角色持续 owner 对话，不读取 Stage/Dream/work session transcript。QQ 引用仍沿现有原文链，尚未接入稳定 reply_to 锚点。

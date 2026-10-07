@@ -209,6 +209,7 @@ def window(
     source: str = "",
     include_isolated: bool = False,
     busy_timeout_ms: int = 5000,
+    messages_only: bool = False,
 ) -> dict[str, Any] | None:
     opened = _connect(scope, busy_timeout_ms=busy_timeout_ms)
     if opened is None:
@@ -221,10 +222,15 @@ def window(
             target = _find(connection, scope, event_id, source=source, include_isolated=include_isolated)
             if target is None:
                 return None
+            message_kinds = ('user_message', 'assistant_message', 'trigger_assistant')
+            if messages_only and (target['kind'] not in message_kinds or target['redaction_state'] == 'tombstoned'):
+                return None
             source_where, source_params = source_policy.sql_predicate(include_isolated=include_isolated)
             exact_source = source or None
             source_clause = " AND source = ?" if exact_source else source_where
             source_values: tuple[Any, ...] = (exact_source,) if exact_source else source_params
+            if messages_only:
+                source_clause += " AND kind IN ('user_message','assistant_message','trigger_assistant') AND redaction_state != 'tombstoned'"
             params = (scope.uid, scope.character_id, scope.domain, *source_values, target["occurred_at"], target["occurred_at"], target["seq"], target["seq"], target["event_id"])
             before_rows = connection.execute(
                 """SELECT * FROM events WHERE uid = ? AND char_id = ? AND realm = ?

@@ -27,7 +27,7 @@ class TestBuildReplyPrefix:
         now = datetime(2026, 7, 19, 12, 0, 0).timestamp()
         ts = datetime(2026, 7, 19, 9, 0, 0).timestamp()
         prefix = build_reply_prefix({"text": "早上好呀", "ts": ts}, now)
-        assert prefix == "用户回复了你今天 09:00发送的这条消息「早上好呀」："
+        assert '作者未经核验' in prefix and '2026-07-19T09:00:00' in prefix
 
     def test_missing_reply_to(self):
         assert build_reply_prefix(None) is None
@@ -70,7 +70,7 @@ class TestApplyReplyPrefix:
         now = datetime(2026, 7, 19, 12, 0, 0).timestamp()
         ts = datetime(2026, 7, 19, 9, 0, 0).timestamp()
         result = apply_reply_prefix("我也是", {"text": "早上好呀", "ts": ts}, now)
-        assert result == "用户回复了你今天 09:00发送的这条消息「早上好呀」：我也是"
+        assert '2026-07-19T09:00:00' in result and result.endswith('：我也是')
 
     def test_missing_reply_to_passthrough(self):
         assert apply_reply_prefix("我也是", None) == "我也是"

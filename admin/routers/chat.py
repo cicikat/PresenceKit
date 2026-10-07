@@ -104,7 +104,6 @@ async def run_owner_chat_turn(
     _probe_text = trusted_user_text if trusted_user_text is not None else message
 
     from core.reply_context import apply_reply_prefix
-    message = apply_reply_prefix(message, reply_to)
 
     from core.conversation_gate import conversation_lock
 
@@ -118,6 +117,8 @@ async def run_owner_chat_turn(
     except (ValueError, RuntimeError) as _scope_err:
         logger.error("[owner_chat] scope freeze 失败，本轮中止: %s", _scope_err)
         raise HTTPException(status_code=503, detail="active character 状态异常，本轮中止")
+
+    message = apply_reply_prefix(message, reply_to, user_id=user_id, char_id=_frozen_scope.character_id)
 
     # Freeze ingress identity alongside the already-frozen memory scope. The
     # compatibility path is explicit and content-free; no active role lookup

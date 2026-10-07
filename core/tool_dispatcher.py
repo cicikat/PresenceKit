@@ -1120,6 +1120,20 @@ _TOOL_REGISTRY["read_food_preferences"] = {
     "echo_event_log": False,
 }
 
+_TOOL_REGISTRY['read_message_context'] = {
+    'func': __import__('core.tools.message_context', fromlist=['read_message_context']).read_message_context,
+    'category': 'memory', 'dangerous': False,
+    'description': '按引用消息的 message_id 读取其上方或下方最多10条现实对话消息，包含作者、完整时间和稳定ID。仅精确锚点，不用同文猜测；旧消息缺锚点时明确不可用。',
+    'parameters': {'type': 'object', 'additionalProperties': False, 'properties': {
+        'message_id': {'type': 'string', 'description': '引用中的稳定消息ID，通常为 turn_id:user 或 turn_id:assistant'},
+        'direction': {'type': 'string', 'enum': ['before', 'after'], 'description': '向上 before 或向下 after，默认before'},
+        'count': {'type': 'integer', 'minimum': 1, 'maximum': 10, 'description': '邻近消息数量，默认5，最多10'},
+    }, 'required': ['message_id']},
+    'examples': ['看看被引用那句话前5条消息', '查那条消息后面的10条'],
+    'keywords': ['引用', '上文', '下文', '邻近消息'], 'trace_args': ['message_id', 'direction', 'count'],
+    'echo_event_log': False,
+}
+
 _TOOL_REGISTRY["backfill_diary"] = {
     "func": _backfill_diary_wrapper,
     "description": (
@@ -3015,7 +3029,9 @@ async def _execute_structured_impl(
             if is_group:
                 raise ValueError("device observation is owner-only")
             result = await func(user_id=user_id, char_id=char_id)
-        elif tool_name in {"read_life_records", "reread_image", "read_food_preferences"}:
+        elif tool_name in {"read_life_records", "reread_image", "read_food_preferences", "read_message_context"}:
+            if is_group:
+                raise ValueError('owner memory tools are unavailable in group sessions')
             _require_memory_read_scope(user_id, char_id)
             result = await func(user_id=user_id, char_id=char_id, **tool_args)
         elif tool_name in _SCOPED_MEMORY_READ_TOOLS:
