@@ -20,7 +20,7 @@ def test_data_paths_unusable_default_falls_back_to_public_id(tmp_path, monkeypat
     assert data_paths._read_default_char_id() == "default"
 
 
-def test_custom_configured_primary_keeps_fail_closed_semantics(sandbox, monkeypatch):
+def test_custom_configured_primary_does_not_exclude_other_characters(sandbox, monkeypatch):
     from core.dream import dream_pipeline
 
     primary_id = "custom-primary"
@@ -36,10 +36,12 @@ def test_custom_configured_primary_keeps_fail_closed_semantics(sandbox, monkeypa
         )
 
     assert accepted.get("ok") is True
-    assert rejected == {"ok": False, "error": "这个角色还不会做梦"}
+    assert rejected.get("ok") is True
+    assert snapshot.call_args.kwargs["char_id"] == "other"
 
 
-def test_fresh_clone_default_character_enter_chat_exit_chain(tmp_path, sandbox, monkeypatch):
+@pytest.mark.parametrize("selected_char", ["default", "secondary"])
+def test_fresh_clone_default_character_enter_chat_exit_chain(tmp_path, sandbox, monkeypatch, selected_char):
     from core import data_paths
     from core.character_loader import Character
     from core.dream import dream_pipeline
@@ -64,7 +66,7 @@ def test_fresh_clone_default_character_enter_chat_exit_chain(tmp_path, sandbox, 
 
     pipeline = MagicMock()
     pipeline.character = Character(name="Companion", description="test")
-    pipeline._active_character_id = primary_id
+    pipeline._active_character_id = selected_char
 
     def discard_background(coro):
         coro.close()
@@ -83,7 +85,7 @@ def test_fresh_clone_default_character_enter_chat_exit_chain(tmp_path, sandbox, 
                  {"role": "user", "content": "hello"},
              ]), \
              patch("core.llm_client.chat", new=AsyncMock(return_value="dream reply")):
-            entered = await dream_pipeline.enter_dream("fresh-u1", char_id=primary_id)
+            entered = await dream_pipeline.enter_dream("fresh-u1", char_id=selected_char)
             chatted = await dream_pipeline.dream_turn("fresh-u1", "hello")
             await dream_pipeline.force_exit_dream("fresh-u1")
         return entered, chatted, read_state("fresh-u1")
@@ -94,4 +96,4 @@ def test_fresh_clone_default_character_enter_chat_exit_chain(tmp_path, sandbox, 
     assert chatted.get("reply") == "dream reply"
     assert chatted.get("error") is None
     assert final_state.get("status") == DreamStatus.REALITY_AFTERGLOW.value
-    assert final_state.get("char_id") == primary_id
+    assert final_state.get("char_id") == selected_char

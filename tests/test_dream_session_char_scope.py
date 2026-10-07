@@ -60,20 +60,20 @@ def _read_state(sandbox, uid):
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-# ── 1. enter_dream accepts only the configured primary character ─────────────
+# ── 1. enter_dream accepts any selected character ───────────────────────────
 
-def test_enter_dream_rejects_non_default_character(sandbox):
-    """A non-primary char_id must fail-closed with a friendly error."""
+def test_enter_dream_accepts_non_default_character(sandbox):
+    """A non-primary character uses its own frozen snapshot and session identity."""
     from core.dream.dream_pipeline import enter_dream
 
     async def run():
         return await enter_dream(_UID, entry_reason="test", char_id="other")
 
-    result = asyncio.run(run())
-    assert result.get("ok") is False, f"Expected rejection, got: {result}"
-    assert "做梦" in result.get("error", ""), (
-        f"Error message must mention inability to dream, got: {result.get('error')!r}"
-    )
+    with patch("core.dream.dream_context.build_snapshot", new=AsyncMock(return_value={})) as snapshot:
+        result = asyncio.run(run())
+    assert result.get("ok") is True
+    assert snapshot.call_args.kwargs["char_id"] == "other"
+    assert _read_state(sandbox, _UID)["char_id"] == "other"
 
 
 def test_enter_dream_default_char_id(sandbox):

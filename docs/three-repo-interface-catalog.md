@@ -1103,3 +1103,8 @@ explicit first-night runner; that field is still empty until a real run.
 `open`: real first-night/next-morning evidence remains gated by Brief 259 D
 and Brief 258 F. Isolated calibration, admission freeze, operator-pass tests,
 and admin browser inspection do not constitute production migration evidence.
+# 2026-10-07 梦境 bug 修复补记
+
+`/dream/enter` schema/scope 不变，当前选中角色不再受“仅默认角色”限制；owner 单会话、
+会话角色冻结及群梦互斥不变。桌面 HTTP 桥保留 409/422 的字符串 detail，单人错误不套群梦文案。
+后端定向回归、桌面构建及 cargo check 通过；真实窗口与模型联调为 observe。

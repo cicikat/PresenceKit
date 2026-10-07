@@ -444,6 +444,9 @@ async def dream_turn(
             "error": "pipeline_not_initialized",
         }
     character = _pl2.character
+    if getattr(_pl2, "_active_character_id", char_id) != char_id:
+        from core.character_loader import load as load_character
+        character = load_character(char_id)
 
     # ── Body state: build D5/D7 projection for THIS turn's prompt ────────────
     from core.dream.body_state import BodyState
@@ -950,10 +953,6 @@ async def enter_dream(
     """
     from core.dream.dream_state import read_state, write_state, DreamStatus, _VALID_DREAM_MODES
     from core.dream.dream_context import build_snapshot
-
-    # Fail-closed: only the deployment's primary character dreams until Method B.
-    if char_id != DEFAULT_CHAR_ID:
-        return {"ok": False, "error": "这个角色还不会做梦"}
 
     if dream_mode not in _VALID_DREAM_MODES:
         return {"ok": False, "error": f"invalid dream_mode={dream_mode!r}"}
@@ -1500,6 +1499,10 @@ async def _generate_retention_line(uid: str, state: dict) -> str | None:
         if pl is None:
             return None
         character = pl.character
+        session_char_id = str(state.get("char_id") or DEFAULT_CHAR_ID)
+        if getattr(pl, "_active_character_id", session_char_id) != session_char_id:
+            from core.character_loader import load as load_character
+            character = load_character(session_char_id)
         char_name = getattr(character, "name", "你") if character else "你"
 
         # Minimal dream-context messages: system card + instruction

@@ -1,5 +1,11 @@
 # docs/dream.md — Dream System 总览与设计原则
 
+2026-10-07 B1：单人梦境允许当前选中的任意角色进入，删除仅默认角色准入限制。
+owner 同时仍只有一个单人梦境会话，state 保持既有会话指针布局；char_id 冻结在会话中，
+快照、设置、日志、存档与回流按会话角色读取。进行中不允许更换角色/模式，群梦互斥保持。
+现实角色切换后梦境生成与挽留仍加载会话角色。桌面保留单人错误详情，不再显示群梦重试文案。
+定向回归与桌面构建通过；真实 Tauri 窗口/模型验收 observe。
+
 跑团模式的设计提案见 [`docs/rpg-dream-mode-design.md`](rpg-dream-mode-design.md)。该模式尚未实现；后端接口、隔离测试和观测端点完成前，不属于当前可用 Dream mode。
 
 ## Path authority（以代码和 data-taxonomy 为准）
