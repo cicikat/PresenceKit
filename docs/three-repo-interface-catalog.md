@@ -1,3 +1,7 @@
+## 手机聊天完整性联动（2026-10-07，267 / mobile 26）
+
+current：同 token label+owner+char+domain 的 request_id 在 grant 重绑后继续去重/回放；HTTP 字段与鉴权保持兼容。chat-log 可附加 ts/user_ts 与 bounded completed request_id；tool_activity 在真实 owner 执行上下文绑定 turn_id/request_id，精确时间排序。管理面沿用 tool-traces/session-scope 观测，无新开关、队列或存储。手机统一逐段合并、保留引用重试和 native pending request_id；seen 不再代表页面呈现。桌面代码未改。observe：真机、真实模型与跨端联合链路。open：legacy 无时间/身份、30 条 trace 淘汰、native consume 到呈现的崩溃窗口、后台 artifacts/sticker 补全；进程内 30 分钟 receipt 不提供跨后端重启 exactly-once。
+
 # 三仓接口总览与闭环审计
 
 ## 语音转写整段等齐才开始（工单 B，2026-10-01，open）

@@ -17,6 +17,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 
 from admin.auth import require_scopes
 from core.llm_reasoning_store import associate_owner_turn
+from core.tool_activity import associate_owner_turn as associate_owner_tools
 from core.audio_perception import voice_context
 
 router = APIRouter()
@@ -33,6 +34,7 @@ _FOURTH_WALL_NOTE = (
 
 
 @associate_owner_turn
+@associate_owner_tools
 async def run_owner_chat_turn(
     message: str,
     provenance_channel: str,

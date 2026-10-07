@@ -23,6 +23,44 @@ def _grant(monkeypatch, *, label="desktop-token", char_id="character_a"):
     return session_scope.create_session(token_label=label, char_id=char_id)
 
 
+@pytest.mark.asyncio
+async def test_rebinding_same_scope_replays_request_without_second_execution(monkeypatch):
+    from core import session_scope
+    first = _grant(monkeypatch)
+    rebound = _grant(monkeypatch)
+    other = _grant(monkeypatch, char_id='character_b')
+    assert first.session_id != rebound.session_id
+    calls = []
+    async def execute():
+        calls.append(True)
+        return {'turn_id': 'turn-' + str(len(calls)), 'reply': 'ok'}
+    await session_scope.execute_request(grant=first, request_id='req_rebind', payload={'message': 'hello'}, executor=execute)
+    _, replay = await session_scope.execute_request(grant=rebound, request_id='req_rebind', payload={'message': 'hello'}, executor=execute)
+    assert len(calls) == 1
+    assert replay['turn_id'] == 'turn-1'
+    assert replay['session_id'] == rebound.session_id
+    await session_scope.execute_request(grant=other, request_id='req_rebind', payload={'message': 'hello'}, executor=execute)
+    assert len(calls) == 2
+    with pytest.raises(session_scope.SessionScopeError) as conflict:
+        await session_scope.execute_request(grant=rebound, request_id='req_rebind', payload={'message': 'changed'}, executor=execute)
+    assert conflict.value.code == 'request_payload_conflict'
+
+
+@pytest.mark.asyncio
+async def test_history_receipt_projection_is_owner_character_scoped_and_bounded(monkeypatch):
+    from core import session_scope
+    grant = _grant(monkeypatch)
+    async def execute():
+        return {'turn_id': 'turn', 'reply': 'private'}
+    await session_scope.execute_request(grant=grant, request_id='req_fixture', payload={}, executor=execute)
+    assert session_scope.completed_requests_for_turns(owner_id='owner', char_id='character_a') == {'turn': 'req_fixture'}
+    assert session_scope.completed_requests_for_turns(owner_id='other', char_id='character_a') == {}
+    assert session_scope.completed_requests_for_turns(owner_id='owner', char_id='other') == {}
+    for row in session_scope._REQUESTS.values():
+        row['updated_at'] = 0
+    assert session_scope.completed_requests_for_turns(owner_id='owner', char_id='character_a') == {}
+
+
 def test_session_is_bound_to_token_owner_and_character(monkeypatch):
     from core import session_scope
 

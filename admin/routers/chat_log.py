@@ -319,11 +319,15 @@ async def get_day(
     entries = [entry for entry in entries if not (entry.get('entry_kind') == 'narration' and entry.get('turn_id') in activity_ids)]
     entries.extend({'time': datetime.fromtimestamp(item['ts']).strftime('%H:%M'), 'ts': item['ts'],
                     'user': '', 'assistant': '', 'tool_activity': item} for item in activities)
-    entries.sort(key=lambda entry: entry['time'])
     # Display-only projection from the canonical ledger; never replace memory text.
     # Missing/older ledgers retain the legacy plain-text history.
     from core.memory.event_query import get_event, EventQueryError
     scope = MemoryScope.reality_scope(_owner_qq(), resolved)
+    from core.session_scope import completed_requests_for_turns
+    requests = completed_requests_for_turns(owner_id=_owner_qq(), char_id=resolved)
+    for activity in activities:
+        if activity.get('turn_id') and activity.get('request_id'):
+            requests[activity['turn_id']] = activity['request_id']
 
     def _project_media_refs(event: dict | None) -> list[dict]:
         if not event or event.get("tombstoned"):
@@ -352,6 +356,16 @@ async def get_day(
             user_event = get_event(scope, turn_id + ":user", include_isolated=True)
         except EventQueryError:
             user_event = None
+        if assistant_event and not assistant_event.get('tombstoned'):
+            occurred_at = assistant_event.get('occurred_at')
+            if isinstance(occurred_at, (int, float)) and occurred_at > 0:
+                entry['ts'] = occurred_at
+        if user_event and not user_event.get('tombstoned'):
+            occurred_at = user_event.get('occurred_at')
+            if isinstance(occurred_at, (int, float)) and occurred_at > 0:
+                entry['user_ts'] = occurred_at
+        if turn_id in requests:
+            entry['request_id'] = requests[turn_id]
         if (
             entry.get("assistant")
             and assistant_event
@@ -363,6 +377,14 @@ async def get_day(
         media_refs = _project_media_refs(user_event) or _project_media_refs(assistant_event)
         if media_refs:
             entry["media_refs"] = media_refs
+    # Exact ledger/tool times precede minute-only legacy entries in the same
+    # minute. Legacy ties retain file order; no fabricated turn association.
+    def order(entry):
+        ts = entry.get('ts')
+        minute = entry['time'][:5]
+        return (minute, 0 if isinstance(ts, (int, float)) and ts > 0 else 1,
+                ts if isinstance(ts, (int, float)) and ts > 0 else 0)
+    entries.sort(key=order)
     raw_fallback = len(entries) == 0 and bool(text.strip())
     try:
         from core.tools.chat_artifacts import artifacts_for_turns

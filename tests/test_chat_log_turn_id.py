@@ -10,6 +10,35 @@ from core.data_paths import DEFAULT_CHAR_ID
 from core.memory import event_log
 
 
+def test_same_minute_receipts_sort_before_reply_with_exact_ledger_time(sandbox, monkeypatch):
+    import asyncio
+    from core.memory import action_trace
+    from core.memory.event_store import append_event
+    from core.memory.scope import MemoryScope
+    monkeypatch.setattr(chat_log, '_owner_qq', lambda: 'owner')
+    monkeypatch.setattr(chat_log, '_resolve_char_id', lambda value: 'char')
+    monkeypatch.setattr(chat_log, '_parse_day', lambda text: [
+        {'time': '12:00', 'user': 'question', 'assistant': 'answer', 'turn_id': 'turn'},
+    ])
+    monkeypatch.setattr(event_log, '_read_day_union', lambda *args: 'fixture')
+    base = datetime(2026, 10, 7, 12).timestamp()
+    event = {'event_id': 'tool', 'chain_id': 'chain', 'char_id': 'char', 'source': 'reality',
+             'origin': 'chat', 'tool_name': 'get_time', 'status': 'success', 'ts': base + 10,
+             'turn_id': 'turn', 'request_id': 'req_fixture'}
+    monkeypatch.setattr(action_trace, 'recent', lambda *args, **kwargs: [{'display_activity': event}])
+    scope = MemoryScope.reality_scope('owner', 'char')
+    append_event(scope, {'event_id': 'turn:assistant', 'turn_id': 'turn', 'kind': 'assistant_message',
+                        'actor': 'assistant', 'occurred_at': base + 40, 'visible_text': 'answer'})
+    append_event(scope, {'event_id': 'turn:user', 'turn_id': 'turn', 'kind': 'user_message',
+                        'actor': 'user', 'occurred_at': base + 1, 'visible_text': 'question'})
+    rows = asyncio.run(chat_log.get_day('2026-10-07', x_presence_session=None))['entries']
+    assert rows[0]['tool_activity']['event_id'] == 'tool'
+    assert rows[1]['assistant'] == 'answer'
+    assert rows[1]['request_id'] == 'req_fixture'
+    assert rows[1]['ts'] == base + 40
+    assert rows[1]['user_ts'] == base + 1
+
+
 @pytest.mark.parametrize('label,colon', [('Companion', ':'), ('另一角色', '：')])
 def test_reply_footer_identity_and_body(label, colon):
     text = f'''## 16:00

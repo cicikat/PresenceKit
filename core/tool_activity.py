@@ -6,6 +6,29 @@ from uuid import uuid4
 
 _chain = ContextVar('tool_display_chain', default=None)
 _call = ContextVar('tool_display_call', default=None)
+_owner_turn = ContextVar('tool_display_owner_turn', default=None)
+
+
+def associate_owner_turn(function):
+    """Link only calls actually executed inside this owner request."""
+    @wraps(function)
+    async def wrapped(*args, **kwargs):
+        scope = {'active': True, 'events': [], 'request_id': kwargs.get('request_id') or ''}
+        token = _owner_turn.set(scope)
+        try:
+            result = await function(*args, **kwargs)
+            turn_id = result.get('turn_id') if isinstance(result, dict) else None
+            if turn_id:
+                from core.memory.action_trace import link_display_turn
+                try:
+                    link_display_turn(scope['events'], turn_id, scope['request_id'])
+                except Exception:
+                    pass  # Display association cannot fail an accepted chat.
+            return result
+        finally:
+            scope['active'] = False
+            _owner_turn.reset(token)
+    return wrapped
 
 
 def display_chain(function):
@@ -42,6 +65,11 @@ async def execute_visible(function, tool_name, tool_args, user_id, target_id,
         'origin': 'autonomy' if origin.startswith('autonomy') else 'chat',
     }
     token = _call.set(event)
+    owner_turn = _owner_turn.get()
+    if owner_turn and owner_turn['active']:
+        owner_turn['events'].append((str(user_id), kwargs['char_id'], event['event_id']))
+        if owner_turn['request_id']:
+            event['request_id'] = owner_turn['request_id']
     async def publish():
         try:
             from channels.desktop_ws import _send_json

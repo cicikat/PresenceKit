@@ -1,3 +1,7 @@
+## 同作用域重绑与回执（2026-10-07）
+
+request receipt 内部键改为 token_label+owner_id+char_id+domain+request_id，session_id 仍是服务端授权 grant，必须经过现有 ingress 校验。仅更换同作用域 grant 不会重新执行同一 request_id；不同 token/owner/char/domain 仍隔离，同 ID 不同 payload 仍 409。completed 回放返回调用者当前 session_id。现有 30 分钟/进程内保留边界不变，字段不删不改。
+
 # 固定会话 scope 契约
 
 状态：后端 `current`（`session_scope=v1`）；手机消费者已接入发现/绑定/角色归属/

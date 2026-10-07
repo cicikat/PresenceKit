@@ -17,6 +17,7 @@ def test_capture_turn_preserves_evidence_ids_and_stores_ingress_provenance(sandb
         uid=uid, char_id=char_id, ingress_event_id="ingress-ctx",
         dedupe_key="dedupe-ctx", source="desktop_chat", channel="desktop",
         kind="user_message", actor="user",
+        occurred_at=1000.0,
     )
     scope = MemoryScope.reality_scope(uid, char_id)
     assert event_store.initialize(scope).healthy
@@ -34,6 +35,10 @@ def test_capture_turn_preserves_evidence_ids_and_stores_ingress_provenance(sandb
         ("turn-ctx:user", "ingress-ctx", "ingress-ctx"),
         ("turn-ctx:assistant", "ingress-ctx", "ingress-ctx"),
     ]
+    with sqlite3.connect(event_store._path(scope)) as connection:
+        times = dict(connection.execute('SELECT actor, occurred_at FROM events'))
+    assert times['user'] == 1000.0
+    assert times['assistant'] > times['user']
 
 
 def test_capture_turn_rejects_cross_scope_context(sandbox):

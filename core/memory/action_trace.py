@@ -249,6 +249,29 @@ def finalize_display(uid: str, char_id: str, event: dict) -> None:
     safe_write_json(path, entries[-_MAX_ENTRIES:])
 
 
+def link_display_turn(events: list[tuple[str, str, str]], turn_id: str, request_id: str) -> None:
+    """Enrich existing receipts only; never recreate evicted trace rows."""
+    if not _enabled():
+        return
+    buckets = {}
+    for uid, char_id, event_id in events:
+        buckets.setdefault((uid, char_id), set()).add(event_id)
+    for (uid, char_id), identities in buckets.items():
+        path = _trace_path(uid, char_id)
+        entries = _load(path)
+        changed = False
+        for row in entries:
+            activity = row.get('display_activity') or {}
+            if activity.get('event_id') not in identities:
+                continue
+            activity['turn_id'] = turn_id
+            if request_id:
+                activity['request_id'] = request_id
+            changed = True
+        if changed:
+            safe_write_json(path, entries[-_MAX_ENTRIES:])
+
+
 def recent(
     uid: str,
     char_id: str,

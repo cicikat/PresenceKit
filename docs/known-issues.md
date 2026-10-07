@@ -1,3 +1,7 @@
+## 手机聊天关联与排序（2026-10-07，工单 267）
+
+current：工具 receipt 关联真实 owner 回合；历史使用 ledger epoch，用户事件采用已有 EventContext ingress 时间；同作用域 grant 重绑保持 request 去重。observe：实际手机与真实工具调用；open：旧日志分钟级时间无法精确还原，trace/receipt 仍有界，后端重启后回执不持久。手机 native consume 崩溃窗口与 artifacts/sticker 完整 handoff 另列 mobile 工单 26，不将接口存在记为无损投递完成。
+
 # docs/known-issues.md — 已知问题与技术债
 
 ## TTS 卡死与长回复堵塞（工单 B3，2026-10-03，部分修复）

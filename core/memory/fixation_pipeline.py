@@ -755,6 +755,10 @@ def _append_event_ledger(
             records.append({
                 **common,
                 "event_id": f"{turn_id}:user",
+                # The owner input happened at ingress, before model/tools.
+                # Assistant evidence keeps the actual completion timestamp.
+                "occurred_at": (event_context.occurred_at if event_context is not None
+                                and event_context.occurred_at > 0 else occurred_at),
                 "seq": 0,
                 "actor": "user",
                 "kind": "user_message",

@@ -59,9 +59,9 @@ class SessionGrant:
 
 
 _SESSIONS: dict[str, SessionGrant] = {}
-_REQUESTS: dict[tuple[str, str, str], dict[str, Any]] = {}
-_REQUEST_LOCKS: dict[tuple[str, str, str], asyncio.Lock] = {}
-_RUNNING: dict[tuple[str, str, str], asyncio.Task] = {}
+_REQUESTS: dict[tuple[str, str, str, str, str], dict[str, Any]] = {}
+_REQUEST_LOCKS: dict[tuple[str, str, str, str, str], asyncio.Lock] = {}
+_RUNNING: dict[tuple[str, str, str, str, str], asyncio.Task] = {}
 _TRACE: deque[dict[str, Any]] = deque(maxlen=500)
 _GUARD = asyncio.Lock()
 
@@ -193,7 +193,11 @@ async def execute_request(
     executor: Callable[[], Awaitable[dict[str, Any]]],
 ) -> tuple[str, dict[str, Any]]:
     rid = validate_request_id(request_id)
-    key = (grant.token_label, grant.session_id, rid)
+    # Rebinding a grant must not create a second execution namespace for the
+    # same logical owner/character request. Authorization is still checked by
+    # the ingress before this call; different token/owner/character/domain
+    # scopes remain isolated.
+    key = (grant.token_label, grant.owner_id, grant.char_id, grant.domain, rid)
     digest = request_digest(payload)
     async with _GUARD:
         _prune()
@@ -247,6 +251,21 @@ async def execute_request(
     result["char_id"] = grant.char_id
     result["domain"] = grant.domain
     return rid, result
+
+
+def completed_requests_for_turns(*, owner_id: str, char_id: str) -> dict[str, str]:
+    """Read bounded completed receipts without projecting payload or credentials."""
+    _prune()
+    result = {}
+    for (_, receipt_owner, receipt_char, domain, rid), row in list(_REQUESTS.items()):
+        if receipt_owner != owner_id or receipt_char != char_id or domain != 'reality':
+            continue
+        if row.get('status') != 'completed':
+            continue
+        turn_id = (row.get('result') or {}).get('turn_id')
+        if turn_id:
+            result[turn_id] = rid
+    return result
 
 
 def observability_snapshot(*, limit: int = 100) -> dict[str, Any]:
