@@ -11,6 +11,7 @@ import logging
 import os
 import sys
 import time
+from contextlib import nullcontext
 from pathlib import Path
 
 # ── 日志基础配置 ──────────────────────────────────────────────────────────────
@@ -228,7 +229,7 @@ def _init_modules():
 # 核心消息处理函数
 # ═══════════════════════════════════════════════════════════════════════════════
 
-async def handle_message(message: dict):
+async def handle_message(message: dict, *, ingress=None):
     """
     处理单条消息的完整流程（骨架）
 
@@ -238,6 +239,9 @@ async def handle_message(message: dict):
     # mark_user_active() 延迟到 owner 确认后调用（见下方），
     # 避免群聊路人或陌生私聊重置 owner 的 120s 主动消息窗口。
     user_id: str      = message["user_id"]
+    # Protocol adapters normalize messages before admission. QQ callers retain
+    # their existing defaults; other transports inject per-turn delivery.
+    channel = ingress.channel if ingress is not None else "qq"
 
     # ── Dream guard: reject owner QQ messages when dream is active ──────────
     try:
@@ -259,7 +263,7 @@ async def handle_message(message: dict):
             try:
                 from core.output import text_output as _to_dg
                 _tgt_dg = message.get("group_id") or user_id
-                await _to_dg.send(_tgt_dg, ["梦境状态暂时无法确认，已暂停现实对话。"], bool(message.get("group_id")))
+                await (ingress.send_segments if ingress else _to_dg.send)(ingress.reply_address if ingress else _tgt_dg, ["梦境状态暂时无法确认，已暂停现实对话。"], bool(message.get("group_id")))
             except Exception:
                 pass
             return
@@ -271,7 +275,7 @@ async def handle_message(message: dict):
             try:
                 from core.output import text_output as _to_dg
                 _tgt_dg = message.get("group_id") or user_id
-                await _to_dg.send(_tgt_dg, ["正在梦境中，请先退出梦境再回到现实聊天。"], bool(message.get("group_id")))
+                await (ingress.send_segments if ingress else _to_dg.send)(ingress.reply_address if ingress else _tgt_dg, ["正在梦境中，请先退出梦境再回到现实聊天。"], bool(message.get("group_id")))
             except Exception:
                 pass
             return
@@ -282,7 +286,7 @@ async def handle_message(message: dict):
             try:
                 from core.output import text_output as _to_dg
                 _tgt_dg = message.get("group_id") or user_id
-                await _to_dg.send(_tgt_dg, ["梦境状态暂时无法确认，已暂停现实对话。"], bool(message.get("group_id")))
+                await (ingress.send_segments if ingress else _to_dg.send)(ingress.reply_address if ingress else _tgt_dg, ["梦境状态暂时无法确认，已暂停现实对话。"], bool(message.get("group_id")))
             except Exception:
                 pass
             return
@@ -318,6 +322,11 @@ async def handle_message(message: dict):
     session_key = f"group_{group_id}" if group_id else f"user_{user_id}"
     target_id   = group_id if group_id else user_id
     is_group    = bool(group_id)
+    if ingress is not None:
+        if is_group:
+            raise ValueError("shared IM ingress currently accepts private messages only")
+        session_key = f"im:{channel}:{ingress.conversation_id}:{user_id}"
+        target_id = ingress.reply_address
 
     logger.info(
         f"[handle_message] 收到消息 | {'群' if is_group else '私'} "
@@ -363,8 +372,8 @@ async def handle_message(message: dict):
             char_id=_char_id,
             ingress_event_id=_qq_ingress_id,
             dedupe_key=_qq_ingress_id,
-            source="qq",
-            channel="qq",
+            source=channel,
+            channel=channel,
             kind="user_message",
             actor="user",
             occurred_at=float(message.get("timestamp") or time.time()),
@@ -426,8 +435,8 @@ async def handle_message(message: dict):
     from core.conversation_gate import conversation_lock
     # N2-B: qq envelope 提前构造，供 thinking helper 传入 envelope 参数
     from core.write_envelope import stamp_qq as _stamp_qq_early
-    _qq_envelope = _stamp_qq_early()
-    async with conversation_lock(user_id):
+    _qq_envelope = ingress.envelope if ingress else _stamp_qq_early()
+    async with (nullcontext() if ingress and ingress.lock_owned else conversation_lock(user_id)):
         # ── 步骤3：统一 pre-tool routing ─────────────────────────────────────
         _loop_active = tool_dispatcher.tool_loop_active(user_id)
 
@@ -443,7 +452,7 @@ async def handle_message(message: dict):
             trusted_user_text=_trusted_user_text,
             uid=user_id,
             char_id=_char_id,
-            channel="qq",
+            channel=channel,
             target_id=str(target_id),
             is_group=is_group,
             session_state=state,
@@ -452,6 +461,7 @@ async def handle_message(message: dict):
             # desktop, and mobile.  The transport no longer chooses categories.
             categories=None,
             before_execute=_mark_pretool_thinking,
+            allowed_tool_names=ingress.allowed_tool_names if ingress else None,
         )
         if _pretool.should_stop_for_user_input:
             request = (
@@ -460,7 +470,10 @@ async def handle_message(message: dict):
                 or _pretool.direct_response
             )
             if request:
-                await text_output.send(target_id, [request], is_group)
+                if ingress:
+                    await ingress.send_segments(target_id, [request], is_group)
+                else:
+                    await text_output.send(target_id, [request], is_group)
             return
         tool_result_text = _pretool.prompt_tool_result
         _fast_path_exclude_tools = _pretool.exclude_tools
@@ -488,7 +501,7 @@ async def handle_message(message: dict):
             tool_result_generated_at=_pretool.tool_result_generated_at,
             tool_call_required=_pretool.must_call_tool,
             required_tool_names=_pretool.required_tool_names,
-            channel="qq",
+            channel=channel,
             char_id=_char_id,
         )
 
@@ -508,6 +521,7 @@ async def handle_message(message: dict):
                 required_tool_names=_pretool.required_tool_names,
                 media_refs=media_refs,
                 tool_event_observer=_desktop_ws.push_tool_status,
+                **({"allowed_tool_names": ingress.allowed_tool_names} if ingress else {}),
             )
         else:
             raw_reply = await _pipeline.run_llm(messages)
@@ -545,6 +559,7 @@ async def handle_message(message: dict):
             raw_user_text=_trusted_user_text,
             media_refs=media_refs,
             event_context=_event_context,
+            **({"ingress": ingress} if ingress else {}),
         )
 
 
@@ -739,6 +754,7 @@ async def _qq_reality_reply_adapter(
     raw_user_text: str | None = None,
     media_refs: list[dict] | None = None,
     event_context=None,
+    ingress=None,
 ) -> None:
     """
     QQ LLM_ASSISTANT_REPLY 统一出口（R1-D: turn_sink 统一链路）。
@@ -788,8 +804,10 @@ async def _qq_reality_reply_adapter(
             user_text=user_content,
             fanout=[],
             bypass_gate=True,
-            envelope=stamp_qq(),
-            target_id=target_id,
+            envelope=ingress.envelope if ingress else stamp_qq(),
+            # target_id in post_process is a QQ media destination, not a
+            # general reply address. Keep other transport addresses out.
+            target_id=target_id if ingress is None else "",
             is_group=is_group,
             pending_paths=pending_paths,
             frozen_scope=frozen_scope,
@@ -797,7 +815,7 @@ async def _qq_reality_reply_adapter(
             web_echo=web_echo,
             coplay_echo=coplay_echo,
             loop_executed=loop_executed,
-            event_channel="qq",
+            event_channel=ingress.channel if ingress else "qq",
             visible_assistant_text="\n".join(clean),
             raw_user_text=raw_user_text,
             media_refs=media_refs,
@@ -817,7 +835,10 @@ async def _qq_reality_reply_adapter(
         "群" if is_group else "私聊", target_id, len(clean),
     )
     try:
-        await text_output.send(target_id, clean, is_group)
+        if ingress:
+            await ingress.send_segments(target_id, clean, is_group)
+        else:
+            await text_output.send(target_id, clean, is_group)
     except Exception as e:
         _log_error("qq_reality_reply_adapter.send", e)
         logger.error(

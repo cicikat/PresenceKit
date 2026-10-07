@@ -139,7 +139,7 @@ def test_a1b_dg_send_count():
     hits = [
         (lineno, ln)
         for lineno, ln in _non_comment_lines("main.py")
-        if "_to_dg.send(" in ln
+        if "_to_dg.send)" in ln
     ]
     assert len(hits) == 3, (
         f"Expected 3 _to_dg.send( calls in main.py (dream-guard sends), "
@@ -246,6 +246,8 @@ def test_a3b_create_task_calls_are_startup_only():
         "start_admin_server",
         "qq_adapter.connect_and_listen",
         "_life_records_worker",
+            "_stt_local.warmup_async",
+            "start_hds_local",
     }
     violations: list[str] = []
     for i, ln in enumerate(lines, 1):

@@ -1,6 +1,6 @@
 # 268 个人微信接入与最小 shared IM ingress
 
-状态：工单已编写；功能施工未开始。用户已要求先写工单后施工。接入类型已确认个人微信，用户已确认桥接项目尚未选定；不以空 adapter 或模拟收发冒充微信接入完成。
+状态：施工中。用户已确定个人微信 WeChatPadPro REST/WebSocket 为 reference transport；通过独立 `wechat_transport` abstraction 隔离第三方 API/字段，不进入 shared ingress、Pipeline、memory 或 turn_sink。第三方下载放在仓库外指定目录。
 
 ## 目标与现状
 
@@ -27,11 +27,11 @@
 ### 268-A：QQ 基线与最小抽取
 
 - [x] 检查入口、队列、输出与现有通道文档，确认混合边界。
-- [ ] 先运行既有 QQ/guard/pretool/turn_sink 相关回归，记录基线；复查 dirty files 与换行。
-- [ ] 设计 `core/im_ingress.py` 的最小消息/发送合同，只抽取现实私聊编排；QQ 解析、媒体转换、群聊及特殊协议留在 QQ facade。
-- [ ] `main.handle_message` 与 `_qq_reality_reply_adapter` 保留兼容入口；既有测试 monkeypatch 入口不因搬函数静默失效。避免双重 conversation_lock、双重 record 或双重发送。
-- [ ] 补最小必要合同测试：来源与 UID 分离、短文本回信路由、QQ memory-before-send、一次写入/发送、scope 冻结、QQ/微信/HTTP 同 owner 串行。
-- [ ] 相关测试与 diff 检查通过，立即独立 commit，再施工 B。
+- [x] QQ 基线：124 passed，1 个既有启动白名单失败（未列 STT/HDS）；核实均为启动任务后更新守卫。工作树最初干净，目标文件 LF。
+- [x] `core/im_ingress.py` 提供中立消息/发送合同、限额 TTL 去重及 canonical UID 锁；现有 main 私聊编排通过注入来源/发送/工具集合共用，不另复制 Pipeline。QQ 媒体及群聊留在现有 facade。
+- [x] `main.handle_message` 与 `_qq_reality_reply_adapter` 保留兼容入口及 monkeypatch；微信 scope 在共享锁内冻结，避免双重锁、双重记录/发送。后处理 target_id 属于 QQ 媒体地址，其他 IM 不传。
+- [x] 补 admission 去重、canonical lock、地址隔离及 record-before-send 测试；现有 QQ guard/工具/分段回归复用。
+- [x] A 定向回归 128 passed；差异与换行检查后独立提交，进入 B。
 
 ### 268-B：真实微信 transport 与 output
 
