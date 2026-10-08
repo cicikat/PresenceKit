@@ -197,6 +197,8 @@ def _resolve_preset_name(call_category: str, char_id: str | None = None) -> str:
     # the established category -> default_preset -> chat fallback.
     if call_category == "scenario_reconcile":
         name = profile.get("scenario_reconcile") or profile.get("intent") or profile.get("chat") or default_name
+    elif call_category == "invariants_relation":
+        name = profile.get(call_category) or profile.get("summary") or default_name or profile.get("chat")
     elif call_category in {"ime_judge", "minecraft_reaction"}:
         name = (
             profile.get(call_category)
@@ -264,6 +266,8 @@ def resolve_category_info(
     profile = profiles.get(active) or (next(iter(profiles.values())) if profiles else {})
     if call_category == "scenario_reconcile":
         candidates = (("scenario_reconcile", "category"), ("intent", "intent_fallback"), ("chat", "chat_fallback"))
+    elif call_category == "invariants_relation":
+        candidates = ((call_category, "category"), ("summary", "summary_fallback"), ("chat", "chat_fallback"))
     elif call_category in {"ime_judge", "minecraft_reaction"}:
         candidates = ((call_category, "category"), ("sensor_judge", "sensor_fallback"), ("intent", "intent_fallback"), ("chat", "chat_fallback"))
     elif call_category == "sensor_judge":
@@ -280,7 +284,7 @@ def resolve_category_info(
             break
         if (
             key == call_category
-            and call_category not in ("scenario_reconcile", "ime_judge", "sensor_judge", "minecraft_reaction")
+            and call_category not in ("scenario_reconcile", "ime_judge", "sensor_judge", "minecraft_reaction", "invariants_relation")
             and default_name
         ):
             preset_name = default_name

@@ -177,15 +177,23 @@ async def _run(request: dict[str, Any]) -> None:
             return
         request = {**request, "next_stage": next_stage}
 
-        from core import llm_client
+        from core.decision_contract import closed, DecisionRequest, Question
 
         timeout, _ = _config()
+        messages = build_reconcile_messages(request)
+        decision_request = DecisionRequest('scenario_reconcile', json.loads(messages[1]['content']), {
+            'decision': Question('choice', messages[0]['content'], {
+                'stay': 'Current stage is still underway',
+                'advance_next': 'Visible exchange clearly completes the current stage and moves into the adjacent stage',
+                'uncertain': 'Evidence is ambiguous or missing',
+            }),
+        }, failure_policy='fail_uncertain', confidence_gate=.65)
         raw = await asyncio.wait_for(
-            llm_client.chat(
-                build_reconcile_messages(request),
+            closed(
+                decision_request, messages,
                 call_category="scenario_reconcile",
                 char_id=str(request.get("char_id") or ""),
-                max_tokens_override=32,
+                max_tokens=32,
             ),
             timeout=timeout,
         )

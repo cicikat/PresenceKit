@@ -11,7 +11,8 @@ from urllib.parse import urlsplit
 from core.llm_protocol import NormalizedResponse, UpstreamResponseFormatError
 
 # Only consumers that explicitly compile a DecisionRequest may use System One.
-SYSTEMONE_CATEGORIES = frozenset({'sensor_judge', 'detect_emotion', 'minecraft_reaction', 'ime_judge', 'probe'})
+SYSTEMONE_CATEGORIES = frozenset({'sensor_judge', 'detect_emotion', 'minecraft_reaction', 'ime_judge', 'probe',
+    'scenario_reconcile', 'letter_eval', 'invariants_relation'})
 _LAST: dict[str, dict] = {}
 
 
@@ -159,6 +160,25 @@ def prepare(target, request: DecisionRequest, *, messages: list, gen_kwargs: dic
     from core.prompt_layer import sanitize_messages
     from core.prompt_style import apply_prompt_style
     return PreparedAttempt(messages=sanitize_messages(apply_prompt_style(messages, target.prompt_style)), gen_kwargs=gen_kwargs)
+
+
+async def closed(request: DecisionRequest, messages: list, *, call_category: str, max_tokens: int,
+                 char_id: str | None = None) -> str:
+    """One native closed decision or the original complete text request."""
+    from core import llm_client
+    from core.model_registry import get_model_client
+    from core.llm_failover import execute_create, category_timeout
+    mc = get_model_client(call_category, char_id=char_id)
+    if mc.api_protocol != 'systemone':
+        options = {'char_id': char_id} if char_id is not None else {}
+        return await llm_client.chat(messages, call_category=call_category,
+            max_tokens_override=max_tokens, **options)
+    outcome = await execute_create(call_category=call_category, char_id=char_id, caller=call_category,
+        primary_mc=mc, prepare=lambda target: prepare(target, request, messages=messages,
+            gen_kwargs={'max_tokens': max_tokens, 'timeout': category_timeout(call_category)}))
+    if not outcome.ok:
+        raise outcome.error or RuntimeError(outcome.skip_reason or 'closed_decision_failed')
+    return outcome.value.assistant_text
 
 
 def validate_routes(mp: dict) -> list[str]:

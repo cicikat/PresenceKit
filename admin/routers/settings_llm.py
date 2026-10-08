@@ -806,6 +806,8 @@ async def get_model_presets(auth=Depends(require_scopes("admin"))):
     from core.model_registry import resolve_category_info
     routing_effective = {
         profile_name: {
+            **{category: resolve_category_info(category, profile_name=profile_name)
+               for category in ('ime_judge', 'probe', 'detect_emotion', 'letter_eval', 'invariants_relation')},
             "scenario_reconcile": resolve_category_info(
                 "scenario_reconcile", profile_name=profile_name
             ),
@@ -982,6 +984,8 @@ async def list_routing_profiles(auth=Depends(require_scopes("persona"))):
                 "categories": dict(mapping),
                 "fallback": dict(normalize_fallback_routes(mp).get(name) or {}),
                 "effective": {
+                    **{category: resolve_category_info(category, profile_name=name)
+                       for category in ('ime_judge', 'probe', 'detect_emotion', 'letter_eval', 'invariants_relation')},
                     "scenario_reconcile": resolve_category_info("scenario_reconcile", profile_name=name),
                     "event_edge_proposer": resolve_category_info("event_edge_proposer", profile_name=name),
                     "rpg_kp": resolve_category_info("rpg_kp", profile_name=name),

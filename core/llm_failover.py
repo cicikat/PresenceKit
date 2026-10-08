@@ -36,6 +36,8 @@ CATEGORY_TIMEOUTS: dict[str, float] = {
     "perform": 10.0,
     "monologue": 10.0,
     "scenario_reconcile": 8.0,
+    "letter_eval": 10.0,
+    "invariants_relation": 30.0,
     "event_edge_proposer": 30.0,
     "rpg_kp": 30.0,
     "sensor_judge": 10.0,
@@ -60,6 +62,8 @@ TOTAL_WALL: dict[str, float] = {
     "consolidation": 60.0,
     "chat": 180.0,
     "scenario_reconcile": 16.0,
+    "letter_eval": 20.0,
+    "invariants_relation": 60.0,
     "event_edge_proposer": 60.0,
     "rpg_kp": 60.0,
 }

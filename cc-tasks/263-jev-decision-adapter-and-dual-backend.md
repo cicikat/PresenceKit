@@ -214,10 +214,10 @@ Jev 路径才是「闸门一次 + 开放字段一次」。纯 `json_chat` 必须
 
 ## D — P1：其余一次 Jev 可替换点
 
-- [ ] D1 `scenario_reconcile`：三选一；uncertain/stale/CAS 合同不变；不得更激进推进。
-- [ ] D2 `letter_eval`、invariants `_relation`。`observe` 生成 items 仍 summary 小模型。
-- [ ] D3 明确不接入：`rpg_kp`、`event_edge_proposer`、consolidation、profile 提取、vision。写入 known-issues 或本单「禁止」节即可，不留假 TODO。
-- [ ] D4 若做 `perform`：仅 llm provider 且句数≤上限；失败 fail-open。默认不强制。独立提交。
+- [x] D1 `scenario_reconcile`：三选一；uncertain/stale/CAS 合同不变；不得更激进推进。
+- [x] D2 `letter_eval`、invariants `_relation`。`observe` 生成 items 仍 summary 小模型。
+- [x] D3 明确不接入：`rpg_kp`、`event_edge_proposer`、consolidation、profile 提取、vision。写入 known-issues 或本单「禁止」节即可，不留假 TODO。
+- [x] D4 若做 `perform`：仅 llm provider 且句数≤上限；失败 fail-open。默认不强制。独立提交。
 
 ## E — P2：对照评测与默认开关
 
@@ -267,3 +267,7 @@ IME Jev 闸门与开放文案已拆分；显式文本兜底同时承担通过后
 ## C 阶段验收（2026-10-08）
 
 本轮可见 schema 封闭选择、none 零文本、enum 填参、开放参数显式文本/缺参询问已接入。能力不兼容只走显式完整文本，未配则失败不执行；不扩大工具暴露面，不改 Path C 与 MCP relay。81 项相关回归通过。工具 reader scope 的旧夹具改为 owner-turn，以满足276默认禁止访客回复；未开放生产访客。原生出口补齐 no_outbound 守卫。
+
+## D 阶段验收（2026-10-08）
+
+scenario 三选一、letter_eval 评分、invariants_relation 三选一已接入；未配原生保持文本。invariants 新 category 未映射沿用 summary，items 正文提取仍 summary。157 项相关回归通过，含原生评分/关系与 uncertain；既有 stale/CAS 回归通过。perform 可选项本次不做；rpg_kp、event_edge_proposer、consolidation、profile 提取、vision 明确不接。管理面 effective 补齐所有新增用途，继承路线协议提示随编辑同步。

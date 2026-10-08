@@ -86,10 +86,16 @@ async def evaluate_letter(letter: str) -> int:
         "只输出数字（1-5），不要其他文字。"
     )
     try:
-        raw = await llm_client.chat(
+        from core.decision_contract import closed, DecisionRequest, Question
+        request = DecisionRequest('letter_eval', letter, {
+            'quality': Question('score', '评价角色给用户的信：具体细节、真实情感和内容分量。',
+                ('几乎没有实质内容', '泛泛而谈像模板', '内容一般稍显空洞', '基本具体情感到位', '细节具体真实且有分量'),
+                scale=(1, 5)),
+        }, output='label', failure_policy='fail_zero', confidence_gate=.65)
+        raw = await closed(request,
             [{"role": "user", "content": prompt}],
             call_category="letter_eval",
-            max_tokens_override=64,
+            max_tokens=64,
         )
         match = re.search(r"[1-5]", str(raw or ""))
         return int(match.group(0)) if match else 0

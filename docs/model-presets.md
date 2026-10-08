@@ -609,6 +609,8 @@ Brief 253.6 的语音转写使用独立 `stt_presets` 命名连接和 `voice_mes
 
 ## Jev 原生决策协议（263 A）
 
+263 D：scenario_reconcile 使用 stay/advance_next/uncertain choice；低置信失败不推进，stale/版本 CAS 保持现状。letter_eval 使用5档 score 投影1–5分，失败为0，letter_write 仍文本。invariants_relation 使用 same/contradicts/different；未映射沿用 summary preset，失败跳过本次合并，observe 的 items 提取仍走 summary 文本。三个用途已在模型路由编辑器提供。perform 本次不接；rpg_kp、event_edge_proposer、consolidation、身份资料提取与 vision 不接原生，不留自动替代逻辑。
+
 263 C：probe 加入原生白名单；从本轮可见 schema 选工具，开放参数仅由本行显式文本预设补写，无文本则沿用缺参询问；MCP/开放对象/复杂参数或含 none 超32项只允许显式完整文本回落。Path C 与 relay 不改，见 [工具探针合同](tools.md)。effective 的 open_fields 与 open_fields_preset 同时适用于 probe。
 
 `api_protocol=systemone` 使用独立 httpx / Bearer / PresenceKit User-Agent，沿用可热更新模型代理与客户端生命周期。base_url 可填根地址、/v1 或完整 /v1/systemone；不会追加 chat/completions。不发送 messages、temperature、tools 或 max_tokens；不支持生成正文和流式。

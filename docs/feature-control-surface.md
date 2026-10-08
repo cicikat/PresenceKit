@@ -1059,3 +1059,5 @@ Minecraft建造：`minecraft.allow_building=false`，`GET/PUT /settings/minecraf
 263 A/B：模型连接与分工的 preset 协议新增 `systemone`，原生 Jev 当前可选 sensor_judge / detect_emotion / minecraft_reaction / ime_judge。API preset CRUD、profile CRUD、默认 preset 与运行时均校验兼容性；失败兜底只允许文本。profile 编辑显示实际协议与未配兜底失败语义提示；IME 还说明该文本预设用于通过后的开放文案，缺预设不入队，effective 返回 open_fields/open_fields_preset。连通性测试改用具名 choice，不做聊天 ping。`GET /observability/decisions`（state.read）显示无正文的近期原生判断，持久尝试复用既有 API 账本。无新的桌面/手机设置和接口。
 
 263 C：probe 可选原生 Jev；管理面说明文本预设承担开放补参及不兼容 schema 的完整探针，未配文本不暗中选主模型。有效状态同样返回 open_fields/open_fields_preset。MCP relay 和 Path C 不切原生。
+
+263 D：模型路由新增 letter_eval 与 invariants_relation 行（后者未映射沿用 summary），并允许 scenario_reconcile 原生 choice。各行 effective protocol 与失败文本兜底复用既有状态；信件正文、梦境观察提取与主回复仍是文本用途。未引入跨客户端字段。

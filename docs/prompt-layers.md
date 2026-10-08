@@ -112,6 +112,8 @@ stage 的导演字段、当前 stage 标记与私密真相披露策略，并受�
 或 Group Dream 生效。可见回复发送后才可能启动有界的 `scenario_reconcile` 后台校准；该
 校准不进入本层 prompt，结果经 state-version CAS 只允许向紧邻下一 stage 推进。
 
+263 D：该封闭校准可用 Jev systemone choice；只发送上述有界可见交换与相邻阶段字段，低置信或协议失败不推进。文本后端、stale 检查和 CAS 合同不变。
+
 > 层 10 注入安全：工具裸输出经 `ToolResult.safe_summary`（截断上限 2000 字符）包裹后，以定界标记 `<<<TOOL_DATA_START>>>` / `<<<TOOL_DATA_END>>>` 加反注入指令框定，防止外部工具/搜索结果中的不可信文本被模型当作指令执行。原始数据仅落 debug 日志，永不进 prompt/memory。
 >
 > 层 10.5（Brief 27）：`tool_dispatcher.execute_structured()` 每次 return（origin 闸门拒绝除外）都调 `action_trace.record()` 落一条精简痕迹（`data/runtime/memory/{char_id}/{uid}/action_trace.json`，环形上限 30 条）。`result_digest` 只消费 `ToolResult.safe_summary`，`peek_screen_content` 特判只留 title_hint。**当轮去重**：本轮已有 `tool_result` 且其工具名与痕迹最新一条相同时跳过该条，避免层10/10.5 重复同一件事。不进 `_drop_priority` 裁剪链（够小且时效性强），全层预算截断 400 字。`action_trace.enabled: false` 时零行为变化。可选 `event_log_echo` 配置项：`status=ok` 时经 `fixation_pipeline.capture_turn(trigger_name="action_trace")` 回流一条到 event_log（**不得**直接调用底层写入函数，见 `tests/test_r6b_reality_scrub_contract.py` C2 契约）；回流文案刻意不整行包在中文括号里，否则会被 `scrub_reality_output_text` 当整行动作旁白丢弃。
