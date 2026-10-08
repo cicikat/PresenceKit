@@ -21,12 +21,14 @@ class CookieLogin(BaseModel):
 @router.get("/settings/qzone")
 async def get_settings(auth=Depends(require_scopes("admin"))):
     cfg = service.settings().model_dump(exclude={"access_token"})
-    return {**cfg, **service.snapshot()}
+    return {**cfg, **service.snapshot(), "effective_watched_user_ids": service.watched_users(),
+            "events": _event_state()}
 
 
 @router.put("/settings/qzone")
 async def put_settings(body: service.QzoneSettings, auth=Depends(require_scopes("admin"))):
     cfg = read_config_file(get_config_path())
+    previous = service.settings()
     values = body.model_dump()
     # Blank password preserves the stored bridge token.
     if not values["access_token"]:
@@ -35,6 +37,13 @@ async def put_settings(body: service.QzoneSettings, auth=Depends(require_scopes(
     write_config_file(get_config_path(), cfg)
     reload_config()
     service._state.update(last_code="not_checked", last_checked_at=0.0)
+    from core.qzone_events import revision
+    if revision(previous) != revision(body):
+        from core.qzone_events import invalidate
+        owner = str(service.get_config().get("scheduler", {}).get("owner_id") or "")
+        for char_id in set(body.allowed_char_ids + previous.allowed_char_ids):
+            if owner:
+                invalidate(owner, char_id)
     return await get_settings(auth)
 
 
@@ -77,4 +86,12 @@ async def sync_napcat_cookie(auth=Depends(require_scopes("admin"))):
 
 @router.get("/observability/qzone")
 async def observe(auth=Depends(require_scopes("state.read"))):
-    return service.snapshot()
+    return {**service.snapshot(), "events": _event_state()}
+
+
+def _event_state():
+    from core.character_loader import _active_character_id
+    from core.qzone_events import observe
+    owner = str(service.get_config().get("scheduler", {}).get("owner_id") or "")
+    char_id = _active_character_id()
+    return observe(owner, char_id) if owner and char_id else {"last_code": "scope_unavailable"}

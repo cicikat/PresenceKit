@@ -911,3 +911,6 @@ schema 兼容修复。实现与定向回归见 [tool-discovery.md](tool-discover
 
 <!-- qzone-272-observe -->
 QQ 空间 272 B（observe）：独立 Docker 桥登录网络探针、只读说说与管理面隔离浏览器交互已通过；真实发帖/评论/点赞/删除及真实模型 self 提醒执行未实测。当前长运行后端仍需首次正常重启加载新增模块，设置本身后续热生效。详见 [qzone-integration.md](qzone-integration.md) 和 [272 工单](../cc-tasks/272-qzone-and-reminder-target.md)。
+
+<!-- qzone-273-observe -->
+QQ 空间 273（observe）：事件进入 autonomy、首次基线/去重/关闭撤销及独立互动授权有定向回归。真实新说说/回复到真实模型决策及真实评论投递尚未联合验收；有界轮询不覆盖历史帖、非关注作者帖子中的回复或空间接口未返回的评论。首次运行仍需正常重启后端加载代码，详见 [273 工单](../cc-tasks/273-qzone-autonomy-events.md)。

@@ -6,6 +6,8 @@
 
 本文定义 v1 的 proactive 工作边界。scheduler 或 sensor 可以报告事实，但不能生成面向用户的一句话。`core.autonomy` 是唯一的 proactive 决策与交付路径；`talk_owner` 是唯一的用户可见出口。
 
+工单 273：`source=qzone` 将关注用户新说说及收到的空间评论/回复作为低信任候选，角色可静默、空间互动或 `talk_owner`。首次基线、有界轮询、撤销与独立写授权见 [QQ 空间](qzone-integration.md#273空间事件--主动机会)。
+
 工单 260 F：真实播放生命周期事件在幂等记账后可作为 low-trust `source=music_playback`
 候选进入既有 perceive → autonomy 路径；Dream 阻断发言不阻断记账。命令 tool result 不再
 入 stimulus。抑制「角色选歌→自己被切歌唤醒→再选歌」（冷却 600 s，每会话最多 2 次开口）。
@@ -20,7 +22,7 @@ Signal 使用 `autonomy-signal.v1`：
 ```json
 {
   "version": "autonomy-signal.v1",
-  "source": "sensor|scheduler|desktop_wake|interval|schedule|overflow|music_playback|video_call_camera",
+  "source": "sensor|scheduler|desktop_wake|interval|schedule|overflow|music_playback|video_call_camera|qzone",
   "evidence": [{"fact": "..."}],
   "reason": "A bounded explanation for considering this opportunity.",
   "expiry": 0,

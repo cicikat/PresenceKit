@@ -2908,11 +2908,12 @@ async def _execute_structured_impl(
             return _execution_outcome("tool_failed", "补写日记仅允许在用户私聊请求中执行。")
 
     if tool_name in _QZONE_TOOL_NAMES:
-        from core.qzone_service import allowed
+        from core.qzone_service import allowed, autonomy_tool_allowed
         if any(key in tool_args for key in ("user_id", "uid", "char_id", "owner", "realm")):
             _trace("failed", "grant_principal_mismatch")
             return _execution_outcome("tool_failed", "grant_principal_mismatch")
-        if (is_group or origin not in {"user_live", "assistant_loop", "assistant_loop_relay"}
+        if (is_group or origin not in {"user_live", "assistant_loop", "assistant_loop_relay", "autonomy_loop"}
+                or (origin == "autonomy_loop" and not autonomy_tool_allowed(tool_name, user_id, char_id))
                 or not allowed(user_id, char_id, write=_TOOL_REGISTRY[tool_name].get("effect") == "write")):
             _trace("failed", "qzone_not_authorized")
             return _execution_outcome("tool_failed", "QQ 空间未授权给当前会话/角色。")

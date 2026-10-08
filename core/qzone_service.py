@@ -17,6 +17,11 @@ class QzoneSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
     enabled: bool = False
     write_enabled: bool = False
+    events_enabled: bool = False
+    replies_enabled: bool = True
+    autonomy_interactions_enabled: bool = False
+    watched_user_ids: list[str] = Field(default_factory=list, max_length=10)
+    poll_interval_seconds: int = Field(default=120, ge=60, le=3600)
     base_url: str = "http://127.0.0.1:5700"
     access_token: str = Field(default="", max_length=4096)
     account_id: str = Field(default="", max_length=20, pattern=r"^\d*$")
@@ -32,6 +37,29 @@ class QzoneSettings(BaseModel):
     def characters(cls, values):
         from core.data_paths import safe_user_id
         return list(dict.fromkeys(safe_user_id(value) for value in values))
+
+    @field_validator("watched_user_ids")
+    @classmethod
+    def watched(cls, values):
+        import re
+        if any(not re.fullmatch(r"[0-9]{1,20}", value) for value in values):
+            raise ValueError("关注用户必须是 QQ 数字 ID")
+        return list(dict.fromkeys(values))
+
+
+def watched_users(cfg: QzoneSettings | None = None) -> list[str]:
+    import re
+    cfg = cfg or settings()
+    owner = str(get_config().get("scheduler", {}).get("owner_id") or "")
+    return cfg.watched_user_ids or ([owner] if re.fullmatch(r"[0-9]{1,20}", owner) else [])
+
+
+def autonomy_tool_allowed(name: str, uid: str, char_id: str) -> bool:
+    cfg = settings()
+    if name in {"qzone_get_feeds", "qzone_get_posts", "qzone_get_comments"}:
+        return cfg.events_enabled and allowed(uid, char_id)
+    return bool(name in {"qzone_comment", "qzone_set_like"}
+                and cfg.autonomy_interactions_enabled and allowed(uid, char_id, write=True))
 
 
 _state = {"last_code": "not_checked", "last_checked_at": 0.0, "calls": 0, "failures": 0}
@@ -56,6 +84,9 @@ def snapshot() -> dict:
     cfg = settings()
     effective = "disabled" if not cfg.enabled else "binding_missing" if not cfg.account_id or not cfg.allowed_char_ids else _state["last_code"]
     return {"enabled": cfg.enabled, "write_enabled": cfg.write_enabled,
+            "events_enabled": cfg.events_enabled,
+            "watched_user_count": len(watched_users(cfg)),
+            "autonomy_interactions_enabled": cfg.autonomy_interactions_enabled,
             "effective_state": effective, "apply_mode": "hot_reload",
             "credential_configured": bool(cfg.access_token), **_state}
 
@@ -88,6 +119,8 @@ async def call(action: str, params: dict, *, uid: str, char_id: str) -> dict:
             return login
         if str((login.get("data") or {}).get("user_id") or "") != cfg.account_id:
             return {"ok": False, "code": "account_mismatch"}
+        if not allowed(uid, char_id, write=write) or settings().model_dump() != cfg.model_dump():
+            return {"ok": False, "code": "qzone_settings_changed"}
         return await request(cfg.base_url, cfg.access_token, action, params)
     if write:
         async with _write_lock:

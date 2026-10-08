@@ -411,6 +411,11 @@ class DataPaths:
         assert_production_identity_allowed(user_id, mode=self.mode)
         return self._p("runtime", "autonomy", safe_user_id(char_id), safe_user_id(user_id), "state.json")
 
+    def qzone_inbox(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
+        """Bounded QZone source baselines and receipt fingerprints, no text."""
+        assert_production_identity_allowed(user_id, mode=self.mode)
+        return self._p("runtime", "qzone", safe_user_id(char_id), safe_user_id(user_id), "inbox.json")
+
     def agent_runtime_reality_root(self) -> Path:
         """Reality Task Manager root; Dream uses a separate future root."""
         return self._p("runtime", "agent_runtime", "reality")

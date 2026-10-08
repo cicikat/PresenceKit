@@ -58,6 +58,9 @@ def tool_is_eligible(name: str, policy: dict, *, registry: dict, effect: str) ->
             and policy.get("outcome_unknown") == "fail_closed"
         )
     if effect == "write":
+        if name in {"qzone_comment", "qzone_set_like"}:
+            from core.qzone_service import settings
+            return settings().autonomy_interactions_enabled
         return name in _SANDBOXED_WRITE_TOOLS and info.get("category") in _SANDBOXED_WRITE_CATEGORIES
     return False
 
@@ -71,7 +74,7 @@ def tool_eligibility(name: str, policy: dict, *, registry: dict, effect: str) ->
     info = registry.get(name, {})
     if info.get("dangerous") or info.get("require_confirm") or effect not in {"read", "write"}:
         return False, "side_effect_or_confirmation_required"
-    if effect == "write" and name not in _SANDBOXED_WRITE_TOOLS:
+    if effect == "write" and name not in _SANDBOXED_WRITE_TOOLS and name not in {"qzone_comment", "qzone_set_like"}:
         return False, "write_not_sandboxed_for_autonomy"
     if info.get("category") == "mcp" and not bool(policy.get("mcp_explicit")):
         return False, "mcp_requires_explicit_enablement"
@@ -276,6 +279,10 @@ def decide_autonomy_tools(uid: str, char_id: str, state: dict) -> list[AutonomyT
         if info.get("self_management"):
             continue
         configured_policy = configured.get(name) if isinstance(configured.get(name), dict) else {}
+        if info.get("category") == "qzone":
+            from core.qzone_service import autonomy_tool_allowed
+            qzone_allowed = autonomy_tool_allowed(name, uid, char_id)
+            configured_policy = {**configured_policy, "enabled": qzone_allowed and configured_policy.get("enabled", True)}
         if name == "observe_user_screen" and name not in configured:
             from core.perception.screen_observation import enabled as screen_enabled
             configured_policy = {"enabled": screen_enabled()}

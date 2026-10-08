@@ -1039,3 +1039,6 @@ confidence 是估计的可信度而非强度）、`recall.semantic_min_similarit
 
 <!-- qzone-272-control-surface -->
 QQ 空间控制：消息分发与客户端设置 → QQ 空间卡片，`GET/PUT /settings/qzone`（admin）热更新启用、写操作、桥地址、write-only Token、预期账号与角色白名单；默认关，关闭只停止空间能力。`POST /settings/qzone/probe` 只读验登录，`login-cookie` / `sync-napcat-cookie` 更新桥登录；`GET /observability/qzone`（state.read）返回脱敏进程计数与最后状态。没有新增桌面/手机设置；见 [qzone-integration.md](qzone-integration.md)。
+
+<!-- qzone-273-control-surface -->
+273：同一卡片新增事件开关（默认关）、关注 QQ（空默认主用户 QQ）、收到回复（默认开，依赖事件总开关）、轮询间隔（默认 120 秒，60–3600）、自主评论/回复/点赞（默认关，依赖写总开关）。关闭回到按需工具，不触发主动机会；首次/换来源只建基线，热更新撤销旧候选。`GET /observability/qzone` 增加活动角色持久事件元数据；管理面显示有效关注、扫描状态、入队与去重。自主工具沿原 autonomy 矩阵显式禁用优先，不开放自主发布/删除。完整边界见 [空间事件](qzone-integration.md#273空间事件--主动机会)。

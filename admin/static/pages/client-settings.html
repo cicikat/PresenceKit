@@ -8,13 +8,18 @@
 </div><p id="client-state" role="status"></p><button class="btn btn-ghost btn-sm" data-action="loadClientSettings">刷新</button></section>
 <details class="card"><summary>QQ · OneBot 桥连接</summary><p>当前支持无路径、无鉴权的 OneBot ws://host:port 桥（例如对应配置的 NapCat）；其他连接形式需要扩展适配器。填写桥实际监听地址；修改后重启后端。standalone 模式会阻止 QQ 启动。</p><label class="field"><span>主机 / IP</span><input id="client-qq-host" autocomplete="off"></label><label class="field"><span>端口</span><input id="client-qq-port" type="number" min="1" max="65535"></label><button class="btn btn-primary" data-action="saveClientConnection">保存 QQ 连接</button></details>
 <details class="card"><summary>QQ · 空间说说与互动</summary>
-  <p>独立 onebot-qzone REST 桥，和 QQ 私聊连接分别配置。默认关闭；关闭即停止空间工具调用，不影响私聊。保存后热生效。只允许已绑定 owner 的私聊与角色白名单，不自动轮询或回复好友。</p>
+  <p>独立 onebot-qzone REST 桥，和 QQ 私聊连接分别配置。默认关闭；关闭即停止空间工具调用与事件采集，不影响私聊。保存后热生效，只允许已绑定 owner 与角色白名单。</p>
   <div class="form-row"><label class="checkbox-row"><input type="checkbox" id="qzone-enabled">启用 QQ 空间</label><label class="checkbox-row"><input type="checkbox" id="qzone-write-enabled">允许发布、评论、点赞和删除</label></div>
   <label class="field"><span>桥接 REST 根地址（独立桥或 NapCat 代理插件地址）</span><input id="qzone-base-url" type="url" autocomplete="off"></label>
   <label class="field"><span>桥接 Token（留空保留，不会回显）</span><input id="qzone-token" type="password" autocomplete="new-password"></label>
   <label class="field"><span>预期登录 QQ 账号（必须与桥登录一致）</span><input id="qzone-account" autocomplete="off"></label>
   <label class="field"><span>允许角色 ID（逗号分隔；空表示不授权任何角色）</span><input id="qzone-characters" autocomplete="off"></label>
-  <p>文字说说使用账号已有可见性；图片上传、自动回评和好友订阅本轮未接入。查看工具按需有界查询；实际调用还受工具与角色权限控制。</p>
+  <div class="form-row"><label class="checkbox-row"><input type="checkbox" id="qzone-events-enabled">新说说进入主动机会</label><label class="checkbox-row"><input type="checkbox" id="qzone-replies-enabled">同时采集收到的评论和回复</label></div>
+  <label class="field"><span>关注用户 QQ（逗号分隔；留空默认主用户 QQ）</span><input id="qzone-watched-users" autocomplete="off"></label>
+  <label class="field"><span>扫描间隔秒（60–3600，默认 120）</span><input id="qzone-poll-interval" type="number" min="60" max="3600" value="120"></label>
+  <label class="checkbox-row"><input type="checkbox" id="qzone-autonomy-interactions">允许角色自主评论、回复和点赞</label>
+  <p>事件采集默认关闭；首次启用/改变关注建立基线，不补发历史。每次扫描轮换一个关注用户及登录账号最近 5 条说说，每条最多 20 条评论；扫描范围外或接口隐藏的回复可能无法检测。候选有效期 20 分钟，仍受主动性、勿扰、梦境与预算限制。角色自己决定静默、互动或正常对话。自主互动默认关闭，开启还需上方写入授权及角色工具许可；自主发说说/删除不开放。文字说说沿原有可见性发布，图片上传未接入。</p>
+  <p id="qzone-events-state" class="i18n-raw" role="status"></p>
   <p id="qzone-state" class="i18n-raw" role="status"></p>
   <button class="btn btn-primary" data-action="saveQzoneSettings">保存空间设置</button>
   <button class="btn btn-ghost" data-action="probeQzone">检查登录与连接（只读）</button>

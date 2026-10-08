@@ -80,13 +80,23 @@ async function saveClientConnection() {
   } catch (error) { toast(error.message, 'err'); }
 }
 
+let qzoneEventsSupported = false;
 async function loadQzoneSettings() {
   const root = document.getElementById('qzone-state');
   if (!root) return;
   try {
     const s = await api('GET', '/settings/qzone');
+    qzoneEventsSupported = typeof s.events_enabled === 'boolean';
     document.getElementById('qzone-enabled').checked = s.enabled;
     document.getElementById('qzone-write-enabled').checked = s.write_enabled;
+    document.getElementById('qzone-events-enabled').checked = s.events_enabled;
+    document.getElementById('qzone-replies-enabled').checked = s.replies_enabled;
+    document.getElementById('qzone-autonomy-interactions').checked = s.autonomy_interactions_enabled;
+    document.getElementById('qzone-watched-users').value = (s.watched_user_ids || []).join(', ');
+    document.getElementById('qzone-poll-interval').value = s.poll_interval_seconds || 120;
+    const e = s.events || {};
+    document.getElementById('qzone-events-state').textContent = `事件：${e.last_code || '未扫描'} · 有效关注 ${(s.effective_watched_user_ids || []).join(', ') || '未绑定主用户 QQ'} · 入队 ${e.queued || 0} · 重复 ${e.duplicates || 0} · ${e.partial ? '部分扫描/评论不可用' : '有界扫描'} · 最近成功 ${e.last_success_at ? new Date(e.last_success_at * 1000).toLocaleString() : '无'}`;
+    if (!qzoneEventsSupported) document.getElementById('qzone-events-state').textContent = '后端尚未加载空间事件模块，请正常重启后端后设置。';
     document.getElementById('qzone-base-url').value = s.base_url;
     document.getElementById('qzone-account').value = s.account_id;
     document.getElementById('qzone-characters').value = s.allowed_char_ids.join(', ');
@@ -96,10 +106,16 @@ async function loadQzoneSettings() {
 }
 
 async function saveQzoneSettings() {
+  if (!qzoneEventsSupported) { toast('请先正常重启后端加载空间事件模块，再保存设置', 'err'); return; }
   try {
     await api('PUT', '/settings/qzone', {
       enabled: document.getElementById('qzone-enabled').checked,
       write_enabled: document.getElementById('qzone-write-enabled').checked,
+      events_enabled: document.getElementById('qzone-events-enabled').checked,
+      replies_enabled: document.getElementById('qzone-replies-enabled').checked,
+      autonomy_interactions_enabled: document.getElementById('qzone-autonomy-interactions').checked,
+      watched_user_ids: document.getElementById('qzone-watched-users').value.split(/[,，]/).map(v => v.trim()).filter(Boolean),
+      poll_interval_seconds: Number(document.getElementById('qzone-poll-interval').value),
       base_url: document.getElementById('qzone-base-url').value.trim(),
       access_token: document.getElementById('qzone-token').value.trim(),
       account_id: document.getElementById('qzone-account').value.trim(),

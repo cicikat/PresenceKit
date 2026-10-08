@@ -5,6 +5,11 @@
 qzone:
   enabled: false
   write_enabled: false
+  events_enabled: false           # 新说说/回复进入既有主动机会
+  replies_enabled: true
+  autonomy_interactions_enabled: false  # 自主评论/回复/点赞；还需 write_enabled
+  watched_user_ids: []             # 留空默认 scheduler.owner_id 对应 QQ
+  poll_interval_seconds: 120       # 60–3600；热生效，有界轮询
   base_url: http://127.0.0.1:5700
   access_token: ""                 # local only; 管理面写入，不回显
   account_id: ""                   # 预期 NapCat/空间登录账号

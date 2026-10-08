@@ -2,6 +2,8 @@
 
 272 A：定时提醒区分用户和角色自己；生成失败不发硬模板，见 [reminder-target.md](reminder-target.md)。
 
+273：autonomy tick 前有界扫描 QQ 空间的新说说/收到回复，仅产生候选不生成台词；复用同一 scheduler owner，无新 worker，最长 45 秒。热设置、基线与覆盖限制见 [qzone-integration.md](qzone-integration.md)。
+
 ## IME 扫描
 
 ## HDS 本地心率

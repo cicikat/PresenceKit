@@ -1181,6 +1181,11 @@ async def _loop():
                         _autonomy_char = _active_char_id_or_none()
                         if _autonomy_char:
                             try:
+                                from core.qzone_events import tick as _qzone_tick
+                                await asyncio.wait_for(_qzone_tick(oid, _autonomy_char), timeout=45)
+                            except Exception as exc:
+                                logger.warning('[scheduler] QZone source scan failed: %s', type(exc).__name__)
+                            try:
                                 from core.ime_awareness import tick as _ime_tick
                                 await asyncio.wait_for(_ime_tick(oid, _autonomy_char), timeout=45)
                             except Exception as exc:
