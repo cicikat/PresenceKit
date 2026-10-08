@@ -244,6 +244,8 @@ class MinecraftService:
             receipt = None
             if plan.action != "none":
                 receipt = await self.command(plan.action, plan.params, expected=b, revision=rev)
+                if receipt.get("status") in {"failed", "canceled", "outcome_unknown"}:
+                    raise MinecraftError("action_" + receipt["status"])
             sent = await self.command("say", {"text": plan.reply}, expected=b, revision=rev)
             for kind, content in (("user_chat", text), ("assistant_chat", plan.reply)):
                 transcript.append_entry(b.char_id, b.uid, "minecraft", b.session_id,

@@ -156,6 +156,30 @@ def test_offline_name_rejects_invalid_java_login_packet():
     assert MinecraftSettings(auth="offline", username="PresenceTest").username == "PresenceTest"
 
 
+def test_model_json_fence_keeps_strict_action_authority():
+    from core.activity.minecraft_companion import parse_plan
+    assert parse_plan('```json\n{"reply":"好。","action":"follow"}\n```').action == "follow"
+    for raw in ('我来了 {"reply":"好。"}', '```json\n{"reply":"好。","action":"shell"}\n```'):
+        with pytest.raises(ValidationError):
+            parse_plan(raw)
+
+
+@pytest.mark.asyncio
+async def test_failed_action_never_sends_claimed_model_reply(runtime):
+    service, bridge, _, _ = runtime
+    original = bridge.request
+    async def failed(method, path, payload=None):
+        if path == "/v1/commands" and payload["action"] == "follow":
+            bridge.calls.append((path, payload))
+            return {"status": "failed", "error": "path_unavailable"}
+        return await original(method, path, payload)
+    bridge.request = failed
+    await service.start()
+    with pytest.raises(MinecraftError, match="action_failed"):
+        await service.chat("跟着我")
+    assert not any(p == "/v1/commands" and c["action"] == "say" for p, c in bridge.calls)
+
+
 def test_http_scopes_reject_mutation_before_bridge_or_storage(runtime, monkeypatch):
     from fastapi import FastAPI
     from fastapi.testclient import TestClient

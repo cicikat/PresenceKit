@@ -157,6 +157,13 @@ Mineflayer 提供实体、方块、背包、移动、聊天等接口；pathfinde
 - [x] 真实调试暴露离线玩家名超过 16 字符会导致 hello 解码失败；补后端与身体入口校验，拒绝无效玩家名。
 - [ ] 独立 Bot 正版登录、皮肤、持续跟随与实际 PVE/拾取、真实模型人格连续性仍 not-run。
 
+### 施工批次 3：真实模型接入修复
+
+- [x] 当前角色资产、近期主聊天只读上下文与真实模型路由，连接真实 LAN 身体后输出 follow 并发送活动回复；活动文件隔离在测试目录。
+- [x] 接受单个完整 JSON Markdown fence，混杂正文、非法动作与未知参数仍拒绝；游戏高度不推测地形。
+- [x] 执行器返回 failed/canceled/outcome_unknown 时不发送模型原先的执行承诺。
+- [x] 相关后端 13 passed；用户选择剩余游戏实测稍后，不能把代码/模型验证勾成实际移动与战斗通过。
+
 静态页面总检查的两个失败为既有 scheduler inline style 与 CSS orphan rules；本次没有修改这些文件或顺手修复。
 上游依赖 audit 有 8 moderate 告警，已记录 known-issues；没有盲目覆盖 uuid 主版本。
 本批没有桌面/手机协议变化，只验证既有 Activity 路由/Tauri 声明合同未漂移。
