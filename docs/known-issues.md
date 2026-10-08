@@ -932,4 +932,4 @@ Minecraft275（observe）：陪伴/保护/白名单小屋、共享快模型路�
 
 ## 聊天工具主动性与既有文件目标识别（2026-10-08，open）
 
-本地会话核查确认：用户希望续写角色此前交付的文件，模型却读取用户长消息，纠正后仍以“记得原文”等角色台词解释而未立即核对文件。后续实际 list_artifacts/read_artifact/update_artifact 成功，不代表早先每轮权限和 schema 必然相同。现有 nudge 偏外部查询及禁止编造，文件路径提示缺少 self/artifacts，发现入口的 artifacts 用途也偏新建。建议增强主动完成受托任务、纠正后重定目标及文件归属路由；本次只查原因，不改行为。见 [278 工单](../cc-tasks/278-log-noise-and-tool-initiative-audit.md)。
+本地会话核查确认：用户希望续写角色此前交付的文件，模型却读取用户长消息，纠正后仍以“记得原文”等角色台词解释而未立即核对文件。后续实际 list_artifacts/read_artifact/update_artifact 成功，不代表早先每轮权限和 schema 必然相同。279 已增强主动完成受托任务、纠正后重定目标及文件归属引导，补齐 self/artifacts；真实模型会话效果仍为 observe，不能用提示回归宣称行为已解决。见 [278 核查](../cc-tasks/278-log-noise-and-tool-initiative-audit.md)、[279 工单](../cc-tasks/279-tool-initiative-and-file-routing.md)。

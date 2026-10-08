@@ -233,6 +233,8 @@ RPG Dream's `rpg_kp` route is a backend capability, not a client setting; it is 
 `presence_ext.tool_loop` 是角色卡级 Path C 覆写，不经设置 API：`"on"` 在全局
 `tool_loop.enabled=false` 时仍为该卡开启多步工具循环，`"off"` 强制关闭，缺失或非法值回落全局。
 全局 `tool_loop.total_timeout_s` 控制单轮工具循环的总墙钟预算，默认 300 秒；管理面可调范围为 5–720 秒。
+
+279：既有 `tool_loop.nudge_hint` 软提示强化主动完成查询/读写/操作、纠正后重定目标及文件归属引导；关闭时不注入此提示。没有新增配置、权限或客户端设置，现有发现/预算/执行闸门继续生效。
 Path C 固定采用分类按需加载，无新增开关：首轮仅提供最终获授权的非空分类入口。
 `max_steps` 之外最多增加非空分类数（至多 10）个纯发现轮，发现/relay/执行共用总超时；
 thinking 前处理和无工具最终生成维持原预算边界。只读 `runtime-signals` 的

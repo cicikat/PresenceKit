@@ -202,6 +202,7 @@ hello 字段或协商流程。
   `fast_failed_then_loop_retry=true`。
 
   工具意愿软提示（`tool_loop.nudge_hint`，默认 true，Brief 29 · 5）：loop 首步在
+  279 更新：明确“工具是你的手脚”，受托操作应连续执行到真实结果；纠正目标后调整行动，区分自有笔记、交付工件、上传资料和用户长消息，不以角色台词代替操作。
   messages 尾部、用户消息之前插入一条 system 提示"需要外部信息或操作时，直接调用可用
   工具，不要凭记忆编造。"（`_layer: "11.5_tool_nudge"`），利用 recency 位置缓解弱代理
   模型不主动调工具的问题。只在 loop 首次组装 messages 时注入一次，只存在于本轮
