@@ -620,3 +620,9 @@ historical tool receipts. Client evidence: docs/tool-activity-2026-09-12.md in t
 管理面提供全局开关、effective state 与 `/perception/screen/status` 无正文观测；电脑视觉观察页、手机系统配置页各有独立本地授权，默认关闭。全局开启时自主工具继承启用，显式工具禁用优先；角色消息继续走原通知/免打扰链路。桌面 IPC 新增可选 onDemandEnabled；手机使用专用 screen_observation 通道与无障碍 worker，不改 mobile poll/ack/relay。
 
 实现及构建/定向测试通过，真实双设备、锁屏、OEM 后台及 VLM/消息联合验收保持 open。管理面既有国际化测试 3 项失败保持 open，详见施工记录，不能将静态检查作为真实设备验收。
+
+## QQ 回复范围（276）
+
+群聊与非 owner 私聊默认关闭，通过消息分发与客户端设置热更新。解析入口及出队入口检查同一准入规则；关闭时不记录群上下文、不更新 presence / owner 活动、不运行媒体/模型。owner 未绑定时私聊按其他用户处理。群聊打开后仍仅响应 @；不以主用户在群中发言为私聊。
+
+既有隔离边界：群聊仅角色卡 + group_context + 主聊天模型，直接 QQ 发送，不走 turn sink / fixation；群上下文仅按 group_id，未按角色区分，主用户群消息在旧链还会更新 owner 梦境/活跃/DND 状态。其他用户私聊仍复用 reality 主链、用户桶、工具和 turn sink；共享角色运行状态及工具推送面不构成完整多用户隔离；普通 QQ 回复 adapter 使用 fanout=[]，不直接广播正文至 desktop/mobile。两个开关是暂停入口，不是重新设计后的隔离证明。

@@ -24,6 +24,14 @@ from unittest.mock import AsyncMock, MagicMock, patch, call
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def enable_group_admission(monkeypatch):
+    from core import qq_admission
+    monkeypatch.setattr(qq_admission, "get_config", lambda: {
+        "qq": {"group_enabled": True}, "scheduler": {"owner_id": "99999"},
+    })
+
+
 _SELF_ID = "10086"
 _GROUP_ID = "999"
 _USER_ID = "12345"

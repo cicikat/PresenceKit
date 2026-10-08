@@ -1134,3 +1134,5 @@ observe：独立 Bot 正版认证、皮肤、真实玩家/模型共玩验收仍�
 合同与部署见 [Minecraft Activity](minecraft-activity.md)。
 
 Minecraft后端增量：`build_house`参数material/x/y/z严格白名单；`allow_building`默认false，在后端共玩页授权，回执placed/total与partial outcome沿现有Activity桥链观察。桌面/手机未消费该接口，无跨仓协议变更。
+
+276 roadmap：QQ 非 owner 私聊的 reality/工具/turn sink 路径尚无完整访客隔离合同，工具事件仍复用面向 UI 的 push_tool_status；普通 QQ 回复正文 fanout=[] 不做 UI 广播；默认以 qq_other_users=false 暂停。QQ 群聊默认 qq_group=false；两开关为 admin 控制面，不新增 desktop/mobile 协议或设置消费。重新开放前验证接收者、用户 scope 与工具权限。

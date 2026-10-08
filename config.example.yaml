@@ -171,6 +171,8 @@ client_channels:
   mobile: true
 
 qq:
+  group_enabled: false  # 群聊回复，管理面逐消息热更新
+  allow_other_users: false  # 非 owner 私聊回复；多用户隔离设计确定后再开放
   enabled: false  # 需要 QQ 机器人再开，并配置 NapCat；纯桌宠用户保持关闭即可
   host: 127.0.0.1
   port: 3001

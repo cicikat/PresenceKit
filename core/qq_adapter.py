@@ -200,6 +200,10 @@ def _parse_event(raw: dict) -> dict | None:
     user_id = str(raw.get("user_id", ""))
     group_id = str(raw.get("group_id", "")) if message_type == "group" else None
 
+    from core.qq_admission import allowed
+    if not allowed(user_id, group_id):
+        return None
+
     # 黑名单检查：命中则静默丢弃
     if is_blacklisted(user_id):
         logger.debug(f"[qq_adapter] 黑名单用户 {user_id}，消息已丢弃")

@@ -1053,3 +1053,5 @@ Docker 桥地址、游戏连接、owner UUID、拾取/PVE 权限及模型预算�
 凭据通过 ignored 本地文件注入，不回显；无桌面/手机设置入口，见 [Minecraft Activity](minecraft-activity.md)。
 
 Minecraft建造：`minecraft.allow_building=false`，`GET/PUT /settings/minecraft`（admin）热更新并撤销会话；共玩页提供5×5小屋材料、显式整数坐标和停止按钮，80块用户材料，不拆块/续建。动作接口activity scope，只读回执placed/total由state.read观测。不涉及桌面/手机设置。
+
+276：消息分发与客户端设置 → QQ 回复范围。`GET/PUT /settings/feature-flags`（admin）的 `qq_group` / `qq_other_users` 对应 `qq.group_enabled` / `qq.allow_other_users`，均默认 false、逐消息热读。关闭在解析及队列消费前拒绝输入，阻止状态、媒体和模型处理；群聊不受其他用户私聊开关控制。effective_state 返回 disabled / standalone-blocked / qq-disabled / enabled；enabled 仅表示配置准入，连接实际状态仍看 QQ 通道观测。QQ 总连接仍需重启。无桌面/手机协议变化。

@@ -924,3 +924,8 @@ npm audit 报告上游 uuid 缓冲区边界问题传播为 8 个 moderate 依赖
 Minecraft 不回流主记忆；复杂采矿与长期规划仍 roadmap。
 
 Minecraft275（observe）：陪伴/保护/白名单小屋、共享快模型路由已实现并完成fixture/浏览器与真实模型验证。快层实测一次冷请求触达3秒上限；慢或冷预设可能取消，固定本地行为与停止仍可用。真实游戏持续移动/保护/建造仍按用户安排not-run，正式常驻后端需正常重启加载。
+
+## Jev 与 QQ 多用户边界（276，2026-10-08）
+
+- open：工单 263 仍规划，文本协议仅 Chat Completions / Responses / Anthropic。保存 Jev 预设使用 Chat Completions 导致请求 `/v1/systemone/chat/completions`，两次隔离测试 HTTP 404；没有原生 systemone 出口或业务决策编译器。Minecraft 六选一适合后续 choice 接入，但当前仍解析文本 JSON，不可宣称 Jev 可用。
+- roadmap：QQ 群上下文仅 group_id、共享角色与模型；旧群链在隔离分流前会触碰 owner 活跃/DND/梦境守卫。其他用户私聊使用 reality 主链，仍有共享角色状态、工具与面向 UI 的 tool_status 推送面；普通 QQ 回复正文经 fanout=[] 直发 QQ，尚无完整访客合同。276 默认关闭两入口且早期拒绝；重新开放前应定义角色/群/用户 scope、工具权限与广播接收者。

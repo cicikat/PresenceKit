@@ -115,8 +115,11 @@ def _patch_config(monkeypatch, owner_id: str = _OWNER_ID):
     import core.config_loader as _cl
     monkeypatch.setattr(_cl, "get_config", lambda: {
         "scheduler": {"owner_id": owner_id},
+        "qq": {"allow_other_users": True},
         "llm": {"tool_call_mode": "function_calling"},
     })
+    from core import qq_admission
+    monkeypatch.setattr(qq_admission, "get_config", _cl.get_config)
 
 
 def _patch_group_context(monkeypatch):

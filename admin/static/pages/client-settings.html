@@ -7,6 +7,11 @@
 <label class="checkbox-row"><input type="checkbox" id="client-mobile" data-action="toggleClientChannel" data-action-args='["mobile"]'><span>手机前端</span></label>
 </div><p id="client-state" role="status"></p><button class="btn btn-ghost btn-sm" data-action="loadClientSettings">刷新</button></section>
 <details class="card"><summary>QQ · OneBot 桥连接</summary><p>当前支持无路径、无鉴权的 OneBot ws://host:port 桥（例如对应配置的 NapCat）；其他连接形式需要扩展适配器。填写桥实际监听地址；修改后重启后端。standalone 模式会阻止 QQ 启动。</p><label class="field"><span>主机 / IP</span><input id="client-qq-host" autocomplete="off"></label><label class="field"><span>端口</span><input id="client-qq-port" type="number" min="1" max="65535"></label><button class="btn btn-primary" data-action="saveClientConnection">保存 QQ 连接</button></details>
+<section class="card"><h3>QQ · 回复范围</h3>
+  <p>两项默认关闭，保存后热生效。群聊开启后仅响应 @ 机器人；其他用户开关控制非主用户的私聊。主用户私聊继续沿用现有链路。开启不代表群聊或多用户状态已完全隔离，设计确定后再开放。</p>
+  <label class="checkbox-row"><input type="checkbox" id="client-qq_group" data-action="toggleClientChannel" data-action-args='["qq_group"]'><span>开启群聊回复</span> <small id="client-qq_group-state"></small></label>
+  <label class="checkbox-row"><input type="checkbox" id="client-qq_other_users" data-action="toggleClientChannel" data-action-args='["qq_other_users"]'><span>允许回复其他用户私聊</span> <small id="client-qq_other_users-state"></small></label>
+</section>
 <details class="card"><summary>QQ · 空间说说与互动</summary>
   <p>独立 onebot-qzone REST 桥，和 QQ 私聊连接分别配置。默认关闭；关闭即停止空间工具调用与事件采集，不影响私聊。保存后热生效，只允许已绑定 owner 与角色白名单。</p>
   <div class="form-row"><label class="checkbox-row"><input type="checkbox" id="qzone-enabled">启用 QQ 空间</label><label class="checkbox-row"><input type="checkbox" id="qzone-write-enabled">允许发布、评论、点赞和删除</label></div>

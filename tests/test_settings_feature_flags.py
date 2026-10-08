@@ -65,6 +65,24 @@ def test_feature_flags_reject_unknown(monkeypatch):
     assert exc.value.status_code == 422
 
 
+def test_qq_reply_scopes_roundtrip_and_effective_state(tmp_path, monkeypatch):
+    path = tmp_path / "config.yaml"
+    path.write_text("qq:\n  enabled: true\n", encoding="utf-8")
+    monkeypatch.setattr(mod, "CONFIG_FILE", path)
+    monkeypatch.setattr(mod, "get_config", lambda: yaml.safe_load(path.read_text(encoding="utf-8")))
+    from core import config_loader
+    monkeypatch.setattr(config_loader, "reload_config", lambda: None)
+    initial = asyncio.run(mod.get_feature_flags(auth=None))["flags"]
+    assert initial["qq_group"]["effective_state"] == "disabled"
+    result = asyncio.run(mod.update_feature_flags(
+        mod.FeatureFlagsUpdate(flags={"qq_group": True, "qq_other_users": False}), auth=None,
+    ))
+    assert result["restart_required"] == []
+    assert result["flags"]["qq_group"]["effective_state"] == "enabled"
+    assert result["flags"]["qq_other_users"]["enabled"] is False
+    assert yaml.safe_load(path.read_text(encoding="utf-8"))["qq"]["group_enabled"] is True
+
+
 def test_qq_and_mail_channel_toggles_are_allowlisted(tmp_path, monkeypatch):
     """Brief 93 §4：auth-tokens 页「通道开关」区复用本白名单读写 qq.enabled / mail.enabled。"""
     path = tmp_path / "config.yaml"

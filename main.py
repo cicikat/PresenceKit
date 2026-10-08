@@ -243,6 +243,11 @@ async def handle_message(message: dict, *, ingress=None):
     # their existing defaults; other transports inject per-turn delivery.
     channel = ingress.channel if ingress is not None else "qq"
 
+    if channel == "qq":
+        from core.qq_admission import allowed
+        if not allowed(user_id, message.get("group_id")):
+            return
+
     # ── Dream guard: reject owner QQ messages when dream is active ──────────
     try:
         from core.config_loader import get_config as _get_config_dg

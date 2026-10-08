@@ -42,6 +42,11 @@ async function loadClientSettings() {
       api('GET', '/settings/clients'), api('GET', '/settings/feature-flags'),
     ]);
     _clientFlags = features.flags;
+    for (const name of ['qq_group', 'qq_other_users']) {
+      document.getElementById('client-' + name).disabled = !_clientFlags[name];
+      document.getElementById('client-' + name).checked = Boolean(_clientFlags[name]?.enabled);
+      document.getElementById('client-' + name + '-state').textContent = _clientFlags[name]?.effective_state || '需重启后端加载新开关';
+    }
     for (const name of ['qq', 'wechat', 'desktop', 'mobile']) {
       document.getElementById('client-' + name).checked =
         Boolean(clients.clients[name]?.enabled ?? _clientFlags[name]?.enabled);
@@ -61,7 +66,7 @@ async function toggleClientChannel(name) {
   const input = document.getElementById('client-' + name);
   input.disabled = true;
   try {
-    const result = name === 'qq' || name === 'wechat'
+    const result = ['qq', 'wechat', 'qq_group', 'qq_other_users'].includes(name)
       ? await api('PUT', '/settings/feature-flags', {flags: {[name]: input.checked}})
       : await api('PUT', '/settings/clients', {[name]: input.checked});
     toast(result.restart_required?.length ? '已保存，重启后端后生效' : '已保存并生效', 'ok');

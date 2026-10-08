@@ -20,6 +20,8 @@ FLAGS = {
     "ime_ingest": ("ime_ingest", "enabled", "IME 草稿与编辑事件接收"),
     "ime_awareness": ("ime_awareness", "enabled", "IME 活动理解与主动关心"),
     "qq":   ("qq",   "enabled", "QQ 通道"),
+    "qq_group": ("qq", "group_enabled", "QQ 群聊回复"),
+    "qq_other_users": ("qq", "allow_other_users", "QQ 其他用户私聊回复"),
     "wechat": ("wechat", "enabled", "个人微信通道"),
     "mail": ("mail", "enabled", "邮件通道"),
     "visual_perception": ("visual_perception", "enabled", "视觉感知"),
@@ -75,7 +77,13 @@ async def get_feature_flags(auth=Depends(require_scopes("admin"))):
             "apply_mode": "restart_required" if name in RESTART_REQUIRED_FLAGS else "hot_reload",
             "restart_required": name in RESTART_REQUIRED_FLAGS,
         }
-        if name == "wechat":
+        if name in {"qq_group", "qq_other_users"}:
+            item["effective_state"] = (
+                "disabled" if not enabled else "standalone-blocked" if cfg.get("standalone_mode", False)
+                else "qq-disabled" if not cfg.get("qq", {}).get("enabled", False) else "enabled"
+            )
+            item["description"] = "默认关闭；逐消息热生效，关闭后不处理对应输入；开启不代表多用户状态已完全隔离。"
+        elif name == "wechat":
             from admin.routers.wechat import operational_state
             item["effective_state"] = operational_state(enabled=enabled)["effective_state"]
             item["description"] = "默认关闭；需绑定 owner 和连接凭据，关闭即停止微信收发；详见运行配置"
