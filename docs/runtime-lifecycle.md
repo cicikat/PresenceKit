@@ -1,5 +1,9 @@
 # Runtime 生命周期
 
+282：Windows Proactor 的 AcceptEx 遇到 WinError64（接入连接断开）时，支持环境 Python3.12 会将错误传至 serving loop 并关闭监听 socket。admin server 在 serve 生命周期安装 `core/windows_accept_recovery.py` 的局部 accept 适配，失败连接关闭后以0.1至1秒退避重试，保留 listener；取消、listener 已关闭及其他错误继续传播。结束 serve 时撤销适配。保留 Proactor 子进程能力，不改系统 Python或跨端协议。首次失败及每60秒重复失败进入已有运行告警，成功接入记录恢复；无新持久状态或配置。
+
+依据：[CPython issue 93821 的修复讨论](https://github.com/python/cpython/pull/124779)。该适配依赖 Windows IOCP 私有 API，升级 Python时必须运行 Windows accept 回归；真实 TCP 故障注入覆盖 listener 保留与下一连接恢复，不代替手机实际收发验收。
+
 > Emerald-Presence 的 runtime 启动顺序和长期组件 ownership。
 >
 > 本文描述当前 runtime topology，不是未来 architecture proposal。

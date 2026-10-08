@@ -243,4 +243,10 @@ async def start_admin_server():
     )
     server = uvicorn.Server(config)
     logger.info(f"[admin] 管理面板启动于 http://{host}:{port}")
-    await server.serve()
+    import asyncio
+    from core.windows_accept_recovery import install as install_accept_recovery
+    undo_accept_recovery = install_accept_recovery(asyncio.get_running_loop())
+    try:
+        await server.serve()
+    finally:
+        undo_accept_recovery()
