@@ -2121,6 +2121,8 @@ turn ID, and companion phone turns use the existing receipt hash.
 
 ## Brief 228: character knowledge recall is not long-term memory
 
+280：文档全文的分块概要和已提供范围保存在同一资料库，按冻结 uid/char 接续，不进入长期记忆；现有资料接续层只带有界概要和进度，状态更新不重新触发新资料。详见 [document-reading.md](document-reading.md)。
+
 Uploaded files/images and character-authored notes live in a separate
 `character_library` runtime bucket partitioned by `uid + char_id`. Import is
 fail-open and records only content-free failure counters. Recall is explicit and

@@ -2268,6 +2268,10 @@ class Pipeline:
             from core.memory.short_term import schedule_long_user_summaries
             schedule_long_user_summaries(user_id, char_id=char_id)
 
+        if not trigger_name and not is_group:
+            from core.document_reading import schedule_summaries
+            schedule_summaries(user_id, char_id)
+
         # ── detect_emotion（带超时，只依赖 reply 文本）──
         try:
             _emotion = await asyncio.wait_for(

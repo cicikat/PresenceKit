@@ -932,4 +932,6 @@ Minecraft275（observe）：陪伴/保护/白名单小屋、共享快模型路�
 
 ## 聊天工具主动性与既有文件目标识别（2026-10-08，open）
 
+280 长文档 current / observe：上传初始3000字改为明确范围及全文引用，文档工具最多6000字连续分页，不再被通用2000字裁剪造成漏读；目录、概要、提供进度及DOCX表格已实现。真实模型全文理解/概要质量和三端真实上传仍待验收；旧上传已缺失内容无法凭空补回，旧 DOC、Word脚注/文本框/图片不属于当前提取范围。既有 context-continuity 3项屏幕文案断言失败，未修改版同样复现，本单不改该旁支。见 [document-reading.md](document-reading.md)。
+
 本地会话核查确认：用户希望续写角色此前交付的文件，模型却读取用户长消息，纠正后仍以“记得原文”等角色台词解释而未立即核对文件。后续实际 list_artifacts/read_artifact/update_artifact 成功，不代表早先每轮权限和 schema 必然相同。279 已增强主动完成受托任务、纠正后重定目标及文件归属引导，补齐 self/artifacts；真实模型会话效果仍为 observe，不能用提示回归宣称行为已解决。见 [278 核查](../cc-tasks/278-log-noise-and-tool-initiative-audit.md)、[279 工单](../cc-tasks/279-tool-initiative-and-file-routing.md)。

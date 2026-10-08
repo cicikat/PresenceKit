@@ -235,6 +235,8 @@ RPG Dream's `rpg_kp` route is a backend capability, not a client setting; it is 
 全局 `tool_loop.total_timeout_s` 控制单轮工具循环的总墙钟预算，默认 300 秒；管理面可调范围为 5–720 秒。
 
 279：既有 `tool_loop.nudge_hint` 软提示强化主动完成查询/读写/操作、纠正后重定目标及文件归属引导；关闭时不注入此提示。没有新增配置、权限或客户端设置，现有发现/预算/执行闸门继续生效。
+
+280：文档分块概要复用既有 summary 模型路由（冻结 char_id），上传后默认在发送后后台生成；主模型可通过 read_document 的 summary 模式补全。资料库观测返回无正文的概要覆盖和阅读进度，仍由后端管理面负责。无新开关；分块/时间/输出上限是内部资源约束，工具原有开关、暴露面和权限继续生效。见 [document-reading.md](document-reading.md)。
 Path C 固定采用分类按需加载，无新增开关：首轮仅提供最终获授权的非空分类入口。
 `max_steps` 之外最多增加非空分类数（至多 10）个纯发现轮，发现/relay/执行共用总超时；
 thinking 前处理和无工具最终生成维持原预算边界。只读 `runtime-signals` 的

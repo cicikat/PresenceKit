@@ -1040,10 +1040,8 @@ async def upload_ingest(
 
         text, stored_path = result
 
-        media_context = (
-            f"(你发来了一个文件:{fname},内容如下),回应必须细腻且有分量。"
-            f"回应长度不少于150字,不要因为克制就缩短回应。\n{text[:3000]}"
-        )
+        digest = hashlib.sha256(data).hexdigest()
+        media_context = media_processor.document_upload_context(text, fname, digest, uid=owner_uid, char_id=active_char)
         full_message = media_context + ("\n" + message if message else "")
         # trusted_user_text = original message body before media prepend;
         # probe must not see file content to prevent injection via uploaded docs.

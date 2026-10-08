@@ -415,8 +415,12 @@ async def handle_message(message: dict, *, ingress=None):
             media_refs.append(file_ref)
             if file_text:
                 fname = file_info.get("name", "文件")
-                media_context = f"（你发来了一个文件：{fname}，内容如下），回应必须细腻且有分量。回应长度不少于150字，不要因为克制就缩短回应。\n{file_text[:3000]}"
+                from core.media_processor import document_upload_context
+                media_context = document_upload_context(file_text, fname, file_ref.get("sha256", ""), uid=user_id, char_id=_char_id)
                 logger.info(f"[handle_message] 文件已读取: {fname} {len(file_text)}字")
+            else:
+                reason = file_ref.get("error", "file_unavailable")
+                media_context = f"用户上传文件未能处理（{reason}）；没有可读正文，不能声称已看过。TXT/MD/DOCX 超过50万字符请分卷，旧 DOC 请转 DOCX。"
         except Exception as e:
             _log_error("handle_message.file", e)
 

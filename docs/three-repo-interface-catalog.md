@@ -1,5 +1,7 @@
 ## 手机聊天交接复查（2026-10-08，271 / mobile 27）
 
+280 长文档：QQ 与 `/upload/ingest` 初始摘录带稳定资料引用，全文在后端按 uid/char 保存；read_document 提供连续分页、目录、进度和分块概要。上传保持原 multipart/chat scope/media_refs/HTTP/WS合同；422 原 `{code,message}` 新增 `document_text_too_large`（解析超过50万字符）及 `document_archive_failed`（全文保存失败）。支持 TXT/MD/DOCX，旧 DOC 需转换。资料库观测 state.read 增无正文概要覆盖/提供进度；summary 路由发送后后台默认分块生成。客户端无新增设置/权限/队列，真机/真实模型效果 observe。详见 [document-reading.md](document-reading.md)。
+
 current：chat-log plain/display 同源 ledger visible_text，消除未分段记忆正文与分段显示正文混用；mobile/desktop chat 仅在工具执行/turn sink 前失败可同 ID 重试，未知副作用与 upload 保留 unknown，context/probe 失败取消并等待兄弟任务。观测仍是 /observability/session-scope（request_failed 的 retryable_failed/failed 与 request_retry）；无新管理开关或持久库。手机前台周期交接 pending 并补偿 poll，成功证据不被迟到 HTTP 错误覆盖；Android 固定 30 分钟冷却已按用户授权移除，重连立即补拉、有界分页排空，pending 上限 500 且满载拒绝 ack，seen+pending 一次提交。只读 getBackgroundPollStatus 增 pendingCount/pendingLimit。桌面协议兼容，代码未改。
 
 observe：真机/真实模型/弱网/Doze/通知联调 not-run。open：后台无信号仍可能等 15 分钟系统补偿；consume 到页面呈现崩溃窗口、后台 artifacts/sticker 补全、旧无 ledger 历史/旧失败回执阶段未知、跨后端重启 exactly-once。细节见 [session-scope-contract.md](session-scope-contract.md) 与手机 docs/mobile/chat-handoff-2026-10-08.md。

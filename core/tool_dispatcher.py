@@ -156,14 +156,14 @@ async def _search_diary_wrapper(
     return await search_character_diary_for_user(user_id, char_id or _active_char_id(), query, date_str=date)
 
 
-async def _search_documents_wrapper(user_id: str, query: str = "", media_type: str = "", *, char_id: str) -> str:
+async def _search_documents_wrapper(user_id: str, query: str = "", media_type: str = "", *, char_id: str):
     from core.tools.character_recall import search_documents_for_user
     return await search_documents_for_user(user_id, char_id, query, media_type)
 
 
-async def _read_document_wrapper(user_id: str, document_id: str, offset: int = 0, mode: str = "context", query: str = "", *, char_id: str) -> str:
+async def _read_document_wrapper(user_id: str, document_id: str, offset: int = 0, mode: str = "context", query: str = "", limit: int = 6000, *, char_id: str):
     from core.tools.character_recall import read_document_for_user
-    return await read_document_for_user(user_id, char_id, document_id, offset, mode=mode, query=query)
+    return await read_document_for_user(user_id, char_id, document_id, offset, mode=mode, query=query, limit=limit)
 
 
 async def _search_character_notes_wrapper(user_id: str, query: str = "", *, char_id: str) -> str:
@@ -585,7 +585,8 @@ async def _reread_image_wrapper(user_id: str, sha256: str, instruction: str = ""
         return "当前角色的资料库中找不到这张图片，请先用 search_documents 查找已上传图片。"
     if mode == "cached":
         from core.tools.character_recall import read_document_for_user
-        return await read_document_for_user(user_id, char_id, rows[0]["document_id"])
+        cached = await read_document_for_user(user_id, char_id, rows[0]["document_id"])
+        return cached.safe_summary if hasattr(cached, "safe_summary") else cached
     from core.media_processor import reread_cached_image
     return await reread_cached_image(sha256, instruction, mode=mode)
 
@@ -1548,14 +1549,15 @@ _TOOL_REGISTRY["search_documents"] = {
 
 _TOOL_REGISTRY["read_document"] = {
     "func": _read_document_wrapper,
-    "description": "按 document_id 读取一份已检索到的私有资料；只读本次搜索返回的 id，不要猜测 id。",
+    "description": "按上传引用或 search_documents 返回的 document_id 分段读私有资料。context 按 offset 读取；continue 接续最早未提供正文；overview 查看带位置的目录和进度；summary 查看/补全分块生成的全文概要。每段最多6000字符，按 next_offset 继续直到末尾，不把一段或部分概要当完整阅读，不猜测 id。",
     "dangerous": False, "category": "info", "trace_result": False, "echo_event_log": False,
     "examples": ["读取检索结果里的 doc_...", "继续读这份资料"],
     "keywords": ["读这份资料", "打开文档", "继续读文件"],
     "parameters": {"type": "object", "properties": {
-        "document_id": {"type": "string", "description": "search_documents 返回的稳定 document_id。"},
+        "document_id": {"type": "string", "description": "上传消息引用或 search_documents 返回的稳定 document_id。"},
         "offset": {"type": "integer", "description": "可选正文偏移量，用于继续读取。", "minimum": 0},
-        "mode": {"type": "string", "enum": ["summary", "context"], "description": "summary 读取已有内容摘录（非模型概括）；context 读取正文和上下文。"},
+        "mode": {"type": "string", "enum": ["summary", "context", "overview", "continue"], "description": "context 正文；continue 从持久提供进度接续；overview 带字符位置的目录（offset 为目录条目偏移）；summary 分块全文概要，可能 pending/partial，可再次请求。"},
+        "limit": {"type": "integer", "minimum": 1, "maximum": 6000, "description": "正文每段字符数，默认6000。"},
         "query": {"type": "string", "description": "在文档内定位文字，从命中位置前后读取；offset 可用于继续查找。"},
     }, "required": ["document_id"]},
 }

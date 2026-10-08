@@ -383,6 +383,8 @@ contract. An upload is not evidence that the desktop renderer can load it.
 
 ## Character knowledge library (Brief 228)
 
+280：索引新增结构位置、overview（自动分块概要/覆盖/状态）及 reading（正文已提供区间），都是当前 uid/char 的资料派生物，不是事实记忆。全文读取进度不等于理解；概要失败保留 pending/partial。复用同桶和只读观测，详见 [document-reading.md](document-reading.md)。
+
 `data/runtime/character_library/{char_id}/{uid}/` is a private, gitignored
 Reality-scoped bucket containing `index.json`, `stats.json`, and optional
 `blobs/{document_id}` files. The index stores bounded derived text and metadata;

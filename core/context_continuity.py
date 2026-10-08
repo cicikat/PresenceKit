@@ -108,6 +108,12 @@ def _material_summary(kind, row):
             lines.append(when)
         if excerpt:
             lines.append(excerpt)
+        overview = row.get('overview') or {}
+        if overview.get('text'):
+            lines.append(f"已保存文档概要（{overview.get('status')}，覆盖前 {overview.get('covered_chars', 0)}/{row.get('total_chars', 0)} 字符）：" + _clip(overview['text'], 700))
+        progress = row.get('progress') or {}
+        if row.get('source') == 'upload_file':
+            lines.append(f"正文工具已提供 {progress.get('provided_chars', 0)}/{row.get('total_chars', 0)} 字符，下一未提供位置 {progress.get('next_unread_offset', 0)}；提供不等于理解，可用文档 continue 模式接续。")
         lines.append('已有描述/正文摘录；需要细节时用资料回读工具查看。')
         return '\n'.join(lines)
     title = _clip(row.get('title'), 80) or '生活记录'
@@ -131,7 +137,8 @@ def _sources(uid, char_id):
     rows = []
     if 'read_document' in visible and _is_tool_enabled('read_document'):
         for row in library.candidates(uid, char_id):
-            rows.append(('upload', row['document_id'], _revision(row), _stamp(row['created_at']),
+            stable = {key: row.get(key) for key in ('document_id', 'sha256', 'filename', 'source', 'created_at', 'summary')}
+            rows.append(('upload', row['document_id'], _revision(stable), _stamp(row['created_at']),
                          _material_summary('upload', row)))
     cfg = life_records.settings()
     if cfg['enabled'] and cfg['character_readable'] and 'read_life_records' in visible and _is_tool_enabled('read_life_records'):

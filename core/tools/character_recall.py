@@ -66,21 +66,54 @@ async def search_character_diary_for_user(user_id: str, char_id: str, query: str
     return f"No character diary entries matched {query!r}." if query.strip() else "No character diary entries available."
 
 
-async def search_documents_for_user(user_id: str, char_id: str, query: str = "", media_type: str = "") -> str:
+async def search_documents_for_user(user_id: str, char_id: str, query: str = "", media_type: str = ""):
     rows = search_document_records(user_id, char_id, query, media_type=media_type)
     if not rows:
         return "No related character documents found."
-    lines = [f"{row['document_id']} | {row['filename']} | {row['media_type']} | {str(row['created_at'])[:10]} | sha256={row['sha256']}\n内容摘录（非模型概括）: {row['summary']}" for row in rows]
-    return "Document search results:\n" + "\n".join(lines)
+    from core.tools.tool_result import ToolResult
+    # All eight scoped identities and image digests must survive projection.
+    lines = [f"{row['document_id']} | {str(row['filename'])[:80]} | {row['media_type']} | {row['total_chars']} 字符 | 概要={row['overview_status']} | sha256={row['sha256']}\n开头摘录: {str(row['summary'])[:80]}" for row in rows]
+    text = "Document search results:\n" + "\n".join(lines)
+    return ToolResult(raw_data=text, safe_summary=text)
 
 
-async def read_document_for_user(user_id: str, char_id: str, document_id: str, offset: int = 0, *, mode: str = "context", query: str = "") -> str:
-    row = read_document_record(user_id, char_id, document_id, offset=offset, mode=mode, query=query)
+async def read_document_for_user(user_id: str, char_id: str, document_id: str, offset: int = 0, *, mode: str = "context", query: str = "", limit: int = 6000):
+    from core.document_reading import summarize
+    from core.character_document_library import record_provided
+    from core.tools.tool_result import ToolResult
+    if mode == "summary":
+        await summarize(user_id, char_id, document_id)
+    row = read_document_record(user_id, char_id, document_id, offset=offset, mode=mode, query=query, limit=limit)
     if row is None:
         return "Character document not found."
-    more = f" Continue with offset={row['next_offset']}." if row["next_offset"] is not None else ""
-    label = "内容摘录（非模型概括）" if mode == "summary" else "已保存正文/识别描述"
-    return f"Document {row['filename']} | {label} | {row.get('created_at', '')}:{more}\n{row['content']}"
+    if "total_chars" not in row:
+        return row["content"]
+    state = row["progress"]
+    heading = (f"Document {str(row['filename'])[:100]} | document_id={document_id}\n"
+               f"总长度={row['total_chars']} 字符；本段 offset={row['offset']} end_offset={row['end_offset']}；"
+               f"章节={row['section'][:100]}；起始行={row['line']}。\n")
+    if mode in {"context", "continue"}:
+        heading += (f"next_offset={row['next_offset']}（None 表示本段到末尾）；"
+                    "按此偏移继续，不能把一段当成全篇。\n")
+        # This result has its own 8000-character bound. Do not route its body
+        # through the generic 2000-character sanitizer and skip the lost tail.
+        content = heading + row["content"]
+        saved = record_provided(user_id, char_id, document_id, row["offset"], row["end_offset"])
+        if not saved:
+            content += "\n阅读进度未能保存，下次请显式传 next_offset。"
+    else:
+        heading += (f"概要状态={row['overview_status']}，覆盖原文前 {row['overview_covered_chars']}/{row['total_chars']} 字符。"
+                    "pending 时只显示开头摘录，partial 不代表全文已概括。\n")
+        if mode == "overview":
+            heading += f"目录 {offset + 1} 起；next_section_offset={row['next_section_offset']}（传入 offset 翻目录）。\n"
+            heading += "\n".join(f"offset={item['offset']} {item['title']}" for item in row["sections"])
+            if not row["section_count"]:
+                heading += "没有可识别标题，按字符偏移和起始行阅读；Word 不提供推测页码。"
+        content = heading + "\n" + row["content"]
+    content += (f"\n此前工具已提供 {state['provided_chars']}/{row['total_chars']} 字符，"
+                f"下一未提供位置={state['next_unread_offset']}（本次读取前；提供不等于理解）。"
+                "下轮可用 mode=continue 接续，或 mode=overview 看目录。")
+    return ToolResult(raw_data=content, safe_summary=content, meta={"document_id": document_id})
 
 
 async def search_character_notes_for_user(user_id: str, char_id: str, query: str = "") -> str:

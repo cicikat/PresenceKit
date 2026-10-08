@@ -10,6 +10,8 @@
 
 `read_food_preferences(query, limit)` 属于 memory 类，按权威 uid/char 读取实际饮食评价与已记录餐次。描述说明推荐前、遇到拒绝或评价改变时查询。写入走发送后独立证据抽取；见 [food-memory.md](food-memory.md)。
 
+280：上传 TXT/MD/DOCX 保存完整解析正文；`read_document` 提供最多6000字符的连续分页、带位置目录、continue进度接续和分块全文概要。上传引用可直接回读，详情见 [document-reading.md](document-reading.md)。
+
 聊天 Path C 现使用[分类按需加载](tool-discovery.md)：授权和预设过滤后，首轮只给
 `load_tools_<category>` 入口；加载后下一轮才提供该类完整 schema。发现不执行业务、
 不产生成功证据；native 与 relay 共用轮内暴露面、预算及原执行闸门。
