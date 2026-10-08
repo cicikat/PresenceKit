@@ -1,5 +1,7 @@
 # docs/scheduler.md — 调度器设计
 
+272 A：定时提醒区分用户和角色自己；生成失败不发硬模板，见 [reminder-target.md](reminder-target.md)。
+
 ## IME 扫描
 
 ## HDS 本地心率

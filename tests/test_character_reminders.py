@@ -426,7 +426,7 @@ async def test_check_reminders_delivers_generated_text_not_template(sandbox, mon
 
 
 @pytest.mark.asyncio
-async def test_check_reminders_compose_failure_retries_then_neutral(sandbox, monkeypatch):
+async def test_check_reminders_compose_failure_keeps_retrying_without_template(sandbox, monkeypatch):
     from core.scheduler import loop
 
     created = _create("吃药")
@@ -451,8 +451,43 @@ async def test_check_reminders_compose_failure_retries_then_neutral(sandbox, mon
     row = sched.get_schedule(_principal(), created["schedule_id"])
     assert row["status"] == "scheduled"
     await loop._check_reminders()
-    assert len(calls) == 3
-    assert sent == ["到时间啦：吃药"]
+    assert len(calls) == 4
+    assert sent == []
+
+
+def test_target_survives_update_cancel_restore_and_legacy_default(sandbox):
+    row = sched.create_schedule(_principal(), content="整理自己的笔记", due_at=time.time() - 5, target="self")
+    assert row["target"] == "self"
+    updated = sched.update_schedule(_principal(), row["schedule_id"], expected_revision=1, content="整理账本")
+    assert updated["target"] == "self"
+    cancelled = sched.cancel_schedule(_principal(), row["schedule_id"], expected_revision=2)
+    restored = sched.restore_schedule(_principal(), row["schedule_id"], revision=cancelled["revision"])
+    assert restored["target"] == "self"
+    assert sched._migrate_row({"content": "旧提醒"})["target"] == "user"
+    with pytest.raises(sched.ScheduleError, match="invalid_target"):
+        sched.create_schedule(_principal(), content="事项", due_at=time.time(), target="other")
+
+
+@pytest.mark.asyncio
+async def test_self_reminder_uses_action_context_and_caches_on_send_failure(sandbox, monkeypatch):
+    from core.scheduler import loop
+    row = sched.create_schedule(_principal(), content="维护 notes/ledger.md", due_at=time.time() - 5, target="self")
+    calls = []
+    async def compose(uid, char_id, prompt, **kwargs):
+        calls.append((prompt, kwargs))
+        return "我检查过自己的账本了。"
+    async def send(*args, **kwargs):
+        return False, "send_failed"
+    monkeypatch.setattr(loop, "_cfg", lambda: {"enabled": True})
+    monkeypatch.setattr(loop, "_owner_id", lambda: _UID)
+    monkeypatch.setattr(loop, "_compose_trigger_reply", compose)
+    monkeypatch.setattr("core.autonomy.talk_gate.send", send)
+    await loop._check_reminders()
+    await loop._check_reminders()
+    assert len(calls) == 1
+    assert calls[0][1]["execute_self"] is True
+    assert "不是提醒用户" in calls[0][0]
+    assert sched.get_schedule(_principal(), row["schedule_id"])["status"] == "scheduled"
 
 
 def test_observability_is_metadata_only(sandbox, monkeypatch):

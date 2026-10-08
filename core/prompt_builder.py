@@ -967,7 +967,7 @@ def build(
     # ─────────────────────────────────────────────────────────────────────────
     if reminders:
         reminder_lines = [
-            f"- {r['content']}（{r['remind_at']}）" for r in reminders
+            f"- [{'提醒角色自己' if r.get('target') == 'self' else '提醒用户'}] {r['content']}（{r['remind_at']}）" for r in reminders
         ]
         messages.append({
             "role": "system",

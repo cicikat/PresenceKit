@@ -1,5 +1,7 @@
 # 单角色文件、自有空间与 Agent 自主能力（现行合同）
 
+272 A：提醒新增对象 `user|self`，到期分流、失败重试与权限边界见 [reminder-target.md](reminder-target.md)。
+
 状态：**H current**。工单 [256](../cc-tasks/256-character-files-and-agent-autonomy.md) A–H 已落地。
 日期：2026-09-18。基线 SHA：`b1ebe0d`（工单源码表对照 `e35d0ec`，差异见 §0）。
 

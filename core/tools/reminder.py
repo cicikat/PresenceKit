@@ -134,6 +134,7 @@ def add_reminder(
     *,
     char_id: str | None = None,
     repeat: str | int | None = None,
+    target: str = "user",
 ) -> str:
     """Create a timed reminder. Returns a short description or a JSON error payload."""
     dt = _parse_time(remind_at_str)
@@ -152,9 +153,10 @@ def add_reminder(
         receipt = create_schedule(
             principal,
             content=content,
+            target=target,
             due_at=dt.timestamp(),
             recurrence_seconds=recurrence,
-            idempotency_key=f"reminder:{principal.uid}:{principal.char_id}:{content}:{dt.isoformat()}:{recurrence or 0}",
+            idempotency_key=f"reminder:{principal.uid}:{principal.char_id}:{target}:{content}:{dt.isoformat()}:{recurrence or 0}",
             causation_ref=_causation("add", principal, dt.isoformat()),
         )
         when = dt.strftime("%Y-%m-%d %H:%M")
@@ -163,12 +165,13 @@ def add_reminder(
             "schedule_id": receipt.get("schedule_id"),
             "revision": receipt.get("revision"),
             "content": receipt.get("content"),
+            "target": receipt.get("target"),
             "due_at": receipt.get("due_at"),
             "remind_at": receipt.get("remind_at"),
             "repeat": receipt.get("repeat"),
             "status": receipt.get("status"),
             "created": receipt.get("created"),
-            "message": f"已记住：{receipt.get('content')!r}，将在 {when} 提醒你",
+            "message": f"已记住：{receipt.get('content')!r}，将在 {when} 提醒{'用户' if target == 'user' else '角色自己'}",
         })
     except Exception as exc:
         payload = _wrap(exc)
@@ -220,6 +223,7 @@ def update_reminder(
     *,
     char_id: str | None = None,
     content: str | None = None,
+    target: str | None = None,
     remind_at: str | None = None,
     repeat: str | int | None | object = ...,
 ) -> dict[str, Any]:
@@ -239,6 +243,7 @@ def update_reminder(
             schedule_id,
             expected_revision=int(expected_revision),
             content=content,
+            target=target,
             due_at=due_at,
             recurrence_seconds=recurrence,
             causation_ref=_causation("update", principal, schedule_id),

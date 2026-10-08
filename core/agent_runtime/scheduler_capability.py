@@ -112,6 +112,8 @@ def _migrate_row(raw: dict[str, Any]) -> dict[str, Any]:
         "schedule_id": str(raw.get("schedule_id") or uuid.uuid4().hex),
         "task_id": str(raw.get("task_id") or ""),
         "content": str(raw.get("content") or ""),
+        "target": str(raw.get("target") or "user"),
+        "reply_cache": raw.get("reply_cache") if isinstance(raw.get("reply_cache"), dict) else {},
         "due_at": float(raw.get("due_at") or 0),
         "repeat": {
             "kind": "interval" if repeat.get("kind") == "interval" and repeat.get("seconds") else "none",
@@ -189,12 +191,19 @@ def _validate_content(content: str) -> str:
     return text
 
 
+def _validate_target(target: str) -> str:
+    if target not in {"user", "self"}:
+        raise ScheduleError("invalid_target")
+    return target
+
+
 def _history_entry(row: dict[str, Any], *, action: str, now: float) -> dict[str, Any]:
     return {
         "revision": int(row.get("revision") or 0),
         "action": action,
         "at": now,
         "content": row.get("content"),
+        "target": row.get("target", "user"),
         "due_at": row.get("due_at"),
         "repeat": dict(row.get("repeat") or {}),
         "status": row.get("status"),
@@ -214,6 +223,7 @@ def _character_projection(row: dict[str, Any]) -> dict[str, Any]:
         "schedule_id": row["schedule_id"],
         "revision": int(row["revision"]),
         "content": _redact_content(str(row.get("content") or "")),
+        "target": row.get("target", "user"),
         "due_at": float(row["due_at"]),
         "remind_at": _due_text(row["due_at"]),
         "repeat": dict(row.get("repeat") or {"kind": "none", "seconds": None}),
@@ -235,6 +245,9 @@ def _obs_item(row: dict[str, Any]) -> dict[str, Any]:
         "delivered_count": int(row.get("delivered_count") or 0),
         "updated_at": float(row.get("updated_at") or 0),
         "has_task": bool(row.get("task_id")),
+        "delivery_attempts": int(row.get("delivery_attempts") or 0),
+        "has_generated_reply": bool(row.get("reply_cache")),
+        "target": row.get("target", "user"),
     }
 
 
@@ -334,6 +347,7 @@ def create_schedule(
     *,
     content: str,
     due_at: float,
+    target: str = "user",
     recurrence_seconds: int | None = None,
     ttl_seconds: int = DEFAULT_TTL_SECONDS,
     idempotency_key: str | None = None,
@@ -343,6 +357,7 @@ def create_schedule(
 ) -> dict[str, Any]:
     principal = _require_principal(principal)
     text = _validate_content(content)
+    target = _validate_target(target)
     repeat = _normalize_repeat(recurrence_seconds)
     timestamp = _now(now)
     due = float(due_at)
@@ -379,6 +394,7 @@ def create_schedule(
             "schedule_id": uuid.uuid4().hex,
             "task_id": task_id,
             "content": text,
+            "target": target,
             "due_at": due,
             "repeat": repeat,
             "status": STATUS_SCHEDULED,
@@ -439,6 +455,7 @@ def prompt_reminders(principal: TaskPrincipal) -> list[dict[str, Any]]:
     for row in list_schedules(principal):
         items.append({
             "content": row["content"],
+            "target": row["target"],
             "remind_at": row["remind_at"],
             "schedule_id": row["schedule_id"],
             "status": row["status"],
@@ -453,6 +470,7 @@ def update_schedule(
     *,
     expected_revision: int,
     content: str | None = None,
+    target: str | None = None,
     due_at: float | None = None,
     recurrence_seconds: int | None | object = ...,
     causation_ref: CausationRef | None = None,
@@ -472,6 +490,8 @@ def update_schedule(
         if row.get("status") == STATUS_CANCELLED:
             raise ScheduleError("path_not_found", extra={"reason": "cancelled"})
         _require_revision(row, expected_revision)
+        if target is not None:
+            row["target"] = _validate_target(target)
         if content is not None:
             row["content"] = _validate_content(content)
         if due_at is not None:
@@ -568,6 +588,7 @@ def restore_schedule(
         except task_manager.TaskManagerError as exc:
             raise ScheduleError("quota_exhausted", extra={"reason": exc.code}) from exc
         row["content"] = _validate_content(str(snapshot.get("content") or row.get("content") or ""))
+        row["target"] = _validate_target(str(snapshot.get("target") or row.get("target") or "user"))
         row["due_at"] = float(snapshot.get("due_at") or row.get("due_at") or timestamp)
         repeat = snapshot.get("repeat") if isinstance(snapshot.get("repeat"), dict) else row.get("repeat")
         seconds = repeat.get("seconds") if isinstance(repeat, dict) else None
@@ -657,6 +678,24 @@ def begin_delivery(
         return dict(row)
 
 
+def cache_delivery_reply(principal: TaskPrincipal, schedule_id: str, *, occurrence: str, reply: str) -> bool:
+    """CAS recheck before send; retain generation across failed delivery retries."""
+    with _lock_for(principal.uid, principal.char_id):
+        path = _path(principal)
+        store = _load_store(path)
+        row = _find(store["schedules"], schedule_id)
+        if (row.get("canceled") or row.get("status") != STATUS_IN_FLIGHT
+                or row.get("in_flight_occurrence") != occurrence
+                or row.get("revision") != row.get("in_flight_revision")):
+            return False
+        row["reply_cache"] = {
+            "revision": row["revision"], "due_at": row["due_at"],
+            "reply": _redact_content(reply[:10000]),
+        }
+        _save_store(path, store)
+        return True
+
+
 def finish_delivery(
     principal: TaskPrincipal,
     schedule_id: str,
@@ -690,6 +729,7 @@ def finish_delivery(
             _save_store(path, store)
             return True
         in_flight_due = float(row.get("in_flight_due_at") or row.get("due_at") or timestamp)
+        row["reply_cache"] = {}
         in_flight_revision = int(row.get("in_flight_revision") or row.get("revision") or 0)
         updated_during_send = int(row.get("revision") or 0) != in_flight_revision
         cancelled = bool(row.get("canceled"))

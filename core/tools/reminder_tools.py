@@ -38,17 +38,19 @@ async def add_reminder_tool(
     content: str,
     remind_at: str,
     repeat: str | None = None,
+    target: str = "user",
     *,
     user_id=None,
     char_id=None,
 ) -> str:
-    return add_reminder(user_id, content, remind_at, char_id=char_id, repeat=repeat)
+    return add_reminder(user_id, content, remind_at, char_id=char_id, repeat=repeat, target=target)
 
 
 async def update_reminder_tool(
     schedule_id: str,
     expected_revision: int,
     content: str | None = None,
+    target: str | None = None,
     remind_at: str | None = None,
     repeat: str | None = None,
     *,
@@ -64,6 +66,7 @@ async def update_reminder_tool(
         expected_revision,
         char_id=char_id,
         content=content,
+        target=target,
         remind_at=remind_at,
         **kwargs,
     ))
@@ -132,7 +135,8 @@ def register_tools(registry: dict) -> None:
     registry["add_reminder"] = {
         "func": add_reminder_tool,
         "description": (
-            "创建一条定时提醒。仅在用户明确要求记录事项并在指定时间提醒时调用。"
+            "创建一条定时提醒。必须区分 target=user（提醒用户）与 self（提醒角色自己行动）。"
+            "用户交办或角色明确计划的事项都可记录；不要把角色自己的工作转嫁给用户。"
             "写进 self 笔记里的“明天提醒”不会自动变成定时任务。"
         ),
         "dangerous": False,
@@ -143,7 +147,7 @@ def register_tools(registry: dict) -> None:
             "properties": {
                 "content": {
                     "type": "string",
-                    "description": "要提醒用户做什么；使用简短、完整的事项文本。写成到时要提醒对方做的事本身（如“喝水休息”），不要写成给自己的备忘或提醒方式。",
+                    "description": "到期事项本身；user 写用户要做的事，self 写角色自己要处理的事。",
                 },
                 "remind_at": {
                     "type": "string",
@@ -153,6 +157,7 @@ def register_tools(registry: dict) -> None:
                     "type": "string",
                     "description": "可选重复：none / daily / weekly，或间隔秒数（至少 60）。",
                 },
+                "target": {"type": "string", "enum": ["user", "self"], "description": "user 提醒用户；self 提醒你自己执行事项。旧调用省略时为 user；新调用请明确指定。"},
             },
             "required": ["content", "remind_at"],
         },
@@ -176,6 +181,7 @@ def register_tools(registry: dict) -> None:
                     "description": "读到的当前 revision；不一致则 revision_conflict。",
                 },
                 "content": {"type": "string", "description": "新的提醒正文。"},
+                "target": {"type": "string", "enum": ["user", "self"], "description": "修改提醒对象；省略保留原对象。"},
                 "remind_at": {"type": "string", "description": "新的本地时间。"},
                 "repeat": {"type": "string", "description": "新的重复规则；none 表示取消重复。"},
             },
