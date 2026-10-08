@@ -271,3 +271,52 @@ def test_http_scopes_reject_mutation_before_bridge_or_storage(runtime, monkeypat
         assert client.get("/observability/minecraft", headers={"Authorization": "Bearer fixture"}).status_code == 200
         assert client.get("/settings/minecraft", headers={"Authorization": "Bearer fixture"}).status_code == 403
     assert not bridge.calls
+
+
+@pytest.mark.asyncio
+async def test_building_is_separately_authorized_and_has_strict_coordinates(runtime):
+    service, bridge, cfg, _ = runtime
+    await service.start()
+    params = {"material": "oak_planks", "x": 4, "y": 64, "z": 0}
+    with pytest.raises(MinecraftError, match="capability_disabled"):
+        await service.command("build_house", params)
+    cfg["minecraft"]["allow_building"] = True
+    await service.close()
+    await service.start()
+    with pytest.raises(ValidationError):
+        await service.command("build_house", {**params, "material": "tnt"})
+    with pytest.raises(ValidationError):
+        await service.command("build_house", {**params, "x": True})
+    with pytest.raises(ValidationError):
+        Plan(reply="可以开始。", action="build_house", params={"material": "oak_planks"})
+    await service.command("build_house", params)
+    assert bridge.calls[-1][1]["params"] == params
+    assert service.binding.companion_goal is None
+    await service.close()
+
+
+@pytest.mark.asyncio
+async def test_local_game_stop_revokes_pending_model_before_chat_event_poll(runtime):
+    service, bridge, _, _ = runtime
+    entered, release = asyncio.Event(), asyncio.Event()
+    async def planner(*args):
+        entered.set()
+        await release.wait()
+        return Plan(reply="开始陪你走。", action="accompany")
+    service.planner = planner
+    await service.start()
+    task = asyncio.create_task(service.chat("陪我走"))
+    await entered.wait()
+    request = bridge.request
+    async def stopped_snapshot(method, path, payload=None):
+        result = await request(method, path, payload)
+        if path == "/v1/heartbeat":
+            result["owner_stop_revision"] = 1
+        return result
+    bridge.request = stopped_snapshot
+    await service.tick()
+    release.set()
+    with pytest.raises(MinecraftError, match="stale_plan"):
+        await task
+    assert not any(path == "/v1/commands" for path, _ in bridge.calls)
+    await service.close()

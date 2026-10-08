@@ -131,7 +131,7 @@ async def state(auth=Depends(require_scopes("activity"))):
 
 class Command(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
-    action: Literal["follow", "stop", "return", "pickup", "defend", "collect_iron", "approach", "accompany", "protect"]
+    action: Literal["follow", "stop", "return", "pickup", "defend", "collect_iron", "approach", "accompany", "protect", "build_house"]
     params: dict = Field(default_factory=dict)
     command_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,64}$")
 

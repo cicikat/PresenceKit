@@ -1051,3 +1051,5 @@ Docker 桥地址、游戏连接、owner UUID、拾取/PVE 权限及模型预算�
 `GET /observability/minecraft`（state.read）提供无聊天/坐标/账号内容的状态和动作回执；
 `/activity/minecraft/*`（activity）提供显式会话、手动指令与活动内聊天。
 凭据通过 ignored 本地文件注入，不回显；无桌面/手机设置入口，见 [Minecraft Activity](minecraft-activity.md)。
+
+Minecraft建造：`minecraft.allow_building=false`，`GET/PUT /settings/minecraft`（admin）热更新并撤销会话；共玩页提供5×5小屋材料、显式整数坐标和停止按钮，80块用户材料，不拆块/续建。动作接口activity scope，只读回执placed/total由state.read观测。不涉及桌面/手机设置。

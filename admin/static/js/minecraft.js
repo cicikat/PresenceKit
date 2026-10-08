@@ -1,4 +1,4 @@
-const MC_BOOLEAN_FIELDS = ['enabled', 'allow_pickup', 'allow_defend', 'allow_mining', 'model_enabled', 'reaction_enabled'];
+const MC_BOOLEAN_FIELDS = ['enabled', 'allow_pickup', 'allow_defend', 'allow_mining', 'allow_building', 'model_enabled', 'reaction_enabled'];
 const MC_NUMBER_FIELDS = ['port', 'model_calls_per_session', 'model_cooldown_seconds', 'reaction_calls_per_session', 'reaction_cooldown_seconds'];
 const MC_TEXT_FIELDS = ['bridge_url', 'host', 'version', 'username', 'auth', 'owner_uuid'];
 let mcRoutingProfile = '';
@@ -48,8 +48,16 @@ async function minecraftSession(operation) {
 async function minecraftCommand(action) {
   try {
     const params = action === 'collect_iron' ? {count: Number(document.getElementById('mc-collect-count').value), radius: Number(document.getElementById('mc-collect-radius').value)} : {};
+    if (action === 'build_house') {
+      params.material = document.getElementById('mc-build-material').value;
+      for (const axis of ['x', 'y', 'z']) {
+        const raw = document.getElementById('mc-build-' + axis).value.trim();
+        if (!raw || !Number.isInteger(Number(raw))) throw new Error('请填写三个整数施工坐标');
+        params[axis] = Number(raw);
+      }
+    }
     const receipt = await api('POST', '/activity/minecraft/command', {action, params, command_id: crypto.randomUUID()});
-    document.getElementById('minecraft-result').textContent = `动作 ${action}：${receipt.status}`;
+    document.getElementById('minecraft-result').textContent = `动作 ${action}：${receipt.status}${receipt.error ? '；原因：' + receipt.error : ''}${receipt.total ? `；已确认 ${receipt.placed}/${receipt.total} 块` : ''}`;
     await loadMinecraftPage();
   } catch (error) { toast(`动作提交失败：${error.message || error}`, 'err'); }
 }

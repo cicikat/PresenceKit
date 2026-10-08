@@ -86,3 +86,9 @@ token 文件就位且 startup worker 活着。管理面入口是“Minecraft 共
 Minecraft registry 的 enabled=False 是客户端静态发现的默认值，并非运行时 effective state；
 不虚构桌面/手机入口。持久文件只保存 Activity 会话与有预算上限的活动 transcript；
 连续游戏状态不持久化。空闲 TTL 60 秒、会话硬上限 4 小时，运行期间每 30 秒刷新存储。
+
+## 陪伴建造
+
+`allow_building` 默认关闭，管理面热更新；`build_house`仅接受白名单material和整数x/y/z（地板最小X/Z角）。5×5蓝图80块，保留两格入口；需足够背包材料、距owner12格内的已加载平整地基和无实体的完整空体积。不覆盖、拆块、自动补料或自由执行模型方块列表。外侧安全站位、15秒阶段预算、120秒总预算；逐块等待服务端确认，全部复核后才标记succeeded。停止/超时后不回放，已发放置请求的半成品标记outcome_unknown，回执保留placed/total。正文模型无显式施工坐标时应先询问。
+
+游戏内停车增加owner_stop_revision；后端沿心跳观察并撤销旧判断，提交非停止动作携带快照序号，身体拒绝停车前的迟到命令/模式续租。该字段是本机桥协议增量，不涉及其他端。

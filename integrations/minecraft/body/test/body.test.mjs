@@ -33,6 +33,8 @@ test('owner UUID gates incoming messages; local stop precedes model', async () =
   const f = fixture(); await f.connect(); f.body.submit(f.command('follow', 'follow'));
   f.bot.emit('chat', 'stranger', 'stop'); assert.equal(f.body.events.length, 0);
   f.bot.emit('chat', 'owner', '停下'); assert.equal(f.bot.goal, null); assert.equal(f.body.events.length, 1);
+  assert.throws(() => f.body.submit({...f.command('late-follow', 'follow'), owner_stop_revision:0}), /owner_stopped_since_snapshot/);
+  assert.equal(f.body.snapshot().owner_stop_revision, 1);
 });
 test('rejects arbitrary fields, server commands, missing owner and low health', async () => {
   const f = fixture(); await f.connect();

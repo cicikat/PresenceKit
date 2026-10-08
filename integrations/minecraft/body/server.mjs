@@ -41,6 +41,10 @@ async function mineflayerFactory(input) {
     const moves = new pf.Movements(bot); moves.canDig = false; moves.allow1by1towers = false;
     moves.allowParkour = false; moves.allowFreeMotion = false; moves.maxDropDown = 1;
     moves.scafoldingBlocks = []; bot.pathfinder.setMovements(moves);
+    moves.exclusionAreasStep.push(block => {
+      const o = bot.pkBuildOrigin, p = block.position;
+      return o && p.x >= o.x && p.x < o.x + 5 && p.z >= o.z && p.z < o.z + 5 ? Infinity : 0;
+    });
     bot.pathfinder.searchRadius = 32; bot.pathfinder.thinkTimeout = 1000; bot.pathfinder.tickTimeout = 10;
   });
   bot.on('path_update', result => { if (result.status === 'noPath' || result.status === 'timeout') bot.emit('pk_path_failed'); });

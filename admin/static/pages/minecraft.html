@@ -23,6 +23,7 @@
   <label class="checkbox-row"><input type="checkbox" id="mc-allow_pickup">允许指定物品拾取（默认关闭）</label>
   <label class="checkbox-row"><input type="checkbox" id="mc-allow_defend">允许近距离敌对生物防守（默认关闭）</label>
   <label class="checkbox-row"><input type="checkbox" id="mc-allow_mining">允许可见铁矿采集（默认关闭；最多 8 个、8 格、120 秒，不跨重启继续）</label>
+  <label class="checkbox-row"><input type="checkbox" id="mc-allow_building">允许建造小屋（默认关闭；使用背包材料，不拆块、不自动采集）</label>
   <div class="form-row">
     <label class="field"><span>每会话模型调用上限（默认 120）</span><input id="mc-model_calls_per_session" type="number" min="1" max="500"></label>
     <label class="field"><span>模型调用最小间隔（秒，默认 10）</span><input id="mc-model_cooldown_seconds" type="number" min="5" max="120"></label>
@@ -62,4 +63,16 @@
   <p id="minecraft-result" role="status"></p>
   <p>游戏内“停下”“停止”或 !pk stop 直接本地停车，不等待模型。单次动作最多 120 秒；“陪着我一起走”“跟随并保护我”在已授权会话内续租，停止或危险后不自动恢复。失联 15 秒停止并断开。</p>
   <pre id="minecraft-observation"></pre>
+</div>
+<div class="card">
+  <div class="card-header"><h3>一起建个小屋</h3></div>
+  <p>5×5 小屋，共 80 块，留两格高入口。先在背包放够所选材料，准备平整空地；坐标是地板西北角（最小 X/Z），Y 是地板高度。你和 Bot 请站在施工范围外，位置需离你 12 格以内。不会覆盖已有方块；120 秒内未完成或中途停止会保留半成品，状态显示已确认数量，不自动续建。</p>
+  <label class="field"><span>建房材料</span><select id="mc-build-material"><option value="oak_planks">橡木木板</option><option value="spruce_planks">云杉木板</option><option value="birch_planks">白桦木板</option><option value="cobblestone">圆石</option><option value="stone_bricks">石砖</option></select></label>
+  <div class="form-row">
+    <label class="field"><span>小屋 X</span><input id="mc-build-x" type="number" step="1" placeholder="整数坐标"></label>
+    <label class="field"><span>地板 Y</span><input id="mc-build-y" type="number" min="-60" max="316" step="1" placeholder="整数坐标"></label>
+    <label class="field"><span>小屋 Z</span><input id="mc-build-z" type="number" step="1" placeholder="整数坐标"></label>
+  </div>
+  <button class="btn btn-primary" data-action="minecraftCommand" data-action-args='["build_house"]'>在指定空地建小屋</button>
+  <button class="btn btn-danger" data-action="minecraftCommand" data-action-args='["stop"]'>停止施工</button>
 </div>

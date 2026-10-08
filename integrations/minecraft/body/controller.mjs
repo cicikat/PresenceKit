@@ -1,7 +1,8 @@
 import { randomUUID, createHash } from 'node:crypto';
 import { visibleIron, startCollect, stepCollect } from './collect.mjs';
+import { validBuildParams, startBuild, stepBuild } from './build.mjs';
 
-const ACTIONS = new Set(['stop', 'follow', 'return', 'pickup', 'defend', 'say', 'collect_iron', 'approach', 'accompany', 'protect']);
+const ACTIONS = new Set(['stop', 'follow', 'return', 'pickup', 'defend', 'say', 'collect_iron', 'approach', 'accompany', 'protect', 'build_house']);
 const HOSTILES = new Set(['zombie', 'husk', 'drowned', 'skeleton', 'stray', 'spider', 'cave_spider', 'silverfish', 'endermite']);
 const ID = /^[a-zA-Z0-9_-]{1,64}$/;
 const UUID = /^[0-9a-f-]{32,36}$/i;
@@ -17,6 +18,7 @@ export class Body {
     this.bot = null; this.binding = null; this.status = 'disconnected';
     this.epoch = randomUUID(); this.receipts = new Map(); this.events = [];
     this.sequence = 0; this.current = null; this.error = null;
+    this.localStopRevision = 0;
   }
   async connect(input) {
     strict(input, ['session_id', 'host', 'port', 'version', 'username', 'auth', 'owner_uuid']);
@@ -24,6 +26,7 @@ export class Body {
     if (!ID.test(input.session_id || '') || typeof input.host !== 'string' || !input.host || input.host.length > 253 || !Number.isInteger(input.port) || input.port < 1 || input.port > 65535 || typeof input.version !== 'string' || !/^[0-9.]{3,20}$/.test(input.version) || typeof input.username !== 'string' || !input.username || input.username.length > 128 || !['offline', 'microsoft'].includes(input.auth) || !UUID.test(input.owner_uuid || '')) throw new Fault('invalid_connection', 422);
     if (this.binding) throw new Fault('body_already_bound');
     this.epoch = randomUUID(); this.receipts.clear(); this.events = [];
+    this.localStopRevision = 0;
     this.binding = { session: input.session_id, owner: input.owner_uuid.replaceAll('-', '').toLowerCase(), lease: this.now() + this.leaseMs };
     this.status = 'connecting'; this.error = null;
     try {
@@ -52,7 +55,7 @@ export class Body {
         const uuid = (bot.players?.[name]?.uuid || '').replaceAll('-', '').toLowerCase();
         if (uuid !== this.binding.owner) return;
         // Emergency stop is local and never waits for the backend or a model.
-        if (['!pk stop', '停下', '停止'].includes(message.trim())) this.halt('owner_stop');
+        if (['!pk stop', '停下', '停止'].includes(message.trim())) { this.localStopRevision++; this.halt('owner_stop'); }
         if (this.events.length >= 100) this.events.shift();
         this.events.push({ seq: ++this.sequence, text: message.slice(0, 500), occurred_at: this.now() });
       });
@@ -76,6 +79,7 @@ export class Body {
     return {
       protocol_version: 1, connection_epoch: this.epoch, status: this.status,
       session_id: this.binding?.session || null, observed_at: this.now(), error: this.error,
+      owner_stop_revision: this.localStopRevision,
       game: bot && this.status === 'connected' ? {
         dimension: bot.game?.dimension || 'unknown', position: position(bot.entity?.position),
         health: bot.health ?? null, food: bot.food ?? null, owner_visible: Boolean(owner),
@@ -87,15 +91,16 @@ export class Body {
         terrain: 'local_loaded_only'
       } : null,
       current: this.current ? { command_id: this.current.command_id, action: this.current.action,
-        stage: this.current.collect?.stage, collected: this.current.collect?.collected } : null,
+        stage: this.current.collect?.stage || this.current.build?.stage, collected: this.current.collect?.collected,
+        placed: this.current.build?.index, total: this.current.build?.targets.length } : null,
       receipts: [...this.receipts.values()].slice(-30).map(({ digest, ...r }) => r),
       event_seq: this.sequence
     };
   }
   halt(reason = 'canceled') {
     const bot = this.bot;
-    if (bot) { bot.stopDigging?.(); bot.pvp?.stop(); bot.pathfinder?.setGoal(null); bot.clearControlStates?.(); }
-    if (this.current) this.finish(this.current.command_id, this.current.collect?.changed ? 'outcome_unknown' : 'canceled', reason);
+    if (bot) { bot.pkBuildOrigin = null; bot.stopDigging?.(); bot.pvp?.stop(); bot.pathfinder?.setGoal(null); bot.clearControlStates?.(); }
+    if (this.current) this.finish(this.current.command_id, this.current.collect?.changed || this.current.build?.changed ? 'outcome_unknown' : 'canceled', reason);
   }
   finish(id, status, error = null) {
     const r = this.receipts.get(id); if (!r || r.status !== 'running') return;
@@ -107,10 +112,12 @@ export class Body {
     this.status = 'disconnected'; bot?.quit?.(); return this.snapshot();
   }
   submit(input) {
-    strict(input, ['session_id', 'connection_epoch', 'command_id', 'action', 'expires_at', 'params']);
+    strict(input, ['session_id', 'connection_epoch', 'command_id', 'action', 'expires_at', 'params', 'owner_stop_revision']);
     this.check(input);
     if (!ID.test(input.command_id || '') || !ACTIONS.has(input.action) || !Number.isFinite(input.expires_at) || input.expires_at <= this.now() || input.expires_at > this.now() + 120000) throw new Fault('invalid_command', 422);
-    const p = input.params || {}; strict(p, input.action === 'say' ? ['text'] : input.action === 'pickup' ? ['entity_id'] : input.action === 'collect_iron' ? ['count', 'radius'] : []);
+    if (input.action !== 'stop' && input.owner_stop_revision !== undefined && input.owner_stop_revision !== this.localStopRevision) throw new Fault('owner_stopped_since_snapshot');
+    const p = input.params || {}; strict(p, input.action === 'say' ? ['text'] : input.action === 'pickup' ? ['entity_id'] : input.action === 'collect_iron' ? ['count', 'radius'] : input.action === 'build_house' ? ['material', 'x', 'y', 'z'] : []);
+    if (input.action === 'build_house' && !validBuildParams(p)) throw new Fault('invalid_build', 422);
     if (input.action === 'collect_iron' && (!Number.isInteger(p.count) || p.count < 1 || p.count > 8 || !Number.isInteger(p.radius) || p.radius < 1 || p.radius > 8)) throw new Fault('invalid_collection', 422);
     if (input.action === 'say' && (typeof p.text !== 'string' || !p.text.trim() || p.text.length > 240 || /[\r\n\u0000-\u001f]/.test(p.text) || p.text.trimStart().startsWith('/'))) throw new Fault('invalid_chat', 422);
     if (input.action === 'pickup' && !Number.isInteger(p.entity_id)) throw new Fault('invalid_pickup', 422);
@@ -130,7 +137,10 @@ export class Body {
       this.bot.chat(p.text); this.finish(input.command_id, 'succeeded');
     } else {
       this.current = { ...input, params: p, started_at: this.now() };
-      try { this.begin(this.current); } catch (e) { this.halt(e instanceof Fault ? e.message : 'execution_failed'); receipt.status = 'failed'; receipt.error = e instanceof Fault ? e.message : 'execution_failed'; }
+      try { this.begin(this.current); } catch (e) {
+        const code = e instanceof Fault || /^build_[a-z_]+$/.test(e.message) ? e.message : 'execution_failed';
+        this.halt(code); receipt.status = 'failed'; receipt.error = code;
+      }
     }
     return { ...receipt, digest: undefined };
   }
@@ -160,6 +170,7 @@ export class Body {
     if (command.action === 'collect_iron') {
       try { startCollect(this, command); } catch (e) { throw new Fault(['no_visible_iron', 'pickaxe_unavailable'].includes(e.message) ? e.message : 'collection_unavailable'); }
     }
+    if (command.action === 'build_house') startBuild(this, command);
     if (command.action === 'pickup') {
       const entity = bot.entities[command.params.entity_id];
       if (!entity || !['item', 'Item'].includes(entity.name) || entity.position.distanceTo(bot.entity.position) > 8 || bot.inventory.emptySlotCount() <= 0) throw new Fault('pickup_unavailable');
@@ -176,6 +187,7 @@ export class Body {
     if (c.action === 'approach' && owner.position.distanceTo(bot.entity.position) <= 2) { this.halt('arrived'); const r = this.receipts.get(c.command_id); r.status = 'succeeded'; r.error = null; }
     if (c.action === 'pickup' && !bot.entities[c.params.entity_id]) { this.halt('item_disappeared'); const r = this.receipts.get(c.command_id); r.status = 'outcome_unknown'; }
     if (c.action === 'collect_iron') stepCollect(this, c);
+    if (c.action === 'build_house') stepBuild(this, c);
     if (['defend', 'protect'].includes(c.action)) {
       if (!c.defendReady) return;
       const target = Object.values(bot.entities).find(e => HOSTILES.has(e.name) && e.position.distanceTo(owner.position) <= 6 && e.position.distanceTo(bot.entity.position) <= 6);

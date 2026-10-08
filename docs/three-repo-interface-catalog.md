@@ -1132,3 +1132,5 @@ and admin browser inspection do not constitute production migration evidence.
 WS、消息投递或设置协议，不向客户端 registry 声明虚构 tab/Tauri 命令。
 observe：独立 Bot 正版认证、皮肤、真实玩家/模型共玩验收仍需单独记录。
 合同与部署见 [Minecraft Activity](minecraft-activity.md)。
+
+Minecraft后端增量：`build_house`参数material/x/y/z严格白名单；`allow_building`默认false，在后端共玩页授权，回执placed/total与partial outcome沿现有Activity桥链观察。桌面/手机未消费该接口，无跨仓协议变更。

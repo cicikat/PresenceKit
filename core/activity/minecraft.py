@@ -154,6 +154,8 @@ class MinecraftService:
                 if session:
                     session.state = {"connection": "closed", "close_reason": reason,
                                      "model_calls": b.model_calls, "last_model_latency_seconds": self.last_model_latency_seconds,
+                                     "reaction_calls": b.reaction_calls, "reaction_error": self.reaction_error,
+                                     "reaction_latency_seconds": self.reaction_latency_seconds,
                                      "current": self.snapshot.get("current"), "receipts": self.snapshot.get("receipts", [])[-30:]}
                     store.save_session(session)
                 store.close_session(b.char_id, b.uid, "minecraft", b.session_id)
@@ -176,11 +178,16 @@ class MinecraftService:
                 raise MinecraftError("authority_changed")
             cfg = settings(self.config())
             params = params or {}
-            if action not in {"follow", "stop", "return", "pickup", "defend", "say", "collect_iron", "approach", "accompany", "protect"}:
+            if action not in {"follow", "stop", "return", "pickup", "defend", "say", "collect_iron", "approach", "accompany", "protect", "build_house"}:
                 raise MinecraftError("invalid_action")
             if action == "pickup" and not cfg.allow_pickup or action in {"defend", "protect"} and not cfg.allow_defend:
                 raise MinecraftError("capability_disabled")
-            if action == "collect_iron":
+            if action == "build_house":
+                if not cfg.allow_building:
+                    raise MinecraftError("capability_disabled")
+                from core.activity.minecraft_build import BuildParams
+                params = BuildParams.model_validate(params).model_dump()
+            elif action == "collect_iron":
                 if not cfg.allow_mining:
                     raise MinecraftError("capability_disabled")
                 if set(params) != {"count", "radius"} or any(type(params[k]) is not int or not 1 <= params[k] <= 8 for k in params):
@@ -202,6 +209,7 @@ class MinecraftService:
                 "session_id": b.session_id, "connection_epoch": b.epoch,
                 "command_id": command_id or uuid.uuid4().hex, "action": action,
                 "params": params, "expires_at": int(time.time() * 1000) + 120000,
+                "owner_stop_revision": self.snapshot.get("owner_stop_revision", 0),
             })
             return result
 
@@ -260,13 +268,17 @@ class MinecraftService:
             if snapshot.get("connection_epoch") != b.epoch or snapshot.get("session_id") != b.session_id:
                 await self._close("stale_binding")
                 return
+            if snapshot.get("owner_stop_revision", 0) != self.snapshot.get("owner_stop_revision", 0):
+                b.revision += 1
+                b.companion_goal = None
             self.snapshot = snapshot
             current = snapshot.get("current") or {}
             if b.companion_goal and current.get("action") == b.companion_goal and time.monotonic() - b.goal_renewed_at > 90:
                 await bridge.request("POST", "/v1/commands", {"session_id": b.session_id, "connection_epoch": b.epoch,
                     "command_id": uuid.uuid4().hex, "action": "stop", "params": {}, "expires_at": int(time.time()*1000)+120000})
                 receipt = await bridge.request("POST", "/v1/commands", {"session_id": b.session_id, "connection_epoch": b.epoch,
-                    "command_id": uuid.uuid4().hex, "action": b.companion_goal, "params": {}, "expires_at": int(time.time()*1000)+120000})
+                    "command_id": uuid.uuid4().hex, "action": b.companion_goal, "params": {}, "expires_at": int(time.time()*1000)+120000,
+                    "owner_stop_revision": snapshot.get("owner_stop_revision", 0)})
                 b.goal_renewed_at = time.monotonic(); b.revision += 1
                 if receipt.get("status") != "running": b.companion_goal = None
             elif b.companion_goal and not current:
@@ -349,7 +361,9 @@ class MinecraftService:
             planner = self.planner
         try:
             model_started = time.monotonic()
-            plan = await planner(b.uid, b.char_id, b.session_id, text, {**self.snapshot, "accepted_fast_action": fast["action"] if fast else None})
+            plan = await planner(b.uid, b.char_id, b.session_id, text, {**self.snapshot,
+                "capabilities": {k: getattr(cfg, k) for k in ("allow_building", "allow_defend", "allow_pickup", "allow_mining")},
+                "accepted_fast_action": fast["action"] if fast else None})
             self.last_model_latency_seconds = round(time.monotonic() - model_started, 3)
             if b is not self.binding or not self.valid(b) or rev != b.revision:
                 raise MinecraftError("stale_plan")

@@ -200,3 +200,7 @@ Mineflayer 提供实体、方块、背包、移动、聊天等接口；pathfinde
 - [Mineflayer 官方仓库：接口、版本与 Microsoft 认证](https://github.com/PrismarineJS/mineflayer)
 - [mineflayer-pathfinder](https://github.com/PrismarineJS/mineflayer-pathfinder)
 - [mineflayer-pvp](https://github.com/PrismarineJS/mineflayer-pvp)
+
+## 275增量
+
+此前E“暂不加快模型”由用户新授权275替代：minecraft_reaction路由、陪伴/接近/保护、小屋建造均已实现。真实模型和管理面验收见275，游戏验收仍按原用户要求not-run；不将此前roadmap误读为当前缺代码。
