@@ -23,7 +23,7 @@ class WechatSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
     enabled: StrictBool = False
     proactive_enabled: StrictBool = False
-    transport: str = "wechatpadpro"
+    transport: str = "openclaw_weixin"
     base_url: str = ""
     account_id: str = ""
     owner_sender_id: str = ""
@@ -31,7 +31,7 @@ class WechatSettings(BaseModel):
     @field_validator("transport")
     @classmethod
     def supported_transport(cls, value):
-        if value != "wechatpadpro":
+        if value != "openclaw_weixin":
             raise ValueError("unsupported_transport")
         return value
 

@@ -11,14 +11,7 @@ import pytest
 
 from core.wechat_service import WechatService, WechatSettings
 from integrations.wechat_transport import DeliveryResult, TransportMessage
-from integrations.wechat.padpro import PadProTransport, classify_delivery, decode_messages
-
-
-def wire_message(**changes):
-    return {"FromUserName": {"string": "external_owner"},
-            "ToUserName": {"string": "bot_account"}, "NewMsgId": "event-1",
-            "MsgType": 1, "Content": {"string": "hello"},
-            "CreateTime": int(time.time()), **changes}
+from integrations.wechat.openclaw_weixin import OpenClawWeixinTransport, decode_messages
 
 
 def event(**changes):
@@ -37,52 +30,42 @@ def configured_service(handler=None):
     return service
 
 
-def test_decode_and_unrecognized_delivery_are_conservative():
-    decoded = decode_messages({"Data": {"AddMsgs": [wire_message(), wire_message(MsgType=3)]}})
-    assert len(decoded) == 2 and decoded[1].kind == "unsupported"
-    assert decoded[0].sender_id == "external_owner"
-    assert not decode_messages({"Data": {"ContactList": []}})
-    assert not decode_messages({"Data": {"AddMsgs": [wire_message(CreateTime=0)]}})
-    assert classify_delivery({"Code": 200}).status == "unknown"
-    assert classify_delivery({"Code": 200, "Data": [{"Ret": 0}]}).status == "accepted"
-    assert classify_delivery({"Code": 200, "Data": [{"Ret": 4}]}).status == "rejected"
-    assert classify_delivery({"Code": 401}).status == "rejected"
+def test_decoder_rejects_invalid_identity_timestamps_and_media():
+    message = event().__dict__
+    assert decode_messages({"events": [message]}) == [TransportMessage(**message)]
+    for invalid in ({**message, "kind": "unsupported"}, {**message, "timestamp": True},
+                    {**message, "timestamp": 0}, {**message, "sender_id": ""},
+                    {**message, "is_group": True}):
+        assert not decode_messages({"events": [invalid]})
 
 
 @pytest.mark.asyncio
-async def test_local_reference_ws_receive_and_rest_send():
+async def test_local_bridge_receive_and_rest_send():
     captured = []
-    release = asyncio.Event()
     async def sync(request):
-        assert request.query["key"] == "fixture-key"
-        ws = web.WebSocketResponse()
-        await ws.prepare(request)
-        await ws.send_json({"Data": {"AddMsgs": [wire_message()]}})
-        await release.wait()
-        await ws.close()
-        return ws
+        assert request.headers["Authorization"] == "Bearer fixture-key"
+        assert not request.query
+        return web.json_response({"connected": True, "events": [event().__dict__]})
     async def send(request):
-        assert request.query["key"] == "fixture-key"
+        assert request.headers["Authorization"] == "Bearer fixture-key"
         captured.append(await request.json())
-        return web.json_response({"Code": 200, "Data": [{"Ret": 0}]})
+        return web.json_response({"status": "accepted"})
     app = web.Application()
-    app.router.add_get("/ws/GetSyncMsg", sync)
-    app.router.add_post("/message/SendTextMessage", send)
+    app.router.add_get("/events", sync)
+    app.router.add_post("/send", send)
     runner = web.AppRunner(app, access_log=None)
     await runner.setup()
     site = web.TCPSite(runner, "127.0.0.1", 0)
     await site.start()
     port = site._server.sockets[0].getsockname()[1]
-    transport = PadProTransport(f"http://127.0.0.1:{port}", "fixture-key")
+    transport = OpenClawWeixinTransport(f"http://127.0.0.1:{port}", "fixture-key")
     stream = transport.receive()
     try:
         incoming = await asyncio.wait_for(anext(stream), 3)
         assert incoming == event(timestamp=incoming.timestamp)
         assert (await transport.send_text(incoming.sender_id, "reply")).status == "accepted"
-        assert captured == [{"MsgItem": [{"ToUserName": "external_owner", "TextContent": "reply",
-                                          "MsgType": 1, "AtWxIDList": []}]}]
+        assert captured == [{"address": "external_owner", "text": "reply"}]
     finally:
-        release.set()
         await stream.aclose()
         await transport.close()
         await runner.cleanup()
@@ -142,7 +125,7 @@ async def test_hot_disable_closes_receiver_and_stale_reply_is_rejected(monkeypat
 @pytest.mark.asyncio
 async def test_no_outbound_blocks_both_transport_boundaries():
     from core.no_outbound import OutboundAttempted, recovery_no_outbound
-    transport = PadProTransport("http://bridge.invalid", "fixture-key")
+    transport = OpenClawWeixinTransport("http://bridge.invalid", "fixture-key")
     with recovery_no_outbound() as guard:
         with pytest.raises(OutboundAttempted):
             await anext(transport.receive())

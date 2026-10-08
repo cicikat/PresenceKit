@@ -60,9 +60,9 @@ NapCat 可在 Linux Docker 中运行，后端继续通过宿主映射的 OneBot 
 ### 个人微信（268，reference transport 已实现，真实 bridge 验收 observe）
 
 `integrations/wechat_transport.py` 是独立协议抽象，仅向上提供规范化消息和
-`accepted/rejected/unknown` 投递结果。首个实现位于 `integrations/wechat/padpro.py`，
-REST/WS wire 字段与 API 全部隔离在该实现；不能传入 shared ingress、Pipeline、memory 或
-turn_sink。公开 reference profile 为 849 API family，来源及版本边界见
+`accepted/rejected/unknown` 投递结果。270 实现位于 `integrations/wechat/openclaw_weixin.py`，
+连接腾讯 openclaw-weixin 官方模块独立桥接；wire 字段不能传入 shared ingress、Pipeline、memory 或
+turn_sink。官方协议、部署与版本边界见
 [wechat-reference-transport.md](wechat-reference-transport.md)。
 
 `core/wechat_service.py` 管理生命周期、显式 owner 绑定及有界队列，规范消息经

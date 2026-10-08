@@ -16,6 +16,8 @@ current：同 token label+owner+char+domain 的 request_id 在 grant 重绑后�
 
 新增后端管理端点 `GET/PUT /settings/wechat`（admin）及 `GET /observability/wechat`
 （state.read），配置与脱敏状态归后端管理面；桌面/手机输入、WS、poll/ack 及字段不变。
+270 使用腾讯 openclaw-weixin 独立桥接，扫码凭据归桥接；transport=openclaw_weixin，
+后端环境变量是本机桥接密钥。桌面/手机字段不变。
 微信绑定到现有 canonical owner UID，复用 conversation_lock 与 turn_sink。第三方 REST/WS
 只存在于独立 transport 实现，不作为三仓业务协议。observe：真实微信与三端并发对话链路；
 open：部署版 wire 响应核对、跨重启去重与媒体/群聊未实现。详见

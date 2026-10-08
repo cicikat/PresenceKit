@@ -36,10 +36,10 @@ feature-control-surface 文档。已知两个 phone-vision 残留 UI 断言失�
 
 ## 个人微信 reference transport（2026-10-07，268，observe / open）
 
-observe：真实已登录 WeChatPadPro REST/WS 版本兼容、微信到达、跨端记忆延续与重连验收
-尚未执行；当前只有公开 849 profile 与本地 fixture 证据。open：公共 Swagger 未完整定义
-同步/发送响应，部署版需提供脱敏样例核对；不识别的发送成功封套保守标 unknown。进程内
-去重不能跨重启保证 exactly-once，没有持久补发、微信媒体/群聊或账号登录 UI。
+270 已按用户要求取消 PadPro，改用腾讯 openclaw-weixin 官方模块独立 Docker 桥接。
+observe：真实扫码、微信到达、跨端记忆延续与重启登录分项验收；本地 fixture
+不代表真实到达。open：进程内去重、桥接游标/队列/context 不能跨重启保证
+exactly-once，没有持久补发、微信媒体/群聊；无近期 context 时主动下行拒绝。
 
 ## TTS 卡死与长回复堵塞（工单 B3，2026-10-03，部分修复）
 

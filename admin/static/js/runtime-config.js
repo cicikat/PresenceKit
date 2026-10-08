@@ -24,7 +24,7 @@ async function saveWechatSettings() {
     await api('PUT', '/settings/wechat', {
       enabled: document.getElementById('wechat-enabled').checked,
       proactive_enabled: document.getElementById('wechat-proactive').checked,
-      transport: 'wechatpadpro',
+      transport: 'openclaw_weixin',
       base_url: document.getElementById('wechat-base_url').value.trim(),
       account_id: document.getElementById('wechat-account_id').value.trim(),
       owner_sender_id: document.getElementById('wechat-owner_sender_id').value.trim(),

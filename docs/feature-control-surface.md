@@ -11,10 +11,10 @@ F7 无新增配置开关：角色工具选择1..10轮，固定3项/6000字/24小
 ## 个人微信（2026-10-07，268）
 
 `wechat.enabled=false`、`proactive_enabled=false` 默认关闭；关闭通道即停止微信收发。
-`transport=wechatpadpro`、`base_url`、`account_id`、`owner_sender_id` 的管理面入口是
+`transport=openclaw_weixin`（270 腾讯官方模块独立桥接）、`base_url`、`account_id`、`owner_sender_id` 的管理面入口是
 「高级运行配置与实验 → 个人微信」，`GET/PUT /settings/wechat`（admin）。所有可见配置
 校验后热更新；开关总览也提供 wechat.enabled。凭据来自进程环境
-`WECHAT_TRANSPORT_TOKEN`，管理面仅返回 credential_configured，不读写明文密钥。
+`WECHAT_TRANSPORT_TOKEN`（本机桥接 Bearer 密钥，不是微信 bot token），管理面仅返回 credential_configured，不读写明文密钥。
 有效状态与配置开关分开，缺绑定/未启动/连接中/在线均有状态；
 `GET /observability/wechat`（state.read）只读返回计数、连接、队列深度与稳定错误码。
 后端启动拥有 supervisor，独立于 standalone/QQ；桌面和手机没有新增设置或协议。
