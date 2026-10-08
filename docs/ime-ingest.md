@@ -7,6 +7,10 @@
 管理面「功能总开关」分别控制 `ime_ingest.enabled` 与 `ime_awareness.enabled`（均默认 false）。
 前者只允许接收，后者允许分类和产生主动候选；还需 scheduler、autonomy 和 talk 开关生效。
 「模型路由」新增 `ime_judge`，可使用轻量模型，未配置依次回退 sensor_judge、intent、chat。
+
+263 B：该用途可选 Jev 原生 `systemone`。Jev 一次并行判断 activity、worth_contact 和文字依据置信；否决或置信低于 0.65 时不调用文案模型。通过后使用本行显式文本兜底预设补写 summary/evidence/uncertainty/topic，文案不能改写决策字段；未指定文案预设、文案失败或缺 evidence 均不入队。相同文本预设也用于允许的传输失败兜底，此时一次返回完整 Assessment。普通文本主用保持一次完整 JSON 调用，不拆两段。两段共享外层 20 秒预算，TTL、修订、cooldown 与开关复核不变。
+
+路由 effective 返回 open_fields / open_fields_preset；管理面说明兜底预设也承担文案生成。API 账本 caller=ime_judge 是判断，caller=ime_judge_text、purpose=ime_open_fields 是文案；近期原生闭集结果复用 `/observability/decisions`，现有 IME 分析记录仍展示 failed/observed/queued 与失败原因。
 实际路由、effective、blocking_reason 见 admin-only `GET /observability/ime-drafts` 和管理面
 「记录与状态总览 · IME」。权限与热配置继续使用既有 feature-flags API。
 

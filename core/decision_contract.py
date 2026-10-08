@@ -11,7 +11,7 @@ from urllib.parse import urlsplit
 from core.llm_protocol import NormalizedResponse, UpstreamResponseFormatError
 
 # Only consumers that explicitly compile a DecisionRequest may use System One.
-SYSTEMONE_CATEGORIES = frozenset({'sensor_judge', 'detect_emotion', 'minecraft_reaction'})
+SYSTEMONE_CATEGORIES = frozenset({'sensor_judge', 'detect_emotion', 'minecraft_reaction', 'ime_judge'})
 _LAST: dict[str, dict] = {}
 
 

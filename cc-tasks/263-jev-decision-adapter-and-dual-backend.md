@@ -200,10 +200,10 @@ Jev 路径才是「闸门一次 + 开放字段一次」。纯 `json_chat` 必须
 
 ## B — P0/P1：IME 决策头拆分（Jev + 小模型文案）
 
-- [ ] B1 把 `Assessment` 拆成决策字段与文案字段；规则过滤（测试包、本系统聊天无删除、TTL、cooldown）仍在模型前。
-- [ ] B2 双后端：`systemone` 否决则不打文案模型；通过但文案失败 → 记 failed，不入队。`json_chat` **一次**产出完整 Assessment，不得拆成两次小模型。Jev 熔断且配了文本兜底时，兜底走完整单次 JSON，不是「Jev 残缺结果 + 再补文案」。
-- [ ] B3 禁止文案模型改写 worth_contact。回归：低置信、无 evidence、stale revision、开关关闭。
-- [ ] B4 观测区分 `ime_judge` 闸门调用与文案调用。文档 `ime-ingest.md` 写清两段调用。独立提交。
+- [x] B1 把 `Assessment` 拆成决策字段与文案字段；规则过滤（测试包、本系统聊天无删除、TTL、cooldown）仍在模型前。
+- [x] B2 双后端：`systemone` 否决则不打文案模型；通过但文案失败 → 记 failed，不入队。`json_chat` **一次**产出完整 Assessment，不得拆成两次小模型。Jev 熔断且配了文本兜底时，兜底走完整单次 JSON，不是「Jev 残缺结果 + 再补文案」。
+- [x] B3 禁止文案模型改写 worth_contact。回归：低置信、无 evidence、stale revision、开关关闭。
+- [x] B4 观测区分 `ime_judge` 闸门调用与文案调用。文档 `ime-ingest.md` 写清两段调用。独立提交。
 
 ## C — P1：Path A 封闭探针（可选 Jev）+ 开放参数小模型
 
@@ -259,3 +259,7 @@ Jev 路径才是「闸门一次 + 开放字段一次」。纯 `json_chat` 必须
 首批白名单为 sensor_judge / detect_emotion / minecraft_reaction；affection 复用 detect_emotion。B/C/D 接入后才开放对应 category。score 原生取值 0..N-1 映射回既有业务范围。失败语义：sensor drop，emotion neutral，affection checked None/public false，Minecraft 原失败回退。保留原熔断/transport-only fallback、总墙钟与零原生 retry，不在失败后擅自调用 chat/default。原生坏类型/概率/闭集、越界、低 confidence 拒绝。
 
 真实原生合成 choice probe：保存 jev 的 api_protocol 修为 systemone（不改地址/密钥/生产路由），/v1/systemone 返回有效结果，437ms。静态/fixture、真实连通与业务校准分别记录。
+
+## B 阶段验收（2026-10-08）
+
+IME Jev 闸门与开放文案已拆分；显式文本兜底同时承担通过后的文案，管理面清楚标明，无配置失败不入队。普通文本一次完整 Assessment。原生否决/低置信零文案调用，文案越权字段拒绝，传输失败完整单次文本回落，文案失败不入队。相关 131 项回归通过；隔离路由编辑器已核对缺文案提示与 Jev+文本保存重开。生产路由未切换，无真机新验收。

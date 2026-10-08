@@ -611,7 +611,7 @@ Brief 253.6 的语音转写使用独立 `stt_presets` 命名连接和 `voice_mes
 
 `api_protocol=systemone` 使用独立 httpx / Bearer / PresenceKit User-Agent，沿用可热更新模型代理与客户端生命周期。base_url 可填根地址、/v1 或完整 /v1/systemone；不会追加 chat/completions。不发送 messages、temperature、tools 或 max_tokens；不支持生成正文和流式。
 
-当前可配 sensor_judge、detect_emotion（含 affection）及 minecraft_reaction；其余用途在后续阶段接入前拒绝绑定。chat、default_preset、首个默认兜底和失败兜底必须是文本后端。失败兜底仍默认关：仅尝试用户明确指定的完整文本 preset、最多一次；鉴权/坏输出不跨模型重试。无兜底则 drop / neutral / false / Minecraft 本地规则，不暗中换主聊天模型。文本判断仍使用原单次请求，情绪宽松标签匹配保留。
+当前可配 sensor_judge、detect_emotion（含 affection）、minecraft_reaction 及 ime_judge（263 B）；其余用途在后续阶段接入前拒绝绑定。chat、default_preset、首个默认兜底和失败兜底必须是文本后端。失败兜底仍默认关：仅尝试用户明确指定的完整文本 preset、最多一次；鉴权/坏输出不跨模型重试。无兜底则 drop / neutral / false / Minecraft 本地规则，不暗中换主聊天模型。文本判断仍使用原单次请求，情绪宽松标签匹配保留。IME 原生通过后才用本行显式文本预设补开放字段，缺少预设则 failed 不入队；effective 包含 open_fields/open_fields_preset，详见 [IME 合同](ime-ingest.md)。
 
 合同 `core/decision_contract.py`：具名 task、state、choice/score/noul questions、failure_policy、固定 projection。choice 校验闭集、confidence、概率分布；score 为 0 起始档位而非百分数，sensor 五档归一为 0–100；affection noul >=0.65 为 true。sensor 并行辅助 noul 仅排障，不替代调度器硬闸。Minecraft 3 秒总预算，confidence >=0.65 才接受动作；角色表达仍走主模型。
 

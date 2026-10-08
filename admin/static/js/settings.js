@@ -1360,7 +1360,7 @@ function openProfileModal(name) {
         <span>${escapeHtml(cat)} <span class="admin-inline-012">${escapeHtml(MR_CATEGORY_DESC[cat] || '')}</span></span>
         <select id="mr-profile-cat-select-${cat}">
           <option value="">${cat === 'minecraft_reaction' ? '（清除映射：走 sensor_judge → intent → chat）' : t('routing.clear_mapping', '（清除映射：走 default_preset → chat → 第一个 preset）')}</option>
-          ${presetNames.filter(p => _mrData.presets[p].api_protocol !== 'systemone' || ['sensor_judge', 'detect_emotion', 'minecraft_reaction'].includes(cat)).map(p => `<option value="${escapeHtml(p)}" ${existing[cat] === p ? 'selected' : ''}>${escapeHtml(p)}</option>`).join('')}
+          ${presetNames.filter(p => _mrData.presets[p].api_protocol !== 'systemone' || ['sensor_judge', 'detect_emotion', 'minecraft_reaction', 'ime_judge'].includes(cat)).map(p => `<option value="${escapeHtml(p)}" ${existing[cat] === p ? 'selected' : ''}>${escapeHtml(p)}</option>`).join('')}
         </select>
       </label>
       <label class="field">
@@ -1382,6 +1382,11 @@ function openProfileModal(name) {
       hint.textContent = protocol === 'systemone'
         ? `实际协议：systemone；${fallback.value ? '失败时最多尝试一次已配置文本兜底' : '未配兜底；Jev 不可用将按本用途失败语义处理'}。`
         : `实际协议：${protocol}；沿用文本判断。`;
+      if (protocol === 'systemone' && cat === 'ime_judge') {
+        hint.textContent += fallback.value
+          ? ' 判断通过后，同一文本预设补写摘要与依据；不得改写判断。'
+          : ' 判断通过后需要文本预设补写摘要与依据；当前缺少文案预设，将记录失败且不入队。';
+      }
     };
     primary.addEventListener('change', update);
     fallback.addEventListener('change', update);

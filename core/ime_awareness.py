@@ -53,6 +53,73 @@ class Assessment(BaseModel):
     worth_contact: bool
 
 
+class Narrative(BaseModel):
+    """Open fields only: a drafting model cannot change a completed gate."""
+    model_config = ConfigDict(extra='forbid', strict=True)
+    summary: str = Field(max_length=240)
+    evidence: str = Field(max_length=160)
+    uncertainty: str = Field(max_length=160)
+    topic: str = Field(max_length=60)
+
+
+async def assess(payload: dict, char_id: str) -> str:
+    from core import llm_client
+    from core.model_registry import get_model_client, resolve_fallback_route
+    from core.decision_contract import DecisionRequest, Question, prepare
+    from core.llm_failover import execute_create, PreparedAttempt
+    messages = [
+        {'role': 'system', 'content': PROMPT, '_layer': 'ime_judge_policy'},
+        {'role': 'user', 'content': json.dumps(payload, ensure_ascii=False), '_layer': 'ime_observation'},
+    ]
+    mc = get_model_client('ime_judge', char_id=char_id)
+    if mc.api_protocol != 'systemone':
+        # Keep the original complete, single-call text backend.
+        return await llm_client.chat(messages, call_category='ime_judge', char_id=char_id, max_tokens_override=700)
+    request = DecisionRequest('ime_judge', payload, {
+        'activity': Question('choice', PROMPT + '\n只判断当前活动类别。', {
+            'work': '工作、学习或处理事务', 'chat': '与别人聊天',
+            'mixed': '两者都有', 'unknown': '没有足够文字依据',
+        }),
+        'worth_contact': Question('noul', PROMPT + '\n是否出现有文字依据、值得角色留意的新线索？', threshold=.65),
+        'confidence': Question('noul', '文字与编辑记录是否充分支持本次观察？不能以应用名、删除请求或推测心理代替证据。'),
+    }, failure_policy='fail_closed_drop', constants={'summary': '', 'evidence': '', 'uncertainty': '', 'topic': ''})
+    outcome = await execute_create(call_category='ime_judge', char_id=char_id, caller='ime_judge', primary_mc=mc,
+        prepare=lambda target: prepare(target, request, messages=messages, gen_kwargs={'max_tokens': 700, 'timeout': 10}),
+        validate=lambda response: Assessment.model_validate_json(response.assistant_text))
+    if not outcome.ok:
+        raise outcome.error or RuntimeError(outcome.skip_reason or 'ime_decision_failed')
+    if outcome.mc.api_protocol != 'systemone':
+        # Transport failover returns one complete assessment, not a partial gate.
+        return outcome.value.assistant_text
+    result = Assessment.model_validate_json(outcome.value.assistant_text)
+    if not result.worth_contact or result.confidence < .65:
+        return result.model_dump_json()
+    fallback = resolve_fallback_route('ime_judge', char_id=char_id, primary_preset=mc.name)
+    name = fallback.get('preset')
+    if not name or fallback.get('refused_reason'):
+        raise ValueError('ime_open_fields_text_preset_missing')
+    text_mc = get_model_client('ime_judge', char_id=char_id, preset_name=name, failover=True)
+    if text_mc.api_protocol == 'systemone':
+        raise ValueError('ime_open_fields_requires_text')
+    draft_messages = [
+        {'role': 'system', 'content': PROMPT + '\n本次只补写 summary/evidence/uncertainty/topic 四个字段。'
+            '只输出这四个字符串字段的 JSON，不输出 activity/confidence/worth_contact。无依据时 evidence 留空。',
+            '_layer': 'ime_judge_policy'},
+        messages[1],
+    ]
+    from core.prompt_style import apply_prompt_style
+    from core.prompt_layer import sanitize_messages
+    drafted = await execute_create(call_category='ime_judge', char_id=char_id, caller='ime_judge_text',
+        purpose='ime_open_fields', primary_mc=text_mc, explicit_preset=True,
+        prepare=lambda target: PreparedAttempt(messages=sanitize_messages(apply_prompt_style(draft_messages, target.prompt_style)),
+            gen_kwargs={'max_tokens': 700, 'timeout': 10}),
+        validate=lambda response: Narrative.model_validate_json(response.assistant_text))
+    if not drafted.ok:
+        raise drafted.error or RuntimeError(drafted.skip_reason or 'ime_draft_failed')
+    narrative = Narrative.model_validate_json(drafted.value.assistant_text)
+    return Assessment.model_validate({**result.model_dump(), **narrative.model_dump()}).model_dump_json()
+
+
 def effective_state(uid=None, char_id=None):
     cfg = get_config() or {}
     enabled = bool(cfg.get('ime_awareness', {}).get('enabled', False))
@@ -130,11 +197,7 @@ async def tick(uid: str, char_id: str):
             payload['new_edit_events'] = [{**e, 'text': e.get('text', '')[-240:]} for e in new_edits[-24:]]
             raw = None
             try:
-                from core import llm_client
-                raw = await asyncio.wait_for(llm_client.chat([
-                    {'role': 'system', 'content': PROMPT, '_layer': 'ime_judge_policy'},
-                    {'role': 'user', 'content': json.dumps(payload, ensure_ascii=False), '_layer': 'ime_observation'},
-                ], call_category='ime_judge', char_id=char_id, max_tokens_override=700), timeout=20)
+                raw = await asyncio.wait_for(assess(payload, char_id), timeout=20)
                 result = Assessment.model_validate_json(raw).model_dump()
             except Exception as exc:
                 failure = dict((old or {}).get('result', {}))
