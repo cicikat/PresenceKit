@@ -30,6 +30,9 @@ class DesktopChannel(BaseChannel):
 
     @property
     def is_active(self) -> bool:
+        from core.client_channels import enabled
+        if not enabled(self.name):
+            return False
         from channels import desktop_ws
         if desktop_ws.is_connected():
             return True
@@ -58,6 +61,9 @@ class DesktopChannel(BaseChannel):
         artifacts: list[dict] | None = None,
         request_id: str | None = None,
     ) -> None:
+        from core.client_channels import enabled
+        if not enabled(self.name):
+            return
         from channels import desktop_ws
         # 路径 1：WS 实时推送
         if desktop_ws.is_connected():

@@ -62,8 +62,9 @@ async def _close_stalled(ws: WebSocket) -> None:
 
 async def _send_json(payload: dict) -> bool:
     global _current_ws
+    from core.client_channels import enabled
     ws = _current_ws
-    if ws is None:
+    if not enabled("desktop") or ws is None:
         return False
     try:
         await asyncio.wait_for(

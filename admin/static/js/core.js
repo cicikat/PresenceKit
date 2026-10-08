@@ -20,7 +20,7 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'xhs-continuation-1';
+const ADMIN_UI_FRAGMENT_VERSION = 'clients-271-1';
 
 const ADMIN_PAGE_ALIASES = Object.freeze({memory: 'observe-memory'});
 
@@ -297,7 +297,8 @@ async function goto(page, {reloadFragment = false, fromHistory = false} = {}) {
     'autonomy-settings': async () => { await loadAutonomySettings(); await loadVideoCallPresence(); await loadAutonomyTools(); },
     'output-settings': loadStickerConfig,
     'device-policy': () => { loadScreenPeekSettings(); loadMetaMode(); },
-    'network-config': async () => { _bindProxyControls(); await Promise.all([loadProxy(), loadRelaySettings()]); },
+    'network-config': async () => { _bindProxyControls(); await loadProxy(); },
+    'client-settings': loadClientSettings,
     'personal-settings': async () => { _loadSetupAnniversaries(); await _ensurePronounUidOptions(); await loadUserPronoun(); },
     'coplay-config': _loadSetupCoplayGames,
     'diary-config': _loadSetupDiary,

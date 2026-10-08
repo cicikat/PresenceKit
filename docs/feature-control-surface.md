@@ -1033,3 +1033,6 @@ confidence 是估计的可信度而非强度）、`recall.semantic_min_similarit
 上方 S2 / S3 / S5b 小节中“无管理面开关”的描述以本节为准。
 
 小红书续读工具已接入同一控制面，具体统计、缓存、限额及远端分页边界见 [续读合同](xiaohongshu-continuation.md)。
+
+
+271：管理面新增「消息分发与客户端设置」，集中客户端开关、QQ/微信连接与手机唤醒。`GET/PUT /settings/clients`（admin）热更新桌面/手机入口与投递开关，缺省开启，关闭不删除队列；QQ 连接需重启。不改变客户端协议；真实设备投递验收仍为 observe。详见 [客户端分发设置](client-distribution-settings.md)。

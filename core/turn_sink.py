@@ -164,6 +164,8 @@ async def _fanout(
     # Control markers are internal protocol, never user-visible.
     _visible_text = _strip_tags(strip_control_markers(assistant_text))
 
+    from core.client_channels import enabled
+    targets = [ch for ch in targets if enabled(ch.name)]
     sent_targets: list[str] = []
     failures: dict[str, str] = {}
     for channel in targets:

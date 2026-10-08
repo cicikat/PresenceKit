@@ -1,22 +1,5 @@
 <h1 class="page-title" data-i18n="runtime_config.title">运行配置</h1>
-<section class="card">
-  <div class="card-header"><h3 data-i18n="wechat.title">个人微信</h3><button class="btn btn-ghost btn-sm" data-action="loadWechatSettings" data-i18n="common.refresh">刷新</button></div>
-  <p data-i18n="wechat.hint">默认关闭，关闭即停止微信收发。首期仅绑定 owner 的文本私聊；主动下行默认关闭。登录由桥接管理，凭据使用后端进程环境 WECHAT_TRANSPORT_TOKEN，页面不显示密钥。</p>
-  <details open><summary data-i18n="wechat.connection_settings">连接与绑定设置</summary>
-  <div class="form-row">
-    <label class="checkbox-row"><input type="checkbox" id="wechat-enabled"><span data-i18n="wechat.enable">启用微信通道</span></label>
-    <label class="checkbox-row"><input type="checkbox" id="wechat-proactive"><span data-i18n="wechat.proactive">允许主动及跨端文本下行</span></label>
-  </div>
-  <label class="field"><span data-i18n="wechat.url">桥接 REST 根地址</span><input id="wechat-base_url" type="url" autocomplete="off"></label>
-  <div class="form-row">
-    <label class="field"><span data-i18n="wechat.account">桥接登录账号 ID</span><input id="wechat-account_id" autocomplete="off"></label>
-    <label class="field"><span data-i18n="wechat.owner">绑定 owner 的微信发送者 ID</span><input id="wechat-owner_sender_id" autocomplete="off"></label>
-  </div>
-  </details>
-  <p id="wechat-state" class="i18n-raw" role="status"></p>
-  <pre id="wechat-counters" class="i18n-raw"></pre>
-  <button class="btn btn-primary btn-sm" data-action="saveWechatSettings" data-i18n="common.save">保存</button>
-</section>
+<p><a href="#page-client-settings" data-action="goto" data-action-args='["client-settings"]'>消息分发与客户端设置</a></p>
 <p class="admin-source-hint" data-i18n="runtime_config.source_hint">这里编辑状态页摘要中的运行时控制项；每项显示配置来源和生效方式，状态页只保留只读摘要。</p>
 
 <div class="card">

@@ -22,7 +22,8 @@ def get(name: str) -> BaseChannel | None:
 
 def get_active() -> list[BaseChannel]:
     """返回所有活跃通道。"""
-    return [c for c in _channels.values() if c.is_active]
+    from core.client_channels import enabled
+    return [c for c in _channels.values() if enabled(c.name) and c.is_active]
 
 
 async def broadcast(

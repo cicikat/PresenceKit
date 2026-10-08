@@ -153,6 +153,10 @@ wechat:
   owner_sender_id: ""  # 显式绑定到 scheduler.owner_id 的个人微信发送者
   # 桥接登录与扫码由桥接自行管理；进程环境 WECHAT_TRANSPORT_TOKEN 提供普通账号 key。
 
+client_channels:
+  desktop: true  # 管理面热更新；关闭停止入口收发，不删除队列
+  mobile: true
+
 qq:
   enabled: false  # 需要 QQ 机器人再开，并配置 NapCat；纯桌宠用户保持关闭即可
   host: 127.0.0.1

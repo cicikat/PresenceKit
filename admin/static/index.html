@@ -59,6 +59,7 @@
 <button type="button" class="nav-group-header" id="nav-toggle-features" aria-expanded="true" aria-controls="navgroup-features" data-action="toggleNavGroup" data-action-args='["features"]'><span class="nav-caret" id="caret-features" aria-hidden="true">▾</span><span data-i18n="nav.category.features">功能与行为</span></button>
 <div class="nav-group" id="navgroup-features">
 <a href="#page-feature-center" data-page="feature-center" data-action="goto" data-action-args='["feature-center"]'><span data-i18n="nav.page.feature-center">功能开关总览</span></a>
+<a href="#page-client-settings" data-page="client-settings" data-action="goto" data-action-args='["client-settings"]'>消息分发与客户端设置</a>
 <a href="#page-conversation-settings" data-page="conversation-settings" data-action="goto" data-action-args='["conversation-settings"]'><span data-i18n="nav.page.conversation-settings">聊天方式与思考</span></a>
 <a href="#page-role-bindings" data-page="role-bindings" data-action="goto" data-action-args='["role-bindings"]'><span data-i18n="nav.page.role-bindings">角色的模型、声音与形象</span></a>
 <a href="#page-scheduler" data-page="scheduler" data-action="goto" data-action-args='["scheduler"]'><span data-i18n="nav.page.scheduler">主动消息与定时提醒</span></a>
@@ -162,6 +163,7 @@
     <!-- ── 配置中心（Brief 93 §1） ── -->
     <div class="page active" id="page-overview" data-page-fragment="overview"></div>
     <div class="page" id="page-setup" data-page-fragment="setup"></div>
+    <div class="page" id="page-client-settings" data-page-fragment="client-settings"></div>
     <div class="page" id="page-runtime-config" data-page-fragment="runtime-config"></div>
     <div class="page" id="page-tts-config" data-page-fragment="tts-config"></div>
     <div class="page" id="page-listening-player" data-page-fragment="listening-player"></div>
@@ -662,7 +664,7 @@
 
 <script src="/static/i18n.js?v=xhs-continuation-1"></script>
 <!-- legacy cache marker: <script src="/static/i18n.js?v=admin-prompt-followups-3"></script> -->
-<script src="/static/js/core.js?v=xhs-continuation-1"></script>
+<script src="/static/js/core.js?v=clients-271-1"></script>
 <!-- legacy cache marker: <script src="/static/js/core.js?v=admin-design-1"></script> -->
 <!-- legacy cache marker: <script src="/static/js/core.js?v=admin-design-1"></script> -->
 <script src="/static/js/overview.js?v=brief-180-admin-static-1"></script>
@@ -692,5 +694,6 @@
 <script src="/static/js/listening-player.js?v=v1-260-admin-surface-1"></script>
 <script src="/static/js/local-runtime.js?v=v1-stt-sherpa-1"></script>
 <script src="/static/js/video-call-presence.js?v=v1-call-presence-1"></script>
+<script src="/static/js/client-settings.js?v=clients-271-1"></script>
 </body>
 </html>

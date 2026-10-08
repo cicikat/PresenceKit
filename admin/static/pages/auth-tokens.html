@@ -14,18 +14,7 @@
         <div id="at-capability-summary" class="admin-result-panel"><div class="loading">加载中…</div></div>
       </div>
 
-      <div class="card">
-        <div class="card-header">
-          <h3>通道开关</h3>
-          <button class="btn btn-ghost btn-sm" data-action="loadChannelToggles">刷新</button>
-        </div>
-        <p class="admin-source-note">
-          只列出有独立总开关的通道；desktop / mobile / device 通道没有单独的 enabled 开关，
-          是否可用取决于对应 token 是否已配置且未停用（见下方 Token 列表）。
-        </p>
-        <div id="ch-toggle-body"><div class="loading">加载中…</div></div>
-      </div>
-
+      <div class="card"><h3>客户端开关</h3><p>QQ、微信、电脑和手机的总开关与连接配置统一在消息分发页管理；设备完整访问权限仍由下方 Token 控制。</p><button class="btn btn-ghost" data-action="goto" data-action-args='["client-settings"]'>消息分发与客户端设置</button></div>
       <div class="card">
         <div class="card-header">
           <h3>Token 列表</h3>

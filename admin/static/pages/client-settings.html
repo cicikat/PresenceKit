@@ -1,0 +1,41 @@
+<h1 class="page-title">消息分发与客户端设置</h1>
+<section class="card"><h3>客户端快捷开关</h3><p>只开启你使用的客户端。桌面/手机关闭后停止该入口收发，保留已有消息；QQ 开关及连接修改需重启后端；微信热生效。</p>
+<div class="form-row">
+<label class="checkbox-row"><input type="checkbox" id="client-qq" data-action="toggleClientChannel" data-action-args='["qq"]'><span>QQ</span></label>
+<label class="checkbox-row"><input type="checkbox" id="client-wechat" data-action="toggleClientChannel" data-action-args='["wechat"]'><span>微信</span></label>
+<label class="checkbox-row"><input type="checkbox" id="client-desktop" data-action="toggleClientChannel" data-action-args='["desktop"]'><span>电脑前端</span></label>
+<label class="checkbox-row"><input type="checkbox" id="client-mobile" data-action="toggleClientChannel" data-action-args='["mobile"]'><span>手机前端</span></label>
+</div><p id="client-state" role="status"></p><button class="btn btn-ghost btn-sm" data-action="loadClientSettings">刷新</button></section>
+<details class="card"><summary>QQ · OneBot 桥连接</summary><p>当前支持无路径、无鉴权的 OneBot ws://host:port 桥（例如对应配置的 NapCat）；其他连接形式需要扩展适配器。填写桥实际监听地址；修改后重启后端。standalone 模式会阻止 QQ 启动。</p><label class="field"><span>主机 / IP</span><input id="client-qq-host" autocomplete="off"></label><label class="field"><span>端口</span><input id="client-qq-port" type="number" min="1" max="65535"></label><button class="btn btn-primary" data-action="saveClientConnection">保存 QQ 连接</button></details>
+<details class="card"><summary>微信 · 桥连接与绑定</summary>
+  <div class="card-header"><h3 data-i18n="wechat.title">个人微信</h3><button class="btn btn-ghost btn-sm" data-action="loadClientWechatSettings" data-i18n="common.refresh">刷新</button></div>
+  <p>腾讯 openclaw-weixin 独立桥接：默认关闭，关闭即停止后端微信收发。只接绑定 owner 的文本私聊；主动下行默认关闭。微信扫码与登录凭据由桥接管理，WECHAT_TRANSPORT_TOKEN 填本机桥接密钥，页面不显示密钥。</p>
+  <details open><summary data-i18n="wechat.connection_settings">连接与绑定设置</summary>
+  <div class="form-row">
+    <label class="checkbox-row"><input type="checkbox" id="wechat-enabled"><span data-i18n="wechat.enable">启用微信通道</span></label>
+    <label class="checkbox-row"><input type="checkbox" id="wechat-proactive"><span data-i18n="wechat.proactive">允许主动及跨端文本下行</span></label>
+  </div>
+  <label class="field"><span data-i18n="wechat.url">桥接 REST 根地址</span><input id="wechat-base_url" type="url" autocomplete="off"></label>
+  <div class="form-row">
+    <label class="field"><span data-i18n="wechat.account">桥接登录账号 ID</span><input id="wechat-account_id" autocomplete="off"></label>
+    <label class="field"><span data-i18n="wechat.owner">绑定 owner 的微信发送者 ID</span><input id="wechat-owner_sender_id" autocomplete="off"></label>
+  </div>
+  </details>
+  <p id="wechat-state" class="i18n-raw" role="status"></p>
+  <pre id="wechat-counters" class="i18n-raw"></pre>
+  <button class="btn btn-primary btn-sm" data-action="saveClientWechatSettings" data-i18n="common.save">保存</button>
+</details>
+<details class="card"><summary>电脑前端 · 连接与权限</summary><p>电脑前端直接连接本后端，无需额外 IM 桥。前端连接设置填写本后端地址和 desktop token，WebSocket 使用同一地址的 /ws/desktop。远程部署应填写实际 HTTPS 地址。</p><p id="client-address"></p><button class="btn btn-ghost" data-action="goto" data-action-args='["auth-tokens"]'>管理客户端 Token</button></details>
+<details class="card"><summary>手机前端 · 连接与后台唤醒</summary><p>手机填写本后端可达的地址和 mobile token；手机上的 127.0.0.1 指手机自己。前台聊天及轮询直接访问后端，后台唤醒可选配置以下中继，App 端填写相同连接。</p>
+<section>
+  <div class="card-header"><h3 data-i18n="status.relay.title">中继唤醒</h3><button class="btn btn-ghost btn-sm" data-action="loadRelaySettings" data-i18n="common.refresh">刷新</button></div>
+  <p class="admin-inline-087" data-i18n="static.status.relay_hint">只影响中继唤醒通道，不改变调度器本地触发。</p>
+  <div class="form-row">
+    <label class="field"><span data-i18n="runtime_config.relay_base_url">Base URL</span><input type="url" id="relay-base-url"></label>
+    <label class="field"><span data-i18n="runtime_config.relay_topic">Topic</span><input type="text" id="relay-topic"></label>
+  </div>
+  <label class="field"><span data-i18n="status.relay.token">Token（留空保留已有值）</span><input type="password" id="relay-token" autocomplete="off"></label>
+  <div class="config-item-meta"><span data-i18n="runtime_config.source_global">来源：全局 relay 设置</span><span data-i18n="runtime_config.apply_reload">保存后热重载</span></div>
+  <button class="btn btn-primary btn-sm" data-action="saveRelaySettings" data-i18n="common.save">保存</button>
+</section></details>
+<section class="card"><h3>部署与兼容</h3><p>桥程序可安装在任意目录，后端按网络地址连接。QQ 和微信各有独立协议适配；桌面和手机使用后端 HTTP/WS 协议。选择设备不会自动转换其他协议。</p><p>从仓库首次部署：复制 config.example.yaml 为本地 config.yaml，配置模型与 owner，生成客户端 Token；只启用所需通道。QQ 启动 OneBot 桥，微信按桥部署说明登录并配置本机桥密钥。</p></section>

@@ -51,6 +51,9 @@ class MobileChannel(BaseChannel):
 
     @property
     def is_active(self) -> bool:
+        from core.client_channels import enabled
+        if not enabled(self.name):
+            return False
         if not self._active:
             return False
         return time.time() - self._last_seen <= _ACTIVE_TTL_SECONDS
@@ -84,6 +87,9 @@ class MobileChannel(BaseChannel):
         display_text: str | None = None,
         request_id: str | None = None,
     ) -> None:
+        from core.client_channels import enabled
+        if not enabled(self.name):
+            return
         await self._write_to_queue(
             content,
             user_id,
@@ -106,6 +112,9 @@ class MobileChannel(BaseChannel):
         char_id: str | None = None,
         sticker: dict | None = None,
     ) -> None:
+        from core.client_channels import enabled
+        if not enabled(self.name):
+            return
         await self._write_to_queue(
             content,
             user_id,

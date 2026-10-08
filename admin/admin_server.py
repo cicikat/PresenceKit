@@ -47,6 +47,11 @@ app = FastAPI(
     version="1.0.0",
 )
 
+from core.client_channels import ClientChannelGate
+app.add_middleware(ClientChannelGate)
+from admin.routers import settings_clients
+app.include_router(settings_clients.router, tags=["设置-客户端"])
+
 # 注册业务路由（在 app 定义之后导入，避免循环）
 from admin.routers import (
     users, memory, relations,

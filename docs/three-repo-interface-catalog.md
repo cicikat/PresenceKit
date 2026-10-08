@@ -1110,3 +1110,6 @@ and admin browser inspection do not constitute production migration evidence.
 `/dream/enter` schema/scope 不变，当前选中角色不再受“仅默认角色”限制；owner 单会话、
 会话角色冻结及群梦互斥不变。桌面 HTTP 桥保留 409/422 的字符串 detail，单人错误不套群梦文案。
 后端定向回归、桌面构建及 cargo check 通过；真实窗口与模型联调为 observe。
+
+
+271：管理面新增「消息分发与客户端设置」，集中客户端开关、QQ/微信连接与手机唤醒。`GET/PUT /settings/clients`（admin）热更新桌面/手机入口与投递开关，缺省开启，关闭不删除队列；QQ 连接需重启。不改变客户端协议；真实设备投递验收仍为 observe。详见 [客户端分发设置](client-distribution-settings.md)。

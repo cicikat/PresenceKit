@@ -20,14 +20,4 @@
   <p id="proxy-model-hint" class="admin-inline-087" data-i18n="status.proxy.model_hint">自动模式每次请求检查模型域名：Fake-IP 或 DNS 失败时用 HTTP 代理地址，其他地址直连。自动和始终代理都要先填 HTTP 代理地址；若直连仍不可达，请选“始终使用代理”。此设置只影响模型与视觉请求，手机聊天沿用后端模型连接。</p>
   <div class="config-item-meta"><span data-i18n="runtime_config.source_global">来源：全局配置</span><span data-i18n="runtime_config.apply_reload">保存后热重载</span></div>
   <button class="btn btn-primary btn-sm" data-action="saveProxy" data-i18n="common.save">保存</button>
-</div><div class="card">
-  <div class="card-header"><h3 data-i18n="status.relay.title">中继唤醒</h3><button class="btn btn-ghost btn-sm" data-action="loadRelaySettings" data-i18n="common.refresh">刷新</button></div>
-  <p class="admin-inline-087" data-i18n="static.status.relay_hint">只影响中继唤醒通道，不改变调度器本地触发。</p>
-  <div class="form-row">
-    <label class="field"><span data-i18n="runtime_config.relay_base_url">Base URL</span><input type="url" id="relay-base-url"></label>
-    <label class="field"><span data-i18n="runtime_config.relay_topic">Topic</span><input type="text" id="relay-topic"></label>
-  </div>
-  <label class="field"><span data-i18n="status.relay.token">Token（留空保留已有值）</span><input type="password" id="relay-token" autocomplete="off"></label>
-  <div class="config-item-meta"><span data-i18n="runtime_config.source_global">来源：全局 relay 设置</span><span data-i18n="runtime_config.apply_reload">保存后热重载</span></div>
-  <button class="btn btn-primary btn-sm" data-action="saveRelaySettings" data-i18n="common.save">保存</button>
-</div>
+</div><p><a href="#page-client-settings" data-action="goto" data-action-args='["client-settings"]'>手机后台唤醒已移至消息分发与客户端设置</a></p>

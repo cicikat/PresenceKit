@@ -1,5 +1,4 @@
 function loadRuntimeConfig() {
-  loadWechatSettings();
   loadEventShadowRecallSettings();
   loadStateAuthoritySettings();
   loadEventContextObserverSettings();
