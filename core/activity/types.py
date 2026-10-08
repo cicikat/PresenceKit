@@ -6,7 +6,7 @@ store 层在入口处验证，非法值抛 ValueError。
 """
 from typing import Literal
 
-ActivityType = Literal["reading", "gomoku", "chess", "dream_seed"]
+ActivityType = Literal["reading", "gomoku", "chess", "dream_seed", "minecraft"]
 ActivityStatus = Literal["active", "closed"]
 
-ALLOWED_ACTIVITY_TYPES: frozenset[str] = frozenset({"reading", "gomoku", "chess", "dream_seed"})
+ALLOWED_ACTIVITY_TYPES: frozenset[str] = frozenset({"reading", "gomoku", "chess", "dream_seed", "minecraft"})

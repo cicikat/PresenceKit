@@ -6,6 +6,12 @@
 
 ## 定位
 
+工单 274：Minecraft 是后端专用共玩类型，静态 registry 默认关闭，无桌面 tab/Tauri
+命令映射；实际启用与状态以管理面 `/settings/minecraft` 为准。复用 session/store/
+transcript 与只读上下文边界，独立 Docker 身体只通过协议适配器连接。新增
+`/activity/minecraft/*` 不引入统一活动执行框架或 EventBus；见
+[Minecraft Activity](minecraft-activity.md)。Minecraft 初版不回流主记忆。
+
 `ActivitySession` 是 **reality-side session**，不是 trigger，不是 tool result，不进入普通短期记忆。
 
 ## P0 persistence convention

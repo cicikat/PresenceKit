@@ -30,6 +30,8 @@ export function createServer(body, token) {
 
 async function mineflayerFactory(input) {
   const { default: mineflayer } = await import('mineflayer');
+  const { default: protocol } = await import('minecraft-protocol');
+  if (!protocol.supportedVersions.includes(input.version)) throw new Fault('unsupported_version', 422);
   const { default: pf } = await import('mineflayer-pathfinder');
   const { default: pvp } = await import('mineflayer-pvp');
   const bot = mineflayer.createBot({ host: input.host, port: input.port, version: input.version, username: input.username, auth: input.auth, profilesFolder: '/auth', hideErrors: true });

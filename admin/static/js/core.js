@@ -20,7 +20,7 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'qzone-273-1';
+const ADMIN_UI_FRAGMENT_VERSION = 'minecraft-274-1';
 
 const ADMIN_PAGE_ALIASES = Object.freeze({memory: 'observe-memory'});
 
@@ -328,6 +328,7 @@ async function goto(page, {reloadFragment = false, fromHistory = false} = {}) {
     tools:           loadToolsPage,
     'owner-turn-api': loadOwnerTurnApiPage,
     'agent-runtime-browser': loadBrowserRuntimePage,
+    minecraft: loadMinecraftPage,
     'relationship-facts': loadRelationshipFactsPage,
     character:       loadCharacterPage,
     lorebook:        () => { loadLorebook(); loadJbEntries(); },

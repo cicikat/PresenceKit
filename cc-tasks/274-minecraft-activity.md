@@ -130,7 +130,7 @@ Mineflayer 提供实体、方块、背包、移动、聊天等接口；pathfinde
 - [x] 核对当前 Activity、事件模型、Agent Runtime 与既有工作区改动。
 - [x] 查阅上游能力并写规划；只创建本工单，未安装依赖、未启动服务器、未修改实现。
 - [x] 按用户要求补充 Docker 进程归属、第三方仓库隔离与 Activity 最小解耦范围；仍未施工或克隆仓库。
-- [ ] A–E 实现与实际验收均未开始。
+- [ ] A–E 全部实现与实际验收尚未完成；D/E 保持后续独立授权边界。
 
 ### 施工批次 1：独立 Docker 身体与协议
 
@@ -141,6 +141,24 @@ Mineflayer 提供实体、方块、背包、移动、聊天等接口；pathfinde
 - [x] Node fake-body/HTTP 测试 5 passed；皮肤、玩家客户端、实际寻路与战斗验收仍 not-run。
 - [ ] 实际 Java 服务器版本待确认；指定快捷方式实际为基岩版，机器有 Java 入口但未发现默认版本目录。
 - [ ] 账号/皮肤验收：用户尚无独立 Bot 账号，待购买后核对；当前账号认证不等同于多人共玩验收。
+
+### 施工批次 2：后端 Activity 与管理面
+
+- [x] 领域编排、HTTP Bridge Protocol、Docker 执行器分层；没有统一插件框架或新 EventBus。
+- [x] 后端专用 Activity registry 元信息、通用 session/store/transcript；不虚构桌面/手机命令。
+- [x] startup supervisor ownership、显式启停、15 秒身体租约、2 秒后端检查、角色/Reality/TTL 撤销。
+- [x] 角色资产与主聊天只读参考、活动内 JSON 高层规划；无主记忆写入、模型并发/超时/频率与次数预算。
+- [x] 手动动作使迟到模型计划失效；stop 在模型忙、预算用完或回执满时仍可使用。
+- [x] scoped settings/activity/observability API、strict 请求、桥响应上限与稳定错误码。
+- [x] 管理页、缓存版本、热保存、默认关闭与未配置状态通过隔离管理服务浏览器验收。
+- [x] 后端相关回归 302 passed；追加鉴权测试另跑。Node 身体测试扩为 6 passed。
+- [x] Docker build、healthy、依赖加载通过；实际 Java 26.3 连接被上游明确拒绝 unsupported protocol version。
+- [ ] 用户正在安装 1.21.11，收到新局域网端口后继续真实进服/跟随/停止验收。
+- [ ] 独立 Bot 正版登录、皮肤、持续跟随与实际 PVE/拾取、真实模型人格连续性仍 not-run。
+
+静态页面总检查的两个失败为既有 scheduler inline style 与 CSS orphan rules；本次没有修改这些文件或顺手修复。
+上游依赖 audit 有 8 moderate 告警，已记录 known-issues；没有盲目覆盖 uuid 主版本。
+本批没有桌面/手机协议变化，只验证既有 Activity 路由/Tauri 声明合同未漂移。
 
 ## 上游参考（2026-10-08 查阅）
 

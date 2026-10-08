@@ -65,6 +65,13 @@ class ActivityMeta:
 
 ACTIVITY_REGISTRY: tuple[ActivityMeta, ...] = (
     ActivityMeta(
+        id="minecraft", label="Minecraft 共玩", enabled=False,
+        route_prefix="/activity/minecraft", session_store="activity_store",
+        session_dir_layout="{char_id}/{uid}/minecraft/{session_id}",
+        memory_policy=MemoryPolicy(main_memory="none"), has_companion_chat=True,
+        docs_path="docs/minecraft-activity.md", idle_ttl_seconds=60, max_age_seconds=4 * 3600,
+    ),
+    ActivityMeta(
         id="reading",
         label="一起看书",
         enabled=True,

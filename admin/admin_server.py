@@ -53,6 +53,9 @@ from admin.routers import settings_clients
 app.include_router(settings_clients.router, tags=["设置-客户端"])
 from admin.routers import qzone
 app.include_router(qzone.router, tags=["设置-QQ空间"])
+from admin.routers import minecraft
+app.include_router(minecraft.router, prefix="/activity", tags=["Minecraft 共玩"])
+app.include_router(minecraft.control_router, tags=["Minecraft 设置与观测"])
 
 # 注册业务路由（在 app 定义之后导入，避免循环）
 from admin.routers import (

@@ -49,7 +49,7 @@ export class Body {
         this.events.push({ seq: ++this.sequence, text: message.slice(0, 500), occurred_at: this.now() });
       });
       return this.snapshot();
-    } catch { this.binding = null; this.bot = null; this.status = 'disconnected'; throw new Fault('connection_failed', 503); }
+    } catch (e) { this.binding = null; this.bot = null; this.status = 'disconnected'; throw e instanceof Fault ? e : new Fault('connection_failed', 503); }
   }
   check(input) {
     if (!this.binding || input.session_id !== this.binding.session || input.connection_epoch !== this.epoch) throw new Fault('stale_binding');
@@ -73,6 +73,7 @@ export class Body {
         health: bot.health ?? null, food: bot.food ?? null, owner_visible: Boolean(owner),
         inventory: (bot.inventory?.items() || []).slice(0, 36).map(i => ({ name: i.name, count: i.count })),
         threats: Object.values(bot.entities || {}).filter(e => HOSTILES.has(e.name) && bot.entity?.position && e.position.distanceTo(bot.entity.position) < 12).slice(0, 8).map(e => ({ id: e.id, name: e.name })),
+        dropped_items: Object.values(bot.entities || {}).filter(e => ['item', 'Item'].includes(e.name) && bot.entity?.position && e.position.distanceTo(bot.entity.position) <= 8).slice(0, 8).map(e => ({ entity_id: e.id })),
         terrain: 'local_loaded_only'
       } : null,
       current: this.current ? { command_id: this.current.command_id, action: this.current.action } : null,
@@ -105,8 +106,11 @@ export class Body {
     const old = this.receipts.get(input.command_id);
     if (old) { if (old.digest !== digest) throw new Fault('command_conflict'); return { ...old, digest: undefined }; }
     if (input.action !== 'stop' && this.status !== 'connected') throw new Fault('not_spawned');
-    if (input.action !== 'stop' && this.current) throw new Fault('body_busy');
-    if (this.receipts.size >= 256) throw new Fault('receipt_limit');
+    if (!['stop', 'say'].includes(input.action) && this.current) throw new Fault('body_busy');
+    if (this.receipts.size >= 256) {
+      if (input.action === 'stop') { this.halt('owner_stop'); return { command_id: input.command_id, action: 'stop', status: 'succeeded', accepted_at: this.now(), error: null }; }
+      throw new Fault('receipt_limit');
+    }
     const receipt = { command_id: input.command_id, action: input.action, status: 'running', accepted_at: this.now(), error: null, digest };
     this.receipts.set(input.command_id, receipt);
     if (input.action === 'stop') { this.halt('owner_stop'); this.finish(input.command_id, 'succeeded'); }

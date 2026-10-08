@@ -1042,3 +1042,10 @@ QQ 空间控制：消息分发与客户端设置 → QQ 空间卡片，`GET/PUT 
 
 <!-- qzone-273-control-surface -->
 273：同一卡片新增事件开关（默认关）、关注 QQ（空默认主用户 QQ）、收到回复（默认开，依赖事件总开关）、轮询间隔（默认 120 秒，60–3600）、自主评论/回复/点赞（默认关，依赖写总开关）。关闭回到按需工具，不触发主动机会；首次/换来源只建基线，热更新撤销旧候选。`GET /observability/qzone` 增加活动角色持久事件元数据；管理面显示有效关注、扫描状态、入队与去重。自主工具沿原 autonomy 矩阵显式禁用优先，不开放自主发布/删除。完整边界见 [空间事件](qzone-integration.md#273空间事件--主动机会)。
+<!-- minecraft-274-control-surface -->
+274：管理面“Minecraft 共玩”通过 `GET/PUT /settings/minecraft`（admin）热更新总开关、
+Docker 桥地址、游戏连接、owner UUID、拾取/PVE 权限及模型预算。默认关闭，拾取与防守默认关；
+关闭停止活动连接，普通聊天不变。任何配置变化撤销当前会话，需显式重新开始。
+`GET /observability/minecraft`（state.read）提供无聊天/坐标/账号内容的状态和动作回执；
+`/activity/minecraft/*`（activity）提供显式会话、手动指令与活动内聊天。
+凭据通过 ignored 本地文件注入，不回显；无桌面/手机设置入口，见 [Minecraft Activity](minecraft-activity.md)。

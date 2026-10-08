@@ -58,3 +58,22 @@ Minecraft 是显式 Reality 共玩会话，不使用 ambient activity_manager �
 Node fake-body 与 HTTP 测试验证仲裁、去重、认证和失联安全态。
 Docker 健康验证不证明进服、皮肤、寻路或真实战斗；这些需要指定 Java 服务端实测。
 Microsoft 登录、独立 Bot 账号、玩家皮肤可见效果分别记录，不能以离线测试替代。
+
+## 后端控制面与角色接入
+
+`GET/PUT /settings/minecraft` 需要 admin；保存配置变化先撤销旧会话，再原子落盘并热加载。
+`GET /observability/minecraft` 需要 state.read，只返回连接/动作回执、快照年龄、预算和错误码，
+不返回游戏坐标、聊天、账号和凭据。
+`/activity/minecraft/start|close|command|chat|state` 需要 activity scope；owner 和当前角色
+由后端解析，不接受客户端提供 uid、char_id 或服务器地址。start 必须启用、配置完整、
+token 文件就位且 startup worker 活着。管理面入口是“Minecraft 共玩”。
+
+角色使用当前角色资产、近期主聊天只读参考、活动 transcript 与局部快照，
+通过既有 LLM 路由做有界规划。模型每次最多 512 输出 token/20 秒、并发 1，
+默认每会话 120 次且间隔 10 秒，超限拒绝而不排无限队列；游戏聊天内存最多 100 条。
+手动动作会使已开始的模型计划失效，停止始终可用。关闭 model_enabled 后仍能用固定
+`!pk follow / !pk return / !pk stop`。拾取和防守默认关闭，管理面单独授权。
+
+Minecraft registry 的 enabled=False 是客户端静态发现的默认值，并非运行时 effective state；
+不虚构桌面/手机入口。持久文件只保存 Activity 会话与有预算上限的活动 transcript；
+连续游戏状态不持久化。空闲 TTL 60 秒、会话硬上限 4 小时，运行期间每 30 秒刷新存储。

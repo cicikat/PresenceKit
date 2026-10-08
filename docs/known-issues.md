@@ -914,3 +914,11 @@ QQ 空间 272 B（observe）：独立 Docker 桥登录网络探针、只读说�
 
 <!-- qzone-273-observe -->
 QQ 空间 273（observe）：事件进入 autonomy、首次基线/去重/关闭撤销及独立互动授权有定向回归。真实新说说/回复到真实模型决策及真实评论投递尚未联合验收；有界轮询不覆盖历史帖、非关注作者帖子中的回复或空间接口未返回的评论。首次运行仍需正常重启后端加载代码，详见 [273 工单](../cc-tasks/273-qzone-autonomy-events.md)。
+<!-- minecraft-274-acceptance -->
+### Minecraft Activity 首版验收边界（274，observe）
+
+Docker 身体与后端隔离会话已实现；fake-body/协议与生命周期测试不能代替真实游戏。
+独立 Bot 账号尚未就位，Microsoft 正版认证、皮肤与长期跟随/战斗验收待完成。
+npm audit 报告上游 uuid 缓冲区边界问题传播为 8 个 moderate 依赖告警，当前上游无完整修复组合；
+未强制覆盖主版本以破坏认证兼容。部署仅本机桥与受控测试服，后续跟踪上游修复。
+Minecraft 不回流主记忆；复杂采矿与长期规划仍 roadmap。

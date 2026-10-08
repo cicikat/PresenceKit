@@ -923,3 +923,18 @@ performance_mapping:
   enabled: true        # false = enrich_say_segments 直接透传，行为与现在完全一致
   provider: rules       # rules | llm
   llm_timeout_sec: 3.0   # llm provider 外层超时，超时放弃标注直接下发
+## Minecraft Docker body (default off; settings in the admin Minecraft page).
+minecraft:
+  enabled: false
+  bridge_url: http://127.0.0.1:3210
+  host: host.docker.internal
+  port: 25565
+  version: ''
+  username: ''
+  auth: microsoft
+  owner_uuid: ''
+  allow_pickup: false
+  allow_defend: false
+  model_enabled: true
+  model_calls_per_session: 120
+  model_cooldown_seconds: 10

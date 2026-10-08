@@ -1000,6 +1000,10 @@ async def _main_with_services():
         logger.warning("Dream Reality continuation recovery failed to start", exc_info=True)
 
     tasks = []
+    from core.activity.minecraft import install_service as _install_minecraft
+    _minecraft_service = _install_minecraft()
+    _minecraft_task = asyncio.create_task(_run_long_lived_service("minecraft", _minecraft_service.run()))
+    tasks.append(_minecraft_task)
     _wechat_task = asyncio.create_task(_run_long_lived_service("wechat", _wechat_service.run()))
     tasks.append(_wechat_task)
     if cfg.get("hds_local", {}).get("enabled") is True:
@@ -1039,6 +1043,8 @@ async def _main_with_services():
     finally:
         _wechat_task.cancel()
         await asyncio.gather(_wechat_task, return_exceptions=True)
+        _minecraft_task.cancel()
+        await asyncio.gather(_minecraft_task, return_exceptions=True)
         life_records_task.cancel()
         await asyncio.gather(life_records_task, return_exceptions=True)
         from core.dream.scenario_reconciler import shutdown as _shutdown_scenario_reconciler

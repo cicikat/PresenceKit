@@ -8,6 +8,12 @@
 
 ## 1. 进程入口
 
+工单 274：`main._main_with_services` 安装 MinecraftService 并持有 supervisor task，
+关闭时 cancel/await；router 不创建服务。默认关闭仍安装 supervisor，以支持热启停。
+它管理角色共玩会话、租约与模型任务，Docker/Compose 独立管理 Node 身体进程。
+配置变化、角色切换、Reality guard 拒绝或 Activity TTL 过期撤销绑定；15 秒无心跳
+由身体自行停止断开。后端重启不恢复旧连接或旧动作。
+
 工单 268：`main._main_with_services` 创建并注册 `WechatService` 与 `WeChatChannel`，
 supervisor 即使默认关闭也由 startup 持有，以支持管理面热启停。配置变更停止旧 receiver、
 关闭旧 transport，并拒绝旧 generation 的排队输入/发送；worker 不被配置变更中途取消，

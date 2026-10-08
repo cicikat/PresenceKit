@@ -21,6 +21,14 @@ test('expired lease disconnects; stale epoch and command fail closed', async () 
   assert.equal(f.body.status, 'disconnected'); assert.equal(f.bot.goal, null); assert.ok(f.bot.quitCalled);
   assert.throws(() => f.body.submit(f.command('late', 'return')), /stale_binding/);
 });
+test('chat can accompany movement; stop remains available when receipts are full', async () => {
+  const f = fixture(); await f.connect(); f.body.submit(f.command('follow', 'follow'));
+  assert.equal(f.body.submit(f.command('chat', 'say', { text: 'Fixture response' })).status, 'succeeded');
+  assert.equal(f.bot.goal, 'follow');
+  for (let n = f.body.receipts.size; n < 256; n++) f.body.receipts.set('fixture-' + n, { status: 'succeeded' });
+  assert.equal(f.body.submit(f.command('stop-at-limit', 'stop')).status, 'succeeded');
+  assert.equal(f.bot.goal, null); assert.equal(f.body.receipts.size, 256);
+});
 test('owner UUID gates incoming messages; local stop precedes model', async () => {
   const f = fixture(); await f.connect(); f.body.submit(f.command('follow', 'follow'));
   f.bot.emit('chat', 'stranger', 'stop'); assert.equal(f.body.events.length, 0);

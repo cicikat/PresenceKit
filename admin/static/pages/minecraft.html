@@ -1,0 +1,45 @@
+<h1 class="page-title">Minecraft 共玩</h1>
+<p class="admin-source-hint">Java 版游戏身体运行在 Docker 中。这里管理角色会话与连接；游戏客户端需另行启动。</p>
+<div class="card">
+  <div class="card-header"><h3>状态与连接</h3><button class="btn btn-ghost btn-sm" data-action="loadMinecraftPage">刷新</button></div>
+  <p id="minecraft-status" role="status">加载中…</p>
+  <p>默认关闭。关闭后停止游戏会话，普通聊天保持原有行为。保存任何配置变化会关闭当前会话，需重新开始。</p>
+  <label class="checkbox-row"><input type="checkbox" id="mc-enabled">启用 Minecraft</label>
+  <label class="field"><span>Docker 桥地址（本机 HTTP）</span><input id="mc-bridge_url" placeholder="http://127.0.0.1:3210"></label>
+  <label class="field"><span>Java 服务器地址（从容器连接）</span><input id="mc-host" placeholder="host.docker.internal"></label>
+  <div class="form-row">
+    <label class="field"><span>端口</span><input id="mc-port" type="number" min="1" max="65535"></label>
+    <label class="field"><span>精确 Java 版本</span><input id="mc-version" placeholder="例如 1.21.1"></label>
+  </div>
+  <label class="field"><span>Bot 账号标识（登录信息仅由账号本人操作）</span><input id="mc-username" autocomplete="off"></label>
+  <label class="field"><span>认证方式</span><select id="mc-auth"><option value="microsoft">Microsoft 正版账号</option><option value="offline">离线测试服</option></select></label>
+  <label class="field"><span>你的玩家 UUID（用于绑定游戏聊天授权）</span><input id="mc-owner_uuid" placeholder="玩家 UUID，不是显示名称"></label>
+  <p>桥接 token 通过本地凭据文件配置，独立于管理密钥；这里不显示凭据。正版服的 Bot 应使用独立账号。</p>
+</div>
+<div class="card">
+  <div class="card-header"><h3>游戏能力与模型预算</h3></div>
+  <label class="checkbox-row"><input type="checkbox" id="mc-model_enabled">角色参与游戏聊天和高层决策（默认开启）</label>
+  <label class="checkbox-row"><input type="checkbox" id="mc-allow_pickup">允许指定物品拾取（默认关闭）</label>
+  <label class="checkbox-row"><input type="checkbox" id="mc-allow_defend">允许近距离敌对生物防守（默认关闭）</label>
+  <div class="form-row">
+    <label class="field"><span>每会话模型调用上限（默认 120）</span><input id="mc-model_calls_per_session" type="number" min="1" max="500"></label>
+    <label class="field"><span>模型调用最小间隔（秒，默认 10）</span><input id="mc-model_cooldown_seconds" type="number" min="5" max="120"></label>
+  </div>
+  <button class="btn btn-primary" data-action="saveMinecraftSettings">保存配置</button>
+</div>
+<div class="card">
+  <div class="card-header"><h3>会话与动作</h3></div>
+  <div class="form-row">
+    <button class="btn btn-primary" data-action="minecraftSession" data-action-args='["start"]'>开始共玩并连接</button>
+    <button class="btn btn-ghost" data-action="minecraftSession" data-action-args='["close"]'>关闭共玩并断开</button>
+    <button class="btn btn-danger" data-action="minecraftCommand" data-action-args='["stop"]'>立即停下</button>
+    <button class="btn btn-ghost" data-action="minecraftCommand" data-action-args='["follow"]'>跟随你</button>
+    <button class="btn btn-ghost" data-action="minecraftCommand" data-action-args='["return"]'>回到你附近</button>
+    <button class="btn btn-ghost" data-action="minecraftCommand" data-action-args='["defend"]'>附近防守</button>
+  </div>
+  <label class="field"><span>活动内聊天（仅游戏会话，不写普通聊天历史）</span><input id="mc-chat" maxlength="500"></label>
+  <button class="btn btn-ghost" data-action="minecraftChat">发送</button>
+  <p id="minecraft-result" role="status"></p>
+  <p>游戏内“停下”“停止”或 !pk stop 直接本地停车，不等待模型。跟随/防守单次最多 120 秒；失联 15 秒停止并断开。</p>
+  <pre id="minecraft-observation"></pre>
+</div>
