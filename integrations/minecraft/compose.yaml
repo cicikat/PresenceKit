@@ -1,0 +1,27 @@
+name: presencekit-minecraft
+services:
+  body:
+    build: ./body
+    restart: unless-stopped
+    init: true
+    ports:
+      - "127.0.0.1:${MINECRAFT_BRIDGE_PORT:-3210}:3210"
+    secrets:
+      - bridge_token
+    volumes:
+      - minecraft_auth:/auth
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 512m
+    cpus: 1
+    stop_grace_period: 5s
+secrets:
+  bridge_token:
+    file: ${MINECRAFT_BRIDGE_TOKEN_FILE:?set an ignored local bridge token file}
+volumes:
+  minecraft_auth:

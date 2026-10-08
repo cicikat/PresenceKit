@@ -1,0 +1,60 @@
+# Minecraft Activity 与 Docker 身体
+
+## 运行边界
+
+PresenceKit Python 后端负责角色与 Activity 会话；`integrations/minecraft/body`
+是自有 Node 执行器，通过锁版本 npm 库调用 Mineflayer。第三方源码不 vendor，
+确需克隆时只放维护者指定的仓库外工作区。执行器与桥合在 Docker 容器内，
+不需要常驻 CMD；玩家客户端与 Minecraft 服务端不随桥自动启动。
+
+## Docker 启动
+
+在 ignored 的本地文件生成至少 32 字符随机桥接 token，不使用 admin token。
+设置 `MINECRAFT_BRIDGE_TOKEN_FILE` 为该文件，再运行：
+
+```powershell
+docker compose -f integrations/minecraft/compose.yaml up -d --build
+docker compose -f integrations/minecraft/compose.yaml ps
+```
+
+桥只发布到宿主 loopback 3210。后端环境变量 `PRESENCEKIT_MINECRAFT_TOKEN_FILE`
+指向同一凭据文件。宿主游戏服务在容器中通常使用 `host.docker.internal`；
+实际地址必须按部署验证。Docker 管进程，管理面管游戏连接/会话；后端不挂 Docker socket。
+认证缓存保存到独立 Docker volume，镜像只读、非 root、无附加 capabilities。
+在线认证需账号交互登录；初版不在管理面回显认证缓存。容器重启不自动进服。
+
+## 桥接 v1
+
+除无内容 `/health` 外使用独立 Bearer token；8 KiB 请求上限，禁止未知字段。
+连接必须显式传版本、服务器、账号认证方式、owner UUID 与 session_id。
+一次只允许一个绑定。spawn 才算 connected；新连接生成 connection_epoch。
+
+- `POST /v1/connect`：显式连接；重复绑定返回冲突。
+- `GET /v1/state`：有界局部快照、当前动作与最近 30 回执；无原始服务器错误内容。
+- `POST /v1/heartbeat`：绑定验证并续租，15 秒无续租就停止并断开。
+- `POST /v1/disconnect`：撤销动作与连接。
+- `POST /v1/commands`：session_id、connection_epoch、command_id、action、expires_at、params。
+- `GET /v1/events?after=N`：仅已绑定 owner UUID 的聊天，内存最多 100 条，每次最多 20 条。
+
+动作白名单 stop/follow/return/pickup/defend/say；有效期最多 120 秒，
+同 id 同参数返回原回执、不同参数拒绝。单动作运行；stop 可抢占。
+每连接最多 256 命令，达上限需显式重新开会话，不自动驱逐去重凭据。
+回执包括 running/succeeded/failed/canceled/outcome_unknown；say 成功只表示提交给游戏连接，
+不声称对方读到。pickup 目标消失不能证明拾取成功，标记 outcome_unknown。
+
+默认寻路禁止挖块、搭桥、跑酷及大落差；跟随范围 32 格，低血/owner 不可见停止。
+PVE 只限定白名单敌对生物及 6 格范围，不攻击玩家/宠物，不追击 creeper。
+owner 游戏输入 `停下`、`停止`、`!pk stop` 直接本地停车，无需模型响应。
+
+## Activity 与记忆
+
+Minecraft 是显式 Reality 共玩会话，不使用 ambient activity_manager 或统一 EventBus。
+领域编排只接桥协议，不依赖 Mineflayer 对象；游戏状态、聊天与回执留活动内。
+游戏受伤/死亡不写现实 hidden state 或普通聊天历史；初版不做长期摘要回流。
+第三方聊天/告示牌内容不能成为授权指令。重启/失联不回放旧任务。
+
+## 验收边界
+
+Node fake-body 与 HTTP 测试验证仲裁、去重、认证和失联安全态。
+Docker 健康验证不证明进服、皮肤、寻路或真实战斗；这些需要指定 Java 服务端实测。
+Microsoft 登录、独立 Bot 账号、玩家皮肤可见效果分别记录，不能以离线测试替代。
