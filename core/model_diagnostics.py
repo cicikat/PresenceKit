@@ -9,6 +9,8 @@ from core.llm_protocol import UpstreamResponseFormatError
 
 def diagnose(exc: Exception) -> dict:
     status = getattr(exc, 'status_code', None) or getattr(exc, 'http_status', None)
+    if status is None:
+        status = getattr(getattr(exc, 'response', None), 'status_code', None)
     if not isinstance(status, int):
         status = None
     chain = []
@@ -49,6 +51,9 @@ def request_metadata(client) -> dict:
     if not isinstance(protocol, str):
         protocol = 'chat_completions'
     base = getattr(client, 'base_url', '')
+    if protocol == 'systemone':
+        from core.decision_contract import endpoint
+        return {'api_protocol': protocol, 'request_path': urlsplit(endpoint(base)).path}
     path = urlsplit(base).path.rstrip('/') if isinstance(base, str) else ''
     suffix = {'chat_completions': '/chat/completions', 'responses': '/responses', 'anthropic_messages': '/messages'}.get(protocol, '')
     if protocol == 'anthropic_messages' and not path:

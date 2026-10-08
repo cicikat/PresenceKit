@@ -29,8 +29,28 @@ async def judge(char_id: str, snapshot: dict, owner_text: str = "") -> Decision:
                 {"role": "user", "_layer": "minecraft_reaction_facts", "content": json.dumps({
                     "game": facts, "current": snapshot.get("current"), "owner_request": owner_text[:500],
                 }, ensure_ascii=False)}]
-    raw = await asyncio.wait_for(llm_client.chat(messages, call_category="minecraft_reaction",
-                                                char_id=char_id, max_tokens_override=96), timeout=3)
+    from core.model_registry import get_model_client
+    mc = get_model_client('minecraft_reaction', char_id=char_id)
+    if getattr(mc, 'api_protocol', '') == 'systemone':
+        from core.decision_contract import DecisionRequest, Question, prepare
+        from core.llm_failover import execute_create
+        request = DecisionRequest('minecraft_reaction', json.loads(messages[1]['content']), {
+            'action': Question('choice', messages[0]['content'], {
+                'none': '无明确需求或已满足', 'follow': '跟随主用户', 'approach': '靠近主用户',
+                'accompany': '在附近陪伴', 'protect': '继续已授权的保护', 'stop': '停止动作',
+            }),
+        }, confidence_gate=.65)
+        outcome = await execute_create(call_category='minecraft_reaction', char_id=char_id,
+            caller='minecraft_reaction', primary_mc=mc,
+            prepare=lambda target: prepare(target, request, messages=messages,
+                gen_kwargs={'max_tokens': 96, 'timeout': 3}),
+            validate=lambda response: Decision.model_validate_json(response.assistant_text))
+        if not outcome.ok:
+            raise outcome.error or RuntimeError(outcome.skip_reason or 'decision_failed')
+        raw = outcome.value.assistant_text
+    else:
+        raw = await asyncio.wait_for(llm_client.chat(messages, call_category="minecraft_reaction",
+                                                    char_id=char_id, max_tokens_override=96), timeout=3)
     value = raw.strip()
     fence = re.fullmatch(r"```(?:json)?\s*\n(.*?)\n```", value, re.DOTALL)
     return Decision.model_validate_json(fence.group(1) if fence else value)

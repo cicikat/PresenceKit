@@ -1,6 +1,6 @@
 # 263 — 决策合同、Jev 适配与双后端（小模型 / System One）
 
-日期：2026-09-21。状态：规划；本文件只定合同，不改代码。未读取实际模型密钥，未调用 TypeSafe / 上游，未改路由配置。
+日期：2026-09-21。状态：施工中（2026-10-08 用户授权继续）；以下保留原规划，当前验收见文末阶段记录。
 
 目标：把「只做结构化判断」的调用从聊天补全里拆出来，同一份决策合同可走小模型 JSON，也可走 Jev `systemone`。复杂决策默认 **一次 Jev + 必要时一次小模型**；禁止「Jev 判完再让主聊天模型重判」。
 
@@ -191,12 +191,12 @@ Jev 路径才是「闸门一次 + 开放字段一次」。纯 `json_chat` 必须
 
 ## A — P0：决策 IR、systemone 出口、sensor / emotion 闭环
 
-- [ ] A1 冻结 IR schema、`DecisionResult`、category 白名单、失败语义表、超时/熔断/fallback 规则，以及「普通 provider 兼容」表。列出每个接入点：现入口、是否走 `llm_client.chat`、现校验、现失败返回值。禁止只接一个出口却宣称全覆盖。`intent` 空槽不发明调用。写明：`json_chat` 一次调用覆盖 questions+open_fields；`systemone` 才允许闸门后再打文本模型。
-- [ ] A2 `api_protocol=systemone`：独立 HTTP（非 OpenAI SDK、非必装 typesafe-sdk），代理/User-Agent/账本与现文本调用同纪律；未知协议 fail-fast。preset CRUD 拒绝 Jev 绑聊天类 category。无 systemone preset 时启动/热重载不连 TypeSafe。热重载清 client 缓存。
-- [ ] A3 JSON 编译器：把 `sensor_judge` 与 `detect_emotion`/`detect_affection` 改为「先 IR、再按 preset 协议编译」。**默认回归只跑 json_chat。** 小模型路径输出必须通过同一校验器，行为与现网兼容（含 emotion 宽松匹配与降级 neutral）。禁止未配 Jev 时走 systemone 或拆成两次聊天。
-- [ ] A4 Jev 编译器接入上述三处；sensor 去掉强制中文 reason；affection 阈值代码化。对照测试用固定 fixture，不打真实 TypeSafe。另测：systemone 主失败 + 文本 fallback 成功；systemone 主失败且无兜底 → 原失败语义。可选隔离 live probe 记入验收说明，不作为通过条件。
-- [ ] A5 管理面：协议选择、不兼容映射 422、effective 展示（含当前协议与兜底文本 preset）。决策行选 Jev 且兜底为空时提示「Jev 不可用将按失败语义处理」，可选手动指定已有文本 preset。静态 `?v=` 与 fragment 版本按 AGENTS 规则更新。浏览器验收：纯文本 profile 保存/刷新；Jev+空兜底提示；Jev+文本兜底保存。
-- [ ] A6 同步 `docs/model-presets.md`、`docs/feature-control-surface.md`，写清双后端与 fallback 默认关。相关测试与换行检查后独立提交。
+- [x] A1 冻结 IR schema、`DecisionResult`、category 白名单、失败语义表、超时/熔断/fallback 规则，以及「普通 provider 兼容」表。列出每个接入点：现入口、是否走 `llm_client.chat`、现校验、现失败返回值。禁止只接一个出口却宣称全覆盖。`intent` 空槽不发明调用。写明：`json_chat` 一次调用覆盖 questions+open_fields；`systemone` 才允许闸门后再打文本模型。
+- [x] A2 `api_protocol=systemone`：独立 HTTP（非 OpenAI SDK、非必装 typesafe-sdk），代理/User-Agent/账本与现文本调用同纪律；未知协议 fail-fast。preset CRUD 拒绝 Jev 绑聊天类 category。无 systemone preset 时启动/热重载不连 TypeSafe。热重载清 client 缓存。
+- [x] A3 JSON 编译器：把 `sensor_judge` 与 `detect_emotion`/`detect_affection` 改为「先 IR、再按 preset 协议编译」。**默认回归只跑 json_chat。** 小模型路径输出必须通过同一校验器，行为与现网兼容（含 emotion 宽松匹配与降级 neutral）。禁止未配 Jev 时走 systemone 或拆成两次聊天。
+- [x] A4 Jev 编译器接入上述三处；sensor 去掉强制中文 reason；affection 阈值代码化。对照测试用固定 fixture，不打真实 TypeSafe。另测：systemone 主失败 + 文本 fallback 成功；systemone 主失败且无兜底 → 原失败语义。可选隔离 live probe 记入验收说明，不作为通过条件。
+- [x] A5 管理面：协议选择、不兼容映射 422、effective 展示（含当前协议与兜底文本 preset）。决策行选 Jev 且兜底为空时提示「Jev 不可用将按失败语义处理」，可选手动指定已有文本 preset。静态 `?v=` 与 fragment 版本按 AGENTS 规则更新。浏览器验收：纯文本 profile 保存/刷新；Jev+空兜底提示；Jev+文本兜底保存。
+- [x] A6 同步 `docs/model-presets.md`、`docs/feature-control-surface.md`，写清双后端与 fallback 默认关。相关测试与换行检查后独立提交。
 
 ## B — P0/P1：IME 决策头拆分（Jev + 小模型文案）
 
@@ -248,3 +248,14 @@ Jev 路径才是「闸门一次 + 开放字段一次」。纯 `json_chat` 必须
 5. IME/探针在 Jev 说「不作为」之后，是否还打了小模型或主模型？必须没有。纯小模型路径是否被拆成两次聊天？必须没有。
 6. 主模型是否仍可能在 autonomy 里决定开口？可以，那是角色说话，不是重判 sensor/IME 闸门。
 7. `rpg_kp` 是否仍走聊天模型出完整提案？必须是。
+
+## 2026-10-08 A 阶段合同与验证
+
+- [x] A1–A4：DecisionRequest / Question / DecisionResult；原生 HTTP 与文本双编译出口，sensor/emotion/affection 接入。文本编译保留原业务 prompt，一次覆盖原字段；原生投影由代码产生，不将聊天散文伪装原生答案。
+- [x] Minecraft 加入 A：六选一 choice，confidence >=0.65、3s 总预算、零 SDK retry，失败本地规则；无路由自动变更。
+- [x] A5 管理面协议与兼容映射、effective protocol、文本兜底、无兜底提示；近期决策只读观测。
+- [x] A5 隔离管理面浏览器验收：纯文本、Jev 无兜底、Jev 显式文本兜底均保存并重新打开核对；A6 相关回归和独立提交。
+
+首批白名单为 sensor_judge / detect_emotion / minecraft_reaction；affection 复用 detect_emotion。B/C/D 接入后才开放对应 category。score 原生取值 0..N-1 映射回既有业务范围。失败语义：sensor drop，emotion neutral，affection checked None/public false，Minecraft 原失败回退。保留原熔断/transport-only fallback、总墙钟与零原生 retry，不在失败后擅自调用 chat/default。原生坏类型/概率/闭集、越界、低 confidence 拒绝。
+
+真实原生合成 choice probe：保存 jev 的 api_protocol 修为 systemone（不改地址/密钥/生产路由），/v1/systemone 返回有效结果，437ms。静态/fixture、真实连通与业务校准分别记录。

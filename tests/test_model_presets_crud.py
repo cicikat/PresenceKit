@@ -68,6 +68,22 @@ def _auth():
     return {"Authorization": f"Bearer {VALID_TOKEN}"}
 
 
+def test_systemone_crud_allows_only_implemented_decisions(admin_client):
+    client, path = admin_client
+    _write_cfg(path)
+    created = client.put('/model-presets/presets/jev', json={
+        'provider_kind': 'openai', 'api_protocol': 'systemone',
+        'base_url': 'https://api.example/v1/systemone', 'model': 'jev-latest',
+    }, headers=_auth())
+    assert created.status_code == 200
+    assert client.put('/model-presets/routing-profiles/default', json={'sensor_judge':'jev'}, headers=_auth()).status_code == 200
+    assert client.put('/model-presets/routing-profiles/default', json={'chat':'jev'}, headers=_auth()).status_code == 422
+    assert client.put('/model-presets/default-preset', json={'default_preset':'jev'}, headers=_auth()).status_code == 422
+    assert client.put('/model-presets/routing-profiles/default', json={'fallback':{'sensor_judge':'jev'}}, headers=_auth()).status_code == 422
+    saved = yaml.safe_load(path.read_text(encoding='utf-8'))['model_presets']
+    assert saved['routing_profiles']['default']['chat'] == 'deepseek-default'
+
+
 def test_force_stream_roundtrip_and_protocol_guard(admin_client):
     client, temp_cfg = admin_client
     _write_cfg(temp_cfg)

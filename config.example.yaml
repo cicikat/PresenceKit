@@ -945,3 +945,12 @@ minecraft:
   reaction_enabled: false      # 同角色快速动作判断；关闭保留本地规则与角色主模型
   reaction_calls_per_session: 120
   reaction_cooldown_seconds: 5
+
+# Jev 原生预设示例：添加至 model_presets.presets；不能用作聊天/default_preset。
+# jev:
+#   provider_kind: openai
+#   api_protocol: systemone
+#   base_url: https://api.typesafe.ai/v1/systemone
+#   api_key: YOUR_TYPESAFE_API_KEY
+#   model: jev-latest
+# 按需把 sensor_judge / detect_emotion / minecraft_reaction 指向此预设；不自动启用。

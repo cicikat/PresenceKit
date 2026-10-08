@@ -236,7 +236,7 @@ class ModelDiscoveryRequest(BaseModel):
     api_key: str = ""
     preset_name: Optional[str] = None
     use_base_model: bool = False
-    api_protocol: Literal["chat_completions", "responses", "anthropic_messages"] = "chat_completions"
+    api_protocol: Literal["chat_completions", "responses", "anthropic_messages", "systemone"] = "chat_completions"
     anthropic_auth_mode: Literal["x_api_key", "bearer"] = "x_api_key"
 
 
@@ -847,6 +847,7 @@ class DefaultPresetUpdate(BaseModel):
 
 async def _persist_model_presets(full_cfg: dict) -> None:
     """Persist config and invalidate every cached model client."""
+    _validate_decision_routes(full_cfg.get("model_presets") or {})
     write_config_file(CONFIG_FILE, full_cfg)
 
     from core import config_loader, llm_client
@@ -1082,6 +1083,19 @@ def _require_model_presets_block(full_cfg: dict) -> dict:
     return mp
 
 
+def _validate_decision_routes(mp: dict) -> None:
+    from core.decision_contract import validate_routes
+    errors = validate_routes(mp)
+    if errors:
+        raise HTTPException(status_code=422, detail="; ".join(errors))
+
+
+@router.get('/observability/decisions', summary='读取封闭判断结果元数据（无输入正文）')
+async def get_decision_observability(auth=Depends(require_scopes('state.read'))):
+    from core.decision_contract import snapshot
+    return snapshot()
+
+
 @router.put("/model-presets/presets/{name}", summary="新增或更新一个 model preset")
 async def upsert_preset(name: str, body: PresetUpsert, auth=Depends(require_scopes("admin"))):
     """合并更新指定 preset；preset 不存在时新建（新建必须提供 provider_kind）。"""
@@ -1134,6 +1148,7 @@ async def upsert_preset(name: str, body: PresetUpsert, auth=Depends(require_scop
     if existing.get("force_stream") and existing.get("api_protocol", "chat_completions") != "chat_completions":
         raise HTTPException(status_code=422, detail="强制流式请求目前仅支持 Chat Completions 协议。")
     presets[name] = existing
+    _validate_decision_routes(mp)
 
     write_config_file(CONFIG_FILE, full_cfg)
 
@@ -1321,6 +1336,7 @@ async def upsert_routing_profile(name: str, body: dict, auth=Depends(require_sco
             routes.pop(name, None)
         fallback_result = cleaned
 
+    _validate_decision_routes(mp)
     write_config_file(CONFIG_FILE, full_cfg)
 
     from core import config_loader, llm_client
@@ -1420,13 +1436,15 @@ async def test_preset_connectivity(name: str, auth=Depends(require_scopes("admin
     t0 = _time.monotonic()
     try:
         from core.llm_protocol import create as create_protocol_response
-        resp = await asyncio.wait_for(create_protocol_response(
-            client,
-            [{"role": "user", "content": "ping"}],
-            tools=None,
-            tool_choice=None,
-            gen_kwargs={"max_tokens": 256, "timeout": 30.0},
-        ), timeout=30.0)
+        if client.api_protocol == 'systemone':
+            from core.decision_contract import DecisionRequest, Question, create
+            probe = create(client, DecisionRequest('connectivity', 'ping', {
+                'ping': Question('choice', 'Select the literal state.', {'ping': 'ping', 'other': 'Any other state'}),
+            }), timeout=30)
+        else:
+            probe = create_protocol_response(client, [{"role": "user", "content": "ping"}],
+                tools=None, tool_choice=None, gen_kwargs={"max_tokens": 256, "timeout": 30.0})
+        resp = await asyncio.wait_for(probe, timeout=30.0)
         latency_ms = round((_time.monotonic() - t0) * 1000, 1)
         reply_preview = ""
         try:

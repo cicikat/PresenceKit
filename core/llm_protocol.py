@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import Any, AsyncIterator
 
 
-VALID_API_PROTOCOLS = frozenset({"chat_completions", "responses", "anthropic_messages"})
+VALID_API_PROTOCOLS = frozenset({"chat_completions", "responses", "anthropic_messages", "systemone"})
 VALID_ANTHROPIC_AUTH_MODES = frozenset({"x_api_key", "bearer"})
 
 
@@ -1165,6 +1165,8 @@ async def _stream_text(
 
 async def create(mc, messages, *, tools=None, tool_choice=None, gen_kwargs):
     """Archive returned reasoning independently, including rejected completions."""
+    if _protocol(mc) == "systemone":
+        raise ValueError("System One requires the typed decision adapter")
     from core.llm_reasoning_store import Capture
     capture = Capture(mc)
     try:
@@ -1180,6 +1182,8 @@ async def create(mc, messages, *, tools=None, tool_choice=None, gen_kwargs):
 
 async def stream_text(mc, messages, *, gen_kwargs):
     """Archive reasoning deltas and inline tags, including interrupted streams."""
+    if _protocol(mc) == "systemone":
+        raise ValueError("System One does not generate or stream text")
     from core.llm_reasoning_store import Capture
     capture = Capture(mc)
     source = _stream_text(mc, messages, gen_kwargs=gen_kwargs, capture=capture)

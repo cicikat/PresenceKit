@@ -951,7 +951,7 @@ let _mrEditingPresetName = null;
 let _mrEditingProfileName = null;
 const MR_CATEGORIES = ['chat', 'intent', 'probe', 'summary', 'detect_emotion', 'consolidation', 'perform', 'monologue', 'sensor_judge', 'ime_judge', 'minecraft_reaction', 'scenario_reconcile', 'event_edge_proposer', 'rpg_kp', 'food_extract'];
 const MR_CATEGORY_DESC = {
-  minecraft_reaction: 'Minecraft 快速动作判断：可选支持文本 JSON 的轻量模型预设；Jev 原生协议待接入；3秒总预算、零SDK重试，失败回到本地规则。未分配沿用 sensor_judge → intent → chat。主模型仍负责角色表达。',
+  minecraft_reaction: 'Minecraft 快速动作判断：可选小模型 JSON 或 Jev 原生 systemone 预设；3秒总预算、零SDK重试，失败回到本地规则。未分配沿用 sensor_judge → intent → chat。主模型仍负责角色表达。',
   food_extract: '饮食事实抽取：仅处理用户明确评价与实际吃过事件；建议轻量模型，未配置沿用默认模型路由。20秒超时，零 SDK 重试。',
   ime_judge: 'IME 活动和有价值线索判断；可选轻量模型，未配置时沿用 sensor_judge / intent / chat',
   sensor_judge: '后台 sensor 裁决；未配置时沿用 intent / chat。短超时、零 SDK 重试。',
@@ -1011,7 +1011,7 @@ async function loadModelRouting() {
     if (defaultSel) {
       const currentDefault = data.default_preset || '';
       defaultSel.innerHTML = `<option value="">${t('routing.default_preset_none', '（不设默认：未填 category 走 default_preset → chat → 第一个 preset）')}</option>` +
-        Object.keys(data.presets || {}).map(name =>
+        Object.keys(data.presets || {}).filter(name => data.presets[name].api_protocol !== 'systemone').map(name =>
           `<option value="${escapeHtml(name)}" ${name === currentDefault ? 'selected' : ''}>${escapeHtml(name)}</option>`
         ).join('');
     }
@@ -1360,18 +1360,33 @@ function openProfileModal(name) {
         <span>${escapeHtml(cat)} <span class="admin-inline-012">${escapeHtml(MR_CATEGORY_DESC[cat] || '')}</span></span>
         <select id="mr-profile-cat-select-${cat}">
           <option value="">${cat === 'minecraft_reaction' ? '（清除映射：走 sensor_judge → intent → chat）' : t('routing.clear_mapping', '（清除映射：走 default_preset → chat → 第一个 preset）')}</option>
-          ${presetNames.map(p => `<option value="${escapeHtml(p)}" ${existing[cat] === p ? 'selected' : ''}>${escapeHtml(p)}</option>`).join('')}
+          ${presetNames.filter(p => _mrData.presets[p].api_protocol !== 'systemone' || ['sensor_judge', 'detect_emotion', 'minecraft_reaction'].includes(cat)).map(p => `<option value="${escapeHtml(p)}" ${existing[cat] === p ? 'selected' : ''}>${escapeHtml(p)}</option>`).join('')}
         </select>
       </label>
       <label class="field">
         <span>${t('routing.fallback.preset', '兜底 Preset（可不选）')}</span>
         <select id="mr-profile-fallback-${cat}">
           <option value="">${t('routing.fallback.off', '关闭')}</option>
-          ${presetNames.map(p => `<option value="${escapeHtml(p)}" ${existingFallback[cat] === p ? 'selected' : ''}>${escapeHtml(p)}</option>`).join('')}
+          ${presetNames.filter(p => _mrData.presets[p].api_protocol !== 'systemone').map(p => `<option value="${escapeHtml(p)}" ${existingFallback[cat] === p ? 'selected' : ''}>${escapeHtml(p)}</option>`).join('')}
         </select>
       </label>
     </div>
   `).join('');
+  for (const cat of MR_CATEGORIES) {
+    const primary = document.getElementById(`mr-profile-cat-select-${cat}`);
+    const fallback = document.getElementById(`mr-profile-fallback-${cat}`);
+    const hint = document.createElement('small');
+    primary.parentElement.appendChild(hint);
+    const update = () => {
+      const protocol = _mrData.presets[primary.value]?.api_protocol || 'chat_completions';
+      hint.textContent = protocol === 'systemone'
+        ? `实际协议：systemone；${fallback.value ? '失败时最多尝试一次已配置文本兜底' : '未配兜底；Jev 不可用将按本用途失败语义处理'}。`
+        : `实际协议：${protocol}；沿用文本判断。`;
+    };
+    primary.addEventListener('change', update);
+    fallback.addEventListener('change', update);
+    update();
+  }
   document.getElementById('mr-profile-modal').classList.add('open');
 }
 function closeProfileModal() {

@@ -11,7 +11,7 @@ def catalogue_url(base_url: str) -> str:
     if parsed.query or parsed.fragment:
         raise ValueError("模型地址不能包含 query 或 fragment")
     path = parsed.path.rstrip("/")
-    for suffix in ("/chat/completions", "/responses", "/messages", "/models"):
+    for suffix in ("/chat/completions", "/responses", "/messages", "/systemone", "/models"):
         if path.endswith(suffix):
             path = path[:-len(suffix)]
             break

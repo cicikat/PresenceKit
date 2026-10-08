@@ -194,15 +194,24 @@ async def judge(event: dict) -> dict:
 
     try:
         mc = get_model_client("sensor_judge")
+        from core.decision_contract import DecisionRequest, Question, prepare as prepare_decision
+        decision = DecisionRequest('sensor_judge', user_text, {
+            'score': Question('score', _SYSTEM.split('只输出 JSON')[0], (
+                '无价值或纯噪音；打扰成本极高', '勉强可提，更像无话找话',
+                '中性时刻，可提可不提', '有意义的瞬间，适合开口', '几乎一定应该说点什么',
+            ), scale=(0, 100)),
+            'recent_chat': Question('noul', '用户是否刚刚与陪伴者交流过？', threshold=.65),
+            'focused': Question('noul', '当前证据是否表明用户正在专注做事？', threshold=.65),
+            'late_night': Question('noul', '本地时间是否是应避免打扰的深夜？', threshold=.65),
+            'repeated': Question('noul', '证据是否表明同类事件刚出现过？未知时回答否。', threshold=.65),
+        }, constants={'reason': '结构化评分'})
 
         def _prepare(_target) -> PreparedAttempt:
             from core.prompt_layer import sanitize_messages
             from core.prompt_style import apply_prompt_style
 
-            styled = apply_prompt_style(messages, _target.prompt_style)
-            styled = sanitize_messages(styled)
-            return PreparedAttempt(
-                messages=styled,
+            return prepare_decision(_target, decision,
+                messages=messages,
                 gen_kwargs={
                     "max_tokens": 80,
                     "temperature": 0.1,

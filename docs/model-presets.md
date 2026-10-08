@@ -1,6 +1,6 @@
 # docs/model-presets.md — 多模型 Preset 系统
 
-275：`minecraft_reaction` 是同角色的快速动作判断路由，可分配支持文本 JSON 的小模型 API preset；Jev 原生 systemone 尚未实现，不能直接使用其预设；未分配沿用 sensor_judge → intent → chat。每次3秒总预算、零SDK重试，主模型仍负责角色表达；不是第二人格。模型路由页和 Minecraft 共玩页编辑同一生效 routing profile，后者显式显示角色覆盖及来源。修改模型配置撤销旧共玩授权，不让迟到判断继续动作。见 [Minecraft Activity](minecraft-activity.md)。
+275：`minecraft_reaction` 是同角色的快速动作判断路由，可分配小模型 JSON 或 Jev 原生 systemone 预设（263 A）；原生 choice 的 confidence 低于 0.65 回到本地规则；未分配沿用 sensor_judge → intent → chat。每次3秒总预算、零SDK重试，主模型仍负责角色表达；不是第二人格。模型路由页和 Minecraft 共玩页编辑同一生效 routing profile，后者显式显示角色覆盖及来源。修改模型配置撤销旧共玩授权，不让迟到判断继续动作。见 [Minecraft Activity](minecraft-activity.md)。
 
 `food_extract` 是饮食证据抽取的独立路由，管理面可配置小模型，遵循既有 fallback。发送后执行，20秒总限与零 SDK 重试；见 [food-memory.md](food-memory.md)。
 
@@ -606,3 +606,13 @@ mobile offers a text snapshot, not this requested on-demand image capture. See d
 Brief 253.6 的语音转写使用独立 `stt_presets` 命名连接和 `voice_message` 用途，默认关闭；不占用聊天模型 routing profile。管理面、兼容协议和超时边界见 [audio-perception.md](audio-perception.md)。
 
 生活记录 diet/cart 使用现有独立 vision 连接并带分类描述提示词；bill 使用 image_recognition 独立 OCR 连接。没有额外 routing profile 或影子配置。普通聊天图片的 image_recognition.mode、手机自动化 vision 覆盖不变。管理面模型页说明消费范围，生活记录状态页逐分类显示配置/有效状态。OCR 缺失只阻塞账单，配置完整不代表服务实测成功。
+
+## Jev 原生决策协议（263 A）
+
+`api_protocol=systemone` 使用独立 httpx / Bearer / PresenceKit User-Agent，沿用可热更新模型代理与客户端生命周期。base_url 可填根地址、/v1 或完整 /v1/systemone；不会追加 chat/completions。不发送 messages、temperature、tools 或 max_tokens；不支持生成正文和流式。
+
+当前可配 sensor_judge、detect_emotion（含 affection）及 minecraft_reaction；其余用途在后续阶段接入前拒绝绑定。chat、default_preset、首个默认兜底和失败兜底必须是文本后端。失败兜底仍默认关：仅尝试用户明确指定的完整文本 preset、最多一次；鉴权/坏输出不跨模型重试。无兜底则 drop / neutral / false / Minecraft 本地规则，不暗中换主聊天模型。文本判断仍使用原单次请求，情绪宽松标签匹配保留。
+
+合同 `core/decision_contract.py`：具名 task、state、choice/score/noul questions、failure_policy、固定 projection。choice 校验闭集、confidence、概率分布；score 为 0 起始档位而非百分数，sensor 五档归一为 0–100；affection noul >=0.65 为 true。sensor 并行辅助 noul 仅排障，不替代调度器硬闸。Minecraft 3 秒总预算，confidence >=0.65 才接受动作；角色表达仍走主模型。
+
+配置与 effective protocol 在模型路由页；连通性测试发送合成 choice。`GET /observability/decisions`（state.read）返回进程内最近原生决策的闭集结果/分数/confidence/实际版本，无输入正文；持久尝试与失败统计复用 `/observability/api-calls` / `/observability/llm-failover`。生产 routing_profiles 不自动修改。已保存 jev 预设仅修正协议，原生合成 ping 实测 437ms 成功；不是业务校准或 Minecraft 真机验收。

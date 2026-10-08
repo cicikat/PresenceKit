@@ -1055,3 +1055,5 @@ Docker 桥地址、游戏连接、owner UUID、拾取/PVE 权限及模型预算�
 Minecraft建造：`minecraft.allow_building=false`，`GET/PUT /settings/minecraft`（admin）热更新并撤销会话；共玩页提供5×5小屋材料、显式整数坐标和停止按钮，80块用户材料，不拆块/续建。动作接口activity scope，只读回执placed/total由state.read观测。不涉及桌面/手机设置。
 
 276：消息分发与客户端设置 → QQ 回复范围。`GET/PUT /settings/feature-flags`（admin）的 `qq_group` / `qq_other_users` 对应 `qq.group_enabled` / `qq.allow_other_users`，均默认 false、逐消息热读。关闭在解析及队列消费前拒绝输入，阻止状态、媒体和模型处理；群聊不受其他用户私聊开关控制。effective_state 返回 disabled / standalone-blocked / qq-disabled / enabled；enabled 仅表示配置准入，连接实际状态仍看 QQ 通道观测。QQ 总连接仍需重启。无桌面/手机协议变化。
+
+263 A：模型连接与分工的 preset 协议新增 `systemone`，原生 Jev 当前仅可选 sensor_judge / detect_emotion / minecraft_reaction。API preset CRUD、profile CRUD、默认 preset 与运行时均校验兼容性；失败兜底只允许文本。profile 编辑显示实际协议与未配兜底失败语义提示；连通性测试改用具名 choice，不做聊天 ping。`GET /observability/decisions`（state.read）显示无正文的近期原生判断，持久尝试复用既有 API 账本。无新的桌面/手机设置和接口。

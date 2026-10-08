@@ -307,6 +307,8 @@ def resolve_category_info(
         "provider_kind": preset.get("provider_kind", "openai"),
         "model": preset.get("model", ""),
         "model_version": preset.get("model_version", ""),
+        "api_protocol": preset.get("api_protocol", "chat_completions"),
+        "decision_backend": "systemone" if preset.get("api_protocol") == "systemone" else "json_chat",
         "fallback_preset": fallback.get("preset") or "",
         "fallback_source": fallback.get("source") or "off",
         "fallback_refused_reason": fallback.get("refused_reason") or "",
@@ -533,7 +535,7 @@ def _build_model_client(preset_name: str, *, request_policy: dict[str, float | i
     # Native Anthropic Messages calls use httpx directly; Chat Completions and
     # Responses retain the OpenAI SDK client.  Both own the same pool lifecycle.
     client: Any
-    if api_protocol == "anthropic_messages":
+    if api_protocol in {"anthropic_messages", "systemone"}:
         client = http_client
     else:
         client = AsyncOpenAI(
@@ -599,6 +601,11 @@ def get_model_client(
             raise ValueError("[model_registry] explicit preset name must not be empty")
     else:
         resolved_name = _resolve_preset_name(call_category, char_id=char_id)
+    preset = _get_preset_config().get("presets", {}).get(resolved_name, {})
+    if preset.get("api_protocol") == "systemone":
+        from core.decision_contract import SYSTEMONE_CATEGORIES
+        if call_category not in SYSTEMONE_CATEGORIES:
+            raise ValueError(f"System One is not supported for category {call_category!r}")
     if failover:
         policy_name = "failover"
         policy: dict[str, float | int] | None = dict(_FAILOVER_POLICY)
@@ -610,7 +617,7 @@ def get_model_client(
     elif call_category == "food_extract":
         policy_name = "food_extract"
         policy = {"timeout_s": 20, "max_retries": 0}
-    elif call_category in {"sensor_judge", "ime_judge"}:
+    elif call_category in {"sensor_judge", "ime_judge"} or preset.get("api_protocol") == "systemone":
         policy_name = "sensor_judge"
         policy = _SENSOR_JUDGE_POLICY
     else:

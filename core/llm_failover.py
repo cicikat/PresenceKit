@@ -128,6 +128,7 @@ class PreparedAttempt:
     tool_choice: str | None = None
     gen_kwargs: dict[str, Any] = field(default_factory=dict)
     refuse_reason: str = ""
+    decision: Any = None
 
 
 PrepareFn = Callable[[ModelClient], PreparedAttempt | Awaitable[PreparedAttempt]]
@@ -385,7 +386,7 @@ def _row_from_mc(
         switch_reason=switch_reason,
         skip_reason=skip_reason,
         logical_final=logical_final,
-        sdk_retry_policy="zero" if failover or route_role == "fallback" else "preset",
+        sdk_retry_policy="zero" if failover or route_role == "fallback" or getattr(mc, 'api_protocol', '') == 'systemone' else "preset",
     )
 
 
@@ -534,14 +535,18 @@ async def execute_create(
         req_timeout = min(float(gen_kwargs.get("timeout") or category_timeout(call_category)), remaining)
         gen_kwargs["timeout"] = req_timeout
         try:
+            if getattr(mc, "api_protocol", "") == "systemone":
+                from core.decision_contract import create as create_decision, SYSTEMONE_CATEGORIES
+                if call_category not in SYSTEMONE_CATEGORIES or prepared.decision is None or prepared.tools:
+                    raise ValueError("System One requires a typed decision, never chat or tools")
+                request = create_decision(mc, prepared.decision, timeout=req_timeout)
+            else:
+                request = create_protocol_response(
+                    mc, prepared.messages, tools=prepared.tools,
+                    tool_choice=prepared.tool_choice, gen_kwargs=gen_kwargs,
+                )
             value = await asyncio.wait_for(
-                create_protocol_response(
-                    mc,
-                    prepared.messages,
-                    tools=prepared.tools,
-                    tool_choice=prepared.tool_choice,
-                    gen_kwargs=gen_kwargs,
-                ),
+                request,
                 timeout=req_timeout,
             )
         except asyncio.CancelledError:
