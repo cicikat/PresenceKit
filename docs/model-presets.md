@@ -609,6 +609,8 @@ Brief 253.6 的语音转写使用独立 `stt_presets` 命名连接和 `voice_mes
 
 ## Jev 原生决策协议（263 A）
 
+263 C：probe 加入原生白名单；从本轮可见 schema 选工具，开放参数仅由本行显式文本预设补写，无文本则沿用缺参询问；MCP/开放对象/复杂参数或含 none 超32项只允许显式完整文本回落。Path C 与 relay 不改，见 [工具探针合同](tools.md)。effective 的 open_fields 与 open_fields_preset 同时适用于 probe。
+
 `api_protocol=systemone` 使用独立 httpx / Bearer / PresenceKit User-Agent，沿用可热更新模型代理与客户端生命周期。base_url 可填根地址、/v1 或完整 /v1/systemone；不会追加 chat/completions。不发送 messages、temperature、tools 或 max_tokens；不支持生成正文和流式。
 
 当前可配 sensor_judge、detect_emotion（含 affection）、minecraft_reaction 及 ime_judge（263 B）；其余用途在后续阶段接入前拒绝绑定。chat、default_preset、首个默认兜底和失败兜底必须是文本后端。失败兜底仍默认关：仅尝试用户明确指定的完整文本 preset、最多一次；鉴权/坏输出不跨模型重试。无兜底则 drop / neutral / false / Minecraft 本地规则，不暗中换主聊天模型。文本判断仍使用原单次请求，情绪宽松标签匹配保留。IME 原生通过后才用本行显式文本预设补开放字段，缺少预设则 failed 不入队；effective 包含 open_fields/open_fields_preset，详见 [IME 合同](ime-ingest.md)。

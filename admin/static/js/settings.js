@@ -1360,7 +1360,7 @@ function openProfileModal(name) {
         <span>${escapeHtml(cat)} <span class="admin-inline-012">${escapeHtml(MR_CATEGORY_DESC[cat] || '')}</span></span>
         <select id="mr-profile-cat-select-${cat}">
           <option value="">${cat === 'minecraft_reaction' ? '（清除映射：走 sensor_judge → intent → chat）' : t('routing.clear_mapping', '（清除映射：走 default_preset → chat → 第一个 preset）')}</option>
-          ${presetNames.filter(p => _mrData.presets[p].api_protocol !== 'systemone' || ['sensor_judge', 'detect_emotion', 'minecraft_reaction', 'ime_judge'].includes(cat)).map(p => `<option value="${escapeHtml(p)}" ${existing[cat] === p ? 'selected' : ''}>${escapeHtml(p)}</option>`).join('')}
+          ${presetNames.filter(p => _mrData.presets[p].api_protocol !== 'systemone' || ['sensor_judge', 'detect_emotion', 'minecraft_reaction', 'ime_judge', 'probe'].includes(cat)).map(p => `<option value="${escapeHtml(p)}" ${existing[cat] === p ? 'selected' : ''}>${escapeHtml(p)}</option>`).join('')}
         </select>
       </label>
       <label class="field">
@@ -1386,6 +1386,11 @@ function openProfileModal(name) {
         hint.textContent += fallback.value
           ? ' 判断通过后，同一文本预设补写摘要与依据；不得改写判断。'
           : ' 判断通过后需要文本预设补写摘要与依据；当前缺少文案预设，将记录失败且不入队。';
+      }
+      if (protocol === 'systemone' && cat === 'probe') {
+        hint.textContent += fallback.value
+          ? ' 开放参数由该文本预设补写；MCP、开放对象或超过32个选项时完整回落文本探针。'
+          : ' 开放参数缺失沿用询问；MCP、开放对象或超过32个选项时需要显式文本预设，否则不执行。';
       }
     };
     primary.addEventListener('change', update);

@@ -11,7 +11,7 @@ from urllib.parse import urlsplit
 from core.llm_protocol import NormalizedResponse, UpstreamResponseFormatError
 
 # Only consumers that explicitly compile a DecisionRequest may use System One.
-SYSTEMONE_CATEGORIES = frozenset({'sensor_judge', 'detect_emotion', 'minecraft_reaction', 'ime_judge'})
+SYSTEMONE_CATEGORIES = frozenset({'sensor_judge', 'detect_emotion', 'minecraft_reaction', 'ime_judge', 'probe'})
 _LAST: dict[str, dict] = {}
 
 
@@ -135,6 +135,8 @@ def normalize(request: DecisionRequest, result: DecisionResult) -> NormalizedRes
 
 
 async def create(mc, request: DecisionRequest, *, timeout: float) -> NormalizedResponse:
+    from core.no_outbound import assert_outbound_allowed
+    assert_outbound_allowed('llm')
     response = await mc.client.post(endpoint(mc.base_url), json=request.wire(mc.model),
         headers={'Authorization': 'Bearer ' + mc.api_key, 'User-Agent': 'PresenceKit/1.0'}, timeout=timeout,
         follow_redirects=False)

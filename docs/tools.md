@@ -865,6 +865,8 @@ worker 在到期、异常、断线、显式取消和进程关闭时尝试停止�
 
 **严禁推断**规则保留不变：消息里有"现在""今天""热""冷"等词，但没有明确问天气或时间，不调工具。
 
+263 C：Path A 可用 Jev `systemone` 从本轮经过 exposure/growth/policy 过滤的 schema 中选择一个工具或 none（含 none 最多32项，confidence >=0.65）。none 不打文本调用；无参直接沿用执行入口。必填 enum 可用第二组 choice，schema 明确 default 可直接采用；开放参数由本行显式文本预设补写，仅暴露选中的工具并拒绝换工具，无文本预设时留空进入既有 WAITING_INPUT。MCP、开放对象、复杂参数或超选项上限不交给 Jev，仅允许显式文本预设跑一次完整探针，否则失败不执行。普通文本仍一次选工具+参数。Path C 跳过探针、get_time 快速路径、确认与 origin=user_live 守卫不变；MCP relay 本单不改。原生多阶段共享30秒预算。账本 pretool_probe / pretool_probe_enum / pretool_probe_text（purpose=probe_open_fields）区分判断与补参。
+
 ---
 
 ## 桌面动作执行机制（SubAgent）

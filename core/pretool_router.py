@@ -435,13 +435,13 @@ async def route_pretool(
             + result.probe_context
         )
     try:
-        probe_raw = await llm_client.chat(
+        from core.decision_probe import probe
+        probe_raw = await probe(
             [
                 {"role": "system", "content": result.probe_system},
                 {"role": "user", "content": trusted_user_text},
             ],
-            tools=schemas,
-            call_category="probe",
+            schemas=schemas,
             char_id=char_id,
         )
     except Exception:

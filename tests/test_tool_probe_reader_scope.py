@@ -64,7 +64,8 @@ def _patch_env(monkeypatch):
     import core.output.text_output as _to
 
     monkeypatch.setattr(_cl, "get_config", lambda: {
-        "scheduler": {"owner_id": "99999"},
+        # This is an owner-turn scope test; guest QQ replies default off (276).
+        "scheduler": {"owner_id": _MSG['user_id']},
         "llm": {"tool_call_mode": "function_calling"},
     })
     monkeypatch.setattr(_sl, "mark_user_active", lambda: None)

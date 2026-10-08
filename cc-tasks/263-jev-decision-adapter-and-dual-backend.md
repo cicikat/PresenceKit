@@ -207,10 +207,10 @@ Jev 路径才是「闸门一次 + 开放字段一次」。纯 `json_chat` 必须
 
 ## C — P1：Path A 封闭探针（可选 Jev）+ 开放参数小模型
 
-- [ ] C1 从当前 path_a schema 生成 choice 选项；超上限或主 preset 为普通文本协议时走现探针（一次出工具名+参数）。fast path `get_time` 不变。无 Jev 时 C 不得改变 Path A 暴露面或成功率语义。
-- [ ] C2 开放参数策略：规则（如 weather 所在地）→ 缺参询问 → 小模型补参。MCP / `additionalProperties` 工具本单不走 Jev。
-- [ ] C3 Path C 仍跳过普通探针。relay 是否复用 IR 在 C 内写明；默认本单不改 MCP relay。
-- [ ] C4 探针解析失败语义保持 fail-closed（不把散文当聊天）。独立提交。
+- [x] C1 从当前 path_a schema 生成 choice 选项；超上限或主 preset 为普通文本协议时走现探针（一次出工具名+参数）。fast path `get_time` 不变。无 Jev 时 C 不得改变 Path A 暴露面或成功率语义。
+- [x] C2 开放参数策略：规则（如 weather 所在地）→ 缺参询问 → 小模型补参。MCP / `additionalProperties` 工具本单不走 Jev。
+- [x] C3 Path C 仍跳过普通探针。relay 是否复用 IR 在 C 内写明；默认本单不改 MCP relay。
+- [x] C4 探针解析失败语义保持 fail-closed（不把散文当聊天）。独立提交。
 
 ## D — P1：其余一次 Jev 可替换点
 
@@ -263,3 +263,7 @@ Jev 路径才是「闸门一次 + 开放字段一次」。纯 `json_chat` 必须
 ## B 阶段验收（2026-10-08）
 
 IME Jev 闸门与开放文案已拆分；显式文本兜底同时承担通过后的文案，管理面清楚标明，无配置失败不入队。普通文本一次完整 Assessment。原生否决/低置信零文案调用，文案越权字段拒绝，传输失败完整单次文本回落，文案失败不入队。相关 131 项回归通过；隔离路由编辑器已核对缺文案提示与 Jev+文本保存重开。生产路由未切换，无真机新验收。
+
+## C 阶段验收（2026-10-08）
+
+本轮可见 schema 封闭选择、none 零文本、enum 填参、开放参数显式文本/缺参询问已接入。能力不兼容只走显式完整文本，未配则失败不执行；不扩大工具暴露面，不改 Path C 与 MCP relay。81 项相关回归通过。工具 reader scope 的旧夹具改为 owner-turn，以满足276默认禁止访客回复；未开放生产访客。原生出口补齐 no_outbound 守卫。
