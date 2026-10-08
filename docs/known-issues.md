@@ -929,3 +929,7 @@ Minecraft275（observe）：陪伴/保护/白名单小屋、共享快模型路�
 
 - current / observe：263 A 已实现原生 systemone 出口与 sensor、emotion/affection、Minecraft 六选一决策合同。旧 Jev 预设误走 Chat Completions 的 404 已定位并改为原生协议；隔离真实合成 choice 返回成功（437ms）。兼容映射和显式文本兜底已通过管理面夹具浏览器验收。IME 两段判断/文案已实现（263 B）；Path A probe、scenario_reconcile、letter_eval、invariants_relation 已实现（263 C/D）；E 合成对照已完成：Jev 中文情绪样本出现10秒超时，Minecraft原生/文本合成动作均触达3秒预算，不支持默认切换或宣称稳定快层；生产路由未自动切换，真实业务校准和常驻后端正常重启仍待完成。
 - roadmap：QQ 群上下文仅 group_id、共享角色与模型；旧群链在隔离分流前会触碰 owner 活跃/DND/梦境守卫。其他用户私聊使用 reality 主链，仍有共享角色状态、工具与面向 UI 的 tool_status 推送面；普通 QQ 回复正文经 fanout=[] 直发 QQ，尚无完整访客合同。276 默认关闭两入口且早期拒绝；重新开放前应定义角色/群/用户 scope、工具权限与广播接收者。
+
+## 聊天工具主动性与既有文件目标识别（2026-10-08，open）
+
+本地会话核查确认：用户希望续写角色此前交付的文件，模型却读取用户长消息，纠正后仍以“记得原文”等角色台词解释而未立即核对文件。后续实际 list_artifacts/read_artifact/update_artifact 成功，不代表早先每轮权限和 schema 必然相同。现有 nudge 偏外部查询及禁止编造，文件路径提示缺少 self/artifacts，发现入口的 artifacts 用途也偏新建。建议增强主动完成受托任务、纠正后重定目标及文件归属路由；本次只查原因，不改行为。见 [278 工单](../cc-tasks/278-log-noise-and-tool-initiative-audit.md)。

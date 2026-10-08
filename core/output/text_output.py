@@ -37,7 +37,7 @@ async def send(
         segments = _split_by_newline(segments)
 
     if not segments:
-        logger.info("[text_output] segments 为空，没有需要发送的内容")
+        logger.debug("[text_output] segments 为空，没有需要发送的内容")
         return
 
     logger.info(
@@ -50,14 +50,9 @@ async def send(
             logger.debug(f"[text_output] 第 {i+1} 段为空白，跳过")
             continue
         try:
-            logger.info(
-                f"[text_output] 发送第 {i+1}/{len(segments)} 段"
-                f"（{len(segment)} 字）: {segment[:30]!r}"
-            )
+            logger.debug("[text_output] 发送第 %d/%d 段（%d 字）", i + 1, len(segments), len(segment))
             await qq_adapter.send_message(target_id, segment, is_group)
-            logger.info(
-                f"[text_output] 第 {i+1}/{len(segments)} 段发送成功 -> {target_id}"
-            )
+            logger.debug("[text_output] 第 %d/%d 段发送调用返回 -> %s", i + 1, len(segments), target_id)
         except Exception as e:
             log_error("text_output.send", e)
             logger.error(f"[text_output] 第 {i+1} 段发送异常: {type(e).__name__}: {e}")

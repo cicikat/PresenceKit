@@ -44,7 +44,7 @@ def _resolve_sticker_emotion(reply: str, emotion: str) -> str:
     )
     for label, keywords in keyword_groups:
         if any(keyword in text for keyword in keywords):
-            logger.info("[sticker] classifier neutral; local fallback selected emotion=%s", label)
+            logger.debug("[sticker] classifier neutral; local fallback selected emotion=%s", label)
             return label
     # `trigger_prob` is the user-facing per-turn frequency control.  Do not
     # silently turn it into zero merely because the optional classifier cannot
@@ -150,7 +150,7 @@ async def maybe_send_sticker(
         emotion = _resolve_sticker_emotion(reply, emotion)
         # neutral或无情绪直接跳过
         if not emotion or emotion == "neutral":
-            logger.info("[sticker] skipped: no actionable emotion")
+            logger.debug("[sticker] skipped: no actionable emotion")
             return
         if random.random() >= trigger_prob:
             return

@@ -106,7 +106,7 @@ async def send_message(target_id: str, content: str, is_group: bool = False):
 
     try:
         await _ws.send_str(json.dumps(payload, ensure_ascii=False))
-        logger.info(f"[qq_adapter] WS 帧已发出 -> {action} target={target_id}: {content[:50]!r}")
+        logger.debug("[qq_adapter] WS 帧已发出 -> %s target=%s chars=%d", action, target_id, len(content))
     except Exception as e:
         log_error("qq_adapter.send_message", e)
         logger.error(f"[qq_adapter] WS 发送失败: {type(e).__name__}: {e}")
@@ -145,7 +145,7 @@ async def send_record(target_id: str, file: str, is_group: bool = False):
 
     try:
         await _ws.send_str(json.dumps(payload, ensure_ascii=False))
-        logger.info(f"[qq_adapter] 语音消息帧已发出 -> {action} target={target_id}")
+        logger.debug(f"[qq_adapter] 语音消息帧已发出 -> {action} target={target_id}")
     except Exception as e:
         log_error("qq_adapter.send_record", e)
         logger.error(f"[qq_adapter] 语音消息发送失败: {type(e).__name__}: {e}")
@@ -179,7 +179,7 @@ async def send_image(target_id: str, file_path: str, is_group: bool = False):
 
     try:
         await _ws.send_str(json.dumps(payload, ensure_ascii=False))
-        logger.info(f"[qq_adapter] 图片消息帧已发出 -> {action} target={target_id}: {file_path}")
+        logger.debug("[qq_adapter] 图片消息帧已发出 -> %s target=%s", action, target_id)
     except Exception as e:
         log_error("qq_adapter.send_image", e)
 

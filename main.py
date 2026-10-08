@@ -516,7 +516,7 @@ async def handle_message(message: dict, *, ingress=None):
                 messages.append(prompt_hint())
 
         # ── 步骤6：调用主 LLM ────────────────────────────────────────────────
-        logger.info("[handle_message] 调用主 LLM...")
+        logger.debug("[handle_message] 调用主 LLM...")
         if _loop_active:
             from channels import desktop_ws as _desktop_ws
             raw_reply = await _pipeline.run_agentic_loop(
@@ -535,17 +535,14 @@ async def handle_message(message: dict, *, ingress=None):
             _upd_prompt_out(user_id, raw_reply)
         except Exception:
             pass
-        logger.info(
-            f"[handle_message] LLM 回复长度={len(raw_reply) if raw_reply else 0}"
-            f"，预览: {(raw_reply or '')[:60]!r}"
-        )
+        logger.debug("[handle_message] LLM 回复长度=%d", len(raw_reply) if raw_reply else 0)
 
         # ── 步骤7：后处理回复 ────────────────────────────────────────────────
         segments = response_processor.process(raw_reply, _pipeline.character.name)
         memory_segments = response_processor.process_memory_copy(
             raw_reply, _pipeline.character.name,
         )
-        logger.info(f"[handle_message] 后处理完成，共 {len(segments)} 段")
+        logger.debug(f"[handle_message] 后处理完成，共 {len(segments)} 段")
         if not segments:
             logger.warning("[handle_message] LLM 回复经处理后为空，本轮不发送")
             return
@@ -835,7 +832,7 @@ async def _qq_reality_reply_adapter(
             user_id, _ts_err,
         )
 
-    logger.info(
+    logger.debug(
         "[qq_reality_reply_adapter] 发送到 %s%s 共 %d 段",
         "群" if is_group else "私聊", target_id, len(clean),
     )
