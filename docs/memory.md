@@ -2123,6 +2123,8 @@ turn ID, and companion phone turns use the existing receipt hash.
 
 280：文档全文的分块概要和已提供范围保存在同一资料库，按冻结 uid/char 接续，不进入长期记忆；现有资料接续层只带有界概要和进度，状态更新不重新触发新资料。详见 [document-reading.md](document-reading.md)。
 
+281：自动分段概要可作为带字符锚点的只读文档笔记检索；角色注释同资料索引持久保存，可版本校验后追加或替换，独立于用户画像与情景记忆。此写入不是用户记忆写入点；作用域、撤回、重传与只读观测合同见同一文档。
+
 Uploaded files/images and character-authored notes live in a separate
 `character_library` runtime bucket partitioned by `uid + char_id`. Import is
 fail-open and records only content-free failure counters. Recall is explicit and

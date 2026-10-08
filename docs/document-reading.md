@@ -1,4 +1,4 @@
-# 长文档阅读与接续（280）
+# 长文档阅读与接续（280 / 281）
 
 上传 TXT、Markdown、DOCX 时，完整解析正文保存到当前 uid/char 的 character_library；单文件上限 5 MiB，解析正文上限 500000 字符。超过上限明确拒绝，不静默保存半篇。旧 DOC 不支持，需转 DOCX。TXT/MD 支持 UTF-8（含 BOM）、UTF-16 BOM 和 GBK；Markdown 保留标题，DOCX 按文档顺序提取段落和表格，并将 Heading 样式投影为标题。嵌入图片、脚注、文本框及 Word 的排版页码不属于正文提取合同，不伪造页码。
 
@@ -22,3 +22,13 @@ search_documents 最多8项，按字段限制名称与摘录，保留每项稳�
 进度记录语义是“正文工具结果已提供”，不证明模型已经理解；初始3000字摘录不充当正文工具完整阅读回执。既有 `/observability/character-library`（state.read）新增无正文的文档长度、概要状态/覆盖及提供进度，失败计数同端点。接口和观测由后端拥有，无桌面/手机新增设置或通知/ack/TTL。
 
 验收：自动回归覆盖万字尾段、实际 dispatcher 无二次截断、跨轮/重开、非顺序回读、目录定位、编码、DOCX表格、摘要重试及撤回。真实模型概要质量、QQ、桌面/手机实际上传体验待部署后验收。
+
+## 持久文档笔记
+
+首次上传后台生成的分段概要无需再调用模型，直接成为 `summary_model` 来源的只读笔记，带解析正文的 `[start_offset,end_offset)` 字符区间和 text_revision。概要未完成时仍可读已完成片段，不伪称完整。角色可通过 `write_document_note` 为缺失概要自行新建笔记，或另建纠正注释；自动概要与角色笔记始终分别标来源，不覆盖原文。
+
+`read_document_notes(document_id?, query?, offset?)` 检索本用户/角色范围内全部历史文档的文件名和笔记内容，每页最多3条；结果过大时减少条数，按 next_offset 接续，不截断单条。角色笔记最多100条/文档，每条最多1500字符，异常转义膨胀也明确拒绝。返回 note_id、revision、字符范围；原文回读用 read_document 的 offset，并按 next_offset 继续到笔记 end_offset。
+
+`write_document_note(document_id,content,start_offset,end_offset,note_id?,expected_revision?,mode?)` 留空 note_id 新建；append 补充或 replace 替换已有角色笔记须传当前版本。版本冲突先重新读取，再决定修改；无效区间、容量超限、存储失败均明确返回错误。读写工具只允许 owner 私聊，沿已有执行、开关和 capability 闸门，使用冻结 char_id。重复上传保留笔记，文档撤回后不可读写；笔记在资料索引持久保存，不进入用户记忆，也不依赖短期材料提示窗口。
+
+现有只读观测新增 automatic_note_count、character_note_count，不输出笔记内容。本单没有新增配置或客户端 UI；桌面/手机通过已有工具链使用同一能力，无跨端接口字段变化。

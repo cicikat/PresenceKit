@@ -56,6 +56,7 @@ class DocumentRecord:
     sections: list[dict] = field(default_factory=list)
     overview: dict = field(default_factory=dict)
     reading: dict = field(default_factory=dict)
+    notes: list[dict] = field(default_factory=list)
 
 
 def _now() -> str:
@@ -153,7 +154,7 @@ def store_upload(
             previous = next((row for row in rows if row.get("document_id") == document_id), None)
             payload = asdict(record)
             if previous and not previous.get("deleted_at") and previous.get("searchable_text") == text:
-                for key in ("created_at", "overview", "reading"):
+                for key in ("created_at", "overview", "reading", "notes"):
                     if key in previous:
                         payload[key] = previous[key]
             rows = [row for row in rows if str(row.get("document_id")) != document_id]
@@ -352,6 +353,8 @@ def observability(uid: str, char_id: str) -> dict:
     documents = [{"document_id": row.get("document_id"), "total_chars": len(str(row.get("searchable_text") or "")),
                   "overview_status": (row.get("overview") or {}).get("status", "pending"),
                   "overview_covered_chars": (row.get("overview") or {}).get("covered_chars", 0),
+                  "automatic_note_count": len((row.get("overview") or {}).get("parts", [])),
+                  "character_note_count": len(row.get("notes") or []),
                   **progress(row)} for row in active if row.get("source") == "upload_file"][-50:]
     return {"scope": {"uid": uid, "char_id": char_id, "realm": "reality"}, "count": len(active), "deleted": deleted,
             "documents": documents,

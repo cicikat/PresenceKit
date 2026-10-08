@@ -1065,3 +1065,7 @@ Minecraft建造：`minecraft.allow_building=false`，`GET/PUT /settings/minecraf
 263 C：probe 可选原生 Jev；管理面说明文本预设承担开放补参及不兼容 schema 的完整探针，未配文本不暗中选主模型。有效状态同样返回 open_fields/open_fields_preset。MCP relay 和 Path C 不切原生。
 
 263 D：模型路由新增 letter_eval 与 invariants_relation 行（后者未映射沿用 summary），并允许 scenario_reconcile 原生 choice。各行 effective protocol 与失败文本兜底复用既有状态；信件正文、梦境观察提取与主回复仍是文本用途。未引入跨客户端字段。
+
+## 文档笔记（281）
+
+`read_document_notes` / `write_document_note` 复用既有工具开关与 capability 授权，后端 owner 私聊闸门和冻结角色作用域生效；无新配置。现有 `/observability/character-library`（state.read）增加每文档自动概要条数及角色笔记条数，不输出内容。桌面和手机无新设置字段，通过原工具链使用；详见 [document-reading.md](document-reading.md)。

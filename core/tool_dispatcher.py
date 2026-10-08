@@ -171,6 +171,16 @@ async def _search_character_notes_wrapper(user_id: str, query: str = "", *, char
     return await search_character_notes_for_user(user_id, char_id, query)
 
 
+async def _read_document_notes_wrapper(user_id: str, *, char_id: str, **kwargs):
+    from core.document_notes import read_for_user
+    return await read_for_user(user_id, char_id=char_id, **kwargs)
+
+
+async def _write_document_note_wrapper(user_id: str, *, char_id: str, **kwargs):
+    from core.document_notes import write_for_user
+    return await write_for_user(user_id, char_id=char_id, **kwargs)
+
+
 async def _get_profile_wrapper(user_id: str, *, char_id: str) -> str:
     """召回用户画像。"""
     from core.memory import user_profile
@@ -1560,6 +1570,36 @@ _TOOL_REGISTRY["read_document"] = {
         "limit": {"type": "integer", "minimum": 1, "maximum": 6000, "description": "正文每段字符数，默认6000。"},
         "query": {"type": "string", "description": "在文档内定位文字，从命中位置前后读取；offset 可用于继续查找。"},
     }, "required": ["document_id"]},
+}
+
+_TOOL_REGISTRY["read_document_notes"] = {
+    "func": _read_document_notes_wrapper,
+    "description": "检索当前用户和角色的持久文档笔记：自动分段概要与角色注释，含 document_id、字符范围和版本。每页3条，按 next_offset 翻页。可跨历史文档按关键词检索；需原文时用 read_document 按笔记位置回看。",
+    "dangerous": False, "category": "info", "trace_result": False, "echo_event_log": False,
+    "examples": ["看看这份文档的分段概要", "找以前记下的文档笔记"],
+    "keywords": ["文档笔记", "分段概要", "阅读笔记"],
+    "parameters": {"type": "object", "properties": {
+        "document_id": {"type": "string", "description": "可选稳定文档ID，留空检索本作用域所有历史文档。"},
+        "query": {"type": "string", "description": "可选文件名或笔记内容关键词。"},
+        "offset": {"type": "integer", "minimum": 0, "description": "条目偏移，默认0；按 next_offset 翻页。"},
+    }, "required": []},
+}
+
+_TOOL_REGISTRY["write_document_note"] = {
+    "func": _write_document_note_wrapper,
+    "description": "为上传文档新建、补充或修改角色自己的持久阅读笔记，包括自动概要缺失时自行写概要。先回读相关原文确认位置。自动概要只读，纠正它应新建角色注释。更新必须传 read_document_notes 返回的 note_id 和当前 revision；冲突时重新读后再改。原文不会被笔记修改。",
+    "dangerous": False, "category": "info", "trace_result": False, "echo_event_log": False,
+    "examples": ["补上这份文档的阅读笔记", "修改你之前写的文档概要"],
+    "keywords": ["补文档笔记", "改阅读笔记", "新建文档概要"],
+    "parameters": {"type": "object", "properties": {
+        "document_id": {"type": "string", "description": "上传引用或检索结果中的稳定文档ID。"},
+        "content": {"type": "string", "description": "笔记正文，最多1500字符；过长应分条保存。"},
+        "start_offset": {"type": "integer", "minimum": 0, "description": "对应原文起点，包含该字符。"},
+        "end_offset": {"type": "integer", "minimum": 1, "description": "对应原文终点，不包含该字符；必须大于起点且不超过全文长度。"},
+        "note_id": {"type": "string", "description": "留空新建；修改传角色笔记ID。"},
+        "expected_revision": {"type": "integer", "minimum": 0, "description": "新建默认0；修改传读到的当前 revision。"},
+        "mode": {"type": "string", "enum": ["append", "replace"], "description": "append 追加，replace 替换（默认）；总正文仍最多1500字符。"},
+    }, "required": ["document_id", "content", "start_offset", "end_offset"]},
 }
 
 _TOOL_REGISTRY["search_character_notes"] = {
@@ -3107,6 +3147,12 @@ async def _execute_structured_impl(
                 raise ValueError('scoped reader continuation is owner-private only')
             _require_memory_read_scope(user_id,char_id)
             result = await func(user_id=user_id,char_id=char_id,**tool_args)
+        elif tool_name in {"read_document_notes", "write_document_note"}:
+            owner_id = str(get_config().get("scheduler", {}).get("owner_id") or "")
+            if is_group or not owner_id or str(user_id) != owner_id:
+                raise ValueError('document notes are owner-private only')
+            _require_memory_read_scope(user_id, char_id)
+            result = await func(user_id=user_id, char_id=char_id, **tool_args)
         elif tool_name in {"read_life_records", "reread_image", "read_food_preferences", "read_message_context", "save_quote", "search_quotes", "read_quote", "write_quote_note", "pin_tool_result", "unpin_tool_result", "list_tool_result_pins"}:
             if is_group:
                 raise ValueError('owner memory tools are unavailable in group sessions')

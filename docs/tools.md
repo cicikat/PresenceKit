@@ -12,6 +12,8 @@
 
 280：上传 TXT/MD/DOCX 保存完整解析正文；`read_document` 提供最多6000字符的连续分页、带位置目录、continue进度接续和分块全文概要。上传引用可直接回读，详情见 [document-reading.md](document-reading.md)。
 
+281：info 类新增 `read_document_notes` / `write_document_note`，owner 私聊可检索持久分段概要与角色注释，并新建、追加或替换角色笔记。自动概要只读、修改版本校验、原文位置回读及容量限制见同一文档；不写用户长期记忆。
+
 聊天 Path C 现使用[分类按需加载](tool-discovery.md)：授权和预设过滤后，首轮只给
 `load_tools_<category>` 入口；加载后下一轮才提供该类完整 schema。发现不执行业务、
 不产生成功证据；native 与 relay 共用轮内暴露面、预算及原执行闸门。
