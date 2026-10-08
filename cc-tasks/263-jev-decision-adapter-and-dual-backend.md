@@ -1,6 +1,6 @@
 # 263 — 决策合同、Jev 适配与双后端（小模型 / System One）
 
-日期：2026-09-21。状态：施工中（2026-10-08 用户授权继续）；以下保留原规划，当前验收见文末阶段记录。
+日期：2026-09-21。状态：A–E 已施工与分段提交（2026-10-08）；以下保留规划及实施差异，当前验收见文末阶段记录。真实业务校准与生产切换仍 observe。
 
 目标：把「只做结构化判断」的调用从聊天补全里拆出来，同一份决策合同可走小模型 JSON，也可走 Jev `systemone`。复杂决策默认 **一次 Jev + 必要时一次小模型**；禁止「Jev 判完再让主聊天模型重判」。
 
@@ -125,7 +125,7 @@ Path A 默认暴露 `info` + `desktop`。其中无参/枚举工具（`get_time`�
 | 该 category 主 preset 本来就是普通文本协议 | 只走 `json_chat`，与有没有 Jev 连接无关 |
 | 主 preset 是 `systemone`，且 `fallback_routes[profile][category]` 指向合法文本 preset | 主尝试按现规则用尽后，**最多切一次**到该文本 preset，由 `json_chat` 跑**同一份 IR**（含开放字段，一次调用）。不递归、不切到 `chat` 主模型 |
 | 主 preset 是 `systemone`，未配兜底 | 走该业务**原失败语义**（sensor drop、emotion `neutral`、affection false、IME `failed` 不入队、reconcile `uncertain`）。不暗中改用 `default_preset` 或 `chat` |
-| `json_chat` 主用、Jev 仅在兜底 | 允许，但默认不这样配；文本失败且未配兜底时同样走原失败语义 |
+| `json_chat` 主用、Jev 仅在兜底 | 首版实施禁止：兜底必须是完整文本后端，保存时422。原生 IR 只由明确原生主用入口产生，不给未迁移聊天调用临时补 IR |
 | Jev 返回成功但 schema 对不上（缺题、未知 choice） | 计格式失败。禁止换模型「再编一个 JSON」来绕过；未配兜底则原失败语义 |
 | 混合任务已 Jev 通过、文案小模型失败 | 不改闸门结果；IME 不入队，探针走缺参/失败。不把闸门重打给主模型 |
 | Jev 选项超上限（探针工具太多） | **本轮不走 Jev**，直接 `json_chat` 完整探针；这是能力回落，不是 failover 计数里的失败 |
@@ -221,9 +221,9 @@ Jev 路径才是「闸门一次 + 开放字段一次」。纯 `json_chat` 必须
 
 ## E — P2：对照评测与默认开关
 
-- [ ] E1 用脱敏/合成的 sensor、IME、emotion 样本对比现用便宜小模型 vs Jev：校准、中文、延迟、失败率。无样本则保持默认关，配置可开。
-- [ ] E2 默认：新协议可配，**不自动改用户 routing_profiles**。示例 yaml 可给注释样例，不写真实 key。
-- [ ] E3 评测结论写回本单或 `docs/model-presets.md`；不把 live 一次成功当成生产默认。
+- [x] E1 用脱敏/合成的 sensor、IME、emotion 样本对比现用便宜小模型 vs Jev：校准、中文、延迟、失败率。无样本则保持默认关，配置可开。
+- [x] E2 默认：新协议可配，**不自动改用户 routing_profiles**。示例 yaml 可给注释样例，不写真实 key。
+- [x] E3 评测结论写回本单或 `docs/model-presets.md`；不把 live 一次成功当成生产默认。
 
 ---
 
@@ -271,3 +271,19 @@ IME Jev 闸门与开放文案已拆分；显式文本兜底同时承担通过后
 ## D 阶段验收（2026-10-08）
 
 scenario 三选一、letter_eval 评分、invariants_relation 三选一已接入；未配原生保持文本。invariants 新 category 未映射沿用 summary，items 正文提取仍 summary。157 项相关回归通过，含原生评分/关系与 uncertain；既有 stale/CAS 回归通过。perform 可选项本次不做；rpg_kp、event_edge_proposer、consolidation、profile 提取、vision 明确不接。管理面 effective 补齐所有新增用途，继承路线协议提示随编辑同步。
+
+## E 合成对照验收（2026-10-08）
+
+仅使用合成中文短句、噪音 sensor 和无新信息 IME，调用现用 gemini-2.5-flash 与保存的原生 Jev；不发送真实聊天、IME记录或游戏状态，不执行游戏动作，不改生产路由。一次探索轮包含显式文本回落，无法用端到端时长代表纯 Jev；另轮显式禁止失败回落，并记录逻辑结果与失败账本。Jev 有效返回版本 jev-1.13.0。
+
+| 合成样本 | Jev 原生主用、无失败回落 | 当前文本小模型 |
+|---|---|---|
+| 明确开心中文短句 | 10.19秒触达10秒预算，降级neutral | happy，3.28秒 |
+| 明确难过中文短句 | 10.03秒超时，降级neutral | sad，2.36秒 |
+| 近期刚聊天、普通屏幕亮起噪音 | score=5/drop，2.41秒 | score=10/drop，1.15秒 |
+| 只有“嗯”、无新编辑 | unknown/false/0.22，3.60秒；未调用文案 | unknown/false/0.20，1.31秒 |
+| Minecraft合成“停下来”，六选一 | 3.17秒触达3秒预算，TimeoutError | 3.03秒触达3秒预算，TimeoutError |
+
+原生4个通用样本中2个请求超时并按原业务降级；该轮文本4个成功。探索轮文本也出现连接/JSON格式失败，IME原生加文案出现校验失败；均未入队。这些是极小样本，不能推广为失败率或阈值校准，不能把neutral降级算成功识别。choice、score、noul 的真实返回已验证；尚不具备稳定低延迟证据，Minecraft保留本地规则与3秒硬预算。未改用户 routing_profiles，八用途当前有效协议仍 Chat Completions；只有保存 jev 的协议被修正。
+
+A–D 相关回归及管理面夹具浏览器已验收；D 最后157项相关回归和66项CRUD/UI/LF/作用域守卫通过。C/D 浏览器核对新增用途保存重开、无文本补参提示及sensor继承协议同步。未重启常驻后端、未做真实Minecraft联机/手机IME验收；正常重启加载新代码后才可在管理面按用途启用。perform本次不接。无桌面/手机新协议或设置，消费端仍使用既有消息和工具结果。
