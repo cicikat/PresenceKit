@@ -691,7 +691,7 @@ self_access:
 | 工具名 | 触发描述 | 执行方式 |
 |---|---|---|
 | `write_artifact` | 用户明确要一份可下载文本文件 | 沙盒 `runtime/chat_artifacts/{char_id}/{uid}/`，扩展名白名单，单文件 256k 字符；超过 50 个上限淘汰最旧产物时写 INFO 日志 |
-| `update_artifact` | 改之前给对方的文件（不要再新建一份） | 原地覆盖同一 id，`revision+1`、更新 `updated_at`/`size`，只留一版 `{id}.prev{ext}`；可选 `expected_sha256`（取自 `read_artifact`）防并发覆盖；本轮 payload 带 `updated: true` |
+| `update_artifact` | 修改或追加之前给对方的工件（不要再新建一份） | `mode=replace`（默认）整份覆盖，`append` 在末尾追加 content（换行自行提供），`edit` 将唯一匹配的非空 old_text 替换为 content（可为空以删除）；修改后总量不超过 256k 字符。锁内读取与修改，原地保留同一 id，`revision+1`、更新 `updated_at`/`size`，只留一版 `{id}.prev{ext}`；可选 `expected_sha256`（取自 `read_artifact`）防并发覆盖；本轮 payload 带 `updated: true`。读取被截断时使用 append/edit，避免覆盖未读尾部 |
 | `read_artifact` | 读取本轮或近期产物正文 | 只读沙盒产物，截断 12k 字符；返回 `revision` 与 `sha256` |
 | `list_artifacts` | 列出近期产物元数据 | 不含正文与绝对路径 |
 

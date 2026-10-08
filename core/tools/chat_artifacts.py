@@ -317,10 +317,18 @@ def update_artifact(
     content: str,
     *,
     expected_sha256: str | None = None,
+    mode: str = "replace",
+    old_text: str | None = None,
     user_id: str | None = None,
     char_id: str | None = None,
 ) -> str:
-    """Overwrite an existing artifact in place (same id), keeping one previous version."""
+    """Replace, append, or edit an artifact under the same scope lock."""
+    if mode not in {"replace", "append", "edit"}:
+        raise ArtifactError("mode 只支持 replace、append、edit")
+    if mode == "edit" and (not isinstance(old_text, str) or not old_text):
+        raise ArtifactError("edit 模式需要非空 old_text")
+    if mode != "edit" and old_text is not None:
+        raise ArtifactError("old_text 仅用于 edit 模式")
     if not isinstance(content, str):
         raise ArtifactError("产物只接受文本内容")
     if len(content) > MAX_CONTENT_CHARS:
@@ -345,13 +353,21 @@ def update_artifact(
         target = _file_path(root, artifact_id, filename)
         if not target.exists() or not target.is_file():
             raise ArtifactError("找不到这个产物文件")
-        if expected_sha256:
+        if expected_sha256 or mode != "replace":
             try:
-                current = _sha256_text(target.read_text(encoding="utf-8"))
+                previous = target.read_text(encoding="utf-8")
             except UnicodeDecodeError as exc:
                 raise ArtifactError("产物文件不是 UTF-8 文本") from exc
-            if current != str(expected_sha256).strip().lower():
+            if expected_sha256 and _sha256_text(previous) != str(expected_sha256).strip().lower():
                 raise ArtifactError("文件在你读取之后已被修改（sha256 不一致），请先重新读取再更新")
+            if mode == "append":
+                content = previous + content
+            elif mode == "edit":
+                if previous.count(old_text) != 1:
+                    raise ArtifactError("old_text 必须在文件中精确匹配一次，请重新读取并提供唯一片段")
+                content = previous.replace(old_text, content, 1)
+        if len(content) > MAX_CONTENT_CHARS:
+            raise ArtifactError(f"修改后的文件不能超过 {MAX_CONTENT_CHARS} 个字符")
         pending = _turn_artifacts.get()
         if (
             pending is not None
@@ -567,9 +583,10 @@ def register_tools(registry: dict) -> None:
     async def write(filename, content, *, user_id, char_id):
         return write_artifact(filename, content, user_id=user_id, char_id=char_id)
 
-    async def update(artifact_id, content, expected_sha256=None, *, user_id, char_id):
+    async def update(artifact_id, content, expected_sha256=None, mode="replace", old_text=None, *, user_id, char_id):
         return update_artifact(
             artifact_id, content, expected_sha256=expected_sha256,
+            mode=mode, old_text=old_text,
             user_id=user_id, char_id=char_id,
         )
 
@@ -584,11 +601,13 @@ def register_tools(registry: dict) -> None:
          {"filename": {"type": "string", "description": "产物文件名，含扩展名。"},
           "content": {"type": "string", "maxLength": MAX_CONTENT_CHARS, "description": "要写入产物的文本内容。"}},
          ["filename", "content"], ["生成文件", "做成文件"]),
-        ("update_artifact", update, "改你之前给对方的文件，用这个而不是 write_artifact 新建一份；原地覆盖同一产物并保留上一版。",
+        ("update_artifact", update, "修改已有工件并保留同一 ID 和上一版：replace 整份覆盖，append 末尾追加，edit 精确替换唯一片段。先 list_artifacts 找 ID；修改前 read_artifact 并传 expected_sha256 防冲突。读取被截断时使用 append/edit，避免整份覆盖丢失未读内容。",
          {"artifact_id": {"type": "string", "description": "要更新的产物 ID。"},
-          "content": {"type": "string", "maxLength": MAX_CONTENT_CHARS, "description": "更新后的完整文本内容。"},
+          "content": {"type": "string", "maxLength": MAX_CONTENT_CHARS, "description": "replace 为完整正文；append 为追加文本（换行须自行提供）；edit 为替换后的片段，可为空以删除片段。"},
+          "mode": {"type": "string", "enum": ["replace", "append", "edit"], "description": "可选，默认 replace；append 追加，edit 局部修改。"},
+          "old_text": {"type": "string", "description": "仅 edit 使用，必须非空且在原文件中精确出现一次。"},
           "expected_sha256": {"type": "string", "description": "可选：read_artifact 返回的 sha256，用于防止覆盖他人新改动。"}},
-         ["artifact_id", "content"], ["修改文件", "更新文件", "改文件"]),
+         ["artifact_id", "content"], ["修改文件", "更新文件", "改文件", "追加工件", "局部修改工件"]),
         ("read_artifact", read, "读取当前用户与角色的既有产物。",
          {"artifact_id": {"type": "string", "description": "要读取的产物 ID。"}}, ["artifact_id"], ["读取产物"]),
         ("list_artifacts", listing, "列出当前用户与角色的产物元数据。",

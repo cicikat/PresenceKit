@@ -86,14 +86,71 @@ def test_update_artifact_in_place_keeps_prev_and_revision(sandbox):
     assert (root / f"{written['id']}.prev.md").read_text(encoding="utf-8") == "v2 内容"
 
 
-def test_update_artifact_rejects_cross_scope_and_missing(sandbox):
+def test_append_and_edit_preserve_unread_tail(sandbox):
+    original = "title\n" + "x" * chat_artifacts.MAX_READ_CHARS + "\ntail"
+    written = _write(content=original)
+    read = json.loads(chat_artifacts.read_artifact(written["id"], user_id="u1", char_id=TEST_CHAR_ID))
+    assert read["truncated"]
+    updated = json.loads(chat_artifacts.update_artifact(
+        written["id"], "\nadded", mode="append", expected_sha256=read["sha256"],
+        user_id="u1", char_id=TEST_CHAR_ID,
+    ))
+    chat_artifacts.update_artifact(
+        written["id"], "", mode="edit", old_text="title\n", expected_sha256=updated["sha256"],
+        user_id="u1", char_id=TEST_CHAR_ID,
+    )
+    record = chat_artifacts.get_artifact_record(written["id"], uid="u1", char_id=TEST_CHAR_ID)
+    assert chat_artifacts.read_artifact_text(record) == original[6:] + "\nadded"
+    assert record["revision"] == 3
+
+
+@pytest.mark.parametrize("kwargs", [
+    {"mode": "invalid"}, {"mode": "edit"}, {"mode": "edit", "old_text": ""},
+    {"mode": "edit", "old_text": "missing"}, {"mode": "edit", "old_text": "repeat"},
+    {"mode": "append", "old_text": "repeat"},
+])
+def test_edit_rejections_do_not_mutate(sandbox, kwargs):
+    written = _write(content="repeat repeat")
+    with pytest.raises(chat_artifacts.ArtifactError):
+        chat_artifacts.update_artifact(written["id"], "new", user_id="u1", char_id=TEST_CHAR_ID, **kwargs)
+    read = json.loads(chat_artifacts.read_artifact(written["id"], user_id="u1", char_id=TEST_CHAR_ID))
+    assert read["content"] == "repeat repeat"
+    assert read["revision"] == 1
+
+
+@pytest.mark.parametrize("mode,old_text", [("append", None), ("edit", "x")])
+def test_update_combined_size_limit(sandbox, mode, old_text, monkeypatch):
+    monkeypatch.setattr(chat_artifacts, "MAX_CONTENT_CHARS", 5)
+    written = _write(content="xabcd")
+    with pytest.raises(chat_artifacts.ArtifactError, match="修改后的文件不能超过"):
+        chat_artifacts.update_artifact(written["id"], "yy", mode=mode, old_text=old_text,
+                                       user_id="u1", char_id=TEST_CHAR_ID)
+    assert json.loads(chat_artifacts.read_artifact(written["id"], user_id="u1", char_id=TEST_CHAR_ID))["content"] == "xabcd"
+
+
+def test_concurrent_append_keeps_every_chunk(sandbox):
+    from concurrent.futures import ThreadPoolExecutor
+    written = _write(content="start")
+    def append(chunk):
+        chat_artifacts.update_artifact(written["id"], chunk, mode="append", user_id="u1", char_id=TEST_CHAR_ID)
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        list(pool.map(append, ["A", "B", "C", "D"]))
+    read = json.loads(chat_artifacts.read_artifact(written["id"], user_id="u1", char_id=TEST_CHAR_ID))
+    assert read["content"].startswith("start")
+    assert sorted(read["content"][5:]) == list("ABCD")
+    assert read["revision"] == 5
+
+
+@pytest.mark.parametrize("mode", ["replace", "append", "edit"])
+def test_update_artifact_rejects_cross_scope_and_missing(sandbox, mode):
     written = _write("plan.md", "v1")
+    kwargs = {"mode": mode, "old_text": "v1"} if mode == "edit" else {"mode": mode}
     with pytest.raises(chat_artifacts.ArtifactError, match="找不到"):
-        chat_artifacts.update_artifact(written["id"], "x", user_id="u2", char_id=TEST_CHAR_ID)
+        chat_artifacts.update_artifact(written["id"], "x", user_id="u2", char_id=TEST_CHAR_ID, **kwargs)
     with pytest.raises(chat_artifacts.ArtifactError, match="找不到"):
-        chat_artifacts.update_artifact(written["id"], "x", user_id="u1", char_id="other_char")
+        chat_artifacts.update_artifact(written["id"], "x", user_id="u1", char_id="other_char", **kwargs)
     with pytest.raises(chat_artifacts.ArtifactError, match="找不到"):
-        chat_artifacts.update_artifact("f" * 32, "x", user_id="u1", char_id=TEST_CHAR_ID)
+        chat_artifacts.update_artifact("f" * 32, "x", user_id="u1", char_id=TEST_CHAR_ID, **kwargs)
     read = json.loads(chat_artifacts.read_artifact(written["id"], user_id="u1", char_id=TEST_CHAR_ID))
     assert read["content"] == "v1"
 
@@ -245,6 +302,18 @@ async def test_artifact_tools_are_path_c_not_probe(sandbox, monkeypatch):
         char_id=TEST_CHAR_ID,
     )
     assert "updated" in updated.result
+    appended = await tool_dispatcher.execute_structured(
+        "update_artifact", {"artifact_id": written_id, "content": "!", "mode": "append"},
+        "u1", "u1", False, _Session(), origin="assistant_loop", char_id=TEST_CHAR_ID,
+    )
+    assert "updated" in appended.result
+    assert json.loads(chat_artifacts.read_artifact(written_id, user_id="u1", char_id=TEST_CHAR_ID))["content"] == "hello again!"
+    edited = await tool_dispatcher.execute_structured(
+        "update_artifact", {"artifact_id": written_id, "content": "world", "mode": "edit", "old_text": "again"},
+        "u1", "u1", False, _Session(), origin="assistant_loop", char_id=TEST_CHAR_ID,
+    )
+    assert "updated" in edited.result
+    assert json.loads(chat_artifacts.read_artifact(written_id, user_id="u1", char_id=TEST_CHAR_ID))["content"] == "hello world!"
     assert tool_dispatcher.is_side_effect_tool("update_artifact")
     assert tool_dispatcher._TOOL_REGISTRY["update_artifact"]["category"] == "artifacts"
     assert tool_dispatcher._TOOL_REGISTRY["update_artifact"]["examples"]
