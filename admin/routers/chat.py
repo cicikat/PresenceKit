@@ -247,7 +247,17 @@ async def _execute_owner_chat_turn_locked(
             return result
 
         if tool_execution_enabled:
-            pretool_result, context = await asyncio.gather(_timed_probe(), _timed_ctx())
+            probe_task = asyncio.create_task(_timed_probe())
+            context_task = asyncio.create_task(_timed_ctx())
+            try:
+                pretool_result, context = await asyncio.gather(probe_task, context_task)
+            except BaseException:
+                # gather does not stop its sibling after one fails. A failed
+                # request must not leave a tool probe executing behind a retry.
+                probe_task.cancel()
+                context_task.cancel()
+                await asyncio.gather(probe_task, context_task, return_exceptions=True)
+                raise
         else:
             pretool_result, context = None, await _timed_ctx()
         _turn_char_name = getattr(

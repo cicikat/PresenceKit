@@ -1,3 +1,6 @@
+## 安全失败重试（2026-10-08，271）
+
+mobile/desktop chat 在工具执行与 turn sink 前失败时标记 retryable_failed，同 request_id/payload 可以重跑；已开始工具/回合写入、未知入口和 upload 保留 execution_outcome_unknown。context/probe 并发失败会取消并等待另一任务，避免重试与残留工具交错。completed/in_flight/409、token+owner+char+domain 隔离和 30 分钟进程内保留不变；旧 failed 无阶段证据不重跑。既有 /observability/session-scope 可见 request_failed 原因 retryable_failed/failed 及 request_retry，无新持久状态或开关。chat-log plain/display 均取 ledger visible_text；记忆存储与原文不改。真机/真实模型观察仍 open。
 ## 同作用域重绑与回执（2026-10-07）
 
 request receipt 内部键改为 token_label+owner_id+char_id+domain+request_id，session_id 仍是服务端授权 grant，必须经过现有 ingress 校验。仅更换同作用域 grant 不会重新执行同一 request_id；不同 token/owner/char/domain 仍隔离，同 ID 不同 payload 仍 409。completed 回放返回调用者当前 session_id。现有 30 分钟/进程内保留边界不变，字段不删不改。

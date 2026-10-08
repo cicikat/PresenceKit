@@ -48,6 +48,8 @@ def current_call():
 
 async def execute_visible(function, tool_name, tool_args, user_id, target_id,
                           is_group, session_state, **kwargs):
+    from core.session_scope import mark_request_side_effects_started
+    mark_request_side_effects_started()
     # Keep group, admin and Dream execution out of the single-owner transcript.
     from core.config_loader import get_config
     owner = str(get_config().get('scheduler', {}).get('owner_id') or '')

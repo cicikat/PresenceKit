@@ -260,6 +260,8 @@ async def record_assistant_turn(
     bypass_gate=True 时跳过 conversation_lock（QQ adapter 已在 conversation_lock 内）。
     loop_executed（Brief 28）：本轮是否走了 tool loop，透传给 post_process_slow。
     """
+    from core.session_scope import mark_request_side_effects_started
+    mark_request_side_effects_started()
     from core.write_envelope import WriteEnvelope
     if envelope is None:
         envelope = WriteEnvelope()

@@ -1,3 +1,9 @@
+## 手机聊天交接复查（2026-10-08，271 / mobile 27）
+
+current：chat-log plain/display 同源 ledger visible_text，消除未分段记忆正文与分段显示正文混用；mobile/desktop chat 仅在工具执行/turn sink 前失败可同 ID 重试，未知副作用与 upload 保留 unknown，context/probe 失败取消并等待兄弟任务。观测仍是 /observability/session-scope（request_failed 的 retryable_failed/failed 与 request_retry）；无新管理开关或持久库。手机前台周期交接 pending 并补偿 poll，成功证据不被迟到 HTTP 错误覆盖；Android 固定 30 分钟冷却已按用户授权移除，重连立即补拉、有界分页排空，pending 上限 500 且满载拒绝 ack，seen+pending 一次提交。只读 getBackgroundPollStatus 增 pendingCount/pendingLimit。桌面协议兼容，代码未改。
+
+observe：真机/真实模型/弱网/Doze/通知联调 not-run。open：后台无信号仍可能等 15 分钟系统补偿；consume 到页面呈现崩溃窗口、后台 artifacts/sticker 补全、旧无 ledger 历史/旧失败回执阶段未知、跨后端重启 exactly-once。细节见 [session-scope-contract.md](session-scope-contract.md) 与手机 docs/mobile/chat-handoff-2026-10-08.md。
+
 ## 手机聊天完整性联动（2026-10-07，267 / mobile 26）
 
 F6：desktop/mobile `reply_to.message_id` 复用 `turn_id:user|assistant`，Rust桥及手机模型透传；backend在冻结现实作用域核验作者、原文、完整带时区时间。旧 text+ts 未经核验，缺锚点不做同文定位。角色 `read_message_context` 查上/下最多10条现实台账消息，无新增设置/存储。QQ精确引用由用户取消，保留普通消息/引用文本降级；真实设备与模型链路 observe。

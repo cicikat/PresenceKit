@@ -184,3 +184,26 @@ def test_history_http_projects_media_refs_without_disk_paths(sandbox, monkeypatc
     }]
     assert 'image_path' not in entry['media_refs'][0]
     assert 'C:/secret' not in str(response.json())
+
+
+def test_history_plain_and_styled_copy_share_visible_paragraphs(sandbox, monkeypatch):
+    import asyncio
+    from core.memory.event_store import append_event
+    from core.memory.scope import MemoryScope
+    monkeypatch.setattr(chat_log, '_owner_qq', lambda: 'owner')
+    monkeypatch.setattr(chat_log, '_resolve_char_id', lambda value: 'char')
+    monkeypatch.setattr(chat_log, '_parse_day', lambda text: [
+        {'time': '12:00', 'user': 'question', 'assistant': 'firstsecond', 'turn_id': 'split'},
+    ])
+    monkeypatch.setattr(event_log, '_read_day_union', lambda *args: 'fixture')
+    append_event(MemoryScope.reality_scope('owner', 'char'), {
+        'event_id': 'split:assistant', 'turn_id': 'split', 'kind': 'assistant_message',
+        'actor': 'assistant', 'visible_text': '<hl>first</hl>\nsecond',
+        'memory_text': 'firstsecond',
+    })
+    directory = event_log._event_log_read_dir('owner', char_id='char')
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / '2026-10-08.md').write_text('fixture', encoding='utf-8')
+    row = asyncio.run(chat_log.get_day('2026-10-08', x_presence_session=None))['entries'][0]
+    assert row['assistant'] == 'first\nsecond'
+    assert row['assistant_display_text'] == '<hl>first</hl>\nsecond'

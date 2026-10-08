@@ -372,8 +372,10 @@ async def get_day(
             and not assistant_event.get("tombstoned")
             and assistant_event.get("visible_text")
         ):
-            from core.response_processor import inline_display_text
-            entry["assistant_display_text"] = inline_display_text(assistant_event["visible_text"])
+            from core.response_processor import inline_display_text, strip_render_tags
+            visible = inline_display_text(assistant_event["visible_text"])
+            entry["assistant"] = strip_render_tags(visible)
+            entry["assistant_display_text"] = visible
         media_refs = _project_media_refs(user_event) or _project_media_refs(assistant_event)
         if media_refs:
             entry["media_refs"] = media_refs

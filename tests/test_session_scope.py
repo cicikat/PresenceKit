@@ -261,3 +261,90 @@ def test_observability_is_metadata_only(monkeypatch):
     assert snapshot["effective"] is True
     assert snapshot["active_sessions"] == 1
     assert "message" not in repr(snapshot).lower()
+
+@pytest.mark.asyncio
+async def test_chat_failure_before_side_effects_retries_same_id(monkeypatch):
+    from core import session_scope
+    grant = _grant(monkeypatch)
+    calls = 0
+    async def execute():
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise RuntimeError("model unavailable")
+        return {"reply": "recovered", "turn_id": "retry-turn"}
+    args = dict(grant=grant, request_id="safe-retry", payload={"kind": "mobile_chat", "message": "hello"}, executor=execute)
+    with pytest.raises(RuntimeError):
+        await session_scope.execute_request(**args)
+    _, result = await session_scope.execute_request(**args)
+    _, replay = await session_scope.execute_request(**args)
+    assert result["turn_id"] == replay["turn_id"] == "retry-turn"
+    assert calls == 2
+    assert any(e["event"] == "request_retry" for e in session_scope.observability_snapshot()["entries"])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("child_task", [False, True])
+async def test_chat_failure_after_side_effect_boundary_never_reexecutes(monkeypatch, child_task):
+    from core import session_scope
+    grant = _grant(monkeypatch)
+    calls = 0
+    async def side_effect():
+        session_scope.mark_request_side_effects_started()
+    async def execute():
+        nonlocal calls
+        calls += 1
+        if child_task:
+            await asyncio.create_task(side_effect())
+        else:
+            await side_effect()
+        raise RuntimeError("reply failed after tool")
+    args = dict(grant=grant, request_id="unsafe-retry", payload={"kind": "mobile_chat", "message": "hello"}, executor=execute)
+    with pytest.raises(RuntimeError):
+        await session_scope.execute_request(**args)
+    with pytest.raises(session_scope.SessionScopeError) as error:
+        await session_scope.execute_request(**args)
+    assert error.value.code == "execution_outcome_unknown"
+    assert calls == 1
+
+
+@pytest.mark.asyncio
+async def test_safe_failed_retry_still_rejects_changed_payload(monkeypatch):
+    from core import session_scope
+    grant = _grant(monkeypatch)
+    async def execute():
+        raise RuntimeError("before execution")
+    with pytest.raises(RuntimeError):
+        await session_scope.execute_request(grant=grant, request_id="safe-conflict", payload={"kind": "mobile_chat", "message": "one"}, executor=execute)
+    with pytest.raises(session_scope.SessionScopeError) as error:
+        await session_scope.execute_request(grant=grant, request_id="safe-conflict", payload={"kind": "mobile_chat", "message": "two"}, executor=execute)
+    assert error.value.code == "request_payload_conflict"
+
+@pytest.mark.asyncio
+async def test_context_failure_stops_sibling_probe_before_retry(monkeypatch):
+    from admin.routers import chat
+    from core.memory.scope import MemoryScope
+    started = asyncio.Event()
+    stopped = asyncio.Event()
+    class Pipeline:
+        character = SimpleNamespace(name="Scoped")
+        async def fetch_context(self, *args, **kwargs):
+            await started.wait()
+            raise RuntimeError("context unavailable")
+    async def probe(*args, **kwargs):
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            stopped.set()
+    monkeypatch.setattr("core.config_loader.get_config", lambda: {"scheduler": {"owner_id": "owner"}})
+    monkeypatch.setattr("core.scheduler.loop.mark_user_active", lambda: None)
+    monkeypatch.setattr("core.scheduler.state_machine.notify_owner_turn", lambda uid: None)
+    monkeypatch.setattr("core.scheduler.proactive_ledger.record_user_message", lambda uid: None)
+    monkeypatch.setattr("core.tool_dispatcher.tool_loop_active", lambda uid: False)
+    monkeypatch.setattr(chat, "_probe_and_execute_tools", probe)
+    monkeypatch.setattr("core.pipeline_registry.get", lambda: Pipeline())
+    with pytest.raises(RuntimeError, match="context unavailable"):
+        await chat.run_owner_chat_turn("hello", "mobile",
+            frozen_scope=MemoryScope.reality_scope("owner", "character_a"))
+    assert stopped.is_set()

@@ -15,6 +15,7 @@ import secrets
 import time
 from collections import deque
 from dataclasses import dataclass
+from contextvars import ContextVar
 from typing import Any, Awaitable, Callable
 
 from core.memory.scope import MemoryScope
@@ -65,6 +66,16 @@ _RUNNING: dict[tuple[str, str, str, str, str], asyncio.Task] = {}
 _TRACE: deque[dict[str, Any]] = deque(maxlen=500)
 _GUARD = asyncio.Lock()
 
+
+# Mutable request-local state is shared with awaited child tasks (tool probe).
+_EXECUTION_SAFETY: ContextVar[dict | None] = ContextVar("session_request_safety", default=None)
+
+
+def mark_request_side_effects_started() -> None:
+    """After tools or turn persistence begin, replaying a failure is unsafe."""
+    state = _EXECUTION_SAFETY.get()
+    if state is not None:
+        state["retry_safe"] = False
 
 def _owner_id() -> str:
     from core.config_loader import get_config
@@ -217,20 +228,27 @@ async def execute_request(
                 return rid, replay
             if key in _RUNNING:
                 raise SessionScopeError(202, "in_flight")
-            raise SessionScopeError(503, "execution_outcome_unknown")
+            if row.get("status") != "retryable_failed":
+                raise SessionScopeError(503, "execution_outcome_unknown")
+            _record("request_retry", grant=grant, request_id=rid, reason="no_side_effects")
         now = time.time()
         _REQUESTS[key] = {"digest": digest, "status": "running", "created_at": now, "updated_at": now}
         async def _execute_and_store():
+            safety = {"retry_safe": isinstance(payload, dict) and payload.get("kind") in {"mobile_chat", "desktop_chat"}}
+            safety_token = _EXECUTION_SAFETY.set(safety)
             try:
                 result = await executor()
-            except Exception as exc:
+            except BaseException as exc:
                 async with lock:
                     row = _REQUESTS.get(key, {})
-                    row.update(status="failed", updated_at=time.time(), error_code=type(exc).__name__)
+                    status = "retryable_failed" if safety["retry_safe"] and isinstance(exc, Exception) else "failed"
+                    row.update(status=status, updated_at=time.time(), error_code=type(exc).__name__)
                     _REQUESTS[key] = row
                     _RUNNING.pop(key, None)
-                    _record("request_failed", grant=grant, request_id=rid, reason=type(exc).__name__)
+                    _record("request_failed", grant=grant, request_id=rid, reason=status)
                 raise
+            finally:
+                _EXECUTION_SAFETY.reset(safety_token)
             async with lock:
                 _REQUESTS[key] = {
                     "digest": digest, "status": "completed",
