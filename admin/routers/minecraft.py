@@ -2,7 +2,7 @@
 from pathlib import Path
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from admin.auth import require_scopes
@@ -57,8 +57,16 @@ async def put_settings(body: MinecraftSettings, auth=Depends(require_scopes("adm
 
 
 @control_router.get("/observability/minecraft")
-async def observation(auth=Depends(require_scopes("state.read"))):
-    return service().observation()
+async def observation(session_id: str | None = Query(default=None, pattern=r"^[a-f0-9]{32}$"), auth=Depends(require_scopes("state.read"))):
+    runtime = service()
+    if session_id:
+        from core.activity import store
+        uid, char_id = runtime.principal()
+        saved = store.load_session(char_id, uid, "minecraft", session_id)
+        if not saved:
+            raise HTTPException(404, detail="session_not_found")
+        return {"session_id": saved.session_id, "status": saved.status, "state": saved.state}
+    return runtime.observation()
 
 
 async def execute(call):
@@ -92,7 +100,7 @@ async def state(auth=Depends(require_scopes("activity"))):
 
 class Command(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
-    action: Literal["follow", "stop", "return", "pickup", "defend"]
+    action: Literal["follow", "stop", "return", "pickup", "defend", "collect_iron"]
     params: dict = Field(default_factory=dict)
     command_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,64}$")
 

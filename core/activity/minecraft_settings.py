@@ -21,6 +21,7 @@ class MinecraftSettings(BaseModel):
     owner_uuid: str = ""
     allow_pickup: bool = False
     allow_defend: bool = False
+    allow_mining: bool = False
     model_enabled: bool = True
     model_calls_per_session: int = Field(default=120, ge=1, le=500)
     model_cooldown_seconds: int = Field(default=10, ge=5, le=120)

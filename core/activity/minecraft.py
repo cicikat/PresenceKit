@@ -46,6 +46,7 @@ class MinecraftService:
         self.chat_task: asyncio.Task | None = None
         self.model_busy = False
         self.dropped_messages = 0
+        self.last_model_latency_seconds: float | None = None
 
     def _principal(self) -> tuple[str, str]:
         from admin.routers._common import active_char_id
@@ -74,7 +75,10 @@ class MinecraftService:
                 "snapshot_age_seconds": max(0, time.time() - self.snapshot.get("observed_at", 0) / 1000) if self.snapshot.get("observed_at") else None,
                 "current": self.snapshot.get("current"), "receipts": self.snapshot.get("receipts", [])[-30:],
                 "error": self.last_error, "model_calls": b.model_calls if b else 0,
-                "dropped_messages": self.dropped_messages}
+                "dropped_messages": self.dropped_messages,
+                "last_model_latency_seconds": self.last_model_latency_seconds,
+                "action_outcomes": {status: sum(r.get("status") == status for r in self.snapshot.get("receipts", []))
+                                    for status in ("running", "succeeded", "failed", "canceled", "outcome_unknown")}}
 
     async def start(self) -> dict:
         async with self.lock:
@@ -119,10 +123,18 @@ class MinecraftService:
             self.last_error = reason
             try:
                 if bridge:
-                    await bridge.request("POST", "/v1/disconnect", {"session_id": b.session_id, "connection_epoch": b.epoch})
+                    final = await bridge.request("POST", "/v1/disconnect", {"session_id": b.session_id, "connection_epoch": b.epoch})
+                    if final.get("connection_epoch") == b.epoch:
+                        self.snapshot = final
             except BridgeError:
                 pass  # Body lease expires independently; never claim a successful disconnect.
             finally:
+                session = store.load_session(b.char_id, b.uid, "minecraft", b.session_id)
+                if session:
+                    session.state = {"connection": "closed", "close_reason": reason,
+                                     "model_calls": b.model_calls, "last_model_latency_seconds": self.last_model_latency_seconds,
+                                     "current": self.snapshot.get("current"), "receipts": self.snapshot.get("receipts", [])[-30:]}
+                    store.save_session(session)
                 store.close_session(b.char_id, b.uid, "minecraft", b.session_id)
         self.snapshot = {}
 
@@ -143,11 +155,16 @@ class MinecraftService:
                 raise MinecraftError("authority_changed")
             cfg = settings(self.config())
             params = params or {}
-            if action not in {"follow", "stop", "return", "pickup", "defend", "say"}:
+            if action not in {"follow", "stop", "return", "pickup", "defend", "say", "collect_iron"}:
                 raise MinecraftError("invalid_action")
             if action == "pickup" and not cfg.allow_pickup or action == "defend" and not cfg.allow_defend:
                 raise MinecraftError("capability_disabled")
-            if action == "pickup":
+            if action == "collect_iron":
+                if not cfg.allow_mining:
+                    raise MinecraftError("capability_disabled")
+                if set(params) != {"count", "radius"} or any(type(params[k]) is not int or not 1 <= params[k] <= 8 for k in params):
+                    raise MinecraftError("invalid_params")
+            elif action == "pickup":
                 if set(params) != {"entity_id"} or type(params["entity_id"]) is not int:
                     raise MinecraftError("invalid_params")
             elif action == "say":
@@ -181,7 +198,8 @@ class MinecraftService:
             # Heartbeat itself keeps the activity alive without persisting all game ticks.
             if time.time() - float(session.state.get("saved_at", 0)) > 30:
                 session.state = {"connection": snapshot.get("status"), "connection_epoch": b.epoch,
-                                 "model_calls": b.model_calls, "saved_at": time.time()}
+                                 "model_calls": b.model_calls, "saved_at": time.time(),
+                                 "current": snapshot.get("current"), "receipts": snapshot.get("receipts", [])[-30:]}
                 session.updated_at = store.now_iso(); store.save_session(session)
             events = await bridge.request("GET", f"/v1/events?after={b.event_seq}")
             if events.get("connection_epoch") != b.epoch:
@@ -238,7 +256,9 @@ class MinecraftService:
         else:
             planner = self.planner
         try:
+            model_started = time.monotonic()
             plan = await planner(b.uid, b.char_id, b.session_id, text, self.snapshot)
+            self.last_model_latency_seconds = round(time.monotonic() - model_started, 3)
             if b is not self.binding or not self.valid(b) or rev != b.revision:
                 raise MinecraftError("stale_plan")
             receipt = None

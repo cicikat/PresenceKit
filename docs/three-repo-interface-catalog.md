@@ -1123,6 +1123,7 @@ and admin browser inspection do not constitute production migration evidence.
 <!-- qzone-272-interface -->
 272 B current：QQ 空间工具为后端独立 OneBot-QZone REST，管理入口在消息分发与客户端设置的 QQ 卡片，接口见 [qzone-integration.md](qzone-integration.md)。owner 私聊可调用，不修改 desktop/mobile 消息、设置或 ack 合同。observe：真实写入/图片及事件订阅未验收；本轮只读登录与说说查询，不宣称写侧已实测。
 <!-- minecraft-274-interface -->
+274 D：后端增加 `collect_iron` 有界动作及 `allow_mining` 热授权；现有桌面/手机无新增消费方。采集与真实游戏验收为 partial，非 durable Agent Runtime capability。
 274：Minecraft 为后端 Activity + 独立 Docker 身体；`/activity/minecraft/*` 使用 activity scope，
 管理面 `/settings/minecraft` 使用 admin，观测使用 state.read。初版未修改 desktop/mobile
 WS、消息投递或设置协议，不向客户端 registry 声明虚构 tab/Tauri 命令。

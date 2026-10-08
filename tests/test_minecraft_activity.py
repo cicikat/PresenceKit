@@ -165,6 +165,20 @@ def test_model_json_fence_keeps_strict_action_authority():
 
 
 @pytest.mark.asyncio
+async def test_collection_grant_and_bounds_checked_before_bridge(runtime):
+    service, bridge, cfg, _ = runtime
+    await service.start()
+    with pytest.raises(MinecraftError, match="capability_disabled"):
+        await service.command("collect_iron", {"count": 1, "radius": 4})
+    cfg["minecraft"]["allow_mining"] = True
+    # Config changes revoke the previous session; new authority requires a new session.
+    await service.close(); await service.start()
+    with pytest.raises(MinecraftError, match="invalid_params"):
+        await service.command("collect_iron", {"count": 9, "radius": 4})
+    assert (await service.command("collect_iron", {"count": 1, "radius": 4}))["status"] == "succeeded"
+
+
+@pytest.mark.asyncio
 async def test_failed_action_never_sends_claimed_model_reply(runtime):
     service, bridge, _, _ = runtime
     original = bridge.request

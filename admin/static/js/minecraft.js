@@ -1,4 +1,4 @@
-const MC_BOOLEAN_FIELDS = ['enabled', 'allow_pickup', 'allow_defend', 'model_enabled'];
+const MC_BOOLEAN_FIELDS = ['enabled', 'allow_pickup', 'allow_defend', 'allow_mining', 'model_enabled'];
 const MC_NUMBER_FIELDS = ['port', 'model_calls_per_session', 'model_cooldown_seconds'];
 const MC_TEXT_FIELDS = ['bridge_url', 'host', 'version', 'username', 'auth', 'owner_uuid'];
 
@@ -28,7 +28,8 @@ async function minecraftSession(operation) {
 
 async function minecraftCommand(action) {
   try {
-    const receipt = await api('POST', '/activity/minecraft/command', {action, params: {}, command_id: crypto.randomUUID()});
+    const params = action === 'collect_iron' ? {count: Number(document.getElementById('mc-collect-count').value), radius: Number(document.getElementById('mc-collect-radius').value)} : {};
+    const receipt = await api('POST', '/activity/minecraft/command', {action, params, command_id: crypto.randomUUID()});
     document.getElementById('minecraft-result').textContent = `动作 ${action}：${receipt.status}`;
     await loadMinecraftPage();
   } catch (error) { toast(`动作提交失败：${error.message || error}`, 'err'); }

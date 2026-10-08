@@ -935,6 +935,7 @@ minecraft:
   owner_uuid: ''
   allow_pickup: false
   allow_defend: false
+  allow_mining: false           # 可见铁矿：最多8个/8格/120秒，不跨重启续做
   model_enabled: true
   model_calls_per_session: 120
   model_cooldown_seconds: 10

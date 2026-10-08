@@ -1,6 +1,7 @@
 import { randomUUID, createHash } from 'node:crypto';
+import { visibleIron, startCollect, stepCollect } from './collect.mjs';
 
-const ACTIONS = new Set(['stop', 'follow', 'return', 'pickup', 'defend', 'say']);
+const ACTIONS = new Set(['stop', 'follow', 'return', 'pickup', 'defend', 'say', 'collect_iron']);
 const HOSTILES = new Set(['zombie', 'husk', 'drowned', 'skeleton', 'stray', 'spider', 'cave_spider', 'silverfish', 'endermite']);
 const ID = /^[a-zA-Z0-9_-]{1,64}$/;
 const UUID = /^[0-9a-f-]{32,36}$/i;
@@ -35,7 +36,13 @@ export class Body {
       bot.on('kicked', () => { if (live()) this.error = 'server_kicked'; });
       bot.on('death', () => { if (live()) this.halt('bot_died'); });
       bot.on('pk_path_failed', () => { if (live()) this.halt('path_unavailable'); });
+      bot.on('itemDrop', entity => {
+        const s = this.current?.collect;
+        if (!live() || !s || !s.changed || s.existingItems.has(String(entity.id)) || s.eligibleItems.size >= 16) return;
+        if (entity.getDroppedItem?.()?.name === 'raw_iron' && entity.position.distanceTo(s.targets[s.index]) <= 2) s.eligibleItems.add(entity.id);
+      });
       bot.on('playerCollect', (collector, collected) => {
+        if (live() && collector === bot.entity && this.current?.collect?.eligibleItems.has(collected.id)) this.current.collect.pickupSeen = true;
         if (!live() || collector !== bot.entity || this.current?.action !== 'pickup' || this.current.params.entity_id !== collected.id) return;
         const id = this.current.command_id; this.halt('collected');
         Object.assign(this.receipts.get(id), { status: 'succeeded', error: null });
@@ -75,17 +82,19 @@ export class Body {
         inventory: (bot.inventory?.items() || []).slice(0, 36).map(i => ({ name: i.name, count: i.count })),
         threats: Object.values(bot.entities || {}).filter(e => HOSTILES.has(e.name) && bot.entity?.position && e.position.distanceTo(bot.entity.position) < 12).slice(0, 8).map(e => ({ id: e.id, name: e.name })),
         dropped_items: Object.values(bot.entities || {}).filter(e => ['item', 'Item'].includes(e.name) && bot.entity?.position && e.position.distanceTo(bot.entity.position) <= 8).slice(0, 8).map(e => ({ entity_id: e.id })),
+        visible_iron: visibleIron(bot).map(b => ({x: b.position.x, y: b.position.y, z: b.position.z})),
         terrain: 'local_loaded_only'
       } : null,
-      current: this.current ? { command_id: this.current.command_id, action: this.current.action } : null,
+      current: this.current ? { command_id: this.current.command_id, action: this.current.action,
+        stage: this.current.collect?.stage, collected: this.current.collect?.collected } : null,
       receipts: [...this.receipts.values()].slice(-30).map(({ digest, ...r }) => r),
       event_seq: this.sequence
     };
   }
   halt(reason = 'canceled') {
     const bot = this.bot;
-    if (bot) { bot.pvp?.stop(); bot.pathfinder?.setGoal(null); bot.clearControlStates?.(); }
-    if (this.current) this.finish(this.current.command_id, 'canceled', reason);
+    if (bot) { bot.stopDigging?.(); bot.pvp?.stop(); bot.pathfinder?.setGoal(null); bot.clearControlStates?.(); }
+    if (this.current) this.finish(this.current.command_id, this.current.collect?.changed ? 'outcome_unknown' : 'canceled', reason);
   }
   finish(id, status, error = null) {
     const r = this.receipts.get(id); if (!r || r.status !== 'running') return;
@@ -100,7 +109,8 @@ export class Body {
     strict(input, ['session_id', 'connection_epoch', 'command_id', 'action', 'expires_at', 'params']);
     this.check(input);
     if (!ID.test(input.command_id || '') || !ACTIONS.has(input.action) || !Number.isFinite(input.expires_at) || input.expires_at <= this.now() || input.expires_at > this.now() + 120000) throw new Fault('invalid_command', 422);
-    const p = input.params || {}; strict(p, input.action === 'say' ? ['text'] : input.action === 'pickup' ? ['entity_id'] : []);
+    const p = input.params || {}; strict(p, input.action === 'say' ? ['text'] : input.action === 'pickup' ? ['entity_id'] : input.action === 'collect_iron' ? ['count', 'radius'] : []);
+    if (input.action === 'collect_iron' && (!Number.isInteger(p.count) || p.count < 1 || p.count > 8 || !Number.isInteger(p.radius) || p.radius < 1 || p.radius > 8)) throw new Fault('invalid_collection', 422);
     if (input.action === 'say' && (typeof p.text !== 'string' || !p.text.trim() || p.text.length > 240 || /[\r\n\u0000-\u001f]/.test(p.text) || p.text.trimStart().startsWith('/'))) throw new Fault('invalid_chat', 422);
     if (input.action === 'pickup' && !Number.isInteger(p.entity_id)) throw new Fault('invalid_pickup', 422);
     const digest = createHash('sha256').update(JSON.stringify({ action: input.action, params: p })).digest('hex');
@@ -129,6 +139,9 @@ export class Body {
     if (bot.health <= 8) throw new Fault('low_health');
     if (command.action === 'follow') bot.pathfinder.setGoal(bot.pkGoals.follow(owner, 3), true);
     if (command.action === 'return') bot.pathfinder.setGoal(bot.pkGoals.near(owner.position, 2));
+    if (command.action === 'collect_iron') {
+      try { startCollect(this, command); } catch (e) { throw new Fault(['no_visible_iron', 'pickaxe_unavailable'].includes(e.message) ? e.message : 'collection_unavailable'); }
+    }
     if (command.action === 'pickup') {
       const entity = bot.entities[command.params.entity_id];
       if (!entity || !['item', 'Item'].includes(entity.name) || entity.position.distanceTo(bot.entity.position) > 8 || bot.inventory.emptySlotCount() <= 0) throw new Fault('pickup_unavailable');
@@ -143,6 +156,7 @@ export class Body {
     if (this.now() >= c.expires_at || !owner || !bot.entity || owner.position.distanceTo(bot.entity.position) > 32 || bot.health <= 8) return this.halt(this.now() >= c.expires_at ? 'command_expired' : 'unsafe_or_owner_lost');
     if (c.action === 'return' && owner.position.distanceTo(bot.entity.position) <= 2.5) { this.halt('arrived'); const r = this.receipts.get(c.command_id); r.status = 'succeeded'; r.error = null; }
     if (c.action === 'pickup' && !bot.entities[c.params.entity_id]) { this.halt('item_disappeared'); const r = this.receipts.get(c.command_id); r.status = 'outcome_unknown'; }
+    if (c.action === 'collect_iron') stepCollect(this, c);
     if (c.action === 'defend') {
       const target = Object.values(bot.entities).find(e => HOSTILES.has(e.name) && e.position.distanceTo(owner.position) <= 6 && e.position.distanceTo(bot.entity.position) <= 6);
       if (target && bot.pvp.target !== target) bot.pvp.attack(target);

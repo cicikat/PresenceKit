@@ -37,6 +37,7 @@ docker compose -f integrations/minecraft/compose.yaml ps
 - `GET /v1/events?after=N`：仅已绑定 owner UUID 的聊天，内存最多 100 条，每次最多 20 条。
 
 动作白名单 stop/follow/return/pickup/defend/say；有效期最多 120 秒，
+另有默认关闭的 collect_iron（count/radius 均为1–8整数）。其阶段为装备、接近、挖掘、拾取核对、返回；只采当前可见铁矿，要求石镐或更高级非金镐、足够耐久、无附近威胁，不移除脚下或头顶支撑、不接近水/岩浆/砂砾。回执数量以实际背包增量核对，挖掘开始后中断为 outcome_unknown，不重放。它是会话内短任务，不持久续做；跨重启采集需另行 Agent Runtime capability。
 同 id 同参数返回原回执、不同参数拒绝。单动作运行；stop 可抢占。
 每连接最多 256 命令，达上限需显式重新开会话，不自动驱逐去重凭据。
 回执包括 running/succeeded/failed/canceled/outcome_unknown；say 成功只表示提交给游戏连接，
@@ -64,6 +65,7 @@ Microsoft 登录、独立 Bot 账号、玩家皮肤可见效果分别记录，�
 `GET/PUT /settings/minecraft` 需要 admin；保存配置变化先撤销旧会话，再原子落盘并热加载。
 `GET /observability/minecraft` 需要 state.read，只返回连接/动作回执、快照年龄、预算和错误码，
 不返回游戏坐标、聊天、账号和凭据。
+附加 `?session_id=<32位会话ID>` 可读取当前 owner/角色的已保存会话元数据、最后回执与关闭原因，不包含活动聊天。
 `/activity/minecraft/start|close|command|chat|state` 需要 activity scope；owner 和当前角色
 由后端解析，不接受客户端提供 uid、char_id 或服务器地址。start 必须启用、配置完整、
 token 文件就位且 startup worker 活着。管理面入口是“Minecraft 共玩”。

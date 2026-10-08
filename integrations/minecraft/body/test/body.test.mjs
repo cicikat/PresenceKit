@@ -49,3 +49,38 @@ test('HTTP rejects unauthenticated mutation and caps request size', async () => 
     assert.equal((await fetch(url + '/health')).status, 200);
   } finally { server.closeAllConnections(); await new Promise(r => server.close(r)); }
 });
+
+test('collection requires explicit bounded params and visible ore, never hidden mining', async () => {
+  const f = fixture(); await f.connect();
+  assert.throws(() => f.body.submit(f.command('oversized', 'collect_iron', {count: 9, radius: 4})), /invalid_collection/);
+  assert.equal(f.body.submit(f.command('empty', 'collect_iron', {count: 1, radius: 4})).error, 'no_visible_iron');
+});
+
+test('collection verifies inventory and return; stop invalidates pending digging', async () => {
+  const f = fixture(); await f.connect();
+  const vec = {x: 1, y: 64, z: 1, clone() {return this;}, offset() {return {neighbor:true};}, distanceTo() {return 1;}};
+  const pick = {name:'stone_pickaxe',maxDurability:131,durabilityUsed:0,count:1};
+  let mined = false, gained = 0;
+  Object.assign(f.bot, {game:{dimension:'overworld'}, entity:{position:vec}, heldItem:pick,
+    findBlocks:()=>[vec], canSeeBlock:()=>true, canDigBlock:()=>true,
+    blockAt:p=>({name:p.neighbor?'air':mined?'air':'iron_ore',position:vec}),
+    equip:async()=>{}, dig:async()=>{mined=true;}, stopDigging:()=>{},
+    inventory:{items:()=>[pick,{name:'raw_iron',count:gained}],emptySlotCount:()=>4}});
+  f.body.submit(f.command('mine', 'collect_iron', {count:1,radius:4}));
+  await new Promise(r=>setImmediate(r));
+  f.body.tick(); await new Promise(r=>setImmediate(r));
+  assert.equal(f.body.current.collect.stage,'pickup');
+  gained=1; f.body.tick();
+  assert.equal(f.body.current.collect.stage,'pickup'); // Inventory alone cannot prove this task collected it.
+  const dropped = {id:101,position:vec,getDroppedItem:()=>({name:'raw_iron'})};
+  f.bot.emit('itemDrop',dropped); f.bot.emit('playerCollect',f.bot.entity,dropped);
+  f.body.tick(); f.body.tick(); f.body.tick();
+  assert.equal(f.body.receipts.get('mine').status,'succeeded');
+  assert.equal(f.body.receipts.get('mine').collected,1);
+  mined=false; let release; f.bot.dig=()=>new Promise(r=>{release=r;});
+  f.body.submit(f.command('pending', 'collect_iron', {count:1,radius:4}));
+  await new Promise(r=>setImmediate(r)); f.body.tick(); await new Promise(r=>setImmediate(r));
+  f.body.submit(f.command('cancel', 'stop')); release(); await new Promise(r=>setImmediate(r));
+  assert.equal(f.body.current,null); assert.equal(f.bot.goal,null);
+  assert.equal(f.body.receipts.get('pending').status,'outcome_unknown');
+});

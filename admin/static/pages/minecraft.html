@@ -21,6 +21,7 @@
   <label class="checkbox-row"><input type="checkbox" id="mc-model_enabled">角色参与游戏聊天和高层决策（默认开启）</label>
   <label class="checkbox-row"><input type="checkbox" id="mc-allow_pickup">允许指定物品拾取（默认关闭）</label>
   <label class="checkbox-row"><input type="checkbox" id="mc-allow_defend">允许近距离敌对生物防守（默认关闭）</label>
+  <label class="checkbox-row"><input type="checkbox" id="mc-allow_mining">允许可见铁矿采集（默认关闭；最多 8 个、8 格、120 秒，不跨重启继续）</label>
   <div class="form-row">
     <label class="field"><span>每会话模型调用上限（默认 120）</span><input id="mc-model_calls_per_session" type="number" min="1" max="500"></label>
     <label class="field"><span>模型调用最小间隔（秒，默认 10）</span><input id="mc-model_cooldown_seconds" type="number" min="5" max="120"></label>
@@ -36,6 +37,11 @@
     <button class="btn btn-ghost" data-action="minecraftCommand" data-action-args='["follow"]'>跟随你</button>
     <button class="btn btn-ghost" data-action="minecraftCommand" data-action-args='["return"]'>回到你附近</button>
     <button class="btn btn-ghost" data-action="minecraftCommand" data-action-args='["defend"]'>附近防守</button>
+  </div>
+  <div class="form-row">
+    <label class="field"><span>采铁数量（1–8）</span><input id="mc-collect-count" type="number" min="1" max="8" value="1"></label>
+    <label class="field"><span>采铁半径（1–8 格）</span><input id="mc-collect-radius" type="number" min="1" max="8" value="4"></label>
+    <button class="btn btn-ghost" data-action="minecraftCommand" data-action-args='["collect_iron"]'>采集附近可见铁矿并返回</button>
   </div>
   <label class="field"><span>活动内聊天（仅游戏会话，不写普通聊天历史）</span><input id="mc-chat" maxlength="500"></label>
   <button class="btn btn-ghost" data-action="minecraftChat">发送</button>
