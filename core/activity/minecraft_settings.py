@@ -6,7 +6,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class MinecraftSettings(BaseModel):
@@ -24,6 +24,14 @@ class MinecraftSettings(BaseModel):
     model_enabled: bool = True
     model_calls_per_session: int = Field(default=120, ge=1, le=500)
     model_cooldown_seconds: int = Field(default=10, ge=5, le=120)
+
+    @model_validator(mode="after")
+    def offline_player_name(self):
+        if self.auth == "offline" and self.username and (
+            len(self.username) > 16 or not all(c.isascii() and (c.isalnum() or c == "_") for c in self.username)
+        ):
+            raise ValueError("offline username must contain 1-16 ASCII letters, digits or underscores")
+        return self
 
     @field_validator("bridge_url")
     @classmethod

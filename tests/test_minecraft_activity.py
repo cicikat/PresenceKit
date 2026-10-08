@@ -148,6 +148,14 @@ def test_plan_rejects_arbitrary_action_and_authority():
         Plan(reply="ok", action="follow", params={"host": "bad"})
 
 
+def test_offline_name_rejects_invalid_java_login_packet():
+    from core.activity.minecraft_settings import MinecraftSettings
+    for name in ("a" * 17, "invalid name", "角色"):
+        with pytest.raises(ValidationError):
+            MinecraftSettings(auth="offline", username=name)
+    assert MinecraftSettings(auth="offline", username="PresenceTest").username == "PresenceTest"
+
+
 def test_http_scopes_reject_mutation_before_bridge_or_storage(runtime, monkeypatch):
     from fastapi import FastAPI
     from fastapi.testclient import TestClient

@@ -19,6 +19,7 @@ export class Body {
   }
   async connect(input) {
     strict(input, ['session_id', 'host', 'port', 'version', 'username', 'auth', 'owner_uuid']);
+    if (input.auth === 'offline' && !/^[A-Za-z0-9_]{1,16}$/.test(input.username || '')) throw new Fault('invalid_connection', 422);
     if (!ID.test(input.session_id || '') || typeof input.host !== 'string' || !input.host || input.host.length > 253 || !Number.isInteger(input.port) || input.port < 1 || input.port > 65535 || typeof input.version !== 'string' || !/^[0-9.]{3,20}$/.test(input.version) || typeof input.username !== 'string' || !input.username || input.username.length > 128 || !['offline', 'microsoft'].includes(input.auth) || !UUID.test(input.owner_uuid || '')) throw new Fault('invalid_connection', 422);
     if (this.binding) throw new Fault('body_already_bound');
     this.epoch = randomUUID(); this.receipts.clear(); this.events = [];
