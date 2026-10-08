@@ -1119,3 +1119,6 @@ and admin browser inspection do not constitute production migration evidence.
 
 
 271：管理面新增「消息分发与客户端设置」，集中客户端开关、QQ/微信连接与手机唤醒。`GET/PUT /settings/clients`（admin）热更新桌面/手机入口与投递开关，缺省开启，关闭不删除队列；QQ 连接需重启。不改变客户端协议；真实设备投递验收仍为 observe。详见 [客户端分发设置](client-distribution-settings.md)。
+
+<!-- qzone-272-interface -->
+272 B current：QQ 空间工具为后端独立 OneBot-QZone REST，管理入口在消息分发与客户端设置的 QQ 卡片，接口见 [qzone-integration.md](qzone-integration.md)。owner 私聊可调用，不修改 desktop/mobile 消息、设置或 ack 合同。observe：真实写入/图片及事件订阅未验收；本轮只读登录与说说查询，不宣称写侧已实测。

@@ -51,7 +51,7 @@ async function loadClientSettings() {
     document.getElementById('client-state').textContent =
       `电脑：${clients.clients.desktop.effective_state} · 手机：${clients.clients.mobile.effective_state} · 微信：${_clientFlags.wechat?.effective_state} · QQ：${clients.standalone_mode ? 'standalone 模式阻止启动' : '开关及连接重启后生效'}`;
     document.getElementById('client-address').textContent = `当前管理面地址：${location.origin}（客户端使用可达地址；服务监听端口 ${clients.admin_port}，修改 config.yaml 的 admin.port 后重启）`;
-    await Promise.all([loadClientWechatSettings(), loadRelaySettings()]);
+    await Promise.all([loadClientWechatSettings(), loadRelaySettings(), loadQzoneSettings()]);
   } catch (error) {
     document.getElementById('client-state').textContent = error.message;
   }
@@ -77,5 +77,61 @@ async function saveClientConnection() {
     });
     toast(result.restart_required ? '已保存，重启后端后生效' : '已保存', 'ok');
     await loadClientSettings();
+  } catch (error) { toast(error.message, 'err'); }
+}
+
+async function loadQzoneSettings() {
+  const root = document.getElementById('qzone-state');
+  if (!root) return;
+  try {
+    const s = await api('GET', '/settings/qzone');
+    document.getElementById('qzone-enabled').checked = s.enabled;
+    document.getElementById('qzone-write-enabled').checked = s.write_enabled;
+    document.getElementById('qzone-base-url').value = s.base_url;
+    document.getElementById('qzone-account').value = s.account_id;
+    document.getElementById('qzone-characters').value = s.allowed_char_ids.join(', ');
+    document.getElementById('qzone-token').value = '';
+    root.textContent = `状态：${s.effective_state} · Token：${s.credential_configured ? '已配置' : '未配置'} · 调用 ${s.calls} / 失败 ${s.failures}`;
+  } catch (error) { root.textContent = error.message; }
+}
+
+async function saveQzoneSettings() {
+  try {
+    await api('PUT', '/settings/qzone', {
+      enabled: document.getElementById('qzone-enabled').checked,
+      write_enabled: document.getElementById('qzone-write-enabled').checked,
+      base_url: document.getElementById('qzone-base-url').value.trim(),
+      access_token: document.getElementById('qzone-token').value.trim(),
+      account_id: document.getElementById('qzone-account').value.trim(),
+      allowed_char_ids: document.getElementById('qzone-characters').value.split(/[,，]/).map(v => v.trim()).filter(Boolean),
+    });
+    toast('空间设置已保存并热生效', 'ok');
+    await loadQzoneSettings();
+  } catch (error) { toast(error.message, 'err'); }
+}
+
+async function probeQzone() {
+  try {
+    const result = await api('POST', '/settings/qzone/probe', {});
+    toast(result.code, result.ok ? 'ok' : 'err');
+    await loadQzoneSettings();
+  } catch (error) { toast(error.message, 'err'); }
+}
+
+async function loginQzoneCookie() {
+  const input = document.getElementById('qzone-cookie');
+  try {
+    const result = await api('POST', '/settings/qzone/login-cookie', {cookie: input.value});
+    toast(result.code, result.ok ? 'ok' : 'err');
+    await loadQzoneSettings();
+  } catch (error) { toast(error.message, 'err'); }
+  finally { input.value = ''; }
+}
+
+async function syncQzoneNapcatCookie() {
+  try {
+    const result = await api('POST', '/settings/qzone/sync-napcat-cookie', {});
+    toast(result.code, result.ok ? 'ok' : 'err');
+    await loadQzoneSettings();
   } catch (error) { toast(error.message, 'err'); }
 }

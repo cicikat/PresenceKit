@@ -9,9 +9,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
-# ``info`` used to hold the tools that now live in self/schedule/life. Existing
+# ``info`` used to hold the tools that now live in self/schedule/life/qzone. Existing
 # authored whitelists that only name ``info`` keep seeing them.
-_LEGACY_CATEGORY_EXPANSION = {"info": ("self", "schedule", "life")}
+_LEGACY_CATEGORY_EXPANSION = {"info": ("self", "schedule", "life", "qzone")}
 
 _DEFAULTS = {
     "path_a": {"categories": ["info", "self", "schedule", "life", "desktop"], "tools": None, "exclude_tools": []},

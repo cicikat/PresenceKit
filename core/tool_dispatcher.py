@@ -2259,6 +2259,8 @@ from core.tools.character_self import register_tools as _register_self_tools
 _register_self_tools(_TOOL_REGISTRY)
 from core.tools.reminder_tools import register_tools as _register_reminder_tools
 _register_reminder_tools(_TOOL_REGISTRY)
+from core.tools.qzone_tools import register_tools as _register_qzone_tools, _QZONE_TOOL_NAMES
+_register_qzone_tools(_TOOL_REGISTRY)
 from core.listening_tools import register_tools as _register_listening_tools
 _register_listening_tools(_TOOL_REGISTRY)
 
@@ -2336,6 +2338,16 @@ def _is_tool_enabled(tool_name: str) -> bool:
     """检查 config.yaml tools 配置中工具是否启用（默认启用）。
     优先查 tools.<tool_name>.enabled，再回退到旧的 group 键。
     """
+    if tool_name in _QZONE_TOOL_NAMES:
+        from core.qzone_service import settings as qzone_settings
+        try:
+            cfg = qzone_settings()
+            if not cfg.enabled or not cfg.account_id or not cfg.allowed_char_ids:
+                return False
+            if _TOOL_REGISTRY[tool_name].get("effect") == "write" and not cfg.write_enabled:
+                return False
+        except (ValueError, TypeError):
+            return False
     if tool_name == "start_agent_task":
         from core.agent_runtime.agent_tasks import capability_snapshot
         state = capability_snapshot()
@@ -2439,6 +2451,10 @@ def get_tools_schema(
     char_name = get_active_char_name()
     schemas = []
     for name, info in _TOOL_REGISTRY.items():
+        if name in _QZONE_TOOL_NAMES:
+            from core.qzone_service import allowed
+            if not allowed(uid, char_id, write=info.get("effect") == "write"):
+                continue
         if name == "invite_video_call" and char_id is not None:
             settings = get_config().get("tools", {}).get(name) or {}
             allowed = settings.get("allowed_char_ids") or [] if isinstance(settings, dict) else []
@@ -2891,6 +2907,16 @@ async def _execute_structured_impl(
         ):
             return _execution_outcome("tool_failed", "补写日记仅允许在用户私聊请求中执行。")
 
+    if tool_name in _QZONE_TOOL_NAMES:
+        from core.qzone_service import allowed
+        if any(key in tool_args for key in ("user_id", "uid", "char_id", "owner", "realm")):
+            _trace("failed", "grant_principal_mismatch")
+            return _execution_outcome("tool_failed", "grant_principal_mismatch")
+        if (is_group or origin not in {"user_live", "assistant_loop", "assistant_loop_relay"}
+                or not allowed(user_id, char_id, write=_TOOL_REGISTRY[tool_name].get("effect") == "write")):
+            _trace("failed", "qzone_not_authorized")
+            return _execution_outcome("tool_failed", "QQ 空间未授权给当前会话/角色。")
+
     async def _notify_status(kind: str, *, attempt: int = 1) -> None:
         """UI-only hook; it runs after dispatcher gates and never affects execution."""
         if tool_status_observer is None:
@@ -3134,6 +3160,7 @@ async def _execute_structured_impl(
             "list_reminders", "get_reminder", "add_reminder",
             "update_reminder", "cancel_reminder", "restore_reminder",
             "start_agent_task", "get_agent_task", "cancel_agent_task",
+            *_QZONE_TOOL_NAMES,
         }:
             for key in ("user_id", "uid", "char_id", "owner", "realm"):
                 if key in tool_args:
@@ -3182,6 +3209,10 @@ async def _execute_structured_impl(
         safe_summary = tool_result.safe_summary
         _trace_truncated = bool((tool_result.meta or {}).get("truncated"))
         _trace_failure_reason = str((tool_result.meta or {}).get("failure_reason") or "")[:128]
+        if tool_name in _QZONE_TOOL_NAMES and tool_result.meta.get("validity") != "current_turn":
+            status = "outcome_unknown" if tool_result.meta.get("validity") == "outcome_unknown" else "tool_failed"
+            _trace("failed", safe_summary)
+            return _execution_outcome(status, safe_summary)
         logger.info(
             "[tool_dispatcher] 工具执行完成: tool=%s result_len=%d safe_len=%d",
             tool_name,

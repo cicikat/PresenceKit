@@ -908,3 +908,6 @@ schema 兼容修复。实现与定向回归见 [tool-discovery.md](tool-discover
 # 工单 M2 遗留：聊天产物历史卡片
 
 `open`：后端已持久化 artifacts 元数据并由 `GET /chat-log/{date}` 返回，手机刷新历史后卡片仍在；桌面端历史回放（`ChatPanel.tsx` chat-log 初始化/loadMore）尚未读取 entry 的 `artifacts`，桌面刷新后卡片仍会消失（live 路径正常）。手机原生 pending 队列（后台收信）也尚未携带 artifacts，回前台刷新历史后出现。
+
+<!-- qzone-272-observe -->
+QQ 空间 272 B（observe）：独立 Docker 桥登录网络探针、只读说说与管理面隔离浏览器交互已通过；真实发帖/评论/点赞/删除及真实模型 self 提醒执行未实测。当前长运行后端仍需首次正常重启加载新增模块，设置本身后续热生效。详见 [qzone-integration.md](qzone-integration.md) 和 [272 工单](../cc-tasks/272-qzone-and-reminder-target.md)。

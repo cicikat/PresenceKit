@@ -1036,3 +1036,6 @@ confidence 是估计的可信度而非强度）、`recall.semantic_min_similarit
 
 
 271：管理面新增「消息分发与客户端设置」，集中客户端开关、QQ/微信连接与手机唤醒。`GET/PUT /settings/clients`（admin）热更新桌面/手机入口与投递开关，缺省开启，关闭不删除队列；QQ 连接需重启。不改变客户端协议；真实设备投递验收仍为 observe。详见 [客户端分发设置](client-distribution-settings.md)。
+
+<!-- qzone-272-control-surface -->
+QQ 空间控制：消息分发与客户端设置 → QQ 空间卡片，`GET/PUT /settings/qzone`（admin）热更新启用、写操作、桥地址、write-only Token、预期账号与角色白名单；默认关，关闭只停止空间能力。`POST /settings/qzone/probe` 只读验登录，`login-cookie` / `sync-napcat-cookie` 更新桥登录；`GET /observability/qzone`（state.read）返回脱敏进程计数与最后状态。没有新增桌面/手机设置；见 [qzone-integration.md](qzone-integration.md)。

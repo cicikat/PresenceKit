@@ -2,6 +2,14 @@
 # +注释被写回剥离属正常现象，不是文件损坏；字段含义请查本文件（config.example.yaml）。
 # 两文件键集合由 scripts/gen_config_example.py 保持同步，改动配置项时记得重跑该脚本核对。
 
+qzone:
+  enabled: false
+  write_enabled: false
+  base_url: http://127.0.0.1:5700
+  access_token: ""                 # local only; 管理面写入，不回显
+  account_id: ""                   # 预期 NapCat/空间登录账号
+  allowed_char_ids: []             # 空列表不授权任何角色
+
 # ── 多模型 Preset 系统（必填，见 docs/model-presets.md）──────────────────────
 # 扁平 llm: 合成已退出；缺少本块时路由 fail-loud，请按此结构配置。
 model_presets:

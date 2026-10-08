@@ -24,7 +24,7 @@ def test_path_a_is_channel_neutral_and_can_use_explicit_tool_allowlist(monkeypat
     )
 
     exposure = tool_exposure.resolve("path_a")
-    assert exposure.categories == ("info", "fs", "self", "schedule", "life")
+    assert exposure.categories == ("info", "fs", "self", "schedule", "life", "qzone")
     assert exposure.tools == frozenset({"get_time", "fs_list"})
     assert [item["function"]["name"] for item in tool_exposure.filter_schemas(
         [_schema("get_time"), _schema("fs_list"), _schema("weather")], exposure,
@@ -77,7 +77,7 @@ def test_legacy_info_whitelist_expands_to_split_categories(monkeypatch):
         lambda _char_id: SimpleNamespace(presence_ext={"tool_categories": ["info", "life"]}),
     )
     exposure = tool_exposure.resolve("path_c", char_id="char")
-    assert exposure.categories == ("info", "life", "self", "schedule")
+    assert exposure.categories == ("info", "life", "self", "schedule", "qzone")
 
     monkeypatch.setattr(
         "core.character_loader.load",
@@ -92,5 +92,5 @@ def test_expand_legacy_categories_for_caller_allowlist():
     from core.tool_exposure import expand_legacy_categories
 
     assert set(expand_legacy_categories(frozenset({"info", "memory"}))) == {
-        "info", "memory", "self", "schedule", "life",
+        "info", "memory", "self", "schedule", "life", "qzone",
     }
