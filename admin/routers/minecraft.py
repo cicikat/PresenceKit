@@ -25,6 +25,7 @@ def service():
 
 
 def view():
+    from core.activity.minecraft_routing import route_view
     cfg = settings(get_config())
     try:
         observed = get_service().observation()
@@ -32,7 +33,37 @@ def view():
         observed = {"worker_alive": False, "active": False, "connection_state": "unavailable"}
     return {"configured": cfg.model_dump(), "effective_state": readiness(cfg) if observed["worker_alive"] else "worker_offline",
             "apply_mode": "hot_reload", "runtime": observed,
-            "defaults": MinecraftSettings().model_dump()}
+            "defaults": MinecraftSettings().model_dump(), "routing": route_view()}
+
+
+class ReactionRouting(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    profile: str = Field(min_length=1, max_length=128)
+    preset: str = Field(max_length=128)
+
+
+@control_router.put("/settings/minecraft/routing")
+async def set_reaction_routing(body: ReactionRouting, auth=Depends(require_scopes("admin"))):
+    from core.activity.minecraft_routing import route_view
+    current = route_view()
+    if body.profile != current["profile"]:
+        raise HTTPException(409, detail="routing_profile_changed_refresh_required")
+    full = read_config_file(CONFIG_FILE)
+    mp = full.get("model_presets", {})
+    if body.profile not in mp.get("routing_profiles", {}) or body.preset and body.preset not in mp.get("presets", {}):
+        raise HTTPException(422, detail="unknown_model_route")
+    await service().close("routing_changed")
+    route = mp["routing_profiles"][body.profile]
+    if body.preset:
+        route["minecraft_reaction"] = body.preset
+    else:
+        route.pop("minecraft_reaction", None)
+    write_config_file(CONFIG_FILE, full)
+    from core.config_loader import reload_config
+    from core import llm_client
+    reload_config()
+    await llm_client.reload_client()
+    return route_view()
 
 
 @control_router.get("/settings/minecraft")
@@ -100,7 +131,7 @@ async def state(auth=Depends(require_scopes("activity"))):
 
 class Command(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
-    action: Literal["follow", "stop", "return", "pickup", "defend", "collect_iron"]
+    action: Literal["follow", "stop", "return", "pickup", "defend", "collect_iron", "approach", "accompany", "protect"]
     params: dict = Field(default_factory=dict)
     command_id: str = Field(pattern=r"^[A-Za-z0-9_-]{1,64}$")
 

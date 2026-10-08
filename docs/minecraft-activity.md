@@ -1,5 +1,13 @@
 # Minecraft Activity 与 Docker 身体
 
+## 275：陪伴与快速判断
+
+`approach` 接近后停下，`accompany` 在用户授权会话内持续陪伴，`protect` 跟随并近距离保护，武器/耐久不足拒绝战斗。陪伴和保护动作每90秒由会话监督器续租，单次身体指令仍120秒；本地停止/危险后不恢复。切角色、入梦、关闭、配置变化或租约失效立即撤销。普通 follow 仍是单次动作。
+
+快速判断走既有 `minecraft_reaction` 路由，3秒总预算、零SDK重试、并发1、默认关闭；主模型保留当前角色的人设和表达。owner聊天可先判断动作后生成回复，动作无需等待主模型说完；环境判断仅用于已授权陪伴/保护模式及局部状态变化，不能接管采矿或建造、扩大战斗授权。最小间隔默认5秒，每会话默认120次；失败回到本地规则，紧急停车从不等待模型。
+
+模型连接与分工页分配 category；共玩页通过 `PUT /settings/minecraft/routing`（admin）修改同一生效profile，严格校验preset、角色覆盖与profile变化。关闭快层保留原本地规则与主模型角色聊天。观测提供快层次数、延迟、失败和陪伴目标，不暴露账号凭据。
+
 ## 运行边界
 
 PresenceKit Python 后端负责角色与 Activity 会话；`integrations/minecraft/body`

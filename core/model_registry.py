@@ -197,9 +197,9 @@ def _resolve_preset_name(call_category: str, char_id: str | None = None) -> str:
     # the established category -> default_preset -> chat fallback.
     if call_category == "scenario_reconcile":
         name = profile.get("scenario_reconcile") or profile.get("intent") or profile.get("chat") or default_name
-    elif call_category == "ime_judge":
+    elif call_category in {"ime_judge", "minecraft_reaction"}:
         name = (
-            profile.get("ime_judge")
+            profile.get(call_category)
             or profile.get("sensor_judge")
             or profile.get("intent")
             or profile.get("chat")
@@ -264,8 +264,8 @@ def resolve_category_info(
     profile = profiles.get(active) or (next(iter(profiles.values())) if profiles else {})
     if call_category == "scenario_reconcile":
         candidates = (("scenario_reconcile", "category"), ("intent", "intent_fallback"), ("chat", "chat_fallback"))
-    elif call_category == "ime_judge":
-        candidates = (("ime_judge", "category"), ("sensor_judge", "sensor_fallback"), ("intent", "intent_fallback"), ("chat", "chat_fallback"))
+    elif call_category in {"ime_judge", "minecraft_reaction"}:
+        candidates = ((call_category, "category"), ("sensor_judge", "sensor_fallback"), ("intent", "intent_fallback"), ("chat", "chat_fallback"))
     elif call_category == "sensor_judge":
         candidates = (("sensor_judge", "category"), ("intent", "intent_fallback"), ("chat", "chat_fallback"))
     else:
@@ -280,7 +280,7 @@ def resolve_category_info(
             break
         if (
             key == call_category
-            and call_category not in ("scenario_reconcile", "ime_judge", "sensor_judge")
+            and call_category not in ("scenario_reconcile", "ime_judge", "sensor_judge", "minecraft_reaction")
             and default_name
         ):
             preset_name = default_name
@@ -604,6 +604,9 @@ def get_model_client(
         policy: dict[str, float | int] | None = dict(_FAILOVER_POLICY)
         from core.llm_failover import category_timeout
         policy["timeout_s"] = category_timeout(call_category)
+    elif call_category == "minecraft_reaction":
+        policy_name = "minecraft_reaction"
+        policy = {"timeout_s": 3, "max_retries": 0}
     elif call_category == "food_extract":
         policy_name = "food_extract"
         policy = {"timeout_s": 20, "max_retries": 0}

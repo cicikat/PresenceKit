@@ -36,7 +36,8 @@ from admin.config_control import read_config_file, write_config_file
 from core.config_loader import get_config
 
 router = APIRouter()
-CONFIG_FILE = Path("config.yaml")
+from core.config_loader import get_config_path
+CONFIG_FILE = get_config_path()
 logger = logging.getLogger(__name__)
 
 
@@ -813,6 +814,7 @@ async def get_model_presets(auth=Depends(require_scopes("admin"))):
             ),
             "rpg_kp": resolve_category_info("rpg_kp", profile_name=profile_name),
             "food_extract": resolve_category_info("food_extract", profile_name=profile_name),
+            "minecraft_reaction": resolve_category_info("minecraft_reaction", profile_name=profile_name),
             "sensor_judge": resolve_category_info(
                 "sensor_judge", profile_name=profile_name
             ),
@@ -983,6 +985,7 @@ async def list_routing_profiles(auth=Depends(require_scopes("persona"))):
                     "event_edge_proposer": resolve_category_info("event_edge_proposer", profile_name=name),
                     "rpg_kp": resolve_category_info("rpg_kp", profile_name=name),
                     "food_extract": resolve_category_info("food_extract", profile_name=name),
+                    "minecraft_reaction": resolve_category_info("minecraft_reaction", profile_name=name),
                     "sensor_judge": resolve_category_info("sensor_judge", profile_name=name),
                     "monologue": resolve_category_info("monologue", profile_name=name),
                 },

@@ -85,3 +85,19 @@ test('collection verifies inventory and return; stop invalidates pending digging
   assert.equal(f.body.current,null); assert.equal(f.bot.goal,null);
   assert.equal(f.body.receipts.get('pending').status,'outcome_unknown');
 });
+
+test('approach finishes near owner; protection follows and cannot chase past its local radius', async () => {
+  const f = fixture(); await f.connect();
+  f.body.submit(f.command('near', 'approach')); f.body.tick();
+  assert.equal(f.body.receipts.get('near').status,'succeeded');
+  f.bot.inventory.items = () => [{name:'stone_sword',maxDurability:131,durabilityUsed:0}];
+  f.bot.equip = async()=>{};
+  f.bot.pvp.attack = target => {f.bot.pvp.target=target;};
+  f.bot.pvp.stop = () => {f.bot.pvp.target=null;};
+  f.body.submit(f.command('protect', 'protect')); await new Promise(r=>setImmediate(r)); f.body.tick();
+  assert.equal(f.bot.goal,'follow');
+  const target={id:42,name:'zombie',position:{distanceTo:()=>2}};
+  f.bot.entities={42:target}; f.body.tick(); assert.equal(f.bot.pvp.target,target);
+  target.position.distanceTo=()=>8; f.body.tick(); assert.equal(f.bot.pvp.target,null); assert.equal(f.bot.goal,'follow');
+  f.body.submit(f.command('stop', 'stop')); assert.equal(f.bot.goal,null);
+});

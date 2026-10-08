@@ -188,6 +188,56 @@ async def test_collection_grant_and_bounds_checked_before_bridge(runtime):
 
 
 @pytest.mark.asyncio
+async def test_fast_judgement_executes_before_slow_persona_and_has_separate_budget(runtime):
+    from core.activity.minecraft_reaction import Decision
+    service, bridge, cfg, _ = runtime
+    cfg["minecraft"]["reaction_enabled"] = True
+    seen = []
+    async def reactor(*args):
+        seen.append("reaction"); return Decision(action="approach")
+    async def planner(*args):
+        seen.append("persona")
+        assert args[-1]["accepted_fast_action"] == "approach"
+        assert any(p == "/v1/commands" and c["action"] == "approach" for p, c in bridge.calls)
+        return Plan(reply="我过来陪你。", action="none")
+    service.reactor = reactor; service.planner = planner
+    await service.start(); result = await service.chat("靠近我")
+    assert seen == ["reaction", "persona"]
+    assert result["receipt"]["status"] == "succeeded"
+    assert service.binding.reaction_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_late_fast_result_cannot_undo_stop_and_never_interrupts_work(runtime):
+    from core.activity.minecraft_reaction import Decision
+    service, bridge, cfg, _ = runtime
+    cfg["minecraft"]["reaction_enabled"] = True
+    entered, release = asyncio.Event(), asyncio.Event()
+    async def reactor(*args):
+        entered.set(); await release.wait(); return Decision(action="follow")
+    service.reactor = reactor
+    await service.start()
+    task = asyncio.create_task(service.react(service.binding, "跟着我"))
+    await entered.wait(); await service.command("stop"); release.set()
+    assert await task is None
+    assert service.reaction_error == "stale_reaction"
+    assert not any(p == "/v1/commands" and c["action"] == "follow" for p, c in bridge.calls)
+    service.binding.last_reaction_at = 0
+    service.snapshot["current"] = {"action": "collect_iron"}
+    assert await service.react(service.binding, "靠近我") is None
+    assert service.binding.reaction_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_route_edit_revokes_old_game_authority(runtime):
+    service, _, cfg, _ = runtime
+    await service.start()
+    cfg["model_presets"] = {"active_routing": "changed"}
+    await service.tick()
+    assert service.binding is None
+
+
+@pytest.mark.asyncio
 async def test_failed_action_never_sends_claimed_model_reply(runtime):
     service, bridge, _, _ = runtime
     original = bridge.request

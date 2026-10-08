@@ -949,8 +949,9 @@ async function saveEventShadowRecallSettings() {
 let _mrData = { presets: {}, routing_profiles: {}, fallback_routes: {}, routing_effective: {}, active_routing: 'default', default_preset: '' };
 let _mrEditingPresetName = null;
 let _mrEditingProfileName = null;
-const MR_CATEGORIES = ['chat', 'intent', 'probe', 'summary', 'detect_emotion', 'consolidation', 'perform', 'monologue', 'sensor_judge', 'ime_judge', 'scenario_reconcile', 'event_edge_proposer', 'rpg_kp', 'food_extract'];
+const MR_CATEGORIES = ['chat', 'intent', 'probe', 'summary', 'detect_emotion', 'consolidation', 'perform', 'monologue', 'sensor_judge', 'ime_judge', 'minecraft_reaction', 'scenario_reconcile', 'event_edge_proposer', 'rpg_kp', 'food_extract'];
 const MR_CATEGORY_DESC = {
+  minecraft_reaction: 'Minecraft 快速动作判断：可选 JEV 或轻量模型预设；3秒总预算、零SDK重试，失败回到本地规则。未分配沿用 sensor_judge → intent → chat。主模型仍负责角色表达。',
   food_extract: '饮食事实抽取：仅处理用户明确评价与实际吃过事件；建议轻量模型，未配置沿用默认模型路由。20秒超时，零 SDK 重试。',
   ime_judge: 'IME 活动和有价值线索判断；可选轻量模型，未配置时沿用 sensor_judge / intent / chat',
   sensor_judge: '后台 sensor 裁决；未配置时沿用 intent / chat。短超时、零 SDK 重试。',
@@ -1358,7 +1359,7 @@ function openProfileModal(name) {
       <label class="field">
         <span>${escapeHtml(cat)} <span class="admin-inline-012">${escapeHtml(MR_CATEGORY_DESC[cat] || '')}</span></span>
         <select id="mr-profile-cat-select-${cat}">
-          <option value="">${t('routing.clear_mapping', '（清除映射：走 default_preset → chat → 第一个 preset）')}</option>
+          <option value="">${cat === 'minecraft_reaction' ? '（清除映射：走 sensor_judge → intent → chat）' : t('routing.clear_mapping', '（清除映射：走 default_preset → chat → 第一个 preset）')}</option>
           ${presetNames.map(p => `<option value="${escapeHtml(p)}" ${existing[cat] === p ? 'selected' : ''}>${escapeHtml(p)}</option>`).join('')}
         </select>
       </label>

@@ -1043,6 +1043,7 @@ QQ 空间控制：消息分发与客户端设置 → QQ 空间卡片，`GET/PUT 
 <!-- qzone-273-control-surface -->
 273：同一卡片新增事件开关（默认关）、关注 QQ（空默认主用户 QQ）、收到回复（默认开，依赖事件总开关）、轮询间隔（默认 120 秒，60–3600）、自主评论/回复/点赞（默认关，依赖写总开关）。关闭回到按需工具，不触发主动机会；首次/换来源只建基线，热更新撤销旧候选。`GET /observability/qzone` 增加活动角色持久事件元数据；管理面显示有效关注、扫描状态、入队与去重。自主工具沿原 autonomy 矩阵显式禁用优先，不开放自主发布/删除。完整边界见 [空间事件](qzone-integration.md#273空间事件--主动机会)。
 <!-- minecraft-274-control-surface -->
+275：Minecraft 共玩增加 `reaction_enabled` 默认false、每会话120次、间隔5秒；同页快速模型选择与模型路由页 `minecraft_reaction` 共用生效profile。接口严格校验预设与profile，不另存游戏模型；修改路由关闭会话。靠近/持续陪伴/跟随保护从管理页显式开启，保护需 `allow_defend`。
 274 D：`allow_mining` 默认 false，管理面热更新并撤销旧会话。`collect_iron` 参数 count/radius 均为 1–8 整数，最多120秒，限定当前会话的可见铁矿；不探索地下、不跨重启恢复。观测提供采集阶段、数量、回执与最近模型延迟，尚需真实采集验收。
 274：管理面“Minecraft 共玩”通过 `GET/PUT /settings/minecraft`（admin）热更新总开关、
 Docker 桥地址、游戏连接、owner UUID、拾取/PVE 权限及模型预算。默认关闭，拾取与防守默认关；

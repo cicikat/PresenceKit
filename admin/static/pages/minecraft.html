@@ -18,6 +18,7 @@
 </div>
 <div class="card">
   <div class="card-header"><h3>游戏能力与模型预算</h3></div>
+  <p>以陪伴为主：接近你、一起走、保护你；采集与建造由你单独授权，不要求硬核生存。</p>
   <label class="checkbox-row"><input type="checkbox" id="mc-model_enabled">角色参与游戏聊天和高层决策（默认开启）</label>
   <label class="checkbox-row"><input type="checkbox" id="mc-allow_pickup">允许指定物品拾取（默认关闭）</label>
   <label class="checkbox-row"><input type="checkbox" id="mc-allow_defend">允许近距离敌对生物防守（默认关闭）</label>
@@ -29,6 +30,16 @@
   <button class="btn btn-primary" data-action="saveMinecraftSettings">保存配置</button>
 </div>
 <div class="card">
+  <div class="card-header"><h3>快速判断模型</h3></div>
+  <p>与“模型连接与分工”页的 minecraft_reaction 共用同一条路由，可选择已接入的 JEV 或小模型预设。主模型负责角色表达；快层只判定动作。3 秒总预算，失败回到本地规则；紧急停车不等待模型。修改路由关闭当前会话，需重新开始。</p>
+  <p id="mc-reaction-route"></p>
+  <label class="field"><span>快速判断预设</span><select id="mc-reaction-preset"></select></label>
+  <button class="btn btn-ghost" data-action="saveMinecraftReactionRoute">保存快速路由</button>
+  <label class="checkbox-row"><input type="checkbox" id="mc-reaction_enabled">开启模型快速判断（默认关闭，需保存配置）</label>
+  <label class="field"><span>快层每会话调用上限（默认120）</span><input type="number" id="mc-reaction_calls_per_session" min="1" max="500"></label>
+  <label class="field"><span>快层最短间隔（秒，默认5）</span><input type="number" id="mc-reaction_cooldown_seconds" min="3" max="60"></label>
+</div>
+<div class="card">
   <div class="card-header"><h3>会话与动作</h3></div>
   <div class="form-row">
     <button class="btn btn-primary" data-action="minecraftSession" data-action-args='["start"]'>开始共玩并连接</button>
@@ -37,6 +48,9 @@
     <button class="btn btn-ghost" data-action="minecraftCommand" data-action-args='["follow"]'>跟随你</button>
     <button class="btn btn-ghost" data-action="minecraftCommand" data-action-args='["return"]'>回到你附近</button>
     <button class="btn btn-ghost" data-action="minecraftCommand" data-action-args='["defend"]'>附近防守</button>
+    <button class="btn btn-ghost" data-action="minecraftCommand" data-action-args='["approach"]'>靠近我</button>
+    <button class="btn btn-ghost" data-action="minecraftCommand" data-action-args='["accompany"]'>陪着我一起走</button>
+    <button class="btn btn-ghost" data-action="minecraftCommand" data-action-args='["protect"]'>跟随并保护我</button>
   </div>
   <div class="form-row">
     <label class="field"><span>采铁数量（1–8）</span><input id="mc-collect-count" type="number" min="1" max="8" value="1"></label>
@@ -46,6 +60,6 @@
   <label class="field"><span>活动内聊天（仅游戏会话，不写普通聊天历史）</span><input id="mc-chat" maxlength="500"></label>
   <button class="btn btn-ghost" data-action="minecraftChat">发送</button>
   <p id="minecraft-result" role="status"></p>
-  <p>游戏内“停下”“停止”或 !pk stop 直接本地停车，不等待模型。跟随/防守单次最多 120 秒；失联 15 秒停止并断开。</p>
+  <p>游戏内“停下”“停止”或 !pk stop 直接本地停车，不等待模型。单次动作最多 120 秒；“陪着我一起走”“跟随并保护我”在已授权会话内续租，停止或危险后不自动恢复。失联 15 秒停止并断开。</p>
   <pre id="minecraft-observation"></pre>
 </div>

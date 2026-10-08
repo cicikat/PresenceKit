@@ -25,6 +25,9 @@ class MinecraftSettings(BaseModel):
     model_enabled: bool = True
     model_calls_per_session: int = Field(default=120, ge=1, le=500)
     model_cooldown_seconds: int = Field(default=10, ge=5, le=120)
+    reaction_enabled: bool = False
+    reaction_calls_per_session: int = Field(default=120, ge=1, le=500)
+    reaction_cooldown_seconds: int = Field(default=5, ge=3, le=60)
 
     @model_validator(mode="after")
     def offline_player_name(self):

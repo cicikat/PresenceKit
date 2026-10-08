@@ -1,7 +1,7 @@
 import { randomUUID, createHash } from 'node:crypto';
 import { visibleIron, startCollect, stepCollect } from './collect.mjs';
 
-const ACTIONS = new Set(['stop', 'follow', 'return', 'pickup', 'defend', 'say', 'collect_iron']);
+const ACTIONS = new Set(['stop', 'follow', 'return', 'pickup', 'defend', 'say', 'collect_iron', 'approach', 'accompany', 'protect']);
 const HOSTILES = new Set(['zombie', 'husk', 'drowned', 'skeleton', 'stray', 'spider', 'cave_spider', 'silverfish', 'endermite']);
 const ID = /^[a-zA-Z0-9_-]{1,64}$/;
 const UUID = /^[0-9a-f-]{32,36}$/i;
@@ -79,6 +79,7 @@ export class Body {
       game: bot && this.status === 'connected' ? {
         dimension: bot.game?.dimension || 'unknown', position: position(bot.entity?.position),
         health: bot.health ?? null, food: bot.food ?? null, owner_visible: Boolean(owner),
+        owner_distance: owner && bot.entity?.position ? Math.round(owner.position.distanceTo(bot.entity.position) * 10) / 10 : null,
         inventory: (bot.inventory?.items() || []).slice(0, 36).map(i => ({ name: i.name, count: i.count })),
         threats: Object.values(bot.entities || {}).filter(e => HOSTILES.has(e.name) && bot.entity?.position && e.position.distanceTo(bot.entity.position) < 12).slice(0, 8).map(e => ({ id: e.id, name: e.name })),
         dropped_items: Object.values(bot.entities || {}).filter(e => ['item', 'Item'].includes(e.name) && bot.entity?.position && e.position.distanceTo(bot.entity.position) <= 8).slice(0, 8).map(e => ({ entity_id: e.id })),
@@ -138,8 +139,10 @@ export class Body {
     if (!owner || !bot.entity || owner.position.distanceTo(bot.entity.position) > 32) throw new Fault('owner_not_nearby');
     if (bot.health <= 8) throw new Fault('low_health');
     if (command.action === 'follow') bot.pathfinder.setGoal(bot.pkGoals.follow(owner, 3), true);
+    if (command.action === 'accompany') bot.pathfinder.setGoal(bot.pkGoals.follow(owner, 2.5), true);
+    if (command.action === 'approach') bot.pathfinder.setGoal(bot.pkGoals.near(owner.position, 1.5));
     if (command.action === 'return') bot.pathfinder.setGoal(bot.pkGoals.near(owner.position, 2));
-    if (command.action === 'defend') {
+    if (['defend', 'protect'].includes(command.action)) {
       const weapon = bot.inventory.items().find(i => /_(sword|axe)$/.test(i.name)
         && Number.isFinite(i.maxDurability) && i.maxDurability - i.durabilityUsed >= 8);
       if (!weapon) throw new Fault('weapon_unavailable');
@@ -170,13 +173,16 @@ export class Body {
     const bot = this.bot; const owner = this.owner();
     if (this.now() >= c.expires_at || !owner || !bot.entity || owner.position.distanceTo(bot.entity.position) > 32 || bot.health <= 8) return this.halt(this.now() >= c.expires_at ? 'command_expired' : 'unsafe_or_owner_lost');
     if (c.action === 'return' && owner.position.distanceTo(bot.entity.position) <= 2.5) { this.halt('arrived'); const r = this.receipts.get(c.command_id); r.status = 'succeeded'; r.error = null; }
+    if (c.action === 'approach' && owner.position.distanceTo(bot.entity.position) <= 2) { this.halt('arrived'); const r = this.receipts.get(c.command_id); r.status = 'succeeded'; r.error = null; }
     if (c.action === 'pickup' && !bot.entities[c.params.entity_id]) { this.halt('item_disappeared'); const r = this.receipts.get(c.command_id); r.status = 'outcome_unknown'; }
     if (c.action === 'collect_iron') stepCollect(this, c);
-    if (c.action === 'defend') {
+    if (['defend', 'protect'].includes(c.action)) {
       if (!c.defendReady) return;
       const target = Object.values(bot.entities).find(e => HOSTILES.has(e.name) && e.position.distanceTo(owner.position) <= 6 && e.position.distanceTo(bot.entity.position) <= 6);
       if (target && bot.pvp.target !== target) bot.pvp.attack(target);
       if (!target && bot.pvp.target) { bot.pvp.stop(); bot.pathfinder.setGoal(null); }
+      if (!target && c.action === 'protect' && !c.followingOwner) { bot.pathfinder.setGoal(bot.pkGoals.follow(owner, 2.5), true); c.followingOwner = true; }
+      if (target) c.followingOwner = false;
     }
   }
 }

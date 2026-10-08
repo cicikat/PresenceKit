@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import time
 import uuid
 from dataclasses import dataclass
@@ -29,14 +30,21 @@ class Binding:
     revision: int = 0
     last_model_at: float = 0
     model_calls: int = 0
+    reaction_calls: int = 0
+    last_reaction_at: float = 0
+    reaction_signature: str = ""
+    route_digest: str = ""
+    companion_goal: str | None = None
+    goal_renewed_at: float = 0
 
 
 class MinecraftService:
-    def __init__(self, *, config=get_config, principal=None, bridge_factory=None, planner=None):
+    def __init__(self, *, config=get_config, principal=None, bridge_factory=None, planner=None, reactor=None):
         self.config = config
         self.principal = principal or self._principal
         self.bridge_factory = bridge_factory or (lambda cfg: HttpBridge(cfg.bridge_url, bridge_token()))
         self.planner = planner
+        self.reactor = reactor
         self.binding: Binding | None = None
         self.bridge: Bridge | None = None
         self.lock = asyncio.Lock()
@@ -47,6 +55,13 @@ class MinecraftService:
         self.model_busy = False
         self.dropped_messages = 0
         self.last_model_latency_seconds: float | None = None
+        self.reaction_task: asyncio.Task | None = None
+        self.reaction_error: str | None = None
+        self.reaction_latency_seconds: float | None = None
+        self.reaction_busy = False
+
+    def route_digest(self) -> str:
+        return hashlib.sha256(json.dumps(self.config().get("model_presets", {}), sort_keys=True, default=str).encode()).hexdigest()
 
     def _principal(self) -> tuple[str, str]:
         from admin.routers._common import active_char_id
@@ -64,7 +79,7 @@ class MinecraftService:
     def valid(self, b: Binding) -> bool:
         try:
             cfg = settings(self.config())
-            return cfg.enabled and self.digest(cfg) == b.config_digest and self.principal() == (b.uid, b.char_id)
+            return cfg.enabled and self.digest(cfg) == b.config_digest and self.route_digest() == b.route_digest and self.principal() == (b.uid, b.char_id)
         except Exception:
             return False
 
@@ -77,6 +92,9 @@ class MinecraftService:
                 "error": self.last_error, "model_calls": b.model_calls if b else 0,
                 "dropped_messages": self.dropped_messages,
                 "last_model_latency_seconds": self.last_model_latency_seconds,
+                "reaction_calls": b.reaction_calls if b else 0, "reaction_error": self.reaction_error,
+                "reaction_latency_seconds": self.reaction_latency_seconds,
+                "companion_goal": b.companion_goal if b else None,
                 "action_outcomes": {status: sum(r.get("status") == status for r in self.snapshot.get("receipts", []))
                                     for status in ("running", "succeeded", "failed", "canceled", "outcome_unknown")}}
 
@@ -102,6 +120,7 @@ class MinecraftService:
                 if snapshot.get("protocol_version") != 1 or snapshot.get("session_id") != session.session_id or not isinstance(snapshot.get("connection_epoch"), str):
                     raise BridgeError("invalid_bridge_response")
                 binding = Binding(uid, char_id, session.session_id, snapshot["connection_epoch"], self.digest(cfg))
+                binding.route_digest = self.route_digest()
                 if not self.valid(binding):
                     await bridge.request("POST", "/v1/disconnect", {"session_id": session.session_id, "connection_epoch": binding.epoch})
                     raise MinecraftError("authority_changed")
@@ -119,6 +138,8 @@ class MinecraftService:
         self.binding = None; self.bridge = None
         if self.chat_task:
             self.chat_task.cancel()
+        if self.reaction_task:
+            self.reaction_task.cancel()
         if b:
             self.last_error = reason
             try:
@@ -155,9 +176,9 @@ class MinecraftService:
                 raise MinecraftError("authority_changed")
             cfg = settings(self.config())
             params = params or {}
-            if action not in {"follow", "stop", "return", "pickup", "defend", "say", "collect_iron"}:
+            if action not in {"follow", "stop", "return", "pickup", "defend", "say", "collect_iron", "approach", "accompany", "protect"}:
                 raise MinecraftError("invalid_action")
-            if action == "pickup" and not cfg.allow_pickup or action == "defend" and not cfg.allow_defend:
+            if action == "pickup" and not cfg.allow_pickup or action in {"defend", "protect"} and not cfg.allow_defend:
                 raise MinecraftError("capability_disabled")
             if action == "collect_iron":
                 if not cfg.allow_mining:
@@ -174,12 +195,57 @@ class MinecraftService:
                 raise MinecraftError("invalid_params")
             if expected is None:
                 b.revision += 1  # Manual actions invalidate an in-flight model plan.
+            if action != "say":
+                b.companion_goal = action if action in {"accompany", "protect"} else None
+                b.goal_renewed_at = time.monotonic()
             result = await self.bridge.request("POST", "/v1/commands", {
                 "session_id": b.session_id, "connection_epoch": b.epoch,
                 "command_id": command_id or uuid.uuid4().hex, "action": action,
                 "params": params, "expires_at": int(time.time() * 1000) + 120000,
             })
             return result
+
+    async def react(self, b: Binding, text: str = "") -> dict | None:
+        cfg = settings(self.config())
+        if self.reaction_busy or not cfg.reaction_enabled or not self.valid(b) or b.reaction_calls >= cfg.reaction_calls_per_session:
+            return None
+        if time.monotonic() - b.last_reaction_at < cfg.reaction_cooldown_seconds:
+            return None
+        if self.snapshot.get("status") != "connected" or not self.snapshot.get("game"):
+            return None
+        current = self.snapshot.get("current") or {}
+        if current.get("action") not in {None, "follow", "accompany", "protect", "approach"}:
+            return None
+        if not text and b.companion_goal not in {"accompany", "protect"}:
+            return None
+        b.reaction_calls += 1; b.last_reaction_at = time.monotonic()
+        self.reaction_busy = True
+        rev = b.revision; started = time.monotonic()
+        try:
+            from core.activity.minecraft_reaction import judge
+            decision = await asyncio.wait_for((self.reactor or judge)(b.char_id, self.snapshot, text), timeout=3)
+            self.reaction_latency_seconds = round(time.monotonic() - started, 3)
+            if b is not self.binding or not self.valid(b) or b.revision != rev:
+                raise MinecraftError("stale_reaction")
+            action = decision.action
+            if action == "none" or action == current.get("action"):
+                return None
+            # Autonomous changes cannot broaden a user-granted mode.
+            if not text and (action != "stop" and action != b.companion_goal):
+                return None
+            if current.get("action"):
+                await self.command("stop", expected=b, revision=rev)
+            result = await self.command(action, expected=b, revision=rev)
+            b.revision += 1
+            self.reaction_error = None
+            return {"action": action, "receipt": result, "revision": b.revision}
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            self.reaction_error = str(exc) if isinstance(exc, (MinecraftError, BridgeError)) else "reaction_failed"
+            return None
+        finally:
+            self.reaction_busy = False
 
     async def tick(self):
         async with self.lock:
@@ -195,10 +261,29 @@ class MinecraftService:
                 await self._close("stale_binding")
                 return
             self.snapshot = snapshot
+            current = snapshot.get("current") or {}
+            if b.companion_goal and current.get("action") == b.companion_goal and time.monotonic() - b.goal_renewed_at > 90:
+                await bridge.request("POST", "/v1/commands", {"session_id": b.session_id, "connection_epoch": b.epoch,
+                    "command_id": uuid.uuid4().hex, "action": "stop", "params": {}, "expires_at": int(time.time()*1000)+120000})
+                receipt = await bridge.request("POST", "/v1/commands", {"session_id": b.session_id, "connection_epoch": b.epoch,
+                    "command_id": uuid.uuid4().hex, "action": b.companion_goal, "params": {}, "expires_at": int(time.time()*1000)+120000})
+                b.goal_renewed_at = time.monotonic(); b.revision += 1
+                if receipt.get("status") != "running": b.companion_goal = None
+            elif b.companion_goal and not current:
+                b.companion_goal = None  # Never restart a locally stopped/unsafe action.
+            game = snapshot.get("game") or {}
+            signature = json.dumps({"owner": game.get("owner_visible"), "health": game.get("health"),
+                                    "threats": game.get("threats"), "dimension": game.get("dimension")}, sort_keys=True)
+            if signature != b.reaction_signature:
+                b.reaction_signature = signature
+                if not self.reaction_task or self.reaction_task.done():
+                    self.reaction_task = asyncio.create_task(self.react(b))
             # Heartbeat itself keeps the activity alive without persisting all game ticks.
             if time.time() - float(session.state.get("saved_at", 0)) > 30:
                 session.state = {"connection": snapshot.get("status"), "connection_epoch": b.epoch,
-                                 "model_calls": b.model_calls, "saved_at": time.time(),
+                                 "model_calls": b.model_calls, "reaction_calls": b.reaction_calls,
+                                 "reaction_error": self.reaction_error, "reaction_latency_seconds": self.reaction_latency_seconds,
+                                 "saved_at": time.time(),
                                  "current": snapshot.get("current"), "receipts": snapshot.get("receipts", [])[-30:]}
                 session.updated_at = store.now_iso(); store.save_session(session)
             events = await bridge.request("GET", f"/v1/events?after={b.event_seq}")
@@ -250,6 +335,13 @@ class MinecraftService:
             raise MinecraftError("model_cooldown")
         b.last_model_at = time.monotonic(); b.model_calls += 1
         rev = b.revision
+        fast = await self.react(b, text) if not self.reaction_task or self.reaction_task.done() else None
+        if fast:
+            rev = fast["revision"]
+            if fast["receipt"].get("status") in {"failed", "canceled", "outcome_unknown"}:
+                raise MinecraftError("action_" + fast["receipt"]["status"])
+        if b.revision != rev or not self.valid(b):
+            raise MinecraftError("stale_plan")
         if self.planner is None:
             from core.activity.minecraft_companion import plan_reply
             planner = plan_reply
@@ -257,12 +349,12 @@ class MinecraftService:
             planner = self.planner
         try:
             model_started = time.monotonic()
-            plan = await planner(b.uid, b.char_id, b.session_id, text, self.snapshot)
+            plan = await planner(b.uid, b.char_id, b.session_id, text, {**self.snapshot, "accepted_fast_action": fast["action"] if fast else None})
             self.last_model_latency_seconds = round(time.monotonic() - model_started, 3)
             if b is not self.binding or not self.valid(b) or rev != b.revision:
                 raise MinecraftError("stale_plan")
-            receipt = None
-            if plan.action != "none":
+            receipt = fast["receipt"] if fast else None
+            if plan.action != "none" and not fast:
                 receipt = await self.command(plan.action, plan.params, expected=b, revision=rev)
                 if receipt.get("status") in {"failed", "canceled", "outcome_unknown"}:
                     raise MinecraftError("action_" + receipt["status"])

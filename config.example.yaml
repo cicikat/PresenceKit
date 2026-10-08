@@ -939,3 +939,6 @@ minecraft:
   model_enabled: true
   model_calls_per_session: 120
   model_cooldown_seconds: 10
+  reaction_enabled: false      # 同角色快速动作判断；关闭保留本地规则与角色主模型
+  reaction_calls_per_session: 120
+  reaction_cooldown_seconds: 5

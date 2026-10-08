@@ -103,6 +103,7 @@
             <div><code class="admin-inline-073">monologue</code> <span data-i18n="routing.category.monologue">—— 前置独白：角色说话前的内心独白草稿（只有开启思考链时才会用到）。未单独映射时按 default_preset → chat → 第一个 preset 解析，不是“直接回落 chat”。</span></div>
             <div><code class="admin-inline-073">sensor_judge</code> <span data-i18n="routing.category.sensor_judge">—— 后台 sensor 裁决；未配置时沿用 intent / chat。短超时、零 SDK 重试。</span></div>
             <div><code class="admin-inline-073">ime_judge</code> <span data-i18n="routing.category.ime_judge">—— IME 活动和有价值线索判断；未配置时沿用 sensor_judge / intent / chat。</span></div>
+            <div><code class="admin-inline-073">minecraft_reaction</code> <span>—— Minecraft 快速动作判断，可选 JEV/小模型预设；3秒总预算、零SDK重试，主模型负责角色表达。</span></div>
             <div><code class="admin-inline-073">rpg_kp</code> <span data-i18n="routing.category.rpg_kp">—— RPG Dream 中立裁决（KP）；未配置时回退 chat。30 秒超时、零 SDK 重试。</span></div>
             <div><code class="admin-inline-073">scenario_reconcile</code> <span data-i18n="routing.category.scenario_reconcile">—— 场景梦回合后的语义阶段校准；只允许保守地停留或推进相邻阶段。</span></div>
           </div>

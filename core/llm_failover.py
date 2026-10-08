@@ -41,11 +41,13 @@ CATEGORY_TIMEOUTS: dict[str, float] = {
     "sensor_judge": 10.0,
     "ime_judge": 10.0,
     "food_extract": 20.0,
+    "minecraft_reaction": 3.0,
 }
 DEFAULT_CALL_TIMEOUT = 90.0
 
 # Total wall includes primary HTTP + SDK waits + one fallback. Not infinite.
 TOTAL_WALL: dict[str, float] = {
+    "minecraft_reaction": 3.0,
     "sensor_judge": 20.0,
     "ime_judge": 20.0,
     "food_extract": 20.0,

@@ -1,5 +1,7 @@
 # docs/model-presets.md — 多模型 Preset 系统
 
+275：`minecraft_reaction` 是同角色的快速动作判断路由，可分配已有 JEV/小模型 API preset；未分配沿用 sensor_judge → intent → chat。每次3秒总预算、零SDK重试，主模型仍负责角色表达；不是第二人格。模型路由页和 Minecraft 共玩页编辑同一生效 routing profile，后者显式显示角色覆盖及来源。修改模型配置撤销旧共玩授权，不让迟到判断继续动作。见 [Minecraft Activity](minecraft-activity.md)。
+
 `food_extract` 是饮食证据抽取的独立路由，管理面可配置小模型，遵循既有 fallback。发送后执行，20秒总限与零 SDK 重试；见 [food-memory.md](food-memory.md)。
 
 ## 模型出站连接模式（2026-09-28）
