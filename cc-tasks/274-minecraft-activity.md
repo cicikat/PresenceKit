@@ -54,10 +54,10 @@ Mineflayer 提供实体、方块、背包、移动、聊天等接口；pathfinde
 
 通用 Activity 层只负责已有的身份、会话、TTL、transcript 和记忆策略；Minecraft 模块负责游戏动作与快照语义；Docker 执行器负责连接、寻路和本地反应。外部执行器连接状态不能塞入所有 Activity 的通用状态机。
 
-- [ ] 审核 registry smoke tests 与前端对 frontend_key/Tauri 字段的假设，允许后端专用 Activity 明确没有客户端入口；不虚构客户端命令凑字段。
-- [ ] 首批只提取确有共用需求的生命周期/策略检查，不先建设动态插件加载器、万能 ActivityDriver 或 EventBus。
-- [ ] 用 fake bridge 验证 Minecraft 编排；用桥接协议测试执行器。后端领域测试不依赖 Node 或真实游戏服务启动。
-- [ ] 保持现有 reading/chess/gomoku 行为与存储布局，涉及共享层时运行其既有回归。
+- [x] 审核 registry smoke tests 与前端对 frontend_key/Tauri 字段的假设，允许后端专用 Activity 明确没有客户端入口；不虚构客户端命令凑字段。
+- [x] 首批只提取确有共用需求的生命周期/策略检查，不先建设动态插件加载器、万能 ActivityDriver 或 EventBus。
+- [x] 用 fake bridge 验证 Minecraft 编排；用桥接协议测试执行器。后端领域测试不依赖 Node 或真实游戏服务启动。
+- [x] 保持现有 reading/chess/gomoku 行为与存储布局，涉及共享层时运行其既有回归。
 
 ## A — 环境与协议冻结（施工前置）
 
@@ -84,17 +84,17 @@ Mineflayer 提供实体、方块、背包、移动、聊天等接口；pathfinde
 
 ## C — PresenceKit Minecraft Activity（第一版角色接入）
 
-- [ ] 注册 Minecraft Activity 类型及元信息、专用 session/transcript、TTL、持久化失败语义；游戏连接状态独立于 Activity 的 active/closed。
-- [ ] 用户显式启动/关闭；Reality/Dream 与切角色生命周期检查；绑定 owner、角色和身体，禁止两个会话抢同一 Bot。
-- [ ] 增量/有界快照：维度、坐标、健康/饥饿、附近 owner/威胁、背包摘要、当前动作、已知地形及失败原因；不把原始包流或每 tick 状态塞入 prompt。
-- [ ] 角色接入：复用模型路由与角色资产，设计专用有界上下文；验收称呼、近期对话连续性、能力陈述与游戏事实 grounding。
-- [ ] 先开放 follow/stop/return/pickup/defend 白名单；模型输出校验，目标过期或 epoch 不一致拒绝执行，明确区分说要做与已经做完。
-- [ ] owner 游戏聊天进入专用 Activity ingress，校验 UUID/会话、长度/频率与去重；其他玩家内容只作环境数据。明确游戏回话出口与桌宠/手机镜像策略，默认不广播重复消息。
-- [ ] Activity 内模型调用有串行/合并、冷却、超时、token/次数预算和有限队列；本地反应无需等待模型。LLM 失败保留明确安全策略，停止永远可用。
-- [ ] 管理面热更新与 effective state：默认关闭、连接配置、启停、能力授权、预算；只读观测连接/会话、最近快照年龄、执行动作、失败、取消、预算。scope 按实际敏感度定义。
-- [ ] 新工具若开放，遵守 registry/examples/keywords/origin 与 portable schema；不能用管理 token 给模型或 sidecar 全权。
-- [ ] 同步 `docs/activity-session.md`、控制面及实际受影响接口文档；不强制新增桌面 Activity tab 或手机 UI。若新增客户端消费，再独立开跨仓工单。
-- [ ] 按 Admin Static Asset Cache 更新版本并做浏览器实测。
+- [x] 注册 Minecraft Activity 类型及元信息、专用 session/transcript、TTL、持久化失败语义；游戏连接状态独立于 Activity 的 active/closed。
+- [x] 用户显式启动/关闭；Reality/Dream 与切角色生命周期检查；绑定 owner、角色和身体，禁止两个会话抢同一 Bot。
+- [x] 增量/有界快照：维度、坐标、健康/饥饿、附近 owner/威胁、背包摘要、当前动作、已知地形及失败原因；不把原始包流或每 tick 状态塞入 prompt。
+- [x] 角色接入：复用模型路由与角色资产，设计专用有界上下文；验收称呼、近期对话连续性、能力陈述与游戏事实 grounding。
+- [x] 先开放 follow/stop/return/pickup/defend 白名单；模型输出校验，目标过期或 epoch 不一致拒绝执行，明确区分说要做与已经做完。
+- [x] owner 游戏聊天进入专用 Activity ingress，校验 UUID/会话、长度/频率与去重；其他玩家内容只作环境数据。明确游戏回话出口与桌宠/手机镜像策略，默认不广播重复消息。
+- [x] Activity 内模型调用有串行/合并、冷却、超时、token/次数预算和有限队列；本地反应无需等待模型。LLM 失败保留明确安全策略，停止永远可用。
+- [x] 管理面热更新与 effective state：默认关闭、连接配置、启停、能力授权、预算；只读观测连接/会话、最近快照年龄、执行动作、失败、取消、预算。scope 按实际敏感度定义。
+- [x] 新工具若开放，遵守 registry/examples/keywords/origin 与 portable schema；不能用管理 token 给模型或 sidecar 全权。
+- [x] 同步 `docs/activity-session.md`、控制面及实际受影响接口文档；不强制新增桌面 Activity tab 或手机 UI。若新增客户端消费，再独立开跨仓工单。
+- [x] 按 Admin Static Asset Cache 更新版本并做浏览器实测。
 
 验收：角色在游戏内回应并执行高层指令；同一 command_id 重发不重复副作用，旧 epoch 回执不污染新连接；停止抢占、超时、失联、后端重启、入梦与切角色均通过。验证零主记忆污染、零外部文本越权、零普通聊天阻塞。
 
@@ -102,10 +102,10 @@ Mineflayer 提供实体、方块、背包、移动、聊天等接口；pathfinde
 
 用户后续要求完成工单，并选择先完成代码和模型验收。D 在默认关闭下落地；不把 B/C 的实际游戏缺口当作已通过，不自动开启采矿。首批为 120 秒内的会话内任务，不要求跨重启，因此不新增 durable Task Store 或 Agent Runtime capability；需持久采集时再独立冻结 capability 合同。
 
-- [ ] 将“挖铁”拆成搜索已知矿石、到达、装备检查、挖掘、拾取、数量核对、返回；不是一句 Mineflayer 指令就算完成。
-- [ ] 先只采可见且可达矿石，限定区域、数量、时长、耐久与危险；地下探索、跨维度、复杂合成不纳入首批。
-- [ ] 需要跨重启的长期任务再接同角色 Agent Runtime capability；Task Store 与 Activity session 各自持有生命周期，冻结映射、lease、取消、预算与 outcome_unknown，不造第二套通用 Task Manager。
-- [ ] 明确本地副作用与恢复证据；挖掘/丢弃/开箱不盲目重放。采集完成依据背包变化与回执，不能依据 LLM 宣称。
+- [x] 将“挖铁”拆成搜索已知矿石、到达、装备检查、挖掘、拾取、数量核对、返回；不是一句 Mineflayer 指令就算完成。
+- [x] 先只采可见且可达矿石，限定区域、数量、时长、耐久与危险；地下探索、跨维度、复杂合成不纳入首批。
+- [x] 需要跨重启的长期任务再接同角色 Agent Runtime capability；Task Store 与 Activity session 各自持有生命周期，冻结映射、lease、取消、预算与 outcome_unknown，不造第二套通用 Task Manager。
+- [x] 明确本地副作用与恢复证据；挖掘/丢弃/开箱不盲目重放。采集完成依据背包变化与回执，不能依据 LLM 宣称。
 
 验收：限定采集任务可取消，未达条件能解释失败；模型慢/断线不无限行动；重启不重复执行。
 
@@ -117,10 +117,10 @@ Mineflayer 提供实体、方块、背包、移动、聊天等接口；pathfinde
 
 ## 验证与提交纪律
 
-- [ ] A–D 每阶段独立工单/独立提交；相关既有回归优先，缺口只补有意义的协议、生命周期与隔离测试。
-- [ ] 以记录的实际修改面选择 Activity、工具、Runtime 与鉴权回归；不因规划跑全量测试。
-- [ ] 分别标注静态检查、fixture、浏览器、真实 Minecraft 验收；未运行记 not-run，部分完成记 partial。
-- [ ] 提交前检查敏感值、文档链接、差异与换行；只暂存本工单范围，保留既有其他改动。
+- [x] A–D 每阶段独立工单/独立提交；相关既有回归优先，缺口只补有意义的协议、生命周期与隔离测试。
+- [x] 以记录的实际修改面选择 Activity、工具、Runtime 与鉴权回归；不因规划跑全量测试。
+- [x] 分别标注静态检查、fixture、浏览器、真实 Minecraft 验收；未运行记 not-run，部分完成记 partial。
+- [x] 提交前检查敏感值、文档链接、差异与换行；只暂存本工单范围，保留既有其他改动。
 
 ## 删除 brief 候选（本次不执行）
 
@@ -177,7 +177,7 @@ Mineflayer 提供实体、方块、背包、移动、聊天等接口；pathfinde
 
 ### 本轮关闭边界与后续验收
 
-- [x] 收尾批次：默认桥凭据位于 ignored `.env.minecraft.bridge-token`，Compose 和正常后端启动均自动读取，不依赖临时目录或每次手设环境变量；默认开启仍为 false。PVE 增加武器/耐久检查与异步装备停车保护。
+- [x] 收尾批次：默认桥凭据位于 ignored `.env.minecraft.bridge-token`，Compose 和正常后端启动均自动读取，不依赖临时目录或每次手设环境变量；默认开启仍为 false。PVE 增加武器/耐久检查与异步装备停车保护。新增凭据回归后 Minecraft 15 passed，Node 8 passed，最终容器 healthy。
 
 | 项目 | 代码/fixture | 实际验收 |
 |---|---|---|
