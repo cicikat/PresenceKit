@@ -38,6 +38,7 @@ test('rejects arbitrary fields, server commands, missing owner and low health', 
   const f = fixture(); await f.connect();
   assert.throws(() => f.body.submit({ ...f.command('x', 'stop'), shell: 'bad' }), /invalid_fields/);
   assert.throws(() => f.body.submit(f.command('say', 'say', { text: '/op player' })), /invalid_chat/);
+  assert.equal(f.body.submit(f.command('defend-empty', 'defend')).error, 'weapon_unavailable');
   f.bot.health = 4; assert.equal(f.body.submit(f.command('f', 'follow')).error, 'low_health');
 });
 test('HTTP rejects unauthenticated mutation and caps request size', async () => {

@@ -139,6 +139,21 @@ export class Body {
     if (bot.health <= 8) throw new Fault('low_health');
     if (command.action === 'follow') bot.pathfinder.setGoal(bot.pkGoals.follow(owner, 3), true);
     if (command.action === 'return') bot.pathfinder.setGoal(bot.pkGoals.near(owner.position, 2));
+    if (command.action === 'defend') {
+      const weapon = bot.inventory.items().find(i => /_(sword|axe)$/.test(i.name)
+        && Number.isFinite(i.maxDurability) && i.maxDurability - i.durabilityUsed >= 8);
+      if (!weapon) throw new Fault('weapon_unavailable');
+      command.defendReady = false;
+      Promise.resolve().then(() => {
+        if (this.current === command && this.bot === bot) return bot.equip(weapon, 'hand');
+      }).then(() => {
+        if (this.current === command && this.bot === bot) command.defendReady = true;
+      }).catch(() => {
+        if (this.current === command && this.bot === bot) {
+          this.halt('equip_failed'); Object.assign(this.receipts.get(command.command_id), {status: 'failed', error: 'equip_failed'});
+        }
+      });
+    }
     if (command.action === 'collect_iron') {
       try { startCollect(this, command); } catch (e) { throw new Fault(['no_visible_iron', 'pickaxe_unavailable'].includes(e.message) ? e.message : 'collection_unavailable'); }
     }
@@ -158,6 +173,7 @@ export class Body {
     if (c.action === 'pickup' && !bot.entities[c.params.entity_id]) { this.halt('item_disappeared'); const r = this.receipts.get(c.command_id); r.status = 'outcome_unknown'; }
     if (c.action === 'collect_iron') stepCollect(this, c);
     if (c.action === 'defend') {
+      if (!c.defendReady) return;
       const target = Object.values(bot.entities).find(e => HOSTILES.has(e.name) && e.position.distanceTo(owner.position) <= 6 && e.position.distanceTo(bot.entity.position) <= 6);
       if (target && bot.pvp.target !== target) bot.pvp.attack(target);
       if (!target && bot.pvp.target) { bot.pvp.stop(); bot.pathfinder.setGoal(null); }

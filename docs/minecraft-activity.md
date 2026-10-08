@@ -10,15 +10,14 @@ PresenceKit Python 后端负责角色与 Activity 会话；`integrations/minecra
 ## Docker 启动
 
 在 ignored 的本地文件生成至少 32 字符随机桥接 token，不使用 admin token。
-设置 `MINECRAFT_BRIDGE_TOKEN_FILE` 为该文件，再运行：
+默认文件为配置目录的 `.env.minecraft.bridge-token`，Git 忽略 `.env.*`；Compose 默认读仓库根目录同名文件，正常后端启动直接读取，无需每次另开 CMD 设置环境变量。不同部署目录可分别用 `MINECRAFT_BRIDGE_TOKEN_FILE` 与 `PRESENCEKIT_MINECRAFT_TOKEN_FILE` 覆盖到同一个本地凭据文件。然后运行：
 
 ```powershell
 docker compose -f integrations/minecraft/compose.yaml up -d --build
 docker compose -f integrations/minecraft/compose.yaml ps
 ```
 
-桥只发布到宿主 loopback 3210。后端环境变量 `PRESENCEKIT_MINECRAFT_TOKEN_FILE`
-指向同一凭据文件。宿主游戏服务在容器中通常使用 `host.docker.internal`；
+桥只发布到宿主 loopback 3210。宿主游戏服务在容器中通常使用 `host.docker.internal`；
 实际地址必须按部署验证。Docker 管进程，管理面管游戏连接/会话；后端不挂 Docker socket。
 认证缓存保存到独立 Docker volume，镜像只读、非 root、无附加 capabilities。
 在线认证需账号交互登录；初版不在管理面回显认证缓存。容器重启不自动进服。

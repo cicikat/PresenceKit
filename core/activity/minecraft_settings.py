@@ -79,9 +79,8 @@ def settings(config: dict) -> MinecraftSettings:
 
 
 def bridge_token() -> str:
-    path = os.environ.get("PRESENCEKIT_MINECRAFT_TOKEN_FILE", "")
-    if not path:
-        return ""
+    from core.config_loader import get_config_path
+    path = os.environ.get("PRESENCEKIT_MINECRAFT_TOKEN_FILE") or str(get_config_path().parent / ".env.minecraft.bridge-token")
     try:
         token = Path(path).read_text(encoding="utf-8").strip()
         return token if 32 <= len(token) <= 256 else ""

@@ -177,6 +177,8 @@ Mineflayer 提供实体、方块、背包、移动、聊天等接口；pathfinde
 
 ### 本轮关闭边界与后续验收
 
+- [x] 收尾批次：默认桥凭据位于 ignored `.env.minecraft.bridge-token`，Compose 和正常后端启动均自动读取，不依赖临时目录或每次手设环境变量；默认开启仍为 false。PVE 增加武器/耐久检查与异步装备停车保护。
+
 | 项目 | 代码/fixture | 实际验收 |
 |---|---|---|
 | Docker、桥认证/租约、明确版本、LAN 网络 | passed | healthy、真实1.21.11进服 passed |

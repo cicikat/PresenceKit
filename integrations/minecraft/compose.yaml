@@ -22,6 +22,6 @@ services:
     stop_grace_period: 5s
 secrets:
   bridge_token:
-    file: ${MINECRAFT_BRIDGE_TOKEN_FILE:?set an ignored local bridge token file}
+    file: ${MINECRAFT_BRIDGE_TOKEN_FILE:-../../.env.minecraft.bridge-token}
 volumes:
   minecraft_auth:

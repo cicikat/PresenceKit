@@ -156,6 +156,15 @@ def test_offline_name_rejects_invalid_java_login_packet():
     assert MinecraftSettings(auth="offline", username="PresenceTest").username == "PresenceTest"
 
 
+def test_default_bridge_credential_survives_normal_backend_restart(tmp_path, monkeypatch):
+    from core.activity.minecraft_settings import bridge_token
+    monkeypatch.delenv("PRESENCEKIT_MINECRAFT_TOKEN_FILE", raising=False)
+    monkeypatch.setattr("core.config_loader.get_config_path", lambda: tmp_path / "config.yaml")
+    assert bridge_token() == ""
+    (tmp_path / ".env.minecraft.bridge-token").write_bytes(b"x" * 32)
+    assert bridge_token() == "x" * 32
+
+
 def test_model_json_fence_keeps_strict_action_authority():
     from core.activity.minecraft_companion import parse_plan
     assert parse_plan('```json\n{"reply":"好。","action":"follow"}\n```').action == "follow"
