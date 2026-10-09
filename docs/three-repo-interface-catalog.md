@@ -155,6 +155,8 @@ current：admin-only POST /image-recognition/test/{connection} 的视觉预算�
 [admin-settings-visual-review.md](admin-settings-visual-review.md)。不改变客户端消息、上传识别、手机覆盖、WS/poll/ack/TTL。
 
 Current: GET /chat-log/stats/calendar requires memory.read + state.read. All four metrics are scoped to owner + character; period=day/week/month/year with date, or start/end (up to 366 days). Missing history is null, never zero. Coverage and totals_partial disclose incomplete data. See backend docs/conversation-calendar.md.
+
+2026-10-10：历史聊天轮数回退已支持 canonical 角色桶的按日 `.md.gz` 归档，同日 `.md` / `.md.gz` 合并去重；保持原 schema、scope 与不完整覆盖标识，不推算其他用量，不认领未归属旧目录。current：代码及真实数据函数查询；observe：服务 reload 后客户端显示验收。
 Roadmap: native desktop/mobile heatmap and day detail UI. Observe: real provider streaming usage and independent automation transport coverage. Existing history, WS/poll/ack/TTL remain unchanged.
 
 ## Relay SDK User-Agent compatibility (2026-09-12)

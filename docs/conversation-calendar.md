@@ -16,6 +16,12 @@
 partial，不推测已删除历史。工具次数：此 owner/character 通过闸门后的 dispatcher 执行尝试，
 含失败，不计权限拒绝、待确认或已读缓存跳过；不代表远端动作成功。
 
+历史轮数回退读取 canonical 角色桶的 `YYYY-MM-DD.md` 与 `YYYY-MM-DD.md.gz`，
+同日双格式复用日志合并去重，不解压改写源文件。仅计可识别的一问一答；没有 turn_id
+的旧记录按日志块计数。与事件账本/数值计数取较大值，不把重叠来源相加；仍是保留记录
+的下限，coverage / totals_partial 不提升为完整。full_log.md 无可靠日期头，不据此猜测每日
+轮数。压缩归档只补聊天轮数，不补 token、工具和图片次数。
+
 Token 按调用开始时冻结的 owner + character 归属，切换角色不串桶。覆盖公共 LLM 协议出口
 （Chat Completions / Responses / Anthropic）、独立上传视觉
 与 OCR 出口的用量，不仅是聊天生成，可能含后台和 Dream 调用。独立手机自动化等绕开这些出口

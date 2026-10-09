@@ -10,6 +10,7 @@ import re
 import asyncio
 import calendar
 import sqlite3
+import gzip
 from datetime import date as CalendarDate, timedelta
 from typing import Literal
 
@@ -254,8 +255,18 @@ async def calendar_stats(
             item.setdefault("chat_rounds_source", "counter")
             if item["coverage"] != "complete":
                 path = log_dir / (item["date"] + ".md")
-                if path.exists():
-                    entries = _parse_day(path.read_text(encoding="utf-8"))
+                archive = path.with_suffix(".md.gz")
+                text = path.read_text(encoding="utf-8") if path.exists() else ""
+                if archive.exists():
+                    with gzip.open(archive, "rt", encoding="utf-8") as source:
+                        archived_text = source.read()
+                    if text:
+                        from core.memory.event_log import _merge_day_texts
+                        text = _merge_day_texts(text, archived_text)
+                    else:
+                        text = archived_text
+                if text:
+                    entries = _parse_day(text)
                     pairs = [entry for entry in entries if entry["user"] and entry["assistant"]
                              and entry.get("entry_kind") != "narration"]
                     count = len({entry["turn_id"] for entry in pairs if entry.get("turn_id")})
@@ -269,7 +280,7 @@ async def calendar_stats(
         return result
     try:
         result = await asyncio.to_thread(read)
-    except (OSError, sqlite3.Error):
+    except (OSError, EOFError, sqlite3.Error):
         raise HTTPException(503, "conversation statistics unavailable") from None
     result.update(start=start.isoformat(), end=end.isoformat(), char_id=resolved,
                   period=period, week_starts_on="monday", schema_version=1)

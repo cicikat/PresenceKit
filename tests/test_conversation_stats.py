@@ -102,6 +102,47 @@ def test_calendar_ranges_validation_and_legacy(client, tmp_path):
         assert client.get('/chat-log/stats/calendar?' + query).status_code == 422
 
 
+def test_calendar_compressed_archive_and_overlap(client, tmp_path):
+    import gzip
+    text = '## 12:00\n**用户**：hello\n**角色**：hi\n---\n'
+    archive = tmp_path / '2024-04-15.md.gz'
+    with gzip.open(archive, 'wt', encoding='utf-8') as output:
+        output.write(text)
+    url = '/chat-log/stats/calendar?period=day&date=2024-04-15'
+    body = client.get(url).json()
+    day = body['days'][0]
+    assert day['chat_rounds'] == 1
+    assert day['chat_rounds_source'] == 'retained_chat_log_partial'
+    assert day['coverage'] == 'unavailable'
+    assert day['total_tokens'] is None and body['totals_partial']
+    (tmp_path / '2024-04-15.md').write_text(text, encoding='utf-8')
+    assert client.get(url).json()['days'][0]['chat_rounds'] == 1
+    assert archive.exists()
+
+
+def test_calendar_corrupt_archive_is_not_empty_history(client, tmp_path):
+    (tmp_path / '2024-04-15.md.gz').write_bytes(b'broken archive')
+    assert client.get('/chat-log/stats/calendar?period=day&date=2024-04-15').status_code == 503
+
+
+def test_calendar_archive_character_isolation(sandbox, monkeypatch):
+    import asyncio
+    import gzip
+    from core.memory.path_resolver import resolve_path
+    from core.memory.scope import MemoryScope
+    monkeypatch.setattr(chat_log, '_resolve_char_id', lambda value: value)
+    monkeypatch.setattr(chat_log, '_owner_qq', lambda: 'owner')
+    directory = resolve_path(MemoryScope.reality_scope('owner', 'first'), 'event_log')
+    directory.mkdir(parents=True, exist_ok=True)
+    with gzip.open(directory / '2024-04-15.md.gz', 'wt', encoding='utf-8') as output:
+        output.write('## 12:00\n**用户**：hello\n**角色**：hi\n---\n')
+    def read(character):
+        return asyncio.run(chat_log.calendar_stats(period='day', date=date(2024, 4, 15),
+            start=None, end=None, char_id=character, x_presence_session=None, auth=None))
+    assert read('first')['days'][0]['chat_rounds'] == 1
+    assert read('second')['days'][0]['chat_rounds'] is None
+
+
 def test_calendar_scopes_and_character_switch_over_http(sandbox, monkeypatch, tmp_path):
     from types import SimpleNamespace
     from admin import auth
