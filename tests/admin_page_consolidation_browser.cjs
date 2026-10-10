@@ -1,0 +1,122 @@
+// Real admin assets and handlers with isolated API fixtures.
+const {chromium} = require('playwright');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const root = path.resolve(__dirname, '../admin/static');
+const origin = process.env.ADMIN_UI_LIVE_ORIGIN || 'http://127.0.0.1:8769';
+(async () => {
+  const browser = await chromium.launch({headless:true});
+  try {
+    const context = await browser.newContext({viewport:{width:1440,height:1000}});
+    await context.addInitScript(() => localStorage.setItem('presencekit_admin_ui', 'new'));
+    const page = await context.newPage(); const errors = [], calls = [], writes = [];
+    const output = path.resolve(__dirname, '../.tmp/admin-consolidation'); fs.mkdirSync(output,{recursive:true});
+    page.on('pageerror', e => errors.push(e.message));
+    await page.route('**/*', route => {
+      const req = route.request(), url = new URL(req.url()), endpoint = url.pathname;
+      if (url.origin === origin && endpoint.startsWith('/static/')) {
+        if (process.env.ADMIN_UI_LIVE_ORIGIN) return route.continue();
+        const file = path.resolve(root, decodeURIComponent(endpoint.slice(8)));
+        assert.ok(file.startsWith(root + path.sep));
+        return route.fulfill({body:fs.readFileSync(file),contentType:({'.html':'text/html','.js':'text/javascript','.css':'text/css','.woff2':'font/woff2'})[path.extname(file)] || 'application/octet-stream'});
+      }
+      calls.push(endpoint);
+      if (req.method() !== 'GET') writes.push({path:endpoint, body:req.postDataJSON()});
+      let data;
+      if (endpoint === '/characters') data = {characters:['alpha','beta'].map(id => ({id,label:id,filename:id+'.json'})),active_id:'alpha'};
+      if (/\/character\/[^/]+\/model-routing/.test(endpoint)) data = {effective_profile:'default',chat_configured:true};
+      if (/\/character\/[^/]+\/asset-bindings/.test(endpoint)) data = {};
+      if (endpoint === '/model-presets/routing-profiles') data = {profiles:[{name:'default'}]};
+      if (endpoint === '/tts-config') data = {provider:'gsv',provider_params:{api_url:'http://voice.example.test'},resource_options:{},emotions:{}};
+      if (endpoint === '/scheduler/config') data = {enabled:true,presence_nag_minutes:60,global_proactive_min_gap_hours:1.5,max_daily_proactive:16};
+      if (endpoint === '/scheduler/status') data = {triggers:{}};
+      if (endpoint === '/scheduler/proactive-ledger') data = {effective_gap_seconds:5400,daily_budget:16,daily_count:0,recent:[]};
+      if (data === undefined) return route.fulfill({status:403,contentType:'application/json',body:'{}'});
+      return route.fulfill({contentType:'application/json',body:JSON.stringify(data)});
+    });
+    const cdp = await context.newCDPSession(page);
+    await cdp.send('Network.enable'); await cdp.send('Network.clearBrowserCache'); await cdp.send('Network.setCacheDisabled',{cacheDisabled:true});
+    await page.goto(origin + '/static/index.html');
+    await page.reload({waitUntil:'load'});
+    await page.evaluate(() => {document.getElementById('auth-overlay').style.display='none';document.getElementById('app').style.display='flex';});
+    async function go(name) {await page.evaluate(name => goto(name), name);}
+    async function openAll() {await page.evaluate(() => document.querySelectorAll('.page.active details').forEach(n => n.open=true));}
+    await go('scheduler');
+    assert.equal(await page.locator('#scheduler-config-card').evaluate(n=>n.closest('.page').id), 'page-autonomy-settings');
+    assert.equal(await page.locator('nav a[data-page="scheduler"]').evaluate(n=>n.closest('.nav-group').id), 'navgroup-observation');
+    assert.equal(await page.locator('[data-action="scTrigger"],#watch-status-body,[data-action="testWatchEvent"]').count(),0);
+    await go('autonomy-settings');
+    await page.waitForSelector('#scheduler-config-card details.settings-disclosure', {state:'attached'});
+    await openAll();
+    await page.locator('#sc-gap-hours').fill('2.5');
+    await page.locator('[data-action="saveSchedulerConfig"]').click();
+    await page.waitForFunction(()=>document.getElementById('toast').textContent.includes('已保存'));
+    assert.equal(writes.find(w=>w.path==='/scheduler/config').body.global_proactive_min_gap_hours,2.5);
+    await page.screenshot({path:path.join(output,'autonomy.png'),fullPage:true});
+    await go('role-bindings');
+    await page.waitForFunction(()=>document.getElementById('tts-api-url').value==='http://voice.example.test');
+    await page.locator('#binding-character').selectOption('beta');
+    await page.waitForFunction(()=>document.getElementById('tts-char-select').value==='beta' && document.getElementById('binding-profile'));
+    await openAll();
+    await page.locator('#tts-api-url').fill('http://beta.example.test');
+    await page.locator('[data-action="saveTtsConfig"]').click();
+    await page.waitForFunction(()=>document.getElementById('toast').textContent.includes('TTS'));
+    assert.equal(writes.find(w=>w.path==='/tts-config').body.char_id,'beta');
+    await page.locator('#binding-profile').selectOption('default');
+    await page.locator('[data-action="saveRoleBinding"]').click();
+    await page.waitForFunction(()=>document.getElementById('toast').textContent.includes('角色模型'));
+    assert.equal(writes.find(w=>w.path==='/character/beta/model-routing').body.model_routing,'default');
+    await page.locator('[data-binding-asset="sticker_pack"]').fill('fixture-stickers');
+    await page.locator('[data-action="saveRoleAssets"]').click();
+    await page.waitForFunction(()=>document.getElementById('toast').textContent.includes('资源绑定'));
+    assert.equal(writes.find(w=>w.path==='/character/beta/asset-bindings').body.sticker_pack,'fixture-stickers');
+    await page.locator('#binding-character').selectOption('');
+    await page.waitForFunction(()=>document.getElementById('tts-char-select').value==='');
+    await page.locator('#binding-character').selectOption('beta');
+    await page.waitForFunction(()=>document.getElementById('tts-char-select').value==='beta' && document.getElementById('binding-profile'));
+    await page.screenshot({path:path.join(output,'bindings.png'),fullPage:true});
+    await go('mail-config');
+    await page.waitForSelector('#page-character-behavior.active');
+    assert.equal(await page.locator('#page-character-behavior>.behavior-section').count(),9);
+    assert.equal(await page.locator('#page-character-behavior>.behavior-section>.card-header>.pk-collapse').count(),9);
+    const section = page.locator('#page-character-behavior>.behavior-section').first();
+    await section.locator(':scope > .card-header > .pk-collapse').click();
+    assert.equal(await section.locator(':scope > .behavior-section-body').isVisible(),false);
+    await section.locator(':scope > .card-header > .pk-collapse').click();
+    assert.equal(await section.locator(':scope > .behavior-section-body').isVisible(),true);
+    assert.equal(await page.locator('#tts-char-select').count(),1);
+    assert.equal(await page.locator('nav a[data-page="mail-config"]').isVisible(),false);
+    const field = page.locator('#page-character-behavior input:not([type=checkbox]):not([type=number]):not([type=hidden]):not([readonly])').first();
+    await openAll(); await field.fill('draft.example.test'); const id = await field.getAttribute('id');
+    await page.screenshot({path:path.join(output,'behavior-desktop.png'),fullPage:true});
+    await page.evaluate(() => {
+      document.querySelectorAll('#page-character-behavior>.behavior-section').forEach(card => {
+        if (card.dataset.pkCollapsed !== 'true') card.querySelector(':scope > .card-header > .pk-collapse').click();
+      });
+      document.querySelector('main').scrollTop=0;
+    });
+    await page.screenshot({path:path.join(output,'behavior-overview.png'),fullPage:true});
+    await page.locator('#admin-ui-version').selectOption('legacy');
+    await page.waitForSelector('#page-agent-runtime-browser.active');
+    assert.equal(await page.locator('#'+id).inputValue(),'draft.example.test');
+    await page.locator('#admin-ui-version').selectOption('new');
+    await page.waitForSelector('#page-character-behavior.active');
+    await openAll();
+    assert.equal(await page.locator('#'+id).inputValue(),'draft.example.test');
+    await page.setViewportSize({width:390,height:844});
+    await page.screenshot({path:path.join(output,'behavior-mobile.png'),fullPage:true});
+    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+    await go('tools');
+    assert.equal(await page.locator('#page-tools .page-context,#tools-file-access,#tools-mcp-status,#tools-intiface-status').count(),0);
+    await go('autonomy-settings');
+    await page.evaluate(()=>goto('autonomy-settings',{reloadFragment:true}));
+    assert.equal(await page.locator('#sc-gap-hours').count(),1);
+    await page.locator('#admin-ui-version').selectOption('legacy');
+    assert.equal(await page.locator('#scheduler-config-card').evaluate(n=>n.closest('.page').id),'page-scheduler');
+    assert.equal(await page.locator('#tts-api-url').evaluate(n=>n.closest('.page').id),'page-tts-config');
+    assert.ok(!calls.includes('/watch/status'));
+    assert.deepEqual(errors,[]);
+    console.log('PASS: nine nested behavior sections, folds, role-scoped saves, scheduler ownership, drafts, version switching, reload and mobile rendering.');
+  } finally {await browser.close();}
+})().catch(e=>{console.error(e);process.exitCode=1;});

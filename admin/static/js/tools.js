@@ -138,8 +138,6 @@ function _renderToolsPage() {
   if (!_toolsTargetModel || !(_toolsControl.model_presets || []).includes(_toolsTargetModel)) _toolsTargetModel = (_toolsControl.model_presets || [])[0] || '';
   selector.innerHTML = (_toolsControl.model_presets || []).map(name => `<option value="${escapeHtml(name)}" ${name === _toolsTargetModel ? 'selected' : ''}>${escapeHtml(name)}</option>`).join('');
   const note = document.getElementById('tools-binding-note');
-  const mcpStatus = document.getElementById('tools-mcp-status');
-  const intifaceStatus = document.getElementById('tools-intiface-status');
   const bound = _toolCurrentPreset();
   if (note) note.textContent = bound
     ? t('tools.bound_note', '当前模型绑定工具预设：{name}', { name: bound })
@@ -148,14 +146,6 @@ function _renderToolsPage() {
   if (saveButton) saveButton.textContent = bound
     ? t('tools.save_preset', '保存当前勾选')
     : t('tools.save_global_default', '保存全局默认');
-  if (mcpStatus) mcpStatus.textContent = _toolsControl.mcp_enabled
-    ? t('tools.mcp_status_enabled', 'MCP 全局状态：已启用（只读）')
-    : t('tools.mcp_status_disabled', 'MCP 全局状态：未启用（只读）');
-  if (intifaceStatus) intifaceStatus.textContent = _toolsControl.intiface_opt_in
-    ? t('tools.intiface_enabled', 'Intiface 硬件能力：已启用（仍受所有者、危险模式与硬件安全闸保护）')
-    : t('tools.intiface_frozen', 'Intiface 硬件能力：冻结（默认关闭；toy_* 工具不会进入聊天、自主唤醒或自主管理能力）');
-  const fileAccess = document.getElementById('tools-file-access');
-  if (fileAccess) fileAccess.textContent = JSON.stringify(_toolsControl.file_access || {}, null, 2);
   const weatherProxy = document.getElementById('tools-weather-use-proxy');
   if (weatherProxy) weatherProxy.checked = _toolsControl.weather?.use_proxy === true;
   const weatherStatus = document.getElementById('tools-weather-status');

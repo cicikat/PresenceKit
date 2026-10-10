@@ -80,9 +80,7 @@ async function saveSchedulerConfig() { const body={presence_nag_minutes:Number(d
 async function loadRelaySettings(){try{const d=await api('GET','/settings/relay');document.getElementById('relay-base-url').value=d.relay_base_url||'';document.getElementById('relay-topic').value=d.relay_topic||'';document.getElementById('relay-token').value='';document.getElementById('relay-token').placeholder=d.relay_token?t('status.relay.configured','已配置（{value}），留空保留',{value:d.relay_token}):t('status.relay.unconfigured','未配置');}catch(e){toast(t('status.relay.load_error','读取中继失败: {error}',{error:e.message}),'err');}}
 async function saveRelaySettings(){const body={relay_base_url:document.getElementById('relay-base-url').value.trim(),relay_topic:document.getElementById('relay-topic').value.trim()};const token=document.getElementById('relay-token').value.trim();if(token)body.relay_token=token;try{await api('PUT','/settings/relay',body);toast(t('status.relay.saved','中继配置已保存'),'ok');loadRelaySettings();}catch(e){toast(t('common.save_failed','保存失败: {error}',{error:e.message}),'err');}}
 async function loadScheduler() {
-  loadSchedulerConfig();
-  loadHdsLocalSettings();
-  _startWatchStatusPoller();
+  if (AdminUI.version !== 'new') { loadSchedulerConfig(); loadHdsLocalSettings(); }
   loadProactiveLedger();
   try {
     const statusRes = await api('GET', '/scheduler/status');
@@ -232,68 +230,6 @@ function _fmtSec(s) {
   return _scText('scheduler.duration.hours', '{count} 小时', {count: (s / 3600).toFixed(1)});
 }
 
-async function scTrigger(name) {
-  try {
-    const d = await api('POST', `/scheduler/trigger/${name}`);
-    toast(d.message, 'ok');
-    setTimeout(loadScheduler, 500);
-  } catch(e) { toast(_scText('common.trigger_failed', '触发失败: {error}', {error: e.message}), 'err'); }
-}
-
-async function testWatchEvent(type) {
-  const body = { type };
-  if (type === 'heart_rate') {
-    const val = parseInt(document.getElementById('sc-hr-value').value);
-    if (isNaN(val)) { toast(_scText('dynamic.scheduler.invalid_heart_rate', '请输入有效的心率值'), 'warn'); return; }
-    body.value = val;
-  }
-  try {
-    const opts = { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) };
-    const r = await fetch(BASE + '/watch/event', opts);
-    const d = await r.json();
-    toast(d.message || _scText('dynamic.scheduler.sent', '已发送'), 'ok');
-    setTimeout(loadWatchStatus, 300);
-  } catch(e) { toast(_scText('common.send_failed', '发送失败: {error}', {error: e.message}), 'err'); }
-}
-
-let _watchStatusTimer = null;
-
-async function loadWatchStatus() {
-  loadHdsLocalStatus();
-  try {
-    const d = await api('GET', '/watch/status');
-    const hr    = document.getElementById('ws-hr');
-    const sleep = document.getElementById('ws-sleep');
-    const last  = document.getElementById('ws-last');
-    if (!hr) return;
-
-    if (!d || !d.event_type) {
-      // 保持暂无数据，不清空
-      return;
-    }
-
-    if (d.event_type === 'heart_rate') {
-      hr.textContent = d.value ? _scText('scheduler.heart_rate', '{value} 次/分', {value: d.value}) : _scText('common.no_data', '暂无数据');
-      hr.style.color = d.value > 120 ? 'var(--danger)' : d.value > 100 ? 'var(--warn)' : 'var(--accent)';
-    }
-
-    if (d.event_type === 'sleep_end') {
-      const start = d.sleep_start || '—';
-      const end   = d.sleep_end_time || '—';
-      const dur = d.duration_minutes
-        ? _scText('scheduler.duration.compact', '{hours} 小时 {minutes} 分钟', {
-          hours: Math.floor(d.duration_minutes / 60),
-          minutes: Math.round(d.duration_minutes % 60),
-        })
-        : '—';
-      sleep.textContent = _scText('dynamic.scheduler.awake_summary', '已醒 · 入睡 {sleep} → 起床 {wake} · 共 {duration}', {sleep: start, wake: end, duration: dur});
-      sleep.style.color = 'var(--success)';
-    }
-
-    last.textContent = `${_scTriggerLabel(d.event_type)} · ${d.timestamp || ''}`;
-  } catch(e) { /* 静默失败 */ }
-}
-
 async function loadHdsLocalStatus() {
   const el = document.getElementById('hds-latest');
   if (!el) return;
@@ -305,16 +241,6 @@ async function loadHdsLocalStatus() {
       : _scText('scheduler.hds.no_samples', '尚未收到 HDS 心率样本。');
     _renderHdsReads(status);
   } catch (e) { /* 状态轮询静默失败 */ }
-}
-
-// 调度器页面激活时启动 Watch 状态自动刷新
-function _startWatchStatusPoller() {
-  if (_watchStatusTimer) return;
-  loadWatchStatus();
-  _watchStatusTimer = setInterval(loadWatchStatus, 30000);
-}
-function _stopWatchStatusPoller() {
-  if (_watchStatusTimer) { clearInterval(_watchStatusTimer); _watchStatusTimer = null; }
 }
 
 // ══════════════════════════════════════════════════════════

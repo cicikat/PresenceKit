@@ -20,7 +20,7 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'food-pilot-1';
+const ADMIN_UI_FRAGMENT_VERSION = 'admin-consolidation-1';
 
 const ADMIN_PAGE_ALIASES = Object.freeze({memory: 'observe-memory'});
 
@@ -36,7 +36,6 @@ const ADMIN_PAGE_CONTEXT = Object.freeze({
   'dream-settings': {related: ['character']},
   'model-routing': {related: ['setup']},
   scheduler: {related: ['observe-autonomy']},
-  tools: {related: ['mcp', 'character']},
   mcp: {related: ['tools']},
   'owner-turn-api': {related: ['auth-tokens', 'status']},
   'agent-runtime-browser': {related: ['tools', 'owner-turn-api']},
@@ -149,6 +148,7 @@ async function loadPageFragment(page, {reload = false} = {}) {
   if (reload) {
     _pageFragmentLoads.delete(page);
     delete container.dataset.pageLoaded;
+    delete container.dataset.pageVisited;
     container.replaceChildren();
   }
   if (container.dataset.pageLoaded === 'true') return container;
@@ -248,7 +248,9 @@ function goBackPage() {
 }
 
 async function goto(page, {reloadFragment = false, fromHistory = false} = {}) {
-  page = ADMIN_PAGE_ALIASES[page] || page;
+  const requestedPage = page;
+  page = AdminPageLayout.resolve(ADMIN_PAGE_ALIASES[page] || page);
+  if (reloadFragment) AdminPageLayout.restore();
   const pageElement = document.getElementById('page-' + page);
   if (!pageElement) {
     console.error('[admin] unknown page', page);
@@ -277,10 +279,10 @@ async function goto(page, {reloadFragment = false, fromHistory = false} = {}) {
   if (group) setNavGroupExpanded(group.id.slice('navgroup-'.length), true);
   closeSidebar();
   rememberPage(page);
-  if (page !== 'scheduler') _stopWatchStatusPoller();
 
   try {
     await loadPageFragment(page, {reload: reloadFragment});
+    await AdminPageLayout.prepare(page, reloadFragment);
   } catch (_error) {
     if (generation !== _navigationGeneration) return;
     const error = document.createElement('p');
@@ -295,7 +297,7 @@ async function goto(page, {reloadFragment = false, fromHistory = false} = {}) {
   const loaders = {
     guide: () => {},
     'call-records': loadUnifiedRecords,
-    'autonomy-settings': async () => { await loadAutonomySettings(); await loadVideoCallPresence(); await loadAutonomyTools(); },
+    'autonomy-settings': async () => { if (AdminUI.version === 'new') await Promise.all([loadSchedulerConfig(), loadHdsLocalSettings()]); await loadAutonomySettings(); await loadVideoCallPresence(); await loadAutonomyTools(); },
     'output-settings': loadStickerConfig,
     'device-policy': () => { loadScreenPeekSettings(); loadMetaMode(); },
     'network-config': async () => { _bindProxyControls(); await loadProxy(); },
@@ -312,11 +314,12 @@ async function goto(page, {reloadFragment = false, fromHistory = false} = {}) {
     'feature-center': loadFeatureCenter,
     'service-center': loadServiceCenter,
     'role-bindings': loadRoleBindings,
+    'character-behavior': AdminPageLayout.loadBehavior,
     'conversation-settings': loadConversationSettings,
     'generation-debug': () => { loadPromptAblation(); loadMcpDebugRequests(); loadLatestAutonomyPrompt(); },
     setup:           loadSetupPage,
     'runtime-config': loadRuntimeConfig,
-    'tts-config':     async () => { await Promise.all([loadTtsConfig(), loadSttConfig(), loadSttVocabulary()]); },
+    'tts-config':     async () => { await Promise.all([...(AdminUI.version === 'new' ? [] : [loadTtsConfig()]), loadSttConfig(), loadSttVocabulary()]); },
     'listening-player': refreshListeningPlayer,
     'observe-listening': loadObserveListening,
     status:          loadStatus,
@@ -368,7 +371,6 @@ async function goto(page, {reloadFragment = false, fromHistory = false} = {}) {
   };
   // Returning to an already mounted page preserves its filters and form state.
   const resumePage = fromHistory && pageElement.dataset.pageVisited === 'true';
-  if (resumePage && page === 'scheduler') _startWatchStatusPoller();
   if (!resumePage && loaders[page]) {
     Promise.resolve(loaders[page]()).then(() => {
       decorateSettingsPanels(page, pageElement);
@@ -378,6 +380,7 @@ async function goto(page, {reloadFragment = false, fromHistory = false} = {}) {
   mountChainOverview(page, pageElement);
   pageElement.dataset.pageVisited = 'true';
   main.scrollTop = (fromHistory || samePage) ? (_pageHistory.at(-1)?.scroll || 0) : 0;
+  AdminPageLayout.focus(requestedPage);
 }
 
 updatePageHistory();

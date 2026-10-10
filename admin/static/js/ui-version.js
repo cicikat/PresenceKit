@@ -177,6 +177,7 @@ const AdminUI = (() => {
     version = value === 'new' ? 'new' : 'legacy';
     try { localStorage.setItem(key, version); } catch (_) {}
     apply();
+    AdminPageLayout.selected().catch(error => console.error('[admin] page layout failed', error));
   }
   document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('admin-ui-version')?.addEventListener('change', e => select(e.target.value)); apply();

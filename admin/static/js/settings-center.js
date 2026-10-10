@@ -96,6 +96,10 @@ const CENTER_FLAG_DESTINATIONS = {
   music_control:['listening-player','observe-listening'], music_autonomy:['autonomy-settings','observe-autonomy'],
 };
 function centerDestination(source,name) {
+  if (typeof AdminUI !== 'undefined' && AdminUI.version === 'new') {
+    if (source === 'scheduler') return ['autonomy-settings', 'observe-autonomy'];
+    if (source === 'tts') return ['role-bindings', 'call-records'];
+  }
   return (source==='flag'?CENTER_FLAG_DESTINATIONS[name]:CENTER_DESTINATIONS[source]) || ['runtime-config','observe-runtime'];
 }
 function centerRestartRequired(value) { return value === true || (Array.isArray(value) && value.length > 0); }
@@ -289,12 +293,21 @@ async function retryLifeRecord(recordId) {
 }
 let roleBindingGeneration=0;
 let roleBindingCharacters=[];
+async function loadRoleBindingVoice() {
+  if (AdminUI.version !== 'new') return;
+  const select = document.getElementById('tts-char-select');
+  if (!select) return;
+  await _loadTtsCharacters();
+  select.value = document.getElementById('binding-character').value;
+  await loadTtsConfig();
+}
 async function loadRoleBindings() {
   const select=document.getElementById('binding-character');
-  try {const data=await api('GET','/characters'); roleBindingCharacters=data.characters||[]; select.innerHTML=roleBindingCharacters.filter(c=>!c.hidden).map(c=>`<option value="${escapeHtml(c.id)}" ${c.id===data.active_id?'selected':''}>${escapeHtml(c.label||c.id)}</option>`).join(''); await loadRoleBindingDetail();}
+  try {const data=await api('GET','/characters'); roleBindingCharacters=data.characters||[]; select.innerHTML=(AdminUI.version === 'new' ? `<option value="">${t('role_bindings.global_voice','全局默认声音')}</option>` : '')+roleBindingCharacters.filter(c=>!c.hidden).map(c=>`<option value="${escapeHtml(c.id)}" ${c.id===data.active_id?'selected':''}>${escapeHtml(c.label||c.id)}</option>`).join(''); await loadRoleBindingDetail();}
   catch(error){centerError(document.getElementById('role-binding-fields'),error);}
 }
 async function loadRoleBindingDetail() {
+  const voiceLoad = loadRoleBindingVoice();
   const id=document.getElementById('binding-character').value, generation=++roleBindingGeneration;
   const root=document.getElementById('role-binding-fields');root.textContent=t('settings_center.loading',"读取中…"); if(!id){root.textContent=t('settings_center.select_a_character',"请选择角色");return;}
   try {
@@ -304,6 +317,7 @@ async function loadRoleBindingDetail() {
     root.innerHTML=`<section class="card"><h3>${t('settings_center.character_model_binding',"角色模型绑定")}</h3><p>${escapeHtml(t('settings_center.routing_summary','当前方案：{profile} · 模型连接：{preset} · 当前模型：{model}',{profile:routing.effective_profile||'—',preset:routing.resolved_chat_preset||'—',model:routing.resolved_chat_model||t('settings_center.not_configured',"未配置")}))}</p><p>${routing.model_routing?t('settings_center.character_binding',"使用角色绑定"):t('settings_center.follow_global',"跟随全局")} · ${routing.chat_configured?t('settings_center.configured_connection_not_tested',"配置齐全（未测试连接）"):t('settings_center.incomplete_configuration',"配置不完整")}</p><label class="field">${t('settings_center.model_profile',"模型方案")}<select id="binding-profile"><option value="">${t('settings_center.follow_global',"跟随全局")}</option>${(profiles.profiles||[]).map(p=>`<option value="${escapeHtml(p.name)}" ${p.name===routing.model_routing?'selected':''}>${escapeHtml(p.name)}</option>`).join('')}</select></label><div class="admin-action-group"><button class="btn btn-primary" data-action="saveRoleBinding">${t('settings_center.save_binding',"保存绑定")}</button><button class="btn btn-ghost" data-action="resetRoleBinding">${t('settings_center.reset_to_global',"重置为跟随全局")}</button></div><p id="binding-save-status" role="status"></p></section><section class="card"><h3>${t('settings_center.voice_and_appearance_bindings',"声音与形象绑定")}</h3>${[['tts_preset',t('settings_center.voice_preset',"语音预设")],['sticker_pack',t('settings_center.sticker_pack',"表情包池")],['live2d_model',t('settings_center.live2d_model',"Live2D 形象")],['model_3d',t('settings_center.3d_model',"3D 形象")]].map(([key,label])=>`<label class="field">${label}<input type="text" data-binding-asset="${key}" value="${escapeHtml(assets[key]||'')}" placeholder="${t('settings_center.leave_empty_to_use_defaults','留空跟随默认配置')}"></label>`).join('')}<button class="btn btn-primary" data-action="saveRoleAssets">${t('settings_center.save_asset_bindings',"保存资源绑定")}</button></section>`;
     if(!writable){root.querySelectorAll('input,select,button').forEach(el=>el.disabled=true);root.insertAdjacentHTML('afterbegin',`<p role=\"status\">${t('settings_center.plain_text_character_cards_do_not_support_persistent_bindings_use_a_json_card_in_creation_first',"纯文本角色卡不支持持久绑定，请先在创作中使用 JSON 角色卡。")}</p>`);}
     bindPageActions(root);
+    await voiceLoad;
   }catch(error){if(generation===roleBindingGeneration)centerError(root,error);}
 }
 async function persistRoleBinding(reset) {

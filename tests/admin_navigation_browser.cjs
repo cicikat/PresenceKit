@@ -106,22 +106,21 @@ const base = process.env.ADMIN_TEST_URL || 'http://127.0.0.1:8080';
     await page.unroute('**/static/pages/observe-memory-events.html?*');
     await page.evaluate(() => goto('observe-memory-events'));
     await active('observe-memory-events');
-    // Back resumes scheduler polling without rebuilding an unsaved settings form.
+    // Back preserves the scheduler form after the obsolete watch poller was retired.
     assert.deepEqual(await page.evaluate(async () => {
-      const original = [loadScheduler, _startWatchStatusPoller, _stopWatchStatusPoller];
-      let loads = 0, starts = 0, stops = 0;
-      loadScheduler = () => { loads++; _startWatchStatusPoller(); };
-      _startWatchStatusPoller = () => { starts++; };
-      _stopWatchStatusPoller = () => { stops++; };
+      const original = loadScheduler;
+      let loads = 0;
+      loadScheduler = () => { loads++; };
       try {
         await goto('scheduler');
+        document.getElementById('sc-gap-hours').value = '2.5';
         await goto('guide');
         await goBackPage();
-        return {loads, starts, stops};
+        return {loads, draft:document.getElementById('sc-gap-hours').value};
       } finally {
-        [loadScheduler, _startWatchStatusPoller, _stopWatchStatusPoller] = original;
+        loadScheduler = original;
       }
-    }), {loads: 1, starts: 2, stops: 1});
+    }), {loads: 1, draft:'2.5'});
     await page.evaluate(() => goto('guide'));
     await page.evaluate(() => { document.querySelector('main').scrollTop = 0; });
     fs.mkdirSync('.tmp/admin-navigation', {recursive: true});

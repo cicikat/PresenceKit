@@ -761,7 +761,6 @@ textarea { resize: vertical; min-height: 72px; }
 .admin-inline-038{display:flex;gap:8px;align-items:center}
 .admin-inline-040{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
 .admin-inline-041{display:flex;gap:8px;flex-wrap:wrap}
-.admin-inline-042{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .admin-inline-043{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
 .admin-inline-044{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
 .admin-inline-045{display:flex;gap:8px;margin-bottom:12px}
@@ -812,8 +811,6 @@ textarea { resize: vertical; min-height: 72px; }
 .admin-inline-110{font-size:13px;line-height:1.8;color:var(--text)}
 .admin-inline-111{font-size:13px;line-height:1.8;max-height:600px;overflow:auto;padding:4px 0}
 .admin-inline-112{font-size:13px;line-height:1.8;padding:4px 0}
-.admin-inline-115{font-weight:600}
-.admin-inline-116{font-weight:600;color:var(--accent)}
 .admin-inline-117{gap:8px;font-size:14px}
 .admin-inline-122{height:100%;background:var(--accent);transition:width .3s}
 .admin-inline-124{justify-content:flex-start;padding-top:4px}
@@ -860,15 +857,12 @@ textarea { resize: vertical; min-height: 72px; }
 .admin-inline-179{padding:20px;display:flex;flex-direction:column;gap:14px}
 .admin-inline-180{padding:4px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;background:var(--bg-secondary);color:var(--text)}
 .admin-inline-181{padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text)}
-.admin-inline-182{padding:8px 0;color:var(--muted)}
-.admin-inline-183{padding:8px 0;color:var(--muted);width:120px}
 .admin-inline-184{position:absolute;top:0;height:100%;width:2px;background:#ef4444}
 .admin-inline-185{position:absolute;top:0;height:100%;width:2px;background:#f59e0b}
 .admin-inline-186{position:relative}
 .admin-inline-187{position:relative;height:20px;background:var(--bg-secondary);border-radius:4px;overflow:hidden}
 .admin-inline-188{width:100%}
 .admin-inline-189{width:100%;accent-color:var(--accent)}
-.admin-inline-190{width:100%;font-size:13px;border-collapse:collapse}
 .admin-inline-191{width:100%;margin-top:8px}
 .admin-inline-192{width:100%;min-height:240px;font-family:var(--mono);font-size:13px;background:var(--bg-secondary);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:10px;box-sizing:border-box;resize:vertical}
 .admin-inline-194{width:100%;min-height:400px;font-family:monospace;font-size:13px;resize:vertical}

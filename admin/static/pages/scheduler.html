@@ -1,8 +1,8 @@
 
       <h1 class="page-title" data-i18n="scheduler.title">调度器</h1>
-      <p class="admin-source-hint" data-i18n="scheduler.hint">配置来源：scheduler 配置与唤醒状态机；本页的手动触发只生成一次性测试事件，不改变长期调度开关。</p>
+      <p class="admin-source-hint" data-i18n="scheduler.hint">查看例行触发状态与主动发言账本；新版的调度配置在自主活动安排中。</p>
 
-      <div class="card">
+      <div class="card" id="scheduler-config-card">
         <div class="card-header"><h3 data-i18n="scheduler.config_title">调度配置</h3><button class="btn btn-primary btn-sm" data-action="saveSchedulerConfig" data-i18n="common.save">保存</button></div>
         <div id="sc-config-switches" class="admin-inline-033"></div>
         <div class="form-row admin-inline-158">
@@ -30,21 +30,7 @@
         <div id="sc-ledger-body" class="admin-inline-098" data-i18n="common.loading">加载中…</div>
       </div>
 
-      <!-- 手动触发 -->
-      <div class="card">
-        <div class="card-header"><h3 data-i18n="scheduler.manual_title">手动触发</h3></div>
-        <div class="admin-inline-041">
-          <button class="btn btn-ghost btn-sm" data-action="scTrigger" data-action-args='["morning_greeting"]' data-i18n="scheduler.manual.morning">🌅 发早安</button>
-          <button class="btn btn-ghost btn-sm" data-action="scTrigger" data-action-args='["night_reminder"]' data-i18n="scheduler.manual.bedtime">🌙 发晚安</button>
-          <button class="btn btn-ghost btn-sm" data-action="scTrigger" data-action-args='["random_message"]' data-i18n="scheduler.manual.daytime">💬 随机日间消息</button>
-          <button class="btn btn-ghost btn-sm" data-action="scTrigger" data-action-args='["daily_journal"]' data-i18n="scheduler.manual.daily_journal">📓 手动手账</button>
-          <button class="btn btn-ghost btn-sm" data-action="scTrigger" data-action-args='["period_reminder"]' data-i18n="scheduler.manual.period">🌸 生理期关心</button>
-          <button class="btn btn-ghost btn-sm" data-action="scTrigger" data-action-args='["diary_reminder"]' data-i18n="scheduler.manual.diary">📝 日记提醒</button>
-          <button class="btn btn-ghost btn-sm" data-action="scTrigger" data-action-args='["diary_share_reminder"]' data-i18n="scheduler.manual.diary_share">📖 日记分享提醒</button>
-        </div>
-      </div>
-
-      <div class="card" data-hide-settings-functions>
+      <div class="card" id="hds-config-card" data-hide-settings-functions>
         <div class="card-header"><h3 data-i18n="scheduler.hds.title">HDS 本地实时心率</h3><button class="btn btn-primary btn-sm" data-action="saveHdsLocalSettings" data-i18n="common.save">保存</button></div>
         <div class="form-row">
           <label class="checkbox-row"><input type="checkbox" id="hds-enabled"><span data-i18n="scheduler.hds.enabled">启用本地接收</span></label>
@@ -58,41 +44,4 @@
         <p id="hds-effective" class="admin-source-hint"></p>
         <p id="hds-latest" class="admin-source-hint"></p>
         <p id="hds-reads" class="admin-source-hint"></p>
-      </div>
-
-      <!-- 手表设备测试 -->
-      <div class="card">
-        <div class="card-header"><h3 data-i18n="scheduler.watch_test_title">手表设备事件测试</h3></div>
-        <div class="admin-inline-042">
-          <input type="number" id="sc-hr-value" placeholder="心率值" data-i18n-placeholder="placeholder.heart_rate" value="105" class="admin-inline-197">
-          <button class="btn btn-ghost btn-sm" data-action="testWatchEvent" data-action-args='["heart_rate"]' data-i18n="scheduler.send_heart">发送心率事件</button>
-          <button class="btn btn-ghost btn-sm" data-action="testWatchEvent" data-action-args='["sleep_end"]' data-i18n="scheduler.send_sleep">发送睡醒事件</button>
-        </div>
-        <div class="admin-inline-090">
-          <span data-i18n="scheduler.watch_endpoint">手表设备推送地址：</span><code class="admin-inline-073">POST /watch/event?secret=...</code>
-        </div>
-      </div>
-
-      <!-- 手表设备状态 -->
-      <div class="card">
-        <div class="card-header">
-          <h3 data-i18n="scheduler.watch_status_title">手表设备状态</h3>
-          <button class="btn btn-ghost btn-sm" data-action="loadWatchStatus" data-i18n="common.refresh">刷新</button>
-        </div>
-        <div id="watch-status-body">
-  <table class="admin-inline-190">
-    <tr>
-      <td class="admin-inline-183" data-i18n="scheduler.heart_rate_label">❤️ 心率</td>
-      <td id="ws-hr" class="admin-inline-116" data-i18n="common.no_data">暂无数据</td>
-    </tr>
-    <tr>
-      <td class="admin-inline-182" data-i18n="scheduler.sleep_label">😴 睡眠</td>
-      <td id="ws-sleep" class="admin-inline-115" data-i18n="common.no_data">暂无数据</td>
-    </tr>
-    <tr>
-      <td class="admin-inline-182" data-i18n="scheduler.last_event_label">🕐 最近事件</td>
-      <td id="ws-last" class="admin-inline-012" data-i18n="common.no_data">暂无数据</td>
-    </tr>
-  </table>
-</div>
       </div>

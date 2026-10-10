@@ -191,3 +191,12 @@ body.pk-admin {
   .pk-admin #toast {right:16px;bottom:16px;}
 }
 @media(prefers-reduced-motion:reduce) {.pk-admin *, .pk-admin *::before, .pk-admin *::after {transition:none!important;animation:none!important;}}
+nav a[hidden], label[hidden] {display:none!important;}
+.admin-new-only {display:none;}
+.pk-admin .admin-new-only {display:block;}
+.pk-admin .behavior-section {padding:20px;background:var(--pk-surface);}
+.pk-admin .behavior-section>.card-header h2 {font-size:20px;margin:0;}
+.pk-admin .behavior-section-body {display:grid;gap:12px;min-width:0;}
+.pk-admin .behavior-section-body>.card {margin:0;background:var(--pk-field);}
+.pk-admin .behavior-section-body .card {min-width:0;}
+.pk-admin .behavior-section-body .settings-functions {display:none;}
