@@ -142,6 +142,12 @@ body.refined[data-theme="night"][data-palette="mineral"] {
 .refined .theme-control { display: flex; border: 1px solid var(--border); border-radius: 6px; padding: 4px; gap: 4px; }
 .refined .theme-control button { min-height: 28px; padding: 4px 12px; border: 0; font-family: var(--sans); font-size: 12px; }
 .refined .theme-control button[aria-pressed="true"] { background: var(--accent); color: var(--ink); }
+.refined[data-theme="night"][data-palette="original"] button.primary,
+.refined[data-theme="night"][data-palette="original"] .theme-control button[aria-pressed="true"] {
+  background: #c2bbd3;
+  border-color: #c2bbd3;
+  color: #25212e;
+}
 .refined .breadcrumb { margin-bottom: 16px; }
 .refined .hero { margin-bottom: 24px; }
 .refined h1 { font-weight: 500; }
