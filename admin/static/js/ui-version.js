@@ -33,6 +33,7 @@ const AdminUI = (() => {
     root.replaceChildren(shell); layout = {root, nodes, shell, changes, anchors, legacyChildren};
   }
   function apply() {
+    document.body.classList.toggle('pk-admin', version === 'new');
     const root = document.getElementById('food-module');
     if (version === 'new') enhance(root);
     else if (layout) {

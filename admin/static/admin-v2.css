@@ -1,7 +1,8 @@
 @font-face {font-family:"PK Lora";src:url("/static/fonts/Lora-VF.woff2") format("woff2");font-weight:400 700;font-display:swap;}
 @font-face {font-family:"PK Noto Serif";src:url("/static/fonts/NotoSerifSC-VF.woff2") format("woff2");font-weight:200 900;font-display:swap;}
 /* All design tokens and components are restricted to the migrated module. */
-.pk-ui { --pk-bg:#eeedf3; --pk-surface:#faf9fc; --pk-field:#f3f1f7; --pk-text:#302d40; --pk-muted:#625e76; --pk-border:#d8d4e2; --pk-accent:#76668f; --pk-success:#316b50; --pk-error:#a23d47; --pk-radius:8px; --pk-space:20px; font-family:"PK Lora","PK Noto Serif",SimSun,serif; font-size:15px; line-height:1.7; letter-spacing:.01em; color:var(--pk-text); background:var(--pk-bg); padding:var(--pk-space); border-radius:var(--pk-radius); }
+.pk-ui, .pk-admin { --pk-bg:#eeedf3; --pk-surface:#faf9fc; --pk-field:#f3f1f7; --pk-text:#302d40; --pk-muted:#625e76; --pk-border:#d8d4e2; --pk-accent:#76668f; --pk-success:#316b50; --pk-error:#a23d47; --pk-radius:8px; --pk-space:20px; --pk-warn:#886324; --pk-serif:"PK Lora","PK Noto Serif",SimSun,serif; --pk-sans:"Microsoft YaHei UI","Microsoft YaHei",system-ui,sans-serif; }
+.pk-ui { font-family:var(--pk-serif); font-size:15px; line-height:1.7; letter-spacing:.01em; color:var(--pk-text); background:var(--pk-bg); padding:var(--pk-space); border-radius:var(--pk-radius); }
 .pk-ui * { box-sizing:border-box; }
 .pk-ui .pk-hero h3 {font-size:28px;font-weight:500;margin:0 0 12px;color:var(--pk-text)}
 .pk-ui h4,.pk-ui strong {color:var(--pk-text)}

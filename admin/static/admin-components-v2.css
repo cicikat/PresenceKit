@@ -1,0 +1,89 @@
+/* New presentation only. Removing pk-admin restores the complete legacy cascade. */
+body.pk-admin {
+  --bg:var(--pk-bg); --surface:var(--pk-surface); --bg-secondary:var(--pk-field);
+  --border:var(--pk-border); --border-strong:var(--pk-muted);
+  --accent:var(--pk-accent); --accent2:var(--pk-accent);
+  --text:var(--pk-text); --muted:var(--pk-muted);
+  --danger:var(--pk-error); --success:var(--pk-success); --warn:var(--pk-warn);
+  --radius:var(--pk-radius);
+  color-scheme:light;
+  font-family:var(--pk-serif); font-size:15px; line-height:1.7; letter-spacing:.01em;
+}
+.pk-admin main {padding:24px 32px;}
+.pk-admin .admin-topbar {flex-wrap:wrap;gap:10px;padding:12px 0 16px;margin:0 0 24px;border-bottom:1px solid var(--border);font-family:var(--pk-sans);}
+.pk-admin .admin-topbar select {max-width:100%;}
+.pk-admin #admin-ui-version {width:auto;flex:0 0 auto;min-width:120px;}
+.pk-admin nav {padding-top:20px;font-family:var(--pk-sans);}
+.pk-admin .nav-logo h2 {font:500 20px/1.6 var(--pk-serif);}
+.pk-admin nav a:hover, .pk-admin nav a.active {background:var(--pk-field);}
+.pk-admin nav a.active {font-weight:600;}
+.pk-admin .nav-pages .nav-group-header {font-size:13px;line-height:1.7;}
+.pk-admin .nav-menu-toggle {background:var(--pk-surface);color:var(--pk-text);border:1px solid var(--pk-border);border-radius:6px;}
+.pk-admin .page {max-width:1480px;margin-inline:auto;min-width:0;}
+.pk-admin h1.page-title {font-size:28px;font-weight:500;line-height:1.45;margin-bottom:16px;}
+.pk-admin h2 {font-size:20px;line-height:1.6;font-weight:500;color:var(--text);}
+.pk-admin h3, .pk-admin .card-header h3, .pk-admin .settings-disclosure h3 {font-size:18px;line-height:1.6;font-weight:600;color:var(--text);}
+.pk-admin h4 {font-size:16px;line-height:1.6;color:var(--text);}
+.pk-admin .page-subtitle, .pk-admin .admin-description, .pk-admin .card>p, .pk-admin .page-context {font-size:13px;line-height:1.7;}
+.pk-admin .page-context {background:var(--pk-field);padding:16px 20px;border-radius:8px;margin:0 0 20px;}
+.pk-admin .card {background:var(--pk-surface);border:1px solid var(--pk-border);border-radius:var(--pk-radius);padding:20px;margin-bottom:20px;min-width:0;}
+.pk-admin .card .card {padding:16px;}
+.pk-admin .card-header {gap:12px;margin-bottom:16px;align-items:center;}
+.pk-admin .card-header>div {min-width:0;}
+.pk-admin .settings-disclosure>summary {padding:0;gap:12px;}
+.pk-admin .settings-disclosure-body {padding-top:20px;}
+.pk-admin .settings-current {font-size:13px;}
+.pk-admin .settings-functions {font-size:11px;}
+.pk-admin .settings-footer, .pk-admin .modal-footer, .pk-admin .admin-action-group,
+.pk-admin .admin-card-actions, .pk-admin .tools-action-row {flex-wrap:wrap;overflow:visible;gap:10px;}
+.pk-admin .btn, .pk-admin .pk-collapse {
+  font:400 14px/1.6 var(--pk-serif);border-radius:6px;min-height:38px;padding:8px 16px;
+  border:1px solid var(--pk-border);background:var(--pk-surface);color:var(--pk-text);
+  white-space:normal;overflow-wrap:anywhere;justify-content:center;
+}
+.pk-admin .btn:hover {background:var(--pk-field);}
+.pk-admin .btn-primary {background:var(--pk-accent);color:white;border-color:var(--pk-accent);}
+.pk-admin .btn-primary:hover {filter:brightness(.94);background:var(--pk-accent);}
+.pk-admin .btn-danger {background:transparent;color:var(--pk-error);border-color:var(--pk-error);}
+.pk-admin .btn-danger:hover {background:var(--pk-field);}
+.pk-admin .btn-sm {font-size:13px;padding:6px 12px;}
+.pk-admin :is(input:not([type]),input[type=text],input[type=number],input[type=password],input[type=url],input[type=email],input[type=search],input[type=tel],input[type=time],input[type=date],input[type=datetime-local],textarea,select) {
+  font:400 15px/1.7 var(--pk-serif);background:var(--pk-field);color:var(--pk-text);
+  border:1px solid var(--pk-border);border-radius:6px;padding:8px 12px;min-height:38px;max-width:100%;min-width:0;
+}
+.pk-admin textarea {resize:vertical;}
+.pk-admin :is(input[type=checkbox],input[type=radio],input[type=range]) {accent-color:var(--pk-accent);}
+.pk-admin input[type=checkbox] {width:18px;height:18px;flex-shrink:0;}
+.pk-admin input[type=file] {max-width:100%;font:13px var(--pk-sans);}
+.pk-admin input[type=file]::file-selector-button {font:inherit;border:1px solid var(--pk-border);background:var(--pk-field);color:var(--pk-text);border-radius:6px;padding:8px 12px;margin-right:8px;}
+.pk-admin label.field {gap:6px;}
+.pk-admin label.field span, .pk-admin .admin-source-hint, .pk-admin .admin-source-note {font-size:13px;line-height:1.7;}
+.pk-admin .form-row {grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-bottom:16px;}
+.pk-admin .form-row.col-3 {grid-template-columns:repeat(3,minmax(0,1fr));}
+.pk-admin .form-row.col-1 {grid-template-columns:minmax(0,1fr);}
+.pk-admin :focus-visible {outline:2px solid var(--pk-accent);outline-offset:3px;}
+.pk-admin :is(input,textarea,select):focus {box-shadow:none;border-color:var(--pk-accent);}
+.pk-admin .auth-card {background:var(--pk-surface);border-radius:8px;}
+.pk-admin .auth-card h1 {font-size:28px;font-weight:500;}
+.pk-admin .modal {background:var(--pk-surface);border:1px solid var(--pk-border);border-radius:8px;max-width:calc(100vw - 32px);min-width:0;}
+.pk-admin .modal-header {border-color:var(--pk-border);padding:16px 20px;}
+.pk-admin .modal-backdrop {background:rgb(48 45 64 / .4);}
+.pk-admin .control-center {max-width:none;}
+.pk-admin .control-center-section {margin-top:24px;}
+.pk-admin .control-center-grid {gap:16px;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));}
+.pk-admin .control-center-card {background:var(--pk-surface);border:1px solid var(--pk-border);border-radius:8px;padding:20px;min-height:140px;font-family:var(--pk-serif);}
+.pk-admin .control-center-card:hover {background:var(--pk-field);border-color:var(--pk-accent);}
+.pk-admin .control-center-card strong {font-size:18px;font-weight:500;}
+.pk-admin .control-center-card span {font-size:13px;line-height:1.7;}
+.pk-admin .control-center-card-readonly {border-style:dashed;}
+.pk-admin .configuration-notice {background:var(--pk-field);border-radius:6px;border-left:3px solid var(--pk-warn);}
+.pk-admin .empty, .pk-admin .loading {font-size:14px;line-height:1.7;color:var(--pk-muted);}
+@media(max-width:900px) {.pk-admin main {padding:20px;}.pk-admin .admin-topbar {padding-right:0;}}
+@media(max-width:600px) {
+  .pk-admin main {padding:16px;}.pk-admin .admin-topbar {padding-left:32px;gap:8px;}
+  .pk-admin h1.page-title {font-size:24px;}.pk-admin .card {padding:16px;}
+  .pk-admin .form-row, .pk-admin .form-row.col-3 {grid-template-columns:minmax(0,1fr);}
+  .pk-admin .admin-field-grid {grid-template-columns:minmax(0,1fr);}
+  .pk-admin .settings-footer>* {max-width:100%;}
+}
+@media(prefers-reduced-motion:reduce) {.pk-admin *, .pk-admin *::before, .pk-admin *::after {transition:none!important;animation:none!important;}}
