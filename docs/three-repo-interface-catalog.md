@@ -1146,3 +1146,8 @@ observe：独立 Bot 正版认证、皮肤、真实玩家/模型共玩验收仍�
 Minecraft后端增量：`build_house`参数material/x/y/z严格白名单；`allow_building`默认false，在后端共玩页授权，回执placed/total与partial outcome沿现有Activity桥链观察。桌面/手机未消费该接口，无跨仓协议变更。
 
 276 roadmap：QQ 非 owner 私聊的 reality/工具/turn sink 路径尚无完整访客隔离合同，工具事件仍复用面向 UI 的 push_tool_status；普通 QQ 回复正文 fanout=[] 不做 UI 广播；默认以 qq_other_users=false 暂停。QQ 群聊默认 qq_group=false；两开关为 admin 控制面，不新增 desktop/mobile 协议或设置消费。重新开放前验证接收者、用户 scope 与工具权限。
+### 2026-10-10 桌面 GLB 行为呈现（observe / partial）
+
+桌面新增内部 Tauri character://behavior 通知，request-start/end 观察现有 send_chat，audio-start/end 观察 VoiceMessageBar 实际播放；独立 id、charId、epoch at，回复可关联 msgId，音频另含 scene。仅呈现，不新增 REST/WS、后端状态/配置/观测队列，原 TTS 与 performance_mapping 管理控制保持原契约。canonical/stream/perform 使用已有单角色 reality scope，Dream/群聊不驱动当前 GLB；结束只释放自身，角色切换清理。
+
+桌面 Pet/Room 共享仲裁，实际播放/文本反馈优先于 thinking，结束恢复可信情绪；手机仍消费 mobile TTS/原设置，不消费该内部事件，也不新增 GLB/PNG 能力。真实 Windows Tauri 聊天、TTS 与多窗口切换验收为 open；浏览器真实 GLB/PNG + 模拟 transport、真实 AudioElement 为已验证边界。桌面细节见其 docs/backend-integration.md 和 cc-tasks/2026-10-10-tv-behavior-p1-p2.md。
