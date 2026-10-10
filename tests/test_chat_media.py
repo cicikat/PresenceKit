@@ -271,15 +271,3 @@ def test_tombstone_releases_live_ref_for_gc(sandbox):
     assert result.ok and result.changed
     assert media_processor.gc_inbox(max_age_days=0) == 1
     assert not inbox.exists()
-
-
-def test_admin_observe_page_uses_authenticated_media_fetch():
-    from pathlib import Path as _Path
-
-    source = (_Path(__file__).parents[1] / "admin" / "static" / "js" / "observability.js").read_text(encoding="utf-8")
-    page = (_Path(__file__).parents[1] / "admin" / "static" / "pages" / "observe-chat-media.html").read_text(encoding="utf-8")
-    assert "loadObserveChatMedia" in source
-    assert "await api('GET', `/observability/chat-media" in source
-    assert "window.loadObserveChatMedia = loadObserveChatMedia" in source
-    assert 'id="obs-chat-media-body"' in page
-    assert "Authorization: `Bearer ${TOKEN}`" not in page

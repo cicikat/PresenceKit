@@ -1,6 +1,6 @@
 # Admin 新旧 UI 迁移验收
 
-全部 73 个页面接入新版公共呈现层，保持既有导航、后端 API、权限与数据源。默认旧版，顶栏选择写入 localStorage；切换不重启、不写配置、不同时挂载两份业务页面。旧版及切换入口等待用户验收后单独评估删除。
+初次迁移覆盖 73 个页面，以下字段/action 数量为当时的验收快照。2026-10-10 后续重组加入多模态模型路由、角色行为及数据管理；三个聊天观测页面已删除，当前归属见 `feature-control-surface.md`。默认旧版，顶栏选择写入 localStorage；切换不重启、不写配置、不同时挂载两份业务页面。旧版及切换入口等待用户验收后单独评估删除。
 
 ## 组件与共享边界
 
@@ -57,9 +57,6 @@
 | observe-api-contract | 0 | 1 | pass |
 | observe-autonomy | 0 | 1 | pass |
 | observe-char-permissions | 2 | 1 | pass |
-| observe-chat-artifacts | 2 | 1 | pass |
-| observe-chat-media | 2 | 1 | pass |
-| observe-chatlog | 1 | 2 | pass |
 | observe-dream-operations | 0 | 1 | pass |
 | observe-dream-prompt | 2 | 5 | pass |
 | observe-dream | 0 | 1 | pass |

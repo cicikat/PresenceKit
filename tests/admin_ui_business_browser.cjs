@@ -52,17 +52,30 @@ const origin='http://127.0.0.1:8769';
       async function mount(name,loader) {
         await page.evaluate(async ({name,loader})=>{
           await loadPageFragment(name);document.querySelectorAll('.page.active').forEach(n=>n.classList.remove('active'));
-          const el=document.getElementById('page-'+name);el.classList.add('active');
+          let el=document.getElementById('page-'+name);el.classList.add('active');
           if(loader)await window[loader]();
+          el.dataset.pageVisited='true';
+          const target=AdminPageLayout.resolve(name);
+          await loadPageFragment(target);
+          await AdminPageLayout.prepare(target);
+          el.classList.remove('active');el=document.getElementById('page-'+target);el.classList.add('active');
+          el.dataset.pageVisited='true';
           decorateSettingsPanels(name,el);AdminUI.apply();
+          el.querySelectorAll('[data-pk-collapsed="true"] > .card-header > .pk-collapse').forEach(button=>button.click());
           el.querySelectorAll('details').forEach(n=>n.open=true);closeSidebar();document.querySelector('main').scrollTop=0;
         },{name,loader});
       }
       async function checkSwitchDraft(selector,value) {
-        const before=calls;
+        const beforeWrites=writes.length;
+        const originalPage=await page.evaluate(()=>document.querySelector('.page.active').id.replace(/^page-/,''));
         await page.selectOption('#admin-ui-version',version==='new'?'legacy':'new');
         await page.selectOption('#admin-ui-version',version);
-        assert.equal(calls,before);
+        await page.evaluate(async name=>{
+          await goto(name,{fromHistory:true});
+          document.querySelector('.page.active').querySelectorAll('[data-pk-collapsed="true"] > .card-header > .pk-collapse').forEach(button=>button.click());
+        },originalPage);
+        // A first switch may read newly consolidated modules; it must never save drafts.
+        assert.equal(writes.length,beforeWrites);
         assert.equal(await page.locator(selector).inputValue(),value);
       }
       await mount('network-config','loadProxy');await page.evaluate(()=>_bindProxyControls());
@@ -106,9 +119,9 @@ const origin='http://127.0.0.1:8769';
       if(version==='new')await page.screenshot({path:path.join(output,'user-data-business.png')});
       await mount('listening-player','refreshListeningPlayer');
       const audio=await page.locator('#listening-audio').elementHandle();
-      const count=calls;
+      const count=writes.length;
       await page.selectOption('#admin-ui-version',version==='new'?'legacy':'new');await page.selectOption('#admin-ui-version',version);
-      assert.equal(calls,count);
+      assert.equal(writes.length,count);
       assert.equal(await audio.evaluate(n=>n===document.getElementById('listening-audio')),true);
       if(version==='new') {
         await mount('role-bindings','loadRoleBindings');await page.waitForTimeout(100);

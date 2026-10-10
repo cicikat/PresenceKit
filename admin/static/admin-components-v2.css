@@ -194,6 +194,7 @@ body.pk-admin {
 nav a[hidden], label[hidden] {display:none!important;}
 .admin-new-only {display:none;}
 .pk-admin .admin-new-only {display:block;}
+.pk-admin .admin-legacy-only, .pk-admin #page-model-routing>.page-context {display:none;}
 .pk-admin .behavior-section {padding:20px;background:var(--pk-surface);}
 .pk-admin .behavior-section>.card-header h2 {font-size:20px;margin:0;}
 .pk-admin .behavior-section-body {display:grid;gap:12px;min-width:0;}

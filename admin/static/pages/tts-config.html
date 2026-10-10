@@ -1,9 +1,9 @@
 <h1 class="page-title" data-i18n="tts_config.title">语音合成与声音（TTS、STT）</h1>
-<p class="admin-source-hint" data-i18n="tts_config.source_hint">本页同时配置语音合成（TTS）和语音识别（STT）。试听成功只代表本次合成返回音频，不代表桌面端或手机端已经播放。</p>
+<p class="admin-source-hint" data-i18n="tts_config.source_hint">配置语音识别连接、角色声音和试听。</p>
 
 <div class="card" id="stt-config-card">
   <div class="card-header"><h3 data-i18n="stt.title">语音识别（STT）</h3><button class="btn btn-ghost btn-sm" data-action="loadSttConfig" data-i18n="common.refresh">刷新</button></div>
-  <p class="admin-inline-087" data-i18n="stt.hint">命名连接用于语音转写，默认关闭；语调只是印象。兼容 audio/transcriptions 接口，未提供语调时记为 unclear。</p>
+  <p class="admin-inline-087" data-i18n="stt.hint">保存识别连接，再选择语音消息的转写连接。</p>
   <label class="field"><span data-i18n="stt.saved">已保存连接</span><select id="stt-saved" onchange="selectSttConnection()"></select></label>
   <label class="field"><span data-i18n="stt.name">连接名</span><input id="stt-name" type="text"></label>
   <label class="field"><span data-i18n="stt.base_url">Base URL</span><input id="stt-url" type="url" placeholder="https://api.example.com/v1"></label>
@@ -43,7 +43,7 @@
     <label class="field"><span data-i18n="status.tts.provider">TTS Provider</span><select id="tts-provider" onchange="onTtsProviderChange()"><option value="gsv" data-i18n="status.tts.provider_gsv">GPT-SoVITS / GSV</option><option value="openai_compatible" data-i18n="status.tts.provider_openai_compatible">OpenAI-compatible（自建/云端，POST /audio/speech）</option></select></label>
     <label class="field"><span data-i18n="status.tts.api_url">API URL</span><input type="url" id="tts-api-url" placeholder="http://tts.example:9880"></label>
   </div>
-  <p class="admin-inline-087" data-i18n="tts_config.resource_hint">资源选择器只显示 authored 资源的逻辑名称和来源，不提供本机物理路径输入。</p>
+  <p class="admin-inline-087" data-i18n="tts_config.resource_hint">选择参考音频及 GPT、SoVITS 模型资源。</p>
   <label class="field"><span data-i18n="tts_config.gsv_version">GPT-SoVITS 版本路由</span><select id="tts-gsv-version" onchange="onTtsVersionChange()"><option value="auto" data-i18n="tts_config.gsv_auto">自动（沿用旧配置）</option><option value="v2">v2</option><option value="v3">v3</option><option value="v2Pro">v2Pro</option><option value="v2ProPlus">v2ProPlus</option></select></label>
   <p class="admin-inline-087" data-i18n="tts_config.gsv_version_hint">每个版本分别保存 GPT 与 SoVITS 权重。明确版本须配齐两项；自动沿用旧权重与底模回退。实际模型架构由 GPT-SoVITS 从权重识别。</p>
   <div class="form-row">
@@ -59,7 +59,7 @@
 
 <details class="card tts-advanced" id="tts-advanced-panel">
   <summary data-i18n="tts_config.advanced_title">高级 Provider 参数</summary>
-  <p class="admin-inline-087" data-i18n="tts_config.advanced_hint">高级项保持折叠；字段类型由控件约束。密钥只写入，不从服务端回显，也不会进入普通摘要。</p>
+  <p class="admin-inline-087" data-i18n="tts_config.advanced_hint">填写 Provider 参数和情绪分档。</p>
   <label class="field"><span data-i18n="tts_config.api_key">Provider API Key（只写入）</span><input type="password" id="tts-provider-api-key" autocomplete="new-password" placeholder="留空则保留已有值" data-i18n-placeholder="setup.secret.keep"></label>
   <label class="field"><span data-i18n="status.tts.provider_params">其他 Provider 参数</span><div id="tts-provider-params"></div></label>
   <button type="button" class="btn btn-ghost btn-sm" data-action="addTtsProviderParam" data-i18n="status.tts.add_param">新增参数</button>
@@ -68,7 +68,7 @@
 
 <div class="card">
   <div class="card-header"><h3 data-i18n="tts_config.verify_title">试听与调用记录</h3><button class="btn btn-ghost btn-sm" data-action="loadTtsCallLog" data-i18n="status.tts.call_log">最近合成记录</button></div>
-  <p class="admin-inline-087" data-i18n="tts_config.verify_hint">试听调用真实 provider；结果只说明合成请求返回情况，不承诺任何客户端播放链路。</p>
+  <p class="admin-inline-087" data-i18n="tts_config.verify_hint">保存声音配置，或生成试听音频。</p>
   <button class="btn btn-primary btn-sm" data-action="saveTtsConfig" data-i18n="common.save">保存</button>
   <button class="btn btn-ghost btn-sm" data-action="testTtsConfig" data-i18n="status.tts.test">试听当前 Provider</button>
   <pre id="tts-call-log" class="admin-inline-157"></pre>

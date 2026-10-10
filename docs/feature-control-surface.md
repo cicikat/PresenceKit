@@ -2,13 +2,15 @@
 
 ## 新版管理面板页面归属（2026-10-10）
 
-新版「角色的模型、声音与形象」集中单角色模型方案、语音预设、表情包池、Live2D/3D 形象与 TTS 参数、参考音频及试听，共用角色选择；「模型连接与分工」仍维护全局模型连接与用途，「语音识别（STT）」维护转写连接。
+新版「多模态模型路由」集中角色绑定与形象、文本模型、VLM/OCR、STT（远程连接与本地运行）、TTS（声音与试听）和记忆搜索模型六个可收起大模块。单角色模型方案、语音预设、表情包池、Live2D/3D 形象与 TTS 参数继续共用角色选择，保留全局默认声音入口。全局连接和用途仍使用原有接口。
 
 「自主活动安排」集中 scheduler 的例行来源开关、发言间隔与每日预算，以及生产 HDS 接收设置。scheduler 产生候选、自主活动评估机会；每日评估上限与每日发言上限保留各自含义和保存接口。「主动消息与定时提醒」移至「记录与状态」，保留触发器状态和发言账本。旧手动触发、手表事件测试、旧手表状态及其前端轮询退役，不改变生产 HDS API。
 
 新版「角色行为」包含浏览器任务权限、看屏幕与操作电脑、表情包与回复表现、陪玩游戏识别、Minecraft 共玩、共同听歌播放器、邮件连接、日记数据来源、用户资料与纪念日。每部分使用可收起的大卡片，内部保留独立设置组与保存操作；旧页面链接在新版指向合并页。工具页移除文件只读访问展示及两张总说明卡。
 
-本次只调整管理面归属，配置字段、默认值、scope、API 和桌面/手机协议不变。旧版保持配置布局，已退役测试卡片和工具说明卡在两个版本均删除。
+新版「首次配置与连接检查」加入原代理页面的内容；客户端设置中的手机中继表单保留原位。「高级运行配置与实验」归入「功能与行为」。新版「数据管理」集中关系与重要事实、素材与数据管理、IME 输入法接收及角色记忆档案，四个模块独立收起。聊天记录、聊天产物文件、聊天媒体引用三个管理页及专用脚本退役；后端日志、产物与媒体接口继续供客户端和工具使用。
+
+本次只调整管理面归属，配置字段、默认值、scope、API 和桌面/手机协议不变。旧版保持配置布局，已退役测试卡片、工具说明卡及三个聊天观测页在两个版本均删除。
 
 ## 饮食清单（F4）
 
@@ -36,7 +38,7 @@ F7 无新增配置开关：角色工具选择1..10轮，固定3项/6000字/24小
 `proxy.http`，关则直连。可选 `auto` / `direct` / `proxy`。`auto` 每次模型请求解析目标
 DNS：`198.18.0.0/15` Fake-IP 或解析失败时用已配置 HTTP 代理，其余直连；DNS 变化不需
 重启。`auto`/`proxy` 保存时要求有效 `proxy.http`。`GET/PUT /proxy` 读写该字段，保存后
-热重载文本模型与视觉客户端。管理面「代理与中继」提供下拉与说明；系统状态摘要只读展示
+热重载文本模型与视觉客户端。新版管理面「首次配置与连接检查 → 代理与手机连接」提供下拉与说明（旧版仍在代理页）；系统状态摘要只读展示
 当前模式，编辑入口仍在该页。手机聊天继续复用后端模型连接，桌面/手机无新设置。真实模型
 网络与手机端验收 observe。静态版本 `v1-call-presence-1`。其他出站工具仍用各自代理
 策略。
@@ -85,7 +87,7 @@ CHATTING 状态下 `UnboundLocalError`，即通话中用户一说话相机 job �
 模型权重不进 git：显式下载到 `get_paths().stt_model_dir()`（`data/cache/stt_models/<model>/`，约 200 MB），
 `POST /settings/local-runtime/stt/sherpa/download`（`admin`，后台线程，进度见 `GET /settings/local-runtime` 的 `sherpa.download`）。
 
-管理面页面「本地模型运行」（`local-model-runtime`，服务分组，`admin` scope）只接本地 STT：
+新版「多模态模型路由 → STT」包含本地运行设置（旧版 `local-model-runtime`，`admin` scope）：
 `GET /settings/local-runtime`（configured / effective / 回落原因 / 最近一次切换结果）、
 `GET /settings/local-runtime/hardware`（只读探测，不加载模型，缺运行库时给出下一步）、
 `PUT /settings/local-runtime/stt`（先热切换，成功后才写 `config.yaml`；失败返回 409，
@@ -148,7 +150,7 @@ Dream settings 归属为 per-character：`GET/PATCH /dream/settings` 读写当�
 
 ## 聊天产物文件（2026-09-16）
 
-Path C `artifacts` 类（`write_artifact` / `update_artifact` / `read_artifact` / `list_artifacts`）写出沙盒文本文件；不进 Path A 探针。没有独立客户端开关，暴露面由 tool loop categories / 角色 `presence_ext.tool_categories` 决定。管理面观测页 `observe-chat-artifacts` 只读元数据（state.read）；下载/预览走 chat scope。桌面气泡消费 live payload，不新增设置。手机 UI 为 roadmap。
+Path C `artifacts` 类（`write_artifact` / `update_artifact` / `read_artifact` / `list_artifacts`）写出沙盒文本文件；不进 Path A 探针。没有独立客户端开关，暴露面由 tool loop categories / 角色 `presence_ext.tool_categories` 决定。管理面产物观测页已退役；后端元数据接口仍为 state.read，下载/预览仍走 chat scope。桌面气泡消费 live payload，不新增设置。手机 UI 为 roadmap。
 
 ## 资料接续（2026-09-13）
 

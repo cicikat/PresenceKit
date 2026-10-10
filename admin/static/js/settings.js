@@ -1012,7 +1012,7 @@ async function loadModelRouting() {
     const defaultSel = document.getElementById('mr-default-preset-select');
     if (defaultSel) {
       const currentDefault = data.default_preset || '';
-      defaultSel.innerHTML = `<option value="">${t('routing.default_preset_none', '（不设默认：未填 category 走 default_preset → chat → 第一个 preset）')}</option>` +
+      defaultSel.innerHTML = `<option value="">${t('routing.default_preset_none', '（不设置默认 Preset）')}</option>` +
         Object.keys(data.presets || {}).filter(name => data.presets[name].api_protocol !== 'systemone').map(name =>
           `<option value="${escapeHtml(name)}" ${name === currentDefault ? 'selected' : ''}>${escapeHtml(name)}</option>`
         ).join('');

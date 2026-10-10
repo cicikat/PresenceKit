@@ -20,7 +20,7 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'admin-consolidation-1';
+const ADMIN_UI_FRAGMENT_VERSION = 'admin-consolidation-2';
 
 const ADMIN_PAGE_ALIASES = Object.freeze({memory: 'observe-memory'});
 
@@ -47,7 +47,7 @@ const ADMIN_PAGE_CONTEXT = Object.freeze({
 
 function decoratePageContext(page, container) {
   const context = ADMIN_PAGE_CONTEXT[page];
-  if (!context || container.querySelector('.page-context')) return;
+  if (!context || (AdminUI.version === 'new' && page === 'model-routing') || container.querySelector('.page-context')) return;
   const title = container.querySelector('.page-title');
   if (!title) return;
   const panel = document.createElement('section');
@@ -317,7 +317,7 @@ async function goto(page, {reloadFragment = false, fromHistory = false} = {}) {
     'character-behavior': AdminPageLayout.loadBehavior,
     'conversation-settings': loadConversationSettings,
     'generation-debug': () => { loadPromptAblation(); loadMcpDebugRequests(); loadLatestAutonomyPrompt(); },
-    setup:           loadSetupPage,
+    setup:           async () => { await loadSetupPage(); if (AdminUI.version === 'new') await AdminPageLayout.loadNetwork(); },
     'runtime-config': loadRuntimeConfig,
     'tts-config':     async () => { await Promise.all([...(AdminUI.version === 'new' ? [] : [loadTtsConfig()]), loadSttConfig(), loadSttVocabulary()]); },
     'listening-player': refreshListeningPlayer,
@@ -327,7 +327,8 @@ async function goto(page, {reloadFragment = false, fromHistory = false} = {}) {
     logs:            () => { _runtimeWarningOffset = 0; loadLogs(); },
     'auth-tokens':   () => { loadAuthTokens(); loadChannelToggles(); },
     overview:        loadOverview,
-    'model-routing': loadModelRouting,
+    'model-routing': async () => { await loadModelRouting(); if (AdminUI.version === 'new') await AdminPageLayout.loadModels(); },
+    'data-management': AdminPageLayout.loadData,
     mcp:             loadMcpPage,
     tools:           loadToolsPage,
     'owner-turn-api': loadOwnerTurnApiPage,
@@ -344,9 +345,6 @@ async function goto(page, {reloadFragment = false, fromHistory = false} = {}) {
     'observe-memory':  () => {},
     'observe-memory-events': () => {},
     'observe-hidden':  loadObserveHidden,
-    'observe-chatlog': () => { loadObserveChatlogDates(); loadObserveChatIdentity(); },
-    'observe-chat-artifacts': loadObserveChatArtifacts,
-    'observe-chat-media': loadObserveChatMedia,
     'observe-runtime': loadObserveRuntime,
     'observe-growth':  () => initObserveCharacters('obs-growth-char', loadObserveGrowth),
     'observe-visual':  loadObserveVisual,
