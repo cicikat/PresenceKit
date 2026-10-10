@@ -8,6 +8,8 @@
 <link rel="stylesheet" href="/static/admin-design.css?v=admin-design-1">
 <link rel="stylesheet" href="/static/admin-v2.css?v=admin-all-3">
 <link rel="stylesheet" href="/static/admin-components-v2.css?v=admin-spacing-1">
+<link rel="stylesheet" href="/static/admin-theme.css?v=night-1">
+<script defer src="/static/js/admin-theme.js?v=night-1"></script>
 </head>
 <body>
 
@@ -153,14 +155,16 @@
 
   <main>
     <div class="admin-topbar">
+      <button type="button" id="nav-back" class="btn btn-ghost btn-sm admin-icon-button" data-action="goBackPage" data-i18n-aria-label="nav.back" aria-label="返回上一页" disabled><span aria-hidden="true">←</span></button>
+      <div class="admin-topbar-controls">
       <label for="admin-ui-version" data-i18n="admin_ui.version">界面</label><select id="admin-ui-version" aria-label="管理面版本" data-i18n-aria-label="admin_ui.version_label"><option value="legacy" data-i18n="admin_ui.legacy">旧版</option><option value="new" data-i18n="admin_ui.new">新版</option></select>
-      <button type="button" id="nav-back" class="btn btn-ghost btn-sm" data-action="goBackPage" disabled><span aria-hidden="true">←</span> <span data-i18n="nav.back">返回上一页</span></button>
-      <button type="button" class="btn btn-ghost btn-sm" data-action="goto" data-action-args='["setup"]' data-i18n="scheduler.global_owner">所有者资料（全局）</button>
       <label for="admin-language-select" data-i18n="common.language">语言</label>
       <select id="admin-language-select" data-language-select onchange="AdminI18n.setLanguage(this.value)">
         <option value="zh-CN" data-i18n="settings_center.chinese">中文</option>
         <option value="en">English</option>
       </select>
+      <button type="button" id="admin-theme-toggle" class="btn btn-ghost btn-sm admin-icon-button" aria-label="切换夜间模式" title="切换夜间模式"><span aria-hidden="true">☾</span></button>
+      </div>
     </div>
 
     <div class="page" id="page-guide" data-page-fragment="guide"></div>
