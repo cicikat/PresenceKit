@@ -40,6 +40,7 @@ const origin='http://127.0.0.1:8769';
         if(endpoint==='/user-data/assets')data={categories:[{id:'sticker',group:'stickers',scope:'character',upload_fields:['file','logical_id','char_id','emotion'],extensions:['.png'],max_bytes:10000}],assets:[],bindings:{}};
         if(endpoint==='/player/state')data={music_control_enabled:false,session:{generation:1,session_id:'fixture-session',revision:1,host_online:false}};
         if(endpoint==='/player/library')data={items:[]};
+        if(endpoint.startsWith('/observe/prompt-layers/'))data={n:0,total_snapshots:1,snapshot:{captured_at:'2026-01-01T12:00:00',token_estimate:21000,origin:{origin:'proactive',trigger_name:'fixture',seed_prompt:'Long fixture '.repeat(100)},removed_layers:['fixture'],layers:[]}};
         if(data===undefined)return route.fulfill({status:403,contentType:'application/json',body:'{}'});
         return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)});
       });
@@ -106,6 +107,33 @@ const origin='http://127.0.0.1:8769';
       await page.selectOption('#admin-ui-version',version==='new'?'legacy':'new');await page.selectOption('#admin-ui-version',version);
       assert.equal(calls,count);
       assert.equal(await audio.evaluate(n=>n===document.getElementById('listening-audio')),true);
+      await mount('observe-prompt');
+      await page.locator('#obs-prompt-uid').fill('fixture-owner');
+      await page.evaluate(()=>loadObservePrompt());
+      await page.waitForTimeout(100);
+      assert.equal(await page.locator('#obs-prompt-summary-card').isVisible(),true);
+      const signal=page.locator('#obs-prompt-summary strong');
+      const original=await signal.getAttribute('style');
+      if(version==='new') {
+        assert.equal(await signal.getAttribute('data-pk-tone'),'error');
+        const fold=page.locator('#obs-recall-card .pk-collapse');
+        await fold.focus();await page.keyboard.press('Enter');
+        await page.waitForFunction(()=>document.querySelector('#obs-recall-card .pk-collapse').getAttribute('aria-expanded')==='false');
+        assert.equal(await fold.getAttribute('aria-expanded'),'false');
+        await page.evaluate(()=>loadObservePrompt());await page.waitForTimeout(100);
+        assert.equal(await fold.getAttribute('aria-expanded'),'false');
+        await fold.click();
+        await page.screenshot({path:path.join(output,'observe-prompt-business.png')});
+        await page.selectOption('#admin-ui-version','legacy');
+        assert.equal(await page.locator('#obs-prompt-summary strong').getAttribute('style'),original);
+        assert.equal(await page.locator('[data-pk-tone]').count(),0);
+        await page.selectOption('#admin-ui-version','new');
+      }
+      await page.setViewportSize({width:480,height:900});await page.waitForTimeout(200);
+      if(version==='new') {
+        assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+        await page.screenshot({path:path.join(output,'observe-prompt-business-narrow.png')});
+      }
       assert.deepEqual(errors,[]);
       payloads[version]=writes;
       await context.close();

@@ -110,6 +110,7 @@ const mode = process.env.ADMIN_UI_TEST_PHASE || 'shell';
       }
       fs.writeFileSync(path.join(output,'coverage-'+mode+'.json'),JSON.stringify(coverage,null,2)+'\n');
       console.log('Presentation coverage:',coverage.length,'pages; overflow:',coverage.filter(item=>item.overflow.page>1||item.overflow.document>1));
+      assert.ok(coverage.every(item=>item.overflow.page<=1&&item.overflow.document<=1),'all pages fit narrow viewport');
     }
     await mount('overview');
     await page.setViewportSize({width:480,height:900});

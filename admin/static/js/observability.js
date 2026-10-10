@@ -1129,7 +1129,7 @@ async function loadObservePrompt() {
     const est  = snap.token_estimate || 0;
 
     // ── 总览卡 ──
-    summaryCard.style.display = '';
+    summaryCard.style.display = 'block';
     const origin = snap.origin || {};
     const isProactive = origin.origin === 'proactive';
     const isDesktop   = origin.origin === 'desktop';

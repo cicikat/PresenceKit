@@ -9,6 +9,21 @@ const AdminUI = (() => {
   let observer = null;
   let scheduled = false;
   const pendingRoots = new Set();
+  // Map the known dark-theme signal palette to tokens without rewriting legacy inline styles.
+  // CSS variable-based colors already inherit tokens; media and authored color inputs are excluded.
+  const tones = new Map([
+    ['rgb(134, 239, 172)', 'success'], ['rgb(239, 68, 68)', 'error'],
+    ['rgb(248, 113, 113)', 'error'], ['rgb(252, 165, 165)', 'error'],
+    ['rgb(156, 163, 175)', 'muted'], ['rgb(147, 197, 253)', 'accent'],
+    ['rgb(167, 139, 250)', 'accent'], ['rgb(196, 181, 253)', 'accent'],
+    ['rgb(251, 191, 36)', 'warn'], ['rgb(252, 211, 77)', 'warn'], ['rgb(253, 230, 138)', 'warn'],
+  ]);
+  const surfaces = new Map([
+    ['rgb(26, 58, 26)', 'success'], ['rgb(15, 36, 16)', 'success'],
+    ['rgb(58, 26, 26)', 'error'], ['rgb(66, 32, 6)', 'warn'],
+    ['rgb(29, 58, 110)', 'accent'], ['rgb(30, 58, 95)', 'accent'], ['rgb(59, 34, 87)', 'accent'],
+    ['rgb(45, 45, 45)', 'field'], ['rgb(55, 65, 81)', 'field'], ['rgb(124, 58, 237)', 'strong'],
+  ]);
   const components = Object.freeze({card: 'pk-card', accordion: 'pk-accordion', button: 'pk-button', input: 'pk-input', select: 'pk-select', switch: 'pk-switch', statusBadge: 'pk-status', formField: 'pk-field'});
   function enhance(root) {
     if (!root || layout?.root === root) return;
@@ -99,6 +114,18 @@ const AdminUI = (() => {
     if (version !== 'new') return;
     enhance(document.getElementById('food-module'));
     decorate(root);
+    normalizeSignals(root);
+  }
+  function normalizeSignals(root) {
+    if (!root?.isConnected) return;
+    const nodes = [...(root.matches?.('[style]') ? [root] : []), ...root.querySelectorAll('[style]')];
+    nodes.forEach(node => {
+      if (node.matches('input,textarea,canvas,svg,img,video') || node.closest('svg')) return;
+      const surface = surfaces.get(node.style.backgroundColor);
+      const tone = tones.get(node.style.color) || (surface && surface !== 'strong' && node.style.color === 'rgb(255, 255, 255)' ? 'text' : null);
+      if (surface) node.dataset.pkSurface = surface; else delete node.dataset.pkSurface;
+      if (tone) node.dataset.pkTone = tone; else delete node.dataset.pkTone;
+    });
   }
   function refresh() {
     scheduled = false;
@@ -123,7 +150,7 @@ const AdminUI = (() => {
         });
       }
     });
-    observer.observe(document.getElementById('app'), {childList:true,subtree:true});
+    observer.observe(document.getElementById('app'), {childList:true,subtree:true,attributes:true,attributeFilter:['style']});
   }
   function apply() {
     document.body.classList.toggle('pk-admin', version === 'new');
@@ -132,6 +159,9 @@ const AdminUI = (() => {
     else {
       observer?.disconnect(); observer = null;
       pendingRoots.clear();
+      document.querySelectorAll('[data-pk-tone],[data-pk-surface]').forEach(node => {
+        delete node.dataset.pkTone; delete node.dataset.pkSurface;
+      });
       for (const [card, entry] of folds) removeFold(card, entry);
       if (layout) {
         layout.root.replaceChildren(...layout.legacyChildren);
