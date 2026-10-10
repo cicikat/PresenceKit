@@ -12,13 +12,22 @@ body[data-admin-theme="night"], body[data-admin-theme="night"] .pk-ui {
   color-scheme:dark;
 }
 body[data-admin-theme="night"] :is(input,textarea,select) {color-scheme:dark;}
+body[data-admin-theme="night"][data-admin-palette="purple"],
+body[data-admin-theme="night"][data-admin-palette="purple"] .pk-ui {
+  --pk-bg:#17151e; --pk-surface:#211e2b; --pk-field:#292534;
+  --pk-text:#eee9f6; --pk-muted:#b6adc8; --pk-border:#41394f;
+  --pk-accent:#baa6d6; --pk-error:#ffb5bf;
+  --pk-error-bg:#402a34; --pk-accent-bg:#342b43;
+}
 body[data-admin-theme="night"] :is(.btn-primary,.pk-button.btn-primary) {background:var(--pk-accent);border-color:var(--pk-accent);color:#182620;}
 .admin-topbar, .pk-admin .admin-topbar {justify-content:space-between;flex-wrap:nowrap;}
 .admin-topbar-controls {display:flex;align-items:center;justify-content:flex-end;gap:10px;min-width:0;}
 .admin-topbar .admin-icon-button {display:inline-flex;align-items:center;justify-content:center;width:38px;min-width:38px;height:38px;padding:0;font-size:23px;line-height:1;flex-shrink:0;}
 @media(max-width:600px) {
   .admin-topbar, .pk-admin .admin-topbar {padding-left:40px;gap:6px;}
+  .admin-topbar-controls {flex-wrap:wrap;}
+  .admin-topbar #admin-night-palette {min-width:0;width:70px;padding-inline:4px;}
   .admin-topbar-controls {gap:6px;}
   .admin-topbar-controls label {display:none;}
-  .admin-topbar #admin-ui-version,.admin-topbar #admin-language-select {min-width:0;width:80px;flex:0 1 80px;}
+  .admin-topbar #admin-ui-version,.admin-topbar #admin-language-select {min-width:0;width:64px;flex:0 1 64px;padding-inline:4px;}
 }

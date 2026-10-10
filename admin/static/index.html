@@ -8,8 +8,8 @@
 <link rel="stylesheet" href="/static/admin-design.css?v=admin-design-1">
 <link rel="stylesheet" href="/static/admin-v2.css?v=admin-all-3">
 <link rel="stylesheet" href="/static/admin-components-v2.css?v=admin-spacing-1">
-<link rel="stylesheet" href="/static/admin-theme.css?v=night-2">
-<script defer src="/static/js/admin-theme.js?v=night-1"></script>
+<link rel="stylesheet" href="/static/admin-theme.css?v=night-3">
+<script defer src="/static/js/admin-theme.js?v=night-3"></script>
 </head>
 <body>
 
@@ -157,6 +157,8 @@
     <div class="admin-topbar">
       <button type="button" id="nav-back" class="btn btn-ghost btn-sm admin-icon-button" data-action="goBackPage" data-i18n-aria-label="nav.back" aria-label="返回上一页" disabled><span aria-hidden="true">←</span></button>
       <div class="admin-topbar-controls">
+      <label for="admin-night-palette" id="admin-night-palette-label">夜间配色</label>
+      <select id="admin-night-palette" aria-label="夜间配色"><option value="charcoal">参考深灰</option><option value="purple">深紫</option></select>
       <label for="admin-ui-version" data-i18n="admin_ui.version">界面</label><select id="admin-ui-version" aria-label="管理面版本" data-i18n-aria-label="admin_ui.version_label"><option value="legacy" data-i18n="admin_ui.legacy">旧版</option><option value="new" data-i18n="admin_ui.new">新版</option></select>
       <label for="admin-language-select" data-i18n="common.language">语言</label>
       <select id="admin-language-select" data-language-select onchange="AdminI18n.setLanguage(this.value)">
