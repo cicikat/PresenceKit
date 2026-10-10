@@ -42,6 +42,7 @@ const mode = process.env.ADMIN_UI_TEST_PHASE || 'shell';
         root.classList.add('active');
         decorateSettingsPanels(name, root);
         AdminUI.apply();
+        closeSidebar();
         document.querySelector('main').scrollTop=0;
       }, name);
     }
@@ -64,6 +65,52 @@ const mode = process.env.ADMIN_UI_TEST_PHASE || 'shell';
     await switchTo('new');
     await page.reload(); assert.equal(await page.locator('#admin-ui-version').inputValue(),'new');
     await page.evaluate(() => {document.getElementById('auth-overlay').style.display='none';document.getElementById('app').style.display='flex';});
+    if (mode !== 'shell') {
+      const names = fs.readdirSync(path.join(staticRoot,'pages')).filter(n=>n.endsWith('.html')).map(n=>n.slice(0,-5))
+        .filter(name => mode === 'all' || (!name.startsWith('observe-') && !['status','logs','call-records','observation-center'].includes(name)));
+      const coverage=[];
+      for (const name of names) {
+        await page.setViewportSize({width:1440,height:1000});
+        await mount(name);
+        const snapshot = await page.evaluate(name => {
+          const root=document.getElementById('page-'+name);
+          window._uiTestFields=[...root.querySelectorAll('input,select,textarea')];
+          const text=window._uiTestFields.find(n=>n.tagName==='TEXTAREA'||n.type==='text');
+          if(text) text.value='browser-draft';
+          window._uiTestDraft=text;
+          return {fields:window._uiTestFields.length,actions:root.querySelectorAll('[data-action]').length};
+        },name);
+        // Every generic fold only hides content; it never remounts controls or dispatches actions.
+        const before=apiCalls.length;
+        assert.ok(await page.evaluate(name=>[...document.getElementById('page-'+name).querySelectorAll('.pk-collapse')].every(n=>['▾','▸'].includes(n.textContent)&&n.getAttribute('aria-label')),name), 'left triangle, not text buttons: '+name);
+        await page.evaluate(name => document.getElementById('page-'+name).querySelectorAll('.pk-collapse').forEach(n=>{n.click();n.click();}),name);
+        await switchTo('legacy');
+        assert.equal(await page.locator('#page-'+name+' .pk-collapse').count(),0);
+        await switchTo('new');
+        assert.equal(apiCalls.length,before);
+        assert.deepEqual(await page.evaluate(name=>{
+          const root=document.getElementById('page-'+name);
+          return {fields:root.querySelectorAll('input,select,textarea').length,actions:root.querySelectorAll('[data-action]').length};
+        },name),snapshot);
+        assert.ok(await page.evaluate(()=>window._uiTestFields.every(n=>n.isConnected)),'original field identity: '+name);
+        assert.ok(await page.evaluate(()=>!window._uiTestDraft||window._uiTestDraft.value==='browser-draft'),'draft value: '+name);
+        if (['model-routing','character','mcp','tts-config','client-settings','owner-turn-api','listening-player','status','observe-prompt','logs'].includes(name)) {
+          await page.screenshot({path:path.join(output,name+'-desktop.png')});
+        }
+        await page.setViewportSize({width:480,height:900});
+        await page.waitForTimeout(200);
+        const overflow=await page.evaluate(name=>{
+          const root=document.getElementById('page-'+name);
+          return {page:root.scrollWidth-root.clientWidth,document:document.documentElement.scrollWidth-innerWidth};
+        },name);
+        coverage.push({page:name,...snapshot,overflow});
+        if (['model-routing','character','mcp','tts-config','client-settings','owner-turn-api','listening-player','status','observe-prompt','logs'].includes(name)) {
+          await page.screenshot({path:path.join(output,name+'-narrow.png')});
+        }
+      }
+      fs.writeFileSync(path.join(output,'coverage-'+mode+'.json'),JSON.stringify(coverage,null,2)+'\n');
+      console.log('Presentation coverage:',coverage.length,'pages; overflow:',coverage.filter(item=>item.overflow.page>1||item.overflow.document>1));
+    }
     await mount('overview');
     await page.setViewportSize({width:480,height:900});
     await page.screenshot({path:path.join(output,'overview-narrow.png')});

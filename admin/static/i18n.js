@@ -7,6 +7,10 @@
 
   const I18N = {
     'zh-CN': {
+      'admin_ui.version': '界面',
+      'admin_ui.version_label': '管理面版本',
+      'admin_ui.legacy': '旧版',
+      'admin_ui.new': '新版',
       'quotes.title': '收藏小本本',
       'quotes.entry': '收藏条目',
       'quotes.user': '用户',
@@ -3297,6 +3301,10 @@
       'owner_turn.deploy.diary': 'Diary sync',
     },
     en: {
+      'admin_ui.version': 'Interface',
+      'admin_ui.version_label': 'Admin interface version',
+      'admin_ui.legacy': 'Legacy',
+      'admin_ui.new': 'New',
       'quotes.title': 'Quote notebook',
       'quotes.entry': 'Saved quote',
       'quotes.user': 'User',

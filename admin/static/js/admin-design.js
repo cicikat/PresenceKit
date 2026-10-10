@@ -1,9 +1,18 @@
 // Shared presentation only. Configuration and runtime decisions belong to the backend.
 function designText(zh, en) { return window.AdminI18n?.getLanguage() === 'en' ? en : zh; }
 
+const ADMIN_DISCLOSURE_PAGES = new Set(['model-routing', 'scheduler', 'autonomy-settings', 'embedding-config', 'mail-config', 'tts-config', 'listening-player', 'network-config', 'device-policy', 'conversation-settings', 'output-settings', 'tools', 'mcp', 'runtime-config', 'coplay-config', 'diary-config']);
+
+function isSettingsDisclosureCandidate(page, card) {
+  return ADMIN_DISCLOSURE_PAGES.has(page)
+    && !card.hasAttribute('data-autonomy-card') && card.id !== 'stt-config-card'
+    && !card.querySelector('.vision-editor, .card, details')
+    && card.querySelectorAll('input:not([type=checkbox]):not([type=hidden]), select, textarea').length >= 2
+    && Boolean(card.querySelector(':scope > .card-header h3, :scope > h3'));
+}
+
 function decorateSettingsPanels(page, root) {
-  const pages = new Set(['model-routing', 'scheduler', 'autonomy-settings', 'embedding-config', 'mail-config', 'tts-config', 'listening-player', 'network-config', 'device-policy', 'conversation-settings', 'output-settings', 'tools', 'mcp', 'runtime-config', 'coplay-config', 'diary-config']);
-  if (!pages.has(page) || !root?.isConnected) return;
+  if (!ADMIN_DISCLOSURE_PAGES.has(page) || !root?.isConnected) return;
   const pageTitle = root.querySelector('.page-title');
   const navigationLabel = document.querySelector(`nav a[data-page="${page}"] [data-i18n]`);
   if (pageTitle && navigationLabel) {

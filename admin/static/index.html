@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="/static/style.css?v=autonomy-cards-1">
 <link rel="stylesheet" href="/static/admin-design.css?v=admin-design-1">
 <link rel="stylesheet" href="/static/admin-v2.css?v=admin-all-1">
-<link rel="stylesheet" href="/static/admin-components-v2.css?v=admin-all-1">
+<link rel="stylesheet" href="/static/admin-components-v2.css?v=admin-all-2">
 </head>
 <body>
 
@@ -153,7 +153,7 @@
 
   <main>
     <div class="admin-topbar">
-      <label for="admin-ui-version">界面 / UI</label><select id="admin-ui-version" aria-label="管理面版本 / Admin UI version"><option value="legacy">旧版 / Legacy</option><option value="new">新版 / New</option></select>
+      <label for="admin-ui-version" data-i18n="admin_ui.version">界面</label><select id="admin-ui-version" aria-label="管理面版本" data-i18n-aria-label="admin_ui.version_label"><option value="legacy" data-i18n="admin_ui.legacy">旧版</option><option value="new" data-i18n="admin_ui.new">新版</option></select>
       <button type="button" id="nav-back" class="btn btn-ghost btn-sm" data-action="goBackPage" disabled><span aria-hidden="true">←</span> <span data-i18n="nav.back">返回上一页</span></button>
       <button type="button" class="btn btn-ghost btn-sm" data-action="goto" data-action-args='["setup"]' data-i18n="scheduler.global_owner">所有者资料（全局）</button>
       <label for="admin-language-select" data-i18n="common.language">语言</label>
@@ -668,15 +668,15 @@
 
 <div id="toast"></div>
 
-<script src="/static/i18n.js?v=clients-271-1"></script>
+<script src="/static/i18n.js?v=admin-all-2"></script>
 <!-- legacy cache marker: <script src="/static/i18n.js?v=admin-prompt-followups-3"></script> -->
-<script src="/static/js/core.js?v=food-pilot-1"></script>
+<script src="/static/js/core.js?v=admin-all-2"></script>
 <!-- legacy cache marker: <script src="/static/js/core.js?v=admin-design-1"></script> -->
 <!-- legacy cache marker: <script src="/static/js/core.js?v=admin-design-1"></script> -->
 <script src="/static/js/overview.js?v=brief-180-admin-static-1"></script>
 <script src="/static/js/setup.js?v=v1-265-mail-connection-1"></script>
 <script src="/static/js/mcp.js?v=brief-252-mcp-no-flash-1"></script>
-<script src="/static/js/ui-version.js?v=admin-all-1"></script>
+<script src="/static/js/ui-version.js?v=admin-all-2"></script>
 <script src="/static/js/tools.js?v=food-pilot-1"></script>
 <script src="/static/js/status-users.js?v=v1-call-presence-1"></script>
 <script src="/static/js/runtime-config.js?v=clients-271-1"></script>
@@ -697,7 +697,7 @@
 <!-- legacy cache marker: /static/js/dream-settings.js?v=brief-175-scenario-reconciler-1 -->
 <script src="/static/js/provenance-vector.js?v=brief-251-thinking-cache-mcp-1"></script>
 <script src="/static/js/settings-center.js?v=wechat-268-1"></script>
-<script src="/static/js/admin-design.js?v=autonomy-cards-1"></script>
+<script src="/static/js/admin-design.js?v=admin-all-2"></script>
 <script src="/static/js/listening-player.js?v=v1-260-admin-surface-1"></script>
 <script src="/static/js/local-runtime.js?v=v1-stt-sherpa-1"></script>
 <script src="/static/js/video-call-presence.js?v=v1-call-presence-1"></script>

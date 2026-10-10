@@ -4,6 +4,11 @@ const AdminUI = (() => {
   let version = 'legacy';
   try { if (localStorage.getItem(key) === 'new') version = 'new'; } catch (_) {}
   let layout = null;
+  const folds = new Map();
+  const foldState = new WeakMap();
+  let observer = null;
+  let scheduled = false;
+  const pendingRoots = new Set();
   const components = Object.freeze({card: 'pk-card', accordion: 'pk-accordion', button: 'pk-button', input: 'pk-input', select: 'pk-select', switch: 'pk-switch', statusBadge: 'pk-status', formField: 'pk-field'});
   function enhance(root) {
     if (!root || layout?.root === root) return;
@@ -32,15 +37,108 @@ const AdminUI = (() => {
     });
     root.replaceChildren(shell); layout = {root, nodes, shell, changes, anchors, legacyChildren};
   }
+  function foldLabel(expanded) {
+    const english = window.AdminI18n?.getLanguage() === 'en';
+    return expanded ? (english ? 'Collapse' : '折叠') : (english ? 'Expand' : '展开');
+  }
+  function updateFold(card, entry) {
+    const expanded = !foldState.get(card);
+    card.dataset.pkCollapsed = String(!expanded);
+    const label = foldLabel(expanded);
+    const marker = expanded ? '▾' : '▸';
+    if (entry.button.textContent !== marker) entry.button.textContent = marker;
+    entry.button.setAttribute('aria-label', label);
+    entry.button.title = label;
+    entry.button.setAttribute('aria-expanded', String(expanded));
+  }
+  function removeFold(card, entry) {
+    entry.button.remove();
+    entry.heading.removeEventListener('click', entry.headingClick);
+    entry.heading.classList.remove('pk-card-heading');
+    delete card.dataset.pkCollapsed;
+    folds.delete(card);
+  }
+  function decorate(root) {
+    if (version !== 'new' || !root?.isConnected) return;
+    const cards = [...(root.matches?.('.card') ? [root] : []), ...root.querySelectorAll('.card')];
+    cards.forEach(card => {
+      // Existing details keep their own keyboard behavior and open state.
+      // The food pilot already owns its three native accordion cards.
+      if (card.closest('.pk-ui') || card.id === 'food-module' || card.matches('details')
+          || card.querySelector('[data-action="toggleMcpServerCollapsed"]')) return;
+      const entry = folds.get(card);
+      if (card.querySelector(':scope > details.settings-disclosure')) {
+        if (entry) removeFold(card, entry);
+        return;
+      }
+      // Let the existing legacy decorator finish these settings cards first.
+      const page = card.closest('.page')?.id.replace(/^page-/, '');
+      if (isSettingsDisclosureCandidate(page, card)) return;
+      const heading = card.querySelector(':scope > .card-header,:scope > .admin-card-header,:scope > h2,:scope > h3,:scope > h4');
+      if (!heading) return;
+      if (entry?.heading === heading && entry.button.isConnected) {updateFold(card, entry); return;}
+      if (entry) removeFold(card, entry);
+      const button = document.createElement('button');
+      button.type = 'button'; button.className = 'pk-collapse';
+      heading.classList.add('pk-card-heading');
+      // No wrapping or replacement: selectors, handlers, draft fields and canvases retain identity.
+      if (/^H[234]$/.test(heading.tagName)) card.insertBefore(button, heading);
+      else heading.insertBefore(button, heading.firstChild);
+      const toggle = () => {
+        foldState.set(card, !foldState.get(card)); updateFold(card, next);
+      };
+      const headingClick = event => {
+        if (!event.target.closest('button,a,input,select,textarea,label,[contenteditable]')) toggle();
+      };
+      const next = {heading, button, headingClick}; folds.set(card, next); updateFold(card, next);
+      button.addEventListener('click', toggle);
+      heading.addEventListener('click', headingClick);
+    });
+  }
+  function mount(root) {
+    if (version !== 'new') return;
+    enhance(document.getElementById('food-module'));
+    decorate(root);
+  }
+  function refresh() {
+    scheduled = false;
+    if (version !== 'new') return;
+    for (const [card, entry] of folds) if (!card.isConnected) removeFold(card, entry);
+    document.querySelectorAll('.page[data-page-loaded="true"]').forEach(mount);
+  }
+  function observe() {
+    if (observer || !document.getElementById('app')) return;
+    observer = new MutationObserver(records => {
+      records.forEach(record => {
+        const root = record.target.closest?.('.page');
+        if (root) pendingRoots.add(root);
+      });
+      if (!scheduled && pendingRoots.size) {
+        scheduled = true;
+        queueMicrotask(() => {
+          scheduled = false;
+          if (version === 'new') pendingRoots.forEach(mount);
+          pendingRoots.clear();
+          for (const [card, entry] of folds) if (!card.isConnected) removeFold(card, entry);
+        });
+      }
+    });
+    observer.observe(document.getElementById('app'), {childList:true,subtree:true});
+  }
   function apply() {
     document.body.classList.toggle('pk-admin', version === 'new');
     const root = document.getElementById('food-module');
-    if (version === 'new') enhance(root);
-    else if (layout) {
-      layout.root.replaceChildren(...layout.legacyChildren);
-      layout.anchors.forEach(([n, anchor]) => anchor.replaceWith(n));
-      layout.changes.forEach(([n, cls]) => n.classList.remove(cls));
-      layout.shell.remove(); layout = null;
+    if (version === 'new') {enhance(root); refresh(); observe();}
+    else {
+      observer?.disconnect(); observer = null;
+      pendingRoots.clear();
+      for (const [card, entry] of folds) removeFold(card, entry);
+      if (layout) {
+        layout.root.replaceChildren(...layout.legacyChildren);
+        layout.anchors.forEach(([n, anchor]) => anchor.replaceWith(n));
+        layout.changes.forEach(([n, cls]) => n.classList.remove(cls));
+        layout.shell.remove(); layout = null;
+      }
     }
     const select = document.getElementById('admin-ui-version'); if (select) select.value = version;
     window.dispatchEvent(new Event('admin-ui-version-changed'));
@@ -53,5 +151,5 @@ const AdminUI = (() => {
   document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('admin-ui-version')?.addEventListener('change', e => select(e.target.value)); apply();
   });
-  return {apply, select, components, get version() { return version; }};
+  return {apply, select, mount, components, get version() { return version; }};
 })();

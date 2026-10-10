@@ -370,7 +370,10 @@ async function goto(page, {reloadFragment = false, fromHistory = false} = {}) {
   const resumePage = fromHistory && pageElement.dataset.pageVisited === 'true';
   if (resumePage && page === 'scheduler') _startWatchStatusPoller();
   if (!resumePage && loaders[page]) {
-    Promise.resolve(loaders[page]()).then(() => decorateSettingsPanels(page, pageElement)).catch(error => console.error("[admin] page load failed", error));
+    Promise.resolve(loaders[page]()).then(() => {
+      decorateSettingsPanels(page, pageElement);
+      AdminUI.mount(pageElement);
+    }).catch(error => console.error("[admin] page load failed", error));
   }
   mountChainOverview(page, pageElement);
   pageElement.dataset.pageVisited = 'true';
