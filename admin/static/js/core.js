@@ -20,7 +20,7 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'client-hot-reload-1';
+const ADMIN_UI_FRAGMENT_VERSION = 'food-pilot-1';
 
 const ADMIN_PAGE_ALIASES = Object.freeze({memory: 'observe-memory'});
 
@@ -161,6 +161,7 @@ async function loadPageFragment(page, {reload = false} = {}) {
       .then(html => {
         container.innerHTML = html;
         container.dataset.pageLoaded = 'true';
+        AdminUI.apply();
         window.AdminI18n?.applyI18n(container);
         bindPageActions(container);
         decoratePageContext(page, container);

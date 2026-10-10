@@ -176,52 +176,82 @@ async function loadToolsPage() {
   catch (error) { if (root) root.innerHTML = `<div class="empty">${escapeHtml(t('common.load_failed', '加载失败: {error}', { error: error.message }))}</div>`; }
 }
 
+// One controller and one API client for both presentations.
+let _foodSnapshot = null;
+const _foodBusy = new Set();
+function foodStatus(message, state = 'success') {
+  const node = document.getElementById('food-status');
+  node.textContent = message; node.dataset.state = state;
+}
+async function foodOperation(name, work, target = 'food-status') {
+  if (_foodBusy.size) return false;
+  _foodBusy.add(name);
+  const buttons = [...document.querySelectorAll('#food-module button')];
+  buttons.forEach(b => b.disabled = true);
+  const node = document.getElementById(target);
+  node.textContent = '处理中…'; node.dataset.state = 'loading'; node.setAttribute('aria-busy', 'true');
+  try { await work(); return true; }
+  catch (error) { node.textContent = error.message; node.dataset.state = 'error'; return false; }
+  finally {
+    _foodBusy.delete(name); node.setAttribute('aria-busy', 'false');
+    buttons.forEach(b => b.disabled = _foodBusy.size > 0);
+  }
+}
+function renderFoodRecords() {
+  const root = document.getElementById('food-records');
+  if (!root || !_foodSnapshot || root.dataset.state === 'loading' || root.dataset.state === 'error') return;
+  const value = _foodSnapshot;
+  const stats = `<div class="pk-stats">待处理 ${Number(value.pending)} · 失败 ${Number(value.failed)} · 项目 ${Number(value.total)}</div><p>${escapeHtml(value.count_semantics)}</p>`;
+  if (AdminUI.version === 'legacy') {
+    root.innerHTML = stats + `<pre>${escapeHtml(JSON.stringify({items: value.items, tastes: value.tastes}, null, 2))}</pre>`;
+    return;
+  }
+  const records = (items) => items.map(item => `<article class="pk-record"><strong>${escapeHtml(item.name)}</strong> · ${escapeHtml(({like:'喜欢',dislike:'不喜欢'})[item.evaluation] || '未明确评价')}<small>已记录吃过 ${Number(item.recorded_eaten_count)} 次 · ${escapeHtml(new Date(item.last_evidence_at * 1000).toLocaleString())}</small><p>${escapeHtml(item.evaluation_quote || item.temporary_refusal_quote || '')}</p></article>`).join('') || '<p class="pk-empty">暂无记录</p>';
+  root.innerHTML = stats + '<h4>食品与店名（本页最多 20 项）</h4>' + records(value.items) + '<h4>口味记录（最多 12 项）</h4>' + records(value.tastes);
+}
+window.addEventListener('admin-ui-version-changed', renderFoodRecords);
 async function loadFoodSettings() {
-  try {
+  await foodOperation('settings', async () => {
     const value = await api('GET', '/settings/food-memory');
     document.getElementById('food-enabled').checked = value.enabled;
-    document.getElementById('food-status').textContent = `${value.effective ? '已生效' : '已关闭或路由未就绪'} · food_extract → ${value.route.effective_preset || '未配置'} (${value.route.source})`;
-  } catch (error) { document.getElementById('food-status').textContent = error.message; }
+    foodStatus(`${value.effective ? '已生效' : '已关闭或路由未就绪'} · food_extract → ${value.route.effective_preset || '未配置'} (${value.route.source})`);
+  });
 }
-
 async function saveFoodSettings() {
-  try {
-    await api('PUT', '/settings/food-memory', {enabled: document.getElementById('food-enabled').checked});
-    await loadFoodSettings();
-  } catch (error) { document.getElementById('food-status').textContent = error.message; }
+  await foodOperation('save', async () => {
+    const enabled = document.getElementById('food-enabled').checked;
+    const value = await api('PUT', '/settings/food-memory', {enabled});
+    foodStatus(`设置已保存 · ${value.effective ? '已生效' : '已关闭或路由未就绪'} · food_extract → ${value.route.effective_preset || '未配置'}`);
+  });
 }
-
+function foodScope() {
+  const charId = document.getElementById('food-char').value.trim();
+  if (!charId) throw new Error('请填写角色 ID');
+  return `char_id=${encodeURIComponent(charId)}`;
+}
 async function loadFoodRecords() {
-  const root = document.getElementById('food-records');
-  try {
-    const charId = document.getElementById('food-char').value.trim();
+  await foodOperation('query', async () => {
+    const scope = foodScope();
     const query = document.getElementById('food-query').value.trim();
-    if (!charId) throw new Error('请填写角色 ID');
-    const value = await api('GET', `/observability/food-memory?char_id=${encodeURIComponent(charId)}&query=${encodeURIComponent(query)}`);
-    root.innerHTML = `<p>待处理 ${Number(value.pending)} · 失败 ${Number(value.failed)} · 项目 ${Number(value.total)}</p><p>${escapeHtml(value.count_semantics)}</p><pre>${escapeHtml(JSON.stringify({items: value.items, tastes: value.tastes}, null, 2))}</pre>`;
-  } catch (error) { root.textContent = error.message; }
+    _foodSnapshot = await api('GET', `/observability/food-memory?${scope}&query=${encodeURIComponent(query)}`);
+    document.getElementById('food-records').dataset.state = 'success'; renderFoodRecords();
+  }, 'food-records');
 }
-
 async function retryFoodRecords() {
-  try {
-    const charId = document.getElementById('food-char').value.trim();
-    if (!charId) throw new Error('请填写角色 ID');
-    await api('POST', `/settings/food-memory/retry?char_id=${encodeURIComponent(charId)}`);
-    document.getElementById('food-status').textContent = '已排队重试；稍后刷新清单查看结果';
-  } catch (error) { document.getElementById('food-status').textContent = error.message; }
+  await foodOperation('retry', async () => {
+    await api('POST', `/settings/food-memory/retry?${foodScope()}`);
+    foodStatus('已排队重试；稍后刷新清单查看结果');
+  });
 }
-
 async function correctFoodRecord() {
-  try {
-    const charId = document.getElementById('food-char').value.trim();
-    if (!charId) throw new Error('请填写角色 ID');
-    await api('POST', `/settings/food-memory/correct?char_id=${encodeURIComponent(charId)}`, {
-      name: document.getElementById('food-correct-name').value.trim(),
-      quote: document.getElementById('food-correct-quote').value.trim(),
-      evaluation: document.getElementById('food-correct-value').value,
-    });
-    await loadFoodRecords();
-  } catch (error) { document.getElementById('food-status').textContent = error.message; }
+  const saved = await foodOperation('correct', async () => {
+    const scope = foodScope();
+    const body = {name: document.getElementById('food-correct-name').value.trim(), quote: document.getElementById('food-correct-quote').value.trim(), evaluation: document.getElementById('food-correct-value').value};
+    if (!body.name || !body.quote) throw new Error('请填写食品名称和本人明确评价原话');
+    await api('POST', `/settings/food-memory/correct?${scope}`, body);
+    foodStatus('更正已保存，历史证据保留');
+  });
+  if (saved) await loadFoodRecords();
 }
 
 function showXiaohongshuSettings(data) {

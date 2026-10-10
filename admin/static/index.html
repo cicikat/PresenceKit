@@ -6,6 +6,7 @@
 <title>His Presence 管理面板</title>
 <link rel="stylesheet" href="/static/style.css?v=autonomy-cards-1">
 <link rel="stylesheet" href="/static/admin-design.css?v=admin-design-1">
+<link rel="stylesheet" href="/static/admin-v2.css?v=food-pilot-1">
 </head>
 <body>
 
@@ -151,6 +152,7 @@
 
   <main>
     <div class="admin-topbar">
+      <label for="admin-ui-version">界面</label><select id="admin-ui-version" aria-label="管理面版本"><option value="legacy">旧版</option><option value="new">新版（吃食试点）</option></select>
       <button type="button" id="nav-back" class="btn btn-ghost btn-sm" data-action="goBackPage" disabled><span aria-hidden="true">←</span> <span data-i18n="nav.back">返回上一页</span></button>
       <button type="button" class="btn btn-ghost btn-sm" data-action="goto" data-action-args='["setup"]' data-i18n="scheduler.global_owner">所有者资料（全局）</button>
       <label for="admin-language-select" data-i18n="common.language">语言</label>
@@ -667,13 +669,14 @@
 
 <script src="/static/i18n.js?v=clients-271-1"></script>
 <!-- legacy cache marker: <script src="/static/i18n.js?v=admin-prompt-followups-3"></script> -->
-<script src="/static/js/core.js?v=client-hot-reload-1"></script>
+<script src="/static/js/core.js?v=food-pilot-1"></script>
 <!-- legacy cache marker: <script src="/static/js/core.js?v=admin-design-1"></script> -->
 <!-- legacy cache marker: <script src="/static/js/core.js?v=admin-design-1"></script> -->
 <script src="/static/js/overview.js?v=brief-180-admin-static-1"></script>
 <script src="/static/js/setup.js?v=v1-265-mail-connection-1"></script>
 <script src="/static/js/mcp.js?v=brief-252-mcp-no-flash-1"></script>
-<script src="/static/js/tools.js?v=quote-notebook-1"></script>
+<script src="/static/js/ui-version.js?v=food-pilot-1"></script>
+<script src="/static/js/tools.js?v=food-pilot-1"></script>
 <script src="/static/js/status-users.js?v=v1-call-presence-1"></script>
 <script src="/static/js/runtime-config.js?v=clients-271-1"></script>
 <script src="/static/js/lorebook.js?v=brief-251-thinking-cache-mcp-1"></script>
