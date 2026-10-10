@@ -1,3 +1,9 @@
+## Room TV screen playback consumer (2026-10-10)
+
+current: desktop Room consumes existing message_segments.perform for immediate sentence expression and maintains a separate WS baseline layer. Actual TTS start/end owns spoken performance; text mode uses its own presenter exclusively. Screen assets are client-local opt-in screen.json, PNG/sequence/built-in procedural preset; backend never sends image names or screen-material identifiers. No new server events, LLM calls, capabilities/settings, mood writes, persistent traces or mobile delivery changes were introduced. The existing performance_mapping configuration remains authoritative.
+
+observe/open: real model expression coverage, Windows Tauri/audio playback and call-session correlation for delayed legacy events require acceptance. A dedicated asynchronous call-only inference/provider/control plane remains roadmap and is not enabled. Desktop screen package metadata is optional and does not alter mobile chat or polling ack. Client contract: Emerald-client docs/tv-screen-contract.md.
+
 ## 手机聊天交接复查（2026-10-08，271 / mobile 27）
 
 280 长文档：QQ 与 `/upload/ingest` 初始摘录带稳定资料引用，全文在后端按 uid/char 保存；read_document 提供连续分页、目录、进度和分块概要。上传保持原 multipart/chat scope/media_refs/HTTP/WS合同；422 原 `{code,message}` 新增 `document_text_too_large`（解析超过50万字符）及 `document_archive_failed`（全文保存失败）。支持 TXT/MD/DOCX，旧 DOC 需转换。资料库观测 state.read 增无正文概要覆盖/提供进度；summary 路由发送后后台默认分块生成。客户端无新增设置/权限/队列，真机/真实模型效果 observe。详见 [document-reading.md](document-reading.md)。

@@ -67,3 +67,7 @@ performance_mapping:
 解析失败）都被捕获并原样返回输入的 `say_segs`——绝不抛出，绝不影响 `message_segments` 主
 推送流程。这与 `record_assistant_turn` 内 `message_segments` fanout 本身的 fail-open 姿态一致
 （见 `core/turn_sink.py`）。
+
+## Room consumer isolation (2026-10-10)
+
+Desktop Room now separates baseline from sentence performance and applies sentence metadata at actual audio playback. Screen image/sequence/procedural rendering consumes the same expression vocabulary, with local activity state separate from emotion. No backend rule, provider, mood/slow processing or protocol changes in this implementation. Missing performance continues to mean baseline fallback; unsupported artwork remains a visible consumer limitation. Call-only asynchronous inference and admin observability remain roadmap.
