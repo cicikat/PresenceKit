@@ -381,7 +381,7 @@ async function tryLogin(key, silent) {
     const setupStatus = await checkSetupStatus();
     const initialPage = setupStatus && setupStatus.needs_setup
       ? 'setup'
-      : getRememberedPage() || 'overview';
+      : getRememberedPage() || 'setup';
     restoreNavGroups();
     goto(initialPage);
     _initCharName().catch(() => {});

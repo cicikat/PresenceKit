@@ -4,10 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>His Presence 管理面板</title>
-<link rel="stylesheet" href="/static/style.css?v=admin-consolidation-3">
+<link rel="stylesheet" href="/static/style.css?v=admin-editor-20261011">
 <link rel="stylesheet" href="/static/admin-design.css?v=admin-design-1">
 <link rel="stylesheet" href="/static/admin-v2.css?v=admin-all-3">
-<link rel="stylesheet" href="/static/admin-components-v2.css?v=admin-consolidation-3">
+<link rel="stylesheet" href="/static/admin-components-v2.css?v=admin-editor-20261011">
 <link rel="stylesheet" href="/static/admin-theme.css?v=night-3">
 <script defer src="/static/js/admin-theme.js?v=night-3"></script>
 </head>
@@ -59,7 +59,7 @@
       <p id="nav-host">127.0.0.1:8080</p>
     </div>
 <div class="nav-pages">
-<a href="#page-overview" data-page="overview" data-action="goto" data-action-args='["overview"]'><span data-i18n="nav.page.overview">概览</span></a>
+<a href="#page-setup" data-page="setup" data-action="goto" data-action-args='["setup"]'><span data-i18n="nav.page.setup">首次配置与连接检查</span></a>
 <button type="button" class="nav-group-header" id="nav-toggle-features" aria-expanded="true" aria-controls="navgroup-features" data-action="toggleNavGroup" data-action-args='["features"]'><span class="nav-caret" id="caret-features" aria-hidden="true">▾</span><span data-i18n="nav.category.features">功能与行为</span></button>
 <div class="nav-group" id="navgroup-features">
 <a href="#page-character-behavior" data-page="character-behavior" data-action="goto" data-action-args='["character-behavior"]' hidden><span data-i18n="nav.page.character-behavior">角色行为</span></a>
@@ -84,7 +84,6 @@
 <a href="#page-tts-config" data-page="tts-config" data-action="goto" data-action-args='["tts-config"]'><span data-i18n="nav.page.tts-config">语音合成与声音（TTS、STT）</span></a>
 <a href="#page-local-model-runtime" data-page="local-model-runtime" data-action="goto" data-action-args='["local-model-runtime"]'><span data-i18n="nav.page.local-model-runtime">本地模型运行</span></a>
 <a href="#page-listening-player" data-page="listening-player" data-action="goto" data-action-args='["listening-player"]'><span data-i18n="nav.page.listening-player">共同听歌播放器</span></a>
-<a href="#page-setup" data-page="setup" data-action="goto" data-action-args='["setup"]'><span data-i18n="nav.page.setup">首次配置与连接检查</span></a>
 <a href="#page-embedding-config" data-page="embedding-config" data-action="goto" data-action-args='["embedding-config"]'><span data-i18n="nav.page.embedding-config">记忆搜索模型</span></a>
 <a href="#page-network-config" data-page="network-config" data-action="goto" data-action-args='["network-config"]'><span data-i18n="nav.page.network-config">代理与手机中继</span></a>
 <a href="#page-mail-config" data-page="mail-config" data-action="goto" data-action-args='["mail-config"]'><span data-i18n="nav.page.mail-config">邮件连接</span></a>
@@ -123,23 +122,21 @@
 <a href="#page-observe-dream" data-page="observe-dream" data-action="goto" data-action-args='["observe-dream"]'><span data-i18n="nav.page.observe-dream">观测总览</span></a>
 <a href="#page-observe-dream-prompt" data-page="observe-dream-prompt" data-action="goto" data-action-args='["observe-dream-prompt"]'><span data-i18n="nav.page.observe-dream-prompt">梦境prompt检视</span></a>
 <a href="#page-observe-dream-operations" data-page="observe-dream-operations" data-action="goto" data-action-args='["observe-dream-operations"]'><span data-i18n="nav.page.observe-dream-operations">梦境会话记录</span></a>
-<a href="#page-observe-group-arbiter" data-page="observe-group-arbiter" data-action="goto" data-action-args='["observe-group-arbiter"]'><span data-i18n="nav.page.observe-group-arbiter">群聊发言安排</span></a>
-<a href="#page-observe-spend" data-page="observe-spend" data-action="goto" data-action-args='["observe-spend"]'><span data-i18n="nav.page.observe-spend">支出意向记录</span></a>
+<a hidden href="#page-observe-group-arbiter" data-page="observe-group-arbiter" data-action="goto" data-action-args='["observe-group-arbiter"]'><span data-i18n="nav.page.observe-group-arbiter">群聊发言安排</span></a>
+<a hidden href="#page-observe-spend" data-page="observe-spend" data-action="goto" data-action-args='["observe-spend"]'><span data-i18n="nav.page.observe-spend">支出意向记录</span></a>
 <a href="#page-observe-resource-completeness" data-page="observe-resource-completeness" data-action="goto" data-action-args='["observe-resource-completeness"]'><span data-i18n="nav.page.observe-resource-completeness">检查素材是否齐全</span></a>
 </div>
 <button type="button" class="nav-group-header" id="nav-toggle-operations" aria-expanded="true" aria-controls="navgroup-operations" data-action="toggleNavGroup" data-action-args='["operations"]'><span class="nav-caret" id="caret-operations" aria-hidden="true">▾</span><span data-i18n="nav.category.operations">排错与管理</span></button>
 <div class="nav-group" id="navgroup-operations">
 <a href="#page-character-cleanup" data-page="character-cleanup" data-action="goto" data-action-args='["character-cleanup"]'><span data-i18n="nav.page.character-cleanup">删除相关</span></a>
-<a href="#page-operations-center" data-page="operations-center" data-action="goto" data-action-args='["operations-center"]'><span data-i18n="nav.page.operations-center">排错与管理总览</span></a>
 <a href="#page-observe-system-diagnosis" data-page="observe-system-diagnosis" data-action="goto" data-action-args='["observe-system-diagnosis"]'><span data-i18n="nav.page.observe-system-diagnosis">为什么没有正常工作</span></a>
 <a href="#page-logs" data-page="logs" data-action="goto" data-action-args='["logs"]'><span data-i18n="nav.page.logs">错误日志</span></a>
 <a href="#page-observe-runtime" data-page="observe-runtime" data-action="goto" data-action-args='["observe-runtime"]'><span data-i18n="nav.page.observe-runtime">内部运行状态</span></a>
 <a href="#page-observe-runtime-signals" data-page="observe-runtime-signals" data-action="goto" data-action-args='["observe-runtime-signals"]'><span data-i18n="nav.page.observe-runtime-signals">运行事件与信号</span></a>
 <a href="#page-observe-api-contract" data-page="observe-api-contract" data-action="goto" data-action-args='["observe-api-contract"]'><span data-i18n="nav.page.observe-api-contract">接口兼容检查</span></a>
 <a href="#page-auth-tokens" data-page="auth-tokens" data-action="goto" data-action-args='["auth-tokens"]'><span data-i18n="nav.page.auth-tokens">登录密钥与访问权限</span></a>
-<a href="#page-users" data-page="users" data-action="goto" data-action-args='["users"]'><span data-i18n="nav.page.users">用户管理</span></a>
 <a href="#page-owner-turn-api" data-page="owner-turn-api" data-action="goto" data-action-args='["owner-turn-api"]'><span data-i18n="nav.page.owner-turn-api">外部接入与部署</span></a>
-<a href="#page-generation-debug" data-page="generation-debug" data-action="goto" data-action-args='["generation-debug"]'><span data-i18n="nav.page.generation-debug">回答生成排查</span></a>
+<a hidden href="#page-generation-debug" data-page="generation-debug" data-action="goto" data-action-args='["generation-debug"]'><span data-i18n="nav.page.generation-debug">回答生成排查</span></a>
 <a href="#page-runtime-config" data-page="runtime-config" data-action="goto" data-action-args='["runtime-config"]'><span data-i18n="nav.page.runtime-config">高级运行配置与实验</span></a>
 </div>
 </div>
@@ -168,8 +165,7 @@
 
     <div class="page" id="page-guide" data-page-fragment="guide"></div>
     <!-- ── 配置中心（Brief 93 §1） ── -->
-    <div class="page active" id="page-overview" data-page-fragment="overview"></div>
-    <div class="page" id="page-setup" data-page-fragment="setup"></div>
+    <div class="page active" id="page-setup" data-page-fragment="setup"></div>
     <div class="page" id="page-client-settings" data-page-fragment="client-settings"></div>
     <div class="page" id="page-runtime-config" data-page-fragment="runtime-config"></div>
     <div class="page" id="page-tts-config" data-page-fragment="tts-config"></div>
@@ -187,7 +183,6 @@
     <div class="page" id="page-status" data-page-fragment="status"></div>
 
     <!-- ── 用户管理 ── -->
-    <div class="page" id="page-users" data-page-fragment="users"></div>
 
     <!-- ── 现实设定（世界书 + 破限） ── -->
     <div class="page" id="page-lorebook" data-page-fragment="lorebook"></div>
@@ -472,7 +467,6 @@
 <div class="page" id="page-feature-center" data-page-fragment="feature-center"></div>
 <div class="page" id="page-service-center" data-page-fragment="service-center"></div>
 <div class="page" id="page-observation-center" data-page-fragment="observation-center"></div>
-<div class="page" id="page-operations-center" data-page-fragment="operations-center"></div>
 <div class="page" id="page-conversation-settings" data-page-fragment="conversation-settings"></div>
 <div class="page" id="page-character-behavior" data-page-fragment="character-behavior"></div>
 <div class="page" id="page-data-management" data-page-fragment="data-management"></div>
@@ -666,42 +660,43 @@
 
 <div id="toast"></div>
 
-<script src="/static/i18n.js?v=character-cleanup-20261011"></script>
-<!-- legacy cache marker: <script src="/static/i18n.js?v=admin-consolidation-3"></script> -->
-<script src="/static/js/core.js?v=character-cleanup-20261011"></script>
-<!-- legacy cache marker: <script src="/static/js/core.js?v=admin-consolidation-3"></script> -->
-<!-- legacy cache marker: <script src="/static/js/core.js?v=admin-consolidation-3"></script> -->
+<script src="/static/i18n.js?v=admin-editor-20261011"></script>
+<!-- legacy cache marker: <script src="/static/i18n.js?v=admin-editor-20261011"></script> -->
+<script src="/static/js/core.js?v=admin-editor-20261011"></script>
+<!-- legacy cache marker: <script src="/static/js/core.js?v=admin-editor-20261011"></script> -->
+<!-- legacy cache marker: <script src="/static/js/core.js?v=admin-editor-20261011"></script> -->
 <script src="/static/js/overview.js?v=brief-180-admin-static-1"></script>
-<script src="/static/js/setup.js?v=v1-265-mail-connection-1"></script>
+<script src="/static/js/setup.js?v=admin-editor-20261011"></script>
 <script src="/static/js/mcp.js?v=brief-252-mcp-no-flash-1"></script>
-<script src="/static/js/admin-page-layout.js?v=admin-consolidation-3"></script>
+<script src="/static/js/admin-page-layout.js?v=admin-editor-20261011"></script>
 <script src="/static/js/ui-version.js?v=admin-consolidation-1"></script>
 <script src="/static/js/tools.js?v=admin-consolidation-1"></script>
-<script src="/static/js/status-users.js?v=v1-call-presence-1"></script>
+<script src="/static/js/status-users.js?v=admin-editor-20261011"></script>
 <script src="/static/js/runtime-config.js?v=clients-271-1"></script>
 <script src="/static/js/lorebook.js?v=brief-251-thinking-cache-mcp-1"></script>
-<script src="/static/js/settings.js?v=admin-consolidation-3"></script>
+<script src="/static/js/settings.js?v=admin-editor-20261011"></script>
 <script src="/static/js/owner-turn-api.js?v=brief-173-owner-turn-1"></script>
 <script src="/static/js/agent-runtime-browser.js?v=brief-239-browser-admin-1"></script>
 <script src="/static/js/relationship.js?v=admin-prompt-followups-3"></script>
 <script src="/static/js/character.js?v=v1-264-gsv-version-2"></script>
 <script src="/static/js/scheduler.js?v=admin-consolidation-1"></script>
 <script src="/static/js/integrations.js?v=brief-160-garden-freeze-1"></script>
-<script src="/static/js/observability.js?v=admin-consolidation-3"></script>
+<script src="/static/js/observability.js?v=admin-editor-20261011"></script>
 <script src="/static/js/memory-event-control.js?v=brief-216-memory-event-control-2"></script>
 <script src="/static/js/dream-operations.js?v=brief-175-scenario-reconciler-1"></script>
 <script src="/static/js/user-data.js?v=asset-partial-20261011"></script>
-<script src="/static/js/character-cleanup.js?v=character-cleanup-20261011"></script>
+<script src="/static/js/character-cleanup.js?v=admin-editor-20261011"></script>
 <script src="/static/js/dream-settings.js?v=brief-223-rpg-dream-admin-2"></script>
 <!-- legacy cache marker: <script src="/static/js/dream-settings.js?v=brief-175-scenario-reconciler-1"></script> -->
 <!-- legacy cache marker: /static/js/dream-settings.js?v=brief-175-scenario-reconciler-1 -->
 <script src="/static/js/provenance-vector.js?v=brief-251-thinking-cache-mcp-1"></script>
-<script src="/static/js/settings-center.js?v=admin-consolidation-3"></script>
+<script src="/static/js/settings-center.js?v=admin-editor-20261011"></script>
 <script src="/static/js/admin-design.js?v=admin-consolidation-1"></script>
 <script src="/static/js/listening-player.js?v=v1-260-admin-surface-1"></script>
 <script src="/static/js/local-runtime.js?v=v1-stt-sherpa-1"></script>
 <script src="/static/js/video-call-presence.js?v=v1-call-presence-1"></script>
 <script src="/static/js/client-settings.js?v=client-hot-reload-1"></script>
 <script src="/static/js/minecraft.js?v=minecraft-275-2"></script>
+<script src="/static/js/admin-editor.js?v=admin-editor-20261011"></script>
 </body>
 </html>

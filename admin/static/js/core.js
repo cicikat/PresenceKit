@@ -20,9 +20,9 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'character-cleanup-20261011';
+const ADMIN_UI_FRAGMENT_VERSION = 'admin-editor-20261011';
 
-const ADMIN_PAGE_ALIASES = Object.freeze({memory: 'observe-memory', 'creation-center':'data-management', 'observe-existence':'observe-dream'});
+const ADMIN_PAGE_ALIASES = Object.freeze({overview:'setup', users:'character', 'operations-center':'status', memory: 'observe-memory', 'creation-center':'data-management', 'observe-existence':'observe-dream'});
 
 const ADMIN_PAGE_CONTEXT = Object.freeze({
   setup: {related: ['model-routing', 'character']},
@@ -41,7 +41,7 @@ const ADMIN_PAGE_CONTEXT = Object.freeze({
   'agent-runtime-browser': {related: ['tools', 'owner-turn-api']},
   'relationship-facts': {related: ['character', 'observe-memory']},
   'memory-consolidation': {related: ['observe-memory-events', 'model-routing']},
-  'auth-tokens': {related: ['users']},
+  'auth-tokens': {related: ['character']},
   status: {related: ['model-routing', 'auth-tokens']},
 });
 
@@ -303,14 +303,13 @@ async function goto(page, {reloadFragment = false, fromHistory = false} = {}) {
     'device-policy': () => { loadScreenPeekSettings(); loadMetaMode(); },
     'network-config': async () => { _bindProxyControls(); await loadProxy(); },
     'client-settings': loadClientSettings,
-    'personal-settings': async () => { _loadSetupAnniversaries(); await _ensurePronounUidOptions(); await loadUserPronoun(); },
+    'personal-settings': _loadSetupAnniversaries,
     'coplay-config': _loadSetupCoplayGames,
     'diary-config': _loadSetupDiary,
     'mail-config': _loadSetupMail,
     'embedding-config': loadSetupEmbedding,
     'local-model-runtime': loadLocalModelRuntime,
     'observation-center': loadImeObservation,
-    'operations-center': () => {},
     'feature-center': loadFeatureCenter,
     'service-center': loadServiceCenter,
     'role-bindings': loadRoleBindings,
@@ -323,10 +322,8 @@ async function goto(page, {reloadFragment = false, fromHistory = false} = {}) {
     'listening-player': refreshListeningPlayer,
     'observe-listening': loadObserveListening,
     status:          () => AdminPageLayout.loadObservations('status'),
-    users:           () => { loadUsers(); loadBlacklist(); },
     logs:            () => { _runtimeWarningOffset = 0; loadLogs(); },
     'auth-tokens':   () => { loadAuthTokens(); loadChannelToggles(); },
-    overview:        loadOverview,
     'model-routing': async () => { await loadModelRouting(); if (AdminUI.version === 'new') await AdminPageLayout.loadModels(); },
     'data-management': AdminPageLayout.loadData,
     mcp:             loadMcpPage,
@@ -335,7 +332,7 @@ async function goto(page, {reloadFragment = false, fromHistory = false} = {}) {
     'agent-runtime-browser': loadBrowserRuntimePage,
     minecraft: loadMinecraftPage,
     'relationship-facts': loadRelationshipFactsPage,
-    character:       loadCharacterPage,
+    character:       async () => { await loadCharacterPage(); await _ensurePronounUidOptions(); await loadUserPronoun(); },
     lorebook:        () => { loadLorebook(); loadJbEntries(); },
     'dream-settings': loadDreamSettings,
     scheduler:       loadScheduler,
@@ -345,7 +342,7 @@ async function goto(page, {reloadFragment = false, fromHistory = false} = {}) {
     'observe-memory-events': () => {},
     'observe-hidden':  loadObserveHidden,
     'observe-runtime': loadObserveRuntime,
-    'observe-growth':  () => initObserveCharacters('obs-growth-char', loadObserveGrowth),
+    'observe-growth': () => AdminPageLayout.loadObservations('observe-growth'),
     'observe-visual':  loadObserveVisual,
     'observe-spend':   loadObserveSpend,
     'observe-group-arbiter': initObserveGroupArbiter,

@@ -39,7 +39,7 @@ def test_navigation_restore_discovers_all_rendered_groups():
     assert "document.querySelectorAll('[id^=\"navgroup-\"]')" in source
     assert "const key = group.id.slice('navgroup-'.length);" in source
     assert "for(const key of ['create','ops','state','observe'])" not in source
-    for page in ('feature-center', 'service-center', 'data-management', 'observation-center', 'operations-center'):
+    for page in ('feature-center', 'service-center', 'data-management', 'observation-center'):
         assert f'data-action-args=\'["{page}"]\'' in source
 
 
@@ -48,24 +48,23 @@ def test_navigation_restores_the_current_page_within_a_browser_tab_session():
 
     assert "const ACTIVE_PAGE_SESSION_KEY = 'admin_active_page';" in source
     assert 'sessionStorage.setItem(ACTIVE_PAGE_SESSION_KEY, page);' in source
-    assert "getRememberedPage() || 'overview'" in source
+    assert "getRememberedPage() || 'setup'" in source
     assert 'clearRememberedPage();' in source
     assert "setupStatus && setupStatus.needs_setup\n      ? 'setup'" in source
 
 
-def test_control_center_is_the_default_page_and_keeps_settings_contextual():
+def test_setup_is_default_and_effective_state_lives_in_status():
     source = read_admin_client_source()
     index = (Path(__file__).parents[1] / "admin" / "static" / "index.html").read_text(encoding="utf-8")
-    overview = (Path(__file__).parents[1] / "admin" / "static" / "pages" / "overview.html").read_text(encoding="utf-8")
+    overview = (Path(__file__).parents[1] / "admin" / "static" / "pages" / "status.html").read_text(encoding="utf-8")
     i18n = (Path(__file__).parents[1] / "admin" / "static" / "i18n.js").read_text(encoding="utf-8")
 
-    assert 'id="page-overview" data-page-fragment="overview"' in index
-    assert 'data-page="overview"' in index
+    assert 'class="page active" id="page-setup" data-page-fragment="setup"' in index
+    assert 'data-page="overview"' not in index
     assert "const ADMIN_PAGE_CONTEXT = Object.freeze({" in source
     assert "function decoratePageContext(page, container)" in source
     assert "'page_context.related': 'Related settings'" in i18n
-    assert 'data-action-args=\'["setup"]\'' in overview
-    assert 'data-action-args=\'["auth-tokens"]\'' in overview
+    assert 'id="overview-effective-state"' in overview
 
 
 def test_mobile_navigation_uses_a_shell_managed_drawer():

@@ -84,7 +84,7 @@ def test_control_center_endpoint_and_overview_use_the_contract():
     assert "/admin/control-center/effective-state" in paths
     assert "/admin/effective-state" in paths
     source = read_admin_client_source()
-    overview = read_admin_page("overview")
+    overview = read_admin_page("status")
     assert "loadOverview" in source
     assert "/admin/control-center/effective-state" in source
     assert 'id="overview-effective-state"' in overview

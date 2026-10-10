@@ -383,7 +383,7 @@ The control-center overview reads `GET /admin/control-center/effective-state` (`
 its only global state source. The contract includes a row for Tool Loop, MCP, Self Capability,
 autonomy, scheduler, channels, model routing, Embedding, TTS, and the frozen Intiface reserve
 line. Each row carries default/configured/effective values, override source, runtime status,
-blocking reason, reload mode, runtime consumer, and its canonical edit page. The overview does
+blocking reason, reload mode, runtime consumer, and its canonical edit page. The system status page does
 not infer effective values from unrelated status or settings responses; Intiface is reported as
 dormant/frozen independently from MCP.
 
@@ -1085,3 +1085,7 @@ Minecraft建造：`minecraft.allow_building=false`，`GET/PUT /settings/minecraf
 ## 文档笔记（281）
 
 `read_document_notes` / `write_document_note` 复用既有工具开关与 capability 授权，后端 owner 私聊闸门和冻结角色作用域生效；无新配置。现有 `/observability/character-library`（state.read）增加每文档自动概要条数及角色笔记条数，不输出内容。桌面和手机无新设置字段，通过原工具链使用；详见 [document-reading.md](document-reading.md)。
+
+### Temporary admin copy editing
+
+The admin toolbar provides temporary text overrides and sidebar ordering, persisted in browser local storage. Export the edits before removing the editor so approved copy can be applied to source. These overrides do not change backend settings or API data. Global effective state is shown under system status; experimental observations group growth, group arbitration and spending intentions. Generation debugging is grouped under prompt inspection. User pronoun preferences are edited on the character page.

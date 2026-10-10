@@ -127,6 +127,7 @@ async function _loadStatusAttention() {
 }
 
 async function loadStatus() {
+  await loadOverview();
   const jobs = [
     ['runtime', _loadStatusRuntime()],
     ['model', _loadStatusModel()],

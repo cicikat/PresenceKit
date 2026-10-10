@@ -1,4 +1,17 @@
 <h1 class="page-title" data-i18n="status.title">系统状态</h1>
+  <section class="control-center-section" aria-labelledby="overview-effective-title">
+    <div class="card-header">
+      <div>
+        <h2 id="overview-effective-title" data-i18n="overview.effective.title">Effective runtime state</h2>
+        <p class="admin-source-hint" data-i18n="overview.effective.description">Configured values, runtime values, source, blockers, and the canonical edit page.</p>
+      </div>
+      <button class="btn btn-ghost btn-sm" type="button" data-action="loadOverview" data-i18n="common.refresh">Refresh</button>
+    </div>
+    <div id="overview-effective-state" class="tbl-wrap">
+      <div class="loading" data-i18n="common.loading">Loading...</div>
+    </div>
+  </section>
+
 <p class="admin-source-hint" data-i18n="static.status.source_hint">本页只读展示当前运行实例的摘要；配置来源、生效方式和最近刷新结果会一并标明。</p>
 
 <div class="stat-row" id="stat-row">

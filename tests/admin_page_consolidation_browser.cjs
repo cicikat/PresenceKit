@@ -170,7 +170,7 @@ const origin = process.env.ADMIN_UI_LIVE_ORIGIN || 'http://127.0.0.1:8769';
     assert.equal(writes.find(w=>w.path==='/settings/prompt-assets').body.active_character,'beta');
     const groups=[
       ['status',6,['#resource-completeness-content','#sc-status-table','#obs-charperm-char','#autonomy-runs','#system-diagnosis-content']],
-      ['observe-prompt',2,['#obs-prompt-uid','#obs-dream-prompt-uid']],
+      ['observe-prompt',3,['#obs-prompt-uid','#obs-dream-prompt-uid']],
       ['observe-vector',7,['#vec-q','#obs-mem-uid','#event-query-uid','#record-source']],
       ['observe-dream',6,['#obs-dream-raw','#dream-ops-overview','#drinking-state','#obs-mood-raw','#obs-hidden-raw','#obs-listening-player']],
     ];
@@ -248,6 +248,23 @@ const origin = process.env.ADMIN_UI_LIVE_ORIGIN || 'http://127.0.0.1:8769';
     assert.equal(await page.locator('#scheduler-config-card').evaluate(n=>n.closest('.page').id),'page-scheduler');
     assert.equal(await page.locator('#tts-api-url').evaluate(n=>n.closest('.page').id),'page-tts-config');
     assert.ok(!calls.includes('/watch/status'));
+    await page.setViewportSize({width:1440,height:1000});
+    await page.locator('#admin-ui-version').selectOption('new');
+    await go('observe-growth');
+    assert.equal(await page.locator('#page-observe-growth>.behavior-section').count(),3);
+    await go('character');
+    assert.equal(await page.locator('#pn-uid-select').evaluate(n=>n.closest('.page').id),'page-character');
+    await page.locator('#admin-copy-editor button').first().click();
+    page.once('dialog',dialog=>dialog.accept('测试文案修改'));
+    await page.locator('nav a[data-page="character"] span').click();
+    await page.waitForFunction(()=>document.querySelector('nav a[data-page="character"] span').textContent==='测试文案修改');
+    await page.locator('nav a[data-page="character"]').dragTo(page.locator('nav a[data-page="status"]'));
+    await page.waitForFunction(()=>document.querySelector('nav a[data-page="character"]').parentElement.id==='navgroup-observation');
+    const download=page.waitForEvent('download'); await page.getByRole('button',{name:'导出修改',exact:true}).click();
+    assert.equal((await download).suggestedFilename(),'admin-copy-edits.json');
+    await page.reload();
+    await page.waitForFunction(()=>document.querySelector('nav a[data-page="character"] span').textContent==='测试文案修改');
+    assert.equal(await page.locator('nav a[data-page="character"]').evaluate(n=>n.parentElement.id),'navgroup-observation');
     assert.deepEqual(errors,[]);
     console.log('PASS: behavior, multimodal routes, five data modules, system/prompt/memory/observation modules, scoped saves and memory queries, unchanged client relay, retired pages, drafts, version switching, reload and mobile rendering.');
   } finally {await browser.close();}

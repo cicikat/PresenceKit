@@ -5,10 +5,11 @@ const AdminPageLayout = (() => {
   const dataPages = ['relationship-facts', 'user-data', 'observation-center', 'memory-consolidation'];
   const observationGroups = {
     status: {title:['运行状态','Runtime status'], pages:['observe-resource-completeness','scheduler','observe-char-permissions','observe-autonomy','observe-system-diagnosis']},
-    'observe-prompt': {title:['现实 Prompt','Reality prompt'], pages:['observe-dream-prompt']},
+    'observe-prompt': {title:['现实 Prompt','Reality prompt'], pages:['observe-dream-prompt','generation-debug']},
     'observe-vector': {title:['搜索索引','Search index'], pages:['observe-provenance','observe-memory-summary','observe-memory-events','observe-memory','observe-tools','call-records']},
     'observe-dream': {title:['梦境状态','Dream state'], pages:['observe-dream-operations','observe-listening','observe-mood','observe-hidden']},
   };
+  observationGroups['observe-growth'] = {title:['角色成长','Character growth'],pages:['observe-group-arbiter','observe-spend']};
   const observationPages = Object.values(observationGroups).flatMap(group=>group.pages);
   const origins = [];
   const sections = new Map();
@@ -197,7 +198,7 @@ const AdminPageLayout = (() => {
       'listening-player': refreshListeningPlayer,
       'mail-config': _loadSetupMail,
       'diary-config': _loadSetupDiary,
-      'personal-settings': () => Promise.all([_loadSetupAnniversaries(), (async () => {await _ensurePronounUidOptions(); await loadUserPronoun();})()]),
+      'personal-settings': _loadSetupAnniversaries,
     };
     await Promise.all(behaviorPages.map(async source => {
       const root = document.getElementById('page-' + source);
@@ -272,7 +273,7 @@ const AdminPageLayout = (() => {
   }
   async function loadNetwork() { await loadSources({'network-config': async () => { _bindProxyControls(); await loadProxy(); }}); }
   async function loadObservations(page,resume=false) {
-    const primary = {status:loadStatus,'observe-vector':loadVector,'observe-prompt':loadObservePromptUidList,'observe-dream':loadObserveDream};
+    const primary = {'observe-growth':()=>initObserveCharacters('obs-growth-char',loadObserveGrowth),status:loadStatus,'observe-vector':loadVector,'observe-prompt':loadObservePromptUidList,'observe-dream':loadObserveDream};
     if (!resume) await primary[page]();
     if (page === 'observe-dream') await loadObserveDrinking();
     if (!isNew()) return;
@@ -281,6 +282,8 @@ const AdminPageLayout = (() => {
       'observe-char-permissions':()=>initObserveCharacters('obs-charperm-char',loadCharPermissions),
       'observe-autonomy':loadObserveAutonomy,'observe-system-diagnosis':loadSystemDiagnosis,
       'observe-dream-prompt':loadObserveDreamPromptUidList,
+      'generation-debug':()=>Promise.all([loadPromptAblation(),loadMcpDebugRequests(),loadLatestAutonomyPrompt()]),
+      'observe-group-arbiter':initObserveGroupArbiter,'observe-spend':loadObserveSpend,
       'observe-provenance':loadProvenance,'observe-memory-summary':()=>initObserveCharacters('obs-memory-summary-char'),
       'observe-memory-events':()=>{},'observe-memory':()=>{},'observe-tools':loadObserveToolUidList,'call-records':loadUnifiedRecords,
       'observe-dream-operations':loadObserveDreamOperations,'observe-listening':loadObserveListening,
