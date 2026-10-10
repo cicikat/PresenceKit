@@ -20,7 +20,7 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'admin-editor-20261011';
+const ADMIN_UI_FRAGMENT_VERSION = 'admin-round2-20261011';
 
 const ADMIN_PAGE_ALIASES = Object.freeze({overview:'setup', users:'character', 'operations-center':'status', memory: 'observe-memory', 'creation-center':'data-management', 'observe-existence':'observe-dream'});
 
@@ -46,6 +46,7 @@ const ADMIN_PAGE_CONTEXT = Object.freeze({
 });
 
 function decoratePageContext(page, container) {
+  return; // Operator requested removal of page introduction and related-navigation blocks.
   const context = ADMIN_PAGE_CONTEXT[page];
   if (!context || (AdminUI.version === 'new' && page === 'model-routing') || container.querySelector('.page-context')) return;
   const title = container.querySelector('.page-title');
@@ -310,7 +311,7 @@ async function goto(page, {reloadFragment = false, fromHistory = false} = {}) {
     'embedding-config': loadSetupEmbedding,
     'local-model-runtime': loadLocalModelRuntime,
     'observation-center': loadImeObservation,
-    'feature-center': loadFeatureCenter,
+    'feature-center': () => AdminPageLayout.loadObservations('feature-center'),
     'service-center': loadServiceCenter,
     'role-bindings': loadRoleBindings,
     'character-behavior': AdminPageLayout.loadBehavior,
@@ -323,7 +324,7 @@ async function goto(page, {reloadFragment = false, fromHistory = false} = {}) {
     'observe-listening': loadObserveListening,
     status:          () => AdminPageLayout.loadObservations('status'),
     logs:            () => { _runtimeWarningOffset = 0; loadLogs(); },
-    'auth-tokens':   () => { loadAuthTokens(); loadChannelToggles(); },
+    'auth-tokens': () => AdminPageLayout.loadObservations('auth-tokens'),
     'model-routing': async () => { await loadModelRouting(); if (AdminUI.version === 'new') await AdminPageLayout.loadModels(); },
     'data-management': AdminPageLayout.loadData,
     mcp:             loadMcpPage,

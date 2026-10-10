@@ -118,7 +118,7 @@ function _renderToolsRegistry() {
   const exposed = new Set(preset ? preset.tools : (_toolsControl.global_default_tools || []));
   const rows = (_toolsControl.tools || []).map(tool => {
     const frozen = tool.frozen === true;
-    const execution = `<label class="checkbox-row"><input type="checkbox" data-tool="${escapeHtml(tool.name)}" ${tool.execution_enabled ? 'checked' : ''} ${frozen ? 'disabled' : ''} onchange="saveToolExecution(this.dataset.tool)"><span>${escapeHtml(frozen ? t('tools.frozen_execution', '冻结（需 Intiface opt-in）') : t('tools.execution_enabled', '全局执行'))}</span></label>`;
+    const execution = `<span class="badge">${escapeHtml(tool.execution_enabled ? t("common.enabled", "已开启") : t("common.disabled", "已关闭"))}</span>`;
     const exposure = frozen ? `<span style="color:var(--muted)">${escapeHtml(t('tools.frozen', '冻结'))}</span>` : `<label class="checkbox-row"><input type="checkbox" data-tool-exposure="${escapeHtml(tool.name)}" ${exposed.has(tool.name) ? 'checked' : ''}><span>${escapeHtml(t('tools.expose', '在此模型中暴露'))}</span></label>`;
     return `<tr><td><strong><code>${escapeHtml(tool.name)}</code></strong><div style="font-size:12px;color:var(--muted)">${escapeHtml(_toolUiDescription(tool))}</div></td><td>${escapeHtml(_toolCategoryLabel(tool.category))}</td><td>${execution}</td><td>${exposure}</td></tr>`;
   }).join('');

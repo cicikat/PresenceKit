@@ -171,7 +171,7 @@ const origin = process.env.ADMIN_UI_LIVE_ORIGIN || 'http://127.0.0.1:8769';
     const groups=[
       ['status',6,['#resource-completeness-content','#sc-status-table','#obs-charperm-char','#autonomy-runs','#system-diagnosis-content']],
       ['observe-prompt',3,['#obs-prompt-uid','#obs-dream-prompt-uid']],
-      ['observe-vector',7,['#vec-q','#obs-mem-uid','#event-query-uid','#record-source']],
+      ['observe-vector',8,['#vec-q','#obs-mem-uid','#event-query-uid','#record-source']],
       ['observe-dream',6,['#obs-dream-raw','#dream-ops-overview','#drinking-state','#obs-mood-raw','#obs-hidden-raw','#obs-listening-player']],
     ];
     for (const [target,count,selectors] of groups) {
@@ -190,7 +190,7 @@ const origin = process.env.ADMIN_UI_LIVE_ORIGIN || 'http://127.0.0.1:8769';
       await page.setViewportSize({width:1440,height:1000});
     }
     await page.waitForFunction(()=>document.getElementById('drinking-state').textContent.includes('fixture-state'));
-    assert.ok((await page.locator('#obs-listening-player').textContent()).includes('fixture-playing'));
+    await page.waitForFunction(()=>document.getElementById('obs-listening-player').textContent.includes('fixture-playing'));
     await go('observe-memory');await openAll();
     await page.locator('#obs-mem-uid').fill('fixture-reader');
     await page.locator('[data-action="loadObserveMemory"]').click();
@@ -207,8 +207,8 @@ const origin = process.env.ADMIN_UI_LIVE_ORIGIN || 'http://127.0.0.1:8769';
     assert.equal(await page.locator('#page-creation-center,#page-observe-existence,#page-observe-trigger-catalog,nav a[data-page="creation-center"],nav a[data-page="observe-existence"],nav a[data-page="observe-trigger-catalog"]').count(),0);
     await go('mail-config');
     await page.waitForSelector('#page-character-behavior.active');
-    assert.equal(await page.locator('#page-character-behavior>.behavior-section').count(),9);
-    assert.equal(await page.locator('#page-character-behavior>.behavior-section>.card-header>.pk-collapse').count(),9);
+    assert.equal(await page.locator('#page-character-behavior>.behavior-section').count(),11);
+    assert.equal(await page.locator('#page-character-behavior>.behavior-section>.card-header>.pk-collapse').count(),11);
     const section = page.locator('#page-character-behavior>.behavior-section').first();
     await section.locator(':scope > .card-header > .pk-collapse').click();
     assert.equal(await section.locator(':scope > .behavior-section-body').isVisible(),false);
@@ -252,9 +252,24 @@ const origin = process.env.ADMIN_UI_LIVE_ORIGIN || 'http://127.0.0.1:8769';
     await page.locator('#admin-ui-version').selectOption('new');
     await go('observe-growth');
     assert.equal(await page.locator('#page-observe-growth>.behavior-section').count(),3);
+    await go('feature-center');
+    assert.equal(await page.locator('#tools-model-preset').evaluate(n=>n.closest('.page').id),'page-feature-center');
+    assert.equal(await page.locator('[data-tool][onchange]').count(),0);
+    await go('auth-tokens');
+    assert.equal(await page.locator('#page-auth-tokens>.behavior-section').count(),3);
+    assert.equal(await page.locator('.page-context').count(),0);
     await go('character');
     assert.equal(await page.locator('#pn-uid-select').evaluate(n=>n.closest('.page').id),'page-character');
     await page.locator('#admin-copy-editor button').first().click();
+    await go('character-behavior');
+    await page.waitForFunction(()=>document.querySelectorAll('#page-character-behavior [data-editor-drag-handle]').length>1);
+    await page.evaluate(()=>document.querySelectorAll('#page-character-behavior>.behavior-section').forEach(c=>{if(c.dataset.pkCollapsed!=='true') c.querySelector(':scope>.card-header>.pk-collapse')?.click();}));
+    const first=page.locator('#page-character-behavior>.behavior-section').first();
+    const last=page.locator('#page-character-behavior>.behavior-section').nth(1);
+    const movedKey=await last.getAttribute('data-editor-card-key');
+    await last.locator(':scope > .card-header').dragTo(first.locator(':scope > .card-header'),{sourcePosition:{x:150,y:15},targetPosition:{x:150,y:5}});
+    await page.waitForFunction(k=>document.querySelector('#page-character-behavior>.behavior-section').dataset.editorCardKey===k,movedKey);
+    await go('character');
     page.once('dialog',dialog=>dialog.accept('测试文案修改'));
     await page.locator('nav a[data-page="character"] span').click();
     await page.waitForFunction(()=>document.querySelector('nav a[data-page="character"] span').textContent==='测试文案修改');
