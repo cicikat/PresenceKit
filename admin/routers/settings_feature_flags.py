@@ -46,7 +46,6 @@ FLAGS = {
     "music_autonomy": ("audio_music", "music_autonomy", "听歌主动性"),
     "video_call_frame_diff": ("video_call_frame_diff", "enabled", "视频通话帧差分（首帧全量、后续只描述变化）"),
 }
-RESTART_REQUIRED_FLAGS = frozenset({"qq"})
 _DEFAULT_ENABLED_FLAGS = frozenset({"self_management"})
 
 
@@ -74,10 +73,14 @@ async def get_feature_flags(auth=Depends(require_scopes("admin"))):
             "enabled": bool(cfg.get(section, {}).get(key, name in _DEFAULT_ENABLED_FLAGS)),
             "desired_enabled": enabled,
             "label": label,
-            "apply_mode": "restart_required" if name in RESTART_REQUIRED_FLAGS else "hot_reload",
-            "restart_required": name in RESTART_REQUIRED_FLAGS,
+            "apply_mode": "hot_reload",
+            "restart_required": False,
         }
-        if name in {"qq_group", "qq_other_users"}:
+        if name == "qq":
+            from core.qq_service import operational_state
+            item.update(operational_state())
+            item["description"] = "默认关闭；保存后热启停，standalone 模式阻止连接。connected 只表示 OneBot 已连接。"
+        elif name in {"qq_group", "qq_other_users"}:
             item["effective_state"] = (
                 "disabled" if not enabled else "standalone-blocked" if cfg.get("standalone_mode", False)
                 else "qq-disabled" if not cfg.get("qq", {}).get("enabled", False) else "enabled"
@@ -136,15 +139,17 @@ async def update_feature_flags(body: FeatureFlagsUpdate, auth=Depends(require_sc
     if unknown:
         raise HTTPException(status_code=422, detail=f"未知功能开关: {unknown}")
     full_cfg = read_config_file(CONFIG_FILE)
-    changed = set()
     for name, enabled in body.flags.items():
         section, key, _ = FLAGS[name]
-        if bool(full_cfg.get(section, {}).get(key, name in _DEFAULT_ENABLED_FLAGS)) != enabled:
-            changed.add(name)
         full_cfg.setdefault(section, {})[key] = enabled
     write_config_file(CONFIG_FILE, full_cfg)
     from core import config_loader
     config_loader.reload_config()
+    if "qq" in body.flags:
+        from core.qq_service import get_service
+        service = get_service()
+        if service:
+            await service.apply()
     if "wechat" in body.flags:
         from core.wechat_service import get_service
         service = get_service()
@@ -154,15 +159,10 @@ async def update_feature_flags(body: FeatureFlagsUpdate, auth=Depends(require_sc
         from core import mcp_client
         await mcp_client.sync_mcp_servers()
     result = await get_feature_flags(auth)
-    restart_required = sorted(changed & RESTART_REQUIRED_FLAGS)
     result.update({
-        "reload_status": "restart_required" if restart_required else "reloaded",
-        "restart_required": restart_required,
-        "message": (
-            "设置已保存；QQ 通道需要重启后端后生效"
-            if restart_required
-            else "设置已保存并热生效"
-        ),
+        "reload_status": "reloaded",
+        "restart_required": [],
+        "message": "设置已保存并热生效",
     })
     return result
 

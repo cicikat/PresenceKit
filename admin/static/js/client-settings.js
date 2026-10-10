@@ -54,7 +54,7 @@ async function loadClientSettings() {
     document.getElementById('client-qq-host').value = clients.qq_host;
     document.getElementById('client-qq-port').value = clients.qq_port;
     document.getElementById('client-state').textContent =
-      `电脑：${clients.clients.desktop.effective_state} · 手机：${clients.clients.mobile.effective_state} · 微信：${_clientFlags.wechat?.effective_state} · QQ：${clients.standalone_mode ? 'standalone 模式阻止启动' : '开关及连接重启后生效'}`;
+      `电脑：${clients.clients.desktop.effective_state} · 手机：${clients.clients.mobile.effective_state} · 微信：${_clientFlags.wechat?.effective_state} · QQ：${clients.clients.qq?.effective_state || _clientFlags.qq?.effective_state || '状态未知'}（开关及连接保存后热生效）`;
     document.getElementById('client-address').textContent = `当前管理面地址：${location.origin}（客户端使用可达地址；服务监听端口 ${clients.admin_port}，修改 config.yaml 的 admin.port 后重启）`;
     await Promise.all([loadClientWechatSettings(), loadRelaySettings(), loadQzoneSettings()]);
   } catch (error) {
@@ -80,7 +80,7 @@ async function saveClientConnection() {
       qq_host: document.getElementById('client-qq-host').value.trim(),
       qq_port: Number(document.getElementById('client-qq-port').value),
     });
-    toast(result.restart_required ? '已保存，重启后端后生效' : '已保存', 'ok');
+    toast(result.restart_required ? '已保存，重启后端后生效' : 'QQ 连接已保存并热生效', 'ok');
     await loadClientSettings();
   } catch (error) { toast(error.message, 'err'); }
 }

@@ -1,12 +1,12 @@
 <h1 class="page-title">消息分发与客户端设置</h1>
-<section class="card"><h3>客户端快捷开关</h3><p>只开启你使用的客户端。桌面/手机关闭后停止该入口收发，保留已有消息；QQ 开关及连接修改需重启后端；微信热生效。</p>
+<section class="card"><h3>客户端快捷开关</h3><p>只开启你使用的客户端。电脑、手机、QQ、微信开关保存后自动热生效；桌面/手机关闭后停止该入口收发，保留已有消息。QQ 关闭即断开连接，重新开启后自动连接。</p>
 <div class="form-row">
 <label class="checkbox-row"><input type="checkbox" id="client-qq" data-action="toggleClientChannel" data-action-args='["qq"]'><span>QQ</span></label>
 <label class="checkbox-row"><input type="checkbox" id="client-wechat" data-action="toggleClientChannel" data-action-args='["wechat"]'><span>微信</span></label>
 <label class="checkbox-row"><input type="checkbox" id="client-desktop" data-action="toggleClientChannel" data-action-args='["desktop"]'><span>电脑前端</span></label>
 <label class="checkbox-row"><input type="checkbox" id="client-mobile" data-action="toggleClientChannel" data-action-args='["mobile"]'><span>手机前端</span></label>
 </div><p id="client-state" role="status"></p><button class="btn btn-ghost btn-sm" data-action="loadClientSettings">刷新</button></section>
-<details class="card"><summary>QQ · OneBot 桥连接</summary><p>当前支持无路径、无鉴权的 OneBot ws://host:port 桥（例如对应配置的 NapCat）；其他连接形式需要扩展适配器。填写桥实际监听地址；修改后重启后端。standalone 模式会阻止 QQ 启动。</p><label class="field"><span>主机 / IP</span><input id="client-qq-host" autocomplete="off"></label><label class="field"><span>端口</span><input id="client-qq-port" type="number" min="1" max="65535"></label><button class="btn btn-primary" data-action="saveClientConnection">保存 QQ 连接</button></details>
+<details class="card"><summary>QQ · OneBot 桥连接</summary><p>当前支持无路径、无鉴权的 OneBot ws://host:port 桥（例如对应配置的 NapCat）；其他连接形式需要扩展适配器。填写桥实际监听地址；保存后自动重连，开关即时启停。standalone 模式会阻止 QQ 启动。connected 只表示 OneBot 连接，不代表账号登录或消息送达。</p><label class="field"><span>主机 / IP</span><input id="client-qq-host" autocomplete="off"></label><label class="field"><span>端口</span><input id="client-qq-port" type="number" min="1" max="65535"></label><button class="btn btn-primary" data-action="saveClientConnection">保存 QQ 连接</button></details>
 <section class="card"><h3>QQ · 回复范围</h3>
   <p>两项默认关闭，保存后热生效。群聊开启后仅响应 @ 机器人；其他用户开关控制非主用户的私聊。主用户私聊继续沿用现有链路。开启不代表群聊或多用户状态已完全隔离，设计确定后再开放。</p>
   <label class="checkbox-row"><input type="checkbox" id="client-qq_group" data-action="toggleClientChannel" data-action-args='["qq_group"]'><span>开启群聊回复</span> <small id="client-qq_group-state"></small></label>

@@ -35,6 +35,28 @@ _startup_notify_sent: bool = False
 _pending_responses: dict[str, "asyncio.Future"] = {}
 
 
+def is_connected() -> bool:
+    return _ws is not None and not _ws.closed
+
+
+async def disconnect():
+    """Revoke a connection and release its waiting requests."""
+    global _ws, _self_id
+    ws, _ws = _ws, None
+    _self_id = ''
+    for future in list(_pending_responses.values()):
+        if not future.done():
+            future.set_result(None)
+    _pending_responses.clear()
+    if ws is not None and not ws.closed:
+        await ws.close()
+
+
+def _delivery_allowed():
+    from core.qq_service import delivery_allowed
+    return delivery_allowed()
+
+
 def _load_blacklist():
     """加载黑名单，文件不存在时使用空列表"""
     from core.sandbox import get_paths
@@ -87,6 +109,8 @@ async def send_message(target_id: str, content: str, is_group: bool = False):
     """
     from core.no_outbound import assert_outbound_allowed
     assert_outbound_allowed("qq_send")
+    if not _delivery_allowed():
+        return
     if _ws is None or _ws.closed:
         logger.error("[qq_adapter] WebSocket 未连接，无法发送消息")
         return
@@ -124,6 +148,8 @@ async def send_record(target_id: str, file: str, is_group: bool = False):
                     "http://..."             远程 URL
         is_group  — True=群聊，False=私聊
     """
+    if not _delivery_allowed():
+        return
     if _ws is None or _ws.closed:
         logger.error("[qq_adapter] WebSocket 未连接，无法发送语音")
         return
@@ -156,6 +182,8 @@ async def send_image(target_id: str, file_path: str, is_group: bool = False):
     发送本地图片（OneBot 11 image 消息段）
     file_path: 本地绝对路径
     """
+    if not _delivery_allowed():
+        return
     if _ws is None or _ws.closed:
         logger.error("[qq_adapter] WebSocket 未连接，无法发送图片")
         return
@@ -320,16 +348,17 @@ async def connect_and_listen():
     global _ws, _self_id
 
     _load_blacklist()
-    cfg = get_config()["qq"]
-    host = cfg["host"]
-    port = cfg["port"]
-    ws_url = f"ws://{host}:{port}"
+    cfg = get_config().get("qq") or {}
+    host = cfg.get("host", "127.0.0.1")
+    port = cfg.get("port", 3001)
+    ws_host = f"[{host}]" if ":" in host and not host.startswith("[") else host
+    ws_url = f"ws://{ws_host}:{port}"
 
     logger.info(f"[qq_adapter] 正在连接 NapCat: {ws_url}")
 
     while True:  # 自动重连循环
         try:
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(trust_env=False) as session:
                 async with session.ws_connect(
                     ws_url,
                     heartbeat=30,        # 30秒心跳，保活连接
@@ -364,7 +393,7 @@ async def connect_and_listen():
             log_error("qq_adapter.connect_and_listen", e)
             logger.warning("[qq_adapter] 连接异常，5秒后重试...")
         finally:
-            _ws = None
+            await disconnect()
 
         await asyncio.sleep(5)  # 重连等待
 
@@ -402,6 +431,8 @@ async def ws_call(action: str, params: dict | None = None, timeout: float = 5.0)
     返回：
         响应 dict（含 status / data），超时或未连接返回 None
     """
+    if not _delivery_allowed():
+        return None
     if _ws is None or _ws.closed:
         logger.warning(f"[qq_adapter.ws_call] WS 未连接，无法执行 {action}")
         return None

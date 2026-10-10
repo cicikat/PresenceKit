@@ -952,8 +952,6 @@ async def _main_with_services():
     logger.info("主动行为调度器已启动")
 
     standalone_mode = cfg.get("standalone_mode", False)
-    qq_enabled = cfg.get("qq", {}).get("enabled", False)
-    qq_runtime_enabled = (not standalone_mode) and qq_enabled
 
     # 注册通道
     from channels.registry import register as _reg_channel
@@ -974,27 +972,14 @@ async def _main_with_services():
     _wechat_service = install_service(handle_message)
     _reg_channel(WeChatChannel(_wechat_service))
 
-    if qq_runtime_enabled:
-        from core import tool_dispatcher, qq_adapter, message_queue
-        from channels.qq import QQChannel
-        oid = str(cfg.get("scheduler", {}).get("owner_id", ""))
-        _qq_channel = QQChannel(oid)
-        _reg_channel(_qq_channel)
-        tool_dispatcher.register_send_callback(qq_adapter.send_message)
-        logger.info("工具调度器已初始化")
-        message_queue.set_handler(handle_message)
-        logger.info("消息队列处理器已注册")
-        async def on_message_received(msg: dict):
-            await message_queue.enqueue(msg)
-        qq_adapter.on_message(on_message_received)
-        logger.info("QQ 消息回调已注册")
-    else:
-        if standalone_mode:
-            logger.info("standalone_mode=true，跳过NapCat和QQ消息队列")
-            _desktop_channel.set_active(True)
-            logger.info("standalone_mode: desktop通道已激活")
-        else:
-            logger.info("qq.enabled=false，跳过NapCat和QQ消息队列")
+    from core import tool_dispatcher, qq_adapter
+    from core.qq_service import install_service as _install_qq_service
+    from channels.qq import QQChannel
+    _qq_service = _install_qq_service(handle_message)
+    _reg_channel(QQChannel(str(cfg.get("scheduler", {}).get("owner_id", ""))))
+    tool_dispatcher.register_send_callback(qq_adapter.send_message)
+    if standalone_mode:
+        _desktop_channel.set_active(True)
 
     # Brief 170: resume durable Dream -> Reality continuations after all
     # channels are registered, without routing them through scheduler gating.
@@ -1006,6 +991,8 @@ async def _main_with_services():
         logger.warning("Dream Reality continuation recovery failed to start", exc_info=True)
 
     tasks = []
+    _qq_task = asyncio.create_task(_run_long_lived_service("qq", _qq_service.run()))
+    tasks.append(_qq_task)
     from core.activity.minecraft import install_service as _install_minecraft
     _minecraft_service = _install_minecraft()
     _minecraft_task = asyncio.create_task(_run_long_lived_service("minecraft", _minecraft_service.run()))
@@ -1025,14 +1012,6 @@ async def _main_with_services():
     else:
         logger.info("管理面板未启用（config.admin.enabled 或 auto_start 为 false）")
 
-    if qq_runtime_enabled:
-        logger.info(f"正在连接 NapCat: ws://{cfg['qq']['host']}:{cfg['qq']['port']}")
-        tasks.append(asyncio.create_task(_run_long_lived_service("qq", qq_adapter.connect_and_listen())))
-    else:
-        if standalone_mode:
-            logger.info("standalone_mode=true，不连接NapCat")
-        else:
-            logger.info("qq.enabled=false，不连接NapCat")
     logger.info("Bot 已就绪，等待消息...")
     logger.info("=" * 60)
 
@@ -1047,6 +1026,8 @@ async def _main_with_services():
         log_error("main", e)
         logger.error(f"主循环异常退出: {e}")
     finally:
+        _qq_task.cancel()
+        await asyncio.gather(_qq_task, return_exceptions=True)
         _wechat_task.cancel()
         await asyncio.gather(_wechat_task, return_exceptions=True)
         _minecraft_task.cancel()

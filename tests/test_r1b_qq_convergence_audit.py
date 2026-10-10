@@ -244,7 +244,8 @@ def test_a3b_create_task_calls_are_startup_only():
     lines = _lines("main.py")
     _ALLOWED_TARGETS = {
         "start_admin_server",
-        "qq_adapter.connect_and_listen",
+        "_qq_service.run",
+        "_minecraft_service.run",
         "_life_records_worker",
             "_stt_local.warmup_async",
             "start_hds_local",

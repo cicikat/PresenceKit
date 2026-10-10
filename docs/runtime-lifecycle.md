@@ -12,6 +12,13 @@
 
 ## 1. 进程入口
 
+QQ 热更新：startup 始终安装 `core/qq_service.py` supervisor、注册 QQ 通道及工具发送回调。
+`qq.enabled` / host / port 保存后立即 apply；手改配置至多下一秒协调。standalone 阻止连接。
+关闭与连接变更撤销 generation、cancel/await 连接任务、关闭 socket 并结束待响应请求；
+排队输入及已开始回合的外发通过同一代校验，已开始回合的本地处理不取消。
+进程退出 cancel/await supervisor，不在 router 单独创建服务。运行状态复用
+`/settings/clients` 与 `/settings/feature-flags`（admin），无新增持久 trace。
+
 工单 274：`main._main_with_services` 安装 MinecraftService 并持有 supervisor task，
 关闭时 cancel/await；router 不创建服务。默认关闭仍安装 supervisor，以支持热启停。
 它管理角色共玩会话、租约与模型任务，Docker/Compose 独立管理 Node 身体进程。

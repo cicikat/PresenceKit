@@ -1,6 +1,6 @@
 """
 channels/qq — QQ通道，通过NapCat发消息。
-qq.enabled=false 或 standalone_mode=true 时不加载此通道。
+通道始终注册；QQ supervisor 根据开关、standalone 和连接状态热启停。
 """
 
 from channels.base import BaseChannel
@@ -20,7 +20,8 @@ class QQChannel(BaseChannel):
 
     @property
     def is_active(self) -> bool:
-        return self._active
+        from core.qq_service import operational_state
+        return self._active and operational_state()['connected']
 
     def set_active(self, active: bool) -> None:
         self._active = active

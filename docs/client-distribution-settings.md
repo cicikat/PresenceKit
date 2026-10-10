@@ -4,7 +4,9 @@
 
 `GET/PUT /settings/clients` 要求 admin scope。`client_channels.desktop/mobile` 缺省均为 true，热更新：关闭阻止对应 `/desktop/*`、`/mobile/*` 和桌面 WS 新连接，同时停止广播、桌面已有 WS 推送及手机 durable mirror。保留原队列；重新开启后未过期消息按原 ack/TTL 规则消费。已开始的回合不撤销；这不是撤销 token 或关闭所有共享工具接口，若需要撤销设备全部访问须停用它的 token。
 
-QQ enabled 复用 feature-flags，host/port 由本页配置，均需要重启后端；standalone_mode 仍阻止 QQ 启动。微信 enabled、连接和 owner 绑定复用 `/settings/wechat`，桥密钥取自环境变量。页面显示配置及连接状态，不将等待连接写成投递验收成功。
+QQ enabled 复用 feature-flags，host/port 由本页配置，均保存后热生效：startup 始终持有 QQ supervisor，关闭断开、开启连接、地址改变重连；standalone_mode 仍阻止 QQ 启动。已排队的旧代输入丢弃，已开始的回合允许完成本地处理，但旧代回复、媒体与工具请求不能借新连接发送。微信 enabled、连接和 owner 绑定复用 `/settings/wechat`，桥密钥取自环境变量，密钥变更仍需重启进程。页面显示配置及连接状态，不将等待连接写成投递验收成功。
+
+`GET /settings/clients` 的 `clients.qq` 和 feature-flags 的 qq 条目返回 runtime_started、connected、effective_state 与 last_error；状态含 disabled / standalone-blocked / runtime_not_started / connecting / connected。connected 只表示 OneBot WebSocket 已连，不保证 QQ 登录或实际投递。`qq_apply_mode=hot_reload`，保存不要求重启。桌面 / 手机消息、scope、ack / TTL 协议不变。
 
 ## 首次部署与协议兼容
 

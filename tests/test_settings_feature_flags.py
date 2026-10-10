@@ -97,10 +97,10 @@ def test_qq_and_mail_channel_toggles_are_allowlisted(tmp_path, monkeypatch):
     )
     assert result["flags"]["qq"]["enabled"] is True
     assert result["flags"]["mail"]["enabled"] is True
-    assert result["flags"]["qq"]["apply_mode"] == "restart_required"
+    assert result["flags"]["qq"]["apply_mode"] == "hot_reload"
     assert result["flags"]["mail"]["apply_mode"] == "hot_reload"
-    assert result["reload_status"] == "restart_required"
-    assert result["restart_required"] == ["qq"]
+    assert result["reload_status"] == "reloaded"
+    assert result["restart_required"] == []
     cfg = yaml.safe_load(path.read_text(encoding="utf-8"))
     assert cfg["qq"]["enabled"] is True
     assert cfg["mail"]["enabled"] is True

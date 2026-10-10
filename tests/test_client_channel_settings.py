@@ -43,7 +43,8 @@ async def test_client_setting_preserves_unrelated_config(monkeypatch):
     monkeypatch.setattr(settings, 'get_config', lambda: cfg)
     monkeypatch.setattr('core.client_channels.get_config', lambda: cfg)
     result = await settings.put_settings(settings.ClientSettings(mobile=False, qq_host='bridge.example', qq_port=3010), None)
-    assert result['restart_required']
+    assert not result['restart_required']
+    assert result['qq_apply_mode'] == 'hot_reload'
     assert result['clients']['mobile']['effective_state'] == 'disabled'
     assert cfg['unrelated'] == {'keep': True}
     assert cfg['qq']['enabled']

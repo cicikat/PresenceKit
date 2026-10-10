@@ -25,17 +25,18 @@ async def get_settings(auth=Depends(require_scopes("admin"))):
         channel = registry.get(name)
         connected = desktop_ws.is_connected() if name == "desktop" else bool(channel and channel.is_active)
         result[name] = {"enabled": enabled(name), "effective_state": "disabled" if not enabled(name) else "connected" if connected else "waiting_for_client"}
+    from core.qq_service import operational_state
+    result['qq'] = {'enabled': bool(cfg.get('qq', {}).get('enabled', False)), **operational_state()}
     return {"clients": result, "qq_host": cfg.get("qq", {}).get("host", "127.0.0.1"),
             "qq_port": cfg.get("qq", {}).get("port", 3001),
             "standalone_mode": bool(cfg.get("standalone_mode", False)),
             "admin_port": cfg.get("admin", {}).get("port", 8080), "apply_mode": "hot_reload",
-            "qq_apply_mode": "restart_required"}
+            "qq_apply_mode": "hot_reload"}
 
 
 @router.put("/settings/clients")
 async def put_settings(body: ClientSettings, auth=Depends(require_scopes("admin"))):
     cfg = read_config_file(get_config_path())
-    restart = False
     for name in ("desktop", "mobile"):
         value = getattr(body, name)
         if value is not None:
@@ -43,8 +44,11 @@ async def put_settings(body: ClientSettings, auth=Depends(require_scopes("admin"
     for key in ("host", "port"):
         value = getattr(body, "qq_" + key)
         if value is not None:
-            restart |= cfg.get("qq", {}).get(key) != value
             cfg.setdefault("qq", {})[key] = value
     write_config_file(get_config_path(), cfg)
     reload_config()
-    return {**await get_settings(auth), "restart_required": restart}
+    from core.qq_service import get_service
+    service = get_service()
+    if service:
+        await service.apply()
+    return {**await get_settings(auth), "restart_required": False}
