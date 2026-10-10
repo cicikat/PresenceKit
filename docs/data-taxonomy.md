@@ -1,5 +1,7 @@
 # Data Taxonomy
 
+角色删除归档经 `DataPaths.character_cleanup_archive_dir()` 取得，属私有可恢复运行数据；清理白名单经 `character_cleanup_runtime_roots()` 取得。归档不自动清空，不改写共享历史；合同见 [character-cleanup.md](character-cleanup.md)。
+
 本文记录当前 `data/` 路径治理实现。代码真值在：
 
 | 文件 | 职责 |

@@ -1,0 +1,26 @@
+<h1 class="page-title" data-i18n="nav.page.character-cleanup">删除相关</h1>
+<p class="admin-description" data-i18n="cleanup.intro">删除角色卡，或清理已没有角色卡的专属数据。删除后可从本页恢复；已有同 ID 数据时不会覆盖。</p>
+<section class="card">
+  <div class="card-header"><h2 data-i18n="cleanup.select">选择角色</h2><button type="button" class="btn btn-ghost" data-action="loadCharacterCleanup" data-i18n="common.refresh">刷新</button></div>
+  <label class="field"><span data-i18n="cleanup.role">角色或遗留数据</span><select id="cleanup-character" aria-label="角色或遗留数据" data-i18n-aria-label="cleanup.role"></select></label>
+  <p class="admin-description" data-i18n="cleanup.boundary">用户全局数据、共享素材、其他角色和群聊历史会保留。当前或默认角色、仍被群聊或任务使用的角色需要先解除占用。</p>
+  <button type="button" class="btn btn-danger" data-action="openCharacterCleanup" data-i18n="cleanup.preview">预览并删除</button>
+  <p id="cleanup-status" role="status"></p>
+</section>
+<section class="card"><div class="card-header"><h2 data-i18n="cleanup.history">删除与恢复记录</h2></div><div id="cleanup-history"></div></section>
+<dialog id="cleanup-dialog" aria-labelledby="cleanup-dialog-title" style="background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:12px;width:min(640px,90vw);max-height:85vh;overflow:auto;padding:24px">
+  <h2 id="cleanup-dialog-title" data-i18n="cleanup.confirm">确认删除角色</h2>
+  <p id="cleanup-dialog-id"></p>
+  <label class="checkbox-row"><input type="checkbox" id="cleanup-data" checked><span data-i18n="cleanup.include_data">同时清理该角色相关数据</span></label>
+  <p id="cleanup-mode-hint" class="admin-description"></p>
+  <div id="cleanup-preview" role="status"></div>
+  <label class="field"><span data-i18n="cleanup.type_id">输入所选角色 ID 确认</span><input id="cleanup-confirm-id" type="text" autocomplete="off"></label>
+  <p id="cleanup-dialog-status" role="alert"></p>
+  <div class="admin-action-group"><button type="button" class="btn btn-ghost" data-action="closeCharacterCleanup" data-i18n="common.cancel">取消</button><button type="button" id="cleanup-submit" class="btn btn-danger" data-action="submitCharacterCleanup" data-i18n="cleanup.delete" disabled>确认删除</button></div>
+</dialog>
+<dialog id="cleanup-restore-dialog" aria-labelledby="cleanup-restore-title" style="background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:12px;width:min(480px,90vw);padding:24px">
+  <h2 id="cleanup-restore-title" data-i18n="cleanup.restore">恢复</h2>
+  <p data-i18n="cleanup.restore_hint">恢复该次删除的角色卡和数据？已有同 ID 内容时会拒绝覆盖。</p>
+  <p id="cleanup-restore-status" role="alert"></p>
+  <div class="admin-action-group"><button type="button" class="btn btn-ghost" data-action="cancelCharacterRestore" data-i18n="common.cancel">取消</button><button type="button" class="btn btn-primary" data-action="confirmCharacterRestore" data-i18n="cleanup.restore">恢复</button></div>
+</dialog>

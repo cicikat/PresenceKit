@@ -106,6 +106,8 @@ app.include_router(settings_mcp.router,           prefix="", tags=["设置-MCP"]
 app.include_router(settings_tools.router,         prefix="", tags=["设置-工具"])
 app.include_router(settings_browser.router,        prefix="", tags=["设置-浏览器"])
 app.include_router(character.router,      prefix="",           tags=["角色卡"])
+from admin.routers import character_cleanup
+app.include_router(character_cleanup.router, tags=["角色删除与恢复"])
 app.include_router(chat.router,           prefix="",           tags=["对话"])
 app.include_router(owner_turn.router,      prefix="",           tags=["Owner Turn"])
 app.include_router(diary_sync.router,      prefix="",           tags=["Diary Sync"])

@@ -33,6 +33,8 @@ class PathMeta:
 # ── 注册表 ─────────────────────────────────────────────────────────────────────
 # 键 = DataPaths 方法名（不含括号）。
 REGISTRY: dict[str, PathMeta] = {
+    "character_cleanup_archive_dir": PathMeta("archive", "shared", "global", "ignore"),
+    "character_cleanup_runtime_roots": PathMeta("runtime", "shared", "per_char", "ignore"),
 
     # ── runtime: IPC / 队列 / 快照 / 临时态，重启可清 ─────────────────────────
     "channel_queue":          PathMeta("runtime",   "shared",          "global",        "ignore"),

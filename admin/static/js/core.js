@@ -20,7 +20,7 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'admin-consolidation-3';
+const ADMIN_UI_FRAGMENT_VERSION = 'character-cleanup-20261011';
 
 const ADMIN_PAGE_ALIASES = Object.freeze({memory: 'observe-memory', 'creation-center':'data-management', 'observe-existence':'observe-dream'});
 
@@ -295,6 +295,7 @@ async function goto(page, {reloadFragment = false, fromHistory = false} = {}) {
   if (generation !== _navigationGeneration) return;
 
   const loaders = {
+    'character-cleanup': loadCharacterCleanup,
     guide: () => {},
     'call-records': loadUnifiedRecords,
     'autonomy-settings': async () => { if (AdminUI.version === 'new') await Promise.all([loadSchedulerConfig(), loadHdsLocalSettings()]); await loadAutonomySettings(); await loadVideoCallPresence(); await loadAutonomyTools(); },

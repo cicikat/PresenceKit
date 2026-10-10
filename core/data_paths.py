@@ -1124,6 +1124,27 @@ class DataPaths:
         用于 v1 模式下枚举所有用户（各 uid 是其直接子目录）。"""
         return self._p("runtime", "memory", char_id)
 
+    def character_cleanup_archive_dir(self) -> Path:
+        """Recoverable character removal transactions, never runtime inputs."""
+        return self._p("archive", "character_cleanup")
+
+    def character_cleanup_runtime_roots(self, *, char_id: str) -> dict[str, Path]:
+        """Explicit character-only cleanup allowlist; no user-global or group roots."""
+        component = _safe_authored_component(char_id)
+        roots = {name: self._p("runtime", name, component) for name in (
+            "memory", "characters", "dreams", "self", "self_meta", "character_library",
+            "autonomy", "qzone", "self_management", "tool_audit", "self_db", "coplay", "chat_artifacts", "wake_bridge",
+        )}
+        for name in ("tasks", "work_sessions", "agent_tasks", "browser_profiles", "workspace_versions"):
+            roots[f"agent_{name}"] = self._p("runtime", "agent_runtime", "reality", name, component)
+        roots["reading"] = self._p("runtime", "activity", "reading", component)
+        roots["legacy_runtime"] = self._p("chars", component)
+        if component != "reading":
+            roots["activity"] = self._p("runtime", "activity", component)
+        roots["drinking"] = self._p("runtime", "drinking", f"{component}.json")
+        roots["relation_presence"] = self._p("runtime", "relations", "_presence", f"{component}.json")
+        return roots
+
     def _memory_character_ids(self) -> list[str]:
         """Return safe character directory names for metadata-only cross-character lookup."""
         root = self._p("runtime", "memory")
