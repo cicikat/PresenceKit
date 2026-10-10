@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>PresenceKit · 吃食与口味</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="refined.css">
+  <script defer src="refined.js"></script>
+</head>
+<body class="c refined" data-theme="day">
+  <header class="topbar">
+    <div class="brand">PresenceKit <small>管理面板</small></div>
+    <div class="appearance">
+      <label for="font-choice">字体</label>
+      <select id="font-choice"><option value="serif">书卷衬线</option><option value="mixed">标题衬线</option><option value="sans">简洁黑体</option></select>
+      <div class="theme-control" role="group" aria-label="日夜间模式">
+        <button id="day" type="button" aria-pressed="true">日间</button>
+        <button id="night" type="button" aria-pressed="false">夜间</button>
+      </div>
+    </div>
+  </header>
+  <main>
+    <div class="breadcrumb">角色能使用哪些工具 / 吃食与口味</div>
+    <section class="hero">
+      <div><h1>吃食清单与口味记录</h1><p>整理吃过的食物，留下喜欢与不喜欢的理由。</p></div>
+      <span class="badge good">运行正常</span>
+    </section>
+    <div class="stats" aria-label="记录概况">
+      <div class="stat"><strong id="total">3</strong><span>条口味记录</span></div>
+      <div class="stat"><strong id="pending">2</strong><span>条待处理</span></div>
+      <div class="stat"><strong id="failed">1</strong><span>条待重试</span></div>
+    </div>
+    <div class="workspace">
+      <div class="modules">
+        <details class="panel" id="auto-panel" open>
+          <summary><span class="number">01</span><div class="heading"><h2>自动记录</h2><p>从对话中整理饮食与口味。</p></div><span class="badge good" id="auto-state">已开启</span></summary>
+          <div class="body">
+            <label class="toggle"><input type="checkbox" id="enabled" checked role="switch"><span>自动记录饮食与评价<br><small>关闭后保留已有记录。</small></span></label>
+            <div class="actions"><button class="primary" id="save">保存设置</button><span class="muted" id="dirty">已保存</span></div>
+            <div class="notice" id="save-feedback" role="status">抽取模型已就绪</div>
+          </div>
+        </details>
+        <details class="panel" id="query-panel" open>
+          <summary><span class="number">02</span><div class="heading"><h2>吃食清单</h2><p>按食品或店名查找记录。</p></div><span class="badge" id="query-state">3 条结果</span></summary>
+          <div class="body">
+            <form id="query-form" novalidate>
+              <div class="fields">
+                <label>角色 ID<input id="character" maxlength="100" value="demo-character" required></label>
+                <label>食品或店名<input id="query" maxlength="100" placeholder="输入关键词"></label>
+              </div>
+              <div class="actions"><button class="primary" type="submit">查询清单</button><button type="button" id="retry">重试未完成记录</button></div>
+            </form>
+            <div id="query-feedback" role="status"></div>
+            <div class="results" id="results" aria-live="polite"></div>
+          </div>
+        </details>
+        <details class="panel" id="edit-panel" open>
+          <summary><span class="number">03</span><div class="heading"><h2>更正口味</h2><p>更新评价，保留历史。</p></div><span class="badge" id="edit-state">正在编辑</span></summary>
+          <div class="body">
+            <form id="edit-form" novalidate>
+              <div class="fields">
+                <label>食品名称<input id="food-name" maxlength="100" placeholder="例如：番茄牛腩" required></label>
+                <label>评价<select id="evaluation"><option value="喜欢">喜欢</option><option value="不喜欢">不喜欢</option></select></label>
+                <label class="wide">评价原话<textarea id="quote" maxlength="800" placeholder="写下本人对这道食物的评价。" required></textarea><small><span id="count">0</span> / 800</small></label>
+              </div>
+              <div class="actions"><button class="primary" type="submit">提交更正</button><button type="button" id="fill">填入示例</button></div>
+              <div id="edit-feedback" role="status"></div>
+            </form>
+          </div>
+        </details>
+      </div>
+      <aside class="context">
+        <div><h3>当前配置</h3><dl class="config-list"><div><dt>自动记录</dt><dd id="side-state">已开启</dd></div><div><dt>抽取模型</dt><dd>已就绪</dd></div><div><dt>记录来源</dt><dd>对话评价</dd></div></dl></div>
+        <hr>
+        <div><h3>口味摘录</h3><blockquote>番茄酸甜刚好，<br>这个味道我喜欢。</blockquote><p>番茄牛腩 · 家常晚餐</p></div>
+        <hr>
+        <div><h3>交互预览</h3><label class="toggle"><input id="simulate-error" type="checkbox" role="switch"><span>模拟查询失败</span></label><button class="danger" id="reset">重置示例</button></div>
+      </aside>
+    </div>
+    <footer><span>PresenceKit · 视觉样机</span><a href="index.html">方案入口 ↗</a></footer>
+  </main>
+</body>
+</html>

@@ -1,0 +1,104 @@
+@font-face {
+  font-family: "PK Lora";
+  src: url("fonts/Lora-VF.woff2") format("woff2");
+  font-weight: 400 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "PK Noto Serif";
+  src: url("fonts/NotoSerifSC-VF.woff2") format("woff2");
+  font-weight: 200 900;
+  font-display: swap;
+}
+
+body.c.refined {
+  --bg: #eeedf3;
+  --surface: #faf9fc;
+  --field: #f3f1f7;
+  --text: #302d40;
+  --muted: #625e76;
+  --border: #d8d4e2;
+  --accent: #76668f;
+  --ink: #ffffff;
+  --success: #316b50;
+  --danger: #a23d47;
+  --radius: 8px;
+  --control-radius: 6px;
+  --control-height: 38px;
+  --pad: 20px;
+  --font-title: 28px;
+  --font-body: 15px;
+  --serif: "PK Lora", "PK Noto Serif", "Noto Serif SC", "Source Han Serif SC", "Songti SC", SimSun, serif;
+  --sans: "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+  font-family: var(--serif);
+  line-height: 1.7;
+  font-synthesis: none;
+}
+
+body.refined[data-theme="night"] {
+  --bg: #14171b;
+  --surface: #1d2126;
+  --field: #161a1f;
+  --text: #e9edf1;
+  --muted: #aab3bd;
+  --border: #353c44;
+  --accent: #bbd5cb;
+  --ink: #182620;
+  --success: #a3d9ba;
+  --danger: #ffb5af;
+  color-scheme: dark;
+}
+
+.refined[data-font="mixed"], .refined[data-font="sans"] { font-family: var(--sans); }
+.refined[data-font="mixed"] h1, .refined[data-font="mixed"] h2,
+.refined[data-font="mixed"] blockquote, .refined[data-font="mixed"] .brand { font-family: var(--serif); }
+.refined[data-font="sans"] .stat strong { font-family: var(--sans); }
+.refined .topbar { padding-block: 12px; }
+.refined .brand { font-size: 19px; }
+.refined .brand small { font-family: var(--sans); font-size: 12px; }
+.refined .appearance { display: flex; gap: 12px; align-items: center; font-family: var(--sans); font-size: 12px; }
+.refined .appearance select { width: 136px; font-family: var(--sans); font-size: 13px; }
+.refined .theme-control { display: flex; border: 1px solid var(--border); border-radius: 6px; padding: 4px; gap: 4px; }
+.refined .theme-control button { min-height: 28px; padding: 4px 12px; border: 0; font-family: var(--sans); font-size: 12px; }
+.refined .theme-control button[aria-pressed="true"] { background: var(--accent); color: var(--ink); }
+.refined .breadcrumb { margin-bottom: 16px; }
+.refined .hero { margin-bottom: 24px; }
+.refined h1 { font-weight: 500; }
+.refined h2 { font-size: 18px; font-weight: 600; }
+.refined .workspace { gap: 20px; grid-template-columns: minmax(0,1fr) 260px; }
+.refined .stat strong { font-family: var(--serif); font-weight: 500; font-variant-numeric: tabular-nums; }
+.refined .heading p, .refined .badge, .refined small, .refined .breadcrumb,
+.refined .result-header, .refined .stat span, .refined footer { font-size: 13px; }
+.refined .fields { gap: 16px; padding-top: 4px; }
+.refined .fields label.wide { grid-column: 1 / -1; }
+.refined .fields input, .refined .fields select { max-width: 320px; }
+.refined textarea { height: 120px; }
+.refined .body { padding-bottom: 20px; }
+.refined .actions { margin-top: 20px; }
+.refined .record { padding-block: 12px; }
+.refined .context { padding: 20px; display: block; }
+.refined .context hr { display: block; margin: 20px 0; }
+.refined .context h3 { font-size: 15px; font-weight: 600; }
+.refined .context .toggle { margin-top: 12px; margin-bottom: 16px; font-size: 13px; }
+.config-list { margin: 0; font-size: 13px; }
+.config-list div { display: flex; gap: 12px; justify-content: space-between; padding: 8px 0; }
+.config-list dt { color: var(--muted); }
+.config-list dd { margin: 0; }
+.refined blockquote { margin: 16px 0 12px; font-size: 19px; line-height: 1.8; }
+
+@media (max-width: 1000px) {
+  .refined .workspace { grid-template-columns: 1fr; }
+  .refined .context { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 24px; }
+  .refined .context hr { display: none; }
+}
+
+@media (max-width: 600px) {
+  .refined .appearance { flex-wrap: wrap; gap: 8px; }
+  .refined .context { display: block; }
+  .refined .context hr { display: block; }
+  .refined .fields label.wide { grid-column: auto; }
+  .refined .stat span { font-size: 12px; }
+  .refined summary { flex-wrap: wrap; }
+  .refined .heading { flex-basis: 60%; }
+}

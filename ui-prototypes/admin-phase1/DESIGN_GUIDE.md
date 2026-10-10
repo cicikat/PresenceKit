@@ -1,5 +1,7 @@
 # PresenceKit Admin 第一阶段视觉规范
 
+当前选定方向见 [REFINED_DESIGN.md](REFINED_DESIGN.md)，预览 `refined.html`。以下保留初版 A/B/C 的设计记录。
+
 ## 范围与预览
 
 这是独立设计参考，不是已接入的管理面。全部文件位于 `ui-prototypes/admin-phase1/`，没有导入生产 CSS/JS，没有 fetch、接口调用、持久化或权限改动。
