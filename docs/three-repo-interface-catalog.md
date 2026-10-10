@@ -1,3 +1,7 @@
+## 2026-10-11 手机梦境 Flow 外观（current / observe）
+
+current：Flutter 新增金色剧场/经典卷曲与靛蓝轨道/伪随机流体，独立日夜颜色和参数预设由本机 ThemeController JSON 保存；设置外观入口提供当前选用、全部参数与原生实时预览，原 getCustomThemePalette 是只读观测路径。管理面无能力开关/effective/audit 要求，桌面无同步要求；Dream REST/鉴权/segments/reveal/醒来、poll/ack/TTL/通知和角色归属未改，无新服务端状态或业务台账。observe：真实手机 GPU、软键盘、相册/OEM、重启与功耗 not-run，不把构建或预览视为真机完成。手机细节：docs/mobile/dream-flow-appearance.md、cc-tasks/33-dream-flow-integration.md。
+
 ## Room TV screen playback consumer (2026-10-10)
 
 current: desktop Room consumes existing message_segments.perform for immediate sentence expression and maintains a separate WS baseline layer. Actual TTS start/end owns spoken performance; text mode uses its own presenter exclusively. Screen assets are client-local opt-in screen.json, PNG/sequence/built-in procedural preset; backend never sends image names or screen-material identifiers. No new server events, LLM calls, capabilities/settings, mood writes, persistent traces or mobile delivery changes were introduced. The existing performance_mapping configuration remains authoritative.
