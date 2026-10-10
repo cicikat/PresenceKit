@@ -40,6 +40,9 @@ const origin='http://127.0.0.1:8769';
         if(endpoint==='/user-data/assets')data={categories:[{id:'sticker',group:'stickers',scope:'character',upload_fields:['file','logical_id','char_id','emotion'],extensions:['.png'],max_bytes:10000}],assets:[],bindings:{}};
         if(endpoint==='/player/state')data={music_control_enabled:false,session:{generation:1,session_id:'fixture-session',revision:1,host_online:false}};
         if(endpoint==='/player/library')data={items:[]};
+        if(endpoint==='/characters')data={characters:[{id:'fixture',label:'Fixture',filename:'fixture.json'}],active_id:'fixture'};
+        if(endpoint==='/model-presets/routing-profiles')data={profiles:[]};
+        if(endpoint==='/character/fixture/model-routing'||endpoint==='/character/fixture/asset-bindings')data={};
         if(endpoint.startsWith('/observe/prompt-layers/'))data={n:0,total_snapshots:1,snapshot:{captured_at:'2026-01-01T12:00:00',token_estimate:21000,origin:{origin:'proactive',trigger_name:'fixture',seed_prompt:'Long fixture '.repeat(100)},removed_layers:['fixture'],layers:[]}};
         if(data===undefined)return route.fulfill({status:403,contentType:'application/json',body:'{}'});
         return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)});
@@ -107,6 +110,22 @@ const origin='http://127.0.0.1:8769';
       await page.selectOption('#admin-ui-version',version==='new'?'legacy':'new');await page.selectOption('#admin-ui-version',version);
       assert.equal(calls,count);
       assert.equal(await audio.evaluate(n=>n===document.getElementById('listening-audio')),true);
+      if(version==='new') {
+        await mount('role-bindings','loadRoleBindings');await page.waitForTimeout(100);
+        const fields=page.locator('[data-binding-asset]');
+        const boxes=await fields.evaluateAll(nodes=>nodes.map(n=>n.getBoundingClientRect().left));
+        assert.equal(boxes.length,4);assert.ok(boxes.every(x=>Math.abs(x-boxes[0])<1),'all binding fields align');
+        await page.screenshot({path:path.join(output,'bindings-spacing.png')});
+        await mount('tools');
+        await page.locator('#xhs-enabled').evaluate(n=>n.closest('details').open=true);
+        assert.equal(await page.locator('#xhs-enabled').evaluate(n=>getComputedStyle(n.closest('details').querySelector('summary'),'::before').content),'""');
+        const spacing=await page.locator('#xhs-max-images').evaluate(n=>{
+          const button=document.querySelector('[data-action="saveXiaohongshuSettings"]');
+          return button.getBoundingClientRect().top-n.getBoundingClientRect().bottom;
+        });
+        assert.ok(spacing>=16,'field/save button gap');
+        await page.screenshot({path:path.join(output,'tools-spacing.png')});
+      }
       await mount('observe-prompt');
       await page.locator('#obs-prompt-uid').fill('fixture-owner');
       await page.evaluate(()=>loadObservePrompt());

@@ -80,17 +80,39 @@ body.pk-admin {
 .pk-admin .empty, .pk-admin .loading {font-size:14px;line-height:1.7;color:var(--pk-muted);}
 .pk-admin [hidden] {display:none!important;}
 .pk-admin .pk-collapse {cursor:pointer;flex:0 0 auto;font:16px/1 var(--pk-sans);width:24px;min-height:32px;padding:0;border:0;background:transparent;color:var(--pk-text);text-align:left;}
-.pk-admin .card>h2.pk-card-heading, .pk-admin .card>h3.pk-card-heading, .pk-admin .card>h4.pk-card-heading {display:inline;}
-.pk-admin .card>.pk-collapse {float:left;margin-right:8px;}
+.pk-admin .card:has(>.pk-collapse) {position:relative;}
+.pk-admin .card>h2.pk-card-heading, .pk-admin .card>h3.pk-card-heading, .pk-admin .card>h4.pk-card-heading {display:block;padding-left:36px;margin-bottom:16px;min-height:32px;}
+.pk-admin .card>.pk-collapse {position:absolute;left:20px;top:20px;float:none;margin:0;}
 .pk-admin .card[data-pk-collapsed="true"] {display:flow-root;}
 .pk-admin .card[data-pk-collapsed="true"]>:not(.pk-card-heading):not(.pk-collapse) {display:none!important;}
 .pk-admin .pk-card-heading .pk-collapse {margin-right:0;}
 .pk-admin .card-header.pk-card-heading, .pk-admin .admin-card-header.pk-card-heading {justify-content:flex-start;cursor:pointer;}
 .pk-admin .pk-card-heading>.pk-collapse+* {margin-right:auto;}
 .pk-admin [data-action="toggleMcpServerCollapsed"] {font:16px/1 var(--pk-sans);border:0;padding:0;min-height:32px;width:24px;background:transparent;color:var(--pk-text);}
-.pk-admin .settings-disclosure>summary::before {content:'▸';font:16px/1 var(--pk-sans);flex:0 0 24px;}
-.pk-admin .settings-disclosure[open]>summary::before {content:'▾';}
+.pk-admin .settings-disclosure>summary::before {content:'';font:16px/1 var(--pk-sans);flex:0 0 24px;}
 .pk-admin .settings-disclosure>summary::after {content:none;}
+/* One geometric disclosure marker across native and adapted accordions. */
+.pk-admin .pk-collapse, .pk-admin [data-action="toggleMcpServerCollapsed"] {font-size:0;display:inline-flex;align-items:center;justify-content:center;width:24px;}
+.pk-admin .pk-collapse::before, .pk-admin [data-action="toggleMcpServerCollapsed"]::before {content:'';width:0;height:0;border-top:9px solid transparent;border-bottom:9px solid transparent;border-left:12px solid currentColor;}
+.pk-admin .pk-collapse[aria-expanded="true"]::before, .pk-admin [data-action="toggleMcpServerCollapsed"][aria-expanded="true"]::before {border-top:12px solid currentColor;border-bottom:0;border-left:9px solid transparent;border-right:9px solid transparent;}
+.pk-admin .card:has(>[data-mcp-server-body][style*="display:block"]) [data-action="toggleMcpServerCollapsed"]::before,
+.pk-admin .card:has(>[data-mcp-server-body][style*="display: block"]) [data-action="toggleMcpServerCollapsed"]::before {border-top:12px solid currentColor;border-bottom:0;border-left:9px solid transparent;border-right:9px solid transparent;}
+.pk-admin .page details>summary {list-style:none;}
+.pk-admin .page details>summary::marker {content:'';font-size:0;}
+.pk-admin .settings-disclosure>summary {display:flex;align-items:flex-start;}
+.pk-admin .settings-disclosure>summary::before {margin-top:8px;}
+.pk-admin .page details>summary::-webkit-details-marker {display:none;}
+.pk-admin .page details>summary::before {content:'';display:inline-block;width:0;height:0;border-top:9px solid transparent;border-bottom:9px solid transparent;border-left:12px solid currentColor;margin-right:12px;vertical-align:middle;flex:0 0 auto;}
+.pk-admin .page details[open]>summary::before {border-top:12px solid currentColor;border-bottom:0;border-left:9px solid transparent;border-right:9px solid transparent;}
+/* Shared body rhythm for both decorated settings and plain/dynamic cards. */
+.pk-admin :is(.card,.settings-disclosure-body)>p {margin:12px 0;line-height:1.8;}
+.pk-admin :is(.card,.settings-disclosure-body)>label.field {margin-block:16px;}
+.pk-admin :is(.card,.settings-disclosure-body)>label:has(>input[type="checkbox"]) {display:inline-flex;align-items:center;gap:8px;margin:8px 20px 12px 0;}
+.pk-admin :is(.card,.settings-disclosure-body)>:is(.admin-action-group,.settings-footer,.tools-action-row) {margin-top:20px;}
+.pk-admin :is(.card,.settings-disclosure-body)>label.field+.btn {margin-top:4px;}
+.pk-admin #xhs-local-controls>p {margin:16px 0;line-height:1.8;}
+.pk-admin #xhs-local-controls>.btn {margin:0 8px 8px 0;}
+.pk-admin #xhs-local-controls>a {display:inline-block;margin:0 16px 8px 0;}
 .pk-admin .card :is(.settings-disclosure,.tts-advanced)>summary {font-size:18px;line-height:1.6;}
 .pk-admin .tts-advanced {padding:0;}
 .pk-admin .tts-advanced>summary {padding:16px 20px;}
@@ -161,6 +183,7 @@ body.pk-admin {
 @media(max-width:600px) {
   .pk-admin main {padding:16px;}.pk-admin .admin-topbar {padding-left:32px;gap:8px;}
   .pk-admin h1.page-title {font-size:24px;}.pk-admin .card {padding:16px;}
+  .pk-admin .card>.pk-collapse {left:16px;top:16px;}
   .pk-admin .form-row, .pk-admin .form-row.col-3 {grid-template-columns:minmax(0,1fr);}
   .pk-admin .admin-field-grid {grid-template-columns:minmax(0,1fr);}
   .pk-admin .settings-footer>* {max-width:100%;}
