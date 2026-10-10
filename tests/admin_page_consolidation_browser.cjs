@@ -38,10 +38,16 @@ const origin = process.env.ADMIN_UI_LIVE_ORIGIN || 'http://127.0.0.1:8769';
       if (endpoint === '/settings/embedding') data = {};
       if (endpoint === '/proxy') data = {enabled:false,http:'',https:'',model_connection_mode:'follow_global'};
       if (endpoint === '/user-data/assets') data = {categories:[],assets:[],bindings:{}};
+      if (endpoint === '/settings/prompt-assets') data = {characters:[{id:'alpha',label:'Alpha'},{id:'beta',label:'Beta'}],active:{active_character:'alpha',enabled_lorebooks:[],enabled_jailbreaks:[]},lorebooks:[],jailbreaks:[]};
       if (endpoint === '/observability/ime-drafts') data = {entries:[],analyses:[],retention_hours:3,awareness:{effective:false,blocking_reason:'fixture-disabled'}};
       if (endpoint === '/scheduler/config') data = {enabled:true,presence_nag_minutes:60,global_proactive_min_gap_hours:1.5,max_daily_proactive:16};
       if (endpoint === '/scheduler/status') data = {triggers:{}};
       if (endpoint === '/scheduler/proactive-ledger') data = {effective_gap_seconds:5400,daily_budget:16,daily_count:0,recent:[]};
+      if (['/dream/state','/dream/stats','/mood/state','/garden/state','/observability/drinking'].includes(endpoint)) data = {status:'fixture-state'};
+      if (endpoint === '/dream/operations') data = {archives:[],postcards:[],exit_lifecycle:[]};
+      if (endpoint === '/observability/listening') data = {session:{state:'fixture-playing'},audio_music:{},last_events:[]};
+      if (endpoint === '/observability/api-calls') data = {rows:[]};
+      if (endpoint === '/memory/fixture-reader/short-term') data = {fixture:'memory-result'};
       if (data === undefined) return route.fulfill({status:403,contentType:'application/json',body:'{}'});
       return route.fulfill({contentType:'application/json',body:JSON.stringify(data)});
     });
@@ -53,6 +59,7 @@ const origin = process.env.ADMIN_UI_LIVE_ORIGIN || 'http://127.0.0.1:8769';
     async function go(name) {await page.evaluate(name => goto(name), name);}
     async function openAll() {await page.evaluate(() => document.querySelectorAll('.page.active details').forEach(n => n.open=true));}
     await go('scheduler');
+    assert.equal(await page.locator('#page-status').getAttribute('class'),'page active');
     assert.equal(await page.locator('#scheduler-config-card').evaluate(n=>n.closest('.page').id), 'page-autonomy-settings');
     assert.equal(await page.locator('nav a[data-page="scheduler"]').evaluate(n=>n.closest('.nav-group').id), 'navgroup-observation');
     assert.equal(await page.locator('[data-action="scTrigger"],#watch-status-body,[data-action="testWatchEvent"]').count(),0);
@@ -125,7 +132,7 @@ const origin = process.env.ADMIN_UI_LIVE_ORIGIN || 'http://127.0.0.1:8769';
     assert.equal(await page.locator('#relay-base-url').evaluate(n=>n.closest('.page').id),'page-client-settings');
     assert.equal(await page.locator('nav a[data-page="runtime-config"]').evaluate(n=>n.closest('.nav-group').id),'navgroup-features');
     await go('relationship-facts');
-    assert.equal(await page.locator('#page-data-management>.behavior-section').count(),4);
+    assert.equal(await page.locator('#page-data-management>.behavior-section').count(),5);
     assert.equal(await page.locator('#ime-reception-card').evaluate(n=>n.closest('.page').id),'page-data-management');
     assert.equal(await page.locator('#memory-consolidation-char').evaluate(n=>n.closest('.page').id),'page-data-management');
     assert.equal(await page.locator('#user-data-content').evaluate(n=>n.closest('.page').id),'page-data-management');
@@ -143,7 +150,7 @@ const origin = process.env.ADMIN_UI_LIVE_ORIGIN || 'http://127.0.0.1:8769';
     assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
     await page.setViewportSize({width:1440,height:1000});
     await page.locator('#admin-ui-version').selectOption('legacy');
-    await page.waitForSelector('#page-relationship-facts.active');
+    await page.waitForSelector('#page-data-management.active');
     assert.equal(await page.locator('#ime-device-filter').inputValue(),'fixture-device');
     assert.equal(await page.locator('#ime-reception-card').evaluate(n=>n.closest('.page').id),'page-observation-center');
     await page.locator('#admin-ui-version').selectOption('new');
@@ -151,8 +158,53 @@ const origin = process.env.ADMIN_UI_LIVE_ORIGIN || 'http://127.0.0.1:8769';
     assert.equal(await page.locator('#ime-device-filter').inputValue(),'fixture-device');
     assert.equal(await page.locator('[id^="page-observe-chat"],nav a[data-page^="observe-chat"]').count(),0);
     await page.evaluate(()=>goto('data-management',{reloadFragment:true}));
-    assert.equal(await page.locator('#page-data-management>.behavior-section').count(),4);
+    assert.equal(await page.locator('#page-data-management>.behavior-section').count(),5);
     assert.equal(await page.locator('#ime-device-filter').count(),1);
+    await page.waitForSelector('#creation-character',{state:'attached'});
+    assert.equal(await page.locator('#creation-assets').evaluate(n=>n.closest('.page').id),'page-data-management');
+    await page.evaluate(()=>{const card=document.getElementById('data-reality-assets');if(card.dataset.pkCollapsed==='true')card.querySelector(':scope>.card-header>.pk-collapse').click();});
+    await openAll();
+    await page.locator('#creation-character').selectOption('beta');
+    await page.locator('[data-action="saveCreationAssets"]').click();
+    await page.waitForFunction(()=>document.getElementById('creation-result').textContent.includes('已保存'));
+    assert.equal(writes.find(w=>w.path==='/settings/prompt-assets').body.active_character,'beta');
+    const groups=[
+      ['status',6,['#resource-completeness-content','#sc-status-table','#obs-charperm-char','#autonomy-runs','#system-diagnosis-content']],
+      ['observe-prompt',2,['#obs-prompt-uid','#obs-dream-prompt-uid']],
+      ['observe-vector',7,['#vec-q','#obs-mem-uid','#event-query-uid','#record-source']],
+      ['observe-dream',6,['#obs-dream-raw','#dream-ops-overview','#drinking-state','#obs-mood-raw','#obs-hidden-raw','#obs-listening-player']],
+    ];
+    for (const [target,count,selectors] of groups) {
+      await go(target);
+      assert.equal(await page.locator(`#page-${target}>.behavior-section`).count(),count);
+      assert.equal(await page.locator(`#page-${target}>.behavior-section>.card-header>.pk-collapse`).count(),count);
+      for (const selector of selectors) {
+        assert.equal(await page.locator(selector).count(),1,selector);
+        assert.equal(await page.locator(selector).evaluate(n=>n.closest('.page').id),'page-'+target);
+      }
+      await page.screenshot({path:path.join(output,target+'-overview.png')});
+      await page.evaluate(name=>goto(name,{reloadFragment:true}),target);
+      assert.equal(await page.locator(`#page-${target}>.behavior-section`).count(),count);
+      await page.setViewportSize({width:390,height:844});
+      assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),target+' mobile overflow');
+      await page.setViewportSize({width:1440,height:1000});
+    }
+    await page.waitForFunction(()=>document.getElementById('drinking-state').textContent.includes('fixture-state'));
+    assert.ok((await page.locator('#obs-listening-player').textContent()).includes('fixture-playing'));
+    await go('observe-memory');await openAll();
+    await page.locator('#obs-mem-uid').fill('fixture-reader');
+    await page.locator('[data-action="loadObserveMemory"]').click();
+    await page.waitForFunction(()=>document.getElementById('obs-memory-raw').textContent.includes('memory-result'));
+    assert.ok(calls.includes('/memory/fixture-reader/short-term'));
+    await go('observe-dream-prompt');
+    await page.locator('#obs-dream-prompt-uid').fill('fixture-dream');
+    await page.locator('#admin-ui-version').selectOption('legacy');
+    await page.evaluate(()=>goto('observe-dream-prompt',{fromHistory:true}));
+    assert.equal(await page.locator('#obs-dream-prompt-uid').inputValue(),'fixture-dream');
+    await page.locator('#admin-ui-version').selectOption('new');
+    await page.waitForSelector('#page-observe-prompt.active');
+    assert.equal(await page.locator('#obs-dream-prompt-uid').inputValue(),'fixture-dream');
+    assert.equal(await page.locator('#page-creation-center,#page-observe-existence,#page-observe-trigger-catalog,nav a[data-page="creation-center"],nav a[data-page="observe-existence"],nav a[data-page="observe-trigger-catalog"]').count(),0);
     await go('mail-config');
     await page.waitForSelector('#page-character-behavior.active');
     assert.equal(await page.locator('#page-character-behavior>.behavior-section').count(),9);
@@ -197,6 +249,6 @@ const origin = process.env.ADMIN_UI_LIVE_ORIGIN || 'http://127.0.0.1:8769';
     assert.equal(await page.locator('#tts-api-url').evaluate(n=>n.closest('.page').id),'page-tts-config');
     assert.ok(!calls.includes('/watch/status'));
     assert.deepEqual(errors,[]);
-    console.log('PASS: behavior, six multimodal modules, four data modules, scoped saves, proxy ownership, unchanged client relay, retired chat pages, drafts, version switching, reload and mobile rendering.');
+    console.log('PASS: behavior, multimodal routes, five data modules, system/prompt/memory/observation modules, scoped saves and memory queries, unchanged client relay, retired pages, drafts, version switching, reload and mobile rendering.');
   } finally {await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

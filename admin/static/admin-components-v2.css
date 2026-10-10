@@ -201,3 +201,5 @@ nav a[hidden], label[hidden] {display:none!important;}
 .pk-admin .behavior-section-body>.card {margin:0;background:var(--pk-field);}
 .pk-admin .behavior-section-body .card {min-width:0;}
 .pk-admin .behavior-section-body .settings-functions {display:none;}
+
+.pk-admin .behavior-section-body .page-title { display: none; }

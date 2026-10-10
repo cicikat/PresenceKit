@@ -83,12 +83,12 @@ const base = process.env.ADMIN_TEST_URL || 'http://127.0.0.1:8080';
     await page.selectOption('#admin-language-select', 'zh-CN');
     await page.getByRole('heading', {name: '管理面板使用指南', exact: true}).waitFor();
     // Out-of-order fragment completion cannot change the remembered destination.
-    await page.route('**/static/pages/observe-existence.html?*', async route => {
+    await page.route('**/static/pages/observe-dream.html?*', async route => {
       await new Promise(resolve => setTimeout(resolve, 180));
       await route.continue();
     });
     await page.evaluate(async () => {
-      const slow = goto('observe-existence');
+      const slow = goto('observe-dream');
       await goto('operations-center');
       await slow;
     });
@@ -98,7 +98,7 @@ const base = process.env.ADMIN_TEST_URL || 'http://127.0.0.1:8080';
     await active('operations-center');
     assert.equal(await page.locator('#nav-back').isDisabled(), false);
     await page.locator('#nav-back').click();
-    await active('observe-existence');
+    await active('observe-dream');
     // A failed fragment remains retryable and Back remains usable.
     await page.route('**/static/pages/observe-memory-events.html?*', route => route.fulfill({status: 503, body: 'Unavailable'}));
     await page.evaluate(() => goto('observe-memory-events'));

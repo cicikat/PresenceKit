@@ -39,7 +39,7 @@ def test_navigation_restore_discovers_all_rendered_groups():
     assert "document.querySelectorAll('[id^=\"navgroup-\"]')" in source
     assert "const key = group.id.slice('navgroup-'.length);" in source
     assert "for(const key of ['create','ops','state','observe'])" not in source
-    for page in ('feature-center', 'service-center', 'creation-center', 'observation-center', 'operations-center'):
+    for page in ('feature-center', 'service-center', 'data-management', 'observation-center', 'operations-center'):
         assert f'data-action-args=\'["{page}"]\'' in source
 
 

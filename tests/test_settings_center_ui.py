@@ -9,10 +9,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_creation_assets_are_split_setting_rows():
-    page = (ROOT / "admin/static/pages/creation-center.html").read_text(encoding="utf-8")
+    page = (ROOT / "admin/static/pages/data-management.html").read_text(encoding="utf-8")
     source = (ROOT / "admin/static/js/settings-center.js").read_text(encoding="utf-8")
     index = (ROOT / "admin/static/index.html").read_text(encoding="utf-8")
-    assert 'class="admin-page-header"' in page
+    assert 'id="data-reality-assets"' in page
+    assert 'class="behavior-section-body"' in page
+    assert not (ROOT / "admin/static/pages/creation-center.html").exists()
     assert 'id="creation-assets"' in page
     assert "function creationAssetRow" in source
     assert "admin-setting-row" in source
@@ -20,7 +22,7 @@ def test_creation_assets_are_split_setting_rows():
     assert "data-action=\"saveCreationAssets\"" in source
     assert "data-action=\"uploadCreationAvatar\"" in source
     assert "PATCH','/settings/prompt-assets'" in source
-    assert '<script src="/static/js/settings-center.js?v=v1-263-daily-budget-1"></script>' in index
+    assert '<script src="/static/js/settings-center.js?v=admin-consolidation-3"></script>' in index
 
 
 def test_thinking_controls_live_on_model_routing_not_conversation_page():

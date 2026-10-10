@@ -20,9 +20,9 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'admin-consolidation-2';
+const ADMIN_UI_FRAGMENT_VERSION = 'admin-consolidation-3';
 
-const ADMIN_PAGE_ALIASES = Object.freeze({memory: 'observe-memory'});
+const ADMIN_PAGE_ALIASES = Object.freeze({memory: 'observe-memory', 'creation-center':'data-management', 'observe-existence':'observe-dream'});
 
 const ADMIN_PAGE_CONTEXT = Object.freeze({
   setup: {related: ['model-routing', 'character']},
@@ -308,7 +308,6 @@ async function goto(page, {reloadFragment = false, fromHistory = false} = {}) {
     'mail-config': _loadSetupMail,
     'embedding-config': loadSetupEmbedding,
     'local-model-runtime': loadLocalModelRuntime,
-    'creation-center': loadCreationAssets,
     'observation-center': loadImeObservation,
     'operations-center': () => {},
     'feature-center': loadFeatureCenter,
@@ -322,7 +321,7 @@ async function goto(page, {reloadFragment = false, fromHistory = false} = {}) {
     'tts-config':     async () => { await Promise.all([...(AdminUI.version === 'new' ? [] : [loadTtsConfig()]), loadSttConfig(), loadSttVocabulary()]); },
     'listening-player': refreshListeningPlayer,
     'observe-listening': loadObserveListening,
-    status:          loadStatus,
+    status:          () => AdminPageLayout.loadObservations('status'),
     users:           () => { loadUsers(); loadBlacklist(); },
     logs:            () => { _runtimeWarningOffset = 0; loadLogs(); },
     'auth-tokens':   () => { loadAuthTokens(); loadChannelToggles(); },
@@ -339,9 +338,8 @@ async function goto(page, {reloadFragment = false, fromHistory = false} = {}) {
     lorebook:        () => { loadLorebook(); loadJbEntries(); },
     'dream-settings': loadDreamSettings,
     scheduler:       loadScheduler,
-    'observe-existence': () => loadObserveDrinking(),
     'observe-mood':    loadObserveMood,
-    'observe-dream':   loadObserveDream,
+    'observe-dream':   () => AdminPageLayout.loadObservations('observe-dream'),
     'observe-memory':  () => {},
     'observe-memory-events': () => {},
     'observe-hidden':  loadObserveHidden,
@@ -352,12 +350,11 @@ async function goto(page, {reloadFragment = false, fromHistory = false} = {}) {
     'observe-group-arbiter': initObserveGroupArbiter,
     'observe-memory-summary': () => initObserveCharacters('obs-memory-summary-char'),
     'memory-consolidation': () => initObserveCharacters('memory-consolidation-char', () => { loadMemoryConsolidationStatus(); loadMemoryHistoryReconciliation(); }),
-    'observe-prompt':  () => { loadObservePromptUidList(); },
+    'observe-prompt':  () => AdminPageLayout.loadObservations('observe-prompt'),
     'observe-tools':   () => loadObserveToolUidList(),
     'observe-dream-prompt': () => loadObserveDreamPromptUidList(),
     'observe-dream-operations': loadObserveDreamOperations,
-    'observe-trigger-catalog': () => loadTriggerCatalog(),
-    'observe-vector':          () => loadVector(),
+    'observe-vector':          () => AdminPageLayout.loadObservations('observe-vector'),
     'observe-provenance':      () => loadProvenance(),
     'observe-resource-completeness': () => loadResourceCompleteness(),
     'observe-api-contract':          () => loadApiContractCheck(),

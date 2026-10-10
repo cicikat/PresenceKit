@@ -3,6 +3,13 @@ const AdminPageLayout = (() => {
   const behaviorPages = ['agent-runtime-browser', 'device-policy', 'output-settings', 'coplay-config', 'minecraft', 'listening-player', 'mail-config', 'diary-config', 'personal-settings'];
   const modelPages = ['role-bindings', 'tts-config', 'local-model-runtime', 'embedding-config'];
   const dataPages = ['relationship-facts', 'user-data', 'observation-center', 'memory-consolidation'];
+  const observationGroups = {
+    status: {title:['运行状态','Runtime status'], pages:['observe-resource-completeness','scheduler','observe-char-permissions','observe-autonomy','observe-system-diagnosis']},
+    'observe-prompt': {title:['现实 Prompt','Reality prompt'], pages:['observe-dream-prompt']},
+    'observe-vector': {title:['搜索索引','Search index'], pages:['observe-provenance','observe-memory-summary','observe-memory-events','observe-memory','observe-tools','call-records']},
+    'observe-dream': {title:['梦境状态','Dream state'], pages:['observe-dream-operations','observe-listening','observe-mood','observe-hidden']},
+  };
+  const observationPages = Object.values(observationGroups).flatMap(group=>group.pages);
   const origins = [];
   const sections = new Map();
   const navOrigins = new Map();
@@ -15,6 +22,7 @@ const AdminPageLayout = (() => {
     if (behaviorPages.includes(page)) return 'character-behavior';
     if (modelPages.includes(page)) return 'model-routing';
     if (dataPages.includes(page)) return 'data-management';
+    for (const [target, group] of Object.entries(observationGroups)) if (group.pages.includes(page)) return target;
     return page === 'network-config' ? 'setup' : page;
   }
   function move(node, target) {
@@ -32,12 +40,12 @@ const AdminPageLayout = (() => {
   }
   function navigation() {
     document.querySelectorAll('nav a[data-page]').forEach(link => {
-      link.hidden = isNew() && [...behaviorPages, ...modelPages, ...dataPages, 'network-config'].includes(link.dataset.page);
+      link.hidden = isNew() && [...behaviorPages, ...modelPages, ...dataPages, ...observationPages, 'network-config'].includes(link.dataset.page);
     });
     const behavior = document.querySelector('nav a[data-page="character-behavior"]');
     if (behavior) behavior.hidden = !isNew();
     const data = document.querySelector('nav a[data-page="data-management"]');
-    if (data) data.hidden = !isNew();
+    if (data) data.hidden = false;
     const modelLabel = document.querySelector('nav a[data-page="model-routing"] span');
     if (modelLabel) {
       modelLabel.dataset.i18n = isNew() ? 'nav.page.multimodal-routing' : 'nav.page.model-routing';
@@ -46,6 +54,10 @@ const AdminPageLayout = (() => {
     const modelTitle = document.querySelector('#page-model-routing>.page-title');
     if (modelTitle && modelLabel) {
       modelTitle.dataset.i18n = modelLabel.dataset.i18n; modelTitle.textContent = modelLabel.textContent;
+    }
+    for (const page of ['status','observe-vector','observe-dream']) {
+      const title=document.querySelector(`#page-${page}>.page-title`);
+      if (title) {title.dataset.i18n='nav.page.'+page;title.textContent=t(title.dataset.i18n);}
     }
     const voiceLabel = document.querySelector('nav a[data-page="tts-config"] span');
     if (voiceLabel) {
@@ -86,7 +98,30 @@ const AdminPageLayout = (() => {
       await loadPageFragment('autonomy-settings');
       return prepare('autonomy-settings');
     }
-    if (page === 'character-behavior') {
+    if (observationGroups[page]) {
+      const group = observationGroups[page];
+      await Promise.all(group.pages.map(source=>loadPageFragment(source,{reload})));
+      if (page === 'status') {
+        await loadPageFragment('autonomy-settings');
+        await prepare('autonomy-settings');
+      }
+      if (!isNew()) return;
+      const parent = document.getElementById('page-'+page);
+      if (!sections.has(page+'-base')) {
+        const original=[...parent.children];
+        const body=section(parent,page+'-base',designText(...group.title));
+        for (const node of original) if (!node.matches('.page-title,.page-context,.settings-search,#overview-drinking')) move(node,body);
+      }
+      for (const source of group.pages) {
+        if (sections.has(source)) continue;
+        const root=document.getElementById('page-'+source);
+        const title=source === 'observe-resource-completeness' ? designText('资源完整性','Resource completeness')
+          : document.querySelector(`nav a[data-page="${source}"]`)?.textContent || source;
+        const body=section(parent,source,title);
+        for (const node of [...root.children]) if (!node.matches('.page-title,.page-context,.settings-search,.admin-page-header,.page-header')) move(node,body);
+      }
+      if (page === 'observe-dream') parent.append(document.getElementById('overview-drinking'));
+    } else if (page === 'character-behavior') {
       await Promise.all(behaviorPages.map(source => loadPageFragment(source, {reload})));
       if (!isNew()) return;
       const parent = document.getElementById('page-character-behavior');
@@ -185,14 +220,15 @@ const AdminPageLayout = (() => {
     const current = document.querySelector('.page.active')?.id.replace(/^page-/, '');
     if (!current) return;
     const target = !isNew() && current === 'character-behavior' ? behaviorPages[0]
-      : !isNew() && current === 'data-management' ? dataPages[0] : resolve(current);
+      : resolve(current);
     if (target !== current) return goto(target, {fromHistory:true});
-    if (isNew() && ['model-routing', 'data-management', 'setup', 'autonomy-settings', 'scheduler'].includes(current)) {
+    if (isNew() && ['model-routing', 'data-management', 'setup', 'autonomy-settings', 'scheduler', ...Object.keys(observationGroups)].includes(current)) {
       await prepare(current);
       if (current === 'model-routing') await loadModels();
-      if (current === 'data-management') await loadData();
+      if (current === 'data-management') await loadData(true);
       if (current === 'setup') await loadNetwork();
       if (current === 'autonomy-settings') await Promise.all([loadSchedulerConfig(), loadHdsLocalSettings()]);
+      if (observationGroups[current]) await loadObservations(current,true);
     }
   }
   async function loadSources(loaders) {
@@ -224,7 +260,9 @@ const AdminPageLayout = (() => {
       'embedding-config': loadSetupEmbedding,
     });
   }
-  async function loadData() {
+  async function loadData(resume=false) {
+    if (!resume || !document.getElementById('creation-character')) await loadCreationAssets();
+    if (!isNew()) return;
     await loadSources({
       'relationship-facts': loadRelationshipFactsPage,
       'user-data': loadUserDataPage,
@@ -233,7 +271,24 @@ const AdminPageLayout = (() => {
     });
   }
   async function loadNetwork() { await loadSources({'network-config': async () => { _bindProxyControls(); await loadProxy(); }}); }
-  return {resolve, prepare, apply, restore, loadBehavior, loadModels, loadData, loadNetwork, selected, focus};
+  async function loadObservations(page,resume=false) {
+    const primary = {status:loadStatus,'observe-vector':loadVector,'observe-prompt':loadObservePromptUidList,'observe-dream':loadObserveDream};
+    if (!resume) await primary[page]();
+    if (page === 'observe-dream') await loadObserveDrinking();
+    if (!isNew()) return;
+    const loaders = {
+      'observe-resource-completeness':loadResourceCompleteness, scheduler:loadScheduler,
+      'observe-char-permissions':()=>initObserveCharacters('obs-charperm-char',loadCharPermissions),
+      'observe-autonomy':loadObserveAutonomy,'observe-system-diagnosis':loadSystemDiagnosis,
+      'observe-dream-prompt':loadObserveDreamPromptUidList,
+      'observe-provenance':loadProvenance,'observe-memory-summary':()=>initObserveCharacters('obs-memory-summary-char'),
+      'observe-memory-events':()=>{},'observe-memory':()=>{},'observe-tools':loadObserveToolUidList,'call-records':loadUnifiedRecords,
+      'observe-dream-operations':loadObserveDreamOperations,'observe-listening':loadObserveListening,
+      'observe-mood':loadObserveMood,'observe-hidden':loadObserveHidden,
+    };
+    await loadSources(Object.fromEntries(observationGroups[page].pages.map(source=>[source,loaders[source]])));
+  }
+  return {resolve, prepare, apply, restore, loadBehavior, loadModels, loadData, loadNetwork, loadObservations, selected, focus};
 })();
 
 window.addEventListener('admin-ui-version-changed', () => {

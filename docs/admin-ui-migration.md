@@ -34,7 +34,6 @@
 | client-settings | 28 | 17 | pass |
 | conversation-settings | 8 | 6 | pass |
 | coplay-config | 1 | 2 | pass |
-| creation-center | 0 | 6 | pass |
 | device-policy | 3 | 4 | pass |
 | diary-config | 2 | 1 | pass |
 | dream-settings | 8 | 21 | pass |
@@ -60,7 +59,6 @@
 | observe-dream-operations | 0 | 1 | pass |
 | observe-dream-prompt | 2 | 5 | pass |
 | observe-dream | 0 | 1 | pass |
-| observe-existence | 0 | 6 | pass |
 | observe-group-arbiter | 1 | 1 | pass |
 | observe-growth | 1 | 1 | pass |
 | observe-hidden | 0 | 1 | pass |
@@ -77,7 +75,6 @@
 | observe-spend | 0 | 1 | pass |
 | observe-system-diagnosis | 0 | 0 | pass |
 | observe-tools | 3 | 2 | pass |
-| observe-trigger-catalog | 0 | 1 | pass |
 | observe-vector | 3 | 2 | pass |
 | observe-visual | 1 | 1 | pass |
 | operations-center | 0 | 12 | pass |
