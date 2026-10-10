@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PresenceKit · C · 高密度专业管理台</title><link rel="stylesheet" href="styles.css"><script defer src="app.js"></script></head>
+<body class="c">
+<header class="topbar"><div class="brand">PresenceKit <small>Admin / 独立视觉样机</small></div><nav class="directions" aria-label="视觉方向"><a href="a-dark.html" >A · 深色</a><a href="b-mist.html" >B · 雾紫</a><a href="c-professional.html" aria-current="page">C · 专业</a></nav></header>
+<main><div class="breadcrumb">角色能使用哪些工具 / 吃食清单与口味记录</div>
+<section class="hero"><div><h1>吃食清单与口味记录</h1><p>记住明确吃过的食物与本人评价，让口味记录有据可查，也方便随时更正。</p></div><span class="badge">C · 高密度专业管理台 · 仅示例数据</span></section>
+<div class="stats" aria-label="记录概况"><div class="stat"><strong id="total">3</strong><span>条吃食与口味记录</span></div><div class="stat"><strong id="pending">2</strong><span>条待处理抽取</span></div><div class="stat"><strong id="failed">1</strong><span>条抽取失败</span></div></div>
+<div class="workspace"><div class="modules">
+<details class="panel" id="auto-panel" open><summary><span class="number">01</span><div class="heading"><h2>自动记录</h2><p>只记录明确事实，关闭后保留既有清单。</p></div><span class="badge good" id="auto-state">已开启</span></summary><div class="body">
+<p class="muted">不推测喜好或是否吃过。关闭后停止抽取，恢复旧饮食概要。轻量抽取模型在“模型连接与分工”中选择。</p>
+<label class="toggle"><input type="checkbox" id="enabled" checked role="switch"><span>自动记录明确饮食事实<br><small>当前示例抽取模型已就绪</small></span></label>
+<div class="actions"><button class="primary" id="save">保存设置</button><span class="muted" id="dirty">设置已保存</span></div><div class="notice" id="save-feedback" role="status" aria-live="polite">已生效 · 抽取模型就绪</div>
+</div></details>
+<details class="panel" id="query-panel" open><summary><span class="number">02</span><div class="heading"><h2>查询吃食清单</h2><p>按角色和食品、店名查看明确记录。</p></div><span class="badge" id="query-state">3 条结果</span></summary><div class="body">
+<form id="query-form" novalidate><div class="fields"><label>角色 ID<input id="character" maxlength="100" value="demo-character" required><small>示例角色标识，可编辑；仅在本页使用。</small></label><label>食品或店名<input id="query" maxlength="100" placeholder="例如：番茄、面馆"><small>留空查看全部；输入“榴莲”体验空状态。</small></label></div><div class="actions"><button class="primary" type="submit">查看清单</button><button type="button" id="retry">重试未完成抽取</button></div></form>
+<div id="query-feedback" role="status" aria-live="polite"></div><div class="results" id="results" aria-live="polite"></div>
+</div></details>
+<details class="panel" id="edit-panel" open><summary><span class="number">03</span><div class="heading"><h2>更正口味评价</h2><p>新评价更新当前喜恶，历史证据仍然保留。</p></div><span class="badge" id="edit-state">正在编辑</span></summary><div class="body">
+<p class="muted">填写食品名称和本人明确评价原话。此处演示完整表单、校验及提交反馈。</p>
+<form id="edit-form" novalidate><div class="fields"><label>食品名称<input id="food-name" maxlength="100" placeholder="例如：番茄牛腩" required></label><label>当前评价<select id="evaluation"><option value="喜欢">喜欢</option><option value="不喜欢">不喜欢</option></select></label><label class="wide">本人评价原话<textarea id="quote" maxlength="800" placeholder="例如：今天的番茄牛腩很好吃，我喜欢这个味道。" required></textarea><small>必须来自本人明确评价 · <span id="count">0</span> / 800</small></label></div><div class="actions"><button class="primary" type="submit">提交更正</button><button type="button" id="fill">填入演示评价</button></div><div id="edit-feedback" role="status" aria-live="polite"></div></form>
+</div></details>
+</div><aside class="context"><div><span class="badge">本地交互 · 未连接服务</span><h3>记录边界</h3><p>只使用明确吃过事件和实际评价。不会根据聊天语气猜测口味。</p><h3>本页操作说明</h3><p>标题可展开或收起，输入内容不会丢失。查询、更正和开关仅改变当前样机内存，刷新后恢复示例。</p></div><hr><div><h3>反馈与状态演示</h3><p>三套方向使用同一份示例。可模拟查询失败，查看错误反馈与恢复体验。</p><label class="toggle"><input id="simulate-error" type="checkbox" role="switch"><span>模拟查询失败</span></label><button class="danger" id="reset">重置样机示例</button><small>仅清空本页演示输入，不影响真实记录。</small></div></aside></div>
+<footer><span>C · 高密度专业管理台 · 原生 HTML / CSS / JavaScript</span><a href="index.html">返回方案比较 ↗</a></footer>
+</main></body></html>
