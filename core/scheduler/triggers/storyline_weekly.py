@@ -126,7 +126,8 @@ async def _check_storyline_weekly() -> None:
     # 失败不消耗 7 天冷却：留给退避窗口（next_retry_at）后的下一个 tick 重试。
     if not needs_retry:
         _mark("storyline_weekly")
-    logger.info("[storyline_weekly] 本轮完成，合计落盘 %d 条 op", total_ops)
+    log_summary = logger.info if total_ops else logger.debug
+    log_summary("[storyline_weekly] 本轮结束，合计落盘 %d 条 op", total_ops)
 
 
 def _format_existing_arcs(arcs: list[dict]) -> str:

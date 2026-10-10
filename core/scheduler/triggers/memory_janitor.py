@@ -100,7 +100,8 @@ async def _check_memory_janitor() -> None:
                         uid, char_id, exc,
                     )
 
-    logger.info("[memory_janitor] 本轮完成，合计合并 %d 对", total_merged)
+    log_summary = logger.info if total_merged else logger.debug
+    log_summary("[memory_janitor] 本轮完成，合计合并 %d 对", total_merged)
 
 
 # ── (a) episodic 存量近似重复合并 ────────────────────────────────────────────
@@ -313,7 +314,7 @@ async def _check_vector_consistency(char_id: str, uid: str) -> None:
             uid, char_id, orphan_count, checked, orphan_frac * 100, count,
         )
     else:
-        logger.info(
+        logger.debug(
             "[memory_janitor] 向量库孤儿观测 uid=%s char_id=%s orphan=%d/%d(%.1f%%)（未触发 rebuild）",
             uid, char_id, orphan_count, checked, orphan_frac * 100,
         )
