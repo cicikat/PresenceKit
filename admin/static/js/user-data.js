@@ -35,7 +35,7 @@ async function loadUserDataPage() {
   const groupLabel = group => ui(`group.${group}`, group);
   const fieldLabel = field => ui(`field.${field}`, field);
 
-  let pageData = {categories: [], assets: [], bindings: {}};
+  let pageData = {categories: [], assets: [], bindings: {}, errors: []};
 
   const findCategory = category => pageData.categories.find(item => item.id === category);
   const assetsFor = category => pageData.assets.filter(asset => asset.category === category);
@@ -207,9 +207,19 @@ async function loadUserDataPage() {
       if (charId) {
         try { bindings = await api('GET', `/character/${encodeURIComponent(charId)}/asset-bindings`); } catch (_error) { /* Optional role binding detail. */ }
       }
-      pageData = {categories: data.categories || [], assets: data.assets || [], bindings};
+      pageData = {categories: data.categories || [], assets: data.assets || [], bindings, errors: data.errors || []};
       el.innerHTML = `<div class="card user-data-toolbar"><div class="admin-toolbar"><label class="field"><span>${ui('character', 'Character')}</span><input type="text" id="user-data-char" value="${escapeHtml(charId)}" placeholder="char_id"></label><button type="button" class="btn btn-ghost btn-sm" data-action="reloadUserData">${ui('refresh', 'Refresh')}</button></div><p class="admin-source-note">${ui('toolbar_note', 'The inventory is grouped by logical category. Physical roots are intentionally not shown.')}</p></div>`;
       el.insertAdjacentHTML('beforeend', `<div class="user-data-groups">${USER_DATA_GROUP_ORDER.map(group => renderGroup(group, pageData.categories, pageData.assets)).join('')}</div>`);
+      for (const error of pageData.errors) {
+        const host = el.querySelector(`[data-category="${error.category}"]`);
+        if (host) {
+          const notice = document.createElement('p');
+          notice.className = 'admin-error-panel'; notice.setAttribute('role', 'alert');
+          notice.textContent = error.message;
+          host.querySelector('.user-data-empty')?.remove();
+          host.append(notice);
+        }
+      }
       el.insertAdjacentHTML('beforeend', `<div class="card user-data-upload"><div class="card-header"><div><h2>${ui('upload.title', 'Upload authored asset')}</h2><p class="user-data-category-summary">${ui('upload.subtitle', 'Only fields required by the selected category are shown.')}</p></div></div><div class="form-row"><label class="field"><span>${ui('upload.category', 'Asset category')}</span><select id="user-data-upload-category">${pageData.categories.map(category => `<option value="${escapeHtml(category.id)}">${escapeHtml(categoryLabel(category.id))}</option>`).join('')}</select></label></div><div id="user-data-upload-fields"></div><div class="admin-action-group"><button type="button" class="btn btn-primary" data-action="uploadUserDataAsset">${ui('upload.action', 'Upload')}</button></div><div id="user-data-status" class="admin-status-text" aria-live="polite"></div></div>`);
       el.insertAdjacentHTML('beforeend', `<details class="card user-data-advanced"><summary>${ui('advanced.title', 'Advanced inventory table')}</summary><p class="admin-source-note">${ui('advanced.note', 'Diagnostic view only; the grouped cards above are the primary interface.')}</p><div class="tbl-wrap"><table class="tbl"><thead><tr><th>${ui('logical_id', 'Logical ID')}</th><th>${ui('category', 'Category')}</th><th>${ui('scope.label', 'Scope')}</th><th>${ui('source', 'Source')}</th><th>${ui('status', 'Status')}</th><th>${ui('size', 'Size')}</th><th>${ui('updated_at', 'Updated')}</th></tr></thead><tbody>${pageData.assets.length ? pageData.assets.map(asset => `<tr><td>${escapeHtml(asset.logical_id)}</td><td>${escapeHtml(categoryLabel(asset.category))}</td><td>${renderScope(asset, findCategory(asset.category))}</td><td>${escapeHtml(ui(`source.${_userDataSourceKey(asset.source)}`, asset.source || 'unknown'))}</td><td>${renderStatusBadges(asset, findCategory(asset.category))}</td><td>${_userDataFormatSize(asset.size)}</td><td>${asset.updated_at ? escapeHtml(new Date(Number(asset.updated_at) * 1000).toLocaleString()) : '—'}</td></tr>`).join('') : `<tr><td colspan="7" class="empty">${ui('empty.all', 'No assets found.')}</td></tr>`}</tbody></table></div></details>`);
       renderUploadFields();

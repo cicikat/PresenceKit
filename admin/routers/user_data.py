@@ -22,13 +22,18 @@ class DeleteAssetRequest(BaseModel):
 @router.get("/user-data/assets", summary="列出私有 authored 资产")
 async def list_user_assets(category: Optional[str] = None, char_id: str = DEFAULT_CHAR_ID,
                            auth=Depends(require_scopes("persona"))):
-    try:
-        return {
-            "assets": userdata_assets.list_assets(category=category, char_id=char_id),
-            "categories": userdata_assets.category_contract(),
-        }
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if category is not None and category not in userdata_assets.ASSET_SPECS:
+        raise HTTPException(status_code=422, detail="unsupported asset category")
+    assets, errors = [], []
+    for name in ([category] if category else userdata_assets.ASSET_SPECS):
+        try:
+            assets.extend(userdata_assets.list_assets(category=name, char_id=char_id))
+        except (ValueError, OSError):
+            # One invalid scope or unreadable root must not hide global assets.
+            errors.append({"category": name, "code": "asset_inventory_unavailable",
+                           "message": "该分类暂不可读取，请检查角色 ID 或文件访问权限。"})
+    return {"assets": assets, "categories": userdata_assets.category_contract(),
+            "errors": errors, "partial": bool(errors)}
 
 
 @router.post("/user-data/assets", summary="安全上传私有 authored 资产")
