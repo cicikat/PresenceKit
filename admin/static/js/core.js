@@ -20,7 +20,7 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'image-trace-20261011';
+const ADMIN_UI_FRAGMENT_VERSION = 'reality-284-20261011';
 
 const ADMIN_PAGE_ALIASES = Object.freeze({overview:'setup', users:'character', 'operations-center':'status', memory: 'observe-memory', 'creation-center':'data-management', 'observe-existence':'observe-dream'});
 
@@ -343,7 +343,6 @@ async function goto(page, {reloadFragment = false, fromHistory = false} = {}) {
     'observe-memory-events': () => {},
     'observe-hidden':  loadObserveHidden,
     'observe-runtime': loadObserveRuntime,
-    'observe-growth': () => AdminPageLayout.loadObservations('observe-growth'),
     'observe-visual':  loadObserveVisual,
     'observe-spend':   loadObserveSpend,
     'observe-group-arbiter': initObserveGroupArbiter,

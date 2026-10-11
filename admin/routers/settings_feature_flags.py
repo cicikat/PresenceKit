@@ -26,7 +26,6 @@ FLAGS = {
     "mail": ("mail", "enabled", "邮件通道"),
     "visual_perception": ("visual_perception", "enabled", "视觉感知"),
     "spend": ("spend", "enabled", "支出意向"),
-    "practice": ("practice", "enabled", "自主练习"),
     "action_trace": ("action_trace", "enabled", "行为痕迹"),
     "self_management": ("self_management", "enabled", "Self Capability overlay（关=恢复全局默认，不是关能力）"),
     "mcp_servers": ("mcp_servers", "enabled", "MCP 外部工具"),

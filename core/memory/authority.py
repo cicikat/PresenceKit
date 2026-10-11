@@ -36,7 +36,6 @@ LAYER_AUTHORITY: dict[str, dict] = {
     "3.6_watch": _e("watch", _AMB),
     "3.7_sensor": _e("sensor", _AMB),
     "3.8_activity": _e("activity", _AMB),
-    "3.8_growth_self": _e("growth_self", "character_self"),
     "3.9_screen_awareness": _e("screen_awareness", _AMB),
     "4_group_context": _e("group_context", _AMB),
     "4.2_stage_transcript": _e("stage", "system"),

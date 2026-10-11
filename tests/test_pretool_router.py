@@ -53,7 +53,6 @@ def _patch_exposure(monkeypatch, schemas: list[dict]) -> None:
     from core import tool_dispatcher
 
     monkeypatch.setattr(tool_dispatcher, "get_tools_schema", lambda categories=None: schemas)
-    monkeypatch.setattr("core.growth.mcp_proficiency.filter_schemas", lambda items, char_id: items)
     monkeypatch.setattr("core.self_management.policy.tool_allowed", lambda *args, **kwargs: True)
 
 
@@ -75,7 +74,6 @@ async def test_default_path_a_exposure_filters_schemas_without_channel_branching
             "categories": ["fs"], "tools": ["fs_list"],
         }}},
     )
-    monkeypatch.setattr("core.growth.mcp_proficiency.filter_schemas", lambda items, char_id: items)
     monkeypatch.setattr("core.self_management.policy.tool_allowed", lambda *args, **kwargs: True)
 
     result = await route_pretool(

@@ -1,5 +1,7 @@
 # 功能控制面事实清单（最后核对：2026-09-28 模型出站网络自适应）
 
+284 P3：自主兴趣播种/练习/评分等级/技巧成长/MCP等级解锁已删除；practice 开关与成长观测路由/页面不再提供。MCP仍经服务器启用、工具暴露、角色授权、origin、安全模式和风险确认。旧 practice_session 队列项跳过且在 runtime-signals 记录 retired_practice_skipped，不再调用模型。历史作品文件不清理，可按既有文件阅读权限访问。
+
 284 P2：随机活动池/定时切换/随机旁白删除，无重新开启模拟的开关；presence.growth_activity_prob 停止消费并从示例删除。真实活动启动与权限不变，/activity/current 为空是正常状态。
 
 ## 新版管理面板页面归属（2026-10-10）
@@ -216,10 +218,6 @@ observe：真实手机安装、不同应用删除反馈、断网后上传以及�
 
 RPG Dream's `rpg_kp` route is a backend capability, not a client setting; it is now selectable in admin Routing Profiles alongside `sensor_judge` and `monologue`（前置独白）. Effective routes remain visible with the other model categories. Unmapped ordinary categories resolve `default_preset → chat → first preset`; do not describe this as “未配置直接回落 chat”. Desktop/mobile do not gain a new toggle.
 
-后台练习盲评不属于管理面热更新 API，但其模型选择遵循同一模型路由真值：
-`practice.reviewer_category` 是 routing profile category（默认 `consolidation`）；可选旧字段
-`practice.reviewer_preset` 是严格的直接 preset 名并优先于 category。未知 preset 会让该次
-练习明确失败并进入 scheduler 异常记录，不会静默回落 chat。
 
 所有写入 `config.yaml` 的设置端点统一经过 `admin.config_control`：写请求按进程内锁串行，
 用临时文件原子替换，并以读取时快照做三方合并，避免并发设置覆盖无关字段。运行时只使用
@@ -1090,7 +1088,7 @@ Minecraft建造：`minecraft.allow_building=false`，`GET/PUT /settings/minecraf
 
 ### Temporary admin copy editing
 
-The admin toolbar provides temporary text overrides and sidebar ordering, persisted in browser local storage. Export the edits before removing the editor so approved copy can be applied to source. These overrides do not change backend settings or API data. Global effective state is shown under system status; experimental observations group growth, group arbitration and spending intentions. Generation debugging is grouped under prompt inspection. User pronoun preferences are edited on the character page.
+The admin toolbar provides temporary text overrides and sidebar ordering, persisted in browser local storage. Export the edits before removing the editor so approved copy can be applied to source. These overrides do not change backend settings or API data. Global effective state is shown under system status; experimental observations group arbitration and spending intentions. Generation debugging is grouped under prompt inspection. User pronoun preferences are edited on the character page.
 
 Approved operator text lives in `admin-copy.js`; it remains independent of the temporary editor. The current sidebar order is stored in the shell. New UI places tool presets/exposure and detailed tool configuration under Feature switches; only the feature-switch list edits global execution switches, while the tool table shows that state read-only. Conversation settings and service configuration are folded into Character behavior. Image recognition records live under Memory index; runtime signals and API compatibility live under Access credentials. Page introduction/related-navigation panels are removed.
 

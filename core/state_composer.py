@@ -20,7 +20,7 @@ REASONS = (
 )
 
 _TAG_GATED = {
-    "3.5_period", "3.6_watch", "3.8_activity", "3.8_growth_self", "6d_diary_context",
+    "3.5_period", "3.6_watch", "6d_diary_context",
     "coplay_recall", "coplay_residue_soft_hint", "coplay_context", "6h_storyline",
     "6f_dream_afterglow", "dream_afterglow_soft_hint", "6g_dream_impression",
 }

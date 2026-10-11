@@ -196,7 +196,6 @@ def test_agent_cannot_reenable_owner_controlled_mcp_in_same_run(sandbox, monkeyp
     monkeypatch.setattr(runner.policy, "allowed_tools", current_tools)
     monkeypatch.setattr(runner.policy, "admission", lambda *args: None)
     monkeypatch.setattr(runner.talk_gate, "check", lambda *args, **kwargs: ("hard", "suppressed_unanswered_cap"))
-    monkeypatch.setattr("core.growth.mcp_proficiency.is_tool_allowed", lambda *_args, **_kwargs: True)
     calls = iter([
         SimpleNamespace(tool_calls=[{"id": "enable", "name": "manage_self_capability", "arguments": {"action": "enable", "capability_id": capability_id, "reason": "needed", "expected_revision": 1, "action_id": "enable-mcp"}}], continuation_items=[], assistant_message={}),
         SimpleNamespace(tool_calls=[{"id": "mcp", "name": tool_name, "arguments": {}}], continuation_items=[], assistant_message={}),

@@ -10,7 +10,7 @@ category="mcp"）。单 server 初始化失败只跳过该 server（log + 继续
 
 MCP 默认只在 Path C tool loop 暴露。管理员也可显式把 ``mcp`` 加入共享的
 ``tool_exposure.path_a``，让 QQ、desktop、mobile 的预探针一致看到同一批经过
-本地 policy/proficiency/allowlist 过滤后的 schema；这不会绕过任一执行闸门。
+本地 policy/allowlist 过滤后的 schema；这不会绕过任一执行闸门。
 
 action_trace 落痕在 tool_dispatcher.execute_structured() 的收口埋点自动生效，本模块不新增记账代码；
 MCP 工具注册时不声明 trace_args，参数不落痕（防外部 server 的敏感入参入盘）。

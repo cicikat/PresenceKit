@@ -67,7 +67,6 @@ def _ensure_builtins_loaded() -> None:
         "core.scheduler.triggers.dream_exit",
         "core.scheduler.triggers.dream_postcards",
         "core.scheduler.triggers.letter_writer",
-        "core.scheduler.triggers.practice",
         "core.coplay.commentator",
     ):
         module = import_module(module_name)

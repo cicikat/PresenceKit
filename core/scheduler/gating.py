@@ -59,7 +59,6 @@ MIGRATED_TRIGGERS: frozenset[str] = frozenset({
     "presence_nag",
     "dream_exit",
     "coplay_commentary",
-    "practice_help",
 })
 
 MAINTENANCE_ONLY_TRIGGERS: frozenset[str] = frozenset({
@@ -80,8 +79,6 @@ MAINTENANCE_ONLY_TRIGGERS: frozenset[str] = frozenset({
     "memory_consolidation",
     "private_exchange",
     "spend_monitor",
-    "interest_seed",
-    "practice",
     # Candidate-edge discovery is a silent maintenance worker.  It may write
     # bounded proposal state, but it never enters the speech/autonomy outlet.
     "event_edge_proposer",

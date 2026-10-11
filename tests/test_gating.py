@@ -144,7 +144,6 @@ def test_registered_triggers_match_scheduler_proposer_surface():
         "dream_postcards",
         "letter_writer",
         "coplay_commentary",
-        "practice_help",
     }
 
     assert registered_trigger_names() == expected

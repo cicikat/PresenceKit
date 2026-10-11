@@ -77,7 +77,6 @@ def _patch_env(monkeypatch):
     monkeypatch.setattr(_td, "get_tools_schema", lambda categories=None: [
         {"type": "function", "function": {"name": "weather", "description": "", "parameters": {}}},
     ])
-    monkeypatch.setattr("core.growth.mcp_proficiency.filter_schemas", lambda items, char_id: items)
     monkeypatch.setattr("core.self_management.policy.tool_allowed", lambda *args, **kwargs: True)
     monkeypatch.setattr(_llm, "chat", AsyncMock(return_value=""))
     monkeypatch.setattr(_llm, "parse_tool_call_response", lambda r: [])

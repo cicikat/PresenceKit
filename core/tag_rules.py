@@ -22,7 +22,6 @@ TAG_RULES: list[TagRule] = [
     TagRule("topic.learning", ["学习", "练习", "在学", "在练"]),
     TagRule("query.body_state", ["今天状态", "最近怎么样", "身体怎么"]),
     TagRule("query.what_doing", ["你看到我在干嘛", "你知道我在做什么", "我在干嘛", "我在做什么"]),
-    TagRule("query.growth_self", ["你最近在学什么", "你最近忙什么", "你最近在忙什么", "你有没有在练", "最近练了什么"]),
     TagRule("topic.body",     ["肚子", "痛", "生理期", "例假", "姨妈"]),
     TagRule("emotion.physical_discomfort", ["难受", "不舒服", "很疼"]),
     TagRule("topic.relation", ["我们", "你还记得", "之前", "那次", "上次"]),

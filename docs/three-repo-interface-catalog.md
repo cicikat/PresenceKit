@@ -1,3 +1,7 @@
+## 284 P3 成长系统退役
+
+删除 `/growth/*` 和 feature-flags 的 practice 项；客户端没有成长消费入口，无新 WS 消息。管理页成长入口及其 fragment 删除，群聊仲裁和支出观测仍保留。MCP权限与真实自主工具不变。浏览器硬刷新核对导航和观测总览没有成长入口；生产后端未重启，当前浏览器 feature-center 仍停在读取中，完整动态控件验收列 observe。
+
 ## 284 P2 真实活动投影（current / observe）
 
 `GET /activity/current` 保持原字段与 state.read scope；text/id/started_at 来自同一 owner/char 的真实会话，无会话 text 为空、时间为空；arc/next_switch_at 为空、thinking_about_eligible 为 false。Dream 沿原独立状态展示。桌面归一化支持空字符串及 nullable 时间，手机保留原 ActivityCurrentState 读取；没有新增 WS 广播或主聊天消息。并发活动全量投影及真实端验收留给 P4/P7。
@@ -455,7 +459,7 @@ Flutter/Android 字段或设置面。Agent Runtime 是同一角色的 durable / 
 | `/settings/event-context-observer`、`/observability/event-context` | Brief 217 入口事件→turn→evidence 身份链的默认关闭旁路观测控制与汇总 | 管理面 Runtime Config 提供前者的 `admin` 热切换 `disabled/observe`；后者 `state.read`，无桌面/手机新协议；仅聚合、状态码和延迟桶，不返回正文、完整 ID、用户 ID、媒体或路径 |
 | `/memory-events/search`、`/memory-events/{event_id}`、`/memory-events/{event_id}/window`、`/memory-events/{event_id}/related`、`/memory-events/query-trace`、`/memory-events/lineage/*`、`/observability/memory-event-edge-proposals`、`/observability/memory-event-shadow-recall` | Memory Event 证据账本的 scoped 只读检索、受控 topics、确定性关联边、派生记忆血缘、脱敏查询审计、候选边调度和 shadow recall 观测 | `admin-only`；前者需 `memory.read`，请求必须显式 `uid + char_id + realm=reality`，`related` 对同一邻居保留兼容首关系并返回完整 `relations[]`；两类观测需 `state.read`，候选边只含 run/budget、发现和超时计数，shadow 只含事件/turn 覆盖、mapped/unmapped、超时指标和待批准 `retirement_draft`（`used_as_gate=false`）。默认过滤 `web`/`dream_echo`/`coplay`，管理员只能以显式 `source` 查看隔离证据，响应保留 source 标签；lineage 仅消费落盘的事件 ID，旧数据/已删除事件为 `legacy_unknown`，dry-run 不写回；管理面消费，桌面/手机不消费，不进入 prompt 或 tool loop |
 | `DELETE /memory-events/{event_id}`、`GET /observability/memory-event-migration` | Memory Event 10 的可逆遗忘与迁移进度 | `admin-only`；前者需 `admin`，只墓碑化正文/媒体引用并保留关系边（返回 `derived_memories` 为 S4b 级联真实摘要：dossier/mid_term/episodic/storyline 可逆失效，无 lineage 存储列入 `manual_review`；台账观测 `GET /observability/memory-invalidations`，`memory.read`），后者需 `state.read`，返回无正文的计数、当前/旧 Markdown 来源覆盖、`inventory_only` 资产摘要和待批准 `retirement_draft`；桌面/手机不消费，管理面事件证据页消费，物理删除为 `disabled_pending_owner_policy`。阈值未批准前不得删旧召回 |
-| `/growth/*`、`/spend/*`、`/autonomy/*`、`/debug/user-hidden-state`、`/deployment/*` | 成长、支出、主动性、隐性状态、部署能力观测 | 以管理面为主；客户端只能读已脱敏投影 |
+| `/spend/*`、`/autonomy/*`、`/debug/user-hidden-state`、`/deployment/*` | 支出、主动性、隐性状态、部署能力观测 | 以管理面为主；客户端只能读已脱敏投影 |
 | `/auth/*` | token 创建、轮换、禁用、whoami、profile | `admin-only`；任何客户端都不应回显完整 token |
 | `/integrations/diary/sync*`、`/integrations/*`、`/v1/owner/turns*` | Obsidian 镜像、外部刺激、远程 owner turn | `current`；远程 HTTPS/WSS、重启幂等和跨设备仍需真实验收 |
 | `/integrations/companion/events` | Independent Companion opportunity/phone ingress and optional HTTP reply | `current`；`companion.write`，严格 v1 body，服务端固定 owner/char/channel/origin/trust/tool policy，reply 不 fanout |

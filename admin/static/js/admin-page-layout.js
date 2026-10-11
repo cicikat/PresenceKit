@@ -11,7 +11,7 @@ const AdminPageLayout = (() => {
   };
   observationGroups['feature-center'] = {title:['功能开关','Feature switches'],pages:['tools']};
   observationGroups['auth-tokens'] = {title:['登录密钥与访问权限','Access credentials'],pages:['observe-runtime-signals','observe-api-contract']};
-  observationGroups['observe-growth'] = {title:['角色成长','Character growth'],pages:['observe-group-arbiter','observe-spend']};
+  observationGroups.status.pages.push('observe-group-arbiter','observe-spend');
   const observationPages = Object.values(observationGroups).flatMap(group=>group.pages);
   const origins = [];
   const sections = new Map();
@@ -276,7 +276,7 @@ const AdminPageLayout = (() => {
   }
   async function loadNetwork() { await loadSources({'network-config': async () => { _bindProxyControls(); await loadProxy(); }}); }
   async function loadObservations(page,resume=false) {
-    const primary = {'feature-center':loadFeatureCenter,'auth-tokens':()=>Promise.all([loadAuthTokens(),loadChannelToggles()]),'observe-growth':()=>initObserveCharacters('obs-growth-char',loadObserveGrowth),status:loadStatus,'observe-vector':loadVector,'observe-prompt':loadObservePromptUidList,'observe-dream':loadObserveDream};
+    const primary = {'feature-center':loadFeatureCenter,'auth-tokens':()=>Promise.all([loadAuthTokens(),loadChannelToggles()]),status:loadStatus,'observe-vector':loadVector,'observe-prompt':loadObservePromptUidList,'observe-dream':loadObserveDream};
     if (!resume) await primary[page]();
     if (page === 'observe-dream') await loadObserveDrinking();
     if (!isNew()) return;

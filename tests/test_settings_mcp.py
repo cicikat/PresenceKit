@@ -904,7 +904,6 @@ async def test_console_origin_runs_through_dispatcher(monkeypatch, sandbox):
         "description": "", "dangerous": False, "category": "mcp",
         "parameters": {}, "effect": "read", "mcp_server": "cedar_toy", "mcp_tool": "toy_status",
     })
-    monkeypatch.setattr("core.growth.mcp_proficiency.is_tool_allowed", lambda *args, **kwargs: False)
     monkeypatch.setattr("core.memory.action_trace.record", lambda *args, **kwargs: None)
     result = await td.execute_structured(
         "mcp__cedar_toy__toy_status", {}, "owner", "owner", False,

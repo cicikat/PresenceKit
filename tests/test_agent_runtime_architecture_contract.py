@@ -25,7 +25,6 @@ def test_contract_maps_known_unregistered_scheduler_producers() -> None:
     producer_names = {
         "event_edge_proposer",
         "dream_postcards",
-        "practice_help",
         "weather_alert_light",
         "weather_alert_heavy",
         "watch_hr_critical",

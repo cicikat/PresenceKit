@@ -305,7 +305,6 @@ async def test_write_calls_without_confirmation_and_explicit_write_confirmation_
     td._TOOL_REGISTRY["mcp__srv__create_reply"] = _mcp_entry(
         _confirmed_write, effect="write", require_confirm=True,
     )
-    monkeypatch.setattr("core.growth.mcp_proficiency.is_tool_allowed", lambda *args, **kwargs: True)
     monkeypatch.setattr("core.self_management.policy.tool_allowed", lambda *args, **kwargs: True)
     monkeypatch.setattr("core.memory.action_trace.record", lambda *args, **kwargs: None)
 
@@ -345,7 +344,6 @@ async def test_explicit_actuate_confirmation_and_emergency_override(monkeypatch)
     td._TOOL_REGISTRY["mcp__srv__hardware_stop"] = _mcp_entry(
         _stop, effect="emergency", require_confirm=True,
     )
-    monkeypatch.setattr("core.growth.mcp_proficiency.is_tool_allowed", lambda *args, **kwargs: True)
     monkeypatch.setattr("core.self_management.policy.tool_allowed", lambda *args, **kwargs: True)
     monkeypatch.setattr("core.memory.action_trace.record", lambda *args, **kwargs: None)
 

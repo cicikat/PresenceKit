@@ -20,12 +20,6 @@ _WATCH_FRESH_DAYS = 3
 _WATCH_TRIGGERS = {
     "topic.energy", "topic.health", "topic.activity", "query.body_state",
 }
-_GROWTH_SELF_TRIGGERS = {
-    "topic.writing", "topic.drawing", "topic.music", "topic.learning",
-    "query.growth_self",
-}
-
-
 def _watch_segment_is_fresh(segment_time: str, *, today=None) -> bool:
     """Return whether a watch sleep segment is recent enough for layer 3.6."""
     try:
@@ -45,30 +39,6 @@ def _watch_segment_is_fresh(segment_time: str, *, today=None) -> bool:
         return False
 
 
-def _format_growth_self_hint(char_id: str = DEFAULT_CHAR_ID) -> str:
-    """Render up to two active interests as a soft character-self hint."""
-    try:
-        from core.growth.interest_state import active_interests
-        from core.growth.notes import load as load_notes
-
-        parts: list[str] = []
-        for interest in active_interests(char_id)[:2]:
-            name = str(interest.get("name") or "").strip()
-            if not name:
-                continue
-            level = max(1, min(5, int(interest.get("level", 1) or 1)))
-            text = f"你最近在学{name}，到 level {level} 了"
-            notes = load_notes(str(interest.get("id") or ""), char_id=char_id)
-            if notes:
-                latest = str(notes[-1].get("text") or "").strip()
-                if latest:
-                    text += f"；上次琢磨出：{latest}"
-            parts.append(text)
-        if not parts:
-            return ""
-        return "（" + "；".join(parts) + "。这是你自己的近况，可自然提起，别像报数据。）"
-    except Exception:
-        return ""
 
 
 _INNER_DIARY_FEELING_MARKER = re.compile(r"(?m)^##\s*今日感受\s*$")
@@ -734,24 +704,6 @@ def build(
                 })
     except Exception:
         pass
-
-    # ─────────────────────────────────────────────────────────────────────────
-    # 层 3.8_growth_self：角色自身成长近况（mode=tagged）
-    # ─────────────────────────────────────────────────────────────────────────
-    if _tags & _GROWTH_SELF_TRIGGERS:
-        _growth_self_text = _format_growth_self_hint(char_id)
-        if _growth_self_text:
-            messages.append({
-                "role": "system",
-                "content": _growth_self_text,
-                "_layer": "3.8_growth_self",
-                "_drop_priority": 15,
-                "_provenance": {
-                    "mode": "tagged",
-                    "triggers_checked": sorted(_GROWTH_SELF_TRIGGERS),
-                    "matched_tags": sorted(_tags & _GROWTH_SELF_TRIGGERS),
-                },
-            })
 
     # ─────────────────────────────────────────────────────────────────────────
     # 层 3.9：桌面实时感知（sidecar /sensor/realtime 快照）
@@ -1833,7 +1785,6 @@ KNOWN_LAYERS: list[tuple[str, str]] = [
     ("3.6_watch", "watch 睡眠数据摘要（tagged）"),
     ("3.7_sensor", "手机传感器摘要"),
     ("3.8_activity", "桌宠屏幕活动快照（tagged）"),
-    ("3.8_growth_self", "角色自身成长近况（tagged）"),
     ("3.9_screen_awareness", "桌面实时感知摘要"),
     ("4_group_context", "群聊上下文"),
     ("4.2_stage_transcript", "Stage 共享对话 transcript"),

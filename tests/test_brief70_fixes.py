@@ -41,25 +41,8 @@ async def test_spend_recovery_confirms_each_mandate_once(sandbox, monkeypatch):
     assert spend_ledger.budget_usage()["daily_used"] == 20
 
 
-def test_new_interest_keeps_baseline_selection_weight():
-    from core.scheduler.triggers.practice import select_interest
-
-    interests = [{"id": "new"}, {"id": "old", "learning_progress": 0.5}]
-    rng = random.Random(20260712)
-    hits = sum(select_interest(interests, rng)["id"] == "new" for _ in range(10_000))
-    assert 0.12 <= hits / 10_000 <= 0.17
 
 
-def test_note_replacement_allows_similar_revision_but_plain_dedup_remains(sandbox, monkeypatch):
-    from core.growth import notes
-
-    monkeypatch.setattr("core.memory.provenance_log.append", lambda *args, **kwargs: None)
-    for text in ("我发现结尾要留具体物件", "我发现开头要具体", "我发现节奏要收住"):
-        assert notes.apply_note("interest", text, source="test", char_id="c")
-    revised = "我发现节奏要收住一点"
-    assert notes.apply_note("interest", revised, source="test", replaces=3, char_id="c")
-    assert notes.load("interest", char_id="c")[2]["text"] == revised
-    assert not notes.apply_note("interest", "我发现节奏要收住一点点", source="test", char_id="c")
 
 
 @pytest.mark.asyncio
@@ -80,36 +63,8 @@ async def test_stage_phase_b_does_not_echo_cut_against_owner(sandbox, monkeypatc
     assert len(result.replies) == 1
 
 
-@pytest.mark.asyncio
-async def test_practice_trace_echoes_only_fact_not_work_body(sandbox, monkeypatch):
-    from core.growth import practice_session as ps
-
-    interest = {"id": "i", "name": "写诗", "domain": "writing", "level": 1, "status": "active", "recent_scores": [], "learning_progress": 0}
-    monkeypatch.setattr("core.growth.interest_state.active_interests", lambda _: [interest])
-    monkeypatch.setattr("core.character_loader.load", lambda _: type("C", (), {"name": "角色", "personality": "克制"})())
-    monkeypatch.setattr("core.growth.interest_state.record_score", lambda *args, **kwargs: _async({**interest, "recent_scores": [6.5]}))
-    replies = iter(["作品正文绝不能进日记", json.dumps({"score": 6.5, "strengths": ["具体"], "one_improvement": "收紧节奏"}, ensure_ascii=False), '{"note":null}'])
-    monkeypatch.setattr("core.llm_client.chat", lambda *args, **kwargs: _async(next(replies)))
-    traces = []
-    monkeypatch.setattr("core.memory.action_trace.record", lambda *args, **kwargs: traces.append(kwargs))
-
-    assert await ps.run_session({"uid": "owner", "char_id": "c", "interest_id": "i"})
-    assert traces[0]["echo_event_log"] is True
-    assert "作品正文绝不能进日记" not in traces[0]["result_digest"]
 
 
-def test_interest_candidates_use_ranked_domains_and_human_names(monkeypatch):
-    from core.scheduler.triggers.interest_seed import collect_candidates
-
-    monkeypatch.setattr("core.memory.event_log.get_recent_days", lambda *args, **kwargs: "画画画画画歌")
-    monkeypatch.setattr("core.memory.user_profile.load", lambda *args, **kwargs: {
-        "important_facts": [{"text": "用户喜欢某个游戏，希望一起体验", "tag": "pref.media"}],
-    })
-    candidates = collect_candidates("owner", "c")
-    topical = [item for item in candidates if item["origin"] == "topic_stats"]
-    assert topical[0]["domain"] == "drawing"
-    assert topical[0]["name"] != "画"
-    assert all(item["origin"] != "user_pref_mirror" for item in candidates)
 
 
 @pytest.mark.asyncio

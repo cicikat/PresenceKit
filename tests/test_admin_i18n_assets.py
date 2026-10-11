@@ -178,7 +178,6 @@ def test_status_page_and_feature_flags_use_semantic_i18n_keys():
         "mail",
         "visual_perception",
         "spend",
-        "practice",
         "action_trace",
         "mcp_servers",
         "fs_access",

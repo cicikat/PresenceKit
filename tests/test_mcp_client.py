@@ -718,7 +718,6 @@ class TestCallTool:
             "category": "mcp", "parameters": {}, "effect": "actuate",
             "mcp_server": "hardware", "mcp_tool": "hardware_sequence",
         })
-        monkeypatch.setattr("core.growth.mcp_proficiency.is_tool_allowed", lambda *args, **kwargs: True)
         monkeypatch.setattr("core.memory.action_trace.record", lambda *args, **kwargs: None)
 
         result = await td.execute_structured(

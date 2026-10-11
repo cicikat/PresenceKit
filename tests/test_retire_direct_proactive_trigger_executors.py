@@ -74,7 +74,6 @@ def test_trigger_migration_registry_separates_speech_and_maintenance():
     assert trigger_migration_status("morning_greeting") == "migrated"
     assert trigger_migration_status("memory_janitor") == "maintenance-only"
     assert trigger_migration_status("manual_direct_trigger") == "retired"
-    assert "practice_help" in MIGRATED_TRIGGERS
     assert "letter_writer" in ACTIVE_TRIGGERS
     assert "letter_writer" not in MIGRATED_TRIGGERS
     assert trigger_migration_status("letter_writer") == "active"

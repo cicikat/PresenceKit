@@ -128,7 +128,6 @@ window.AdminCopyDefaults = {
       "observe-provenance",
       "observe-vector",
       "observe-dream",
-      "observe-growth",
       "observe-visual",
       "observe-dream-prompt",
       "observe-dream-operations",

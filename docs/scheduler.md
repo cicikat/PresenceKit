@@ -53,8 +53,6 @@ core/scheduler/triggers/         ← 各触发器独立文件
     time_based.py                早安 / 晚安 / 随机消息 / 天气 / 日记 / 记忆衰减
     diary.py                     日记相关触发
     period.py                    生理期关心
-    interest_seed.py             每周兴趣遴选（practice.enabled 总闸）
-    practice.py                  深夜练习入慢队列 + 停滞求助 proposer
     memory.py                    未完结话题追问 / 主动回忆
     birthday.py                  生日多段触发
     timenode.py                  时间节点感知

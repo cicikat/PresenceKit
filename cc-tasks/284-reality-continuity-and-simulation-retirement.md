@@ -115,10 +115,10 @@ MCP去掉等级后仍受服务器启用、工具暴露、scope、origin、风险
 
 ### P3 整套成长删除（删除brief）
 
-- [ ] 按3.5全量引用清单删除子系统及控制面；不保留假等级兼容运行链。
-- [ ] 定义队列旧practice任务退役：不得再次执行模型调用，明确终止/跳过原因；不回滚真实已完成作品。
-- [ ] MCP授权/暴露与schema回归，确认无等级依赖也无权限扩大。
-- [ ] 旧产物可查询，分数等级不再prompt注入；删除growth专项测试与文档条目，保留工具/权限独立守卫。
+- [x] 按3.5全量引用清单删除子系统及控制面；不保留假等级兼容运行链。
+- [x] 定义队列旧practice任务退役：不得再次执行模型调用，明确终止/跳过原因；不回滚真实已完成作品。
+- [x] MCP授权/暴露与schema回归，确认无等级依赖也无权限扩大。
+- [x] 旧产物可查询，分数等级不再prompt注入；删除growth专项测试与文档条目，保留工具/权限独立守卫。
 
 ### P4 真实活动生命周期与查询底座
 
@@ -177,3 +177,7 @@ MCP去掉等级后仍受服务器启用、工具暴露、scope、origin、风险
 删除 activity_manager、切换维护任务、scheduler 随机此刻旁白、prompt/Stage/private_exchange/sensor 随机活动消费及专项测试。真实 /activity/current 使用 registry 找真实会话并读取同源时间，无会话为空。143 项相关回归通过；P1 扩展回归 102 通过、2 项因在线 life_records 数据库变化导致生产目录快照不同而失败，保留记录，未停服务。跨端静态检查确认桌面归一化支持 nullable 时间与空 text；真实端运行 not-run。
 
 提交：P1 `3fbb30d`，P2 `04e896a`。P2后续范围检查103项通过；补充只读过期记录守卫后75项通过。未重启生产服务，提交源码不等于生产运行已生效。P3审计已定位 core/growth、practice/interest_seed调度、MCP三处暴露/执行等级闸门、成长管理页和专项测试；尚未删除这些实现。P5的结构化引用、统一对话收口与界面独立合同已明确，尚未施工。
+
+### P3 施工证据
+
+删除 core/growth 源码、interest_seed/practice 调度及 proposer、slow_queue 注册、growth_self prompt/tag、MCP等级过滤/执行、配置、成长router/页面及专项测试。历史作品和路径accessor保留，不物理删除。旧队列项在 handler 之前明确跳过，runtime-signals 可查询。178项相关MCP/授权/portable/队列/调度回归通过。扩展扫描另有既有失配：管理页全量i18n守卫仍期待旧缓存标记/旧页面文字，架构守卫缺既有memory_consolidation与多项新增工具，旧probe守卫未接受info分类展开；未顺手修这些无关契约。浏览器已硬刷新并核对导航和观测总览无成长入口；feature-center动态加载实测未完成。

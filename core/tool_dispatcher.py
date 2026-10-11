@@ -2524,9 +2524,6 @@ def get_tools_schema(
                 "parameters": info.get("parameters") or {"type": "object", "properties": {}},
             },
         })
-    if char_id is not None:
-        from core.growth.mcp_proficiency import filter_schemas
-        schemas = filter_schemas(schemas, char_id=char_id)
     schemas = [
         schema
         for schema in schemas
@@ -3014,16 +3011,6 @@ async def _execute_structured_impl(
         _msg = "Intiface 硬件能力当前处于冻结状态，需要显式 opt-in"
         _trace("failed", _msg)
         return _execution_outcome("tool_failed", _msg)
-    # Keep the three user-visible capability refusals in one order: MCP
-    # proficiency is neutral, safe mode is explicit, and only then do we
-    # report a role-level authorization denial.  This prevents an internal
-    # policy/level fallback from leaking through the tool result.
-    if tool_name.startswith("mcp__") and origin != "admin_console":
-        from core.growth.mcp_proficiency import NEUTRAL_REFUSAL, is_tool_allowed
-        if not is_tool_allowed(tool_name, char_id=char_id):
-            logger.warning("[tool_dispatcher] MCP proficiency gate denied tool=%s char_id=%s", tool_name, char_id)
-            return _execution_outcome("tool_failed", NEUTRAL_REFUSAL)
-
     gate_msg = _mode_gate(tool_name)
     if gate_msg is not None:
         _trace("failed", gate_msg)

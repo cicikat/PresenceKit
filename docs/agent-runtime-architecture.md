@@ -182,7 +182,6 @@ inside modules resolve to the registered lifecycle name before admission.
 | `dream_exit` | migrated | Dream exit -> new Reality signal/turn; no shared Dream state |
 | `letter_writer` | active | Bounded weekly SMTP delivery via mail subsystem; no autonomy/chat signal consumer. Task/副链 artifact migration remains roadmap until delivery is implemented. |
 | `coplay_commentary` | migrated | Session fact -> optional signal, no direct executor |
-| `practice_help` | migrated | Practice stall fact -> optional autonomy signal; the `practice` maintenance worker remains silent |
 | `desktop_wake`, `restart` | active | One-shot bounded signal; no direct assistant turn |
 | `interval`, `schedule` | active | Native clocks; produce signal/task, never prose |
 | `dream_postcards` | active | Due authored postcard delivery; calls the bounded mail artifact adapter, never the assistant speech outlet |
@@ -197,7 +196,6 @@ inside modules resolve to the registered lifecycle name before admission.
 | `event_edge_proposer` | maintenance-only | Task -> bounded Memory Event candidate-edge worker; never speech/prompt/accepted evidence |
 | `private_exchange` | maintenance-only | Isolated same-character specialized 副链 session; existing relationship artifact only |
 | `spend_monitor` | maintenance-only | Read-only balance task/manual notice proposal; never payment |
-| `interest_seed`, `practice` | maintenance-only | Same-character authored growth work on a specialized 副链; help is separate signal |
 | `scheduler_pipeline_send`, `manual_direct_trigger` | retired | No executor; adapters may only queue/test and must not restore speech |
 
 Module/loop aliases `morning`, `night`, `weather`, `birthday`, `watch_hr_critical`, `watch_hr_high`,

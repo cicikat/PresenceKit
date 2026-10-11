@@ -1370,8 +1370,7 @@ class Pipeline:
             excluded_tool_names.add("drink_with_user")
 
         # Keep the registry helper's long-standing call shape for test/plugin
-        # compatibility; proficiency is an exposure-layer filter applied here.
-        from core.growth.mcp_proficiency import filter_schemas as _filter_growth_tools
+        # compatibility; the existing exposure filters are applied here.
         try:
             _raw_tools = get_tools_schema(categories=categories, char_id=char_id, uid=uid)
         except TypeError:
@@ -1380,7 +1379,7 @@ class Pipeline:
             # filters below when the richer signature is available.
             _raw_tools = get_tools_schema(categories=categories)
         tools = [
-            t for t in _filter_exposure(_filter_growth_tools(_raw_tools, char_id=char_id), _exposure)
+            t for t in _filter_exposure(_raw_tools, _exposure)
             if (t.get("function") or t).get("name") not in excluded_tool_names
         ]
         caller_allowed_tool_names = allowed_tool_names
@@ -1426,7 +1425,7 @@ class Pipeline:
         except Exception:
             logger.warning("[pipeline.run_agentic_loop] self-management schema unavailable", exc_info=True)
         # A named tool preset is a final, model-specific *exposure* filter.  It
-        # cannot bypass category, per-character, MCP proficiency, or global
+        # cannot bypass category, per-character, MCP policy, or global
         # execution gates above; it only makes this model receive fewer schemas.
         from core.model_registry import _get_preset_config, _resolve_preset_name
         from core.tool_presets import resolve_tool_allowlist
@@ -2778,5 +2777,3 @@ def register_slow_handlers() -> None:
     slow_queue.register_handler("toy_autogrow",            handler_toy_autogrow)
     from core.stage.char_relations import handler_update_char_relations
     slow_queue.register_handler("update_char_relations",   handler_update_char_relations)
-    from core.growth.practice_session import handler_practice_session
-    slow_queue.register_handler("practice_session",        handler_practice_session)

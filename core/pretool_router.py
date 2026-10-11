@@ -295,12 +295,11 @@ async def route_pretool(
     # Preserve the registry helper's long-standing call shape for local test
     # and plugin compatibility, then apply the same character gates explicitly.
     schemas = tool_dispatcher.get_tools_schema(categories=effective_categories)
-    from core.growth.mcp_proficiency import filter_schemas as filter_growth_schemas
     from core.self_management.policy import tool_allowed
 
     schemas = [
         schema
-        for schema in filter_growth_schemas(schemas, char_id=char_id)
+        for schema in schemas
         if tool_allowed(
             uid,
             char_id,

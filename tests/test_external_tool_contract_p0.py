@@ -107,7 +107,6 @@ async def test_desktop_probe_reads_both_buckets_with_frozen_char_id(monkeypatch)
     monkeypatch.setattr(tool_dispatcher, "get_tools_schema", lambda categories=None: [
         {"type": "function", "function": {"name": "p0_tool", "description": "", "parameters": {}}},
     ])
-    monkeypatch.setattr("core.growth.mcp_proficiency.filter_schemas", lambda items, char_id: items)
     monkeypatch.setattr("core.self_management.policy.tool_allowed", lambda *args, **kwargs: True)
     monkeypatch.setattr(tool_dispatcher, "get_probe_prompt", _probe_prompt)
     monkeypatch.setattr(llm_client, "chat", _chat)

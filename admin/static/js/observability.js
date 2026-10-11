@@ -607,54 +607,6 @@ function observeBar(value, max) {
   return `<div style="height:6px;background:var(--border);border-radius:4px;overflow:hidden;margin-top:5px"><div style="width:${ratio*100}%;height:100%;background:var(--accent);border-radius:4px"></div></div>`;
 }
 
-async function loadObserveGrowth() {
-  const el = document.getElementById('obs-growth-content');
-  const charId = document.getElementById('obs-growth-char')?.value || '';
-  if (!el || !charId) { if(el) el.innerHTML = observeEmpty('暂无角色'); return; }
-  el.innerHTML = observeEmpty('加载中…');
-  try {
-    const root = await api('GET', `/growth/interests?char_id=${encodeURIComponent(charId)}`);
-    const interests = root.interests || [];
-    if (!interests.length) { el.innerHTML = observeEmpty('尚未启用成长记录'); return; }
-    const practice = await api('GET', '/growth/practice-log');
-    const practiceCount = (practice.entries || []).filter(x => !x.char_id || x.char_id === charId).length;
-    const bundles = await Promise.all(interests.map(async interest => {
-      const id = String(interest.id || interest.interest_id || interest.name || '');
-      if (!id) return {interest, id, works:[], notes:[]};
-      const qs = `?char_id=${encodeURIComponent(charId)}`;
-      const [works, notes] = await Promise.all([
-        api('GET', `/growth/works/${encodeURIComponent(id)}${qs}`),
-        api('GET', `/growth/notes/${encodeURIComponent(id)}${qs}`),
-      ]);
-      return {interest, id, works:works.entries || [], notes:notes.entries || []};
-    }));
-    el.className = '';
-    el.innerHTML = bundles.map(({interest,id,works,notes}) => {
-      const scores = (interest.recent_scores || works.map(x => x.score)).map(Number).filter(Number.isFinite);
-      const latest = scores.length ? scores[scores.length-1] : 0;
-      const first = scores.length ? scores[0] : latest;
-      const trend = latest > first + .01 ? '↗' : latest < first - .01 ? '↘' : '→';
-      const level = Math.max(0, Math.min(5, Math.round(Number(interest.level || 0))));
-      return `<div style="padding:14px 0;border-bottom:1px solid var(--border)">
-        <div style="display:flex;justify-content:space-between"><strong>${escapeHtml(interest.name || id)}</strong><span>${trend}</span></div>
-        <div style="color:var(--accent);letter-spacing:1px">${'★'.repeat(level)}${'☆'.repeat(5-level)}</div>${observeBar(latest,10)}
-        <h4 style="margin:14px 0 5px">作品时间轴</h4>${works.length ? works.slice().reverse().map(w => { const f=String(w.file||w.filename||''); return `<div style="padding:5px 0"><button class="btn btn-ghost btn-sm" onclick="loadObserveGrowthWork(this)" data-char="${escapeHtml(charId)}" data-interest="${escapeHtml(id)}" data-file="${escapeHtml(f)}">${escapeHtml(observeTime(w.date || w.ts))} · ${escapeHtml(w.title || f || '练习作品')}${w.score != null ? ` · ${escapeHtml(String(w.score))} 分` : ''}</button><pre class="obs-growth-work" style="display:none;white-space:pre-wrap"></pre></div>`; }).join('') : observeEmpty()}
-        <h4 style="margin:14px 0 5px">技巧笔记</h4>${notes.length ? notes.map(n => `<div style="padding:4px 0">${escapeHtml(n.text || n.note || n.content || JSON.stringify(n))}${n.hits != null ? ` <span class="badge">命中 ${escapeHtml(String(n.hits))}</span>` : ''}</div>`).join('') : observeEmpty()}
-      </div>`;
-    }).join('') + `<div style="padding-top:12px;color:var(--muted)">练习日志：${practiceCount}</div>`;
-  } catch(e) { el.innerHTML = observeEmpty('加载失败：' + e.message); }
-}
-
-async function loadObserveGrowthWork(button) {
-  const pre = button.parentElement.querySelector('.obs-growth-work');
-  if (pre.style.display !== 'none') { pre.style.display='none'; return; }
-  pre.style.display='block'; pre.textContent='加载中…';
-  try {
-    const d = await api('GET', `/growth/works/${encodeURIComponent(button.dataset.interest)}/${encodeURIComponent(button.dataset.file)}?char_id=${encodeURIComponent(button.dataset.char)}`);
-    pre.textContent = d.content || '（空文件）';
-  } catch(e) { pre.textContent='加载失败：'+e.message; }
-}
-
 let _visualBefore = null, _visualRequest = 0;
 function visualSourceLabel(source) {
   const labels={chat_upload:'聊天图片',ocr:'图片文字识别',screen:'屏幕',camera:'摄像头',

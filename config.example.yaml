@@ -479,20 +479,6 @@ spend:
   #     topup_url: "https://usercenter2.aliyun.com/home"
   balance_providers: []
 
-# Briefs 58-61: slow character growth. The whole subsystem is opt-in.
-practice:
-  enabled: false
-  daily_sessions: 1
-  reviewer_category: consolidation  # routing profile category；默认复用后台整合模型
-  # reviewer_preset: deepseek-default  # 可选：严格直连同名 preset；未知名字会明确失败
-  help_proposer: true
-
-presence:
-
-# Media MCP servers listed here gain level-based exposure. Unlisted servers
-# remain ordinary organ-like tools and preserve their current behavior.
-mcp_proficiency: {}        # tiers 每档须列全量工具；高档不自动继承低档工具
-
 action_trace:
   enabled: true              # 关闭后不记录、不注入，零行为变化（回滚开关）
   inject_max_items: 5        # 层 10.5 最多注入几条痕迹

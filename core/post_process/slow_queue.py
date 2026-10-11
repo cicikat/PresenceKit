@@ -108,6 +108,12 @@ async def worker() -> None:
         item = await _queue.get()
         task_type = item.get("task_type", "")
         payload = item.get("payload", {})
+        if task_type == "practice_session":
+            from core.runtime_signal_observability import record
+            record(category="slow_queue", code="retired_practice_skipped", status="ok", context={"reason": "subsystem_retired"})
+            logger.info("[slow_queue] practice_session skipped: subsystem_retired")
+            _queue.task_done()
+            continue
         handler = _handlers.get(task_type)
 
         if handler is None:

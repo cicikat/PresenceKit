@@ -166,9 +166,6 @@ REGISTRY: dict[str, PathMeta] = {
     "yexuan_inner_diary":     PathMeta("canonical", "character_inner", "per_char",      "ignore"),
     "garden":                 PathMeta("canonical", "character_inner", "per_char",      "ignore"),
     "character_growth":       PathMeta("canonical", "character_inner", "per_char_user", "ignore"),
-    "interest_state":         PathMeta("canonical", "character_inner", "per_char",      "ignore"),
-    "growth_works_dir":       PathMeta("canonical", "character_inner", "per_char",      "ignore"),
-    "growth_note":            PathMeta("canonical", "character_inner", "per_char",      "ignore"),
     # observations.jsonl 由离线脚本写入，但被 prompt_builder.py:60 读作提示词层输入；
     # 丢失永久降低输出质量且无自动重建路径，判定 canonical
     "observations":           PathMeta("canonical", "character_inner", "per_char",      "ignore"),

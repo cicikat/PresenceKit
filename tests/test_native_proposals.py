@@ -190,22 +190,6 @@ def test_window_event_proposals_use_window_tier(monkeypatch):
     assert 0.70 <= f.urgency <= 0.89
 
 
-def test_practice_help_stall_uses_filler_tier(monkeypatch):
-    from core.scheduler.triggers import practice
-
-    now = 1_000_000.0
-    monkeypatch.setattr(practice, "_cfg", lambda: {"enabled": True, "help_proposer": True})
-    monkeypatch.setattr(practice.time, "time", lambda: now)
-    monkeypatch.setattr(
-        "core.growth.interest_state.active_interests",
-        lambda char_id: [{"id": "i1", "name": "topic", "stalled_since": now - 8 * 86400}],
-    )
-    monkeypatch.setattr("core.growth.practice_session.recent_works", lambda *args, **kwargs: [])
-
-    proposal = practice.propose_practice_help({"uid": "u1", "char_id": "c1"})
-
-    assert proposal.trigger_name == "practice_help"
-    assert 0.10 <= proposal.urgency <= 0.29
 
 
 def test_weather_heavy_propose_uses_window_event_tier(monkeypatch):

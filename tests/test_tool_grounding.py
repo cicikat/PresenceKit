@@ -11,7 +11,6 @@ async def test_required_intent_is_marked_even_when_tool_is_not_exposed(monkeypat
     from core.pretool_router import route_pretool
 
     monkeypatch.setattr(tool_dispatcher, "get_tools_schema", lambda categories=None: [])
-    monkeypatch.setattr("core.growth.mcp_proficiency.filter_schemas", lambda items, char_id: items)
     monkeypatch.setattr("core.self_management.policy.tool_allowed", lambda *args, **kwargs: True)
     monkeypatch.setitem(tool_dispatcher._TOOL_REGISTRY, "weather", {
         "keywords": ["天气"], "category": "info", "parameters": {"required": []},
