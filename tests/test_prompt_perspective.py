@@ -12,7 +12,6 @@ from tests.fixtures.public_assets import TEST_CHAR_ID
 def build_prompt(monkeypatch):
     monkeypatch.setattr(prompt_builder, "_load_jailbreak", lambda layer=None: "")
     monkeypatch.setattr(prompt_builder, "_load_style_hint", lambda **kwargs: "")
-    monkeypatch.setattr(prompt_builder, "_load_activity_snapshot", lambda **kwargs: "阅读")
     monkeypatch.setattr(prompt_builder, "_format_realtime_awareness", lambda *args, **kwargs: "")
     monkeypatch.setattr("core.activity_manager.get_prompt_fragment", lambda **kwargs: "")
     monkeypatch.setattr("core.author_note_rotator.get_current_note", lambda **kwargs: "")
@@ -42,7 +41,6 @@ def test_framework_subjects_are_bound_without_gender_guessing(build_prompt, monk
     assert "你是Test Companion" in layer(messages, "1_system_prompt")
     expected = user_name or "她"
     assert f"{expected}是你的friend" in layer(messages, "3_relation")
-    assert f"{expected}在阅读" in layer(messages, "3.8_activity")
     assert '你称呼对方为"Reader"' in layer(messages, "3_relation")
     assert "你不是助手，你不需要为她提供服务" in layer(messages, "1_system_prompt")
     assert "本轮框架说明" not in layer(messages, "1_system_prompt")

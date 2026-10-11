@@ -115,7 +115,6 @@ def test_prompt_builder_reads_uid_global_period_state(sandbox, monkeypatch):
     health_state.set_period_date("owner1", date.today().isoformat())
     monkeypatch.setattr(prompt_builder, "_load_jailbreak", lambda layer=None: "")
     monkeypatch.setattr(prompt_builder, "_load_style_hint", lambda *, char_id="": "")
-    monkeypatch.setattr(prompt_builder, "_load_activity_snapshot", lambda *, char_id="": "")
     monkeypatch.setattr(prompt_builder, "_format_afterglow_soft_hint", lambda uid, char_id="": "")
     monkeypatch.setattr("core.presence.get_last_seen_text", lambda uid: "")
     monkeypatch.setattr("core.author_note_rotator.get_current_note", lambda paths=None, char_id=None: "")

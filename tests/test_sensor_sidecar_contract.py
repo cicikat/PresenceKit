@@ -95,7 +95,7 @@ def test_realtime_awareness_uses_summary_without_window_title(monkeypatch):
 
     result = prompt_builder._format_realtime_awareness(set(), now=now)
 
-    assert result == "大致在写代码，正在认真输入"
+    assert result == "设备上报（接收于0秒前）：前台类别为代码编辑器，输入标记为持续输入或编辑"
     assert "private-chat" not in result
     assert "secret document" not in result
 
@@ -115,5 +115,16 @@ def test_realtime_awareness_ttl_and_tag_gate(monkeypatch):
     assert prompt_builder._format_realtime_awareness(set(), now=now) == ""
     assert (
         prompt_builder._format_realtime_awareness({"query.what_doing"}, now=now)
-        == "在用 Code.exe"
+        == "设备上报（接收于240秒前）：前台应用为 Code.exe"
     )
+
+
+@pytest.mark.parametrize("age", [300, 301, -1])
+def test_realtime_awareness_rejects_expired_or_future_receipt(monkeypatch, age):
+    now = time.time()
+    monkeypatch.setattr(realtime_state, "get", lambda: {
+        "received_at": now - age,
+        "input": {"idle_seconds": 0},
+        "focus": {"app": "Code.exe"},
+    })
+    assert prompt_builder._format_realtime_awareness({"query.what_doing"}, now=now) == ""

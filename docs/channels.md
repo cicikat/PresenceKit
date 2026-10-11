@@ -1,5 +1,7 @@
 # docs/channels.md — 通道与桌宠通信
 
+284 P1：实时设备摘要仅投影给配置的 scheduler owner；同一 owner 的各角色可读取同一用户设备观测，不能把它当成角色活动。`sensor.write` / `state.read` 权限不变，敏感窗口仍整帧跳过。prompt 使用服务器接收时间，活跃窗口小于 180 秒、活动询问小于 300 秒；过期、无数据或未来接收时间不注入。类别与输入标记只描述设备上报，不能证明任务、注意力、情绪或身体姿势。旧 `activity_snapshot.json` 无生产写入者，已退役其 prompt 读取，历史文件及迁移路径保留。当前协议没有独立设备身份字段，最新整帧覆盖不等于多设备隔离验收。
+
 272 B：QQ 空间使用独立 onebot-qzone REST transport，复用 NapCat 空间 Cookie，不进入 QQ 私聊广播；配置、权限与部署见 [qzone-integration.md](qzone-integration.md)。
 
 Brief 253.6：QQ record、单音频上传与桌面/手机既有 `/transcribe` 入口接入可选 STT。

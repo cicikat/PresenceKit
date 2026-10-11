@@ -7,13 +7,11 @@ Contract assertions (all static source-level unless noted as runtime):
   L1  Cross-channel switch hint: no 桌宠/QQ/desktop/channel/通道 in the hint literal
   L2  Layer 3.6 body data: no [身体数据感知] tag; still contains sleep data injection
   L3  Layer 3.7 phone sensor: no [手机感知] tag; no "收到来自用户手机的数据"
-  L4  Layer 3.8 activity snapshot: no [屏幕感知] tag
   L5  author_note extras: no [人设纠偏: / [输出风格: bracket forms
   L6  Memory protocol: no code/git/仓库/日志/测试/checkpoint dev vocab
   L7  sensor_events._app_category: unknown app maps to a neutral phrase, not raw name
   L8  APP_CATEGORY_CHANGED narrative: no raw app names in the narrative f-string
   L9  Regression: layer 3.7 still builds _parts list (data not deleted, just re-worded)
-  L10 Regression: layer 3.8 still calls _load_activity_snapshot (not removed)
 """
 
 from __future__ import annotations
@@ -111,18 +109,6 @@ class TestLayer37PhoneSensor:
 # ─────────────────────────────────────────────────────────────────────────────
 # L4 — Layer 3.8 activity snapshot
 # ─────────────────────────────────────────────────────────────────────────────
-
-class TestLayer38Activity:
-    _PB = "core/prompt_builder.py"
-
-    def test_no_bracket_tag(self):
-        src = _src(self._PB)
-        assert "[屏幕感知]" not in src, "[屏幕感知] tag must be removed from prompt text"
-
-    def test_layer_still_present(self):
-        src = _src(self._PB)
-        assert "3.8_activity" in src, "Layer 3.8_activity must still exist"
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # L5 — author_note bracket forms
@@ -273,11 +259,6 @@ class TestRegressionDataNotDeleted:
         src = _src(self._PB)
         assert "_sensor['battery']" in src, \
             "Battery injection in layer 3.7 must not have been removed"
-
-    def test_38_activity_text_passed(self):
-        src = _src(self._PB)
-        assert "_activity_text" in src, \
-            "_activity_text must still be passed to the layer 3.8 content"
 
     def test_36_sleep_hours_still_injected(self):
         src = _src(self._PB)

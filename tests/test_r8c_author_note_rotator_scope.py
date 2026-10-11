@@ -164,7 +164,6 @@ def test_build_passes_char_id_to_get_current_note(monkeypatch):
 
     monkeypatch.setattr(_pb, "_load_jailbreak", lambda layer=None: "")
     monkeypatch.setattr(_pb, "_load_style_hint", lambda *, char_id="": "")
-    monkeypatch.setattr(_pb, "_load_activity_snapshot", lambda *, char_id="": "")
     monkeypatch.setattr(_pb, "_format_afterglow_soft_hint", lambda uid, char_id=TEST_CHAR_ID: "")
     monkeypatch.setattr(_pres, "get_last_seen_text", lambda uid: "")
     monkeypatch.setattr(_cl, "get_config", lambda: {"chat": {}})

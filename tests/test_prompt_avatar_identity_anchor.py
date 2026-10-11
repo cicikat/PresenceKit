@@ -19,6 +19,7 @@ def _fact_boundary(messages):
 
 
 def test_fact_boundary_anchors_desktop_avatar_identity(monkeypatch):
+    monkeypatch.setattr("core.config_loader.get_config", lambda: {"scheduler": {"owner_id": "owner"}})
     monkeypatch.setattr(prompt_builder, "_format_realtime_awareness", lambda _tags: "正在使用电脑")
 
     messages, _ = prompt_builder.build(_character(), "owner", "你好", [], {}, {}, [], tags=set())
@@ -35,6 +36,7 @@ def test_fact_boundary_anchors_desktop_avatar_identity(monkeypatch):
 
 
 def test_empty_realtime_awareness_forbids_invented_screen_scene(monkeypatch):
+    monkeypatch.setattr("core.config_loader.get_config", lambda: {"scheduler": {"owner_id": "owner"}})
     monkeypatch.setattr(prompt_builder, "_format_realtime_awareness", lambda _tags: "")
 
     messages, _ = prompt_builder.build(_character(), "owner", "回来了", [], {}, {}, [], tags=set())
@@ -46,4 +48,11 @@ def test_empty_realtime_awareness_forbids_invented_screen_scene(monkeypatch):
     assert "不否定其他来源" in boundary
     assert "手机电量、步数、餐食、行为" in boundary
     assert "过时信息不要当成此刻状态" in boundary
+    assert not any(m.get("_layer") == "3.9_screen_awareness" for m in messages)
+
+
+def test_non_owner_does_not_receive_owner_sensor(monkeypatch):
+    monkeypatch.setattr("core.config_loader.get_config", lambda: {"scheduler": {"owner_id": "owner"}})
+    monkeypatch.setattr(prompt_builder, "_format_realtime_awareness", lambda _tags: "private sensor")
+    messages, _ = prompt_builder.build(_character(), "other_user", "你好", [], {}, {}, [], tags=set())
     assert not any(m.get("_layer") == "3.9_screen_awareness" for m in messages)

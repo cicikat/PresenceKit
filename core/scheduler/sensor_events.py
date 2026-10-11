@@ -246,7 +246,7 @@ def tick() -> list[dict]:
             _set_cooldown(PRESENCE_LEFT)
             events.append({
                 "type":      PRESENCE_LEFT,
-                "narrative": "她离开了。",
+                "narrative": "设备上报的键鼠空闲时长达到离线判定阈值。",
                 "context":   ctx,
             })
 
@@ -263,7 +263,7 @@ def tick() -> list[dict]:
             _set_cooldown(PRESENCE_RETURNED)
             events.append({
                 "type":      PRESENCE_RETURNED,
-                "narrative": f"她回来了，刚离开了 {minutes_away} 分钟。",
+                "narrative": f"设备重新检测到输入，此前空闲约 {minutes_away} 分钟。",
                 "context":   ctx,
             })
 
@@ -292,8 +292,8 @@ def tick() -> list[dict]:
             events.append({
                 "type":      LONG_FOCUS,
                 "narrative": (
-                    f"她已经在 {_focus_window_in_app_name} 里"
-                    f"连续工作了 {minutes_focus} 分钟。"
+                    f"设备上报前台应用为 {_focus_window_in_app_name}，"
+                    f"该窗口持续约 {minutes_focus} 分钟且有键盘输入。"
                 ),
                 "context": ctx,
             })
@@ -308,7 +308,7 @@ def tick() -> list[dict]:
         _set_cooldown(FOCUS_SCATTERED)
         events.append({
             "type":      FOCUS_SCATTERED,
-            "narrative": f"她在 5 分钟内切换了 {n} 次窗口。",
+            "narrative": f"设备上报近 5 分钟切换了 {n} 次窗口。",
             "context":   ctx,
         })
 
@@ -317,10 +317,10 @@ def tick() -> list[dict]:
         chat_silence = _last_chat_at is None or (now - _last_chat_at >= 30 * 60)
         if chat_silence:
             if _last_chat_at is None:
-                narrative = "她在，但已经很久没说话了。"
+                narrative = "设备近期有输入，目前没有近期聊天记录。"
             else:
                 minutes_silent = round((now - _last_chat_at) / 60)
-                narrative = f"她在，但已经 {minutes_silent} 分钟没说话了。"
+                narrative = f"设备近期有输入，距上次聊天约 {minutes_silent} 分钟。"
             _set_cooldown(SILENT_TOGETHER)
             events.append({
                 "type":      SILENT_TOGETHER,
@@ -342,7 +342,7 @@ def tick() -> list[dict]:
             events.append({
                 "type":      APP_CATEGORY_CHANGED,
                 "narrative": (
-                    f"她从{_last_app_category}切换到{current_cat}了。"
+                    f"设备上报前台类别从{_last_app_category}切换到{current_cat}。"
                 ),
                 "context": ctx,
             })
@@ -360,7 +360,7 @@ def tick() -> list[dict]:
         _set_cooldown(LATE_NIGHT_ACTIVE)
         events.append({
             "type":      LATE_NIGHT_ACTIVE,
-            "narrative": f"已经凌晨 {local_hour} 点了，她还醒着。",
+            "narrative": f"当前凌晨 {local_hour} 点，设备近期仍检测到输入。",
             "context":   ctx,
         })
 
@@ -370,7 +370,7 @@ def tick() -> list[dict]:
         _set_cooldown(LONG_AT_DESK)
         events.append({
             "type":      LONG_AT_DESK,
-            "narrative": f"她已经在桌前坐了 {hours} 小时没起身。",
+            "narrative": f"设备连续检测到非长时空闲的输入窗口累计约 {hours} 小时；不能据此判断身体姿势。",
             "context":   ctx,
         })
 

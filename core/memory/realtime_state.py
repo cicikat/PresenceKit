@@ -142,7 +142,7 @@ def describe_input_activity(now: Optional[float] = None) -> list[str]:
     if kpm >= 120:
         phrases.append("近几分钟在快速打字")
     elif kpm >= 30 and act["covered_seconds"] >= 120:
-        phrases.append("近几分钟一直在认真打字")
+        phrases.append("近几分钟持续检测到键盘输入")
     elif kpm > 0:
         phrases.append("近几分钟只偶尔敲几下键盘")
     if cpm >= 20:

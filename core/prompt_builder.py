@@ -157,45 +157,20 @@ def _format_afterglow_soft_hint(uid: str, *, char_id: str = DEFAULT_CHAR_ID) -> 
         logger.warning("[prompt_builder] afterglow soft hint read failed: %s", exc)
         return ""
 
-def _load_activity_snapshot(*, char_id: str) -> str:
-    from core.sandbox import get_paths
-    import json
-    import time
-    p = get_paths().activity_snapshot(char_id=char_id)
-    if not p.exists():
-        return ""
-    try:
-        data = json.loads(p.read_text(encoding="utf-8"))
-        if time.time() - data.get("received_at", 0) > 300:
-            return ""
-        current = data.get("current", {})
-        summary = data.get("today_summary", "")
-        cat = current.get("category", "")
-        dur = current.get("duration_min", 0)
-        parts = []
-        if cat and cat != "idle":
-            parts.append(f"用户现在在{cat}，已经{dur}分钟了")
-        if summary:
-            parts.append(f"今天：{summary}")
-        return "；".join(parts)
-    except Exception:
-        return ""
-
-
 _REALTIME_ACTIVITY_LABELS: dict[str, str] = {
-    "coding": "写代码",
-    "code": "写代码",
-    "browsing": "浏览网页",
-    "browser": "浏览网页",
-    "gaming": "打游戏",
-    "game": "打游戏",
-    "video": "看视频",
-    "social": "使用社交软件",
-    "document": "写文档",
-    "work": "处理工作",
-    "music": "听音乐",
-    "creative": "进行创作",
-    "idle": "暂时停下来了",
+    "coding": "代码编辑器",
+    "code": "代码编辑器",
+    "browsing": "浏览器",
+    "browser": "浏览器",
+    "gaming": "游戏",
+    "game": "游戏",
+    "video": "视频",
+    "social": "社交",
+    "document": "文档",
+    "work": "工作类应用",
+    "music": "音乐",
+    "creative": "创作类应用",
+    "idle": "空闲",
 }
 
 
@@ -211,6 +186,8 @@ def _format_realtime_awareness(tags: set[str], *, now: float | None = None) -> s
 
         current_time = time.time() if now is None else now
         stale_seconds = current_time - float(snap.get("received_at", 0))
+        if stale_seconds < 0:
+            return ""
         tag_hit = bool(tags & {"query.what_doing", "topic.activity"})
         input_data = snap.get("input", {})
         idle_seconds = int(input_data.get("idle_seconds", 9999))
@@ -223,27 +200,27 @@ def _format_realtime_awareness(tags: set[str], *, now: float | None = None) -> s
             str(screen.get("app_label", "")).casefold()
         )
         if activity:
-            parts.append(f"大致在{activity}")
+            parts.append(f"前台类别为{activity}")
         else:
             app = str(snap.get("focus", {}).get("app", "")).strip()
             # Process name is a coarse app summary. Strip path/control-like characters.
             app = re.sub(r"[^0-9A-Za-z._ +()-]", "", app)[:40]
             if app and app.casefold() != "unknown":
-                parts.append(f"在用 {app}")
+                parts.append(f"前台应用为 {app}")
 
         edit_hint = input_data.get("edit_hint")
         if edit_hint in ("typing_long", "editing"):
-            parts.append("正在认真输入")
+            parts.append("输入标记为持续输入或编辑")
         elif edit_hint == "deleting":
-            parts.append("像是在反复修改")
+            parts.append("输入标记为删除")
         elif idle_seconds >= 120:
-            parts.append("暂时停下来了")
+            parts.append("近期未检测到键鼠输入")
         else:
             # 桌面端目前不发 edit_hint（known-issues）；改由后端内存短历史推导的
             # 定性键鼠频率短语补位（近 5 分钟，纯内存，无裸数字）。
             parts.extend(realtime_state.describe_input_activity(current_time))
 
-        return "，".join(parts)
+        return f"设备上报（接收于{int(max(0, stale_seconds))}秒前）：" + "，".join(parts) if parts else ""
     except Exception as exc:
         logger.warning("[prompt_builder] realtime awareness read failed: %s", exc)
         return ""
@@ -558,7 +535,9 @@ def build(
     # 层 1.5：来源边界，不把缺少桌面快照等同于没有现实事实。
     # 实际桌面数据只在 3.9 注入一次。
     # ─────────────────────────────────────────────────────────────────────────
-    _realtime_awareness = _format_realtime_awareness(_tags)
+    from core.config_loader import get_config as _sensor_config
+    _sensor_owner = str(_sensor_config().get("scheduler", {}).get("owner_id") or "")
+    _realtime_awareness = _format_realtime_awareness(_tags) if _sensor_owner and str(user_id) == _sensor_owner else ""
     _fact_boundary_text = (
         "现实细节按用户自述、资料或工具结果各自的来源和时间理解；缺少屏幕快照不否定其他来源。"
         "没有真实屏幕感知时，不得虚构屏幕画面；应用活动摘要不代表看到了屏幕原文。"
@@ -792,24 +771,6 @@ def build(
         pass
 
     # ─────────────────────────────────────────────────────────────────────────
-    # 层 3.8：桌宠屏幕活动快照（mode=tagged，活动/询问在做什么时注入）
-    # ─────────────────────────────────────────────────────────────────────────
-    _activity_triggers = {"topic.activity", "query.what_doing", "emotion.positive"}
-    if _tags & _activity_triggers:
-        _activity_text = _load_activity_snapshot(char_id=char_id)
-        if _activity_text:
-            messages.append({
-                "role": "system",
-                "content": f"（{user_name}在{_activity_text}。可自然提起。）",
-                "_layer": "3.8_activity",
-                "_provenance": {
-                    "mode": "tagged",
-                    "triggers_checked": sorted(_activity_triggers),
-                    "matched_tags": sorted(_tags & _activity_triggers),
-                },
-            })
-
-    # ─────────────────────────────────────────────────────────────────────────
     # 层 3.8_growth_self：角色自身成长近况（mode=tagged）
     # ─────────────────────────────────────────────────────────────────────────
     if _tags & _GROWTH_SELF_TRIGGERS:
@@ -837,7 +798,7 @@ def build(
     if _realtime_awareness:
         messages.append({
             "role": "system",
-            "content": f"（{user_name}此刻{_realtime_awareness}，短时线索，别当长期事实。）",
+            "content": f"（{user_name}的{_realtime_awareness}。仅为设备观测，不能据此确定实际任务、注意力或内心；短时线索，别当长期事实。）",
             "_layer": "3.9_screen_awareness",
             "_drop_priority": 25,
             "_provenance": {"mode": "fresh", "source": "realtime_state", "max_age_seconds": 300},

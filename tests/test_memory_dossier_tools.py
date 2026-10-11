@@ -154,7 +154,6 @@ def test_prompt_layer_is_ablated_and_does_not_duplicate_legacy(sandbox, monkeypa
 
     monkeypatch.setattr(builder, "_load_jailbreak", lambda layer=None: "")
     monkeypatch.setattr(builder, "_load_style_hint", lambda *, char_id="": "")
-    monkeypatch.setattr(builder, "_load_activity_snapshot", lambda *, char_id="": "")
     monkeypatch.setattr(builder, "_format_afterglow_soft_hint", lambda uid, char_id=TEST_CHAR_ID: "")
     monkeypatch.setattr(presence, "get_last_seen_text", lambda uid: "")
     monkeypatch.setattr(notes, "get_current_note", lambda paths=None, char_id=None: "")

@@ -67,7 +67,7 @@ def test_prompt_layer_uses_derived_phrases():
     for _ in range(4):
         rs.update(_payload(keys=40, idle=0))
     text = prompt_builder._format_realtime_awareness({"query.what_doing"})
-    assert "认真打字" in text or "快速打字" in text
+    assert "持续检测到键盘输入" in text or "快速打字" in text
 
 
 def test_desk_busy_requires_fresh_data_and_recent_chat(monkeypatch):
