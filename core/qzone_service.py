@@ -59,7 +59,7 @@ def watched_users(cfg: QzoneSettings | None = None) -> list[str]:
 def autonomy_tool_allowed(name: str, uid: str, char_id: str) -> bool:
     cfg = settings()
     if name in {"qzone_get_feeds", "qzone_get_posts", "qzone_get_comments"}:
-        return cfg.events_enabled and allowed(uid, char_id)
+        return allowed(uid, char_id)
     return bool(name in {"qzone_comment", "qzone_set_like"}
                 and cfg.autonomy_interactions_enabled and allowed(uid, char_id, write=True))
 

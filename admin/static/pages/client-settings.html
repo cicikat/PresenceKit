@@ -22,7 +22,8 @@
   <label class="field"><span>桥接 Token（留空保留，不会回显）</span><input id="qzone-token" type="password" autocomplete="new-password"></label>
   <label class="field"><span>预期登录 QQ 账号（必须与桥登录一致）</span><input id="qzone-account" autocomplete="off"></label>
   <label class="field"><span>允许角色 ID（逗号分隔；空表示不授权任何角色）</span><input id="qzone-characters" autocomplete="off"></label>
-  <div class="form-row"><label class="checkbox-row"><input type="checkbox" id="qzone-events-enabled">新说说进入主动机会</label><label class="checkbox-row"><input type="checkbox" id="qzone-replies-enabled">采集关注用户帖子中回复机器人的评论</label></div>
+  <div class="form-row"><label class="checkbox-row"><input type="checkbox" id="qzone-events-enabled">自动扫描关注用户空间（产生主动机会）</label><label class="checkbox-row"><input type="checkbox" id="qzone-replies-enabled">自动扫描时采集回复机器人的评论</label></div>
+  <p>关闭自动扫描后不再定期查询或生成空间事件；角色仍可按需查看空间、说说和评论。读取依然需要空间总开关、主用户绑定、角色白名单和工具许可。只想保留查询时，关闭自动扫描、写操作和自主互动。</p>
   <label class="field"><span>指定关注用户 QQ（留空默认主用户；多个账号每轮只查一位）</span><input id="qzone-watched-users" autocomplete="off"></label>
   <label class="field"><span>扫描间隔秒（60–3600，默认 600）</span><input id="qzone-poll-interval" type="number" min="60" max="3600" value="600"></label>
   <label class="field"><span>空间请求最小间隔秒（1–60，默认 3）</span><input id="qzone-request-interval" type="number" min="1" max="60" value="3"></label>

@@ -202,6 +202,17 @@ def test_permission_matrix_honors_explicit_disable_and_global_switch(source, mon
     assert not rows["qzone_set_like"].allowed
 
 
+def test_on_demand_reads_survive_disabled_scan_but_writes_remain_off(source):
+    cfg = source[0]
+    cfg['qzone'].update(events_enabled=False, write_enabled=False, autonomy_interactions_enabled=False)
+    for name in ('qzone_get_feeds', 'qzone_get_posts', 'qzone_get_comments'):
+        assert service.autonomy_tool_allowed(name, UID, TEST_CHAR_ID)
+    for name in ('qzone_comment', 'qzone_set_like', 'qzone_publish', 'qzone_delete_post'):
+        assert not service.autonomy_tool_allowed(name, UID, TEST_CHAR_ID)
+    cfg['qzone']['enabled'] = False
+    assert not service.autonomy_tool_allowed('qzone_get_posts', UID, TEST_CHAR_ID)
+
+
 @pytest.mark.asyncio
 async def test_comment_threads_rotate_with_bounded_requests(source):
     _, clock, posts, comments, calls = source

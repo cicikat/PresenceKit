@@ -28,7 +28,7 @@
 
 首次启用/换关注/换账号建立各帖基线，不倒灌历史。已见指纹跨重启保存（最多 2000），基线最多 128；正文低信任，候选 TTL 20 分钟。关闭/修改来源撤销 pending 并更新 epoch，使已 claim 的旧候选也失效；autonomy 关闭时消费新观察，不在开启后补发。队列仍受原有 Dream、active-user、勿扰、冷却、日预算、写入预算与 talk_gate 管理；事件存在不保证开口。
 
-`autonomy_interactions_enabled` 默认 false，允许自主评论/回复/点赞，仍需写入总开关、角色白名单、工具授权且显式 autonomy 禁用优先。读取工具随事件开关可供决策补上下文。自主发布/删除不可用。角色可静默结束或调用 `talk_owner`；空间互动 receipt 不冒充 QQ 私聊，正常对话继续走统一 turn_sink。
+`autonomy_interactions_enabled` 默认 false，允许自主评论/回复/点赞，仍需写入总开关、角色白名单、工具授权且显式 autonomy 禁用优先。读取工具独立于事件开关，可按需查询。自主发布/删除不可用。角色可静默结束或调用 `talk_owner`；空间互动 receipt 不冒充 QQ 私聊，正常对话继续走统一 turn_sink。
 
 ## 本地部署
 
@@ -45,3 +45,5 @@
 这是进程内节流，重启会清空冷却。桥内 fallback、Cookie 保活及其他桥消费者不在本后端预算内；上游逆向接口存在限流，本后端不能推断免封号阈值。不伪造人类身份，不自动重试写入。QQ 消息发送模式独立于空间授权，muted 仍可按授权读取或互动。
 
 指定用户查询仅约束后端 author_id 与返回帖子范围。当前桥内部好友查询可能先取好友流再过滤作者，并执行多级 fallback；不能把一次业务调用当作一次平台请求。当前部署四类事件 emit 已关闭，但每 600 秒 Cookie 保活独立存在。本单未修改第三方源码。
+
+管理面「消息分发与客户端设置 → QQ · 空间说说与互动」的“自动扫描关注用户空间”控制 events_enabled。关闭停止周期扫描和空间事件候选；qzone_get_feeds/posts/comments 的自主按需读取不依赖该开关，仍需总开关、owner/角色授权、工具许可及主动性准入。只读模式关闭 write_enabled 与 autonomy_interactions_enabled，不改变桌面/手机协议。
