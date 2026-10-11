@@ -10,6 +10,11 @@ from __future__ import annotations
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def legacy_broadcast_mode(monkeypatch):
+    monkeypatch.setattr('core.qq_service.outbound_mode', lambda: 'all')
+
+
 # ── 共享 fixture ──────────────────────────────────────────────────────────────
 
 class _FakeChar:

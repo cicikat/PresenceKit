@@ -17,7 +17,9 @@ async def test_image_payload_contains_bytes_without_host_path(tmp_path, monkeypa
     socket.closed = False
     monkeypatch.setattr(qq_adapter, "_ws", socket)
 
-    await qq_adapter.send_image("12345", str(image), is_group)
+    from core.qq_service import reply_scope
+    with reply_scope('12345', is_group):
+        await qq_adapter.send_image("12345", str(image), is_group)
 
     frame = json.loads(socket.send_str.call_args.args[0])
     assert frame["action"] == ("send_group_msg" if is_group else "send_private_msg")

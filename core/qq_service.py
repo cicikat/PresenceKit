@@ -1,11 +1,74 @@
 """Startup-owned QQ lifecycle and per-turn delivery revocation."""
 import asyncio
+import time
 from contextvars import ContextVar
+from contextlib import contextmanager
+from functools import wraps
 
 from core.config_loader import get_config
 
 _service = None
 _turn_generation = ContextVar('qq_turn_generation', default=None)
+_reply_scope = ContextVar('qq_reply_scope', default=None)
+
+
+def outbound_mode():
+    mode = (get_config().get('qq') or {}).get('outbound_mode', 'reply_only')
+    return mode if mode in {'reply_only', 'muted', 'all'} else 'muted'
+
+
+@contextmanager
+def reply_scope(target_id, is_group=False):
+    # A shared revocable object prevents child tasks retaining a completed turn.
+    scope = {'target': str(target_id), 'group': bool(is_group),
+             'task': asyncio.current_task(), 'active': True, 'expires': time.monotonic() + 300}
+    token = _reply_scope.set(scope)
+    try:
+        yield
+    finally:
+        scope['active'] = False
+        _reply_scope.reset(token)
+
+
+def message_delivery_allowed(target_id, is_group=False):
+    if not delivery_allowed():
+        return False
+    mode = outbound_mode()
+    if mode == 'all':
+        return True
+    scope = _reply_scope.get()
+    return bool(mode == 'reply_only' and scope and scope['active']
+                and time.monotonic() < scope['expires']
+                and scope['task'] is asyncio.current_task()
+                and scope['target'] == str(target_id) and scope['group'] == bool(is_group))
+
+
+def qq_reply_handler(handler):
+    @wraps(handler)
+    async def wrapped(message, *, ingress=None):
+        if ingress is None or ingress.channel == 'qq':
+            with reply_scope(message.get('group_id') or message['user_id'], bool(message.get('group_id'))):
+                return await handler(message, ingress=ingress)
+        return await handler(message, ingress=ingress)
+    return wrapped
+
+
+def create_reply_media_task(coro):
+    """Grant only the chosen reply's TTS/sticker job a bounded media send scope."""
+    parent = _reply_scope.get()
+    if parent is None:
+        return asyncio.create_task(coro)
+
+    async def run():
+        scope = {**parent, 'task': asyncio.current_task(), 'active': True}
+        token = _reply_scope.set(scope)
+        try:
+            return await coro
+        finally:
+            scope['active'] = False
+            _reply_scope.reset(token)
+
+    return asyncio.create_task(run())
 
 
 def connection_settings():
@@ -24,9 +87,12 @@ def get_service():
 def operational_state():
     reason, _ = connection_settings()
     if _service is None:
-        return {'effective_state': reason or 'runtime_not_started', 'connected': False,
-                'runtime_started': False, 'last_error': ''}
-    return _service.snapshot()
+        state = {'effective_state': reason or 'runtime_not_started', 'connected': False,
+                 'runtime_started': False, 'last_error': ''}
+    else:
+        state = _service.snapshot()
+    return {**state, 'outbound_mode': outbound_mode(),
+            'broadcast_enabled': outbound_mode() == 'all'}
 
 
 def delivery_allowed():

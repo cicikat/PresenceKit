@@ -2385,7 +2385,8 @@ class Pipeline:
                 _tts_enabled = _cfg().get("tts", {}).get("enabled", False)
                 _tts_prob = _cfg().get("tts", {}).get("probability", 0.3)
                 if _tts_enabled and random.random() < _tts_prob:
-                    asyncio.create_task(self._send_tts(reply, target_id, is_group, emotion=_emotion, char_id=char_id))
+                    from core.qq_service import create_reply_media_task
+                    create_reply_media_task(self._send_tts(reply, target_id, is_group, emotion=_emotion, char_id=char_id))
             except Exception as e:
                 log_error("pipeline.post_process.tts", e)
 
@@ -2396,7 +2397,8 @@ class Pipeline:
         if envelope.can_affect_mood and not trigger_name and _emotion:
             try:
                 from core.output.sticker import maybe_send_sticker
-                asyncio.create_task(
+                from core.qq_service import create_reply_media_task
+                create_reply_media_task(
                     maybe_send_sticker(
                         reply,
                         target_id or None,

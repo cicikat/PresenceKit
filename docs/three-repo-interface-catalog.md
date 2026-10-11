@@ -1179,3 +1179,5 @@ Reality 活动对话由同一 owner/char 的 canonical turn sink 落盘，使用
 GET /activity/records（state.read）默认仅列来源元数据；指定 source_ref 才读取原文。query_activity_records 使用 dispatcher 身份；未指定引用时关键词/时间查询跨当前身份的活动原文。概要是 revision 绑定的分段摘录，标注 coverage/pending，回复发送后构建；失败保留原文，后续对话或关闭重试。canonical 撤回也遮蔽已关联的局部召回，并使旧概要失效。
 
 表达状态 has_signal=false 表示无短时信号，区别于明确 neutral。来源 turn/source_at/version/expires_at 可观测，最多30分钟且只读不续期；旧固定 mood 不转成新余韵。prompt 的 expression_afterglow 是可裁剪层，prompt_eligible 表示资格，实际注入以 prompt 观测为准。没有新增模型情绪检测、随机活动或成长等级控制开关。
+
+QQ 默认只回复 QQ 当轮输入，手机/桌面及主动消息不广播到 QQ。后端管理设置新增 qq_outbound_mode 与空间请求/写入间隔；无客户端 payload、scope、ack、TTL 或设置界面变动，无需改桌面/手机仓。observe：真实 QQ 回复、静默及空间互动尚需运行中后端验收。

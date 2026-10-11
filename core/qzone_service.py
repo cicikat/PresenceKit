@@ -21,7 +21,9 @@ class QzoneSettings(BaseModel):
     replies_enabled: bool = True
     autonomy_interactions_enabled: bool = False
     watched_user_ids: list[str] = Field(default_factory=list, max_length=10)
-    poll_interval_seconds: int = Field(default=120, ge=60, le=3600)
+    poll_interval_seconds: int = Field(default=600, ge=60, le=3600)
+    request_interval_seconds: int = Field(default=3, ge=1, le=60)
+    write_interval_seconds: int = Field(default=60, ge=10, le=3600)
     base_url: str = "http://127.0.0.1:5700"
     access_token: str = Field(default="", max_length=4096)
     account_id: str = Field(default="", max_length=20, pattern=r"^\d*$")
@@ -64,6 +66,48 @@ def autonomy_tool_allowed(name: str, uid: str, char_id: str) -> bool:
 
 _state = {"last_code": "not_checked", "last_checked_at": 0.0, "calls": 0, "failures": 0}
 _write_lock = asyncio.Lock()
+_request_lock = asyncio.Lock()
+_pacing = {'last_request': 0.0, 'write_until': 0.0, 'backoff_until': 0.0,
+           'failures': 0, 'requests': 0, 'limited': 0}
+_sleep = asyncio.sleep
+
+
+def _now():
+    return time.monotonic()
+
+
+async def paced_request(cfg, action, params, *, authorized=None):
+    """Shared request budget including login checks and admin probes."""
+    async with _request_lock:
+        now = _now()
+        if now < _pacing['backoff_until']:
+            _pacing['limited'] += 1
+            return {'ok': False, 'code': 'qzone_backoff'}
+        delay = _pacing['last_request'] + cfg.request_interval_seconds - now
+        if delay > 0:
+            await _sleep(delay)
+        if settings().model_dump() != cfg.model_dump():
+            return {'ok': False, 'code': 'qzone_settings_changed'}
+        if authorized is not None and not authorized():
+            return {'ok': False, 'code': 'qzone_not_authorized'}
+        if action in WRITE_ACTIONS:
+            if _now() < _pacing['write_until']:
+                _pacing['limited'] += 1
+                return {'ok': False, 'code': 'qzone_write_cooldown'}
+            _pacing['write_until'] = _now() + cfg.write_interval_seconds
+        _pacing['last_request'] = _now()
+        _pacing['requests'] += 1
+        result = await request(cfg.base_url, cfg.access_token, action, params)
+        _pacing['last_request'] = _now()
+        if action in WRITE_ACTIONS:
+            _pacing['write_until'] = _now() + cfg.write_interval_seconds
+        if result.get('ok'):
+            if action != 'get_login_info':
+                _pacing['failures'] = 0
+        else:
+            _pacing['failures'] = min(_pacing['failures'] + 1, 6)
+            _pacing['backoff_until'] = _now() + min(3600, 60 * 2 ** (_pacing['failures'] - 1))
+        return result
 
 
 def settings() -> QzoneSettings:
@@ -88,20 +132,25 @@ def snapshot() -> dict:
             "watched_user_count": len(watched_users(cfg)),
             "autonomy_interactions_enabled": cfg.autonomy_interactions_enabled,
             "effective_state": effective, "apply_mode": "hot_reload",
+            "pacing": {'request_interval_seconds': cfg.request_interval_seconds,
+                       'write_interval_seconds': cfg.write_interval_seconds,
+                       'backoff_remaining_seconds': max(0, round(_pacing['backoff_until'] - _now())),
+                       'write_remaining_seconds': max(0, round(_pacing['write_until'] - _now())),
+                       'requests': _pacing['requests'], 'limited': _pacing['limited']},
             "credential_configured": bool(cfg.access_token), **_state}
 
 
 async def probe(cfg: QzoneSettings | None = None) -> dict:
     cfg = cfg or settings()
-    login = await request(cfg.base_url, cfg.access_token, "get_login_info", {})
+    login = await paced_request(cfg, "get_login_info", {})
     account = str((login.get("data") or {}).get("user_id") or "") if login.get("ok") else ""
     if not login.get("ok"):
         code = login.get("code", "bridge_rejected")
     elif cfg.account_id and account != cfg.account_id:
         code = "account_mismatch"
     else:
-        cookie = await request(cfg.base_url, cfg.access_token, "check_cookie", {"probe": True})
-        code = "ready" if cookie.get("ok") and (cookie.get("data") or {}).get("valid") is True else "login_expired"
+        cookie = await paced_request(cfg, "check_cookie", {"probe": True})
+        code = ("ready" if (cookie.get("data") or {}).get("valid") is True else "login_expired") if cookie.get('ok') else cookie.get('code', 'login_expired')
     _state.update(last_code=code, last_checked_at=time.time())
     return {"ok": code == "ready", "code": code, "account_id": account}
 
@@ -114,16 +163,20 @@ async def call(action: str, params: dict, *, uid: str, char_id: str) -> dict:
     # Bind every operation to the configured login, so replacing a bridge cannot
     # silently make another QQ account publish on the character's behalf.
     async def perform():
-        login = await request(cfg.base_url, cfg.access_token, "get_login_info", {})
+        login = await paced_request(cfg, "get_login_info", {})
         if not login.get("ok"):
             return login
         if str((login.get("data") or {}).get("user_id") or "") != cfg.account_id:
             return {"ok": False, "code": "account_mismatch"}
         if not allowed(uid, char_id, write=write) or settings().model_dump() != cfg.model_dump():
             return {"ok": False, "code": "qzone_settings_changed"}
-        return await request(cfg.base_url, cfg.access_token, action, params)
+        return await paced_request(cfg, action, params,
+                                   authorized=lambda: allowed(uid, char_id, write=write))
     if write:
         async with _write_lock:
+            if _now() < _pacing['write_until']:
+                _pacing['limited'] += 1
+                return {'ok': False, 'code': 'qzone_write_cooldown'}
             result = await perform()
     else:
         result = await perform()

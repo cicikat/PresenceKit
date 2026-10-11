@@ -109,7 +109,8 @@ async def send_message(target_id: str, content: str, is_group: bool = False):
     """
     from core.no_outbound import assert_outbound_allowed
     assert_outbound_allowed("qq_send")
-    if not _delivery_allowed():
+    from core.qq_service import message_delivery_allowed
+    if not message_delivery_allowed(target_id, is_group):
         return
     if _ws is None or _ws.closed:
         logger.error("[qq_adapter] WebSocket 未连接，无法发送消息")
@@ -148,7 +149,8 @@ async def send_record(target_id: str, file: str, is_group: bool = False):
                     "http://..."             远程 URL
         is_group  — True=群聊，False=私聊
     """
-    if not _delivery_allowed():
+    from core.qq_service import message_delivery_allowed
+    if not message_delivery_allowed(target_id, is_group):
         return
     if _ws is None or _ws.closed:
         logger.error("[qq_adapter] WebSocket 未连接，无法发送语音")
@@ -182,13 +184,16 @@ async def send_image(target_id: str, file_path: str, is_group: bool = False):
     发送本地图片（OneBot 11 image 消息段）
     file_path: 本地绝对路径
     """
-    if not _delivery_allowed():
+    from core.qq_service import message_delivery_allowed
+    if not message_delivery_allowed(target_id, is_group):
         return
     if _ws is None or _ws.closed:
         logger.error("[qq_adapter] WebSocket 未连接，无法发送图片")
         return
 
     encoded = base64.b64encode(await asyncio.to_thread(Path(file_path).read_bytes)).decode("ascii")
+    if not message_delivery_allowed(target_id, is_group):
+        return
     file_uri = f"base64://{encoded}"
     message_seg = [{"type": "image", "data": {"file": file_uri}}]
 
@@ -431,6 +436,12 @@ async def ws_call(action: str, params: dict | None = None, timeout: float = 5.0)
     返回：
         响应 dict（含 status / data），超时或未连接返回 None
     """
+    if action in {'send_msg', 'send_private_msg', 'send_group_msg', 'send_forward_msg', 'send_private_forward_msg', 'send_group_forward_msg'}:
+        from core.qq_service import message_delivery_allowed
+        values = params or {}
+        group = action.startswith('send_group_') or values.get('message_type') == 'group' or bool(values.get('group_id'))
+        if not message_delivery_allowed(values.get('group_id') if group else values.get('user_id'), group):
+            return None
     if not _delivery_allowed():
         return None
     if _ws is None or _ws.closed:

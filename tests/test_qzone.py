@@ -14,6 +14,8 @@ from tests.fixtures.public_assets import TEST_CHAR_ID
 
 @pytest.fixture
 def configured(monkeypatch):
+    monkeypatch.setattr(service, '_pacing', {'last_request': 0.0, 'write_until': 0.0,
+                        'backoff_until': 0.0, 'failures': 0, 'requests': 0, 'limited': 0})
     cfg = {"scheduler": {"owner_id": "test_owner"}, "qzone": {
         "enabled": True, "write_enabled": True, "account_id": "12345",
         "allowed_char_ids": [TEST_CHAR_ID], "access_token": "local-test-bridge-secret",
@@ -184,7 +186,7 @@ async def test_cookie_account_mismatch_never_contacts_bridge(configured, monkeyp
     from fastapi import HTTPException
     async def unexpected(*a, **kw):
         pytest.fail("mismatched cookie was sent to bridge")
-    monkeypatch.setattr(qzone, "request", unexpected)
+    monkeypatch.setattr(service, "request", unexpected)
     with pytest.raises(HTTPException) as failure:
         await qzone.login_cookie(qzone.CookieLogin(cookie="uin=o99999; p_skey=secret"), None)
     assert failure.value.status_code == 400

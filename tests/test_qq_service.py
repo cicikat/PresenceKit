@@ -8,7 +8,7 @@ from core import qq_adapter, qq_service
 
 @pytest.fixture
 def config(monkeypatch):
-    cfg = {'qq': {'enabled': False, 'host': '127.0.0.1', 'port': 3001},
+    cfg = {'qq': {'enabled': False, 'host': '127.0.0.1', 'port': 3001, 'outbound_mode': 'all'},
            'scheduler': {'owner_id': 'owner'}}
     monkeypatch.setattr(qq_service, 'get_config', lambda: cfg)
     monkeypatch.setattr(qq_service, '_service', None)

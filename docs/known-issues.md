@@ -944,3 +944,7 @@ WinError64关闭listener的问题已增加生命周期局部适配，Windows真�
 ## 工单284交付验收边界（2026-10-11，observe）
 
 current：Reality真实对话统一canonical历史，结构化活动按引用查询，独立交互界面保留；随机ambient/成长等级与强制情绪链已退役。observe：真实设备/模型、桌面3D/Pet/Live2D/视频与手机真机尚未验收；生产服务未由本单重启。现有sensor协议无独立设备身份，设备切换隔离不能据夹具宣称完成。状态revision CAS限单后端进程；活动原文查询返回有界但扫描成本随存量增长。未进行历史私有数据导入或删除。
+
+QQ 回复隔离/空间节流 observe：fixture 和隔离管理面检查不证明真实 QQ/空间投递或账号安全。节流为进程内状态，重启清空；桥内部 fallback/保活及其他消费者不受后端限频控制。空间评论每位作者每轮最多两帖轮换，窗口外事件可能遗漏。
+
+QQ 相关旧 fixture observe：fast-path 四项、tool-reply 一项及 R6C F7 一项只替换 config_loader 而未替换已导入 qq_admission 的配置引用，特定收集顺序下入口被拒；旧贴纸调度 fixture 仍模拟退役的 detect_emotion，缺少显式 expression_signal。七项在未修改 HEAD 主入口/原 Pipeline 上复现，QQ 回复隔离单独回归与实际表达信号贴纸回归通过。

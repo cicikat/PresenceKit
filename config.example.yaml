@@ -9,7 +9,9 @@ qzone:
   replies_enabled: true
   autonomy_interactions_enabled: false  # 自主评论/回复/点赞；还需 write_enabled
   watched_user_ids: []             # 留空默认 scheduler.owner_id 对应 QQ
-  poll_interval_seconds: 120       # 60–3600；热生效，有界轮询
+  poll_interval_seconds: 600       # 60–3600；热生效，有界轮询
+  request_interval_seconds: 3     # 1–60；账号请求共享最小间隔
+  write_interval_seconds: 60      # 10–3600；写操作拒绝式冷却，不排队重试
   base_url: http://127.0.0.1:5700
   access_token: ""                 # local only; 管理面写入，不回显
   account_id: ""                   # 预期 NapCat/空间登录账号
@@ -171,6 +173,7 @@ client_channels:
   mobile: true
 
 qq:
+  outbound_mode: reply_only       # reply_only 只回复 QQ 当前输入；muted 停发消息；all 旧广播
   group_enabled: false  # 群聊回复，管理面逐消息热更新
   allow_other_users: false  # 非 owner 私聊回复；多用户隔离设计确定后再开放
   enabled: false  # 需要 QQ 机器人再开，并配置 NapCat；纯桌宠用户保持关闭即可

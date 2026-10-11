@@ -229,6 +229,10 @@ def _init_modules():
 # 核心消息处理函数
 # ═══════════════════════════════════════════════════════════════════════════════
 
+from core.qq_service import qq_reply_handler
+
+
+@qq_reply_handler
 async def handle_message(message: dict, *, ingress=None):
     """
     处理单条消息的完整流程（骨架）

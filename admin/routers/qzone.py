@@ -6,7 +6,6 @@ from admin.auth import require_scopes
 from admin.config_control import read_config_file, write_config_file
 from core.config_loader import get_config_path, reload_config
 from core import qzone_service as service
-from integrations.qzone.transport import request
 import asyncio
 import aiohttp
 
@@ -63,7 +62,7 @@ async def login_cookie(body: CookieLogin, auth=Depends(require_scopes("admin")))
     value = cookies.get("uin") or cookies.get("p_uin")
     if value is None or value.value.lstrip("o").lstrip("0") != cfg.account_id.lstrip("0"):
         raise HTTPException(400, "Cookie 账号与预期账号不一致")
-    result = await request(cfg.base_url, cfg.access_token, "login_cookie", {"cookie": body.cookie})
+    result = await service.paced_request(cfg, "login_cookie", {"cookie": body.cookie})
     if not result.get("ok"):
         return {"ok": False, "code": result.get("code", "login_failed")}
     return await service.probe(cfg)
@@ -78,7 +77,7 @@ async def sync_napcat_cookie(auth=Depends(require_scopes("admin"))):
         cookie = await service.napcat_cookie(cfg.account_id)
     except (ValueError, aiohttp.ClientError, asyncio.TimeoutError):
         return {"ok": False, "code": "napcat_login_or_cookie_unavailable"}
-    result = await request(cfg.base_url, cfg.access_token, "login_cookie", {"cookie": cookie})
+    result = await service.paced_request(cfg, "login_cookie", {"cookie": cookie})
     if not result.get("ok"):
         return {"ok": False, "code": result.get("code", "login_failed")}
     return await service.probe(cfg)

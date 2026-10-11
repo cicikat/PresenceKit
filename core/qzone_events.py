@@ -22,7 +22,7 @@ _poll_lock = asyncio.Lock()
 def revision(cfg=None):
     cfg = cfg or service.settings()
     # Every source/permission change invalidates queued observations.
-    values = [cfg.enabled, cfg.events_enabled, cfg.replies_enabled, cfg.account_id,
+    values = ['single_watch_v2', cfg.enabled, cfg.events_enabled, cfg.replies_enabled, cfg.account_id,
               cfg.base_url, cfg.allowed_char_ids, service.watched_users(cfg)]
     return hashlib.sha256(json.dumps(values, sort_keys=True).encode()).hexdigest()[:24]
 
@@ -164,9 +164,9 @@ async def _tick(uid, char_id):
         state.update(last_poll_at=now, last_code="scanning", partial=False)
         _save(uid, char_id, state)
     watched = service.watched_users(cfg)
-    # Rotate authors fairly; at most one watched author plus the login per scan.
+    # One watched user only; never append the bot's own account implicitly.
     selected = [watched[state["cursor"] % len(watched)]] if watched else []
-    authors = list(dict.fromkeys(selected + ([cfg.account_id] if cfg.replies_enabled else [])))
+    authors = selected
     try:
         for author in authors:
             result = await service.call("get_emotion_list", {
@@ -174,9 +174,12 @@ async def _tick(uid, char_id):
                 "include_image_data": False}, uid=uid, char_id=char_id)
             if not result.get("ok"):
                 state.update(last_code=result.get("code", "scan_failed"), partial=True)
-                continue
+                return
             posts = _rows(result.get("data"), "msglist")[:5]
             group = _hash("posts:" + author)
+            offset = (state['cursor'] * 2) % max(1, len(posts))
+            comment_tids = {str(posts[(offset + i) % len(posts)].get('tid') or '')
+                            for i in range(min(2, len(posts)))}
             for post in posts:
                 tid = str(post.get("tid") or "")[:128]
                 if not tid:
@@ -187,7 +190,7 @@ async def _tick(uid, char_id):
                              fact={"kind": "post", "author_id": author, "post_id": tid,
                                    "abstime": created, "content": str(post.get("content") or "")[:2000]},
                              now=now, timestamp=created, uid=uid, char_id=char_id)
-                if not cfg.replies_enabled:
+                if not cfg.replies_enabled or tid not in comment_tids:
                     continue
                 cgroup = _hash(f"comments:{author}:{tid}")
                 # An explicit zero is a valid empty baseline; avoid expensive
@@ -201,6 +204,8 @@ async def _tick(uid, char_id):
                 data = comments.get("data") or {}
                 if not comments.get("ok") or data.get("availability") == "not_embedded":
                     state.update(partial=True, last_code=comments.get("code") or "comments_unavailable")
+                    if not comments.get('ok'):
+                        return
                     continue
                 if data.get("availability") == "available_partial":
                     state.update(partial=True, last_code="comments_partial")
@@ -226,11 +231,12 @@ async def _tick(uid, char_id):
                 _save_scan(uid, char_id, state)
             if group not in state["baselines"]:
                 state["baselines"].append(group)
-        state["cursor"] += 1
-        state["last_success_at"] = time.time()
+        if not state['partial']:
+            state["last_success_at"] = time.time()
         if state["last_code"] == "scanning":
             state["last_code"] = "ready" if watched else "watch_binding_missing"
     finally:
+        state['cursor'] += 1
         state["baseline_count"] = len(state["baselines"])
         if state["last_code"] == "scanning":
             state.update(last_code="scan_interrupted", partial=True)

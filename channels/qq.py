@@ -20,8 +20,8 @@ class QQChannel(BaseChannel):
 
     @property
     def is_active(self) -> bool:
-        from core.qq_service import operational_state
-        return self._active and operational_state()['connected']
+        from core.qq_service import operational_state, outbound_mode
+        return self._active and outbound_mode() == 'all' and operational_state()['connected']
 
     def set_active(self, active: bool) -> None:
         self._active = active
@@ -47,6 +47,9 @@ class QQChannel(BaseChannel):
         原文；通过 response_processor.process 切段后用 text_output.send 逐条发
         送，与正常对话回复路径保持一致（分条 + 段间停顿）。
         """
+        from core.qq_service import outbound_mode
+        if outbound_mode() != 'all':
+            return
         try:
             from core import response_processor
             from core.output import text_output

@@ -8,6 +8,9 @@
 </div><p id="client-state" role="status"></p><button class="btn btn-ghost btn-sm" data-action="loadClientSettings">刷新</button></section>
 <section class="card"><h3>QQ · OneBot 桥连接</h3><p>当前支持无路径、无鉴权的 OneBot ws://host:port 桥（例如对应配置的 NapCat）；其他连接形式需要扩展适配器。填写桥实际监听地址；保存后自动重连，开关即时启停。standalone 模式会阻止 QQ 启动。connected 只表示 OneBot 连接，不代表账号登录或消息送达。</p><label class="field"><span>主机 / IP</span><input id="client-qq-host" autocomplete="off"></label><label class="field"><span>端口</span><input id="client-qq-port" type="number" min="1" max="65535"></label><button class="btn btn-primary" data-action="saveClientConnection">保存 QQ 连接</button></section>
 <section class="card"><h3>QQ · 回复范围</h3>
+  <label class="field"><span>QQ 消息发送模式</span><select id="client-qq-outbound"><option value="reply_only">只回复 QQ 发起的当轮对话（默认）</option><option value="muted">完全停止 QQ 消息发送</option><option value="all">接收所有通道广播（旧行为）</option></select></label>
+  <p>默认不把手机、桌面和主动消息转发到 QQ。完全停止发送时仍保留 QQ 连接与独立授权的空间读取、互动。手机和桌面收发保持原状；选择旧行为恢复原广播。</p>
+  <button class="btn btn-primary" data-action="saveClientConnection">保存 QQ 发送模式</button>
   <p>两项默认关闭，保存后热生效。群聊开启后仅响应 @ 机器人；其他用户开关控制非主用户的私聊。主用户私聊继续沿用现有链路。开启不代表群聊或多用户状态已完全隔离，设计确定后再开放。</p>
   <label class="checkbox-row"><input type="checkbox" id="client-qq_group" data-action="toggleClientChannel" data-action-args='["qq_group"]'><span>开启群聊回复</span> <small id="client-qq_group-state"></small></label>
   <label class="checkbox-row"><input type="checkbox" id="client-qq_other_users" data-action="toggleClientChannel" data-action-args='["qq_other_users"]'><span>允许回复其他用户私聊</span> <small id="client-qq_other_users-state"></small></label>
@@ -19,11 +22,14 @@
   <label class="field"><span>桥接 Token（留空保留，不会回显）</span><input id="qzone-token" type="password" autocomplete="new-password"></label>
   <label class="field"><span>预期登录 QQ 账号（必须与桥登录一致）</span><input id="qzone-account" autocomplete="off"></label>
   <label class="field"><span>允许角色 ID（逗号分隔；空表示不授权任何角色）</span><input id="qzone-characters" autocomplete="off"></label>
-  <div class="form-row"><label class="checkbox-row"><input type="checkbox" id="qzone-events-enabled">新说说进入主动机会</label><label class="checkbox-row"><input type="checkbox" id="qzone-replies-enabled">同时采集收到的评论和回复</label></div>
-  <label class="field"><span>关注用户 QQ（逗号分隔；留空默认主用户 QQ）</span><input id="qzone-watched-users" autocomplete="off"></label>
-  <label class="field"><span>扫描间隔秒（60–3600，默认 120）</span><input id="qzone-poll-interval" type="number" min="60" max="3600" value="120"></label>
+  <div class="form-row"><label class="checkbox-row"><input type="checkbox" id="qzone-events-enabled">新说说进入主动机会</label><label class="checkbox-row"><input type="checkbox" id="qzone-replies-enabled">采集关注用户帖子中回复机器人的评论</label></div>
+  <label class="field"><span>指定关注用户 QQ（留空默认主用户；多个账号每轮只查一位）</span><input id="qzone-watched-users" autocomplete="off"></label>
+  <label class="field"><span>扫描间隔秒（60–3600，默认 600）</span><input id="qzone-poll-interval" type="number" min="60" max="3600" value="600"></label>
+  <label class="field"><span>空间请求最小间隔秒（1–60，默认 3）</span><input id="qzone-request-interval" type="number" min="1" max="60" value="3"></label>
+  <label class="field"><span>空间写操作冷却秒（10–3600，默认 60）</span><input id="qzone-write-interval" type="number" min="10" max="3600" value="60"></label>
+  <p>账号请求共享间隔，评论线程每位作者每轮最多两条并轮换。失败后退避 60–1920 秒；冷却中的写操作直接拒绝，不排队重发。限频只能减少请求集中，不能保证账号免受平台限制。</p>
   <label class="checkbox-row"><input type="checkbox" id="qzone-autonomy-interactions">允许角色自主评论、回复和点赞</label>
-  <p>事件采集默认关闭；首次启用/改变关注建立基线，不补发历史。每次扫描轮换一个关注用户及登录账号最近 5 条说说，每条最多 20 条评论；扫描范围外或接口隐藏的回复可能无法检测。候选有效期 20 分钟，仍受主动性、勿扰、梦境与预算限制。角色自己决定静默、互动或正常对话。自主互动默认关闭，开启还需上方写入授权及角色工具许可；自主发说说/删除不开放。文字说说沿原有可见性发布，图片上传未接入。</p>
+  <p>事件采集默认关闭；首次启用/改变关注建立基线，不补发历史。每次只查询一位指定关注用户最近 5 条说说，不额外扫描机器人自己的空间；评论每轮轮换最多两帖，每帖最多 20 条；扫描范围外或接口隐藏的回复可能无法检测。候选有效期 20 分钟，仍受主动性、勿扰、梦境与预算限制。角色自己决定静默、互动或正常对话。自主互动默认关闭，开启还需上方写入授权及角色工具许可；自主发说说/删除不开放。文字说说沿原有可见性发布，图片上传未接入。</p>
   <p id="qzone-events-state" class="i18n-raw" role="status"></p>
   <p id="qzone-state" class="i18n-raw" role="status"></p>
   <button class="btn btn-primary" data-action="saveQzoneSettings">保存空间设置</button>

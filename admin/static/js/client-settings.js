@@ -53,6 +53,7 @@ async function loadClientSettings() {
     }
     document.getElementById('client-qq-host').value = clients.qq_host;
     document.getElementById('client-qq-port').value = clients.qq_port;
+    document.getElementById('client-qq-outbound').value = clients.clients.qq.outbound_mode || 'reply_only';
     document.getElementById('client-state').textContent =
       `电脑：${clients.clients.desktop.effective_state} · 手机：${clients.clients.mobile.effective_state} · 微信：${_clientFlags.wechat?.effective_state} · QQ：${clients.clients.qq?.effective_state || _clientFlags.qq?.effective_state || '状态未知'}（开关及连接保存后热生效）`;
     document.getElementById('client-address').textContent = `当前管理面地址：${location.origin}（客户端使用可达地址；服务监听端口 ${clients.admin_port}，修改 config.yaml 的 admin.port 后重启）`;
@@ -79,8 +80,9 @@ async function saveClientConnection() {
     const result = await api('PUT', '/settings/clients', {
       qq_host: document.getElementById('client-qq-host').value.trim(),
       qq_port: Number(document.getElementById('client-qq-port').value),
+      qq_outbound_mode: document.getElementById('client-qq-outbound').value,
     });
-    toast(result.restart_required ? '已保存，重启后端后生效' : 'QQ 连接已保存并热生效', 'ok');
+    toast(result.restart_required ? '已保存，重启后端后生效' : 'QQ 连接和发送模式已保存并热生效', 'ok');
     await loadClientSettings();
   } catch (error) { toast(error.message, 'err'); }
 }
@@ -98,7 +100,9 @@ async function loadQzoneSettings() {
     document.getElementById('qzone-replies-enabled').checked = s.replies_enabled;
     document.getElementById('qzone-autonomy-interactions').checked = s.autonomy_interactions_enabled;
     document.getElementById('qzone-watched-users').value = (s.watched_user_ids || []).join(', ');
-    document.getElementById('qzone-poll-interval').value = s.poll_interval_seconds || 120;
+    document.getElementById('qzone-poll-interval').value = s.poll_interval_seconds || 600;
+    document.getElementById('qzone-request-interval').value = s.request_interval_seconds || 3;
+    document.getElementById('qzone-write-interval').value = s.write_interval_seconds || 60;
     const e = s.events || {};
     document.getElementById('qzone-events-state').textContent = `事件：${e.last_code || '未扫描'} · 有效关注 ${(s.effective_watched_user_ids || []).join(', ') || '未绑定主用户 QQ'} · 入队 ${e.queued || 0} · 重复 ${e.duplicates || 0} · ${e.partial ? '部分扫描/评论不可用' : '有界扫描'} · 最近成功 ${e.last_success_at ? new Date(e.last_success_at * 1000).toLocaleString() : '无'}`;
     if (!qzoneEventsSupported) document.getElementById('qzone-events-state').textContent = '后端尚未加载空间事件模块，请正常重启后端后设置。';
@@ -107,6 +111,7 @@ async function loadQzoneSettings() {
     document.getElementById('qzone-characters').value = s.allowed_char_ids.join(', ');
     document.getElementById('qzone-token').value = '';
     root.textContent = `状态：${s.effective_state} · Token：${s.credential_configured ? '已配置' : '未配置'} · 调用 ${s.calls} / 失败 ${s.failures}`;
+    root.textContent += ` · 退避剩余 ${s.pacing?.backoff_remaining_seconds || 0} 秒 · 写冷却 ${s.pacing?.write_remaining_seconds || 0} 秒 · 限频拒绝 ${s.pacing?.limited || 0}`;
   } catch (error) { root.textContent = error.message; }
 }
 
@@ -121,6 +126,8 @@ async function saveQzoneSettings() {
       autonomy_interactions_enabled: document.getElementById('qzone-autonomy-interactions').checked,
       watched_user_ids: document.getElementById('qzone-watched-users').value.split(/[,，]/).map(v => v.trim()).filter(Boolean),
       poll_interval_seconds: Number(document.getElementById('qzone-poll-interval').value),
+      request_interval_seconds: Number(document.getElementById('qzone-request-interval').value),
+      write_interval_seconds: Number(document.getElementById('qzone-write-interval').value),
       base_url: document.getElementById('qzone-base-url').value.trim(),
       access_token: document.getElementById('qzone-token').value.trim(),
       account_id: document.getElementById('qzone-account').value.trim(),

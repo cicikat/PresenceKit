@@ -1,6 +1,7 @@
 """Connection settings without local installation paths or credential exposure."""
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
+from typing import Literal
 from admin.auth import require_scopes
 from admin.config_control import read_config_file, write_config_file
 from core.config_loader import get_config, get_config_path, reload_config
@@ -13,6 +14,7 @@ class ClientSettings(BaseModel):
     mobile: bool | None = None
     qq_host: str | None = Field(default=None, min_length=1, max_length=253, pattern=r"^[a-zA-Z0-9._:-]+$")
     qq_port: int | None = Field(default=None, ge=1, le=65535)
+    qq_outbound_mode: Literal['reply_only', 'muted', 'all'] | None = None
 
 
 @router.get("/settings/clients")
@@ -41,7 +43,7 @@ async def put_settings(body: ClientSettings, auth=Depends(require_scopes("admin"
         value = getattr(body, name)
         if value is not None:
             cfg.setdefault("client_channels", {})[name] = value
-    for key in ("host", "port"):
+    for key in ("host", "port", "outbound_mode"):
         value = getattr(body, "qq_" + key)
         if value is not None:
             cfg.setdefault("qq", {})[key] = value

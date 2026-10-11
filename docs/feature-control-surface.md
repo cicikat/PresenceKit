@@ -1108,3 +1108,5 @@ Reality 活动对话由同一 owner/char 的 canonical turn sink 落盘，使用
 GET /activity/records（state.read）默认仅列来源元数据；指定 source_ref 才读取原文。query_activity_records 使用 dispatcher 身份；未指定引用时关键词/时间查询跨当前身份的活动原文。概要是 revision 绑定的分段摘录，标注 coverage/pending，回复发送后构建；失败保留原文，后续对话或关闭重试。canonical 撤回也遮蔽已关联的局部召回，并使旧概要失效。
 
 表达状态 has_signal=false 表示无短时信号，区别于明确 neutral。来源 turn/source_at/version/expires_at 可观测，最多30分钟且只读不续期；旧固定 mood 不转成新余韵。prompt 的 expression_afterglow 是可裁剪层，prompt_eligible 表示资格，实际注入以 prompt 观测为准。没有新增模型情绪检测、随机活动或成长等级控制开关。
+
+QQ 发送模式：消息分发与客户端设置 → QQ 回复范围，qq.outbound_mode 默认 reply_only，admin PUT /settings/clients 的 qq_outbound_mode 可选 reply_only/muted/all；返回 outbound_mode、broadcast_enabled。all 恢复旧广播，muted 停止 QQ 消息而保留空间。空间同卡片新增 request_interval_seconds（默认3，1–60）、write_interval_seconds（默认60，10–3600），poll_interval_seconds 默认改600，现有显式值保留。GET /observability/qzone 的 pacing 返回进程内剩余冷却/退避及计数；无关闭节流选项，关闭空间仍回到无空间请求。

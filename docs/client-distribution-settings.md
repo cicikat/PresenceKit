@@ -21,3 +21,5 @@ QQ enabled 复用 feature-flags，host/port 由本页配置，均保存后热生
 本地名为 presencekit-bridges 的目录用于部署 QQ/微信服务及保存登录状态，不随后端仓库自动安装。Emerald-bridge 是 insideworld 游戏 director 和只读 MCP sidecar，不是 QQ/微信/桌面/手机分发桥；普通陪伴部署无需安装它。两者均不是后端代码固定安装地址。
 
 本单只改后端管理与通道开关，不改变客户端协议字段或设置界面。真实 QQ/微信登录投递和真实设备验收独立于隔离浏览器检查。
+
+QQ 发送模式 qq.outbound_mode 默认 reply_only，通过 PUT /settings/clients 的 qq_outbound_mode 热设置，GET 的 clients.qq 返回 outbound_mode 与 broadcast_enabled。reply_only 仅允许当前 QQ 输入处理任务向本轮目标发送，完成后撤销；普通后台子任务不能继承发送权；本轮选定的语音/贴纸任务获得最长五分钟的专属发送权，仍受热停发与连接代际撤销。muted 全停 QQ 消息，仍可连接和使用独立授权空间；all 恢复旧广播。手机/桌面输入、实时输出、durable mirror 与主动消息策略不变。启动通知在 reply_only/muted 被抑制。
