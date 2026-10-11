@@ -2163,6 +2163,12 @@ class Pipeline:
                         "scope": scope_payload,
                         "event_context": _turn_context.to_payload() if _turn_context is not None else None,
                         "audit_extras": audit_extras,
+                        "source": _source,
+                        "event_channel": event_channel,
+                        "event_source": event_source,
+                        "media_refs": media_refs,
+                        "visible_reply": visible_reply,
+                        "raw_user_text": raw_user_text,
                     })
 
         if pending_paths:
@@ -2195,6 +2201,8 @@ class Pipeline:
             "prior_gap_seconds": _prior_gap_seconds,
             "expression_signal": (audit_extras or {}).get("expression_signal", __import__("core.expression_signal", fromlist=["explicit_expression"]).explicit_expression(reply)),
             "source_at": event_context.occurred_at if event_context is not None else _time.time(),
+            "source_refs": [str(ref["source_ref"]) for ref in (media_refs or [])
+                            if isinstance(ref, dict) and ref.get("kind") == "activity_record" and ref.get("source_ref")],
         }
 
     async def post_process_slow(
@@ -2258,17 +2266,18 @@ class Pipeline:
         _reality_tags = set(_get_tags(content))
         try:
             from core.memory.user_hidden_state_reality_signals import process_reality_turn
-            process_reality_turn(
-                uid=user_id,
-                content=content,
-                tags=_reality_tags,
-                assistant_emotion="",
-                trigger_name=trigger_name,
-                envelope=envelope,
-                prior_gap_seconds=critical_result.get("prior_gap_seconds"),
-                char_id=char_id,
-                turn_id=str(_turn_id or ""),
-            )
+            if not provenance_source.startswith("activity:"):
+                process_reality_turn(
+                    uid=user_id,
+                    content=content,
+                    tags=_reality_tags,
+                    assistant_emotion="",
+                    trigger_name=trigger_name,
+                    envelope=envelope,
+                    prior_gap_seconds=critical_result.get("prior_gap_seconds"),
+                    char_id=char_id,
+                    turn_id=str(_turn_id or ""),
+                )
         except Exception as _hs_err:
             logger.warning(f"[pipeline.post_process_slow] hidden_state reality signal 映射失败: {_hs_err}")
 
@@ -2333,6 +2342,8 @@ class Pipeline:
                 _mt_payload["coplay_echo"] = True
             if provenance_source:
                 _mt_payload["source"] = provenance_source
+            if critical_result.get("source_refs"):
+                _mt_payload["source_refs"] = critical_result["source_refs"]
             if audit_extras and audit_extras.get("input_modality") == "voice":
                 _mt_payload["input_modality"] = "voice"
                 _mt_payload["asr_low_confidence"] = bool(audit_extras.get("asr_low_confidence"))

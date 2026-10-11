@@ -35,3 +35,36 @@ def test_late_state_cannot_replace_current_board(sandbox):
     with pytest.raises(store.ActivityPersistenceError):
         store.save_session(stale)
     assert store.load_session("companion", "owner", "chess", value.session_id).state["fen"] == "new"
+
+
+def test_withdrawal_blocks_local_recall_and_invalidates_projection(sandbox, monkeypatch):
+    import asyncio
+    import json
+    from core.activity import activity_summary
+    value = store.create_session("owner", "companion", "chess")
+    transcript.append_entry("companion", "owner", "chess", value.session_id,
+                            {"type": "user_chat", "text": "private phrase"})
+    root = transcript._path("companion", "owner", "chess", value.session_id).parent
+    receipts = root / "dialogue_receipts"
+    receipts.mkdir()
+    (receipts / "request.json").write_text(json.dumps({"status": "completed", "turn_id": "turn",
+        "entry_start": 0, "entry_end": 1}), encoding="utf-8")
+    state = {"redaction_state": "memory_cleaned"}
+    monkeypatch.setattr("core.memory.event_query.get_event", lambda *args, **kwargs: state)
+    asyncio.run(activity_summary.generate_and_reflow("owner", "companion", "chess", value.session_id))
+    state["redaction_state"] = "tombstoned"
+    ref = f"activity:chess:{value.session_id}"
+    assert records.read("owner", "companion", ref + ":entry:0")["items"][0]["text"] == ""
+    assert records.read("owner", "companion", ref + ":summary")["status"] == "pending"
+    assert transcript.load_recent("companion", "owner", "chess", value.session_id) == []
+    assert "private phrase" in (root / "transcript.jsonl").read_text(encoding="utf-8")
+    assert records.search("owner", "companion", keyword="private")["total"] == 0
+
+
+def test_search_across_scoped_sessions(sandbox):
+    for kind in ("chess", "gomoku"):
+        value = store.create_session("owner", "companion", kind)
+        transcript.append_entry("companion", "owner", kind, value.session_id,
+                                {"type": "user_chat", "text": "needle", "ts": "2026-10-11"})
+    assert records.search("owner", "companion", keyword="needle", limit=1)["total"] == 2
+    assert records.search("other", "companion", keyword="needle")["total"] == 0

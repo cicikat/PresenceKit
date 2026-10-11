@@ -4,7 +4,8 @@ Activity transcript — per-session JSONL storage.
 Path: data/runtime/activity/{char_id}/{uid}/{activity_type}/{session_id}/transcript.jsonl
 
 Allowed entry types: user_chat / assistant_chat.
-Forbidden writes: short_term / event_log / user_hidden_state / afterglow / impression.
+This storage helper writes only local evidence. Reality routes additionally use
+the canonical turn sink; structured moves and external content remain separate.
 """
 from __future__ import annotations
 
@@ -61,6 +62,20 @@ def load_recent(
     p = _path(char_id, uid, activity_type, session_id)
     if not p.exists():
         return []
+    if activity_type in ("reading", "gomoku", "chess", "minecraft") and (p.parent / "dialogue_receipts").exists():
+        from core.activity import records
+        first = records.read(uid, char_id, f"activity:{activity_type}:{session_id}:dialogue", limit=1)
+        total = first["total"]
+        wanted = min(limit if limit > 0 else _MAX_BUFFER, _MAX_BUFFER)
+        entries = []
+        offset = max(0, total - wanted)
+        while offset < total:
+            page = records.read(uid, char_id, f"activity:{activity_type}:{session_id}:dialogue",
+                                offset=offset, limit=min(100, total - offset), text_limit=12000,
+                                expected_revision=first["revision"])
+            entries.extend(item for item in page["items"] if item.get("availability") != "withdrawn")
+            offset += len(page["items"])
+        return entries
     entries: list[dict] = []
     try:
         for raw in p.read_text(encoding="utf-8").splitlines():

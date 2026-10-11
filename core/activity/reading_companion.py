@@ -193,6 +193,10 @@ async def generate_reply(
     facts = build_reading_grounding_facts(current_page, total_pages, filename, page_text)
     recent_ctx = _tr.load_recent(char_id, uid, "reading", session_id, limit=_TRANSCRIPT_CONTEXT_LIMIT)
     messages = _build_messages(current_page, total_pages, filename, page_text, recent_ctx, user_message, facts, char_name=char_name)
+    from core.activity.companion_context import load_main_chat_recall
+    recall = load_main_chat_recall(uid, char_id)
+    if recall:
+        messages.insert(1, {"role": "system", "content": recall, "_layer": "unified_history"})
     _capture_prompt(uid, session_id, messages, kind="chat")
     reply, control = await _call_llm(messages)
     reply = strip_action_descriptions(reply)

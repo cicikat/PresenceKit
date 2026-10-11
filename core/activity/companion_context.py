@@ -3,8 +3,8 @@ Activity companion context loaders (Brief 43 §C).
 
 Read-only boundary change: activity companion chat (chess/gomoku) may now
 *read* a short persona summary and the last few main-chat rounds to ground
-its replies. The write boundary is unchanged — activity chat still never
-writes short_term / event_log / user_hidden_state / afterglow.
+its replies. Reality routes commit real dialogue through the canonical sink;
+this helper remains read-only. Structured records do not become chat messages.
 
 All loaders fail-open: any read error returns "" so a memory hiccup never
 breaks companion chat.

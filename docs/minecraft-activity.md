@@ -1,5 +1,7 @@
 # Minecraft Activity 与 Docker 身体
 
+> 工单284当前：真实活动对话经 canonical turn sink 共享 Reality 历史与记忆，专用界面保留且无全局主聊天转播。棋步/页面/任务回执仍为结构化来源，按引用查询；Dream 不参与。以下早期阶段中的“活动不写主记忆”仅适用于结构化步骤或当时历史实现，不能用于当前 chat/comment 路由。分段摘录取代 close 强制感受回流；合同与查询详见 [Reality活动连续性](reality-activity-continuity.md)。
+
 ## 275：陪伴与快速判断
 
 `approach` 接近后停下，`accompany` 在用户授权会话内持续陪伴，`protect` 跟随并近距离保护，武器/耐久不足拒绝战斗。陪伴和保护动作每90秒由会话监督器续租，单次身体指令仍120秒；本地停止/危险后不恢复。切角色、入梦、关闭、配置变化或租约失效立即撤销。普通 follow 仍是单次动作。

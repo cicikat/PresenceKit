@@ -90,6 +90,9 @@ def _safe_media_refs(raw: object) -> list[dict[str, str]]:
             for key in ("kind", "filename", "sha256", "availability")
             if item.get(key) not in (None, "")
         }
+        source_ref = str(item.get("source_ref") or "")
+        if item.get("kind") == "activity_record" and source_ref.startswith("activity:") and len(source_ref) <= 256 and not any(c in source_ref for c in ("/", "\\")):
+            projected["source_ref"] = source_ref
         if projected:
             refs.append(projected)
     return refs

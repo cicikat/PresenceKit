@@ -1,5 +1,7 @@
 # Gomoku Activity (P0 + P1 + P3-pending)
 
+> 工单284当前：真实活动对话经 canonical turn sink 共享 Reality 历史与记忆，专用界面保留且无全局主聊天转播。棋步/页面/任务回执仍为结构化来源，按引用查询；Dream 不参与。以下早期阶段中的“活动不写主记忆”仅适用于结构化步骤或当时历史实现，不能用于当前 chat/comment 路由。分段摘录取代 close 强制感受回流；合同与查询详见 [Reality活动连续性](reality-activity-continuity.md)。
+
 ## P0 hardening
 
 In `character_ai` games, the ordinary move endpoint is restricted to the user
@@ -402,21 +404,20 @@ data/runtime/activity/{char_id}/{uid}/gomoku/{session_id}/summary.json
 | `opponent` | string | `"human"` / `"character_ai"` |
 | `generated_at` | string | ISO 8601 UTC 时间戳 |
 
-### 主记忆接入（待后续实现）
+### 主记忆接入（284已替换）
 
-当前摘要**只落到 activity session 目录的 `summary.json`**，不接入 `short_term` / `event_log` / `user_hidden_state`。后续可通过主记忆的安全写入入口（slow_queue / fixation_pipeline）读取摘要并推入 episodic 层，无需改动本文件内的边界逻辑。
+当前真实对话即时经 canonical sink 固化；close 不另写重复 episodic。continuity_projection.json 是可重建的 revision 分段摘录，覆盖范围可观测，原文独立分页回读。
 
 ## 活动内对话（P0 + 只读注入，Brief 43 §C）
 
 五子棋 session 内，用户可以和他自然聊天。后端生成 LLM 回复并写入 transcript，
-**不写主记忆**（不写 short_term / event_log / user_hidden_state）。
+**经 route sink 写 Reality 对话历史**，不自动写 user_hidden_state。
 
 **只读边界（Brief 43 §C 拍板）**：companion chat 现在会**只读**注入主聊天最近 3
 轮对话（`core.memory.short_term.get_history`）+ 人设摘要（`core.character_loader`
 的 personality，退 description，截断 ~300 字），用于让活动内回复贴合角色人设与
 主线语境。两个注入源都通过 `core/activity/companion_context.py` 读取，全部
-fail-open（读失败返回空串，不影响陪聊）。**写入边界完全不变**：仍不写
-short_term / event_log / user_hidden_state / afterglow。
+fail-open（读失败返回空串，不影响陪聊）。**当前写入边界**：route sink 写 Reality 对话历史，专用 generator 只保存 local transcript。
 
 ### POST /activity/gomoku/chat
 

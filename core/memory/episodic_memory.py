@@ -908,6 +908,10 @@ def format_for_prompt(
         if not summary:
             continue
         summary = summary.replace("用户", user_pronoun)
+        refs = [ref for ref in mem.get("source_refs", [])
+                if isinstance(ref, str) and ref.startswith("activity:") and len(ref) <= 256]
+        if refs:
+            summary += "（原记录：" + "、".join(refs[:3]) + "；可用 query_activity_records 回读）"
 
         # P0-3: 用 occurred_at（事件真实时刻）渲染时间锚；旧数据回退 timestamp
         anchor_ts = mem.get("occurred_at")

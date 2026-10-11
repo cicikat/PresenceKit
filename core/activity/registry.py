@@ -6,7 +6,7 @@ Activity Registry P0-Lite — 静态元信息表。
 用途：
   1. 发现（/activity/list endpoint）
   2. contract smoke tests（route / Tauri command / frontend key / memory policy 断言）
-  3. memory policy 声明（所有 activity 默认不写 short_term / hidden_state / event_log）
+  3. memory policy 声明（Reality对话写入统一short_term/event_log；结构化状态和Dream仍隔离）
 
 不做：
   - router 自动注册（admin_server.py 手工维护）
@@ -68,7 +68,7 @@ ACTIVITY_REGISTRY: tuple[ActivityMeta, ...] = (
         id="minecraft", label="Minecraft 共玩", enabled=False,
         route_prefix="/activity/minecraft", session_store="activity_store",
         session_dir_layout="{char_id}/{uid}/minecraft/{session_id}",
-        memory_policy=MemoryPolicy(main_memory="none"), has_companion_chat=True,
+        memory_policy=MemoryPolicy(writes_short_term=True, writes_event_log=True, main_memory="episodic"), has_companion_chat=True,
         docs_path="docs/minecraft-activity.md", idle_ttl_seconds=60, max_age_seconds=4 * 3600,
     ),
     ActivityMeta(
@@ -97,6 +97,7 @@ ACTIVITY_REGISTRY: tuple[ActivityMeta, ...] = (
         memory_policy=MemoryPolicy(
             transcript="activity_local",
             summary_threshold=2,  # current_page 阈值，≤ 视为翻了开头就关
+            writes_short_term=True, writes_event_log=True,
             main_memory="episodic",
         ),
         has_companion_chat=True,
@@ -125,6 +126,7 @@ ACTIVITY_REGISTRY: tuple[ActivityMeta, ...] = (
         memory_policy=MemoryPolicy(
             transcript="activity_local",
             summary_threshold=12,
+            writes_short_term=True, writes_event_log=True,
             main_memory="episodic",
         ),
         has_companion_chat=True,
@@ -154,6 +156,7 @@ ACTIVITY_REGISTRY: tuple[ActivityMeta, ...] = (
         memory_policy=MemoryPolicy(
             transcript="activity_local",
             summary_threshold=10,  # move_history 长度阈值，≤ 视为试棋噪声
+            writes_short_term=True, writes_event_log=True,
             main_memory="episodic",
         ),
         has_companion_chat=True,

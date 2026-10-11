@@ -65,6 +65,7 @@ def append(
     occurred_at: float | None = None,
     input_modality: str = "",
     asr_low_confidence: bool = False,
+    source_refs: list[str] | None = None,
 ) -> None:
     """追加事件；追加前先清理过期 + 截断到 MAX_EVENTS-1。
 
@@ -103,6 +104,9 @@ def append(
         if input_modality == "voice":
             entry["input_modality"] = "voice"
             entry["asr_low_confidence"] = bool(asr_low_confidence)
+        if source_refs:
+            entry["source_refs"] = list(dict.fromkeys(ref for ref in source_refs
+                if isinstance(ref, str) and ref.startswith("activity:") and len(ref) <= 256))[:20]
         events.append(entry)
         safe_write_json(write_path, {"events": events})
     except Exception as e:

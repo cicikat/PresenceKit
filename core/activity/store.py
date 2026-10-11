@@ -145,7 +145,10 @@ def load_session(
     if not p.exists():
         return None
     try:
-        return ActivitySession.from_dict(json.loads(p.read_text(encoding="utf-8")))
+        value = ActivitySession.from_dict(json.loads(p.read_text(encoding="utf-8")))
+        if (value.char_id, value.uid, value.activity_type, value.session_id) != (char_id, uid, activity_type, session_id):
+            return None
+        return value
     except Exception as e:
         logger.error("[activity_store] load failed %s: %s", session_id, e)
         return None
@@ -176,6 +179,8 @@ def find_active_session(
             continue
         try:
             s = ActivitySession.from_dict(json.loads(p.read_text(encoding="utf-8")))
+            if (s.char_id, s.uid, s.activity_type, s.session_id) != (char_id, uid, activity_type, session_dir.name):
+                continue
             if s.status != "active":
                 continue
             if _session_is_stale(s, now=current):

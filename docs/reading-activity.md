@@ -1,5 +1,7 @@
 # 一起看书 — Reading Activity (P0)
 
+> 工单284当前：真实活动对话经 canonical turn sink 共享 Reality 历史与记忆，专用界面保留且无全局主聊天转播。棋步/页面/任务回执仍为结构化来源，按引用查询；Dream 不参与。以下早期阶段中的“活动不写主记忆”仅适用于结构化步骤或当时历史实现，不能用于当前 chat/comment 路由。分段摘录取代 close 强制感受回流；合同与查询详见 [Reality活动连续性](reality-activity-continuity.md)。
+
 ## P0 hardening
 
 Reading remains an independent `ReadingSession` and store. Starting either a

@@ -482,6 +482,8 @@ def _emit_completion(principal: TaskPrincipal, receipt: dict[str, Any], payload:
             evidence=[{
                 "fact": "agent_task_completed",
                 "task_id": receipt["task_id"],
+                "source_ref": f"task:{receipt['task_id']}",
+                "read_tool": "get_agent_task",
                 "status": receipt["status"],
                 "summary": str(result.get("summary") or "")[:300],
                 "artifact_count": len(result.get("artifacts") or []),

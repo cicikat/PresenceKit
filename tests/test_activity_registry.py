@@ -90,7 +90,7 @@ def test_tauri_commands_unique_across_registry():
 @pytest.mark.parametrize("activity_id", ["reading", "gomoku", "chess", "dream_seed"])
 def test_writes_short_term_false(activity_id):
     meta = get_activity_meta(activity_id)
-    assert meta.memory_policy.writes_short_term is False, (
+    assert meta.memory_policy.writes_short_term is (activity_id != "dream_seed"), (
         f"{activity_id}: writes_short_term must be False"
     )
 
@@ -106,7 +106,7 @@ def test_writes_hidden_state_false(activity_id):
 @pytest.mark.parametrize("activity_id", ["reading", "gomoku", "chess", "dream_seed"])
 def test_writes_event_log_false(activity_id):
     meta = get_activity_meta(activity_id)
-    assert meta.memory_policy.writes_event_log is False, (
+    assert meta.memory_policy.writes_event_log is (activity_id != "dream_seed"), (
         f"{activity_id}: writes_event_log must be False"
     )
 

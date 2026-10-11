@@ -996,7 +996,7 @@ def capture_turn(
             event_log.append(uid, "assistant", _scrubbed_reply, emotion=emotion, turn_id=turn_id, trigger_name=trigger_name, char_id=char_id, source=source)
             if _scrubbed_reply is not None else True,
         ]
-        if trigger_name in CONVERSATIONAL_TRIGGERS and _scrubbed_reply is not None:
+        if (trigger_name in CONVERSATIONAL_TRIGGERS or trigger_name.startswith("activity_comment:")) and _scrubbed_reply is not None:
             writes.append(
                 short_term.append(uid, "assistant", _scrubbed_reply, turn_id=turn_id, char_id=char_id)
             )
@@ -1072,6 +1072,7 @@ async def summarize_to_midterm(
     trigger_name: str = "",
     input_modality: str = "",
     asr_low_confidence: bool = False,
+    source_refs: list[str] | None = None,
 ) -> str | None:
     """
     LLM 压缩单轮对话到 mid_term，写入血缘字段。
@@ -1106,6 +1107,8 @@ async def summarize_to_midterm(
             logger.debug(f"[fixation] summarize_to_midterm 幂等命中: turn_id={turn_id}")
             return None
         append_kwargs = {"char_id": char_id}
+        if source_refs:
+            append_kwargs["source_refs"] = source_refs
         if source:
             append_kwargs["source"] = source
         if memory_strength != 1.0:
@@ -1493,6 +1496,7 @@ async def reflect_to_episodic(
             "last_retrieved": None,
             # 血缘字段
             "source_mid_ids": [e.get("mid_id") for e in to_process if e.get("mid_id")],
+            "source_refs": list(dict.fromkeys(ref for e in to_process for ref in e.get("source_refs", [])))[:20],
             "source_event_ids": normalize_source_event_ids(
                 [event_id for e in to_process for event_id in (e.get("source_event_ids") or [])]
             ),
@@ -1544,6 +1548,8 @@ async def reflect_to_episodic(
                 *(_dup_ep.get("source_event_ids") or []),
                 *(episode.get("source_event_ids") or []),
             ])
+            _dup_ep["source_refs"] = list(dict.fromkeys([
+                *(_dup_ep.get("source_refs") or []), *(episode.get("source_refs") or [])]))[:20]
             _save_memories(uid, existing_eps, char_id=char_id)
             _rebuild_index(uid, existing_eps, char_id=char_id)
             from core.memory.provenance_log import append as _prov_append
@@ -2085,6 +2091,8 @@ async def handler_summarize_to_midterm(payload: dict) -> None:
     }
     if payload.get("source"):
         kwargs["source"] = payload["source"]
+    if payload.get("source_refs"):
+        kwargs["source_refs"] = payload["source_refs"]
     if "memory_strength" in payload:
         kwargs["memory_strength"] = payload["memory_strength"]
     if payload.get("force_reflect"):
@@ -2127,6 +2135,9 @@ async def handler_capture_turn_retry(payload: dict) -> None:
             capture_kwargs["event_context"] = event_context
         if payload.get("audit_extras"):
             capture_kwargs["audit_extras"] = payload["audit_extras"]
+        for key in ("source", "event_channel", "event_source", "media_refs", "visible_reply", "raw_user_text"):
+            if payload.get(key) is not None:
+                capture_kwargs[key] = payload[key]
         capture_turn(
             uid,
             payload["user_content"],

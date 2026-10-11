@@ -1,5 +1,7 @@
 # Chess Activity (P0)
 
+> 工单284当前：真实活动对话经 canonical turn sink 共享 Reality 历史与记忆，专用界面保留且无全局主聊天转播。棋步/页面/任务回执仍为结构化来源，按引用查询；Dream 不参与。以下早期阶段中的“活动不写主记忆”仅适用于结构化步骤或当时历史实现，不能用于当前 chat/comment 路由。分段摘录取代 close 强制感受回流；合同与查询详见 [Reality活动连续性](reality-activity-continuity.md)。
+
 ## P0 hardening
 
 In `character_ai` games, ordinary `apply_move()` accepts only the user turn.
@@ -317,14 +319,12 @@ tilt，用 session 的 `ai_style`）。
 
 ## 活动内对话（companion chat + 只读注入 Brief 43 §C）
 
-`POST /activity/chess/chat` — 同 gomoku，只写 activity transcript，不写主记忆
-（不写 short_term / event_log / user_hidden_state）。
+`POST /activity/chess/chat` — 写 local transcript，并由 route 的 canonical sink 写 Reality short_term/event_log；不自动写 user_hidden_state。
 
 **只读边界（Brief 43 §C 拍板）**：companion chat 会**只读**注入主聊天最近 3 轮
 对话 + 人设摘要（personality，退 description，截断 ~300 字），用于让棋局陪聊更贴
 合角色人设与主线语境；两者均通过 `core/activity/companion_context.py` 读取，
-fail-open（读失败返回空串）。**写入边界不变**：仍不写 short_term / event_log /
-user_hidden_state / afterglow。
+fail-open（读失败返回空串）。**当前写入边界**：route sink 写同一 Reality 对话历史；结构化棋盘及 user_hidden_state 保持独立。
 
 回复在写入 transcript 前经 `core/activity/companion_text.py::strip_action_descriptions`
 清洗括号动作描写与整行 Markdown 旁白（Brief 43 §A）；LLM 调用前后接入

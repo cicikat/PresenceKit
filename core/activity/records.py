@@ -11,6 +11,61 @@ from core.activity import activity_store, store, transcript
 REALITY_TYPES = ("reading", "gomoku", "chess", "minecraft")
 
 
+def _visible_dialogue(uid, char_id, kind, sid, entries):
+    """Canonical tombstones also suppress local recall; original evidence stays intact."""
+    from core.memory.event_query import get_event
+    from core.memory.scope import MemoryScope
+    links = {}
+    root = transcript._path(char_id, uid, kind, sid).parent / "dialogue_receipts"
+    if root.exists():
+        for path in root.glob("*.json"):
+            try:
+                raw = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                raise LookupError("dialogue link unavailable") from None
+            turn = (raw.get("response") or {}).get("turn_id") or raw.get("turn_id")
+            for index in range(int(raw.get("entry_start", 0)), int(raw.get("entry_end", 0))):
+                links[index] = turn
+    result = []
+    for entry in entries:
+        turn = links.get(entry.get("source_index"))
+        if turn:
+            role = "user" if entry.get("type") == "user_chat" else "assistant"
+            event_id = f"{turn}:{role}"
+            event = get_event(MemoryScope.reality_scope(uid, char_id), event_id)
+            entry = {**entry, "source_event_id": event_id}
+            if event and event.get("redaction_state") == "tombstoned":
+                entry = {"source_index": entry["source_index"], "source_ref": entry["source_ref"],
+                         "source_event_id": event_id, "availability": "withdrawn", "text": ""}
+        result.append(entry)
+    return result
+
+
+def search(uid: str, char_id: str, *, keyword="", since="", until="", offset=0, limit=20):
+    """Search scoped original dialogues, returning stable references and bounded excerpts."""
+    if offset < 0 or not 1 <= limit <= 100:
+        raise ValueError("invalid page")
+    hits = []
+    start = 0
+    while True:
+        sessions = list_sessions(uid, char_id, offset=start, limit=100)
+        for item in sessions["items"]:
+            ref = item["source_ref"].rsplit(":", 1)[0] + ":dialogue"
+            page_offset = 0
+            while True:
+                page = read(uid, char_id, ref, offset=page_offset, limit=100,
+                            text_limit=1000, keyword=keyword, since=since, until=until)
+                hits.extend(entry for entry in page["items"] if entry.get("availability") != "withdrawn")
+                if page["next_offset"] is None:
+                    break
+                page_offset = page["next_offset"]
+        if sessions["next_offset"] is None:
+            break
+        start = sessions["next_offset"]
+    return {"items": hits[offset:offset + limit], "total": len(hits),
+            "next_offset": offset + limit if offset + limit < len(hits) else None}
+
+
 def revision(value) -> str:
     return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False,
                                     default=str).encode("utf-8")).hexdigest()[:24]
@@ -146,7 +201,7 @@ def read(uid: str, char_id: str, source_ref: str, *, offset: int = 0,
         with path.open(encoding="utf-8") as stream:
             for index, line in enumerate(stream):
                 if index == int(number[0]):
-                    entries = [json.loads(line)]
+                    entries = [{**json.loads(line), "source_index": index, "source_ref": source_ref}]
                     break
         if not entries:
             raise LookupError("source unavailable")
@@ -157,6 +212,8 @@ def read(uid: str, char_id: str, source_ref: str, *, offset: int = 0,
         entries = [{"type": "external_content", "text": text}]
     else:
         raise ValueError("unsupported section")
+    if section in ("dialogue", "entry"):
+        entries = _visible_dialogue(uid, char_id, kind, sid, entries)
     current = revision(entries)
     if expected_revision and current != expected_revision:
         raise ValueError("source revision changed; restart pagination")

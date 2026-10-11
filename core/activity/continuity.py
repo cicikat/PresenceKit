@@ -9,7 +9,7 @@ import uuid
 import inspect
 import typing
 
-from fastapi import HTTPException
+from fastapi import HTTPException, BackgroundTasks
 from core.activity import records
 from core.config_loader import get_config
 from core.conversation_gate import conversation_lock
@@ -21,10 +21,17 @@ from core.turn_sink import record_assistant_turn, TurnSource
 from core.write_envelope import stamp_user_chat
 
 
+def _line_count(path):
+    if not path.exists():
+        return 0
+    with path.open(encoding="utf-8") as stream:
+        return sum(1 for _ in stream)
+
+
 def reality_dialogue(kind, *, assistant_only=False):
     def decorate(function):
         @functools.wraps(function)
-        async def wrapped(body, auth=None):
+        async def wrapped(body, auth=None, background_tasks=None):
             from admin.routers._common import active_char_id
             uid = str(get_config().get("scheduler", {}).get("owner_id") or "")
             char_id = active_char_id()
@@ -51,6 +58,8 @@ def reality_dialogue(kind, *, assistant_only=False):
             except LookupError:
                 raise HTTPException(404, "activity source unavailable")
             request_id = str(getattr(body, "request_id", "") or uuid.uuid4().hex)
+            if len(request_id) > 128:
+                raise HTTPException(422, "request identity too long")
             text = "" if assistant_only else str(getattr(body, "message", getattr(body, "text", "")))
             key = hashlib.sha256(request_id.encode()).hexdigest()
             directory = get_paths().activity_session_dir(char_id=char_id, uid=uid,
@@ -63,12 +72,22 @@ def reality_dialogue(kind, *, assistant_only=False):
                 if receipt and receipt["input_hash"] != hashlib.sha256(text.encode()).hexdigest():
                     raise HTTPException(409, "request identity conflict")
                 if receipt and receipt.get("status") == "completed":
+                    from core.memory.event_query import get_event
+                    for role in ("assistant",) if assistant_only else ("user", "assistant"):
+                        event = get_event(MemoryScope.reality_scope(uid, char_id), f"{receipt['response']['turn_id']}:{role}")
+                        if event and event.get("tombstoned"):
+                            raise HTTPException(410, "activity dialogue withdrawn")
                     return receipt["response"]
                 if receipt is None:
+                    from core.activity import transcript
+                    source_path = transcript._path(char_id, uid, kind, sid)
+                    entry_start = _line_count(source_path)
                     response = await function(body, auth=auth)
                     if assistant_only and not response.get("comment"):
                         return response
                     receipt = {"status": "pending", "response": response, "request_id": request_id,
+                               "entry_start": entry_start,
+                               "entry_end": _line_count(source_path),
                                "input_hash": hashlib.sha256(text.encode()).hexdigest(),
                                "turn_id": uuid.uuid4().hex}
                     if not safe_write_json(receipt_path, receipt):
@@ -86,7 +105,8 @@ def reality_dialogue(kind, *, assistant_only=False):
                     bypass_gate=True, fanout=[], durable_mobile_mirror=False,
                     event_channel=f"activity:{kind}", provenance_source=f"activity:{kind}",
                     event_context=context, request_id=request_id,
-                    media_refs=[{"type": "activity_record", "source_ref": f"activity:{kind}:{sid}:dialogue"}])
+                    background_tasks=background_tasks,
+                    media_refs=[{"kind": "activity_record", "source_ref": f"activity:{kind}:{sid}:dialogue"}])
                 if not result.written_to_memory:
                     raise HTTPException(503, "activity history persistence pending")
                 response = receipt["response"] | {"turn_id": result.turn_id, "msg_id": result.msg_id,
@@ -95,13 +115,17 @@ def reality_dialogue(kind, *, assistant_only=False):
                 receipt.update(status="completed", response=response)
                 if not safe_write_json(receipt_path, receipt):
                     raise HTTPException(503, "activity receipt persistence failed")
-                asyncio.create_task(refresh_projection(uid, char_id, kind, sid))
+                if background_tasks is not None:
+                    background_tasks.add_task(refresh_projection, uid, char_id, kind, sid)
+                else:
+                    asyncio.create_task(refresh_projection(uid, char_id, kind, sid))
                 return response
         hints = typing.get_type_hints(function)
         original = inspect.signature(function)
         wrapped.__signature__ = original.replace(parameters=[
             parameter.replace(annotation=hints.get(name, parameter.annotation))
-            for name, parameter in original.parameters.items()])
+            for name, parameter in original.parameters.items()] + [
+                inspect.Parameter("background_tasks", inspect.Parameter.KEYWORD_ONLY, annotation=BackgroundTasks)])
         return wrapped
     return decorate
 

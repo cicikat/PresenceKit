@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Optional, Sequence, Union
 from uuid import uuid4
+from functools import partial
 
 logger = logging.getLogger(__name__)
 
@@ -236,6 +237,7 @@ async def record_assistant_turn(
     media_refs: Optional[list[dict]] = None,
     event_context=None,
     request_id: str = "",
+    background_tasks=None,
 ) -> TurnResult:
     """
     Record one completed assistant turn and deliver it to the requested channels.
@@ -400,8 +402,15 @@ async def record_assistant_turn(
     # Brief 37: send（上面的 fanout）已经完成，慢段（detect_emotion / mood_state /
     # slow_queue 入队等）现在才调度，绝不 await——否则又把下一条消息的 send 堵住。
     if await_critical_post_process and post_info is not None and schedule_slow:
-        asyncio.create_task(
-            pipeline.post_process_slow(
+        def _schedule_slow(call):
+            if background_tasks is not None:
+                async def after_send():
+                    await call()
+                background_tasks.add_task(after_send)
+            else:
+                asyncio.create_task(call())
+        _schedule_slow(
+            partial(pipeline.post_process_slow,
                 uid,
                 memory_input,
                 memory_text,

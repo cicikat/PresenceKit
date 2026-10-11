@@ -29,6 +29,9 @@ async def get_activity_records(
             return records.read(uid, char_id, source_ref, offset=offset, limit=limit,
                                 text_offset=text_offset, expected_revision=expected_revision,
                                 keyword=keyword, since=since, until=until)
+        if keyword or since or until:
+            return records.search(uid, char_id, keyword=keyword, since=since, until=until,
+                                  offset=offset, limit=limit)
         return records.list_sessions(uid, char_id, offset=offset, limit=limit) | {"tasks": records.tasks(uid, char_id)}
     except LookupError:
         raise HTTPException(404, "source unavailable")

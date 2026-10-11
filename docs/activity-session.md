@@ -1,5 +1,7 @@
 # Activity Session — 设计说明
 
+> 工单284当前：真实活动对话经 canonical turn sink 共享 Reality 历史与记忆，专用界面保留且无全局主聊天转播。棋步/页面/任务回执仍为结构化来源，按引用查询；Dream 不参与。以下早期阶段中的“活动不写主记忆”仅适用于结构化步骤或当时历史实现，不能用于当前 chat/comment 路由。分段摘录取代 close 强制感受回流；合同与查询详见 [Reality活动连续性](reality-activity-continuity.md)。
+
 > 284 P2：随机 ambient 活动机制已退役。当前活动只来自真实会话；无活动允许为空，读取不生成活动。历史 authored 池文件保留但不消费。
 
 ## 定位
@@ -8,7 +10,7 @@
 命令映射；实际启用与状态以管理面 `/settings/minecraft` 为准。复用 session/store/
 transcript 与只读上下文边界，独立 Docker 身体只通过协议适配器连接。新增
 `/activity/minecraft/*` 不引入统一活动执行框架或 EventBus；见
-[Minecraft Activity](minecraft-activity.md)。Minecraft 初版不回流主记忆。
+[Minecraft Activity](minecraft-activity.md)。Minecraft 实际对话进入统一 Reality 历史，结构化状态独立。
 
 `ActivitySession` 是 **reality-side session**，不是 trigger，不是 tool result，不进入普通短期记忆。
 
@@ -33,10 +35,10 @@ POST /activity/close   → close_session()
 
 | 系统 | 关系 |
 |---|---|
-| short_term / history | **不写入**。活动步骤不进对话历史 |
+| short_term / history | 真实对话写统一历史；结构化步骤按引用查询 |
 | event_log | **不写全文**。活动状态变更不记录事件日志 |
 | user_hidden_state | **不写入**。活动不影响隐性状态 |
-| perceive_event | **不接入**。不走 gate/conversation_lock 流程 |
+| perceive_event | 结构化状态不冒充 stimulus；真实对话经 owner conversation_lock |
 | Dream / Scenario | **完全隔离**。Dream 期间不启动/不读取 ActivitySession |
 | scheduler | **不接入**。没有定时触发 |
 | trigger / stimulus | **不是** trigger。必须由用户按钮/命令显式启动 |
