@@ -2076,7 +2076,8 @@ class Pipeline:
         _profile_recent: list = []
         import time as _time
         _critical_started_at = _time.monotonic()
-        _turn_id = f"{user_id}_{int(_time.time() * 1000)}"
+        _turn_id = (event_context.turn_id if event_context is not None and event_context.turn_id
+                    else f"{user_id}_{int(_time.time() * 1000)}")
         _turn_context = event_context.with_turn(_turn_id) if event_context is not None else None
         _critical_written = False
 

@@ -29,6 +29,8 @@ import uuid
 from pathlib import Path
 from typing import Literal, Optional
 
+from core.activity.continuity import reality_dialogue
+import asyncio
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 
@@ -325,6 +327,7 @@ class CloseRequest(BaseModel):
 
 
 class ChatRequest(BaseModel):
+    request_id: str = ""
     session_id: str
     message: str
     uid: str = ""
@@ -363,21 +366,8 @@ async def close_reading(
     logger.info(
         "[reading] close: session=%s last_page=%d", body.session_id, session.current_page
     )
-    threshold = _get_activity_meta("reading").memory_policy.summary_threshold
-    if threshold is not None and session.current_page > threshold:
-        summary_text = await _activity_summary.generate_and_reflow(
-            session.uid, char_id, "reading", body.session_id
-        )
-        if summary_text:
-            try:
-                book_id = session.file_id
-                insights_dir = _get_paths().reading_library_insights_dir(book_id=book_id)
-                insights_dir.mkdir(parents=True, exist_ok=True)
-                insight_file = insights_dir / f"{body.session_id}.txt"
-                insight_file.write_text(summary_text, encoding="utf-8")
-                logger.info("[reading] insight saved: book=%s session=%s", book_id, body.session_id)
-            except Exception:
-                logger.exception("[reading] failed to save insight")
+    from core.activity.continuity import refresh_projection
+    asyncio.create_task(refresh_projection(session.uid, char_id, "reading", body.session_id))
     return {
         "status": "closed",
         "session_id": body.session_id,
@@ -585,6 +575,7 @@ async def categorize_book(
 
 
 @router.post("/reading/chat", summary="活动内对话（陪伴聊天）")
+@reality_dialogue("reading")
 async def reading_chat(
     body: ChatRequest,
     auth=Depends(require_scopes("activity")),
@@ -628,8 +619,7 @@ async def reading_chat(
         user_message=msg,
     )
 
-    from core.activity.pseudo_stream import push_companion_reply
-    _msg_id = await push_companion_reply(reply, char_id=char_id)
+    _msg_id = None
 
     return {
         "session_id": body.session_id,

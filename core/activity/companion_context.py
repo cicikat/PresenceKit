@@ -19,7 +19,7 @@ PERSONA_BRIEF_MAX_CHARS = 300
 MAIN_CHAT_RECALL_ROUNDS = 3
 
 MAIN_CHAT_RECALL_HEADER = (
-    "【主线聊天最近对话（只读参考，不要复述，不要把那边的话题强行接过来）】"
+    "【同一现实聊天的最近对话（只读参考，按当前话题自然接续）】"
 )
 
 # Brief 43 §D: proactive move comment — replaces the "用户说：…" tail of the prompt

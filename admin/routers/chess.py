@@ -20,6 +20,8 @@ import logging
 import re
 from typing import Optional
 
+from core.activity.continuity import reality_dialogue
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
@@ -94,6 +96,7 @@ class CloseRequest(BaseModel):
 
 
 class ChatRequest(BaseModel):
+    request_id: str = ""
     session_id: str
     message: str
     uid: str = ""
@@ -262,9 +265,9 @@ async def close_chess(body: CloseRequest, auth=Depends(require_scopes("activity"
     if closed:
         threshold = _get_activity_meta("chess").memory_policy.summary_threshold
         if threshold is not None and len(closed.state.get("move_history", [])) > threshold:
-            await _activity_summary.generate_and_reflow(
+            asyncio.create_task(_activity_summary.generate_and_reflow(
                 resolved_uid, char_id, "chess", body.session_id
-            )
+            ))
     return {
         "status": "closed",
         "session_id": body.session_id,
@@ -338,6 +341,7 @@ async def chess_ai_move(body: AiMoveRequest, auth=Depends(require_scopes("activi
 
 
 @router.post("/chess/chat", summary="活动内对话（陪伴聊天）")
+@reality_dialogue("chess")
 async def chess_chat(body: ChatRequest, auth=Depends(require_scopes("activity"))):
     """
     活动内对话接口。
@@ -373,8 +377,7 @@ async def chess_chat(body: ChatRequest, auth=Depends(require_scopes("activity"))
         user_message=msg,
     )
 
-    from core.activity.pseudo_stream import push_companion_reply
-    _msg_id = await push_companion_reply(reply, char_id=char_id)
+    _msg_id = None
 
     return {
         "session_id": body.session_id,
@@ -386,11 +389,13 @@ async def chess_chat(body: ChatRequest, auth=Depends(require_scopes("activity"))
 
 
 class CommentRequest(BaseModel):
+    request_id: str = ""
     session_id: str
     uid: str = ""
 
 
 @router.post("/chess/comment", summary="主动评论（AI 落子后/终局后由后端裁决是否说话）")
+@reality_dialogue("chess", assistant_only=True)
 async def chess_comment(body: CommentRequest, auth=Depends(require_scopes("activity"))):
     """
     主动评论接口（Brief 43 §D）。
@@ -416,8 +421,7 @@ async def chess_comment(body: CommentRequest, auth=Depends(require_scopes("activ
         state=session.state,
     )
 
-    from core.activity.pseudo_stream import push_companion_reply
-    _msg_id = await push_companion_reply(comment, char_id=char_id)
+    _msg_id = None
 
     return {
         "session_id": body.session_id,

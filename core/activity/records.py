@@ -73,6 +73,15 @@ def read(uid: str, char_id: str, source_ref: str, *, offset: int = 0,
     value = session(uid, char_id, kind, sid)
     if section == "state":
         entries = [value.to_dict()]
+    elif section == "summary":
+        path = transcript._path(char_id, uid, kind, sid).parent / "continuity_projection.json"
+        if not path.exists():
+            return {"status": "pending", "source_ref": source_ref, "items": []}
+        projection = json.loads(path.read_text(encoding="utf-8"))
+        current = read(uid, char_id, f"activity:{kind}:{sid}:dialogue", limit=1)["revision"]
+        if projection.get("revision") != current:
+            return {"status": "pending", "reason": "source_revision_changed", "items": []}
+        entries = projection.get("segments", [])
     elif section == "moves":
         entries = list(getattr(value, "state", {}).get("move_history", []))
     elif section == "dialogue":

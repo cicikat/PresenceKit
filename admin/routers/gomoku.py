@@ -21,6 +21,8 @@ import json
 import logging
 import re
 
+from core.activity.continuity import reality_dialogue
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
@@ -173,7 +175,7 @@ async def close_gomoku(body: CloseRequest, auth=Depends(require_scopes("activity
     if session is None:
         raise HTTPException(status_code=404, detail=f"session {body.session_id!r} 不存在")
     if summary is not None:
-        await _activity_summary.generate_and_reflow(uid, char_id, "gomoku", session.session_id)
+        asyncio.create_task(_activity_summary.generate_and_reflow(uid, char_id, "gomoku", session.session_id))
     resp: dict = {
         "session_id": session.session_id,
         "status": "closed",
@@ -232,12 +234,14 @@ _CHAT_MAX_MESSAGE_LEN = 1000
 
 
 class ChatRequest(BaseModel):
+    request_id: str = ""
     session_id: str
     message: str
     uid: str = ""
 
 
 @router.post("/gomoku/chat", summary="活动内对话（P0）")
+@reality_dialogue("gomoku")
 async def gomoku_chat(body: ChatRequest, auth=Depends(require_scopes("activity"))):
     """
     活动内对话接口（P0）。
@@ -273,8 +277,7 @@ async def gomoku_chat(body: ChatRequest, auth=Depends(require_scopes("activity")
         user_message=msg,
     )
 
-    from core.activity.pseudo_stream import push_companion_reply
-    _msg_id = await push_companion_reply(reply, char_id=char_id)
+    _msg_id = None
 
     return {
         "session_id": body.session_id,
@@ -286,11 +289,13 @@ async def gomoku_chat(body: ChatRequest, auth=Depends(require_scopes("activity")
 
 
 class CommentRequest(BaseModel):
+    request_id: str = ""
     session_id: str
     uid: str = ""
 
 
 @router.post("/gomoku/comment", summary="主动评论（AI 落子后/终局后由后端裁决是否说话）")
+@reality_dialogue("gomoku", assistant_only=True)
 async def gomoku_comment(body: CommentRequest, auth=Depends(require_scopes("activity"))):
     """
     主动评论接口（Brief 43 §D）。
@@ -316,8 +321,7 @@ async def gomoku_comment(body: CommentRequest, auth=Depends(require_scopes("acti
         state=session.state,
     )
 
-    from core.activity.pseudo_stream import push_companion_reply
-    _msg_id = await push_companion_reply(comment, char_id=char_id)
+    _msg_id = None
 
     return {
         "session_id": body.session_id,

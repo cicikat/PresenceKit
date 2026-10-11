@@ -46,6 +46,8 @@ def append_entry(
             f.write(line + "\n")
     except Exception as e:
         logger.error("[transcript] append failed session=%s: %s", session_id, e)
+        from core.activity.store import ActivityPersistenceError
+        raise ActivityPersistenceError("Activity transcript persistence failed") from e
 
 
 def load_recent(

@@ -492,6 +492,19 @@ def build(
         "_layer": "1_system_prompt",
     })
 
+    # Reality state references are bounded; raw moves/pages remain in activity records.
+    try:
+        from core.activity.records import list_sessions
+        from core.config_loader import get_config as _continuity_config
+        _owner = str(_continuity_config().get("scheduler", {}).get("owner_id") or "")
+        if _owner and _owner == str(user_id):
+            _sessions = list_sessions(_owner, char_id, limit=3, active_only=True)["items"]
+            if _sessions:
+                messages.append({"role": "system", "_layer": "activity_continuity",
+                    "_drop_priority": 10, "content": "真实活动状态引用（状态以记录为准，可用query_activity_records回读）：" + str(_sessions)})
+    except Exception:
+        pass
+
     # ─────────────────────────────────────────────────────────────────────────
     from core.audio_perception import prompt_hint as _audio_hint
     if audio_hint := _audio_hint():

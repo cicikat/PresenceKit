@@ -2,6 +2,7 @@
 from pathlib import Path
 from typing import Literal
 
+from core.activity.continuity import reality_dialogue
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -142,10 +143,12 @@ async def command(body: Command, auth=Depends(require_scopes("activity"))):
 
 
 class Chat(BaseModel):
+    request_id: str = ""
     model_config = ConfigDict(extra="forbid", strict=True)
     text: str = Field(min_length=1, max_length=500)
 
 
 @router.post("/minecraft/chat")
+@reality_dialogue("minecraft")
 async def chat(body: Chat, auth=Depends(require_scopes("activity"))):
     return await execute(service().chat(body.text))
