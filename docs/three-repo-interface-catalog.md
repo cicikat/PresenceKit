@@ -1181,3 +1181,13 @@ GET /activity/records（state.read）默认仅列来源元数据；指定 source
 表达状态 has_signal=false 表示无短时信号，区别于明确 neutral。来源 turn/source_at/version/expires_at 可观测，最多30分钟且只读不续期；旧固定 mood 不转成新余韵。prompt 的 expression_afterglow 是可裁剪层，prompt_eligible 表示资格，实际注入以 prompt 观测为准。没有新增模型情绪检测、随机活动或成长等级控制开关。
 
 QQ 默认只回复 QQ 当轮输入，手机/桌面及主动消息不广播到 QQ。后端管理设置新增 qq_outbound_mode 与空间请求/写入间隔；无客户端 payload、scope、ack、TTL 或设置界面变动，无需改桌面/手机仓。observe：真实 QQ 回复、静默及空间互动尚需运行中后端验收。
+
+## 2026-10-11 Avatar shared motion consumer (observe/roadmap)
+
+Desktop adds local read_shared_motion_config for one character/motions/library.json and reuses
+read_room_motion_file. Existing scoped message_segments.perform head/expression selects the
+existing motion player; no new WS field, inference, backend setting, identity, permission,
+fanout, ack, TTL, persistent mood, trace or queue. Successful Rig/clip adaptations are bounded
+WebView memory only, with local diagnostics. Mobile has no GLB motion consumer and its relay
+contract is unchanged. observe: real backend-to-native performance and skin switching;
+roadmap: authored thinking/arms_crossed/camera_reach and camera_closeup choreography/contact IK.
