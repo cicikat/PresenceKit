@@ -19,10 +19,11 @@ from __future__ import annotations
 import json
 import logging
 import time
+import threading
 from datetime import datetime
 from pathlib import Path
 
-from core.safe_write import safe_write_json
+from core.safe_write import safe_write_json, safe_append_jsonl
 from core.sandbox import get_paths
 
 from core.activity.registry import get_activity_meta
@@ -30,6 +31,7 @@ from core.activity.session import ActivitySession, new_session_id, now_iso
 from core.activity.types import ALLOWED_ACTIVITY_TYPES
 
 logger = logging.getLogger(__name__)
+_WRITE_LOCK = threading.RLock()
 
 
 def _parse_session_ts(value: str) -> float | None:
@@ -43,7 +45,7 @@ def _parse_session_ts(value: str) -> float | None:
 
 
 def _session_is_stale(session: ActivitySession, *, now: float | None = None) -> bool:
-    meta = get_activity_meta(session.activity_type)
+    meta = get_activity_meta(getattr(session, "activity_type", getattr(session, "mode", "")))
     if meta is None:
         return False
     current = time.time() if now is None else float(now)
@@ -110,10 +112,29 @@ def _session_path(char_id: str, uid: str, activity_type: str, session_id: str) -
 def save_session(session: ActivitySession) -> None:
     """原子写入 session.json，失败时拒绝向调用方伪装成功。"""
     p = _session_path(session.char_id, session.uid, session.activity_type, session.session_id)
-    ok = safe_write_json(p, session.to_dict())
-    if not ok:
-        logger.error("[activity_store] save failed: %s", session.session_id)
-        raise ActivityPersistenceError("Activity session persistence failed")
+    persist_revision(session, p, writer=safe_write_json)
+
+
+def persist_revision(session, path: Path, *, writer) -> None:
+    """CAS in the single backend process: late snapshots cannot overwrite new state."""
+    with _WRITE_LOCK:
+        old = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+        expected = int(old.get("revision") or 0)
+        if session.revision != expected:
+            raise ActivityPersistenceError("Activity source revision changed")
+        value = session.to_dict() | {"revision": expected + 1}
+        if not writer(path, value):
+            raise ActivityPersistenceError("Activity session persistence failed")
+        session.revision = expected + 1
+        state = getattr(session, "state", {})
+        event = {"event_id": f"{session.session_id}:{session.revision}",
+                 "revision": session.revision, "ts": session.updated_at,
+                 "status": session.status,
+                 "current_page": getattr(session, "current_page", None),
+                 "fen": state.get("fen"), "last_move": state.get("last_move"),
+                 "move_count": len(state.get("move_history", []))}
+        if not safe_append_jsonl(path.parent / "state_events.jsonl", event):
+            raise ActivityPersistenceError("Activity state saved; event persistence incomplete")
 
 
 def load_session(

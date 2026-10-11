@@ -44,7 +44,10 @@ def reality_dialogue(kind, *, assistant_only=False):
             else:
                 sid = body.session_id
             try:
-                records.session(uid, char_id, kind, sid)
+                value = records.session(uid, char_id, kind, sid)
+                from core.activity.store import _session_is_stale
+                if _session_is_stale(value):
+                    raise HTTPException(409, "activity session expired")
             except LookupError:
                 raise HTTPException(404, "activity source unavailable")
             request_id = str(getattr(body, "request_id", "") or uuid.uuid4().hex)

@@ -31,6 +31,7 @@ class ReadingSession:
     updated_at: str          # ISO 8601 UTC
     status: SessionStatus
     mode: Literal["reading"] = "reading"
+    revision: int = 0
 
     def to_dict(self) -> dict:
         title = self.filename[:-4] if self.filename.lower().endswith(".pdf") else self.filename
@@ -47,6 +48,7 @@ class ReadingSession:
             "updated_at": self.updated_at,
             "status": self.status,
             "mode": self.mode,
+            "revision": self.revision,
         }
 
     @classmethod
@@ -63,6 +65,7 @@ class ReadingSession:
             updated_at=data["updated_at"],
             status=data["status"],
             mode=data.get("mode", "reading"),
+            revision=int(data.get("revision") or 0),
         )
 
 

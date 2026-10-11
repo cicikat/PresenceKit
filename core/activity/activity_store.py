@@ -23,7 +23,7 @@ from core.safe_write import safe_write_json, safe_write_text
 from core.sandbox import get_paths
 
 from core.activity.reading_session import ReadingSession
-from core.activity.store import ActivityPersistenceError
+from core.activity.store import ActivityPersistenceError, persist_revision
 
 logger = logging.getLogger(__name__)
 
@@ -45,10 +45,7 @@ def _pages_dir(char_id: str, uid: str, session_id: str) -> Path:
 def save_session(session: ReadingSession) -> None:
     """原子写入 session metadata（不含页面正文），失败时抛出明确错误。"""
     p = _session_dir(session.char_id, session.uid, session.session_id) / "metadata.json"
-    ok = safe_write_json(p, session.to_dict())
-    if not ok:
-        logger.error("[activity_store] 保存 metadata 失败: %s", session.session_id)
-        raise ActivityPersistenceError("Reading session metadata persistence failed")
+    persist_revision(session, p, writer=safe_write_json)
 
 
 def save_pages(char_id: str, uid: str, session_id: str, pages: list[str]) -> None:
@@ -128,7 +125,10 @@ def find_active_session(char_id: str, uid: str) -> ReadingSession | None:
         try:
             data = json.loads(meta.read_text(encoding="utf-8"))
             s = ReadingSession.from_dict(data)
-            if s.status == "active":
+            from core.activity.store import _session_is_stale
+            if (s.uid, s.char_id, s.session_id) != (uid, char_id, session_dir.name):
+                continue
+            if s.status == "active" and not _session_is_stale(s):
                 candidates.append(s)
         except Exception:
             continue

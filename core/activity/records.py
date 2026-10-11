@@ -16,6 +16,27 @@ def revision(value) -> str:
                                     default=str).encode("utf-8")).hexdigest()[:24]
 
 
+def projection_status(uid: str, char_id: str, kind: str, sid: str) -> dict:
+    root = transcript._path(char_id, uid, kind, sid).parent
+    path = root / "continuity_projection.json"
+    result = {"status": "not_projected", "covered_entries": 0, "pending_receipts": 0}
+    if path.exists():
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            result.update({key: raw.get(key) for key in ("status", "revision", "covered_entries", "reason")})
+        except (ValueError, OSError):
+            result.update(status="partial", reason="projection_unreadable")
+    receipt_dir = root / "dialogue_receipts"
+    if receipt_dir.exists():
+        for path in receipt_dir.glob("*.json"):
+            try:
+                if json.loads(path.read_text(encoding="utf-8")).get("status") != "completed":
+                    result["pending_receipts"] += 1
+            except (ValueError, OSError):
+                result["pending_receipts"] += 1
+    return result
+
+
 def session(uid: str, char_id: str, activity_type: str, session_id: str):
     if activity_type not in REALITY_TYPES:
         raise ValueError("unsupported Reality activity")
@@ -43,7 +64,7 @@ def list_sessions(uid: str, char_id: str, *, offset: int = 0, limit: int = 20,
                 continue
             try:
                 value = session(uid, char_id, kind, directory.name)
-                stale = kind != "reading" and store._session_is_stale(value)
+                stale = store._session_is_stale(value)
                 if active_only and (value.status != "active" or stale):
                     continue
                 raw = value.to_dict()
@@ -52,7 +73,8 @@ def list_sessions(uid: str, char_id: str, *, offset: int = 0, limit: int = 20,
                                "status": "expired" if stale and value.status == "active" else value.status,
                                "created_at": value.created_at, "updated_at": value.updated_at,
                                "revision": revision(raw),
-                               "source_ref": f"activity:{kind}:{value.session_id}:state"})
+                               "source_ref": f"activity:{kind}:{value.session_id}:state",
+                               "projection": projection_status(uid, char_id, kind, value.session_id)})
             except (ValueError, LookupError):
                 continue
     values.sort(key=lambda item: (item["updated_at"], item["session_id"]), reverse=True)
@@ -72,7 +94,25 @@ def read(uid: str, char_id: str, source_ref: str, *, offset: int = 0,
     _, kind, sid, section, *number = parts
     value = session(uid, char_id, kind, sid)
     if section == "state":
-        entries = [value.to_dict()]
+        raw = value.to_dict()
+        if "state" in raw:
+            raw["state"] = dict(raw["state"])
+            history = raw["state"].pop("move_history", [])
+            raw["move_count"] = len(history)
+            raw["moves_ref"] = f"activity:{kind}:{sid}:moves"
+        entries = [raw]
+    elif section == "events":
+        root = (get_paths().reading_session_dir(char_id=char_id, uid=uid, session_id=sid)
+                if kind == "reading" else transcript._path(char_id, uid, kind, sid).parent)
+        path = root / "state_events.jsonl"
+        entries = []
+        if path.exists():
+            with path.open(encoding="utf-8") as stream:
+                for line in stream:
+                    try:
+                        entries.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        continue
     elif section == "summary":
         path = transcript._path(char_id, uid, kind, sid).parent / "continuity_projection.json"
         if not path.exists():
@@ -147,5 +187,6 @@ def tasks(uid: str, char_id: str) -> list[dict]:
                                     or float(raw.get("lease_until") or 0) <= time.time()):
             status = "interrupted"
         values.append({key: raw.get(key) for key in ("task_id", "capability", "created_at", "updated_at")}
-                      | {"status": status, "realm": "reality", "revision": revision(raw)})
+                      | {"status": status, "realm": "reality", "revision": revision(raw),
+                         "source_ref": f"task:{raw.get('task_id')}", "read_tool": "get_agent_task"})
     return values

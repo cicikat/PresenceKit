@@ -27,6 +27,7 @@ class ActivitySession:
     state: dict
     created_at: str      # ISO 8601 UTC
     updated_at: str      # ISO 8601 UTC
+    revision: int = 0
 
     def to_dict(self) -> dict:
         return {
@@ -38,6 +39,7 @@ class ActivitySession:
             "state": self.state,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
+            "revision": self.revision,
         }
 
     @classmethod
@@ -51,6 +53,7 @@ class ActivitySession:
             state=data.get("state") or {},
             created_at=data["created_at"],
             updated_at=data["updated_at"],
+            revision=int(data.get("revision") or 0),
         )
 
 

@@ -25,3 +25,13 @@ def test_long_original_and_concurrent_sessions(sandbox):
     ref = f"activity:chess:{first.session_id}:entry:0"
     assert records.read("owner", "companion", ref, text_offset=15000)["items"][0]["text"] == "TAIL"
     assert records.list_sessions("owner", "companion", active_only=True)["total"] == 2
+
+
+def test_late_state_cannot_replace_current_board(sandbox):
+    value = store.create_session("owner", "companion", "chess")
+    stale = store.load_session("companion", "owner", "chess", value.session_id)
+    store.update_state("companion", "owner", "chess", value.session_id, {"fen": "new"})
+    stale.state = {"fen": "old"}
+    with pytest.raises(store.ActivityPersistenceError):
+        store.save_session(stale)
+    assert store.load_session("companion", "owner", "chess", value.session_id).state["fen"] == "new"
