@@ -36,6 +36,13 @@ async function loadObserveListening() {
 }
 
 async function loadObserveMood() {
+  const activityEl = document.getElementById('obs-activity-records');
+  if (activityEl) {
+    activityEl.textContent = '加载中…';
+    api('GET', '/activity/records').then(data => {
+      activityEl.textContent = JSON.stringify(data, null, 2);
+    }).catch(error => { activityEl.textContent = '加载失败：' + error.message; });
+  }
   const moodEl   = document.getElementById('obs-mood-raw');
   const gardenEl = document.getElementById('obs-garden-raw');
   moodEl.textContent = gardenEl.textContent = '加载中…';

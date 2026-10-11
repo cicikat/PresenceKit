@@ -628,3 +628,14 @@ historical tool receipts. Client evidence: docs/tool-activity-2026-09-12.md in t
 群聊与非 owner 私聊默认关闭，通过消息分发与客户端设置热更新。解析入口及出队入口检查同一准入规则；关闭时不记录群上下文、不更新 presence / owner 活动、不运行媒体/模型。owner 未绑定时私聊按其他用户处理。群聊打开后仍仅响应 @；不以主用户在群中发言为私聊。
 
 既有隔离边界：群聊仅角色卡 + group_context + 主聊天模型，直接 QQ 发送，不走 turn sink / fixation；群上下文仅按 group_id，未按角色区分，主用户群消息在旧链还会更新 owner 梦境/活跃/DND 状态。其他用户私聊仍复用 reality 主链、用户桶、工具和 turn sink；共享角色运行状态及工具推送面不构成完整多用户隔离；普通 QQ 回复 adapter 使用 fanout=[]，不直接广播正文至 desktop/mobile。两个开关是暂停入口，不是重新设计后的隔离证明。
+
+
+## 工单284当前合同
+
+Reality 活动对话由同一 owner/char 的 canonical turn sink 落盘，使用原有脱敏、来源与回合去重。阅读、棋局和 Minecraft 保留独立交互界面；回复只由调用窗口消费，不进行全局主聊天伪流转播。结构化棋步、页面正文、文件和工具回执不批量转换成聊天消息。Dream 隔离不变。
+
+活动请求可携带 request_id，重试须复用同一值；返回 turn_id、msg_id、request_id、source_ref。配置 owner 是服务端身份，客户端不能用 uid 切换用户。新状态使用 revision 比较写入，旧快照拒绝覆盖；state_events 保留实际状态变化。活动对话的 canonical event 携带 activity_record 引用，派生记忆可通过源 event 回到完整分页记录。旧局部 transcript 可原地查询，不自动导入历史或增加指标。
+
+GET /activity/records（state.read）默认仅列来源元数据；指定 source_ref 才读取原文。query_activity_records 使用 dispatcher 身份；未指定引用时关键词/时间查询跨当前身份的活动原文。概要是 revision 绑定的分段摘录，标注 coverage/pending，回复发送后构建；失败保留原文，后续对话或关闭重试。canonical 撤回也遮蔽已关联的局部召回，并使旧概要失效。
+
+表达状态 has_signal=false 表示无短时信号，区别于明确 neutral。来源 turn/source_at/version/expires_at 可观测，最多30分钟且只读不续期；旧固定 mood 不转成新余韵。prompt 的 expression_afterglow 是可裁剪层，prompt_eligible 表示资格，实际注入以 prompt 观测为准。没有新增模型情绪检测、随机活动或成长等级控制开关。

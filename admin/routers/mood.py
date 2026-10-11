@@ -19,4 +19,6 @@ async def get_mood_state(
     auth=Depends(require_scopes("state.read")),
 ):
     resolved = resolve_requested_char_id(char_id, fallback=_active_char_id)
-    return mood_state.load(char_id=resolved)
+    state = mood_state.load(char_id=resolved)
+    return {**state, "char_id": resolved, "prompt_eligible": bool(state.get("has_signal")),
+            "prompt_layer": "expression_afterglow"}

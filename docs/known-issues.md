@@ -939,3 +939,8 @@ Minecraft275（observe）：陪伴/保护/白名单小屋、共享快模型路�
 ## 282 Windows HTTP accept 恢复验收
 
 WinError64关闭listener的问题已增加生命周期局部适配，Windows真实TCP故障注入后下一连接成功；生产进程重启及手机收发验收为 observe。相关测试 test_desktop_chat_keeps_desktop_provenance 旧断言未包含既有trusted_user_text参数，当前为 open 测试更新项，本单未改desktop入口。详见 [runtime-lifecycle.md](runtime-lifecycle.md)。
+
+
+## 工单284交付验收边界（2026-10-11，observe）
+
+current：Reality真实对话统一canonical历史，结构化活动按引用查询，独立交互界面保留；随机ambient/成长等级与强制情绪链已退役。observe：真实设备/模型、桌面3D/Pet/Live2D/视频与手机真机尚未验收；生产服务未由本单重启。现有sensor协议无独立设备身份，设备切换隔离不能据夹具宣称完成。状态revision CAS限单后端进程；活动原文查询返回有界但扫描成本随存量增长。未进行历史私有数据导入或删除。

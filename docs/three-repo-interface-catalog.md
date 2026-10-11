@@ -1168,3 +1168,14 @@ Minecraft后端增量：`build_house`参数material/x/y/z严格白名单；`allo
 `GET /perception/visual-trace` 保留原路由和 `state.read`，兼容既有 `date`、`limit`（1..500）、`before`，新增 `source` 筛选。返回 `entries`、`count` 并新增 `sources` 与 `next_before`。来源列表来自当前日期与游标前的记录；`next_before` 是本页最早时间戳，仅仍有记录时返回，前端使用严格小于游标的下一页。空文件继续返回空列表。
 
 条目兼容原 `ts/source/caption/dropped`，新增识别出口的 `model/provider/status/cached/image_count/truncated`。全部识别诊断使用统一台账，敏感/失败记录不返回正文，保留30天且受文本与总大小限制。后端管理面消费新字段；桌面/手机的图像上传、屏幕采集、摄像头路由和能力合同未变化，不新增客户端设置或权限。
+
+
+## 工单284当前合同
+
+Reality 活动对话由同一 owner/char 的 canonical turn sink 落盘，使用原有脱敏、来源与回合去重。阅读、棋局和 Minecraft 保留独立交互界面；回复只由调用窗口消费，不进行全局主聊天伪流转播。结构化棋步、页面正文、文件和工具回执不批量转换成聊天消息。Dream 隔离不变。
+
+活动请求可携带 request_id，重试须复用同一值；返回 turn_id、msg_id、request_id、source_ref。配置 owner 是服务端身份，客户端不能用 uid 切换用户。新状态使用 revision 比较写入，旧快照拒绝覆盖；state_events 保留实际状态变化。活动对话的 canonical event 携带 activity_record 引用，派生记忆可通过源 event 回到完整分页记录。旧局部 transcript 可原地查询，不自动导入历史或增加指标。
+
+GET /activity/records（state.read）默认仅列来源元数据；指定 source_ref 才读取原文。query_activity_records 使用 dispatcher 身份；未指定引用时关键词/时间查询跨当前身份的活动原文。概要是 revision 绑定的分段摘录，标注 coverage/pending，回复发送后构建；失败保留原文，后续对话或关闭重试。canonical 撤回也遮蔽已关联的局部召回，并使旧概要失效。
+
+表达状态 has_signal=false 表示无短时信号，区别于明确 neutral。来源 turn/source_at/version/expires_at 可观测，最多30分钟且只读不续期；旧固定 mood 不转成新余韵。prompt 的 expression_afterglow 是可裁剪层，prompt_eligible 表示资格，实际注入以 prompt 观测为准。没有新增模型情绪检测、随机活动或成长等级控制开关。
