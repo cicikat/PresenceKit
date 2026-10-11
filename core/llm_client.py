@@ -375,6 +375,8 @@ async def chat(
         vision_cfg = _resolve_vision_config(vision_purpose)
         vision_client = _get_vision_client(vision_cfg)
         if vision_client is None and vision_purpose:
+            from core.image_observability import append as record_image
+            record_image(source=vision_purpose, error='vision_route_unavailable')
             # 不能静默回落到文本 preset：那会把图片块发给主聊天模型，
             # 看起来"本地图像模型在用"，实际请求从未打到它。
             raise VisionRouteError(vision_purpose, "vision_route_unavailable")
@@ -383,6 +385,8 @@ async def chat(
             # chat.completions and logging "chat_completions" regardless.
             protocol = str(vision_cfg.get("api_protocol") or "chat_completions")
             if protocol not in {"chat_completions", "responses"}:
+                from core.image_observability import append as record_image
+                record_image(source=vision_purpose or 'vision', error='unsupported_api_protocol')
                 raise VisionRouteError(vision_purpose, f"unsupported_api_protocol:{protocol}")
             # Vision branch: sanitize only (no prompt_style transform needed)
             safe_msgs = sanitize_messages(messages)
@@ -435,6 +439,13 @@ async def chat(
                     ok=True,
                     protocol=protocol,
                 )
+                from core.image_observability import append as record_image
+                image_count = sum(1 for msg in safe_msgs for block in
+                                  (msg.get('content') if isinstance(msg.get('content'), list) else [])
+                                  if isinstance(block, dict) and block.get('type') == 'image_url')
+                record_image(source=vision_purpose or "vision", result=content, image_count=image_count,
+                             error='' if content else 'empty_response',
+                             model=str(vision_cfg.get("model") or ""), provider=str(vision_cfg.get("provider") or ""))
                 return content
             except Exception as e:
                 category = ("timeout" if isinstance(e, APITimeoutError) else
@@ -450,6 +461,9 @@ async def chat(
                     error_category=category,
                     protocol=protocol,
                 )
+                from core.image_observability import append as record_image
+                record_image(source=vision_purpose or "vision", error=category,
+                             model=str(vision_cfg.get("model") or ""), provider=str(vision_cfg.get("provider") or ""))
                 if camera_frame or isinstance(e, VisionRouteError):
                     raise
                 log_error("llm_client.chat.vision", e)

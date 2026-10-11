@@ -108,6 +108,9 @@ async def test_vlm_describe_failure_logs_exception_type_not_body(monkeypatch, ca
 
     from core.perception import vlm_client
 
+    monkeypatch.setattr(vlm_client, 'route_chain', lambda source: [{'config': {
+        'base_url': 'http://vlm', 'model': 'local', 'timeout_s': 1, 'provider': 'local'}}])
+    monkeypatch.setattr('core.image_presets.aiohttp_error_category', lambda exc: 'connection_error')
     monkeypatch.setattr(
         "core.perception.vlm_client.get_visual_perception_config",
         lambda: {"enabled": True, "base_url": "http://vlm", "model": "local", "timeout_s": 1, "provider": "local"},

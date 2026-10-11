@@ -174,7 +174,9 @@ async def read_post(share: str='', *, user_id=None, char_id=None, read_id='') ->
             for image in result['images'][:image_limit]:
                 try:
                     await asyncio.sleep(random.uniform(1, 2))
-                    description = await asyncio.wait_for(process_image(image['url']), timeout=12)
+                    from core.image_observability import attributed
+                    with attributed('xiaohongshu'):
+                        description = await asyncio.wait_for(process_image(image['url']), timeout=12)
                     image['description'] = str(description or '')[:3000]
                     image['status'] = 'analyzed' if description else 'unavailable'
                 except Exception:

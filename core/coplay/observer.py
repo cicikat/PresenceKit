@@ -272,10 +272,12 @@ async def vlm_fallback_summary(frame: bytes, *, char_id: str) -> str | None:
     ]
     try:
         from core import llm_client
-        result = await llm_client.chat(
-            [{"role": "user", "content": content_blocks}], use_vision=True, call_category="vision",
-            char_id=char_id,
-        )
+        from core.image_observability import attributed
+        with attributed('coplay'):
+            result = await llm_client.chat(
+                [{"role": "user", "content": content_blocks}], use_vision=True, call_category="vision",
+                char_id=char_id,
+            )
         return (result or "").strip() or None
     except Exception:
         logger.exception("[coplay_observer] VLM 兜底调用失败（fail-open）")

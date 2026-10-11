@@ -468,13 +468,17 @@ async def test_image_connection(
                 truncated = bool(response.choices and response.choices[0].finish_reason == "length")
                 return response.choices[0].message.content if response.choices else ""
         from core.conversation_stats import exclude_diagnostic
-        with exclude_diagnostic():
+        from core.image_observability import suppress_nested_trace
+        with exclude_diagnostic(), suppress_nested_trace():
             answer = await asyncio.wait_for(probe(), timeout=25)
         ok = bool(not truncated and answer and answer.strip() and answer.strip() != "[OCR: no text detected]")
         error = "output_truncated" if truncated else ("" if ok else "empty_response")
     except Exception as exc:
         error = type(exc).__name__
     duration = int((time.monotonic() - started) * 1000)
+    from core.image_observability import append as record_image
+    record_image(source="admin_image_test", result=answer if ok else "", error=error,
+                 model=str(vision.get("model") or ""), provider="image_test")
     api_call_log.append(caller="admin_image_test", purpose=connection, provider="image_test",
                         model=str(vision.get("model") or ""),
                         duration_ms=duration, ok=ok, error_category=error)

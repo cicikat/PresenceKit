@@ -196,12 +196,17 @@ async def _decide_once(
                 duration_ms=duration_ms, ok=False, output_hint="invalid_response",
             )
             logger.warning("[phone_control.vision] 响应解析失败 model=%s raw=%r", model, raw)
+            from core.image_observability import append as record_image
+            record_image(source="phone_control", model=model, error="invalid_response")
             return None, "invalid", "invalid_response"
         append(
             caller="phone_control", purpose="next_action",
             provider=str(cfg.get("provider") or "openai_compatible"), model=model,
             duration_ms=duration_ms, ok=True,
         )
+        from core.image_observability import append as record_image
+        record_image(source="phone_control", result=json.dumps(raw, ensure_ascii=False),
+                     model=model, provider=str(cfg.get("provider") or ""), sensitive=parsed.status == "need_confirmation")
         return parsed, None, ""
     except Exception as exc:
         from core.image_presets import aiohttp_error_category
@@ -218,4 +223,6 @@ async def _decide_once(
         except Exception:
             pass
         logger.warning("[phone_control.vision] 调用失败 category=%s: %s", category, exc)
+        from core.image_observability import append as record_image
+        record_image(source="phone_control", model=model, error=category)
         return None, "error", category

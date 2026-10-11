@@ -150,6 +150,7 @@ async function loadFeatureCenter() {
   ]);
   const section=(title,body)=>`<section class="card"><h3>${title}</h3>${body}</section>`;
   const flags=results[0], tools=results[1], loop=results[2], state=results[3];
+  if(tools.status==='fulfilled') refreshToolExecutionStates(tools.value.tools);
   const grouped=new Set(Object.values(CENTER_GROUPED_FLAGS).flat());
   const remainingFlags=flags.status==='fulfilled'?Object.entries(flags.value.flags||{}).filter(([name])=>!grouped.has(name)).map(([name,item])=>centerSwitch(centerFeatureNames()[name]||item.label,item.enabled,'flag',name,false,centerFlagNote(item,name))).join(''):t('settings_center.could_not_load_refresh_to_retry',"读取失败，请刷新重试");
   const peek=results[7], meta=results[8], sticker=results[9], browser=results[10];

@@ -126,7 +126,9 @@ async def read_xiaohongshu_images(user_id,read_id,start,count=2,*,char_id):
             if not effective or not image['url']:
                 image['status']='unavailable';continue
             try:
-                description=await asyncio.wait_for(process_image(image['url']),timeout=12)
+                from core.image_observability import attributed
+                with attributed('xiaohongshu'):
+                    description=await asyncio.wait_for(process_image(image['url']),timeout=12)
                 image.update(description=str(description or '')[:3000],status='analyzed' if description else 'unavailable')
             except Exception:image['status']='unavailable'
             await asyncio.sleep(random.uniform(1,2))

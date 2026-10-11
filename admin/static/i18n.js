@@ -319,7 +319,7 @@
       'nav.page.call-records': "服务调用与任务记录",
       'nav.page.observe-autonomy': "主动活动记录",
       'nav.page.observe-char-permissions': "角色当前可用的能力",
-      'nav.page.observe-visual': "屏幕与图片感知记录",
+      'nav.page.observe-visual': "图像识别记录",
       'nav.page.observe-mood': "情绪与花园状态",
       'nav.page.observe-listening': "共同听歌状态",
       'nav.page.observe-hidden': "用户隐性状态",

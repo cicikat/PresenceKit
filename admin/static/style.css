@@ -923,3 +923,5 @@ textarea { resize: vertical; min-height: 72px; }
 #feature-center-list [data-feature-row] { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(180px, 2fr) auto auto; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); align-items: center; }
 #feature-center-list [data-feature-row][hidden] { display: none; }
 @media (max-width: 760px) { #feature-center-list [data-feature-row] { grid-template-columns: 1fr 1fr; } }
+
+.visual-result{white-space:pre-wrap;overflow-wrap:anywhere;max-height:360px;overflow:auto;}

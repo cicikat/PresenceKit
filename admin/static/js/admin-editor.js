@@ -61,7 +61,7 @@
       if(!heading) return;
       if(!card.dataset.editorCardKey) {
         const title=heading.querySelector('[data-i18n]');
-        const label=title?.dataset.i18n || heading.textContent.replace(/[▾▸−+]/g,'').trim();
+        const label=title?.dataset.i18n || (heading.querySelector('h2,h3,h4') || heading).textContent.replace(/[▾▸−+]/g,'').trim();
         card.dataset.editorCardKey=card.id || card.dataset.layoutKey || label;
       }
       heading.dataset.editorDragHandle='true'; heading.draggable=enabled;
@@ -91,7 +91,14 @@
   },true);
   function cardGroup(card) {
     const parent=card.parentElement;
-    return (card.closest('.page')?.id || '')+':'+(parent.id || parent.closest('[data-editor-card-key]')?.dataset.editorCardKey || 'root');
+    if(!parent.dataset.editorGroupKey) {
+      const path=[];let node=parent;
+      while(node && !node.id && !node.dataset.editorCardKey) {
+        path.unshift([...node.parentElement.children].indexOf(node));node=node.parentElement;
+      }
+      parent.dataset.editorGroupKey=(node?.id || node?.dataset.editorCardKey || 'root')+':'+path.join('/');
+    }
+    return (card.closest('.page')?.id || '')+':'+parent.dataset.editorGroupKey;
   }
   document.addEventListener('dragstart',event=>{
     if(!enabled) return;

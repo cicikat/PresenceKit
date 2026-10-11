@@ -1155,3 +1155,8 @@ Minecraft后端增量：`build_house`参数material/x/y/z严格白名单；`allo
 桌面新增内部 Tauri character://behavior 通知，request-start/end 观察现有 send_chat，audio-start/end 观察 VoiceMessageBar 实际播放；独立 id、charId、epoch at，回复可关联 msgId，音频另含 scene。仅呈现，不新增 REST/WS、后端状态/配置/观测队列，原 TTS 与 performance_mapping 管理控制保持原契约。canonical/stream/perform 使用已有单角色 reality scope，Dream/群聊不驱动当前 GLB；结束只释放自身，角色切换清理。
 
 桌面 Pet/Room 共享仲裁，实际播放/文本反馈优先于 thinking，结束恢复可信情绪；手机仍消费 mobile TTS/原设置，不消费该内部事件，也不新增 GLB/PNG 能力。真实 Windows Tauri 聊天、TTS 与多窗口切换验收为 open；浏览器真实 GLB/PNG + 模拟 transport、真实 AudioElement 为已验证边界。桌面细节见其 docs/backend-integration.md 和 cc-tasks/2026-10-10-tv-behavior-p1-p2.md。
+# 图像识别管理面观测补充
+
+`GET /perception/visual-trace` 保留原路由和 `state.read`，兼容既有 `date`、`limit`（1..500）、`before`，新增 `source` 筛选。返回 `entries`、`count` 并新增 `sources` 与 `next_before`。来源列表来自当前日期与游标前的记录；`next_before` 是本页最早时间戳，仅仍有记录时返回，前端使用严格小于游标的下一页。空文件继续返回空列表。
+
+条目兼容原 `ts/source/caption/dropped`，新增识别出口的 `model/provider/status/cached/image_count/truncated`。全部识别诊断使用统一台账，敏感/失败记录不返回正文，保留30天且受文本与总大小限制。后端管理面消费新字段；桌面/手机的图像上传、屏幕采集、摄像头路由和能力合同未变化，不新增客户端设置或权限。

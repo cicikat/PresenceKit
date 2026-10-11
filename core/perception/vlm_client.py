@@ -160,6 +160,11 @@ async def describe_with_status(image_bytes: bytes, context_hint: str = "",
     for index, row in enumerate(chain):
         observation, reason, category = await _describe_once(
             row["config"], image_bytes, context_hint)
+        from core.image_observability import append as record_image
+        record_image(source=source, result=observation.caption if observation else "",
+                     sensitive=bool(observation and observation.sensitive), error=reason or "",
+                     model=str(row["config"].get("model") or ""), provider=str(row["config"].get("provider") or ""),
+                     **({"scene":observation.scene,"activity":observation.activity,"confidence":observation.confidence} if observation else {}))
         if observation is not None or reason == "invalid":
             return observation, reason
         if index + 1 < len(chain) and should_try_fallback(category):

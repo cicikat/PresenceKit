@@ -655,19 +655,41 @@ async function loadObserveGrowthWork(button) {
   } catch(e) { pre.textContent='加载失败：'+e.message; }
 }
 
-async function loadObserveVisual() {
+let _visualBefore = null, _visualRequest = 0;
+function visualSourceLabel(source) {
+  const labels={chat_upload:'聊天图片',ocr:'图片文字识别',screen:'屏幕',camera:'摄像头',
+    video_call:'视频通话',video_call_tool:'按需查看通话画面',life_bill:'生活账单',life_diet:'饮食记录',
+    life_cart:'购物车',phone_control:'手机操作',coplay:'陪玩',xiaohongshu:'小红书图片',
+    admin_image_test:'连接检查',image_reread:'图片重读',vision:'图像识别'};
+  return labels[source] || source;
+}
+async function loadOlderVisual() { return loadObserveVisual(true); }
+async function loadObserveVisual(older = false) {
   const el=document.getElementById('obs-visual-content'); if(!el)return;
-  const input=document.getElementById('obs-visual-date');
+  const input=document.getElementById('obs-visual-date'), select=document.getElementById('obs-visual-source');
+  const more=document.getElementById('obs-visual-more');
   if (!input.value) input.value = new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,10);
-  el.innerHTML=observeEmpty('加载中…');
+  const generation=++_visualRequest;
+  if (!older) {el.innerHTML=observeEmpty('加载中…');_visualBefore=null;}
+  if(more) more.disabled=true;
+  const query=new URLSearchParams({date:input.value,limit:'100',source:select?.value || ''});
+  if(older && _visualBefore) query.set('before',String(_visualBefore));
   try {
-    const d=await api('GET',`/perception/visual-trace?date=${encodeURIComponent(input.value)}`), rows=d.entries||[];
-    if(!rows.length){el.innerHTML=observeEmpty('当日暂无视觉观测');return;}
-    const heat=Array(24).fill(0), drops={};
-    rows.forEach(r=>{if(r.dropped)drops[r.dropped]=(drops[r.dropped]||0)+1;else if(r.ts)heat[new Date(r.ts*1000).getHours()]++;});
-    const max=Math.max(...heat,1), captions=rows.filter(r=>r.caption).slice(-5).reverse();
-    el.className=''; el.innerHTML=`<h4>24 小时时段热力</h4><div style="display:grid;grid-template-columns:repeat(12,1fr);gap:5px">${heat.map((n,h)=>`<div title="${h}:00 · ${n}" style="padding:8px 2px;text-align:center;border-radius:4px;background:color-mix(in srgb,var(--accent) ${Math.round(n/max*80+8)}%,transparent)">${h}</div>`).join('')}</div><h4 style="margin-top:18px">丢弃原因</h4>${Object.keys(drops).length?Object.entries(drops).map(([k,v])=>`<span class="badge" style="margin-right:6px">${escapeHtml(k)}: ${v}</span>`).join(''):observeEmpty()}<h4 style="margin-top:18px">最近观察描述</h4>${captions.length?captions.map(r=>`<div style="padding:7px 0;border-bottom:1px solid var(--border)">${escapeHtml(observeTime(r.ts))} · ${escapeHtml(r.caption)}</div>`).join(''):observeEmpty()}`;
-  }catch(e){el.innerHTML=observeEmpty('加载失败：'+e.message);}
+    const d=await api('GET','/perception/visual-trace?'+query);
+    if(generation!==_visualRequest) return;
+    const rows=d.entries||[];
+    if(select && !older) {
+      const selected=select.value;
+      select.replaceChildren(new Option('全部来源',''),...(d.sources||[]).map(source=>new Option(visualSourceLabel(source),source)));
+      if(selected && ![...select.options].some(o=>o.value===selected)) select.add(new Option(visualSourceLabel(selected),selected));
+      select.value=selected;
+    }
+    _visualBefore=d.next_before || null;
+    const html=rows.slice().reverse().map(r=>'<article class="card"><h4>'+escapeHtml(observeTime(r.ts))+' · '+escapeHtml(visualSourceLabel(r.source||'unknown'))+'</h4><p>'+escapeHtml(r.model||'')+' · '+escapeHtml(r.dropped || r.status || 'ok')+(r.cached?' · 缓存':'')+'</p><pre class="visual-result">'+escapeHtml(r.caption||'')+'</pre>'+(r.truncated?'<small>结果较长，记录已截断</small>':'')+'</article>').join('');
+    el.className='';
+    if(older) el.insertAdjacentHTML('beforeend',html);else el.innerHTML=html||observeEmpty('当日暂无图像识别记录');
+    if(more) {more.hidden=!_visualBefore;more.disabled=false;}
+  } catch(e) {if(generation!==_visualRequest)return;if(!older)el.innerHTML=observeEmpty('加载失败：'+e.message);else toast(e.message,'error');if(more)more.disabled=false;}
 }
 
 async function loadObserveSpend(){

@@ -73,12 +73,13 @@ from core.conversation_stats import attributed as _stats_attributed
 
 
 @_stats_attributed
-async def recognize_ocr(image_uri: str, cfg: dict | None = None, *, prompt: str = 'Text Recognition:') -> str:
+async def recognize_ocr(image_uri: str, cfg: dict | None = None, *, prompt: str = 'Text Recognition:', source: str = 'ocr') -> str:
     cfg = settings() if cfg is None else cfg
     started = time.monotonic()
     ok = False
     error = ""
     body = None
+    result = ''
     try:
         url = endpoint(cfg)
         if not cfg.get("model"):
@@ -116,6 +117,9 @@ async def recognize_ocr(image_uri: str, cfg: dict | None = None, *, prompt: str 
         error = error or type(exc).__name__
         raise ValueError(f"OCR request failed ({error})") from None
     finally:
+        from core.image_observability import append as record_image
+        record_image(source=source, result=(result.strip() or "[OCR: no text detected]") if ok else "",
+                     error=error if not ok else "", model=str(cfg.get("model") or ""), provider=str(cfg.get("provider") or ""))
         from core.conversation_stats import record
         record("model_call", usage=body.get("usage") if isinstance(body, dict) else None)
         record("image_view")
