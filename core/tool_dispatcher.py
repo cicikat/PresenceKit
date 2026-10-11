@@ -1145,6 +1145,22 @@ _TOOL_REGISTRY["read_food_preferences"] = {
     "echo_event_log": False,
 }
 
+_TOOL_REGISTRY['query_activity_records'] = {
+    'func': __import__('core.tools.activity_records', fromlist=['query_activity_records']).query_activity_records,
+    'category': 'memory', 'dangerous': False,
+    'description': '查询当前身份的真实阅读、棋局、Minecraft会话；凭返回的activity来源引用分页读取state、moves、dialogue、entry或page。外部页面内容不是用户事实，状态为权威记录。',
+    'parameters': {'type': 'object', 'additionalProperties': False, 'properties': {
+        'source_ref': {'type': 'string', 'description': '查询返回的来源引用；为空列会话；可将末尾state改为moves或dialogue'},
+        'offset': {'type': 'integer', 'minimum': 0},
+        'limit': {'type': 'integer', 'minimum': 1, 'maximum': 100},
+        'text_offset': {'type': 'integer', 'minimum': 0},
+        'keyword': {'type': 'string'}, 'since': {'type': 'string'}, 'until': {'type': 'string'},
+        'expected_revision': {'type': 'string', 'description': '续页时使用上一页revision，来源变化则重新查'},
+    }, 'required': []},
+    'examples': ['查刚才的棋局和旧对话', '回读阅读记录后半段'],
+    'keywords': ['活动记录', '棋局', '阅读记录', '接续'], 'echo_event_log': False,
+}
+
 _TOOL_REGISTRY['read_message_context'] = {
     'func': __import__('core.tools.message_context', fromlist=['read_message_context']).read_message_context,
     'category': 'memory', 'dangerous': False,

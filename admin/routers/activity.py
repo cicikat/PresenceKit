@@ -2,7 +2,7 @@
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 
 from admin.auth import require_scopes
 from admin.routers._common import active_char_id as _active_char_id
@@ -10,6 +10,30 @@ from admin.routers._common import resolve_requested_char_id
 from core.config_loader import get_config
 
 router = APIRouter()
+
+
+@router.get("/records", summary="Reality活动来源与分页记录")
+async def get_activity_records(
+    char_id: Optional[str] = None, source_ref: str = "", offset: int = 0,
+    limit: int = 20, text_offset: int = 0, expected_revision: str = "",
+    keyword: str = "", since: str = "", until: str = "",
+    auth=Depends(require_scopes("state.read")),
+):
+    from core.activity import records
+    char_id = resolve_requested_char_id(char_id, fallback=_active_char_id)
+    uid = str(get_config().get("scheduler", {}).get("owner_id") or "")
+    if not uid:
+        return {"items": [], "tasks": []}
+    try:
+        if source_ref:
+            return records.read(uid, char_id, source_ref, offset=offset, limit=limit,
+                                text_offset=text_offset, expected_revision=expected_revision,
+                                keyword=keyword, since=since, until=until)
+        return records.list_sessions(uid, char_id, offset=offset, limit=limit) | {"tasks": records.tasks(uid, char_id)}
+    except LookupError:
+        raise HTTPException(404, "source unavailable")
+    except ValueError:
+        raise HTTPException(409, "invalid query or changed source revision")
 
 
 def _timestamp(value: str) -> float | None:
