@@ -1201,3 +1201,7 @@ acceptance. partial: FoldArms entering/exiting and sleeve/hand contact; no conta
 ChatWindow refreshes existing character avatar on WS reconnect after startup failure;
 browser reload/reconnect passed, native process restart remains observe. Mobile settings,
 avatar endpoint and relay unchanged. No backend or mobile code modified.
+
+## Room TV local material presets (2026-10-12)
+
+current/local: desktop Room TV v02/v03 edit mode supports original/soft/cel, per-material palettes and bounded local presets in room.settings. No new backend capability, IPC/REST/WS or mobile consumer; no cross-end impact. observe: real Tauri window, animated overlap and GPU performance remain open. See Emerald-client/docs/room-cel-materials.md.
