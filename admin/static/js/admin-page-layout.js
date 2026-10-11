@@ -1,8 +1,8 @@
 // Move the original forms between pages; field identity and drafts survive UI switching.
 const AdminPageLayout = (() => {
-  const behaviorPages = ['agent-runtime-browser', 'device-policy', 'output-settings', 'coplay-config', 'minecraft', 'listening-player', 'mail-config', 'diary-config', 'personal-settings', 'conversation-settings', 'service-center'];
+  const behaviorPages = ['agent-runtime-browser', 'device-policy', 'output-settings', 'coplay-config', 'minecraft', 'listening-player', 'mail-config', 'diary-config', 'personal-settings', 'conversation-settings', 'observation-center'];
   const modelPages = ['role-bindings', 'tts-config', 'local-model-runtime', 'embedding-config'];
-  const dataPages = ['relationship-facts', 'user-data', 'observation-center', 'memory-consolidation'];
+  const dataPages = ['relationship-facts', 'user-data', 'memory-consolidation'];
   const observationGroups = {
     status: {title:['运行状态','Runtime status'], pages:['observe-resource-completeness','scheduler','observe-char-permissions','observe-autonomy','observe-system-diagnosis']},
     'observe-prompt': {title:['现实 Prompt','Reality prompt'], pages:['observe-dream-prompt','generation-debug']},
@@ -22,6 +22,7 @@ const AdminPageLayout = (() => {
   }
   function resolve(page) {
     if (!isNew()) return page;
+    if (page === 'service-center') return 'client-settings';
     if (behaviorPages.includes(page)) return 'character-behavior';
     if (modelPages.includes(page)) return 'model-routing';
     if (dataPages.includes(page)) return 'data-management';
@@ -43,7 +44,7 @@ const AdminPageLayout = (() => {
   }
   function navigation() {
     document.querySelectorAll('nav a[data-page]').forEach(link => {
-      link.hidden = isNew() && [...behaviorPages, ...modelPages, ...dataPages, ...observationPages, 'network-config'].includes(link.dataset.page);
+      link.hidden = isNew() && [...behaviorPages, ...modelPages, ...dataPages, ...observationPages, 'network-config', 'service-center'].includes(link.dataset.page);
     });
     const behavior = document.querySelector('nav a[data-page="character-behavior"]');
     if (behavior) behavior.hidden = !isNew();
@@ -123,9 +124,20 @@ const AdminPageLayout = (() => {
         const body=section(parent,source,title);
         for (const node of [...root.children]) if (!node.matches('.page-title,.page-context,.settings-search,.admin-page-header,.page-header')) move(node,body);
       }
+      if (page === 'observe-vector') {
+        await loadPageFragment('tools', {reload});
+        if (!sections.has('memory-notebooks')) {
+          const body=section(parent,'memory-notebooks',designText('角色记录','Character records'));
+          ['food-module','quote-notebook-module'].forEach(id=>move(document.getElementById(id),body));
+        }
+      }
+      if (page === 'feature-center') {
+        await prepare('character-behavior');
+        await prepare('observe-vector');
+      }
       if (page === 'observe-dream') parent.append(document.getElementById('overview-drinking'));
     } else if (page === 'character-behavior') {
-      await Promise.all(behaviorPages.map(source => loadPageFragment(source, {reload})));
+      await Promise.all([...behaviorPages, 'tools', 'scheduler', 'autonomy-settings'].map(source => loadPageFragment(source, {reload})));
       if (!isNew()) return;
       const parent = document.getElementById('page-character-behavior');
       for (const source of behaviorPages) {
@@ -139,12 +151,28 @@ const AdminPageLayout = (() => {
           if (!node.matches('.page-title,.page-context,.settings-search')) move(node, body);
         }
       }
+      for (const [key,title,ids] of [
+        ['behavior-reading','资料读取',['tools-xhs-card','tools-weather-card']],
+        ['behavior-health','身体信号',['hds-config-card']],
+        ['behavior-call','通话互动',['video-call-presence-card']],
+      ]) {
+        if (sections.has(key)) continue;
+        const body=section(parent,key,title);
+        ids.forEach(id=>move(document.getElementById(id),body));
+      }
+    } else if (page === 'client-settings') {
+      await loadPageFragment('service-center', {reload});
+      if (!sections.has('service-center')) {
+        const body=section(document.getElementById('page-client-settings'),'service-center',designText('服务配置总览','Service configuration'));
+        for (const node of [...document.getElementById('page-service-center').children]) if (!node.matches('.page-title,.page-context,.settings-search')) move(node,body);
+      }
     } else if (page === 'autonomy-settings') {
-      await loadPageFragment('scheduler', {reload});
+      await prepare('character-behavior');
+      await loadPageFragment('scheduler');
       if (!isNew() || sections.has('scheduler-config')) return;
-      const body = section(document.getElementById('page-autonomy-settings'), 'scheduler-config', designText('例行触发与发言预算', 'Routine triggers and speaking budget'));
+      const body = section(document.getElementById('self-management-panel'), 'scheduler-config', designText('例行来源与发言预算', 'Routine sources and speaking budget'));
       move(document.getElementById('scheduler-config-card'), body);
-      move(document.getElementById('hds-config-card'), body);
+
     } else if (page === 'model-routing') {
       await Promise.all(modelPages.map(source => loadPageFragment(source, {reload})));
       if (!isNew() || sections.has('model-text')) return;
@@ -201,8 +229,9 @@ const AdminPageLayout = (() => {
       'mail-config': _loadSetupMail,
       'diary-config': _loadSetupDiary,
       'personal-settings': _loadSetupAnniversaries,
-      'conversation-settings':loadConversationSettings,'service-center':loadServiceCenter,
+      'conversation-settings':loadConversationSettings,'observation-center':loadImeObservation,
     };
+    await Promise.all([loadToolsPage(),loadHdsLocalSettings(),loadVideoCallPresence()]);
     await Promise.all(behaviorPages.map(async source => {
       const root = document.getElementById('page-' + source);
       if (root.dataset.pageVisited === 'true') return;
@@ -226,8 +255,10 @@ const AdminPageLayout = (() => {
     const target = !isNew() && current === 'character-behavior' ? behaviorPages[0]
       : resolve(current);
     if (target !== current) return goto(target, {fromHistory:true});
-    if (isNew() && ['model-routing', 'data-management', 'setup', 'autonomy-settings', 'scheduler', ...Object.keys(observationGroups)].includes(current)) {
+    if (isNew() && ['character-behavior', 'client-settings', 'model-routing', 'data-management', 'setup', 'autonomy-settings', 'scheduler', ...Object.keys(observationGroups)].includes(current)) {
       await prepare(current);
+      if (current === 'character-behavior') await loadBehavior();
+      if (current === 'client-settings') await loadServiceCenter();
       if (current === 'model-routing') await loadModels();
       if (current === 'data-management') await loadData(true);
       if (current === 'setup') await loadNetwork();
@@ -270,7 +301,6 @@ const AdminPageLayout = (() => {
     await loadSources({
       'relationship-facts': loadRelationshipFactsPage,
       'user-data': loadUserDataPage,
-      'observation-center': loadImeObservation,
       'memory-consolidation': () => initObserveCharacters('memory-consolidation-char', () => {loadMemoryConsolidationStatus(); loadMemoryHistoryReconciliation();}),
     });
   }
@@ -278,6 +308,7 @@ const AdminPageLayout = (() => {
   async function loadObservations(page,resume=false) {
     const primary = {'feature-center':loadFeatureCenter,'auth-tokens':()=>Promise.all([loadAuthTokens(),loadChannelToggles()]),status:loadStatus,'observe-vector':loadVector,'observe-prompt':loadObservePromptUidList,'observe-dream':loadObserveDream};
     if (!resume) await primary[page]();
+    if (page === 'observe-vector') await loadFoodSettings();
     if (page === 'observe-dream') await loadObserveDrinking();
     if (!isNew()) return;
     const loaders = {

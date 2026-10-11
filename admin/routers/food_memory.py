@@ -47,34 +47,3 @@ async def observe(char_id: str = Query(min_length=1, max_length=100), query: str
                   limit: int = Query(20, ge=1, le=50), _auth=Depends(require_scopes('state.read'))):
     uid, char_id = scope(char_id)
     return store.snapshot(uid, char_id, query, limit)
-
-
-class Correction(BaseModel):
-    name: str
-    quote: str
-    evaluation: str
-
-
-@router.post('/settings/food-memory/correct')
-async def correct(body: Correction, char_id: str = Query(min_length=1, max_length=100),
-                  _auth=Depends(require_scopes('admin'))):
-    uid, char_id = scope(char_id)
-    candidate = {'name': body.name, 'quote': body.quote, 'kind': 'rating', 'value': body.evaluation}
-    if store.validate(candidate, body.quote) is None:
-        raise HTTPException(422, '需要包含食品名称和明确喜恶的本人评价原话')
-    import uuid, time
-    job = {'message_id': 'admin_' + uuid.uuid4().hex, 'ts': time.time(), 'text': body.quote}
-    store.apply(uid, char_id, job, [candidate])
-    return store.snapshot(uid, char_id, body.name)
-
-
-@router.post('/settings/food-memory/retry')
-async def retry(char_id: str = Query(min_length=1, max_length=100), _auth=Depends(require_scopes('admin'))):
-    uid, char_id = scope(char_id)
-    with store.connection() as db:
-        db.execute("UPDATE jobs SET attempts=0 WHERE uid=? AND char_id=? AND status='pending'", (uid, char_id))
-    from core.post_process.slow_queue import enqueue
-    from core.memory.scope import MemoryScope
-    # Explicit retry is still scoped; queue processor takes no model-supplied identity.
-    enqueue('food_memory_update', {'uid': uid, 'char_id': char_id, 'scope': MemoryScope.reality_scope(uid, char_id).to_payload()})
-    return {'queued': True}

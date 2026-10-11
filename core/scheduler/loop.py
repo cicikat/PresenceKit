@@ -982,7 +982,6 @@ def get_status() -> dict:
         "daily_journal":     "daily_journal",
         "period_reminder":   "period_reminder",
         "diary_reminder":    "diary_reminder",
-        "diary_inject":      "diary_inject",
         "presence_nag":      "presence_nag",
     }
 

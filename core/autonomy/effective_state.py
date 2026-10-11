@@ -25,7 +25,6 @@ _SCHEDULER_SOURCE_PATHS: dict[str, tuple[str, ...]] = {
     "daily_journal": ("daily_journal",),
     "period_reminder": ("period_reminder",),
     "diary_reminder": ("diary_reminder",),
-    "diary_inject": ("diary_inject",),
     "presence_nag": ("presence_nag",),
     "timenode": ("timenode",),
     "festival": ("festival",),

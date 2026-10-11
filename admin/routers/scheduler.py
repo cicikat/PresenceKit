@@ -119,7 +119,7 @@ async def put_sched_config(body: dict, auth=Depends(require_scopes("admin"))):
 
     bool_fields = [
         "enabled", "morning_greeting", "night_reminder", "random_message",
-        "daily_journal", "period_reminder", "diary_reminder", "diary_inject",
+        "daily_journal", "period_reminder", "diary_reminder",
         "presence_nag",
     ]
     for f in bool_fields:

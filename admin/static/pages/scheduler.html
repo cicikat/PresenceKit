@@ -3,7 +3,8 @@
       <p class="admin-source-hint" data-i18n="scheduler.hint">查看例行触发状态与主动发言账本；新版的调度配置在自主活动安排中。</p>
 
       <div class="card" id="scheduler-config-card">
-        <div class="card-header"><h3 data-i18n="scheduler.config_title">调度配置</h3><button class="btn btn-primary btn-sm" data-action="saveSchedulerConfig" data-i18n="common.save">保存</button></div>
+        <div class="card-header"><h3 data-i18n="scheduler.sources_title">例行来源与发言预算</h3><button class="btn btn-primary btn-sm" data-action="saveSchedulerConfig" data-i18n="common.save">保存</button></div>
+        <p>下列开关分别控制例行候选和后台维护。候选交给自主活动评估，不保证发言；每日发言预算与每日评估预算独立。</p>
         <div id="sc-config-switches" class="admin-inline-033"></div>
         <div class="form-row admin-inline-158">
           <label class="field"><span data-i18n="scheduler.presence_minutes">存在感提醒（分钟）</span><input type="number" min="1" id="sc-presence-minutes"></label>

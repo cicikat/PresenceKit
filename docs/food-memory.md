@@ -18,7 +18,7 @@
 
 管理面模型路由包含 `food_extract`，遵循现有 category/default/chat fallback，建议选择小模型；调用20秒、SDK零重试。工具页提供热更新开关、effective route、按角色查询、更正和重试。开关默认开启；关闭恢复原 profile 投影和抽取行为，已有清单保留且仍可按需查询。
 
-API：`GET/PUT /settings/food-memory`、`GET /observability/food-memory`（state.read）、`POST /settings/food-memory/correct` 与 `/retry`（admin）。更正必须提供实际用户原话并通过同一校验，不能直接制造喜欢/不喜欢。清单为后端共享工具能力，无新增桌面/手机设置合同。
+API：`GET/PUT /settings/food-memory` 保留内部运营配置；`GET /observability/food-memory`（state.read）只读查看。管理面无记录开关、更正或重试入口，原 correct/retry 管理接口已删除；自动记录链继续工作。新版入口归入记忆索引。无新增桌面/手机设置合同。
 
 ## 历史迁移与验证边界
 

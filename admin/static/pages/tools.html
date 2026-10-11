@@ -1,6 +1,6 @@
 <h1 class="page-title" data-i18n="tools.title">工具</h1>
 
-<div class="card">
+<div class="card" id="tools-xhs-card">
   <h3 data-i18n="xhs.title">小红书分享读取</h3>
   <p data-i18n="xhs.intro">读取正文、图片和评论样本。首次安装并扫码后，本地服务可随后端自动启动；图片使用已有图片识别配置。</p>
   <p data-i18n="xhs.continue_hint">首读返回统计和续读引用，有效30分钟。可再读最多30条评论、按原序号看后续最多4张图、查看最多20个帖主公开主页标题。评论以扩大滚动加载加去重续读；主页仅已加载样本，不支持远端继续翻页。共用原读取开关、冷却和图片识别设置。</p>
@@ -32,21 +32,8 @@
 </div>
 
 <div class="card">
-  <div class="card-header"><h3 data-i18n="tools.binding_title">模型工具预设</h3><button class="btn btn-ghost btn-sm" data-action="loadToolsPage" data-i18n="common.refresh">刷新</button></div>
-  <div class="form-row">
-    <label class="field"><span data-i18n="tools.model">聊天模型 preset</span><select id="tools-model-preset" onchange="changeToolsModelPreset(this.value)"></select></label>
-  </div>
-  <p id="tools-binding-note" class="tools-status-note"></p>
-  <div id="tools-preset-buttons"></div>
-  <div class="tools-action-row">
-    <button id="tools-save-preset" class="btn btn-primary btn-sm" data-action="saveToolPreset" data-i18n="tools.save_preset">保存当前勾选</button>
-    <button class="btn btn-ghost btn-sm" data-action="createToolPreset" data-i18n="tools.create_preset">新建预设</button>
-  </div>
-</div>
-
-<div class="card">
   <div class="card-header"><h3 data-i18n="tools.registry_title">已注册工具</h3><span id="tools-exposure-count" class="badge"></span></div>
-  <p data-i18n="tools.registry_hint" class="tools-status-note">“在此模型中暴露”只影响工具循环传给当前聊天模型的 schema；全局执行开关关闭后，任何模型都不能调用该内置工具。</p>
+  <p data-i18n="tools.registry_status_hint" class="tools-status-note">这里显示已注册工具与全局执行状态；全局执行开关关闭后，任何模型都不能调用该内置工具。</p>
   <div id="tools-registry-list"><div class="loading" data-i18n="common.loading">加载中…</div></div>
 </div>
 
@@ -57,31 +44,21 @@
 </div>
 <section class="card" id="food-module">
   <h3 data-i18n="food.title">吃食清单与口味记录</h3>
-  <p data-i18n="food.hint">默认开启。只记录用户实际评价和明确吃过事件，禁止推测。关闭后停止抽取并恢复旧饮食概要；既有清单保留。轻量模型在“模型路由 → food_extract”选择。</p>
-  <label><input id="food-enabled" type="checkbox"><span data-i18n="food.enabled">自动记录明确饮食事实</span></label>
-  <button class="btn btn-primary" data-action="saveFoodSettings" data-i18n="common.save">保存</button>
+  <p data-i18n="food.readonly_hint">只读查看角色记录的明确饮食事实与口味，管理面板不提供更正或重试入口。</p>
   <p id="food-status" role="status"></p>
   <label><span data-i18n="food.character">角色 ID</span><input id="food-char" type="text" maxlength="100"></label>
   <label><span data-i18n="food.query">食品或店名</span><input id="food-query" type="text" maxlength="100"></label>
   <button class="btn btn-ghost" data-action="loadFoodRecords" data-i18n="food.read">查看清单</button>
-  <button class="btn btn-ghost" data-action="retryFoodRecords" data-i18n="food.retry">重试未完成抽取</button>
   <div id="food-records"></div>
-  <p data-i18n="food.correct_hint">更正需要填写食品名称和本人明确评价原话；新评价覆盖当前喜恶，历史证据保留。</p>
-  <input id="food-correct-name" maxlength="100" aria-label="食品名称">
-  <input id="food-correct-quote" maxlength="800" aria-label="评价原话">
-  <select id="food-correct-value"><option value="like" data-i18n="food.like">喜欢</option><option value="dislike" data-i18n="food.dislike">不喜欢</option></select>
-  <button class="btn btn-ghost" data-action="correctFoodRecord" data-i18n="food.correct">提交更正</button>
 </section>
-<section class="card">
+<section class="card" id="quote-notebook-module">
   <h3 data-i18n="quotes.title">收藏小本本</h3>
-  <p data-i18n="quotes.hint">收藏双方原话，保留消息时间、收藏时间和当时相关召回；笔记可以更新，原话不会改写。</p>
+  <p data-i18n="quotes.readonly_hint">只读查看角色收藏的双方原话、时间、相关召回和角色笔记；收藏与笔记仅由角色维护。</p>
   <label><span data-i18n="food.character">角色 ID</span><input id="quotes-char" maxlength="100"></label>
   <label><span data-i18n="quotes.query">搜索原话或笔记</span><input id="quotes-query" maxlength="200"></label>
   <button class="btn btn-ghost" data-action="loadQuoteNotebook" data-i18n="quotes.search">查看收藏</button>
   <select id="quotes-choice" aria-label="收藏条目" data-i18n-aria-label="quotes.entry"></select>
   <button class="btn btn-ghost" data-action="openNotebookQuote" data-i18n="quotes.open">打开收藏</button>
   <div id="quotes-detail" role="status"></div>
-  <label><span data-i18n="quotes.note">角色笔记</span><textarea id="quotes-note" maxlength="2000"></textarea></label>
-  <button class="btn btn-primary" data-action="saveNotebookNote" data-i18n="quotes.save_note">更新笔记</button>
-  <button class="btn btn-ghost" data-action="deleteNotebookQuote" data-i18n="quotes.delete">删除收藏</button>
+  <label><span data-i18n="quotes.note">角色笔记</span><textarea id="quotes-note" readonly maxlength="2000"></textarea></label>
 </section>

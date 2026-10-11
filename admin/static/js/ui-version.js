@@ -3,7 +3,6 @@ const AdminUI = (() => {
   const key = 'presencekit_admin_ui';
   let version = 'legacy';
   try { if (localStorage.getItem(key) === 'new') version = 'new'; } catch (_) {}
-  let layout = null;
   const folds = new Map();
   const foldState = new WeakMap();
   let observer = null;
@@ -25,33 +24,6 @@ const AdminUI = (() => {
     ['rgb(45, 45, 45)', 'field'], ['rgb(55, 65, 81)', 'field'], ['rgb(124, 58, 237)', 'strong'],
   ]);
   const components = Object.freeze({card: 'pk-card', accordion: 'pk-accordion', button: 'pk-button', input: 'pk-input', select: 'pk-select', switch: 'pk-switch', statusBadge: 'pk-status', formField: 'pk-field'});
-  function enhance(root) {
-    if (!root || layout?.root === root) return;
-    const legacyChildren = [...root.childNodes];
-    const disclosure = root.querySelector(':scope > details.settings-disclosure');
-    const nodes = disclosure ? [disclosure.querySelector('h3'), ...disclosure.querySelector('.settings-disclosure-body').children] : [...root.children];
-    const anchors = nodes.map(n => { const anchor = document.createComment('ui-origin'); n.before(anchor); return [n, anchor]; });
-    const shell = document.createElement('div');
-    shell.className = 'pk-ui';
-    const hero = document.createElement('header'); hero.className = 'pk-hero';
-    hero.append(nodes[0], nodes[1]); shell.append(hero);
-    const cards = [];
-    ['自动记录', '吃食清单', '更正口味'].forEach((title, i) => {
-      const card = document.createElement('details'); card.className = components.card + ' ' + components.accordion; card.open = true;
-      const summary = document.createElement('summary'); summary.textContent = `0${i + 1} · ${title}`;
-      const body = document.createElement('div'); body.className = 'pk-body';
-      card.append(summary, body); shell.append(card); cards.push(body);
-    });
-    nodes.slice(2,5).forEach(n => cards[0].append(n));
-    nodes.slice(5,10).forEach(n => cards[1].append(n));
-    nodes.slice(10).forEach(n => cards[2].append(n));
-    const changes = [];
-    shell.querySelectorAll('input, select, button, label, [role="status"]').forEach(n => {
-      const cls = n.tagName === 'BUTTON' ? components.button : n.tagName === 'SELECT' ? components.select : n.tagName === 'LABEL' ? components.formField : n.type === 'checkbox' ? components.switch : n.matches('[role="status"]') ? components.statusBadge : components.input;
-      n.classList.add(cls); changes.push([n, cls]);
-    });
-    root.replaceChildren(shell); layout = {root, nodes, shell, changes, anchors, legacyChildren};
-  }
   function foldLabel(expanded) {
     const english = window.AdminI18n?.getLanguage() === 'en';
     return expanded ? (english ? 'Collapse' : '折叠') : (english ? 'Expand' : '展开');
@@ -79,7 +51,7 @@ const AdminUI = (() => {
     cards.forEach(card => {
       // Existing details keep their own keyboard behavior and open state.
       // The food pilot already owns its three native accordion cards.
-      if (card.closest('.pk-ui') || card.id === 'food-module' || card.matches('details')
+      if (card.closest('.pk-ui') || card.matches('details')
           || card.querySelector('[data-action="toggleMcpServerCollapsed"]')) return;
       const entry = folds.get(card);
       if (card.querySelector(':scope > details.settings-disclosure')) {
@@ -112,7 +84,7 @@ const AdminUI = (() => {
   }
   function mount(root) {
     if (version !== 'new') return;
-    enhance(document.getElementById('food-module'));
+
     decorate(root);
     normalizeSignals(root);
   }
@@ -154,8 +126,7 @@ const AdminUI = (() => {
   }
   function apply() {
     document.body.classList.toggle('pk-admin', version === 'new');
-    const root = document.getElementById('food-module');
-    if (version === 'new') {enhance(root); refresh(); observe();}
+    if (version === 'new') {refresh(); observe();}
     else {
       observer?.disconnect(); observer = null;
       pendingRoots.clear();
@@ -163,12 +134,6 @@ const AdminUI = (() => {
         delete node.dataset.pkTone; delete node.dataset.pkSurface;
       });
       for (const [card, entry] of folds) removeFold(card, entry);
-      if (layout) {
-        layout.root.replaceChildren(...layout.legacyChildren);
-        layout.anchors.forEach(([n, anchor]) => anchor.replaceWith(n));
-        layout.changes.forEach(([n, cls]) => n.classList.remove(cls));
-        layout.shell.remove(); layout = null;
-      }
     }
     const select = document.getElementById('admin-ui-version'); if (select) select.value = version;
     window.dispatchEvent(new Event('admin-ui-version-changed'));

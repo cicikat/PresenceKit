@@ -51,19 +51,17 @@ def test_every_page_is_a_lazy_fragment_with_its_original_placeholder():
     assert "window.AdminI18n?.applyI18n(container)" in source
 
 
-def test_tools_dynamic_preset_buttons_are_bound_after_rendering():
+def test_tools_registry_is_rendered_dynamically():
     tools_source = (STATIC / "js" / "tools.js").read_text(encoding="utf-8")
     assert "root.innerHTML =" in tools_source
-    assert "bindPageActions(root);" in tools_source
 
 
-def test_tools_page_exposes_editable_global_default_mode():
+def test_tools_page_keeps_permissions_without_model_preset_card():
     page = (PAGES / "tools.html").read_text(encoding="utf-8")
     tools_source = (STATIC / "js" / "tools.js").read_text(encoding="utf-8")
 
-    assert 'id="tools-save-preset"' in page
-    assert "global_default_tools" in tools_source
-    assert "saveGlobalToolDefault" in tools_source
+    assert 'id="tools-save-preset"' not in page
+    assert "saveGlobalToolDefault" not in tools_source
     assert 'id="tools-weather-use-proxy"' in page
     assert "saveWeatherProxy" in tools_source
     assert "weather: { use_proxy:" in tools_source

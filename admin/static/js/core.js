@@ -20,7 +20,7 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'reality-284-p7-20261011';
+const ADMIN_UI_FRAGMENT_VERSION = 'admin-modules-20261011';
 
 const ADMIN_PAGE_ALIASES = Object.freeze({overview:'setup', users:'character', 'operations-center':'status', memory: 'observe-memory', 'creation-center':'data-management', 'observe-existence':'observe-dream'});
 
@@ -303,7 +303,7 @@ async function goto(page, {reloadFragment = false, fromHistory = false} = {}) {
     'output-settings': loadStickerConfig,
     'device-policy': () => { loadScreenPeekSettings(); loadMetaMode(); },
     'network-config': async () => { _bindProxyControls(); await loadProxy(); },
-    'client-settings': loadClientSettings,
+    'client-settings': async () => { await loadClientSettings(); if (AdminUI.version === 'new') await loadServiceCenter(); },
     'personal-settings': _loadSetupAnniversaries,
     'coplay-config': _loadSetupCoplayGames,
     'diary-config': _loadSetupDiary,

@@ -176,29 +176,16 @@ def test_controls_scope_and_hot_reload(sandbox, tmp_path, monkeypatch):
     assert result.status_code == 200 and result.json()['effective'] is False
     assert food.enqueue('u', 'c', 'new', '吃了水饺') is False
 
-def test_admin_food_pilot_real_routes_preserve_evidence_and_permissions(sandbox, monkeypatch):
+def test_admin_food_records_are_read_only(sandbox, monkeypatch):
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
     from admin import auth
     from admin.routers import food_memory as routes
     monkeypatch.setattr(routes, 'scope', lambda char_id: ('fixture-owner', char_id))
     monkeypatch.setattr(auth, 'resolve_token', lambda token: auth.TokenInfo('fixture', frozenset({token})))
-    queued = []
-    monkeypatch.setattr('core.post_process.slow_queue.enqueue', lambda *args: queued.append(args))
     app = FastAPI()
     app.include_router(routes.router)
     client = TestClient(app)
-    admin = {'Authorization': 'Bearer admin'}
-    reader = {'Authorization': 'Bearer state.read'}
-    path = '/settings/food-memory/correct?char_id=fixture'
-    body = {'name': '水饺', 'quote': '我喜欢水饺', 'evaluation': 'like'}
-    assert client.post(path, headers=reader, json=body).status_code == 403
-    assert client.post(path, headers=admin, json=body).status_code == 200
-    result = client.get('/observability/food-memory?char_id=fixture', headers=reader)
-    assert result.status_code == 200
-    assert result.json()['items'][0]['evaluation_quote'] == body['quote']
-    assert client.get('/observability/food-memory?char_id=other', headers=reader).json()['items'] == []
-    assert client.post(path, headers=admin, json={**body, 'quote': '缺少食品和明确评价'}).status_code == 422
-    assert client.post('/settings/food-memory/retry?char_id=fixture', headers=reader).status_code == 403
-    assert client.post('/settings/food-memory/retry?char_id=fixture', headers=admin).json()['queued']
-    assert len(queued) == 1 and queued[0][1]['char_id'] == 'fixture'
+    assert client.get('/observability/food-memory?char_id=fixture', headers={'Authorization': 'Bearer state.read'}).status_code == 200
+    for endpoint in ('correct', 'retry'):
+        assert client.post('/settings/food-memory/' + endpoint + '?char_id=fixture', headers={'Authorization': 'Bearer admin'}, json={}).status_code == 404

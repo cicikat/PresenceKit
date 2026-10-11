@@ -832,7 +832,6 @@ scheduler:
   daily_journal: true
   period_reminder: true
   diary_reminder: true
-  diary_inject: true
   timenode: true
   festival: true
   holiday_boost: true

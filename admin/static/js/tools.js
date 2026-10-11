@@ -32,48 +32,7 @@ async function openNotebookQuote() {
   } catch (error) { document.getElementById('quotes-detail').textContent = error.message; }
 }
 
-async function saveNotebookNote() {
-  if (!_openedNotebookQuote) return;
-  try { if (notebookScope() !== _openedNotebookScope) throw Error(t('quotes.scope_changed', '角色已切换，请重新打开收藏')); await api('PUT', `/settings/quotes/${encodeURIComponent(_openedNotebookQuote)}/note?${_openedNotebookScope}`, { note: document.getElementById('quotes-note').value }); await openNotebookQuote(); }
-  catch (error) { document.getElementById('quotes-detail').textContent = error.message; }
-}
-
-async function deleteNotebookQuote() {
-  if (!_openedNotebookQuote || !confirm(t('quotes.confirm_delete', '删除这条收藏及笔记？'))) return;
-  try { if (notebookScope() !== _openedNotebookScope) throw Error(t('quotes.scope_changed', '角色已切换，请重新打开收藏')); await api('DELETE', `/settings/quotes/${encodeURIComponent(_openedNotebookQuote)}?${_openedNotebookScope}`); await loadQuoteNotebook(); }
-  catch (error) { document.getElementById('quotes-detail').textContent = error.message; }
-}
-let _toolsTargetModel = '';
 const _KNOWN_TOOL_CATEGORIES = ['info', 'self', 'schedule', 'life', 'desktop', 'memory', 'system', 'fs', 'phone_control', 'self_management', 'mcp'];
-
-function _toolCurrentPreset() {
-  return _toolsControl?.model_bindings?.[_toolsTargetModel] || '';
-}
-
-function _toolCheckedNames() {
-  return [...document.querySelectorAll('[data-tool-exposure]:checked')].map(input => input.dataset.toolExposure);
-}
-
-function _toolPresetPayload(presets, binding = undefined) {
-  const body = { tool_presets: presets };
-  if (binding !== undefined && _toolsTargetModel) body.model_bindings = { [_toolsTargetModel]: binding || null };
-  return body;
-}
-
-function _toolsPresetButtons() {
-  const root = document.getElementById('tools-preset-buttons');
-  if (!root || !_toolsControl) return;
-  const active = _toolCurrentPreset();
-  const buttons = ( _toolsControl.tool_presets || []).map(item => {
-    const args = escapeHtml(JSON.stringify([item.name]));
-    const klass = item.name === active ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm';
-    return `<span style="display:inline-flex;gap:4px;margin:2px"><button class="${klass}" data-action="selectToolPreset" data-action-args="${args}">${escapeHtml(item.name)}</button><button class="btn btn-ghost btn-sm" data-action="editToolPreset" data-action-args="${args}" title="${escapeHtml(t('common.edit', '编辑'))}">✎</button><button class="btn btn-danger btn-sm" data-action="deleteToolPreset" data-action-args="${args}" title="${escapeHtml(t('common.delete', '删除'))}">×</button></span>`;
-  }).join('');
-  root.innerHTML = `<span style="font-size:12px;color:var(--muted);margin-right:6px">${escapeHtml(t('tools.preset', '工具预设'))}</span><button class="${active ? 'btn btn-ghost btn-sm' : 'btn btn-primary btn-sm'}" data-action="selectToolPreset" data-action-args='[""]'>${escapeHtml(t('tools.global_default', '全局默认'))}</button>${buttons || `<span style="font-size:12px;color:var(--muted);margin-left:6px">${escapeHtml(t('tools.no_presets', '尚无预设'))}</span>`}`;
-  // These controls are rendered after the page fragment has received its
-  // initial binding, so bind the newly-created action buttons explicitly.
-  bindPageActions(root);
-}
 
 function _toolExposureCategories() {
   const categories = new Set(_KNOWN_TOOL_CATEGORIES);
@@ -113,19 +72,15 @@ function _renderPathExposure() {
 function _renderToolsRegistry() {
   const root = document.getElementById('tools-registry-list');
   if (!root || !_toolsControl) return;
-  const presetName = _toolCurrentPreset();
-  const preset = (_toolsControl.tool_presets || []).find(item => item.name === presetName);
-  const exposed = new Set(preset ? preset.tools : (_toolsControl.global_default_tools || []));
   const rows = (_toolsControl.tools || []).map(tool => {
     const frozen = tool.frozen === true;
     const execution = `<span class="badge" data-tool-state="${escapeHtml(tool.name)}" data-enabled="${tool.execution_enabled}">${escapeHtml(tool.execution_enabled ? t("common.enabled", "已开启") : t("common.disabled", "已关闭"))}</span>`;
-    const exposure = frozen ? `<span style="color:var(--muted)">${escapeHtml(t('tools.frozen', '冻结'))}</span>` : `<label class="checkbox-row"><input type="checkbox" data-tool-exposure="${escapeHtml(tool.name)}" ${exposed.has(tool.name) ? 'checked' : ''}><span>${escapeHtml(t('tools.expose', '在此模型中暴露'))}</span></label>`;
-    return `<tr><td><strong><code>${escapeHtml(tool.name)}</code></strong><div style="font-size:12px;color:var(--muted)">${escapeHtml(_toolUiDescription(tool))}</div></td><td>${escapeHtml(_toolCategoryLabel(tool.category))}</td><td>${execution}</td><td>${exposure}</td></tr>`;
+    return `<tr><td><strong><code>${escapeHtml(tool.name)}</code></strong><div style="font-size:12px;color:var(--muted)">${escapeHtml(_toolUiDescription(tool))}</div></td><td>${escapeHtml(_toolCategoryLabel(tool.category))}</td><td>${execution}</td></tr>`;
   }).join('');
-  root.innerHTML = rows ? `<div class="tbl-wrap"><table><thead><tr><th>${escapeHtml(t('tools.name', '工具'))}</th><th>${escapeHtml(t('tools.category', '分类'))}</th><th>${escapeHtml(t('tools.execution', '执行'))}</th><th>${escapeHtml(t('tools.exposure', '模型暴露'))}</th></tr></thead><tbody>${rows}</tbody></table></div>` : `<div class="empty">${escapeHtml(t('tools.empty', '没有已注册工具'))}</div>`;
+  root.innerHTML = rows ? `<div class="tbl-wrap"><table><thead><tr><th>${escapeHtml(t('tools.name', '工具'))}</th><th>${escapeHtml(t('tools.category', '分类'))}</th><th>${escapeHtml(t('tools.execution', '执行'))}</th></tr></thead><tbody>${rows}</tbody></table></div>` : `<div class="empty">${escapeHtml(t('tools.empty', '没有已注册工具'))}</div>`;
   const count = document.getElementById('tools-exposure-count');
   if (count) {
-    const n = exposed.size;
+    const n = (_toolsControl.tools || []).length;
     count.textContent = t('tools.exposure_count', '{count} 个工具', { count: n });
     count.className = n > 16 ? 'badge badge-danger' : 'badge badge-success';
   }
@@ -145,26 +100,12 @@ function refreshToolExecutionStates(tools) {
 
 function _renderToolsPage() {
   if (!_toolsControl) return;
-  const selector = document.getElementById('tools-model-preset');
-  if (!selector) return;
-  if (!_toolsTargetModel || !(_toolsControl.model_presets || []).includes(_toolsTargetModel)) _toolsTargetModel = (_toolsControl.model_presets || [])[0] || '';
-  selector.innerHTML = (_toolsControl.model_presets || []).map(name => `<option value="${escapeHtml(name)}" ${name === _toolsTargetModel ? 'selected' : ''}>${escapeHtml(name)}</option>`).join('');
-  const note = document.getElementById('tools-binding-note');
-  const bound = _toolCurrentPreset();
-  if (note) note.textContent = bound
-    ? t('tools.bound_note', '当前模型绑定工具预设：{name}', { name: bound })
-    : t('tools.global_note', '当前模型使用全局默认：可在此勾选并保存。');
-  const saveButton = document.getElementById('tools-save-preset');
-  if (saveButton) saveButton.textContent = bound
-    ? t('tools.save_preset', '保存当前勾选')
-    : t('tools.save_global_default', '保存全局默认');
   const weatherProxy = document.getElementById('tools-weather-use-proxy');
   if (weatherProxy) weatherProxy.checked = _toolsControl.weather?.use_proxy === true;
   const weatherStatus = document.getElementById('tools-weather-status');
   if (weatherStatus) weatherStatus.textContent = _toolsControl.weather?.use_proxy
     ? t('tools.weather_proxy_on', '当前天气请求走全局代理')
     : t('tools.weather_proxy_off', '当前天气请求直连，不走全局代理');
-  _toolsPresetButtons();
   _renderPathExposure();
   _renderToolsRegistry();
 }
@@ -215,15 +156,7 @@ window.addEventListener('admin-ui-version-changed', renderFoodRecords);
 async function loadFoodSettings() {
   await foodOperation('settings', async () => {
     const value = await api('GET', '/settings/food-memory');
-    document.getElementById('food-enabled').checked = value.enabled;
     foodStatus(`${value.effective ? '已生效' : '已关闭或路由未就绪'} · food_extract → ${value.route.effective_preset || '未配置'} (${value.route.source})`);
-  });
-}
-async function saveFoodSettings() {
-  await foodOperation('save', async () => {
-    const enabled = document.getElementById('food-enabled').checked;
-    const value = await api('PUT', '/settings/food-memory', {enabled});
-    foodStatus(`设置已保存 · ${value.effective ? '已生效' : '已关闭或路由未就绪'} · food_extract → ${value.route.effective_preset || '未配置'}`);
   });
 }
 function foodScope() {
@@ -239,23 +172,6 @@ async function loadFoodRecords() {
     document.getElementById('food-records').dataset.state = 'success'; renderFoodRecords();
   }, 'food-records');
 }
-async function retryFoodRecords() {
-  await foodOperation('retry', async () => {
-    await api('POST', `/settings/food-memory/retry?${foodScope()}`);
-    foodStatus('已排队重试；稍后刷新清单查看结果');
-  });
-}
-async function correctFoodRecord() {
-  const saved = await foodOperation('correct', async () => {
-    const scope = foodScope();
-    const body = {name: document.getElementById('food-correct-name').value.trim(), quote: document.getElementById('food-correct-quote').value.trim(), evaluation: document.getElementById('food-correct-value').value};
-    if (!body.name || !body.quote) throw new Error('请填写食品名称和本人明确评价原话');
-    await api('POST', `/settings/food-memory/correct?${scope}`, body);
-    foodStatus('更正已保存，历史证据保留');
-  });
-  if (saved) await loadFoodRecords();
-}
-
 function showXiaohongshuSettings(data) {
   document.getElementById('xhs-enabled').checked = data.enabled;
   document.getElementById('xhs-local-service').checked = !!data.local_service;
@@ -340,46 +256,6 @@ async function saveXiaohongshuSettings() {
   } catch (e) { document.getElementById('xhs-settings-status').textContent = `保存失败：${e.message || e}`; }
 }
 
-function changeToolsModelPreset(name) { _toolsTargetModel = name; _renderToolsPage(); }
-
-async function selectToolPreset(name) {
-  if (!_toolsTargetModel) return;
-  try {
-    _toolsControl = await api('PUT', '/settings/tools', _toolPresetPayload(undefined, name));
-    toast(t('tools.binding_saved', '模型工具预设已切换并热更新'), 'ok');
-    _renderToolsPage();
-  } catch (error) { toast(error.message, 'err'); }
-}
-
-async function _saveNamedToolPreset(name, oldName = '') {
-  const presets = (_toolsControl.tool_presets || []).filter(item => item.name !== oldName);
-  presets.push({ name, tools: _toolCheckedNames() });
-  _toolsControl = await api('PUT', '/settings/tools', _toolPresetPayload(presets, name));
-  _renderToolsPage();
-}
-
-async function createToolPreset() {
-  const name = prompt(t('tools.name_prompt', '请输入工具预设名称：'))?.trim();
-  if (!name) return;
-  try { await _saveNamedToolPreset(name); toast(t('tools.preset_saved', '工具预设已保存并应用到当前模型'), 'ok'); }
-  catch (error) { toast(error.message, 'err'); }
-}
-
-async function saveToolPreset() {
-  const name = _toolCurrentPreset();
-  if (!name) return saveGlobalToolDefault();
-  try { await _saveNamedToolPreset(name, name); toast(t('tools.preset_saved', '工具预设已保存并应用到当前模型'), 'ok'); }
-  catch (error) { toast(error.message, 'err'); }
-}
-
-async function saveGlobalToolDefault() {
-  try {
-    _toolsControl = await api('PUT', '/settings/tools', { global_default_tools: _toolCheckedNames() });
-    toast(t('tools.global_saved', '全局默认工具已保存并热更新'), 'ok');
-    _renderToolsPage();
-  } catch (error) { toast(error.message, 'err'); }
-}
-
 async function savePathExposure() {
   const exposure = {};
   for (const path of ['path_a', 'path_c']) {
@@ -391,23 +267,6 @@ async function savePathExposure() {
   try {
     _toolsControl = await api('PUT', '/settings/tools', { exposure });
     toast(t('tools.path_saved', 'Path A/Path C categories saved; QQ, desktop, and mobile share the same Path A settings.'), 'ok');
-    _renderToolsPage();
-  } catch (error) { toast(error.message, 'err'); }
-}
-
-async function editToolPreset(name) {
-  const next = prompt(t('tools.rename_prompt', '修改工具预设名称：'), name)?.trim();
-  if (!next) return;
-  try { await _saveNamedToolPreset(next, name); toast(t('tools.preset_saved', '工具预设已保存并应用到当前模型'), 'ok'); }
-  catch (error) { toast(error.message, 'err'); }
-}
-
-async function deleteToolPreset(name) {
-  if (!confirm(t('tools.delete_confirm', '删除工具预设“{name}”？', { name }))) return;
-  try {
-    const presets = (_toolsControl.tool_presets || []).filter(item => item.name !== name);
-    _toolsControl = await api('PUT', '/settings/tools', _toolPresetPayload(presets));
-    toast(t('tools.preset_deleted', '工具预设已删除'), 'ok');
     _renderToolsPage();
   } catch (error) { toast(error.message, 'err'); }
 }

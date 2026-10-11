@@ -16,7 +16,7 @@ const SC_TRIGGER_LABELS = {
 const SC_FIELD_LABELS = {
   enabled: 'scheduler.field.enabled', morning_greeting: 'dynamic.scheduler.morning', night_reminder: 'scheduler.field.bedtime',
   random_message: 'dynamic.scheduler.daytime', daily_journal: 'dynamic.scheduler.daily_journal', period_reminder: 'dynamic.scheduler.period',
-  diary_reminder: 'scheduler.field.diary_reminder', diary_inject: 'dynamic.scheduler.diary_injection', presence_nag: 'scheduler.field.presence_nag',
+  diary_reminder: 'scheduler.field.diary_reminder', presence_nag: 'scheduler.field.presence_nag',
 };
 
 function _scText(key, fallback, params) { return t(key, fallback, params); }
@@ -27,7 +27,7 @@ function _scTriggerLabel(key) {
 
 const SC_BOOL_FIELDS = [
   'enabled', 'morning_greeting', 'night_reminder', 'random_message',
-  'daily_journal', 'period_reminder', 'diary_reminder', 'diary_inject',
+  'daily_journal', 'period_reminder', 'diary_reminder',
   'presence_nag',
 ];
 
@@ -74,8 +74,18 @@ async function loadProactiveLedger() {
   }
 }
 
+const SC_FIELD_HINTS = {
+  enabled: '调度主循环总闸：同时控制例行候选、记忆维护、花园、日记与信号扫描；关闭会停止这些后台任务。',
+  morning_greeting: '早间生成问候候选，由自主活动决定是否开口。',
+  night_reminder: '晚间生成休息提醒候选，由自主活动决定是否开口。',
+  random_message: '白天按节律生成联系候选，不直接发送随机消息。',
+  daily_journal: '生成每日回顾候选；不等于静默内心日记写入。',
+  period_reminder: '按已有生理期记录生成关心候选。',
+  diary_reminder: '日记缺失时生成提醒候选。',
+  presence_nag: '用户长时间未互动时生成存在感候选，使用下方分钟阈值。',
+};
 let _scConfig = {};
-async function loadSchedulerConfig() { try { _scConfig = await api('GET','/scheduler/config'); document.getElementById('sc-config-switches').innerHTML = SC_BOOL_FIELDS.map(k => `<label class="checkbox-row"><input type="checkbox" data-sc-bool="${k}" ${_scConfig[k] ? 'checked' : ''}><span>${_scText(SC_FIELD_LABELS[k], k)}</span></label>`).join(''); document.getElementById('sc-presence-minutes').value=_scConfig.presence_nag_minutes||60; document.getElementById('sc-gap-hours').value=_scConfig.global_proactive_min_gap_hours||1.5; document.getElementById('sc-daily-proactive').value=_scConfig.max_daily_proactive||16; } catch(e){toast(_scText('dynamic.scheduler.read_failed','读取调度配置失败: {error}',{error:e.message}),'err');} }
+async function loadSchedulerConfig() { try { _scConfig = await api('GET','/scheduler/config'); document.getElementById('sc-config-switches').innerHTML = SC_BOOL_FIELDS.map(k => `<label class="admin-setting-row"><span><strong>${_scText(SC_FIELD_LABELS[k], k)}</strong><small>${escapeHtml(SC_FIELD_HINTS[k])}</small></span><input type="checkbox" data-sc-bool="${k}" ${_scConfig[k] ? 'checked' : ''}></label>`).join(''); document.getElementById('sc-presence-minutes').value=_scConfig.presence_nag_minutes||60; document.getElementById('sc-gap-hours').value=_scConfig.global_proactive_min_gap_hours||1.5; document.getElementById('sc-daily-proactive').value=_scConfig.max_daily_proactive||16; } catch(e){toast(_scText('dynamic.scheduler.read_failed','读取调度配置失败: {error}',{error:e.message}),'err');} }
 async function saveSchedulerConfig() { const body={presence_nag_minutes:Number(document.getElementById('sc-presence-minutes').value),global_proactive_min_gap_hours:Number(document.getElementById('sc-gap-hours').value),max_daily_proactive:Number(document.getElementById('sc-daily-proactive').value)}; document.querySelectorAll('[data-sc-bool]').forEach(el=>body[el.dataset.scBool]=el.checked); try{await api('PUT','/scheduler/config',body);toast(_scText('dynamic.scheduler.saved','调度配置已保存'),'ok');loadSchedulerConfig();}catch(e){toast(_scText('common.save_failed','保存失败: {error}',{error:e.message}),'err');} }
 async function loadRelaySettings(){try{const d=await api('GET','/settings/relay');document.getElementById('relay-base-url').value=d.relay_base_url||'';document.getElementById('relay-topic').value=d.relay_topic||'';document.getElementById('relay-token').value='';document.getElementById('relay-token').placeholder=d.relay_token?t('status.relay.configured','已配置（{value}），留空保留',{value:d.relay_token}):t('status.relay.unconfigured','未配置');}catch(e){toast(t('status.relay.load_error','读取中继失败: {error}',{error:e.message}),'err');}}
 async function saveRelaySettings(){const body={relay_base_url:document.getElementById('relay-base-url').value.trim(),relay_topic:document.getElementById('relay-topic').value.trim()};const token=document.getElementById('relay-token').value.trim();if(token)body.relay_token=token;try{await api('PUT','/settings/relay',body);toast(t('status.relay.saved','中继配置已保存'),'ok');loadRelaySettings();}catch(e){toast(t('common.save_failed','保存失败: {error}',{error:e.message}),'err');}}

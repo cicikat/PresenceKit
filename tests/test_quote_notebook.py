@@ -27,7 +27,7 @@ def test_both_quotes_and_immutable_snapshot_notes(sandbox):
     assert store.list_quotes('u','other')['total']==0
 
 
-def test_source_loss_preserves_collection_and_user_can_delete(sandbox):
+def test_source_loss_preserves_collection_and_store_can_delete(sandbox):
     scope=seed()
     quote_id=store.save('u','c','t:assistant')['quote_id']
     event_store.tombstone_event(scope,'t:assistant')
@@ -57,6 +57,7 @@ def test_admin_read_and_edit_scopes(sandbox,monkeypatch):
     app=FastAPI();app.include_router(routes.router);client=TestClient(app)
     assert client.get('/observability/quotes?char_id=c',headers={'Authorization':'Bearer state.read'}).status_code==403
     assert client.get('/observability/quotes?char_id=c',headers={'Authorization':'Bearer memory.read'}).json()['total']==1
-    assert client.put(f'/settings/quotes/{quote_id}/note?char_id=c',json={'note':'new'},headers={'Authorization':'Bearer memory.read'}).status_code==403
-    assert client.put(f'/settings/quotes/{quote_id}/note?char_id=c',json={'note':'new'},headers={'Authorization':'Bearer admin'}).status_code==200
+    assert client.put(f'/settings/quotes/{quote_id}/note?char_id=c',json={'note':'new'},headers={'Authorization':'Bearer memory.read'}).status_code==404
+    assert client.put(f'/settings/quotes/{quote_id}/note?char_id=c',json={'note':'new'},headers={'Authorization':'Bearer admin'}).status_code==404
+    assert client.delete(f'/settings/quotes/{quote_id}?char_id=c',headers={'Authorization':'Bearer admin'}).status_code==404
     assert client.get(f'/observability/quotes/{quote_id}?char_id=other',headers={'Authorization':'Bearer memory.read'}).status_code==404

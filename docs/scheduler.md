@@ -8,6 +8,8 @@
 
 ## HDS 本地心率
 
+新版管理面入口位于角色行为的身体信号模块；例行来源与发言预算位于自主管理能力。无消费者的 diary_inject 独立配置开关已移除，日记读取任务仍按调度总闸每六小时运行。
+
 `hds_local.enabled` 默认关闭。启用后独立监听 `hds_local.host:port`（默认 3476），
 接受 HDS 本地模式发往根路径的 HTTP `PUT`。`source_mode: auto` 按选中网卡
 当前 IPv4 网段限制来源；`manual` 才使用 `allowed_subnets`。电脑 DHCP 地址变化
