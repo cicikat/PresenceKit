@@ -80,7 +80,7 @@ async def paced_request(cfg, action, params, *, authorized=None):
     """Shared request budget including login checks and admin probes."""
     async with _request_lock:
         now = _now()
-        if now < _pacing['backoff_until']:
+        if now < _pacing['backoff_until'] and action != 'login_cookie':
             _pacing['limited'] += 1
             return {'ok': False, 'code': 'qzone_backoff'}
         delay = _pacing['last_request'] + cfg.request_interval_seconds - now
@@ -102,6 +102,8 @@ async def paced_request(cfg, action, params, *, authorized=None):
         if action in WRITE_ACTIONS:
             _pacing['write_until'] = _now() + cfg.write_interval_seconds
         if result.get('ok'):
+            if action == 'login_cookie':
+                _pacing['backoff_until'] = 0.0
             if action != 'get_login_info':
                 _pacing['failures'] = 0
         else:

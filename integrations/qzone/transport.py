@@ -53,6 +53,8 @@ async def request(base_url: str, token: str, action: str, params: dict, *, timeo
                         return {"ok": False, "code": "outcome_unknown" if action in WRITE_ACTIONS else "response_too_large"}
                 body = json.loads(raw)
         if not isinstance(body, dict) or body.get("status") != "ok" or body.get("retcode") != 0:
+            if isinstance(body, dict) and body.get("retcode") == 1401:
+                return {"ok": False, "code": "login_expired", "retcode": 1401}
             return {"ok": False, "code": "bridge_rejected", "retcode": body.get("retcode") if isinstance(body, dict) else None}
         data = body.get("data")
         # Some upstream list fallbacks wrap a QZone failure in OneBot status=ok.

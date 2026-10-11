@@ -86,3 +86,17 @@ async def test_owner_change_during_spacing_revokes_business_call(paced, monkeypa
     result = await service.call('get_emotion_list', {}, uid='test_owner', char_id=TEST_CHAR_ID)
     assert result['code'] == 'qzone_not_authorized'
     assert [action for action, _ in calls] == ['get_login_info']
+
+
+@pytest.mark.asyncio
+async def test_explicit_login_can_recover_during_failure_backoff(paced):
+    _, clock, calls = paced
+    service._pacing.update(backoff_until=clock[0] + 120, failures=2)
+    cfg = service.settings()
+    assert (await service.paced_request(cfg, 'get_emotion_list', {}))['code'] == 'qzone_backoff'
+    assert not calls
+    assert (await service.paced_request(cfg, 'login_cookie', {'cookie': 'test-cookie'}))['ok']
+    assert service._pacing['backoff_until'] == 0
+    assert service._pacing['failures'] == 0
+    assert (await service.paced_request(cfg, 'get_emotion_list', {}))['ok']
+    assert calls[1][1] - calls[0][1] >= cfg.request_interval_seconds
