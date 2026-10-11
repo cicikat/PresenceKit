@@ -1190,4 +1190,14 @@ existing motion player; no new WS field, inference, backend setting, identity, p
 fanout, ack, TTL, persistent mood, trace or queue. Successful Rig/clip adaptations are bounded
 WebView memory only, with local diagnostics. Mobile has no GLB motion consumer and its relay
 contract is unchanged. observe: real backend-to-native performance and skin switching;
-roadmap: authored thinking/arms_crossed/camera_reach and camera_closeup choreography/contact IK.
+roadmap: authored thinking/camera_reach and camera_closeup choreography/contact IK.
+
+2026-10-11 UAL import: desktop's existing shared MotionLibrary now consumes real CC0
+FoldArms/Talking/Yes/No/Rail clips via one offline derived resource, with local editor
+play/pause/resume/idle preview. Existing speaking and perform nod/shake signals reuse
+the same consumer; no new WS/REST field or backend permission. Browser real-TV-v03 and
+production Pet-stage playback passed; observe: native Tauri/backend, other-skin visual
+acceptance. partial: FoldArms entering/exiting and sleeve/hand contact; no contact IK.
+ChatWindow refreshes existing character avatar on WS reconnect after startup failure;
+browser reload/reconnect passed, native process restart remains observe. Mobile settings,
+avatar endpoint and relay unchanged. No backend or mobile code modified.
