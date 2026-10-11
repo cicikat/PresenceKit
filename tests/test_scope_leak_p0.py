@@ -50,7 +50,7 @@ def _write_mood(sandbox, char_id: str, mood: str, intensity: float = 0.8):
     p = sandbox.mood_state(char_id=char_id)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(
-        json.dumps({"current": mood, "intensity": intensity, "previous": "neutral", "updated_at": 0.0}),
+        json.dumps({"current": mood, "intensity": intensity, "previous": "neutral", "updated_at": time.time(), "schema_version": 2, "has_signal": True, "source_turn_id": "scope", "source_at": time.time(), "expires_at": time.time()+1800}),
         encoding="utf-8",
     )
 
@@ -122,10 +122,10 @@ def test_prompt_builder_mood_isolation(sandbox):
     ):
         content = _build_prompt("character_b")
 
-    assert "撑不住了" in content, (
+    assert "sleepy" in content, (
         f"prompt must contain character_b mood text '撑不住了': {content[:600]}"
     )
-    assert "很紧，克制着" not in content, (
+    assert "angry" not in content, (
         f"prompt must NOT contain yexuan mood text '很紧，克制着': {content[:600]}"
     )
 

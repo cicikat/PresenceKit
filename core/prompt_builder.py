@@ -472,7 +472,8 @@ def build(
     from core.sandbox import get_paths
     mood_line = ""
     try:
-        mood_raw = json.loads(get_paths().mood_state(char_id=char_id).read_text(encoding="utf-8"))
+        from core.memory.mood_state import load as _load_expression
+        mood_raw = _load_expression(char_id=char_id)
         if isinstance(mood_raw, dict) and mood_raw:
             mood_line = get_mood_text(mood_raw, subject="你")
     except Exception:
@@ -488,9 +489,13 @@ def build(
     )
     messages.append({
         "role": "system",
-        "content": "\n\n".join(part for part in (identity_contract, sp, mood_line) if part),
+        "content": "\n\n".join(part for part in (identity_contract, sp) if part),
         "_layer": "1_system_prompt",
     })
+
+    if mood_line:
+        messages.append({"role": "system", "_layer": "expression_afterglow", "_drop_priority": 5,
+                         "content": mood_line})
 
     # Reality state references are bounded; raw moves/pages remain in activity records.
     try:

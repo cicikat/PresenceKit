@@ -586,12 +586,6 @@ def retrieve(
         if changed:
             _save_memories(user_id, memories, char_id=char_id)
 
-        from core.memory.mood_state import nudge_from_memory
-        for mem in result:
-            nudge_from_memory(
-                mem.get("emotion_peak", "neutral"),
-                mem.get("strength", 0.5)
-            )
     else:
         logger.debug(
             "[episodic.retrieve] allow_strengthen=False，跳过 strength 写回 uid=%s", user_id

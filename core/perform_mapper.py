@@ -142,6 +142,9 @@ def _assign_action_text(all_segs: list, say_segs: list) -> list[tuple[str, str]]
 
 
 def _map_with_rules(action_text: str, say_text: str) -> dict | None:
+    # Spoken words, quotes, user feelings and punctuation aren't self performance.
+    if re.search(r'[“”"「」『』]|用户|不|没|并非|别', action_text):
+        return None
     fields: dict[str, str] = {}
     energy_delta = 0.0
     intensity = None
@@ -149,9 +152,11 @@ def _map_with_rules(action_text: str, say_text: str) -> dict | None:
 
     for rule in _WORD_RULES:
         field = rule["field"]
+        if field == "expression" and "你" in action_text:
+            continue
         if field in fields:
             continue
-        pool = (action_text, say_text) if rule.get("also_say") else (action_text,)
+        pool = (action_text,)
         if not any(text and rule["pattern"].search(text) for text in pool):
             continue
 
@@ -163,14 +168,6 @@ def _map_with_rules(action_text: str, say_text: str) -> dict | None:
         for extra_field, extra_value in rule.get("extra", {}).items():
             if extra_field not in fields:
                 fields[extra_field] = extra_value
-
-    stripped_say = say_text.rstrip()
-    if stripped_say.endswith(("！", "!")):
-        energy_delta += 0.2
-        matched_any = True
-    if stripped_say.endswith("……") or say_text.count("……") >= 2:
-        energy_delta -= 0.15
-        matched_any = True
 
     if not matched_any:
         return None

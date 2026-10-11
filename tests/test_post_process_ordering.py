@@ -98,7 +98,7 @@ async def test_critical_writes_complete_before_slow_tasks(sandbox, monkeypatch, 
 
     # 深夜的 time_sleepiness 允许先写 sleepy；detect_emotion 的结果仍须成为
     # 本轮最终 mood write，不能把合法前置写入误判为顺序回归。
-    assert mood_calls and mood_calls[-1] == "happy", \
+    assert mood_calls and mood_calls[-1] == "", \
         f"mood_state.update 最后一笔应为 'happy'，实际: {mood_calls}"
 
     # ── gate 关闭状态：episodic 确定性地尚未完成 ─────────────────────────────
@@ -114,119 +114,24 @@ async def test_critical_writes_complete_before_slow_tasks(sandbox, monkeypatch, 
 # 测试1.5（Brief 34 §1）：detect_emotion 在 uid_lock 外执行
 # ═══════════════════════════════════════════════════════════════════════════════
 
-async def test_detect_emotion_runs_outside_uid_lock(sandbox, monkeypatch):
-    """detect_emotion 执行期间 uid_lock 不应被持有：用 Event 把 detect_emotion
-    挂住，探测此时 uid_lock(uid).locked() 是否为 False，证明锁外算已生效。
-    emotion 结果仍应正确写入 mood/event_log（在 gate 放行后完成）。
-    """
-    import core.post_process.slow_queue as sq
-    from core.memory import locks as _locks
-    from core.pipeline import Pipeline
-    from core.sandbox import get_paths
-
-    uid = "uid_lock_scope_test"
-
-    detect_started = asyncio.Event()
-    release_detect = asyncio.Event()
-
-    async def gated_detect(*_):
-        detect_started.set()
-        await release_detect.wait()
-        return "happy"
-
-    monkeypatch.setattr("core.llm_client.detect_emotion", gated_detect)
-    monkeypatch.setattr("core.llm_client.chat", AsyncMock(return_value=""))
-
-    mood_calls: list[str] = []
-
-    def _capture_mood(emotion, *args, **kwargs):
-        mood_calls.append(emotion)
-
-    monkeypatch.setattr("core.memory.mood_state.update", _capture_mood)
-
-    sq.register_handler("summarize_to_midterm", AsyncMock())
-    sq.register_handler("consistency_check", AsyncMock())
-    sq.start_worker()
-
-    from core.write_envelope import stamp_user_chat
-    pipeline = Pipeline(_MockCharacter(), lore_engine=None)
-
-    task = asyncio.create_task(
-        pipeline.post_process(uid, "你好", "hi", target_id="", is_group=False, envelope=stamp_user_chat())
-    )
-
-    await asyncio.wait_for(detect_started.wait(), timeout=2)
-    lock = _locks.uid_lock(uid)
-    assert not lock.locked(), (
-        "detect_emotion 挂起期间 uid_lock 被持有 —— 应挪到锁外算，锁内只做读-改-写"
-    )
-
-    release_detect.set()
-    await task
-
-    # Brief 37：capture_turn 跑在 post_process_critical（detect_emotion 之前），
-    # event_log 的 emotion 字段是占位值 "neutral"；真实检测结果 "happy" 只进
-    # post_process_slow 里的 mood_state.update，用 mood_calls 断言。
-    day_dir = get_paths().user_memory_root(uid) / "event_log"
-    day_files = [f for f in day_dir.glob("*.md") if f.name != "full_log.md"]
-    assert day_files, "event_log 今日文件未创建"
-    log_text = day_files[0].read_text(encoding="utf-8")
-    assert "emotion:neutral" in log_text, f"event_log 应写占位值 neutral，实际:\n{log_text}"
-    assert mood_calls and mood_calls[-1] == "happy", (
-        f"detect_emotion 的真实结果应写入本轮最终 mood_state，实际: {mood_calls}"
-    )
-
-    await sq.drain()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 测试2：detect_emotion 超时 → neutral 降级
 # ═══════════════════════════════════════════════════════════════════════════════
 
-async def test_detect_emotion_timeout_falls_back_to_neutral(sandbox, monkeypatch):
-    import core.post_process.slow_queue as sq
-    import core.pipeline as _pipeline_mod
+
+async def test_no_extra_emotion_model_for_reply(sandbox, monkeypatch):
     from core.pipeline import Pipeline
-    from core.sandbox import get_paths
-
-    uid = "uid_timeout_test"
-
-    # 超时阈值压到 0.05s，detect_emotion 睡 0.2s → 必然触发 TimeoutError
-    monkeypatch.setattr(_pipeline_mod, "_DETECT_EMOTION_TIMEOUT", 0.05)
-
-    async def slow_detect(*_):
-        await asyncio.sleep(0.2)
-        return "happy"   # 不应到达这里
-
-    monkeypatch.setattr("core.llm_client.detect_emotion", slow_detect)
-    monkeypatch.setattr("core.llm_client.chat", AsyncMock(return_value=""))
-
-    mood_calls: list[str] = []
-
-    def _capture_mood(emotion, *args, **kwargs):
-        mood_calls.append(emotion)
-
-    monkeypatch.setattr("core.memory.mood_state.update", _capture_mood)
-
-    sq.register_handler("consistency_check", AsyncMock())
-    sq.start_worker()
-
-    pipeline = Pipeline(_MockCharacter(), lore_engine=None)
-
     from core.write_envelope import stamp_user_chat
-    # 不应向调用方抛出异常
-    await pipeline.post_process(uid, "你好", "hi", target_id="", is_group=False, envelope=stamp_user_chat())
-
-    # event_log assistant 行应含 emotion:neutral
-    day_dir = get_paths().user_memory_root(uid) / "event_log"
-    day_files = [f for f in day_dir.glob("*.md") if f.name != "full_log.md"]
-    assert day_files, "event_log 今日文件未创建"
-    log_text = day_files[0].read_text(encoding="utf-8")
-    assert "emotion:neutral" in log_text, \
-        f"超时降级时应为 emotion:neutral，实际:\n{log_text}"
-
-    # 同上：sleepy 合法地先于 timeout fallback；最终值必须是 neutral。
-    assert mood_calls and mood_calls[-1] == "neutral", \
-        f"mood_state.update 最后一笔应为 'neutral'，实际: {mood_calls}"
-
-    await sq.drain()
+    from core.memory import mood_state
+    async def forbidden(*args, **kwargs):
+        raise AssertionError("extra emotion model")
+    detector = AsyncMock(side_effect=forbidden)
+    monkeypatch.setattr("core.llm_client.detect_emotion", detector)
+    monkeypatch.setattr("core.post_process.slow_queue.enqueue", lambda *a, **k: None)
+    pipeline = Pipeline(_MockCharacter(), lore_engine=None)
+    result = await pipeline.post_process("owner", "hello", "<feel>很开心</feel><say>嗯</say>",
+                                         envelope=stamp_user_chat())
+    assert result["emotion"] == "happy"
+    detector.assert_not_called()

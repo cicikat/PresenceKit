@@ -261,7 +261,7 @@ def test_retrieve_with_allow_strengthen_true_does_save():
         patch.object(_ep, "_load_index", return_value={}),
         patch.object(_ep, "_save_memories",
                      side_effect=lambda *a, **kw: save_calls.append(a)),
-        patch("core.memory.mood_state.nudge_from_memory"),
+        patch("core.memory.mood_state.update"),
     ):
         result = _ep.retrieve(
             user_id="u_test",
@@ -306,7 +306,7 @@ def test_retrieve_with_allow_strengthen_false_does_not_call_nudge():
         patch.object(_ep, "_load_memories", return_value=memories),
         patch.object(_ep, "_load_index", return_value={}),
         patch.object(_ep, "_save_memories"),
-        patch.object(_ms, "nudge_from_memory",
+        patch.object(_ms, "update",
                      side_effect=lambda *a, **kw: nudge_calls.append(a)),
     ):
         _ep.retrieve(
@@ -326,158 +326,22 @@ def test_retrieve_with_allow_strengthen_false_does_not_call_nudge():
 # 3. thinking mood 入口是 mark_tool_thinking_mood
 # ══════════════════════════════════════════════════════════════════════════════
 
-def test_main_py_does_not_import_mood_state_update_directly():
-    """N2-A T3 (静态): main.py 不再裸调用 mood_state.update / _update_mood_probe。"""
-    import main as _main
-    src = inspect.getsource(_main.handle_message)
-    assert "_update_mood_probe" not in src, (
-        "main.py handle_message 中仍有 _update_mood_probe，未完成迁出"
-    )
-    assert "mark_tool_thinking_mood" in src or "mark_thinking" in src, (
-        "main.py handle_message 中未找到 mark_tool_thinking_mood 调用"
-    )
 
 
-@pytest.mark.asyncio
-async def test_mark_tool_thinking_mood_calls_mood_update():
-    """N2-A T3a: mark_tool_thinking_mood 调 mood_state.update('thinking', ...)。
-    N2-B update: helper 已升级为 async，需 await + mock lock。
-    """
-    from unittest.mock import AsyncMock
-    from core import mood_helpers
-    import core.memory.mood_state as _ms
-
-    calls = []
-    mock_lock = AsyncMock()
-    mock_lock.__aenter__ = AsyncMock(return_value=None)
-    mock_lock.__aexit__ = AsyncMock(return_value=False)
-    with patch("core.memory.locks.global_lock", return_value=mock_lock):
-        with patch.object(_ms, "update",
-                          side_effect=lambda *a, **kw: calls.append((a, kw))):
-            await mood_helpers.mark_tool_thinking_mood(uid="u1", char_id=TEST_CHAR_ID)
-
-    assert len(calls) == 1
-    assert calls[0][0][0] == "thinking", f"情绪应为 thinking，实际 {calls[0][0][0]!r}"
-    assert calls[0][1]["force"] is True
 
 
-@pytest.mark.asyncio
-async def test_mark_tool_thinking_mood_skips_when_envelope_blocks():
-    """N2-A T3b: envelope.can_affect_mood=False 时不写 mood。
-    N2-B update: helper 已升级为 async，需 await。envelope 拦截在 lock 前，无需 mock lock。
-    """
-    from core import mood_helpers
-    import core.memory.mood_state as _ms
-    from core.write_envelope import WriteEnvelope
-
-    env = WriteEnvelope(can_affect_mood=False)
-    calls = []
-    with patch.object(_ms, "update",
-                      side_effect=lambda *a, **kw: calls.append((a, kw))):
-        await mood_helpers.mark_tool_thinking_mood(uid="u1", char_id=TEST_CHAR_ID, envelope=env)
-
-    assert calls == []
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 4. sleepy 语义仍存在，由 post_process 内 maybe_mark_sleepy_from_time 触发
 # ══════════════════════════════════════════════════════════════════════════════
 
-@pytest.mark.asyncio
-async def test_maybe_mark_sleepy_writes_when_nighttime():
-    """N2-A T4a: 深夜 neutral 时写入 sleepy。
-    N2-B update: helper 已升级为 async，需 await + mock lock。
-    """
-    from unittest.mock import AsyncMock
-    from core import mood_helpers
-    import core.memory.mood_state as _ms
-
-    calls = []
-    mock_lock = AsyncMock()
-    mock_lock.__aenter__ = AsyncMock(return_value=None)
-    mock_lock.__aexit__ = AsyncMock(return_value=False)
-    with (
-        patch("core.mood_helpers.datetime") as _dt,
-        patch("core.memory.locks.global_lock", return_value=mock_lock),
-        patch.object(_ms, "get_current", return_value="neutral"),
-        patch.object(_ms, "update",
-                     side_effect=lambda *a, **kw: calls.append((a, kw))),
-    ):
-        _dt.now.return_value.hour = 23
-        await mood_helpers.maybe_mark_sleepy_from_time(uid="u1", char_id=TEST_CHAR_ID)
-
-    assert len(calls) == 1 and calls[0][0][0] == "sleepy"
-    assert calls[0][1]["force"] is True
 
 
-@pytest.mark.asyncio
-async def test_maybe_mark_sleepy_skips_when_daytime():
-    """N2-A T4b: 白天不写 sleepy。
-    N2-B update: helper 已升级为 async，需 await。白天在 lock 前返回，无需 mock lock。
-    """
-    from core import mood_helpers
-    import core.memory.mood_state as _ms
-
-    calls = []
-    with (
-        patch("core.mood_helpers.datetime") as _dt,
-        patch.object(_ms, "update",
-                     side_effect=lambda *a, **kw: calls.append(a)),
-    ):
-        _dt.now.return_value.hour = 14
-        await mood_helpers.maybe_mark_sleepy_from_time(uid="u1", char_id=TEST_CHAR_ID)
-
-    assert calls == []
 
 
-@pytest.mark.asyncio
-async def test_maybe_mark_sleepy_skips_when_yandere():
-    """N2-A T4c: 深夜但 mood=yandere 时不覆盖。
-    N2-B update: helper 已升级为 async，需 await + mock lock。
-    """
-    from unittest.mock import AsyncMock
-    from core import mood_helpers
-    import core.memory.mood_state as _ms
-
-    calls = []
-    mock_lock = AsyncMock()
-    mock_lock.__aenter__ = AsyncMock(return_value=None)
-    mock_lock.__aexit__ = AsyncMock(return_value=False)
-    with (
-        patch("core.mood_helpers.datetime") as _dt,
-        patch("core.memory.locks.global_lock", return_value=mock_lock),
-        patch.object(_ms, "get_current", return_value="yandere"),
-        patch.object(_ms, "update",
-                     side_effect=lambda *a, **kw: calls.append(a)),
-    ):
-        _dt.now.return_value.hour = 2
-        await mood_helpers.maybe_mark_sleepy_from_time(uid="u1", char_id=TEST_CHAR_ID)
-
-    assert calls == []
 
 
-@pytest.mark.asyncio
-async def test_maybe_mark_sleepy_skips_when_envelope_blocks():
-    """N2-A T4d: envelope.can_affect_mood=False 时不写。
-    N2-B update: helper 已升级为 async，需 await。envelope 拦截在 lock 前，无需 mock lock。
-    """
-    from core import mood_helpers
-    import core.memory.mood_state as _ms
-    from core.write_envelope import WriteEnvelope
-
-    env = WriteEnvelope(can_affect_mood=False)
-    calls = []
-    with (
-        patch("core.mood_helpers.datetime") as _dt,
-        patch.object(_ms, "get_current", return_value="neutral"),
-        patch.object(_ms, "update",
-                     side_effect=lambda *a, **kw: calls.append(a)),
-    ):
-        _dt.now.return_value.hour = 23
-        await mood_helpers.maybe_mark_sleepy_from_time(uid="u1", char_id=TEST_CHAR_ID,
-                                                        envelope=env)
-
-    assert calls == []
 
 
 def test_fetch_context_source_has_no_sleepy_write():
@@ -498,24 +362,9 @@ def test_fetch_context_source_has_no_sleepy_write():
     )
 
 
-def test_post_process_source_calls_maybe_mark_sleepy():
-    """N2-A T4f (静态): post_process_critical 中包含 maybe_mark_sleepy_from_time 调用。
-    Brief 37: sleepy 写入本身不含 LLM/网络往返，留在 send 前的关键段（critical）
-    里不影响延迟，因此没有跟着 detect_emotion/mood 一起搬进 post_process_slow。
-    """
-    from core.pipeline import Pipeline
-    src = inspect.getsource(Pipeline.post_process_critical)
-    assert "maybe_mark_sleepy" in src
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 5. mood_helpers 模块接口完整性
 # ══════════════════════════════════════════════════════════════════════════════
 
-def test_mood_helpers_module_has_expected_functions():
-    """N2-A T5: mood_helpers 导出两个显式 helper。"""
-    from core import mood_helpers
-    assert hasattr(mood_helpers, "maybe_mark_sleepy_from_time")
-    assert hasattr(mood_helpers, "mark_tool_thinking_mood")
-    assert callable(mood_helpers.maybe_mark_sleepy_from_time)
-    assert callable(mood_helpers.mark_tool_thinking_mood)

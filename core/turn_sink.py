@@ -318,6 +318,8 @@ async def record_assistant_turn(
         except Exception:
             logger.debug("[turn_sink] EventContext compatibility adapter failed", exc_info=True)
 
+    from core.expression_signal import explicit_expression
+    audit_extras = {**(audit_extras or {}), "expression_signal": explicit_expression(assistant_text)}
     post_info: dict | None = None
     async with _maybe_conversation_gate(uid, bypass_gate):
         if await_critical_post_process:

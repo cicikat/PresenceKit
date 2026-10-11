@@ -149,21 +149,12 @@ class TestMapWithRules:
         assert perform["expression"] == "gentle"
         assert perform["gaze"] == "away"
 
-    def test_expression_word_matches_in_say_text_too(self):
-        perform = _map_with_rules("", "笑死我了")
-        assert perform["expression"] == "happy"
 
-    def test_energy_bonus_from_exclamation(self):
-        perform = _map_with_rules("", "才没有等你很久呢！")
-        assert perform["energy"] == pytest.approx(0.7)
 
-    def test_energy_penalty_from_ellipsis(self):
-        perform = _map_with_rules("", "是吗……")
-        assert perform["energy"] == pytest.approx(0.35)
 
     def test_energy_clamp_lower_bound(self):
         perform = _map_with_rules("她蜷起来，情绪黯淡", "没关系……")
-        assert perform["energy"] == 0.0
+        assert perform["energy"] == pytest.approx(0.1)
 
     def test_no_hit_returns_none(self):
         assert _map_with_rules("她坐在椅子上安静地看书", "今天天气不错") is None

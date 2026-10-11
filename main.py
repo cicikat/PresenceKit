@@ -449,13 +449,6 @@ async def handle_message(message: dict, *, ingress=None):
         # ── 步骤3：统一 pre-tool routing ─────────────────────────────────────
         _loop_active = tool_dispatcher.tool_loop_active(user_id)
 
-        async def _mark_pretool_thinking() -> None:
-            try:
-                from core.mood_helpers import mark_tool_thinking_mood as _mark_thinking
-                await _mark_thinking(uid=user_id, char_id=_char_id, envelope=_qq_envelope)
-            except Exception:
-                pass
-
         from core.pretool_router import route_pretool
         _pretool = await route_pretool(
             trusted_user_text=_trusted_user_text,
@@ -469,7 +462,7 @@ async def handle_message(message: dict, *, ingress=None):
             # Path A exposure is resolved centrally and is identical for QQ,
             # desktop, and mobile.  The transport no longer chooses categories.
             categories=None,
-            before_execute=_mark_pretool_thinking,
+            before_execute=None,
             allowed_tool_names=ingress.allowed_tool_names if ingress else None,
         )
         if _pretool.should_stop_for_user_input:

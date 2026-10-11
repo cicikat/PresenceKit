@@ -1,3 +1,4 @@
+import time
 from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_mood_state_char_scope.py
@@ -88,7 +89,7 @@ def test_update_writes_to_specified_char_path(sandbox):
     """update(char_id='character_b') writes character_b path, not yexuan path."""
     from core.memory.mood_state import update
 
-    update("happy", char_id="character_b")
+    update("happy", char_id="character_b", source_turn_id="t", source_at=time.time())
 
     character_b_path = sandbox.mood_state(char_id="character_b")
     yexuan_path  = sandbox.mood_state(char_id=TEST_CHAR_ID)
@@ -99,7 +100,7 @@ def test_update_writes_to_specified_char_path(sandbox):
     )
 
     data = json.loads(character_b_path.read_text(encoding="utf-8"))
-    assert data["previous"] == "neutral", "initial previous must be neutral"
+    assert data["previous"] == "", "initial previous must be neutral"
 
 
 def test_update_path_contains_char_id(sandbox):
@@ -138,16 +139,16 @@ def test_get_current_reads_correct_char_path(sandbox):
         encoding="utf-8",
     )
 
-    assert get_current(char_id=TEST_CHAR_ID) == "happy", f"{TEST_CHAR_ID} must return 'happy'"
-    assert get_current(char_id="character_b") == "sleepy", "character_b must return 'sleepy'"
+    assert get_current(char_id=TEST_CHAR_ID) == "", f"{TEST_CHAR_ID} legacy must not return 'happy'"
+    assert get_current(char_id="character_b") == "", "character_b legacy must not return 'sleepy'"
 
 
 def test_get_current_default_is_neutral_when_missing(sandbox):
     """get_current returns 'neutral' when file doesn't exist."""
     from core.memory.mood_state import get_current
 
-    assert get_current(char_id="character_b") == "neutral"
-    assert get_current(char_id=TEST_CHAR_ID) == "neutral"
+    assert get_current(char_id="character_b") == ""
+    assert get_current(char_id=TEST_CHAR_ID) == ""
 
 
 # ── 3. update reads and writes same char_id ───────────────────────────────────
@@ -167,7 +168,7 @@ def test_update_reads_and_writes_same_char_id(sandbox):
     yexuan_path = sandbox.mood_state(char_id=TEST_CHAR_ID)
     assert not yexuan_path.exists(), f'Precondition: {TEST_CHAR_ID} file must not exist'
 
-    update("happy", char_id="character_b")
+    update("happy", char_id="character_b", source_turn_id="t", source_at=time.time())
 
     # character_b updated
     assert character_b_path.exists()
@@ -197,7 +198,7 @@ def test_update_writes_only_target_char(sandbox):
     yexuan_before = sandbox.mood_state(char_id=TEST_CHAR_ID).read_text(encoding="utf-8")
 
     # Update only character_b
-    update("sad", char_id="character_b")
+    update("sad", char_id="character_b", source_turn_id="t", source_at=time.time())
 
     yexuan_after = sandbox.mood_state(char_id=TEST_CHAR_ID).read_text(encoding="utf-8")
     assert yexuan_before == yexuan_after, (
@@ -205,34 +206,8 @@ def test_update_writes_only_target_char(sandbox):
     )
 
 
-@pytest.mark.parametrize(
-    ("emotion", "expected_intensity"),
-    [("sleepy", 0.09), ("thinking", 0.06)],
-)
-def test_force_update_switches_low_intensity_mood_immediately(
-    sandbox, emotion, expected_intensity
-):
-    """Dedicated force writers switch low-intensity moods in one update."""
-    from core.memory.mood_state import update
-
-    state = update(emotion, source="trigger", char_id="character_b", force=True)
-
-    assert state["previous"] == "neutral"
-    assert state["current"] == emotion
-    assert state["pending"] is None
-    assert state["intensity"] == expected_intensity
 
 
-@pytest.mark.parametrize("emotion", ["sleepy", "thinking"])
-def test_detect_update_still_rejects_low_intensity_mood_switch(sandbox, emotion):
-    """The normal detect path keeps the low-intensity noise gate."""
-    from core.memory.mood_state import update
-
-    state = update(emotion, source="detect", char_id="character_b", force=False)
-
-    assert state["current"] == "neutral"
-    assert state["pending"] is None
-    assert state["intensity"] > 0.0
 
 
 # ── 4. pipeline.post_process mood update passes active char_id ───────────────
@@ -251,12 +226,12 @@ async def test_post_process_mood_update_passes_active_char_id(
 
     captured_kwargs: list[dict] = []
 
-    def _spy_update(new_emotion, new_intensity=None, source="detect", *, char_id=TEST_CHAR_ID):
+    def _spy_update(new_emotion, new_intensity=None, source="detect", *, char_id=TEST_CHAR_ID, **metadata):
         captured_kwargs.append({"char_id": char_id, "emotion": new_emotion})
 
     monkeypatch.setattr(_ms, "update", _spy_update)
 
-    def _spy_ct(uid, user_msg, reply, emotion="neutral", turn_id=None, trigger_name="", envelope=None, *, char_id=TEST_CHAR_ID):
+    def _spy_ct(uid, user_msg, reply, emotion="neutral", turn_id=None, trigger_name="", envelope=None, *, char_id=TEST_CHAR_ID, **metadata):
         return turn_id or f"{uid}_spy"
 
     monkeypatch.setattr(_fp, "capture_turn", _spy_ct)
@@ -299,12 +274,12 @@ async def test_char_switch_mood_update_uses_new_char(
 
     captured_char_ids: list[str] = []
 
-    def _spy_update(new_emotion, new_intensity=None, source="detect", *, char_id=TEST_CHAR_ID):
+    def _spy_update(new_emotion, new_intensity=None, source="detect", *, char_id=TEST_CHAR_ID, **metadata):
         captured_char_ids.append(char_id)
 
     monkeypatch.setattr(_ms, "update", _spy_update)
 
-    def _spy_ct(uid, user_msg, reply, emotion="neutral", turn_id=None, trigger_name="", envelope=None, *, char_id=TEST_CHAR_ID):
+    def _spy_ct(uid, user_msg, reply, emotion="neutral", turn_id=None, trigger_name="", envelope=None, *, char_id=TEST_CHAR_ID, **metadata):
         return turn_id or f"{uid}_spy"
 
     monkeypatch.setattr(_fp, "capture_turn", _spy_ct)

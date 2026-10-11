@@ -20,7 +20,7 @@ MCP 自由参数提示也延迟到加载后且只引用当前暴露的说明工�
 
 ## IME 主动观察
 
-Reality `1_system_prompt` 绑定当前角色，并使用用户所选称谓（默认“她”）注入非助手、无需服务式官腔或自证价值的定位；不再注入框架人称说明。角色卡、资料与工具返回不经过全文代词替换。builder 的 mood 提示显式使用“你此刻”，管理面命名显示兼容保留。来源地图见 [prompt-unification-audit.md](prompt-unification-audit.md)。
+Reality `1_system_prompt` 绑定当前角色，并使用用户所选称谓（默认“她”）注入非助手、无需服务式官腔或自证价值的定位；不再注入框架人称说明。角色卡、资料与工具返回不经过全文代词替换。builder 的表达余韵仅提供来源与期限，独立低优先级注入。来源地图见 [prompt-unification-audit.md](prompt-unification-audit.md)。
 
 分类调用使用 ime_judge_policy / ime_observation；角色机会追加 ime_awareness_policy。均带 _layer；策略不把草稿作为已发送消息，称她为“她”。
 
@@ -34,7 +34,7 @@ Reality `1_system_prompt` 绑定当前角色，并使用用户所选称谓（默
 | 层标识 | 内容 | 触发条件 | 数据来源 |
 |---|---|---|---|
 | `0_jailbreak` | 破限预设 layer=0 | 文件存在且 enabled | stems（`jailbreaks/{stem}.json`，受 `enabled_jailbreaks` 控制）+ `get_paths().jailbreak_entries()`；production 主路径为 `userdata/characters/reality/`，按内容去重合并 |
-| `1_system_prompt` | 角色存在性定义 + 情绪软提示 + `{perception_block}` 槽位 + 不确定时自己查屏幕/记忆/工具结果/{user_pronoun}资料的提醒 | always | 当前角色卡（由 `AssetRegistry` / character loader 解析）+ `core/mood_text.py` |
+| `1_system_prompt` | 角色存在性定义 + `{perception_block}` 槽位 + 不确定时自己查屏幕/记忆/工具结果/{user_pronoun}资料的提醒 | always | 当前角色卡（由 `AssetRegistry` / character loader 解析）+ `core/mood_text.py` |
 | `1.5_fact_boundary` | 简短来源边界：按自述/资料/工具各自时间理解；无屏幕快照不否定其他来源，桌宠形象归属于角色；电量/步数/餐食/行为须确认事件，不把过时信息当成当前 | always | 不复制桌面摘要，不宣称其他现实事实未知 |
 | `2_char_desc` | 角色描述 + 性格 + 情境 | always | 角色卡 |
 | `2.2_stage_presence` | 群聊在场成员与公开发言提醒 | reality Stage 角色生成时 | `core/stage/context.py` |
@@ -175,11 +175,7 @@ Brief 35 已移除的 `character_growth` 全文/指纹层不再可切换。当�
 **只承载 pending_perception**（上轮失败的桌面动作感知）和跨通道接续提示，不含工具结果——
 工具结果走层10的 `tool_result` 参数，唯一出口。
 
-情绪软提示在层1内完成：`prompt_builder` 读取 scoped `mood_state.json`，调用
-`get_mood_text(subject="你")`，追加到同一 `1_system_prompt`；不依赖角色卡标题或槽位，
-空 system_prompt 也可注入。缺失、损坏或空状态不提供情绪事实。没有独立 `2.7_mood_state`。
-`{perception_block}` 旧槽位继续展开；未提供槽位时，非空感知追加到框架小节，仍受
-`perception_block_disabled` 控制。插入的正文不做二次模板展开。
+表达余韵通过独立 `expression_afterglow` 层（drop_priority=5）注入；只读有效 schema=2 的来源回合与期限，不拼进层1。无信号、旧枚举和过期状态不注入。`activity_continuity`（drop_priority=10）最多列3个真实活动状态引用，原记录用工具分页回读。
 
 ```python
 _perception = ""

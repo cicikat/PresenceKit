@@ -19,15 +19,7 @@ from core.data_paths import DEFAULT_CHAR_ID
 
 logger = logging.getLogger(__name__)
 
-_DETECT_EMOTION_TIMEOUT = 8.0  # detect_emotion wait_for 超时阈值，测试时可 monkeypatch
 _TOOL_EPHEMERAL_WAITING_AFTER_S = 3.0
-
-YANDERE_KEYWORDS = (
-    "只属于我", "别看别人", "只能是我", "独占",
-    "不许", "不准", "你是我的",
-)
-# priority 字段量纲：stranger=1，已认识的用户通常 >=2
-YANDERE_RELATION_THRESHOLD = 2
 
 # Phase A v8: avatar directive throttle — same emotion within cooldown window is skipped
 _AVATAR_DIRECTIVE_LAST: dict[str, tuple[str, float]] = {}  # char_id → (emotion, sent_at)
@@ -51,11 +43,6 @@ def _voice_reanchor(char_id: str) -> str:
     )
 
 
-def _check_yandere_trigger(user_message: str, reply: str, relation_priority: int) -> bool:
-    if relation_priority < YANDERE_RELATION_THRESHOLD:
-        return False
-    text = user_message + " " + reply
-    return any(kw in text for kw in YANDERE_KEYWORDS)
 
 
 def _detect_dream_echo(user_id: str, char_id: str, content: str, reply: str) -> bool:
@@ -2054,18 +2041,6 @@ class Pipeline:
         assert char_id is not None
         scope_payload = scope.to_payload()
 
-        # N2-A/N2-B: sleepy mood — 从 fetch_context 迁出的显式写操作。
-        # 放在关键段开头（uid_lock 外）：保留深夜 sleepy 语义，
-        # 但不再污染读路径。覆盖所有调用链（QQ / admin / scheduler），
-        # 因为 record_assistant_turn 最终都走 pipeline.post_process_critical。
-        # N2-B: helper 已升级为 async + global_lock("mood_state")，需 await。
-        # 本身不含 LLM/网络往返，留在关键段不影响 send 延迟。
-        try:
-            from core.mood_helpers import maybe_mark_sleepy_from_time as _mark_sleepy
-            await _mark_sleepy(uid=user_id, char_id=char_id, envelope=envelope)
-        except Exception as _sleepy_err:
-            logger.warning("[pipeline.post_process_critical] sleepy mood 写入异常（已忽略）: %s", _sleepy_err)
-
         from core.memory import locks as _locks
         from core.error_handler import log_error
         from core.post_process import slow_queue
@@ -2218,6 +2193,8 @@ class Pipeline:
             "tool_pin_echo": _pin_echo,
             "profile_recent": _profile_recent,
             "prior_gap_seconds": _prior_gap_seconds,
+            "expression_signal": (audit_extras or {}).get("expression_signal", __import__("core.expression_signal", fromlist=["explicit_expression"]).explicit_expression(reply)),
+            "source_at": event_context.occurred_at if event_context is not None else _time.time(),
         }
 
     async def post_process_slow(
@@ -2272,14 +2249,7 @@ class Pipeline:
             from core.document_reading import schedule_summaries
             schedule_summaries(user_id, char_id)
 
-        # ── detect_emotion（带超时，只依赖 reply 文本）──
-        try:
-            _emotion = await asyncio.wait_for(
-                llm_client.detect_emotion(reply), timeout=_DETECT_EMOTION_TIMEOUT
-            )
-        except (asyncio.TimeoutError, Exception) as e:
-            logger.warning(f"[pipeline.post_process_slow] detect_emotion 降级 neutral: {e}")
-            _emotion = "neutral"
+        _emotion = str(critical_result.get("expression_signal") or "")
 
         # ── Brief 88：user_hidden_state 现实侧信号映射（对话侧，emotion 已可用）──
         # 判定全用现成数据（tags / emotion / 现实轮 gap 快照 / 常量词表），零 LLM；
@@ -2292,7 +2262,7 @@ class Pipeline:
                 uid=user_id,
                 content=content,
                 tags=_reality_tags,
-                assistant_emotion=_emotion,
+                assistant_emotion="",
                 trigger_name=trigger_name,
                 envelope=envelope,
                 prior_gap_seconds=critical_result.get("prior_gap_seconds"),
@@ -2309,21 +2279,14 @@ class Pipeline:
                 async with _locks.global_lock("mood_state"):
                     try:
                         from core.memory.mood_state import update as _update_mood
-                        _mood_state_after = _update_mood(_emotion, source="detect", char_id=char_id)
-
-                        try:
-                            from core import user_relation as _user_relation
-                            _relation = _user_relation.get_relation(user_id)
-                            if _check_yandere_trigger(content, reply, _relation.get("priority", 1)):
-                                from core.memory.mood_state import update as _update_mood_y
-                                _mood_state_after = _update_mood_y("yandere", source="trigger", char_id=char_id)
-                        except Exception as e:
-                            log_error("post_process.yandere", e)
+                        _mood_state_after = _update_mood(_emotion, source="explicit", char_id=char_id,
+                            source_turn_id=str(_turn_id), source_at=critical_result.get("source_at"))
                     except Exception as e:
                         log_error("post_process.mood_state", e)
 
             # Phase A v8: push avatar directive (fail-open, outside locks)
-            if _mood_state_after is not None:
+            if (_mood_state_after is not None and _mood_state_after.get("has_signal")
+                    and _mood_state_after.get("source_turn_id") == str(_turn_id)):
                 asyncio.create_task(_maybe_push_avatar_directive(_mood_state_after, char_id))
             # 爱意探针 → 板子爱心（非阻塞、锁外、fail-open）；梦境/沙盒等场景不触发实体爱心。
             if envelope.can_affect_mood:

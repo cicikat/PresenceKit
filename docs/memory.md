@@ -667,15 +667,15 @@ clamp 单测是弱断言（未验真截顶）；ShortTermMemory.append 类封装
 **写入顺序**（Brief 37 之后，注意有先后）：
 1. `post_process_critical`（send 前的关键段，只做毫秒级本地落盘）直接调用
    `fixation_pipeline.capture_turn(uid, ..., emotion="neutral", char_id=_active_character_id)`——
-   此时 `detect_emotion()` 还没跑完，`emotion` 传的是占位值 `"neutral"`，事后不会
+   此处没有额外情绪模型调用，`emotion` 传的是占位值 `"neutral"`，事后不会
    回写修正。这是有意的取舍：event_log 的 `emotion` 字段只是标注，不参与任何下游
-   判断（mid_term eager reflect 消费的是 `post_process_slow` 里 detect 出的真实
+   判断（mid_term eager reflect 消费的是 `post_process_slow` 里源回合明确表达的
    emotion，不读这份占位值）。写入规则按 envelope 区分：
    - **用户对话**（`stamp_user_chat()`）：写 short_term user + assistant 两行，写 event_log user + assistant 两行（assistant 行含 emotion，所有行含 turn_id）。
    - **调度器触发器**（`stamp_trigger()`）：**不写 short_term**（trigger 不是用户说过的话，不得进入 history/prompt 上下文）；写 event_log assistant 行；另外追加 `trigger_audit_log` 一条（metadata + SHA256[:16] reply hash，不含完整回复文本）至 `data/event_log/{uid}/trigger_audit.jsonl`。
    - `envelope.can_write_memory=False`（默认 WriteEnvelope）：所有写入均跳过，用于无副作用 dry-run。
    - `char_id` 由 `post_process_critical` 显式传入，决定写入哪个角色桶。
-2. send（channel fanout）完成后，`post_process_slow` 才异步跑 `detect_emotion()`
+2. send（channel fanout）完成后，`post_process_slow` 才异步提交源回合表达
    并更新 `mood_state`（真实 emotion 只进 mood_state / mid_term，不回写 event_log）。
 
 **写入格式（P1-1 speaker 字段化）**：每个对话块的各行之后加说话人元行：
@@ -1254,130 +1254,17 @@ meta 另含 `consecutive_failures`、`rejected_ops`、`next_retry_at`（及 `agg
 
 ---
 
-## 五、情绪状态（mood_state）
+## 情绪表达与短时余韵（284）
 
-**文件**：`core/memory/mood_state.py`
+`mood_state` 保存角色级短时表达，schema_version=2。字段包含 current、has_signal、source_turn_id、source_at、expires_at、version，以及阻止晚到提交的 last_source_at / last_turn_id。
 
-**存哪**：`data/runtime/characters/{char_id}/inner/mood_state.json`（角色级唯一，不区分用户）
+只有角色输出中明确的自我 feel/do 信号参与，沿现有回复解析；不另调用情绪模型。否定、引用、用户情绪和标点不自动贴角色标签。钟点 sleepy、工具 thinking、关键词 yandere、记忆召回 nudge、两轮门槛及加权漂移均退役。sleepy/thinking 仍可明确表达。
 
-### 数据结构
+默认无信号 current 为空；明确 neutral 与无信号不同。旧固定枚举不自动恢复为新信号。期限最多30分钟，从源事件时间计算；读取不写入、不续期。无信号轮只推进提交水位，不改旧信号来源；新信号可即时改变或撤回，晚到旧轮不得覆盖。
 
-```json
-{
-  "current": "gentle",
-  "intensity": 0.45,
-  "previous": "neutral",
-  "pending": null,
-  "updated_at": 1234567890.0
-}
-```
+`expression_afterglow` 是低优先级独立层（drop_priority=5），只在有效时注入来源与期限，以当前回复为准。花园、scheduler、贴纸、avatar、硬件与客户端只消费有效值；视觉基线不回写心理事实。角色表达标签不再传给 user_hidden_state 作为用户隐性状态的推断证据。
 
-### 情绪强度映射
-
-| 情绪 | 强度 |
-|---|---|
-| neutral | 0.0 |
-| thinking / sleepy / gentle | 0.2~0.3 |
-| happy / sad | 0.6 |
-| surprised | 0.7 |
-| angry | 0.8 |
-| yandere | 1.0 |
-
-### 漂移规则
-
-每轮 `post_process_slow`（Brief 37：send 之后异步跑的慢段）里，LLM 检测他回复的
-情绪后调用 `update()`：
-
-- `update(emotion, source="detect")` — source 可选值：`detect`（post_process_slow 检测）、`trigger`（关键词触发，如 yandere）、`schedule`（时间触发，如深夜 sleepy）
-
-```
-新强度 = 旧强度 × 0.7 + 新情绪强度 × 0.3
-```
-
-**情绪标签切换需同时满足**：
-1. 新情绪强度 > 0.4
-2. 连续两轮检测到同一新情绪（`pending` 字段记录上轮候选）
-
-### 对外接口
-
-- `get_current()` → 当前情绪字符串
-- `get_intensity()` → 当前强度 float
-- `update(emotion, force=False)` → 漂移更新；`force=True` 跳过切换门槛/pending，但仍保留强度漂移
-- `nudge_from_memory(emotion, strength)` → 记忆召回时的微调（episodic 调）
-
-### ⚠️ 当前状态
-
-### prompt 注入形态
-
-mood_text 输出**不是独立的 prompt 层**，而是直接拼入层 1（system_prompt）的 `## 当前感知` 区块之前。格式：
-他此刻：{情绪描述}。[pending 时追加：但有什么东西好像在悄悄变得不一样。]
-
-每个情绪 × 3档强度（<0.4 / 0.4-0.7 / >0.7）对应不同描述，例：
-- `gentle` 低：淡淡的平静 / 中：平静，带一点轻盈 / 高：很平静，像静水
-- `sad` 低：有点沉 / 中：沉着，像压着什么 / 高：很沉，有什么东西在
-
-`yandere` 情绪不在 MOOD_TEXT 里，走 `get_mood_text` 的 fallback 降级为 neutral 描述。
-
-**残留混合（Brief 81）**：零结构改动，纯文本层立体感。当 `previous != current` 且
-`previous != "neutral"` 且距 `updated_at` 未超过 30 分钟时，在主描述后追加一句
-`RESIDUAL_TEXT[previous]` 残留短句（每情绪一档，不做强度组合，全表 ≤8 句，写在
-`core/mood_text.py` 同文件）。`yandere` 不参与残留混合（current 为 yandere 时不追加）。
-pending 与残留同时满足时只出 pending 句（避免一层堆两句情绪旁白）。不新增字段、不动
-`detect_emotion`/漂移数学/consumer（episodic emotion_bonus、nudge、花园）。
-
-mood_state 目前影响：
-1. ~~episodic_memory 召回时的 emotion_bonus 加分~~（M4 已移除）
-2. nudge_from_memory 的情绪强度微调
-3. 三路触发写入：detect（每轮 post_process_slow，保留强度门槛）、trigger（yandere 关键词；工具 thinking 通过 helper 强制置位）、schedule（深夜 sleepy，post_process_critical 里调用 helper 强制置位——sleepy 本身不含 LLM/网络往返，留在关键段不影响 send 延迟）
----
-
-## 记忆系统时序关系
-
-```
-fetch_context()
-    ├─ 读 history（上轮写的）
-    ├─ 读 event_log（搜索）
-    ├─ 读 user_identity（稳定行为模式，confidence >= 0.5）
-    ├─ 读 episodic_memory → retrieve()（此时读 mood_state，用的是上轮情绪）
-    └─ 读 profile / diary_context / reminders
-
-run_llm()  →  reply 生成
-
-post_process_critical()  ← send 前必须走完的关键段，不 await 任何 LLM/网络往返
-    ├─ 检查 profile 更新条件（读 short_term 估算长度）
-    ├─ maybe_mark_sleepy_from_time（深夜 sleepy，无 LLM，留在关键段不影响延迟）
-    └─ capture_turn(uid, content, reply, emotion="neutral", char_id=_active_character_id)
-         [用户对话] → 写 short_term（user + assistant，含 turn_id）
-         [用户对话] → 写 event_log（user + assistant，含 turn_id；emotion 是占位值 "neutral"）
-         [触发器]  → 跳过 short_term（trigger 不入 history）
-         [触发器]  → 写 event_log（assistant 行）+ trigger_audit.jsonl（metadata+hash）
-
-record_assistant_turn() → channel fanout（send，用户在这里看到回复）
-
-post_process_slow()  ← send 之后 asyncio.create_task 调度，不 await
-    ├─ detect_emotion(reply) → 写 mood_state  ← 本轮真实情绪写入（只影响下一轮）
-    └─ 慢队列：summarize_to_midterm / consistency_check / user_profile_update（条件）
-         └─ summarize_to_midterm handler
-              → 写 mid_term（含 mid_id, source_turn_id）
-              → 若 emotion ∈ {sad,angry,happy} → 入队 reflect_to_episodic(eager)
-                   → 写 episodic（含 source_mid_ids, consolidated_at=None）
-                   → 更新 fixation_state
-                   → 若达阈值 → 入队 consolidate_to_identity
-                        → 读 unconsolidated episodic + old identity + profile
-                        → _synthesize_identity → 写 user_identity.yaml
-                        → 标记 episodic.consolidated_at → 重置 fixation_state
-```
-
-**关键时序（Brief 37 更新）**：`post_process` 原来是一整段同步流程，`detect_emotion`
-（一次 LLM 往返，最长 8s 超时）挡在 send 之前，每条消息都多付一次 LLM 延迟。现在拆成
-`post_process_critical`（send 前，只做毫秒级本地落盘）与 `post_process_slow`（send 后
-异步执行 detect_emotion / mood_state / slow_queue 入队等）。event_log 里这一轮的
-`emotion` 字段永远是 critical 段写入时的占位值 `"neutral"`，事后不会回写修正——这是
-可接受的取舍，因为 event_log 的 emotion 只是标注字段，真正消费 emotion 做判断的
-mid_term eager reflect 触发用的是 `post_process_slow` 里 detect 出的真实值。本轮真实
-情绪只在 `post_process_slow` 完成后才写入 mood_state，所以只影响**下一轮**的记忆召回
-——这一点本身没变，只是触发时机从"send 之前"挪到了"send 之后"，语义上更清楚地体现
-"本轮情绪不影响本轮 prompt"。
+对话仍先经 `post_process_critical` 落盘，再发送，最后后台执行余韵提交、资料及记忆整合。真实过去情感保留在事件和对话中。活动真实对话也走 turn sink；棋步/页面保留结构化来源，详见 [reality-activity-continuity.md](reality-activity-continuity.md)。
 
 ---
 
@@ -1531,7 +1418,7 @@ per-uid 锁（`uid_lock(uid)`）：保护关键写入和慢队列 handler 中按
 两种锁均为 asyncio.Lock，在单线程事件循环内安全。
 `post_process_critical`（send 前的关键段）与 `post_process_slow`（send 后异步的慢段，
 Brief 37）各自独立获取一次 uid 锁——不再是同一把锁贯穿整轮，capture_turn 落盘完就
-释放，`global_lock("mood_state")` 要等 detect_emotion 跑完才在 `post_process_slow`
+释放，`global_lock("mood_state")` 在 `post_process_slow`
 里获取。单用户连发时，critical 段的排队会拖慢 send（这正是它必须"只做毫秒级本地
 落盘"的原因），slow 段的排队完全在后台，不影响任何用户可见的响应延迟。
 
@@ -1548,7 +1435,7 @@ message_queue"的提案：诊断（两套串行机制=认知负债）成立，�
 | `conversation_lock`（`core/conversation_gate.py`） | uid（不区分 char_id） | 同一用户完整一轮对话（`fetch_context → build_prompt → run_llm → record_assistant_turn`）不被并行第二轮抢跑 | QQ `handle_message` / `_reply_with_tool_result` / `_handle_group_message`；desktop `admin/routers/chat.py`；scheduler `_pipeline_send`；`perceive_event`；stage `projection.py`/`runner.py`；admin dream 路由 |
 | `uid_lock`（`core/memory/locks.py`） | uid | `post_process_critical`（send 前）内关键写入的读-改-写（capture_turn / profile 条件判断等）；`post_process_slow`（send 后异步）内 mood_state 更新的读-改-写；以及慢队列 handler 里按 uid 分文件的读-改-写 | `pipeline.post_process_critical` / `pipeline.post_process_slow` 各自独立的临界区；慢队列各 handler |
 | self 文件锁（256 C） | `uid+char_id` 桶 | self 用户文件的读-改-写、move 双路径校验、revision CAS | `core/character_self.py` 每桶 `threading.RLock`；不得复用 workspace 锁或只靠字符串前缀。self 内容不自动进入 identity/episodic；若误入记忆链须 `provenance_log.append()` |
-| `global_lock("mood_state")`（`core/memory/locks.py`） | 全局单键 | 跨 uid 共享的 mood_state 文件（角色级，不分用户） | `post_process_slow` 内 mood_state.update（send 后异步，Brief 37）；工具/调度器强制置位 mood 的 helper |
+| `global_lock("mood_state")`（`core/memory/locks.py`） | 全局单键 | 跨 uid 共享的 mood_state 文件（角色级，不分用户） | `post_process_slow` 内 mood_state.update（send 后异步，Brief 37）；源回合明确表达的余韵提交 |
 | vector_store 单 worker executor（Brief 34 §2；Brief 36 收尾 episodic 一处遗留同步调用，2026-07-10） | 进程级单线程 | 同一 sqlite 向量库文件的读写不被默认线程池的多路并发撞 lock（无 WAL，rollback-journal 默认模式） | `vector_store.query_async` / `query_with_preview_async` / `upsert`（`_upsert_sync` 在 executor 内跑）；`fetch_context` 语义召回、`event_log.search` 语义相似度、`episodic_memory.retrieve` 的 X2 语义候选扩展（`fetch_context` 预取 `sem_hits` 传入，`retrieve()` 自身不再直接查库） |
 
 **层次关系**：`message_queue` 串行化的是"消息到达顺序"，`conversation_lock` 串行化的是
@@ -1789,7 +1676,7 @@ Phase 6 之前现实对话对 hidden_state 零写入（只被 Dream 单向喂养
 两条现实侧写入路径：
 
 **§1 对话侧（`core/memory/user_hidden_state_reality_signals.py::process_reality_turn`）**：
-接线点 `pipeline.post_process_slow` 的 detect_emotion 完成之后，判定全部用现成数据
+接线点 `pipeline.post_process_slow` 的 源回合表达解析之后，判定全部用现成数据
 （tags / emotion / 现实轮 gap 快照 / 常量词表），零 LLM，fail-open。
 
 | 事件 | 判定 | 效果 |
