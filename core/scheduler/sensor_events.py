@@ -11,7 +11,6 @@ from datetime import datetime
 from typing import Optional
 
 from core.memory import realtime_state
-from core import activity_manager
 from core.scheduler.rhythm import is_quiet_sleep_time
 
 logger = logging.getLogger(__name__)
@@ -130,13 +129,6 @@ def _build_context(snap: dict, presence: str) -> dict:
         away_since=away_since,
     )
 
-    try:
-        from core import pipeline_registry
-        _pl = pipeline_registry.get()
-        _char_id = getattr(_pl, "_active_character_id", None) or "yexuan"
-        ye_xuan_activity = activity_manager.get_current(char_id=_char_id).get("current", "")
-    except Exception:
-        ye_xuan_activity = ""
     screen = snap.get("screen", {}) or {}
     visible_text   = screen.get("visible_text", []) or []
     clickable_text = screen.get("clickable_text", []) or []
@@ -165,7 +157,7 @@ def _build_context(snap: dict, presence: str) -> dict:
         "screen_text_hint":    screen_text_hint[:300],
         "screen_click_hint":   screen_click_hint[:240],
         "keystroke_density":   _keystroke_density(snap),
-        "ye_xuan_activity":    ye_xuan_activity,
+        "ye_xuan_activity":    "",
     }
 
 

@@ -31,7 +31,6 @@ LAYER_AUTHORITY: dict[str, dict] = {
     "2.5_time": _SYS,
     "2.55_last_seen": _SYS,
     "2.56_relationship_span": _e("relationship_span", "user_stated_fact"),
-    "2.6_presence": _e("presence", _AMB),
     "3_relation": _e("relation", "user_stated_fact"),
     "3.5_period": _e("period", _AMB),
     "3.6_watch": _e("watch", _AMB),

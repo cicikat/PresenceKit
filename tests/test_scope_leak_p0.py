@@ -119,7 +119,6 @@ def test_prompt_builder_mood_isolation(sandbox):
     with (
         patch("core.author_note_rotator.get_current_note", return_value=""),
         patch("core.presence.get_last_seen_text", return_value=""),
-        patch("core.activity_manager.get_prompt_fragment", return_value=""),
     ):
         content = _build_prompt("character_b")
 
@@ -141,7 +140,6 @@ def test_prompt_builder_activity_isolation(sandbox):
     with (
         patch("core.author_note_rotator.get_current_note", return_value=""),
         patch("core.presence.get_last_seen_text", return_value=""),
-        patch("core.activity_manager.get_prompt_fragment", return_value=""),
     ):
         content = _build_prompt("character_b")
 
@@ -164,7 +162,6 @@ def test_prompt_builder_style_hint_isolation(sandbox):
     with (
         patch("core.author_note_rotator.get_current_note", return_value=""),
         patch("core.presence.get_last_seen_text", return_value=""),
-        patch("core.activity_manager.get_prompt_fragment", return_value=""),
     ):
         content = _build_prompt("character_b")
 

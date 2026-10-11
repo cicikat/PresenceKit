@@ -186,7 +186,7 @@ inside modules resolve to the registered lifecycle name before admission.
 | `desktop_wake`, `restart` | active | One-shot bounded signal; no direct assistant turn |
 | `interval`, `schedule` | active | Native clocks; produce signal/task, never prose |
 | `dream_postcards` | active | Due authored postcard delivery; calls the bounded mail artifact adapter, never the assistant speech outlet |
-| `activity_switch`, `coplay_watch`, `diary_inject` | maintenance-only | Silent Task worker/state maintenance |
+| `coplay_watch`, `diary_inject` | maintenance-only | Silent Task worker/state maintenance |
 | `episodic_decay`, `episodic_sweep` | maintenance-only | Existing memory maintenance writer; no speech |
 | `inner_diary_write` | maintenance-only | Task -> same-character specialized 副链 work session -> authored diary; 23:00 silent |
 | `dlq_monitor`, `log_maintenance` | maintenance-only | Operational cleanup only |

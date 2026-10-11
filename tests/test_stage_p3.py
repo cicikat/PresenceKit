@@ -230,7 +230,6 @@ def test_lightweight_prompt_context_is_smaller_than_full(sandbox):
         patch("core.author_note_rotator.get_current_note", return_value=""),
         patch("core.config_loader.get_config", return_value={"chat": {"style": "chat"}}),
         patch("core.mood_text.get_mood_text", return_value=""),
-        patch("core.activity_manager.get_prompt_fragment", return_value=""),
     ):
         _full_messages, full_debug = prompt_builder.build(
             character=char, user_id="owner", user_message="hi",
@@ -338,7 +337,6 @@ def test_prompt_builder_injects_stage_layers(sandbox):
         patch("core.author_note_rotator.get_current_note", return_value=""),
         patch("core.config_loader.get_config", return_value={"chat": {"style": "chat"}}),
         patch("core.mood_text.get_mood_text", return_value=""),
-        patch("core.activity_manager.get_prompt_fragment", return_value=""),
     ):
         messages, debug = prompt_builder.build(
             character=char,
@@ -379,7 +377,6 @@ def test_prompt_builder_private_transcript_header_differs_from_group(sandbox):
         patch("core.author_note_rotator.get_current_note", return_value=""),
         patch("core.config_loader.get_config", return_value={"chat": {"style": "chat"}}),
         patch("core.mood_text.get_mood_text", return_value=""),
-        patch("core.activity_manager.get_prompt_fragment", return_value=""),
     ):
         messages, _debug = prompt_builder.build(
             character=char,
@@ -426,7 +423,6 @@ def test_prompt_builder_group_stage_history_header_disclaims_not_group_content(s
         patch("core.author_note_rotator.get_current_note", return_value=""),
         patch("core.config_loader.get_config", return_value={"chat": {"style": "chat"}}),
         patch("core.mood_text.get_mood_text", return_value=""),
-        patch("core.activity_manager.get_prompt_fragment", return_value=""),
     ):
         group_messages, _ = prompt_builder.build(
             character=char, user_id="owner", user_message="hello",

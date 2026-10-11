@@ -108,10 +108,10 @@ MCP去掉等级后仍受服务器启用、工具暴露、scope、origin、风险
 
 ### P2 删除虚拟活动（删除brief）
 
-- [ ] 删除activity_manager随机生成、thinking池/抽记忆、20h练习当前化、scheduler随机旁白和切换任务。
-- [ ] 清理prompt、sensor_events、Stage/private_exchange、HTTP和配置依赖；真实活动接口不得读取随机元数据。
+- [x] 删除activity_manager随机生成、thinking池/抽记忆、20h练习当前化、scheduler随机旁白和切换任务。
+- [x] 清理prompt、sensor_events、Stage/private_exchange、HTTP和配置依赖；真实活动接口不得读取随机元数据。
 - [ ] 空状态正常展示；GET和prompt读取不得生成状态；重复读取不变更记录。
-- [ ] 专用守卫/测试/文档随功能删除，保留真实感知及真实活动守卫；不清理用户authored池文件。
+- [x] 专用守卫/测试/文档随功能删除，保留真实感知及真实活动守卫；不清理用户authored池文件。
 
 ### P3 整套成长删除（删除brief）
 
@@ -171,3 +171,7 @@ MCP去掉等级后仍受服务器启用、工具暴露、scope、origin、风险
 ### P1 施工证据
 
 旧快照只有 data_paths/data_registry/迁移引用，没有生产写入者；删除 prompt reader 和专用守卫，不删除历史数据。sensor 仍由 sensor.write 接收，state.read 查询；纯内存整帧替换，重启清零。实时 prompt 限配置的 scheduler owner，各角色共享用户设备事实。设备类别、输入和 scheduler 事件改为观测措辞，拒绝未来接收时间。协议目前没有独立设备身份，设备切换隔离及真实设备实测仍待完成；不能据 fixture 宣称这两项已验收。
+
+### P2 施工证据
+
+删除 activity_manager、切换维护任务、scheduler 随机此刻旁白、prompt/Stage/private_exchange/sensor 随机活动消费及专项测试。真实 /activity/current 使用 registry 找真实会话并读取同源时间，无会话为空。143 项相关回归通过；P1 扩展回归 102 通过、2 项因在线 life_records 数据库变化导致生产目录快照不同而失败，保留记录，未停服务。跨端静态检查确认桌面归一化支持 nullable 时间与空 text；真实端运行 not-run。

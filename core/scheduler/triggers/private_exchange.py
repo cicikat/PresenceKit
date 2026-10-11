@@ -147,14 +147,6 @@ def select_pair(char_ids: list[str]) -> tuple[str, str] | None:
 def _opener_material(char_id: str, other_id: str) -> str:
     parts: list[str] = []
     try:
-        from core import activity_manager
-
-        activity = activity_manager.get_prompt_fragment(char_id=char_id)
-    except Exception:
-        activity = ""
-    if activity:
-        parts.append(f"你最近在忙：{activity}")
-    try:
         from core.character_name_provider import get_char_name
         from core.stage.char_relations import recent_moments
 

@@ -15,12 +15,6 @@ import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
-# Monkey-patch activity_manager.get_current 在 sensor_events 被引入前生效，
-# 避免 sandbox / YAML 文件依赖。
-import unittest.mock as mock
-import core.activity_manager as _am
-_am.get_current = mock.Mock(return_value={"current": "在读书"})
-
 from core.memory import realtime_state
 import core.scheduler.sensor_events as se
 

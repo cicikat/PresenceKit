@@ -1,3 +1,7 @@
+## 284 P2 真实活动投影（current / observe）
+
+`GET /activity/current` 保持原字段与 state.read scope；text/id/started_at 来自同一 owner/char 的真实会话，无会话 text 为空、时间为空；arc/next_switch_at 为空、thinking_about_eligible 为 false。Dream 沿原独立状态展示。桌面归一化支持空字符串及 nullable 时间，手机保留原 ActivityCurrentState 读取；没有新增 WS 广播或主聊天消息。并发活动全量投影及真实端验收留给 P4/P7。
+
 ## 2026-10-11 手机梦境 Flow 外观（current / observe）
 
 current：Flutter 新增金色剧场/经典卷曲与靛蓝轨道/伪随机流体，独立日夜颜色和参数预设由本机 ThemeController JSON 保存；设置外观入口提供当前选用、全部参数与原生实时预览，原 getCustomThemePalette 是只读观测路径。管理面无能力开关/effective/audit 要求，桌面无同步要求；Dream REST/鉴权/segments/reveal/醒来、poll/ack/TTL/通知和角色归属未改，无新服务端状态或业务台账。observe：真实手机 GPU、软键盘、相册/OEM、重启与功耗 not-run，不把构建或预览视为真机完成。手机细节：docs/mobile/dream-flow-appearance.md、cc-tasks/33-dream-flow-integration.md。

@@ -117,7 +117,6 @@ def test_prompt_reads_health_state(monkeypatch):
         patch("core.memory.health_state.load", return_value=health),
         patch("core.memory.user_profile.load", return_value={}),
         patch("core.mood_text.get_mood_text", return_value=""),
-        patch("core.activity_manager.get_prompt_fragment", return_value=""),
     ):
         messages, _ = prompt_builder.build(
             character=char, user_id="prompt-owner", user_message="health", history=[],

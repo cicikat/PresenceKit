@@ -61,7 +61,7 @@ data/runtime/groups/{group_id}/
    续聊。调用方不传 `generate_reaction` 时此阶段整体跳过（向后兼容）。
 5. **Phase T**（话题引子，可选）：轮末条件触发——本轮 Phase A+B 实际发言 <2 条，或最后一条
    无问句且无 vocative——以概率 `topic_seed_prob` 选本轮未发言、talkativeness 最高的角色抛一个
-   新话头（素材：`activity_manager` 当前动向、`scheduler_user_state.followed_topics`、
+   新话头（素材：`scheduler_user_state.followed_topics`、
    `char_relations.recent_moments`、当前时间，零新检索）。`triggered_by="topic_seed"`；这是
    本轮的最后一步，不会再触发新的 Phase B 链，天然无递归。
 6. 每条有效回复（含 Phase R/T）先追加共享 transcript，再调用可选 delivery callback。

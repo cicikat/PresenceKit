@@ -133,7 +133,8 @@ def load_session(
 # ── 查询 ──────────────────────────────────────────────────────────────────────
 
 def find_active_session(
-    char_id: str, uid: str, activity_type: str, *, now: float | None = None
+    char_id: str, uid: str, activity_type: str, *, now: float | None = None,
+    persist_expiry: bool = True,
 ) -> ActivitySession | None:
     """返回该 (char_id, uid, activity_type) 下最新的 active session，无则返回 None。
 
@@ -157,7 +158,8 @@ def find_active_session(
             if s.status != "active":
                 continue
             if _session_is_stale(s, now=current):
-                _expire_session(s, reason="stale_ttl")
+                if persist_expiry:
+                    _expire_session(s, reason="stale_ttl")
                 continue
             candidates.append(s)
         except Exception:

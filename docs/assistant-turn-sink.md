@@ -16,7 +16,7 @@
 | 普通 scheduler conversational trigger（morning_greeting / period_reminder / birthday / festival / timenode / topic_followup / reminders / diary_reminder / hr_high / hr_critical / garden_bloom 等） | 成功发言后 ✓ assistant only | 成功发言后 ✓ assistant only | 成功发言后 ✓ 全 channel | 当前先提交 signal，经 autonomy admission；仅 `talk_owner` 成功时进入 sink |
 | **sensor_aware** | 成功发言后 ✓ assistant only | 成功发言后 ✓ assistant only | 成功发言后 ✓ desktop + mobile（含 mobile durable mirror） | 当前提交高 urgency sensor signal；仍经过统一 autonomy admission 与 `talk_owner`，不向 QQ fanout |
 | **sleep_end**（`admin/routers/watch.py:_flush_sleep_buffer`） | ✓ assistant only | ✓ assistant only | ✓ 统一 sink fanout | 当前由 `scheduler.on_watch_event` → autonomy `talk_owner` 进入 sink，带 `trigger_name="sleep_end"` |
-| 维护型任务（diary_inject / episodic_decay / episodic_sweep / dlq_monitor / activity_switch / dnd） | — | — | — | 不是 assistant turn，不在 Phase 1 范围 |
+| 维护型任务（diary_inject / episodic_decay / episodic_sweep / dlq_monitor / dnd） | — | — | — | 不是 assistant turn，不在 Phase 1 范围 |
 
 副问题：
 
@@ -461,7 +461,7 @@ mobile 队列，后台也就没有横幅可弹。
 | sleep_end 没传 trigger_name 污染 user 行 | 用 `WATCH` source + `trigger_name="sleep_end"` 修正 |
 | garden 事件冷却名挂着但未节流 | 已由 `_is_ready` / `_mark` / `would_mark` 接入；后续仅保留验收观测 |
 
-codex 报告里维护型任务（diary_inject / episodic_decay / episodic_sweep / dlq_monitor / activity_switch / dnd）**不在本 Phase 1 范围**，因为它们不是 assistant turn。
+codex 报告里维护型任务（diary_inject / episodic_decay / episodic_sweep / dlq_monitor / dnd）**不在本 Phase 1 范围**，因为它们不是 assistant turn。
 
 ---
 

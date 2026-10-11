@@ -131,17 +131,6 @@ def test_empty_user_dream_roots_do_not_hide_legacy_resources(tmp_path, monkeypat
     assert load_world("legacy").ruleset == "legacy rules"
 
 
-def test_activity_manager_uses_default_pool_after_missing_custom_pool(tmp_path, monkeypatch):
-    paths = _production_paths(tmp_path, monkeypatch)
-    import core.activity_manager as activity
-
-    _write(
-        paths.user_authored_character_dir(char_id=activity._DEFAULT_CHAR_ID) / "activity_pool.yaml",
-        "activities:\n  - name: default activity\n",
-    )
-    assert activity._load_pool("companion") == [{"name": "default activity"}]
-
-
 def test_fresh_user_only_resources_remain_visible_without_legacy(tmp_path, monkeypatch):
     _production_paths(tmp_path, monkeypatch)
     _write(tmp_path / "userdata" / "characters" / "dream" / "worlds" / "fresh" / "ruleset.md", "fresh")

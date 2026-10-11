@@ -552,7 +552,6 @@ def test_prompt_builder_injects_6g_layer(sandbox):
         patch("core.author_note_rotator.get_current_note", return_value=""),
         patch("core.config_loader.get_config", return_value={"chat": {"style": "roleplay"}}),
         patch("core.mood_text.get_mood_text", return_value=""),
-        patch("core.activity_manager.get_prompt_fragment", return_value=""),
     ):
         messages, debug = prompt_builder.build(
             character=char,
@@ -596,7 +595,6 @@ def test_prompt_builder_no_6g_when_empty(sandbox):
         patch("core.author_note_rotator.get_current_note", return_value=""),
         patch("core.config_loader.get_config", return_value={"chat": {"style": "roleplay"}}),
         patch("core.mood_text.get_mood_text", return_value=""),
-        patch("core.activity_manager.get_prompt_fragment", return_value=""),
     ):
         messages, _ = prompt_builder.build(
             character=char,

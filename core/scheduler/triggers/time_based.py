@@ -724,18 +724,6 @@ async def _check_episodic_decay():
         log_error("scheduler._check_episodic_decay", e)
 
 
-async def check_activity_switch() -> None:
-    """每次调度器循环时检查是否需要切换activity。"""
-    try:
-        from core.activity_manager import should_switch, switch_activity
-        char_id = _active_char_id_or_none() or DEFAULT_CHAR_ID
-        if should_switch(char_id=char_id):
-            switch_activity(char_id=char_id)
-    except Exception as e:
-        from core.error_handler import log_error
-        log_error("scheduler.activity_switch", e)
-
-
 def propose_spontaneous_recall(ctx: dict | None = None):
     ctx = ctx or {}
     now = _proposal_now(ctx)

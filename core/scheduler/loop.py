@@ -5,7 +5,6 @@
 import asyncio
 import uuid
 import logging
-import random
 import time
 from datetime import datetime, date
 from typing import Optional
@@ -531,13 +530,6 @@ async def _pipeline_send(
         from core.scheduler.triggers.birthday import _is_birthday_period
         if _is_birthday_period():
             prompt = prompt + "\n（今天是她的生日，4月24日）"
-        _states = ["在思考", "在翻阅她的日记", "在想她说过的话", "在看窗外", "在灵体出游"]
-        try:
-            from core.character_name_provider import get_char_name
-            prompt = prompt + f"\n（{get_char_name(resolved_char_id)}此刻{random.choice(_states)}）"
-        except Exception as _cn_err:
-            logger.warning("[scheduler._pipeline_send] 角色名不可用，跳过状态提示: %s", _cn_err)
-
         # ── N1: turn-level scope freeze ──────────────────────────────────────
         # Resolve active character exactly once per trigger turn; fetch_context /
         # build_prompt / post_process all consume this frozen scope so a mid-turn
@@ -1129,7 +1121,6 @@ async def _loop():
                 from core.scheduler.triggers.time_based import (
                     _check_weather, _check_episodic_decay,
                     _check_inner_diary_write,
-                    check_activity_switch,
                     _check_dlq_monitor,
                 )
                 from core.scheduler.triggers.diary import _check_diary_inject
@@ -1221,7 +1212,7 @@ async def _loop():
                     "weather",
                     "reminders", "diary_inject",
                     "episodic_decay", "inner_diary_write",
-                    "activity_switch", "dlq_monitor", "log_maintenance",
+                    "dlq_monitor", "log_maintenance",
                     "episodic_sweep", "garden_water", "garden_daily",
                     "hidden_state_decay", "hidden_state_consolidate",
                     "storyline_weekly",
@@ -1237,7 +1228,6 @@ async def _loop():
                     _check_diary_inject(),
                     _check_episodic_decay(),
                     _check_inner_diary_write(),
-                    check_activity_switch(),
                     _check_dlq_monitor(),
                     _check_log_maintenance(),
                     _check_episodic_sweep(),

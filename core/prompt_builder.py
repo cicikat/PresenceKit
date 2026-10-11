@@ -619,41 +619,6 @@ def build(
         })
 
     # ─────────────────────────────────────────────────────────────────────────
-    # 层 2.6：角色此刻（activity）
-    # 对话开头或沉默超10分钟时注入，进行中不干扰连续性
-    # ─────────────────────────────────────────────────────────────────────────
-    def _is_silent_10min(user_id: str) -> bool:
-        try:
-            import json, time
-            from core.sandbox import get_paths
-            p = get_paths().presence()
-            if not p.exists():
-                return False
-            data = json.loads(p.read_text(encoding="utf-8"))
-            last_at = data.get(user_id, {}).get("last_message_at", 0)
-            return (time.time() - last_at) > 600
-        except Exception:
-            return False
-
-    logger.info(f"[activity_inject] should_inject={not bool(history)}, history_len={len(history)}")
-    if not history or _is_silent_10min(user_id):
-        try:
-            from core.activity_manager import get_prompt_fragment
-            _activity_fragment = get_prompt_fragment(
-                char_id=char_id,
-                suppress_growth=bool(_tags & _GROWTH_SELF_TRIGGERS),
-            )
-            logger.info(f"[activity_inject] fragment={_activity_fragment!r}")
-            if _activity_fragment:
-                messages.append({
-                    "role": "system",
-                    "content": f"## 你此刻\n{_activity_fragment}",
-                    "_layer": "2.6_presence",
-                })
-        except Exception as _e:
-            logger.warning(f"[activity_inject] 异常: {_e}")
-
-    # ─────────────────────────────────────────────────────────────────────────
     # 层 3：与该用户的关系
     # 来自 UserRelation，说明 bot 该用什么态度对待这个用户
     # ─────────────────────────────────────────────────────────────────────────
@@ -1863,7 +1828,6 @@ KNOWN_LAYERS: list[tuple[str, str]] = [
     ("2.5_time", "当前时间"),
     ("2.55_last_seen", "上次说话时间差"),
     ("2.56_relationship_span", "相识日期事实（仅长期/关系层问题）"),
-    ("2.6_presence", "角色此刻在做什么（ambient presence）"),
     ("3_relation", "与该用户的关系"),
     ("3.5_period", "生理期感知（tagged）"),
     ("3.6_watch", "watch 睡眠数据摘要（tagged）"),

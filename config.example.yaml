@@ -488,7 +488,6 @@ practice:
   help_proposer: true
 
 presence:
-  growth_activity_prob: 0.3  # 近20h确有练习时，当下活动混入 growth 来源的概率
 
 # Media MCP servers listed here gain level-based exposure. Unlisted servers
 # remain ordinary organ-like tools and preserve their current behavior.

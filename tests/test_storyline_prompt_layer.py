@@ -45,7 +45,6 @@ def _build(tags: set[str], arcs: list[dict], user_message: str = "你好"):
         patch("core.author_note_rotator.get_current_note", return_value=""),
         patch("core.config_loader.get_config", return_value={"chat": {"style": "roleplay"}}),
         patch("core.mood_text.get_mood_text", return_value=""),
-        patch("core.activity_manager.get_prompt_fragment", return_value=""),
         patch("core.memory.storyline.list_recallable_arcs", return_value=arcs),
     ):
         messages, _ = prompt_builder.build(

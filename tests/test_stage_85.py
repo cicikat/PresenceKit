@@ -247,7 +247,6 @@ async def test_topic_seed_block_assembles_activity_topic_and_moment(sandbox, mon
     relation = _empty_relation(TEST_CHAR_ID, TEST_PEER_CHAR_ID)
     relation["recent_moments"] = ["上次一起弹琴"]
     assert _save_relation(relation)
-    monkeypatch.setattr("core.activity_manager.get_prompt_fragment", lambda char_id=None: "在看书")
 
     captured = {}
 
@@ -271,7 +270,6 @@ async def test_topic_seed_block_assembles_activity_topic_and_moment(sandbox, mon
     reply = await view.generate(stage, transcript, "t", "topic_seed")
 
     assert reply == "新话题来了"
-    assert "在看书" in captured["content"]
     assert "没聊完的暑假计划" in captured["content"]
     assert "上次一起弹琴" in captured["content"]
 

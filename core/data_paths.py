@@ -1344,7 +1344,7 @@ class DataPaths:
 
     def private_exchange_presence(self, *, char_id: str) -> Path:
         """data/runtime/relations/_presence/{char_id}.json — 12h TTL 'just talked
-        to X' ambient stamp, read by activity_manager / stage presence rendering."""
+        to X' historical stamp; not a current activity source."""
         return self._p("runtime", "relations", "_presence", f"{safe_user_id(char_id)}.json")
 
     def private_exchange_budget_state(self) -> Path:

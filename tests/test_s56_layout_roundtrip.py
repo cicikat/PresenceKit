@@ -148,20 +148,6 @@ def test_mood_write_new_path_and_reload(sandbox):
 # activity_state 读-改-写往返
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def test_activity_write_new_path_and_reload(sandbox):
-    """_save_state() 写新路径 → _load_state() 从新路径恢复。"""
-    from core.activity_manager import _save_state, _load_state
-
-    state = {"current_activity": "reading", "arc": "afternoon", "updated_at": time.time()}
-    _save_state(state)
-
-    assert sandbox.activity_state().exists(), "_save_state 应写入新路径"
-
-    loaded = _load_state()
-    assert loaded["current_activity"] == "reading"
-
-
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # trait_state 对称链路往返
 # ═══════════════════════════════════════════════════════════════════════════════

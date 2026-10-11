@@ -290,14 +290,6 @@ class StageCharacterView:
             "不必等谁问起，自然一点就好。"
         ]
         try:
-            from core import activity_manager
-
-            activity = activity_manager.get_prompt_fragment(char_id=self.char_id)
-        except Exception:
-            activity = ""
-        if activity:
-            parts.append(f"你最近在忙：{activity}")
-        try:
             from core.scheduler.last_mentioned import load_followed_topics
 
             followed = list(load_followed_topics().keys())

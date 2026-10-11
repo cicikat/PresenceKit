@@ -29,7 +29,7 @@ pytest。
 `tests/test_session_scope_proposed_fixtures.py`、`tests/test_diary_feeling_api.py`、
 `tests/test_dream_ui_endpoints.py`、`tests/test_garden_mood_char_scope.py`、
 `tests/test_garden_active_char_fail_loud.py`、`tests/test_admin_mood_active_char_fail_loud.py`、
-`tests/test_activity_manager_char_scope.py`、`tests/test_media_ingest_errors.py`、
+`tests/test_media_ingest_errors.py`、
 `tests/test_chat_media.py`、`tests/test_life_records.py`、
 `tests/test_observability_endpoints.py`、`tests/test_dream_settings_ownership.py`。
 

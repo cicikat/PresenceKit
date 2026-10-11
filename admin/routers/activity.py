@@ -1,9 +1,4 @@
-"""
-活动状态路由
-
-GET /activity/current  — 当前角色活动状态（activity_manager 维护的内部状态机）
-"""
-
+"""Current activity comes only from an existing Reality session."""
 from datetime import datetime
 from typing import Optional
 
@@ -12,62 +7,40 @@ from fastapi import APIRouter, Depends, Query
 from admin.auth import require_scopes
 from admin.routers._common import active_char_id as _active_char_id
 from admin.routers._common import resolve_requested_char_id
-from core import activity_manager
+from core.config_loader import get_config
 
 router = APIRouter()
 
 
-def _get_activity_text(char_id: str) -> str:
-    """
-    优先级：梦境 > 共同活动会话 > 随机池。
-    返回当前动向文案字符串。char_id 由调用方解析一次后传入，避免重复读取
-    active_prompt_assets.json（也避免与调用方对"当前激活角色"的判断产生分歧）。
-    """
-    # ── 1. 梦境检查 ───────────────────────────────────────────────────────────
+def _timestamp(value: str) -> float | None:
     try:
-        from core.config_loader import get_config
-        uid = str(get_config().get("default_user_id", "owner"))
-    except Exception:
-        uid = "owner"
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+    except (ValueError, AttributeError):
+        return None
 
-    try:
-        from core.dream.dream_state import read_state, DreamStatus
-        dream = read_state(uid)
-        if dream.get("status") in (DreamStatus.DREAM_ACTIVE.value, DreamStatus.DREAM_CLOSING.value):
-            return "在做梦"
-    except Exception:
-        pass
 
-    # ── 2. 活跃共同活动检查 ───────────────────────────────────────────────────
-    if char_id:
-        # 阅读
-        try:
-            from core.activity import activity_store as reading_store
-            session = reading_store.find_active_session(char_id, uid)
-            if session is not None:
-                return f"在和你一起看《{session.filename}》"
-        except Exception:
-            pass
+def _current_session(char_id: str):
+    from core.activity import activity_store, store
+    from core.activity.registry import ACTIVITY_REGISTRY
 
-        # 五子棋
-        try:
-            from core.activity.gomoku import get_active_session as get_gomoku_session
-            if get_gomoku_session(uid, char_id) is not None:
-                return "在和你下五子棋"
-        except Exception:
-            pass
-
-        # 国际象棋
-        try:
-            from core.activity.store import find_active_session as find_chess_session
-            if find_chess_session(char_id, uid, "chess") is not None:
-                return "在和你下国际象棋"
-        except Exception:
-            pass
-
-    # ── 3. 随机活动池（按角色隔离，CC 任务 24 · 3）──────────────────────────────
-    state = activity_manager.get_current(char_id=char_id)
-    return state.get("current", "")
+    uid = str(get_config().get("scheduler", {}).get("owner_id") or "")
+    if not uid:
+        return None, ""
+    from core.dream.dream_state import read_state, DreamStatus
+    dream = read_state(uid)
+    if dream.get("status") in (DreamStatus.DREAM_ACTIVE.value, DreamStatus.DREAM_CLOSING.value):
+        return None, "在做梦"
+    for meta in ACTIVITY_REGISTRY:
+        if meta.id == "dream_seed":
+            continue
+        session = (
+            activity_store.find_active_session(char_id, uid)
+            if meta.session_store == "reading_store"
+            else store.find_active_session(char_id, uid, meta.id, persist_expiry=False)
+        )
+        if session is not None:
+            return session, meta.label
+    return None, ""
 
 
 @router.get("/current", summary="获取当前活动状态")
@@ -76,24 +49,13 @@ async def get_activity_state(
     auth=Depends(require_scopes("state.read")),
 ):
     char_id = resolve_requested_char_id(char_id, fallback=_active_char_id)
-    state = activity_manager.get_current(char_id=char_id)
-
-    started_at = None
-    raw = state.get("started_at")
-    if raw:
-        try:
-            started_at = datetime.fromisoformat(raw).timestamp()
-        except Exception:
-            pass
-
-    text = _get_activity_text(char_id)
-
+    session, text = _current_session(char_id)
     return {
-        "id": None,
+        "id": session.session_id if session else None,
         "char_id": char_id,
         "text": text,
-        "arc": state.get("arc"),
-        "started_at": started_at,
-        "next_switch_at": state.get("expected_until_ts"),
-        "thinking_about_eligible": bool(state.get("thinking_about")),
+        "arc": None,
+        "started_at": _timestamp(session.created_at) if session else None,
+        "next_switch_at": None,
+        "thinking_about_eligible": False,
     }

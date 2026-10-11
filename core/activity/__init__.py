@@ -1,1 +1,1 @@
-"""Structured co-play ActivitySession; not activity_manager ambient presence."""
+"""Structured Reality co-play ActivitySession."""

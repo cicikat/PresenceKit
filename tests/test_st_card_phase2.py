@@ -151,7 +151,6 @@ def _call_build(char, user_message: str = "你好") -> list[dict]:
         patch("core.author_note_rotator.get_current_note", return_value=""),
         patch("core.config_loader.get_config", return_value={"chat": {"style": "chat"}}),
         patch("core.mood_text.get_mood_text", return_value=""),
-        patch("core.activity_manager.get_prompt_fragment", return_value=""),
         patch("core.presence.get_last_seen_text", return_value=""),
     ):
         messages, _debug = prompt_builder.build(

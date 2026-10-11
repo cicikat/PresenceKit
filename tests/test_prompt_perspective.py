@@ -13,7 +13,6 @@ def build_prompt(monkeypatch):
     monkeypatch.setattr(prompt_builder, "_load_jailbreak", lambda layer=None: "")
     monkeypatch.setattr(prompt_builder, "_load_style_hint", lambda **kwargs: "")
     monkeypatch.setattr(prompt_builder, "_format_realtime_awareness", lambda *args, **kwargs: "")
-    monkeypatch.setattr("core.activity_manager.get_prompt_fragment", lambda **kwargs: "")
     monkeypatch.setattr("core.author_note_rotator.get_current_note", lambda **kwargs: "")
     monkeypatch.setattr("core.user_relation.has_configured_relation", lambda uid: True)
     monkeypatch.setattr("core.config_loader.get_config", lambda: {"anti_collapse": {"enabled": False}})

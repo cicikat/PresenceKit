@@ -1,8 +1,6 @@
 # Activity Session — 设计说明
 
-> **命名辨析**：本文的 `core/activity/` / `ActivitySession` 是用户显式发起的结构化共玩会话；
-> `core/activity_manager.py` 则是角色「此刻在忙什么」的 ambient presence 状态，注入现实 prompt
-> 的 `2.6_presence` 层。两者架构无关，不共享生命周期、状态或路由。
+> 284 P2：随机 ambient 活动机制已退役。当前活动只来自真实会话；无活动允许为空，读取不生成活动。历史 authored 池文件保留但不消费。
 
 ## 定位
 

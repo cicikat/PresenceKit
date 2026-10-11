@@ -32,7 +32,6 @@ def _build_layers(segment_date: date, tags: set[str]) -> list[str]:
         }),
         patch("core.memory.health_state.load", return_value=profile),
         patch("core.mood_text.get_mood_text", return_value=""),
-        patch("core.activity_manager.get_prompt_fragment", return_value=""),
     ):
         messages, _ = prompt_builder.build(
             character=char,

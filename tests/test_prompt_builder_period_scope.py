@@ -120,7 +120,6 @@ def test_prompt_builder_reads_uid_global_period_state(sandbox, monkeypatch):
     monkeypatch.setattr("core.author_note_rotator.get_current_note", lambda paths=None, char_id=None: "")
     monkeypatch.setattr("core.config_loader.get_config", lambda: {"chat": {}})
     monkeypatch.setattr("core.mood_text.get_mood_text", lambda: "")
-    monkeypatch.setattr("core.activity_manager.get_prompt_fragment", lambda *args, **kwargs: "")
     messages, _ = prompt_builder.build(
         character=Character(name="Companion"), user_id="owner1", user_message="pain",
         history=[], relation={}, profile={}, group_context=[], tags={"topic.body"}, char_id="character_b",
