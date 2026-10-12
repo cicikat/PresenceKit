@@ -81,7 +81,12 @@ def test_legacy_reality_edits_materialize_combined_userdata_files(tmp_path, monk
 
     from admin.routers import jailbreak_entries, lorebook
 
-    lore = lorebook._read_lorebook()
+    from scripts.migrate_character_user_facts import migrate
+    from core.data_paths import DEFAULT_CHAR_ID
+    assert lorebook._read_lorebook(DEFAULT_CHAR_ID) == {"entries": []}
+    migrate("", DEFAULT_CHAR_ID, artifact="lorebook", apply=True)
+    migrate("", DEFAULT_CHAR_ID, artifact="jailbreak_entries", apply=True)
+    lore = lorebook._read_lorebook(DEFAULT_CHAR_ID)
     lore["entries"][0]["content"] = "updated"
     lorebook._write_lorebook(lore)
     jb = jailbreak_entries._read()
@@ -90,8 +95,8 @@ def test_legacy_reality_edits_materialize_combined_userdata_files(tmp_path, monk
 
     assert "legacy" in legacy_lore.read_text(encoding="utf-8")
     assert json.loads(legacy_jb.read_text(encoding="utf-8"))["entries"][0]["content"] == "legacy"
-    assert "updated" in (tmp_path / "userdata" / "characters" / "reality" / "lorebook.yaml").read_text(encoding="utf-8")
-    assert json.loads((tmp_path / "userdata" / "characters" / "reality" / "jailbreak_entries.json").read_text(encoding="utf-8"))["entries"][0]["content"] == "updated"
+    assert "updated" in (tmp_path / "userdata" / "characters" / "authored" / DEFAULT_CHAR_ID / "lorebook.yaml").read_text(encoding="utf-8")
+    assert json.loads((tmp_path / "userdata" / "characters" / "authored" / DEFAULT_CHAR_ID / "jailbreak_entries.json").read_text(encoding="utf-8"))["entries"][0]["content"] == "updated"
 
 
 def test_legacy_dream_world_edit_materializes_package_and_delete_fails_loud(tmp_path, monkeypatch):

@@ -152,7 +152,7 @@ def test_prompt_layer_is_ablated_and_does_not_duplicate_legacy(sandbox, monkeypa
     import core.config_loader as config
     from core.prompt_ablation import set_state
 
-    monkeypatch.setattr(builder, "_load_jailbreak", lambda layer=None: "")
+    monkeypatch.setattr(builder, "_load_jailbreak", lambda layer=None, **kwargs: "")
     monkeypatch.setattr(builder, "_load_style_hint", lambda *, char_id="": "")
     monkeypatch.setattr(builder, "_format_afterglow_soft_hint", lambda uid, char_id=TEST_CHAR_ID: "")
     monkeypatch.setattr(presence, "get_last_seen_text", lambda uid: "")

@@ -225,7 +225,7 @@ def _load_style_hint(*, char_id: str) -> str:
         return ""
 
 
-def _load_jailbreak(layer: int | None = None) -> str:
+def _load_jailbreak(layer: int | None = None, *, char_id: str | None = None) -> str:
     """
     两套破限存储合并注入，按内容去重：
     1) stems 源：active_prompt_assets.json 的 enabled_jailbreaks 列表，
@@ -236,6 +236,8 @@ def _load_jailbreak(layer: int | None = None) -> str:
     保持 layer 0 / 2 / 11 注入顺序不变（由调用方控制）。
     两源内容重复（`content.strip()` 相同）时只注入一次。
     """
+    from core.prompt_asset_selection import active_character, for_character
+    char_id = char_id or active_character()
     parts: list[str] = []
     seen: set[str] = set()
 
@@ -245,7 +247,7 @@ def _load_jailbreak(layer: int | None = None) -> str:
     try:
         import json
         from core.sandbox import get_paths
-        entries_data = json.loads(get_paths().jailbreak_entries().read_text(encoding="utf-8"))
+        entries_data = json.loads(get_paths().jailbreak_entries(char_id=char_id).read_text(encoding="utf-8"))
         entries = entries_data.get("entries", [])
         if not isinstance(entries, list) or any(not isinstance(e, dict) for e in entries):
             raise ValueError("invalid managed jailbreak entries")
@@ -266,7 +268,7 @@ def _load_jailbreak(layer: int | None = None) -> str:
         paths = get_paths()
 
         assets_path = paths.active_prompt_assets()
-        assets = json.loads(assets_path.read_text(encoding="utf-8"))
+        assets = for_character(char_id)
         enabled_jailbreaks: list = assets.get("enabled_jailbreaks", [])
 
         for stem in enabled_jailbreaks:
@@ -462,7 +464,7 @@ def build(
     # 来自 stems（jailbreaks/{stem}.json，受 enabled_jailbreaks 控制）与
     # characters/reality/jailbreak_entries.json 两套存储中启用且 layer=0 的条目，按内容去重合并
     # ─────────────────────────────────────────────────────────────────────────
-    jailbreak_text = _load_jailbreak(layer=0)
+    jailbreak_text = _load_jailbreak(layer=0, char_id=char_id)
     if jailbreak_text:
         messages.append({"role": "system", "content": jailbreak_text, "_layer": "0_jailbreak"})
 
@@ -579,7 +581,7 @@ def build(
             "_layer": "2.2_stage_presence",
         })
 
-    jb_layer2 = _load_jailbreak(layer=2)
+    jb_layer2 = _load_jailbreak(layer=2, char_id=char_id)
     if jb_layer2:
         messages.append({"role": "system", "content": jb_layer2, "_layer": "2_jailbreak"})
 
@@ -1583,7 +1585,7 @@ def build(
     })
 
     # 破限条目层11
-    jb_layer11 = _load_jailbreak(layer=11)
+    jb_layer11 = _load_jailbreak(layer=11, char_id=char_id)
     if jb_layer11:
         messages.append({"role": "system", "content": jb_layer11, "_layer": "11_jailbreak"})
 

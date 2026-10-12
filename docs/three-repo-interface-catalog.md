@@ -1,3 +1,5 @@
+工单 288 C3：现实世界书/提示词启用组合按角色保存在 active_prompt_assets.by_character；旧全局组合仅属于其 active_character，切换新角色从空组合开始。条目管理文件改到角色 authored 目录，API CRUD/import/export 支持 char_id 并在 await 前冻结。共享模块文件是安装级素材目录，只有用户为角色显式选择的模块可注入；条目文件不跨角色回退。历史共享条目可用迁移脚本 --artifact lorebook/jailbreak_entries 显式归属，默认 dry-run 并保留原件。单角色管理清单补条目文件与资产绑定。
+
 工单 288 A2：自主工具继承普通工具权限，未配置自主覆盖时默认开放；显式关闭仍有效。旧危险/确认标记不再拦截执行。新 MCP 默认不要求本地分类白名单（用户可主动收窄），工具无需风险说明或确认。手机自动化与设备动作已去除起手/敏感页面确认；设备系统权限、连接、取消和执行预算保持有效。
 
 工单 288 C2：health_state（生理期、睡眠、传感器与 HDS）按 uid+char_id 保存。设备输入缺省归属接收时的当前角色；prompt、工具和主动心率链使用本轮角色。旧同角色 profile 可导入；旧 global 健康账本只经 migrate_character_user_facts.py --artifact health_state 显式归属，默认 dry-run，不覆盖目标且保留原件。GET/PUT/DELETE /period 可传 char_id，省略时使用当前角色。共享连接、鉴权与运行日志不属于角色记忆。

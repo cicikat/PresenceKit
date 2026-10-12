@@ -15,6 +15,24 @@ def migrate(uid: str, char_id: str, *, apply: bool = False, artifact: str = "use
     from core.sandbox import get_paths
     from core.memory import user_facts
     paths = get_paths()
+    if artifact in {"lorebook", "jailbreak_entries"}:
+        import yaml
+        from core.safe_write import safe_write_text
+        source = paths.legacy_prompt_entries(artifact)
+        target = paths.lorebook(char_id=char_id) if artifact == "lorebook" else paths.jailbreak_entries(char_id=char_id)
+        if not source.exists():
+            return {"status": "source_absent", "applied": False}
+        raw = source.read_text(encoding="utf-8")
+        value = yaml.safe_load(raw) if artifact == "lorebook" else json.loads(raw)
+        if not isinstance(value, dict) or not isinstance(value.get("entries"), list):
+            raise ValueError("legacy prompt entries must be a mapping with entries")
+        if target.exists():
+            old = target.read_text(encoding="utf-8")
+            existing = yaml.safe_load(old) if artifact == "lorebook" else json.loads(old)
+            return {"status": "already_imported" if existing == value else "target_conflict", "applied": False}
+        if apply and not safe_write_text(target, raw):
+            raise OSError("prompt migration write failed")
+        return {"status": "imported" if apply else "dry_run", "applied": apply, "original_preserved": True}
     from core.memory import health_state
     if artifact not in {"user_facts", "health_state"}:
         raise ValueError("unsupported artifact")
@@ -41,9 +59,11 @@ def migrate(uid: str, char_id: str, *, apply: bool = False, artifact: str = "use
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--uid", required=True)
+    parser.add_argument("--uid", default="")
     parser.add_argument("--char-id", required=True)
     parser.add_argument("--apply", action="store_true")
-    parser.add_argument("--artifact", choices=["user_facts", "health_state"], default="user_facts")
+    parser.add_argument("--artifact", choices=["user_facts", "health_state", "lorebook", "jailbreak_entries"], default="user_facts")
     args = parser.parse_args()
+    if args.artifact in {"user_facts", "health_state"} and not args.uid:
+        parser.error("--uid is required for user data")
     print(json.dumps(migrate(args.uid, args.char_id, apply=args.apply, artifact=args.artifact), ensure_ascii=False))

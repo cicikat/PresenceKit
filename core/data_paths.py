@@ -293,17 +293,17 @@ class DataPaths:
     def user_reality_dir(self) -> Path:
         return self.userdata_root() / "characters" / "reality"
 
-    def reality_lorebook_write_path(self) -> Path:
-        """Canonical writer target for the combined Reality lorebook."""
-        if self.mode == "test":
-            return self._base / "reality" / "lorebook.yaml"
-        return self.user_reality_dir() / "lorebook.yaml"
+    def reality_lorebook_write_path(self, *, char_id: str | None = None) -> Path:
+        if char_id is None:
+            from core.prompt_asset_selection import active_character
+            char_id = active_character()
+        return self.user_authored_character_dir(char_id=safe_user_id(char_id)) / "lorebook.yaml"
 
-    def reality_jailbreak_write_path(self) -> Path:
-        """Canonical writer target for the combined Reality jailbreak entries."""
-        if self.mode == "test":
-            return self._base / "reality" / "jailbreak_entries.json"
-        return self.user_reality_dir() / "jailbreak_entries.json"
+    def reality_jailbreak_write_path(self, *, char_id: str | None = None) -> Path:
+        if char_id is None:
+            from core.prompt_asset_selection import active_character
+            char_id = active_character()
+        return self.user_authored_character_dir(char_id=safe_user_id(char_id)) / "jailbreak_entries.json"
 
     def reality_lorebook_write_dir(self) -> Path:
         """Canonical writer root for modular Reality lorebooks."""
@@ -890,8 +890,8 @@ class DataPaths:
             p.parent.mkdir(parents=True, exist_ok=True)
             default = {
                 "active_character": char_id,
-                "enabled_lorebooks": ["base"],
-                "enabled_jailbreaks": ["base"],
+                "enabled_lorebooks": [],
+                "enabled_jailbreaks": [],
             }
             p.write_text(_json.dumps(default, ensure_ascii=False, indent=2), encoding="utf-8")
             logger.info(
@@ -976,52 +976,13 @@ class DataPaths:
         return self.user_reality_dir() / "jailbreaks", self.legacy_reality_dir() / "jailbreaks"
 
     # ── authored reality prompt assets（characters/reality/，不走 data/ 沙盒偏移）
-    def jailbreak_entries(self) -> Path:
-        """主路径：characters/reality/jailbreak_entries.json（无 data/ fallback）。
+    def jailbreak_entries(self, *, char_id: str | None = None) -> Path:
+        """Owned authored file; missing data is empty, never another role's file."""
+        return self.reality_jailbreak_write_path(char_id=char_id)
 
-        首次运行缺失时从 defaults/ 播种一个空壳（entries: []，不含任何私人条目），
-        production/test 两种模式都播种——保证 fresh clone 不改配置就能直接启动；
-        用户可随时用自己的真实内容覆盖播种出的文件。
-        """
-        p = self._reality_p("jailbreak_entries.json")
-        if not p.exists():
-            src = self._bundled_seed("jailbreak_entries.json")
-            if src.exists():
-                p.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(src, p)
-                logger.info(
-                    "[authored-writer] kind=reality_jailbreak effective_read_source=default "
-                    "canonical_write_target=user"
-                )
-            else:
-                logger.error(
-                    f"[data_paths] authored asset missing: {p}  "
-                    f"— 请从版本库恢复或从备份拷贝；运行时不自动生成。"
-                )
-        return p
-
-    def lorebook(self) -> Path:
-        """主路径：characters/reality/lorebook.yaml（无 data/ fallback）。
-
-        首次运行缺失时从 defaults/ 播种一个空壳（entries: []），
-        production/test 两种模式都播种，理由同 jailbreak_entries()。
-        """
-        p = self._reality_p("lorebook.yaml")
-        if not p.exists():
-            src = self._bundled_seed("lorebook.yaml")
-            if src.exists():
-                p.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(src, p)
-                logger.info(
-                    "[authored-writer] kind=reality_lorebook effective_read_source=default "
-                    "canonical_write_target=user"
-                )
-            else:
-                logger.error(
-                    f"[data_paths] authored asset missing: {p}  "
-                    f"— 请从版本库恢复或从备份拷贝；运行时不自动生成。"
-                )
-        return p
+    def lorebook(self, *, char_id: str | None = None) -> Path:
+        """Owned authored file; missing data is empty, never another role's file."""
+        return self.reality_lorebook_write_path(char_id=char_id)
 
     def relations(self) -> Path:
         return self._seed_if_missing(self._p("relations.yaml"), "relations.yaml")
@@ -1036,6 +997,12 @@ class DataPaths:
     def legacy_health_state(self, user_id: str | int) -> Path:
         """Unassigned shared historical health evidence; migration only."""
         return self._p("runtime", "memory", "global", safe_user_id(user_id), "health_state.json")
+
+    def legacy_prompt_entries(self, artifact: str) -> Path:
+        """Unassigned historical combined prompt file, for explicit migration."""
+        if artifact not in {"lorebook", "jailbreak_entries"}:
+            raise ValueError("unsupported prompt artifact")
+        return self._reality_p("lorebook.yaml" if artifact == "lorebook" else "jailbreak_entries.json")
 
     def blacklist(self) -> Path:
         return self._seed_if_missing(self._p("blacklist.yaml"), "blacklist.yaml")

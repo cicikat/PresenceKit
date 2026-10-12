@@ -195,8 +195,9 @@ class Pipeline:
 
         self.character = new_char
         self._active_character_id = new_id
+        self.author_note_extra = ""
         if self.lore_engine is not None:
-            self.lore_engine.load()
+            self.lore_engine.load(char_id=new_id)
             if new_char.world_book:
                 self.lore_engine.load_entries(new_char.world_book)
         logger.info(f"[pipeline] character hot-swapped to {new_id!r} ({new_char.name})")
@@ -272,7 +273,7 @@ class Pipeline:
 
             scoped_character = load_character(char_id)
             scoped_lore_engine = LoreEngine()
-            scoped_lore_engine.load()
+            scoped_lore_engine.load(char_id=char_id)
             if scoped_character.world_book:
                 scoped_lore_engine.load_entries(scoped_character.world_book)
 

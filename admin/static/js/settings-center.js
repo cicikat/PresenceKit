@@ -32,6 +32,11 @@ async function loadCreationAssets() {
     <div class="admin-action-group"><button class="btn btn-ghost" data-action="uploadCreationAvatar">${t('settings_center.upload_selected_character_avatar',"上传所选角色头像")}</button><button class="btn btn-ghost" data-action="clearCreationAvatar">${t('settings_center.restore_selected_character_default_avatar',"恢复所选角色默认头像")}</button></div>
     <p id="creation-result" role="status"></p>`;
     bindPageActions(root);
+    document.getElementById('creation-character').addEventListener('change', event => {
+      const char = event.target.value;
+      const selection = data.active.by_character?.[char] || (char === data.active.active_character ? data.active : {});
+      root.querySelectorAll('[data-creation-asset]').forEach(input => input.checked = (selection[input.dataset.creationAsset] || []).includes(input.value));
+    });
   } catch(error){centerError(root,error);}
 }
 async function withCreationSave(save) {
@@ -70,7 +75,8 @@ async function loadCharacterData() {
     if(request!==characterDataRequest)return;
     document.getElementById('character-data-inventory').innerHTML=`<p>${(data.entries||[]).map(item=>`${escapeHtml(item.id)}：${item.present?'已保存':'暂无数据'}`).join(' · ')}</p><p>用户档案：${(data.user_artifacts||[]).map(escapeHtml).join('、')}</p>`;
     input.value=JSON.stringify(data.traits??[],null,2);
-    input.disabled=Boolean(data.traits_error);
+    document.getElementById('character-data-inventory').insertAdjacentHTML('beforeend', `<p>提示词资产：${escapeHtml(JSON.stringify(data.prompt_bindings||{}))}</p>`);
+    input.disabled=false;
     result.textContent=data.traits_error?`Trait 读取失败：${data.traits_error}`:'';
   } catch(error) {if(request===characterDataRequest)result.textContent=`读取失败：${error.message}`;}
 }
@@ -210,7 +216,6 @@ async function loadFeatureCenter() {
   ].join(''));
   html+=section(t('settings_center.external_capabilities',"外部能力"), [
     centerFlagSwitch(flags,'mcp_servers',t('settings_center.external_tool_services',"外部工具服务")),
-    centerSettledSwitch(browser,t('settings_center.browser_tasks',"浏览器任务"),'browser',browser.status==='fulfilled'&&browser.value.enabled),
   ].join(''));
   html+=section(t('settings_center.feature_switches',"功能总开关"),remainingFlags);
   html+=section(t('settings_center.multi_step_tool_calls',"多步工具调用"),loop.status==='fulfilled'?centerSwitch(t('settings_center.global_default',"全局默认"),loop.value.enabled,'loop','enabled',false,t('settings_center.character_cards_can_override_this_ordinary_tool_calls_are_controlled_separately',"角色卡可覆盖；普通工具调用另行控制")):t('settings_center.could_not_load',"读取失败"));

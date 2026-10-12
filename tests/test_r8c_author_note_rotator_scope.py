@@ -162,7 +162,7 @@ def test_build_passes_char_id_to_get_current_note(monkeypatch):
     import core.author_note_rotator as _anr
     import core.config_loader as _cl
 
-    monkeypatch.setattr(_pb, "_load_jailbreak", lambda layer=None: "")
+    monkeypatch.setattr(_pb, "_load_jailbreak", lambda layer=None, **kwargs: "")
     monkeypatch.setattr(_pb, "_load_style_hint", lambda *, char_id="": "")
     monkeypatch.setattr(_pb, "_format_afterglow_soft_hint", lambda uid, char_id=TEST_CHAR_ID: "")
     monkeypatch.setattr(_pres, "get_last_seen_text", lambda uid: "")

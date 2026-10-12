@@ -13,6 +13,8 @@ from pydantic import BaseModel
 
 from admin.auth import require_scopes
 from core.sandbox import get_paths
+from admin.routers.users import _resolve_char_id
+from core.safe_write import safe_write_text
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -34,9 +36,9 @@ def _ensure_ids(data: dict) -> bool:
     return changed
 
 
-def _read_lorebook() -> dict:
+def _read_lorebook(char_id: str | None = None) -> dict:
     """读取 lorebook.yaml，文件不存在时返回空结构；加载后自动补发缺失 id 并回写。"""
-    p = get_paths().lorebook()
+    p = get_paths().lorebook(char_id=char_id)
     if not p.exists():
         return {"entries": []}
     try:
@@ -45,21 +47,21 @@ def _read_lorebook() -> dict:
         if "entries" not in data:
             data["entries"] = []
         if _ensure_ids(data):
-            _write_lorebook(data)
+            _write_lorebook(data, char_id)
         return data
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"读取 lorebook.yaml 失败: {e}")
 
 
-def _write_lorebook(data: dict):
+def _write_lorebook(data: dict, char_id: str | None = None):
     """Materialize the effective lorebook into its canonical userdata target."""
     paths = get_paths()
-    read_path = paths.lorebook()
-    p = paths.reality_lorebook_write_path()
+    read_path = paths.lorebook(char_id=char_id)
+    p = paths.reality_lorebook_write_path(char_id=char_id)
     p.parent.mkdir(parents=True, exist_ok=True)
     try:
-        with open(p, "w", encoding="utf-8") as f:
-            yaml.dump(data, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+        if not safe_write_text(p, yaml.safe_dump(data, allow_unicode=True, sort_keys=False)):
+            raise OSError("lorebook save failed")
         logger.info(
             "[authored-writer] kind=reality_lorebook effective_read_source=%s canonical_write_target=user",
             "user" if read_path == p else "legacy",
@@ -93,16 +95,18 @@ class LoreEntry(BaseModel):
 # ── 路由 ─────────────────────────────────────────────────────────────────────
 
 @router.get("/lorebook", summary="获取所有世界书条目")
-async def get_lorebook(auth=Depends(require_scopes("persona"))):
+async def get_lorebook(char_id: str | None = None, auth=Depends(require_scopes("persona"))):
     """读取 characters/reality/lorebook.yaml 并返回全部条目"""
-    data = _read_lorebook()
+    char_id = _resolve_char_id(char_id)
+    data = _read_lorebook(char_id)
     return {"entries": data.get("entries", [])}
 
 
 @router.post("/lorebook", summary="新增世界书条目")
-async def add_lore_entry(entry: LoreEntry, auth=Depends(require_scopes("persona"))):
+async def add_lore_entry(entry: LoreEntry, char_id: str | None = None, auth=Depends(require_scopes("persona"))):
     """在 lorebook.yaml 末尾追加一条新条目，并热重载世界书引擎"""
-    data = _read_lorebook()
+    char_id = _resolve_char_id(char_id)
+    data = _read_lorebook(char_id)
     new_entry = {
         "id":              entry.id or _new_id(),
         "keyword":         entry.keyword,
@@ -112,15 +116,16 @@ async def add_lore_entry(entry: LoreEntry, auth=Depends(require_scopes("persona"
         "insertion_order": entry.insertion_order,
     }
     data["entries"].append(new_entry)
-    _write_lorebook(data)
+    _write_lorebook(data, char_id)
     _reload_lore_engine()
     return {"message": "条目已添加", "id": new_entry["id"]}
 
 
 @router.put("/lorebook/{eid}", summary="修改世界书条目")
-async def update_lore_entry(eid: str, entry: LoreEntry, auth=Depends(require_scopes("persona"))):
+async def update_lore_entry(eid: str, entry: LoreEntry, char_id: str | None = None, auth=Depends(require_scopes("persona"))):
     """按 id 修改 lorebook.yaml 中的条目，并热重载世界书引擎"""
-    data = _read_lorebook()
+    char_id = _resolve_char_id(char_id)
+    data = _read_lorebook(char_id)
     entries = data.get("entries", [])
 
     for i, e in enumerate(entries):
@@ -134,7 +139,7 @@ async def update_lore_entry(eid: str, entry: LoreEntry, auth=Depends(require_sco
                 "insertion_order": entry.insertion_order,
             }
             data["entries"] = entries
-            _write_lorebook(data)
+            _write_lorebook(data, char_id)
             _reload_lore_engine()
             return {"message": f"条目 {eid} 已更新"}
 
@@ -142,13 +147,14 @@ async def update_lore_entry(eid: str, entry: LoreEntry, auth=Depends(require_sco
 
 
 @router.post("/lorebook/import/txt", summary="从 txt 文件批量导入世界书条目")
-async def import_lorebook_txt(file: UploadFile = File(...), auth=Depends(require_scopes("persona"))):
+async def import_lorebook_txt(file: UploadFile = File(...), char_id: str | None = None, auth=Depends(require_scopes("persona"))):
     """
     读取上传的 .txt 文件，按空行分段：
       - 每段首行作为 keyword（逗号分隔多关键词）
       - 剩余行作为 content
     逐条追加到 lorebook.yaml 并热重载。
     """
+    char_id = _resolve_char_id(char_id)
     if not (file.filename or "").lower().endswith(".txt"):
         raise HTTPException(status_code=422, detail="只接受 .txt 文件")
 
@@ -163,7 +169,7 @@ async def import_lorebook_txt(file: UploadFile = File(...), auth=Depends(require
     if not paragraphs:
         raise HTTPException(status_code=422, detail="文件内容为空或没有空行分段")
 
-    data = _read_lorebook()
+    data = _read_lorebook(char_id)
     added = 0
     for para in paragraphs:
         lines = [l.rstrip() for l in para.splitlines() if l.strip()]
@@ -187,29 +193,31 @@ async def import_lorebook_txt(file: UploadFile = File(...), auth=Depends(require
     if added == 0:
         raise HTTPException(status_code=422, detail="未解析到有效条目，请确认格式：首行关键词，空行分段")
 
-    _write_lorebook(data)
+    _write_lorebook(data, char_id)
     _reload_lore_engine()
     return {"message": f"已导入 {added} 条世界书条目", "added": added}
 
 
 @router.delete("/lorebook/{eid}", summary="删除世界书条目")
-async def delete_lore_entry(eid: str, auth=Depends(require_scopes("persona"))):
+async def delete_lore_entry(eid: str, char_id: str | None = None, auth=Depends(require_scopes("persona"))):
     """按 id 删除 lorebook.yaml 中的条目，并热重载世界书引擎"""
-    data = _read_lorebook()
+    char_id = _resolve_char_id(char_id)
+    data = _read_lorebook(char_id)
     entries = data.get("entries", [])
     new_entries = [e for e in entries if e.get("id") != eid]
     if len(new_entries) == len(entries):
         raise HTTPException(status_code=404, detail=f"条目 {eid} 不存在")
     data["entries"] = new_entries
-    _write_lorebook(data)
+    _write_lorebook(data, char_id)
     _reload_lore_engine()
     return {"message": f"条目 {eid} 已删除"}
 
 
 @router.get("/lorebook/export/json", summary="导出世界书为JSON")
-async def export_lorebook_json(auth=Depends(require_scopes("persona"))):
+async def export_lorebook_json(char_id: str | None = None, auth=Depends(require_scopes("persona"))):
     """导出完整lorebook.yaml为JSON格式"""
-    data = _read_lorebook()
+    char_id = _resolve_char_id(char_id)
+    data = _read_lorebook(char_id)
     from fastapi.responses import JSONResponse
     import json
     content = json.dumps({"entries": data.get("entries", [])}, ensure_ascii=False, indent=2)
@@ -222,8 +230,9 @@ async def export_lorebook_json(auth=Depends(require_scopes("persona"))):
 
 
 @router.post("/lorebook/import/json", summary="从JSON文件导入世界书条目")
-async def import_lorebook_json(file: UploadFile = File(...), auth=Depends(require_scopes("persona"))):
+async def import_lorebook_json(file: UploadFile = File(...), char_id: str | None = None, auth=Depends(require_scopes("persona"))):
     """读取上传的.json文件，合并到现有lorebook.yaml"""
+    char_id = _resolve_char_id(char_id)
     if not (file.filename or "").lower().endswith(".json"):
         raise HTTPException(status_code=422, detail="只接受 .json 文件")
     raw = await file.read()
@@ -239,8 +248,8 @@ async def import_lorebook_json(file: UploadFile = File(...), auth=Depends(requir
     for e in new_entries:
         if not e.get("id"):
             e["id"] = _new_id()
-    data = _read_lorebook()
+    data = _read_lorebook(char_id)
     data["entries"].extend(new_entries)
-    _write_lorebook(data)
+    _write_lorebook(data, char_id)
     _reload_lore_engine()
     return {"message": f"已导入 {len(new_entries)} 条条目", "added": len(new_entries)}

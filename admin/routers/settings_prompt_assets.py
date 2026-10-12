@@ -295,17 +295,10 @@ async def patch_prompt_assets(body: PromptAssetsUpdate, auth=Depends(require_sco
     if body.active_dream_preset is not None:
         _validate_id(body.active_dream_preset, "dream_preset", "active_dream_preset")
 
-    active = _read_active()
-    if body.active_character is not None:
-        active["active_character"] = body.active_character
-    if body.enabled_lorebooks is not None:
-        active["enabled_lorebooks"] = body.enabled_lorebooks
-    if body.enabled_jailbreaks is not None:
-        active["enabled_jailbreaks"] = body.enabled_jailbreaks
-    if body.active_dream_preset is not None:
-        active["active_dream_preset"] = body.active_dream_preset
+    from core.prompt_asset_selection import read_document, update, selection_lock
+    with selection_lock:
+        active = update(read_document(), body.model_dump(exclude_none=True))
 
-    _write_active(active)
 
     if body.enabled_lorebooks is not None:
         _reload_lore_engine()
@@ -320,6 +313,7 @@ async def patch_prompt_assets(body: PromptAssetsUpdate, auth=Depends(require_sco
                 new_char = _cl.load(body.active_character)
                 pipeline.character = new_char
                 pipeline._active_character_id = body.active_character
+                pipeline.author_note_extra = ""
                 if pipeline.lore_engine is not None:
                     pipeline.lore_engine.load()
                     if new_char.world_book:

@@ -73,9 +73,13 @@ def inventory(char_id: str) -> dict:
         "author_notes": paths.author_notes_pool(char_id=char_id),
         "observations": paths.observations(char_id=char_id),
         "user_relations": paths.character_user_relations(char_id=char_id),
+        "lorebook": paths.lorebook(char_id=char_id),
+        "jailbreak_entries": paths.jailbreak_entries(char_id=char_id),
     }.items():
         entries.append({"id": name, "present": path.exists(), "kind": "file"})
     root = paths.memory_char_root(char_id=char_id)
     users = sorted(p.name for p in root.iterdir() if p.is_dir()) if root.exists() else []
+    from core.prompt_asset_selection import for_character
     return {"char_id": char_id, "entries": entries, "users": users,
+            "prompt_bindings": for_character(char_id),
             "user_artifacts": ["history", "profile", "identity", "user_facts", "health_state", "episodic", "mid_term", "event_store", "relationship_facts", "memory_dossiers", "reminders", "self", "hidden_state", "afterglow_residue"]}

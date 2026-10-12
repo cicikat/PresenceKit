@@ -14,6 +14,8 @@ from pydantic import BaseModel
 
 from admin.auth import require_scopes
 from core.sandbox import get_paths
+from admin.routers.users import _resolve_char_id
+from core.safe_write import safe_write_text
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -33,25 +35,26 @@ def _ensure_ids(data: dict) -> bool:
     return changed
 
 
-def _read() -> dict:
-    p = get_paths().jailbreak_entries()
+def _read(char_id: str | None = None) -> dict:
+    p = get_paths().jailbreak_entries(char_id=char_id)
     if p.exists():
         try:
             data = json.loads(p.read_text(encoding="utf-8"))
             if _ensure_ids(data):
-                _write(data)
+                _write(data, char_id)
             return data
         except Exception:
             pass
     return {"entries": []}
 
 
-def _write(data: dict):
+def _write(data: dict, char_id: str | None = None):
     paths = get_paths()
-    read_path = paths.jailbreak_entries()
-    p = paths.reality_jailbreak_write_path()
+    read_path = paths.jailbreak_entries(char_id=char_id)
+    p = paths.reality_jailbreak_write_path(char_id=char_id)
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    if not safe_write_text(p, json.dumps(data, ensure_ascii=False, indent=2)):
+        raise HTTPException(status_code=500, detail="prompt entries save failed")
     logger.info(
         "[authored-writer] kind=reality_jailbreak effective_read_source=%s canonical_write_target=user",
         "user" if read_path == p else "legacy",
@@ -71,20 +74,23 @@ class JbEntry(BaseModel):
 
 
 @router.get("/jailbreak-entries", summary="获取所有破限条目")
-async def get_entries(auth=Depends(require_scopes("persona"))):
-    return _read()
+async def get_entries(char_id: str | None = None, auth=Depends(require_scopes("persona"))):
+    char_id = _resolve_char_id(char_id)
+    return _read(char_id)
 
 
 @router.get("/jailbreak-entries/export/json", summary="导出破限条目JSON")
-async def export_entries(auth=Depends(require_scopes("persona"))):
-    p = get_paths().jailbreak_entries()
+async def export_entries(char_id: str | None = None, auth=Depends(require_scopes("persona"))):
+    char_id = _resolve_char_id(char_id)
+    p = get_paths().jailbreak_entries(char_id=char_id)
     content = p.read_text(encoding="utf-8") if p.exists() else '{"entries":[]}'
     return Response(content=content, media_type="application/json",
                     headers={"Content-Disposition": "attachment; filename=jailbreak_entries.json"})
 
 
 @router.post("/jailbreak-entries/import/json", summary="导入破限条目JSON")
-async def import_entries_json(file: UploadFile = File(...), auth=Depends(require_scopes("persona"))):
+async def import_entries_json(file: UploadFile = File(...), char_id: str | None = None, auth=Depends(require_scopes("persona"))):
+    char_id = _resolve_char_id(char_id)
     raw = await file.read()
     try:
         incoming = json.loads(raw.decode("utf-8"))
@@ -96,14 +102,15 @@ async def import_entries_json(file: UploadFile = File(...), auth=Depends(require
     for e in new_entries:
         if not e.get("id"):
             e["id"] = _new_id()
-    data = _read()
+    data = _read(char_id)
     data["entries"].extend(new_entries)
-    _write(data)
+    _write(data, char_id)
     return {"message": f"已导入 {len(new_entries)} 条", "added": len(new_entries)}
 
 
 @router.post("/jailbreak-entries/import/txt", summary="导入破限预设txt")
-async def import_entries_txt(file: UploadFile = File(...), auth=Depends(require_scopes("persona"))):
+async def import_entries_txt(file: UploadFile = File(...), char_id: str | None = None, auth=Depends(require_scopes("persona"))):
+    char_id = _resolve_char_id(char_id)
     if not (file.filename or "").endswith(".txt"):
         raise HTTPException(status_code=422, detail="只接受.txt文件")
     raw = await file.read()
@@ -111,7 +118,7 @@ async def import_entries_txt(file: UploadFile = File(...), auth=Depends(require_
         text = raw.decode("utf-8")
     except UnicodeDecodeError:
         text = raw.decode("gbk", errors="replace")
-    data = _read()
+    data = _read(char_id)
     data["entries"].append({
         "id":      _new_id(),
         "title":   Path(file.filename or "untitled").stem,
@@ -119,13 +126,14 @@ async def import_entries_txt(file: UploadFile = File(...), auth=Depends(require_
         "enabled": True,
         "layer":   0,
     })
-    _write(data)
+    _write(data, char_id)
     return {"message": "已导入"}
 
 
 @router.post("/jailbreak-entries", summary="新增破限条目")
-async def add_entry(entry: JbEntry, auth=Depends(require_scopes("persona"))):
-    data = _read()
+async def add_entry(entry: JbEntry, char_id: str | None = None, auth=Depends(require_scopes("persona"))):
+    char_id = _resolve_char_id(char_id)
+    data = _read(char_id)
     data["entries"].append({
         "id":      _new_id(),
         "title":   entry.title,
@@ -133,27 +141,29 @@ async def add_entry(entry: JbEntry, auth=Depends(require_scopes("persona"))):
         "enabled": entry.enabled,
         "layer":   entry.layer,
     })
-    _write(data)
+    _write(data, char_id)
     return {"message": "已添加"}
 
 
 @router.put("/jailbreak-entries/{eid}", summary="修改破限条目")
-async def update_entry(eid: str, entry: JbEntry, auth=Depends(require_scopes("persona"))):
-    data = _read()
+async def update_entry(eid: str, entry: JbEntry, char_id: str | None = None, auth=Depends(require_scopes("persona"))):
+    char_id = _resolve_char_id(char_id)
+    data = _read(char_id)
     for e in data["entries"]:
         if e["id"] == eid:
             e.update({"title": entry.title, "content": entry.content,
                       "enabled": entry.enabled, "layer": entry.layer})
-            _write(data)
+            _write(data, char_id)
             return {"message": "已更新"}
     raise HTTPException(status_code=404, detail="条目不存在")
 
 
 @router.delete("/jailbreak-entries/{eid}", summary="删除破限条目")
-async def delete_entry(eid: str, auth=Depends(require_scopes("persona"))):
-    data = _read()
+async def delete_entry(eid: str, char_id: str | None = None, auth=Depends(require_scopes("persona"))):
+    char_id = _resolve_char_id(char_id)
+    data = _read(char_id)
     data["entries"] = [e for e in data["entries"] if e["id"] != eid]
-    _write(data)
+    _write(data, char_id)
     return {"message": "已删除"}
 
 

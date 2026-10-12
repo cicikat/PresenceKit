@@ -10,7 +10,7 @@ from tests.fixtures.public_assets import TEST_CHAR_ID
 
 @pytest.fixture
 def build_prompt(monkeypatch):
-    monkeypatch.setattr(prompt_builder, "_load_jailbreak", lambda layer=None: "")
+    monkeypatch.setattr(prompt_builder, "_load_jailbreak", lambda layer=None, **kwargs: "")
     monkeypatch.setattr(prompt_builder, "_load_style_hint", lambda **kwargs: "")
     monkeypatch.setattr(prompt_builder, "_format_realtime_awareness", lambda *args, **kwargs: "")
     monkeypatch.setattr("core.author_note_rotator.get_current_note", lambda **kwargs: "")

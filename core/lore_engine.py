@@ -92,7 +92,7 @@ class LoreEngine:
 
     # ── 数据加载 ──────────────────────────────────────────────────────────────
 
-    def load(self):
+    def load(self, *, char_id: str | None = None):
         """
         从 active_prompt_assets.json 读取 enabled_lorebooks 列表，
         按顺序加载 characters/reality/lorebooks/{stem}.yaml，合并所有条目。
@@ -107,13 +107,21 @@ class LoreEngine:
 
         try:
             assets_path = paths.active_prompt_assets()
-            assets = json.loads(assets_path.read_text(encoding="utf-8"))
+            from core.prompt_asset_selection import active_character, for_character
+            char_id = char_id or active_character()
+            assets = for_character(char_id)
         except Exception as e:
             log_error("lore_engine.load.assets", e)
             return
 
         enabled_lorebooks: list = assets.get("enabled_lorebooks", [])
         total_loaded = 0
+        managed_path = paths.lorebook(char_id=char_id)
+        try:
+            managed = yaml.safe_load(managed_path.read_text(encoding="utf-8")) if managed_path.exists() else {}
+            self.load_entries((managed or {}).get("entries", []))
+        except Exception as exc:
+            log_error("lore_engine.load.managed", exc)
 
         for stem in enabled_lorebooks:
             from core.authored_asset_resolver import resolve_layered_file

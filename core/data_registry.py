@@ -164,6 +164,10 @@ REGISTRY: dict[str, PathMeta] = {
     "character_user_relations": PathMeta("canonical", "reality", "per_char", "ignore"),
     "legacy_user_facts": PathMeta("archive", "reality", "per_user", "ignore"),
     "legacy_health_state": PathMeta("archive", "reality", "per_user", "ignore"),
+    "legacy_prompt_entries": PathMeta("archive", "reality", "global", "ignore-but-authored"),
+    "interest_state": PathMeta("archive", "reality", "per_char", "ignore"),
+    "growth_works_dir": PathMeta("canonical", "reality", "per_char", "ignore-but-authored"),
+    "growth_note": PathMeta("canonical", "reality", "per_char", "ignore-but-authored"),
     "author_note_state":      PathMeta("canonical", "character_inner", "per_char",      "ignore"),
     "presence":               PathMeta("canonical", "character_inner", "per_char",      "ignore"),
     "yexuan_inner_diary":     PathMeta("canonical", "character_inner", "per_char",      "ignore"),
@@ -218,9 +222,9 @@ REGISTRY: dict[str, PathMeta] = {
     "authored_character_dir":     PathMeta("authored", "character_inner", "per_char", "ignore-but-authored"),
     "authored_character_dirs":    PathMeta("authored", "character_inner", "per_char", "ignore-but-authored"),
     "user_reality_dir":           PathMeta("authored", "shared",          "global",   "ignore-but-authored"),
-    "reality_lorebook_write_path": PathMeta("authored", "shared",         "global",   "ignore-but-authored"),
+    "reality_lorebook_write_path": PathMeta("authored", "reality",         "per_char",   "ignore-but-authored"),
     "reality_lorebook_write_dir": PathMeta("authored", "shared",          "global",   "ignore-but-authored"),
-    "reality_jailbreak_write_path": PathMeta("authored", "shared",        "global",   "ignore-but-authored"),
+    "reality_jailbreak_write_path": PathMeta("authored", "reality",        "per_char",   "ignore-but-authored"),
     "reality_jailbreak_write_dir": PathMeta("authored", "shared",         "global",   "ignore-but-authored"),
     "legacy_reality_dir":         PathMeta("authored", "shared",          "global",   "ignore-but-authored"),
     "user_dream_worlds_dir":      PathMeta("authored", "dream",           "global",   "ignore-but-authored"),
@@ -242,8 +246,8 @@ REGISTRY: dict[str, PathMeta] = {
     "jailbreak_presets_dir":  PathMeta("authored",  "shared",          "global",        "track"),
 
     # ── admin 运行时可写（沙盒偏移，seed = 随仓库发默认值，运行时副本 ignore）──
-    "jailbreak_entries":      PathMeta("canonical", "shared",          "global",        "seed"),
-    "lorebook":               PathMeta("canonical", "shared",          "global",        "seed"),
+    "jailbreak_entries":      PathMeta("canonical", "reality",          "per_char",        "ignore-but-authored"),
+    "lorebook":               PathMeta("canonical", "reality",          "per_char",        "ignore-but-authored"),
     "relations":              PathMeta("canonical", "shared",          "global",        "seed"),
     "blacklist":              PathMeta("canonical", "shared",          "global",        "seed"),
 

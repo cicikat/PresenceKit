@@ -1,3 +1,5 @@
+工单 288 C3：现实世界书/提示词启用组合按角色保存在 active_prompt_assets.by_character；旧全局组合仅属于其 active_character，切换新角色从空组合开始。条目管理文件改到角色 authored 目录，API CRUD/import/export 支持 char_id 并在 await 前冻结。共享模块文件是安装级素材目录，只有用户为角色显式选择的模块可注入；条目文件不跨角色回退。历史共享条目可用迁移脚本 --artifact lorebook/jailbreak_entries 显式归属，默认 dry-run 并保留原件。单角色管理清单补条目文件与资产绑定。
+
 工单 288 A2：自主工具继承普通工具权限，未配置自主覆盖时默认开放；显式关闭仍有效。旧危险/确认标记不再拦截执行。新 MCP 默认不要求本地分类白名单（用户可主动收窄），工具无需风险说明或确认。手机自动化与设备动作已去除起手/敏感页面确认；设备系统权限、连接、取消和执行预算保持有效。
 
 工单 288 C：用户事实与第三人称称谓改为 uid+char_id；记忆读写、固化/抢救、prompt、用户/记忆管理接口均传入角色。旧 global_facts 字段只是兼容名称，不再共享内容。关系称呼与 extra_prompt 保存到角色 user_relations.yaml；平台黑名单和连接配置保持安装级。traits 使用 {traits: [...]} 中性 schema，单角色数据管理新增定义编辑和所有权清单。非默认角色不再回退到默认 traits 或 author notes；缺失时为空。历史共享事实不自动认领，离线迁移脚本显式指定 uid/char-id，默认 dry-run，保留原件且不覆盖目标。
