@@ -1,6 +1,6 @@
 // Move the original forms between pages; field identity and drafts survive UI switching.
 const AdminPageLayout = (() => {
-  const behaviorPages = ['agent-runtime-browser', 'device-policy', 'output-settings', 'coplay-config', 'minecraft', 'listening-player', 'mail-config', 'diary-config', 'personal-settings', 'conversation-settings', 'observation-center'];
+  const behaviorPages = ['device-policy', 'output-settings', 'coplay-config', 'minecraft', 'listening-player', 'mail-config', 'diary-config', 'personal-settings', 'conversation-settings', 'observation-center'];
   const modelPages = ['role-bindings', 'tts-config', 'local-model-runtime', 'embedding-config'];
   const dataPages = ['relationship-facts', 'user-data', 'memory-consolidation'];
   const observationGroups = {
@@ -22,6 +22,7 @@ const AdminPageLayout = (() => {
   }
   function resolve(page) {
     if (!isNew()) return page;
+    if (page === 'agent-runtime-browser') return 'frozen-features';
     if (page === 'service-center') return 'client-settings';
     if (behaviorPages.includes(page)) return 'character-behavior';
     if (modelPages.includes(page)) return 'model-routing';

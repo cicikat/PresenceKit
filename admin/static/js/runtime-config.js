@@ -1,7 +1,5 @@
 function loadRuntimeConfig() {
-  loadEventShadowRecallSettings();
-  loadStateAuthoritySettings();
-  loadEventContextObserverSettings();
+  // Experimental controls are loaded by the dedicated operations page.
 }
 
 async function loadWechatSettings() {

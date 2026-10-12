@@ -1,21 +1,4 @@
-<h1 class="page-title" data-i18n="settings_center.conversation_and_reasoning">对话与思考</h1><div id="conversation-settings-fields"></div>      <div class="card admin-inline-128" id="obs-segment-enforce-card">
-        <div class="card-header">
-          <h3>生成后段落兜底（实验）</h3>
-          <span class="admin-inline-082">只改发送副本，不写回短期记忆；默认关闭</span>
-        </div>
-        <div class="admin-card-actions admin-inline-018">
-          <label class="admin-inline-027">
-            <input type="checkbox" id="obs-segment-enforce-enabled">
-            <span class="admin-inline-080">长篇单段回复按句末标点补一个空行</span>
-          </label>
-          <label class="admin-inline-082">阈值
-            <input type="number" id="obs-segment-enforce-min-len" min="1" max="5000" class="admin-inline-210">
-          </label>
-          <button class="btn btn-ghost btn-sm" data-action="loadOutputSegmentEnforce">刷新</button>
-          <button class="btn btn-primary btn-sm" data-action="saveOutputSegmentEnforce" data-i18n="settings_center.save">保存</button>
-        </div>
-      </div>
-
+<h1 class="page-title" data-i18n="settings_center.conversation_and_reasoning">对话与思考</h1><div id="conversation-settings-fields"></div>      
 <div class="card">
   <div class="card-header"><h3 data-i18n="status.context.title">上下文长度</h3><button class="btn btn-ghost btn-sm" data-action="loadContextConfig" data-i18n="common.refresh">刷新</button></div>
   <p class="admin-inline-087" data-i18n="status.context.hint">影响后续新请求使用的上下文窗口。</p>

@@ -2,3 +2,118 @@
 <p class="admin-source-hint">冻结功能保留配置与记录；实验功能可按需调整。</p>
 <div id="frozen-features-list" role="status"></div>
 <div id="frozen-integrations"></div>
+
+<h2>记忆与状态实验</h2>
+<div class="card">
+  <div class="card-header"><h3 data-i18n="memory_event.shadow.title">Memory Event shadow rollout</h3><button class="btn btn-ghost btn-sm" data-action="loadEventShadowRecallSettings" data-i18n="common.refresh">刷新</button></div>
+  <p class="admin-inline-087" data-i18n="memory_event.shadow.hint">Only compares old and event-ledger recall. Results are excluded from the production prompt.</p>
+  <div class="config-item-meta"><span id="event-shadow-effective">effective: -</span><span id="event-shadow-apply-mode">apply: -</span></div>
+  <div class="form-row">
+    <label class="checkbox-row"><input type="checkbox" id="event-shadow-enabled"><span data-i18n="memory_event.shadow.global_enable">全局启用</span></label>
+  </div>
+  <div class="form-row">
+    <label class="field"><span data-i18n="memory_event.shadow.uid_allowlist">UID allowlist</span><textarea id="event-shadow-uids" rows="3" spellcheck="false"></textarea></label>
+    <label class="field"><span data-i18n="memory_event.shadow.char_allowlist">Character ID allowlist</span><textarea id="event-shadow-char-ids" rows="3" spellcheck="false"></textarea></label>
+  </div>
+  <button class="btn btn-primary btn-sm" data-action="saveEventShadowRecallSettings" data-i18n="common.save">保存</button>
+</div>
+
+<div class="card">
+  <div class="card-header"><h3>状态权威与记忆解释开关</h3><button class="btn btn-ghost btn-sm" data-action="loadStateAuthoritySettings">刷新</button></div>
+  <p class="admin-inline-087">以下开关均热生效，保存后下一轮对话起生效；默认值即现状，关闭或恢复默认即回到现状。</p>
+  <div class="config-item-meta"><span id="state-authority-shadow-effective">effective: -</span><span id="state-authority-apply-mode">apply: -</span></div>
+  <h4>StatePacket 影子记录（观察用）</h4>
+  <p class="admin-inline-087">默认关闭。只记录每轮各提示层的来源与权威级别，不改变提示词；可只对名单内的用户或角色灰度开启。关闭即回到现状。</p>
+  <div class="form-row">
+    <label class="checkbox-row"><input type="checkbox" id="state-authority-shadow-enabled"><span>全局启用</span></label>
+  </div>
+  <div class="form-row">
+    <label class="field"><span>UID 灰度名单（每行一个）</span><textarea id="state-authority-shadow-uids" rows="3" spellcheck="false"></textarea></label>
+    <label class="field"><span>角色 ID 灰度名单（每行一个）</span><textarea id="state-authority-shadow-char-ids" rows="3" spellcheck="false"></textarea></label>
+  </div>
+  <h4>Dossier 记忆档案</h4>
+  <p class="admin-inline-087">注入档案：默认开启；关闭后档案不进提示词，也不再压制旧召回（工具与夜间整理不受影响）。压制范围：默认“全局”（有档案就清掉旧召回文本，现状）；“按证据重叠”只去掉与档案证据重合的条目。</p>
+  <div class="form-row">
+    <label class="checkbox-row"><input type="checkbox" id="state-authority-dossier-injection"><span>向提示词注入 Dossier（默认开）</span></label>
+    <label class="field"><span>旧召回压制范围</span><select id="state-authority-dossier-suppression"><option value="global">global 全局（默认）</option><option value="overlap">overlap 按证据重叠</option></select></label>
+  </div>
+  <h4>隐性状态置信度门控</h4>
+  <p class="admin-inline-087">默认关闭。开启后，置信度不足的隐性状态字段不参与需求评分、写信原因与梦境快照。注意：置信度是“对该状态估计的可信度”，不是状态本身的强度。关闭即回到现状（仅在观测中记录原始值与门控值）。</p>
+  <div class="form-row">
+    <label class="checkbox-row"><input type="checkbox" id="state-authority-hidden-gating"><span>启用置信度门控</span></label>
+    <label class="field"><span>最低置信度（0~1，默认 0.3）</span><input type="number" id="state-authority-hidden-min" min="0" max="1" step="0.05"></label>
+  </div>
+  <details>
+    <summary>高级设置</summary>
+    <p class="admin-inline-087">语义召回最低相似度：只对没有关键词命中的纯语义候选生效，0 表示不过滤（默认，现状）。建议先看召回观测里的相似度分布再调高。</p>
+    <label class="field"><span>语义召回最低相似度（0~1）</span><input type="number" id="state-authority-semantic-min" min="0" max="1" step="0.05"></label>
+  </details>
+  <button class="btn btn-primary btn-sm" data-action="saveStateAuthoritySettings">保存</button>
+</div>
+
+<div class="card">
+  <div class="card-header"><h3>EventContext observer</h3><button class="btn btn-ghost btn-sm" data-action="loadEventContextObserverSettings" data-i18n="common.refresh">Refresh</button></div>
+  <p class="admin-inline-087">Records redacted propagation metadata only. It never changes the production write path.</p>
+  <div class="config-item-meta"><span id="event-context-observer-effective">effective: -</span><span id="event-context-observer-state">state: -</span></div>
+  <div class="form-row">
+    <label class="checkbox-row"><input type="checkbox" id="event-context-observer-enabled"><span>Enable observation</span></label>
+  </div>
+  <button class="btn btn-primary btn-sm" data-action="saveEventContextObserverSettings" data-i18n="common.save">Save</button>
+</div>
+
+<div class="card admin-inline-128" id="obs-segment-enforce-card">
+        <div class="card-header">
+          <h3>生成后段落兜底（实验）</h3>
+          <span class="admin-inline-082">只改发送副本，不写回短期记忆；默认关闭</span>
+        </div>
+        <div class="admin-card-actions admin-inline-018">
+          <label class="admin-inline-027">
+            <input type="checkbox" id="obs-segment-enforce-enabled">
+            <span class="admin-inline-080">长篇单段回复按句末标点补一个空行</span>
+          </label>
+          <label class="admin-inline-082">阈值
+            <input type="number" id="obs-segment-enforce-min-len" min="1" max="5000" class="admin-inline-210">
+          </label>
+          <button class="btn btn-ghost btn-sm" data-action="loadOutputSegmentEnforce">刷新</button>
+          <button class="btn btn-primary btn-sm" data-action="saveOutputSegmentEnforce" data-i18n="settings_center.save">保存</button>
+        </div>
+      </div>
+
+<h2 data-i18n="agent_runtime_browser.title">浏览器能力与实验任务</h2>
+<p class="admin-source-hint" data-i18n="agent_runtime_browser.description">浏览器配置、allowlist、worker 状态和实验任务统一由后端管理面板控制。客户端不再提交浏览器任务。</p>
+
+<div class="card">
+  <div class="card-header"><h3 data-i18n="agent_runtime_browser.status">能力状态</h3><button class="btn btn-ghost btn-sm" data-action="loadBrowserRuntimePage" data-i18n="common.refresh">刷新</button></div>
+  <div id="browser-runtime-status" class="config-item-meta" data-i18n="common.loading">加载中…</div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h3 data-i18n="agent_runtime_browser.policy">浏览器策略</h3></div>
+  <div class="form-row">
+    <label class="checkbox-row"><input type="checkbox" id="browser-enabled"><span data-i18n="agent_runtime_browser.enabled">启用浏览器 worker</span></label>
+    <label class="checkbox-row"><input type="checkbox" id="browser-download"><span data-i18n="agent_runtime_browser.download">允许下载</span></label>
+    <label class="checkbox-row"><input type="checkbox" id="browser-upload"><span data-i18n="agent_runtime_browser.upload">允许上传</span></label>
+  </div>
+  <label class="field"><span data-i18n="agent_runtime_browser.domains">允许域名（每行一个）</span><textarea id="browser-domains" rows="4" spellcheck="false" placeholder="example.com"></textarea></label>
+  <div class="form-row">
+    <label class="field"><span data-i18n="agent_runtime_browser.max_chars">页面最大字符数</span><input type="number" id="browser-max-chars" min="100" max="100000"></label>
+    <label class="field"><span data-i18n="agent_runtime_browser.max_links">最大链接数</span><input type="number" id="browser-max-links" min="1" max="100"></label>
+    <label class="field"><span data-i18n="agent_runtime_browser.timeout">worker 超时（秒）</span><input type="number" id="browser-timeout" min="1" max="300"></label>
+  </div>
+  <button class="btn btn-primary btn-sm" data-action="saveBrowserRuntimeSettings" data-i18n="agent_runtime_browser.save">保存策略</button>
+</div>
+
+<div class="card">
+  <div class="card-header"><h3 data-i18n="agent_runtime_browser.tasks">受控实验任务</h3><button class="btn btn-ghost btn-sm" data-action="loadBrowserRuntimeTasks" data-i18n="common.refresh">刷新</button></div>
+  <div class="form-row">
+    <label class="field"><span data-i18n="agent_runtime_browser.url">目标地址</span><input type="url" id="browser-task-url" placeholder="https://allowlisted.example/"></label>
+    <label class="field"><span data-i18n="agent_runtime_browser.operation">操作</span><select id="browser-task-operation"><option value="navigate" data-i18n="agent_runtime_browser.open">打开页面</option><option value="read_page" data-i18n="agent_runtime_browser.read">读取页面摘要</option><option value="click" data-i18n="agent_runtime_browser.click">点击元素</option><option value="fill" data-i18n="agent_runtime_browser.fill">填写字段</option><option value="select" data-i18n="agent_runtime_browser.select">选择选项</option><option value="post" data-i18n="agent_runtime_browser.post">发布</option></select></label>
+  </div>
+  <div class="form-row">
+    <label class="field"><span data-i18n="agent_runtime_browser.selector">selector（点击/填写/选择时需要）</span><input type="text" id="browser-task-selector"></label>
+    <label class="field"><span data-i18n="agent_runtime_browser.value">value（填写/选择时需要）</span><input type="text" id="browser-task-value"></label>
+  </div>
+  <button class="btn btn-primary btn-sm" data-action="submitBrowserRuntimeTask" data-i18n="agent_runtime_browser.submit">提交任务</button>
+  <p id="browser-task-message" class="tools-status-note"></p>
+  <div id="browser-task-list"><div class="loading" data-i18n="agent_runtime_browser.empty">暂无任务</div></div>
+</div>
