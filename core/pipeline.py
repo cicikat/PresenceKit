@@ -1397,7 +1397,7 @@ class Pipeline:
                 tools.append({"type": "function", "function": {"name": "manage_self_capability", "description": _info["description"], "parameters": _info["parameters"]}})
                 self_management_context = {
                     "revision": _self_management_state.get("revision", 0),
-                    "capabilities": [{"id": row["capability_id"], "current": row.get("agent_selected_state"), "constraints": (row.get("grant") or {}).get("constraints", {})} for row in _mutable_rows],
+                    "capabilities": [{"id": row["capability_id"], "current": row.get("agent_selected_state"), "effective": row.get("effective"), "effective_value": row.get("effective_value"), "constraints": (row.get("grant") or {}).get("constraints", {})} for row in _mutable_rows],
                 }
             if _self_management_enabled():
                 for _read_name in ("list_self_capabilities", "read_self_action_history"):
@@ -1434,6 +1434,9 @@ class Pipeline:
                 applied_tool_preset, chat_preset_name, len(tools),
             )
         from core.tool_discovery import ToolDiscovery, PREFIX as _discovery_prefix
+        _final_tool_names = {(tool.get("function") or tool).get("name") for tool in tools}
+        if "manage_self_capability" not in _final_tool_names:
+            self_management_context = None
         from core.runtime_signal_observability import record as _record_discovery
         _discovery_notes: dict[str, str] = {}
         try:
@@ -1465,7 +1468,7 @@ class Pipeline:
             )})
         loop_msgs.insert(0, {"role": "system", "_layer": "11.6_tool_discovery", "content": (
             "工具按分类加载。先调用 load_tools_ 分类入口，再在下一轮使用获得的具体工具定义。"
-            "每个入口的描述里列出了该分类包含的工具名：需要其中某个工具时先加载对应分类，不要因为当前没看到定义就认为该能力不存在。"
+            "每个入口的描述里列出了当前可用工具名与内置工具用途：需要其中某个工具时先加载对应分类，不要因为当前没看到定义就认为该能力不存在。"
             "分类加载只提供定义，不是业务执行或成功证据。未加载的工具不得调用或猜测参数。"
             + (("找工具的方向：" + discovery.routing_hint()) if discovery.routing_hint() else "")
         )})
@@ -1488,8 +1491,8 @@ class Pipeline:
             if _grounding:
                 loop_msgs.insert(max(0, len(loop_msgs) - 1), _grounding)
         if self_management_context is not None:
-            loop_msgs.insert(0, {"role": "system", "content": f"Self Capability control state: {json.dumps(self_management_context, ensure_ascii=False)}. You may use manage_self_capability only for these IDs, with this revision and a new action_id.", "_layer": "11.4_self_management"})
-        if any((tool.get("function") or tool).get("name") == "read_self_action_history" for tool in tools):
+            loop_msgs.insert(0, {"role": "system", "content": f"可自主管理的功能状态：{json.dumps(self_management_context, ensure_ascii=False)}。需要时先加载self_management，再用manage_self_capability调整这些ID；携带当前revision和新的action_id，执行后读取有效状态确认结果。冻结、未授权或不在清单中的开关不能自行开启。", "_layer": "11.4_self_management"})
+        if "read_self_action_history" in _final_tool_names:
             loop_msgs.insert(0, {"role": "system", "content": (
                 "When asked what Self Capability changes you made or which failed, read_self_action_history first. "
                 "State only recorded capability IDs and outcomes; if the audit has no matching entry, say so. "

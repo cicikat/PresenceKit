@@ -35,9 +35,14 @@ ROUTES = {
     "life": "花园、喝一杯、听歌这类一起生活的小事",
     "artifacts": "给用户做文件，或查找、续写、修改你以前交付的文件",
     "desktop": "电脑上的操作",
+    "browser": "打开网页或操作浏览器",
+    "fs": "查找或操作工作区文件",
+    "phone_control": "操作已连接手机",
+    "mcp": "按需使用当前获准的外部服务",
+    "self_management": "需要调整已授权由你管理的功能",
+    "system": "查询或操作系统设备",
 }
 PREFIX = "load_tools_"
-MAX_LISTED_TOOLS = 24
 
 
 class ToolDiscovery:
@@ -62,9 +67,19 @@ class ToolDiscovery:
         """
         names = [(schema.get("function") or schema).get("name", "") for schema in self.groups[category]]
         names = [name for name in names if name]
-        shown, rest = names[:MAX_LISTED_TOOLS], max(0, len(names) - MAX_LISTED_TOOLS)
-        listed = "、".join(shown) + (f" 等 {len(names)} 个" if rest else "")
+        listed = "、".join(names)
+        if category != "mcp":
+            purposes = []
+            for schema in self.groups[category]:
+                function = schema.get("function") or schema
+                description = " ".join(str(function.get("description", "")).split())[:80]
+                if description:
+                    purposes.append(f"{function.get('name', '')}：{description}")
+            if purposes:
+                listed += "。用途：" + "；".join(purposes)
         text = f"含：{listed}。" if listed else ""
+        if category == "self":
+            text += "需要积累MCP用法时，可以在自己的空间维护笔记或能力表，记录真实用途、调用结果与限制；使用前重新核对当前连接和授权，旧笔记不证明能力仍可用。"
         note = self.notes.get(category)
         return f"{text}{note}" if note else text
 

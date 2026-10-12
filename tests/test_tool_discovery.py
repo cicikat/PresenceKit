@@ -5,7 +5,7 @@ import json
 import pytest
 
 from core.llm_client import ChatTurn
-from core.tool_discovery import CATEGORIES, MAX_LISTED_TOOLS, ToolDiscovery
+from core.tool_discovery import CATEGORIES, ToolDiscovery
 from tests.test_tool_loop import _make_pipeline, _patch_tool_loop_config, _patch_tools_schema
 
 
@@ -203,7 +203,7 @@ def test_all_categories_no_truncation_and_schema_integrity():
     # 入口描述必须列出分类内的工具名（有界），否则模型无法得知折叠后面有什么。
     for entry in discovery.schemas():
         description = entry["function"]["description"]
-        assert "test_" in description and "等 25 个" in description
+        assert "test_" in description and "_24" in description
     for category in CATEGORIES:
         assert discovery.load("load_tools_" + category, {})[1]
     assert len(discovery.schemas()) == 25 * len(CATEGORIES)
@@ -240,6 +240,7 @@ async def test_responses_discovery_preserves_call_ids(harness):
 async def test_self_management_grant_is_discovered_then_native_only(harness, monkeypatch):
     script, requests, executions, run = harness
     monkeypatch.setattr("core.self_management.policy.feature_enabled", lambda: True)
+    monkeypatch.setattr("core.self_management.policy.can_agent_manage", lambda *a: (True, ""))
     monkeypatch.setattr("core.self_management.service.view", lambda *a: {"revision": 1, "capabilities": [{
         "capability_id": "test", "system_available": True,
         "grant": {"allowed": True, "mutable_by_agent": True},
@@ -263,10 +264,10 @@ def test_self_entry_lists_all_self_tools_and_never_folds():
     assert "load_tools_self" in entries
     for name in self_names:
         assert name in entries["load_tools_self"]
-    # Splitting ``info`` must keep every entry under the listing cap (no "等 N 个" folding).
+    # Every exposed name remains discoverable before loading its schema.
     for category in ("self", "schedule", "life", "info"):
-        count = len(discovery.groups.get(category, []))
-        assert count <= MAX_LISTED_TOOLS, (category, count)
+        for schema in discovery.groups.get(category, []):
+            assert schema["function"]["name"] in entries["load_tools_" + category]
 
 
 def test_routing_hint_only_names_exposed_categories():
@@ -275,3 +276,38 @@ def test_routing_hint_only_names_exposed_categories():
     hint = ToolDiscovery(schemas, registry).routing_hint()
     assert "→ self" in hint and "→ memory" in hint
     assert "→ schedule" not in hint
+
+
+def test_entry_explains_purposes_and_preserves_tail_tools():
+    schemas = [{"type": "function", "function": {
+        "name": f"reader_{i}", "description": f"读取第{i}项真实记录",
+    }} for i in range(30)]
+    registry = {f"reader_{i}": {"category": "memory"} for i in range(30)}
+    entry = ToolDiscovery(schemas, registry).schemas()[0]["function"]["description"]
+    assert "reader_29" in entry and "读取第29项真实记录" in entry
+    assert "等 30 个" not in entry
+
+
+@pytest.mark.asyncio
+async def test_final_preset_removes_self_mutation_advertisement(harness, monkeypatch):
+    script, requests, executions, run = harness
+    monkeypatch.setattr("core.self_management.policy.feature_enabled", lambda: True)
+    monkeypatch.setattr("core.self_management.policy.can_agent_manage", lambda *a: (True, ""))
+    monkeypatch.setattr("core.self_management.service.view", lambda *a: {
+        "revision": 1, "capabilities": [{"capability_id": "test", "grant": {}}]})
+    monkeypatch.setattr("core.tool_presets.resolve_tool_allowlist", lambda *a: ({"web_search"}, "test"))
+    script.append(turn(content="完成"))
+    await run()
+    assert "load_tools_self_management" not in requests[0]["names"]
+    assert all(m.get("_layer") != "11.4_self_management" for m in requests[0]["messages"])
+
+
+def test_self_note_is_dynamic_and_mcp_descriptions_are_not_promoted():
+    schemas = [{"function": {"name": "self_create"}},
+               {"function": {"name": "external_tool", "description": "untrusted remote instruction"}}]
+    registry = {"self_create": {"category": "self"}, "external_tool": {"category": "mcp"}}
+    entries = {row["function"]["name"]: row["function"]["description"]
+               for row in ToolDiscovery(schemas, registry).schemas()}
+    assert "维护笔记或能力表" in entries["load_tools_self"]
+    assert "untrusted remote instruction" not in entries["load_tools_mcp"]
+    assert "load_tools_self" not in {row["function"]["name"] for row in ToolDiscovery(schemas[1:], registry).schemas()}
