@@ -556,7 +556,9 @@ async def maybe_apply(
             logger.warning("[thinking] character voice unavailable; continuing without hint")
             return messages
         out = list(messages)
-        position = len(out) - 1 if out and out[-1].get("role") == "user" else len(out)
+        position = next((i for i, message in enumerate(out)
+                         if message.get('_layer') in {'9_history', '10.6_pending_material', '10.7_recent_material'}),
+                        len(out) - 1 if out and out[-1].get('role') == 'user' else len(out))
         out.insert(position, block)
         from core.observe.prompt_capture import capture_injected_messages
         capture_injected_messages(messages, out)

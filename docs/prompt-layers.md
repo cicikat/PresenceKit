@@ -6,11 +6,12 @@
 
 ## 资料接续（2026-09-13）
 
-`10.6_pending_material`（最多 3 条未读资料）、`10.7_recent_material`（1 条近期已读参考）、
+`10.6_pending_material`（最多 3 条未读资料）、`10.7_recent_material`（1 条近期接续）、
 `10.8_recent_tool_results`（最多 3 条主动工具历史结果）在用户当前消息之前注入，均有 `_layer` 和
 `_drop_priority=85`，参与原裁剪与消融。仅 owner QQ/desktop/mobile 私聊；autonomy 独立投影复用同一数据源。
-`10.6` / `10.7` 只注入短摘要：文件名或标题、时间、摘录；不出现 sha256、revision、内部 id。
-`10.8` 写成唤醒时间、工具名、设备（有则写手机/电脑）、结果摘要和该次自主循环有/无发言，不再套 `frame_tool_message`。
+`10.6` 保留待评估上传或生活记录的有界内容及回读 ID；`10.7` 已读上传只写「你可以调用工具回放用户曾发给你的文件具体内容。」，不重复文件名、概要或进度。生活记录保留有界历史内容。这两层归入对话历史区块，不归入参考资料。
+`10.8` 写成唤醒时间、工具结果摘要和该次自主循环有/无发言，不再套 `frame_tool_message`。JSON 结果转成文字，移除身份、调用参数、路径、权限及修订等工程元数据；屏幕观察保留设备与观察正文。
+`11.6_thinking_voice` 在最终 prompt 的第一条历史（包括上传接续）前插入，无历史时位于当前输入前。
 内部 `_continuity_receipt` 在 API 边界移除，成功模型返回后确认，被裁剪/消融的资料不确认。
 角色可读与撤回边界、历史时效和零直接长期记忆写入见 [资料接续](media-continuity-2026-09-13.md)。
 
@@ -43,7 +44,7 @@ Reality builder 最终输出按来源集中排列：真实性边界 → 角色�
 - 真实数据：时间、手机/手表/健康观测、电脑活动摘要、真实活动引用、陪玩状态与后台硬件任务。
 - 用户事实：画像、偏好、全局事实、强调事实、待办及有明确归纳边界的行为模式。
 - 现实回忆：事件检索、档案、情景记忆、压缩对话、日记、叙事弧和陪玩历史；日记感受不升级为客观事实。
-- 参考资料：未读/近期已读资料与网络资料，不当作共同经历。
+- 参考资料：角色主动查阅的网络资料；用户上传接续属于对话历史。
 - 工具结果：本轮返回、近期自主结果、暂存快照与动作痕迹；历史结果不当作当前状态。
 - 主观余韵：梦境、表达和陪玩余韵，明确不是现实证据。
 
@@ -109,7 +110,7 @@ prompt inspector 仍逐叶层展示最终正文。`9.5_episodic_top` 随现实�
 | `10.5_action_trace` | 历史工具动作参考：你最近做过的操作（不是本轮结果） | `action_trace_entries` 非空（`recent()` 过滤后仍有条目） | `core/memory/action_trace.py` → `recent()` + `format_trace_block()`；历史条目带时间并明确标为参考 |
 | `10.6_hardware_jobs` | 当前硬件后台动作状态与系统计算的剩余时间 | 存在 `accepted`/`started` job | `core/hardware/jobs.py::format_prompt()`；只读系统状态，断线/失败/取消/过期任务不继续倒计时 |
 | `10.6_pending_material` | 未读资料短摘要（文件名/标题、时间、摘录；无内部 id） | owner 私聊且有未读资料 | `core/context_continuity.py`；`_drop_priority=85` |
-| `10.7_recent_material` | 近期已读资料短摘要（最多 1 条） | owner 私聊且 24h 内已读 | 同上 |
+| `10.7_recent_material` | 已读上传的单句回放提示或生活记录历史（最多 1 条） | owner 私聊且 24h 内已读 | 同上 |
 | `10.8_recent_tool_results` | 跨轮自主唤醒工具结果：HH:MM、工具名、设备（有则写）、结果、有/无发言 | owner 私聊且 24h 内有自主工具结果 | `context_continuity.result_messages()`；不套 `frame_tool_message` |
 | `11_tool_grounding` | 本轮工具事实闸：明确要求调用时绑定“必须成功调用”，并在输出端拦截无成功调用的完成式断言 | pretool 关键词命中，或调用方显式传入 `tool_call_required=True` | `core/pretool_router.py` 识别意图 → `core/tool_grounding.py` 组装消息并在 `Pipeline.run_llm()` / tool loop 收尾校验 |
 | `anti_collapse_hint` | 反坍缩提示（长度坍缩 + 分段坍缩合并，按触发维度拼装文案），per-uid 持久化倒计时 `hint_rounds` 轮（默认3），不可裁 | `anti_collapse.enabled` 且长度/分段任一维度倒计时未归零 | `core/memory/short_term.py::get_anti_collapse_hint()`（长度维度沿用 `detect_reply_length_collapse()`；分段维度由 `note_segment_collapse_signal()` 在 `capture_turn()` 落盘时写入） |

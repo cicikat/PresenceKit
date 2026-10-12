@@ -22,7 +22,7 @@ Brief 249：monologue 的 scoped mood 提示改用“你此刻”，不借全局
 沿用 mood_state 已有平滑 current/intensity/pending；不新增情绪写入、随机状态或台账。
 
 `thinking.character_voice` 默认 true，但只有 thinking.enabled=true 时生效。
-native/auto-native 在 `maybe_apply` 增加 `11.6_thinking_voice` system 层，无额外模型调用；
+native/auto-native 在 `maybe_apply` 增加 `11.6_thinking_voice` system 层，位于第一条对话历史或上传接续前，无历史时位于当前输入前，无额外模型调用；
 工具循环首步前注入一次，后续复用，重试不叠加。同既有 `11.7_inner_monologue` 一样位于
 prompt_builder 裁剪之后，不属于消融开关；关闭方法是 character_voice=false。
 该层只提出可见摘要的文风约定，不要求公开内部推理，不要求在正文中补写心声或 think 标签。

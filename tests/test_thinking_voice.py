@@ -54,13 +54,16 @@ async def test_native_guidance_is_local_idempotent_and_gated(monkeypatch, mode):
     async def no_monologue(*args, **kwargs):
         pytest.fail('native guidance must not call another model')
     monkeypatch.setattr(thinking, '_run_monologue_call', no_monologue)
-    messages = [{'role': 'system', 'content': 'persona'}, {'role': 'user', 'content': 'hello'}]
+    messages = [{'role': 'system', 'content': 'persona'},
+                {'role': 'assistant', '_layer': '9_history', 'content': 'previous reply'},
+                {'role': 'user', 'content': 'hello'}]
     original = copy.deepcopy(messages)
     mc = SimpleNamespace(reasoning_native=True)
     out = await thinking.maybe_apply(messages, call_category='chat', mc=mc)
     assert messages == original
     assert out[-1] == messages[-1]
-    assert out[-2]['_layer'] == voice.LAYER
+    assert out[1]['_layer'] == voice.LAYER
+    assert out[2]['_layer'] == '9_history'
     assert await thinking.maybe_apply(out, call_category='chat', mc=mc) is out
     for category in ['monologue', 'intent', 'summary']:
         assert await thinking.maybe_apply(messages, call_category=category, mc=mc) is messages

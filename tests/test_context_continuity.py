@@ -33,7 +33,7 @@ def recent(messages):
     return [m for m in messages if m['_layer'] == '10.7_recent_material']
 
 
-_INTERNAL_MARKERS = ('sha256', 'document_id', 'record_id', 'revision', 'operation_id')
+_INTERNAL_MARKERS = ('sha256', 'revision', 'operation_id')
 
 
 def assert_readable_material(messages, *needles):
@@ -101,7 +101,8 @@ def test_upload_receipt_trimming_and_tombstone(configured):
     continuity.acknowledge(msg)
     later = continuity.messages('owner-test', 'char-test')
     assert not pending(later)
-    assert_readable_material(later, 'notes.txt', 'chapter detail')
+    assert recent(later)[0]['content'] == '你可以调用工具回放用户曾发给你的文件具体内容。'
+    assert 'chapter detail' not in str(later) and 'notes.txt' not in str(later)
     assert library.delete('owner-test', 'char-test', doc)
     assert continuity.messages('owner-test', 'char-test') == []
 
@@ -132,7 +133,7 @@ def test_screen_success_only_and_revocation(configured, monkeypatch):
                              '{"status":"ok","device":"desktop","caption":"spreadsheet"}')
     projected = str(continuity.messages('owner-test', 'char-test'))
     assert 'spreadsheet' in projected
-    assert '电脑上' in projected
+    assert '的电脑' in projected
     assert '你无发言' in projected
     monkeypatch.setattr(screen_observation, 'enabled', lambda: False)
     assert continuity.messages('owner-test', 'char-test') == []
@@ -207,7 +208,7 @@ async def test_real_dispatcher_silent_autonomy_keeps_screen_result(configured, m
     later = continuity.messages('owner-test', 'char-test')
     assert not pending(later)
     assert 'fixture spreadsheet' in str(later)
-    assert 'observe_user_screen' in str(later)
+    assert '看了一眼' in str(later)
     assert '你无发言' in str(later)
     assert '<<<TOOL_DATA_START>>>' not in str(later)
     assert_readable_material(later, 'lunch')
@@ -238,14 +239,14 @@ def test_material_summary_omits_internal_fields():
         'summary': 'kitchen notes',
     })
     assert 'memo.txt' in excerpt and 'kitchen notes' in excerpt
-    assert 'doc_hidden' not in excerpt and digest not in excerpt
+    assert 'document_id=doc_hidden' in excerpt and digest not in excerpt
     life = continuity._material_summary('life', {
         'id': 'record-hidden', 'revision': 9, 'category': 'diet',
         'updated_at': '2026-09-13T12:00:00+00:00', 'title': 'breakfast',
         'note': 'tea', 'recognition_description': 'model guess',
     })
     assert 'breakfast' in life and 'tea' in life and 'diet' in life
-    assert 'record-hidden' not in life and 'revision' not in life
+    assert 'record_id=record-hidden' in life and 'revision' not in life
 
 
 def test_tool_result_projection_includes_device_and_talk_mark(configured, monkeypatch):
@@ -258,9 +259,22 @@ def test_tool_result_projection_includes_device_and_talk_mark(configured, monkey
     )
     continuity.mark_run_talk('owner-test', 'char-test', started_at=time.time() - 5, talk_sent=True)
     text = str(continuity.messages('owner-test', 'char-test'))
-    assert 'observe_user_screen' in text
-    assert '手机上' in text
+    assert '看了一眼' in text
+    assert '的手机' in text
     assert 'chat app' in text
     assert '你有发言' in text
     assert '<<<TOOL_DATA_START>>>' not in text
     assert 'SECRET' not in text
+
+
+def test_all_tool_results_project_outcomes_without_metadata():
+    content = json.dumps({'ok': True, 'operation': 'update', 'path': 'notes/ledger.md',
+                          'result': 'updated', 'principal': {'uid': 'PRIVATE'},
+                          'origin': 'tool', 'causation': {'reference': 'SECRET'},
+                          'revision': 10, 'size': 1684, 'grant_revision': 0})
+    assert continuity._readable_content('self_update', content) == '文件已更新'
+    weather = continuity._readable_content('weather', json.dumps({
+        'status': 'ok', 'result': {'forecast': 'rain', 'arguments': {'city': 'SECRET'}}}))
+    assert 'rain' in weather and 'SECRET' not in weather and '{' not in weather
+    assert '失败' in continuity._readable_content('self_update', '{"ok":false,"error":"denied"}')
+    assert 'principal' not in continuity._readable_content('self_update', '{"principal":')

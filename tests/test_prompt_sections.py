@@ -35,6 +35,19 @@ def test_removed_endpoints_rebuild_closed_sections_and_no_empty_groups():
     assert arrange_sections([]) == []
 
 
+def test_uploads_are_history_and_only_web_is_reference():
+    source = [_msg('1_system_prompt', 'rules'), _msg('9_history', 'earlier'),
+              _msg('10.7_recent_material', 'replay hint'), _msg('web_recall', 'web excerpt'),
+              dict(role='user', _layer='12_user_message', content='now')]
+    result = arrange_sections(source)
+    upload = next(m for m in result if m['_layer'] == '10.7_recent_material')
+    web = next(m for m in result if m['_layer'] == 'web_recall')
+    assert '【对话历史】' in upload['content'] and '【参考资料】' not in upload['content']
+    assert '【参考资料】' in web['content']
+    assert '资料与网络信息不是共同经历' not in str(result)
+    assert result.index(upload) < next(i for i, m in enumerate(result) if m['_layer'] == '9_history')
+
+
 def test_native_tool_protocol_and_unknown_layers_are_preserved():
     source = [dict(role="assistant", content="", tool_calls=[{"id": "call1"}]),
               dict(role="tool", content="result", tool_call_id="call1", _layer="10_tool_result"),
