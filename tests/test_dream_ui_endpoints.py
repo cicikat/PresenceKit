@@ -91,7 +91,7 @@ def test_state_get_mood_state_unchanged(sandbox):
 
     # Positive control
     from core.memory.mood_state import update as _mood_update
-    _mood_update("calm", 0.5, source="positive_control")
+    _mood_update("happy", 0.5, source="explicit", source_turn_id="positive-control", source_at=__import__("time").time())
     assert mood_path.exists(), "Positive control: mood_state.update() should create the file"
 
 

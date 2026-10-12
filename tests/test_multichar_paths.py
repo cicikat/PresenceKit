@@ -95,18 +95,18 @@ def test_author_notes_pool_userdata_primary(dp):
     assert dp.author_notes_pool() == dp.author_notes_pool(char_id=TEST_CHAR_ID)
 
 
-def test_activity_pool_falls_back_when_public_authored_fixture_is_missing(dp):
+def test_missing_nondefault_activity_pool_does_not_fall_back(dp):
     authored = dp.user_authored_character_dir(char_id=TEST_CHAR_ID) / "activity_pool.yaml"
     authored.unlink()
 
     assert dp.activity_pool(char_id=TEST_CHAR_ID) == (
-        dp.bundled_default_character_dir() / "activity_pool.yaml"
+        dp.user_authored_character_dir(char_id=TEST_CHAR_ID) / "activity_pool.yaml"
     )
 
 
-def test_traits_resolve_to_bundled_default(dp):
+def test_nondefault_traits_stay_in_the_character_bucket(dp):
     assert dp.yexuan_traits(char_id=TEST_CHAR_ID) == (
-        dp.bundled_default_character_dir() / "traits.yaml"
+        dp.user_authored_character_dir(char_id=TEST_CHAR_ID) / "traits.yaml"
     )
     assert dp.yexuan_traits() == dp.yexuan_traits(char_id=TEST_CHAR_ID)
 

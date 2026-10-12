@@ -367,4 +367,6 @@ def test_tombstone_route_reports_derived_memories_honestly(sandbox):
     assert append_event(scope, ev).ok
     out = asyncio.run(tombstone_memory_event(
         event_id="s4a-r1", uid=scope.uid, char_id=scope.character_id, realm="reality", _auth=None))
-    assert out["derived_memories"] == {"dossiers": "invalidated", "others": "not_cascaded"}
+    assert out["derived_memories"]["dossiers"] == 0
+    assert out["derived_memories"]["episodic"] == 0
+    assert "manual_review" in out["derived_memories"]

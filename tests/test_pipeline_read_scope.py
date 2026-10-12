@@ -236,7 +236,7 @@ def test_fetch_context_passes_char_id_to_mid_term_format(
 
     captured: list[str] = []
 
-    def _spy_format(uid, *, char_id=TEST_CHAR_ID):
+    def _spy_format(uid, *, char_id=TEST_CHAR_ID, history=None):
         captured.append(char_id)
         return ""
 

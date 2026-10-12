@@ -133,7 +133,7 @@ def test_registry_backend_only_no_client_commands_or_main_memory():
     from core.activity.registry import get_activity_meta
     meta = get_activity_meta("minecraft")
     assert meta and not meta.enabled and not meta.frontend_key and not meta.tauri_commands
-    assert meta.memory_policy.main_memory == "none"
+    assert meta.memory_policy.main_memory == "episodic"
     assert not meta.memory_policy.writes_hidden_state
 
 

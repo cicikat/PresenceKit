@@ -166,6 +166,7 @@ def test_failure_is_not_retried_on_every_request(monkeypatch):
 def test_warmup_builds_backend_when_local_engine_is_selected(monkeypatch):
     loads = _patch(monkeypatch, cuda_devices=0)
     monkeypatch.setattr("core.audio_perception.config", lambda: {"enabled": False, "presets": {}, "routes": {}})
+    monkeypatch.setattr(stt_local.importlib.util, "find_spec", lambda _name: object())
     stt_local.warmup()
     assert loads  # a model was actually built
     assert stt_local.get_backend()["key"] == stt_local._key(stt_local.settings())
@@ -205,6 +206,7 @@ def test_probe_hardware_explains_next_step_without_loading_a_model(monkeypatch):
     import types, sys
     fake = types.SimpleNamespace(get_cuda_device_count=lambda: 0)
     monkeypatch.setitem(sys.modules, "ctranslate2", fake)
+    monkeypatch.setitem(sys.modules, "faster_whisper", types.SimpleNamespace())
     info = stt_local.probe_hardware()
     assert info["devices"] == ["cpu"] and info["hint"]
     assert "cuBLAS" in stt_local.diagnose("Library cublas64_12.dll is not found")

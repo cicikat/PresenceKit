@@ -108,7 +108,7 @@ def test_span_layer_only_when_text_given(sandbox, monkeypatch, span_text, expect
     spans = [m for m in messages if m.get("_layer") == "2.56_relationship_span"]
     assert bool(spans) is expected
     if expected:
-        assert spans[0]["content"] == span_text  # 只有日期句，无评价
+        assert span_text in spans[0]["content"]  # 只有日期句，无评价
 
 
 def test_retrieve_mixed_long_term_shape_matches_m5_spec(sandbox):

@@ -30,7 +30,7 @@ def test_chat_turn_rejects_a_string_gateway_response_and_records_failure(monkeyp
     model_client = _model_client("not a chat completion")
     monkeypatch.setattr(llm_client, "_prepare_call", lambda *_args, **_kwargs: (model_client, [], {}))
     failures = []
-    monkeypatch.setattr(llm_client, "_record_api_call", lambda **kwargs: failures.append(kwargs))
+    monkeypatch.setattr("core.api_call_log.append", lambda **kwargs: failures.append(kwargs))
     monkeypatch.setattr(llm_client, "log_error", lambda *_args: None)
 
     with pytest.raises(llm_client.UpstreamResponseFormatError, match="expected an OpenAI ChatCompletion"):
@@ -40,7 +40,7 @@ def test_chat_turn_rejects_a_string_gateway_response_and_records_failure(monkeyp
     assert failures[0]["provider"] == "openai"
     assert failures[0]["model"] == "test-model"
     assert failures[0]["purpose"] == "chat"
-    assert isinstance(failures[0]["started_at"], float)
+    assert isinstance(failures[0]["duration_ms"], int)
     assert failures[0]["ok"] is False
     assert failures[0]["output_hint"] == "UpstreamResponseFormatError"
 

@@ -65,11 +65,11 @@ async def test_native_proposal_executes_dryrun_for_each_registered_trigger(monke
     monkeypatch.setattr("core.scheduler.loop._last_diary_share", datetime(2026, 5, 21, 12, 0).timestamp())
     monkeypatch.setattr(diary, "_scheduler_start_time", 0.0)
     monkeypatch.setattr("core.config_loader.get_config", lambda: {"tools": {"weather": {"enabled": True}}})
-    monkeypatch.setattr(period, "_days_elapsed", lambda uid, today=None: today.day)
+    monkeypatch.setattr(period, "_days_elapsed", lambda uid, today=None, **kwargs: today.day)
     monkeypatch.setattr(time_based, "_user_talked_today", lambda uid: False)
     monkeypatch.setattr(time_based, "_weather_location", lambda: "杭州")
-    monkeypatch.setattr("core.tools.diary_reader.has_any_diary_entry", lambda: True)
-    monkeypatch.setattr("core.tools.diary_reader.yesterday_missing", lambda: True)
+    monkeypatch.setattr("core.tools.diary_reader.has_any_diary_entry", lambda **kwargs: True)
+    monkeypatch.setattr("core.tools.diary_reader.yesterday_missing", lambda **kwargs: True)
     monkeypatch.setattr("core.memory.episodic_memory._load_memories", lambda uid: [
         {"id": "ep_exec_recall", "summary": "她说起实习", "yexuan_feeling": "有些在意", "strength": 0.8}
     ])
@@ -595,7 +595,7 @@ async def test_weather_live_old_tick_refreshes_cache_without_sending(monkeypatch
     monkeypatch.setattr(time_based, "_owner_id", lambda: "u1")
     monkeypatch.setattr(time_based, "datetime", FakeDatetime)
     monkeypatch.setattr("core.config_loader.get_config", lambda: {"tools": {"weather": {"enabled": True}}})
-    monkeypatch.setattr("core.memory.user_profile.load", lambda uid: {"location": "杭州"})
+    monkeypatch.setattr("core.memory.user_profile.load", lambda uid, **kwargs: {"location": "杭州"})
     monkeypatch.setitem(sys.modules, "core.tools.weather", SimpleNamespace(get_weather_detail=fake_fetch))
 
     await time_based._check_weather(force=False)

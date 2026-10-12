@@ -61,6 +61,14 @@ def _configure_public_test_environment() -> None:
 _configure_public_test_environment()
 
 
+@pytest.fixture(autouse=True)
+def reset_runtime_registries(monkeypatch):
+    """Each test owns its runtime; registered test doubles must not leak."""
+    from core import pipeline_registry, qq_service
+    monkeypatch.setattr(pipeline_registry, "_pipeline", None)
+    monkeypatch.setattr(qq_service, "_service", None)
+
+
 def _worker_session(suffix: str) -> str:
     worker = os.environ.get("PYTEST_XDIST_WORKER", "gw0")
     return f"pytest_{worker}_{suffix}"

@@ -229,9 +229,9 @@ async def test_tool_continuation_strips_nested_inline_reasoning(monkeypatch):
             {"type": "text", "text": "<think>private</think>visible"},
         ]}],
     )
-    model = mc()
+    model = mc(prompt_style="narrative", params={})
     monkeypatch.setattr(llm_client, "_prepare_call", lambda *a, **kw: (model, [], {}))
-    monkeypatch.setattr(llm_client, "create_protocol_response", AsyncMock(return_value=result))
+    monkeypatch.setattr("core.llm_protocol.create", AsyncMock(return_value=result))
     monkeypatch.setattr(llm_client, "_record_api_call", lambda **kw: None)
     turn = await llm_client.chat_turn([], [])
     assert turn.content == "visible"

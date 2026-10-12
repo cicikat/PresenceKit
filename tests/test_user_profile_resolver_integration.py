@@ -96,7 +96,7 @@ def test_clear_profile_resets_resolver_path(sandbox):
 def test_period_info_reads_from_global_health_state_path(sandbox):
     from core.memory import health_state
 
-    scope = MemoryScope.global_scope(_UID)
+    scope = MemoryScope.reality_scope(_UID, TEST_CHAR_ID)
     expected_path = resolve_path(scope, "health_state")
     health_state.set_period_date(_UID, "2026-06-01")
 

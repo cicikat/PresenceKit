@@ -151,7 +151,9 @@ async def test_document_progress_and_overview_continue_without_reannouncing_uplo
     await document_reading.summarize("reader", "char-test", doc)
     after = context_continuity.messages("reader", "char-test")
     assert not any(item["_layer"] == "10.6_pending_material" for item in after)
-    assert "持久概要内容" in str(after) and "6000" in str(after)
+    assert "回放" in str(after)
+    assert "持久概要内容" not in str(after)
+    assert "持久概要内容" in str(library.get_record("reader", "char-test", doc))
 
 
 @pytest.mark.asyncio

@@ -384,3 +384,9 @@ async def test_memory_path_scrubbed_before_post_process(sandbox, monkeypatch):
     assert "好的，我明白了。" in mem, (
         f"Dialogue text missing from memory reply: {mem!r}"
     )
+
+
+@pytest.fixture(autouse=True)
+def admission_config(monkeypatch):
+    from core import config_loader
+    monkeypatch.setattr("core.qq_admission.get_config", lambda: config_loader.get_config())

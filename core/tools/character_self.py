@@ -208,7 +208,7 @@ def _register_db_tools(registry: dict) -> None:
         "parameters": {
             "type": "object",
             "properties": {
-                "table": {"type": "string"},
+                "table": {"type": "string", "description": '本角色 self 数据表名，取自 self_db_tables 或建表结果。'},
                 "rows": {"type": "array", "items": {"type": "object"}, "description": "每行是 {列名: 值}。"},
             },
             "required": ["table", "rows"],
@@ -226,7 +226,7 @@ def _register_db_tools(registry: dict) -> None:
         "parameters": {
             "type": "object",
             "properties": {
-                "table": {"type": "string"},
+                "table": {"type": "string", "description": '本角色 self 数据表名，取自 self_db_tables 或建表结果。'},
                 "where": {"type": "object", "description": _WHERE_DESC},
                 "order_by": {"type": "string", "description": "排序列；前面加 - 表示倒序，如 -_id。"},
                 "limit": {"type": "integer", "description": "最多返回行数，1-50，默认 20。"},
@@ -246,7 +246,7 @@ def _register_db_tools(registry: dict) -> None:
         "parameters": {
             "type": "object",
             "properties": {
-                "table": {"type": "string"},
+                "table": {"type": "string", "description": '本角色 self 数据表名，取自 self_db_tables 或建表结果。'},
                 "where": {"type": "object", "description": _WHERE_DESC},
                 "set": {"type": "object", "description": "要改成的 {列名: 新值}。"},
             },
@@ -264,7 +264,7 @@ def _register_db_tools(registry: dict) -> None:
         "effect": "write",
         "parameters": {
             "type": "object",
-            "properties": {"table": {"type": "string"}, "where": {"type": "object", "description": _WHERE_DESC}},
+            "properties": {"table": {"type": "string", "description": '本角色 self 数据表名，取自 self_db_tables 或建表结果。'}, "where": {"type": "object", "description": _WHERE_DESC}},
             "required": ["table", "where"],
         },
         "examples": ["把记错的那条删掉"],
@@ -277,7 +277,7 @@ def _register_db_tools(registry: dict) -> None:
         "dangerous": False,
         "category": "self",
         "effect": "write",
-        "parameters": {"type": "object", "properties": {"table": {"type": "string"}}, "required": ["table"]},
+        "parameters": {"type": "object", "properties": {"table": {"type": "string", "description": '本角色 self 数据表名，取自 self_db_tables 或建表结果。'}}, "required": ["table"]},
         "examples": ["这张表不用了"],
         "keywords": ["删表", "丢掉资料表"],
         "trace_args": ["table"],
@@ -311,7 +311,7 @@ def _register_recipe_tools(registry: dict) -> None:
                     "description": "按顺序执行的步骤，每步 {tool: 工具名, args: {...}}，args 里可写 {参数名}。",
                     "items": {
                         "type": "object",
-                        "properties": {"tool": {"type": "string"}, "args": {"type": "object"}},
+                        "properties": {"tool": {"type": "string", "description": '可选工具名称，用于筛选动作记录。'}, "args": {"type": "object"}},
                         "required": ["tool"],
                     },
                 },

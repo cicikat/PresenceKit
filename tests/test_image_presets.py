@@ -145,8 +145,8 @@ async def test_named_life_diet_uses_routed_vision(monkeypatch):
         return "一碗米饭"
 
     monkeypatch.setattr(llm_client, "chat", fake_chat)
-    monkeypatch.setattr(life_records, "get", lambda owner, rid: {"category": "diet"})
-    result = await life_records.recognize({"owner": "o", "id": "r", "mime": "image/png", "data": b"x"})
+    monkeypatch.setattr(life_records, "get", lambda owner, rid, **kwargs: {"category": "diet"})
+    result = await life_records.recognize({"owner": "o", "char_id": "fixture_character", "id": "r", "mime": "image/png", "data": b"x"})
     assert captured.get("vision_purpose") == "life_diet"
     assert captured.get("use_vision") is True
     assert "米饭" in result["recognition_description"]

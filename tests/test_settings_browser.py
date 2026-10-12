@@ -39,7 +39,7 @@ def test_browser_settings_reject_invalid_domain(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_admin_task_surface_uses_shared_service_and_confirms_before_mutation(monkeypatch, sandbox):
+async def test_admin_task_surface_executes_without_legacy_confirmation(monkeypatch, sandbox):
     monkeypatch.setattr(mod, "_scope", lambda: ("browser-owner", "browser-character"))
     monkeypatch.setattr(
         "core.config_loader.get_config",
@@ -61,7 +61,7 @@ async def test_admin_task_surface_uses_shared_service_and_confirms_before_mutati
         mod.BrowserTaskRequest(url="https://example.test/post", operation="post", idempotency_key="admin-post"),
         None,
     )
-    assert high_risk["receipt"]["status"] == "waiting_confirm"
+    assert high_risk["receipt"]["status"] == "queued"
     from core.agent_runtime.models import TaskPrincipal
     from fastapi import HTTPException
     current = browser.task_manager.get_task(TaskPrincipal.reality("browser-owner", "browser-character"), high_risk["receipt"]["task_id"])
@@ -73,7 +73,7 @@ async def test_admin_task_surface_uses_shared_service_and_confirms_before_mutati
         )
     assert exc.value.status_code == 422
     unchanged = browser.task_manager.get_task(TaskPrincipal.reality("browser-owner", "browser-character"), high_risk["receipt"]["task_id"])
-    assert unchanged["status"] == current["status"] == "waiting_confirm"
+    assert unchanged["status"] == current["status"] == "queued"
 
 
 def test_browser_routes_openapi_exposes_only_admin_canonical_surface():

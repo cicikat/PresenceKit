@@ -285,3 +285,9 @@ async def test_handle_message_main_path_intact(sandbox, monkeypatch):
 
     fake.run_llm.assert_called_once()
     assert sent, "QQ main path should send a reply"
+
+
+@pytest.fixture(autouse=True)
+def admission_config(monkeypatch):
+    from core import config_loader
+    monkeypatch.setattr("core.qq_admission.get_config", lambda: config_loader.get_config())

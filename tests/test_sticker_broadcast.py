@@ -109,7 +109,7 @@ async def test_pipeline_schedules_sticker_without_qq_target(sandbox, monkeypatch
 
     pipeline = Pipeline(_Character(), lore_engine=None)
     await pipeline.post_process(
-        "desktop-owner", "你好", "很高兴见到你。", target_id="", envelope=stamp_user_chat(),
+        "desktop-owner", "你好", "<feel>很高兴</feel><say>见到你真好。</say>", target_id="", envelope=stamp_user_chat(),
     )
     await asyncio.sleep(0)
 

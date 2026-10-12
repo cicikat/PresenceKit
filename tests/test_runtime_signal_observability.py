@@ -48,10 +48,9 @@ def test_emotion_invalid_output_is_aggregated_by_preset_and_warning_rate_limited
     from core.runtime_signal_observability import _reset_for_tests, snapshot
 
     _reset_for_tests()
-    monkeypatch.setattr(llm_client, "get_model_client", lambda _purpose: SimpleNamespace(name="emotion-small"))
+    monkeypatch.setattr(llm_client, "get_model_client", lambda _purpose: SimpleNamespace(name="emotion-small", provider_kind="openai", model="test", prompt_style="narrative", params={}))
     monkeypatch.setattr(
-        llm_client,
-        "create_protocol_response",
+        "core.llm_protocol.create",
         AsyncMock(return_value=SimpleNamespace(assistant_text="")),
     )
 

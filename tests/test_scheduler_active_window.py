@@ -93,6 +93,7 @@ def _install_ui_transport_stubs(monkeypatch):
         _new_msg_id=lambda: "test-stream-message",
         push_message=noop,
         push_segments=noop,
+        push_tool_status=noop,
     )
     ui_push = SimpleNamespace(
         any_connected=lambda: False,

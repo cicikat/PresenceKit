@@ -349,7 +349,7 @@ class TestRunAgenticLoopToolCategories:
             pl.run_agentic_loop([{"role": "user", "content": "hi"}], uid="u1", char_id="c1", session_state=_Sess())
         )
         assert result == "done"
-        assert seen_categories == [["info", "mcp"]]
+        assert seen_categories == [["info", "mcp", "self", "schedule", "life", "qzone"]]
 
     def test_no_char_override_uses_global_categories(self, monkeypatch):
         from core.llm_client import ChatTurn
@@ -383,7 +383,7 @@ class TestRunAgenticLoopToolCategories:
             pl.run_agentic_loop([{"role": "user", "content": "hi"}], uid="u1", char_id="c1", session_state=_Sess())
         )
         assert result == "done"
-        assert seen_categories == [["info", "desktop", "memory"]]
+        assert seen_categories == [["info", "desktop", "memory", "self", "schedule", "life", "qzone"]]
 
     def test_nudge_hint_injected_before_last_message(self, monkeypatch):
         from core.llm_client import ChatTurn

@@ -604,3 +604,9 @@ def test_f8_scrubber_docstring_names_qq_adapter():
     assert "_qq_reality_reply_adapter" in src or "main.py" in src[:2000], (
         "core/reality_output_scrubber.py: module docstring does not name the QQ adapter call site"
     )
+
+
+@pytest.fixture(autouse=True)
+def admission_config(monkeypatch):
+    from core import config_loader
+    monkeypatch.setattr("core.qq_admission.get_config", lambda: config_loader.get_config())

@@ -664,10 +664,15 @@ def test_s5b_scheduler_uses_record_assistant_turn():
     )
 
 
-def test_s5c_sensor_aware_uses_record_assistant_turn():
-    """S5c: sensor_aware must use record_assistant_turn for memory + fanout."""
+def test_s5c_sensor_aware_emits_signal_without_direct_reply():
+    """Sensor candidates enter autonomy; only talk_owner may write/send a reply."""
     src = _source("core/scheduler/triggers/sensor_aware.py")
-    assert "record_assistant_turn" in src, (
-        "sensor_aware.py: record_assistant_turn not called — "
-        "sensor reply memory write may bypass turn_sink scrub"
-    )
+    assert "emit_trigger_signal" in src
+    assert "record_assistant_turn" not in src
+    assert "execute_prompt(" not in src
+
+
+@pytest.fixture(autouse=True)
+def admission_config(monkeypatch):
+    from core import config_loader
+    monkeypatch.setattr("core.qq_admission.get_config", lambda: config_loader.get_config())

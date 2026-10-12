@@ -118,3 +118,9 @@ async def test_successful_fast_path_executes_get_time_once(monkeypatch):
     await main.handle_message(_TIME_MESSAGE)
 
     assert execute.await_count == 1
+
+
+@pytest.fixture(autouse=True)
+def admission_config(monkeypatch):
+    from core import config_loader
+    monkeypatch.setattr("core.qq_admission.get_config", lambda: config_loader.get_config())

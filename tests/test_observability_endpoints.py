@@ -24,27 +24,10 @@ def _active(sandbox):
     sandbox.active_prompt_assets().write_text(json.dumps({"active_character": TEST_CHAR_ID}), encoding="utf-8")
 
 
-def test_growth_endpoints_empty_and_auth(sandbox, monkeypatch):
-    _active(sandbox)
+def test_retired_growth_routes_are_unavailable(sandbox, monkeypatch):
     client = _client(monkeypatch)
-    assert client.get("/growth/interests").status_code == 401
-    assert client.get("/growth/interests", headers=_headers()).json()["interests"] == []
-    assert client.get("/growth/works/not_real", headers=_headers()).json()["entries"] == []
-    assert client.get("/growth/notes/not_real", headers=_headers()).json()["entries"] == []
-    assert client.get("/growth/practice-log", headers=_headers()).json()["entries"] == []
-
-
-def test_work_reader_is_index_bounded(sandbox, monkeypatch):
-    _active(sandbox)
-    client = _client(monkeypatch)
-    root = sandbox.growth_works_dir("int_test", char_id=TEST_CHAR_ID)
-    root.mkdir(parents=True)
-    (root / "index.json").write_text(json.dumps([{"file": "20260712_1.md", "date": "2026-07-12"}]), encoding="utf-8")
-    (root / "20260712_1.md").write_text("作品正文", encoding="utf-8")
-    ok = client.get("/growth/works/int_test/20260712_1.md", headers=_headers())
-    assert ok.status_code == 200 and ok.json()["content"] == "作品正文"
-    assert client.get("/growth/works/int_test/not-in-index.md", headers=_headers()).status_code == 404
-    assert client.get("/growth/works/int_test/..%2Fsecret.md", headers=_headers()).status_code in (404, 422)
+    for path in ("/growth/interests", "/growth/works/not_real", "/growth/notes/not_real", "/growth/practice-log"):
+        assert client.get(path, headers=_headers()).status_code == 404
 
 
 def test_visual_spend_digest_and_group_empty_views(sandbox, monkeypatch):
@@ -207,7 +190,7 @@ def test_character_permissions_requires_auth_and_returns_shape(sandbox, monkeypa
     cats = {c["category"] for c in payload["categories"]}
     assert cats == {"info", "self", "schedule", "life", "desktop", "memory", "system", "fs", "phone_control", "mcp", "artifacts"}
     desktop = next(c for c in payload["categories"] if c["category"] == "desktop")
-    assert desktop["mode_restricted"] is True
+    assert desktop["mode_restricted"] is False
     info_cat = next(c for c in payload["categories"] if c["category"] == "info")
     assert info_cat["mode_restricted"] is False
 

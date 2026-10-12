@@ -364,3 +364,17 @@ Reality Task Manager receipt and expose only metadata (`task_id`, operation, siz
 never content or absolute paths. The receipt's `causation_ref.kind` is `tool_request` with the request
 fingerprint; it is not a `reality_turn`. Delete requires an explicit confirmation flag. Dream has no
 adapter or access to the Reality workspace.
+
+## 工单289：新增工具执行链归属
+
+这些工具复用当前角色的前台 dispatcher；只有明确启动的任务走 durable Work Session，均不产生第二个角色。
+
+- info：`continue_xiaohongshu_comments`, `read_xiaohongshu_images`, `read_xiaohongshu_author_posts`, `read_document_notes`, `write_document_note`, `observe_video_call_camera`, `invite_video_call`。
+- memory：`read_food_preferences`, `query_activity_records`, `read_message_context`, `pin_tool_result`, `unpin_tool_result`, `list_tool_result_pins`, `save_quote`, `search_quotes`, `read_quote`, `write_quote_note`, `read_hds_heart_rate`, `read_long_user_message`, `search_memory_dossiers`, `read_memory_dossier`, `search_dossier_events`, `update_memory_dossier`, `get_memory_consolidation_status`, `request_memory_consolidation`。
+- self_management：`list_self_capabilities`, `read_self_action_history`。
+- artifacts：`update_artifact`。
+- self：`self_db_tables`, `self_db_create_table`, `self_db_insert`, `self_db_query`, `self_db_update`, `self_db_delete`, `self_db_drop_table`, `self_tool_define`, `self_tool_list`, `self_tool_run`。
+- qzone：`qzone_get_feeds`, `qzone_get_posts`, `qzone_get_comments`, `qzone_publish`, `qzone_comment`, `qzone_set_like`, `qzone_delete_post`。
+- life：`get_listening_state`, `get_listening_queue`, `get_listening_history`, `get_track_note`, `write_track_note`, `choose_next_track`。
+
+`memory_consolidation` 是同角色的静默维护 Work Session，受独立配置、预算及前台让路约束，不直接发言。

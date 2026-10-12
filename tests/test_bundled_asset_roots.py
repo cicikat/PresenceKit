@@ -70,8 +70,8 @@ def test_fresh_layout_reads_packaged_default_and_seeds_without_legacy_roots(tmp_
 
     test_paths = DataPaths(mode="test", test_session_id="bundled_seed")
     test_paths._base = tmp_path / "runtime"
-    assert test_paths.lorebook().read_text(encoding="utf-8") == "entries: []\n"
-    assert json.loads(test_paths.jailbreak_entries().read_text(encoding="utf-8")) == {"entries": []}
+    assert not test_paths.lorebook(char_id="default").exists()
+    assert not test_paths.jailbreak_entries(char_id="default").exists()
     assert test_paths.relations().read_text(encoding="utf-8") == "default: {}\n"
     assert test_paths.blacklist().read_text(encoding="utf-8") == "[]\n"
 

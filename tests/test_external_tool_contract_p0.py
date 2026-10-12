@@ -123,7 +123,7 @@ async def test_desktop_probe_reads_both_buckets_with_frozen_char_id(monkeypatch)
     assert all(
         call == {
             "location": "杭州",
-            "categories": ["info", "desktop"],
+            "categories": ["info", "desktop", "self", "schedule", "life", "qzone"],
             "allowed_tool_names": {"p0_tool"},
         }
         for call in probe_prompt_calls

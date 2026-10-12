@@ -80,7 +80,7 @@ def test_period_and_festival_proposals_provide_factual_evidence(monkeypatch):
     from core.scheduler.triggers import festival, period
 
     monkeypatch.setattr(period, "_cfg", lambda: {"period_reminder": True})
-    monkeypatch.setattr(period, "_days_elapsed", lambda uid, today=None: 4)
+    monkeypatch.setattr(period, "_days_elapsed", lambda uid, today=None, **kwargs: 4)
     period_proposal = period.propose({"uid": "owner", "today": date(2026, 5, 4)})
     period_evidence = period_proposal.metadata["autonomy_evidence"][0]
     assert period_evidence == {"fact": "period_reminder_window", "stage": "current", "days_elapsed": 4}

@@ -447,7 +447,6 @@ async def test_post_process_capture_turn_retry_keeps_audit_extras(
               side_effect=RuntimeError("forced failure")),
         patch("core.post_process.slow_queue.enqueue", side_effect=_spy_enqueue),
         patch("core.memory.pending_perception.confirm_delivered", return_value=None),
-        patch("core.mood_helpers.maybe_mark_sleepy_from_time", new=AsyncMock(return_value=None)),
     ):
         await pipeline.post_process_critical(
             user_id="u1", content="hello", reply="hi", envelope=env, audit_extras=extras,

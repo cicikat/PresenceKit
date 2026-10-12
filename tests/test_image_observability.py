@@ -86,7 +86,7 @@ def test_endpoint_source_cursor_retention_and_auth(sandbox, monkeypatch):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('status', ['done', 'need_confirmation'])
+@pytest.mark.parametrize('status', ['done', 'refused'])
 async def test_phone_recognition_preserves_sensitive_stop(sandbox, monkeypatch, status):
     from tests.test_image_recognition import fake_transport
     from core.phone_control import vision_client
@@ -97,7 +97,7 @@ async def test_phone_recognition_preserves_sensitive_stop(sandbox, monkeypatch, 
     assert outcome.status == status and reason is None and not category
     record=rows(sandbox)[0]
     assert record['source'] == 'phone_control'
-    if status == 'need_confirmation':
+    if status == 'refused':
         assert record['dropped'] == 'sensitive' and 'caption' not in record
     else:
         assert 'recognized private page' in record['caption']

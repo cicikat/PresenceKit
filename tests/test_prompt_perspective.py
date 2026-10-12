@@ -1,5 +1,6 @@
 """Behavioral contracts for framework perspective and verbatim source material."""
 from datetime import date
+import time
 
 import pytest
 
@@ -14,7 +15,7 @@ def build_prompt(monkeypatch):
     monkeypatch.setattr(prompt_builder, "_load_style_hint", lambda **kwargs: "")
     monkeypatch.setattr(prompt_builder, "_format_realtime_awareness", lambda *args, **kwargs: "")
     monkeypatch.setattr("core.author_note_rotator.get_current_note", lambda **kwargs: "")
-    monkeypatch.setattr("core.user_relation.has_configured_relation", lambda uid: True)
+    monkeypatch.setattr("core.user_relation.has_configured_relation", lambda uid, **kwargs: True)
     monkeypatch.setattr("core.config_loader.get_config", lambda: {"anti_collapse": {"enabled": False}})
     monkeypatch.setattr("core.config_loader.get_user_display_name", lambda: "Test Reader")
 
@@ -60,7 +61,7 @@ def test_authored_and_quoted_system_sources_keep_original_words(build_prompt):
                  "mid_term", "4.2_stage_transcript", "web_recall", "11_author_note"):
         assert raw in layer(messages, name), name
     assert char.system_prompt == raw
-    assert "非角色记忆" in layer(messages, "5.1_user_facts")
+    assert "非角色记忆" not in layer(messages, "5.1_user_facts")
     assert "外部事实" in layer(messages, "web_recall")
     assert all("_layer" in m and "_provenance" in m for m in messages)
 
@@ -89,7 +90,7 @@ def test_failed_tool_evidence_keeps_source_and_status(build_prompt):
 
 
 def test_sensor_subject_and_provenance(build_prompt, monkeypatch):
-    monkeypatch.setattr("core.memory.health_state.load", lambda uid: {
+    monkeypatch.setattr("core.memory.health_state.load", lambda uid, **kwargs: {
         "phone_sensor_today": {"date": date.today().isoformat(), "steps": 300},
         "sleep_segments": [{"time": date.today().isoformat(), "duration_minutes": 420}],
     })
@@ -103,7 +104,7 @@ def test_sensor_subject_and_provenance(build_prompt, monkeypatch):
 def test_mood_prompt_does_not_resolve_global_character(monkeypatch):
     from core.mood_text import get_mood_text
     monkeypatch.setattr("core.mood_text._char_name", lambda: pytest.fail("global character lookup"))
-    assert get_mood_text({"current": "happy", "intensity": .5}, subject="你") == "你此刻：心情不错。"
+    assert "回合 mood-turn" in get_mood_text({"current": "happy", "intensity": .5, "has_signal": True, "schema_version": 2, "source_turn_id": "mood-turn", "source_at": time.time(), "expires_at": time.time()+60}, subject="你")
 
 
 @pytest.mark.parametrize("system_prompt", ["", "自定义角色规则", "记录：{perception_block}", "## 当前感知（实时，非记忆）\n{perception_block}"])
@@ -112,16 +113,16 @@ def test_state_injection_does_not_depend_on_authored_heading(build_prompt, sandb
     from core.observe import prompt_capture
     path = sandbox.mood_state(char_id=TEST_CHAR_ID)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps({"current": "happy", "intensity": .5}), encoding="utf-8")
+    path.write_text(json.dumps({"current": "happy", "intensity": .5, "has_signal": True, "schema_version": 2, "source_turn_id": "mood-turn", "source_at": time.time(), "expires_at": time.time()+60}), encoding="utf-8")
     character = Character(name="Scoped Companion", system_prompt=system_prompt)
     messages, meta = build_prompt(character=character, perception_block="跨通道接续 user {user_name}")
-    text = layer(messages, "1_system_prompt")
-    assert text.count("你此刻：心情不错。") == 1
+    text = layer(messages, "expression_afterglow") + layer(messages, "1.4_perception")
+    assert text.count("刚才回合 mood-turn 明确表达了 happy") == 1
     assert text.count("跨通道接续 user {user_name}") == 1
     assert character.system_prompt == system_prompt
     prompt_capture.capture("test_owner", messages, meta)
     snapshot = prompt_capture.get_snapshots("test_owner")[0]
-    assert any("你此刻：心情不错。" in item.get("content", "") for item in snapshot["layers"])
+    assert any("刚才回合 mood-turn 明确表达了 happy" in item.get("content", "") for item in snapshot["layers"])
 
 
 @pytest.mark.parametrize("raw", [None, "{broken", "[]", "{}"])
@@ -146,9 +147,9 @@ def test_thinking_mood_uses_scoped_state_without_global_name(sandbox, monkeypatc
     from core.thinking import _mood_hint
     path = sandbox.mood_state(char_id="other_character")
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text('{"current":"happy","intensity":0.5}', encoding="utf-8")
+    __import__("core.memory.mood_state", fromlist=["update"]).update("happy", .5, char_id="other_character", source_turn_id="mood-turn", source_at=time.time())
     monkeypatch.setattr("core.mood_text._char_name", lambda: pytest.fail("global character lookup"))
-    assert _mood_hint("other_character") == "你此刻：心情不错。"
+    assert "刚才回合 mood-turn 明确表达了 happy" in _mood_hint("other_character")
 
 
 @pytest.mark.asyncio
@@ -182,7 +183,7 @@ async def test_builder_rules_remain_valid_after_loop_tool_return(build_prompt, m
 
 @pytest.mark.parametrize("pronoun", ["她", "他", "祂", "TA", "它"])
 def test_selected_pronoun_reaches_framework_without_rewriting_sources(build_prompt, monkeypatch, pronoun):
-    monkeypatch.setattr("core.memory.user_facts.get_user_pronoun", lambda uid: pronoun)
+    monkeypatch.setattr("core.memory.user_facts.get_user_pronoun", lambda uid, **kwargs: pronoun)
     raw = "用户 user 说她：{user_pronoun}"
     messages, _ = build_prompt(user_identity_text=raw, diary_context=raw, tags={"emotion.down"})
     assert f"不需要为{pronoun}提供服务，不需要用官腔回复{pronoun}" in layer(messages, "1_system_prompt")

@@ -110,7 +110,7 @@ def test_chat_log_list_dates_uses_active_char(sandbox, registry, monkeypatch):
     _seed_active(sandbox, "character_b")
     _seed_event_log_day(sandbox, _TEST_OWNER, "character_b", "2026-06-06", "## 10:00\n**用户**：test\n")
 
-    result = asyncio.run(list_dates(char_id=None, auth="dummy"))
+    result = asyncio.run(list_dates(char_id=None, auth="dummy", x_presence_session=None))
 
     assert "2026-06-06" in result["dates"], (
         f"character_b event_log date must appear; got {result['dates']}"
@@ -126,7 +126,7 @@ def test_chat_log_get_day_uses_active_char(sandbox, registry, monkeypatch):
     _seed_active(sandbox, "character_b")
     _seed_event_log_day(sandbox, _TEST_OWNER, "character_b", "2026-06-06", "## 10:00\n**用户**：你好\n")
 
-    result = asyncio.run(get_day("2026-06-06", char_id=None, auth="dummy"))
+    result = asyncio.run(get_day("2026-06-06", char_id=None, auth="dummy", x_presence_session=None))
 
     assert result["date"] == "2026-06-06"
     assert not result.get("raw_fallback") or result["date"] == "2026-06-06"
@@ -146,8 +146,8 @@ def test_chat_log_explicit_char_id_reads_correct_bucket(sandbox, registry, monke
     # Only yexuan has a log file
     _seed_event_log_day(sandbox, _TEST_OWNER, TEST_CHAR_ID, "2026-06-05", "## 09:00\n**用户**：Companion内容\n")
 
-    result_yexuan = asyncio.run(list_dates(char_id=TEST_CHAR_ID, auth="dummy"))
-    result_character_b = asyncio.run(list_dates(char_id=None, auth="dummy"))
+    result_yexuan = asyncio.run(list_dates(char_id=TEST_CHAR_ID, auth="dummy", x_presence_session=None))
+    result_character_b = asyncio.run(list_dates(char_id=None, auth="dummy", x_presence_session=None))
 
     assert "2026-06-05" in result_yexuan["dates"], (
         f"yexuan bucket must contain 2026-06-05; got {result_yexuan['dates']}"
@@ -183,7 +183,7 @@ def test_chat_log_active_missing_returns_503(sandbox, registry, monkeypatch):
     monkeypatch.setattr(_pr, "resolve_path", lambda *a, **kw: resolve_called.append(a) or original_resolve(*a, **kw))
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(list_dates(char_id=None, auth="dummy"))
+        asyncio.run(list_dates(char_id=None, auth="dummy", x_presence_session=None))
 
     assert exc_info.value.status_code == 503
     assert not resolve_called, "resolve_path must not be called when active_character is invalid"
@@ -203,7 +203,7 @@ def test_chat_log_invalid_char_id_returns_422(sandbox, registry, monkeypatch):
     _seed_active(sandbox, "character_b")
 
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.run(list_dates(char_id="ghost_char_xyz", auth="dummy"))
+        asyncio.run(list_dates(char_id="ghost_char_xyz", auth="dummy", x_presence_session=None))
 
     assert exc_info.value.status_code == 422
 

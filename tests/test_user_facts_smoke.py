@@ -1,8 +1,8 @@
 """
 tests/test_user_facts_smoke.py
 ===============================
-Smoke test: verify user_facts global layer is injected correctly across
-all characters, and that scoped profile/identity remain isolated.
+Smoke test: verify user_facts, profile and identity are isolated by character,
+and explicitly supplied prompt facts are preserved.
 
 Run with:
     pytest tests/test_user_facts_smoke.py -v
@@ -46,7 +46,7 @@ TEST_FACTS = {
 def _get_user_facts_path() -> pathlib.Path:
     from core.memory.scope import MemoryScope
     from core.memory.path_resolver import resolve_path
-    scope = MemoryScope.global_scope(OWNER_UID)
+    scope = MemoryScope.reality_scope(OWNER_UID, TEST_CHAR_ID)
     return resolve_path(scope, "user_facts")
 
 
@@ -234,8 +234,8 @@ class TestPromptLayerInjection:
             f"Present layers: {list(layers.keys())}"
         )
         content = layers["5.1_user_facts"]
-        assert "跨角色通用" in content, "header must say cross-character"
-        assert "非角色记忆" in content, "header must say non-character memory"
+        assert "跨角色通用" not in content
+        assert "非角色记忆" not in content
         assert "preferred_language" in content or "Chinese" in content
 
     @pytest.mark.parametrize("char_id", CHARACTERS)
@@ -295,7 +295,7 @@ class TestScopedIsolation:
                 f"[{char_id}] own identity text not found in prompt"
             )
 
-    def test_user_facts_same_content_all_chars(self, monkeypatch):
+    def test_explicit_prompt_facts_are_preserved(self, monkeypatch):
         """All chars receive identical user_facts content."""
         facts_contents = {}
         for char_id in CHARACTERS:
@@ -446,7 +446,7 @@ class TestPipelineFetchContext:
         )
         assert "Asia/Shanghai" in uf_text
 
-    def test_fetch_context_user_facts_uid_only_no_char_bleed(self):
+    def test_fetch_context_user_facts_do_not_bleed(self):
         """user_facts_text is the same regardless of char_id."""
         results = {}
         for char_id in CHARACTERS:
@@ -455,9 +455,9 @@ class TestPipelineFetchContext:
             results[char_id] = ctx.get("user_facts_text", "")
 
         contents = list(results.values())
-        assert all(c == contents[0] for c in contents), (
-            f"user_facts_text differs across chars in fetch_context: {results}"
-        )
+        assert results[TEST_CHAR_ID]
+        assert results["character_b"] == ""
+        assert results[TEST_PEER_CHAR_ID] == ""
         assert contents[0] != "", "user_facts_text should be non-empty"
 
     def test_fetch_context_user_identity_is_char_scoped(self):
@@ -503,7 +503,7 @@ class TestPipelineFetchContext:
 
         # user_facts_text should be identical across all chars
         facts_values = list(facts_results.values())
-        assert all(v == facts_values[0] for v in facts_values), (
-            f"user_facts_text should be same across chars, got: {facts_results}"
-        )
+        assert facts_results[TEST_CHAR_ID]
+        assert facts_results["character_b"] == ""
+        assert facts_results[TEST_PEER_CHAR_ID] == ""
 

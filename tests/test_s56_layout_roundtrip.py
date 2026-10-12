@@ -133,7 +133,7 @@ def test_mood_write_new_path_and_reload(sandbox):
     """save() 写新路径 → load() 从新路径恢复正确状态。"""
     from core.memory import mood_state
 
-    payload = {"current": "sad", "intensity": 0.5, "previous": "neutral", "updated_at": time.time()}
+    payload = {"current": "sad", "intensity": 0.5, "previous": "neutral", "updated_at": time.time(), "schema_version": 2, "source_at": time.time(), "source_turn_id": "roundtrip", "has_signal": True, "expires_at": time.time()+60}
     mood_state.save(payload)
 
     # mood_state.save/load default to yexuan; roundtrip test checks yexuan path.

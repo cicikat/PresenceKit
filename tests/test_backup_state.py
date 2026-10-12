@@ -98,7 +98,7 @@ def test_windows_marker_pid_alive_is_running_not_unknown(tmp_path: Path, monkeyp
         "paths_for_installation",
         lambda _installation: SimpleNamespace(service_state=lambda: marker),
     )
-    monkeypatch.setattr(backup.os, "name", "nt")
+    monkeypatch.setattr(backup, "os", SimpleNamespace(name="nt", getpid=os.getpid))
     monkeypatch.setattr(backup, "_pid_is_alive", lambda pid: True if pid == os.getpid() else None)
 
     assert backup.service_state(tmp_path) is backup.ServiceState.RUNNING
@@ -115,7 +115,7 @@ def test_windows_stale_marker_falls_through_to_offline_scan(tmp_path: Path, monk
         "paths_for_installation",
         lambda _installation: SimpleNamespace(service_state=lambda: marker),
     )
-    monkeypatch.setattr(backup.os, "name", "nt")
+    monkeypatch.setattr(backup, "os", SimpleNamespace(name="nt", getpid=os.getpid))
     monkeypatch.setattr(backup, "_pid_is_alive", lambda _pid: False)
 
     class FakeCompleted:
@@ -143,7 +143,7 @@ def test_linux_service_scan_ignores_backup_process_itself(tmp_path: Path, monkey
         "paths_for_installation",
         lambda _installation: SimpleNamespace(service_state=lambda: tmp_path / "missing-marker"),
     )
-    monkeypatch.setattr(backup.os, "name", "posix")
+    monkeypatch.setattr(backup, "os", SimpleNamespace(name="posix", getpid=os.getpid))
     monkeypatch.setitem(sys.modules, "psutil", fake_psutil)
 
     assert backup.service_state(tmp_path) is backup.ServiceState.OFFLINE
@@ -165,7 +165,7 @@ def test_linux_service_scan_keeps_other_relative_main_process_fail_closed(tmp_pa
         "paths_for_installation",
         lambda _installation: SimpleNamespace(service_state=lambda: tmp_path / "missing-marker"),
     )
-    monkeypatch.setattr(backup.os, "name", "posix")
+    monkeypatch.setattr(backup, "os", SimpleNamespace(name="posix", getpid=os.getpid))
     monkeypatch.setitem(sys.modules, "psutil", fake_psutil)
 
     assert backup.service_state(tmp_path) is backup.ServiceState.UNKNOWN

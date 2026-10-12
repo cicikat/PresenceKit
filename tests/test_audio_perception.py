@@ -290,6 +290,7 @@ def test_http_scopes_and_legacy_chat_signatures(configured):
 
 def test_qq_voice_only_is_accepted(monkeypatch):
     from core import qq_adapter
+    monkeypatch.setattr("core.qq_admission.get_config", lambda: {"scheduler": {"owner_id": "fixture"}})
     monkeypatch.setattr(qq_adapter, "is_blacklisted", lambda _: False)
     value = qq_adapter._parse_event({"post_type": "message", "message_type": "private", "user_id": "fixture",
                                     "message": [{"type": "record", "data": {"url": "https://example.test/voice.amr"}}]})
@@ -496,3 +497,9 @@ def test_provider_tone_with_a_new_label_still_cannot_override_failed_analysis():
 def test_snapshot_reports_voice_analysis_stats(configured):
     stats = audio.snapshot()["voice_analysis_stats"]
     assert {"impressions", "feature_calls", "feature_ms_avg", "feature_skipped_budget"} <= set(stats)
+
+
+@pytest.fixture(autouse=True)
+def admission_config(monkeypatch):
+    from core import config_loader
+    monkeypatch.setattr("core.qq_admission.get_config", lambda: config_loader.get_config())

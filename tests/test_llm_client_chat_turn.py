@@ -263,7 +263,7 @@ async def test_chat_turn_records_rejected_tool_request_category(monkeypatch):
     fake_mc.client.chat.completions.create = boom
     captured = {}
     monkeypatch.setattr(llm_client, "get_model_client", lambda *a, **k: fake_mc)
-    monkeypatch.setattr(llm_client, "_record_api_call", lambda **kwargs: captured.update(kwargs))
+    monkeypatch.setattr("core.api_call_log.append", lambda **kwargs: captured.update(kwargs))
 
     with pytest.raises(FakeRejected):
         await llm_client.chat_turn(

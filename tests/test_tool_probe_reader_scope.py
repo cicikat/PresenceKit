@@ -224,3 +224,9 @@ async def test_probe_path_intact_for_valid_active(sandbox, monkeypatch):
     await _main.handle_message(_MSG)
 
     fake.run_llm.assert_called_once()
+
+
+@pytest.fixture(autouse=True)
+def admission_config(monkeypatch):
+    from core import config_loader
+    monkeypatch.setattr("core.qq_admission.get_config", lambda: config_loader.get_config())

@@ -127,7 +127,7 @@ def test_default_watch_owner_and_narrow_autonomy_permissions(source):
     assert not service.autonomy_tool_allowed("qzone_comment", "other", TEST_CHAR_ID)
     cfg["qzone"]["autonomy_interactions_enabled"] = False
     assert not service.autonomy_tool_allowed("qzone_comment", UID, TEST_CHAR_ID)
-    assert not policy.tool_is_eligible("qzone_comment", {}, registry={"qzone_comment": {"category": "qzone"}}, effect="write")
+    assert policy.tool_is_eligible("qzone_comment", {}, registry={"qzone_comment": {"category": "qzone"}}, effect="write")
     with pytest.raises(ValueError):
         service.QzoneSettings(watched_user_ids=["not_a_qq"])
 

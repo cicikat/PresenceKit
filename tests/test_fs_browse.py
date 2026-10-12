@@ -370,8 +370,12 @@ def test_fs_list_without_path_returns_discovery_map(monkeypatch, tmp_path):
 
 
 def test_unc_and_ads_denied(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+
     _patch_fs_config(monkeypatch, tmp_path)
     assert fs_browse.fs_read(r"\\server\share\file.txt", user_id=_UID, char_id=_CHAR) == "unc_network_denied"
+    # ADS is a Windows path rule; do not mutate the shared os module on Linux.
+    monkeypatch.setattr(fs_browse, "os", SimpleNamespace(name="nt"))
     ads = str(tmp_path / "allow" / "file.txt") + ":secret"
     assert fs_browse.fs_read(ads, user_id=_UID, char_id=_CHAR) == "ads_denied"
 

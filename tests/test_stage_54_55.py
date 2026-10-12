@@ -56,6 +56,8 @@ async def test_projection_carries_speakers_and_group_attribution_prompt(sandbox,
 
     monkeypatch.setattr(llm_client, "get_model_client", lambda _: SimpleNamespace(
         name="summary-preset",
+        prompt_style="narrative",
+        params={},
         model="test",
         provider_kind="openai",
         api_protocol="chat_completions",

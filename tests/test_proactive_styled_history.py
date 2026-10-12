@@ -37,7 +37,7 @@ async def test_display_style_reloaded_from_ledger_not_memory(sandbox, monkeypatc
                  visible_reply='<hl>Hello</hl>')
     monkeypatch.setattr(chat_log, '_owner_qq', lambda: 'fixture-owner')
     monkeypatch.setattr(chat_log, '_resolve_char_id', lambda _: DEFAULT_CHAR_ID)
-    result = await chat_log.get_day(datetime.now().strftime('%Y-%m-%d'))
+    result = await chat_log.get_day(datetime.now().strftime('%Y-%m-%d'), x_presence_session=None)
     assert result['entries'][0]['assistant'] == 'Hello'
     assert result['entries'][0]['assistant_display_text'] == '<hl>Hello</hl>'
     assert '<hl>' not in str(short_term.load('fixture-owner', char_id=DEFAULT_CHAR_ID))

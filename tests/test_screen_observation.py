@@ -32,7 +32,7 @@ def test_active_device_needs_fresh_consent_and_recent_input():
 @pytest.mark.asyncio
 async def test_request_correlated_single_claim_and_private_receipt(monkeypatch):
     from core.perception import vlm_client
-    async def describe(image):
+    async def describe(image, hint=""):
         assert image == b"fresh"
         return vlm_client.VisualObservation("desk", "working", .9, False, "editing"), None
     monkeypatch.setattr(vlm_client, "describe_with_status", describe)
@@ -87,7 +87,7 @@ async def test_owner_and_disabled_gates(monkeypatch):
 @pytest.mark.asyncio
 async def test_sensitive_never_reaches_role(monkeypatch):
     from core.perception import vlm_client
-    async def describe(image):
+    async def describe(image, hint=""):
         return vlm_client.VisualObservation("desk", "working", .9, True, "secret"), None
     monkeypatch.setattr(vlm_client, "describe_with_status", describe)
     service.poll("desktop", "d", True, 1)

@@ -45,7 +45,7 @@ def test_screen_route_chain_carries_both_connections_and_the_timeout(config):
 @pytest.mark.asyncio
 async def test_shadow_chain_falls_back_when_the_primary_is_unreachable(config, monkeypatch):
     seen = []
-    observation = object()
+    observation = vlm_client.VisualObservation("desk", "working", .9, False, "editing")
 
     async def fake(cfg, image, hint):
         seen.append(cfg["model"])

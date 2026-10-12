@@ -69,7 +69,7 @@ def test_birthday_propose_preserves_four_time_windows(monkeypatch):
 def test_period_propose_uses_real_windows(monkeypatch):
     from core.scheduler.triggers import period
 
-    monkeypatch.setattr(period, "_days_elapsed", lambda uid, today=None: today.day)
+    monkeypatch.setattr(period, "_days_elapsed", lambda uid, today=None, **kwargs: today.day)
 
     in_period = period.propose({"uid": "u1", "today": date(2026, 5, 3)})
     upcoming = period.propose({"uid": "u1", "today": date(2026, 5, 29)})

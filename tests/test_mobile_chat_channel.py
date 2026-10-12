@@ -66,7 +66,7 @@ async def test_desktop_chat_keeps_desktop_provenance(monkeypatch):
 
     await chat.desktop_chat({"message": "你好"}, _auth=True)
 
-    assert calls == [("你好", "desktop", {"reply_to": None})]
+    assert calls == [("你好", "desktop", {"reply_to": None, "trusted_user_text": "你好"})]
 
 
 def test_mobile_probe_prompt_excludes_desktop_tools(monkeypatch):

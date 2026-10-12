@@ -5,15 +5,15 @@ tests/test_pipeline_user_facts_wiring.py
 P1-4: pipeline fetch_context / build_prompt user_facts wiring tests.
 
 Covers:
-1.  fetch_context calls user_facts.format_for_prompt(uid)
+1.  fetch_context calls user_facts.format_for_prompt(uid, char_id=char_id)
 2.  fetch_context returns "user_facts_text" key in context dict
 3.  build_prompt passes user_facts_text from context to prompt_builder.build()
-4.  yexuan and character_b with same uid see the same user_facts (uid-only global)
+4.  characters with the same uid read their own facts independently
 5.  scoped profile and identity still use char_id (isolation unchanged)
-6.  user_facts injection does NOT require char_id
+6.  omitted char_id resolves the active character for compatibility callers
 7.  no user_facts on disk → user_facts_text = '' → layer 5.1 absent, no error
 8.  user_facts loaded → user_facts_text non-empty → layer 5.1 present
-9.  no yexuan fallback: format_for_prompt is called with uid only, not char_id
+9.  facts paths include the explicitly frozen character scope
 """
 
 import asyncio
@@ -118,7 +118,7 @@ def _apply_fetch_stubs(monkeypatch, user_facts_return: str = ""):
     monkeypatch.setattr(_ms, "get_current", lambda *a, **kw: "neutral")
     monkeypatch.setattr(_ms, "update", lambda *a, **kw: None)
     monkeypatch.setattr(_ur, "get_relation", lambda *a, **kw: {"priority": 1})
-    monkeypatch.setattr(_uf, "format_for_prompt", lambda uid: user_facts_return)
+    monkeypatch.setattr(_uf, "format_for_prompt", lambda uid, **kwargs: user_facts_return)
     try:
         monkeypatch.setattr(_dc, "load", lambda *a, **kw: "")
     except Exception:
@@ -141,7 +141,7 @@ def test_fetch_context_calls_user_facts_format_for_prompt(chars_tree, sandbox, r
 
     import core.memory.user_facts as _uf
     calls = []
-    monkeypatch.setattr(_uf, "format_for_prompt", lambda uid: calls.append(uid) or "")
+    monkeypatch.setattr(_uf, "format_for_prompt", lambda uid, *, char_id: calls.append((uid, char_id)) or "")
 
     pipeline = _make_pipeline(TEST_CHAR_ID, registry)
     _write_active(sandbox, TEST_CHAR_ID)
@@ -150,7 +150,7 @@ def test_fetch_context_calls_user_facts_format_for_prompt(chars_tree, sandbox, r
         pipeline.fetch_context("u99", "hello")
     )
 
-    assert calls == ["u99"], f"Expected format_for_prompt called once with 'u99', got {calls}"
+    assert calls == [("u99", TEST_CHAR_ID)], f"Expected format_for_prompt called once with 'u99', got {calls}"
 
 
 # ── 2. fetch_context returns user_facts_text in context dict ─────────────────
@@ -220,9 +220,9 @@ def test_same_uid_both_chars_get_same_facts(sandbox):
     uf.save_user_facts("shareduser", {"preferred_language": "zh-CN"})
 
     text_a = uf.format_for_prompt("shareduser")
-    text_b = uf.format_for_prompt("shareduser")
+    text_b = uf.format_for_prompt("shareduser", char_id="character_b")
 
-    assert text_a == text_b
+    assert text_b == ""
     assert "preferred_language" in text_a
 
 
@@ -245,7 +245,7 @@ def test_profile_path_scoped_by_char_id(sandbox):
 # ── 6. user_facts injection does NOT require char_id ─────────────────────────
 
 def test_user_facts_format_for_prompt_no_char_id_argument(sandbox):
-    """format_for_prompt takes only uid — calling without char_id must not raise."""
+    """Compatibility callers resolve the active character when char_id is omitted."""
     from core.memory import user_facts as uf
     uf.save_user_facts("u_nci", {"timezone": "UTC"})
 
@@ -320,14 +320,14 @@ def test_user_facts_present_layer_51_in_build(sandbox):
 
 # ── 9. no yexuan fallback: global_scope path has no char_id segment ───────────
 
-def test_user_facts_path_is_global_no_char_id(sandbox):
-    """user_facts path must not contain any char_id (uid-only global)."""
+def test_user_facts_path_contains_frozen_char_id(sandbox):
+    """user_facts paths carry both uid and the frozen character."""
     from core.memory.path_resolver import resolve_path
 
-    scope = MemoryScope.global_scope("u_global")
+    scope = MemoryScope.reality_scope("u_global", TEST_CHAR_ID)
     p = str(resolve_path(scope, "user_facts")).replace("\\", "/")
 
-    assert TEST_CHAR_ID not in p
+    assert TEST_CHAR_ID in p
     assert "character_b" not in p
     assert "u_global" in p
     # Confirm it ends with user_facts.json

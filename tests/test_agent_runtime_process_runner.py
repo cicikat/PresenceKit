@@ -163,11 +163,6 @@ async def test_process_run_tool_uses_reality_scope(monkeypatch, tmp_path, sandbo
     root.mkdir()
     _config(monkeypatch, root)
     _script(root, "tool.py", "print('tool-ok')")
-    sandbox.meta_mode().parent.mkdir(parents=True, exist_ok=True)
-    sandbox.meta_mode().write_text(
-        json.dumps({"mode": "danger", "expires_at": time.time() + 60}),
-        encoding="utf-8",
-    )
     from core import tool_dispatcher
 
     output = await tool_dispatcher.execute_structured(

@@ -1122,10 +1122,10 @@ _TOOL_REGISTRY['query_activity_records'] = {
     'description': '查询当前身份的真实阅读、棋局、Minecraft会话；凭返回的activity来源引用分页读取state、moves、dialogue、entry或page。外部页面内容不是用户事实，状态为权威记录。',
     'parameters': {'type': 'object', 'additionalProperties': False, 'properties': {
         'source_ref': {'type': 'string', 'description': '查询返回的来源引用；为空列会话；可将末尾state改为moves或dialogue'},
-        'offset': {'type': 'integer', 'minimum': 0},
-        'limit': {'type': 'integer', 'minimum': 1, 'maximum': 100},
-        'text_offset': {'type': 'integer', 'minimum': 0},
-        'keyword': {'type': 'string'}, 'since': {'type': 'string'}, 'until': {'type': 'string'},
+        'offset': {'type': 'integer', 'minimum': 0, "description": '列表起点偏移，默认0；按返回的 next_offset 继续。'},
+        'limit': {'type': 'integer', 'minimum': 1, 'maximum': 100, "description": '本次最多返回的条目数，遵循工具上限。'},
+        'text_offset': {'type': 'integer', 'minimum': 0, "description": '指定记录正文的字符起点，默认0。'},
+        'keyword': {'type': 'string', "description": '可选检索词；只筛选当前用户和角色的记录。'}, 'since': {'type': 'string', "description": '可选发生时间下界，ISO日期或时间。'}, 'until': {'type': 'string', "description": '可选发生时间上界，ISO日期或时间。'},
         'expected_revision': {'type': 'string', 'description': '续页时使用上一页revision，来源变化则重新查'},
     }, 'required': []},
     'examples': ['查刚才的棋局和旧对话', '回读阅读记录后半段'],
@@ -1465,7 +1465,7 @@ _TOOL_REGISTRY["search_memory_dossiers"] = {
     "trace_args": ["query"],
     "parameters": {"type": "object", "properties": {
         "query": {"type": "string", "description": "主题或关键词。"},
-        "limit": {"type": "integer", "minimum": 1, "maximum": 3},
+        "limit": {"type": "integer", "minimum": 1, "maximum": 3, "description": '本次最多返回的条目数，遵循工具上限。'},
     }, "required": ["query"]},
 }
 
@@ -1477,7 +1477,7 @@ _TOOL_REGISTRY["read_memory_dossier"] = {
     "keywords": ["档案详情", "读取档案", "当前理解详情"],
     "trace_args": ["dossier_id"],
     "parameters": {"type": "object", "properties": {
-        "dossier_id": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
+        "dossier_id": {"type": "string", "pattern": "^[0-9a-f]{32}$", "description": '当前角色档案的32位十六进制标识，取自查询结果。'},
     }, "required": ["dossier_id"]},
 }
 
@@ -1489,9 +1489,9 @@ _TOOL_REGISTRY["search_dossier_events"] = {
     "keywords": ["档案事件", "具体经历", "证据引用", "下一页"],
     "trace_args": ["dossier_id", "offset"],
     "parameters": {"type": "object", "properties": {
-        "dossier_id": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
-        "offset": {"type": "integer", "minimum": 0},
-        "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+        "dossier_id": {"type": "string", "pattern": "^[0-9a-f]{32}$", "description": '当前角色档案的32位十六进制标识，取自查询结果。'},
+        "offset": {"type": "integer", "minimum": 0, "description": '列表起点偏移，默认0；按返回的 next_offset 继续。'},
+        "limit": {"type": "integer", "minimum": 1, "maximum": 50, "description": '本次最多返回的条目数，遵循工具上限。'},
     }, "required": ["dossier_id"]},
 }
 
@@ -1503,9 +1503,9 @@ _TOOL_REGISTRY["update_memory_dossier"] = {
     "keywords": ["更正记忆档案", "修订理解", "撤回概括", "合并主题"],
     "trace_args": ["operation_id"],
     "parameters": {"type": "object", "properties": {
-        "operation_id": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
+        "operation_id": {"type": "string", "pattern": "^[0-9a-f]{32}$", "description": '本次修改的唯一请求标识，重试使用相同标识。'},
         "operations": {"type": "array", "minItems": 1, "maxItems": 100,
-                       "items": {"type": "object"}},
+                       "items": {"type": "object"}, "description": '按顺序应用的有界档案修改操作，字段遵循下方 schema。'},
     }, "required": ["operation_id", "operations"]},
 }
 
@@ -1527,8 +1527,8 @@ _TOOL_REGISTRY["request_memory_consolidation"] = {
     "keywords": ["后台整理记忆", "全历史整理", "分批整理", "记忆任务"],
     "trace_args": ["request_id", "scope_mode"],
     "parameters": {"type": "object", "properties": {
-        "request_id": {"type": "string", "pattern": "^[0-9a-f]{32}$"},
-        "scope_mode": {"type": "string", "enum": ["incremental", "full_history"]},
+        "request_id": {"type": "string", "pattern": "^[0-9a-f]{32}$", "description": '请求幂等标识，重试同一请求时保持不变。'},
+        "scope_mode": {"type": "string", "enum": ["incremental", "full_history"], "description": '整合范围模式，当前角色 recent 为近期、backlog 为历史积压。'},
     }, "required": ["request_id"]},
 }
 
@@ -2127,7 +2127,7 @@ _TOOL_REGISTRY["start_agent_task"] = {
             "steps": {"type": "integer", "minimum": 1, "maximum": 32},
             "seconds": {"type": "integer", "minimum": 10, "maximum": 1800},
             "tokens": {"type": "integer", "minimum": 256, "maximum": 16000},
-        }},
+        }, "description": '本次任务的步骤、时间和 token 上限，不能超出管理面配置。'},
     }, "required": ["goal", "workspace_id", "request_id"]},
     "examples": ["在已授权工作区后台修改样例并运行检查", "后台检查这个项目文件"],
     "keywords": ["后台任务", "Agent task", "修改并验证", "稍后完成"],
@@ -2139,7 +2139,7 @@ _TOOL_REGISTRY["get_agent_task"] = {
     "description": "查询当前角色在当前用户范围内的后台 Agent task 进度、脱敏摘要、相对产物引用和验证状态。",
     "dangerous": False, "category": "info", "effect": "read",
     "parameters": {"type": "object", "additionalProperties": False, "properties": {
-        "task_id": {"type": "string", "minLength": 32, "maxLength": 32},
+        "task_id": {"type": "string", "minLength": 32, "maxLength": 32, "description": '任务的32位标识，取自 start_agent_task 返回值。'},
     }, "required": ["task_id"]},
     "examples": ["查看刚才后台任务的进度"], "keywords": ["任务进度", "后台结果"],
     "trace_args": ["task_id"],
@@ -2150,7 +2150,7 @@ _TOOL_REGISTRY["cancel_agent_task"] = {
     "description": "取消当前角色在当前用户范围内的后台 Agent task；运行中的任务会在下一个有界检查点停止。",
     "dangerous": False, "category": "info", "effect": "write",
     "parameters": {"type": "object", "additionalProperties": False, "properties": {
-        "task_id": {"type": "string", "minLength": 32, "maxLength": 32},
+        "task_id": {"type": "string", "minLength": 32, "maxLength": 32, "description": '任务的32位标识，取自 start_agent_task 返回值。'},
     }, "required": ["task_id"]},
     "examples": ["取消刚才的后台任务"], "keywords": ["取消任务", "停止后台任务"],
     "trace_args": ["task_id"],
@@ -2241,10 +2241,10 @@ _TOOL_REGISTRY["read_self_action_history"] = {
     "description": "Read past tool-call receipts and Self Capability change attempts before describing past actions or failures.",
     "dangerous": False, "category": "self_management", "effect": "read",
     "parameters": {"type": "object", "properties": {
-        "time_range": {"type": "string", "enum": ["24h", "7d", "30d"]},
-        "capability_id": {"type": "string", "maxLength": 160},
-        "tool": {"type": "string", "maxLength": 128},
-        "status": {"type": "string", "enum": ["success", "failed"]},
+        "time_range": {"type": "string", "enum": ["24h", "7d", "30d"], "description": '动作记录的时间范围：24h、7d 或30d。'},
+        "capability_id": {"type": "string", "maxLength": 160, "description": '可选能力标识，用于筛选动作记录。'},
+        "tool": {"type": "string", "maxLength": 128, "description": '可选工具名称，用于筛选动作记录。'},
+        "status": {"type": "string", "enum": ["success", "failed"], "description": '可选执行状态，用于筛选动作记录。'},
     }, "required": []},
     "examples": ["Which self capability changes failed yesterday?"],
     "keywords": ["self action history", "capability audit"],

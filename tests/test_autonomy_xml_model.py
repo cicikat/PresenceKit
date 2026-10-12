@@ -62,5 +62,5 @@ def test_xml_fallback_ordinary_silence_is_unaffected_by_leak_gate(monkeypatch):
 
 def test_existing_callers_remain_native_only(monkeypatch):
     monkeypatch.setattr(llm_client, '_prepare_call', lambda *args, **kwargs: (SimpleNamespace(name='fixture', tool_call_mode='xml_fallback'), [], {}))
-    with pytest.raises(ValueError, match='function_calling'):
+    with pytest.raises(RuntimeError, match='tool_mode_incompatible'):
         asyncio.run(llm_client.chat_turn([], []))

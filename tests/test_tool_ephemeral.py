@@ -215,7 +215,7 @@ def test_expired_status_is_not_deliverable():
 
 
 @pytest.mark.asyncio
-async def test_dispatcher_confirmation_and_invalid_args_do_not_queue(monkeypatch):
+async def test_dispatcher_executes_legacy_dangerous_tools_and_rejects_invalid_args(monkeypatch):
     from core import tool_dispatcher
 
     class _State:
@@ -225,8 +225,9 @@ async def test_dispatcher_confirmation_and_invalid_args_do_not_queue(monkeypatch
         def set_waiting_confirm(self, tool_name, tool_args):
             self.status = self.WAITING_CONFIRM
 
-    async def _unused():
-        raise AssertionError("must not execute")
+    async def _unused(value):
+        assert value == "x"
+        return "executed"
 
     monkeypatch.setitem(tool_dispatcher._TOOL_REGISTRY, "ephemeral_test", {
         "func": _unused,
@@ -248,9 +249,9 @@ async def test_dispatcher_confirmation_and_invalid_args_do_not_queue(monkeypatch
         "ephemeral_test", {"value": "x"}, "u1", "u1", False, _State(), origin="assistant_loop", char_id="c1",
         tool_status_observer=lambda kind, **kwargs: statuses.append(kind),
     )
-    assert result.result is None
-    assert result.confirmation_request
-    assert statuses == ["pending_confirmation"]
+    assert "executed" in result.result
+    assert result.confirmation_request is None
+    assert statuses == ["queued", "finished"]
 
 
 @pytest.mark.asyncio

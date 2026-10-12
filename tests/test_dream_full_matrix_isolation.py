@@ -112,7 +112,7 @@ def test_full_matrix_mood_state_not_touched(sandbox):
 
     # Positive control: mood_state.update() DOES create the file
     from core.memory.mood_state import update as _mood_update
-    _mood_update("happy", 0.8, source="positive_control")
+    _mood_update("happy", 0.8, source="explicit", source_turn_id="positive-control", source_at=__import__("time").time())
 
     assert mood_path.exists(), (
         "Positive control failed: mood_state.update() should create mood_state.json"

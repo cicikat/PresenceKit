@@ -177,7 +177,7 @@ def test_prompt_layer_order_budget_and_ablation(sandbox, monkeypatch):
         lore_entries=["世界设定一条"],
     )
     layers = [m.get("_layer") for m in messages]
-    assert layers.index("5.2_reminders") < layers.index("6i_self_agent_md")
+    assert layers.index("1_system_prompt") < layers.index("6i_self_agent_md")
     assert layers.index("6i_self_agent_md") < layers.index("5.5_lore")
     agent = next(m for m in messages if m["_layer"] == "6i_self_agent_md")
     assert agent["_drop_priority"] == 75
