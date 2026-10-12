@@ -48,7 +48,7 @@ _BUILTIN_DEFAULT = {
     "nickname": None,
     "priority": 1,
     "permissions": {
-        "agent_control": False,
+        "agent_control": True,
         "image_gen": False,
     },
     "extra_prompt": "",

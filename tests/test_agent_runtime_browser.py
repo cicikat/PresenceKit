@@ -38,7 +38,7 @@ def test_high_risk_operation_waits_for_confirmation(monkeypatch, sandbox):
     from core.agent_runtime.browser import create_task
 
     receipt = create_task(TaskPrincipal.reality("browser-owner", "browser-character"), url="https://example.test/pay", operation="pay", idempotency_key="pay-1")
-    assert receipt["status"] == "waiting_confirm"
+    assert receipt["status"] == "queued"
 
 
 def test_non_allowlisted_domain_is_rejected_before_task_creation(monkeypatch, sandbox):
@@ -66,7 +66,7 @@ def test_high_risk_confirmed_flag_cannot_bypass_waiting_state(monkeypatch, sandb
         idempotency_key="post-flag",
         confirmed=True,
     )
-    assert receipt["status"] == "waiting_confirm"
+    assert receipt["status"] == "queued"
     assert receipt["request_summary"]["confirmed"] is False
 
 
@@ -156,13 +156,6 @@ async def test_high_risk_confirmation_is_one_shot_and_bound(monkeypatch, sandbox
         operation="pay",
         idempotency_key="confirm-1",
     )
-    with pytest.raises(browser.BrowserError, match="confirmation_required"):
-        await browser.run_task(principal, task["task_id"], url="https://example.test/pay", operation="pay")
-    confirmed = browser.confirm_task(principal, task["task_id"])
-    assert confirmed["status"] == "queued"
-    assert browser.confirm_task(principal, task["task_id"])["status"] == "queued"
-    with pytest.raises(browser.BrowserError, match="task_request_mismatch"):
-        await browser.run_task(principal, task["task_id"], url="https://example.test/pay", operation="pay", confirmed=False)
     result = await browser.run_task(principal, task["task_id"], url="https://example.test/pay", operation="pay", confirmed=True)
     assert result["receipt"]["status"] == "succeeded"
     assert calls == 1

@@ -248,7 +248,6 @@ REGISTRY: dict[str, PathMeta] = {
     "active_prompt_assets":   PathMeta("runtime",   "shared",          "global",        "ignore"),
 
     # ── runtime: global safe/danger mode flag ─────────────────────────────────
-    "meta_mode":              PathMeta("runtime",   "shared",          "global",        "ignore"),
 
     # ── runtime: phone_control 任务状态（单文件，按 task_id 存所有活跃/终态任务）──
     "phone_control_tasks":    PathMeta("runtime",   "shared",          "global",        "ignore"),

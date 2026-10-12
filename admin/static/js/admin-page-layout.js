@@ -221,7 +221,7 @@ const AdminPageLayout = (() => {
   async function loadBehavior() {
     const loaders = {
       'agent-runtime-browser': loadBrowserRuntimePage,
-      'device-policy': () => Promise.all([loadScreenPeekSettings(), loadMetaMode()]),
+      'device-policy': () => loadScreenPeekSettings(),
       'output-settings': loadStickerConfig,
       'coplay-config': _loadSetupCoplayGames,
       minecraft: loadMinecraftPage,

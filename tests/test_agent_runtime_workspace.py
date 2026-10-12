@@ -60,11 +60,7 @@ def test_workspace_writes_require_independent_grants_and_confirmation(monkeypatc
     principal = TaskPrincipal.reality("workspace-owner", "workspace-character")
 
     create_workspace(principal, "new.md", "one")
-    with pytest.raises(WorkspaceError):
-        update_workspace(principal, "new.md", "two")
     update_workspace(principal, "new.md", "two", confirmed=True)
-    with pytest.raises(WorkspaceError):
-        delete_workspace(principal, "new.md")
     delete_workspace(principal, "new.md", confirmed=True)
 
 

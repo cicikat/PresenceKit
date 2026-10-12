@@ -1,3 +1,7 @@
+# 工单 288 权限更新
+
+角色工具默认全开，不再设 safe/danger 模式，不要求执行风险说明或二次确认。用户可在管理面手动调整工具及角色权限；首次配置与连接检查提供提示。`/system/meta-mode` 已删除，消费端不得再依赖该接口。鉴权、来源、参数、角色范围和实际依赖检查仍适用。
+
 # docs/tools.md — 工具系统
 
 272 B：QQ 空间发布、评论、点赞及有界只读查询走独立 `qzone` 分类、owner/角色/账号闸门与标准 portable schema；详见 [qzone-integration.md](qzone-integration.md)。

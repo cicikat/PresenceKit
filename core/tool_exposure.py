@@ -14,9 +14,9 @@ from dataclasses import dataclass
 _LEGACY_CATEGORY_EXPANSION = {"info": ("self", "schedule", "life", "qzone")}
 
 _DEFAULTS = {
-    "path_a": {"categories": ["info", "self", "schedule", "life", "desktop"], "tools": None, "exclude_tools": []},
+    "path_a": {"categories": ["info", "self", "schedule", "life", "desktop", "memory", "artifacts", "system", "fs", "phone_control", "mcp", "qzone"], "tools": None, "exclude_tools": []},
     "path_c": {
-        "categories": ["info", "self", "schedule", "life", "desktop", "memory", "artifacts"],
+        "categories": ["info", "self", "schedule", "life", "desktop", "memory", "artifacts", "system", "fs", "phone_control", "mcp", "qzone"],
         "tools": None, "exclude_tools": [],
     },
 }

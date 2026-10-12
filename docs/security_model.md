@@ -11,15 +11,11 @@
 ### 后端白名单执行
 
 LLM 不能直接执行系统能力。所有工具都必须在 `core/tool_dispatcher.py` 的 `_TOOL_REGISTRY`
-注册，通过 `execute_structured()` 做开关、危险标记、权限和确认流程。tuple `execute()` 已删除。
+注册，通过 `execute_structured()` 做开关、权限和参数校验。tuple `execute()` 已删除。
 
 - 探针只暴露 `info` / `desktop` 类工具：`get_tools_schema(categories=["info", "desktop"])`
-- 全局默认处于 `safe` 模式；`desktop` / `system` 类工具只有在用户通过受鉴权的
-  `PATCH /system/meta-mode` 开启 `danger` 模式后才能执行。危险模式常驻到手动关闭，
-  `ttl_seconds` 会被忽略；GET 在 danger 时 `expires_at` 为 null。状态存于 `data/runtime/meta_mode.json`
-- 危险工具 `device_shutdown` / `device_sleep` 标记 `dangerous=True`，并检查 `agent_control` 权限
-- `device_shutdown` / `device_sleep` 即使在 `danger` 模式下仍需单独确认，形成模式闸和确认流双保险
-- 工具开关来自 `config.yaml tools:`，默认启用，危险工具通常配置为关闭
+- 角色默认工具权限全开，执行不需要风险说明或二次确认；用户可手动调整全局及角色权限。
+- 工具仍检查鉴权、来源、参数、角色隔离和设备连接条件；冻结实现保持原状态。
 - 桌面动作先走 WebSocket ack，失败才降级文件队列
 - `execute_structured()` 的 origin 白名单按调用面分层：`user_live`、`assistant_loop`/`assistant_loop_relay`、
   `autonomy_loop`、`admin_console`，以及只允许 `manage_self_capability` 的两个 self-management origin。
@@ -46,7 +42,6 @@ public endpoint。
 - `/sensor/*` / `/watch/*`（含 `/watch/event`）/ `/garden/*` / `/mood/*` / `/diary/*`
 - `/memory/*` / `/users/*` / `/relations/*`
 - `GET /system/data-path`
-- `GET /system/meta-mode` / `PATCH /system/meta-mode`
 - 所有 LLM/settings 路由
 
 **鉴权失败行为**：`verify_token()` 抛出 HTTP 401/403，FastAPI 在函数体执行前拒绝请求。

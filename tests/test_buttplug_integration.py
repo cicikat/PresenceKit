@@ -174,7 +174,7 @@ async def test_toy_tools_reject_non_owner_and_group(monkeypatch):
         "get_config",
         lambda: {"scheduler": {"owner_id": "owner"}, "hardware": {"intiface_opt_in": True}},
     )
-    monkeypatch.setattr(tool_dispatcher, "_current_mode", lambda: "danger")
+
 
     for user_id, is_group in (("other", False), ("owner", True)):
         result = await tool_dispatcher.execute_structured(
@@ -206,7 +206,7 @@ async def test_toy_tool_executes_for_owner_private_turn(monkeypatch):
         "get_config",
         lambda: {"scheduler": {"owner_id": "owner"}, "hardware": {"intiface_opt_in": True}},
     )
-    monkeypatch.setattr(tool_dispatcher, "_current_mode", lambda: "danger")
+
     monkeypatch.setitem(tool_dispatcher._TOOL_REGISTRY["toy_stop"], "func", fake_stop)
 
     result = await tool_dispatcher.execute_structured(

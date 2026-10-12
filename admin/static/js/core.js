@@ -20,7 +20,7 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'qzone-on-demand-20261011';
+const ADMIN_UI_FRAGMENT_VERSION = 'character-permissions-288-20261012';
 
 const ADMIN_PAGE_ALIASES = Object.freeze({overview:'setup', users:'character', 'operations-center':'status', memory: 'observe-memory', 'creation-center':'data-management', 'observe-existence':'observe-dream'});
 
@@ -301,7 +301,7 @@ async function goto(page, {reloadFragment = false, fromHistory = false} = {}) {
     'call-records': loadUnifiedRecords,
     'autonomy-settings': async () => { if (AdminUI.version === 'new') await Promise.all([loadSchedulerConfig(), loadHdsLocalSettings()]); await loadAutonomySettings(); await loadVideoCallPresence(); await loadAutonomyTools(); },
     'output-settings': loadStickerConfig,
-    'device-policy': () => { loadScreenPeekSettings(); loadMetaMode(); },
+    'device-policy': () => { loadScreenPeekSettings(); },
     'network-config': async () => { _bindProxyControls(); await loadProxy(); },
     'client-settings': async () => { await loadClientSettings(); if (AdminUI.version === 'new') await loadServiceCenter(); },
     'personal-settings': _loadSetupAnniversaries,

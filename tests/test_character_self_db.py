@@ -202,7 +202,7 @@ def test_audit_has_counts_not_contents_and_observability(sandbox):
 @pytest.mark.asyncio
 async def test_tools_registered_and_dispatched(sandbox, monkeypatch):
     monkeypatch.setattr(tool_dispatcher, "_is_tool_enabled", lambda _: True)
-    monkeypatch.setattr(tool_dispatcher, "_current_mode", lambda: "safe")
+
     names = ["self_db_tables", "self_db_create_table", "self_db_insert", "self_db_query",
              "self_db_update", "self_db_delete", "self_db_drop_table"]
     schemas = {s["function"]["name"] for s in tool_dispatcher.get_tools_schema(categories=["self"])}

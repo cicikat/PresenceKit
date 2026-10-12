@@ -145,7 +145,7 @@ async function loadFeatureCenter() {
   const results=await Promise.allSettled([
     api('GET','/settings/feature-flags'),api('GET','/settings/tools'),api('GET','/settings/tool-loop'),
     api('GET','/admin/control-center/effective-state'),api('GET','/scheduler/config'),api('GET','/admin/autonomy/config'),
-    api('GET','/tts-config'),api('GET','/settings/screen-peek'),api('GET','/system/meta-mode'),
+    api('GET','/tts-config'),api('GET','/settings/screen-peek'),Promise.resolve(null),
     api('GET','/sticker-config'),api('GET','/settings/agent-runtime-browser'),
   ]);
   const section=(title,body)=>`<section class="card"><h3>${title}</h3>${body}</section>`;
@@ -158,7 +158,6 @@ async function loadFeatureCenter() {
     centerFlagSwitch(flags,'visual_perception',t('settings_center.screen_perception',"视觉感知")),
     centerFlagSwitch(flags,'screen_observation',t('settings_center.on_demand_screenshot',"按需截图")),
     centerSettledSwitch(peek,t('settings_center.screen_content',"屏幕内容查看"),'screen_peek',peek.status==='fulfilled'&&peek.value.enabled),
-    centerSettledSwitch(meta,t('status.dangermode.title',"危险模式"),'meta',meta.status==='fulfilled'&&meta.value.mode==='danger',t('settings_center.danger_mode_hint',"开启后保持到手动关闭；电脑与手机操作仍受此闸约束")),
   ].join(''));
   html+=section(t('settings_center.output_and_interaction',"输出与互动"), [
     centerSettledSwitch(sticker,t('settings_center.sticker_output',"表情包输出"),'sticker',sticker.status==='fulfilled'&&sticker.value.enabled),
@@ -196,7 +195,6 @@ async function saveCenterSwitch(input) {
     if(input.dataset.centerSource==='flag') result=await api('PUT','/settings/feature-flags',{flags:{[input.dataset.centerName]:value}});
     else if(input.dataset.centerSource==='tool') result=await api('PUT','/settings/tools',{execution_enabled:{[input.dataset.centerName]:value}});
     else if(input.dataset.centerSource==='loop') result=await api('POST','/settings/tool-loop',{enabled:value});
-    else if(input.dataset.centerSource==='meta') result=await api('PATCH','/system/meta-mode',{mode:value?'danger':'safe'});
     else if(input.dataset.centerSource==='screen_peek') result=await api('POST','/settings/screen-peek',{enabled:value});
     else if(input.dataset.centerSource==='sticker') result=await api('PUT','/sticker-config',{enabled:value});
     else if(input.dataset.centerSource==='browser') result=await api('PUT','/settings/agent-runtime-browser',{enabled:value});

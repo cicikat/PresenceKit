@@ -321,7 +321,7 @@ def test_prompt_sees_newly_added(sandbox):
 @pytest.mark.asyncio
 async def test_tools_are_discoverable_and_frozen_principal(sandbox, monkeypatch):
     monkeypatch.setattr(tool_dispatcher, "_is_tool_enabled", lambda _: True)
-    monkeypatch.setattr(tool_dispatcher, "_current_mode", lambda: "safe")
+
     schemas = tool_dispatcher.get_tools_schema(categories=["schedule"])
     names = {(item.get("function") or {}).get("name") for item in schemas}
     for name in (

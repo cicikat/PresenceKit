@@ -1900,7 +1900,7 @@ async function loadCharPermissions() {
     const d = await api('GET', '/observability/character-permissions' + qs);
 
     let html = `<div style="margin-bottom:12px;font-size:12px;color:var(--muted)">
-      当前危险模式: <b style="color:${d.current_mode === 'danger' ? '#fbbf24' : '#86efac'}">${escapeHtml(d.current_mode)}</b>
+      工具默认开放，可手动调整角色权限
       · tool loop: ${d.tool_loop_enabled ? '已开启' : '已关闭'}
       · 暴露面来源: ${escapeHtml(d.tool_categories_source || '')}
     </div>`;
@@ -1910,7 +1910,7 @@ async function loadCharPermissions() {
         ? (cat.currently_blocked_by_mode
             ? '<span style="font-size:11px;background:#3a1a1a;color:#f87171;padding:2px 8px;border-radius:8px">受危险模式闸门·当前拦截</span>'
             : '<span style="font-size:11px;background:#1a3a1a;color:#86efac;padding:2px 8px;border-radius:8px">受危险模式闸门·当前放行</span>')
-        : '<span style="font-size:11px;background:#2d2d2d;color:#9ca3af;padding:2px 8px;border-radius:8px">不受危险模式约束</span>';
+        : '<span style="font-size:11px;background:#2d2d2d;color:#9ca3af;padding:2px 8px;border-radius:8px">按角色权限执行</span>';
       html += `<div class="card" style="margin-bottom:10px">
         <div class="card-header" style="padding:10px 14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <h3 style="font-size:14px;margin:0">${escapeHtml(cat.category)}</h3>

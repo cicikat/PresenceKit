@@ -1184,11 +1184,6 @@ class DataPaths:
         return self.chat_artifact_lookup_root() / f"{safe_user_id(artifact_id)}.json"
 
     # ── Global runtime meta flags ────────────────────────────────────────────
-    def meta_mode(self) -> Path:
-        """data/runtime/meta_mode.json — global safe/danger mode switch."""
-        return self._p("runtime", "meta_mode.json")
-
-    # ── SEC-AUTH-2: scoped token registry + audit ────────────────────────────
     def auth_dir(self) -> Path:
         """data/runtime/auth/ — token registry + audit log directory."""
         return self._p("runtime", "auth")

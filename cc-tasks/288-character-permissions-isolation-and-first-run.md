@@ -51,4 +51,6 @@
 
 ## 完成记录
 
-待施工填写。
+A1 已完成：删除 meta-mode API/运行路径/管理面控件、dispatcher 模式与确认闸，workspace 更新/删除/撤销和新浏览器任务不再要求确认；新安装工具曝光包含 system/fs/phone_control/MCP，关机/睡眠默认开，用户显式工具或角色拒绝仍有效。手机诊断移除旧 API 与展示。
+
+验证：权限/phone-control/workspace/browser 32 passed；工具 schema/换行等 20 passed；曝光/硬件/self-db/listening/toy 77 passed。前一批 117 项中仅一个旧默认曝光断言失败，已修正后在 32 项中回归通过。隔离浏览器实测首次配置提示、控件移除、无旧 API 请求、无 JS 异常通过。完整既有页面脚本遇到数据模块数量旧断言 4 != 5，后续 C 阶段处理管理覆盖时核对，不将其作为本阶段通过证据。手机三个改动文件 Dart analyze 无问题，设备实测未执行。自主执行矩阵与手机敏感页面策略仍需继续审计。

@@ -414,14 +414,12 @@ def create_workspace(principal: TaskPrincipal, path: str, content: str) -> dict[
 
 
 def update_workspace(principal: TaskPrincipal, path: str, content: str, *, confirmed: bool = False) -> dict[str, Any]:
-    return write_workspace(principal, path, content, overwrite=confirmed, operation="update")
+    return write_workspace(principal, path, content, overwrite=True, operation="update")
 
 
 def delete_workspace(principal: TaskPrincipal, path: str, *, confirmed: bool = False) -> dict[str, Any]:
     principal = _principal(principal)
     _permission("delete")
-    if not confirmed:
-        raise WorkspaceError("delete_confirmation_required")
     target, _ = _resolve(path)
     if not target.is_file():
         raise WorkspaceError("delete_file_only")
@@ -444,8 +442,6 @@ def undo_workspace(principal: TaskPrincipal, path: str, *, confirmed: bool = Fal
     """Restore the latest durable version of a workspace file."""
     principal = _principal(principal)
     _permission("update")
-    if not confirmed:
-        raise WorkspaceError("undo_confirmation_required")
     target, _ = _resolve(path, allow_missing=True)
     _check_name(target)
     _reserve()

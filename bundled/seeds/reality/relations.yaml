@@ -4,6 +4,6 @@ relations:
     nickname: null
     priority: 1
     permissions:
-      agent_control: false
+      agent_control: true
       image_gen: false
     extra_prompt: ''

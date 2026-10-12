@@ -32,7 +32,7 @@ def _j(raw) -> dict:
 @pytest.fixture
 def env(sandbox, monkeypatch):
     monkeypatch.setattr(tool_dispatcher, "_is_tool_enabled", lambda _: True)
-    monkeypatch.setattr(tool_dispatcher, "_current_mode", lambda: "safe")
+
     calls: list[tuple[str, dict]] = []
 
     async def echo(*, user_id=None, **args):

@@ -117,19 +117,8 @@ async def test_status_uses_path_c_global_exposure_when_character_has_no_legacy_f
     result = await pc.phone_control_status(auth=None)
 
     assert result["tool_enabled"] is True
-    assert result["path_a_enabled"] is False
+    assert result["path_a_enabled"] is True
     assert result["path_c_enabled"] is True
-
-
-@pytest.mark.asyncio
-async def test_debug_start_blocked_in_safe_mode(monkeypatch):
-    import core.tool_dispatcher as td
-
-    monkeypatch.setattr(td, "_current_mode", lambda: "safe")
-
-    result = await pc.phone_control_debug_start(body={"task": "帮我点杯奶茶"}, auth=None)
-    assert result["ok"] is False
-    assert "安全模式" in result["message"]
 
 
 @pytest.mark.asyncio
@@ -137,7 +126,6 @@ async def test_debug_start_rejects_empty_task(monkeypatch):
     import core.tool_dispatcher as td
     from fastapi import HTTPException
 
-    monkeypatch.setattr(td, "_current_mode", lambda: "danger")
 
     with pytest.raises(HTTPException) as excinfo:
         await pc.phone_control_debug_start(body={"task": "  "}, auth=None)
@@ -148,7 +136,6 @@ async def test_debug_start_rejects_empty_task(monkeypatch):
 async def test_debug_start_calls_real_wrapper_in_danger_mode(monkeypatch):
     import core.tool_dispatcher as td
 
-    monkeypatch.setattr(td, "_current_mode", lambda: "danger")
     monkeypatch.setattr(
         "admin.routers.character._active_character_id", lambda: TEST_CHAR_ID,
     )
@@ -174,7 +161,6 @@ async def test_debug_start_calls_real_wrapper_in_danger_mode(monkeypatch):
 async def test_debug_start_falls_back_to_owner_id_when_missing(monkeypatch):
     import core.tool_dispatcher as td
 
-    monkeypatch.setattr(td, "_current_mode", lambda: "danger")
     monkeypatch.setattr(
         "admin.routers.character._active_character_id", lambda: TEST_CHAR_ID,
     )

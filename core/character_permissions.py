@@ -1,30 +1,3 @@
-"""
-core/character_permissions.py — "角色权限" 观测面板后端（2026-07-25，茶茶反馈）
-
-用户原话："要不在观测里面再加一栏'角色权限'，里面写有关角色目前拥有哪些具体权限
-（桌面+手机），哪些开启，哪些差什么条件，并且加个测试按钮，测试这条链路到底通没通。"
-
-三件事：
-1. 工具类目暴露面（探针 Path A / tool loop Path C 分别暴露哪些类目，是否被
-   presence_ext.tool_categories 覆盖）。
-2. 桌面/手机类目的"危险模式"闸门状态——desktop/system/phone_control 三个类目
-   即便暴露了 schema，真正执行时也会在 core/tool_dispatcher.py::_mode_gate() 被拦
-   （安全模式一律拒绝，只有危险模式窗口内放行，2 小时自动过期）。这是用户反馈里
-   "哪些差什么条件"最常见的答案，值得直接摆出来而不是让用户去猜。
-3. 身份固化管线（角色改自己的记忆文件那条线）状态 + 一个真正执行一次
-   consolidate_to_identity() 的测试入口——这条链路是后台任务，没有交互反馈，
-   用户自己完全看不出有没有在跑。
-
-test 按钮的设计取舍：
-- identity_consolidation：真实执行 consolidate_to_identity()。函数本身在"没有可固化
-  的 episode"时是安全的空操作（只记一条日志，不写文件），所以随时点都不会有副作用，
-  点了就能看到"通不通"的真实结果。
-- fs 类目：真实执行 fs_list 列一个安全根目录，同样是安全的只读操作。
-- desktop / system / phone_control 类目：不会真的执行——这些工具都有真实副作用
-  （弹通知、震动玩具、关机等），一个观测面板的"测试"按钮不该意外触发它们。改为返回
-  一份就绪检查清单（类目是否暴露、危险模式是否开着、config 里对应工具开关是否打开），
-  清单本身已经能回答"通不通"，且在结果里明确标注"未实际执行"，不让用户误以为已经点过了。
-"""
 from __future__ import annotations
 
 import logging
@@ -36,7 +9,7 @@ _ALL_CATEGORIES = (
 )
 
 # 与 core/tool_dispatcher.py 保持一致（不 import 私有名以外的逻辑，这里只读只报告）。
-_MODE_RESTRICTED_CATEGORIES = frozenset({"desktop", "system", "phone_control"})
+
 
 def _load_character(char_id: str):
     from core.character_loader import load
@@ -45,9 +18,9 @@ def _load_character(char_id: str):
 
 def get_tool_category_status(char_id: str) -> dict:
     """按类目汇总：是否对该角色暴露（探针/tool loop 分别判断）、是否受危险模式闸门约束、
-    当前危险模式状态，以及该类目下每个工具的 config 开关状态。"""
+    当前工具权限状态，以及该类目下每个工具的 config 开关状态。"""
     from core.config_loader import get_config
-    from core.tool_dispatcher import _TOOL_REGISTRY, _current_mode
+    from core.tool_dispatcher import _TOOL_REGISTRY
 
     cfg = get_config()
     try:
@@ -62,7 +35,7 @@ def get_tool_category_status(char_id: str) -> dict:
     path_c = resolve_exposure("path_c", char_id=char_id)
     loop_enabled = bool((cfg.get("tool_loop") or {}).get("enabled", False))
 
-    current_mode = _current_mode()
+    current_mode = "unrestricted"
 
     tools_by_category: dict[str, list] = {c: [] for c in _ALL_CATEGORIES}
     for name, spec in _TOOL_REGISTRY.items():
@@ -83,7 +56,7 @@ def get_tool_category_status(char_id: str) -> dict:
     for cat in _ALL_CATEGORIES:
         exposed_probe = cat in path_a.categories
         exposed_loop = loop_enabled and cat in path_c.categories
-        mode_restricted = cat in _MODE_RESTRICTED_CATEGORIES
+        mode_restricted = False
         mode_blocks_now = mode_restricted and current_mode != "danger"
         categories.append({
             "category": cat,
@@ -238,11 +211,6 @@ def _readiness_check(category: str, char_id: str) -> dict:
         {"item": "对该角色暴露(探针 Path A)", "pass": cat_entry["exposed_to_probe"]},
         {"item": "对该角色暴露(tool loop Path C)", "pass": cat_entry["exposed_to_tool_loop"]},
     ]
-    if cat_entry["mode_restricted"]:
-        checklist.append({
-            "item": "危险模式窗口已开启（否则一律安全模式拒绝，见 _mode_gate）",
-            "pass": not cat_entry["currently_blocked_by_mode"],
-        })
     enabled_tools = [t for t in cat_entry["tools"] if t["config_enabled"] and not t["excluded_by_char"]]
     checklist.append({
         "item": f"该类目下至少一个工具在 config 中启用且未被角色排除（当前 {len(enabled_tools)}/{len(cat_entry['tools'])}）",

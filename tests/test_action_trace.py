@@ -84,27 +84,6 @@ class TestExecuteRecording:
         assert len(entries) == 1
         assert entries[0]["status"] == "failed"
 
-    async def test_dangerous_confirm_records_pending(self, sandbox, monkeypatch):
-        import core.tool_dispatcher as td
-        from core.session_state import SessionState
-        from core.memory import action_trace
-
-        monkeypatch.setattr(td, "get_config", lambda: _controlled_config())
-        monkeypatch.setattr(td, "_current_mode", lambda: "danger")
-        monkeypatch.setattr("core.user_relation.has_permission", lambda *a, **k: True)
-
-        state = SessionState()
-        outcome = await td.execute_structured(
-            tool_name="device_shutdown", tool_args={}, user_id="u_confirm", target_id="u_confirm",
-            is_group=False, session_state=state, origin="user_live", char_id=DEFAULT_CHAR_ID,
-        )
-        assert outcome.result is None
-        assert outcome.confirmation_request is not None
-        assert state.status == SessionState.WAITING_CONFIRM
-        entries = action_trace.recent("u_confirm", DEFAULT_CHAR_ID, max_items=10, window_hours=999)
-        assert len(entries) == 1
-        assert entries[0]["status"] == "pending_confirm"
-
     async def test_origin_rejected_not_recorded(self, sandbox, monkeypatch):
         import core.tool_dispatcher as td
         from core.session_state import SessionState
@@ -432,7 +411,7 @@ class TestPeekScreenSensitive:
         from core.memory import action_trace
 
         monkeypatch.setattr(td, "get_config", lambda: _controlled_config())
-        monkeypatch.setattr(td, "_current_mode", lambda: "danger")  # desktop 类工具需 danger 模式放行
+
 
         async def _fake_peek():
             return "【窗口】私密笔记\n【可见文字】超级敏感的日记内容\n【可交互元素】保存"

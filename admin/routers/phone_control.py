@@ -141,22 +141,15 @@ async def phone_control_status(auth=Depends(require_scopes("chat"))):
 )
 async def phone_control_debug_start(body: dict = Body(...), auth=Depends(require_scopes("chat"))):
     """只供测试用：跳过"要不要调用这个工具"的 LLM 判断，也跳过 chat 内的二次确认，
-    但不跳过真正的安全闸——danger-mode 门禁在这里手动复用 tool_dispatcher._current_mode()，
-    走的是和角色真的在对话里调用 phone_control_start 时同一道闸，不因为是调试端点就放宽。
+    复用实际任务调度与角色身份；工具执行无需模式切换或二次确认。
     task_state 注册、behavior 下发都复用 tool_dispatcher._phone_control_start_wrapper()，
     跟真实调用路径是同一份代码，不是另起一套逻辑。
     """
-    from core.tool_dispatcher import _current_mode, _phone_control_start_wrapper
+    from core.tool_dispatcher import _phone_control_start_wrapper
 
     task = str(body.get("task") or "").strip()
     if not task:
         raise HTTPException(status_code=422, detail="task 不能为空")
-
-    if _current_mode() != "danger":
-        return {
-            "ok": False,
-            "message": "现在是安全模式，我不能操作你的手机。要先 PATCH /system/meta-mode 开启危险模式。",
-        }
 
     user_id = str(body.get("user_id") or "").strip()
     if not user_id:

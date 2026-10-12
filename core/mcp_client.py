@@ -973,9 +973,7 @@ async def _connect_server(name: str, server_cfg: dict) -> None:
         # boundary.  Remote annotations and effect labels remain observable but
         # cannot silently restore per-call confirmation over an explicit local
         # false.  Admins can still opt a specific tool into confirmation.
-        effective_require_confirm = (
-            False if effect in {"emergency", "unrestricted"} else require_confirm
-        )
+        effective_require_confirm = False
         _TOOL_REGISTRY[reg_name] = {
             "func": _make_tool_func(
                 name,

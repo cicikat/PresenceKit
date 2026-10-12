@@ -282,7 +282,6 @@ from pathlib import Path as _Path
 
 # ─── 全局模式闸 ─────────────────────────────────────────────────────────────────
 
-_MODE_RESTRICTED_CATEGORIES: frozenset[str] = frozenset({"desktop", "system", "phone_control"})
 _SCOPED_MEMORY_READ_TOOLS: frozenset[str] = frozenset({
     "get_profile", "get_episodic", "read_long_user_message", "search_events", "expand_event_window", "get_related_events",
     "search_documents", "read_document", "search_character_notes",
@@ -317,32 +316,6 @@ _ACTION_TARGETS: dict[str, str] = {
 def resolve_action_target(action_type: str) -> str | None:
     """Return the sole transport owner for a registered action, else None."""
     return _ACTION_TARGETS.get(action_type)
-
-
-def _current_mode() -> str:
-    """读 data/runtime/meta_mode.json，返回 'safe' 或 'danger'。
-    文件不存在或损坏 → safe。danger 常驻到手动关闭；遗留 expires_at 不再到期回落。
-    """
-    try:
-        from core.sandbox import get_paths
-        p = get_paths().meta_mode()
-        if not p.exists():
-            return "safe"
-        data = _json.loads(p.read_text(encoding="utf-8"))
-        return "danger" if data.get("mode") == "danger" else "safe"
-    except Exception:
-        return "safe"
-
-
-def _mode_gate(tool_name: str) -> str | None:
-    """返回拒绝文案（模式闸命中），或 None（放行）。"""
-    spec = _TOOL_REGISTRY.get(tool_name, {})
-    category = spec.get("category")
-    if category in _MODE_RESTRICTED_CATEGORIES and _current_mode() != "danger":
-        if category == "phone_control":
-            return "现在是安全模式，我不能操作你的手机。要先在设置里开启危险模式哦。"
-        return "现在是安全模式，我不能操作你的电脑。要先在设置里开启危险模式哦。"
-    return None
 
 
 def _is_desktop_active() -> bool:
@@ -507,7 +480,7 @@ async def _phone_control_start_wrapper(task: str = "", *, user_id: str, char_id:
 
     真正的截屏/点击循环在设备本地跑，见 admin/routers/phone_control.py 和
     docs/protocols/phone-control-protocol.md（Emerald-mobile 仓库）。dangerous=True，
-    调用前已经过一轮 chat 内确认；danger-mode 门禁在 _mode_gate() 里做，这里不用重复判断。
+    执行许可由全局工具开关和当前角色权限决定。
     """
     task = (task or "").strip()
     if not task:
@@ -664,7 +637,7 @@ async def _workspace_write_wrapper(path: str, content: str, *, operation: str, c
     if lease is None:
         return json.dumps({"receipt": receipt["task_id"], "status": receipt["status"], "duplicate": True}, ensure_ascii=False)
     try:
-        result = write_workspace(principal, path, content, overwrite=confirmed, operation=operation)
+        result = write_workspace(principal, path, content, overwrite=operation == "update", operation=operation)
         if lease:
             complete_task(principal, lease, result_metadata={"outcome_code": "written", "counters": {"bytes": result["size"], "version": result["version"]}})
         return json.dumps({"receipt": receipt["task_id"], **result}, ensure_ascii=False)
@@ -704,7 +677,7 @@ async def _workspace_delete_wrapper(path: str, *, confirmed: bool = False, user_
     if lease is None:
         return json.dumps({"receipt": receipt["task_id"], "status": receipt["status"], "duplicate": True}, ensure_ascii=False)
     try:
-        result = delete_workspace(principal, path, confirmed=confirmed)
+        result = delete_workspace(principal, path, confirmed=True)
         if lease:
             complete_task(principal, lease, result_metadata={"outcome_code": "deleted", "counters": {"version": result["version"]}})
         return json.dumps({"receipt": receipt["task_id"], **result}, ensure_ascii=False)
@@ -736,7 +709,7 @@ async def _workspace_undo_wrapper(path: str, *, confirmed: bool = False, user_id
     if lease is None:
         return json.dumps({"receipt": receipt["task_id"], "status": receipt["status"], "duplicate": True}, ensure_ascii=False)
     try:
-        result = undo_workspace(principal, path, confirmed=confirmed)
+        result = undo_workspace(principal, path, confirmed=True)
         if lease:
             complete_task(principal, lease, result_metadata={"outcome_code": "undone", "counters": {"version": result["version"]}})
         return json.dumps({"receipt": receipt["task_id"], **result}, ensure_ascii=False)
@@ -879,8 +852,6 @@ async def _browser_automation_wrapper(
         call_params = {"selector": selector, "value": value, "path": path} if any((selector, value, path)) else {}
         receipt = browser.create_task(principal, url=url, operation=operation, params=call_params, idempotency_key=idem, confirmed=confirmed)
         if receipt["status"] == "waiting_confirm":
-            if not confirmed:
-                return json.dumps({"receipt": receipt, "status": "waiting_confirm"}, ensure_ascii=False)
             receipt = browser.confirm_task(principal, receipt["task_id"])
         result = await browser.run_task(principal, receipt["task_id"], url=url, operation=operation, confirmed=confirmed, params=call_params)
         return json.dumps({"receipt": result.get("receipt"), "result": result.get("result")}, ensure_ascii=False)
@@ -2092,35 +2063,32 @@ _TOOL_REGISTRY["workspace_create"] = {
 
 _TOOL_REGISTRY["workspace_update"] = {
     "func": _workspace_update_wrapper,
-    "description": "更新已授权 workspace 中的文本文件；必须显式 confirmed=true 才能覆盖。",
+    "description": "更新已授权 workspace 中的文本文件。",
     "dangerous": True, "category": "fs", "effect": "write",
     "parameters": {"type": "object", "properties": {
         "path": {"type": "string", "description": "已授权工作区内已存在的文本文件路径。"},
         "content": {"type": "string", "description": "确认后用于替换文件的 UTF-8 文本正文。"},
-        "confirmed": {"type": "boolean", "description": "用户是否已明确确认覆盖现有内容。"},
-    }, "required": ["path", "content", "confirmed"]},
+    }, "required": ["path", "content"]},
     "examples": ["确认后更新工作区文档"], "keywords": ["工作区", "更新文件", "覆盖文件"], "trace_args": ["path"],
 }
 
 _TOOL_REGISTRY["workspace_delete"] = {
     "func": _workspace_delete_wrapper,
-    "description": "删除已授权 workspace 中的文件，必须显式 confirmed=true。",
+    "description": "删除已授权 workspace 中的文件。",
     "dangerous": True, "category": "fs", "effect": "write",
     "parameters": {"type": "object", "properties": {
         "path": {"type": "string", "description": "已授权工作区内要删除的受支持文本文件路径。"},
-        "confirmed": {"type": "boolean", "description": "用户是否已明确确认删除该文件。"},
-    }, "required": ["path", "confirmed"]},
+    }, "required": ["path"]},
     "examples": ["删除工作区文件"], "keywords": ["工作区", "删除文件"], "trace_args": ["path"],
 }
 
 _TOOL_REGISTRY["workspace_undo"] = {
     "func": _workspace_undo_wrapper,
-    "description": "撤销 workspace 文件最近一次受控变更；必须显式 confirmed=true。",
+    "description": "撤销 workspace 文件最近一次受控变更。",
     "dangerous": True, "category": "fs", "effect": "write",
     "parameters": {"type": "object", "properties": {
         "path": {"type": "string", "description": "已授权工作区内要恢复最近版本的文本文件路径。"},
-        "confirmed": {"type": "boolean", "description": "用户是否已明确确认执行版本撤销。"},
-    }, "required": ["path", "confirmed"]},
+    }, "required": ["path"]},
     "examples": ["撤销工作区文件修改"], "keywords": ["工作区", "撤销修改"], "trace_args": ["path"],
 }
 
@@ -2191,7 +2159,7 @@ _TOOL_REGISTRY["cancel_agent_task"] = {
 
 _TOOL_REGISTRY["browser_automation"] = {
     "func": _browser_automation_wrapper,
-    "description": "在显式允许的网页域名中执行隔离浏览器操作；页面结果有界且不会暴露凭据、cookie、header 或 profile。高风险操作需要 confirmed=true。",
+    "description": "在显式允许的网页域名中执行隔离浏览器操作；页面结果有界且不会暴露凭据、cookie、header 或 profile。操作按当前角色权限执行。",
     "dangerous": True,
     "category": "browser",
     "effect": "write",
@@ -2201,7 +2169,6 @@ _TOOL_REGISTRY["browser_automation"] = {
         "selector": {"type": "string", "maxLength": 256, "description": "页面元素选择器；仅用于需要定位元素的操作。"},
         "value": {"type": "string", "maxLength": 2000, "description": "填充或选择操作使用的值。"},
         "path": {"type": "string", "maxLength": 1024, "description": "Workspace 内文件的相对路径；仅用于上传或下载。"},
-        "confirmed": {"type": "boolean", "description": "是否已有用户对高风险操作的明确确认。"},
     }, "required": ["url", "operation"]},
     "examples": ["读取已允许域名的网页摘要"],
     "keywords": ["浏览网页", "网页操作", "打开网页"],
@@ -3027,11 +2994,6 @@ async def _execute_structured_impl(
         _msg = "Intiface 硬件能力当前处于冻结状态，需要显式 opt-in"
         _trace("failed", _msg)
         return _execution_outcome("tool_failed", _msg)
-    gate_msg = _mode_gate(tool_name)
-    if gate_msg is not None:
-        _trace("failed", gate_msg)
-        return _execution_outcome("tool_failed", gate_msg)
-
     if tool_info.get("self_management"):
         if origin not in {"assistant_self_management", "autonomy_self_management"}:
             _trace("failed", "self-management origin rejected")
@@ -3099,17 +3061,6 @@ async def _execute_structured_impl(
             _msg = "你没有执行此操作的权限哦"
             _trace("failed", _msg)
             return _execution_outcome("tool_failed", _msg)
-
-    # 高危工具确认机制
-    # emergency MCP actions deliberately bypass the existing confirmation
-    # state machine; every other tool preserves its current dangerous gate.
-    if tool_info["dangerous"] and get_tool_effect(tool_name) != "emergency":
-        if session_state.status != session_state.WAITING_CONFIRM:
-            _ask = _build_confirm_ask(tool_name, tool_args)
-            _trace("pending_confirm", _ask)
-            session_state.set_waiting_confirm(tool_name, tool_args)
-            await _notify_status("pending_confirmation")
-            return _execution_outcome("confirmation_required", confirmation_request=_ask)
 
     # ── persist 工具：指纹去重检查 ────────────────────────────────────────────
     _is_persist = bool(tool_info.get("persist", False))
@@ -3368,16 +3319,6 @@ async def execute_structured(
         from core.tool_audit import record as record_tool_audit
         record_tool_audit(user_id, char_id, tool=tool_name, args=tool_args, origin=origin, outcome=outcome)
     return outcome
-
-
-def _build_confirm_ask(tool_name: str, tool_args: dict) -> str:
-    descriptions = {
-        "device_shutdown": f"关机（{tool_args.get('delay_seconds', 60)}秒后）",
-        "device_sleep": "让设备进入睡眠",
-        "phone_control_start": f"在你手机上自动操作：{tool_args.get('task', '')}",
-    }
-    action = descriptions.get(tool_name, tool_name)
-    return f"你确定要{action}吗？回复\"确认\"来执行，回复其他内容取消。"
 
 
 class ToolDispatcher:

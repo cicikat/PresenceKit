@@ -170,8 +170,6 @@ def _check(principal: TaskPrincipal, url: str, operation: str, *, confirmed: boo
         raise BrowserError("download_disabled")
     if operation == "upload" and not p.upload_enabled:
         raise BrowserError("upload_disabled")
-    if operation in CONFIRM_OPERATIONS and not confirmed:
-        raise BrowserError("confirmation_required")
     _validate_url(url, p)
     return p
 
@@ -377,22 +375,16 @@ async def stop_worker() -> None:
 
 
 def create_task(principal: TaskPrincipal, *, url: str, operation: str, idempotency_key: str, confirmed: bool = False, ttl_seconds: int = 900, causation_ref: CausationRef | None = None, params: dict[str, Any] | None = None) -> dict[str, Any]:
-    # Creation of a dangerous operation is allowed only to park it in the
-    # durable confirmation state; execution still requires explicit confirm.
+    # Operations queue under the current role permissions.
     p = _check(principal, url, operation, confirmed=True)
     normalized_url = _validate_url(url, p)
     canonical_params = _canonical_params(operation, params)
     fingerprint, summary = _request_binding(principal, normalized_url, operation, canonical_params, confirmed=False)
-    # A caller-provided ``confirmed`` flag never skips the durable confirmation
-    # state.  High-risk work is always parked first; only confirm_task() may
-    # grant the one-shot transition to queued.
     try:
-        receipt, _ = task_manager.create_task(principal, capability=BROWSER_CAPABILITY, source="browser", idempotency_key=idempotency_key, ttl_seconds=ttl_seconds, causation_ref=causation_ref, enqueue=operation not in CONFIRM_OPERATIONS, request_context={"url_digest": summary["url_digest"], "operation": operation, "params": summary["params"]}, request_fingerprint=fingerprint, request_summary=summary, confirmation_required=operation in CONFIRM_OPERATIONS)
+        receipt, _ = task_manager.create_task(principal, capability=BROWSER_CAPABILITY, source="browser", idempotency_key=idempotency_key, ttl_seconds=ttl_seconds, causation_ref=causation_ref, enqueue=True, request_context={"url_digest": summary["url_digest"], "operation": operation, "params": summary["params"]}, request_fingerprint=fingerprint, request_summary=summary, confirmation_required=False)
     except task_manager.TaskManagerError as exc:
         raise BrowserError(exc.code) from exc
     _stats["submitted"] += 1
-    if operation in CONFIRM_OPERATIONS:
-        receipt = task_manager.mark_waiting_confirmation(principal, receipt["task_id"])
     return receipt
 
 
@@ -400,12 +392,6 @@ async def run_task(principal: TaskPrincipal, task_id: str, *, url: str, operatio
     task, canonical_params = _validate_task_request(principal, task_id, url=url, operation=operation, params=params)
     if task["status"] == TaskStatus.WAITING_CONFIRM.value:
         raise BrowserError("confirmation_required")
-    expected_confirmed = bool(
-        task.get("confirmation_required")
-        and (task.get("confirmation_granted") or task.get("request_summary", {}).get("confirmed"))
-    )
-    if bool(confirmed) != expected_confirmed:
-        raise BrowserError("task_request_mismatch")
     if task["status"] != TaskStatus.QUEUED.value:
         raise BrowserError("task_not_queued")
     try:

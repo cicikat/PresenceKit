@@ -92,7 +92,7 @@ def test_music_control_keeps_listening_tools_off_by_default():
 @pytest.mark.asyncio
 async def test_tools_are_discoverable_and_frozen_principal(sandbox, monkeypatch):
     _enable_control(monkeypatch)
-    monkeypatch.setattr(tool_dispatcher, "_current_mode", lambda: "safe")
+
     schemas = tool_dispatcher.get_tools_schema(categories=["life"])
     names = {(item.get("function") or {}).get("name") for item in schemas}
     for name in PLANNED_TOOLS:
@@ -121,7 +121,7 @@ async def test_tools_are_discoverable_and_frozen_principal(sandbox, monkeypatch)
 @pytest.mark.asyncio
 async def test_write_note_and_choose_next_need_session(sandbox, monkeypatch):
     _enable_control(monkeypatch)
-    monkeypatch.setattr(tool_dispatcher, "_current_mode", lambda: "safe")
+
     track = upsert_track(_UID, provider="local", source_id="a", title="One")
     written = await tool_dispatcher.execute_structured(
         "write_track_note",
@@ -151,7 +151,7 @@ async def test_write_note_and_choose_next_need_session(sandbox, monkeypatch):
 @pytest.mark.asyncio
 async def test_choose_next_mutates_queue_without_starting_sound(sandbox, monkeypatch):
     _enable_control(monkeypatch)
-    monkeypatch.setattr(tool_dispatcher, "_current_mode", lambda: "safe")
+
     one = upsert_track(_UID, provider="local", source_id="a", title="One")
     two = upsert_track(_UID, provider="local", source_id="b", title="Two")
     host = FakePlayerHost(_UID)
@@ -203,7 +203,7 @@ async def test_choose_next_causation_is_cooled_for_600s(sandbox, monkeypatch):
     _enable_control(monkeypatch)
     _enable_autonomy(monkeypatch)
     _allow_dream(monkeypatch)
-    monkeypatch.setattr(tool_dispatcher, "_current_mode", lambda: "safe")
+
     one = upsert_track(_UID, provider="local", source_id="a", title="One")
     two = upsert_track(_UID, provider="local", source_id="b", title="Two")
     host = FakePlayerHost(_UID)
