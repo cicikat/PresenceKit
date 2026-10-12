@@ -234,7 +234,7 @@ class Pipeline:
             "relation":           dict,        # 用户关系配置
             "group_context":      str,         # 群消息流（私聊为 ""）
             "user_identity_text": str,         # 用户稳定行为模式描述（scoped by char_id）
-            "user_facts_text":    str,         # 跨角色全局用户事实（uid-only，无 char_id）
+            "user_facts_text":    str,         # 当前角色的用户信息
             "event_search_result": str,        # 事件日志语义搜索结果
             "lore_entries":       list[str],   # 命中的世界书条目
         }
@@ -372,7 +372,7 @@ class Pipeline:
         # 旧的失败条目在本轮历史投影完成后重试；本轮使用裁剪兜底。
         short_term.schedule_long_user_summaries(uid, char_id=char_id)
         recent_group_ctx = group_context.get_recent(group_id)
-        relation         = user_relation.get_relation(uid)
+        relation         = user_relation.get_relation(uid, char_id=char_id)
         lore_entries, _lore_trace = scoped_lore_engine.match(content, history, return_trace=True)
 
         # 关系事实（动态世界书）— 只注入 confirmed 条目，不含 pending
@@ -389,7 +389,7 @@ class Pipeline:
         # 避免"召回→增强→更易召回"的永动机效应。写回仍由写路径触发（post_process 等）。
         from core.memory.episodic_memory import retrieve_mixed, format_for_prompt
         from core.memory.user_facts import get_user_pronoun as _get_pronoun
-        _user_pronoun = _get_pronoun(uid)
+        _user_pronoun = _get_pronoun(uid, char_id=char_id)
         if recall_policy == "none":
             # C: 主动触发的"由头"已在种子 prompt 里写死，不需要被宽泛锚点词捞出的旧情景
             # 记忆带偏（RC6）。注意：只挂 recall_policy，不与 _low_info 合并——原有
@@ -457,8 +457,8 @@ class Pipeline:
         profile              = await profile_future
         mid_term_text        = await mid_term_future
         user_identity_text   = await user_identity.format_for_prompt(uid, char_id=char_id)
-        # uid-only global facts — no char_id, no fallback
-        user_facts_text      = user_facts.format_for_prompt(uid)
+        # Character-owned user facts; no cross-character fallback
+        user_facts_text      = user_facts.format_for_prompt(uid, char_id=char_id)
 
         # Brief 258: an owned topic has one current-understanding output. The
         # dossier read is local and bounded; legacy retrieval still runs for
@@ -2658,59 +2658,11 @@ async def _handler_trait_tracker_update(payload: dict) -> None:
     uid = scope.uid
     char_id = scope.character_id
 
-    traits_path = get_paths().yexuan_traits(char_id=char_id)
-    # The path accessor falls back to the public default asset for characters
-    # without authored traits. That asset is an example, not their trait schema.
-    if char_id != "default" and traits_path in {
-        get_paths().bundled_default_character_dir() / "traits.yaml",
-        get_paths().legacy_authored_character_dir(char_id="default") / "traits.yaml",
-    }:
-        logger.debug("[pipeline.trait_tracker] no character traits: char_id=%s", char_id)
-        return
+    from core.character_data import load_traits
     try:
-        with open(traits_path, encoding="utf-8") as _f:
-            data = yaml.safe_load(_f)
-        if not isinstance(data, dict):
-            logger.warning(
-                "[pipeline.trait_tracker] traits schema unsupported: char_id=%s path=%s reason=root_not_mapping",
-                char_id, traits_path,
-            )
-            return
-
-        trait_key = f"{char_id}_traits"
-        if trait_key in data:
-            schema_key = trait_key
-        elif char_id == "default" and "default_traits" in data:
-            schema_key = "default_traits"
-        elif char_id == "default" and "yexuan_traits" in data:
-            schema_key = "yexuan_traits"
-        else:
-            logger.warning(
-                "[pipeline.trait_tracker] traits schema unsupported: char_id=%s path=%s reason=unknown_schema",
-                char_id, traits_path,
-            )
-            return
-
-        traits = data[schema_key]
-        if (
-            not isinstance(traits, list)
-            or any(
-                not isinstance(trait, dict)
-                or not isinstance(trait.get("id"), str)
-                or not isinstance(trait.get("keywords"), list)
-                for trait in traits
-            )
-        ):
-            logger.warning(
-                "[pipeline.trait_tracker] traits schema unsupported: char_id=%s path=%s reason=invalid_schema key=%s",
-                char_id, traits_path, schema_key,
-            )
-            return
-    except Exception as _e:
-        logger.warning(
-            "[pipeline.trait_tracker] traits 定义加载失败，跳过: char_id=%s path=%s error=%s",
-            char_id, traits_path, _e,
-        )
+        traits = load_traits(char_id)
+    except (ValueError, OSError) as exc:
+        logger.warning("[pipeline.trait_tracker] traits definition unavailable: char_id=%s error=%s", char_id, exc)
         return
     if not traits:
         logger.debug("[pipeline.trait_tracker] traits 为空，跳过: char_id=%s", char_id)

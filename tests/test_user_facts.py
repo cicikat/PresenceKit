@@ -42,33 +42,34 @@ def _s(path) -> str:
 # ---------------------------------------------------------------------------
 
 def test_user_facts_path_contains_uid(sandbox):
-    scope = MemoryScope.global_scope(UID)
+    scope = MemoryScope.reality_scope(UID, CHAR_A)
     p = _s(resolve_path(scope, "user_facts"))
     assert UID in p
 
 
 def test_user_facts_path_not_contain_char_a(sandbox):
-    scope = MemoryScope.global_scope(UID)
+    scope = MemoryScope.reality_scope(UID, CHAR_A)
     p = _s(resolve_path(scope, "user_facts"))
-    assert CHAR_A not in p
+    assert CHAR_A in p
 
 
 def test_user_facts_path_not_contain_char_b(sandbox):
-    scope = MemoryScope.global_scope(UID)
+    scope = MemoryScope.reality_scope(UID, CHAR_A)
     p = _s(resolve_path(scope, "user_facts"))
     assert CHAR_B not in p
 
 
 def test_user_facts_path_no_yexuan_fallback(sandbox):
-    scope = MemoryScope.global_scope(UID)
+    scope = MemoryScope.reality_scope(UID, CHAR_A)
     p = resolve_path(scope, "user_facts")
     # Check the relative portion under the sandbox base — not the tmp dir name
     rel = _s(p.relative_to(sandbox._base))
-    assert TEST_CHAR_ID not in rel
+    assert CHAR_A in rel
+    assert CHAR_B not in rel
 
 
 def test_user_facts_path_ends_with_user_facts_json(sandbox):
-    scope = MemoryScope.global_scope(UID)
+    scope = MemoryScope.reality_scope(UID, CHAR_A)
     p = _s(resolve_path(scope, "user_facts"))
     assert p.endswith("user_facts.json")
 
@@ -77,11 +78,11 @@ def test_user_facts_path_ends_with_user_facts_json(sandbox):
 # 2. Cross-character identity: yexuan and character_b share the same facts file
 # ---------------------------------------------------------------------------
 
-def test_cross_character_same_facts(sandbox):
-    uf.save_user_facts(UID, {"preferred_language": "zh-CN"})
-    data_a = uf.load_user_facts(UID)
-    data_b = uf.load_user_facts(UID)
-    assert data_a == data_b
+def test_cross_character_separate_facts(sandbox):
+    uf.save_user_facts(UID, {"preferred_language": "zh-CN"}, char_id=CHAR_A)
+    data_a = uf.load_user_facts(UID, char_id=CHAR_A)
+    data_b = uf.load_user_facts(UID, char_id=CHAR_B)
+    assert data_b == {}
     assert data_a["preferred_language"] == "zh-CN"
 
 
@@ -235,7 +236,7 @@ def test_format_skips_none_values(sandbox):
     # Inject None directly to test None-skip (bypass save filter)
     import json
     from core.memory.path_resolver import resolve_path
-    p = resolve_path(MemoryScope.global_scope(UID), "user_facts")
+    p = resolve_path(MemoryScope.reality_scope(UID, CHAR_A), "user_facts")
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps({"preferred_language": "zh-CN", "timezone": None}), encoding="utf-8")
     text = uf.format_for_prompt(UID)

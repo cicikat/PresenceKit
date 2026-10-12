@@ -482,7 +482,7 @@ async def search(
 
     char_name = _char_name()
     from core.memory.user_facts import get_user_pronoun as _get_pronoun
-    _user_pronoun = _get_pronoun(user_id)
+    _user_pronoun = _get_pronoun(user_id, char_id=char_id)
     _ROLE_PREFIX_RE = re.compile(
         rf"^\*\*(用户|{re.escape(char_name)})\*\*[:：](.*)$"
     )

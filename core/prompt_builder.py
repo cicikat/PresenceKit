@@ -432,7 +432,7 @@ def build(
     messages: list[dict] = []
     from core.config_loader import get_user_display_name
     from core.memory.user_facts import get_user_pronoun
-    user_pronoun = get_user_pronoun(user_id)
+    user_pronoun = get_user_pronoun(user_id, char_id=char_id)
     user_name = get_user_display_name() or user_pronoun
 
     # 层级消融开关（CC 任务 23 · B）：一次性读取，B3 统一过滤点复用同一结果。
@@ -627,7 +627,7 @@ def build(
     # 关系数据不存在/仍是硬编码兜底默认值时，该层整体不注入——没有信息就别说，
     # 胜过注入"陌生人"误导角色对 owner 冷淡（Brief 97 §5，冷启动新用户场景）。
     from core.user_relation import has_configured_relation
-    if has_configured_relation(user_id):
+    if has_configured_relation(user_id, char_id=char_id):
         role = relation.get("role", "stranger")
         nickname = relation.get("nickname")
         extra_prompt = relation.get("extra_prompt", "")
@@ -863,8 +863,8 @@ def build(
         })
 
     # ─────────────────────────────────────────────────────────────────────────
-    # 层 5.1：全局用户事实（跨角色客观信息，与角色主观记忆无关）
-    # 来自 user_facts.py；uid-only，不含角色关系史或主观印象。
+    # 层 5.1：本角色拥有的用户信息
+    # 来自 user_facts.py；按 uid+char_id 隔离。
     # 标题明确区分：角色不应把此处内容当作自己的记忆或感受。
     # ─────────────────────────────────────────────────────────────────────────
     if user_facts_text:
@@ -872,7 +872,7 @@ def build(
             "role": "system",
             "content": (
                 "<用户客观信息>\n"
-                "【用户客观信息（跨角色通用，非角色记忆）】\n"
+                "【本角色了解到的用户信息】\n"
                 + user_facts_text
                 + "\n</用户客观信息>"
             ),
@@ -1843,7 +1843,7 @@ KNOWN_LAYERS: list[tuple[str, str]] = [
     ("4.2_stage_transcript", "Stage 共享对话 transcript"),
     ("5_profile", "用户画像"),
     ("5_profile_pref", "用户偏好/习惯类事实"),
-    ("5.1_user_facts", "跨角色全局用户事实"),
+    ("5.1_user_facts", "本角色用户信息"),
     ("5.2_reminders", "待办备忘录"),
     ("5.2_food_tastes", "用户明确表达的一般口味"),
     ("6i_self_agent_md", "角色自己写的 self/AGENT.md 工作习惯（self-authored，低于系统安全与用户指令）"),

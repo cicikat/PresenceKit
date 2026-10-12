@@ -161,6 +161,8 @@ REGISTRY: dict[str, PathMeta] = {
     "mood_state":             PathMeta("canonical", "character_inner", "per_char",      "ignore"),
     "activity_state":         PathMeta("canonical", "character_inner", "per_char",      "ignore"),
     "trait_state":            PathMeta("canonical", "character_inner", "per_char",      "ignore"),
+    "character_user_relations": PathMeta("canonical", "reality", "per_char", "ignore"),
+    "legacy_user_facts": PathMeta("archive", "reality", "per_user", "ignore"),
     "author_note_state":      PathMeta("canonical", "character_inner", "per_char",      "ignore"),
     "presence":               PathMeta("canonical", "character_inner", "per_char",      "ignore"),
     "yexuan_inner_diary":     PathMeta("canonical", "character_inner", "per_char",      "ignore"),

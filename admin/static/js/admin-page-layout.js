@@ -297,6 +297,7 @@ const AdminPageLayout = (() => {
   }
   async function loadData(resume=false) {
     if (!resume || !document.getElementById('creation-character')) await loadCreationAssets();
+    if (!resume || !document.getElementById('character-data-char')?.value) await initObserveCharacters('character-data-char', loadCharacterData);
     if (!isNew()) return;
     await loadSources({
       'relationship-facts': loadRelationshipFactsPage,

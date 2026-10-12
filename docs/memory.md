@@ -1,3 +1,5 @@
+工单 288 C：用户事实与第三人称称谓改为 uid+char_id；记忆读写、固化/抢救、prompt、用户/记忆管理接口均传入角色。旧 global_facts 字段只是兼容名称，不再共享内容。关系称呼与 extra_prompt 保存到角色 user_relations.yaml；平台黑名单和连接配置保持安装级。traits 使用 {traits: [...]} 中性 schema，单角色数据管理新增定义编辑和所有权清单。非默认角色不再回退到默认 traits 或 author notes；缺失时为空。历史共享事实不自动认领，离线迁移脚本显式指定 uid/char-id，默认 dry-run，保留原件且不覆盖目标。
+
 # docs/memory.md — 记忆子系统设计
 
 工单 286：mid_term 存储合同不变；prompt 只补充本轮所选 history 未覆盖的来源回合。

@@ -330,7 +330,7 @@ def result_messages(uid, char_id, *, now=None):
     now = time.time() if now is None else now
     with _db(uid, char_id) as db:
         rows = list(db.execute('SELECT * FROM results WHERE ts>? ORDER BY id DESC LIMIT 3', (now - WINDOW,))) if db else []
-    pronoun = get_user_pronoun(uid)
+    pronoun = get_user_pronoun(uid, char_id=char_id)
     result = []
     from core.tool_result_pins import view as pin_view, allowed as pin_allowed
     pinned={(r['tool'],r['content']) for r in pin_view(uid,char_id) if pin_allowed(uid,char_id,r['tool'])}

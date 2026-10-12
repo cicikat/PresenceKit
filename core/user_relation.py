@@ -35,8 +35,20 @@ def _load_relations() -> dict:
     return _relations_cache
 
 
-def _get_relations() -> dict:
+def _get_relations(char_id: str | None = None) -> dict:
     """获取关系配置（懒加载单例）"""
+    if char_id is not None:
+        from core.sandbox import get_paths
+        path = get_paths().character_user_relations(char_id=char_id)
+        try:
+            data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            relations = data.get("relations", {}) if isinstance(data, dict) else {}
+            return relations if isinstance(relations, dict) else {}
+        except FileNotFoundError:
+            return {}
+        except (OSError, yaml.YAMLError) as exc:
+            log_error("user_relation.character_read", exc)
+            return {}
     if _relations_cache is None:
         _load_relations()
     return _relations_cache or {}
@@ -55,7 +67,7 @@ _BUILTIN_DEFAULT = {
 }
 
 
-def get_relation(user_id: str) -> dict:
+def get_relation(user_id: str, *, char_id: str | None = None) -> dict:
     """
     获取指定用户的关系配置
 
@@ -64,7 +76,7 @@ def get_relation(user_id: str) -> dict:
     2. relations.yaml 中的 "default" 配置
     3. 内置默认配置（stranger）
     """
-    relations = _get_relations()
+    relations = _get_relations(char_id)
     user_id_str = str(user_id)
 
     if user_id_str in relations:
@@ -88,14 +100,14 @@ def get_relation(user_id: str) -> dict:
     return dict(_BUILTIN_DEFAULT)
 
 
-def has_configured_relation(user_id: str) -> bool:
+def has_configured_relation(user_id: str, *, char_id: str | None = None) -> bool:
     """是否存在真实配置的关系数据（用户专属条目或 relations.yaml 的全局 default 段）。
 
     False 表示 get_relation() 返回的是硬编码兜底 _BUILTIN_DEFAULT（stranger/无称呼/
     无 extra_prompt），不是管理员或用户真实录入的关系状态——调用方（prompt_builder
     的关系层）据此判断"没有信息就别说，胜过注入陌生人误导角色对 owner 冷淡"（Brief 97 §5）。
     """
-    relations = _get_relations()
+    relations = _get_relations(char_id)
     return str(user_id) in relations or "default" in relations
 
 
@@ -128,8 +140,8 @@ def reload():
 class UserRelation:
     """用户关系类，封装模块级函数，供外部按类方式导入使用"""
 
-    def get_relation(self, user_id: str) -> dict:
-        return get_relation(user_id)
+    def get_relation(self, user_id: str, *, char_id: str | None = None) -> dict:
+        return get_relation(user_id, char_id=char_id)
 
     def has_permission(self, user_id: str, permission_name: str) -> bool:
         return has_permission(user_id, permission_name)

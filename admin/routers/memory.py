@@ -205,13 +205,14 @@ async def list_mid_term(
     return {"user_id": user_id, "char_id": resolved, "events": events, "count": len(events)}
 
 
-@router.get("/{user_id}/user-facts", summary="获取全局用户事实（跨角色，global scope）")
+@router.get("/{user_id}/user-facts", summary="获取角色用户信息")
 async def list_user_facts(
     user_id: str,
+    char_id: str | None = None,
     auth=Depends(require_scopes("memory.read")),
 ):
     from core.memory import user_facts
-    facts = user_facts.load_user_facts(user_id)
+    facts = user_facts.load_user_facts(user_id, char_id=_resolve_char_id(char_id))
     return {"user_id": user_id, "facts": facts}
 
 
@@ -349,16 +350,17 @@ async def delete_midterm_event(
     return {"message": f"mid_term 条目 {mid_id!r} 已删除", "char_id": resolved}
 
 
-# user_facts (global-scope, no char_id)
+# user_facts (character and user scope)
 
-@router.delete("/{user_id}/user-facts/{key}", summary="删除一条全局用户事实")
+@router.delete("/{user_id}/user-facts/{key}", summary="删除一条角色用户信息")
 async def delete_user_fact_entry(
     user_id: str,
     key: str,
+    char_id: str | None = None,
     auth=Depends(require_scopes("admin")),
 ):
     from core.memory import user_facts
-    ok = user_facts.delete_user_fact(user_id, key)
+    ok = user_facts.delete_user_fact(user_id, key, char_id=_resolve_char_id(char_id))
     if not ok:
         raise HTTPException(status_code=404, detail=f"user_facts key={key!r} 不存在或不允许删除")
     return {"message": f"user_facts[{key!r}] 已删除"}

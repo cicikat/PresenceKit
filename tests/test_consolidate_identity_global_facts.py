@@ -85,11 +85,12 @@ def test_apply_patch_same_value_skips_write_and_provenance(sandbox):
 
     uid = f"{UID_PREFIX}_samevalue"
     uf.save_user_facts(uid, {"timezone": "Asia/Shanghai"})
+    before = provenance_log.query(uid, TEST_CHAR_ID, artifact="user_facts")
 
     uf.apply_global_facts_patch(uid, TEST_CHAR_ID, [{"key": "timezone", "value": "Asia/Shanghai"}])
 
     records = provenance_log.query(uid, TEST_CHAR_ID, artifact="user_facts")
-    assert records == [], "同值重写不应留 provenance"
+    assert records == before, "同值重写不应新增 provenance"
 
 
 def test_apply_patch_empty_list_is_noop(sandbox):

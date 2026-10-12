@@ -16,19 +16,11 @@ _SWITCH_INTERVAL_ROUNDS = 2   # 同一 note 最多连用此回合数（密集对
 _JITTER_SWITCH_PROB = 0.35    # 未到硬阈值时每轮提前切换概率，使切换点不可预测
 
 
-_DEFAULT_POOL_PATH = Path(__file__).parent.parent / "characters" / "default_author_notes.json"
 
 
 def _load_pool(pool_path: Path) -> list[dict]:
     if not pool_path.exists():
-        logger.warning(
-            f"[author_note_rotator] notes pool 文件不存在: {pool_path}，回落到默认池"
-        )
-        if not _DEFAULT_POOL_PATH.exists():
-            raise FileNotFoundError(
-                f"[author_note_rotator] 默认 notes pool 也不存在: {_DEFAULT_POOL_PATH}"
-            )
-        pool_path = _DEFAULT_POOL_PATH
+        return []
     data = json.loads(pool_path.read_text(encoding="utf-8"))
     return data.get("notes", [])
 

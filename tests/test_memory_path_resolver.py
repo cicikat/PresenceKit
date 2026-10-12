@@ -155,9 +155,9 @@ def test_garden_storage_contains_char_not_uid(sandbox):
 # ---------------------------------------------------------------------------
 
 def test_user_facts_contains_uid_not_char(sandbox):
-    p = _s(resolve_path(GLOBAL, "user_facts"))
+    p = _s(resolve_path(REALITY, "user_facts"))
     assert UID in p
-    assert CHAR not in p
+    assert CHAR in p
 
 
 # ---------------------------------------------------------------------------
@@ -184,9 +184,9 @@ def test_global_scope_resolves_history_raises(sandbox):
 # 14. reality scope + user_facts → ValueError
 # ---------------------------------------------------------------------------
 
-def test_reality_scope_resolves_user_facts_raises(sandbox):
+def test_global_scope_resolves_user_facts_raises(sandbox):
     with pytest.raises(ValueError, match="domain"):
-        resolve_path(REALITY, "user_facts")
+        resolve_path(GLOBAL, "user_facts")
 
 
 # ---------------------------------------------------------------------------
@@ -271,7 +271,7 @@ def test_resolve_does_not_create_directories(sandbox):
     ):
         resolve_path(scope, artifact)
 
-    resolve_path(MemoryScope.global_scope("u999"), "user_facts")
+    resolve_path(MemoryScope.reality_scope("u999", CHAR), "user_facts")
     resolve_path(MemoryScope.dream_scope("u999", "newchar", "w1"), "dream_state")
 
     after = set(str(p) for p in sandbox._base.rglob("*"))

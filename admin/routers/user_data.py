@@ -13,6 +13,37 @@ from core import userdata_assets
 router = APIRouter()
 
 
+class TraitsUpdate(BaseModel):
+    traits: list[dict]
+
+
+@router.get("/character-data/{char_id}", summary="角色数据清单及 trait 定义")
+async def character_data_inventory(char_id: str, auth=Depends(require_scopes("persona", "memory.read"))):
+    from core import character_data
+    try:
+        char_id = userdata_assets.validate_character_id(char_id)
+        result = character_data.inventory(char_id)
+        try:
+            result["traits"] = character_data.load_traits(char_id)
+            result["traits_error"] = None
+        except (ValueError, OSError) as exc:
+            result["traits"] = None
+            result["traits_error"] = str(exc)
+        return result
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.put("/character-data/{char_id}/traits", summary="保存角色 trait 定义")
+async def update_character_traits(char_id: str, body: TraitsUpdate, auth=Depends(require_scopes("admin"))):
+    from core.character_data import save_traits
+    try:
+        save_traits(userdata_assets.validate_character_id(char_id), body.traits)
+        return {"char_id": char_id, "saved": True}
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 class DeleteAssetRequest(BaseModel):
     char_id: str = DEFAULT_CHAR_ID
     emotion: str = ""

@@ -127,21 +127,21 @@ async def update_user_profile(
 
 
 @router.get("/{user_id}/pronoun", summary="获取用户称谓")
-async def get_user_pronoun(user_id: str, auth=Depends(require_scopes("admin"))):
+async def get_user_pronoun(user_id: str, char_id: str | None = None, auth=Depends(require_scopes("admin"))):
     """返回该用户的第三人称称谓（她/他/祂/TA/它）。"""
     from core.memory.user_facts import get_user_pronoun as _get_pronoun
-    return {"user_id": user_id, "pronoun": _get_pronoun(user_id)}
+    return {"user_id": user_id, "pronoun": _get_pronoun(user_id, char_id=_resolve_char_id(char_id))}
 
 
-@router.get("/{user_id}/facts", summary="获取用户全局客观事实（只读）")
-async def get_user_facts(user_id: str, auth=Depends(require_scopes("admin"))):
-    """返回该用户完整的 global-scope user_facts（跨角色客观事实，KV）。
+@router.get("/{user_id}/facts", summary="获取角色用户信息（只读）")
+async def get_user_facts(user_id: str, char_id: str | None = None, auth=Depends(require_scopes("admin"))):
+    """返回该用户完整的 角色范围 user_facts。
 
     只读观测端点（Brief 89）：确认固化链/抢救链自动写入的 key 落盘可见。
     写入仍走 update_user_facts（pronoun PATCH 或固化链分流），此端点不提供写。
     """
     from core.memory.user_facts import load_user_facts
-    return {"user_id": user_id, "facts": load_user_facts(user_id)}
+    return {"user_id": user_id, "facts": load_user_facts(user_id, char_id=_resolve_char_id(char_id))}
 
 
 class _PronounBody(BaseModel):
@@ -152,13 +152,14 @@ class _PronounBody(BaseModel):
 async def set_user_pronoun(
     user_id: str,
     body: _PronounBody,
+    char_id: str | None = None,
     auth=Depends(require_scopes("admin")),
 ):
     """更新该用户的第三人称称谓（允许值：她/他/祂/TA/它）。"""
     from core.memory.user_facts import update_user_facts, _VALID_PRONOUNS
     if body.pronoun not in _VALID_PRONOUNS:
         raise HTTPException(status_code=422, detail=f"非法称谓值 {body.pronoun!r}，允许：{sorted(_VALID_PRONOUNS)}")
-    updated, rejected = update_user_facts(user_id, {"pronoun": body.pronoun})
+    updated, rejected = update_user_facts(user_id, {"pronoun": body.pronoun}, char_id=_resolve_char_id(char_id))
     if rejected:
         raise HTTPException(status_code=422, detail=f"字段被拒绝: {rejected}")
     return {"user_id": user_id, "pronoun": updated.get("pronoun", body.pronoun)}

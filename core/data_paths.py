@@ -824,9 +824,9 @@ class DataPaths:
             return new
         if legacy.exists():
             return legacy
-        if bundled.exists():
+        if char_id == "default" and bundled.exists():
             return bundled
-        return legacy_default
+        return legacy_default if char_id == "default" else primary
 
     def _bundled_seed(self, name: str) -> Path:
         """Prefer the packaged canonical seed, retaining one legacy read period."""
@@ -1026,6 +1026,13 @@ class DataPaths:
     def relations(self) -> Path:
         return self._seed_if_missing(self._p("relations.yaml"), "relations.yaml")
 
+    def character_user_relations(self, *, char_id: str) -> Path:
+        return self._p("runtime", "characters", safe_user_id(char_id), "user_relations.yaml")
+
+    def legacy_user_facts(self, user_id: str | int) -> Path:
+        """Unassigned historical facts; only explicit offline migration reads this."""
+        return self._p("runtime", "memory", "global", safe_user_id(user_id), "user_facts.json")
+
     def blacklist(self) -> Path:
         return self._seed_if_missing(self._p("blacklist.yaml"), "blacklist.yaml")
 
@@ -1041,11 +1048,9 @@ class DataPaths:
             return bundled
         if legacy.exists():
             return legacy
-        if bundled.exists():
-            return bundled
-        if legacy_default.exists():
+        if char_id == "default" and legacy_default.exists():
             return legacy_default
-        return Path("data/yexuan_traits.yaml")
+        return primary
 
     def jailbreak_presets_dir(self) -> Path:
         new = Path("content/jailbreak_presets")

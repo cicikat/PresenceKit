@@ -1,4 +1,15 @@
 <h1 class="page-title" data-i18n="nav.page.data-management">数据管理</h1>
+<section class="card behavior-section" id="character-data-module">
+  <div class="card-header"><h2>角色档案与 trait</h2></div>
+  <div class="behavior-section-body">
+    <label class="field"><span>角色</span><select id="character-data-char" onchange="loadCharacterData()"></select></label>
+    <div id="character-data-inventory" role="status"></div>
+    <label class="field"><span>Trait 定义</span><textarea id="character-data-traits" rows="12" spellcheck="false"></textarea></label>
+    <p class="admin-source-hint">填写 JSON 数组，每项包含 id 与 keywords；空数组表示没有定义 trait。</p>
+    <button class="btn btn-primary" data-action="saveCharacterDataTraits">保存 trait</button>
+    <p id="character-data-result" role="status"></p>
+  </div>
+</section>
 
 <section class="card behavior-section" id="data-reality-assets"><div class="card-header"><h2 data-i18n="settings_center.reality_assets_and_avatars">现实资产启用与头像</h2></div><div class="behavior-section-body"><section class="card">
   <h3 data-i18n="settings_center.reality_assets_and_avatars">现实资产启用与头像</h3>

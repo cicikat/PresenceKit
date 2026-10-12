@@ -32,6 +32,7 @@ REALITY_USER_ARTIFACTS: frozenset[str] = frozenset({
     "memory_index",
     "fixation_state",
     "profile",
+    "user_facts",
     "identity",
     "hidden_state",
     "hidden_state_no_interaction_stamp",  # Brief 88 §2：NO_INTERACTION 逻辑日去重小 stamp
@@ -61,7 +62,6 @@ REALITY_CHARACTER_ARTIFACTS: frozenset[str] = frozenset({
 
 # Global-scoped: path uses uid only, no char_id in scope.
 GLOBAL_USER_ARTIFACTS: frozenset[str] = frozenset({
-    "user_facts",
     "health_state",
 })
 
@@ -233,10 +233,8 @@ def resolve_path(scope: MemoryScope, artifact: str) -> Path:
     # ── global-scoped: (uid) only — char_id is None in scope ────────────────
 
     if artifact == "user_facts":
-        # Global per-user: data/runtime/memory/global/{uid}/user_facts.json
-        # Parallel to reality user_memory_root (data/runtime/memory/{char_id}/{uid}/)
-        # but without char_id since this is cross-character.
-        return paths._p("runtime", "memory", "global", uid, "user_facts.json")
+        # Character-owned facts, never the unassigned legacy global file.
+        return paths.user_memory_root(uid, char_id=char_id) / "user_facts.json"
 
     if artifact == "health_state":
         return paths._p("runtime", "memory", "global", uid, "health_state.json")

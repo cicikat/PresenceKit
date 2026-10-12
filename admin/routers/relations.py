@@ -13,15 +13,16 @@ from pydantic import BaseModel
 
 from admin.auth import require_scopes
 from core.sandbox import get_paths
+from admin.routers.users import _resolve_char_id
 
 router = APIRouter()
 
 
 # ── 辅助函数 ─────────────────────────────────────────────────────────────────
 
-def _read_relations() -> dict:
+def _read_relations(char_id: str | None = None) -> dict:
     """读取 relations.yaml，返回 relations 字段内容"""
-    rf = get_paths().relations()
+    rf = get_paths().character_user_relations(char_id=char_id) if char_id else get_paths().relations()
     if not rf.exists():
         return {}
     with open(rf, "r", encoding="utf-8") as f:
@@ -29,18 +30,13 @@ def _read_relations() -> dict:
     return data.get("relations", {})
 
 
-def _write_relations(relations: dict):
+def _write_relations(relations: dict, char_id: str | None = None):
     """将 relations 字典写回 relations.yaml"""
-    rf = get_paths().relations()
+    rf = get_paths().character_user_relations(char_id=char_id) if char_id else get_paths().relations()
     rf.parent.mkdir(parents=True, exist_ok=True)
-    with open(rf, "w", encoding="utf-8") as f:
-        yaml.dump(
-            {"relations": relations},
-            f,
-            allow_unicode=True,
-            default_flow_style=False,
-            sort_keys=False,
-        )
+    from core.safe_write import safe_write_text
+    if not safe_write_text(rf, yaml.safe_dump({"relations": relations}, allow_unicode=True, sort_keys=False)):
+        raise OSError("relation save failed")
 
 
 def _read_blacklist() -> list[str]:
@@ -145,26 +141,26 @@ async def get_private_exchange_log(
 # ── 关系配置接口 ──────────────────────────────────────────────────────────────
 
 @router.get("/{user_id}", summary="获取单用户关系配置")
-async def get_relation(user_id: str, auth=Depends(require_scopes("memory.read"))):
+async def get_relation(user_id: str, char_id: str | None = None, auth=Depends(require_scopes("memory.read"))):
     """
     获取指定用户的关系配置。
     raw: relations.yaml 中的原始条目；
     merged: 经 default / 内置默认合并后的实际生效配置。
     """
     from core import user_relation
-    raw = _read_relations().get(str(user_id))
-    merged = user_relation.get_relation(user_id)
+    raw = _read_relations(_resolve_char_id(char_id)).get(str(user_id))
+    merged = user_relation.get_relation(user_id, char_id=_resolve_char_id(char_id))
     return {"user_id": user_id, "raw": raw, "merged": merged}
 
 
 @router.put("/{user_id}", summary="新增或更新用户关系配置")
-async def update_relation(user_id: str, body: RelationUpdate, auth=Depends(require_scopes("admin"))):
+async def update_relation(user_id: str, body: RelationUpdate, char_id: str | None = None, auth=Depends(require_scopes("admin"))):
     """
     合并更新 relations.yaml 中的指定用户条目，然后热重载。
     只传入需要修改的字段即可，未传入字段保持原值。
     permissions 字段也是合并更新，不整体覆盖。
     """
-    relations = _read_relations()
+    relations = _read_relations(_resolve_char_id(char_id))
     uid = str(user_id)
     existing = dict(relations.get(uid, {}))
 
@@ -179,19 +175,19 @@ async def update_relation(user_id: str, body: RelationUpdate, auth=Depends(requi
 
     existing.update(update_data)
     relations[uid] = existing
-    _write_relations(relations)
+    _write_relations(relations, _resolve_char_id(char_id))
     _hot_reload()
     return {"message": f"用户 {uid} 关系配置已更新", "relation": relations[uid]}
 
 
 @router.delete("/{user_id}", summary="删除用户关系配置")
-async def delete_relation(user_id: str, auth=Depends(require_scopes("admin"))):
+async def delete_relation(user_id: str, char_id: str | None = None, auth=Depends(require_scopes("admin"))):
     """从 relations.yaml 删除指定用户条目并热重载（不影响 default）"""
-    relations = _read_relations()
+    relations = _read_relations(_resolve_char_id(char_id))
     uid = str(user_id)
     if uid not in relations:
         raise HTTPException(status_code=404, detail=f"用户 {uid} 没有关系配置")
     del relations[uid]
-    _write_relations(relations)
+    _write_relations(relations, _resolve_char_id(char_id))
     _hot_reload()
     return {"message": f"用户 {uid} 关系配置已删除"}

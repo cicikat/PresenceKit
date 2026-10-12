@@ -1406,7 +1406,7 @@ async def reflect_to_episodic(
         from core.memory.user_facts import get_user_pronoun as _get_pronoun
         prompt_system = _REFLECT_PROMPT_TEMPLATE.format(
             char_name=char_name,
-            pronoun=_get_pronoun(uid),
+            pronoun=_get_pronoun(uid, char_id=char_id),
         )
         if trigger == "emotional_run":
             prompt_system += _REFLECT_RUN_ADDENDUM

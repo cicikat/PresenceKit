@@ -57,6 +57,34 @@ async function loadFrozenFeatures() {
   const target=document.getElementById('frozen-integrations');
   if(source&&target) [...source.children].forEach(node=>target.append(node));
 }
+let characterDataRequest=0;
+async function loadCharacterData() {
+  const request=++characterDataRequest;
+  const char=document.getElementById('character-data-char').value;
+  const result=document.getElementById('character-data-result');
+  const input=document.getElementById('character-data-traits');
+  input.disabled=true; result.textContent='读取中…';
+  try {
+    const data=await api('GET',`/character-data/${encodeURIComponent(char)}`);
+    if(request!==characterDataRequest)return;
+    document.getElementById('character-data-inventory').innerHTML=`<p>${(data.entries||[]).map(item=>`${escapeHtml(item.id)}：${item.present?'已保存':'暂无数据'}`).join(' · ')}</p><p>用户档案：${(data.user_artifacts||[]).map(escapeHtml).join('、')}</p>`;
+    input.value=JSON.stringify(data.traits??[],null,2);
+    input.disabled=Boolean(data.traits_error);
+    result.textContent=data.traits_error?`Trait 读取失败：${data.traits_error}`:'';
+  } catch(error) {if(request===characterDataRequest)result.textContent=`读取失败：${error.message}`;}
+}
+async function saveCharacterDataTraits(button) {
+  const char=document.getElementById('character-data-char').value;
+  const result=document.getElementById('character-data-result');
+  const input=document.getElementById('character-data-traits');
+  if(input.disabled)return;
+  button.disabled=true;
+  try {
+    await api('PUT',`/character-data/${encodeURIComponent(char)}/traits`,{traits:JSON.parse(input.value)});
+    if(document.getElementById('character-data-char').value===char)result.textContent='已保存';
+  } catch(error) {result.textContent=`保存失败：${error.message}`;}
+  finally {button.disabled=false;}
+}
 function saveCreationAssets() {
   const body={active_character:document.getElementById('creation-character').value};
   for(const key of ['enabled_lorebooks','enabled_jailbreaks'])body[key]=[...document.querySelectorAll(`[data-creation-asset="${key}"]:checked`)].map(el=>el.value);

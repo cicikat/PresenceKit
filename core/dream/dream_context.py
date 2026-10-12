@@ -60,7 +60,7 @@ async def build_snapshot(user_id: str, entry_reason: str = "", *, char_id: str =
     # relationship_state — always included regardless of tier
     try:
         from core import user_relation
-        snapshot["relationship_state"] = user_relation.get_relation(user_id)
+        snapshot["relationship_state"] = user_relation.get_relation(user_id, char_id=char_id)
     except Exception as e:
         logger.warning(f"[dream_context] relationship_state failed: {e}")
         snapshot["relationship_state"] = {}

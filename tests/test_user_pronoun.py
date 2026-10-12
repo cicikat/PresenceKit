@@ -38,7 +38,7 @@ UID = "test_pronoun_uid_9988"
 def _path_for(uid: str) -> pathlib.Path:
     from core.memory.scope import MemoryScope
     from core.memory.path_resolver import resolve_path
-    return resolve_path(MemoryScope.global_scope(uid), "user_facts")
+    return resolve_path(MemoryScope.reality_scope(uid, TEST_CHAR_ID), "user_facts")
 
 
 def _write_facts(uid: str, facts: dict):
@@ -245,8 +245,9 @@ async def test_admin_pronoun_round_trip_and_validation(monkeypatch):
     from core.memory import user_facts
     from fastapi import HTTPException
     facts = {}
-    monkeypatch.setattr(user_facts, "load_user_facts", lambda uid: facts.copy())
-    monkeypatch.setattr(user_facts, "save_user_facts", lambda uid, value: facts.update(value) or True)
+    monkeypatch.setattr(user_facts, "load_user_facts", lambda uid, **kwargs: facts.copy())
+    monkeypatch.setattr(user_facts, "save_user_facts", lambda uid, value, **kwargs: facts.update(value) or True)
+    monkeypatch.setattr(users, "_resolve_char_id", lambda value: TEST_CHAR_ID)
     assert (await users.get_user_pronoun("fixture", auth=None))["pronoun"] == "她"
     for pronoun in ("他", "祂", "TA", "它", "她"):
         await users.set_user_pronoun("fixture", users._PronounBody(pronoun=pronoun), auth=None)
