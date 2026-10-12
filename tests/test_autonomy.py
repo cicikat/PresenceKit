@@ -127,7 +127,7 @@ def test_soft_block_allows_only_one_confirm_decision(sandbox, monkeypatch):
     assert exposed[1] == ["confirm_talk"]
 
 
-def test_autonomy_tool_policy_rejects_memory_and_unsandboxed_writes():
+def test_autonomy_tool_policy_uses_equal_write_permissions():
     from core.autonomy.policy import tool_eligibility
     registry = {
         "water_garden": {"category": "info"},
@@ -135,8 +135,8 @@ def test_autonomy_tool_policy_rejects_memory_and_unsandboxed_writes():
         "desktop_notify": {"category": "desktop"},
     }
     assert tool_eligibility("water_garden", {"enabled": True}, registry=registry, effect="write") == (True, "eligible")
-    assert tool_eligibility("revise_memory", {"enabled": True}, registry=registry, effect="write") == (False, "write_not_sandboxed_for_autonomy")
-    assert tool_eligibility("desktop_notify", {"enabled": True}, registry=registry, effect="actuate")[0] is False
+    assert tool_eligibility("revise_memory", {"enabled": True}, registry=registry, effect="write") == (True, "eligible")
+    assert tool_eligibility("desktop_notify", {"enabled": True}, registry=registry, effect="actuate")[0] is True
 
 
 def test_write_tool_budget_prevents_second_write(sandbox, monkeypatch):
@@ -330,7 +330,7 @@ def test_tool_eligibility_is_allowlist_admission_not_final_schema():
         effect="read",
     )
     assert eligible is False
-    assert reason == "mcp_requires_explicit_enablement"
+    assert reason == "explicitly_disabled"
 
 
 def test_connected_readonly_mcp_inherits_without_allowlist(sandbox, monkeypatch):
@@ -364,13 +364,13 @@ def test_connected_readonly_mcp_inherits_without_allowlist(sandbox, monkeypatch)
     assert user_grant("owner", "char", capability_id=capability_id, allowed=True, mutable_by_agent=False, constraints={}, reason="allow").ok
     state = store.load("owner", "char")
     row = next(item for item in policy.tool_decisions("owner", "char", state) if item["name"] == tool_name)
-    assert row["eligible"] is False
-    assert row["eligibility_reason"] == "mcp_requires_explicit_enablement"
+    assert row["eligible"] is True
+    assert row["eligibility_reason"] == "eligible"
     assert row["allowed"] is True
     assert row["final_schema"] is True
     assert row["execution_allowed"] is True
-    assert row["decision_source"] == "global_read_inheritance"
-    assert row["autonomy_policy"] == "global_read_inheritance"
+    assert row["decision_source"] == "global_permission_inheritance"
+    assert row["autonomy_policy"] == "global_permission_inheritance"
     assert [item["function"]["name"] for item in policy.allowed_tools("owner", "char", state)] == [tool_name]
 
 
@@ -404,10 +404,10 @@ def test_allowlist_and_inheritance_share_one_denied_reason(sandbox, monkeypatch)
     row = next(item for item in policy.tool_decisions("owner", "char", state) if item["name"] == tool_name)
     assert row["allowed"] is False
     assert row["denial_reason"] == "schema_unavailable"
-    assert row["decision_source"] == "global_read_inheritance"
+    assert row["decision_source"] == "global_permission_inheritance"
 
 
-def test_dangerous_and_confirm_tools_stay_ineligible():
+def test_old_risk_flags_do_not_block_tools():
     from core.autonomy.policy import tool_eligibility
     registry = {
         "device_shutdown": {"category": "system", "dangerous": True, "require_confirm": True},
@@ -416,9 +416,9 @@ def test_dangerous_and_confirm_tools_stay_ineligible():
     eligible, reason = tool_eligibility(
         "device_shutdown", {"enabled": True}, registry=registry, effect="write"
     )
-    assert eligible is False
-    assert reason == "side_effect_or_confirmation_required"
-    assert tool_eligibility("desktop_notify", {"enabled": True}, registry=registry, effect="actuate")[0] is False
+    assert eligible is True
+    assert reason == "eligible"
+    assert tool_eligibility("desktop_notify", {"enabled": True}, registry=registry, effect="actuate")[0] is True
 
 
 def test_global_disable_blocks_inherited_mcp(sandbox, monkeypatch):
@@ -510,7 +510,7 @@ def test_self_capability_revoke_blocks_inherited_mcp(sandbox, monkeypatch):
     assert row["denial_reason"] == "self_capability_disabled"
 
 
-def test_require_confirm_mcp_does_not_inherit(sandbox, monkeypatch):
+def test_old_mcp_confirm_flag_does_not_block_tools(sandbox, monkeypatch):
     from core.autonomy import policy, store
     from core.self_management.service import user_grant
     from core.tool_dispatcher import _TOOL_REGISTRY
@@ -540,10 +540,10 @@ def test_require_confirm_mcp_does_not_inherit(sandbox, monkeypatch):
     monkeypatch.setattr("core.config_loader.get_config", lambda: {"mcp_servers": {}})
     assert user_grant("owner", "char", capability_id=capability_id, allowed=True, mutable_by_agent=False, constraints={}, reason="allow").ok
     row = next(item for item in policy.tool_decisions("owner", "char", store.load("owner", "char")) if item["name"] == tool_name)
-    assert row["eligible"] is False
-    assert row["allowed"] is False
-    assert row["confirmation"] is True
-    assert row["denial_reason"] == "autonomy_allowlist_disabled"
+    assert row["eligible"] is True
+    assert row["allowed"] is True
+    assert row["confirmation"] is False
+    assert row["denial_reason"] == ""
 
 
 def test_mcp_local_policy_blocks_allowlisted_mcp(sandbox, monkeypatch):

@@ -1721,8 +1721,7 @@ _TOOL_REGISTRY["phone_control_start"] = {
     "description": (
         "在用户手机上发起一次多步自动化操作任务，比如帮忙导航外卖/购物 App 到支付确认页、"
         "或操作某个没有开放 API 的第三方 App（比如玩具官方 App）。仅在用户明确要求时调用。"
-        "只负责导航和填写，遇到密码、支付、验证码、银行等敏感页面会自动停下来交还给用户，"
-        "绝不会自动完成支付、提交订单或确认收货——这是硬性边界，不是可以商量的建议。"
+        "使用当前角色的工具权限；用户可在权限设置中手动关闭。设备连接和实际任务参数必须可用。"
     ),
     "dangerous": True,
     "category": "phone_control",
@@ -2067,9 +2066,9 @@ _TOOL_REGISTRY["workspace_update"] = {
     "dangerous": True, "category": "fs", "effect": "write",
     "parameters": {"type": "object", "properties": {
         "path": {"type": "string", "description": "已授权工作区内已存在的文本文件路径。"},
-        "content": {"type": "string", "description": "确认后用于替换文件的 UTF-8 文本正文。"},
+        "content": {"type": "string", "description": "用于替换文件的 UTF-8 文本正文。"},
     }, "required": ["path", "content"]},
-    "examples": ["确认后更新工作区文档"], "keywords": ["工作区", "更新文件", "覆盖文件"], "trace_args": ["path"],
+    "examples": ["更新工作区文档"], "keywords": ["工作区", "更新文件", "覆盖文件"], "trace_args": ["path"],
 }
 
 _TOOL_REGISTRY["workspace_delete"] = {

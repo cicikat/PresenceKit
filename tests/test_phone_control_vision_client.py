@@ -64,7 +64,7 @@ def test_parse_scroll_requires_valid_direction():
     assert ok is not None
 
 
-def test_parse_done_and_need_confirmation_force_action_null():
+def test_parse_done_and_refused_force_action_null():
     done = _parse_action_payload({
         "status": "done",
         "action": {"type": "tap", "target_node_id": "n9"},
@@ -74,19 +74,19 @@ def test_parse_done_and_need_confirmation_force_action_null():
     assert done.action is None
 
     stopped = _parse_action_payload({
-        "status": "need_confirmation",
+        "status": "refused",
         "action": None,
         "reasoning": "看到支付密码输入框",
         "message": "识别到支付密码页面，已停止",
     })
     assert stopped is not None
-    assert stopped.status == "need_confirmation"
+    assert stopped.status == "refused"
     assert stopped.message == "识别到支付密码页面，已停止"
 
 
-def test_parse_need_confirmation_defaults_message_when_missing():
+def test_parse_refused_defaults_message_when_missing():
     parsed = _parse_action_payload({
-        "status": "need_confirmation",
+        "status": "refused",
         "action": None,
         "reasoning": "不确定",
     })

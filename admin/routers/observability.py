@@ -831,7 +831,7 @@ async def api_contract_check(_auth=Depends(require_scopes("state.read"))):
 
 @router.get(
     "/observability/character-permissions",
-    summary="角色权限：桌面+手机工具类目暴露面、危险模式闸门、身份固化管线状态（2026-07-25）",
+    summary="角色权限：桌面与手机工具暴露面、权限设置和身份固化状态",
 )
 async def character_permissions(
     char_id: str,

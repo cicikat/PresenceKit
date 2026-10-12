@@ -2,7 +2,7 @@
 
 见 docs/protocols/phone-control-protocol.md（Emerald-mobile 仓库）。设备侧每一步调用一次
 POST /phone_control/step：上报当前观察，换回下一步动作。步数上限/超时由后端 task_state 维护，
-不信设备自己数；敏感页面拦截在调用视觉模型之前做，未过滤通过的观察不会喂给视觉模型。
+不信设备自己数；工具权限由角色配置决定，不设风险确认分支。
 """
 import logging
 
@@ -28,7 +28,7 @@ def _node_texts(nodes: list) -> list[str]:
 
 @router.post("/phone_control/step", summary="手机自动化循环：上报观察，换回下一步动作")
 async def phone_control_step(body: dict = Body(...), auth=Depends(require_scopes("chat"))):
-    from core.phone_control import sensitive_filter, task_state, vision_client
+    from core.phone_control import task_state, vision_client
 
     task_id = str(body.get("task_id") or "").strip()
     if not task_id:
@@ -46,17 +46,6 @@ async def phone_control_step(body: dict = Body(...), auth=Depends(require_scopes
     if step is None:
         logger.info("[phone_control] task=%s refused at gate: %s", task_id, refuse_reason)
         return {"status": "refused", "action": None, "message": _refuse_message(refuse_reason)}
-
-    # 敏感页面硬拦截：先过这道闸，过不了就不调用视觉模型——不给它判断的机会。
-    block_reason = sensitive_filter.check_observation(
-        package_name=package_name,
-        screen_title=screen_title,
-        node_texts=_node_texts(nodes),
-    )
-    if block_reason is not None:
-        task_state.mark_status(task_id, "need_confirmation")
-        logger.info("[phone_control] task=%s blocked by sensitive_filter: %s", task_id, block_reason)
-        return {"status": "need_confirmation", "action": None, "message": block_reason}
 
     entry = task_state.get_task(task_id) or {}
     task_description = str(entry.get("task") or "")
@@ -78,7 +67,7 @@ async def phone_control_step(body: dict = Body(...), auth=Depends(require_scopes
     action_type = decision.action.get("type") if decision.action else decision.status
     task_state.append_history(task_id, step, action_type, decision.reasoning)
 
-    if decision.status in ("done", "need_confirmation"):
+    if decision.status in ("done", "refused"):
         task_state.mark_status(task_id, decision.status)
 
     return {

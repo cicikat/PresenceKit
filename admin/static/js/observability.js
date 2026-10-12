@@ -466,17 +466,17 @@ function _renderAutonomyToolsLegacy(host, tools) {
     host.innerHTML = '<div class="empty">当前没有已启用的自主工具。角色仍可安静结束或在允许时主动 Talk。</div>';
     return;
   }
-  host.innerHTML = `<table><thead><tr><th>工具</th><th>来源</th><th>动作类型</th><th>风险</th><th>可重试</th></tr></thead><tbody>${active.map(item => `<tr><td>${escapeHtml(item.name)}</td><td>${escapeHtml(item.source)}</td><td>${escapeHtml(item.effect === 'read' ? '读取' : '受限写入')}</td><td>${escapeHtml(item.risk === 'high' ? '高（当前不会自动执行）' : '低')}</td><td>${item.idempotent ? '可安全重试' : '失败后停止并记录'}</td></tr>`).join('')}</tbody></table>`;
+  host.innerHTML = `<table><thead><tr><th>工具</th><th>来源</th><th>动作类型</th><th>可重试</th></tr></thead><tbody>${active.map(item => `<tr><td>${escapeHtml(item.name)}</td><td>${escapeHtml(item.source)}</td><td>${escapeHtml(item.effect === 'read' ? '读取' : '受限写入')}</td><td>${item.idempotent ? '可安全重试' : '失败后停止并记录'}</td></tr>`).join('')}</tbody></table>`;
 }
 
 function _renderAutonomyTools(host, tools) {
   const cell = value => escapeHtml(value === null || value === undefined || value === '' ? '-' : String(value));
   const sourceLabel = item => {
-    if (item.decision_source === 'global_read_inheritance') return '全局只读继承';
-    if (item.decision_source === 'autonomy_allowlist') return '自主白名单';
+    if (item.decision_source === 'global_permission_inheritance') return '默认权限继承';
+    if (item.decision_source === 'autonomy_allowlist') return '自主权限覆盖';
     return cell(item.decision_source || item.source);
   };
-  host.innerHTML = `<table><thead><tr><th>工具</th><th>来源</th><th>决策来源</th><th>全局开关</th><th>部署</th><th>已注册</th><th>已连接</th><th>MCP 策略</th><th>自主策略</th><th>MCP 明确授权</th><th>自主管理授权</th><th>自主管理生效值</th><th>代理选择</th><th>自主白名单</th><th>动作类型</th><th>危险/确认</th><th>最终状态</th><th>拒绝原因</th></tr></thead><tbody>${tools.map(item => `<tr><td>${cell(item.name)}</td><td>${cell(item.source)}</td><td>${sourceLabel(item)}</td><td>${cell(item.global_enabled)}</td><td>${cell(item.deployment_allowed ?? item.deployment)}</td><td>${cell(item.registered)}</td><td>${cell(item.mcp_server_connected)}</td><td>${cell(item.mcp_policy)}</td><td>${cell(item.autonomy_policy)}</td><td>${cell(item.mcp_explicit)}</td><td>${cell(item.self_capability_granted)}</td><td>${cell(item.self_capability ?? item.self_capability_effective)}</td><td>${cell(item.agent_selected_state)}</td><td>${cell(item.autonomy_allowlist)}</td><td>${cell(item.effect)}</td><td>${cell(item.danger || item.confirmation || item.dangerous || item.require_confirm)}</td><td>${cell(item.allowed ?? item.execution_allowed)}</td><td>${cell(item.denial_reason)}</td></tr>`).join('')}</tbody></table>`;
+  host.innerHTML = `<table><thead><tr><th>工具</th><th>来源</th><th>决策来源</th><th>全局开关</th><th>部署</th><th>已注册</th><th>已连接</th><th>MCP 策略</th><th>自主策略</th><th>MCP 明确授权</th><th>自主管理授权</th><th>自主管理生效值</th><th>代理选择</th><th>自主权限覆盖</th><th>动作类型</th><th>最终状态</th><th>拒绝原因</th></tr></thead><tbody>${tools.map(item => `<tr><td>${cell(item.name)}</td><td>${cell(item.source)}</td><td>${sourceLabel(item)}</td><td>${cell(item.global_enabled)}</td><td>${cell(item.deployment_allowed ?? item.deployment)}</td><td>${cell(item.registered)}</td><td>${cell(item.mcp_server_connected)}</td><td>${cell(item.mcp_policy)}</td><td>${cell(item.autonomy_policy)}</td><td>${cell(item.mcp_explicit)}</td><td>${cell(item.self_capability_granted)}</td><td>${cell(item.self_capability ?? item.self_capability_effective)}</td><td>${cell(item.agent_selected_state)}</td><td>${cell(item.autonomy_allowlist)}</td><td>${cell(item.effect)}</td><td>${cell(item.allowed ?? item.execution_allowed)}</td><td>${cell(item.denial_reason)}</td></tr>`).join('')}</tbody></table>`;
 }
 
 function _renderAutonomyRuns(host, runs) {
@@ -1906,11 +1906,7 @@ async function loadCharPermissions() {
     </div>`;
 
     for (const cat of (d.categories || [])) {
-      const modeBadge = cat.mode_restricted
-        ? (cat.currently_blocked_by_mode
-            ? '<span style="font-size:11px;background:#3a1a1a;color:#f87171;padding:2px 8px;border-radius:8px">受危险模式闸门·当前拦截</span>'
-            : '<span style="font-size:11px;background:#1a3a1a;color:#86efac;padding:2px 8px;border-radius:8px">受危险模式闸门·当前放行</span>')
-        : '<span style="font-size:11px;background:#2d2d2d;color:#9ca3af;padding:2px 8px;border-radius:8px">按角色权限执行</span>';
+      const modeBadge = '<span style="font-size:11px;color:var(--muted)">按角色权限执行</span>';
       html += `<div class="card" style="margin-bottom:10px">
         <div class="card-header" style="padding:10px 14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <h3 style="font-size:14px;margin:0">${escapeHtml(cat.category)}</h3>

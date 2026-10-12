@@ -17,7 +17,7 @@ def _load_character(char_id: str):
 
 
 def get_tool_category_status(char_id: str) -> dict:
-    """按类目汇总：是否对该角色暴露（探针/tool loop 分别判断）、是否受危险模式闸门约束、
+    """按类目汇总：是否对该角色暴露（探针/tool loop 分别判断）、当前角色权限、
     当前工具权限状态，以及该类目下每个工具的 config 开关状态。"""
     from core.config_loader import get_config
     from core.tool_dispatcher import _TOOL_REGISTRY

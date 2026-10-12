@@ -7,80 +7,17 @@ from typing import Any
 
 from core.autonomy.models import Disposition
 
-# Autonomous writes are deliberately narrower than the normal tool-loop
-# surface. New entries require an explicit review here; a configurable
-# allowlist must never turn a memory edit, desktop action, or device
-# control into an unattended side effect. Reminder writes are sandboxed
-# because they stay inside this character's Reality schedule bucket.
-_SANDBOXED_WRITE_TOOLS = frozenset({
-    "water_garden",
-    "self_create",
-    "self_update",
-    "self_move",
-    "self_delete",
-    "self_restore",
-    "self_db_create_table",
-    "self_db_insert",
-    "self_db_update",
-    "self_db_delete",
-    "self_db_drop_table",
-    "self_tool_define",
-    "self_tool_run",
-    "write_toy_file",
-    "add_reminder",
-    "update_reminder",
-    "cancel_reminder",
-    "restore_reminder",
-    "start_agent_task",
-    "cancel_agent_task",
-    "write_track_note",
-    "choose_next_track",
-    "invite_video_call",
-})
-
-# ``info`` was split into info/self/schedule/life; sandboxed writes keep the
-# same eligibility they had when all of these lived under ``info``.
-_SANDBOXED_WRITE_CATEGORIES = frozenset({"info", "self", "schedule", "life"})
-
 DECISION_SOURCE_ALLOWLIST = "autonomy_allowlist"
-DECISION_SOURCE_INHERITANCE = "global_read_inheritance"
+DECISION_SOURCE_INHERITANCE = "global_permission_inheritance"
 
 
 def tool_is_eligible(name: str, policy: dict, *, registry: dict, effect: str) -> bool:
-    """Return whether one explicitly configured allowlist entry is safe."""
-    info = registry.get(name, {})
-    if effect == "read":
-        # MCP reads additionally require the operator to acknowledge that an
-        # interrupted request has an unknown outcome. Builtins have no remote
-        # side effect to reconcile.
-        return info.get("category") != "mcp" or (
-            bool(policy.get("mcp_explicit"))
-            and policy.get("outcome_unknown") == "fail_closed"
-        )
-    if effect == "write":
-        if name in {"qzone_comment", "qzone_set_like"}:
-            from core.qzone_service import settings
-            return settings().autonomy_interactions_enabled
-        return name in _SANDBOXED_WRITE_TOOLS and info.get("category") in _SANDBOXED_WRITE_CATEGORIES
-    return False
+    return name in registry and policy.get("enabled", True) is not False
 
 
 def tool_eligibility(name: str, policy: dict, *, registry: dict, effect: str) -> tuple[bool, str]:
-    """Allowlist-admission check only.
-
-    This is not the final schema/execute answer. Connected read-only MCP may
-    still enter the autonomy surface through ``global_read_inheritance``.
-    """
-    info = registry.get(name, {})
-    if info.get("dangerous") or info.get("require_confirm") or effect not in {"read", "write"}:
-        return False, "side_effect_or_confirmation_required"
-    if effect == "write" and name not in _SANDBOXED_WRITE_TOOLS and name not in {"qzone_comment", "qzone_set_like"}:
-        return False, "write_not_sandboxed_for_autonomy"
-    if info.get("category") == "mcp" and not bool(policy.get("mcp_explicit")):
-        return False, "mcp_requires_explicit_enablement"
-    if info.get("category") == "mcp" and policy.get("outcome_unknown") != "fail_closed":
-        return False, "mcp_requires_fail_closed_outcome_policy"
-    return (tool_is_eligible(name, policy, registry=registry, effect=effect), "eligible")
+    allowed = tool_is_eligible(name, policy, registry=registry, effect=effect)
+    return allowed, "eligible" if allowed else "explicitly_disabled"
 
 
 @dataclass(frozen=True)
@@ -317,22 +254,10 @@ def decide_autonomy_tools(uid: str, char_id: str, state: dict) -> list[AutonomyT
         capability_id = capability_registry.capability_for_tool(name)
         self_capability, agent_selected_state = capability_effective(capability_id, uid, char_id) if capability_id else (False, None)
         grant = (capability_state.get("grants") or {}).get(capability_id) if capability_id else None
-        explicitly_enabled = bool(configured_policy.get("enabled"))
+        explicitly_enabled = bool(configured_policy.get("enabled", True))
         global_enabled = bool(_is_tool_enabled(name))
         deployment_ok, deployment_reason = deployment_tool_allowed(name)
         night_inactive = name == "observe_user_screen" and screen_observation_suppressed()
-        inherit_mcp_read = bool(
-            is_mcp
-            and effect == "read"
-            and global_enabled
-            and deployment_ok
-            and self_capability
-            and connected
-            and registered
-            and mcp_policy_ok
-            and not info.get("dangerous")
-            and not info.get("require_confirm")
-        )
         allowlist_ok = bool(
             explicitly_enabled
             and eligible
@@ -344,19 +269,9 @@ def decide_autonomy_tools(uid: str, char_id: str, state: dict) -> list[AutonomyT
             and mcp_policy_ok
         )
         in_schema = name in schemas
-        allowed = bool((allowlist_ok or inherit_mcp_read) and in_schema and not night_inactive)
-        if allowlist_ok:
-            decision_source = DECISION_SOURCE_ALLOWLIST
-            autonomy_policy = "allowlist"
-        elif inherit_mcp_read:
-            decision_source = DECISION_SOURCE_INHERITANCE
-            autonomy_policy = DECISION_SOURCE_INHERITANCE
-        elif explicitly_enabled:
-            decision_source = DECISION_SOURCE_ALLOWLIST
-            autonomy_policy = "allowlist"
-        else:
-            decision_source = DECISION_SOURCE_ALLOWLIST
-            autonomy_policy = "allowlist_required"
+        allowed = bool(allowlist_ok and in_schema and not night_inactive)
+        decision_source = DECISION_SOURCE_ALLOWLIST if name in configured else DECISION_SOURCE_INHERITANCE
+        autonomy_policy = "explicit_override" if name in configured else "global_permission_inheritance"
         denial = ""
         if not global_enabled:
             denial = "globally_disabled"
@@ -364,9 +279,9 @@ def decide_autonomy_tools(uid: str, char_id: str, state: dict) -> list[AutonomyT
             denial = deployment_reason or "deployment_disabled"
         elif not self_capability:
             denial = "self_capability_disabled"
-        elif not explicitly_enabled and not inherit_mcp_read:
+        elif not explicitly_enabled:
             denial = "autonomy_allowlist_disabled"
-        elif not eligible and not inherit_mcp_read:
+        elif not eligible:
             denial = eligibility_reason
         elif not connected:
             denial = "mcp_server_disconnected"
@@ -389,8 +304,8 @@ def decide_autonomy_tools(uid: str, char_id: str, state: dict) -> list[AutonomyT
             self_capability=bool(self_capability),
             mcp_policy=mcp_policy_reason,
             autonomy_policy=autonomy_policy,
-            danger=bool(info.get("dangerous")),
-            confirmation=bool(info.get("require_confirm")),
+            danger=False,
+            confirmation=False,
             registered=registered,
             mcp_server_connected=connected if is_mcp else None,
             mcp_policy_allowed=mcp_policy_ok,

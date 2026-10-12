@@ -546,7 +546,7 @@ thinking:
 # categories 含 "mcp" 只控制模型能否看见 MCP 工具，不能代替下面的本地副作用策略。
 mcp_servers:
   enabled: false                  # 总开关；关闭时不会建立任何 MCP session
-  require_local_policy: true      # true=启用的 server 必须有非空 allow_tools + 完整 tool_policy
+  require_local_policy: false     # 默认发现工具全部可用；用户可手动用 allow_tools/tool_policy 收窄
   # effect 只信任本地配置：
   #   read      = 只读，不确认
   #   write     = 改外部状态，默认不确认；可显式 require_confirm: true
