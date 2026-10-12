@@ -9,6 +9,8 @@ from admin.routers import settings_feature_flags as mod
 @pytest.fixture(autouse=True)
 def _stub_screen_observation_state(monkeypatch):
     from core.perception import screen_observation
+    from core import qq_service
+    monkeypatch.setattr(qq_service, "get_config", lambda: mod.get_config() or {})
 
     monkeypatch.setattr(
         screen_observation,
@@ -19,15 +21,15 @@ def _stub_screen_observation_state(monkeypatch):
 
 def test_feature_flags_update_is_allowlisted(tmp_path, monkeypatch):
     path = tmp_path / "config.yaml"
-    path.write_text("practice:\n  enabled: false\n", encoding="utf-8")
+    path.write_text("action_trace:\n  enabled: false\n", encoding="utf-8")
     monkeypatch.setattr(mod, "CONFIG_FILE", path)
     monkeypatch.setattr(mod, "get_config", lambda: yaml.safe_load(path.read_text(encoding="utf-8")))
     from core import config_loader
     monkeypatch.setattr(config_loader, "reload_config", lambda: None)
 
-    result = asyncio.run(mod.update_feature_flags(mod.FeatureFlagsUpdate(flags={"practice": True}), auth=None))
-    assert result["flags"]["practice"]["enabled"] is True
-    assert yaml.safe_load(path.read_text(encoding="utf-8"))["practice"]["enabled"] is True
+    result = asyncio.run(mod.update_feature_flags(mod.FeatureFlagsUpdate(flags={"action_trace": True}), auth=None))
+    assert result["flags"]["action_trace"]["enabled"] is True
+    assert yaml.safe_load(path.read_text(encoding="utf-8"))["action_trace"]["enabled"] is True
 
 
 def test_self_management_feature_flag_is_exposed_and_consumed(tmp_path, monkeypatch):

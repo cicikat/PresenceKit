@@ -46,6 +46,8 @@ FLAGS = {
     "video_call_frame_diff": ("video_call_frame_diff", "enabled", "视频通话帧差分（首帧全量、后续只描述变化）"),
 }
 _DEFAULT_ENABLED_FLAGS = frozenset({"self_management"})
+_EXPERIMENTAL_FLAGS = frozenset({"event_edge_proposer", "event_shadow_recall"})
+_FROZEN_FLAGS = frozenset({"spend", "toy_autogrow"})
 
 
 class FeatureFlagsUpdate(BaseModel):
@@ -69,6 +71,8 @@ async def get_feature_flags(auth=Depends(require_scopes("admin"))):
     for name, (section, key, label) in FLAGS.items():
         enabled = bool(cfg.get(section, {}).get(key, name in _DEFAULT_ENABLED_FLAGS))
         item = {
+            "experimental": name in _EXPERIMENTAL_FLAGS,
+            "frozen": name in _FROZEN_FLAGS,
             "enabled": bool(cfg.get(section, {}).get(key, name in _DEFAULT_ENABLED_FLAGS)),
             "desired_enabled": enabled,
             "label": label,

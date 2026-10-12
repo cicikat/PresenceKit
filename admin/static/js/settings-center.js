@@ -41,6 +41,22 @@ async function withCreationSave(save) {
   catch(error){document.getElementById('creation-result').textContent=t('settings_center.save_error','保存失败：{error}',{error:error.message});}
   finally{controls.forEach(el=>el.disabled=false);}
 }
+async function loadFrozenFeatures() {
+  const root=document.getElementById('frozen-features-list');
+  const results=await Promise.allSettled([api('GET','/settings/feature-flags'),api('GET','/settings/tools')]);
+  let html='';
+  if(results[0].status==='fulfilled') {
+    html+=Object.entries(results[0].value.flags||{}).filter(([,item])=>item.frozen||item.experimental).map(([name,item])=>centerSwitch(centerFeatureNames()[name]||item.label,item.enabled,'flag',name,item.frozen,item.frozen?'当前冻结':centerFlagNote(item,name))).join('');
+  } else html+='<p>功能状态读取失败，请刷新重试。</p>';
+  if(results[1].status==='fulfilled') {
+    html+=(results[1].value.tools||[]).filter(tool=>tool.frozen).map(tool=>centerSwitch(t(`tools.description.${tool.name}`,tool.description||tool.name),tool.execution_enabled,'tool',tool.name,true,'当前冻结')).join('');
+  } else html+='<p>工具状态读取失败，请刷新重试。</p>';
+  root.innerHTML=html||'<p>暂无冻结或实验功能。</p>'; bindPageActions(root);
+  await loadPageFragment('integrations');
+  const source=document.getElementById('page-integrations');
+  const target=document.getElementById('frozen-integrations');
+  if(source&&target) [...source.children].forEach(node=>target.append(node));
+}
 function saveCreationAssets() {
   const body={active_character:document.getElementById('creation-character').value};
   for(const key of ['enabled_lorebooks','enabled_jailbreaks'])body[key]=[...document.querySelectorAll(`[data-creation-asset="${key}"]:checked`)].map(el=>el.value);
@@ -152,7 +168,7 @@ async function loadFeatureCenter() {
   const flags=results[0], tools=results[1], loop=results[2], state=results[3];
   if(tools.status==='fulfilled') refreshToolExecutionStates(tools.value.tools);
   const grouped=new Set(Object.values(CENTER_GROUPED_FLAGS).flat());
-  const remainingFlags=flags.status==='fulfilled'?Object.entries(flags.value.flags||{}).filter(([name])=>!grouped.has(name)).map(([name,item])=>centerSwitch(centerFeatureNames()[name]||item.label,item.enabled,'flag',name,false,centerFlagNote(item,name))).join(''):t('settings_center.could_not_load_refresh_to_retry',"读取失败，请刷新重试");
+  const remainingFlags=flags.status==='fulfilled'?Object.entries(flags.value.flags||{}).filter(([name,item])=>!grouped.has(name)&&!item.frozen&&!item.experimental).map(([name,item])=>centerSwitch(centerFeatureNames()[name]||item.label,item.enabled,'flag',name,false,centerFlagNote(item,name))).join(''):t('settings_center.could_not_load_refresh_to_retry',"读取失败，请刷新重试");
   const peek=results[7], meta=results[8], sticker=results[9], browser=results[10];
   let html=section(t('settings_center.perception_and_computer_actions',"感知与电脑操作"), [
     centerFlagSwitch(flags,'visual_perception',t('settings_center.screen_perception',"视觉感知")),
@@ -170,7 +186,7 @@ async function loadFeatureCenter() {
   html+=section(t('settings_center.feature_switches',"功能总开关"),remainingFlags);
   html+=section(t('settings_center.multi_step_tool_calls',"多步工具调用"),loop.status==='fulfilled'?centerSwitch(t('settings_center.global_default',"全局默认"),loop.value.enabled,'loop','enabled',false,t('settings_center.character_cards_can_override_this_ordinary_tool_calls_are_controlled_separately',"角色卡可覆盖；普通工具调用另行控制")):t('settings_center.could_not_load',"读取失败"));
   html+=section(t('settings_center.proactive_behavior_and_voice',"主动行为与语音"), [[t('settings_center.scheduler',"调度器"),4,'scheduler'],[t('settings_center.autonomous_activity',"自主活动"),5,'autonomy'],[t('settings_center.speech_synthesis',"语音合成"),6,'tts']].map(([label,i,source])=>results[i].status==='fulfilled'?(source==='autonomy'?centerAutonomyControls(results[i].value):centerSwitch(label,results[i].value.enabled,source,'enabled',false,t('settings_center.global_configuration',"全局配置"))):label+t('settings_center.could_not_load',"：读取失败")).join(''));
-  html+=section(t('settings_center.built_in_tool_permissions',"内置工具执行开关"),tools.status==='fulfilled'?(tools.value.tools||[]).map(tool=>centerSwitch(t(`tools.description.${tool.name}`,tool.description||tool.name),tool.execution_enabled,'tool',tool.name,tool.frozen,tool.frozen?t('settings_center.currently_frozen',"当前冻结"):t('settings_center.global_permission_character_scope_and_execution_conditions_still_apply',"全局执行许可；仍需满足角色范围和执行条件"))).join(''):t('settings_center.could_not_load',"读取失败"));
+  html+=section(t('settings_center.built_in_tool_permissions',"内置工具执行开关"),tools.status==='fulfilled'?(tools.value.tools||[]).filter(tool=>!tool.frozen).map(tool=>centerSwitch(t(`tools.description.${tool.name}`,tool.description||tool.name),tool.execution_enabled,'tool',tool.name,tool.frozen,tool.frozen?t('settings_center.currently_frozen',"当前冻结"):t('settings_center.global_permission_character_scope_and_execution_conditions_still_apply',"全局执行许可；仍需满足角色范围和执行条件"))).join(''):t('settings_center.could_not_load',"读取失败"));
   html+=section(t('settings_center.effective_state',"当前生效状态"),state.status==='fulfilled'?renderChainTable(state.value.features||[]):t('settings_center.status_unavailable_this_does_not_mean_the_feature_is_disabled',"状态读取失败；不代表功能关闭"));
   root.innerHTML=html; bindPageActions(root);
 }
@@ -199,7 +215,7 @@ async function saveCenterSwitch(input) {
     else if(input.dataset.centerSource==='sticker') result=await api('PUT','/sticker-config',{enabled:value});
     else if(input.dataset.centerSource==='browser') result=await api('PUT','/settings/agent-runtime-browser',{enabled:value});
     else {const routes={scheduler:['PUT','/scheduler/config'],autonomy:['PATCH','/admin/autonomy/config'],tts:['PUT','/tts-config']};const [method,path]=routes[input.dataset.centerSource];result=await api(method,path,{enabled:value});}
-    toast(centerRestartRequired(result?.restart_required)?t('settings_center.saved_some_settings_require_a_restart',"已保存，部分设置需重启"):t('settings_center.saved',"已保存"),'ok'); await loadFeatureCenter();
+    toast(centerRestartRequired(result?.restart_required)?t('settings_center.saved_some_settings_require_a_restart',"已保存，部分设置需重启"):t('settings_center.saved',"已保存"),'ok'); await (input.closest('#frozen-features-list') ? loadFrozenFeatures() : loadFeatureCenter());
   } catch(error) { input.checked=!value; input.disabled=false; toast(t('settings_center.save_error','保存失败：{error}',{error:error.message}),'err'); }
 }
 let imeObservationCursor = null;

@@ -72,7 +72,7 @@ function _renderPathExposure() {
 function _renderToolsRegistry() {
   const root = document.getElementById('tools-registry-list');
   if (!root || !_toolsControl) return;
-  const rows = (_toolsControl.tools || []).map(tool => {
+  const rows = (_toolsControl.tools || []).filter(tool => !tool.frozen).map(tool => {
     const frozen = tool.frozen === true;
     const execution = `<span class="badge" data-tool-state="${escapeHtml(tool.name)}" data-enabled="${tool.execution_enabled}">${escapeHtml(tool.execution_enabled ? t("common.enabled", "已开启") : t("common.disabled", "已关闭"))}</span>`;
     return `<tr><td><strong><code>${escapeHtml(tool.name)}</code></strong><div style="font-size:12px;color:var(--muted)">${escapeHtml(_toolUiDescription(tool))}</div></td><td>${escapeHtml(_toolCategoryLabel(tool.category))}</td><td>${execution}</td></tr>`;

@@ -4,7 +4,7 @@ async function loadFeatureFlags() {
   try {
     const data = await api('GET', '/settings/feature-flags');
     _featureFlags = data.flags || {};
-    el.innerHTML = Object.entries(_featureFlags).map(([name, item]) =>
+    el.innerHTML = Object.entries(_featureFlags).filter(([,item])=>!item.frozen&&!item.experimental).map(([name, item]) =>
       `<label class="checkbox-row" style="gap:9px;padding:9px 10px;border:1px solid var(--border);border-radius:6px"><input type="checkbox" data-feature-flag="${escapeHtml(name)}" ${item.enabled ? 'checked' : ''}><span>${escapeHtml(t('flag.' + name, item.label))}<small style="display:block;color:var(--muted)">${escapeHtml(name)} · effective: ${escapeHtml(item.effective_state || 'unknown')} · ${escapeHtml(item.apply_mode || 'unknown')}${item.restart_required ? ' (restart required)' : ''}</small>${item.description ? `<small style="display:block;color:var(--muted)">${escapeHtml(item.description)}</small>` : ''}</span></label>`
     ).join('');
   } catch (error) {

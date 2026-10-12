@@ -20,7 +20,7 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'character-permissions-288-20261012';
+const ADMIN_UI_FRAGMENT_VERSION = 'frozen-features-288-20261012';
 
 const ADMIN_PAGE_ALIASES = Object.freeze({overview:'setup', users:'character', 'operations-center':'status', memory: 'observe-memory', 'creation-center':'data-management', 'observe-existence':'observe-dream'});
 
@@ -311,6 +311,7 @@ async function goto(page, {reloadFragment = false, fromHistory = false} = {}) {
     'embedding-config': loadSetupEmbedding,
     'local-model-runtime': loadLocalModelRuntime,
     'observation-center': loadImeObservation,
+    'frozen-features': loadFrozenFeatures,
     'feature-center': () => AdminPageLayout.loadObservations('feature-center'),
     'service-center': loadServiceCenter,
     'role-bindings': loadRoleBindings,
