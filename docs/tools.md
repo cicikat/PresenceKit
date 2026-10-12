@@ -107,11 +107,11 @@ Tool Loop、autonomy 或 Self Capability，也不能通过直接 dispatch 执行
 响应包含 `processed_count`、最终 `allow_tools`、`tool_policy` 和 `reload_status`。
 
 `default` 只补齐缺失的本地 policy，保留已有显式策略；可靠只读工具使用 `read`，其他工具
-使用 `write`，新生成的普通策略统一写入 `require_confirm: false`。是否每次确认是管理员的逐工具
-显式选择，不由远端 annotations、名称、描述或风险建议自动开启。导入、普通保存和批量默认授权
+使用 `write`，新生成的普通策略统一写入 `require_confirm: false`。旧 require_confirm 标记不再改变执行；管理员可以逐工具
+调整权限。导入、普通保存和批量默认授权
 共用同一套生成规则。
 `unrestricted` 是管理员明确选择的无限制执行模式，会为当前发现的全部工具写入
-`effect: unrestricted`、`idempotent: true`、`require_confirm: false`，并只需一次管理面确认。
+`effect: unrestricted`、`idempotent: true`、`require_confirm: false`，由管理面保存权限配置。
 
 开启 `mcp_servers.require_local_policy` 后，`allow_tools: []` 表示零授权，不再表示全部允许。
 普通保存会先补齐当前运行时快照中的缺失 policy；若仍有 allowlisted 工具没有有效本地 policy，
@@ -256,7 +256,7 @@ hello 字段或协商流程。
   `tool_tools_path_a` / `tool_tools_path_c` 是进一步的精确白名单，`tool_exclude_path_a` /
   `tool_exclude_path_c` 只能继续排除。旧 `tool_categories` 保留为 Path C 的兼容别名。全局默认在
   `tool_exposure.path_a` / `tool_exposure.path_c`；Path C 未配置新块时继续回落
-  `tool_loop.categories/exclude_tools`。角色覆盖不能绕过执行闸门、危险确认或 MCP local policy。
+  `tool_loop.categories/exclude_tools`。角色覆盖遵循用户显式工具权限及 MCP local policy。
   示例卡 `examples/benwo.example.json` 把 `mcp` 类加入暴露面；
   角色 authored 文件的 canonical 路径是 `userdata/characters/cards/<char_id>.json`，
   根目录不放模板/示例文件，见 `tests/test_authored_assets.py::test_no_template_files_in_characters_root`；
@@ -340,7 +340,7 @@ MCP 常规调用形态是 owner private turn 中已激活的 Path C：
 `Path C tool loop → tool_dispatcher → local tool 或 MCP dynamic tool → MCP client/session →
 external MCP server → bounded ToolResult → 当前轮 tool-result 边界`。此外，admin-only 的 MCP Tool-call
 Console 可在排障时走 `admin router → tool_dispatcher.execute_structured(origin="admin_console") → MCP dynamic tool`
-这一受限路径；它不直连 MCP session，也不能绕过 allowlist、本地 policy、effect/确认门或超时。scheduler、stimulus/trigger、
+这一受限路径；它不直连 MCP session，也不能绕过 allowlist、本地 policy、effect/权限门或超时。scheduler、stimulus/trigger、
 Dream、Stage 不会隐式升级为 MCP 调用；MCP 结果不重新进入 `perceive_event`，不成为 stimulus，
 也不拥有直接 memory writer 权限。`hardware_gateway` 只是外部 MCP Server 的一种实现，不是
 PresenceKit 核心模块。
@@ -408,12 +408,11 @@ override。删除 mapping、override 或 selector 后立即回到普通 MCP 行�
 - **受控手动调用**：后端管理面 MCP 页的 Tool-call Console 只列出已连接、有效 allowlist、已注册并已通过
   local policy 的工具；`POST /settings/mcp/console/invoke` 再次以 registry/config/runtime 交叉验证，并用
   inputSchema 校验 JSON 参数。它以 `admin_console` origin 复用 dispatcher；管理调用不受角色熟练度门控，
-  但绝不绕过本地 effect、dangerous confirmation、模式与工具启用门。需要确认时只返回 120 秒一次性的
-  ticket，`/confirm` 只能重放 ticket 内的 server/tool/arguments；policy 或连接变化会在确认时重新拒绝。
+  工具权限继承普通角色配置，直接执行；旧 console confirmation ticket 与确认接口已删除。
 - **本地 effect 策略**：`require_local_policy: true` 时，管理面 URL 导入会在 `initialize + list_tools`
   成功后为每个选中的工具写入本地默认 `tool_policy`，并保留重导入时已有的显式策略。建议可判定为
   `read` / `write` 的工具按建议落盘；无法判定的工具写为 `write`，新生成的普通策略均默认
-  `require_confirm: false`。管理面逐工具复选框是确认行为的唯一显式控制面，已有 true/false 均保留。手动更新
+  `require_confirm: false`。旧 require_confirm 值仅兼容解析，effective 恒为 false；管理面移除确认复选框。手动更新
   `allow_tools` 时，管理面会从当前运行时快照补齐缺失策略；无法补齐时严格写入会拒绝。每个已确认的白名单工具都要显式标为 `read`、`write`、`actuate`、
   `emergency` 或 `unrestricted`；校验失败不会写入配置或热重载。`unrestricted` 是管理员在本地明确选定的“无限制执行”模式：强制不确认、
   必须显式 `idempotent: true`，同一 `request_id` 最多重连重试三次。像删除远端帖子这样的操作应标为
@@ -440,11 +439,11 @@ override。删除 mapping、override 或 selector 后立即回到普通 MCP 行�
   Path C 的原生 function schema 从这里取得，tail-brace relay 继续复用同一轮已经筛选后的 `tools`
   与 allowed name 集合，不会重建或扩大 MCP 暴露面。Path A 默认类别仍不含 MCP，但管理员可通过
   `tool_exposure.path_a` 明确加入，三端同步生效。
-- **暴露面与危险工具排除**：server 级 `allow_tools` 先按 `list_tools` 结果做白名单过滤；调用路径
+- **暴露面与用户工具权限**：server 级 `allow_tools` 先按 `list_tools` 结果做白名单过滤；调用路径
   还必须在各自 `tool_exposure.path_a/path_c` 的 category、tools 白名单和 exclude_tools 内，并通过
   `mcp_proficiency` 的 schema/执行双重门控。默认 Path C/Path A 都不含 `mcp`。动态 MCP 条目当前统一标记
   `dangerous=False`，不会因外部 description 或 annotation 自动获得本地高危确认语义；显式
-  `tool_policy.<tool>.require_confirm: true` 仍会要求确认。需要
+  `tool_policy.<tool>.require_confirm: true` 不再触发确认。需要
   排除的工具必须显式列入 `exclude_tools` 或 `allow_tools` 白名单。外部 server 不能通过工具
   描述改变这些系统权限。
 - **执行适配**：`execute_structured()` 走既有的通用分发分支（`func(**tool_args)`），内部转发到
@@ -468,7 +467,7 @@ override。删除 mapping、override 或 selector 后立即回到普通 MCP 行�
   到同一条总账记录；`request_id` 仍用于动作超时/结果不明的 MCP 侧关联。
 - **管理面安全摘要**：`GET /settings/mcp` 为每个工具分别返回已发现、已授权、当前会话可暴露
   三个状态，以及远端/本地/最终 domains、interaction 提示和 metadata 状态/版本。远端分类不是
-  授权，interaction 不是本地 effect，确认仍只由本地 policy 控制。响应不返回完整 `_meta`、
+  授权，interaction 不是本地 effect，执行权限由本地配置控制。响应不返回完整 `_meta`、
   原始 description 或完整参数 schema；控制台只得到有界的参数名/类型摘要，执行时仍在服务端用
   registry 中的完整 JSON Schema 校验。
 - **探针默认不覆盖 mcp 类**：默认 Path A 是 info/desktop；若管理员明确把 mcp 放进
@@ -478,7 +477,7 @@ override。删除 mapping、override 或 selector 后立即回到普通 MCP 行�
   Anthropic API 直连（非网关），当前架构不涉及。
 - **风险**：MCP server 是外部进程，描述/结果都是不可信输入，见 `docs/known-issues.md`
   "观察项（Brief 29 · MCP）"。任何描述、参数 schema 或返回文本都不能被当作系统指令，
-  不能借工具描述提升角色暴露面、绕过 origin 闸门、危险工具排除、超时或审计规则。
+  不能借工具描述提升角色暴露面、绕过 origin 闸门、用户工具权限、超时或审计规则。
 
 统一路由按路径过滤探针类别，通道不参与决策：
 ```python
@@ -556,7 +555,7 @@ fs_access:
   `unsupported_file_type`。不承诺任意二进制均可理解。
 - **remote_server**：schema 仍暴露 fs，以便读本进程 backend；外部本机路径拒绝。
 - **探针默认不覆盖 fs 类**：默认 Path A 是 info/desktop。
-- **不受危险模式闸约束**：`fs` 不在 `_MODE_RESTRICTED_CATEGORIES`。
+- **工具权限**：`fs` 默认开放，可手动关闭。
 - **action_trace**：`trace_args: ["path"]`，收口在 `execute_structured()`。
 - **观测**：`GET /observability/backend-read`（`state.read`）返回 configured/
   effective、关闭原因、脱敏版本与计数；不含正文、秘密或完整路径。
@@ -598,7 +597,7 @@ self_access:
 - **创建可执行文本 ≠ process grant**：`.py`/脚本只是文本；执行仍走 Runtime process。
 - **脱敏**：`self_read` 先 `inspect_high_risk` 再 `redact_for_export`，失败拒绝不退原文。
 - **remote_server**：可写本进程 self 桶；不因此获得用户电脑外部写或 process。
-- **不受危险模式闸约束**：category `self`（T1 起从 `info` 拆出，旧 `info` 白名单自动展开包含），不在 `_MODE_RESTRICTED_CATEGORIES`。
+- **工具权限**：category `self` 默认开放，可手动关闭。
 - **结构化资料库 `self_db_*`（T2）**：每个 owner+char 桶一个 SQLite（`character_self_db()`，位于 self 文本根之外，`self_*` 读不到）。
   不开放原始 SQL：标识符正则 `^[A-Za-z_一-鿿][\w一-鿿]{0,31}$`（表名另不得以 `_` 开头）加双引号，值全部参数绑定；
   列类型 text/number/bool/date；`where` 支持 eq/ne/gt/lt/contains/in，update/delete 必填 where；单次插入 ≤50 行、
@@ -829,15 +828,15 @@ worker 在到期、异常、断线、显式取消和进程关闭时尝试停止�
 
 | 工具名 | 用途 | 备注 |
 |---|---|---|
-| `device_shutdown` | 关机 | `dangerous=True`，需用户确认，默认关闭 |
-| `device_sleep` | 睡眠 | `dangerous=True`，需用户确认，默认关闭 |
+| `device_shutdown` | 关机 | 默认开放，可手动关闭，无二次确认 |
+| `device_sleep` | 睡眠 | 默认开放，可手动关闭，无二次确认 |
 | `exit_yandere` | 他从病娇状态平静 | 旧客户端兼容：向 `Emerald-desktop` 写信号文件；PresenceKit-desktop 当前不消费该信号，未配置旧客户端时无可见效果 |
 
 ### phone_control 类（默认仅 Path C）
 
 | 工具名 | 用途 | 备注 |
 |---|---|---|
-| `phone_control_start` | 发起一次手机自动化任务（导航外卖/购物到支付确认页、操作无开放 API 的第三方 App） | `dangerous=True`，需用户确认 + danger-mode 门禁；只负责把任务派给手机（写 `mobile_queue` + `behavior_id=phone_control_task`），真正的截屏/点击循环在设备本地跑，见 `docs/protocols/phone-control-protocol.md`（Emerald-mobile 仓库）。**绝不自动完成支付/提交订单/确认收货**——遇到密码/支付/银行类页面，后端 `core/phone_control/sensitive_filter.py` 和设备本地各自独立拦截，命中任一方即停。默认不在任一路径暴露面内；显式加入 `tool_exposure.path_c` 或角色 `tool_categories_path_c` 后仅进 loop，加入 `path_a` 后三个端都会进入预探针，仍受确认和 danger-mode 闸门约束。能力诊断在角色加载失败时按 fail-closed 处理。 |
+| `phone_control_start` | 发起手机自动化任务 | 默认曝光，继承普通角色权限；无模式或敏感页面确认闸。任务写入 mobile_queue，由设备本地截屏/点击循环执行；设备系统权限、连接、取消、执行预算仍有效。 |
 
 新增子系统：`core/phone_control/`（`sensitive_filter.py` 敏感页面拦截、`vision_client.py` 视觉模型调用、`task_state.py` 步数/超时状态）+ 三个端点（`admin/routers/phone_control.py`）：
 
@@ -845,7 +844,7 @@ worker 在到期、异常、断线、显式取消和进程关闭时尝试停止�
 |---|---|---|
 | `POST /phone_control/step` | `chat` | 设备侧循环每步调用，上报观察换回下一步动作 |
 | `GET /phone_control/status` | `chat` | 只读诊断：兼容字段 `tool_enabled`（Path C）以及 `path_a_enabled`/`path_c_enabled`，均按角色覆盖后的共享暴露策略解析；另含 `vision_configured` 和 `char_id`，供手机端能力页展示 |
-| `POST /phone_control/debug/start` | `chat` | 调试用：跳过 LLM 判断和 chat 内二次确认，直接调 `tool_dispatcher._phone_control_start_wrapper()` 发起任务；**仍然过danger-mode 门禁**（复用 `tool_dispatcher._current_mode()`），不因为是调试端点就放宽 |
+| `POST /phone_control/debug/start` | `chat` | 跳过 LLM 工具选择，复用角色权限与实际任务调度直接发起任务 |
 
 视觉模型走 `image_presets` 的 `screen` 路由（主连接 + 可选备用连接，`core/phone_control/vision_client.py::phone_vision_chain()`），与影子观测、按需看屏幕共用同一条配置；调用方式与 `core/perception/vlm_client.py` 相同（OpenAI-compatible）。专用 `phone_control_vision` 覆盖已退役。角色级手机控制授权使用正式的 `presence_ext.tool_categories_path_a/path_c` 字段；旧 `tool_categories` 只作为 Path C 兼容别名。
 
@@ -1022,27 +1021,22 @@ action_trace:
 
 ## 工具开关
 
-`config.yaml` 的 `tools:` 节点，危险工具默认关闭：
+`config.yaml` 的 `tools:` 节点，角色工具默认开放，可手动关闭：
 
 ```yaml
 tools:
   device_shutdown:
-    enabled: false
+    enabled: true
   device_sleep:
-    enabled: false
+    enabled: true
   weather:
     enabled: true
     use_proxy: false  # 默认直连 wttr.in；需要走全局代理时再设 true
   # 其他工具默认 enabled: true
 ```
 
-工具执行还受全局安全模式约束：
-
-- 默认 `safe`：`desktop` / `system` 类工具在 `execute()` 入口被友好拒绝，`info` / `memory` 类不受影响
-- `danger`：通过受 Bearer 鉴权的 `PATCH /system/meta-mode` 开启，保持到手动切回 `safe`；客户端若仍传 `ttl_seconds` 会被忽略
-- 当前状态：`GET /system/meta-mode` 返回 `{mode, expires_at}`；danger 时 `expires_at` 恒为 null；状态文件损坏时 fail-closed 为 `safe`
-- 状态文件：`data/runtime/meta_mode.json`，路径通过 `get_paths().meta_mode()` 获取
-- 单工具 `config.tools.<name>.enabled` 仍保留；`device_shutdown` / `device_sleep` 在 danger 模式下仍需确认
+工具执行采用普通角色权限，危险模式及其 API、状态路径均已删除：
+- 单工具 `config.tools.<name>.enabled` 仍保留；`device_shutdown` / `device_sleep` 默认开放且无需确认
 - `weather` 是角色可读的 info 工具；`tools.weather.use_proxy` 默认 `false`（直连，不继承全局 `proxy`）。管理面功能开关总览里天气走内置工具执行开关；直连/代理细分在「工具」页。`GET/PUT /settings/tools` 的 `weather.use_proxy` 热更新该字段
 
 ---
@@ -1084,7 +1078,7 @@ class ToolResult:
 2. 在 `tool_dispatcher.py` 顶部写 wrapper 函数（async）
 3. 在 `_TOOL_REGISTRY` 里注册，填写 `func / description / dangerous / category / parameters`
 4. 如果需要探针覆盖（info/desktop 类），在注册条目里补充 `examples`（触发例句）和 `keywords`（快速路径关键词），`get_probe_prompt()` 会自动同步，无需手动改探针规则
-5. 如果是高危工具，设 `dangerous: True`，并在 `execute_structured()` 的确认逻辑里补充描述文案
+5. 工具执行无需风险说明或确认；声明 effect 供重试、审计及权限管理使用。
 6. 在 `config.yaml` 的 `tools:` 节点决定默认开关状态
 7. 在此文档的注册表里补充说明
 
@@ -1149,7 +1143,7 @@ queries, paths, profiles, cookies, headers, credentials, and page payloads.
 
 `browser_automation` is a default-off, Reality-only capability. It accepts only explicit
 `http/https` domains and bounded operations, runs through a per-task isolated browser profile,
-and returns redacted bounded projections. High-risk operations require explicit confirmation;
+and returns redacted bounded projections. Operations execute directly under character tool permissions;
 unknown browser outcomes become `outcome_unknown` and are never replayed. File transfer is
 delegated to Workspace, and the optional Playwright adapter is local-config opt-in.
 
@@ -1237,7 +1231,7 @@ an administrator updates the server-owned manifest.
 视频电话摄像头另有 `observe_video_call_camera`（工单 265）：仅活跃本机视频电话可用，借鉴屏幕按需工具的单次新帧请求、TTL 与撤销检查，但使用独立的 `video_call_tool` 图像路由（管理面「Routing · 图像用途」中的「视频电话 · 按需查看摄像头」）。该路由未显式配置时沿用周期观察的 `video_call` 路由；显式留空则只关掉按需查看，周期观察不受影响。两条路由同样只允许本机 loopback HTTP + Chat Completions 的视觉连接。结果只作为不可信观察事实；摄像头关闭或没有有效路由时不返回旧画面。`observe_user_screen` 的设备、授权与识别路由均不变。
 
 工单 266：`invite_video_call` 是角色范围受 `tools.invite_video_call.allowed_char_ids` 控制的主人私聊工具，也可由已启用的 autonomy 工具 allowlist 调用。它向已连接桌面端送一次来电并等待最多 10 秒，返回 `accepted`、`declined`、`unanswered`、`disconnected` 或不可用状态。它不替主人接通、不打开摄像头或麦克风。主人在已接通页面挂断后，仅产生一次 `video_call_hangup` 主动候选；是否再行动或发言仍由原有闸门决定。
-若模型把明确的发起视频通话请求误选为 `phone_control_start`，调度器先按 `invite_video_call` 的权限与可用性重新校验并转到桌面来电，不派发手机任务，也不触发手机自动化确认。普通手机自动化仍保留危险模式和二次确认。
+若模型把明确的发起视频通话请求误选为 `phone_control_start`，调度器先按 `invite_video_call` 的权限与可用性重新校验并转到桌面来电，不派发手机任务，也不触发手机自动化确认。普通手机自动化也直接按角色权限执行。
 
 详见仓库 `docs/screen-observation-2026-09-12.md`。后端 `observe_user_screen` 通过独立 HTTP poll/result 请求活跃电脑或手机的新截图，UUID/凭据绑定、20 秒 TTL、30 秒设备新鲜度和本地授权均参与门控；图像只在内存中处理。
 

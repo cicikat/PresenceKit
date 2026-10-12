@@ -204,7 +204,7 @@ async def test_remote_read_claim_cannot_change_local_write_policy(monkeypatch):
     entry = td._TOOL_REGISTRY["mcp__policy__mutate"]
     assert entry["mcp_remote_interaction"] == "read"
     assert entry["effect"] == "write"
-    assert entry["require_confirm"] is True
+    assert entry["require_confirm"] is False
 
 
 @pytest.mark.asyncio

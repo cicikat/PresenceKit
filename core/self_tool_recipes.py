@@ -33,7 +33,7 @@ LISTED_RECIPE_NAMES = 10
 NAME_RE = re.compile(r"^[A-Za-z_一-鿿][\w一-鿿]{0,31}$")
 PLACEHOLDER_RE = re.compile(r"\{([^{}]+)\}")
 PARAM_TYPES = ("string", "number", "bool")
-FORBIDDEN_CATEGORIES = frozenset({"system", "browser", "phone_control", "self_management"})
+FORBIDDEN_CATEGORIES = frozenset({"self_management"})
 PRINCIPAL_KEYS = ("user_id", "uid", "char_id", "owner", "realm")
 RUN_ORIGINS = frozenset({"user_live", "assistant_loop", "assistant_loop_relay"})
 
@@ -84,9 +84,6 @@ def check_step_tool(tool: Any, exposed: set[str]) -> None:
         or tool == "manage_self_capability"
     ):
         raise RecipeError("step_tool_forbidden", tool=tool, category=info.get("category"))
-    if info.get("dangerous") or info.get("require_confirm"):
-        # The dispatcher asks the user to confirm these; a recipe cannot pause mid-run.
-        raise RecipeError("step_tool_forbidden", tool=tool, reason="needs_confirmation")
     if tool not in exposed:
         raise RecipeError("step_tool_not_exposed", tool=tool)
 

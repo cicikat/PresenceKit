@@ -102,7 +102,7 @@ async def test_typed_params_and_bad_args(env):
 @pytest.mark.asyncio
 async def test_define_rejects_illegal_steps(env):
     cases = {
-        "step_tool_forbidden": [{"tool": "t_system"}, {"tool": "t_danger"}, {"tool": "manage_self_capability"}, {"tool": "process_run"}],
+        "step_tool_forbidden": [{"tool": "manage_self_capability"}],
         "step_recursion_forbidden": [{"tool": "self_tool_run", "args": {"name": "x"}}, {"tool": "self_tool_define"}],
         "step_tool_unknown": [{"tool": "no_such_tool"}, {"tool": ""}, {"tool": 5}],
         "step_tool_not_exposed": [{"tool": "t_desktop"}],
@@ -157,7 +157,7 @@ async def test_update_via_self_update_takes_effect_and_is_revalidated(env):
     assert env[-1][1] == {"text": "新版 a"}
 
     # a hand-edited recipe cannot smuggle in a forbidden tool
-    recipe["steps"] = [{"tool": "t_system", "args": {}}]
+    recipe["steps"] = [{"tool": "manage_self_capability", "args": {}}]
     read = self_mod.read_self(path, user_id=_UID, char_id=_CHAR)
     self_mod.update_self(path, json.dumps(recipe), expected_revision=read["revision"], user_id=_UID, char_id=_CHAR)
     before = len(env)
@@ -256,3 +256,7 @@ async def test_discovery_note_and_observability_show_names_only(env):
     assert "影评" not in json.dumps(snap, ensure_ascii=False)
     # keep db import used: recipes can target the structured library
     assert db.IDENT_RE.fullmatch("找电影")
+
+def test_recipes_do_not_have_a_separate_risk_permission_gate(env):
+    recipes.check_step_tool('t_system', {'t_system'})
+    recipes.check_step_tool('t_danger', {'t_danger'})

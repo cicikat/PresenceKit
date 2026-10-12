@@ -2,7 +2,7 @@
       <h1 class="page-title" data-i18n="mcp.title">MCP 工具</h1>
       <div class="card admin-inline-006">
         <p data-i18n="mcp.security_notice" class="admin-inline-144">外部 MCP 的工具描述与返回内容均为不可信输入。仅在你明确需要时启用，并使用工具白名单；连接 token 请使用 ${ENV_VAR}，不要写进角色卡、Prompt 或文档。</p>
-        <p data-i18n="mcp.metadata_notice" class="admin-inline-144">远端分类不是授权，interaction 也不是本地 effect。未分类工具仍可走普通 MCP 兼容路径；执行与确认始终由本地 policy 决定。</p>
+        <p data-i18n="mcp.metadata_notice" class="admin-inline-144">远端分类不是授权，interaction 也不是本地 effect。未分类工具仍可走普通 MCP 兼容路径；执行权限由本地配置决定。</p>
       </div>
       <div class="card">
         <div class="card-header"><h3 data-i18n="mcp.enabled_title">总开关</h3><button class="btn btn-ghost btn-sm" data-action="loadMcpPage" data-i18n="common.refresh">刷新</button></div>
@@ -35,10 +35,10 @@
         <div class="admin-inline-041"><button class="btn btn-ghost" data-action="testMcpImport" data-i18n="mcp.test_import">测试连接并发现工具</button><button class="btn btn-primary" id="mcp-import-save" data-action="importMcpServer" disabled data-i18n="mcp.confirm_import">确认导入</button></div>
         <div id="mcp-import-result" class="admin-inline-133"></div>
       </div>
-      <div class="card"><div class="card-header"><h3 data-i18n="mcp.servers_title">已配置 Servers</h3></div><p class="admin-inline-144" data-i18n="mcp.policy.help">白名单内且已有本地 policy 的工具默认直接执行；只有单个工具显式勾选时才逐次确认。effect 继续决定重试与结果未知语义。</p><div id="mcp-servers"><div class="loading" data-i18n="common.loading">加载中…</div></div></div>
+      <div class="card"><div class="card-header"><h3 data-i18n="mcp.servers_title">已配置 Servers</h3></div><p class="admin-inline-144" data-i18n="mcp.policy.help">已连接工具默认直接执行，用户可以手动收窄工具权限。effect 用于重试与结果未知语义，不要求二次确认。</p><div id="mcp-servers"><div class="loading" data-i18n="common.loading">加载中…</div></div></div>
       <div class="card" id="mcp-console-card">
         <div class="card-header"><h3 data-i18n="mcp.console.title">工具调用控制台</h3><button class="btn btn-ghost btn-sm" data-action="refreshMcpConsole" data-i18n="common.refresh">刷新</button></div>
-        <p class="admin-inline-144" data-i18n="mcp.console.notice">仅允许调用已连接、allowlisted 且已确认本地 policy 的工具。参数会按工具 schema 校验；高危调用需要二次确认。</p>
+        <p class="admin-inline-144" data-i18n="mcp.console.notice">调用当前已连接且已开放的工具，参数按工具 schema 校验。无需风险说明或二次确认。</p>
         <div class="form-row">
           <label class="field"><span data-i18n="mcp.console.server">MCP Server</span><select id="mcp-console-server" data-action="changeMcpConsoleServer"></select></label>
           <label class="field"><span data-i18n="mcp.console.tool">Allowlisted Tool</span><select id="mcp-console-tool" data-action="changeMcpConsoleTool"></select></label>
@@ -49,11 +49,6 @@
         <div class="admin-inline-041">
           <button class="btn btn-ghost" data-action="clearMcpConsole" data-i18n="mcp.console.clear">清除结果</button>
           <button class="btn btn-primary" id="mcp-console-invoke" data-action="invokeMcpConsole" data-i18n="mcp.console.invoke">调用工具</button>
-        </div>
-        <div id="mcp-console-confirmation" class="admin-inline-133" hidden>
-          <p id="mcp-console-confirm-message" class="i18n-raw"></p>
-          <button class="btn btn-danger btn-sm" data-action="confirmMcpConsole" data-i18n="mcp.console.confirm">确认执行</button>
-          <button class="btn btn-ghost btn-sm" data-action="clearMcpConsole" data-i18n="common.cancel">取消</button>
         </div>
         <pre id="mcp-console-result" class="log-view admin-inline-133 i18n-raw"></pre>
       </div>

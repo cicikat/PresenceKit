@@ -1,3 +1,5 @@
+工单 288 C4/C5：生活记录 SQLite、群聊缓存、日记 fallback 与镜像均位于角色运行目录；日记源配置保存到 diary.by_character，旧全局源不自动继承。手机生活记录队列及桌面日记目录绑定固定 char_id，切角色不改写旧批次归属。food/quote/统计数据库物理共享，但按 char_id 行隔离，管理清单只读统计当前角色；共享 Stage transcript 是明确参与者的会议证据，安装级连接、凭据、ACL 与原始传感器观测不作为跨角色学习记忆。旧资料只按显式指定归属迁移，原件保留。
+
 工单 288 C3：现实世界书/提示词启用组合按角色保存在 active_prompt_assets.by_character；旧全局组合仅属于其 active_character，切换新角色从空组合开始。条目管理文件改到角色 authored 目录，API CRUD/import/export 支持 char_id 并在 await 前冻结。共享模块文件是安装级素材目录，只有用户为角色显式选择的模块可注入；条目文件不跨角色回退。历史共享条目可用迁移脚本 --artifact lorebook/jailbreak_entries 显式归属，默认 dry-run 并保留原件。单角色管理清单补条目文件与资产绑定。
 
 工单 288 C2：health_state（生理期、睡眠、传感器与 HDS）按 uid+char_id 保存。设备输入缺省归属接收时的当前角色；prompt、工具和主动心率链使用本轮角色。旧同角色 profile 可导入；旧 global 健康账本只经 migrate_character_user_facts.py --artifact health_state 显式归属，默认 dry-run，不覆盖目标且保留原件。GET/PUT/DELETE /period 可传 char_id，省略时使用当前角色。共享连接、鉴权与运行日志不属于角色记忆。
@@ -348,7 +350,7 @@ The private server mirror is runtime integration state, not authored
 `userdata`:
 
 ```
-data/runtime/integrations/diary/{owner}/
+data/runtime/characters/{char_id}/diary_mirror/{owner}/
 ├── manifest.json
 ├── status.json
 └── entries/YYYY-MM-DD.md

@@ -12,7 +12,7 @@
 
 # 功能控制面事实清单（最后核对：2026-09-28 模型出站网络自适应）
 
-284 P3：自主兴趣播种/练习/评分等级/技巧成长/MCP等级解锁已删除；practice 开关与成长观测路由/页面不再提供。MCP仍经服务器启用、工具暴露、角色授权、origin、安全模式和风险确认。旧 practice_session 队列项跳过且在 runtime-signals 记录 retired_practice_skipped，不再调用模型。历史作品文件不清理，可按既有文件阅读权限访问。
+284 P3：自主兴趣播种/练习/评分等级/技巧成长/MCP等级解锁已删除；practice 开关与成长观测路由/页面不再提供。MCP仍经服务器启用、工具暴露、角色授权与 origin；安全模式和风险确认已由工单288删除。旧 practice_session 队列项跳过且在 runtime-signals 记录 retired_practice_skipped，不再调用模型。历史作品文件不清理，可按既有文件阅读权限访问。
 
 284 P2：随机活动池/定时切换/随机旁白删除，无重新开启模拟的开关；presence.growth_activity_prob 停止消费并从示例删除。真实活动启动与权限不变，/activity/current 为空是正常状态。
 

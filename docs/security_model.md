@@ -249,7 +249,7 @@ workspace 文本操作与无 shell 的 process runner。目标、输入快照、
 2. 文件类型白名单、单文件大小、文件数量、解压后总大小限制
 3. 路径穿越检查和嵌套压缩包拒绝
 4. 插件目录隔离，禁止插件直接写 memory / queue / system path
-5. 工具权限 manifest，危险能力必须用户确认
+5. 工具权限 manifest，默认开放，可由用户手动收窄
 6. WebSocket / mobile / desktop 配对机制
 7. 导出清单，默认排除所有私人记忆和密钥
 

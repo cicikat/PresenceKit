@@ -378,17 +378,15 @@ async def patch_tools(body: dict, auth=Depends(require_scopes("admin"))):
         raise HTTPException(status_code=422, detail=f"autonomy tool is not eligible: {reason}")
     if policy["outcome_unknown"] != "fail_closed":
         raise HTTPException(status_code=422, detail="outcome_unknown must be fail_closed")
-    if effect not in {"read", "write"} or info.get("dangerous") or info.get("require_confirm"):
-        raise HTTPException(status_code=422, detail="该工具不允许 autonomy")
     state = store.load(uid, char_id); state["config"].setdefault("tools", {})[name] = policy
     store.replace_config(uid, char_id, state["config"]); return {"ok": True}
 
 
 @router.post("/admin/autonomy/tools/bulk", summary="批量开启/关闭主动时段可用工具")
 async def bulk_tools(body: dict, auth=Depends(require_scopes("admin"))):
-    """一键授权：只处理内置、非危险、无需确认且通过 tool_eligibility 的工具。
+    """一键调整内置工具权限，保留显式开关与工具可用性检查。
 
-    MCP 工具需要逐个确认「结果未知」策略，不在批量范围内。
+    MCP 工具在对应连接管理页调整，不在本批量范围内。
     """
     from core.autonomy import store
     from core.autonomy.policy import tool_eligibility

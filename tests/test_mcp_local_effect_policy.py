@@ -288,7 +288,7 @@ def _mcp_entry(func, *, effect: str, require_confirm: bool):
 
 
 @pytest.mark.asyncio
-async def test_write_calls_without_confirmation_and_explicit_write_confirmation_uses_existing_state(monkeypatch):
+async def test_write_calls_ignore_legacy_confirmation_flags(monkeypatch):
     calls: list[str] = []
 
     async def _write():
@@ -319,13 +319,13 @@ async def test_write_calls_without_confirmation_and_explicit_write_confirmation_
         "mcp__srv__create_reply", {}, "u1", "u1", False, state,
         origin="assistant_loop", char_id="c1",
     )
-    assert result.result is None and result.confirmation_request is not None
-    assert state.waiting == ("mcp__srv__create_reply", {})
-    assert calls == ["write"]
+    assert result.result and result.confirmation_request is None
+    assert state.waiting is None
+    assert calls == ["write", "confirmed"]
 
 
 @pytest.mark.asyncio
-async def test_explicit_actuate_confirmation_and_emergency_override(monkeypatch):
+async def test_actuate_and_emergency_execute_without_confirmation(monkeypatch):
     calls: list[str] = []
 
     async def _actuate():
@@ -352,13 +352,13 @@ async def test_explicit_actuate_confirmation_and_emergency_override(monkeypatch)
         "mcp__srv__hardware_pulse", {}, "u1", "u1", False, pulse_state,
         origin="assistant_loop", char_id="c1",
     )
-    assert result.result is None and result.confirmation_request is not None and calls == []
+    assert result.result and result.confirmation_request is None and calls == ["actuate"]
 
     result = await td.execute_structured(
         "mcp__srv__hardware_stop", {}, "u1", "u1", False, _ConfirmState(),
         origin="assistant_loop", char_id="c1",
     )
-    assert result.result and "stopped" in result.result and result.confirmation_request is None and calls == ["stop"]
+    assert result.result and "stopped" in result.result and result.confirmation_request is None and calls == ["actuate", "stop"]
 
 
 def test_effect_drives_side_effect_classification_without_changing_local_fallback(monkeypatch):

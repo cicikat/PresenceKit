@@ -848,50 +848,6 @@ def test_console_schema_validation_redacts_argument_value(monkeypatch):
     assert "secret-value" not in str(exc.value.detail)
 
 
-def test_console_confirmation_reuses_ticket_arguments_and_audit_id(monkeypatch):
-    _install_console_tool(monkeypatch)
-    mod._console_confirmations.clear()
-    calls = []
-
-    async def fake_run(*, registered_name, arguments, audit_id, confirmed):
-        from core.tool_dispatcher import ToolExecutionOutcome
-        calls.append((registered_name, arguments, audit_id, confirmed))
-        if not confirmed:
-            return ToolExecutionOutcome(
-                status="confirmation_required",
-                confirmation_request="确认后执行",
-            )
-        return ToolExecutionOutcome(
-            status="tool_executed",
-            result="工具已执行：mcp__cedar_toy__toy_status，结果：ok",
-        )
-
-    monkeypatch.setattr(mod, "_run_console_tool", fake_run)
-    initial = asyncio.run(mod.invoke_mcp_console(
-        mod.McpConsoleInvoke(server="cedar_toy", tool="toy_status", arguments={"verbose": True}),
-        _auth=None,
-    ))
-    assert initial["status"] == "confirmation_required"
-    result = asyncio.run(mod.confirm_mcp_console(
-        mod.McpConsoleConfirm(confirmation_id=initial["confirmation_id"]), _auth=None,
-    ))
-
-    assert result == {
-        "status": "completed",
-        "audit_id": initial["audit_id"],
-        "result": "工具已执行：mcp__cedar_toy__toy_status，结果：ok",
-    }
-    assert calls == [
-        ("mcp__cedar_toy__toy_status", {"verbose": True}, initial["audit_id"], False),
-        ("mcp__cedar_toy__toy_status", {"verbose": True}, initial["audit_id"], True),
-    ]
-    with pytest.raises(HTTPException) as exc:
-        asyncio.run(mod.confirm_mcp_console(
-            mod.McpConsoleConfirm(confirmation_id=initial["confirmation_id"]), _auth=None,
-        ))
-    assert exc.value.status_code == 409
-
-
 @pytest.mark.asyncio
 async def test_console_origin_runs_through_dispatcher(monkeypatch, sandbox):
     from core import tool_dispatcher as td
@@ -907,14 +863,14 @@ async def test_console_origin_runs_through_dispatcher(monkeypatch, sandbox):
     monkeypatch.setattr("core.memory.action_trace.record", lambda *args, **kwargs: None)
     result = await td.execute_structured(
         "mcp__cedar_toy__toy_status", {}, "owner", "owner", False,
-        mod._ConsoleSessionState(), origin="admin_console", char_id="char",
+        None, origin="admin_console", char_id="char",
     )
     assert result.confirmation_request is None
     assert result.result == "工具已执行：mcp__cedar_toy__toy_status，结果：ok"
 
 
 @pytest.mark.asyncio
-async def test_console_runner_uses_dispatcher_confirmation(monkeypatch, sandbox):
+async def test_console_runner_executes_old_danger_flag_without_confirmation(monkeypatch, sandbox):
     _install_console_tool(monkeypatch)
     from core import tool_dispatcher as td
 
@@ -927,14 +883,8 @@ async def test_console_runner_uses_dispatcher_confirmation(monkeypatch, sandbox)
         "parameters": {}, "effect": "write", "mcp_server": "cedar_toy", "mcp_tool": "toy_status",
     })
     monkeypatch.setattr("core.memory.action_trace.record", lambda *args, **kwargs: None)
-    pending = await mod._run_console_tool(
-        registered_name="mcp__cedar_toy__toy_status", arguments={}, audit_id="audit", confirmed=False,
-    )
-    assert pending.result is None
-    assert pending.confirmation_request is not None
-    assert pending.status == "confirmation_required"
     completed = await mod._run_console_tool(
-        registered_name="mcp__cedar_toy__toy_status", arguments={}, audit_id="audit", confirmed=True,
+        registered_name="mcp__cedar_toy__toy_status", arguments={}, audit_id="audit",
     )
     assert completed.confirmation_request is None
     assert completed.status == "tool_executed"

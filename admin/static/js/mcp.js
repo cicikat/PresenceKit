@@ -1,6 +1,5 @@
 let _mcpImport = null;
 let _mcpConsoleData = null;
-let _mcpConsolePending = null;
 const MCP_EXPANDED_SERVERS_STORAGE_KEY = 'qq_admin_mcp_expanded_servers_v1';
 const MCP_DEFAULT_HEADERS = Object.freeze({});
 
@@ -111,7 +110,7 @@ function _mcpDraftFromForm() {
 }
 
 function _mcpSuggestion(tool) {
-  return tool?.suggestion || { effect: null, source: 'unknown', status: 'confirmation_required', high_risk: false };
+  return tool?.suggestion || { effect: null, source: 'unknown', status: 'unclassified', high_risk: false };
 }
 
 function _mcpEffectBadge(suggestion, policyStatus = '') {
@@ -119,10 +118,10 @@ function _mcpEffectBadge(suggestion, policyStatus = '') {
   const source = suggestion.source === 'name_description'
     ? t('mcp.suggestion.name_description', '名称/描述建议')
     : suggestion.source || t('mcp.status.pending', '待确认');
-  const risk = suggestion.high_risk ? ` ${t('mcp.status.high_risk', '高风险')}` : '';
+  const risk = '';
   const pending = policyStatus && policyStatus !== 'confirmed' && policyStatus !== 'legacy_allowed'
     ? ` ${t('mcp.status.pending', '待确认')}` : '';
-  return `<small style="display:block;color:${suggestion.high_risk ? 'var(--danger)' : 'var(--muted)'}">${escapeHtml(t('mcp.suggestion.summary', '建议 {effect} · {source}{risk}{pending}', {effect, source, risk, pending}))}</small>`;
+  return `<small style="display:block;color:${'var(--muted)'}">${escapeHtml(t('mcp.suggestion.summary', '建议 {effect} · {source}{risk}{pending}', {effect, source, risk, pending}))}</small>`;
 }
 
 function _mcpMetadataSummary(tool) {
@@ -158,7 +157,7 @@ async function loadMcpPage() {
       ? (data.servers || []).map(_renderMcpServer).join('')
       : `<div class="empty">${escapeHtml(t('mcp.empty_servers', '尚未配置 MCP server。先填写 URL 并测试连接。'))}</div>`;
     document.querySelectorAll('[data-i18n="mcp.policy.help"]').forEach(element => {
-      element.textContent = t('mcp.policy.help_v2', 'Mode guide: unrestricted is an administrator-selected unrestricted execution mode.');
+      element.textContent = t('mcp.policy.help_v2', 'Tools execute directly by default; permissions can be adjusted manually.');
     });
     _decorateMcpServerCards(serversEl, data.servers || []);
     bindPageActions(serversEl);
@@ -178,7 +177,6 @@ function _mcpConsoleEligibleTools(server) {
 
 function _setMcpConsoleData(data) {
   _mcpConsoleData = data || null;
-  _mcpConsolePending = null;
   const serverSelect = document.getElementById('mcp-console-server');
   if (!serverSelect) return;
   const servers = (_mcpConsoleData?.servers || []).filter(server => server.enabled && server.runtime?.connected);
@@ -214,7 +212,7 @@ function _renderMcpConsoleTool() {
   toolSelect.value = selected;
   const tool = tools.find(item => item.name === selected);
   info.textContent = tool
-    ? `${t('mcp.console.effect', 'effect')}: ${tool.effect || 'unclassified'}${tool.require_confirm ? ` · ${t('mcp.console.confirmation_required', 'confirmation required')}` : ''}\n` +
+    ? `${t('mcp.console.effect', 'effect')}: ${tool.effect || 'unclassified'}\n` +
       `${t('mcp.console.domains', 'domains')}: ${(tool.final_domains || []).join(', ') || 'unclassified'} · ${t('mcp.console.interaction', 'interaction')}: ${tool.remote_interaction || 'unknown'}`
     : t('mcp.console.no_tool', '该 server 没有可调用工具。');
   schema.textContent = JSON.stringify(tool?.parameter_summary || {}, null, 2);
@@ -223,13 +221,11 @@ function _renderMcpConsoleTool() {
 }
 
 function changeMcpConsoleServer() {
-  _mcpConsolePending = null;
   _renderMcpConsoleTool();
   clearMcpConsole();
 }
 
 function changeMcpConsoleTool() {
-  _mcpConsolePending = null;
   clearMcpConsole();
   _renderMcpConsoleTool();
 }
@@ -239,9 +235,6 @@ function _showMcpConsoleResult(text) {
 }
 
 function clearMcpConsole() {
-  _mcpConsolePending = null;
-  document.getElementById('mcp-console-confirmation').hidden = true;
-  document.getElementById('mcp-console-confirm-message').textContent = '';
   _showMcpConsoleResult('');
 }
 
@@ -265,13 +258,7 @@ async function invokeMcpConsole() {
   clearMcpConsole();
   try {
     const result = await api('POST', '/settings/mcp/console/invoke', { server: server.name, tool: tool.name, arguments: arguments_ });
-    if (result.status === 'confirmation_required') {
-      _mcpConsolePending = result;
-      document.getElementById('mcp-console-confirm-message').textContent = result.confirmation_message || '';
-      document.getElementById('mcp-console-confirmation').hidden = false;
-      _showMcpConsoleResult(`audit_id: ${result.audit_id}`);
-      return;
-    }
+
     _showMcpConsoleResult(`audit_id: ${result.audit_id}\n\n${result.result || t('mcp.console.no_result', '调用完成，无文本结果。')}`);
   } catch (e) { _showMcpConsoleResult(`${t('mcp.console.invoke_error', '调用被拒绝或失败：')}${e.message}`); }
 }
@@ -279,15 +266,6 @@ async function invokeMcpConsole() {
 function addMcpHeader() { addKeyValueRow('mcp-import-headers', _mcpHeaderEditorOptions()); }
 function addMcpConsoleArgument() { addKeyValueRow('mcp-console-arguments'); }
 
-async function confirmMcpConsole() {
-  if (!_mcpConsolePending?.confirmation_id) return;
-  const confirmationId = _mcpConsolePending.confirmation_id;
-  clearMcpConsole();
-  try {
-    const result = await api('POST', '/settings/mcp/console/confirm', { confirmation_id: confirmationId });
-    _showMcpConsoleResult(`audit_id: ${result.audit_id}\n\n${result.result || t('mcp.console.no_result', '调用完成，无文本结果。')}`);
-  } catch (e) { _showMcpConsoleResult(`${t('mcp.console.confirm_error', '确认调用失败：')}${e.message}`); }
-}
 
 function _moveMcpSaveControls(root) {
   root.querySelectorAll('[data-action="saveMcpServer"]').forEach(button => {
@@ -365,9 +343,7 @@ function _mcpPolicyControl(server, tool, allowlisted) {
   ).join('');
   const args = escapeHtml(JSON.stringify([server.name, tool.name]));
   const selectId = `mcp-policy-effect-${server.name}-${tool.name}`;
-  const confirmId = `mcp-policy-confirm-${server.name}-${tool.name}`;
-  const requireConfirm = state.policy?.require_confirm === true || state.require_confirm === true;
-  return `${badge}<span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px"><span style="font-size:12px;color:var(--muted)">${escapeHtml(t('mcp.policy.mode', '模式'))}</span><select id="${escapeHtml(selectId)}" style="max-width:116px">${options}</select><label class="checkbox-row"><input type="checkbox" id="${escapeHtml(confirmId)}" ${requireConfirm ? 'checked' : ''}><span>${escapeHtml(t('mcp.policy.require_confirm', '每次执行前确认'))}</span></label><button class="btn btn-ghost btn-sm" data-action="saveMcpToolPolicy" data-action-args="${args}">${escapeHtml(t('mcp.policy.save_mode', '保存模式'))}</button></span>`;
+  return `${badge}<span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px"><span style="font-size:12px;color:var(--muted)">${escapeHtml(t('mcp.policy.mode', '模式'))}</span><select id="${escapeHtml(selectId)}" style="max-width:116px">${options}</select><button class="btn btn-ghost btn-sm" data-action="saveMcpToolPolicy" data-action-args="${args}">${escapeHtml(t('mcp.policy.save_mode', '保存模式'))}</button></span>`;
 }
 
 function _mcpMetadataControl(server, tool) {
@@ -448,10 +424,6 @@ function _mcpReloadToastText(status, {reloaded, connectionFailed, restartRequire
 }
 
 async function bulkAuthorizeMcpServer(name, mode) {
-  if (mode === 'unrestricted' && !confirm(t(
-    'mcp.bulk.unrestricted_confirm',
-    'Authorize every currently discovered tool without per-tool confirmation? This writes unrestricted policies and enables retries for explicitly idempotent calls.',
-  ))) return;
   const controls = [...document.querySelectorAll('[data-mcp-bulk-server]')]
     .filter(element => element.dataset.mcpBulkServer === name)
     .flatMap(element => [...element.querySelectorAll('button')]);
@@ -503,7 +475,7 @@ function _renderMcpServer(server) {
     const editArgs = escapeHtml(JSON.stringify([server.name, preset.name]));
     return `<div style="display:flex;gap:6px;align-items:center;margin-top:5px"><code>${escapeHtml(preset.name)}</code><span style="font-size:12px;color:var(--muted)">${preset.tools.length} ${escapeHtml(t('mcp.preset.tools', '个工具'))}</span><button class="btn btn-ghost btn-sm" data-action="editMcpToolPreset" data-action-args="${editArgs}">${escapeHtml(t('common.edit', '修改'))}</button><button class="btn btn-danger btn-sm" data-action="deleteMcpToolPreset" data-action-args="${editArgs}">${escapeHtml(t('common.delete', '删除'))}</button></div>`;
   }).join('');
-  return `<section class="card" data-mcp-presets="${escapeHtml(JSON.stringify(server.tool_presets || []))}" style="background:var(--bg);margin:0 0 12px"><div class="card-header"><div style="display:flex;gap:8px;align-items:center"><button class="btn btn-ghost btn-sm" title="${escapeHtml(t('mcp.collapse', '展开/收起'))}" data-action="toggleMcpServerCollapsed" data-action-args="${collapseArgs}">${collapsed ? '▸' : '▾'}</button><h3>${escapeHtml(server.name)} ${status}</h3></div><label class="checkbox-row"><input type="checkbox" id="mcp-server-enabled-${escapeHtml(server.name)}" ${server.enabled ? 'checked' : ''}><span>${escapeHtml(t('common.enable', '启用'))}</span></label></div>${_mcpPresetButtons(server)}<div data-mcp-server-body style="display:${collapsed ? 'none' : 'block'};margin-top:10px"><div style="font-size:12px;color:var(--muted);word-break:break-all">${escapeHtml(server.url || server.transport)} · ${escapeHtml(t('mcp.timeout', '超时'))} ${Number(server.tool_timeout_s || 30)}s</div>${proxyControl}${Object.keys(server.headers || {}).length ? `<div style="font-size:12px;color:var(--muted);margin-top:5px">${escapeHtml(t('mcp.headers', '请求头'))}：${escapeHtml(Object.keys(server.headers).join(', '))}</div>` : ''}${_mcpMetadataMappingControls(server)}${initError}<p style="font-size:12px;color:var(--warn);margin:10px 0">${escapeHtml(server.require_local_policy ? t('mcp.allowlist.strict_hint', 'Strict mode: an empty allowlist authorizes no tools.') : t('mcp.allowlist.legacy_hint', 'Legacy mode: an empty allowlist allows all tools; select the smallest explicit allowlist.'))}${escapeHtml(t('mcp.metadata.local_policy_notice', '远端分类不授予权限，执行和确认由本地 policy 控制。'))}</p>${exposureWarn}${grouped || `<div class="empty">${escapeHtml(t('mcp.no_discovered_tools', '尚未发现工具；可切换启用状态以重连。'))}</div>`}<div style="margin-top:12px"><strong>${escapeHtml(t('mcp.preset.manage', '工具预设'))}</strong>${presets || `<div style="font-size:12px;color:var(--muted);margin-top:5px">${escapeHtml(t('mcp.preset.none', '还没有预设'))}</div>`}<button class="btn btn-ghost btn-sm" style="margin-top:8px" data-action="createMcpToolPreset" data-action-args="${actionArgs}">+ ${escapeHtml(t('mcp.preset.create', '新增预设'))}</button></div><div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-primary btn-sm" data-action="saveMcpServer" data-action-args="${actionArgs}">${saveLabel}</button><button class="btn btn-ghost btn-sm" data-action="reconnectMcpServer" data-action-args="${actionArgs}">${reconnectLabel}</button><button class="btn btn-danger btn-sm" data-action="deleteMcpServer" data-action-args="${actionArgs}">${deleteLabel}</button></div></div></section>`;
+  return `<section class="card" data-mcp-presets="${escapeHtml(JSON.stringify(server.tool_presets || []))}" style="background:var(--bg);margin:0 0 12px"><div class="card-header"><div style="display:flex;gap:8px;align-items:center"><button class="btn btn-ghost btn-sm" title="${escapeHtml(t('mcp.collapse', '展开/收起'))}" data-action="toggleMcpServerCollapsed" data-action-args="${collapseArgs}">${collapsed ? '▸' : '▾'}</button><h3>${escapeHtml(server.name)} ${status}</h3></div><label class="checkbox-row"><input type="checkbox" id="mcp-server-enabled-${escapeHtml(server.name)}" ${server.enabled ? 'checked' : ''}><span>${escapeHtml(t('common.enable', '启用'))}</span></label></div>${_mcpPresetButtons(server)}<div data-mcp-server-body style="display:${collapsed ? 'none' : 'block'};margin-top:10px"><div style="font-size:12px;color:var(--muted);word-break:break-all">${escapeHtml(server.url || server.transport)} · ${escapeHtml(t('mcp.timeout', '超时'))} ${Number(server.tool_timeout_s || 30)}s</div>${proxyControl}${Object.keys(server.headers || {}).length ? `<div style="font-size:12px;color:var(--muted);margin-top:5px">${escapeHtml(t('mcp.headers', '请求头'))}：${escapeHtml(Object.keys(server.headers).join(', '))}</div>` : ''}${_mcpMetadataMappingControls(server)}${initError}<p style="font-size:12px;color:var(--warn);margin:10px 0">${escapeHtml(server.require_local_policy ? t('mcp.allowlist.strict_hint', 'Strict mode: an empty allowlist authorizes no tools.') : t('mcp.allowlist.legacy_hint', 'Legacy mode: an empty allowlist allows all tools; select the smallest explicit allowlist.'))}${escapeHtml(t('mcp.metadata.local_policy_notice', '远端分类用于工具选择，执行权限由本地配置控制。'))}</p>${exposureWarn}${grouped || `<div class="empty">${escapeHtml(t('mcp.no_discovered_tools', '尚未发现工具；可切换启用状态以重连。'))}</div>`}<div style="margin-top:12px"><strong>${escapeHtml(t('mcp.preset.manage', '工具预设'))}</strong>${presets || `<div style="font-size:12px;color:var(--muted);margin-top:5px">${escapeHtml(t('mcp.preset.none', '还没有预设'))}</div>`}<button class="btn btn-ghost btn-sm" style="margin-top:8px" data-action="createMcpToolPreset" data-action-args="${actionArgs}">+ ${escapeHtml(t('mcp.preset.create', '新增预设'))}</button></div><div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-primary btn-sm" data-action="saveMcpServer" data-action-args="${actionArgs}">${saveLabel}</button><button class="btn btn-ghost btn-sm" data-action="reconnectMcpServer" data-action-args="${actionArgs}">${reconnectLabel}</button><button class="btn btn-danger btn-sm" data-action="deleteMcpServer" data-action-args="${actionArgs}">${deleteLabel}</button></div></div></section>`;
 }
 
 function toggleMcpServerCollapsed(name) {
@@ -542,7 +514,6 @@ async function saveMcpToolPolicy(name, toolName) {
     if (!server) throw new Error('MCP server 不存在');
     const state = (server.tool_states || []).find(item => item.name === toolName) || {};
     const effectControl = document.getElementById(`mcp-policy-effect-${name}-${toolName}`);
-    const confirmControl = document.getElementById(`mcp-policy-confirm-${name}-${toolName}`);
     const effect = effectControl?.value || state.suggestion?.effect || 'write';
     const policy = { ...(server.tool_policy || {}) };
     policy[toolName] = { ...(state.policy || {}), effect };
@@ -550,7 +521,7 @@ async function saveMcpToolPolicy(name, toolName) {
       if (effect === 'unrestricted') policy[toolName].idempotent = true;
       policy[toolName].require_confirm = false;
     } else {
-      policy[toolName].require_confirm = !!confirmControl?.checked;
+      policy[toolName].require_confirm = false;
     }
     const result = await api('PATCH', `/settings/mcp/${encodeURIComponent(name)}`, { tool_policy: policy });
     toast(_mcpReloadToastText(result.reload_status, {

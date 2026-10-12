@@ -126,10 +126,10 @@ async def phone_control_status(auth=Depends(require_scopes("chat"))):
 
 @router.post(
     "/phone_control/debug/start",
-    summary="调试：跳过 LLM 判断和 chat 二次确认，直接发起一次手机自动化任务",
+    summary="调试：跳过 LLM 工具选择判断，直接发起一次手机自动化任务",
 )
 async def phone_control_debug_start(body: dict = Body(...), auth=Depends(require_scopes("chat"))):
-    """只供测试用：跳过"要不要调用这个工具"的 LLM 判断，也跳过 chat 内的二次确认，
+    """只供测试用：跳过"要不要调用这个工具"的 LLM 判断，
     复用实际任务调度与角色身份；工具执行无需模式切换或二次确认。
     task_state 注册、behavior 下发都复用 tool_dispatcher._phone_control_start_wrapper()，
     跟真实调用路径是同一份代码，不是另起一套逻辑。

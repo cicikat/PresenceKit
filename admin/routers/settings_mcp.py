@@ -2,8 +2,6 @@
 from __future__ import annotations
 
 import re
-import secrets
-import time
 import uuid
 from pathlib import Path
 from typing import Any, Literal, Optional
@@ -21,11 +19,6 @@ router = APIRouter()
 CONFIG_FILE: Path | None = None
 _NAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,63}$")
 _REMOTE_TRANSPORTS = ("sse", "streamable-http")
-_CONSOLE_CONFIRM_TTL_S = 120
-_CONSOLE_CONFIRM_LIMIT = 100
-_console_confirmations: dict[str, dict[str, Any]] = {}
-
-
 class McpMetadataMapping(BaseModel):
     namespace: str = Field(min_length=1, max_length=160)
     schema_versions: list[int | str] = Field(min_length=1, max_length=16)
@@ -90,26 +83,6 @@ class McpConsoleInvoke(BaseModel):
     server: str = Field(min_length=1, max_length=64)
     tool: str = Field(min_length=1, max_length=128)
     arguments: dict[str, Any] = Field(default_factory=dict)
-
-
-class McpConsoleConfirm(BaseModel):
-    confirmation_id: str = Field(min_length=16, max_length=256)
-
-
-class _ConsoleSessionState:
-    """Small adapter that lets the admin console use dispatcher confirmation."""
-
-    WAITING_CONFIRM = "waiting_confirm"
-
-    def __init__(self, *, confirmed: bool = False):
-        self.status = self.WAITING_CONFIRM if confirmed else "idle"
-        self.pending_tool: str | None = None
-        self.pending_args: dict[str, Any] | None = None
-
-    def set_waiting_confirm(self, tool_name: str, tool_args: dict[str, Any]) -> None:
-        self.status = self.WAITING_CONFIRM
-        self.pending_tool = tool_name
-        self.pending_args = dict(tool_args)
 
 
 def _validate_draft(draft: McpServerDraft) -> dict:
@@ -408,7 +381,7 @@ def _safe_parameter_summary(schema: object) -> dict:
 def _current_mcp_exposure_names() -> set[str]:
     """Resolve the active Path C schema once for the admin three-state view."""
     from core.config_loader import get_config
-    from core.data_paths import DEFAULT_CHAR_ID
+    from core.prompt_asset_selection import active_character
     from core.tool_dispatcher import get_tools_schema, tool_loop_active
 
     cfg = get_config() or {}
@@ -595,16 +568,6 @@ async def get_mcp_settings(_auth=Depends(require_scopes("admin"))):
     }
 
 
-def _prune_console_confirmations() -> None:
-    expires_before = time.time()
-    expired = [key for key, entry in _console_confirmations.items() if entry["expires_at"] <= expires_before]
-    for key in expired:
-        _console_confirmations.pop(key, None)
-    while len(_console_confirmations) >= _CONSOLE_CONFIRM_LIMIT:
-        oldest = min(_console_confirmations, key=lambda key: _console_confirmations[key]["expires_at"])
-        _console_confirmations.pop(oldest, None)
-
-
 def _resolve_console_tool(server_name: str, tool_name: str) -> tuple[str, dict]:
     """Resolve only a connected, currently allowed dynamic MCP registry entry."""
     from core import mcp_client
@@ -669,22 +632,21 @@ def _validate_console_arguments(arguments: dict[str, Any], schema: object) -> No
 
 
 def _console_actor() -> tuple[str, str]:
-    from core.data_paths import DEFAULT_CHAR_ID
+    from core.prompt_asset_selection import active_character
 
     owner_id = str(get_config().get("scheduler", {}).get("owner_id") or "").strip()
     if not owner_id:
         raise HTTPException(status_code=409, detail="未配置 owner，无法建立受控工具调用上下文")
-    return owner_id, DEFAULT_CHAR_ID
+    return owner_id, active_character()
 
 
 async def _run_console_tool(
-    *, registered_name: str, arguments: dict[str, Any], audit_id: str, confirmed: bool,
+    *, registered_name: str, arguments: dict[str, Any], audit_id: str,
 ):
     from core.mcp_client import audit_context
     from core.tool_dispatcher import execute_structured
 
     owner_id, char_id = _console_actor()
-    session = _ConsoleSessionState(confirmed=confirmed)
     with audit_context(audit_id):
         return await execute_structured(
             registered_name,
@@ -692,7 +654,7 @@ async def _run_console_tool(
             owner_id,
             owner_id,
             False,
-            session,
+            None,
             origin="admin_console",
             char_id=char_id,
         )
@@ -707,46 +669,8 @@ async def invoke_mcp_console(body: McpConsoleInvoke, _auth=Depends(require_scope
         registered_name=registered_name,
         arguments=body.arguments,
         audit_id=audit_id,
-        confirmed=False,
     )
-    ask_confirm = tool_outcome.confirmation_request
-    if ask_confirm or tool_outcome.status == "confirmation_required":
-        _prune_console_confirmations()
-        confirmation_id = secrets.token_urlsafe(24)
-        _console_confirmations[confirmation_id] = {
-            "server": body.server,
-            "tool": body.tool,
-            "arguments": dict(body.arguments),
-            "audit_id": audit_id,
-            "expires_at": time.time() + _CONSOLE_CONFIRM_TTL_S,
-        }
-        return {
-            "status": "confirmation_required",
-            "audit_id": audit_id,
-            "confirmation_id": confirmation_id,
-            "confirmation_message": ask_confirm,
-            "expires_in_s": _CONSOLE_CONFIRM_TTL_S,
-        }
     return {"status": "completed", "audit_id": audit_id, "result": tool_outcome.result or ""}
-
-
-@router.post("/settings/mcp/console/confirm", summary="确认并执行受控 MCP 控制台调用")
-async def confirm_mcp_console(body: McpConsoleConfirm, _auth=Depends(require_scopes("admin"))):
-    _prune_console_confirmations()
-    ticket = _console_confirmations.pop(body.confirmation_id, None)
-    if ticket is None:
-        raise HTTPException(status_code=409, detail="确认已失效、已使用或不存在")
-    registered_name, info = _resolve_console_tool(ticket["server"], ticket["tool"])
-    _validate_console_arguments(ticket["arguments"], info.get("parameters"))
-    tool_outcome = await _run_console_tool(
-        registered_name=registered_name,
-        arguments=ticket["arguments"],
-        audit_id=ticket["audit_id"],
-        confirmed=True,
-    )
-    if tool_outcome.confirmation_request or tool_outcome.status == "confirmation_required":
-        raise HTTPException(status_code=409, detail="工具策略在确认期间已改变")
-    return {"status": "completed", "audit_id": ticket["audit_id"], "result": tool_outcome.result or ""}
 
 
 @router.patch("/settings/mcp", summary="更新 MCP 总开关（写配置并热同步）")
