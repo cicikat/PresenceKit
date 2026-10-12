@@ -225,7 +225,9 @@ def test_perception_block_disabled_strips_content(sandbox, monkeypatch):
         **_base_build_kwargs(character=char, perception_block="她刚刚在敲键盘")
     )
     sys_msg2 = next(m for m in messages2 if m.get("_layer") == "1_system_prompt")
-    assert "她刚刚在敲键盘" in sys_msg2["content"]
+    assert "她刚刚在敲键盘" not in sys_msg2["content"]
+    perception_msg = next(m for m in messages2 if m.get("_layer") == "1.4_perception")
+    assert "她刚刚在敲键盘" in perception_msg["content"]
 
 
 # ─────────────────────────────────────────────────────────────────────────────

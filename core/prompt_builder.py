@@ -11,6 +11,7 @@ from core.character_loader import Character
 from core.error_handler import log_error
 from core.prompt_ablation import ALWAYS_ON
 from core.data_paths import DEFAULT_CHAR_ID
+from core.prompt_sections import arrange_sections
 
 
 logger = logging.getLogger(__name__)
@@ -461,11 +462,9 @@ def build(
     perception = perception_block.strip() if perception_block else ""
     if _ab["perception_block_disabled"]:
         perception = ""
-    # Only the declared legacy slot is expanded. Inserted data is never re-templated.
+    # Legacy slots no longer scatter runtime data through authored instructions.
     if "{perception_block}" in sp:
-        sp = sp.replace("{perception_block}", perception)
-    elif perception:
-        sp += ("\n\n" if sp else "") + "## 当前感知（实时，非记忆）\n" + perception
+        sp = sp.replace("{perception_block}", "")
 
     from core.mood_text import get_mood_text
     import json
@@ -492,6 +491,9 @@ def build(
         "content": "\n\n".join(part for part in (identity_contract, sp) if part),
         "_layer": "1_system_prompt",
     })
+    if perception:
+        messages.append({"role": "system", "_layer": "1.4_perception",
+                         "content": perception})
 
     if mood_line:
         messages.append({"role": "system", "_layer": "expression_afterglow", "_drop_priority": 5,
@@ -1669,9 +1671,9 @@ def build(
         )
 
     _layers_before_trim = [
-        m.get("_report_layer") or m.get("_layer", "unknown") for m in messages
+        m.get("_report_layer") or m.get("_layer", "unknown") for m in arrange_sections(messages)
     ]
-    token_estimate = sum(len(m["content"]) for m in messages)
+    token_estimate = sum(len(m["content"]) for m in arrange_sections(messages))
     _removed_layers: list[str] = []
     if token_estimate > 20000:
         _prompt_logger.warning(f"[prompt] token估算超硬上限: {token_estimate}，触发层裁剪")
@@ -1691,8 +1693,12 @@ def build(
                 _idx, _msg = _droppable[_di]
                 _drop_indices.add(_idx)
                 _removed_layers.append(_msg.get("_layer", "?"))
-                token_estimate -= len(_msg["content"])
                 _di += 1
+            # Rebuild section boundaries after each priority batch, including
+            # their overhead even when a section's first/last leaf was removed.
+            token_estimate = sum(len(m["content"]) for m in arrange_sections(
+                [m for j, m in enumerate(messages) if j not in _drop_indices]
+            ))
         if _drop_indices:
             messages = [m for j, m in enumerate(messages) if j not in _drop_indices]
         if _removed_layers:
@@ -1704,6 +1710,10 @@ def build(
             )
     elif token_estimate > 15000:
         _prompt_logger.warning(f"[prompt] token估算超软警戒: {token_estimate}")
+
+    messages = arrange_sections(messages)
+    for _meta_message in messages:
+        _meta_message["_estimated_tokens"] = round(len(_meta_message["content"]) / 1.7, 1)
 
     import logging
     _tlog = logging.getLogger("prompt_builder.debug")
@@ -1782,15 +1792,15 @@ def _parse_mes_example(mes_example: str, char_name: str) -> list[dict]:
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 层级消融开关（CC 任务 23 · B6）：覆盖全部 build() 中出现的 _layer 字面量。
-# perception_block 不是独立 _layer（嵌在 1_system_prompt 槽位），由 API 独立字段
-# perception_block_disabled 表达，不在此表内。
+# perception_block_disabled 仍兼容；运行时内容现在走独立叶层。
 #
 # 放在文件末尾（而非顶部）：避免与 tests/test_r4b_prompt_drop_priority.py 等按
 # `src.find('"layer_name"')` 定位 messages.append() 代码块的测试发生字符串误命中。
 # ─────────────────────────────────────────────────────────────────────────────
 KNOWN_LAYERS: list[tuple[str, str]] = [
     ("0_jailbreak", "破限预设 layer=0"),
-    ("1_system_prompt", "角色存在性定义 + 情绪软提示 + 感知槽位 + 不确定时自己查的提醒（不可消融）"),
+    ("1_system_prompt", "角色存在性定义与角色卡规则 + 不确定时自己查的提醒（不可消融）"),
+    ("1.4_perception", "待确认动作结果与跨通道接续（原感知槽位）"),
     ("1.5_fact_boundary", "现实信息事实边界句（含过时生活数据确认）"),
     ("2_char_desc", "角色描述 + 性格 + 情境"),
     ("2.2_stage_presence", "群聊在场成员提醒"),

@@ -756,6 +756,10 @@ preserve keys. Ready is not tested. Runtime metadata uses
 在生成调试，完整自主提示词也移至该页。观测首页按排查任务分组，调用记录显示时间、
 状态、调用方、模型、失败类别及耗时，支持筛选，原始详情按需展开。语音入口限定 caller=tts。
 
+工单 285：Reality 注入按六个来源区块集中排列，生成调试仍按原叶层消融和展示正文。
+旧 `perception_block_disabled` 保持有效，待确认动作/接续数据移至 `1.4_perception`，
+可通过既有消融接口单独关闭；角色规则不再承载此数据。没有新增 config 开关或客户端设置。
+
 桌面只保留界面、连接、本机采集同意、播放、活动/桌宠交互和当前角色切换；当前角色
 模型状态只读。Activity 外观并入聊天偏好，原五个偏好 key 不变。后端 scope、REST 写入
 路径、配置锁、WS/poll/ack/TTL 与发送链未改变，没有新增存储或客户端权限判断。

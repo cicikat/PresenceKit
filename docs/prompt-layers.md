@@ -27,9 +27,33 @@ Reality `1_system_prompt` 绑定当前角色，并使用用户所选称谓（默
 
 ---
 
-## 层总览（实际执行顺序）
+## 来源区块（工单 285）
 
-> 注意：层编号和实际插入顺序不完全一致（3.5~3.8 在 4 之后插入）。以下是代码实际执行顺序。
+Reality builder 最终输出按来源集中排列：角色与规则 → 真实数据 → 用户事实 →
+现实回忆 → 参考资料 → 工具结果 → 主观余韵 → 风格示例 → 对话历史 → 回答约束 → 当前输入。
+空区块省略。各区块使用 `【区块名】` / `【/区块名】`，边界由首尾叶层承载，
+并保留每项原本的说明、时间、有效期、执行状态和防注入定界。
+
+具体映射以 `core/prompt_sections.py::SECTIONS` 为准：
+
+- 真实数据：时间、手机/手表/健康观测、电脑活动摘要、真实活动引用、陪玩状态与后台硬件任务。
+- 用户事实：画像、偏好、全局事实、强调事实、待办及有明确归纳边界的行为模式。
+- 现实回忆：事件检索、档案、情景记忆、压缩对话、日记、叙事弧和陪玩历史；日记感受不升级为客观事实。
+- 参考资料：未读/近期已读资料与网络资料，不当作共同经历。
+- 工具结果：本轮返回、近期自主结果、暂存快照与动作痕迹；历史结果不当作当前状态。
+- 主观余韵：梦境、表达和陪玩余韵，明确不是现实证据。
+
+主动截图分析仍位于工具结果，自动电脑活动上报位于真实数据。Path C 后续产生的
+`role=tool` 消息保留调用顺序和关联键，不搬入 system 区块。
+Dream builder 不使用此重排。
+
+这次集中排列不把叶层合并为不可分的大消息：原 `_layer`、消融、裁剪优先级、
+provenance 与资料确认凭据继续逐项生效。裁剪后重建区块边界，说明文字计入预算，
+prompt inspector 仍逐叶层展示最终正文。`9.5_episodic_top` 随现实回忆集中，不再单独放在历史后。
+
+## 叶层总览（原始构建顺序）
+
+> 下表描述各叶层的来源与准入。最终 messages 顺序由上方来源区块统一整理，层编号不代表最终阅读顺序。
 
 | 层标识 | 内容 | 触发条件 | 数据来源 |
 |---|---|---|---|
@@ -171,7 +195,8 @@ Brief 35 已移除的 `character_growth` 全文/指纹层不再可切换。当�
 
 ## perception_block 槽位
 
-层1 的 system_prompt 末尾有一个占位符 `{perception_block}`，由 pipeline.build_prompt 填入。
+角色卡的旧 `{perception_block}` 槽位现在清空，运行时内容由 pipeline.build_prompt 提供后
+进入独立 `1.4_perception` 叶层，集中到工具结果区块。
 **只承载 pending_perception**（上轮失败的桌面动作感知）和跨通道接续提示，不含工具结果——
 工具结果走层10的 `tool_result` 参数，唯一出口。
 
@@ -191,7 +216,8 @@ if _pending:
 
 ```
 
-当前实现中，`tool_result` 不进入 `perception_block`，只作为层10注入。
+`perception_block_disabled` 继续有效；也可单独消融 `1.4_perception`。
+当前实现中，`tool_result` 不进入 `perception_block`，只作为层10注入；二者现在同处工具结果区块。
 
 ---
 
@@ -531,7 +557,7 @@ messages.append({
 ```python
 # 在 tests/test_r4c_prompt_layer_contract.py 中
 NON_DROPPABLE_ALLOWLIST: dict[str, str] = {
-    "9.5_episodic_top": "Single top memory placed after history for recency ...",
+    "9.5_episodic_top": "Small high-value long/repair recall retained in the memory section ...",
     "Nx_my_new_layer":  "原因：...",   # ← 新增
 }
 ```

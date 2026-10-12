@@ -217,7 +217,8 @@ def test_inner_diary_projection_rewrites_today_headings(build_prompt, sandbox):
     layers = _inner_diary_layers(messages)
     assert len(layers) == 2
     facts, feeling = layers
-    assert facts["content"].startswith("<昨日记录>")
+    assert facts["content"].startswith("【现实回忆】")
+    assert "<昨日记录>" in facts["content"] and "</昨日记录>" in facts["content"]
     assert feeling["content"].startswith("<昨日心情>")
     assert "昨日事件" in facts["content"]
     assert "今日事件" not in facts["content"]
@@ -248,7 +249,9 @@ def test_inner_diary_legacy_unheaded_stays_feeling(build_prompt, sandbox):
     messages, _ = build_prompt(tags={"topic.relation"})
     layers = _inner_diary_layers(messages)
     assert len(layers) == 1
-    assert layers[0]["content"].startswith("<昨日心情>")
+    assert layers[0]["content"].startswith("【现实回忆】")
+    assert "<昨日心情>" in layers[0]["content"]
+    assert layers[0]["content"].endswith("【/现实回忆】")
     assert "旧格式的日记内容。" in layers[0]["content"]
     assert "今日事件" not in layers[0]["content"]
     assert "今日感受" not in layers[0]["content"]

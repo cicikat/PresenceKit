@@ -24,6 +24,7 @@ _AMB = "ambient"
 LAYER_AUTHORITY: dict[str, dict] = {
     "0_jailbreak": _e("preset", "system"),
     "1_system_prompt": _SYS,
+    "1.4_perception": _e("pending_perception", "system"),
     "1.5_fact_boundary": _SYS,
     "2_char_desc": _e("character_card", "character_self"),
     "2.2_stage_presence": _e("stage", "system"),

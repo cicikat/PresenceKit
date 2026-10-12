@@ -65,9 +65,7 @@ DROPPABLE_KEYWORDS: frozenset[str] = frozenset({
 # Layers that match a keyword but are intentionally NOT auto-droppable.
 NON_DROPPABLE_ALLOWLIST: dict[str, str] = {
     "9.5_episodic_top": (
-        "Single top memory placed *after* history for recency attention benefit. "
-        "Its positioning (right before user message) is the entire point; "
-        "auto-dropping it defeats the sweet-spot attention design. "
+        "Single high-value long/repair recall retained in the memory section. "
         "Small footprint (one line); no meaningful token saving from dropping it."
     ),
 }
