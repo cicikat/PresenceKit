@@ -28,19 +28,19 @@ def _parse_date(date_str: str) -> date | None:
     return None
 
 
-async def read_diary_for_user(user_id: str, date_str: str = "") -> str:
+async def read_diary_for_user(user_id: str, date_str: str = "", *, char_id: str | None = None) -> str:
     from core.deployment_capabilities import is_remote_server
 
     if is_remote_server():
         from core import diary_mirror
 
-        if diary_mirror.sync_state() == "never_synced":
+        if diary_mirror.sync_state(char_id=char_id) == "never_synced":
             return "日记镜像尚未同步，客户端可能离线；本次没有可读取的日记。"
     target = _parse_date(date_str) if date_str else date.today()
     if target is None:
         target = date.today()
 
-    text = read_diary(target)
+    text = read_diary(target, char_id=char_id)
     if text:
         try:
             from core.scheduler import mark_diary_shared

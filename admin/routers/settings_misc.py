@@ -783,26 +783,32 @@ class DiarySettingsUpdate(BaseModel):
 
 
 @router.get("/settings/diary", summary="读取 Obsidian 日记读取路径（配置中心可选层）")
-async def get_diary_settings(auth=Depends(require_scopes("admin"))):
-    path = str(get_config().get("diary", {}).get("obsidian_path") or "")
-    return {"obsidian_path": path, "configured": bool(path.strip())}
+async def get_diary_settings(char_id: str | None = None, auth=Depends(require_scopes("admin"))):
+    from core.prompt_asset_selection import active_character
+    from core.data_paths import safe_user_id
+    char_id = safe_user_id(char_id) if char_id else active_character()
+    path = str(get_config().get("diary", {}).get("by_character", {}).get(char_id, {}).get("obsidian_path") or "")
+    return {"obsidian_path": path, "configured": bool(path.strip()), "char_id": char_id}
 
 
 @router.put("/settings/diary", summary="写入 Obsidian 日记读取路径并热重载（配置中心可选层）")
-async def update_diary_settings(body: DiarySettingsUpdate, auth=Depends(require_scopes("admin"))):
+async def update_diary_settings(body: DiarySettingsUpdate, char_id: str | None = None, auth=Depends(require_scopes("admin"))):
+    from core.prompt_asset_selection import active_character
+    from core.data_paths import safe_user_id
+    char_id = safe_user_id(char_id) if char_id else active_character()
     path = body.obsidian_path.strip()
     if not path:
         raise HTTPException(status_code=422, detail="obsidian_path 不能为空")
 
     full_cfg = read_config_file(CONFIG_FILE)
 
-    full_cfg.setdefault("diary", {})["obsidian_path"] = path
+    full_cfg.setdefault("diary", {}).setdefault("by_character", {}).setdefault(char_id, {})["obsidian_path"] = path
 
     write_config_file(CONFIG_FILE, full_cfg)
 
     from core import config_loader
     config_loader.reload_config()
-    return {"obsidian_path": path, "configured": True}
+    return {"obsidian_path": path, "configured": True, "char_id": char_id}
 
 
 # ---------------------------------------------------------------------------

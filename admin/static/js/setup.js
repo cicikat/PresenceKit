@@ -176,9 +176,11 @@ async function saveSetupAnniversaries() {
   }
 }
 
+let _setupDiaryCharId = null;
 async function _loadSetupDiary() {
   try {
     const diary = await api('GET', '/settings/diary');
+    _setupDiaryCharId = diary.char_id;
     document.getElementById('setup-diary-path').value = diary.obsidian_path || '';
     document.getElementById('setup-diary-status').innerHTML = _setupBadge(diary.configured);
   } catch (e) {
@@ -190,7 +192,8 @@ async function saveSetupDiary() {
   const path = document.getElementById('setup-diary-path').value.trim();
   if (!path) { toast(t('setup.diary.required', 'obsidian_path 不能为空'), 'err'); return; }
   try {
-    await api('PUT', '/settings/diary', { obsidian_path: path });
+    if (!_setupDiaryCharId) throw new Error('请先加载角色日记设置');
+    await api('PUT', '/settings/diary?char_id=' + encodeURIComponent(_setupDiaryCharId), { obsidian_path: path });
     toast(t('setup.diary.saved', '日记路径已保存'), 'ok');
     _loadSetupDiary();
   } catch (e) {

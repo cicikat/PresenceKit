@@ -76,6 +76,7 @@ async function loadCharacterData() {
     document.getElementById('character-data-inventory').innerHTML=`<p>${(data.entries||[]).map(item=>`${escapeHtml(item.id)}：${item.present?'已保存':'暂无数据'}`).join(' · ')}</p><p>用户档案：${(data.user_artifacts||[]).map(escapeHtml).join('、')}</p>`;
     input.value=JSON.stringify(data.traits??[],null,2);
     document.getElementById('character-data-inventory').insertAdjacentHTML('beforeend', `<p>提示词资产：${escapeHtml(JSON.stringify(data.prompt_bindings||{}))}</p>`);
+    document.getElementById('character-data-inventory').insertAdjacentHTML('beforeend', `<p>角色数据库记录：${(data.row_stores||[]).map(item=>`${escapeHtml(item.id)}：${item.unavailable?'暂不可读取':item.count}`).join(' · ')}</p>`);
     input.disabled=false;
     result.textContent=data.traits_error?`Trait 读取失败：${data.traits_error}`:'';
   } catch(error) {if(request===characterDataRequest)result.textContent=`读取失败：${error.message}`;}

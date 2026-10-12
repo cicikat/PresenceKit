@@ -598,8 +598,11 @@ class DataPaths:
     def reminders(self, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
         return self._p("chars", char_id, "reminders")
 
-    def diary_fallback(self) -> Path:
-        return self._p("diary_fallback")
+    def diary_fallback(self, *, char_id: str | None = None) -> Path:
+        if char_id is None:
+            from core.prompt_asset_selection import active_character
+            char_id = active_character()
+        return self.runtime_character_dir(char_id=safe_user_id(char_id)) / "user_diary"
 
     def character_document_root(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
         """Private searchable material, isolated by the Reality uid and character."""
@@ -1216,18 +1219,21 @@ class DataPaths:
     def companion_stats(self) -> Path:
         return self._p("runtime", "companion", "stats.json")
 
-    def diary_mirror_root(self, *, owner_id: str | int) -> Path:
+    def diary_mirror_root(self, *, owner_id: str | int, char_id: str | None = None) -> Path:
         """Private server-side mirror of client-owned dated diary entries."""
-        return self._p("runtime", "integrations", "diary", safe_user_id(owner_id))
+        if char_id is None:
+            from core.prompt_asset_selection import active_character
+            char_id = active_character()
+        return self.runtime_character_dir(char_id=safe_user_id(char_id)) / "diary_mirror" / safe_user_id(owner_id)
 
-    def diary_mirror_manifest(self, *, owner_id: str | int) -> Path:
-        return self.diary_mirror_root(owner_id=owner_id) / "manifest.json"
+    def diary_mirror_manifest(self, *, owner_id: str | int, char_id: str | None = None) -> Path:
+        return self.diary_mirror_root(owner_id=owner_id, char_id=char_id) / "manifest.json"
 
-    def diary_mirror_status(self, *, owner_id: str | int) -> Path:
-        return self.diary_mirror_root(owner_id=owner_id) / "status.json"
+    def diary_mirror_status(self, *, owner_id: str | int, char_id: str | None = None) -> Path:
+        return self.diary_mirror_root(owner_id=owner_id, char_id=char_id) / "status.json"
 
-    def diary_mirror_entry(self, *, owner_id: str | int, logical_date: str) -> Path:
-        return self.diary_mirror_root(owner_id=owner_id) / "entries" / f"{logical_date}.md"
+    def diary_mirror_entry(self, *, owner_id: str | int, logical_date: str, char_id: str | None = None) -> Path:
+        return self.diary_mirror_root(owner_id=owner_id, char_id=char_id) / "entries" / f"{logical_date}.md"
 
     def web_autosearch_state(self) -> Path:
         """data/runtime/web_autosearch_state.json — rate-limit state for autonomous web search (X3)."""

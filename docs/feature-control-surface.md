@@ -1135,3 +1135,6 @@ GET /activity/records（state.read）默认仅列来源元数据；指定 source
 QQ 发送模式：消息分发与客户端设置 → QQ 回复范围，qq.outbound_mode 默认 reply_only，admin PUT /settings/clients 的 qq_outbound_mode 可选 reply_only/muted/all；返回 outbound_mode、broadcast_enabled。all 恢复旧广播，muted 停止 QQ 消息而保留空间。空间同卡片新增 request_interval_seconds（默认3，1–60）、write_interval_seconds（默认60，10–3600），poll_interval_seconds 默认改600，现有显式值保留。GET /observability/qzone 的 pacing 返回进程内剩余冷却/退避及计数；无关闭节流选项，关闭空间仍回到无空间请求。
 
 管理面「消息分发与客户端设置 → QQ · 空间说说与互动」的“自动扫描关注用户空间”控制 events_enabled。关闭停止周期扫描和空间事件候选；qzone_get_feeds/posts/comments 的自主按需读取不依赖该开关，仍需总开关、owner/角色授权、工具许可及主动性准入。只读模式关闭 write_enabled 与 autonomy_interactions_enabled，不改变桌面/手机协议。
+# 288 日记源角色归属
+
+后端日记源 `/settings/diary` 以 char_id 为键保存于 diary.by_character，管理页固定加载角色后保存并热重载。新角色没有源时只读自己的日记目录，旧全局 obsidian_path 不自动继承；旧值保留供人工归属。远程日记镜像及观测支持 char_id，日记注入使用同一角色桶。桌面本地目录另由客户端保存绑定角色，旧未绑定目录需重新选择。

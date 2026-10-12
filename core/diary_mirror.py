@@ -154,7 +154,10 @@ def _status_from_manifest(manifest: dict[str, Any], status: dict[str, Any]) -> d
     }
 
 
-async def apply_batch(*, generation: str, entries: list[dict[str, Any]]) -> dict[str, Any]:
+async def apply_batch(*, generation: str, entries: list[dict[str, Any]], char_id: str | None = None) -> dict[str, Any]:
+    from core.prompt_asset_selection import active_character
+    from core.data_paths import safe_user_id
+    char_id = safe_user_id(char_id) if char_id else active_character()
     generation = _validate_generation(generation)
     if not isinstance(entries, list) or not entries or len(entries) > MAX_BATCH_ENTRIES:
         raise DiarySyncError("batch_limit")
@@ -170,10 +173,10 @@ async def apply_batch(*, generation: str, entries: list[dict[str, Any]]) -> dict
     owner_id = _owner_id()
     async with _LOCK:
         paths = get_paths()
-        root = paths.diary_mirror_root(owner_id=owner_id)
-        manifest = _read_json(paths.diary_mirror_manifest(owner_id=owner_id), _default_manifest())
+        root = paths.diary_mirror_root(owner_id=owner_id, char_id=char_id)
+        manifest = _read_json(paths.diary_mirror_manifest(owner_id=owner_id, char_id=char_id), _default_manifest())
         manifest.setdefault("entries", {})
-        status = _read_json(paths.diary_mirror_status(owner_id=owner_id), _default_status())
+        status = _read_json(paths.diary_mirror_status(owner_id=owner_id, char_id=char_id), _default_status())
         changed = 0
         results: list[dict[str, Any]] = []
         try:
@@ -192,56 +195,56 @@ async def apply_batch(*, generation: str, entries: list[dict[str, Any]]) -> dict
                         results.append({"logical_date": logical_date, "status": "conflict"})
                         continue
                 if not item["deleted"]:
-                    path = paths.diary_mirror_entry(owner_id=owner_id, logical_date=logical_date)
+                    path = paths.diary_mirror_entry(owner_id=owner_id, logical_date=logical_date, char_id=char_id)
                     if not safe_write_text(path, item["content"]):
                         raise DiarySyncError("mirror_write_failed")
                 manifest["entries"][logical_date] = _entry_projection(item)
                 changed += 1
                 results.append({"logical_date": logical_date, "status": "applied"})
             manifest["active_generation"] = generation
-            if not safe_write_json(paths.diary_mirror_manifest(owner_id=owner_id), manifest):
+            if not safe_write_json(paths.diary_mirror_manifest(owner_id=owner_id, char_id=char_id), manifest):
                 raise DiarySyncError("mirror_write_failed")
             status["last_success_at"] = time.time()
             status["active_generation"] = generation
             status["changed_count"] = int(status.get("changed_count") or 0) + changed
             status["last_error_code"] = None
-            if not safe_write_json(paths.diary_mirror_status(owner_id=owner_id), status):
+            if not safe_write_json(paths.diary_mirror_status(owner_id=owner_id, char_id=char_id), status):
                 raise DiarySyncError("mirror_write_failed")
         except DiarySyncError as exc:
             status["error_count"] = int(status.get("error_count") or 0) + 1
             status["last_error_code"] = exc.code
-            safe_write_json(paths.diary_mirror_status(owner_id=owner_id), status)
+            safe_write_json(paths.diary_mirror_status(owner_id=owner_id, char_id=char_id), status)
             raise
         return {"generation": generation, "changed": changed, "entries": results, "status": _status_from_manifest(manifest, status)}
 
 
-def status() -> dict[str, Any]:
+def status(*, char_id: str | None = None) -> dict[str, Any]:
     owner_id = _owner_id()
     paths = get_paths()
-    manifest = _read_json(paths.diary_mirror_manifest(owner_id=owner_id), _default_manifest())
-    saved = _read_json(paths.diary_mirror_status(owner_id=owner_id), _default_status())
+    manifest = _read_json(paths.diary_mirror_manifest(owner_id=owner_id, char_id=char_id), _default_manifest())
+    saved = _read_json(paths.diary_mirror_status(owner_id=owner_id, char_id=char_id), _default_status())
     return _status_from_manifest(manifest, saved)
 
 
-def sync_state() -> str:
+def sync_state(*, char_id: str | None = None) -> str:
     """Return a bounded read-side state for tool framing and reminders."""
-    return "never_synced" if status().get("active_generation") is None else "synced"
+    return "never_synced" if status(char_id=char_id).get("active_generation") is None else "synced"
 
 
-def read_entry(target_date: date) -> str:
+def read_entry(target_date: date, *, char_id: str | None = None) -> str:
     owner_id = _owner_id()
     paths = get_paths()
-    manifest = _read_json(paths.diary_mirror_manifest(owner_id=owner_id), _default_manifest())
+    manifest = _read_json(paths.diary_mirror_manifest(owner_id=owner_id, char_id=char_id), _default_manifest())
     entry = (manifest.get("entries") or {}).get(target_date.isoformat())
     if not isinstance(entry, dict) or entry.get("deleted"):
         return ""
     try:
-        return paths.diary_mirror_entry(owner_id=owner_id, logical_date=target_date.isoformat()).read_text(encoding="utf-8").strip()
+        return paths.diary_mirror_entry(owner_id=owner_id, logical_date=target_date.isoformat(), char_id=char_id).read_text(encoding="utf-8").strip()
     except (FileNotFoundError, OSError, UnicodeError):
         return ""
 
 
-def has_any_entry() -> bool:
+def has_any_entry(*, char_id: str | None = None) -> bool:
     owner_id = _owner_id()
-    manifest = _read_json(get_paths().diary_mirror_manifest(owner_id=owner_id), _default_manifest())
+    manifest = _read_json(get_paths().diary_mirror_manifest(owner_id=owner_id, char_id=char_id), _default_manifest())
     return any(isinstance(row, dict) and not row.get("deleted") for row in (manifest.get("entries") or {}).values())

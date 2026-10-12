@@ -54,10 +54,10 @@ REGISTRY: dict[str, PathMeta] = {
     "companion_receipts_root": PathMeta("runtime", "reality", "global",   "ignore"),
     "companion_session":       PathMeta("runtime", "reality", "per_user", "ignore"),
     "companion_stats":         PathMeta("runtime", "reality", "global",   "ignore"),
-    "diary_mirror_root":      PathMeta("runtime", "reality", "per_user", "ignore"),
-    "diary_mirror_manifest":  PathMeta("runtime", "reality", "per_user", "ignore"),
-    "diary_mirror_status":    PathMeta("runtime", "reality", "per_user", "ignore"),
-    "diary_mirror_entry":     PathMeta("canonical", "reality", "per_user", "ignore"),
+    "diary_mirror_root":      PathMeta("runtime", "reality", "per_char_user", "ignore"),
+    "diary_mirror_manifest":  PathMeta("runtime", "reality", "per_char_user", "ignore"),
+    "diary_mirror_status":    PathMeta("runtime", "reality", "per_char_user", "ignore"),
+    "diary_mirror_entry":     PathMeta("canonical", "reality", "per_char_user", "ignore"),
     "pending_perception_dir": PathMeta("runtime",   "shared",          "global",        "ignore"),
     "visual_trace_log":      PathMeta("runtime",   "shared",          "global",        "ignore"),
     # Opt-in, content-free EventContext propagation observability ledger.
@@ -145,7 +145,7 @@ REGISTRY: dict[str, PathMeta] = {
     # diary_context/ 下文件为 {uid}.txt（core/memory/diary_context.py:21 确认，非 .json）
     "diary_context":          PathMeta("canonical", "reality",         "per_char_user", "ignore"),
     # diary_fallback/ 是 obsidian_path 未配置时的本地日记兜底目录（含人工写入的 .md）
-    "diary_fallback":         PathMeta("canonical", "reality",         "global",        "ignore"),
+    "diary_fallback":         PathMeta("canonical", "reality",         "per_char",        "ignore"),
     "reminders":              PathMeta("canonical", "reality",         "per_char_user", "ignore"),
     # event_log/ 30 天窗口内 canonical，窗口外同物理位置视为 archive；
     # 单目录双身份按主用途标 canonical，无需拆目录

@@ -135,8 +135,8 @@ def test_anniversaries_rejects_empty_key(tmp_path, monkeypatch):
 def test_diary_empty_by_default(tmp_path, monkeypatch):
     path = _write(tmp_path, "other: {}\n")
     _patch(monkeypatch, path)
-    result = asyncio.run(mod.get_diary_settings(auth=None))
-    assert result == {"obsidian_path": "", "configured": False}
+    result = asyncio.run(mod.get_diary_settings(char_id="alpha", auth=None))
+    assert result == {"obsidian_path": "", "configured": False, "char_id": "alpha"}
 
 
 def test_diary_write_and_read_back(tmp_path, monkeypatch):
@@ -144,24 +144,24 @@ def test_diary_write_and_read_back(tmp_path, monkeypatch):
     _patch(monkeypatch, path)
 
     result = asyncio.run(mod.update_diary_settings(
-        mod.DiarySettingsUpdate(obsidian_path=r"E:\obsidian_note\Calendar"), auth=None,
+        mod.DiarySettingsUpdate(obsidian_path=r"E:\obsidian_note\Calendar"), char_id="alpha", auth=None,
     ))
     assert result["obsidian_path"] == r"E:\obsidian_note\Calendar"
     assert result["configured"] is True
 
     cfg = yaml.safe_load(path.read_text(encoding="utf-8"))
-    assert cfg["diary"]["obsidian_path"] == r"E:\obsidian_note\Calendar"
+    assert cfg["diary"]["by_character"]["alpha"]["obsidian_path"] == r"E:\obsidian_note\Calendar"
     assert cfg["diary"]["characters"] == ["叶瑄"]  # 未编辑的字段原样保留
 
-    readback = asyncio.run(mod.get_diary_settings(auth=None))
-    assert readback == {"obsidian_path": r"E:\obsidian_note\Calendar", "configured": True}
+    readback = asyncio.run(mod.get_diary_settings(char_id="alpha", auth=None))
+    assert readback == {"obsidian_path": r"E:\obsidian_note\Calendar", "configured": True, "char_id": "alpha"}
 
 
 def test_diary_rejects_empty_path(tmp_path, monkeypatch):
     path = _write(tmp_path, "other: {}\n")
     _patch(monkeypatch, path)
     with pytest.raises(HTTPException) as exc:
-        asyncio.run(mod.update_diary_settings(mod.DiarySettingsUpdate(obsidian_path="   "), auth=None))
+        asyncio.run(mod.update_diary_settings(mod.DiarySettingsUpdate(obsidian_path="   "), char_id="alpha", auth=None))
     assert exc.value.status_code == 422
 
 

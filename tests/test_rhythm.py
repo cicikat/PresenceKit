@@ -113,15 +113,15 @@ def test_diary_reminder_propose_keeps_diary_quiet_and_missing_gates(monkeypatch)
     monkeypatch.setattr("core.scheduler.rhythm.has_real_interaction_history", lambda uid, **kw: True)
     monkeypatch.setattr("core.scheduler.rhythm.quiet_floor_elapsed", lambda uid, now_ts=None: True)
     monkeypatch.setattr("core.scheduler.rhythm.triggered_on_logical_day", lambda name, now=None, **_kwargs: False)
-    monkeypatch.setattr("core.tools.diary_reader.has_any_diary_entry", lambda: True)
-    monkeypatch.setattr("core.tools.diary_reader.yesterday_missing", lambda: True)
+    monkeypatch.setattr("core.tools.diary_reader.has_any_diary_entry", lambda **kwargs: True)
+    monkeypatch.setattr("core.tools.diary_reader.yesterday_missing", lambda **kwargs: True)
 
     proposal = diary.propose_diary_reminder({"now_dt": now, "now_ts": now.timestamp()})
 
     assert proposal.trigger_name == "diary_reminder"
     assert 0.50 <= proposal.urgency <= 0.69
 
-    monkeypatch.setattr("core.tools.diary_reader.yesterday_missing", lambda: False)
+    monkeypatch.setattr("core.tools.diary_reader.yesterday_missing", lambda **kwargs: False)
     assert diary.propose_diary_reminder({"now_dt": now, "now_ts": now.timestamp()}) is None
 
 
@@ -135,8 +135,8 @@ def test_diary_reminder_propose_skips_when_diary_never_used(monkeypatch):
     monkeypatch.setattr("core.scheduler.rhythm.has_real_interaction_history", lambda uid, **kw: True)
     monkeypatch.setattr("core.scheduler.rhythm.quiet_floor_elapsed", lambda uid, now_ts=None: True)
     monkeypatch.setattr("core.scheduler.rhythm.triggered_on_logical_day", lambda name, now=None, **_kwargs: False)
-    monkeypatch.setattr("core.tools.diary_reader.has_any_diary_entry", lambda: False)
-    monkeypatch.setattr("core.tools.diary_reader.yesterday_missing", lambda: True)
+    monkeypatch.setattr("core.tools.diary_reader.has_any_diary_entry", lambda **kwargs: False)
+    monkeypatch.setattr("core.tools.diary_reader.yesterday_missing", lambda **kwargs: True)
 
     assert diary.propose_diary_reminder({"now_dt": now, "now_ts": now.timestamp()}) is None
 

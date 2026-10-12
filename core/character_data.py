@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import json
 import yaml
+import sqlite3
+from contextlib import closing
 
 from core.sandbox import get_paths
 from core.data_paths import DEFAULT_CHAR_ID, safe_user_id
@@ -77,11 +79,30 @@ def inventory(char_id: str) -> dict:
         "jailbreak_entries": paths.jailbreak_entries(char_id=char_id),
         "life_records": paths.life_records_db(char_id=char_id),
         "group_context": paths.group_context(char_id=char_id),
+        "user_diary": paths.diary_fallback(char_id=char_id),
+        "diary_mirror": paths.runtime_character_dir(char_id=char_id) / "diary_mirror",
     }.items():
-        entries.append({"id": name, "present": path.exists(), "kind": "directory" if name == "group_context" else "file"})
+        entries.append({"id": name, "present": path.exists(), "kind": "directory" if name in {"group_context", "user_diary", "diary_mirror"} else "file"})
     root = paths.memory_char_root(char_id=char_id)
     users = sorted(p.name for p in root.iterdir() if p.is_dir()) if root.exists() else []
     from core.prompt_asset_selection import for_character
+    row_stores = []
+    # These stores share a database file but every content row has an explicit
+    # character key. Inspect only that key; never count another role's records.
+    for name, path, table in (
+        ("food_memory", paths.food_memory_db(), "events"),
+        ("quote_notebook", paths.quote_notebook_db(), "quotes"),
+        ("conversation_stats", paths.conversation_stats_db(), "activity"),
+    ):
+        row = {"id": name, "count": 0, "scope": "character_rows"}
+        if path.exists():
+            try:
+                with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True, timeout=0.2)) as db:
+                    row["count"] = db.execute(f'SELECT count(*) FROM "{table}" WHERE char_id=?', (char_id,)).fetchone()[0]
+            except sqlite3.Error:
+                row["unavailable"] = True
+        row_stores.append(row)
     return {"char_id": char_id, "entries": entries, "users": users,
             "prompt_bindings": for_character(char_id),
+            "row_stores": row_stores,
             "user_artifacts": ["history", "profile", "identity", "user_facts", "health_state", "episodic", "mid_term", "event_store", "relationship_facts", "memory_dossiers", "reminders", "self", "hidden_state", "afterglow_residue"]}

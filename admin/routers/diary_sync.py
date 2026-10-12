@@ -28,14 +28,14 @@ def _sync_error(exc: diary_mirror.DiarySyncError) -> HTTPException:
 
 
 @router.post("/integrations/diary/sync", summary="Apply a bounded dated diary mirror batch")
-async def sync_diary(body: dict, _auth=Depends(require_scopes("diary.sync"))):
+async def sync_diary(body: dict, char_id: str | None = None, _auth=Depends(require_scopes("diary.sync"))):
     generation, entries = _request_body(body)
     try:
-        return await diary_mirror.apply_batch(generation=generation, entries=entries)
+        return await diary_mirror.apply_batch(generation=generation, entries=entries, char_id=char_id)
     except diary_mirror.DiarySyncError as exc:
         raise _sync_error(exc) from exc
 
 
 @router.get("/integrations/diary/sync/status", summary="Read redacted diary mirror sync status")
-async def diary_sync_status(_auth=Depends(require_scopes("diary.sync"))):
-    return diary_mirror.status()
+async def diary_sync_status(char_id: str | None = None, _auth=Depends(require_scopes("diary.sync"))):
+    return diary_mirror.status(char_id=char_id)
