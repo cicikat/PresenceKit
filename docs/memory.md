@@ -1,5 +1,11 @@
 # docs/memory.md — 记忆子系统设计
 
+工单 286：mid_term 存储合同不变；prompt 只补充本轮所选 history 未覆盖的来源回合。
+有 source_turn_id 时精确去重，缺少血缘时仅过滤可证实的正文重复，不按整个历史时间跨度
+删掉中间未选中的回合。按 occurred_at 排序（旧数据回退 ts），逐条完整日期时间，
+最多8条/1200字符，不截断半条概要；保留最近能容纳的条目并以发生时间升序展示。
+派生概要明确可能有偏差；原始记录与既有12h过期/20条存储上限不变。
+
 收藏小本本是用户/角色隔离的原话快照与笔记，写入 provenance，整本不参与常驻召回；来源遗忘与删除收藏独立，见 [quote-notebook.md](quote-notebook.md)。
 
 饮食证据独立台账、明确覆盖及口味投影见 [food-memory.md](food-memory.md)。写入带 provenance，梦境/群聊/web echo/低置信度 ASR 不进入记录；迁移默认 dry-run。

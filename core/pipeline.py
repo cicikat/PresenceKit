@@ -364,12 +364,11 @@ class Pipeline:
         profile_future = loop.run_in_executor(
             None, lambda: user_profile.load(uid, char_id=char_id)
         )
-        mid_term_future = loop.run_in_executor(
-            None, lambda: mid_term.format_for_prompt(uid, char_id=char_id)
-        )
-
         # 同步读取（内存/小文件，不值得并发）
         history          = short_term.load_for_prompt(uid, char_id=char_id)
+        mid_term_future = loop.run_in_executor(
+            None, lambda: mid_term.format_for_prompt(uid, char_id=char_id, history=history)
+        )
         # 旧的失败条目在本轮历史投影完成后重试；本轮使用裁剪兜底。
         short_term.schedule_long_user_summaries(uid, char_id=char_id)
         recent_group_ctx = group_context.get_recent(group_id)

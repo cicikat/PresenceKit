@@ -7,6 +7,7 @@
 import json
 import logging
 import time
+import re
 from pathlib import Path
 
 from core.error_handler import log_error
@@ -19,6 +20,8 @@ logger = logging.getLogger(__name__)
 
 EXPIRE_SECONDS = 12 * 3600
 MAX_EVENTS = 20
+PROMPT_MAX_EVENTS = 8
+PROMPT_CHAR_BUDGET = 1200
 
 
 def _read_file(uid: str, *, char_id: str = DEFAULT_CHAR_ID) -> Path:
@@ -210,40 +213,38 @@ def clear(uid: str, *, char_id: str = DEFAULT_CHAR_ID, origin: dict | None = Non
         return 0
 
 
-def format_for_prompt(uid: str, *, char_id: str = DEFAULT_CHAR_ID) -> str:
-    """读取 + 时间桶分组 + 渲染成 prompt 段落。空返空串。"""
+def format_for_prompt(
+    uid: str, *, char_id: str = DEFAULT_CHAR_ID, history: list[dict] | None = None,
+) -> str:
+    """Only supplement selected history, with dated, bounded derived summaries."""
     events = [e for e in load(uid, char_id=char_id) if not e.get("invalidated")]
-    if not events:
-        return ""
-    now = time.time()
-    bucket_soon: list[str] = []      # < 1h
-    bucket_few: list[str] = []       # 1-4h
-    bucket_early: list[str] = []     # 4-12h
+    history = history or []
+    turn_ids = {m.get("_turn_id") for m in history if m.get("_turn_id")}
+    # Exact textual containment only: do not guess semantic equivalence.
+    history_texts = [re.sub(r"\s+", "", str(m.get("content", ""))) for m in history]
 
-    for e in events:
-        hours_ago = (now - e["ts"]) / 3600
-        if hours_ago < 1:
-            bucket_soon.append(e["summary"])
-        elif hours_ago < 4:
-            bucket_few.append(e["summary"])
-        else:
-            bucket_early.append(e["summary"])
+    def event_time(event):
+        occurred = event.get("occurred_at")
+        return occurred if isinstance(occurred, (int, float)) and occurred > 0 else event["ts"]
 
-    # 按时间顺序排列（早→近）
-    filled = [
-        (label, items)
-        for label, items in [
-            ("早些时候", bucket_early),
-            ("几小时前", bucket_few),
-            ("刚才", bucket_soon),
-        ]
-        if items
-    ]
-    if not filled:
-        return ""
-
-    lines = [f"{label}：{'、'.join(items)}" for label, items in filled]
-
-    if len(lines) == 1:
-        return lines[0]
-    return "过去 12 小时：\n" + "\n".join(lines)
+    candidates = []
+    seen = set()
+    for event in sorted(events, key=event_time, reverse=True):
+        summary = re.sub(r"\s+", " ", str(event.get("summary", ""))).strip()
+        if not summary or event.get("source_turn_id") in turn_ids:
+            continue
+        normalized = re.sub(r"\s+", "", summary)
+        if normalized in seen or any(normalized in text for text in history_texts if text):
+            continue
+        seen.add(normalized)
+        stamp = time.strftime("%Y-%m-%d %H:%M", time.localtime(event_time(event)))
+        line = f"- {stamp}｜{summary}"
+        # Never cut a summary into an ambiguous unfinished fragment.
+        if len(line) > PROMPT_CHAR_BUDGET:
+            continue
+        if sum(len(item[1]) + 1 for item in candidates) + len(line) > PROMPT_CHAR_BUDGET:
+            continue
+        candidates.append((event_time(event), line))
+        if len(candidates) >= PROMPT_MAX_EVENTS:
+            break
+    return "\n".join(line for _, line in sorted(candidates, key=lambda item: item[0]))

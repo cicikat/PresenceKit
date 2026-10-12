@@ -15,6 +15,7 @@ tests/test_jailbreak_dual_source.py — CC 任务 24 · 1
 """
 
 import json
+import pytest
 
 import core.prompt_builder as _pb
 
@@ -63,6 +64,24 @@ def test_entries_json_disabled_not_injected(sandbox):
     assert _pb._load_jailbreak(layer=0) == ""
 
 
+def test_disabled_managed_entry_overrides_enabled_stem_copy(sandbox):
+    _write_stem(sandbox, "base", [
+        {"id": "shared", "content": "old prompt", "enabled": True, "layer": 11}])
+    _write_entries(sandbox, [
+        {"id": "shared", "content": "old prompt", "enabled": False, "layer": 11}])
+    assert _pb._load_jailbreak(11) == ""
+
+
+def test_managed_edit_and_layer_override_stale_stem_copy(sandbox):
+    _write_stem(sandbox, "base", [
+        {"id": "shared", "content": "old prompt", "enabled": True, "layer": 11},
+        {"id": "other", "content": "independent prompt", "enabled": True, "layer": 11}])
+    _write_entries(sandbox, [
+        {"id": "shared", "content": "new prompt", "enabled": True, "layer": 2}])
+    assert _pb._load_jailbreak(11) == "independent prompt"
+    assert _pb._load_jailbreak(2) == "new prompt"
+
+
 def test_duplicate_content_across_sources_injected_once(sandbox):
     """情绪张力同时存在于 base.json（stems，layer 11）与 entries.json（layer 11）→ 只出现一次。"""
     _write_stem(sandbox, "base", [
@@ -95,6 +114,15 @@ def test_entries_json_corrupted_fails_open(sandbox):
         {"content": "stems still works", "enabled": True, "layer": 0},
     ])
     assert _pb._load_jailbreak(layer=0) == "stems still works"
+
+
+@pytest.mark.parametrize("entries", [None, ["invalid"]])
+def test_entries_json_invalid_shape_fails_open(sandbox, entries):
+    p = sandbox.jailbreak_entries()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps({"entries": entries}), encoding="utf-8")
+    _write_stem(sandbox, "base", [{"content": "independent stem", "enabled": True, "layer": 0}])
+    assert _pb._load_jailbreak(0) == "independent stem"
 
 
 def test_entries_json_layer_filter(sandbox):

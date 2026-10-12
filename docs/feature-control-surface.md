@@ -760,6 +760,10 @@ preserve keys. Ready is not tested. Runtime metadata uses
 旧 `perception_block_disabled` 保持有效，待确认动作/接续数据移至 `1.4_perception`，
 可通过既有消融接口单独关闭；角色规则不再承载此数据。没有新增 config 开关或客户端设置。
 
+工单 286：真实性边界前置；mid_term 投影排除本轮历史已覆盖回合并有界逐条标时。
+破限条目存在同 ID 的 stems 副本时，管理面 EntryManager 的正文、layer 和关闭状态优先，
+防止已关闭条目被旧预设副本继续注入。独立 ID 不受此覆盖规则影响，现有 scope/API 不变。
+
 桌面只保留界面、连接、本机采集同意、播放、活动/桌宠交互和当前角色切换；当前角色
 模型状态只读。Activity 外观并入聊天偏好，原五个偏好 key 不变。后端 scope、REST 写入
 路径、配置锁、WS/poll/ack/TTL 与发送链未改变，没有新增存储或客户端权限判断。

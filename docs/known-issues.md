@@ -8,6 +8,14 @@ current：工具 receipt 关联真实 owner 回合；历史使用 ledger epoch�
 
 # docs/known-issues.md — 已知问题与技术债
 
+## Reality 提示词双来源入口（2026-10-12，工单 286）
+
+current：同 ID 的 EntryManager 条目在 builder 中覆盖 stems 副本，包括关闭状态、正文和 layer；
+已修复“条目已关闭但 base 旧副本仍注入”的问题。
+open：现实设定仅展示条目管理，文件级 stems 位于创作启用组合，入口未合并；文件预设用
+首条标题作展示名（例如 base 显示为“情绪张力”），容易被误认成同一条目。
+应统一展示来源及 effective 状态，明确文件与条目层级；本单未修改页面或做浏览器验收。
+
 ## 屏幕识图详细模式与细节回查（2026-10-07，工单 C，roadmap）
 
 静态核对：B（`f642735`）已在当前 main，图像连接的显式 `is_local` 标记与管理面已实现；

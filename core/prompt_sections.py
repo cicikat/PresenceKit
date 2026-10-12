@@ -39,6 +39,12 @@ def arrange_sections(messages: list[dict]) -> list[dict]:
     grouped_layers = set().union(*(layers for _, _, layers in SECTIONS))
     remaining = [dict(m) for m in messages
                  if m.get("role") != "system" or m.get("_layer") not in grouped_layers]
+    boundary = next((m for m in remaining if m.get("_layer") == "1.5_fact_boundary"), None)
+    if boundary is not None:
+        remaining.remove(boundary)
+        identity_index = next((i for i, m in enumerate(remaining)
+                               if m.get("_layer") == "1_system_prompt"), 0)
+        remaining.insert(identity_index, boundary)
     blocks = []
     for name, guidance, layers in SECTIONS:
         leaves = [dict(m) for m in messages

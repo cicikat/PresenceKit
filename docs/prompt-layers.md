@@ -29,7 +29,7 @@ Reality `1_system_prompt` 绑定当前角色，并使用用户所选称谓（默
 
 ## 来源区块（工单 285）
 
-Reality builder 最终输出按来源集中排列：角色与规则 → 真实数据 → 用户事实 →
+Reality builder 最终输出按来源集中排列：真实性边界 → 角色与规则 → 真实数据 → 用户事实 →
 现实回忆 → 参考资料 → 工具结果 → 主观余韵 → 风格示例 → 对话历史 → 回答约束 → 当前输入。
 空区块省略。各区块使用 `【区块名】` / `【/区块名】`，边界由首尾叶层承载，
 并保留每项原本的说明、时间、有效期、执行状态和防注入定界。
@@ -58,7 +58,7 @@ prompt inspector 仍逐叶层展示最终正文。`9.5_episodic_top` 随现实�
 | 层标识 | 内容 | 触发条件 | 数据来源 |
 |---|---|---|---|
 | `0_jailbreak` | 破限预设 layer=0 | 文件存在且 enabled | stems（`jailbreaks/{stem}.json`，受 `enabled_jailbreaks` 控制）+ `get_paths().jailbreak_entries()`；production 主路径为 `userdata/characters/reality/`，按内容去重合并 |
-| `1_system_prompt` | 角色存在性定义 + `{perception_block}` 槽位 + 不确定时自己查屏幕/记忆/工具结果/{user_pronoun}资料的提醒 | always | 当前角色卡（由 `AssetRegistry` / character loader 解析）+ `core/mood_text.py` |
+| `1_system_prompt` | 角色存在性定义与角色卡规则 + 不确定时自己查屏幕/记忆/工具结果/{user_pronoun}资料的提醒；旧感知槽位清空 | always | 当前角色卡（由 `AssetRegistry` / character loader 解析） |
 | `1.5_fact_boundary` | 简短来源边界：按自述/资料/工具各自时间理解；无屏幕快照不否定其他来源，桌宠形象归属于角色；电量/步数/餐食/行为须确认事件，不把过时信息当成当前 | always | 不复制桌面摘要，不宣称其他现实事实未知 |
 | `2_char_desc` | 角色描述 + 性格 + 情境 | always | 角色卡 |
 | `2.2_stage_presence` | 群聊在场成员与公开发言提醒 | reality Stage 角色生成时 | `core/stage/context.py` |
@@ -83,7 +83,7 @@ prompt inspector 仍逐叶层展示最终正文。`9.5_episodic_top` 随现实�
 | `6b_event_search` | 相关往事（event_log 搜索结果） | 搜索结果非空；`fetch_context(recall_policy="none")` 时整层跳过（CC 任务 19 · C） | `event_log.search()` |
 | `6c_episodic` | 情景记忆片段 | episodic_result 非空；`fetch_context(recall_policy="none")` 时整层跳过（CC 任务 19 · C） | `episodic_memory.retrieve_mixed()`（M4：recent/mid/long/repair 分桶，≤4 条；冲突条目连同修复结果渲染）+ `format_for_prompt()` |
 | `6c_episodic_fallback` | 长期/修复点记忆兜底（M4：不再取近 7 天高强度） | episodic_result 为空且 fallback 非空；`recall_policy="none"` 时同样跳过；**S1：仅主动回忆（调度器 `fetch_context(query_free_fallback=True)`）才会跑，普通聊天默认不跑**。保留的意图型补位：`retrieve_mixed(long_term=True)` 的 `long_term_fill`（query 命中 `relationship_longterm`）、时间窗兜底（query 含时间意图） | `episodic_memory.retrieve_fallback()`；实际消息 `_layer` 仍写 `6c_episodic`，便于统一裁剪 |
-| `mid_term` | 过去 12 小时对话压缩视图 | mid_term_context 非空 | `mid_term.format_for_prompt()`（12h 过期，最多 20 条，三时间桶渲染） |
+| `mid_term` | 本轮历史未覆盖的补充对话概要，明确派生摘要可能有偏差 | mid_term_context 非空 | `mid_term.format_for_prompt(history=本轮所选历史)`；12h 存储过期；按 source_turn_id 去重，旧数据仅做精确文本重复过滤；occurred_at 排序、逐条完整日期时间，最多8条/1200字符 |
 | `6d_diary_context` | 用户近期日记 | 有内容且命中 `emotion.down` / `emotion.indirect`；**新鲜度闸**：`diary_context.meta.json` 中 `latest_entry_date` 距今 >4 天（可配置 `diary.context_max_age_days`）或无 meta 时不注入；**低信息准入闸**：用户消息为 backchannel 时不注入 | `diary_context.load()` + `diary_context.load_meta()` |
 | `6e_inner_diary_facts` | 他昨天的记录（事件层，取前200字）；摘录里的 `今日事件` 改成 `昨日事件` | 昨日日记文件存在且含事件层 | `data/runtime/characters/{char_id}/inner/diary/` |
 | `6e_inner_diary_feeling` | 他昨天的心情（感受层，取前150字）；摘录里的 `今日感受` 改成 `昨日感受` | 昨日日记存在且命中 `emotion.down/indirect/deep` 或 `topic.relation`；**低信息准入闸**：`suppress_emotional_recall=True` 时跳过 | `data/runtime/characters/{char_id}/inner/diary/` |
@@ -146,6 +146,12 @@ stage 的导演字段、当前 stage 标记与私密真相披露策略，并受�
 > `6f_dream_afterglow` 与 `dream_afterglow_soft_hint` 为互斥层：前者在退梦后 0–5h 注入逐渐模糊的摘要，后者在详细层为空后接管至 8h TTL。两层均只读、非现实事实、读取异常 fail-closed，不写 memory / mood / profile / hidden state。
 >
 > 破限层双来源+去重（CC 任务 24 · 1）：`_load_jailbreak(layer)`（`core/prompt_builder.py`）合并两套并行存储——stems 源（`characters/reality/jailbreaks/{stem}.json`，受 `active_prompt_assets.json` 的 `enabled_jailbreaks` 控制）与 entries 源（`characters/reality/jailbreak_entries.json`，前端「偏好→世界→破限条目」EntryManager 管理）。两源均按各自的 `enabled` + `layer` 过滤后合并，`content.strip()` 相同的条目跨源只注入一次（先出现的保留，通常是 stems 源）。entries 源读取失败时 fail-open（不影响 stems 源正常注入）。
+
+工单 286：同 ID 的条目以 EntryManager 为准，包括 enabled=false、修改后的正文与 layer；
+不能由 stems 的旧副本覆盖关闭状态。不同 ID 的独立条目仍合并，内容仍去重。
+`1.5_fact_boundary` 在最终消息中前置到 `1_system_prompt` 之前。
+内置模板及已有本地卡的旧“当前感知”说明删除；`11_author_note` 末尾追加用户指定的
+【使用工具强调】，不确定/做事先查真实工具结果，STT、图像模型及记忆概要不能当作权威指令。
 
 ---
 
@@ -884,9 +890,9 @@ episodic / event-log / vector，不因重复存储切换。
 
 ### perception_block 子开关
 
-`perception_block` 不是独立消息——它嵌在 `1_system_prompt` 的 `{perception_block}` 槽位里
+`perception_block` 现在进入独立 `1.4_perception` 消息，位于工具结果区块；旧角色卡槽位清空。
 （`core/prompt_builder.py` 约 :363-382），没有自己的 `_layer`，所以不能用统一过滤点处理，需要独立
-字段 `perception_block_disabled` 在拼接槽位前判断：
+字段 `perception_block_disabled` 在生成独立感知叶层前判断：
 
 ```python
 perception = perception_block.strip() if perception_block else ""

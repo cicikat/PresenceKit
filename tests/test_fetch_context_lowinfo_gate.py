@@ -125,6 +125,23 @@ def _run_fetch(pipeline, user_id="u1", content="hello"):
     return asyncio.run(pipeline.fetch_context(user_id=user_id, content=content))
 
 
+def test_midterm_receives_the_same_selected_history(chars_tree, monkeypatch, sandbox, registry):
+    pipeline = _make_pipeline(TEST_CHAR_ID, registry)
+    _write_active(sandbox, TEST_CHAR_ID)
+    _apply_base_stubs(monkeypatch)
+    history = [{"role": "user", "content": "selected original", "_turn_id": "selected-turn"}]
+    monkeypatch.setattr(core.memory.short_term, "load_for_prompt", lambda *a, **kw: history)
+    received = []
+    def project(*args, **kwargs):
+        received.append(kwargs["history"])
+        return "uncovered summary"
+    monkeypatch.setattr(core.memory.mid_term, "format_for_prompt", project)
+    context = _run_fetch(pipeline, content="嗯嗯")
+    assert received == [history]
+    assert received[0] is history
+    assert context["mid_term"] == "uncovered summary"
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Tests
 # ─────────────────────────────────────────────────────────────────────────────

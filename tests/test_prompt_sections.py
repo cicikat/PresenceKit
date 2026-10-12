@@ -77,3 +77,14 @@ def test_legacy_perception_slot_is_separate_and_can_be_disabled(sandbox, monkeyp
     set_state([], True)
     disabled, _ = build(**kwargs)
     assert not any(m["_layer"] == "1.4_perception" for m in disabled)
+
+
+def test_truth_boundary_precedes_identity_and_author_note_ends_with_tool_emphasis(sandbox, monkeypatch):
+    _apply_build_stubs(monkeypatch)
+    from core.prompt_builder import build
+    result, _ = build(**_base_build_kwargs())
+    layers = [m["_layer"] for m in result]
+    assert layers.index("1.5_fact_boundary") < layers.index("1_system_prompt")
+    note = next(m["content"] for m in result if m["_layer"] == "11_author_note")
+    assert note.splitlines()[-1].startswith("【使用工具强调】")
+    assert note.endswith("当遇到冲突时，优先信任用户，其次调用工具。")
