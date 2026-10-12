@@ -146,7 +146,7 @@ def _sources(uid, char_id):
                          _material_summary('upload', row)))
     cfg = life_records.settings()
     if cfg['enabled'] and cfg['character_readable'] and 'read_life_records' in visible and _is_tool_enabled('read_life_records'):
-        for row in life_records.character_candidates(uid):
+        for row in life_records.character_candidates(uid, char_id=char_id):
             rows.append(('life', row['id'], str(row['revision']), _stamp(row['updated_at']),
                          _material_summary('life', row)))
     return rows

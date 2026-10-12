@@ -75,8 +75,10 @@ def inventory(char_id: str) -> dict:
         "user_relations": paths.character_user_relations(char_id=char_id),
         "lorebook": paths.lorebook(char_id=char_id),
         "jailbreak_entries": paths.jailbreak_entries(char_id=char_id),
+        "life_records": paths.life_records_db(char_id=char_id),
+        "group_context": paths.group_context(char_id=char_id),
     }.items():
-        entries.append({"id": name, "present": path.exists(), "kind": "file"})
+        entries.append({"id": name, "present": path.exists(), "kind": "directory" if name == "group_context" else "file"})
     root = paths.memory_char_root(char_id=char_id)
     users = sorted(p.name for p in root.iterdir() if p.is_dir()) if root.exists() else []
     from core.prompt_asset_selection import for_character

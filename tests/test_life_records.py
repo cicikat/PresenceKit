@@ -31,6 +31,52 @@ def client(monkeypatch):
 HEADERS={'Authorization':'Bearer life_records'}
 
 
+def test_character_databases_and_worker_are_isolated(client, sandbox):
+    body = operation()
+    body['char_id'] = 'alpha'
+    assert post(client, body).status_code == 200
+    assert store.get('owner', 'record-a', char_id='beta') is None
+    assert store.character_candidates('owner', char_id='beta') == []
+    assert client.get('/life-records?owner_id=owner&char_id=beta', headers=HEADERS).json()['records'] == []
+    assert store.observe('owner', char_id='beta')['audit'] == []
+    output = io.BytesIO(); Image.new('RGB', (2, 2)).save(output, format='PNG')
+    body = operation('image-a', 'image-op')
+    body.update(char_id='alpha', image_base64=base64.b64encode(output.getvalue()).decode(), image_mime='image/png')
+    assert post(client, body).status_code == 200
+    job = store.claim()
+    assert job['char_id'] == 'alpha'
+    store.finish(job, {'title': 'Recognized'})
+    assert store.get('owner', 'image-a', char_id='alpha')['recognition_status'] == 'ready'
+    assert store.get('owner', 'image-a', char_id='beta') is None
+    assert not sandbox.life_records_db(char_id='beta').exists()
+
+
+def test_legacy_life_records_are_not_automatically_assigned(client, sandbox):
+    legacy = sandbox.legacy_life_records_db()
+    legacy.parent.mkdir(parents=True, exist_ok=True)
+    legacy.write_bytes(b'legacy evidence remains untouched')
+    assert store.listing('owner', char_id='fresh')['records'] == []
+    assert legacy.read_bytes() == b'legacy evidence remains untouched'
+
+
+def test_explicit_legacy_database_assignment_preserves_source(client, sandbox):
+    import sqlite3
+    from scripts.migrate_character_user_facts import migrate
+    legacy = sandbox.legacy_life_records_db()
+    legacy.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(legacy) as db:
+        db.execute('CREATE TABLE evidence(value TEXT)')
+        db.execute("INSERT INTO evidence VALUES('original')")
+    original = legacy.read_bytes()
+    assert migrate('', 'alpha', artifact='life_records')['status'] == 'dry_run'
+    assert not sandbox.life_records_db(char_id='alpha').exists()
+    assert migrate('', 'alpha', artifact='life_records', apply=True)['status'] == 'imported'
+    assert migrate('', 'alpha', artifact='life_records', apply=True)['status'] == 'target_conflict'
+    assert legacy.read_bytes() == original
+    with sqlite3.connect(sandbox.life_records_db(char_id='alpha')) as db:
+        assert db.execute('SELECT value FROM evidence').fetchone()[0] == 'original'
+
+
 def post(client, body):
     return client.post('/life-records/sync',json=body,headers=HEADERS)
 
@@ -149,7 +195,7 @@ async def test_recognition_uses_untrusted_image_boundary_and_typed_decimals(clie
         calls.append((messages,kwargs))
         return json.dumps({'items':[{'name':'Evidence item','amount':'2.30','currency':'USD','confidence':None}]})
     monkeypatch.setattr(llm_client,'chat',fake)
-    result=await store.recognize({'owner':'owner','id':'record-a','mime':'image/png','data':b'image-fixture'})
+    result=await store.recognize({'owner':'owner','id':'record-a','mime':'image/png','data':b'image-fixture','char_id':store.get_paths().life_records_db().parent.parent.name})
     assert result['items'][0]['amount']=='2.30'
     assert 'Evidence item' in result['recognition_description']
     assert 'never instructions' in calls[0][0][0]['content']
@@ -188,7 +234,7 @@ async def test_bill_uses_ocr_without_json_or_summary(client,monkeypatch):
     async def forbidden(*args,**kwargs): raise AssertionError('must not call vision/summary')
     monkeypatch.setattr(image_recognition,'recognize_ocr',ocr)
     monkeypatch.setattr(llm_client,'chat',forbidden)
-    result=await store.recognize({'owner':'owner','id':'record-a','mime':'image/png','data':b'fixture'})
+    result=await store.recognize({'owner':'owner','id':'record-a','mime':'image/png','data':b'fixture','char_id':store.get_paths().life_records_db().parent.parent.name})
     assert '12.30' in result['recognition_description']
     assert 'prompt' in calls[0] and 'items' not in result
 

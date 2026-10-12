@@ -247,7 +247,8 @@ def _load_jailbreak(layer: int | None = None, *, char_id: str | None = None) -> 
     try:
         import json
         from core.sandbox import get_paths
-        entries_data = json.loads(get_paths().jailbreak_entries(char_id=char_id).read_text(encoding="utf-8"))
+        entries_path = get_paths().jailbreak_entries(char_id=char_id)
+        entries_data = json.loads(entries_path.read_text(encoding="utf-8")) if entries_path.exists() else {"entries": []}
         entries = entries_data.get("entries", [])
         if not isinstance(entries, list) or any(not isinstance(e, dict) for e in entries):
             raise ValueError("invalid managed jailbreak entries")

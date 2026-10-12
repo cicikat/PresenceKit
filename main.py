@@ -353,9 +353,13 @@ async def handle_message(message: dict, *, ingress=None):
 
     # ── 步骤1：群聊记录群消息流 ─────────────────────────────────────────────
     if is_group:
-        group_context.append(group_id, sender_name, content)
+        if _pipeline is None:
+            return
+        _pipeline._refresh_character_if_needed()
+        group_char_id = _pipeline._active_character_id
+        group_context.append(group_id, sender_name, content, char_id=group_char_id)
         # 群聊走隔离路径，不进 reality 主链
-        await _handle_group_message(group_id, sender_name, content, target_id)
+        await _handle_group_message(group_id, sender_name, content, target_id, char_id=group_char_id)
         return
 
     # ── 步骤2.5（N1）：现实轮级 scope freeze —————————————————————————————————
@@ -608,7 +612,7 @@ async def _reply_with_tool_result(
         "history":             short_term.load_for_prompt(user_id, char_id=_char_id),
         "profile":             user_profile.load(user_id, char_id=_char_id),
         "relation":            user_relation.get_relation(user_id, char_id=_char_id),
-        "group_context":       group_context.get_recent(group_id),
+        "group_context":       group_context.get_recent(group_id, char_id=_char_id),
         "user_identity_text":  "",
         "event_search_result": "",
         "lore_entries":        [],
@@ -659,6 +663,7 @@ async def _handle_group_message(
     sender_name: str,
     content: str,
     target_id: str,
+    *, char_id: str | None = None,
 ) -> None:
     """
     群聊隔离路径：只读 group_context + 角色卡生成回复，直发后追加到 group_context。
@@ -676,6 +681,7 @@ async def _handle_group_message(
         return
 
     char = _pipeline.character
+    char_id = char_id or _pipeline._active_character_id
 
     # 组装最简 system prompt：角色卡 + 群聊定位
     parts: list[str] = []
@@ -691,7 +697,7 @@ async def _handle_group_message(
     )
 
     # 拼入最近群聊历史（不含刚追加的当前消息，那条作为 user turn）
-    recent = _gc.get_recent(group_id)
+    recent = _gc.get_recent(group_id, char_id=char_id)
     history = recent[:-1] if recent else []
     if history:
         ctx_lines = "\n".join(
@@ -735,7 +741,7 @@ async def _handle_group_message(
             return
 
         # 把机器人回复追加进群上下文，供下轮参考（可丢弃，不写主记忆）
-        _gc.append(group_id, char.name, "\n".join(clean))
+        _gc.append(group_id, char.name, "\n".join(clean), char_id=char_id)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

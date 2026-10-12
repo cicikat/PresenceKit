@@ -15,6 +15,28 @@ def migrate(uid: str, char_id: str, *, apply: bool = False, artifact: str = "use
     from core.sandbox import get_paths
     from core.memory import user_facts
     paths = get_paths()
+    if artifact == "life_records":
+        import os
+        import sqlite3
+        import uuid
+        from contextlib import closing
+        source = paths.legacy_life_records_db()
+        target = paths.life_records_db(char_id=char_id)
+        if not source.exists():
+            return {"status": "source_absent", "applied": False}
+        if target.exists():
+            return {"status": "target_conflict", "applied": False}
+        if apply:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            temporary = target.with_name(f".migration-{uuid.uuid4().hex}.sqlite3")
+            try:
+                with closing(sqlite3.connect(source.resolve().as_uri() + "?mode=ro", uri=True)) as old:
+                    with closing(sqlite3.connect(temporary)) as new:
+                        old.backup(new)
+                os.link(temporary, target)  # Atomic publication without overwriting.
+            finally:
+                temporary.unlink(missing_ok=True)
+        return {"status": "imported" if apply else "dry_run", "applied": apply, "original_preserved": True}
     if artifact in {"lorebook", "jailbreak_entries"}:
         import yaml
         from core.safe_write import safe_write_text
@@ -62,7 +84,7 @@ if __name__ == "__main__":
     parser.add_argument("--uid", default="")
     parser.add_argument("--char-id", required=True)
     parser.add_argument("--apply", action="store_true")
-    parser.add_argument("--artifact", choices=["user_facts", "health_state", "lorebook", "jailbreak_entries"], default="user_facts")
+    parser.add_argument("--artifact", choices=["user_facts", "health_state", "lorebook", "jailbreak_entries", "life_records"], default="user_facts")
     args = parser.parse_args()
     if args.artifact in {"user_facts", "health_state"} and not args.uid:
         parser.error("--uid is required for user data")

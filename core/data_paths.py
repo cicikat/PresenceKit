@@ -573,7 +573,13 @@ class DataPaths:
     def event_log(self, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
         return self._p("chars", char_id, "event_log")
 
-    def group_context(self) -> Path:
+    def group_context(self, *, char_id: str | None = None) -> Path:
+        if char_id is None:
+            from core.prompt_asset_selection import active_character
+            char_id = active_character()
+        return self.runtime_character_dir(char_id=safe_user_id(char_id)) / "group_context"
+
+    def legacy_group_context(self) -> Path:
         return self._p("group_context")
 
     def yexuan_inner_diary(self, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
@@ -640,7 +646,14 @@ class DataPaths:
     def ime_drafts_db(self) -> Path:
         return self._p("runtime", "integrations", "ime_drafts.sqlite3")
 
-    def life_records_db(self) -> Path:
+    def life_records_db(self, *, char_id: str | None = None) -> Path:
+        if char_id is None:
+            from core.prompt_asset_selection import active_character
+            char_id = active_character()
+        return self.runtime_character_dir(char_id=safe_user_id(char_id)) / "life_records" / "records.sqlite3"
+
+    def legacy_life_records_db(self) -> Path:
+        """Unassigned old records, available only for explicit migration."""
         return self._p("runtime", "life_records", "records.sqlite3")
 
     def food_memory_db(self) -> Path:

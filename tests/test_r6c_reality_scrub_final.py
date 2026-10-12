@@ -499,9 +499,9 @@ async def test_f7_handle_message_adapter_scrubs_before_post_process(sandbox, mon
     import core.memory.group_context as _gc, core.user_relation as _ur
     monkeypatch.setattr(_st, "load_for_prompt", lambda uid, **kw: [])
     monkeypatch.setattr(_up, "load", lambda uid, **kw: {"location": "杭州"})
-    monkeypatch.setattr(_gc, "get_recent", lambda gid: [])
+    monkeypatch.setattr(_gc, "get_recent", lambda gid, **kwargs: [])
     monkeypatch.setattr(_gc, "append", lambda *a, **kw: None)
-    monkeypatch.setattr(_ur, "get_relation", lambda uid: {})
+    monkeypatch.setattr(_ur, "get_relation", lambda uid, **kwargs: {})
 
     import core.output.text_output as _to
     monkeypatch.setattr(_to, "send", AsyncMock())
@@ -555,9 +555,9 @@ async def test_f7b_tool_reply_adapter_scrubs_before_post_process(sandbox, monkey
     import core.memory.group_context as _gc, core.user_relation as _ur
     monkeypatch.setattr(_st, "load_for_prompt", lambda uid, **kw: [])
     monkeypatch.setattr(_up, "load", lambda uid, **kw: {"location": "杭州"})
-    monkeypatch.setattr(_gc, "get_recent", lambda gid: [])
+    monkeypatch.setattr(_gc, "get_recent", lambda gid, **kwargs: [])
     monkeypatch.setattr(_gc, "append", lambda *a, **kw: None)
-    monkeypatch.setattr(_ur, "get_relation", lambda uid: {})
+    monkeypatch.setattr(_ur, "get_relation", lambda uid, **kwargs: {})
 
     import core.output.text_output as _to
     monkeypatch.setattr(_to, "send", AsyncMock())

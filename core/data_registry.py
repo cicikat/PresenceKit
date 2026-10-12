@@ -103,7 +103,8 @@ REGISTRY: dict[str, PathMeta] = {
     "conversation_stats_db":  PathMeta("canonical", "reality",         "global",        "ignore"),
     "llm_reasoning_db":       PathMeta("forensic",  "shared",          "global",        "ignore"),
     "ime_drafts_db":          PathMeta("runtime",   "shared",          "global",        "ignore"),
-    "life_records_db":        PathMeta("canonical", "reality",         "global",        "ignore"),
+    "life_records_db":        PathMeta("canonical", "reality",         "per_char",      "ignore"),
+    "legacy_life_records_db": PathMeta("archive", "reality",           "global",        "ignore"),
     "food_memory_db":         PathMeta("canonical", "reality",         "global",        "ignore"),
     "quote_notebook_db":      PathMeta("canonical", "reality",         "global",        "ignore"),
     "drinking_state":         PathMeta("runtime",   "reality",         "per_char",      "ignore"),
@@ -150,7 +151,8 @@ REGISTRY: dict[str, PathMeta] = {
     # 单目录双身份按主用途标 canonical，无需拆目录
     "event_log":              PathMeta("canonical", "reality",         "per_char_user", "ignore"),
     "event_store":             PathMeta("canonical", "reality",         "per_char_user", "ignore"),
-    "group_context":          PathMeta("canonical", "reality",         "per_group",     "ignore"),
+    "group_context":          PathMeta("canonical", "reality",         "per_char",      "ignore"),
+    "legacy_group_context":   PathMeta("archive", "reality",           "per_group",     "ignore"),
     "fixation_state_dir":     PathMeta("canonical", "reality",         "per_char_user", "ignore"),
 
     # ── canonical · shared: 跨角色/全局业务真值 ──────────────────────────────

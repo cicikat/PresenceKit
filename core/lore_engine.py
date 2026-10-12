@@ -117,9 +117,12 @@ class LoreEngine:
         enabled_lorebooks: list = assets.get("enabled_lorebooks", [])
         total_loaded = 0
         managed_path = paths.lorebook(char_id=char_id)
+        managed_ids = set()
         try:
             managed = yaml.safe_load(managed_path.read_text(encoding="utf-8")) if managed_path.exists() else {}
-            self.load_entries((managed or {}).get("entries", []))
+            managed_entries = (managed or {}).get("entries", [])
+            managed_ids = {entry.get("id") for entry in managed_entries if isinstance(entry, dict) and entry.get("id")}
+            self.load_entries(managed_entries)
         except Exception as exc:
             log_error("lore_engine.load.managed", exc)
 
@@ -163,6 +166,8 @@ class LoreEngine:
 
             loaded = 0
             for entry in raw_entries:
+                if isinstance(entry, dict) and entry.get("id") in managed_ids:
+                    continue
                 normalized = _normalize_entry(entry)
                 if normalized:
                     self.entries.append(normalized)

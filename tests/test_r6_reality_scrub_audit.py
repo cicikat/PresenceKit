@@ -73,9 +73,9 @@ def _patch_memory(monkeypatch):
     import core.user_relation as _ur
     monkeypatch.setattr(_st, "load_for_prompt", lambda uid, **kw: [])
     monkeypatch.setattr(_up, "load", lambda uid, **kw: {"location": "杭州"})
-    monkeypatch.setattr(_gc, "get_recent", lambda gid: [])
+    monkeypatch.setattr(_gc, "get_recent", lambda gid, **kwargs: [])
     monkeypatch.setattr(_gc, "append", lambda *a, **kw: None)
-    monkeypatch.setattr(_ur, "get_relation", lambda uid: {})
+    monkeypatch.setattr(_ur, "get_relation", lambda uid, **kwargs: {})
 
 
 def _patch_output(monkeypatch) -> list:

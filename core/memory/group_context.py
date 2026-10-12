@@ -1,7 +1,7 @@
 """
 群聊上下文模块（框架尚未开发，仅有基础聊天功能）
 维护每个群最近 N 条消息流（N = config.memory.group_context_lines）
-持久化到 data/group_context/{group_id}.json
+每个角色单独保留群聊上下文，不继承旧共享缓存。
 """
 
 import json
@@ -49,16 +49,17 @@ def relevance_score(msg: dict, *, query_text: str, tags: set, char_name: str) ->
         return 0.0
 
 
-def _ctx_path(group_id: str) -> Path:
+def _ctx_path(group_id: str, *, char_id: str | None = None) -> Path:
     """返回该群的上下文文件路径"""
-    d = get_paths().group_context()
-    d.mkdir(parents=True, exist_ok=True)
+    d = get_paths().group_context(char_id=char_id)
+    from core.data_paths import safe_user_id
+    group_id = safe_user_id(group_id)
     return d / f"{group_id}.json"
 
 
-def _load_raw(group_id: str) -> list[dict]:
+def _load_raw(group_id: str, *, char_id: str | None = None) -> list[dict]:
     """从磁盘读取原始消息列表，出错返回空列表"""
-    path = _ctx_path(group_id)
+    path = _ctx_path(group_id, char_id=char_id)
     try:
         if path.exists():
             with open(path, "r", encoding="utf-8") as f:
@@ -69,7 +70,7 @@ def _load_raw(group_id: str) -> list[dict]:
     return []
 
 
-def append(group_id: str, sender_name: str, content: str):
+def append(group_id: str, sender_name: str, content: str, *, char_id: str | None = None):
     """
     追加一条群消息记录
 
@@ -81,7 +82,7 @@ def append(group_id: str, sender_name: str, content: str):
     cfg = get_config()
     max_lines = cfg.get("memory", {}).get("group_context_lines", 50)
 
-    messages = _load_raw(group_id)
+    messages = _load_raw(group_id, char_id=char_id)
     messages.append({
         "sender_name": sender_name,
         "content": content,
@@ -93,10 +94,10 @@ def append(group_id: str, sender_name: str, content: str):
     if len(messages) > max_lines:
         messages = messages[-max_lines:]
 
-    _save(group_id, messages)
+    _save(group_id, messages, char_id=char_id)
 
 
-def get_recent(group_id: str | None) -> list[dict]:
+def get_recent(group_id: str | None, *, char_id: str | None = None) -> list[dict]:
     """
     获取最近的群消息列表
 
@@ -105,34 +106,35 @@ def get_recent(group_id: str | None) -> list[dict]:
     """
     if not group_id:
         return []
-    msgs = _load_raw(group_id)
+    msgs = _load_raw(group_id, char_id=char_id)
     msgs.sort(key=lambda m: float(m.get("ts") or 0))
     return msgs
 
 
-def _save(group_id: str, messages: list[dict]):
+def _save(group_id: str, messages: list[dict], *, char_id: str | None = None):
     """把消息列表写回磁盘"""
-    path = _ctx_path(group_id)
+    path = _ctx_path(group_id, char_id=char_id)
     try:
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(messages, f, ensure_ascii=False, indent=2)
+        from core.safe_write import safe_write_json
+        if not safe_write_json(path, messages):
+            raise OSError("group context save failed")
     except Exception as e:
         log_error("group_context._save", e)
 
 
-def clear(group_id: str):
+def clear(group_id: str, *, char_id: str | None = None):
     """清空指定群的上下文（admin 用）"""
-    _save(group_id, [])
+    _save(group_id, [], char_id=char_id)
 
 
 class GroupContext:
     """群聊上下文类，封装模块级函数，供外部按类方式导入使用"""
 
-    def append(self, group_id: str, sender_name: str, content: str):
-        append(group_id, sender_name, content)
+    def append(self, group_id: str, sender_name: str, content: str, *, char_id: str | None = None):
+        append(group_id, sender_name, content, char_id=char_id)
 
-    def get_recent(self, group_id: str | None) -> list[dict]:
-        return get_recent(group_id)
+    def get_recent(self, group_id: str | None, *, char_id: str | None = None) -> list[dict]:
+        return get_recent(group_id, char_id=char_id)
 
-    def clear(self, group_id: str):
-        clear(group_id)
+    def clear(self, group_id: str, *, char_id: str | None = None):
+        clear(group_id, char_id=char_id)

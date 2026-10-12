@@ -13,6 +13,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from admin.auth import require_scopes
 from core import life_records as store
 from core.config_loader import get_config
+from core.data_paths import safe_user_id
+from core.prompt_asset_selection import active_character
 
 router = APIRouter()
 IDENTIFIER = r'^[A-Za-z0-9_-]{1,128}$'
@@ -57,6 +59,7 @@ class Record(BaseModel):
 class Sync(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
     owner_id: str
+    char_id: str | None = None
     operation_id: str = Field(pattern=IDENTIFIER)
     record_id: str = Field(pattern=IDENTIFIER)
     action: Literal['upsert', 'delete']
@@ -64,6 +67,13 @@ class Sync(BaseModel):
     record: Record | None = None
     image_base64: str | None = Field(None, max_length=14_000_000)
     image_mime: Literal['image/jpeg', 'image/png', 'image/webp'] | None = None
+
+
+def character(char_id):
+    try:
+        return safe_user_id(char_id) if char_id else active_character()
+    except ValueError as exc:
+        raise HTTPException(422, "invalid_character") from exc
 
 
 def owner(owner_id):
@@ -74,14 +84,15 @@ def owner(owner_id):
 
 
 @router.get('/life-records/capabilities')
-async def capabilities(owner_id: str, auth=Depends(require_scopes('life_records'))):
+async def capabilities(owner_id: str, char_id: str | None = None, auth=Depends(require_scopes('life_records'))):
     owner(owner_id)
-    return store.settings()
+    return {**store.settings(), "char_id": character(char_id)}
 
 
 @router.post('/life-records/sync')
 async def sync(body: Sync, auth=Depends(require_scopes('life_records'))):
     uid = owner(body.owner_id)
+    char_id = character(body.char_id)
     if not store.settings()['enabled']: raise HTTPException(503, 'life_records_disabled')
     if body.action == 'upsert' and body.record is None: raise HTTPException(422, 'record_required')
     if body.action == 'delete' and body.image_base64 is not None: raise HTTPException(422, 'delete_has_image')
@@ -100,7 +111,7 @@ async def sync(body: Sync, auth=Depends(require_scopes('life_records'))):
             raise HTTPException(status_code=422, detail={'code': 'dependency_unavailable', 'message': '缺少运行依赖 pillow，无法校验生活记录图片'}) from e
         except Exception: raise HTTPException(status_code=422, detail={'code': 'invalid_image', 'message': 'invalid_image'}) from None
     try:
-        return await asyncio.to_thread(store.sync, uid, auth.label, body.model_dump(mode='json'), image)
+        return await asyncio.to_thread(store.sync, uid, auth.label, body.model_dump(mode='json'), image, char_id=char_id)
     except store.Conflict as exc:
         from fastapi.responses import JSONResponse
         return JSONResponse(status_code=409, content={'detail': 'revision_or_operation_conflict', 'current_record': exc.record})
@@ -108,25 +119,26 @@ async def sync(body: Sync, auth=Depends(require_scopes('life_records'))):
 
 
 @router.get('/life-records')
-async def records(owner_id: str, category: Literal['diet', 'bill', 'cart'] | None = None,
+async def records(owner_id: str, char_id: str | None = None, category: Literal['diet', 'bill', 'cart'] | None = None,
                   date_from: date | None = Query(None, alias='from'), date_to: date | None = Query(None, alias='to'),
                   q: str = Query('', max_length=200), cursor: str = Query('', max_length=2000),
                   limit: int = Query(50, ge=1, le=200), auth=Depends(require_scopes('life_records'))):
     uid = owner(owner_id)
+    char_id = character(char_id)
     if date_from and date_to and date_from > date_to: raise HTTPException(422, 'invalid_date_range')
     try:
-        return await asyncio.to_thread(store.listing, uid, category=category or '', date_from=str(date_from or ''), date_to=str(date_to or ''), q=q, cursor=cursor, limit=limit)
+        return await asyncio.to_thread(store.listing, uid, char_id=char_id, category=category or '', date_from=str(date_from or ''), date_to=str(date_to or ''), q=q, cursor=cursor, limit=limit)
     except ValueError as exc: raise HTTPException(422, str(exc)) from None
 
 
 @router.get('/life-records/observability')
-async def observation(owner_id: str, auth=Depends(require_scopes('life_records'))):
-    return await asyncio.to_thread(store.observe, owner(owner_id))
+async def observation(owner_id: str, char_id: str | None = None, auth=Depends(require_scopes('life_records'))):
+    return await asyncio.to_thread(store.observe, owner(owner_id), char_id=character(char_id))
 
 
 @router.get('/life-records/{record_id}')
-async def record(record_id: str, owner_id: str, auth=Depends(require_scopes('life_records'))):
-    value = await asyncio.to_thread(store.get, owner(owner_id), record_id)
+async def record(record_id: str, owner_id: str, char_id: str | None = None, auth=Depends(require_scopes('life_records'))):
+    value = await asyncio.to_thread(store.get, owner(owner_id), record_id, char_id=character(char_id))
     if value is None: raise HTTPException(404, 'record_not_found')
     return {'record': value}
 
@@ -140,13 +152,13 @@ class Settings(BaseModel):
 
 
 @router.get('/settings/life-records')
-async def settings(auth=Depends(require_scopes('admin'))):
+async def settings(char_id: str | None = None, auth=Depends(require_scopes('admin'))):
     uid = str(get_config().get('scheduler', {}).get('owner_id', ''))
-    result = await asyncio.to_thread(store.observe, uid)
+    char_id = character(char_id)
+    result = await asyncio.to_thread(store.observe, uid, char_id=char_id)
     try:
         from core.scheduler.loop import _active_char_id_or_none
         from core.context_continuity import observability
-        char_id = _active_char_id_or_none()
         result['continuity'] = await asyncio.to_thread(observability, uid, char_id) if uid and char_id else {'unavailable': True}
     except Exception:
         result['continuity'] = {'unavailable': True}
@@ -166,8 +178,8 @@ async def save_settings(body: Settings, auth=Depends(require_scopes('admin'))):
 
 
 @router.post('/settings/life-records/{record_id}/retry')
-async def retry(record_id: str, auth=Depends(require_scopes('admin'))):
+async def retry(record_id: str, char_id: str | None = None, auth=Depends(require_scopes('admin'))):
     uid = str(get_config().get('scheduler', {}).get('owner_id', ''))
     try:
-        return await asyncio.to_thread(store.retry_failed, uid, record_id)
+        return await asyncio.to_thread(store.retry_failed, uid, record_id, char_id=character(char_id))
     except ValueError as exc: raise HTTPException(422, str(exc)) from None

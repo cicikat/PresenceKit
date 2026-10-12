@@ -76,7 +76,7 @@ class JbEntry(BaseModel):
 @router.get("/jailbreak-entries", summary="获取所有破限条目")
 async def get_entries(char_id: str | None = None, auth=Depends(require_scopes("persona"))):
     char_id = _resolve_char_id(char_id)
-    return _read(char_id)
+    return {**_read(char_id), "char_id": char_id}
 
 
 @router.get("/jailbreak-entries/export/json", summary="导出破限条目JSON")

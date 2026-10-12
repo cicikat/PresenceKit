@@ -67,8 +67,8 @@ def now():
 
 
 @contextmanager
-def database(write=False):
-    path = get_paths().life_records_db()
+def database(write=False, *, char_id=None):
+    path = get_paths().life_records_db(char_id=char_id)
     with _LOCK:
         if not write and not path.exists():
             yield None
@@ -107,8 +107,8 @@ def _current(db, owner, record_id):
     return json.loads(row[0]) if row else None
 
 
-def get(owner, record_id):
-    with database() as db:
+def get(owner, record_id, *, char_id=None):
+    with database(char_id=char_id) as db:
         return _current(db, owner, record_id) if db else None
 
 
@@ -117,10 +117,10 @@ def _put(db, owner, record, action):
     db.execute('INSERT INTO audit(owner,id,action,at,outcome) VALUES(?,?,?,?,?)', (owner, record['id'], action, now(), 'ok'))
 
 
-def sync(owner, device, body, image=None):
+def sync(owner, device, body, image=None, *, char_id=None):
     fingerprint = hashlib.sha256(json.dumps(body, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
     record_id, operation = body['record_id'], body['operation_id']
-    with database(True) as db:
+    with database(True, char_id=char_id) as db:
         old = db.execute('SELECT fingerprint,result FROM operations WHERE owner=? AND operation_id=?', (owner, operation)).fetchone()
         if old:
             if old[0] != fingerprint:
@@ -166,10 +166,11 @@ def sync(owner, device, body, image=None):
         return result
 
 
-def listing(owner, *, category='', date_from='', date_to='', q='', cursor='', limit=50):
-    filters = [owner, category, date_from, date_to, q]
+def listing(owner, *, char_id=None, category='', date_from='', date_to='', q='', cursor='', limit=50):
+    char_id = get_paths().life_records_db(char_id=char_id).parent.parent.name
+    filters = [owner, char_id, category, date_from, date_to, q]
     signature = hashlib.sha256(json.dumps(filters).encode()).hexdigest()
-    with database() as db:
+    with database(char_id=char_id) as db:
         if not db:
             return {'records': [], 'next_cursor': None}
         snapshot = db.execute('SELECT coalesce(max(seq),0) FROM versions WHERE owner=?', (owner,)).fetchone()[0]
@@ -203,9 +204,10 @@ def listing(owner, *, category='', date_from='', date_to='', q='', cursor='', li
         return {'records': records, 'next_cursor': token}
 
 
-def observe(owner):
-    result = {**settings(), 'tasks': {}, 'devices': [], 'audit': []}
-    with database() as db:
+def observe(owner, *, char_id=None):
+    char_id = get_paths().life_records_db(char_id=char_id).parent.parent.name
+    result = {**settings(), 'char_id': char_id, 'tasks': {}, 'devices': [], 'audit': []}
+    with database(char_id=char_id) as db:
         if db:
             result['tasks'] = {row[0]: row[1] for row in db.execute('SELECT status,count(*) FROM jobs WHERE owner=? GROUP BY status', (owner,))}
             result['devices'] = [dict(row) for row in db.execute('SELECT device,count(*) operation_count,max(acknowledged_at) last_ack_at FROM operations WHERE owner=? GROUP BY device', (owner,))]
@@ -214,9 +216,9 @@ def observe(owner):
     return result
 
 
-def character_candidates(owner):
+def character_candidates(owner, *, char_id=None):
     """Latest revisions only; failed/pending recognitions never become ready evidence."""
-    with database() as db:
+    with database(char_id=char_id) as db:
         if not db:
             return []
         rows = db.execute('''SELECT v.data FROM versions v JOIN
@@ -227,7 +229,16 @@ def character_candidates(owner):
 
 
 def claim(available_categories=None):
-    with database(True) as db:
+    root = get_paths().life_records_db().parents[2]
+    for path in sorted(root.glob('*/life_records/records.sqlite3')):
+        job = _claim_character(path.parent.parent.name, available_categories)
+        if job:
+            return job
+    return None
+
+
+def _claim_character(char_id, available_categories):
+    with database(True, char_id=char_id) as db:
         rows = db.execute("SELECT j.owner,j.id FROM jobs j WHERE j.status='pending' OR (j.status='processing' AND j.lease<?)", (time.time(),)).fetchall()
         for row in rows:
             record = _current(db, row['owner'], row['id'])
@@ -238,12 +249,13 @@ def claim(available_categories=None):
                 continue
             lease = time.time() + 180
             db.execute("UPDATE jobs SET status='processing',lease=? WHERE owner=? AND id=?", (lease, row['owner'], row['id']))
-            return {**dict(row), **dict(image), 'lease': lease, 'category': record['category']}
+            return {**dict(row), **dict(image), 'lease': lease, 'category': record['category'], 'char_id': char_id}
         return None
 
 
 def finish(job, extracted=None, error=''):
-    with database(True) as db:
+    char_id = job['char_id']
+    with database(True, char_id=char_id) as db:
         record = _current(db, job['owner'], job['id'])
         if not record or record.get('deleted'): return
         active = db.execute('SELECT status,lease FROM jobs WHERE owner=? AND id=?', (job['owner'], job['id'])).fetchone()
@@ -297,7 +309,7 @@ async def recognize(job):
     from core import llm_client, image_recognition
     from core.image_presets import resolve_purpose
     from core.life_record_extraction import extract
-    current = get(job['owner'], job['id'])
+    current = get(job['owner'], job['id'], char_id=job['char_id'])
     if not current or current.get('deleted'): return {}
     uri = 'data:' + job['mime'] + ';base64,' + base64.b64encode(job['data']).decode()
     purpose = {'bill': 'life_bill', 'diet': 'life_diet', 'cart': 'life_cart'}.get(current['category'], 'life_diet')
@@ -319,12 +331,12 @@ async def recognize(job):
     else:
         messages = [{'role': 'system', 'content': prompt}, {'role': 'user', 'content': [{'type': 'image_url', 'image_url': {'url': uri}}]}]
         output = await llm_client.chat(messages, use_vision=True, call_category='vision',
-                                       max_tokens_override=2000, vision_purpose=purpose)
+                                       max_tokens_override=2000, vision_purpose=purpose, char_id=job['char_id'])
     return extract(output)
 
 
-def retry_failed(owner, record_id):
-    with database(True) as db:
+def retry_failed(owner, record_id, *, char_id=None):
+    with database(True, char_id=char_id) as db:
         record = _current(db, owner, record_id)
         if not record or record.get('deleted'): raise ValueError('record_not_found')
         if not db.execute('SELECT 1 FROM images WHERE owner=? AND id=?', (owner, record_id)).fetchone():

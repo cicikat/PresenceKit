@@ -63,8 +63,8 @@ def _patch_memory_capture(monkeypatch):
 
     monkeypatch.setattr(_st, "load_for_prompt", _st_load)
     monkeypatch.setattr(_up, "load", _up_load)
-    monkeypatch.setattr(_gc, "get_recent", lambda gid: [])
-    monkeypatch.setattr(_ur, "get_relation", lambda uid: {})
+    monkeypatch.setattr(_gc, "get_recent", lambda gid, **kwargs: [])
+    monkeypatch.setattr(_ur, "get_relation", lambda uid, **kwargs: {})
     return st_calls, up_calls
 
 
@@ -133,8 +133,8 @@ async def test_character_switch_reader_follows(sandbox, monkeypatch):
     import core.memory.group_context as _gc
     import core.user_relation as _ur
 
-    monkeypatch.setattr(_gc, "get_recent", lambda gid: [])
-    monkeypatch.setattr(_ur, "get_relation", lambda uid: {})
+    monkeypatch.setattr(_gc, "get_recent", lambda gid, **kwargs: [])
+    monkeypatch.setattr(_ur, "get_relation", lambda uid, **kwargs: {})
     monkeypatch.setattr(_up, "load", lambda uid, **kw: {})
     _patch_text_output(monkeypatch)
     _patch_rp(monkeypatch)
@@ -173,8 +173,8 @@ async def test_invalid_active_char_no_reader_called(sandbox, monkeypatch):
     import core.memory.group_context as _gc
     import core.user_relation as _ur
 
-    monkeypatch.setattr(_gc, "get_recent", lambda gid: [])
-    monkeypatch.setattr(_ur, "get_relation", lambda uid: {})
+    monkeypatch.setattr(_gc, "get_recent", lambda gid, **kwargs: [])
+    monkeypatch.setattr(_ur, "get_relation", lambda uid, **kwargs: {})
 
     def _fail_if_called(*a, **kw):
         pytest.fail("Reader must not be called when active_character is invalid")
@@ -217,8 +217,8 @@ async def test_content_isolation_yexuan_not_in_character_b_context(sandbox, monk
 
     monkeypatch.setattr(_st, "load_for_prompt", _st_load)
     monkeypatch.setattr(_up, "load", _up_load)
-    monkeypatch.setattr(_gc, "get_recent", lambda gid: [])
-    monkeypatch.setattr(_ur, "get_relation", lambda uid: {})
+    monkeypatch.setattr(_gc, "get_recent", lambda gid, **kwargs: [])
+    monkeypatch.setattr(_ur, "get_relation", lambda uid, **kwargs: {})
     _patch_text_output(monkeypatch)
     _patch_rp(monkeypatch)
 

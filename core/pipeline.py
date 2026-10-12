@@ -372,7 +372,7 @@ class Pipeline:
         )
         # 旧的失败条目在本轮历史投影完成后重试；本轮使用裁剪兜底。
         short_term.schedule_long_user_summaries(uid, char_id=char_id)
-        recent_group_ctx = group_context.get_recent(group_id)
+        recent_group_ctx = group_context.get_recent(group_id, char_id=char_id)
         relation         = user_relation.get_relation(uid, char_id=char_id)
         lore_entries, _lore_trace = scoped_lore_engine.match(content, history, return_trace=True)
 

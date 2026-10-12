@@ -1,3 +1,9 @@
+let _loreCharId = null;
+let _jbCharId = null;
+function ownedEntryUrl(path, charId) {
+  if (!charId) throw new Error('请先加载角色条目');
+  return path + '?char_id=' + encodeURIComponent(charId);
+}
 let _loreEntries = [];
 let _editingLoreIdx = null;
 
@@ -6,6 +12,7 @@ async function loadLorebook() {
   el.innerHTML = '<div class="loading">加载中…</div>';
   try {
     const data = await api('GET', '/lorebook');
+    _loreCharId = data.char_id;
     _loreEntries = data.entries || [];
     renderLorebook();
   } catch(e) {
@@ -65,7 +72,7 @@ function toggleLoreContent(i) {
 
 async function exportLorebook() {
   try {
-    const resp = await fetch('/lorebook/export/json', {
+    const resp = await fetch(ownedEntryUrl('/lorebook/export/json', _loreCharId), {
       headers: { 'Authorization': `Bearer ${localStorage.getItem('qq_admin_key')||''}` }
     });
     const blob = await resp.blob();
@@ -84,7 +91,7 @@ async function importLorebookJson(file) {
   const form = new FormData();
   form.append('file', file);
   try {
-    const resp = await fetch('/lorebook/import/json', {
+    const resp = await fetch(ownedEntryUrl('/lorebook/import/json', _loreCharId), {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${localStorage.getItem('qq_admin_key')||''}` },
       body: form,
@@ -136,9 +143,9 @@ async function saveLoreEntry() {
 
   try {
     if (_editingLoreIdx === null) {
-      await api('POST', '/lorebook', payload);
+      await api('POST', ownedEntryUrl('/lorebook', _loreCharId), payload);
     } else {
-      await api('PUT', `/lorebook/${_editingLoreIdx}`, payload);
+      await api('PUT', ownedEntryUrl(`/lorebook/${_editingLoreIdx}`, _loreCharId), payload);
     }
     closeLoreModal();
     await loadLorebook();
@@ -153,7 +160,7 @@ async function deleteLoreEntry(eid) {
   const label = entry ? (entry.keyword || []).join(', ') : eid;
   if (!confirm(`确定删除条目（${label}）吗？`)) return;
   try {
-    await api('DELETE', `/lorebook/${eid}`);
+    await api('DELETE', ownedEntryUrl(`/lorebook/${eid}`, _loreCharId));
     await loadLorebook();
     toast('条目已删除', 'ok');
   } catch(e) {
@@ -169,7 +176,7 @@ async function importLorebookTxt(event) {
   fd.append('file', file);
   try {
     const token = localStorage.getItem('qq_admin_key') || '';
-    const resp = await fetch('/lorebook/import/txt', {
+    const resp = await fetch(ownedEntryUrl('/lorebook/import/txt', _loreCharId), {
       method: 'POST',
       headers: { 'Authorization': 'Bearer ' + token },
       body: fd,
@@ -193,6 +200,7 @@ async function loadJbEntries() {
   el.innerHTML = '<div class="loading">加载中…</div>';
   try {
     const data = await api('GET', '/jailbreak-entries');
+    _jbCharId = data.char_id;
     _jbEntries = data.entries || [];
     renderJbEntries();
   } catch(e) {
@@ -278,9 +286,9 @@ async function saveJbEntry() {
   if (!body.title || !body.content) { toast('标题和内容不能为空', 'err'); return; }
   try {
     if (_editingJbId) {
-      await api('PUT', `/jailbreak-entries/${_editingJbId}`, body);
+      await api('PUT', ownedEntryUrl(`/jailbreak-entries/${_editingJbId}`, _jbCharId), body);
     } else {
-      await api('POST', '/jailbreak-entries', body);
+      await api('POST', ownedEntryUrl('/jailbreak-entries', _jbCharId), body);
     }
     toast('已保存', 'ok');
     closeJbModal();
@@ -293,7 +301,7 @@ async function saveJbEntry() {
 async function deleteJbEntry(id) {
   if (!confirm('确认删除？')) return;
   try {
-    await api('DELETE', `/jailbreak-entries/${id}`);
+    await api('DELETE', ownedEntryUrl(`/jailbreak-entries/${id}`, _jbCharId));
     toast('已删除', 'ok');
     loadJbEntries();
   } catch(e) {
@@ -303,7 +311,7 @@ async function deleteJbEntry(id) {
 
 async function exportJbEntries() {
   try {
-    const resp = await fetch('/jailbreak-entries/export/json', {
+    const resp = await fetch(ownedEntryUrl('/jailbreak-entries/export/json', _jbCharId), {
       headers: { 'Authorization': `Bearer ${localStorage.getItem('qq_admin_key')||''}` }
     });
     const blob = await resp.blob();
@@ -318,7 +326,7 @@ async function importJbEntriesJson(file) {
   const form = new FormData();
   form.append('file', file);
   try {
-    const resp = await fetch('/jailbreak-entries/import/json', {
+    const resp = await fetch(ownedEntryUrl('/jailbreak-entries/import/json', _jbCharId), {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${localStorage.getItem('qq_admin_key')||''}` },
       body: form,
@@ -334,7 +342,7 @@ async function importJbEntriesTxt(file) {
   const form = new FormData();
   form.append('file', file);
   try {
-    const resp = await fetch('/jailbreak-entries/import/txt', {
+    const resp = await fetch(ownedEntryUrl('/jailbreak-entries/import/txt', _jbCharId), {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${localStorage.getItem('qq_admin_key')||''}` },
       body: form,

@@ -14,7 +14,7 @@ def configured(sandbox, monkeypatch):
     for module in (config_loader, life_records, tool_dispatcher):
         monkeypatch.setattr(module, 'get_config', lambda: config)
     monkeypatch.setattr(tool_dispatcher, 'get_tools_schema', lambda **kw: [
-        {'function': {'name': name}} for name in ('read_document', 'reread_image', 'read_life_records')])
+        {'function': {'name': name}} for name in ('read_document', 'reread_image', 'read_life_records', 'observe_user_screen')])
     monkeypatch.setattr(tool_dispatcher, '_is_tool_enabled', lambda _: True)
     monkeypatch.setattr('core.self_management.policy.tool_allowed', lambda *args: True)
     return config
@@ -47,7 +47,7 @@ def assert_readable_material(messages, *needles):
 
 
 def test_ready_record_stays_pending_until_evaluated_then_becomes_reference(configured):
-    life_records.sync('owner-test', 'device', record())
+    life_records.sync('owner-test', 'device', record(), char_id='char-test')
     first = continuity.messages('owner-test', 'char-test')
     assert_readable_material(first, 'lunch')
     assert len(pending(first)) == 1
@@ -56,16 +56,16 @@ def test_ready_record_stays_pending_until_evaluated_then_becomes_reference(confi
     later = continuity.messages('owner-test', 'char-test')
     assert not pending(later) and len(recent(later)) == 1
     assert_readable_material(later, 'lunch')
-    assert len(pending(continuity.messages('owner-test', 'other-char'))) == 1
+    assert continuity.messages('owner-test', 'other-char') == []
     assert continuity.messages('other-owner', 'char-test') == []
     state = continuity.observability('owner-test', 'char-test')
     assert state['receipts'] and 'lunch' not in json.dumps(state)
 
 
 def test_latest_revision_deletion_and_permission_revocation(configured):
-    life_records.sync('owner-test', 'device', record())
+    life_records.sync('owner-test', 'device', record(), char_id='char-test')
     old = continuity.messages('owner-test', 'char-test')
-    life_records.sync('owner-test', 'device', record(operation='edit', revision=1, title='corrected'))
+    life_records.sync('owner-test', 'device', record(operation='edit', revision=1, title='corrected'), char_id='char-test')
     continuity.acknowledge(old)
     current = continuity.messages('owner-test', 'char-test')
     assert pending(current)
@@ -75,14 +75,14 @@ def test_latest_revision_deletion_and_permission_revocation(configured):
     configured['life_records']['character_readable'] = False
     assert continuity.messages('owner-test', 'char-test') == []
     configured['life_records']['character_readable'] = True
-    life_records.sync('owner-test', 'device', {'record_id': 'record-a', 'operation_id': 'delete', 'action': 'delete', 'base_revision': 2})
+    life_records.sync('owner-test', 'device', {'record_id': 'record-a', 'operation_id': 'delete', 'action': 'delete', 'base_revision': 2}, char_id='char-test')
     assert continuity.messages('owner-test', 'char-test') == []
 
 
 def test_pending_recognition_waits_and_receipt_does_not_invent_content(configured):
     body = record()
     body['image_mime'] = 'image/png'
-    life_records.sync('owner-test', 'device', body, image=b'fixture')
+    life_records.sync('owner-test', 'device', body, image=b'fixture', char_id='char-test')
     assert continuity.messages('owner-test', 'char-test') == []
     job = life_records.claim()
     life_records.finish(job, {'recognition_description': 'noodles'})
@@ -144,7 +144,7 @@ async def test_life_tool_reads_detail_in_pages(configured):
     from core.tool_dispatcher import _life_records_wrapper
     body = record()
     body['record']['note'] = 'abc' * 1200 + 'tail detail'
-    life_records.sync('owner-test', 'device', body)
+    life_records.sync('owner-test', 'device', body, char_id='char-test')
     index = await _life_records_wrapper('owner-test', char_id='char-test')
     assert 'record-a' in index.safe_summary
     assert pending(continuity.messages('owner-test', 'char-test'))  # index alone is not a detail read
@@ -159,7 +159,7 @@ async def test_life_tool_reads_detail_in_pages(configured):
 
 def test_autonomy_context_includes_pending_and_previous_result(configured):
     from core.autonomy.runner import _context_messages
-    life_records.sync('owner-test', 'device', record())
+    life_records.sync('owner-test', 'device', record(), char_id='char-test')
     continuity.retain_result('owner-test', 'char-test', 'weather', 'observed rain')
     context = _context_messages('owner-test', 'char-test')
     assert pending(context) and 'observed rain' in str(context)
@@ -172,7 +172,7 @@ async def test_failed_generation_does_not_consume_pending(configured, monkeypatc
     from core import llm_client, error_handler
     monkeypatch.setattr(error_handler, 'with_retry', lambda **kw: lambda fn: fn)
     monkeypatch.setattr(llm_client, 'chat', AsyncMock(side_effect=RuntimeError('fixture failure')))
-    life_records.sync('owner-test', 'device', record())
+    life_records.sync('owner-test', 'device', record(), char_id='char-test')
     pipeline = object.__new__(Pipeline)
     with pytest.raises(RuntimeError):
         await pipeline.run_llm(continuity.messages('owner-test', 'char-test'), char_id='char-test')
@@ -186,8 +186,9 @@ async def test_real_dispatcher_silent_autonomy_keeps_screen_result(configured, m
     from core.autonomy import runner, store
     from core.autonomy.models import Job, Run
     from core.perception import screen_observation
-    life_records.sync('owner-test', 'device', record())
+    life_records.sync('owner-test', 'device', record(), char_id='char-test')
     monkeypatch.setattr(screen_observation, 'enabled', lambda: True)
+    monkeypatch.setattr(runner.policy, 'screen_observation_suppressed', lambda: False)
     monkeypatch.setitem(tool_dispatcher._TOOL_REGISTRY['observe_user_screen'], 'func', AsyncMock(return_value='{"status":"ok","caption":"fixture spreadsheet"}'))
     monkeypatch.setattr(runner, '_user_became_active', lambda _: False)
     monkeypatch.setattr(runner, '_runtime_tools', lambda *args: ([{'type': 'function', 'function': {'name': 'observe_user_screen', 'parameters': {'type': 'object', 'properties': {}}}}], None))

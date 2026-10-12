@@ -1217,3 +1217,6 @@ avatar endpoint and relay unchanged. No backend or mobile code modified.
 ## Room TV local material presets (2026-10-12)
 
 current/local: desktop Room TV v02/v03 edit mode supports original/soft/cel, per-material palettes and bounded local presets in room.settings. No new backend capability, IPC/REST/WS or mobile consumer; no cross-end impact. observe: real Tauri window, animated overlap and GPU performance remain open. See Emerald-client/docs/room-cel-materials.md.
+# 288 C4：生活记录与条目编辑归属
+
+生活记录按角色分库；sync body 可带 char_id，列表/详情/观测/重试支持 char_id query，省略时入口固定当前角色。识别 job 固定原角色。手机缓存、编辑器及队列 realm 增加 char_id，旧无归属队列保留且不自动上传；切角色后旧编辑器失效。生活记录 capabilities 返回 char_id，观测返回对应角色状态。条目世界书/提示词 GET 返回 char_id，管理面后续写入/导入/导出固定加载时的角色。群聊上下文按角色隔离；旧共享缓存保留而不自动回流。原生活记录库只能显式指定角色、dry-run 后迁移，不覆盖目标。真实手机和模型验收 not-run。

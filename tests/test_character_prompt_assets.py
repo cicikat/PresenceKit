@@ -24,7 +24,7 @@ def test_managed_entries_crud_and_prompt_do_not_cross_characters(sandbox):
     asyncio.run(lorebook.add_lore_entry(lorebook.LoreEntry(keyword=["secret"], content="Alpha lore"), char_id=TEST_CHAR_ID, auth=None))
     assert _load_jailbreak(char_id=TEST_CHAR_ID) == "Alpha private"
     assert _load_jailbreak(char_id=TEST_PEER_CHAR_ID) == ""
-    assert asyncio.run(jailbreak_entries.get_entries(char_id=TEST_PEER_CHAR_ID, auth=None)) == {"entries": []}
+    assert asyncio.run(jailbreak_entries.get_entries(char_id=TEST_PEER_CHAR_ID, auth=None)) == {"entries": [], "char_id": TEST_PEER_CHAR_ID}
     engine = LoreEngine()
     engine.load(char_id=TEST_CHAR_ID)
     assert engine.match("secret") == ["Alpha lore"]

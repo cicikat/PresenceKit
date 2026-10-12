@@ -99,7 +99,7 @@ async def get_lorebook(char_id: str | None = None, auth=Depends(require_scopes("
     """读取 characters/reality/lorebook.yaml 并返回全部条目"""
     char_id = _resolve_char_id(char_id)
     data = _read_lorebook(char_id)
-    return {"entries": data.get("entries", [])}
+    return {"entries": data.get("entries", []), "char_id": char_id}
 
 
 @router.post("/lorebook", summary="新增世界书条目")

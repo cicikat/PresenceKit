@@ -181,6 +181,7 @@ def _make_group_msg(user_id: str = _USER_ID, content: str = "hi", group_id: str 
 def _patch_pipeline_for_group(monkeypatch):
     import main as _main
     fake = MagicMock()
+    fake._active_character_id = "test_char"
     fake.character = MagicMock()
     fake.character.name = "Companion"
     fake.character.system_prompt = "你是一个AI助手。"
@@ -238,8 +239,8 @@ async def test_group_message_skips_reality_chain(sandbox, monkeypatch):
 
     gc_appended = []
     from core.memory import group_context as _gc
-    monkeypatch.setattr(_gc, "append", lambda gid, name, content: gc_appended.append((name, content)))
-    monkeypatch.setattr(_gc, "get_recent", lambda gid: [])
+    monkeypatch.setattr(_gc, "append", lambda gid, name, content, **kwargs: gc_appended.append((name, content)))
+    monkeypatch.setattr(_gc, "get_recent", lambda gid, **kwargs: [])
 
     record_calls = []
     import core.turn_sink as _ts
@@ -267,8 +268,8 @@ async def test_handle_group_message_sends_without_memory_write(sandbox, monkeypa
 
     gc_appended = []
     from core.memory import group_context as _gc
-    monkeypatch.setattr(_gc, "get_recent", lambda gid: [])
-    monkeypatch.setattr(_gc, "append", lambda gid, name, content: gc_appended.append((name, content)))
+    monkeypatch.setattr(_gc, "get_recent", lambda gid, **kwargs: [])
+    monkeypatch.setattr(_gc, "append", lambda gid, name, content, **kwargs: gc_appended.append((name, content)))
 
     import core.turn_sink as _ts
     record_mock = AsyncMock()
@@ -297,8 +298,8 @@ async def test_bot_reply_appended_to_group_context(sandbox, monkeypatch):
 
     gc_appended = []
     from core.memory import group_context as _gc
-    monkeypatch.setattr(_gc, "get_recent", lambda gid: [])
-    monkeypatch.setattr(_gc, "append", lambda gid, name, content: gc_appended.append((name, content)))
+    monkeypatch.setattr(_gc, "get_recent", lambda gid, **kwargs: [])
+    monkeypatch.setattr(_gc, "append", lambda gid, name, content, **kwargs: gc_appended.append((name, content)))
 
     import main as _main
     await _main._handle_group_message(_GROUP_ID, "TestUser", "hi", _GROUP_ID)
