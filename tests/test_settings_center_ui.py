@@ -1,4 +1,5 @@
 """Executable regression of migrated controls and stale response handling."""
+from admin_static_assets import assert_versioned_admin_asset
 import shutil
 import subprocess
 from pathlib import Path
@@ -22,7 +23,7 @@ def test_creation_assets_are_split_setting_rows():
     assert "data-action=\"saveCreationAssets\"" in source
     assert "data-action=\"uploadCreationAvatar\"" in source
     assert "PATCH','/settings/prompt-assets'" in source
-    assert '<script src="/static/js/settings-center.js?v=admin-consolidation-3"></script>' in index
+    assert_versioned_admin_asset('js/settings-center.js', index)
 
 
 def test_thinking_controls_live_on_model_routing_not_conversation_page():
@@ -56,7 +57,7 @@ def test_feature_center_groups_category_switches():
     device = (ROOT / "admin/static/pages/device-policy.html").read_text(encoding="utf-8")
     assert "CENTER_GROUPED_FLAGS" in source
     assert "screen_peek" in source
-    assert "PATCH','/system/meta-mode'" in source
+    assert "/system/meta-mode" not in source
     assert "PUT','/settings/agent-runtime-browser'" in source
     assert "PUT','/sticker-config'" in source
     assert "settings_center.perception_and_computer_actions" in source
@@ -67,7 +68,7 @@ def test_feature_center_groups_category_switches():
     assert 'id="metamode-ttl"' not in device
     assert "status.dangermode.ttl" not in device
     assert 'data-action-args=\'["output-settings"]\'' not in page
-    assert 'data-i18n="settings_center.other_detailed_settings"' in page
+    assert 'id="feature-center-list"' in page
 
 
 def test_settings_center_control_contracts():

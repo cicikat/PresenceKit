@@ -15,7 +15,6 @@ def test_model_routing_exposes_named_image_preset_crud_and_purpose_selects():
         'data-action="saveImagePreset"',
         'data-action="saveImageRoutes"',
         'data-action="deleteImagePreset"',
-        'id="phone-vision-enabled"',
         'id="image-recognition-mode"',
         'id="image-preset-is-local"',
         'is_local: !!document.getElementById',

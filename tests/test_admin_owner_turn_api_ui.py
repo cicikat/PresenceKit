@@ -1,4 +1,4 @@
-from admin_static_assets import STATIC, read_admin_client_source, read_admin_page
+from admin_static_assets import STATIC, read_admin_client_source, read_admin_page, assert_versioned_admin_asset, assert_admin_fragment_version_consistent
 
 
 def test_owner_turn_page_is_registered_and_cache_busted():
@@ -8,14 +8,14 @@ def test_owner_turn_page_is_registered_and_cache_busted():
         'data-page="owner-turn-api"',
         'id="page-owner-turn-api"',
         'data-page-fragment="owner-turn-api"',
-        '/static/js/owner-turn-api.js?v=brief-173-owner-turn-1',
-        "ADMIN_UI_FRAGMENT_VERSION = 'v1-call-presence-1'",
         'data-action="ownerTurnSelectTab"',
         'owner-turn-tab-api',
         'owner-turn-tab-observability',
         'owner-turn-tab-deployment',
     ):
         assert marker in source or marker in page
+    assert_versioned_admin_asset('js/owner-turn-api.js', source)
+    assert_admin_fragment_version_consistent()
 
 
 def test_owner_turn_page_uses_existing_redacted_contract_surfaces():

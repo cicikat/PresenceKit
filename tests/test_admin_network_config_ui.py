@@ -1,3 +1,5 @@
+from admin_static_assets import assert_admin_fragment_version_consistent
+from admin_static_assets import assert_versioned_admin_asset
 from pathlib import Path
 
 
@@ -18,11 +20,11 @@ def test_network_config_exposes_model_connection_mode():
     assert 'id="proxy-model-hint"' in page
     assert "model_connection_mode" in settings
     assert "status.proxy.model_need_url" in settings
-    assert "ADMIN_UI_FRAGMENT_VERSION = 'v1-call-presence-1'" in core
-    assert '<script src="/static/js/core.js?v=v1-call-presence-1"></script>' in index
-    assert '<script src="/static/js/settings.js?v=v1-call-presence-1"></script>' in index
-    assert '<script src="/static/i18n.js?v=v1-call-presence-1"></script>' in index
-    assert '<script src="/static/js/status-users.js?v=v1-call-presence-1"></script>' in index
+    assert_admin_fragment_version_consistent()
+    assert_versioned_admin_asset('js/core.js', index)
+    assert_versioned_admin_asset('js/settings.js', index)
+    assert_versioned_admin_asset('i18n.js', index)
+    assert_versioned_admin_asset('js/status-users.js', index)
 
 
 def test_status_summary_links_to_network_config_and_shows_model_mode():

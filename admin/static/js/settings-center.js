@@ -135,7 +135,7 @@ const CENTER_DESTINATIONS = {
   tool:['tools','observe-tools'], loop:['conversation-settings','observe-tools'],
   scheduler:['scheduler','observe-autonomy'], autonomy:['autonomy-settings','observe-autonomy'], tts:['tts-config','call-records'],
   screen_peek:['device-policy','observe-visual'], meta:['device-policy','observe-char-permissions'],
-  sticker:['output-settings','observe-prompt'], browser:['agent-runtime-browser','observe-tools'],
+  sticker:['output-settings','observe-prompt'], browser:['frozen-features','observe-tools'],
 };
 const CENTER_FLAG_DESTINATIONS = {
   wechat:['runtime-config','runtime-config'],

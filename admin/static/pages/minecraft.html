@@ -5,15 +5,15 @@
   <p id="minecraft-status" role="status">加载中…</p>
   <p>默认关闭。关闭后停止游戏会话，普通聊天保持原有行为。保存任何配置变化会关闭当前会话，需重新开始。</p>
   <label class="checkbox-row"><input type="checkbox" id="mc-enabled">启用 Minecraft</label>
-  <label class="field"><span>Docker 桥地址（本机 HTTP）</span><input id="mc-bridge_url" placeholder="http://127.0.0.1:3210"></label>
-  <label class="field"><span>Java 服务器地址（从容器连接）</span><input id="mc-host" placeholder="host.docker.internal"></label>
+  <label class="field"><span>Docker 桥地址（本机 HTTP）</span><input type="text" id="mc-bridge_url" placeholder="http://127.0.0.1:3210"></label>
+  <label class="field"><span>Java 服务器地址（从容器连接）</span><input type="text" id="mc-host" placeholder="host.docker.internal"></label>
   <div class="form-row">
     <label class="field"><span>端口</span><input id="mc-port" type="number" min="1" max="65535"></label>
-    <label class="field"><span>精确 Java 版本</span><input id="mc-version" placeholder="例如 1.21.1"></label>
+    <label class="field"><span>精确 Java 版本</span><input type="text" id="mc-version" placeholder="例如 1.21.1"></label>
   </div>
-  <label class="field"><span>Bot 账号标识（登录信息仅由账号本人操作）</span><input id="mc-username" autocomplete="off"></label>
+  <label class="field"><span>Bot 账号标识（登录信息仅由账号本人操作）</span><input type="text" id="mc-username" autocomplete="off"></label>
   <label class="field"><span>认证方式</span><select id="mc-auth"><option value="microsoft">Microsoft 正版账号</option><option value="offline">离线测试服</option></select></label>
-  <label class="field"><span>你的玩家 UUID（用于绑定游戏聊天授权）</span><input id="mc-owner_uuid" placeholder="玩家 UUID，不是显示名称"></label>
+  <label class="field"><span>你的玩家 UUID（用于绑定游戏聊天授权）</span><input type="text" id="mc-owner_uuid" placeholder="玩家 UUID，不是显示名称"></label>
   <p>桥接 token 通过本地凭据文件配置，独立于管理密钥；这里不显示凭据。正版服的 Bot 应使用独立账号。</p>
 </div>
 <div class="card">
@@ -58,7 +58,7 @@
     <label class="field"><span>采铁半径（1–8 格）</span><input id="mc-collect-radius" type="number" min="1" max="8" value="4"></label>
     <button class="btn btn-ghost" data-action="minecraftCommand" data-action-args='["collect_iron"]'>采集附近可见铁矿并返回</button>
   </div>
-  <label class="field"><span>活动内聊天（仅游戏会话，不写普通聊天历史）</span><input id="mc-chat" maxlength="500"></label>
+  <label class="field"><span>活动内聊天（仅游戏会话，不写普通聊天历史）</span><input type="text" id="mc-chat" maxlength="500"></label>
   <button class="btn btn-ghost" data-action="minecraftChat">发送</button>
   <p id="minecraft-result" role="status"></p>
   <p>游戏内“停下”“停止”或 !pk stop 直接本地停车，不等待模型。单次动作最多 120 秒；“陪着我一起走”“跟随并保护我”在已授权会话内续租，停止或危险后不自动恢复。失联 15 秒停止并断开。</p>

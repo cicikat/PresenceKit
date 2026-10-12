@@ -1,4 +1,6 @@
 from __future__ import annotations
+from admin_static_assets import assert_admin_fragment_version_consistent
+from admin_static_assets import assert_versioned_admin_asset
 
 from datetime import date, datetime
 
@@ -10,8 +12,8 @@ def test_mcp_import_headers_start_empty_and_cache_versions_are_bumped():
 
     assert "const MCP_DEFAULT_HEADERS = Object.freeze({});" in source
     assert "renderKeyValueEditor('mcp-import-headers', MCP_DEFAULT_HEADERS" in source
-    assert "mcp.js?v=brief-252-mcp-no-flash-1" in index
-    assert "ADMIN_UI_FRAGMENT_VERSION = 'v1-call-presence-1'" in core
+    assert_versioned_admin_asset('js/mcp.js', index)
+    assert_admin_fragment_version_consistent()
 
 
 def test_selected_migrated_winner_queues_only_bounded_festival_facts(sandbox):

@@ -6,7 +6,7 @@
 <label class="checkbox-row"><input type="checkbox" id="client-desktop" data-action="toggleClientChannel" data-action-args='["desktop"]'><span>电脑前端</span></label>
 <label class="checkbox-row"><input type="checkbox" id="client-mobile" data-action="toggleClientChannel" data-action-args='["mobile"]'><span>手机前端</span></label>
 </div><p id="client-state" role="status"></p><button class="btn btn-ghost btn-sm" data-action="loadClientSettings">刷新</button></section>
-<section class="card"><h3>QQ · OneBot 桥连接</h3><p>当前支持无路径、无鉴权的 OneBot ws://host:port 桥（例如对应配置的 NapCat）；其他连接形式需要扩展适配器。填写桥实际监听地址；保存后自动重连，开关即时启停。standalone 模式会阻止 QQ 启动。connected 只表示 OneBot 连接，不代表账号登录或消息送达。</p><label class="field"><span>主机 / IP</span><input id="client-qq-host" autocomplete="off"></label><label class="field"><span>端口</span><input id="client-qq-port" type="number" min="1" max="65535"></label><button class="btn btn-primary" data-action="saveClientConnection">保存 QQ 连接</button></section>
+<section class="card"><h3>QQ · OneBot 桥连接</h3><p>当前支持无路径、无鉴权的 OneBot ws://host:port 桥（例如对应配置的 NapCat）；其他连接形式需要扩展适配器。填写桥实际监听地址；保存后自动重连，开关即时启停。standalone 模式会阻止 QQ 启动。connected 只表示 OneBot 连接，不代表账号登录或消息送达。</p><label class="field"><span>主机 / IP</span><input type="text" id="client-qq-host" autocomplete="off"></label><label class="field"><span>端口</span><input id="client-qq-port" type="number" min="1" max="65535"></label><button class="btn btn-primary" data-action="saveClientConnection">保存 QQ 连接</button></section>
 <section class="card"><h3>QQ · 回复范围</h3>
   <label class="field"><span>QQ 消息发送模式</span><select id="client-qq-outbound"><option value="reply_only">只回复 QQ 发起的当轮对话（默认）</option><option value="muted">完全停止 QQ 消息发送</option><option value="all">接收所有通道广播（旧行为）</option></select></label>
   <p>默认不把手机、桌面和主动消息转发到 QQ。完全停止发送时仍保留 QQ 连接与独立授权的空间读取、互动。手机和桌面收发保持原状；选择旧行为恢复原广播。</p>
@@ -20,11 +20,11 @@
   <div class="form-row"><label class="checkbox-row"><input type="checkbox" id="qzone-enabled">启用 QQ 空间</label><label class="checkbox-row"><input type="checkbox" id="qzone-write-enabled">允许发布、评论、点赞和删除</label></div>
   <label class="field"><span>桥接 REST 根地址（独立桥或 NapCat 代理插件地址）</span><input id="qzone-base-url" type="url" autocomplete="off"></label>
   <label class="field"><span>桥接 Token（留空保留，不会回显）</span><input id="qzone-token" type="password" autocomplete="new-password"></label>
-  <label class="field"><span>预期登录 QQ 账号（必须与桥登录一致）</span><input id="qzone-account" autocomplete="off"></label>
-  <label class="field"><span>允许角色 ID（逗号分隔；空表示不授权任何角色）</span><input id="qzone-characters" autocomplete="off"></label>
+  <label class="field"><span>预期登录 QQ 账号（必须与桥登录一致）</span><input type="text" id="qzone-account" autocomplete="off"></label>
+  <label class="field"><span>允许角色 ID（逗号分隔；空表示不授权任何角色）</span><input type="text" id="qzone-characters" autocomplete="off"></label>
   <div class="form-row"><label class="checkbox-row"><input type="checkbox" id="qzone-events-enabled">自动扫描关注用户空间（产生主动机会）</label><label class="checkbox-row"><input type="checkbox" id="qzone-replies-enabled">自动扫描时采集回复机器人的评论</label></div>
   <p>关闭自动扫描后不再定期查询或生成空间事件；角色仍可按需查看空间、说说和评论。读取依然需要空间总开关、主用户绑定、角色白名单和工具许可。只想保留查询时，关闭自动扫描、写操作和自主互动。</p>
-  <label class="field"><span>指定关注用户 QQ（留空默认主用户；多个账号每轮只查一位）</span><input id="qzone-watched-users" autocomplete="off"></label>
+  <label class="field"><span>指定关注用户 QQ（留空默认主用户；多个账号每轮只查一位）</span><input type="text" id="qzone-watched-users" autocomplete="off"></label>
   <label class="field"><span>扫描间隔秒（60–3600，默认 600）</span><input id="qzone-poll-interval" type="number" min="60" max="3600" value="600"></label>
   <label class="field"><span>空间请求最小间隔秒（1–60，默认 3）</span><input id="qzone-request-interval" type="number" min="1" max="60" value="3"></label>
   <label class="field"><span>空间写操作冷却秒（10–3600，默认 60）</span><input id="qzone-write-interval" type="number" min="10" max="3600" value="60"></label>
@@ -48,8 +48,8 @@
   </div>
   <label class="field"><span data-i18n="wechat.url">桥接 REST 根地址</span><input id="wechat-base_url" type="url" autocomplete="off"></label>
   <div class="form-row">
-    <label class="field"><span data-i18n="wechat.account">桥接登录账号 ID</span><input id="wechat-account_id" autocomplete="off"></label>
-    <label class="field"><span data-i18n="wechat.owner">绑定 owner 的微信发送者 ID</span><input id="wechat-owner_sender_id" autocomplete="off"></label>
+    <label class="field"><span data-i18n="wechat.account">桥接登录账号 ID</span><input type="text" id="wechat-account_id" autocomplete="off"></label>
+    <label class="field"><span data-i18n="wechat.owner">绑定 owner 的微信发送者 ID</span><input type="text" id="wechat-owner_sender_id" autocomplete="off"></label>
   </div>
   </details>
   <p id="wechat-state" class="i18n-raw" role="status"></p>

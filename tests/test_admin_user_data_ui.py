@@ -1,3 +1,4 @@
+from admin_static_assets import assert_versioned_admin_asset
 from pathlib import Path
 
 
@@ -39,7 +40,7 @@ def test_user_data_upload_is_driven_by_backend_category_contract():
     assert "@media (max-width: 767px)" in css
     assert ".user-data-category-grid" in css
     assert ".user-data-asset-meta" in css
-    assert "/static/js/user-data.js?v=brief-162-userdata-assets-1" in index
+    assert_versioned_admin_asset('js/user-data.js', index)
 
 
 def test_user_data_i18n_covers_sources_status_scope_and_upload_states():

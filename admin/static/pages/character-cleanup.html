@@ -8,7 +8,7 @@
   <p id="cleanup-status" role="status"></p>
 </section>
 <section class="card"><div class="card-header"><h2 data-i18n="cleanup.history">删除与恢复记录</h2></div><div id="cleanup-history"></div></section>
-<dialog id="cleanup-dialog" aria-labelledby="cleanup-dialog-title" style="background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:12px;width:min(640px,90vw);max-height:85vh;overflow:auto;padding:24px">
+<dialog id="cleanup-dialog" aria-labelledby="cleanup-dialog-title" class="cleanup-dialog">
   <h2 id="cleanup-dialog-title" data-i18n="cleanup.confirm">确认删除角色</h2>
   <p id="cleanup-dialog-id"></p>
   <label class="checkbox-row"><input type="checkbox" id="cleanup-data" checked><span data-i18n="cleanup.include_data">同时清理该角色相关数据</span></label>
@@ -18,7 +18,7 @@
   <p id="cleanup-dialog-status" role="alert"></p>
   <div class="admin-action-group"><button type="button" class="btn btn-ghost" data-action="closeCharacterCleanup" data-i18n="common.cancel">取消</button><button type="button" id="cleanup-submit" class="btn btn-danger" data-action="submitCharacterCleanup" data-i18n="cleanup.delete" disabled>确认删除</button></div>
 </dialog>
-<dialog id="cleanup-restore-dialog" aria-labelledby="cleanup-restore-title" style="background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:12px;width:min(480px,90vw);padding:24px">
+<dialog id="cleanup-restore-dialog" aria-labelledby="cleanup-restore-title" class="cleanup-dialog cleanup-dialog-compact">
   <h2 id="cleanup-restore-title" data-i18n="cleanup.restore">恢复</h2>
   <p data-i18n="cleanup.restore_hint">恢复该次删除的角色卡和数据？已有同 ID 内容时会拒绝覆盖。</p>
   <p id="cleanup-restore-status" role="alert"></p>

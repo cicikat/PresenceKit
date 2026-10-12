@@ -4,6 +4,8 @@ The fake host is allowed here. It does not close the construction ticket;
 the first-party admin HTMLAudioElement is the real host.
 """
 from __future__ import annotations
+from admin_static_assets import assert_admin_fragment_version_consistent
+from admin_static_assets import assert_versioned_admin_asset
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -343,10 +345,10 @@ def test_observe_listening_page_is_registered_and_cache_busted():
 
     assert 'data-page="observe-listening"' in index
     assert 'id="page-observe-listening"' in index
-    assert "ADMIN_UI_FRAGMENT_VERSION = 'v1-call-presence-1'" in core
-    assert '<script src="/static/js/core.js?v=v1-call-presence-1"></script>' in index
-    assert '<script src="/static/js/observability.js?v=self-tool-audit-5"></script>' in index
-    assert '<script src="/static/js/listening-player.js?v=v1-260-admin-surface-1"></script>' in index
+    assert_admin_fragment_version_consistent()
+    assert_versioned_admin_asset('js/core.js', index)
+    assert_versioned_admin_asset('js/observability.js', index)
+    assert_versioned_admin_asset('js/listening-player.js', index)
     assert "loadObserveListening" in script
     assert "loadObserveListening" in core
     assert 'id="obs-listening-flags"' in fragment

@@ -40,7 +40,7 @@
           <label class="field"><span data-i18n="scheduler.hds.interface">手表所在网卡</span><select id="hds-interface"></select></label>
           <label class="field"><span data-i18n="scheduler.hds.source_mode">允许来源</span><select id="hds-source-mode"><option value="auto" data-i18n="scheduler.hds.auto">自动：选中网卡同网段</option><option value="manual" data-i18n="scheduler.hds.manual">手动填写网段</option></select></label>
         </div>
-        <label class="field" id="hds-subnets-row" style="display:none"><span data-i18n="scheduler.hds.subnets">允许网段（每行一个 CIDR）</span><textarea id="hds-subnets" rows="2"></textarea></label>
+        <label class="field" id="hds-subnets-row" hidden><span data-i18n="scheduler.hds.subnets">允许网段（每行一个 CIDR）</span><textarea id="hds-subnets" rows="2"></textarea></label>
         <p><span id="hds-url" class="admin-source-hint"></span> <button class="btn btn-ghost btn-sm" data-action="copyHdsAddress" data-i18n="scheduler.hds.copy">复制地址</button></p>
         <p id="hds-effective" class="admin-source-hint"></p>
         <p id="hds-latest" class="admin-source-hint"></p>

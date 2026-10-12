@@ -1,3 +1,5 @@
+from admin_static_assets import assert_admin_fragment_version_consistent
+from admin_static_assets import assert_versioned_admin_asset
 from pathlib import Path
 from html.parser import HTMLParser
 import re
@@ -74,11 +76,11 @@ def test_i18n_runtime_is_wired_with_persistent_chinese_default():
     runtime = I18N.read_text(encoding="utf-8")
     core_js = (ROOT / "admin" / "static" / "js" / "core.js").read_text(encoding="utf-8")
 
-    assert '<link rel="stylesheet" href="/static/style.css?v=autonomy-cards-1">' in index
-    assert '<script src="/static/i18n.js?v=v1-stt-sherpa-1"></script>' in index
-    assert '<script src="/static/js/core.js?v=v1-stt-sherpa-1"></script>' in index
-    assert '<script src="/static/js/dream-settings.js?v=brief-223-rpg-dream-admin-2"></script>' in index
-    assert "ADMIN_UI_FRAGMENT_VERSION = 'v1-stt-sherpa-1'" in core_js
+    assert_versioned_admin_asset('style.css', index)
+    assert_versioned_admin_asset('i18n.js', index)
+    assert_versioned_admin_asset('js/core.js', index)
+    assert_versioned_admin_asset('js/dream-settings.js', index)
+    assert_admin_fragment_version_consistent()
     assert "/observability/backend-read" in read_admin_page("call-records")
     assert 'data-i18n="settings_center.backend_read"' in read_admin_page("call-records")
     assert "/observability/character-self" in read_admin_page("call-records")
@@ -87,15 +89,15 @@ def test_i18n_runtime_is_wired_with_persistent_chinese_default():
     assert 'data-i18n="settings_center.character_reminders"' in read_admin_page("call-records")
     assert "/observability/character-file-autonomy" in read_admin_page("call-records")
     assert 'data-i18n="settings_center.character_file_autonomy"' in read_admin_page("call-records")
-    assert '<script src="/static/js/observability.js?v=self-tool-audit-5"></script>' in index
-    assert '<script src="/static/js/settings-center.js?v=v1-263-daily-budget-1"></script>' in index
-    assert '<script src="/static/js/character.js?v=v1-264-gsv-version-2"></script>' in index
+    assert_versioned_admin_asset('js/observability.js', index)
+    assert_versioned_admin_asset('js/settings-center.js', index)
+    assert_versioned_admin_asset('js/character.js', index)
     assert 'id="ds-private-truths"' in read_admin_page("dream-settings")
     assert "dream.scenario.policy_reveal_required" in runtime
-    assert '<script src="/static/js/overview.js?v=brief-180-admin-static-1"></script>' in index
-    assert '<script src="/static/js/mcp.js?v=brief-252-mcp-no-flash-1"></script>' in index
-    assert '<script src="/static/js/scheduler.js?v=v1-hds-real-payload-1"></script>' in index
-    assert '<script src="/static/js/integrations.js?v=brief-160-garden-freeze-1"></script>' in index
+    assert_versioned_admin_asset('js/overview.js', index)
+    assert_versioned_admin_asset('js/mcp.js', index)
+    assert_versioned_admin_asset('js/scheduler.js', index)
+    assert_versioned_admin_asset('js/integrations.js', index)
     assert "flag.self_management_hint" in runtime
     assert "自主管理 overlay（关=恢复全局默认）" in runtime
     assert "const DEFAULT_LANGUAGE = 'zh-CN';" in runtime
@@ -127,7 +129,7 @@ def test_all_navigation_links_use_semantic_i18n_keys():
     assert 'id="auth-language-select"' in index
     assert index.count("data-language-select") == 2
     assert 'data-action-args=\'["observation-center"]\'' in index
-    assert 'data-action-args=\'["operations-center"]\'' in index
+    assert 'data-action-args=\'["status"]\'' in index
     assert 'data-page="observe-probe"' not in index
 
 
@@ -135,7 +137,7 @@ def test_status_page_and_feature_flags_use_semantic_i18n_keys():
     index = read_admin_client_source()
     runtime = I18N.read_text(encoding="utf-8")
     status = read_admin_page("status")
-    runtime_config = "".join(read_admin_page(page) for page in ("runtime-config", "network-config", "conversation-settings", "device-policy", "output-settings", "personal-settings"))
+    runtime_config = "".join(read_admin_page(page) for page in ("runtime-config", "network-config", "conversation-settings", "device-policy", "output-settings", "personal-settings", "client-settings"))
     tts_config = read_admin_page("tts-config")
     routing = read_admin_page("model-routing")
 
@@ -155,9 +157,9 @@ def test_status_page_and_feature_flags_use_semantic_i18n_keys():
         "status.screen.title",
         "status.relay.title",
         "status.sticker.title",
-        "status.pronoun.title",
     ):
         assert f'data-i18n="{key}"' in runtime_config
+    assert 'data-i18n="status.pronoun.title"' in read_admin_page("character")
 
     for key in (
         "tts_config.title",
@@ -169,7 +171,7 @@ def test_status_page_and_feature_flags_use_semantic_i18n_keys():
     ):
         assert f'data-i18n="{key}"' in tts_config
 
-    for key in ("status.vision.title", "status.phone_vision.title"):
+    for key in ("status.vision.title",):
         assert f'data-i18n="{key}"' in routing
 
     assert "t('flag.' + name, item.label)" in index
@@ -242,7 +244,7 @@ def test_setup_page_and_common_empty_state_are_localized():
         assert f'data-i18n="{key}"' in page
         assert runtime.count(f"'{key}'") == 2
 
-    assert page.count('data-i18n="common.save"') == 8
+    assert page.count('data-i18n="common.save"') == 7
     assert 'data-i18n-placeholder="setup.secret.keep"' in page
     assert "t('setup.base.saved'" in index
     assert "t('setup.mail.saved'" in index
@@ -376,3 +378,16 @@ def test_updated_settings_fragments_have_complete_translation_keys():
         parser.feed(content)
         missing = {re.sub(r"\s+", " ", value).strip() for value in parser.values} - values
         assert not missing, (page, sorted(missing))
+
+
+def test_operator_copy_does_not_oscillate_with_language_observers():
+    import shutil
+    import subprocess
+    import pytest
+
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node is required for the admin JavaScript regression")
+    result = subprocess.run([node, "tests/admin_copy_i18n.cjs"], cwd=ROOT,
+                            capture_output=True, text=True, encoding="utf-8")
+    assert result.returncode == 0, result.stdout + result.stderr

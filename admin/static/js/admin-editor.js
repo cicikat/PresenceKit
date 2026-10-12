@@ -52,7 +52,8 @@
     while(walker.nextNode()) {
       const node=walker.currentNode;
       if (!node.textContent.trim() || node.parentElement.closest('script,style,textarea,select,[contenteditable]')) continue;
-      const value=saved.text[textKey(node)];
+      const raw=saved.text[textKey(node)];
+      const value=raw === undefined ? undefined : (window.AdminCopy?.projectText(raw) ?? raw);
       if (value !== undefined && node.textContent !== value) node.textContent=value;
     }
     document.querySelectorAll('nav a[data-page]').forEach(link=>{link.draggable=enabled;});

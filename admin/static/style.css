@@ -925,3 +925,6 @@ textarea { resize: vertical; min-height: 72px; }
 @media (max-width: 760px) { #feature-center-list [data-feature-row] { grid-template-columns: 1fr 1fr; } }
 
 .visual-result{white-space:pre-wrap;overflow-wrap:anywhere;max-height:360px;overflow:auto;}
+
+.cleanup-dialog{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:12px;width:min(640px,90vw);max-height:85vh;overflow:auto;padding:24px}
+.cleanup-dialog-compact{width:min(480px,90vw)}

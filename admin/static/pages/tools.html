@@ -54,8 +54,8 @@
 <section class="card" id="quote-notebook-module">
   <h3 data-i18n="quotes.title">收藏小本本</h3>
   <p data-i18n="quotes.readonly_hint">只读查看角色收藏的双方原话、时间、相关召回和角色笔记；收藏与笔记仅由角色维护。</p>
-  <label><span data-i18n="food.character">角色 ID</span><input id="quotes-char" maxlength="100"></label>
-  <label><span data-i18n="quotes.query">搜索原话或笔记</span><input id="quotes-query" maxlength="200"></label>
+  <label><span data-i18n="food.character">角色 ID</span><input type="text" id="quotes-char" maxlength="100"></label>
+  <label><span data-i18n="quotes.query">搜索原话或笔记</span><input type="text" id="quotes-query" maxlength="200"></label>
   <button class="btn btn-ghost" data-action="loadQuoteNotebook" data-i18n="quotes.search">查看收藏</button>
   <select id="quotes-choice" aria-label="收藏条目" data-i18n-aria-label="quotes.entry"></select>
   <button class="btn btn-ghost" data-action="openNotebookQuote" data-i18n="quotes.open">打开收藏</button>

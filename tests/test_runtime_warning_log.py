@@ -1,5 +1,6 @@
 """Runtime WARNING+ JSONL persistence, rotation, query, and error.log isolation."""
 from __future__ import annotations
+from admin_static_assets import assert_admin_fragment_version_consistent
 
 import json
 import logging
@@ -265,6 +266,6 @@ def test_logs_page_wires_runtime_warning_query():
     assert "/logs/runtime-warnings" in script
     assert "不能当作没有 warning" in script or "query_failed_not_empty" in script
     assert "window._runtimeWarningHasMore !== true" in script
-    assert "ADMIN_UI_FRAGMENT_VERSION = 'v1-call-presence-1'" in core
+    assert_admin_fragment_version_consistent()
     assert "clearLogs" in script
     assert "DELETE" in script and "/logs" in script

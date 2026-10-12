@@ -1,3 +1,4 @@
+from admin_static_assets import assert_versioned_admin_asset
 import re
 from pathlib import Path
 
@@ -61,9 +62,9 @@ def test_setup_and_character_anniversary_editors_consume_shared_helper():
         assert "_characterAnniversaryRow" not in page_source
 
     index = (STATIC / "index.html").read_text(encoding="utf-8")
-    assert '/static/js/setup.js?v=v1-262-voice-stt-1' in index
-    assert '/static/js/character.js?v=v1-1-0-ci-1' in index
-    assert '/static/js/user-data.js?v=brief-162-userdata-assets-1' in index
+    assert_versioned_admin_asset('js/setup.js', index)
+    assert_versioned_admin_asset('js/character.js', index)
+    assert_versioned_admin_asset('js/user-data.js', index)
 
 
 def test_anniversary_fragments_keep_their_page_containers_and_accessible_dynamic_fields():

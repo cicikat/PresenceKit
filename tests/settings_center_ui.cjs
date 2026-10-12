@@ -10,6 +10,7 @@ const context = vm.createContext({
   t: (_key, fallback, args = {}) => Object.entries(args).reduce((s, [k, v]) => s.replace(`{${k}}`, v), fallback || _key),
   escapeHtml: value => String(value ?? '').replaceAll('<', '&lt;'),
   bindPageActions: () => {}, toast: () => {},
+  refreshToolExecutionStates: () => {},
   renderChainTable: () => 'chain',
   api: async (method, path, body) => { writes.push({method,path,body}); return respond(method,path,body); },
   loadOutputSegmentEnforce: () => {}, loadContextConfig: () => {}, loadLlmParams: () => {},
@@ -24,7 +25,7 @@ const plain = value => JSON.parse(JSON.stringify(value));
   assert.deepEqual(plain(run("centerDestination('meta','enabled')")), ['device-policy','observe-char-permissions']);
   assert.deepEqual(plain(run("centerDestination('screen_peek','enabled')")), ['device-policy','observe-visual']);
   assert.deepEqual(plain(run("centerDestination('sticker','enabled')")), ['output-settings','observe-prompt']);
-  assert.deepEqual(plain(run("centerDestination('browser','enabled')")), ['agent-runtime-browser','observe-tools']);
+  assert.deepEqual(plain(run("centerDestination('browser','enabled')")), ['frozen-features','observe-tools']);
   assert.deepEqual(plain(run("centerDestination('flag','visual_perception')")), ['device-policy','observe-visual']);
   assert.deepEqual(plain(run("centerDestination('flag','coplay')")), ['coplay-config','observe-tools']);
   assert.deepEqual(plain(run("centerDestination('flag','mcp_servers')")), ['mcp','observe-tools']);
@@ -70,16 +71,6 @@ const plain = value => JSON.parse(JSON.stringify(value));
   assert.equal(checkbox.checked,false);
   assert.equal(checkbox.disabled,false);
   assert.equal(writes.at(-1).path,'/scheduler/config');
-  const loadFeatureCenter = context.loadFeatureCenter;
-  const metaSwitch={checked:true,disabled:false,dataset:{centerSource:'meta',centerName:'enabled'}};
-  context.loadFeatureCenter=async()=>{};
-  respond=async()=>({mode:'danger',expires_at:null});
-  await context.saveCenterSwitch(metaSwitch);
-  assert.equal(writes.at(-1).path,'/system/meta-mode');
-  assert.equal(writes.at(-1).method,'PATCH');
-  assert.deepEqual(plain(writes.at(-1).body),{mode:'danger'});
-  assert.equal(metaSwitch.disabled,true);
-  context.loadFeatureCenter = loadFeatureCenter;
   const featureRoot = nodes['feature-center-list'] = {textContent:'', innerHTML:''};
   const payloads = {
     '/settings/feature-flags': {flags:{
@@ -96,7 +87,6 @@ const plain = value => JSON.parse(JSON.stringify(value));
     '/admin/autonomy/config': {enabled:true,daily_evaluation_budget:12,min_interval_seconds:900},
     '/tts-config': {enabled:false},
     '/settings/screen-peek': {enabled:true},
-    '/system/meta-mode': {mode:'danger',expires_at:null},
     '/sticker-config': {enabled:true},
     '/settings/agent-runtime-browser': {enabled:false},
   };
@@ -105,11 +95,11 @@ const plain = value => JSON.parse(JSON.stringify(value));
   assert.ok(featureRoot.innerHTML.includes('感知与电脑操作'));
   assert.ok(featureRoot.innerHTML.includes('输出与互动'));
   assert.ok(featureRoot.innerHTML.includes('外部能力'));
-  assert.ok(featureRoot.innerHTML.includes('data-center-source="meta"'));
+  assert.ok(!featureRoot.innerHTML.includes('data-center-source="meta"'));
   assert.ok(featureRoot.innerHTML.includes('data-center-source="screen_peek"'));
   assert.ok(featureRoot.innerHTML.includes('data-center-source="sticker"'));
-  assert.ok(featureRoot.innerHTML.includes('data-center-source="browser"'));
-  assert.ok(featureRoot.innerHTML.includes('危险模式'));
+  assert.ok(!featureRoot.innerHTML.includes('data-center-source="browser"'));
+  assert.ok(!featureRoot.innerHTML.includes('危险模式'));
   assert.equal((featureRoot.innerHTML.match(/data-center-source="flag"/g) || []).length, 5);
   const thinkingHtml = context.thinkingFieldMarkup({
     enabled:true, character_voice:false, mode:'auto', apply_to_proactive:true,

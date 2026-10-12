@@ -41,7 +41,9 @@ async function saveMinecraftSettings() {
 }
 
 async function minecraftSession(operation) {
-  try { await api('POST', `/activity/minecraft/${operation}`); await loadMinecraftPage(); }
+  const paths = {start: '/activity/minecraft/start', close: '/activity/minecraft/close'};
+  if (!paths[operation]) return;
+  try { await api('POST', paths[operation]); await loadMinecraftPage(); }
   catch (error) { toast(`会话操作失败：${error.message || error}`, 'err'); }
 }
 

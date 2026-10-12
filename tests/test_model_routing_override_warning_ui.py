@@ -118,7 +118,7 @@ def test_model_routing_page_exposes_profile_rename_delete_and_default_preset():
         "function closeProfileModal()", 1
     )[0]
     assert "confirmDeleteProfile" in source
-    assert "（清除映射，走默认 preset / chat）" in source
+    assert "（清除映射：走 default_preset → chat → 第一个 preset）" in source
 
 
 def test_model_routing_editor_exposes_rpg_kp_sensor_judge_and_prefixed_monologue():
@@ -130,7 +130,7 @@ def test_model_routing_editor_exposes_rpg_kp_sensor_judge_and_prefixed_monologue
     assert "'rpg_kp'" in categories
     assert "'sensor_judge'" in categories
     assert "'monologue'" in categories
-    assert "前置独白 / 额外思考链" in source
+    assert "前置独白（说话前的内心独白草稿" in source
     assert 'data-i18n="routing.category.rpg_kp"' in page
     assert 'data-i18n="routing.category.sensor_judge"' in page
     assert 'data-i18n="routing.category.monologue"' in page

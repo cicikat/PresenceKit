@@ -173,7 +173,7 @@ function _renderHdsReads(status) {
 
 function _showHdsMode() {
   const manual = document.getElementById('hds-source-mode')?.value === 'manual';
-  document.getElementById('hds-subnets-row').style.display = manual ? '' : 'none';
+  document.getElementById('hds-subnets-row').hidden = !manual;
   document.getElementById('hds-interface').disabled = manual;
 }
 

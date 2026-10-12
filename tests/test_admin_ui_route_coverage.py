@@ -31,6 +31,14 @@ _ROUTE_RE = re.compile(r'@router\.(post|patch|put)\(\s*"([^"]+)"')
 # (METHOD, 完整路径) -> 白名单理由（一行，说明为什么管理面板不需要接这个接口）。
 # 新增写接口默认要求要么出现在 index.html 里，要么显式加进这里。
 NO_ADMIN_UI_WHITELIST: dict[tuple[str, str], str] = {
+    ("POST", "/scheduler/trigger/{name}"): "显式排队调度测试的诊断 API；生产管理面不模拟用户或设备事件",
+    ("POST", "/watch/event"): "Apple Watch 事件上报入口，由设备自动化调用；管理面提供只读观察",
+    ("POST", "/video-call/invite/respond"): "桌面视频来电接受或拒绝，由桌面实际接听界面调用",
+    ("POST", "/video-call/invite/hangup"): "桌面已接通视频通话挂断回执",
+    ("POST", "/video-call/close"): "桌面视频电话生命周期关闭",
+    ("POST", "/video-call/camera/poll"): "桌面摄像头请求领取协议，不在管理面采集设备画面",
+    ("POST", "/video-call/camera/result"): "桌面摄像头按需采集结果回传协议",
+    ("POST", "/video-call/observe"): "桌面视频电话主动帧上报；管理面不创建摄像头载荷",
     ("POST", "/dream/rpg/turn"): "RPG runtime client route",
     ("POST", "/dream/rpg/corrections"): "RPG runtime correction route",
     # ── 桌宠客户端（Emerald-client）专属通道 ────────────────────────────
@@ -78,7 +86,6 @@ NO_ADMIN_UI_WHITELIST: dict[tuple[str, str], str] = {
     ("POST", "/sensor/realtime"): "桌面端实时传感器快照，Emerald-client sensor 消费",
     ("POST", "/phone_control/step"): "手机自动化设备侧逐步协议，Emerald-mobile 每步上报并获取下一动作",
     ("PATCH", "/settings/prompt-assets"): "Prompt 资产部分更新，已确认由 Emerald-mobile PATCH 调用",
-    ("PATCH", "/system/meta-mode"): "安全/危险模式切换，已确认由 Emerald-mobile 调用",
 
     # ── 群聊/群梦：面向 Emerald-mobile，管理面板未做对应界面 ────────────────
     ("POST", "/group/create"): "建群，Emerald-mobile backend_client.dart 消费",

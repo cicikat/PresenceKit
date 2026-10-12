@@ -141,6 +141,9 @@ window.AdminCopyDefaults = {
 
 window.AdminCopy = (() => {
   const originals = new WeakMap();
+  function projectText(value) {
+    return window.AdminI18n?.translateUiText(value) ?? value;
+  }
   function textKey(node) {
     if(originals.has(node)) return originals.get(node).key;
     const el=node.parentElement, translated=el.closest('[data-i18n]');
@@ -161,6 +164,7 @@ window.AdminCopy = (() => {
         const entry=Object.entries(AdminCopyDefaults.text).find(([k])=>!k.startsWith('i18n:') && k.slice(k.indexOf(':')+1)===original);
         if(entry) value=entry[1];
       }
+      if(value!==undefined) value=projectText(value);
       if(value!==undefined && node.textContent!==value) node.textContent=value;
       if(value!==undefined && !value.trim() && node.parentElement.matches('p,small.admin-source-hint')) node.parentElement.hidden=true;
     }
@@ -171,5 +175,5 @@ window.AdminCopy = (() => {
     for(const k of Object.keys(edits)) if(edits[k]==='【删掉】') edits[k]='';
     apply(edits);
   });}}).observe(document.getElementById('app'),{subtree:true,childList:true,characterData:true});
-  apply();return {apply,textKey};
+  apply();return {apply,textKey,projectText};
 })();

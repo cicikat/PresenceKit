@@ -27,7 +27,7 @@ def test_sidebar_and_guide_cover_all_current_pages():
     nav.feed(shell.split('<nav id="admin-navigation">')[1].split('</nav>')[0])
     pages = {p.stem for p in (static / 'pages').glob('*.html')}
     # Integrations is frozen; it remains a compatibility deep link only.
-    assert nav.targets == pages - {'integrations'}
+    assert nav.targets == pages - {'integrations', 'agent-runtime-browser'}
     guide = Links()
     guide.feed((static / 'pages/guide.html').read_text(encoding='utf-8'))
     assert guide.targets == pages - {'integrations', 'guide', 'overview'}
