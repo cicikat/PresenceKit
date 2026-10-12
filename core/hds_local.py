@@ -177,14 +177,14 @@ def read_status(uid: str, *, now: float | None = None) -> dict:
     state = health_state.load(uid)
     samples = state.get("hds_samples") or []
     latest = samples[-1] if samples else None
-    age = max(0, now - latest["received_at"]) if latest else None
+    age = now - latest["received_at"] if latest else None
     recent = [s["value"] for s in samples if 0 <= now - s.get("received_at", 0) <= 180]
     return {
         "enabled": enabled(),
         "sample_count_retained": len(samples),
         "latest": latest,
         "latest_age_seconds": round(age) if age is not None else None,
-        "live": bool(enabled() and age is not None and age <= 30),
+        "live": bool(enabled() and age is not None and 0 <= age <= 30),
         "recent_3m": {
             "count": len(recent),
             "median_bpm": round(statistics.median(recent)) if recent else None,
@@ -194,3 +194,19 @@ def read_status(uid: str, *, now: float | None = None) -> dict:
         "last_automation_analysis": state.get("hds_last_analysis") or None,
         "last_candidate": state.get("hds_last_signal") or None,
     }
+
+
+def prompt_hint(uid: str) -> dict | None:
+    """Read-only owner observation, never inject stale or unconsented samples."""
+    owner = str(get_config().get("scheduler", {}).get("owner_id") or "")
+    if not owner or str(uid) != owner or not character_read_enabled():
+        return None
+    status = read_status(uid)
+    if not status["live"]:
+        return None
+    sample = status["latest"]
+    stamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(sample["received_at"]))
+    return {"role": "system", "_layer": "3.75_heart_rate", "content": (
+        f"【手表心率观测】HDS接收于{stamp}，接收龄{status['latest_age_seconds']}秒："
+        f"{sample['value']}次/分钟（有效期30秒）。这是设备观测，不据此推断情绪或病情。"
+    ), "_provenance": {"mode": "fresh", "source": "hds_local", "received_at": sample["received_at"], "ttl_seconds": 30}}

@@ -744,6 +744,13 @@ def build(
     # TTL：tag 触发允许 5 分钟内快照；无 tag 触发要求 3 分钟内且用户活跃。
     # _realtime_awareness 已在层 1.5 前计算，此处直接复用。
     # ─────────────────────────────────────────────────────────────────────────
+    try:
+        from core.hds_local import prompt_hint as _heart_rate_hint
+        if _heart_rate_message := _heart_rate_hint(user_id):
+            messages.append(_heart_rate_message)
+    except Exception:
+        logger.debug("[prompt] heart-rate observation unavailable", exc_info=True)
+
     if _realtime_awareness:
         messages.append({
             "role": "system",
@@ -1829,6 +1836,7 @@ KNOWN_LAYERS: list[tuple[str, str]] = [
     ("3.5_period", "生理期感知（tagged）"),
     ("3.6_watch", "watch 睡眠数据摘要（tagged）"),
     ("3.7_sensor", "手机传感器摘要"),
+    ("3.75_heart_rate", "手表实时心率（HDS，30秒新鲜度且许可读取）"),
     ("3.8_activity", "桌宠屏幕活动快照（tagged）"),
     ("3.9_screen_awareness", "桌面实时感知摘要"),
     ("4_group_context", "群聊上下文"),

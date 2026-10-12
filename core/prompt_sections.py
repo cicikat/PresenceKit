@@ -3,7 +3,7 @@
 SECTIONS = (
     ("真实数据", "按各项记录时间与有效期理解；设备观测不代表用户意图或内心状态。", {
         "2.5_time", "2.55_last_seen", "3.5_period", "3.6_watch", "3.7_sensor",
-        "3.9_screen_awareness", "3.8_audio_impression", "activity_continuity", "coplay_context",
+        "3.75_heart_rate", "3.9_screen_awareness", "3.8_audio_impression", "activity_continuity", "coplay_context",
         "10.6_hardware_jobs",
     }),
     ("用户事实", "区分用户自述、已记录事项与行为归纳；归纳不是本轮事实。", {
