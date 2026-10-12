@@ -176,7 +176,7 @@ def get_user_pronoun(uid: str, *, char_id: str = DEFAULT_CHAR_ID) -> str:
     Defaults to '她' when unset or invalid.
     """
     p = load_user_facts(uid, char_id=char_id).get("pronoun")
-    return p if p in _VALID_PRONOUNS else "她"
+    return p if isinstance(p, str) and p in _VALID_PRONOUNS else "她"
 
 
 @_serialized_facts

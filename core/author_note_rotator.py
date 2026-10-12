@@ -114,6 +114,8 @@ def get_current_note(paths=None, char_id: str | None = None) -> str:
 
     try:
         pool = _load_pool(pool_path)
+        if not pool:
+            return ""
         state = _load_state(write_state_path)
 
         if not _should_switch(state):
@@ -145,8 +147,6 @@ def get_current_note(paths=None, char_id: str | None = None) -> str:
         logger.info(f"[author_note_rotator] 切换到 note id={chosen['id']}")
         return chosen["content"]
 
-    except FileNotFoundError:
-        raise
     except Exception as e:
         logger.warning(f"[author_note_rotator] 获取 note 失败，跳过: {e}")
         return ""

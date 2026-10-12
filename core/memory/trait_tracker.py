@@ -62,7 +62,15 @@ def update_trait_state(
     else:
         state = {"windows": []}
 
-    windows: list[dict] = state.get("windows", [])
+    if not isinstance(state, dict):
+        logger.warning("[trait_tracker] invalid state mapping; rebuilding from current evidence")
+        state = {}
+    raw_windows = state.get("windows", [])
+    if not isinstance(raw_windows, list):
+        logger.warning("[trait_tracker] invalid window list; rebuilding from current evidence")
+        raw_windows = []
+    windows: list[dict] = [window for window in raw_windows
+                          if isinstance(window, dict) and isinstance(window.get("counts"), dict)][:4]
 
     windows.insert(0, {
         "timestamp": datetime.now().isoformat(timespec="seconds"),
@@ -74,7 +82,7 @@ def update_trait_state(
     totals: dict[str, int] = {tid: 0 for tid in all_trait_ids}
     for window in windows:
         for tid, cnt in window.get("counts", {}).items():
-            if tid in totals:
+            if tid in totals and isinstance(cnt, int) and not isinstance(cnt, bool) and cnt >= 0:
                 totals[tid] += cnt
 
     underrepresented = [tid for tid, total in totals.items() if total <= UNDERREPRESENTED_THRESHOLD]

@@ -705,11 +705,9 @@ class DataPaths:
             return bundled
         if legacy.exists():
             return legacy
-        if bundled.exists():
-            return bundled
-        if legacy_default.exists():
+        if char_id == _DEFAULT_CHAR_ID and legacy_default.exists():
             return legacy_default
-        return Path("data/yexuan_inner/activity_pool.yaml")
+        return primary
 
     def activity_state(self, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
         return self._p("runtime", "characters", char_id, "inner", "activity_state.json")
