@@ -1033,6 +1033,10 @@ class DataPaths:
         """Unassigned historical facts; only explicit offline migration reads this."""
         return self._p("runtime", "memory", "global", safe_user_id(user_id), "user_facts.json")
 
+    def legacy_health_state(self, user_id: str | int) -> Path:
+        """Unassigned shared historical health evidence; migration only."""
+        return self._p("runtime", "memory", "global", safe_user_id(user_id), "health_state.json")
+
     def blacklist(self) -> Path:
         return self._seed_if_missing(self._p("blacklist.yaml"), "blacklist.yaml")
 

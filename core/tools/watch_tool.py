@@ -1,12 +1,12 @@
 from core.memory.health_state import load as load_health_state
 
 
-def read_watch_for_user(user_id: str, query: str = "") -> str:
+def read_watch_for_user(user_id: str, query: str = "", *, char_id: str | None = None) -> str:
     """
     读取用户的watch数据，返回给角色的自然语言描述。
     query可以是"睡眠"/"心率"/"运动"/"最近"，不填返回综合摘要。
     """
-    health_state = load_health_state(user_id)
+    health_state = load_health_state(user_id, char_id=char_id)
 
     sleep_segments = [
         s for s in health_state.get("sleep_segments", [])

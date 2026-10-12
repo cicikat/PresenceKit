@@ -16,7 +16,8 @@ from fastapi.testclient import TestClient
 
 
 def _health_path(paths, uid: str) -> Path:
-    return paths._p("runtime", "memory", "global", uid, "health_state.json")
+    from core.data_paths import DEFAULT_CHAR_ID
+    return paths.user_memory_root(uid, char_id=DEFAULT_CHAR_ID) / "health_state.json"
 
 
 def _manifest(root: Path) -> dict[str, tuple[int, str]]:
@@ -55,13 +56,13 @@ def test_legacy_profile_migration_is_idempotent_and_new_state_wins(sandbox):
 
     uid = "legacy-owner"
     user_profile.save(uid, {"last_period_date": "2026-06-20"}, char_id="character_a")
-    assert health_state.get_period_info(uid) == {"last_period_date": "2026-06-20"}
+    assert health_state.get_period_info(uid, char_id="character_a") == {"last_period_date": "2026-06-20"}
     user_profile.save(uid, {"last_period_date": "2026-06-21"}, char_id="character_a")
-    assert health_state.get_period_info(uid) == {"last_period_date": "2026-06-20"}
-    health_state.set_period_date(uid, "2026-06-22")
-    assert health_state.get_period_info(uid) == {"last_period_date": "2026-06-22"}
-    health_state.clear_period_date(uid)
-    assert health_state.get_period_info(uid) == {"last_period_date": None}
+    assert health_state.get_period_info(uid, char_id="character_a") == {"last_period_date": "2026-06-20"}
+    health_state.set_period_date(uid, "2026-06-22", char_id="character_a")
+    assert health_state.get_period_info(uid, char_id="character_a") == {"last_period_date": "2026-06-22"}
+    health_state.clear_period_date(uid, char_id="character_a")
+    assert health_state.get_period_info(uid, char_id="character_a") == {"last_period_date": None}
 
 
 def test_legacy_period_conflict_uses_active_character_and_warns(sandbox, monkeypatch, caplog):
@@ -74,7 +75,8 @@ def test_legacy_period_conflict_uses_active_character_and_warns(sandbox, monkeyp
     monkeypatch.setattr(pipeline_registry, "get", lambda: SimpleNamespace(_active_character_id="character_b"))
     with caplog.at_level(logging.WARNING):
         assert health_state.get_period_info(uid) == {"last_period_date": "2026-06-02"}
-    assert "Legacy period state conflict" in caplog.text
+    assert health_state.get_period_info(uid, char_id="character_a") == {"last_period_date": "2026-06-01"}
+    assert health_state.get_period_info(uid, char_id="new_character") == {"last_period_date": None}
     assert "2026-06-01" not in caplog.text
     assert "2026-06-02" not in caplog.text
 
@@ -107,7 +109,7 @@ def test_manual_trigger_missing_input_returns_reason_without_send(sandbox, monke
     assert asyncio.run(loop.manual_trigger("period_reminder")) == "missing_period_date"
 
 
-def test_prompt_builder_reads_uid_global_period_state(sandbox, monkeypatch):
+def test_prompt_builder_reads_character_period_state(sandbox, monkeypatch):
     from core.character_loader import Character
     from core.memory import health_state
     from core import prompt_builder
@@ -124,7 +126,7 @@ def test_prompt_builder_reads_uid_global_period_state(sandbox, monkeypatch):
         character=Character(name="Companion"), user_id="owner1", user_message="pain",
         history=[], relation={}, profile={}, group_context=[], tags={"topic.body"}, char_id="character_b",
     )
-    assert "3.5_period" in {message.get("_layer") for message in messages}
+    assert "3.5_period" not in {message.get("_layer") for message in messages}
 
 
 @pytest.fixture
@@ -179,4 +181,4 @@ def test_period_operations_write_only_to_sandbox(sandbox):
     health_state.set_period_date("test_char", "2026-07-28")
     assert _manifest(production_data) == before
     sandbox_paths = {path.relative_to(sandbox._base).as_posix() for path in sandbox._base.rglob("health_state.json")}
-    assert all(f"runtime/memory/global/{uid}/health_state.json" in sandbox_paths for uid in ("u1", "owner1", "test_char"))
+    assert all(f"runtime/memory/{health_state.DEFAULT_CHAR_ID}/{uid}/health_state.json" in sandbox_paths for uid in ("u1", "owner1", "test_char"))

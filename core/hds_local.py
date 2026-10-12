@@ -104,7 +104,8 @@ def _heart_rate(payload: object) -> int | None:
     return None
 
 
-def ingest(uid: str, payload: object, *, now: float | None = None) -> dict:
+def ingest(uid: str, payload: object, *, now: float | None = None, char_id: str | None = None) -> dict:
+    char_id = health_state._resolve_character(char_id)
     data = payload.get("data") if isinstance(payload, dict) else None
     if isinstance(data, str) and re.match(r"^[A-Za-z][A-Za-z0-9_]*:", data) and not data.startswith("heartRate:"):
         return {"accepted": False, "ignored": True}
@@ -113,7 +114,7 @@ def ingest(uid: str, payload: object, *, now: float | None = None) -> dict:
         raise ValueError("HDS payload has no valid heart rate")
     now = time.time() if now is None else now
     with _lock:
-        state = health_state.load(uid)
+        state = health_state.load(uid, char_id=char_id)
         samples = list(state.get("hds_samples") or [])
         if samples and samples[-1]["value"] == value and now - samples[-1]["received_at"] < 5:
             return {"accepted": False, "value": value}
@@ -123,16 +124,17 @@ def ingest(uid: str, payload: object, *, now: float | None = None) -> dict:
                 {"value": value, "received_at": now}
             ])[-1440:]
 
-        health_state.mutate(uid, append)
+        health_state.mutate(uid, append, char_id=char_id)
     return {"accepted": True, "value": value}
 
 
-def latest_change(uid: str, *, now: float | None = None) -> dict | None:
+def latest_change(uid: str, *, now: float | None = None, char_id: str | None = None) -> dict | None:
     """Read recent samples at each autonomy tick; expose only meaningful changes."""
     if not enabled():
         return None
+    char_id = health_state._resolve_character(char_id)
     now = time.time() if now is None else now
-    state = health_state.load(uid)
+    state = health_state.load(uid, char_id=char_id)
     samples = state.get("hds_samples") or []
     recent = [s for s in samples if 0 <= now - s.get("received_at", 0) <= 180]
     if len(recent) < 3:
@@ -158,10 +160,10 @@ def latest_change(uid: str, *, now: float | None = None) -> dict | None:
         "outcome": outcome,
     }
     if (state.get("hds_last_analysis") or {}).get("measured_at") != analysis["measured_at"] or (state.get("hds_last_analysis") or {}).get("outcome") != outcome:
-        health_state.mutate(uid, lambda current: current.__setitem__("hds_last_analysis", analysis))
+        health_state.mutate(uid, lambda current: current.__setitem__("hds_last_analysis", analysis), char_id=char_id)
     if not meaningful or cooldown:
         return None
-    health_state.mutate(uid, lambda current: current.__setitem__("hds_last_signal", analysis | {"at": now}))
+    health_state.mutate(uid, lambda current: current.__setitem__("hds_last_signal", analysis | {"at": now}), char_id=char_id)
     return {
         "value": value,
         "previous_value": previous,
@@ -171,10 +173,10 @@ def latest_change(uid: str, *, now: float | None = None) -> dict | None:
     }
 
 
-def read_status(uid: str, *, now: float | None = None) -> dict:
+def read_status(uid: str, *, now: float | None = None, char_id: str | None = None) -> dict:
     """Read HDS facts without running or consuming the autonomy classifier."""
     now = time.time() if now is None else now
-    state = health_state.load(uid)
+    state = health_state.load(uid, char_id=char_id)
     samples = state.get("hds_samples") or []
     latest = samples[-1] if samples else None
     age = now - latest["received_at"] if latest else None
@@ -196,12 +198,12 @@ def read_status(uid: str, *, now: float | None = None) -> dict:
     }
 
 
-def prompt_hint(uid: str) -> dict | None:
+def prompt_hint(uid: str, *, char_id: str | None = None) -> dict | None:
     """Read-only owner observation, never inject stale or unconsented samples."""
     owner = str(get_config().get("scheduler", {}).get("owner_id") or "")
     if not owner or str(uid) != owner or not character_read_enabled():
         return None
-    status = read_status(uid)
+    status = read_status(uid, char_id=char_id)
     if not status["live"]:
         return None
     sample = status["latest"]

@@ -23,10 +23,11 @@ def _manifest(root: Path) -> dict[str, tuple[int, int, str]]:
 
 
 def _health_path(paths, uid: str) -> Path:
-    return paths._p("runtime", "memory", "global", uid, "health_state.json")
+    from core.data_paths import DEFAULT_CHAR_ID
+    return paths.user_memory_root(uid, char_id=DEFAULT_CHAR_ID) / "health_state.json"
 
 
-def test_health_state_is_uid_global(sandbox):
+def test_health_state_is_character_scoped(sandbox):
     from core.memory import health_state, user_profile
 
     uid = "health-shared"
@@ -177,7 +178,8 @@ def test_legacy_conflict_prefers_active_character(sandbox, monkeypatch, caplog):
     user_profile.save(uid, {"heart_rate_events": [{"value": 92}]}, char_id="character_b")
     monkeypatch.setattr(pipeline_registry, "get", lambda: SimpleNamespace(_active_character_id="character_b"))
     assert health_state.load(uid)["heart_rate_events"] == [{"value": 92}]
-    assert "Legacy health state conflict" in caplog.text
+    assert health_state.load(uid, char_id="character_a")["heart_rate_events"] == [{"value": 71}]
+    assert health_state.load(uid, char_id="new_character")["heart_rate_events"] == []
 
 
 def _paths_at(base: Path, *, mode: str):

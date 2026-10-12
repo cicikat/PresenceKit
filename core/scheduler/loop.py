@@ -1041,7 +1041,7 @@ async def manual_trigger(name: str) -> str:
         if not oid:
             return "owner_id 未配置"
         from core.memory.health_state import get_period_info
-        if not get_period_info(oid).get("last_period_date"):
+        if not get_period_info(oid, char_id=_active_char_id_or_none()).get("last_period_date"):
             logger.info("[period] missing_period_date")
             return "missing_period_date"
 

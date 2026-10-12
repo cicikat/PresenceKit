@@ -139,14 +139,14 @@ async def _backfill_diary_wrapper(user_id: str, date: str = "", *, char_id: str)
     return await backfill_diary(user_id, char_id, date)
 
 
-async def _read_watch_wrapper(user_id: str, query: str = "") -> str:
+async def _read_watch_wrapper(user_id: str, query: str = "", *, char_id: str | None = None) -> str:
     from core.tools.watch_tool import read_watch_for_user
-    return read_watch_for_user(user_id, query)
+    return read_watch_for_user(user_id, query, char_id=char_id or _active_char_id())
 
 
-async def _read_hds_heart_rate_wrapper(user_id: str) -> str:
+async def _read_hds_heart_rate_wrapper(user_id: str, *, char_id: str | None = None) -> str:
     from core.hds_local import read_status
-    return json.dumps(read_status(user_id), ensure_ascii=False)
+    return json.dumps(read_status(user_id, char_id=char_id or _active_char_id()), ensure_ascii=False)
 
 
 async def _search_diary_wrapper(

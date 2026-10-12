@@ -6,10 +6,10 @@ from core.scheduler.loop import _owner_id, _cfg
 logger = logging.getLogger(__name__)
 
 
-def _days_elapsed(uid: str, today: _date | None = None) -> int | None:
+def _days_elapsed(uid: str, today: _date | None = None, *, char_id: str | None = None) -> int | None:
     from core.memory.health_state import get_period_info
 
-    info = get_period_info(uid)
+    info = get_period_info(uid, char_id=char_id)
     last_date_str = info.get("last_period_date")
     if not last_date_str:
         from core.runtime_signal_observability import record
@@ -34,7 +34,7 @@ def propose(ctx: dict | None = None):
     if not uid:
         return None
     try:
-        days_elapsed = _days_elapsed(uid, ctx.get("today"))
+        days_elapsed = _days_elapsed(uid, ctx.get("today"), char_id=ctx.get("char_id"))
     except Exception:
         logger.exception("[period] propose 读取生理期信息失败")
         return None

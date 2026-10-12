@@ -13,17 +13,17 @@ def test_only_fresh_consented_owner_samples(monkeypatch, age, enabled, consent, 
     monkeypatch.setattr(hds_local, "get_config", lambda: {"scheduler": {"owner_id": "owner"},
         "hds_local": {"enabled": enabled, "character_read_enabled": consent}})
     monkeypatch.setattr(hds_local.time, "time", lambda: 1000000)
-    monkeypatch.setattr(hds_local.health_state, "load", lambda _: {"hds_samples": [{"value": 75, "received_at": 1000000-age}]})
+    monkeypatch.setattr(hds_local.health_state, "load", lambda _, **kwargs: {"hds_samples": [{"value": 75, "received_at": 1000000-age}]})
     assert bool(hds_local.prompt_hint(uid)) is expected
 
 
 def test_no_sample_no_injection_and_builder_section(sandbox, monkeypatch):
     _apply_build_stubs(monkeypatch)
     monkeypatch.setattr(hds_local, "get_config", lambda: {"scheduler": {"owner_id": "owner"}, "hds_local": {"enabled": True}})
-    monkeypatch.setattr(hds_local.health_state, "load", lambda _: {})
+    monkeypatch.setattr(hds_local.health_state, "load", lambda _, **kwargs: {})
     assert hds_local.prompt_hint("owner") is None
     monkeypatch.setattr(hds_local.time, "time", lambda: 1000000)
-    monkeypatch.setattr(hds_local.health_state, "load", lambda _: {"hds_samples": [{"value": 75, "received_at": 999995}]})
+    monkeypatch.setattr(hds_local.health_state, "load", lambda _, **kwargs: {"hds_samples": [{"value": 75, "received_at": 999995}]})
     from core.prompt_builder import build
     messages, _ = build(**_base_build_kwargs(user_id="owner"))
     text = "\n".join(m["content"] for m in messages)

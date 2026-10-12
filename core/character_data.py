@@ -78,4 +78,4 @@ def inventory(char_id: str) -> dict:
     root = paths.memory_char_root(char_id=char_id)
     users = sorted(p.name for p in root.iterdir() if p.is_dir()) if root.exists() else []
     return {"char_id": char_id, "entries": entries, "users": users,
-            "user_artifacts": ["history", "profile", "identity", "user_facts", "episodic", "mid_term", "event_store", "relationship_facts", "memory_dossiers", "reminders", "self", "hidden_state", "afterglow_residue"]}
+            "user_artifacts": ["history", "profile", "identity", "user_facts", "health_state", "episodic", "mid_term", "event_store", "relationship_facts", "memory_dossiers", "reminders", "self", "hidden_state", "afterglow_residue"]}

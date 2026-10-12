@@ -1266,7 +1266,7 @@ async def tick(uid: str, char_id: str) -> None:
         from core.hds_local import latest_change
 
         external: list[Signal] = []
-        heart_rate = adapt_heart_rate(latest_change(uid, now=now), now=now)
+        heart_rate = adapt_heart_rate(latest_change(uid, now=now, char_id=char_id), now=now)
         if heart_rate is not None:
             external.append(heart_rate)
         try:

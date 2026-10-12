@@ -33,6 +33,7 @@ REALITY_USER_ARTIFACTS: frozenset[str] = frozenset({
     "fixation_state",
     "profile",
     "user_facts",
+    "health_state",
     "identity",
     "hidden_state",
     "hidden_state_no_interaction_stamp",  # Brief 88 §2：NO_INTERACTION 逻辑日去重小 stamp
@@ -61,9 +62,7 @@ REALITY_CHARACTER_ARTIFACTS: frozenset[str] = frozenset({
 })
 
 # Global-scoped: path uses uid only, no char_id in scope.
-GLOBAL_USER_ARTIFACTS: frozenset[str] = frozenset({
-    "health_state",
-})
+GLOBAL_USER_ARTIFACTS: frozenset[str] = frozenset()
 
 # Dream-scoped: path uses char_id, uid, and world_id.
 DREAM_ARTIFACTS: frozenset[str] = frozenset({
@@ -237,7 +236,7 @@ def resolve_path(scope: MemoryScope, artifact: str) -> Path:
         return paths.user_memory_root(uid, char_id=char_id) / "user_facts.json"
 
     if artifact == "health_state":
-        return paths._p("runtime", "memory", "global", uid, "health_state.json")
+        return paths.user_memory_root(uid, char_id=char_id) / "health_state.json"
 
     # ── dream-scoped: (char_id, uid, world_id) ───────────────────────────────
 

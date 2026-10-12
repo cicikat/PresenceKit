@@ -653,7 +653,7 @@ def build(
         try:
             from core.memory.health_state import get_period_info
             from datetime import date as _date, datetime as _datetime
-            _period = get_period_info(user_id)
+            _period = get_period_info(user_id, char_id=char_id)
             _last = _period.get("last_period_date")
             if _last:
                 _days = (_date.today() - _datetime.strptime(_last, "%Y-%m-%d").date()).days
@@ -677,7 +677,7 @@ def build(
     if _tags & _WATCH_TRIGGERS:
         try:
             from core.memory.health_state import load as _load_health
-            _up = _load_health(user_id)
+            _up = _load_health(user_id, char_id=char_id)
             _segs = [s for s in _up.get("sleep_segments", []) if s.get("duration_minutes", 0) > 0]
             if _segs:
                 _last_seg = _segs[-1]
@@ -706,7 +706,7 @@ def build(
     # ─────────────────────────────────────────────────────────────────────────
     try:
         from core.memory.health_state import load as _load_health2
-        _up2 = _load_health2(user_id)
+        _up2 = _load_health2(user_id, char_id=char_id)
         _sensor = _up2.get("phone_sensor_today") or {}
         _sensor_date = _sensor.get("date", "")
         _today_str = __import__("datetime").date.today().isoformat()
@@ -746,7 +746,7 @@ def build(
     # ─────────────────────────────────────────────────────────────────────────
     try:
         from core.hds_local import prompt_hint as _heart_rate_hint
-        if _heart_rate_message := _heart_rate_hint(user_id):
+        if _heart_rate_message := _heart_rate_hint(user_id, char_id=char_id):
             messages.append(_heart_rate_message)
     except Exception:
         logger.debug("[prompt] heart-rate observation unavailable", exc_info=True)
