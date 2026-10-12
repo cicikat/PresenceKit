@@ -732,7 +732,7 @@ def build_recall_context(scope: MemoryScope, query: str, *, max_dossiers: int = 
     unreviewed = False
     shown_new_event_ids: set[str] = set()
     for row in rows:
-        line = f"[{row['title']}] {row['summary'] or '尚无稳定理解'}"
+        line = f"dossier_id={row['dossier_id']} [{row['title']}] {row['summary'] or '尚无稳定理解'}"
         if row["occurred_from"] is not None or row["occurred_to"] is not None:
             line += f"；覆盖时间 {row['occurred_from'] or '?'}..{row['occurred_to'] or '?'}"
         new_events = _unprocessed_evidence(scope, after_sequence=int(row["coverage_ingest_seq"] or 0), query=query)
@@ -742,7 +742,6 @@ def build_recall_context(scope: MemoryScope, query: str, *, max_dossiers: int = 
             line += "\n未整理的新证据（与旧理解并列，尚未归纳）：" + "；".join(
                 f"{item['event_id']} {item['text']}" for item in new_events
             )
-        line += f"\n详情入口 dossier_id={row['dossier_id']}"
         if len(line) > remaining:
             line = line[:max(0, remaining - 1)] + "…"
         if line:

@@ -1,7 +1,7 @@
 """
 tests/test_prompt_pruning_contract.py — Brief 50 · 工单G.2
 
-20k 硬上限剪枝顺序的权威测试文件，合并自：
+剪枝顺序的权威测试文件，合并自：
   - test_r4b_prompt_drop_priority.py（R4-B，行为级：实际跑裁剪逻辑）
   - test_r4c_prompt_layer_contract.py（R4-C，契约级：正则扫描 prompt_builder 源码）
 两个旧文件已删除。
@@ -137,6 +137,9 @@ def _build_messages_over_limit(extra: list[dict]) -> list[dict]:
 
 def _run_trimmer(messages: list[dict], hard_limit: int = 20000, target: int = 18000):
     """Run the R4-B dynamic trimmer on a message list.
+
+    Uses a compact fixture budget for priority tests; production's 30k/28k
+    boundary is exercised through build() in test_prompt_evidence_refs.
 
     Returns (trimmed_messages, removed_layers).
     """

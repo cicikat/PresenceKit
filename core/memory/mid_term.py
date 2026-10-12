@@ -238,7 +238,10 @@ def format_for_prompt(
             continue
         seen.add(normalized)
         stamp = time.strftime("%Y-%m-%d %H:%M", time.localtime(event_time(event)))
-        line = f"- {stamp}｜{summary}"
+        from core.memory.prompt_sources import evidence_hint, activity_hint
+        refs = evidence_hint(event.get("source_event_ids"), uid=uid, char_id=char_id,
+                             turn_id=event.get("source_turn_id") or "")
+        line = f"- {stamp}｜{summary}" + refs + activity_hint(event.get("source_refs"))
         # Never cut a summary into an ambiguous unfinished fragment.
         if len(line) > PROMPT_CHAR_BUDGET:
             continue

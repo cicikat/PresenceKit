@@ -48,7 +48,7 @@ def test_builder_pruning_ablation_and_final_budget(sandbox, monkeypatch):
     from core.prompt_ablation import set_state
     set_state(["6g_dream_impression"], False)
     result, debug = build(**_base_build_kwargs(
-        event_search_result="past" * 7000, episodic_result="retained memory",
+        event_search_result="past" * 10000, episodic_result="retained memory",
         dream_impression_text="dream", tool_result="screen summary"))
     text = "\n".join(m["content"] for m in result)
     assert "6b_event_search" in debug["removed_layers"]
@@ -58,7 +58,7 @@ def test_builder_pruning_ablation_and_final_budget(sandbox, monkeypatch):
     assert "<<<TOOL_DATA_START>>>" in text
     assert debug["char_estimate"] == sum(len(m["content"]) for m in result)
     assert all(m["_estimated_tokens"] == round(len(m["content"]) / 1.7, 1) for m in result)
-    assert debug["char_estimate"] <= 18000
+    assert debug["char_estimate"] <= 28000
 
 
 def test_legacy_perception_slot_is_separate_and_can_be_disabled(sandbox, monkeypatch):

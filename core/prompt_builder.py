@@ -1699,10 +1699,10 @@ def build(
     ]
     token_estimate = sum(len(m["content"]) for m in arrange_sections(messages))
     _removed_layers: list[str] = []
-    if token_estimate > 20000:
+    if token_estimate > 30000:
         _prompt_logger.warning(f"[prompt] token估算超硬上限: {token_estimate}，触发层裁剪")
         # R4-B: 动态裁剪——收集所有带 _drop_priority 的消息，按 priority 升序排列（数字越小越先丢），
-        # 同 priority 整批一次性丢弃，直到估算 ≤18000。无 _drop_priority 的层永不被自动丢弃。
+        # 同 priority 整批一次性丢弃，直到估算 ≤28000。无 _drop_priority 的层永不被自动丢弃。
         _droppable = [
             (i, m) for i, m in enumerate(messages)
             if m.get("_drop_priority") is not None
@@ -1710,7 +1710,7 @@ def build(
         _droppable.sort(key=lambda x: (x[1]["_drop_priority"], x[0]))
         _drop_indices: set[int] = set()
         _di = 0
-        while _di < len(_droppable) and token_estimate > 18000:
+        while _di < len(_droppable) and token_estimate > 28000:
             _cur_prio = _droppable[_di][1]["_drop_priority"]
             # 整批同 priority 的消息一次性丢弃
             while _di < len(_droppable) and _droppable[_di][1]["_drop_priority"] == _cur_prio:
@@ -1727,7 +1727,7 @@ def build(
             messages = [m for j, m in enumerate(messages) if j not in _drop_indices]
         if _removed_layers:
             _prompt_logger.info(f"[prompt] 裁剪层：{_removed_layers}，裁剪后估算：{token_estimate}")
-        if token_estimate > 18000:
+        if token_estimate > 28000:
             _prompt_logger.warning(
                 "[prompt] 裁完仍超预算: %d，全部可裁层已丢弃，无法继续压缩",
                 token_estimate,

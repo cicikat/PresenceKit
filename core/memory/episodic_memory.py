@@ -980,7 +980,9 @@ def format_for_prompt(
             )
 
         core_mark = "【重要】" if mem.get("is_core") else ""
-        lines.append(f"- {core_mark}{time_str}，{summary}{resolved_str}{feeling_str}{arc_str}")
+        from core.memory.prompt_sources import evidence_hint
+        sources = evidence_hint(mem.get("source_event_ids"))
+        lines.append(f"- {core_mark}{time_str}，{summary}{resolved_str}{feeling_str}{arc_str}{sources}")
 
     return "\n".join(lines)
 

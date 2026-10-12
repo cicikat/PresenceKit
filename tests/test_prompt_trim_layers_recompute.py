@@ -44,10 +44,10 @@ def test_trimmed_layer_absent_from_activated_but_present_before_trim(sandbox, mo
     _apply_build_stubs(monkeypatch)
     import core.prompt_builder as _pb
 
-    # 超 20k 场景：唯一可裁层（5.5_lore, drop_priority=80）单独撑爆预算，
+    # 超 30k 场景：唯一可裁层（5.5_lore, drop_priority=80）单独撑爆预算，
     # 裁掉它足以回落到 target 以下。
     messages, debug_info = _pb.build(
-        **_base_build_kwargs(lore_entries=["A" * 25000])
+        **_base_build_kwargs(lore_entries=["A" * 35000])
     )
 
     layers = [m.get("_layer") for m in messages]
@@ -62,7 +62,7 @@ def test_layers_activated_matches_final_messages(sandbox, monkeypatch):
     import core.prompt_builder as _pb
 
     messages, debug_info = _pb.build(
-        **_base_build_kwargs(lore_entries=["A" * 25000])
+        **_base_build_kwargs(lore_entries=["A" * 35000])
     )
 
     assert debug_info["layers_activated"] == [m.get("_layer", "unknown") for m in messages]

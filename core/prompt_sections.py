@@ -11,7 +11,7 @@ SECTIONS = (
         "5.2_reminders", "6a_user_identity", "11.7_pinned_facts",
         "2.56_relationship_span",
     }),
-    ("现实回忆", "以下是历史记录与回忆线索，不是此刻正在发生的事；日记感受与叙事归纳不等于客观事实。", {
+    ("现实回忆", "以下是历史记录与回忆线索，不是此刻正在发生的事；日记感受与叙事归纳不等于客观事实。需要细节或出现冲突时，先用expand_event_window按所附event_id回读原始证据，get_related_events查关联事件；dossier_id用read_memory_dossier/search_dossier_events，长消息序号用read_long_user_message。未附可用ID时按关键词和时间检索，不猜造ID；工具以本轮实际暴露为准。", {
         "6b_event_search", "6b_memory_dossiers", "6c_episodic", "mid_term",
         "6d_diary_context", "6e_inner_diary", "6h_storyline",
         "9.5_episodic_top", "coplay_recall",

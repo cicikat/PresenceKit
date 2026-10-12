@@ -558,7 +558,7 @@ async def search(
                         relevance = hit / max(len(keywords), 1)
                         matched.append((_score_recall(_el_sem_sim, relevance, strength_norm, decay), cur_role, _clip_sentence(body, 60), days_ago, turn_id))
 
-    def _render_card(role: str, text: str, days_ago: int) -> str:
+    def _render_card(role: str, text: str, days_ago: int, turn_id: str) -> str:
         coarse = (
             "今天" if days_ago == 0 else
             "昨天" if days_ago == 1 else
@@ -566,12 +566,13 @@ async def search(
             f"约{days_ago}天前"
         )
         who = f"{_user_pronoun}提到" if role == "user" else f"{char_name}当时说"
-        return f"（{coarse}）{who}：{text}"
+        from core.memory.prompt_sources import evidence_hint
+        return f"（{coarse}）{who}：{text}" + evidence_hint(uid=user_id, char_id=char_id, turn_id=turn_id)
 
     matched.sort(key=lambda x: x[0], reverse=True)
     MIN_SCORE = 0.3  # recalibrated for X2 fusion formula (w_sem+w_kw+w_str=1.0 range)
     selected = [(s, r, t, d, turn_id) for s, r, t, d, turn_id in matched[:5] if s >= MIN_SCORE]
-    result_str = "\n".join(_render_card(r, t, d) for _, r, t, d, _turn_id in selected) if selected else ""
+    result_str = "\n".join(_render_card(r, t, d, turn_id) for _, r, t, d, turn_id in selected) if selected else ""
     if return_trace:
         trace_items = [
             {"score": round(s, 4), "role": r, "snippet": t[:80], "event_day": d, "turn_id": turn_id}

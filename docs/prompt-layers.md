@@ -408,7 +408,7 @@ token_estimate = sum(len(m["content"]) for m in messages)
 | 字符数 | 行为 |
 |---|---|
 | > 15000 | warning 日志 |
-| > 20000 | 强制裁剪，目标降到 ≤18000 |
+| > 30000 | 强制裁剪，目标降到 ≤28000（字符估算，非精确token） |
 
 ### _drop_priority 裁剪元数据（R4-B）
 
@@ -447,7 +447,7 @@ token_estimate = sum(len(m["content"]) for m in messages)
 
 1. 收集所有 `_drop_priority is not None` 的消息，按 priority 升序排列，同 priority 按原始顺序（稳定排序）。
 2. 按 priority 分组，整批原子性丢弃，丢完后检查预算是否达标。
-3. 预算已满（≤18000）即停止，更高 priority 的层保留。
+3. 预算已满（≤28000）即停止，更高 priority 的层保留。
 4. 无 `_drop_priority` 的层永不被裁剪器触碰。
 5. 裁剪结果写入 `debug_info["removed_layers"]`，与实际删除严格一致。
 
@@ -1062,3 +1062,5 @@ recall_trace 在 `fetch_context()` 内先于 build 写入，故不回写该条�
 观测 `GET /observability/state-packet?uid&char_id&date&limit`（`state.read`），含
 `query_free_layers`、`duplicate_event_ids`、`untraced_sources`、`conflict_candidates`
 （只列不判）以及最近 N 轮的频次聚合。
+
+工单287溯源更新：event_search通过同owner/角色的turn_id回查真实event_id；episodic、mid_term与9.5_episodic_top保留已有原始证据ID。无血缘不生成虚构ID。档案、活动、文档与生活记录同时保留对应工具支持的查询锚点；提示中明确摘要需要按需回读原证据。

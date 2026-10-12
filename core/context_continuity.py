@@ -98,12 +98,14 @@ def _clip(value, limit):
 
 
 def _material_summary(kind, row):
-    """Readable prompt excerpt: title/filename, time, excerpt. No internal ids."""
+    """Readable excerpt with the stable ID accepted by its scoped read tool."""
     if kind == 'upload':
         title = _clip(row.get('filename'), 80) or '未命名文件'
         when = _clock_text(row.get('created_at'))
         excerpt = _clip(row.get('summary'), 280)
         lines = [title]
+        if row.get('document_id'):
+            lines.append(f"document_id={row['document_id']}；用read_document回读原文，用read_document_notes读笔记。")
         if when:
             lines.append(when)
         if excerpt:
@@ -122,6 +124,8 @@ def _material_summary(kind, row):
     when = _clock_text(row.get('updated_at') or row.get('occurred_on'))
     excerpt = _clip(row.get('note') or row.get('recognition_description'), 280)
     lines = [heading]
+    if row.get('id'):
+        lines.append(f"record_id={row['id']}；用read_life_records回读。")
     if when:
         lines.append(when)
     if excerpt:
