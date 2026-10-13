@@ -8,7 +8,7 @@
 - [x] A：逐类修复运行合同与回归测试漂移，保持角色范围、来源和隔离检查；不得跳过失败或恢复已退役行为。相关回归通过后独立提交。
 - [x] B：修复管理面真实控件、导航、翻译和工具说明缺口，测试验证现行结构及缓存关联而非固定旧版本；缓存更新与浏览器验收后独立提交。
 - [x] C：使用仅 tracked 文件的干净安装验证依赖、首次配置、启动、鉴权、默认角色及首轮聊天；修复实际阻碍并补必要回归，独立提交。
-- [ ] D：推送修复，核对对应 SHA 的 Python 3.10/3.12 smoke/full 与 offline-evals 全绿。
+- [x] D：推送修复，核对对应 SHA 的 Python 3.10/3.12 smoke/full 与 offline-evals 全绿。
 - [x] D1：修复全量揭示的 POSIX 标准库导入误拦截及 Python 3.10 两种 TimeoutError 差异，保持实际脚本验证与安全守卫，相关回归后独立提交。
 - [x] D2：修复 Windows 同一时钟刻度内的 prompt 采集排序，冻结时钟回归确认最新记录不丢失；保留替换原采集记录的身份，独立提交。
 
@@ -27,3 +27,5 @@ C：干净 tracked 文件安装、独立 Python 3.12 环境 requirements 安装�
 D1：edb04fa 的远端 smoke 与 offline-evals 通过；3.12 full 仅剩 1 failed / 7847 passed，3.10 full 剩 2 failed / 7846 passed。实际 Linux 容器复现 pathlib → ntpath 探测 _winapi 被守卫误拦截；标准库预加载后同一验证脚本返回 ok，用户代码执行前仍安装全部守卫。Python 3.10 分别处理内置与 asyncio TimeoutError。工具循环/Agent task/进程回归 70 passed，含成功、超时、取消、资源限制、网络与越界拒绝。Windows 全量转入独立副本，避免已有生产服务临时写入干扰数据保护断言；未放宽隔离断言，未停止生产服务。
 
 D2：35590cd 的 Python 3.10/3.12 smoke/full 与 offline-evals 已全绿（Tests run 38344949678、evals run 38344949702）。独立 Windows 副本全量 7853 passed / 1 failed / 68 skipped；唯一失败为同一时钟刻度内的 prompt 目录选旧记录。改用进程内采集顺序，跨 uid 仍选最新，注入刷新保留原顺序；冻结时钟及既有采集链 18 passed。清除该测试中不再需要的 sys.modules 假模块，避免局部组合测试污染。最终 SHA 的远端核对归属 D。
+
+D：功能修复 SHA 911e48349977cb1b9a9c11522f6b7da7ee4584a9 已推送 main；[Tests 38345369981](https://github.com/cicikat/PresenceKit/actions/runs/38345369981) 的 Python 3.10/3.12 smoke/full 全部 success；[offline-evals 38345370143](https://github.com/cicikat/PresenceKit/actions/runs/38345370143) success。两组 full 各 7850 passed / 73 skipped / 13 subtests passed；skip 为既有条件性跨仓/外部环境检查，本单未新增跳过或隐藏失败。原型工作区改动未纳入提交，生产进程未重启。验收记录提交只更新本工单，提交后仍核对远端运行结果。
