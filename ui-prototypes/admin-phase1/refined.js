@@ -48,10 +48,6 @@ function setTheme(theme) {
 }
 $('day').addEventListener('click', () => setTheme('day'));
 $('night').addEventListener('click', () => setTheme('night'));
-$('palette-choice').addEventListener('change', () => {
-  document.body.dataset.palette = $('palette-choice').value;
-  setTheme('night');
-});
 $('font-choice').addEventListener('change', () => {
   document.body.dataset.font = $('font-choice').value;
 });
