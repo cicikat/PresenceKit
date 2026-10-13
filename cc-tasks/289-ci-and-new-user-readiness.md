@@ -10,6 +10,7 @@
 - [x] C：使用仅 tracked 文件的干净安装验证依赖、首次配置、启动、鉴权、默认角色及首轮聊天；修复实际阻碍并补必要回归，独立提交。
 - [ ] D：推送修复，核对对应 SHA 的 Python 3.10/3.12 smoke/full 与 offline-evals 全绿。
 - [x] D1：修复全量揭示的 POSIX 标准库导入误拦截及 Python 3.10 两种 TimeoutError 差异，保持实际脚本验证与安全守卫，相关回归后独立提交。
+- [x] D2：修复 Windows 同一时钟刻度内的 prompt 采集排序，冻结时钟回归确认最新记录不丢失；保留替换原采集记录的身份，独立提交。
 
 不触碰真实用户数据或凭据。真实付费模型、QQ/手机/硬件验收与模拟接口验证分别记账。仅实际跨仓合同变化才修改消费端。
 
@@ -24,3 +25,5 @@ B：管理面相关回归 100 passed；语言观察器补测后 24 passed，Node
 C：干净 tracked 文件安装、独立 Python 3.12 环境 requirements 安装、示例配置生成鉴权、内置角色启动通过；未鉴权状态返回 401。管理面保存连接与 Owner、连接测试通过；桌面/手机 scoped token 的首轮聊天返回 200，含 turn_id/msg_id/critical_written。聊天模型使用本地协议 fixture，不代表真实付费模型、QQ 或实体设备验收。修复首次配置异步刷新覆盖草稿、default_preset 选择偏差；可选模型摘要复用后端实际路由。Embedding 示例凭据直接降级，连接在成功/失败/取消时关闭；有效状态要求密钥与支持的 provider，首次写入补齐 provider。相关回归 45 passed，模型/缓存/换行/schema 补验 92 passed；浏览器复验草稿保留、连接成功及控制台无 error。仅管理面 routing_effective 增加 summary 元数据，桌面/手机聊天合同未变化。
 
 D1：edb04fa 的远端 smoke 与 offline-evals 通过；3.12 full 仅剩 1 failed / 7847 passed，3.10 full 剩 2 failed / 7846 passed。实际 Linux 容器复现 pathlib → ntpath 探测 _winapi 被守卫误拦截；标准库预加载后同一验证脚本返回 ok，用户代码执行前仍安装全部守卫。Python 3.10 分别处理内置与 asyncio TimeoutError。工具循环/Agent task/进程回归 70 passed，含成功、超时、取消、资源限制、网络与越界拒绝。Windows 全量转入独立副本，避免已有生产服务临时写入干扰数据保护断言；未放宽隔离断言，未停止生产服务。
+
+D2：35590cd 的 Python 3.10/3.12 smoke/full 与 offline-evals 已全绿（Tests run 38344949678、evals run 38344949702）。独立 Windows 副本全量 7853 passed / 1 failed / 68 skipped；唯一失败为同一时钟刻度内的 prompt 目录选旧记录。改用进程内采集顺序，跨 uid 仍选最新，注入刷新保留原顺序；冻结时钟及既有采集链 18 passed。清除该测试中不再需要的 sys.modules 假模块，避免局部组合测试污染。最终 SHA 的远端核对归属 D。

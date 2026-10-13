@@ -24,6 +24,7 @@ Usage:
 from collections import deque
 from contextvars import ContextVar
 from datetime import datetime, timezone
+from itertools import count
 from typing import Any
 
 # Per-async-task origin metadata for the current build_prompt() call.
@@ -51,6 +52,7 @@ PRUNE_TARGET = 18000
 
 # per-uid ring:  uid → deque of snapshot dicts
 _rings: dict[str, deque] = {}
+_capture_sequence = count()
 _current_capture: ContextVar[Any] = ContextVar("_current_prompt_capture", default=None)
 
 
@@ -113,6 +115,7 @@ def capture(uid: str, messages: list[dict], meta: dict, *, _replace: dict | None
     snap = {
         "uid": uid,
         "captured_at": datetime.now(timezone.utc).isoformat(),
+        "capture_sequence": next(_capture_sequence) if _replace is None else _replace["capture_sequence"],
         "origin": _capture_origin.get(),   # set by caller before build_prompt
         "token_estimate": token_estimate,
         "char_estimate": char_estimate,
@@ -182,6 +185,6 @@ def get_latest_proactive_by_trigger() -> dict[str, dict]:
             tname = origin.get("trigger_name", "")
             if not tname:
                 continue
-            if tname not in result or snap["captured_at"] > result[tname]["captured_at"]:
+            if tname not in result or snap["capture_sequence"] > result[tname]["capture_sequence"]:
                 result[tname] = snap
     return result

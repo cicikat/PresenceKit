@@ -1,18 +1,8 @@
 """Tests for prompt_capture origin tagging (A + B scope from admin-panel-round6 work order)."""
 
 import asyncio
-import sys
 import types
 import pytest
-
-# ─── minimal stubs so prompt_capture imports cleanly without the full app ──
-
-for mod in (
-    "core.config_loader",
-    "core.sandbox",
-):
-    if mod not in sys.modules:
-        sys.modules[mod] = types.ModuleType(mod)
 
 
 def _make_capture():
@@ -169,8 +159,11 @@ def test_catalog_returns_trigger_keyed_dict():
     assert catalog["morning_greeting"]["origin"]["seed_prompt"] == "早上好"
 
 
-def test_catalog_picks_newest_for_same_trigger():
+def test_catalog_picks_newest_for_same_trigger(monkeypatch):
     pc = _make_capture()
+    from datetime import datetime, timezone
+    frozen = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    monkeypatch.setattr(pc, "datetime", types.SimpleNamespace(now=lambda _timezone: frozen))
     _do_capture(pc, uid="u8", origin={
         "origin": "proactive", "trigger_name": "daily_journal",
         "seed_prompt": "第一次", "search_query": "今天",
@@ -182,6 +175,28 @@ def test_catalog_picks_newest_for_same_trigger():
     catalog = pc.get_latest_proactive_by_trigger()
     assert "daily_journal" in catalog
     assert catalog["daily_journal"]["origin"]["seed_prompt"] == "第二次（更新）"
+
+
+def test_catalog_capture_order_is_global_and_survives_refresh(monkeypatch):
+    pc = _make_capture()
+    from datetime import datetime, timezone
+    frozen = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    monkeypatch.setattr(pc, "datetime", types.SimpleNamespace(now=lambda _timezone: frozen))
+    origin = {"origin": "proactive", "trigger_name": "daily_journal"}
+    pc.set_capture_origin(origin)
+    old_messages = [_make_msg(content="old")]
+    pc.capture("first-owner", old_messages, {})
+    older = pc.get_snapshots("first-owner")[-1]
+    pc.capture("second-owner", [_make_msg(content="middle")], {})
+    newest_messages = [_make_msg(content="newest")]
+    pc.capture("first-owner", newest_messages, {})
+    newest = pc.get_snapshots("first-owner")[-1]
+    sequence = newest["capture_sequence"]
+    pc.capture_injected_messages(newest_messages, newest_messages + [_make_msg(content="injected")])
+    assert newest["capture_sequence"] == sequence
+    assert pc.get_latest_proactive_by_trigger()["daily_journal"] is newest
+    pc.capture("first-owner", [_make_msg(content="refreshed old")], {}, _replace=older)
+    assert pc.get_latest_proactive_by_trigger()["daily_journal"] is newest
 
 
 def test_catalog_trigger_name_empty_excluded():

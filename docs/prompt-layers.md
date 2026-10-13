@@ -670,6 +670,7 @@ R4-B 已完全退役 `_DROPPABLE`。新层的可裁性由 `_drop_priority` 字�
 各调用方在 `build_prompt()` 前调用 `set_capture_origin(info)` 写入。
 ContextVar 保证同一 asyncio task 内隔离，不同并发请求互不影响。
 Reality prompt 环形缓冲按 uid 保存最近 10 轮，足够群聊页聚合最近 10 次生成；进程重启后清空。
+`capture_sequence` 是进程内递增的采集顺序；主动触发器目录按该顺序选最新记录，避免时钟精度不足或回拨导致旧记录覆盖新记录。注入刷新保留原记录的顺序与 `captured_at`，不算新一轮。
 
 **主动轮额外字段**（仅 `"proactive"`）：
 
