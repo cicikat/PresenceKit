@@ -47,7 +47,9 @@ MAX_CHILD_PROCESSES = 16
 MAX_DISK_BYTES = 100 * 1024 * 1024
 
 _PYTHON_BOOTSTRAP = r'''
-import os, socket, sys, sysconfig
+# pathlib's ntpath dependency probes _winapi on POSIX. Load the standard
+# library before the user-code guard so that harmless probe is not denied.
+import os, pathlib, socket, sys, sysconfig
 root = os.path.realpath(sys.argv[1])
 private_root = os.path.realpath(sys.argv[2])
 program = os.path.realpath(sys.argv[3])

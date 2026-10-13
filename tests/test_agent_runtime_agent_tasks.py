@@ -91,6 +91,16 @@ async def test_chat_tool_runs_bounded_worker_and_returns_artifacts(monkeypatch, 
 
     monkeypatch.setattr("core.llm_client.chat", fake_chat)
     from core import tool_dispatcher
+    from core.agent_runtime import process_runner
+    checks = []
+    original_run = process_runner.run_workspace_program
+
+    async def capture_check(*args, **kwargs):
+        result = await original_run(*args, **kwargs)
+        checks.append(result)
+        return result
+
+    monkeypatch.setattr(process_runner, "run_workspace_program", capture_check)
 
     started = await tool_dispatcher.execute_structured(
         "start_agent_task",
@@ -107,7 +117,7 @@ async def test_chat_tool_runs_bounded_worker_and_returns_artifacts(monkeypatch, 
     task_id = body["task_id"]
 
     finished = await _wait_terminal(task_id)
-    assert finished["status"] == "succeeded"
+    assert finished["status"] == "succeeded", (finished, checks)
     assert (root / "sample.txt").read_text(encoding="utf-8") == "after"
     assert finished["result"]["summary"] == "updated and verified"
     assert finished["result"]["artifacts"][0]["ref"] == "sample.txt"

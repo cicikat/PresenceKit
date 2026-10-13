@@ -55,7 +55,7 @@ def test_process_runner_success_and_metadata_redaction(monkeypatch, tmp_path, sa
     root = tmp_path / "workspace"
     root.mkdir()
     _config(monkeypatch, root)
-    name = _script(root, "ok.py", "print('hello')")
+    name = _script(root, "ok.py", "from pathlib import Path\nprint(Path('hello').name)")
     from core.agent_runtime import TaskPrincipal
     from core.agent_runtime.process_runner import run_process_task
 

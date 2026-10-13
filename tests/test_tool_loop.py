@@ -10,6 +10,7 @@ LLM 全 mock：core.llm_client.chat_turn / chat / chat_stream 按脚本吐结果
 from __future__ import annotations
 from tests.fixtures.public_assets import TEST_CHAR_ID
 
+import asyncio
 import json
 
 import pytest
@@ -1201,13 +1202,14 @@ async def test_budget_timeout_closing_strips_marker(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_inner_chat_timeout_is_not_logged_as_total_budget(monkeypatch, caplog):
+@pytest.mark.parametrize("timeout_type", [TimeoutError, asyncio.TimeoutError])
+async def test_inner_chat_timeout_is_not_logged_as_total_budget(monkeypatch, caplog, timeout_type):
     import logging
     _patch_tool_loop_config(monkeypatch, max_steps=5, total_timeout_s=90)
     _patch_tools_schema(monkeypatch, ["web_search"])
 
     async def _inner_timeout(messages, tools, **kw):
-        raise TimeoutError()
+        raise timeout_type()
 
     monkeypatch.setattr("core.llm_client.chat_turn", _inner_timeout)
     final_calls = _patch_final_chat(monkeypatch, text="内层超时收尾")

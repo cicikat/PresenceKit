@@ -1897,7 +1897,7 @@ class Pipeline:
         _loop_started = time.monotonic()
         try:
             await asyncio.wait_for(_run_steps(), timeout=total_timeout_s)
-        except asyncio.TimeoutError:
+        except (asyncio.TimeoutError, TimeoutError):
             elapsed = time.monotonic() - _loop_started
             remaining = total_timeout_s - elapsed
             if remaining > 0.05:
