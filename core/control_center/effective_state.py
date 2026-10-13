@@ -314,15 +314,8 @@ def _model_routing_row(cfg: dict[str, Any], char_id: str) -> dict[str, Any]:
 def _embedding_row(cfg: dict[str, Any]) -> dict[str, Any]:
     section = cfg.get("embedding") or {}
 
-    def _usable(value: Any) -> bool:
-        text = str(value or "").strip().upper()
-        return bool(text) and not text.startswith("YOUR_") and not text.startswith("YOUR-")
-
-    configured = bool(
-        _usable(section.get("base_url"))
-        and _usable(section.get("model"))
-        and section.get("dim")
-    )
+    from core.memory.embedding import connection_configured
+    configured = section.get("provider_kind") == "openai_compat" and connection_configured(section) and bool(section.get("dim"))
     return _row(
         feature_id="embedding",
         default=False,

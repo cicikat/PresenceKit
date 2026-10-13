@@ -54,7 +54,21 @@ async function checkSetupStatus() {
   catch (e) { return null; }
 }
 
-async function loadSetupPage() {
+let _setupLoadGeneration = 0;
+const _setupInputSections = {
+  owner: ['setup-owner-id', 'setup-owner-birthday'],
+  base: ['setup-base-url', 'setup-base-model-name', 'setup-base-api-key'],
+};
+function _setupInputSnapshot() {
+  return Object.fromEntries(Object.values(_setupInputSections).flat().map(id => [id, document.getElementById(id).value]));
+}
+
+async function loadSetupPage({section = null, expectedValues = _setupInputSnapshot()} = {}) {
+  const generation = ++_setupLoadGeneration;
+  const setInput = (id, value) => {
+    const el = document.getElementById(id);
+    if ((!section || _setupInputSections[section].includes(id)) && el.value === expectedValues[id]) el.value = value;
+  };
   document.getElementById('setup-missing-banner').style.display = 'none';
   document.getElementById('setup-optional-body').innerHTML = `<div class="loading">${escapeHtml(t('common.loading', '加载中…'))}</div>`;
   try {
@@ -64,6 +78,7 @@ async function loadSetupPage() {
       api('GET', '/settings/embedding'),
       api('GET', '/characters').catch(() => null),
     ]);
+    if (generation !== _setupLoadGeneration) return;
     const owner = status.owner || {};
 
     window._setupBasePresetName = base.preset_name || 'legacy';
@@ -81,19 +96,19 @@ async function loadSetupPage() {
       {items: missing.join(t('setup.missing_separator', '」「'))},
     );
 
-    document.getElementById('setup-owner-id').value = owner.owner_id || '';
-    document.getElementById('setup-owner-birthday').value = owner.owner_birthday || '';
+    setInput('setup-owner-id', owner.owner_id || '');
+    setInput('setup-owner-birthday', owner.owner_birthday || '');
     document.getElementById('setup-owner-status').innerHTML = _setupBadge(owner.configured);
 
-    document.getElementById('setup-base-url').value = base.base_url || '';
-    document.getElementById('setup-base-model-name').value = base.model || '';
-    document.getElementById('setup-base-api-key').value = '';
+    setInput('setup-base-url', base.base_url || '');
+    setInput('setup-base-model-name', base.model || '');
+    setInput('setup-base-api-key', '');
     document.getElementById('setup-base-key-state').textContent = base.api_key_set
       ? t('setup.secret.configured', '（已配置 {value}）', {value: base.api_key_masked})
       : `（${t('common.not_configured', '未配置')}）`;
     document.getElementById('setup-base-status').innerHTML = _setupBadge(base.configured);
 
-    await _loadSetupOptional();
+    await _loadSetupOptional(generation);
 
   } catch (e) {
     toast(t('setup.load_error', '加载配置中心失败: {error}', {error: _setupErrMsg(e)}), 'err');
@@ -241,7 +256,7 @@ function removeSetupRow(button) {
   if (!removeAnniversaryEditorRow(button)) button.closest('[data-setup-game]')?.remove();
 }
 
-async function _loadSetupOptional() {
+async function _loadSetupOptional(generation = _setupLoadGeneration) {
   const el = document.getElementById('setup-optional-body');
   try {
     const [mp, tts, vision] = await Promise.all([
@@ -249,10 +264,9 @@ async function _loadSetupOptional() {
       api('GET', '/tts-config').catch(() => null),
       api('GET', '/vision-params').catch(() => null),
     ]);
-    const profiles = mp.routing_profiles || {};
-    const profile = profiles[mp.active_routing] || Object.values(profiles)[0] || {};
-    const presetNames = Object.keys(mp.presets || {});
-    const resolve = (cat) => profile[cat] || profile.chat || presetNames[0] || t('setup.no_preset', '（无 preset）');
+    if (generation !== _setupLoadGeneration) return;
+    const effective = (mp.routing_effective || {})[mp.active_routing] || {};
+    const resolve = (cat) => effective[cat]?.effective_preset || t('setup.no_preset', '（无 preset）');
     const enabled = escapeHtml(t('common.enabled', '已启用'));
     const disabled = escapeHtml(t('common.disabled', '未启用'));
     const unknown = escapeHtml(t('common.unknown', '未知'));
@@ -280,6 +294,7 @@ async function _loadSetupOptional() {
 }
 
 async function saveSetupBaseModel() {
+  const expectedValues = _setupInputSnapshot();
   const body = {};
   const url   = document.getElementById('setup-base-url').value.trim();
   const model = document.getElementById('setup-base-model-name').value.trim();
@@ -291,7 +306,7 @@ async function saveSetupBaseModel() {
   try {
     await api('PUT', '/settings/base-model', body);
     toast(t('setup.base.saved', '基础聊天模型已保存'), 'ok');
-    loadSetupPage();
+    await loadSetupPage({section: 'base', expectedValues});
   } catch (e) {
     toast(t('common.save_failed', '保存失败: {error}', {error: _setupErrMsg(e)}), 'err');
   }
@@ -322,6 +337,7 @@ async function testSetupBaseModel() {
 }
 
 async function saveSetupOwner() {
+  const expectedValues = _setupInputSnapshot();
   const ownerId = document.getElementById('setup-owner-id').value.trim();
   const birthday = document.getElementById('setup-owner-birthday').value.trim();
   if (ownerId && !/^[A-Za-z0-9_-]+$/.test(ownerId)) {
@@ -335,7 +351,7 @@ async function saveSetupOwner() {
   try {
     await api('PUT', '/scheduler/config', { owner_id: ownerId, owner_birthday: birthday });
     toast(t('setup.owner.saved', 'owner_id 已保存'), 'ok');
-    loadSetupPage();
+    await loadSetupPage({section: 'owner', expectedValues});
   } catch (e) {
     toast(t('common.save_failed', '保存失败: {error}', {error: _setupErrMsg(e)}), 'err');
   }

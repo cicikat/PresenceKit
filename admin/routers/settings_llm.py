@@ -196,7 +196,8 @@ def _resolve_base_chat_preset_name(cfg: dict) -> Optional[str]:
     active = mp.get("active_routing", "default")
     profiles = mp.get("routing_profiles", {})
     profile = profiles.get(active) or (next(iter(profiles.values())) if profiles else {})
-    return profile.get("chat") or next(iter(mp.get("presets", {})), None)
+    from core.model_registry import _default_preset_name
+    return profile.get("chat") or _default_preset_name(mp) or next(iter(mp.get("presets", {})), None)
 
 
 def _base_model_view(cfg: dict) -> dict:
@@ -303,7 +304,8 @@ def _embedding_view(cfg: dict) -> dict:
     api_key  = target.get("api_key", "")
     model    = target.get("model", "")
     dim      = target.get("dim")
-    configured = not (_looks_placeholder(base_url) or _looks_placeholder(api_key) or _looks_placeholder(model)) and bool(dim)
+    from core.memory.embedding import connection_configured
+    configured = target.get("provider_kind") == "openai_compat" and connection_configured(target) and bool(dim)
     return {
         "base_url": "" if _looks_placeholder(base_url) else base_url,
         "model": "" if _looks_placeholder(model) else model,
@@ -343,7 +345,9 @@ async def update_embedding_settings(body: EmbeddingSettingsUpdate, auth=Depends(
 
     full_cfg = read_config_file(CONFIG_FILE)
 
-    full_cfg.setdefault("embedding", {}).update(updates)
+    section = full_cfg.setdefault("embedding", {})
+    section.setdefault("provider_kind", "openai_compat")
+    section.update(updates)
 
     write_config_file(CONFIG_FILE, full_cfg)
 
@@ -811,7 +815,7 @@ async def get_model_presets(auth=Depends(require_scopes("admin"))):
     routing_effective = {
         profile_name: {
             **{category: resolve_category_info(category, profile_name=profile_name)
-               for category in ('ime_judge', 'probe', 'detect_emotion', 'letter_eval', 'invariants_relation')},
+               for category in ('ime_judge', 'probe', 'summary', 'detect_emotion', 'letter_eval', 'invariants_relation')},
             "scenario_reconcile": resolve_category_info(
                 "scenario_reconcile", profile_name=profile_name
             ),

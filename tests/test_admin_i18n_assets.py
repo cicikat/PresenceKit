@@ -391,3 +391,16 @@ def test_operator_copy_does_not_oscillate_with_language_observers():
     result = subprocess.run([node, "tests/admin_copy_i18n.cjs"], cwd=ROOT,
                             capture_output=True, text=True, encoding="utf-8")
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_setup_refresh_preserves_new_input_and_latest_response():
+    import shutil
+    import subprocess
+    import pytest
+
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node is required for the admin JavaScript regression")
+    result = subprocess.run([node, "tests/setup_input_races.cjs"], cwd=ROOT,
+                            capture_output=True, text=True, encoding="utf-8")
+    assert result.returncode == 0, result.stdout + result.stderr

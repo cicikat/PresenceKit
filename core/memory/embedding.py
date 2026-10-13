@@ -16,6 +16,12 @@ class EmbeddingUnavailable(Exception):
     """Raised when the provider is unreachable, misconfigured, or unimplemented."""
 
 
+def connection_configured(cfg: dict) -> bool:
+    """Example credentials are unconfigured, never a reason to contact a provider."""
+    values = [str(cfg.get(key) or "").strip() for key in ("base_url", "api_key", "model")]
+    return all(value and not value.upper().startswith(("YOUR_", "YOUR-")) for value in values)
+
+
 async def embed(texts: list[str]) -> list[list[float]]:
     """Encode texts into embedding vectors. Raises EmbeddingUnavailable on failure."""
     cfg = _load_config()
@@ -43,20 +49,17 @@ def _load_config() -> dict:
 
 
 async def _embed_openai_compat(texts: list[str], cfg: dict) -> list[list[float]]:
+    if not connection_configured(cfg):
+        raise EmbeddingUnavailable("embedding config requires usable base_url, api_key, and model")
     try:
         from openai import AsyncOpenAI
     except ImportError as e:
         raise EmbeddingUnavailable("openai package not installed") from e
 
-    base_url: str = cfg.get("base_url", "")
-    api_key: str = cfg.get("api_key", "")
-    model: str = cfg.get("model", "")
-    batch_size: int = int(cfg.get("batch_size", 32))
-
-    if not base_url or not api_key or not model:
-        raise EmbeddingUnavailable(
-            "embedding config requires base_url, api_key, and model"
-        )
+    base_url: str = cfg["base_url"].strip()
+    api_key: str = cfg["api_key"].strip()
+    model: str = cfg["model"].strip()
+    batch_size: int = max(1, int(cfg.get("batch_size", 32)))
 
     client = AsyncOpenAI(base_url=base_url, api_key=api_key)
     results: list[list[float]] = []
@@ -72,6 +75,8 @@ async def _embed_openai_compat(texts: list[str], cfg: dict) -> list[list[float]]
         from core.api_call_log import append
         append(caller="embedding", purpose="encode", provider="openai_compat", model=model, duration_ms=int((time.perf_counter() - started_at) * 1000), ok=False, output_hint=type(e).__name__)
         raise EmbeddingUnavailable(f"embedding API call failed: {e}") from e
+    finally:
+        await client.close()
     from core.api_call_log import append
     append(caller="embedding", purpose="encode", provider="openai_compat", model=model, duration_ms=int((time.perf_counter() - started_at) * 1000), ok=True, output_hint=f"{len(texts)}_texts")
     return results

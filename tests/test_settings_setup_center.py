@@ -47,6 +47,20 @@ def _patch(monkeypatch, path):
     monkeypatch.setattr(llm_client, "reload_client", no_reload)
 
 
+def test_setup_edits_default_preset_used_by_runtime(tmp_path, monkeypatch):
+    path = _write(tmp_path, yaml.safe_dump({"model_presets": {
+        "default_preset": "selected", "active_routing": "default",
+        "routing_profiles": {"default": {}},
+        "presets": {"first": {"model": "unchanged"}, "selected": {"model": "before"}},
+    }}, sort_keys=False))
+    _patch(monkeypatch, path)
+    assert asyncio.run(mod.get_base_model(auth=None))["preset_name"] == "selected"
+    asyncio.run(mod.update_base_model(mod.BaseModelUpdate(model="after"), auth=None))
+    presets = yaml.safe_load(path.read_text(encoding="utf-8"))["model_presets"]["presets"]
+    assert presets["selected"]["model"] == "after"
+    assert presets["first"]["model"] == "unchanged"
+
+
 # ── /settings/base-model — 无 model_presets ─────────────────────────────────
 
 def test_base_model_missing_presets_is_not_configured(tmp_path, monkeypatch):
@@ -140,6 +154,7 @@ def test_embedding_write_marks_configured(tmp_path, monkeypatch):
     cfg = yaml.safe_load(path.read_text(encoding="utf-8"))
     assert cfg["embedding"]["api_key"] == "sk-realembedkey"
     assert cfg["embedding"]["dim"] == 1024
+    assert cfg["embedding"]["provider_kind"] == "openai_compat"
 
 
 def test_embedding_dim_out_of_range_rejected(tmp_path, monkeypatch):

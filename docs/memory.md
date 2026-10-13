@@ -1732,7 +1732,7 @@ Phase 6 之前现实对话对 hidden_state 零写入（只被 Dream 单向喂养
 - 存储：per-user `vector_store.db`（sqlite-vec，派生数据，gitignore）
 - 接口：`embed()` in `core/memory/embedding.py`；`upsert/query/rebuild` in `core/memory/vector_store.py`
 - 挂接：episodic 落盘后异步 upsert；event_log 每轮 post_process_critical 后异步 upsert；fetch_context 并联语义召回
-- fail-open：embedding 不可达时回退关键词路径，主回复不受影响
+- fail-open：embedding 不可达时回退关键词路径，主回复不受影响。缺失连接字段或示例 YOUR_ / YOUR- 凭据在统一编码边界直接判为未配置，不发起网络重试；每次编码结束（含失败、取消）关闭客户端。
 
 ---
 

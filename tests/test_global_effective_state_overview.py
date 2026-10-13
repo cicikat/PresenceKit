@@ -3,6 +3,18 @@ from pathlib import Path
 from types import SimpleNamespace
 
 
+def test_embedding_effective_state_requires_usable_key():
+    from core.control_center.effective_state import _embedding_row
+    cfg = {"embedding": {"provider_kind": "openai_compat", "base_url": "https://example.invalid", "model": "fixture", "dim": 2}}
+    for key in (None, "YOUR_EMBEDDING_KEY", ""):
+        cfg["embedding"]["api_key"] = key
+        assert _embedding_row(cfg)["effective_value"] is False
+    cfg["embedding"]["api_key"] = "fixture-key"
+    assert _embedding_row(cfg)["effective_value"] is True
+    cfg["embedding"]["provider_kind"] = "self_hosted"
+    assert _embedding_row(cfg)["effective_value"] is False
+
+
 def test_character_can_enable_tool_loop_when_global_default_is_off(monkeypatch):
     from core.control_center.effective_state import _tool_loop_row
     from core import pipeline_registry, tool_dispatcher
