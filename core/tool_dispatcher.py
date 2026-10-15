@@ -2473,6 +2473,7 @@ def get_tools_schema(
     categories: 若提供，仅返回该分类内的工具；None 返回全部。
     """
     char_name = get_active_char_name()
+    from core.prompt_language import tool_description, tool_parameters
     schemas = []
     for name, info in _TOOL_REGISTRY.items():
         if name in _QZONE_TOOL_NAMES:
@@ -2502,8 +2503,8 @@ def get_tools_schema(
             "type": "function",
             "function": {
                 "name": name,
-                "description": str(info.get("description") or "").replace("{char}", char_name),
-                "parameters": info.get("parameters") or {"type": "object", "properties": {}},
+                "description": tool_description(name, str(info.get("description") or "")).replace("{char}", char_name),
+                "parameters": tool_parameters(info.get("parameters") or {"type": "object", "properties": {}}, tool_name=name),
             },
         })
     schemas = [

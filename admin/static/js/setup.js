@@ -393,6 +393,7 @@ async function tryLogin(key, silent) {
       return false;
     }
     localStorage.setItem('qq_admin_key', key);
+    await loadAdminPromptLanguage();
     document.getElementById('auth-overlay').style.display = 'none';
     document.getElementById('app').style.display = 'flex';
     document.getElementById('nav-host').textContent = window.location.host;
@@ -420,6 +421,7 @@ async function doLogin() {
 }
 
 function logout() {
+  _promptLanguageReady = false;
   localStorage.removeItem('qq_admin_key');
   clearRememberedPage();
   TOKEN = '';

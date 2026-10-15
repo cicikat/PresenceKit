@@ -1222,3 +1222,7 @@ current/local: desktop Room TV v02/v03 edit mode supports original/soft/cel, per
 生活记录按角色分库；sync body 可带 char_id，列表/详情/观测/重试支持 char_id query，省略时入口固定当前角色。识别 job 固定原角色。手机缓存、编辑器及队列 realm 增加 char_id，旧无归属队列保留且不自动上传；切角色后旧编辑器失效。生活记录 capabilities 返回 char_id，观测返回对应角色状态。条目世界书/提示词 GET 返回 char_id，管理面后续写入/导入/导出固定加载时的角色。群聊上下文按角色隔离；旧共享缓存保留而不自动回流。原生活记录库只能显式指定角色、dry-run 后迁移，不覆盖目标。真实手机和模型验收 not-run。
 
 288 C5：`/settings/diary` 和 `/integrations/diary/sync{,/status}` 支持 char_id query，镜像与后端源配置均隔离。桌面选目录保存绑定角色，批次使用该固定角色；旧未绑定目录需重新选择。日记注入读写传入当前角色，角色数据管理包含日记/镜像及三种角色行库计数。手机不消费 Obsidian 同步。原共享日记证据保留，不自动分发。
+
+## 框架提示词语言（291）
+
+`current`：`GET/POST /settings/prompt-language` 是管理面消费的后端设置接口，GET需persona、POST需admin；请求language仅zh/en，响应language/effective_language/default。管理面语言菜单负责保存与错误展示。后端为所有渠道组装同一语言的框架模板；桌面/手机无新协议或设置入口，角色卡、历史和证据正文保持原文。`observe`：真实模型与全部功能组合prompt快照未验收，详见 [prompt-language.md](prompt-language.md)。

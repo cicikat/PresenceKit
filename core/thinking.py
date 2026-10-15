@@ -372,6 +372,8 @@ def build_reasoning_kwargs(
 # monologue 路线：前置独白
 # ---------------------------------------------------------------------------
 
+from core.prompt_language import choose as _pc
+
 _MONOLOGUE_SYSTEM_TEMPLATE = (
     "你是{char_name}。看到对方刚说的话，先在心里想一下："
     "对方想要什么/你此刻的情绪/你打算怎么回。\n"
@@ -436,20 +438,20 @@ async def _run_monologue_call(messages: list[dict], *, char_id: str | None) -> s
             )[:6000]
             mono_messages = [
                 {"role": "system", "content": (
-                    f"以下是此刻的人设，心声保持其中的性格与关系：\n{persona}\n\n"
+                    _pc('以下是此刻的人设，心声保持其中的性格与关系：\n', 'Current character context; preserve its personality and relationship in your inner voice:\n') + persona + '\n\n'
                     + voice["prompt"]
-                    + f"\n只写心声本身，约{get_monologue_max_tokens()}字以内，不写标题、标签或回复正文。"
+                    + _pc(f"\n只写心声本身，约{get_monologue_max_tokens()}字以内，不写标题、标签或回复正文。", f'\nWrite only the inner voice, within about {get_monologue_max_tokens()} characters. No heading, tags, or reply body.')
                 )},
-                {"role": "user", "content": f"你刚说：{user_msg}\n最近的对话：\n{hist_summary}"},
+                {"role": "user", "content": _pc('你刚说：', 'You just said: ') + user_msg + _pc('\n最近的对话：\n', '\nRecent dialogue:\n') + hist_summary},
             ]
         else:
             from core.character_name_provider import get_char_name
-            system = _MONOLOGUE_SYSTEM_TEMPLATE.format(
+            system = _pc(_MONOLOGUE_SYSTEM_TEMPLATE, 'You are {char_name}. Before replying, privately consider what the other person wants, your current emotion, and your response. Casual, fragmented thoughts are fine, within {max_chars} characters. Output only inner thoughts, without prefixes, tags, or quotation marks.').format(
                 char_name=get_char_name(char_id), max_chars=get_monologue_max_tokens()
             )
             mono_messages = [
                 {"role": "system", "content": system},
-                {"role": "user", "content": f"对方刚说：{user_msg}\n你的心情：{_mood_hint(char_id)}\n最近两轮对话：\n{hist_summary}"},
+                {"role": "user", "content": _pc('对方刚说：', 'The other person just said: ') + user_msg + _pc('\n你的心情：', '\nYour mood: ') + _mood_hint(char_id) + _pc('\n最近两轮对话：\n', '\nLast two dialogue turns:\n') + hist_summary},
             ]
 
         from core import llm_client

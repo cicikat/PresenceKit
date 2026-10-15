@@ -149,6 +149,16 @@ def grounding_message(
             "再回答事实；只有口头承诺、历史痕迹或模型自述都不算调用。调用失败/未暴露时，"
             "不得声称已经查到、控制、完成或执行。"
         )
+    from core.prompt_language import choose
+    english_names = ', '.join(names) or 'available tools'
+    english = (
+        '[Current tool facts] A successful tool result was received this turn. Base claims only on that result, not historical actions.'
+        if result_validity == 'current_turn' else
+        f'[Current tool facts] The user explicitly requested {english_names} this turn, but no confirmed successful result was obtained. Do not claim you found, controlled, completed, or executed anything; acknowledge failure or uncertainty.'
+        if result_validity in {'execution_failed', 'outcome_unknown'} else
+        f'[Current tool facts] The user explicitly requested {english_names} this turn. Actually call an available tool and obtain success before asserting the corresponding fact. Promises, historical traces, and model claims are not execution. If unavailable or failed, do not claim completion.'
+    )
+    content = choose(content, english)
     return {
         "role": "system",
         "content": content,
@@ -181,9 +191,10 @@ def has_successful_tool_message(messages: list[dict]) -> bool:
         content = str(message.get("content") or "")
         if "<<<TOOL_DATA_START>>>" not in content:
             continue
-        if role == "tool" and "本轮刚生成" in content:
+        header = content.split('<<<TOOL_DATA_START>>>', 1)[0]
+        if role == "tool" and ("本轮刚生成" in header or "generated this turn" in header):
             return True
-        if role == "system" and message.get("_layer") == "10_tool_result" and "本轮刚生成" in content:
+        if role == "system" and message.get("_layer") == "10_tool_result" and ("本轮刚生成" in header or "generated this turn" in header):
             return True
     return False
 
@@ -217,10 +228,11 @@ def check_unverified_claim(
 
 
 def build_claim_nudge(char_name: str, tool_names: list[str] | None = None) -> str:
+    from core.prompt_language import choose
     names = "、".join(tool_names or []) or "所需工具"
-    return (
+    return choose((
         f"【系统提示】你刚才的回复声称事情已经办成，但本轮 {names} 并没有得到可确认的成功结果。"
         f"请以{char_name}自己的口吻重写这条回复：如实、自然地表达还没办成或结果不确定，"
         "不要声称已经查到、完成或执行，也不要提及系统提示或工具机制。"
-    )
+    ), f'[System reminder] Your previous reply claimed completion, but {", ".join(tool_names or []) or "the required tools"} produced no confirmed success this turn. Rewrite naturally in the voice of {char_name}, acknowledging that the action is incomplete or uncertain. Do not claim success or mention system reminders or tool implementation.')
 

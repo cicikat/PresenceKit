@@ -368,6 +368,8 @@ async def chat(
     """
     from core.no_outbound import assert_outbound_allowed
     assert_outbound_allowed("llm")
+    from core.prompt_language import tool_schemas
+    tools = tool_schemas(tools)
     _timeout = category_timeout(call_category)
 
     # vision 模式走独立 vision client，不经过文本 preset 路由
@@ -668,6 +670,8 @@ async def chat_turn(
     char_id: 显式指定"替谁说话"时传（Brief 30）；None（默认）按活跃角色解析。
     is_proactive: 本次是否 scheduler 主动消息（Brief 32）。
     """
+    from core.prompt_language import tool_schemas
+    tools = tool_schemas(tools)
     mc, prepared, gen_kwargs = _prepare_call(
         messages, call_category, max_tokens_override, char_id=char_id, is_proactive=is_proactive,
     )

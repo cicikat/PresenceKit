@@ -1138,3 +1138,7 @@ QQ 发送模式：消息分发与客户端设置 → QQ 回复范围，qq.outbou
 # 288 日记源角色归属
 
 后端日记源 `/settings/diary` 以 char_id 为键保存于 diary.by_character，管理页固定加载角色后保存并热重载。新角色没有源时只读自己的日记目录，旧全局 obsidian_path 不自动继承；旧值保留供人工归属。远程日记镜像及观测支持 char_id，日记注入使用同一角色桶。桌面本地目录另由客户端保存绑定角色，旧未绑定目录需重新选择。
+
+## 框架提示词语言（291）
+
+管理面登录后的语言菜单同时管理 `prompt_language: zh|en`（默认zh；切回zh恢复原中文框架）。`GET /settings/prompt-language`（persona）返回 language/effective_language/default；`POST`（admin）严格校验并原子保存、热重载。前端先保存后切换，失败恢复旧显示并报错；登录以服务端为准。所有后端聊天/主动链共享，桌面和手机没有独立设置。角色卡、历史及原始资料不翻译，不强制回复语言。详见 [prompt-language.md](prompt-language.md)。

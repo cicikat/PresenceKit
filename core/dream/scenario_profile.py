@@ -7,6 +7,8 @@ Dream world and body layers remain explicitly excluded.
 """
 from __future__ import annotations
 
+from core.prompt_language import text as _pt
+
 from typing import Any
 
 SCENARIO_PROMPT_PROFILE = "scenario"
@@ -60,9 +62,9 @@ def scenario_identity_projection(character: Any) -> str:
         description = _bounded_text(getattr(character, "description", ""))
         personality = _bounded_text(getattr(character, "personality", ""))
         if description:
-            parts.append(f"外貌与基础设定：\n{description}")
+            parts.append((_pt('外貌与基础设定：\n') + f'{description}'))
         if personality:
-            parts.append(f"基础性格与说话方式：\n{personality}")
+            parts.append((_pt('基础性格与说话方式：\n') + f'{personality}'))
         return "\n\n".join(parts)
     except Exception:
         return ""

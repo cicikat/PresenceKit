@@ -5,6 +5,8 @@
 Pipeline 实例持有角色卡和世界书引擎的引用，在 main.py 中初始化后全程复用。
 """
 
+from core.prompt_language import text as _pt
+
 import asyncio
 import json
 import logging
@@ -1468,10 +1470,8 @@ class Pipeline:
                 "Do not invent capability names, outcomes, or parameters. " + recap[:6000]
             )})
         loop_msgs.insert(0, {"role": "system", "_layer": "11.6_tool_discovery", "content": (
-            "工具按分类加载。先调用 load_tools_ 分类入口，再在下一轮使用获得的具体工具定义。"
-            "每个入口的描述里列出了当前可用工具名与内置工具用途：需要其中某个工具时先加载对应分类，不要因为当前没看到定义就认为该能力不存在。"
-            "分类加载只提供定义，不是业务执行或成功证据。未加载的工具不得调用或猜测参数。"
-            + (("找工具的方向：" + discovery.routing_hint()) if discovery.routing_hint() else "")
+            _pt('工具按分类加载。先调用 load_tools_ 分类入口，再在下一轮使用获得的具体工具定义。每个入口的描述里列出了当前可用工具名与内置工具用途：需要其中某个工具时先加载对应分类，不要因为当前没看到定义就认为该能力不存在。分类加载只提供定义，不是业务执行或成功证据。未加载的工具不得调用或猜测参数。')
+            + ((_pt('找工具的方向：') + discovery.routing_hint()) if discovery.routing_hint() else "")
         )})
         image_refs = [
             ref for ref in (media_refs or [])
@@ -1479,8 +1479,7 @@ class Pipeline:
         ]
         if image_refs:
             loop_msgs.insert(0, {"role": "system", "content": (
-                "本轮收到的图片可再次读取。需要更仔细查看时调用 reread_image，使用下面的 sha256；"
-                "不要猜测或编造指纹：\n" + "\n".join(
+                _pt('本轮收到的图片可再次读取。需要更仔细查看时调用 reread_image，使用下面的 sha256；不要猜测或编造指纹：\n') + "\n".join(
                     f"- {ref.get('filename', 'image')}: {ref['sha256']}" for ref in image_refs[-8:]
                 )
             ), "_layer": "11.3_image_references"})
@@ -1492,7 +1491,7 @@ class Pipeline:
             if _grounding:
                 loop_msgs.insert(max(0, len(loop_msgs) - 1), _grounding)
         if self_management_context is not None:
-            loop_msgs.insert(0, {"role": "system", "content": f"可自主管理的功能状态：{json.dumps(self_management_context, ensure_ascii=False)}。需要时先加载self_management，再用manage_self_capability调整这些ID；携带当前revision和新的action_id，执行后读取有效状态确认结果。冻结、未授权或不在清单中的开关不能自行开启。", "_layer": "11.4_self_management"})
+            loop_msgs.insert(0, {"role": "system", "content": (_pt('可自主管理的功能状态：') + f'{json.dumps(self_management_context, ensure_ascii=False)}' + _pt('。需要时先加载self_management，再用manage_self_capability调整这些ID；携带当前revision和新的action_id，执行后读取有效状态确认结果。冻结、未授权或不在清单中的开关不能自行开启。')), "_layer": "11.4_self_management"})
         if "read_self_action_history" in _final_tool_names:
             loop_msgs.insert(0, {"role": "system", "content": (
                 "When asked what Self Capability changes you made or which failed, read_self_action_history first. "
@@ -1517,24 +1516,7 @@ class Pipeline:
             loop_msgs.insert(len(loop_msgs) - 1, {
                 "role": "system",
                 "content": (
-                    "工具是你的手脚。需要查询、阅读、记录、修改或操作时，主动使用本轮可用工具，"
-                    "不要等对方反复催促，也不要凭记忆编造。先加载相应分类，再调用具体工具；"
-                    "拿到中间结果后继续完成必要步骤，直到实际完成或遇到明确阻碍。"
-                    "口头承诺、角色台词和动作描写不能代替执行；角色口吻用来回应真实结果。"
-                    "对方纠正目标、对象或来源时，立即按最新要求调整行动，停止为之前的理解辩解。"
-                    "修改以前交付的文件用 artifacts：定位原工件、读取正文、更新并核对结果；"
-                    "自己的私有笔记用 self；用户上传的资料用 search_documents/read_document；"
-                    "用户长消息原文才用 read_long_user_message，不能拿它代替你写过的文件。"
-                    "不知道文件位置就先查列表；只有真实缺少必要参数、工具未提供或执行被拒绝时"
-                    "才说明具体阻碍，不凭印象宣称没有权限，也不声称记得正文而省略读取。"
-                    "优先发起结构化工具调用；只有确实没法走结构化调用时，才在自然语言回复末尾"
-                    "附加「{true: 具体要做什么，参数是什么}」请求执行，不只用文字暗示。"
-                    "不需要再调用工具时什么都不加，不要输出内部协议标记。"
-                    "工具调用这个动作本身是系统内部静默完成的，不是说给对方听、也不是"
-                    "演给对方看的内容：禁止把工具名、参数、调用语法当成台词念出来或写进"
-                    "（）动作描写里；对方说「去调用工具玩一下」只是在推动你去做这件事，"
-                    "不是要你复述你打算怎么调。你的回复永远只是你这个角色本身的自然语言"
-                    "反应，调用细节只对系统可见。"
+                    _pt('工具是你的手脚。需要查询、阅读、记录、修改或操作时，主动使用本轮可用工具，不要等对方反复催促，也不要凭记忆编造。先加载相应分类，再调用具体工具；拿到中间结果后继续完成必要步骤，直到实际完成或遇到明确阻碍。口头承诺、角色台词和动作描写不能代替执行；角色口吻用来回应真实结果。对方纠正目标、对象或来源时，立即按最新要求调整行动，停止为之前的理解辩解。修改以前交付的文件用 artifacts：定位原工件、读取正文、更新并核对结果；自己的私有笔记用 self；用户上传的资料用 search_documents/read_document；用户长消息原文才用 read_long_user_message，不能拿它代替你写过的文件。不知道文件位置就先查列表；只有真实缺少必要参数、工具未提供或执行被拒绝时才说明具体阻碍，不凭印象宣称没有权限，也不声称记得正文而省略读取。优先发起结构化工具调用；只有确实没法走结构化调用时，才在自然语言回复末尾附加「{true: 具体要做什么，参数是什么}」请求执行，不只用文字暗示。不需要再调用工具时什么都不加，不要输出内部协议标记。工具调用这个动作本身是系统内部静默完成的，不是说给对方听、也不是演给对方看的内容：禁止把工具名、参数、调用语法当成台词念出来或写进（）动作描写里；对方说「去调用工具玩一下」只是在推动你去做这件事，不是要你复述你打算怎么调。你的回复永远只是你这个角色本身的自然语言反应，调用细节只对系统可见。')
                     + ("\n\n" + mcp_opaque_params_note if mcp_opaque_params_note else "")
                 ),
                 "_layer": "11.5_tool_nudge",
@@ -1645,7 +1627,7 @@ class Pipeline:
             if discovery_result:
                 # Local protocol receipt; never mark schema discovery as business
                 # success (or as a failed business execution).
-                return result or "分类未加载；未执行任何业务操作。"
+                return result or _pt('分类未加载；未执行任何业务操作。')
             if ask_confirm:
                 return ask_confirm
             if result:
@@ -1658,7 +1640,7 @@ class Pipeline:
                     else "execution_failed"
                 )
                 return frame_tool_message(result, generated_at=generated_at, validity=validity)
-            return "（工具无结果或执行失败）"
+            return _pt('（工具无结果或执行失败）')
 
         async def _resolve_relay_intent(intent_text: str) -> list[dict]:
             """Brief 120·工具循环二次调用兜底：把 {true:...} 里模型自标注的干净意图
@@ -1675,7 +1657,7 @@ class Pipeline:
                 categories,
                 allowed_tool_names=exposed_tool_names,
             )
-            relay_system += "\n未加载的分类只能调用当前提供的 load_tools_ 入口（参数为 {}），不能直接选择具体工具。"
+            relay_system += _pt('\n未加载的分类只能调用当前提供的 load_tools_ 入口（参数为 {}），不能直接选择具体工具。')
             try:
                 relay_response = await llm_client.chat(
                     [
@@ -1729,7 +1711,7 @@ class Pipeline:
                         _record_discovery(category="tool_loop_discovery", code="unoffered_call", status="attention")
                         return ToolExecutionOutcome(
                             status="tool_failed",
-                            result="工具调用被拒绝：本轮未提供该工具。请先加载分类。",
+                            result=_pt('工具调用被拒绝：本轮未提供该工具。请先加载分类。'),
                         )
                     if name.startswith(_discovery_prefix):
                         result, loaded = discovery.load(name, tc["arguments"])

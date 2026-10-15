@@ -12,6 +12,7 @@ import sqlite3
 import time
 
 from core.sandbox import get_paths
+from core.prompt_language import language, choose
 
 logger = logging.getLogger(__name__)
 WINDOW = 24 * 3600
@@ -99,6 +100,28 @@ def _clip(value, limit):
 
 def _material_summary(kind, row):
     """Readable excerpt with the stable ID accepted by its scoped read tool."""
+    if language() == 'en':
+        if kind == 'upload':
+            lines = [_clip(row.get('filename'), 80) or 'Unnamed file']
+            if row.get('document_id'):
+                lines.append(f"document_id={row['document_id']}; use read_document for the original and read_document_notes for notes.")
+            lines.extend(filter(None, (_clock_text(row.get('created_at')), _clip(row.get('summary'), 280))))
+            overview = row.get('overview') or {}
+            if overview.get('text'):
+                lines.append(f"Saved overview ({overview.get('status')}; first {overview.get('covered_chars', 0)}/{row.get('total_chars', 0)} characters): " + _clip(overview['text'], 700))
+            progress = row.get('progress') or {}
+            if row.get('source') == 'upload_file':
+                lines.append(f"Body supplied: {progress.get('provided_chars', 0)}/{row.get('total_chars', 0)} characters; next unread offset {progress.get('next_unread_offset', 0)}. Supplied does not mean understood. Use continue mode.")
+            lines.append('Existing description or excerpts are available; reread with tools for details.')
+        else:
+            title = _clip(row.get('title'), 80) or 'Life record'
+            category = _clip(row.get('category'), 40)
+            lines = [f'{title} ({category})' if category else title]
+            if row.get('id'):
+                lines.append(f"record_id={row['id']}; reread with read_life_records.")
+            lines.extend(filter(None, (_clock_text(row.get('updated_at') or row.get('occurred_on')), _clip(row.get('note') or row.get('recognition_description'), 280))))
+            lines.append('User record; model descriptions are unconfirmed and user corrections take priority. Use life-record tools for the full content.')
+        return '\n'.join(lines)
     if kind == 'upload':
         title = _clip(row.get('filename'), 80) or '未命名文件'
         when = _clock_text(row.get('created_at'))
@@ -171,13 +194,13 @@ def messages(uid, char_id, *, now=None):
             message = {
                 'role': 'system', '_layer': '10.6_pending_material' if unread else '10.7_recent_material',
                 '_drop_priority': 85,
-                'content': ('用户发来的文件：\n' if kind == 'upload' else '用户生活记录：\n') + summary[:1500],
+                'content': (choose('用户发来的文件：\n', 'File sent by the user:\n') if kind == 'upload' else choose('用户生活记录：\n', 'User life record:\n')) + summary[:1500],
                 '_continuity_receipt': {'uid': uid, 'char_id': char_id, 'kind': kind, 'id': identity, 'revision': revision},
             }
             if not unread:
                 message.pop('_continuity_receipt')
                 if kind == 'upload':
-                    message['content'] = '你可以调用工具回放用户曾发给你的文件具体内容。'
+                    message['content'] = choose('你可以调用工具回放用户曾发给你的文件具体内容。', 'Use the available tools to reread files the user previously sent.')
                 else:
                     message['content'] = summary[:1500]
             (pending if unread else recent).append((timestamp, message))
@@ -306,6 +329,11 @@ def _tool_result_projection(row, pronoun):
     keys = set(row.keys())
     device = row['device'] if 'device' in keys else None
     talk_sent = row['talk_sent'] if 'talk_sent' in keys else None
+    if language() == 'en':
+        location = f' on the user {device}' if device else ''
+        speech = 'spoke' if talk_sent not in (None, 0) else 'did not speak'
+        return (f'{when} During an autonomous wake you used {row["tool"]}{location}: '
+                f'{_readable_content(row["tool"], row["content"])}. You {speech}.')
     phrase = _device_phrase(device, pronoun)
     spoken = '有' if talk_sent not in (None, 0) else '无'
     location = f' {phrase}' if phrase else ''

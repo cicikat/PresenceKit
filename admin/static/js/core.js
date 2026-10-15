@@ -8,6 +8,30 @@ let _allUsers = [];
 const ACTIVE_PAGE_SESSION_KEY = 'admin_active_page';
 window._charName = '叶瑄';  // fallback; overwritten after login by _initCharName()
 
+let _promptLanguageReady = false;
+let _promptLanguageSaving = false;
+window.saveAdminPromptLanguage = async (uiLanguage) => {
+  // Before sign-in only the local UI language changes. Authenticated changes
+  // persist first, so an error never advertises an unapplied prompt language.
+  if (!_promptLanguageReady) return;
+  if (_promptLanguageSaving) throw new Error('A language change is already being saved.');
+  _promptLanguageSaving = true;
+  try {
+    const language = uiLanguage === 'en' ? 'en' : 'zh';
+    const result = await api('POST', '/settings/prompt-language', {language});
+    if (result.effective_language !== language) throw new Error('Prompt language was not applied.');
+  } finally {
+    _promptLanguageSaving = false;
+  }
+};
+
+async function loadAdminPromptLanguage() {
+  _promptLanguageReady = false;
+  const result = await api('GET', '/settings/prompt-language');
+  await AdminI18n.setLanguage(result.effective_language === 'en' ? 'en' : 'zh-CN', {persistPrompt: false});
+  _promptLanguageReady = true;
+}
+
 window.addEventListener('admin-language-changed', () => {
   const activePage = document.querySelector('.page.active');
   const appVisible = document.getElementById('app').style.display !== 'none';
@@ -20,7 +44,7 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = '289-first-run-20261013';
+const ADMIN_UI_FRAGMENT_VERSION = '291-prompt-language-20261015';
 
 const ADMIN_PAGE_ALIASES = Object.freeze({overview:'setup', users:'character', 'operations-center':'status', memory: 'observe-memory', 'creation-center':'data-management', 'observe-existence':'observe-dream'});
 

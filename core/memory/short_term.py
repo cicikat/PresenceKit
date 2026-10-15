@@ -776,11 +776,13 @@ def get_anti_collapse_hint(
     parts: list[str] = []
     if state["length_remaining"] > 0:
         if state["length_text"]:
-            parts.append(state["length_text"])
+            from core.prompt_language import text
+            parts.append(text(state["length_text"]))
         state["length_remaining"] -= 1
 
     if state["segment_remaining"] > 0:
-        parts.append(_SEGMENT_HINT_TEXT)
+        from core.prompt_language import text
+        parts.append(text(_SEGMENT_HINT_TEXT))
         state["segment_remaining"] -= 1
 
     return " ".join(parts) if parts else None

@@ -22,6 +22,8 @@ Layer order (D0-D8 → system content; D9 → history messages; D10 → user msg
 ★ D9 绝不过现实 sanitizer；全程无 retrieve / 无 mood_state / 无 author_note_extra。
 """
 
+from core.prompt_language import text as _pt
+
 import logging
 from dataclasses import dataclass, field
 from typing import Any
@@ -174,8 +176,8 @@ _DX_EXIT_PROTOCOL = """逃生协议（系统层，不可撤销，{name}不可阻
 def _format_user_clause(user_name: str) -> str:
     """人称契约句里"谁是你"的分句。user_name 为空时用不含具体名字的写法。"""
     if user_name:
-        return f"梦里与你同在的人是{user_name}，"
-    return "梦里与你同在的用户，"
+        return (_pt('梦里与你同在的人是') + f'{user_name}' + '，')
+    return _pt('梦里与你同在的用户，')
 
 
 def _collect_scene_tags(
@@ -291,7 +293,7 @@ def build_dream_prompt(
     from core.dream.world_loader import load_world
     world = load_world(world_id)
 
-    char_name: str = getattr(character, "name", None) or "(角色未加载)"
+    char_name: str = getattr(character, "name", None) or _pt('(角色未加载)')
     _char_gender_raw = getattr(character, "gender", None)
     _char_gender: str = _char_gender_raw if isinstance(_char_gender_raw, str) else "neutral"
     from core.character_name_provider import _PRONOUN_MAP as _PM
@@ -304,7 +306,7 @@ def build_dream_prompt(
     # ── D0: jailbreak ────────────────────────────────────────────────────────
     _d0_note = f"preset={jailbreak_preset_name}"
     if jailbreak_text:
-        _d0 = f"# D0·破限 ─ {char_name}的自由边界\n{jailbreak_text}"
+        _d0 = (_pt('# D0·破限 ─ ') + f'{char_name}' + _pt('的自由边界\n') + f'{jailbreak_text}')
         system_layers.append(_d0)
         _d0_flags = [jailbreak_preset_status.upper()] if jailbreak_preset_status else []
         _records.append(_LayerRec("D0_jailbreak", len(_d0), _est_tokens(_d0), flags=_d0_flags, note=_d0_note, content=_d0))
@@ -315,16 +317,16 @@ def build_dream_prompt(
     _scenario_profile = dream_mode == "scenario" and dream_domain != "group"
     if _scenario_profile:
         from core.dream.scenario_profile import scenario_identity_projection
-        d1_parts = [f"# D1S·剧本身份投影 ─ {char_name}（固定）"]
+        d1_parts = [(_pt('# D1S·剧本身份投影 ─ ') + f'{char_name}' + _pt('（固定）'))]
         identity_projection = scenario_identity_projection(character)
         if identity_projection:
             d1_parts.append(identity_projection)
     else:
-        d1_parts = [f"# D1·身份核心 ─ {char_name}（固定）"]
+        d1_parts = [(_pt('# D1·身份核心 ─ ') + f'{char_name}' + _pt('（固定）'))]
         for label, field_name in (
-            ("角色卡核心规则", "system_prompt"),
-            ("角色设定", "description"),
-            ("性格", "personality"),
+            (_pt('角色卡核心规则'), "system_prompt"),
+            (_pt('角色设定'), "description"),
+            (_pt('性格'), "personality"),
         ):
             value = getattr(character, field_name, "") or ""
             if isinstance(value, list):
@@ -332,14 +334,12 @@ def build_dream_prompt(
             if isinstance(value, str) and value.strip():
                 d1_parts.append(f"{label}：\n{value.strip()}")
     _d1_awareness = _D1_NON_LUCID_AWARENESS if lucid_mode == "non_lucid" else _D1_LUCID_AWARENESS
-    d1_parts.append(_d1_awareness.format(
+    d1_parts.append(_pt(_d1_awareness).format(
         name=char_name, pronoun=char_pronoun, user_clause=_format_user_clause(user_name),
     ))
     if dream_mode == "scenario":
         d1_parts.append(
-            "剧本模式身份边界：保留核心人格与表达连续性，但当前剧本角色的公开立场、"
-            "目标和可见行动以 DS 当前阶段为准。内在关心、依恋或犹豫可以存在，不能自动"
-            "改写成放弃立场、解除限制或跳过剧情后果；只有当前阶段或用户的明确退出请求允许时才改变。"
+            _pt('剧本模式身份边界：保留核心人格与表达连续性，但当前剧本角色的公开立场、目标和可见行动以 DS 当前阶段为准。内在关心、依恋或犹豫可以存在，不能自动改写成放弃立场、解除限制或跳过剧情后果；只有当前阶段或用户的明确退出请求允许时才改变。')
         )
     _dream_behavior = _format_character_dream_behavior(character, dream_mode)
     if _dream_behavior:
@@ -359,7 +359,7 @@ def build_dream_prompt(
     # above D2 in precedence. Hard-disabled outside dream_domain="group"
     # (scenario-style guard, mirrors the D4.5/D5/DS/DM pattern below).
     if dream_domain == "group" and dg_layer_text:
-        _dg = f"# DG·梦内在场感\n{dg_layer_text}"
+        _dg = (_pt('# DG·梦内在场感\n') + f'{dg_layer_text}')
         system_layers.append(_dg)
         _records.append(_LayerRec("DG_group_presence", len(_dg), _est_tokens(_dg), content=_dg))
     else:
@@ -368,7 +368,7 @@ def build_dream_prompt(
 
     # ── D2: world_ruleset (loaded from world package, subordinate to D1) ─────
     if world.ruleset and not _scenario_profile:
-        _d2 = f"# D2·今晚梦的世界规则\n{world.ruleset}"
+        _d2 = (_pt('# D2·今晚梦的世界规则\n') + f'{world.ruleset}')
         system_layers.append(_d2)
         _records.append(_LayerRec("D2_world_ruleset", len(_d2), _est_tokens(_d2), content=_d2))
     else:
@@ -381,7 +381,7 @@ def build_dream_prompt(
     _mes_from_fallback = not bool(world.mes_example)
     example = world.mes_example or _get_dream_mes_example(char_name)
     if example and not _scenario_profile:
-        _d3 = f"# D3·梦境示例对话\n{example}"
+        _d3 = (_pt('# D3·梦境示例对话\n') + f'{example}')
         system_layers.append(_d3)
         _d3_flags = ["FALLBACK"] if _mes_from_fallback else []
         _records.append(_LayerRec("D3_mes_example", len(_d3), _est_tokens(_d3), _d3_flags, content=_d3))
@@ -405,7 +405,7 @@ def build_dream_prompt(
             reality_context_full_turns=reality_context_full_turns,
         )
     if snapshot_block:
-        _d4 = f"# D4·入梦前背景（冻结快照，只读）\n{snapshot_block}"
+        _d4 = (_pt('# D4·入梦前背景（冻结快照，只读）\n') + f'{snapshot_block}')
         system_layers.append(_d4)
         _records.append(_LayerRec("D4_frozen_reality", len(_d4), _est_tokens(_d4), content=_d4))
     else:
@@ -426,7 +426,7 @@ def build_dream_prompt(
             if _should_inject_hidden_state_snapshot(local_state, context_snapshot):
                 _d45_text = _format_hidden_state_snapshot(_hs_data)
                 if _d45_text:
-                    _d45 = f"# D4.5·用户隐性状态（只读快照）\n{_d45_text}"
+                    _d45 = (_pt('# D4.5·用户隐性状态（只读快照）\n') + f'{_d45_text}')
                     system_layers.append(_d45)
                     _records.append(_LayerRec("D4.5_hidden_state", len(_d45), _est_tokens(_d45), content=_d45))
                     _d45_injected = True
@@ -447,7 +447,7 @@ def build_dream_prompt(
     # D5 is always skipped for scenario to prevent style/mode boundary pollution.
     _d5_injected = False
     if body_projection_text and dream_mode != "scenario":
-        _d5 = f"# D5·她的身体感知\n{body_projection_text}"
+        _d5 = (_pt('# D5·她的身体感知\n') + f'{body_projection_text}')
         system_layers.append(_d5)
         _records.append(_LayerRec("D5_body_projection", len(_d5), _est_tokens(_d5), content=_d5))
         _d5_injected = True
@@ -458,7 +458,7 @@ def build_dream_prompt(
     # ── D6: scene_anchors ────────────────────────────────────────────────────
     scene_block = _format_scene_anchors(local_state)
     if scene_block and not _scenario_profile:
-        _d6 = f"# D6·场景锚点\n{scene_block}"
+        _d6 = (_pt('# D6·场景锚点\n') + f'{scene_block}')
         system_layers.append(_d6)
         _records.append(_LayerRec("D6_scene_anchors", len(_d6), _est_tokens(_d6), content=_d6))
     else:
@@ -471,9 +471,7 @@ def build_dream_prompt(
     if yexuan_tension > 0.05 and not _scenario_profile:
         _d7_bucket = _bucket_tension(yexuan_tension)
         _d7 = (
-            f"# D7·{char_name}情绪张力\n"
-            f"当前情绪张力水位：{_d7_bucket}\n"
-            f"（这是梦内累积的情绪紧绷程度，影响{char_name}的表达方式和反应灵敏度。）"
+            ('# D7·' + f'{char_name}' + _pt('情绪张力\n当前情绪张力水位：') + f'{_d7_bucket}' + _pt('\n（这是梦内累积的情绪紧绷程度，影响') + f'{char_name}' + _pt('的表达方式和反应灵敏度。）'))
         )
         system_layers.append(_d7)
         _records.append(_LayerRec("D7_dream_tension", len(_d7), _est_tokens(_d7), content=_d7))
@@ -486,10 +484,10 @@ def build_dream_prompt(
     # ── D8: dream_director ───────────────────────────────────────────────────
     if _scenario_profile:
         from core.dream.scenario_profile import SCENARIO_DIRECTOR
-        _d8 = f"# D8S·剧本导演注记\n{SCENARIO_DIRECTOR.format(name=char_name)}"
+        _d8 = _pt('# D8S·剧本导演注记\n') + _pt(SCENARIO_DIRECTOR).format(name=char_name)
     else:
         _d8_raw = _D8_DREAM_DIRECTOR_NON_LUCID if lucid_mode == "non_lucid" else _D8_DREAM_DIRECTOR
-        _d8 = f"# D8·梦境导演注记\n{_d8_raw.format(name=char_name)}"
+        _d8 = _pt('# D8·梦境导演注记\n') + _pt(_d8_raw).format(name=char_name)
     system_layers.append(_d8)
     _records.append(_LayerRec(
         "D8_dream_director", len(_d8), _est_tokens(_d8),
@@ -497,7 +495,7 @@ def build_dream_prompt(
     ))
 
     # Keep exit safety test-independent: D8 may be ablated, DX may not.
-    _dx = f"# DX·梦境退出协议\n{_DX_EXIT_PROTOCOL.format(name=char_name)}"
+    _dx = _pt('# DX·梦境退出协议\n') + _pt(_DX_EXIT_PROTOCOL).format(name=char_name)
     system_layers.append(_dx)
     _records.append(_LayerRec("DX_exit_protocol", len(_dx), _est_tokens(_dx), content=_dx))
 
@@ -511,7 +509,7 @@ def build_dream_prompt(
         try:
             _ds_text = _format_scenario_layer(scenario_core, injection_mode=scenario_injection_mode)
             if _ds_text:
-                _ds = f"# DS·剧本当前阶段\n{_ds_text}"
+                _ds = (_pt('# DS·剧本当前阶段\n') + f'{_ds_text}')
                 system_layers.append(_ds)
                 _records.append(_LayerRec("DS_scenario", len(_ds), _est_tokens(_ds), content=_ds))
                 _ds_injected = True
@@ -519,9 +517,9 @@ def build_dream_prompt(
                     "current_stage_id": scenario_core.get("current_stage_id"),
                     "injection_mode": scenario_injection_mode if scenario_injection_mode in {"strict_stage", "full_script"} else "strict_stage",
                     "stall_turns": int(scenario_core.get("stall_turns", 0) or 0),
-                    "recovery_injected": "【接住刚才的意图】" in _ds_text,
-                    "drift_pressure_injected": "漂移压力 / Drift Pressure" in _ds_text,
-                    "generic_recovery_injected": "轻量拉回" in _ds_text,
+                    "recovery_injected": _pt('【接住刚才的意图】') in _ds_text,
+                    "drift_pressure_injected": _pt('漂移压力 / Drift Pressure') in _ds_text,
+                    "generic_recovery_injected": _pt('轻量拉回') in _ds_text,
                 }
         except Exception as _ds_exc:
             logger.warning("[dream_prompt] DS scenario layer failed: %s", _ds_exc)
@@ -538,7 +536,7 @@ def build_dream_prompt(
         try:
             _dm_text = _format_mirror_layer(mirror_core)
             if _dm_text:
-                _dm = f"# DM·Mirror 梦境倾向材料\n{_dm_text}"
+                _dm = (_pt('# DM·Mirror 梦境倾向材料\n') + f'{_dm_text}')
                 system_layers.append(_dm)
                 _records.append(_LayerRec("DM_mirror", len(_dm), _est_tokens(_dm), content=_dm))
                 _dm_injected = True
@@ -550,7 +548,7 @@ def build_dream_prompt(
 
     # ── Dream lorebook (injected between D4 and D5 conceptually) ─────────────
     if lore_entries and not _scenario_profile:
-        _dlore = "# 梦境世界书\n" + "\n---\n".join(lore_entries)
+        _dlore = _pt('# 梦境世界书\n') + "\n---\n".join(lore_entries)
         system_layers.append(_dlore)
         _lore_note = f"{len(lore_entries)} entries"
         _records.append(_LayerRec("D_lorebook", len(_dlore), _est_tokens(_dlore), note=_lore_note, content=_dlore))
@@ -567,7 +565,7 @@ def build_dream_prompt(
     # chat roles for one character's own generation call. Never passes through
     # the reality sanitizer (Brief 100 §2 D9).
     if dream_domain == "group" and shared_transcript_block is not None:
-        _d9g = f"# D9·梦内共享对话（{char_name}视角，speaker 前缀，不过现实 sanitizer）\n{shared_transcript_block}"
+        _d9g = (_pt('# D9·梦内共享对话（') + f'{char_name}' + _pt('视角，speaker 前缀，不过现实 sanitizer）\n') + f'{shared_transcript_block}')
         system_layers.append(_d9g)
         _records.append(_LayerRec("D9_dream_history", len(_d9g), _est_tokens(_d9g), note="group_shared_transcript", content=_d9g))
 
@@ -697,12 +695,12 @@ def _bucket_tension(value: float) -> str:
     """
     v = max(0.0, min(1.0, value))
     if v < 0.25:
-        return "低位"
+        return _pt('低位')
     if v < 0.5:
-        return "上升中"
+        return _pt('上升中')
     if v < 0.75:
-        return "高位"
-    return "临界"
+        return _pt('高位')
+    return _pt('临界')
 
 
 # ── Internal formatters ───────────────────────────────────────────────────────
@@ -712,22 +710,22 @@ def _format_snapshot(snapshot: dict[str, Any], *, dream_turn: int = 0, reality_c
     parts: list[str] = []
     if dream_turn < reality_context_full_turns:
         if r := snapshot.get("recent_reality_context"):
-            parts.append(f"最近现实对话摘要：\n{r}")
+            parts.append((_pt('最近现实对话摘要：\n') + f'{r}'))
     else:
         if gist := snapshot.get("recent_reality_gist"):
-            parts.append(f"（你记得入梦前你们在{gist}）")
+            parts.append((_pt('（你记得入梦前你们在') + f'{gist}' + '）'))
     if p := snapshot.get("profile_impression"):
-        parts.append(f"她的印象：{p}")
+        parts.append((_pt('她的印象：') + f'{p}'))
     if e := snapshot.get("episodic_summary"):
-        parts.append(f"记忆片段：\n{e}")
+        parts.append((_pt('记忆片段：\n') + f'{e}'))
     if m := snapshot.get("mid_term_context"):
-        parts.append(f"近期互动背景：\n{m}")
+        parts.append((_pt('近期互动背景：\n') + f'{m}'))
     if rel := snapshot.get("relationship_state"):
         rel_str = _format_relation(rel)
         if rel_str:
-            parts.append(f"关系状态：{rel_str}")
+            parts.append((_pt('关系状态：') + f'{rel_str}'))
     if reason := snapshot.get("entry_reason"):
-        parts.append(f"入梦原因：{reason}")
+        parts.append((_pt('入梦原因：') + f'{reason}'))
     return "\n\n".join(parts)
 
 
@@ -736,9 +734,9 @@ def _format_relation(rel: dict[str, Any]) -> str:
         return ""
     parts: list[str] = []
     if affection := rel.get("affection"):
-        parts.append(f"好感度={affection}")
+        parts.append((_pt('好感度=') + f'{affection}'))
     if priority := rel.get("priority"):
-        parts.append(f"关系优先级={priority}")
+        parts.append((_pt('关系优先级=') + f'{priority}'))
     if note := rel.get("note"):
         parts.append(str(note))
     return "；".join(parts)
@@ -747,10 +745,10 @@ def _format_relation(rel: dict[str, Any]) -> str:
 def _format_scene_anchors(local_state: dict[str, Any]) -> str:
     parts: list[str] = []
     if scene := local_state.get("scene_state"):
-        parts.append(f"当前场景：{scene}")
+        parts.append((_pt('当前场景：') + f'{scene}'))
     anchors = local_state.get("symbolic_anchors") or []
     if anchors:
-        parts.append(f"象征锚点：{', '.join(str(a) for a in anchors)}")
+        parts.append((_pt('象征锚点：') + f"{', '.join((str(a) for a in anchors))}"))
     return "；".join(parts)
 
 
@@ -770,12 +768,12 @@ def _format_character_dream_behavior(character: Any, dream_mode: str) -> str:
         parts: list[str] = []
         identity_anchor = behavior.get("identity_anchor")
         if isinstance(identity_anchor, str) and identity_anchor.strip():
-            parts.append(f"角色卡梦境人格锚点：\n{identity_anchor.strip()}")
+            parts.append((_pt('角色卡梦境人格锚点：\n') + f'{identity_anchor.strip()}'))
         mode_key = "scenario_directive" if dream_mode == "scenario" else "sandbox_directive"
         mode_directive = behavior.get(mode_key)
         if isinstance(mode_directive, str) and mode_directive.strip():
-            label = "剧本模式" if dream_mode == "scenario" else "自由梦境模式"
-            parts.append(f"角色卡{label}指令：\n{mode_directive.strip()}")
+            label = _pt('剧本模式') if dream_mode == "scenario" else _pt('自由梦境模式')
+            parts.append((_pt('角色卡') + f'{label}' + _pt('指令：\n') + f'{mode_directive.strip()}'))
         return "\n\n".join(parts)
     except Exception:
         return ""
@@ -833,21 +831,17 @@ def _format_scenario_layer(
         if not stage:
             logger.warning("[dream_prompt] DS stage %r not found in script %r", stage_id, script_id)
             return ""
-        parts: list[str] = ["【本轮必须遵循】"]
+        parts: list[str] = [_pt('【本轮必须遵循】')]
         if scenario_core.get("ending_state") == "completed":
-            parts.append("【剧本状态：所有阶段已完成 — Scenario Completed】")
-        parts.append(f"剧本：{script.get('title', script_id)}")
-        parts.append(f"当前阶段：{stage.get('name', stage_id)}")
+            parts.append(_pt('【剧本状态：所有阶段已完成 — Scenario Completed】'))
+        parts.append((_pt('剧本：') + f"{script.get('title', script_id)}"))
+        parts.append((_pt('当前阶段：') + f"{stage.get('name', stage_id)}"))
         if task := stage.get("dramatic_task", "").strip():
-            parts.append(f"戏剧任务：\n{task}")
+            parts.append((_pt('戏剧任务：\n') + f'{task}'))
         if pressure := stage.get("entry_pressure", "").strip():
-            parts.append(f"入场压力：\n{pressure}")
+            parts.append((_pt('入场压力：\n') + f'{pressure}'))
         parts.append(
-            "【本轮行动契约】\n"
-            "保持当前阶段赋予角色的公开立场。不要把内在关心自动写成退让、放弃目标或解除限制。\n"
-            "除非这一轮自然处于观察或停顿节点，否则回复必须包含至少一个会改变现场状态、信息、"
-            "距离、资源或选择空间的具体角色行动；只有口头威胁、重复警告或气氛描写不算行动推进。\n"
-            "行动不得越过本阶段的禁止事项，也不得替用户决定动作、感受或台词。"
+            _pt('【本轮行动契约】\n保持当前阶段赋予角色的公开立场。不要把内在关心自动写成退让、放弃目标或解除限制。\n除非这一轮自然处于观察或停顿节点，否则回复必须包含至少一个会改变现场状态、信息、距离、资源或选择空间的具体角色行动；只有口头威胁、重复警告或气氛描写不算行动推进。\n行动不得越过本阶段的禁止事项，也不得替用户决定动作、感受或台词。')
         )
 
         private_truths = script.get("private_truths") or []
@@ -862,32 +856,32 @@ def _format_scenario_layer(
             rule = rule if isinstance(rule, dict) else {}
             policy = rule.get("policy", "hidden")
             truth_parts = [
-                "【角色私下知道的真相】",
+                _pt('【角色私下知道的真相】'),
                 truth,
-                "这是你从本阶段开始前就知道的事实，不要把自己演成对此失忆或刚刚才发现。",
-                "【当前阶段披露权限】",
+                _pt('这是你从本阶段开始前就知道的事实，不要把自己演成对此失忆或刚刚才发现。'),
+                _pt('【当前阶段披露权限】'),
             ]
             if policy == "hint_only":
-                truth_parts.append("只可通过下列线索含蓄表现；不得直接说出、确认或解释完整真相。")
+                truth_parts.append(_pt('只可通过下列线索含蓄表现；不得直接说出、确认或解释完整真相。'))
                 hints = [
                     str(hint).strip()
                     for hint in (rule.get("allowed_hints") or [])
                     if str(hint).strip()
                 ]
                 if hints:
-                    truth_parts.append("允许的线索：\n" + "\n".join(f"· {hint}" for hint in hints))
+                    truth_parts.append(_pt('允许的线索：\n') + "\n".join(f"· {hint}" for hint in hints))
                 else:
-                    truth_parts.append("本阶段没有指定可用线索，按 hidden 处理，不主动暗示真相。")
+                    truth_parts.append(_pt('本阶段没有指定可用线索，按 hidden 处理，不主动暗示真相。'))
             elif policy == "reveal_allowed":
-                truth_parts.append("本阶段允许在叙事自然到达时揭露真相，但不要为了说明设定而生硬抢跑。")
+                truth_parts.append(_pt('本阶段允许在叙事自然到达时揭露真相，但不要为了说明设定而生硬抢跑。'))
             elif policy == "reveal_required":
-                truth_parts.append("本阶段必须让真相在剧情中落地；通过角色行动或台词自然完成揭露。")
+                truth_parts.append(_pt('本阶段必须让真相在剧情中落地；通过角色行动或台词自然完成揭露。'))
             else:
-                truth_parts.append("本阶段必须隐藏真相：你仍按知情者行动，但不得直接说出、确认或主动暗示。")
+                truth_parts.append(_pt('本阶段必须隐藏真相：你仍按知情者行动，但不得直接说出、确认或主动暗示。'))
             parts.append("\n".join(truth_parts))
         not_yet = stage.get("not_yet_allowed") or []
         if not_yet:
-            parts.append("本阶段不允许：\n" + "\n".join(f"· {item}" for item in not_yet))
+            parts.append(_pt('本阶段不允许：\n') + "\n".join(f"· {item}" for item in not_yet))
 
         # A blocked event is a one-turn recovery cue.  It is populated only
         # after whitelist normalization in dream_pipeline, so authored stage
@@ -900,16 +894,16 @@ def _format_scenario_layer(
         if scenario_core.get("recovery_pending") and blocked_events:
             task = str(stage.get("dramatic_task") or "").strip()
             recovery_parts = [
-                "【接住刚才的意图】",
-                "先承接用户刚才想做的事，不指责、不打断沉浸感。",
-                "本轮不要执行下面尚未允许的事项：\n"
+                _pt('【接住刚才的意图】'),
+                _pt('先承接用户刚才想做的事，不指责、不打断沉浸感。'),
+                _pt('本轮不要执行下面尚未允许的事项：\n')
                 + "\n".join(f"· {item}" for item in blocked_events),
-                "用环境变化、角色动作、信息缺口或局部压力，把注意力自然带回当前戏剧任务。",
+                _pt('用环境变化、角色动作、信息缺口或局部压力，把注意力自然带回当前戏剧任务。'),
             ]
             if task:
-                recovery_parts.append(f"当前戏剧任务：\n{task}")
+                recovery_parts.append((_pt('当前戏剧任务：\n') + f'{task}'))
             recovery_parts += [
-                "不要透露后续阶段，不要替用户决定动作或台词，也不要向用户解释这段提示。",
+                _pt('不要透露后续阶段，不要替用户决定动作或台词，也不要向用户解释这段提示。'),
             ]
             parts.append("\n".join(recovery_parts))
 
@@ -921,23 +915,21 @@ def _format_scenario_layer(
             after_turns = dp.get("after_turns")
             instruction = (dp.get("instruction") or "").strip()
             if isinstance(after_turns, int) and instruction and stall_turns >= after_turns:
-                parts.append(f"漂移压力 / Drift Pressure\n{instruction}")
+                parts.append((_pt('漂移压力 / Drift Pressure\n') + f'{instruction}'))
         elif stall_turns >= _GENERIC_SCENARIO_RECOVERY_AFTER_STALL_TURNS:
             task = str(stage.get("dramatic_task") or "").strip()
             if task:
                 parts.append(
-                    "轻量拉回\n"
-                    "当前阶段出现停滞。保持自然叙事，把注意力带回当前戏剧任务；"
-                    f"不要创造剧本外事实，也不要透露后续阶段。\n{task}"
+                    (_pt('轻量拉回\n当前阶段出现停滞。保持自然叙事，把注意力带回当前戏剧任务；不要创造剧本外事实，也不要透露后续阶段。\n') + f'{task}')
                 )
         target = stage.get("arc")
         if scenario_core.get("_arc_mode") == "arc" and target:
             current = scenario_core.get("_tension_bucket", "low")
             rank = {"low": 0, "rising": 1, "high": 2, "critical": 3}
             if rank.get(current, 0) < rank.get(target, 0):
-                parts.append("张力导演：收紧节奏，推进冲突或靠近。")
+                parts.append(_pt('张力导演：收紧节奏，推进冲突或靠近。'))
             elif rank.get(current, 0) > rank.get(target, 0):
-                parts.append("张力导演：放缓，给彼此喘息，退半步。")
+                parts.append(_pt('张力导演：放缓，给彼此喘息，退半步。'))
         # Hidden turn note: v2 uses short IDs only. The system strips this
         # note before the user sees the reply; legacy parsers remain compatible.
         exit_signs = [
@@ -952,28 +944,28 @@ def _format_scenario_layer(
         ]
         protocol_lines: list[str] = [
             "---",
-            "写完这一轮的自然回复后，再在末尾留一段给系统看的短 ID 备注。不要向用户解释这段备注：",
+            _pt('写完这一轮的自然回复后，再在末尾留一段给系统看的短 ID 备注。不要向用户解释这段备注：'),
             '<scenario_control>{"hit":["E1"],"blocked":[]}</scenario_control>',
-            "只使用当前阶段列出的 E* / B* 短 ID；不要提交 stage_id 或 next_stage。",
-            "hit 是必填数组：本轮没有完成信号就写 []；blocked 可省略，或写本轮实际触及的 B*。",
+            _pt('只使用当前阶段列出的 E* / B* 短 ID；不要提交 stage_id 或 next_stage。'),
+            _pt('hit 是必填数组：本轮没有完成信号就写 []；blocked 可省略，或写本轮实际触及的 B*。'),
         ]
         if exit_signs:
             protocol_lines += [
                 "",
-                "当前阶段完成信号（只回传实际完成的 E*）：",
+                _pt('当前阶段完成信号（只回传实际完成的 E*）：'),
                 "\n".join(f"  E{index} — {item}" for index, item in enumerate(exit_signs, 1)),
             ]
         else:
-            protocol_lines.append("本阶段没有完成信号，hit 始终写 []。")
+            protocol_lines.append(_pt('本阶段没有完成信号，hit 始终写 []。'))
         if blocked_items:
             protocol_lines += [
                 "",
-                "当前阶段禁止事项（只回传本轮实际触及的 B*）：",
+                _pt('当前阶段禁止事项（只回传本轮实际触及的 B*）：'),
                 "\n".join(f"  B{index} — {item}" for index, item in enumerate(blocked_items, 1)),
             ]
         protocol_lines += [
             "",
-            "只写短 ID，不要照抄长文本；阶段切换由系统确定性判断。",
+            _pt('只写短 ID，不要照抄长文本；阶段切换由系统确定性判断。'),
         ]
         parts.append("\n".join(protocol_lines))
         return "\n\n".join(parts)
@@ -1001,29 +993,29 @@ def _format_mirror_layer(mirror_core: dict[str, Any]) -> str:
             return ""
 
         _BUCKET_LABELS: dict[str, str] = {
-            "low": "低",
-            "medium": "中",
-            "high": "高",
-            "unknown": "未知",
+            "low": _pt('低'),
+            "medium": _pt('中'),
+            "high": _pt('高'),
+            "unknown": _pt('未知'),
         }
         _PRESENCE_LABELS: dict[str, str] = {
-            "none": "无",
-            "light": "淡",
-            "present": "有",
+            "none": _pt('无'),
+            "light": _pt('淡'),
+            "present": _pt('有'),
         }
 
         lines: list[str] = [
-            "这是梦境的隐喻材料，不是诊断结论。",
-            "请把这些倾向转化为环境、距离、重复意象、靠近/退后节奏。",
-            "不要直接分析用户心理。不要明说数值。",
+            _pt('这是梦境的隐喻材料，不是诊断结论。'),
+            _pt('请把这些倾向转化为环境、距离、重复意象、靠近/退后节奏。'),
+            _pt('不要直接分析用户心理。不要明说数值。'),
             "",
-            "当前倾向：",
+            _pt('当前倾向：'),
         ]
 
         _BUCKET_NAMES: list[tuple[str, str]] = [
-            ("sensitivity_bucket", "感知敏锐度"),
-            ("closeness_need_bucket", "靠近需求"),
-            ("embodied_ease_bucket", "身体放松度"),
+            ("sensitivity_bucket", _pt('感知敏锐度')),
+            ("closeness_need_bucket", _pt('靠近需求')),
+            ("embodied_ease_bucket", _pt('身体放松度')),
         ]
         for key, label in _BUCKET_NAMES:
             val = buckets.get(key, "unknown")
@@ -1031,7 +1023,7 @@ def _format_mirror_layer(mirror_core: dict[str, Any]) -> str:
 
         presence = buckets.get("association_presence", "")
         if presence in _PRESENCE_LABELS:
-            lines.append(f"  重复意象倾向：{_PRESENCE_LABELS[presence]}")
+            lines.append((_pt('  重复意象倾向：') + f'{_PRESENCE_LABELS[presence]}'))
 
         if hints:
             lines.append("")
@@ -1052,8 +1044,9 @@ def _get_dream_mes_example(char_name: str) -> str:
     只演角色自己这一轮，不替用户旁白、不配台词、不用「她」。
     独立于现实角色卡 mes_example，避免交叉污染。
     """
-    return (
+    from core.prompt_language import choose
+    return choose((
         f"*停住脚步，看着那片光落在你身上，声音比平时低*……你也在。一直在。\n"
         f"*慢慢走近*这里不一样，什么都更清楚。但我是真的在这里。\n"
         f"*目光没有移开*……想留下的话，那就先别醒。"
-    )
+    ), '*Stop and watch the light fall across you, voice lower than usual* ...You are here too. Still here.\n*Walk closer slowly* It is different here; everything is clearer. But I am really here.\n*Keep my gaze steady* ...If you want to stay, do not wake just yet.')

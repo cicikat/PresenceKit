@@ -5,6 +5,8 @@ cannot execute actions, grant permissions, or produce completion evidence.
 """
 from __future__ import annotations
 
+from core.prompt_language import text as _pt
+
 from copy import deepcopy
 
 
@@ -76,21 +78,22 @@ class ToolDiscovery:
                 if description:
                     purposes.append(f"{function.get('name', '')}：{description}")
             if purposes:
-                listed += "。用途：" + "；".join(purposes)
-        text = f"含：{listed}。" if listed else ""
+                listed += _pt('。用途：') + "；".join(purposes)
+        text = (_pt('含：') + f'{listed}' + '。') if listed else ""
         if category == "self":
-            text += "需要积累MCP用法时，可以在自己的空间维护笔记或能力表，记录真实用途、调用结果与限制；使用前重新核对当前连接和授权，旧笔记不证明能力仍可用。"
+            text += _pt('需要积累MCP用法时，可以在自己的空间维护笔记或能力表，记录真实用途、调用结果与限制；使用前重新核对当前连接和授权，旧笔记不证明能力仍可用。')
         note = self.notes.get(category)
         return f"{text}{note}" if note else text
 
     def routing_hint(self) -> str:
         """Direction table: which entry fits which kind of intent (exposed ones only)."""
-        parts = [f"{ROUTES[c]} → {c}" for c in ROUTES if c in self.groups]
+        parts = [f"{_pt(ROUTES[c])} → {c}" for c in ROUTES if c in self.groups]
         return "；".join(parts) + "。" if parts else ""
 
     def schemas(self) -> list[dict]:
         result = []
         for category, description in CATEGORIES.items():
+            description = _pt(description)
             if category not in self.groups:
                 continue
             if category in self.loaded:
@@ -98,8 +101,7 @@ class ToolDiscovery:
             else:
                 result.append({"type": "function", "function": {
                     "name": PREFIX + category,
-                    "description": (f"加载{description}的工具定义。{self._contents(category)}"
-                                    "只发现工具，不执行任何业务操作；下一轮才能调用具体工具。"),
+                    "description": ((_pt('加载') + f'{description}' + _pt('的工具定义。') + f'{self._contents(category)}' + _pt('只发现工具，不执行任何业务操作；下一轮才能调用具体工具。'))),
                     "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
                 }})
         return deepcopy(result)
@@ -107,8 +109,8 @@ class ToolDiscovery:
     def load(self, name: str, arguments: object) -> tuple[str, bool]:
         category = name.removeprefix(PREFIX)
         if not name.startswith(PREFIX) or category not in self.groups or arguments != {}:
-            return "工具分类加载失败：入口不可用或参数非法。未执行任何业务操作。", False
+            return _pt('工具分类加载失败：入口不可用或参数非法。未执行任何业务操作。'), False
         if category in self.loaded:
-            return "该分类已加载。请使用当前提供的具体工具。未执行任何业务操作。", False
+            return _pt('该分类已加载。请使用当前提供的具体工具。未执行任何业务操作。'), False
         self.loaded.add(category)
-        return f"已加载 {category} 的工具定义，下一轮可调用具体工具。未执行任何业务操作。", True
+        return (_pt('已加载 ') + f'{category}' + _pt(' 的工具定义，下一轮可调用具体工具。未执行任何业务操作。')), True

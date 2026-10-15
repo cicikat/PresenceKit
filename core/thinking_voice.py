@@ -5,6 +5,7 @@ import hashlib
 import time
 
 from core.config_loader import get_user_display_name
+from core.prompt_language import text as _pt, choose as _pc
 
 LAYER = "11.6_thinking_voice"
 
@@ -84,10 +85,11 @@ def compose(*, char_id: str, mood: dict, user_name: str = "", now: float | None 
     strength = "只染上一点情绪底色，不放大。" if intensity < 0.4 else "感受可以更清楚，但仍服从平日的性格与分寸。"
     continuity = "先沿用当前心绪，不把刚浮起的另一种感觉演成突然翻脸。" if mood.get("pending") else ""
     address = f"熟悉的名字是{user_name[:80]}；可以自然沿用已有称呼，以‘你’为主。" if user_name.strip() else "称呼以‘你’为主，亲近来自语气。"
+    address = _pc(address, f'The familiar name is {user_name[:80]}; naturally use an established address, primarily "you".' if user_name.strip() else 'Address primarily as "you"; closeness comes from tone.')
     return {
         "register": register_id, "emotion": emotion, "variant": variant,
         "rotation_hours": 24,
-        "prompt": "\n".join(filter(None, (_BASE, address, register, _EMOTIONS[emotion][variant], strength, continuity))),
+        "prompt": "\n".join(filter(None, (_pt(_BASE), address, _pt(register), _pt(_EMOTIONS[emotion][variant]), _pt(strength), _pt(continuity)))),
     }
 
 

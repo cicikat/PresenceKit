@@ -8,6 +8,8 @@ current：工具 receipt 关联真实 owner 回合；历史使用 ledger epoch�
 
 # docs/known-issues.md — 已知问题与技术债
 
+工单291 `observe`：管理面语言已持久联动后端框架提示词，隔离浏览器与中英文相关回归通过；真实模型的英文策略遵从与全部功能组合的逐层prompt快照尚未实测。原始角色卡、世界、历史和工具证据保持原文，因此English模式不承诺最终消息全英文。范围见 [prompt-language.md](prompt-language.md)。
+
 ## Reality 提示词双来源入口（2026-10-12，工单 286）
 
 current：同 ID 的 EntryManager 条目在 builder 中覆盖 stems 副本，包括关闭状态、正文和 layer；

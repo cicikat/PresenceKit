@@ -61,7 +61,7 @@ app.include_router(minecraft.control_router, tags=["Minecraft 设置与观测"])
 from admin.routers import (
     users, memory, relations,
     system, lorebook,
-    settings_proxy, settings_llm, settings_misc, settings_prompt_assets,
+    settings_proxy, settings_llm, settings_misc, settings_prompt_assets, settings_prompt_language,
     settings_screen_peek, settings_tool_loop, settings_thinking, settings_relay, settings_feature_flags, settings_local_runtime, settings_mcp, settings_tools, settings_browser,
     character, chat, owner_turn, diary_sync,
     scheduler, watch, sensor, period,
@@ -96,6 +96,7 @@ app.include_router(settings_proxy.router, prefix="",           tags=["设置-代
 app.include_router(settings_llm.router,   prefix="",           tags=["设置-LLM"])
 app.include_router(settings_misc.router,          prefix="", tags=["设置-杂项"])
 app.include_router(settings_prompt_assets.router, prefix="", tags=["设置-Prompt资产"])
+app.include_router(settings_prompt_language.router, prefix="", tags=["设置-Prompt语言"])
 app.include_router(settings_screen_peek.router,   prefix="", tags=["设置-屏幕内容"])
 app.include_router(settings_tool_loop.router,     prefix="", tags=["设置-工具循环"])
 app.include_router(settings_thinking.router,      prefix="", tags=["设置-思考"])

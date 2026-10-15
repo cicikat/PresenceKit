@@ -1055,6 +1055,7 @@
       'auth.subtitle': 'Presence · 输入管理密钥登录',
       'auth.login': '登录',
       'common.language': '语言',
+      'common.language_scope': '登录后同时切换框架提示词语言；角色卡与历史原文保留。',
       'nav.console': '运维控制台',
       'nav.menu_toggle': '切换导航菜单',
       'nav.close_menu': '关闭导航菜单',
@@ -4608,6 +4609,7 @@
       'auth.subtitle': 'His Presence · Enter the admin key to sign in',
       'auth.login': 'Sign in',
       'common.language': 'Language',
+      'common.language_scope': 'After sign-in, also changes framework prompt language. Character cards and history stay in their original language.',
       'nav.console': 'Operations Console',
       'nav.menu_toggle': 'Toggle navigation menu',
       'nav.close_menu': 'Close navigation menu',
@@ -7131,11 +7133,21 @@
     applyLegacyI18n(scope);
     document.querySelectorAll('[data-language-select]').forEach(selector => {
       selector.value = currentLanguage;
+      selector.title = t('common.language_scope');
     });
   }
 
-  function setLanguage(language) {
+  async function setLanguage(language, {persistPrompt = true} = {}) {
     if (!SUPPORTED_LANGUAGES.has(language) || language === currentLanguage) return;
+    if (persistPrompt && window.saveAdminPromptLanguage) {
+      try {
+        await window.saveAdminPromptLanguage(language);
+      } catch (error) {
+        applyI18n();
+        window.toast?.(t('common.save_failed', '保存失败: {error}', {error: error.message}), 'err');
+        return;
+      }
+    }
     currentLanguage = language;
     try { localStorage.setItem(STORAGE_KEY, language); } catch (_error) { /* best effort */ }
     applyI18n();

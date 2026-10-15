@@ -387,6 +387,10 @@ def format_line(entry: dict) -> str:
     tool = entry.get("tool", "")
     label = _ACTION_LABELS.get(tool, tool or "做了点什么")
     status = entry.get("status", "ok")
+    from core.prompt_language import language
+    if language() == 'en':
+        digest = entry.get('result_digest') or ''
+        return f"{time_str} {tool or 'action'} [{status}]" + (f': {digest}' if digest else '')
     if status == "failed":
         return f"{time_str} 想{label}，但没成功"
     if status == "pending_confirm":
@@ -420,6 +424,8 @@ def format_trace_block(entries: list[dict], *, current_tool_result: str | None =
         + "\n".join(lines)
         + "\n）"
     )
+    from core.prompt_language import choose
+    block = choose(block, '(Historical action references, not results from this turn. Use these to recall what you did; do not recite them unprompted. When directly asked, describe only the recorded actions naturally, without implementation details:\n' + '\n'.join(lines) + '\n)')
     if len(block) > _BLOCK_CHAR_CAP:
         block = block[:_BLOCK_CHAR_CAP - 2] + "…\n）"
     return block

@@ -1,5 +1,7 @@
 """Presentation-only source sections; leaf policy and receipts stay intact."""
 
+from core.prompt_language import text as _pt
+
 SECTIONS = (
     ("真实数据", "按各项记录时间与有效期理解；设备观测不代表用户意图或内心状态。", {
         "2.5_time", "2.55_last_seen", "3.5_period", "3.6_watch", "3.7_sensor",
@@ -47,6 +49,7 @@ def arrange_sections(messages: list[dict]) -> list[dict]:
         remaining.insert(identity_index, boundary)
     blocks = []
     for name, guidance, layers in SECTIONS:
+        name, guidance = _pt(name), _pt(guidance)
         leaves = [dict(m) for m in messages
                   if m.get("role") == "system" and m.get("_layer") in layers]
         if not leaves:
@@ -62,7 +65,7 @@ def arrange_sections(messages: list[dict]) -> list[dict]:
     if materials:
         arranged = [m for m in arranged if m not in materials]
         history = next((i for i, m in enumerate(arranged) if m.get('_layer') in {'9_history', '12_user_message'}), len(arranged))
-        materials[0]['content'] = '【对话历史】\n' + materials[0]['content']
-        materials[-1]['content'] += '\n【/对话历史】'
+        materials[0]['content'] = _pt('【对话历史】\n') + materials[0]['content']
+        materials[-1]['content'] += _pt('\n【/对话历史】')
         arranged[history:history] = materials
     return arranged

@@ -1,5 +1,7 @@
 # docs/prompt-layers.md — Prompt 层结构
 
+工单291：框架模板支持服务端 `prompt_language: zh|en`，管理面语言菜单保存后热生效；角色卡、历史和证据原文不翻译。范围、端点与验证见 [prompt-language.md](prompt-language.md)。
+
 `10.9_pinned_tool_results`（drop_priority=85）注入有界、已授权工具快照，与近期结果去重；成功owner轮幂等扣减，预算裁剪可移除。来源隔离见 [tool-result-pins.md](tool-result-pins.md)。
 
 `5.2_food_tastes`（drop_priority=40）只包含明确口味及证据时间；启用饮食清单时 profile 的 `pref.food` 不进常驻投影。具体食品由工具按需读；见 [food-memory.md](food-memory.md)。

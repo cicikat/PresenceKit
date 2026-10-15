@@ -2,6 +2,9 @@
 # +注释被写回剥离属正常现象，不是文件损坏；字段含义请查本文件（config.example.yaml）。
 # 两文件键集合由 scripts/gen_config_example.py 保持同步，改动配置项时记得重跑该脚本核对。
 
+# Framework prompt language, managed by the admin language selector. zh preserves the default.
+prompt_language: zh
+
 qzone:
   enabled: false
   write_enabled: false
