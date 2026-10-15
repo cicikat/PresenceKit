@@ -64,6 +64,17 @@ def _system_prompt(
         description = str(getattr(character, "description", "") or "").strip()
         identity = f" You are {name}." + (f" {description[:1200]}" if description else "")
     tool_names = available_tool_names or set()
+    continuity_note = (
+        "Review recent and pinned tool results before calling a tool again. They record what you already did, "
+        "including silent runs; ordinary chat history is not the only record. Reuse a relevant result unless "
+        "its age, changed inputs, or missing details require a new call. Historical results do not prove current state. "
+    )
+    if "pin_tool_result" in tool_names:
+        continuity_note += (
+            "When an important tool result will help in later conversations, use pin_tool_result with its actual "
+            "result_id and rounds=1..10 to keep its bounded snapshot visible. Pin selectively, not every result; "
+            "pinning preserves a historical snapshot and does not refresh it. "
+        )
     optional_capabilities: list[str] = []
     if tool_names & {"fs_list", "fs_read"}:
         optional_capabilities.append("read permitted backend or external files")
@@ -84,7 +95,7 @@ def _system_prompt(
         "You are running an internal autonomous opportunity. This is not a chat turn. "
         "Your ordinary text is private and will never be delivered. You may call allowed tools, "
         "then either explicitly call talk_owner once or finish silently. Do not narrate tool calls. "
-        + screen_note + capability_note +
+        + screen_note + capability_note + continuity_note +
         "Treat opportunity evidence as a candidate reason to evaluate, never as dialogue that already happened. "
         "Only the bounded memory-query result and recent-history layers are historical anchors. "
         "Every historical claim in talk_owner.text must be traceable to an anchor with source, time, and speaker provenance. "

@@ -1,5 +1,7 @@
 # 工具结果临时驻留（F7）
 
+工单291：真实候选 result_id 位于工具返回开头，避免普通聊天2000字符或主动循环1400字符裁剪丢失驻留句柄。主动提示明确先复用近期/驻留结果；仅当 pin_tool_result 在当前曝光面时提醒选择重要结果驻留。普通现实身份层也提示按需驻留；不会自动收藏全部结果，也不把历史快照当成当前状态。
+
 真实成功工具结果返回 result_id；角色需要多轮复用时调用 `pin_tool_result(result_id, rounds)`，轮数1..10。只存既有 safe_summary，单项最多2000字、最多3项、总计6000字；不接受任意文本，不缓存 raw_data，禁止缓存 trace_result=false 的敏感结果及驻留工具自身输出。
 
 缓存复用 context_continuity SQLite：最近30个候选加仍驻留项，硬过期最多24小时且不超过结果 expires_at。每次投影重查工具执行、角色曝光和 self-management 权限；到期、取消或撤权后不再注入。`unpin_tool_result` 取消，`list_tool_result_pins` 查剩余轮数。

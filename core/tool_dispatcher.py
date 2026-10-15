@@ -3251,7 +3251,12 @@ async def _execute_structured_impl(
                 from core.tool_result_pins import retain as retain_pin_candidate
                 _result_id=retain_pin_candidate(user_id,char_id,tool_name,tool_result)
                 if _result_id:
-                    outward += f'\nresult_id={_result_id}（需要后续多轮复用时可调用 pin_tool_result，rounds=1..10）'
+                    # Keep the real candidate ID ahead of bounded result text so
+                    # downstream prompt clipping cannot remove the pin handle.
+                    outward = (
+                        f'工具已执行：{tool_name}，result_id={_result_id}'
+                        f'（需要后续多轮复用时可调用 pin_tool_result，rounds=1..10）\n结果：{safe_summary}'
+                    )
             except Exception:
                 logger.warning('[tool_result_pins] candidate unavailable')
         if tool_result.meta.get('continuity_receipt'):
