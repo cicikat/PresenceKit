@@ -22,21 +22,41 @@ def test_public_template_is_conservative_until_explicit_opt_in():
     assert cfg["hardware"]["intiface_opt_in"] is False
     assert cfg["mcp_servers"]["enabled"] is False
     assert all(not server.get("enabled", True) for server in cfg["mcp_servers"]["servers"])
-    assert cfg["tool_loop"]["enabled"] is False
-    assert cfg["fs_access"]["enabled"] is False
+    assert cfg["tool_loop"]["enabled"] is True
+    assert cfg["fs_access"]["enabled"] is True
+    assert cfg["fs_access"]["external_read"] is False
+    assert cfg["client_channels"] == {"desktop": False, "mobile": False}
 
 
-def test_public_template_disables_high_risk_tool_defaults():
+def test_public_template_keeps_frozen_services_disabled_without_restricting_ordinary_tools():
     tools = _template()["tools"]
+    for name in ("device_shutdown", "device_sleep", "web_search", "desktop_open_url"):
+        assert tools[name]["enabled"] is True, name
     for name in (
-        "device_shutdown",
-        "device_sleep",
         "toy_vibrate",
         "toy_stop",
         "toy_pattern",
         "write_toy_file",
     ):
         assert tools.get(name, {}).get("enabled", False) is False, name
+
+
+def test_tool_defaults_are_at_the_consumed_config_path(monkeypatch):
+    from core import tool_dispatcher
+    from core.memory.embedding import connection_configured
+
+    cfg = _template()
+    monkeypatch.setattr(tool_dispatcher, "get_config", lambda: cfg)
+    for name in ("get_time", "weather", "web_search", "read_diary", "device_shutdown"):
+        assert name in cfg["tools"]
+        assert tool_dispatcher._is_tool_enabled(name)
+    assert not tool_dispatcher._is_tool_enabled("exit_yandere")
+    assert not tool_dispatcher._is_tool_enabled("toy_vibrate")
+    cfg["tools"]["web_search"]["enabled"] = False
+    assert not tool_dispatcher._is_tool_enabled("web_search")
+    assert set(cfg["xiaohongshu"]) == {"local_service", "reader_url", "max_comments", "max_images"}
+    assert set(cfg["character_document_library"]) == {"retain_raw_uploads"}
+    assert not connection_configured(cfg["embedding"])
 
 
 def test_clean_install_has_a_loadable_neutral_character_seed():

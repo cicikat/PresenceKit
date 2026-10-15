@@ -4,6 +4,10 @@
 
 ## 全新安装
 
+clone 与 Release 的首次配置共用 `config.example.yaml`。工具授权和 tool loop 默认可用，分类、步数及冻结工具排除沿用已确认偏好；用户显式关闭工具仍会阻断执行。桌面/手机、QQ、微信、TTS、视觉、HDS、MCP、硬件、邮件和浏览器等外部接入保持默认关闭，先配好依赖与凭据，再在管理面开启。Embedding 留空即不调用向量服务，继续关键词召回。表情包默认关闭；不包含维护者的账号、模型连接、授权状态文件或私人数据。
+
+首次连接桌面或手机前，在管理面「客户端设置」开启对应通道；管理面自身默认可用。已有安装不会被公共模板覆盖，升级保留用户自己的 `config.yaml`。
+
 1. 使用 Python 3.10-3.12（推荐并受支持的是 3.12），安装依赖，并将 `config.example.yaml` 复制为 `config.yaml`。
 2. 运行 `python scripts/setup_auth.py`。将 `secrets.local.yaml` 保持在 source control 之外。该命令创建 break-glass admin secret 和 scoped device token；后续再次运行时不会打印已有 token value。
 3. 如果只部署桌面端，设置 `standalone_mode: true`。除非 NapCat 是此部署的一部分，否则保持 `qq.enabled` 为 false。

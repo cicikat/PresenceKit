@@ -172,8 +172,8 @@ wechat:
   # 腾讯微信扫码由桥接管理；WECHAT_TRANSPORT_TOKEN 是本机桥接密钥，不是微信 bot token。
 
 client_channels:
-  desktop: true  # 管理面热更新；关闭停止入口收发，不删除队列
-  mobile: true
+  desktop: false  # 配好客户端地址与 Token 后，在管理面开启；关闭不删除队列
+  mobile: false
 
 qq:
   outbound_mode: reply_only       # reply_only 只回复 QQ 当前输入；muted 停发消息；all 旧广播
@@ -227,20 +227,16 @@ food_memory:
 
 tools:
   read_xiaohongshu:
-    enabled: false
-xiaohongshu:
-  # Admin UI can install and own the local reader. Set false to use reader_url as an external service.
-  local_service: false
-  reader_url: ""
-  max_comments: 10
-  max_images: 2
+    enabled: false  # 读取服务与登录另行配置；授权不等于服务已可用
+  invite_video_call:
+    enabled: true
   get_time:
     enabled: true
   weather:
     enabled: true
     use_proxy: false  # 默认直连 wttr.in，不走全局代理；梯子环境下直连更稳
   web_search:
-    enabled: false
+    enabled: true
   add_reminder:
     enabled: true
   # list_reminders / get_reminder / update_reminder / cancel_reminder /
@@ -251,9 +247,6 @@ xiaohongshu:
     enabled: true
   search_diary:
     enabled: true
-character_document_library:
-  # Derived text/vision descriptions are indexed; original uploads are discarded by default.
-  retain_raw_uploads: false
   read_watch:
     enabled: true
   get_profile:
@@ -275,7 +268,7 @@ character_document_library:
   device_sleep:
     enabled: true
   exit_yandere:
-    enabled: true
+    enabled: false
   peek_screen_content:
     enabled: true
   toy_vibrate:
@@ -286,6 +279,19 @@ character_document_library:
     enabled: false
   toy_job_status:
     enabled: false
+  toy_invite:
+    enabled: false
+xiaohongshu:
+  # Independent reader ownership and login are configured separately from tool permissions.
+  local_service: false
+  reader_url: ""
+  max_comments: 10
+  max_images: 2
+character_document_library:
+  # Derived text/vision descriptions are indexed; original uploads are discarded by default.
+  retain_raw_uploads: false
+self_management:
+  enabled: true  # 未设置角色覆盖时继承普通工具权限；用户显式关闭仍生效
 dream:
   scenario:
     full_script_max_stages: 12
@@ -300,7 +306,7 @@ dream:
 watch:
   fresh_days: 3             # 3.6_watch 睡眠摘要最大新鲜度；超过即不注入
 sticker:
-  enabled: true        # 总开关
+  enabled: false       # 按当前回复表现偏好默认关闭
   trigger_prob: 0.06   # 触发概率 0~1
 tts:
   # `provider` defaults to gsv. Existing top-level GSV fields remain valid and
@@ -436,9 +442,9 @@ logging:
 # 不配此块时，向量召回自动关闭，退回关键词路径（fail-open）。
 embedding:
   provider_kind: openai_compat          # 阶段 A：OpenAI 兼容 /embeddings 端点
-  base_url: https://your-embedding-endpoint/v1
-  api_key: YOUR_EMBEDDING_KEY           # 真 key 只进 config.yaml（已 gitignore）
-  model: bge-m3                          # 或任意中文 embedding 模型
+  base_url: ""                          # 未配置即关闭向量调用，保留关键词召回
+  api_key: ""                           # 真 key 只进 config.yaml（已 gitignore）
+  model: ""                             # 配置服务时填写实际模型
   dim: 1024                              # 必须与 model 输出维度一致
 # ── 召回融合权重（X2，见 docs/vector-store.md）────────────────────────────────
 # score = w_sem*semantic_sim + w_kw*keyword_relevance + w_strength*(strength*decay)
@@ -524,10 +530,10 @@ hidden_state:
   min_confidence: 0.3
 
 tool_loop:
-  enabled: false
+  enabled: true            # 工具权限默认可用；外部服务和客户端仍需单独配置并启用
   max_steps: 5               # 单轮最多调用工具的步数，前端可调 1-8
   total_timeout_s: 720       # 整个 loop 墙钟超时，超时按步数耗尽处理
-  categories: ["info", "self", "schedule", "life", "desktop", "memory", "artifacts", "system", "fs", "phone_control", "mcp", "qzone"]
+  categories: ["info", "desktop", "memory", "mcp"]
   exclude_tools: ["toy_vibrate", "toy_stop", "toy_pattern", "write_toy_file"]  # 硬件写类默认排除
   nudge_hint: true           # 首步注入"别凭记忆编造，需要就调工具"的软提示（Brief 29 · 5）
 
@@ -553,7 +559,7 @@ mcp_servers:
   # effect 只信任本地配置：
   #   read      = 只读，不确认
   #   write     = 改外部状态，默认不确认；可显式 require_confirm: true
-  #   actuate   = 控制实体/设备，默认确认；可显式 require_confirm: false
+#   actuate   = 控制实体/设备；执行仍受实际连接与设备权限约束，不二次确认
   #   emergency = 立即停止/保护动作，永不确认
   # 远端 annotations.readOnlyHint 仅记录与观测，不能授予 read 权限；本地 effect 优先。
   servers:
@@ -620,7 +626,7 @@ mcp_servers:
 # allow_roots 是外部常用目录/发现提示，不是外部普通文件的唯一准入。
 # 与 MCP 同策略——只经 tool loop 暴露，角色卡 presence_ext.tool_categories 含 "fs" 才看得见。
 fs_access:
-  enabled: false                  # 旧总开关：未写 external_read 时沿用它控制外部读
+  enabled: true                   # 工具授权可用；外部文件仍需单独授权根目录
   backend_read: true              # 后端代码/配置/日志默认开；显式 false 关闭
   external_read: false            # 本机外部普通文件；省略时跟随 enabled
   allow_roots: []                  # 外部发现提示/相对路径解析根，不是唯一准入
