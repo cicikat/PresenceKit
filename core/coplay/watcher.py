@@ -152,6 +152,9 @@ def detect_running_game() -> dict[str, str] | None:
     模块级 `_last_raw_signals`，供 `_record_probe()` 写 DEBUG 日志 + 落
     `_last_probe`（不影响本函数返回值语义，调用方/既有测试无感知）。
     """
+    from core.deployment_capabilities import is_remote_server
+    if is_remote_server():
+        return None
     cfg = _coplay_cfg()
     library_paths = cfg.get("steam_library_paths") or []
     whitelist = cfg.get("game_whitelist") or []
@@ -196,6 +199,9 @@ def _is_tracked_game_still_running(game_id: str) -> bool:
 
 def _maybe_launch_pet() -> None:
     """active 时若桌宠未连接，spawn pet_launch_cmd。fail-open：异常只记日志。"""
+    from core.deployment_capabilities import is_remote_server
+    if is_remote_server():
+        return
     try:
         from channels import desktop_ws
         if desktop_ws.is_connected():
@@ -222,6 +228,9 @@ async def tick(uid: str, *, char_id: str = DEFAULT_CHAR_ID) -> None:
     不发言、只推状态机（armed → active / active → closing）+ 拉起桌宠。
     """
     from core.coplay import session
+    from core.deployment_capabilities import is_remote_server
+    if is_remote_server():
+        return
 
     # coplay.enabled 是部署级"允许陪玩功能"开关，默认 True——运行时唯一开关是
     # 状态机 armed/off（由用户在前端"游戏模式"驱动），这里的判定本身不变，只是

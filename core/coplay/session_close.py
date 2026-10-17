@@ -113,7 +113,8 @@ async def run_session_close(uid: str | int, *, char_id: str = DEFAULT_CHAR_ID) -
         return
 
     game_st = game_state.read_game_state(uid, game_id, char_id=char_id)
-    remaining_moments = observer.drain_moments(str(uid))
+    from core.coplay.device_collection import moment_scope
+    remaining_moments = observer.drain_moments(moment_scope(str(uid), char_id))
     quote_lines = _collect_quote_lines(game_st, remaining_moments)
     gist = await _summarize_session(game_name, quote_lines, char_id=char_id)
 

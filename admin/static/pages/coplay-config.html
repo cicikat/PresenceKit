@@ -1,6 +1,8 @@
 <h1 class="page-title" data-i18n="settings_center.coplay_game_detection">陪玩检测名单</h1><div class="card">
         <div class="card-header"><h3><span data-i18n="setup.coplay.title">Coplay 后台游戏检测白名单</span> <span class="badge" data-i18n="common.optional">可选</span></h3></div>
-        <p class="admin-inline-087">陪玩模式按进程名识别非 Steam 游戏。名称和进程名必填，存档目录可选。</p>
+        <p class="admin-inline-087" data-i18n="static.setup.coplay_hint">陪玩模式按进程名识别非 Steam 游戏。名称和进程名必填，存档目录可选；远程部署时填写用户电脑上的目录，由电脑采集。</p>
+        <p id="setup-coplay-collection-status" role="status"></p>
+        <button type="button" class="btn btn-ghost btn-sm" data-action="refreshSetupCoplayStatus" data-i18n="common.refresh">刷新采集状态</button>
         <div id="setup-coplay-games-list"></div>
         <button type="button" class="btn btn-ghost btn-sm" data-action="addSetupCoplayGame">Add game</button>
         <div class="modal-footer admin-inline-124">

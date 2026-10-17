@@ -217,11 +217,32 @@ async function saveSetupDiary() {
 }
 
 async function _loadSetupCoplayGames() {
+  refreshSetupCoplayStatus();
   try {
     const { game_whitelist } = await api('GET', '/settings/coplay-games');
     _renderSetupCoplayGames(game_whitelist || []);
   } catch (e) {
     toast(t('setup.coplay.load_error', '加载 coplay 游戏白名单失败: {error}', {error: _setupErrMsg(e)}), 'err');
+  }
+}
+
+async function refreshSetupCoplayStatus() {
+  const root = document.getElementById('setup-coplay-collection-status');
+  if (!root) return;
+  try {
+    const state = await api('GET', '/coplay/state');
+    const collection = state.collection;
+    if (!collection) { root.textContent = t('setup.coplay.no_collection', '后端尚未提供采集状态'); return; }
+    if (collection.source === 'backend_local') {
+      root.textContent = t('setup.coplay.local_collection', '本机部署：使用后端所在电脑采集。');
+      return;
+    }
+    const freshness = collection.fresh ? t('setup.coplay.fresh', '设备报告有效') : t('setup.coplay.stale', '设备离线或报告已过期');
+    const permission = collection.frame_authorized ? t('setup.coplay.frames_on', '已授权游戏窗口截图') : t('setup.coplay.frames_off', '当前未授权截图');
+    const reason = collection.blocked_reason ? ` · ${collection.blocked_reason}` : '';
+    root.textContent = `${t('setup.coplay.device_source', '用户电脑采集')} · ${freshness} · ${permission}${reason}`;
+  } catch (error) {
+    root.textContent = t('setup.coplay.collection_error', '采集状态读取失败：{error}', {error: _setupErrMsg(error)});
   }
 }
 

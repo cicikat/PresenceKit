@@ -71,6 +71,9 @@ def clear_moments_for_test(uid: str | None = None) -> None:
 
 def capture_screen() -> bytes | None:
     """截取主屏幕，返回 PNG bytes。mss 未安装 / 截屏失败 → None（fail-open）。"""
+    from core.deployment_capabilities import is_remote_server
+    if is_remote_server():
+        return None
     try:
         import mss
         import mss.tools
@@ -304,6 +307,9 @@ def check_save_point(uid: str, save_dir: str) -> bool:
     只读 mtime，不读取/解析文件内容。第一次看到某目录不算 save_point（没有
     "之前"可比较，避免 session 一开始就被判定成刚存过档）。
     """
+    from core.deployment_capabilities import is_remote_server
+    if is_remote_server():
+        return False
     p = Path(save_dir)
     if not p.exists() or not p.is_dir():
         return False
@@ -353,6 +359,9 @@ async def tick(uid: str, *, char_id: str = DEFAULT_CHAR_ID, game_id: str | None 
 
     只在 CoplaySession status == active 时应该被调用（由调用方保证）。
     """
+    from core.deployment_capabilities import is_remote_server
+    if is_remote_server():
+        return
     if not _capture_ready(uid):
         return
 
@@ -380,3 +389,35 @@ async def tick(uid: str, *, char_id: str = DEFAULT_CHAR_ID, game_id: str | None 
         save_dir = _resolve_save_dir(game_id)
         if save_dir and check_save_point(uid, save_dir):
             push_moment(uid, GameMoment(kind="save_point", summary="检测到存档更新"))
+
+
+async def analyze_frame(uid: str, *, char_id: str, frame: bytes | None,
+                        save_changed: bool, valid) -> None:
+    """Analyze a leased client frame; recheck authority after any model await."""
+    from core.coplay.device_collection import moment_scope
+    key = moment_scope(uid, char_id)
+    moments = []
+    try:
+        if not valid():
+            return
+        if frame:
+            import asyncio
+            ocr_kind = classify_ocr_text(await asyncio.to_thread(ocr_frame, frame))
+            if not valid():
+                return
+            if ocr_kind:
+                moments.append(GameMoment(kind=ocr_kind, summary=_OCR_KIND_SUMMARY[ocr_kind]))
+            else:
+                kind = classify_frame(key, frame)
+                if kind:
+                    summary = _DIFF_KIND_SUMMARY[kind]
+                    if kind == "scene_change":
+                        summary = await vlm_fallback_summary(frame, char_id=char_id) or summary
+                    moments.append(GameMoment(kind=kind, summary=summary))
+        if save_changed:
+            moments.append(GameMoment(kind="save_point", summary="检测到存档更新"))
+        if valid():
+            for moment in moments:
+                push_moment(key, moment)
+    except Exception:
+        logger.exception("[coplay_observer] device frame analysis failed")

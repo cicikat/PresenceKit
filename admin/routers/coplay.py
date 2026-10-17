@@ -16,11 +16,15 @@ scope 复用 docs/security.md 里已有的 `activity`（活动/梦境 overlay �
 """
 
 import logging
+import hashlib
+from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, ConfigDict, Field
 
 from admin.auth import require_scopes
 from core.config_loader import get_config
+from core.data_paths import DEFAULT_CHAR_ID
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -37,7 +41,7 @@ def _active_char_id() -> str:
     from core.pipeline_registry import get as _get_pipeline
     pl = _get_pipeline()
     char_id = pl._active_character_id if pl else None
-    return char_id or "yexuan"
+    return char_id or DEFAULT_CHAR_ID
 
 
 def _coplay_enabled() -> bool:
@@ -53,6 +57,7 @@ async def coplay_state_get(_auth=Depends(require_scopes("activity"))):
     uid = _owner_uid()
     char_id = _active_char_id()
     state = read_state(uid, char_id=char_id)
+    from core.coplay.device_collection import projection
     return {
         "status": state.get("status"),
         "game_id": state.get("game_id"),
@@ -61,6 +66,7 @@ async def coplay_state_get(_auth=Depends(require_scopes("activity"))):
         # 调试字段：watcher 上一次 tick 探测到的原始信号，fail-open（未探测过/
         # 探测失败时为 None），供前端设置页排查"检测卡在哪一步"（Brief 54-A §4）。
         "last_probe": watcher.get_last_probe(uid),
+        "collection": projection(uid, char_id),
     }
 
 
@@ -89,3 +95,46 @@ async def coplay_disarm(_auth=Depends(require_scopes("activity"))):
     char_id = _active_char_id()
     state = disarm(uid, char_id=char_id)
     return {"ok": True, "status": state.get("status")}
+
+
+class DevicePoll(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    client_id: str = Field(pattern=r"^[a-f0-9]{32}$")
+    metadata_available: bool
+    frame_available: bool
+
+
+class DeviceResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    client_id: str = Field(pattern=r"^[a-f0-9]{32}$")
+    lease_id: str = Field(pattern=r"^[a-f0-9]{32}$")
+    char_id: str = Field(min_length=1, max_length=100)
+    revision: str = Field(pattern=r"^[a-f0-9]{64}$")
+    captured_at: float = Field(ge=0, allow_inf_nan=False)
+    status: Literal["ok", "locked", "disabled", "unsupported", "failed"]
+    game_id: str = Field(default="", max_length=128)
+    game_name: str = Field(default="", max_length=200)
+    foreground: bool = False
+    save_changed: bool = False
+    image_base64: str = Field(default="", max_length=1_398_104)
+
+
+def _device_identity(request: Request) -> str:
+    return hashlib.sha256(request.headers.get("authorization", "").encode()).hexdigest()
+
+
+@router.post("/coplay/device/poll", summary="桌面陪玩采集租约")
+async def device_poll(body: DevicePoll, request: Request,
+                      _auth=Depends(require_scopes("activity", "sensor.write", "ws.desktop"))):
+    from core.coplay.device_collection import poll
+    return poll(_owner_uid(), _active_char_id(), _device_identity(request), **body.model_dump())
+
+
+@router.post("/coplay/device/result", summary="提交一次性陪玩设备采集")
+async def device_result(body: DeviceResult, request: Request,
+                        _auth=Depends(require_scopes("activity", "sensor.write", "ws.desktop"))):
+    from core.coplay.device_collection import accept
+    result = accept(_owner_uid(), _active_char_id(), _device_identity(request), body.model_dump())
+    if not result["accepted"]:
+        raise HTTPException(409, result["reason"])
+    return result

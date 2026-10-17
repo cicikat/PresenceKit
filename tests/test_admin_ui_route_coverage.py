@@ -54,6 +54,8 @@ NO_ADMIN_UI_WHITELIST: dict[tuple[str, str], str] = {
     ("POST", "/transcribe"): "语音转写，Emerald-client shared/voice/useVoiceInput.ts 消费",
     ("POST", "/coplay/arm"): "陪玩模式开关，Emerald-client CoplaySettingsPage 消费",
     ("POST", "/coplay/disarm"): "陪玩模式开关，Emerald-client CoplaySettingsPage 消费",
+    ("POST", "/coplay/device/poll"): "Windows 客户端领取陪玩采集租约，管理面只读状态，不构造设备证据",
+    ("POST", "/coplay/device/result"): "Windows 客户端提交真实游戏状态/截图，管理面不伪造采集报告",
     ("PUT", "/period"): "经期输入由 Emerald-client 健康设置页消费，管理面板不重复收集用户健康数据",
 
     # 外部 bridge / provider adapter 入口：由受限 integration token 的自动化进程调用；

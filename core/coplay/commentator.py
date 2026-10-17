@@ -23,6 +23,7 @@ import logging
 import time
 
 from core.coplay.observer import GameMoment
+from core.data_paths import DEFAULT_CHAR_ID
 
 logger = logging.getLogger(__name__)
 
@@ -52,17 +53,24 @@ _KIND_LINE: dict[str, str] = {
 }
 
 
-def _pick_moment(uid: str) -> GameMoment | None:
+def _pick_moment(uid: str, char_id: str = DEFAULT_CHAR_ID) -> GameMoment | None:
     """从 observer 的 moment 队列（peek，不消费）里挑一个"最值得开口"的候选。
 
     不销毁队列内容——game_state.build_coplay_context_text() 的"最近发生的事"
     也读同一份队列，两者都是只读旁观者，互不冲突。
     """
     from core.coplay import observer
+    from core.coplay.device_collection import moment_scope
+    from core.deployment_capabilities import is_remote_server
+
+    if is_remote_server():
+        from core.coplay.device_collection import projection
+        if not projection(uid, char_id)["fresh"]:
+            return None
 
     now = time.time()
     candidates = [
-        m for m in observer.peek_moments(uid)
+        m for m in observer.peek_moments(moment_scope(uid, char_id))
         if m.kind not in DISCARD_KINDS and (now - m.ts) <= MOMENT_FRESHNESS_SECONDS
     ]
     if not candidates:
@@ -84,7 +92,7 @@ def propose_coplay_commentary(ctx: dict | None = None):
         return None
     char_id = active_chars[0]
 
-    moment = _pick_moment(uid)
+    moment = _pick_moment(uid, char_id)
     if moment is None:
         return None
 

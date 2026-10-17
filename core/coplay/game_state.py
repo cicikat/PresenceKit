@@ -198,6 +198,11 @@ def build_coplay_context_text(uid: str | int, *, char_id: str = DEFAULT_CHAR_ID)
     core/pipeline.py::fetch_context() 里调用，结果经 context 字典透传给
     core/prompt_builder.py::build() 的 coplay_context_text 参数。
     """
+    from core.deployment_capabilities import is_remote_server
+    if is_remote_server():
+        from core.coplay.device_collection import projection
+        if not projection(str(uid), char_id)["fresh"]:
+            return ""
     try:
         from core.coplay import session, observer
 
@@ -214,7 +219,8 @@ def build_coplay_context_text(uid: str | int, *, char_id: str = DEFAULT_CHAR_ID)
         markers = game_state.get("progress_markers") or []
         progress_line = "、".join(markers[-3:]) if markers else "刚开始玩"
 
-        moments = observer.peek_moments(str(uid))[-_MAX_RECENT_MOMENTS:]
+        from core.coplay.device_collection import moment_scope
+        moments = observer.peek_moments(moment_scope(str(uid), char_id))[-_MAX_RECENT_MOMENTS:]
         moment_line = "；".join(m.summary for m in moments if m.summary) or "还没有什么特别的动静"
 
         lines = [

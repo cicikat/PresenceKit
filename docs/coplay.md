@@ -1,5 +1,9 @@
 # Coplay（陪玩模式）
 
+292-B：`remote_server` 使用[桌面采集合同 v1](coplay-device-contract.md)，后端不截屏、不枚举游戏进程、不读取用户存档，也不启动服务器桌宠。Windows客户端沿用sensor许可与单进程视觉runner，10秒请求一次有界租约；截图另需本地按需截图许可、后端看屏幕开关、前台游戏窗口与解锁检查。Steam名称/安装目录来自客户端配置库内的manifest，无法证明前台归属时不截图。非Steam使用管理员已有白名单；存档只比较目录条目的元数据指纹，不上传正文或路径。客户端完全退出则不可采集；离线/过期不伪造游戏退出。
+
+`POST /coplay/device/poll|result` 要求activity+sensor.write+ws.desktop，结果绑定owner/角色/配置/连接且一次性消费。`GET /coplay/state.collection` 提供来源、在线/新鲜度、权限和阻断原因；管理面陪玩页可刷新查看，桌面显示真实连接/过期状态。现有本机部署路径保留。Windows游戏窗口、真实存档变更、锁屏撤权及云端联合验收仍为observe，不能以离线回归或编译替代。
+
 > 落地文档。设计决策记录见 `docs/coplay-design-and-briefs-20260710.md`（Brief 38–42 施工工单）。
 > Brief 38–42 全部完工（2026-07-10）。
 

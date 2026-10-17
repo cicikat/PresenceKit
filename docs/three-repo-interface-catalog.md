@@ -44,6 +44,12 @@ current：同 token label+owner+char+domain 的 request_id 在 grant 重绑后�
 
 # 三仓接口总览与闭环审计
 
+## 292-B 陪玩设备采集（current / observe）
+
+current：桌面Windows runner消费POST `/coplay/device/poll|result`，activity+sensor.write+ws.desktop；20秒一次性租约绑定token身份、连接、owner/char、配置和陪玩轮次。上传单个匹配游戏和可选有界JPEG/存档变更布尔值，不上传完整进程清单、存档正文或路径；remote_server无后端OS采集fallback。GET `/coplay/state` 新增可选collection状态，旧客户端继续工作但不产生远程报告；无新WS/IPC消息。服务端配置、鉴权变更、disarm、角色切换撤销旧结果；异步视觉分析提交前复核授权与TTL。手机无ws.desktop，不参与该采集链，无需增加入口。
+
+observe：真实Windows游戏/存档/前台切换/锁屏、桌面完全退出及云端端到端验收尚待完成；旧已安装桌面程序需更新后才能采集。详见[合同](coplay-device-contract.md)和桌面backend-integration.md。
+
 ## 个人微信入口（2026-10-07，268，backend reference current / live observe）
 
 新增后端管理端点 `GET/PUT /settings/wechat`（admin）及 `GET /observability/wechat`

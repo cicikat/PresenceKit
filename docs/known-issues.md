@@ -8,6 +8,8 @@ current：工具 receipt 关联真实 owner 回合；历史使用 ledger epoch�
 
 # docs/known-issues.md — 已知问题与技术债
 
+292-B `observe`：远程陪玩设备租约、Windows采集器、后端零OS回退、权限/TTL/去重及管理面状态已实现；尚未使用真实Windows游戏与云端后端完成联合采集、存档、锁屏/撤权、重连和完全退出验收。Steam库目录未配置时可识别RunningAppID，但无法证明游戏前台窗口归属，故不截图。旧桌面程序不会生成采集报告；不把离线/过期当作游戏退出。本地部署分支保留，未执行退役删除。见[合同](coplay-device-contract.md)。
+
 工单291 `observe`：管理面语言已持久联动后端框架提示词，隔离浏览器与中英文相关回归通过；真实模型的英文策略遵从与全部功能组合的逐层prompt快照尚未实测。原始角色卡、世界、历史和工具证据保持原文，因此English模式不承诺最终消息全英文。范围见 [prompt-language.md](prompt-language.md)。
 
 ## Reality 提示词双来源入口（2026-10-12，工单 286）

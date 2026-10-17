@@ -120,6 +120,8 @@ def arm(user_id: str | int, *, char_id: str = DEFAULT_CHAR_ID) -> dict[str, Any]
         logger.info("[coplay_session] arm() no-op, already status=%s uid=%s", state.get("status"), user_id)
         return state
     state["status"] = CoplayStatus.ARMED.value
+    import uuid
+    state["collection_epoch"] = uuid.uuid4().hex
     write_state(user_id, state, char_id=char_id)
     logger.info("[coplay_session] armed uid=%s", user_id)
     return state
@@ -127,6 +129,8 @@ def arm(user_id: str | int, *, char_id: str = DEFAULT_CHAR_ID) -> dict[str, Any]
 
 def disarm(user_id: str | int, *, char_id: str = DEFAULT_CHAR_ID) -> dict[str, Any]:
     """硬关闭 —— 任意状态 → off。总是成功（用户随时能关掉陪玩模式）。"""
+    from core.coplay.device_collection import revoke
+    revoke(str(user_id), char_id)
     state = read_state(user_id, char_id=char_id)
     prev_status = state.get("status")
     game_id = state.get("game_id")
@@ -180,6 +184,10 @@ def close_session(user_id: str | int, *, char_id: str = DEFAULT_CHAR_ID) -> dict
         )
         return state
     state = {"user_id": safe_user_id(user_id), "status": CoplayStatus.ARMED.value}
+    import uuid
+    state["collection_epoch"] = uuid.uuid4().hex
+    from core.coplay.device_collection import revoke
+    revoke(str(user_id), char_id)
     write_state(user_id, state, char_id=char_id)
     logger.info("[coplay_session] closed → armed uid=%s", user_id)
     return state
