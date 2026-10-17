@@ -48,6 +48,7 @@ def test_real_bootstrap_contracts_are_public_but_still_application_authenticated
         assert permitted(app, method, path), (method, path)
     for method, path in [("GET", "/settings/clients"), ("GET", "/auth/tokens"),
                          ("POST", "/auth/tokens"), ("GET", "/observability/api-calls"),
+                         ("GET", "/admin/autonomy/runs"),
                          ("GET", "/system/data-path"), ("GET", "/")]:
         assert not permitted(app, method, path), (method, path)
     assert 'default 0;' in nginx_map(app)

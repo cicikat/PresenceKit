@@ -1,0 +1,46 @@
+# Copy outside the repository. Every bridge requires an explicit profile.
+name: presencekit-bridges
+services:
+  napcat:
+    profiles: [qq]
+    image: mlikiowa/napcat-docker@sha256:147cb18a758aa5a4dc8ef4b310e532b1dd68371a93c2e7e5bb2022aa12a05328
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3001:3001"
+      - "127.0.0.1:6099:6099"
+    volumes:
+      - ./napcat/config:/app/napcat/config
+      - ./napcat/qq:/app/.config/QQ
+    environment:
+      TZ: Asia/Shanghai
+    ulimits:
+      core: 0
+    logging: &logs
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+  xiaohongshu:
+    profiles: [xiaohongshu]
+    image: xpzouying/xiaohongshu-mcp:v2.5.0
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:18060:18060"
+    volumes:
+      - ./xiaohongshu/data:/app/data
+    environment:
+      COOKIES_PATH: /app/data/cookies.json
+      TZ: Asia/Shanghai
+    logging: *logs
+  wechat:
+    profiles: [wechat]
+    image: ${WECHAT_BRIDGE_IMAGE:-presencekit-tencent-weixin:local}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:1238:1238"
+    volumes:
+      - ./wechat/state:/state
+    environment:
+      STATE_DIR: /state
+      BRIDGE_TOKEN: ${WECHAT_TRANSPORT_TOKEN:-}
+    logging: *logs
