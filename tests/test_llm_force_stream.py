@@ -76,6 +76,38 @@ async def test_interleaved_tool_fragments_are_assembled_by_index():
 
 
 @pytest.mark.asyncio
+async def test_empty_usage_choice_and_duplicate_terminal_preserve_tool_turn():
+    from openai.types.chat import ChatCompletionChunk
+    trailer = ChatCompletionChunk(id="fixture", created=0, model="fixture", object="chat.completion.chunk",
+        choices=[{"index": 0, "delta": {}, "finish_reason": None}],
+        usage={"prompt_tokens": 2, "completion_tokens": 3, "total_tokens": 5})
+    mc, stream, _ = client([
+        chunk(calls=[call(0, "a", "first", '{"x":2}')], finish="tool_calls"),
+        trailer, chunk(finish="tool_calls"),
+    ])
+    result = await create(mc, [], gen_kwargs={})
+    assert len(result.tool_calls) == 1
+    assert result.tool_calls[0].arguments == {"x": 2}
+    assert result.usage["total_tokens"] == 5
+    assert result.status == "tool_calls"
+    stream.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("tail", [
+    chunk("late text"), chunk(calls=[call(0, args="}")]),
+    chunk(reasoning="late reasoning"), chunk(finish="length"),
+    NS(choices=[NS(index=0, delta=NS(refusal="late refusal"), finish_reason=None)]),
+    NS(choices=[NS(index=0, delta=NS(future_field="new data"), finish_reason=None)]),
+])
+async def test_completed_turn_rejects_new_data_and_conflicting_terminal(tail):
+    mc, stream, _ = client([chunk("complete", finish="stop"), tail])
+    with pytest.raises(UpstreamResponseFormatError, match="choices after completion"):
+        await create(mc, [], gen_kwargs={})
+    stream.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("events", [
     [chunk("partial")],
     [chunk(calls=[call(0, "a", "tool", "{")], finish="tool_calls")],

@@ -946,6 +946,16 @@ async def _create(
     return _normalize_responses(mc, response)
 
 
+def _empty_chat_delta(delta: Any) -> bool:
+    """Only empty transport trailers may follow a completed buffered turn."""
+    if delta is None:
+        return True
+    dump = getattr(delta, "model_dump", None)
+    fields = dump(exclude_none=True) if callable(dump) else vars(delta)
+    return all(value is None or value == "" or value == [] or value == {}
+               for value in fields.values())
+
+
 async def _collect_chat_stream(mc, messages, kwargs, capture) -> NormalizedResponse:
     """Buffer a complete SSE turn; never execute partial tool arguments."""
     stream = await mc.client.chat.completions.create(
@@ -966,9 +976,14 @@ async def _collect_chat_stream(mc, messages, kwargs, capture) -> NormalizedRespo
             choice = choices[0]
             if getattr(choice, "index", 0) != 0:
                 continue
-            if finish is not None:
-                raise _format_error(mc, "Chat stream contains choices after completion")
             delta = getattr(choice, "delta", None)
+            if finish is not None:
+                # Some gateways retain an empty choices[0] in the usage
+                # trailer and repeat the same terminal marker. Never merge
+                # new content or tool fragments after completion.
+                if getattr(choice, "finish_reason", None) in (None, finish) and _empty_chat_delta(delta):
+                    continue
+                raise _format_error(mc, "Chat stream contains choices after completion")
             for key in ("reasoning_content", "reasoning"):
                 capture.add(key, getattr(delta, key, None))
             text = getattr(delta, "content", None)
