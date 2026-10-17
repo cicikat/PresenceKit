@@ -24,6 +24,7 @@ import time
 
 from core.coplay.observer import GameMoment
 from core.data_paths import DEFAULT_CHAR_ID
+from core.prompt_language import choose, text as _prompt_text
 
 logger = logging.getLogger(__name__)
 
@@ -128,10 +129,10 @@ def _make_execute(moment: GameMoment, char_id: str):
     async def execute(*, dry_run: bool):
         from core.scheduler.execution import execute_prompt
 
-        line = _KIND_LINE.get(moment.kind, moment.summary)
+        line = _prompt_text(_KIND_LINE[moment.kind]) if moment.kind in _KIND_LINE else moment.summary
         return await execute_prompt(
             trigger_name="coplay_commentary",
-            prompt_factory=lambda: f"（{line}：{moment.summary}）",
+            prompt_factory=lambda: choose(f"（{line}：{moment.summary}）", f"({line}: {moment.summary})"),
             dry_run=dry_run,
             would_mark=["coplay_commentary"],
             reads_cache_ok=True,

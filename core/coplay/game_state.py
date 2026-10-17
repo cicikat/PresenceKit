@@ -21,6 +21,7 @@ import logging
 from typing import Any
 
 from core.data_paths import DEFAULT_CHAR_ID
+from core.prompt_language import choose
 from core.safe_write import safe_write_json
 from core.sandbox import get_paths
 
@@ -169,11 +170,13 @@ def build_game_log_recall_text(uid: str | int, text: str, *, char_id: str = DEFA
         game = match_game_by_text(uid, text, char_id=char_id)
         if not game or not game.get("last_summary"):
             return ""
-        game_name = game.get("game_name") or "那个游戏"
-        return (
+        game_name = game.get("game_name") or choose("那个游戏", "that game")
+        return choose(
             "<陪玩回忆>\n"
             f"你之前陪她玩过《{game_name}》。上次的印象：{game['last_summary']}\n"
-            "</陪玩回忆>"
+            "</陪玩回忆>",
+            f"<coplay_recall>\nYou previously accompanied the user in {game_name}. "
+            f"Impressions from last time: {game['last_summary']}\n</coplay_recall>",
         )
     except Exception:
         logger.exception("[coplay_game_state] build_game_log_recall_text 失败（fail-open）")
@@ -211,24 +214,27 @@ def build_coplay_context_text(uid: str | int, *, char_id: str = DEFAULT_CHAR_ID)
             return ""
 
         game_id = state.get("game_id") or ""
-        game_name = state.get("game_name") or "这个游戏"
+        game_name = state.get("game_name") or choose("这个游戏", "this game")
         if not game_id:
             return ""
 
         game_state = read_game_state(uid, game_id, char_id=char_id)
         markers = game_state.get("progress_markers") or []
-        progress_line = "、".join(markers[-3:]) if markers else "刚开始玩"
+        progress_line = "、".join(markers[-3:]) if markers else choose("刚开始玩", "just started")
 
         from core.coplay.device_collection import moment_scope
         moments = observer.peek_moments(moment_scope(str(uid), char_id))[-_MAX_RECENT_MOMENTS:]
-        moment_line = "；".join(m.summary for m in moments if m.summary) or "还没有什么特别的动静"
+        moment_line = "；".join(m.summary for m in moments if m.summary) or choose("还没有什么特别的动静", "no notable events observed yet")
 
         lines = [
-            "<陪玩状态>",
-            f"你正在陪她玩《{game_name}》。目前进度：{progress_line}。",
-            f"最近发生的事：{moment_line}。",
-            _ANTI_SPOILER_CONSTRAINT,
-            "</陪玩状态>",
+            choose("<陪玩状态>", "<coplay_state>"),
+            choose(f"你正在陪她玩《{game_name}》。目前进度：{progress_line}。",
+                   f"You are accompanying the user in {game_name}. Current progress: {progress_line}."),
+            choose(f"最近发生的事：{moment_line}。", f"Recent observations: {moment_line}."),
+            choose(_ANTI_SPOILER_CONSTRAINT,
+                   "This is your first playthrough together. You only know what has happened so far. "
+                   "Never predict, hint at, or reveal later plot events, even if you believe you know the game."),
+            choose("</陪玩状态>", "</coplay_state>"),
         ]
         return "\n".join(lines)
     except Exception:

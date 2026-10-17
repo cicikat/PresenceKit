@@ -31,6 +31,7 @@ import time
 from datetime import datetime, timezone
 
 from core.data_paths import DEFAULT_CHAR_ID
+from core.prompt_language import choose
 
 logger = logging.getLogger(__name__)
 
@@ -69,11 +70,15 @@ async def _summarize_session(game_name: str, quote_lines: list[str], *, char_id:
         from core import llm_client
 
         bullets = "\n".join(f"- {q}" for q in quote_lines)
-        prompt = (
+        prompt = choose(
             f"这是一局《{game_name}》陪玩过程中记录下的客观片段（截图差分/OCR识别，"
             f"不是完整剧情）：\n{bullets}\n\n"
             "用1-2句话客观概括这次游玩大概发生了什么，不要编造片段以外的信息，"
-            "不要评价好坏，不要煽情，只说事实梗概。"
+            "不要评价好坏，不要煽情，只说事实梗概。",
+            f"These are objective observations from a coplay session of {game_name} "
+            f"(frame differences/OCR, not the complete story):\n{bullets}\n\n"
+            "Summarize what happened in 1-2 factual sentences. Do not invent information beyond "
+            "these observations, judge the play, or add sentiment.",
         )
         messages = [{"role": "user", "content": prompt}]
         reply = await llm_client.chat(messages, call_category="summary", char_id=char_id)

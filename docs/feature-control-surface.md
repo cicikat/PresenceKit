@@ -1146,3 +1146,5 @@ QQ 发送模式：消息分发与客户端设置 → QQ 回复范围，qq.outbou
 ## 框架提示词语言（291）
 
 管理面登录后的语言菜单同时管理 `prompt_language: zh|en`（默认zh；切回zh恢复原中文框架）。`GET /settings/prompt-language`（persona）返回 language/effective_language/default；`POST`（admin）严格校验并原子保存、热重载。前端先保存后切换，失败恢复旧显示并报错；登录以服务端为准。所有后端聊天/主动链共享，桌面和手机没有独立设置。角色卡、历史及原始资料不翻译，不强制回复语言。详见 [prompt-language.md](prompt-language.md)。
+
+292补齐陪玩与视觉辅助模型模板及工具结果失败提示，沿用同一设置，不增开关；视觉caption仍按既有合同输出中文，STT纯词表保持用户原文。既有游戏日志不重写，数据/权限/JSON枚举与路由不变。

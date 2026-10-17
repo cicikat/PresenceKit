@@ -19,6 +19,7 @@ from typing import Any
 
 from core.config_loader import get_config
 from core.data_paths import DEFAULT_CHAR_ID
+from core.prompt_language import text as _prompt_text
 
 logger = logging.getLogger(__name__)
 
@@ -271,7 +272,7 @@ async def vlm_fallback_summary(frame: bytes, *, char_id: str) -> str | None:
     b64 = base64.b64encode(frame).decode()
     content_blocks = [
         {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}},
-        {"type": "text", "text": _VLM_PROMPT},
+        {"type": "text", "text": _prompt_text(_VLM_PROMPT)},
     ]
     try:
         from core import llm_client
@@ -372,11 +373,11 @@ async def tick(uid: str, *, char_id: str = DEFAULT_CHAR_ID, game_id: str | None 
     ocr_lines = ocr_frame(frame)
     ocr_kind = classify_ocr_text(ocr_lines)
     if ocr_kind:
-        push_moment(uid, GameMoment(kind=ocr_kind, summary=_OCR_KIND_SUMMARY[ocr_kind]))
+        push_moment(uid, GameMoment(kind=ocr_kind, summary=_prompt_text(_OCR_KIND_SUMMARY[ocr_kind])))
     else:
         diff_kind = classify_frame(uid, frame)
         if diff_kind:
-            summary = _DIFF_KIND_SUMMARY[diff_kind]
+            summary = _prompt_text(_DIFF_KIND_SUMMARY[diff_kind])
             if diff_kind == "scene_change":
                 # 廉价信号（直方图+OCR）都没能解释这次剧变时才兜底 VLM（额度紧张是硬约束，
                 # 只在这一种情况下调用，且每次剧变最多调一次）。
@@ -406,11 +407,11 @@ async def analyze_frame(uid: str, *, char_id: str, frame: bytes | None,
             if not valid():
                 return
             if ocr_kind:
-                moments.append(GameMoment(kind=ocr_kind, summary=_OCR_KIND_SUMMARY[ocr_kind]))
+                moments.append(GameMoment(kind=ocr_kind, summary=_prompt_text(_OCR_KIND_SUMMARY[ocr_kind])))
             else:
                 kind = classify_frame(key, frame)
                 if kind:
-                    summary = _DIFF_KIND_SUMMARY[kind]
+                    summary = _prompt_text(_DIFF_KIND_SUMMARY[kind])
                     if kind == "scene_change":
                         summary = await vlm_fallback_summary(frame, char_id=char_id) or summary
                     moments.append(GameMoment(kind=kind, summary=summary))

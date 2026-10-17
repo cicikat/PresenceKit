@@ -298,7 +298,7 @@ def _readable_content(tool, content):
     try:
         payload = json.loads(content)
     except (ValueError, TypeError):
-        return '结果内容不完整，可调用工具回读。' if content.lstrip().startswith(('{', '[')) else content[:1400]
+        return choose('结果内容不完整，可调用工具回读。', 'The result is incomplete; call the tool to read it again.') if content.lstrip().startswith(('{', '[')) else content[:1400]
     if not isinstance(payload, dict):
         return '；'.join(str(item) for item in payload if not isinstance(item, (dict, list)))[:1400] if isinstance(payload, list) else str(payload)[:1400]
     def readable(value):
@@ -313,15 +313,15 @@ def _readable_content(tool, content):
             return '；'.join(readable(item) for item in value)
         return str(value)
     if payload.get('ok') is False or payload.get('status') in {'error', 'failed'}:
-        return ('失败：' + readable(payload.get('error') or payload.get('message') or '操作未完成'))[:1400]
+        return (choose('失败：', 'Failed: ') + readable(payload.get('error') or payload.get('message') or choose('操作未完成', 'operation not completed')))[:1400]
     text = payload.get('观察') or payload.get('caption') or payload.get('safe_summary') or payload.get('summary')
     if not text:
         text = readable(payload)
     elif isinstance(text, (dict, list)):
         text = readable(text)
     if tool.startswith('self_') and isinstance(payload.get('result'), str) and payload['result'] in {'updated', 'created', 'deleted'}:
-        text = {'updated': '文件已更新', 'created': '文件已创建', 'deleted': '文件已删除'}[payload['result']]
-    return str(text or ('操作成功' if payload.get('ok') is True else '未提供结果内容'))[:1400]
+        text = {'updated': choose('文件已更新', 'File updated'), 'created': choose('文件已创建', 'File created'), 'deleted': choose('文件已删除', 'File deleted')}[payload['result']]
+    return str(text or (choose('操作成功', 'Operation succeeded') if payload.get('ok') is True else choose('未提供结果内容', 'No result content provided')))[:1400]
 
 
 def _tool_result_projection(row, pronoun):

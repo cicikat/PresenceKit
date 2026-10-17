@@ -355,5 +355,18 @@
   "与别人聊天": "Chatting with others",
   "两者都有": "Both",
   "没有足够文字依据": "Insufficient textual evidence",
-  "文字与编辑记录是否充分支持本次观察？不能以应用名、删除请求或推测心理代替证据。": "Do the text and edit records support this observation? Application names, deletion requests, or guessed psychology cannot replace evidence."
+  "文字与编辑记录是否充分支持本次观察？不能以应用名、删除请求或推测心理代替证据。": "Do the text and edit records support this observation? Application names, deletion requests, or guessed psychology cannot replace evidence.",
+  "画面发生了明显变化": "The image changed noticeably",
+  "看起来进入了战斗/高强度场面": "The image appears to have entered combat or an intense scene",
+  "战斗/高强度场面结束了": "Combat or the intense scene ended",
+  "有一阵子画面没什么变化，可能在停顿或菜单里": "The image has been stable for a while; this may be a pause or menu",
+  "画面上出现了死亡/失败提示": "A death or failure notice appeared on screen",
+  "画面上出现了成就/奖杯提示": "An achievement or trophy notice appeared on screen",
+  "刚看到你在游戏里挂了": "A death was just observed in the game",
+  "刚解锁了一个成就": "An achievement was just unlocked",
+  "刚存了个档": "A save was just observed",
+  "打完了一场高强度的场面": "An intense scene just ended",
+  "你好像停下来了，不知道是卡关了还是在想事情": "The game appears paused; the reason is unknown",
+  "画面好像发生了点变化": "The image appears to have changed",
+  "这是一张游戏截图。用一句话（不超过30字）客观描述画面里正在发生什么，不要猜测剧情走向，不要提前透露后续内容，只说你看到的当下画面。": "This is a game screenshot. Describe only the currently visible events objectively in one Chinese sentence (at most 30 Chinese characters). Do not guess the plot or reveal later events."
 }
