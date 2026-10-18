@@ -549,6 +549,13 @@ snapshot 的不同保留/隐私语义。
 
 ### 5.1 当前桌面 WS v0.1
 
+2026-10-18 desktop current / observe：原生 bridge 启用 native-tls，WSS 使用系统证书校验。
+默认或空白 websocketBase 由 backendBase 推导（HTTPS→WSS，保留端口与路径前缀），非默认
+自定义 WS 地址保留；首启/连接设置页联动默认地址，保存后自动重连，Ribbon 等 hello_ack。
+Bearer/ws.desktop、消息、ack、TTL、后端连接观测和手机 HTTP poll/relay 均无变更，未新增
+控制面开关或持久台账。真实云端证书/反代/心跳/主动推送验收 observe；桌面工单为
+`Emerald-client/cc-tasks/2026-10-18-remote-websocket-status.md`。
+
 连接：`ws://127.0.0.1:8080/ws/desktop`（生产以本地配置为准），Rust bridge 使用 Bearer
 header。当前消息全集：
 
