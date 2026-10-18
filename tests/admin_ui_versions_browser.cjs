@@ -52,8 +52,15 @@ const mode = process.env.ADMIN_UI_TEST_PHASE || 'shell';
       await page.waitForTimeout(30);
       assert.equal(apiCalls.length,before,'version switching must not call APIs');
     }
+    assert.equal(await page.locator('#admin-ui-version').inputValue(),'new');
+    await switchTo('legacy');
+    await page.reload();
     assert.equal(await page.locator('#admin-ui-version').inputValue(),'legacy');
-    await mount('overview');
+    await page.evaluate(() => {
+      document.getElementById('auth-overlay').style.display='none';
+      document.getElementById('app').style.display='flex';
+    });
+    await mount('status');
     const legacy = await page.evaluate(() => ({background:getComputedStyle(document.body).backgroundColor,font:getComputedStyle(document.body).fontFamily}));
     await page.screenshot({path:path.join(output,'overview-legacy.png')});
     await switchTo('new');
@@ -112,7 +119,7 @@ const mode = process.env.ADMIN_UI_TEST_PHASE || 'shell';
       console.log('Presentation coverage:',coverage.length,'pages; overflow:',coverage.filter(item=>item.overflow.page>1||item.overflow.document>1));
       assert.ok(coverage.every(item=>item.overflow.page<=1&&item.overflow.document<=1),'all pages fit narrow viewport');
     }
-    await mount('overview');
+    await mount('status');
     await page.setViewportSize({width:480,height:900});
     await page.screenshot({path:path.join(output,'overview-narrow.png')});
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));

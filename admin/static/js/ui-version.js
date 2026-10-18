@@ -1,8 +1,8 @@
 // Presentation adapter: moves the existing controls, never mounts a second form.
 const AdminUI = (() => {
   const key = 'presencekit_admin_ui';
-  let version = 'legacy';
-  try { if (localStorage.getItem(key) === 'new') version = 'new'; } catch (_) {}
+  let version = 'new';
+  try { if (localStorage.getItem(key) === 'legacy') version = 'legacy'; } catch (_) {}
   const folds = new Map();
   const foldState = new WeakMap();
   let observer = null;
