@@ -1,6 +1,11 @@
 from tests.fixtures.public_assets import TEST_THIRD_CHAR_ID
 import json
 
+import pytest
+
+
+pytestmark = pytest.mark.usefixtures("enabled_client_channels")
+
 
 async def test_desktop_ws_envelopes_include_optional_char_id(monkeypatch):
     from channels import desktop_ws

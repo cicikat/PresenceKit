@@ -41,7 +41,7 @@ FanoutPolicy = Union[str, Sequence[str]]
 class TurnResult:
     turn_id: str
     written_to_memory: bool
-    fanout_targets: list[str]
+    fanout_targets: list[str]  # Channels whose send completed without error; not client ACKs.
     fanout_failures: dict[str, str] = field(default_factory=dict)
     post_process_scheduled: bool = False
     emotion: str = "neutral"
@@ -171,7 +171,6 @@ async def _fanout(
     failures: dict[str, str] = {}
     for channel in targets:
         name = getattr(channel, "name", channel.__class__.__name__)
-        sent_targets.append(name)
         try:
             text_to_send = _visible_text
             send_kwargs = {"behavior": behavior}
@@ -194,6 +193,7 @@ async def _fanout(
             if artifacts and name in ("desktop", "mobile"):
                 send_kwargs["artifacts"] = artifacts
             await channel.send(text_to_send, uid, **send_kwargs)
+            sent_targets.append(name)
         except Exception as exc:
             failures[name] = str(exc)
             logger.warning("[turn_sink] fanout failed channel=%s: %s", name, exc)

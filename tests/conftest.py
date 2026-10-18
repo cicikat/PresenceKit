@@ -61,6 +61,15 @@ def _configure_public_test_environment() -> None:
 _configure_public_test_environment()
 
 
+@pytest.fixture
+def enabled_client_channels(monkeypatch):
+    """Opt in to delivery tests without changing disabled public defaults."""
+    monkeypatch.setattr(
+        "core.client_channels.get_config",
+        lambda: {"client_channels": {"desktop": True, "mobile": True}},
+    )
+
+
 @pytest.fixture(autouse=True)
 def reset_runtime_registries(monkeypatch):
     """Each test owns its runtime; registered test doubles must not leak."""

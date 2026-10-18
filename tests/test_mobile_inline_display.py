@@ -3,6 +3,9 @@ from unittest.mock import AsyncMock
 import pytest
 
 
+pytestmark = pytest.mark.usefixtures("enabled_client_channels")
+
+
 @pytest.mark.parametrize("text, expected", [
     ("<say><hl>hi</hl> <big>large</big> <sm>quiet</sm></say>",
      "<hl>hi</hl> <big>large</big> <sm>quiet</sm>"),

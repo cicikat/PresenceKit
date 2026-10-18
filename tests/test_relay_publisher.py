@@ -4,6 +4,11 @@ import json
 
 import httpx
 
+import pytest
+
+
+pytestmark = pytest.mark.usefixtures("enabled_client_channels")
+
 
 class _MockAsyncClient:
     def __init__(self, handler, **_kwargs):

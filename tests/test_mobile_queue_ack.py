@@ -2,6 +2,66 @@ import asyncio
 import json
 import time
 
+import pytest
+
+
+pytestmark = pytest.mark.usefixtures("enabled_client_channels")
+
+
+@pytest.mark.parametrize("failed_file", ["mobile_queue", "mobile_queue_seq"])
+@pytest.mark.parametrize("failure_mode", ["false", "exception"])
+@pytest.mark.parametrize("send_method", ["send", "send_with_behavior"])
+async def test_send_reports_persistence_failure_and_recovers(
+    sandbox, monkeypatch, failed_file, failure_mode, send_method
+):
+    import channels.mobile as mobile_module
+
+    signals = []
+    monkeypatch.setattr(mobile_module, "schedule_signal_publish", signals.append)
+    channel = mobile_module.MobileChannel()
+    await channel.send("existing", "owner", msg_id="turn-existing")
+    original_queue = sandbox.mobile_queue().read_bytes()
+    signals.clear()
+    real_write = mobile_module.safe_write_json
+
+    def fail_write(path, data):
+        if path == getattr(sandbox, failed_file)():
+            if failure_mode == "exception":
+                raise OSError("injected persistence failure")
+            return False
+        return real_write(path, data)
+
+    monkeypatch.setattr(mobile_module, "safe_write_json", fail_write)
+    with pytest.raises(OSError, match="persist"):
+        await getattr(channel, send_method)(
+            "failed", "owner", behavior={"action_type": "notify"}, msg_id="turn-failed"
+        )
+
+    assert sandbox.mobile_queue().read_bytes() == original_queue
+    assert signals == []
+
+    monkeypatch.setattr(mobile_module, "safe_write_json", real_write)
+    await channel.send("recovered", "owner", msg_id="turn-recovered")
+    messages = await channel.poll()
+    assert [item["id"] for item in messages] == ["turn-existing", "turn-recovered"]
+    assert messages[1]["seq"] > messages[0]["seq"]
+    assert messages[1]["turn_id"] == "turn-recovered"
+    assert signals == [messages[1]]
+
+
+async def test_relay_scheduling_failure_does_not_fail_persisted_send(sandbox, monkeypatch):
+    import channels.mobile as mobile_module
+
+    def fail_signal(_item):
+        raise RuntimeError("injected relay scheduling failure")
+
+    monkeypatch.setattr(mobile_module, "schedule_signal_publish", fail_signal)
+    channel = mobile_module.MobileChannel()
+    await channel.send("persisted", "owner", msg_id="turn-persisted")
+
+    messages = await channel.poll()
+    assert [item["id"] for item in messages] == ["turn-persisted"]
+
 
 async def _push(channel, count: int) -> None:
     for index in range(count):

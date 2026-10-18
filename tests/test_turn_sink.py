@@ -4,6 +4,9 @@ import json
 import pytest
 
 
+pytestmark = pytest.mark.usefixtures("enabled_client_channels")
+
+
 class _MockCharacter:
     name = "Companion"
 
@@ -159,6 +162,52 @@ async def test_fanout_failure_does_not_block_other_channels():
         ("小心一点。", "uid2", {"action_type": "notify", "params": {"text": "x"}})
     ]
     assert "broken" in result.fanout_failures
+    assert result.fanout_targets == ["ok"]
+
+
+@pytest.mark.parametrize("failed_file", ["mobile_queue", "mobile_queue_seq"])
+@pytest.mark.parametrize("failure_mode", ["false", "exception"])
+@pytest.mark.parametrize("source", ["user_chat", "trigger"])
+async def test_mobile_durable_failure_reaches_turn_result(
+    sandbox, monkeypatch, failed_file, failure_mode, source
+):
+    from channels import registry
+    import channels.mobile as mobile_module
+    from core.turn_sink import record_assistant_turn
+
+    ok = _Channel("ok")
+    mobile = mobile_module.MobileChannel()
+    assert mobile.is_active is False
+    monkeypatch.setattr(registry, "_channels", {"mobile": mobile, "ok": ok})
+    signals = []
+    monkeypatch.setattr(mobile_module, "schedule_signal_publish", signals.append)
+    real_write = mobile_module.safe_write_json
+
+    def fail_write(path, data):
+        if path == getattr(sandbox, failed_file)():
+            if failure_mode == "exception":
+                raise OSError("injected persistence failure")
+            return False
+        return real_write(path, data)
+
+    monkeypatch.setattr(mobile_module, "safe_write_json", fail_write)
+    result = await record_assistant_turn(
+        assistant_text="reply",
+        uid="owner",
+        source=source,
+        user_text="hello" if source == "user_chat" else None,
+        trigger_name="reminder" if source == "trigger" else None,
+        fanout="all",
+        pipeline=_FakePipeline(),
+    )
+
+    assert result.written_to_memory is True
+    assert result.fanout_targets == ["ok"]
+    assert set(result.fanout_failures) == {"mobile"}
+    assert "persist" in result.fanout_failures["mobile"]
+    assert ok.sent == [("reply", "owner", None)]
+    assert signals == []
+    assert not sandbox.mobile_queue().exists()
 
 
 async def test_capture_turn_failure_enqueues_retry(sandbox, monkeypatch):

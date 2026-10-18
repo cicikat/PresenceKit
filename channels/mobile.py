@@ -87,6 +87,7 @@ class MobileChannel(BaseChannel):
         display_text: str | None = None,
         request_id: str | None = None,
     ) -> None:
+        """Persist an enabled channel's message, raising on persistence failure."""
         from core.client_channels import enabled
         if not enabled(self.name):
             return
@@ -184,7 +185,8 @@ class MobileChannel(BaseChannel):
                 q_file.parent.mkdir(parents=True, exist_ok=True)
                 queue = self._load_queue()
                 seq = self._next_seq(queue)
-                safe_write_json(paths.mobile_queue_seq(), {"next_seq": seq + 1})
+                if not safe_write_json(paths.mobile_queue_seq(), {"next_seq": seq + 1}):
+                    raise OSError("mobile sequence persistence failed")
                 canonical_id = (msg_id or "").strip() or uuid4().hex
                 item = {
                     "id": canonical_id,
@@ -213,13 +215,18 @@ class MobileChannel(BaseChannel):
                     item["voice_available"] = _is_tts_available()
                 queue.append(item)
                 queue = self._prune_queue(queue)
-                safe_write_json(q_file, queue)
+                if not safe_write_json(q_file, queue):
+                    raise OSError("mobile queue persistence failed")
                 _queue_condition.notify_all()
         except Exception as e:
             logger.warning(f"[mobile_channel] write queue failed: {e}")
-            return
+            raise
 
-        schedule_signal_publish(item)
+        # Persistence is the send boundary; optional wake-up cannot undo it.
+        try:
+            schedule_signal_publish(item)
+        except Exception:
+            logger.warning("[mobile_channel] queue persisted but relay scheduling failed", exc_info=True)
 
     def _read_from_queue(self, after: int | None, limit: int) -> list[dict]:
         queue = self._load_queue()
