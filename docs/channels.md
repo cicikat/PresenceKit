@@ -91,7 +91,7 @@ UID 沿用 `scheduler.owner_id`；入口事件 ID 使用命名空间摘要。64 
 |---|---|---|---|
 | QQ | `channels/qq.py` | `standalone_mode=false` 且 `qq.enabled=true` 时由 `main.py` 注册 | `core/qq_adapter.send_message()` → NapCat |
 | 桌宠 | `channels/desktop.py` | 总是注册；WS 连接或 `set_active(True)` 后活跃 | 主动下行优先 WebSocket，失败降级到 `data/runtime/channel_queue.json`（仅 USER_CHAT 回显 / WS 在线时的瞬时失败；proactive turn 见下条广播一次规则）；remote server 部署不写本地 fallback |
-| 手机 | `channels/mobile.py` | 总是注册；`POST /mobile/activate` 或 `GET /mobile/poll` 后短时活跃 | 写入 `data/runtime/mobile_queue.json`，手机端轮询读取；`turn_sink._fanout` 里所有来源（含 USER_CHAT）都无条件补进 mobile durable fallback，`is_active` 不再是能否入队的门槛，只影响其他 channel 的活跃判断 |
+| 手机 | `channels/mobile.py` | 总是注册；`POST /mobile/activate` 或 `GET /mobile/poll` 后短时活跃 | 写入 `data/runtime/mobile_queue.json`，手机端轮询读取；通道启用且 durable mirror 开启时，`turn_sink._fanout` 的 all/broadcast 策略对所有来源（含 USER_CHAT）补入离线 mobile，入队不以 `is_active` 为门槛 |
 | 设备 | `channels/device.py` | 总是注册；仅 `/ws/device` 连接后活跃 | 只走 WebSocket（MVP 无文件降级），WS 未连接时 `send()` 直接返回 |
 
 `channels/registry.py` 维护通道注册表：
@@ -119,12 +119,16 @@ UID 沿用 `scheduler.owner_id`；入口事件 ID 使用命名空间摘要。64 
 桌宠 `/ws/desktop` 与管理面、手机 HTTP 共用同一条 asyncio 循环：`send_text` 超过 0.5s 即丢弃该帧并关掉半开连接，避免心跳或 `tool_status` / `tool_activity` 卡住 `/mobile/activate`、`/mobile/poll` 或 `/mobile/chat`。
 `POST /mobile/push` 可选接收 `char_id`，写入主动消息信封供新客户端渲染发言人。
 
-MobileChannel 的活跃状态有 120 秒 TTL：手机端持续轮询时保持活跃；停止轮询后，调度器广播不会再写入手机队列。
+MobileChannel 的活跃状态有 120 秒 TTL：手机端持续轮询时保持活跃。停止轮询后，统一 `turn_sink` 的 all/broadcast 策略仍会在通道启用且 `durable_mobile_mirror=True` 时将回复与主动消息写入手机队列；TTL 到期不等于停止入队。关闭 mirror 只取消强制补入离线 mobile，活跃手机仍可成为普通广播目标。`client_channels.mobile=false` 会阻止发送入队并保留已有队列。原始 `registry.broadcast()` 以及显式指定通道的 fanout 仍按活跃状态筛选，不自动补入离线手机。
 
 主动消息队列采用单调 `seq` 游标并保留到 `/mobile/ack`；未 ack 项最多保留 500 条或 24 小时，避免离线客户端令队列无限增长。
-配置 `relay_base_url` / `relay_topic` / `relay_token` 后，每条主动消息写盘成功会异步发布一条
+该队列是共享的单消费者收件箱，ACK 删除全局前缀；当前不提供每台手机独立的 ACK 游标，不能作为多设备独立补收保证。
+
+`MobileChannel.send()` / `send_with_behavior()` 在通道启用时以持久化完成为发送边界：发送时预留 seq 或最终队列写入返回 False、或入队过程抛异常，均向调用方报告异常。`turn_sink` 将其记入 `TurnResult.fanout_failures`，发送正常完成后才计入 `fanout_targets`；其他通道继续发送。这里的成功不代表手机已经读取或展示。relay 唤醒调度失败单独记录日志，不将已持久化消息误报为入队失败；本轮不改变 poll/ack 自身的写盘失败语义。
+
+配置 `relay_base_url` / `relay_topic`（`relay_token` 按服务端鉴权要求选填）后，每条消息写盘成功会异步发布一条
 signal-only 中继唤醒（仅含 `id` / `seq` / `user_id` / `timestamp` / `signal`）；正文和
-`behavior` 只保留在 `/mobile/poll` 队列。三项任一缺失时静默跳过中继发布。
+`behavior` 只保留在 `/mobile/poll` 队列。base URL 或 topic 缺失时跳过中继发布，并记录一次未配置提醒；不影响队列留存。
 
 手机普通聊天使用 `/mobile/chat`，桌宠使用 `/desktop/chat`；两者复用同一个
 `run_owner_chat_turn()` 与
@@ -133,14 +137,14 @@ signal-only 中继唤醒（仅含 `id` / `seq` / `user_id` / `timestamp` / `sign
 `detect_emotion` / mood_state 更新是 send 后异步 `asyncio.create_task` 出去的，不占这把锁，
 下一条消息不需要等它跑完）。
 本端 reply 通过 HTTP response 返回；`exclude_origin_channel` 只排除实时来源，
-mobile durable mirror 则由独立策略控制，确保手机发消息后立即切后台仍有可 poll 的副本。
+mobile durable mirror 则由独立策略控制，使手机发消息后立即切后台仍可通过 poll 补收成功持久化的副本。
 
 HTTP assistant reply 保留 `turn_id`（仅 persisted memory id，可为空），并同时返回兼容字段
 `msg_id`（传输 correlator）。手机非流式且 critical 已落盘 turn_id 时，两者相等；无 persisted
 turn_id 时 `msg_id` 仍由 sink mint 不透明 transport id，`turn_id` 保持空，不伪造旧日志身份。
 桌面流式路径的 `_stream_msg_id` 可与 persisted `turn_id` 不同。mobile 普通聊天的
 provenance 是 `mobile`（prompt、probe 与观测），实时来源也是 `mobile`（不启用 desktop stream，
-不激活 desktop），但 USER_CHAT 的 mobile durable mirror 是独立策略，始终写入一次队列。该
+不激活 desktop），但 USER_CHAT 的 mobile durable mirror 是独立策略，在通道启用且 mirror 开启时尝试入队一次。该
 transport `msg_id` 也用于同一 assistant turn 的 WS `channel_message.msg_id` /
 `message_segments.msg_id` 与 mobile queue `id`/`turn_id`。
 `/desktop/wake` 只有 Path A 回放已有 assistant turn 时返回 reply，并保持该次回放的

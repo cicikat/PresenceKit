@@ -16,6 +16,14 @@ current：工具 receipt 关联真实 owner 回合；历史使用 ledger epoch�
 
 292-E 审计：服务器最近100条主动run只有6次工具调用，均为跨次唤醒的屏幕观察，没有同轮重复。6份快照均含3条近期工具结果、pin提醒和result_id；说明有界结果确实进入prompt，不证明每次刷新均有必要，也不证明工具schema在快照中完整可见。未发现应加全局重复禁令的证据；实际pin创建/续轮/过期/撤权仍由隔离回归验证，不冒充生产中已发生。
 
+## 桌面 WS 旧连接消息竞态（2026-10-18，observe）
+
+`channels/desktop_ws.py::handle_connection` 替换旧连接后，接收循环未验证消息来自当前连接，
+`_handle_message` 仍更新共享 pong/ACK 状态。静态可见旧连接残留消息干扰当前状态的窗口，
+尚未确定性复现；本轮未修改 WS。后续先做旧连接 ACK/pong 失败注入，再单独收紧连接所有权。
+范围与已完成手机投递修复见
+[通道审计工单](work-orders/channel-delivery-audit-2026-10-18.md)。
+
 ## Reality 提示词双来源入口（2026-10-12，工单 286）
 
 current：同 ID 的 EntryManager 条目在 builder 中覆盖 stems 副本，包括关闭状态、正文和 layer；

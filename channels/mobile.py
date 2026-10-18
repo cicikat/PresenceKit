@@ -1,9 +1,9 @@
 """
 channels/mobile - mobile polling channel.
 
-The mobile client does not use the desktop WebSocket. Scheduler broadcasts to
-the active mobile channel are written into data/mobile_queue.json, and the
-mobile client reads them through /mobile/poll.
+The mobile client reads its durable queue through /mobile/poll, independently
+of the desktop WebSocket. Unified turn fanout can enqueue for an offline phone
+when the mobile channel and durable mirror are enabled.
 """
 
 import asyncio
