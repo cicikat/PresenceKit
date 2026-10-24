@@ -1,3 +1,9 @@
+## 手机可靠收件 R0/R1 本地实现（2026-10-24，mobile42）
+
+current：后端19176cc已修ACK写盘失败传播、mobile镜像先入队；手机1ae32a9/f251c1e/4663d6c/06387c0已实现HTTP打开/总期限与接收取消、网络epoch、连续wait25/limit50补收、history并行、完整inbox先持久化再ACK、非删除peek与精确scope/id/seq确认、后台回源失败秒级退避。settings ABI为加法，legacy consume/seq/TTL/单消费者和desktop WS合同保留；没有新后端字段、运营开关或状态库。手机inbox复用既有pendingCount/pendingLimit观测，不引入第二份业务真值。
+
+三面核对：后台client_channels与relay配置不变，管理面无新控件；桌面只读、不会被手机HTTP抢占；request_id/turn_id/msg_id/seq、auth、去重、ack、TTL、epoch与fallback按完整调用链回归。手机新增presence_mobile/network只传epoch、不改VPN策略；原生能力授权/动作边界未改。393项Flutter全量/零分析问题、后端52项与Android25项相关回归通过，设备/线上仍observe。R2独立mobile WS与流式、R3多设备游标、连接池和更细投递时延观测保持roadmap，不把接口或构建存在当作真机完成。实现细节：手机 docs/mobile/reliable-message-delivery.md；工单42/43。
+
 ## 手机可靠投递 R1b（2026-10-24）
 
 current：ACK队列写盘False抛出明确异常，不返回ok=true；恢复后重试与重复ACK保持幂等。turn_sink先完成mobile持久镜像再按原相对顺序发送其他通道，保留独立fanout_failures，不再被前面网络/动作ACK拖延。seq、TTL、单消费者、字段和scope不变。52项相关回归通过（新测试先2失败/1通过，再全部通过）。observe：真实手机/线上部署未验收；其余网络恢复/本机交接仍由手机工单42施工。
