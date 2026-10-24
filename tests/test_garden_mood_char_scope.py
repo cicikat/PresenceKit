@@ -54,20 +54,20 @@ def test_force_water_character_b_reads_character_b_mood(sandbox):
 
     captured = []
 
-    real_get_current = __import__(
-        "core.memory.mood_state", fromlist=["get_current"]
-    ).get_current
+    real_get_inner_current = __import__(
+        "core.memory.mood_state", fromlist=["get_inner_current"]
+    ).get_inner_current
 
-    def spy_get_current(*, char_id=TEST_CHAR_ID):
+    def spy_get_inner_current(*, char_id=TEST_CHAR_ID):
         captured.append(char_id)
-        return real_get_current(char_id=char_id)
+        return real_get_inner_current(char_id=char_id)
 
-    with patch("core.memory.mood_state.get_current", side_effect=spy_get_current):
+    with patch("core.memory.mood_state.get_inner_current", side_effect=spy_get_inner_current):
         garden_manager.force_water(char_id="character_b")
 
-    assert captured, "get_current must be called"
+    assert captured, "get_inner_current must be called"
     assert all(cid == "character_b" for cid in captured), (
-        f"force_water(char_id='character_b') must call get_current(char_id='character_b'), got {captured}"
+        f"force_water(char_id='character_b') must call get_inner_current(char_id='character_b'), got {captured}"
     )
 
 
@@ -79,43 +79,43 @@ def test_force_water_yexuan_reads_yexuan_mood(sandbox):
     _seed_mood(sandbox, "character_b", "yandere")
 
     captured = []
-    real_get_current = __import__(
-        "core.memory.mood_state", fromlist=["get_current"]
-    ).get_current
+    real_get_inner_current = __import__(
+        "core.memory.mood_state", fromlist=["get_inner_current"]
+    ).get_inner_current
 
-    def spy_get_current(*, char_id=TEST_CHAR_ID):
+    def spy_get_inner_current(*, char_id=TEST_CHAR_ID):
         captured.append(char_id)
-        return real_get_current(char_id=char_id)
+        return real_get_inner_current(char_id=char_id)
 
-    with patch("core.memory.mood_state.get_current", side_effect=spy_get_current):
+    with patch("core.memory.mood_state.get_inner_current", side_effect=spy_get_inner_current):
         garden_manager.force_water(char_id=TEST_CHAR_ID)
 
     assert all(cid == TEST_CHAR_ID for cid in captured), (
-        f"force_water(char_id=TEST_CHAR_ID) must call get_current(char_id=TEST_CHAR_ID), got {captured}"
+        f"force_water(char_id=TEST_CHAR_ID) must call get_inner_current(char_id=TEST_CHAR_ID), got {captured}"
     )
 
 
-# ── 3. auto_water_tick passes char_id to get_current ─────────────────────────
+# ── 3. auto_water_tick passes char_id to get_inner_current ─────────────────────────
 
 def test_auto_water_tick_passes_char_id_to_mood(sandbox, monkeypatch):
-    """auto_water_tick(char_id='character_b') must call get_current(char_id='character_b')."""
+    """auto_water_tick(char_id='character_b') must call get_inner_current(char_id='character_b')."""
     _seed_mood(sandbox, "character_b", "neutral")
     # Force probability to always trigger
     monkeypatch.setattr(garden_manager.random, "random", lambda: 0.0)
 
     captured = []
-    real_get_current = __import__(
-        "core.memory.mood_state", fromlist=["get_current"]
-    ).get_current
+    real_get_inner_current = __import__(
+        "core.memory.mood_state", fromlist=["get_inner_current"]
+    ).get_inner_current
 
-    def spy_get_current(*, char_id=TEST_CHAR_ID):
+    def spy_get_inner_current(*, char_id=TEST_CHAR_ID):
         captured.append(char_id)
-        return real_get_current(char_id=char_id)
+        return real_get_inner_current(char_id=char_id)
 
-    with patch("core.memory.mood_state.get_current", side_effect=spy_get_current):
+    with patch("core.memory.mood_state.get_inner_current", side_effect=spy_get_inner_current):
         garden_manager.auto_water_tick(char_id="character_b")
 
-    assert captured, "get_current must be called when probability triggers"
+    assert captured, "get_inner_current must be called when probability triggers"
     assert all(cid == "character_b" for cid in captured), (
         f"auto_water_tick(char_id='character_b') must pass char_id='character_b', got {captured}"
     )
@@ -231,18 +231,18 @@ def test_explicit_char_id_reads_correct_mood_path(sandbox):
     _seed_mood(sandbox, TEST_CHAR_ID, "sleepy")
 
     captured = []
-    real_get_current = __import__(
-        "core.memory.mood_state", fromlist=["get_current"]
-    ).get_current
+    real_get_inner_current = __import__(
+        "core.memory.mood_state", fromlist=["get_inner_current"]
+    ).get_inner_current
 
-    def spy_get_current(*, char_id=TEST_CHAR_ID):
+    def spy_get_inner_current(*, char_id=TEST_CHAR_ID):
         captured.append(char_id)
-        return real_get_current(char_id=char_id)
+        return real_get_inner_current(char_id=char_id)
 
-    with patch("core.memory.mood_state.get_current", side_effect=spy_get_current):
+    with patch("core.memory.mood_state.get_inner_current", side_effect=spy_get_inner_current):
         garden_manager.force_water(char_id="yexuan_j5412")
 
-    assert captured, "get_current must be called"
+    assert captured, "get_inner_current must be called"
     assert all(cid == "yexuan_j5412" for cid in captured), (
         f"force_water(char_id='yexuan_j5412') must read j5412 mood, got {captured}"
     )

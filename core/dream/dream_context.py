@@ -103,7 +103,7 @@ async def build_snapshot(user_id: str, entry_reason: str = "", *, char_id: str =
             snapshot["episodic_summary"] = format_for_prompt(
                 episodes,
                 char_name=char_name,
-                current_emotion=_get_mood(),
+                current_emotion=_get_mood(char_id=char_id),
             )
         except Exception as e:
             logger.warning(f"[dream_context] episodic failed: {e}")

@@ -76,14 +76,18 @@ def compose(*, char_id: str, mood: dict, user_name: str = "", now: float | None 
     day = int((now + seed % 86400) // 86400)
     draw = hashlib.sha256(f"{char_id}:{day}:voice-v1".encode()).digest()
     register_id, register = _REGISTERS[draw[0] % len(_REGISTERS)]
-    emotion = str(mood.get("current", "neutral"))
+    from core.affect import LABELS
+    inner = mood.get("affect") or {}
+    emotion = (LABELS.get(inner.get("dominant"), "neutral") if inner.get("enabled") and inner.get("has_signal")
+               else str(mood.get("current", "neutral")))
     if emotion not in _EMOTIONS:
         emotion = "neutral"
     variant = draw[1] % len(_EMOTIONS[emotion])
-    intensity = mood.get("intensity", 0.0)
+    intensity = inner.get("intensity", 0.0) if inner.get("enabled") and inner.get("has_signal") else mood.get("intensity", 0.0)
     intensity = float(intensity) if isinstance(intensity, (int, float)) else 0.0
     strength = "只染上一点情绪底色，不放大。" if intensity < 0.4 else "感受可以更清楚，但仍服从平日的性格与分寸。"
-    continuity = "先沿用当前心绪，不把刚浮起的另一种感觉演成突然翻脸。" if mood.get("pending") else ""
+    from core.mood_text import get_affect_text
+    continuity = get_affect_text(mood)
     address = f"熟悉的名字是{user_name[:80]}；可以自然沿用已有称呼，以‘你’为主。" if user_name.strip() else "称呼以‘你’为主，亲近来自语气。"
     address = _pc(address, f'The familiar name is {user_name[:80]}; naturally use an established address, primarily "you".' if user_name.strip() else 'Address primarily as "you"; closeness comes from tone.')
     return {

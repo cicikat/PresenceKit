@@ -40,6 +40,9 @@ def _configure_public_test_environment() -> None:
     # These tests exercise signal production and queue observability.  Keep
     # scheduler sources available while leaving autonomy/LLM execution off.
     config["scheduler"]["enabled"] = True
+    # Semantic appraisal is opt-in in its focused tests; ordinary unit tests
+    # must never spend a model request just because the production default is on.
+    config.setdefault("affective_engine", {})["enabled"] = False
 
     def replace_credentials(value):
         if isinstance(value, dict):

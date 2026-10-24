@@ -53,6 +53,11 @@ def project(events: list[dict], now: float) -> dict:
     vector, mood = ({key: 0.0 for key in EMOTIONS} for _ in range(2))
     sources, active = [], []
     for event in events[-MAX_EVENTS:]:
+        if event.get("invalid_source_event_ids"):
+            continue
+        number(event["occurred_at"], 0, 1e12)
+        if not isinstance(event["source_turn_id"], str) or not event["source_turn_id"]:
+            raise ValueError("missing source turn")
         at = number(event["appraised_at"], 0, 1e12)
         age = now - at
         if not 0 <= age < MAX_AGE:
@@ -87,7 +92,7 @@ def project(events: list[dict], now: float) -> dict:
 
 def apply(state: dict, raw: dict, *, turn_id: str, occurred_at: float, now: float) -> None:
     events = [e for e in state.get("affect_events", []) if 0 <= now - e["occurred_at"] < MAX_AGE]
-    proposal = candidate(raw, {e["source_turn_id"] for e in events})
+    proposal = candidate(raw, {e["source_turn_id"] for e in events if not e.get("invalid_source_event_ids")})
     target = proposal.pop("correction_target")
     if target != "none":
         original = next(e for e in events if e["source_turn_id"] == target)
@@ -96,7 +101,9 @@ def apply(state: dict, raw: dict, *, turn_id: str, occurred_at: float, now: floa
             "superseded_by": turn_id,
         }])[-4:]
         original.update(appraisal=proposal, appraised_at=occurred_at, correction_turn_id=turn_id)
+        original["source_event_ids"] = list(dict.fromkeys(original.get("source_event_ids", [target + ":user"]) + [turn_id + ":user"]))[-8:]
     elif proposal["relevance"] >= .1:
         events.append({"source_turn_id": turn_id, "occurred_at": occurred_at,
+                       "source_event_ids": [turn_id + ":user"],
                        "appraised_at": occurred_at, "appraisal": proposal, "revisions": []})
     state["affect_events"] = events[-MAX_EVENTS:]

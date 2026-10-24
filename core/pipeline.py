@@ -580,8 +580,7 @@ class Pipeline:
         if _low_info:
             diary_context = ""
 
-        # N2-A: sleepy mood 已迁出 — 见 Pipeline.post_process 开头的
-        #        maybe_mark_sleepy_from_time() 调用。fetch_context 是读路径，不写 mood。
+        # Context fetching is read-only; clock time never invents a mood.
 
         # Dream impression — forced for the exact post-exit rounds, then topic recall.
         try:
@@ -2186,6 +2185,7 @@ class Pipeline:
             "prior_gap_seconds": _prior_gap_seconds,
             "expression_signal": (audit_extras or {}).get("expression_signal", __import__("core.expression_signal", fromlist=["explicit_expression"]).explicit_expression(reply)),
             "source_at": event_context.occurred_at if event_context is not None else _time.time(),
+            "appraisal_input": raw_user_text if raw_user_text is not None else content,
             "source_refs": [str(ref["source_ref"]) for ref in (media_refs or [])
                             if isinstance(ref, dict) and ref.get("kind") == "activity_record" and ref.get("source_ref")],
         }
@@ -2207,7 +2207,7 @@ class Pipeline:
         provenance_source: str = "",
     ) -> dict:
         """
-        Brief 37：send 之后异步执行的慢段——detect_emotion → mood_state → avatar/
+        Brief 37：send 之后异步执行的慢段——明确表达 → mood_state → avatar/
         heart → profile → slow_queue 入队 → TTS/表情包 → 意图解析。调用方（
         turn_sink.record_assistant_turn）应在 channel fanout 完成后用
         asyncio.create_task() 调度本方法，不得 await（否则又把 send 堵回去）。
@@ -2267,7 +2267,7 @@ class Pipeline:
             logger.warning(f"[pipeline.post_process_slow] hidden_state reality signal 映射失败: {_hs_err}")
 
         async with _locks.uid_lock(user_id):
-            # ── mood_state 更新（全局锁，嵌套在 uid_lock 内；用刚 detect 出的 _emotion）
+            # Outward expression commits immediately, before semantic appraisal.
             _mood_state_after: dict | None = None
             if envelope.can_affect_mood:
                 async with _locks.global_lock("mood_state"):
@@ -2286,6 +2286,27 @@ class Pipeline:
             if envelope.can_affect_mood:
                 from core.embodiment.heart import maybe_draw_heart as _maybe_heart
                 asyncio.create_task(_maybe_heart(reply, char_id))
+
+        # Real dialogue only. Trigger seeds, imports and isolated material are not
+        # personal events. Network work is outside both UID and state locks.
+        from core.write_envelope import SourceType
+        if (envelope.can_affect_mood and not trigger_name and not is_group
+                and envelope.source in (SourceType.USER_CHAT, SourceType.QQ, SourceType.WECHAT)
+                and critical_result.get("critical_written")
+                and not web_echo and not coplay_echo and not provenance_source
+                and not _detect_dream_echo(user_id, char_id, content, reply)):
+            try:
+                from core import affective_appraisal
+                from core.memory import mood_state as _mood
+                _input = str(critical_result.get("appraisal_input") or "")
+                _state = _mood.load(char_id=char_id)
+                if (_mood.enabled() and _state.get("last_turn_id") == str(_turn_id)
+                        and _state.get("last_appraisal_turn_id") != str(_turn_id)):
+                    _proposal, _status = await affective_appraisal.evaluate(_input, char_id=char_id)
+                    _mood.record_appraisal(_proposal, char_id=char_id, turn_id=str(_turn_id),
+                                           occurred_at=critical_result["source_at"], evidence=_input, status=_status)
+            except Exception as e:
+                log_error("post_process.affective_appraisal", e)
 
         # ── 入慢队列 ───────────────────────────────────────────
         _mt_tags = list(_reality_tags)

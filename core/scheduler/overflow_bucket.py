@@ -158,6 +158,7 @@ def compute_signals(uid: str, *, char_id: str) -> OverflowSignals:
         logger.debug("[overflow_bucket] garden_event failed: %s", exc)
 
     try:
+        # Do not turn a suppressed internal feeling into an interruption request.
         from core.memory.mood_state import get_intensity
 
         intensity = float(get_intensity(char_id=char_id))

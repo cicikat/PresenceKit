@@ -157,10 +157,10 @@ async def _build_letter_context(
         from core.memory import mood_state as ms
 
         state = ms.load(char_id=char_id)
-        current = state.get("current", "")
-        intensity = float(state.get("intensity") or 0)
-        if current and current != "neutral":
-            parts.append(f"此刻情绪：{current}（强度 {intensity:.1f}）")
+        from core.mood_text import get_affect_text, get_mood_text
+        hint = get_affect_text(state) or get_mood_text(state)
+        if hint:
+            parts.append(hint)
     except Exception:
         pass
 

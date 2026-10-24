@@ -483,15 +483,18 @@ def build(
     if "{perception_block}" in sp:
         sp = sp.replace("{perception_block}", "")
 
-    from core.mood_text import get_mood_text
+    from core.mood_text import get_mood_text, get_affect_text
     import json
     from core.sandbox import get_paths
     mood_line = ""
+    affect_line = ""
+    mood_raw = {}
     try:
         from core.memory.mood_state import load as _load_expression
         mood_raw = _load_expression(char_id=char_id)
         if isinstance(mood_raw, dict) and mood_raw:
             mood_line = get_mood_text(mood_raw, subject="你")
+            affect_line = get_affect_text(mood_raw)
     except Exception:
         pass  # Missing/invalid state supplies no invented emotional fact.
 
@@ -529,6 +532,11 @@ def build(
     if mood_line:
         messages.append({"role": "system", "_layer": "expression_afterglow", "_drop_priority": 5,
                          "content": mood_line})
+    if affect_line:
+        messages.append({"role": "system", "_layer": "affective_state", "_drop_priority": 5,
+                         "content": affect_line,
+                         "_provenance": {"source": "character_appraisal", "version": mood_raw.get("version"),
+                                         "source_turn_ids": mood_raw["affect"]["source_turn_ids"]}})
 
     # Reality state references are bounded; raw moves/pages remain in activity records.
     try:

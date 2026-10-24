@@ -229,6 +229,16 @@ def invalidate_by_events(scope: MemoryScope, event_ids: list[str], *, reason: st
     except Exception:
         logger.warning("[invalidation] storyline step failed", exc_info=True)
 
+    try:
+        from core.memory.mood_state import invalidate_sources
+        affected = invalidate_sources(ids, char_id=scope.character_id)
+        summary["affective_events"] = len(affected)
+        if affected:
+            undo["affective_events"] = affected
+            _provenance(scope, "mood_state", ",".join(affected)[:200], reason, ids)
+    except Exception:
+        logger.warning("[invalidation] affect step failed", exc_info=True)
+
     summary["downstream_events"] = _downstream_events(scope, ids)
     summary["manual_review"] = [
         {"store": name, "note": MANUAL_REVIEW_NOTE} for name in MANUAL_REVIEW_STORES
@@ -289,6 +299,10 @@ def revert_invalidation(scope: MemoryScope, invalidation_id: str) -> dict[str, A
         return {"ok": False, "error": "already_reverted"}
     undo = target.get("undo") or {}
     restored = {"mid_term": 0, "episodic": 0, "storyline_nodes": 0}
+    if undo.get("affective_events"):
+        from core.memory.mood_state import invalidate_sources
+        restored["affective_events"] = len(invalidate_sources(
+            target["event_ids"], char_id=scope.character_id, revert=True))
 
     if undo.get("mid_term"):
         from core.memory import mid_term

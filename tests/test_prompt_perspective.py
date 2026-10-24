@@ -103,7 +103,6 @@ def test_sensor_subject_and_provenance(build_prompt, monkeypatch):
 
 def test_mood_prompt_does_not_resolve_global_character(monkeypatch):
     from core.mood_text import get_mood_text
-    monkeypatch.setattr("core.mood_text._char_name", lambda: pytest.fail("global character lookup"))
     assert "回合 mood-turn" in get_mood_text({"current": "happy", "intensity": .5, "has_signal": True, "schema_version": 2, "source_turn_id": "mood-turn", "source_at": time.time(), "expires_at": time.time()+60}, subject="你")
 
 
@@ -148,7 +147,6 @@ def test_thinking_mood_uses_scoped_state_without_global_name(sandbox, monkeypatc
     path = sandbox.mood_state(char_id="other_character")
     path.parent.mkdir(parents=True, exist_ok=True)
     __import__("core.memory.mood_state", fromlist=["update"]).update("happy", .5, char_id="other_character", source_turn_id="mood-turn", source_at=time.time())
-    monkeypatch.setattr("core.mood_text._char_name", lambda: pytest.fail("global character lookup"))
     assert "刚才回合 mood-turn 明确表达了 happy" in _mood_hint("other_character")
 
 

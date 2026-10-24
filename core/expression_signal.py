@@ -10,7 +10,10 @@ WORDS = {"happy": r"开心|高兴|笑", "sad": r"难过|伤心|叹气", "angry":
 
 def explicit_expression(reply: str) -> str:
     result = ""
-    for segment in parse_narrative_segments(reply)["segments"]:
+    segments = parse_narrative_segments(reply)["segments"]
+    # Explicit outward actions take precedence over inner narration in any order.
+    segments = [s for s in segments if s.get("type") == "feel"] + [s for s in segments if s.get("type") == "do"]
+    for segment in segments:
         if segment.get("type") not in ("feel", "do"):
             continue
         text = str(segment.get("text", ""))

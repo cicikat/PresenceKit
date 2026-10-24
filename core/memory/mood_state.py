@@ -32,6 +32,7 @@ def _read(char_id: str) -> dict:
         if not isinstance(raw, dict) or raw.get("schema_version") not in (2, 3):
             return deepcopy(_DEFAULT)
         state = {**deepcopy(_DEFAULT), **raw, "schema_version": 3}
+        state["affect_events"] = state["affect_events"][-affect.MAX_EVENTS:]
         affect.project(state["affect_events"], time.time())
         if not isinstance(state["receipts"], list) or not all(isinstance(x, str) for x in state["receipts"]):
             raise ValueError("invalid receipts")
@@ -102,7 +103,55 @@ def update(new_emotion: str, new_intensity: float | None = None, source: str = "
                 state["appraisal_status"] = "rejected"
         elif appraisal_status:
             state["appraisal_status"] = appraisal_status
-        state["last_appraisal_turn_id"] = source_turn_id
+        if appraisal is not None or appraisal_status:
+            state["last_appraisal_turn_id"] = source_turn_id
+        save(state, char_id=char_id)
+        return load(char_id=char_id)
+
+
+def invalidate_sources(event_ids: list[str], *, char_id: str, revert: bool = False) -> list[str]:
+    """Exact canonical event IDs only; withdrawal never revives an older guess."""
+    with _STORE_LOCK:
+        if not get_paths().mood_state(char_id=char_id).exists():
+            return []
+        state = _read(char_id)
+        changed = []
+        for event in state["affect_events"]:
+            hit = set(event_ids) & set(event.get("source_event_ids", []))
+            old = set(event.get("invalid_source_event_ids", []))
+            current = old - hit if revert else old | hit
+            if old != current:
+                event["invalid_source_event_ids"] = sorted(current)
+                changed.append(event["source_turn_id"])
+        if changed:
+            state["version"] += 1
+            save(state, char_id=char_id)
+        return changed
+
+
+def record_appraisal(raw: dict | None, *, char_id: str, turn_id: str,
+                     occurred_at: float, evidence: str, status: str) -> dict:
+    """Commit a network result only while its source turn is still current."""
+    with _STORE_LOCK:
+        state = _read(char_id)
+        if (not enabled() or state.get("last_turn_id") != turn_id
+                or state.get("last_appraisal_turn_id") == turn_id
+                or state.get("last_source_at") != occurred_at):
+            return load(char_id=char_id)
+        state["last_appraisal_turn_id"] = turn_id
+        state["appraisal_status"] = status
+        state["version"] += 1
+        if raw is not None:
+            try:
+                affect.apply(state, raw, turn_id=turn_id, occurred_at=occurred_at, now=time.time())
+                for event in state["affect_events"]:
+                    if event["source_turn_id"] == turn_id:
+                        event["evidence_excerpt"] = evidence[:600]
+                    elif event.get("correction_turn_id") == turn_id:
+                        event["correction_excerpt"] = evidence[:600]
+                state["appraisal_status"] = "applied"
+            except (ValueError, KeyError, TypeError):
+                state["appraisal_status"] = "rejected"
         save(state, char_id=char_id)
         return load(char_id=char_id)
 

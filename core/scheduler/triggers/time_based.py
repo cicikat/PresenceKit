@@ -318,7 +318,9 @@ def _collect_diary_voice(char_id: str) -> tuple[str, str, str]:
         logger.debug("[daily_journal] voice anchor 读取失败: %s", e)
     try:
         from core.memory import mood_state
-        mood_hint = (mood_state.get_current(char_id=char_id or DEFAULT_CHAR_ID) or "").strip()[:200]
+        from core.mood_text import get_affect_text, get_mood_text
+        state = mood_state.load(char_id=char_id or DEFAULT_CHAR_ID)
+        mood_hint = (get_affect_text(state) or get_mood_text(state))[:600]
     except Exception as e:
         logger.debug("[daily_journal] mood 读取失败: %s", e)
     return persona_hint, voice_example, mood_hint

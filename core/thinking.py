@@ -410,15 +410,11 @@ def _recent_history_summary(messages: list[dict]) -> str:
 
 def _mood_hint(char_id: str | None) -> str:
     try:
-        import json
         from core.data_paths import DEFAULT_CHAR_ID
-        from core.mood_text import get_mood_text
-        from core.sandbox import get_paths
-
-        mood_raw = json.loads(
-            get_paths().mood_state(char_id=char_id or DEFAULT_CHAR_ID).read_text(encoding="utf-8")
-        )
-        return get_mood_text(mood_raw, subject="你")
+        from core.mood_text import get_mood_text, get_affect_text
+        from core.memory.mood_state import load
+        mood_raw = load(char_id=char_id or DEFAULT_CHAR_ID)
+        return get_affect_text(mood_raw) or get_mood_text(mood_raw, subject="你")
     except Exception:
         return ""
 

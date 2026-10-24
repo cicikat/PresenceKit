@@ -210,7 +210,7 @@ def auto_water_tick(*, char_id: str) -> dict | None:
     if random.random() >= AUTO_WATER_PROBABILITY:
         return None
 
-    from core.memory.mood_state import get_current
+    from core.memory.mood_state import get_inner_current as get_current
     mood = get_current(char_id=char_id)
 
     slot_key = _resolve_slot_for_mood(mood)
@@ -228,7 +228,7 @@ def auto_water_tick(*, char_id: str) -> dict | None:
 def force_water(mood: str | None = None, *, char_id: str) -> dict:
     """被动浇水入口（工具调用）。mood 为 None 时自动读当前情绪。"""
     if mood is None:
-        from core.memory.mood_state import get_current
+        from core.memory.mood_state import get_inner_current as get_current
         mood = get_current(char_id=char_id)
 
     slot_key = _resolve_slot_for_mood(mood)

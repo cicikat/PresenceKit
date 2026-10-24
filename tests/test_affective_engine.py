@@ -9,6 +9,11 @@ from core import affect
 from core.memory import mood_state as ms
 
 
+@pytest.fixture(autouse=True)
+def enable_engine(monkeypatch):
+    monkeypatch.setattr(ms, "enabled", lambda: True)
+
+
 def proposal(**values):
     return {**dict.fromkeys(affect.EMOTIONS, 0.0), "confidence": .9, "relevance": 1.0,
             "strategy": "express", "goal_impact": "conflict", "agency": "uncertain",

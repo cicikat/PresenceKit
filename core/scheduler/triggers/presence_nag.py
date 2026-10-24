@@ -47,7 +47,7 @@ def propose(ctx: dict | None = None):
 
     try:
         from core.memory.mood_state import load
-
+        # This outward interruption follows explicit expression, not hidden anger.
         mood = load(char_id=char_id)
         current_mood = str(mood.get("current") or "neutral").strip().lower()
     except Exception as exc:
