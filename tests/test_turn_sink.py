@@ -165,6 +165,34 @@ async def test_fanout_failure_does_not_block_other_channels():
     assert result.fanout_targets == ["ok"]
 
 
+async def test_mobile_mirror_is_persisted_before_slow_network_channel(sandbox, monkeypatch):
+    from channels import registry
+    import channels.mobile as mobile_module
+    from core.turn_sink import _fanout, TurnSource
+
+    mobile = mobile_module.MobileChannel()
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    class SlowChannel(_Channel):
+        async def send(self, *args, **kwargs):
+            entered.set()
+            await release.wait()
+
+    monkeypatch.setattr(registry, "_channels", {"slow": SlowChannel("slow"), "mobile": mobile})
+    monkeypatch.setattr(mobile_module, "schedule_signal_publish", lambda item: None)
+    task = asyncio.create_task(_fanout(
+        assistant_text="fixture", uid="owner", fanout="all", behavior=None,
+        source=TurnSource.USER_CHAT,
+    ))
+    try:
+        await asyncio.wait_for(entered.wait(), timeout=1)
+        assert [item["content"] for item in await mobile.poll()] == ["fixture"]
+    finally:
+        release.set()
+        await task
+
+
 @pytest.mark.parametrize("failed_file", ["mobile_queue", "mobile_queue_seq"])
 @pytest.mark.parametrize("failure_mode", ["false", "exception"])
 @pytest.mark.parametrize("source", ["user_chat", "trigger"])
@@ -429,7 +457,7 @@ async def test_mobile_live_origin_keeps_durable_mirror_and_desktop_fanout(sandbo
     )
 
     queue = json.loads(sandbox.mobile_queue().read_text(encoding="utf-8"))
-    assert result.fanout_targets == ["desktop", "mobile"]
+    assert result.fanout_targets == ["mobile", "desktop"]
     assert desktop.sent == [("手机回复", "owner", None)]
     assert len(queue) == 1
     assert queue[0]["id"] == result.turn_id == "turn-手机消息"

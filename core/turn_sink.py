@@ -167,6 +167,9 @@ async def _fanout(
 
     from core.client_channels import enabled
     targets = [ch for ch in targets if enabled(ch.name)]
+    # Durable delivery must not wait for a live channel's network/action ACK.
+    # Keep all other channels' relative ordering and failure accounting intact.
+    targets.sort(key=lambda ch: ch.name != "mobile")
     sent_targets: list[str] = []
     failures: dict[str, str] = {}
     for channel in targets:

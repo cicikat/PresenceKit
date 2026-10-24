@@ -100,6 +100,41 @@ async def test_poll_after_returns_only_newer_items(sandbox):
     assert [item["id"] for item in newer] == ["turn-3"]
 
 
+@pytest.mark.parametrize("failure_mode", ["false", "exception"])
+async def test_ack_persistence_failure_does_not_confirm_and_can_retry(
+    sandbox, monkeypatch, failure_mode
+):
+    import channels.mobile as mobile_module
+    from admin.routers import mobile as router
+
+    channel = mobile_module.MobileChannel()
+    await _push(channel, 2)
+    rows = await channel.poll()
+    before = sandbox.mobile_queue().read_bytes()
+    real_write = mobile_module.safe_write_json
+
+    def fail_write(path, data):
+        if path == sandbox.mobile_queue():
+            if failure_mode == "exception":
+                raise OSError("injected ack persistence failure")
+            return False
+        return real_write(path, data)
+
+    monkeypatch.setattr(mobile_module, "safe_write_json", fail_write)
+    monkeypatch.setattr(router, "_get_mobile_channel", lambda: channel)
+    with pytest.raises(OSError, match="persist"):
+        await router.mobile_ack({"ack_seq": rows[0]["seq"]}, auth=True)
+    assert sandbox.mobile_queue().read_bytes() == before
+    assert [row["id"] for row in await channel.poll()] == ["turn-1", "turn-2"]
+
+    monkeypatch.setattr(mobile_module, "safe_write_json", real_write)
+    assert await router.mobile_ack({"ack_seq": rows[0]["seq"]}, auth=True) == {
+        "ok": True, "remaining": 1,
+    }
+    assert await channel.ack(rows[0]["seq"]) == 1
+    assert [row["id"] for row in await channel.poll()] == ["turn-2"]
+
+
 async def test_concurrent_push_assigns_unique_monotonic_sequences(sandbox):
     from channels.mobile import MobileChannel
 

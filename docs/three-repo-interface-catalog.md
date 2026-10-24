@@ -1,3 +1,7 @@
+## 手机可靠投递 R1b（2026-10-24）
+
+current：ACK队列写盘False抛出明确异常，不返回ok=true；恢复后重试与重复ACK保持幂等。turn_sink先完成mobile持久镜像再按原相对顺序发送其他通道，保留独立fanout_failures，不再被前面网络/动作ACK拖延。seq、TTL、单消费者、字段和scope不变。52项相关回归通过（新测试先2失败/1通过，再全部通过）。observe：真实手机/线上部署未验收；其余网络恢复/本机交接仍由手机工单42施工。
+
 ## 手机投递重构评估（2026-10-24，mobile 41，open / roadmap / observe）
 
 current：手机前台HTTP轮询、后台ntfy signal回源；未接desktop WS，不会与桌面互踢。既有condition长轮询入队即唤醒已隔离验证。仅完成源码审计与故障注入，没有交付新传输功能。

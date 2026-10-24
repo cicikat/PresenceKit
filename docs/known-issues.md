@@ -1,3 +1,7 @@
+## 手机可靠投递 R1b（2026-10-24）
+
+current：ACK队列写盘False抛出明确异常，不返回ok=true；恢复后重试与重复ACK保持幂等。turn_sink先完成mobile持久镜像再按原相对顺序发送其他通道，保留独立fanout_failures，不再被前面网络/动作ACK拖延。seq、TTL、单消费者、字段和scope不变。52项相关回归通过（新测试先2失败/1通过，再全部通过）。observe：真实手机/线上部署未验收；其余网络恢复/本机交接仍由手机工单42施工。
+
 ## 手机投递与代理卡住联合审计（2026-10-24，open / roadmap / observe）
 
 open：mobile ACK的safe_write_json(False)仍返回ok=true，故障注入确认确认成功与磁盘不一致；共享队列单消费者不支持双手机独立补收；串行fanout会使不活跃mobile的末尾durable mirror被前面慢通道拖延。手机真实HTTPS CONNECT黑洞代理实验16,011ms仍占用前台收件单任务，存在打开请求总期限/取消/网络恢复缺口，但未证明用户V2Ray VPN使用同一HTTP代理路径。正常前台已停ntfy，不能用后台15分钟补偿解释全部前台卡住。

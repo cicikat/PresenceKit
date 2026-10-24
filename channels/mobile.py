@@ -161,7 +161,8 @@ class MobileChannel(BaseChannel):
                 if int(item.get("seq", 0)) > up_to_seq
             ]
             if remaining != queue:
-                safe_write_json(get_paths().mobile_queue(), remaining)
+                if not safe_write_json(get_paths().mobile_queue(), remaining):
+                    raise OSError("mobile acknowledgement persistence failed")
             return len(remaining)
 
     async def _write_to_queue(
