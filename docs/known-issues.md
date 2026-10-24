@@ -1,3 +1,9 @@
+## 手机投递与代理卡住联合审计（2026-10-24，open / roadmap / observe）
+
+open：mobile ACK的safe_write_json(False)仍返回ok=true，故障注入确认确认成功与磁盘不一致；共享队列单消费者不支持双手机独立补收；串行fanout会使不活跃mobile的末尾durable mirror被前面慢通道拖延。手机真实HTTPS CONNECT黑洞代理实验16,011ms仍占用前台收件单任务，存在打开请求总期限/取消/网络恢复缺口，但未证明用户V2Ray VPN使用同一HTTP代理路径。正常前台已停ntfy，不能用后台15分钟补偿解释全部前台卡住。
+
+roadmap：先网络恢复+连续HTTP长轮询+可靠ack/本机交接，再独立mobile WS+HTTP；禁止让手机复用会替换桌面连接的 `/ws/desktop`。observe：实际部署/安装版本、手机路由、真实卡住点、Doze/OEM未测。后端49既有+4隔离注入=53 passed，手机78回归+1真实本地代理实验通过；仅文档，无跨端运行行为影响。见[联合审计与施工顺序](work-orders/channel-delivery-audit-2026-10-24.md)。
+
 ## 手机聊天关联与排序（2026-10-07，工单 267）
 
 F6 observe：desktop/mobile 引用稳定锚点及邻近消息工具已实现，真实设备/模型尚未验收。QQ 精确引用于2026-10-07由用户取消，保留普通消息/引用文本降级，不再列为待施工；旧日志无台账身份不可精确展开，不猜测作者与时间。

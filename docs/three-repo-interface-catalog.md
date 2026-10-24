@@ -1,3 +1,11 @@
+## 手机投递重构评估（2026-10-24，mobile 41，open / roadmap / observe）
+
+current：手机前台HTTP轮询、后台ntfy signal回源；未接desktop WS，不会与桌面互踢。既有condition长轮询入队即唤醒已隔离验证。仅完成源码审计与故障注入，没有交付新传输功能。
+
+open：手机打开请求缺少全程deadline/取消及网络变化恢复（显式HTTPS代理CONNECT黑洞16,011ms仍占用前台收件，非真实V2Ray归因）；前台5秒tick/单页积压；后台signal回源失败及时重试；native删除式consume/inbox持久交接；后端ack写盘False假成功、共享单消费者、串行fanout拖延离线mirror。roadmap：先网络/连续poll/可靠确认，后独立mobile WS+HTTP；多设备独立游标按产品需求另立合同。不得复用desktop单连接，也不得把WS在线视为持久收到。
+
+三面：管理面需投递/ack/retention/逐通道耗时只读观测，新增运营开关须effective/default；手机需接收健康/权限/降级与本机inbox观测，桌面既有鉴权/动作/会话归属保持；request_id/turn_id/msg_id/seq、ack/TTL、generation、fallback需全链验收。observe：真机/线上版本与V2Ray路由/Doze未测。后端53、手机78+1实验通过不代表真机。仅文档，无跨端运行行为影响。证据与依赖见[联合审计](work-orders/channel-delivery-audit-2026-10-24.md)及手机 `docs/mobile/message-delivery-audit-2026-10-24.md`。
+
 工单 288 C3：现实世界书/提示词启用组合按角色保存在 active_prompt_assets.by_character；旧全局组合仅属于其 active_character，切换新角色从空组合开始。条目管理文件改到角色 authored 目录，API CRUD/import/export 支持 char_id 并在 await 前冻结。共享模块文件是安装级素材目录，只有用户为角色显式选择的模块可注入；条目文件不跨角色回退。历史共享条目可用迁移脚本 --artifact lorebook/jailbreak_entries 显式归属，默认 dry-run 并保留原件。单角色管理清单补条目文件与资产绑定。
 
 工单 288 A2：自主工具继承普通工具权限，未配置自主覆盖时默认开放；显式关闭仍有效。旧危险/确认标记不再拦截执行。新 MCP 默认不要求本地分类白名单（用户可主动收窄），工具无需风险说明或确认。手机自动化与设备动作已去除起手/敏感页面确认；设备系统权限、连接、取消和执行预算保持有效。
