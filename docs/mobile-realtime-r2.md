@@ -40,6 +40,6 @@ Flutter 独立 MobileRealtimeController 管理资源，AppShell 复用已有 pau
 
 ## 本地证据与遗留
 
-后端相关173项通过（含新增R2、ACK/队列、mobile合同、session、chat-log、scoped auth、角色字面量和换行守卫），最后局部收尾R2的28项再次通过；手机相关124项通过（含R2的7项），分析零问题。证据用例为 tests/test_mobile_realtime.py 与手机 test/mobile_realtime_test.dart，涵盖真实本地WS、黑洞升级资源关闭、重复段落、持久化失败、迟到HTTP错误、旧代、撤权、跨日分页和队列ACK清空。
+后端相关173项通过（含新增R2、ACK/队列、mobile合同、session、chat-log、scoped auth、角色字面量和换行守卫），最后R2的29项通过，增加遗忘最新记录后历史位置不复用的回归；手机相关124项通过（含R2的7项），分析零问题。证据用例为 tests/test_mobile_realtime.py 与手机 test/mobile_realtime_test.dart，涵盖真实本地WS、黑洞升级资源关闭、重复段落、持久化失败、迟到HTTP错误、旧代、撤权、跨日分页和队列ACK清空。
 
 管理面使用实际 fragment/JS、隔离本机fixture，开/关和热更新回显已浏览器实测；不读写生产配置。实际手机、V2Ray、Wi-Fi/流量、Doze/进程被杀、真实模型及双端联合体验未验收。桌面协议/代码不变；后台 Android 原链路不变，不扩大此次原生验收范围。删除候选仅为将来安全增量流可替换 final_only 后的单一路径清理，本次不删除 legacy 传输或42的降级逻辑。

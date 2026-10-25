@@ -81,6 +81,15 @@ def test_projection_is_idempotent_and_respects_tombstone():
     assert final() is None
 
 
+def test_forgetting_newest_final_does_not_reuse_history_position():
+    final("old")
+    scope = MemoryScope.reality_scope("owner", "character_a")
+    previous = realtime.history(scope)["messages"][0]["history_index"]
+    assert event_store.tombstone_event(scope, "old:assistant").ok
+    final("new")
+    assert realtime.history(scope)["messages"][0]["history_index"] > previous
+
+
 @pytest.mark.parametrize("body", ["<tool_call>secret</tool_call>", "ok<think>hidden", "<|system|>secret", "<analysis unfinished"])
 def test_no_raw_internal_content_is_ever_published(body):
     assert realtime.remember_final(uid="owner", char_id="character_a", turn_id="t",

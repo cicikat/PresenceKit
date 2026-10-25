@@ -21,7 +21,8 @@ _CONNECTIONS: dict[str, "Subscription"] = {}
 _CLIENTS: dict[tuple[str, str], str] = {}
 _METRICS: dict[str, deque] = {}
 _SCHEMA = """CREATE TABLE IF NOT EXISTS mobile_finals (
-    msg_id TEXT PRIMARY KEY, assistant_event_id TEXT NOT NULL,
+    history_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    msg_id TEXT NOT NULL UNIQUE, assistant_event_id TEXT NOT NULL,
     envelope TEXT NOT NULL, created_at REAL NOT NULL)"""
 
 
@@ -74,7 +75,7 @@ def remember_final(*, uid: str, char_id: str, turn_id: str, content: str,
                 BEGIN DELETE FROM mobile_finals WHERE assistant_event_id=NEW.event_id; END""")
             db.execute("""CREATE TRIGGER IF NOT EXISTS mobile_finals_delete
                 AFTER DELETE ON events BEGIN DELETE FROM mobile_finals WHERE assistant_event_id=OLD.event_id; END""")
-            db.execute("INSERT OR IGNORE INTO mobile_finals VALUES (?,?,?,?)",
+            db.execute("INSERT OR IGNORE INTO mobile_finals (msg_id,assistant_event_id,envelope,created_at) VALUES (?,?,?,?)",
                        (turn_id, turn_id + ":assistant", json.dumps(envelope, ensure_ascii=False), time.time()))
             stored = db.execute("SELECT envelope FROM mobile_finals WHERE msg_id=?", (turn_id,)).fetchone()
             db.commit()
