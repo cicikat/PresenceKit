@@ -51,6 +51,34 @@ def test_invalid_min_len_fails_open():
 
 
 @pytest.mark.parametrize("raw,expected", [
+    ("嗯\n，在呢。", "嗯，在呢。"),
+    ("嗯\n\n，在呢。", "嗯，在呢。"),
+    ("好的，\n时间还早，\n先坐一会儿。", "好的，时间还早，先坐一会儿。"),
+    ("好的，\n\n时间还早，\n\n先坐一会儿。", "好的，时间还早，先坐一会儿。"),
+    ("第一句！\n下一句？\n继续…\n最后一句。", "第一句！下一句？继续…最后一句。"),
+    ("第一句！\n\n下一句？\n\n继续…\n\n最后一句。", "第一句！下一句？继续…最后一句。"),
+    ("第一句。\n\n第二句。", "第一句。\n\n第二句。"),
+    ("他说：“第一句。”\n下一句。", "他说：“第一句。”\n下一句。"),
+    ("<say>嗯</say>\n<say>，明白了。</say>", "<say>嗯</say><say>，明白了。</say>"),
+])
+@pytest.mark.parametrize("width", [1, 2, 7, 31, 64])
+def test_plain_reply_breaks_only_after_chinese_period(raw, expected, width):
+    from core.output.segment_enforcer import ParagraphStreamEnforcer, enforce_paragraph_breaks
+    assert enforce_paragraph_breaks(raw, min_len=1000) == expected
+    stream = ParagraphStreamEnforcer(1000)
+    result = "".join(stream.feed(raw[i:i + width]) for i in range(0, len(raw), width)) + stream.finish()
+    assert result == expected
+    assert "".join(result.split()) == "".join(raw.split())
+
+
+@pytest.mark.parametrize("punctuation", ["，", ",", "、", "；", "：", "！", "？", "…", "!", "?", "."])
+def test_automatic_break_requires_chinese_period(punctuation):
+    from core.output.segment_enforcer import enforce_paragraph_breaks
+    raw = "这句话足够长" + punctuation + "这一句继续说完。"
+    assert enforce_paragraph_breaks(raw, min_len=1) == raw
+
+
+@pytest.mark.parametrize("raw,expected", [
     ("看来\n这个问题需要一起处理。", "看来这个问题需要一起处理。"),
     ("正在生\n气，但仍然在意。", "正在生气，但仍然在意。"),
     ("你亲\n口说过。\n\n另一段。", "你亲口说过。\n\n另一段。"),
@@ -63,12 +91,12 @@ def test_invalid_min_len_fails_open():
     ("正文\n## 标题\n正文", "正文\n## 标题\n正文"),
     ("| 项目 | 值 |\n| --- | --- |\n| 甲 | 乙 |", "| 项目 | 值 |\n| --- | --- |\n| 甲 | 乙 |"),
     ("```text\n正在生\n气\n```\n正文", "```text\n正在生\n气\n```\n正文"),
-    ("正文  \n明确硬换行", "正文  \n明确硬换行"),
-    ("正文\\\n明确硬换行", "正文\\\n明确硬换行"),
-    ("<say>第一段</say>\n<say>第二段</say>", "<say>第一段</say>\n<say>第二段</say>"),
+    ("正文  \n明确硬换行", "正文  明确硬换行"),
+    ("正文\\\n明确硬换行", "正文\\明确硬换行"),
+    ("<say>第一段</say>\n<say>第二段</say>", "<say>第一段</say><say>第二段</say>"),
     ("正在<hl>生\n气</hl>。", "正在<hl>生气</hl>。"),
     ("正在生\r\n气。", "正在生气。"),
-    ("Hello\nworld", "Hello\nworld"),
+    ("Hello\nworld", "Hello world"),
 ])
 def test_visible_soft_wrap_repair_preserves_explicit_structure(raw, expected):
     from core.output.segment_enforcer import enforce_paragraph_breaks
@@ -162,6 +190,22 @@ def test_effective_threshold_falls_back_to_s4(monkeypatch):
         },
     )
     assert segment_enforcer.get_segment_enforce_settings() == (True, 73)
+
+
+@pytest.mark.parametrize("path", ["qq", "desktop"])
+def test_shared_output_path_does_not_split_around_comma(monkeypatch, path):
+    raw = "嗯\n\n，在呢。\n\n下一句，\n还没说完。"
+    expected = "嗯，在呢。\n\n下一句，还没说完。"
+    if path == "qq":
+        import core.response_processor as output
+        monkeypatch.setattr(output, "get_segment_enforce_settings", lambda: (True, 1000))
+        assert "".join(output.process(raw, "Companion")) == expected
+        assert "".join(output.process_memory_copy(raw, "Companion")) == raw
+    else:
+        import core.reality_output_guard as output
+        monkeypatch.setattr(output, "get_segment_enforce_settings", lambda: (True, 1000))
+        assert output.clean_reality_reply_text(raw, "Companion") == expected
+        assert output.clean_reality_reply_text_for_memory(raw, "Companion") == raw
 
 
 @pytest.mark.parametrize("path", ["qq", "desktop"])

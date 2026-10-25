@@ -14,7 +14,7 @@ from core.memory.short_term import DEFAULT_SEGMENT_MIN_LEN
 
 logger = logging.getLogger(__name__)
 
-_SENTENCE_END_CHARS = frozenset("。！？…")
+_SENTENCE_END_CHARS = frozenset("。")
 _CLOSING_CHARS = frozenset("”’\"'」』】）》〉")
 _TAG_TOKEN_RE = re.compile(
     r"^<\s*(/?)\s*([A-Za-z][\w-]*)\b[^>]*?(/?)\s*>$",
@@ -22,7 +22,7 @@ _TAG_TOKEN_RE = re.compile(
 _VOID_TAGS = frozenset({"br", "hr"})
 _STRUCTURED_LINE_RE = re.compile(r"^(?:[ \t]{4}|\t|\s{0,3}(?:[#>|]|[-+*]\s|\d+[.)、]\s*))")
 _LABEL_LINE_RE = re.compile(r"^\s*[^\s:：<>]{1,16}[:：]")
-_BLOCK_TAG_RE = re.compile(r"</?(?:say|thought|narration|action|do|feel|env)\b", re.I)
+_BLOCK_TAG_RE = re.compile(r"</?(?:thought|narration|action|do|feel|env)\b", re.I)
 
 
 def _visible_line(line: str) -> str:
@@ -34,14 +34,10 @@ def _structured_line(line: str) -> bool:
                 or _BLOCK_TAG_RE.search(line) or line.lstrip().startswith(("```", "~~~")))
 
 
-def _han(char: str) -> bool:
-    return bool(char) and "\u3400" <= char <= "\u9fff"
-
-
 class _SoftLineBreakFilter:
-    """Repair Han-to-Han single wraps, retaining explicit paragraph/Markdown structure.
+    """Keep prose newlines only after a Chinese period, retaining code/list structure.
 
-    Only the uncertain newline and up to 32 following characters are held, so
+    The uncertain whitespace and up to 32 following characters are held, so
     chunk boundaries cannot turn a list marker or a speaker label into prose.
     Raw output is owned by the caller; this filter only edits the visible copy.
     """
@@ -50,30 +46,36 @@ class _SoftLineBreakFilter:
         self._line = ""
         self._pending = False
         self._head = ""
+        self._separator = ""
         self._fence = ""
         self._cr = False
 
     def _keep_previous(self) -> bool:
         visible = _visible_line(self._line)
         return (bool(self._fence) or _structured_line(self._line)
-                or self._line.endswith(("  ", "\\"))
-                or not visible or not _han(visible[-1]))
+                or not visible
+                or visible.rstrip("".join(_CLOSING_CHARS) + " \t").endswith("。"))
 
     def _resolve(self, output: list[str]) -> None:
         following = _visible_line(self._head)
-        join = (not self._keep_previous() and following and _han(following[0])
-                and not _structured_line(self._head))
-        output.extend(("" if join else "\n", self._head))
+        keep = self._keep_previous() or _structured_line(self._head)
+        separator = self._separator if keep else ""
+        previous = _visible_line(self._line)
+        if (not keep and previous and following and previous[-1].isascii()
+                and previous[-1].isalnum() and following[0].isascii()
+                and following[0].isalnum()):
+            separator = " "
+        output.extend((separator, self._head))
         self._line = self._head
         self._head = ""
+        self._separator = ""
         self._pending = False
 
     def _newline(self, output: list[str]) -> None:
         if self._pending:
             if not self._head.strip():
-                output.extend(("\n", self._head, "\n"))
-                self._line = self._head = ""
-                self._pending = False
+                self._separator += self._head + "\n"
+                self._head = ""
                 return
             self._resolve(output)
         stripped = self._line.lstrip()
@@ -88,6 +90,7 @@ class _SoftLineBreakFilter:
             self._line = ""
         else:
             self._pending = True
+            self._separator = "\n"
 
     def _char(self, char: str, output: list[str]) -> None:
         if char == "\n":
@@ -145,9 +148,9 @@ class ParagraphStreamEnforcer:
     """Incrementally add safe paragraph breaks to an outgoing text stream.
 
     A break becomes eligible after the current paragraph exceeds ``min_len``
-    and reaches ``。！？…``.  It is emitted immediately before the next visible
+    and reaches ``。``.  It is emitted immediately before the next visible
     sentence, which leaves room for closing quotes and an existing newline.
-    Han-to-Han soft line wraps are repaired first, with bounded lookahead.
+    Prose newlines without a preceding ``。`` are removed first, including blank lines.
     XML/NMP tags are tracked so a synthetic break never splits one tag across
     two client bubbles.  The input chunks themselves are never mutated or
     stored; callers keep the raw model output separately for memory.
@@ -270,8 +273,8 @@ def enforce_paragraph_breaks(text: str, *, min_len: int) -> str:
     """在长回复达到阈值后的句末插入段落空行。
 
     与 :class:`ParagraphStreamEnforcer` 使用同一增量规则，因此流式临时
-    气泡与最终 canonical 文本会收敛到相同段落。已有换行会重置段长；
-    先保守合并中文句中单换行，保留空行、结构化内容和硬换行，再做句末分段；
+    气泡与最终 canonical 文本会收敛到相同段落。普通正文只保留句号后的换行，
+    连续空行也服从同一规则；代码/列表等结构保留，再按阈值在句号后分段；
     不改写标点、不增删字词；任何异常均返回原文。
     """
     original = text

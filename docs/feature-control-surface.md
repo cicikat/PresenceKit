@@ -381,7 +381,7 @@ LLM 请求快照是独立的高敏感调试开关：管理面 MCP 页通过 admi
 `GET /observability/llm-debug-requests`，并可经同为 admin-only 的 `DELETE /observability/llm-debug-requests` 主动清空；不可复用普通 `state.read` API 调用总账权限。它只应用于短时
 排查，关闭后不再产生新快照，既有快照按保留期自动轮转清理。
 
-生成后段落兜底开启时，还会保守修复中文句中单换行；明确空行、句末、列表、代码及Markdown硬换行保留。桌面流式与最终正文、手机最终消息共用规则，不新增本地设置或协议字段。关闭仍保留模型原换行；详细边界见 [reply-boundaries.md](reply-boundaries.md)。
+生成后段落兜底开启时，普通正文只在中文句号`。`后保留或新增分段；逗号旁、句中以及问号/叹号/省略号后的单换行和空行合并，代码/列表等显式结构保留。既有阈值控制自动分段长度，不要求每个句号都拆。桌面流式与最终正文、手机最终消息共用规则，不新增本地设置或协议字段。关闭仍保留模型原换行；详细边界见 [reply-boundaries.md](reply-boundaries.md)。
 
 降级路径：关闭对应功能布尔值时保留其余配置；tool loop 回到普通单次回复，thinking 回到无前置思考，桌面 TTS 回到纯文字，生成后段落兜底关闭后直接发送清理后的模型原文，模型可切回稳定 routing profile。
 

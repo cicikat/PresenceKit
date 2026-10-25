@@ -364,13 +364,13 @@ anti_collapse:
 ### S4 生成后兜底：segment_enforcer（Brief 72）
 
 `core/output/segment_enforcer.py::enforce_paragraph_breaks()` 是 S4 预防之外的发送前硬兜底：
-先保守合并中文字符之间的句中单换行，避免把词拆成独立气泡；明确空行、句末换行、列表/引用/标题/表格、代码块、说话者标签和 Markdown 硬换行保留。非中文软换行不猜测。随后，当前段落长度超过有效 `min_len` 后，在下一个 `。！？…` 句末插入一个空行；保留的换行会重置段长。
+普通正文只保留中文句号`。`（及其闭引号）后的换行；逗号旁、词内、问号/叹号/省略号后的单换行、空行和硬换行均合并，避免拆成碎气泡。列表/引用/标题/表格、代码块、说话者标签及非say的NMP块边界作为显式结构保留。英语词间换行转空格以免粘词。随后，当前段落长度超过有效`min_len`后，只在下一个`。`后插入一个空行；保留的换行会重置段长。
 不改写标点，不增删字词。QQ 路径在
 `core/response_processor.py::process()` 完成清理后、`_split_message()` 前调用；桌面/手机 Reality 路径
 在 `core/reality_output_guard.py::clean_reality_reply_text()` 出口调用。Dream 不在本机制覆盖范围。
 
 桌面流式路径使用同模块的 `ParagraphStreamEnforcer` 增量处理发送副本：达到阈值的句末出现后，
-在下一句第一个可见字符到达时发出 `\n\n` delta；不确定的原单换行最多缓冲下一行32字符以识别结构，流正常结束时 flush，不能按模型 chunk 边界拆泡。状态机会先接纳右引号，并追踪 XML/NMP
+在下一句第一个可见字符到达时发出 `\n\n` delta；不确定的分隔空白及下一行最多32字符用于识别结构，流正常结束时flush，不能按模型chunk边界拆泡。状态机会先接纳右引号，并追踪XML/NMP
 标签边界，避免把 `。”` 或 `<say>…</say>` 拆跨两个气泡；流结束后的 canonical 文本再用同一规则
 校正，前端按同一 `msg_id` 替换临时气泡。开关关闭或处理异常时 delta 原样透传。
 

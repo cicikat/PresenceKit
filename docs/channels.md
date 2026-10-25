@@ -1,6 +1,6 @@
 ## 手机前台 R2 本地实现（mobile43）
 
-2026-10-26修复：已有段落兜底开关开启时，双端共同展示出口保守合并中文句中单换行，桌面delta与最终正文共用状态机并在结束时flush。字段、消息身份与ACK不变，不改原始生成/记忆或既有历史；Dream不受影响。规则、退回原文方式和验收见 [reply-boundaries.md](reply-boundaries.md)。用户授权后已单独部署此修复，手机R2仍未部署。
+2026-10-26修复：已有段落兜底开关开启时，双端共同展示出口按句号合同处理普通正文，只在`。`后分段；逗号旁及句中单换行/空行合并，代码/列表结构保留。桌面delta与最终正文共用状态机并在结束时flush。字段、消息身份与ACK不变，不改原始生成/记忆或既有历史；Dream不受影响。首轮词内修复已单独部署，后续句号修正的发布状态见 [reply-boundaries.md](reply-boundaries.md)，手机R2仍未部署。
 
 独立 `/ws/mobile` 只分发同一 Reality turn 的持久最终消息（final_only），不转发桌面模型 delta、不推进队列 ACK。`/mobile/history` 加原 chat-log 支持清队列后的稳定身份和展示恢复。逐帧鉴权、前后台、热关闭、scope 与覆盖边界见 [mobile-realtime-r2.md](mobile-realtime-r2.md)。尚未部署，真实设备/代理及首字时延仍 observe。
 
