@@ -20,7 +20,7 @@ Covers:
     — active=missing_id，mood_state.update 不被调用，post_process 抛错
 7.  mood_state 路径不含 uid
     — sandbox.mood_state(char_id="character_b") 路径字符串不含 uid 格式
-8.  force=True 允许低强度专用入口一次切换；普通 detect 仍保留低强度去噪
+8.  无有效来源的旧枚举不恢复为当前信号
 """
 
 import asyncio
@@ -179,7 +179,7 @@ def test_update_reads_and_writes_same_char_id(sandbox):
 
     # Verify character_b state changed (pending set or emotion blended)
     data = load(char_id="character_b")
-    assert data["intensity"] > 0.0, "character_b intensity must have been blended upward"
+    assert data["intensity"] > 0.0, "character_b explicit expression must be recorded"
 
 
 def test_update_writes_only_target_char(sandbox):
@@ -239,7 +239,6 @@ async def test_post_process_mood_update_passes_active_char_id(
     env = WriteEnvelope(source=SourceType.INGEST, can_write_memory=True, can_affect_mood=True)
 
     with (
-        patch("core.llm_client.detect_emotion", new=AsyncMock(return_value="neutral")),
         patch("core.memory.short_term.load", return_value=[]),
         patch("core.post_process.slow_queue.enqueue", return_value=None),
         patch("core.memory.pending_perception.confirm_delivered", return_value=None),
@@ -294,7 +293,6 @@ async def test_char_switch_mood_update_uses_new_char(
     )
 
     with (
-        patch("core.llm_client.detect_emotion", new=AsyncMock(return_value="neutral")),
         patch("core.memory.short_term.load", return_value=[]),
         patch("core.post_process.slow_queue.enqueue", return_value=None),
         patch("core.memory.pending_perception.confirm_delivered", return_value=None),
@@ -344,16 +342,13 @@ async def test_invalid_active_does_not_update_mood(
 
     env = WriteEnvelope(source=SourceType.INGEST, can_write_memory=True, can_affect_mood=True)
 
-    with (
-        patch("core.llm_client.detect_emotion", new=AsyncMock(return_value="neutral")),
-    ):
-        with pytest.raises((ValueError, RuntimeError)):
-            await pipeline.post_process(
-                user_id="u1",
-                content="你好",
-                reply="在的",
-                envelope=env,
-            )
+    with pytest.raises((ValueError, RuntimeError)):
+        await pipeline.post_process(
+            user_id="u1",
+            content="你好",
+            reply="在的",
+            envelope=env,
+        )
 
     assert mood_update_called == [], (
         "mood_state.update must not be called when active_character is invalid"

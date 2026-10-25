@@ -97,7 +97,7 @@
             <div><code class="admin-inline-073">intent</code> —— 判断"要不要触发某个动作"的轻量辅助判断，不面向用户，配便宜模型即可。</div>
             <div><code class="admin-inline-073">probe</code> —— 每轮先判断要不要调用工具的轻量"探针"调用，配便宜模型即可。</div>
             <div><code class="admin-inline-073">summary</code> —— 生成摘要（压缩长对话、总结一局陪玩/一场梦），配便宜模型即可。</div>
-            <div><code class="admin-inline-073">detect_emotion</code> —— 识别文字里的情绪标签，配便宜模型即可。</div>
+            <div><code class="admin-inline-073">detect_emotion</code> —— 发送后评价真实对话的混合情绪与认知重评；爱意探针也复用此路由，支持闭合决策模型。</div>
             <div><code class="admin-inline-073">consolidation</code> —— 把短期记忆整理沉淀为长期记忆、提炼关系事实等后台整理，配便宜模型即可。</div>
             <div><code class="admin-inline-073">perform</code> —— 把回复文字映射成动作/表情演出指令（只有开启"表演意图映射"功能时才会用到）。</div>
             <div><code class="admin-inline-073">monologue</code> <span data-i18n="routing.category.monologue">—— 前置独白：角色说话前的内心独白草稿（只有开启思考链时才会用到）。未单独映射时按 default_preset → chat → 第一个 preset 解析，不是“直接回落 chat”。</span></div>

@@ -39,30 +39,23 @@ def test_runtime_signal_snapshot_is_process_local_aggregated_and_redacted():
     }]
 
 
-def test_emotion_invalid_output_is_aggregated_by_preset_and_warning_rate_limited(monkeypatch, caplog):
+def test_appraisal_invalid_output_is_aggregated_without_content(sandbox, monkeypatch):
     import asyncio
     from types import SimpleNamespace
     from unittest.mock import AsyncMock
 
-    import core.llm_client as llm_client
+    from core import affective_appraisal
     from core.runtime_signal_observability import _reset_for_tests, snapshot
 
     _reset_for_tests()
-    monkeypatch.setattr(llm_client, "get_model_client", lambda _purpose: SimpleNamespace(name="emotion-small", provider_kind="openai", model="test", prompt_style="narrative", params={}))
-    monkeypatch.setattr(
-        "core.llm_protocol.create",
-        AsyncMock(return_value=SimpleNamespace(assistant_text="")),
-    )
-
-    with caplog.at_level("WARNING", logger="core.llm_client"):
-        for _ in range(20):
-            assert asyncio.run(llm_client.detect_emotion("hello")) == "neutral"
-
-    warnings = [item.message for item in caplog.records if "reason=empty" in item.message]
-    assert len(warnings) == 2
+    monkeypatch.setattr('core.memory.mood_state.enabled', lambda: True)
+    monkeypatch.setattr('core.character_loader.load', lambda char: SimpleNamespace(system_prompt='', description='', personality=''))
+    monkeypatch.setattr('core.decision_contract.closed', AsyncMock(return_value='{}'))
+    for _ in range(20):
+        assert asyncio.run(affective_appraisal.evaluate('private event', char_id='fixture')) == (None, 'rejected')
     signal = snapshot()["signals"][0]
     assert signal["context_counts"] == [{
-        "context": {"model": "emotion-small", "purpose": "detect_emotion", "reason": "empty"},
+        "context": {"purpose": "affective_appraisal", "reason": "rejected"},
         "count": 20,
     }]
 

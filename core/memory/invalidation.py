@@ -351,4 +351,6 @@ def revert_invalidation(scope: MemoryScope, invalidation_id: str) -> dict[str, A
     for artifact in ("mid_term", "episodic", "storyline"):
         if undo.get(artifact):
             _provenance(scope, artifact, invalidation_id, "revert", target.get("event_ids") or [])
+    if undo.get("affective_events"):
+        _provenance(scope, "mood_state", invalidation_id, "revert", target.get("event_ids") or [])
     return {"ok": True, "restored": restored}

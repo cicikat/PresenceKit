@@ -96,7 +96,6 @@ async def test_new_payload_contains_scope_field(chars_tree, monkeypatch, sandbox
     env = WriteEnvelope(source=SourceType.INGEST, can_write_memory=True, can_affect_mood=False)
 
     with (
-        patch("core.llm_client.detect_emotion", new=AsyncMock(return_value="neutral")),
         patch("core.memory.short_term.load", return_value=[]),
         patch("core.memory.pending_perception.confirm_delivered", return_value=None),
         patch("core.memory.fixation_pipeline.capture_turn", return_value="turn_1"),
@@ -125,7 +124,6 @@ async def test_new_payload_retains_uid_and_char_id(chars_tree, monkeypatch, sand
     env = WriteEnvelope(source=SourceType.INGEST, can_write_memory=True, can_affect_mood=False)
 
     with (
-        patch("core.llm_client.detect_emotion", new=AsyncMock(return_value="neutral")),
         patch("core.memory.short_term.load", return_value=[]),
         patch("core.memory.pending_perception.confirm_delivered", return_value=None),
         patch("core.memory.fixation_pipeline.capture_turn", return_value="turn_1"),
@@ -451,7 +449,6 @@ async def test_new_payload_char_id_field_unchanged(chars_tree, monkeypatch, sand
     env = WriteEnvelope(source=SourceType.INGEST, can_write_memory=True, can_affect_mood=False)
 
     with (
-        patch("core.llm_client.detect_emotion", new=AsyncMock(return_value="neutral")),
         patch("core.memory.short_term.load", return_value=[]),
         patch("core.memory.pending_perception.confirm_delivered", return_value=None),
         patch("core.memory.fixation_pipeline.capture_turn", return_value="turn_1"),

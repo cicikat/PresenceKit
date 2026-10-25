@@ -5,12 +5,10 @@ tests/test_n2_fetch_context_side_effects.py
 N2-A 审计测试：fetch_context 读路径副作用封口验收
 
 验收标准：
-1. Pipeline.fetch_context 本身不再直接写 mood（sleepy 已迁出）
+1. Pipeline.fetch_context 是无情绪写入的读路径
 2. Pipeline.fetch_context 调 episodic retrieve 时 allow_strengthen=False，不写回 strength
-3. 工具命中仍会进入 thinking，但入口是 mark_tool_thinking_mood helper，
-   main.py 不再直接调用 mood_state.update
-4. 深夜 sleepy 语义仍存在，现在由 post_process 内的 maybe_mark_sleepy_from_time 触发
-5. maybe_mark_sleepy_from_time 和 mark_tool_thinking_mood 是 mood_helpers 模块的唯一出口
+3. 记忆召回不制造新的角色情绪；时间和工具不强制写入标签。
+
 """
 
 import asyncio
@@ -278,7 +276,7 @@ def test_retrieve_with_allow_strengthen_true_does_save():
 
 
 def test_retrieve_with_allow_strengthen_false_does_not_call_nudge():
-    """N2-A T2c: allow_strengthen=False 时 nudge_from_memory 也不被调用。"""
+    """N2-A T2c: allow_strengthen=False 时 mood_state.update 也不被调用。"""
     import core.memory.episodic_memory as _ep
     from core.memory import mood_state as _ms
 
@@ -301,13 +299,13 @@ def test_retrieve_with_allow_strengthen_false_does_not_call_nudge():
         }
     ]
 
-    nudge_calls = []
+    mood_calls = []
     with (
         patch.object(_ep, "_load_memories", return_value=memories),
         patch.object(_ep, "_load_index", return_value={}),
         patch.object(_ep, "_save_memories"),
         patch.object(_ms, "update",
-                     side_effect=lambda *a, **kw: nudge_calls.append(a)),
+                     side_effect=lambda *a, **kw: mood_calls.append(a)),
     ):
         _ep.retrieve(
             user_id="u_test",
@@ -317,31 +315,9 @@ def test_retrieve_with_allow_strengthen_false_does_not_call_nudge():
             allow_strengthen=False,
         )
 
-    assert nudge_calls == [], (
-        f"allow_strengthen=False 时不应调用 nudge_from_memory，实际 {len(nudge_calls)} 次"
+    assert mood_calls == [], (
+        f"allow_strengthen=False 时不应调用 mood_state.update，实际 {len(mood_calls)} 次"
     )
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# 3. thinking mood 入口是 mark_tool_thinking_mood
-# ══════════════════════════════════════════════════════════════════════════════
-
-
-
-
-
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# 4. sleepy 语义仍存在，由 post_process 内 maybe_mark_sleepy_from_time 触发
-# ══════════════════════════════════════════════════════════════════════════════
-
-
-
-
-
-
-
 
 
 def test_fetch_context_source_has_no_sleepy_write():
@@ -358,12 +334,5 @@ def test_fetch_context_source_has_no_sleepy_write():
         "fetch_context 代码行中仍含有 sleepy mood 写入"
     )
     assert "maybe_mark_sleepy" not in code_body, (
-        "fetch_context 可执行代码中不应调用 maybe_mark_sleepy（已迁到 post_process）"
+        "fetch_context 可执行代码中不应调用 maybe_mark_sleepy（已退役）"
     )
-
-
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# 5. mood_helpers 模块接口完整性
-# ══════════════════════════════════════════════════════════════════════════════

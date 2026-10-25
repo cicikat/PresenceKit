@@ -9,7 +9,7 @@ import pytest
 from core import affective_appraisal as appraisal
 from core.memory import mood_state as ms
 from core.mood_text import get_affect_text
-from tests.test_affective_engine import proposal
+from tests.test_affective_engine import proposal, commit
 
 
 @pytest.fixture(autouse=True)
@@ -97,12 +97,22 @@ def test_native_closed_request_and_expression_are_independent():
     assert explicit_expression("<feel>生气</feel><do>微笑</do>") == "happy"
 
 
+def test_withdrawal_before_and_during_appraisal(sandbox, monkeypatch):
+    monkeypatch.setattr('core.memory.event_query.get_event', lambda *a, **k: {'tombstoned': True})
+    assert not appraisal.source_available('owner', 'companion', 't1')
+    now = time.time()
+    ms.update('happy', char_id='companion', source_turn_id='t1', source_at=now-1)
+    assert ms.invalidate_sources(['t1:user'], char_id='companion') == ['t1']
+    state = ms.record_appraisal(proposal(anger=.9), char_id='companion', turn_id='t1',
+                                occurred_at=now-1, evidence='withdrawn', status='ready')
+    assert not state['affect']['has_signal']
+
+
 def test_source_withdrawal_clears_derived_affect_and_revert_restores(sandbox):
     from core.memory.invalidation import invalidate_by_events, revert_invalidation
     from core.memory.scope import MemoryScope
     now = time.time()
-    ms.update("happy", char_id="companion", source_turn_id="t1", source_at=now-1,
-              appraisal=proposal(anger=.8))
+    commit("t1", now-1, proposal(anger=.8), "happy")
     scope = MemoryScope.reality_scope("owner", "companion")
     result = invalidate_by_events(scope, ["t1:user"], reason="withdrawn", actor="owner")
     assert result["affective_events"] == 1

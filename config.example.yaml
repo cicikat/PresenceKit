@@ -5,6 +5,9 @@
 # Framework prompt language, managed by the admin language selector. zh preserves the default.
 prompt_language: zh
 
+affective_engine:
+  enabled: true                 # 默认开启；发送后评价真实对话；管理面热开关，关闭恢复仅明确表达余韵
+
 qzone:
   enabled: false
   write_enabled: false
@@ -949,4 +952,4 @@ minecraft:
 #   base_url: https://api.typesafe.ai/v1/systemone
 #   api_key: YOUR_TYPESAFE_API_KEY
 #   model: jev-latest
-# 按需把 sensor_judge / detect_emotion / minecraft_reaction 指向此预设；不自动启用。
+# 按需把 sensor_judge / detect_emotion（多维事件评价）/ minecraft_reaction 指向此预设；不自动启用。

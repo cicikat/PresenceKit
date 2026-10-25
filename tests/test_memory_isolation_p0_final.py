@@ -602,8 +602,7 @@ async def test_fail_loud_missing_active_blocks_all_writes(
 
     with patch.object(_st, "append", side_effect=lambda *a, **kw: st_calls.append((a, kw)) or True), \
          patch.object(_el, "append", side_effect=lambda *a, **kw: el_calls.append((a, kw)) or True), \
-         patch.object(sq, "enqueue", side_effect=lambda *a, **kw: sq_calls.append((a, kw))), \
-         patch("core.llm_client.detect_emotion", new=AsyncMock(return_value="neutral")):
+         patch.object(sq, "enqueue", side_effect=lambda *a, **kw: sq_calls.append((a, kw))):
         with pytest.raises((ValueError, RuntimeError)):
             await pipeline.post_process("u_ghost", "你好", "在的", envelope=env)
 
@@ -664,8 +663,7 @@ async def test_fail_loud_missing_active_no_mood_update(
 
     env = WriteEnvelope(source=SourceType.INGEST, can_write_memory=True, can_affect_mood=True)
 
-    with patch.object(_ms, "update", side_effect=lambda *a, **kw: mood_calls.append((a, kw))), \
-         patch("core.llm_client.detect_emotion", new=AsyncMock(return_value="neutral")):
+    with patch.object(_ms, "update", side_effect=lambda *a, **kw: mood_calls.append((a, kw))):
         with pytest.raises((ValueError, RuntimeError)):
             await pipeline.post_process("u_ghost2", "你好", "在的", envelope=env)
 

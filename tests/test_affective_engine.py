@@ -28,7 +28,10 @@ def clock(monkeypatch):
 
 
 def commit(turn, at, raw=None, expression="", char="companion"):
-    return ms.update(expression, char_id=char, source_turn_id=turn, source_at=at, appraisal=raw)
+    state = ms.update(expression, char_id=char, source_turn_id=turn, source_at=at)
+    if raw is not None:
+        state = ms.record_appraisal(raw, char_id=char, turn_id=turn, occurred_at=at, evidence="event", status="ready")
+    return state
 
 
 def test_smiling_does_not_clear_anger_and_concern(sandbox, clock):
@@ -79,7 +82,7 @@ def test_duplicate_late_and_equal_time_independent_turns(sandbox, clock):
     commit("late", 9998, proposal(joy=.9))
     commit("future", 10001, proposal(joy=.9))
     assert path.read_bytes() == original
-    assert commit("same_time", 9999, proposal(concern=.5))["version"] == 2
+    assert commit("same_time", 9999, proposal(concern=.5))["version"] == 4
 
 
 @pytest.mark.parametrize("bad", [math.nan, math.inf, -.1, 1.1, True, "0.5", None])

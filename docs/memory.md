@@ -686,7 +686,7 @@ clamp 单测是弱断言（未验真截顶）；ShortTermMemory.append 类封装
    - `envelope.can_write_memory=False`（默认 WriteEnvelope）：所有写入均跳过，用于无副作用 dry-run。
    - `char_id` 由 `post_process_critical` 显式传入，决定写入哪个角色桶。
 2. send（channel fanout）完成后，`post_process_slow` 才异步提交源回合表达
-   并更新 `mood_state`（真实 emotion 只进 mood_state / mid_term，不回写 event_log）。
+   提交明确表达与事件认知评价；认知评价不进入 mid_term 或 event_log，原明确表达仍供旧整合策略使用。
 
 **写入格式（P1-1 speaker 字段化）**：每个对话块的各行之后加说话人元行：
 - 用户行：`> speaker:user [turn_id:{turn_id}]`（turn_id 可选，speaker:user 恒写）
@@ -963,7 +963,7 @@ recent 置 0，long / repair 各放宽到 2 条，且词面没命中时直接从
 
 **召回后副作用**：
 1. 被召回的记忆 `strength += 0.15`（越被想起越牢固）
-2. 调用 `nudge_from_memory()`：如果记忆 strength > 0.7，轻微推高当前情绪强度（幅度 ≤ 0.1）
+2. 不写入情绪：召回不能自我强化为新的情绪证据；旧 nudge 已退役。
 
 ### 格式化：format_for_prompt()
 
@@ -1264,17 +1264,15 @@ meta 另含 `consecutive_failures`、`rejected_ops`、`next_retry_at`（及 `agg
 
 ---
 
-## 情绪表达与短时余韵（284）
+## 情绪、表达与认知重评（2026-10-25）
 
-`mood_state` 保存角色级短时表达，schema_version=2。字段包含 current、has_signal、source_turn_id、source_at、expires_at、version，以及阻止晚到提交的 last_source_at / last_turn_id。
+当前合同见 [affective-engine.md](affective-engine.md)。沿用 char-only 的 mood_state 路径，schema_version=3：外层字段保留有来源、最多30分钟的明确表达；affect_events 保存有界的混合感受、可修正评价及证据引用，affect 为只读时间投影。旧v2只迁移表达，不倒推内心。
 
-只有角色输出中明确的自我 feel/do 信号参与，沿现有回复解析；不另调用情绪模型。否定、引用、用户情绪和标点不自动贴角色标签。钟点 sleepy、工具 thinking、关键词 yandere、记忆召回 nudge、两轮门槛及加权漂移均退役。sleepy/thinking 仍可明确表达。
+发送后先提交明确表达，再在锁外对合格真实用户对话执行一次有时限认知评价，重读来源水位后提交；不阻塞当前回复或表情。角色可以生气仍微笑；重评替换原事件贡献并保留旧解释与更正来源。新状态不写用户事实/画像/长期记忆/hidden_state。源事件撤回精确失效相关贡献，使用既有可逆级联；原始对话仍由既有事件账本保管。
 
-默认无信号 current 为空；明确 neutral 与无信号不同。旧固定枚举不自动恢复为新信号。期限最多30分钟，从源事件时间计算；读取不写入、不续期。无信号轮只推进提交水位，不改旧信号来源；新信号可即时改变或撤回，晚到旧轮不得覆盖。
+prompt 分为 expression_afterglow 与 affective_state 两个低优先级可裁剪投影。没有有效信号就不注入；钟点 sleepy、工具 thinking、关键词 yandere、召回 nudge、漂移和两轮门槛不恢复。花园使用内在概括；TTS、avatar、贴纸及客户端维持明确表达。scheduler 不因隐藏的不悦自动制造打断。关闭 affective_engine 热开关恢复仅明确表达。
 
-`expression_afterglow` 是低优先级独立层（drop_priority=5），只在有效时注入来源与期限，以当前回复为准。花园、scheduler、贴纸、avatar、硬件与客户端只消费有效值；视觉基线不回写心理事实。角色表达标签不再传给 user_hidden_state 作为用户隐性状态的推断证据。
-
-对话仍先经 `post_process_critical` 落盘，再发送，最后后台执行余韵提交、资料及记忆整合。真实过去情感保留在事件和对话中。活动真实对话也走 turn sink；棋步/页面保留结构化来源，详见 [reality-activity-continuity.md](reality-activity-continuity.md)。
+观测：/mood/state（state.read，省略事件正文）、/mood/events（memory.read，有界事件/更正/来源）、runtime 与 Prompt 观测；失败统计复用 runtime-signals，模型调用复用 api-calls。状态读取不写盘、不续期，不用视觉基线证明心理事实。
 
 ---
 

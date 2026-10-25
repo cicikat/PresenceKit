@@ -186,8 +186,9 @@ def get_event(
     *,
     source: str = "",
     include_isolated: bool = False,
+    busy_timeout_ms: int = 5000,
 ) -> dict[str, Any] | None:
-    opened = _connect(scope)
+    opened = _connect(scope, busy_timeout_ms=busy_timeout_ms)
     if opened is None:
         return None
     path, connection = opened

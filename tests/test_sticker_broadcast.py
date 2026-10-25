@@ -102,7 +102,6 @@ async def test_pipeline_schedules_sticker_without_qq_target(sandbox, monkeypatch
     async def _sticker(*args, **kwargs):
         calls.append((args, kwargs))
 
-    monkeypatch.setattr("core.llm_client.detect_emotion", AsyncMock(return_value="happy"))
     monkeypatch.setattr("core.llm_client.chat", AsyncMock(return_value=""))
     monkeypatch.setattr("core.output.sticker.maybe_send_sticker", _sticker)
     monkeypatch.setattr("core.memory.mood_state.update", lambda *_args, **_kwargs: None)
@@ -155,7 +154,7 @@ async def test_sticker_logs_selected_folder_when_probability_hits_without_image(
 
 
 @pytest.mark.asyncio
-async def test_sticker_payload_reaches_desktop_ws_and_mobile_queue(sandbox, monkeypatch):
+async def test_sticker_payload_reaches_desktop_ws_and_mobile_queue(sandbox, monkeypatch, enabled_client_channels):
     from channels import desktop_ws
     from channels.mobile import MobileChannel
 

@@ -78,7 +78,6 @@ def _write_active(sandbox, char_id: str):
 
 def _common_post_process_patches():
     return [
-        patch("core.llm_client.detect_emotion", new=AsyncMock(return_value="neutral")),
         patch("core.memory.short_term.load", return_value=[]),
         patch("core.memory.pending_perception.confirm_delivered", return_value=None),
     ]
@@ -103,7 +102,6 @@ async def test_post_process_payload_carries_active_char_id(
     env = WriteEnvelope(source=SourceType.INGEST, can_write_memory=True, can_affect_mood=False)
 
     with (
-        patch("core.llm_client.detect_emotion", new=AsyncMock(return_value="neutral")),
         patch("core.memory.short_term.load", return_value=[]),
         patch("core.memory.pending_perception.confirm_delivered", return_value=None),
         patch("core.memory.fixation_pipeline.capture_turn", return_value="turn_1"),
@@ -146,7 +144,6 @@ async def test_payload_char_id_is_snapshot_not_current(
     env = WriteEnvelope(source=SourceType.INGEST, can_write_memory=True, can_affect_mood=False)
 
     with (
-        patch("core.llm_client.detect_emotion", new=AsyncMock(return_value="neutral")),
         patch("core.memory.short_term.load", return_value=[]),
         patch("core.memory.pending_perception.confirm_delivered", return_value=None),
         patch("core.memory.fixation_pipeline.capture_turn", return_value="turn_a"),
@@ -170,7 +167,6 @@ async def test_payload_char_id_is_snapshot_not_current(
             )
 
     with (
-        patch("core.llm_client.detect_emotion", new=AsyncMock(return_value="neutral")),
         patch("core.memory.short_term.load", return_value=[]),
         patch("core.memory.pending_perception.confirm_delivered", return_value=None),
         patch("core.memory.fixation_pipeline.capture_turn", return_value="turn_b"),

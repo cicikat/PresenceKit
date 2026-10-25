@@ -32,6 +32,9 @@ def _read(char_id: str) -> dict:
         if not isinstance(raw, dict) or raw.get("schema_version") not in (2, 3):
             return deepcopy(_DEFAULT)
         state = {**deepcopy(_DEFAULT), **raw, "schema_version": 3}
+        state["intensity"] = affect.number(state["intensity"])
+        affect.number(state.get("last_source_at", 0), 0, 1e12)
+        affect.number(state["version"], 0, 1e12)
         state["affect_events"] = state["affect_events"][-affect.MAX_EVENTS:]
         affect.project(state["affect_events"], time.time())
         if not isinstance(state["receipts"], list) or not all(isinstance(x, str) for x in state["receipts"]):
@@ -50,7 +53,7 @@ def load(*, char_id: str = DEFAULT_CHAR_ID) -> dict:
         state = _read(char_id)
     now = time.time()
     try:
-        valid = (state.get("current") in EMOTION_INTENSITY and state.get("source_turn_id")
+        valid = (state.get("has_signal") and state.get("current") in EMOTION_INTENSITY and state.get("source_turn_id")
                  and affect.number(state.get("source_at", 0), 0, 1e12) <= now
                  < affect.number(state.get("expires_at", 0), 0, 1e12))
     except ValueError:
@@ -72,8 +75,7 @@ def save(state: dict, *, char_id: str = DEFAULT_CHAR_ID) -> None:
 def update(new_emotion: str, new_intensity: float | None = None, source: str = "explicit",
            *, char_id: str = DEFAULT_CHAR_ID, source_turn_id: str = "",
            source_at: float | None = None, ttl_seconds: float = TTL_SECONDS,
-           retract: bool = False, appraisal: dict | None = None,
-           appraisal_status: str | None = None) -> dict:
+           retract: bool = False) -> dict:
     with _STORE_LOCK:
         state = _read(char_id)
         now = time.time()
@@ -95,16 +97,6 @@ def update(new_emotion: str, new_intensity: float | None = None, source: str = "
                              source_at=occurred, source_turn_id=source_turn_id,
                              intensity=affect.number(new_intensity if new_intensity is not None else EMOTION_INTENSITY[new_emotion]),
                              has_signal=True, updated_at=occurred, expires_at=occurred + ttl, source=source)
-        if appraisal is not None and enabled():
-            try:
-                affect.apply(state, appraisal, turn_id=source_turn_id, occurred_at=occurred, now=now)
-                state["appraisal_status"] = "applied"
-            except (ValueError, KeyError, TypeError):
-                state["appraisal_status"] = "rejected"
-        elif appraisal_status:
-            state["appraisal_status"] = appraisal_status
-        if appraisal is not None or appraisal_status:
-            state["last_appraisal_turn_id"] = source_turn_id
         save(state, char_id=char_id)
         return load(char_id=char_id)
 
@@ -116,13 +108,23 @@ def invalidate_sources(event_ids: list[str], *, char_id: str, revert: bool = Fal
             return []
         state = _read(char_id)
         changed = []
+        known = {ref for event in state["affect_events"] for ref in event.get("source_event_ids", [])}
+        if state.get("last_turn_id"):
+            known.add(state["last_turn_id"] + ":user")
+        prior_withdrawn = set(state.get("withdrawn_event_ids", []))
+        hit_refs = set(event_ids) & known
+        withdrawn = prior_withdrawn - hit_refs if revert else prior_withdrawn | hit_refs
+        if withdrawn != prior_withdrawn:
+            state["withdrawn_event_ids"] = sorted(withdrawn)[-affect.MAX_RECEIPTS:]
+            changed.extend(ref.removesuffix(":user") for ref in hit_refs)
         for event in state["affect_events"]:
             hit = set(event_ids) & set(event.get("source_event_ids", []))
             old = set(event.get("invalid_source_event_ids", []))
             current = old - hit if revert else old | hit
             if old != current:
                 event["invalid_source_event_ids"] = sorted(current)
-                changed.append(event["source_turn_id"])
+                if event["source_turn_id"] not in changed:
+                    changed.append(event["source_turn_id"])
         if changed:
             state["version"] += 1
             save(state, char_id=char_id)
@@ -136,7 +138,8 @@ def record_appraisal(raw: dict | None, *, char_id: str, turn_id: str,
         state = _read(char_id)
         if (not enabled() or state.get("last_turn_id") != turn_id
                 or state.get("last_appraisal_turn_id") == turn_id
-                or state.get("last_source_at") != occurred_at):
+                or state.get("last_source_at") != occurred_at
+                or turn_id + ":user" in state.get("withdrawn_event_ids", [])):
             return load(char_id=char_id)
         state["last_appraisal_turn_id"] = turn_id
         state["appraisal_status"] = status
@@ -171,9 +174,3 @@ def get_inner_current(*, char_id: str = DEFAULT_CHAR_ID) -> str:
     if inner["enabled"] and inner["has_signal"]:
         return affect.LABELS.get(inner["dominant"], "")
     return state["current"]
-
-
-def get_inner_intensity(*, char_id: str = DEFAULT_CHAR_ID) -> float:
-    state = load(char_id=char_id)
-    inner = state["affect"]
-    return inner["intensity"] if inner["enabled"] and inner["has_signal"] else state["intensity"]

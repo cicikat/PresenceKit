@@ -7,6 +7,11 @@
 
   const I18N = {
     'zh-CN': {
+      'flag.affective_engine': '事件驱动的混合情绪与认知重评',
+      'flag.affective_engine_hint': '默认开启；发送后评价真实用户对话，每回合最多一次、8秒总预算。关闭即恢复仅明确表达余韵；既有事件保留但不参与心理提示。',
+      'observe.affect.events': '事件评价与认知重评',
+      'observe.affect.summary': '外在表达：{expression}；内在感受：{emotions}；调节：{strategy}；模式：{mode}',
+      'observe.affect.hint': '内在感受与外在表情独立。评价是可修正的角色侧解释，来源和更正记录不会写为用户事实；关闭引擎后仅保留明确表达。实际注入见 Prompt 层观测。',
       'admin_copy.tool_status': '工具状态',
       'admin_copy.character_data': '单角色数据管理',
       'admin_copy.json_overview': 'json观测总览',
@@ -3492,6 +3497,11 @@
       'owner_turn.deploy.diary': 'Diary sync',
     },
     en: {
+      'flag.affective_engine': 'Event-driven mixed affect and reappraisal',
+      'flag.affective_engine_hint': 'On by default. Appraises real dialogue after delivery, at most once per turn with an 8-second budget. Off restores expression-only afterglow; stored events remain observable but do not drive emotional guidance.',
+      'observe.affect.events': 'Event appraisal and reappraisal',
+      'observe.affect.summary': 'Expression: {expression}; inner affect: {emotions}; regulation: {strategy}; mode: {mode}',
+      'observe.affect.hint': 'Inner affect and outward expression are independent. Appraisals are revisable character interpretations, never user facts. Disabling retains explicit expression only. Check Prompt layers for actual injection.',
       'admin_copy.tool_status': 'Tool status',
       'admin_copy.character_data': 'Character data management',
       'admin_copy.json_overview': 'JSON observation overview',

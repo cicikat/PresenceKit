@@ -169,7 +169,7 @@ class TestLLMBoundaryStrip:
       system-only payload some providers reject it outright ("at least one
       message is required"), and the test fails for a reason unrelated to
       _layer/_debug stripping. Fixed by patching core.llm_client.get_model_client
-      to inject a fake ModelClient (same pattern as tests/test_detect_emotion.py),
+      to inject a fake ModelClient (with an isolated fake model client),
       so no real client/config is ever touched.
     """
 

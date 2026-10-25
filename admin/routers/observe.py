@@ -102,25 +102,15 @@ def _active_channels_state() -> dict:
 
 def _mood_state() -> dict:
     try:
-        import json
-        from core.sandbox import get_paths
-        from core.observe.prompt_capture import list_uids
-
-        def _active_char_id() -> str:
-            p = get_paths().active_prompt_assets()
-            data = json.loads(p.read_text(encoding="utf-8"))
-            char_id = (data.get("active_character") or "").strip()
-            return char_id if char_id else "yexuan"
-
-        char_id = _active_char_id()
-        mood_path = get_paths().mood_state(char_id=char_id)
-        if not mood_path.exists():
-            return {"mood": None}
-        mood_raw = json.loads(mood_path.read_text(encoding="utf-8"))
-        from core.mood_text import get_mood_text
+        from admin.routers._common import active_char_id
+        from core.memory.mood_state import load
+        from core.mood_text import get_mood_text, get_affect_text
+        char_id = active_char_id()
+        mood_raw = load(char_id=char_id)
         return {
-            "mood_text": get_mood_text(mood_raw),
-            "mood_raw": {k: v for k, v in mood_raw.items() if k != "history"},
+            "mood_text": "\n".join(filter(None, (get_mood_text(mood_raw), get_affect_text(mood_raw)))),
+            "mood_raw": {k: v for k, v in mood_raw.items() if k not in ("affect_events", "receipts", "withdrawn_event_ids")},
+            "event_count": len(mood_raw["affect_events"]),
         }
     except Exception as exc:
         logger.warning("[observe/runtime] mood read failed: %s", exc)

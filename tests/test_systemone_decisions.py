@@ -115,7 +115,7 @@ async def test_native_auth_failure_never_implicitly_calls_chat(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_business_emotion_affection_sensor_and_minecraft_use_native(monkeypatch):
+async def test_business_appraisal_affection_sensor_and_minecraft_use_native(sandbox, monkeypatch):
     from core import llm_client, model_registry
     from core.scheduler import sensor_judge
     from core.activity import minecraft_reaction
@@ -127,14 +127,15 @@ async def test_business_emotion_affection_sensor_and_minecraft_use_native(monkey
         answers={}
         for key,q in payload['questions'].items():
             if q['type']=='choice':
-                selected = 'stop' if key=='action' else 'happy'
+                selected = {'action': 'stop', 'strategy': 'suppress', 'goal_impact': 'conflict',
+                            'agency': 'uncertain', 'correction_target': 'none'}.get(key, 'happy')
                 answers[key]={'type':'choice','choice':selected,'confidence':.9,
                     'probabilities':{k:float(k==selected) for k in q['criteria']}}
             elif q['type']=='score':
                 answers[key]={'type':'score','score':3,'confidence':.8,
                     'probabilities':{str(i):float(i==3) for i in range(len(q['criteria']))}}
             else:
-                answers[key]={'type':'noul','noul':.9 if key=='affection' else .1}
+                answers[key]={'type':'noul','noul':.9 if key in {'affection','confidence','relevance','anger'} else .1}
         return httpx.Response(200,json={'model':'fixed','answers':answers,'usage':{}})
     async with httpx.AsyncClient(transport=httpx.MockTransport(handle)) as http:
         native=SimpleNamespace(name='native',api_protocol='systemone',client=http,base_url='https://api.example/v1',
@@ -143,7 +144,11 @@ async def test_business_emotion_affection_sensor_and_minecraft_use_native(monkey
         monkeypatch.setattr(model_registry,'get_model_client',lambda *a,**k:native)
         monkeypatch.setattr(sensor_judge,'get_model_client',lambda *a,**k:native)
         monkeypatch.setattr(llm_failover,'resolve_fallback_client',lambda *a,**k:(None,'not_configured'))
-        assert await llm_client.detect_emotion('happy')=='happy'
+        from core import affective_appraisal
+        monkeypatch.setattr('core.memory.mood_state.enabled', lambda: True)
+        monkeypatch.setattr('core.character_loader.load', lambda char: SimpleNamespace(system_prompt='persona', description='', personality=''))
+        proposal, status = await affective_appraisal.evaluate('actual event', char_id='fixture')
+        assert status == 'ready' and proposal['anger'] == .9 and proposal['strategy'] == 'suppress'
         assert await llm_client.detect_affection('affection') is True
         assert (await sensor_judge.judge({'type':'test','context':{}}))['score']==75
         assert (await minecraft_reaction.judge('fixture',{},'stop')).action=='stop'

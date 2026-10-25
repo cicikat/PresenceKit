@@ -170,7 +170,6 @@ async def test_post_process_passes_active_char_id_to_capture_turn(
     env = WriteEnvelope(source=SourceType.INGEST, can_write_memory=True, can_affect_mood=False)
 
     with (
-        patch("core.llm_client.detect_emotion", new=AsyncMock(return_value="neutral")),
         patch("core.memory.short_term.load", return_value=[]),
         patch("core.post_process.slow_queue.enqueue", return_value=None),
         patch("core.memory.pending_perception.confirm_delivered", return_value=None),
@@ -225,12 +224,7 @@ async def test_post_process_uses_new_char_id_after_switch(
 
     env = WriteEnvelope(source=SourceType.INGEST, can_write_memory=True, can_affect_mood=False)
 
-    common_patches = dict(
-        detect_emotion=AsyncMock(return_value="neutral"),
-    )
-
     with (
-        patch("core.llm_client.detect_emotion", new=AsyncMock(return_value="neutral")),
         patch("core.memory.short_term.load", return_value=[]),
         patch("core.post_process.slow_queue.enqueue", return_value=None),
         patch("core.memory.pending_perception.confirm_delivered", return_value=None),
@@ -289,7 +283,6 @@ async def test_post_process_invalid_active_does_not_write(
     with (
         patch.object(_st, "append", side_effect=_fail_st),
         patch.object(_el, "append", side_effect=_fail_el),
-        patch("core.llm_client.detect_emotion", new=AsyncMock(return_value="neutral")),
     ):
         with pytest.raises((ValueError, RuntimeError)):
             await pipeline.post_process("u1", "你好", "在的", envelope=env)

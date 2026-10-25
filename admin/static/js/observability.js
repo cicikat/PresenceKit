@@ -36,6 +36,13 @@ async function loadObserveListening() {
 }
 
 async function loadObserveMood() {
+  const eventsEl = document.getElementById('obs-affect-events');
+  if (eventsEl) {
+    eventsEl.textContent = '加载中…';
+    api('GET', '/mood/events?limit=20').then(data => {
+      eventsEl.textContent = JSON.stringify(data, null, 2);
+    }).catch(error => { eventsEl.textContent = '加载失败：' + error.message; });
+  }
   const activityEl = document.getElementById('obs-activity-records');
   if (activityEl) {
     activityEl.textContent = '加载中…';
@@ -49,6 +56,12 @@ async function loadObserveMood() {
   try {
     const d = await api('GET', '/mood/state');
     moodEl.textContent = JSON.stringify(d, null, 2);
+    const summary = document.getElementById('obs-affect-summary');
+    if (summary) summary.textContent = t('observe.affect.summary', '外在表达：{expression}；内在感受：{emotions}；调节：{strategy}；模式：{mode}', {
+      expression: d.current || '—',
+      emotions: Object.entries(d.affect?.emotions || {}).filter(([,v]) => v >= .04).map(([k]) => k).join(' / ') || '—',
+      strategy: d.affect?.strategy || 'none', mode: d.affect?.enabled ? 'enabled' : 'expression-only',
+    });
   } catch(e) {
     moodEl.textContent = '加载失败：' + e.message;
   }

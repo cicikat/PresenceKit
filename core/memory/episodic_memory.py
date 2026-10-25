@@ -318,7 +318,7 @@ def retrieve(
     评分之前；过滤后为空时改用时间范围内的全量记忆参与评分（"上周聊了什么"这类
     time-only 查询没有关键词也要能召回）。默认 None=现行为，不受影响。
 
-    allow_strengthen: 控制是否执行召回后写回（strength += 递减 boost / nudge_from_memory；
+    allow_strengthen: 控制是否执行召回后写回（strength += 递减 boost；
       Brief 47：boost = _RETRIEVAL_BOOST_BASE / (1 + retrieval_count)，收益递减防永动机）。
       N2-A: fetch_context（读路径）调用时必须传 allow_strengthen=False，
       避免"召回→增强→更易召回"的永动机效应。

@@ -45,14 +45,14 @@
 
 ## 工单 C：控制面、清理与交付
 
-- [ ] 热开关、effective state、`/mood/state` 的状态/事件/修正/失败只读观测；runtime 快照用有效投影，避免原始旧文件误展示。
-- [ ] 检查 avatar 角色/来源/版本/TTL；TTS/sticker 继续使用明确表达。按消费端实现核查协议降级。
-- [ ] 删除被替代的解析/死参数/陈旧注释和测试，保留仍有真实调用者的检测工具；不保留旧引擎分支或双写。
-- [ ] 同步 memory / channels / garden / feature-control / 接口文档；管理面缓存版本与隔离浏览器实测。
-- [ ] 相关回归、源码消费者搜索、LF 与 diff 核对、独立提交；记录实际模型/设备验收边界。
+- [x] 热开关与 enabled/expression-only；/mood/state 不返回证据正文，/mood/events 使用 memory.read；runtime 快照使用有效投影。明确表达与评价两阶段写同一真值，不保留测试专用第二写入入口。
+- [x] avatar 补 char_id/version/source_turn_id/source_at/expires_at，桌面统一入口拒绝错角色/乱序/过期，扣减TTL；共享avatar在切角时清旧角色WS表情。TTS/sticker 继续明确表达，手机沿既有轮询，无新权限。
+- [x] 删除无生产调用者的单标签 detect_emotion 函数、facade、对应测试及跨测试死mock；路由ABI仍供新评价与独立爱意探针使用。退役旧参数、空测试章节与陈旧注释一并清理。
+- [x] 同步 memory / channels / garden / feature-control / 接口文档及桌面接入说明，保留并行工作区改动。缓存版本更新；隔离真实管理面浏览器已验证混合状态/来源卡、热关闭为expression-only、恢复enabled及查看记录入口；证据图保存在本地 .tmp/affective-engine-ui.png（仅合成样本）。
+- [x] Python 3.12 相关回归 514 passed，事件账本/查询另20 passed；桌面19项纯逻辑测试、tsc与生产build通过。JS语法、源消费者搜索、LF与差异检查通过后独立提交 C；真实模型、原生桌面/手机验收保持observe。
 
 ## 删除候选与验收边界
 
-本次授权内删除：单标签内心推导、被替代的 mood 旧实现、表达=感受的提示文字、退役行为对应测试与注释；不删除历史运行文件或真实记忆。`detect_emotion` 若仍被公共模型 facade/其他业务使用，保留并说明用途。无关 legacy、用户数据与素材清理不在本次范围。
+本次授权内已删除：单标签内心推导、被替代的 mood 旧实现、表达=感受的提示文字、退役行为对应测试与注释；不删除历史运行文件或真实记忆。审计确认旧 detect_emotion 仅有未被生产使用的 facade，所以连同 facade 删除；配置路由名仍有新评价/爱意探针的真实消费，不删除路由。无关 legacy、用户数据与素材清理不在本次范围。
 
 固定情境：愤怒与关切共存；仍生气但微笑；解释修正旧判断；隔天重谈有事件但无持续同强度；事件重放一次；晚到旧结果丢弃；切角隔离；Dream/web/coplay/trigger 不喂现实；关闭后仅有旧式明确表达。额外成本限定在发送后、每个合格回合最多一个有时限评价；失败不虚构 neutral 或新情绪。跨设备动作恢复、原生 GLB/Live2D 细粒度目光、TTS 温和疏离混合声线及拟人盲评不由单元测试代替。

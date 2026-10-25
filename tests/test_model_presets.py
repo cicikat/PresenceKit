@@ -505,54 +505,6 @@ class TestXmlTransform:
 
 
 # ===========================================================================
-# 6. detect_emotion integration with new routing (regression)
-# ===========================================================================
-
-def _make_fake_model_client(emotion: str):
-    """Build a minimal ModelClient-like object whose client.chat.completions.create returns `emotion`."""
-    from core.model_registry import ModelClient
-
-    async def fake_create(**kwargs):
-        msg = types.SimpleNamespace(content=emotion)
-        choice = types.SimpleNamespace(message=msg)
-        return types.SimpleNamespace(choices=[choice])
-
-    completions = types.SimpleNamespace(create=fake_create)
-    chat_obj = types.SimpleNamespace(completions=completions)
-    fake_client = types.SimpleNamespace(chat=chat_obj)
-
-    return ModelClient(
-        name="test",
-        provider_kind="deepseek",
-        model="test-model",
-        tool_call_mode="function_calling",
-        prompt_style="narrative",
-        params={"temperature": 0.0, "max_tokens": 10},
-        client=fake_client,
-    )
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("emotion", ["thinking", "sleepy", "happy", "neutral"])
-async def test_detect_emotion_routes_through_preset(emotion, monkeypatch):
-    from core import llm_client
-
-    fake_mc = _make_fake_model_client(emotion)
-    # patch the imported name inside llm_client (not the registry module attribute)
-    monkeypatch.setattr(llm_client, "get_model_client", lambda cat: fake_mc)
-    assert await llm_client.detect_emotion("some text") == emotion
-
-
-@pytest.mark.asyncio
-async def test_detect_emotion_invalid_falls_back(monkeypatch):
-    from core import llm_client
-
-    fake_mc = _make_fake_model_client("confused")
-    monkeypatch.setattr(llm_client, "get_model_client", lambda cat: fake_mc)
-    assert await llm_client.detect_emotion("some text") == "neutral"
-
-
-# ===========================================================================
 # 7. sensor_judge routing: must use intent preset model, not legacy llm block
 # ===========================================================================
 

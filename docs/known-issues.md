@@ -988,3 +988,7 @@ current：Reality真实对话统一canonical历史，结构化活动按引用查
 QQ 回复隔离/空间节流 observe：fixture 和隔离管理面检查不证明真实 QQ/空间投递或账号安全。节流为进程内状态，重启清空；桥内部 fallback/保活及其他消费者不受后端限频控制。空间评论每位作者每轮最多两帖轮换，窗口外事件可能遗漏。
 
 QQ 相关旧 fixture observe：fast-path 四项、tool-reply 一项及 R6C F7 一项只替换 config_loader 而未替换已导入 qq_admission 的配置引用，特定收集顺序下入口被拒；旧贴纸调度 fixture 仍模拟退役的 detect_emotion，缺少显式 expression_signal。七项在未修改 HEAD 主入口/原 Pipeline 上复现，QQ 回复隔离单独回归与实际表达信号贴纸回归通过。
+
+## 情绪引擎实机与模型验收（2026-10-25，observe）
+
+已实现：有来源的混合情绪、确定性衰减、认知重评、独立表达、后台评价、热开关及敏感度分层观测；旧单标签检测器已删除。当前评价发生在发送后，影响后续回合，不能把同轮生成称作受本轮评价驱动。真实模型的因果质量、人格差异及长期盲评，桌面原生切角/动作恢复、手机设备联调仍待验收；GLB/Live2D细粒度新素材及混合声线不在本次交付。详见 [affective-engine.md](affective-engine.md)。

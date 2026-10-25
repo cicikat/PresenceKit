@@ -16,6 +16,7 @@ router = APIRouter()
 CONFIG_FILE = Path("config.yaml")
 
 FLAGS = {
+    "affective_engine": ("affective_engine", "enabled", "事件驱动的混合情绪与认知重评"),
     "screen_observation": ("screen_observation", "enabled", "角色按需截图（电脑与手机）"),
     "ime_ingest": ("ime_ingest", "enabled", "IME 草稿与编辑事件接收"),
     "ime_awareness": ("ime_awareness", "enabled", "IME 活动理解与主动关心"),
@@ -45,7 +46,7 @@ FLAGS = {
     "music_autonomy": ("audio_music", "music_autonomy", "听歌主动性"),
     "video_call_frame_diff": ("video_call_frame_diff", "enabled", "视频通话帧差分（首帧全量、后续只描述变化）"),
 }
-_DEFAULT_ENABLED_FLAGS = frozenset({"self_management"})
+_DEFAULT_ENABLED_FLAGS = frozenset({"self_management", "affective_engine"})
 _EXPERIMENTAL_FLAGS = frozenset({"event_edge_proposer", "event_shadow_recall"})
 _FROZEN_FLAGS = frozenset({"spend", "toy_autogrow"})
 
@@ -79,7 +80,10 @@ async def get_feature_flags(auth=Depends(require_scopes("admin"))):
             "apply_mode": "hot_reload",
             "restart_required": False,
         }
-        if name == "qq":
+        if name == "affective_engine":
+            item["effective_state"] = "enabled" if enabled else "expression-only"
+            item["description"] = "默认开启；发送后评价真实用户对话，每回合最多一次、8秒总预算。关闭即回到仅明确表达余韵；既有事件保留但不参与心理提示。"
+        elif name == "qq":
             from core.qq_service import operational_state
             item.update(operational_state())
             item["description"] = "默认关闭；保存后热启停，standalone 模式阻止连接。connected 只表示 OneBot 已连接。"

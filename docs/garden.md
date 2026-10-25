@@ -168,3 +168,7 @@ _check_garden_water()
 3. ~~`ask` / `gift` / `dry` 分支会标记 `handle_triggered`，其中只有 `vase` 会从 `harvest` 移除~~
    已在 Brief 83（G4）修复：三者处理完成后立即离开 `harvest`，落 `history` 记录，详见上方
    「采后容器：dry/gift/ask 统一归宿」。
+
+## 情绪来源升级（2026-10-25）
+
+自动与被动浇水通过 get_inner_current(char_id=...) 取有效内在主要情绪，按既有花槽映射；无内在信号或引擎关闭时兼容明确表达。内部多情绪贡献保留，不因外在微笑抹掉不悦。不新增花园状态源、设置或客户端写操作。完整来源/衰减合同见 [affective-engine.md](affective-engine.md)。

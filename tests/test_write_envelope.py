@@ -304,7 +304,6 @@ class TestMoodGate:
         monkeypatch.setattr(_sq_mod,   "enqueue",     MagicMock())
         monkeypatch.setattr(_cfg_mod,  "get_config",  lambda: {"memory": {"summary_every_n_rounds": 20}})
         monkeypatch.setattr(_tr_mod,   "get_tags",    MagicMock(return_value=set()))
-        monkeypatch.setattr(_llm_mod,  "detect_emotion", AsyncMock(return_value="happy"))
 
         from core.write_envelope import WriteEnvelope
         from core.pipeline import Pipeline
@@ -341,7 +340,6 @@ class TestMoodGate:
         monkeypatch.setattr(_sq_mod,   "enqueue",     MagicMock())
         monkeypatch.setattr(_cfg_mod,  "get_config",  lambda: {"memory": {"summary_every_n_rounds": 20}})
         monkeypatch.setattr(_tr_mod,   "get_tags",    MagicMock(return_value=set()))
-        monkeypatch.setattr(_llm_mod,  "detect_emotion", AsyncMock(return_value="happy"))
         monkeypatch.setattr(_ur_mod,   "get_relation", MagicMock(return_value={"priority": 1}))
 
         from core.write_envelope import stamp_user_chat

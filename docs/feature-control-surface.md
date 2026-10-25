@@ -1136,7 +1136,7 @@ Reality 活动对话由同一 owner/char 的 canonical turn sink 落盘，使用
 
 GET /activity/records（state.read）默认仅列来源元数据；指定 source_ref 才读取原文。query_activity_records 使用 dispatcher 身份；未指定引用时关键词/时间查询跨当前身份的活动原文。概要是 revision 绑定的分段摘录，标注 coverage/pending，回复发送后构建；失败保留原文，后续对话或关闭重试。canonical 撤回也遮蔽已关联的局部召回，并使旧概要失效。
 
-表达状态 has_signal=false 表示无短时信号，区别于明确 neutral。来源 turn/source_at/version/expires_at 可观测，最多30分钟且只读不续期；旧固定 mood 不转成新余韵。prompt 的 expression_afterglow 是可裁剪层，prompt_eligible 表示资格，实际注入以 prompt 观测为准。没有新增模型情绪检测、随机活动或成长等级控制开关。
+表达状态 has_signal=false 表示无短时信号，区别于明确 neutral。来源 turn/source_at/version/expires_at 可观测，最多30分钟且只读不续期；旧固定 mood 不转成新余韵。prompt 的 expression_afterglow 是可裁剪层，prompt_eligible 表示资格，实际注入以 prompt 观测为准。该段是284的表达基线；2026-10-25新增事件评价热开关、内在投影与观测，当前合同见 [affective-engine.md](affective-engine.md)。随机活动与成长等级控制仍不恢复。
 
 QQ 发送模式：消息分发与客户端设置 → QQ 回复范围，qq.outbound_mode 默认 reply_only，admin PUT /settings/clients 的 qq_outbound_mode 可选 reply_only/muted/all；返回 outbound_mode、broadcast_enabled。all 恢复旧广播，muted 停止 QQ 消息而保留空间。空间同卡片新增 request_interval_seconds（默认3，1–60）、write_interval_seconds（默认60，10–3600），poll_interval_seconds 默认改600，现有显式值保留。GET /observability/qzone 的 pacing 返回进程内剩余冷却/退避及计数；无关闭节流选项，关闭空间仍回到无空间请求。
 
@@ -1150,3 +1150,7 @@ QQ 发送模式：消息分发与客户端设置 → QQ 回复范围，qq.outbou
 管理面登录后的语言菜单同时管理 `prompt_language: zh|en`（默认zh；切回zh恢复原中文框架）。`GET /settings/prompt-language`（persona）返回 language/effective_language/default；`POST`（admin）严格校验并原子保存、热重载。前端先保存后切换，失败恢复旧显示并报错；登录以服务端为准。所有后端聊天/主动链共享，桌面和手机没有独立设置。角色卡、历史及原始资料不翻译，不强制回复语言。详见 [prompt-language.md](prompt-language.md)。
 
 292补齐陪玩与视觉辅助模型模板及工具结果失败提示，沿用同一设置，不增开关；视觉caption仍按既有合同输出中文，STT纯词表保持用户原文。既有游戏日志不重写，数据/权限/JSON枚举与路由不变。
+
+## 事件情绪引擎（2026-10-25）
+
+affective_engine.enabled 默认 true；管理面通用高级功能开关热保存，enabled / expression-only 表示实际消费模式。关闭恢复仅明确表达余韵，不删除事件。GET /mood/state（state.read）新增省略证据正文的 affect / 资格 / 状态；GET /mood/events（memory.read）返回有界来源与重评。Prompt 实际注入另查观测。模型沿 detect_emotion 路由发送后运行，旧单标签检测器已删除，硬件爱意探针仍复用路由。新控件与事件卡已接入「情绪·花园」，客户端无新的心理开关或状态写入者。完整合同见 [affective-engine.md](affective-engine.md)。

@@ -89,7 +89,13 @@ async def _maybe_push_avatar_directive(mood_state: dict, char_id: str) -> None:
     import time as _t
     try:
         from core.tool_dispatcher import _push_desktop_action
-        emotion = mood_state.get("current", "neutral")
+        from core.pipeline_registry import get as _get_pipeline
+        active = _get_pipeline()
+        if active is not None and getattr(active, "_active_character_id", "") != char_id:
+            return
+        emotion = mood_state.get("current", "")
+        if not emotion or not mood_state.get("has_signal"):
+            return
         intensity = float(mood_state.get("intensity", 0.0))
         now = _t.time()
         last_emotion, last_sent = _AVATAR_DIRECTIVE_LAST.get(char_id, (None, 0.0))
@@ -101,6 +107,11 @@ async def _maybe_push_avatar_directive(mood_state: dict, char_id: str) -> None:
             "expression": emotion,
             "intensity": round(min(1.0, max(0.0, intensity)), 3),
             "ttl_ms": 6000,
+            "char_id": char_id,
+            "version": mood_state.get("version", 0),
+            "source_turn_id": mood_state.get("source_turn_id", ""),
+            "source_at": mood_state.get("source_at", 0.0),
+            "expires_at": min(float(mood_state.get("expires_at") or 0), now + 6),
         })
     except Exception as e:
         logger.debug("[pipeline] avatar_directive push skipped: %s", e)
@@ -1991,14 +2002,12 @@ class Pipeline:
     ) -> dict:
         """
         Brief 37：send 前必须走完的关键路径——只做毫秒级本地落盘（capture_turn），
-        不 await 任何 LLM/网络往返。detect_emotion / mood_state / avatar / profile /
+        不 await 任何 LLM/网络往返。expression / appraisal / avatar / profile /
         slow_queue 全部移到 post_process_slow，由调用方在 send 完成后异步调度
         （见 core/turn_sink.py record_assistant_turn）。
 
-        emotion 占位：event_log 里这一轮的 emotion 字段写死 "neutral"（真实情绪
-        要等 detect_emotion 完成才知道，那已经在 slow 段）。这只是 event_log 的
-        标注字段，不影响任何下游判断——mid_term eager reflect 的情绪判断消费的是
-        slow 段里 detect 出的真实 emotion，不读 event_log 这份占位值。
+        event_log 的 emotion 保留 "neutral" 标注；慢段明确表达用于原有整合策略，
+        内在事件评价只进入独立状态投影，不回填此标注，也不作为事实记忆证据。
 
         返回值原样传给 post_process_slow(critical_result=...)。
 
@@ -2302,7 +2311,12 @@ class Pipeline:
                 _state = _mood.load(char_id=char_id)
                 if (_mood.enabled() and _state.get("last_turn_id") == str(_turn_id)
                         and _state.get("last_appraisal_turn_id") != str(_turn_id)):
-                    _proposal, _status = await affective_appraisal.evaluate(_input, char_id=char_id)
+                    if affective_appraisal.source_available(user_id, char_id, str(_turn_id)):
+                        _proposal, _status = await affective_appraisal.evaluate(_input, char_id=char_id)
+                    else:
+                        _proposal, _status = None, "source_unavailable"
+                    if not affective_appraisal.source_available(user_id, char_id, str(_turn_id)):
+                        _proposal, _status = None, "source_unavailable"
                     _mood.record_appraisal(_proposal, char_id=char_id, turn_id=str(_turn_id),
                                            occurred_at=critical_result["source_at"], evidence=_input, status=_status)
             except Exception as e:
@@ -2446,7 +2460,7 @@ class Pipeline:
     ):
         """
         Brief 37 拆分前的组合入口：依次 await post_process_critical()（落盘）与
-        post_process_slow()（detect_emotion / mood / slow_queue 等）。
+        post_process_slow()（expression / appraisal / slow_queue 等）。
 
         只给不需要"send 前只等落盘"的调用方用（如 admin/routers/chat.py 的
         fire-and-forget 桌宠聊天路径，整个 post_process 已经是 asyncio.create_task

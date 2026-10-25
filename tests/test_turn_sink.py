@@ -250,12 +250,8 @@ async def test_capture_turn_failure_enqueues_retry(sandbox, monkeypatch):
     def fail_capture(*args, **kwargs):
         raise RuntimeError("capture failed")
 
-    async def detect_emotion(_):
-        return "neutral"
-
     monkeypatch.setattr("core.post_process.slow_queue.enqueue", fake_enqueue)
     monkeypatch.setattr("core.memory.fixation_pipeline.capture_turn", fail_capture)
-    monkeypatch.setattr("core.llm_client.detect_emotion", detect_emotion)
     monkeypatch.setattr("core.memory.mood_state.update", lambda *args, **kwargs: None)
 
     from core.write_envelope import stamp_trigger

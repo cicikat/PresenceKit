@@ -6,9 +6,7 @@ post_process 顺序保证与超时降级测试
   slow 任务（summarize_to_midterm）被 asyncio.Event 门控住，
   证明：在该任务被人为卡住期间，critical 数据已可读。
 
-测试2 — detect_emotion 超时降级：
-  detect_emotion 超过 _DETECT_EMOTION_TIMEOUT 未响应时，
-  emotion 降级为 "neutral"，不向调用方抛出异常。
+测试2 — 引擎关闭时仅处理明确表达，不额外评价。
 """
 
 import asyncio
@@ -39,7 +37,6 @@ async def test_critical_writes_complete_before_slow_tasks(sandbox, monkeypatch, 
     reply = "hi"
 
     # ── LLM 桩 ───────────────────────────────────────────────────────────────
-    monkeypatch.setattr("core.llm_client.detect_emotion", AsyncMock(return_value="happy"))
     monkeypatch.setattr("core.llm_client.chat", AsyncMock(return_value=""))
 
     # 捕获 mood_state.update 调用（不依赖 weighted drift 的具体返回值）
@@ -83,7 +80,7 @@ async def test_critical_writes_complete_before_slow_tasks(sandbox, monkeypatch, 
 
     # event_log 今日文件应含 user 行 + assistant 行。
     # Brief 37：capture_turn 现在跑在 post_process_critical（send 前的关键段），
-    # 此时 detect_emotion 还没跑完，emotion 字段写死占位值 "neutral"——真实值
+    # 此时 event_log 的 emotion 标注写死占位值 "neutral"——明确表达
     # "happy" 只进 mood_state（下面的 mood_calls 断言），不回写 event_log 标注。
     from core.sandbox import get_paths
     # S6 新布局：event_log 写到 user_memory_root(uid) / "event_log"
@@ -96,8 +93,7 @@ async def test_critical_writes_complete_before_slow_tasks(sandbox, monkeypatch, 
     assert reply in log_text,            "assistant 行缺失"
     assert "emotion:neutral" in log_text, "assistant 行 emotion 占位字段缺失"
 
-    # 深夜的 time_sleepiness 允许先写 sleepy；detect_emotion 的结果仍须成为
-    # 本轮最终 mood write，不能把合法前置写入误判为顺序回归。
+    # 没有明确表达时不从普通文字推导角色心情。
     assert mood_calls and mood_calls[-1] == "", \
         f"mood_state.update 最后一笔应为 'happy'，实际: {mood_calls}"
 
@@ -111,13 +107,7 @@ async def test_critical_writes_complete_before_slow_tasks(sandbox, monkeypatch, 
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 测试1.5（Brief 34 §1）：detect_emotion 在 uid_lock 外执行
-# ═══════════════════════════════════════════════════════════════════════════════
-
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# 测试2：detect_emotion 超时 → neutral 降级
+# 测试2：引擎关闭时无额外模型调用
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
@@ -128,7 +118,7 @@ async def test_no_extra_emotion_model_for_reply(sandbox, monkeypatch):
     async def forbidden(*args, **kwargs):
         raise AssertionError("extra emotion model")
     detector = AsyncMock(side_effect=forbidden)
-    monkeypatch.setattr("core.llm_client.detect_emotion", detector)
+    monkeypatch.setattr("core.affective_appraisal.evaluate", detector)
     monkeypatch.setattr("core.post_process.slow_queue.enqueue", lambda *a, **k: None)
     pipeline = Pipeline(_MockCharacter(), lore_engine=None)
     result = await pipeline.post_process("owner", "hello", "<feel>很开心</feel><say>嗯</say>",

@@ -97,7 +97,6 @@ async def test_post_process_st_load_receives_char_id_character_b(
     with (
         patch("core.config_loader.get_config", return_value={"memory": {"summary_every_n_rounds": 20}}),
         patch("core.memory.short_term.load", side_effect=_spy_load),
-        patch("core.llm_client.detect_emotion", new=AsyncMock(return_value="neutral")),
         patch("core.memory.fixation_pipeline.capture_turn", return_value="u1_spy"),
         patch("core.post_process.slow_queue.enqueue", return_value=None),
         patch("core.memory.pending_perception.confirm_delivered", return_value=None),
@@ -137,7 +136,6 @@ async def test_post_process_st_load_uses_new_char_id_after_switch(
     with (
         patch("core.config_loader.get_config", return_value={"memory": {"summary_every_n_rounds": 20}}),
         patch("core.memory.short_term.load", side_effect=_spy_load),
-        patch("core.llm_client.detect_emotion", new=AsyncMock(return_value="neutral")),
         patch(
             "core.memory.fixation_pipeline.capture_turn",
             side_effect=lambda uid, *a, turn_id=None, **kw: turn_id or f"{uid}_spy",
@@ -199,7 +197,6 @@ async def test_post_process_profile_recent_reads_character_b_bucket_only(
         patch("core.config_loader.get_config", return_value=mock_cfg),
         # short_term.py imports get_config at module level, so patch its namespace too
         patch("core.memory.short_term.get_config", return_value=mock_cfg),
-        patch("core.llm_client.detect_emotion", new=AsyncMock(return_value="neutral")),
         patch("core.memory.fixation_pipeline.capture_turn", return_value=f"{uid}_spy"),
         patch("core.post_process.slow_queue.enqueue", side_effect=_spy_enqueue),
         patch("core.memory.pending_perception.confirm_delivered", return_value=None),

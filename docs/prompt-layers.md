@@ -1068,3 +1068,7 @@ recall_trace 在 `fetch_context()` 内先于 build 写入，故不回写该条�
 （只列不判）以及最近 N 轮的频次聚合。
 
 工单287溯源更新：event_search通过同owner/角色的turn_id回查真实event_id；episodic、mid_term与9.5_episodic_top保留已有原始证据ID。无血缘不生成虚构ID。档案、活动、文档与生活记录同时保留对应工具支持的查询锚点；提示中明确摘要需要按需回读原证据。
+
+## 2026-10-25 情绪投影
+
+expression_afterglow 只描述有TTL的已发生表达；affective_state 使用同一schema v3状态的有界混合感受与调节建议，两者 drop_priority=5、可独立消融/裁剪。来源turn与版本在 _provenance，正文给出可错的角色侧解释，不升级为用户事实。发送后评价只影响后续prompt，关闭引擎不注入内在层。见 [affective-engine.md](affective-engine.md)。

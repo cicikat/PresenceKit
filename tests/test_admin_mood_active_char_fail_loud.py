@@ -126,7 +126,8 @@ async def test_mood_get_state_passes_hongcha_to_load(sandbox):
 
     def _spy_load(**kw):
         captured.append(kw.get("char_id"))
-        return {"current": "neutral", "intensity": 0.0, "previous": "neutral", "updated_at": 0.0}
+        return {"current": "neutral", "intensity": 0.0, "previous": "neutral", "updated_at": 0.0,
+                "affect": {"enabled": False, "has_signal": False}, "affect_events": []}
 
     with patch.object(_mood_state_mod, "load", side_effect=_spy_load):
         from admin.routers.mood import get_mood_state
@@ -144,7 +145,8 @@ async def test_mood_get_state_explicit_char_id_ignores_active(sandbox):
 
     def _spy_load(**kw):
         captured.append(kw.get("char_id"))
-        return {"current": "neutral", "intensity": 0.0, "previous": "neutral", "updated_at": 0.0}
+        return {"current": "neutral", "intensity": 0.0, "previous": "neutral", "updated_at": 0.0,
+                "affect": {"enabled": False, "has_signal": False}, "affect_events": []}
 
     with patch.object(_mood_state_mod, "load", side_effect=_spy_load):
         from admin.routers.mood import get_mood_state

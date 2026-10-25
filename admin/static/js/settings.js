@@ -904,7 +904,7 @@ let _featureFlags = {};
 async function loadFeatureFlags() {
   const el = document.getElementById('feature-flags-grid'); if (!el) return;
   try { const d = await api('GET', '/settings/feature-flags'); _featureFlags = d.flags || {};
-    el.innerHTML = Object.entries(_featureFlags).map(([name, item]) => `<label class="checkbox-row" style="gap:9px;padding:9px 10px;border:1px solid var(--border);border-radius:6px"><input type="checkbox" data-feature-flag="${name}" ${item.enabled ? 'checked' : ''}><span>${escapeHtml(t('flag.' + name, item.label))}<small style="display:block;color:var(--muted)">${name}${item.restart_required ? ` ${escapeHtml(t('dynamic.tokens.restart_effect', '（重启后生效）'))}` : ''}</small>${name === 'visual_perception' ? `<small style="display:block;color:var(--warning,#c77)">${escapeHtml(t('flag.visual_perception_hint', '此闸打开后，还需在桌宠客户端「设置→视觉观察」里单独打开本地开关，两处都开才会真正截图'))}</small>` : ''}${name === 'self_management' ? `<small style="display:block;color:var(--muted)">${escapeHtml(item.description || t('flag.self_management_hint', '关闭后 overlay 休眠、管理网关隐藏；全局工具/自主默认恢复。不删除授权或审计，也不是能力总闸。'))}</small>` : ''}</span></label>`).join('');
+    el.innerHTML = Object.entries(_featureFlags).map(([name, item]) => `<label class="checkbox-row" style="gap:9px;padding:9px 10px;border:1px solid var(--border);border-radius:6px"><input type="checkbox" data-feature-flag="${name}" ${item.enabled ? 'checked' : ''}><span>${escapeHtml(t('flag.' + name, item.label))}<small style="display:block;color:var(--muted)">${name}${item.restart_required ? ` ${escapeHtml(t('dynamic.tokens.restart_effect', '（重启后生效）'))}` : ''}</small>${name === 'visual_perception' ? `<small style="display:block;color:var(--warning,#c77)">${escapeHtml(t('flag.visual_perception_hint', '此闸打开后，还需在桌宠客户端「设置→视觉观察」里单独打开本地开关，两处都开才会真正截图'))}</small>` : ''}${['self_management', 'affective_engine'].includes(name) ? `<small style="display:block;color:var(--muted)">${escapeHtml((name === 'affective_engine' ? t('flag.affective_engine_hint', item.description) : item.description) || t('flag.self_management_hint', '关闭后 overlay 休眠、管理网关隐藏；全局工具/自主默认恢复。不删除授权或审计，也不是能力总闸。'))}</small>` : ''}</span></label>`).join('');
     if (_featureFlags.screen_observation) {
       const item = _featureFlags.screen_observation;
       el.innerHTML += `<div style="grid-column:1/-1"><small>${escapeHtml(item.description || '')} (${escapeHtml(item.effective_state || '')})</small><button type="button" onclick="showScreenObservationStatus()">${escapeHtml(t('screen.status', 'Screen requests and devices'))}</button><pre id="screen-observation-status" style="white-space:pre-wrap"></pre></div>`;
@@ -964,7 +964,7 @@ const MR_CATEGORY_DESC = {
   intent:         '判断要不要触发某个动作的轻量辅助判断（便宜模型即可）',
   probe:          '每轮先判断要不要调用工具的轻量探针（便宜模型即可）',
   summary:        '生成摘要，如压缩长对话/总结一局陪玩（便宜模型即可）',
-  detect_emotion: '识别文字里的情绪标签（便宜模型即可）',
+  detect_emotion: '发送后的事件认知评价与混合情绪（含独立爱意探针，支持闭合决策模型）',
   consolidation:  '短期记忆整理沉淀为长期记忆等后台整理（便宜模型即可）',
   perform:        '回复文字映射成动作/表情演出指令（仅开启该功能时用到）',
   monologue:      '前置独白（说话前的内心独白草稿；仅开启思考链功能时用到。未单独映射时按 default_preset → chat → 第一个 preset 解析）',

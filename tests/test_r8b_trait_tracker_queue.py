@@ -131,7 +131,6 @@ async def test_post_process_enqueues_trait_tracker_update(
     env = WriteEnvelope(source=SourceType.INGEST, can_write_memory=True, can_affect_mood=False)
 
     with (
-        patch("core.llm_client.detect_emotion", new=AsyncMock(return_value="neutral")),
         patch("core.memory.short_term.load", return_value=[]),
         patch("core.memory.pending_perception.confirm_delivered", return_value=None),
     ):
@@ -172,7 +171,6 @@ async def test_payload_uses_active_char_id_not_hardcoded(
     env = WriteEnvelope(source=SourceType.INGEST, can_write_memory=True, can_affect_mood=False)
 
     with (
-        patch("core.llm_client.detect_emotion", new=AsyncMock(return_value="neutral")),
         patch("core.memory.short_term.load", return_value=[]),
         patch("core.memory.pending_perception.confirm_delivered", return_value=None),
     ):
@@ -212,7 +210,6 @@ async def test_no_enqueue_when_write_disabled(
     env = WriteEnvelope(source=SourceType.INGEST, can_write_memory=False, can_affect_mood=False)
 
     with (
-        patch("core.llm_client.detect_emotion", new=AsyncMock(return_value="neutral")),
         patch("core.memory.short_term.load", return_value=[]),
         patch("core.memory.pending_perception.confirm_delivered", return_value=None),
     ):

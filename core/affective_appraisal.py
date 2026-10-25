@@ -11,6 +11,19 @@ from core.prompt_language import choose
 WALL_SECONDS = 8.0
 
 
+def source_available(uid: str, char_id: str, turn_id: str) -> bool:
+    """Cover withdrawal between critical capture and the first expression commit."""
+    try:
+        from core.memory.event_query import get_event
+        from core.memory.scope import MemoryScope
+        event = get_event(MemoryScope.reality_scope(uid, char_id), turn_id + ":user", busy_timeout_ms=20)
+        # Legacy critical capture may have no canonical ledger; its original
+        # source text still exists in the committed conversation record.
+        return event is None or not event.get("tombstoned")
+    except Exception:
+        return False
+
+
 def request_for(content: str, persona: str, events: list[dict]):
     from core.decision_contract import DecisionRequest, Question
     recent = [{k: v for k, v in e.items() if k in {

@@ -252,7 +252,7 @@ async def record_assistant_turn(
 
     Brief 37：当 await_critical_post_process=True 时，只 await
     post_process_critical()（毫秒级本地落盘），fanout 完成后再用
-    asyncio.create_task() 调度 post_process_slow()（detect_emotion / mood_state /
+    asyncio.create_task() 调度 post_process_slow()（expression / appraisal /
     avatar / profile / slow_queue）——这些都是 LLM/网络往返或非关键写入，绝不能
     堵住 send。返回的 TurnResult.emotion 因此只是 critical 段的占位值
     "neutral"，真实情绪要等 post_process_slow 异步跑完才落进 mood_state /
@@ -329,7 +329,7 @@ async def record_assistant_turn(
     async with _maybe_conversation_gate(uid, bypass_gate):
         if await_critical_post_process:
             # Brief 37: send 前只 await 落盘（post_process_critical），不再等
-            # detect_emotion 等 LLM 往返。post_process_slow 在下面 fanout 完成后
+            # 认知评价等 LLM 往返。post_process_slow 在下面 fanout 完成后
             # 才用 create_task 调度，emotion/mood/slow_queue 全挪到 send 之后。
             post_info = await pipeline.post_process_critical(
                 uid,
@@ -402,7 +402,7 @@ async def record_assistant_turn(
         request_id=request_id or None,
     )
 
-    # Brief 37: send（上面的 fanout）已经完成，慢段（detect_emotion / mood_state /
+    # Brief 37: send（上面的 fanout）已经完成，慢段（expression / appraisal /
     # slow_queue 入队等）现在才调度，绝不 await——否则又把下一条消息的 send 堵住。
     if await_critical_post_process and post_info is not None and schedule_slow:
         def _schedule_slow(call):

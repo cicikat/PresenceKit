@@ -53,6 +53,8 @@ def project(events: list[dict], now: float) -> dict:
     vector, mood = ({key: 0.0 for key in EMOTIONS} for _ in range(2))
     sources, active = [], []
     for event in events[-MAX_EVENTS:]:
+        if not isinstance(event, dict):
+            raise ValueError("invalid affect event")
         if event.get("invalid_source_event_ids"):
             continue
         number(event["occurred_at"], 0, 1e12)
@@ -101,7 +103,8 @@ def apply(state: dict, raw: dict, *, turn_id: str, occurred_at: float, now: floa
             "superseded_by": turn_id,
         }])[-4:]
         original.update(appraisal=proposal, appraised_at=occurred_at, correction_turn_id=turn_id)
-        original["source_event_ids"] = list(dict.fromkeys(original.get("source_event_ids", [target + ":user"]) + [turn_id + ":user"]))[-8:]
+        corrections = [ref for ref in original.get("source_event_ids", []) if ref != target + ":user"]
+        original["source_event_ids"] = [target + ":user"] + list(dict.fromkeys(corrections + [turn_id + ":user"]))[-7:]
     elif proposal["relevance"] >= .1:
         events.append({"source_turn_id": turn_id, "occurred_at": occurred_at,
                        "source_event_ids": [turn_id + ":user"],

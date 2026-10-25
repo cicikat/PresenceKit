@@ -1257,3 +1257,9 @@ current/local: desktop Room TV v02/v03 edit mode supports original/soft/cel, per
 ## 框架提示词语言（291）
 
 `current`：`GET/POST /settings/prompt-language` 是管理面消费的后端设置接口，GET需persona、POST需admin；请求language仅zh/en，响应language/effective_language/default。管理面语言菜单负责保存与错误展示。后端为所有渠道组装同一语言的框架模板；桌面/手机无新协议或设置入口，角色卡、历史和证据正文保持原文。`observe`：真实模型与全部功能组合prompt快照未验收，详见 [prompt-language.md](prompt-language.md)。
+
+## 情绪状态与表达 ABI（2026-10-25，current / observe）
+
+current：后端沿 /mood/state 保留明确表达字段，新增 affect 内在投影与事件计数；新 /mood/events 使用 memory.read，state.read 不获证据摘录。单一后端char-only状态，不向各客户端复制情绪写入权。avatar_directive 新增可选 char_id/version/source_turn_id/source_at/expires_at，桌面统一入口校验角色/顺序/截止并扣减TTL；旧无版本包仍兼容。手机继续消费既有 current 与 has_signal，忽略内在新增字段；无新设置、动作或原生权限。开关归后端管理面，默认开启、热关闭回到仅明确表达。
+
+observe：真实模型拟人评估、桌面原生切角/动作恢复与手机实机未验收；已完成确定性回归与前端构建。未提供新的细粒度表情/目光素材或混合声线。合同及验收细节见 [affective-engine.md](affective-engine.md) 和对应工单。

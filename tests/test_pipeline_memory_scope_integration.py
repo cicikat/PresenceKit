@@ -302,7 +302,6 @@ async def test_post_process_enqueue_scope_payload_present(
         patch("core.config_loader.get_config",
               return_value={"memory": {"summary_every_n_rounds": 20}}),
         patch("core.memory.short_term.load", return_value=[]),
-        patch("core.llm_client.detect_emotion", new=AsyncMock(return_value="neutral")),
         patch("core.memory.fixation_pipeline.capture_turn", return_value="u1_spy"),
         patch("core.post_process.slow_queue.enqueue", side_effect=_spy_enqueue),
         patch("core.memory.pending_perception.confirm_delivered", return_value=None),
@@ -349,7 +348,6 @@ async def test_post_process_payload_scope_consistent_with_uid_char_id(
         patch("core.memory.short_term.get_config",
               return_value={"memory": {"summary_every_n_rounds": 1}}),
         patch("core.memory.short_term.load", return_value=[{"role": "user", "content": "x"}]),
-        patch("core.llm_client.detect_emotion", new=AsyncMock(return_value="neutral")),
         patch("core.memory.fixation_pipeline.capture_turn", return_value="u1_spy"),
         patch("core.post_process.slow_queue.enqueue", side_effect=_spy_enqueue),
         patch("core.memory.pending_perception.confirm_delivered", return_value=None),
@@ -398,7 +396,6 @@ async def test_post_process_capture_turn_retry_scope_payload(
         patch("core.config_loader.get_config",
               return_value={"memory": {"summary_every_n_rounds": 20}}),
         patch("core.memory.short_term.load", return_value=[]),
-        patch("core.llm_client.detect_emotion", new=AsyncMock(return_value="neutral")),
         patch("core.memory.fixation_pipeline.capture_turn",
               side_effect=RuntimeError("forced failure")),
         patch("core.post_process.slow_queue.enqueue", side_effect=_spy_enqueue),
@@ -486,7 +483,6 @@ async def test_post_process_user_profile_update_scope_payload(
               return_value={"memory": {"summary_every_n_rounds": 1}}),
         patch("core.memory.short_term.load",
               return_value=[{"role": "user", "content": "x"}]),
-        patch("core.llm_client.detect_emotion", new=AsyncMock(return_value="neutral")),
         patch("core.memory.fixation_pipeline.capture_turn", return_value="u1_spy"),
         patch("core.post_process.slow_queue.enqueue", side_effect=_spy_enqueue),
         patch("core.memory.pending_perception.confirm_delivered", return_value=None),
@@ -532,7 +528,6 @@ async def test_post_process_invalid_active_raises_no_enqueue(
 
     with (
         patch("core.post_process.slow_queue.enqueue", side_effect=_fail_enqueue),
-        patch("core.llm_client.detect_emotion", new=AsyncMock(return_value="neutral")),
     ):
         with pytest.raises((ValueError, RuntimeError)):
             await pipeline.post_process(
@@ -597,7 +592,6 @@ async def test_regression_post_process_char_id_forwarding(
     env = WriteEnvelope(source=SourceType.INGEST, can_write_memory=True, can_affect_mood=False)
 
     with (
-        patch("core.llm_client.detect_emotion", new=AsyncMock(return_value="neutral")),
         patch("core.memory.short_term.load", return_value=[]),
         patch("core.post_process.slow_queue.enqueue", return_value=None),
         patch("core.memory.pending_perception.confirm_delivered", return_value=None),
