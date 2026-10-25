@@ -42,6 +42,10 @@ async function loadClientSettings() {
       api('GET', '/settings/clients'), api('GET', '/settings/feature-flags'),
     ]);
     _clientFlags = features.flags;
+    const realtime = clients.mobile_realtime;
+    document.getElementById('client-mobile_realtime').checked = Boolean(realtime?.enabled);
+    document.getElementById('client-mobile-realtime-state').textContent =
+      realtime ? `当前：${realtime.effective ? '前台实时可用' : 'HTTP 补收'} · 安全模式：完整最终消息` : '后端尚未支持手机实时连接';
     for (const name of ['qq_group', 'qq_other_users']) {
       document.getElementById('client-' + name).disabled = !_clientFlags[name];
       document.getElementById('client-' + name).checked = Boolean(_clientFlags[name]?.enabled);

@@ -2,12 +2,60 @@
 手机端轮询接口。
 """
 
-from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, WebSocket
 
 from admin.auth import require_scopes
 from core.audio_perception import voice_context
+from pydantic import BaseModel, ConfigDict, Field
+from typing import Literal
 
 router = APIRouter()
+
+
+class MobileRealtimeMetric(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["connect_ms", "reply_apply_ms", "recovered_messages", "fallback"]
+    value: int = Field(ge=0, le=600_000)
+
+
+@router.post("/mobile/realtime/metric", summary="手机实时传输计数（不接受正文或标识）")
+async def mobile_realtime_metric(body: MobileRealtimeMetric, auth=Depends(require_scopes("chat"))):
+    from core.mobile_realtime import record_metric
+    record_metric(body.kind, body.value)
+    return {"ok": True}
+
+
+@router.websocket("/ws/mobile")
+async def mobile_websocket(websocket: WebSocket):
+    from core.mobile_realtime import serve
+    await serve(websocket)
+
+
+@router.get("/mobile/realtime", summary="手机实时传输能力（只读）")
+async def mobile_realtime_capability(auth=Depends(require_scopes("chat"))):
+    from core.mobile_realtime import enabled
+    return {"enabled": enabled(), "mode": "final_only", "protocol": "mobile-final-v1"}
+
+
+@router.get("/mobile/history", summary="持久最终展示消息（不推进投递ACK）")
+async def mobile_final_history(
+    before: int | None = Query(None, ge=1),
+    limit: int = Query(50, ge=1, le=50),
+    x_presence_session: str | None = Header(None, alias="X-Presence-Session"),
+    auth=Depends(require_scopes("memory.read")),
+):
+    from admin.routers.chat import _session_grant
+    from core.mobile_realtime import history
+    grant = _session_grant(x_presence_session, getattr(auth, "label", "legacy-admin"))
+    if grant is None:
+        raise HTTPException(422, "session_scope_required")
+    return history(grant.memory_scope, before=before, limit=limit)
+
+
+@router.get("/observability/mobile-realtime", summary="手机实时连接观测（无正文/凭据）")
+async def mobile_realtime_observability(auth=Depends(require_scopes("state.read"))):
+    from core.mobile_realtime import snapshot
+    return snapshot()
 
 
 @router.post("/mobile/chat", summary="手机端普通对话（Bearer 鉴权）")

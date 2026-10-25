@@ -390,6 +390,15 @@ async def get_day(
         media_refs = _project_media_refs(user_event) or _project_media_refs(assistant_event)
         if media_refs:
             entry["media_refs"] = media_refs
+    # R2 retains display/identity metadata beyond the short-lived request cache.
+    # Existing date discovery and day-by-day lazy loading remain authoritative.
+    from core.mobile_realtime import finals_for_turns
+    projected = finals_for_turns(scope, [e["turn_id"] for e in entries if e.get("turn_id")])
+    for entry in entries:
+        final = projected.get(entry.get("turn_id"))
+        if final:
+            entry.update(assistant=final["content"], assistant_display_text=final["display_text"],
+                         msg_id=final["msg_id"], request_id=final["request_id"], artifacts=final["artifacts"])
     # Exact ledger/tool times precede minute-only legacy entries in the same
     # minute. Legacy ties retain file order; no fabricated turn association.
     def order(entry):

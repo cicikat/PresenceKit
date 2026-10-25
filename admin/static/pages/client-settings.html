@@ -5,7 +5,11 @@
 <label class="checkbox-row"><input type="checkbox" id="client-wechat" data-action="toggleClientChannel" data-action-args='["wechat"]'><span>微信</span></label>
 <label class="checkbox-row"><input type="checkbox" id="client-desktop" data-action="toggleClientChannel" data-action-args='["desktop"]'><span>电脑前端</span></label>
 <label class="checkbox-row"><input type="checkbox" id="client-mobile" data-action="toggleClientChannel" data-action-args='["mobile"]'><span>手机前端</span></label>
-</div><p id="client-state" role="status"></p><button class="btn btn-ghost btn-sm" data-action="loadClientSettings">刷新</button></section>
+<label class="checkbox-row"><input type="checkbox" id="client-mobile_realtime" data-action="toggleClientChannel" data-action-args='["mobile_realtime"]'><span>手机前台实时连接</span></label>
+</div>
+<p>默认开启，保存后热生效。关闭即回到 HTTP 发送、历史和轮询补收；后台继续沿用原通知服务。当前只推送过滤并持久化成功的最终消息，不展示模型草稿。</p>
+<p class="muted" id="client-mobile-realtime-state"></p>
+<p id="client-state" role="status"></p><button class="btn btn-ghost btn-sm" data-action="loadClientSettings">刷新</button></section>
 <section class="card"><h3>QQ · OneBot 桥连接</h3><p>当前支持无路径、无鉴权的 OneBot ws://host:port 桥（例如对应配置的 NapCat）；其他连接形式需要扩展适配器。填写桥实际监听地址；保存后自动重连，开关即时启停。standalone 模式会阻止 QQ 启动。connected 只表示 OneBot 连接，不代表账号登录或消息送达。</p><label class="field"><span>主机 / IP</span><input type="text" id="client-qq-host" autocomplete="off"></label><label class="field"><span>端口</span><input id="client-qq-port" type="number" min="1" max="65535"></label><button class="btn btn-primary" data-action="saveClientConnection">保存 QQ 连接</button></section>
 <section class="card"><h3>QQ · 回复范围</h3>
   <label class="field"><span>QQ 消息发送模式</span><select id="client-qq-outbound"><option value="reply_only">只回复 QQ 发起的当轮对话（默认）</option><option value="muted">完全停止 QQ 消息发送</option><option value="all">接收所有通道广播（旧行为）</option></select></label>

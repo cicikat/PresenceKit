@@ -1,3 +1,7 @@
+## 手机 R2 现场验收与历史覆盖（mobile43，observe/open）
+
+本地完成独立前台WS和HTTP历史恢复，固定 final_only，尚未部署。真实手机/代理、前后台、跨端联合及首字p50/p95未测，不宣称首token提速。上线前无展示投影的旧消息沿原历史降级；独立贴纸/behavior缺少父turn身份，仍依赖既有队列/inbox，不能保证清队列后的此类旧元数据恢复。正文/artifacts投影只在原持久证据仍有效时读取，失效资源保持不可用。详见 [R2验收边界](mobile-realtime-r2.md)。
+
 ## 手机可靠收件 R0/R1 本地实现（2026-10-24，mobile42）
 
 current：后端19176cc已修ACK写盘失败传播、mobile镜像先入队；手机1ae32a9/f251c1e/4663d6c/06387c0已实现HTTP打开/总期限与接收取消、网络epoch、连续wait25/limit50补收、history并行、完整inbox先持久化再ACK、非删除peek与精确scope/id/seq确认、后台回源失败秒级退避。settings ABI为加法，legacy consume/seq/TTL/单消费者和desktop WS合同保留；没有新后端字段、运营开关或状态库。手机inbox复用既有pendingCount/pendingLimit观测，不引入第二份业务真值。

@@ -178,6 +178,9 @@ client_channels:
   desktop: false  # 配好客户端地址与 Token 后，在管理面开启；关闭不删除队列
   mobile: false
 
+mobile_realtime:
+  enabled: true  # 手机前台独立 WS；只发送持久化最终消息。管理面热更新，关闭回到 HTTP。
+
 qq:
   outbound_mode: reply_only       # reply_only 只回复 QQ 当前输入；muted 停发消息；all 旧广播
   group_enabled: false  # 群聊回复，管理面逐消息热更新

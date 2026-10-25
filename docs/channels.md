@@ -1,3 +1,7 @@
+## 手机前台 R2 本地实现（mobile43）
+
+独立 `/ws/mobile` 只分发同一 Reality turn 的持久最终消息（final_only），不转发桌面模型 delta、不推进队列 ACK。`/mobile/history` 加原 chat-log 支持清队列后的稳定身份和展示恢复。逐帧鉴权、前后台、热关闭、scope 与覆盖边界见 [mobile-realtime-r2.md](mobile-realtime-r2.md)。尚未部署，真实设备/代理及首字时延仍 observe。
+
 ## 手机可靠投递 R1b（2026-10-24）
 
 current：ACK队列写盘False抛出明确异常，不返回ok=true；恢复后重试与重复ACK保持幂等。turn_sink先完成mobile持久镜像再按原相对顺序发送其他通道，保留独立fanout_failures，不再被前面网络/动作ACK拖延。seq、TTL、单消费者、字段和scope不变。52项相关回归通过（新测试先2失败/1通过，再全部通过）。observe：真实手机/线上部署未验收；其余网络恢复/本机交接仍由手机工单42施工。

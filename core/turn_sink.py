@@ -388,6 +388,27 @@ async def record_assistant_turn(
         from core.tools.chat_artifacts import link_turn_artifacts
         link_turn_artifacts(_ws_msg_id, artifacts, uid=uid, char_id=char_id)
 
+    # R2 is a projection of this already-completed turn, never another executor.
+    # Only main Reality deliveries opt in; activity/dream/private fanout stays out.
+    if isinstance(fanout, str) and fanout in ("all", "broadcast") and (
+        durable_mobile_mirror and not is_group and char_id and _persisted_turn_id
+        and bool((post_info or {}).get("critical_written", False))
+        and ledger_channel in {"mobile", "desktop", "qq", "scheduler", "sensor", "watch"}
+        and (source != TurnSource.USER_CHAT or ledger_channel in {"mobile", "desktop", "qq"})
+    ):
+        try:
+            from core.mobile_realtime import remember_final, publish
+            from core.response_processor import strip_render_tags
+            projected = remember_final(
+                uid=uid, char_id=char_id, turn_id=_persisted_turn_id,
+                content=strip_render_tags(visible_text), display_text=visible_text,
+                request_id=request_id, artifacts=artifacts,
+            )
+            if projected is not None:
+                publish(projected)
+        except Exception:
+            logger.warning("[turn_sink] mobile final projection failed", exc_info=True)
+
     targets, failures = await _fanout(
         assistant_text=visible_assistant_text or assistant_text,
         uid=uid,

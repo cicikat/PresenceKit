@@ -1,3 +1,9 @@
+## 手机前台 R2（2026-10-25，mobile43）
+
+current（仅本地自动验证）：`/ws/mobile` 独立 Bearer + X-Presence-Session + client instance；ready/final/ping/pong，final_only，手机最终 msg_id=turn_id 在持久成功后绑定，WS不ACK。`/mobile/history` 按授权 scope 分页读既有证据对应的展示投影，无投递seq；chat-log补齐长期 request_id/display_text/artifacts。后端管理面独立热开关与 state.read 观测已接入；Flutter复用协调器，后台关WS/取消升级、前台HTTP补收，HTTP critical_written=false不作成功。桌面协议与 Android 后台服务不改。
+
+observe：未部署、未安装、真实手机/V2Ray/网络切换/真实模型与p50/p95；reply_apply_ms仅客户端应用时点。open：上线前无投影的旧记录仍旧历史降级；无稳定父turn的独立贴纸/behavior不猜关联，仍走队列/inbox。roadmap：安全增量token流、R3设备游标。完整合同和证据见 [mobile-realtime-r2.md](mobile-realtime-r2.md)。
+
 ## 手机可靠收件 R0/R1 本地实现（2026-10-24，mobile42）
 
 current：后端19176cc已修ACK写盘失败传播、mobile镜像先入队；手机1ae32a9/f251c1e/4663d6c/06387c0已实现HTTP打开/总期限与接收取消、网络epoch、连续wait25/limit50补收、history并行、完整inbox先持久化再ACK、非删除peek与精确scope/id/seq确认、后台回源失败秒级退避。settings ABI为加法，legacy consume/seq/TTL/单消费者和desktop WS合同保留；没有新后端字段、运营开关或状态库。手机inbox复用既有pendingCount/pendingLimit观测，不引入第二份业务真值。

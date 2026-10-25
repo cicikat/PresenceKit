@@ -1,3 +1,7 @@
+## 手机前台实时连接 R2（mobile43）
+
+`mobile_realtime.enabled` 默认 true；管理面「消息分发与客户端设置」提供独立开关，GET/PUT `/settings/clients` 的 mobile_realtime 返回 enabled/effective/mode/default（admin），热更新。关闭即回到 HTTP，不停用手机通道、不删除队列/历史；client_channels.mobile 总开关优先。当前 mode 固定 final_only；手机只读 GET `/mobile/realtime` 发现能力，无本地提权开关。state.read 观测 `/observability/mobile-realtime`，连接/失败/补收及无正文的本机延迟样本；reply_apply_ms 不等于屏幕首字。详见 [R2合同](mobile-realtime-r2.md)，真机仍 observe。
+
 工单 288 C3：现实世界书/提示词启用组合按角色保存在 active_prompt_assets.by_character；旧全局组合仅属于其 active_character，切换新角色从空组合开始。条目管理文件改到角色 authored 目录，API CRUD/import/export 支持 char_id 并在 await 前冻结。共享模块文件是安装级素材目录，只有用户为角色显式选择的模块可注入；条目文件不跨角色回退。历史共享条目可用迁移脚本 --artifact lorebook/jailbreak_entries 显式归属，默认 dry-run 并保留原件。单角色管理清单补条目文件与资产绑定。
 
 工单 288 A2：自主工具继承普通工具权限，未配置自主覆盖时默认开放；显式关闭仍有效。旧危险/确认标记不再拦截执行。新 MCP 默认不要求本地分类白名单（用户可主动收窄），工具无需风险说明或确认。手机自动化与设备动作已去除起手/敏感页面确认；设备系统权限、连接、取消和执行预算保持有效。
