@@ -50,6 +50,41 @@ def test_invalid_min_len_fails_open():
     assert enforce_paragraph_breaks(text, min_len="invalid") == text  # type: ignore[arg-type]
 
 
+@pytest.mark.parametrize("raw,expected", [
+    ("看来\n这个问题需要一起处理。", "看来这个问题需要一起处理。"),
+    ("正在生\n气，但仍然在意。", "正在生气，但仍然在意。"),
+    ("你亲\n口说过。\n\n另一段。", "你亲口说过。\n\n另一段。"),
+    ("第一句。\n第二句。", "第一句。\n第二句。"),
+    ("他说：“先休息。”\n随后继续。", "他说：“先休息。”\n随后继续。"),
+    ("标题\n- 条目甲\n- 条目乙", "标题\n- 条目甲\n- 条目乙"),
+    ("标题\n1. 条目甲\n2. 条目乙", "标题\n1. 条目甲\n2. 条目乙"),
+    ("甲：你好\n乙：明白", "甲：你好\n乙：明白"),
+    ("正文\n> 引用\n> 下一行", "正文\n> 引用\n> 下一行"),
+    ("正文\n## 标题\n正文", "正文\n## 标题\n正文"),
+    ("| 项目 | 值 |\n| --- | --- |\n| 甲 | 乙 |", "| 项目 | 值 |\n| --- | --- |\n| 甲 | 乙 |"),
+    ("```text\n正在生\n气\n```\n正文", "```text\n正在生\n气\n```\n正文"),
+    ("正文  \n明确硬换行", "正文  \n明确硬换行"),
+    ("正文\\\n明确硬换行", "正文\\\n明确硬换行"),
+    ("<say>第一段</say>\n<say>第二段</say>", "<say>第一段</say>\n<say>第二段</say>"),
+    ("正在<hl>生\n气</hl>。", "正在<hl>生气</hl>。"),
+    ("正在生\r\n气。", "正在生气。"),
+    ("Hello\nworld", "Hello\nworld"),
+])
+def test_visible_soft_wrap_repair_preserves_explicit_structure(raw, expected):
+    from core.output.segment_enforcer import enforce_paragraph_breaks
+    assert enforce_paragraph_breaks(raw, min_len=1000) == expected
+
+
+@pytest.mark.parametrize("width", [1, 2, 7, 31, 64])
+def test_soft_wrap_repair_is_independent_of_model_chunk_boundaries(width):
+    from core.output.segment_enforcer import ParagraphStreamEnforcer, enforce_paragraph_breaks
+    raw = "看来\n这个问题需要一起处理。\n\n正在<hl>生\r\n气</hl>，但仍然在意。\n```text\n词内\n换行\n```\n最后一句。"
+    enforcer = ParagraphStreamEnforcer(min_len=20)
+    result = "".join(enforcer.feed(raw[i:i + width]) for i in range(0, len(raw), width)) + enforcer.finish()
+    assert result == enforce_paragraph_breaks(raw, min_len=20)
+    assert "看来\n" not in result and "生\n气" not in result
+
+
 def test_stream_enforcer_breaks_before_next_sentence_delta():
     from core.output.segment_enforcer import ParagraphStreamEnforcer
 
@@ -179,7 +214,8 @@ def test_reality_memory_copy_preserves_original_paragraph_shape(monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("enabled", [True, False])
-async def test_owner_chat_stream_enforces_visible_copy_only(monkeypatch, enabled):
+@pytest.mark.parametrize("soft_wrap", [False, True])
+async def test_owner_chat_stream_enforces_visible_copy_only(monkeypatch, enabled, soft_wrap):
     """Live deltas and canonical converge; memory always keeps raw shape."""
     from contextlib import asynccontextmanager
     from types import SimpleNamespace
@@ -204,6 +240,8 @@ async def test_owner_chat_stream_enforces_visible_copy_only(monkeypatch, enabled
         "第二句继续补充细节。",
         "第三句负责收束。",
     ]
+    if soft_wrap:
+        pieces = ["第一句在这里慢慢铺开足够多的内\n", "容。第二句继续补充细节。\n\n", "看来\n", "第三句负责收束。"]
     raw_reply = "".join(pieces)
     stream_deltas: list[str] = []
     canonical_messages: list[str] = []
@@ -284,6 +322,8 @@ async def test_owner_chat_stream_enforces_visible_copy_only(monkeypatch, enabled
         assert streamed == expected
         assert result["reply"] == expected
         assert "\n\n" in streamed
+        if soft_wrap:
+            assert "内\n容" not in streamed and "看来\n" not in streamed
     else:
         assert streamed == raw_reply
         assert result["reply"] == raw_reply

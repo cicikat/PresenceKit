@@ -398,6 +398,10 @@ async def _execute_owner_chat_turn_locked(
                             _stream_msg_id,
                             visible_piece,
                         )
+                if _stream_paragraph_enforcer is not None:
+                    visible_tail = _stream_paragraph_enforcer.finish()
+                    if visible_tail:
+                        await _ui_push.push_stream_delta(_stream_msg_id, visible_tail)
             finally:
                 await _ui_push.push_stream_end(_stream_msg_id)
             if _t_first_delta_ts is not None:

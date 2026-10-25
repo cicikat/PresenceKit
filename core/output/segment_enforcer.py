@@ -20,6 +20,108 @@ _TAG_TOKEN_RE = re.compile(
     r"^<\s*(/?)\s*([A-Za-z][\w-]*)\b[^>]*?(/?)\s*>$",
 )
 _VOID_TAGS = frozenset({"br", "hr"})
+_STRUCTURED_LINE_RE = re.compile(r"^(?:[ \t]{4}|\t|\s{0,3}(?:[#>|]|[-+*]\s|\d+[.)、]\s*))")
+_LABEL_LINE_RE = re.compile(r"^\s*[^\s:：<>]{1,16}[:：]")
+_BLOCK_TAG_RE = re.compile(r"</?(?:say|thought|narration|action|do|feel|env)\b", re.I)
+
+
+def _visible_line(line: str) -> str:
+    return re.sub(r"<[^>]*>", "", line).strip()
+
+
+def _structured_line(line: str) -> bool:
+    return bool(_STRUCTURED_LINE_RE.match(line) or _LABEL_LINE_RE.match(line)
+                or _BLOCK_TAG_RE.search(line) or line.lstrip().startswith(("```", "~~~")))
+
+
+def _han(char: str) -> bool:
+    return bool(char) and "\u3400" <= char <= "\u9fff"
+
+
+class _SoftLineBreakFilter:
+    """Repair Han-to-Han single wraps, retaining explicit paragraph/Markdown structure.
+
+    Only the uncertain newline and up to 32 following characters are held, so
+    chunk boundaries cannot turn a list marker or a speaker label into prose.
+    Raw output is owned by the caller; this filter only edits the visible copy.
+    """
+
+    def __init__(self):
+        self._line = ""
+        self._pending = False
+        self._head = ""
+        self._fence = ""
+        self._cr = False
+
+    def _keep_previous(self) -> bool:
+        visible = _visible_line(self._line)
+        return (bool(self._fence) or _structured_line(self._line)
+                or self._line.endswith(("  ", "\\"))
+                or not visible or not _han(visible[-1]))
+
+    def _resolve(self, output: list[str]) -> None:
+        following = _visible_line(self._head)
+        join = (not self._keep_previous() and following and _han(following[0])
+                and not _structured_line(self._head))
+        output.extend(("" if join else "\n", self._head))
+        self._line = self._head
+        self._head = ""
+        self._pending = False
+
+    def _newline(self, output: list[str]) -> None:
+        if self._pending:
+            if not self._head.strip():
+                output.extend(("\n", self._head, "\n"))
+                self._line = self._head = ""
+                self._pending = False
+                return
+            self._resolve(output)
+        stripped = self._line.lstrip()
+        if stripped.startswith(("```", "~~~")):
+            marker = stripped[:3]
+            if not self._fence:
+                self._fence = marker
+            elif marker == self._fence:
+                self._fence = ""
+        if self._fence:
+            output.append("\n")
+            self._line = ""
+        else:
+            self._pending = True
+
+    def _char(self, char: str, output: list[str]) -> None:
+        if char == "\n":
+            self._newline(output)
+        elif self._pending:
+            self._head += char
+            if self._keep_previous() or len(self._head) >= 32:
+                self._resolve(output)
+        else:
+            self._line += char
+            output.append(char)
+
+    def feed(self, chunk: str) -> str:
+        output: list[str] = []
+        for char in chunk:
+            if self._cr:
+                self._char("\n", output)
+                self._cr = False
+                if char == "\n":
+                    continue
+            if char == "\r":
+                self._cr = True
+            else:
+                self._char(char, output)
+        return "".join(output)
+
+    def finish(self) -> str:
+        output: list[str] = []
+        if self._cr:
+            self._char("\n", output)
+            self._cr = False
+        if self._pending:
+            self._resolve(output)
+        return "".join(output)
 
 
 def get_segment_enforce_settings() -> tuple[bool, int]:
@@ -45,6 +147,7 @@ class ParagraphStreamEnforcer:
     A break becomes eligible after the current paragraph exceeds ``min_len``
     and reaches ``。！？…``.  It is emitted immediately before the next visible
     sentence, which leaves room for closing quotes and an existing newline.
+    Han-to-Han soft line wraps are repaired first, with bounded lookahead.
     XML/NMP tags are tracked so a synthetic break never splits one tag across
     two client bubbles.  The input chunks themselves are never mutated or
     stored; callers keep the raw model output separately for memory.
@@ -62,6 +165,7 @@ class ParagraphStreamEnforcer:
         self._in_tag = False
         self._tag_buffer: list[str] = []
         self._open_tags: list[tuple[str, str]] = []
+        self._soft_wrap = _SoftLineBreakFilter()
 
     def feed(self, chunk: str) -> str:
         """Transform one delta; failure disables further transformation."""
@@ -70,6 +174,16 @@ class ParagraphStreamEnforcer:
         if not isinstance(chunk, str):
             self._failed = True
             return chunk
+
+        return self._feed_visible(self._soft_wrap.feed(chunk))
+
+    def finish(self) -> str:
+        """Flush bounded newline lookahead after a normally completed stream."""
+        if self._failed:
+            return ""
+        return self._feed_visible(self._soft_wrap.finish())
+
+    def _feed_visible(self, chunk: str) -> str:
 
         try:
             output: list[str] = []
@@ -157,16 +271,16 @@ def enforce_paragraph_breaks(text: str, *, min_len: int) -> str:
 
     与 :class:`ParagraphStreamEnforcer` 使用同一增量规则，因此流式临时
     气泡与最终 canonical 文本会收敛到相同段落。已有换行会重置段长；
-    函数只插入换行，不改写标点，也不增删字词；任何异常均返回原文。
+    先保守合并中文句中单换行，保留空行、结构化内容和硬换行，再做句末分段；
+    不改写标点、不增删字词；任何异常均返回原文。
     """
     original = text
     try:
         if not isinstance(text, str):
             return original
         threshold = max(1, int(min_len))
-        if len(text) <= threshold:
-            return text
-        return ParagraphStreamEnforcer(threshold).feed(text)
+        enforcer = ParagraphStreamEnforcer(threshold)
+        return enforcer.feed(text) + enforcer.finish()
     except Exception as exc:
         logger.warning("[segment_enforcer] 分段兜底失败，返回原文: %s", exc)
         return original

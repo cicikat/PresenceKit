@@ -1,5 +1,7 @@
 ## 手机前台 R2 本地实现（mobile43）
 
+2026-10-26本地修复：已有段落兜底开关开启时，双端共同展示出口保守合并中文句中单换行，桌面delta与最终正文共用状态机并在结束时flush。字段、消息身份与ACK不变，不改原始生成/记忆或既有历史；Dream不受影响。规则、退回原文方式和验收见 [reply-boundaries.md](reply-boundaries.md)。服务器未部署此修复。
+
 独立 `/ws/mobile` 只分发同一 Reality turn 的持久最终消息（final_only），不转发桌面模型 delta、不推进队列 ACK。`/mobile/history` 加原 chat-log 支持清队列后的稳定身份和展示恢复。逐帧鉴权、前后台、热关闭、scope 与覆盖边界见 [mobile-realtime-r2.md](mobile-realtime-r2.md)。尚未部署，真实设备/代理及首字时延仍 observe。
 
 ## 手机可靠投递 R1b（2026-10-24）

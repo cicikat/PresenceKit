@@ -1,3 +1,7 @@
+## 双端中文句中断行（2026-10-26，observe）
+
+current（仅本地验证）：现有后端段落兜底开启时，发送副本保守合并中文句中单换行，保留明确分段和结构；桌面delta在正常结束flush，与最终正文共用规则，手机消费同一最终展示副本。现有控制面、默认关闭、热更新、身份字段、scope及ACK不变，无新增客户端设置或持久状态。187项相关回归与本地管理面说明目检通过。observe：未部署、未改线上配置，真实模型新生成与双端设备未验收；不回写原始生成/记忆和既有坏历史。详见 [reply-boundaries.md](reply-boundaries.md)。
+
 ## 手机前台 R2（2026-10-25，mobile43）
 
 current（仅本地自动验证）：`/ws/mobile` 独立 Bearer + X-Presence-Session + client instance；ready/final/ping/pong，final_only，手机最终 msg_id=turn_id 在持久成功后绑定，WS不ACK。`/mobile/history` 按授权 scope 分页读既有证据对应的展示投影，无投递seq；chat-log补齐长期 request_id/display_text/artifacts。后端管理面独立热开关与 state.read 观测已接入；Flutter复用协调器，后台关WS/取消升级、前台HTTP补收，HTTP critical_written=false不作成功。桌面协议与 Android 后台服务不改。
