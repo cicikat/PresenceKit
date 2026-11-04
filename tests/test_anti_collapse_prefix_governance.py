@@ -49,6 +49,13 @@ def test_detect_prefix_none_when_insufficient_hits():
     assert detect_reply_homogeneity_prefix(history) is None
 
 
+@pytest.mark.parametrize("reply", ["嗯。", "好。", "知道了", "晚安。", "我在。"])
+def test_complete_acknowledgements_are_not_repeated_openings(reply):
+    history = _assistant_history([reply] * 6)
+    assert detect_reply_homogeneity_prefix(history) is None
+    assert detect_reply_homogeneity(history) is None
+
+
 def test_hint_text_no_priming_for_filler_prefix():
     history = _assistant_history(["嗯。今天还好", "嗯。没事", "嗯。你说吧"])
     hint = detect_reply_homogeneity(history)

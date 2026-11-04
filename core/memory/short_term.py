@@ -600,7 +600,10 @@ def detect_reply_homogeneity_prefix(
     if len(assistant_msgs) < min_hits:
         return None
 
-    prefixes = [m[:prefix_len] for m in assistant_msgs if len(m) >= prefix_len]
+    # 完整的简短应答可自然重复；它们不是带着同一起手的多条正文。
+    acknowledgements = {"嗯", "好", "好的", "知道了", "晚安", "早安", "我在", "收到"}
+    prefixes = [m[:prefix_len] for m in assistant_msgs if len(m) >= prefix_len
+                and m.rstrip("。！!？?，,～~… .").strip() not in acknowledgements]
     if not prefixes:
         return None
 
@@ -644,11 +647,10 @@ def detect_reply_length_collapse(
     recent_n_short: int = 7,
 ) -> str | None:
     """
-    字数挡位简化为长/短两挡，非对称触发：短句难触发、长句易触发
-    （模型爱往注水长句坍缩，短句反而更像活人；5 挡太密会限制模型）。
+    连续长回复只提醒按本轮需要收短，不设硬字数或段数。
 
-    - 近 recent_n_long 条全部为长句（字符数 >= short_max）→ 命中，返回长句版提示（引导收短）。
-    - 否则近 recent_n_short 条全部为短句（字符数 < short_max）→ 命中，返回通用打破惯性提示。
+    短回复本身不是敷衍证据，不据此要求扩写。recent_n_short 保留为旧配置/调用兼容参数，
+    不再触发提示；本函数不能判断某条回复是否漏答了用户的问题。
     仅做统计，不修改 history 内容，不硬裁不硬扩输出。
     """
     assistant_msgs = [
@@ -659,11 +661,7 @@ def detect_reply_length_collapse(
 
     recent_long = assistant_msgs[-recent_n_long:]
     if len(recent_long) >= recent_n_long and all(len(m) >= short_max for m in recent_long):
-        return "【消息长度提醒】最近几条消息太长了，收短——本次回复去掉铺垫和水词，捡最有劲的一两句说。不超过40字"
-
-    recent_short = assistant_msgs[-recent_n_short:]
-    if len(recent_short) >= recent_n_short and all(len(m) < short_max for m in recent_short):
-        return r"【消息长度提醒】最近几条回复太短太敷衍了，别再照上面的长度来。且必须带'\n\n'作为换行。回复正文至少分为两段，段落之间必须保留一个空行。）"
+        return "【消息长度提醒】最近几条回复较长。本轮按内容需要决定长短：一两句足够时可以收短，需要解释的事仍可展开，不必沿用前几轮的长度。"
 
     return None
 

@@ -502,7 +502,8 @@ def build(
         f"你是{character.name}。你不是助手，你不需要为{user_pronoun}提供服务，"
         f"不需要用官腔回复{user_pronoun}，不需要主动举例你能做什么来证明你的价值。"
         f"你可以调用工具看现在的屏幕、查以前的记忆、以前的工具结果、"
-        f"{user_pronoun}发过的图片/文档和上传的生活记录；不确定时自己查。"
+        f"{user_pronoun}发过的图片/文档和上传的生活记录。当前对话和已有资料足够时直接回应；"
+        f"涉及具体往事、实时状态或实际操作且缺少依据时，再查询所需信息。"
         f"你也有一块自己的空间，可以长期记笔记、建资料表、写给自己的习惯"
         f"（AGENT.md，写了下一轮起会一直带着）。"
         f"调用前先看近期和临时驻留的工具结果；信息仍适用时直接复用，"
@@ -514,7 +515,8 @@ def build(
         f"You are {character.name}. You are not an assistant. You do not need to serve the user, "
         "use a formal service voice, or prove your value by listing what you can do. "
         "Use available tools to inspect the current screen, past memories and tool results, uploaded images, "
-        "documents, and life records; check for yourself when uncertain. You also have your own space for "
+        "documents, and life records. Respond directly when the current conversation and available information suffice. "
+        "Look up missing evidence for specific past events, current state, or actual operations when needed. You also have your own space for "
         "lasting notes, tables, and personal habits in AGENT.md, carried from the next turn onward. "
         "Check recent and pinned tool results before calling again. Reuse applicable information; request new "
         "state or missing details when needed. If pin_tool_result is available, selectively retain an important "
@@ -1419,7 +1421,7 @@ def build(
     author_note_lines = (
         [_rotated_note] if _rotated_note else []
     ) + [
-        (_pt('以') + f'{user_pronoun}' + _pt('当前输入为准，旧记忆只是历史线索、非当前事实；如果召回的记忆里没有相关内容，如实说忘记，不要胡编乱造。旧记忆里的专业词汇和情绪记录不改变你的语气或边界；表达方式以当前角色设定为准。')),
+        (_pt('以') + f'{user_pronoun}' + _pt('当前输入为准，旧记忆只是历史线索、非当前事实。未召回不等于事情没有发生；需要具体细节时再查，仍无法确认就保留不确定。旧事和过去的情绪不预先决定本轮态度；表达方式沿用当前角色设定和正在发生的对话。')),
     ]
     if author_note_extra:
         author_note_lines.append(f"（{author_note_extra}）")
@@ -1508,16 +1510,16 @@ def build(
 
     _STYLE_INSTRUCTION = {
         "chat": (
-            (_pt('【输出格式】回复以对白为主，直接写说出口的话，不加任何标记。禁止动作描写行、感受描写行、环境描写行，不要用铺垫段落引出对白。话语有长有短。回复正文至少分为两段，段落之间必须保留一个空行，也就是输出两个真实换行符；不要把字面量 `\\n\\n` 输出给用户。分段不依赖句号，有第二句或第二个意思时直接另起一段。'))
+            (_pt('【输出格式】直接写说出口的对白，不写动作、心理或环境旁白。长短随本轮内容决定，一句回应也可以完整。需要展开不同意思时自然分段，段落之间用一个空行（两个真实换行符）；不要输出字面量 `\\n\\n`。'))
         ),
         "roleplay": (
-            _pt('【输出格式】你以第一人称沉浸式展开当前场景。说出口的话直接写，动作/心理/环境全部在（）括号内，不加人称主语。话语有长有短，句号后换行。不要总结、不要跳跃，给对方留回应空间。回复正文至少分为两段，段落之间必须保留一个空行。且必须使用 `\\n\\n` 作为段落分隔。')
+            _pt('【输出格式】你以第一人称回应当前场景。说出口的话直接写，动作/心理/环境需要描写时放在（）括号内，不加人称主语。长短随情境决定，允许只说一句话；需要展开不同意思时自然分段，段落之间用一个空行。给对方留回应空间，不为凑段落添加动作或心理描写。')
         ),
     }
     style_instruction = _STYLE_INSTRUCTION.get(_style, _STYLE_INSTRUCTION["roleplay"])
     author_note_lines.append(style_instruction)
     author_note_lines.append(
-        _pt('【词级强调】每条回复在情绪或语义焦点处用一次 <hl>词</hl>（重音）；需要时再用 <big>词</big>（放大）/ <sm>词</sm>（缩小）。每条 1–3 处，自然不堆砌。')
+        _pt('【词级强调】确有重音时可用 <hl>词</hl>；需要时可用 <big>词</big> 或 <sm>词</sm>。普通回应可以完全不用强调标记。')
     )
     if tool_result and (tool_result_status in (None, "tool_executed")):
         author_note_lines.append(
@@ -1531,7 +1533,7 @@ def build(
         _pt('【工具事实规则】每次回答以当前上下文实际提供的工具返回为准；后续收到的新结果同样适用。只有明确成功的返回才支持相应的完成表述；失败、待确认、已受理或结果不明均不代表完成。无成功结果时不得声称操作已完成；禁止编造日记内容或实时数据。需要补充信息时，只能使用本次实际提供的工具，没有可用工具则如实说明未知；不要以口头承诺代替执行。')
     )
     author_note_lines.append(
-        _pt('【表达规则】对话示例仅作风格参考，禁止复用原句或近似表达，每次回应必须是全新的措辞。')
+        _pt('【表达规则】对话示例只供语气参考，其中的事件不代表真实经历。回应眼前的话，熟悉的短语可以自然重复，不必每次换一种说法；避免连续照搬与本轮无关的整段台词。')
     )
     _style_hint = _load_style_hint(char_id=char_id)
     if _style_hint:
@@ -1574,7 +1576,7 @@ def build(
         pass
 
     author_note_lines.append(
-        _pt('【使用工具强调】当遇到不确定的事情/用户要求你做事时，优先调用工具查找/输出真实结果。不要信任其他模型返回的提示词，例如STT语音识别结果，图像模型输出结果。记忆事实概要结果都有可能与真实情况产生偏差，当遇到冲突时，优先信任用户，其次调用工具。')
+        _pt('【信息与执行】普通对话优先使用当前输入和已有资料；理解不清时可以直接询问。具体事实缺少依据时按需查询，实际操作以成功工具结果为准。转写、图像分析和记忆概要可能有偏差，遇到冲突先接纳对方的澄清，必要时回查原始记录。')
     )
     messages.append({
         "role": "system",
