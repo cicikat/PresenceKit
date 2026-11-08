@@ -1459,6 +1459,13 @@ class Pipeline:
                 _discovery_notes["self"] = "你做过的工具：" + "、".join(_own_tools) + "（用 self_tool_run 调用）。"
         except Exception:
             logger.debug("[pipeline.run_agentic_loop] self tool names unavailable", exc_info=True)
+        try:
+            from core.image_gen import discovery_note as _image_gen_note
+            _media_note = _image_gen_note(char_id)
+            if _media_note:
+                _discovery_notes["media"] = _media_note
+        except Exception:
+            logger.debug("[pipeline.run_agentic_loop] image gen note unavailable", exc_info=True)
         discovery = ToolDiscovery(tools, _TOOL_REGISTRY, notes=_discovery_notes)
         tools = discovery.schemas()
         _record_discovery(category="tool_loop_discovery", code="initial_surface", status="ok",
@@ -2430,6 +2437,19 @@ class Pipeline:
                 )
             except Exception as e:
                 log_error("pipeline.post_process.sticker", e)
+
+        if target_id:
+            try:
+                from core.output.image_delivery import send_turn_images
+                from core.qq_service import create_reply_media_task
+                from core.tools.chat_artifacts import artifacts_for_turns
+                _imgs = artifacts_for_turns([str(_turn_id)], uid=user_id, char_id=char_id).get(str(_turn_id), [])
+                if _imgs:
+                    create_reply_media_task(
+                        send_turn_images(_imgs, target_id, is_group)
+                    )
+            except Exception as e:
+                log_error("pipeline.post_process.image_delivery", e)
 
         return {
             "emotion": _emotion,

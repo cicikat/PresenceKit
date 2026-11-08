@@ -550,7 +550,7 @@ async def set_character_model_routing(
 # （vision）与「桌面自动化专用」（use_computer_vision，core/perception/vlm_client.py）
 # 两个全局槽位，见该模块函数注释。
 
-_ASSET_BINDING_FIELDS = ("tts_preset", "sticker_pack", "live2d_model", "model_3d")
+_ASSET_BINDING_FIELDS = ("tts_preset", "sticker_pack", "live2d_model", "model_3d", "image_gen")
 
 
 class AssetBindingsUpdate(BaseModel):
@@ -558,6 +558,7 @@ class AssetBindingsUpdate(BaseModel):
     sticker_pack: Optional[str] = None
     live2d_model: Optional[str] = None
     model_3d: Optional[str] = None
+    image_gen: Optional[str] = None
     # None = 不修改该字段；空字符串 "" = 显式清除该字段的绑定。
     # （与 model_routing 端点的"None=清除"语义不同，因为这里一次可能只想改一个字段，
     # 全部按 None=清除会把其余三个字段一起冲掉；用空串表达"清除"更安全。）
@@ -577,6 +578,7 @@ def _resolve_asset_bindings(char_id: str, presence_ext: dict) -> dict:
         "sticker_pack": presence_ext.get("sticker_pack") or None,
         "live2d_model": presence_ext.get("live2d_model") or None,
         "model_3d": presence_ext.get("model_3d") or None,
+        "image_gen": presence_ext.get("image_gen") or None,
     }
 
 

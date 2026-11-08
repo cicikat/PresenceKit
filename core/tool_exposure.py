@@ -16,7 +16,7 @@ _LEGACY_CATEGORY_EXPANSION = {"info": ("self", "schedule", "life", "qzone")}
 _DEFAULTS = {
     "path_a": {"categories": ["info", "self", "schedule", "life", "desktop", "memory", "artifacts", "system", "fs", "phone_control", "mcp", "qzone"], "tools": None, "exclude_tools": []},
     "path_c": {
-        "categories": ["info", "self", "schedule", "life", "desktop", "memory", "artifacts", "system", "fs", "phone_control", "mcp", "qzone"],
+        "categories": ["info", "self", "schedule", "life", "desktop", "memory", "artifacts", "media", "system", "fs", "phone_control", "mcp", "qzone"],
         "tools": None, "exclude_tools": [],
     },
 }

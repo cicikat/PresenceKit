@@ -25,6 +25,7 @@ CATEGORIES = {
     "self": "你自己的空间：想长期记住、整理、积累的东西（笔记、资料表、自制工具、给自己定的习惯 AGENT.md）",
     "self_management": "已授予角色的自身能力管理",
     "system": "系统与设备管理",
+    "media": "生成图片：按提示词画图",
 }
 # One line per category: when to reach for it. Only categories that are actually
 # exposed this turn are rendered (see routing_hint()).
@@ -43,6 +44,7 @@ ROUTES = {
     "mcp": "按需使用当前获准的外部服务",
     "self_management": "需要调整已授权由你管理的功能",
     "system": "查询或操作系统设备",
+    "media": "想画一张图、生成图片",
 }
 PREFIX = "load_tools_"
 

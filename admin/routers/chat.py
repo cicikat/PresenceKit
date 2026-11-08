@@ -831,6 +831,17 @@ async def preview_chat_artifact(artifact_id: str, _auth=Depends(require_scopes("
     record = _artifact_record_or_404(artifact_id)
     filename = str(record.get("filename") or "")
     ext = _Path(filename).suffix.lower()
+    if record.get("kind") == "image":
+        from core.tools.chat_artifacts import artifact_file_path
+
+        path = artifact_file_path(record)
+        if not path.exists() or not path.is_file():
+            raise HTTPException(status_code=404, detail="产物文件已不存在")
+        return FileResponse(
+            path,
+            media_type=str(record.get("mime") or "image/png"),
+            headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "no-store", "Content-Security-Policy": PREVIEW_CSP},
+        )
     if ext not in PREVIEWABLE_EXTENSIONS:
         raise HTTPException(status_code=415, detail="该文件类型不支持预览")
     try:

@@ -5,7 +5,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 _ALL_CATEGORIES = (
-    "info", "self", "schedule", "life", "desktop", "memory", "system", "fs", "phone_control", "mcp", "artifacts",
+    "info", "self", "schedule", "life", "desktop", "memory", "system", "fs", "phone_control", "mcp", "artifacts", "media",
 )
 
 # 与 core/tool_dispatcher.py 保持一致（不 import 私有名以外的逻辑，这里只读只报告）。

@@ -87,6 +87,36 @@ async def observability_chat_media(
     return observability_snapshot(uid=uid, char_id=char_id)
 
 
+@router.get("/observability/image-gen", summary="读取图像生成调用元数据")
+async def observability_image_gen(
+    limit: int = Query(50, ge=1, le=200),
+    _auth=Depends(require_scopes("state.read")),
+):
+    from core.api_call_log import query as _query_log
+
+    rows, by_provider = _query_log(caller="image_gen", limit=limit)
+    by_model: dict[str, int] = {}
+    for row in rows:
+        key = str(row.get("model") or "unknown")
+        by_model[key] = by_model.get(key, 0) + 1
+    return {
+        "count": len(rows),
+        "by_model": by_model,
+        "by_provider": by_provider,
+        "items": [
+            {
+                "ts": row.get("ts"),
+                "provider": row.get("provider"),
+                "model": row.get("model"),
+                "duration_ms": row.get("duration_ms"),
+                "ok": row.get("ok"),
+                "error_category": row.get("error_category") or "",
+            }
+            for row in rows
+        ],
+    }
+
+
 @router.get("/observability/chat-artifacts", summary="读取聊天产物元数据（不含正文）")
 async def observability_chat_artifacts(
     uid: str = "",

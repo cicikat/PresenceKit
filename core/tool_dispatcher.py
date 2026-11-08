@@ -2287,6 +2287,8 @@ from core.tools.qzone_tools import register_tools as _register_qzone_tools, _QZO
 _register_qzone_tools(_TOOL_REGISTRY)
 from core.listening_tools import register_tools as _register_listening_tools
 _register_listening_tools(_TOOL_REGISTRY)
+from core.tools.image_gen import register_tools as _register_image_gen_tools
+_register_image_gen_tools(_TOOL_REGISTRY)
 
 
 _SIDE_EFFECT_TOOLS: frozenset[str] = frozenset({
@@ -2383,7 +2385,11 @@ def _is_tool_enabled(tool_name: str) -> bool:
         from core.video_call import TOOL_PURPOSE, connection_state
         if not connection_state(get_config(), TOOL_PURPOSE)["effective"]:
             return False
-    if tool_name == "observe_user_screen":
+    if tool_name == "generate_image":
+        from core.image_gen import tools_enabled
+        if not tools_enabled():
+            return False
+    if tool_name in ("observe_user_screen",):
         from core.perception.screen_observation import enabled
         if not enabled():
             return False
@@ -2915,7 +2921,7 @@ async def _execute_structured_impl(
         if is_group or origin not in {"assistant_loop", "autonomy_loop"} or not feature_enabled():
             return _execution_outcome("tool_failed", "Self Capability history is unavailable in this context.")
 
-    if tool_name in {"read_long_user_message", "search_events", "expand_event_window", "get_related_events", "search_memory_dossiers", "read_memory_dossier", "search_dossier_events", "update_memory_dossier", "get_memory_consolidation_status", "request_memory_consolidation", "read_life_records", "reread_image", "write_artifact", "update_artifact", "read_artifact", "list_artifacts", "self_db_tables", "self_db_create_table", "self_db_insert", "self_db_query", "self_db_update", "self_db_delete", "self_db_drop_table", "self_tool_define", "self_tool_list", "self_tool_run"} and is_group:
+    if tool_name in {"generate_image", "read_long_user_message", "search_events", "expand_event_window", "get_related_events", "search_memory_dossiers", "read_memory_dossier", "search_dossier_events", "update_memory_dossier", "get_memory_consolidation_status", "request_memory_consolidation", "read_life_records", "reread_image", "write_artifact", "update_artifact", "read_artifact", "list_artifacts", "self_db_tables", "self_db_create_table", "self_db_insert", "self_db_query", "self_db_update", "self_db_delete", "self_db_drop_table", "self_tool_define", "self_tool_list", "self_tool_run"} and is_group:
         _trace("failed", "reality_event_tools_forbidden_in_group")
         return _execution_outcome("tool_failed")
 
@@ -3129,7 +3135,7 @@ async def _execute_structured_impl(
                 # Preserve the historical signature for test/local extensions
                 # that replace the legacy callable in the registry.
                 result = await func(user_id=user_id, **tool_args)
-        elif tool_name in ("read_toy_file", "write_toy_file", "write_artifact", "update_artifact", "read_artifact", "list_artifacts", "drink_with_user"):
+        elif tool_name in ("read_toy_file", "write_toy_file", "write_artifact", "update_artifact", "read_artifact", "list_artifacts", "drink_with_user", "generate_image"):
             result = await func(user_id=user_id, char_id=char_id, **tool_args)
         elif tool_name in {
             "get_listening_state", "get_listening_queue", "get_listening_history",

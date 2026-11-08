@@ -19,7 +19,7 @@ from contextvars import ContextVar
 from pathlib import Path
 
 from core.data_paths import DEFAULT_CHAR_ID, safe_user_id
-from core.safe_write import safe_write_json, safe_write_text
+from core.safe_write import safe_write_bytes, safe_write_json, safe_write_text
 from core.sandbox import get_paths
 
 logger = logging.getLogger(__name__)
@@ -52,7 +52,17 @@ ALLOWED_EXTENSIONS: dict[str, str] = {
 
 PREVIEWABLE_EXTENSIONS = frozenset({
     ".txt", ".md", ".html", ".htm", ".css", ".json", ".csv", ".xml", ".yaml", ".yml", ".toml",
+    ".png", ".jpg", ".jpeg", ".webp",
 })
+
+IMAGE_EXTENSIONS: dict[str, str] = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+}
+
+MAX_IMAGE_BYTES = 25 * 1024 * 1024
 
 PREVIEW_CSP = (
     "sandbox; default-src 'none'; img-src data:; style-src 'unsafe-inline'; "
@@ -97,6 +107,8 @@ def public_payload(record: dict) -> dict:
     }
     if previewable:
         payload["preview_url"] = f"/chat/artifacts/{artifact_id}/preview"
+    if record.get("kind") == "image":
+        payload["kind"] = "image"
     return payload
 
 
@@ -312,6 +324,75 @@ def write_artifact(
     }, ensure_ascii=False)
 
 
+def store_generated_image(
+    data: bytes,
+    *,
+    ext: str = ".png",
+    user_id: str | None = None,
+    char_id: str | None = None,
+) -> dict:
+    """Store a binary image outside the text-artifact contract and collect it."""
+    if not isinstance(data, bytes) or not data:
+        raise ArtifactError("生成图为空。")
+    if len(data) > MAX_IMAGE_BYTES:
+        raise ArtifactError(f"生成的图片超过 {MAX_IMAGE_BYTES} 字节。")
+    ext = str(ext or "").lower()
+    if ext not in IMAGE_EXTENSIONS:
+        raise ArtifactError("不支持的生成图格式。")
+    uid, cid = _require_scope(user_id, char_id)
+    artifact_id = uuid.uuid4().hex
+    paths = get_paths()
+    root = paths.chat_artifacts_dir(uid, char_id=cid)
+    index_path = paths.chat_artifacts_index(uid, char_id=cid)
+    filename = f"generated{ext}"
+    target = _file_path(root, artifact_id, filename)
+    with _lock_for(uid, cid):
+        root.mkdir(parents=True, exist_ok=True)
+        items = _load_index(index_path)
+        pending = _turn_artifacts.get()
+        if pending is not None and len(pending) >= MAX_FILES_PER_TURN:
+            raise ArtifactError(f"这一轮最多写 {MAX_FILES_PER_TURN} 个文件")
+        if not safe_write_bytes(target, data):
+            raise OSError("生成图写入失败")
+        record = {
+            "id": artifact_id,
+            "filename": filename,
+            "mime": IMAGE_EXTENSIONS[ext],
+            "size": len(data),
+            "kind": "image",
+            "created_at": time.time(),
+            "revision": 1,
+            "uid": uid,
+            "char_id": cid,
+        }
+        items.append(record)
+        overflow = items[:-MAX_FILES_PER_SCOPE] if len(items) > MAX_FILES_PER_SCOPE else []
+        kept = items[-MAX_FILES_PER_SCOPE:]
+        for old in overflow:
+            try:
+                old_id = str(old.get("id") or "")
+                old_name = str(old.get("filename") or "")
+                old_file = _file_path(root, old_id, old_name)
+                if old_file.exists():
+                    old_file.unlink()
+                old_prev = _prev_path(root, old_id, old_name)
+                if old_prev.exists():
+                    old_prev.unlink()
+                lookup = _lookup_path(old_id)
+                if lookup.exists():
+                    lookup.unlink()
+            except Exception:
+                pass
+        _store_index(index_path, kept)
+        _record_lookup(artifact_id, uid, cid)
+        _collect(record)
+    return public_payload(record)
+
+
+def _is_image_record(record: dict) -> bool:
+    return record.get("kind") == "image" or Path(str(record.get("filename") or "")).suffix.lower() in IMAGE_EXTENSIONS
+
+
 def update_artifact(
     artifact_id: str,
     content: str,
@@ -349,6 +430,8 @@ def update_artifact(
         if position is None:
             raise ArtifactError("找不到这个产物文件")
         record = dict(items[position])
+        if _is_image_record(record):
+            raise ArtifactError("生成图是二进制产物，不能用文本编辑工具修改。")
         filename = str(record.get("filename") or "")
         target = _file_path(root, artifact_id, filename)
         if not target.exists() or not target.is_file():
@@ -409,6 +492,8 @@ def read_artifact(
     record = get_artifact_record(artifact_id, uid=uid, char_id=cid)
     if record is None:
         raise ArtifactError("找不到这个产物文件")
+    if _is_image_record(record):
+        raise ArtifactError("生成图是二进制产物，不能用文本读取工具读取。")
     text = read_artifact_text(record)
     digest = _sha256_text(text)
     from core.sensitive_redaction import redact_for_export, RedactionError
@@ -481,6 +566,8 @@ def artifact_file_path(record: dict) -> Path:
 
 
 def read_artifact_text(record: dict) -> str:
+    if _is_image_record(record):
+        raise ArtifactError("生成图是二进制产物，不能用文本读取工具读取。")
     target = artifact_file_path(record)
     if not target.exists() or not target.is_file():
         raise ArtifactError("找不到这个产物文件")

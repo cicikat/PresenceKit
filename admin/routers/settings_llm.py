@@ -667,6 +667,80 @@ async def delete_image_preset(name: str, auth=Depends(require_scopes("admin"))):
     return {"message": f"image connection {name!r} deleted", **snapshot(full_cfg)}
 
 
+class ImageGenPresetUpsert(BaseModel):
+    description: Optional[str] = None
+    show_to_llm: Optional[bool] = None
+    provider_kind: Optional[str] = None
+    base_url: Optional[str] = None
+    api_key: Optional[str] = None
+    model: Optional[str] = None
+    extra_params: Optional[dict] = None
+    is_local: Optional[bool] = None
+
+
+@router.get("/image-gen-presets", summary="图像生成预设快照")
+async def get_image_gen_presets(auth=Depends(require_scopes("admin"))):
+    from core import image_gen
+    cat = image_gen.catalog(get_config())
+    presets = {}
+    for name, preset in cat["presets"].items():
+        view = dict(preset)
+        key = view.pop("api_key", "")
+        view["has_api_key"] = bool(key)
+        view["ready"] = image_gen.connection_ready(preset)
+        presets[name] = view
+    return {"enabled": cat["enabled"], "presets": presets}
+
+
+@router.put("/image-gen-presets/presets/{name}", summary="新增或更新一个图像生成预设")
+async def upsert_image_gen_preset(name: str, body: ImageGenPresetUpsert, auth=Depends(require_scopes("admin"))):
+    from core.image_gen import validate_name
+    try:
+        name = validate_name(name)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    full_cfg = read_config_file(CONFIG_FILE)
+    block = full_cfg.setdefault("image_gen", {})
+    presets = block.setdefault("presets", {})
+    existing = dict(presets.get(name) or {})
+    update = body.model_dump(exclude_none=True)
+    if "api_key" in update and not str(update["api_key"]).strip():
+        update.pop("api_key")
+        if existing.get("api_key"):
+            update["api_key"] = existing["api_key"]
+    merged = {**existing, **update}
+    presets[name] = merged
+    write_config_file(CONFIG_FILE, full_cfg)
+    from core import config_loader
+    config_loader.reload_config()
+    return {"message": f"image generation preset {name!r} saved", "name": name}
+
+
+@router.delete("/image-gen-presets/presets/{name}", summary="删除一个图像生成预设")
+async def delete_image_gen_preset(name: str, auth=Depends(require_scopes("admin"))):
+    full_cfg = read_config_file(CONFIG_FILE)
+    block = full_cfg.get("image_gen") or {}
+    presets = block.get("presets") or {}
+    if name not in presets:
+        raise HTTPException(status_code=404, detail=f"image generation preset {name!r} 不存在")
+    del presets[name]
+    write_config_file(CONFIG_FILE, full_cfg)
+    from core import config_loader
+    config_loader.reload_config()
+    return {"message": f"image generation preset {name!r} deleted"}
+
+
+@router.put("/image-gen-presets/enabled", summary="开关图像生成总闸")
+async def set_image_gen_enabled(body: dict, auth=Depends(require_scopes("admin"))):
+    full_cfg = read_config_file(CONFIG_FILE)
+    block = full_cfg.setdefault("image_gen", {})
+    block["enabled"] = bool(body.get("enabled"))
+    write_config_file(CONFIG_FILE, full_cfg)
+    from core import config_loader
+    config_loader.reload_config()
+    return {"enabled": bool(block["enabled"])}
+
+
 @router.put("/image-presets/routes", summary="保存图像用途到连接的映射")
 async def update_image_routes(body: ImageRoutesUpdate, auth=Depends(require_scopes("admin"))):
     from core.image_presets import (FALLBACK_PURPOSES, LOOPBACK_ONLY_PURPOSES, PURPOSES,

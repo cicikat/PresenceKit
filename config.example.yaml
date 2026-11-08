@@ -8,6 +8,18 @@ prompt_language: zh
 affective_engine:
   enabled: true                 # 默认开启；发送后评价真实对话；管理面热开关，关闭恢复仅明确表达余韵
 
+image_gen:
+  enabled: false                # 图像生成总闸（generate_image 工具）；管理面 /image-gen-presets 热开关
+  presets:                      # 命名预设；角色卡 presence_ext.image_gen 声明白名单
+    flux-pro:
+      description: "光影与复杂意境强，适合氛围感插画；慢、贵"
+      show_to_llm: true         # false = 不暴露给 LLM（preset 参数仍可显式调用）
+      provider_kind: openai_compatible
+      base_url: https://your-image-api.example/v1
+      api_key: YOUR_IMAGE_API_KEY
+      model: flux-pro
+      extra_params: {}
+
 qzone:
   enabled: false
   write_enabled: false
