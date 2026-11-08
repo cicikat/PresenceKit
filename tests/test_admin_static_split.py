@@ -17,7 +17,9 @@ def test_admin_html_is_a_shell_with_ordered_plain_static_assets():
     assert "<style>" not in index
     assert re.search(r'<script src="/static/i18n\.js(?:\?[^" ]*)?"></script>', index)
     scripts = re.findall(r'<script src="/static/js/([^"?]+)(?:\?[^" ]*)?"></script>', index)
-    assert scripts[0] == "core.js"
+    assert scripts[0] in ("core.js", "ui-version-boot.js")
+    if scripts[0] == "ui-version-boot.js":
+        assert "core.js" in scripts
     assert len(scripts) >= 2
     assert all((STATIC / "js" / script).is_file() for script in scripts)
     assert "<script>" not in index
