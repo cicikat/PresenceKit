@@ -670,6 +670,7 @@ async def delete_image_preset(name: str, auth=Depends(require_scopes("admin"))):
 class ImageGenPresetUpsert(BaseModel):
     description: Optional[str] = None
     show_to_llm: Optional[bool] = None
+    supports_edits: Optional[bool] = None
     provider_kind: Optional[str] = None
     base_url: Optional[str] = None
     api_key: Optional[str] = None

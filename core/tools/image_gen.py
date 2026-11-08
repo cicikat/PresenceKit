@@ -23,6 +23,8 @@ async def generate_image(
     preset: str | None = None,
     width: int | None = None,
     height: int | None = None,
+    reference_sha256: str | None = None,
+    reference_artifact_id: str | None = None,
     *,
     user_id: str | None = None,
     char_id: str | None = None,
@@ -31,52 +33,75 @@ async def generate_image(
         raise ValueError("prompt 不能为空。")
     if len(prompt) > image_gen.MAX_PROMPT_CHARS:
         raise ValueError(f"prompt 不能超过 {image_gen.MAX_PROMPT_CHARS} 个字符。")
+    has_ref = reference_sha256 is not None or reference_artifact_id is not None
     resolved = image_gen.resolve_preset(preset, char_id)
-    body: dict = {
-        "model": resolved["model"],
-        "prompt": prompt.strip(),
-        "n": 1,
-        "response_format": "b64_json",
-    }
-    extra = resolved.get("extra_params") or {}
-    body.update(extra)
-    if width or height:
-        body.setdefault("size", f"{int(width) if width else 1024}x{int(height) if height else 1024}")
-    url = resolved["base_url"].rstrip("/") + "/images/generations"
-    headers = {"Content-Type": "application/json", "User-Agent": "PresenceKit/1.0"}
-    if resolved["api_key"]:
-        headers["Authorization"] = f"Bearer {resolved['api_key']}"
-    started = time.perf_counter()
-    client = make_model_http_client(None, httpx.Timeout(timeout=_TIMEOUT_S, connect=10.0))
-    try:
-        response = await client.post(url, headers=headers, json=body)
-        response.raise_for_status()
-    except Exception as exc:
-        status = getattr(exc, "response", None)
-        error_category = image_gen_httpx_error_category(exc)
-        api_call_log.append(
-            caller="image_gen",
-            purpose="generate_image",
-            provider=resolved["provider_kind"],
-            model=resolved["model"],
-            duration_ms=int((time.perf_counter() - started) * 1000),
-            ok=False,
-            output_hint="",
-            protocol="images_generations",
-            error_category=error_category,
+    if has_ref and resolved.get("supports_edits", True) is False:
+        raise ValueError(f"图像生成预设 {resolved['name']} 不支持参考图。")
+    image_bytes: tuple[bytes, str, str] | None = None
+    if has_ref:
+        image_bytes = image_gen.image_reference_bytes(
+            user_id=user_id,
+            char_id=char_id,
+            sha256=reference_sha256,
+            artifact_id=reference_artifact_id,
         )
-        detail = ""
-        if status is not None:
-            try:
-                detail = status.text[:200]
-            except Exception:
-                detail = ""
-        raise ValueError(f"生成图失败（预设 {resolved['name']}，{error_category}）。{detail}") from exc
-    finally:
+        if len(image_bytes[0]) > 20 * 1024 * 1024:
+            raise ValueError("参考图总尺寸超过 20MB 上限。")
+    if image_bytes is not None:
+        url = resolved["base_url"].rstrip("/") + "/images/edits"
+        headers = {"User-Agent": "PresenceKit/1.0"}
+        if resolved["api_key"]:
+            headers["Authorization"] = f"Bearer {resolved['api_key']}"
+        started = time.perf_counter()
+        client = make_model_http_client(None, httpx.Timeout(timeout=_TIMEOUT_S, connect=10.0))
         try:
-            await client.aclose()
-        except Exception:
-            pass
+            ref_data, ref_mime, _src = image_bytes
+            ext = ref_mime.split("/")[-1].replace("jpeg", "jpg")
+            response = await client.post(
+                url,
+                headers=headers,
+                files={"image": (f"reference.{ext}", ref_data, ref_mime)},
+                data={"model": resolved["model"], "prompt": prompt.strip(), "n": "1", "response_format": "b64_json"},
+            )
+            response.raise_for_status()
+        except Exception as exc:
+            _log_failure(resolved, started, exc)
+            detail = _detail(exc)
+            raise ValueError(f"生成图失败（预设 {resolved['name']}，{image_gen_httpx_error_category(exc)}）。{detail}") from exc
+        finally:
+            try:
+                await client.aclose()
+            except Exception:
+                pass
+    else:
+        body: dict = {
+            "model": resolved["model"],
+            "prompt": prompt.strip(),
+            "n": 1,
+            "response_format": "b64_json",
+        }
+        extra = resolved.get("extra_params") or {}
+        body.update(extra)
+        if width or height:
+            body.setdefault("size", f"{int(width) if width else 1024}x{int(height) if height else 1024}")
+        url = resolved["base_url"].rstrip("/") + "/images/generations"
+        headers = {"Content-Type": "application/json", "User-Agent": "PresenceKit/1.0"}
+        if resolved["api_key"]:
+            headers["Authorization"] = f"Bearer {resolved['api_key']}"
+        started = time.perf_counter()
+        client = make_model_http_client(None, httpx.Timeout(timeout=_TIMEOUT_S, connect=10.0))
+        try:
+            response = await client.post(url, headers=headers, json=body)
+            response.raise_for_status()
+        except Exception as exc:
+            _log_failure(resolved, started, exc)
+            detail = _detail(exc)
+            raise ValueError(f"生成图失败（预设 {resolved['name']}，{image_gen_httpx_error_category(exc)}）。{detail}") from exc
+        finally:
+            try:
+                await client.aclose()
+            except Exception:
+                pass
     try:
         payload = response.json()
     except Exception as exc:
@@ -150,6 +175,32 @@ async def generate_image(
     )
 
 
+def _log_failure(resolved: dict, started: float, exc: BaseException) -> None:
+    status = getattr(exc, "response", None)
+    error_category = image_gen_httpx_error_category(exc)
+    api_call_log.append(
+        caller="image_gen",
+        purpose="generate_image",
+        provider=resolved["provider_kind"],
+        model=resolved["model"],
+        duration_ms=int((time.perf_counter() - started) * 1000),
+        ok=False,
+        output_hint="",
+        protocol="images_generations",
+        error_category=error_category,
+    )
+
+
+def _detail(exc: BaseException) -> str:
+    status = getattr(exc, "response", None)
+    if status is not None:
+        try:
+            return str(status.text)[:200]
+        except Exception:
+            return ""
+    return ""
+
+
 def image_gen_httpx_error_category(exc: BaseException) -> str:
     from core.llm_protocol import error_category_for_exception
 
@@ -157,20 +208,25 @@ def image_gen_httpx_error_category(exc: BaseException) -> str:
 
 
 def register_tools(registry: dict) -> None:
-    async def _generate(prompt, preset=None, width=None, height=None, *, user_id, char_id):
-        return await generate_image(prompt, preset=preset, width=width, height=height, user_id=user_id, char_id=char_id)
+    async def _generate(prompt, preset=None, width=None, height=None, reference_sha256=None, reference_artifact_id=None, *, user_id, char_id):
+        return await generate_image(prompt, preset=preset, width=width, height=height,
+                                    reference_sha256=reference_sha256,
+                                    reference_artifact_id=reference_artifact_id,
+                                    user_id=user_id, char_id=char_id)
 
     registry["generate_image"] = {
         "func": _generate,
-        "description": "按提示词生成图片。先加载 media 分类，再用本工具；preset 选你想用的图像预设（省略用默认），不要编造本机路径。",
+        "description": "按提示词生成图片。先加载 media 分类，再用本工具；preset 选你想用的图像预设（省略用默认），不要编造本机路径。传 reference_sha256 或 reference_artifact_id 时走图生图（edits），prompt 是改图指令。",
         "category": "media",
         "parameters": {
             "type": "object",
             "properties": {
-                "prompt": {"type": "string", "description": "画面描述（英文常用），写清主体、氛围、风格。"},
+                "prompt": {"type": "string", "description": "画面描述（英文常用），写清主体、氛围、风格。参考图模式时是改图指令（保留什么、改成什么）。"},
                 "preset": {"type": "string", "description": "可选：要用的图像预设名；省略用默认预设。"},
                 "width": {"type": "integer", "description": "可选：宽度，默认由预设决定。"},
                 "height": {"type": "integer", "description": "可选：高度，默认由预设决定。"},
+                "reference_sha256": {"type": "string", "description": "可选：参考图 sha256（本轮图片消息或资料库）。与 reference_artifact_id 二选一。"},
+                "reference_artifact_id": {"type": "string", "description": "可选：之前生成的图 id。与 reference_sha256 二选一。"},
             },
             "required": ["prompt"],
         },

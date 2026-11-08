@@ -14,6 +14,7 @@ image_gen:
     flux-pro:
       description: "光影与复杂意境强，适合氛围感插画；慢、贵"
       show_to_llm: true         # false = 不暴露给 LLM（preset 参数仍可显式调用）
+      supports_edits: true      # false = 不支持参考图，discovery 清单会标注
       provider_kind: openai_compatible
       base_url: https://your-image-api.example/v1
       api_key: YOUR_IMAGE_API_KEY

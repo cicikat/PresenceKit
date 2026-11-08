@@ -359,6 +359,7 @@ def store_generated_image(
             "filename": filename,
             "mime": IMAGE_EXTENSIONS[ext],
             "size": len(data),
+            "sha256": hashlib.sha256(data).hexdigest(),
             "kind": "image",
             "created_at": time.time(),
             "revision": 1,

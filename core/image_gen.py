@@ -36,6 +36,7 @@ def _normalize_preset(payload: dict) -> dict:
     return {
         "description": str(payload.get("description") or ""),
         "show_to_llm": payload.get("show_to_llm", True) is True,
+        "supports_edits": payload.get("supports_edits", True) is True,
         "provider_kind": str(payload.get("provider_kind") or "openai_compatible"),
         "base_url": str(payload.get("base_url") or ""),
         "api_key": str(payload.get("api_key") or ""),
@@ -76,7 +77,8 @@ def exposed_preset_names(char_id: str | None = None, config: dict | None = None)
             continue
         if not connection_ready(preset):
             continue
-        result.append({"name": name, "description": preset.get("description") or ""})
+        result.append({"name": name, "description": preset.get("description") or "",
+                       "supports_edits": preset.get("supports_edits", True) is True})
     return result
 
 
@@ -103,7 +105,10 @@ def discovery_note(char_id: str | None = None, config: dict | None = None) -> st
     parts = []
     for row in rows:
         desc = " ".join(str(row.get("description") or "").split())[:200]
-        parts.append(f"{row['name']}：{desc}" if desc else str(row["name"]))
+        item = f"{row['name']}：{desc}" if desc else str(row["name"])
+        if row.get("supports_edits") is False:
+            item += "（不支持参考图）"
+        parts.append(item)
     return "可选图像预设（用 preset 参数指定，省略用默认）：{}。".format("；".join(parts))
 
 
@@ -144,3 +149,60 @@ def validate_name(name: str) -> str:
     if not NAME_RE.fullmatch(name):
         raise ValueError("预设名须以字母开头，仅含字母、数字、下划线和短横线")
     return name
+
+
+def image_reference_bytes(
+    *,
+    user_id: str | None = None,
+    char_id: str | None = None,
+    sha256: str | None = None,
+    artifact_id: str | None = None,
+) -> tuple[bytes, str, str]:
+    """Resolve reference image bytes from sha256 (media/library) or an artifact.
+
+    Returns (bytes, mime, source_label). Scope is checked fail-closed; the
+    model passes only opaque identifiers, never paths.
+    """
+    from pathlib import Path
+
+    has_sha = bool(str(sha256 or "").strip())
+    has_art = bool(str(artifact_id or "").strip())
+    if has_sha == has_art:
+        raise ValueError("reference_sha256 与 reference_artifact_id 只能传其一。")
+    if has_sha:
+        from core.chat_media import ChatMediaError, resolve_chat_media
+
+        try:
+            record = resolve_chat_media(str(sha256), uid=str(user_id), char_id=str(char_id))
+        except ChatMediaError as exc:
+            raise ValueError(f"找不到参考图 {str(sha256)[:16]}…：{exc.detail}") from exc
+        data = record.path.read_bytes()
+        if len(data) > MAX_IMAGE_BYTES:
+            raise ValueError("参考图超过 10MB 上限。")
+        mime = record.mime or "image/png"
+        return data, mime, record.source
+    from core.tools.chat_artifacts import (
+        ArtifactError,
+        artifact_file_path,
+        get_artifact_record,
+        resolve_artifact_scope,
+    )
+
+    scope = resolve_artifact_scope(str(artifact_id))
+    if scope is None:
+        raise ValueError("生成图不存在或不在当前账号下。")
+    try:
+        record = get_artifact_record(scope["id"], uid=scope["uid"], char_id=scope["char_id"])
+    except ArtifactError as exc:
+        raise ValueError(f"生成图不存在或不在当前账号下。") from exc
+    if record is None:
+        raise ValueError("生成图不存在或不在当前账号下。")
+    path = artifact_file_path(record)
+    if not path.exists() or not path.is_file():
+        raise ValueError("生成图文件已不存在。")
+    data = path.read_bytes()
+    if len(data) > MAX_IMAGE_BYTES:
+        raise ValueError("参考图超过 10MB 上限。")
+    ext = Path(str(record.get("filename") or "")).suffix.lower()
+    mime = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp"}.get(ext[1:] if ext else "", "image/png")
+    return data, mime, "artifact"
