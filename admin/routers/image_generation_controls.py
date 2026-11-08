@@ -113,4 +113,5 @@ async def test_image_preset(name: str):
         category = getattr(exc, "error_category", "generation_failed")
         # Neither provider error bodies nor connection strings are safe to echo.
         return {"ok": False, "duration_ms": int((time.perf_counter() - started) * 1000),
-                "error_category": category, "message": "生成测试失败，请检查地址、密钥、模型与图片协议（" + category + "）"}
+                "error_category": category, "message": "服务商余额不足，请充值后重试" if category == "insufficient_balance" else "生成测试失败，请检查地址、密钥、模型与图片协议（" + category + "）",
+                "configured_model": configured_model, "tested_model": tested_model, "same_model": configured_model == tested_model}

@@ -8,6 +8,12 @@ from core import api_call_log
 from core.model_network import make_model_http_client
 
 
+class VeniceError(ValueError):
+    def __init__(self, category: str):
+        self.error_category = category
+        super().__init__("Venice 生图失败（" + category + "）")
+
+
 def api_root(url: str) -> str:
     url = url.rstrip("/")
     return url[:-len("/image/generate")] if url.endswith("/image/generate") else url
@@ -57,8 +63,8 @@ async def request_image(prompt: str, resolved: dict, *, image_bytes=None, width=
         return raw
     except Exception as exc:
         from core.llm_protocol import error_category_for_exception
-        category = error_category_for_exception(exc)
-        raise ValueError("Venice 生图失败（" + category + "）") from exc
+        category = "insufficient_balance" if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 402 else error_category_for_exception(exc)
+        raise VeniceError(category) from exc
     finally:
         await client.aclose()
         api_call_log.append(caller="image_gen", purpose="generate_image", provider="venice", model=resolved["model"],

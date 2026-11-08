@@ -27,3 +27,14 @@ async def test_native_venice_image_and_directory(monkeypatch, sandbox):
     assert url == root
     assert request["json"]["prompt"] == "user constraint" and request["json"]["variants"] == 1
     assert calls.count("closed") == 2
+
+@pytest.mark.asyncio
+async def test_insufficient_venice_balance_is_actionable_and_does_not_echo_provider_body(monkeypatch, sandbox):
+    class Client:
+        async def post(self, url, **kw):
+            return httpx.Response(402, request=httpx.Request('POST',url), json={'error':'secret=fixture-key insufficient balance'})
+        async def aclose(self): pass
+    monkeypatch.setattr(venice_images,'make_model_http_client',lambda *a:Client())
+    with pytest.raises(venice_images.VeniceError) as exc:
+        await venice_images.request_image('test',{'base_url':'https://api.venice.ai/api/v1','model':'z-image-turbo','api_key':'fixture-key'})
+    assert exc.value.error_category=='insufficient_balance' and 'fixture-key' not in str(exc.value)

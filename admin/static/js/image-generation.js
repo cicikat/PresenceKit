@@ -109,7 +109,7 @@ async function testImageGeneration(name, button) {
   const controller = new AbortController(); const timeout = setTimeout(() => controller.abort(), 140000);
   try {
     const result = await api('POST', '/image-gen-presets/presets/' + encodeURIComponent(name) + '/test', {}, {signal:controller.signal});
-    const text = result.ok ? igText('连接测试成功', 'Connection test passed') + ` · ${result.tested_model || ''} · ${result.duration_ms} ms` + (result.same_model === false ? igText('（高级模型未执行）',' (configured premium model not executed)') : '') : (result.message || result.error_category);
+    const text = result.ok ? igText('连接测试成功', 'Connection test passed') + ` · ${result.tested_model || ''} · ${result.duration_ms} ms` + (result.same_model === false ? igText('（高级模型未执行）',' (configured premium model not executed)') : '') : (result.message || result.error_category) + (result.tested_model ? ' · ' + result.tested_model : '');
     if(state) state.textContent=text; igStatus(text);
   } catch (e) {
     const text=e.name==='AbortError' ? igText('请求超时，结果未确认；请勿连续重复测试。','Request timed out; result unknown. Avoid repeated submissions.') : e.message;
