@@ -54,7 +54,29 @@ def catalog(config: dict | None = None) -> dict:
         for name, payload in stored.items()
         if isinstance(name, str) and NAME_RE.fullmatch(name) and isinstance(payload, dict)
     }
-    return {"presets": presets, "enabled": bool(block.get("enabled"))}
+    return {"presets": presets, "enabled": bool(block.get("enabled")),
+            "default_preset": str(block.get("default_preset") or ""),
+            "prompt_constraints": constraint_settings(config)}
+
+
+def constraint_settings(config: dict | None = None) -> dict:
+    block = _block(config).get("prompt_constraints") or {}
+    return {"selected": str(block.get("selected") or ""),
+            "custom": str(block.get("custom") or ""),
+            "presets": dict(block.get("presets") or {})}
+
+
+def constrained_prompt(prompt: str, config: dict | None = None) -> str:
+    """User-controlled visual requirements apply to generation and reference edits."""
+    settings = constraint_settings(config)
+    selected = settings["selected"]
+    if not selected:
+        return prompt
+    text = settings["custom"] if selected == "__custom__" else settings["presets"].get(selected)
+    if text is None:
+        raise ValueError("选中的生图提示词约束预设不存在，请重新选择。")
+    text = str(text).strip()
+    return prompt + "\n\nUser visual constraints:\n" + text if text else prompt
 
 
 def connection_ready(preset: dict | None) -> bool:
@@ -123,6 +145,10 @@ def resolve_preset(name: str | None, char_id: str | None = None, config: dict | 
     wanted = str(name or "").strip()
     if not wanted:
         visible = exposed_preset_names(char_id, config)
+        default = cat.get("default_preset")
+        if default and any(row["name"] == default for row in visible):
+            wanted = default
+            visible = [{"name": default}]
         if visible:
             wanted = str(visible[0]["name"])
         else:

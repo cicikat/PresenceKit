@@ -1275,3 +1275,8 @@ current/local: desktop Room TV v02/v03 edit mode supports original/soft/cel, per
 current：后端沿 /mood/state 保留明确表达字段，新增 affect 内在投影与事件计数；新 /mood/events 使用 memory.read，state.read 不获证据摘录。单一后端char-only状态，不向各客户端复制情绪写入权。avatar_directive 新增可选 char_id/version/source_turn_id/source_at/expires_at，桌面统一入口校验角色/顺序/截止并扣减TTL；旧无版本包仍兼容。手机继续消费既有 current 与 has_signal，忽略内在新增字段；无新设置、动作或原生权限。开关归后端管理面，默认开启、热关闭回到仅明确表达。
 
 observe：真实模型拟人评估、桌面原生切角/动作恢复与手机实机未验收；已完成确定性回归与前端构建。未提供新的细粒度表情/目光素材或混合声线。合同及验收细节见 [affective-engine.md](affective-engine.md) 和对应工单。
+
+## 294 生图配置与跨端图片（2026-11-09）
+后端生图控制面见 feature-control-surface.md §294。图片沿既有 HTTP chat response、WS channel_message、mobile poll 与聊天历史 `artifacts[]` 交付；可选 `kind: image`，mime 为 PNG/JPEG/WebP，旧客户端保留文件卡片兼容。无新消息类型/ACK/TTL/队列。取图使用原 chat scope `/chat/artifacts/{id}/preview` 或下载端点，无裸URL和前端令牌拼接。
+桌面新增 `preview_chat_image` IPC：固定32位hex id、Bearer、禁止重定向、60秒/25MiB上限，返回data URL，仅可见卡片加载并有重试/放大，保留原文件下载。手机保存 kind 元数据，通过已有会话授权下载图片（25MiB；文本仍2MiB），ChatImage 缩略图和全屏缩放；`saveChatImage` 设置通道仅接受有界PNG/JPEG/WebP字节，经系统文件选择器保存，不新增权限、不自动写相册，不改后台通知服务。
+验证：后端95项、后台Chromium隔离交互、桌面9项/构建/Rust检查及图片组件Chromium显示放大、手机11项/分析和Dev APK构建。observe：真实图像服务、桌面原生窗口、Android真机文件选择器与后台跨设备恢复尚未验收，测试数据不代表真实提供商支持。

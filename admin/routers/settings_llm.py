@@ -36,6 +36,8 @@ from admin.config_control import read_config_file, write_config_file
 from core.config_loader import get_config
 
 router = APIRouter()
+from admin.routers.image_generation_controls import router as image_controls_router
+router.include_router(image_controls_router)
 from core.config_loader import get_config_path
 CONFIG_FILE = get_config_path()
 logger = logging.getLogger(__name__)
@@ -690,7 +692,8 @@ async def get_image_gen_presets(auth=Depends(require_scopes("admin"))):
         view["has_api_key"] = bool(key)
         view["ready"] = image_gen.connection_ready(preset)
         presets[name] = view
-    return {"enabled": cat["enabled"], "presets": presets}
+    return {"enabled": cat["enabled"], "presets": presets, "default_preset": cat["default_preset"],
+            "prompt_constraints": cat["prompt_constraints"]}
 
 
 @router.put("/image-gen-presets/presets/{name}", summary="新增或更新一个图像生成预设")
@@ -710,6 +713,16 @@ async def upsert_image_gen_preset(name: str, body: ImageGenPresetUpsert, auth=De
         if existing.get("api_key"):
             update["api_key"] = existing["api_key"]
     merged = {**existing, **update}
+    from urllib.parse import urlsplit
+    url = urlsplit(str(merged.get("base_url") or ""))
+    if url.scheme not in {"http", "https"} or not url.hostname or url.username or url.password or url.query or url.fragment:
+        raise HTTPException(422, "请填写有效的 HTTP(S) 生图 API 根地址")
+    if not str(merged.get("model") or "").strip():
+        raise HTTPException(422, "请填写模型 ID")
+    if existing.get("api_key") and existing.get("base_url", "").rstrip("/") != merged["base_url"].rstrip("/") and not str(body.api_key or "").strip():
+        raise HTTPException(422, "更换服务地址时请重新输入密钥")
+    if merged.get("provider_kind", "openai_compatible") != "openai_compatible":
+        raise HTTPException(422, "生图目前支持 OpenAI-compatible Images 协议")
     presets[name] = merged
     write_config_file(CONFIG_FILE, full_cfg)
     from core import config_loader
@@ -724,6 +737,8 @@ async def delete_image_gen_preset(name: str, auth=Depends(require_scopes("admin"
     presets = block.get("presets") or {}
     if name not in presets:
         raise HTTPException(status_code=404, detail=f"image generation preset {name!r} 不存在")
+    if block.get("default_preset") == name:
+        raise HTTPException(409, "请先更换默认生图连接")
     del presets[name]
     write_config_file(CONFIG_FILE, full_cfg)
     from core import config_loader

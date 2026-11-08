@@ -126,3 +126,27 @@
         <div id="mr-failover-stats" role="status" class="admin-inline-087" data-i18n="common.loading">加载中…</div>
       </div>
 <section class="card admin-legacy-only"><button class="btn btn-primary" data-action="goto" data-action-args='["role-bindings"]' data-i18n="settings_center.character_model_bindings_and_reset">角色模型绑定与重置</button></section>
+
+<section class="card" id="image-generation-card">
+<div class="card-header"><h3 data-i18n="ig.title">图像生成</h3><div><button class="btn btn-primary btn-sm" data-action="editImageGeneration" data-i18n="ig.new">新建生图连接</button><button class="btn btn-ghost btn-sm" data-action="loadImageGeneration" data-i18n="ig.refresh">刷新</button></div></div>
+<p data-i18n="ig.hint">独立于看图识别。配置 Images API 地址、密钥和模型；角色根据描述选择已开放的连接。测试会真实生成图片，可能计费。</p>
+<div class="form-row"><label class="field"><span data-i18n="ig.enabled">启用角色生图</span><input id="ig-enabled" type="checkbox"></label><label class="field"><span data-i18n="ig.default">默认生图连接</span><select id="ig-default"></select></label><button class="btn btn-primary btn-sm" data-action="saveImageGenerationRouting" data-i18n="ig.saveRouting">保存开关与默认连接</button></div>
+<div class="tbl-wrap"><table><thead><tr><th data-i18n="ig.connection">连接</th><th data-i18n="ig.model">模型</th><th data-i18n="ig.state">状态</th><th data-i18n="ig.actions">操作</th></tr></thead><tbody id="ig-list"></tbody></table></div>
+<div id="ig-editor" class="vision-editor" hidden>
+<label class="field"><span data-i18n="ig.name">连接名（字母开头）</span><input id="ig-name" type="text" autocomplete="off"></label>
+<label class="field"><span data-i18n="ig.base_url">Base URL（例如 https://host/v1）</span><input id="ig-base_url" type="url" autocomplete="off"></label>
+<label class="field"><span data-i18n="ig.api_key">API Key</span><input id="ig-api_key" type="password" autocomplete="off"></label>
+<label class="field"><span data-i18n="ig.model">模型 ID（可手填）</span><input id="ig-model" type="text" autocomplete="off" list="ig-models"></label>
+<label class="field"><span data-i18n="ig.description">给角色看的用途描述</span><input id="ig-description" type="text" autocomplete="off"></label>
+<small id="ig-key-state"></small><datalist id="ig-models"></datalist><button class="btn btn-ghost btn-sm" data-action="discoverImageGeneration" data-i18n="ig.discover">读取可用模型</button>
+<label class="field"><span data-i18n="ig.show_to_llm">向角色公开此连接及描述</span><input id="ig-show_to_llm" type="checkbox"></label>
+<label class="field"><span data-i18n="ig.supports_edits">支持参考图（Images Edits）</span><input id="ig-supports_edits" type="checkbox"></label>
+<label class="field"><span data-i18n="ig.extra">高级参数（JSON）</span><textarea id="ig-extra" rows="3"></textarea></label><button class="btn btn-primary btn-sm" data-action="saveImageGeneration" data-i18n="ig.save">保存连接</button></div>
+<h4 data-i18n="ig.constraints">生图提示词约束</h4>
+<p data-i18n="ig.constraintsHint">选中的约束会附加到文生图和参考图的提示词末尾。可选预设、直接手写，或选择不附加。</p>
+<label class="field"><span data-i18n="ig.constraintSelection">当前约束</span><select id="ig-constraint" onchange="editImageConstraint()"></select></label>
+<label class="field"><span data-i18n="ig.constraintContent">约束内容（可修改或直接手写）</span><textarea id="ig-constraint-text" rows="4" maxlength="4000"></textarea></label>
+<label class="field"><span data-i18n="ig.constraintName">另存为预设名称（可选）</span><input id="ig-constraint-name" maxlength="80"></label>
+<button class="btn btn-primary btn-sm" data-action="saveImageConstraints" data-i18n="ig.saveConstraints">保存并选用约束</button>
+<h4 data-i18n="ig.character">角色可用生图连接</h4><select id="ig-character" onchange="loadImageGenerationCharacter().catch(e=>igStatus(e.message))"></select><label class="field"><span data-i18n="ig.inherit">跟随全局（取消勾选后使用下方白名单；空列表禁止生图）</span><input id="ig-inherit" type="checkbox"></label><div id="ig-allowlist" class="form-row"></div><button class="btn btn-primary btn-sm" data-action="saveImageGenerationCharacter" data-i18n="ig.saveChar">保存角色白名单</button><p id="ig-status" role="status" aria-live="polite"></p>
+</section>

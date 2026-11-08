@@ -9,6 +9,11 @@ affective_engine:
   enabled: true                 # 默认开启；发送后评价真实对话；管理面热开关，关闭恢复仅明确表达余韵
 
 image_gen:
+  default_preset: ""           # 未指定时用首个可见可用连接；角色白名单优先
+  prompt_constraints:
+    selected: ""               # 空=不附加，__custom__=手写，否则选presets中的名称
+    custom: ""
+    presets: {}                # 命名视觉约束，每项最多4000字符，管理面可添加/改写
   enabled: false                # 图像生成总闸（generate_image 工具）；管理面 /image-gen-presets 热开关
   presets:                      # 命名预设；角色卡 presence_ext.image_gen 声明白名单
     flux-pro:

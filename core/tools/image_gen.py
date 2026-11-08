@@ -47,6 +47,26 @@ async def generate_image(
         )
         if len(image_bytes[0]) > 20 * 1024 * 1024:
             raise ValueError("参考图总尺寸超过 20MB 上限。")
+    raw = await request_image(prompt, resolved, image_bytes=image_bytes, width=width, height=height)
+    stored = store_generated_image(raw, ext=".png", user_id=user_id, char_id=char_id)
+    raw = json.dumps({
+            "status": "generated",
+            "id": stored["id"],
+            "filename": stored["filename"],
+            "mime": stored["mime"],
+            "size": stored["size"],
+            "note": "图片已生成，用户会看到图片卡片；不要说出工具名，也不要编造本机路径。",
+        }, ensure_ascii=False)
+    return ToolResult(
+        raw_data=raw,
+        safe_summary=raw,
+        meta={"validity": "current_turn"},
+    )
+
+
+async def request_image(prompt: str, resolved: dict, *, image_bytes=None, width=None, height=None) -> bytes:
+    """Shared production/probe request; never stores an artifact or touches chat state."""
+    prompt = image_gen.constrained_prompt(prompt.strip())
     if image_bytes is not None:
         url = resolved["base_url"].rstrip("/") + "/images/edits"
         headers = {"User-Agent": "PresenceKit/1.0"}
@@ -66,8 +86,7 @@ async def generate_image(
             response.raise_for_status()
         except Exception as exc:
             _log_failure(resolved, started, exc)
-            detail = _detail(exc)
-            raise ValueError(f"生成图失败（预设 {resolved['name']}，{image_gen_httpx_error_category(exc)}）。{detail}") from exc
+            raise ValueError(f"生成图失败（预设 {resolved['name']}，{image_gen_httpx_error_category(exc)}）。") from exc
         finally:
             try:
                 await client.aclose()
@@ -82,6 +101,7 @@ async def generate_image(
         }
         extra = resolved.get("extra_params") or {}
         body.update(extra)
+        body["prompt"] = prompt
         if width or height:
             body.setdefault("size", f"{int(width) if width else 1024}x{int(height) if height else 1024}")
         url = resolved["base_url"].rstrip("/") + "/images/generations"
@@ -95,8 +115,7 @@ async def generate_image(
             response.raise_for_status()
         except Exception as exc:
             _log_failure(resolved, started, exc)
-            detail = _detail(exc)
-            raise ValueError(f"生成图失败（预设 {resolved['name']}，{image_gen_httpx_error_category(exc)}）。{detail}") from exc
+            raise ValueError(f"生成图失败（预设 {resolved['name']}，{image_gen_httpx_error_category(exc)}）。") from exc
         finally:
             try:
                 await client.aclose()
@@ -149,7 +168,6 @@ async def generate_image(
         raise ValueError("生成图返回的数据不是有效 base64。") from exc
     if len(raw) > image_gen.MAX_IMAGE_BYTES:
         raise ValueError("生成的图片超过 25MB 上限。")
-    stored = store_generated_image(raw, ext=".png", user_id=user_id, char_id=char_id)
     api_call_log.append(
         caller="image_gen",
         purpose="generate_image",
@@ -157,22 +175,10 @@ async def generate_image(
         model=resolved["model"],
         duration_ms=int((time.perf_counter() - started) * 1000),
         ok=True,
-        output_hint=f"{stored['size']} bytes",
+        output_hint=f"{len(raw)} bytes",
         protocol="images_generations",
     )
-    raw = json.dumps({
-            "status": "generated",
-            "id": stored["id"],
-            "filename": stored["filename"],
-            "mime": stored["mime"],
-            "size": stored["size"],
-            "note": "图片已生成，用户会看到下载卡片；不要说出工具名，也不要编造本机路径。",
-        }, ensure_ascii=False)
-    return ToolResult(
-        raw_data=raw,
-        safe_summary=raw,
-        meta={"validity": "current_turn"},
-    )
+    return raw
 
 
 def _log_failure(resolved: dict, started: float, exc: BaseException) -> None:
@@ -189,16 +195,6 @@ def _log_failure(resolved: dict, started: float, exc: BaseException) -> None:
         protocol="images_generations",
         error_category=error_category,
     )
-
-
-def _detail(exc: BaseException) -> str:
-    status = getattr(exc, "response", None)
-    if status is not None:
-        try:
-            return str(status.text)[:200]
-        except Exception:
-            return ""
-    return ""
 
 
 def image_gen_httpx_error_category(exc: BaseException) -> str:

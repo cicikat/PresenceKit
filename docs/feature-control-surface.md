@@ -1162,3 +1162,8 @@ QQ 发送模式：消息分发与客户端设置 → QQ 回复范围，qq.outbou
 ## 事件情绪引擎（2026-10-25）
 
 affective_engine.enabled 默认 true；管理面通用高级功能开关热保存，enabled / expression-only 表示实际消费模式。关闭恢复仅明确表达余韵，不删除事件。GET /mood/state（state.read）新增省略证据正文的 affect / 资格 / 状态；GET /mood/events（memory.read）返回有界来源与重评。Prompt 实际注入另查观测。模型沿 detect_emotion 路由发送后运行，旧单标签检测器已删除，硬件爱意探针仍复用路由。新控件与事件卡已接入「情绪·花园」，客户端无新的心理开关或状态写入者。完整合同见 [affective-engine.md](affective-engine.md)。
+
+## 294 生图配置与提示词约束
+管理面「模型连接与分工 → 图像生成」独立于 VLM/OCR。GET/PUT/DELETE `/image-gen-presets` 预设接口保留；新增 POST `/image-gen-presets/discover` 查询模型目录（目录可混有文本模型，允许手填），POST `/image-gen-presets/presets/{name}/test` 真实生成单图并丢弃图片（可能计费，不写聊天/记忆），PUT `/image-gen-presets/default-preset` 设置默认连接。全部 admin scope；密钥不回显，变更地址须重新提供密钥；全局默认仅在该角色可见连接中生效。
+PUT `/image-gen-presets/prompt-constraints` 保存 `{selected, custom, presets}`。selected 为空不附加，`__custom__` 用手写内容，否则选命名预设；最多50项，每项4000字符。实际文生图与参考图编辑均在画面描述后附加当前用户约束，extra_params 不能覆盖 prompt。默认不附加；用户可随时选择、改写、另存或停用。
+角色 asset-bindings.image_gen 为 list[str] 或 null：null 继承全局，[] 禁止生图，非空列表为白名单；角色调用时可选连接。配置完成不代表可调用：仍需启用生图总闸、角色允许 media 工具且使用 Path C function calling。真实服务费用/效果与实际设备仍需验收。

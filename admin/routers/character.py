@@ -558,7 +558,7 @@ class AssetBindingsUpdate(BaseModel):
     sticker_pack: Optional[str] = None
     live2d_model: Optional[str] = None
     model_3d: Optional[str] = None
-    image_gen: Optional[str] = None
+    image_gen: Optional[list[str]] = None
     # None = 不修改该字段；空字符串 "" = 显式清除该字段的绑定。
     # （与 model_routing 端点的"None=清除"语义不同，因为这里一次可能只想改一个字段，
     # 全部按 None=清除会把其余三个字段一起冲掉；用空串表达"清除"更安全。）
@@ -578,7 +578,7 @@ def _resolve_asset_bindings(char_id: str, presence_ext: dict) -> dict:
         "sticker_pack": presence_ext.get("sticker_pack") or None,
         "live2d_model": presence_ext.get("live2d_model") or None,
         "model_3d": presence_ext.get("model_3d") or None,
-        "image_gen": presence_ext.get("image_gen") or None,
+        "image_gen": presence_ext.get("image_gen"),
     }
 
 
@@ -640,6 +640,12 @@ async def set_character_asset_bindings(
         if field_name not in updates:
             continue
         value = updates[field_name]
+        if field_name == "image_gen" and value is not None:
+            from core.image_gen import catalog
+            if any(name not in catalog()["presets"] for name in value):
+                raise HTTPException(422, "角色白名单包含不存在的生图连接")
+            presence_ext[field_name] = list(dict.fromkeys(value))
+            continue
         if not value:  # None 或 "" 均视为清除，语义上等价（都不写入 presence_ext）
             presence_ext.pop(field_name, None)
         else:

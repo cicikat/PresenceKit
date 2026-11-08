@@ -996,6 +996,7 @@ window.addEventListener('admin-language-changed', () => {
 });
 
 async function loadModelRouting() {
+  loadImageGeneration();
   loadImageConnections();
   if (typeof loadThinkingSettings === 'function') loadThinkingSettings();
   document.getElementById('mr-presets-body').innerHTML = '<div class="loading">加载中…</div>';

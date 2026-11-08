@@ -182,13 +182,14 @@ const AdminPageLayout = (() => {
       const role = section(parent, 'model-role', designText('角色绑定与形象', 'Character bindings and appearance'));
       const text = section(parent, 'model-text', designText('文本模型', 'Text models'));
       const vision = section(parent, 'model-vision', designText('图像识别模型（VLM / OCR）', 'Image models (VLM / OCR)'));
+      const generation = section(parent, 'model-generation', designText('图像生成', 'Image generation'));
       const stt = section(parent, 'model-stt', designText('语音识别（STT）', 'Speech recognition (STT)'));
       const tts = section(parent, 'model-tts', designText('角色声音与试听（TTS）', 'Character voice and preview (TTS)'));
       const embedding = section(parent, 'model-embedding', designText('记忆搜索模型（Embedding）', 'Memory search models (Embedding)'));
       let destination = vision;
       for (const node of original) {
         if (node.dataset.i18n === 'routing.text_heading') destination = text;
-        if (node.matches('.card') && !node.classList.contains('admin-legacy-only')) move(node, destination);
+        if (node.matches('.card') && !node.classList.contains('admin-legacy-only')) move(node, node.id === 'image-generation-card' ? generation : destination);
       }
       const roleRoot = document.getElementById('page-role-bindings');
       for (const node of [...roleRoot.children]) if (node.matches('label,#role-binding-fields')) move(node, role);
