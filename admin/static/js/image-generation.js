@@ -56,6 +56,8 @@ function editImageGeneration(name = null) {
   igEl('test_model').value = p.test_model || '';
   igEl('test_extra').value = JSON.stringify(p.test_extra_params || {}, null, 2);
   igEl('models').replaceChildren();
+  igEl('model-results').replaceChildren(); igEl('model-results').hidden=true;
+  igEl('model-status').textContent='';
 }
 
 async function saveImageGeneration() {
@@ -77,6 +79,7 @@ async function saveImageGeneration() {
 async function discoverImageGeneration(button) {
   const status = igEl('model-status');
   if (button) button.disabled = true;
+  igEl('model-results').hidden=true;
   status.textContent = igText('正在读取模型目录…', 'Loading model catalogue…');
   const controller = new AbortController(); const timeout = setTimeout(() => controller.abort(), 25000);
   try {

@@ -107,6 +107,8 @@ def main():
         page.locator("#ig-list button").nth(1).click()
         page.wait_for_function("document.getElementById('ig-status').textContent.includes('连接测试成功')")
         page.locator('[data-layout-key="model-generation"]').screenshot(path=str(output / "admin.png"))
+        page.locator("#ig-list button").nth(0).click()
+        assert not page.locator("#ig-model-results").is_visible()
         assert catalog["enabled"] and catalog["default_preset"] == "fixture"
         assert binding["image_gen"] == ["fixture"]
         assert not errors, errors
