@@ -670,6 +670,8 @@ async def delete_image_preset(name: str, auth=Depends(require_scopes("admin"))):
 
 
 class ImageGenPresetUpsert(BaseModel):
+    test_model: Optional[str] = None
+    test_extra_params: Optional[dict] = None
     description: Optional[str] = None
     show_to_llm: Optional[bool] = None
     supports_edits: Optional[bool] = None
@@ -713,6 +715,9 @@ async def upsert_image_gen_preset(name: str, body: ImageGenPresetUpsert, auth=De
         if existing.get("api_key"):
             update["api_key"] = existing["api_key"]
     merged = {**existing, **update}
+    if merged.get("provider_kind") == "venice":
+        from core.venice_images import api_root
+        merged["base_url"] = api_root(str(merged.get("base_url") or ""))
     from urllib.parse import urlsplit
     url = urlsplit(str(merged.get("base_url") or ""))
     if url.scheme not in {"http", "https"} or not url.hostname or url.username or url.password or url.query or url.fragment:
@@ -721,8 +726,8 @@ async def upsert_image_gen_preset(name: str, body: ImageGenPresetUpsert, auth=De
         raise HTTPException(422, "请填写模型 ID")
     if existing.get("api_key") and existing.get("base_url", "").rstrip("/") != merged["base_url"].rstrip("/") and not str(body.api_key or "").strip():
         raise HTTPException(422, "更换服务地址时请重新输入密钥")
-    if merged.get("provider_kind", "openai_compatible") not in {"openai_compatible", "runware"}:
-        raise HTTPException(422, "生图支持 OpenAI-compatible Images 或 Runware 原生协议")
+    if merged.get("provider_kind", "openai_compatible") not in {"openai_compatible", "runware", "venice"}:
+        raise HTTPException(422, "生图支持 OpenAI Images、Runware 或 Venice 原生协议")
     presets[name] = merged
     write_config_file(CONFIG_FILE, full_cfg)
     from core import config_loader

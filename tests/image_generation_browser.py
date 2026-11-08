@@ -45,7 +45,7 @@ def main():
             elif url == "/image-gen-presets/discover":
                 result = {"status": "ok", "models": ["fixture-image-model", "other-model"]}
             elif url.endswith("/test"):
-                result = {"ok": True, "duration_ms": 12, "bytes": 100}
+                result = {"ok": True, "duration_ms": 12, "bytes": 100, "tested_model":"cheap-fixture", "same_model":False}
             elif url == "/image-gen-presets/prompt-constraints":
                 catalog["prompt_constraints"] = body
                 result = body
@@ -83,6 +83,8 @@ def main():
         page.locator("#ig-api_key").fill("fixture-key")
         page.locator('[data-action="discoverImageGeneration"]').click()
         page.wait_for_function("document.querySelectorAll('#ig-models option').length === 2")
+        assert page.locator("#ig-model-results").is_visible()
+        page.locator("#ig-model-results").select_option("fixture-image-model")
         page.locator("#ig-model").fill("fixture-image-model")
         page.locator("#ig-description").fill("Illustrations")
         page.locator('[data-action="saveImageGeneration"]').click()
@@ -103,7 +105,7 @@ def main():
         assert catalog["prompt_constraints"]["selected"] == "Painterly"
         page.on("dialog", lambda dialog: dialog.accept())
         page.locator("#ig-list button").nth(1).click()
-        page.wait_for_function("document.getElementById('ig-status').textContent.includes('生成成功')")
+        page.wait_for_function("document.getElementById('ig-status').textContent.includes('连接测试成功')")
         page.locator('[data-layout-key="model-generation"]').screenshot(path=str(output / "admin.png"))
         assert catalog["enabled"] and catalog["default_preset"] == "fixture"
         assert binding["image_gen"] == ["fixture"]

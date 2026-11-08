@@ -1171,3 +1171,7 @@ PUT `/image-gen-presets/prompt-constraints` 保存 `{selected, custom, presets}`
 ## 295 Runware与管理面登录
 生图预设 provider_kind 新增 runware，使用用户配置的 Runware Native Models API（官方URL https://api.runware.ai/v1），POST任务数组。模型目录调用modelSearch，可填写搜索词并返回最多100条AIR ID，has_more表示仍有后续项；用户仍可手填模型。文生图/参考图分别用imageInference与inputs.seedImage，服务返回base64 PNG后沿原产物链交付；单次1图，沿用用户已选prompt约束。同步120秒预算，超时不自动重复付费请求，原OpenAI Images适配保留。密钥仅在私有配置，不回显上游错误正文。
 管理登录改用/auth/whoami确认admin scope；10秒鉴权超时，自动/手动登录按代际隔离，后者取消前者。语言和首次配置检查最多8秒后台执行，不阻塞已通过鉴权的用户。401、权限不足、网络超时和HTTP错误分别展示。主题在head同步恢复，body挂载时继承首屏主题；公共管理静态资源gzip压缩，带版本号资源immutable缓存，HTML与无版本资源仍revalidate，API/WS/SSE不进入此压缩层。
+
+## 296 高质量生图与低成本测试
+生图预设新增 test_model、test_extra_params，仅用于管理面测试；配置后测试接口返回 configured_model/tested_model/same_model。低成本连接测试不代表高级模型生成已验证。角色只从已公开且白名单允许的模型中选型。管理面测试去除浏览器原生confirm依赖，按钮/行内反馈显示进度、成功或错误；模型目录显示可见选择框，仍允许手填，目录25秒、测试140秒前端预算。
+provider_kind 新增 venice。Base URL为 https://api.venice.ai/api/v1，原生POST /image/generate，GET /models?type=image；填写完整/image/generate时保存为根地址。此适配暂不开放参考图。Runware高级编辑模型可在extra_params设置reference_input=referenceImages（适配器消费，不透传此选项）；扩散模型仍用seedImage。

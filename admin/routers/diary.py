@@ -8,6 +8,8 @@ char_id 查询参数：指定角色；缺省 = active char。
 import re
 from typing import Optional
 
+from core.diary_format import normalize_diary_prose
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from admin.auth import require_scopes
@@ -65,12 +67,12 @@ def _split_layers(content: str) -> tuple[str, str]:
     body = _strip_body(content)
     marker = re.search(r"(?m)^##\s*今日感受\s*$", body)
     if marker:
-        return body[:marker.start()].strip(), body[marker.end():].strip()
+        return body[:marker.start()].strip(), normalize_diary_prose(body[marker.end():])
     if re.search(r"(?m)^##\s*今日事件\s*$", body):
         return body.strip(), ""
     # Legacy entries had no section headings; they are still readable and
     # are treated as a single feeling block for the presentation layer.
-    return "", body.strip()
+    return "", normalize_diary_prose(body)
 
 
 def _feeling_title(feeling: str) -> str:

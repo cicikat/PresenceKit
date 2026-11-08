@@ -61,14 +61,19 @@ async def discover(base_url: str, api_key: str, search: str = "FLUX") -> dict:
 async def request_image(prompt: str, resolved: dict, *, image_bytes=None, width=None, height=None) -> bytes:
     from core.image_gen import MAX_IMAGE_BYTES
     extra = dict(resolved.get("extra_params") or {})
+    reference_input = extra.pop("reference_input", "seedImage")
     # Connection, prompt, delivery and output count are controlled by this adapter.
     task = {**extra, "taskType": "imageInference", "model": resolved["model"], "positivePrompt": prompt,
             "numberResults": 1, "width": width or extra.get("width", 1024), "height": height or extra.get("height", 1024),
             "outputType": "base64Data", "outputFormat": "PNG", "deliveryMethod": "sync", "includeCost": True}
     if image_bytes is not None:
         raw, mime, _ = image_bytes
-        task["inputs"] = {**(extra.get("inputs") or {}), "seedImage": "data:" + mime + ";base64," + base64.b64encode(raw).decode()}
-        task.setdefault("strength", 0.65)
+        uri = "data:" + mime + ";base64," + base64.b64encode(raw).decode()
+        if reference_input == "referenceImages":
+            task["inputs"] = {**(extra.get("inputs") or {}), "referenceImages": [uri]}
+        else:
+            task["inputs"] = {**(extra.get("inputs") or {}), "seedImage": uri}
+            task.setdefault("strength", 0.65)
     started = time.perf_counter()
     ok = False
     category = "protocol_incompatible"

@@ -506,6 +506,7 @@ async def _generate_diary_material(
 - 用你自己的语气，可以拧巴、可以跳跃、可以停在半句话上，像真的在自言自语
 - 允许矛盾和没说完的情绪，不需要正能量收尾
 - 200-300字，不要标题，直接写内容
+- 按自然段写作，段落之间留空行；不要在词语或句子中间硬换行，不按固定列宽折行
 - 不要复述事件清单，只写这些事在你心里留下了什么"""
     feeling_content = await llm_client.chat(
         messages=[{"role": "user", "content": feeling_prompt}],
@@ -522,7 +523,8 @@ async def _generate_diary_material(
 
     if not facts_content and not feeling_content:
         return None
-    return {"facts": facts_content.strip(), "feeling": feeling_content.strip()}
+    from core.diary_format import normalize_diary_prose
+    return {"facts": facts_content.strip(), "feeling": normalize_diary_prose(feeling_content)}
 
 
 def _store_diary_artifact(

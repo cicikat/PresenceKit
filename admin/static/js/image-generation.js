@@ -21,9 +21,10 @@ async function loadImageGeneration() {
         const td = document.createElement('td'); td.textContent = text; row.append(td);
       }
       const actions = document.createElement('td');
-      for (const [label, fn] of [[igText('编辑', 'Edit'), () => editImageGeneration(name)], [igText('测试生成', 'Test generation'), () => testImageGeneration(name)], [igText('删除', 'Delete'), () => deleteImageGeneration(name)]]) {
-        const button = document.createElement('button'); button.className = 'btn btn-ghost btn-sm'; button.textContent = label; button.onclick = fn; actions.append(button);
+      for (const [label, fn] of [[igText('编辑', 'Edit'), () => editImageGeneration(name)], [igText('测试生成', 'Test generation'), button => testImageGeneration(name, button)], [igText('删除', 'Delete'), () => deleteImageGeneration(name)]]) {
+        const button = document.createElement('button'); button.className = 'btn btn-ghost btn-sm'; button.textContent = label; button.onclick = () => fn(button); actions.append(button);
       }
+      const state = document.createElement('span'); state.id = 'ig-test-' + name; state.setAttribute('role','status'); actions.append(state);
       row.append(actions); igEl('list').append(row);
     }
     igEl('default').value = imageGenerationCatalog.default_preset || '';
@@ -52,6 +53,8 @@ function editImageGeneration(name = null) {
   igEl('show_to_llm').checked = p.show_to_llm !== false;
   igEl('supports_edits').checked = p.supports_edits !== false;
   igEl('extra').value = JSON.stringify(p.extra_params || {}, null, 2);
+  igEl('test_model').value = p.test_model || '';
+  igEl('test_extra').value = JSON.stringify(p.test_extra_params || {}, null, 2);
   igEl('models').replaceChildren();
 }
 
@@ -59,7 +62,9 @@ async function saveImageGeneration() {
   try {
     const extra = JSON.parse(igValue('extra') || '{}');
     if (!extra || Array.isArray(extra) || typeof extra !== 'object') throw new Error(igText('高级参数必须是 JSON 对象', 'Extra parameters must be a JSON object'));
-    const body = {provider_kind: igValue('provider_kind'), extra_params: extra};
+    const testExtra = JSON.parse(igValue('test_extra') || '{}');
+    if (!testExtra || Array.isArray(testExtra) || typeof testExtra !== 'object') throw new Error('测试参数必须是JSON对象');
+    const body = {provider_kind: igValue('provider_kind'), extra_params: extra, test_model: igValue('test_model'), test_extra_params: testExtra};
     for (const field of ['base_url', 'model', 'description']) body[field] = igValue(field);
     if (igValue('api_key')) body.api_key = igValue('api_key');
     for (const field of ['show_to_llm', 'supports_edits']) body[field] = igEl(field).checked;
@@ -69,24 +74,44 @@ async function saveImageGeneration() {
   } catch (e) { igStatus(e.message); }
 }
 
-async function discoverImageGeneration() {
+async function discoverImageGeneration(button) {
+  const status = igEl('model-status');
+  if (button) button.disabled = true;
+  status.textContent = igText('正在读取模型目录…', 'Loading model catalogue…');
+  const controller = new AbortController(); const timeout = setTimeout(() => controller.abort(), 25000);
   try {
-    const result = await api('POST', '/image-gen-presets/discover', {base_url: igValue('base_url'), api_key: igValue('api_key'), preset_name: imageGenerationEditing, provider_kind: igValue('provider_kind'), search: igValue('search') || 'FLUX'});
-    igEl('models').replaceChildren(...(result.models || []).map(id => new Option(id, id)));
-    igStatus(result.status === 'ok' ? igText('已读取模型；目录可能混有文本模型，请选择支持 Images 的模型。', 'Models loaded; select an Images-capable model from the mixed catalogue.') : igText('无法读取列表，可手动输入模型 ID。状态：', 'Catalogue unavailable; enter a model ID manually. Status: ') + result.status);
-  } catch (e) { igStatus(e.message); }
+    const result = await api('POST', '/image-gen-presets/discover', {base_url: igValue('base_url'), api_key: igValue('api_key'), preset_name: imageGenerationEditing, provider_kind: igValue('provider_kind'), search: igValue('search') || 'FLUX'}, {signal:controller.signal});
+    const models = result.models || [];
+    const options = () => models.map(id => new Option(result.model_names?.[id] ? result.model_names[id] + ' · ' + id : id, id));
+    igEl('models').replaceChildren(...options());
+    igEl('model-results').replaceChildren(new Option(igText('选择模型（也可直接手填）', 'Choose a model (or type an ID)'), ''), ...options());
+    igEl('model-results').hidden = !models.length;
+    status.textContent = result.status === 'ok' ? igText('已读取 ', 'Loaded ') + models.length + igText(' 个模型，请在下方选择。', ' models; choose below.') : igText('目录不可用，可手填模型。状态：', 'Catalogue unavailable; type a model ID. Status: ') + result.status;
+    igStatus(status.textContent);
+  } catch (e) {
+    status.textContent = e.name === 'AbortError' ? igText('读取超时，请重试。', 'Catalogue request timed out; retry.') : e.message;
+    igStatus(status.textContent);
+  } finally { clearTimeout(timeout); if (button) button.disabled = false; }
 }
 
 let imageGenerationTesting = false;
-async function testImageGeneration(name) {
-  if (imageGenerationTesting) return;
-  if (!confirm(igText('将使用已保存的连接真实生成一张测试图，可能产生费用。继续？', 'Generate one test image using the saved connection? This may incur a charge.'))) return;
-  imageGenerationTesting = true; igStatus(igText('正在生成测试图，请稍候…', 'Generating test image…'));
+async function testImageGeneration(name, button) {
+  const state = document.getElementById('ig-test-' + name);
+  if (imageGenerationTesting) { if(state) state.textContent = igText('正在测试其他连接，请稍候。', 'Another connection is being tested.'); return; }
+  imageGenerationTesting = true;
+  const originalLabel = button?.textContent;
+  if(button) {button.disabled=true; button.textContent=igText('测试中…','Testing…');}
+  const message = igText('正在用测试模型生成一张图，请稍候…', 'Generating one image with the test model…');
+  if(state) state.textContent=message; igStatus(message);
+  const controller = new AbortController(); const timeout = setTimeout(() => controller.abort(), 140000);
   try {
-    const result = await api('POST', '/image-gen-presets/presets/' + encodeURIComponent(name) + '/test');
-    igStatus(result.ok ? igText('生成成功', 'Generation succeeded') + ` · ${result.duration_ms} ms · ${result.bytes} B` : (result.message || result.error_category));
-  } catch (e) { igStatus(e.message); }
-  finally { imageGenerationTesting = false; }
+    const result = await api('POST', '/image-gen-presets/presets/' + encodeURIComponent(name) + '/test', {}, {signal:controller.signal});
+    const text = result.ok ? igText('连接测试成功', 'Connection test passed') + ` · ${result.tested_model || ''} · ${result.duration_ms} ms` + (result.same_model === false ? igText('（高级模型未执行）',' (configured premium model not executed)') : '') : (result.message || result.error_category);
+    if(state) state.textContent=text; igStatus(text);
+  } catch (e) {
+    const text=e.name==='AbortError' ? igText('请求超时，结果未确认；请勿连续重复测试。','Request timed out; result unknown. Avoid repeated submissions.') : e.message;
+    if(state) state.textContent=text; igStatus(text);
+  } finally {clearTimeout(timeout);imageGenerationTesting=false;if(button){button.disabled=false;button.textContent=originalLabel;}}
 }
 
 async function deleteImageGeneration(name) {

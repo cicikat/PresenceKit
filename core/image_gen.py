@@ -42,6 +42,8 @@ def _normalize_preset(payload: dict) -> dict:
         "api_key": str(payload.get("api_key") or ""),
         "model": str(payload.get("model") or ""),
         "extra_params": deepcopy(extra) if isinstance(extra, dict) else {},
+        "test_model": str(payload.get("test_model") or ""),
+        "test_extra_params": deepcopy(payload.get("test_extra_params") or {}),
     }
 
 

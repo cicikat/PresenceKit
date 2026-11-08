@@ -129,20 +129,21 @@
 
 <section class="card" id="image-generation-card">
 <div class="card-header"><h3 data-i18n="ig.title">图像生成</h3><div><button class="btn btn-primary btn-sm" data-action="editImageGeneration" data-i18n="ig.new">新建生图连接</button><button class="btn btn-ghost btn-sm" data-action="loadImageGeneration" data-i18n="ig.refresh">刷新</button></div></div>
-<p data-i18n="ig.hint">独立于看图识别。配置 Images API 地址、密钥和模型；角色根据描述选择已开放的连接。测试会真实生成图片，可能计费。</p>
+<p data-i18n="ig.hint">独立于看图识别。配置 Images API 地址、密钥和模型；角色根据描述选择已开放的连接。测试会真实生成图片，可能计费；配置测试模型后仅执行廉价模型，不验证高级模型的实际生成。</p>
 <div class="form-row"><label class="field"><span data-i18n="ig.enabled">启用角色生图</span><input id="ig-enabled" type="checkbox"></label><label class="field"><span data-i18n="ig.default">默认生图连接</span><select id="ig-default"></select></label><button class="btn btn-primary btn-sm" data-action="saveImageGenerationRouting" data-i18n="ig.saveRouting">保存开关与默认连接</button></div>
 <div class="tbl-wrap"><table><thead><tr><th data-i18n="ig.connection">连接</th><th data-i18n="ig.model">模型</th><th data-i18n="ig.state">状态</th><th data-i18n="ig.actions">操作</th></tr></thead><tbody id="ig-list"></tbody></table></div>
 <div id="ig-editor" class="vision-editor" hidden>
-<label class="field"><span>API 协议 / Provider</span><select id="ig-provider_kind"><option value="openai_compatible">OpenAI-compatible Images</option><option value="runware">Runware Native Models API</option></select></label>
+<label class="field"><span>API 协议 / Provider</span><select id="ig-provider_kind"><option value="openai_compatible">OpenAI-compatible Images</option><option value="runware">Runware Native Models API</option><option value="venice">Venice Native Images API</option></select></label>
 <label class="field"><span>Runware 模型目录搜索 / Model search</span><input id="ig-search" value="FLUX" maxlength="48"></label>
 <label class="field"><span data-i18n="ig.name">连接名（字母开头）</span><input id="ig-name" type="text" autocomplete="off"></label>
 <label class="field"><span data-i18n="ig.base_url">Base URL（例如 https://host/v1）</span><input id="ig-base_url" type="url" autocomplete="off"></label>
 <label class="field"><span data-i18n="ig.api_key">API Key</span><input id="ig-api_key" type="password" autocomplete="off"></label>
 <label class="field"><span data-i18n="ig.model">模型 ID（可手填）</span><input id="ig-model" type="text" autocomplete="off" list="ig-models"></label>
 <label class="field"><span data-i18n="ig.description">给角色看的用途描述</span><input id="ig-description" type="text" autocomplete="off"></label>
-<small id="ig-key-state"></small><datalist id="ig-models"></datalist><button class="btn btn-ghost btn-sm" data-action="discoverImageGeneration" data-i18n="ig.discover">读取可用模型</button>
+<small id="ig-key-state"></small><datalist id="ig-models"></datalist><button class="btn btn-ghost btn-sm" data-action="discoverImageGeneration" data-i18n="ig.discover">读取可用模型</button><p id="ig-model-status" role="status" aria-live="polite"></p><select id="ig-model-results" hidden aria-label="可用模型 / Available models" onchange="document.getElementById('ig-model').value=this.value"></select>
 <label class="field"><span data-i18n="ig.show_to_llm">向角色公开此连接及描述</span><input id="ig-show_to_llm" type="checkbox"></label>
 <label class="field"><span data-i18n="ig.supports_edits">支持参考图（Images Edits）</span><input id="ig-supports_edits" type="checkbox"></label>
+<label class="field"><span>低成本测试模型 ID / Low-cost test model（留空测试当前模型）</span><input id="ig-test_model" list="ig-models"></label><label class="field"><span>测试模型参数 JSON / Test parameters</span><textarea id="ig-test_extra" rows="2"></textarea></label>
 <label class="field"><span data-i18n="ig.extra">高级参数（JSON）</span><textarea id="ig-extra" rows="3"></textarea></label><button class="btn btn-primary btn-sm" data-action="saveImageGeneration" data-i18n="ig.save">保存连接</button></div>
 <h4 data-i18n="ig.constraints">生图提示词约束</h4>
 <p data-i18n="ig.constraintsHint">选中的约束会附加到文生图和参考图的提示词末尾。可选预设、直接手写，或选择不附加。</p>

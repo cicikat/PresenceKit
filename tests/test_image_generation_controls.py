@@ -125,3 +125,15 @@ async def test_actual_generation_and_edits_requests_include_user_constraint(conf
     await request_image("a tree", {"name": "one", **preset}, image_bytes=(b"reference", "image/png", "test") if reference else None)
     prompt = captured[0]["data" if reference else "json"]["prompt"]
     assert prompt == "a tree\n\nUser visual constraints:\nrich chiaroscuro"
+
+@pytest.mark.asyncio
+async def test_premium_connection_probe_uses_only_configured_cheap_model(config, monkeypatch):
+    from PIL import Image
+    import io
+    raw = io.BytesIO(); Image.new('RGB',(2,2)).save(raw,format='PNG')
+    config['image_gen']['presets']['one'].update(test_model='cheap-model',test_extra_params={'steps':4})
+    remote=AsyncMock(return_value=raw.getvalue());monkeypatch.setattr('core.tools.image_gen.request_image',remote)
+    result=await controls.test_image_preset('one')
+    assert remote.call_args.args[1]['model']=='cheap-model'
+    assert remote.call_args.args[1]['extra_params']=={'steps':4}
+    assert result['tested_model']=='cheap-model' and not result['same_model']

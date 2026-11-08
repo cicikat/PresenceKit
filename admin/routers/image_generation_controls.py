@@ -26,12 +26,18 @@ async def discover_image_models(body: Discovery):
     if body.preset_name and not saved:
         raise HTTPException(404, "生图连接不存在")
     try:
+        if body.provider_kind == "venice":
+            from core.venice_images import api_root
+            body.base_url = api_root(body.base_url)
         url = catalogue_url(body.base_url)
         key = body.api_key.strip()
         if not key and saved.get("api_key"):
             if url != catalogue_url(saved["base_url"]):
                 return {"status": "key_required", "models": []}
             key = saved["api_key"]
+        if body.provider_kind == "venice":
+            from core.venice_images import discover as venice_discover
+            return await venice_discover(body.base_url, key)
         if body.provider_kind == "runware":
             from core.runware_images import discover as runware_discover
             return await runware_discover(body.base_url, key, body.search)
@@ -87,6 +93,10 @@ async def test_image_preset(name: str):
         raise HTTPException(404, "生图连接不存在")
     if not image_gen.connection_ready(preset):
         raise HTTPException(422, "请先填写服务地址和模型")
+    configured_model = preset["model"]
+    if preset.get("test_model"):
+        preset = {**preset, "model": preset["test_model"], "extra_params": preset.get("test_extra_params") or {}}
+    tested_model = preset["model"]
     started = time.perf_counter()
     try:
         raw = await request_image("A small blue circle on a white background.", {"name": name, **preset})
@@ -97,7 +107,8 @@ async def test_image_preset(name: str):
             if img.width * img.height > 40_000_000:
                 raise ValueError("image too large")
             img.verify()
-        return {"ok": True, "duration_ms": int((time.perf_counter() - started) * 1000), "bytes": len(raw)}
+        return {"ok": True, "duration_ms": int((time.perf_counter() - started) * 1000), "bytes": len(raw),
+                "configured_model": configured_model, "tested_model": tested_model, "same_model": configured_model == tested_model}
     except Exception as exc:
         category = getattr(exc, "error_category", "generation_failed")
         # Neither provider error bodies nor connection strings are safe to echo.
