@@ -17,6 +17,9 @@ def test_admin_html_is_a_shell_with_ordered_plain_static_assets():
     assert "<style>" not in index
     assert re.search(r'<script src="/static/i18n\.js(?:\?[^" ]*)?"></script>', index)
     scripts = re.findall(r'<script src="/static/js/([^"?]+)(?:\?[^" ]*)?"></script>', index)
+    assert scripts[0] == "admin-theme-boot.js"
+    assert index.index("admin-theme-boot.js") < index.index('<link rel="stylesheet"')
+    scripts = scripts[1:]
     assert scripts[0] in ("core.js", "ui-version-boot.js")
     if scripts[0] == "ui-version-boot.js":
         assert "core.js" in scripts
@@ -118,6 +121,19 @@ def test_admin_shell_and_static_assets_revalidate_on_refresh():
         response = client.get(path)
         assert response.status_code == 200
         assert response.headers["cache-control"] == "no-cache, must-revalidate"
+
+
+def test_versioned_assets_cache_and_static_only_compression():
+    from fastapi.testclient import TestClient
+    from admin.admin_server import app
+    client = TestClient(app)
+    response = client.get("/static/js/core.js?v=fixture-version", headers={"Accept-Encoding": "gzip"})
+    assert "immutable" in response.headers["cache-control"]
+    assert response.headers["content-encoding"] == "gzip"
+    assert int(response.headers["content-length"]) < len(response.content)
+    # API responses and their authentication policy keep their own delivery semantics.
+    denied = client.get("/auth/whoami", headers={"Accept-Encoding": "gzip"})
+    assert denied.status_code == 401 and "content-encoding" not in denied.headers
 
 
 def test_split_pages_have_no_inline_style_or_onclick_and_actions_are_bound():

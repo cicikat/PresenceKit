@@ -1,7 +1,8 @@
 // ══════════════════════════════════════════════════════════
 //  State
 // ══════════════════════════════════════════════════════════
-let TOKEN = localStorage.getItem('qq_admin_key') || '';
+let TOKEN = '';
+try { TOKEN = localStorage.getItem('qq_admin_key') || ''; } catch (_) {}
 let BASE  = window.location.origin;
 let _currentUser = null;
 let _allUsers = [];
@@ -25,9 +26,10 @@ window.saveAdminPromptLanguage = async (uiLanguage) => {
   }
 };
 
-async function loadAdminPromptLanguage() {
+async function loadAdminPromptLanguage(options = {}) {
   _promptLanguageReady = false;
-  const result = await api('GET', '/settings/prompt-language');
+  const result = await api('GET', '/settings/prompt-language', undefined, options);
+  if (options.signal?.aborted) return;
   await AdminI18n.setLanguage(result.effective_language === 'en' ? 'en' : 'zh-CN', {persistPrompt: false});
   _promptLanguageReady = true;
 }
@@ -44,7 +46,7 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'image-generation-294';
+const ADMIN_UI_FRAGMENT_VERSION = 'runware-theme-295';
 
 const ADMIN_PAGE_ALIASES = Object.freeze({overview:'setup', users:'character', 'operations-center':'status', memory: 'observe-memory', 'creation-center':'data-management', 'observe-existence':'observe-dream'});
 
@@ -416,8 +418,8 @@ function authHeaders(extra) {
   return { 'Authorization': `Bearer ${TOKEN}`, 'Content-Type': 'application/json', ...extra };
 }
 
-async function api(method, path, body) {
-  const opts = { method, headers: authHeaders() };
+async function api(method, path, body, options = {}) {
+  const opts = { method, headers: authHeaders(), ...(options.signal ? {signal: options.signal} : {}) };
   if (body !== undefined) opts.body = JSON.stringify(body);
   const r = await fetch(BASE + path, opts);
   if (!r.ok) {

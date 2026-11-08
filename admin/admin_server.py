@@ -7,6 +7,7 @@
 import logging
 import mimetypes
 from pathlib import Path
+from urllib.parse import parse_qs
 
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
@@ -22,11 +23,12 @@ _ADMIN_NO_CACHE = "no-cache, must-revalidate"
 
 
 class _NoCacheStaticFiles(StaticFiles):
-    """Admin UI must revalidate on ordinary refresh; agents bump ?v= for content changes."""
+    """Versioned assets are immutable; the shell and unversioned assets revalidate."""
 
     async def get_response(self, path: str, scope):
         response = await super().get_response(path, scope)
-        response.headers["Cache-Control"] = _ADMIN_NO_CACHE
+        version = parse_qs(scope.get("query_string", b"").decode("ascii", "ignore")).get("v")
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable" if version and response.status_code in (200, 304) else _ADMIN_NO_CACHE
         return response
 
 # Windows 的注册表可能把 .js 映射成 text/plain，现代浏览器会拒绝执行。
@@ -49,6 +51,8 @@ app = FastAPI(
 
 from core.client_channels import ClientChannelGate
 app.add_middleware(ClientChannelGate)
+from admin.static_delivery import AdminStaticCompression
+app.add_middleware(AdminStaticCompression)
 from admin.routers import settings_clients
 app.include_router(settings_clients.router, tags=["设置-客户端"])
 from admin.routers import qzone

@@ -1280,3 +1280,6 @@ observe：真实模型拟人评估、桌面原生切角/动作恢复与手机实
 后端生图控制面见 feature-control-surface.md §294。图片沿既有 HTTP chat response、WS channel_message、mobile poll 与聊天历史 `artifacts[]` 交付；可选 `kind: image`，mime 为 PNG/JPEG/WebP，旧客户端保留文件卡片兼容。无新消息类型/ACK/TTL/队列。取图使用原 chat scope `/chat/artifacts/{id}/preview` 或下载端点，无裸URL和前端令牌拼接。
 桌面新增 `preview_chat_image` IPC：固定32位hex id、Bearer、禁止重定向、60秒/25MiB上限，返回data URL，仅可见卡片加载并有重试/放大，保留原文件下载。手机保存 kind 元数据，通过已有会话授权下载图片（25MiB；文本仍2MiB），ChatImage 缩略图和全屏缩放；`saveChatImage` 设置通道仅接受有界PNG/JPEG/WebP字节，经系统文件选择器保存，不新增权限、不自动写相册，不改后台通知服务。
 验证：后端95项、后台Chromium隔离交互、桌面9项/构建/Rust检查及图片组件Chromium显示放大、手机11项/分析和Dev APK构建。observe：真实图像服务、桌面原生窗口、Android真机文件选择器与后台跨设备恢复尚未验收，测试数据不代表真实提供商支持。
+
+## 295 Runware与管理页可用性
+Runware适配和模型发现位于后端管理面；桌面/手机继续消费原artifacts图片，无客户端契约和权限变化。登录使用既有/auth/whoami、admin scope不变，有限时验证不等待语言/设置接口。压缩仅管理静态资源，不改聊天流/消息队列和客户端API响应。真实Runware文生图已验证1024×1024、约6秒，接口报告cost=0.0013 USD；原生桌面/手机设备验收边界沿用294。

@@ -7,6 +7,10 @@
   try { if (localStorage.getItem(key) === 'night') theme = 'night'; } catch (_) {}
   try { if (localStorage.getItem(paletteKey) === 'purple') palette = 'purple'; } catch (_) {}
   function apply() {
+    document.documentElement.dataset.adminTheme = theme;
+    document.documentElement.dataset.adminPalette = palette;
+    document.documentElement.style.colorScheme = theme === 'night' ? 'dark' : 'light';
+    document.documentElement.style.backgroundColor = theme === 'night' ? (palette === 'purple' ? '#17151e' : '#14171b') : '';
     document.body.dataset.adminTheme = theme;
     document.body.dataset.adminPalette = palette;
     const button = document.getElementById('admin-theme-toggle');

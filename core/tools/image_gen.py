@@ -67,6 +67,9 @@ async def generate_image(
 async def request_image(prompt: str, resolved: dict, *, image_bytes=None, width=None, height=None) -> bytes:
     """Shared production/probe request; never stores an artifact or touches chat state."""
     prompt = image_gen.constrained_prompt(prompt.strip())
+    if resolved.get("provider_kind") == "runware":
+        from core.runware_images import request_image as runware_request
+        return await runware_request(prompt, resolved, image_bytes=image_bytes, width=width, height=height)
     if image_bytes is not None:
         url = resolved["base_url"].rstrip("/") + "/images/edits"
         headers = {"User-Agent": "PresenceKit/1.0"}

@@ -721,8 +721,8 @@ async def upsert_image_gen_preset(name: str, body: ImageGenPresetUpsert, auth=De
         raise HTTPException(422, "请填写模型 ID")
     if existing.get("api_key") and existing.get("base_url", "").rstrip("/") != merged["base_url"].rstrip("/") and not str(body.api_key or "").strip():
         raise HTTPException(422, "更换服务地址时请重新输入密钥")
-    if merged.get("provider_kind", "openai_compatible") != "openai_compatible":
-        raise HTTPException(422, "生图目前支持 OpenAI-compatible Images 协议")
+    if merged.get("provider_kind", "openai_compatible") not in {"openai_compatible", "runware"}:
+        raise HTTPException(422, "生图支持 OpenAI-compatible Images 或 Runware 原生协议")
     presets[name] = merged
     write_config_file(CONFIG_FILE, full_cfg)
     from core import config_loader

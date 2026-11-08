@@ -43,6 +43,7 @@ function editImageGeneration(name = null) {
   name = typeof name === 'string' ? name : null;
   imageGenerationEditing = name;
   const p = imageGenerationCatalog.presets[name] || {};
+  igEl('provider_kind').value = p.provider_kind || 'openai_compatible';
   igEl('editor').hidden = false;
   igEl('name').disabled = Boolean(name); igEl('name').value = name || '';
   for (const field of ['base_url', 'model', 'description']) igEl(field).value = p[field] || '';
@@ -58,7 +59,7 @@ async function saveImageGeneration() {
   try {
     const extra = JSON.parse(igValue('extra') || '{}');
     if (!extra || Array.isArray(extra) || typeof extra !== 'object') throw new Error(igText('高级参数必须是 JSON 对象', 'Extra parameters must be a JSON object'));
-    const body = {provider_kind: 'openai_compatible', extra_params: extra};
+    const body = {provider_kind: igValue('provider_kind'), extra_params: extra};
     for (const field of ['base_url', 'model', 'description']) body[field] = igValue(field);
     if (igValue('api_key')) body.api_key = igValue('api_key');
     for (const field of ['show_to_llm', 'supports_edits']) body[field] = igEl(field).checked;
@@ -70,7 +71,7 @@ async function saveImageGeneration() {
 
 async function discoverImageGeneration() {
   try {
-    const result = await api('POST', '/image-gen-presets/discover', {base_url: igValue('base_url'), api_key: igValue('api_key'), preset_name: imageGenerationEditing});
+    const result = await api('POST', '/image-gen-presets/discover', {base_url: igValue('base_url'), api_key: igValue('api_key'), preset_name: imageGenerationEditing, provider_kind: igValue('provider_kind'), search: igValue('search') || 'FLUX'});
     igEl('models').replaceChildren(...(result.models || []).map(id => new Option(id, id)));
     igStatus(result.status === 'ok' ? igText('已读取模型；目录可能混有文本模型，请选择支持 Images 的模型。', 'Models loaded; select an Images-capable model from the mixed catalogue.') : igText('无法读取列表，可手动输入模型 ID。状态：', 'Catalogue unavailable; enter a model ID manually. Status: ') + result.status);
   } catch (e) { igStatus(e.message); }

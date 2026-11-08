@@ -15,6 +15,8 @@ class Discovery(BaseModel):
     base_url: str
     api_key: str = ""
     preset_name: str | None = None
+    provider_kind: str = "openai_compatible"
+    search: str = "FLUX"
 
 
 @router.post("/image-gen-presets/discover")
@@ -30,6 +32,9 @@ async def discover_image_models(body: Discovery):
             if url != catalogue_url(saved["base_url"]):
                 return {"status": "key_required", "models": []}
             key = saved["api_key"]
+        if body.provider_kind == "runware":
+            from core.runware_images import discover as runware_discover
+            return await runware_discover(body.base_url, key, body.search)
         return await discover(body.base_url, key, "chat_completions", "bearer")
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
@@ -93,7 +98,8 @@ async def test_image_preset(name: str):
                 raise ValueError("image too large")
             img.verify()
         return {"ok": True, "duration_ms": int((time.perf_counter() - started) * 1000), "bytes": len(raw)}
-    except Exception:
+    except Exception as exc:
+        category = getattr(exc, "error_category", "generation_failed")
         # Neither provider error bodies nor connection strings are safe to echo.
         return {"ok": False, "duration_ms": int((time.perf_counter() - started) * 1000),
-                "error_category": "generation_failed", "message": "生成测试失败，请检查地址、密钥、模型与图片协议"}
+                "error_category": category, "message": "生成测试失败，请检查地址、密钥、模型与图片协议（" + category + "）"}

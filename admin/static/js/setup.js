@@ -49,8 +49,8 @@ function _setupBadge(configured, unconfiguredKey='common.not_configured') {
   return `<span class="badge ${configured ? 'badge-success' : 'badge-danger'}">${configured ? '●' : '○'} ${escapeHtml(label)}</span>`;
 }
 
-async function checkSetupStatus() {
-  try { return await api('GET', '/settings/setup-status'); }
+async function checkSetupStatus(options = {}) {
+  try { return await api('GET', '/settings/setup-status', undefined, options); }
   catch (e) { return null; }
 }
 
@@ -401,37 +401,73 @@ async function saveSetupEmbedding() {
 // ══════════════════════════════════════════════════════════
 //  Auth
 // ══════════════════════════════════════════════════════════
+let _loginSequence = 0;
+let _loginController = null;
+let _loginBootstrapController = null;
+function setLoginBusy(busy, silent = false) {
+  document.querySelector('[data-action="doLogin"]').disabled = busy && !silent;
+  document.getElementById('auth-progress').textContent = busy ? t('auth.verifying', '正在验证管理密钥…') : '';
+}
 async function tryLogin(key, silent) {
-  TOKEN = key;
+  const sequence = ++_loginSequence;
+  _loginController?.abort();
+  _loginBootstrapController?.abort();
+  const controller = new AbortController();
+  _loginController = controller;
+  let timedOut = false;
+  const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, 10000);
+  setLoginBusy(true, silent);
+  document.getElementById('auth-err').textContent = '';
   try {
-    const r = await fetch(`${BASE}/status`, {headers: authHeaders()});
+    // Keep credentials local to this request: stale auto-login cannot overwrite a manual login.
+    const r = await fetch(`${BASE}/auth/whoami`, {headers: {'Authorization': `Bearer ${key}`}, signal: controller.signal});
+    if (sequence !== _loginSequence) return false;
     if (r.status === 401) {
       TOKEN = '';
-      localStorage.removeItem('qq_admin_key');
+      try { localStorage.removeItem('qq_admin_key'); } catch (_) {}
       document.getElementById('auth-err').textContent = silent
         ? t('dynamic.auth.stale_key', 'Token 已失效，请重新输入')
         : t('dynamic.auth.invalid_key', '密钥错误，请重试');
       return false;
     }
-    localStorage.setItem('qq_admin_key', key);
-    await loadAdminPromptLanguage();
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const identity = await r.json();
+    if (sequence !== _loginSequence) return false;
+    if (!Array.isArray(identity.scopes) || !identity.scopes.includes('admin')) {
+      document.getElementById('auth-err').textContent = t('auth.admin_required', '这个密钥有效，但没有管理权限，请使用管理密钥。');
+      return false;
+    }
+    TOKEN = key;
+    try { localStorage.setItem('qq_admin_key', key); } catch (_) {}
     document.getElementById('auth-overlay').style.display = 'none';
     document.getElementById('app').style.display = 'flex';
     document.getElementById('nav-host').textContent = window.location.host;
     document.getElementById('nav-key-hint').textContent = t('dynamic.auth.key_prefix', '密钥: {value}', {value: key.slice(0,4) + '…'});
-    const setupStatus = await checkSetupStatus();
-    const initialPage = setupStatus && setupStatus.needs_setup
-      ? 'setup'
-      : getRememberedPage() || 'setup';
     restoreNavGroups();
-    goto(initialPage);
+    const initialPage = getRememberedPage() || 'setup';
+    Promise.resolve(goto(initialPage)).catch(() => toast(t('auth.page_retry', '页面加载失败，请点击菜单重试。'), 'err'));
+    // Setup/language lookups cannot keep an authenticated user trapped behind the login form.
+    const bootstrap = new AbortController();
+    _loginBootstrapController = bootstrap;
+    const bootstrapTimeout = setTimeout(() => bootstrap.abort(), 8000);
+    Promise.allSettled([loadAdminPromptLanguage({signal: bootstrap.signal}), checkSetupStatus({signal: bootstrap.signal})]).then(results => {
+      if (sequence !== _loginSequence) return;
+      if (results[0].status === 'rejected') toast(t('auth.language_retry', '语言设置暂时不可用，已保留当前界面语言。'), 'err');
+      const status = results[1].status === 'fulfilled' ? results[1].value : null;
+      if (status?.needs_setup && document.querySelector('.page.active')?.id === 'page-' + initialPage && initialPage !== 'setup') goto('setup');
+    }).finally(() => clearTimeout(bootstrapTimeout));
     _initCharName().catch(() => {});
     initSecretsBookFab().catch(() => {});
     return true;
   } catch(e) {
-    TOKEN = '';
-    document.getElementById('auth-err').textContent = t('dynamic.auth.connect_failed', '连接失败: {error}', {error: e.message});
+    if (sequence !== _loginSequence) return false;
+    document.getElementById('auth-err').textContent = timedOut
+      ? t('auth.timeout', '连接超时，请检查管理隧道后重试；这不代表密钥错误。')
+      : t('dynamic.auth.connect_failed', '连接失败: {error}', {error: e.message});
     return false;
+  } finally {
+    clearTimeout(timeout);
+    if (sequence === _loginSequence) setLoginBusy(false);
   }
 }
 
@@ -442,8 +478,12 @@ async function doLogin() {
 }
 
 function logout() {
+  ++_loginSequence;
+  _loginController?.abort();
+  _loginBootstrapController?.abort();
+  setLoginBusy(false);
   _promptLanguageReady = false;
-  localStorage.removeItem('qq_admin_key');
+  try { localStorage.removeItem('qq_admin_key'); } catch (_) {}
   clearRememberedPage();
   TOKEN = '';
   document.getElementById('key-input').value = '';

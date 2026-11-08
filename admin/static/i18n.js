@@ -7,6 +7,11 @@
 
   const I18N = {
     'zh-CN': {
+      "auth.verifying": "正在验证管理密钥…",
+      "auth.admin_required": "这个密钥有效，但没有管理权限，请使用管理密钥。",
+      "auth.page_retry": "页面加载失败，请点击菜单重试。",
+      "auth.language_retry": "语言设置暂时不可用，已保留当前界面语言。",
+      "auth.timeout": "连接超时，请检查管理隧道后重试；这不代表密钥错误。",
       "ig.constraints": "生图提示词约束",
       "ig.constraintsHint": "选中的约束会附加到文生图和参考图的提示词末尾。可选预设、直接手写，或选择不附加。",
       "ig.constraintSelection": "当前约束",
@@ -3527,6 +3532,11 @@
       'owner_turn.deploy.diary': 'Diary sync',
     },
     en: {
+      "auth.verifying": "Verifying admin credential…",
+      "auth.admin_required": "This credential is valid but lacks admin access. Use an admin credential.",
+      "auth.page_retry": "Page loading failed. Select the menu to retry.",
+      "auth.language_retry": "Language settings unavailable; keeping the current UI language.",
+      "auth.timeout": "Connection timed out. Check the admin tunnel and retry; the credential has not been rejected.",
       "ig.constraints": "Image prompt constraints",
       "ig.constraintsHint": "Selected constraints are appended to generation and reference-edit prompts. Choose a preset, enter custom text, or select none.",
       "ig.constraintSelection": "Selected constraints",

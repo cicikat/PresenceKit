@@ -1167,3 +1167,7 @@ affective_engine.enabled 默认 true；管理面通用高级功能开关热保�
 管理面「模型连接与分工 → 图像生成」独立于 VLM/OCR。GET/PUT/DELETE `/image-gen-presets` 预设接口保留；新增 POST `/image-gen-presets/discover` 查询模型目录（目录可混有文本模型，允许手填），POST `/image-gen-presets/presets/{name}/test` 真实生成单图并丢弃图片（可能计费，不写聊天/记忆），PUT `/image-gen-presets/default-preset` 设置默认连接。全部 admin scope；密钥不回显，变更地址须重新提供密钥；全局默认仅在该角色可见连接中生效。
 PUT `/image-gen-presets/prompt-constraints` 保存 `{selected, custom, presets}`。selected 为空不附加，`__custom__` 用手写内容，否则选命名预设；最多50项，每项4000字符。实际文生图与参考图编辑均在画面描述后附加当前用户约束，extra_params 不能覆盖 prompt。默认不附加；用户可随时选择、改写、另存或停用。
 角色 asset-bindings.image_gen 为 list[str] 或 null：null 继承全局，[] 禁止生图，非空列表为白名单；角色调用时可选连接。配置完成不代表可调用：仍需启用生图总闸、角色允许 media 工具且使用 Path C function calling。真实服务费用/效果与实际设备仍需验收。
+
+## 295 Runware与管理面登录
+生图预设 provider_kind 新增 runware，使用用户配置的 Runware Native Models API（官方URL https://api.runware.ai/v1），POST任务数组。模型目录调用modelSearch，可填写搜索词并返回最多100条AIR ID，has_more表示仍有后续项；用户仍可手填模型。文生图/参考图分别用imageInference与inputs.seedImage，服务返回base64 PNG后沿原产物链交付；单次1图，沿用用户已选prompt约束。同步120秒预算，超时不自动重复付费请求，原OpenAI Images适配保留。密钥仅在私有配置，不回显上游错误正文。
+管理登录改用/auth/whoami确认admin scope；10秒鉴权超时，自动/手动登录按代际隔离，后者取消前者。语言和首次配置检查最多8秒后台执行，不阻塞已通过鉴权的用户。401、权限不足、网络超时和HTTP错误分别展示。主题在head同步恢复，body挂载时继承首屏主题；公共管理静态资源gzip压缩，带版本号资源immutable缓存，HTML与无版本资源仍revalidate，API/WS/SSE不进入此压缩层。
