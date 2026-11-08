@@ -66,11 +66,37 @@ image_gen:
 - 角色卡 asset-bindings 端点补 `image_gen` 字段（同 `tts_preset`/`sticker_pack` 同构）。
 - 调用记 `api_call_log(caller=image_gen)`；`GET /observability/image-gen` 只返回元数据（预设、耗时、状态、每预设计数），不存图与 prompt 正文。
 
+## 参考图/图生图（后续增量，设计已定）
+
+目标：角色可按她自己判断，拿之前的图当参考再生成一张（换风格、延续画面、改细节）。来源全选：
+
+| 来源 | ID 形式 | 字节入口 |
+|---|---|---|
+| 本轮图片消息 | sha256（media_refs，已在 tool result 里） | `resolve_chat_media(sha256)` |
+| 之前生成的图 | artifact id | `artifact_file_path(record)` |
+| 用户上传资料库 | sha256 / document_id | `resolve_chat_media` / library blob |
+| 本轮对话可见 | sha256（最后 8 张清单，仿 `11.3_image_references`） | 同上 |
+
+接口形态：`multipart /images/edits`（OpenAI 兼容 edits 端点：`image` = 参考图文件，`prompt` = 改图指令），兼容 FLUX/SD 聚合服务；JSON base64 / URL 输入不做（逐家差异大/云不可达）。
+
+工具增量：`generate_image(..., reference_sha256?, reference_artifact_id?)` 互斥二选一；传了参考图时走 edits 端点，`prompt` 语义变为改图指令（schema 描述里写清）；`echo_event_log` 保持 false，prompt 不落盘。
+
+解析器新增：`image_reference_bytes(user_id, char_id, *, sha256?, artifact_id?)` → (bytes, mime, 来源标签)，scope 校验 fail-closed，不在资料库/不存在直接 ValueError。
+
+自由度设计：模型完全自己抉择（不设必选/限额），只设资源上限（单图 10MB、参考图总尺寸≤20MB）；每预设 `supports_edits` 声明（默认 true，未声明的预设在 discovery 清单里标注「不支持参考图」，调用传参考图时明确失败）。
+
 ## 分期
 
 1. **MVP**：`image_gen` 配置块 + 单预设 + `generate_image`（Path C only）+ artifacts 落盘 + 桌面/手机卡片 + QQ 图片消息 + 管理面 CRUD。
-2. **P2**：多预设描述清单暴露（依赖 `_discovery_notes`）、per-char 白名单、单工具超时配置化。
+2. **P2（参考图）**：上面设计。
 3. **Deferred**：异步队列（>120s 生成）、本地 ComfyUI/SD WebUI adapter、生成图回读（reread）、Dream/Stage/群聊暴露。
+
+## 参考图耦合核查
+
+- 字节入口：`core/chat_media.py::resolve_chat_media(sha256, uid, char_id)` 是唯一权威解析（资料库 blob 优先、其次 inbox），调用方不拼路径；生成图 artifact 在 `chat_artifacts_dir` 不走该链。
+- 资料库行自带 sha256（`search_documents` 结果行含 `sha256`），模型已有 ID 来源；本轮 media_refs 的 sha256 已注入 `11.3_image_references`，无需新层。
+- edits 端点是 multipart 字节上传，与现有 JSON generations 只有传输形态差异；无记忆/prompt 耦合。
+- 生成图 artifacts 目前没有 sha256 字段与 message_history 关联；P2 需给 kind=image 的记录加 sha256（store 时计算），供后续本轮对话清单消费。
 
 ## 耦合清单（已核查）
 
