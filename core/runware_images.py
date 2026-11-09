@@ -11,10 +11,16 @@ from core.model_network import make_model_http_client
 
 
 class RunwareError(ValueError):
-    def __init__(self, code):
-        code = str(code or "invalid_response")
-        self.error_category = "runware_" + (code if re.fullmatch(r"[A-Za-z0-9_]{1,80}", code) else "request_failed")
-        super().__init__("Runware 请求失败（" + self.error_category + "）")
+    def __init__(self, code, *, status=None, task_id=""):
+        self.status = status
+        self.task_id = task_id
+        code = str(code or (f"http_{status}" if status else "invalid_response"))
+        safe_code = code if re.fullmatch(r"[A-Za-z0-9_]{1,55}", code) else "request_failed"
+        self.error_category = "insufficient_balance" if status == 402 else "runware_" + safe_code
+        detail = "账户余额不足" if status == 402 else self.error_category
+        if status is not None:
+            detail += f"，HTTP {status}，{safe_code}" if status == 402 else f"，HTTP {status}"
+        super().__init__("Runware 请求失败（" + detail + "）")
 
 
 async def post_task(base_url: str, api_key: str, task: dict) -> dict:
@@ -23,12 +29,20 @@ async def post_task(base_url: str, api_key: str, task: dict) -> dict:
     try:
         response = await client.post(base_url.rstrip("/"), headers={"Authorization": "Bearer " + api_key},
                                      json=[task], follow_redirects=False)
-        response.raise_for_status()
-        payload = response.json()
+        status = response.status_code if not response.is_success else None
+        try:
+            payload = response.json()
+        except ValueError:
+            if status is not None:
+                raise RunwareError(None, status=status, task_id=task["taskUUID"]) from None
+            raise
         errors = payload.get("errors") or payload.get("error") if isinstance(payload, dict) else None
         if errors:
             error = errors[0] if isinstance(errors, list) else errors
-            raise RunwareError(error.get("code") if isinstance(error, dict) else "request_failed")
+            code = error.get("code") if isinstance(error, dict) else None
+            raise RunwareError(code, status=status, task_id=task["taskUUID"])
+        if status is not None:
+            raise RunwareError(None, status=status, task_id=task["taskUUID"])
         rows = payload.get("data", []) if isinstance(payload, dict) else []
         if not isinstance(rows, list):
             raise RunwareError("invalid_response")
@@ -49,6 +63,10 @@ async def discover(base_url: str, api_key: str, search: str = "FLUX") -> dict:
         return {"status": "ok" if models else "empty", "models": models,
                 "has_more": int(result.get("totalResults") or 0) > len(models)}
     except RunwareError as exc:
+        if exc.status in (401, 403):
+            return {"status": "unauthorized", "models": []}
+        if exc.status is not None:
+            return {"status": "http_error", "models": []}
         return {"status": exc.error_category, "models": []}
     except httpx.TimeoutException:
         return {"status": "timeout", "models": []}
@@ -77,6 +95,7 @@ async def request_image(prompt: str, resolved: dict, *, image_bytes=None, width=
     started = time.perf_counter()
     ok = False
     category = "protocol_incompatible"
+    request_id = ""
     size = 0
     try:
         result = await post_task(resolved["base_url"], resolved["api_key"], task)
@@ -91,6 +110,7 @@ async def request_image(prompt: str, resolved: dict, *, image_bytes=None, width=
         return raw
     except RunwareError as exc:
         category = exc.error_category
+        request_id = exc.task_id
         raise
     except Exception as exc:
         from core.llm_protocol import error_category_for_exception
@@ -100,4 +120,4 @@ async def request_image(prompt: str, resolved: dict, *, image_bytes=None, width=
         api_call_log.append(caller="image_gen", purpose="generate_image", provider="runware", model=resolved["model"],
                             duration_ms=int((time.perf_counter() - started) * 1000), ok=ok,
                             output_hint=f"{size} bytes" if ok else "", protocol="runware_image_inference",
-                            error_category="" if ok else category)
+                            request_id=request_id, error_category="" if ok else category)

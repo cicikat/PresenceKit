@@ -23,7 +23,7 @@ def transport(monkeypatch):
             else:
                 payload = {"data": [{"taskUUID": "wrong-task", "imageBase64Data": "wrong"},
                                     {"taskUUID": task["taskUUID"], "imageBase64Data": base64.b64encode(b"png-data").decode()}]}
-            return httpx.Response(200, json=payload, request=httpx.Request("POST", url))
+            return httpx.Response(state.get("status", 200), json=payload, request=httpx.Request("POST", url))
         async def aclose(self): state["closed"] += 1
     monkeypatch.setattr(runware_images, "make_model_http_client", lambda *a: Client())
     return state
@@ -54,3 +54,19 @@ async def test_runware_reference_input_and_sanitized_failure(transport, sandbox)
     assert "fixture-key" not in str(exc.value)
     assert exc.value.error_category == "runware_insufficientCredits"
     assert transport["closed"] == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("status", "category"), [(400, "runware_insufficientCredits"), (402, "insufficient_balance")])
+async def test_runware_http_error_retains_safe_details(transport, monkeypatch, status, category):
+    transport.update(error=True, status=status)
+    ledger = []
+    monkeypatch.setattr(runware_images.api_call_log, "append", lambda **row: ledger.append(row))
+    preset = {"base_url": "https://api.runware.ai/v1", "api_key": "fixture-key", "model": "bfl:5@1"}
+    with pytest.raises(runware_images.RunwareError) as exc:
+        await runware_images.request_image("fixture prompt", preset)
+    assert f"HTTP {status}" in str(exc.value)
+    assert "insufficientCredits" in str(exc.value)
+    assert "fixture-key" not in str(exc.value)
+    assert ledger[0]["error_category"] == category
+    assert ledger[0]["request_id"] == transport["tasks"][0]["taskUUID"]
