@@ -1,4 +1,8 @@
 {
+  "工具按分类呈现。已经提供具体定义的工具可直接调用；只看到 load_tools_ 分类入口时，先加载分类，再在下一轮使用具体定义。每个入口列出了当前可用工具名与用途，不要把未加载误判为不可用。加载只提供定义，不是业务执行或成功证据。未提供定义的工具不得猜测参数。": "Tools are organized by category. Call a tool directly when its definition is present. If only a load_tools_ entry is present, load the category and use the definitions on the next inference step. Entries list the available tools and their uses; an unloaded tool is not necessarily unavailable. Loading supplies definitions, not execution or completion evidence. Do not guess the arguments of an undefined tool.",
+  "本轮已提供 generate_image，可直接调用。用户明确要求画图或改图时使用；只询问能力时说明即可，不自动生图。": "generate_image is available directly in this turn. Use it for an explicit request to generate or edit an image. If the user is asking only about capabilities, explain without generating an image.",
+  "当前可用生图：先调用 load_tools_media，再使用返回的 generate_image 定义。": "Image generation is available: call load_tools_media, then use the returned generate_image definition.",
+
   "真实数据": "Observed data",
   "用户事实": "User facts",
   "现实回忆": "Reality memories",

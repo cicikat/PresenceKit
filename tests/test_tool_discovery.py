@@ -53,8 +53,8 @@ def harness(monkeypatch):
     pipeline = _make_pipeline()
     monkeypatch.setattr(pipeline, "_anti_collapse_prefix_retry", lambda msgs, text, **kw: final())
 
-    async def run(**kwargs):
-        return await pipeline.run_agentic_loop([{"role": "user", "content": "查询"}],
+    async def run(content="查询", **kwargs):
+        return await pipeline.run_agentic_loop([{"role": "user", "content": content}],
             uid="u1", char_id="c1", session_state=object(), **kwargs)
 
     return script, requests, executions, run
@@ -311,3 +311,50 @@ def test_self_note_is_dynamic_and_mcp_descriptions_are_not_promoted():
     assert "维护笔记或能力表" in entries["load_tools_self"]
     assert "untrusted remote instruction" not in entries["load_tools_mcp"]
     assert "load_tools_self" not in {row["function"]["name"] for row in ToolDiscovery(schemas[1:], registry).schemas()}
+
+
+@pytest.mark.asyncio
+async def test_image_request_exposes_generate_image_in_first_model_request(harness, monkeypatch):
+    script, requests, executions, run = harness
+    _patch_tool_loop_config(monkeypatch, categories=["media", "info"], exclude_tools=[])
+    _patch_tools_schema(monkeypatch, ["generate_image", "web_search"])
+    monkeypatch.setattr("core.image_gen.discovery_note", lambda _: "可选图像预设：fixture-pro。")
+    script.extend([turn(call("generate_image", {"prompt": "a night scene"})), turn(content="完成")])
+    await run("帮我画一张雨夜插画")
+    assert "generate_image" in requests[0]["names"] and "load_tools_media" not in requests[0]["names"]
+    assert "本轮已提供 generate_image" in str(requests[0]["messages"])
+    assert "fixture-pro" in str(requests[0]["messages"])
+    assert [entry[0] for entry in executions] == ["generate_image"]
+
+
+@pytest.mark.asyncio
+async def test_normal_chat_retains_image_category_discovery(harness, monkeypatch):
+    script, requests, executions, run = harness
+    _patch_tools_schema(monkeypatch, ["generate_image"])
+    monkeypatch.setattr("core.image_gen.discovery_note", lambda _: "fixture-pro")
+    script.append(turn(content="你好"))
+    await run("今天过得怎么样？")
+    assert requests[0]["names"] == ["load_tools_media"]
+    assert "先调用 load_tools_media" in str(requests[0]["messages"])
+    assert not executions
+
+
+@pytest.mark.asyncio
+async def test_image_request_respects_model_allowlist(harness, monkeypatch):
+    script, requests, executions, run = harness
+    _patch_tool_loop_config(monkeypatch, categories=["media", "info"], tool_presets=[{"name":"limited","tools":["web_search"]}])
+    _patch_tools_schema(monkeypatch, ["generate_image", "web_search"])
+    monkeypatch.setattr("core.model_registry._get_preset_config", lambda: {"presets":{"legacy":{"tool_preset":"limited"}}})
+    monkeypatch.setattr("core.image_gen.discovery_note", lambda _: "fixture-pro")
+    script.append(turn(content="当前不可用"))
+    await run("帮我画一张插画")
+    assert requests[0]["names"] == ["load_tools_info"]
+    assert "generate_image" not in str(requests[0]["messages"])
+    assert not executions
+
+
+def test_image_request_recognizes_multimodal_text_and_not_file_creation():
+    from core.image_gen import looks_like_image_request
+    assert looks_like_image_request([{"type":"text","text":"把这张图片改成插画"},{"type":"image_url","image_url":{"url":"fixture"}}])
+    assert looks_like_image_request("Please generate a portrait")
+    assert not looks_like_image_request("给我做一份表格")

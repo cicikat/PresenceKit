@@ -16,6 +16,22 @@ NAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,63}$")
 MAX_PROMPT_CHARS = 8_000
 MAX_IMAGE_BYTES = 25 * 1024 * 1024
 
+_IMAGE_REQUEST_RE = re.compile(
+    r"画(?:一|两|几)?张|画一幅|帮我画|给我画|给(?:我|你)做(?:一)?张(?:图|海报|头像|壁纸|插画)|生图|出图|图生图|文生图|"
+    r"(?:生成|绘制|制作|创作|画出).{0,12}(?:图像|图片|插画|肖像|头像|壁纸|海报)|"
+    r"(?:改|编辑|重画|重绘|修改).{0,8}(?:这张图|那张图|参考图|图片|插画)|"
+    r"\b(?:draw|generate|create|paint|edit|redraw|illustrate)\b.{0,55}\b(?:image|picture|portrait|illustration|artwork|poster)\b",
+    re.I | re.S,
+)
+
+
+def looks_like_image_request(content: object) -> bool:
+    """Only controls first-round presentation; never grants or executes a tool."""
+    if isinstance(content, list):
+        content = "\n".join(str(block.get("text") or "") for block in content
+                            if isinstance(block, dict) and block.get("type") in {"text", "input_text"})
+    return isinstance(content, str) and bool(_IMAGE_REQUEST_RE.search(content))
+
 
 def get_config() -> dict:
     return config_loader.get_config()

@@ -218,7 +218,7 @@ def register_tools(registry: dict) -> None:
 
     registry["generate_image"] = {
         "func": _generate,
-        "description": "按提示词生成图片。先加载 media 分类，再用本工具；preset 选你想用的图像预设（省略用默认），不要编造本机路径。传 reference_sha256 或 reference_artifact_id 时走图生图（edits），prompt 是改图指令。",
+        "description": "按提示词生成图片。定义出现后可直接调用；preset 选你想用的图像预设（省略用默认），不要编造本机路径。传 reference_sha256 或 reference_artifact_id 时走图生图（edits），prompt 是改图指令。",
         "category": "media",
         "parameters": {
             "type": "object",

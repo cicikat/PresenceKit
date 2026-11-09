@@ -1467,9 +1467,22 @@ class Pipeline:
         except Exception:
             logger.debug("[pipeline.run_agentic_loop] image gen note unavailable", exc_info=True)
         discovery = ToolDiscovery(tools, _TOOL_REGISTRY, notes=_discovery_notes)
+        image_surface = "absent"
+        image_hint = ""
+        if "generate_image" in _final_tool_names and _discovery_notes.get("media") and not is_group and not is_proactive:
+            from core.image_gen import looks_like_image_request
+            image_surface = "direct" if looks_like_image_request(_last_user_text) else "discoverable"
+            if image_surface == "direct":
+                # This is presentation only, after every caller/model/character filter.
+                discovery.loaded.add("media")
+                image_hint = _pt('本轮已提供 generate_image，可直接调用。用户明确要求画图或改图时使用；只询问能力时说明即可，不自动生图。')
+            else:
+                image_hint = _pt('当前可用生图：先调用 load_tools_media，再使用返回的 generate_image 定义。')
+            image_hint += _discovery_notes["media"]
         tools = discovery.schemas()
         _record_discovery(category="tool_loop_discovery", code="initial_surface", status="ok",
-                          context={"category_count": len(discovery.groups), "schema_count": len(tools)})
+                          context={"category_count": len(discovery.groups), "schema_count": len(tools),
+                                   "image_surface": image_surface})
         mcp_opaque_params_note = format_mcp_opaque_params_note(tools)
 
         loop_msgs = list(messages)
@@ -1487,8 +1500,9 @@ class Pipeline:
                 "Do not invent capability names, outcomes, or parameters. " + recap[:6000]
             )})
         loop_msgs.insert(0, {"role": "system", "_layer": "11.6_tool_discovery", "content": (
-            _pt('工具按分类加载。先调用 load_tools_ 分类入口，再在下一轮使用获得的具体工具定义。每个入口的描述里列出了当前可用工具名与内置工具用途：需要其中某个工具时先加载对应分类，不要因为当前没看到定义就认为该能力不存在。分类加载只提供定义，不是业务执行或成功证据。未加载的工具不得调用或猜测参数。')
+            _pt('工具按分类呈现。已经提供具体定义的工具可直接调用；只看到 load_tools_ 分类入口时，先加载分类，再在下一轮使用具体定义。每个入口列出了当前可用工具名与用途，不要把未加载误判为不可用。加载只提供定义，不是业务执行或成功证据。未提供定义的工具不得猜测参数。')
             + ((_pt('找工具的方向：') + discovery.routing_hint()) if discovery.routing_hint() else "")
+            + ("\n" + image_hint if image_hint else "")
         )})
         image_refs = [
             ref for ref in (media_refs or [])
