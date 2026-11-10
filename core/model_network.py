@@ -17,6 +17,13 @@ _PRIVATE_NODE_RANGES = tuple(map(ipaddress.ip_network, (
 )))
 
 
+def is_loopback_url(url: object) -> bool:
+    try:
+        return urlsplit(str(url or "")).hostname in {"localhost", "127.0.0.1", "::1"}
+    except ValueError:
+        return False
+
+
 def private_node_url(url: str) -> bool:
     """Only literal private IPs, with no DNS lookup or URL-embedded credentials."""
     if any(ord(c) <= 32 or c in "\\%?#" for c in url):

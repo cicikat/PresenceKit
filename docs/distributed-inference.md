@@ -69,4 +69,39 @@ PresenceKit 按角色、版本和情绪选资源，在节点模式只发送逻�
 | TTS | 节点代理经本机 GPT-SoVITS API v2 返回可解码 WAV，见 DIST-03。 |
 | Embedding | 配置的公网 OpenAI 兼容 API 为合成文本返回 1 条 1024 维向量。 |
 
-真正由 VPS 访问另一台设备的 VLM、STT 和 GPT-SoVITS，以及私网设备断线与重连，仍为 `observe`。DIST-05 至 DIST-07 依赖此前置验收，仍为 `roadmap`。
+异机验证进展见 DIST-08。DIST-05 至 DIST-07 仍为 `roadmap`。
+
+## DIST-08 参数和资源审计
+
+| 有效参数 | Gradio / API v2 对应关系 |
+|---|---|
+| 角色、情绪、版本、参考音频和权重 | 共用角色预设、情绪分档与版本配对。Gradio 解析本机文件，节点模式发送映射后的三个 ID。节点要求参考音频存在，`ref_free` 仍使用参考音色。 |
+| 参考文本、语种、`ref_free` | 共用参考文本选择。Gradio 用语言名称，API v2 用语言代码。v2 家族在空参考文本时启用无文本参考。v3 需要参考文本，缺失时返回 `reference_text_required`。 |
+| `if_freeze` | Gradio 支持复用语义结果。API v2 没有该模式，节点配置显式启用时返回 `unsupported_if_freeze`。 |
+| 分段、语速、采样与停顿 | 复用文本清洗和语种分段。Gradio 使用「不切」，API v2 使用 `cut0`。`speed` 映射 `speed_factor`，`pause_second` 映射 `fragment_interval`；`top_k`、`top_p`、`temperature`、`sample_steps` 原值传递。`top_p`、`temperature`、停顿支持零值。段间 WAV 拼接停顿独立设置。 |
+| 超分和额外参考 | `if_sr` 对应 `super_sampling`，节点模式需要显式选择 v3 权重。PresenceKit 的 Gradio 调用固定 `inp_refs=None`，两种传输都使用单个已选参考。 |
+| 调度与超时 | 合成段与权重切换的超时分别配置。Gradio 本机串行时保留句间让出视觉锁。节点独占 API v2 引擎，切换两项权重和完整合成作为一个请求处理。 |
+
+清单接受参考 `.wav`、`.mp3`、`.flac`、`.ogg`、`.mp4`，GPT `.ckpt` 或兼容 PyTorch `.pt`，SoVITS `.pth`。本地资产列表可列出 `.safetensors`，本次核对的 API v2 SoVITS 加载器使用 GPT-SoVITS 自带权重格式和 `torch.load`，节点清单明确拒绝 `.safetensors`。已用实际 v2 引擎验证 `.pt` 文件、空参考文本与零停顿组合。
+
+同一组权重连续三次重新加载耗时 1.036 / 1.006 / 0.910 秒，中位 1.006 秒。对应短句合成 7.368 / 0.852 / 0.774 秒，首轮含预热。API v2 没有进程身份和当前权重查询，节点继续每请求切换两项权重，以防引擎重启后沿用错误声线。
+
+### GPU 并发组
+
+「模型路由 → 推理 GPU 并发组」热更新 `inference_gpu_limits`。将同一物理 GPU 上的各服务 origin 放到一组，格式为 `{"gpu_a":{"origins":["http://gpu.example:11434","http://gpu.example:9881"],"max_concurrency":1}}`。地址使用协议、主机和端口，路径由原 Preset 管理。默认 `{}`，显式清空恢复默认调度。`GET /inference-gpu-limits` 返回组与占用，`PUT` 在有活动名额时拒绝更改配置。
+
+同组的摄像头/图片理解、屏幕 VLM、命名 STT 与 TTS 请求共享限额，忙时立即拒绝。其他组独立，远程摄像头绕过本机共享锁。未归组的本机仍沿用单机锁；Gradio 本机 worker 在调用方取消或超时后保留共享锁直到线程退出。摄像头挂断取消等待中的推理并废弃迟到凭据。对已归组的请求，调用方取消后保留名额至有超时边界的出站调用结束。GSV 节点超时后通过仅鉴权可用的 `/ready` 探测单 worker 引擎；主后端的共享名额最多额外保留 30 秒。HTTP 接入限额的作用域是单个后端进程，其他客户端、其他进程与 GPU 上常驻模型的容量需要由节点自身约束。
+
+### 两台设备验证
+
+2026-11-10 使用 VPS 和 Windows RTX 4060 Laptop 8 GiB，输入为合成音频和合成图片。Windows 语音测试监听仅在私网且限制来源与临时令牌，使用隔离资源和配置。
+
+| 验证项 | 实测结果 |
+|---|---|
+| VPS → Windows VLM | VPS 隔离的实际摄像头适配器沿现有 SSH 隧道调用 Windows Ollama，9.15 秒返回 `ready`，可消费凭据，合成画面颜色识别正确。采样峰值 6670 MiB / 100%。 |
+| VPS → Windows STT | VPS 隔离 `/transcribe` 通过私网调用 Windows Faster Whisper small（CPU），HTTP 200，9.551 秒，识别结果匹配且签发凭据。 |
+| VPS → Windows GPT-SoVITS | 通过私网实际调用节点协议，HTTP 200，3.423 秒，返回 32 kHz、28160 帧 WAV。 |
+| 节点停机、超时、取消和恢复 | 停止临时监听后，VPS 报 `ConnectTimeout`；重启后健康检查 HTTP 200。强制合成超时报 504 `node_timeout`，随后四次忙碌、第五次合成成功。主动取消后鉴权 `/ready` 实测先 429、后 204，GSV 采样峰值 3000 MiB / 25%。 |
+| 同一 GPU 的 VLM + TTS | 隔离主后端以并发 1 同时发起请求。实际 GSV 合成返回 WAV（3.126 秒），视觉请求 0.265 秒内由准入拒绝 `gpu_group_busy`。两张物理 GPU 同时满载推理仍待验证。 |
+
+实际桌面摄像头到角色回复、物理链路断网与重连、生产 STT/TTS Preset 切换及 v3 真实声线超分保持 `observe`。

@@ -18,7 +18,8 @@ from fastapi.responses import JSONResponse
 from core.output.gsv_node import GsvNodeError, MAX_WAV_BYTES, RESOURCE_ID_PATTERN, SpeechRequest, node_url_allowed, read_wav
 from core.output.voice_adapter import _join_pcm_wavs
 
-_RESOURCE_SUFFIXES = {"reference": {".wav", ".flac", ".mp3", ".ogg"}, "gpt": {".ckpt"}, "sovits": {".pth"}}
+_RESOURCE_SUFFIXES = {"reference": {".wav", ".flac", ".mp3", ".ogg", ".mp4"},
+                      "gpt": {".ckpt", ".pt"}, "sovits": {".pth"}}
 
 
 def load_resources(root: Path, manifest: Path) -> dict[str, dict[str, Path]]:
@@ -39,7 +40,7 @@ def load_resources(root: Path, manifest: Path) -> dict[str, dict[str, Path]]:
                 raise ValueError(f"Expected a path relative to resource root: {group}")
             path = (root / relative).resolve()
             if not path.is_relative_to(root) or path.suffix.lower() not in suffixes:
-                raise ValueError(f"Resource escapes its root or has the wrong file type: {group}")
+                raise ValueError(f"Invalid {group} resource path or format. Supported: {', '.join(sorted(suffixes))}")
             resources[group][key] = path
     return resources
 
@@ -51,23 +52,49 @@ def create_app(*, api_url: str, key: str, resources: dict[str, dict[str, Path]])
     base = api_url.rstrip("/")
     expected = f"Bearer {key}".encode()
     lock = asyncio.Lock()
+    needs_recovery = False
     app = FastAPI(openapi_url=None, docs_url=None, redoc_url=None)
 
     @app.middleware("http")
     async def admit(request, call_next):
         if not hmac.compare_digest(request.headers.get("authorization", "").encode(), expected):
             return JSONResponse(status_code=401, content={"detail": "node_auth_failed"})
-        length = request.headers.get("content-length", "")
-        if not length.isascii() or not length.isdecimal() or len(length) > 7 or int(length) > 1_100_000:
-            return JSONResponse(status_code=413, content={"detail": "node_config_invalid"})
+        if request.method == "POST":
+            length = request.headers.get("content-length", "")
+            if not length.isascii() or not length.isdecimal() or len(length) > 7 or int(length) > 1_100_000:
+                return JSONResponse(status_code=413, content={"detail": "node_config_invalid"})
         return await call_next(request)
 
     @app.exception_handler(RequestValidationError)
     async def invalid_request(_request, _error):
         return JSONResponse(status_code=422, content={"detail": "node_config_invalid"})
 
+    async def check_engine(session):
+        try:
+            async with session.get(f"{base}/openapi.json", allow_redirects=False,
+                                   timeout=aiohttp.ClientTimeout(total=2)) as response:
+                if response.status != 200:
+                    raise HTTPException(503, "node_offline")
+        except TimeoutError:
+            if needs_recovery:
+                raise HTTPException(429, "node_busy") from None
+            raise HTTPException(503, "node_offline") from None
+        except aiohttp.ClientError:
+            raise HTTPException(503, "node_offline") from None
+
+    @app.get("/ready", status_code=204)
+    async def ready():
+        nonlocal needs_recovery
+        if lock.locked():
+            raise HTTPException(429, "node_busy")
+        async with lock, aiohttp.ClientSession(trust_env=False) as session:
+            await check_engine(session)
+            needs_recovery = False
+        return Response(status_code=204)
+
     @app.post("/synthesize")
     async def synthesize(body: SpeechRequest):
+        nonlocal needs_recovery
         paths = {group: resources[group].get(getattr(body, group)) for group in _RESOURCE_SUFFIXES}
         if any(path is None or not path.is_file() or path.resolve() != path for path in paths.values()):
             raise HTTPException(404, "resource_missing")
@@ -78,6 +105,11 @@ def create_app(*, api_url: str, key: str, resources: dict[str, dict[str, Path]])
         async with lock:
             try:
                 async with (asyncio.timeout(180), aiohttp.ClientSession(trust_env=False) as session):
+                    if needs_recovery:
+                        # API v2 runs inference and weight changes on its single
+                        # worker. A response here confirms the previous call yielded.
+                        await check_engine(session)
+                        needs_recovery = False
                     async with asyncio.timeout(body.switch_timeout):
                         for group, action in (("sovits", "set_sovits_weights"), ("gpt", "set_gpt_weights")):
                             async with session.get(f"{base}/{action}", params={"weights_path": str(paths[group])},
@@ -95,6 +127,10 @@ def create_app(*, api_url: str, key: str, resources: dict[str, dict[str, Path]])
                         async with session.post(f"{base}/tts", json=payload, allow_redirects=False,
                                                 timeout=aiohttp.ClientTimeout(total=body.segment_timeout)) as response:
                             if response.status != 200:
+                                if response.status == 400 and 0 < (response.content_length or 0) <= 512:
+                                    detail = await response.json(content_type=None)
+                                    if isinstance(detail, dict) and detail.get("Exception") == "prompt_text cannot be empty when using SoVITS_V3":
+                                        raise HTTPException(422, "reference_text_required")
                                 raise HTTPException(502, "node_service_error")
                             wav = await read_wav(response)
                         total += len(wav)
@@ -106,11 +142,18 @@ def create_app(*, api_url: str, key: str, resources: dict[str, dict[str, Path]])
                     raise GsvNodeError("invalid_audio")
                 return Response(content=result, media_type="audio/wav")
             except TimeoutError:
+                needs_recovery = True
                 raise HTTPException(504, "node_timeout") from None
+            except asyncio.CancelledError:
+                needs_recovery = True
+                raise
             except aiohttp.ClientConnectionError:
+                needs_recovery = True
                 raise HTTPException(503, "node_offline") from None
-            except (GsvNodeError, aiohttp.ClientError):
+            except GsvNodeError:
                 raise HTTPException(502, "invalid_audio") from None
+            except (aiohttp.ClientError, ValueError):
+                raise HTTPException(502, "node_service_error") from None
 
     return app
 

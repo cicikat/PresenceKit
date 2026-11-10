@@ -171,12 +171,17 @@ async def _decide_once(
     started_at = time.perf_counter()
     try:
         import aiohttp
+        from core.inference_resources import reserve
 
         timeout = aiohttp.ClientTimeout(total=float(cfg.get("timeout_s", 25)))
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.post(base_url + "/chat/completions", json=payload, headers=headers) as response:
-                response.raise_for_status()
-                data = await response.json()
+        async def send():
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.post(base_url + "/chat/completions", json=payload, headers=headers) as response:
+                    response.raise_for_status()
+                    return await response.json()
+
+        with reserve(base_url) as slot:
+            data = await slot.run(send())
         content = data["choices"][0]["message"]["content"]
         raw = json.loads(content) if isinstance(content, str) else content
         parsed = _parse_action_payload(raw)

@@ -218,8 +218,11 @@ def aiohttp_error_category(exc: BaseException) -> str:
     import asyncio
 
     import aiohttp
+    from core.inference_resources import GpuResourceBusy
     from core.llm_protocol import _http_error_category
 
+    if isinstance(exc, GpuResourceBusy):
+        return str(exc)
     if isinstance(exc, (asyncio.TimeoutError, TimeoutError)):
         return "timeout"
     status = getattr(exc, "status", None)

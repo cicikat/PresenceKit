@@ -245,6 +245,11 @@ relay_topic: ""       # 例: yexuan-wake-a1b2c3（当作密码，用随机后缀
 relay_token: ""       # ntfy 访问 token；服务端开了鉴权才需要
 emerald_desktop:
   path: YOUR-DESKTOP-PATH
+# 可选：把同一 GPU 上的模型连接归组。默认空；在模型路由页热更新。
+# 每个地址填写协议、主机、端口。多个别名或端口使用同一张 GPU 时放在同一组。
+inference_gpu_limits: {}
+# inference_gpu_limits:
+#   gpu_a: {origins: ['http://gpu.example:11434', 'http://gpu.example:9881'], max_concurrency: 1}
 proxy:
   enabled: false
   http: http://127.0.0.1:7897

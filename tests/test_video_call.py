@@ -76,6 +76,59 @@ async def test_camera_scope_change_discards_inflight_result(monkeypatch):
     assert result == {"status": "closed"}
 
 
+@pytest.mark.asyncio
+async def test_remote_camera_bypasses_local_gpu_and_hangup_cancels_request(monkeypatch):
+    address = "http://100.64.10.5:11434/v1"
+    config = _config(address)
+    config["image_presets"]["presets"]["local_vision"]["camera_private_endpoint"] = address
+    monkeypatch.setattr("core.config_loader.get_config", lambda: config)
+    started = asyncio.Event()
+    cancelled = asyncio.Event()
+
+    async def model(*args, **kwargs):
+        started.set()
+        try:
+            await asyncio.Future()
+        finally:
+            cancelled.set()
+
+    monkeypatch.setattr("core.llm_client.chat", model)
+    monkeypatch.setattr("core.autonomy.store.discard_pending_signals_by_source", lambda *args: None)
+    async with video_call.local_resource():
+        task = asyncio.create_task(video_call.observe(_jpeg(), uid="remote", char_id="fixture", token_label="desktop"))
+        await asyncio.wait_for(started.wait(), 1)
+        second = await video_call.observe(_jpeg(), uid="remote", char_id="fixture", token_label="desktop")
+        assert second == {"status": "busy"}
+        video_call.close_camera("remote", "fixture", "desktop")
+        assert await asyncio.wait_for(task, 1) == {"status": "closed"}
+        assert cancelled.is_set()
+
+
+@pytest.mark.asyncio
+async def test_local_camera_hangup_holds_gpu_until_outbound_finishes(monkeypatch):
+    monkeypatch.setattr("core.config_loader.get_config", _config)
+    started, finish = asyncio.Event(), asyncio.Event()
+
+    async def model(*args, **kwargs):
+        started.set()
+        await finish.wait()
+        return "fixture"
+
+    monkeypatch.setattr("core.llm_client.chat", model)
+    monkeypatch.setattr("core.autonomy.store.discard_pending_signals_by_source", lambda *args: None)
+    task = asyncio.create_task(video_call.observe(_jpeg(), uid="local", char_id="fixture", token_label="desktop"))
+    await asyncio.wait_for(started.wait(), 1)
+    try:
+        video_call.close_camera("local", "fixture", "desktop")
+        assert await asyncio.wait_for(task, 1) == {"status": "closed"}
+        assert video_call.local_resource().locked()
+    finally:
+        finish.set()
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+    assert not video_call.local_resource().locked()
+
+
 def test_camera_tool_route_is_separately_configurable(monkeypatch):
     """按需查看有自己的路由；未配置时沿用周期观察，配置后独立生效。"""
     from core.image_presets import catalog

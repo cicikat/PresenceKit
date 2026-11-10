@@ -204,13 +204,21 @@ async def _describe_once(cfg: dict, image_bytes: bytes,
         }
         headers = {"Authorization": f"Bearer {cfg.get('api_key', '')}"} if cfg.get("api_key") else {}
         timeout = aiohttp.ClientTimeout(total=float(cfg.get("timeout_s", 20)))
-        async with aiohttp.ClientSession(timeout=timeout, trust_env=False) as session:
-            async with session.post(base_url + "/chat/completions", json=payload, headers=headers,
-                                    allow_redirects=not camera) as response:
-                if camera and 300 <= response.status < 400:
-                    return None, "error", "unexpected_redirect"
-                response.raise_for_status()
-                data = await response.json()
+        from core.inference_resources import reserve
+
+        async def send():
+            async with aiohttp.ClientSession(timeout=timeout, trust_env=False) as session:
+                async with session.post(base_url + "/chat/completions", json=payload, headers=headers,
+                                        allow_redirects=not camera) as response:
+                    if camera and 300 <= response.status < 400:
+                        return None
+                    response.raise_for_status()
+                    return await response.json()
+
+        with reserve(base_url) as slot:
+            data = await slot.run(send())
+        if data is None:
+            return None, "error", "unexpected_redirect"
         content = data["choices"][0]["message"]["content"]
         if isinstance(content, str):
             observation = _parse_observation(json.loads(content))

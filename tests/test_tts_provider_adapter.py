@@ -55,6 +55,8 @@ def test_gsv_node_requires_bearer_and_rejects_paths(tmp_path):
     with TestClient(create_app(api_url="http://127.0.0.1:1", key="fixture", resources=resources)) as client:
         assert client.post("/synthesize", json=body).status_code == 401
         headers = {"Authorization": "Bearer fixture"}
+        assert client.get("/ready").status_code == 401
+        assert client.get("/ready", headers=headers).json() == {"detail": "node_offline"}
         response = client.post("/synthesize", json={**body, "reference": "../anything.wav"}, headers=headers)
         assert response.json() == {"detail": "node_config_invalid"}
         response = client.post("/synthesize", json=body, headers=headers)
@@ -76,6 +78,61 @@ async def test_gsv_node_preserves_pure_chinese_language(monkeypatch):
            "node_resources": {"reference": {"ref.wav": "ref"}, "gpt": {"voice.ckpt": "gpt"},
                               "sovits": {"voice.pth": "sovits"}}}
     assert await voice_adapter.GsvProvider().synthesize("测试。Test.", "neutral", cfg)
+
+
+@pytest.mark.asyncio
+async def test_local_and_node_gsv_forward_the_same_effective_options(tmp_path, monkeypatch):
+    from core.output import gsv_node
+
+    reference = tmp_path / "emotion.wav"
+    reference.write_bytes(_pcm_wav())
+    local = {}
+    weights = []
+
+    class Client:
+        def __init__(self, _url):
+            pass
+
+        def predict(self, *, api_name, **kwargs):
+            if api_name == "/get_tts_wav":
+                local.update(kwargs)
+                return str(reference)
+            weights.append(kwargs)
+
+    monkeypatch.setitem(sys.modules, "gradio_client", SimpleNamespace(Client=Client, handle_file=lambda x: x))
+    monkeypatch.setattr(voice_adapter, "_GSV_ACTIVE_MODELS", {})
+    cfg = {"api_url": "http://127.0.0.1:5880", "gsv_version": "v2", "ref_audio": "unused.wav",
+           "version_models": {"v2": {"gpt_model_path": "selected.pt", "sovits_model_path": "selected.pth"}},
+           "emotion_enabled": True, "emotions": {"happy": {"ref_audio": str(reference), "speed": 1.3}},
+           "reference_texts": {str(reference): "参考文本"}, "prompt_language": "中英混合", "top_k": 6,
+           "top_p": 0, "temperature": 0, "pause_second": 0, "sample_steps": 32}
+    assert await voice_adapter.GsvProvider().synthesize("测试。", "happy", cfg)
+    assert len(weights) == 2 and "selected.pt" in str(weights) and "selected.pth" in str(weights)
+
+    async def capture(_url, _key, speech):
+        assert (speech.reference, speech.gpt, speech.sovits) == ("emotion", "selected_gpt", "selected_sovits")
+        assert speech.segments == [(local["text"], "all_zh")]
+        assert speech.prompt_lang == "zh"
+        for key in ("prompt_text", "speed", "top_k", "top_p", "temperature", "sample_steps"):
+            assert getattr(speech, key) == local[key]
+        assert speech.fragment_interval == local["pause_second"]
+        return _pcm_wav()
+
+    monkeypatch.setattr(gsv_node, "synthesize", capture)
+    node = {**cfg, "node_url": "http://127.0.0.1:9881", "api_key": "fixture",
+            "node_resources": {"reference": {str(reference): "emotion"}, "gpt": {"selected.pt": "selected_gpt"},
+                               "sovits": {"selected.pth": "selected_sovits"}}}
+    assert await voice_adapter.GsvProvider().synthesize("测试。", "happy", node)
+
+
+@pytest.mark.parametrize("settings,reason", [({"if_freeze": True}, "unsupported_if_freeze"),
+                                             ({"if_sr": True}, "unsupported_super_sampling"),
+                                             ({"gsv_version": "v3", "ref_free": True}, "reference_text_required")])
+def test_remote_gsv_rejects_unsupported_options(settings, reason):
+    from core.output.gsv_node import GsvNodeError, validate_options
+
+    with pytest.raises(GsvNodeError, match=reason):
+        validate_options(settings, "参考文本")
 
 
 def test_new_provider_block_overrides_legacy_gsv_fields():
@@ -473,12 +530,13 @@ async def test_unknown_provider_is_recorded_as_failed_call(monkeypatch):
 
 
 def _reset_runtime():
-    voice_adapter._TTS_RUNTIME.update(pending=0, dropped=0, current=None, last_error=None, last_error_at=None)
+    voice_adapter._TTS_RUNTIME.update(pending=0, dropped=0, last_error=None, last_error_at=None)
     voice_adapter._TTS_RUNTIME["unhealthy_urls"] = {}
 
 
 @pytest.mark.asyncio
-async def test_gsv_hang_times_out_releases_lock_and_recovers(tmp_path, monkeypatch):
+@pytest.mark.parametrize("cancel", [False, True])
+async def test_gsv_worker_drains_after_timeout_or_cancel(tmp_path, monkeypatch, cancel):
     import threading
     from core import video_call
     import asyncio
@@ -490,6 +548,7 @@ async def test_gsv_hang_times_out_releases_lock_and_recovers(tmp_path, monkeypat
     output.write_bytes(_pcm_wav())
     monkeypatch.setattr(video_call, "_local_resource", asyncio.Lock())
     release = threading.Event()
+    started = threading.Event()
     state = {"hang": True}
 
     class FakeClient:
@@ -499,6 +558,7 @@ async def test_gsv_hang_times_out_releases_lock_and_recovers(tmp_path, monkeypat
         def predict(self, **kwargs):
             if kwargs["api_name"] == "/get_tts_wav":
                 if state["hang"]:
+                    started.set()
                     release.wait(5)
                 return str(output)
             return None
@@ -509,15 +569,29 @@ async def test_gsv_hang_times_out_releases_lock_and_recovers(tmp_path, monkeypat
     voice_adapter._GSV_ACTIVE_MODELS[url] = ("a", "b")
     cfg = {"api_url": url, "ref_audio": str(reference), "segment_timeout_seconds": 0.2}
 
-    with pytest.raises(voice_adapter.GsvTimeoutError):
+    async def speak():
         async with voice_adapter._hold_local_resource():
             await voice_adapter.GsvProvider().synthesize("你好。", "neutral", cfg)
-    release.set()
-    assert not voice_adapter._GSV_SYNTHESIS_LOCK.locked()
+
+    task = asyncio.create_task(speak())
+    try:
+        if cancel:
+            assert await asyncio.to_thread(started.wait, 2)
+            task.cancel()
+        with pytest.raises(asyncio.CancelledError if cancel else voice_adapter.GsvTimeoutError):
+            await task
+        assert not voice_adapter._GSV_SYNTHESIS_LOCK.locked()
+        assert video_call.local_resource().locked()
+        worker = next(iter(voice_adapter._GSV_WORKERS.values()))
+        assert not worker.done()
+    finally:
+        release.set()
+    await asyncio.wait_for(asyncio.shield(worker), 2)
+    await asyncio.sleep(0)
     assert not video_call.local_resource().locked()
     assert url not in voice_adapter._GSV_ACTIVE_MODELS
     status = voice_adapter.get_tts_runtime_status()
-    assert status["healthy"] is False and "GsvTimeoutError" in status["last_error"]
+    assert ("CancelledError" if cancel else "GsvTimeoutError") in status["last_error"]
 
     state["hang"] = False
     async with voice_adapter._hold_local_resource():

@@ -1019,3 +1019,5 @@ QQ 相关旧 fixture observe：fast-path 四项、tool-reply 一项及 R6C F7 �
 ## 300 分布式推理设备验收（observe）
 
 已验证公网 LLM/Embedding、本机 VLM 和隔离 HTTP 的 Whisper、GPT-SoVITS。仍需用不同设备验证 VPS 到私网 VLM/STT/TTS 的往返、离线恢复、两组角色声线和客户端播放。节点目录、共享 GPU 调度与管理面综合节点状态依赖这项验收。见 [调用矩阵](distributed-inference.md)。
+
+DIST-08 补充：VPS 与 Windows 已通过隔离 STT 和 GPT-SoVITS 真实 HTTP 验证，节点停机、超时、取消与恢复均有记录。生产语音 Preset、真实桌面摄像头到角色回复、物理链路重连、独立双 GPU 实测和 v3 超分仍为 `observe`。见 [两台设备验证](distributed-inference.md#两台设备验证)。

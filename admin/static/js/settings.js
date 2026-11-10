@@ -375,7 +375,29 @@ async function loadImageConnections() {
     kind.addEventListener('change', _toggleImageKindFields);
     kind.dataset.bound = 'true';
   }
-  await Promise.allSettled([loadNamedImagePresets(), loadVisionParams(), loadImageRecognition()]);
+  const limits = document.getElementById('inference-gpu-limits');
+  const loads = [loadNamedImagePresets(), loadVisionParams(), loadImageRecognition()];
+  if (limits && !limits.dataset.loaded) loads.push(loadInferenceGpuLimits());
+  await Promise.allSettled(loads);
+}
+function renderInferenceGpuLimits(data) {
+  const field = document.getElementById('inference-gpu-limits');
+  field.value = JSON.stringify(data.groups || {}, null, 2);
+  field.dataset.loaded = 'true';
+  document.getElementById('inference-gpu-status').textContent = data.error || JSON.stringify(data.active || {});
+}
+async function loadInferenceGpuLimits() {
+  try { renderInferenceGpuLimits(await api('GET', '/inference-gpu-limits')); }
+  catch (error) { document.getElementById('inference-gpu-status').textContent = error.message; }
+}
+async function saveInferenceGpuLimits() {
+  try {
+    const groups = JSON.parse(document.getElementById('inference-gpu-limits').value);
+    renderInferenceGpuLimits(await api('PUT', '/inference-gpu-limits', {groups}));
+    toast(t('common.saved', '已保存'), 'ok');
+  } catch (error) {
+    document.getElementById('inference-gpu-status').textContent = error.message;
+  }
 }
 async function loadNamedImagePresets() {
   try {

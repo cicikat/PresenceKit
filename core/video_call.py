@@ -98,6 +98,9 @@ def close_camera(uid: str, char_id: str, token_label: str) -> None:
     row = _camera_sessions.get((uid, char_id))
     if row is not None and row["token_label"] == token_label:
         _camera_sessions.pop((uid, char_id), None)
+        inference = row.get("inference")
+        if inference is not None:
+            inference.cancel()
         pending = row.get("pending")
         if pending and not pending["future"].done():
             pending["future"].set_result(None)
@@ -311,12 +314,10 @@ async def _acquire_vision_lock(wait_for_resource: bool) -> bool:
     if not _local_resource.locked():
         await _local_resource.acquire()
         return True
-    if wait_for_resource:
-        await _local_resource.acquire()
-        return True
     _counts["vision_lock_waited"] += 1
     try:
-        await asyncio.wait_for(_local_resource.acquire(), VISION_LOCK_WAIT_SECONDS)
+        await asyncio.wait_for(_local_resource.acquire(),
+                               CAMERA_REQUEST_TTL_SECONDS if wait_for_resource else VISION_LOCK_WAIT_SECONDS)
     except asyncio.TimeoutError:
         return False
     return True
@@ -366,7 +367,7 @@ def snapshot(config: dict[str, Any]) -> dict[str, Any]:
     from core.video_call_presence import snapshot as presence_snapshot
     return {**connection_state(config),
             "tool_connection": connection_state(config, TOOL_PURPOSE),
-            "vision_busy": _local_resource.locked(),
+            "vision_busy": _local_resource.locked() or any(row.get("observing") for row in _camera_sessions.values()),
             "presence": presence_snapshot(config),
             "pending_observations": len(_receipts), "counts": dict(_counts),
             **camera_status()}
@@ -400,6 +401,7 @@ async def observe(frame: bytes, *, uid: str, char_id: str, token_label: str,
                   purpose: str = "video_call", scope_is_current: Callable[[], bool] | None = None) -> dict[str, Any]:
     from core.config_loader import get_config
     from core.image_presets import resolve_purpose
+    from core.inference_resources import GpuResourceBusy
     from core.llm_client import chat
 
     state = connection_state(get_config(), purpose)
@@ -407,6 +409,7 @@ async def observe(frame: bytes, *, uid: str, char_id: str, token_label: str,
         raise ValueError(state["blocking_reason"])
     validate_frame(frame)
     route = resolve_purpose(purpose)
+    started = time.monotonic()
     key = (uid, char_id)
     session = camera_session(uid, char_id)
     if session is None or session["token_label"] != token_label:
@@ -437,7 +440,11 @@ async def observe(frame: bytes, *, uid: str, char_id: str, token_label: str,
     if not state["effective"]:
         return {"status": "unavailable", "reason": state["blocking_reason"],
                 "retry_after_seconds": state["retry_after_seconds"]}
-    if not await _acquire_vision_lock(wait_for_resource):
+    local = state["endpoint_type"] == "loopback"
+    if not local and session.get("observing"):
+        _counts["busy"] += 1
+        return {"status": "busy"}
+    if local and not await _acquire_vision_lock(wait_for_resource):
         _counts["busy"] += 1
         _counts["vision_lock_timeout"] += 1
         if emit_signal and not diff_mode:
@@ -446,9 +453,16 @@ async def observe(frame: bytes, *, uid: str, char_id: str, token_label: str,
         return {"status": "busy"}
     memory = None
     diff_frame = False
+    owns_frame = False
+    local_inference = None
     try:
+        if session.get("observing"):
+            _counts["busy"] += 1
+            return {"status": "busy"}
         if not observation_is_current():
             return {"status": "closed"}
+        session["observing"] = True
+        owns_frame = True
         # Read the memory only after the vision lock is held: concurrent frames are
         # serialized there, so each diff is taken against the previous frame's result.
         prompt, chat_kwargs = OBSERVATION_PROMPT, {}
@@ -465,9 +479,20 @@ async def observe(frame: bytes, *, uid: str, char_id: str, token_label: str,
             {"type": "image_url", "image_url": {"url": image_url}},
         ]}]
         try:
-            description = await asyncio.wait_for(
-                chat(messages, use_vision=True, vision_purpose=purpose, **chat_kwargs), timeout=110,
-            )
+            task = asyncio.create_task(chat(messages, use_vision=True, vision_purpose=purpose, **chat_kwargs))
+            if local:
+                local_inference = task
+            waiter = asyncio.shield(task) if local else task
+            session["inference"] = waiter
+            description = await asyncio.wait_for(waiter, timeout=max(0, 110 - (time.monotonic() - started)))
+        except asyncio.CancelledError:
+            cancelling = getattr(asyncio.current_task(), "cancelling", lambda: 0)
+            if not observation_is_current() and not cancelling():
+                return {"status": "closed"}
+            raise
+        except GpuResourceBusy:
+            _counts["busy"] += 1
+            return {"status": "busy"}
         except (APITimeoutError, asyncio.TimeoutError):
             _counts["failed"] += 1
             return {"status": "timeout"}
@@ -484,7 +509,19 @@ async def observe(frame: bytes, *, uid: str, char_id: str, token_label: str,
             _counts["failed"] += 1
             return {"status": "failed"}
     finally:
-        _local_resource.release()
+        if owns_frame:
+            session.pop("observing", None)
+            session.pop("inference", None)
+        if local:
+            lock = _local_resource
+            if local_inference is not None and not local_inference.done():
+                def release_after_inference(completed):
+                    if not completed.cancelled():
+                        completed.exception()
+                    lock.release()
+                local_inference.add_done_callback(release_after_inference)
+            else:
+                lock.release()
     description = str(description or "").strip()[:MAX_OBSERVATION_CHARS]
     if not description:
         _counts["failed"] += 1

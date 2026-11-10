@@ -17,7 +17,8 @@ SpeechText = Annotated[str, StringConstraints(min_length=1, max_length=4000)]
 Language = Literal["zh", "en", "ja", "ko", "yue", "auto", "auto_yue", "all_zh", "all_ja", "all_ko", "all_yue"]
 MAX_WAV_BYTES = 32 * 1024 * 1024
 NODE_ERRORS = frozenset({"node_offline", "node_busy", "node_timeout", "resource_missing", "model_unavailable",
-                         "node_config_invalid", "node_auth_failed", "invalid_audio", "node_service_error"})
+                         "node_config_invalid", "node_auth_failed", "invalid_audio", "node_service_error",
+                         "unsupported_if_freeze", "reference_text_required", "unsupported_super_sampling"})
 
 
 class GsvNodeError(RuntimeError):
@@ -35,15 +36,25 @@ class SpeechRequest(BaseModel):
     prompt_text: str = Field(default="", max_length=500)
     prompt_lang: Language = "zh"
     speed: float = Field(default=1.0, ge=0.5, le=2.0)
-    pause_seconds: float = Field(default=0.15, ge=0, le=2.0)
+    pause_seconds: float = Field(default=0.25, ge=0, le=2.0)
     segment_timeout: float = Field(default=30, ge=1, le=120)
     switch_timeout: float = Field(default=60, ge=1, le=120)
     top_k: int = Field(default=15, ge=1, le=100)
-    top_p: float = Field(default=1.0, gt=0, le=1)
-    temperature: float = Field(default=1.0, gt=0, le=2)
+    top_p: float = Field(default=1.0, ge=0, le=1)
+    temperature: float = Field(default=1.0, ge=0, le=2)
     sample_steps: int = Field(default=8, ge=1, le=128)
     super_sampling: bool = False
-    fragment_interval: float = Field(default=0.3, ge=0.01, le=2.0)
+    fragment_interval: float = Field(default=0.3, ge=0, le=2.0)
+
+
+def validate_options(cfg: dict, prompt_text: str) -> None:
+    if cfg.get("if_freeze"):
+        raise GsvNodeError("unsupported_if_freeze")
+    version = cfg.get("gsv_version") or "auto"
+    if version == "v3" and (cfg.get("ref_free") or not prompt_text):
+        raise GsvNodeError("reference_text_required")
+    if cfg.get("if_sr") and version != "v3":
+        raise GsvNodeError("unsupported_super_sampling")
 
 
 def node_url_allowed(url: str) -> bool:
@@ -110,3 +121,19 @@ async def synthesize(url: str, key: str, speech: SpeechRequest) -> bytes:
         raise GsvNodeError("node_offline") from error
     except aiohttp.ClientError as error:
         raise GsvNodeError("node_service_error") from error
+
+
+async def wait_for_recovery(url: str, key: str, *, budget: float = 30) -> None:
+    """Keep a timed-out node's shared slot reserved while its engine drains."""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + budget
+    async with aiohttp.ClientSession(trust_env=False) as session:
+        while (remaining := deadline - loop.time()) > 0:
+            try:
+                async with session.get(url.rstrip("/") + "/ready", headers={"Authorization": "Bearer " + key},
+                                       allow_redirects=False, timeout=aiohttp.ClientTimeout(total=min(3, remaining))) as response:
+                    if response.status == 204:
+                        return
+            except (TimeoutError, aiohttp.ClientError):
+                pass
+            await asyncio.sleep(min(1, max(0, deadline - loop.time())))

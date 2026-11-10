@@ -201,11 +201,8 @@ class VisionRouteError(RuntimeError):
 
 
 def _is_loopback_base_url(base_url: object) -> bool:
-    from urllib.parse import urlsplit
-    try:
-        return urlsplit(str(base_url or "")).hostname in {"localhost", "127.0.0.1", "::1"}
-    except ValueError:
-        return False
+    from core.model_network import is_loopback_url
+    return is_loopback_url(base_url)
 
 
 def _resolve_vision_config(vision_purpose: str | None = None) -> dict:
@@ -396,6 +393,7 @@ async def chat(
             started_at = time.perf_counter()
             response = None
             from core.image_presets import CAMERA_PURPOSES as _CAMERA_PURPOSES
+            from core.inference_resources import GpuResourceBusy, reserve
             camera_frame = vision_purpose in _CAMERA_PURPOSES
             try:
                 if not camera_frame:
@@ -411,23 +409,24 @@ async def chat(
                 if camera_frame and max_tokens_override is not None:
                     max_tokens = min(max_tokens, max(1, int(max_tokens_override)))
                 timeout = 105 if camera_frame else _CALL_TIMEOUTS["vision"]
-                if protocol == "responses":
-                    from core.llm_protocol import responses_input
-                    endpoint = getattr(vision_client, "responses", None)
-                    if endpoint is None or not callable(getattr(endpoint, "create", None)):
-                        raise VisionRouteError(vision_purpose, "responses_unsupported_by_sdk")
-                    response = await endpoint.create(
-                        model=vision_cfg["model"], input=responses_input(safe_msgs),
-                        store=False, max_output_tokens=max_tokens, timeout=timeout,
-                    )
-                    text = getattr(response, "output_text", None)
-                    content = text if isinstance(text, str) else ""
-                else:
-                    response = await vision_client.chat.completions.create(
-                        model=vision_cfg["model"], messages=safe_msgs,
-                        max_tokens=max_tokens, timeout=timeout,
-                    )
-                    content = _first_chat_choice(response, operation="chat[vision]").message.content or ""
+                with reserve(str(vision_cfg.get("base_url") or "")) as slot:
+                    if protocol == "responses":
+                        from core.llm_protocol import responses_input
+                        endpoint = getattr(vision_client, "responses", None)
+                        if endpoint is None or not callable(getattr(endpoint, "create", None)):
+                            raise VisionRouteError(vision_purpose, "responses_unsupported_by_sdk")
+                        response = await slot.run(endpoint.create(
+                            model=vision_cfg["model"], input=responses_input(safe_msgs),
+                            store=False, max_output_tokens=max_tokens, timeout=timeout,
+                        ))
+                        text = getattr(response, "output_text", None)
+                        content = text if isinstance(text, str) else ""
+                    else:
+                        response = await slot.run(vision_client.chat.completions.create(
+                            model=vision_cfg["model"], messages=safe_msgs,
+                            max_tokens=max_tokens, timeout=timeout,
+                        ))
+                        content = _first_chat_choice(response, operation="chat[vision]").message.content or ""
                 _log_completed_call(
                     provider=str(vision_cfg.get("provider") or "vision"),
                     model=str(vision_cfg.get("model") or ""),
@@ -451,7 +450,8 @@ async def chat(
                              model=str(vision_cfg.get("model") or ""), provider=str(vision_cfg.get("provider") or ""))
                 return content
             except Exception as e:
-                category = ("timeout" if isinstance(e, APITimeoutError) else
+                category = (str(e) if isinstance(e, GpuResourceBusy) else
+                            "timeout" if isinstance(e, APITimeoutError) else
                             "connection_error" if isinstance(e, APIConnectionError) else
                             error_category_for_exception(e))
                 _record_api_call(

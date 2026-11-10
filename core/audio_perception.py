@@ -243,18 +243,23 @@ async def _request(data, filename, preset):
         form.add_field("prompt", hint)
     headers = {"Authorization": "Bearer " + preset["api_key"]} if preset.get("api_key") else {}
     from core.proxy_config import get_aiohttp_proxy
+    from core.inference_resources import reserve
     proxy = None if preset.get("direct") else get_aiohttp_proxy()
-    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=preset["timeout_seconds"]), trust_env=False) as session:
-        async with session.post(preset["base_url"] + "/audio/transcriptions", data=form,
-                                headers=headers, proxy=proxy, allow_redirects=False) as response:
-            response.raise_for_status()
-            chunks, size = [], 0
-            async for chunk in response.content.iter_chunked(16384):
-                size += len(chunk)
-                if size > 256 * 1024:
-                    raise ValueError("STT response too large")
-                chunks.append(chunk)
-            return json.loads(b"".join(chunks))
+    async def send():
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=preset["timeout_seconds"]), trust_env=False) as session:
+            async with session.post(preset["base_url"] + "/audio/transcriptions", data=form,
+                                    headers=headers, proxy=proxy, allow_redirects=False) as response:
+                response.raise_for_status()
+                chunks, size = [], 0
+                async for chunk in response.content.iter_chunked(16384):
+                    size += len(chunk)
+                    if size > 256 * 1024:
+                        raise ValueError("STT response too large")
+                    chunks.append(chunk)
+                return json.loads(b"".join(chunks))
+
+    with reserve(preset["base_url"]) as slot:
+        return await slot.run(send())
 
 
 async def ingest_audio_bytes(data, filename):
@@ -302,10 +307,13 @@ def _retry_reason(error: Exception) -> str:
 
 async def _transcribe_attempt(data, filename, block, preset_name, call_id, role, *,
                               can_fallback=False, switch_reason=""):
+    from core.inference_resources import GpuResourceBusy
+
     started = time.perf_counter()
     ok = False
     output_hint = ""
     retry_reason = ""
+    error_category = ""
     try:
         preset = validate_preset(block["presets"][preset_name])
         from core.stt_vocabulary import hotwords, is_prompt_echo
@@ -336,6 +344,7 @@ async def _transcribe_attempt(data, filename, block, preset_name, call_id, role,
         # exception class, which carries no request/response content.
         output_hint = type(error).__name__
         retry_reason = _retry_reason(error)
+        error_category = str(error) if isinstance(error, GpuResourceBusy) else retry_reason
         logger.warning("[audio_perception] 远程 STT 转写失败: %s", output_hint)
         return None, retry_reason if can_fallback else ""
     finally:
@@ -343,7 +352,7 @@ async def _transcribe_attempt(data, filename, block, preset_name, call_id, role,
         append(caller="stt", purpose="transcribe_remote", provider=preset_name,
                model=str((block["presets"].get(preset_name) or {}).get("model", "")),
                duration_ms=int((time.perf_counter() - started) * 1000), ok=ok,
-               output_hint=output_hint, error_category=retry_reason,
+               output_hint=output_hint, error_category=error_category,
                logical_call_id=call_id, route_role=role, switch_reason=switch_reason)
 
 

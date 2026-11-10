@@ -1,6 +1,11 @@
 <h1 class="page-title" data-i18n="nav.page.model-routing">模型路由</h1>
 <p class="page-subtitle admin-legacy-only" data-i18n="routing.clean_intro">先配置模型连接，再分配用途。角色绑定优先于全局方案。</p>
 <h2 class="vision-section-title admin-legacy-only" data-i18n="routing.images_heading">图像识别</h2>
+<section class="card" id="inference-gpu-limits-card">
+  <div class="card-header"><h3 data-i18n="routing.gpu_limits">推理 GPU 并发组</h3><div><button class="btn btn-ghost btn-sm" data-action="loadInferenceGpuLimits" data-i18n="common.refresh">刷新</button><button class="btn btn-primary btn-sm" data-action="saveInferenceGpuLimits" data-i18n="common.save">保存</button></div></div>
+  <label class="field"><span data-i18n="routing.gpu_limits_hint">默认留空对象 {}。将同一 GPU 的 VLM、STT 和 TTS 连接地址归到一组，填 origins（协议、主机和端口）与 max_concurrency（1–16）。保存后生效，清空恢复原有调度。</span><textarea id="inference-gpu-limits" rows="5" placeholder='{"gpu_a":{"origins":["http://gpu.example:8000"],"max_concurrency":1}}'>{}</textarea></label>
+  <pre id="inference-gpu-status" role="status"></pre>
+</section>
 <section class="card">
   <div class="card-header"><h3 data-i18n="routing.image_presets">Presets · 图像连接</h3><div><button class="btn btn-primary btn-sm" data-action="openCreateImagePreset" data-i18n="routing.image_preset.new">+ 新建连接</button><button class="btn btn-ghost btn-sm" data-action="loadImageConnections" data-i18n="common.refresh">刷新</button></div></div>
   <p data-i18n="routing.image_presets_hint">命名图像连接。vision 负责理解图片，OCR 负责提取文字。用途表可把连接指派给聊天图、生活记录、屏幕截图（含手机自动化）或本机摄像头。</p>

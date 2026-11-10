@@ -322,7 +322,8 @@ async def test_tts_config(body: TtsTestRequest, auth=Depends(require_scopes("adm
             audio = await synthesize(text, body.emotion, char_id=body.char_id, raise_node_error=True)
         except GsvNodeError as error:
             status_code = {"node_timeout": 504, "node_busy": 429, "node_offline": 503,
-                           "resource_missing": 409, "node_config_invalid": 409}.get(error.code, 502)
+                           "resource_missing": 409, "node_config_invalid": 409, "unsupported_if_freeze": 422,
+                           "reference_text_required": 422, "unsupported_super_sampling": 422}.get(error.code, 502)
             raise HTTPException(status_code, detail=error.code) from None
     else:
         audio = await synthesize(text, body.emotion, char_id=body.char_id)

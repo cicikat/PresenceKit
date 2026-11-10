@@ -476,8 +476,10 @@ async def test_image_connection(
                 return response.choices[0].message.content if response.choices else ""
         from core.conversation_stats import exclude_diagnostic
         from core.image_observability import suppress_nested_trace
+        from core.inference_resources import reserve
         with exclude_diagnostic(), suppress_nested_trace():
-            answer = await asyncio.wait_for(probe(), timeout=25)
+            with reserve(str(vision.get("base_url") or "") if kind == "vision" else "") as slot:
+                answer = await asyncio.wait_for(slot.run(probe()), timeout=25)
         ok = bool(not truncated and answer and answer.strip() and answer.strip() != "[OCR: no text detected]")
         error = "output_truncated" if truncated else ("" if ok else "empty_response")
     except Exception as exc:
@@ -622,6 +624,28 @@ async def get_image_presets(auth=Depends(require_scopes("admin"))):
     cfg = get_config()
     return {**snapshot(cfg), "camera_states": [connection_state(cfg, purpose)
             for purpose in ("video_call", TOOL_PURPOSE)]}
+
+
+@router.get("/inference-gpu-limits", summary="读取 GPU 并发组和已占用名额")
+async def get_inference_gpu_limits(auth=Depends(require_scopes("admin"))):
+    from core.inference_resources import snapshot
+    return snapshot(get_config())
+
+
+@router.put("/inference-gpu-limits", summary="更新 GPU 并发组")
+async def update_inference_gpu_limits(body: dict, auth=Depends(require_scopes("admin"))):
+    from core.inference_resources import snapshot, validate_limits
+    try:
+        groups = validate_limits(body.get("groups"))
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from None
+    if snapshot(get_config())["active"]:
+        raise HTTPException(409, "Wait for active GPU requests to finish before changing group limits")
+    cfg = read_config_file(CONFIG_FILE)
+    cfg["inference_gpu_limits"] = groups
+    write_config_file(CONFIG_FILE, cfg)
+    from core.config_loader import reload_config
+    return snapshot(reload_config())
 
 
 @router.put("/image-presets/presets/{name}", summary="新增或更新一个图像连接")
