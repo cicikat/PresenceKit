@@ -1175,3 +1175,5 @@ PUT `/image-gen-presets/prompt-constraints` 保存 `{selected, custom, presets}`
 ## 296 高质量生图与低成本测试
 生图预设新增 test_model、test_extra_params，仅用于管理面测试；配置后测试接口返回 configured_model/tested_model/same_model。低成本连接测试不代表高级模型生成已验证。角色只从已公开且白名单允许的模型中选型。管理面测试去除浏览器原生confirm依赖，按钮/行内反馈显示进度、成功或错误；模型目录显示可见选择框，仍允许手填，目录25秒、测试140秒前端预算。
 provider_kind 新增 venice。Base URL为 https://api.venice.ai/api/v1，原生POST /image/generate，GET /models?type=image；填写完整/image/generate时保存为根地址。此适配暂不开放参考图。Runware高级编辑模型可在extra_params设置reference_input=referenceImages（适配器消费，不透传此选项）；扩散模型仍用seedImage。
+
+角色侧 `generate_image` 的可选 `preset` 枚举仅包含公开、已配置且角色获准使用的连接名。没有符合条件的连接时不提供工具定义。省略参数时沿用当前默认选择。指定无效连接时返回可用连接提示，且不自动改用另一付费连接。

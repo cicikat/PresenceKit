@@ -11,10 +11,15 @@ import re
 from copy import deepcopy
 
 from core import config_loader
+from core.prompt_language import choose
 
 NAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,63}$")
 MAX_PROMPT_CHARS = 8_000
 MAX_IMAGE_BYTES = 25 * 1024 * 1024
+
+
+class ImagePresetError(ValueError):
+    """A preset selection failure that can safely be explained to the model."""
 
 _IMAGE_REQUEST_RE = re.compile(
     r"画(?:一|两|几)?张|画一幅|帮我画|给我画|给(?:我|你)做(?:一)?张(?:图|海报|头像|壁纸|插画)|生图|出图|图生图|文生图|"
@@ -149,7 +154,13 @@ def discovery_note(char_id: str | None = None, config: dict | None = None) -> st
         if row.get("supports_edits") is False:
             item += "（不支持参考图）"
         parts.append(item)
-    return "可选图像预设（用 preset 参数指定，省略用默认）：{}。".format("；".join(parts))
+    default = catalog(config)["default_preset"]
+    if not any(row["name"] == default for row in rows):
+        default = rows[0]["name"]
+    return choose(
+        "未指定连接时省略 preset，当前默认连接为 {default}。需要指定时，原样使用以下连接名：{choices}。",
+        "Omit preset when no connection was requested. The current default is {default}. When specifying a connection, use its exact name: {choices}.",
+    ).format(default=default, choices="；".join(parts))
 
 
 def resolve_preset(name: str | None, char_id: str | None = None, config: dict | None = None) -> dict:
@@ -179,12 +190,12 @@ def resolve_preset(name: str | None, char_id: str | None = None, config: dict | 
                 raise ValueError("没有可用的图像生成预设配置。")
     preset = presets.get(wanted)
     if preset is None:
-        raise ValueError(f"未知的图像生成预设：{wanted}。")
+        raise ImagePresetError("未知的图像生成预设。")
     allowed = _char_allowlist(char_id)
     if allowed is not None and wanted not in allowed:
-        raise ValueError(f"当前角色不可以使用图像生成预设：{wanted}。")
+        raise ImagePresetError("当前角色不可以使用指定的图像生成预设。")
     if not connection_ready(preset):
-        raise ValueError(f"图像生成预设 {wanted} 连接未配置。")
+        raise ImagePresetError("指定的图像生成预设连接未配置。")
     return {"name": wanted, **deepcopy(preset)}
 
 

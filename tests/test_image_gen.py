@@ -52,6 +52,21 @@ def test_tools_disabled_by_default(monkeypatch):
     assert image_gen.exposed_preset_names() == []
 
 
+def test_schema_lists_only_visible_connection_names(monkeypatch):
+    from core.tool_dispatcher import get_tools_schema
+
+    monkeypatch.setattr("core.config_loader.get_config", lambda: CFG)
+    monkeypatch.setattr(image_gen, "_char_allowlist", lambda _: {"flux-pro", "hidden"})
+    schemas = get_tools_schema(["media"], char_id="fixture")
+    image = next(row["function"] for row in schemas if row["function"]["name"] == "generate_image")
+    assert image["parameters"]["properties"]["preset"]["enum"] == ["flux-pro"]
+    assert "preset" not in image["parameters"]["required"]
+
+    monkeypatch.setattr(image_gen, "_char_allowlist", lambda _: set())
+    schemas = get_tools_schema(["media"], char_id="fixture")
+    assert all(row["function"]["name"] != "generate_image" for row in schemas)
+
+
 def test_store_image_roundtrip_and_artifact_guards(sandbox):
     chat_artifacts.begin_turn_collection()
     payload = chat_artifacts.store_generated_image(b"\x89PNG" + b"x" * 32, ext=".png", user_id="u1", char_id="c1")

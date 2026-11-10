@@ -2505,12 +2505,19 @@ def get_tools_schema(
             from core.self_management.policy import tool_allowed
             if not tool_allowed(uid, char_id, name):
                 continue
+        parameters = tool_parameters(info.get("parameters") or {"type": "object", "properties": {}}, tool_name=name)
+        if name == "generate_image":
+            from core.image_gen import exposed_preset_names
+            image_presets = exposed_preset_names(char_id)
+            if not image_presets:
+                continue
+            parameters["properties"]["preset"]["enum"] = [preset["name"] for preset in image_presets]
         schemas.append({
             "type": "function",
             "function": {
                 "name": name,
                 "description": tool_description(name, str(info.get("description") or "")).replace("{char}", char_name),
-                "parameters": tool_parameters(info.get("parameters") or {"type": "object", "properties": {}}, tool_name=name),
+                "parameters": parameters,
             },
         })
     schemas = [
@@ -3278,6 +3285,7 @@ async def _execute_structured_impl(
         await _notify_status("failed")
         return _execution_outcome("tool_failed", fallback)
     except Exception as e:
+        from core.image_gen import ImagePresetError, discovery_note
         from core.mcp_client import McpOutcomeUnknown
         if isinstance(e, McpOutcomeUnknown):
             result_text = e.safe_summary()
@@ -3289,8 +3297,10 @@ async def _execute_structured_impl(
         _log_execute_failure_context(tool_name, tool_args, origin)
         if isinstance(e, _tool_result_pins.PinError):
             server_reason = e.hint
+        elif tool_name == "generate_image" and isinstance(e, ImagePresetError):
+            server_reason = "无法使用指定的生图连接。" + discovery_note(char_id)
         elif tool_name == 'generate_image' and getattr(e, 'error_category', '') == 'runware_thirdPartyInsufficientCredits':
-            server_reason = 'Runware 的第三方模型付费额度不足。请选择当前可用的生图预设，或充值后再使用该模型。'
+            server_reason = 'Runware 的第三方模型付费额度不足。不要重试同一连接；可使用工具定义中另一个确切的连接名。'
         else:
             server_reason = _mcp_server_reported_error(e)
         if server_reason:
