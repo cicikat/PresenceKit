@@ -1591,12 +1591,15 @@ class SttConnection(BaseModel):
     base_url: str
     model: str
     api_key: str = ""
-    timeout_seconds: float = 12
+    timeout_seconds: Optional[float] = None
+    direct: Optional[bool] = None
+    verbose_json: Optional[bool] = None
 
 
 class SttPurpose(BaseModel):
     enabled: bool = False
     voice_message: str = ""
+    fallback_voice_message: Optional[str] = None
 
 
 class SttVocabularyEntry(BaseModel):
@@ -1643,7 +1646,7 @@ async def save_stt_preset(name: str, body: SttConnection, auth=Depends(require_s
     cfg = read_config_file(CONFIG_FILE)
     block = cfg.setdefault("stt_presets", {"enabled": False, "presets": {}, "routes": {}})
     presets = block.setdefault("presets", {})
-    data = body.model_dump()
+    data = {**(presets.get(name) or {}), **body.model_dump(exclude_none=True)}
     if not data["api_key"]:
         data["api_key"] = (presets.get(name) or {}).get("api_key", "")
     try:
@@ -1665,6 +1668,13 @@ async def save_stt_route(body: SttPurpose, auth=Depends(require_scopes("admin"))
         raise HTTPException(status_code=422, detail="Unknown STT connection")
     if body.enabled and not body.voice_message:
         raise HTTPException(status_code=422, detail="Select an STT connection first")
+    fallback = body.fallback_voice_message
+    if fallback is not None:
+        if fallback and (not body.voice_message or fallback == body.voice_message or fallback not in block.get("presets", {})):
+            raise HTTPException(status_code=422, detail="Select a different saved backup STT connection")
+        block["fallbacks"] = {"voice_message": fallback} if fallback else {}
+    elif (block.get("fallbacks") or {}).get("voice_message") == body.voice_message:
+        block["fallbacks"] = {}
     block["enabled"] = body.enabled
     block["routes"] = {"voice_message": body.voice_message}
     write_config_file(CONFIG_FILE, cfg)

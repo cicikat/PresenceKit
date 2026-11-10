@@ -356,6 +356,8 @@ def test_failover_stats_keep_primary_failure_and_denominators(tmp_path, monkeypa
         duration_ms=12, ok=True, logical_call_id="abc", attempt_id="abc:f",
         route_role="fallback", switch_reason="timeout", logical_final=True,
     )
+    api_call_log.append(caller="stt", purpose="transcribe_remote", provider="backup", model="whisper",
+                        duration_ms=12, ok=True, logical_call_id="stt-example", route_role="fallback")
     stats = api_call_log.failover_stats(window_hours=24)
     assert stats["attempts"]["total"] == 2
     assert stats["attempts"]["failed"] == 1

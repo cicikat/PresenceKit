@@ -695,16 +695,17 @@ async function loadSttConfig() {
   try {
     const data = await api('GET', '/stt-presets');
     _sttConnections = data.presets || {};
-    for (const id of ['stt-saved', 'stt-route']) {
+    for (const id of ['stt-saved', 'stt-route', 'stt-fallback']) {
       const select = document.getElementById(id);
       select.replaceChildren(new Option('—', ''));
       for (const name of Object.keys(_sttConnections)) select.add(new Option(name, name));
     }
     document.getElementById('stt-route').value = data.routes.voice_message || '';
+    document.getElementById('stt-fallback').value = data.fallbacks?.voice_message || '';
     document.getElementById('stt-enabled').checked = data.enabled;
     host.textContent = JSON.stringify({enabled: data.enabled, configured: data.configured,
       effective: data.effective, blocking_reason: data.blocking_reason, source: data.source,
-      legacy_local_transcribe: data.legacy_local_transcribe}, null, 2);
+      fallback_effective: data.fallback_effective, legacy_local_transcribe: data.legacy_local_transcribe}, null, 2);
   } catch (error) { host.textContent = error.message; }
 }
 function selectSttConnection() {
@@ -714,6 +715,8 @@ function selectSttConnection() {
   document.getElementById('stt-url').value = row.base_url || '';
   document.getElementById('stt-model').value = row.model || '';
   document.getElementById('stt-key').value = '';
+  document.getElementById('stt-timeout').value = row.timeout_seconds ?? 12;
+  document.getElementById('stt-direct').checked = row.direct === true;
 }
 async function saveSttConnection() {
   try {
@@ -722,6 +725,8 @@ async function saveSttConnection() {
       base_url: document.getElementById('stt-url').value.trim(),
       model: document.getElementById('stt-model').value.trim(),
       api_key: document.getElementById('stt-key').value,
+      timeout_seconds: document.getElementById('stt-timeout').valueAsNumber,
+      direct: document.getElementById('stt-direct').checked,
     });
     document.getElementById('stt-key').value = '';
     await loadSttConfig();
@@ -732,6 +737,7 @@ async function saveSttPurpose() {
     await api('PUT', '/stt-presets/routes', {
       enabled: document.getElementById('stt-enabled').checked,
       voice_message: document.getElementById('stt-route').value,
+      fallback_voice_message: document.getElementById('stt-fallback').value,
     });
     await loadSttConfig();
   } catch (error) { toast(error.message, 'err'); }

@@ -539,7 +539,7 @@ def test_the_repeat_threshold_comes_from_the_saved_settings(monkeypatch):
 # ── warmup selection ───────────────────────────────────────────────────────────
 
 def test_warmup_for_sherpa_needs_both_the_package_and_the_downloaded_model(monkeypatch, assets):
-    monkeypatch.setattr("core.audio_perception.config", lambda: {"enabled": False, "presets": {}, "routes": {}})
+    monkeypatch.setattr("core.audio_perception.get_config", lambda: {})
     monkeypatch.setattr(stt_local, "settings", lambda config=None: sherpa_cfg())
     monkeypatch.setitem(sys.modules, "sherpa_onnx", types.ModuleType("sherpa_onnx"))
     monkeypatch.setattr(stt_local.importlib.util, "find_spec", lambda name: object() if name == "sherpa_onnx" else None)

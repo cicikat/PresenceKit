@@ -327,8 +327,8 @@ fail-closed）：管理面「模型路由」连接编辑器手动勾选「本地
 可读。本字段目前无运行时消费方，不改变任何识图行为；与文本 preset 的 `provider_kind: local`
 无关。
 
-工单 264：`video_call` 是独立图像用途，默认未路由；管理面只接受启用的本机 HTTP
-Chat Completions 视觉连接（`localhost`、`127.0.0.1`、`::1`），拒绝远端与 OCR。
+工单 264 / DIST-02：`video_call` 是独立图像用途，默认未路由。接受启用的本机 HTTP
+Chat Completions（`localhost`、`127.0.0.1`、`::1`）或管理员授权的匹配私网端点。
 `GET /video-call/state`（chat）返回 effective 与阻断原因；`GET /observability/video-call`
 （state.read）另含无图像内容的处理计数。摄像头预览可在路由无效时独立显示，但不会送帧。
 本机 TTS 与视频视觉共用推理锁；视觉忙时跳过帧，TTS 按已有播放队列等待。GSV 调用有硬超时（`segment_timeout_seconds` 默认 30、`model_switch_timeout_seconds` 默认 60，写在 tts provider 配置块）；超时后该 `api_url` 标记不健康，下次请求先探测通过才进锁，任何失败都清除模型缓存。等待中的 TTS 请求上限 `max_pending`（默认 4），超出直接丢弃。`GET /admin/tts-config` 的 `runtime_status` 只读暴露锁持有者、队列长度、丢弃数、最近错误与健康状态。
@@ -336,8 +336,10 @@ Chat Completions 视觉连接（`localhost`、`127.0.0.1`、`::1`），拒绝远
 推理超时与连接失败分别显示。TTS 配置读取若遇到不能作为 authored 资产索引的旧角色 ID，
 仍返回现有 TTS 设置和外部参考音频，资源列表置空并给出 `blocking_reason`。
 
-工单 265：视频电话摄像头开启且 `video_call` 路由有效时，周期识别结果每隔至少 60 秒可形成一次有期限的 autonomy 候选，即使画面没有变化；候选有效期 10 分钟，通话持续且最近 120 秒无用户发言时可进入主动评估。角色仍通过梦境、免打扰、预算、冷却与发言门控决定是否通知。`observe_video_call_camera` 仅在活跃视频电话中请求新帧，走 `/video-call/camera/poll` 与 `/video-call/camera/result` 的 10 秒单次请求，再用独立的 `video_call_tool` 路由识别（未配置时沿用 `video_call`，显式留空则工具关闭而周期观察保留）；两条路由都只接受本机 loopback HTTP 的 Chat Completions 视觉连接，`GET /video-call` 快照的 `tool_connection` 给出按需路由的 connection/effective/blocking_reason。`POST /video-call/close` 清除会话与待消费结果；`GET /observability/video-call` 增加活跃会话及待领取请求数，不返回图像或描述正文。屏幕的 `observe_user_screen`、实验性 `/perception/visual` 和 `visual_perception` 配置均不参与摄像头链。
+工单 265：视频电话摄像头开启且 `video_call` 路由有效时，周期识别结果每隔至少 60 秒可形成一次有期限的 autonomy 候选，即使画面没有变化；候选有效期 10 分钟，通话持续且最近 120 秒无用户发言时可进入主动评估。角色仍通过梦境、免打扰、预算、冷却与发言门控决定是否通知。`observe_video_call_camera` 仅在活跃视频电话中请求新帧，走 `/video-call/camera/poll` 与 `/video-call/camera/result` 的 10 秒单次请求，再用独立的 `video_call_tool` 路由识别（未配置时沿用 `video_call`，显式留空则工具关闭而周期观察保留）；两条路由均要求 Chat Completions，并遵循 DIST-02 的摄像头连接授权；`GET /video-call/state` 快照的 `tool_connection` 给出按需路由的 connection/effective/blocking_reason。`POST /video-call/close` 清除会话与待消费结果；`GET /observability/video-call` 增加活跃会话及待领取请求数，不返回图像或描述正文。屏幕的 `observe_user_screen`、实验性 `/perception/visual` 和 `visual_perception` 配置均不参与摄像头链。
 工单 266：`tools.invite_video_call.enabled` 与 `allowed_char_ids` 限制发起角色；autonomy 另需该工具的显式 allowlist，不能由普通对话开关推导为主动可用。来电 10 秒超时，接通只进入视频页，主人仍自己决定摄像头和麦克风。挂断生成一次主动候选，是否通知仍遵循 Dream、DND、预算及发言间隔。只读观测见 `/observability/video-call.invites`。
+
+DIST-04：语音识别命名连接支持直连和每次请求超时，默认沿用全局代理。`PUT /stt-presets/routes` 接受可选 `fallback_voice_message`；省略时保留已有选择，显式留空则关闭备用。`GET /stt-presets` 返回备用配置与 `fallback_effective`。两项设置由语音管理页热更新，桌面和手机继续消费主后端 `/transcribe`。详见 [STT 回退](distributed-inference.md#dist-04-stt-和文本回退)。
 
 摄像头描写（周期帧与 `observe_video_call_camera` 共用同一 prompt）：以镜头内人物的动作、姿态、表情、视线为首要且写细腻（只描写可见状态，不推断内心情绪），环境只给轮廓，人物与物件互动或举物展示时才展开该物件；总长约 300 字。`video_call` 视觉用途的 `max_tokens` 由 120 放开到 500（`core/llm_client.py::VIDEO_CALL_MAX_TOKENS`），落库截断 `MAX_OBSERVATION_CHARS=800` 保持兜底，三者须一致（见 `core/video_call.py` 顶部注释）；回执 TTL 仍为 45 秒，单帧耗时逼近时优先降 `max_tokens`。
 

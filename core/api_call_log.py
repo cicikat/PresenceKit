@@ -156,11 +156,11 @@ def failover_stats(*, window_hours: float = 24.0, now: float | None = None) -> d
     hours = max(1.0, min(float(window_hours or 24.0), 24.0 * 7))
     since = now - hours * 3600
     try:
-        rows = _iter_rows(since_ts=since, until_ts=now)
+        rows = [row for row in _iter_rows(since_ts=since, until_ts=now) if row.get("caller") != "stt"]
     except Exception:
         rows = []
 
-    attempts = [r for r in rows if r.get("attempt_id") or r.get("logical_call_id") or True]
+    attempts = rows
     attempt_total = len(attempts)
     attempt_fail = sum(1 for r in attempts if not r.get("ok"))
 

@@ -16,7 +16,7 @@
 ### 代理与验证边界
 
 - 文本与通用 SDK 视觉默认 `follow_global`。显式全局 HTTP 代理会接管私网文本请求。私网可用 `auto`（正常 DNS 直连，Fake-IP 或解析失败走代理）或 `direct`。本机视觉及已授权摄像头连接直连。SDK 文本与视觉不继承系统代理环境变量。
-- 截图 raw HTTP、OpenAI 兼容 TTS 默认直连；命名 STT 的旧默认使用全局 aiohttp 代理配置。Embedding 的 SDK 默认传输遵循进程代理环境，和 `proxy.model_connection_mode` 独立。部署时检查 `NO_PROXY` 或运行环境的代理边界。
+- 截图 raw HTTP、OpenAI 兼容 TTS 默认直连；命名 STT 默认使用全局 aiohttp 代理配置，可按连接选择直连。Embedding 的 SDK 默认传输遵循进程代理环境，和 `proxy.model_connection_mode` 独立。部署时检查 `NO_PROXY` 或运行环境的代理边界。
 - 连接目录、HTTP 响应、模型推理成功分别取证。使用合成图像和音频，禁止用真实通话帧或私人录音探测。连通性验证在测试环境进行。
 
 ### 当前设备核对
@@ -52,3 +52,21 @@
 PresenceKit 按角色、版本和情绪选资源，在节点模式只发送逻辑 ID 与合成文本参数。节点校验资源位于根目录内，完整切换两项权重后才逐段合成并返回 WAV。未配置或缺失的资源报错，不回退底模。节点同一时间处理一个请求，忙时立即拒绝。管理面试听和现有调用台账提供离线、忙碌、超时、资源缺失和模型加载失败分类。
 
 本机实测使用合成参考音频和三个中文资源 ID，经 PresenceKit → HTTP 节点 → GPT-SoVITS API v2 合成两句中文，得到 32 kHz、173120 帧的 WAV。两台物理设备、两组真实角色声线及客户端播放为 `observe`。
+
+## DIST-04 STT 和文本回退
+
+- 命名 STT 的 `direct: true` 跳过全局代理，默认 `false` 兼容已有配置。每连接超时为 1–20 秒，默认 12 秒。管理面保存后立即生效。`stt_presets.fallbacks.voice_message` 默认空，只有管理员显式选择的不同备用连接才会收到音频。触发条件为连接失败、超时或 HTTP 502–504，每次最多尝试一次备用。证书校验失败、鉴权失败、无效音频、空转写、词表回声和协议错误都不会触发备用。未配置命名块时 `/transcribe` 仍走本地。配置命名块后，即使关闭远程也不预热本地模型。
+- `GET /stt-presets` 的 `fallback_effective` 表示备用路由配置已生效。`GET /observability/api-calls?caller=stt` 用 `logical_call_id` 关联尝试，记录 `route_role`、`switch_reason` 和结果。录音、转写文本和词表提示均不写入台账。
+- 文本继续使用原按角色/用途选择、SDK 连接策略、取消与总时间预算，以及 profile 的显式备用路由。私网文本地址使用 `proxy.model_connection_mode=auto` 或 `direct`。本次未调整文本 Failover 策略。
+
+### 实际 HTTP 验证
+
+| 链路 | 证据 |
+|---|---|
+| LLM | 两个独立公网 API 域名分别返回有效文本。隔离配置中令主地址拒连后，既有 Failover 调用公网备用成功，台账记录 `primary` 失败及 `fallback/connection_error` 成功。 |
+| VLM | 本机配置的 Ollama 对合成 JPEG 返回描述，主后端签发观察凭据。 |
+| STT | 本机独立 HTTP 端点用真实 Faster Whisper small 推理。主端口拒连后，桌面和手机的 `/transcribe` 请求均从备用端点取得正确中文、置信度和凭据。主后端 STT 模型缓存为空。 |
+| TTS | 节点代理经本机 GPT-SoVITS API v2 返回可解码 WAV，见 DIST-03。 |
+| Embedding | 配置的公网 OpenAI 兼容 API 为合成文本返回 1 条 1024 维向量。 |
+
+真正由 VPS 访问另一台设备的 VLM、STT 和 GPT-SoVITS，以及私网设备断线与重连，仍为 `observe`。DIST-05 至 DIST-07 依赖此前置验收，仍为 `roadmap`。

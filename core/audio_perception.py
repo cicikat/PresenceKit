@@ -48,7 +48,11 @@ def get_config():
 def config():
     block = (get_config() or {}).get("stt_presets") or {}
     return {"enabled": block.get("enabled") is True, "presets": block.get("presets") or {},
-            "routes": block.get("routes") or {}}
+            "routes": block.get("routes") or {}, "fallbacks": block.get("fallbacks") or {}}
+
+
+def uses_local_transcribe(cfg: dict) -> bool:
+    return "stt_presets" not in cfg
 
 
 def snapshot():
@@ -63,7 +67,13 @@ def snapshot():
         ready = True
     except (ValueError, TypeError):
         ready = False
-    legacy_local = "stt_presets" not in (get_config() or {})
+    legacy_local = uses_local_transcribe(get_config() or {})
+    fallback_name = block["fallbacks"].get("voice_message", "")
+    try:
+        fallback_ready = bool(block["enabled"] and ready and fallback_name and fallback_name != name
+                              and validate_preset(block["presets"].get(fallback_name) or {}))
+    except (ValueError, TypeError):
+        fallback_ready = False
     stt_effective = (block["enabled"] and ready) or (legacy_local and local_stt_installed())
     analysis_on = speech_analysis_enabled()
     try:
@@ -79,6 +89,7 @@ def snapshot():
     result.update(configured=ready, effective=stt_effective,
                   blocking_reason="" if stt_effective else ("missing_dependency" if legacy_local else "disabled" if not block["enabled"] else "missing_connection"),
                   source="legacy_local" if legacy_local else "stt_presets", purpose="voice_message",
+                  fallback_effective=fallback_ready,
                   legacy_local_transcribe=legacy_local,
                   speech_analysis_enabled=analysis_on,
                   analysis_deps_ready=analysis_deps,
@@ -201,7 +212,8 @@ def audio_music_flags_snapshot(
 def validate_preset(preset):
     base = str(preset.get("base_url", "")).strip().rstrip("/")
     parsed = urlsplit(base)
-    if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
+    if (parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.port == 0
+            or parsed.username is not None or parsed.password is not None or parsed.query or parsed.fragment):
         raise ValueError("STT base URL must be HTTP(S), without credentials or query")
     model = str(preset.get("model", "")).strip()
     if not model or len(model) > 200:
@@ -211,6 +223,7 @@ def validate_preset(preset):
         raise ValueError("STT timeout must be 1–20 seconds")
     return {"base_url": base, "model": model, "api_key": str(preset.get("api_key", "")),
             "timeout_seconds": timeout, "protocol": "audio_transcriptions",
+            "direct": preset.get("direct") is True,
             "verbose_json": preset.get("verbose_json") is True}
 
 
@@ -230,9 +243,10 @@ async def _request(data, filename, preset):
         form.add_field("prompt", hint)
     headers = {"Authorization": "Bearer " + preset["api_key"]} if preset.get("api_key") else {}
     from core.proxy_config import get_aiohttp_proxy
-    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=preset["timeout_seconds"])) as session:
+    proxy = None if preset.get("direct") else get_aiohttp_proxy()
+    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=preset["timeout_seconds"]), trust_env=False) as session:
         async with session.post(preset["base_url"] + "/audio/transcriptions", data=form,
-                                headers=headers, proxy=get_aiohttp_proxy(), allow_redirects=False) as response:
+                                headers=headers, proxy=proxy, allow_redirects=False) as response:
             response.raise_for_status()
             chunks, size = [], 0
             async for chunk in response.content.iter_chunked(16384):
@@ -249,47 +263,19 @@ async def ingest_audio_bytes(data, filename):
     block = config()
     if not block["enabled"]:
         return None
-    started = time.perf_counter()
-    preset_name = block["routes"].get("voice_message", "")
-    ok = False
-    output_hint = ""
-    try:
-        preset = validate_preset(block["presets"][preset_name])
-        from core.stt_vocabulary import hotwords, is_prompt_echo
-        hint = hotwords()
-        result = await asyncio.wait_for(_request(data, filename, preset), preset["timeout_seconds"])
-        text = result.get("text")
-        if not isinstance(text, str) or not text.strip():
-            output_hint = "empty_text"
+    primary = block["routes"].get("voice_message", "")
+    fallback = block["fallbacks"].get("voice_message", "")
+    call_id = secrets.token_hex(12)
+    payload, retry_reason = await _transcribe_attempt(data, filename, block, primary, call_id, "primary",
+                                                      can_fallback=bool(fallback and fallback != primary))
+    if retry_reason:
+        # A hot revocation during the first attempt must not send the recording
+        # to a connection that is no longer the selected backup.
+        if config() != block:
             return None
-        text = text.strip()[:12000]
-        if hint and is_prompt_echo(text, hint):
-            # Decoder repeated the biasing hint back as "transcription" — not
-            # a real utterance. Treat exactly like "didn't catch it".
-            output_hint = "prompt_echo"
-            return None
-        # Optional provider field only; never infer emotion from transcript words.
-        tone = result.get("tone", "unclear")
-        tone = tone if isinstance(tone, str) and tone in TONES else "unclear"
-        from core.stt_vocabulary import correct
-        payload = {"text": correct(text), "tone": tone}
-        quality = quality_from_segments(result.get("segments")) if preset.get("verbose_json") else None
-        if quality:
-            payload["asr_quality"] = quality
-        ok = True
-    except Exception as error:
-        # Never log payload, URL, key or provider response body — only the
-        # exception class, which carries no request/response content.
-        output_hint = type(error).__name__
-        logger.warning("[audio_perception] 远程 STT 转写失败: %s", output_hint)
-        return None
-    finally:
-        from core.api_call_log import append
-        append(caller="stt", purpose="transcribe_remote", provider=preset_name,
-               model=str((block["presets"].get(preset_name) or {}).get("model", "")),
-               duration_ms=int((time.perf_counter() - started) * 1000), ok=ok,
-               output_hint=output_hint)
-    if speech_analysis_enabled():
+        payload, _ = await _transcribe_attempt(data, filename, block, fallback, call_id, "fallback",
+                                                switch_reason=retry_reason)
+    if payload and speech_analysis_enabled():
         try:
             payload.update(await _attach_acoustic(bytes(data), filename, payload["tone"]))
         except Exception:
@@ -300,6 +286,65 @@ async def ingest_audio_bytes(data, filename):
                 "acoustic": compact,
             })
     return payload
+
+
+def _retry_reason(error: Exception) -> str:
+    if isinstance(error, TimeoutError):
+        return "timeout"
+    if isinstance(error, aiohttp.ClientSSLError):
+        return ""
+    if isinstance(error, aiohttp.ClientConnectionError):
+        return "connection_error"
+    if isinstance(error, aiohttp.ClientResponseError) and error.status in {502, 503, 504}:
+        return "upstream_unavailable"
+    return ""
+
+
+async def _transcribe_attempt(data, filename, block, preset_name, call_id, role, *,
+                              can_fallback=False, switch_reason=""):
+    started = time.perf_counter()
+    ok = False
+    output_hint = ""
+    retry_reason = ""
+    try:
+        preset = validate_preset(block["presets"][preset_name])
+        from core.stt_vocabulary import hotwords, is_prompt_echo
+        hint = hotwords()
+        result = await asyncio.wait_for(_request(data, filename, preset), preset["timeout_seconds"])
+        text = result.get("text")
+        if not isinstance(text, str) or not text.strip():
+            output_hint = "empty_text"
+            return None, ""
+        text = text.strip()[:12000]
+        if hint and is_prompt_echo(text, hint):
+            # Decoder repeated the biasing hint back as "transcription" — not
+            # a real utterance. Treat exactly like "didn't catch it".
+            output_hint = "prompt_echo"
+            return None, ""
+        # Optional provider field only; never infer emotion from transcript words.
+        tone = result.get("tone", "unclear")
+        tone = tone if isinstance(tone, str) and tone in TONES else "unclear"
+        from core.stt_vocabulary import correct
+        payload = {"text": correct(text), "tone": tone}
+        quality = quality_from_segments(result.get("segments")) if preset.get("verbose_json") else None
+        if quality:
+            payload["asr_quality"] = quality
+        ok = True
+        return payload, ""
+    except Exception as error:
+        # Never log payload, URL, key or provider response body — only the
+        # exception class, which carries no request/response content.
+        output_hint = type(error).__name__
+        retry_reason = _retry_reason(error)
+        logger.warning("[audio_perception] 远程 STT 转写失败: %s", output_hint)
+        return None, retry_reason if can_fallback else ""
+    finally:
+        from core.api_call_log import append
+        append(caller="stt", purpose="transcribe_remote", provider=preset_name,
+               model=str((block["presets"].get(preset_name) or {}).get("model", "")),
+               duration_ms=int((time.perf_counter() - started) * 1000), ok=ok,
+               output_hint=output_hint, error_category=retry_reason,
+               logical_call_id=call_id, route_role=role, switch_reason=switch_reason)
 
 
 BASE_VOICE_HINT = (

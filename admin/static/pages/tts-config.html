@@ -9,9 +9,12 @@
   <label class="field"><span data-i18n="stt.base_url">Base URL</span><input id="stt-url" type="url" placeholder="https://api.example.com/v1"></label>
   <label class="field"><span data-i18n="stt.model">转写模型</span><input id="stt-model" type="text"></label>
   <label class="field"><span data-i18n="stt.key">API key（留空保留）</span><input id="stt-key" type="password" autocomplete="new-password"></label>
+  <label class="field"><span data-i18n="stt.timeout">单次超时（秒）</span><input id="stt-timeout" type="number" min="1" max="20" value="12"></label>
+  <label class="checkbox-row"><input id="stt-direct" type="checkbox"><span data-i18n="stt.direct">此连接直连（可信私网，默认跟随全局代理）</span></label>
   <button class="btn btn-primary" data-action="saveSttConnection" data-i18n="stt.save">保存连接</button>
   <label class="checkbox-row"><input id="stt-enabled" type="checkbox"><span data-i18n="stt.enabled">启用语音感知</span></label>
   <label class="field"><span data-i18n="stt.purpose">语音消息使用连接</span><select id="stt-route"></select></label>
+  <label class="field"><span data-i18n="stt.fallback">语音消息备用连接</span><select id="stt-fallback"></select><small data-i18n="stt.fallback_hint">默认不发送到备用连接。显式选择后，主连接遇到连接失败、超时或 HTTP 502–504 才发送到备用连接一次。清空即关闭。</small></label>
   <button class="btn btn-primary" data-action="saveSttPurpose" data-i18n="stt.route_save">保存用途与开关</button>
   <pre id="stt-state"></pre>
   <div class="card-header"><h4 data-i18n="stt.vocabulary.title">自定义识别词</h4><button class="btn btn-ghost btn-sm" data-action="loadSttVocabulary" data-i18n="common.refresh">刷新</button></div>

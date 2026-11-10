@@ -419,7 +419,15 @@ hardware:
   intiface_opt_in: false  # Brief 151: dormant reserve; explicit opt-in required
   buttplug_ws: ws://127.0.0.1:12345
   max_job_duration_ms: 900000  # 单个后台硬件动作最长 15 分钟
-# 本地语音识别引擎（POST /transcribe 在没有 stt_presets 块时使用；有该块时远程优先）。管理面「本地模型运行」页可视化编辑。
+# 远程语音识别可选。启用命名连接后，/transcribe、QQ 和单音频上传共用 voice_message。
+# stt_presets:
+#   enabled: false
+#   presets:
+#     speech: {base_url: 'https://stt.example/v1', model: 'whisper', timeout_seconds: 12, direct: false}
+#     backup: {base_url: 'https://backup.example/v1', model: 'whisper', timeout_seconds: 12}
+#   routes: {voice_message: speech}
+#   fallbacks: {}  # 默认关闭。显式填 voice_message: backup 才授权故障时发送至备用连接。
+# 本地语音识别引擎（仅当没有 stt_presets 块时由 POST /transcribe 使用）。管理面「本地模型运行」页可视化编辑。
 # stt_local:
 #   engine: faster_whisper      # faster_whisper（默认）| sherpa_onnx
 #   timeout_seconds: 20         # 两个引擎共用

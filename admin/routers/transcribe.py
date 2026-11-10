@@ -120,8 +120,8 @@ async def transcribe_audio(
         raise HTTPException(status_code=422, detail="音频内容为空")
 
     from core.config_loader import get_config
-    from core.audio_perception import ingest_audio_bytes, issue_receipt
-    if "stt_presets" in get_config():
+    from core.audio_perception import ingest_audio_bytes, issue_receipt, uses_local_transcribe
+    if not uses_local_transcribe(get_config()):
         result = await ingest_audio_bytes(data, file.filename or "voice.webm")
         if not result:
             raise HTTPException(status_code=422, detail="语音识别未启用、未配置或未能听清，请重试或输入文字")

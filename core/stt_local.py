@@ -349,17 +349,13 @@ def reset_for_tests() -> None:
 def _local_stt_selected() -> bool:
     """True when this deployment will actually use the local backend.
 
-    A pure-remote deployment (``stt_presets`` configured and enabled) should
-    not pay the model-load cost. ``faster_whisper``/``whisper`` missing is
+    Any named STT configuration owns the route, even when disabled.
+    ``faster_whisper``/``whisper`` missing is
     also "not selected" — ``get_backend()`` would just raise.
     """
-    try:
-        from core import audio_perception
-        remote = audio_perception.config()
-        if remote.get("enabled"):
-            return False
-    except Exception:  # noqa: BLE001 - never block warmup decision on this
-        pass
+    from core.audio_perception import get_config, uses_local_transcribe
+    if not uses_local_transcribe(get_config()):
+        return False
     if settings().get("engine") == "sherpa_onnx":
         # Only warm up when the package and the downloaded model are both there; otherwise the first
         # real request reports the actionable error instead of startup logging a failure nobody asked for.

@@ -178,6 +178,29 @@ def test_snapshot_masks_secrets(configured):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("first,expected_calls", [(TimeoutError(), 2), ({"text": ""}, 1), (ValueError("invalid audio"), 1)])
+async def test_stt_fallback_requires_a_transport_failure(configured, monkeypatch, first, expected_calls):
+    block = configured["stt_presets"]
+    block["presets"]["backup"] = {"base_url": "http://100.64.10.5/v1", "model": "backup-stt", "direct": True}
+    block["fallbacks"] = {"voice_message": "backup"}
+    ledger = []
+    monkeypatch.setattr("core.api_call_log.append", lambda **row: ledger.append(row))
+    request = AsyncMock(side_effect=[first, {"text": "recognized"}])
+    monkeypatch.setattr(audio, "_request", request)
+    result = await audio.ingest_audio_bytes(b"fixture", "x.wav")
+    assert request.await_count == expected_calls
+    if expected_calls == 2:
+        assert result["text"] == "recognized"
+        assert request.await_args.args[2]["direct"] is True
+        assert [row["route_role"] for row in ledger] == ["primary", "fallback"]
+        assert ledger[0]["logical_call_id"] == ledger[1]["logical_call_id"]
+        assert ledger[1]["switch_reason"] == "timeout"
+        assert "recognized" not in str(ledger)
+    else:
+        assert result is None
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("oversize", [False, True])
 async def test_transport_collects_chunked_json_with_size_limit(configured, monkeypatch, oversize):
     class Content:
