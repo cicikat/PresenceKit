@@ -31,3 +31,24 @@
 `video_call_tool` 未配置时继承 `video_call`，显式留空时关闭。两条链及摄像头 shadow 直连、禁重定向和公网兜底。原始帧仅在请求内存中处理。配置变更、关闭摄像头或会话失效后，迟到结果作废。
 
 `/video-call/state` 按用途显示 `endpoint_type`、`configured`、`effective`、`blocking_reason`、`retry_after_seconds`。服务拒连、模型 404 或其他 HTTP 故障会标记对应路由 15 秒。到期允许请求恢复检测。有效状态表示当前允许发起请求。保存连接的合成图片测试用于单独验证推理。
+
+本机 Ollama 用合成纯蓝 JPEG 返回正确描述和一次性凭据。测试将全局代理指向不可用地址，摄像头请求仍直接抵达配置中的本机 VLM。浏览器验证私网授权、用途选择和撤销。另一台机器上的 VLM 推理仍为 `observe`。
+
+## DIST-03 GPT-SoVITS 私网节点
+
+1. 在推理节点启动 GPT-SoVITS `api_v2.py`，只监听 loopback，供节点代理独占使用。通过 `-c` 指向节点专用推理配置，因为上游切换权重时会更新这份文件。上游有打印合成文本、参考文本和文件路径的版本，应在该进程禁用常规访问日志及输出采集。准备专用资源目录，把参考音频和配对的权重部署到该目录。编写 UTF-8 JSON 清单，路径相对该目录，键为稳定逻辑 ID，可用中文。
+
+   ```json
+   {
+     "reference": {"角色_普通": "references/neutral.wav"},
+     "gpt": {"角色_v2_gpt": "weights/voice.ckpt"},
+     "sovits": {"角色_v2_sovits": "weights/voice.pth"}
+   }
+   ```
+
+2. 在节点进程环境设置 `PRESENCEKIT_GSV_NODE_TOKEN`。从 PresenceKit 仓库运行 `python -m scripts.serve_gsv_node --root <资源目录> --manifest <清单> --gsv-url <本机API地址> --host <加密私网IP> --port <端口>`。节点代理只接受 Bearer 鉴权。使用单 worker，并在私网 ACL 中仅放行主后端。需要重载清单时重启该节点代理。
+3. 在主后端「语音合成与声音」选角色，填 GPT-SoVITS 私网节点 URL 和令牌。在其他 Provider 参数增加 JSON 对象 `node_resources`。其 `reference`、`gpt`、`sovits` 分别将原有参考音频与权重选择值映射到清单 ID，例如 `{ "reference": {"neutral.wav":"角色_普通"}, "gpt": {"voice.ckpt":"角色_v2_gpt"}, "sovits": {"voice.pth":"角色_v2_sovits"} }`。已有情绪引用同样需要映射。选定版本需要成对提供两项权重，自动模式也须显式选两项。清空节点 URL 即恢复 Gradio。
+
+PresenceKit 按角色、版本和情绪选资源，在节点模式只发送逻辑 ID 与合成文本参数。节点校验资源位于根目录内，完整切换两项权重后才逐段合成并返回 WAV。未配置或缺失的资源报错，不回退底模。节点同一时间处理一个请求，忙时立即拒绝。管理面试听和现有调用台账提供离线、忙碌、超时、资源缺失和模型加载失败分类。
+
+本机实测使用合成参考音频和三个中文资源 ID，经 PresenceKit → HTTP 节点 → GPT-SoVITS API v2 合成两句中文，得到 32 kHz、173120 帧的 WAV。两台物理设备、两组真实角色声线及客户端播放为 `observe`。

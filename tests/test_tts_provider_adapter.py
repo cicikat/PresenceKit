@@ -32,6 +32,35 @@ def test_legacy_gsv_fields_are_mapped_without_new_provider_block():
     }
 
 
+def test_gsv_node_requires_explicit_pair_and_exact_resource_mapping():
+    from core.output.gsv_node import GsvNodeError, resource_ids
+
+    cfg = {"node_url": "http://100.64.10.5:9881", "ref_audio": "ref.wav", "gpt_model_path": "voice.ckpt",
+           "node_resources": {"reference": {"ref.wav": "普通参考", "angry.wav": "情绪参考"},
+                              "gpt": {"voice.ckpt": "语言模型"}, "sovits": {"voice.pth": "声音模型"}}}
+    assert voice_adapter.selected_gsv_models(cfg) is None
+    cfg["sovits_model_path"] = "voice.pth"
+    pair = voice_adapter.selected_gsv_models(cfg)
+    assert resource_ids(cfg, "angry.wav", pair) == {"reference": "情绪参考", "gpt": "语言模型", "sovits": "声音模型"}
+    with pytest.raises(GsvNodeError, match="resource_missing"):
+        resource_ids(cfg, "another-role.wav", pair)
+
+
+def test_gsv_node_requires_bearer_and_rejects_paths(tmp_path):
+    from fastapi.testclient import TestClient
+    from scripts.serve_gsv_node import create_app
+
+    resources = {"reference": {"ref": tmp_path / "missing.wav"}, "gpt": {}, "sovits": {}}
+    body = {"reference": "ref", "gpt": "gpt", "sovits": "sovits", "segments": [["test", "en"]]}
+    with TestClient(create_app(api_url="http://127.0.0.1:1", key="fixture", resources=resources)) as client:
+        assert client.post("/synthesize", json=body).status_code == 401
+        headers = {"Authorization": "Bearer fixture"}
+        response = client.post("/synthesize", json={**body, "reference": "../anything.wav"}, headers=headers)
+        assert response.json() == {"detail": "node_config_invalid"}
+        response = client.post("/synthesize", json=body, headers=headers)
+        assert response.status_code == 404 and response.json() == {"detail": "resource_missing"}
+
+
 def test_new_provider_block_overrides_legacy_gsv_fields():
     provider, cfg = voice_adapter.get_provider_config({
         "provider": "gpt_sovits",

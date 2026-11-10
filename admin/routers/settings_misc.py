@@ -3,7 +3,6 @@
 """
 
 import base64
-from pathlib import Path
 from typing import Literal, Optional
 
 import yaml
@@ -12,11 +11,11 @@ from pydantic import BaseModel
 
 from admin.auth import require_scopes
 from admin.config_control import read_config_file, write_config_file
-from core.config_loader import get_config
+from core.config_loader import get_config, get_config_path
 from core.data_paths import DEFAULT_CHAR_ID
 
 router = APIRouter()
-CONFIG_FILE = Path("config.yaml")
+CONFIG_FILE = get_config_path()
 
 # ─── 工具注册表（只读诊断） ─────────────────────────────────────────────────────
 
@@ -216,6 +215,17 @@ async def update_tts_config(body: TtsConfigUpdate, auth=Depends(require_scopes("
         ):
             raise HTTPException(status_code=422, detail="参考音频文本映射最多 64 项；音频名和文本长度超限")
     if body.provider_params is not None:
+        from core.output.gsv_node import RESOURCE_ID_PATTERN, node_url_allowed
+        import re
+        node_url = body.provider_params.get("node_url", "")
+        if not isinstance(node_url, str) or (node_url and not node_url_allowed(node_url)):
+            raise HTTPException(status_code=422, detail="GPT-SoVITS 节点 URL 需要私网 IP 或 loopback")
+        mapping = body.provider_params.get("node_resources", {})
+        if (not isinstance(mapping, dict) or set(mapping) - {"reference", "gpt", "sovits"}
+                or any(not isinstance(entries, dict) or len(entries) > 128 or any(
+                    not isinstance(resource, str) or not re.fullmatch(RESOURCE_ID_PATTERN, resource)
+                    for resource in entries.values()) for entries in mapping.values())):
+            raise HTTPException(status_code=422, detail="GPT-SoVITS 节点资源映射无效")
         version = body.provider_params.get("gsv_version", "auto")
         routes = body.provider_params.get("version_models", {})
         if version not in {"auto", "v2", "v3", "v2Pro", "v2ProPlus"}:
@@ -306,7 +316,16 @@ async def test_tts_config(body: TtsTestRequest, auth=Depends(require_scopes("adm
     status = get_provider_status(resolve_tts_config(body.char_id))
     if not status["ready"]:
         raise HTTPException(status_code=409, detail=status["reason"])
-    audio = await synthesize(text, body.emotion, char_id=body.char_id)
+    if status["transport"] == "private_node":
+        from core.output.gsv_node import GsvNodeError
+        try:
+            audio = await synthesize(text, body.emotion, char_id=body.char_id, raise_node_error=True)
+        except GsvNodeError as error:
+            status_code = {"node_timeout": 504, "node_busy": 429, "node_offline": 503,
+                           "resource_missing": 409, "node_config_invalid": 409}.get(error.code, 502)
+            raise HTTPException(status_code, detail=error.code) from None
+    else:
+        audio = await synthesize(text, body.emotion, char_id=body.char_id)
     if not audio:
         raise HTTPException(status_code=502, detail="TTS 未返回音频；请查看最近合成记录")
     return {"audio_b64": base64.b64encode(audio).decode("ascii"), "mime": "audio/wav", "provider": status["provider"]}

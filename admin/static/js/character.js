@@ -82,8 +82,9 @@ function _renderTtsResourceSelect(id, rows, current) {
 
 function _renderTtsProvider(provider) {
   const params = _ttsProviderParamsByProvider[provider] || {};
-  renderKeyValueEditor('tts-provider-params', params, { exclude: ['api_key', 'api_url', 'ref_audio', 'gpt_model_path', 'sovits_model_path', 'gsv_version', 'version_models', 'prompt_text', 'reference_texts', 'speed'] });
+  renderKeyValueEditor('tts-provider-params', params, { exclude: ['api_key', 'api_url', 'node_url', 'ref_audio', 'gpt_model_path', 'sovits_model_path', 'gsv_version', 'version_models', 'prompt_text', 'reference_texts', 'speed'] });
   document.getElementById('tts-api-url').value = params.api_url || '';
+  document.getElementById('tts-gsv-node-url').value = params.node_url || '';
   document.getElementById('tts-ref-audio').value = params.ref_audio || '';
   document.getElementById('tts-gpt-model-path').value = params.gpt_model_path || '';
   document.getElementById('tts-sovits-model-path').value = params.sovits_model_path || '';
@@ -171,6 +172,7 @@ async function saveTtsConfig() {
   const provider = document.getElementById('tts-provider').value;
   if (provider === 'openai_compatible') { toast(t('status.tts.provider_unavailable', '该 TTS Provider 尚未实装，不能保存。'), 'err'); return; }
   providerParams.api_url = document.getElementById('tts-api-url').value.trim();
+  providerParams.node_url = document.getElementById('tts-gsv-node-url').value.trim();
   providerParams.ref_audio = document.getElementById('tts-ref-audio').value.trim();
   providerParams.gpt_model_path = (_ttsAutoModels.gpt_model_path || '').trim();
   providerParams.sovits_model_path = (_ttsAutoModels.sovits_model_path || '').trim();

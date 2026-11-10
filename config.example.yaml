@@ -343,6 +343,9 @@ tts:
   providers:
     # Optional new-style block. Omit it to continue using the legacy fields below.
     gsv: {}
+    # 可选：在 gsv 中填 node_url（可信私网资源代理）与 api_key（节点令牌）。
+    # node_resources: {reference: {ref_selector: ref_id}, gpt: {gpt_selector: gpt_id}, sovits: {sovits_selector: sovits_id}}
+    # node_url 默认空；清空即恢复旧 Gradio。详见 docs/distributed-inference.md。
     # Reserved configuration slot only; no cloud protocol is assumed or activated.
     openai_compatible:
       api_url: ''

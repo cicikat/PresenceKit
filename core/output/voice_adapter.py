@@ -348,6 +348,15 @@ def get_provider_status(cfg: dict | None = None) -> dict:
             models = selected_gsv_models(selected)
             ready = bool(models)
             reason = "" if ready else "Selected GSV version requires both GPT and SoVITS weights"
+        if selected.get("node_url"):
+            from core.output.gsv_node import GsvNodeError, node_url_allowed, resource_ids
+            try:
+                if not node_url_allowed(str(selected["node_url"])) or not selected.get("api_key"):
+                    raise GsvNodeError("node_config_invalid")
+                resource_ids(selected, str(selected.get("ref_audio") or ""), selected_gsv_models(selected))
+                ready, reason = True, ""
+            except GsvNodeError as error:
+                ready, reason = False, error.code
     elif provider == _OPENAI_COMPAT_PROVIDER:
         ready = bool(selected.get("base_url"))
         reason = "" if ready else "openai_compatible requires base_url (api_key optional for unauthenticated local deployments)"
@@ -360,6 +369,7 @@ def get_provider_status(cfg: dict | None = None) -> dict:
         "ready": ready,
         "reason": reason,
         "api_key_configured": bool(selected.get("api_key")),
+        "transport": "private_node" if provider == _GSV_PROVIDER and selected.get("node_url") else provider,
     }
 
 
@@ -386,6 +396,9 @@ def selected_gsv_models(cfg: dict) -> tuple[str, str] | None:
     """Choose a saved version pair; legacy auto keeps its existing fallbacks."""
     version = str(cfg.get("gsv_version") or "auto")
     if version == "auto":
+        if cfg.get("node_url"):
+            gpt, sovits = cfg.get("gpt_model_path"), cfg.get("sovits_model_path")
+            return (str(gpt), str(sovits)) if gpt and sovits else None
         return (
             str(cfg.get("gpt_model_path") or cfg.get("gpt_model_fallback") or _DEFAULT_GPT_MODEL),
             str(cfg.get("sovits_model_path") or cfg.get("sovits_model_fallback") or _DEFAULT_SOVITS_MODEL),
@@ -635,6 +648,8 @@ class GsvProvider:
             speed = float(cfg.get("speed", 1.0))
         if cfg.get("ref_free", False):
             prompt_txt = ""
+        if cfg.get("node_url"):
+            return await _synthesize_gsv_node(cfg, text, ref_audio, prompt_txt, speed)
         ref_audio = _resolve_audio_path(ref_audio, char_id=char_id)
         if not ref_audio:
             logger.warning("[voice_adapter] GSV ref_audio is not configured")
@@ -757,6 +772,30 @@ class GsvProvider:
             raise
 
 
+async def _synthesize_gsv_node(cfg: dict, text: str, reference: str, prompt_text: str, speed: float) -> bytes:
+    from core.output import gsv_node
+    from pydantic import ValidationError
+
+    ids = gsv_node.resource_ids(cfg, reference, selected_gsv_models(cfg))
+    languages = {"中文": "zh", "英文": "en", "日文": "ja", "韩文": "ko", "粤语": "yue",
+                 "中英混合": "zh", "日英混合": "ja", "韩英混合": "ko", "粤英混合": "yue", "多语种混合": "auto"}
+    prompt_lang = str(cfg.get("prompt_language") or "中文")
+    try:
+        speech = gsv_node.SpeechRequest(
+            **ids, prompt_text=prompt_text, prompt_lang=languages.get(prompt_lang, prompt_lang),
+            speed=speed, segments=[(part, languages[language]) for part, language in split_gsv_segments(text, cfg)],
+            pause_seconds=cfg.get("segment_pause_seconds", _GSV_DEFAULT_SEGMENT_PAUSE_SECONDS),
+            segment_timeout=_float_cfg(cfg, "segment_timeout_seconds", _GSV_DEFAULT_SEGMENT_TIMEOUT),
+            switch_timeout=_float_cfg(cfg, "model_switch_timeout_seconds", _GSV_DEFAULT_MODEL_SWITCH_TIMEOUT),
+            top_k=cfg.get("top_k", 15), top_p=cfg.get("top_p", 1.0), temperature=cfg.get("temperature", 1.0),
+            sample_steps=cfg.get("sample_steps", 8), super_sampling=bool(cfg.get("if_sr")),
+            fragment_interval=cfg.get("pause_second", 0.3),
+        )
+    except ValidationError:
+        raise gsv_node.GsvNodeError("node_config_invalid") from None
+    return await gsv_node.synthesize(str(cfg["node_url"]), str(cfg.get("api_key") or ""), speech)
+
+
 class OpenAICompatibleProvider:
     """OpenAI ``POST {base_url}/audio/speech`` 协议的通用 provider（Brief 107·B2）。
 
@@ -845,7 +884,8 @@ def clean_tts_text(text: str) -> str:
     return _sanitize_tts_text(cleaned).strip()
 
 
-async def synthesize(text: str, emotion: str = "neutral", *, char_id: str | None = None) -> bytes | None:
+async def synthesize(text: str, emotion: str = "neutral", *, char_id: str | None = None,
+                     raise_node_error: bool = False) -> bytes | None:
     """
     将文本合成为语音，返回 wav 音频二进制数据。
 
@@ -892,7 +932,7 @@ async def synthesize(text: str, emotion: str = "neutral", *, char_id: str | None
     _TTS_RUNTIME["pending"] += 1
     try:
         from urllib.parse import urlsplit
-        endpoint = str(provider_cfg.get("api_url") or provider_cfg.get("base_url") or "")
+        endpoint = str(provider_cfg.get("node_url") or provider_cfg.get("api_url") or provider_cfg.get("base_url") or "")
         local_tts = urlsplit(endpoint).hostname in {"localhost", "127.0.0.1", "::1"}
         if local_tts:
             async with _hold_local_resource():
@@ -907,8 +947,16 @@ async def synthesize(text: str, emotion: str = "neutral", *, char_id: str | None
         return None
     except Exception as e:
         from core.api_call_log import append
-        append(caller="tts", purpose="synthesize", provider=provider, model="", duration_ms=int((time.perf_counter() - started_at) * 1000), ok=False, output_hint=type(e).__name__)
-        log_error("voice_adapter.synthesize", e)
+        from core.output.gsv_node import GsvNodeError
+        reason = e.code if isinstance(e, GsvNodeError) else type(e).__name__
+        append(caller="tts", purpose="synthesize", provider=provider, model="", duration_ms=int((time.perf_counter() - started_at) * 1000), ok=False, output_hint=reason)
+        if isinstance(e, GsvNodeError):
+            _record_tts_error(e)
+            logger.warning("[voice_adapter] private GSV node failed: %s", reason)
+            if raise_node_error:
+                raise
+        else:
+            log_error("voice_adapter.synthesize", e)
         return None
     finally:
         _TTS_RUNTIME["pending"] -= 1

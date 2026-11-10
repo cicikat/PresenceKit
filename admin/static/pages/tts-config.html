@@ -62,6 +62,7 @@
   <p class="admin-inline-087" data-i18n="tts_config.advanced_hint">填写 Provider 参数和情绪分档。</p>
   <label class="field"><span data-i18n="tts_config.api_key">Provider API Key（只写入）</span><input type="password" id="tts-provider-api-key" autocomplete="new-password" placeholder="留空则保留已有值" data-i18n-placeholder="setup.secret.keep"></label>
   <label class="field"><span data-i18n="status.tts.provider_params">其他 Provider 参数</span><div id="tts-provider-params"></div></label>
+  <label class="field"><span data-i18n="tts_config.gsv_node_url">GPT-SoVITS 私网节点 URL</span><input id="tts-gsv-node-url" type="url"><small data-i18n="tts_config.gsv_node_hint">默认留空，沿用本地 Gradio。配置后须填节点令牌，并在其他 Provider 参数中以 JSON 对象配置 node_resources，将已选资源映射为节点上的逻辑 ID。</small></label>
   <button type="button" class="btn btn-ghost btn-sm" data-action="addTtsProviderParam" data-i18n="status.tts.add_param">新增参数</button>
   <label class="field"><span data-i18n="tts_config.emotion_tiers">情绪分档参数</span><div id="tts-emotion-tiers"></div></label>
 </details>
