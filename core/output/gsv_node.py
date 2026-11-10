@@ -14,7 +14,7 @@ from core.model_network import private_node_url
 RESOURCE_ID_PATTERN = r"^[\w-]{1,96}$"
 ResourceId = Annotated[str, StringConstraints(min_length=1, max_length=96, pattern=RESOURCE_ID_PATTERN)]
 SpeechText = Annotated[str, StringConstraints(min_length=1, max_length=4000)]
-Language = Literal["zh", "en", "ja", "ko", "yue", "auto", "all_zh", "all_ja", "all_ko", "all_yue"]
+Language = Literal["zh", "en", "ja", "ko", "yue", "auto", "auto_yue", "all_zh", "all_ja", "all_ko", "all_yue"]
 MAX_WAV_BYTES = 32 * 1024 * 1024
 NODE_ERRORS = frozenset({"node_offline", "node_busy", "node_timeout", "resource_missing", "model_unavailable",
                          "node_config_invalid", "node_auth_failed", "invalid_audio", "node_service_error"})

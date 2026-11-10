@@ -61,6 +61,23 @@ def test_gsv_node_requires_bearer_and_rejects_paths(tmp_path):
         assert response.status_code == 404 and response.json() == {"detail": "resource_missing"}
 
 
+@pytest.mark.asyncio
+async def test_gsv_node_preserves_pure_chinese_language(monkeypatch):
+    from core.output import gsv_node
+
+    async def capture(_url, _key, speech):
+        assert speech.prompt_lang == "all_zh"
+        assert speech.segments == [("测试。", "all_zh"), ("Test.", "en")]
+        return _pcm_wav()
+
+    monkeypatch.setattr(gsv_node, "synthesize", capture)
+    cfg = {"node_url": "http://127.0.0.1:9881", "api_key": "test", "ref_audio": "ref.wav",
+           "gpt_model_path": "voice.ckpt", "sovits_model_path": "voice.pth",
+           "node_resources": {"reference": {"ref.wav": "ref"}, "gpt": {"voice.ckpt": "gpt"},
+                              "sovits": {"voice.pth": "sovits"}}}
+    assert await voice_adapter.GsvProvider().synthesize("测试。Test.", "neutral", cfg)
+
+
 def test_new_provider_block_overrides_legacy_gsv_fields():
     provider, cfg = voice_adapter.get_provider_config({
         "provider": "gpt_sovits",

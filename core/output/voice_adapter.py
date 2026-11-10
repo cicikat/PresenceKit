@@ -777,8 +777,9 @@ async def _synthesize_gsv_node(cfg: dict, text: str, reference: str, prompt_text
     from pydantic import ValidationError
 
     ids = gsv_node.resource_ids(cfg, reference, selected_gsv_models(cfg))
-    languages = {"中文": "zh", "英文": "en", "日文": "ja", "韩文": "ko", "粤语": "yue",
-                 "中英混合": "zh", "日英混合": "ja", "韩英混合": "ko", "粤英混合": "yue", "多语种混合": "auto"}
+    languages = {"中文": "all_zh", "英文": "en", "日文": "all_ja", "韩文": "all_ko", "粤语": "all_yue",
+                 "中英混合": "zh", "日英混合": "ja", "韩英混合": "ko", "粤英混合": "yue",
+                 "多语种混合": "auto", "多语种混合(粤语)": "auto_yue"}
     prompt_lang = str(cfg.get("prompt_language") or "中文")
     try:
         speech = gsv_node.SpeechRequest(
