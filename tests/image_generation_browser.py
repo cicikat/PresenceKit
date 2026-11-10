@@ -55,8 +55,13 @@ def main():
                 catalog.update(body)
             elif url.startswith("/image-gen-presets/presets/"):
                 name = url.rsplit("/", 1)[-1]
-                catalog["presets"][name] = {**body, "has_api_key": bool(body.get("api_key")), "ready": True}
-                catalog["presets"][name].pop("api_key", None)
+                if method == "DELETE":
+                    if catalog["default_preset"] == name:
+                        return request.fulfill(status=409, json={"detail": "请先更换默认生图连接"})
+                    del catalog["presets"][name]
+                else:
+                    catalog["presets"][name] = {**body, "has_api_key": bool(body.get("api_key")), "ready": True}
+                    catalog["presets"][name].pop("api_key", None)
             return request.fulfill(status=200, content_type="application/json", body=json.dumps(result))
 
         page.route("**/*", route)
@@ -76,7 +81,13 @@ def main():
           await loadImageGeneration();
         }""")
         assert page.locator('[data-layout-key="model-generation"] #image-generation-card').count() == 1
+        assert page.locator('[data-layout-key="model-generation"] > div > [data-image-generation-card]').count() == 4
         page.locator('[data-action="editImageGeneration"]').click()
+        editor = page.get_by_role("dialog", name="新建 Preset")
+        assert editor.is_visible()
+        assert not page.locator("#ig-search-field").is_visible()
+        page.locator("#ig-provider_kind").select_option("runware")
+        assert page.locator("#ig-search-field").is_visible()
         assert page.locator("#ig-name").is_enabled()
         page.locator("#ig-name").fill("fixture")
         page.locator("#ig-base_url").fill("https://fixture.invalid/v1")
@@ -89,11 +100,13 @@ def main():
         page.locator("#ig-description").fill("Illustrations")
         page.locator('[data-action="saveImageGeneration"]').click()
         page.wait_for_selector("#ig-list tr")
+        assert not editor.is_visible()
         assert "fixture-key" not in page.locator("#ig-list").inner_text()
         page.locator("#ig-enabled").check()
         page.locator("#ig-default").select_option("fixture")
         page.locator('[data-action="saveImageGenerationRouting"]').click()
-        page.wait_for_function("document.getElementById('ig-status').textContent.includes('已保存')")
+        page.wait_for_function("document.getElementById('ig-routing-status').textContent.includes('已保存')")
+        page.locator("#ig-list").get_by_text("全局默认", exact=True).wait_for()
         page.locator("#ig-inherit").uncheck()
         page.locator('#ig-allowlist input[value="fixture"]').check()
         page.locator('[data-action="saveImageGenerationCharacter"]').click()
@@ -103,14 +116,28 @@ def main():
         page.locator('[data-action="saveImageConstraints"]').click()
         page.wait_for_function("document.getElementById('ig-constraint').value === 'Painterly'")
         assert catalog["prompt_constraints"]["selected"] == "Painterly"
-        page.on("dialog", lambda dialog: dialog.accept())
-        page.locator("#ig-list button").nth(1).click()
-        page.wait_for_function("document.getElementById('ig-status').textContent.includes('连接测试成功')")
-        page.locator('[data-layout-key="model-generation"]').screenshot(path=str(output / "admin.png"))
-        page.locator("#ig-list button").nth(0).click()
+        page.locator("#ig-list [data-ig-test]").click()
+        page.get_by_text("连接测试成功 · cheap-fixture · 12 ms（仅验证测试模型）", exact=True).wait_for()
+        page.locator("#image-generation-card").screenshot(path=str(output / "admin.png"))
+        page.locator("#ig-list").get_by_role("button", name="编辑").click()
+        assert page.get_by_role("dialog", name="编辑 Preset · fixture").is_visible()
+        assert not page.locator("#ig-name").is_enabled()
+        assert page.locator("#ig-api_key").input_value() == ""
         assert not page.locator("#ig-model-results").is_visible()
+        page.get_by_role("dialog", name="编辑 Preset · fixture").screenshot(path=str(output / "editor.png"))
+        page.locator("#ig-api_key").fill("unsaved-key")
+        page.locator("#ig-cancel").click()
+        assert page.locator("#ig-api_key").input_value() == ""
+        assert not page.locator("#ig-editor").is_visible()
         assert catalog["enabled"] and catalog["default_preset"] == "fixture"
         assert binding["image_gen"] == ["fixture"]
+        page.locator("#ig-default").select_option("")
+        page.locator('[data-action="saveImageGenerationRouting"]').click()
+        page.locator("#ig-list").get_by_text("全局默认", exact=True).wait_for(state="hidden")
+        page.locator("#ig-list").get_by_role("button", name="删除").click()
+        assert page.locator("#at-confirm-modal").is_visible()
+        page.locator("#at-confirm-btn").click()
+        page.locator("#ig-list").get_by_text("暂无生图连接").wait_for()
         assert not errors, errors
         print(json.dumps({"browser": "passed", "writes": len(writes), "page_errors": errors}))
         browser.close()

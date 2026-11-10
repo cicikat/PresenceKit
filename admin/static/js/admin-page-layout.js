@@ -189,7 +189,9 @@ const AdminPageLayout = (() => {
       let destination = vision;
       for (const node of original) {
         if (node.dataset.i18n === 'routing.text_heading') destination = text;
-        if (node.matches('.card') && !node.classList.contains('admin-legacy-only')) move(node, node.id === 'image-generation-card' ? generation : destination);
+        if (node.matches('.card') && !node.classList.contains('admin-legacy-only')) {
+          move(node, node.hasAttribute('data-image-generation-card') ? generation : destination);
+        }
       }
       const roleRoot = document.getElementById('page-role-bindings');
       for (const node of [...roleRoot.children]) if (node.matches('label,#role-binding-fields')) move(node, role);
