@@ -1,18 +1,19 @@
-"""Ephemeral video-call observations from a loopback-only vision connection."""
+"""Ephemeral video-call observations from authorized vision connections."""
 from __future__ import annotations
 
 import asyncio
 import base64
 from collections import OrderedDict
+from collections.abc import Callable
 import hashlib
 from io import BytesIO
 import re
 import secrets
 import time
 from typing import Any
-from openai import APIConnectionError, APITimeoutError
+from openai import APIConnectionError, APIStatusError, APITimeoutError
 
-from core.image_presets import catalog, video_call_ready
+from core.image_presets import camera_endpoint_type, catalog, video_call_ready
 
 MAX_FRAME_BYTES = 800_000
 MAX_FRAME_PIXELS = 1280 * 720
@@ -72,7 +73,7 @@ _counts = {"accepted": 0, "busy": 0, "failed": 0, "unavailable": 0,
            "signal_from_stale_description": 0,
            "frame_diff_no_change": 0, "frame_diff_minor": 0,
            "frame_diff_change_triggered": 0, "frame_diff_signal_suppressed": 0}
-_unavailable_until = 0.0
+_route_failures: dict[str, tuple[dict, str, float]] = {}
 CAMERA_ACTIVE_SECONDS = 15.0
 CAMERA_SIGNAL_INTERVAL_SECONDS = 60.0
 CAMERA_SIGNAL_TTL_SECONDS = 10 * 60
@@ -86,6 +87,9 @@ _camera_sessions: dict[tuple[str, str], dict[str, Any]] = {}
 def camera_session(uid: str, char_id: str) -> dict[str, Any] | None:
     row = _camera_sessions.get((uid, char_id))
     if row is None or time.monotonic() - row["seen_at"] >= CAMERA_ACTIVE_SECONDS:
+        return None
+    scope_is_current = row.get("scope_is_current")
+    if scope_is_current is not None and not scope_is_current():
         return None
     return row
 
@@ -348,8 +352,14 @@ def connection_state(config: dict[str, Any], purpose: str = "video_call") -> dic
     name = cat["routes"].get(purpose) or ""
     preset = cat["presets"].get(name)
     ready, reason = video_call_ready(preset)
-    return {"purpose": purpose, "connection": name, "effective": ready,
-            "blocking_reason": reason if name else "not_routed"}
+    remaining = 0
+    failure = _route_failures.get(purpose)
+    if ready and failure and failure[0] == preset and failure[2] > time.monotonic():
+        reason = failure[1]
+        remaining = max(1, round(failure[2] - time.monotonic()))
+    return {"purpose": purpose, "connection": name, "effective": ready and not remaining,
+            "endpoint_type": camera_endpoint_type(preset), "configured": ready,
+            "blocking_reason": reason if name else "not_routed", "retry_after_seconds": remaining}
 
 
 def snapshot(config: dict[str, Any]) -> dict[str, Any]:
@@ -359,8 +369,7 @@ def snapshot(config: dict[str, Any]) -> dict[str, Any]:
             "vision_busy": _local_resource.locked(),
             "presence": presence_snapshot(config),
             "pending_observations": len(_receipts), "counts": dict(_counts),
-            **camera_status(),
-            "retry_after_seconds": max(0, round(_unavailable_until - time.monotonic()))}
+            **camera_status()}
 
 
 def validate_frame(data: bytes) -> None:
@@ -388,15 +397,16 @@ def _prune(now: float) -> None:
 
 async def observe(frame: bytes, *, uid: str, char_id: str, token_label: str,
                   emit_signal: bool = True, wait_for_resource: bool = False,
-                  purpose: str = "video_call") -> dict[str, Any]:
-    global _unavailable_until
+                  purpose: str = "video_call", scope_is_current: Callable[[], bool] | None = None) -> dict[str, Any]:
     from core.config_loader import get_config
+    from core.image_presets import resolve_purpose
     from core.llm_client import chat
 
     state = connection_state(get_config(), purpose)
-    if not state["effective"]:
+    if not state["configured"]:
         raise ValueError(state["blocking_reason"])
     validate_frame(frame)
+    route = resolve_purpose(purpose)
     key = (uid, char_id)
     session = camera_session(uid, char_id)
     if session is None or session["token_label"] != token_label:
@@ -406,6 +416,12 @@ async def observe(frame: bytes, *, uid: str, char_id: str, token_label: str,
         _camera_sessions[key] = session
     else:
         session["seen_at"] = time.monotonic()
+    if scope_is_current is not None:
+        session["scope_is_current"] = scope_is_current
+
+    def session_is_current() -> bool:
+        check_scope = scope_is_current or session.get("scope_is_current")
+        return _camera_sessions.get(key) is session and (check_scope is None or check_scope())
     # Diff mode applies to the periodic stream only; the on-demand tool ("look at me
     # now") always gets the full description. Switching the flag off mid-call drops the
     # memory so turning it back on never diffs against a stale scene.
@@ -413,8 +429,9 @@ async def observe(frame: bytes, *, uid: str, char_id: str, token_label: str,
     diff_mode = periodic and frame_diff_enabled()
     if periodic and not diff_mode:
         session.pop("frame_memory", None)
-    if time.monotonic() < _unavailable_until:
-        return {"status": "unavailable", "retry_after_seconds": max(1, round(_unavailable_until - time.monotonic()))}
+    if not state["effective"]:
+        return {"status": "unavailable", "reason": state["blocking_reason"],
+                "retry_after_seconds": state["retry_after_seconds"]}
     if not await _acquire_vision_lock(wait_for_resource):
         _counts["busy"] += 1
         _counts["vision_lock_timeout"] += 1
@@ -425,6 +442,12 @@ async def observe(frame: bytes, *, uid: str, char_id: str, token_label: str,
     memory = None
     diff_frame = False
     try:
+        try:
+            current_route = resolve_purpose(purpose)
+        except KeyError:
+            current_route = None
+        if not session_is_current() or current_route != route:
+            return {"status": "closed"}
         # Read the memory only after the vision lock is held: concurrent frames are
         # serialized there, so each diff is taken against the previous frame's result.
         prompt, chat_kwargs = OBSERVATION_PROMPT, {}
@@ -449,8 +472,13 @@ async def observe(frame: bytes, *, uid: str, char_id: str, token_label: str,
             return {"status": "timeout"}
         except APIConnectionError:
             _counts["unavailable"] += 1
-            _unavailable_until = time.monotonic() + 15
-            return {"status": "unavailable", "retry_after_seconds": 15}
+            _route_failures[purpose] = (route["config"], "node_offline", time.monotonic() + 15)
+            return {"status": "unavailable", "reason": "node_offline", "retry_after_seconds": 15}
+        except APIStatusError as error:
+            _counts["failed"] += 1
+            reason = "model_unavailable" if error.status_code == 404 else "model_service_error"
+            _route_failures[purpose] = (route["config"], reason, time.monotonic() + 15)
+            return {"status": "unavailable", "reason": reason, "retry_after_seconds": 15}
         except Exception:
             _counts["failed"] += 1
             return {"status": "failed"}
@@ -461,8 +489,13 @@ async def observe(frame: bytes, *, uid: str, char_id: str, token_label: str,
         _counts["failed"] += 1
         return {"status": "failed"}
     now = time.monotonic()
-    if _camera_sessions.get(key) is not session:
+    try:
+        current_route = resolve_purpose(purpose)
+    except KeyError:
+        current_route = None
+    if not session_is_current() or current_route != route:
         return {"status": "closed"}
+    _route_failures.pop(purpose, None)
     magnitude, change = "none", ""
     if diff_frame:
         magnitude, change = parse_change(description)
@@ -492,6 +525,8 @@ async def observe(frame: bytes, *, uid: str, char_id: str, token_label: str,
         except Exception:
             # Camera observation and chat receipts remain available if autonomy state is unavailable.
             pass
+    if not session_is_current():
+        return {"status": "closed"}
     _prune(now)
     receipt = secrets.token_urlsafe(24)
     _receipts[receipt] = (now + OBSERVATION_TTL_SECONDS, uid, char_id, token_label, description, now)

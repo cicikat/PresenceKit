@@ -43,12 +43,7 @@ def screen_route_chain() -> list[dict]:
 
 
 def camera_route_chain() -> list[dict]:
-    """The camera route's single loopback connection; never a fallback.
-
-    Real-world camera frames may only reach a loopback vision model, so a
-    connection that fails ``video_call_ready`` yields nothing instead of a remote
-    handoff — the same rule the video-call chains enforce.
-    """
+    """Use the camera route's single authorized connection."""
     from core.config_loader import get_config
     from core.image_presets import CAMERA_PURPOSES, resolve_purpose, video_call_ready
 
@@ -153,7 +148,7 @@ async def describe_with_status(image_bytes: bytes, context_hint: str = "",
 
     ``source`` picks the route: screenshots walk the screen chain (if the primary
     cannot be reached the owner's declared fallback answers instead), camera
-    frames only ever see the loopback camera route. A reply that did arrive but
+    frames only ever see an authorized camera route. A reply that did arrive but
     failed validation is final — retrying it on a second model would pay twice
     for the same image without new information.
     """
@@ -209,8 +204,11 @@ async def _describe_once(cfg: dict, image_bytes: bytes,
         }
         headers = {"Authorization": f"Bearer {cfg.get('api_key', '')}"} if cfg.get("api_key") else {}
         timeout = aiohttp.ClientTimeout(total=float(cfg.get("timeout_s", 20)))
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.post(base_url + "/chat/completions", json=payload, headers=headers) as response:
+        async with aiohttp.ClientSession(timeout=timeout, trust_env=False) as session:
+            async with session.post(base_url + "/chat/completions", json=payload, headers=headers,
+                                    allow_redirects=False) as response:
+                if 300 <= response.status < 400:
+                    return None, "error", "unexpected_redirect"
                 response.raise_for_status()
                 data = await response.json()
         content = data["choices"][0]["message"]["content"]

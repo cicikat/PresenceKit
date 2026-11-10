@@ -16,6 +16,7 @@ from core.image_presets import video_call_ready
 def _fresh_local_resource(monkeypatch):
     # A contended asyncio.Lock binds to the first running loop; each test has its own.
     monkeypatch.setattr(video_call, "_local_resource", asyncio.Lock())
+    monkeypatch.setattr(video_call, "_route_failures", {})
 
 
 def _config(base_url="http://127.0.0.1:11434/v1"):
@@ -41,6 +42,38 @@ def test_video_call_requires_loopback_vision():
     for address in ("https://127.0.0.1:11434/v1", "http://192.168.1.5:11434/v1", "https://api.example/v1"):
         assert video_call_ready({**local, "base_url": address})[0] is False
     assert video_call_ready({**local, "kind": "ocr"})[0] is False
+
+
+def test_private_camera_endpoint_requires_exact_explicit_grant():
+    from core.image_presets import camera_endpoint_type, validate_preset
+
+    address = "http://100.64.10.5:11434/v1"
+    preset = {**_config(address)["image_presets"]["presets"]["local_vision"], "is_local": True}
+    assert not video_call_ready(preset)[0]
+    authorized = validate_preset({**preset, "camera_private_endpoint": address})
+    assert video_call_ready(authorized) == (True, "")
+    assert camera_endpoint_type(authorized) == "trusted_private"
+    assert not video_call_ready({**authorized, "base_url": address + "/other"})[0]
+    for url in ("http://api.example/v1", "http://169.254.169.254/v1", "http://198.18.0.1/v1",
+                "http://100.64.10.5:invalid/v1", "http://100.64.10.5/v1?proxy=remote"):
+        with pytest.raises(ValueError):
+            validate_preset({**preset, "base_url": url, "camera_private_endpoint": url})
+
+
+@pytest.mark.asyncio
+async def test_camera_scope_change_discards_inflight_result(monkeypatch):
+    monkeypatch.setattr("core.config_loader.get_config", _config)
+    valid = True
+
+    async def switched(*args, **kwargs):
+        nonlocal valid
+        valid = False
+        return "stale frame"
+
+    monkeypatch.setattr("core.llm_client.chat", switched)
+    result = await video_call.observe(_jpeg(), uid="owner", char_id="character", token_label="desktop",
+                                      scope_is_current=lambda: valid)
+    assert result == {"status": "closed"}
 
 
 def test_camera_tool_route_is_separately_configurable(monkeypatch):
@@ -112,7 +145,6 @@ def test_camera_signal_uses_interval_even_when_scene_is_unchanged(monkeypatch):
 @pytest.mark.asyncio
 async def test_camera_tool_requests_fresh_frame_on_its_own_route(monkeypatch):
     monkeypatch.setattr("core.config_loader.get_config", _config)
-    monkeypatch.setattr(video_call, "_unavailable_until", 0.0)
     async def fake_chat(messages, **kwargs):
         assert kwargs["vision_purpose"] == video_call.TOOL_PURPOSE
         return "窗边有一本书"
@@ -166,7 +198,6 @@ async def test_camera_observation_is_ephemeral_scoped_and_busy_drops(monkeypatch
 @pytest.mark.asyncio
 async def test_periodic_frame_waits_out_a_short_tts_hold(monkeypatch):
     monkeypatch.setattr("core.config_loader.get_config", _config)
-    monkeypatch.setattr(video_call, "_unavailable_until", 0.0)
     monkeypatch.setattr(video_call, "VISION_LOCK_WAIT_SECONDS", 1.0)
 
     async def fake_chat(*_args, **_kwargs):
@@ -191,7 +222,6 @@ async def test_periodic_frame_waits_out_a_short_tts_hold(monkeypatch):
 async def test_starved_frame_still_emits_a_signal_from_the_last_description(monkeypatch):
     from core.autonomy import store
     monkeypatch.setattr("core.config_loader.get_config", _config)
-    monkeypatch.setattr(video_call, "_unavailable_until", 0.0)
     monkeypatch.setattr(video_call, "VISION_LOCK_WAIT_SECONDS", 0.01)
     queued = []
     monkeypatch.setattr(store, "enqueue_signal", lambda uid, char_id, signal, **kwargs: (
@@ -218,7 +248,6 @@ async def test_starved_frame_still_emits_a_signal_from_the_last_description(monk
 async def test_starved_frame_without_history_emits_no_signal(monkeypatch):
     from core.autonomy import store
     monkeypatch.setattr("core.config_loader.get_config", _config)
-    monkeypatch.setattr(video_call, "_unavailable_until", 0.0)
     monkeypatch.setattr(video_call, "VISION_LOCK_WAIT_SECONDS", 0.01)
     queued = []
     monkeypatch.setattr(store, "enqueue_signal", lambda *args, **kwargs: (
@@ -272,7 +301,6 @@ async def test_camera_observation_rejects_remote_route_and_oversized_frame(monke
 @pytest.mark.asyncio
 async def test_unavailable_local_model_skips_following_frames_without_queue(monkeypatch):
     monkeypatch.setattr("core.config_loader.get_config", _config)
-    monkeypatch.setattr(video_call, "_unavailable_until", 0.0)
     calls = []
 
     async def disconnected(*_args, **_kwargs):
@@ -284,7 +312,8 @@ async def test_unavailable_local_model_skips_following_frames_without_queue(monk
     second = await video_call.observe(_jpeg(), uid="owner", char_id="character", token_label="desktop")
     assert first["status"] == second["status"] == "unavailable"
     assert len(calls) == 1
-    monkeypatch.setattr(video_call, "_unavailable_until", 0.0)
+    assert video_call.connection_state(_config())["blocking_reason"] == "node_offline"
+    video_call._route_failures.clear()
 
     async def recovered(*_args, **_kwargs):
         return "恢复后的当前画面"
@@ -297,7 +326,6 @@ async def test_unavailable_local_model_skips_following_frames_without_queue(monk
 @pytest.mark.asyncio
 async def test_model_timeout_is_distinct_from_disconnection(monkeypatch):
     monkeypatch.setattr("core.config_loader.get_config", _config)
-    monkeypatch.setattr(video_call, "_unavailable_until", 0.0)
 
     async def timed_out(*_args, **_kwargs):
         raise APITimeoutError(request=httpx.Request("POST", "http://127.0.0.1:11434/v1/chat/completions"))

@@ -23,3 +23,11 @@
 
 - 后端、桌面和手机本地 `main` 与各自远端 `main` 一致。现有配置包含本机 VLM 与 GPT-SoVITS，STT 使用后端进程内的旧路径。核对时配置中的两个服务端口未监听；另一个运行中的 Ollama 监听地址返回空模型目录。
 - 实际跨机器推理、私网链路与故障切换的设备验收为 `observe`，见后续工单的验证记录。
+
+## DIST-02 摄像头私网连接
+
+在管理面「模型路由 → 图像连接」选择视觉 Chat Completions。默认只允许 loopback HTTP。需要向 Tailscale 等可信加密私网发送摄像头帧时，把该节点的 IP Base URL 同时填入「摄像头授权的私网端点」，然后在摄像头用途选择它。支持 RFC1918、Tailscale IPv4 地址段和 ULA IPv6 字面地址。授权绑定到保存的确切 URL，单独的 `is_local` 只用于隐私归因。部署方应在私网 ACL 中仅允许主后端访问视觉服务。
+
+`video_call_tool` 未配置时继承 `video_call`，显式留空时关闭。两条链及摄像头 shadow 直连、禁重定向和公网兜底。原始帧仅在请求内存中处理。配置变更、关闭摄像头或会话失效后，迟到结果作废。
+
+`/video-call/state` 按用途显示 `endpoint_type`、`configured`、`effective`、`blocking_reason`、`retry_after_seconds`。服务拒连、模型 404 或其他 HTTP 故障会标记对应路由 15 秒。到期允许请求恢复检测。有效状态表示当前允许发起请求。保存连接的合成图片测试用于单独验证推理。

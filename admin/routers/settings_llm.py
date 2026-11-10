@@ -450,7 +450,8 @@ async def test_image_connection(
             if kind == "ocr":
                 return await image_recognition.recognize_ocr(uri, resolved)
             async with AsyncOpenAI(api_key=vision.get("api_key") or "none", base_url=vision["base_url"],
-                http_client=_make_http_client(None if _is_loopback_base_url(vision["base_url"]) else _get_proxy_url()),
+                http_client=_make_http_client(None if _is_loopback_base_url(vision["base_url"])
+                    or image_presets.camera_endpoint_type(vision) == "trusted_private" else _get_proxy_url()),
                 timeout=20, max_retries=0) as client:
                 if vision.get("api_protocol", "chat_completions") == "responses":
                     response = await client.responses.create(model=vision["model"], max_output_tokens=output_budget,
@@ -598,6 +599,7 @@ class ImagePresetUpsert(BaseModel):
     endpoint_url: Optional[str] = None
     api_key: Optional[str] = None
     is_local: Optional[bool] = None
+    camera_private_endpoint: Optional[str] = None
 
 
 class ImageRoutesUpdate(BaseModel):
@@ -616,7 +618,10 @@ class ImageRoutesUpdate(BaseModel):
 @router.get("/image-presets", summary="命名图像连接与用途路由")
 async def get_image_presets(auth=Depends(require_scopes("admin"))):
     from core.image_presets import snapshot
-    return snapshot(get_config())
+    from core.video_call import connection_state, TOOL_PURPOSE
+    cfg = get_config()
+    return {**snapshot(cfg), "camera_states": [connection_state(cfg, purpose)
+            for purpose in ("video_call", TOOL_PURPOSE)]}
 
 
 @router.put("/image-presets/presets/{name}", summary="新增或更新一个图像连接")
@@ -636,6 +641,9 @@ async def upsert_image_preset(name: str, body: ImagePresetUpsert, auth=Depends(r
         if existing.get("api_key"):
             update["api_key"] = existing["api_key"]
     merged = {**existing, **update}
+    if "camera_private_endpoint" not in update and any(
+            key in update and update[key] != existing.get(key) for key in ("base_url", "api_protocol")):
+        merged.pop("camera_private_endpoint", None)
     if "kind" not in merged:
         merged["kind"] = "vision"
     try:
@@ -764,7 +772,7 @@ async def set_image_gen_enabled(body: dict, auth=Depends(require_scopes("admin")
 
 @router.put("/image-presets/routes", summary="保存图像用途到连接的映射")
 async def update_image_routes(body: ImageRoutesUpdate, auth=Depends(require_scopes("admin"))):
-    from core.image_presets import (FALLBACK_PURPOSES, LOOPBACK_ONLY_PURPOSES, PURPOSES,
+    from core.image_presets import (FALLBACK_PURPOSES, CAMERA_PURPOSES, PURPOSES,
                                     SCREEN_PURPOSES, snapshot, video_call_ready)
     full_cfg = read_config_file(CONFIG_FILE)
     block = _image_presets_block(full_cfg)
@@ -775,8 +783,8 @@ async def update_image_routes(body: ImageRoutesUpdate, auth=Depends(require_scop
     for purpose, name in updates.items():
         if purpose not in PURPOSES:
             raise HTTPException(status_code=422, detail=f"未知用途 {purpose}")
-        if purpose in LOOPBACK_ONLY_PURPOSES and not name:
-            routes.pop(purpose, None)
+        if purpose in CAMERA_PURPOSES and not name:
+            routes[purpose] = ""
             continue
         if purpose in SCREEN_PURPOSES and not name:
             # An explicit empty route stays off; popping it would let the legacy
@@ -785,10 +793,10 @@ async def update_image_routes(body: ImageRoutesUpdate, auth=Depends(require_scop
             continue
         if name not in presets:
             raise HTTPException(status_code=422, detail=f"未知图像连接 {name}")
-        if purpose in LOOPBACK_ONLY_PURPOSES:
+        if purpose in CAMERA_PURPOSES:
             ready, reason = video_call_ready(presets[name])
             if not ready:
-                raise HTTPException(status_code=422, detail=f"视频电话只允许本机 HTTP 视觉连接: {reason}")
+                raise HTTPException(status_code=422, detail=f"视频电话需要本机或已授权私网视觉连接 ({reason})")
         if purpose in SCREEN_PURPOSES and presets[name].get("kind") != "vision":
             raise HTTPException(status_code=422, detail="屏幕用途需要 vision 类型连接")
         routes[purpose] = name

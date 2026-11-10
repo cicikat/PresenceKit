@@ -429,7 +429,7 @@ policy、连接、registry、角色 proficiency 和 exclude_tools 之后继续�
    `media_processor` 把 `reason` 带进 `vision_failed` 的 422 message。`video_call` 行为不变，
    仍直接 `raise`。(c) vision 分支遵循 preset 的 `api_protocol`：支持 `chat_completions` 与
    `responses`，其他值明确拒绝，不再一律按 `chat.completions` 发出并把日志 protocol 写死。
-   注意 `video_call` 仍有额外硬约束 `video_call_ready`（仅 loopback + http + chat_completions）；
+   `video_call` 和 `video_call_tool` 由 `video_call_ready` 单独授权（默认 loopback HTTP；可显式授权匹配的私网 IP URL；均要求 Chat Completions）；
    其他用途只要 `connection_ready`。
 
 ModelClient 缓存（`core.model_registry._model_clients`）以**解析出的 preset 名**为 key，不是

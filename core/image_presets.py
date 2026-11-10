@@ -38,10 +38,7 @@ PURPOSES = (
     "video_call_tool",
     "screen",
 )
-# Real-world camera frames may leave only to a loopback vision model, whichever
-# chain asks: periodic video-call observation or the on-demand fresh-frame tool.
 CAMERA_PURPOSES = ("video_call", "video_call_tool")
-LOOPBACK_ONLY_PURPOSES = frozenset(CAMERA_PURPOSES)
 # Every screenshot chain — the on-demand tool (desktop and phone), the shadow
 # ingress, and phone automation — shares one route, and may name one fallback.
 SCREEN_PURPOSES = ("screen",)
@@ -124,7 +121,7 @@ def snapshot(config: dict | None = None) -> dict:
     for purpose in PURPOSES:
         name = cat["routes"].get(purpose, "")
         preset = cat["presets"].get(name, {})
-        if purpose in LOOPBACK_ONLY_PURPOSES:
+        if purpose in CAMERA_PURPOSES:
             ready = video_call_ready(preset)[0]
         else:
             ready = connection_ready(preset) if preset else False
@@ -293,18 +290,33 @@ def connection_ready(preset: dict | None) -> bool:
 
 
 def video_call_ready(preset: dict | None) -> tuple[bool, str]:
-    """Video frames may use only an enabled loopback Chat Completions vision model."""
+    """Require an enabled Chat Completions connection with camera permission."""
     if not preset or preset.get("kind") != "vision":
         return False, "vision_connection_required"
     if not connection_ready(preset):
         return False, "connection_not_ready"
     if preset.get("api_protocol") != "chat_completions":
         return False, "chat_completions_required"
-    parsed = urlsplit(str(preset.get("base_url") or ""))
-    if (parsed.scheme != "http" or parsed.hostname not in {"localhost", "127.0.0.1", "::1"}
-            or parsed.username or parsed.password or parsed.query or parsed.fragment):
+    if camera_endpoint_type(preset) == "unauthorized_remote":
         return False, "loopback_http_required"
     return True, ""
+
+
+def camera_endpoint_type(preset: dict | None) -> str:
+    if not preset or not preset.get("base_url"):
+        return "unconfigured"
+    url = str(preset["base_url"])
+    from core.model_network import private_node_url
+    if (url.rstrip("/") == preset.get("camera_private_endpoint") and private_node_url(url)):
+        return "trusted_private"
+    try:
+        parsed = urlsplit(url)
+        if (parsed.scheme == "http" and parsed.hostname in {"localhost", "127.0.0.1", "::1"}
+                and parsed.port != 0 and not any(ord(c) <= 32 or c in "\\%?#@" for c in url)):
+            return "loopback"
+    except ValueError:
+        pass
+    return "unauthorized_remote"
 
 
 def referencing_purposes(name: str, config: dict | None = None) -> list[str]:
@@ -368,6 +380,10 @@ def validate_preset(payload: dict) -> dict:
             _ocr_request_url(preset)
     elif preset.get("api_protocol") not in _VISION_PROTOCOLS:
         raise ValueError("Unsupported vision API protocol")
+    if preset.get("camera_private_endpoint"):
+        if (camera_endpoint_type(preset) != "trusted_private"
+                or preset["api_protocol"] != "chat_completions"):
+            raise ValueError("摄像头私网授权须匹配 Chat Completions 的私网 IP Base URL")
     return preset
 
 
@@ -486,6 +502,7 @@ def _normalize_preset(payload: dict) -> dict:
         "base_url": str(payload.get("base_url") or ""),
         "api_key": str(payload.get("api_key") or ""),
         "is_local": _as_is_local(payload.get("is_local")),
+        "camera_private_endpoint": str(payload.get("camera_private_endpoint") or "").strip().rstrip("/"),
     }
 
 
@@ -514,6 +531,8 @@ def _ocr_request_url(cfg: dict) -> str:
 
 def _mask_preset(preset: dict) -> dict:
     view = dict(preset)
+    view["camera_ready"] = video_call_ready(preset)[0]
+    view["camera_endpoint_type"] = camera_endpoint_type(preset)
     key = view.get("api_key") or ""
     view["has_api_key"] = bool(key)
     if not key:

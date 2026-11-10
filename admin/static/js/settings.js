@@ -66,7 +66,7 @@ const IMAGE_PURPOSE_LABELS = {
   video_call_tool: () => '视频电话 · 按需查看摄像头（角色主动拉新帧）',
   screen: () => t('routing.screen_purpose', '屏幕截图 · 影子观察、按需看屏幕、手机自动化'),
 };
-const LOOPBACK_ONLY_PURPOSES = ['video_call', 'video_call_tool'];
+const CAMERA_PURPOSES = ['video_call', 'video_call_tool'];
 // phone_automation is not listed: phone automation now follows the screen route,
 // so the old row would be a control with no consumer.
 const IMAGE_ROUTE_GROUPS = [
@@ -113,18 +113,10 @@ function renderImageRoutes() {
   const fallbacks = _imagePresetCatalog.fallbacks || {};
   const renderRow = purpose => {
     const selected = routes[purpose] || '';
-    const loopback = LOOPBACK_ONLY_PURPOSES.includes(purpose);
-    const available = loopback ? names.filter(name => {
-      const preset = presets[name] || {};
-      try {
-        const url = new URL(preset.base_url || '');
-        return preset.kind === 'vision' && preset.enabled !== false && preset.model
-          && preset.api_protocol === 'chat_completions' && url.protocol === 'http:'
-          && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
-          && !url.username && !url.password && !url.search && !url.hash;
-      } catch { return false; }
-    }) : FALLBACK_PURPOSES.includes(purpose) ? names.filter(name => (presets[name] || {}).kind === 'vision') : names;
-    const offOption = loopback ? '<option value="">关闭 · 未指定本机视觉连接</option>'
+    const camera = CAMERA_PURPOSES.includes(purpose);
+    const available = camera ? names.filter(name => presets[name]?.camera_ready === true || name === selected)
+      : FALLBACK_PURPOSES.includes(purpose) ? names.filter(name => (presets[name] || {}).kind === 'vision') : names;
+    const offOption = camera ? '<option value="">关闭 · 未指定摄像头连接</option>'
       : FALLBACK_PURPOSES.includes(purpose) ? `<option value="">${t('routing.screen_off', '关闭 · 不分析屏幕截图')}</option>` : '';
     const options = offOption
       + available.map(name => `<option value="${escapeHtml(name)}" ${name === selected ? 'selected' : ''} data-i18n-skip>${escapeHtml(name)}</option>`).join('');
@@ -156,11 +148,16 @@ function renderImageRoutes() {
   }
   const videoState = document.getElementById('vision-video-summary');
   if (videoState) {
-    const periodic = routes.video_call
-      ? `周期观察：${routes.video_call}` : '周期观察未配置，摄像头预览仍可用。';
-    const tool = routes.video_call_tool
-      ? `按需查看：${routes.video_call_tool}` : '按需查看未配置，角色无法主动拉新帧。';
-    videoState.textContent = `视频电话仅使用本机视觉连接。${periodic} · ${tool}`;
+    const endpointLabels = {loopback: '本机', trusted_private: '已授权私网', unauthorized_remote: '未授权远程地址'};
+    const statusLabels = {not_routed: '未指定', node_offline: '节点离线', model_unavailable: '模型不可用',
+      model_service_error: '模型服务异常', loopback_http_required: '端点未获授权', connection_not_ready: '未启用或配置不完整',
+      chat_completions_required: '需要 Chat Completions', vision_connection_required: '需要视觉连接'};
+    videoState.textContent = (_imagePresetCatalog.camera_states || []).map(row => {
+      const label = row.purpose === 'video_call' ? '周期观察' : '按需查看';
+      const endpoint = endpointLabels[row.endpoint_type];
+      const status = row.effective ? '可发起请求' : (statusLabels[row.blocking_reason] || row.blocking_reason);
+      return [label, row.connection, endpoint, status].filter(Boolean).join(' · ');
+    }).join(' / ');
   }
 }
 function _toggleImageKindFields() {
@@ -235,6 +232,7 @@ function openCreateImagePreset() {
   document.getElementById('vision-api-protocol').value = 'chat_completions';
   document.getElementById('vision-model-select').value = '';
   document.getElementById('vision-base-url').value = '';
+  document.getElementById('vision-camera-private-endpoint').value = '';
   document.getElementById('vision-api-key').value = '';
   document.getElementById('ocr-provider').value = 'glm';
   document.getElementById('ocr-protocol').value = 'glm_layout_parsing';
@@ -272,6 +270,7 @@ function editImagePreset(name) {
     document.getElementById('vision-api-protocol').value = preset.api_protocol || 'chat_completions';
     document.getElementById('vision-model-select').value = preset.model || '';
     document.getElementById('vision-base-url').value = preset.base_url || '';
+    document.getElementById('vision-camera-private-endpoint').value = preset.camera_private_endpoint || '';
     document.getElementById('vision-api-key').value = '';
     onVisionProviderChange();
   }
@@ -302,6 +301,7 @@ async function saveImagePreset() {
     body.api_protocol = document.getElementById('vision-api-protocol').value;
     body.model = document.getElementById('vision-model-select').value.trim();
     body.base_url = document.getElementById('vision-base-url').value.trim();
+    body.camera_private_endpoint = document.getElementById('vision-camera-private-endpoint').value.trim();
     const key = document.getElementById('vision-api-key').value.trim();
     if (key) body.api_key = key;
   }
@@ -345,7 +345,7 @@ async function saveImageRoutes() {
   const body = {};
   for (const purpose of IMAGE_ROUTE_PURPOSES) {
     const select = document.getElementById('image-route-' + purpose);
-    const clearable = LOOPBACK_ONLY_PURPOSES.includes(purpose) || FALLBACK_PURPOSES.includes(purpose);
+    const clearable = CAMERA_PURPOSES.includes(purpose) || FALLBACK_PURPOSES.includes(purpose);
     if (select && (select.value || clearable)) body[purpose] = select.value;
   }
   const fallbacks = {};

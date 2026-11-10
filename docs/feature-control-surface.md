@@ -79,6 +79,8 @@ DNS：`198.18.0.0/15` Fake-IP 或解析失败时用已配置 HTTP 代理，其�
 
 ## 通话内主动性放宽 `video_call_presence`（2026-09-30，默认关闭）
 
+工单 300 DIST-02：模型路由的视觉连接可填写 `camera_private_endpoint`。管理员必须确认加密私网并填入与该连接 `base_url` 完全匹配的私网 IP URL；清空即撤销。默认摄像头仍只用本机 HTTP。`GET /image-presets` 和 `GET /video-call/state` 分别展示两个摄像头用途的授权类型、配置与短时故障状态。保存后热更新。详见 [分布式推理](distributed-inference.md#dist-02-摄像头私网连接)。
+
 配置块 `video_call_presence`：`enabled`（默认 `false`）、`max_talks_per_call`（1–10，默认 3）、
 `min_gap_seconds`（30–3600，默认 180）、`silence_seconds`（5–120，默认 30；全局规则是 120）、
 `camera_signal_interval_seconds`（15–600，默认 60，与原常量相同）。管理面「自主活动安排」页有卡片，

@@ -219,10 +219,11 @@ def _resolve_vision_config(vision_purpose: str | None = None) -> dict:
         if route.get("kind") != "vision":
             return {}
         cfg = dict(route.get("config") or {})
-        from core.image_presets import LOOPBACK_ONLY_PURPOSES, video_call_ready
-        if vision_purpose in LOOPBACK_ONLY_PURPOSES:
+        from core.image_presets import CAMERA_PURPOSES, video_call_ready
+        if vision_purpose in CAMERA_PURPOSES:
             if not video_call_ready(cfg)[0]:
                 return {}
+            cfg["_local_only"] = True
         # Any loopback vision connection must bypass the proxy and skip retries,
         # not just video_call: a global proxy set to follow_global/auto otherwise
         # swallows 127.0.0.1 requests, so a local image model is never reached.
@@ -394,7 +395,7 @@ async def chat(
             safe_msgs = sanitize_messages(messages)
             started_at = time.perf_counter()
             response = None
-            from core.image_presets import LOOPBACK_ONLY_PURPOSES as _CAMERA_PURPOSES
+            from core.image_presets import CAMERA_PURPOSES as _CAMERA_PURPOSES
             camera_frame = vision_purpose in _CAMERA_PURPOSES
             try:
                 if not camera_frame:

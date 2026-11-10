@@ -3,6 +3,7 @@
 import asyncio
 import ipaddress
 import socket
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -11,6 +12,24 @@ from core.config_loader import get_config
 
 MODES = frozenset({"follow_global", "auto", "direct", "proxy"})
 _FAKE_IP_RANGE = ipaddress.ip_network("198.18.0.0/15")
+_PRIVATE_NODE_RANGES = tuple(map(ipaddress.ip_network, (
+    "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "fd00::/8",
+)))
+
+
+def private_node_url(url: str) -> bool:
+    """Only literal private IPs, with no DNS lookup or URL-embedded credentials."""
+    if any(ord(c) <= 32 or c in "\\%?#" for c in url):
+        return False
+    try:
+        parsed = urlsplit(url)
+        if (parsed.scheme not in {"http", "https"} or not parsed.hostname
+                or parsed.username is not None or parsed.password is not None or parsed.port == 0):
+            return False
+        address = ipaddress.ip_address(parsed.hostname)
+    except ValueError:
+        return False
+    return any(address in network for network in _PRIVATE_NODE_RANGES)
 
 
 def normalize_model_connection_mode(value: object) -> str:

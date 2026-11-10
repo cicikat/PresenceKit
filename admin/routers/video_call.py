@@ -147,7 +147,15 @@ async def observe_camera_frame(
 ):
     uid, char_id, label = _camera_scope(x_presence_session, auth)
     frame = await file.read(video_call.MAX_FRAME_BYTES + 1)
+
+    def scope_is_current() -> bool:
+        try:
+            return _camera_scope(x_presence_session, auth) == (uid, char_id, label)
+        except HTTPException:
+            return False
+
     try:
-        return await video_call.observe(frame, uid=uid, char_id=char_id, token_label=label)
+        return await video_call.observe(frame, uid=uid, char_id=char_id, token_label=label,
+                                        scope_is_current=scope_is_current)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
