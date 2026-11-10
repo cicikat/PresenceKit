@@ -459,6 +459,9 @@ separate and is not reused for this mirror.
 
 ## 功能控制面
 
+多设备推理复用现有文本、图像、STT、TTS 和 Embedding 入口。调用矩阵、出站策略和设备验证见
+[分布式推理调用链](docs/distributed-inference.md)。主后端继续持有角色、记忆、会话和权限。
+
 P0–P2 设置入口、权限边界与降级路径以 docs/feature-control-surface.md 为准；不得把 config 字段存在误写成已有可视化控制。
 
 
