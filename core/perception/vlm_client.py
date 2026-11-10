@@ -160,7 +160,7 @@ async def describe_with_status(image_bytes: bytes, context_hint: str = "",
     observation, reason = None, "error"
     for index, row in enumerate(chain):
         observation, reason, category = await _describe_once(
-            row["config"], image_bytes, context_hint)
+            row["config"], image_bytes, context_hint, camera=(source == "camera"))
         from core.image_observability import append as record_image
         record_image(source=source, result=observation.caption if observation else "",
                      sensitive=bool(observation and observation.sensitive), error=reason or "",
@@ -176,7 +176,7 @@ async def describe_with_status(image_bytes: bytes, context_hint: str = "",
 
 
 async def _describe_once(cfg: dict, image_bytes: bytes,
-                         context_hint: str) -> tuple[VisualObservation | None, str | None, str]:
+                         context_hint: str, *, camera: bool = False) -> tuple[VisualObservation | None, str | None, str]:
     """One connection attempt. Returns (observation, trace_reason, error_category)."""
     base_url = str(cfg.get("base_url") or "").rstrip("/")
     model = str(cfg.get("model") or "")
@@ -206,8 +206,8 @@ async def _describe_once(cfg: dict, image_bytes: bytes,
         timeout = aiohttp.ClientTimeout(total=float(cfg.get("timeout_s", 20)))
         async with aiohttp.ClientSession(timeout=timeout, trust_env=False) as session:
             async with session.post(base_url + "/chat/completions", json=payload, headers=headers,
-                                    allow_redirects=False) as response:
-                if 300 <= response.status < 400:
+                                    allow_redirects=not camera) as response:
+                if camera and 300 <= response.status < 400:
                     return None, "error", "unexpected_redirect"
                 response.raise_for_status()
                 data = await response.json()

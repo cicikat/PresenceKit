@@ -30,7 +30,7 @@
 
 `video_call_tool` 未配置时继承 `video_call`，显式留空时关闭。两条链及摄像头 shadow 直连、禁重定向和公网兜底。原始帧仅在请求内存中处理。配置变更、关闭摄像头或会话失效后，迟到结果作废。
 
-`/video-call/state` 按用途显示 `endpoint_type`、`configured`、`effective`、`blocking_reason`、`retry_after_seconds`。服务拒连、模型 404 或其他 HTTP 故障会标记对应路由 15 秒。到期允许请求恢复检测。有效状态表示当前允许发起请求。保存连接的合成图片测试用于单独验证推理。
+`/video-call/state` 显示 `endpoint_type`、`configured`、`effective`、`runtime_effective`、`blocking_reason`、`retry_after_seconds`。聊天权限的顶层 `effective` 保留配置就绪语义，使旧桌面也能启动观察定时器并从短时故障恢复。`runtime_effective` 以及管理面、只读观测的 `effective` 反映当前退避状态。服务拒连、模型 404 或其他 HTTP 故障会标记对应路由 15 秒，到期由后续请求恢复检测。保存连接的合成图片测试用于单独验证推理。
 
 本机 Ollama 用合成纯蓝 JPEG 返回正确描述和一次性凭据。测试将全局代理指向不可用地址，摄像头请求仍直接抵达配置中的本机 VLM。浏览器验证私网授权、用途选择和撤销。另一台机器上的 VLM 推理仍为 `observe`。
 

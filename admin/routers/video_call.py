@@ -23,7 +23,10 @@ def _camera_scope(session_header: str | None, auth) -> tuple[str, str, str]:
 @router.get("/video-call/state", summary="视频电话视觉路由有效状态")
 async def video_call_state(_auth=Depends(require_scopes("chat"))):
     from core.config_loader import get_config
-    return video_call.snapshot(get_config())
+    state = video_call.snapshot(get_config())
+    # Existing clients use effective to decide whether to start the upload
+    # timer at all. Keep it true for an authorized route in temporary backoff.
+    return {**state, "runtime_effective": state["effective"], "effective": state["configured"]}
 
 
 class VideoCallPresenceUpdate(BaseModel):

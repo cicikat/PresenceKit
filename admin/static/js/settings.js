@@ -346,6 +346,8 @@ async function saveImageRoutes() {
   for (const purpose of IMAGE_ROUTE_PURPOSES) {
     const select = document.getElementById('image-route-' + purpose);
     const clearable = CAMERA_PURPOSES.includes(purpose) || FALLBACK_PURPOSES.includes(purpose);
+    if (CAMERA_PURPOSES.includes(purpose) && select?.value && select.value === _imagePresetCatalog.routes?.[purpose]
+        && !_imagePresetCatalog.presets?.[select.value]?.camera_ready) continue;
     if (select && (select.value || clearable)) body[purpose] = select.value;
   }
   const fallbacks = {};

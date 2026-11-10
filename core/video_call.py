@@ -182,7 +182,7 @@ def _compose_description(memory: dict[str, Any]) -> str:
 
 
 async def _queue_change_signal(uid: str, char_id: str, session: dict[str, Any], change: str,
-                               now: float) -> bool:
+                               now: float, *, is_current: Callable[[], bool]) -> bool:
     """Queue one low-trust autonomy candidate for a [major] camera change.
 
     Keeps ``source="video_call_camera"`` on purpose: autonomy admission, camera-session
@@ -204,7 +204,7 @@ async def _queue_change_signal(uid: str, char_id: str, session: dict[str, Any], 
         event_id=f"video-call-camera-change:{uid}:{char_id}:{fingerprint}",
         char_id=char_id, trust="low_trust", require_dream_guard=True,
     ))
-    if gate.status != PerceiveStatus.ACCEPTED:
+    if gate.status != PerceiveStatus.ACCEPTED or not is_current():
         _counts["frame_diff_signal_suppressed"] += 1
         return False
     from core.autonomy.models import ActionMode, Signal
@@ -419,9 +419,14 @@ async def observe(frame: bytes, *, uid: str, char_id: str, token_label: str,
     if scope_is_current is not None:
         session["scope_is_current"] = scope_is_current
 
-    def session_is_current() -> bool:
+    def observation_is_current() -> bool:
         check_scope = scope_is_current or session.get("scope_is_current")
-        return _camera_sessions.get(key) is session and (check_scope is None or check_scope())
+        if _camera_sessions.get(key) is not session or (check_scope is not None and not check_scope()):
+            return False
+        try:
+            return resolve_purpose(purpose) == route
+        except KeyError:
+            return False
     # Diff mode applies to the periodic stream only; the on-demand tool ("look at me
     # now") always gets the full description. Switching the flag off mid-call drops the
     # memory so turning it back on never diffs against a stale scene.
@@ -442,11 +447,7 @@ async def observe(frame: bytes, *, uid: str, char_id: str, token_label: str,
     memory = None
     diff_frame = False
     try:
-        try:
-            current_route = resolve_purpose(purpose)
-        except KeyError:
-            current_route = None
-        if not session_is_current() or current_route != route:
+        if not observation_is_current():
             return {"status": "closed"}
         # Read the memory only after the vision lock is held: concurrent frames are
         # serialized there, so each diff is taken against the previous frame's result.
@@ -489,11 +490,7 @@ async def observe(frame: bytes, *, uid: str, char_id: str, token_label: str,
         _counts["failed"] += 1
         return {"status": "failed"}
     now = time.monotonic()
-    try:
-        current_route = resolve_purpose(purpose)
-    except KeyError:
-        current_route = None
-    if not session_is_current() or current_route != route:
+    if not observation_is_current():
         return {"status": "closed"}
     _route_failures.pop(purpose, None)
     magnitude, change = "none", ""
@@ -521,11 +518,11 @@ async def observe(frame: bytes, *, uid: str, char_id: str, token_label: str,
             if not diff_mode:
                 _queue_camera_signal(uid, char_id, session, description, now)
             elif magnitude == "major":
-                await _queue_change_signal(uid, char_id, session, change, now)
+                await _queue_change_signal(uid, char_id, session, change, now, is_current=observation_is_current)
         except Exception:
             # Camera observation and chat receipts remain available if autonomy state is unavailable.
             pass
-    if not session_is_current():
+    if not observation_is_current():
         return {"status": "closed"}
     _prune(now)
     receipt = secrets.token_urlsafe(24)

@@ -329,7 +329,7 @@ observe：77 项回归和管理面清缓存浏览器验证通过；两次真实�
 ### Image recognition routing (2026-09-09)
 
 - `current`（工单 264 / DIST-02）：`video_call` 默认空路由，可配置本机 HTTP 或经管理员授权的匹配私网 IP
-  `chat_completions` 视觉连接。桌面 `GET /video-call/state`（chat）读取 `effective`、`blocking_reason`，新增 `configured`、`endpoint_type`、`retry_after_seconds`；
+  `chat_completions` 视觉连接。桌面 `GET /video-call/state`（chat）的顶层 `effective` 仍表示配置就绪；新增 `runtime_effective`、`endpoint_type` 和 `retry_after_seconds` 展示当前退避；
   `POST /video-call/observe`（chat，multipart JPEG）返回 `ready` 时的一次性
   `observation_id`，`busy` 时丢帧，不返回或持久化图像描述。
   `POST /desktop/chat` 可带 `video_observation_id`，凭据绑定 owner、角色和 token 标签，

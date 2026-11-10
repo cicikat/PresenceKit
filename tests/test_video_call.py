@@ -313,6 +313,10 @@ async def test_unavailable_local_model_skips_following_frames_without_queue(monk
     assert first["status"] == second["status"] == "unavailable"
     assert len(calls) == 1
     assert video_call.connection_state(_config())["blocking_reason"] == "node_offline"
+    from admin.routers.video_call import video_call_state
+    state = await video_call_state()
+    assert state["effective"] is True and state["runtime_effective"] is False
+    assert state["retry_after_seconds"] > 0
     video_call._route_failures.clear()
 
     async def recovered(*_args, **_kwargs):
