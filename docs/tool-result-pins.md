@@ -6,6 +6,8 @@
 
 缓存复用 context_continuity SQLite：最近30个候选加仍驻留项，硬过期最多24小时且不超过结果 expires_at。每次投影重查工具执行、角色曝光和 self-management 权限；到期、取消或撤权后不再注入。`unpin_tool_result` 取消，`list_tool_result_pins` 查剩余轮数。
 
+`list_tool_result_pins` 同时列出最近 5 个仍获授权且未过期的候选，只返回工具名、真实 ID 和时间。驻留只接受完整 ID。ID 缺失、已失效或达到容量时，工具会返回对应的处理提示。
+
 `10.9_pinned_tool_results` 带 _layer/drop_priority=85，保留工具、获取时刻、原有效性、过期和剩余轮数；明确是不可信历史参考，驻留不代表仍然新鲜。与 recent_tool_results 的同工具同摘要去重。每次 owner prompt 构造用 ContextVar 冻结当轮已投影项；成功落盘后按 turn_id 幂等扣减。新标记不扣创建轮，工具推理步、失败重试和 scheduler tick 不扣；重标记修订不被旧投影扣轮。预算裁剪仍可能移除该层。
 
 驻留轮沿既有外部资料隔离原则：事件标为 `tool_pin`，不进入自动 profile/中期固化/饮食抽取，原聊天证据仍保留供管理员查看；普通现实检索默认排除该来源。避免临时工具快照变成长期用户事实。此保守隔离针对整轮，与现有 web echo 行为一致。

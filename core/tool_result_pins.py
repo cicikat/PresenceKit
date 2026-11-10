@@ -2,6 +2,7 @@
 from __future__ import annotations
 from contextvars import ContextVar
 import json
+import re
 import time
 import uuid
 import math
@@ -10,6 +11,12 @@ from core.tools.tool_result import ToolResult, sanitize_for_prompt
 from core.prompt_language import choose
 
 _projection = ContextVar('tool_pin_projection', default=None)
+
+
+class PinError(ValueError):
+    def __init__(self, code, hint):
+        super().__init__(code)
+        self.hint = hint
 
 
 def reset_projection(uid,char_id):
@@ -51,15 +58,25 @@ def retain(uid,char_id,tool,result):
 
 def pin(uid,char_id,result_id,rounds):
     if not _owner(uid) or isinstance(rounds,bool) or not isinstance(rounds,int) or not 1<=rounds<=10:
-        raise ValueError('rounds_must_be_1_to_10_for_owner')
+        raise PinError('rounds_must_be_1_to_10_for_owner', choose(
+            '仅当前用户私聊可以驻留，rounds 必须是 1 到 10 的整数。',
+            'Pins require the owner context and an integer rounds value between 1 and 10.'))
+    if not isinstance(result_id, str) or not re.fullmatch(r'[0-9a-f]{32}', result_id):
+        raise PinError('invalid_result_id', choose(
+            '请用成功结果或 list_tool_result_pins 返回的完整 result_id。没有 ID 的结果无法驻留。',
+            'Use the complete result_id returned by a successful result or list_tool_result_pins. A result without an ID cannot be pinned.'))
     with _db(uid,char_id,True) as db:
         row=db.execute('SELECT * FROM pin_candidates WHERE id=?',(result_id,)).fetchone()
         if row is None or row['expires_at']<=time.time() or not allowed(uid,char_id,row['tool']):
-            raise ValueError('result_unavailable_or_permission_revoked')
+            raise PinError('result_unavailable_or_permission_revoked', choose(
+                '结果已过期、已不在候选中，或原工具已撤权。请用 list_tool_result_pins 查询当前候选。',
+                'This result expired, left the candidate list, or its tool permission was revoked. Check list_tool_result_pins for current candidates.'))
         active=list(db.execute('SELECT p.id,length(c.content) chars FROM result_pins p JOIN pin_candidates c ON c.id=p.id WHERE p.remaining>0'))
         other=[item for item in active if item['id']!=result_id]
         if len(other)>=3 or sum(item['chars'] for item in other)+len(row['content'])>6000:
-            raise ValueError('pin_limit_3_or_6000_chars')
+            raise PinError('pin_limit_3_or_6000_chars', choose(
+                '驻留已达容量上限。请先取消不再需要的驻留结果。',
+                'Pin capacity is full. Unpin a result you no longer need first.'))
         db.execute('INSERT INTO result_pins VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET remaining=excluded.remaining,revision=excluded.revision',
             (result_id,rounds,uuid.uuid4().hex))
     return {'result_id':result_id,'remaining_rounds':rounds,'starts':'next_owner_prompt','snapshot_only':True}
@@ -79,6 +96,27 @@ def view(uid,char_id):
             return [dict(row) for row in db.execute('SELECT c.*,p.remaining,p.revision FROM result_pins p JOIN pin_candidates c ON c.id=p.id WHERE p.remaining>0 AND c.expires_at>? ORDER BY c.captured_at',(time.time(),))]
         except Exception:
             return []  # Existing databases may not yet have a pin schema.
+
+
+def candidates(uid, char_id):
+    if not _owner(uid):
+        return []
+    with _db(uid, char_id) as db:
+        if db is None or db.execute("SELECT 1 FROM sqlite_master WHERE name='pin_candidates'").fetchone() is None:
+            return []
+        rows = db.execute('SELECT id AS result_id,tool,generated_at,expires_at FROM pin_candidates '
+                          'WHERE expires_at>? ORDER BY captured_at DESC', (time.time(),)).fetchall()
+    exposed = {}
+    result = []
+    for row in rows:
+        tool = row['tool']
+        if tool not in exposed:
+            exposed[tool] = allowed(uid, char_id, tool)
+        if exposed[tool]:
+            result.append(dict(row))
+            if len(result) == 5:
+                break
+    return result
 
 
 def messages(uid,char_id):
@@ -107,7 +145,7 @@ def consume(uid,char_id,turn_id):
 
 
 def output(data):
-    text=json.dumps(data,ensure_ascii=False)
+    text=json.dumps(data,ensure_ascii=False,separators=(',', ':'))
     return ToolResult(raw_data=text,safe_summary=sanitize_for_prompt(text),meta={'validity':'current_turn','generated_at':time.time()})
 
 
@@ -125,4 +163,8 @@ async def unpin_tool_result(user_id,result_id,*,char_id):
 
 
 async def list_tool_result_pins(user_id,*,char_id):
-    return output({'pins':[{k:r[k] for k in ('id','tool','generated_at','expires_at','remaining')} for r in view(user_id,char_id)]})
+    if not _owner(user_id):
+        return output({'pins': [], 'candidates': []})
+    pins = [{k:r[k] for k in ('id','tool','generated_at','expires_at','remaining')}
+            for r in view(user_id,char_id) if allowed(user_id,char_id,r['tool'])]
+    return output({'pins': pins, 'candidates': candidates(user_id, char_id)})

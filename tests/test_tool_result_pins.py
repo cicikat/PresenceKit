@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from core import tool_result_pins as pins
 from core.tools.tool_result import ToolResult
@@ -49,6 +51,29 @@ def test_autonomy_reminds_reuse_and_only_exposed_pin_tool():
     assert 'does not refresh' in prompt
     hidden = _system_prompt(talk_available=False, available_tool_names={'get_time'})
     assert 'pin_tool_result' not in hidden
+
+
+@pytest.mark.asyncio
+async def test_bad_pin_id_recovers_through_live_candidate_list(sandbox, monkeypatch):
+    from core import tool_dispatcher as dispatcher
+
+    monkeypatch.setattr(dispatcher, '_is_tool_enabled', lambda name: True)
+    identifier = candidate()
+    async def dispatch(name, args):
+        return await dispatcher.execute_structured(name, args, 'u', 'u', False, object(),
+                                                   origin='autonomy_loop', char_id='c')
+
+    failed = await dispatch('pin_tool_result', {'result_id': 'latest', 'rounds': 2})
+    assert failed.status == 'tool_failed'
+    assert 'list_tool_result_pins' in failed.result
+    listed = await dispatch('list_tool_result_pins', {})
+    assert listed.status == 'tool_executed' and identifier in listed.result
+    assert 'safe reference' not in listed.result
+    saved = await dispatch('pin_tool_result', {'result_id': identifier, 'rounds': 2})
+    assert saved.status == 'tool_executed' and pins.view('u', 'c')[0]['remaining'] == 2
+    monkeypatch.setattr(pins, 'allowed', lambda *args: False)
+    hidden = await pins.list_tool_result_pins('u', char_id='c')
+    assert json.loads(hidden.safe_summary) == {'pins': [], 'candidates': []}
 
 
 def test_rounds_commit_once_and_skip_creation_round(sandbox):

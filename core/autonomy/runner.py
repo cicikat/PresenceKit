@@ -76,6 +76,11 @@ def _system_prompt(
             "result_id and rounds=1..10 to keep its bounded snapshot visible. Pin selectively, not every result; "
             "pinning preserves a historical snapshot and does not refresh it. "
         )
+        if "list_tool_result_pins" in tool_names:
+            continuity_note += (
+                "If you do not have the exact result_id, use list_tool_result_pins to find a current candidate. "
+                "Only results with an issued ID are eligible. "
+            )
     optional_capabilities: list[str] = []
     if tool_names & {"fs_list", "fs_read"}:
         optional_capabilities.append("read permitted backend or external files")

@@ -1150,10 +1150,10 @@ from core import quote_notebook as _quote_notebook
 from core import tool_result_pins as _tool_result_pins
 
 for _pin_name, _pin_description, _pin_properties, _pin_required in (
-    ('pin_tool_result','标记本次真实工具返回的 result_id，供后续1..10个成功用户对话轮临时复用。最多3项、摘要总计6000字，硬过期最多24小时；只保留历史快照，不保证仍然新鲜。',
-     {'result_id':{'type':'string','description':'成功工具返回附带的result_id，不得编造'},'rounds':{'type':'integer','minimum':1,'maximum':10,'description':'后续保留轮数，角色按需选择'}},['result_id','rounds']),
+    ('pin_tool_result','临时驻留真实工具结果1到10轮。只接受成功结果或 list_tool_result_pins 提供的完整 result_id；没有 ID 的结果无法驻留。最多3项，硬过期最多24小时。',
+     {'result_id':{'type':'string','description':'成功结果或候选列表给出的完整 32 位 result_id'},'rounds':{'type':'integer','minimum':1,'maximum':10,'description':'后续保留轮数，角色按需选择'}},['result_id','rounds']),
     ('unpin_tool_result','取消临时驻留的工具结果，下一轮停止注入。',{'result_id':{'type':'string','description':'已标记的结果ID'}},['result_id']),
-    ('list_tool_result_pins','查看当前临时驻留的工具名称、result_id、获取时间和剩余轮数；不把驻留当成最新事实。',{},[]),
+    ('list_tool_result_pins','查看已驻留项以及最近5个可驻留候选的真实 ID、工具名称和时间。没有 ID 或找不到时，先查候选列表。',{},[]),
 ):
     _TOOL_REGISTRY[_pin_name]={'func':getattr(_tool_result_pins,_pin_name),'category':'memory','dangerous':False,
         'description':_pin_description,'parameters':{'type':'object','additionalProperties':False,'properties':_pin_properties,'required':_pin_required},
@@ -3287,7 +3287,12 @@ async def _execute_structured_impl(
             return _execution_outcome("tool_failed", result_text)
         log_error("tool_dispatcher.execute", e)
         _log_execute_failure_context(tool_name, tool_args, origin)
-        server_reason = _mcp_server_reported_error(e)
+        if isinstance(e, _tool_result_pins.PinError):
+            server_reason = e.hint
+        elif tool_name == 'generate_image' and getattr(e, 'error_category', '') == 'runware_thirdPartyInsufficientCredits':
+            server_reason = 'Runware 的第三方模型付费额度不足。请选择当前可用的生图预设，或充值后再使用该模型。'
+        else:
+            server_reason = _mcp_server_reported_error(e)
         if server_reason:
             # Brief 122：服务器业务层明确说了缺什么/为什么拒绝（如"command 参数
             # 必填"），把原话给模型而不是套通用兜底——模型大概率能在下一步自己
