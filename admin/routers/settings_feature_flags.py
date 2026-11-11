@@ -18,6 +18,7 @@ CONFIG_FILE = Path("config.yaml")
 FLAGS = {
     "affective_engine": ("affective_engine", "enabled", "事件驱动的混合情绪与认知重评"),
     "screen_observation": ("screen_observation", "enabled", "角色按需截图（电脑与手机）"),
+    "computer_use": ("computer_use", "enabled", "Windows Computer Use"),
     "ime_ingest": ("ime_ingest", "enabled", "IME 草稿与编辑事件接收"),
     "ime_awareness": ("ime_awareness", "enabled", "IME 活动理解与主动关心"),
     "qq":   ("qq",   "enabled", "QQ 通道"),
@@ -97,6 +98,13 @@ async def get_feature_flags(auth=Depends(require_scopes("admin"))):
             from admin.routers.wechat import operational_state
             item["effective_state"] = operational_state(enabled=enabled)["effective_state"]
             item["description"] = "默认关闭；需绑定 owner 和连接凭据，关闭即停止微信收发；详见运行配置"
+        elif name == "computer_use":
+            from core.agent_runtime.computer_use import snapshot
+            status = snapshot(cfg)
+            item["enabled"] = item["desired_enabled"] = status["enabled"]
+            item["effective_state"] = ("ready" if status["device_online"] else "no-active-device"
+                                       if status["enabled"] else "disabled")
+            item["description"] = "默认关闭；开启后需桌面本机授权。关闭立即结束授权与任务，恢复普通聊天。"
         elif name == "screen_observation":
             from core.perception.screen_observation import state
             snapshot = state()

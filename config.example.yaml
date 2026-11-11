@@ -508,6 +508,10 @@ recall:
   cooldown_minutes: 30     # 同一文件/窗口最短间隔分钟数（范围 5–240）
 
 # Brief 56: local VLM shadow observation. Disabled by default; images never persist.
+# Windows 桌面 GUI 任务。默认关闭，可在管理面热更新。关闭即撤销执行租约。
+computer_use:
+  enabled: false
+
 visual_perception:
   enabled: false
   base_url: ""

@@ -1021,3 +1021,9 @@ QQ 相关旧 fixture observe：fast-path 四项、tool-reply 一项及 R6C F7 �
 已验证公网 LLM/Embedding、本机 VLM 和隔离 HTTP 的 Whisper、GPT-SoVITS。仍需用不同设备验证 VPS 到私网 VLM/STT/TTS 的往返、离线恢复、两组角色声线和客户端播放。节点目录、共享 GPU 调度与管理面综合节点状态依赖这项验收。见 [调用矩阵](distributed-inference.md)。
 
 DIST-08 补充：VPS 与 Windows 已通过隔离 STT 和 GPT-SoVITS 真实 HTTP 验证，节点停机、超时、取消与恢复均有记录。生产语音 Preset、真实桌面摄像头到角色回复、物理链路重连、独立双 GPU 实测和 v3 超分仍为 `observe`。见 [两台设备验证](distributed-inference.md#两台设备验证)。
+
+## 301 Windows Computer Use（observe）
+
+真实记事本在 168 DPI 完成观察、全选、输入、保存、停止和拒绝重放。设备协议覆盖五步模拟执行、错设备/nonce、重复回执、迟到观察、断线、切角和撤销。管理面浏览器已硬刷新验证视觉路由与开关，桌面浏览器以 Tauri IPC 测试替身验证授权、暂停、恢复和停止。
+
+私网视觉连接能查询模型列表，视觉定位在 18 秒预算内超时，未执行输入。真实视觉定位、远程部署与桌面客户端及模型端到端、Edge 原生滚动与点击、多屏、锁屏及执行器崩溃恢复仍待验收。

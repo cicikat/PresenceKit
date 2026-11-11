@@ -1728,11 +1728,11 @@ async def _computer_use_start(goal: str, *, user_id: str, char_id: str) -> str:
     return json.dumps(result, ensure_ascii=False)
 
 
-async def _computer_use_status(task_id: str, *, user_id: str, char_id: str) -> str:
+async def _computer_use_status(task_id: str = "", *, user_id: str, char_id: str) -> str:
     return json.dumps(_computer_use.task_status(user_id, char_id, task_id), ensure_ascii=False)
 
 
-async def _computer_use_cancel(task_id: str, *, user_id: str, char_id: str) -> str:
+async def _computer_use_cancel(task_id: str = "", *, user_id: str, char_id: str) -> str:
     return json.dumps(_computer_use.task_status(user_id, char_id, task_id, cancel=True), ensure_ascii=False)
 
 
@@ -1741,10 +1741,10 @@ for _cu_name, _cu_func, _cu_field, _cu_description, _cu_example in (
      "在用户已授权的 Windows 桌面上执行用户明确委托的任务。返回已排队或不可用；已排队时仅说明正在处理，随后可查实际结果。",
      "帮我在已授权的记事本里写入这段文字"),
     ("computer_use_status", _computer_use_status, "task_id",
-     "查询当前主人与角色的桌面任务状态，只有 succeeded 表示目标已验证。",
+     "查询当前主人与角色的桌面任务状态，省略任务 ID 时查询最近任务。只有 succeeded 表示目标已验证。",
      "刚才那个桌面任务做完了吗"),
     ("computer_use_cancel", _computer_use_cancel, "task_id",
-     "按用户请求停止当前桌面任务。已发出的输入可能已生效。",
+     "按用户请求停止当前桌面任务，可省略任务 ID。已发出的输入可能已生效。",
      "停止刚才的桌面操作"),
 ):
     _TOOL_REGISTRY[_cu_name] = {
@@ -1752,7 +1752,7 @@ for _cu_name, _cu_func, _cu_field, _cu_description, _cu_example in (
         "dangerous": False, "probe": False, "echo_event_log": False,
         "parameters": {"type": "object", "properties": {
             _cu_field: {"type": "string", "maxLength": 1200 if _cu_field == "goal" else 32},
-        }, "required": [_cu_field], "additionalProperties": False},
+        }, "required": ["goal"] if _cu_field == "goal" else [], "additionalProperties": False},
         "examples": [_cu_example], "keywords": ["操作桌面", "Computer Use", "桌面任务"], "trace_args": [],
     }
 

@@ -110,6 +110,7 @@ async def test_remote_task_receipts_are_device_session_sequence_and_nonce_bound(
         assert "fixture private" not in json.dumps(state)
         assert "Test control" not in json.dumps(state)
         assert service.task_status("owner", "fixture_char", task_id)["state"] == "succeeded"
+        assert service.task_status("owner", "fixture_char", "")["task_id"] == task_id
 
 
 @pytest.mark.asyncio

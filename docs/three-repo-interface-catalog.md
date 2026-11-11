@@ -1299,3 +1299,7 @@ Runware适配和模型发现位于后端管理面；桌面/手机继续消费原
 `POST /computer-use/poll` 和 `POST /computer-use/result` 采用桌面 profile 的 `ws.desktop`、`sensor.write` scopes 与 Bearer 指纹绑定；管理员 token 兼容。服务端根据实际主人、活跃角色、Dream guard 和角色工具权限校验会话，步骤发放一次。设备、授权会话、任务、服务实例、序号、nonce、TTL 和帧版本共同校验回执；发送结果丢失后的输入状态为 `outcome_unknown`。观察只上传有界 UIA 与图像元数据。手机无调用方，原 WS action 协议继续使用原有消息。
 
 `GET /computer-use/status`（`state.read`）返回设备在线、授权范围、任务状态、步数、动作数、平均步时延、最后错误与视觉路由。聊天工具 `computer_use_start/status/cancel` 走主人现实私聊的 desktop 工具类别。远程服务 + 真实桌面 + 模型端到端待验收。
+
+## 301 CU-04 Windows 授权控制（current / observe）
+
+`computer_use.enabled` 默认关闭。管理面经现有 feature-flags API 热切换，并复用状态端点。桌面主窗口提供会话授权、状态与控制；桌宠只读取本机状态和执行本机停止。手机无消费者。交付与未验收项见 [Windows Computer Use 已知问题](known-issues.md#301-windows-computer-useobserve)。

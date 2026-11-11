@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT))
 
 
 def main() -> None:
-    from admin.routers import settings_llm
+    from admin.routers import computer_use, settings_feature_flags, settings_llm
     from core import config_loader, llm_client
 
     with tempfile.TemporaryDirectory() as temporary, MonkeyPatch.context() as patch:
@@ -36,11 +36,16 @@ def main() -> None:
             return None
 
         patch.setattr(settings_llm, "CONFIG_FILE", config)
-        patch.setattr(config_loader, "get_config", read_config)
-        patch.setattr(config_loader, "reload_config", read_config)
+        patch.setattr(settings_feature_flags, "CONFIG_FILE", config)
+        patch.setattr(settings_feature_flags, "get_config", read_config)
+        patch.setattr(config_loader, "_CONFIG_PATH", config)
+        patch.setattr(config_loader, "_config", None)
+        patch.setattr(config_loader, "_base_config", None)
         patch.setattr(llm_client, "reload_client", no_network_reload)
         app = FastAPI()
         app.include_router(settings_llm.router)
+        app.include_router(settings_feature_flags.router)
+        app.include_router(computer_use.router)
         for route in app.routes:
             for dep in getattr(getattr(route, "dependant", None), "dependencies", []):
                 app.dependency_overrides[dep.call] = object
@@ -60,7 +65,7 @@ def main() -> None:
 
                 def route_request(route):
                     path = urlsplit(route.request.url).path
-                    if path.startswith("/static/") or path.startswith("/image-presets"):
+                    if path.startswith(("/static/", "/image-presets", "/computer-use", "/settings/feature-flags")):
                         route.continue_()
                     else:
                         route.fulfill(json={})
@@ -107,11 +112,40 @@ def main() -> None:
                 select.select_option("")
                 page.evaluate("() => saveImageRoutes()")
                 assert read_config()["image_presets"]["routes"]["computer_use"] == ""
+                def load_device():
+                    page.reload(wait_until="networkidle")
+                    page.evaluate("""async () => {
+                        document.getElementById('auth-overlay').style.display = 'none';
+                        const app = document.getElementById('app');
+                        app.classList.remove('admin-inline-056');
+                        app.style.display = 'flex';
+                        await goto('device-policy');
+                        await loadComputerUse();
+                    }""")
+                    page.locator("#cu-enabled").wait_for(state="attached")
+                    disclosure = page.locator("details:not([open]):has(#cu-enabled) > summary")
+                    if disclosure.count():
+                        disclosure.click()
+
+                load_device()
+                checkbox = page.locator("#cu-enabled")
+                assert not checkbox.is_checked()
+                assert page.locator("#cu-device").inner_text()
+                checkbox.check()
+                page.locator("#cu-save").click()
+                page.wait_for_function("document.getElementById('cu-save').disabled === false")
+                assert read_config()["computer_use"]["enabled"] is True
+                load_device()
+                assert checkbox.is_checked()
+                checkbox.uncheck()
+                page.locator("#cu-save").click()
+                page.wait_for_function("document.getElementById('cu-save').disabled === false")
+                assert read_config()["computer_use"]["enabled"] is False
                 browser.close()
         finally:
             server.should_exit = True
             thread.join(timeout=5)
-    print("Computer Use admin route saved, restored after hard refresh, and cleared.")
+    print("Computer Use admin route and switch saved, restored after hard refresh, and cleared.")
 
 
 if __name__ == "__main__":

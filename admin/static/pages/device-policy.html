@@ -7,3 +7,24 @@
   <div class="config-item-meta"><span data-i18n="runtime_config.source_global">来源：全局 screen_peek 配置</span><span data-i18n="runtime_config.apply_reload">保存后热重载</span></div>
   <button class="btn btn-primary btn-sm" data-action="saveScreenPeekSettings" data-i18n="common.save">保存</button>
 </div>
+<section class="card">
+  <div class="card-header">
+    <h3>Computer Use</h3>
+    <button class="btn btn-ghost btn-sm" data-action="loadComputerUse" data-i18n="common.refresh">刷新</button>
+  </div>
+  <p data-i18n="computer_use.hint">默认关闭。启用后仍需在 Windows 桌面端授权。关闭会结束当前授权与任务。</p>
+  <label class="checkbox-row"><input id="cu-enabled" type="checkbox" disabled>
+    <span data-i18n="computer_use.enabled">启用 Windows Computer Use</span>
+  </label>
+  <button id="cu-save" class="btn btn-primary btn-sm" data-action="saveComputerUse" data-i18n="common.save" disabled>保存</button>
+  <p id="cu-status" role="status"></p>
+  <dl>
+    <dt data-i18n="computer_use.device">桌面设备</dt><dd id="cu-device">–</dd>
+    <dt data-i18n="computer_use.scope">授权范围</dt><dd id="cu-scope">–</dd>
+    <dt data-i18n="computer_use.model">视觉路由</dt><dd id="cu-model">–</dd>
+    <dt data-i18n="computer_use.task">任务状态</dt><dd id="cu-task">–</dd>
+    <dt data-i18n="computer_use.actions">已执行动作</dt><dd id="cu-actions">–</dd>
+    <dt data-i18n="computer_use.latency">平均步时延</dt><dd id="cu-latency">–</dd>
+    <dt data-i18n="computer_use.error">最后错误</dt><dd id="cu-error">–</dd>
+  </dl>
+</section>

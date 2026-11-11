@@ -161,6 +161,7 @@ async function submitFactModal() {
 //  屏幕内容查看 / TTS / 用户称谓（三个小设置卡片）
 // ══════════════════════════════════════════════════════════
 async function loadScreenPeekSettings() {
+  void loadComputerUse();
   try {
     const d = await api('GET', '/settings/screen-peek');
     document.getElementById('sp-enabled').checked = !!d.enabled;
@@ -178,3 +179,47 @@ async function saveScreenPeekSettings() {
   } catch (e) { toast(t('common.save_failed', '保存失败: {error}', {error: e.message}), 'err'); }
 }
 
+
+async function loadComputerUse() {
+  const toggle = document.getElementById('cu-enabled');
+  const save = document.getElementById('cu-save');
+  if (!toggle || !save) return;
+  const status = document.getElementById('cu-status');
+  try {
+    const data = await api('GET', '/computer-use/status');
+    toggle.checked = data.enabled === true;
+    toggle.disabled = save.disabled = false;
+    status.textContent = data.enabled ? (data.device_online
+      ? t('computer_use.ready', '设备已授权') : t('computer_use.waiting', '等待桌面授权'))
+      : t('computer_use.disabled', '已关闭');
+    const values = {
+      device: data.device_online ? t('computer_use.online', '在线') : t('computer_use.offline', '离线'),
+      scope: data.scope ? t('computer_use.scope.' + data.scope, data.scope) : '–',
+      model: data.model_route ? data.model_route + (data.vision_ready ? '' : ' · ' + t('computer_use.route_unready', '不可用'))
+        : t('routing.computer_use_off', '关闭 · 仅使用 UIA'),
+      task: data.state ? t('computer_use.task.' + data.state, data.state) : '–',
+      actions: data.actions ?? 0,
+      latency: (data.average_step_ms ?? 0) + ' ms',
+      error: data.last_error || '–',
+    };
+    for (const [key, value] of Object.entries(values)) {
+      document.getElementById('cu-' + key).textContent = value;
+    }
+  } catch {
+    toggle.disabled = save.disabled = true;
+    status.textContent = t('computer_use.unavailable', '无法读取 Computer Use 状态');
+  }
+}
+
+async function saveComputerUse() {
+  const toggle = document.getElementById('cu-enabled');
+  const save = document.getElementById('cu-save');
+  save.disabled = true;
+  try {
+    await api('PUT', '/settings/feature-flags', {flags: {computer_use: toggle.checked}});
+    toast(t('common.saved', '已保存'), 'ok');
+  } catch (error) {
+    toast(t('common.save_failed', '保存失败: {error}', {error: error.message}), 'err');
+  }
+  await loadComputerUse();
+}

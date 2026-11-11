@@ -62,8 +62,9 @@ _last: dict[str, Any] = {}
 _retired: dict[str, float] = {}
 
 
-def enabled() -> bool:
-    block = config_loader.get_config().get("computer_use")
+def enabled(config: dict | None = None) -> bool:
+    config = (config_loader.get_config() or {}) if config is None else config
+    block = config.get("computer_use")
     return isinstance(block, dict) and block.get("enabled") is True
 
 
@@ -223,11 +224,12 @@ def available(uid: str | None, char_id: str | None) -> bool:
                 and _device_valid(device, time.monotonic()))
 
 
-def snapshot() -> dict:
+def snapshot(config: dict | None = None) -> dict:
     from core.image_presets import snapshot as image_snapshot
 
     _refresh(time.monotonic())
-    route = next(row for row in image_snapshot()["purposes"] if row["purpose"] == CAPABILITY)
+    config = (config_loader.get_config() or {}) if config is None else config
+    route = next(row for row in image_snapshot(config)["purposes"] if row["purpose"] == CAPABILITY)
     current = _last.copy()
     if _run is not None:
         current = {
@@ -235,7 +237,7 @@ def snapshot() -> dict:
             "steps": _run.steps, "actions": _run.actions,
             "average_step_ms": round(_run.total_ms / _run.steps) if _run.steps else 0, "last_error": None,
         }
-    return {"enabled": enabled(), "device_online": _device is not None,
+    return {"enabled": enabled(config), "device_online": _device is not None,
             "scope": _device.scope if _device else None,
             "model_route": route["connection"], "vision_ready": route["ready"], **current}
 
@@ -275,7 +277,18 @@ def task_status(uid: str, char_id: str, task_id: str, *, cancel: bool = False) -
     if principal() != actor:
         return {"state": "unavailable"}
     try:
-        receipt = task_manager.get_task(actor, task_id)
+        if not task_id and _run is not None and _run.device.principal == actor:
+            task_id = _run.lease.task_id
+        if task_id:
+            receipt = task_manager.get_task(actor, task_id)
+        elif cancel:
+            return {"state": "unavailable"}
+        else:
+            recent = task_manager.list_tasks(actor, capability=CAPABILITY, limit=1)
+            if not recent:
+                return {"state": "unavailable"}
+            receipt = recent[0]
+            task_id = receipt["task_id"]
     except task_manager.TaskManagerError:
         return {"state": "unavailable"}
     if receipt["capability"] != CAPABILITY:
@@ -322,7 +335,10 @@ async def _drive(run: Run, goal: str) -> None:
             run.steps += 1
             run.total_ms += round((time.monotonic() - now) * 1000)
             kind = action["kind"]
-            if receipt["status"] == "stale" or receipt.get("reason") == "paused":
+            if receipt.get("reason") in {
+                "paused", "element_changed", "observation_changed", "image_changed",
+                "observation_expired", "session_resumed",
+            }:
                 observation = None
                 action = {"kind": "observe"}
                 continue
