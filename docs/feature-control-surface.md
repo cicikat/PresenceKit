@@ -1188,7 +1188,7 @@ provider_kind 新增 venice。Base URL为 https://api.venice.ai/api/v1，原生P
 
 ## 302 CU-05 Windows Computer Use 视觉定位
 
-管理员通过「模型路由 → 图像用途」或 `PUT /image-presets/routes` 修改 `image_presets.routes.computer_use`。默认空值，关闭后仅使用 UI Automation。`GET /image-presets` 显示 `ready`、`transport_mode` 和 `blocking_reason`；`GET /computer-use/status` 另显示会话视觉状态及最近一次云端请求的结果、时延与尺寸。云端路由就绪后，桌面仍需在开启每次会话时勾选授权。
+管理员通过「多模态管理 → 图像用途 → Computer Use · Windows 视觉定位」或 `PUT /image-presets/routes` 修改 `image_presets.routes.computer_use`。默认空值，关闭后仅使用 UI Automation。`GET /image-presets` 显示 `ready`、`transport_mode` 和 `blocking_reason`；`GET /computer-use/status` 另显示会话视觉状态及最近一次云端请求的结果、时延与尺寸。云端路由就绪后，桌面仍需在开启每次会话时勾选授权。
 
 「看屏幕与操作电脑」通过 `PUT /computer-use/vision/settings`（`admin`）热更新 `computer_use.local_vision_timeout_s`（默认 18，范围 1–18 秒）和 `computer_use.cloud_vision_timeout_s`（默认 25，范围 1–25 秒）。修改对下一次步骤分发生效，状态端点显示当前有效值。总闸关闭即撤销会话；UIA 会话无须勾选云端截图。
 

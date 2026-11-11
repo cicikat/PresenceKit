@@ -629,4 +629,4 @@ Brief 253.6 的语音转写使用独立 `stt_presets` 命名连接和 `voice_mes
 
 `image_presets.routes.computer_use` 默认留空。管理面「模型路由 → 图像用途」可热更新，连接须启用并支持 Chat Completions 视觉输入。`local_private` 沿用显式标记本地的 HTTP 回环或私网 IP（含 Tailnet）；`cloud_proxy` 使用已保存的公网 HTTPS 连接，截图出站须有本次桌面授权。管理视图显示 `transport_mode` 和 `blocking_reason`，密钥继续遮罩。关闭路由后仍可用 Windows UI Automation。用途独立于屏幕观察、摄像头和手机，也没有备用连接。
 
-截图由桌面 Rust 客户端直接 POST 到选中的本机或私网视觉连接。请求禁用代理与重定向，模型只返回目标位置或无法确定；图片不经任务后端或聊天模型传输。
+本地模式由桌面 Rust 客户端直连视觉服务；云端模式由后端代理本次获准的截图。管理面「多模态管理 → 图像用途」将 Computer Use 单列，与普通屏幕观察分别保存。

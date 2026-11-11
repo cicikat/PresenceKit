@@ -46,7 +46,7 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'cu-05';
+const ADMIN_UI_FRAGMENT_VERSION = 'character-image-reference-1';
 
 const ADMIN_PAGE_ALIASES = Object.freeze({overview:'setup', users:'character', 'operations-center':'status', memory: 'observe-memory', 'creation-center':'data-management', 'observe-existence':'observe-dream'});
 

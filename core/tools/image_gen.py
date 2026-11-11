@@ -8,7 +8,7 @@ import time
 
 import httpx
 
-from core import image_gen, api_call_log
+from core import image_gen, api_call_log, character_image_reference
 from core.model_network import make_model_http_client
 from core.tools.chat_artifacts import ArtifactError, store_generated_image
 from core.tools.tool_result import ToolResult
@@ -25,6 +25,7 @@ async def generate_image(
     height: int | None = None,
     reference_sha256: str | None = None,
     reference_artifact_id: str | None = None,
+    use_character_reference: bool = False,
     *,
     user_id: str | None = None,
     char_id: str | None = None,
@@ -33,12 +34,20 @@ async def generate_image(
         raise ValueError("prompt 不能为空。")
     if len(prompt) > image_gen.MAX_PROMPT_CHARS:
         raise ValueError(f"prompt 不能超过 {image_gen.MAX_PROMPT_CHARS} 个字符。")
-    has_ref = reference_sha256 is not None or reference_artifact_id is not None
+    has_attachment_ref = reference_sha256 is not None or reference_artifact_id is not None
+    if use_character_reference and has_attachment_ref:
+        raise character_image_reference.ReferenceError("角色参考图和临时参考图只能选择一种。")
+    has_ref = use_character_reference or has_attachment_ref
     resolved = image_gen.resolve_preset(preset, char_id)
     if has_ref and resolved.get("supports_edits", True) is False:
-        raise ValueError(f"图像生成预设 {resolved['name']} 不支持参考图。")
+        raise character_image_reference.ReferenceError(f"图像生成预设 {resolved['name']} 不支持参考图。请改用支持参考图的连接，不要取消勾选重试。")
     image_bytes: tuple[bytes, str, str] | None = None
-    if has_ref:
+    if use_character_reference:
+        portrait = character_image_reference.read(user_id, char_id) if user_id and char_id else None
+        if portrait is None:
+            raise character_image_reference.ReferenceError("还没有固定角色形象参考图。请让用户上传并固定参考图，再生成自己的形象。")
+        image_bytes = (portrait, "image/jpeg", "character_reference")
+    elif has_attachment_ref:
         image_bytes = image_gen.image_reference_bytes(
             user_id=user_id,
             char_id=char_id,
@@ -210,15 +219,42 @@ def image_gen_httpx_error_category(exc: BaseException) -> str:
 
 
 def register_tools(registry: dict) -> None:
-    async def _generate(prompt, preset=None, width=None, height=None, reference_sha256=None, reference_artifact_id=None, *, user_id, char_id):
+    async def _generate(prompt, preset=None, width=None, height=None, reference_sha256=None, reference_artifact_id=None, use_character_reference=False, *, user_id, char_id):
         return await generate_image(prompt, preset=preset, width=width, height=height,
                                     reference_sha256=reference_sha256,
                                     reference_artifact_id=reference_artifact_id,
+                                    use_character_reference=use_character_reference,
                                     user_id=user_id, char_id=char_id)
 
+    async def _pin(sha256, *, user_id, char_id):
+        from core.character_image_reference import MAX_UPLOAD_BYTES, save
+        from core.chat_media import resolve_chat_media
+
+        from starlette.concurrency import run_in_threadpool
+
+        record = resolve_chat_media(sha256, uid=user_id, char_id=char_id)
+        if record.size > MAX_UPLOAD_BYTES:
+            raise character_image_reference.ReferenceError("参考图不能超过 10 MB。")
+        await run_in_threadpool(save, user_id, char_id, record.path.read_bytes())
+        return "已把这张图片固定为当前角色的形象参考图。"
+
+    registry["pin_character_image_reference"] = {
+        "func": _pin,
+        "description": "仅当用户本轮明确要求固定随消息发送的图为你的角色形象参考图时使用。会替换此前的参考图。",
+        "category": "media",
+        "parameters": {"type": "object", "properties": {
+            "sha256": {"type": "string", "description": "本轮用户上传的图片指纹。"},
+        }, "required": ["sha256"]},
+        "dangerous": False,
+        "effect": "write",
+        "examples": ["把这张图固定为你的形象参考图"],
+        "keywords": ["固定参考图", "设为参考图"],
+        "trace_result": False,
+        "echo_event_log": False,
+    }
     registry["generate_image"] = {
         "func": _generate,
-        "description": "按提示词生成图片。定义出现后可直接调用；preset 选你想用的图像预设（省略用默认），不要编造本机路径。传 reference_sha256 或 reference_artifact_id 时走图生图（edits），prompt 是改图指令。",
+        "description": "按提示词生成图片。定义出现后可直接调用；preset 选你想用的图像预设（省略用默认），不要编造本机路径。传 reference_sha256 或 reference_artifact_id 时走图生图（edits），prompt 是改图指令。生成你自己的形象（包括自拍或自画像）时务必勾选 use_character_reference；没有固定图或连接不支持参考图时，说明原因，不能去掉参考图重试。其他主题默认不勾选。",
         "category": "media",
         "parameters": {
             "type": "object",
@@ -227,6 +263,7 @@ def register_tools(registry: dict) -> None:
                 "preset": {"type": "string", "description": "可选：要用的图像预设名；省略用默认预设。"},
                 "width": {"type": "integer", "description": "可选：宽度，默认由预设决定。"},
                 "height": {"type": "integer", "description": "可选：高度，默认由预设决定。"},
+                "use_character_reference": {"type": "boolean", "description": "勾选固定的角色形象参考图。只在 true 时使用；生成自己的形象时务必设为 true。与临时参考图字段互斥。"},
                 "reference_sha256": {"type": "string", "description": "可选：参考图 sha256（本轮图片消息或资料库）。与 reference_artifact_id 二选一。"},
                 "reference_artifact_id": {"type": "string", "description": "可选：之前生成的图 id。与 reference_sha256 二选一。"},
             },

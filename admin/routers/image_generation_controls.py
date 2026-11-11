@@ -1,7 +1,8 @@
 """Admin-only image-generation discovery, routing and production-path probes."""
 import time
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi.responses import Response
 from pydantic import BaseModel
 
 from admin.auth import require_scopes
@@ -115,3 +116,52 @@ async def test_image_preset(name: str):
         return {"ok": False, "duration_ms": int((time.perf_counter() - started) * 1000),
                 "error_category": category, "message": "服务商余额不足，请充值后重试" if category == "insufficient_balance" else "生成测试失败，请检查地址、密钥、模型与图片协议（" + category + "）",
                 "configured_model": configured_model, "tested_model": tested_model, "same_model": configured_model == tested_model}
+
+
+def _reference_owner(char_id: str) -> str:
+    from core.asset_registry import get_registry
+
+    try:
+        get_registry().resolve(char_id, "character")
+    except ValueError as exc:
+        raise HTTPException(404, "角色不存在") from exc
+    return str(config_loader.get_config().get("scheduler", {}).get("owner_id", "owner"))
+
+
+@router.get("/image-gen-presets/character-reference/{char_id}")
+def character_reference_status(char_id: str):
+    from core.character_image_reference import exists
+
+    return {"configured": exists(_reference_owner(char_id), char_id)}
+
+
+@router.get("/image-gen-presets/character-reference/{char_id}/preview")
+def character_reference_preview(char_id: str):
+    from core.character_image_reference import read
+
+    raw = read(_reference_owner(char_id), char_id)
+    if raw is None:
+        raise HTTPException(404, "尚未固定参考图")
+    return Response(raw, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
+
+
+@router.put("/image-gen-presets/character-reference/{char_id}")
+async def upload_character_reference(char_id: str, file: UploadFile):
+    from starlette.concurrency import run_in_threadpool
+    from core.character_image_reference import MAX_UPLOAD_BYTES, save
+
+    uid = _reference_owner(char_id)
+    raw = await file.read(MAX_UPLOAD_BYTES + 1)
+    try:
+        await run_in_threadpool(save, uid, char_id, raw)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {"configured": True}
+
+
+@router.delete("/image-gen-presets/character-reference/{char_id}")
+def delete_character_reference(char_id: str):
+    from core.character_image_reference import remove
+
+    remove(_reference_owner(char_id), char_id)
+    return {"configured": False}

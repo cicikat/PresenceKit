@@ -268,6 +268,7 @@ async function loadImageGenerationCharacter() {
   save.disabled = true;
   igEl('allowlist').replaceChildren();
   igStatus('', 'character-status');
+  refreshImageGenerationReference(character);
   if (!character) return;
   try {
     const binding = await api('GET', '/character/' + encodeURIComponent(character) + '/asset-bindings');
@@ -336,4 +337,82 @@ async function saveImageConstraints() {
     renderImageConstraints();
     igStatus(igText('提示词约束已保存并选用', 'Prompt constraints saved and selected'), 'constraints-status');
   } catch (e) { igStatus(e.message, 'constraints-status'); }
+}
+
+
+let imageReferenceRequest = 0;
+let imageReferencePreviewUrl = '';
+function imageReferencePath(character) {
+  return '/image-gen-presets/character-reference/' + encodeURIComponent(character);
+}
+async function refreshImageGenerationReference(character) {
+  const request = ++imageReferenceRequest;
+  const preview = igEl('reference-preview');
+  const remove = igEl('reference-remove');
+  preview.hidden = true;
+  preview.removeAttribute('src');
+  if (imageReferencePreviewUrl) URL.revokeObjectURL(imageReferencePreviewUrl);
+  imageReferencePreviewUrl = '';
+  igEl('reference-file').value = '';
+  remove.disabled = true;
+  igStatus('', 'reference-status');
+  if (!character) return;
+  const current = () => request === imageReferenceRequest && preview.isConnected;
+  try {
+    const path = imageReferencePath(character);
+    const state = await api('GET', path);
+    if (!current()) return;
+    remove.disabled = !state.configured;
+    igStatus(state.configured ? '已固定参考图' : '尚未固定参考图', 'reference-status');
+    if (!state.configured) return;
+    const response = await fetch(BASE + path + '/preview', {headers: authHeaders()});
+    if (!response.ok) throw new Error('参考图预览加载失败');
+    const blob = await response.blob();
+    if (!current()) return;
+    imageReferencePreviewUrl = URL.createObjectURL(blob);
+    preview.src = imageReferencePreviewUrl;
+    preview.hidden = false;
+  } catch (e) {
+    if (current()) igStatus(e.message, 'reference-status');
+  }
+}
+async function uploadImageGenerationReference(button) {
+  const character = igValue('character');
+  const file = igEl('reference-file').files[0];
+  if (!character || !file) {
+    igStatus('请先选择角色和图片。', 'reference-status');
+    return;
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    igStatus('参考图不能超过 10 MB。', 'reference-status');
+    return;
+  }
+  const data = new FormData();
+  data.append('file', file);
+  const headers = authHeaders();
+  delete headers['Content-Type'];
+  button.disabled = true;
+  try {
+    const r = await fetch(BASE + imageReferencePath(character), {method: 'PUT', headers, body: data});
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || '参考图导入失败');
+    if (igEl('character')?.value === character) await refreshImageGenerationReference(character);
+  } catch (e) {
+    if (igEl('character')?.value === character) igStatus(e.message, 'reference-status');
+  } finally {
+    button.disabled = false;
+  }
+}
+async function removeImageGenerationReference(button) {
+  const character = igValue('character');
+  if (!character) return;
+  button.disabled = true;
+  try {
+    await api('DELETE', imageReferencePath(character));
+    if (igEl('character')?.value === character) await refreshImageGenerationReference(character);
+  } catch (e) {
+    if (igEl('character')?.value === character) {
+      igStatus(e.message, 'reference-status');
+      button.disabled = false;
+    }
+  }
 }

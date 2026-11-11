@@ -2919,6 +2919,7 @@ async def _execute_structured_impl(
     bypass_read_log: bool = False,
     tool_status_observer=None,
     allowed_tool_names: frozenset[str] | None = None,
+    pin_reference_hashes: frozenset[str] = frozenset(),
 ) -> ToolExecutionOutcome:
     """
     执行工具，返回 ToolExecutionOutcome。
@@ -3246,6 +3247,12 @@ async def _execute_structured_impl(
                     result = await func(user_id=user_id, char_id=char_id, origin=origin, **tool_args)
                 else:
                     result = await func(user_id=user_id, char_id=char_id, **tool_args)
+        elif tool_name == "pin_character_image_reference":
+            digest = tool_args.get("sha256")
+            if (origin != "assistant_loop" or is_group or not isinstance(digest, str)
+                    or digest not in pin_reference_hashes):
+                raise ValueError("只能按用户本轮明确要求固定本轮上传的图片。")
+            result = await func(digest, user_id=user_id, char_id=char_id)
         elif tool_name == "read_hds_heart_rate":
             _require_memory_read_scope(user_id, char_id)
             result = await func(user_id=user_id, **tool_args)
@@ -3344,6 +3351,7 @@ async def _execute_structured_impl(
         await _notify_status("failed")
         return _execution_outcome("tool_failed", fallback)
     except Exception as e:
+        from core.character_image_reference import ReferenceError
         from core.image_gen import ImagePresetError, discovery_note
         from core.mcp_client import McpOutcomeUnknown
         if isinstance(e, McpOutcomeUnknown):
@@ -3356,6 +3364,8 @@ async def _execute_structured_impl(
         _log_execute_failure_context(tool_name, tool_args, origin)
         if isinstance(e, _tool_result_pins.PinError):
             server_reason = e.hint
+        elif tool_name in {"generate_image", "pin_character_image_reference"} and isinstance(e, ReferenceError):
+            server_reason = str(e)
         elif tool_name == "generate_image" and isinstance(e, ImagePresetError):
             server_reason = "无法使用指定的生图连接。" + discovery_note(char_id)
         elif tool_name == 'generate_image' and getattr(e, 'error_category', '') == 'runware_thirdPartyInsufficientCredits':
@@ -3389,6 +3399,7 @@ async def execute_structured(
     bypass_read_log: bool = False,
     tool_status_observer=None,
     allowed_tool_names: frozenset[str] | None = None,
+    pin_reference_hashes: frozenset[str] = frozenset(),
 ) -> ToolExecutionOutcome:
     from core.tool_activity import execute_visible
     outcome = await execute_visible(
@@ -3399,6 +3410,7 @@ async def execute_structured(
         bypass_read_log=bypass_read_log,
         tool_status_observer=tool_status_observer,
         allowed_tool_names=allowed_tool_names,
+        pin_reference_hashes=pin_reference_hashes,
     )
     if origin in _EXECUTE_ALLOWED_ORIGINS:
         from core.tool_audit import record as record_tool_audit

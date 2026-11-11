@@ -116,3 +116,57 @@ async def test_generate_reference_rejected_when_preset_no_edits(monkeypatch):
     monkeypatch.setattr("core.config_loader.get_config", lambda: CFG)
     with pytest.raises(ValueError, match="不支持参考图"):
         await generate_image("x", preset="no-edits", reference_sha256="a" * 64, user_id="u1", char_id="c1")
+
+
+@pytest.mark.asyncio
+async def test_fixed_character_reference_is_opt_in_and_scoped(monkeypatch, sandbox):
+    from io import BytesIO
+
+    from PIL import Image
+    from core import character_image_reference as reference
+
+    monkeypatch.setattr("core.config_loader.get_config", lambda: CFG)
+    fake = FakeClient()
+    monkeypatch.setattr("core.tools.image_gen.make_model_http_client", lambda *a, **k: fake)
+    source = BytesIO()
+    Image.new("RGB", (16, 16), "red").save(source, "PNG")
+    reference.save("u1", "c1", source.getvalue())
+    chat_artifacts.begin_turn_collection()
+    await generate_image("landscape", user_id="u1", char_id="c1")
+    await generate_image("portrait", use_character_reference=True, user_id="u1", char_id="c1")
+    assert fake.calls[0]["url"].endswith("/images/generations")
+    assert fake.calls[1]["url"].endswith("/images/edits")
+    assert fake.calls[1]["files"]["image"][1] == reference.read("u1", "c1")
+    for user, char in [("u2", "c1"), ("u1", "c2")]:
+        with pytest.raises(reference.ReferenceError, match="还没有固定"):
+            await generate_image("portrait", use_character_reference=True, user_id=user, char_id=char)
+    assert len(fake.calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_pin_accepts_only_authorized_current_attachment(monkeypatch, sandbox, tmp_path):
+    from io import BytesIO
+    from types import SimpleNamespace
+    from PIL import Image
+    from core import character_image_reference as reference
+    from core.tool_dispatcher import execute_structured
+
+    source = BytesIO()
+    Image.new("RGB", (16, 16), "red").save(source, "PNG")
+    upload = tmp_path / "test-upload.png"
+    upload.write_bytes(source.getvalue())
+    digest = "a" * 64
+    monkeypatch.setattr("core.chat_media.resolve_chat_media",
+                        lambda *a, **kw: SimpleNamespace(path=upload, size=upload.stat().st_size))
+    args = ("pin_character_image_reference", {"sha256": digest}, "u1", "u1", False, None)
+    denied = await execute_structured(*args, origin="assistant_loop", char_id="c1")
+    assert denied.status == "tool_failed"
+    assert not reference.exists("u1", "c1")
+    allowed = await execute_structured(
+        *args, origin="assistant_loop", char_id="c1", pin_reference_hashes=frozenset({digest}),
+    )
+    assert allowed.status == "tool_executed"
+    upload.unlink()
+    assert reference.exists("u1", "c1")
+    assert reference.pin_requested("把这张图固定为你的形象参考图")
+    assert not reference.pin_requested("不要固定为参考图")

@@ -1263,3 +1263,9 @@ GET /activity/records（state.read）默认仅列来源元数据；指定 source
 ## 301 Windows Computer Use 工具
 
 `computer_use_start(goal)`、`computer_use_status(task_id?)`、`computer_use_cancel(task_id?)` 走主人现实私聊，属于 `desktop` 类别并继承角色工具权限。普通探针使用注册描述和例句选择工具，工具循环在既有暴露过滤后直接提供定义。开启后端功能和本机授权后才能开始任务。排队只代表接受请求，验证结果由任务状态提供。工具参数中的任务内容不写入动作痕迹。未取得本机授权时返回 `no_desktop_authorization`。
+
+## 角色形象参考图
+
+管理面「多模态管理 → 图像生成 → 角色可用生图连接」可按角色导入、预览和移除参考图。也可在私聊发送图片，附言「把这张图固定为你的形象参考图」；固定工具只接受本轮附件，结果独立保存，不依赖聊天图片缓存。
+
+生成自己的形象时，角色应设置 `generate_image.use_character_reference=true`。默认不使用固定图；勾选后若图不存在或连接不支持参考图，调用会失败，不退回文生图。固定图与单次参考图互斥。

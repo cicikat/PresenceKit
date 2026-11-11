@@ -1157,6 +1157,9 @@ class DataPaths:
         Used for runtime-uploaded assets (e.g. avatar overrides)."""
         return self._p("runtime", "characters", char_id)
 
+    def character_image_reference(self, user_id: str | int, *, char_id: str) -> Path:
+        return self.runtime_character_dir(char_id=char_id) / "image_references" / f"{safe_user_id(user_id)}.jpg"
+
     def chat_artifacts_dir(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
         """Chat-facing product files: data/runtime/chat_artifacts/{char_id}/{uid}/"""
         return self._p("runtime", "chat_artifacts", char_id, safe_user_id(user_id))

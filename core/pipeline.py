@@ -1303,6 +1303,7 @@ class Pipeline:
         allowed_tool_categories: frozenset[str] | None = None,
         allowed_tool_names: frozenset[str] | None = None,
         media_refs: list[dict] | None = None,
+        trusted_user_text: str = "",
     ):
         """主生成多步调用工具再回答，只在 tool_dispatcher.tool_loop_active(uid) 为真时被调用。
 
@@ -1366,6 +1367,15 @@ class Pipeline:
         categories = _expand_cats(allowed_tool_categories) if allowed_tool_categories is not None else list(_exposure.categories)
         excluded_tool_names = set(_exposure.exclude_tools)
         excluded_tool_names.update(exclude_tools or ())
+        from core.character_image_reference import pin_requested
+        pin_tool = "pin_character_image_reference"
+        pin_hashes = frozenset(
+            ref["sha256"] for ref in (media_refs or ())
+            if isinstance(ref, dict) and ref.get("kind") == "image"
+            and isinstance(ref.get("sha256"), str) and ref["sha256"]
+        ) if not (is_group or is_proactive) and pin_requested(trusted_user_text) else frozenset()
+        if not pin_hashes:
+            excluded_tool_names.add(pin_tool)
         if is_group or is_proactive:
             excluded_tool_names.update(_computer_use.TOOL_NAMES)
         if not _drinking_invited:
@@ -1469,7 +1479,7 @@ class Pipeline:
                 _discovery_notes["media"] = _media_note
         except Exception:
             logger.debug("[pipeline.run_agentic_loop] image gen note unavailable", exc_info=True)
-        discovery = ToolDiscovery(tools, _TOOL_REGISTRY, notes=_discovery_notes, direct=_computer_use.TOOL_NAMES)
+        discovery = ToolDiscovery(tools, _TOOL_REGISTRY, notes=_discovery_notes, direct=_computer_use.TOOL_NAMES | {pin_tool})
         image_surface = "absent"
         image_hint = ""
         if "generate_image" in _final_tool_names and _discovery_notes.get("media") and not is_group and not is_proactive:
@@ -1516,7 +1526,7 @@ class Pipeline:
         ]
         if image_refs:
             loop_msgs.insert(0, {"role": "system", "content": (
-                _pt('本轮收到的图片可再次读取。需要更仔细查看时调用 reread_image，使用下面的 sha256；不要猜测或编造指纹：\n') + "\n".join(
+                _pt('本轮收到的图片可再次读取。需要更仔细查看时调用 reread_image；若本轮提供了固定角色形象参考图的工具，按用户要求使用下列指纹。不要猜测或编造指纹：\n') + "\n".join(
                     f"- {ref.get('filename', 'image')}: {ref['sha256']}" for ref in image_refs[-8:]
                 )
             ), "_layer": "11.3_image_references"})
@@ -1582,6 +1592,8 @@ class Pipeline:
                 "char_id": char_id,
                 "bypass_read_log": _bypass_read_log,
             }
+            if tool_name == pin_tool:
+                execute_kwargs["pin_reference_hashes"] = pin_hashes
             if caller_allowed_tool_names is not None:
                 execute_kwargs["allowed_tool_names"] = caller_allowed_tool_names
             if tool_event_observer is None:

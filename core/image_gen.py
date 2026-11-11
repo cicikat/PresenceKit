@@ -53,12 +53,13 @@ def tools_enabled() -> bool:
 
 
 def _normalize_preset(payload: dict) -> dict:
+    provider_kind = str(payload.get("provider_kind") or "openai_compatible")
     extra = payload.get("extra_params")
     return {
         "description": str(payload.get("description") or ""),
         "show_to_llm": payload.get("show_to_llm", True) is True,
-        "supports_edits": payload.get("supports_edits", True) is True,
-        "provider_kind": str(payload.get("provider_kind") or "openai_compatible"),
+        "supports_edits": provider_kind != "venice" and payload.get("supports_edits", True) is True,
+        "provider_kind": provider_kind,
         "base_url": str(payload.get("base_url") or ""),
         "api_key": str(payload.get("api_key") or ""),
         "model": str(payload.get("model") or ""),
@@ -158,8 +159,8 @@ def discovery_note(char_id: str | None = None, config: dict | None = None) -> st
     if not any(row["name"] == default for row in rows):
         default = rows[0]["name"]
     return choose(
-        "未指定连接时省略 preset，当前默认连接为 {default}。需要指定时，原样使用以下连接名：{choices}。",
-        "Omit preset when no connection was requested. The current default is {default}. When specifying a connection, use its exact name: {choices}.",
+        "未指定连接时省略 preset，当前默认连接为 {default}。生成自己的形象时务必勾选角色形象参考图。需要指定时，原样使用以下连接名：{choices}。",
+        "Omit preset when no connection was requested. The current default is {default}. Always opt in to the character reference when depicting your own likeness. When specifying a connection, use its exact name: {choices}.",
     ).format(default=default, choices="；".join(parts))
 
 

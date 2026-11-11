@@ -72,7 +72,8 @@ const CAMERA_PURPOSES = ['video_call', 'video_call_tool'];
 // so the old row would be a control with no consumer.
 const IMAGE_ROUTE_GROUPS = [
   {id: 'camera', label: () => t('routing.group.camera', '摄像头'), purposes: ['video_call', 'video_call_tool']},
-  {id: 'screen', label: () => t('routing.group.screen', '屏幕'), purposes: ['screen', 'computer_use']},
+  {id: 'screen', label: () => t('routing.group.screen', '屏幕'), purposes: ['screen']},
+  {id: 'computer-use', label: () => t('routing.computer_use', 'Computer Use · Windows 视觉定位'), purposes: ['computer_use']},
   {id: 'other', label: () => t('routing.group.other', '其他'), purposes: ['chat_upload', 'life_diet', 'life_cart', 'life_bill']},
 ];
 const IMAGE_ROUTE_PURPOSES = IMAGE_ROUTE_GROUPS.flatMap(group => group.purposes);
@@ -134,7 +135,7 @@ function renderImageRoutes() {
     const visionState = computerUse ? (_imagePresetCatalog.purposes || []).find(row => row.purpose === purpose) : null;
     const visionSummary = visionState ? [visionState.transport_mode, visionState.blocking_reason]
       .filter(Boolean).map(value => t('computer_use.vision.' + value, value)).join(' · ') : '';
-    return `<tr><td>${escapeHtml(IMAGE_PURPOSE_LABELS[purpose] ? IMAGE_PURPOSE_LABELS[purpose]() : purpose)}</td><td><select id="image-route-${purpose}">${options}</select>${fallbackCell}${visionSummary ? ` <small>${escapeHtml(visionSummary)}</small>` : ''}</td></tr>`;
+    return `<tr><td>${escapeHtml(IMAGE_PURPOSE_LABELS[purpose] ? IMAGE_PURPOSE_LABELS[purpose]() : purpose)}</td><td><select id="image-route-${purpose}">${options}</select>${fallbackCell}${computerUse ? ' <small>独立于普通屏幕观察；留空时仅使用 UI Automation。</small>' : ''}${visionSummary ? ` <small>${escapeHtml(visionSummary)}</small>` : ''}</td></tr>`;
   };
   root.innerHTML = IMAGE_ROUTE_GROUPS.map(group =>
     `<tr class="image-route-group"><th colspan="2" scope="colgroup">${escapeHtml(group.label())}</th></tr>`

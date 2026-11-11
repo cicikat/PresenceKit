@@ -174,6 +174,16 @@
     <span data-i18n="ig.inherit">跟随全局（取消勾选后使用下方白名单；空列表禁止生图）</span>
   </label>
   <div id="ig-allowlist" class="admin-inline-019"></div>
+  <fieldset>
+    <legend>角色形象参考图</legend>
+    <p>生成自己的形象时，角色应勾选参考图。只有勾选时才会把图片交给选中的生图连接。</p>
+    <p>也可在私聊发送图片并附言「把这张图固定为你的形象参考图」。</p>
+    <img id="ig-reference-preview" alt="当前角色形象参考图" width="160" hidden>
+    <p id="ig-reference-status" role="status"></p>
+    <input id="ig-reference-file" type="file" accept="image/png,image/jpeg,image/webp" aria-label="选择角色形象参考图">
+    <button type="button" class="btn btn-primary btn-sm" data-action="uploadImageGenerationReference">导入 / 替换参考图</button>
+    <button type="button" class="btn btn-ghost btn-sm" id="ig-reference-remove" data-action="removeImageGenerationReference" disabled>移除参考图</button>
+  </fieldset>
   <div class="admin-card-actions">
     <button class="btn btn-primary btn-sm" id="ig-save-character" data-action="saveImageGenerationCharacter" data-i18n="ig.saveChar" disabled>保存角色白名单</button>
     <p id="ig-character-status" role="status"></p>

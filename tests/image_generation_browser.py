@@ -18,6 +18,7 @@ def main():
     catalog = {"enabled": False, "default_preset": "", "presets": {}}
     binding = {"image_gen": None}
     writes = []
+    reference = {"configured": False}
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page(viewport={"width": 1440, "height": 1000})
@@ -30,6 +31,18 @@ def main():
             if url.startswith("/static/"):
                 return request.continue_()
             method = request.request.method
+            if url == "/image-gen-presets/character-reference/fixture":
+                if method == "PUT":
+                    assert b"image/png" in request.request.post_data_buffer
+                    reference["configured"] = True
+                if method == "DELETE":
+                    reference["configured"] = False
+                return request.fulfill(json=reference)
+            if url == "/image-gen-presets/character-reference/fixture/preview":
+                import base64
+                return request.fulfill(content_type="image/png", body=base64.b64decode(
+                    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aF2QAAAAASUVORK5CYII="
+                ))
             body = request.request.post_data_json if request.request.post_data else {}
             result = {}
             if method != "GET":
@@ -82,6 +95,17 @@ def main():
         }""")
         assert page.locator('[data-layout-key="model-generation"] #image-generation-card').count() == 1
         assert page.locator('[data-layout-key="model-generation"] > div > [data-image-generation-card]').count() == 4
+        page.get_by_text("尚未固定参考图", exact=True).wait_for()
+        page.locator("#ig-reference-file").set_input_files({
+            "name": "portrait.png", "mimeType": "image/png", "buffer": b"fixture",
+        })
+        page.get_by_role("button", name="导入 / 替换参考图").click()
+        page.get_by_text("已固定参考图", exact=True).wait_for()
+        page.locator("#ig-reference-preview").wait_for(state="visible")
+        page.wait_for_function("document.querySelector('#ig-reference-preview').naturalWidth > 0")
+        page.get_by_role("button", name="移除参考图").click()
+        page.get_by_text("尚未固定参考图", exact=True).wait_for()
+        page.locator("#ig-reference-preview").wait_for(state="hidden")
         page.locator('[data-action="editImageGeneration"]').click()
         editor = page.get_by_role("dialog", name="新建 Preset")
         assert editor.is_visible()
