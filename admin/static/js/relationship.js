@@ -184,19 +184,30 @@ async function loadComputerUse() {
   const toggle = document.getElementById('cu-enabled');
   const save = document.getElementById('cu-save');
   if (!toggle || !save) return;
+  const localTimeout = document.getElementById('cu-local-timeout');
+  const cloudTimeout = document.getElementById('cu-cloud-timeout');
+  const visionSave = document.getElementById('cu-vision-save');
   const status = document.getElementById('cu-status');
   try {
     const data = await api('GET', '/computer-use/status');
     toggle.checked = data.enabled === true;
     toggle.disabled = save.disabled = false;
+    localTimeout.value = data.local_vision_timeout_s;
+    cloudTimeout.value = data.cloud_vision_timeout_s;
+    localTimeout.disabled = cloudTimeout.disabled = visionSave.disabled = false;
     status.textContent = data.enabled ? (data.device_online
       ? t('computer_use.ready', '设备已授权') : t('computer_use.waiting', '等待桌面授权'))
       : t('computer_use.disabled', '已关闭');
     const values = {
       device: data.device_online ? t('computer_use.online', '在线') : t('computer_use.offline', '离线'),
       scope: data.scope ? t('computer_use.scope.' + data.scope, data.scope) : '–',
-      model: data.model_route ? data.model_route + (data.vision_ready ? '' : ' · ' + t('computer_use.route_unready', '不可用'))
-        : t('routing.computer_use_off', '关闭 · 仅使用 UIA'),
+      model: [data.model_route || t('routing.computer_use_off', '关闭 · 仅使用 UIA'),
+        ...[data.transport_mode, data.vision_state].filter(Boolean).map(value => t('computer_use.vision.' + value, value)),
+      ].join(' · '),
+      'vision-result': data.last_vision ? [
+        t('computer_use.vision.' + data.last_vision.status, data.last_vision.status),
+        `${data.last_vision.width} × ${data.last_vision.height}`, `${data.last_vision.elapsed_ms} ms`,
+      ].join(' · ') : '–',
       task: data.state ? t('computer_use.task.' + data.state, data.state) : '–',
       actions: data.actions ?? 0,
       latency: (data.average_step_ms ?? 0) + ' ms',
@@ -207,8 +218,27 @@ async function loadComputerUse() {
     }
   } catch {
     toggle.disabled = save.disabled = true;
+    localTimeout.disabled = cloudTimeout.disabled = visionSave.disabled = true;
     status.textContent = t('computer_use.unavailable', '无法读取 Computer Use 状态');
   }
+}
+
+async function saveComputerUseVision() {
+  const local = document.getElementById('cu-local-timeout');
+  const cloud = document.getElementById('cu-cloud-timeout');
+  const save = document.getElementById('cu-vision-save');
+  if (!local.reportValidity() || !cloud.reportValidity()) return;
+  save.disabled = true;
+  try {
+    await api('PUT', '/computer-use/vision/settings', {
+      local_vision_timeout_s: local.valueAsNumber,
+      cloud_vision_timeout_s: cloud.valueAsNumber,
+    });
+    toast(t('common.saved', '已保存'), 'ok');
+  } catch (error) {
+    toast(t('common.save_failed', '保存失败: {error}', {error: error.message}), 'err');
+  }
+  await loadComputerUse();
 }
 
 async function saveComputerUse() {

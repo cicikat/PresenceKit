@@ -116,7 +116,7 @@ def snapshot(config: dict | None = None) -> dict:
     config = get_config() if config is None else config
     cat = catalog(config)
     presets = {
-        name: _mask_preset(preset)
+        name: _mask_preset(preset, _configured_vision_protocol(config, name))
         for name, preset in cat["presets"].items()
     }
     purposes = []
@@ -127,7 +127,7 @@ def snapshot(config: dict | None = None) -> dict:
         if purpose in CAMERA_PURPOSES:
             ready = video_call_ready(preset)[0]
         elif purpose == "computer_use":
-            mode, reason = computer_use_transport(preset)
+            mode, reason = computer_use_transport(preset, _configured_vision_protocol(config, name))
             ready = mode != "unavailable"
             diagnostics = {"transport_mode": mode, "blocking_reason": reason}
         else:
@@ -300,13 +300,21 @@ def connection_ready(preset: dict | None) -> bool:
     return bool(preset.get("base_url") and preset.get("model"))
 
 
-def computer_use_transport(preset: dict | None) -> tuple[str, str]:
+def _configured_vision_protocol(config: dict, name: str) -> str | None:
+    block = config.get("image_presets")
+    presets = block.get("presets") if isinstance(block, dict) else None
+    raw = presets.get(name) if isinstance(presets, dict) else None
+    return raw.get("api_protocol") if isinstance(raw, dict) else None
+
+
+def computer_use_transport(preset: dict | None, configured_protocol: str | None = None) -> tuple[str, str]:
     """Classify the selected preset. Cloud consent is checked by the task service."""
     from core.model_network import private_node_url
 
     if not preset:
         return "unavailable", "vision_not_configured"
-    if preset.get("kind") != "vision" or preset.get("api_protocol") != "chat_completions":
+    if (preset.get("kind") != "vision"
+            or (configured_protocol or preset.get("api_protocol")) != "chat_completions"):
         return "unavailable", "chat_completions_required"
     if not connection_ready(preset) or not preset["model"].strip():
         return "unavailable", "connection_not_ready"
@@ -333,7 +341,9 @@ def _public_https_url(url: str) -> bool:
     try:
         address = ipaddress.ip_address(host)
     except ValueError:
-        return "." in host and not host.endswith((".localhost", ".local", ".internal", ".ts.net"))
+        labels = host.split(".")
+        return (len(labels) > 1 and all(labels) and not labels[-1].isdigit()
+                and not host.endswith((".localhost", ".local", ".internal", ".ts.net")))
     return address.is_global and not address.is_multicast
 
 
@@ -343,10 +353,17 @@ def computer_use_ready(preset: dict | None) -> bool:
 
 def computer_use_route(config: dict | None = None) -> dict:
     """Server-only resolved route. Contains the selected credential."""
+    config = get_config() if config is None else config
     try:
-        return resolve_purpose("computer_use", config)
+        route = resolve_purpose("computer_use", config)
     except KeyError:
         return {}
+    # The generic legacy resolver normalizes unknown protocols to Chat Completions.
+    # Preserve the explicit value here so a misconfigured screenshot route fails closed.
+    protocol = _configured_vision_protocol(config, route["name"])
+    if protocol:
+        route["config"]["api_protocol"] = protocol
+    return route
 
 
 def computer_use_connection(config: dict | None = None) -> dict | None:
@@ -440,6 +457,9 @@ def validate_preset(payload: dict) -> dict:
     kind = payload.get("kind") or "vision"
     if kind not in KINDS:
         raise ValueError("kind 必须是 vision 或 ocr")
+    protocol = payload.get("api_protocol")
+    if kind == "vision" and protocol and protocol not in _VISION_PROTOCOLS:
+        raise ValueError("Unsupported vision API protocol")
     preset = _normalize_preset({"kind": kind, **payload})
     if kind == "ocr":
         if preset.get("api_protocol") not in _OCR_PROTOCOLS:
@@ -598,9 +618,9 @@ def _ocr_request_url(cfg: dict) -> str:
     return address
 
 
-def _mask_preset(preset: dict) -> dict:
+def _mask_preset(preset: dict, configured_protocol: str | None = None) -> dict:
     view = dict(preset)
-    mode, _ = computer_use_transport(preset)
+    mode, _ = computer_use_transport(preset, configured_protocol)
     view["computer_use_ready"] = mode != "unavailable"
     view["computer_use_transport_mode"] = mode
     view["camera_ready"] = video_call_ready(preset)[0]

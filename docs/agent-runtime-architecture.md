@@ -382,3 +382,5 @@ adapter or access to the Reality workspace.
 ## 301 CU-03 Windows Computer Use
 
 Computer Use 由主人现实私聊发起，采用同一角色的文本模型及 Task Manager 元数据回执。任务保留设备授权会话和可追踪的任务 ID，意图、动作、观察文本和原始图片不进入任务存储。任务使用 `RetryPolicy.NEVER`；后端重启、设备离线或回执迟到时，可能已执行的输入进入 `outcome_unknown`。WebSocket 原有动作不承载 Computer Use。后端部署在远程时，由用户 Windows 客户端执行全部 OS 操作。
+
+CU-05 云端定位复用同一 `Run → Delivery → Result`。授权在首个设备轮询冻结并绑定已选连接，连接改变或总闸关闭会结束授权。只有当前已下发、未过期且在前台的视觉步骤可以提交一张与原观察版本、尺寸匹配的 JPEG。每个目标槽最多接受一次上传，拖拽最多两个槽。代理从冻结步骤取描述，对在途请求检查会话、角色、前台、暂停、到期和任务状态。返回值只有归一化坐标或不确定。截图、描述和供应商原文只在内存中消费，最近定位状态只暴露分类、耗时和尺寸。文本规划仍使用 `call_category="computer_use"`。

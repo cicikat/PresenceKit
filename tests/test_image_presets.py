@@ -308,6 +308,7 @@ def test_is_local_covers_screen_primary_and_fallback_separately():
     ("https://public.example/v1", False, "cloud_proxy"),
     ("http://public.example/v1", False, "unavailable"),
     ("https://host.example.ts.net/v1", False, "unavailable"),
+    ("https://127.1/v1", False, "unavailable"),
 ])
 def test_computer_use_vision_has_independent_route(url, local, mode):
     from core.image_presets import computer_use_connection, snapshot
@@ -328,3 +329,16 @@ def test_computer_use_vision_has_independent_route(url, local, mode):
     assert projected["ready"] is (mode != "unavailable")
     assert projected["transport_mode"] == mode
     assert projected["fallback"] == ""
+
+
+@pytest.mark.parametrize("changes", [
+    {"model": "   "}, {"api_protocol": "responses"}, {"api_protocol": "unknown"}, {"enabled": False},
+])
+def test_computer_use_does_not_enable_incompatible_saved_preset(changes):
+    from core.image_presets import computer_use_route, computer_use_transport, snapshot
+
+    preset = {"kind": "vision", "base_url": "https://public.example/v1", "model": "test", **changes}
+    config = {"image_presets": {"presets": {"vision": preset}, "routes": {"computer_use": "vision"}}}
+    view = snapshot(config)
+    assert view["presets"]["vision"]["computer_use_transport_mode"] == "unavailable"
+    assert computer_use_transport(computer_use_route(config)["config"])[0] == "unavailable"

@@ -64,7 +64,7 @@ const IMAGE_PURPOSE_LABELS = {
   phone_automation: () => t('routing.phone_automation', '手机自动化'),
   video_call: () => '视频电话 · 本机摄像头（周期观察）',
   video_call_tool: () => '视频电话 · 按需查看摄像头（角色主动拉新帧）',
-  computer_use: () => t('routing.computer_use', 'Computer Use · Windows 私网视觉定位'),
+  computer_use: () => t('routing.computer_use', 'Computer Use · Windows 视觉定位'),
   screen: () => t('routing.screen_purpose', '屏幕截图 · 影子观察、按需看屏幕、手机自动化'),
 };
 const CAMERA_PURPOSES = ['video_call', 'video_call_tool'];
@@ -131,7 +131,10 @@ function renderImageRoutes() {
         + available.filter(name => name !== selected).map(name => `<option value="${escapeHtml(name)}" ${name === chosen ? 'selected' : ''} data-i18n-skip>${escapeHtml(name)}</option>`).join('');
       fallbackCell = `<div><label>${t('routing.fallback.connection', '备用连接（主连接不可达时才启用）')} <select id="image-fallback-${purpose}">${fallbackOptions}</select></label></div>`;
     }
-    return `<tr><td>${escapeHtml(IMAGE_PURPOSE_LABELS[purpose] ? IMAGE_PURPOSE_LABELS[purpose]() : purpose)}</td><td><select id="image-route-${purpose}">${options}</select>${fallbackCell}</td></tr>`;
+    const visionState = computerUse ? (_imagePresetCatalog.purposes || []).find(row => row.purpose === purpose) : null;
+    const visionSummary = visionState ? [visionState.transport_mode, visionState.blocking_reason]
+      .filter(Boolean).map(value => t('computer_use.vision.' + value, value)).join(' · ') : '';
+    return `<tr><td>${escapeHtml(IMAGE_PURPOSE_LABELS[purpose] ? IMAGE_PURPOSE_LABELS[purpose]() : purpose)}</td><td><select id="image-route-${purpose}">${options}</select>${fallbackCell}${visionSummary ? ` <small>${escapeHtml(visionSummary)}</small>` : ''}</td></tr>`;
   };
   root.innerHTML = IMAGE_ROUTE_GROUPS.map(group =>
     `<tr class="image-route-group"><th colspan="2" scope="colgroup">${escapeHtml(group.label())}</th></tr>`

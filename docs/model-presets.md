@@ -625,8 +625,8 @@ Brief 253.6 的语音转写使用独立 `stt_presets` 命名连接和 `voice_mes
 
 263 E：合成对照已完成，Jev 通用判断有2.4–3.6秒有效返回及10秒超时，Minecraft六选一与现用文本均在3秒预算超时；不能宣称稳定快速。保持生产路由不变，完整样本与限制见 [263 工单](../cc-tasks/263-jev-decision-adapter-and-dual-backend.md)。常驻后端需正常重启加载，真实业务校准仍 observe。
 
-## Windows Computer Use 视觉路由（301 CU-02）
+## Windows Computer Use 视觉路由（302 CU-05）
 
-`image_presets.routes.computer_use` 默认留空，不继承屏幕、摄像头或手机路由。管理面「模型路由 → 图像用途 → 屏幕」可热更新。连接须启用、标记本地、使用 Chat Completions，地址须为 HTTP 回环地址或明确的私网 IP（含 Tailnet）。关闭视觉路由后仍可用 Windows UI Automation。
+`image_presets.routes.computer_use` 默认留空。管理面「模型路由 → 图像用途」可热更新，连接须启用并支持 Chat Completions 视觉输入。`local_private` 沿用显式标记本地的 HTTP 回环或私网 IP（含 Tailnet）；`cloud_proxy` 使用已保存的公网 HTTPS 连接，截图出站须有本次桌面授权。管理视图显示 `transport_mode` 和 `blocking_reason`，密钥继续遮罩。关闭路由后仍可用 Windows UI Automation。用途独立于屏幕观察、摄像头和手机，也没有备用连接。
 
 截图由桌面 Rust 客户端直接 POST 到选中的本机或私网视觉连接。请求禁用代理与重定向，模型只返回目标位置或无法确定；图片不经任务后端或聊天模型传输。

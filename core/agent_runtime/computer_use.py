@@ -1,14 +1,14 @@
-"""Single-owner Windows task transport. Raw frames remain in the native client."""
+"""Single-owner Windows task transport and session-scoped vision grants."""
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 import time
 from typing import Any
 from uuid import uuid4
 
-from core import config_loader, pipeline_registry
+from core import config_loader, image_presets, pipeline_registry
 from core.agent_runtime import task_manager
 from core.agent_runtime.models import CausationRef, TaskLease, TaskPrincipal
 from core.data_paths import DEFAULT_CHAR_ID
@@ -18,6 +18,8 @@ MAX_STEPS = 32
 TASK_TTL = 180
 HEARTBEAT_TTL = 5.0
 STEP_TTL = 22.0
+CLOUD_STEP_TTL = 35.0
+VISION_TIMEOUT_DEFAULTS = {"local": 18, "cloud": 25}
 TOOL_NAMES = frozenset({"computer_use_start", "computer_use_status", "computer_use_cancel"})
 INSTANCE = uuid4().hex
 
@@ -89,6 +91,9 @@ class Device:
     expires: float
     heartbeat: float
     state: str = "ready"
+    focus_ready: bool = False
+    cloud_vision: bool | None = None
+    cloud_route: dict = field(default_factory=dict, repr=False)
 
 
 @dataclass
@@ -99,6 +104,12 @@ class Delivery:
     expires: float
     receipt: asyncio.Future
     dispatched: bool = False
+    frame_size: tuple[int, int] | None = None
+    vision_revoked: bool = False
+    vision_claims: set[int] = field(default_factory=set)
+    vision_error: str | None = None
+    cloud_dispatched: bool = False
+    vision_timeout_ms: int = 0
 
 
 @dataclass
@@ -111,6 +122,7 @@ class Run:
     actions: int = 0
     total_ms: int = 0
     worker: asyncio.Task | None = None
+    last_vision: dict | None = None
 
 
 _device: Device | None = None
@@ -123,6 +135,18 @@ def enabled(config: dict | None = None) -> bool:
     config = (config_loader.get_config() or {}) if config is None else config
     block = config.get("computer_use")
     return isinstance(block, dict) and block.get("enabled") is True
+
+
+def vision_timeouts(config: dict | None = None) -> dict[str, int]:
+    config = config_loader.get_config() if config is None else config
+    block = (config or {}).get("computer_use")
+    block = block if isinstance(block, dict) else {}
+    timeouts = {}
+    for mode, default in VISION_TIMEOUT_DEFAULTS.items():
+        key = f"{mode}_vision_timeout_s"
+        value = block.get(key)
+        timeouts[key] = value if type(value) is int and 1 <= value <= default else default
+    return timeouts
 
 
 def principal() -> TaskPrincipal | None:
@@ -176,7 +200,8 @@ def _finish(run: Run, status: str, reason: str) -> None:
     _run = None
     _last = {"task_id": run.lease.task_id, "state": status, "last_error": None if status == "succeeded" else reason,
              "steps": run.steps, "actions": run.actions,
-             "average_step_ms": round(run.total_ms / run.steps) if run.steps else 0}
+             "average_step_ms": round(run.total_ms / run.steps) if run.steps else 0,
+             "last_vision": run.last_vision}
     if run.delivery is not None and not run.delivery.receipt.done():
         run.delivery.receipt.cancel()
     if run.worker is not None and run.worker is not asyncio.current_task():
@@ -203,6 +228,9 @@ def _refresh(now: float) -> None:
     if _device is not None and not _device_valid(_device, now):
         reason = "device_offline" if _device.heartbeat + HEARTBEAT_TTL <= now else "authorization_ended"
         _close_device(reason)
+    if (_device is not None and _device.cloud_route
+            and _device.cloud_route != image_presets.computer_use_route()):
+        _close_device("cloud_vision_route_changed")
     if _run is not None:
         receipt = task_manager.get_task(_run.device.principal, _run.lease.task_id)
         if receipt.get("cancel_requested") or receipt["status"] != "running":
@@ -223,12 +251,18 @@ def poll(identity: str, body) -> dict:
     if _device is not None and _device.session_id == body.session_id:
         if _device.identity != identity or _device.device_id != body.device_id:
             return {"accepted": False, "reason": "identity_mismatch", "server_epoch": INSTANCE}
-        if body.state == "closed" or _device.scope != body.scope or _device.principal.char_id != body.char_id:
+        if (body.state == "closed" or _device.scope != body.scope
+                or _device.principal.char_id != body.char_id
+                or _device.cloud_vision != body.cloud_vision):
             _close_device("authorization_ended")
             return {"accepted": False, "reason": "authorization_ended", "server_epoch": INSTANCE}
         _device.heartbeat = now
         _device.state = body.state
         _device.expires = min(_device.expires, now + body.remaining_ms / 1000)
+        if _run and _run.delivery and _run.delivery.dispatched and (
+            body.state == "paused" or not body.focus_ready
+        ):
+            _run.delivery.vision_revoked = True
     else:
         for session_id, expires in tuple(_retired.items()):
             if expires <= now:
@@ -237,41 +271,109 @@ def poll(identity: str, body) -> dict:
                 or body.state != "ready" or body.remaining_ms <= 0 or body.server_epoch
                 or body.session_id in _retired or len(_retired) >= 128 or _device is not None):
             return {"accepted": False, "reason": "session_unavailable", "server_epoch": INSTANCE}
+        route = image_presets.computer_use_route() if body.cloud_vision else {}
+        cloud_route = route if image_presets.computer_use_transport(route.get("config"))[0] == "cloud_proxy" else {}
         _device = Device(identity, body.device_id, body.session_id, actor,
-                         body.scope, now + body.remaining_ms / 1000, now)
+                         body.scope, now + body.remaining_ms / 1000, now,
+                         cloud_vision=body.cloud_vision, cloud_route=cloud_route)
 
     _refresh(now)
     if _device is None:
         return {"accepted": False, "reason": "authorization_ended", "server_epoch": INSTANCE}
+    _device.focus_ready = body.focus_ready
     response = {"accepted": True, "server_epoch": INSTANCE,
                 "task_id": _run.lease.task_id if _run else None, "step": None}
     delivery = _run.delivery if _run else None
     if delivery and not delivery.dispatched and _device.state != "paused" and body.focus_ready:
-        from core.image_presets import computer_use_connection
-
         delivery.dispatched = True
-        action = delivery.step["action"]
-        uses_vision = any(isinstance(value, dict) and value.get("kind") == "visual" for value in action.values())
+        vision = None
+        if _vision_targets(delivery.step["action"]):
+            vision, delivery.vision_error = _vision_projection(_device)
+            delivery.cloud_dispatched = bool(vision and vision.get("mode") == "cloud_proxy")
+            if vision and delivery.vision_error is None:
+                mode = "cloud" if delivery.cloud_dispatched else "local"
+                delivery.vision_timeout_ms = 1000 * vision_timeouts()[f"{mode}_vision_timeout_s"]
+                response["vision_timeout_ms"] = delivery.vision_timeout_ms
         response.update(step=delivery.step, nonce=delivery.nonce,
-                        expires_in_ms=int((delivery.expires - now) * 1000),
-                        vision=computer_use_connection() if uses_vision else None)
+                        expires_in_ms=max(1, int((delivery.expires - now) * 1000)),
+                        vision=vision)
     return response
 
 
-def accept(identity: str, body) -> bool:
-    _refresh(time.monotonic())
+def _vision_targets(action: dict) -> dict[int, str]:
+    targets = (action["from"], action["to"]) if action["kind"] == "drag" else (action.get("target"),)
+    return {index: target["description"] for index, target in enumerate(targets)
+            if target and target["kind"] == "visual"}
+
+
+def _vision_projection(device: Device) -> tuple[dict | None, str | None]:
+    route = image_presets.computer_use_route()
+    mode, _ = image_presets.computer_use_transport(route.get("config"))
+    if mode == "local_private" and not device.cloud_route:
+        return image_presets.computer_use_connection(), None
+    if mode == "cloud_proxy":
+        if device.cloud_route and route == device.cloud_route:
+            return {"mode": "cloud_proxy"}, None
+        reason = ("cloud_vision_client_unsupported" if device.cloud_vision is None else
+                  "cloud_vision_not_authorized")
+    else:
+        reason = "vision_not_configured"
+    # Legacy clients only understand the original private connection object.
+    return ({"mode": "unavailable", "reason": reason} if device.cloud_vision is not None else None), reason
+
+
+def _matching_delivery(identity: str, body) -> tuple[Run, Delivery] | None:
     run = _run
     if run is None or run.delivery is None:
-        return False
+        return None
     device, delivery = run.device, run.delivery
     if ((identity, body.device_id, body.session_id, body.task_id, body.seq, body.nonce)
             != (device.identity, device.device_id, device.session_id, run.lease.task_id, delivery.seq, delivery.nonce)
             or body.server_epoch != INSTANCE or not delivery.dispatched or delivery.receipt.done()):
+        return None
+    return run, delivery
+
+
+def vision_active(run: Run, delivery: Delivery) -> bool:
+    _refresh(time.monotonic())
+    device = run.device
+    return (_run is run and run.delivery is delivery and not delivery.receipt.done()
+            and not delivery.vision_revoked and device.state != "paused" and device.focus_ready)
+
+
+def vision_lease(identity: str, body) -> tuple[Run, Delivery, str] | None:
+    _refresh(time.monotonic())
+    match = _matching_delivery(identity, body)
+    if match is None:
+        return None
+    run, delivery = match
+    description = _vision_targets(delivery.step["action"]).get(body.target_index)
+    if (not delivery.cloud_dispatched or delivery.frame_size is None or description is None
+            or body.frame_version != delivery.step["frame"]
+            or body.target_index in delivery.vision_claims or not vision_active(run, delivery)):
+        return None
+    return run, delivery, description
+
+
+def record_vision(run: Run, status: str, elapsed_ms: int, size: tuple[int, int]) -> None:
+    run.last_vision = {"status": status, "elapsed_ms": elapsed_ms, "width": size[0], "height": size[1]}
+    if _last.get("task_id") == run.lease.task_id:
+        _last["last_vision"] = run.last_vision
+
+
+def accept(identity: str, body) -> bool:
+    _refresh(time.monotonic())
+    match = _matching_delivery(identity, body)
+    if match is None:
         return False
+    _, delivery = match
     observation = body.receipt.observation
     if observation and observation.version != delivery.seq:
         return False
-    delivery.receipt.set_result(body.receipt.model_dump())
+    receipt = body.receipt.model_dump()
+    if receipt["reason"] == "vision_not_configured" and delivery.vision_error:
+        receipt["reason"] = delivery.vision_error
+    delivery.receipt.set_result(receipt)
     return True
 
 
@@ -293,10 +395,19 @@ def snapshot(config: dict | None = None) -> dict:
             "task_id": _run.lease.task_id, "state": "paused" if _run.device.state == "paused" else "running",
             "steps": _run.steps, "actions": _run.actions,
             "average_step_ms": round(_run.total_ms / _run.steps) if _run.steps else 0, "last_error": None,
+            "last_vision": _run.last_vision,
         }
+    vision_state = route["blocking_reason"]
+    if _device is not None:
+        _, vision_state = _vision_projection(_device)
+        vision_state = vision_state or ("paused" if _device.state == "paused" else "")
+    elif route["transport_mode"] == "cloud_proxy":
+        vision_state = "cloud_vision_not_authorized"
     return {"enabled": enabled(config), "device_online": _device is not None,
             "scope": _device.scope if _device else None,
-            "model_route": route["connection"], "vision_ready": route["ready"], **current}
+            "model_route": route["connection"], "vision_ready": route["ready"],
+            "transport_mode": route["transport_mode"], "vision_state": vision_state,
+            **vision_timeouts(config), **current}
 
 
 def start(uid: str, char_id: str, goal: str, *, request_id: str = "") -> dict:
@@ -381,8 +492,11 @@ async def _drive(run: Run, goal: str) -> None:
             frame = observation["version"] if observation is not None else None
             step = {"device_id": run.device.device_id, "session_id": run.device.session_id,
                     "task_id": run.lease.task_id, "seq": seq, "frame": frame, "action": action}
-            delivery = Delivery(seq, uuid4().hex, step, min(now + STEP_TTL, run.deadline),
-                                asyncio.get_running_loop().create_future())
+            cloud = bool(_vision_targets(action) and _vision_projection(run.device)[0] == {"mode": "cloud_proxy"})
+            ttl = CLOUD_STEP_TTL if cloud else STEP_TTL
+            size = (observation["jpeg_width"], observation["jpeg_height"]) if observation else None
+            delivery = Delivery(seq, uuid4().hex, step, min(now + ttl, run.deadline),
+                                asyncio.get_running_loop().create_future(), frame_size=size)
             run.delivery = delivery
             while not delivery.receipt.done():
                 await asyncio.wait((delivery.receipt,), timeout=0.25)

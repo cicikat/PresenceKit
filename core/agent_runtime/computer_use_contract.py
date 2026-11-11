@@ -88,6 +88,8 @@ class Poll(Strict):
     remaining_ms: int = Field(ge=0, le=900_000)
     focus_ready: bool
     server_epoch: Identifier | None = None
+    # Omitted by legacy clients. A grant can only be made on the first poll.
+    cloud_vision: bool | None = None
 
 
 class Window(Strict):
@@ -136,11 +138,19 @@ class Receipt(Strict):
     observation: Observation | None = None
 
 
-class Result(Strict):
+class DeliveryRef(Strict):
     device_id: Identifier
     session_id: Identifier
     task_id: Identifier
     server_epoch: Identifier
     nonce: Identifier
     seq: StepNumber
+
+
+class Result(DeliveryRef):
     receipt: Receipt
+
+
+class VisionRequest(DeliveryRef):
+    frame_version: StepNumber
+    target_index: int = Field(ge=0, le=1)

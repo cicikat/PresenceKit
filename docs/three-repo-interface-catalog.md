@@ -1292,7 +1292,7 @@ Runware适配和模型发现位于后端管理面；桌面/手机继续消费原
 
 ## 301 CU-02 Windows Computer Use 视觉路由（current / observe）
 
-`GET /image-presets` 和 `PUT /image-presets/routes` 新增 `computer_use`。这是单独的私网视觉用途，默认空，桌面直接发图给已选模型；手机和旧桌面屏幕用途继续使用各自原有路由。真实模型的视觉定位待验收。
+`GET /image-presets` 和 `PUT /image-presets/routes` 提供独立的 `computer_use` 用途，默认空。CU-05 保留私网直连并增加须会话授权的云端代理，见下节。
 
 ## 301 CU-03 Windows 桌面任务协议（current / observe）
 
@@ -1303,3 +1303,11 @@ Runware适配和模型发现位于后端管理面；桌面/手机继续消费原
 ## 301 CU-04 Windows 授权控制（current / observe）
 
 `computer_use.enabled` 默认关闭。管理面经现有 feature-flags API 热切换，并复用状态端点。桌面主窗口提供会话授权、状态与控制；桌宠只读取本机状态和执行本机停止。手机无消费者。交付与未验收项见 [Windows Computer Use 已知问题](known-issues.md#301-windows-computer-useobserve)。
+
+## 302 CU-05 Windows Computer Use 云端视觉（current / observe）
+
+- `GET /image-presets` 为该用途增加 `transport_mode`（`local_private | cloud_proxy | unavailable`）和 `blocking_reason`。管理面仍使用 `PUT /image-presets/routes` 选择连接。
+- `POST /computer-use/poll` 可携带可选布尔值 `cloud_vision`，仅会话首轮建立授权。每个视觉步骤投影私网原有连接对象、`{"mode":"cloud_proxy"}` 或带原因的不可用状态。私网步骤最多 22 秒，云端步骤最多 35 秒，总任务仍为 180 秒。配置的请求预算经 `vision_timeout_ms` 下发。云端投影无模型、上游 URL 和凭据。旧桌面省略授权字段，私网沿用 18 秒；云端路由对其保持关闭，需要视觉时后端回执记 `cloud_vision_client_unsupported`。
+- `POST /computer-use/vision/locate` 使用既有桌面 Bearer 设备绑定（`ws.desktop + sensor.write`）。请求为流式 `image/jpeg`，最长边 1280、最多 2 MiB。请求头 `X-Computer-Use-Lease` 是 JSON，包含 `device_id`、`session_id`、`task_id`、`server_epoch`、`seq`、`nonce`、`frame_version`、`target_index`。普通目标槽为 0，拖拽起点 0、终点 1。描述由后端从步骤读取。响应 `Cache-Control: no-store`，成功体为 `{"status":"found","x":0.52,"y":0.31}` 或 `{"status":"uncertain"}`，失败体为短错误码 `{"error":"vision_stale_step"}` 等。
+- `GET /computer-use/status` 增加传输方式、授权诊断、有效超时和脱敏的最近一次云端定位元数据。`PUT /computer-use/vision/settings` 供管理员热更新请求超时。`POST /computer-use/result` 保持原回执结构。
+- 手机无消费者，普通屏幕观察和视频通话使用自己的既有接口。真实推理与 Windows 端到端进度见 [CU-05 验收](known-issues.md#302-cu-05-云端视觉实机验收observe)。

@@ -511,6 +511,8 @@ recall:
 # Windows 桌面 GUI 任务。默认关闭，可在管理面热更新。关闭即撤销执行租约。
 computer_use:
   enabled: false
+  local_vision_timeout_s: 18  # 1–18 秒。桌面到私网模型的总请求预算。
+  cloud_vision_timeout_s: 25  # 1–25 秒。后端到云端模型的总请求预算。
 
 visual_perception:
   enabled: false

@@ -2,6 +2,7 @@
 from types import SimpleNamespace
 from uuid import uuid4
 import asyncio
+import io
 import json
 
 import httpx
@@ -11,7 +12,7 @@ from fastapi import FastAPI
 from admin import auth
 from admin.routers import computer_use as routes
 from core import llm_client, tool_dispatcher
-from core.agent_runtime import computer_use as service
+from core.agent_runtime import computer_use as service, computer_use_vision as vision
 from core.agent_runtime.computer_use_contract import ActionModel, Poll, Result
 from core.pipeline import Pipeline
 
@@ -29,7 +30,10 @@ def fixture(monkeypatch):
     monkeypatch.setattr(service, "_retired", {})
     desktop = auth.TokenInfo("desktop", frozenset({"sensor.write", "ws.desktop", "state.read"}), "desktop")
     mobile = auth.TokenInfo("mobile", frozenset({"sensor.write", "state.read"}), "mobile")
-    monkeypatch.setattr(auth, "resolve_token", lambda token: {"desktop": desktop, "other": desktop, "mobile": mobile}.get(token))
+    chat = auth.TokenInfo("chat", frozenset({"chat.send"}), "desktop")
+    monkeypatch.setattr(auth, "resolve_token", lambda token: {
+        "desktop": desktop, "other": desktop, "mobile": mobile, "chat": chat,
+    }.get(token))
     body = {
         "device_id": uuid4().hex, "session_id": uuid4().hex, "char_id": "fixture_char",
         "scope": "window", "state": "ready", "remaining_ms": 60_000, "focus_ready": True,
@@ -47,6 +51,215 @@ def observation(seq):
         },
         "nodes": [{"id": 1, "name": "Test control", "control_type": 1, "bounds": bounds, "focused": True}],
     }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scenario", [
+    "authorized", "legacy", "no_consent", "private", "bad_image", "too_large",
+    "wrong_size", "expired", "pause", "stop", "role", "disable", "route_changed",
+    "drag", "element",
+])
+async def test_cloud_proxy_requires_a_single_live_frozen_target(fixture, monkeypatch, caplog, scenario):
+    from PIL import Image
+
+    config, pipeline, poll = fixture
+    connection = {"kind": "vision", "api_protocol": "chat_completions", "model": "fixture-model",
+                  "base_url": "https://fixture.example/v1", "api_key": "fixture-cloud-secret"}
+    config["image_presets"] = {"presets": {"chosen": connection}, "routes": {"computer_use": "chosen"}}
+    if scenario == "private":
+        connection.update(base_url="http://localhost:8180/v1", is_local=True)
+    if scenario != "legacy":
+        poll["cloud_vision"] = scenario != "no_consent"
+    target = {"kind": "visual", "description": "fixture private description: 删除"}
+    action = {"kind": "click", "target": target}
+    if scenario == "drag":
+        action = {"kind": "drag", "from": target, "to": {**target, "description": "second target"}}
+    if scenario == "element":
+        action = {"kind": "click", "target": {"kind": "element", "id": 1}}
+
+    async def plan(*args):
+        return action
+
+    monkeypatch.setattr(service, "_plan", plan)
+    calls = []
+    entered, release, canceled = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    interrupt = scenario in {"pause", "stop", "role", "disable", "route_changed"}
+
+    async def provider(request):
+        payload = json.loads(request.content)
+        calls.append(payload)
+        assert request.headers["authorization"] == "Bearer fixture-cloud-secret"
+        entered.set()
+        if interrupt or scenario == "authorized":
+            try:
+                await release.wait()
+            except asyncio.CancelledError:
+                canceled.set()
+                raise
+        return httpx.Response(200, json={"choices": [{"message": {
+            "content": '{"status":"found","x":0.5,"y":0.75}',
+        }}]})
+
+    monkeypatch.setattr(vision, "make_model_http_client", lambda *_: httpx.AsyncClient(
+        transport=httpx.MockTransport(provider),
+    ))
+    app = FastAPI()
+    app.include_router(routes.router)
+    image = io.BytesIO()
+    Image.new("RGB", (400 if scenario == "wrong_size" else 800, 600)).save(image, format="JPEG")
+    jpeg = image.getvalue()
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test",
+                                 headers={"Authorization": "Bearer desktop"}) as client:
+        async def poll_step():
+            for _ in range(40):
+                packet = (await client.post("/computer-use/poll", json=poll)).json()
+                if packet["step"]:
+                    return packet
+                await asyncio.sleep(.01)
+            pytest.fail("delivery was not dispatched")
+
+        initial = (await client.post("/computer-use/poll", json=poll)).json()
+        assert initial["accepted"]
+        poll["server_epoch"] = initial["server_epoch"]
+        task_id = service.start("owner", "fixture_char", "fixture private goal")["task_id"]
+        run = service._run
+        try:
+            step = await poll_step()
+            lease = {key: poll[key] for key in ("device_id", "session_id", "server_epoch")}
+            lease.update(task_id=task_id, seq=1, nonce=step["nonce"])
+            result = await client.post("/computer-use/result", json={
+                **lease, "receipt": {"status": "ok", "observation": observation(1)},
+            })
+            assert result.status_code == 200
+            step = await poll_step()
+            lease.update(seq=2, nonce=step["nonce"], frame_version=1, target_index=0)
+
+            async def locate(fields=None, data=jpeg, token="desktop"):
+                return await client.post("/computer-use/vision/locate", content=data, headers={
+                    "Authorization": f"Bearer {token}", "Content-Type": "image/jpeg",
+                    "X-Computer-Use-Lease": json.dumps({**lease, **(fields or {})}),
+                })
+
+            if scenario in {"legacy", "no_consent", "private", "element"}:
+                expected = {
+                    "legacy": None, "element": None,
+                    "no_consent": {"mode": "unavailable", "reason": "cloud_vision_not_authorized"},
+                    "private": {"base_url": "http://localhost:8180/v1", "model": "fixture-model",
+                                "api_key": "fixture-cloud-secret"},
+                }
+                assert step["vision"] == expected[scenario]
+                assert step["expires_in_ms"] <= 22_000
+                assert (await locate()).status_code == 409
+                assert not calls
+                if scenario == "legacy":
+                    assert service.snapshot()["vision_state"] == "cloud_vision_client_unsupported"
+                return
+
+            assert step["vision"] == {"mode": "cloud_proxy"}
+            assert 22_000 < step["expires_in_ms"] <= 35_000
+            assert "fixture-cloud-secret" not in str(step) and "fixture.example" not in str(step)
+            assert step["vision_timeout_ms"] == 25_000
+            if scenario == "expired":
+                run.delivery.expires = 0
+                assert (await locate()).status_code == 409
+                assert not calls
+                return
+            if scenario in {"bad_image", "too_large", "wrong_size"}:
+                data = {"bad_image": b"bad", "too_large": b"x" * (vision.MAX_JPEG + 1)}.get(scenario, jpeg)
+                assert (await locate(data=data)).status_code == (413 if scenario == "too_large" else 422)
+                assert (await locate()).status_code == 409
+                assert not calls
+                return
+            if scenario == "authorized":
+                for token, code in (("mobile", 403), ("chat", 403), ("other", 409)):
+                    denied = await locate(token=token)
+                    assert denied.status_code == code
+                    assert denied.headers["cache-control"] == "no-store"
+                for fields in ({"nonce": uuid4().hex}, {"server_epoch": uuid4().hex}, {"seq": 1},
+                               {"frame_version": 2}, {"target_index": 1}, {"device_id": uuid4().hex}):
+                    assert (await locate(fields)).status_code == 409
+                assert (await locate({"target_description": "client injected"})).status_code == 422
+                assert not calls
+
+            request = asyncio.create_task(locate())
+            await asyncio.wait_for(entered.wait(), 2)
+            assert (await locate()).status_code == 409
+            if interrupt:
+                if scenario in {"pause", "stop"}:
+                    await client.post("/computer-use/poll", json={
+                        **poll, "state": "paused" if scenario == "pause" else "closed",
+                    })
+                elif scenario == "role":
+                    pipeline._active_character_id = "other_fixture"
+                elif scenario == "disable":
+                    config["computer_use"]["enabled"] = False
+                else:
+                    connection["model"] = "other-fixture-model"
+                assert (await asyncio.wait_for(request, 2)).status_code == 409
+                assert canceled.is_set()
+                assert (await locate()).status_code == 409
+            else:
+                release.set()
+                response = await asyncio.wait_for(request, 2)
+                assert response.json() == {"status": "found", "x": 0.5, "y": 0.75}
+                assert response.headers["cache-control"] == "no-store"
+                assert (await locate()).status_code == 409
+            assert calls[0]["messages"][1]["content"][0]["text"] == target["description"]
+            assert len(calls) == 1
+            if scenario == "drag":
+                assert (await locate({"target_index": 1})).status_code == 200
+                assert (await locate({"target_index": 1})).status_code == 409
+                assert calls[1]["messages"][1]["content"][0]["text"] == "second target"
+            status = (await client.get("/computer-use/status")).text
+            for secret in ("fixture-cloud-secret", "fixture private", "data:image", '"x":0.5'):
+                assert secret not in status and secret not in caplog.text
+        finally:
+            release.set()
+            if service._run is run:
+                service.task_status("owner", "fixture_char", task_id, cancel=True)
+            await asyncio.gather(run.worker, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("provider_case", "code"), [
+    (302, "vision_provider_error"), (401, "vision_provider_error"), (503, "vision_provider_error"),
+    ("timeout", "vision_timeout"), ("network", "vision_node_offline"),
+    ("text", "vision_invalid_response"), ("extra", "vision_invalid_response"),
+    ("nan", "vision_invalid_response"), ("range", "vision_invalid_response"),
+    ("duplicate", "vision_invalid_response"),
+    ("uncertain", None),
+])
+async def test_cloud_provider_errors_and_strict_coordinates(monkeypatch, provider_case, code):
+    cases = {
+        "text": "fixture raw output",
+        "extra": '{"status":"found","x":0.4,"y":0.5,"action":"click"}',
+        "nan": '{"status":"found","x":NaN,"y":0.5}',
+        "range": '{"status":"found","x":1,"y":0.5}',
+        "duplicate": '{"status":"found","x":0.5,"x":0.6,"y":0.5}',
+        "uncertain": '{"status":"uncertain"}',
+    }
+    calls = []
+
+    async def provider(request):
+        calls.append(request.url)
+        if isinstance(provider_case, int):
+            return httpx.Response(provider_case, headers={"Location": "https://other.example/"})
+        if provider_case == "timeout":
+            await asyncio.sleep(2)
+        if provider_case == "network":
+            raise httpx.ConnectError("private provider diagnostic")
+        return httpx.Response(200, json={"choices": [{"message": {"content": cases[provider_case]}}]})
+
+    monkeypatch.setattr(vision, "make_model_http_client", lambda *_: httpx.AsyncClient(
+        transport=httpx.MockTransport(provider), follow_redirects=True,
+    ))
+    preset = {"model": "fixture-model", "base_url": "https://fixture.example/v1"}
+    if code:
+        with pytest.raises(vision.VisionError, match=code):
+            await vision.locate(preset, b"jpeg fixture", "fixture target", .05)
+    else:
+        assert await vision.locate(preset, b"jpeg fixture", "fixture target", .05) == {"status": "uncertain"}
+    assert len(calls) == 1 and calls[0].host == "fixture.example"
 
 
 @pytest.mark.asyncio
