@@ -10,6 +10,7 @@ synthesized from ``vision:``, ``image_recognition:`` and
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import json
 import re
 from copy import deepcopy
@@ -122,10 +123,13 @@ def snapshot(config: dict | None = None) -> dict:
     for purpose in PURPOSES:
         name = cat["routes"].get(purpose, "")
         preset = cat["presets"].get(name, {})
+        diagnostics = {}
         if purpose in CAMERA_PURPOSES:
             ready = video_call_ready(preset)[0]
         elif purpose == "computer_use":
-            ready = computer_use_ready(preset)
+            mode, reason = computer_use_transport(preset)
+            ready = mode != "unavailable"
+            diagnostics = {"transport_mode": mode, "blocking_reason": reason}
         else:
             ready = connection_ready(preset) if preset else False
         fallback = cat["fallbacks"].get(purpose, "")
@@ -142,6 +146,7 @@ def snapshot(config: dict | None = None) -> dict:
             "is_local": bool(preset.get("is_local")) if preset else False,
             "fallback_is_local": bool(cat["presets"].get(fallback, {}).get("is_local")) if fallback else False,
             "source": "image_presets" if not cat["synthesized"] else "legacy",
+            **diagnostics,
         })
     return {
         "synthesized": cat["synthesized"],
@@ -295,27 +300,59 @@ def connection_ready(preset: dict | None) -> bool:
     return bool(preset.get("base_url") and preset.get("model"))
 
 
-def computer_use_ready(preset: dict | None) -> bool:
-    """A dedicated, explicitly local route for screenshots sent by the desktop."""
+def computer_use_transport(preset: dict | None) -> tuple[str, str]:
+    """Classify the selected preset. Cloud consent is checked by the task service."""
     from core.model_network import private_node_url
 
-    if (not preset or preset.get("kind") != "vision"
-            or preset.get("is_local") is not True
-            or preset.get("api_protocol") != "chat_completions"
-            or not connection_ready(preset)):
-        return False
+    if not preset:
+        return "unavailable", "vision_not_configured"
+    if preset.get("kind") != "vision" or preset.get("api_protocol") != "chat_completions":
+        return "unavailable", "chat_completions_required"
+    if not connection_ready(preset) or not preset["model"].strip():
+        return "unavailable", "connection_not_ready"
     url = preset["base_url"]
-    return camera_endpoint_type(preset) == "loopback" or private_node_url(url)
+    if preset.get("is_local") is True:
+        if camera_endpoint_type(preset) == "loopback" or private_node_url(url):
+            return "local_private", ""
+        return "unavailable", "private_endpoint_required"
+    if _public_https_url(url):
+        return "cloud_proxy", ""
+    return "unavailable", "public_https_required"
+
+
+def _public_https_url(url: str) -> bool:
+    if any(ord(c) <= 32 or c in "\\%?#@" for c in url):
+        return False
+    try:
+        parsed = urlsplit(url)
+        host = (parsed.hostname or "").rstrip(".")
+        if parsed.scheme != "https" or parsed.port == 0 or not host:
+            return False
+    except ValueError:
+        return False
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        return "." in host and not host.endswith((".localhost", ".local", ".internal", ".ts.net"))
+    return address.is_global and not address.is_multicast
+
+
+def computer_use_ready(preset: dict | None) -> bool:
+    return computer_use_transport(preset)[0] != "unavailable"
+
+
+def computer_use_route(config: dict | None = None) -> dict:
+    """Server-only resolved route. Contains the selected credential."""
+    try:
+        return resolve_purpose("computer_use", config)
+    except KeyError:
+        return {}
 
 
 def computer_use_connection(config: dict | None = None) -> dict | None:
-    """Native consumer only. Contains the selected connection credential."""
-    try:
-        route = resolve_purpose("computer_use", config)
-    except KeyError:
-        return None
-    preset = route["config"]
-    if not computer_use_ready(preset):
+    """Legacy desktop wire projection. Only direct private nodes get credentials."""
+    preset = computer_use_route(config).get("config")
+    if computer_use_transport(preset)[0] != "local_private":
         return None
     return {key: preset[key] for key in ("base_url", "model", "api_key")}
 
@@ -563,7 +600,9 @@ def _ocr_request_url(cfg: dict) -> str:
 
 def _mask_preset(preset: dict) -> dict:
     view = dict(preset)
-    view["computer_use_ready"] = computer_use_ready(preset)
+    mode, _ = computer_use_transport(preset)
+    view["computer_use_ready"] = mode != "unavailable"
+    view["computer_use_transport_mode"] = mode
     view["camera_ready"] = video_call_ready(preset)[0]
     view["camera_endpoint_type"] = camera_endpoint_type(preset)
     key = view.get("api_key") or ""

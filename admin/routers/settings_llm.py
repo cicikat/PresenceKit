@@ -823,7 +823,7 @@ async def update_image_routes(body: ImageRoutesUpdate, auth=Depends(require_scop
             if not ready:
                 raise HTTPException(status_code=422, detail=f"视频电话需要本机或已授权私网视觉连接 ({reason})")
         if purpose == "computer_use" and not computer_use_ready(presets[name]):
-            raise HTTPException(status_code=422, detail="Computer Use 需要启用的本机或私网 Chat Completions 视觉连接")
+            raise HTTPException(status_code=422, detail="Computer Use 需要已启用的 Chat Completions 视觉连接，支持已标记本地的本机/私网地址或公网 HTTPS")
         if purpose in SCREEN_PURPOSES and presets[name].get("kind") != "vision":
             raise HTTPException(status_code=422, detail="屏幕用途需要 vision 类型连接")
         routes[purpose] = name

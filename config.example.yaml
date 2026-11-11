@@ -180,7 +180,7 @@ vision:
 #     life_bill: ocr
 #     screen: general   # 按需看屏幕 / 影子观测 / 手机自动化共用
 #     video_call: ''    # 可选：本机 HTTP 或已授权私网的 Chat Completions
-#     computer_use: ''  # 桌面 Computer Use 独立路由，默认关闭，只可选择标记本地的本机/私网 Chat Completions
+#     computer_use: ''  # 独立 Chat Completions 路由：本机/私网直连，或公网 HTTPS（须每次桌面会话授权）
 #     video_call_tool: ''  # 缺省继承 video_call，显式留空关闭按需查看
 #   fallbacks:
 #     screen: remote   # 可选：screen 主连接连不上时的备用连接（摄像头路由不允许备用）

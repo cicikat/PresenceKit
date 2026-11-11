@@ -299,14 +299,17 @@ def test_is_local_covers_screen_primary_and_fallback_separately():
     assert row["fallback"] == "" and row["fallback_is_local"] is False
 
 
-@pytest.mark.parametrize(("url", "local", "ready"), [
-    ("http://localhost:8180/v1", True, True),
-    ("http://100.64.3.2:8180/v1", True, True),
-    ("http://192.168.3.2:8180/v1", False, False),
-    ("https://public.example/v1", True, False),
-    ("http://user@127.0.0.1:8180/v1", True, False),
+@pytest.mark.parametrize(("url", "local", "mode"), [
+    ("http://localhost:8180/v1", True, "local_private"),
+    ("http://100.64.3.2:8180/v1", True, "local_private"),
+    ("https://192.168.3.2:8180/v1", False, "unavailable"),
+    ("https://public.example/v1", True, "unavailable"),
+    ("http://user@127.0.0.1:8180/v1", True, "unavailable"),
+    ("https://public.example/v1", False, "cloud_proxy"),
+    ("http://public.example/v1", False, "unavailable"),
+    ("https://host.example.ts.net/v1", False, "unavailable"),
 ])
-def test_computer_use_vision_has_independent_private_route(url, local, ready):
+def test_computer_use_vision_has_independent_route(url, local, mode):
     from core.image_presets import computer_use_connection, snapshot
 
     named = {
@@ -319,7 +322,9 @@ def test_computer_use_vision_has_independent_private_route(url, local, ready):
     config = {"image_presets": named}
     assert computer_use_connection(config) is None
     named["routes"]["computer_use"] = "vision"
-    assert bool(computer_use_connection(config)) is ready
-    projected = next(row for row in snapshot(config)["purposes"] if row["purpose"] == "computer_use")
-    assert projected["ready"] is ready
+    assert bool(computer_use_connection(config)) is (mode == "local_private")
+    view = snapshot(config)
+    projected = next(row for row in view["purposes"] if row["purpose"] == "computer_use")
+    assert projected["ready"] is (mode != "unavailable")
+    assert projected["transport_mode"] == mode
     assert projected["fallback"] == ""
