@@ -93,10 +93,13 @@ def _project(row: dict, session: Session | None = None) -> dict:
         phase = "paused" if session.device.state == "paused" else session.phase
     counters = metadata.get("counters", {})
     step = counters.get("steps", 0)
+    current_action = None
     if session and session.child:
         step += session.child.steps
+        if phase == "acting" and session.child.delivery:
+            current_action = session.child.delivery.step["action"]["kind"]
     return {"session_id": row["request_summary"]["session_id"], "task_id": row["task_id"],
-            "status": phase, "current_step": step,
+            "status": phase, "current_step": step, "current_action": current_action,
             "short_description": PHASES.get(phase, ""), "last_error_code": row["error_code"] or
             (code if code and code not in PHASES else None), "updated_at": row["updated_at"],
             "counters": counters}
