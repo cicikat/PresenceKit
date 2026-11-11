@@ -337,6 +337,10 @@ async def _execute_owner_chat_turn_locked(
                 channel=provenance_channel,
                 char_id=_frozen_scope.character_id,
             )
+            if isinstance(pretool_result, PreToolRouteResult):
+                _cu_prompt = pretool_result.computer_use_prompt()
+                if _cu_prompt:
+                    messages.insert(max(0, len(messages) - 1), _cu_prompt)
             if prompt_context_note:
                 messages.insert(0, {
                     "role": "system",

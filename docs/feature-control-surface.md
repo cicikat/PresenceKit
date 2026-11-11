@@ -1192,6 +1192,6 @@ provider_kind 新增 venice。Base URL为 https://api.venice.ai/api/v1，原生P
 
 ## 301 CU-04 Windows Computer Use 授权与状态
 
-`computer_use.enabled` 默认 `false`，管理面「看屏幕与操作电脑」通过 `PUT /settings/feature-flags` 热更新。有效状态为 `disabled`、`no-active-device` 或 `ready`。关闭后撤销桌面执行租约，普通聊天照常。桌面用户还需在「偏好 → 系统设置」选择窗口或整个桌面并设定时长。角色必须有桌面工具类别权限，并使用工具循环。
+`computer_use.enabled` 默认 `false`，管理面「看屏幕与操作电脑」通过 `PUT /settings/feature-flags` 热更新。有效状态为 `disabled`、`no-active-device` 或 `ready`。关闭后撤销桌面执行租约，普通聊天照常。桌面用户还需在「偏好 → 系统设置」选择窗口或整个桌面并设定时长。主人现实私聊可通过普通探针或工具循环调用，继承 `desktop` 类别和角色权限。
 
 管理面状态卡通过 `GET /computer-use/status` 展示授权范围、模型路由、当前或最近任务、动作数、平均步时延和最后错误。状态不含用户目标、输入内容、UIA 文本或截图。

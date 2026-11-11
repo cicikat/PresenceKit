@@ -514,6 +514,9 @@ async def handle_message(message: dict, *, ingress=None):
             channel=channel,
             char_id=_char_id,
         )
+        _cu_prompt = _pretool.computer_use_prompt()
+        if _cu_prompt:
+            messages.insert(max(0, len(messages) - 1), _cu_prompt)
 
         if audio_result:
             from core.audio_perception import impression, prompt_hint

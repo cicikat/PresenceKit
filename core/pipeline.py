@@ -1360,11 +1360,14 @@ class Pipeline:
         # tool_loop.categories fallbacks while adding explicit path-local
         # categories/tools/excludes.
         from core.tool_exposure import filter_schemas as _filter_exposure, resolve as _resolve_exposure
+        from core.agent_runtime import computer_use as _computer_use
         _exposure = _resolve_exposure("path_c", char_id=char_id)
         from core.tool_exposure import expand_legacy_categories as _expand_cats
         categories = _expand_cats(allowed_tool_categories) if allowed_tool_categories is not None else list(_exposure.categories)
         excluded_tool_names = set(_exposure.exclude_tools)
         excluded_tool_names.update(exclude_tools or ())
+        if is_group or is_proactive:
+            excluded_tool_names.update(_computer_use.TOOL_NAMES)
         if not _drinking_invited:
             excluded_tool_names.add("drink_with_user")
 
@@ -1466,7 +1469,7 @@ class Pipeline:
                 _discovery_notes["media"] = _media_note
         except Exception:
             logger.debug("[pipeline.run_agentic_loop] image gen note unavailable", exc_info=True)
-        discovery = ToolDiscovery(tools, _TOOL_REGISTRY, notes=_discovery_notes)
+        discovery = ToolDiscovery(tools, _TOOL_REGISTRY, notes=_discovery_notes, direct=_computer_use.TOOL_NAMES)
         image_surface = "absent"
         image_hint = ""
         if "generate_image" in _final_tool_names and _discovery_notes.get("media") and not is_group and not is_proactive:
@@ -1486,6 +1489,9 @@ class Pipeline:
         mcp_opaque_params_note = format_mcp_opaque_params_note(tools)
 
         loop_msgs = list(messages)
+        computer_use_hint = _computer_use.role_prompt(_final_tool_names)
+        if computer_use_hint:
+            loop_msgs.insert(max(0, len(loop_msgs) - 1), computer_use_hint)
         from core.tool_audit import is_recap_request, query as query_tool_audit
         latest_user_text = next((item.get("content") for item in reversed(messages)
                                  if item.get("role") == "user" and isinstance(item.get("content"), str)), "")

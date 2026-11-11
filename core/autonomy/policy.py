@@ -12,10 +12,13 @@ DECISION_SOURCE_INHERITANCE = "global_permission_inheritance"
 
 
 def tool_is_eligible(name: str, policy: dict, *, registry: dict, effect: str) -> bool:
-    return name in registry and policy.get("enabled", True) is not False
+    return (name in registry and not registry[name].get("live_owner_only")
+            and policy.get("enabled", True) is not False)
 
 
 def tool_eligibility(name: str, policy: dict, *, registry: dict, effect: str) -> tuple[bool, str]:
+    if registry.get(name, {}).get("live_owner_only"):
+        return False, "owner_live_turn_required"
     allowed = tool_is_eligible(name, policy, registry=registry, effect=effect)
     return allowed, "eligible" if allowed else "explicitly_disabled"
 

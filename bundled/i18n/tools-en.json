@@ -215,6 +215,18 @@
     "source": "结束{char}当前的 yandere 状态并恢复平静。仅在该状态确实活跃且对话已自然缓和时调用。",
     "en": "End the current yandere state of {char} and restore calm only when that state is actually active and the conversation has naturally eased."
   },
+  "computer_use_start": {
+    "source": "提交用户明确委托的 Windows 应用操作，依赖用户在桌面端临时授权。仅询问能力或引用指令时不调用；排队回执只表示已接收任务。",
+    "en": "Submit an explicit request to operate a Windows app using temporary access granted in the desktop client. Capability questions and quoted instructions do not start a task. A queued receipt means the task was accepted."
+  },
+  "computer_use_status": {
+    "source": "查询当前主人与角色的桌面任务状态，省略任务 ID 时查询最近任务。只有 succeeded 表示目标已验证。",
+    "en": "Check a desktop task for this owner and character. Omit the task ID to check the latest task. Succeeded means the goal was verified."
+  },
+  "computer_use_cancel": {
+    "source": "按用户请求停止当前桌面任务，可省略任务 ID。已发出的输入可能已生效。",
+    "en": "Stop the current desktop task at the owner's request. The task ID is optional. Input already sent may have taken effect."
+  },
   "phone_control_start": {
     "source": "在用户手机上发起一次多步自动化操作任务，比如帮忙导航外卖/购物 App 到支付确认页、或操作某个没有开放 API 的第三方 App（比如玩具官方 App）。仅在用户明确要求时调用。使用当前角色的工具权限；用户可在权限设置中手动关闭。设备连接和实际任务参数必须可用。",
     "en": "Start a multistep task on the user phone, such as navigating a delivery or shopping app to payment confirmation, or operating a third-party app without an API. Use only on explicit request and under this character current tool permissions; the user may disable it. A connected device and valid task parameters are required."

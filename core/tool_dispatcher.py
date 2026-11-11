@@ -1725,20 +1725,20 @@ async def _computer_use_start(goal: str, *, user_id: str, char_id: str) -> str:
     context = current_call() or {}
     request = context.get("request_id") or context.get("event_id") or ""
     result = _computer_use.start(user_id, char_id, goal, request_id=request)
-    return json.dumps(result, ensure_ascii=False)
+    return _computer_use.role_receipt(result)
 
 
 async def _computer_use_status(task_id: str = "", *, user_id: str, char_id: str) -> str:
-    return json.dumps(_computer_use.task_status(user_id, char_id, task_id), ensure_ascii=False)
+    return _computer_use.role_receipt(_computer_use.task_status(user_id, char_id, task_id))
 
 
 async def _computer_use_cancel(task_id: str = "", *, user_id: str, char_id: str) -> str:
-    return json.dumps(_computer_use.task_status(user_id, char_id, task_id, cancel=True), ensure_ascii=False)
+    return _computer_use.role_receipt(_computer_use.task_status(user_id, char_id, task_id, cancel=True))
 
 
 for _cu_name, _cu_func, _cu_field, _cu_description, _cu_example in (
     ("computer_use_start", _computer_use_start, "goal",
-     "在用户已授权的 Windows 桌面上执行用户明确委托的任务。返回已排队或不可用；已排队时仅说明正在处理，随后可查实际结果。",
+     "提交用户明确委托的 Windows 应用操作，依赖用户在桌面端临时授权。仅询问能力或引用指令时不调用；排队回执只表示已接收任务。",
      "帮我在已授权的记事本里写入这段文字"),
     ("computer_use_status", _computer_use_status, "task_id",
      "查询当前主人与角色的桌面任务状态，省略任务 ID 时查询最近任务。只有 succeeded 表示目标已验证。",
@@ -1749,7 +1749,8 @@ for _cu_name, _cu_func, _cu_field, _cu_description, _cu_example in (
 ):
     _TOOL_REGISTRY[_cu_name] = {
         "func": _cu_func, "description": _cu_description, "category": "desktop",
-        "dangerous": False, "probe": False, "echo_event_log": False,
+        "dangerous": False, "echo_event_log": False, "live_owner_only": True,
+        "effect": "read" if _cu_name == "computer_use_status" else "actuate",
         "parameters": {"type": "object", "properties": {
             _cu_field: {"type": "string", "maxLength": 1200 if _cu_field == "goal" else 32},
         }, "required": ["goal"] if _cu_field == "goal" else [], "additionalProperties": False},
@@ -2517,6 +2518,7 @@ def get_tools_schema(
     *,
     char_id: str | None = None,
     uid: str | None = None,
+    only_names: frozenset[str] | None = None,
 ) -> list[dict]:
     """返回已启用工具的 OpenAI function_calling 格式 schema。
     categories: 若提供，仅返回该分类内的工具；None 返回全部。
@@ -2525,6 +2527,8 @@ def get_tools_schema(
     from core.prompt_language import tool_description, tool_parameters
     schemas = []
     for name, info in _TOOL_REGISTRY.items():
+        if only_names is not None and name not in only_names:
+            continue
         if name in _computer_use.TOOL_NAMES and (not _computer_use.enabled() or not _computer_use.owner_scope(uid, char_id)):
             continue
         if name in _QZONE_TOOL_NAMES:
@@ -2676,6 +2680,8 @@ def _build_probe_prompt(
     char_name = get_active_char_name()
     for name, spec in _TOOL_REGISTRY.items():
         if spec.get("probe") is False:
+            continue
+        if name in _computer_use.TOOL_NAMES and allowed_tool_names is None:
             continue
         if allowed_tool_names is not None and name not in allowed_tool_names:
             continue

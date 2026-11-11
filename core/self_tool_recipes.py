@@ -79,7 +79,7 @@ def check_step_tool(tool: Any, exposed: set[str]) -> None:
     if tool.startswith("self_tool_"):
         raise RecipeError("step_recursion_forbidden", tool=tool)
     if (
-        info.get("self_management") or info.get("self_management_read")
+        info.get("self_management") or info.get("self_management_read") or info.get("live_owner_only")
         or info.get("category") in FORBIDDEN_CATEGORIES
         or tool == "manage_self_capability"
     ):

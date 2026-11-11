@@ -50,13 +50,18 @@ PREFIX = "load_tools_"
 
 
 class ToolDiscovery:
-    def __init__(self, schemas: list[dict], registry: dict, notes: dict[str, str] | None = None):
+    def __init__(self, schemas: list[dict], registry: dict, notes: dict[str, str] | None = None,
+                 *, direct: frozenset[str] = frozenset()):
         # notes: optional per-category suffix for the entry description (e.g. the
         # character's own recipe names). Presentation only; never grants anything.
         self.notes = dict(notes or {})
+        self.direct: list[dict] = []
         self.groups: dict[str, list[dict]] = {}
         for schema in schemas:
             name = (schema.get("function") or schema).get("name", "")
+            if name in direct:
+                self.direct.append(deepcopy(schema))
+                continue
             category = registry.get(name, {}).get("category")
             if category in CATEGORIES and not name.startswith(PREFIX):
                 self.groups.setdefault(category, []).append(deepcopy(schema))
@@ -93,7 +98,7 @@ class ToolDiscovery:
         return "；".join(parts) + "。" if parts else ""
 
     def schemas(self) -> list[dict]:
-        result = []
+        result = list(self.direct)
         for category, description in CATEGORIES.items():
             description = _pt(description)
             if category not in self.groups:

@@ -1262,4 +1262,4 @@ GET /activity/records（state.read）默认仅列来源元数据；指定 source
 
 ## 301 Windows Computer Use 工具
 
-`computer_use_start(goal)`、`computer_use_status(task_id)`、`computer_use_cancel(task_id)` 走主人现实私聊的工具循环，属于 `desktop` 类别并继承角色工具权限。开启后端功能和本机授权后才能开始任务。排队只代表接受请求，验证结果由任务状态提供。工具参数中的任务内容不写入动作痕迹。未取得本机授权时返回 `no_desktop_authorization`。
+`computer_use_start(goal)`、`computer_use_status(task_id?)`、`computer_use_cancel(task_id?)` 走主人现实私聊，属于 `desktop` 类别并继承角色工具权限。普通探针使用注册描述和例句选择工具，工具循环在既有暴露过滤后直接提供定义。开启后端功能和本机授权后才能开始任务。排队只代表接受请求，验证结果由任务状态提供。工具参数中的任务内容不写入动作痕迹。未取得本机授权时返回 `no_desktop_authorization`。

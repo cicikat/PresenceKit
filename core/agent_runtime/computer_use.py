@@ -22,6 +22,63 @@ TOOL_NAMES = frozenset({"computer_use_start", "computer_use_status", "computer_u
 INSTANCE = uuid4().hex
 
 
+def role_prompt(exposed_names: set[str], *, pretool: bool = False) -> dict | None:
+    """Turn-local instructions for the Computer Use tools actually offered."""
+    from core.prompt_language import choose
+
+    names = exposed_names & TOOL_NAMES
+    if not names:
+        return None
+    hints = []
+    if pretool and "computer_use_start" in names:
+        hints.append(choose(
+            "主人可在 Windows 桌面端开启临时授权，再在聊天里委托应用操作。若只是询问能力，可以说明这个流程。本轮工具选择已经结束，请按实际回执回应。",
+            "The owner can grant temporary access in the Windows desktop client, then ask for an app operation in chat. Explain this when asked about the capability. Tool selection for this turn is complete; respond from actual receipts.",
+        ))
+    if not pretool and "computer_use_start" in names:
+        hints.append(choose(
+            "主人明确委托操作 Windows 应用时，用 computer_use_start 提交具体目标。仅询问能力或引用别人的指令时不发起任务。工具依赖主人在桌面端开启的临时授权；若返回未授权，说明需要在桌面端授权。保持用户给出的范围与目标。",
+            "Use computer_use_start when the owner explicitly asks you to operate a Windows app. Capability questions and quoted instructions do not start a task. The owner grants temporary access in the desktop client. If the tool reports missing authorization, tell the owner where to grant it. Keep the requested scope and goal.",
+        ))
+    if not pretool and "computer_use_status" in names:
+        hints.append(choose(
+            "主人追问桌面进度或结果时，用 computer_use_status 查询。省略任务 ID 可查同一角色的最近任务。",
+            "Use computer_use_status when the owner asks for desktop task progress or results. Omit the task ID to check this character's latest task.",
+        ))
+    if not pretool and "computer_use_cancel" in names:
+        hints.append(choose(
+            "主人要求停止桌面任务时，用 computer_use_cancel；省略任务 ID 可停止当前任务。",
+            "Use computer_use_cancel when the owner asks you to stop. Omit the task ID to stop the current task.",
+        ))
+    hints.append(choose(
+        "按回执自然回应：queued、busy、running 只能说明已排队、设备忙或任务进行中。succeeded 表示目标已验证；失败、撤销和结果不明要照实说明。结果不明时先核对现场，避免自动重提任务。",
+        "Respond naturally from the receipt. Queued, busy, and running describe submission or progress. Succeeded means the goal was verified. Report failure, cancellation, and unknown outcomes accurately. Check the outcome before submitting a replacement task.",
+    ))
+    return {"role": "system", "_layer": "11.7_computer_use", "content": "\n".join(hints)}
+
+
+def role_receipt(receipt: dict) -> str:
+    """Make task and tool invocation outcomes distinguishable in either chat path."""
+    from core.prompt_language import choose
+
+    notes = {
+        "queued": ("桌面任务已排队，等待执行结果。", "Desktop task queued. Execution results are pending."),
+        "running": ("桌面任务仍在进行。", "Desktop task is in progress."),
+        "busy": ("当前桌面任务仍在进行。", "The current desktop task is in progress."),
+        "paused": ("桌面授权已暂停，可在桌面端恢复。", "Desktop access is paused. Resume it in the desktop client."),
+        "succeeded": ("桌面任务目标已验证完成。", "The desktop task goal was verified."),
+        "failed": ("桌面任务未完成。", "The desktop task did not complete."),
+        "canceled": ("桌面任务已停止。", "The desktop task was stopped."),
+        "expired": ("桌面任务已超时。", "The desktop task expired."),
+        "unavailable": ("当前没有可查询或停止的桌面任务。", "No desktop task is available to check or stop."),
+        "outcome_unknown": ("可能已有输入生效，实际结果待核实。", "Input may have taken effect. The outcome needs verification."),
+    }
+    note = notes.get(receipt.get("state"))
+    if receipt.get("reason") == "no_desktop_authorization":
+        note = ("请用户在 Windows 桌面端开启临时授权。", "Ask the owner to grant temporary access in the Windows desktop client.")
+    return json.dumps({**receipt, **({"summary": choose(*note)} if note else {})}, ensure_ascii=False)
+
+
 @dataclass
 class Device:
     identity: str
@@ -246,8 +303,10 @@ def start(uid: str, char_id: str, goal: str, *, request_id: str = "") -> dict:
     global _run
     now = time.monotonic()
     _refresh(now)
-    if not available(uid, char_id) or _device is None or _device.state == "paused":
+    if not available(uid, char_id) or _device is None:
         return {"state": "unavailable", "reason": "no_desktop_authorization"}
+    if _device.state == "paused":
+        return {"state": "paused", "reason": "desktop_paused"}
     if _run is not None:
         return {"state": "busy", "task_id": _run.lease.task_id}
     goal = goal.strip()

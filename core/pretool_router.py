@@ -63,6 +63,11 @@ class PreToolRouteResult:
     def has_successful_tool_call(self) -> bool:
         return any(item.status == "tool_executed" for item in self.tool_results)
 
+    def computer_use_prompt(self) -> dict | None:
+        from core.agent_runtime.computer_use import role_prompt
+
+        return role_prompt(set(self.tools_available), pretool=True)
+
     @property
     def should_stop_for_user_input(self) -> bool:
         return bool(
@@ -223,7 +228,10 @@ async def _execute_selected(
     await _maybe_call(before_execute)
     name = call.get("name", "")
     arguments = call.get("arguments", {})
-    if allowed_tool_names is not None and name not in allowed_tool_names:
+    from core.agent_runtime.computer_use import TOOL_NAMES as computer_use_tools
+
+    if ((allowed_tool_names is not None and name not in allowed_tool_names)
+            or (name in computer_use_tools and name not in result.tools_available)):
         outcome = tool_dispatcher.ToolExecutionOutcome(
             status="tool_failed", result="tool capability unavailable for this caller",
         )
@@ -286,6 +294,7 @@ async def route_pretool(
 ) -> PreToolRouteResult:
     """Run the shared fast-match/probe/execute pre-tool contract."""
     effective_channel = provenance_channel or channel
+    from core.agent_runtime import computer_use
     from core.tool_exposure import (
         filter_schemas as filter_exposure_schemas,
         resolve as resolve_exposure,
@@ -295,6 +304,11 @@ async def route_pretool(
     # Preserve the registry helper's long-standing call shape for local test
     # and plugin compatibility, then apply the same character gates explicitly.
     schemas = tool_dispatcher.get_tools_schema(categories=effective_categories)
+    if not tool_loop_enabled and not is_group and computer_use.enabled():
+        schemas += tool_dispatcher.get_tools_schema(
+            categories=effective_categories, char_id=char_id, uid=uid,
+            only_names=computer_use.TOOL_NAMES,
+        )
     from core.self_management.policy import tool_allowed
 
     schemas = [
