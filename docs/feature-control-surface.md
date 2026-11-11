@@ -1185,3 +1185,7 @@ PUT `/image-gen-presets/prompt-constraints` 保存 `{selected, custom, presets}`
 provider_kind 新增 venice。Base URL为 https://api.venice.ai/api/v1，原生POST /image/generate，GET /models?type=image；填写完整/image/generate时保存为根地址。此适配暂不开放参考图。Runware高级编辑模型可在extra_params设置reference_input=referenceImages（适配器消费，不透传此选项）；扩散模型仍用seedImage。
 
 角色侧 `generate_image` 的可选 `preset` 枚举仅包含公开、已配置且角色获准使用的连接名。没有符合条件的连接时不提供工具定义。省略参数时沿用当前默认选择。指定无效连接时返回可用连接提示，且不自动改用另一付费连接。
+
+## 301 CU-02 Windows Computer Use 视觉定位
+
+管理员通过「模型路由 → 图像用途 → 屏幕」或 `PUT /image-presets/routes` 修改 `image_presets.routes.computer_use`。默认空值，关闭后仅使用 UI Automation。路由就绪由 `GET /image-presets` 的对应 `purposes[].ready` 投影。

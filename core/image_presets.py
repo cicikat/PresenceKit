@@ -37,6 +37,7 @@ PURPOSES = (
     "video_call",
     "video_call_tool",
     "screen",
+    "computer_use",
 )
 CAMERA_PURPOSES = ("video_call", "video_call_tool")
 # Every screenshot chain — the on-demand tool (desktop and phone), the shadow
@@ -123,6 +124,8 @@ def snapshot(config: dict | None = None) -> dict:
         preset = cat["presets"].get(name, {})
         if purpose in CAMERA_PURPOSES:
             ready = video_call_ready(preset)[0]
+        elif purpose == "computer_use":
+            ready = computer_use_ready(preset)
         else:
             ready = connection_ready(preset) if preset else False
         fallback = cat["fallbacks"].get(purpose, "")
@@ -292,6 +295,31 @@ def connection_ready(preset: dict | None) -> bool:
     return bool(preset.get("base_url") and preset.get("model"))
 
 
+def computer_use_ready(preset: dict | None) -> bool:
+    """A dedicated, explicitly local route for screenshots sent by the desktop."""
+    from core.model_network import private_node_url
+
+    if (not preset or preset.get("kind") != "vision"
+            or preset.get("is_local") is not True
+            or preset.get("api_protocol") != "chat_completions"
+            or not connection_ready(preset)):
+        return False
+    url = preset["base_url"]
+    return camera_endpoint_type(preset) == "loopback" or private_node_url(url)
+
+
+def computer_use_connection(config: dict | None = None) -> dict | None:
+    """Native consumer only. Contains the selected connection credential."""
+    try:
+        route = resolve_purpose("computer_use", config)
+    except KeyError:
+        return None
+    preset = route["config"]
+    if not computer_use_ready(preset):
+        return None
+    return {key: preset[key] for key in ("base_url", "model", "api_key")}
+
+
 def video_call_ready(preset: dict | None) -> tuple[bool, str]:
     """Require an enabled Chat Completions connection with camera permission."""
     if not preset or preset.get("kind") != "vision":
@@ -425,6 +453,7 @@ def _default_routes(config: dict, presets: dict) -> dict:
         "video_call": "",
         "video_call_tool": "",
         "screen": "",
+        "computer_use": "",
     }
 
 
@@ -534,6 +563,7 @@ def _ocr_request_url(cfg: dict) -> str:
 
 def _mask_preset(preset: dict) -> dict:
     view = dict(preset)
+    view["computer_use_ready"] = computer_use_ready(preset)
     view["camera_ready"] = video_call_ready(preset)[0]
     view["camera_endpoint_type"] = camera_endpoint_type(preset)
     key = view.get("api_key") or ""

@@ -613,6 +613,7 @@ class ImageRoutesUpdate(BaseModel):
     video_call: Optional[str] = None
     video_call_tool: Optional[str] = None
     screen: Optional[str] = None
+    computer_use: Optional[str] = None
     # purpose -> fallback connection name; "" clears it. Only screen purposes accept one.
     fallbacks: Optional[dict[str, str]] = None
 
@@ -797,7 +798,7 @@ async def set_image_gen_enabled(body: dict, auth=Depends(require_scopes("admin")
 @router.put("/image-presets/routes", summary="保存图像用途到连接的映射")
 async def update_image_routes(body: ImageRoutesUpdate, auth=Depends(require_scopes("admin"))):
     from core.image_presets import (FALLBACK_PURPOSES, CAMERA_PURPOSES, PURPOSES,
-                                    SCREEN_PURPOSES, snapshot, video_call_ready)
+                                    SCREEN_PURPOSES, computer_use_ready, snapshot, video_call_ready)
     full_cfg = read_config_file(CONFIG_FILE)
     block = _image_presets_block(full_cfg)
     presets = block.get("presets") or {}
@@ -807,7 +808,7 @@ async def update_image_routes(body: ImageRoutesUpdate, auth=Depends(require_scop
     for purpose, name in updates.items():
         if purpose not in PURPOSES:
             raise HTTPException(status_code=422, detail=f"未知用途 {purpose}")
-        if purpose in CAMERA_PURPOSES and not name:
+        if (purpose in CAMERA_PURPOSES or purpose == "computer_use") and not name:
             routes[purpose] = ""
             continue
         if purpose in SCREEN_PURPOSES and not name:
@@ -821,6 +822,8 @@ async def update_image_routes(body: ImageRoutesUpdate, auth=Depends(require_scop
             ready, reason = video_call_ready(presets[name])
             if not ready:
                 raise HTTPException(status_code=422, detail=f"视频电话需要本机或已授权私网视觉连接 ({reason})")
+        if purpose == "computer_use" and not computer_use_ready(presets[name]):
+            raise HTTPException(status_code=422, detail="Computer Use 需要启用的本机或私网 Chat Completions 视觉连接")
         if purpose in SCREEN_PURPOSES and presets[name].get("kind") != "vision":
             raise HTTPException(status_code=422, detail="屏幕用途需要 vision 类型连接")
         routes[purpose] = name

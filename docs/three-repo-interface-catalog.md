@@ -1289,3 +1289,7 @@ Runware适配和模型发现位于后端管理面；桌面/手机继续消费原
 ## 296 生图反馈与日记自然段
 生图新增Venice原生适配、test_model/test_extra_params和明确的测试结果模型标识。角色配置使用高级模型；管理测试使用低成本模型，不声明高级已通过真实生成。
 每日23点角色日记原始生成曾在词中/句中带单换行。新生成感受层合并段内软换行，保留空行自然段、Markdown标题/列表/引用/代码；只读/diary/list与/diary/{date}给旧日记提供同一修复投影，不改写旧文件。两端继续消费原feeling/body字段，没有消息、ACK、队列或客户端协议变化；用户日记镜像不参与此处理。
+
+## 301 CU-02 Windows Computer Use 视觉路由（current / observe）
+
+`GET /image-presets` 和 `PUT /image-presets/routes` 新增 `computer_use`。这是单独的私网视觉用途，默认空，桌面直接发图给已选模型；手机和旧桌面屏幕用途继续使用各自原有路由。真实模型的视觉定位待验收。

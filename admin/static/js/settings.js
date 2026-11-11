@@ -64,6 +64,7 @@ const IMAGE_PURPOSE_LABELS = {
   phone_automation: () => t('routing.phone_automation', '手机自动化'),
   video_call: () => '视频电话 · 本机摄像头（周期观察）',
   video_call_tool: () => '视频电话 · 按需查看摄像头（角色主动拉新帧）',
+  computer_use: () => t('routing.computer_use', 'Computer Use · Windows 私网视觉定位'),
   screen: () => t('routing.screen_purpose', '屏幕截图 · 影子观察、按需看屏幕、手机自动化'),
 };
 const CAMERA_PURPOSES = ['video_call', 'video_call_tool'];
@@ -71,7 +72,7 @@ const CAMERA_PURPOSES = ['video_call', 'video_call_tool'];
 // so the old row would be a control with no consumer.
 const IMAGE_ROUTE_GROUPS = [
   {id: 'camera', label: () => t('routing.group.camera', '摄像头'), purposes: ['video_call', 'video_call_tool']},
-  {id: 'screen', label: () => t('routing.group.screen', '屏幕'), purposes: ['screen']},
+  {id: 'screen', label: () => t('routing.group.screen', '屏幕'), purposes: ['screen', 'computer_use']},
   {id: 'other', label: () => t('routing.group.other', '其他'), purposes: ['chat_upload', 'life_diet', 'life_cart', 'life_bill']},
 ];
 const IMAGE_ROUTE_PURPOSES = IMAGE_ROUTE_GROUPS.flatMap(group => group.purposes);
@@ -114,9 +115,12 @@ function renderImageRoutes() {
   const renderRow = purpose => {
     const selected = routes[purpose] || '';
     const camera = CAMERA_PURPOSES.includes(purpose);
-    const available = camera ? names.filter(name => presets[name]?.camera_ready === true || name === selected)
+    const computerUse = purpose === 'computer_use';
+    const available = computerUse ? names.filter(name => presets[name]?.computer_use_ready === true || name === selected)
+      : camera ? names.filter(name => presets[name]?.camera_ready === true || name === selected)
       : FALLBACK_PURPOSES.includes(purpose) ? names.filter(name => (presets[name] || {}).kind === 'vision') : names;
-    const offOption = camera ? '<option value="">关闭 · 未指定摄像头连接</option>'
+    const offOption = computerUse ? `<option value="">${t('routing.computer_use_off', '关闭 · 仅使用 UIA')}</option>`
+      : camera ? '<option value="">关闭 · 未指定摄像头连接</option>'
       : FALLBACK_PURPOSES.includes(purpose) ? `<option value="">${t('routing.screen_off', '关闭 · 不分析屏幕截图')}</option>` : '';
     const options = offOption
       + available.map(name => `<option value="${escapeHtml(name)}" ${name === selected ? 'selected' : ''} data-i18n-skip>${escapeHtml(name)}</option>`).join('');
@@ -345,7 +349,7 @@ async function saveImageRoutes() {
   const body = {};
   for (const purpose of IMAGE_ROUTE_PURPOSES) {
     const select = document.getElementById('image-route-' + purpose);
-    const clearable = CAMERA_PURPOSES.includes(purpose) || FALLBACK_PURPOSES.includes(purpose);
+    const clearable = purpose === 'computer_use' || CAMERA_PURPOSES.includes(purpose) || FALLBACK_PURPOSES.includes(purpose);
     if (CAMERA_PURPOSES.includes(purpose) && select?.value && select.value === _imagePresetCatalog.routes?.[purpose]
         && !_imagePresetCatalog.presets?.[select.value]?.camera_ready) continue;
     if (select && (select.value || clearable)) body[purpose] = select.value;

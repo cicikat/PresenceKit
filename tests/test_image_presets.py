@@ -297,3 +297,29 @@ def test_is_local_covers_screen_primary_and_fallback_separately():
     cfg["image_presets"]["fallbacks"] = {}
     row = {p["purpose"]: p for p in snapshot(cfg)["purposes"]}["screen"]
     assert row["fallback"] == "" and row["fallback_is_local"] is False
+
+
+@pytest.mark.parametrize(("url", "local", "ready"), [
+    ("http://localhost:8180/v1", True, True),
+    ("http://100.64.3.2:8180/v1", True, True),
+    ("http://192.168.3.2:8180/v1", False, False),
+    ("https://public.example/v1", True, False),
+    ("http://user@127.0.0.1:8180/v1", True, False),
+])
+def test_computer_use_vision_has_independent_private_route(url, local, ready):
+    from core.image_presets import computer_use_connection, snapshot
+
+    named = {
+        "presets": {"vision": {
+            "kind": "vision", "model": "test", "base_url": url,
+            "api_protocol": "chat_completions", "is_local": local, "api_key": "fixture",
+        }},
+        "routes": {"screen": "vision", "video_call": "vision"},
+    }
+    config = {"image_presets": named}
+    assert computer_use_connection(config) is None
+    named["routes"]["computer_use"] = "vision"
+    assert bool(computer_use_connection(config)) is ready
+    projected = next(row for row in snapshot(config)["purposes"] if row["purpose"] == "computer_use")
+    assert projected["ready"] is ready
+    assert projected["fallback"] == ""
