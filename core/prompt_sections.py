@@ -32,6 +32,15 @@ SECTIONS = (
 )
 
 
+def character_description(character, *, max_field_chars: int | None = None) -> str:
+    parts = (
+        ("【角色描述】\n", character.description),
+        ("【性格】\n", character.personality),
+        ("【当前情境】\n", character.scenario),
+    )
+    return "\n\n".join(_pt(label) + value[:max_field_chars] for label, value in parts if value)
+
+
 def arrange_sections(messages: list[dict]) -> list[dict]:
     """Return copies, with contiguous sections before examples/history.
 
