@@ -13,8 +13,8 @@ from core.agent_runtime.agent_context import build_agent_context
 from core.agent_runtime.models import CausationRef, TaskLease, TaskPrincipal
 
 CAPABILITY = "agent_session"
-OUTPUT_TOKENS = 320
-DEFAULT_BUDGET = {"calls": 48, "output_tokens": 15360, "steps": 72, "seconds": 420, "failures": 2}
+OUTPUT_TOKENS = computer_use.SESSION_OUTPUT_TOKENS
+DEFAULT_BUDGET = {"calls": 48, "output_tokens": 24576, "steps": 72, "seconds": 420, "failures": 2}
 PHASES = {"planning": "Reviewing the goal", "acting": "Working on the desktop",
           "observing": "Reviewing desktop results", "waiting_user": "Waiting for your input",
           "paused": "Work paused", "completed": "Work completed", "failed": "Work did not complete",
@@ -98,9 +98,10 @@ def _project(row: dict, session: Session | None = None) -> dict:
         step += session.child.steps
         if phase == "acting" and session.child.delivery:
             current_action = session.child.delivery.step["action"]["kind"]
+    error = row["cancel_reason_code"] if phase == "canceled" else row["error_code"]
     return {"session_id": row["request_summary"]["session_id"], "task_id": row["task_id"],
             "status": phase, "current_step": step, "current_action": current_action,
-            "short_description": PHASES.get(phase, ""), "last_error_code": row["error_code"] or
+            "short_description": PHASES.get(phase, ""), "last_error_code": error or
             (code if code and code not in PHASES else None), "updated_at": row["updated_at"],
             "counters": counters}
 
@@ -320,6 +321,7 @@ async def _drive(session: Session) -> None:
                     terminal, reason = "canceled", result["reason"]
                     break
             result["revision"] = revision
+            result["subgoal"] = goal[:400]
             session.receipts = [*session.receipts[-7:], result]
             if session.phase != "paused":
                 session.phase = "observing"
