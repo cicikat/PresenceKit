@@ -1716,6 +1716,47 @@ _TOOL_REGISTRY["exit_yandere"] = {
     },
 }
 
+from core.agent_runtime import computer_use as _computer_use
+
+
+async def _computer_use_start(goal: str, *, user_id: str, char_id: str) -> str:
+    from core.tool_activity import current_call
+
+    context = current_call() or {}
+    request = context.get("request_id") or context.get("event_id") or ""
+    result = _computer_use.start(user_id, char_id, goal, request_id=request)
+    return json.dumps(result, ensure_ascii=False)
+
+
+async def _computer_use_status(task_id: str, *, user_id: str, char_id: str) -> str:
+    return json.dumps(_computer_use.task_status(user_id, char_id, task_id), ensure_ascii=False)
+
+
+async def _computer_use_cancel(task_id: str, *, user_id: str, char_id: str) -> str:
+    return json.dumps(_computer_use.task_status(user_id, char_id, task_id, cancel=True), ensure_ascii=False)
+
+
+for _cu_name, _cu_func, _cu_field, _cu_description, _cu_example in (
+    ("computer_use_start", _computer_use_start, "goal",
+     "在用户已授权的 Windows 桌面上执行用户明确委托的任务。返回已排队或不可用；已排队时仅说明正在处理，随后可查实际结果。",
+     "帮我在已授权的记事本里写入这段文字"),
+    ("computer_use_status", _computer_use_status, "task_id",
+     "查询当前主人与角色的桌面任务状态，只有 succeeded 表示目标已验证。",
+     "刚才那个桌面任务做完了吗"),
+    ("computer_use_cancel", _computer_use_cancel, "task_id",
+     "按用户请求停止当前桌面任务。已发出的输入可能已生效。",
+     "停止刚才的桌面操作"),
+):
+    _TOOL_REGISTRY[_cu_name] = {
+        "func": _cu_func, "description": _cu_description, "category": "desktop",
+        "dangerous": False, "probe": False, "echo_event_log": False,
+        "parameters": {"type": "object", "properties": {
+            _cu_field: {"type": "string", "maxLength": 1200 if _cu_field == "goal" else 32},
+        }, "required": [_cu_field], "additionalProperties": False},
+        "examples": [_cu_example], "keywords": ["操作桌面", "Computer Use", "桌面任务"], "trace_args": [],
+    }
+
+
 _TOOL_REGISTRY["phone_control_start"] = {
     "func": _phone_control_start_wrapper,
     "description": (
@@ -2374,6 +2415,8 @@ def _is_tool_enabled(tool_name: str) -> bool:
                 return False
         except (ValueError, TypeError):
             return False
+    if tool_name in _computer_use.TOOL_NAMES and not _computer_use.enabled():
+        return False
     if tool_name == "start_agent_task":
         from core.agent_runtime.agent_tasks import capability_snapshot
         state = capability_snapshot()
@@ -2482,6 +2525,8 @@ def get_tools_schema(
     from core.prompt_language import tool_description, tool_parameters
     schemas = []
     for name, info in _TOOL_REGISTRY.items():
+        if name in _computer_use.TOOL_NAMES and (not _computer_use.enabled() or not _computer_use.owner_scope(uid, char_id)):
+            continue
         if name in _QZONE_TOOL_NAMES:
             from core.qzone_service import allowed
             if not allowed(uid, char_id, write=info.get("effect") == "write"):
@@ -2745,6 +2790,8 @@ def _log_execute_failure_context(tool_name: str, tool_args: dict, origin: str) -
     参数/origin 都没有，出故障后完全没法反推真正发给 MCP 的是什么（Brief 120 排查
     cedartoy「command 参数必填」时吃过这个亏）。这里记完整 tool_args。
     """
+    if tool_name in _computer_use.TOOL_NAMES:
+        return
     try:
         args_repr = json.dumps(tool_args, ensure_ascii=False, default=str)
     except Exception:
@@ -3003,6 +3050,10 @@ async def _execute_structured_impl(
             )
 
     tool_info = _TOOL_REGISTRY[tool_name]
+    if tool_name in _computer_use.TOOL_NAMES:
+        if (is_group or origin not in {"user_live", "assistant_loop", "assistant_loop_relay"}
+                or not _computer_use.owner_scope(user_id, char_id)):
+            return _execution_outcome("tool_failed", "当前会话无法操作桌面。")
     if tool_name in _INTIFACE_TOOL_NAMES and not intiface_opted_in():
         _msg = "Intiface 硬件能力当前处于冻结状态，需要显式 opt-in"
         _trace("failed", _msg)
@@ -3142,6 +3193,8 @@ async def _execute_structured_impl(
                 # Preserve the historical signature for test/local extensions
                 # that replace the legacy callable in the registry.
                 result = await func(user_id=user_id, **tool_args)
+        elif tool_name in _computer_use.TOOL_NAMES:
+            result = await func(user_id=user_id, char_id=char_id, **tool_args)
         elif tool_name in ("read_toy_file", "write_toy_file", "write_artifact", "update_artifact", "read_artifact", "list_artifacts", "drink_with_user", "generate_image"):
             result = await func(user_id=user_id, char_id=char_id, **tool_args)
         elif tool_name in {

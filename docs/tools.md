@@ -1259,3 +1259,7 @@ Reality 活动对话由同一 owner/char 的 canonical turn sink 落盘，使用
 GET /activity/records（state.read）默认仅列来源元数据；指定 source_ref 才读取原文。query_activity_records 使用 dispatcher 身份；未指定引用时关键词/时间查询跨当前身份的活动原文。概要是 revision 绑定的分段摘录，标注 coverage/pending，回复发送后构建；失败保留原文，后续对话或关闭重试。canonical 撤回也遮蔽已关联的局部召回，并使旧概要失效。
 
 表达状态 has_signal=false 表示无短时信号，区别于明确 neutral。来源 turn/source_at/version/expires_at 可观测，最多30分钟且只读不续期；旧固定 mood 不转成新余韵。prompt 的 expression_afterglow 是可裁剪层，prompt_eligible 表示资格，实际注入以 prompt 观测为准。没有新增模型情绪检测、随机活动或成长等级控制开关。
+
+## 301 Windows Computer Use 工具
+
+`computer_use_start(goal)`、`computer_use_status(task_id)`、`computer_use_cancel(task_id)` 走主人现实私聊的工具循环，属于 `desktop` 类别并继承角色工具权限。开启后端功能和本机授权后才能开始任务。排队只代表接受请求，验证结果由任务状态提供。工具参数中的任务内容不写入动作痕迹。未取得本机授权时返回 `no_desktop_authorization`。

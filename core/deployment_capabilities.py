@@ -153,6 +153,12 @@ def capability_projection(*, desktop_ws_online: bool = False, last_ack_at: float
                 if not intiface_open
                 else "frozen by Brief 171; existing opt-in requires separate review"),
     ))
+    from core.agent_runtime.computer_use import enabled as computer_use_enabled
+    decisions.append(CapabilityDecision(
+        logical_name="computer_use",
+        status="online_required" if computer_use_enabled() else "disabled",
+        reason="requires a locally authorized Windows desktop client",
+    ))
     return decisions
 
 

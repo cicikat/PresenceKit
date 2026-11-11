@@ -378,3 +378,7 @@ adapter or access to the Reality workspace.
 - life：`get_listening_state`, `get_listening_queue`, `get_listening_history`, `get_track_note`, `write_track_note`, `choose_next_track`。
 
 `memory_consolidation` 是同角色的静默维护 Work Session，受独立配置、预算及前台让路约束，不直接发言。
+
+## 301 CU-03 Windows Computer Use
+
+Computer Use 由主人现实私聊发起，采用同一角色的文本模型及 Task Manager 元数据回执。任务保留设备授权会话和可追踪的任务 ID，意图、动作、观察文本和原始图片不进入任务存储。任务使用 `RetryPolicy.NEVER`；后端重启、设备离线或回执迟到时，可能已执行的输入进入 `outcome_unknown`。WebSocket 原有动作不承载 Computer Use。后端部署在远程时，由用户 Windows 客户端执行全部 OS 操作。
