@@ -1,6 +1,7 @@
 """Desktop polling and scoped JPEG grounding."""
 import asyncio
 import time
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
@@ -12,6 +13,7 @@ from admin.auth import require_scopes
 from admin.config_control import read_config_file, write_config_file
 from admin.routers.screen_observation import identity
 from core import config_loader
+from core.agent_runtime import agent_sessions
 from core.agent_runtime import computer_use as service
 from core.agent_runtime import computer_use_vision as vision
 from core.agent_runtime.computer_use_contract import Poll, Result, Strict, VisionRequest
@@ -45,6 +47,29 @@ _desktop = require_scopes("ws.desktop", "sensor.write")
 class VisionSettings(Strict):
     local_vision_timeout_s: int = Field(ge=1, le=service.VISION_TIMEOUT_DEFAULTS["local"])
     cloud_vision_timeout_s: int = Field(ge=1, le=service.VISION_TIMEOUT_DEFAULTS["cloud"])
+
+
+class SessionControl(Strict):
+    session_id: str = Field(min_length=32, max_length=32)
+    action: Literal["steer", "pause", "resume", "cancel"]
+    instruction: str = Field(default="", max_length=1200)
+    request_id: str = Field(min_length=1, max_length=128)
+
+
+@router.get("/agent-session")
+async def agent_session_status(session_id: str = "", auth=Depends(require_scopes("state.read"))):
+    actor = service.principal()
+    return agent_sessions.status(actor, session_id) if actor else {"status": "unavailable"}
+
+
+@router.post("/agent-session/control")
+async def agent_session_control(body: SessionControl, request: Request, auth=Depends(_desktop)):
+    actor = service.principal()
+    device = service.bound_device(actor.uid, actor.char_id) if actor else None
+    if device is None or device.identity != identity(request, auth, "desktop"):
+        raise HTTPException(403, "agent_session_device_denied")
+    return agent_sessions.control(actor, body.session_id, body.action, instruction=body.instruction,
+                                  request_id=body.request_id)
 
 
 @router.post("/poll")

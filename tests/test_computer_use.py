@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from admin import auth
 from admin.routers import computer_use as routes
 from core import llm_client, tool_dispatcher
-from core.agent_runtime import computer_use as service, computer_use_vision as vision
+from core.agent_runtime import agent_sessions, computer_use as service, computer_use_vision as vision, task_manager
 from core.agent_runtime.computer_use_contract import ActionModel, Poll, Result
 from core.pipeline import Pipeline
 
@@ -51,6 +51,134 @@ def observation(seq):
         },
         "nodes": [{"id": 1, "name": "Test control", "control_type": 1, "bounds": bounds, "focused": True}],
     }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("scenario", ["finish", "steer", "cancel", "offline", "role", "restart", "failure_budget"])
+async def test_agent_session_drives_receipts_after_the_owner_turn(fixture, monkeypatch, scenario):
+    config, pipeline, device = fixture
+    config["computer_use"]["agent_budget"] = {"failures": 1}
+    actor = service.principal()
+    proposals = []
+    goals = []
+
+    async def decision(session):
+        proposals.append((session.revision, list(session.receipts)))
+        if len(proposals) <= 2:
+            return {"kind": "desktop_task", "goal": session.latest_instruction or f"part {len(proposals)}"}
+        return {"kind": "agent_finish"}
+
+    async def planner(_char, goal, _observation, prior_action, _changed):
+        if prior_action:
+            return {"kind": "done", "evidence_id": 1}
+        goals.append(goal)
+        return {"kind": "press_key", "key": "Enter"}
+
+    monkeypatch.setattr(agent_sessions, "_decision", decision)
+    monkeypatch.setattr(service, "_plan", planner)
+    app = FastAPI()
+    app.include_router(routes.router)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test",
+                                 headers={"Authorization": "Bearer desktop"}) as client:
+        async def poll(state=None):
+            if state:
+                device["state"] = state
+            return (await client.post("/computer-use/poll", json=device)).json()
+
+        async def next_step():
+            for _ in range(40):
+                response = await poll()
+                if response["step"]:
+                    return response
+                await asyncio.sleep(.01)
+            pytest.fail("expected a desktop step")
+
+        async def acknowledge(packet, receipt_status="ok"):
+            keys = ("device_id", "session_id", "task_id", "seq")
+            body = {key: packet["step"][key] for key in keys}
+            seq = body["seq"]
+            body.update(server_epoch=device["server_epoch"], nonce=packet["nonce"],
+                        receipt={"status": receipt_status, "observation": observation(seq)})
+            return await client.post("/computer-use/result", json=body)
+
+        async def get_status():
+            return (await client.get("/computer-use/agent-session")).json()
+
+        device["server_epoch"] = (await poll())["server_epoch"]
+        initial = agent_sessions.start(actor, "private owner goal", request_id="owner-request")
+        assert initial["status"] == "planning"
+        sid = initial["session_id"]
+        assert agent_sessions.start(actor, "private owner goal", request_id="owner-request")["session_id"] == sid
+        assert agent_sessions.start(actor, "different goal", request_id="owner-request")["last_error_code"] == "idempotency_conflict"
+        assert (await client.get("/computer-use/agent-session", headers={"Authorization": "Bearer chat"})).status_code == 403
+        try:
+            first = await next_step()
+            assert first["step"]["action"] == {"kind": "observe"}
+            assert (await acknowledge(first)).status_code == 200
+            action = await next_step()
+            assert action["step"]["action"]["kind"] == "press_key"
+            assert len(proposals) == 1
+            control = {"session_id": sid, "action": "steer", "instruction": "replacement B", "request_id": "edit-turn"}
+            if scenario == "steer":
+                denied = await client.post("/computer-use/agent-session/control", json=control,
+                                           headers={"Authorization": "Bearer other"})
+                assert denied.status_code == 403
+                for _ in range(2):
+                    assert (await client.post("/computer-use/agent-session/control", json=control)).status_code == 200
+                assert not (await poll())["step"]
+                assert (await acknowledge(action, "changed")).status_code == 200
+            elif scenario == "cancel":
+                await client.post("/computer-use/agent-session/control", json={**control, "action": "cancel"})
+            elif scenario == "offline":
+                service._device.heartbeat -= service.HEARTBEAT_TTL
+                await poll()
+            elif scenario == "role":
+                pipeline._active_character_id = "different_char"
+                assert not (await poll())["accepted"]
+                pipeline._active_character_id = actor.char_id
+            elif scenario == "restart":
+                from core.agent_runtime import task_store
+
+                monkeypatch.setattr(task_store, "process_instance_id", lambda: "fixture-restarted")
+                task_manager.recover_scope(actor)
+                assert not (await poll())["step"]
+            elif scenario == "failure_budget":
+                failed = {key: action["step"][key] for key in ("device_id", "session_id", "task_id", "seq")}
+                failed.update(server_epoch=device["server_epoch"], nonce=action["nonce"],
+                              receipt={"status": "failed", "reason": "target_unavailable"})
+                assert (await client.post("/computer-use/result", json=failed)).status_code == 200
+            else:
+                assert (await acknowledge(action, "changed")).status_code == 200
+            if scenario in {"finish", "steer"}:
+                second = await next_step()
+                assert second["step"]["action"]["kind"] == "observe"
+                assert second["task_id"] != first["task_id"]
+                assert (await acknowledge(second)).status_code == 200
+                assert (await acknowledge(await next_step(), "changed")).status_code == 200
+                assert goals == ["part 1", "replacement B" if scenario == "steer" else "part 2"]
+            expected = ("completed" if scenario in {"finish", "steer"} else
+                        "paused" if scenario == "failure_budget" else "outcome_unknown")
+            for _ in range(80):
+                state = await get_status()
+                if state["status"] == expected:
+                    break
+                await asyncio.sleep(.01)
+            assert state["status"] == expected
+            assert state["session_id"] == sid
+            assert state["task_id"] not in {first["task_id"], sid}
+            assert "private owner goal" not in str(state) and "Test control" not in str(state)
+            assert len(proposals) == (3 if scenario in {"finish", "steer"} else 1)
+            if scenario == "steer":
+                assert proposals[-1][0] == 1
+            if scenario == "failure_budget":
+                assert state["last_error_code"] == "session_failure_budget"
+            assert (await acknowledge(action, "changed")).status_code == 409
+        finally:
+            agent_sessions.control(actor, sid, "cancel")
+            for _ in range(80):
+                if agent_sessions._active is None:
+                    break
+                await asyncio.sleep(.01)
 
 
 @pytest.mark.asyncio

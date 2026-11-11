@@ -32,7 +32,7 @@ from core.llm_protocol import (
     error_category_for_exception,
     stream_text,
 )
-from core.llm_reasoning_store import reset_capture_purpose, set_capture_purpose
+from core.llm_reasoning_store import PRIVATE_DESKTOP_PURPOSES, reset_capture_purpose, set_capture_purpose
 from core.prompt_layer import sanitize_messages
 from core.prompt_style import apply_prompt_style
 
@@ -127,7 +127,7 @@ def _record_debug_request(
     request_kwargs: dict[str, Any],
 ) -> None:
     """Persist an opt-in semantic request snapshot without affecting the call."""
-    if purpose == "computer_use":
+    if purpose in PRIVATE_DESKTOP_PURPOSES:
         return
     from core.llm_debug_requests import append
 
@@ -562,8 +562,8 @@ async def chat(
             explicit_preset=preset_name is not None,
         )
     except Exception as e:
-        if call_category == "computer_use":
-            raise RuntimeError("computer_use_model_error") from None
+        if call_category in PRIVATE_DESKTOP_PURPOSES:
+            raise RuntimeError(f"{call_category}_model_error") from None
         log_error(f"llm_client.chat[{call_category}]", e)
         raise
     finally:
@@ -571,8 +571,8 @@ async def chat(
 
     used = outcome.mc or mc
     if not outcome.ok:
-        if call_category == "computer_use":
-            raise RuntimeError("computer_use_model_error") from None
+        if call_category in PRIVATE_DESKTOP_PURPOSES:
+            raise RuntimeError(f"{call_category}_model_error") from None
         log_error(f"llm_client.chat[{call_category}]", outcome.error or RuntimeError(outcome.error_category or "llm_failed"))
         if outcome.error is not None:
             raise outcome.error

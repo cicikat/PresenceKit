@@ -5,7 +5,7 @@ import asyncio
 from dataclasses import dataclass, field
 import json
 import time
-from typing import Any
+from typing import Any, Callable
 from uuid import uuid4
 
 from core import config_loader, image_presets, pipeline_registry
@@ -21,6 +21,8 @@ STEP_TTL = 22.0
 CLOUD_STEP_TTL = 35.0
 VISION_TIMEOUT_DEFAULTS = {"local": 18, "cloud": 25}
 TOOL_NAMES = frozenset({"computer_use_start", "computer_use_status", "computer_use_cancel"})
+SESSION_TOOL_NAMES = frozenset({"agent_session_start", "agent_session_status", "agent_session_control"})
+OWNER_TOOL_NAMES = TOOL_NAMES | SESSION_TOOL_NAMES
 INSTANCE = uuid4().hex
 
 
@@ -28,10 +30,15 @@ def role_prompt(exposed_names: set[str], *, pretool: bool = False) -> dict | Non
     """Turn-local instructions for the Computer Use tools actually offered."""
     from core.prompt_language import choose
 
-    names = exposed_names & TOOL_NAMES
+    names = exposed_names & OWNER_TOOL_NAMES
     if not names:
         return None
     hints = []
+    if not pretool and "agent_session_start" in names:
+        hints.append(choose(
+            "用户明确委托持续或多阶段桌面工作时，用 agent_session_start；首次回执只是接单。后续通过 agent_session_status 查询结果，通过 agent_session_control 对同一会话改令、暂停、恢复或取消。用户在等待输入时给出补充，用 steer。",
+            "Use agent_session_start for an explicitly delegated sustained or multi-stage desktop goal. The first receipt only acknowledges it. Check agent_session_status and use agent_session_control to steer, pause, resume or cancel the same session. Use steer to pass the owner's answer when waiting for input.",
+        ))
     if pretool and "computer_use_start" in names:
         hints.append(choose(
             "主人可在 Windows 桌面端开启临时授权，再在聊天里委托应用操作。若只是询问能力，可以说明这个流程。本轮工具选择已经结束，请按实际回执回应。",
@@ -123,6 +130,12 @@ class Run:
     total_ms: int = 0
     worker: asyncio.Task | None = None
     last_vision: dict | None = None
+    step_limit: int = MAX_STEPS
+    reserve_plan: Callable[[], bool] | None = None
+    parent_allowed: Callable[[], bool] | None = None
+    completed: asyncio.Future | None = None
+    checkpoint_requested: bool = False
+    evidence: dict | None = None
 
 
 _device: Device | None = None
@@ -193,10 +206,12 @@ def _finish(run: Run, status: str, reason: str) -> None:
     if _run is not run:
         return
     delivery = run.delivery
-    if (status != "succeeded" and delivery is not None and delivery.dispatched
-            and delivery.step["action"]["kind"] not in {"observe", "wait"}
-            and not delivery.receipt.done()):
-        status = "outcome_unknown"
+    if status != "succeeded" and delivery is not None and delivery.dispatched:
+        if delivery.step["action"]["kind"] not in {"observe", "wait"} and (
+            not delivery.receipt.done() or delivery.receipt.cancelled()
+            or delivery.receipt.result().get("reason") == "outcome_unknown"
+        ):
+            status = "outcome_unknown"
     _run = None
     _last = {"task_id": run.lease.task_id, "state": status, "last_error": None if status == "succeeded" else reason,
              "steps": run.steps, "actions": run.actions,
@@ -221,7 +236,13 @@ def _finish(run: Run, status: str, reason: str) -> None:
             task_manager.fail_task(actor, run.lease, error_code=reason, result_metadata=metadata)
     except task_manager.TaskManagerError:
         # A manager cancellation/expiry can win the race. Its durable state is authoritative.
-        pass
+        if run.completed is not None:
+            status, reason = "outcome_unknown", "child_lease_lost"
+    if run.completed is not None and not run.completed.done():
+        run.completed.set_result({
+            "task_id": run.lease.task_id, "state": status, "reason": reason,
+            "steps": run.steps, "actions": run.actions, "evidence": run.evidence,
+        })
 
 
 def _refresh(now: float) -> None:
@@ -233,7 +254,8 @@ def _refresh(now: float) -> None:
         _close_device("cloud_vision_route_changed")
     if _run is not None:
         receipt = task_manager.get_task(_run.device.principal, _run.lease.task_id)
-        if receipt.get("cancel_requested") or receipt["status"] != "running":
+        if (receipt.get("cancel_requested") or receipt["status"] != "running"
+                or (_run.parent_allowed is not None and not _run.parent_allowed())):
             _finish(_run, "canceled", "task_ended")
         elif _run.deadline <= now:
             _finish(_run, "failed", "task_timeout")
@@ -410,11 +432,30 @@ def snapshot(config: dict | None = None) -> dict:
             **vision_timeouts(config), **current}
 
 
-def start(uid: str, char_id: str, goal: str, *, request_id: str = "") -> dict:
+def bound_device(uid: str, char_id: str) -> Device | None:
+    _refresh(time.monotonic())
+    return _device if available(uid, char_id) else None
+
+
+def stop_child(run: Run, *, at_checkpoint: bool = False, reason: str = "user_requested") -> None:
+    if _run is not run:
+        return
+    if at_checkpoint and run.delivery and run.delivery.dispatched and not run.delivery.receipt.done():
+        run.checkpoint_requested = True
+        return
+    _finish(run, "canceled", "checkpoint_reached" if at_checkpoint else reason)
+
+
+def start(
+    uid: str, char_id: str, goal: str, *, request_id: str = "",
+    parent_task_id: str = "", device: Device | None = None, step_limit: int = MAX_STEPS,
+    time_limit: float = TASK_TTL, reserve_plan: Callable[[], bool] | None = None,
+    parent_allowed: Callable[[], bool] | None = None,
+) -> dict:
     global _run
     now = time.monotonic()
     _refresh(now)
-    if not available(uid, char_id) or _device is None:
+    if not available(uid, char_id) or _device is None or (device is not None and device is not _device):
         return {"state": "unavailable", "reason": "no_desktop_authorization"}
     if _device.state == "paused":
         return {"state": "paused", "reason": "desktop_paused"}
@@ -428,17 +469,26 @@ def start(uid: str, char_id: str, goal: str, *, request_id: str = "") -> dict:
     key = request_id or uuid4().hex
     task, created = task_manager.create_task(
         actor, capability=CAPABILITY, source="owner_chat", idempotency_key=key,
-        ttl_seconds=TASK_TTL + 10, causation_ref=CausationRef("tool_request", key),
+        ttl_seconds=TASK_TTL + 10,
+        causation_ref=CausationRef("parent_task", parent_task_id) if parent_task_id else CausationRef("tool_request", key),
     )
     if not created:
         return {"state": task["status"], "task_id": task["task_id"]}
     lease = task_manager.claim_next(actor, task_id=task["task_id"], lease_seconds=TASK_TTL + 5)
     if lease is None:
         return {"state": "failed", "reason": "lease_unavailable"}
-    run = Run(_device, lease, now + TASK_TTL)
+    run = Run(_device, lease, now + min(TASK_TTL, time_limit),
+              step_limit=min(MAX_STEPS, step_limit), reserve_plan=reserve_plan, parent_allowed=parent_allowed)
+    if parent_task_id:
+        run.completed = asyncio.get_running_loop().create_future()
     _run = run
     run.worker = asyncio.create_task(_drive(run, goal))
     return {"state": "queued", "task_id": lease.task_id}
+
+
+def start_child(actor: TaskPrincipal, goal: str, **options) -> tuple[dict, Run | None]:
+    result = start(actor.uid, actor.char_id, goal, **options)
+    return result, _run if result["state"] == "queued" else None
 
 
 def task_status(uid: str, char_id: str, task_id: str, *, cancel: bool = False) -> dict:
@@ -478,7 +528,7 @@ async def _drive(run: Run, goal: str) -> None:
     prior_action = None
     changed = False
     try:
-        for seq in range(1, MAX_STEPS + 1):
+        for seq in range(1, run.step_limit + 1):
             while run.device.state == "paused":
                 await asyncio.sleep(0.25)
                 _refresh(time.monotonic())
@@ -498,6 +548,8 @@ async def _drive(run: Run, goal: str) -> None:
             delivery = Delivery(seq, uuid4().hex, step, min(now + ttl, run.deadline),
                                 asyncio.get_running_loop().create_future(), frame_size=size)
             run.delivery = delivery
+            if run.completed is not None:
+                run.steps = seq
             while not delivery.receipt.done():
                 await asyncio.wait((delivery.receipt,), timeout=0.25)
                 _refresh(time.monotonic())
@@ -505,9 +557,14 @@ async def _drive(run: Run, goal: str) -> None:
                     return
             receipt = delivery.receipt.result()
             run.delivery = None
-            run.steps += 1
+            run.steps = seq
             run.total_ms += round((time.monotonic() - now) * 1000)
             kind = action["kind"]
+            if run.checkpoint_requested:
+                reason = receipt.get("reason")
+                _finish(run, "outcome_unknown" if reason == "outcome_unknown" else "canceled",
+                        "checkpoint_reached" if reason != "outcome_unknown" else reason)
+                return
             if receipt.get("reason") in {
                 "paused", "element_changed", "observation_changed", "image_changed",
                 "observation_expired", "session_resumed",
@@ -524,14 +581,21 @@ async def _drive(run: Run, goal: str) -> None:
                 changed = receipt["status"] == "changed"
                 prior_action = kind
             observation = receipt["observation"]
+            if run.reserve_plan is not None and not run.reserve_plan():
+                _finish(run, "failed", "session_model_budget")
+                return
             proposal = await asyncio.wait_for(_plan(run.device.principal.char_id, goal, observation, prior_action, changed), timeout=30)
             _refresh(time.monotonic())
             if _run is not run:
                 return
             if proposal.get("kind") == "done":
                 evidence = proposal.get("evidence_id")
+                node = next((node for node in observation["nodes"] if node["id"] == evidence), None)
                 verified = (run.actions > 0 and changed and set(proposal) == {"kind", "evidence_id"}
-                            and type(evidence) is int and any(node["id"] == evidence for node in observation["nodes"]))
+                            and type(evidence) is int and node is not None)
+                if verified and run.completed is not None:
+                    run.evidence = {"node_id": evidence, "name": node["name"][:200],
+                                    "observed_after": prior_action}
                 _finish(run, "succeeded" if verified else "failed",
                         "verified" if verified else "goal_unverified")
                 return

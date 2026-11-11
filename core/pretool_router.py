@@ -307,7 +307,7 @@ async def route_pretool(
     if not tool_loop_enabled and not is_group and computer_use.enabled():
         schemas += tool_dispatcher.get_tools_schema(
             categories=effective_categories, char_id=char_id, uid=uid,
-            only_names=computer_use.TOOL_NAMES,
+            only_names=computer_use.OWNER_TOOL_NAMES,
         )
     from core.self_management.policy import tool_allowed
 

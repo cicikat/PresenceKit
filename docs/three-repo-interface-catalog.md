@@ -1310,4 +1310,10 @@ Runware适配和模型发现位于后端管理面；桌面/手机继续消费原
 - `POST /computer-use/poll` 可携带可选布尔值 `cloud_vision`，仅会话首轮建立授权。每个视觉步骤投影私网原有连接对象、`{"mode":"cloud_proxy"}` 或带原因的不可用状态。私网步骤最多 22 秒，云端步骤最多 35 秒，总任务仍为 180 秒。配置的请求预算经 `vision_timeout_ms` 下发。云端投影无模型、上游 URL 和凭据。旧桌面省略授权字段，私网沿用 18 秒；云端路由对其保持关闭，需要视觉时后端回执记 `cloud_vision_client_unsupported`。
 - `POST /computer-use/vision/locate` 使用既有桌面 Bearer 设备绑定（`ws.desktop + sensor.write`）。请求为流式 `image/jpeg`，最长边 1280、最多 2 MiB。请求头 `X-Computer-Use-Lease` 是 JSON，包含 `device_id`、`session_id`、`task_id`、`server_epoch`、`seq`、`nonce`、`frame_version`、`target_index`。普通目标槽为 0，拖拽起点 0、终点 1。描述由后端从步骤读取。响应 `Cache-Control: no-store`，成功体为 `{"status":"found","x":0.52,"y":0.31}` 或 `{"status":"uncertain"}`，失败体为短错误码 `{"error":"vision_stale_step"}` 等。
 - `GET /computer-use/status` 增加传输方式、授权诊断、有效超时和脱敏的最近一次云端定位元数据。`PUT /computer-use/vision/settings` 供管理员热更新请求超时。`POST /computer-use/result` 保持原回执结构。
+
+## 303 AGENT-01 持续工作会话（current / observe）
+
+- `GET /computer-use/agent-session?session_id=...` 需要 `state.read`。省略 ID 时读取当前角色最近的会话；返回 `session_id`、父级 `task_id`、`status`、`current_step`、`short_description`、`last_error_code`、`updated_at` 和计数。没有匹配项时返回 `status: unavailable`。
+- `POST /computer-use/agent-session/control` 需要 `ws.desktop + sensor.write` 和当前授权设备 Bearer 绑定。请求包含 `session_id`、`action`（`steer|pause|resume|cancel`）、去重用 `request_id`，改令可传 `instruction`。聊天入口通过主人现实私聊与角色工具权限控制。
+- 旧桌面执行继续使用原有 `poll/result` 协议，桌面状态消费者计划由 AGENT-04 接入。持续会话的真机和真实模型结果待 AGENT-05 验收。
 - 手机无消费者，普通屏幕观察和视频通话使用自己的既有接口。真实推理与 Windows 端到端进度见 [CU-05 验收](known-issues.md#302-cu-05-云端视觉实机验收observe)。

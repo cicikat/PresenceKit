@@ -1717,6 +1717,8 @@ _TOOL_REGISTRY["exit_yandere"] = {
 }
 
 from core.agent_runtime import computer_use as _computer_use
+from core.agent_runtime import agent_sessions as _agent_sessions
+from core.agent_runtime.models import TaskPrincipal as _TaskPrincipal
 
 
 async def _computer_use_start(goal: str, *, user_id: str, char_id: str) -> str:
@@ -1734,6 +1736,55 @@ async def _computer_use_status(task_id: str = "", *, user_id: str, char_id: str)
 
 async def _computer_use_cancel(task_id: str = "", *, user_id: str, char_id: str) -> str:
     return _computer_use.role_receipt(_computer_use.task_status(user_id, char_id, task_id, cancel=True))
+
+
+async def _agent_session_start(goal: str, *, user_id: str, char_id: str) -> str:
+    from core.tool_activity import current_call
+
+    call = current_call() or {}
+    request_id = call.get("request_id") or call.get("event_id") or ""
+    result = _agent_sessions.start(_TaskPrincipal.reality(user_id, char_id), goal, request_id=request_id)
+    return json.dumps(result, ensure_ascii=False)
+
+
+async def _agent_session_status(session_id: str = "", *, user_id: str, char_id: str) -> str:
+    return json.dumps(_agent_sessions.status(_TaskPrincipal.reality(user_id, char_id), session_id))
+
+
+async def _agent_session_control(action: str, session_id: str = "", instruction: str = "",
+                                 *, user_id: str, char_id: str) -> str:
+    from core.tool_activity import current_call
+
+    call = current_call() or {}
+    result = _agent_sessions.control(
+        _TaskPrincipal.reality(user_id, char_id), session_id, action, instruction=instruction,
+        request_id=call.get("request_id") or call.get("event_id") or "",
+    )
+    return json.dumps(result, ensure_ascii=False)
+
+
+_agent_session_id = {"type": "string", "maxLength": 32}
+for _name, _func, _description, _properties, _required, _examples in (
+    ("agent_session_start", _agent_session_start,
+     "接受主人明确委托的持续、多阶段 Windows 桌面目标。依赖当前本机授权。返回会话 ID 和进度，只有 completed 表示已验证完成。",
+     {"goal": {"type": "string", "maxLength": 1200}}, ["goal"], ["帮我把这两段分别录入并保存，再检查结果"]),
+    ("agent_session_status", _agent_session_status,
+     "查询持续桌面工作会话的进展或终态，省略 session_id 查询最近的会话。",
+     {"session_id": _agent_session_id}, [], ["那个持续桌面任务进展如何"]),
+    ("agent_session_control", _agent_session_control,
+     "按主人本轮明确指令，对同一持续桌面任务改令、回答追问、暂停、恢复或取消。steer 的 instruction 传入主人的最新指令。",
+     {"session_id": _agent_session_id, "instruction": {"type": "string", "maxLength": 1200},
+      "action": {"type": "string", "enum": ["steer", "pause", "resume", "cancel"]}},
+     ["action"], ["暂停持续桌面任务", "刚才的任务改成保存第二段"]),
+):
+    _TOOL_REGISTRY[_name] = {
+        "func": _func, "description": _description, "category": "desktop",
+        "dangerous": False, "echo_event_log": False, "live_owner_only": True,
+        "effect": "read" if _name == "agent_session_status" else "actuate",
+        "parameters": {"type": "object", "properties": _properties, "required": _required,
+                       "additionalProperties": False},
+        "examples": _examples, "keywords": ["桌面任务", "持续工作", "改成"], "trace_args": [],
+    }
 
 
 for _cu_name, _cu_func, _cu_field, _cu_description, _cu_example in (
@@ -2416,7 +2467,7 @@ def _is_tool_enabled(tool_name: str) -> bool:
                 return False
         except (ValueError, TypeError):
             return False
-    if tool_name in _computer_use.TOOL_NAMES and not _computer_use.enabled():
+    if tool_name in _computer_use.OWNER_TOOL_NAMES and not _computer_use.enabled():
         return False
     if tool_name == "start_agent_task":
         from core.agent_runtime.agent_tasks import capability_snapshot
@@ -2529,7 +2580,7 @@ def get_tools_schema(
     for name, info in _TOOL_REGISTRY.items():
         if only_names is not None and name not in only_names:
             continue
-        if name in _computer_use.TOOL_NAMES and (not _computer_use.enabled() or not _computer_use.owner_scope(uid, char_id)):
+        if name in _computer_use.OWNER_TOOL_NAMES and (not _computer_use.enabled() or not _computer_use.owner_scope(uid, char_id)):
             continue
         if name in _QZONE_TOOL_NAMES:
             from core.qzone_service import allowed
@@ -2681,7 +2732,7 @@ def _build_probe_prompt(
     for name, spec in _TOOL_REGISTRY.items():
         if spec.get("probe") is False:
             continue
-        if name in _computer_use.TOOL_NAMES and allowed_tool_names is None:
+        if name in _computer_use.OWNER_TOOL_NAMES and allowed_tool_names is None:
             continue
         if allowed_tool_names is not None and name not in allowed_tool_names:
             continue
@@ -2796,7 +2847,7 @@ def _log_execute_failure_context(tool_name: str, tool_args: dict, origin: str) -
     参数/origin 都没有，出故障后完全没法反推真正发给 MCP 的是什么（Brief 120 排查
     cedartoy「command 参数必填」时吃过这个亏）。这里记完整 tool_args。
     """
-    if tool_name in _computer_use.TOOL_NAMES:
+    if tool_name in _computer_use.OWNER_TOOL_NAMES:
         return
     try:
         args_repr = json.dumps(tool_args, ensure_ascii=False, default=str)
@@ -3056,7 +3107,7 @@ async def _execute_structured_impl(
             )
 
     tool_info = _TOOL_REGISTRY[tool_name]
-    if tool_name in _computer_use.TOOL_NAMES:
+    if tool_name in _computer_use.OWNER_TOOL_NAMES:
         if (is_group or origin not in {"user_live", "assistant_loop", "assistant_loop_relay"}
                 or not _computer_use.owner_scope(user_id, char_id)):
             return _execution_outcome("tool_failed", "当前会话无法操作桌面。")
@@ -3199,7 +3250,7 @@ async def _execute_structured_impl(
                 # Preserve the historical signature for test/local extensions
                 # that replace the legacy callable in the registry.
                 result = await func(user_id=user_id, **tool_args)
-        elif tool_name in _computer_use.TOOL_NAMES:
+        elif tool_name in _computer_use.OWNER_TOOL_NAMES:
             result = await func(user_id=user_id, char_id=char_id, **tool_args)
         elif tool_name in ("read_toy_file", "write_toy_file", "write_artifact", "update_artifact", "read_artifact", "list_artifacts", "drink_with_user", "generate_image"):
             result = await func(user_id=user_id, char_id=char_id, **tool_args)

@@ -54,6 +54,18 @@ async def test_empty_and_missing_reads_do_not_create_database(sandbox):
     assert not sandbox.llm_reasoning_db().exists()
 
 
+@pytest.mark.parametrize("purpose", ["computer_use", "agent_session"])
+async def test_desktop_reasoning_is_not_archived(sandbox, purpose):
+    token = store.set_capture_purpose(purpose)
+    try:
+        capture = store.Capture(mc())
+        capture.add("thinking", "private desktop context")
+        await capture.save()
+    finally:
+        store.reset_capture_purpose(token)
+    assert not sandbox.llm_reasoning_db().exists()
+
+
 async def test_concurrent_writes_and_stable_pagination():
     async def write(i):
         capture = store.Capture(mc())
