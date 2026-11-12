@@ -7,7 +7,13 @@
 旧 Path C 先做分类过滤，再一次性发送所有具体工具 schema；分类不是发现入口。
 本次在授权与预设过滤之后插入轮内 `ToolDiscovery`，保留原 schema 构造和执行器。
 首个模型请求只有非空的获授权分类入口 `load_tools_<category>`，参数为 `{}`。
-支持 browser、desktop、artifacts、fs、info、life、mcp、memory、phone_control、schedule、self、self_management、system。
+支持 browser、desktop、artifacts、fs、gmail、info、life、mcp、memory、phone_control、qzone、schedule、self、self_management、system、media。
+
+2026-11-12（303 线上验收修复）：Gmail 授权与类别过滤通过后，必须保留在发现层。
+`load_tools_gmail` 入口列出当前获授权的 Gmail 工具名与用途，路由提示说明查看、搜索、
+阅读、发信及原线程回复；加载后才提供含邮件 ID、分页及投递幂等标识说明的完整参数。
+此前发现分类表漏了 `gmail`，导致已注册且获授权的工具在发给聊天模型前被丢弃。
+修复不增加授权、开关或跨端字段，自主执行链继续使用原有权限过滤。
 
 2026-10-03（T1 分类重组）：原本全塞在 `info` 的自有空间 / 提醒 / 生活类工具拆出独立入口，入口标签写「什么时候用」：
 `self`（`self_*`，想长期记住、整理、积累的东西，含 AGENT.md）、`schedule`（提醒 6 个）、

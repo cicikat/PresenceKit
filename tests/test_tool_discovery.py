@@ -278,6 +278,42 @@ def test_routing_hint_only_names_exposed_categories():
     assert "→ schedule" not in hint
 
 
+def test_authorized_gmail_tools_remain_discoverable_with_usage_and_parameters():
+    from core.tools.gmail_tools import NAMES, register
+
+    registry = {}
+    register(registry)
+    schemas = [{"type": "function", "function": {
+        "name": name, "description": info["description"], "parameters": info["parameters"],
+    }} for name, info in registry.items()]
+    discovery = ToolDiscovery(schemas, registry)
+    entries = discovery.schemas()
+    assert [entry["function"]["name"] for entry in entries] == ["load_tools_gmail"]
+    description = entries[0]["function"]["description"]
+    assert all(name in description for name in NAMES)
+    assert "收件箱" in description and "回复" in description
+    assert "→ gmail" in discovery.routing_hint()
+    assert discovery.load("load_tools_gmail", {})[1]
+    assert discovery.schemas() == schemas
+    reply = next(row["function"] for row in discovery.schemas()
+                 if row["function"]["name"] == "gmail_reply_message")
+    assert set(reply["parameters"]["required"]) == {"message_id", "body", "request_id"}
+
+
+@pytest.mark.asyncio
+async def test_owner_chat_discovers_then_executes_gmail(harness, monkeypatch):
+    script, requests, executions, run = harness
+    _patch_tool_loop_config(monkeypatch, categories=["gmail"], exclude_tools=[])
+    _patch_tools_schema(monkeypatch, ["gmail_list_messages"])
+    script.extend([turn(call("load_tools_gmail")),
+                   turn(call("gmail_list_messages", {"limit": 1})), turn(content="已查看")])
+    await run("查看你的邮箱收件箱")
+    assert requests[0]["names"] == ["load_tools_gmail"]
+    assert requests[1]["names"] == ["gmail_list_messages"]
+    assert [entry[0] for entry in executions] == ["gmail_list_messages"]
+    assert executions[0][2]["origin"] == "assistant_loop"
+
+
 def test_entry_explains_purposes_and_preserves_tail_tools():
     schemas = [{"type": "function", "function": {
         "name": f"reader_{i}", "description": f"读取第{i}项真实记录",
