@@ -300,6 +300,8 @@ async def complete(state: str, browser: str, code: str, uid: str, char_id: str, 
                 raise GmailError("google_account_mismatch")
             if not admin_valid(flow.admin_token) or uid != owner():
                 raise GmailError("invalid_authorization_principal")
+            from core.mail.gmail_poll import baseline
+            record.setdefault("poll", baseline())
             save({**record, "uid": uid, "char_id": char_id, "email": flow.email,
                   "scopes": sorted(scopes & {READ, SEND}), "refresh": result["refresh_token"]})
             cache_access(load(), result)
@@ -334,6 +336,7 @@ async def disconnect(uid: str, char_id: str) -> str:
 
 
 def status(uid: str, char_id: str) -> dict:
+    from core.mail.gmail_poll import status as poll_status
     record = load()
     same = bound(record, uid, char_id)
     try:
@@ -348,4 +351,5 @@ def status(uid: str, char_id: str) -> dict:
         "email": record.get("email", "") if same else "",
         "scopes": record.get("scopes", []) if same else [],
         "error": _last_error if same else "",
+        **poll_status(record, uid, char_id),
     }

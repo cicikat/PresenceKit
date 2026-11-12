@@ -16,6 +16,23 @@ HEADERS = {
 }
 
 
+class Sync(BaseModel):
+    enabled: bool
+    interval_seconds: int = Field(ge=60, le=3600)
+
+
+@router.put("/settings/gmail/sync")
+async def configure_sync(body: Sync, auth=Depends(admin)):
+    from core.mail.gmail_poll import configure
+
+    try:
+        uid, char_id = _principal()
+        await configure(uid, char_id, body.enabled, body.interval_seconds)
+        return gmail.status(uid, char_id)
+    except gmail.GmailError as exc:
+        raise _problem(exc) from None
+
+
 class Start(BaseModel):
     email: str = Field(max_length=254)
 

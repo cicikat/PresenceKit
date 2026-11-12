@@ -63,6 +63,7 @@ MIGRATED_TRIGGERS: frozenset[str] = frozenset({
 
 MAINTENANCE_ONLY_TRIGGERS: frozenset[str] = frozenset({
     "coplay_watch",
+    "gmail_poll",
     "diary_inject",
     "episodic_decay",
     "episodic_sweep",

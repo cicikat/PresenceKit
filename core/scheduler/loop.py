@@ -1136,6 +1136,7 @@ async def _loop():
                 from core.scheduler.triggers.coplay_watch import _check_coplay_watch
                 from core.scheduler.triggers.spend_monitor import _check_spend_monitor
 
+                from core.scheduler.triggers.gmail_poll import check_gmail_poll
                 oid = _owner_id()
                 if oid:
                     from core.scheduler.gating import run_shadow_tick
@@ -1238,6 +1239,7 @@ async def _loop():
                     _check_sensor_aware(),
                     _check_coplay_watch(),
                     _check_spend_monitor(),
+                    check_gmail_poll(oid, _active_char_id_or_none()),
                     return_exceptions=True,
                 )
                 for _tname, _tres in zip(_trigger_names, _trigger_results):

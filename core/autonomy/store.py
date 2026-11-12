@@ -58,6 +58,7 @@ def _default() -> dict:
         "runs": [],
         "sources": {},
         "pending_signals": [],
+        "durable_signal_keys": [],
         "delivered_correlations": [],
         "daily": {"day": "", "evaluations": 0, "tools": 0, "talks": 0},
         "circuit": {"consecutive_failures": 0, "open_until": 0.0},
@@ -115,7 +116,7 @@ def replace_config(uid: str, char_id: str, config: dict) -> bool:
         return _save_unlocked(uid, char_id, state)
 
 
-def enqueue_signal(uid: str, char_id: str, signal: Signal, *, dedupe_key: str = "") -> tuple[bool, str]:
+def enqueue_signal(uid: str, char_id: str, signal: Signal, *, dedupe_key: str = "", durable: bool = False) -> tuple[bool, str]:
     """Persist a trigger fact for the next autonomy opportunity.
 
     Trigger producers use this small queue instead of constructing prompts or
@@ -127,6 +128,8 @@ def enqueue_signal(uid: str, char_id: str, signal: Signal, *, dedupe_key: str = 
     with _scope_lock(uid, char_id):
         state = _load_unlocked(uid, char_id)
         key = str(dedupe_key or signal.signal_id)
+        if durable and key in state["durable_signal_keys"]:
+            return False, "duplicate"
         for raw in state.get("pending_signals", []):
             if str(raw.get("dedupe_key") or "") == key:
                 return False, "duplicate"
@@ -135,6 +138,8 @@ def enqueue_signal(uid: str, char_id: str, signal: Signal, *, dedupe_key: str = 
             "signal": signal.to_dict(),
             "queued_at": time.time(),
         })
+        if durable:
+            state["durable_signal_keys"] = [*state["durable_signal_keys"], key][-512:]
         return bool(_save_unlocked(uid, char_id, state)), "queued"
 
 
