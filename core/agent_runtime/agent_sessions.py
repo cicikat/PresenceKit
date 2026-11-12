@@ -435,14 +435,17 @@ Return exactly {"covered":true} or {"covered":false}.""", {
 
 
 async def _plan_with_deadline(session: Session, plan) -> object:
-    session.planner = asyncio.create_task(plan)
+    planner = asyncio.create_task(plan)
+    session.planner = planner
     try:
-        return await asyncio.wait_for(session.planner, timeout=min(30, session.deadline - time.monotonic()))
-    except asyncio.CancelledError:
-        if asyncio.current_task().cancelling():
-            raise
-        return None
+        done, _ = await asyncio.wait({planner}, timeout=min(30, session.deadline - time.monotonic()))
+        if planner not in done:
+            raise asyncio.TimeoutError
+        return None if planner.cancelled() else planner.result()
     finally:
+        if not planner.done():
+            planner.cancel()
+            await asyncio.gather(planner, return_exceptions=True)
         session.planner = None
 
 

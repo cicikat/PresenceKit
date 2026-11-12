@@ -1763,18 +1763,18 @@ async def _agent_session_control(action: str, session_id: str = "", instruction:
     return json.dumps(result, ensure_ascii=False)
 
 
-_agent_session_id = {"type": "string", "maxLength": 32}
+_agent_session_id = {"type": "string", "maxLength": 32, "description": "持续桌面会话 ID，省略时使用最近的会话。"}
 for _name, _func, _description, _properties, _required, _examples in (
     ("agent_session_start", _agent_session_start,
      "接受主人明确委托的持续、多阶段 Windows 桌面目标。依赖当前本机授权。返回会话 ID 和进度，只有 completed 表示已验证完成。",
-     {"goal": {"type": "string", "maxLength": 1200}}, ["goal"], ["帮我把这两段分别录入并保存，再检查结果"]),
+     {"goal": {"type": "string", "maxLength": 1200, "description": "用户明确委托的桌面目标。"}}, ["goal"], ["帮我把这两段分别录入并保存，再检查结果"]),
     ("agent_session_status", _agent_session_status,
      "查询持续桌面工作会话的进展或终态，省略 session_id 查询最近的会话。",
      {"session_id": _agent_session_id}, [], ["那个持续桌面任务进展如何"]),
     ("agent_session_control", _agent_session_control,
      "按主人本轮明确指令，对同一持续桌面任务改令、回答追问、暂停、恢复或取消。steer 的 instruction 传入主人的最新指令。",
-     {"session_id": _agent_session_id, "instruction": {"type": "string", "maxLength": 1200},
-      "action": {"type": "string", "enum": ["steer", "pause", "resume", "cancel"]}},
+     {"session_id": _agent_session_id, "instruction": {"type": "string", "maxLength": 1200, "description": "用户的新指令或对追问的回答。"},
+      "action": {"type": "string", "enum": ["steer", "pause", "resume", "cancel"], "description": "要执行的会话操作。"}},
      ["action"], ["暂停持续桌面任务", "刚才的任务改成保存第二段"]),
 ):
     _TOOL_REGISTRY[_name] = {
@@ -1803,7 +1803,10 @@ for _cu_name, _cu_func, _cu_field, _cu_description, _cu_example in (
         "dangerous": False, "echo_event_log": False, "live_owner_only": True,
         "effect": "read" if _cu_name == "computer_use_status" else "actuate",
         "parameters": {"type": "object", "properties": {
-            _cu_field: {"type": "string", "maxLength": 1200 if _cu_field == "goal" else 32},
+            _cu_field: {
+                "type": "string", "maxLength": 1200 if _cu_field == "goal" else 32,
+                "description": "用户明确委托的桌面目标。" if _cu_field == "goal" else "桌面任务 ID，省略时使用最近任务。",
+            },
         }, "required": ["goal"] if _cu_field == "goal" else [], "additionalProperties": False},
         "examples": [_cu_example], "keywords": ["操作桌面", "Computer Use", "桌面任务"], "trace_args": [],
     }
