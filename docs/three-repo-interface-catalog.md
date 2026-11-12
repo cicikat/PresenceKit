@@ -1320,4 +1320,6 @@ Runware适配和模型发现位于后端管理面；桌面/手机继续消费原
 AGENT-04 的桌面状态消费者经 Tauri 读取该 GET 端点，增加可空的 `current_action`（只含动作类型）。新桌面对缺少端点的后端回落为本机执行状态。授权与取消仍用原有设备轮询。手机没有新增消费者。
 
 AGENT-05 的新桌面将传输请求上限从 2 秒调到 3.2 秒。设备执行仍由本机 4 秒租约限制。真实记事本链路通过一次，Edge 图标与云端视觉联调为 `observe`。
+
+AGENT-06B 的 `GET /computer-use/agent-session` 区分 `waiting_user`、`paused_by_owner`、`paused_budget`、`paused_device` 和 `outcome_unknown`，增加 `question`、`can_resume`、`resume_until`。现有 `POST /computer-use/agent-session/control` 的 `resume` 可显式认领已暂停父任务，`steer` 用于回答问题。桌面 IPC 提供暂停和继续，聊天通过现有主人私聊工具回答或改令。手机没有原生执行或恢复按钮。
 - 手机无消费者，普通屏幕观察和视频通话使用自己的既有接口。真实推理与 Windows 端到端进度见 [CU-05 验收](known-issues.md#302-cu-05-云端视觉实机验收observe)。

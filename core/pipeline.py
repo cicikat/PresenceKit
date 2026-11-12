@@ -1497,7 +1497,11 @@ class Pipeline:
         mcp_opaque_params_note = format_mcp_opaque_params_note(tools)
 
         loop_msgs = list(messages)
-        computer_use_hint = _computer_use.role_prompt(_final_tool_names)
+        from core.agent_runtime.models import TaskPrincipal
+
+        computer_use_hint = _computer_use.role_prompt(
+            _final_tool_names, actor=TaskPrincipal.reality(uid, char_id) if uid and char_id else None,
+        )
         if computer_use_hint:
             loop_msgs.insert(max(0, len(loop_msgs) - 1), computer_use_hint)
         from core.tool_audit import is_recap_request, query as query_tool_audit

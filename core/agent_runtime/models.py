@@ -105,6 +105,7 @@ class TaskRecord:
     error_code: str = ""
     recovery_reason: str = ""
     result_metadata: dict[str, Any] = field(default_factory=dict)
+    agent_checkpoint: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

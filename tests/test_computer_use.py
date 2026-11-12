@@ -167,7 +167,7 @@ async def test_agent_session_drives_receipts_after_the_owner_turn(fixture, monke
                 assert (await acknowledge(await next_step(), "changed")).status_code == 200
                 assert goals == ["part 1", "replacement B" if scenario == "steer" else "part 2"]
             expected = ("completed" if scenario in {"finish", "steer"} else
-                        "paused" if scenario == "failure_budget" else "outcome_unknown")
+                        "paused_budget" if scenario == "failure_budget" else "outcome_unknown")
             for _ in range(80):
                 state = await get_status()
                 if state["status"] == expected:
@@ -182,6 +182,7 @@ async def test_agent_session_drives_receipts_after_the_owner_turn(fixture, monke
                 assert proposals[-1][0] == 1
             if scenario == "failure_budget":
                 assert state["last_error_code"] == "session_failure_budget"
+                assert state["can_resume"] is True
             assert (await acknowledge(action, "changed")).status_code == 409
         finally:
             agent_sessions.control(actor, sid, "cancel")
@@ -189,6 +190,71 @@ async def test_agent_session_drives_receipts_after_the_owner_turn(fixture, monke
                 if agent_sessions._active is None:
                     break
                 await asyncio.sleep(.01)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", ["question", "owner", "budget", "canceled"])
+async def test_agent_parked_session_reclaims_after_restart(fixture, monkeypatch, mode):
+    from core.agent_runtime import task_store
+
+    config, _, body = fixture
+    actor = service.principal()
+    service.poll("desktop-identity", Poll.model_validate(body))
+    config["computer_use"]["agent_budget"] = {"calls": 1} if mode == "budget" else {}
+    entered = asyncio.Event()
+    decisions = []
+
+    async def decision(session):
+        decisions.append((session.revision, session.latest_instruction))
+        entered.set()
+        if len(decisions) > 1:
+            return {"kind": "agent_fail"}
+        if mode == "question":
+            return {"kind": "agent_need_input", "question": "Which document should I use?"}
+        if mode == "budget":
+            return {"kind": "agent_plan", "requirements": ["Check the document"]}
+        await asyncio.Future()
+
+    async def settled(sid):
+        for _ in range(100):
+            if agent_sessions._active is None:
+                return agent_sessions.status(actor, sid)
+            await asyncio.sleep(.01)
+        pytest.fail("Agent did not park or stop")
+
+    monkeypatch.setattr(agent_sessions, "_decision", decision)
+    initial = agent_sessions.start(actor, "Check a document")
+    sid = initial["session_id"]
+    await asyncio.wait_for(entered.wait(), timeout=2)
+    if mode in {"owner", "canceled"}:
+        agent_sessions.control(actor, sid, "pause", request_id="pause-once")
+    parked = await settled(sid)
+    assert parked["status"] == {"question": "waiting_user", "budget": "paused_budget"}.get(mode, "paused_by_owner")
+    assert len(decisions) == 1
+    if mode == "question":
+        assert parked["question"] == "Which document should I use?"
+        assert not parked["can_resume"]
+        prompt = service.role_prompt({"agent_session_control"}, actor=actor)
+        assert sid in prompt["content"] and parked["question"] in prompt["content"]
+    assert "Check a document" not in str(task_manager.get_task(actor, initial["task_id"]))
+
+    monkeypatch.setattr(task_store, "process_instance_id", lambda: "restarted-agent-process")
+    monkeypatch.setattr(service, "_device", None)
+    assert agent_sessions.control(actor, sid, "resume")["status"] == parked["status"]
+    service.poll("desktop-identity", Poll.model_validate({**body, "session_id": uuid4().hex}))
+    action = "steer" if mode == "question" else "resume"
+    instruction = "Use the second document" if mode == "question" else ""
+    if mode == "canceled":
+        assert agent_sessions.control(actor, sid, "cancel")["status"] == "canceled"
+    for _ in range(2):
+        agent_sessions.control(actor, sid, action, instruction=instruction, request_id="continue-once")
+    final = await settled(sid)
+    assert final["task_id"] == initial["task_id"]
+    if mode == "canceled":
+        assert final["status"] == "canceled" and len(decisions) == 1
+    else:
+        assert final["status"] == "failed" and len(decisions) == 2
+        assert decisions[-1] == ((1, instruction) if mode == "question" else (0, ""))
 
 
 @pytest.mark.asyncio

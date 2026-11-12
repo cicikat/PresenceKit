@@ -213,6 +213,7 @@ def _terminalize(
     task.next_attempt_at = 0.0
     task.error_code = error_code
     task.recovery_reason = recovery_reason
+    task.agent_checkpoint = {}
     _clear_lease(task)
 
 
@@ -470,6 +471,7 @@ def claim_next(
     capabilities: set[str] | frozenset[str] | None = None,
     lease_seconds: int = DEFAULT_LEASE_SECONDS,
     now: float | None = None,
+    resume_agent: bool = False,
 ) -> TaskLease | None:
     principal = _validate_principal(principal)
     if (
@@ -491,7 +493,10 @@ def claim_next(
         candidates = [
             task
             for task in records
-            if task.status == TaskStatus.QUEUED.value
+            if (task.status == TaskStatus.QUEUED.value if not resume_agent else
+                task_id is not None and task.status == TaskStatus.PAUSED.value
+                and task.capability == "agent_session" and bool(task.agent_checkpoint))
+            and not task.cancel_requested_at
             and task.next_attempt_at <= timestamp
             and (task_id is None or task.task_id == task_id)
             and (allowed is None or task.capability in allowed)
@@ -506,6 +511,9 @@ def claim_next(
         task.current_attempt_id = uuid.uuid4().hex
         task.lease_token = secrets.token_urlsafe(32)
         task.lease_owner_instance = task_store.process_instance_id()
+        if resume_agent:
+            task.expires_at = timestamp + lease_seconds + 10
+            task.agent_checkpoint = {}
         task.lease_until = min(task.expires_at, timestamp + lease_seconds)
         task.started_at = task.started_at or timestamp
         task.updated_at = timestamp
@@ -798,6 +806,8 @@ def resume_task(
     with task_store.scope_lock(principal.uid, principal.char_id):
         state, records, changed = _load_records(principal, timestamp)
         task = _find(records, task_id)
+        if task.agent_checkpoint:
+            raise TaskManagerError("agent_session_control_required")
         if task.status == TaskStatus.PAUSED.value:
             if task.expires_at <= timestamp:
                 _terminalize(task, TaskStatus.EXPIRED.value, timestamp, error_code="task_ttl_expired")
@@ -860,7 +870,10 @@ def mark_waiting_confirmation(
 
 
 def acknowledge_pause(
-    principal: TaskPrincipal, lease: TaskLease, *, now: float | None = None
+    principal: TaskPrincipal, lease: TaskLease, *, now: float | None = None,
+    agent_checkpoint: dict[str, Any] | None = None,
+    result_metadata: dict[str, Any] | None = None,
+    retention_seconds: int = 0,
 ) -> dict[str, Any]:
     principal = _validate_principal(principal)
     timestamp = _now(now)
@@ -872,12 +885,32 @@ def acknowledge_pause(
         _require_lease(task, lease, timestamp)
         if not task.pause_requested_at:
             raise TaskManagerError("pause_not_requested")
+        if agent_checkpoint is not None:
+            if task.cancel_requested_at:
+                raise TaskManagerError("task_cancel_requested")
+            if (task.capability != "agent_session" or not 1 <= retention_seconds <= MAX_TTL_SECONDS
+                    or len(json.dumps(agent_checkpoint, ensure_ascii=False).encode("utf-8")) > 65536):
+                raise TaskManagerError("invalid_agent_checkpoint")
+            task.agent_checkpoint = agent_checkpoint
+            task.expires_at = timestamp + retention_seconds
+            task.result_metadata = _normalize_result_metadata(result_metadata)
         task.status = TaskStatus.PAUSED.value
         task.updated_at = timestamp
         task.pause_requested_at = 0.0
         _clear_lease(task)
         _save_records(principal, state, records, now=timestamp)
         return _receipt(task)
+
+
+def read_agent_checkpoint(principal: TaskPrincipal, task_id: str) -> dict[str, Any]:
+    principal = _validate_principal(principal)
+    timestamp = time.time()
+    with task_store.scope_lock(principal.uid, principal.char_id):
+        state, records, changed = _load_records(principal, timestamp)
+        if changed:
+            _save_records(principal, state, records, now=timestamp)
+        task = _find(records, task_id)
+        return task.agent_checkpoint if task.status == TaskStatus.PAUSED.value else {}
 
 
 def unknown_task(
