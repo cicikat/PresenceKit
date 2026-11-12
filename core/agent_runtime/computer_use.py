@@ -111,6 +111,7 @@ class Device:
     focus_ready: bool = False
     cloud_vision: bool | None = None
     cloud_route: dict = field(default_factory=dict, repr=False)
+    agent_task_id: str = ""
 
 
 @dataclass
@@ -291,6 +292,10 @@ def poll(identity: str, body) -> dict:
         if (body.state == "closed" or _device.scope != body.scope
                 or _device.principal.char_id != body.char_id
                 or _device.cloud_vision != body.cloud_vision):
+            if body.state == "closed" and body.stop_agent and body.server_epoch == INSTANCE:
+                from core.agent_runtime import agent_sessions
+
+                agent_sessions.stop_device(_device)
             _close_device("authorization_ended")
             return {"accepted": False, "reason": "authorization_ended", "server_epoch": INSTANCE}
         _device.heartbeat = now
@@ -320,6 +325,10 @@ def poll(identity: str, body) -> dict:
     _device.focus_ready = body.focus_ready
     response = {"accepted": True, "server_epoch": INSTANCE,
                 "task_id": _run.lease.task_id if _run else None, "step": None}
+    if _device.agent_task_id:
+        from core.agent_runtime import agent_sessions
+
+        response["agent_cue"] = agent_sessions.device_cue(_device)
     delivery = _run.delivery if _run else None
     if delivery and not delivery.dispatched and _device.state != "paused" and body.focus_ready:
         delivery.dispatched = True

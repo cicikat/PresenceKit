@@ -176,8 +176,30 @@ def _launch(session: Session) -> dict:
     global _active
     row = task_manager.checkpoint_task(session.actor, session.lease, result_metadata=session.progress())
     _active = session
+    session.device.agent_task_id = session.lease.task_id
     asyncio.create_task(_drive(session), name=f"agent-session-{session.session_id}")
     return _project(session.actor, row, session)
+
+
+def device_cue(device: computer_use.Device) -> str | None:
+    row = task_manager.get_task(device.principal, device.agent_task_id)
+    if row["cancel_requested"] or row["status"] in TERMINAL:
+        device.agent_task_id = ""
+        return None
+    if row["status"] == "paused" or device.state == "paused":
+        return "weak"
+    session = _active
+    if session and session.device is device and session.lease.task_id == device.agent_task_id:
+        return "weak" if session.phase in PARKED else "active"
+    return None
+
+
+def stop_device(device: computer_use.Device) -> None:
+    if not device.agent_task_id:
+        return
+    row = task_manager.get_task(device.principal, device.agent_task_id)
+    if row["capability"] == CAPABILITY and row["status"] not in TERMINAL:
+        control(device.principal, row["request_summary"]["session_id"], "cancel")
 
 
 def control(actor: TaskPrincipal, session_id: str, action: str, *, instruction: str = "", request_id: str = "") -> dict:

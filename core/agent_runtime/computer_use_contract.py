@@ -90,6 +90,7 @@ class Poll(Strict):
     server_epoch: Identifier | None = None
     # Omitted by legacy clients. A grant can only be made on the first poll.
     cloud_vision: bool | None = None
+    stop_agent: bool = False
 
 
 class Window(Strict):

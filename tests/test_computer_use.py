@@ -54,7 +54,7 @@ def observation(seq):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("scenario", ["finish", "steer", "cancel", "offline", "role", "restart", "failure_budget"])
+@pytest.mark.parametrize("scenario", ["finish", "steer", "cancel", "desktop_stop", "offline", "role", "restart", "failure_budget"])
 async def test_agent_session_drives_receipts_after_the_owner_turn(fixture, monkeypatch, scenario):
     config, pipeline, device = fixture
     if scenario == "failure_budget":
@@ -127,6 +127,7 @@ async def test_agent_session_drives_receipts_after_the_owner_turn(fixture, monke
             assert (await acknowledge(first)).status_code == 200
             action = await next_step()
             assert action["step"]["action"]["kind"] == "press_key"
+            assert action["agent_cue"] == "active"
             assert len(proposals) == 2
             control = {"session_id": sid, "action": "steer", "instruction": "replacement B", "request_id": "edit-turn"}
             if scenario == "steer":
@@ -139,6 +140,9 @@ async def test_agent_session_drives_receipts_after_the_owner_turn(fixture, monke
                 assert (await acknowledge(action, "changed")).status_code == 200
             elif scenario == "cancel":
                 await client.post("/computer-use/agent-session/control", json={**control, "action": "cancel"})
+            elif scenario == "desktop_stop":
+                device["stop_agent"] = True
+                assert not (await poll("closed"))["accepted"]
             elif scenario == "offline":
                 service._device.heartbeat -= service.HEARTBEAT_TTL
                 await poll()
@@ -231,6 +235,7 @@ async def test_agent_parked_session_reclaims_after_restart(fixture, monkeypatch,
     parked = await settled(sid)
     assert parked["status"] == {"question": "waiting_user", "budget": "paused_budget"}.get(mode, "paused_by_owner")
     assert len(decisions) == 1
+    assert service.poll("desktop-identity", Poll.model_validate(body))["agent_cue"] == "weak"
     if mode == "question":
         assert parked["question"] == "Which document should I use?"
         assert not parked["can_resume"]
