@@ -17,7 +17,9 @@ DEFAULT_INTERVAL = 300
 
 
 def baseline() -> dict:
-    return {"enabled": True, "interval": DEFAULT_INTERVAL, "cursor": int(time.time() * 1000)}
+    now = time.time()
+    return {"enabled": True, "interval": DEFAULT_INTERVAL, "cursor": int(now * 1000),
+            "enabled_since": now}
 
 
 def _active(record: dict, uid: str, char_id: str) -> bool:
@@ -27,10 +29,14 @@ def _active(record: dict, uid: str, char_id: str) -> bool:
 
 
 def source_active(uid: str, char_id: str, signals) -> bool:
-    if not any(isinstance(signal, dict) and signal.get("source") == SOURCE for signal in signals):
+    matching = [signal for signal in signals if isinstance(signal, dict) and signal.get("source") == SOURCE]
+    if not matching:
         return True
     try:
-        return scheduler_enabled() and _active(gmail.load(), uid, char_id)
+        record = gmail.load()
+        enabled_since = record.get("poll", {}).get("enabled_since", 0)
+        return bool(scheduler_enabled() and _active(record, uid, char_id)
+                    and all(signal.get("created_at", 0) >= enabled_since for signal in matching))
     except gmail.GmailError:
         return False
 
@@ -92,7 +98,7 @@ async def tick(uid: str, char_id: str, *, now: float | None = None) -> None:
         return
     poll = dict(previous)
     cursor = poll["cursor"]
-    upper = poll.get("upper") or int(now) * 1000
+    upper = poll.get("upper") or min(int(now) * 1000, cursor + 86_400_000)
     if upper <= cursor:
         return
     page_token = poll.get("page_token", "")
@@ -123,7 +129,7 @@ async def tick(uid: str, char_id: str, *, now: float | None = None) -> None:
         token = page.get("nextPageToken", "")
         poll.update(last_sync=now, failures=0, error="", next_due=now + (60 if token else poll["interval"]))
         if token:
-            poll.update(upper=upper, page_token=token, seen=seen)
+            poll.update(upper=upper, page_token=token, seen=dict(list(seen.items())[-2000:]))
         else:
             poll.update(cursor=upper, upper=0, page_token="", seen={})
     except (gmail.GmailError, KeyError, TypeError, ValueError) as exc:

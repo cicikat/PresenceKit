@@ -19,6 +19,7 @@ class MailSendResult:
     exception_type: str = ""
     smtp_status_code: int | None = None
     message_id: str = ""
+    already_sent: bool = False
 
 
 async def _open_proxy_socket(proxy_url: str, host: str, port: int):
@@ -42,7 +43,8 @@ async def send_letter(subject: str, body_text: str) -> bool:
     return (await send_letter_detailed(subject, body_text)).sent
 
 
-async def send_letter_detailed(subject: str, body_text: str) -> MailSendResult:
+async def send_letter_detailed(subject: str, body_text: str, *, uid: str = "", char_id: str = "",
+                               delivery_key: str = "") -> MailSendResult:
     """Send one letter and retain only safe failure metadata for its caller."""
     from core.config_loader import get_config
 
@@ -50,6 +52,22 @@ async def send_letter_detailed(subject: str, body_text: str) -> MailSendResult:
     if not cfg.get("enabled", False):
         logger.info("[mail] disabled, skipping send")
         return MailSendResult(False, "smtp_unknown_error")
+
+    if cfg.get("backend") == "gmail_api":
+        from core.mail import gmail, gmail_messages
+
+        try:
+            result = await gmail_messages.send(
+                uid, char_id, recipient=str(cfg.get("to_addr") or ""),
+                subject=f"{cfg.get('subject_prefix') or ''}{subject}", body=body_text,
+                from_name=str(cfg.get("from_name") or "角色"), delivery_key=delivery_key,
+            )
+            return MailSendResult(True, message_id=result["receipt"],
+                                  already_sent=result["status"] == "already_sent")
+        except gmail.GmailError as exc:
+            code = str(exc)
+            logger.warning("[mail] Gmail delivery status=%s", code)
+            return MailSendResult(False, code if code == "outcome_unknown" else f"gmail_{code}")
 
     required = ("smtp_host", "smtp_user", "smtp_password", "to_addr")
     missing = [key for key in required if not str(cfg.get(key) or "").strip()]

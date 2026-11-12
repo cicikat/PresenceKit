@@ -458,6 +458,7 @@ embodiment:
     duration_ms: 4000    # 单次爱心显示时长
     sample_rate: 1.0     # 0–1：每条回复以此概率才调爱意探针（默认 1.0 = 每条都判）；探针连续失败时另有 60s→15min 指数退避
 mail:
+  backend: smtp  # smtp | gmail_api。Gmail API 需先在管理面的邮件连接页授权。
   enabled: false  # 纯增值功能(角色写信)，默认关；面板「通道开关」可开，需自备 SMTP 凭据
   smtp_host: smtp.gmail.com
   smtp_port: 587
@@ -584,7 +585,7 @@ tool_loop:
   enabled: true            # 工具权限默认可用；外部服务和客户端仍需单独配置并启用
   max_steps: 5               # 单轮最多调用工具的步数，前端可调 1-8
   total_timeout_s: 720       # 整个 loop 墙钟超时，超时按步数耗尽处理
-  categories: ["info", "desktop", "memory", "mcp"]
+  categories: ["info", "desktop", "memory", "mcp", "gmail"]
   exclude_tools: ["toy_vibrate", "toy_stop", "toy_pattern", "write_toy_file"]  # 硬件写类默认排除
   nudge_hint: true           # 首步注入"别凭记忆编造，需要就调工具"的软提示（Brief 29 · 5）
 

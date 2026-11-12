@@ -266,7 +266,11 @@ def test_ws_missing_token_rejected(sandbox):
 # Guard: default-deny 全量路由扫描
 # ═══════════════════════════════════════════════════════════════════════════════
 
-_PUBLIC_ALLOWLIST = {"/", "/docs", "/openapi.json", "/redoc"}
+_PUBLIC_ALLOWLIST = {
+    "/", "/docs", "/openapi.json", "/redoc",
+    # These two GETs use short-lived OAuth tickets and a browser-bound state cookie.
+    "/settings/gmail/oauth/authorize", "/settings/gmail/oauth/callback",
+}
 
 
 def _dependant_has_scope_marker(dependant) -> bool:

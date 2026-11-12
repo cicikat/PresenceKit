@@ -1,9 +1,31 @@
-<h1 class="page-title" data-i18n="settings_center.mail_connection">邮件连接</h1><div class="card">
+<h1 class="page-title" data-i18n="settings_center.mail_connection">邮件连接</h1>
+<div class="card">
+  <div class="card-header"><h3>角色 Gmail 邮箱</h3><span id="setup-gmail-status" role="status"></span></div>
+  <p>角色可以读取和发送邮件。读取的内容可能交给当前模型服务处理。管理面仅展示连接、同步及投递状态。</p>
+  <div class="form-row">
+    <label class="field"><span>角色的 Google 邮箱</span><input id="setup-gmail-email" type="email" maxlength="254"></label>
+    <label class="checkbox-row"><input id="setup-gmail-consent" type="checkbox">我同意由配置的模型服务处理邮箱内容</label>
+  </div>
+  <div class="form-row">
+    <label class="checkbox-row"><input id="setup-gmail-sync" type="checkbox" checked>同步新邮件</label>
+    <label class="field"><span>同步间隔（秒，默认 300）</span><input id="setup-gmail-interval" type="number" required min="60" max="3600" value="300"></label>
+  </div>
+  <p id="setup-gmail-detail"></p>
+  <details id="setup-gmail-unknown" hidden><summary>需要人工核查的投递</summary><p id="setup-gmail-unknown-ids"></p></details>
+  <div class="modal-footer admin-inline-124">
+    <button class="btn btn-primary" id="setup-gmail-connect" data-action="connectSetupGmail">连接 / 重新授权</button>
+    <button class="btn btn-ghost" id="setup-gmail-test" data-action="testSetupGmail">测试连接</button>
+    <button class="btn btn-ghost" id="setup-gmail-save" data-action="saveSetupGmailSync">保存同步设置</button>
+    <button class="btn btn-ghost" data-action="loadSetupGmail">刷新</button>
+    <button class="btn btn-ghost" id="setup-gmail-disconnect" data-action="disconnectSetupGmail">断开并撤销</button>
+  </div>
+</div>
+<div class="card">
         <div class="card-header">
           <h3><span data-i18n="setup.mail.title">邮件通道</span> <span class="badge" data-i18n="common.optional">可选</span></h3>
           <span id="setup-mail-status" class="admin-inline-082"></span>
         </div>
-        <p data-i18n="setup.mail.description" class="admin-inline-087">角色写信功能的 SMTP 发信配置；默认关闭，纯增值功能。总开关也可以在「Token」页「通道开关」区切换。</p>
+        <p class="admin-inline-087">角色写信和梦境明信片的投递设置。</p>
         <div class="form-row">
           <label class="checkbox-row admin-inline-117">
             <input type="checkbox" id="setup-mail-enabled" class="admin-inline-202">
@@ -48,6 +70,15 @@
           <label class="field">
             <span>subject_prefix</span>
             <input type="text" id="setup-mail-subject-prefix" placeholder="【来信】" data-i18n-placeholder="setup.mail.subject_placeholder">
+          </label>
+        </div>
+        <div class="form-row">
+          <label class="field">
+            <span>角色写信发信后端</span>
+            <select id="setup-mail-backend">
+              <option value="smtp">SMTP</option>
+              <option value="gmail_api">Gmail API</option>
+            </select>
           </label>
         </div>
         <div class="form-row col-1">

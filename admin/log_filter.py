@@ -113,7 +113,7 @@ class QuerySanitizeFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         if isinstance(record.args, tuple) and len(record.args) >= 3:
             lst = list(record.args)
-            lst[2] = _redact_url_value(str(lst[2]))
+            lst[2] = _SENSITIVE.sub(r'\1***', _redact_url_value(str(lst[2])))
             record.args = tuple(lst)
         return True
 

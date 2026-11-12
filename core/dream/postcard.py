@@ -225,20 +225,38 @@ def _template_text(template_id: str) -> str:
     return path.read_text(encoding="utf-8") if path.exists() else "写一封克制的梦后短笺。"
 
 async def deliver_due_postcards(*, char_id: str = DEFAULT_CHAR_ID, today: date | None = None) -> int:
-    """Retry every due unsent entry; only SMTP success flips sent=True."""
+    """Retry due unsent entries unless delivery needs manual verification."""
     entries = _load_schedule(char_id)
     today_text = (today or date.today()).isoformat()
     changed = sent_count = 0
-    from core.mail.mail_sender import send_letter
+    from core.config_loader import get_config
+    from core.mail.mail_sender import send_letter, send_letter_detailed
+
+    gmail_backend = get_config().get("mail", {}).get("backend") == "gmail_api"
     for entry in entries:
         if entry.get("sent") or entry.get("generation_status") == "generation_failed" or str(entry.get("scheduled_date", "")) > today_text:
             continue
-        ok = await send_letter("一封从梦里寄出的明信片", str(entry.get("letter_text") or ""))
+        if entry.get("delivery_status") == "outcome_unknown":
+            continue
+        subject = "一封从梦里寄出的明信片"
+        body = str(entry.get("letter_text") or "")
+        failure = "smtp_failed"
+        if gmail_backend:
+            from core.mail import gmail
+
+            result = await send_letter_detailed(
+                subject, body, uid=str(entry.get("uid") or gmail.owner()), char_id=char_id,
+                delivery_key=f"scheduled:postcard:{entry.get('dream_id', '')}",
+            )
+            ok = result.sent
+            failure = "outcome_unknown" if result.failure_code == "outcome_unknown" else "gmail_failed"
+        else:
+            ok = await send_letter(subject, body)
         entry["attempts"] = int(entry.get("attempts") or 0) + 1
         if ok:
             entry["sent"] = True; entry["last_error"] = ""; entry["delivery_status"] = "sent"; sent_count += 1
         else:
-            entry["last_error"] = "smtp_failed"; entry["delivery_status"] = "smtp_failed"
+            entry["last_error"] = failure; entry["delivery_status"] = failure
         changed = True
     if changed:
         _save_schedule(char_id, entries)

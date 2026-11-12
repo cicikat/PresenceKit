@@ -113,3 +113,35 @@ def test_callback_log_redaction():
     assert _redact_url_value(gmail.CALLBACK + "?state=private&code=secret") == (
         gmail.CALLBACK + "?state=***&code=***"
     )
+
+
+def test_http_handoff_and_management_authorization(mailbox, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from admin.routers import settings_gmail
+
+    monkeypatch.setenv("YEXUAN_ADMIN_SECRET", "qa-admin")
+    monkeypatch.setattr(settings_gmail, "_principal", lambda: ("owner", "character"))
+    app = FastAPI()
+    app.include_router(settings_gmail.router)
+    with TestClient(app, base_url="https://example.test", follow_redirects=False) as client:
+        assert client.get("/settings/gmail").status_code == 401
+        auth = {"Authorization": "Bearer qa-admin"}
+        body = {"email": "mail@example.test", "model_processing_consent": True}
+        assert client.post("/settings/gmail/oauth/start", json=body).status_code == 401
+        assert client.post("/settings/gmail/oauth/start", headers=auth,
+                           json={**body, "model_processing_consent": False}).status_code == 422
+        start = client.post("/settings/gmail/oauth/start", headers=auth, json=body)
+        assert start.status_code == 200
+        redirect = client.get(start.json()["authorization_url"])
+        assert redirect.status_code == 303
+        assert "HttpOnly" in redirect.headers["set-cookie"] and "Secure" in redirect.headers["set-cookie"]
+        assert redirect.headers["referrer-policy"] == "no-referrer"
+        state = parse_qs(urlsplit(redirect.headers["location"]).query)["state"][0]
+        with TestClient(app, base_url="https://example.test") as other:
+            assert other.get(gmail.CALLBACK, params={"state": state, "code": "private"}).status_code == 400
+        denied = client.get(gmail.CALLBACK, params={"state": state, "error": "access_denied"})
+        assert denied.status_code == 400 and "authorization_declined" in denied.text
+        assert "private" not in denied.text
+        assert client.get(gmail.CALLBACK, params={"state": state, "code": "private"}).status_code == 400

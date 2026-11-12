@@ -115,7 +115,104 @@ async function loadSetupPage({section = null, expectedValues = _setupInputSnapsh
   }
 }
 
+async function loadSetupGmail() {
+  const field = id => document.getElementById('setup-gmail-' + id);
+  try {
+    const state = await api('GET', '/settings/gmail');
+    field('status').textContent = state.bound_elsewhere ? '邮箱已绑定到其他角色'
+      : !state.configured ? '服务器尚未配置 OAuth'
+      : state.connected ? (state.error === 'reauthorization_required' ? '需要重新授权' : '已连接') : '待授权';
+    if (state.email) field('email').value = state.email;
+    field('connect').disabled = !state.configured || state.bound_elsewhere;
+    field('test').disabled = !state.connected;
+    field('save').disabled = !state.connected;
+    field('disconnect').disabled = !state.connected;
+    field('sync').checked = !!state.sync_enabled;
+    field('interval').value = state.sync_interval_seconds;
+    const scopes = (state.scopes || []).map(scope => scope.split('/').pop()).join('、');
+    const lastSync = state.last_sync_at ? new Date(state.last_sync_at * 1000).toLocaleString() : '暂无';
+    const retry = state.sync_retry_at ? new Date(state.sync_retry_at * 1000).toLocaleString() : '';
+    field('detail').textContent = [
+      scopes ? '授权范围 ' + scopes : '',
+      state.connected ? (state.sync_effective ? '同步已启用' : '同步未生效') : '',
+      state.connected ? '上次成功同步 ' + lastSync : '',
+      state.error || '', state.sync_error ? '同步错误 ' + state.sync_error : '',
+      retry ? '下次尝试 ' + retry : '',
+    ].filter(Boolean).join(' · ');
+    field('unknown').hidden = !state.unknown_delivery_count;
+    field('unknown-ids').textContent = (state.unknown_deliveries || [])
+      .map(row => row.message_id).join(' · ');
+  } catch (e) {
+    field('status').textContent = '读取 Gmail 状态失败 ' + _setupErrMsg(e);
+  }
+}
+
+async function connectSetupGmail() {
+  const email = document.getElementById('setup-gmail-email');
+  if (!email.value.trim() || !email.reportValidity()) {
+    toast('请填写角色的 Google 邮箱', 'err');
+    return;
+  }
+  if (!document.getElementById('setup-gmail-consent').checked) {
+    toast('请确认模型服务处理说明', 'err');
+    return;
+  }
+  const popup = window.open('about:blank', '_blank');
+  if (!popup) {
+    toast('请允许浏览器打开授权窗口', 'err');
+    return;
+  }
+  popup.opener = null;
+  try {
+    const result = await api('POST', '/settings/gmail/oauth/start', {
+      email: email.value.trim(), model_processing_consent: true,
+    });
+    popup.location.replace(result.authorization_url);
+  } catch (e) {
+    popup.close();
+    toast('无法启动授权 ' + _setupErrMsg(e), 'err');
+  }
+}
+
+async function testSetupGmail() {
+  try {
+    await api('POST', '/settings/gmail/test');
+    toast('Google 邮箱授权有效', 'ok');
+  } catch (e) {
+    toast('测试连接失败 ' + _setupErrMsg(e), 'err');
+  }
+  await loadSetupGmail();
+}
+
+async function disconnectSetupGmail() {
+  if (!window.confirm('断开此角色的 Google 邮箱，并请求撤销 Google 授权？')) return;
+  try {
+    const result = await api('POST', '/settings/gmail/disconnect');
+    toast(result.result === 'local_disconnect_upstream_unconfirmed'
+      ? '本地已断开，请在 Google 账号中手动撤销授权' : '邮箱已断开', 'ok');
+    await loadSetupGmail();
+  } catch (e) {
+    toast('断开失败 ' + _setupErrMsg(e), 'err');
+  }
+}
+
+async function saveSetupGmailSync() {
+  const interval = document.getElementById('setup-gmail-interval');
+  if (!interval.reportValidity()) return;
+  try {
+    await api('PUT', '/settings/gmail/sync', {
+      enabled: document.getElementById('setup-gmail-sync').checked,
+      interval_seconds: Number(interval.value),
+    });
+    await loadSetupGmail();
+    toast('同步设置已保存', 'ok');
+  } catch (e) {
+    toast('保存同步设置失败 ' + _setupErrMsg(e), 'err');
+  }
+}
+
 async function _loadSetupMail() {
+  void loadSetupGmail();
   try {
     const mail = await api('GET', '/settings/mail');
     document.getElementById('setup-mail-enabled').checked = !!mail.enabled;
@@ -132,6 +229,7 @@ async function _loadSetupMail() {
     document.getElementById('setup-mail-subject-prefix').value = mail.subject_prefix || '';
     document.getElementById('setup-mail-proxy-url').value = mail.proxy_url || '';
     document.getElementById('setup-mail-connection-mode').value = mail.connection_mode || 'auto';
+    document.getElementById('setup-mail-backend').value = mail.backend || 'smtp';
     document.getElementById('setup-mail-status').innerHTML = _setupBadge(mail.configured);
   } catch (e) {
     toast(t('setup.mail.load_error', '加载邮件通道配置失败: {error}', {error: _setupErrMsg(e)}), 'err');
@@ -141,6 +239,7 @@ async function _loadSetupMail() {
 async function saveSetupMail() {
   const body = {
     enabled: document.getElementById('setup-mail-enabled').checked,
+    backend: document.getElementById('setup-mail-backend').value,
     connection_mode: document.getElementById('setup-mail-connection-mode').value,
   };
   const host   = document.getElementById('setup-mail-host').value.trim();

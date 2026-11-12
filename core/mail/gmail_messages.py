@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 from email.headerregistry import Address
 from email.message import EmailMessage
@@ -150,11 +151,14 @@ async def send(uid: str, char_id: str, *, recipient: str, subject: str, body: st
         content = _fingerprint(uid, char_id, sender, recipient.casefold(), subject, body, str((parent or {}).get("id", "")))
         entries = record.setdefault("deliveries", {})
         existing = entries.get(key)
-        if not existing:
-            # Covers a model retry that invents a new request key.
-            existing = next((row for row in entries.values() if row["content"] == content), None)
+        scheduled = delivery_key.startswith("scheduled:")
+        now = int(time.time())
+        if not existing and not scheduled:
+            # A model may invent a new request key when retrying a write.
+            existing = next((row for row in entries.values() if row["content"] == content
+                             and (row["state"] != "sent" or now - row["at"] < 3600)), None)
         if existing:
-            if existing["content"] != content and not delivery_key.startswith("scheduled:"):
+            if existing["content"] != content and not scheduled:
                 raise gmail.GmailError("delivery_key_conflict")
             if existing["state"] != "sent":
                 raise gmail.GmailError("outcome_unknown")
@@ -186,14 +190,18 @@ async def send(uid: str, char_id: str, *, recipient: str, subject: str, body: st
             raise gmail.GmailError("invalid_message") from None
 
         receipt = key[:24]
-        entries[key] = {"state": "pending", "content": content, "receipt": receipt, "at": int(time.time())}
+        entries[key] = {"state": "pending", "content": content, "receipt": receipt, "at": now,
+                        "mailbox": _fingerprint(uid, char_id, sender)}
         gmail.save(record)
         try:
             result = await gmail.request("POST", gmail.API + "messages/send", token=token,
                                          sending=True, json=payload)
             if not result.get("id"):
                 raise gmail.GmailError("outcome_unknown")
+        except asyncio.CancelledError:
+            raise gmail.GmailError("outcome_unknown") from None
         except gmail.GmailError as exc:
+            gmail.note_api_error(token, exc)
             if str(exc) != "outcome_unknown":
                 del entries[key]
                 gmail.save(record)

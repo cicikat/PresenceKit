@@ -91,3 +91,38 @@ async def test_paginated_search(connected, monkeypatch):
     result = await gmail_tools.gmail_search_messages("owner", "character", "from:test@example.test", "page1")
     assert result["next_page_token"] == "page2"
     assert result["messages"][0]["subject"] == "主题"
+
+
+@pytest.mark.asyncio
+async def test_scheduled_adapter_and_unknown_weekly_hold(connected, monkeypatch, tmp_path):
+    from core import config_loader
+    from core.mail import mail_sender, weekly_contract
+
+    monkeypatch.setattr(config_loader, "get_config", lambda: {
+        "mail": {"enabled": True, "backend": "gmail_api", "to_addr": "owner@example.test",
+                 "subject_prefix": "来信 "},
+    })
+    monkeypatch.setattr(weekly_contract, "_load", lambda: {})
+    saved = {}
+    monkeypatch.setattr(weekly_contract, "_save", saved.update)
+    calls = []
+
+    async def request(method, url, **kwargs):
+        calls.append(kwargs["json"])
+        raise gmail.GmailError("outcome_unknown")
+
+    monkeypatch.setattr(gmail, "request", request)
+    for body in ("正文", "重新生成的正文"):
+        result = await mail_sender.send_letter_detailed(
+            "标题", body, uid="owner", char_id="character", delivery_key="scheduled:letter:week",
+        )
+        assert not result.sent and result.failure_code == "outcome_unknown"
+    assert len(calls) == 1
+    assert len(gmail.status("owner", "character")["unknown_deliveries"]) == 1
+    msg = email.message_from_bytes(base64.urlsafe_b64decode(calls[0]["raw"]), policy=default)
+    assert msg["Subject"] == "来信 标题"
+    assert msg["To"] == "owner@example.test"
+    weekly_contract.finish("owner", "character", sent=False, failure_code=result.failure_code)
+    monkeypatch.setattr(weekly_contract, "_load", lambda: saved)
+    assert not weekly_contract.is_due("owner", "character")
+    assert weekly_contract.claim("owner", "character") is None

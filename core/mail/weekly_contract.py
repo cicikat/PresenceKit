@@ -40,7 +40,7 @@ def snapshot(uid: str, char_id: str, *, now: float | None = None) -> dict:
 def is_due(uid: str, char_id: str, *, now: float | None = None) -> bool:
     now = now or time.time()
     state = snapshot(uid, char_id, now=now)
-    return state.get("status") != "sent" and float(state.get("next_attempt_ts") or 0) <= now and float(state.get("lease_until") or 0) <= now
+    return state.get("status") not in {"sent", "outcome_unknown"} and float(state.get("next_attempt_ts") or 0) <= now and float(state.get("lease_until") or 0) <= now
 
 
 def claim(uid: str, char_id: str, *, now: float | None = None) -> dict | None:
@@ -49,7 +49,7 @@ def claim(uid: str, char_id: str, *, now: float | None = None) -> dict | None:
     with _LOCK:
         rows = _load()
         state = dict(rows.get(key) or {"status": "unattempted", "retry_count": 0, "generation_count": 0})
-        if state.get("status") == "sent" or float(state.get("next_attempt_ts") or 0) > now or float(state.get("lease_until") or 0) > now:
+        if state.get("status") in {"sent", "outcome_unknown"} or float(state.get("next_attempt_ts") or 0) > now or float(state.get("lease_until") or 0) > now:
             return None
         state["lease_until"] = now + _LEASE_SECONDS
         state["last_attempt_ts"] = now
@@ -70,13 +70,15 @@ def finish(uid: str, char_id: str, *, sent: bool, failure_code: str = "", messag
         else:
             state["status"] = "failed"
             state["failure_code"] = failure_code
-            if failure_code == "quality_rejected":
+            if failure_code == "outcome_unknown":
+                state["status"] = "outcome_unknown"
+            elif failure_code == "quality_rejected":
                 state["generation_count"] = int(state.get("generation_count") or 0) + 1
                 if state["generation_count"] >= max_generation_attempts:
                     state["next_attempt_ts"] = _next_week_ts(now)
                 else:
                     state["next_attempt_ts"] = now + 6 * 3600
-            elif failure_code.startswith("smtp_"):
+            elif failure_code.startswith(("smtp_", "gmail_")):
                 state["retry_count"] = int(state.get("retry_count") or 0) + 1
                 if state["retry_count"] >= smtp_max_retries:
                     state["next_attempt_ts"] = _next_week_ts(now)

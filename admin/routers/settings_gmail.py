@@ -1,5 +1,7 @@
 """Private mailbox controls and the two browser-only OAuth handoff routes."""
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel, Field
@@ -35,6 +37,7 @@ async def configure_sync(body: Sync, auth=Depends(admin)):
 
 class Start(BaseModel):
     email: str = Field(max_length=254)
+    model_processing_consent: Literal[True]
 
 
 def _principal() -> tuple[str, str]:

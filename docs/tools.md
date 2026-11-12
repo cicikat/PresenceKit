@@ -1084,6 +1084,10 @@ class ToolResult:
 
 ---
 
+## 工单 303 Gmail 工具
+
+gmail_list_messages、gmail_search_messages、gmail_read_message、gmail_list_labels 为读取工具。gmail_send_message、gmail_reply_message 有外部写入效果。仅已授权 owner/char 的私聊结构化 Tool Loop 和自主执行可用，类别为 gmail。邮件内容只进当轮不可信工具消息，Gmail 结果不进入工具固定、动作回流或自主快照。投递结果未知时保留去重记录。详见 [Gmail OAuth](gmail-oauth.md)。
+
 ## 工单 260 F：听歌工具已注册
 
 `get_listening_state` / `get_listening_queue` / `get_listening_history` /

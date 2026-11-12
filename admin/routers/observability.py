@@ -66,10 +66,16 @@ async def mail_weekly_state(_auth=Depends(require_scopes('state.read'))):
     cfg = get_config()
     mail = cfg.get('mail', {})
     uid, char_id = _owner_id(), _active_char_id_or_none()
+    backend = mail.get("backend", "smtp")
+    configured = all(bool(mail.get(key)) for key in ("smtp_host", "smtp_user", "smtp_password", "to_addr"))
+    if backend == "gmail_api":
+        from core.mail import gmail
+
+        configured = bool(mail.get("to_addr") and gmail.allowed(uid, char_id, gmail.SEND))
     now = time.time()
     state = await asyncio.to_thread(weekly_contract.snapshot, uid, char_id, now=now) if uid and char_id else {}
     return {'enabled': bool(mail.get('enabled')), 'scheduler_enabled': bool(cfg.get('scheduler', {}).get('enabled')),
-            'configured': all(bool(mail.get(k)) for k in ('smtp_host', 'smtp_user', 'smtp_password', 'to_addr')),
+            'configured': configured, 'backend': backend,
             'scope_ready': bool(uid and char_id), 'in_weekly_window': _in_weekly_window(now),
             'delivery_path': 'scheduler_mail',
             'weekly': {k: v for k, v in state.items() if k != 'provider_message_id'},

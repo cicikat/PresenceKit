@@ -662,6 +662,7 @@ async def update_dream_prompt_ablation(
 # ---------------------------------------------------------------------------
 
 class MailSettingsUpdate(BaseModel):
+    backend:        Optional[Literal["smtp", "gmail_api"]] = None
     enabled:        Optional[bool] = None
     connection_mode: Optional[Literal["auto", "direct", "proxy"]] = None
     smtp_host:      Optional[str]  = None
@@ -679,11 +680,20 @@ def _mail_view(cfg: dict) -> dict:
     from admin.routers.settings_llm import _looks_placeholder, _mask_key
 
     target = cfg.get("mail", {})
+    backend = target.get("backend", "smtp")
     password = str(target.get("smtp_password") or "")
     required_filled = not any(
         _looks_placeholder(target.get(k, ""))
         for k in ("smtp_host", "smtp_user", "smtp_password", "to_addr")
     )
+    configured = required_filled
+    if backend == "gmail_api":
+        from core.mail import gmail
+
+        from admin.routers.character import _active_character_id
+
+        configured = bool(not _looks_placeholder(target.get("to_addr", ""))
+                          and gmail.allowed(gmail.owner(), _active_character_id(), gmail.SEND))
     return {
         "enabled":         bool(target.get("enabled", False)),
         "connection_mode": target.get("connection_mode", "auto"),
@@ -697,7 +707,8 @@ def _mail_view(cfg: dict) -> dict:
         "from_name":       target.get("from_name", ""),
         "to_addr":         "" if _looks_placeholder(target.get("to_addr", "")) else target.get("to_addr", ""),
         "subject_prefix":  target.get("subject_prefix", ""),
-        "configured":      required_filled,
+        "backend":         backend,
+        "configured":      configured,
     }
 
 
@@ -710,7 +721,8 @@ async def get_mail_settings(auth=Depends(require_scopes("admin"))):
 async def update_mail_settings(body: MailSettingsUpdate, auth=Depends(require_scopes("admin"))):
     if body.smtp_port is not None and not (1 <= body.smtp_port <= 65535):
         raise HTTPException(status_code=422, detail="smtp_port 必须在 1~65535 之间")
-    if body.connection_mode == "proxy" and not (body.proxy_url or get_config().get("mail", {}).get("proxy_url")):
+    backend = body.backend or get_config().get("mail", {}).get("backend", "smtp")
+    if backend == "smtp" and body.connection_mode == "proxy" and not (body.proxy_url or get_config().get("mail", {}).get("proxy_url")):
         raise HTTPException(status_code=422, detail="代理模式需要 proxy_url")
 
     full_cfg = read_config_file(CONFIG_FILE)

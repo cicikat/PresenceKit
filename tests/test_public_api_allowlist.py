@@ -51,4 +51,8 @@ def test_real_bootstrap_contracts_are_public_but_still_application_authenticated
                          ("GET", "/admin/autonomy/runs"),
                          ("GET", "/system/data-path"), ("GET", "/")]:
         assert not permitted(app, method, path), (method, path)
+    for path in ("/settings/gmail", "/settings/gmail/oauth/start", "/settings/gmail/sync",
+                 "/settings/gmail/oauth/authorize", "/settings/gmail/oauth/callback"):
+        for method in ("GET", "PUT", "POST"):
+            assert not permitted(app, method, path)  # OAuth GETs use exact TLS-only Nginx locations.
     assert 'default 0;' in nginx_map(app)

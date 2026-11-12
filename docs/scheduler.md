@@ -871,6 +871,10 @@ active window 决策已完全收入 `gating._decide()`（R2-C 后），以 `POLI
 
 ## 冷却状态持久化
 
+## Gmail 新邮件候选（303）
+
+gmail_poll 是 maintenance-only 扫描，在调度器现有 gather 中分页轮询已授权角色的收件箱。游标从连接时的基线开始，发送箱、自发和自动回环邮件不产生候选。每次最多检查一页。失败退避，成功同步时间和有效状态由邮件连接页读出。启用自主能力时，新邮件通过现有 signal 队列交给角色，证据仅含存在事实，来源关闭后待处理信号失效。详见 [Gmail OAuth](gmail-oauth.md)。
+
 ## 邮件周频契约与观测
 
 `letter_writer` 不再把“7 天冷却”解释为每周计划。它按 `uid + char_id + ISO year/week`

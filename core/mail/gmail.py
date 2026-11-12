@@ -76,7 +76,10 @@ def state_path() -> Path:
 
 def load() -> dict:
     try:
-        return json.loads(state_path().read_bytes())
+        value = json.loads(state_path().read_bytes())
+        if not isinstance(value, dict):
+            raise ValueError
+        return value
     except FileNotFoundError:
         return {}
     except (OSError, ValueError):
@@ -111,13 +114,16 @@ def bound(record: dict, uid: str | None, char_id: str | None) -> bool:
 def allowed(uid: str | None, char_id: str | None, *scopes: str) -> bool:
     try:
         record = load()
-        return bool(bound(record, uid, char_id) and record.get("refresh")
-                    and all(scope in record.get("scopes", []) for scope in scopes))
+        if not bound(record, uid, char_id) or not record.get("refresh"):
+            return False
+        oauth_config()
+        return all(scope in record.get("scopes", []) for scope in scopes)
     except GmailError:
         return False
 
 
 def normalize_address(raw: str) -> str:
+    from email.errors import HeaderParseError
     from email.headerregistry import Address
 
     try:
@@ -125,7 +131,7 @@ def normalize_address(raw: str) -> str:
         if not address.username or not address.domain or len(address.addr_spec) > 254:
             raise ValueError
         return address.addr_spec
-    except (ValueError, TypeError):
+    except (HeaderParseError, ValueError, TypeError):
         raise GmailError("invalid_email_address") from None
 
 
@@ -146,7 +152,7 @@ async def request(method: str, url: str, *, sending: bool = False, token: str = 
                         401: "reauthorization_required", 403: "scope_or_policy_denied",
                         404: "not_found", 429: "rate_limited",
                     }.get(res.status, "upstream_unavailable" if res.status >= 500 else "request_rejected")
-                    raise GmailError("outcome_unknown" if sending and res.status >= 500 else code)
+                    raise GmailError("outcome_unknown" if sending and (res.status >= 500 or res.status == 408) else code)
                 if url == REVOKE:
                     return {}
                 body = bytearray()
@@ -194,9 +200,13 @@ async def access_token(uid: str, char_id: str, *scopes: str) -> str:
             result = await token_exchange(oauth_config(), {
                 "grant_type": "refresh_token", "refresh_token": record["refresh"],
             })
-            if result.get("refresh_token"):
-                record["refresh"] = result["refresh_token"]
+            if result.get("refresh_token") or "scope" in result:
+                record["refresh"] = result.get("refresh_token") or record["refresh"]
+                if "scope" in result:
+                    record["scopes"] = sorted(set(str(result["scope"]).split()) & {READ, SEND})
                 save(record)
+            if not all(scope in record.get("scopes", []) for scope in scopes):
+                raise GmailError("scope_missing")
             cache_access(record, result)
             _last_error = ""
             return result["access_token"]
@@ -205,20 +215,29 @@ async def access_token(uid: str, char_id: str, *scopes: str) -> str:
             raise
 
 
+def note_api_error(token: str, error: GmailError) -> None:
+    global _access, _last_error
+    if _access and _access[1] == token:
+        _last_error = str(error)
+        if str(error) == "reauthorization_required":
+            _access = None
+
+
 def token_current(record: dict, token: str) -> bool:
     return bool(_access and _access[:2] == (record.get("refresh"), token))
 
 
 async def api(uid: str, char_id: str, method: str, endpoint: str, *,
               scopes: tuple[str, ...] = (READ,), **kwargs) -> dict:
-    global _access, _last_error
+    global _last_error
     token = await access_token(uid, char_id, *scopes)
     try:
-        return await request(method, API + endpoint, token=token, **kwargs)
+        result = await request(method, API + endpoint, token=token, **kwargs)
+        if _access and _access[1] == token:
+            _last_error = ""
+        return result
     except GmailError as exc:
-        if str(exc) == "reauthorization_required" and _access and _access[1] == token:
-            _access = None
-        _last_error = str(exc)
+        note_api_error(token, exc)
         raise
 
 
@@ -274,15 +293,17 @@ def authorize(ticket: str) -> tuple[str, str]:
 
 async def complete(state: str, browser: str, code: str, uid: str, char_id: str, admin_valid) -> None:
     global _last_error
-    flow = _flows.get(state)
-    if not flow or flow.expires <= time.monotonic() or not hmac.compare_digest(flow.browser, browser):
+    if state not in _flows:
         raise GmailError("invalid_authorization_session")
-    del _flows[state]
-    if (flow.uid, flow.char_id) != (uid, char_id) or not admin_valid(flow.admin_token):
-        raise GmailError("invalid_authorization_principal")
-    if not code:
-        raise GmailError("authorization_declined")
     async with LOCK:
+        flow = _flows.get(state)
+        if not flow or flow.expires <= time.monotonic() or not hmac.compare_digest(flow.browser, browser):
+            raise GmailError("invalid_authorization_session")
+        del _flows[state]
+        if (flow.uid, flow.char_id) != (uid, char_id) or not admin_valid(flow.admin_token):
+            raise GmailError("invalid_authorization_principal")
+        if not code:
+            raise GmailError("authorization_declined")
         record = load()
         if record.get("refresh") and (not bound(record, uid, char_id) or record.get("email") != flow.email):
             raise GmailError("disconnect_existing_mailbox")
@@ -339,6 +360,13 @@ def status(uid: str, char_id: str) -> dict:
     from core.mail.gmail_poll import status as poll_status
     record = load()
     same = bound(record, uid, char_id)
+    email = record.get("email", "") if same else ""
+    mailbox = hashlib.sha256(json.dumps((uid, char_id, email), ensure_ascii=False).encode()).hexdigest()
+    pending = [
+        {"message_id": f"<{key}@{email.rsplit('@', 1)[-1]}>", "at": item["at"]}
+        for key, item in record.get("deliveries", {}).items()
+        if same and email and item.get("state") == "pending" and item.get("mailbox") == mailbox
+    ]
     try:
         oauth_config()
         configured = True
@@ -348,7 +376,9 @@ def status(uid: str, char_id: str) -> dict:
         "configured": configured, "char_id": char_id,
         "connected": bool(same and record.get("refresh")),
         "bound_elsewhere": bool(not same and record.get("refresh")),
-        "email": record.get("email", "") if same else "",
+        "email": email,
+        "unknown_delivery_count": len(pending),
+        "unknown_deliveries": sorted(pending, key=lambda item: item["at"], reverse=True)[:10],
         "scopes": record.get("scopes", []) if same else [],
         "error": _last_error if same else "",
         **poll_status(record, uid, char_id),

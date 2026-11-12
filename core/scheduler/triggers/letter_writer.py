@@ -302,7 +302,22 @@ async def _send_letter_if_worthy(
 
     record("quality_passed", "ok")
     record("send_attempted", "started")
-    send_result = await send_letter_detailed(_extract_subject(letter, reason), letter)
+    from core.config_loader import get_config
+
+    subject = _extract_subject(letter, reason)
+    gmail_backend = get_config().get("mail", {}).get("backend") == "gmail_api"
+    if gmail_backend:
+        from hashlib import sha256
+        from core.mail.weekly_contract import week_key
+
+        slot = week_key(uid, char_id)
+        if not weekly_contract:
+            slot += ":" + sha256(reason.encode()).hexdigest()[:24]
+        send_result = await send_letter_detailed(
+            subject, letter, uid=uid, char_id=char_id, delivery_key=f"scheduled:letter:{slot}",
+        )
+    else:
+        send_result = await send_letter_detailed(subject, letter)
     if send_result.sent:
         record("sent", "ok", smtp_status_code=send_result.smtp_status_code)
         finish_weekly(sent=True, message_id=send_result.message_id)
@@ -311,11 +326,15 @@ async def _send_letter_if_worthy(
         _clear_attempt_backoff("letter_writer", char_id=char_id)
         try:
             from core.mail.letter_reference import append_sent_letter
-            append_sent_letter(uid, char_id, letter)
+            if not send_result.already_sent:
+                append_sent_letter(uid, char_id, letter)
         except Exception:
             pass
     else:
-        record("smtp_failed", "failed", failure_code=send_result.failure_code,
+        stage = "gmail_failed" if gmail_backend else "smtp_failed"
+        if send_result.failure_code == "outcome_unknown":
+            stage = "outcome_unknown"
+        record(stage, "failed", failure_code=send_result.failure_code,
                exception_type=send_result.exception_type, smtp_status_code=send_result.smtp_status_code)
         finish_weekly(sent=False, failure_code=send_result.failure_code)
         if not weekly_contract:

@@ -13,6 +13,7 @@ from core.sandbox import get_paths
 FAILURE_CODES = frozenset({
     "generation_error", "empty_content", "quality_rejected", "smtp_auth_error",
     "smtp_connection_error", "smtp_timeout", "smtp_rejected", "smtp_unknown_error",
+    "outcome_unknown",
 })
 
 
@@ -25,7 +26,7 @@ def append(*, execution_id: str, uid: str, char_id: str, stage: str, result: str
         safe_append_jsonl(get_paths().mail_execution_log(), {
             "execution_id": str(execution_id), "uid": str(uid), "char_id": str(char_id),
             "trigger": str(trigger), "source": str(source), "stage": str(stage),
-            "result": str(result), "failure_code": failure_code if failure_code in FAILURE_CODES else "",
+            "result": str(result), "failure_code": failure_code if failure_code in FAILURE_CODES else "gmail_delivery_error" if failure_code.startswith("gmail_") else "",
             "exception_type": str(exception_type)[:80], "smtp_status_code": smtp_status_code,
             "retry_count": max(0, int(retry_count)), "duration_ms": max(0, int(duration_ms)),
             "timestamp": time.time(),
