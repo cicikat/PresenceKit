@@ -57,24 +57,34 @@ def observation(seq):
 @pytest.mark.parametrize("scenario", ["finish", "steer", "cancel", "offline", "role", "restart", "failure_budget"])
 async def test_agent_session_drives_receipts_after_the_owner_turn(fixture, monkeypatch, scenario):
     config, pipeline, device = fixture
-    config["computer_use"]["agent_budget"] = {"failures": 1}
+    if scenario == "failure_budget":
+        config["computer_use"]["agent_budget"] = {"failures": 1}
     actor = service.principal()
     proposals = []
     goals = []
 
     async def decision(session):
         proposals.append((session.revision, list(session.receipts)))
-        if len(proposals) <= 2:
-            return {"kind": "desktop_task", "goal": session.latest_instruction or f"part {len(proposals)}"}
-        return {"kind": "agent_finish"}
+        if not session.subgoals:
+            return {"kind": "agent_plan", "requirements": ["replacement B"] if session.revision else ["part 1", "part 2"]}
+        pending = [sid for sid, entry in session.subgoals.items() if entry["state"] != "succeeded"]
+        complete = [sid for sid in session.subgoals if sid not in pending]
+        if pending and (not complete or session.finish_rejected):
+            return {"kind": "desktop_task", "subgoal_id": pending[0], "goal": session.subgoals[pending[0]]["requirement"]}
+        return {"kind": "agent_finish", "completed_subgoals": complete, "summary": "Done"}
+
+    async def coverage(session):
+        assert all(entry["receipt"]["revision"] == session.revision for entry in session.subgoals.values())
+        return True
 
     async def planner(_run, goal, _observation, prior_action):
         if prior_action:
             return {"kind": "done", "evidence_id": 1, "observed_text": "Test control"}
-        goals.append(goal)
+        goals.append(goal.split("\nExecution goal: ")[1])
         return {"kind": "press_key", "key": "Enter"}
 
     monkeypatch.setattr(agent_sessions, "_decision", decision)
+    monkeypatch.setattr(agent_sessions, "_verify_coverage", coverage)
     monkeypatch.setattr(service, "_plan_agent_worker", planner)
     app = FastAPI()
     app.include_router(routes.router)
@@ -117,7 +127,7 @@ async def test_agent_session_drives_receipts_after_the_owner_turn(fixture, monke
             assert (await acknowledge(first)).status_code == 200
             action = await next_step()
             assert action["step"]["action"]["kind"] == "press_key"
-            assert len(proposals) == 1
+            assert len(proposals) == 2
             control = {"session_id": sid, "action": "steer", "instruction": "replacement B", "request_id": "edit-turn"}
             if scenario == "steer":
                 denied = await client.post("/computer-use/agent-session/control", json=control,
@@ -167,7 +177,7 @@ async def test_agent_session_drives_receipts_after_the_owner_turn(fixture, monke
             assert state["session_id"] == sid
             assert state["task_id"] not in {first["task_id"], sid}
             assert "private owner goal" not in str(state) and "Test control" not in str(state)
-            assert len(proposals) == (3 if scenario in {"finish", "steer"} else 1)
+            assert len(proposals) == (5 if scenario in {"finish", "steer"} else 2)
             if scenario == "steer":
                 assert proposals[-1][0] == 1
             if scenario == "failure_budget":

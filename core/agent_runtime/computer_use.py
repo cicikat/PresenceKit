@@ -138,6 +138,8 @@ class Run:
     checkpoint_requested: bool = False
     evidence: dict | None = None
     worker_habits: str = ""
+    prior_actions: list[dict] = field(default_factory=list)
+    acknowledged_actions: list[dict] = field(default_factory=list)
 
 
 _device: Device | None = None
@@ -244,6 +246,7 @@ def _finish(run: Run, status: str, reason: str) -> None:
         run.completed.set_result({
             "task_id": run.lease.task_id, "state": status, "reason": reason,
             "steps": run.steps, "actions": run.actions, "evidence": run.evidence,
+            "acknowledged_actions": run.acknowledged_actions,
         })
 
 
@@ -453,6 +456,7 @@ def start(
     parent_task_id: str = "", device: Device | None = None, step_limit: int = MAX_STEPS,
     time_limit: float = TASK_TTL, reserve_plan: Callable[[], bool] | None = None,
     parent_allowed: Callable[[], bool] | None = None, worker_habits: str = "",
+    prior_actions: list[dict] | None = None,
 ) -> dict:
     global _run
     now = time.monotonic()
@@ -481,7 +485,8 @@ def start(
         return {"state": "failed", "reason": "lease_unavailable"}
     run = Run(_device, lease, now + min(TASK_TTL, time_limit),
               step_limit=min(MAX_STEPS, step_limit), reserve_plan=reserve_plan, parent_allowed=parent_allowed,
-              worker_habits=worker_habits)
+              worker_habits=worker_habits, prior_actions=prior_actions or [],
+              acknowledged_actions=list(prior_actions or []))
     if parent_task_id:
         run.completed = asyncio.get_running_loop().create_future()
     _run = run
@@ -530,7 +535,6 @@ async def _drive(run: Run, goal: str) -> None:
     observation = None
     prior_action = None
     changed = False
-    acknowledged_actions: list[dict] = []
     try:
         for seq in range(1, run.step_limit + 1):
             while run.device.state == "paused":
@@ -564,6 +568,10 @@ async def _drive(run: Run, goal: str) -> None:
             run.steps = seq
             run.total_ms += round((time.monotonic() - now) * 1000)
             kind = action["kind"]
+            if (run.completed is not None and kind not in {"observe", "wait"}
+                    and receipt["status"] in {"ok", "changed"}):
+                ack = {**_action_marker(action), "receipt": receipt["status"]}
+                run.acknowledged_actions = [*run.acknowledged_actions[-71:], ack]
             if run.checkpoint_requested:
                 reason = receipt.get("reason")
                 _finish(run, "outcome_unknown" if reason == "outcome_unknown" else "canceled",
@@ -584,16 +592,6 @@ async def _drive(run: Run, goal: str) -> None:
                 run.actions += 1
                 changed = receipt["status"] == "changed"
                 prior_action = kind
-                if run.completed is not None:
-                    # Preserve what was acknowledged, without copying typed text
-                    # or untrusted surface content into the worker's history.
-                    ack = {"kind": kind, "receipt": receipt["status"]}
-                    for key in ("key", "keys"):
-                        if key in action:
-                            ack[key] = action[key]
-                    if kind == "type_text":
-                        ack["utf8_bytes"] = len(action["text"].encode("utf-8"))
-                    acknowledged_actions = [*acknowledged_actions[-3:], ack]
             observation = receipt["observation"]
             if run.reserve_plan is not None and not run.reserve_plan():
                 _finish(run, "failed", "session_model_budget")
@@ -601,7 +599,7 @@ async def _drive(run: Run, goal: str) -> None:
             if run.completed is None:
                 planning = _plan(run.device.principal.char_id, goal, observation, prior_action, changed)
             else:
-                planning = _plan_agent_worker(run, goal, observation, acknowledged_actions)
+                planning = _plan_agent_worker(run, goal, observation, run.acknowledged_actions[-4:])
             proposal = await asyncio.wait_for(planning, timeout=30)
             _refresh(time.monotonic())
             if _run is not run:
@@ -618,7 +616,7 @@ async def _drive(run: Run, goal: str) -> None:
                                 and observed_text in {node["name"], node.get("value")})
                 if verified and run.completed is not None:
                     run.evidence = {"node_id": evidence, "observed_text": observed_text,
-                                    "acknowledged_actions": acknowledged_actions[-3:]}
+                                    "acknowledged_actions": run.acknowledged_actions[-3:]}
                 _finish(run, "succeeded" if verified else "failed",
                         "verified" if verified else "goal_unverified")
                 return
@@ -629,6 +627,12 @@ async def _drive(run: Run, goal: str) -> None:
                 _finish(run, "failed", "worker_needs_input")
                 return
             action = ActionModel.validate_python(proposal).model_dump(exclude_none=True, by_alias=True)
+            if action["kind"] in {"type_text", "hotkey", "press_key"} and any(
+                _action_marker(action) == {key: value for key, value in ack.items() if key != "receipt"}
+                for ack in run.prior_actions
+            ):
+                _finish(run, "failed", "confirmed_action_replay")
+                return
         _finish(run, "failed", "step_limit")
     except asyncio.CancelledError:
         if _run is run:
@@ -636,6 +640,13 @@ async def _drive(run: Run, goal: str) -> None:
         raise
     except Exception:
         _finish(run, "failed", "planner_failed")
+
+
+def _action_marker(action: dict) -> dict:
+    marker = {key: action[key] for key in ("kind", "key", "keys") if key in action}
+    if action["kind"] == "type_text":
+        marker["utf8_bytes"] = len(action["text"].encode("utf-8"))
+    return marker
 
 
 _ACTION_GUIDE = """Prefer UIA IDs from this observation:
