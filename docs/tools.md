@@ -1264,6 +1264,8 @@ GET /activity/records（state.read）默认仅列来源元数据；指定 source
 
 `computer_use_start(goal)`、`computer_use_status(task_id?)`、`computer_use_cancel(task_id?)` 走主人现实私聊，属于 `desktop` 类别并继承角色工具权限。普通探针使用注册描述和例句选择工具，工具循环在既有暴露过滤后直接提供定义。开启后端功能和本机授权后才能开始任务。排队只代表接受请求，验证结果由任务状态提供。工具参数中的任务内容不写入动作痕迹。未取得本机授权时返回 `no_desktop_authorization`。
 
+303 持续桌面任务使用 `agent_session_start(goal)`，和单个桌面子任务共用同一权限边界。主人可用 `agent_session_status(session_id?)` 查询，或用 `agent_session_control(action, session_id?, instruction?)` 改令、暂停、恢复及取消。用户回答会话追问时使用 `steer` 传入最新指令。只有 `completed` 表示上层已根据子任务证据判定完成。
+
 ## 角色形象参考图
 
 管理面「多模态管理 → 图像生成 → 角色可用生图连接」可按角色导入、预览和移除参考图。也可在私聊发送角色设定图。角色根据对话判断是否调用固定工具，无需特定措辞。工具只接受本轮附件，固定后的图片独立保存。

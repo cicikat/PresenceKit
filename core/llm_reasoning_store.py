@@ -23,6 +23,7 @@ _DB_LOCK = threading.RLock()
 _TURN_CAPTURE = ContextVar("reasoning_turn_capture", default=None)
 _CAPTURE_PURPOSE = ContextVar("reasoning_capture_purpose", default="chat")
 _OWNER_TURN_PURPOSES = frozenset({"chat", "monologue"})
+PRIVATE_DESKTOP_PURPOSES = frozenset({"computer_use", "agent_session"})
 
 
 def set_capture_purpose(purpose: str | None):
@@ -212,6 +213,8 @@ class Capture:
                             self.text.append(text)
 
     async def save(self):
+        if self.purpose in PRIVATE_DESKTOP_PURPOSES:
+            return
         try:
             for match in _INLINE.finditer("".join(self.text)):
                 self.add("inline_" + match.group(1).lower(), match.group(2))

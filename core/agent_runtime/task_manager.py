@@ -601,6 +601,30 @@ def complete_task(
         return _receipt(task)
 
 
+def checkpoint_task(
+    principal: TaskPrincipal,
+    lease: TaskLease,
+    *,
+    result_metadata: dict[str, Any],
+) -> dict[str, Any]:
+    """Publish bounded progress from the current lease holder."""
+    principal = _validate_principal(principal)
+    metadata = _normalize_result_metadata(result_metadata)
+    timestamp = _now(None)
+    with task_store.scope_lock(principal.uid, principal.char_id):
+        state, records, changed = _load_records(principal, timestamp)
+        task = _find(records, lease.task_id)
+        if changed:
+            _save_records(principal, state, records, now=timestamp)
+        _require_lease(task, lease, timestamp)
+        if task.cancel_requested_at:
+            raise TaskManagerError("cancel_requested")
+        task.result_metadata = metadata
+        task.updated_at = timestamp
+        _save_records(principal, state, records, now=timestamp)
+        return _receipt(task)
+
+
 def fail_task(
     principal: TaskPrincipal,
     lease: TaskLease,

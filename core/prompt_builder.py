@@ -13,7 +13,7 @@ from core.character_loader import Character
 from core.error_handler import log_error
 from core.prompt_ablation import ALWAYS_ON
 from core.data_paths import DEFAULT_CHAR_ID
-from core.prompt_sections import arrange_sections
+from core.prompt_sections import arrange_sections, character_description
 
 
 logger = logging.getLogger(__name__)
@@ -591,19 +591,11 @@ def build(
     # ─────────────────────────────────────────────────────────────────────────
     # 层 2：角色描述 + 性格 + 情境
     # ─────────────────────────────────────────────────────────────────────────
-    char_desc_parts = []
-    if character.description:
-        char_desc_parts.append((_pt('【角色描述】\n') + f'{character.description}'))
-    if character.personality:
-        char_desc_parts.append((_pt('【性格】\n') + f'{character.personality}'))
-    scenario_text = character.scenario or ""
-    if scenario_text:
-        char_desc_parts.append((_pt('【当前情境】\n') + f'{scenario_text}'))
-
-    if char_desc_parts:
+    char_desc = character_description(character)
+    if char_desc:
         messages.append({
             "role": "system",
-            "content": "\n\n".join(char_desc_parts),
+            "content": char_desc,
             "_layer": "2_char_desc",
         })
 
