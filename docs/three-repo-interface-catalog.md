@@ -20,6 +20,10 @@ current：手机在 Android 私有原子文件保存按 origin/owner/角色隔�
 
 current：`GET /settings/gmail` 增加脱敏待办统计，管理面可用 admin-only `GET/PUT /settings/gmail/pending` 标记及撤销。Gmail OAuth 范围不变。角色工具与 Autonomy 共用原授权链，桌面和手机无新增消费者。observe：真实 Google 账号收信至完成的验收。隔离 Chromium 已核对管理页计数和人工处理。
 
+## 工单 311 · 角色私有意图
+
+current：`GET/PATCH /admin/autonomy/config` 增加默认关闭的 `character_intents_enabled`，`GET /observability/character-intentions` 以 state.read 返回脱敏状态。取消和清理走 admin-only `POST /admin/autonomy/intents/cancel|clear`。沿用后端角色、授权和任务回执，桌面及手机无新增执行器或协议字段。音乐事实沿用现有听歌 occurrence。observe：真实模型质量、外部设备自主体验与其他桌面共听实现的联调。
+
 ## 工单 305 · 桌面聊天请求对账
 
 current：后端 chat scope 内新增可选桌面请求头与只读查询，沿用 owner-turn 回执存储和观测。桌面持久化待对账 ID，按 request_id 关联 HTTP、工具活动和 canonical WS。断线与旧后端降级保留未知，只有确认未执行才开放新回合。手机调用合同保持现有形态。见 [通道协议](channels.md#工单-305--桌面聊天请求对账)。

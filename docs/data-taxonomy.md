@@ -207,6 +207,10 @@ Prompt、API key、base URL 或模型自由文本。校准任务只在进程生�
 `interest_state.json`、`works/{interest_id}/` 与 `notes/{interest_id}.md` 是当前成长系统的
 角色级 canonical 真值；物理位置虽在 `runtime/` 树下，仍不可按临时缓存清理。
 
+### 角色私有意图（311）
+
+`runtime/self_meta/<char>/<owner>/intentions.json` 是 Reality 侧结构化意图的私有权威。通过 `character_intentions()` 定位，使用现有范围锁和原子写。只供已启用的 Autonomy 工具与有界提示层消费，self 文件工具不能读取或改写。状态有 revision，保存最多 32 条活动项和 200 条已结束历史，历史保留最多 30 天。无法证明副作用结果的记录继续占用活动额度。观测只显示数量、状态、时间及阻断码。
+
 ### Listening / music (ticket 260 A freeze)
 
 共同听歌账本按 owner 落在 `data/runtime/listening/{uid}/`；角色注释按 char 隔离。

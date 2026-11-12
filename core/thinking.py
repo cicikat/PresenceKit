@@ -527,7 +527,7 @@ async def maybe_apply(
     - native 路线只拼接角色心声文风提示，不增加模型调用。
     - 独白调用失败/超时/空结果 → no-op，fail-open，主生成照常。
     """
-    if call_category != "chat" or any(message.get("_private_gmail_result") for message in messages):
+    if call_category != "chat" or any(message.get("_private_gmail_result") or message.get("_private_character_intent") for message in messages):
         return messages
     if not is_enabled():
         return messages

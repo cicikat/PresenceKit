@@ -145,6 +145,10 @@ notify -> new ingress I2 -> EventContext(I2) -> new turn T2 -> turn_sink
 Task success and notification success are separate outcomes. Notification retries never rerun the
 capability task and always pass the normal Reality Dream Guard and scope checks.
 
+### 工单 311 · 角色私有意图
+
+私有意图索引在同一角色的 Reality self metadata 下，记录准备、推迟、阻断和已核验结果。执行阶段复用既有 Autonomy Tool Loop，或通过原 `start_agent_task` 创建已授权任务，凭 Task Manager 回执对账。意图本身不调度任务，不授予执行权限。撤销意图后停止其后续行动，关联的任务取消走 Task Manager。
+
 ## Task and receipt contract (implemented by Brief 230)
 
 ```text

@@ -6,9 +6,11 @@ import json
 import logging
 import re
 import time
+from dataclasses import replace
 from datetime import datetime
 
-from core.autonomy import policy, store, talk_gate
+from core.autonomy import intent_context, policy, store, talk_gate
+from core.agent_runtime import intentions
 from core.prompt_language import text as _pt, choose as _pc
 from core.tool_activity import display_chain
 from core.autonomy.models import ActionMode, Disposition, Job, Run, Signal, evaluation_status_for
@@ -617,6 +619,7 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
             'reply_author_id=sender_id。缺少原始 ID 时先读取核实。不要把空间评论当成已发送的私聊，'
             '也不要盲目重试 outcome_unknown 的写入。')})
     _append_gmail_pending_context(messages, job.uid, job.char_id)
+    intent_run = _append_intent_context(messages, job, state, run, run_now)
     if any(s.get("source") == "gmail_new_mail" for s in (job.opportunity or {}).get("signals", []) if isinstance(s, dict)):
         messages.append({"role": "system", "_layer": "gmail_opportunity_policy", "content": _pt(
             "有新的 Gmail 邮件可处理。你可以查看收件箱、阅读、回复或忽略。"
@@ -774,6 +777,7 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
                     return _finish(run)
                 if len([tool for tool in run.tool_names if tool != "manage_self_capability"]) >= max_tools:
                     run.disposition = _completed_disposition(saw_tool, saw_self_change); return _finish(run)
+                from core.tools.character_intent_tools import NAMES as intent_tools
                 if name != "manage_self_capability" and _is_write_tool(name) and write_tool_count >= max_write_tools:
                     messages.append({"role": "tool", "tool_call_id": call["id"], "content": "write tool budget exhausted for this autonomy run"})
                     continue
@@ -783,7 +787,9 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
                     result, outcome = read_cache[cache_key]
                     _record_event(run, "tool_read_reused", tool_name=name)
                 else:
-                    result, outcome = await _execute_tool(name, args, job, session, cfg, run)
+                    tool_context = replace(intent_run, tools=frozenset(allowed_names)) if intent_run else None
+                    with intent_context.activate(tool_context):
+                        result, outcome = await _execute_intention_bound_tool(name, args, job, session, cfg, run, tool_context)
                     if cache_key is not None and outcome == "ok":
                         read_cache[cache_key] = (result, outcome)
                     elif name == "manage_self_capability":
@@ -829,11 +835,12 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
                     "content": frame_tool_message(safe_result.safe_summary[:_CONTEXT_BUDGETS["tool_fact_chars"]], generated_at=generated_at, validity="current_turn" if outcome == "ok" else "outcome_unknown" if outcome == "outcome_unknown" else "execution_failed"),
                     "_layer": "autonomy_tool_result",
                     "_private_gmail_result": name in gmail_tools,
+                    "_private_character_intent": name in intent_tools,
                     "_continuity_receipt": getattr(result, 'continuity_receipt', None),
                     "_budget_chars": _CONTEXT_BUDGETS["tool_fact_chars"],
                     "_provenance": {"source": "tool_result", "tool_name": name, "generated_at": generated_at, "validity": "current_turn" if outcome == "ok" else "execution_failed"},
                 })
-                if name not in gmail_tools:
+                if name not in gmail_tools | intent_tools:
                     messages.append(_tool_fact_message(name, result, outcome, now=generated_at))
                 # A tool may have created, completed, or changed a long-running
                 # hardware job. Re-read the authoritative job projection rather
@@ -866,8 +873,16 @@ def _finish(run: Run) -> Run:
 def _set_prompt_snapshot(run: Run, messages: list[dict]) -> None:
     """Persist a redacted, bounded view of the actual autonomy prompt."""
     snapshot: list[dict] = []
+    private_intent = any(message.get("_private_character_intent") for message in messages)
     for message in messages:
         if not isinstance(message, dict):
+            continue
+        if message.get("_private_character_intent"):
+            if message.get("_layer") == "character_intent_context":
+                snapshot.append({"role": "system", "_layer": "character_intent_context",
+                                 "content": "[private intention context omitted]"})
+            continue
+        if private_intent and (message.get("role") in {"assistant", "tool"} or message.get("_layer") == "autonomy_tool_fact"):
             continue
         if message.get("_private_gmail_result"):
             snapshot.append({"role": "tool", "content": "[private Gmail result omitted]"})
@@ -1173,6 +1188,53 @@ def _character_for(char_id: str):
         return load(char_id)
     except Exception:
         return None
+
+
+def _append_intent_context(messages: list[dict], job: Job, state: dict, run: Run, now: float):
+    if not intentions.enabled(state):
+        return None
+    try:
+        intent_context.reconcile_agent_tasks(job.uid, job.char_id)
+        facts = intent_context.facts_for(job, now)
+        messages.append(intent_context.prompt_message(job.uid, job.char_id, facts, now=now))
+        return intent_context.IntentContext(job.uid, job.char_id, run.id, facts, frozenset())
+    except (intentions.IntentError, OSError):
+        _record_event(run, "intent_context_unavailable", reason="intent_storage_error")
+        return None
+
+
+async def _execute_intention_bound_tool(name, args, job, session, cfg, run, context):
+    if context is None or name not in intentions.ACTIONS:
+        return await _execute_tool(name, args, job, session, cfg, run)
+    try:
+        intent_context.current(job.uid, job.char_id)
+        claimed = intentions.claim(job.uid, job.char_id, run.id, name, args,
+                                  timeout=float(cfg.get("tool_timeout_seconds") or 30))
+    except intentions.IntentError as exc:
+        _record_event(run, "intent_action_blocked", reason=str(exc))
+        return str(exc), "denied"
+    if claimed is None:
+        return await _execute_tool(name, args, job, session, cfg, run)
+    _record_event(run, "intent_acting", intent_id=claimed["id"], tool_name=name)
+    try:
+        reason = intent_context.action_block_reason(context, claimed, name, args.get(intentions.ACTIONS[name]))
+        if reason:
+            intentions.finish(job.uid, job.char_id, claimed, status="blocked", reason=reason,
+                              evidence={"kind": "tool_rejected"})
+            _record_event(run, "intent_action_blocked", intent_id=claimed["id"], reason=reason)
+            return reason, "denied"
+        baseline = intent_context.action_baseline(job.uid, job.char_id, name, args)
+        result, outcome = await _execute_tool(name, args, job, session, cfg, run)
+        feedback = intent_context.apply_tool_feedback(job.uid, job.char_id, claimed, result, outcome,
+                                                      args=args, baseline=baseline)
+        _record_event(run, "intent_" + feedback, intent_id=claimed["id"], tool_name=name)
+        return result, "outcome_unknown" if feedback == "outcome_unknown" else outcome
+    except asyncio.CancelledError:
+        intentions.finish(job.uid, job.char_id, claimed, status="outcome_unknown", reason="tool_interrupted")
+        raise
+    except Exception:
+        intentions.finish(job.uid, job.char_id, claimed, status="outcome_unknown", reason="tool_receipt_unavailable")
+        return "tool_receipt_unavailable", "outcome_unknown"
 
 
 async def _execute_tool(name: str, args: dict, job: Job, session, cfg: dict, run: Run) -> tuple[str | None, str]:

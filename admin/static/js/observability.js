@@ -523,6 +523,7 @@ function _autonomyCardBody(card) {
   if (card === 'control') {
     return {
       enabled: chk('autonomy-enabled'), talk_enabled: chk('autonomy-talk'),
+      character_intents_enabled: chk('autonomy-intents'),
       daily_evaluation_budget: num('autonomy-daily'), min_interval_seconds: num('autonomy-min-interval'),
       max_steps: num('autonomy-max-steps'), max_tools: num('autonomy-max-tools'), max_write_tools: num('autonomy-max-write-tools'),
       total_timeout_seconds: num('autonomy-total-timeout'), tool_timeout_seconds: num('autonomy-tool-timeout'),
@@ -2041,11 +2042,60 @@ async function loadSystemDiagnosis() {
   }
 }
 
+async function loadCharacterIntentionStatus() {
+  const status = document.getElementById('autonomy-intents-status');
+  const list = document.getElementById('autonomy-intents-items');
+  const clear = document.getElementById('autonomy-intents-clear');
+  if (!status || !list || !clear) return;
+  const modify = async (path, body) => {
+    try {
+      await api('POST', '/admin/autonomy/intents/' + path, body);
+    } catch (error) {
+      toast(error.message, 'err');
+    }
+    await loadCharacterIntentionStatus();
+  };
+  try {
+    const state = await api('GET', '/observability/character-intentions');
+    status.textContent = t('autonomy.intents.status', '生效状态 {effective} · 活动意图 {active}/{limit} · 已完成 {done} · 结果未知 {unknown}', {
+      effective: state.effective ? t('autonomy.intents.active', '已生效')
+        : t('autonomy.intents.' + state.reason, state.reason),
+      active: state.items.length, limit: state.active_limit,
+      done: state.counts.done || 0, unknown: state.states.outcome_unknown || 0,
+    });
+    list.replaceChildren();
+    for (const item of state.items) {
+      const row = document.createElement('li');
+      row.textContent = [t('autonomy.intents.' + item.status, item.status),
+        item.next_check_at ? new Date(item.next_check_at * 1000).toLocaleString() : '',
+        item.block_reason || '',
+      ].filter(Boolean).join(' · ') + ' ';
+      const cancel = document.createElement('button');
+      cancel.type = 'button';
+      cancel.className = 'btn btn-ghost btn-sm';
+      cancel.textContent = t('autonomy.intents.cancel', '撤销意图');
+      cancel.onclick = () => {
+        cancel.disabled = true;
+        void modify('cancel', {intent_id: item.id, revision: item.revision});
+      };
+      row.append(cancel);
+      list.append(row);
+    }
+    clear.onclick = () => {
+      if (window.confirm(t('autonomy.intents.clear_confirm', '清理已结束的意图记录？'))) void modify('clear', {});
+    };
+  } catch (error) {
+    status.textContent = error.message;
+  }
+}
+
 async function loadAutonomySettings() {
   void loadSelfManagement();
   try { const config=await api("GET", "/admin/autonomy/config");
     document.getElementById('autonomy-enabled').checked = !!config.enabled;
     document.getElementById('autonomy-talk').checked = !!config.talk_enabled;
+    document.getElementById('autonomy-intents').checked = !!config.character_intents_enabled;
+    void loadCharacterIntentionStatus();
     document.getElementById('autonomy-daily').value = config.daily_evaluation_budget || 1;
     document.getElementById('autonomy-min-interval').value = config.min_interval_seconds || 0;
     document.getElementById('autonomy-max-steps').value = config.max_steps ?? 3;

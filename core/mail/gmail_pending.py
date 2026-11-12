@@ -110,6 +110,18 @@ def list_items(uid: str, char_id: str, *, after: str = "", limit: int = 5,
     return {"items": items, "next_cursor": items[-1]["pending_id"] if len(rows) > limit else ""}
 
 
+def pending_anchor(record: dict) -> str:
+    key = mailbox_key(record)
+    ids = sorted(identity for identity, row in _ledger(record).items()
+                 if row["mailbox"] == key and row["status"] == "pending")
+    return hashlib.sha256(json.dumps(ids).encode()).hexdigest()
+
+
+def is_pending_id(record: dict, identity: str) -> bool:
+    row = _ledger(record).get(identity)
+    return bool(row and row["mailbox"] == mailbox_key(record) and row["status"] == "pending")
+
+
 def resolve_message_id(record: dict, identifier: str) -> str:
     row = _ledger(record).get(identifier)
     if row is not None:

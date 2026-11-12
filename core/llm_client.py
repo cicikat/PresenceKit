@@ -77,7 +77,8 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 def _private_gmail_context(messages: list[dict]) -> bool:
-    return any(message.get("_private_gmail_result") for message in messages)
+    return any(message.get("_private_gmail_result") or message.get("_private_character_intent")
+               for message in messages)
 
 
 def _purpose_token(call_category: str | None, *, private_gmail: bool = False):
@@ -816,7 +817,7 @@ async def chat_turn(
         logger.warning(
             "[llm_client.chat_turn] content 疑似混进模型工具调用内部 token（网关"
             "未解析成 tool_calls），丢弃并按空内容处理: %r",
-            "[private Gmail context]" if private_gmail else content[:200],
+            "[private tool context]" if private_gmail else content[:200],
         )
         content = ""
         for item in continuation_items:

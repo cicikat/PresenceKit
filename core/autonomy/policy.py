@@ -189,7 +189,7 @@ def screen_observation_suppressed() -> bool:
 
 def allowed_tools(uid: str, char_id: str, state: dict) -> list[dict]:
     from core.tool_dispatcher import get_tools_schema
-    schemas = {((s.get("function") or s).get("name")): s for s in get_tools_schema(char_id=char_id, uid=uid)}
+    schemas = {((s.get("function") or s).get("name")): s for s in get_tools_schema(char_id=char_id, uid=uid, autonomy=True)}
     return [
         schemas[decision.name]
         for decision in decide_autonomy_tools(uid, char_id, state)
@@ -205,7 +205,7 @@ def decide_autonomy_tools(uid: str, char_id: str, state: dict) -> list[AutonomyT
     from core.self_management.policy import effective as capability_effective
     from core.tool_dispatcher import _TOOL_REGISTRY, _is_tool_enabled, get_tool_effect, get_tools_schema, is_side_effect_tool
 
-    schemas = {((item.get("function") or item).get("name")) for item in get_tools_schema(char_id=char_id, uid=uid)}
+    schemas = {((item.get("function") or item).get("name")) for item in get_tools_schema(char_id=char_id, uid=uid, autonomy=True)}
     configured = state.get("config", {}).get("tools", {})
     capability_state = capability_store.load(uid, char_id)
     mcp_config = get_config().get("mcp_servers", {}) or {}
@@ -219,6 +219,8 @@ def decide_autonomy_tools(uid: str, char_id: str, state: dict) -> list[AutonomyT
         if info.get("self_management"):
             continue
         configured_policy = configured.get(name) if isinstance(configured.get(name), dict) else {}
+        if info.get("autonomy_only") and not state.get("config", {}).get("character_intents_enabled", False):
+            configured_policy = {**configured_policy, "enabled": False}
         if info.get("category") == "qzone":
             from core.qzone_service import autonomy_tool_allowed
             qzone_allowed = autonomy_tool_allowed(name, uid, char_id)
