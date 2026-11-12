@@ -7,18 +7,21 @@ POST /chat — 接收消息，走完整 Pipeline，返回回复 + 好感度
 
 import asyncio
 import hashlib
+import io
 import logging
 import math
+import re
 import time
 from pathlib import Path
 
-from fastapi import APIRouter, Body, Depends, File, Form, Header, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Body, Depends, File, Form, Header, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
 
 from admin.auth import require_scopes
 from core.llm_reasoning_store import associate_owner_turn
 from core.tool_activity import associate_owner_turn as associate_owner_tools
 from core.audio_perception import voice_context
+from core.tool_grounding import ToolProtocolStreamFilter, tool_protocol_offset
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -368,6 +371,7 @@ async def _execute_owner_chat_turn_locked(
                 request_id=request_id or None,
             )
             _chunks: list[str] = []
+            protocol_filter = ToolProtocolStreamFilter()
             _t_stream_launch = time.monotonic()
             _t_first_delta_ts = None
             if _loop_active:
@@ -388,6 +392,11 @@ async def _execute_owner_chat_turn_locked(
                 )
             try:
                 async for piece in _stream_source:
+                    piece = protocol_filter.feed(piece)
+                    if protocol_filter.blocked:
+                        raise HTTPException(status_code=502, detail="invalid_assistant_tool_protocol")
+                    if not piece:
+                        continue
                     if _t_first_delta_ts is None:
                         _t_first_delta_ts = time.monotonic()
                         _t_first_delta = _t_first_delta_ts - _t_stream_launch
@@ -402,6 +411,15 @@ async def _execute_owner_chat_turn_locked(
                             _stream_msg_id,
                             visible_piece,
                         )
+                tail = protocol_filter.finish()
+                if protocol_filter.blocked:
+                    raise HTTPException(status_code=502, detail="invalid_assistant_tool_protocol")
+                if tail:
+                    _chunks.append(tail)
+                    visible_tail = (_stream_paragraph_enforcer.feed(tail)
+                                    if _stream_paragraph_enforcer is not None else tail)
+                    if visible_tail:
+                        await _ui_push.push_stream_delta(_stream_msg_id, visible_tail)
                 if _stream_paragraph_enforcer is not None:
                     visible_tail = _stream_paragraph_enforcer.finish()
                     if visible_tail:
@@ -448,6 +466,8 @@ async def _execute_owner_chat_turn_locked(
             _t_llm = time.monotonic() - _t0
         from core.llm_reasoning_store import finish_turn_capture
         finish_turn_capture()
+        if reply and tool_protocol_offset(reply) is not None:
+            raise HTTPException(status_code=502, detail="invalid_assistant_tool_protocol")
         if not reply or not reply.strip():
             logger.warning(
                 "[owner_chat] empty model reply channel=%s loop_active=%s",
@@ -871,12 +891,76 @@ async def preview_chat_artifact(artifact_id: str, _auth=Depends(require_scopes("
     return HTMLResponse(content=html, headers=headers)
 
 
+_DESKTOP_REQUEST_RE = re.compile(r"dc-([0-9]{13})-[0-9a-f]{32}")
+
+
+def _desktop_request_key(request_id: str, owner_id: str, *, admitting: bool = False) -> str:
+    from core.owner_turn_receipts import DESKTOP_ADMISSION_SECONDS, DESKTOP_FUTURE_SKEW_SECONDS
+
+    match = _DESKTOP_REQUEST_RE.fullmatch(request_id)
+    if match is None:
+        raise HTTPException(422, "invalid_desktop_request_id")
+    age = time.time() - int(match[1]) / 1000
+    if admitting and not -DESKTOP_FUTURE_SKEW_SECONDS <= age <= DESKTOP_ADMISSION_SECONDS:
+        raise HTTPException(409, "desktop_request_id_outside_window")
+    owner_hash = hashlib.sha256(owner_id.encode()).hexdigest()
+    return f"~desktop:{owner_hash}:{request_id}"
+
+
+def _check_desktop_chat_preflight(owner_id: str, request_id: str) -> None:
+    try:
+        _check_reality_not_in_dream(owner_id)
+    except HTTPException as exc:
+        if request_id:
+            exc.headers = {**(exc.headers or {}), "X-Presence-Chat-Rejected": "1"}
+        raise
+
+
+async def _execute_desktop_request(request_id, *, auth, owner_id, payload, execute):
+    from core.owner_turn_service import execute_receipted_turn
+    from core.session_scope import request_digest
+
+    status, reply = await execute_receipted_turn(
+        caller_label=auth.label, client_turn_id=_desktop_request_key(request_id, owner_id, admitting=True),
+        request_digest=request_digest(payload), execute=execute,
+        preflight=lambda: _check_desktop_chat_preflight(owner_id, request_id),
+    )
+    if status in {"completed", "completed_replay"}:
+        if tool_protocol_offset(reply.get("reply") or "") is not None:
+            raise HTTPException(502, "invalid_assistant_tool_protocol")
+        return {**reply, "request_id": request_id}
+    headers = {"X-Presence-Chat-Rejected": "1"} if status == "not_executed" else None
+    raise HTTPException(409, status, headers=headers)
+
+
+@router.get("/desktop/chat/requests/{request_id}", summary="查询本客户端聊天请求结果")
+async def desktop_chat_request(request_id: str, response: Response, _auth=Depends(require_scopes("chat"))):
+    from core.owner_turn_service import project_receipted_reply, read_owner_turn_receipt
+
+    owner_id, _ = _owner_media_scope()
+    key = _desktop_request_key(request_id, owner_id)
+    row = await read_owner_turn_receipt(_auth.label, key)
+    response.headers["Cache-Control"] = "no-store"
+    # Absence does not prove non-execution: the POST could still arrive, or the
+    # receipt could have expired. It never authorizes a replacement request.
+    result = {"request_id": request_id, "status": row["status"] if row else "unknown"}
+    if row and row.get("error_code") == "not_executed":
+        result["status"] = "not_executed"
+    if row and row["status"] == "completed":
+        reply = project_receipted_reply(row)
+        result.update(turn_id=row["canonical_turn_id"], msg_id=row.get("transport_msg_id"))
+        if reply and tool_protocol_offset(reply["reply"]) is None:
+            result["result"] = {**reply, "request_id": request_id}
+    return result
+
+
 @router.post("/desktop/chat", summary="桌宠对话（Bearer 鉴权）")
 @voice_context("desktop")
 async def desktop_chat(
     body: dict,
     x_presence_session: str | None = Header(None, alias="X-Presence-Session"),
     _auth=Depends(require_scopes("chat")),
+    desktop_request_id: str | None = Header(None, alias="X-Presence-Chat-Request"),
 ):
     """
     桌宠端对话入口，需 Bearer token 鉴权（Authorization: Bearer <YEXUAN_ADMIN_SECRET>）。
@@ -887,12 +971,16 @@ async def desktop_chat(
         raise HTTPException(status_code=422, detail="message 不能为空")
     reply_to = body.get("reply_to")
     grant = _session_grant(x_presence_session, getattr(_auth, "label", "legacy-admin"))
+    rid = desktop_request_id if isinstance(desktop_request_id, str) else ""
+    if rid and (grant is not None or "request_id" in body):
+        raise HTTPException(422, "conflicting_chat_request_identity")
     if grant is None and any(key in body for key in ("char_id", "session_id", "request_id")):
         raise HTTPException(status_code=422, detail="session_scope_required")
 
     from core.config_loader import get_config as _cfg
     _uid = str(_cfg().get("scheduler", {}).get("owner_id", "owner"))
-    _check_reality_not_in_dream(_uid)
+    if not rid:
+        _check_reality_not_in_dream(_uid)
 
     video_observation_id = body.get("video_observation_id")
     if video_observation_id is not None and (not isinstance(video_observation_id, str) or len(video_observation_id) > 128):
@@ -919,6 +1007,7 @@ async def desktop_chat(
                 return await run_legacy_owner_turn(
                     full_message, context, reply_to=reply_to,
                     trusted_user_text=message, audit_extras=voice_extras,
+                    request_id=rid,
                     executor=run_owner_chat_turn,
                 )
             return await run_owner_chat_turn(
@@ -927,16 +1016,21 @@ async def desktop_chat(
                 frozen_scope=grant.memory_scope, request_id=str(body.get("request_id") or ""),
             )
 
-        result = (
-            await _run_session_request(
+        if rid:
+            result = await _execute_desktop_request(
+                rid, auth=_auth, owner_id=_uid, execute=_execute,
+                payload={"kind": "desktop_chat", "body": body},
+            )
+        elif grant is not None:
+            result = await _run_session_request(
                 grant=grant,
                 request_id=body.get("request_id"),
                 payload={"kind": "desktop_chat", "message": message, "reply_to": reply_to,
                          "video_observation_id": video_observation_id},
                 executor=_execute,
             )
-            if grant is not None else await _execute()
-        )
+        else:
+            result = await _execute()
     except Exception as exc:
         from core.llm_client import UpstreamResponseFormatError
 
@@ -983,16 +1077,55 @@ async def upload_ingest(
     request_id: str = Form(""),
     x_presence_session: str | None = Header(None, alias="X-Presence-Session"),
     _auth=Depends(require_scopes("chat")),
+    desktop_request_id: str | None = Header(None, alias="X-Presence-Chat-Request"),
 ):
     """
     multipart 上传 + 可选用户附言 + channel 标记。
     """
-    from core import media_processor
-    from core.config_loader import get_config as _cfg
-
     grant = _session_grant(x_presence_session, getattr(_auth, "label", "legacy-admin"))
     if request_id and grant is None:
         raise HTTPException(status_code=422, detail="session_scope_required")
+
+    upload_files = [file] if file else (files or [])
+    if not upload_files:
+        raise HTTPException(status_code=422, detail="文件不能为空")
+    rid = desktop_request_id if isinstance(desktop_request_id, str) else ""
+    if not rid:
+        return await _ingest_chat_upload(upload_files, message, channel, grant, request_id)
+    if channel != "desktop" or grant is not None or request_id:
+        raise HTTPException(422, "conflicting_chat_request_identity")
+    owner_id, _ = _owner_media_scope()
+    if len(upload_files) > 10:
+        raise HTTPException(413, "too_many_chat_attachments")
+    # The detached turn owns its snapshot; FastAPI may close request-scoped
+    # spooled files as soon as the HTTP waiter disconnects.
+    snapshots = []
+    descriptors = []
+    from core import media_processor
+
+    for upload in upload_files:
+        suffix = Path(upload.filename or "").suffix.lower()
+        if suffix in media_processor.SUPPORTED_IMAGE_SUFFIXES:
+            limit = media_processor.MAX_IMAGE_SIZE
+        elif len(upload_files) == 1 and suffix in media_processor.SUPPORTED_AUDIO_SUFFIXES:
+            limit = 25 * 1024 * 1024
+        else:
+            limit = 5 * 1024 * 1024
+        data = await upload.read(limit + 1)
+        if len(data) > limit:
+            raise HTTPException(413, "chat_attachment_too_large")
+        snapshots.append(UploadFile(io.BytesIO(data), filename=upload.filename))
+        descriptors.append({"filename": upload.filename, "sha256": hashlib.sha256(data).hexdigest()})
+    return await _execute_desktop_request(
+        rid, auth=_auth, owner_id=owner_id,
+        payload={"kind": "desktop_upload", "message": message, "files": descriptors},
+        execute=lambda: _ingest_chat_upload(snapshots, message, channel, None, rid),
+    )
+
+
+async def _ingest_chat_upload(upload_files, message, channel, grant, request_id):
+    from core import media_processor
+    from core.config_loader import get_config as _cfg
 
     async def _turn(text, *, trusted, refs, digest_payload):
         async def _execute():
@@ -1008,10 +1141,6 @@ async def upload_ingest(
             payload={"kind": "upload", "channel": channel, "message": message, **digest_payload},
             executor=_execute,
         )
-
-    upload_files = [file] if file else (files or [])
-    if not upload_files:
-        raise HTTPException(status_code=422, detail="文件不能为空")
 
     suffixes = [Path(item.filename or "").suffix.lower() for item in upload_files]
     is_docs = [suffix in media_processor.SUPPORTED_SUFFIXES for suffix in suffixes]

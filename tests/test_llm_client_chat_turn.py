@@ -361,6 +361,21 @@ async def test_chat_stream_clean_output_unaffected(monkeypatch):
     assert "".join(out) == "今天天气不错，我们出去走走吧"
 
 
+@pytest.mark.parametrize("control", [
+    '__TOOL_CALL__:[{"name":"gmail_read_message","arguments":{"id":"fixture"}}]',
+    '<tool_call>{"name":"gmail_read_message","arguments":{}}</tool_call>',
+    '<｜tool▁calls▁begin｜>private protocol',
+])
+async def test_stream_never_emits_control_even_when_split_into_single_characters(monkeypatch, control):
+    from core import llm_client
+
+    _disable_thinking(monkeypatch)
+    mc = _make_stream_mc(["A safe prefix. ", *control, "untrusted trailing content"])
+    monkeypatch.setattr(llm_client, "get_model_client", lambda cat, char_id=None: mc)
+    visible = [piece async for piece in llm_client.chat_stream([{"role": "user", "content": "fixture"}])]
+    assert "".join(visible) == "A safe prefix. "
+
+
 @pytest.mark.asyncio
 async def test_chat_stream_leak_after_think_tag_still_caught(monkeypatch):
     """回归：<think> 缓冲结束、进入正常输出之后才出现的泄漏，也要被滚动缓冲挡住

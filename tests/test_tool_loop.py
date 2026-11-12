@@ -524,7 +524,7 @@ async def test_stream_tool_step_nonstream_final_streamed(monkeypatch):
     stream_calls: list[list[dict]] = []
 
     async def _fake_chat_stream(messages, max_tokens_override=None, call_category="chat", char_id=None,
-                                 is_proactive=False):
+                                is_proactive=False, require_complete=False):
         stream_calls.append([dict(m) for m in messages])
         for piece in ["你", "好", "呀"]:
             yield piece
@@ -555,7 +555,7 @@ async def test_stream_empty_natural_termination_falls_back_to_tool_free_stream(m
     _script_execute(monkeypatch, [])
 
     async def _fake_chat_stream(messages, max_tokens_override=None, call_category="chat", char_id=None,
-                                 is_proactive=False):
+                                is_proactive=False, require_complete=False):
         for piece in ["降级", "成功"]:
             yield piece
 
@@ -1036,7 +1036,7 @@ def _script_char_stream(monkeypatch, text: str, *, raise_after: int | None = Non
     calls: list[list[dict]] = []
 
     async def _fake(messages, max_tokens_override=None, call_category="chat", char_id=None,
-                     is_proactive=False):
+                     is_proactive=False, require_complete=False):
         calls.append([dict(m) for m in messages])
         for index, ch in enumerate(text):
             if raise_after is not None and index >= raise_after:
@@ -1298,11 +1298,34 @@ async def test_stream_cut_mid_marker_does_not_flash_prefix(monkeypatch):
         [{"role": "user", "content": "查一下"}], uid="u1", char_id=TEST_CHAR_ID,
         session_state=object(), stream=True,
     )
-    chunks = [piece async for piece in gen]
-    displayed = "".join(chunks)
-    assert displayed == "你好呀"
-    for piece in chunks:
-        _assert_no_internal_marker(piece)
+    displayed = []
+    with pytest.raises(RuntimeError, match="stream cut"):
+        async for piece in gen:
+            displayed.append(piece)
+    assert displayed == []
+
+
+async def test_unknown_tool_outcome_stops_the_loop_before_any_repeat(monkeypatch):
+    from core.tool_dispatcher import ToolExecutionOutcome
+    from core.prompt_language import choose
+
+    _patch_tool_loop_config(monkeypatch)
+    _patch_tools_schema(monkeypatch, ["web_search"])
+    _script_chat_turn(monkeypatch, [ChatTurn(
+        content="",
+        tool_calls=[
+            {"id": "first", "name": "web_search", "arguments": {"query": "fixture"}},
+            {"id": "repeat", "name": "web_search", "arguments": {"query": "fixture"}},
+        ],
+        assistant_message={"role": "assistant", "content": None},
+    )])
+    effects = _script_execute(monkeypatch, [ToolExecutionOutcome("outcome_unknown")])
+    reply = await _make_pipeline().run_agentic_loop(
+        [{"role": "user", "content": "fixture"}], uid="u1", char_id=TEST_CHAR_ID,
+        session_state=object(),
+    )
+    assert [effect["tool_name"] for effect in effects] == ["web_search"]
+    assert choose("结果还无法确认", "outcome of this operation is still unknown") in reply
 
 
 @pytest.mark.asyncio

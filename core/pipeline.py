@@ -1017,7 +1017,8 @@ class Pipeline:
     # ──────────────────────────────────────────────────────────────────────────
 
     async def run_llm(
-        self, messages: list[dict], *, char_id: str | None = None, is_proactive: bool = False
+        self, messages: list[dict], *, char_id: str | None = None, is_proactive: bool = False,
+        require_complete: bool = False,
     ) -> str:
         """调用 LLM 生成回复，失败自动重试。
 
@@ -1028,11 +1029,11 @@ class Pipeline:
         from core import llm_client
         from core.error_handler import with_retry
 
-        @with_retry(module_name="pipeline.llm_call")
         async def _call():
             return await llm_client.chat(messages, char_id=char_id, is_proactive=is_proactive)
 
-        reply = await _call()
+        call = _call if require_complete else with_retry(module_name="pipeline.llm_call")(_call)
+        reply = await call()
         from core.context_continuity import acknowledge
         acknowledge(messages)
         reply = await self._anti_collapse_prefix_retry(
@@ -1236,6 +1237,7 @@ class Pipeline:
         char_id: str | None = None,
         is_proactive: bool = False,
         user_id: str = "",
+        require_complete: bool = False,
     ):
         """流式生成，逐 token yield。失败（含零产出）时降级为非流式整段 yield 一次。
 
@@ -1253,7 +1255,10 @@ class Pipeline:
         pieces: list[str] = []
         marker_filter = ControlMarkerStreamFilter()
         try:
-            async for piece in llm_client.chat_stream(messages, char_id=char_id, is_proactive=is_proactive):
+            stream_options = {"require_complete": True} if require_complete else {}
+            async for piece in llm_client.chat_stream(
+                messages, char_id=char_id, is_proactive=is_proactive, **stream_options,
+            ):
                 got_any = True
                 visible = marker_filter.feed(piece)
                 if visible:
@@ -1273,11 +1278,14 @@ class Pipeline:
         except Exception as e:
             from core.error_handler import log_error
             log_error("pipeline.run_llm_stream", e)
+            if got_any and require_complete:
+                raise
             if got_any:
                 # 已推出部分 token，中止而非追加以免重复。
                 # 未闭合的协议标记前缀留在 filter 里，不 flush，避免闪现。
                 return
-        full = await self.run_llm(messages, char_id=char_id, is_proactive=is_proactive)
+        options = {"require_complete": True} if require_complete else {}
+        full = await self.run_llm(messages, char_id=char_id, is_proactive=is_proactive, **options)
         if full:
             yield full
 
@@ -1870,6 +1878,9 @@ class Pipeline:
                                     log_error("pipeline.run_agentic_loop.relay_execute", e)
                                     tool_outcome = ToolExecutionOutcome(status="tool_failed")
                                 result, ask_confirm = tool_outcome.result, tool_outcome.confirmation_request
+                                if tool_outcome.status == "outcome_unknown":
+                                    outcome = ("unknown", "")
+                                    return
                                 if tool_outcome.status == "tool_executed" and not ask_confirm:
                                     successful_tool_call = True
                                 loop_msgs.append({
@@ -1910,6 +1921,9 @@ class Pipeline:
                         log_error("pipeline.run_agentic_loop.execute", e)
                         tool_outcome = ToolExecutionOutcome(status="tool_failed")
                     result, ask_confirm = tool_outcome.result, tool_outcome.confirmation_request
+                    if tool_outcome.status == "outcome_unknown":
+                        outcome = ("unknown", "")
+                        return
                     if tool_outcome.status == "tool_executed" and not ask_confirm:
                         successful_tool_call = True
                     loop_msgs.append({
@@ -1965,6 +1979,13 @@ class Pipeline:
 
         kind, text = outcome
         from core.control_markers import strip_control_markers
+        if kind == "unknown":
+            from core.prompt_language import choose
+            text = choose(
+                "这次操作的结果还无法确认。请先核实实际结果，再决定下一步。",
+                "The outcome of this operation is still unknown. Please verify it before taking another action.",
+            )
+            return _single_chunk(text) if stream else text
         if kind == "confirm":
             text = strip_control_markers(text)
             return _single_chunk(text) if stream else text
@@ -1993,7 +2014,7 @@ class Pipeline:
             async def _grounded_stream():
                 _pieces: list[str] = []
                 async for _piece in self.run_llm_stream(
-                    loop_msgs, char_id=char_id, is_proactive=is_proactive, user_id=uid,
+                    loop_msgs, char_id=char_id, is_proactive=is_proactive, user_id=uid, require_complete=True,
                 ):
                     _pieces.append(_piece)
                 from core.control_markers import strip_control_markers
@@ -2009,7 +2030,7 @@ class Pipeline:
                     yield _guarded
             return _grounded_stream()
         final_text = await self.run_llm(
-            loop_msgs, is_proactive=is_proactive, char_id=char_id,
+            loop_msgs, is_proactive=is_proactive, char_id=char_id, require_complete=True,
         )
         final_text = await self._guard_unverified_claim(
             loop_msgs, strip_control_markers(final_text),

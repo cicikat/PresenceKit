@@ -59,6 +59,9 @@ def _clean_reality_reply_text(
         from core.control_markers import strip_control_markers
         text = strip_control_markers(text)
         text = _remove_tool_call_tags(text)
+        from core.tool_grounding import tool_protocol_offset
+        if tool_protocol_offset(text) is not None:
+            return ""
         if character_name:
             text = _remove_character_prefix(text, character_name)
         text = _filter_self_censor(text)

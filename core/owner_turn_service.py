@@ -110,6 +110,7 @@ async def run_legacy_owner_turn(
     reply_to: dict | None = None,
     trusted_user_text: str | None = None,
     ingress_event_id: str = "",
+    request_id: str = "",
     audit_extras: dict | None = None,
     executor: Callable[..., Awaitable[dict]],
 ) -> dict:
@@ -129,6 +130,8 @@ async def run_legacy_owner_turn(
     if ingress_event_id:
         kwargs["ingress_event_id"] = ingress_event_id
         kwargs["ingress_dedupe_key"] = ingress_event_id
+    if request_id:
+        kwargs["request_id"] = request_id
     return await executor(message, context.provenance_channel, **kwargs)
 
 
@@ -147,54 +150,78 @@ async def execute_idempotent_owner_turn(
     request_digest = owner_turn_receipts.request_hash(
         message=message, reply_to=reply_to, upload_ids=upload_ids,
     )
-    lock = await owner_turn_receipts.lock_for(context.token_label, client_turn_id)
+    async def execute():
+        return await run_legacy_owner_turn(
+            message, context, reply_to=reply_to,
+            ingress_event_id=f"owner:{context.token_label}:{client_turn_id}", executor=executor,
+        )
+
+    return await execute_receipted_turn(
+        caller_label=context.token_label, client_turn_id=client_turn_id,
+        request_digest=request_digest, execute=execute,
+    )
+
+
+async def execute_receipted_turn(*, caller_label, client_turn_id, request_digest, execute, preflight=None):
+    """Reserve a caller-owned receipt before starting an independent task."""
+    lock = await owner_turn_receipts.lock_for(caller_label, client_turn_id)
     async with lock:
-        owner_turn_receipts.prune(is_inflight=is_currently_inflight)
-        row = owner_turn_receipts.load(context.token_label, client_turn_id)
+        row = owner_turn_receipts.load(caller_label, client_turn_id, strict=True)
         if row is not None:
             if row.get("request_hash") != request_digest:
                 return "conflict", owner_turn_receipts.projection(row)
             status = row.get("status")
             if status == "completed":
-                canonical_char_id = row.get("canonical_char_id")
-                projected = _project_retained_result(
-                    row.get("canonical_turn_id"), canonical_char_id,
-                )
+                projected = project_receipted_reply(row)
                 return ("completed_replay", projected) if projected is not None else (
                     "completed_result_expired", owner_turn_receipts.projection(row)
                 )
             if status == "running":
-                if is_currently_inflight(context.token_label, client_turn_id):
+                if is_currently_inflight(caller_label, client_turn_id):
                     return "in_flight", owner_turn_receipts.projection(row)
                 row = owner_turn_receipts.recover_if_interrupted(
-                    context.token_label,
+                    caller_label,
                     client_turn_id,
                     is_inflight=False,
                 )
                 return "interrupted_unknown", owner_turn_receipts.projection(row or {})
+            if status == "failed" and row.get("error_code") == "not_executed":
+                return "not_executed", owner_turn_receipts.projection(row)
             return str(status or "failed"), owner_turn_receipts.projection(row)
 
+        owner_turn_receipts.prune(is_inflight=is_currently_inflight)
+        if preflight is not None:
+            try:
+                preflight()
+            except Exception:
+                owner_turn_receipts.write(
+                    caller_label=caller_label, client_turn_id=client_turn_id,
+                    request_digest=request_digest, status="failed", error_code="not_executed",
+                )
+                raise
         row = owner_turn_receipts.write(
-            caller_label=context.token_label,
+            caller_label=caller_label,
             client_turn_id=client_turn_id,
             request_digest=request_digest,
             status="running",
         )
         task = asyncio.create_task(_execute_and_record(
             client_turn_id=client_turn_id,
-            message=message,
-            reply_to=reply_to,
-            upload_ids=upload_ids,
-            context=context,
-            executor=executor,
+            caller_label=caller_label,
+            execute=execute,
             created_at=row.get("created_at"),
             request_digest=request_digest,
         ))
-        _INFLIGHT[(context.token_label, client_turn_id)] = task
-        task.add_done_callback(
-            lambda completed: _INFLIGHT.pop((context.token_label, client_turn_id), None)
-            if _INFLIGHT.get((context.token_label, client_turn_id)) is completed else None
-        )
+        key = (caller_label, client_turn_id)
+        _INFLIGHT[key] = task
+
+        def finished(completed):
+            if _INFLIGHT.get(key) is completed:
+                _INFLIGHT.pop(key, None)
+            if not completed.cancelled():
+                completed.exception()
+
+        task.add_done_callback(finished)
 
     result = await asyncio.shield(task)
     return "completed", result
@@ -203,38 +230,30 @@ async def execute_idempotent_owner_turn(
 async def _execute_and_record(
     *,
     client_turn_id: str,
-    message: str,
-    reply_to: dict | None,
-    upload_ids: list[str],
-    context: TurnCallerContext,
-    executor: Callable[..., Awaitable[dict]],
+    caller_label: str,
+    execute: Callable[[], Awaitable[dict]],
     created_at: float | None,
     request_digest: str,
 ) -> dict:
     try:
-        result = await run_legacy_owner_turn(
-            message,
-            context,
-            reply_to=reply_to,
-            ingress_event_id=f"owner:{context.token_label}:{client_turn_id}",
-            executor=executor,
-        )
+        result = await execute()
         canonical_turn_id = str(result.get("turn_id") or "")
         if not canonical_turn_id:
             raise RuntimeError("owner turn did not produce a canonical turn id")
         owner_turn_receipts.write(
-            caller_label=context.token_label,
+            caller_label=caller_label,
             client_turn_id=client_turn_id,
             request_digest=request_digest,
             status="completed",
             canonical_turn_id=canonical_turn_id,
             created_at=created_at,
-            canonical_char_id=_canonical_character_id(),
+            canonical_char_id=result.get("char_id") or _canonical_character_id(),
+            transport_msg_id=result.get("msg_id"),
         )
         return result
     except Exception as exc:
         owner_turn_receipts.write(
-            caller_label=context.token_label,
+            caller_label=caller_label,
             client_turn_id=client_turn_id,
             request_digest=request_digest,
             status="failed",
@@ -319,7 +338,7 @@ async def read_owner_turn_receipt(caller_label: str, client_turn_id: str) -> dic
     """Read one caller-owned receipt under its same per-key lock."""
     lock = await owner_turn_receipts.lock_for(caller_label, client_turn_id)
     async with lock:
-        row = owner_turn_receipts.load(caller_label, client_turn_id)
+        row = owner_turn_receipts.load(caller_label, client_turn_id, strict=True)
         if row is None:
             return None
         if row.get("status") == "running":
@@ -329,3 +348,10 @@ async def read_owner_turn_receipt(caller_label: str, client_turn_id: str) -> dic
                 is_inflight=is_currently_inflight(caller_label, client_turn_id),
             )
         return row
+
+
+def project_receipted_reply(row: dict) -> dict | None:
+    result = _project_retained_result(row.get("canonical_turn_id"), row.get("canonical_char_id"))
+    if result and row.get("transport_msg_id"):
+        result["msg_id"] = row["transport_msg_id"]
+    return result
