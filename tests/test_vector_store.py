@@ -104,10 +104,12 @@ async def test_embedding_unavailable_fail_open(tmp_path, caplog):
          patch("core.memory.vector_store._db_path", return_value=db), \
          patch("core.memory.embedding.embed", side_effect=EmbeddingUnavailable("down")):
         with caplog.at_level(logging.DEBUG, logger="core.memory.vector_store"):
-            await upsert(_UID, _CHAR, "episodic", "ep_003", time.time(), "text")
+            result = await upsert(_UID, _CHAR, "episodic", "ep_003", time.time(), "text")
 
-    # Must reach here without raising
-    assert True
+    assert result is None
+    assert not db.exists()
+    assert not list(tmp_path.glob("vs.db*"))
+    assert "embedding unavailable" in caplog.text
 
 
 def test_query_empty_when_db_missing(tmp_path):

@@ -260,7 +260,24 @@ class TestRegressionDataNotDeleted:
         assert "_sensor['battery']" in src, \
             "Battery injection in layer 3.7 must not have been removed"
 
-    def test_36_sleep_hours_still_injected(self):
-        src = _src(self._PB)
-        assert "f'{_h}' + _pt('时') + f'{_m}' + _pt('分。可自然提起。）')" in src, \
-            "Sleep duration must still appear in layer 3.6 content"
+    def test_36_sleep_hours_still_injected(self, sandbox, monkeypatch):
+        from datetime import datetime
+        from core import prompt_builder
+        from core.character_loader import load
+        from tests.fixtures.public_assets import TEST_CHAR_ID
+
+        monkeypatch.setattr("core.memory.health_state.load", lambda *a, **kw: {
+            "sleep_segments": [{"time": datetime.now().isoformat(),
+                                "sleep_start": "23:15", "sleep_end_time": "06:40",
+                                "duration_minutes": 445}]})
+        monkeypatch.setattr(prompt_builder, "_pt", lambda value: value)
+        messages, _ = prompt_builder.build(
+            load(TEST_CHAR_ID), "fixture_owner", "昨晚睡得如何", [], {}, {}, [],
+            tags=set(prompt_builder._WATCH_TRIGGERS), char_id=TEST_CHAR_ID)
+        layers = [message for message in messages if message.get("_layer") == "3.6_watch"]
+        assert len(layers) == 1
+        content = layers[0]["content"]
+        assert "7时25分" in content
+        assert "23:15–06:40" in content
+        for internal in ("[身体数据感知]", "sleep_segments", "duration_minutes", "3.6_watch"):
+            assert internal not in content

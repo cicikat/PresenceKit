@@ -329,12 +329,4 @@ class TestProductionLint:
         for rel_path in _KNOWN_VIOLATIONS:
             if rel_path not in found:
                 stale.append(rel_path)
-        if stale:
-            # Emit a soft warning via assertion message rather than hard failure —
-            # a cleaned-up violation is a good thing, just needs the table updated.
-            import warnings
-            warnings.warn(
-                f"These files are in _KNOWN_VIOLATIONS but now have no violations "
-                f"(remove them from _KNOWN_VIOLATIONS): {stale}",
-                stacklevel=2,
-            )
+        assert not stale, f"Remove stale _KNOWN_VIOLATIONS entries: {stale}"

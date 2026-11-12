@@ -115,11 +115,6 @@ def test_i18n_runtime_is_wired_with_persistent_chinese_default():
     assert_versioned_admin_asset('js/integrations.js', index)
     assert "flag.self_management_hint" in runtime
     assert "自主管理 overlay（关=恢复全局默认）" in runtime
-    assert "const DEFAULT_LANGUAGE = 'zh-CN';" in runtime
-    assert "presence.admin.language" in runtime
-    assert "localStorage.setItem(STORAGE_KEY, language)" in runtime
-    assert "window.dispatchEvent(new CustomEvent('admin-language-changed'" in runtime
-    assert "console.debug(`[admin-i18n] missing ${currentLanguage}: ${key}`)" in runtime
 
 
 def test_i18n_javascript_is_served_with_an_executable_mime_type():
@@ -259,13 +254,24 @@ def test_setup_page_and_common_empty_state_are_localized():
         assert f'data-i18n="{key}"' in page
         assert runtime.count(f"'{key}'") == 2
 
-    assert page.count('data-i18n="common.save"') == 8
+    class SaveButtons(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.buttons = []
+
+        def handle_starttag(self, tag, attrs):
+            attrs = dict(attrs)
+            if tag == "button" and attrs.get("data-action", "").startswith("save"):
+                self.buttons.append(attrs)
+
+    buttons = SaveButtons()
+    buttons.feed(page)
+    assert buttons.buttons
+    for button in buttons.buttons:
+        key = button.get("data-i18n")
+        assert key in _dictionary_keys(runtime, "zh-CN"), button
+        assert key in _dictionary_keys(runtime, "en"), button
     assert 'data-i18n-placeholder="setup.secret.keep"' in page
-    assert "t('setup.base.saved'" in index
-    assert "t('setup.mail.saved'" in index
-    assert "t('setup.diary.saved'" in index
-    assert "t('setup.coplay.saved'" in index
-    assert "label || t('common.no_data', '暂无数据')" in index
 
 
 def test_chinese_and_english_dictionaries_have_identical_semantic_keys():

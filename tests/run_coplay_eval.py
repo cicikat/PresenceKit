@@ -86,6 +86,7 @@ async def _run_case(character, game: dict, question: str) -> dict:
 
 
 async def main():
+    print("evaluation_mode=report_only; no blocking quality threshold configured")
     cfg = get_config()
     char_ref = cfg.get("character", {}).get("default", "")
     if not char_ref:

@@ -31,6 +31,9 @@ def _percent(value: float) -> str:
 
 def run_offline() -> int:
     cases = engine.load_cases()
+    if len(cases) < 4:
+        print(f"[FAIL] format case count {len(cases)} < minimum 4")
+        return 1
     failures = 0
     scores = []
     for case in cases:
@@ -59,6 +62,7 @@ def run_offline() -> int:
 
 
 def run_online(*, n: int, char_id: str, min_len: int, enforce: str) -> int:
+    print("evaluation_mode=report_only; no blocking quality threshold configured")
     replies = engine.generate_online_replies_sync(n=n, char_id=char_id)
     rows = engine.build_online_rows(replies, min_len=min_len)
     selected = rows if enforce == "both" else [row for row in rows if row.enforce == enforce]

@@ -15,12 +15,16 @@ from tests.identity_eval import engine  # noqa: E402
 def main() -> int:
     failures = 0
     cases = engine.load_cases()
+    if len(cases) < 8:
+        print(f"[FAIL] identity case count {len(cases)} < minimum 8")
+        return 1
     for case in cases:
         with pytest.MonkeyPatch.context() as mp, tempfile.TemporaryDirectory() as tmp:
             import core.sandbox as sandbox
             import core.asset_registry as registry
             paths = sandbox.DataPaths(mode="test", test_session_id="identity_eval")
             paths._base = Path(tmp)
+            paths._project_root = Path(tmp)
             mp.setattr(sandbox, "_instance", paths)
             char_ids = {"primary": engine.new_test_char_id(), "alternate": engine.new_test_char_id()}
             for char_id in char_ids.values():

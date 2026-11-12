@@ -65,6 +65,20 @@ async def _reset_channels():
     registry._channels = {}
 
 
+@pytest.mark.asyncio
+async def test_disabled_channel_cannot_send_even_when_active(monkeypatch):
+    from channels import registry
+    from core import client_channels, turn_sink
+
+    channel = _Channel("desktop")
+    monkeypatch.setattr(registry, "_channels", {"desktop": channel})
+    monkeypatch.setattr(client_channels, "get_config", lambda: {"client_channels": {"desktop": False}})
+    targets, failures = await turn_sink._fanout(assistant_text="fixture reply", uid="fixture_owner",
+                                               fanout="desktop", behavior=None)
+    assert channel.sent == []
+    assert targets == [] and failures == {}
+
+
 @pytest.mark.parametrize(
     ("source", "trigger_name", "user_text", "ws_connected", "expect_desktop"),
     [

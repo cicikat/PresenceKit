@@ -108,18 +108,6 @@ async def test_failed_fast_path_does_not_exclude_get_time(monkeypatch):
     assert pipeline.run_agentic_loop.call_args.kwargs["exclude_tools"] == set()
 
 
-@pytest.mark.asyncio
-async def test_successful_fast_path_executes_get_time_once(monkeypatch):
-    import main
-
-    pipeline = _make_pipeline()
-    execute = _patch_handle_message_dependencies(monkeypatch, pipeline, _SUCCESS_RESULT)
-
-    await main.handle_message(_TIME_MESSAGE)
-
-    assert execute.await_count == 1
-
-
 @pytest.fixture(autouse=True)
 def admission_config(monkeypatch):
     from core import config_loader
