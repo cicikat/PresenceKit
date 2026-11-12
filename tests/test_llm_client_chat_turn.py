@@ -365,7 +365,7 @@ async def test_chat_stream_clean_output_unaffected(monkeypatch):
     '__TOOL_CALL__:[{"name":"gmail_read_message","arguments":{"id":"fixture"}}]',
     '<tool_call>{"name":"gmail_read_message","arguments":{}}</tool_call>',
     '<｜tool▁calls▁begin｜>private protocol',
-])
+], ids=["sentinel", "xml", "provider_token"])
 async def test_stream_never_emits_control_even_when_split_into_single_characters(monkeypatch, control):
     from core import llm_client
 
