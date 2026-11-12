@@ -35,7 +35,8 @@
       saved={text:data.text,order:data.order,cards:data.cards || {}}; persist(); location.reload();
     } catch (_) {status.textContent='导入失败：请选择有效的修改文件';}
   };
-  panel.append(toggle,exportButton,importButton,input,status); document.body.append(panel);
+  panel.append(toggle,exportButton,importButton,input,status);
+  if (new URLSearchParams(location.search).get('admin_editor') === '1') document.body.append(panel);
   function textKey(node) {
     if (window.AdminCopy) return AdminCopy.textKey(node);
     if (originals.has(node)) return originals.get(node);

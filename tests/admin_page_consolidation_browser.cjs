@@ -62,6 +62,7 @@ const origin = process.env.ADMIN_UI_LIVE_ORIGIN || 'http://127.0.0.1:8769';
     await cdp.send('Network.enable'); await cdp.send('Network.clearBrowserCache'); await cdp.send('Network.setCacheDisabled',{cacheDisabled:true});
     await page.goto(origin + '/static/index.html');
     await page.reload({waitUntil:'load'});
+    assert.equal(await page.locator('#admin-copy-editor').count(),0);
     await page.evaluate(() => {document.getElementById('auth-overlay').style.display='none';document.getElementById('app').style.display='flex';});
     async function go(name) {await page.evaluate(name => goto(name), name);}
     async function openAll() {await page.evaluate(() => document.querySelectorAll('.page.active details').forEach(n => n.open=true));}
@@ -279,6 +280,8 @@ const origin = process.env.ADMIN_UI_LIVE_ORIGIN || 'http://127.0.0.1:8769';
     assert.equal(await page.locator('.page-context').count(),0);
     await go('character');
     assert.equal(await page.locator('#pn-uid-select').evaluate(n=>n.closest('.page').id),'page-character');
+    await page.goto(origin + '/static/index.html?admin_editor=1');
+    await page.evaluate(()=>{document.getElementById('auth-overlay').style.display='none';document.getElementById('app').style.display='flex';});
     await page.locator('#admin-copy-editor button').first().click();
     await go('character-behavior');
     await page.waitForFunction(()=>document.querySelectorAll('#page-character-behavior [data-editor-drag-handle]').length>1);
@@ -296,7 +299,8 @@ const origin = process.env.ADMIN_UI_LIVE_ORIGIN || 'http://127.0.0.1:8769';
     await page.waitForFunction(()=>document.querySelector('nav a[data-page="character"]').parentElement.id==='navgroup-observation');
     const download=page.waitForEvent('download'); await page.getByRole('button',{name:'导出修改',exact:true}).click();
     assert.equal((await download).suggestedFilename(),'admin-copy-edits.json');
-    await page.reload();
+    await page.goto(origin + '/static/index.html');
+    assert.equal(await page.locator('#admin-copy-editor').count(),0);
     await page.waitForFunction(()=>document.querySelector('nav a[data-page="character"] span').textContent==='测试文案修改');
     assert.equal(await page.locator('nav a[data-page="character"]').evaluate(n=>n.parentElement.id),'navgroup-observation');
     await page.evaluate(()=>{document.getElementById('auth-overlay').style.display='none';document.getElementById('app').style.display='flex';});
