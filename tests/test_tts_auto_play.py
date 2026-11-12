@@ -73,7 +73,7 @@ def test_synthesize_accepts_mobile_and_strips_parenthetical_narration(monkeypatc
     assert synthesize.await_args.args[:2] == ("你好。 晚安。", "neutral")
 
 
-async def test_mobile_queue_marks_voice_availability(sandbox, monkeypatch):
+async def test_mobile_queue_marks_voice_availability(sandbox, monkeypatch, enabled_client_channels):
     from channels.mobile import MobileChannel
 
     monkeypatch.setattr("channels.mobile._is_tts_available", lambda: True)

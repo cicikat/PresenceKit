@@ -165,9 +165,10 @@ async def test_expression_commits_before_network_and_network_holds_no_uid_lock(s
         "owner", "event", "reply", critical, envelope=stamp_user_chat()))
     await asyncio.wait_for(started.wait(), 2)
     assert ms.get_current(char_id="companion") == "happy"
-    async with asyncio.timeout(1):
+    async def acquire_uid_lock():
         async with locks.uid_lock("owner"):
             pass
+    await asyncio.wait_for(acquire_uid_lock(), timeout=1)
     gate.set()
     await task
     assert ms.load(char_id="companion")["affect"]["emotions"]["anger"] > .7

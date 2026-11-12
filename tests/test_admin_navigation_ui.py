@@ -50,7 +50,8 @@ def test_navigation_restores_the_current_page_within_a_browser_tab_session():
     assert 'sessionStorage.setItem(ACTIVE_PAGE_SESSION_KEY, page);' in source
     assert "getRememberedPage() || 'setup'" in source
     assert 'clearRememberedPage();' in source
-    assert "setupStatus && setupStatus.needs_setup\n      ? 'setup'" in source
+    assert "status?.needs_setup && document.querySelector('.page.active')?.id === 'page-' + initialPage && initialPage !== 'setup'" in source
+    assert "goto('setup')" in source
 
 
 def test_setup_is_default_and_effective_state_lives_in_status():

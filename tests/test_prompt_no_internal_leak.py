@@ -262,5 +262,5 @@ class TestRegressionDataNotDeleted:
 
     def test_36_sleep_hours_still_injected(self):
         src = _src(self._PB)
-        assert "{_h}时{_m}分" in src, \
+        assert "f'{_h}' + _pt('时') + f'{_m}' + _pt('分。可自然提起。）')" in src, \
             "Sleep duration must still appear in layer 3.6 content"

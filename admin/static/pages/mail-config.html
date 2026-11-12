@@ -1,23 +1,41 @@
 <h1 class="page-title" data-i18n="settings_center.mail_connection">邮件连接</h1>
 <div class="card">
-  <div class="card-header"><h3>角色 Gmail 邮箱</h3><span id="setup-gmail-status" role="status"></span></div>
-  <p>角色可以读取和发送邮件。读取的内容可能交给当前模型服务处理。管理面仅展示连接、同步及投递状态。</p>
+  <div class="card-header"><h3 data-i18n="gmail.oauth.title">Google OAuth 应用配置</h3><span id="setup-gmail-oauth-status" role="status"></span></div>
+  <p data-i18n="gmail.oauth.help">网页配置优先于环境变量。凭据以私有明文文件保存（目录 0700、文件 0600），并非加密存储。保存不撤销已有邮箱授权；轮换后请测试连接。</p>
   <div class="form-row">
-    <label class="field"><span>角色的 Google 邮箱</span><input id="setup-gmail-email" type="email" maxlength="254"></label>
-    <label class="checkbox-row"><input id="setup-gmail-consent" type="checkbox">我同意由配置的模型服务处理邮箱内容</label>
+    <label class="field"><span>Google Client ID</span><input id="setup-gmail-client-id" type="text" maxlength="256" required autocomplete="off"></label>
+    <label class="field"><span>Google Client Secret <span id="setup-gmail-secret-state"></span></span><input id="setup-gmail-client-secret" type="password" maxlength="1024" autocomplete="new-password" placeholder="留空=不修改已有值" data-i18n-placeholder="setup.secret.keep"></label>
+  </div>
+  <div class="form-row col-1">
+    <label class="field"><span>OAuth Redirect URI</span><input id="setup-gmail-redirect-uri" type="url" maxlength="2048" required placeholder="https://example.com/settings/gmail/oauth/callback" autocomplete="off"></label>
+  </div>
+  <p data-i18n="gmail.oauth.callback_help">请填写公开 HTTPS 地址，路径必须是 /settings/gmail/oauth/callback，并在 Google Cloud 中登记完全相同的回调地址。</p>
+  <p id="setup-gmail-oauth-source"></p>
+  <div class="modal-footer admin-inline-124">
+    <button class="btn btn-primary" id="setup-gmail-oauth-save" data-action="saveSetupGmailOAuth" data-i18n="common.save">保存</button>
+    <button class="btn btn-ghost" id="setup-gmail-oauth-validate" data-action="validateSetupGmailOAuth" data-i18n="gmail.oauth.validate">验证格式</button>
+    <button class="btn btn-ghost" data-action="copySetupGmailCallback" data-i18n="gmail.oauth.copy">复制回调地址</button>
+  </div>
+</div>
+<div class="card">
+  <div class="card-header"><h3 data-i18n="gmail.title">角色 Gmail 邮箱</h3><span id="setup-gmail-status" role="status"></span></div>
+  <p data-i18n="gmail.help">角色可以读取和发送邮件。读取的内容可能交给当前模型服务处理。管理面仅展示连接、同步及投递状态。</p>
+  <div class="form-row">
+    <label class="field"><span data-i18n="gmail.email">角色的 Google 邮箱</span><input id="setup-gmail-email" type="email" maxlength="254"></label>
+    <label class="checkbox-row"><input id="setup-gmail-consent" type="checkbox"><span data-i18n="gmail.consent">我同意由配置的模型服务处理邮箱内容</span></label>
   </div>
   <div class="form-row">
-    <label class="checkbox-row"><input id="setup-gmail-sync" type="checkbox" checked>同步新邮件</label>
-    <label class="field"><span>同步间隔（秒，默认 300）</span><input id="setup-gmail-interval" type="number" required min="60" max="3600" value="300"></label>
+    <label class="checkbox-row"><input id="setup-gmail-sync" type="checkbox" checked><span data-i18n="gmail.sync">同步新邮件</span></label>
+    <label class="field"><span data-i18n="gmail.interval">同步间隔（秒，默认 300）</span><input id="setup-gmail-interval" type="number" required min="60" max="3600" value="300"></label>
   </div>
   <p id="setup-gmail-detail"></p>
-  <details id="setup-gmail-unknown" hidden><summary>需要人工核查的投递</summary><p id="setup-gmail-unknown-ids"></p></details>
+  <details id="setup-gmail-unknown" hidden><summary data-i18n="gmail.unknown">需要人工核查的投递</summary><p id="setup-gmail-unknown-ids"></p></details>
   <div class="modal-footer admin-inline-124">
-    <button class="btn btn-primary" id="setup-gmail-connect" data-action="connectSetupGmail">连接 / 重新授权</button>
-    <button class="btn btn-ghost" id="setup-gmail-test" data-action="testSetupGmail">测试连接</button>
-    <button class="btn btn-ghost" id="setup-gmail-save" data-action="saveSetupGmailSync">保存同步设置</button>
-    <button class="btn btn-ghost" data-action="loadSetupGmail">刷新</button>
-    <button class="btn btn-ghost" id="setup-gmail-disconnect" data-action="disconnectSetupGmail">断开并撤销</button>
+    <button class="btn btn-primary" id="setup-gmail-connect" data-action="connectSetupGmail" data-i18n="gmail.connect">连接 / 重新授权</button>
+    <button class="btn btn-ghost" id="setup-gmail-test" data-action="testSetupGmail" data-i18n="gmail.test">测试连接</button>
+    <button class="btn btn-ghost" id="setup-gmail-save" data-action="saveSetupGmailSync" data-i18n="gmail.save_sync">保存同步设置</button>
+    <button class="btn btn-ghost" data-action="loadSetupGmail" data-i18n="common.refresh">刷新</button>
+    <button class="btn btn-ghost" id="setup-gmail-disconnect" data-action="disconnectSetupGmail" data-i18n="gmail.disconnect">断开并撤销</button>
   </div>
 </div>
 <div class="card">
@@ -25,7 +43,7 @@
           <h3><span data-i18n="setup.mail.title">邮件通道</span> <span class="badge" data-i18n="common.optional">可选</span></h3>
           <span id="setup-mail-status" class="admin-inline-082"></span>
         </div>
-        <p class="admin-inline-087">角色写信和梦境明信片的投递设置。</p>
+        <p class="admin-inline-087" data-i18n="mail.delivery_hint">角色写信和梦境明信片的投递设置。</p>
         <div class="form-row">
           <label class="checkbox-row admin-inline-117">
             <input type="checkbox" id="setup-mail-enabled" class="admin-inline-202">
@@ -74,7 +92,7 @@
         </div>
         <div class="form-row">
           <label class="field">
-            <span>角色写信发信后端</span>
+            <span data-i18n="mail.delivery_backend">角色写信发信后端</span>
             <select id="setup-mail-backend">
               <option value="smtp">SMTP</option>
               <option value="gmail_api">Gmail API</option>

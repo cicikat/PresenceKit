@@ -524,7 +524,7 @@ async def test_b4_turn_sink_memory_text_scrubbed(sandbox, monkeypatch):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @pytest.mark.asyncio
-async def test_b5_fanout_visible_strips_render_tags(monkeypatch):
+async def test_b5_fanout_visible_strips_render_tags(monkeypatch, enabled_client_channels):
     """B5: _fanout must strip <say> tags from visible channel output but preserve action text."""
     import core.turn_sink as _ts
     import channels.registry as _reg

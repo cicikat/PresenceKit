@@ -131,7 +131,7 @@ async def test_qq_fanout_strips_say_tags():
 # 5. mobile fanout 不含 <say>
 # ═══════════════════════════════════════════════════════════════════════════════
 
-async def test_mobile_fanout_strips_say_tags():
+async def test_mobile_fanout_strips_say_tags(enabled_client_channels):
     """mobile channel 收到的文本不含 <say> 标签。"""
     from channels import registry
     from core.turn_sink import TurnSource, record_assistant_turn
@@ -208,7 +208,7 @@ async def test_memory_text_stripped_of_multiple_tags():
 # 7. desktop channel_message 收到完整原文（含标签）
 # ═══════════════════════════════════════════════════════════════════════════════
 
-async def test_desktop_fanout_receives_scrubbed_text(monkeypatch):
+async def test_desktop_fanout_receives_scrubbed_text(monkeypatch, enabled_client_channels):
     """desktop channel_message receives scrubbed text: NMP tags stripped, action content removed.
     All record_assistant_turn calls are reality-only; Dream uses its own pipeline."""
     from channels import registry
@@ -253,7 +253,7 @@ async def test_desktop_fanout_receives_scrubbed_text(monkeypatch):
 # 8. desktop message_segments 仍保留 NMP 解析行为
 # ═══════════════════════════════════════════════════════════════════════════════
 
-async def test_desktop_message_segments_say_only(monkeypatch):
+async def test_desktop_message_segments_say_only(monkeypatch, enabled_client_channels):
     """desktop message_segments pushes only say segments; do/feel/env are filtered.
     Reality-only gate: all record_assistant_turn calls are reality."""
     from channels import registry

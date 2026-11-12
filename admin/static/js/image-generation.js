@@ -134,7 +134,7 @@ async function saveImageGeneration() {
     for (const field of ['base_url', 'model', 'description']) body[field] = igValue(field);
     if (igValue('api_key')) body.api_key = igValue('api_key');
     for (const field of ['show_to_llm', 'supports_edits']) body[field] = igEl(field).checked;
-    await api('PUT', '/image-gen-presets/presets/' + encodeURIComponent(igValue('name')), body);
+    await api('PUT', `/image-gen-presets/presets/${encodeURIComponent(igValue('name'))}`, body);
     closeImageGeneration();
     igStatus(igText('生图连接已保存', 'Generation preset saved'));
     await loadImageGeneration();

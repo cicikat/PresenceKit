@@ -288,7 +288,7 @@ class _HangingDesktopWS:
 
 
 @pytest.mark.asyncio
-async def test_desktop_send_timeout_does_not_block_event_loop(monkeypatch):
+async def test_desktop_send_timeout_does_not_block_event_loop(monkeypatch, enabled_client_channels):
     from channels import desktop_ws
     from core.tool_ephemeral import ToolEphemeralEvent
 

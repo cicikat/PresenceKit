@@ -324,6 +324,7 @@ REGISTRY: dict[str, PathMeta] = {
 
     # ── runtime: per-character runtime assets dir ─────────────────────────────
     "runtime_character_dir":  PathMeta("runtime",   "character_inner", "per_char",      "ignore"),
+    "character_image_reference": PathMeta("authored", "character_inner", "per_char_user", "ignore-but-authored"),
 
     # ── Activity: reading activity paths ─────────────────────────────────────
     "reading_char_root":         PathMeta("runtime",    "reality", "per_char",      "ignore"),

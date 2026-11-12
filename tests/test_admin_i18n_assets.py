@@ -17,7 +17,7 @@ def _dictionary_keys(runtime: str, language: str) -> set[str]:
     else:
         body = re.search(r"\n    en: \{(.*?)\n    \},\n  \};", runtime, re.S)
     assert body is not None
-    return set(re.findall(r"^\s+'([^']+)':", body.group(1), re.M))
+    return {key for _, key in re.findall(r'''^\s+(['"])([^'"\n]+)\1:''', body.group(1), re.M)}
 
 
 def _chinese_dictionary_values(runtime: str) -> set[str]:
@@ -25,13 +25,28 @@ def _chinese_dictionary_values(runtime: str) -> set[str]:
     assert body is not None
     values = set()
     for match in re.finditer(
-        r"^\s+'[^']+':\s*(?:'((?:\\.|[^'\\])*)'|\"((?:\\.|[^\"\\])*)\"),",
+        r'''^\s+['"][^'"\n]+['"]:\s*(?:'((?:\\.|[^'\\])*)'|"((?:\\.|[^"\\])*)"),''',
         body.group(1),
         re.M,
     ):
         value = match.group(1) if match.group(1) is not None else match.group(2)
         values.add(re.sub(r"\s+", " ", value).strip())
     return values
+
+
+def test_dictionary_parser_accepts_both_javascript_key_quote_styles():
+    runtime = """'zh-CN': {
+      'single': '单引号',
+      "double": "双引号",
+    },
+    en: {
+      'single': 'Single',
+      "double": "Double",
+    },
+  };"""
+    assert _dictionary_keys(runtime, 'zh-CN') == {'single', 'double'}
+    assert _dictionary_keys(runtime, 'en') == {'single', 'double'}
+    assert _chinese_dictionary_values(runtime) == {'单引号', '双引号'}
 
 
 class _VisibleChineseParser(HTMLParser):
@@ -244,7 +259,7 @@ def test_setup_page_and_common_empty_state_are_localized():
         assert f'data-i18n="{key}"' in page
         assert runtime.count(f"'{key}'") == 2
 
-    assert page.count('data-i18n="common.save"') == 7
+    assert page.count('data-i18n="common.save"') == 8
     assert 'data-i18n-placeholder="setup.secret.keep"' in page
     assert "t('setup.base.saved'" in index
     assert "t('setup.mail.saved'" in index

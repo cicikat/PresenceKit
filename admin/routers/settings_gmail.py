@@ -2,20 +2,38 @@
 
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from fastapi.routing import APIRoute
+from pydantic import BaseModel, Field, SecretStr
 
 from admin.auth import require_scopes, resolve_token
 from admin.routers.character import _active_character_id
 from core.mail import gmail
 
-router = APIRouter()
 admin = require_scopes("admin")
 HEADERS = {
     "Cache-Control": "no-store", "Referrer-Policy": "no-referrer",
     "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
 }
+
+
+class PrivateRoute(APIRoute):
+    def get_route_handler(self):
+        handler = super().get_route_handler()
+
+        async def private_handler(request: Request):
+            try:
+                return await handler(request)
+            except RequestValidationError:
+                # Pydantic's default response can echo a rejected secret as `input`.
+                return JSONResponse({"detail": "invalid_request"}, status_code=422, headers=HEADERS)
+
+        return private_handler
+
+
+router = APIRouter(route_class=PrivateRoute)
 
 
 class Sync(BaseModel):
@@ -40,6 +58,46 @@ class Start(BaseModel):
     model_processing_consent: Literal[True]
 
 
+class OAuthConfig(BaseModel):
+    client_id: str = Field(max_length=256)
+    client_secret: SecretStr | None = Field(default=None, max_length=1024)
+    redirect_uri: str = Field(max_length=2048)
+
+
+@router.get("/settings/gmail/oauth/config")
+async def oauth_config(response: Response, auth=Depends(admin)):
+    response.headers.update(HEADERS)
+    try:
+        return gmail.config_status()
+    except gmail.GmailError as exc:
+        raise _problem(exc) from None
+
+
+@router.put("/settings/gmail/oauth/config")
+async def save_oauth_config(body: OAuthConfig, response: Response, auth=Depends(admin)):
+    from admin.audit import log_event
+
+    response.headers.update(HEADERS)
+    try:
+        result = await gmail.configure_client(body.client_id,
+                    body.client_secret.get_secret_value() if body.client_secret else None, body.redirect_uri)
+        log_event("gmail_oauth_config_updated", label=auth.label, path="/settings/gmail/oauth/config")
+        return result
+    except gmail.GmailError as exc:
+        raise _problem(exc) from None
+
+
+@router.post("/settings/gmail/oauth/config/validate")
+async def validate_oauth_config(body: OAuthConfig, response: Response, auth=Depends(admin)):
+    response.headers.update(HEADERS)
+    try:
+        gmail.validate_config(body.client_id,
+                    body.client_secret.get_secret_value() if body.client_secret else None, body.redirect_uri)
+        return {"valid": True, "authorization_verified": False}
+    except gmail.GmailError as exc:
+        raise _problem(exc) from None
+
+
 def _principal() -> tuple[str, str]:
     return gmail.owner(), _active_character_id()
 
@@ -50,7 +108,7 @@ def _admin_valid(token: str) -> bool:
 
 
 def _problem(exc: gmail.GmailError) -> HTTPException:
-    return HTTPException(409, str(exc))
+    return HTTPException(409, str(exc), headers=HEADERS)
 
 
 @router.get("/settings/gmail")
@@ -77,9 +135,14 @@ async def start(body: Start, request: Request, auth=Depends(admin)):
 def _result(ok: bool, code: str = "") -> HTMLResponse:
     from html import escape
 
-    text = "Google 邮箱已连接。请回到邮件连接页面刷新状态。" if ok else (
-        f"授权未完成（{escape(code)}）。请关闭此页并在邮件连接页面重新发起。"
-    )
+    if ok:
+        text = "Google 邮箱已连接，请回邮件连接页面刷新。Gmail connected; return to Mail connections and refresh."
+    elif code == "disabled_client":
+        text = ("Google OAuth 客户端已被禁用，请在 Google Cloud 恢复或更换客户端配置。"
+                "Google OAuth client disabled. Restore it in Google Cloud or replace the client configuration.")
+    else:
+        text = (f"授权未完成（{escape(code)}），请回邮件连接页面查看状态。"
+                "Authorization incomplete; return to Mail connections to check its status.")
     return HTMLResponse(f'<!doctype html><html lang="zh-CN"><meta charset="utf-8">'
                         f'<title>PresenceKit Gmail</title><p>{text}</p></html>',
                         status_code=200 if ok else 400, headers=HEADERS)
@@ -103,7 +166,8 @@ async def callback(request: Request):
         await gmail.complete(request.query_params.get("state", "")[:128],
                              request.cookies.get(gmail.COOKIE, "")[:128],
                              request.query_params.get("code", "")[:4096],
-                             *_principal(), _admin_valid)
+                             *_principal(), _admin_valid,
+                             error=request.query_params.get("error", "")[:128])
         response = _result(True)
         response.delete_cookie(gmail.COOKIE, path=gmail.CALLBACK, secure=True, httponly=True)
         return response

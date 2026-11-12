@@ -49,7 +49,7 @@ async def test_video_call_mistaken_for_phone_control_routes_to_desktop(sandbox, 
 
 
 @pytest.mark.asyncio
-async def test_wrapper_starts_task_and_queues_mobile_behavior(sandbox, monkeypatch):
+async def test_wrapper_starts_task_and_queues_mobile_behavior(sandbox, monkeypatch, enabled_client_channels):
     from channels import registry
     from channels.mobile import MobileChannel
 
