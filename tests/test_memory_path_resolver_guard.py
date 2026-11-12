@@ -165,16 +165,15 @@ def test_character_global_artifact_rejects_dream_scope(sandbox, artifact):
 # 5. Domain enforcement — global artifacts reject non-global scopes
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("artifact", sorted(GLOBAL_USER_ARTIFACTS))
-def test_global_artifact_rejects_reality_scope(sandbox, artifact):
-    with pytest.raises(ValueError, match="domain"):
-        resolve_path(REALITY, artifact)
-
-
-@pytest.mark.parametrize("artifact", sorted(GLOBAL_USER_ARTIFACTS))
-def test_global_artifact_rejects_dream_scope(sandbox, artifact):
-    with pytest.raises(ValueError, match="domain"):
-        resolve_path(DREAM, artifact)
+@pytest.mark.parametrize("scope", [REALITY, DREAM], ids=["reality", "dream"])
+def test_global_artifacts_reject_character_scopes(sandbox, monkeypatch, scope):
+    # The registry currently has no global user artifacts. Exercise the gate
+    # with a test entry as well as any future production entries.
+    fixture = "fixture_global_artifact"
+    monkeypatch.setitem(_ARTIFACT_DOMAIN, fixture, "global")
+    for artifact in sorted(GLOBAL_USER_ARTIFACTS | {fixture}):
+        with pytest.raises(ValueError, match="requires domain='global'"):
+            resolve_path(scope, artifact)
 
 
 # ---------------------------------------------------------------------------

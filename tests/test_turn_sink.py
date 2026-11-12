@@ -52,17 +52,12 @@ class _Channel:
         self.sent = []
         self.msg_ids = []
 
-    async def send(self, content, user_id, behavior=None, msg_id=None):
+    async def send(self, content, user_id, behavior=None, msg_id=None, *,
+                   char_id=None, sticker=None, artifacts=None):
         if self.fail:
             raise RuntimeError("boom")
         self.sent.append((content, user_id, behavior))
         self.msg_ids.append(msg_id)
-
-
-async def _reset_channels():
-    from channels import registry
-
-    registry._channels = {}
 
 
 @pytest.mark.asyncio
@@ -99,7 +94,6 @@ async def test_record_assistant_turn_sources_success(
     from channels import registry
     from core.turn_sink import record_assistant_turn
 
-    await _reset_channels()
     channel = _Channel("desktop")
     registry.register(channel)
     monkeypatch.setattr("channels.desktop_ws.is_connected", lambda: ws_connected)
@@ -135,7 +129,6 @@ async def test_proactive_turn_does_not_queue_to_desktop_file_when_disconnected(m
     from channels.desktop import DesktopChannel
     from core.turn_sink import TurnSource, record_assistant_turn
 
-    await _reset_channels()
     registry.register(DesktopChannel())
     monkeypatch.setattr("channels.desktop_ws.is_connected", lambda: False)
 
@@ -156,7 +149,6 @@ async def test_fanout_failure_does_not_block_other_channels():
     from channels import registry
     from core.turn_sink import TurnSource, record_assistant_turn
 
-    await _reset_channels()
     broken = _Channel("broken", fail=True)
     ok = _Channel("ok")
     registry.register(broken)
@@ -360,7 +352,6 @@ async def test_fanout_excludes_origin_channel():
     from channels import registry
     from core.turn_sink import TurnSource, record_assistant_turn
 
-    await _reset_channels()
     desktop = _Channel("desktop")
     mobile = _Channel("mobile")
     registry.register(desktop)
@@ -388,7 +379,6 @@ async def test_fanout_all_without_exclude_sends_to_all():
     from channels import registry
     from core.turn_sink import TurnSource, record_assistant_turn
 
-    await _reset_channels()
     desktop = _Channel("desktop")
     mobile = _Channel("mobile")
     registry.register(desktop)
@@ -421,7 +411,6 @@ async def test_user_chat_reaches_offline_mobile_queue(sandbox):
     from channels.mobile import MobileChannel
     from core.turn_sink import TurnSource, record_assistant_turn
 
-    await _reset_channels()
     mobile = MobileChannel()
     # 显式不调用 mobile.set_active(True)：模拟用户发完消息立刻切后台、
     # is_active 已经过期/从未激活的场景。
@@ -448,7 +437,6 @@ async def test_mobile_live_origin_keeps_durable_mirror_and_desktop_fanout(sandbo
     from channels.mobile import MobileChannel
     from core.turn_sink import TurnSource, record_assistant_turn
 
-    await _reset_channels()
     desktop = _Channel("desktop")
     mobile = MobileChannel()
     registry.register(desktop)
@@ -478,7 +466,6 @@ async def test_mobile_fanout_queue_id_matches_turn_id(sandbox):
     from channels.mobile import MobileChannel
     from core.turn_sink import TurnSource, record_assistant_turn
 
-    await _reset_channels()
     mobile = MobileChannel()
     mobile.set_active(True)
     registry.register(mobile)
@@ -513,7 +500,6 @@ async def test_mobile_fanout_mints_transport_id_without_turn_id_or_desktop(monke
     from channels.mobile import MobileChannel
     from core.turn_sink import TurnSource, record_assistant_turn, _reset_identity_observability_for_tests
 
-    await _reset_channels()
     _reset_identity_observability_for_tests()
     monkeypatch.setattr("channels.desktop_ws.is_connected", lambda: False)
     mobile = MobileChannel()
@@ -578,7 +564,6 @@ async def test_fanout_exclude_does_not_affect_named_fanout():
     from channels import registry
     from core.turn_sink import TurnSource, record_assistant_turn
 
-    await _reset_channels()
     desktop = _Channel("desktop")
     registry.register(desktop)
 
@@ -604,38 +589,9 @@ async def test_fanout_exclude_does_not_affect_named_fanout():
 # through the actual channel.send() path.  push_message and push_segments are
 # monkeypatched at the desktop_ws module level to capture calls.
 
-async def _setup_real_desktop(monkeypatch):
-    """Register real DesktopChannel and fake out both WS push functions.
-    Returns (push_msg_calls, push_seg_calls)."""
-    from channels import registry
-    from channels.desktop import DesktopChannel
-
-    await _reset_channels()
-    registry.register(DesktopChannel())
-
-    push_msg_calls: list[dict] = []
-    push_seg_calls: list[dict] = []
-
-    async def fake_push_message(content, msg_id=None):
-        push_msg_calls.append({"content": content, "msg_id": msg_id})
-        return True
-
-    async def fake_push_segments(content, segments, msg_id=None):
-        push_seg_calls.append({"content": content, "segments": segments, "msg_id": msg_id})
-        return True
-
-    monkeypatch.setattr("channels.desktop_ws.is_connected", lambda: True)
-    monkeypatch.setattr("channels.desktop_ws.push_message", fake_push_message)
-    monkeypatch.setattr("channels.desktop_ws.push_segments", fake_push_segments)
-
-    return push_msg_calls, push_seg_calls
-
-
-async def test_message_segments_fanout_with_say(monkeypatch):
+async def test_message_segments_fanout_with_say(desktop_wire):
     """message_segments envelope 正确发出，包含 say segment，msg_id 与 channel_message 共享。"""
     from core.turn_sink import record_assistant_turn
-
-    push_msg_calls, push_seg_calls = await _setup_real_desktop(monkeypatch)
 
     await record_assistant_turn(
         assistant_text="她说：<say>你好</say>",
@@ -646,16 +602,12 @@ async def test_message_segments_fanout_with_say(monkeypatch):
         pipeline=_FakePipeline(),
     )
 
-    # push_segments called exactly once
-    assert len(push_seg_calls) == 1
-    seg = push_seg_calls[0]
-
-    # channel_message called exactly once
-    assert len(push_msg_calls) == 1
+    message, = [frame for frame in desktop_wire if frame["type"] == "channel_message"]
+    seg, = [frame for frame in desktop_wire if frame["type"] == "message_segments"]
 
     # msg_id is shared between channel_message and message_segments
     assert seg["msg_id"] is not None
-    assert push_msg_calls[0]["msg_id"] == seg["msg_id"]
+    assert message["msg_id"] == seg["msg_id"]
     assert seg["msg_id"] == "turn-hello"
 
     # content has no tag markup
@@ -669,26 +621,13 @@ async def test_message_segments_fanout_with_say(monkeypatch):
     assert say_segs[0]["text"] == "你好"
 
 
-async def test_message_segments_exception_does_not_block_main_flow(monkeypatch):
+async def test_message_segments_exception_does_not_block_main_flow(monkeypatch, desktop_wire):
     """push_segments 抛异常时，主流程不中断，channel_message 仍已发出，TurnResult 有效。"""
-    from channels import registry
-    from channels.desktop import DesktopChannel
     from core.turn_sink import record_assistant_turn
-
-    await _reset_channels()
-    registry.register(DesktopChannel())
-
-    push_msg_calls: list[str] = []
-
-    async def fake_push_message(content, msg_id=None):
-        push_msg_calls.append(content)
-        return True
 
     async def failing_push_segments(*args, **kwargs):
         raise RuntimeError("segments fanout boom")
 
-    monkeypatch.setattr("channels.desktop_ws.is_connected", lambda: True)
-    monkeypatch.setattr("channels.desktop_ws.push_message", fake_push_message)
     monkeypatch.setattr("channels.desktop_ws.push_segments", failing_push_segments)
 
     # Must not raise
@@ -702,18 +641,17 @@ async def test_message_segments_exception_does_not_block_main_flow(monkeypatch):
     )
 
     # Original channel_message was delivered
-    assert push_msg_calls == ["普通回复"]
+    frame, = desktop_wire
+    assert (frame["type"], frame["content"]) == ("channel_message", "普通回复")
     # TurnResult reflects successful write and fanout
     assert result.written_to_memory is True
     assert "desktop" in result.fanout_targets
     assert result.fanout_failures == {}
 
 
-async def test_message_segments_plain_text(monkeypatch):
+async def test_message_segments_plain_text(desktop_wire):
     """无标签普通文本仍发送 message_segments，segments 为单个 narration，content 等于原文。"""
     from core.turn_sink import record_assistant_turn
-
-    _, push_seg_calls = await _setup_real_desktop(monkeypatch)
 
     raw = "普通的一句话，没有任何标签。"
     await record_assistant_turn(
@@ -725,8 +663,7 @@ async def test_message_segments_plain_text(monkeypatch):
         pipeline=_FakePipeline(),
     )
 
-    assert len(push_seg_calls) == 1
-    seg = push_seg_calls[0]
+    seg, = [frame for frame in desktop_wire if frame["type"] == "message_segments"]
 
     # content equals original text (no tags to strip)
     assert seg["content"] == raw

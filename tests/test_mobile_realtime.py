@@ -1,7 +1,10 @@
 import asyncio
+from contextlib import contextmanager
 import json
 import sqlite3
+from threading import Event
 from types import SimpleNamespace
+from uuid import uuid4
 
 import pytest
 from fastapi import FastAPI
@@ -120,6 +123,38 @@ def headers(grant, client="client-a", token="yes"):
     return {"authorization": token, "x-presence-session": grant.session_id, "x-presence-client": client}
 
 
+@pytest.fixture
+def mobile_connection(monkeypatch):
+    """Wait for the real ASGI handler to finish before TestClient cancels it."""
+    completions = {}
+    serve = realtime.serve
+
+    async def observed_serve(websocket):
+        completion = completions[websocket.headers["x-test-connection"]]
+        try:
+            await serve(websocket)
+        finally:
+            completion.set()
+
+    monkeypatch.setattr(realtime, "serve", observed_serve)
+
+    @contextmanager
+    def connect(client, grant, client_id="client-a"):
+        connection_id = uuid4().hex
+        completed = completions[connection_id] = Event()
+        try:
+            request_headers = {**headers(grant, client_id), "x-test-connection": connection_id}
+            with client.websocket_connect("/ws/mobile", headers=request_headers) as socket:
+                yield socket
+                if not completed.is_set():
+                    socket.close()
+                assert completed.wait(timeout=5), "Mobile WebSocket handler did not finish after disconnect"
+        finally:
+            completions.pop(connection_id, None)
+
+    return connect
+
+
 @pytest.mark.parametrize("changed", ["token", "owner", "character", "switch", "disabled"])
 def test_revocation_at_send_rejects_queued_frames(monkeypatch, changed):
     client, grant, valid = ws_client(monkeypatch)
@@ -139,34 +174,34 @@ def test_revocation_at_send_rejects_queued_frames(monkeypatch, changed):
         with pytest.raises(WebSocketDisconnect): ws.receive_json()
 
 
-def test_parallel_phone_connections_and_rebind_do_not_touch_desktop(monkeypatch):
+def test_parallel_phone_connections_and_rebind_do_not_touch_desktop(monkeypatch, mobile_connection):
     client, grant, _ = ws_client(monkeypatch)
     with client:
-        with client.websocket_connect("/ws/mobile", headers=headers(grant)) as first:
+        with mobile_connection(client, grant) as first:
             a = first.receive_json()
             old = next(iter(realtime._CONNECTIONS.values()))
-            with client.websocket_connect("/ws/mobile", headers=headers(grant, "client-b")) as second:
+            with mobile_connection(client, grant, "client-b") as second:
                 b = second.receive_json()
                 assert a["generation"] != b["generation"] and old.authorized()
-                with client.websocket_connect("/ws/mobile", headers=headers(grant)) as rebound:
+                with mobile_connection(client, grant) as rebound:
                     c = rebound.receive_json()
                     assert not old.authorized() and c["generation"] != a["generation"]
-                    rebound.close()
-                second.close()
-            first.close()
+                    assert first.receive() == {"type": "websocket.close", "code": 1008, "reason": ""}
+    assert not realtime._CONNECTIONS
+    assert not realtime._CLIENTS
 
 
-def test_live_final_is_same_as_authorized_history(monkeypatch):
+def test_live_final_is_same_as_authorized_history(monkeypatch, mobile_connection):
     message = final()
     client, grant, _ = ws_client(monkeypatch)
     with client:
-        with client.websocket_connect("/ws/mobile", headers=headers(grant)) as ws:
+        with mobile_connection(client, grant) as ws:
             ready = ws.receive_json()
             client.portal.call(realtime.publish, message)
             frame = ws.receive_json()
             assert frame["type"] == "final" and frame["message"] == message
             assert frame["generation"] == ready["generation"]
-            ws.close()
+    assert not realtime._CONNECTIONS
 
 
 @pytest.mark.parametrize("kind", ["ack", "execute", "pong"])

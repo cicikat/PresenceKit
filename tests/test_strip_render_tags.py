@@ -47,11 +47,6 @@ class _CapturePipeline:
         return {"emotion": "neutral", "turn_id": critical_result.get("turn_id")}
 
 
-async def _reset_channels():
-    from channels import registry
-    registry._channels = {}
-
-
 # ═══════════════════════════════════════════════════════════════════════════════
 # 1–3. strip_render_tags unit tests
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -107,7 +102,6 @@ async def test_qq_fanout_strips_say_tags():
     from channels import registry
     from core.turn_sink import TurnSource, record_assistant_turn
 
-    await _reset_channels()
     qq_ch = _Channel("qq")
     registry.register(qq_ch)
 
@@ -136,7 +130,6 @@ async def test_mobile_fanout_strips_say_tags(enabled_client_channels):
     from channels import registry
     from core.turn_sink import TurnSource, record_assistant_turn
 
-    await _reset_channels()
     mobile_ch = _Channel("mobile")
     registry.register(mobile_ch)
 
@@ -163,7 +156,6 @@ async def test_memory_text_stripped_of_say_tags():
     from channels import registry
     from core.turn_sink import TurnSource, record_assistant_turn
 
-    await _reset_channels()
     pipeline = _CapturePipeline()
 
     await record_assistant_turn(
@@ -185,7 +177,6 @@ async def test_memory_text_stripped_of_multiple_tags():
     from channels import registry
     from core.turn_sink import TurnSource, record_assistant_turn
 
-    await _reset_channels()
     pipeline = _CapturePipeline()
     raw = "<say>说话</say><do>动作</do><feel>感受</feel><env>环境</env>"
 
@@ -208,29 +199,11 @@ async def test_memory_text_stripped_of_multiple_tags():
 # 7. desktop channel_message 收到完整原文（含标签）
 # ═══════════════════════════════════════════════════════════════════════════════
 
-async def test_desktop_fanout_receives_scrubbed_text(monkeypatch, enabled_client_channels):
+async def test_desktop_fanout_receives_scrubbed_text(desktop_wire):
     """desktop channel_message receives scrubbed text: NMP tags stripped, action content removed.
     All record_assistant_turn calls are reality-only; Dream uses its own pipeline."""
-    from channels import registry
-    from channels.desktop import DesktopChannel
     from core.turn_sink import TurnSource, record_assistant_turn
 
-    await _reset_channels()
-
-    push_msg_calls: list[dict] = []
-
-    async def fake_push_message(content, msg_id=None):
-        push_msg_calls.append({"content": content, "msg_id": msg_id})
-        return True
-
-    async def fake_push_segments(*args, **kwargs):
-        return True
-
-    monkeypatch.setattr("channels.desktop_ws.is_connected", lambda: True)
-    monkeypatch.setattr("channels.desktop_ws.push_message", fake_push_message)
-    monkeypatch.setattr("channels.desktop_ws.push_segments", fake_push_segments)
-
-    registry.register(DesktopChannel())
     # Pure say content — scrubber keeps dialogue intact
     raw = "<say>你好</say>"
 
@@ -243,6 +216,7 @@ async def test_desktop_fanout_receives_scrubbed_text(monkeypatch, enabled_client
         pipeline=_CapturePipeline(),
     )
 
+    push_msg_calls = [frame for frame in desktop_wire if frame["type"] == "channel_message"]
     assert len(push_msg_calls) == 1
     # NMP tags are stripped; plain dialogue is preserved
     assert "<say>" not in push_msg_calls[0]["content"]
@@ -253,29 +227,10 @@ async def test_desktop_fanout_receives_scrubbed_text(monkeypatch, enabled_client
 # 8. desktop message_segments 仍保留 NMP 解析行为
 # ═══════════════════════════════════════════════════════════════════════════════
 
-async def test_desktop_message_segments_say_only(monkeypatch, enabled_client_channels):
+async def test_desktop_message_segments_say_only(desktop_wire):
     """desktop message_segments pushes only say segments; do/feel/env are filtered.
     Reality-only gate: all record_assistant_turn calls are reality."""
-    from channels import registry
-    from channels.desktop import DesktopChannel
     from core.turn_sink import TurnSource, record_assistant_turn
-
-    await _reset_channels()
-
-    push_seg_calls: list[dict] = []
-
-    async def fake_push_message(content, msg_id=None):
-        return True
-
-    async def fake_push_segments(content, segments, msg_id=None):
-        push_seg_calls.append({"content": content, "segments": segments})
-        return True
-
-    monkeypatch.setattr("channels.desktop_ws.is_connected", lambda: True)
-    monkeypatch.setattr("channels.desktop_ws.push_message", fake_push_message)
-    monkeypatch.setattr("channels.desktop_ws.push_segments", fake_push_segments)
-
-    registry.register(DesktopChannel())
 
     raw = "<say>你好</say><do>她点头</do><feel>温暖</feel><env>阳光</env>"
     await record_assistant_turn(
@@ -287,6 +242,7 @@ async def test_desktop_message_segments_say_only(monkeypatch, enabled_client_cha
         pipeline=_CapturePipeline(),
     )
 
+    push_seg_calls = [frame for frame in desktop_wire if frame["type"] == "message_segments"]
     assert len(push_seg_calls) == 1
     segs = push_seg_calls[0]["segments"]
     seg_types = {s["type"] for s in segs}
@@ -310,7 +266,6 @@ async def test_plain_text_memory_unchanged():
     from channels import registry
     from core.turn_sink import TurnSource, record_assistant_turn
 
-    await _reset_channels()
     pipeline = _CapturePipeline()
     raw = "普通的一句话，没有任何标签。"
 
@@ -332,7 +287,6 @@ async def test_plain_text_qq_fanout_unchanged():
     from channels import registry
     from core.turn_sink import TurnSource, record_assistant_turn
 
-    await _reset_channels()
     qq_ch = _Channel("qq")
     registry.register(qq_ch)
 

@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import asyncio
 import io
+from itertools import count
 import time
+from types import SimpleNamespace
 import wave
 
 import pytest
@@ -429,8 +431,11 @@ def test_feature_timeout_inside_the_feature_does_not_fail_the_analysis(sandbox, 
     assert result["analysis_status"] in {"ok", "timeout"}    # never an exception
 
 
-def test_stats_expose_label_distribution_and_feature_cost(sandbox):
+def test_stats_expose_label_distribution_and_feature_cost(sandbox, monkeypatch):
     from core import audio_analysis as module
+
+    ticks = count()
+    monkeypatch.setattr(module, "time", SimpleNamespace(monotonic=lambda: next(ticks) / 100_000))
     module.reset_stats_for_tests()
     analyze_audio_bytes(_wav_bytes(_voice(200.0, 2.0, 5.0)), mode="speech", use_cache=False)
     analyze_audio_bytes(_wav_bytes(_voice(200.0, 2.0, 40.0)), mode="speech", use_cache=False)

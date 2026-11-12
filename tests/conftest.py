@@ -6,6 +6,7 @@ pytest 共享 fixture
 """
 
 import asyncio
+import json
 import os
 import sys
 from pathlib import Path
@@ -78,9 +79,35 @@ def enabled_client_channels(monkeypatch):
 @pytest.fixture(autouse=True)
 def reset_runtime_registries(monkeypatch):
     """Each test owns its runtime; registered test doubles must not leak."""
+    from channels import registry
     from core import pipeline_registry, qq_service
+    from core.tools import chat_artifacts
+
+    monkeypatch.setattr(registry, "_channels", {})
     monkeypatch.setattr(pipeline_registry, "_pipeline", None)
     monkeypatch.setattr(qq_service, "_service", None)
+    token = chat_artifacts._turn_artifacts.set(None)
+    try:
+        yield
+    finally:
+        chat_artifacts._turn_artifacts.reset(token)
+
+
+@pytest.fixture
+def desktop_wire(monkeypatch, enabled_client_channels):
+    """Connect a test socket at the transport boundary and capture wire frames."""
+    from channels import desktop_ws, registry
+    from channels.desktop import DesktopChannel
+
+    frames = []
+
+    class Socket:
+        async def send_text(self, text):
+            frames.append(json.loads(text))
+
+    registry.register(DesktopChannel())
+    monkeypatch.setattr(desktop_ws, "_current_ws", Socket())
+    return frames
 
 
 def _worker_session(suffix: str) -> str:
