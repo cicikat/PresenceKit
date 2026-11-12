@@ -83,6 +83,8 @@ async def test_paginated_search(connected, monkeypatch):
         if url.endswith("/messages"):
             assert kwargs["params"]["q"] == "from:test@example.test"
             assert kwargs["params"]["pageToken"] == "page1"
+            # Gmail emits HTTP 204 when the projection removes all fields from an empty page.
+            assert "resultSizeEstimate" in kwargs["params"]["fields"].split(",")
             return {"messages": [{"id": "first"}], "nextPageToken": "page2"}
         assert url.endswith("/messages/first")
         return {"id": "first", "payload": _metadata(("Subject", "主题"))}

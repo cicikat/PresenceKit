@@ -54,7 +54,10 @@ async def get(uid: str, char_id: str, mid: str, *, full: bool = False) -> dict:
 
 
 async def list_page(uid: str, char_id: str, *, query: str = "", page_token: str = "", limit: int = 5) -> dict:
-    params: dict[str, str | int] = {"maxResults": limit, "fields": "messages(id),nextPageToken"}
+    # Include the count so an empty page still has a JSON response.
+    params: dict[str, str | int] = {
+        "maxResults": limit, "fields": "messages(id),nextPageToken,resultSizeEstimate",
+    }
     if query:
         params["q"] = query
     if page_token:
