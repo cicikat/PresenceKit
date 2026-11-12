@@ -38,7 +38,7 @@ def test_run_session_close_noop_when_not_closing(sandbox):
     session.arm(UID, char_id=CHAR)
     session.enter_active(UID, game_id=GAME_ID, game_name=GAME_NAME, char_id=CHAR)
     import asyncio
-    asyncio.get_event_loop().run_until_complete(
+    asyncio.run(
         session_close.run_session_close(UID, char_id=CHAR)
     )
     # 仍是 active，没被误收尾

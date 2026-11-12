@@ -19,6 +19,7 @@ jobs:
     if: github.event_name != 'push' || github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         python-version: ["3.10", "3.12"]
 
@@ -123,7 +124,8 @@ jobs:
           retention-days: 30
 
   browser:
-    runs-on: ubuntu-latest
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

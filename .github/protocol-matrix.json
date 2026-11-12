@@ -22,7 +22,7 @@
     }
   },
   "suites": [
-    {"name": "backend protocol provider", "level": "contract", "command": "pytest -n auto -q tests/test_protocol_fixtures.py"},
+    {"name": "backend protocol provider", "level": "contract", "command": "pytest -n auto -q tests/test_protocol_fixtures.py tests/test_activity_contract.py"},
     {"name": "desktop protocol consumer", "level": "contract", "command": "npm test -- --run tests/protocol-fixtures.test.ts"},
     {"name": "mobile protocol consumer", "level": "contract", "command": "flutter test test/protocol_fixtures_test.dart"}
   ],

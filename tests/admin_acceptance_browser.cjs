@@ -9,11 +9,12 @@ const base = process.env.ADMIN_TEST_URL;
   try {
     const context = await browser.newContext({viewport:{width:1365,height:900}});
     const page = await context.newPage();
+    page.setDefaultTimeout(10000);
     const errors = [];
     const writes = [];
     let needsSetup = false;
     let oauth = {configured:false, source:'none', client_secret_set:false};
-    let language = 'zh-CN';
+    let language = 'zh';
     page.on('pageerror', error => errors.push(error.message));
     await page.route('**/*', async route => {
       const request = route.request();
@@ -32,7 +33,7 @@ const base = process.env.ADMIN_TEST_URL;
         data = {needs_setup:needsSetup, owner:{configured:true}, embedding:{}};
       } else if (url.pathname === '/settings/prompt-language') {
         if (method === 'POST') language = body.language;
-        data = {language};
+        data = {effective_language:language};
       } else if (url.pathname === '/settings/gmail/oauth/config') {
         if (method === 'PUT') oauth = {configured:true, source:'private_file',
           client_id:body.client_id, redirect_uri:body.redirect_uri, client_secret_set:true, credential_revision:'fixture'};
@@ -58,7 +59,9 @@ const base = process.env.ADMIN_TEST_URL;
     await page.locator('#key-input').fill('invalid-fixture');
     await page.locator('[data-action="doLogin"]').click();
     await page.locator('#auth-err').filter({hasText:'密钥错误'}).waitFor();
-    assert.equal(await page.locator('#app').isVisible(), false);
+    assert.equal(await page.locator('#auth-overlay').isVisible(), true);
+    assert.equal(await page.evaluate(() => localStorage.getItem('qq_admin_key')), null);
+    assert.deepEqual(writes, []);
     await page.locator('#key-input').fill('fixture-admin');
     await page.locator('[data-action="doLogin"]').click();
     await active('setup');
@@ -70,12 +73,17 @@ const base = process.env.ADMIN_TEST_URL;
     await page.reload({waitUntil:'networkidle'});
     await active('setup');
     needsSetup = false;
-    await page.evaluate(() => goto('mail-config'));
-    await active('mail-config');
+    await page.locator('nav a[data-page="character-behavior"]').click();
+    await active('character-behavior');
+    const oauthForm = page.locator('details').filter({has: page.locator('#setup-gmail-client-id')});
+    await oauthForm.locator('summary').click();
+    await page.locator('#setup-gmail-oauth-status').filter({hasText:'未配置'}).waitFor();
+    assert.equal(await page.locator('#setup-gmail-client-secret').getAttribute('type'), 'password');
     await page.locator('#setup-gmail-client-id').fill('123-fixture.apps.googleusercontent.com');
     await page.locator('#setup-gmail-client-secret').fill('fixture-browser-secret');
     await page.locator('#setup-gmail-redirect-uri').fill('https://example.test/settings/gmail/oauth/callback');
     await page.locator('#setup-gmail-oauth-save').click();
+    await page.locator('#setup-gmail-oauth-status').filter({hasText:'已配置'}).waitFor();
     await page.waitForFunction(() => document.getElementById('setup-gmail-client-secret').value === '');
     const saved = writes.filter(write => write.path === '/settings/gmail/oauth/config');
     assert.equal(saved.length, 1);
@@ -84,13 +92,18 @@ const base = process.env.ADMIN_TEST_URL;
     assert.equal(saved[0].body.client_id, oauth.client_id);
     assert.equal(saved[0].body.redirect_uri, oauth.redirect_uri);
     assert.ok(!(await page.locator('body').innerText()).includes('fixture-browser-secret'));
-    await page.locator('#setup-gmail-client-id').fill('draft.apps.googleusercontent.com');
     await page.selectOption('#admin-language-select', 'en');
-    await page.waitForFunction(() => document.getElementById('setup-gmail-oauth-save').textContent.trim() === 'Save');
-    assert.equal(await page.locator('#setup-gmail-client-id').inputValue(), 'draft.apps.googleusercontent.com');
-    await page.evaluate(() => goto('guide'));
+    await active('character-behavior');
+    await page.locator('#setup-gmail-oauth-status').filter({hasText:/^Configured$/}).waitFor();
+    assert.equal(await page.locator('#setup-gmail-client-id').inputValue(), oauth.client_id);
+    assert.equal(await page.locator('#setup-gmail-client-secret').inputValue(), '');
+    await oauthForm.locator('summary').click();
+    await page.getByRole('button', {name:'Save', exact:true}).and(page.locator('#setup-gmail-oauth-save')).waitFor();
+    await page.locator('#setup-gmail-client-id').fill('draft.apps.googleusercontent.com');
+    await page.locator('nav a[data-page="guide"]').click();
+    await active('guide');
     await page.locator('#nav-back').click();
-    await active('mail-config');
+    await active('character-behavior');
     assert.equal(await page.locator('#setup-gmail-client-id').inputValue(), 'draft.apps.googleusercontent.com');
     // Discover actual save buttons in every loaded fragment, then execute i18n.
     await page.evaluate(async () => {
@@ -99,7 +112,16 @@ const base = process.env.ADMIN_TEST_URL;
         const host = document.createElement('div');
         host.hidden = true;
         host.dataset.testTranslations = 'true';
-        host.innerHTML = await response.text();
+        const fragment = document.createElement('template');
+        fragment.innerHTML = await response.text();
+        for (const button of fragment.content.querySelectorAll('button')) {
+          if (button.dataset.i18n === 'common.save' || button.dataset.i18n === 'settings_center.save'
+              || /^(保存|Save\\b)/.test(button.textContent.trim())) {
+            const copy = button.cloneNode(true);
+            copy.removeAttribute('id');
+            host.append(copy);
+          }
+        }
         document.body.append(host);
       }
     });
@@ -110,9 +132,12 @@ const base = process.env.ADMIN_TEST_URL;
       assert.ok(buttons.length > 0);
       for (const text of buttons) assert.equal(text.trim(), expected);
       const missing = await page.locator('[data-test-translations] button').evaluateAll(buttons => buttons
-        .filter(button => /^保存|^Save\b/.test(button.textContent.trim()) && !button.dataset.i18n)
+        .filter(button => !button.dataset.i18n)
         .map(button => button.outerHTML));
       assert.deepEqual(missing, []);
+      const localizedButtons = await page.locator('[data-test-translations] button').allTextContents();
+      const saveLabel = lang === 'en' ? /^Save\b/i : /^保存/;
+      for (const label of localizedButtons) assert.match(label.trim(), saveLabel);
     }
     await page.screenshot({path:'.tmp/admin-navigation/oauth-en.png'});
     assert.deepEqual(errors, []);

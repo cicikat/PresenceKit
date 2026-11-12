@@ -1,17 +1,24 @@
 from pathlib import Path
 
+import yaml
+
 
 WORKFLOW_ROOT = Path(__file__).parents[1] / ".github" / "workflows"
 
 
-def test_pr_workflow_keeps_smoke_and_protocol_contracts_parallel():
-    workflow = (WORKFLOW_ROOT / "tests.yml").read_text(encoding="utf-8")
-    assert "pull_request" in workflow
-    assert "python -m pytest -n auto -q" in workflow
-    assert "tests/test_protocol_fixtures.py" in workflow
-    assert "full-pytest:" in workflow
-    assert "--junitxml=artifacts/pytest-" in workflow
-    assert "continue-on-error" not in workflow
+def _workflow(filename):
+    return yaml.load((WORKFLOW_ROOT / filename).read_text(encoding="utf-8"), Loader=yaml.BaseLoader)
+
+
+def test_pr_workflow_requires_both_supported_python_versions_and_offline_evals():
+    workflow = _workflow("tests.yml")
+    assert "main" in workflow["on"]["pull_request"]["branches"]
+    assert "main" in _workflow("offline-evals.yml")["on"]["pull_request"]["branches"]
+    for job_id in ("pytest", "full-pytest"):
+        job = workflow["jobs"][job_id]
+        assert set(job["strategy"]["matrix"]["python-version"]) == {"3.10", "3.12"}
+        for step in [job, *job["steps"]]:
+            assert step.get("continue-on-error", "false") == "false"
 
 
 def test_external_and_manual_evidence_are_separate_from_pr_required_checks():

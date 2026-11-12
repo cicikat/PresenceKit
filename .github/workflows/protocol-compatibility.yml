@@ -60,11 +60,15 @@ jobs:
 
       - name: Assert all checkouts are pinned to the requested SHAs
         shell: bash
+        env:
+          BACKEND_SHA: ${{ inputs.backend_sha }}
+          DESKTOP_SHA: ${{ inputs.desktop_sha }}
+          MOBILE_SHA: ${{ inputs.mobile_sha }}
         run: |
           set -euo pipefail
-          test "$(git -C backend rev-parse HEAD)" = "${{ inputs.backend_sha }}"
-          test "$(git -C desktop rev-parse HEAD)" = "${{ inputs.desktop_sha }}"
-          test "$(git -C mobile rev-parse HEAD)" = "${{ inputs.mobile_sha }}"
+          test "$(git -C backend rev-parse HEAD)" = "$BACKEND_SHA"
+          test "$(git -C desktop rev-parse HEAD)" = "$DESKTOP_SHA"
+          test "$(git -C mobile rev-parse HEAD)" = "$MOBILE_SHA"
           test -f backend/tests/protocol_fixtures/v1/manifest.json
           mkdir -p evidence
 
@@ -80,8 +84,10 @@ jobs:
       - name: Run backend provider contract
         id: backend
         working-directory: backend
+        env:
+          EMERALD_CLIENT_ROOT: ${{ github.workspace }}/desktop
         run: |
-          python -m pytest -n 4 -q -ra tests/test_protocol_fixtures.py --junitxml=../evidence/backend.xml
+          python -m pytest -n 4 -q -ra tests/test_protocol_fixtures.py tests/test_activity_contract.py --junitxml=../evidence/backend.xml
           python ../tooling/tests/ci_evidence.py ../evidence/backend.xml --no-skips
 
       - name: Run desktop consumer contract

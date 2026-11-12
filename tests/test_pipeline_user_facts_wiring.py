@@ -146,7 +146,7 @@ def test_fetch_context_calls_user_facts_format_for_prompt(chars_tree, sandbox, r
     pipeline = _make_pipeline(TEST_CHAR_ID, registry)
     _write_active(sandbox, TEST_CHAR_ID)
 
-    asyncio.get_event_loop().run_until_complete(
+    asyncio.run(
         pipeline.fetch_context("u99", "hello")
     )
 
@@ -162,7 +162,7 @@ def test_fetch_context_returns_user_facts_text_key(chars_tree, sandbox, registry
     pipeline = _make_pipeline(TEST_CHAR_ID, registry)
     _write_active(sandbox, TEST_CHAR_ID)
 
-    ctx = asyncio.get_event_loop().run_until_complete(
+    ctx = asyncio.run(
         pipeline.fetch_context("u1", "hello")
     )
 

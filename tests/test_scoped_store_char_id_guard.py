@@ -102,31 +102,31 @@ class TestUserIdentityGuard:
     def test_load_none_raises(self, sandbox):
         import core.memory.user_identity as ui
         with pytest.raises(ValueError, match="character_id"):
-            asyncio.get_event_loop().run_until_complete(ui.load(_UID, char_id=None))
+            asyncio.run(ui.load(_UID, char_id=None))
 
     def test_load_empty_raises(self, sandbox):
         import core.memory.user_identity as ui
         with pytest.raises(ValueError, match="character_id"):
-            asyncio.get_event_loop().run_until_complete(ui.load(_UID, char_id=""))
+            asyncio.run(ui.load(_UID, char_id=""))
 
     def test_load_int_raises(self, sandbox):
         import core.memory.user_identity as ui
         with pytest.raises(ValueError, match="character_id"):
-            asyncio.get_event_loop().run_until_complete(ui.load(_UID, char_id=42))
+            asyncio.run(ui.load(_UID, char_id=42))
 
     def test_save_none_raises(self, sandbox):
         import core.memory.user_identity as ui
         with pytest.raises(ValueError, match="character_id"):
-            asyncio.get_event_loop().run_until_complete(ui.save(_UID, {}, char_id=None))
+            asyncio.run(ui.save(_UID, {}, char_id=None))
 
     def test_save_empty_raises(self, sandbox):
         import core.memory.user_identity as ui
         with pytest.raises(ValueError, match="character_id"):
-            asyncio.get_event_loop().run_until_complete(ui.save(_UID, {}, char_id=""))
+            asyncio.run(ui.save(_UID, {}, char_id=""))
 
     def test_default_char_id_works(self, sandbox):
         import core.memory.user_identity as ui
-        result = asyncio.get_event_loop().run_until_complete(ui.load(_UID))
+        result = asyncio.run(ui.load(_UID))
         assert isinstance(result, dict)
 
 
@@ -225,12 +225,12 @@ class TestShortTermGuard:
     def test_clear_none_raises(self, sandbox):
         import core.memory.short_term as st
         with pytest.raises(ValueError, match="character_id"):
-            asyncio.get_event_loop().run_until_complete(st.clear(_UID, char_id=None))
+            asyncio.run(st.clear(_UID, char_id=None))
 
     def test_clear_empty_raises(self, sandbox):
         import core.memory.short_term as st
         with pytest.raises(ValueError, match="character_id"):
-            asyncio.get_event_loop().run_until_complete(st.clear(_UID, char_id=""))
+            asyncio.run(st.clear(_UID, char_id=""))
 
     def test_default_char_id_works(self, sandbox):
         import core.memory.short_term as st

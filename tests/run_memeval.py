@@ -69,11 +69,13 @@ def main() -> int:
         is_xfail = bool(case.get("xfail"))
 
         for mode in _RECALL_MODES:
+            label = f"{cid}/{mode}"
             try:
                 problems = _run_one(case, mode)
             except Exception as e:  # noqa: BLE001
-                problems = [f"异常: {e!r}"]
-            label = f"{cid}/{mode}"
+                failures += 1
+                print(f"[FAIL] {label} {category}: 异常: {e!r}")
+                continue
             if is_xfail and problems:
                 xfail_ok += 1
                 print(f"[XFAIL] {label} {category} ({case['xfail_reason']}): {'; '.join(problems)}")

@@ -234,7 +234,7 @@ class TestEventLogSearchTrace:
         event_log.append(UID, "user", "我今天很累很累", char_id=CHAR_ID)
         event_log.append(UID, "assistant", "好好休息", char_id=CHAR_ID)
 
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             event_log.search(UID, "很累", return_trace=True, char_id=CHAR_ID)
         )
         assert isinstance(result, tuple)
@@ -247,7 +247,7 @@ class TestEventLogSearchTrace:
         event_log.append(UID, "user", "我今天非常非常开心", char_id=CHAR_ID)
         event_log.append(UID, "assistant", "真好", char_id=CHAR_ID)
 
-        _, trace = asyncio.get_event_loop().run_until_complete(
+        _, trace = asyncio.run(
             event_log.search(UID, "开心", return_trace=True, char_id=CHAR_ID)
         )
         if trace:
@@ -257,14 +257,14 @@ class TestEventLogSearchTrace:
 
     def test_returns_str_when_return_trace_false(self, sandbox):
         from core.memory import event_log
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             event_log.search(UID, "query", return_trace=False, char_id=CHAR_ID)
         )
         assert isinstance(result, str)
 
     def test_empty_log_returns_empty_trace(self, sandbox):
         from core.memory import event_log
-        text, trace = asyncio.get_event_loop().run_until_complete(
+        text, trace = asyncio.run(
             event_log.search("no_log_uid", "query", return_trace=True, char_id=CHAR_ID)
         )
         assert text == ""

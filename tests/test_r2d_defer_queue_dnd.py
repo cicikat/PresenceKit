@@ -656,7 +656,7 @@ class TestExecutionLayerDecisionFree:
             assert result.sent is False
             assert not marked, "_mark must not be called when send returns None"
 
-        asyncio.get_event_loop().run_until_complete(_run())
+        asyncio.run(_run())
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -762,7 +762,7 @@ class TestDeferNoMark:
             from core.scheduler.gating import write_shadow_tick
             write_shadow_tick("u1")
 
-        asyncio.get_event_loop().run_until_complete(_run())
+        asyncio.run(_run())
         assert not execute_calls, "execute must not be called when gating blocks the trigger"
 
 

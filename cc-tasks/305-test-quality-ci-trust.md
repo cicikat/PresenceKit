@@ -12,17 +12,13 @@
 - 共享不可变测试素材，保留每个测试的可写沙盒；减少同步测试的事件循环初始化。
 - 五种局部内存 mutation 覆盖秘密泄漏、角色越权、重复副作用、禁用通道发送及工具协议放行。
 
-## 当前验证
+## 续修与验收
 
-- 五种 mutation 全部被对应业务测试发现（KILLED）；脚本不修改磁盘业务源码。
-- 最新局部验证：通道禁用行为及路由覆盖 3 passed。
-- 前期 focused 验证覆盖 Gmail、Prompt、i18n、slow queue；发现的路由清单问题已修复并复测。
-- 基线日志：8324 passed、3 failed、2 skipped、13 subtests，1183.13 秒。失败涉及音频耗时/计时精度和 Windows 跨盘相对路径；运行期间工作区发生修改，该结果不能作为严格的修改前性能对照。
+- 并行 Smoke 通过 241 项。移除慢队列 fixture 对同步测试隐式创建的 event loop 后，旧测试改为自管事件循环或在 pytest 管理的同一循环内执行；相关串行回归通过 256 项。
+- 两条 Playwright 验收覆盖新版登录及邮件设置、旧版导航和移动视口。测试实际展开 OAuth 卡片、点击保存、核对 HTTP 请求与重新读取的状态，并执行真实双语翻译。保存按钮补齐已有翻译键，浏览器 CI 固定到 Playwright 支持的 Ubuntu 24.04。
+- Windows Python 3.12 离线 identity、format、memeval 分别通过 8、4、50 项。关闭食物记忆的 SQLite 连接后，临时沙盒可正常清理；评估异常计入失败，无法被 XFAIL 吞掉。
+- 五种故障注入全部被对应业务测试发现。局部 mutation 在独立进程注入，不修改磁盘上的业务源码。
+- [PR #2](https://github.com/cicikat/PresenceKit/pull/2) 持续运行双版本 Smoke、全量、串行隔离、浏览器和离线评估。以 PR 当前提交的运行记录为准。
+- [三仓协议验收](https://github.com/cicikat/PresenceKit/actions/runs/43172604200) 对 backend `125c7bb`、desktop `a2704db`、mobile `0f2a7ee` 的 provider/consumer fixture 通过。扩充后的合同还检查跨仓活动接口，并在每次运行生成针对所验三仓提交的证据。
 
-## 尚未完成的验收
-
-- 真实浏览器脚本、完整 Smoke/串行/离线评估、Python 3.10/3.12 全量及可靠的同环境性能对照，需以本 PR 的实际运行结果补充。
-- 三仓当前 SHA 的合同尚未执行；矩阵不宣称兼容。
-- GitHub Actions 链接与 PR 链接在创建及运行后补充；当前不宣称完整验收通过。
-
-本次仅修改后端仓库的测试与工作流，没有修改桌面或手机产品接口。
+本次变更在后端仓库交付。测试使用公开资产、隔离数据和合成 OAuth 凭据。
