@@ -1,3 +1,17 @@
+## 工单 307 · 桌面连接所有权与正文恢复（2026-11-12）
+
+current：后端以 WS/generation 共同限定 hello、pong、ACK、心跳与 finally 清理，动作 ACK 绑定
+发送代次，替换/断线明确收尾。桌面分离执行状态与正文可用性，completed 无 result 保留定位身份，
+显式 canonical/history 恢复单气泡；有界退避查询及独立截止计时覆盖挂起 GET，未知结果不重发。
+只有 not_executed 允许用户创建新请求。无新增 wire 字段、scope、配置开关或服务端状态库；复用
+既有回执观测。手机未消费桌面恢复协调器，其 HTTP/poll/ACK 合同不变。
+
+observe/open：隔离 ChatPanel 浏览器与单元回归通过；真实 Windows/Tauri 断网、快速重启、HTTP
+中断与 OrangeVPS 部署联调仍 open。旧 WebView 缺 Web Locks 时只保证单 WebView 内 GET 合并。
+Gmail 不在 307 范围。先部署后端，再更新桌面；旧客户端保持原恢复提示。三仓兼容结果仅以绑定
+三个完整 SHA 的 workflow 产物为证，静态 protocol-matrix 的 not_verified 计划快照不代表运行验收。
+关联 PR：后端 #4、桌面 #2。详见 [通道合同](channels.md#工单-307--连接所有权与正文恢复)。
+
 ## 工单 305 · 桌面聊天请求对账
 
 current：后端 chat scope 内新增可选桌面请求头与只读查询，沿用 owner-turn 回执存储和观测。桌面持久化待对账 ID，按 request_id 关联 HTTP、工具活动和 canonical WS。断线与旧后端降级保留未知，只有确认未执行才开放新回合。手机调用合同保持现有形态。见 [通道协议](channels.md#工单-305--桌面聊天请求对账)。

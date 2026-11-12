@@ -186,6 +186,25 @@ transport `msg_id` 也用于同一 assistant turn 的 WS `channel_message.msg_id
 
 HTTP 回复、`tool_activity`、`message_stream_start` 和 canonical `channel_message` 携带同一 `request_id`。同轮流式增量和结束帧通过既有 `msg_id` 关联。工具状态独立于整轮状态。确认前置拒绝时使用 `not_executed` 与 `X-Presence-Chat-Rejected: 1`，桌面可使用新 ID 发送。无请求头的客户端沿用旧协议。手机消费端无需升级。
 
+### 工单 307 · 连接所有权与正文恢复
+
+每次接纳桌面 WS 都分配单调 connection generation。hello/pong/ACK 在无 await 的临界区检查
+WS 与代次，只有当前连接可修改共享心跳、ACK 和连接状态。待确认动作绑定发送代次，替换或断线以
+connection_replaced/disconnected 收尾；旧接收循环、finally 或心跳超时不能清理或关闭新连接。
+channel_message、stream 与 segments 继续使用原 fire-and-forget 协议。
+
+桌面将服务器执行完成与正文已呈现分开：completed 无 result 时保留 request_id/msg_id/turn_id，
+显示已执行但回复暂不可恢复，只查询原回执或按显式 turn_id 恢复历史。unknown、failed、
+interrupted_unknown 不自动重发，仅 not_executed 允许用户以新 ID 重试。
+客户端有界退避查询最多观察 90 秒、间隔最多 15 秒，请求年龄上限 12 分钟；独立截止计时覆盖挂起
+GET。终态或完整 canonical 回复停止自动查询，配置/角色切换使旧观察失效。无新增 scope、设置或
+持久服务端状态；旧客户端保持原恢复界面，手机合同不变。部署顺序为后端先行、桌面随后。
+
+确定性所有权测试撤销消息入口检查时，迟到 pong/ACK 污染回归失败；恢复后相关 WS/视频通话测试
+56 项通过（本地 Python 3.14 仅作补充，标准验收以当前 head 的 3.10/3.12 CI 为准）。桌面隔离
+浏览器与单测覆盖正文恢复、去重及只读查询。真实 Windows/Tauri 与 OrangeVPS 断网/重启联调仍 open，
+Gmail 不在 307 验收范围。详见桌面 docs/chat-correlation.md。
+
 文件：`channels/desktop_ws.py`
 
 端点：`ws://127.0.0.1:8080/ws/desktop`
