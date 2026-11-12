@@ -101,7 +101,7 @@ async def test_concurrent_actions_have_distinct_ack_ids(module_name, monkeypatch
     ws_module._pending_acks.clear()
     sent = []
 
-    async def fake_send(payload):
+    async def fake_send(payload, **kwargs):
         sent.append(payload)
         return True
 
@@ -120,12 +120,17 @@ async def test_concurrent_actions_have_distinct_ack_ids(module_name, monkeypatch
         assert all(len(msg_id) == 32 for msg_id in ids)
 
         for msg_id in ids:
-            await ws_module._handle_message({"type": "ack", "msg_id": msg_id, "ok": True})
+            frame = {"type": "ack", "msg_id": msg_id, "ok": True}
+            if module_name == "channels.desktop_ws":
+                await ws_module._handle_message(ws_module._current_ws, ws_module._generation, frame)
+            else:
+                await ws_module._handle_message(frame)
         assert await asyncio.gather(first, second) == [(True, None), (True, None)]
     finally:
         for task in (first, second):
             if not task.done():
                 task.cancel()
+        await asyncio.gather(first, second, return_exceptions=True)
         ws_module._pending_acks.clear()
         ws_module._current_ws = None
 
