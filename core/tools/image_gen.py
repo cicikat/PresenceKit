@@ -240,14 +240,14 @@ def register_tools(registry: dict) -> None:
 
     registry["pin_character_image_reference"] = {
         "func": _pin,
-        "description": "仅当用户本轮明确要求固定随消息发送的图为你的角色形象参考图时使用。会替换此前的参考图。",
+        "description": "根据对话判断用户是否把本轮发来的图片当作你的长期形象参考。如果语义清楚，就主动调用；普通分享、仅供本次改图或用途不明的图片不固定。调用会替换旧参考图，仅在对话支持替换时执行。",
         "category": "media",
         "parameters": {"type": "object", "properties": {
             "sha256": {"type": "string", "description": "本轮用户上传的图片指纹。"},
         }, "required": ["sha256"]},
         "dangerous": False,
         "effect": "write",
-        "examples": ["把这张图固定为你的形象参考图"],
+        "examples": ["以后画自己就照这个造型", "这是你的新版设定图，以后以这个为准"],
         "keywords": ["固定参考图", "设为参考图"],
         "trace_result": False,
         "echo_event_log": False,

@@ -358,3 +358,19 @@ def test_image_request_recognizes_multimodal_text_and_not_file_creation():
     assert looks_like_image_request([{"type":"text","text":"把这张图片改成插画"},{"type":"image_url","image_url":{"url":"fixture"}}])
     assert looks_like_image_request("Please generate a portrait")
     assert not looks_like_image_request("给我做一份表格")
+
+
+@pytest.mark.asyncio
+async def test_character_reference_tool_available_with_natural_caption(harness, monkeypatch):
+    script, requests, executions, run = harness
+    name = "pin_character_image_reference"
+    _patch_tools_schema(monkeypatch, [name, "web_search"])
+    digest = "a" * 64
+    script.extend([turn(call(name, {"sha256": digest})), turn(content="记住了")])
+    await run("以后画自己就照这个造型", media_refs=[{"kind": "image", "sha256": digest}])
+    assert name in requests[0]["names"]
+    assert executions[0][2]["pin_reference_hashes"] == {digest}
+
+    script.append(turn(content="好"))
+    await run("以后画自己就照这个造型")
+    assert name not in requests[-1]["names"]

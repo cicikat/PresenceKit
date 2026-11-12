@@ -168,5 +168,3 @@ async def test_pin_accepts_only_authorized_current_attachment(monkeypatch, sandb
     assert allowed.status == "tool_executed"
     upload.unlink()
     assert reference.exists("u1", "c1")
-    assert reference.pin_requested("把这张图固定为你的形象参考图")
-    assert not reference.pin_requested("不要固定为参考图")

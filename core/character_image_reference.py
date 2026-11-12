@@ -1,6 +1,5 @@
 """Owner-approved portrait used only when image generation opts in."""
 from io import BytesIO
-import re
 from threading import Lock
 
 from PIL import Image, ImageOps, UnidentifiedImageError
@@ -10,18 +9,10 @@ from core.sandbox import get_paths
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 _WRITE_LOCK = Lock()
-_PIN_INTENT = re.compile(
-    r"(?:固定|设[为成]|设置为|保存为|pin\b).{0,48}(?:参考图|reference)|"
-    r"(?:参考图|reference).{0,24}(?:固定|pin\b)", re.IGNORECASE,
-)
 
 
 class ReferenceError(ValueError):
     """Safe, actionable reference error for the tool caller."""
-
-
-def pin_requested(text: str) -> bool:
-    return not re.search(r"不要|别|不用|取消|do not|don.t", text or "", re.I) and bool(_PIN_INTENT.search(text or ""))
 
 
 def _path(user_id: str, char_id: str):

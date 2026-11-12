@@ -3251,7 +3251,7 @@ async def _execute_structured_impl(
             digest = tool_args.get("sha256")
             if (origin != "assistant_loop" or is_group or not isinstance(digest, str)
                     or digest not in pin_reference_hashes):
-                raise ValueError("只能按用户本轮明确要求固定本轮上传的图片。")
+                raise ValueError("只能固定本轮私聊收到的图片。")
             result = await func(digest, user_id=user_id, char_id=char_id)
         elif tool_name == "read_hds_heart_rate":
             _require_memory_read_scope(user_id, char_id)
