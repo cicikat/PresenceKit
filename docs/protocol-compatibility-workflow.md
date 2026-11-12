@@ -7,7 +7,9 @@ mobile consumer tests read that bundle through
 review bundle for session scope; it is not part of this frozen matrix until C
 advertises `session_scope` and the three repositories pick it up together.
 
-The machine-readable freeze is [.github/protocol-matrix.json](../.github/protocol-matrix.json).
+The static [.github/protocol-matrix.json](../.github/protocol-matrix.json) is an
+unverified planning snapshot. Use the workflow artifact for the tested commits,
+suite outcomes and run URL.
 The manually dispatched workflow is
 `.github/workflows/protocol-compatibility.yml`. Every checkout uses an explicit
 40-character SHA. A missing SHA, a checkout that resolves to another commit,
