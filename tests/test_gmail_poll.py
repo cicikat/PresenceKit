@@ -34,6 +34,7 @@ async def test_baseline_pagination_and_restart_dedup(connected, monkeypatch, tmp
     monkeypatch.setattr(gmail_poll.messages, "list_page", page)
     monkeypatch.setattr(gmail_poll.messages, "get", get)
     await gmail_poll.tick("owner", "character", now=now + 5)
+    assert gmail.status("owner", "character")["pending_count"] == 1
     signals = store.drain_pending_signals("owner", "character")
     assert len(signals) == 1 and signals[0].source == gmail_poll.SOURCE
     assert signals[0].evidence == [{"fact": "gmail_message_available"}]
@@ -47,6 +48,7 @@ async def test_baseline_pagination_and_restart_dedup(connected, monkeypatch, tmp
     assert calls[-1][1] == "page2"
     assert not store.drain_pending_signals("owner", "character")
     assert gmail.load()["poll"]["last_sync"] == now + 65
+    assert gmail.status("owner", "character")["pending_count"] == 1
 
 
 @pytest.mark.asyncio

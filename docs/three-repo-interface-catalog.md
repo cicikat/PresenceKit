@@ -16,6 +16,10 @@ Gmail 不在 307 范围。先部署后端，再更新桌面；旧客户端保持
 
 current：手机在 Android 私有原子文件保存按 origin/owner/角色隔离的待投递项，复用 scoped session、稳定 request_id、实时最终消息、poll 和 chat-log 对账。HTTP 5xx 和读超时保留结果未知。桌面协议、管理开关和后端 schema 沿用既有合同。observe：真实 Android 连发、切网、进程重启及后台验收。
 
+## 工单 309 · Gmail 处理账本
+
+current：`GET /settings/gmail` 增加脱敏待办统计，管理面可用 admin-only `GET/PUT /settings/gmail/pending` 标记及撤销。Gmail OAuth 范围不变。角色工具与 Autonomy 共用原授权链，桌面和手机无新增消费者。observe：真实 Google 账号收信至完成的验收。隔离 Chromium 已核对管理页计数和人工处理。
+
 ## 工单 305 · 桌面聊天请求对账
 
 current：后端 chat scope 内新增可选桌面请求头与只读查询，沿用 owner-turn 回执存储和观测。桌面持久化待对账 ID，按 request_id 关联 HTTP、工具活动和 canonical WS。断线与旧后端降级保留未知，只有确认未执行才开放新回合。手机调用合同保持现有形态。见 [通道协议](channels.md#工单-305--桌面聊天请求对账)。

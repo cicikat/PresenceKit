@@ -462,6 +462,7 @@ async def disconnect(uid: str, char_id: str) -> str:
 
 def status(uid: str, char_id: str) -> dict:
     from core.mail.gmail_poll import status as poll_status
+    from core.mail.gmail_pending import summary as pending_summary
     record = load()
     same = bound(record, uid, char_id)
     email = record.get("email", "") if same else ""
@@ -503,4 +504,5 @@ def status(uid: str, char_id: str) -> dict:
         "scopes": record.get("scopes", []) if same else [],
         "error": error,
         **poll_status(record, uid, char_id),
+        **pending_summary(record, uid, char_id, token_state=token_state),
     }

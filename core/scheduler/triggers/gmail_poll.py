@@ -11,5 +11,6 @@ async def check_gmail_poll(uid: str, char_id: str | None) -> None:
     if uid and char_id:
         try:
             await gmail_poll.tick(uid, char_id)
+            await gmail_poll.remind_pending(uid, char_id)
         except gmail.GmailError as exc:
             logger.warning("[gmail] poll could not persist state: %s", exc)

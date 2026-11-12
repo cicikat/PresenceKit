@@ -15,6 +15,8 @@
 
 `tool_eligibility()` 只判断一项工具能否被 autonomy allowlist 显式打开；已连接的全局只读 MCP 仍可经 `global_read_inheritance` 进入工具面，不要求 `mcp_explicit`。schema、`GET /admin/autonomy/tools` 和管理面矩阵共用 `AutonomyToolDecision`（`allowed`、`decision_source`、global/deployment/self-capability/MCP/autonomy policy、danger、confirmation）。执行前仍复查当前矩阵，展示允许但执行时撤权记 `tool_call_denied`。
 
+工单 309 的 Gmail 待办状态跨 signal TTL 保留。每次真实自主评估仅提供当前角色邮箱的待办数量和可用性。未处理且邮箱连接可用时，现有调度节拍至多每两小时产生一个 `gmail_pending_reminder`，同 tick 继续合并机会并服从预算、DND、Dream 和用户活跃门控。可静默或调用已授权 Gmail 工具。
+
 ## 版本化契约
 
 Signal 使用 `autonomy-signal.v1`：
