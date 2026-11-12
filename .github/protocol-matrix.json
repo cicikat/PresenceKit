@@ -2,7 +2,7 @@
   "matrix_version": "1",
   "fixture_version": "v1",
   "captured_at": "2026-11-12",
-  "compatibility_window": "current backend × current desktop × current mobile",
+  "compatibility_window": "unverified planning snapshot captured on the date above",
   "classification": "not_verified",
   "repositories": {
     "backend": {

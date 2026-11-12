@@ -19,8 +19,8 @@ from fastapi import WebSocket, WebSocketDisconnect
 logger = logging.getLogger(__name__)
 
 _current_ws: WebSocket | None = None
-_lock = asyncio.Lock()
-_pending_acks: dict[str, asyncio.Future] = {}
+_generation = 0
+_pending_acks: dict[str, tuple[int, asyncio.Future]] = {}
 _last_pong: float = 0.0
 _connect_time: float = 0.0  # epoch when the current WS session was accepted
 _last_ack_at: float = 0.0
@@ -50,21 +50,46 @@ _SEND_TIMEOUT_S = 0.5
 _TOOL_STATUS_SEND_TIMEOUT_S = _SEND_TIMEOUT_S  # alias kept for existing tests
 
 
-async def _close_stalled(ws: WebSocket) -> None:
+def _owns_connection(ws: WebSocket, generation: int) -> bool:
+    return _current_ws is ws and _generation == generation
+
+
+def _retire_connection(ws: WebSocket, generation: int, error: str) -> None:
+    """Validate and retire the owner in one event-loop turn."""
+    global _current_ws, _connect_time, _heartbeat_task, _last_ack_at
+    if not _owns_connection(ws, generation):
+        return
+    _current_ws = None
+    _connect_time = 0.0
+    _last_ack_at = 0.0
+    for owner, future in _pending_acks.values():
+        if owner == generation and not future.done():
+            future.set_result({"ok": False, "error": error})
+    if _heartbeat_task is not None and _heartbeat_task is not asyncio.current_task():
+        _heartbeat_task.cancel()
+    _heartbeat_task = None
+    from channels.registry import get as get_channel
+    from core.video_call_invite import disconnect as disconnect_video_invites
+    disconnect_video_invites()
+    channel = get_channel("desktop")
+    if channel is not None:
+        channel.set_active(False)
+
+
+async def _close(ws: WebSocket, code: int, reason: str) -> None:
     try:
         await asyncio.wait_for(
-            ws.close(code=1001, reason="send timeout"),
+            ws.close(code=code, reason=reason),
             timeout=min(0.2, _SEND_TIMEOUT_S),
         )
     except Exception:
         pass
 
 
-async def _send_json(payload: dict) -> bool:
-    global _current_ws
+async def _send_json(payload: dict, *, owner: tuple[WebSocket, int] | None = None) -> bool:
     from core.client_channels import enabled
-    ws = _current_ws
-    if not enabled("desktop") or ws is None:
+    ws, generation = owner if owner is not None else (_current_ws, _generation)
+    if not enabled("desktop") or ws is None or not _owns_connection(ws, generation):
         return False
     try:
         await asyncio.wait_for(
@@ -74,9 +99,8 @@ async def _send_json(payload: dict) -> bool:
         return True
     except asyncio.TimeoutError:
         logger.warning("[desktop_ws] send timed out; closing stalled socket")
-        if _current_ws is ws:
-            _current_ws = None
-        await _close_stalled(ws)
+        _retire_connection(ws, generation, "disconnected")
+        await _close(ws, 1001, "send timeout")
         return False
     except Exception as e:
         logger.warning(f"[desktop_ws] 发送失败: {e}")
@@ -225,27 +249,28 @@ async def push_action_and_wait(
     action: dict, timeout: float = 5.0
 ) -> tuple[bool, str | None]:
     """推送桌面动作并等 ack。返回 (ok, error)。"""
-    if not is_connected():
+    ws, generation = _current_ws, _generation
+    if ws is None:
         return False, "桌宠端 WS 未连接"
     msg_id = _new_msg_id()
     loop = asyncio.get_running_loop()
     fut: asyncio.Future = loop.create_future()
-    _pending_acks[msg_id] = fut
-    sent = await _send_json({
-        "type": "action",
-        "action": action,
-        "msg_id": msg_id,
-    })
-    if not sent:
-        _pending_acks.pop(msg_id, None)
-        return False, "发送失败"
+    _pending_acks[msg_id] = (generation, fut)
     try:
+        sent = await _send_json({
+            "type": "action",
+            "action": action,
+            "msg_id": msg_id,
+        }, owner=(ws, generation))
+        if not sent and not fut.done():
+            return False, "发送失败"
         ack = await asyncio.wait_for(fut, timeout=timeout)
         return ack.get("ok", False), ack.get("error")
     except asyncio.TimeoutError:
         return False, "timeout"
     finally:
         _pending_acks.pop(msg_id, None)
+        fut.cancel()
 
 
 async def push_video_call_invite(invite_id: str, char_id: str, expires_in_seconds: int) -> bool:
@@ -256,71 +281,67 @@ async def push_video_call_invite(invite_id: str, char_id: str, expires_in_second
         "char_id": char_id,
         "expires_in_seconds": expires_in_seconds,
     })
+
+
 async def handle_connection(ws: WebSocket) -> None:
     """处理一个新 WS 连接的完整生命周期。由路由层调用。"""
-    global _current_ws, _last_pong, _connect_time, _heartbeat_task
+    global _current_ws, _generation, _last_pong, _connect_time, _heartbeat_task
     await ws.accept()
 
-    async with _lock:
-        if _current_ws is not None:
-            from core.video_call_invite import disconnect as disconnect_video_invites
-            disconnect_video_invites()
-            try:
-                await _current_ws.close(code=1000, reason="replaced by new connection")
-            except Exception:
-                pass
-        _current_ws = ws
-        _last_pong = time.time()
-        _connect_time = time.time()
-
-    # 通知 channel 抽象层桌宠上线
+    # Publish ownership, channel state and heartbeat without yielding.
+    previous = _current_ws
+    if previous is not None:
+        _retire_connection(previous, _generation, "connection_replaced")
+    _generation += 1
+    generation = _generation
+    _current_ws = ws
+    _last_pong = _connect_time = time.time()
     from channels.registry import get as get_channel
     ch = get_channel("desktop")
     if ch is not None:
         ch.set_active(True)
 
-    if _heartbeat_task is None or _heartbeat_task.done():
-        _heartbeat_task = asyncio.create_task(_heartbeat_loop())
+    _heartbeat_task = asyncio.create_task(_heartbeat_loop(ws, generation))
 
     logger.info("[desktop_ws] 桌宠端已连接")
 
     try:
-        while True:
+        if previous is not None:
+            await _close(previous, 1000, "replaced by new connection")
+        while _owns_connection(ws, generation):
             text = await ws.receive_text()
             try:
                 msg = json.loads(text)
             except Exception:
                 continue
-            await _handle_message(msg)
+            if isinstance(msg, dict):
+                await _handle_message(ws, generation, msg)
     except WebSocketDisconnect:
         logger.info("[desktop_ws] 桌宠端断开")
     except Exception as e:
         logger.warning(f"[desktop_ws] 连接异常: {e}")
     finally:
-        async with _lock:
-            if _current_ws is ws:
-                _current_ws = None
-                _connect_time = 0.0
-                from core.video_call_invite import disconnect as disconnect_video_invites
-                disconnect_video_invites()
-                if ch is not None:
-                    ch.set_active(False)
+        _retire_connection(ws, generation, "disconnected")
         logger.info("[desktop_ws] 连接已清理")
 
 
-async def _handle_message(msg: dict) -> None:
+async def _handle_message(ws: WebSocket, generation: int, msg: dict) -> None:
     global _last_pong, _last_ack_at
+    if not _owns_connection(ws, generation):
+        return
     mtype = msg.get("type")
     if mtype == "hello":
-        await _send_json({"type": "hello_ack", "server_version": "1.0"})
+        await _send_json({"type": "hello_ack", "server_version": "1.0"}, owner=(ws, generation))
     elif mtype == "pong":
         _last_pong = time.time()
     elif mtype == "ack":
         _last_ack_at = time.time()
         msg_id = msg.get("msg_id")
-        fut = _pending_acks.get(msg_id)
-        if fut and not fut.done():
-            fut.set_result(msg)
+        pending = _pending_acks.get(msg_id) if isinstance(msg_id, str) else None
+        if pending is not None:
+            owner, future = pending
+            if owner == generation and not future.done():
+                future.set_result(msg)
     else:
         logger.debug(f"[desktop_ws] 未知消息类型: {mtype}")
 
@@ -353,18 +374,18 @@ async def push_group_round_end(round_id: str, group_id: str, *, domain: str | No
     return await _send_json(payload)
 
 
-async def _heartbeat_loop() -> None:
+_HEARTBEAT_INTERVAL_S = 20
+
+
+async def _heartbeat_loop(ws: WebSocket, generation: int) -> None:
     """每 20s 发 ping；若上次 pong 距今 > 70s 则判定超时，强制断开。"""
-    global _current_ws
     while True:
-        await asyncio.sleep(20)
-        if _current_ws is None:
+        await asyncio.sleep(_HEARTBEAT_INTERVAL_S)
+        if not _owns_connection(ws, generation):
             return
-        await _send_json({"type": "ping", "source": "server", "ts": time.time()})
         if time.time() - _last_pong > 70:
             logger.warning("[desktop_ws] pong 超时，强制断开")
-            try:
-                await _current_ws.close(code=1001, reason="heartbeat timeout")
-            except Exception:
-                pass
+            _retire_connection(ws, generation, "disconnected")
+            await _close(ws, 1001, "heartbeat timeout")
             return
+        await _send_json({"type": "ping", "source": "server", "ts": time.time()}, owner=(ws, generation))

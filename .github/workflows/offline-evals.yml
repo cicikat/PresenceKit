@@ -27,8 +27,8 @@ jobs:
   offline:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -47,7 +47,7 @@ jobs:
           python tests/run_memeval.py 2>&1 | tee artifacts/memeval.txt
       - name: Upload offline evaluation evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: offline-evals-${{ github.sha }}
           path: artifacts
@@ -58,8 +58,8 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && inputs.run_coplay == true
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -85,7 +85,7 @@ jobs:
           python tests/run_coplay_eval.py 2>&1 | tee artifacts/coplay-eval.txt
       - name: Upload Coplay evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: coplay-opt-in-${{ github.sha }}
           path: artifacts
