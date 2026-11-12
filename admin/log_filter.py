@@ -24,7 +24,7 @@ _BEARER_RE = re.compile(r"(?i)(\b(?:authorization|proxy-authorization)\s*:\s*bea
 _KEY_VALUE_RE = re.compile(r"(?i)(\b(?:api[_-]?key|token|secret|password|credential)\s*[=:]\s*)[^\s,;&]+")
 _SENSITIVE_QUERY_KEYS = frozenset({
     "api_key", "apikey", "auth", "authorization", "credential", "key",
-    "password", "secret", "signature", "sig", "token", "access_token",
+    "code", "state", "ticket", "password", "secret", "signature", "sig", "token", "access_token",
 })
 
 
@@ -113,7 +113,7 @@ class QuerySanitizeFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         if isinstance(record.args, tuple) and len(record.args) >= 3:
             lst = list(record.args)
-            lst[2] = _SENSITIVE.sub(r'\1***', str(lst[2]))
+            lst[2] = _redact_url_value(str(lst[2]))
             record.args = tuple(lst)
         return True
 
