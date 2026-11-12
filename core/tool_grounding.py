@@ -28,6 +28,49 @@ _TOOL_META_PHRASES = (
 )
 _DISCOVERY_PREFIX = "load_tools_"
 _DENSE_TOOL_NAME_THRESHOLD = 3
+_TOOL_PROTOCOL_MARKERS = (
+    "__tool_call__:", "<tool_call", "</tool_call", "<｜", "｜｜dsml", "｜tool", "<|tool", "<|function",
+)
+_TOOL_PROTOCOL_RE = re.compile("|".join(map(re.escape, _TOOL_PROTOCOL_MARKERS)), re.IGNORECASE | re.ASCII)
+
+
+def tool_protocol_offset(text: str) -> int | None:
+    """Locate the start of reserved tool control text in a model reply."""
+    match = _TOOL_PROTOCOL_RE.search(text)
+    return match.start() if match else None
+
+
+class ToolProtocolStreamFilter:
+    """Hold partial marker prefixes until they are safe to send."""
+
+    def __init__(self):
+        self.pending = ""
+        self.blocked = False
+
+    def feed(self, chunk: str) -> str:
+        if self.blocked:
+            return ""
+        text = self.pending + chunk
+        offset = tool_protocol_offset(text)
+        if offset is not None:
+            self.blocked = True
+            self.pending = ""
+            return text[:offset]
+        lowered = text.lower()
+        hold = max((length for marker in _TOOL_PROTOCOL_MARKERS
+                    for length in range(1, len(marker)) if lowered.endswith(marker[:length])),
+                   default=0)
+        cut = len(text) - hold
+        self.pending = text[cut:]
+        return text[:cut]
+
+    def finish(self) -> str:
+        tail, self.pending = self.pending, ""
+        # Ordinary punctuation and underscores can end valid replies.
+        if len(tail) >= 4:
+            self.blocked = True
+            return ""
+        return tail
 _TOOL_LOADING_RE = re.compile(r"(?:正在)?加载(?:辅助|相关|所需|需要的)?工具(?:中|定义|列表)?[，,。\s]*(?:请稍[后候]|稍等|请等待|中)")
 
 
@@ -43,6 +86,8 @@ def detect_tool_meta_leak(text: str, tool_names: "set[str] | frozenset[str]" = f
     """
     if not text:
         return False
+    if tool_protocol_offset(text) is not None:
+        return True
     # Only a standalone progress announcement, not a user quote or discussion.
     if _TOOL_LOADING_RE.match(text.strip()):
         return True

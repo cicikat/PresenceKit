@@ -37,6 +37,7 @@ from core.llm_reasoning_store import (
 )
 from core.prompt_layer import sanitize_messages
 from core.prompt_style import apply_prompt_style
+from core.tool_grounding import ToolProtocolStreamFilter, tool_protocol_offset
 
 logger = logging.getLogger(__name__)
 
@@ -591,6 +592,8 @@ async def chat(
         raise RuntimeError(outcome.skip_reason or outcome.error_category or "llm_failed")
 
     normalized = outcome.value
+    if normalized.tool_calls and not tools:
+        return ""
     if normalized.tool_calls:
         tool_calls = [
             {"name": call.name, "arguments": call.arguments}
@@ -601,7 +604,7 @@ async def chat(
     _log_completed_call(provider=used.provider_kind, model=used.model, purpose=call_category, started_at=started_at)
     content = thinking.strip_think_tags(normalized.assistant_text) or ""
     _log_empty_completion(used, normalized, content)
-    return content
+    return "" if not tools and tool_protocol_offset(content) is not None else content
 
 
 def _prepare_call(
@@ -663,12 +666,6 @@ def _looks_like_leaked_tool_call_markup(text: str) -> bool:
     一次泄漏——展示给用户比误判更糟。
     """
     return bool(text) and text.count(_LEAKED_TOOL_TOKEN_CHAR) >= _LEAKED_TOOL_TOKEN_MIN_COUNT
-
-
-# chat_stream() 逐 chunk 到达，判不出"这一段已经安全"就不能立刻 yield；留这么多个
-# 字符在尾部缓冲区里滚动扫描，覆盖典型 special token 全长（真实样本 <｜tool▁calls▁
-# begin｜> 一类在 20～30 字符量级），避免 token 跨多个 chunk 到达时漏判。
-_LEAK_SCAN_WINDOW = 64
 
 
 @_stats_attributed
@@ -809,7 +806,7 @@ async def chat_turn(
 
     content = thinking.strip_think_tags(normalized.assistant_text) or ""
     _log_empty_completion(mc, normalized, content)
-    if not tool_calls and _looks_like_leaked_tool_call_markup(content):
+    if tool_protocol_offset(content) is not None or (not tool_calls and _looks_like_leaked_tool_call_markup(content)):
         # 网关这一步没能把模型自己的工具调用内部 token 解析成结构化 tool_calls，
         # 原始 token 直接漏进了 content——不能把这个当成真的自然语言回复展示给
         # 用户。丢弃并按空内容处理，复用 run_agentic_loop 里已有的"空回复→不带
@@ -845,6 +842,7 @@ async def chat_stream(
     *,
     char_id: str | None = None,
     is_proactive: bool = False,
+    require_complete: bool = False,
 ):
     """流式生成，逐 token yield 文本增量（async generator）。
 
@@ -857,13 +855,7 @@ async def chat_stream(
       - 协议边界默认独立保存 reasoning；此处只消费正文。
       - 内联标签按跨 chunk 状态机剥离，未闭合内容也只留独立 archive，不展示。
 
-    Brief 122 补：chat_turn()（工具决策步）已经会挡掉模型自己泄漏的工具调用内部
-    special token（如 <｜tool▁calls▁begin｜>），但那次修复漏了这条纯文本的流式
-    出口——同一类泄漏一样可能出现在无 tools 的最终生成里，且是逐 chunk 到达，
-    不是一次性拿到完整 content，不能直接复用 chat_turn() 那个"整段判完再决定"
-    的判断方式。这里维护一个尾部滚动缓冲区（_LEAK_SCAN_WINDOW 个字符），只有
-    确认不含泄漏特征的部分才真正 yield 给调用方（进而推给前端）；一旦在缓冲区里
-    扫到泄漏特征，判定这条流已经脏了，本次剩余内容全部丢弃、不再展示。
+    协议过滤器跨 chunk 暂存可疑前缀。工具收尾要求流完整，遇到控制标记时中止。
     """
     _timeout = category_timeout(call_category)
 
@@ -898,44 +890,7 @@ async def chat_stream(
 
     think_filter = thinking.ThinkTextFilter()
 
-    leak_buf = ""
-    leaked = False
-
-    def _leak_scan(text: str) -> str | None:
-        """滚动扫描泄漏特征，返回这一步真正可以安全 yield 的部分（可能是 None）。
-
-        命中泄漏时只丢弃从第一个可疑字符开始的部分——之前已经攒在缓冲区里的
-        干净文本（比如泄漏 token 前面正常的角色台词）仍然放行，不能因为后面
-        出现了泄漏就连前面已经确认干净的内容一起吞掉。
-        """
-        nonlocal leak_buf, leaked
-        if leaked:
-            return None
-        leak_buf += text
-        if _looks_like_leaked_tool_call_markup(leak_buf):
-            cut = leak_buf.find(_LEAKED_TOOL_TOKEN_CHAR)
-            safe_prefix = leak_buf[:cut] if cut > 0 else ""
-            logger.warning(
-                "[llm_client.chat_stream] 疑似模型工具调用内部 token 泄漏进流式"
-                "输出，丢弃本次剩余内容: %r",
-                "[private Gmail context]" if private_gmail else leak_buf[:200],
-            )
-            leaked = True
-            leak_buf = ""
-            return safe_prefix or None
-        if len(leak_buf) > _LEAK_SCAN_WINDOW:
-            cut = len(leak_buf) - _LEAK_SCAN_WINDOW
-            safe, leak_buf = leak_buf[:cut], leak_buf[cut:]
-            return safe or None
-        return None
-
-    def _leak_flush() -> str | None:
-        """流正常结束时把尾部缓冲区里剩下的（已确认安全的）内容吐出。"""
-        nonlocal leak_buf
-        if leaked:
-            return None
-        out, leak_buf = leak_buf, ""
-        return out or None
+    protocol_filter = ToolProtocolStreamFilter()
 
     from contextlib import aclosing
     purpose_token = _purpose_token(call_category, private_gmail=private_gmail)
@@ -948,17 +903,23 @@ async def chat_stream(
             primary_mc=mc,
         )) as source:
             async for piece in source:
-                safe = _leak_scan(think_filter.feed(piece))
+                safe = protocol_filter.feed(think_filter.feed(piece))
+                if require_complete and protocol_filter.blocked:
+                    raise ValueError("invalid_assistant_tool_protocol")
                 if safe:
                     yield safe
     finally:
         reset_capture_purpose(purpose_token)
 
-    safe = _leak_scan(think_filter.finish())
+    safe = protocol_filter.feed(think_filter.finish())
+    if require_complete and protocol_filter.blocked:
+        raise ValueError("invalid_assistant_tool_protocol")
     if safe:
         yield safe
 
-    tail = _leak_flush()
+    tail = protocol_filter.finish()
+    if require_complete and protocol_filter.blocked:
+        raise ValueError("invalid_assistant_tool_protocol")
     if tail:
         yield tail
 
@@ -1000,11 +961,17 @@ def parse_probe_response(
         if not matches:
             return ProbeParseResult("probe_parse_failed", [], encoding)
         decoded: list[object] = []
-        for payload in matches:
+        cursor = 0
+        for block in re.finditer(r"<tool_call>(.*?)</tool_call>", response, re.DOTALL):
+            if response[cursor:block.start()].strip():
+                return ProbeParseResult("probe_parse_failed", [], encoding)
             try:
-                decoded.append(json.loads(payload.strip()))
+                decoded.append(json.loads(block[1].strip()))
             except json.JSONDecodeError:
                 return ProbeParseResult("probe_parse_failed", [], encoding)
+            cursor = block.end()
+        if response[cursor:].strip():
+            return ProbeParseResult("probe_parse_failed", [], encoding)
         raw_calls = decoded
     else:
         # A probe is required to emit either an empty response or a supported

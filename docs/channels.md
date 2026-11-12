@@ -178,6 +178,14 @@ transport `msg_id` 也用于同一 assistant turn 的 WS `channel_message.msg_id
 
 ## 桌宠 WebSocket
 
+### 工单 305 · 桌面聊天请求对账
+
+`POST /desktop/chat` 和桌面 `POST /upload/ingest` 可携带 `X-Presence-Chat-Request: dc-<13 位 Unix 毫秒>-<32 位小写十六进制>`。后端在工具与附件处理前写入持久回执，使用原 chat scope 和桌面执行链。调用方 token label 与 owner 共同限定回执，键与 `/v1/owner/turns` 隔离。同 ID 异载荷返回 409，同 ID 在途或已失败也不会再执行。提交 ID 的时钟窗口为过去 24 小时及未来 5 分钟，回执至少覆盖该窗口，之后沿用最多 30 天及既有数量限制。
+
+`GET /desktop/chat/requests/{request_id}` 使用同一 chat scope，返回 `request_id` 与 `status`。状态包括 `running`、`completed`、`failed`、`not_executed`、`interrupted_unknown`、`unknown`。已完成回执带 `turn_id`、可用时带 `msg_id`，历史可读时返回 `result`。持久回执复用现有 owner-turn 观测，不保存请求或回复正文。进程退出后未终结的回执保留未知状态。找不到记录、旧后端没有查询接口、传输失败都只能继续对账。
+
+HTTP 回复、`tool_activity`、`message_stream_start` 和 canonical `channel_message` 携带同一 `request_id`。同轮流式增量和结束帧通过既有 `msg_id` 关联。工具状态独立于整轮状态。确认前置拒绝时使用 `not_executed` 与 `X-Presence-Chat-Rejected: 1`，桌面可使用新 ID 发送。无请求头的客户端沿用旧协议。手机消费端无需升级。
+
 文件：`channels/desktop_ws.py`
 
 端点：`ws://127.0.0.1:8080/ws/desktop`

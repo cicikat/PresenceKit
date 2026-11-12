@@ -51,6 +51,9 @@ def _process_reply(
 
         # 步骤1：移除 xml_fallback 模式的 <tool_call> 标记
         reply = _remove_tool_call_tags(reply)
+        from core.tool_grounding import tool_protocol_offset
+        if tool_protocol_offset(reply) is not None:
+            return []
 
         # 步骤2：去除开头的角色名前缀（如 "小花：xxx" → "xxx"）
         reply = _remove_character_prefix(reply, character_name)

@@ -17,6 +17,8 @@ from core.safe_write import safe_write_json
 from core.sandbox import get_paths
 
 _RETENTION_SECONDS = 30 * 24 * 60 * 60
+DESKTOP_ADMISSION_SECONDS = 24 * 60 * 60
+DESKTOP_FUTURE_SKEW_SECONDS = 300
 _MAX_RECEIPTS_PER_CALLER = 1000
 _OBSERVABILITY_DEFAULT_LIMIT = 25
 _OBSERVABILITY_MAX_LIMIT = 100
@@ -64,12 +66,18 @@ def _path(caller_label: str, client_turn_id: str):
     )
 
 
-def load(caller_label: str, client_turn_id: str) -> dict[str, Any] | None:
+def load(caller_label: str, client_turn_id: str, *, strict: bool = False) -> dict[str, Any] | None:
     path = _path(caller_label, client_turn_id)
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
-    except (FileNotFoundError, OSError, ValueError, TypeError):
+    except FileNotFoundError:
         return None
+    except (OSError, ValueError, TypeError):
+        if strict:
+            raise
+        return None
+    if strict and not isinstance(raw, dict):
+        raise ValueError("invalid turn receipt")
     return raw if isinstance(raw, dict) else None
 
 
@@ -83,6 +91,7 @@ def write(
     error_code: str | None = None,
     created_at: float | None = None,
     canonical_char_id: str | None = None,
+    transport_msg_id: str | None = None,
 ) -> dict[str, Any]:
     now = time.time()
     row = {
@@ -97,6 +106,8 @@ def write(
     }
     if canonical_char_id is not None:
         row["canonical_char_id"] = canonical_char_id
+    if transport_msg_id is not None:
+        row["transport_msg_id"] = transport_msg_id
     if not safe_write_json(_path(caller_label, client_turn_id), row):
         raise OSError("owner turn receipt write failed")
     return row
@@ -312,6 +323,7 @@ def prune(*, is_inflight=None) -> None:
     if not root.exists():
         return
     cutoff = time.time() - _RETENTION_SECONDS
+    desktop_cutoff = time.time() - DESKTOP_ADMISSION_SECONDS - DESKTOP_FUTURE_SKEW_SECONDS
     for caller_dir in root.iterdir():
         if not caller_dir.is_dir():
             continue
@@ -326,9 +338,14 @@ def prune(*, is_inflight=None) -> None:
         retained = []
         for path in files:
             row = _read_path(path)
-            if not row or row.get("status") != "running":
+            if not row:
+                retained.append(path)
                 continue
             client_id = str(row.get("client_turn_id") or "")
+            if client_id.startswith("~desktop:") and row.get("created_at", 0) >= desktop_cutoff:
+                retained.append(path)
+            if row.get("status") != "running":
+                continue
             live = bool(is_inflight(caller_dir.name, client_id)) if is_inflight and client_id else False
             if live:
                 retained.append(path)
