@@ -32,7 +32,9 @@ from core.llm_protocol import (
     error_category_for_exception,
     stream_text,
 )
-from core.llm_reasoning_store import PRIVATE_DESKTOP_PURPOSES, reset_capture_purpose, set_capture_purpose
+from core.llm_reasoning_store import (
+    GMAIL_PRIVATE_PURPOSE, PRIVATE_DESKTOP_PURPOSES, reset_capture_purpose, set_capture_purpose,
+)
 from core.prompt_layer import sanitize_messages
 from core.prompt_style import apply_prompt_style
 
@@ -73,7 +75,13 @@ def _log_empty_completion(mc, normalized, content: str) -> None:
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
-def _purpose_token(call_category: str | None):
+def _private_gmail_context(messages: list[dict]) -> bool:
+    return any(message.get("_private_gmail_result") for message in messages)
+
+
+def _purpose_token(call_category: str | None, *, private_gmail: bool = False):
+    if private_gmail:
+        return set_capture_purpose(GMAIL_PRIVATE_PURPOSE)
     return set_capture_purpose(call_category or "chat")
 
 
@@ -125,9 +133,10 @@ def _record_debug_request(
     messages: list[dict],
     tools: list[dict] | None,
     request_kwargs: dict[str, Any],
+    private_gmail: bool = False,
 ) -> None:
     """Persist an opt-in semantic request snapshot without affecting the call."""
-    if purpose in PRIVATE_DESKTOP_PURPOSES:
+    if private_gmail or purpose in PRIVATE_DESKTOP_PURPOSES:
         return
     from core.llm_debug_requests import append
 
@@ -404,6 +413,7 @@ async def chat(
                         model=str(vision_cfg.get("model") or ""),
                         purpose="vision",
                         messages=safe_msgs,
+                        private_gmail=_private_gmail_context(messages),
                         tools=None,
                         request_kwargs={"max_tokens": 1000, "timeout": _CALL_TIMEOUTS["vision"]},
                     )
@@ -499,6 +509,7 @@ async def chat(
         messages, call_category=call_category, char_id=char_id, is_proactive=is_proactive, mc=mc,
     )
     semantic_messages = list(messages)
+    private_gmail = _private_gmail_context(semantic_messages)
 
     def _prepare_chat(target: ModelClient) -> PreparedAttempt:
         styled = apply_prompt_style(semantic_messages, target.prompt_style)
@@ -540,6 +551,7 @@ async def chat(
         _record_debug_request(
             provider=target.provider_kind, model=target.model, purpose=call_category,
             messages=request_messages, tools=request_tools or (tools if mode == "xml_fallback" else None),
+            private_gmail=private_gmail,
             request_kwargs={"api_protocol": getattr(target, "api_protocol", "chat_completions"), **request_debug,
                             "stream": getattr(target, "force_stream", False) is True},
         )
@@ -551,7 +563,7 @@ async def chat(
         )
 
     started_at = time.perf_counter()
-    purpose_token = _purpose_token(call_category)
+    purpose_token = _purpose_token(call_category, private_gmail=private_gmail)
     try:
         outcome = await execute_create(
             call_category=call_category,
@@ -683,6 +695,7 @@ async def chat_turn(
         messages, call_category, max_tokens_override, char_id=char_id, is_proactive=is_proactive,
     )
     semantic_messages = list(messages)
+    private_gmail = _private_gmail_context(semantic_messages)
     if mc.tool_call_mode == 'xml_fallback' and allow_xml_fallback:
         # Autonomy must work with the configured character model too. Keep the
         # native FC API strict for existing callers and opt in explicitly.
@@ -731,6 +744,7 @@ async def chat_turn(
             model=target.model,
             purpose=call_category,
             messages=styled,
+            private_gmail=private_gmail,
             tools=tools,
             request_kwargs={"api_protocol": getattr(target, "api_protocol", "chat_completions"), "tool_choice": "auto", **turn_kwargs,
                             "stream": getattr(target, "force_stream", False) is True},
@@ -742,7 +756,7 @@ async def chat_turn(
             gen_kwargs=turn_kwargs,
         )
 
-    purpose_token = _purpose_token(call_category)
+    purpose_token = _purpose_token(call_category, private_gmail=private_gmail)
     try:
         outcome = await execute_create(
             call_category=call_category,
@@ -805,7 +819,7 @@ async def chat_turn(
         logger.warning(
             "[llm_client.chat_turn] content 疑似混进模型工具调用内部 token（网关"
             "未解析成 tool_calls），丢弃并按空内容处理: %r",
-            content[:200],
+            "[private Gmail context]" if private_gmail else content[:200],
         )
         content = ""
         for item in continuation_items:
@@ -859,6 +873,7 @@ async def chat_stream(
         messages, call_category=call_category, char_id=char_id, is_proactive=is_proactive, mc=mc,
     )
     semantic_messages = list(messages)
+    private_gmail = _private_gmail_context(semantic_messages)
 
     def _prepare_stream(target: ModelClient) -> PreparedAttempt:
         styled = apply_prompt_style(semantic_messages, target.prompt_style)
@@ -875,6 +890,7 @@ async def chat_stream(
             model=target.model,
             purpose=call_category,
             messages=styled,
+            private_gmail=private_gmail,
             tools=None,
             request_kwargs={"api_protocol": getattr(target, "api_protocol", "chat_completions"), "stream": True, **gen_kwargs},
         )
@@ -902,7 +918,7 @@ async def chat_stream(
             logger.warning(
                 "[llm_client.chat_stream] 疑似模型工具调用内部 token 泄漏进流式"
                 "输出，丢弃本次剩余内容: %r",
-                leak_buf[:200],
+                "[private Gmail context]" if private_gmail else leak_buf[:200],
             )
             leaked = True
             leak_buf = ""
@@ -922,7 +938,7 @@ async def chat_stream(
         return out or None
 
     from contextlib import aclosing
-    purpose_token = _purpose_token(call_category)
+    purpose_token = _purpose_token(call_category, private_gmail=private_gmail)
     try:
         async with aclosing(execute_stream(
             call_category=call_category,

@@ -92,6 +92,17 @@ async def execute(func, user_id: str, char_id: str, args: dict) -> ToolResult:
 
 
 def register(registry: dict) -> None:
+    field_descriptions = {
+        "page_token": "上一页返回的 next_page_token，首次查询省略。",
+        "limit": "每页邮件数量，1 至 5。",
+        "query": "Gmail 搜索表达式，可包含发件人和日期条件。",
+        "message_id": "列表或搜索返回的 Gmail 邮件 ID。",
+        "offset": "上一页返回的 next_offset，从 0 开始。",
+        "to": "单个收件地址。",
+        "subject": "邮件主题。",
+        "body": "UTF-8 纯文本正文。",
+        "request_id": "投递幂等标识，同一投递沿用相同值。",
+    }
     page = {"page_token": "string", "limit": "integer"}
     definitions = (
         (gmail_list_messages, "分页查看自己的 Gmail 收件箱摘要", "查看最近的 Gmail", ["收件箱"], page, []),
@@ -116,6 +127,6 @@ def register(registry: dict) -> None:
             "description": f"{desc}。需要角色 Gmail 授权。", "ui_label": "Gmail",
             "examples": [example], "keywords": keywords, "echo_event_log": False,
             "parameters": {"type": "object", "properties": {
-                key: {"type": kind} for key, kind in properties.items()
+                key: {"type": kind, "description": field_descriptions[key]} for key, kind in properties.items()
             }, "required": required, "additionalProperties": False},
         }

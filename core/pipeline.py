@@ -1392,8 +1392,8 @@ class Pipeline:
             t for t in _filter_exposure(_raw_tools, _exposure)
             if (t.get("function") or t).get("name") not in excluded_tool_names
         ]
+        from core.tools.gmail_tools import NAMES as gmail_tools
         if is_group:
-            from core.tools.gmail_tools import NAMES as gmail_tools
             tools = [tool for tool in tools if (tool.get("function") or tool).get("name") not in gmail_tools]
         caller_allowed_tool_names = allowed_tool_names
         if caller_allowed_tool_names is not None:
@@ -1875,6 +1875,7 @@ class Pipeline:
                                 loop_msgs.append({
                                     "role": "tool",
                                     "tool_call_id": rc["id"],
+                                    "_private_gmail_result": rc["name"] in gmail_tools,
                                     "content": _tool_message_content(result, ask_confirm, generated_at=time.time(),
                                                                      discovery_result=rc["name"].startswith(_discovery_prefix),
                                                                      status=tool_outcome.status),
@@ -1914,6 +1915,7 @@ class Pipeline:
                     loop_msgs.append({
                         "role": "tool",
                         "tool_call_id": tc["id"],
+                        "_private_gmail_result": tc["name"] in gmail_tools,
                         "_continuity_receipt": getattr(result, 'continuity_receipt', None),
                         "content": _tool_message_content(result, ask_confirm, generated_at=time.time(),
                                                          discovery_result=tc["name"].startswith(_discovery_prefix),

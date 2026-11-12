@@ -264,6 +264,8 @@ class TestWatchUnifiedGating:
 class TestFullRouteAuthInventory:
     PUBLIC_HTTP_ALLOWLIST = {
         "/": "Static admin UI entry; it performs no management operation.",
+        "/settings/gmail/oauth/authorize": "One-time admin-issued browser handoff ticket.",
+        "/settings/gmail/oauth/callback": "OAuth state bound to the issuing browser and live admin grant.",
     }
 
     def test_all_http_management_routes_require_bearer(self):

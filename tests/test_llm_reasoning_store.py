@@ -54,8 +54,8 @@ async def test_empty_and_missing_reads_do_not_create_database(sandbox):
     assert not sandbox.llm_reasoning_db().exists()
 
 
-@pytest.mark.parametrize("purpose", ["computer_use", "agent_session"])
-async def test_desktop_reasoning_is_not_archived(sandbox, purpose):
+@pytest.mark.parametrize("purpose", ["computer_use", "agent_session", "gmail_private"])
+async def test_private_reasoning_is_not_archived(sandbox, purpose):
     token = store.set_capture_purpose(purpose)
     try:
         capture = store.Capture(mc())

@@ -186,6 +186,7 @@ inside modules resolve to the registered lifecycle name before admission.
 | `interval`, `schedule` | active | Native clocks; produce signal/task, never prose |
 | `dream_postcards` | active | Due authored postcard delivery; calls the bounded mail artifact adapter, never the assistant speech outlet |
 | `coplay_watch`, `diary_inject` | maintenance-only | Silent Task worker/state maintenance |
+| `gmail_poll` | maintenance-only | Bounded mailbox metadata poll; queues a Gmail autonomy fact when eligible |
 | `episodic_decay`, `episodic_sweep` | maintenance-only | Existing memory maintenance writer; no speech |
 | `inner_diary_write` | maintenance-only | Task -> same-character specialized 副链 work session -> authored diary; 23:00 silent |
 | `dlq_monitor`, `log_maintenance` | maintenance-only | Operational cleanup only |
@@ -217,6 +218,11 @@ The implemented registry does so; an unregistered label cannot enter the compati
 | `spontaneous_recall`, `topic_followup` | memory candidate evaluation | same-character read-only evaluator |
 | `talk_owner` | sole proactive delivery outlet | Interaction adapter; creates new ingress/turn |
 | `manage_self_capability` | autonomy-only management gateway | Capability policy adapter, separate origin |
+| `agent_session_start`, `agent_session_status`, `agent_session_control` | Owner live turn only | Task Manager parent session and owner control |
+| `computer_use_start`, `computer_use_status`, `computer_use_cancel` | Owner live turn only | Scoped Windows device lease and execution receipt |
+| `pin_character_image_reference`, `generate_image` | Character image reference and generation | Reference pinning in the live owner turn; image preset for generation |
+| `gmail_list_messages`, `gmail_search_messages`, `gmail_read_message`, `gmail_list_labels` | Authorized Gmail reads | Private owner Tool Loop or autonomy, with external data framing |
+| `gmail_send_message`, `gmail_reply_message` | Authorized Gmail writes | Durable delivery reservation and OAuth send scope |
 
 ## Tool to capability mapping
 

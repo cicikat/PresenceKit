@@ -24,6 +24,7 @@ _TURN_CAPTURE = ContextVar("reasoning_turn_capture", default=None)
 _CAPTURE_PURPOSE = ContextVar("reasoning_capture_purpose", default="chat")
 _OWNER_TURN_PURPOSES = frozenset({"chat", "monologue"})
 PRIVATE_DESKTOP_PURPOSES = frozenset({"computer_use", "agent_session"})
+GMAIL_PRIVATE_PURPOSE = "gmail_private"
 
 
 def set_capture_purpose(purpose: str | None):
@@ -213,7 +214,7 @@ class Capture:
                             self.text.append(text)
 
     async def save(self):
-        if self.purpose in PRIVATE_DESKTOP_PURPOSES:
+        if self.purpose == GMAIL_PRIVATE_PURPOSE or self.purpose in PRIVATE_DESKTOP_PURPOSES:
             return
         try:
             for match in _INLINE.finditer("".join(self.text)):
