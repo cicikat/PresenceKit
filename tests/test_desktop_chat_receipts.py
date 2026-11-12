@@ -129,6 +129,32 @@ async def test_only_a_persisted_preflight_rejection_authorizes_new_request(app, 
     assert calls == ["virtual send"]
 
 
+async def test_receipt_write_failure_after_reply_keeps_execution_unknown(app, monkeypatch):
+    from core import owner_turn_receipts
+
+    rid = request_id()
+    effects = []
+    write = owner_turn_receipts.safe_write_json
+
+    def fail_completion(path, row):
+        return False if row["status"] == "completed" else write(path, row)
+
+    async def execute(message, channel, **kwargs):
+        effects.append(message)
+        return {"reply": "Delivered.", "turn_id": "already-delivered"}
+
+    monkeypatch.setattr(owner_turn_receipts, "safe_write_json", fail_completion)
+    monkeypatch.setattr(chat, "run_owner_chat_turn", execute)
+    transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        args = {"headers": headers(rid), "json": {"message": "virtual write"}}
+        assert (await client.post("/desktop/chat", **args)).status_code == 500
+        status = await client.get(f"/desktop/chat/requests/{rid}", headers=headers(rid))
+        assert status.json()["status"] == "interrupted_unknown"
+        assert (await client.post("/desktop/chat", **args)).status_code == 409
+    assert effects == ["virtual write"]
+
+
 async def test_upload_reserves_before_ingesting_file(app, monkeypatch):
     from core import media_processor
 

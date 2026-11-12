@@ -240,17 +240,6 @@ async def _execute_and_record(
         canonical_turn_id = str(result.get("turn_id") or "")
         if not canonical_turn_id:
             raise RuntimeError("owner turn did not produce a canonical turn id")
-        owner_turn_receipts.write(
-            caller_label=caller_label,
-            client_turn_id=client_turn_id,
-            request_digest=request_digest,
-            status="completed",
-            canonical_turn_id=canonical_turn_id,
-            created_at=created_at,
-            canonical_char_id=result.get("char_id") or _canonical_character_id(),
-            transport_msg_id=result.get("msg_id"),
-        )
-        return result
     except Exception as exc:
         owner_turn_receipts.write(
             caller_label=caller_label,
@@ -262,6 +251,19 @@ async def _execute_and_record(
             canonical_char_id=_canonical_character_id(),
         )
         raise
+    # A receipt write failure after execution leaves a running row for
+    # recovery as interrupted_unknown. It cannot undo a delivered reply.
+    owner_turn_receipts.write(
+        caller_label=caller_label,
+        client_turn_id=client_turn_id,
+        request_digest=request_digest,
+        status="completed",
+        canonical_turn_id=canonical_turn_id,
+        created_at=created_at,
+        canonical_char_id=result.get("char_id") or _canonical_character_id(),
+        transport_msg_id=result.get("msg_id"),
+    )
+    return result
 
 
 def _canonical_character_id() -> str | None:

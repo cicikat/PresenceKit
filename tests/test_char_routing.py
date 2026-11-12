@@ -510,9 +510,10 @@ async def test_agentic_final_run_llm_forwards_owned_char(monkeypatch):
         from core.tool_dispatcher import ToolExecutionOutcome
         return ToolExecutionOutcome(status="tool_executed", result="工具已执行：ok")
 
-    async def _fake_run_llm(self, messages, *, char_id=None, is_proactive=False):
+    async def _fake_run_llm(self, messages, *, char_id=None, is_proactive=False, require_complete=False):
         captured["char_id"] = char_id
         captured["is_proactive"] = is_proactive
+        captured["require_complete"] = require_complete
         if char_id is None:
             raise AssertionError("char_id existed on the agentic loop but was not passed into run_llm")
         return "收尾回复"
@@ -555,6 +556,7 @@ async def test_agentic_final_run_llm_forwards_owned_char(monkeypatch):
         session_state=object(),
     )
     assert result == "收尾回复"
+    assert captured["require_complete"] is True
     assert captured.get("char_id") == TEST_CHAR_ID
     assert TEST_THIRD_CHAR_ID != captured.get("char_id")
 
