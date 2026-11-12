@@ -162,7 +162,7 @@ async def test_fanout_channel_preserves_action_text(monkeypatch):
     assert "低头看了你一眼" in text
 
 
-async def test_fanout_channel_strips_render_tags_not_bracket_actions(monkeypatch):
+async def test_fanout_channel_strips_render_tags_not_bracket_actions(monkeypatch, enabled_client_channels):
     """Chinese bracket actions reach the channel; only NMP/XML render tags are stripped."""
     from channels import registry
     from core.turn_sink import TurnSource, record_assistant_turn
@@ -190,7 +190,7 @@ async def test_fanout_channel_strips_render_tags_not_bracket_actions(monkeypatch
     assert "（" in sent
 
 
-async def test_fanout_render_tags_stripped():
+async def test_fanout_render_tags_stripped(enabled_client_channels):
     """<say>/<do> NMP markup tags must be stripped even though action text is kept."""
     from channels import registry
     from core.turn_sink import TurnSource, record_assistant_turn
@@ -487,7 +487,7 @@ async def test_qq_fanout_strips_tags_keeps_bracket_actions():
 # N5. All-action reply: visible output kept; memory writes skipped
 # ═══════════════════════════════════════════════════════════════════════════════
 
-async def test_all_action_reply_visible_kept_memory_skipped():
+async def test_all_action_reply_visible_kept_memory_skipped(enabled_client_channels):
     """
     All-action reply (e.g. only Chinese bracket):
     - Fanout visible text receives something (not silenced or collapsed).

@@ -1,34 +1,34 @@
 {
   "matrix_version": "1",
   "fixture_version": "v1",
-  "captured_at": "2026-08-10",
+  "captured_at": "2026-11-12",
   "compatibility_window": "current backend × current desktop × current mobile",
-  "classification": "backward-compatible",
+  "classification": "not_verified",
   "repositories": {
     "backend": {
       "repository": "cicikat/PresenceKit",
-      "sha": "d12f3ff438c7aacc01d3b0b1f66dbba9677267b5",
+      "sha": "3d46def48abbc05a527d382ad1eced6cb0a9bd90",
       "runner": "ubuntu-latest"
     },
     "desktop": {
       "repository": "cicikat/PresenceKit-desktop",
-      "sha": "4f00d0c0bd75e29af0aa3e8c1b1ec0518df407ad",
+      "sha": "a2704db03da745d1124b8f8df4cfb540e99526b2",
       "runner": "ubuntu-latest"
     },
     "mobile": {
       "repository": "cicikat/PresenceKit-mobile",
-      "sha": "5fd9717e89e7011a969c04ba16c618b767f2e7ba",
+      "sha": "0f2a7ee60e5f8fbcffea52ada8c45817db24050d",
       "runner": "ubuntu-latest"
     }
   },
   "suites": [
-    {"name": "backend protocol provider", "level": "contract", "command": "pytest -n auto -q tests/test_protocol_fixtures.py"},
+    {"name": "backend protocol provider", "level": "contract", "command": "pytest -n auto -q tests/test_protocol_fixtures.py tests/test_activity_contract.py"},
     {"name": "desktop protocol consumer", "level": "contract", "command": "npm test -- --run tests/protocol-fixtures.test.ts"},
     {"name": "mobile protocol consumer", "level": "contract", "command": "flutter test test/protocol_fixtures_test.dart"}
   ],
   "evidence": {
     "artifact_id": "",
     "run_url": "",
-    "recorded_results": "not-run"
+    "recorded_results": "not_verified"
   }
 }

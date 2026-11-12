@@ -122,7 +122,7 @@ class TestTriggerTurnGuard:
             is_trigger_turn=True,
         )
 
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             reflect_to_episodic(_UID, [mid_id], trigger="eager", char_id=_CHAR)
         )
 
@@ -144,7 +144,7 @@ class TestTriggerTurnGuard:
             is_trigger_turn=False,  # 正常对话轮
         )
 
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             reflect_to_episodic(_UID, [mid_id], trigger="eager", char_id=_CHAR)
         )
 
@@ -185,7 +185,7 @@ class TestTriggerTurnGuard:
                    source_turn_id=f"{_UID}_1800000004000",
                    char_id=_CHAR, is_trigger_turn=False)
 
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             reflect_to_episodic(_UID, [trigger_mid, normal_mid], trigger="eager", char_id=_CHAR)
         )
 
@@ -250,7 +250,7 @@ class TestCoreDedupInReflect:
                    source_turn_id=f"{_UID}_1800010000000",
                    char_id=_CHAR, is_trigger_turn=False)
 
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             reflect_to_episodic(_UID, [mid_id], trigger="eager", char_id=_CHAR)
         )
 
@@ -278,7 +278,7 @@ class TestCoreDedupInReflect:
                    source_turn_id=f"{_UID}_1800020000000",
                    char_id=_CHAR, is_trigger_turn=False)
 
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             reflect_to_episodic(_UID, [mid_id], trigger="eager", char_id=_CHAR)
         )
 
@@ -298,7 +298,7 @@ class TestSummarizeToMidtermTriggerPropagation:
         from core.memory import mid_term as _mt
 
         turn_id = f"{_UID}_1800030000000"
-        asyncio.get_event_loop().run_until_complete(
+        asyncio.run(
             summarize_to_midterm(
                 turn_id=turn_id,
                 uid=_UID,
@@ -319,7 +319,7 @@ class TestSummarizeToMidtermTriggerPropagation:
         from core.memory import mid_term as _mt
 
         turn_id = f"{_UID}_1800040000000"
-        asyncio.get_event_loop().run_until_complete(
+        asyncio.run(
             summarize_to_midterm(
                 turn_id=turn_id,
                 uid=_UID,

@@ -1,5 +1,9 @@
 import asyncio
 import os
+import json
+from pathlib import Path
+import subprocess
+import sys
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
@@ -33,6 +37,21 @@ def flow():
     assert query["code_challenge_method"] == ["S256"]
     assert query["access_type"] == ["offline"]
     return query["state"][0], browser
+
+
+def restart_status(mailbox):
+    env = {key: value for key, value in os.environ.items()
+           if not any(word in key.upper() for word in ("GOOGLE", "GMAIL", "TOKEN", "SECRET", "API_KEY"))}
+    root = Path(__file__).parents[1]
+    env["PYTHONPATH"] = str(root)
+    env["PYTHONIOENCODING"] = "utf-8"
+    result = subprocess.run([sys.executable, "-m", "tests.gmail_restart_probe", str(mailbox)],
+                            cwd=root, env=env, capture_output=True, text=True,
+                            encoding="utf-8", timeout=30)
+    assert result.returncode == 0, result.stderr
+    for private in ("fixture-secret", "fixture-refresh", '"refresh":', '"access_token":'):
+        assert private not in result.stdout + result.stderr
+    return json.loads(result.stdout)
 
 
 @pytest.mark.asyncio
@@ -115,6 +134,47 @@ def test_callback_log_redaction():
     )
 
 
+@pytest.mark.asyncio
+async def test_first_authorization_error_survives_restart_and_is_role_scoped(mailbox, monkeypatch):
+    await gmail.configure_client(CLIENT_ID, "fixture-secret", REDIRECT_URI)
+    state, browser = flow()
+    with pytest.raises(gmail.GmailError, match="disabled_client"):
+        await gmail.complete(state, browser, "", "owner", "character", lambda _: True,
+                             error="disabled_client")
+    status = restart_status(mailbox)
+    assert status["owner"]["token_state"] == "client_disabled"
+    assert status["owner"]["error"] == "disabled_client"
+    assert status["other_role"]["error"] == ""
+    assert status["other_user"]["error"] == ""
+    from admin.routers.settings_gmail import _result
+    assert "Google Cloud" in _result(False, "disabled_client").body.decode()
+
+
+@pytest.mark.asyncio
+async def test_web_configuration_survives_authorize_revoke_and_restart(mailbox, monkeypatch):
+    await gmail.configure_client("123-fixture.apps.googleusercontent.com", "fixture-secret",
+                                 "https://example.test" + gmail.CALLBACK)
+    stored_config = gmail.load()["oauth_client"]
+
+    async def request(method, url, **kwargs):
+        if url == gmail.TOKEN:
+            return {"access_token": "access", "refresh_token": "refresh", "scope": gmail.READ}
+        if url.endswith("/profile"):
+            return {"emailAddress": "mail@example.test"}
+        return {}
+
+    monkeypatch.setattr(gmail, "request", request)
+    state, browser = flow()
+    await gmail.complete(state, browser, "code", "owner", "character", lambda _: True)
+    assert gmail.load()["oauth_client"] == stored_config
+    assert await gmail.disconnect("owner", "character") == "revoked"
+    assert gmail.load()["oauth_client"] == stored_config
+    status = restart_status(mailbox)
+    assert status["config"]["source"] == "private_file"
+    assert status["config"]["client_secret_set"] is True
+    assert status["owner"]["token_state"] == "waiting_authorization"
+
+
 def test_http_handoff_and_management_authorization(mailbox, monkeypatch):
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
@@ -142,6 +202,191 @@ def test_http_handoff_and_management_authorization(mailbox, monkeypatch):
         with TestClient(app, base_url="https://example.test") as other:
             assert other.get(gmail.CALLBACK, params={"state": state, "code": "private"}).status_code == 400
         denied = client.get(gmail.CALLBACK, params={"state": state, "error": "access_denied"})
-        assert denied.status_code == 400 and "authorization_declined" in denied.text
+        assert denied.status_code == 400 and "access_denied" in denied.text
         assert "private" not in denied.text
         assert client.get(gmail.CALLBACK, params={"state": state, "code": "private"}).status_code == 400
+
+
+CLIENT_ID = "123-fixture.apps.googleusercontent.com"
+REDIRECT_URI = "https://example.test" + gmail.CALLBACK
+
+
+@pytest.mark.asyncio
+async def test_client_configuration_persists_and_rotation_preserves_mailbox(mailbox, monkeypatch):
+    state, browser = flow()
+    original = {"uid": "owner", "char_id": "character", "email": "mail@example.test",
+                "refresh": "existing-refresh", "scopes": [gmail.READ],
+                "poll": {"enabled": False}, "deliveries": {"fixture": {"state": "sent"}}}
+    gmail.save(original)
+    gmail._access = ("existing-refresh", "old-access", 10**12, gmail.oauth_config().revision)
+    old_revision = gmail.config_status()["credential_revision"]
+    result = await gmail.configure_client(CLIENT_ID, "new-secret", REDIRECT_URI)
+    assert result["source"] == "private_file" and result["configured"]
+    assert result["credential_revision"] != old_revision
+    assert result["client_secret_set"] and "new-secret" not in str(result)
+    assert gmail.load()["refresh"] == original["refresh"]
+    assert gmail.load()["poll"] == original["poll"]
+    assert gmail.load()["deliveries"] == original["deliveries"]
+    assert gmail._access is None and not gmail._flows and not gmail._tickets
+    assert gmail.status("owner", "character")["token_state"] == "pending_verification"
+    with pytest.raises(gmail.GmailError, match="invalid_authorization_session"):
+        await gmail.complete(state, browser, "code", "owner", "character", lambda _: True)
+    # Environment fallback is removed; this checks file precedence in-process.
+    for key in ("GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET", "GOOGLE_OAUTH_REDIRECT_URI"):
+        monkeypatch.delenv(key)
+    assert gmail.oauth_config().client_secret == "new-secret"
+    same = await gmail.configure_client(CLIENT_ID, "", REDIRECT_URI)
+    assert same == result
+    assert gmail.oauth_config().client_secret == "new-secret"
+    if os.name != "nt":
+        assert gmail.state_path().stat().st_mode & 0o777 == 0o600
+        assert gmail.state_path().parent.stat().st_mode & 0o777 == 0o700
+
+    async def request(method, url, **kwargs):
+        assert url == gmail.TOKEN
+        assert kwargs["data"]["client_id"] == CLIENT_ID
+        assert kwargs["data"]["client_secret"] == "new-secret"
+        return {"access_token": "new-access", "expires_in": 3600}
+
+    monkeypatch.setattr(gmail, "request", request)
+    assert await gmail.access_token("owner", "character", gmail.READ) == "new-access"
+    assert gmail.status("owner", "character")["token_state"] == "valid"
+
+
+@pytest.mark.asyncio
+async def test_successful_refresh_clears_previous_authorization_error(mailbox, monkeypatch):
+    gmail.save({"uid": "owner", "char_id": "character", "email": "mail@example.test",
+                "refresh": "fixture-refresh", "scopes": [gmail.READ],
+                "authorization_error": {"uid": "owner", "char_id": "character",
+                    "revision": gmail.oauth_config().revision, "error": "disabled_client"}})
+
+    async def request(*args, **kwargs):
+        return {"access_token": "fixture-access", "expires_in": 3600}
+
+    monkeypatch.setattr(gmail, "request", request)
+    assert await gmail.access_token("owner", "character", gmail.READ) == "fixture-access"
+    assert "authorization_error" not in gmail.load()
+    assert gmail.status("owner", "character")["token_state"] == "valid"
+
+
+@pytest.mark.parametrize("uri", [
+    "http://example.test" + gmail.CALLBACK,
+    "https://localhost" + gmail.CALLBACK,
+    "https://127.0.0.1" + gmail.CALLBACK,
+    "https://10.0.0.1" + gmail.CALLBACK,
+    "https://[::1]" + gmail.CALLBACK,
+    "https://server.local" + gmail.CALLBACK,
+    "https://example.test:invalid" + gmail.CALLBACK,
+    "https://user:pass@example.test" + gmail.CALLBACK,
+    REDIRECT_URI + "?code=private",
+    REDIRECT_URI + "#fragment",
+    REDIRECT_URI + "?",
+    "https://example.test/elsewhere",
+])
+def test_web_configuration_rejects_unsafe_callback(mailbox, uri):
+    with pytest.raises(gmail.GmailError, match="invalid_oauth_config"):
+        gmail.validate_config(CLIENT_ID, "fixture-secret", uri)
+    assert gmail.load() == {}
+
+
+@pytest.mark.asyncio
+async def test_failed_atomic_write_preserves_config_and_sessions(mailbox, monkeypatch):
+    await gmail.configure_client(CLIENT_ID, "old-secret", REDIRECT_URI)
+    state, _ = flow()
+    before = gmail.state_path().read_bytes()
+
+    def fail(*args):
+        raise OSError("fixture failure")
+
+    monkeypatch.setattr(type(gmail.state_path()), "replace", fail)
+    with pytest.raises(gmail.GmailError, match="storage_error"):
+        await gmail.configure_client(CLIENT_ID, "replacement", REDIRECT_URI)
+    assert gmail.state_path().read_bytes() == before
+    assert state in gmail._flows
+
+
+def test_config_api_is_admin_only_and_never_echoes_secrets(mailbox, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from admin.routers import settings_gmail
+    from admin import auth as admin_auth
+
+    monkeypatch.setenv("YEXUAN_ADMIN_SECRET", "qa-admin")
+    resolve = admin_auth.resolve_token
+    monkeypatch.setattr(admin_auth, "resolve_token", lambda token: admin_auth.TokenInfo(
+        label="mobile", scopes=frozenset({"chat", "state.read"})) if token == "qa-mobile" else resolve(token))
+    app = FastAPI()
+    app.include_router(settings_gmail.router)
+    body = {"client_id": CLIENT_ID, "client_secret": "private-secret", "redirect_uri": REDIRECT_URI}
+    auth = {"Authorization": "Bearer qa-admin"}
+    with TestClient(app) as client:
+        for method, path in (("GET", "/settings/gmail/oauth/config"),
+                             ("PUT", "/settings/gmail/oauth/config"),
+                             ("POST", "/settings/gmail/oauth/config/validate")):
+            assert client.request(method, path, json=body).status_code == 401
+            assert client.request(method, path, json=body,
+                                  headers={"Authorization": "Bearer qa-mobile"}).status_code == 403
+        validated = client.post("/settings/gmail/oauth/config/validate", headers=auth, json=body)
+        assert validated.json() == {"valid": True, "authorization_verified": False}
+        assert gmail.load() == {}
+        saved = client.put("/settings/gmail/oauth/config", headers=auth, json=body)
+        assert saved.status_code == 200 and "private-secret" not in saved.text
+        response = client.get("/settings/gmail/oauth/config", headers=auth)
+        assert response.json() == saved.json()
+        assert response.headers["cache-control"] == "no-store"
+        bad = client.put("/settings/gmail/oauth/config", headers=auth,
+                         json={**body, "client_secret": "private-secret" * 200})
+        assert bad.status_code == 422 and "private-secret" not in bad.text
+        kept = client.put("/settings/gmail/oauth/config", headers=auth, json={**body, "client_secret": ""})
+        assert kept.status_code == 200 and gmail.oauth_config().client_secret == "private-secret"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("code", sorted(gmail.TOKEN_ERRORS))
+async def test_google_token_error_classification_does_not_echo_response(mailbox, monkeypatch, code):
+    class Content:
+        async def read(self, limit):
+            return ('{"error":"' + code + '","error_description":"private-secret"}').encode()
+
+    class Response:
+        status = 401
+        content = Content()
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+    class Session(Response):
+        def __init__(self, **kwargs):
+            pass
+
+        def request(self, *args, **kwargs):
+            return Response()
+
+    monkeypatch.setattr(gmail.aiohttp, "ClientSession", Session)
+    with pytest.raises(gmail.GmailError) as error:
+        await gmail.request("POST", gmail.TOKEN)
+    assert str(error.value) == code
+
+
+@pytest.mark.asyncio
+async def test_disabled_client_status_survives_restart(mailbox, monkeypatch):
+    await gmail.configure_client(CLIENT_ID, "fixture-secret", REDIRECT_URI)
+    gmail.save({**gmail.load(), "uid": "owner", "char_id": "character", "email": "mail@example.test",
+                "refresh": "fixture-refresh", "scopes": [gmail.READ]})
+
+    async def request(*args, **kwargs):
+        raise gmail.GmailError("disabled_client")
+
+    monkeypatch.setattr(gmail, "request", request)
+    with pytest.raises(gmail.GmailError, match="disabled_client"):
+        await gmail.access_token("owner", "character", gmail.READ)
+    status = restart_status(mailbox)
+    assert status["owner"]["token_state"] == "client_disabled"
+    assert status["other_role"]["connected"] is False
+    assert status["other_user"]["connected"] is False
+    assert gmail.load()["refresh"] == "fixture-refresh"
+    await gmail.configure_client(CLIENT_ID, "replacement", REDIRECT_URI)
+    assert gmail.status("owner", "character")["token_state"] == "pending_verification"

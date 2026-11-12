@@ -7,6 +7,7 @@ These ids intentionally have no relationship with any deployment role names.
 from __future__ import annotations
 
 import shutil
+from functools import lru_cache
 from pathlib import Path
 
 
@@ -22,20 +23,26 @@ PUBLIC_CHARACTER_ASSETS = _FIXTURE_ROOT / "characters" / "authored"
 PUBLIC_DREAM_WORLDS = _FIXTURE_ROOT / "dream_worlds"
 
 
+@lru_cache(maxsize=1)
+def public_character_package():
+    """Immutable bytes shared per worker; writable copies stay function scoped."""
+    return tuple((char_id, (PUBLIC_CHARACTER_CARDS / f"{char_id}.json").read_bytes(),
+                  tuple((asset.name, asset.read_bytes())
+                        for asset in sorted((PUBLIC_CHARACTER_ASSETS / char_id).glob("*"))
+                        if asset.is_file())) for char_id in TEST_CHAR_IDS)
+
+
 def install_public_character_cards(paths) -> tuple[str, ...]:
     """Install tracked public role cards into the active test sandbox."""
-    for char_id in TEST_CHAR_IDS:
-        source = PUBLIC_CHARACTER_CARDS / f"{char_id}.json"
+    for char_id, card, assets in public_character_package():
         target = paths.character_card_write_path(char_id)
         target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(source, target)
-        source_assets = PUBLIC_CHARACTER_ASSETS / char_id
-        if source_assets.is_dir():
+        target.write_bytes(card)
+        if assets:
             target_assets = paths.user_authored_character_dir(char_id=char_id)
             target_assets.mkdir(parents=True, exist_ok=True)
-            for asset in source_assets.iterdir():
-                if asset.is_file():
-                    shutil.copyfile(asset, target_assets / asset.name)
+            for name, content in assets:
+                (target_assets / name).write_bytes(content)
     return TEST_CHAR_IDS
 
 

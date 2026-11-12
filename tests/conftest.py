@@ -6,11 +6,14 @@ pytest 共享 fixture
 """
 
 import asyncio
+import json
 import os
 import sys
 from pathlib import Path
 
 import pytest
+
+from tests.ci_suites import mark_suites as pytest_collection_modifyitems
 
 # 将 Emerald-presence 根目录设为工作目录，保证 config.yaml 等相对路径可被正确读取
 _ROOT = Path(__file__).parent.parent
@@ -76,9 +79,35 @@ def enabled_client_channels(monkeypatch):
 @pytest.fixture(autouse=True)
 def reset_runtime_registries(monkeypatch):
     """Each test owns its runtime; registered test doubles must not leak."""
+    from channels import registry
     from core import pipeline_registry, qq_service
+    from core.tools import chat_artifacts
+
+    monkeypatch.setattr(registry, "_channels", {})
     monkeypatch.setattr(pipeline_registry, "_pipeline", None)
     monkeypatch.setattr(qq_service, "_service", None)
+    token = chat_artifacts._turn_artifacts.set(None)
+    try:
+        yield
+    finally:
+        chat_artifacts._turn_artifacts.reset(token)
+
+
+@pytest.fixture
+def desktop_wire(monkeypatch, enabled_client_channels):
+    """Connect a test socket at the transport boundary and capture wire frames."""
+    from channels import desktop_ws, registry
+    from channels.desktop import DesktopChannel
+
+    frames = []
+
+    class Socket:
+        async def send_text(self, text):
+            frames.append(json.loads(text))
+
+    registry.register(DesktopChannel())
+    monkeypatch.setattr(desktop_ws, "_current_ws", Socket())
+    return frames
 
 
 def _worker_session(suffix: str) -> str:
@@ -116,13 +145,15 @@ def _default_sandbox_guard(tmp_path, monkeypatch):
     monkeypatch.setattr(_sandbox, "_instance", guard_paths)
 
 
-@pytest.fixture(autouse=True)
-def _dream_scenario_examples(monkeypatch):
+@pytest.fixture(scope="session", autouse=True)
+def _dream_scenario_examples():
     """Use tracked, neutral scenario fixtures instead of private data/ content."""
     import core.dream.scenario_loader as scenario_loader
 
     fixture_dir = _ROOT / "tests" / "fixtures" / "dream_scenarios"
-    monkeypatch.setattr(scenario_loader, "_SCRIPTS_BASE", fixture_dir)
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(scenario_loader, "_SCRIPTS_BASE", fixture_dir)
+        yield
 
 
 @pytest.fixture(autouse=True)
@@ -187,15 +218,12 @@ def public_character_assets(sandbox, request):
     # on their incomplete test double.
     if hasattr(paths, "_project_root") and not custom_asset_root and not self_managed_asset_root:
         install_public_character_cards(paths)
-    import core.asset_registry as asset_registry
     import core.character_loader as character_loader
 
-    asset_registry._registry = None
     character_loader._character_cache.clear()
     yield
     if self_managed_asset_root and hasattr(paths, "_project_root"):
         paths._project_root = original_project_root
-    asset_registry._registry = None
     character_loader._character_cache.clear()
 
 
@@ -283,7 +311,32 @@ def reset_asset_registry():
 
 
 @pytest.fixture(autouse=True)
-async def reset_slow_queue():
+def reset_slow_queue(request):
+    """Only asynchronous tests need an event loop for worker cleanup."""
+    if request.node.get_closest_marker("asyncio"):
+        request.getfixturevalue("_async_slow_queue")
+        yield
+        return
+    import core.post_process.slow_queue as sq
+
+    def reset():
+        task = sq._worker_task
+        if task is not None and not task.done():
+            task.cancel()
+            loop = task.get_loop()
+            if not loop.is_closed():
+                loop.run_until_complete(asyncio.gather(task, return_exceptions=True))
+        sq._queue = asyncio.Queue()
+        sq._handlers = {}
+        sq._worker_task = None
+
+    reset()
+    yield
+    reset()
+
+
+@pytest.fixture
+async def _async_slow_queue():
     """每个测试前重置 slow_queue 模块状态（队列/handler/worker），测试后清理 worker。"""
     import core.post_process.slow_queue as sq
 

@@ -3,6 +3,8 @@ name: offline-evals
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   schedule:
     - cron: "47 18 * * *"
   workflow_dispatch:
@@ -38,6 +40,7 @@ jobs:
         run: cp config.example.yaml config.yaml
       - name: Run independent offline evaluations
         run: |
+          set -euo pipefail
           mkdir -p artifacts
           python tests/run_identity_eval.py 2>&1 | tee artifacts/identity-eval.txt
           python tests/run_format_eval.py 2>&1 | tee artifacts/format-eval.txt
@@ -68,6 +71,7 @@ jobs:
         run: cp config.example.yaml config.yaml
       - name: Record opt-in model and cost boundary
         run: |
+          set -euo pipefail
           mkdir -p artifacts
           {
             echo "model=${{ inputs.coplay_model }}"
@@ -76,7 +80,9 @@ jobs:
             echo "commit=$(git rev-parse HEAD)"
           } | tee artifacts/coplay-run-metadata.txt
       - name: Run Coplay external evaluation
-        run: python tests/run_coplay_eval.py 2>&1 | tee artifacts/coplay-eval.txt
+        run: |
+          set -euo pipefail
+          python tests/run_coplay_eval.py 2>&1 | tee artifacts/coplay-eval.txt
       - name: Upload Coplay evidence
         if: always()
         uses: actions/upload-artifact@v4

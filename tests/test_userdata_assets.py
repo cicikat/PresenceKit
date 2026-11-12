@@ -115,7 +115,7 @@ def test_tts_preview_passes_selected_character_to_real_synthesis(monkeypatch):
     captured = {}
 
     monkeypatch.setattr(voice_adapter, "resolve_tts_config", lambda char_id: {"char_id": char_id})
-    monkeypatch.setattr(voice_adapter, "get_provider_status", lambda _cfg: {"ready": True, "provider": "gsv"})
+    monkeypatch.setattr(voice_adapter, "get_provider_status", lambda _cfg: {"ready": True, "provider": "gsv", "transport": "gsv"})
 
     async def _synthesize(_text, _emotion, *, char_id=None):
         captured["char_id"] = char_id

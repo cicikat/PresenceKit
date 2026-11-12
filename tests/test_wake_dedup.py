@@ -41,7 +41,7 @@ async def _reset_channels():
 
 # ── Test 1: WS 已连接时触发 → push_segments 随 fanout 触发，不额外重复 ──────────
 
-async def test_push_segments_fires_only_when_desktop_in_fanout(monkeypatch):
+async def test_push_segments_fires_only_when_desktop_in_fanout(monkeypatch, enabled_client_channels):
     """fanout='all' 且 desktop 活跃 → push_segments 发出一次且 msg_id 共享。"""
     from channels import registry
     from channels.desktop import DesktopChannel
@@ -321,7 +321,7 @@ async def test_path_a_includes_pre_connect_trigger_when_ws_connected(monkeypatch
 
 # ── Test 3: 普通 chat → push_segments 照常（不影响 split 气泡）───────────────
 
-async def test_push_segments_fires_for_user_chat(monkeypatch):
+async def test_push_segments_fires_for_user_chat(monkeypatch, enabled_client_channels):
     """普通 user_chat 走 fanout='all' → push_segments 正常发出（不受 Fix 3 影响）。"""
     from channels import registry
     from channels.desktop import DesktopChannel

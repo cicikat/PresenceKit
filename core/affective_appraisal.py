@@ -87,7 +87,7 @@ async def evaluate(content: str, *, char_id: str) -> tuple[dict | None, str]:
     except asyncio.CancelledError:
         raise
     except Exception as exc:
-        status = "timeout" if isinstance(exc, TimeoutError) else "rejected" if isinstance(exc, (ValueError, KeyError, TypeError)) else "failed"
+        status = "timeout" if isinstance(exc, (asyncio.TimeoutError, TimeoutError)) else "rejected" if isinstance(exc, (ValueError, KeyError, TypeError)) else "failed"
         from core.runtime_signal_observability import record_counts
         record_counts(category="model_quality", code="affective_appraisal_failed", status="attention",
                       context={"purpose": "affective_appraisal", "reason": status})

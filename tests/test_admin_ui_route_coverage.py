@@ -15,22 +15,27 @@
 纯内部/测试用接口等。管理面板本该覆盖但目前没做的功能缺口，请补 UI 而不是
 加白名单掩盖。
 """
+import inspect
 import re
 from pathlib import Path
 
-from admin_static_assets import read_admin_client_source
+from admin_static_assets import STATIC
 
 ROOT = Path(__file__).resolve().parent.parent
-SERVER_FILE = ROOT / "admin/admin_server.py"
-ROUTERS_DIR = ROOT / "admin/routers"
-INDEX_FILE = ROOT / "admin/static/index.html"
-
-_INCLUDE_RE = re.compile(r'app\.include_router\(\s*(\w+)\.router\s*,\s*prefix\s*=\s*"([^"]*)"')
-_ROUTE_RE = re.compile(r'@router\.(post|patch|put)\(\s*"([^"]+)"')
 
 # (METHOD, 完整路径) -> 白名单理由（一行，说明为什么管理面板不需要接这个接口）。
 # 新增写接口默认要求要么出现在 index.html 里，要么显式加进这里。
 NO_ADMIN_UI_WHITELIST: dict[tuple[str, str], str] = {
+    ("POST", "/v1/ime/drafts"): "Desktop IME draft ingestion; admin observes drafts without simulating typing",
+    ("POST", "/life-records/sync"): "Mobile life-record synchronization; admin manages policy and retry only",
+    ("POST", "/phone_control/debug/start"): "Mobile device automation diagnostic session entry",
+    ("POST", "/computer-use/agent-session/control"): "Desktop agent session controls; device client owns execution",
+    ("POST", "/computer-use/poll"): "Desktop device action lease polling",
+    ("POST", "/computer-use/result"): "Desktop device action result submission",
+    ("POST", "/computer-use/vision/locate"): "Desktop execution-time visual target localization",
+    ("POST", "/perception/screen/poll"): "Desktop screenshot request polling; admin does not capture device screens",
+    ("POST", "/perception/screen/result"): "Desktop screenshot result submission",
+    ("POST", "/integrations/companion/events"): "External companion bridge event ingestion",
     ("POST", "/scheduler/trigger/{name}"): "显式排队调度测试的诊断 API；生产管理面不模拟用户或设备事件",
     ("POST", "/watch/event"): "Apple Watch 事件上报入口，由设备自动化调用；管理面提供只读观察",
     ("POST", "/video-call/invite/respond"): "桌面视频来电接受或拒绝，由桌面实际接听界面调用",
@@ -83,6 +88,7 @@ NO_ADMIN_UI_WHITELIST: dict[tuple[str, str], str] = {
     ("POST", "/mobile/activate"): "手机端上线激活，Emerald-mobile backend_client.dart 消费",
     ("POST", "/mobile/deactivate"): "手机端下线停用，Emerald-mobile backend_client.dart 消费",
     ("POST", "/mobile/ack"): "手机端消息确认，Emerald-mobile backend_client.dart 消费",
+    ("POST", "/mobile/realtime/metric"): "手机实时连接指标上报，由移动客户端消费；管理面不伪造客户端测量",
     ("POST", "/mobile/push"): "向手机端推送消息，Emerald-mobile backend_client.dart 消费",
     ("POST", "/sensor/push"): "手机传感器数据上报，Emerald-mobile 消费",
     ("POST", "/sensor/realtime"): "桌面端实时传感器快照，Emerald-client sensor 消费",
@@ -143,26 +149,47 @@ NO_ADMIN_UI_WHITELIST: dict[tuple[str, str], str] = {
 }
 
 
-def _prefix_map() -> dict[str, str]:
-    source = SERVER_FILE.read_text(encoding="utf-8")
-    return {mod: prefix for mod, prefix in _INCLUDE_RE.findall(source)}
-
-
 def _iter_routes():
-    """Yield (method, full_path, module, lineno) for every write route that's mounted in admin_server.py."""
-    prefixes = _prefix_map()
-    for path in sorted(ROUTERS_DIR.glob("*.py")):
-        module = path.stem
-        prefix = prefixes.get(module)
-        if prefix is None:
-            continue  # 没被 include_router 挂载（比如可选依赖缺失时的 chess），不算真实路由
-        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-            m = _ROUTE_RE.search(line)
-            if not m:
-                continue
-            method, route_path = m.group(1).upper(), m.group(2)
-            full_path = prefix.rstrip("/") + route_path if prefix else route_path
-            yield method, full_path, module, lineno
+    """Use the application's registered routes, including multiline decorators."""
+    from admin.admin_server import app
+    from fastapi.routing import APIRoute
+
+    for route in app.routes:
+        if isinstance(route, APIRoute):
+            endpoint = inspect.unwrap(route.endpoint)
+            module = endpoint.__module__
+            lineno = inspect.getsourcelines(endpoint)[1]
+            for method in sorted(route.methods & {"POST", "PATCH", "PUT"}):
+                yield method, route.path, module, lineno
+
+
+def _loaded_ui_source():
+    """Only shell-loaded scripts and declared lazy fragments count as references.
+
+    This is an inventory guard; execution is checked by the browser job and the
+    OAuth API tests, never inferred from a URL occurrence.
+    """
+    from html.parser import HTMLParser
+
+    class Assets(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.paths = set()
+
+        def handle_starttag(self, tag, attrs):
+            attrs = dict(attrs)
+            if tag == "script" and attrs.get("src", "").startswith("/static/"):
+                self.paths.add(attrs["src"].split("?", 1)[0].removeprefix("/static/"))
+            if attrs.get("data-page-fragment"):
+                self.paths.add(f"pages/{attrs['data-page-fragment']}.html")
+
+    shell = (STATIC / "index.html").read_text(encoding="utf-8")
+    assets = Assets()
+    assets.feed(shell)
+    assert assets.paths
+    source = "\n".join([shell, *((STATIC / path).read_text(encoding="utf-8") for path in sorted(assets.paths))])
+    # Normalize encoded path concatenations as well as template literals.
+    return re.sub(r'''['"]\s*\+\s*encodeURIComponent\([^;\n]+?\)(?:\s*\+\s*['"])?''', "PARAM", source)
 
 
 def _path_pattern(full_path: str) -> re.Pattern:
@@ -187,7 +214,7 @@ def test_no_admin_ui_whitelist_entries_are_stale():
 
 def test_write_routes_are_referenced_in_admin_ui_or_whitelisted():
     """admin/routers/*.py 里的每个写接口，要么被 index.html 引用，要么在白名单里写明理由。"""
-    index_source = read_admin_client_source()
+    index_source = _loaded_ui_source()
     unexplained = []
     for method, full_path, module, lineno in _iter_routes():
         key = (method, full_path)

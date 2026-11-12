@@ -212,7 +212,7 @@ class TestLLMBoundaryStrip:
             return_value=self._make_fake_model_client(fake_create),
         ):
             from core.llm_client import chat
-            asyncio.get_event_loop().run_until_complete(chat(messages_with_layer))
+            asyncio.run(chat(messages_with_layer))
 
         assert captured, "fake_create was never invoked — chat() bypassed the mock"
         for m in captured:
@@ -234,7 +234,7 @@ class TestLLMBoundaryStrip:
             return_value=self._make_fake_model_client(fake_create),
         ):
             from core.llm_client import chat
-            asyncio.get_event_loop().run_until_complete(chat(messages_with_internal))
+            asyncio.run(chat(messages_with_internal))
 
         assert captured, "fake_create was never invoked — chat() bypassed the mock"
         for m in captured:
@@ -264,7 +264,7 @@ class TestLLMBoundaryStrip:
             return_value=self._make_fake_model_client(fake_create),
         ):
             from core.llm_client import chat
-            asyncio.get_event_loop().run_until_complete(chat(messages_with_meta))
+            asyncio.run(chat(messages_with_meta))
 
         assert captured, "fake_create was never invoked — chat() bypassed the mock"
         for m in captured:
@@ -287,7 +287,7 @@ class TestLLMBoundaryStrip:
             return_value=self._make_fake_model_client(fake_create),
         ):
             from core.llm_client import chat
-            asyncio.get_event_loop().run_until_complete(chat(original))
+            asyncio.run(chat(original))
 
         for i, (orig, saved) in enumerate(zip(original, originals_copy)):
             assert orig == saved, f"message[{i}] was mutated by chat()"

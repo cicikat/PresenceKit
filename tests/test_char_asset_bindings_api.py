@@ -82,6 +82,7 @@ def test_get_undeclared_char_returns_all_none(registry):
         "char_id": TEST_CHAR_ID,
         "tts_preset": None, "tts_preset_resolved": None,
         "sticker_pack": None, "live2d_model": None, "model_3d": None,
+        "image_gen": None,
     }
 
 

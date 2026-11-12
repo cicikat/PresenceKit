@@ -115,13 +115,84 @@ async function loadSetupPage({section = null, expectedValues = _setupInputSnapsh
   }
 }
 
+function gmailError(error) {
+  const code = _setupErrMsg(error);
+  return t('gmail.error.' + code, code);
+}
+
+async function loadSetupGmailOAuth() {
+  const field = id => document.getElementById('setup-gmail-' + id);
+  const state = await api('GET', '/settings/gmail/oauth/config');
+  field('client-id').value = state.client_id || '';
+  field('client-secret').value = '';
+  field('redirect-uri').value = state.redirect_uri || '';
+  field('secret-state').textContent = state.client_secret_set
+    ? t('common.configured', '已配置') : t('common.not_configured', '未配置');
+  field('oauth-status').textContent = state.configured
+    ? t('common.configured', '已配置') : t('common.not_configured', '未配置');
+  field('oauth-source').textContent = t('gmail.oauth.source', '当前来源：{source} · 版本：{revision}', {
+    source: t('gmail.oauth.source.' + state.source, state.source), revision: state.credential_revision || '—',
+  });
+}
+
+function setupGmailOAuthBody() {
+  const field = id => document.getElementById('setup-gmail-' + id);
+  if (!field('client-id').reportValidity() || !field('redirect-uri').reportValidity()) return null;
+  return {client_id: field('client-id').value.trim(), client_secret: field('client-secret').value,
+    redirect_uri: field('redirect-uri').value.trim()};
+}
+
+async function saveSetupGmailOAuth() {
+  const body = setupGmailOAuthBody();
+  if (!body) return;
+  const button = document.getElementById('setup-gmail-oauth-save');
+  button.disabled = true;
+  button.textContent = t('gmail.oauth.saving', '正在保存…');
+  try {
+    await api('PUT', '/settings/gmail/oauth/config', body);
+    document.getElementById('setup-gmail-client-secret').value = '';
+    await loadSetupGmailOAuth();
+    await loadSetupGmail();
+    toast(t('gmail.oauth.saved', 'OAuth 配置已保存，请测试连接或授权'), 'ok');
+  } catch (e) {
+    toast(t('gmail.oauth.failed', 'OAuth 配置操作失败：{error}', {error: gmailError(e)}), 'err');
+  } finally {
+    body.client_secret = '';
+    button.disabled = false;
+    button.textContent = t('common.save', '保存');
+  }
+}
+
+async function validateSetupGmailOAuth() {
+  const body = setupGmailOAuthBody();
+  if (!body) return;
+  try {
+    await api('POST', '/settings/gmail/oauth/config/validate', body);
+    toast(t('gmail.oauth.valid', '格式有效；尚未验证 Google 授权'), 'ok');
+  } catch (e) {
+    toast(t('gmail.oauth.failed', 'OAuth 配置操作失败：{error}', {error: gmailError(e)}), 'err');
+  } finally {
+    body.client_secret = '';
+  }
+}
+
+async function copySetupGmailCallback() {
+  try {
+    const state = await api('GET', '/settings/gmail/oauth/config');
+    if (!state.configured) throw new Error(t('gmail.state.not_configured', '配置未完成'));
+    await navigator.clipboard.writeText(state.redirect_uri);
+    toast(t('gmail.oauth.copied', '已复制当前有效回调地址'), 'ok');
+  } catch (e) {
+    toast(t('gmail.oauth.failed', 'OAuth 配置操作失败：{error}', {error: gmailError(e)}), 'err');
+  }
+}
+
 async function loadSetupGmail() {
   const field = id => document.getElementById('setup-gmail-' + id);
   try {
     const state = await api('GET', '/settings/gmail');
-    field('status').textContent = state.bound_elsewhere ? '邮箱已绑定到其他角色'
-      : !state.configured ? '服务器尚未配置 OAuth'
-      : state.connected ? (state.error === 'reauthorization_required' ? '需要重新授权' : '已连接') : '待授权';
+    field('status').textContent = state.bound_elsewhere ? t('gmail.bound_elsewhere', '邮箱已绑定到其他角色')
+      : t('gmail.state.' + state.token_state, state.token_state);
     if (state.email) field('email').value = state.email;
     field('connect').disabled = !state.configured || state.bound_elsewhere;
     field('test').disabled = !state.connected;
@@ -130,36 +201,37 @@ async function loadSetupGmail() {
     field('sync').checked = !!state.sync_enabled;
     field('interval').value = state.sync_interval_seconds;
     const scopes = (state.scopes || []).map(scope => scope.split('/').pop()).join('、');
-    const lastSync = state.last_sync_at ? new Date(state.last_sync_at * 1000).toLocaleString() : '暂无';
+    const lastSync = state.last_sync_at ? new Date(state.last_sync_at * 1000).toLocaleString() : '—';
     const retry = state.sync_retry_at ? new Date(state.sync_retry_at * 1000).toLocaleString() : '';
     field('detail').textContent = [
-      scopes ? '授权范围 ' + scopes : '',
-      state.connected ? (state.sync_effective ? '同步已启用' : '同步未生效') : '',
-      state.connected ? '上次成功同步 ' + lastSync : '',
-      state.error || '', state.sync_error ? '同步错误 ' + state.sync_error : '',
-      retry ? '下次尝试 ' + retry : '',
+      scopes ? t('gmail.scopes', '授权范围 {value}', {value: scopes}) : '',
+      state.connected ? t(state.sync_effective ? 'gmail.sync_on' : 'gmail.sync_off', state.sync_effective ? '同步已启用' : '同步未生效') : '',
+      state.connected ? t('gmail.last_sync', '上次成功同步 {value}', {value: lastSync}) : '',
+      state.error ? gmailError(state.error) : '',
+      state.sync_error ? t('gmail.sync_error', '同步错误 {value}', {value: gmailError(state.sync_error)}) : '',
+      retry ? t('gmail.retry', '下次尝试 {value}', {value: retry}) : '',
     ].filter(Boolean).join(' · ');
     field('unknown').hidden = !state.unknown_delivery_count;
     field('unknown-ids').textContent = (state.unknown_deliveries || [])
       .map(row => row.message_id).join(' · ');
   } catch (e) {
-    field('status').textContent = '读取 Gmail 状态失败 ' + _setupErrMsg(e);
+    field('status').textContent = t('gmail.load_failed', '读取 Gmail 状态失败 {error}', {error: gmailError(e)});
   }
 }
 
 async function connectSetupGmail() {
   const email = document.getElementById('setup-gmail-email');
   if (!email.value.trim() || !email.reportValidity()) {
-    toast('请填写角色的 Google 邮箱', 'err');
+    toast(t('gmail.enter_email', '请填写角色的 Google 邮箱'), 'err');
     return;
   }
   if (!document.getElementById('setup-gmail-consent').checked) {
-    toast('请确认模型服务处理说明', 'err');
+    toast(t('gmail.confirm_consent', '请确认模型服务处理说明'), 'err');
     return;
   }
   const popup = window.open('about:blank', '_blank');
   if (!popup) {
-    toast('请允许浏览器打开授权窗口', 'err');
+    toast(t('gmail.allow_popup', '请允许浏览器打开授权窗口'), 'err');
     return;
   }
   popup.opener = null;
@@ -170,29 +242,29 @@ async function connectSetupGmail() {
     popup.location.replace(result.authorization_url);
   } catch (e) {
     popup.close();
-    toast('无法启动授权 ' + _setupErrMsg(e), 'err');
+    toast(t('gmail.connect_failed', '无法启动授权 {error}', {error: gmailError(e)}), 'err');
   }
 }
 
 async function testSetupGmail() {
   try {
     await api('POST', '/settings/gmail/test');
-    toast('Google 邮箱授权有效', 'ok');
+    toast(t('gmail.test_ok', 'Google 邮箱授权有效'), 'ok');
   } catch (e) {
-    toast('测试连接失败 ' + _setupErrMsg(e), 'err');
+    toast(t('gmail.test_failed', '测试连接失败 {error}', {error: gmailError(e)}), 'err');
   }
   await loadSetupGmail();
 }
 
 async function disconnectSetupGmail() {
-  if (!window.confirm('断开此角色的 Google 邮箱，并请求撤销 Google 授权？')) return;
+  if (!window.confirm(t('gmail.disconnect_confirm', '断开此角色的 Google 邮箱，并请求撤销 Google 授权？'))) return;
   try {
     const result = await api('POST', '/settings/gmail/disconnect');
     toast(result.result === 'local_disconnect_upstream_unconfirmed'
-      ? '本地已断开，请在 Google 账号中手动撤销授权' : '邮箱已断开', 'ok');
+      ? t('gmail.disconnect_local', '本地已断开，请在 Google 账号中手动撤销授权') : t('gmail.disconnected', '邮箱已断开'), 'ok');
     await loadSetupGmail();
   } catch (e) {
-    toast('断开失败 ' + _setupErrMsg(e), 'err');
+    toast(t('gmail.disconnect_failed', '断开失败 {error}', {error: gmailError(e)}), 'err');
   }
 }
 
@@ -205,14 +277,15 @@ async function saveSetupGmailSync() {
       interval_seconds: Number(interval.value),
     });
     await loadSetupGmail();
-    toast('同步设置已保存', 'ok');
+    toast(t('gmail.sync_saved', '同步设置已保存'), 'ok');
   } catch (e) {
-    toast('保存同步设置失败 ' + _setupErrMsg(e), 'err');
+    toast(t('gmail.sync_failed', '保存同步设置失败 {error}', {error: gmailError(e)}), 'err');
   }
 }
 
 async function _loadSetupMail() {
   void loadSetupGmail();
+  void loadSetupGmailOAuth().catch(e => toast(t('gmail.load_failed', '读取 Gmail 状态失败 {error}', {error: gmailError(e)}), 'err'));
   try {
     const mail = await api('GET', '/settings/mail');
     document.getElementById('setup-mail-enabled').checked = !!mail.enabled;

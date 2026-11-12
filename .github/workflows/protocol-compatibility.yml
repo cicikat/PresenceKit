@@ -6,15 +6,23 @@ on:
       backend_sha:
         description: "40-character backend commit SHA"
         required: true
-        default: "d12f3ff438c7aacc01d3b0b1f66dbba9677267b5"
       desktop_sha:
         description: "40-character desktop commit SHA"
         required: true
-        default: "4f00d0c0bd75e29af0aa3e8c1b1ec0518df407ad"
       mobile_sha:
         description: "40-character mobile commit SHA"
         required: true
-        default: "5fd9717e89e7011a969c04ba16c618b767f2e7ba"
+  workflow_call:
+    inputs:
+      backend_sha:
+        required: true
+        type: string
+      desktop_sha:
+        required: true
+        type: string
+      mobile_sha:
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -24,6 +32,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - name: Checkout evidence tools from the workflow revision
+        uses: actions/checkout@v4
+        with:
+          path: tooling
+
       - name: Checkout frozen backend
         uses: actions/checkout@v4
         with:
@@ -47,12 +60,17 @@ jobs:
 
       - name: Assert all checkouts are pinned to the requested SHAs
         shell: bash
+        env:
+          BACKEND_SHA: ${{ inputs.backend_sha }}
+          DESKTOP_SHA: ${{ inputs.desktop_sha }}
+          MOBILE_SHA: ${{ inputs.mobile_sha }}
         run: |
           set -euo pipefail
-          test "$(git -C backend rev-parse HEAD)" = "${{ inputs.backend_sha }}"
-          test "$(git -C desktop rev-parse HEAD)" = "${{ inputs.desktop_sha }}"
-          test "$(git -C mobile rev-parse HEAD)" = "${{ inputs.mobile_sha }}"
+          test "$(git -C backend rev-parse HEAD)" = "$BACKEND_SHA"
+          test "$(git -C desktop rev-parse HEAD)" = "$DESKTOP_SHA"
+          test "$(git -C mobile rev-parse HEAD)" = "$MOBILE_SHA"
           test -f backend/tests/protocol_fixtures/v1/manifest.json
+          mkdir -p evidence
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -64,10 +82,16 @@ jobs:
         run: python -m pip install -r requirements.txt
 
       - name: Run backend provider contract
+        id: backend
         working-directory: backend
-        run: python -m pytest -n auto -q tests/test_protocol_fixtures.py
+        env:
+          EMERALD_CLIENT_ROOT: ${{ github.workspace }}/desktop
+        run: |
+          python -m pytest -n 4 -q -ra tests/test_protocol_fixtures.py tests/test_activity_contract.py --junitxml=../evidence/backend.xml
+          python ../tooling/tests/ci_evidence.py ../evidence/backend.xml --no-skips
 
       - name: Run desktop consumer contract
+        id: desktop
         working-directory: desktop
         env:
           PRESENCEKIT_PROTOCOL_FIXTURES: ${{ github.workspace }}/backend/tests/protocol_fixtures/v1
@@ -82,6 +106,7 @@ jobs:
           cache: true
 
       - name: Run mobile consumer contract
+        id: mobile
         working-directory: mobile
         env:
           PRESENCEKIT_PROTOCOL_FIXTURES: ${{ github.workspace }}/backend/tests/protocol_fixtures/v1
@@ -89,12 +114,26 @@ jobs:
           flutter pub get
           flutter test test/protocol_fixtures_test.dart
 
+      - name: Record exact-SHA contract evidence
+        if: always()
+        working-directory: backend
+        env:
+          BACKEND_SHA: ${{ inputs.backend_sha }}
+          DESKTOP_SHA: ${{ inputs.desktop_sha }}
+          MOBILE_SHA: ${{ inputs.mobile_sha }}
+          BACKEND_RESULT: ${{ steps.backend.outcome }}
+          DESKTOP_RESULT: ${{ steps.desktop.outcome }}
+          MOBILE_RESULT: ${{ steps.mobile.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: python ../tooling/tests/protocol_evidence.py --output ../evidence/protocol.json
+
       - name: Upload reproducibility metadata
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: protocol-compatibility-${{ inputs.backend_sha }}-${{ inputs.desktop_sha }}-${{ inputs.mobile_sha }}
           path: |
+            evidence/
             backend/tests/protocol_fixtures/v1/manifest.json
           if-no-files-found: error
           retention-days: 30

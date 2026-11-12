@@ -345,7 +345,7 @@ class TestRunAgenticLoopToolCategories:
         class _Sess:
             status = "idle"
 
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             pl.run_agentic_loop([{"role": "user", "content": "hi"}], uid="u1", char_id="c1", session_state=_Sess())
         )
         assert result == "done"
@@ -379,7 +379,7 @@ class TestRunAgenticLoopToolCategories:
         class _Sess:
             status = "idle"
 
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             pl.run_agentic_loop([{"role": "user", "content": "hi"}], uid="u1", char_id="c1", session_state=_Sess())
         )
         assert result == "done"
@@ -410,7 +410,7 @@ class TestRunAgenticLoopToolCategories:
         class _Sess:
             status = "idle"
 
-        asyncio.get_event_loop().run_until_complete(
+        asyncio.run(
             pl.run_agentic_loop([{"role": "user", "content": "hi"}], uid="u1", char_id="c1", session_state=_Sess())
         )
         msgs = seen_messages[0]
@@ -442,7 +442,7 @@ class TestRunAgenticLoopToolCategories:
         class _Sess:
             status = "idle"
 
-        asyncio.get_event_loop().run_until_complete(
+        asyncio.run(
             pl.run_agentic_loop([{"role": "user", "content": "hi"}], uid="u1", char_id="c1", session_state=_Sess())
         )
         msgs = seen_messages[0]

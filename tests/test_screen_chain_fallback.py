@@ -47,7 +47,8 @@ async def test_shadow_chain_falls_back_when_the_primary_is_unreachable(config, m
     seen = []
     observation = vlm_client.VisualObservation("desk", "working", .9, False, "editing")
 
-    async def fake(cfg, image, hint):
+    async def fake(cfg, image, hint, *, camera=False):
+        assert camera is False
         seen.append(cfg["model"])
         if cfg["model"] == "local-vl":
             return None, "error", "connection_error"
@@ -62,7 +63,8 @@ async def test_shadow_chain_falls_back_when_the_primary_is_unreachable(config, m
 async def test_shadow_chain_does_not_repay_for_an_invalid_reply(config, monkeypatch):
     seen = []
 
-    async def fake(cfg, image, hint):
+    async def fake(cfg, image, hint, *, camera=False):
+        assert camera is False
         seen.append(cfg["model"])
         return None, "invalid", "invalid_response"
 
@@ -75,7 +77,8 @@ async def test_shadow_chain_does_not_repay_for_an_invalid_reply(config, monkeypa
 async def test_shadow_chain_without_a_fallback_reports_the_primary_failure(config, monkeypatch):
     config["cfg"] = _cfg(fallback=False)
 
-    async def fake(cfg, image, hint):
+    async def fake(cfg, image, hint, *, camera=False):
+        assert camera is False
         return None, "error", "timeout"
 
     monkeypatch.setattr(vlm_client, "_describe_once", fake)
@@ -143,7 +146,8 @@ async def test_camera_upload_never_reaches_the_screen_fallback(config, monkeypat
     config["cfg"]["image_presets"]["routes"]["video_call"] = "local"
     seen = []
 
-    async def fake(cfg, image, hint):
+    async def fake(cfg, image, hint, *, camera=False):
+        assert camera is True
         seen.append(cfg["model"])
         return None, "error", "connection_error"
 

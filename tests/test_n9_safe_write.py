@@ -13,7 +13,6 @@ N9 原子写测试
 import json
 import re
 import time
-import asyncio
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
@@ -148,7 +147,8 @@ def test_mark_diary_shared_persists(tmp_path):
 
 # ── 5. desktop channel _write_to_queue 内容一致 ───────────────────────────────
 
-def test_desktop_write_to_queue_roundtrip(tmp_path):
+@pytest.mark.asyncio
+async def test_desktop_write_to_queue_roundtrip(tmp_path):
     q_file = tmp_path / "channel_queue.json"
 
     import channels.desktop as desktop_mod
@@ -158,7 +158,7 @@ def test_desktop_write_to_queue_roundtrip(tmp_path):
 
     with patch("channels.desktop.get_paths", return_value=fake_paths):
         ch = desktop_mod.DesktopChannel()
-        asyncio.get_event_loop().run_until_complete(ch._write_to_queue("hello world"))
+        await ch._write_to_queue("hello world")
 
     assert q_file.exists()
     queue = json.loads(q_file.read_text(encoding="utf-8"))
@@ -168,7 +168,8 @@ def test_desktop_write_to_queue_roundtrip(tmp_path):
 
 # ── 6. mobile channel 写入/取出内容一致 ─────────────────────────────────────
 
-def test_mobile_queue_write_poll_and_ack(tmp_path):
+@pytest.mark.asyncio
+async def test_mobile_queue_write_poll_and_ack(tmp_path):
     q_file = tmp_path / "mobile_queue.json"
     seq_file = tmp_path / "mobile_queue_seq"
 
@@ -181,12 +182,12 @@ def test_mobile_queue_write_poll_and_ack(tmp_path):
     with patch("channels.mobile.get_paths", return_value=fake_paths):
         ch = mobile_mod.MobileChannel()
         # 写入两条
-        asyncio.get_event_loop().run_until_complete(ch._write_to_queue("msg1", user_id="u1"))
-        asyncio.get_event_loop().run_until_complete(ch._write_to_queue("msg2", user_id="u1"))
+        await ch._write_to_queue("msg1", user_id="u1")
+        await ch._write_to_queue("msg2", user_id="u1")
 
         # 取 1 条
         polled = ch._read_from_queue(after=None, limit=1)
-        remaining_count = asyncio.get_event_loop().run_until_complete(ch.ack(polled[0]["seq"]))
+        remaining_count = await ch.ack(polled[0]["seq"])
 
     assert len(polled) == 1
     assert polled[0]["content"] == "msg1"

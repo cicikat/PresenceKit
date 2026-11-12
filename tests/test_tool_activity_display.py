@@ -66,7 +66,7 @@ def test_chain_and_status_without_arguments_or_results(monkeypatch):
     assert 'private' not in str(events)
 
 
-def test_tool_activity_send_timeout_does_not_block_execution(monkeypatch):
+def test_tool_activity_send_timeout_does_not_block_execution(monkeypatch, enabled_client_channels):
     from channels import desktop_ws
 
     monkeypatch.setattr('core.config_loader.get_config', lambda: {'scheduler': {'owner_id': 'owner'}})

@@ -9,6 +9,9 @@ const base = process.env.ADMIN_TEST_URL || 'http://127.0.0.1:8080';
   const browser = await chromium.launch({headless: true, executablePath: process.env.ADMIN_TEST_BROWSER || undefined});
   try {
     const context = await browser.newContext({viewport: {width: 1365, height: 900}});
+    // Retain navigation coverage for the supported legacy layout; the companion
+    // acceptance script exercises the default presentation and authentication.
+    await context.addInitScript(() => localStorage.setItem('presencekit_admin_ui', 'legacy'));
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
@@ -32,7 +35,8 @@ const base = process.env.ADMIN_TEST_URL || 'http://127.0.0.1:8080';
       });
     }
     async function active(name) {
-      await page.locator('#page-' + name + '.active[data-page-loaded="true"]').waitFor();
+      const target = await page.evaluate(value => AdminPageLayout.resolve(ADMIN_PAGE_ALIASES[value] || value), name);
+      await page.locator('#page-' + target + '.active[data-page-loaded="true"]').waitFor();
     }
     await openShell();
     await active('guide');
@@ -93,7 +97,7 @@ const base = process.env.ADMIN_TEST_URL || 'http://127.0.0.1:8080';
       await slow;
     });
     await active('operations-center');
-    assert.equal(await page.evaluate(() => getRememberedPage()), 'operations-center');
+    assert.equal(await page.evaluate(() => getRememberedPage()), 'status');
     await openShell();
     await active('operations-center');
     assert.equal(await page.locator('#nav-back').isDisabled(), false);

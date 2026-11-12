@@ -8,8 +8,10 @@ from dataclasses import dataclass
 import hashlib
 import hmac
 import json
+import ipaddress
 import os
 from pathlib import Path
+import re
 import secrets
 import tempfile
 import time
@@ -29,8 +31,10 @@ TOKEN = "https://oauth2.googleapis.com/token"
 REVOKE = "https://oauth2.googleapis.com/revoke"
 COOKIE = "__Secure-presencekit-gmail"
 LOCK = asyncio.Lock()
-_access: tuple[str, str, float] | None = None
+_access: tuple[str, str, float, str] | None = None
 _last_error = ""
+TOKEN_ERRORS = frozenset({"disabled_client", "invalid_client", "invalid_grant",
+                          "redirect_uri_mismatch", "access_denied", "unauthorized_client"})
 
 
 class GmailError(Exception):
@@ -44,26 +48,100 @@ class OAuth:
     redirect_uri: str
 
     @property
+    def revision(self) -> str:
+        return hashlib.sha256(json.dumps((self.client_id, self.client_secret,
+                                          self.redirect_uri)).encode()).hexdigest()[:24]
+
+    @property
     def origin(self) -> str:
         url = urlsplit(self.redirect_uri)
         return f"{url.scheme}://{url.netloc}"
 
 
-def oauth_config() -> OAuth:
-    cfg = OAuth(*(os.environ.get(key, "").strip() for key in (
+def _raw_config() -> tuple[OAuth, str]:
+    stored = load().get("oauth_client")
+    if stored is not None:
+        if not isinstance(stored, dict):
+            raise GmailError("storage_error")
+        return OAuth(*(str(stored.get(key, "")) for key in (
+            "client_id", "client_secret", "redirect_uri"))), "private_file"
+    return OAuth(*(os.environ.get(key, "").strip() for key in (
         "GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET", "GOOGLE_OAUTH_REDIRECT_URI",
-    )))
+    ))), "environment"
+
+
+def _validate_config(cfg: OAuth, *, web: bool = False) -> None:
     try:
         url = urlsplit(cfg.redirect_uri)
+        host = url.hostname or ""
+        try:
+            address = ipaddress.ip_address(host)
+        except ValueError:
+            public = bool(re.fullmatch(r"(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+"
+                                       r"[A-Za-z]{2,63}", host)) and not host.lower().endswith(
+                                           (".localhost", ".local", ".internal", ".lan"))
+        else:
+            public = address.is_global
         valid = (
-            url.scheme == "https" and bool(url.hostname) and url.username is None
+            url.scheme == "https" and public and url.username is None
             and url.password is None and not url.query and not url.fragment and url.path == CALLBACK
+            and url.port in (None, 443) and "?" not in cfg.redirect_uri and "#" not in cfg.redirect_uri
         )
     except ValueError:
         valid = False
     if not (cfg.client_id and cfg.client_secret and valid):
-        raise GmailError("oauth_not_configured")
+        raise GmailError("invalid_oauth_config" if web else "oauth_not_configured")
+    if web and (not re.fullmatch(r"[A-Za-z0-9_-]+\.apps\.googleusercontent\.com", cfg.client_id)
+                or any(c.isspace() for c in cfg.client_secret)):
+        raise GmailError("invalid_oauth_config")
+
+
+def oauth_config() -> OAuth:
+    cfg, _ = _raw_config()
+    _validate_config(cfg)
     return cfg
+
+
+def config_status() -> dict:
+    cfg, source = _raw_config()
+    try:
+        _validate_config(cfg)
+        configured = True
+    except GmailError:
+        configured = False
+    return {"client_id": cfg.client_id, "client_secret_set": bool(cfg.client_secret),
+            "redirect_uri": cfg.redirect_uri, "configured": configured, "source": source,
+            "credential_revision": cfg.revision if configured else ""}
+
+
+def validate_config(client_id: str, client_secret: str | None, redirect_uri: str) -> OAuth:
+    previous, _ = _raw_config()
+    cfg = OAuth(client_id.strip(), (client_secret or "").strip() or previous.client_secret,
+                redirect_uri.strip())
+    _validate_config(cfg, web=True)
+    return cfg
+
+
+async def configure_client(client_id: str, client_secret: str | None, redirect_uri: str) -> dict:
+    global _access, _last_error
+    async with LOCK:
+        cfg = validate_config(client_id, client_secret, redirect_uri)
+        previous, _ = _raw_config()
+        record = load()
+        if record.get("refresh") and "verified_revision" not in record:
+            record["verified_revision"] = previous.revision
+        record["oauth_client"] = {"client_id": cfg.client_id, "client_secret": cfg.client_secret,
+                                  "redirect_uri": cfg.redirect_uri}
+        if cfg != previous:
+            record.pop("token_error", None)
+            record.pop("authorization_error", None)
+        save(record)
+        if cfg != previous:
+            _access = None
+            _last_error = ""
+            _tickets.clear()
+            _flows.clear()
+        return config_status()
 
 
 def owner() -> str:
@@ -141,11 +219,12 @@ async def request(method: str, url: str, *, sending: bool = False, token: str = 
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=12)) as session:
             async with session.request(method, url, headers=headers, allow_redirects=False, **kwargs) as res:
                 if res.status >= 300:
-                    if url == TOKEN and res.status == 400:
+                    if url == TOKEN and res.status in (400, 401, 403):
                         body = await res.content.read(4096)
                         try:
-                            if json.loads(body).get("error") == "invalid_grant":
-                                raise GmailError("reauthorization_required")
+                            error = json.loads(body).get("error")
+                            if isinstance(error, str) and error in TOKEN_ERRORS:
+                                raise GmailError(error)
                         except (ValueError, AttributeError):
                             pass
                     code = {
@@ -164,7 +243,7 @@ async def request(method: str, url: str, *, sending: bool = False, token: str = 
                 if not isinstance(result, dict):
                     raise ValueError
                 return result
-    except (aiohttp.ClientError, TimeoutError, ValueError):
+    except (aiohttp.ClientError, asyncio.TimeoutError, TimeoutError, ValueError):
         raise GmailError("outcome_unknown" if sending else "transport_or_response_error") from None
 
 
@@ -183,7 +262,8 @@ def cache_access(record: dict, result: dict) -> None:
         ttl = int(result.get("expires_in", 0))
     except (ValueError, TypeError):
         ttl = 0
-    _access = (record["refresh"], result["access_token"], time.monotonic() + ttl)
+    _access = (record["refresh"], result["access_token"], time.monotonic() + ttl,
+               oauth_config().revision)
 
 
 async def access_token(uid: str, char_id: str, *scopes: str) -> str:
@@ -194,17 +274,22 @@ async def access_token(uid: str, char_id: str, *scopes: str) -> str:
             raise GmailError("gmail_not_connected")
         if not all(scope in record.get("scopes", []) for scope in scopes):
             raise GmailError("scope_missing")
-        if _access and _access[0] == record["refresh"] and _access[2] > time.monotonic() + 60:
+        cfg = oauth_config()
+        if (_access and _access[0] == record["refresh"] and _access[3] == cfg.revision
+                and _access[2] > time.monotonic() + 60):
             return _access[1]
         try:
-            result = await token_exchange(oauth_config(), {
+            result = await token_exchange(cfg, {
                 "grant_type": "refresh_token", "refresh_token": record["refresh"],
             })
             if result.get("refresh_token") or "scope" in result:
                 record["refresh"] = result.get("refresh_token") or record["refresh"]
                 if "scope" in result:
                     record["scopes"] = sorted(set(str(result["scope"]).split()) & {READ, SEND})
-                save(record)
+            record["verified_revision"] = cfg.revision
+            record.pop("token_error", None)
+            record.pop("authorization_error", None)
+            save(record)
             if not all(scope in record.get("scopes", []) for scope in scopes):
                 raise GmailError("scope_missing")
             cache_access(record, result)
@@ -212,6 +297,9 @@ async def access_token(uid: str, char_id: str, *scopes: str) -> str:
             return result["access_token"]
         except GmailError as exc:
             _last_error = str(exc)
+            if str(exc) in TOKEN_ERRORS:
+                record["token_error"] = str(exc)
+                save(record)
             raise
 
 
@@ -251,6 +339,7 @@ class Flow:
     state: str
     verifier: str
     browser: str
+    revision: str
 
 
 _tickets: dict[str, Flow] = {}
@@ -271,7 +360,7 @@ def start(uid: str, char_id: str, email: str, admin_token: str) -> str:
             raise GmailError("authorization_busy")
     ticket = secrets.token_urlsafe(32)
     _tickets[ticket] = Flow(uid, char_id, email, admin_token, now + 600, secrets.token_urlsafe(32),
-                            secrets.token_urlsafe(64), secrets.token_urlsafe(32))
+                            secrets.token_urlsafe(64), secrets.token_urlsafe(32), cfg.revision)
     return f"{cfg.origin}{AUTHORIZE}?ticket={ticket}"
 
 
@@ -280,6 +369,8 @@ def authorize(ticket: str) -> tuple[str, str]:
     if not flow or flow.expires <= time.monotonic():
         raise GmailError("invalid_authorization_session")
     cfg = oauth_config()
+    if cfg.revision != flow.revision:
+        raise GmailError("invalid_authorization_session")
     challenge = base64.urlsafe_b64encode(hashlib.sha256(flow.verifier.encode()).digest()).rstrip(b"=").decode()
     _flows[flow.state] = flow
     url = "https://accounts.google.com/o/oauth2/v2/auth?" + urlencode({
@@ -291,7 +382,8 @@ def authorize(ticket: str) -> tuple[str, str]:
     return url, flow.browser
 
 
-async def complete(state: str, browser: str, code: str, uid: str, char_id: str, admin_valid) -> None:
+async def complete(state: str, browser: str, code: str, uid: str, char_id: str, admin_valid,
+                   error: str = "") -> None:
     global _last_error
     if state not in _flows:
         raise GmailError("invalid_authorization_session")
@@ -302,13 +394,17 @@ async def complete(state: str, browser: str, code: str, uid: str, char_id: str, 
         del _flows[state]
         if (flow.uid, flow.char_id) != (uid, char_id) or not admin_valid(flow.admin_token):
             raise GmailError("invalid_authorization_principal")
-        if not code:
-            raise GmailError("authorization_declined")
         record = load()
         if record.get("refresh") and (not bound(record, uid, char_id) or record.get("email") != flow.email):
             raise GmailError("disconnect_existing_mailbox")
         cfg = oauth_config()
+        if cfg.revision != flow.revision:
+            raise GmailError("invalid_authorization_session")
         try:
+            if error:
+                raise GmailError(error if error in TOKEN_ERRORS else "authorization_declined")
+            if not code:
+                raise GmailError("authorization_declined")
             result = await token_exchange(cfg, {
                 "grant_type": "authorization_code", "code": code, "redirect_uri": cfg.redirect_uri,
                 "code_verifier": flow.verifier,
@@ -323,12 +419,19 @@ async def complete(state: str, browser: str, code: str, uid: str, char_id: str, 
                 raise GmailError("invalid_authorization_principal")
             from core.mail.gmail_poll import baseline
             record.setdefault("poll", baseline())
+            record.pop("token_error", None)
+            record.pop("authorization_error", None)
             save({**record, "uid": uid, "char_id": char_id, "email": flow.email,
-                  "scopes": sorted(scopes & {READ, SEND}), "refresh": result["refresh_token"]})
+                  "scopes": sorted(scopes & {READ, SEND}), "refresh": result["refresh_token"],
+                  "verified_revision": cfg.revision})
             cache_access(load(), result)
             _last_error = ""
         except GmailError as exc:
             _last_error = str(exc)
+            if str(exc) in TOKEN_ERRORS:
+                record["authorization_error"] = {"uid": uid, "char_id": char_id,
+                    "revision": cfg.revision, "error": str(exc)}
+                save(record)
             raise
 
 
@@ -336,7 +439,7 @@ async def disconnect(uid: str, char_id: str) -> str:
     global _access, _last_error
     async with LOCK:
         record = load()
-        if record and not bound(record, uid, char_id):
+        if record.get("refresh") and not bound(record, uid, char_id):
             raise GmailError("gmail_not_connected")
         for pool in (_tickets, _flows):
             for key, flow in list(pool.items()):
@@ -346,7 +449,8 @@ async def disconnect(uid: str, char_id: str) -> str:
         if not refresh:
             return "already_disconnected"
         # Keep the delivery ledger across disconnect/reconnect.
-        save({key: value for key, value in record.items() if key not in {"refresh", "scopes", "poll"}})
+        save({key: value for key, value in record.items() if key not in {
+            "refresh", "scopes", "poll", "token_error", "authorization_error", "verified_revision"}})
         _access = None
         _last_error = ""
         try:
@@ -368,18 +472,35 @@ def status(uid: str, char_id: str) -> dict:
         if same and email and item.get("state") == "pending" and item.get("mailbox") == mailbox
     ]
     try:
-        oauth_config()
+        cfg = oauth_config()
         configured = True
     except GmailError:
         configured = False
+    error = (_last_error or record.get("token_error", "")) if same else ""
+    authorization_error = record.get("authorization_error", {})
+    if not isinstance(authorization_error, dict):
+        raise GmailError("storage_error")
+    if configured and (authorization_error.get("uid"), authorization_error.get("char_id"),
+                       authorization_error.get("revision")) == (uid, char_id, cfg.revision):
+        error = authorization_error.get("error", "")
+    token_state = "waiting_authorization"
+    if not configured:
+        token_state = "not_configured"
+    elif same and record.get("refresh"):
+        token_state = "pending_verification" if record.get("verified_revision", cfg.revision) != cfg.revision else "valid"
+    if error == "disabled_client":
+        token_state = "client_disabled"
+    elif error in TOKEN_ERRORS | {"reauthorization_required"}:
+        token_state = "reauthorization_required"
     return {
         "configured": configured, "char_id": char_id,
         "connected": bool(same and record.get("refresh")),
         "bound_elsewhere": bool(not same and record.get("refresh")),
         "email": email,
+        "token_state": token_state,
         "unknown_delivery_count": len(pending),
         "unknown_deliveries": sorted(pending, key=lambda item: item["at"], reverse=True)[:10],
         "scopes": record.get("scopes", []) if same else [],
-        "error": _last_error if same else "",
+        "error": error,
         **poll_status(record, uid, char_id),
     }

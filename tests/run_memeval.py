@@ -35,6 +35,7 @@ def _run_one(case: dict, recall_mode: str) -> list[str]:
         import core.sandbox as _sandbox
         paths = _sandbox.DataPaths(mode="test", test_session_id="run_memeval")
         paths._base = tmp_path
+        paths._project_root = tmp_path
         mp.setattr(_sandbox, "_instance", paths)
 
         import core.asset_registry as _reg_mod
@@ -51,6 +52,9 @@ def _run_one(case: dict, recall_mode: str) -> list[str]:
 
 def main() -> int:
     cases = engine.load_cases()
+    if len(cases) < 25:
+        print(f"[FAIL] memeval case count {len(cases)} < minimum 25")
+        return 1
     print("=" * 70)
     print(f"memeval: {len(cases)} cases x {len(_RECALL_MODES)} recall modes")
     print("=" * 70)
@@ -64,34 +68,29 @@ def main() -> int:
         category = case["category"]
         is_xfail = bool(case.get("xfail"))
 
-        case_problems: list[str] = []
         for mode in _RECALL_MODES:
+            label = f"{cid}/{mode}"
             try:
                 problems = _run_one(case, mode)
             except Exception as e:  # noqa: BLE001
-                problems = [f"异常: {e!r}"]
-            if problems:
-                case_problems.append(f"[{mode}] " + "; ".join(problems))
-
-        if is_xfail:
-            if case_problems:
-                xfail_ok += 1
-                print(f"[xfail-ok]   {cid:30s} {category:16s} (预期失败: {case['xfail_reason']})")
-            else:
-                xfail_broken += 1
-                print(f"[xfail-XPASS!] {cid:30s} {category:16s} 已经通过，请摘掉 xfail 标记")
-        else:
-            if case_problems:
                 failures += 1
-                print(f"[FAIL]       {cid:30s} {category:16s}")
-                for p in case_problems:
-                    print(f"    {p}")
+                print(f"[FAIL] {label} {category}: 异常: {e!r}")
+                continue
+            if is_xfail and problems:
+                xfail_ok += 1
+                print(f"[XFAIL] {label} {category} ({case['xfail_reason']}): {'; '.join(problems)}")
+            elif is_xfail:
+                xfail_broken += 1
+                print(f"[XPASS] {label} {category}: remove stale xfail")
+            elif problems:
+                failures += 1
+                print(f"[FAIL] {label} {category}: {'; '.join(problems)}")
             else:
-                print(f"[ok]         {cid:30s} {category:16s}")
+                print(f"[ok] {label} {category}")
 
     print("=" * 70)
     print(
-        f"结果：{len(cases) - failures - xfail_ok - xfail_broken} 正常通过 / "
+        f"结果：{len(cases) * len(_RECALL_MODES) - failures - xfail_ok - xfail_broken} 正常通过 / "
         f"{xfail_ok} xfail(预期) / {xfail_broken} xfail 意外转正 / {failures} 失败"
     )
 

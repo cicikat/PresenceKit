@@ -7,7 +7,7 @@ import json
 import re
 import sqlite3
 import time
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from datetime import datetime, timedelta
 
 from core.config_loader import get_config
@@ -63,7 +63,7 @@ def ambient_text(text, names=(), *, dietary_topics=False):
 def connection():
     path = get_paths().food_memory_db()
     path.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(path, timeout=5) as db:
+    with closing(sqlite3.connect(path, timeout=5)) as db, db:
         db.row_factory = sqlite3.Row
         db.execute("PRAGMA journal_mode=WAL")
         db.executescript("""
