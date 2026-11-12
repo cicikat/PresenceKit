@@ -14,7 +14,7 @@ import json
 import re
 import time
 
-from core.mail import gmail
+from core.mail import gmail, gmail_pending
 
 _ID = re.compile(r"[A-Za-z0-9_-]{1,128}")
 _MESSAGE_ID = re.compile(r"<[^\s<>@]+@[^\s<>@]+>")
@@ -51,6 +51,27 @@ async def get(uid: str, char_id: str, mid: str, *, full: bool = False) -> dict:
     if not full:
         params.extend(("metadataHeaders", name) for name in _HEADERS)
     return await gmail.api(uid, char_id, "GET", f"messages/{message_id(mid)}", params=params)
+
+
+async def get_pending_or_message(uid: str, char_id: str, identifier: str, *, full: bool = False) -> tuple[dict, str]:
+    record = gmail.load()
+    if not gmail.bound(record, uid, char_id):
+        raise gmail.GmailError("gmail_not_connected")
+    key = gmail_pending.mailbox_key(record)
+    mid = gmail_pending.resolve_message_id(record, identifier)
+    try:
+        row = await get(uid, char_id, mid, full=full)
+    except gmail.GmailError as exc:
+        if str(exc) == "not_found":
+            await gmail_pending.note_unavailable(uid, char_id, key, mid)
+        raise
+    if gmail_pending.mailbox_key(gmail.load()) != key:
+        raise gmail.GmailError("connection_changed")
+    if row.get("id") != mid:
+        raise gmail.GmailError("invalid_gmail_response")
+    if "labelIds" in row and "INBOX" not in row["labelIds"]:
+        await gmail_pending.note_unavailable(uid, char_id, key, mid)
+    return row, key
 
 
 async def list_page(uid: str, char_id: str, *, query: str = "", page_token: str = "", limit: int = 5) -> dict:
@@ -132,7 +153,8 @@ def _fingerprint(*values: str) -> str:
 
 
 async def send(uid: str, char_id: str, *, recipient: str, subject: str, body: str,
-               delivery_key: str, parent: dict | None = None, from_name: str = "") -> dict:
+               delivery_key: str, parent: dict | None = None, from_name: str = "",
+               expected_mailbox: str | None = None) -> dict:
     """Persist an in-flight reservation before issuing the single POST."""
     recipient = gmail.normalize_address(recipient)
     if any(c in subject for c in "\r\n") or len(subject) > 400 or not 0 < len(body) <= 100_000:
@@ -146,6 +168,8 @@ async def send(uid: str, char_id: str, *, recipient: str, subject: str, body: st
         if not gmail.bound(record, uid, char_id) or not record.get("refresh"):
             raise gmail.GmailError("gmail_not_connected")
         if not gmail.token_current(record, token):
+            raise gmail.GmailError("connection_changed")
+        if expected_mailbox is not None and gmail_pending.mailbox_key(record) != expected_mailbox:
             raise gmail.GmailError("connection_changed")
         sender = record["email"]
         if recipient.casefold() == sender:
@@ -211,6 +235,8 @@ async def send(uid: str, char_id: str, *, recipient: str, subject: str, body: st
             raise
         entries[key]["state"] = "sent"
         try:
+            if parent and parent.get("id"):
+                gmail_pending.handle_verified_reply(record, parent["id"], receipt)
             gmail.save(record)
         except gmail.GmailError:
             raise gmail.GmailError("outcome_unknown") from None
@@ -218,10 +244,12 @@ async def send(uid: str, char_id: str, *, recipient: str, subject: str, body: st
 
 
 async def reply(uid: str, char_id: str, *, mid: str, body: str, delivery_key: str) -> dict:
-    parent = await get(uid, char_id, mid)
+    parent, mailbox = await get_pending_or_message(uid, char_id, mid)
+    if parent.get("id") is None:
+        raise gmail.GmailError("invalid_reply_thread")
     original = headers(parent)
     if original.get("auto-submitted", "no").strip().lower() != "no":
         raise gmail.GmailError("automated_message_reply_blocked")
     recipient = parseaddr(original.get("reply-to") or original.get("from", ""))[1]
     return await send(uid, char_id, recipient=recipient, subject=original.get("subject", ""),
-                      body=body, delivery_key=delivery_key, parent=parent)
+                      body=body, delivery_key=delivery_key, parent=parent, expected_mailbox=mailbox)

@@ -517,6 +517,10 @@ class DataPaths:
         assert_production_identity_allowed(user_id, mode=self.mode)
         return self._p("runtime", "self_meta", safe_user_id(char_id), safe_user_id(user_id))
 
+    def character_intentions(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
+        """Private Reality intention index, outside the character's file tool root."""
+        return self.character_self_meta_root(user_id, char_id=char_id) / "intentions.json"
+
     def character_self_db(self, user_id: str | int, *, char_id: str = _DEFAULT_CHAR_ID) -> Path:
         """SQLite file of the character's structured self library (T2).
 

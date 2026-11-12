@@ -10,9 +10,11 @@ import time
 from core.autonomy import store
 from core.autonomy.effective_state import autonomy_enabled, scheduler_enabled
 from core.autonomy.models import ActionMode, Signal
-from core.mail import gmail, gmail_messages as messages
+from core.mail import gmail, gmail_messages as messages, gmail_pending
 
 SOURCE = "gmail_new_mail"
+REMINDER = "gmail_pending_reminder"
+REMINDER_INTERVAL = 7200
 DEFAULT_INTERVAL = 300
 
 
@@ -29,12 +31,16 @@ def _active(record: dict, uid: str, char_id: str) -> bool:
 
 
 def source_active(uid: str, char_id: str, signals) -> bool:
-    matching = [signal for signal in signals if isinstance(signal, dict) and signal.get("source") == SOURCE]
+    matching = [signal for signal in signals if isinstance(signal, dict) and signal.get("source") in {SOURCE, REMINDER}]
     if not matching:
         return True
     try:
         record = gmail.load()
         enabled_since = record.get("poll", {}).get("enabled_since", 0)
+        if any(signal.get("source") == REMINDER for signal in matching):
+            summary = gmail_pending.summary(record, uid, char_id)
+            if not summary["pending_count"] or summary["pending_sync_state"] != "connected":
+                return False
         return bool(scheduler_enabled() and _active(record, uid, char_id)
                     and all(signal.get("created_at", 0) >= enabled_since for signal in matching))
     except gmail.GmailError:
@@ -67,7 +73,7 @@ async def configure(uid: str, char_id: str, enabled: bool, interval: int) -> Non
         record["poll"] = poll
         gmail.save(record)
     if not enabled:
-        store.discard_pending_signals_by_source(uid, char_id, {SOURCE})
+        store.discard_pending_signals_by_source(uid, char_id, {SOURCE, REMINDER})
 
 
 def _new_mail(row: dict, email: str, start: int, end: int) -> bool:
@@ -104,6 +110,7 @@ async def tick(uid: str, char_id: str, *, now: float | None = None) -> None:
     page_token = poll.get("page_token", "")
     seen = dict(poll.get("seen", {}))
     candidates: list[str] = []
+    discovered: list[tuple[str, int]] = []
     try:
         page = await messages.list_page(
             uid, char_id, limit=10, page_token=page_token,
@@ -122,6 +129,7 @@ async def tick(uid: str, char_id: str, *, now: float | None = None) -> None:
         for row in rows:
             if not _new_mail(row, initial["email"], cursor, upper):
                 continue
+            discovered.append((messages.message_id(row["id"]), int(row["internalDate"])))
             key = sha256((initial["email"] + ":" + row["id"]).encode()).hexdigest()[:32]
             if key not in seen:
                 candidates.append(key)
@@ -139,11 +147,21 @@ async def tick(uid: str, char_id: str, *, now: float | None = None) -> None:
         failures = min(previous.get("failures", 0) + 1, 8)
         poll.update(error=code, failures=failures, next_due=now + min(6 * 3600, poll["interval"] * 2 ** failures))
         candidates = []
+        discovered = []
 
     async with gmail.LOCK:
         record = gmail.load()
-        if not _active(record, uid, char_id) or record.get("poll") != previous:
+        if (not _active(record, uid, char_id) or record.get("poll") != previous
+                or gmail_pending.mailbox_key(record) != gmail_pending.mailbox_key(initial)):
             return  # Settings changed or the mailbox disconnected while the request was in flight.
+        if not gmail_pending.add_discovered(record, discovered, now):
+            record["poll"] = {**previous, "error": "pending_overflow", "failures": 1,
+                              "next_due": now + poll["interval"]}
+            gmail.save(record)
+            return
+        # Store the inbox fact and scan cursor together before waking Autonomy.
+        record["poll"] = poll
+        gmail.save(record)
         state = store.load(uid, char_id) if candidates else {}
         if candidates and autonomy_enabled(uid, char_id, state):
             # Use per-message hashes for retry/restart deduplication. The signal
@@ -160,6 +178,32 @@ async def tick(uid: str, char_id: str, *, now: float | None = None) -> None:
                 if not queued and disposition != "duplicate":
                     poll = {**previous, "error": "autonomy_queue_write_failed", "failures": 1,
                             "next_due": now + poll["interval"]}
+                    record["poll"] = poll
+                    gmail.save(record)
                     break
-        record["poll"] = poll
-        gmail.save(record)
+
+
+async def remind_pending(uid: str, char_id: str, *, now: float | None = None) -> None:
+    now = time.time() if now is None else now
+    if not scheduler_enabled() or not autonomy_enabled(uid, char_id, store.load(uid, char_id)):
+        return
+    async with gmail.LOCK:
+        record = gmail.load()
+        if not _active(record, uid, char_id) or not gmail.allowed(uid, char_id, gmail.READ):
+            return
+        poll = record.get("poll", {})
+        if not poll.get("last_sync") or now - poll.get("last_pending_reminder", 0) < REMINDER_INTERVAL:
+            return
+        summary = gmail_pending.summary(record, uid, char_id)
+        if not summary["pending_count"] or summary["pending_sync_state"] != "connected":
+            return
+        signal = Signal(
+            source=REMINDER, reason="The character Gmail inbox still has pending mail.",
+            evidence=[{"fact": "gmail_pending_available"}], created_at=now, expires_at=now + 1200,
+            priority=0.15, urgency=0.1, confidence=1, action_mode=ActionMode.USE_TOOLS.value,
+        )
+        key = f"{REMINDER}:{gmail_pending.mailbox_key(record)}:{int(now) // REMINDER_INTERVAL}"
+        queued, disposition = store.enqueue_signal(uid, char_id, signal, dedupe_key=key, durable=True)
+        if queued or disposition == "duplicate":
+            poll["last_pending_reminder"] = now
+            gmail.save(record)

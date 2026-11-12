@@ -6,6 +6,7 @@ import time
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 
 from admin.auth import require_scopes
 
@@ -112,7 +113,7 @@ async def config(auth=Depends(require_scopes("state.read"))):
 async def patch_config(body: dict, auth=Depends(require_scopes("admin"))):
     from core.autonomy import store
     uid, char_id = _scope(); state = store.load(uid, char_id); cfg = state["config"]
-    bool_fields = {"enabled", "talk_enabled"}
+    bool_fields = {"enabled", "talk_enabled", "character_intents_enabled"}
     int_limits = {
         "daily_evaluation_budget": (1, 100), "min_interval_seconds": (0, 86400),
         "max_steps": (1, 8), "max_tools": (0, 8), "max_write_tools": (0, 8),
@@ -158,6 +159,67 @@ async def patch_config(body: dict, auth=Depends(require_scopes("admin"))):
     if cfg["max_write_tools"] > cfg["max_tools"]:
         raise HTTPException(status_code=422, detail="max_write_tools 不能超过 max_tools")
     store.replace_config(uid, char_id, cfg); return cfg
+
+
+class IntentCancel(BaseModel):
+    intent_id: str = Field(pattern=r"^[a-f0-9]{32}$")
+    revision: int = Field(ge=1)
+
+
+@router.get("/observability/character-intentions", summary="读取角色私有意图的脱敏运行状态")
+async def character_intentions(auth=Depends(require_scopes("state.read"))):
+    from core.agent_runtime import intentions
+    from core.autonomy import store
+    from core.autonomy.effective_state import autonomy_enabled, scheduler_enabled
+    from core.dream.dream_state import DreamGuardStatus, get_reality_guard_status
+
+    uid, char_id = _scope()
+    state = store.load(uid, char_id)
+    desired = intentions.enabled(state)
+    if not desired:
+        reason = "disabled"
+    elif not scheduler_enabled():
+        reason = "scheduler_disabled"
+    elif not autonomy_enabled(uid, char_id, state):
+        reason = "autonomy_disabled"
+    elif get_reality_guard_status(uid) != DreamGuardStatus.ALLOW:
+        reason = "reality_blocked"
+    else:
+        reason = ""
+    try:
+        result = intentions.observation(uid, char_id)
+    except intentions.IntentError as exc:
+        raise HTTPException(503, str(exc)) from None
+    return {
+        "desired": desired, "effective": not reason, "reason": reason, **result,
+        "daily_evaluations": state["daily"].get("evaluations", 0),
+        "daily_talks": state["daily"].get("talks", 0),
+    }
+
+
+@router.post("/admin/autonomy/intents/cancel", summary="撤销当前角色的一条意图")
+async def cancel_character_intent(body: IntentCancel, auth=Depends(require_scopes("admin"))):
+    from core.agent_runtime import intentions
+    from core.autonomy.intent_context import cancel_linked_task
+
+    uid, char_id = _scope()
+    try:
+        row = intentions.revise(uid, char_id, identity=body.intent_id, revision=body.revision,
+                                action="abandon", block_reason="owner_canceled")
+        cancel_linked_task(uid, char_id, row)
+    except intentions.IntentError as exc:
+        raise HTTPException(409, str(exc)) from None
+    return {"status": row["status"], "revision": row["revision"]}
+
+
+@router.post("/admin/autonomy/intents/clear", summary="清理已终结的角色意图")
+async def clear_character_intents(auth=Depends(require_scopes("admin"))):
+    from core.agent_runtime import intentions
+
+    try:
+        return {"cleared": intentions.clear_terminal(*_scope())}
+    except intentions.IntentError as exc:
+        raise HTTPException(409, str(exc)) from None
 
 
 @router.get("/admin/autonomy/runs", summary="读取最近内置唤醒运行")

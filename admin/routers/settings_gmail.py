@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.routing import APIRoute
@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field, SecretStr
 
 from admin.auth import require_scopes, resolve_token
 from admin.routers.character import _active_character_id
-from core.mail import gmail
+from core.mail import gmail, gmail_pending
 
 admin = require_scopes("admin")
 HEADERS = {
@@ -112,9 +112,36 @@ def _problem(exc: gmail.GmailError) -> HTTPException:
 
 
 @router.get("/settings/gmail")
-async def status(auth=Depends(admin)):
+async def status(response: Response, auth=Depends(admin)):
+    response.headers.update(HEADERS)
     try:
         return gmail.status(*_principal())
+    except gmail.GmailError as exc:
+        raise _problem(exc) from None
+
+
+class PendingUpdate(BaseModel):
+    pending_id: str = Field(pattern=r"^[a-f0-9]{32}$")
+    revision: int = Field(ge=1)
+    handled: bool
+
+
+@router.get("/settings/gmail/pending")
+async def pending_items(response: Response, cursor: str = Query("", max_length=32), auth=Depends(admin)):
+    response.headers.update(HEADERS)
+    try:
+        return gmail_pending.list_items(*_principal(), after=cursor, limit=20, include_handled=True)
+    except gmail.GmailError as exc:
+        raise _problem(exc) from None
+
+
+@router.put("/settings/gmail/pending")
+async def update_pending(body: PendingUpdate, response: Response, auth=Depends(admin)):
+    response.headers.update(HEADERS)
+    try:
+        return await gmail_pending.set_handled(
+            *_principal(), body.pending_id, handled=body.handled, actor="manual", revision=body.revision,
+        )
     except gmail.GmailError as exc:
         raise _problem(exc) from None
 

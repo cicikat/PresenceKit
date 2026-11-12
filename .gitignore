@@ -1,3 +1,12 @@
+# Local planning drafts and video prototype notes. Keep shared implementation
+# records and shipped assets tracked.
+/cc-tasks/304.md
+/cc-tasks/305.md
+/cc-tasks/306.md
+/cc-tasks/307PresenceKit_307_Desktop_WS_and_Chat_Recovery.md
+/cc-tasks/308PresenceKit_308-311_完整工单.md
+/docs/intro-video-plan.md
+
 # runtime data — see blacklist.example.yaml and relations.example.yaml for structure
 data/
 logs/

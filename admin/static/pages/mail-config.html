@@ -29,6 +29,13 @@
     <label class="field"><span data-i18n="gmail.interval">同步间隔（秒，默认 300）</span><input id="setup-gmail-interval" type="number" required min="60" max="3600" value="300"></label>
   </div>
   <p id="setup-gmail-detail"></p>
+  <p id="setup-gmail-pending-status" role="status"></p>
+  <details id="setup-gmail-pending">
+    <summary data-i18n="gmail.pending.title">邮件待办</summary>
+    <p data-i18n="gmail.pending.help">这里的处理状态独立于 Gmail 的已读和未读。</p>
+    <ul id="setup-gmail-pending-items"></ul>
+    <button type="button" id="setup-gmail-pending-next" class="btn btn-ghost" hidden data-i18n="gmail.pending.next">下一页</button>
+  </details>
   <details id="setup-gmail-unknown" hidden><summary data-i18n="gmail.unknown">需要人工核查的投递</summary><p id="setup-gmail-unknown-ids"></p></details>
   <div class="modal-footer admin-inline-124">
     <button class="btn btn-primary" id="setup-gmail-connect" data-action="connectSetupGmail" data-i18n="gmail.connect">连接 / 重新授权</button>

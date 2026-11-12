@@ -21,6 +21,7 @@ _scope_locks_guard = Lock()
 DEFAULT_CONFIG = {
     "enabled": False,
     "talk_enabled": True,
+    "character_intents_enabled": False,
     "daily_evaluation_budget": 96,
     "min_interval_seconds": 15 * 60,
     "max_steps": 4,

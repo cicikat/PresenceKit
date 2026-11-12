@@ -211,11 +211,73 @@ async function loadSetupGmail() {
       state.sync_error ? t('gmail.sync_error', '同步错误 {value}', {value: gmailError(state.sync_error)}) : '',
       retry ? t('gmail.retry', '下次尝试 {value}', {value: retry}) : '',
     ].filter(Boolean).join(' · ');
+    field('pending-status').textContent = state.pending_count == null ? '' : [
+      t('gmail.pending.count', '待处理 {pending} · 近期已处理 {handled}', {
+        pending: state.pending_count, handled: state.handled_count_recent,
+      }),
+      state.pending_sync_state === 'mailbox_unavailable' ? t('gmail.pending.unavailable', '邮箱暂不可用') : '',
+      state.overflow ? t('gmail.pending.overflow', '待办已满，同步保留进度并等待可用容量') : '',
+    ].filter(Boolean).join(' · ');
+    const pending = field('pending');
+    pending.hidden = !state.mailbox_identity_valid;
+    pending.ontoggle = () => {
+      if (pending.open && !pending.hidden) void loadSetupGmailPending();
+    };
+    if (pending.open && !pending.hidden) await loadSetupGmailPending();
+    else field('pending-items').replaceChildren();
     field('unknown').hidden = !state.unknown_delivery_count;
     field('unknown-ids').textContent = (state.unknown_deliveries || [])
       .map(row => row.message_id).join(' · ');
   } catch (e) {
     field('status').textContent = t('gmail.load_failed', '读取 Gmail 状态失败 {error}', {error: gmailError(e)});
+  }
+}
+
+async function loadSetupGmailPending(cursor = '') {
+  const list = document.getElementById('setup-gmail-pending-items');
+  const next = document.getElementById('setup-gmail-pending-next');
+  list.replaceChildren();
+  next.hidden = true;
+  try {
+    const page = await api('GET', '/settings/gmail/pending?cursor=' + encodeURIComponent(cursor));
+    for (const item of page.items) {
+      const row = document.createElement('li');
+      const status = t('gmail.pending.' + item.status, item.status);
+      const timestamp = new Date(item.first_seen_at * 1000).toLocaleString();
+      const unavailable = item.availability === 'unavailable'
+        ? ' · ' + t('gmail.pending.message_unavailable', '邮件已移出收件箱或不可读取') : '';
+      row.textContent = status + ' · ' + timestamp + unavailable + ' ';
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'btn btn-ghost btn-sm';
+      button.textContent = item.status === 'pending'
+        ? t('gmail.pending.mark', '标记已处理') : t('gmail.pending.reopen', '重新打开');
+      button.onclick = async () => {
+        button.disabled = true;
+        try {
+          await api('PUT', '/settings/gmail/pending', {
+            pending_id: item.pending_id, revision: item.revision, handled: item.status === 'pending',
+          });
+          await loadSetupGmail();
+        } catch (e) {
+          toast(t('gmail.load_failed', '读取 Gmail 状态失败 {error}', {error: gmailError(e)}), 'err');
+          await loadSetupGmailPending(cursor);
+        }
+      };
+      row.append(button);
+      list.append(row);
+    }
+    if (!page.items.length) {
+      const row = document.createElement('li');
+      row.textContent = t('gmail.pending.empty', '暂无本地待办记录');
+      list.append(row);
+    }
+    next.hidden = !page.next_cursor;
+    next.onclick = () => loadSetupGmailPending(page.next_cursor);
+  } catch (e) {
+    const row = document.createElement('li');
+    row.textContent = t('gmail.load_failed', '读取 Gmail 状态失败 {error}', {error: gmailError(e)});
+    list.append(row);
   }
 }
 

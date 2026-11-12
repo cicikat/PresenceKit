@@ -2387,6 +2387,8 @@ from core.tools.image_gen import register_tools as _register_image_gen_tools
 _register_image_gen_tools(_TOOL_REGISTRY)
 from core.tools import gmail_tools as _gmail_tools
 _gmail_tools.register(_TOOL_REGISTRY)
+from core.tools import character_intent_tools as _intent_tools
+_intent_tools.register(_TOOL_REGISTRY)
 
 
 _SIDE_EFFECT_TOOLS: frozenset[str] = frozenset({
@@ -2575,6 +2577,7 @@ def get_tools_schema(
     char_id: str | None = None,
     uid: str | None = None,
     only_names: frozenset[str] | None = None,
+    autonomy: bool = False,
 ) -> list[dict]:
     """返回已启用工具的 OpenAI function_calling 格式 schema。
     categories: 若提供，仅返回该分类内的工具；None 返回全部。
@@ -2584,6 +2587,8 @@ def get_tools_schema(
     schemas = []
     for name, info in _TOOL_REGISTRY.items():
         if only_names is not None and name not in only_names:
+            continue
+        if info.get('autonomy_only') and not autonomy:
             continue
         if name in _computer_use.OWNER_TOOL_NAMES and (not _computer_use.enabled() or not _computer_use.owner_scope(uid, char_id)):
             continue
@@ -3014,8 +3019,8 @@ async def _execute_structured_impl(
     _trace_failure_reason = ""
 
     def _trace(status: str, digest_source=None) -> None:
-        if tool_name in _gmail_tools.NAMES:
-            return  # Gmail has its own content-free execution receipt below.
+        if tool_name in _gmail_tools.NAMES | _intent_tools.NAMES:
+            return  # Private tools have content-free dispatcher receipts.
         try:
             from core.memory import action_trace
             trace_kwargs = {}
@@ -3117,6 +3122,8 @@ async def _execute_structured_impl(
             )
 
     tool_info = _TOOL_REGISTRY[tool_name]
+    if tool_info.get("autonomy_only") and (is_group or origin != "autonomy_loop"):
+        return _execution_outcome("tool_failed", "intent_context_required")
     if tool_name in _gmail_tools.NAMES and (
         is_group or origin not in {"assistant_loop", "assistant_loop_relay", "autonomy_loop"}
         or not _gmail_tools.allowed(tool_name, user_id, char_id)
@@ -3269,6 +3276,8 @@ async def _execute_structured_impl(
             result = await func(user_id=user_id, char_id=char_id, **tool_args)
         elif tool_name in _gmail_tools.NAMES:
             result = await _gmail_tools.execute(func, user_id, char_id, tool_args)
+        elif tool_name in _intent_tools.NAMES:
+            result = await _intent_tools.execute(func, user_id, char_id, tool_args)
         elif tool_name in ("read_toy_file", "write_toy_file", "write_artifact", "update_artifact", "read_artifact", "list_artifacts", "drink_with_user", "generate_image"):
             result = await func(user_id=user_id, char_id=char_id, **tool_args)
         elif tool_name in {
@@ -3358,7 +3367,7 @@ async def _execute_structured_impl(
         safe_summary = tool_result.safe_summary
         _trace_truncated = bool((tool_result.meta or {}).get("truncated"))
         _trace_failure_reason = str((tool_result.meta or {}).get("failure_reason") or "")[:128]
-        if tool_name in _gmail_tools.NAMES:
+        if tool_name in _gmail_tools.NAMES | _intent_tools.NAMES:
             validity = tool_result.meta.get("validity")
             if validity == "current_turn":
                 await _notify_status("finished")
@@ -3492,7 +3501,7 @@ async def execute_structured(
     if origin in _EXECUTE_ALLOWED_ORIGINS:
         from core.tool_audit import record as record_tool_audit
         record_tool_audit(user_id, char_id, tool=tool_name,
-                          args={} if tool_name in _gmail_tools.NAMES else tool_args,
+                          args={} if tool_name in _gmail_tools.NAMES | _intent_tools.NAMES else tool_args,
                           origin=origin, outcome=outcome)
     return outcome
 

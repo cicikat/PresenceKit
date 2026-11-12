@@ -145,6 +145,10 @@ notify -> new ingress I2 -> EventContext(I2) -> new turn T2 -> turn_sink
 Task success and notification success are separate outcomes. Notification retries never rerun the
 capability task and always pass the normal Reality Dream Guard and scope checks.
 
+### 工单 311 · 角色私有意图
+
+私有意图索引在同一角色的 Reality self metadata 下，记录准备、推迟、阻断和已核验结果。执行阶段复用既有 Autonomy Tool Loop，或通过原 `start_agent_task` 创建已授权任务，凭 Task Manager 回执对账。意图本身不调度任务，不授予执行权限。撤销意图后停止其后续行动，关联的任务取消走 Task Manager。
+
 ## Task and receipt contract (implemented by Brief 230)
 
 ```text
@@ -223,6 +227,8 @@ The implemented registry does so; an unregistered label cannot enter the compati
 | `pin_character_image_reference`, `generate_image` | Character image reference and generation | Reference pinning in the live owner turn; image preset for generation |
 | `gmail_list_messages`, `gmail_search_messages`, `gmail_read_message`, `gmail_list_labels` | Authorized Gmail reads | Private owner Tool Loop or autonomy, with external data framing |
 | `gmail_send_message`, `gmail_reply_message` | Authorized Gmail writes | Durable delivery reservation and OAuth send scope |
+| `gmail_list_pending`, `gmail_mark_handled`, `gmail_reopen_pending` | Local Gmail handling ledger | Current owner/character mailbox authorization; revision checked writes, no Gmail label changes |
+| `list_character_intents`, `propose_character_intent`, `revise_character_intent` | Private character intentions | Reality Autonomy only; verified anchors and execution receipts, never user memory |
 
 ## Tool to capability mapping
 
