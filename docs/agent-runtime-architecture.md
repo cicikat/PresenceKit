@@ -227,6 +227,8 @@ The implemented registry does so; an unregistered label cannot enter the compati
 | `pin_character_image_reference`, `generate_image` | Character image reference and generation | Reference pinning in the live owner turn; image preset for generation |
 | `gmail_list_messages`, `gmail_search_messages`, `gmail_read_message`, `gmail_list_labels` | Authorized Gmail reads | Private owner Tool Loop or autonomy, with external data framing |
 | `gmail_send_message`, `gmail_reply_message` | Authorized Gmail writes | Durable delivery reservation and OAuth send scope |
+| `gmail_list_pending`, `gmail_mark_handled`, `gmail_reopen_pending` | Local Gmail handling ledger | Current owner/character mailbox authorization; revision checked writes, no Gmail label changes |
+| `list_character_intents`, `propose_character_intent`, `revise_character_intent` | Private character intentions | Reality Autonomy only; verified anchors and execution receipts, never user memory |
 
 ## Tool to capability mapping
 

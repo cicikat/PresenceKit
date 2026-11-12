@@ -1,4 +1,28 @@
 {
+  "gmail_list_pending": {
+    "source": "分页查看本地 Gmail 待办状态。需要角色 Gmail 授权。",
+    "en": "Page through local Gmail pending items. Requires character Gmail authorization."
+  },
+  "gmail_mark_handled": {
+    "source": "标记本地邮件待办已处理，不改变邮箱标签。需要角色 Gmail 授权。",
+    "en": "Mark a local pending email as handled without changing mailbox labels. Requires character Gmail authorization."
+  },
+  "gmail_reopen_pending": {
+    "source": "重新打开本地 Gmail 待办。需要角色 Gmail 授权。",
+    "en": "Reopen a local Gmail pending item. Requires character Gmail authorization."
+  },
+  "list_character_intents": {
+    "source": "分页查看当前角色的私有意图和版本。",
+    "en": "Page through the current character's private intentions and revisions."
+  },
+  "propose_character_intent": {
+    "source": "保存角色私有意图。它是计划，不能作为用户事实。可保存后安静结束。",
+    "en": "Save a private character intention. It is a plan, never a user fact. You may finish silently after saving."
+  },
+  "revise_character_intent": {
+    "source": "修改、推迟、准备或放弃私有意图。准备后仍调用已授权工具。完成状态由回执写入。",
+    "en": "Revise, defer, prepare or abandon a private intention. After preparing, still call an authorized tool. Receipts determine completion."
+  },
   "agent_session_start": {
     "source": "接受主人明确委托的持续、多阶段 Windows 桌面目标。依赖当前本机授权。返回会话 ID 和进度，只有 completed 表示已验证完成。",
     "en": "Accept a sustained, multi-stage Windows desktop goal explicitly delegated by the owner, subject to current local authorization. Return a session ID and progress; only completed means verified completion."

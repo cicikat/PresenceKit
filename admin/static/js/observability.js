@@ -2047,9 +2047,9 @@ async function loadCharacterIntentionStatus() {
   const list = document.getElementById('autonomy-intents-items');
   const clear = document.getElementById('autonomy-intents-clear');
   if (!status || !list || !clear) return;
-  const modify = async (path, body) => {
+  const modify = async (endpoint, body) => {
     try {
-      await api('POST', '/admin/autonomy/intents/' + path, body);
+      await api('POST', endpoint, body);
     } catch (error) {
       toast(error.message, 'err');
     }
@@ -2076,13 +2076,13 @@ async function loadCharacterIntentionStatus() {
       cancel.textContent = t('autonomy.intents.cancel', '撤销意图');
       cancel.onclick = () => {
         cancel.disabled = true;
-        void modify('cancel', {intent_id: item.id, revision: item.revision});
+        void modify('/admin/autonomy/intents/cancel', {intent_id: item.id, revision: item.revision});
       };
       row.append(cancel);
       list.append(row);
     }
     clear.onclick = () => {
-      if (window.confirm(t('autonomy.intents.clear_confirm', '清理已结束的意图记录？'))) void modify('clear', {});
+      if (window.confirm(t('autonomy.intents.clear_confirm', '清理已结束的意图记录？'))) void modify('/admin/autonomy/intents/clear', {});
     };
   } catch (error) {
     status.textContent = error.message;

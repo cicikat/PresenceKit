@@ -72,6 +72,7 @@ REGISTRY: dict[str, PathMeta] = {
     "service_state":          PathMeta("runtime",   "shared",          "global",        "ignore"),
     "proactive_ledger":       PathMeta("runtime",   "shared",          "global",        "ignore"),
     "autonomy_state":         PathMeta("runtime",   "shared",          "per_char_user", "ignore"),
+    "character_intentions":   PathMeta("canonical", "reality",         "per_char_user", "ignore"),
     "qzone_inbox":            PathMeta("runtime",   "shared",          "per_char_user", "ignore"),
     "agent_runtime_reality_root": PathMeta("runtime", "reality",       "global",        "ignore"),
     "agent_runtime_task_state": PathMeta("runtime", "reality",         "per_char_user", "ignore"),
