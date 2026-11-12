@@ -205,6 +205,10 @@ async def access_token(uid: str, char_id: str, *scopes: str) -> str:
             raise
 
 
+def token_current(record: dict, token: str) -> bool:
+    return bool(_access and _access[:2] == (record.get("refresh"), token))
+
+
 async def api(uid: str, char_id: str, method: str, endpoint: str, *,
               scopes: tuple[str, ...] = (READ,), **kwargs) -> dict:
     global _access, _last_error

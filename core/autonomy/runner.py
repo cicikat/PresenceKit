@@ -794,17 +794,20 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
                     write_tool_count += 1
                 generated_at = time.time()
                 from core.tools.tool_result import frame_tool_message, to_tool_result
+                from core.tools.gmail_tools import NAMES as gmail_tools
                 safe_result = to_tool_result(result, meta={"tool_name": name, "generated_at": generated_at, "validity": "current_turn" if outcome == "ok" else "outcome_unknown" if outcome == "outcome_unknown" else "execution_failed"})
                 messages.append({
                     "role": "tool",
                     "tool_call_id": call["id"],
                     "content": frame_tool_message(safe_result.safe_summary[:_CONTEXT_BUDGETS["tool_fact_chars"]], generated_at=generated_at, validity="current_turn" if outcome == "ok" else "outcome_unknown" if outcome == "outcome_unknown" else "execution_failed"),
                     "_layer": "autonomy_tool_result",
+                    "_private_gmail_result": name in gmail_tools,
                     "_continuity_receipt": getattr(result, 'continuity_receipt', None),
                     "_budget_chars": _CONTEXT_BUDGETS["tool_fact_chars"],
                     "_provenance": {"source": "tool_result", "tool_name": name, "generated_at": generated_at, "validity": "current_turn" if outcome == "ok" else "execution_failed"},
                 })
-                messages.append(_tool_fact_message(name, result, outcome, now=generated_at))
+                if name not in gmail_tools:
+                    messages.append(_tool_fact_message(name, result, outcome, now=generated_at))
                 # A tool may have created, completed, or changed a long-running
                 # hardware job. Re-read the authoritative job projection rather
                 # than inferring status from a tool acknowledgement.
@@ -839,6 +842,9 @@ def _set_prompt_snapshot(run: Run, messages: list[dict]) -> None:
     for message in messages:
         if not isinstance(message, dict):
             continue
+        if message.get("_private_gmail_result"):
+            snapshot.append({"role": "tool", "content": "[private Gmail result omitted]"})
+            break
         item = {
             key: message[key]
             for key in (

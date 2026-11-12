@@ -2382,6 +2382,8 @@ from core.listening_tools import register_tools as _register_listening_tools
 _register_listening_tools(_TOOL_REGISTRY)
 from core.tools.image_gen import register_tools as _register_image_gen_tools
 _register_image_gen_tools(_TOOL_REGISTRY)
+from core.tools import gmail_tools as _gmail_tools
+_gmail_tools.register(_TOOL_REGISTRY)
 
 
 _SIDE_EFFECT_TOOLS: frozenset[str] = frozenset({
@@ -2581,6 +2583,8 @@ def get_tools_schema(
         if only_names is not None and name not in only_names:
             continue
         if name in _computer_use.OWNER_TOOL_NAMES and (not _computer_use.enabled() or not _computer_use.owner_scope(uid, char_id)):
+            continue
+        if name in _gmail_tools.NAMES and not _gmail_tools.allowed(name, uid, char_id):
             continue
         if name in _QZONE_TOOL_NAMES:
             from core.qzone_service import allowed
@@ -2847,7 +2851,7 @@ def _log_execute_failure_context(tool_name: str, tool_args: dict, origin: str) -
     参数/origin 都没有，出故障后完全没法反推真正发给 MCP 的是什么（Brief 120 排查
     cedartoy「command 参数必填」时吃过这个亏）。这里记完整 tool_args。
     """
-    if tool_name in _computer_use.OWNER_TOOL_NAMES:
+    if tool_name in _computer_use.OWNER_TOOL_NAMES or tool_name in _gmail_tools.NAMES:
         return
     try:
         args_repr = json.dumps(tool_args, ensure_ascii=False, default=str)
@@ -3007,6 +3011,8 @@ async def _execute_structured_impl(
     _trace_failure_reason = ""
 
     def _trace(status: str, digest_source=None) -> None:
+        if tool_name in _gmail_tools.NAMES:
+            return  # Gmail has its own content-free execution receipt below.
         try:
             from core.memory import action_trace
             trace_kwargs = {}
@@ -3108,6 +3114,11 @@ async def _execute_structured_impl(
             )
 
     tool_info = _TOOL_REGISTRY[tool_name]
+    if tool_name in _gmail_tools.NAMES and (
+        is_group or origin not in {"assistant_loop", "assistant_loop_relay", "autonomy_loop"}
+        or not _gmail_tools.allowed(tool_name, user_id, char_id)
+    ):
+        return _execution_outcome("tool_failed", "gmail_not_authorized")
     if tool_name in _computer_use.OWNER_TOOL_NAMES:
         if (is_group or origin not in {"user_live", "assistant_loop", "assistant_loop_relay"}
                 or not _computer_use.owner_scope(user_id, char_id)):
@@ -3253,6 +3264,8 @@ async def _execute_structured_impl(
                 result = await func(user_id=user_id, **tool_args)
         elif tool_name in _computer_use.OWNER_TOOL_NAMES:
             result = await func(user_id=user_id, char_id=char_id, **tool_args)
+        elif tool_name in _gmail_tools.NAMES:
+            result = await _gmail_tools.execute(func, user_id, char_id, tool_args)
         elif tool_name in ("read_toy_file", "write_toy_file", "write_artifact", "update_artifact", "read_artifact", "list_artifacts", "drink_with_user", "generate_image"):
             result = await func(user_id=user_id, char_id=char_id, **tool_args)
         elif tool_name in {
@@ -3342,6 +3355,16 @@ async def _execute_structured_impl(
         safe_summary = tool_result.safe_summary
         _trace_truncated = bool((tool_result.meta or {}).get("truncated"))
         _trace_failure_reason = str((tool_result.meta or {}).get("failure_reason") or "")[:128]
+        if tool_name in _gmail_tools.NAMES:
+            validity = tool_result.meta.get("validity")
+            if validity == "current_turn":
+                await _notify_status("finished")
+                return _execution_outcome("tool_executed", safe_summary)
+            if validity == "outcome_unknown":
+                await _notify_status("outcome_unknown")
+                return _execution_outcome("outcome_unknown", safe_summary)
+            await _notify_status("failed")
+            return _execution_outcome("tool_failed", safe_summary)
         if tool_name in _QZONE_TOOL_NAMES and tool_result.meta.get("validity") != "current_turn":
             status = "outcome_unknown" if tool_result.meta.get("validity") == "outcome_unknown" else "tool_failed"
             _trace("failed", safe_summary)
@@ -3465,7 +3488,9 @@ async def execute_structured(
     )
     if origin in _EXECUTE_ALLOWED_ORIGINS:
         from core.tool_audit import record as record_tool_audit
-        record_tool_audit(user_id, char_id, tool=tool_name, args=tool_args, origin=origin, outcome=outcome)
+        record_tool_audit(user_id, char_id, tool=tool_name,
+                          args={} if tool_name in _gmail_tools.NAMES else tool_args,
+                          origin=origin, outcome=outcome)
     return outcome
 
 

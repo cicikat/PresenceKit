@@ -1392,6 +1392,9 @@ class Pipeline:
             t for t in _filter_exposure(_raw_tools, _exposure)
             if (t.get("function") or t).get("name") not in excluded_tool_names
         ]
+        if is_group:
+            from core.tools.gmail_tools import NAMES as gmail_tools
+            tools = [tool for tool in tools if (tool.get("function") or tool).get("name") not in gmail_tools]
         caller_allowed_tool_names = allowed_tool_names
         if caller_allowed_tool_names is not None:
             tools = [
