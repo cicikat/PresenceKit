@@ -30,6 +30,10 @@ class Observe(Strict):
     kind: Literal["observe"]
 
 
+class VerifyVisual(Strict):
+    kind: Literal["verify_visual"]
+
+
 class Pointer(Strict):
     kind: Literal["move", "double_click"]
     target: Target
@@ -74,7 +78,7 @@ class Wait(Strict):
 
 
 ActionModel = TypeAdapter(Annotated[
-    Observe | Pointer | Click | Scroll | Text | Press | Hotkey | Drag | Wait,
+    Observe | VerifyVisual | Pointer | Click | Scroll | Text | Press | Hotkey | Drag | Wait,
     Field(discriminator="kind"),
 ])
 
@@ -91,6 +95,7 @@ class Poll(Strict):
     # Omitted by legacy clients. A grant can only be made on the first poll.
     cloud_vision: bool | None = None
     stop_agent: bool = False
+    visual_verify: bool = False
 
 
 class Window(Strict):

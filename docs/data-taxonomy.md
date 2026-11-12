@@ -255,6 +255,7 @@ Dream domain 独立落在 `data/runtime/dreams/{char_id}/`，不进入 reality m
   fail-open，最近 7 天；只读查询见 `GET /observability/api-calls`）
 - 支出账本：`data/runtime/spend/ledger.jsonl`，`GET /spend/ledger` / `GET /spend/budget` / `POST /spend/check`（admin）。预留 `GET /spend/mandates` 读面已删；confirm/reject writer、购买执行器和商家 adapter 仍不存在（Brief 63/64/226）。历史 `mandates.jsonl` 若存在不由代码清掉。
 - Agent Runtime Reality 根：`data/runtime/agent_runtime/reality/`（tasks / work_sessions / workspace_versions / browser_profiles / schedules）
+- 持续桌面工作暂停检查点保存在该主人与角色的 Task Manager 记录内，有效期 24 小时。它包含主人委托、改令、追问、回执引用及去重元数据，仅经原任务控制恢复。普通任务回执和观测接口不暴露检查点正文。截图、UIA 文本和视觉模型观察描述仅供在途核验。
 - dossier 整合运行态：`data/runtime/memory_consolidation_state.json`（global runtime；仅预算、退避和调度元数据，可重建且无记忆正文）
 - 角色提醒权威（256 H）：`data/runtime/agent_runtime/reality/schedules/{uid}/{char_id}.json`，accessor `agent_runtime_schedule_state`；legacy 归属与迁移报告保留供 90 天备份回滚审计，live reader/writer 已删除
 - 旧共享 toy 目录（256 H）：`very_formal_project_dir()` 仅供离线迁移/回滚；live 读写走 character_self，冷却走 character_self_meta。生产源在备份与恢复校验后清理，备份保留 90 天

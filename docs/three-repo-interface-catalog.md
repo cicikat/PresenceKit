@@ -1324,4 +1324,6 @@ AGENT-05 的新桌面将传输请求上限从 2 秒调到 3.2 秒。设备执行
 AGENT-06B 的 `GET /computer-use/agent-session` 区分 `waiting_user`、`paused_by_owner`、`paused_budget`、`paused_device` 和 `outcome_unknown`，增加 `question`、`can_resume`、`resume_until`。现有 `POST /computer-use/agent-session/control` 的 `resume` 可显式认领已暂停父任务，`steer` 用于回答问题。桌面 IPC 提供暂停和继续，聊天通过现有主人私聊工具回答或改令。手机没有原生执行或恢复按钮。
 
 AGENT-06C 在设备 `poll` 回包增加可选 `agent_cue`，值为 `active` 或 `weak`。它来自绑定父会话，持续覆盖子任务之间的规划。桌面通过同一授权租约的关闭轮询发送 `stop_agent`，统一取消父会话。无父会话时，新旧桌面使用既有的子任务提示。
+
+AGENT-06D 新后端通过 `visual_verify_supported` 声明能力，新桌面再以 `visual_verify` 协商。父会话的 `verify_visual` 是只读步骤。桌面在已有截图许可下，经原 `/computer-use/vision/locate` 和原租约上传后置 JPEG。后端将结构化视觉结果与已确认的动作、截图帧和父修订绑定，桌面仅收 `verified` 或 `uncertain`。`/computer-use/status` 的最近视觉调用增加模型、地域、模式、错误分类和可用的 Token 计数。真实百炼及实机目标覆盖见 [AGENT-06 验收记录](agent-06-acceptance.md)（`observe`）。
 - 手机无消费者，普通屏幕观察和视频通话使用自己的既有接口。真实推理与 Windows 端到端进度见 [CU-05 验收](known-issues.md#302-cu-05-云端视觉实机验收observe)。

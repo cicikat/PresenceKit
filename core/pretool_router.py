@@ -448,12 +448,15 @@ async def route_pretool(
             + result.probe_context
         )
     try:
+        from core.agent_runtime.models import TaskPrincipal
         from core.decision_probe import probe
+        waiting = computer_use.waiting_user_prompt(TaskPrincipal.reality(uid, char_id), available_set)
+        messages = [{"role": "system", "content": result.probe_system}]
+        if waiting:
+            messages.append({"role": "system", "content": waiting})
+        messages.append({"role": "user", "content": trusted_user_text})
         probe_raw = await probe(
-            [
-                {"role": "system", "content": result.probe_system},
-                {"role": "user", "content": trusted_user_text},
-            ],
+            messages,
             schemas=schemas,
             char_id=char_id,
         )

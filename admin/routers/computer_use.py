@@ -2,6 +2,7 @@
 import asyncio
 import time
 from typing import Literal
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
@@ -109,7 +110,7 @@ async def _read_jpeg(request: Request) -> bytes:
 
 
 @router.post("/vision/locate", responses={
-    200: {"description": "Found normalized coordinates or uncertain"},
+    200: {"description": "Normalized location, verification status, or uncertain according to the leased action"},
     409: {"description": "Missing, revoked, expired or already claimed delivery target"},
 }, openapi_extra={"requestBody": {"required": True, "content": {
     "image/jpeg": {"schema": {"type": "string", "format": "binary"}},
@@ -154,9 +155,15 @@ async def locate(request: Request, auth=Depends(_desktop)):
     timeout = min(delivery.vision_timeout_ms / 1000, deadline - time.monotonic())
     if timeout <= 0 or not service.vision_active(run, delivery):
         return _vision_error("vision_stale_step", 409)
+    if run.reserve_plan is not None and not run.reserve_plan():
+        return _vision_error("session_model_budget", 429)
     preset = run.device.cloud_route["config"]
+    verifying = delivery.step["action"]["kind"] == "verify_visual"
+    request_model = vision.verify if verifying else vision.locate
+    usage = {}
+    category = None
     started = time.monotonic()
-    call = asyncio.create_task(vision.locate(preset, jpeg, description, timeout))
+    call = asyncio.create_task(request_model(preset, jpeg, description, timeout, usage=usage))
     outcome = "vision_stale_step"
     try:
         while service.vision_active(run, delivery):
@@ -167,16 +174,28 @@ async def locate(request: Request, auth=Depends(_desktop)):
                 if not service.vision_active(run, delivery):
                     break
                 result = call.result()
-                outcome = "vision_uncertain" if result["status"] == "uncertain" else "found"
+                outcome = "vision_uncertain" if result["status"] == "uncertain" else result["status"]
+                if verifying and outcome == "verified":
+                    delivery.visual_evidence = {"kind": "visual", "frame_version": body.frame_version,
+                                                "verification_seq": delivery.seq, "observed": result["observed"],
+                                                "action_receipt": run.last_input, "revision": run.revision}
+                    return JSONResponse({"status": "verified"})
                 return JSONResponse(result)
         return _vision_error(outcome, 409)
     except vision.VisionError as exc:
         outcome = exc.code
+        category = exc.category
         return _vision_error(exc.code, exc.status)
     finally:
         call.cancel()
         await asyncio.gather(call, return_exceptions=True)
-        service.record_vision(run, outcome, round((time.monotonic() - started) * 1000), delivery.frame_size)
+        host = urlsplit(preset["base_url"]).hostname or ""
+        region = ("beijing" if host == "dashscope.aliyuncs.com" or host.endswith(".cn-beijing.maas.aliyuncs.com") else
+                  "singapore" if host == "dashscope-intl.aliyuncs.com" or host.endswith(".ap-southeast-1.maas.aliyuncs.com") else
+                  "configured")
+        service.record_vision(run, outcome, round((time.monotonic() - started) * 1000), delivery.frame_size,
+                              mode="verify" if verifying else "locate", model=preset["model"], region=region,
+                              error_category=category, **usage)
 
 
 @router.get("/status")

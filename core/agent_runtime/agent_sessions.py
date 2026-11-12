@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
+import hashlib
 import json
 import math
 import time
@@ -101,6 +102,10 @@ def _project(actor: TaskPrincipal, row: dict, session: Session | None = None) ->
     parked = task_manager.read_agent_checkpoint(actor, row["task_id"]) if row["status"] == "paused" else {}
     if session and row["status"] == "running":
         phase = session.phase
+        if row["cancel_requested"]:
+            receipt = session.child.completed if session.child else None
+            phase = ("outcome_unknown" if receipt and receipt.done() and receipt.result()["state"] == "outcome_unknown"
+                     else "canceled")
     counters = metadata.get("counters", {})
     step = counters.get("steps", 0)
     current_action = None
@@ -200,6 +205,23 @@ def stop_device(device: computer_use.Device) -> None:
     row = task_manager.get_task(device.principal, device.agent_task_id)
     if row["capability"] == CAPABILITY and row["status"] not in TERMINAL:
         control(device.principal, row["request_summary"]["session_id"], "cancel")
+
+
+def cancel_from_desktop_tool(actor: TaskPrincipal, task: dict | None) -> dict | None:
+    if task and task["capability"] == computer_use.CAPABILITY:
+        cause = task["causation_ref"] or {}
+        if cause.get("kind") != "parent_task":
+            return None
+        parents = task_manager.list_tasks(actor, capability=CAPABILITY, limit=100)
+        task = next((row for row in parents if hashlib.sha256(row["task_id"].encode()).hexdigest()[:24]
+                     == cause.get("ref_digest")), None)
+        if task is None:
+            return None
+    task = task or _session_row(actor, "")
+    if not task or task["capability"] != CAPABILITY or task["status"] in TERMINAL:
+        return None
+    result = control(actor, task["request_summary"]["session_id"], "cancel")
+    return {"task_id": task["task_id"], "state": result["status"], "reason": result.get("last_error_code")}
 
 
 def control(actor: TaskPrincipal, session_id: str, action: str, *, instruction: str = "", request_id: str = "") -> dict:
@@ -385,14 +407,19 @@ def _add_subgoals(session: Session, requirements: object) -> bool:
 def _finish_claim_valid(session: Session, proposal: dict) -> bool:
     ids = proposal.get("completed_subgoals")
     summary = proposal.get("summary")
-    return (set(proposal) == {"kind", "completed_subgoals", "summary"}
-            and isinstance(summary, str) and 1 <= len(summary.strip()) <= 400
-            and isinstance(ids, list) and 1 <= len(ids) <= MAX_SUBGOALS
-            and all(isinstance(sid, str) for sid in ids)
-            and len(set(ids)) == len(ids) and set(ids) == set(session.subgoals)
-            and all(entry["revision"] == session.revision and entry["state"] == "succeeded"
-                    and entry["receipt"]["state"] == "succeeded" and entry["receipt"].get("evidence")
-                    for entry in session.subgoals.values()))
+    if (set(proposal) != {"kind", "completed_subgoals", "summary"}
+            or not isinstance(summary, str) or not 1 <= len(summary.strip()) <= 400
+            or not isinstance(ids, list) or not 1 <= len(ids) <= MAX_SUBGOALS
+            or any(not isinstance(sid, str) for sid in ids)
+            or len(set(ids)) != len(ids) or set(ids) != set(session.subgoals)):
+        return False
+    for sid, entry in session.subgoals.items():
+        receipt = entry["receipt"]
+        if (entry["revision"] != session.revision or entry["state"] != "succeeded"
+                or not receipt or receipt["state"] != "succeeded" or not receipt.get("evidence")
+                or receipt["subgoal_id"] != sid or receipt["revision"] != session.revision):
+            return False
+    return True
 
 
 async def _verify_coverage(session: Session) -> bool:
@@ -496,6 +523,9 @@ async def _drive(session: Session) -> None:
                 continue
             previous = next((r for r in reversed(session.receipts)
                              if r["requirement"] == subgoal["requirement"]), {})
+            prior = subgoal["receipt"] or previous
+            observe_only = (subgoal["state"] == "verify_only" or previous.get("state") == "succeeded"
+                            or bool(previous.get("observe_only")))
             result, child = computer_use.start_child(
                 actor, f"Required result: {subgoal['requirement']}\nExecution goal: {goal}",
                 parent_task_id=lease.task_id, device=session.device,
@@ -503,9 +533,9 @@ async def _drive(session: Session) -> None:
                 time_limit=session.deadline - time.monotonic(),
                 reserve_plan=session.reserve_plan, parent_allowed=session.parent_allowed,
                 worker_habits=session.context.get("working_habits", ""),
-                prior_actions=(subgoal["receipt"] or previous).get("acknowledged_actions", []),
-                observe_only=(subgoal["state"] == "verify_only"
-                              or previous.get("state") == "succeeded" or bool(previous.get("observe_only"))),
+                prior_actions=prior.get("acknowledged_actions", []), observe_only=observe_only,
+                visual_assertion=subgoal["requirement"], revision=revision,
+                prior_input=prior.get("last_input") if observe_only and prior.get("revision") == revision else None,
             )
             if child is None:
                 session.phase, session.reason = "paused_device", result.get("reason", "desktop_busy")
@@ -532,8 +562,16 @@ async def _drive(session: Session) -> None:
                 subgoal["receipt"] = result
                 if result["state"] == "succeeded" and result.get("evidence"):
                     subgoal["state"] = "succeeded"
+                elif result["verification_attempted"]:
+                    subgoal["state"] = "verify_only"
             if session.phase not in PARKED:
                 session.phase = "observing"
+                if result["reason"] in {"vision_timeout", "vision_node_offline", "vision_provider_error",
+                                        "vision_invalid_response", "vision_not_configured",
+                                        "visual_verification_unavailable", "cloud_vision_not_authorized"}:
+                    session.phase, session.reason = "paused_device", result["reason"]
+                elif result["reason"] == "session_model_budget":
+                    session.phase, session.reason = "paused_budget", "session_execution_budget"
             if result["state"] == "failed" and result["reason"] != "worker_needs_input":
                 session.failures += 1
             elif result["state"] == "succeeded":

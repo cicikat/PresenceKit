@@ -54,10 +54,11 @@ def observation(seq):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("scenario", ["finish", "steer", "cancel", "desktop_stop", "offline", "role", "restart", "failure_budget"])
+@pytest.mark.parametrize("scenario", ["finish", "steer", "cancel", "desktop_stop", "chat_cancel", "offline", "role",
+                                      "restart", "failure_budget", "pause_replay"])
 async def test_agent_session_drives_receipts_after_the_owner_turn(fixture, monkeypatch, scenario):
     config, pipeline, device = fixture
-    if scenario == "failure_budget":
+    if scenario in {"failure_budget", "pause_replay"}:
         config["computer_use"]["agent_budget"] = {"failures": 1}
     actor = service.principal()
     proposals = []
@@ -77,7 +78,11 @@ async def test_agent_session_drives_receipts_after_the_owner_turn(fixture, monke
         assert all(entry["receipt"]["revision"] == session.revision for entry in session.subgoals.values())
         return True
 
-    async def planner(_run, goal, _observation, prior_action):
+    async def planner(run, goal, _observation, prior_action):
+        if scenario == "pause_replay":
+            if prior_action and not run.prior_actions:
+                await asyncio.Future()
+            return {"kind": "type_text", "text": "enter once"}
         if prior_action:
             return {"kind": "done", "evidence_id": 1, "observed_text": "Test control"}
         goals.append(goal.split("\nExecution goal: ")[1])
@@ -126,7 +131,7 @@ async def test_agent_session_drives_receipts_after_the_owner_turn(fixture, monke
             assert first["step"]["action"] == {"kind": "observe"}
             assert (await acknowledge(first)).status_code == 200
             action = await next_step()
-            assert action["step"]["action"]["kind"] == "press_key"
+            assert action["step"]["action"]["kind"] == ("type_text" if scenario == "pause_replay" else "press_key")
             assert action["agent_cue"] == "active"
             assert len(proposals) == 2
             control = {"session_id": sid, "action": "steer", "instruction": "replacement B", "request_id": "edit-turn"}
@@ -143,6 +148,9 @@ async def test_agent_session_drives_receipts_after_the_owner_turn(fixture, monke
             elif scenario == "desktop_stop":
                 device["stop_agent"] = True
                 assert not (await poll("closed"))["accepted"]
+            elif scenario == "chat_cancel":
+                stopped = service.task_status(actor.uid, actor.char_id, action["task_id"], cancel=True)
+                assert stopped["task_id"] == initial["task_id"] and stopped["state"] == "outcome_unknown"
             elif scenario == "offline":
                 service._device.heartbeat -= service.HEARTBEAT_TTL
                 await poll()
@@ -161,6 +169,18 @@ async def test_agent_session_drives_receipts_after_the_owner_turn(fixture, monke
                 failed.update(server_epoch=device["server_epoch"], nonce=action["nonce"],
                               receipt={"status": "failed", "reason": "target_unavailable"})
                 assert (await client.post("/computer-use/result", json=failed)).status_code == 200
+            elif scenario == "pause_replay":
+                assert (await acknowledge(action, "changed")).status_code == 200
+                agent_sessions.control(actor, sid, "pause", request_id="pause")
+                for _ in range(80):
+                    if agent_sessions._active is None:
+                        break
+                    await asyncio.sleep(.01)
+                assert (await get_status())["status"] == "paused_by_owner"
+                agent_sessions.control(actor, sid, "resume", request_id="resume")
+                fresh = await next_step()
+                assert fresh["step"]["action"] == {"kind": "observe"}
+                assert (await acknowledge(fresh)).status_code == 200
             else:
                 assert (await acknowledge(action, "changed")).status_code == 200
             if scenario in {"finish", "steer"}:
@@ -171,7 +191,7 @@ async def test_agent_session_drives_receipts_after_the_owner_turn(fixture, monke
                 assert (await acknowledge(await next_step(), "changed")).status_code == 200
                 assert goals == ["part 1", "replacement B" if scenario == "steer" else "part 2"]
             expected = ("completed" if scenario in {"finish", "steer"} else
-                        "paused_budget" if scenario == "failure_budget" else "outcome_unknown")
+                        "paused_budget" if scenario in {"failure_budget", "pause_replay"} else "outcome_unknown")
             for _ in range(80):
                 state = await get_status()
                 if state["status"] == expected:
@@ -181,12 +201,15 @@ async def test_agent_session_drives_receipts_after_the_owner_turn(fixture, monke
             assert state["session_id"] == sid
             assert state["task_id"] not in {first["task_id"], sid}
             assert "private owner goal" not in str(state) and "Test control" not in str(state)
-            assert len(proposals) == (5 if scenario in {"finish", "steer"} else 2)
+            assert len(proposals) == (5 if scenario in {"finish", "steer"} else 3 if scenario == "pause_replay" else 2)
             if scenario == "steer":
                 assert proposals[-1][0] == 1
             if scenario == "failure_budget":
                 assert state["last_error_code"] == "session_failure_budget"
                 assert state["can_resume"] is True
+            if scenario == "pause_replay":
+                assert not (await poll())["step"]
+                assert service.snapshot()["last_error"] == "confirmed_action_replay"
             assert (await acknowledge(action, "changed")).status_code == 409
         finally:
             agent_sessions.control(actor, sid, "cancel")
@@ -488,6 +511,127 @@ async def test_cloud_proxy_requires_a_single_live_frozen_target(fixture, monkeyp
             if service._run is run:
                 service.task_status("owner", "fixture_char", task_id, cancel=True)
             await asyncio.gather(run.worker, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("verdict", ["verified", "uncertain", "no_cloud_receipt", "no_action_receipt"])
+async def test_visual_completion_requires_an_action_frame_and_cloud_verdict(fixture, monkeypatch, verdict):
+    from PIL import Image
+
+    config, _, body = fixture
+    config["image_presets"] = {"routes": {"computer_use": "chosen"}, "presets": {"chosen": {
+        "kind": "vision", "api_protocol": "chat_completions", "model": "fixture-model",
+        "base_url": "https://fixture.example/v1", "api_key": "fixture-key",
+    }}}
+    body.update(cloud_vision=True, visual_verify=True)
+    actor = service.principal()
+    requirement = "The canvas shows its selected mode indicator"
+
+    async def planner(run, goal, view, acknowledged):
+        if not acknowledged and verdict != "no_action_receipt":
+            return {"kind": "click", "target": {"kind": "visual", "description": "mode icon"}}
+        return {"kind": "verify_visual"}
+
+    calls = []
+
+    async def provider(request):
+        prompt = json.loads(request.content)["messages"]
+        expected = "mode icon" if not calls else requirement
+        assert prompt[1]["content"][0]["text"] == expected
+        calls.append(expected)
+        if len(calls) == 1:
+            result = {"status": "found", "x": .5, "y": .5}
+        elif verdict == "verified":
+            result = {"status": "verified", "observed": "Mode indicator is highlighted blue"}
+        else:
+            result = {"status": "uncertain"}
+        return httpx.Response(200, json={"choices": [{"message": {"content": json.dumps(result)}}],
+                                         "usage": {"prompt_tokens": 135, "completion_tokens": 19}})
+
+    monkeypatch.setattr(service, "_plan_agent_worker", planner)
+    monkeypatch.setattr(vision, "make_model_http_client", lambda *_: httpx.AsyncClient(
+        transport=httpx.MockTransport(provider),
+    ))
+    app = FastAPI()
+    app.include_router(routes.router)
+    image = io.BytesIO()
+    Image.new("RGB", (800, 600)).save(image, format="JPEG")
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test",
+                                 headers={"Authorization": "Bearer desktop"}) as client:
+        initial = (await client.post("/computer-use/poll", json=body)).json()
+        assert initial["visual_verify_supported"] is True
+        body["server_epoch"] = initial["server_epoch"]
+        _, run = service.start_child(actor, "Select mode", parent_task_id=uuid4().hex,
+                                     visual_assertion=requirement, revision=3)
+        assert run
+
+        async def step(kind):
+            for _ in range(50):
+                packet = (await client.post("/computer-use/poll", json=body)).json()
+                if packet["step"]:
+                    assert packet["step"]["action"]["kind"] == kind
+                    return {**{key: packet["step"][key] for key in ("device_id", "session_id", "task_id", "seq")},
+                            "server_epoch": body["server_epoch"], "nonce": packet["nonce"]}
+                await asyncio.sleep(.01)
+            pytest.fail("step was not dispatched")
+
+        async def receipt(lease):
+            view = observation(lease["seq"])
+            view["nodes"] = []
+            result = await client.post("/computer-use/result", json={
+                **lease, "receipt": {"status": "ok", "observation": view},
+            })
+            assert result.status_code == 200
+
+        async def upload(lease, frame):
+            return await client.post("/computer-use/vision/locate", content=image.getvalue(), headers={
+                "Content-Type": "image/jpeg", "X-Computer-Use-Lease": json.dumps({
+                    **lease, "frame_version": frame, "target_index": 0,
+                }),
+            })
+
+        try:
+            await receipt(await step("observe"))
+            if verdict == "no_action_receipt":
+                result = await asyncio.wait_for(run.completed, 2)
+                assert result["reason"] == "vision_evidence_requires_input" and not calls
+                return
+            action = await step("click")
+            assert (await upload(action, 1)).json() == {"status": "found", "x": .5, "y": .5}
+            await receipt(action)
+            proof = await step("verify_visual")
+            assert (await upload(proof, 1)).status_code == 409
+            if verdict != "no_cloud_receipt":
+                assert (await upload(proof, 2)).json() == {"status": verdict}
+                assert (await upload(proof, 2)).status_code == 409
+            await receipt(proof)
+            result = await asyncio.wait_for(run.completed, 2)
+            if verdict == "verified":
+                assert result["state"] == "succeeded"
+                assert result["evidence"]["frame_version"] == result["evidence"]["action_receipt"]["action_seq"] == 2
+                assert result["evidence"]["revision"] == 3
+                assert result["evidence"]["observed"] == "Mode indicator is highlighted blue"
+                metrics = service.snapshot()["last_vision"]
+                assert metrics["prompt_tokens"] == 135 and metrics["completion_tokens"] == 19
+            else:
+                assert result["state"] == "failed" and not result["evidence"]
+            assert result["verification_attempted"]
+        finally:
+            if service._run is run:
+                service.stop_child(run)
+            await asyncio.gather(run.worker, return_exceptions=True)
+
+
+@pytest.mark.parametrize(("content", "category"), [
+    ('```json\n{"status":"found","x":0.5,"y":0.5}\n```', "markdown"),
+    ('Here it is: {"status":"found","x":0.5,"y":0.5}', "non_json_or_duplicate"),
+    ('{"status":"found","x":0.5,"y":0.5,"extra":true}', "schema"),
+    ('{"status":"found","x":1.2,"y":0.5}', "coordinates"),
+])
+def test_vision_response_failure_categories(content, category):
+    with pytest.raises(vision.VisionError) as error:
+        vision.parse_location(content)
+    assert error.value.code == "vision_invalid_response" and error.value.category == category
 
 
 @pytest.mark.asyncio
