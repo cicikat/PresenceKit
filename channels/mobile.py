@@ -14,6 +14,7 @@ from uuid import uuid4
 
 from channels.base import BaseChannel
 from channels.relay_publisher import schedule_signal_publish
+from core.mobile_delivery_trace import mark
 from core.sandbox import get_paths
 from core.safe_write import safe_write_json
 
@@ -141,6 +142,8 @@ class MobileChannel(BaseChannel):
             while True:
                 messages = self._read_from_queue(after=after, limit=limit)
                 if messages:
+                    for item in messages:
+                        mark(str(item.get('id') or ''), 'poll_finished')
                     return messages
 
                 remaining = deadline - time.monotonic()
@@ -163,6 +166,9 @@ class MobileChannel(BaseChannel):
             if remaining != queue:
                 if not safe_write_json(get_paths().mobile_queue(), remaining):
                     raise OSError("mobile acknowledgement persistence failed")
+            for item in queue:
+                if int(item.get('seq', 0)) <= up_to_seq:
+                    mark(str(item.get('id') or ''), 'acked')
             return len(remaining)
 
     async def _write_to_queue(
@@ -218,6 +224,7 @@ class MobileChannel(BaseChannel):
                 queue = self._prune_queue(queue)
                 if not safe_write_json(q_file, queue):
                     raise OSError("mobile queue persistence failed")
+                mark(canonical_id, 'queued')
                 _queue_condition.notify_all()
         except Exception as e:
             logger.warning(f"[mobile_channel] write queue failed: {e}")

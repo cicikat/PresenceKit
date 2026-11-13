@@ -265,6 +265,8 @@ async def record_assistant_turn(
     bypass_gate=True 时跳过 conversation_lock（QQ adapter 已在 conversation_lock 内）。
     loop_executed（Brief 28）：本轮是否走了 tool loop，透传给 post_process_slow。
     """
+    from time import time_ns
+    turn_ready_ms = time_ns() // 1_000_000
     from core.session_scope import mark_request_side_effects_started
     mark_request_side_effects_started()
     from core.write_envelope import WriteEnvelope
@@ -383,6 +385,9 @@ async def record_assistant_turn(
     # desktop WS and HTTP replies share a correlator. Do not wait for desktop WS.
     _persisted_turn_id = str((post_info or {}).get("turn_id") or "").strip()
     _ws_msg_id = _persisted_turn_id or uuid4().hex
+    if durable_mobile_mirror and fanout in ('all', 'broadcast') and not is_group:
+        from core.mobile_delivery_trace import mark
+        mark(_ws_msg_id, 'turn_ready', at_ms=turn_ready_ms)
     _record_identity_outcome(persisted=bool(_persisted_turn_id), transport=bool(_ws_msg_id))
     if artifacts and char_id:
         from core.tools.chat_artifacts import link_turn_artifacts

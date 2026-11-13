@@ -7,6 +7,7 @@ from collections.abc import Mapping
 import httpx
 
 from core.config_loader import get_config
+from core.mobile_delivery_trace import mark
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,7 @@ def schedule_signal_publish(queue_item: Mapping) -> None:
         logger.warning("[relay_publisher] relay config unavailable: %s", exc)
         return
     if relay_config is None:
+        mark(queue_item['id'], 'publish_skipped', outcome='unconfigured')
         global _warned_unconfigured
         if not _warned_unconfigured:
             _warned_unconfigured = True
@@ -89,26 +91,32 @@ async def publish_signal(
         timeout=_REQUEST_TIMEOUT_SECONDS,
     ) as client:
         for attempt in range(1, _MAX_ATTEMPTS + 1):
+            mark(queue_item['id'], 'publish_started', attempt=attempt)
             try:
                 response = await client.post(
                     f"{base_url}/{topic}",
                     json=signal,
                     headers=headers,
                 )
-            except httpx.RequestError as exc:
+            except httpx.RequestError:
+                mark(queue_item['id'], 'publish_finished', attempt=attempt, outcome='network_error')
                 if attempt == _MAX_ATTEMPTS:
                     logger.warning(
-                        "[relay_publisher] relay unreachable after %d attempts: %s",
+                        "[relay_publisher] relay unreachable after %d attempts",
                         attempt,
-                        exc,
                     )
                     return
                 await asyncio.sleep(2 ** (attempt - 1))
                 continue
-            except Exception as exc:
-                logger.warning("[relay_publisher] unexpected publish failure: %s", exc)
+            except Exception:
+                mark(queue_item['id'], 'publish_finished', attempt=attempt, outcome='unexpected_error')
+                logger.warning("[relay_publisher] unexpected publish failure")
                 return
 
+            mark(
+                queue_item['id'], 'publish_finished', attempt=attempt,
+                outcome='ok' if response.is_success else 'http_error', status=response.status_code,
+            )
             if response.status_code in (401, 403):
                 logger.warning(
                     "[relay_publisher] relay authorization failed: status=%d",
