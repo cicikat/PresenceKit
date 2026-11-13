@@ -1062,3 +1062,8 @@ observe：文字与附件的回执隔离、断线取消、协议分块和副作�
 ### 315 手机后台提醒延迟（observe）
 
 缺少连接真机和带时钟校准的真实后台样本。后端与 Android 已提供时间链，待用前台、后台亮屏、息屏与 Doze 场景复现并核对各段时延。系统推送迁移及 ROM/功耗验收待实测。
+
+
+### 317 Android FCM (observe)
+
+No connected phone or Firebase project configuration was available for the real delivery matrix. Doze, screen-off, carrier network changes, device rotation and power behavior require the procedure in [317 device feasibility](fcm-device-feasibility.md). A valid FCM sender response is recorded separately from Android notification posting.

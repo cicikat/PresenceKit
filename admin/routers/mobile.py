@@ -2,7 +2,7 @@
 手机端轮询接口。
 """
 
-from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, WebSocket
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request, WebSocket
 
 from admin.auth import require_scopes
 from core.audio_perception import voice_context
@@ -10,6 +10,103 @@ from pydantic import BaseModel, ConfigDict, Field
 from typing import Literal
 
 router = APIRouter()
+
+
+_INSTALLATION_PATTERN = r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+
+
+class PushRegistration(BaseModel):
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
+    installation_id: str = Field(pattern=_INSTALLATION_PATTERN)
+    registration: str = Field(min_length=16, max_length=4096, pattern=r"^[A-Za-z0-9:_-]+$")
+    consent: Literal[True]
+
+
+def _push_credential(request: Request, auth) -> str:
+    from admin.token_registry import hash_token
+
+    if auth.profile != "mobile":
+        raise HTTPException(403, "mobile_profile_required")
+    return hash_token(request.headers["Authorization"].split(None, 1)[1])
+
+
+@router.put("/mobile/push/devices/self")
+async def register_push_device(
+    request: Request,
+    session_id: str = Header(alias="X-Presence-Session"),
+    auth=Depends(require_scopes("chat")),
+):
+    from pydantic import ValidationError
+    from admin.routers.chat import _session_grant
+    from core import mobile_push_devices
+
+    credential = _push_credential(request, auth)
+    grant = _session_grant(session_id, auth.label)
+    if grant is None:
+        raise HTTPException(422, "session_scope_required")
+    if not mobile_push_devices.configured():
+        raise HTTPException(503, "fcm_unconfigured")
+    try:
+        raw = bytearray()
+        async for chunk in request.stream():
+            if len(raw) + len(chunk) > 5000:
+                raise ValueError
+            raw.extend(chunk)
+        body = PushRegistration.model_validate_json(raw)
+    except (ValidationError, ValueError):
+        raise HTTPException(422, "invalid_registration") from None
+    try:
+        return mobile_push_devices.register(
+            body.installation_id, grant.owner_id, grant.char_id, credential, body.registration,
+        )
+    except (PermissionError, OverflowError) as error:
+        raise HTTPException(409, str(error)) from None
+
+
+@router.delete("/mobile/push/devices/self")
+async def unregister_push_device(
+    request: Request, installation_id: str = Query(pattern=_INSTALLATION_PATTERN),
+    auth=Depends(require_scopes("chat")),
+):
+    from core import mobile_push_devices
+
+    mobile_push_devices.remove(installation_id, _push_credential(request, auth))
+    return {"registered": False}
+
+
+@router.get("/mobile/push/devices/status")
+async def push_device_status(
+    request: Request, installation_id: str = Query(pattern=_INSTALLATION_PATTERN),
+    auth=Depends(require_scopes("chat")),
+):
+    from core import mobile_push_devices
+
+    return {
+        "configured": mobile_push_devices.configured(),
+        **mobile_push_devices.status(installation_id, _push_credential(request, auth)),
+    }
+
+
+@router.get("/mobile/push/message")
+async def read_push_message(
+    request: Request,
+    installation_id: str = Query(pattern=_INSTALLATION_PATTERN),
+    generation: int = Query(ge=0),
+    seq: int = Query(ge=1),
+    message_id: str = Query(min_length=1, max_length=128),
+    auth=Depends(require_scopes("chat")),
+):
+    from core import mobile_push_devices
+
+    credential = _push_credential(request, auth)
+    character = mobile_push_devices.bound_character(installation_id, credential, generation)
+    mobile = _get_mobile_channel()
+    if not character or mobile is None:
+        raise HTTPException(404, "push_message_unavailable")
+    item = await mobile.push_message(seq, message_id, mobile_push_devices.owner_id(), character)
+    if item is None:
+        raise HTTPException(404, "push_message_unavailable")
+    return item
 
 
 class MobileRealtimeMetric(BaseModel):
@@ -207,7 +304,9 @@ async def mobile_push(body: dict, auth=Depends(require_scopes("chat"))):
 
     behavior = body.get("behavior")
     char_id = str(body.get("char_id") or "").strip() or None
-    send_kwargs = {"char_id": char_id} if char_id is not None else {}
+    send_kwargs = {"proactive_push": True}
+    if char_id is not None:
+        send_kwargs["char_id"] = char_id
     if isinstance(behavior, dict):
         await mobile.send_with_behavior(content, user_id, behavior, **send_kwargs)
     else:

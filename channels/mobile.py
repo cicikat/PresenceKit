@@ -87,6 +87,7 @@ class MobileChannel(BaseChannel):
         artifacts: list[dict] | None = None,
         display_text: str | None = None,
         request_id: str | None = None,
+        proactive_push: bool = False,
     ) -> None:
         """Persist an enabled channel's message, raising on persistence failure."""
         from core.client_channels import enabled
@@ -102,6 +103,7 @@ class MobileChannel(BaseChannel):
             artifacts=artifacts,
             display_text=display_text,
             request_id=request_id,
+            proactive_push=proactive_push,
         )
 
     async def send_with_behavior(
@@ -113,6 +115,7 @@ class MobileChannel(BaseChannel):
         *,
         char_id: str | None = None,
         sticker: dict | None = None,
+        proactive_push: bool = False,
     ) -> None:
         from core.client_channels import enabled
         if not enabled(self.name):
@@ -124,6 +127,7 @@ class MobileChannel(BaseChannel):
             msg_id=msg_id,
             char_id=char_id,
             sticker=sticker,
+            proactive_push=proactive_push,
         )
 
     async def poll(
@@ -155,6 +159,14 @@ class MobileChannel(BaseChannel):
                 except asyncio.TimeoutError:
                     return []
 
+    async def push_message(self, seq: int, message_id: str, owner: str, char_id: str) -> dict | None:
+        async with _queue_condition:
+            return next((
+                item for item in self._load_queue()
+                if item.get("seq") == seq and item.get("id") == message_id
+                and item.get("user_id") == owner and item.get("char_id") == char_id
+            ), None)
+
     async def ack(self, up_to_seq: int) -> int:
         up_to_seq = int(up_to_seq)
         async with _queue_condition:
@@ -183,6 +195,7 @@ class MobileChannel(BaseChannel):
         artifacts: list[dict] | None = None,
         display_text: str | None = None,
         request_id: str | None = None,
+        proactive_push: bool = False,
     ) -> None:
         item = None
         try:
@@ -231,6 +244,15 @@ class MobileChannel(BaseChannel):
             raise
 
         # Persistence is the send boundary; optional wake-up cannot undo it.
+        if proactive_push:
+            from channels.fcm_publisher import schedule
+
+            try:
+                if schedule(item):
+                    return
+            except Exception:
+                mark(item["id"], "fcm_send_failed", outcome="registry_error")
+                return
         try:
             schedule_signal_publish(item)
         except Exception:

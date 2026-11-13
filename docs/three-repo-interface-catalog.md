@@ -1363,3 +1363,8 @@ AGENT-06D 新后端通过 `visual_verify_supported` 声明能力，新桌面再�
 ### 315-A 手机后台投递（observe）
 
 `GET /observability/mobile-delivery` 需 `state.read`，返回进程内最多 256 条以消息 ID 的 SHA-256 前 16 位关联的时间链，以及后端入队、relay 发布 p50/p95。Android 可在能力检查中开启通知测试模式后用 `adb logcat -s PresenceDelivery` 采集同一 ID 哈希的唤醒、回源、交接、ACK 和通知提交时间。跨设备时间差需先校准时钟。系统实际弹出由真机观察记录。未连接 Android 真机，五分钟延迟、分设备 p50/p95 与功耗待验证。可回退本单提交，队列和 ACK 协议兼容。
+
+
+### 317 Android system push (observe)
+
+FCM registration requires a mobile profile and a Reality session issued to the same credential. `PUT/DELETE /mobile/push/devices/self` manage a device installation, `GET /mobile/push/devices/status` returns status only, and `GET /mobile/push/message` reads one existing queued row for a valid binding and exact message ID/sequence. That read does not ACK a shared queue prefix. Existing foreground history and poll/ACK own recovery. When a proactive row has eligible FCM targets, one FCM publish path is selected; the existing relay remains available when there is no matching registration. Desktop REST/WS remain unchanged. Live acceptance and setup are tracked in [317 device feasibility](fcm-device-feasibility.md).
