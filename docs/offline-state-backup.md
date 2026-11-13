@@ -8,11 +8,11 @@
 
 当前的非敏感决策状态也可由 `state.read` token 通过 `GET /observability/backup-service-state` 查询；返回值只有 `offline`、`running` 或 `unknown`。
 
-当前 protection inventory（版本 1）包括：
+当前 protection inventory（版本 2，manifest schema 仍为版本 1）包括：
 
-- `data/`，但排除明确的派生/取证缓存：vector index 与 SQLite sidecar、memory index、image cache、inbox、普通日志、debug 输出、pending perception 文件、选择性启用的 LLM request log，以及临时 service PID marker；
+- `data/`，包括 `data/inbox/` 原始上传。事件引用可能只有这一份原件，快照保留停机时仍存在的上传；仍排除派生向量索引与其明确命名的 SQLite sidecar、旧 memory index、缓存、普通日志、debug 输出、pending perception、LLM debug request log、测试沙盒和临时 service PID marker；
 - 存在时的 `userdata/`；
-- 必需的 `config.yaml`，以及存在时的 `secrets.local.yaml`；
+- 必需的 `config.yaml`，以及存在时的 `config.local.yaml`、`secrets.local.yaml`；
 - 仍为兼容性保留的 legacy 私有 authored-asset 子树：私有 cards/notes、Reality/Dream 资产、贴纸和非 example 的按角色 content。公共 `bundled/`、defaults、examples、源代码、虚拟环境、构建输出、release-updater backup 和普通日志不会被复制。
 
 inventory 集中在 `core.backup_state.PROTECTION_ROOTS`。未来经过审计的私有根目录必须在这里分类；已知但未分类的根目录会导致创建失败，而不是被静默省略。
@@ -50,6 +50,8 @@ python main.py backup-state verify <protected-volume>\presencekit-snapshot
 它不会保存安装路径、配置内容、memory、token 或 secret。SQLite 文件只在服务停止时复制；未被明确排除的 WAL/SHM 文件作为普通声明文件纳入，不会被猜测或删除。
 
 `verify` 会验证 manifest/checksum、受支持的 schema、layout metadata、root inventory、必需 config 条目、每个声明文件的大小/哈希、安全相对路径、reparse point、可读性和意外文件。它只验证 backup 完整性。
+
+旧 inventory v1 仍可验证和恢复，沿用原清单，不推断缺失的 `config.local.yaml` 或上传原件。需要证明当前覆盖范围时，在同一停机窗口执行 `python main.py backup-state coverage <snapshot>`。该命令先验证快照，再按相对路径、保护类别和大小核对源文件，输出各类别计数、排除项大小与恢复容量检查。漏项或源状态差异以非零状态退出，报告不输出私有文件名。生产盘点还应单独检查实际数据根、外部挂载及独立服务的持久状态。
 
 ## 不支持的行为
 

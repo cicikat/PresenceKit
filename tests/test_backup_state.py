@@ -56,6 +56,19 @@ def _rewrite_manifest_checksum(snapshot: Path) -> None:
 
 def test_create_offline_snapshot_and_manifest_excludes_content_and_caches(tmp_path: Path):
     root = _install(tmp_path)
+    retained = {
+        "data/inbox/original.jpg",
+        "data/runtime/memory/character/owner/event_store.sqlite3",
+        "data/runtime/memory/character/owner/event_store.sqlite3-wal",
+        "data/runtime/self_db/character/owner/self.db",
+        "data/runtime/other/event_store.sqlite3",
+        "data/runtime/memory/character/owner/vector_store.db.notes",
+        "config.local.yaml",
+    }
+    for path in retained:
+        _write(root / path, path)
+    _write(root / "data/cache/image_cache/derived.json", "cache")
+    _write(root / "data/runtime/memory/character/owner/vector_store.db-wal", "derived")
     target = _create(root, tmp_path)
 
     manifest_text = (target / backup.MANIFEST_NAME).read_text(encoding="utf-8")
@@ -71,6 +84,9 @@ def test_create_offline_snapshot_and_manifest_excludes_content_and_caches(tmp_pa
     assert "main.py" not in paths
     assert "data/runtime/memory/character/owner/vector_store.db" not in paths
     assert "data/logs/error.log" not in paths
+    assert retained <= paths
+    assert "data/cache/image_cache/derived.json" not in paths
+    assert "data/runtime/memory/character/owner/vector_store.db-wal" not in paths
     assert "test-token-should-never-appear" not in manifest_text
     assert "private memory body" not in manifest_text
     assert backup.verify_snapshot(target) == {"ok": True, "errors": []}
@@ -184,6 +200,59 @@ def test_missing_required_root_and_optional_files(tmp_path: Path):
     target = _create(root, tmp_path / "optional")
     manifest = json.loads((target / backup.MANIFEST_NAME).read_text(encoding="utf-8"))
     assert "secrets.local.yaml" in manifest["optional_missing_files"]
+    assert "config.local.yaml" in manifest["optional_missing_files"]
+    assert backup.verify_snapshot(target)["ok"]
+
+
+def test_v1_inventory_verifies_and_restores(tmp_path: Path):
+    root = _install(tmp_path)
+    target = _create(root, tmp_path)
+    manifest_path = target / backup.MANIFEST_NAME
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["private_roots_version"] = 1
+    manifest["included_roots"] = [item for item in manifest["included_roots"] if item["id"] != "config_local"]
+    manifest["optional_missing_files"] = ["secrets.local.yaml"]
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    _rewrite_manifest_checksum(target)
+    assert backup.verify_snapshot(target)["ok"]
+    recovery = tmp_path / "recovery"
+    backup.restore_snapshot(root, target, recovery, startup_check=False)
+    assert (recovery / "config.yaml").read_bytes() == (root / "config.yaml").read_bytes()
+
+
+def test_verify_rejects_incorrect_config_local_presence(tmp_path: Path):
+    root = _install(tmp_path)
+    _write(root / "config.local.yaml", "local: true")
+    target = _create(root, tmp_path)
+    manifest_path = target / backup.MANIFEST_NAME
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["optional_missing_files"].append("config.local.yaml")
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    _rewrite_manifest_checksum(target)
+    assert not backup.verify_snapshot(target)["ok"]
+
+
+def test_coverage_detects_missing_source_path_despite_valid_manifest(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys):
+    root = _install(tmp_path)
+    _write(root / "data/inbox/original.jpg", "abc")
+    target = _create(root, tmp_path)
+    monkeypatch.chdir(root)
+    monkeypatch.setattr(backup, "service_state", _offline)
+
+    assert backup.main(["coverage", str(target)]) == 0
+    complete = json.loads(capsys.readouterr().out)
+    assert complete["roots"]["data"]["source_files"] == 3
+    assert complete["excluded"]["data/logs"]["files"] == 1
+    original = root / "data/inbox/original.jpg"
+    moved = root / "data/another-directory" / original.name
+    moved.parent.mkdir()
+    original.rename(moved)
+    assert backup.verify_snapshot(target)["ok"]
+    assert backup.main(["coverage", str(target)]) == 1
+    incomplete = json.loads(capsys.readouterr().out)
+    assert incomplete["roots"]["data"]["matched_files"] == 2
+    assert incomplete["roots"]["data"]["source_files"] == incomplete["roots"]["data"]["manifest_files"]
+    assert str(moved) not in json.dumps(incomplete)
 
 
 @pytest.mark.parametrize("relative", ["inside", "data/inside", "userdata/inside"])
