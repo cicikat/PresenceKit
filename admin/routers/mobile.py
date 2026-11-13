@@ -58,6 +58,12 @@ async def mobile_realtime_observability(auth=Depends(require_scopes("state.read"
     return snapshot()
 
 
+@router.get("/observability/mobile-delivery", summary="手机后台投递时延（无正文/凭据）")
+async def mobile_delivery_observability(auth=Depends(require_scopes("state.read"))):
+    from core.mobile_delivery_trace import snapshot
+    return snapshot()
+
+
 @router.post("/mobile/chat", summary="手机端普通对话（Bearer 鉴权）")
 @voice_context("mobile")
 async def mobile_chat(
