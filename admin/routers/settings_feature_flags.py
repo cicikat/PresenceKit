@@ -19,6 +19,7 @@ FLAGS = {
     "affective_engine": ("affective_engine", "enabled", "事件驱动的混合情绪与认知重评"),
     "screen_observation": ("screen_observation", "enabled", "角色按需截图（电脑与手机）"),
     "computer_use": ("computer_use", "enabled", "Windows Computer Use"),
+    "device_file_agent": ("device_file_agent", "enabled", "本地文件 Agent"),
     "ime_ingest": ("ime_ingest", "enabled", "IME 草稿与编辑事件接收"),
     "ime_awareness": ("ime_awareness", "enabled", "IME 活动理解与主动关心"),
     "qq":   ("qq",   "enabled", "QQ 通道"),
@@ -98,6 +99,12 @@ async def get_feature_flags(auth=Depends(require_scopes("admin"))):
             from admin.routers.wechat import operational_state
             item["effective_state"] = operational_state(enabled=enabled)["effective_state"]
             item["description"] = "默认关闭；需绑定 owner 和连接凭据，关闭即停止微信收发；详见运行配置"
+        elif name == "device_file_agent":
+            from core.agent_runtime.device_file_agent import snapshot
+            device_status = snapshot()
+            item["effective_state"] = ("disabled" if not enabled else "ready"
+                                       if device_status["devices_online"] else "no-active-device")
+            item["description"] = "默认关闭。开启后仍需在桌面授权文件或目录。关闭会停止发放命令，恢复普通聊天。"
         elif name == "computer_use":
             from core.agent_runtime.computer_use import snapshot
             status = snapshot(cfg)

@@ -158,6 +158,8 @@ app.include_router(coplay.router,              prefix="", tags=["陪玩"])
 from admin.routers import screen_observation
 from admin.routers import computer_use
 app.include_router(computer_use.router)
+from admin.routers import device_file_agent
+app.include_router(device_file_agent.router)
 app.include_router(screen_observation.router, tags=["按需截图"])
 app.include_router(perception.router,           prefix="", tags=["视觉感知"])
 app.include_router(spend.router,                prefix="", tags=["支出台账"])

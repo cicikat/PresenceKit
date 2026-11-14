@@ -2407,6 +2407,8 @@ from core.tools.image_gen import register_tools as _register_image_gen_tools
 _register_image_gen_tools(_TOOL_REGISTRY)
 from core.tools import gmail_tools as _gmail_tools
 _gmail_tools.register(_TOOL_REGISTRY)
+from core.tools import device_file_tools as _device_file_tools
+_device_file_tools.register(_TOOL_REGISTRY)
 from core.tools import character_intent_tools as _intent_tools
 _intent_tools.register(_TOOL_REGISTRY)
 
@@ -2612,6 +2614,8 @@ def get_tools_schema(
             continue
         if name in _computer_use.OWNER_TOOL_NAMES and (not _computer_use.enabled() or not _computer_use.owner_scope(uid, char_id)):
             continue
+        if name in _device_file_tools.NAMES and not _device_file_tools.service.allowed(uid, char_id):
+            continue
         if name in _gmail_tools.NAMES and not _gmail_tools.allowed(name, uid, char_id):
             continue
         if name in _QZONE_TOOL_NAMES:
@@ -2764,6 +2768,8 @@ def _build_probe_prompt(
     for name, spec in _TOOL_REGISTRY.items():
         if spec.get("probe") is False:
             continue
+        if name in _device_file_tools.NAMES:
+            continue
         if name in _computer_use.OWNER_TOOL_NAMES and allowed_tool_names is None:
             continue
         if allowed_tool_names is not None and name not in allowed_tool_names:
@@ -2879,7 +2885,7 @@ def _log_execute_failure_context(tool_name: str, tool_args: dict, origin: str) -
     参数/origin 都没有，出故障后完全没法反推真正发给 MCP 的是什么（Brief 120 排查
     cedartoy「command 参数必填」时吃过这个亏）。这里记完整 tool_args。
     """
-    if tool_name in _computer_use.OWNER_TOOL_NAMES or tool_name in _gmail_tools.NAMES:
+    if tool_name in _computer_use.OWNER_TOOL_NAMES | _gmail_tools.NAMES | _device_file_tools.NAMES:
         return
     try:
         args_repr = json.dumps(tool_args, ensure_ascii=False, default=str)
@@ -3039,7 +3045,7 @@ async def _execute_structured_impl(
     _trace_failure_reason = ""
 
     def _trace(status: str, digest_source=None) -> None:
-        if tool_name in _gmail_tools.NAMES | _intent_tools.NAMES:
+        if tool_name in _gmail_tools.NAMES | _intent_tools.NAMES | _device_file_tools.NAMES:
             return  # Private tools have content-free dispatcher receipts.
         try:
             from core.memory import action_trace
@@ -3144,6 +3150,11 @@ async def _execute_structured_impl(
     tool_info = _TOOL_REGISTRY[tool_name]
     if tool_info.get("autonomy_only") and (is_group or origin != "autonomy_loop"):
         return _execution_outcome("tool_failed", "intent_context_required")
+    if tool_name in _device_file_tools.NAMES and (
+        is_group or origin not in {"assistant_loop", "assistant_loop_relay"}
+        or not _device_file_tools.service.allowed(user_id, char_id)
+    ):
+        return _execution_outcome("tool_failed", "device_file_denied")
     if tool_name in _gmail_tools.NAMES and (
         is_group or origin not in {"assistant_loop", "assistant_loop_relay", "autonomy_loop"}
         or not _gmail_tools.allowed(tool_name, user_id, char_id)
@@ -3292,6 +3303,8 @@ async def _execute_structured_impl(
                 # Preserve the historical signature for test/local extensions
                 # that replace the legacy callable in the registry.
                 result = await func(user_id=user_id, **tool_args)
+        elif tool_name in _device_file_tools.NAMES:
+            result = _device_file_tools.format_result(await func(tool_name, user_id, char_id, tool_args))
         elif tool_name in _computer_use.OWNER_TOOL_NAMES:
             result = await func(user_id=user_id, char_id=char_id, **tool_args)
         elif tool_name in _gmail_tools.NAMES:
@@ -3387,7 +3400,7 @@ async def _execute_structured_impl(
         safe_summary = tool_result.safe_summary
         _trace_truncated = bool((tool_result.meta or {}).get("truncated"))
         _trace_failure_reason = str((tool_result.meta or {}).get("failure_reason") or "")[:128]
-        if tool_name in _gmail_tools.NAMES | _intent_tools.NAMES:
+        if tool_name in _gmail_tools.NAMES | _intent_tools.NAMES | _device_file_tools.NAMES:
             validity = tool_result.meta.get("validity")
             if validity == "current_turn":
                 await _notify_status("finished")
@@ -3521,7 +3534,7 @@ async def execute_structured(
     if origin in _EXECUTE_ALLOWED_ORIGINS:
         from core.tool_audit import record as record_tool_audit
         record_tool_audit(user_id, char_id, tool=tool_name,
-                          args={} if tool_name in _gmail_tools.NAMES | _intent_tools.NAMES else tool_args,
+                          args={} if tool_name in _gmail_tools.NAMES | _intent_tools.NAMES | _device_file_tools.NAMES else tool_args,
                           origin=origin, outcome=outcome)
     return outcome
 

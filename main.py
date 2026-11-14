@@ -1050,6 +1050,8 @@ async def _main_with_services():
         try:
             from core.agent_runtime.agent_tasks import shutdown as _stop_agent_tasks
             await _stop_agent_tasks()
+            from core.agent_runtime.device_file_agent import shutdown as _stop_device_file_agent
+            await _stop_device_file_agent()
         except Exception:
             logger.warning("Agent Runtime executable-task workers failed to stop", exc_info=True)
         try:

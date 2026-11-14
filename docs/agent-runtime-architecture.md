@@ -367,6 +367,12 @@ never replay. If that day's diary file is still missing after the Reality task
 is terminal, the next `inner_diary_write` tick mints a fresh task instead of
 reusing the exhausted key.
 
+## 318 device file capability
+
+`device_workspace_list`, `device_file_task_start`, `device_file_task_status`,
+`device_file_task_control` and `device_file_task_cancel` coordinate owner-bound desktop file work. The same Reality
+principal and Work Session manage the task budget and receipt. See [device file protocol](device-file-agent-contract.md).
+
 ## Brief 233 workspace capability
 
 The workspace adapter is separate from the legacy read-only `fs_access` tools and from the proposed

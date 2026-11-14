@@ -77,7 +77,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 def _private_gmail_context(messages: list[dict]) -> bool:
-    return any(message.get("_private_gmail_result") or message.get("_private_character_intent")
+    return any(message.get("_private_gmail_result") or message.get("_private_character_intent") or message.get("_private_device_file")
                for message in messages)
 
 

@@ -290,6 +290,8 @@ hardware worker
 
 Hardware job manager 在 Pipeline setup 后由 `main.py` 启动。它会把前一个进程留下的 active job 标记为 `expired`，尝试显式停止，并在 shutdown 时注销 device-disconnect listener。Worker 永远不会从 module import 时启动。
 
+本地文件 Agent worker 由 owner 的 Path C 工具启动，退出时由 `main.py` 停止。已下发的写入保留回执绑定，重启后只核对回执。
+
 模块不应在 import 时静默创建 background task。
 
 ---

@@ -162,6 +162,7 @@ async function submitFactModal() {
 // ══════════════════════════════════════════════════════════
 async function loadScreenPeekSettings() {
   void loadComputerUse();
+  void loadDeviceFileAgent();
   try {
     const d = await api('GET', '/settings/screen-peek');
     document.getElementById('sp-enabled').checked = !!d.enabled;
@@ -179,6 +180,40 @@ async function saveScreenPeekSettings() {
   } catch (e) { toast(t('common.save_failed', '保存失败: {error}', {error: e.message}), 'err'); }
 }
 
+
+async function loadDeviceFileAgent() {
+  const toggle = document.getElementById('device-file-enabled');
+  const save = document.getElementById('device-file-save');
+  const state = document.getElementById('device-file-state');
+  if (!toggle || !save || !state) return;
+  try {
+    const { flags } = await api('GET', '/settings/feature-flags');
+    const item = flags?.device_file_agent;
+    if (!item) {
+      state.textContent = t('device_file_agent.unavailable', '无法读取状态');
+      return;
+    }
+    toggle.checked = item.enabled;
+    toggle.disabled = save.disabled = false;
+    state.textContent = t('device_file_agent.state.' + item.effective_state, item.effective_state);
+  } catch {
+    state.textContent = t('device_file_agent.unavailable', '无法读取状态');
+  }
+}
+
+async function saveDeviceFileAgent() {
+  const toggle = document.getElementById('device-file-enabled');
+  const save = document.getElementById('device-file-save');
+  if (!toggle || !save || save.disabled) return;
+  save.disabled = toggle.disabled = true;
+  try {
+    await api('PUT', '/settings/feature-flags', {flags: {device_file_agent: toggle.checked}});
+  } catch (error) {
+    toast(error.message, 'err');
+  } finally {
+    await loadDeviceFileAgent();
+  }
+}
 
 async function loadComputerUse() {
   const toggle = document.getElementById('cu-enabled');

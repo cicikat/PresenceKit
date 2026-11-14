@@ -204,6 +204,8 @@ python run_test.py
 
 ## 工作惯例
 
+**直接在当前仓库和当前分支施工，禁止为施工新建分支或 worktree。需要按规则交付 PR 时，在提交验证完成后再建立仅供交付的分支。**
+
 ### 三仓 Android 正式签名交接
 
 涉及 `Emerald-mobile`/`PresenceKit-mobile` 正式 APK、GitHub Release 或 release CI 重跑时，不要假设签名材料在 mobile
