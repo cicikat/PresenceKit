@@ -95,7 +95,18 @@ Windows / Python 3.12.13 验证命令（解释器使用项目支持的虚拟环�
 
 回归使用真实 dispatcher、HTTP poll/result 与只读观测入口；设备和 DDGS 只在外部边界替换。覆盖失败任务的 dispatch/audit/display 一致性、无效计划恢复、真正额度耗尽、无写入误完成、规划超时、未知写入不重放、owner/character/origin 拒绝，以及搜索异常/超时/空/成功结果。新增未知写入用例短暂撤销状态映射后，在 `tool_executed != outcome_unknown` 的业务断言上失败；恢复修复后通过。搜索日志脱敏用例先捕获到 traceback 中的合成私密文本，改用仅异常类名日志后通过。此前文件失败、计划和 autonomy 暴露用例也已先复现业务红灯。
 
-本次未运行完整全量；相关回归与核心 smoke 已覆盖后端改动。未改管理面静态资源、桌面或手机的授权/传输协议及设置，因此无需客户端版本或静态缓存升级。浏览器可见效果、实际桌面文件操作和真实 DDGS 连通性未验证；自动化覆盖既有展示活动的状态字段，不能代替实机验收。历史缺失证据仍按上文列明，不由测试补成生产事实。
+本地未运行完整全量；相关回归与核心 smoke 已覆盖后端改动，远端全量结果见下节。未改管理面静态资源、桌面或手机的授权/传输协议及设置，因此无需客户端版本或静态缓存升级。工具失败状态的实机可见效果、实际桌面文件操作和真实 DDGS 连通性未验证；CI 管理面浏览器合同和展示活动字段测试不能代替这些实机验收。历史缺失证据仍按上文列明，不由测试补成生产事实。
+
+## CI 交付与基线失败
+
+修复提交 `55eba08186fc87ecf104a758ece28d5fee57d52a` 已提交到 [PR #10](https://github.com/cicikat/PresenceKit/pull/10)。该 head 的 Python 3.10/3.12 smoke、管理面 browser 和 offline 检查通过；[双版本全量](https://github.com/cicikat/PresenceKit/actions/runs/43598344840) 均为 8298 passed、2 failed、71 skipped，失败项一致：
+
+- `tests/test_computer_use.py::test_tool_loop_offers_scoped_definitions_and_prompt_on_first_turn[owner]`
+- `tests/test_prompt_language.py::test_tool_annotations_are_english_but_schema_values_unchanged`
+
+共同原因是 `computer_use_start` 中文工具描述与英文翻译条目的 `source` 不一致，英文模式回退到中文。2026-11-14 使用 `git archive` 导出修复前基线 `60a2da9caf3797f86c964c3c53acdfaf8ecb6dc9` 到独立临时源码快照，配置仅复制公开 `config.example.yaml`，设置 `SKIP_CROSS_REPO=1`，在 Windows / Python 3.12.13 下单独运行上述两项，得到相同业务断言失败（2 failed，22.42s）。未切换当前分支或覆盖工作区。
+
+这是修复前已存在的翻译缺陷，已记入 [known-issues](known-issues.md)。本工单保持工具异常修复范围，不修改该翻译模块。全量 CI 尚未通过，PR 保持未合并；相关定向回归通过不等于完整合并门禁通过。本节仅将检查结果归属于对应 SHA，后续文档提交的检查以其自身 head 为准。
 
 ## 生产环境零变更声明
 

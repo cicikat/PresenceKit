@@ -1,3 +1,9 @@
+## Computer Use 英文工具描述与全量 CI（2026-11-14，open）
+
+`computer_use_start` 的中文描述已改为桌面偏好开启权限并提供目标窗口，但英文翻译条目的 `source` 仍为旧版临时授权描述，英文模式回退到中文。PR #10 的 Python 3.10/3.12 全量均在 `test_tool_loop_offers_scoped_definitions_and_prompt_on_first_turn[owner]` 和 `test_tool_annotations_are_english_but_schema_values_unchanged` 失败；两版本均为 8298 passed、2 failed、71 skipped。
+
+在修复前基线 `60a2da9caf3797f86c964c3c53acdfaf8ecb6dc9` 的独立临时源码快照中，使用公开示例配置及 Python 3.12.13 单独运行这两项，同样 2 failed。此问题先于文件工具/搜索异常修复，需另单同步翻译并复跑既有回归。CI 与复现范围见 [生产取证报告](311-vps-evidence.md#ci-交付与基线失败)。
+
 ## 本地文件 Agent 318（open）
 
 322 的独立文件权限开关、任务接续和 Computer Use 选窗已覆盖本地代码及协议测试。角色经生产模型发起操作、Windows 切到实机目标窗口，以及打包客户端和物理紧急停止仍待验证。
