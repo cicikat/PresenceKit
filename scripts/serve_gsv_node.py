@@ -75,7 +75,7 @@ def create_app(*, api_url: str, key: str, resources: dict[str, dict[str, Path]])
                                    timeout=aiohttp.ClientTimeout(total=2)) as response:
                 if response.status != 200:
                     raise HTTPException(503, "node_offline")
-        except TimeoutError:
+        except (TimeoutError, asyncio.TimeoutError):
             if needs_recovery:
                 raise HTTPException(429, "node_busy") from None
             raise HTTPException(503, "node_offline") from None

@@ -375,6 +375,10 @@ async def _execute(
         "PYTHONNOUSERSITE": "1",
         "PYTHONUNBUFFERED": "1",
     }
+    # Windows Python 3.10 needs this to initialize its random source. Keep the
+    # subprocess environment allowlisted instead of inheriting parent secrets.
+    if os.name == "nt" and os.environ.get("SystemRoot"):
+        env["SystemRoot"] = os.environ["SystemRoot"]
     started = time.monotonic()
     initial_disk_bytes = _tree_size(workspace_root)
     kwargs: dict[str, Any] = {
