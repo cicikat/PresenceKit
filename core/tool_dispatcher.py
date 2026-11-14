@@ -2396,7 +2396,8 @@ _TOOL_REGISTRY["get_ambient_state"] = {
     "parameters": {
         "type": "object",
         "additionalProperties": False,
-        "properties": {"device": {"type": "string", "enum": ["desktop", "phone"]}},
+        "properties": {"device": {"type": "string", "enum": ["desktop", "phone"],
+                                   "description": "Select desktop or phone. Omit to include both devices."}},
         "required": [],
     },
     "examples": ["房间光线最近有变化吗", "手机能读到周围的亮度吗"],
