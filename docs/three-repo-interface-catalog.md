@@ -1371,3 +1371,7 @@ AGENT-06D 新后端通过 `visual_verify_supported` 声明能力，新桌面再�
 ### 313–314 环境观测（observe）
 
 `POST /sensor/ambient` 接收显式启用后的分项统计。要求 desktop 或 mobile 单设备 profile 和同凭据 Reality 会话；服务端推导 owner、角色和设备来源。设备用独立令牌区分，轮换或撤销立即停止该令牌数据的读取。旧的 sensor 入口兼容。`GET /sensor/ambient?device=desktop|phone` 需 `state.read`。同一角色可用 `get_ambient_state` 读取短期状态。样本 120 秒内过期，过期后不暴露测量值。桌面只报摄像头相对亮度及混合声级，手机 lux 来自真实照度传感器。确认的桌面明暗变化可以进入 Autonomy 的静默反思；候选随事实过期。设备级别锁屏、权限撤销、误报率及功耗待真机验证。可分别回退两端的采集提交及后端契约。
+
+### 317 Android system push (observe)
+
+FCM registration requires a mobile profile and a Reality session issued to the same credential. `PUT/DELETE /mobile/push/devices/self` manage a device installation, `GET /mobile/push/devices/status` returns status only, and `GET /mobile/push/message` reads one existing queued row for a valid binding and exact message ID/sequence. That read does not ACK a shared queue prefix. Existing foreground history and poll/ACK own recovery. When a proactive row has eligible FCM targets, one FCM publish path is selected; the existing relay remains available when there is no matching registration. Desktop REST/WS remain unchanged. Live acceptance and setup are tracked in [317 device feasibility](fcm-device-feasibility.md).

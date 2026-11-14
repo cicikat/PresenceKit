@@ -686,3 +686,8 @@ QQ 默认 outbound_mode=reply_only：只回复 QQ 发起的当轮输入，不参
 ## 情绪内外分离与 avatar 来源（2026-10-25）
 
 /mood/state 的 current/intensity/has_signal 继续代表明确表达；新增 affect 为内在模拟投影，不应替代前端表情。事件正文独立在 memory.read 的 /mood/events。avatar_directive 新增可选 char_id/version/source_turn_id/source_at/expires_at；后端仍发旧白名单表达且 ttl_ms=6000，绝不由内部怒意强制覆盖微笑。更新桌面在统一 WS action 入口拒绝跨角色、过期和重复/乱序包，扣除传输延迟后保留TTL，丢弃仍ACK收件；旧无版本包兼容。手机仍使用既有轮询表达，未新增动作接口。详见 [affective-engine.md](affective-engine.md)。
+
+
+### 317 mobile system push
+
+The queue commits before wake selection. Proactive turn fanout can select data-only FCM for the matching owner and character. Ordinary chat continues to use its existing delivery paths. FCM registration is encrypted with a deployment secret and expires after 14 days without renewal. Client-side revocation suppresses new notifications immediately. Android background body reconciliation reads one exact message and leaves prefix ACK to the existing queue consumer. Provider acceptance is available in the existing delivery timing trace.
