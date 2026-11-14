@@ -99,6 +99,31 @@ def test_force_stream_roundtrip_and_protocol_guard(admin_client):
     assert response.json()["preset"]["force_stream"] is False
 
 
+def test_stream_compatibility_and_recovery_roundtrip(admin_client, monkeypatch):
+    """Operators can hot-update and disable policy without changing credentials."""
+    client, path = admin_client
+    _write_cfg(path)
+    reload_client = AsyncMock()
+    monkeypatch.setattr("core.llm_client.reload_client", reload_client)
+    route = "/model-presets/presets/deepseek-default"
+    response = client.put(route, headers=_auth(), json={
+        "force_stream": True, "stream_compatibility": "openlux",
+        "protocol_recovery": "nonstream_then_fallback"})
+    assert response.status_code == 200
+    assert response.json()["preset"]["stream_compatibility"] == "openlux"
+    assert response.json()["preset"]["protocol_recovery"] == "nonstream_then_fallback"
+    saved = yaml.safe_load(path.read_text(encoding="utf-8"))["model_presets"]["presets"]["deepseek-default"]
+    assert saved["api_key"] == "sk-existing-secret-key"
+    assert saved["protocol_recovery"] == "nonstream_then_fallback"
+    reload_client.assert_awaited_once()
+    assert client.put(route, headers=_auth(), json={"stream_compatibility": "ignore_all"}).status_code == 422
+    assert client.put(route, headers=_auth(), json={"force_stream": False, "api_protocol": "responses"}).status_code == 422
+    response = client.put(route, headers=_auth(), json={
+        "force_stream": False, "api_protocol": "responses", "stream_compatibility": "strict", "protocol_recovery": "off"})
+    assert response.status_code == 200
+    assert response.json()["preset"]["protocol_recovery"] == "off"
+
+
 # ── PUT /model-presets/presets/{name} ──────────────────────────────────────────
 
 def test_put_creates_new_preset(admin_client):

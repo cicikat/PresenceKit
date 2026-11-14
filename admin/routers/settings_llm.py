@@ -865,6 +865,8 @@ def _mask_presets(presets: dict) -> dict:
     masked = {}
     for name, p in presets.items():
         entry = dict(p)
+        entry.setdefault("stream_compatibility", "strict")
+        entry.setdefault("protocol_recovery", "off")
         if "api_key" in entry:
             entry["api_key"] = _mask_key(entry["api_key"])
         masked[name] = entry
@@ -1198,6 +1200,8 @@ async def set_default_preset(body: DefaultPresetUpdate, auth=Depends(require_sco
 class PresetUpsert(BaseModel):
     provider_kind: Optional[str] = None
     force_stream: Optional[bool] = None
+    stream_compatibility: Optional[Literal["strict", "openlux"]] = None
+    protocol_recovery: Optional[Literal["off", "fallback", "nonstream_then_fallback"]] = None
     api_protocol: Optional[str] = None
     anthropic_auth_mode: Optional[str] = None
     base_url: Optional[str] = None
@@ -1289,6 +1293,10 @@ async def upsert_preset(name: str, body: PresetUpsert, auth=Depends(require_scop
     existing.update(update_data)
     if existing.get("force_stream") and existing.get("api_protocol", "chat_completions") != "chat_completions":
         raise HTTPException(status_code=422, detail="强制流式请求目前仅支持 Chat Completions 协议。")
+    if existing.get("api_protocol", "chat_completions") != "chat_completions" and (
+        existing.get("stream_compatibility", "strict") != "strict" or existing.get("protocol_recovery", "off") != "off"
+    ):
+        raise HTTPException(status_code=422, detail="流兼容与协议恢复目前仅支持 Chat Completions。")
     presets[name] = existing
     _validate_decision_routes(mp)
 

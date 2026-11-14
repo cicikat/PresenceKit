@@ -780,6 +780,19 @@ preserve keys. Ready is not tested. Runtime metadata uses
 
 ## Forced streaming compatibility (2026-09-09)
 
+2026-11-15: The admin Preset editor also exposes `stream_compatibility` (`strict` by default,
+optional `openlux`) and `protocol_recovery` (`off` by default, optional `fallback` or
+`nonstream_then_fallback`). Existing admin GET/PUT model configuration hot reloads both and
+returns effective defaults; non-default policies require Chat Completions. Turning them off
+restores strict trailer parsing and the existing protocol-error behavior. Recovery applies to
+buffered create calls before tool results exist: at most one nonstream attempt and one configured
+fallback within the existing time budget. Completed tool receipts prohibit automatic replay,
+including after prompt conversion. API-call observability retains the failed primary and each
+recovery/fallback attempt. No new scope or desktop/mobile setting is needed. Chromium hard-refresh
+verification completed for defaults, saving, reopening, disabling and credential preservation
+through the actual admin API. See [model-presets.md](model-presets.md) for the exact parser boundary
+and live-probe evidence limits.
+
 `model_presets.presets.<name>.force_stream` defaults to false. The admin Preset editor exposes it through existing admin-only GET/PUT model configuration with hot reload. Chat Completions only; unsupported protocol combinations are rejected. The selected preset governs both tool decisions and final generation for all channels. Clients do not duplicate this setting or request extra scopes. Request snapshots expose the actual stream flag. Browser verification is incomplete: this session provides no Browser execution tool. JS syntax and focused API/protocol regressions provide alternative validation; real gateway verification remains observe.
 
 

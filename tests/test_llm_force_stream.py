@@ -94,6 +94,62 @@ async def test_empty_usage_choice_and_duplicate_terminal_preserve_tool_turn():
 
 
 @pytest.mark.asyncio
+async def test_openlux_observed_trailers_preserve_completed_tool_call():
+    """Gateway role/stop trailers must not erase a completed document action."""
+    from openai.types.chat import ChatCompletionChunk
+    def wire(delta, finish=None, usage=None):
+        return ChatCompletionChunk(id="synthetic", created=0, model="fixture",
+            object="chat.completion.chunk", choices=[{
+                "index": 0, "delta": delta, "finish_reason": finish}], usage=usage)
+    terminal = wire({"role": "assistant", "content": "", "tool_calls": [{
+        "index": 0, "id": "doc", "type": "function", "function": {
+            "name": "write_document", "arguments": '{"path":"protocol-test.md","content":"hello"}'}}]}, "tool_calls")
+    mc, stream, _ = client([terminal, terminal,
+        wire({"role": "assistant", "content": ""}), wire({}, "stop"),
+        NS(choices=[], usage=NS(total_tokens=237))])
+    mc.stream_compatibility = "openlux"
+    result = await create(mc, [], gen_kwargs={})
+    assert result.status == "tool_calls"
+    assert [(c.id, c.name, c.arguments) for c in result.tool_calls] == [
+        ("doc", "write_document", {"path": "protocol-test.md", "content": "hello"})]
+    assert result.usage["total_tokens"] == 237
+    stream.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("tail", [
+    chunk("new text"), chunk(calls=[call(0, args="}")]),
+    chunk(reasoning="new reasoning"), chunk(finish="length"),
+    NS(choices=[NS(index=0, delta=NS(role="user"), finish_reason=None)]),
+])
+async def test_openlux_still_rejects_conflicts_after_tools(tail):
+    """Opt-in compatibility must never execute extra or truncated tool data."""
+    mc, stream, _ = client([
+        chunk(calls=[call(0, "a", "write_document", '{}')], finish="tool_calls"), tail])
+    mc.stream_compatibility = "openlux"
+    with pytest.raises(UpstreamResponseFormatError):
+        await create(mc, [], gen_kwargs={})
+    stream.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_strict_mode_rejects_observed_role_and_stop_trailers():
+    """Existing presets retain their validation unless explicitly opted in."""
+    mc, _, _ = client([chunk(calls=[call(0, "a", "write_document", "{}")], finish="tool_calls"),
+        NS(choices=[NS(index=0, delta=NS(role="assistant", content=""), finish_reason=None)]), chunk(finish="stop")])
+    with pytest.raises(UpstreamResponseFormatError):
+        await create(mc, [], gen_kwargs={})
+
+
+@pytest.mark.asyncio
+async def test_duplicate_tool_ids_are_rejected_before_execution():
+    mc, _, _ = client([chunk(calls=[call(0, "same", "first", "{}"),
+        call(1, "same", "second", "{}")], finish="tool_calls")])
+    with pytest.raises(UpstreamResponseFormatError, match="duplicate tool call ids"):
+        await create(mc, [], gen_kwargs={})
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("tail", [
     chunk("late text"), chunk(calls=[call(0, args="}")]),
     chunk(reasoning="late reasoning"), chunk(finish="length"),

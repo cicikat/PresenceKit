@@ -41,6 +41,123 @@ def _timeout(msg="timed out"):
     return err
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("recovery, tool_history, expected", [
+    ("off", False, ["primary"]),
+    ("fallback", False, ["primary", "fallback"]),
+    ("nonstream_then_fallback", False, ["primary", "primary", "fallback"]),
+    ("nonstream_then_fallback", True, ["primary"]),
+])
+async def test_protocol_recovery_is_bounded_and_does_not_replay_tools(monkeypatch, recovery, tool_history, expected):
+    """A failed model round may recover only before any tool result exists."""
+    from core import llm_failover as fo
+    from core.llm_protocol import UpstreamResponseFormatError
+    primary, fallback = _mc("primary"), _mc("fallback")
+    primary.force_stream = True
+    primary.protocol_recovery = recovery
+    seen, rows = [], []
+    async def create(mc, messages, **kwargs):
+        seen.append(mc.name)
+        if mc.name == "primary":
+            if len(seen) == 2:
+                assert mc.force_stream is False
+            raise UpstreamResponseFormatError("synthetic invalid completion")
+        return _ok("recovered")
+    monkeypatch.setattr("core.llm_protocol.create", create)
+    monkeypatch.setattr(fo, "resolve_fallback_client", lambda *a, **k: (fallback, ""))
+    monkeypatch.setattr("core.api_call_log.append", lambda **row: rows.append(row))
+    messages = [{"role": "user", "content": "write a document"}]
+    if tool_history:
+        messages += [{"role": "tool", "tool_call_id": "completed-write", "content": "written"}]
+    outcome = await execute_create(call_category="chat", primary_mc=primary,
+        prepare=lambda mc: PreparedAttempt(messages=messages), caller="test")
+    assert seen == expected
+    assert outcome.ok is (expected[-1] == "fallback")
+    assert rows[0]["error_category"] == "protocol_incompatible"
+    if tool_history:
+        assert outcome.skip_reason == "tool_history_present"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("prior_failures", [0, 2])
+async def test_protocol_nonstream_success_does_not_use_fallback(monkeypatch, prior_failures):
+    from core import llm_failover as fo
+    from core.llm_protocol import UpstreamResponseFormatError
+    primary = _mc("primary")
+    primary.force_stream = True
+    primary.protocol_recovery = "nonstream_then_fallback"
+    for _ in range(prior_failures):
+        fo.breaker_record(primary.name, "chat", "protocol_incompatible", ok=False, protocol_recovery=True)
+    seen, rows = [], []
+    async def create(mc, messages, **kwargs):
+        seen.append(mc.force_stream)
+        if mc.force_stream:
+            raise UpstreamResponseFormatError("synthetic bad stream")
+        return _ok("document ready")
+    monkeypatch.setattr("core.llm_protocol.create", create)
+    monkeypatch.setattr(fo, "resolve_fallback_client", lambda *a, **k: (_mc("fallback"), ""))
+    monkeypatch.setattr("core.api_call_log.append", lambda **row: rows.append(row))
+    outcome = await execute_create(call_category="chat", primary_mc=primary,
+        prepare=lambda mc: PreparedAttempt(messages=[]), caller="test")
+    assert outcome.ok and outcome.value.assistant_text == "document ready"
+    assert seen == [True, False]
+    assert primary.force_stream is True
+    assert [(r["route_role"], r["ok"]) for r in rows] == [("primary", False), ("recovery", True)]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("messages, marked", [
+    ([{"role": "system", "content": "result after conversion"}], True),
+    ([{"role": "system", "content": "result", "_layer": "autonomy_tool_result"}], False),
+    ([{"type": "function_call_output", "call_id": "done", "output": "written"}], False),
+    ([{"role": "user", "content": [{"type": "tool_result", "tool_use_id": "done", "content": "written"}]}], False),
+])
+async def test_protocol_recovery_preserves_converted_tool_history(monkeypatch, messages, marked):
+    """Native and converted tool receipts must all prevent automatic replay."""
+    from core import llm_failover as fo
+    from core.llm_protocol import UpstreamResponseFormatError
+    primary = _mc("primary")
+    primary.force_stream = True
+    primary.protocol_recovery = "nonstream_then_fallback"
+    seen = []
+    async def create(mc, messages, **kwargs):
+        seen.append(mc.name)
+        if mc.name == "primary":
+            raise UpstreamResponseFormatError("synthetic bad stream")
+        return _ok("must not recover")
+    monkeypatch.setattr("core.llm_protocol.create", create)
+    monkeypatch.setattr(fo, "resolve_fallback_client", lambda *a, **k: (_mc("fallback"), ""))
+    outcome = await execute_create(call_category="chat", primary_mc=primary,
+        prepare=lambda mc: PreparedAttempt(messages=messages, has_tool_results=marked), caller="test")
+    assert not outcome.ok and outcome.skip_reason == "tool_history_present"
+    assert seen == ["primary"]
+
+
+@pytest.mark.asyncio
+async def test_repeated_protocol_failures_open_breaker_and_use_fallback(monkeypatch):
+    """Repeated invalid streams stop spending primary requests during cooldown."""
+    from core import llm_failover as fo
+    from core.llm_protocol import UpstreamResponseFormatError
+    primary = _mc("primary")
+    primary.protocol_recovery = "fallback"
+    primary_requests = []
+    async def create(mc, messages, **kwargs):
+        if mc.name == "primary":
+            primary_requests.append(mc.name)
+            raise UpstreamResponseFormatError("synthetic bad stream")
+        return _ok("recovered")
+    monkeypatch.setattr("core.llm_protocol.create", create)
+    monkeypatch.setattr(fo, "resolve_fallback_client", lambda *a, **k: (_mc("fallback"), ""))
+    rows = []
+    monkeypatch.setattr("core.api_call_log.append", lambda **row: rows.append(row))
+    for _ in range(4):
+        outcome = await execute_create(call_category="chat", primary_mc=primary,
+            prepare=lambda mc: PreparedAttempt(messages=[]), caller="test")
+        assert outcome.ok and outcome.value.assistant_text == "recovered"
+    assert len(primary_requests) == 3
+    assert any(row.get("skip_reason") == "breaker_open" for row in rows)
+
+
 @pytest.fixture(autouse=True)
 def _reset_failover(monkeypatch):
     clear_breakers()

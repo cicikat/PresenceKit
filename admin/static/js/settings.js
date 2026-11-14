@@ -1207,6 +1207,8 @@ function _openPresetModal(name) {
     document.getElementById('mr-preset-kind').value = p.provider_kind || 'openai';
     document.getElementById('mr-preset-api-protocol').value = p.api_protocol || 'chat_completions';
     document.getElementById('mr-preset-force-stream').checked = p.force_stream === true;
+    document.getElementById('mr-preset-stream-compatibility').value = p.stream_compatibility || 'strict';
+    document.getElementById('mr-preset-protocol-recovery').value = p.protocol_recovery || 'off';
     document.getElementById('mr-preset-anthropic-auth-mode').value = p.anthropic_auth_mode || 'x_api_key';
     document.getElementById('mr-preset-tool-mode').value = p.tool_call_mode || 'function_calling';
     document.getElementById('mr-preset-base-url').value = p.base_url || '';
@@ -1225,6 +1227,8 @@ function _openPresetModal(name) {
     document.getElementById('mr-preset-kind').value = 'openai';
     document.getElementById('mr-preset-api-protocol').value = 'chat_completions';
     document.getElementById('mr-preset-force-stream').checked = false;
+    document.getElementById('mr-preset-stream-compatibility').value = 'strict';
+    document.getElementById('mr-preset-protocol-recovery').value = 'off';
     document.getElementById('mr-preset-anthropic-auth-mode').value = 'x_api_key';
     document.getElementById('mr-preset-tool-mode').value = 'function_calling';
     document.getElementById('mr-preset-base-url').value = '';
@@ -1321,6 +1325,8 @@ async function submitPresetModal() {
     provider_kind: document.getElementById('mr-preset-kind').value,
     api_protocol: document.getElementById('mr-preset-api-protocol').value,
     force_stream: document.getElementById('mr-preset-force-stream').checked,
+    stream_compatibility: document.getElementById('mr-preset-stream-compatibility').value,
+    protocol_recovery: document.getElementById('mr-preset-protocol-recovery').value,
     anthropic_auth_mode: document.getElementById('mr-preset-anthropic-auth-mode').value,
     tool_call_mode: document.getElementById('mr-preset-tool-mode').value,
     base_url: document.getElementById('mr-preset-base-url').value.trim(),

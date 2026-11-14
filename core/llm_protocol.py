@@ -946,12 +946,14 @@ async def _create(
     return _normalize_responses(mc, response)
 
 
-def _empty_chat_delta(delta: Any) -> bool:
+def _empty_chat_delta(delta: Any, *, allow_assistant_role: bool = False) -> bool:
     """Only empty transport trailers may follow a completed buffered turn."""
     if delta is None:
         return True
     dump = getattr(delta, "model_dump", None)
     fields = dump(exclude_none=True) if callable(dump) else vars(delta)
+    if allow_assistant_role and fields.get("role") == "assistant":
+        fields = {key: value for key, value in fields.items() if key != "role"}
     return all(value is None or value == "" or value == [] or value == {}
                for value in fields.values())
 
@@ -966,6 +968,9 @@ async def _collect_chat_stream(mc, messages, kwargs, capture) -> NormalizedRespo
     calls: dict[int, dict] = {}
     finish = None
     usage = None
+    compatible = getattr(mc, "stream_compatibility", "strict") == "openlux"
+    terminal_choice = None
+    terminal_id = None
     try:
         async for chunk in stream:
             usage = getattr(chunk, "usage", None) or usage
@@ -973,6 +978,8 @@ async def _collect_chat_stream(mc, messages, kwargs, capture) -> NormalizedRespo
             choices = getattr(chunk, "choices", None)
             if not choices:
                 continue
+            if compatible and (len(choices) != 1 or getattr(choices[0], "index", 0) != 0):
+                raise _format_error(mc, "Chat stream contains unexpected choice indices")
             choice = choices[0]
             if getattr(choice, "index", 0) != 0:
                 continue
@@ -981,7 +988,11 @@ async def _collect_chat_stream(mc, messages, kwargs, capture) -> NormalizedRespo
                 # Some gateways retain an empty choices[0] in the usage
                 # trailer and repeat the same terminal marker. Never merge
                 # new content or tool fragments after completion.
-                if getattr(choice, "finish_reason", None) in (None, finish) and _empty_chat_delta(delta):
+                tail_finish = getattr(choice, "finish_reason", None)
+                if compatible and terminal_id and getattr(chunk, "id", None) == terminal_id and _as_dict(choice) == terminal_choice:
+                    continue
+                allowed_finish = (None, finish, "stop") if compatible and finish == "tool_calls" else (None, finish)
+                if tail_finish in allowed_finish and _empty_chat_delta(delta, allow_assistant_role=compatible):
                     continue
                 raise _format_error(mc, "Chat stream contains choices after completion")
             for key in ("reasoning_content", "reasoning"):
@@ -993,6 +1004,8 @@ async def _collect_chat_stream(mc, messages, kwargs, capture) -> NormalizedRespo
                 parts.append(text)
                 capture.text.append(text)
             for call in getattr(delta, "tool_calls", None) or []:
+                if getattr(call, "type", None) not in (None, "function"):
+                    raise _format_error(mc, "Chat stream contains unsupported tool call type")
                 index = getattr(call, "index", None)
                 if type(index) is not int or index < 0:
                     raise _format_error(mc, "Chat stream tool call is missing index")
@@ -1011,12 +1024,17 @@ async def _collect_chat_stream(mc, messages, kwargs, capture) -> NormalizedRespo
                             raise _format_error(mc, "Chat stream tool delta is not text")
                         accumulated[key] += fragment
             finish = getattr(choice, "finish_reason", None)
+            if finish is not None:
+                terminal_choice = _as_dict(choice)
+                terminal_id = getattr(chunk, "id", None)
         if finish is None:
             raise _format_error(mc, "Chat stream ended before finish_reason")
         if calls and finish != "tool_calls":
             raise _format_error(mc, "Chat stream ended without completing tool calls")
         if finish == "tool_calls" and not calls:
             raise _format_error(mc, "Chat stream completed tools without tool calls")
+        if len({call["id"] for call in calls.values()}) != len(calls):
+            raise _format_error(mc, "Chat stream contains duplicate tool call ids")
         response = SimpleNamespace(
             choices=[SimpleNamespace(
                 finish_reason=finish,

@@ -618,6 +618,75 @@ async def test_action_trace_recorded_per_step(monkeypatch, sandbox):
     )
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["none", "before_tools", "after_write"])
+async def test_buffered_gateway_document_is_written_once(monkeypatch, sandbox, tmp_path, failure):
+    """Real loop, parser and dispatcher: recover before tools, never replay a write."""
+    from types import SimpleNamespace as NS
+    from unittest.mock import AsyncMock
+    from core import llm_failover
+    from core.llm_protocol import UpstreamResponseFormatError
+    from core.model_registry import ModelClient
+    from core.session_state import SessionState
+    from core.agent_runtime.task_manager import observability_snapshot
+    from tests.test_llm_force_stream import Stream, chunk, call
+
+    root = tmp_path / "workspace"
+    root.mkdir()
+    cfg = _patch_tool_loop_config(monkeypatch, categories=["fs"], exclude_tools=[])
+    cfg["workspace_access"] = {"enabled": True, "roots": [str(root)],
+        "permissions": {"read": True, "list": True, "create": True}}
+    _patch_tools_schema(monkeypatch, ["workspace_create"])
+    monkeypatch.setattr("core.agent_runtime.workspace._project_data", lambda: root / "protected")
+    monkeypatch.setattr("core.llm_reasoning_store.Capture.save", AsyncMock())
+    llm_failover.clear_breakers()
+    monkeypatch.setattr(llm_failover, "resolve_fallback_client", lambda *a, **k: (None, "not_configured"))
+    requests = []
+
+    async def sdk_create(**kwargs):
+        requests.append(kwargs)
+        names = [(t.get("function") or t)["name"] for t in kwargs.get("tools", [])]
+        if failure == "after_write" and (root / "result.md").exists():
+            return Stream([chunk("unfinished")])
+        if failure == "before_tools" and len(requests) == 1:
+            return Stream([chunk(calls=[call(0, "partial", "workspace_create", "{")], finish="tool_calls")])
+        name = "load_tools_fs" if "load_tools_fs" in names else "workspace_create"
+        args = {} if name.startswith("load_tools_") else {"path": "result.md", "content": "# Verified document\n"}
+        if not names or (root / "result.md").exists():
+            return Stream([chunk("Document created.", finish="stop")])
+        if not kwargs.get("stream"):
+            return NS(choices=[NS(finish_reason="tool_calls", message=NS(content="", tool_calls=[
+                NS(id=name, type="function", function=NS(name=name, arguments=json.dumps(args))) ]))])
+        terminal = chunk(calls=[call(0, name, name, json.dumps(args))], finish="tool_calls")
+        return Stream([terminal, NS(choices=[NS(index=0, delta=NS(role="assistant", content=""), finish_reason=None)]),
+                       chunk(finish="stop")])
+
+    mc = ModelClient(name="synthetic", provider_kind="openai", model="synthetic",
+        tool_call_mode="function_calling", prompt_style="narrative", params={},
+        client=NS(chat=NS(completions=NS(create=sdk_create))), force_stream=True,
+        stream_compatibility="openlux", protocol_recovery="nonstream_then_fallback")
+    monkeypatch.setattr("core.llm_client.get_model_client", lambda *a, **k: mc)
+    try:
+        request = _make_pipeline().run_agentic_loop(
+            [{"role": "user", "content": "Create result.md in the workspace."}],
+            uid="workspace-owner", char_id=TEST_CHAR_ID, session_state=SessionState())
+        if failure == "after_write":
+            with pytest.raises(UpstreamResponseFormatError):
+                await request
+        else:
+            assert await request == "Document created."
+        assert (root / "result.md").read_text(encoding="utf-8") == "# Verified document\n"
+        tasks = observability_snapshot(uid="workspace-owner", char_id=TEST_CHAR_ID)
+        assert tasks["status_counts"] == {"succeeded": 1}
+        assert tasks["entries"][0]["result_metadata"]["counters"]["version"] == 1
+        if failure == "before_tools":
+            assert requests[0]["stream"] is True and not requests[1].get("stream")
+        if failure == "after_write":
+            assert all(r.get("stream") for r in requests)
+    finally:
+        llm_failover.clear_breakers()
+
+
 # ── 12. prompt_style 直通：narrative/xml 两种 style 下 role=tool 消息不被改写
 
 def test_prompt_style_passthrough_for_tool_messages():

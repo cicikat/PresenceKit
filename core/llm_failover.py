@@ -10,6 +10,7 @@ primary failure. SDK-internal retries are not separate rows.
 from __future__ import annotations
 
 import asyncio
+import copy
 import logging
 import time
 import uuid
@@ -133,6 +134,18 @@ class PreparedAttempt:
     gen_kwargs: dict[str, Any] = field(default_factory=dict)
     refuse_reason: str = ""
     decision: Any = None
+    has_tool_results: bool = False
+
+
+def has_tool_results(messages: list[dict[str, Any]]) -> bool:
+    """Detect completed actions before prompt/protocol conversion removes metadata."""
+    return any(
+        message.get("role") == "tool" or message.get("type") == "function_call_output"
+        or message.get("_layer") == "autonomy_tool_result"
+        or any(isinstance(block, dict) and block.get("type") == "tool_result"
+               for block in (message.get("content") if isinstance(message.get("content"), list) else []))
+        for message in messages
+    )
 
 
 PrepareFn = Callable[[ModelClient], PreparedAttempt | Awaitable[PreparedAttempt]]
@@ -270,6 +283,7 @@ def breaker_record(
     category: str,
     *,
     ok: bool,
+    protocol_recovery: bool = False,
     now: float | None = None,
 ) -> None:
     now = time.monotonic() if now is None else now
@@ -281,7 +295,7 @@ def breaker_record(
         breaker.open_until = 0.0
         return
     trip = breaker_category_for(category)
-    if trip in _BREAKER_TRIP:
+    if trip in _BREAKER_TRIP or (protocol_recovery and category == "protocol_incompatible"):
         breaker.failures += 1
         if breaker.failures >= _BREAKER_THRESHOLD:
             breaker.open_until = now + _BREAKER_COOLDOWN_S
@@ -452,7 +466,7 @@ async def execute_create(
     reset_breaker_on_http_success: bool = True,
     purpose: str | None = None,
 ) -> AttemptOutcome:
-    """Run primary then at most one fallback create() call."""
+    """Bounded model attempts; never replay a round containing tool results."""
     from core.llm_protocol import create as create_protocol_response
 
     purpose = purpose or call_category
@@ -460,6 +474,8 @@ async def execute_create(
     deadline = time.monotonic() + total_wall(call_category)
     if primary_mc is None:
         primary_mc = get_model_client(call_category, char_id=char_id)
+    recovery = getattr(primary_mc, "protocol_recovery", "off")
+    tool_history = False
 
     async def _one(
         mc: ModelClient,
@@ -469,6 +485,7 @@ async def execute_create(
         switch_reason: str = "",
         logical_final: bool,
     ) -> AttemptOutcome:
+        nonlocal tool_history
         started = time.perf_counter()
         failover = role == "fallback"
         remaining = _remaining(deadline)
@@ -488,22 +505,11 @@ async def execute_create(
         if _SHUTTING_DOWN:
             raise asyncio.CancelledError()
 
-        if not breaker_permits(mc.name, call_category):
-            duration_ms = int((time.perf_counter() - started) * 1000)
-            _row_from_mc(
-                mc, caller=caller, purpose=purpose, duration_ms=duration_ms, ok=False,
-                logical_call_id=logical_id, attempt_id=attempt_id, route_role=role,
-                skip_reason="breaker_open", error_category="breaker_open",
-                logical_final=logical_final, failover=failover,
-            )
-            return AttemptOutcome(
-                ok=False, mc=mc, role=role, preset=mc.name,
-                skip_reason="breaker_open", error_category="breaker_open",
-                duration_ms=duration_ms, logical_call_id=logical_id, attempt_id=attempt_id,
-            )
-
+        # Prepare before the breaker so a skipped primary still establishes
+        # whether the request contains completed (possibly mutating) actions.
         try:
             prepared = await _invoke_prepare(prepare, mc)
+            tool_history = tool_history or prepared.has_tool_results or has_tool_results(prepared.messages)
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -518,6 +524,20 @@ async def execute_create(
             return AttemptOutcome(
                 ok=False, error=exc, mc=mc, role=role, preset=mc.name,
                 error_category=category, failover_reason=reason,
+                duration_ms=duration_ms, logical_call_id=logical_id, attempt_id=attempt_id,
+            )
+
+        if role != "recovery" and not breaker_permits(mc.name, call_category):
+            duration_ms = int((time.perf_counter() - started) * 1000)
+            _row_from_mc(
+                mc, caller=caller, purpose=purpose, duration_ms=duration_ms, ok=False,
+                logical_call_id=logical_id, attempt_id=attempt_id, route_role=role,
+                skip_reason="breaker_open", error_category="breaker_open",
+                logical_final=logical_final, failover=failover,
+            )
+            return AttemptOutcome(
+                ok=False, mc=mc, role=role, preset=mc.name,
+                skip_reason="breaker_open", error_category="breaker_open",
                 duration_ms=duration_ms, logical_call_id=logical_id, attempt_id=attempt_id,
             )
 
@@ -536,7 +556,17 @@ async def execute_create(
             )
 
         gen_kwargs = dict(prepared.gen_kwargs)
-        req_timeout = min(float(gen_kwargs.get("timeout") or category_timeout(call_category)), remaining)
+        req_timeout = min(float(gen_kwargs.get("timeout") or category_timeout(call_category)), _remaining(deadline))
+        if req_timeout <= 0:
+            _row_from_mc(
+                mc, caller=caller, purpose=purpose, duration_ms=int((time.perf_counter() - started) * 1000),
+                ok=False, logical_call_id=logical_id, attempt_id=attempt_id, route_role=role,
+                skip_reason="budget_exhausted", error_category="budget_exhausted",
+                logical_final=logical_final, failover=failover,
+            )
+            return AttemptOutcome(ok=False, mc=mc, role=role, preset=mc.name,
+                                  skip_reason="budget_exhausted", error_category="budget_exhausted",
+                                  logical_call_id=logical_id, attempt_id=attempt_id)
         gen_kwargs["timeout"] = req_timeout
         try:
             if getattr(mc, "api_protocol", "") == "systemone":
@@ -565,7 +595,10 @@ async def execute_create(
         except Exception as exc:
             duration_ms = int((time.perf_counter() - started) * 1000)
             category, reason = classify_exception(exc)
-            breaker_record(mc.name, call_category, category, ok=False)
+            if category == "protocol_incompatible" and recovery != "off":
+                reason = category
+            breaker_record(mc.name, call_category, category, ok=False,
+                           protocol_recovery=recovery != "off")
             _row_from_mc(
                 mc, caller=caller, purpose=purpose, duration_ms=duration_ms, ok=False,
                 logical_call_id=logical_id, attempt_id=attempt_id, route_role=role,
@@ -612,17 +645,37 @@ async def execute_create(
     fallback_mc, fallback_skip = resolve_fallback_client(
         call_category, char_id=char_id, primary=primary_mc, explicit_preset=explicit_preset,
     )
-    primary_final = fallback_mc is None
+    primary_final = fallback_mc is None and recovery != "nonstream_then_fallback"
     primary = await _one(
         primary_mc, role="primary", attempt_id=primary_id, logical_final=primary_final,
     )
     if primary.ok:
         primary.logical_ok = True
         return primary
+    if tool_history:
+        primary.skip_reason = "tool_history_present"
+        _row_from_mc(
+            primary_mc, caller=caller, purpose=purpose, duration_ms=0, ok=False,
+            logical_call_id=logical_id, attempt_id=f"{logical_id}:skip",
+            route_role="primary", skip_reason=primary.skip_reason,
+            error_category=primary.error_category, logical_final=True,
+        )
+        return primary
+    if (primary.error_category == "protocol_incompatible" and recovery == "nonstream_then_fallback"
+            and getattr(primary_mc, "force_stream", False)):
+        nonstream_mc = copy.copy(primary_mc)
+        nonstream_mc.force_stream = False
+        recovered = await _one(nonstream_mc, role="recovery", attempt_id=f"{logical_id}:r",
+                               switch_reason="protocol_incompatible", logical_final=fallback_mc is None)
+        if recovered.ok:
+            return recovered
+        primary = recovered
     if primary.skip_reason == "breaker_open" and fallback_mc is not None:
         pass
-    elif primary.failover_reason not in FAILOVER_ELIGIBLE:
-        if fallback_mc is not None and not primary.skip_reason:
+    elif primary.failover_reason not in FAILOVER_ELIGIBLE and not (
+        recovery != "off" and primary.failover_reason == "protocol_incompatible"
+    ):
+        if (fallback_mc is not None or not primary_final) and not primary.skip_reason:
             primary.skip_reason = "not_eligible"
             _row_from_mc(
                 primary_mc, caller=caller, purpose=purpose, duration_ms=0, ok=False,

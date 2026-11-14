@@ -61,6 +61,9 @@ model_presets:
       base_url: https://api.deepseek.com
       api_key: YOUR_DEEPSEEK_API_KEY
       model: deepseek-chat
+      # Chat Completions only. Enable explicitly per gateway preset.
+      stream_compatibility: strict  # strict | openlux (empty role/stop trailers after tool_calls)
+      protocol_recovery: "off"     # "off" | fallback | nonstream_then_fallback; no retry after tool results
       tool_call_mode: function_calling
       params:
         temperature: 1.0
