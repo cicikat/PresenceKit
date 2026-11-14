@@ -31,6 +31,8 @@ def attributed(function):
     """Freeze owner/character before the first await, including streamed calls."""
     signature = inspect.signature(function)
     def enter(args, kwargs):
+        if _EXCLUDED.get():
+            return _SCOPE.set({})
         arguments = signature.bind_partial(*args, **kwargs).arguments
         inherited = _SCOPE.get()
         char_id = arguments.get("char_id") or (inherited or {}).get("char_id")

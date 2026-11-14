@@ -1,3 +1,9 @@
+## 工单 314 · 桌面 Browser + Visual Workbench（current / open / observe）
+
+current：device-file-agent.v1 poll 的 operations 增加 browser，响应增加 browser_tasks；browser 动作复用 grant/revision/epoch/nonce/lease/ACK 与 Task/Work Session，未知 ACK 不重放。Windows 打包 Chromium 处理授权文本副本与可信 React/Three runtime，VPS 不读本机物理路径。截图分块/hash绑定，600秒内存 TTL、state.read/no-store 诊断和管理面复核；视觉复用 screen 主备。无新增运营开关、scope 或手机协议，手机不执行浏览器。先更新后端，再更新含worker的桌面；回滚反向。详见 [协议](device-file-agent-contract.md#isolated-desktop-browser-preview-314)。
+
+observe：真实 packaged Chromium、Windows Rust执行器/保存回读/刷新/撤权进程树清理，以及合成HTTP broker→Chromium→真实screen VLM已分别验证。open：完整Tauri窗口→远程HTTP→Chromium→VLM同链、真实网络故障/重启、修复后VLM复评与Canvas专门VLM评审未验收。源码预览不执行Vite服务器/插件/任意npm依赖。固定三仓SHA组合尚为 not_verified；证据及限制见 [314交付记录](browser-workbench-314-delivery.md)。
+
 ## 手机 #52 跟随、等待与接入（2026-11-15，open / observe）
 
 current：手机发送显式跟随、手势/惯性阅读意图与限时120秒本地等待；复用消息锚点及uncertain详情，无新增后端/桌面开关、持久状态或mobile wire，原scope/request_id/final_only/ACK/TTL/fallback保留。Flutter428项通过。open：跨进程running恢复仍缺安全手机只读接口，禁止复用desktop request endpoint；生产/ws/mobile公网及loopback匿名Upgrade均404，需核查部署/路由/鉴权拒绝行为。observe：本机Fake-IP/代理影响直连证据，无VPN的手机Wi-Fi/移动网络及Windows业务链未验收；生产配置未修改。详见手机docs/mobile/chat-follow-wait-direct-52.md的网络证据与配置/回滚计划。本记录仅文档同步。
@@ -13,6 +19,10 @@ current：手机复用既有settings通道提供明确设备感知入口、读�
 ## 工单 313 B · 设备原子发现（current / open / observe）
 
 current：文件 poll 加 `operations` 广告；新增只读模型入口 list_dir/stat/find_name/search_text/read，复用 Task Manager、Work Session、grant/epoch/revision/lease/nonce/ACK，effect=read。旧桌面缺操作时明确 unsupported_operation；新桌面须在后端更新后部署。名称查询仅元数据，正文搜索独立 opt-in，目录结果带排序、分页、截断，读页带 hash/has_more。无新增 scope、设置或手机协议，既有后端开关和桌面授权控制面不变；观测复用 `/observability/device-file-agent`。详见[文件合同](device-file-agent-contract.md)。
+
+current：每条文件命令新增必填、任务内不可升级的 `operation_intent`。后端与桌面均拒绝 inspect/search/read 的 create/patch/undo；桌面在写入及 journal 前独立检查，即使 grant 可写。字段缺失拒绝而非默认 edit。先部署后端，再部署桌面；回滚顺序相反。旧桌面不具备新增本地守卫，新桌面与旧后端组合拒绝执行；配对实机验收仍为 observe。手机无执行协议变动。
+
+current：新增独立开发 profile/scope `development/development.run` 和 `/v1/development/turns` 合成入口。开发身份不能调用正式桌面、手机或 owner-input 聊天，即使混入 admin/chat；不复用生产角色上下文与工具。现有正式 adapter 保留有副作用合同，来源标为 integration、真人作者未验证。桌面/手机无需新增设置或 UI；合成测试不走其正式聊天。
 
 open：桌面扫描期间授权变更与扫描串行，尚无逐条扫描的合作式取消；扫描硬上限一秒，后端撤权/取消后拒绝回执并不返回正文。no-change 与复合必要目标合同尚缺，保持 P0 遗留。observe：Windows Rust 临时文件 6 项、Python 3.10/3.12 定向各 192 项及兼容回归各 46 项通过；真实 Tauri→HTTP→模型全链、macOS、三仓固定 SHA CI 未验证，不能据此宣称实机完成。固定提交、dirty 工作区及浏览器限制见 [313 交付证据](agent-capabilities-313-delivery.md)。
 

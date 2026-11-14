@@ -14,7 +14,7 @@
 
 ## Scope 表
 
-13 个 scope，`admin` 蕴含全部（`"admin" in token.scopes` 时任意 `require_scopes(...)` 直接通过）。
+Scope 以 `admin/scopes.py` 为准。通常 `admin` 蕴含全部；携带 `development.run` 的身份优先收敛到开发入口，混入 `admin` 或 `chat` 也不能访问生产能力。开发入口还要求 scope 集合恰好为 `{"development.run"}`，不能用普通 admin 凭证替代。
 
 | scope | 语义 | 典型端点 |
 |---|---|---|
@@ -25,6 +25,7 @@
 | `sensor.write` | 感知数据写入，以及仅服务于写入前 fail-closed 预检的低敏开关读取 | `POST /sensor/push`、`POST /watch/event`、`GET /perception/visual/config` |
 | `integration.write` | 外部只读来源的标准化 stimulus ingress | `POST /integrations/forum/events` |
 | `companion.write` | 独立 external companion opportunity/phone ingress | `POST /integrations/companion/events` |
+| `development.run` | 合成开发验收；无生产聊天、上下文或工具权限 | `POST /v1/development/turns` |
 | `activity` | 活动/梦境 overlay 全生命周期 | `/dream/*`、`/activity/reading\|gomoku\|chess\|dream_seed/*` |
 | `persona` | 人设/世界/呈现配置读写 | `/settings/prompt-assets`、`/jailbreak-entries`、`/lorebook`、character 卡、`/chat-mode\|chat-style\|chat-multi-message`、头像 |
 | `hardware` | 实体硬件控制 + 危险模式开关 | `/hardware/*`、`GET\|PATCH /system/meta-mode` |
@@ -41,6 +42,7 @@
 | `watch` | sensor.write | Watch |
 | `integration` | integration.write | 外部论坛/来源 adapter（只允许提交标准化事件） |
 | `companion` | companion.write | External Companion Bridge（只允许提交冻结 v1 事件） |
+| `development` | development.run | 开发 Agent，单独签发；不得复用 owner 凭证 |
 | `device` | ws.device | ESP32 具身硬件 |
 | `panel` | admin | 管理面板网页 |
 

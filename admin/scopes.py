@@ -1,11 +1,12 @@
 """
-SEC-AUTH-2 scope model：13 个 scope + profile 预置组合。
+SEC-AUTH-2 scope model：scope 注册表与 profile 预置组合。
 详见 cc-tasks/21-鉴权分层-scoped-tokens.md §2。
 """
 
 SCOPES: frozenset[str] = frozenset({
     "admin",
     "chat",
+    "development.run",
     "state.read",
     "memory.read",
     "sensor.write",
@@ -34,6 +35,7 @@ PROFILES: dict[str, frozenset[str]] = {
     "integration": frozenset({"integration.write"}),
     "companion": frozenset({"companion.write"}),
     "owner-input": frozenset({"chat"}),
+    "development": frozenset({"development.run"}),
     "device": frozenset({"ws.device"}),
     "panel": frozenset({"admin"}),
 }

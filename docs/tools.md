@@ -6,6 +6,8 @@
 
 # docs/tools.md — 工具系统
 
+314：artifacts 类新增持久桌面预览 `browser_session_start/action/status/cancel`、`browser_snapshot/screenshot/console/visual_review`，沿用 owner 私聊 Path C 与设备工作区权限。开始/交互/取消按 write 分类，证据读取按 read 分类；仅授权的隔离本地页面可交互。截图与视觉评审是独立动作，页面文字与视觉观察不得提升为授权或文件保存证据。旧 `browser_automation` 和 remote_server 本机执行限制保留。合同及支持边界见 [设备文件合同](device-file-agent-contract.md#isolated-desktop-browser-preview-314)。
+
 272 B：QQ 空间发布、评论、点赞及有界只读查询走独立 `qzone` 分类、owner/角色/账号闸门与标准 portable schema；详见 [qzone-integration.md](qzone-integration.md)。
 
 `pin_tool_result/unpin_tool_result/list_tool_result_pins` 标记真实结果供后续1..10轮临时复用，最多3项，保留历史时刻及权限约束；见 [tool-result-pins.md](tool-result-pins.md)。
@@ -144,7 +146,7 @@ hello 字段或协商流程。
   QQ 私聊 / /desktop/chat / mobile 前台
     → trusted_user_text（media merge 前捕获）
     → core.pretool_router.route_pretool(...)
-    → 同时按注册表 keywords 识别明确的查询/操作意图，记录本轮 must-call 标记（只标记，不绕过 execute 闸门）
+    → 注册表 keywords 仅记录 candidate_tool_names 供观测，不证明真人来源、明确意图或 must-call；工具仍由正常探针 / Path C 自主选择
     → 再检查显式快速路径白名单（当前仅 get_time；与 keywords 无关）
     → 未命中且 Path C 未激活时，走 get_probe_prompt + Path A 的 function schema
     → 探针 user message 只含 trusted_user_text 与短期引用块，不含 media span 或主生成 prompt

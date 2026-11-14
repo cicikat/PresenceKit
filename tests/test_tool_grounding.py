@@ -6,7 +6,7 @@ import pytest
 
 
 @pytest.mark.asyncio
-async def test_required_intent_is_marked_even_when_tool_is_not_exposed(monkeypatch):
+async def test_unexposed_keyword_candidate_does_not_attest_user_intent(monkeypatch):
     from core import tool_dispatcher
     from core.pretool_router import route_pretool
 
@@ -26,8 +26,9 @@ async def test_required_intent_is_marked_even_when_tool_is_not_exposed(monkeypat
         "查天气", "u-ground", "c1", "qq", "u-ground", False, State(),
         tool_loop_enabled=True, categories=["info"],
     )
-    assert result.must_call_tool is True
-    assert result.required_tool_names == {"weather"}
+    assert result.must_call_tool is False
+    assert result.required_tool_names == set()
+    assert result.candidate_tool_names == {"weather"}
     assert result.route == "skipped_for_tool_loop"
 
 

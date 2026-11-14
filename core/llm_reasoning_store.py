@@ -214,6 +214,10 @@ class Capture:
                             self.text.append(text)
 
     async def save(self):
+        from core.input_provenance import current
+        provenance = current()
+        if provenance is not None and provenance.source == "development":
+            return
         if self.purpose == GMAIL_PRIVATE_PURPOSE or self.purpose in PRIVATE_DESKTOP_PURPOSES:
             return
         try:

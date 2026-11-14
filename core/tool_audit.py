@@ -51,6 +51,10 @@ def record(uid: str, char_id: str, *, tool: str, args: dict, origin: str, outcom
             "before": None, "after": None,
             "request_id": str(activity.get("event_id") or uuid.uuid4().hex)[:128],
         }
+        from core.input_provenance import current
+        provenance = current()
+        receipt["input_source"] = provenance.source if provenance else "unknown"
+        receipt["human_authorship"] = "unverified"
         if tool.startswith("device_file_") or tool == "device_workspace_list" or tool == "web_search":
             # Retain correlation and business state, never raw arguments or result text.
             try:

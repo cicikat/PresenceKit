@@ -103,6 +103,10 @@ def resolve_token(raw: str) -> "TokenInfo | None":
 
 
 def _scopes_ok(have: frozenset[str], need: tuple[str, ...]) -> bool:
+    # Development is a separate execution realm, including accidentally mixed
+    # credentials. Admin/chat scopes cannot promote it into production.
+    if "development.run" in have:
+        return bool(need) and set(need) <= {"development.run"}
     if "admin" in have:
         return True
     return set(need) <= have

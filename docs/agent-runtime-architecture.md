@@ -32,6 +32,19 @@ Existing code remains authoritative for anything not in the current row.
 
 ## Scope and non-goals
 
+314 desktop browser preview is an interactive adapter on the existing device-file task transport,
+Task Manager lease and same-character Work Session. It keeps one task/session across operations;
+an associated file-edit task retains independent save/readback evidence and links the browser IDs.
+The VPS coordinates authorized manifests and screen vision; the Windows worker renders them.
+It does not enable the legacy local BrowserWorker on a remote server. Lost browser ACKs remain
+unknown and are never replayed. See [device contract](device-file-agent-contract.md#isolated-desktop-browser-preview-314)
+and [acceptance limits](browser-workbench-314-delivery.md).
+
+The Path C adapter exposes `browser_session_start`, `browser_session_action`,
+`browser_snapshot`, `browser_screenshot`, `browser_console`, `browser_visual_review`,
+`browser_session_status` and `browser_session_cancel`. All retain the same owner,
+device and workspace authorization; visual observations cannot authorize file edits.
+
 Agent Runtime is the single architectural home for the same character's durable or
 specialized 副链 work: task lifecycle, bounded work sessions, explicit capability adapters,
 recovery, and optional owner notification. Later briefs still land independently:

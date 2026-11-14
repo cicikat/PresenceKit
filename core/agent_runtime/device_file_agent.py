@@ -71,7 +71,7 @@ class Ref(Strict):
 
 class Action(Strict):
     op: Literal["find", "read", "patch", "create", "undo", "verify",
-                "list_dir", "stat", "find_name", "search_text", "read_page"]
+                "list_dir", "stat", "find_name", "search_text", "read_page", "browser"]
     path: str = Field(default="", max_length=512)
     query: str = Field(default="", max_length=4096)
     start: int = Field(default=1, ge=1, le=262144)
@@ -126,6 +126,8 @@ class Run:
     wake: asyncio.Event = field(default_factory=asyncio.Event)
     finished: asyncio.Event = field(default_factory=asyncio.Event)
     evidence: dict = field(default_factory=dict)
+    interactive: bool = False
+    commands: asyncio.Queue = field(default_factory=lambda: asyncio.Queue(maxsize=1))
 
 
 _devices: dict[str, Device] = {}
@@ -206,6 +208,9 @@ def poll(identity: str, body: Poll) -> dict:
                     grants, frozenset(body.operations))
     _devices[body.device_id] = device
     reply["online"] = True
+    reply["browser_tasks"] = [run.task_id for run in _runs.values() if run.interactive
+                              and run.device.device_id == body.device_id and _current(run)
+                              and not tasks.get_task(actor, run.task_id).get("cancel_requested")]
     for run in _runs.values():
         delivery = run.delivery
         if run.paused or not delivery or delivery.sent or delivery.expires <= time.monotonic():
@@ -217,10 +222,12 @@ def poll(identity: str, body: Poll) -> dict:
         # Persist the delivery binding before exposing the command to the device.
         run.receipt["pending"] = delivery.ref.model_dump()
         run.receipt["pending_write"] = delivery.action.op in WRITES
+        run.receipt["pending_browser"] = delivery.action.op == "browser"
         _save(run)
         delivery.sent = True
         reply["command"] = {
             "ref": delivery.ref.model_dump(), "action": delivery.action.model_dump(),
+            "operation_intent": run.receipt["operation_intent"],
             "ttl_ms": max(0, int((delivery.expires - time.monotonic()) * 1000)),
         }
         break
@@ -268,6 +275,7 @@ def accept(identity: str, result: Result) -> bool:
     record["acknowledged"].append(ref.model_dump())
     record["pending"] = None
     record["pending_write"] = False
+    record["pending_browser"] = False
     if not safe_write_json(_path(actor, ref.task_id), record):
         return False
     if run:
@@ -310,6 +318,9 @@ def status(actor, task_id: str, *, cancel=False) -> dict:
         "operation_intent": local.get("operation_intent", "edit"),
         "completion_reason": local.get("completion_reason", ""),
         "evidence_summary": local.get("evidence_summary", {}),
+        "session_id": local.get("session_id", ""),
+        "browser_task_id": local.get("browser_task_id", ""),
+        "browser_session_id": local.get("browser_session_id", ""),
     }
 
 
@@ -375,12 +386,18 @@ def list_workspaces(actor) -> dict:
 
 
 def start(actor, device_id: str, workspace_id: str, goal: str, *, atomic_action: Action | None = None,
-          operation_intent: str = "edit") -> dict:
+          operation_intent: str = "edit", interactive: bool = False) -> dict:
     if not allowed(actor.uid, actor.char_id):
         return {"code": "device_file_denied"}
     if operation_intent not in INTENTS:
         return {"code": "unsupported_operation_intent"}
-    if active := next((run for run in _runs.values() if run.actor == actor), None):
+    # Source editing reuses the existing file planner while a preview retains its
+    # original inspect-only task. Only the same authorized workspace may coexist.
+    browser_parent = next((run for run in _runs.values() if run.actor == actor and run.interactive), None)
+    if active := next((run for run in _runs.values() if run.actor == actor and (
+        interactive or not run.interactive or run.device.device_id != device_id
+        or run.grant.workspace_id != workspace_id
+    )), None):
         return {**status(actor, active.task_id), "code": "task_already_running"}
     device = next((item for item in devices(actor) if item.device_id == device_id), None)
     if device is None:
@@ -403,7 +420,11 @@ def start(actor, device_id: str, workspace_id: str, goal: str, *, atomic_action:
         "evidence_summary": {"reads": 0, "searches": 0, "inspections": 0, "writes": 0, "verified_files": 0},
         "progress": {"stage": "queued", "actions_completed": 0, "plan_attempts": 0},
     })
+    if browser_parent is not None:
+        run.receipt["browser_task_id"] = browser_parent.task_id
+        run.receipt["browser_session_id"] = browser_parent.receipt.get("session_id", "")
     _save(run)
+    run.interactive = interactive
     _runs[task_id] = run
     worker = asyncio.create_task(_worker(run, goal, atomic_action=atomic_action))
     _workers.add(worker)
@@ -610,6 +631,16 @@ async def _worker(run: Run, goal: str, *, atomic_action: Action | None = None) -
         run.receipt["session_id"] = session_id
         _save(run)
         sessions.start_work_session(actor, session_id)
+        if run.interactive:
+            from core.agent_runtime import browser_workbench
+            failure = await browser_workbench.worker_loop(run, lease)
+            if failure:
+                return
+            sessions.complete_work_session(actor, session_id, artifact_id=f"device-browser:{task_id}", artifact_version=1)
+            tasks.complete_task(actor, lease, result_metadata={"outcome_code": "browser_session_closed",
+                                                            "counters": {"actions": run.receipt["progress"]["actions_completed"]}})
+            _progress(run, "succeeded")
+            return
         if atomic_action:
             failure = "device_offline_or_grant_changed"
             if not _current(run):
@@ -737,6 +768,9 @@ async def _worker(run: Run, goal: str, *, atomic_action: Action | None = None) -
                     break
                 messages.append({"role": "user", "content": "Invalid action. Use an action object with op and supported fields only."})
                 continue
+            if action.op == "browser":
+                failure = "unsupported_operation"
+                break
             if intent in READ_INTENTS and action.op in WRITES:
                 failure = "operation_intent_violation"
                 break
@@ -819,7 +853,7 @@ async def _worker(run: Run, goal: str, *, atomic_action: Action | None = None) -
         _runs.pop(task_id, None)
         run.finished.set()
         if lease and tasks.get_task(actor, task_id)["status"] == "running":
-            if run.receipt.get("pending_write"):
+            if run.receipt.get("pending_write") or run.receipt.get("pending_browser"):
                 tasks.unknown_task(actor, lease, error_code="device_receipt_pending")
                 if session_id:
                     sessions.unknown_work_session(actor, session_id)

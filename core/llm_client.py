@@ -139,6 +139,10 @@ def _record_debug_request(
     private_gmail: bool = False,
 ) -> None:
     """Persist an opt-in semantic request snapshot without affecting the call."""
+    from core.input_provenance import current
+    provenance = current()
+    if provenance is not None and provenance.source == "development":
+        return
     if private_gmail or purpose in PRIVATE_DESKTOP_PURPOSES:
         return
     from core.llm_debug_requests import append
@@ -361,6 +365,7 @@ async def chat(
     preset_name: str | None = None,
     is_proactive: bool = False,
     vision_purpose: str | None = None,
+    vision_connection: str | None = None,
 ) -> str:
     """
     调用 LLM 生成回复
@@ -387,6 +392,17 @@ async def chat(
     # vision 模式走独立 vision client，不经过文本 preset 路由
     if use_vision:
         vision_cfg = _resolve_vision_config(vision_purpose)
+        if vision_connection is not None:
+            from core.image_presets import resolve_purpose_chain
+            if vision_purpose != "screen":
+                raise VisionRouteError(vision_purpose or "vision", "screen_connection_required")
+            selected = next((row for row in resolve_purpose_chain(vision_purpose)
+                             if row.get("name") == vision_connection and row.get("kind") == "vision"), None)
+            if selected is None:
+                raise VisionRouteError(vision_purpose, "vision_connection_not_routed")
+            vision_cfg = dict(selected["config"])
+            if _is_loopback_base_url(vision_cfg.get("base_url")):
+                vision_cfg["_local_only"] = True
         vision_client = _get_vision_client(vision_cfg)
         if vision_client is None and vision_purpose:
             from core.image_observability import append as record_image

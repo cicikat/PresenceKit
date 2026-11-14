@@ -185,12 +185,12 @@ def grounding_message(
         )
     elif result_validity in {"execution_failed", "outcome_unknown"}:
         content = (
-            f"【本轮工具事实】用户明确要求本轮使用{name_text}。当前调用没有得到可确认的成功结果，"
+            f"【本轮工具事实】本轮涉及{name_text}的事实需要执行证据。当前调用没有得到可确认的成功结果，"
             "不得声称已经查到、控制、完成或执行；请如实说明未完成或结果不明。"
         )
     else:
         content = (
-            f"【本轮工具事实】用户明确要求本轮使用{name_text}。必须先实际调用可用工具并取得成功结果，"
+            f"【本轮工具事实】本轮涉及{name_text}的事实需要执行证据。必须先实际调用可用工具并取得成功结果，"
             "再回答事实；只有口头承诺、历史痕迹或模型自述都不算调用。调用失败/未暴露时，"
             "不得声称已经查到、控制、完成或执行。"
         )
@@ -199,9 +199,9 @@ def grounding_message(
     english = (
         '[Current tool facts] A successful tool result was received this turn. Base claims only on that result, not historical actions.'
         if result_validity == 'current_turn' else
-        f'[Current tool facts] The user explicitly requested {english_names} this turn, but no confirmed successful result was obtained. Do not claim you found, controlled, completed, or executed anything; acknowledge failure or uncertainty.'
+        f'[Current tool facts] Claims involving {english_names} need execution evidence, but no confirmed successful result was obtained. Do not claim you found, controlled, completed, or executed anything; acknowledge failure or uncertainty.'
         if result_validity in {'execution_failed', 'outcome_unknown'} else
-        f'[Current tool facts] The user explicitly requested {english_names} this turn. Actually call an available tool and obtain success before asserting the corresponding fact. Promises, historical traces, and model claims are not execution. If unavailable or failed, do not claim completion.'
+        f'[Current tool facts] Claims involving {english_names} need execution evidence. Actually call an available tool and obtain success before asserting the corresponding fact. Promises, historical traces, and model claims are not execution. If unavailable or failed, do not claim completion.'
     )
     content = choose(content, english)
     return {
@@ -280,4 +280,3 @@ def build_claim_nudge(char_name: str, tool_names: list[str] | None = None) -> st
         f"请以{char_name}自己的口吻重写这条回复：如实、自然地表达还没办成或结果不确定，"
         "不要声称已经查到、完成或执行，也不要提及系统提示或工具机制。"
     ), f'[System reminder] Your previous reply claimed completion, but {", ".join(tool_names or []) or "the required tools"} produced no confirmed success this turn. Rewrite naturally in the voice of {char_name}, acknowledging that the action is incomplete or uncertain. Do not claim success or mention system reminders or tool implementation.')
-
