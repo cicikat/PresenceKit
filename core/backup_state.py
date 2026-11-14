@@ -15,6 +15,7 @@ import stat
 import subprocess
 import sys
 import uuid
+from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
@@ -31,7 +32,7 @@ MANIFEST_NAME = "manifest.json"
 MANIFEST_CHECKSUM_NAME = "manifest.sha256"
 MANIFEST_VERSION = 1
 PROTECTION_MODE_PROTECTED_VOLUME = "protected_volume"
-PRIVATE_ROOTS_VERSION = 1
+PRIVATE_ROOTS_VERSION = 2
 MAX_RESTORE_FILES = 100_000
 MAX_RESTORE_BYTES = 8 * 1024 * 1024 * 1024
 
@@ -106,13 +107,17 @@ class ProtectionRoot:
 # This is the versioned, centralized private-write inventory for backup.  The
 # legacy selector is intentionally explicit: those paths remain compatibility
 # readers/writers for installations not yet fully materialized into userdata.
-PROTECTION_ROOTS: tuple[ProtectionRoot, ...] = (
+_V1_PROTECTION_ROOTS: tuple[ProtectionRoot, ...] = (
     ProtectionRoot("data", PurePosixPath("data"), True, "directory"),
     ProtectionRoot("userdata", PurePosixPath("userdata"), False, "directory"),
     ProtectionRoot("config", PurePosixPath("config.yaml"), True, "file"),
     ProtectionRoot("secrets_local", PurePosixPath("secrets.local.yaml"), False, "file"),
     ProtectionRoot("legacy_private_assets", PurePosixPath("."), False, "legacy_selector"),
 )
+PROTECTION_ROOTS = _V1_PROTECTION_ROOTS + (
+    ProtectionRoot("config_local", PurePosixPath("config.local.yaml"), False, "file"),
+)
+_PROTECTION_ROOTS_BY_VERSION = {1: _V1_PROTECTION_ROOTS, PRIVATE_ROOTS_VERSION: PROTECTION_ROOTS}
 
 # A test or a future audited migration may declare an unresolved write root
 # here.  Creation must never quietly omit one.
@@ -124,7 +129,6 @@ _EXCLUDED_DATA_PREFIXES = (
     PurePosixPath("data/test_sandbox"),
     PurePosixPath("data/logs"),
     PurePosixPath("data/cache"),
-    PurePosixPath("data/inbox"),
     PurePosixPath("data/debug"),
     PurePosixPath("data/runtime/pending_perception"),
     PurePosixPath("data/runtime/observability/llm_debug_requests.jsonl"),
@@ -158,7 +162,9 @@ def _is_excluded_data_path(relative: PurePosixPath) -> bool:
     if any(relative == prefix or prefix in relative.parents for prefix in _EXCLUDED_DATA_PREFIXES):
         return True
     # sqlite-vec is a derived index; SQLite sidecars belong to the same cache.
-    if relative.match("data/runtime/memory/*/*/vector_store.db*"):
+    if relative.parent.match("data/runtime/memory/*/*") and relative.name in {
+        "vector_store.db", "vector_store.db-wal", "vector_store.db-shm", "vector_store.db-journal",
+    }:
         return True
     # The older memory-index tree is likewise a rebuildable index.
     return relative.match("data/chars/*/memory_index/*")
@@ -220,13 +226,13 @@ def _selected_files(installation: Path) -> tuple[list[tuple[Path, str]], list[st
         if root.kind == "legacy_selector":
             selected.extend((path, root.root_id) for path in _legacy_private_files(installation))
             continue
+        if _is_reparse_point(source):
+            raise BackupError("unsafe_link", "保护根不能是符号链接、junction 或 reparse point。")
         if not source.exists():
             if root.required:
                 raise BackupError("missing_required_root", f"缺少必需私人状态根：{root.root_id}。")
             optional_missing.append(root.relative_path.as_posix())
             continue
-        if _is_reparse_point(source):
-            raise BackupError("unsafe_link", "保护根不能是符号链接、junction 或 reparse point。")
         if root.kind == "file":
             if not source.is_file():
                 raise BackupError("missing_required_root", f"保护文件类型无效：{root.root_id}。")
@@ -374,10 +380,10 @@ def _validate_output(installation: Path, output: Path) -> Path:
     raise BackupError("output_inside_installation", "备份目标必须位于安装目录外。")
 
 
-def _manifest_root_entries() -> list[dict[str, Any]]:
+def _manifest_root_entries(roots: tuple[ProtectionRoot, ...]) -> list[dict[str, Any]]:
     return [
         {"id": root.root_id, "path": root.relative_path.as_posix(), "required": root.required, "kind": root.kind}
-        for root in PROTECTION_ROOTS
+        for root in roots
     ]
 
 
@@ -386,10 +392,9 @@ def _record_belongs_to_root(path: PurePosixPath, root_id: str) -> bool:
         return path.parts[0] == "data"
     if root_id == "userdata":
         return path.parts[0] == "userdata"
-    if root_id == "config":
-        return path == PurePosixPath("config.yaml")
-    if root_id == "secrets_local":
-        return path == PurePosixPath("secrets.local.yaml")
+    for root in PROTECTION_ROOTS:
+        if root.root_id == root_id and root.kind == "file":
+            return path == root.relative_path
     if root_id == "legacy_private_assets":
         return path.parts[:2] in {("characters", "reality"), ("characters", "dream_presets"), ("characters", "dream_worlds"), ("assets", "stickers"), ("content", "characters")} or path.parts[0] == "characters"
     return False
@@ -435,7 +440,7 @@ def create_snapshot(
             "backup_id": str(uuid.uuid4()),
             "protection_mode": protection_mode,
             "private_roots_version": PRIVATE_ROOTS_VERSION,
-            "included_roots": _manifest_root_entries(),
+            "included_roots": _manifest_root_entries(PROTECTION_ROOTS),
             "optional_missing_files": optional_missing,
             "files": records,
         }
@@ -470,12 +475,14 @@ def _read_manifest(snapshot: Path) -> dict[str, Any]:
         raise BackupError("manifest_invalid", "manifest data layout schema 无效。")
     if payload.get("protection_mode") != PROTECTION_MODE_PROTECTED_VOLUME:
         raise BackupError("manifest_invalid", "manifest protection mode 无效。")
-    if payload.get("private_roots_version") != PRIVATE_ROOTS_VERSION or payload.get("included_roots") != _manifest_root_entries():
+    version = payload.get("private_roots_version")
+    roots = _PROTECTION_ROOTS_BY_VERSION.get(version) if type(version) is int else None
+    if roots is None or payload.get("included_roots") != _manifest_root_entries(roots):
         raise BackupError("manifest_invalid", "manifest 的保护根清单不一致。")
     if not isinstance(payload.get("optional_missing_files"), list) or not isinstance(payload.get("files"), list):
         raise BackupError("manifest_invalid", "manifest 文件清单无效。")
     optional = payload["optional_missing_files"]
-    allowed_optional = {"userdata", "secrets.local.yaml"}
+    allowed_optional = {root.relative_path.as_posix() for root in roots if not root.required and root.kind != "legacy_selector"}
     if any(not isinstance(item, str) for item in optional) or len(optional) != len(set(optional)) or not set(optional).issubset(allowed_optional):
         raise BackupError("manifest_invalid", "manifest 的可选缺失状态无效。")
     return payload
@@ -488,6 +495,8 @@ def verify_snapshot(snapshot: Path) -> dict[str, Any]:
         if not snapshot.is_dir() or _is_reparse_point(snapshot):
             raise BackupError("archive_unreadable", "备份目录不可读取或不是普通目录。")
         manifest = _read_manifest(snapshot)
+        roots = _PROTECTION_ROOTS_BY_VERSION[manifest["private_roots_version"]]
+        allowed_roots = {root.root_id for root in roots}
         expected: set[PurePosixPath] = {PurePosixPath(MANIFEST_NAME)}
         seen: set[PurePosixPath] = set()
         for record in manifest["files"]:
@@ -497,7 +506,6 @@ def verify_snapshot(snapshot: Path) -> dict[str, Any]:
             size = record.get("size")
             checksum = record.get("sha256")
             root = record.get("root")
-            allowed_roots = {item.root_id for item in PROTECTION_ROOTS}
             if not isinstance(path, str) or not isinstance(size, int) or size < 0 or not isinstance(checksum, str) or len(checksum) != 64 or root not in allowed_roots:
                 raise BackupError("manifest_invalid", "manifest 文件条目字段无效。")
             relative = _safe_relative(PurePosixPath(path))
@@ -527,9 +535,11 @@ def verify_snapshot(snapshot: Path) -> dict[str, Any]:
         if PurePosixPath("data/layout_version.json") not in seen:
             errors.append({"code": "missing_file", "path": "data/layout_version.json"})
         optional_missing = set(manifest["optional_missing_files"])
-        for optional_path in ("secrets.local.yaml",):
-            if (PurePosixPath(optional_path) in seen) == (optional_path in optional_missing):
-                errors.append({"code": "manifest_invalid", "path": optional_path})
+        for root in roots:
+            if root.kind == "file" and not root.required:
+                path = root.relative_path
+                if (path in seen) == (path.as_posix() in optional_missing):
+                    errors.append({"code": "manifest_invalid", "path": path.as_posix()})
         actual: set[PurePosixPath] = set()
         for item in _walk_regular_files(snapshot):
             actual.add(PurePosixPath(item.relative_to(snapshot).as_posix()))
@@ -540,6 +550,55 @@ def verify_snapshot(snapshot: Path) -> dict[str, Any]:
     except BackupError as exc:
         errors.append({"code": exc.code})
     return {"ok": not errors, "errors": errors}
+
+
+def snapshot_coverage(installation: Path, snapshot: Path) -> dict[str, Any]:
+    """Compare a verified manifest with the offline source without emitting paths."""
+    installation = installation.resolve()
+    if service_state(installation) != ServiceState.OFFLINE:
+        raise BackupError("service_not_offline", "覆盖率核对要求服务完全停止。")
+    if not verify_snapshot(snapshot)["ok"]:
+        raise BackupError("backup_verify_failed", "备份校验失败，无法核对覆盖率。")
+    manifest = _read_manifest(snapshot)
+    selected, _ = _selected_files(installation)
+    source = {
+        (_relative_to_installation(installation, path), root_id): path.stat().st_size
+        for path, root_id in selected if root_id != "data"
+    }
+    excluded: dict[str, Counter[str]] = {}
+    for path in _walk_regular_files(paths_for_installation(installation).root_dir()):
+        relative = _relative_to_installation(installation, path)
+        size = path.stat().st_size
+        if _is_excluded_data_path(relative):
+            prefix = next((p for p in _EXCLUDED_DATA_PREFIXES if relative == p or p in relative.parents), None)
+            category = prefix.as_posix() if prefix else (
+                "data/runtime/memory/<vector index>" if relative.parts[1] == "runtime" else "data/chars/<legacy memory index>"
+            )
+            excluded.setdefault(category, Counter()).update(files=1, bytes=size)
+        else:
+            source[relative, "data"] = size
+    records = {(PurePosixPath(item["path"]), item["root"]): item["size"] for item in manifest["files"]}
+    groups = {}
+    for root in PROTECTION_ROOTS:
+        src = {key: size for key, size in source.items() if key[1] == root.root_id}
+        dst = {key: size for key, size in records.items() if key[1] == root.root_id}
+        matches = {key: size for key, size in src.items() if dst.get(key) == size}
+        groups[root.root_id] = {
+            "source_files": len(src), "source_bytes": sum(src.values()),
+            "matched_files": len(matches), "matched_bytes": sum(matches.values()),
+            "manifest_files": len(dst), "manifest_bytes": sum(dst.values()),
+            "ok": src == dst,
+        }
+    return {
+        "ok": all(group["ok"] for group in groups.values()),
+        "backup_id": manifest["backup_id"],
+        "created_at": manifest["created_at"],
+        "manifest_version": manifest["manifest_version"],
+        "private_roots_version": manifest["private_roots_version"],
+        "roots": groups,
+        "excluded": excluded,
+        "within_restore_limits": len(records) <= MAX_RESTORE_FILES and sum(records.values()) <= MAX_RESTORE_BYTES,
+    }
 
 
 _WINDOWS_RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
@@ -662,6 +721,8 @@ def main(argv: list[str] | None = None) -> int:
     create.add_argument("--protection-mode", choices=[PROTECTION_MODE_PROTECTED_VOLUME], required=True)
     verify = sub.add_parser("verify")
     verify.add_argument("backup_path")
+    coverage = sub.add_parser("coverage")
+    coverage.add_argument("backup_path")
     restore = sub.add_parser("restore")
     restore.add_argument("backup_path")
     restore.add_argument("--target", required=True)
@@ -674,13 +735,15 @@ def main(argv: list[str] | None = None) -> int:
             result = verify_snapshot(Path(args.backup_path))
             if not result["ok"]:
                 raise BackupError(result["errors"][0]["code"], "备份校验失败。")
+        elif args.command == "coverage":
+            result = snapshot_coverage(Path.cwd(), Path(args.backup_path).expanduser().resolve())
         else:
             result = restore_snapshot(Path.cwd(), Path(args.backup_path), Path(args.target), startup_check=not args.no_startup_check)
-        if args.json_output:
+        if args.json_output or args.command == "coverage":
             print(json.dumps(result, ensure_ascii=False))
         elif not args.quiet:
             print("备份已创建并完成内部校验。" if args.command == "create" else ("备份校验通过。" if args.command == "verify" else "恢复完成并通过离线初始化验证。"))
-        return 0
+        return 0 if result["ok"] else 1
     except BackupError as exc:
         result = {"ok": False, "error": {"code": exc.code}}
         if args.json_output:

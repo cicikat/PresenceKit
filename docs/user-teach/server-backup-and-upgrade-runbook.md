@@ -14,7 +14,7 @@
 
 快照当前覆盖：
 
-- `data/` 中需要保护的状态，排除可重建缓存、普通日志和临时运行标记；
+- `data/` 中需要保护的状态，包括 `data/inbox/` 原始上传，排除可重建缓存、普通日志和临时运行标记；
 - `userdata/`；
 - `config.yaml`，以及存在时的 `config.local.yaml`、`secrets.local.yaml`；
 - inventory 中声明的兼容私有 authored assets。
@@ -50,9 +50,10 @@ mkdir -p /home/<用户>/backups/presencekit
   --protection-mode protected_volume
 
 ./.venv/bin/python main.py backup-state verify "$snapshot"
+./.venv/bin/python main.py backup-state coverage "$snapshot"
 ```
 
-只有 `verify` 成功后才继续。输出目录不能预先存在；若本轮失败，换一个新时间戳，不要复用半成品目录。
+两项检查均成功后，立即重启并检查后端，再压缩和回传。输出目录不能预先存在；若本轮失败，恢复服务并保留现场，重试时使用新时间戳。
 
 如果出现 `service_state_unknown`：
 
@@ -64,7 +65,16 @@ ls -l data/runtime/service_state.json 2>/dev/null
 
 先确认没有残留后端进程。不要为了绕过保护直接手工打包 live data。Linux 进程自识别问题已在 `90a3f7c` 修复；Windows 上 `os.kill(pid, 0)` 不是存活探测，会把有效 marker 误报成 `service_state_unknown`，需更新到包含 Windows pid 探测修复的版本。
 
-### 3. 压缩并生成传输哈希
+### 3. 恢复服务
+
+```bash
+sudo systemctl start presencekit
+systemctl is-active presencekit
+```
+
+应看到 `active`。使用有 `state.read` 权限的凭据复查 `/system/health`，避免把凭据输出到终端。
+
+### 4. 压缩并生成传输哈希
 
 ```bash
 archive="$snapshot.tar.gz"
@@ -74,16 +84,6 @@ ls -lh "$archive" "$archive.sha256"
 ```
 
 目录快照仍留在服务器；`.tar.gz` 只是便于回传的传输包装，不会改变 manifest。
-
-### 4. 立即恢复服务
-
-```bash
-sudo systemctl start presencekit
-systemctl is-active presencekit
-systemctl status presencekit --no-pager -l
-```
-
-应看到 `active (running)`。备份停机时间不应被文件回传速度拉长，因此回传在服务重新启动后进行。
 
 ### 5. 从 Windows 回传，支持断点续传
 
@@ -233,7 +233,7 @@ git pull --ff-only origin main
 
 | 中断点 | 处理 |
 |---|---|
-| 创建快照失败 | 保持服务停止，读错误；修复后使用新时间戳重建。 |
+| 创建快照或覆盖率核对失败 | 恢复服务并保留现场；修复后使用新时间戳重建。 |
 | `verify` 失败 | 不回传、不作为恢复点；保留现场排查或删除后重建。 |
 | 压缩中断 | 删除不完整的 `.tar.gz` 后重新压缩；目录快照不受影响。 |
 | SFTP/扫码连接中断 | 服务无需停止；重连后对同名本地文件执行 `get -a`。 |

@@ -18,7 +18,7 @@ QQ enabled 复用 feature-flags，host/port 由本页配置，均保存后热生
 
 桥安装目录不属于后端连接合同；可放任意目录或其他服务器。同协议桥可配置连接地址，跨协议需要独立适配器，不能只选设备自动兼容。当前 QQ adapter 使用无路径的 `ws://host:port`，不提供通用 URL/TLS/桥认证字段；需要这些连接形式时应另扩展合同，不应声称任意 OneBot 部署均可连接。
 
-本地名为 presencekit-bridges 的目录用于部署 QQ/微信服务及保存登录状态，不随后端仓库自动安装。Emerald-bridge 是 insideworld 游戏 director 和只读 MCP sidecar，不是 QQ/微信/桌面/手机分发桥；普通陪伴部署无需安装它。两者均不是后端代码固定安装地址。
+本地名为 presencekit-bridges 的目录用于部署 QQ/微信服务及保存登录状态，不随后端仓库自动安装。insideworld-bridge 是 insideworld 游戏 director 和只读 MCP sidecar，不是 QQ/微信/桌面/手机分发桥；普通陪伴部署无需安装它。两者均不是后端代码固定安装地址。
 
 本单只改后端管理与通道开关，不改变客户端协议字段或设置界面。真实 QQ/微信登录投递和真实设备验收独立于隔离浏览器检查。
 
