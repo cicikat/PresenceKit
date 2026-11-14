@@ -90,6 +90,7 @@ NO_ADMIN_UI_WHITELIST: dict[tuple[str, str], str] = {
     ("POST", "/mobile/deactivate"): "手机端下线停用，Emerald-mobile backend_client.dart 消费",
     ("POST", "/mobile/ack"): "手机端消息确认，Emerald-mobile backend_client.dart 消费",
     ("POST", "/mobile/realtime/metric"): "手机实时连接指标上报，由移动客户端消费；管理面不伪造客户端测量",
+    ("PUT", "/mobile/push/devices/self"): "Android 系统推送安装注册，需同凭据 Reality 会话",
     ("POST", "/mobile/push"): "向手机端推送消息，Emerald-mobile backend_client.dart 消费",
     ("POST", "/sensor/push"): "手机传感器数据上报，Emerald-mobile 消费",
     ("POST", "/sensor/realtime"): "桌面端实时传感器快照，Emerald-client sensor 消费",

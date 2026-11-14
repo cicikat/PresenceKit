@@ -178,6 +178,8 @@ async def _fanout(
             text_to_send = _visible_text
             send_kwargs = {"behavior": behavior}
             if name == "mobile":
+                if source != TurnSource.USER_CHAT and not request_id:
+                    send_kwargs["proactive_push"] = True
                 from core.response_processor import inline_display_text
                 styled = inline_display_text(strip_control_markers(assistant_text))
                 if styled != _visible_text:

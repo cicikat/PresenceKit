@@ -365,6 +365,9 @@ class DataPaths:
     def channel_queue(self) -> Path:
         return self._p("runtime", "channel_queue.json")
 
+    def mobile_push_devices(self) -> Path:
+        return self._p("runtime", "mobile_push_devices.json")
+
     def mobile_queue(self) -> Path:
         return self._p("runtime", "mobile_queue.json")
 

@@ -1066,3 +1066,7 @@ observe：文字与附件的回执隔离、断线取消、协议分块和副作�
 ### 313–314 环境感知验收（observe）
 
 Windows 摄像头自动曝光、屏幕反光、混合音源和锁屏的真实结果待核验。Android 照度、姿态、使用访问、撤权和进程恢复待连接设备验证。无独立桌面摄像头环境会话；手机声音与当日使用统计仍开放。
+
+### 317 Android FCM (observe)
+
+No connected phone or Firebase project configuration was available for the real delivery matrix. Doze, screen-off, carrier network changes, device rotation and power behavior require the procedure in [317 device feasibility](fcm-device-feasibility.md). A valid FCM sender response is recorded separately from Android notification posting.

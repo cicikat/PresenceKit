@@ -39,6 +39,7 @@ REGISTRY: dict[str, PathMeta] = {
     # ── runtime: IPC / 队列 / 快照 / 临时态，重启可清 ─────────────────────────
     "channel_queue":          PathMeta("runtime",   "shared",          "global",        "ignore"),
     "mobile_queue":           PathMeta("runtime",   "shared",          "global",        "ignore"),
+    "mobile_push_devices":    PathMeta("runtime",   "shared",          "global",        "ignore"),
     "mobile_queue_seq":       PathMeta("runtime",   "shared",          "global",        "ignore"),
     "agent_actions":          PathMeta("runtime",   "shared",          "global",        "ignore"),
     "owner_turn_receipts_root": PathMeta("runtime", "reality", "global", "ignore"),
