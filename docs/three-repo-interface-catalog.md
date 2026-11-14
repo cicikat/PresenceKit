@@ -1,3 +1,11 @@
+## 手机 #49 感知入口与原生通知（2026-11-14，open / observe）
+
+current：手机复用既有settings通道提供明确设备感知入口、读取失败/重试与恢复刷新，本机电量及授权不冒充后端receipt；普通能力观察只读。native常驻通知按文字去重，重复start不重置，复用60秒断线宽限；真实消息频道、FCM/SSE所有权及poll/inbox/ACK/TTL不变。无新增后端/桌面配置、接口或持久状态。open：逐项硬件/权限/本机意愿/后端effective/最近成功上报的统一观测仍需后端依赖及手机接入；不能以接口存在或本机开关认定完成。observe：真实权限往返、SSE/FCM/前后台/ROM通知未验收。手机Flutter416与Android19项通过，详见手机 docs/mobile/device-permissions-relay-49.md。本记录仅文档同步。
+
+## 手机 #50 聊天恢复与阅读位置（2026-11-14，open / observe）
+
+手机本机 Outbox 增加可选 status_code 和明确 skipped（保留原 request_id 对账，不是服务器取消），通过既有本机快照/详情只读观测；队列阻塞安全出口与虚拟列表真实消息锚点已实现。无后端运行代码、管理开关或桌面合同变更；原 scoped session、final_only、poll/ACK/TTL 不变。open：手机缺安全 scoped 只读 request running 证据，不能借用 desktop 端点或以 WS ready/HTTP 在途冒充生成；需独立后端依赖，合同草案见手机 docs/mobile/chat-reliability-50.md。observe：真实手机/网络/杀进程/签名升级未验收。手机 #49 跟踪感知与原生通知收尾；本记录仅文档同步。
+
 ## 工单 318 · 本地文件 Agent（open）
 
 桌面通过独立 `POST /device-file-agent/poll`、`POST /device-file-agent/result` 连接，使用 `ws.desktop + sensor.write`。授予的物理路径留在客户端。手机和 QQ 通过既有对话入口发起角色请求，手机接口与队列无需新增字段。协议、权限、限制和回执见 [设备文件合同](device-file-agent-contract.md)。真实跨平台设备验收待完成。
