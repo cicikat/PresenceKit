@@ -66,13 +66,20 @@ def register(registry):
                 key: {"type": "string", "description": value} for key, value in fields.items()
             }, "required": list(fields)},
             "persist": False,
+            "live_owner_only": True,
             "write_short_term": False,
             "echo_event_log": False,
         }
 
 
 def format_result(result):
+    state = result.get("status")
+    unknown = state == "outcome_unknown" or result.get("receipt_pending") is True
+    failed = state in {"failed", "canceled", "cancelled", "expired", "paused"} or (
+        result.get("code") and "status" not in result
+    )
+    result = {**result, "request_status": "completed", "task_status": state}
     content = json.dumps(result, ensure_ascii=False)
-    failed = result.get("code") and "status" not in result
     return ToolResult(raw_data=content, safe_summary=content,
-                      meta={"validity": "unavailable" if failed else "current_turn"})
+                      meta={"validity": "outcome_unknown" if unknown else
+                            "execution_failed" if failed else "current_turn"})

@@ -14,7 +14,9 @@ from core.agent_runtime import device_file_agent as service, work_sessions
 
 
 @pytest.mark.asyncio
-async def test_path_c_edit_uses_one_device_and_requires_verified_readback(monkeypatch, sandbox):
+@pytest.mark.parametrize("invalid_prefix", [None, "json", "action"])
+async def test_path_c_edit_uses_one_device_and_requires_verified_readback(monkeypatch, sandbox, invalid_prefix):
+    """A malformed initial plan can recover without spending or replaying a device action."""
     from core.agent_runtime import computer_use
 
     config = {"device_file_agent": {"enabled": True}, "scheduler": {"owner_id": "owner"},
@@ -36,7 +38,11 @@ async def test_path_c_edit_uses_one_device_and_requires_verified_readback(monkey
     ])
 
     async def model(messages, **kwargs):
+        nonlocal invalid_prefix
         assert kwargs["char_id"] == character._active_character_id
+        if invalid_prefix:
+            prefix, invalid_prefix = invalid_prefix, None
+            return "not JSON" if prefix == "json" else '{"action":{"op":"unsupported"}}'
         return json.dumps(next(actions))
 
     monkeypatch.setattr(llm_client, "chat", model)

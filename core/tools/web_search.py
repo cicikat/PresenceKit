@@ -7,13 +7,22 @@ X3：搜索结果自动沉淀到 vector_store（source="web"，去重靠 url）�
 """
 
 import asyncio
+import json
+import logging
 import time
 
 from core.error_handler import log_error
 from core.proxy_config import get_aiohttp_proxy
+from core.tools.tool_result import ToolResult
 
 
-async def search(query: str, uid: str | None = None, char_id: str | None = None) -> str:
+def _result(code: str, status: str, message: str) -> ToolResult:
+    content = json.dumps({"code": code, "status": status, "message": message}, ensure_ascii=False)
+    return ToolResult(raw_data=content, safe_summary=content,
+                      meta={"validity": "current_turn" if status == "empty" else "execution_failed"})
+
+
+async def search(query: str, uid: str | None = None, char_id: str | None = None) -> str | ToolResult:
     """
     用 DuckDuckGo 搜索，返回前3条结果（标题 + 链接 + 摘要）。
     代理从 config.yaml proxy 配置自动读取。
@@ -40,7 +49,7 @@ async def search(query: str, uid: str | None = None, char_id: str | None = None)
         if not results:
             from core.api_call_log import append
             append(caller="web_search", purpose="search", provider="ddgs", model="text", duration_ms=int((time.perf_counter() - started_at) * 1000), ok=True, output_hint="0_results")
-            return "没有找到相关结果"
+            return _result("web_search_empty", "empty", "没有找到相关结果")
 
         from core.api_call_log import append
         append(caller="web_search", purpose="search", provider="ddgs", model="text", duration_ms=int((time.perf_counter() - started_at) * 1000), ok=True, output_hint=f"{len(results)}_results")
@@ -72,12 +81,13 @@ async def search(query: str, uid: str | None = None, char_id: str | None = None)
 
         return "\n\n".join(lines)
 
-    except asyncio.TimeoutError:
+    except (asyncio.TimeoutError, TimeoutError):
         from core.api_call_log import append
         append(caller="web_search", purpose="search", provider="ddgs", model="text", duration_ms=int((time.perf_counter() - started_at) * 1000), ok=False, output_hint="TimeoutError")
-        return "搜索超时，请稍后再试"
+        return _result("web_search_timeout", "failed", "搜索超时，请稍后再试")
     except Exception as e:
         from core.api_call_log import append
         append(caller="web_search", purpose="search", provider="ddgs", model="text", duration_ms=int((time.perf_counter() - started_at) * 1000), ok=False, output_hint=type(e).__name__)
-        log_error("tool.web_search", e)
-        return "搜索失败，请稍后再试"
+        # DDGS exception text can echo the private query or proxy credentials.
+        logging.getLogger(__name__).warning("[tool.web_search] %s", type(e).__name__)
+        return _result("web_search_failed", "failed", "搜索失败，请稍后再试")

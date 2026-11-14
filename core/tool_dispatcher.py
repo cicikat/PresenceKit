@@ -2614,7 +2614,7 @@ def get_tools_schema(
             continue
         if name in _computer_use.OWNER_TOOL_NAMES and (not _computer_use.enabled() or not _computer_use.owner_scope(uid, char_id)):
             continue
-        if name in _device_file_tools.NAMES and not _device_file_tools.service.allowed(uid, char_id):
+        if name in _device_file_tools.NAMES and (autonomy or not _device_file_tools.service.allowed(uid, char_id)):
             continue
         if name in _gmail_tools.NAMES and not _gmail_tools.allowed(name, uid, char_id):
             continue
@@ -3395,19 +3395,23 @@ async def _execute_structured_impl(
         # Tool implementations may return a ToolResult.  Keep raw_data inside
         # that object: all outward-facing execution paths consume only its
         # safe_summary, never the dataclass repr or its raw payload.
-        from core.tools.tool_result import to_tool_result
+        from core.tools.tool_result import ToolResult, to_tool_result
         tool_result = to_tool_result(result)
         safe_summary = tool_result.safe_summary
         _trace_truncated = bool((tool_result.meta or {}).get("truncated"))
         _trace_failure_reason = str((tool_result.meta or {}).get("failure_reason") or "")[:128]
-        if tool_name in _gmail_tools.NAMES | _intent_tools.NAMES | _device_file_tools.NAMES:
+        if tool_name in _gmail_tools.NAMES | _intent_tools.NAMES | _device_file_tools.NAMES or (
+            tool_name == "web_search" and isinstance(result, ToolResult)
+        ):
             validity = tool_result.meta.get("validity")
             if validity == "current_turn":
+                _trace("ok", safe_summary)
                 await _notify_status("finished")
                 return _execution_outcome("tool_executed", safe_summary)
             if validity == "outcome_unknown":
                 await _notify_status("outcome_unknown")
                 return _execution_outcome("outcome_unknown", safe_summary)
+            _trace("failed", safe_summary)
             await _notify_status("failed")
             return _execution_outcome("tool_failed", safe_summary)
         if tool_name in _QZONE_TOOL_NAMES and tool_result.meta.get("validity") != "current_turn":
