@@ -1,3 +1,7 @@
+## 工单 318 · 本地文件 Agent（open）
+
+桌面通过独立 `POST /device-file-agent/poll`、`POST /device-file-agent/result` 连接，使用 `ws.desktop + sensor.write`。授予的物理路径留在客户端。手机和 QQ 通过既有对话入口发起角色请求，手机接口与队列无需新增字段。协议、权限、限制和回执见 [设备文件合同](device-file-agent-contract.md)。真实跨平台设备验收待完成。
+
 ## 工单 307 · 桌面连接所有权与正文恢复（2026-11-12）
 
 current：后端以 WS/generation 共同限定 hello、pong、ACK、心跳与 finally 清理，动作 ACK 绑定

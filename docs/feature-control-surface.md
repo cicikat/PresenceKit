@@ -1,3 +1,7 @@
+## 本地文件 Agent（318）
+
+`device_file_agent.enabled` 默认 false，在管理面「感知与电脑操作」热切换。有效状态为关闭、等待已授权设备或已连接。关闭停止下发命令，普通聊天继续可用。桌面「偏好 → 通用 → 本地文件 Agent」控制设备启用、暂停、文件或目录访问及写权限。任务元数据从私有 `GET /observability/device-file-agent` 查看。
+
 ## 手机前台实时连接 R2（mobile43）
 
 `mobile_realtime.enabled` 默认 true；管理面「消息分发与客户端设置」提供独立开关，GET/PUT `/settings/clients` 的 mobile_realtime 返回 enabled/effective/mode/default（admin），热更新。关闭即回到 HTTP，不停用手机通道、不删除队列/历史；client_channels.mobile 总开关优先。当前 mode 固定 final_only；手机只读 GET `/mobile/realtime` 发现能力，无本地提权开关。state.read 观测 `/observability/mobile-realtime`，连接/失败/补收及无正文的本机延迟样本；reply_apply_ms 不等于屏幕首字。详见 [R2合同](mobile-realtime-r2.md)，真机仍 observe。

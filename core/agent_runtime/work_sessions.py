@@ -25,6 +25,7 @@ WORK_SESSION_SCHEMA_VERSION = "agent-runtime-work-session.v1"
 _SESSION_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 _NAME_RE = re.compile(r"^[a-z][a-z0-9_.:-]{0,127}$")
 CAPABILITY_MANIFESTS: dict[str, frozenset[str]] = {
+    "device_file_agent": frozenset({"device_file_receipt"}),
     "authored_diary": frozenset({"authored_diary"}),
     "document_summary": frozenset({"document_summary"}),
     "workspace_artifact": frozenset({"workspace_artifact"}),

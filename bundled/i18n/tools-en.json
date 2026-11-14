@@ -423,6 +423,22 @@
     "source": "读取当前用户与角色的既有产物。",
     "en": "Read an existing artifact for the current user and character."
   },
+  "device_workspace_list": {
+    "source": "Find authorized workspaces on online desktops.",
+    "en": "Find authorized workspaces on online desktops."
+  },
+  "device_file_task_start": {
+    "source": "Start a bounded local-file work session on exactly one authorized desktop workspace. Include the requested target and changes in goal. A queued receipt means work has not finished.",
+    "en": "Start a bounded local-file work session on exactly one authorized desktop workspace. Include the requested target and changes in goal. A queued receipt means work has not finished."
+  },
+  "device_file_task_status": {
+    "source": "Read the same local-file task's outcome, saved versions and verification receipts.",
+    "en": "Read the same local-file task's outcome, saved versions and verification receipts."
+  },
+  "device_file_task_cancel": {
+    "source": "Stop the same local-file task before another file action. Consult its saved changes afterwards.",
+    "en": "Stop the same local-file task before another file action. Consult its saved changes afterwards."
+  },
   "list_artifacts": {
     "source": "列出当前用户与角色的产物元数据。",
     "en": "List artifact metadata for the current user and character."

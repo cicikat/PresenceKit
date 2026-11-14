@@ -1369,6 +1369,7 @@ class Pipeline:
         # categories/tools/excludes.
         from core.tool_exposure import filter_schemas as _filter_exposure, resolve as _resolve_exposure
         from core.agent_runtime import computer_use as _computer_use
+        from core.tools.device_file_tools import NAMES as device_file_tools
         _exposure = _resolve_exposure("path_c", char_id=char_id)
         from core.tool_exposure import expand_legacy_categories as _expand_cats
         categories = _expand_cats(allowed_tool_categories) if allowed_tool_categories is not None else list(_exposure.categories)
@@ -1383,7 +1384,7 @@ class Pipeline:
         if not pin_hashes:
             excluded_tool_names.add(pin_tool)
         if is_group or is_proactive:
-            excluded_tool_names.update(_computer_use.OWNER_TOOL_NAMES)
+            excluded_tool_names.update(_computer_use.OWNER_TOOL_NAMES | device_file_tools)
         if not _drinking_invited:
             excluded_tool_names.add("drink_with_user")
 
@@ -1488,7 +1489,7 @@ class Pipeline:
                 _discovery_notes["media"] = _media_note
         except Exception:
             logger.debug("[pipeline.run_agentic_loop] image gen note unavailable", exc_info=True)
-        discovery = ToolDiscovery(tools, _TOOL_REGISTRY, notes=_discovery_notes, direct=_computer_use.OWNER_TOOL_NAMES | {pin_tool})
+        discovery = ToolDiscovery(tools, _TOOL_REGISTRY, notes=_discovery_notes, direct=_computer_use.OWNER_TOOL_NAMES | device_file_tools | {pin_tool})
         image_surface = "absent"
         image_hint = ""
         if "generate_image" in _final_tool_names and _discovery_notes.get("media") and not is_group and not is_proactive:
@@ -1508,6 +1509,13 @@ class Pipeline:
         mcp_opaque_params_note = format_mcp_opaque_params_note(tools)
 
         loop_msgs = list(messages)
+        if any((tool.get("function") or tool).get("name") in device_file_tools for tool in tools):
+            loop_msgs.insert(0, {"role": "system", "_layer": "11.6_device_file_agent", "content": (
+                "For a file explicitly exported or downloaded to the user’s computer, use device_workspace_list "
+                "and device_file_task_start. If missing or ambiguous, ask the user to select the file in desktop "
+                "settings. Chat artifacts are only for the server copy. A queued task is not a completed edit. "
+                "Use device_file_task_status to check saved versions and verification before reporting completion."
+            )})
         from core.agent_runtime.models import TaskPrincipal
 
         computer_use_hint = _computer_use.role_prompt(
@@ -1887,6 +1895,7 @@ class Pipeline:
                                     "role": "tool",
                                     "tool_call_id": rc["id"],
                                     "_private_gmail_result": rc["name"] in gmail_tools,
+                                    "_private_device_file": rc["name"] in device_file_tools,
                                     "content": _tool_message_content(result, ask_confirm, generated_at=time.time(),
                                                                      discovery_result=rc["name"].startswith(_discovery_prefix),
                                                                      status=tool_outcome.status),
@@ -1930,6 +1939,7 @@ class Pipeline:
                         "role": "tool",
                         "tool_call_id": tc["id"],
                         "_private_gmail_result": tc["name"] in gmail_tools,
+                        "_private_device_file": tc["name"] in device_file_tools,
                         "_continuity_receipt": getattr(result, 'continuity_receipt', None),
                         "content": _tool_message_content(result, ask_confirm, generated_at=time.time(),
                                                          discovery_result=tc["name"].startswith(_discovery_prefix),

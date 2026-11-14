@@ -35,3 +35,12 @@
     <dt data-i18n="computer_use.error">最后错误</dt><dd id="cu-error">–</dd>
   </dl>
 </section>
+<section class="card">
+  <div class="card-header"><h3 data-i18n="flag.device_file_agent">本地文件 Agent</h3></div>
+  <p data-i18n="device_file_agent.hint">默认关闭。开启后需在桌面授权文件或目录。</p>
+  <label class="checkbox-row"><input id="device-file-enabled" type="checkbox" disabled>
+    <span data-i18n="device_file_agent.enabled">启用本地文件 Agent</span>
+  </label>
+  <button id="device-file-save" class="btn btn-primary btn-sm" data-action="saveDeviceFileAgent" data-i18n="common.save" disabled>保存</button>
+  <p id="device-file-state" role="status"></p>
+</section>

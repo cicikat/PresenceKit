@@ -121,6 +121,7 @@ def main() -> None:
                         app.style.display = 'flex';
                         await goto('device-policy');
                         await loadComputerUse();
+                        await loadDeviceFileAgent();
                     }""")
                     page.locator("#cu-enabled").wait_for(state="attached")
                     disclosure = page.locator("details:not([open]):has(#cu-enabled) > summary")
@@ -141,6 +142,23 @@ def main() -> None:
                 page.locator("#cu-save").click()
                 page.wait_for_function("document.getElementById('cu-save').disabled === false")
                 assert read_config()["computer_use"]["enabled"] is False
+                file_toggle = page.locator("#device-file-enabled")
+                disclosure = page.locator("details:not([open]):has(#device-file-enabled) > summary")
+                if disclosure.count():
+                    disclosure.click()
+                assert not file_toggle.is_checked()
+                file_toggle.check()
+                page.locator("#device-file-save").click()
+                page.wait_for_function("document.getElementById('device-file-save').disabled === false")
+                assert read_config()["device_file_agent"]["enabled"] is True
+                load_device()
+                if disclosure.count():
+                    disclosure.click()
+                assert file_toggle.is_checked()
+                file_toggle.uncheck()
+                page.locator("#device-file-save").click()
+                page.wait_for_function("document.getElementById('device-file-save').disabled === false")
+                assert read_config()["device_file_agent"]["enabled"] is False
                 browser.close()
         finally:
             server.should_exit = True
