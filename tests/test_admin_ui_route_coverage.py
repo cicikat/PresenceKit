@@ -31,6 +31,7 @@ NO_ADMIN_UI_WHITELIST: dict[tuple[str, str], str] = {
     ("POST", "/phone_control/debug/start"): "Mobile device automation diagnostic session entry",
     ("POST", "/computer-use/agent-session/control"): "Desktop agent session controls; device client owns execution",
     ("POST", "/computer-use/poll"): "Desktop device action lease polling",
+    ("POST", "/sensor/ambient"): "Device-only opt-in ambient summary ingestion",
     ("POST", "/computer-use/result"): "Desktop device action result submission",
     ("POST", "/computer-use/vision/locate"): "Desktop execution-time visual target localization",
     ("POST", "/perception/screen/poll"): "Desktop screenshot request polling; admin does not capture device screens",
