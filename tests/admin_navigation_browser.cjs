@@ -14,9 +14,17 @@ const base = process.env.ADMIN_TEST_URL || 'http://127.0.0.1:8080';
     await context.addInitScript(() => localStorage.setItem('presencekit_admin_ui', 'legacy'));
     const page = await context.newPage();
     const errors = [];
+    let diaryFragmentUnavailable = false;
+    let diarySettingsUnavailable = false;
     page.on('pageerror', error => errors.push(error.message));
     await page.route('**/*', route => {
       const url = new URL(route.request().url());
+      if (url.pathname === '/static/pages/diary-config.html' && diaryFragmentUnavailable) {
+        return route.fulfill({status: 503, body: 'Fixture unavailable'});
+      }
+      if (url.pathname === '/settings/diary' && !diarySettingsUnavailable) {
+        return route.fulfill({json: {char_id: 'fixture', obsidian_path: 'fixture-notes', configured: true}});
+      }
       if (url.origin === base && (url.pathname.startsWith('/static/') || url.pathname === '/')) return route.continue();
       return route.fulfill({status: 403, contentType: 'application/json', body: '{}'});
     });
@@ -39,6 +47,28 @@ const base = process.env.ADMIN_TEST_URL || 'http://127.0.0.1:8080';
       await page.locator('#page-' + target + '.active[data-page-loaded="true"]').waitFor();
     }
     await openShell();
+    await active('guide');
+    diaryFragmentUnavailable = true;
+    await page.evaluate(() => AdminUI.select('new'));
+    await page.evaluate(() => goto('character-behavior'));
+    const behavior = page.locator('#page-character-behavior');
+    await behavior.getByRole('heading', {name: '角色行为', exact: true}).waitFor();
+    await behavior.locator('#setup-mail-enabled').waitFor({state: 'attached'});
+    const retryFragment = behavior.locator('[data-behavior-load-error] button');
+    await retryFragment.waitFor();
+    diaryFragmentUnavailable = false;
+    diarySettingsUnavailable = true;
+    await retryFragment.click();
+    const retryDiary = behavior.locator('[data-source-error="diary-config"] button');
+    await retryDiary.waitFor();
+    diarySettingsUnavailable = false;
+    await retryDiary.click();
+    await page.waitForFunction(() => document.getElementById('setup-diary-path')?.value === 'fixture-notes');
+    await page.evaluate(() => goto('guide'));
+    await page.evaluate(() => goto('character-behavior'));
+    assert.equal(await behavior.locator('#setup-diary-path').inputValue(), 'fixture-notes');
+    await page.evaluate(() => { AdminUI.select('legacy'); resetPageHistory(); });
+    await page.evaluate(() => goto('guide'));
     await active('guide');
     assert.equal(await page.locator('#nav-back').isDisabled(), true);
     await page.locator('#nav-toggle-services').click();

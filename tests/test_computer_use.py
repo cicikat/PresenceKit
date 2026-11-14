@@ -677,11 +677,16 @@ async def test_cloud_provider_errors_and_strict_coordinates(monkeypatch, provide
 
 
 @pytest.mark.asyncio
-async def test_remote_task_receipts_are_device_session_sequence_and_nonce_bound(fixture, monkeypatch):
+@pytest.mark.parametrize("switched", [False, True])
+async def test_remote_task_receipts_are_device_session_sequence_and_nonce_bound(fixture, monkeypatch, switched):
     _, _, body = fixture
     app = FastAPI()
     app.include_router(routes.router)
+    window = {"id": observation(1)["surface"]["window"], "title": "Fixture app"}
+    if switched:
+        body.update(scope="desktop", switch_authorization=True, remaining_ms=900000)
     actions = iter([
+        *([{"kind": "focus_window", "handle": window["id"]["handle"]}] if switched else []),
         {"kind": "click", "target": {"kind": "element", "id": 1}},
         {"kind": "type_text", "text": "fixture private input"},
         {"kind": "press_key", "key": "Enter"},
@@ -690,6 +695,8 @@ async def test_remote_task_receipts_are_device_session_sequence_and_nonce_bound(
     ])
 
     async def plan(*args):
+        if switched:
+            assert args[2]["windows"][0]["title"] == "Fixture app"
         return next(actions)
 
     monkeypatch.setattr(service, "_plan", plan)
@@ -700,6 +707,15 @@ async def test_remote_task_receipts_are_device_session_sequence_and_nonce_bound(
         poll = (await http.post("/computer-use/poll", json=body)).json()
         assert poll["accepted"]
         body["server_epoch"] = poll["server_epoch"]
+        if switched:
+            # Simulate repeated heartbeats beyond the original authorization horizon.
+            for _ in range(226):
+                with monkeypatch.context() as clock:
+                    now = service._device.heartbeat + 4
+                    clock.setattr(service, "time", SimpleNamespace(monotonic=lambda: now))
+                    assert (await http.post("/computer-use/poll", json=body)).json()["accepted"]
+            # AsyncIO and the service return to the real clock for task execution.
+            service._device.heartbeat = service.time.monotonic()
         await http.post("/computer-use/poll", json={**body, "state": "paused"})
         assert service.start("owner", "fixture_char", "paused") == {
             "state": "paused", "reason": "desktop_paused",
@@ -709,14 +725,19 @@ async def test_remote_task_receipts_are_device_session_sequence_and_nonce_bound(
         task_id = service.start("owner", "fixture_char", "fixture private goal")["task_id"]
         assert service.start("owner", "fixture_char", "another")["state"] == "busy"
         run = service._run
-        for seq in range(1, 6):
+        steps = 6 if switched else 5
+        for seq in range(1, steps + 1):
             for _ in range(20):
-                packet = (await http.post("/computer-use/poll", json=body)).json()
+                packet = (await http.post("/computer-use/poll", json={
+                    **body, "focus_ready": not switched or seq > 2,
+                })).json()
                 if packet["step"]:
                     break
                 await asyncio.sleep(.01)
             assert packet["step"]["seq"] == seq
-            assert packet["step"]["frame"] == (seq - 1 if seq > 1 else None)
+            assert packet["step"]["frame"] == (seq - 1 if seq > (2 if switched else 1) else None)
+            if switched and seq <= 2:
+                assert packet["step"]["action"]["kind"] == ("list_windows" if seq == 1 else "focus_window")
             replay = (await http.post("/computer-use/poll", json=body)).json()
             assert replay["step"] is None
             body_result = {
@@ -724,6 +745,8 @@ async def test_remote_task_receipts_are_device_session_sequence_and_nonce_bound(
                 "server_epoch": body["server_epoch"], "nonce": packet["nonce"], "seq": seq,
                 "receipt": {"status": "changed" if seq > 1 else "ok", "observation": observation(seq)},
             }
+            if switched and seq == 1:
+                body_result["receipt"] = {"status": "ok", "windows": [window]}
             denied = await http.post("/computer-use/result", json=body_result, headers={"Authorization": "Bearer other"})
             assert denied.status_code == 409
             wrong = await http.post("/computer-use/result", json={**body_result, "nonce": uuid4().hex})
@@ -739,7 +762,7 @@ async def test_remote_task_receipts_are_device_session_sequence_and_nonce_bound(
         await asyncio.wait_for(run.worker, timeout=1)
         state = (await http.get("/computer-use/status")).json()
         assert state["state"] == "succeeded"
-        assert state["steps"] == 5
+        assert state["steps"] == steps
         assert state["actions"] == 4
         assert "fixture private" not in json.dumps(state)
         assert "Test control" not in json.dumps(state)
@@ -805,7 +828,7 @@ async def test_owner_probe_exposes_computer_use_and_explains_missing_desktop_gra
         seen.append(names)
         if "computer_use_start" not in names:
             return ""
-        assert "临时授权" in messages[0]["content"]
+        assert "开启 Computer Use" in messages[0]["content"]
         return '__TOOL_CALL__:[{"name":"computer_use_start","arguments":{"goal":"在记事本里写一句话"}}]'
 
     monkeypatch.setattr("core.decision_probe.probe", probe)
@@ -818,7 +841,7 @@ async def test_owner_probe_exposes_computer_use_and_explains_missing_desktop_gra
             assert service.TOOL_NAMES <= seen[-1]
             assert result.selected_tool == "computer_use_start"
             assert "no_desktop_authorization" in result.prompt_tool_result
-            assert "开启临时授权" in result.prompt_tool_result
+            assert "开启 Computer Use" in result.prompt_tool_result
             prompt = result.computer_use_prompt()
             assert prompt["_layer"] == "11.7_computer_use"
             assert "本轮工具选择已经结束" in prompt["content"]
@@ -864,7 +887,7 @@ async def test_tool_loop_offers_scoped_definitions_and_prompt_on_first_turn(fixt
     if context == "owner":
         assert service.TOOL_NAMES <= functions.keys()
         assert functions["computer_use_start"]["description"].startswith("Submit an explicit request")
-        assert "temporary access" in notes[0]
+        assert "Windows desktop preferences" in notes[0]
         assert "Succeeded means the goal was verified" in notes[0]
     elif context == "filtered":
         assert service.TOOL_NAMES & functions.keys() == {"computer_use_status"}

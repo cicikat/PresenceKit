@@ -122,7 +122,10 @@ function gmailError(error) {
 
 async function loadSetupGmailOAuth() {
   const field = id => document.getElementById('setup-gmail-' + id);
+  const mounted = field('client-id');
+  if (!mounted) return;
   const state = await api('GET', '/settings/gmail/oauth/config');
+  if (!mounted.isConnected) return;
   field('client-id').value = state.client_id || '';
   field('client-secret').value = '';
   field('redirect-uri').value = state.redirect_uri || '';
@@ -189,8 +192,11 @@ async function copySetupGmailCallback() {
 
 async function loadSetupGmail() {
   const field = id => document.getElementById('setup-gmail-' + id);
+  const mounted = field('status');
+  if (!mounted) return;
   try {
     const state = await api('GET', '/settings/gmail');
+    if (!mounted.isConnected) return;
     field('status').textContent = state.bound_elsewhere ? t('gmail.bound_elsewhere', '邮箱已绑定到其他角色')
       : t('gmail.state.' + state.token_state, state.token_state);
     if (state.email) field('email').value = state.email;
@@ -225,11 +231,12 @@ async function loadSetupGmail() {
     };
     if (pending.open && !pending.hidden) await loadSetupGmailPending();
     else field('pending-items').replaceChildren();
+    if (!mounted.isConnected) return;
     field('unknown').hidden = !state.unknown_delivery_count;
     field('unknown-ids').textContent = (state.unknown_deliveries || [])
       .map(row => row.message_id).join(' · ');
   } catch (e) {
-    field('status').textContent = t('gmail.load_failed', '读取 Gmail 状态失败 {error}', {error: gmailError(e)});
+    if (mounted.isConnected) mounted.textContent = t('gmail.load_failed', '读取 Gmail 状态失败 {error}', {error: gmailError(e)});
   }
 }
 
@@ -345,11 +352,13 @@ async function saveSetupGmailSync() {
   }
 }
 
-async function _loadSetupMail() {
-  void loadSetupGmail();
-  void loadSetupGmailOAuth().catch(e => toast(t('gmail.load_failed', '读取 Gmail 状态失败 {error}', {error: gmailError(e)}), 'err'));
+async function _loadSetupMail({inline = false} = {}) {
+  const mounted = document.getElementById('setup-mail-enabled');
+  if (!mounted) return;
+  const gmail = Promise.all([loadSetupGmail(), loadSetupGmailOAuth()]).catch(e => e);
   try {
     const mail = await api('GET', '/settings/mail');
+    if (!mounted.isConnected) return;
     document.getElementById('setup-mail-enabled').checked = !!mail.enabled;
     document.getElementById('setup-mail-host').value = mail.smtp_host || '';
     document.getElementById('setup-mail-port').value = mail.smtp_port || '';
@@ -366,7 +375,11 @@ async function _loadSetupMail() {
     document.getElementById('setup-mail-connection-mode').value = mail.connection_mode || 'auto';
     document.getElementById('setup-mail-backend').value = mail.backend || 'smtp';
     document.getElementById('setup-mail-status').innerHTML = _setupBadge(mail.configured);
+    const failure = await gmail;
+    if (failure && mounted.isConnected) throw failure;
   } catch (e) {
+    if (!mounted.isConnected) return;
+    if (inline) throw e;
     toast(t('setup.mail.load_error', '加载邮件通道配置失败: {error}', {error: _setupErrMsg(e)}), 'err');
   }
 }
@@ -404,11 +417,16 @@ async function saveSetupMail() {
   }
 }
 
-async function _loadSetupAnniversaries() {
+async function _loadSetupAnniversaries({inline = false} = {}) {
+  const mounted = document.getElementById('setup-anniversaries-list');
+  if (!mounted) return;
   try {
     const { anniversaries } = await api('GET', '/settings/anniversaries');
+    if (!mounted.isConnected) return;
     _renderSetupAnniversaries(anniversaries || []);
   } catch (e) {
+    if (!mounted.isConnected) return;
+    if (inline) throw e;
     toast(t('setup.anniversaries.load_error', '加载自定义纪念日失败: {error}', {error: _setupErrMsg(e)}), 'err');
   }
 }
@@ -426,13 +444,18 @@ async function saveSetupAnniversaries() {
 }
 
 let _setupDiaryCharId = null;
-async function _loadSetupDiary() {
+async function _loadSetupDiary({inline = false} = {}) {
+  const mounted = document.getElementById('setup-diary-path');
+  if (!mounted) return;
   try {
     const diary = await api('GET', '/settings/diary');
+    if (!mounted.isConnected) return;
     _setupDiaryCharId = diary.char_id;
-    document.getElementById('setup-diary-path').value = diary.obsidian_path || '';
+    mounted.value = diary.obsidian_path || '';
     document.getElementById('setup-diary-status').innerHTML = _setupBadge(diary.configured);
   } catch (e) {
+    if (!mounted.isConnected) return;
+    if (inline) throw e;
     toast(t('setup.diary.load_error', '加载日记路径失败: {error}', {error: _setupErrMsg(e)}), 'err');
   }
 }
@@ -450,12 +473,17 @@ async function saveSetupDiary() {
   }
 }
 
-async function _loadSetupCoplayGames() {
+async function _loadSetupCoplayGames({inline = false} = {}) {
+  const mounted = document.getElementById('setup-coplay-games-list');
+  if (!mounted) return;
   refreshSetupCoplayStatus();
   try {
     const { game_whitelist } = await api('GET', '/settings/coplay-games');
+    if (!mounted.isConnected) return;
     _renderSetupCoplayGames(game_whitelist || []);
   } catch (e) {
+    if (!mounted.isConnected) return;
+    if (inline) throw e;
     toast(t('setup.coplay.load_error', '加载 coplay 游戏白名单失败: {error}', {error: _setupErrMsg(e)}), 'err');
   }
 }

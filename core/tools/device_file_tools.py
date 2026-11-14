@@ -7,15 +7,18 @@ from core.tools.tool_result import ToolResult
 
 
 SPECS = {
-    "device_workspace_list": ("Find authorized workspaces on online desktops.", {}),
+    "device_workspace_list": ("Find authorized workspaces and any active local-file task. "
+                              "Use this directly for edits on the owner's desktop.", {}),
     "device_file_task_start": (
         "Start a bounded local-file work session on exactly one authorized desktop workspace. "
-        "Include the requested target and changes in goal. A queued receipt means work has not finished.",
+        "Include the exact path or filename, location hints and requested changes in goal. "
+        "Reuse the current task ID if already running.",
         {"device_id": "Desktop ID from device_workspace_list", "workspace_id": "Authorized workspace ID",
          "goal": "The user's requested local file operation, including filename and revision or version when known"},
     ),
     "device_file_task_status": (
-        "Read the same local-file task's outcome, saved versions and verification receipts.",
+        "Briefly wait for progress on the same task and read its saved versions and verification. "
+        "If it is still running, share its progress instead of launching another task.",
         {"task_id": "Task ID from device_file_task_start"},
     ),
     "device_file_task_control": (
@@ -43,7 +46,9 @@ async def execute(name, uid, char_id, args):
             return service.start(actor, **args)
         if name == "device_file_task_control":
             return service.control(actor, **args)
-        return service.status(actor, args["task_id"], cancel=name.endswith("_cancel"))
+        if name == "device_file_task_cancel":
+            return service.status(actor, args["task_id"], cancel=True)
+        return await service.check_progress(actor, args["task_id"])
     except (ValueError, RuntimeError):
         return {"code": "device_file_task_unavailable"}
 

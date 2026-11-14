@@ -29,6 +29,13 @@ Target = Annotated[Element | Visual, Field(discriminator="kind")]
 class Observe(Strict):
     kind: Literal["observe"]
 
+class ListWindows(Strict):
+    kind: Literal["list_windows"]
+
+class FocusWindow(Strict):
+    kind: Literal["focus_window"]
+    handle: int = Field(gt=0, lt=2**53)
+
 
 class VerifyVisual(Strict):
     kind: Literal["verify_visual"]
@@ -78,7 +85,7 @@ class Wait(Strict):
 
 
 ActionModel = TypeAdapter(Annotated[
-    Observe | VerifyVisual | Pointer | Click | Scroll | Text | Press | Hotkey | Drag | Wait,
+    Observe | ListWindows | FocusWindow | VerifyVisual | Pointer | Click | Scroll | Text | Press | Hotkey | Drag | Wait,
     Field(discriminator="kind"),
 ])
 
@@ -96,6 +103,7 @@ class Poll(Strict):
     cloud_vision: bool | None = None
     stop_agent: bool = False
     visual_verify: bool = False
+    switch_authorization: bool = False
 
 
 class Window(Strict):
@@ -138,10 +146,16 @@ class Observation(Strict):
     nodes: list[Node] = Field(max_length=64)
 
 
+class WindowChoice(Strict):
+    id: Window
+    title: str = Field(min_length=1, max_length=160)
+
+
 class Receipt(Strict):
     status: Literal["ok", "changed", "failed", "stale", "canceled"]
     reason: Code | None = None
     observation: Observation | None = None
+    windows: Annotated[list[WindowChoice], Field(max_length=32)] | None = None
 
 
 class DeliveryRef(Strict):

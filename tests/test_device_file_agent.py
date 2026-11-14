@@ -76,6 +76,13 @@ async def test_path_c_edit_uses_one_device_and_requires_verified_readback(monkey
             "device_id": device["device_id"], "workspace_id": grant["workspace_id"], "goal": "Fix eye movement",
         }))
         assert started["status"] == "queued"
+        active = json.loads(await tool("device_workspace_list", {}))["active_task"]
+        assert active["task_id"] == started["task_id"]
+        duplicate = json.loads(await tool("device_file_task_start", {
+            "device_id": device["device_id"], "workspace_id": grant["workspace_id"], "goal": "Fix eye movement",
+        }))
+        assert (duplicate["task_id"], duplicate["code"]) == (started["task_id"], "task_already_running")
+        progress = asyncio.create_task(tool("device_file_task_status", {"task_id": started["task_id"]}))
         for operation, body in [
             ("read", {"content": "offset = y", "sha256": "a" * 64}),
             ("patch", {"saved": True, "sha256": "b" * 64, "version_id": uuid4().hex, "diff": "private marker"}),
@@ -89,7 +96,7 @@ async def test_path_c_edit_uses_one_device_and_requires_verified_readback(monkey
             assert (await client.post(result_url, json=payload)).status_code == 200
             assert (await client.post(result_url, json=payload)).status_code == 200
         await asyncio.gather(*tuple(service._workers))
-        status = json.loads(await tool("device_file_task_status", {"task_id": started["task_id"]}))
+        status = json.loads(await progress)
         assert status["status"] == "succeeded"
         assert len(status["changes"]) == 1
         assert status["checks"][0]["visual_checked"] == "unknown"

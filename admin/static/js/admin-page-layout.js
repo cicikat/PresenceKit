@@ -1,6 +1,11 @@
 // Move the original forms between pages; field identity and drafts survive UI switching.
 const AdminPageLayout = (() => {
   const behaviorPages = ['device-policy', 'output-settings', 'coplay-config', 'minecraft', 'listening-player', 'mail-config', 'diary-config', 'personal-settings', 'conversation-settings', 'observation-center'];
+  const behaviorCards = [
+    ['behavior-reading', '资料读取', 'tools', ['tools-xhs-card', 'tools-weather-card']],
+    ['behavior-health', '身体信号', 'scheduler', ['hds-config-card']],
+    ['behavior-call', '通话互动', 'autonomy-settings', ['video-call-presence-card']],
+  ];
   const modelPages = ['role-bindings', 'tts-config', 'local-model-runtime', 'embedding-config'];
   const dataPages = ['relationship-facts', 'user-data', 'memory-consolidation'];
   const observationGroups = {
@@ -138,11 +143,12 @@ const AdminPageLayout = (() => {
       }
       if (page === 'observe-dream') parent.append(document.getElementById('overview-drinking'));
     } else if (page === 'character-behavior') {
-      await Promise.all([...behaviorPages, 'tools', 'scheduler', 'autonomy-settings'].map(source => loadPageFragment(source, {reload})));
+      const sources = [...behaviorPages, ...behaviorCards.map(([, , source]) => source)];
+      const fragments = await Promise.allSettled(sources.map(source => loadPageFragment(source, {reload})));
       if (!isNew()) return;
       const parent = document.getElementById('page-character-behavior');
       for (const source of behaviorPages) {
-        if (sections.has(source)) continue;
+        if (sections.has(source) || fragments[sources.indexOf(source)].status !== 'fulfilled') continue;
         const root = document.getElementById('page-' + source);
         decorateSettingsPanels(source, root);
         const title = source === 'personal-settings' ? t('settings_center.user_profile_and_anniversaries', '用户资料与纪念日')
@@ -152,14 +158,25 @@ const AdminPageLayout = (() => {
           if (!node.matches('.page-title,.page-context,.settings-search')) move(node, body);
         }
       }
-      for (const [key,title,ids] of [
-        ['behavior-reading','资料读取',['tools-xhs-card','tools-weather-card']],
-        ['behavior-health','身体信号',['hds-config-card']],
-        ['behavior-call','通话互动',['video-call-presence-card']],
-      ]) {
+      for (const [key, title, source, ids] of behaviorCards) {
         if (sections.has(key)) continue;
-        const body=section(parent,key,title);
-        ids.forEach(id=>move(document.getElementById(id),body));
+        const nodes = ids.map(id => document.getElementById(id));
+        if (fragments[sources.indexOf(source)].status !== 'fulfilled' || nodes.some(node => !node)) continue;
+        const body = section(parent, key, title);
+        nodes.forEach(node => move(node, body));
+      }
+      parent.querySelector('[data-behavior-load-error]')?.remove();
+      if ([...behaviorPages, ...behaviorCards.map(([key]) => key)].some(key => !sections.has(key))) {
+        const status = document.createElement('p');
+        status.dataset.behaviorLoadError = '';
+        status.setAttribute('role', 'alert');
+        status.textContent = designText('部分设置暂时无法显示。', 'Some settings could not be displayed.');
+        const retry = document.createElement('button');
+        retry.type = 'button'; retry.className = 'btn btn-ghost btn-sm';
+        retry.textContent = t('common.refresh', '刷新');
+        retry.addEventListener('click', () => goto('character-behavior'));
+        status.append(' ', retry);
+        parent.prepend(status);
       }
     } else if (page === 'client-settings') {
       await loadPageFragment('service-center', {reload});
@@ -224,23 +241,23 @@ const AdminPageLayout = (() => {
   }
   async function loadBehavior() {
     const loaders = {
-      'agent-runtime-browser': loadBrowserRuntimePage,
       'device-policy': () => loadScreenPeekSettings(),
       'output-settings': loadStickerConfig,
-      'coplay-config': _loadSetupCoplayGames,
+      'coplay-config': () => _loadSetupCoplayGames({inline: true}),
       minecraft: loadMinecraftPage,
       'listening-player': refreshListeningPlayer,
-      'mail-config': _loadSetupMail,
-      'diary-config': _loadSetupDiary,
-      'personal-settings': _loadSetupAnniversaries,
+      'mail-config': () => _loadSetupMail({inline: true}),
+      'diary-config': () => _loadSetupDiary({inline: true}),
+      'personal-settings': () => _loadSetupAnniversaries({inline: true}),
       'conversation-settings':loadConversationSettings,'observation-center':loadImeObservation,
     };
-    await Promise.all([loadToolsPage(),loadHdsLocalSettings(),loadVideoCallPresence()]);
-    await Promise.all(behaviorPages.map(async source => {
-      const root = document.getElementById('page-' + source);
-      if (root.dataset.pageVisited === 'true') return;
-      await loaders[source](); root.dataset.pageVisited = 'true';
-    }));
+    const mounted = Object.fromEntries(behaviorPages.filter(source => sections.has(source))
+      .map(source => [source, loaders[source]]));
+    const extras = [loadToolsPage, loadHdsLocalSettings, loadVideoCallPresence];
+    await Promise.all([loadSources(mounted), ...behaviorCards.flatMap(([key], index) =>
+      sections.has(key) ? [Promise.resolve().then(extras[index]).catch(error => {
+        console.error('[admin] behavior section failed', key, error);
+      })] : [])]);
   }
   function apply() {
     if (!isNew()) restore(); else navigation();

@@ -1,6 +1,6 @@
 # device-file-agent.v1
 
-The current Reality character uses the existing Task Manager and Work Session to coordinate edits on an authenticated desktop. Each task freezes the owner, character, desktop installation, desktop process epoch, workspace and grant revision. Physical paths stay on the desktop. Polling is independent of GUI Computer Use and desktop WebSocket ownership.
+The current Reality character uses the existing Task Manager and Work Session to coordinate edits on an authenticated desktop. Each task freezes the owner, character, desktop installation, desktop process epoch, workspace and grant revision. Polling is independent of GUI Computer Use and desktop WebSocket ownership.
 
 ## Transport
 
@@ -12,6 +12,8 @@ The current Reality character uses the existing Task Manager and Work Session to
 
 Requests and results are limited to 64 KiB. The desktop accepts UTF-8 text files up to 256 KiB and returns pages up to 8 KiB. A task allows at most 30 file actions, 20 files, 600 seconds and three automatic repair attempts. A saved receipt requires a matching readback. No shell or package manager is exposed.
 
+The optional unrestricted grant defaults off and requires explicit desktop consent. Its separate write permission defaults off. It accepts absolute paths on supported local drives and can return those paths to the planner transiently. Name searches start in the local Downloads, Desktop and Documents folders. File format and size bounds, OS permissions, path validation and symlink checks continue to apply. Turning the grant off invalidates its ID and revision at the desktop.
+
 ## Data boundary
 
-The desktop holds grants, snapshots and the write journal in app data. The server retains task metadata and handles bounded excerpts transiently. Documents are untrusted data. Normal logs and public receipts omit file contents and paths. File tools do not touch Tavern history, Reality/Dream source records, the event store/log, episodic and mid-term memory, storylines, identities, dossiers, vector indexes, or backup/restore state. Migration, cleanup, reconciliation and reindexing jobs are outside the scope of 318.
+The desktop holds grants, snapshots and the write journal in app data. The server retains task metadata and handles bounded excerpts transiently. Documents are untrusted data. Normal logs and public receipts omit file contents and paths. The folder and file picker grants exclude sensitive paths. The optional unrestricted grant can reach sensitive text files accessible to the desktop user.

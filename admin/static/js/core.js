@@ -46,7 +46,7 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'device-file-agent-318-1';
+const ADMIN_UI_FRAGMENT_VERSION = 'character-behavior-322';
 
 const ADMIN_PAGE_ALIASES = Object.freeze({overview:'setup', users:'character', 'operations-center':'status', memory: 'observe-memory', 'creation-center':'data-management', 'observe-existence':'observe-dream'});
 
@@ -172,8 +172,13 @@ function bindPageActions(scope) {
 async function loadPageFragment(page, {reload = false} = {}) {
   const container = document.getElementById('page-' + page);
   if (!container) return container;
+  const pending = _pageFragmentLoads.get(page);
+  if (pending) {
+    if (!reload) return pending;
+    // Finish the in-flight fetch before replacing the fragment it owns.
+    await pending.catch(() => {});
+  }
   if (reload) {
-    _pageFragmentLoads.delete(page);
     delete container.dataset.pageLoaded;
     delete container.dataset.pageVisited;
     container.replaceChildren();
@@ -195,10 +200,9 @@ async function loadPageFragment(page, {reload = false} = {}) {
         return container;
       })
       .catch(error => {
-        _pageFragmentLoads.delete(page);
         console.error(`[admin] failed to load page fragment ${page}`, error);
         throw error;
-      });
+      }).finally(() => _pageFragmentLoads.delete(page));
     _pageFragmentLoads.set(page, request);
   }
   return _pageFragmentLoads.get(page);
@@ -309,17 +313,21 @@ async function goto(page, {reloadFragment = false, fromHistory = false} = {}) {
 
   try {
     await loadPageFragment(page, {reload: reloadFragment});
+    if (generation !== _navigationGeneration) return;
     await AdminPageLayout.prepare(page, reloadFragment);
   } catch (_error) {
     if (generation !== _navigationGeneration) return;
+    pageElement.querySelector(':scope > [data-page-load-error]')?.remove();
     const error = document.createElement('p');
+    error.dataset.pageLoadError = '';
     error.setAttribute('role', 'alert');
     error.textContent = t('nav.load_failed', 'Page could not load. Select it again to retry, or go back.');
-    pageElement.replaceChildren(error);
+    pageElement.append(error);
     return;
   }
   // A slower fragment must never resume navigation after a newer click or logout.
   if (generation !== _navigationGeneration) return;
+  pageElement.querySelector(':scope > [data-page-load-error]')?.remove();
 
   const loaders = {
     'character-cleanup': loadCharacterCleanup,

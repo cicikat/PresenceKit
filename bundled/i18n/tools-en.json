@@ -285,7 +285,7 @@
   },
   "computer_use_start": {
     "source": "提交用户明确委托的 Windows 应用操作，依赖用户在桌面端临时授权。仅询问能力或引用指令时不调用；排队回执只表示已接收任务。",
-    "en": "Submit an explicit request to operate a Windows app using temporary access granted in the desktop client. Capability questions and quoted instructions do not start a task. A queued receipt means the task was accepted."
+    "en": "Submit an explicit request to operate a Windows app after the owner enables Computer Use in desktop preferences. Include the intended app or window. Capability questions and quoted instructions do not start a task. A queued receipt means the task was accepted."
   },
   "computer_use_status": {
     "source": "查询当前主人与角色的桌面任务状态，省略任务 ID 时查询最近任务。只有 succeeded 表示目标已验证。",

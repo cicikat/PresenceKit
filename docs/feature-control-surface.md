@@ -1,6 +1,6 @@
 ## 本地文件 Agent（318）
 
-`device_file_agent.enabled` 默认 false，在管理面「感知与电脑操作」热切换。有效状态为关闭、等待已授权设备或已连接。关闭停止下发命令，普通聊天继续可用。桌面「偏好 → 通用 → 本地文件 Agent」控制设备启用、暂停、文件或目录访问及写权限。任务元数据从私有 `GET /observability/device-file-agent` 查看。
+`device_file_agent.enabled` 默认 false，在管理面「感知与电脑操作」热切换。有效状态为关闭、等待已授权设备或已连接。关闭停止下发命令，普通聊天继续可用。桌面「偏好 → 通用 → 本地文件 Agent」控制设备启用、暂停、文件或目录访问及写权限。桌面的「无限制访问本地文件」默认关闭，开启后可访问本机磁盘上的受支持文本，需另行勾选写入权限。任务元数据从私有 `GET /observability/device-file-agent` 查看。
 
 ## 手机前台实时连接 R2（mobile43）
 
@@ -1203,6 +1203,6 @@ provider_kind 新增 venice。Base URL为 https://api.venice.ai/api/v1，原生P
 
 ## 301 CU-04 Windows Computer Use 授权与状态
 
-`computer_use.enabled` 默认 `false`，管理面「看屏幕与操作电脑」通过 `PUT /settings/feature-flags` 热更新。有效状态为 `disabled`、`no-active-device` 或 `ready`。关闭后撤销桌面执行租约，普通聊天照常。桌面用户还需在「偏好 → 系统设置」选择窗口或整个桌面并设定时长。主人现实私聊可通过普通探针或工具循环调用，继承 `desktop` 类别和角色权限。
+`computer_use.enabled` 默认 `false`，管理面「看屏幕与操作电脑」通过 `PUT /settings/feature-flags` 热更新。有效状态为 `disabled`、`no-active-device` 或 `ready`。关闭后撤销桌面执行租约，普通聊天照常。桌面「偏好 → 系统设置」提供本机授权开关，开启后由角色选择窗口。授权无固定倒计时，关闭、紧急停止、锁屏或失去后端连接都会结束本机授权。主人现实私聊可通过普通探针或工具循环调用，继承 `desktop` 类别和角色权限。
 
 管理面状态卡通过 `GET /computer-use/status` 展示授权范围、模型路由、当前或最近任务、动作数、平均步时延和最后错误。状态不含用户目标、输入内容、UIA 文本或截图。

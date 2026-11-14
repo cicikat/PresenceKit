@@ -1789,8 +1789,8 @@ for _name, _func, _description, _properties, _required, _examples in (
 
 for _cu_name, _cu_func, _cu_field, _cu_description, _cu_example in (
     ("computer_use_start", _computer_use_start, "goal",
-     "提交用户明确委托的 Windows 应用操作，依赖用户在桌面端临时授权。仅询问能力或引用指令时不调用；排队回执只表示已接收任务。",
-     "帮我在已授权的记事本里写入这段文字"),
+     "提交用户明确委托的 Windows 应用操作，需在 Windows 桌面偏好开启 Computer Use。提供目标应用或窗口。仅询问能力或引用指令时不调用；排队回执只表示已接收任务。",
+     "帮我在记事本里写入这段文字"),
     ("computer_use_status", _computer_use_status, "task_id",
      "查询当前主人与角色的桌面任务状态，省略任务 ID 时查询最近任务。只有 succeeded 表示目标已验证。",
      "刚才那个桌面任务做完了吗"),
