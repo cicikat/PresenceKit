@@ -144,7 +144,7 @@ hello 字段或协商流程。
   QQ 私聊 / /desktop/chat / mobile 前台
     → trusted_user_text（media merge 前捕获）
     → core.pretool_router.route_pretool(...)
-    → 同时按注册表 keywords 识别明确的查询/操作意图，记录本轮 must-call 标记（只标记，不绕过 execute 闸门）
+    → 注册表 keywords 仅记录 candidate_tool_names 供观测，不证明真人来源、明确意图或 must-call；工具仍由正常探针 / Path C 自主选择
     → 再检查显式快速路径白名单（当前仅 get_time；与 keywords 无关）
     → 未命中且 Path C 未激活时，走 get_probe_prompt + Path A 的 function schema
     → 探针 user message 只含 trusted_user_text 与短期引用块，不含 media span 或主生成 prompt

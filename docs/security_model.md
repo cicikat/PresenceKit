@@ -54,6 +54,18 @@ public endpoint。
 **客户端调用方式**：所有受保护端点均需 `Authorization: Bearer <YEXUAN_ADMIN_SECRET>` header。
 HTTP 管理面不接受 `?token=` / `?secret=` query 鉴权；`/watch/event` 也只接受 Bearer header。
 
+### 输入来源与开发验收隔离
+
+`core/input_provenance.py` 只接受服务端绑定的执行来源。正文、消息 role、通道名、caller label
+或 owner token 均不证明真人作者；当前投影统一为 `human_authorship=unverified`。资料中的命令不
+升级为本轮授权，关键词只产生候选工具；角色仍可在已有授权内自主回查原文和核对矛盾。
+
+开发验收使用独立 `development.run` 身份与 `POST /v1/development/turns`，不走正式聊天。
+即使开发身份误混入 admin/chat scope，鉴权层也拒绝访问生产端点。开发上下文不能提升为正式
+来源，且在 owner chat 与工具执行入口拒绝。模型仅使用全局默认 preset 和合成消息，无角色、
+历史、记忆、工具、广播或主动链；不归档推理、正文快照和对话统计。无正文 API 计费元数据保留。
+正式 owner-input API 仍有正式会话副作用，标记 integration，不能用于开发验收。
+
 ### External Companion ingress（Brief 193）
 
 `POST /integrations/companion/events` 使用独立的 `companion.write` scope/profile，
@@ -64,7 +76,7 @@ HTTP 管理面不接受 `?token=` / `?secret=` query 鉴权；`/watch/event` 也
 memory policy 和空工具集合。请求只允许冻结 v1 字段，`extra=forbid`，并拒绝任何
 authority/path/token/config 字段。`opportunity` 是 low-trust、non-user-authored
 stimulus，使用零写入 `WriteEnvelope`、零工具、零 fanout；`phone_message` 是
-`companion_phone_input` provenance 的 user-authored owner input，沿正常记忆策略，
+`companion_phone_input` provenance 的协议声明 owner input，真人作者未验证，沿正常记忆策略，
 但仍零工具、零 fanout。回复只通过 HTTP 返回，不再作为 stimulus 回灌。
 
 Companion receipt/session 文件只保存 caller、opaque ID、digest、状态、时间和错误码；

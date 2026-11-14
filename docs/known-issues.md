@@ -1,3 +1,9 @@
+## 输入来源与只读任务加固验收（observe）
+
+开发身份隔离、关键词候选和双端只读意图守卫已有合成 API/文件回归；真实 Windows
+Tauri→HTTP 联调及真实模型自主查证质量尚未验收。旧事件 audit 无真人作者证据，不能由
+assistant_loop 倒推真人委托。详见 [交付与历史窗口证据](input-isolation-delivery.md)。
+
 ## Computer Use 英文工具描述与全量 CI（2026-11-14，open）
 
 `computer_use_start` 的中文描述已改为桌面偏好开启权限并提供目标窗口，但英文翻译条目的 `source` 仍为旧版临时授权描述，英文模式回退到中文。PR #10 的 Python 3.10/3.12 全量均在 `test_tool_loop_offers_scoped_definitions_and_prompt_on_first_turn[owner]` 和 `test_tool_annotations_are_english_but_schema_values_unchanged` 失败；两版本均为 8298 passed、2 failed、71 skipped。

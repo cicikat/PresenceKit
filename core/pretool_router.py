@@ -54,6 +54,7 @@ class PreToolRouteResult:
     turn_id: str = field(default_factory=lambda: uuid.uuid4().hex)
     must_call_tool: bool = False
     required_tool_names: set[str] = field(default_factory=set)
+    candidate_tool_names: set[str] = field(default_factory=set)
     tool_result_generated_at: float | None = None
     exposure_path: str = "path_a"
     exposure_source: str = ""
@@ -77,7 +78,12 @@ class PreToolRouteResult:
         )
 
     def observation(self, trusted_user_text: str) -> dict:
+        from core.input_provenance import current
+        provenance = current()
         return {
+            "input_provenance": provenance.projection() if provenance else {
+                "source": "unknown", "human_authorship": "unverified",
+            },
             "channel": self.channel,
             "exposure_path": self.exposure_path,
             "exposure_source": self.exposure_source,
@@ -89,6 +95,9 @@ class PreToolRouteResult:
             "probe_encoding": self.probe_encoding,
             "tools_available_count": len(self.tools_available),
             "tools_available": list(self.tools_available),
+            "candidate_tool_names": sorted(self.candidate_tool_names),
+            "must_call_tool": self.must_call_tool,
+            "required_tool_names": sorted(self.required_tool_names),
             "selected_tool": self.selected_tool,
             "execution_status": self.execution_status,
             "fast_failed_then_loop_retry": self.fast_failed_then_loop_retry,
@@ -137,16 +146,16 @@ def fast_path_match(
     return None
 
 
-def _required_tool_matches(
+def _candidate_tool_matches(
     user_text: str,
 ) -> set[str]:
-    """Find explicit registry keyword intents without executing side effects."""
+    """Discover candidates, without inferring instruction authorship or intent."""
     matches: set[str] = set()
     for name, spec in tool_dispatcher._TOOL_REGISTRY.items():
         keywords = spec.get("keywords") or []
         if any(keyword and keyword in user_text for keyword in keywords):
-            # Keep the intent even when exposure filtered this tool out.  The
-            # output guard must still prevent a false completion claim.
+            # Keep unavailable candidates visible to diagnostics, but never
+            # turn a keyword in reference data into a system-level obligation.
             matches.add(name)
     return matches
 
@@ -337,8 +346,7 @@ async def route_pretool(
         exposure_source=exposure.source,
         exposure_categories=effective_categories,
     )
-    result.required_tool_names = _required_tool_matches(trusted_user_text)
-    result.must_call_tool = bool(result.required_tool_names)
+    result.candidate_tool_names = _candidate_tool_matches(trusted_user_text)
 
     # Pending input is part of the same channel-neutral contract.  Clear the
     # old state before re-execution so execute() can establish a new confirm or

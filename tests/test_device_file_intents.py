@@ -12,6 +12,32 @@ from tests.test_tool_incident_312 import file_device, call
 
 
 @pytest.mark.asyncio
+async def test_ambiguous_target_pauses_same_task_without_dispatch(file_device, monkeypatch):
+    """A planner's clarification request must stay paused, without a write or replacement task."""
+    async def model(*args, **kwargs):
+        return '{"waiting_user":true}'
+
+    monkeypatch.setattr(llm_client, "chat", model)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test",
+                                 headers={"Authorization": "Bearer fixture"}) as client:
+        await client.post("/device-file-agent/poll", json=file_device)
+        started = json.loads((await call("device_file_task_start", {
+            "device_id": file_device["device_id"], "workspace_id": file_device["grants"][0]["workspace_id"],
+            "goal": "Inspect the requested fixture; target is ambiguous", "operation_intent": "inspect",
+        })).result)
+        try:
+            result = await asyncio.wait_for(call("device_file_task_status", {"task_id": started["task_id"]}), 3)
+            body = json.loads(result.result)
+            assert (body["status"], body["code"]) == ("paused", "target_needs_clarification")
+            assert body["task_id"] == started["task_id"]
+            assert body["changes"] == body["checks"] == []
+            assert body["progress"]["actions_completed"] == 0
+            assert "command" not in (await client.post("/device-file-agent/poll", json=file_device)).json()
+        finally:
+            await service.shutdown()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("intent,action,evidence", [
     ("read", {"op": "read", "path": "fixture.html"}, {"content": "synthetic title", "sha256": "a" * 64}),
     ("search", {"op": "find", "query": "missing.html"}, {"files": [], "truncated": False}),
@@ -52,6 +78,7 @@ async def test_readonly_task_succeeds_from_corresponding_evidence(file_device, m
             else:
                 pytest.fail("device command unavailable")
             assert command["action"]["op"] == action["op"]
+            assert command["operation_intent"] == intent
             assert (await client.post("/device-file-agent/result", json={
                 "ref": command["ref"], "code": "ok", "body": evidence,
             })).status_code == 200

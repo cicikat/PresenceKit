@@ -40,6 +40,8 @@ Scans have hard limits: 4096 visited entries/results, depth 12, 1 second, 8 MiB 
 
 ## Typed task completion (313 C)
 
+Every delivered command now includes required `operation_intent=inspect|search|read|edit|create`, frozen from the submitted task. Desktop execution independently rejects `create/patch/undo` for read intents before touching files or the journal, even with a writable grant. Create intent rejects patch/undo; changing intent on an existing task is rejected. Missing/unknown intent fails deserialization; it never defaults to edit. Deploy this backend before this desktop and roll back the desktop first. An old desktop does not provide this additional local intent guard; an updated desktop cannot execute commands from an old backend. These combinations are not equivalent security evidence.
+
 `device_file_task_start` accepts optional `operation_intent=inspect|search|read|edit|create`; omission preserves legacy edit behavior. Intent freezes at submission and steering cannot elevate it. Read intents reject every write before device dispatch. Create rejects patch/undo. Delete/move/execute/computer_use are not supported file-planner intents: use their existing authorized executors or report the capability gap.
 
 Read tasks need operation-specific, usable device evidence, including confirmed empty results. Edit/create require a saved ACK and matching verification for every written path. Premature `done` receives bounded feedback and then fails with the unmet completion condition. No-change certification and explicit compound required-target contracts remain open; a saved result proves only the reported, verified targets. Do not claim every natural-language subgoal has been satisfied solely from this receipt.

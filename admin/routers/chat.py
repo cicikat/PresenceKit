@@ -83,6 +83,8 @@ async def run_owner_chat_turn(
       探针（_probe_text）刻意使用拼接前的原始文本，避免引用原文里的操作性
       短语被探针误判为当轮指令。非法/缺失时静默降级为普通消息。
     """
+    from core.input_provenance import assert_production_allowed
+    assert_production_allowed()
     live_origin_channel = live_origin_channel or provenance_channel
     from core.pipeline_registry import get as _get_pipeline
     pipeline = pipeline_override or _get_pipeline()

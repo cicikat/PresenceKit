@@ -132,7 +132,13 @@ async def run_legacy_owner_turn(
         kwargs["ingress_dedupe_key"] = ingress_event_id
     if request_id:
         kwargs["request_id"] = request_id
-    return await executor(message, context.provenance_channel, **kwargs)
+    from core.input_provenance import InputProvenance, bind
+    provenance = InputProvenance(
+        "integration" if context.caller_kind == "owner_input" else "owner_channel",
+        context.token_label, context.provenance_channel,
+    )
+    with bind(provenance):
+        return await executor(message, context.provenance_channel, **kwargs)
 
 
 async def execute_idempotent_owner_turn(

@@ -139,6 +139,10 @@ def _record_debug_request(
     private_gmail: bool = False,
 ) -> None:
     """Persist an opt-in semantic request snapshot without affecting the call."""
+    from core.input_provenance import current
+    provenance = current()
+    if provenance is not None and provenance.source == "development":
+        return
     if private_gmail or purpose in PRIVATE_DESKTOP_PURPOSES:
         return
     from core.llm_debug_requests import append

@@ -3524,6 +3524,8 @@ async def execute_structured(
     allowed_tool_names: frozenset[str] | None = None,
     pin_reference_hashes: frozenset[str] = frozenset(),
 ) -> ToolExecutionOutcome:
+    from core.input_provenance import assert_production_allowed
+    assert_production_allowed()
     from core.tool_activity import execute_visible
     outcome = await execute_visible(
         _execute_structured_impl,

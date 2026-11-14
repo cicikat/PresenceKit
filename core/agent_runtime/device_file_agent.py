@@ -221,6 +221,7 @@ def poll(identity: str, body: Poll) -> dict:
         delivery.sent = True
         reply["command"] = {
             "ref": delivery.ref.model_dump(), "action": delivery.action.model_dump(),
+            "operation_intent": run.receipt["operation_intent"],
             "ttl_ms": max(0, int((delivery.expires - time.monotonic()) * 1000)),
         }
         break

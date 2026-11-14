@@ -67,7 +67,7 @@ from admin.routers import (
     system, lorebook,
     settings_proxy, settings_llm, settings_misc, settings_gmail, settings_prompt_assets, settings_prompt_language,
     settings_screen_peek, settings_tool_loop, settings_thinking, settings_relay, settings_feature_flags, settings_local_runtime, settings_mcp, settings_tools, settings_browser,
-    character, chat, owner_turn, diary_sync,
+    character, chat, owner_turn, diary_sync, development,
     scheduler, watch, sensor, period,
     garden, mobile, diary, chat_log,
     mood, activity, dream, dream_rpg,
@@ -116,6 +116,7 @@ from admin.routers import character_cleanup
 app.include_router(character_cleanup.router, tags=["角色删除与恢复"])
 app.include_router(chat.router,           prefix="",           tags=["对话"])
 app.include_router(owner_turn.router,      prefix="",           tags=["Owner Turn"])
+app.include_router(development.router,     prefix="",           tags=["Development"])
 app.include_router(diary_sync.router,      prefix="",           tags=["Diary Sync"])
 app.include_router(scheduler.router,      prefix="",           tags=["调度器"])
 app.include_router(watch.router,          prefix="",           tags=["Watch"])

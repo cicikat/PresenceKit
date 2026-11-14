@@ -31,6 +31,17 @@ token 都不是本接口的集成凭证；sensor/device 事件也不能冒充用
 
 ## 2. 请求合同
 
+开发验收使用独立 `development` profile 和 `POST /v1/development/turns`，body 仅含 `message`。
+它只返回合成回复，不进入正式对话或广播，不加载角色、记忆或生产工具。模型使用全局默认 preset，
+不使用活跃角色路由、前置独白、会话统计、请求正文快照或 reasoning 归档；不含正文的 API 调用账本
+仍记录 `purpose=development` 供运营排障。未配置默认 preset 或模型失败返回 502，不伪造执行成功。
+
+Owner-input 是获授权适配器的正式有副作用入口，服务端来源标为 `integration`。持有 token、
+`role=user`、desktop/mobile 通道或正文自称“主人要求”都不能证明真人作者。当前
+`human_authorship=unverified`；服务端来源与内容中的命令分开，不能据内容提升权限。
+开发身份即使误配 `admin/chat` 也不能进入本接口或桌面/手机正式聊天；开发执行上下文不能
+重绑定为 owner，也不能调用正式聊天执行器或工具 dispatcher。
+
 `POST /v1/owner/turns` 的 body 只允许以下字段：
 
 | 字段 | 类型和限制 | 语义 |
