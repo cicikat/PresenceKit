@@ -1,6 +1,7 @@
 """Owner-only tool display events; arguments and results never leave this boundary."""
 from contextvars import ContextVar
 from functools import wraps
+import json
 import time
 from uuid import uuid4
 
@@ -84,6 +85,15 @@ async def execute_visible(function, tool_name, tool_args, user_id, target_id,
         event['status'] = ('pending_confirmation' if outcome.confirmation_request else
                            'success' if outcome.status == 'tool_executed' else
                            'unknown' if outcome.status == 'outcome_unknown' else 'error')
+        if tool_name.startswith('device_file_') and outcome.status == 'tool_executed':
+            try:
+                result = json.loads(outcome.result)
+            except (TypeError, ValueError):
+                result = {}
+            if isinstance(result, dict) and result.get('task_status') in {
+                'queued', 'running', 'paused', 'waiting_user',
+            }:
+                event['status'] = 'running'
         return outcome
     except BaseException:
         event['status'] = 'unknown'

@@ -14,7 +14,7 @@ from core.agent_runtime import device_file_agent as service, work_sessions
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("invalid_prefix", [None, "json", "action"])
+@pytest.mark.parametrize("invalid_prefix", [None, "json", "action", "premature"])
 async def test_path_c_edit_uses_one_device_and_requires_verified_readback(monkeypatch, sandbox, invalid_prefix):
     """A malformed initial plan can recover without spending or replaying a device action."""
     from core.agent_runtime import computer_use
@@ -42,6 +42,8 @@ async def test_path_c_edit_uses_one_device_and_requires_verified_readback(monkey
         assert kwargs["char_id"] == character._active_character_id
         if invalid_prefix:
             prefix, invalid_prefix = invalid_prefix, None
+            if prefix == "premature":
+                return '{"done":true}'
             return "not JSON" if prefix == "json" else '{"action":{"op":"unsupported"}}'
         return json.dumps(next(actions))
 
@@ -82,6 +84,8 @@ async def test_path_c_edit_uses_one_device_and_requires_verified_readback(monkey
             "device_id": device["device_id"], "workspace_id": grant["workspace_id"], "goal": "Fix eye movement",
         }))
         assert started["status"] == "queued"
+        assert started["request_status"] == "accepted"
+        assert started["next_action"] == "check_same_task"
         active = json.loads(await tool("device_workspace_list", {}))["active_task"]
         assert active["task_id"] == started["task_id"]
         duplicate = json.loads(await tool("device_file_task_start", {
@@ -104,6 +108,8 @@ async def test_path_c_edit_uses_one_device_and_requires_verified_readback(monkey
         await asyncio.gather(*tuple(service._workers))
         status = json.loads(await progress)
         assert status["status"] == "succeeded"
+        assert status["completion_reason"] == "saved_and_verified"
+        assert status["evidence_summary"]["writes"] == status["evidence_summary"]["verified_files"] == 1
         assert len(status["changes"]) == 1
         assert status["checks"][0]["visual_checked"] == "unknown"
         assert work_sessions.list_work_sessions(service.principal())[0]["status"] == "succeeded"

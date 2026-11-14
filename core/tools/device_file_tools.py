@@ -31,15 +31,48 @@ SPECS = {
         {"task_id": "Task ID from device_file_task_start"},
     ),
 }
+READ_SPECS = {
+    "device_file_list_dir": ("list_dir", "List one authorized desktop directory; metadata only."),
+    "device_file_stat": ("stat", "Inspect desktop file/directory metadata without reading its contents."),
+    "device_file_find_name": ("find_name", "Find desktop paths by exact, substring or glob filename; never read contents."),
+    "device_file_search_text": ("search_text", "Search authorized desktop text: literal or bounded regex; returns lines and excerpts."),
+    "device_file_read": ("read_page", "Read a desktop UTF-8 file page with full hash, line range and has_more."),
+}
+for _name, (_, _description) in READ_SPECS.items():
+    SPECS[_name] = (_description + " Use the same grant and returned cursor for continuation; truncated is incomplete.", {
+        "device_id": "Desktop ID from device_workspace_list", "workspace_id": "Authorized workspace ID",
+        "path": "Relative path in this workspace, or an explicitly authorized absolute local path; empty for root",
+        "query": "Filename pattern or content query; empty for list, stat or read",
+        "options": 'JSON object: mode=exact|substring|glob (names) or literal|regex (content), limit=1..100, depth=0..12, cursor, start=1..262144. search_text requires content_search=true.',
+    })
 NAMES = frozenset(SPECS)
 
 
 async def execute(name, uid, char_id, args):
     actor = TaskPrincipal.reality(uid, char_id)
     parameters = SPECS[name][1]
-    if set(args) != set(parameters) or any(not isinstance(value, str) for value in args.values()):
+    optional = {"operation_intent"} if name == "device_file_task_start" else set()
+    if (set(args) - set(parameters) - optional or set(parameters) - set(args)
+            or any(not isinstance(value, str) for value in args.values())):
         return {"code": "invalid_device_file_arguments"}
     try:
+        if name in READ_SPECS:
+            options = json.loads(args["options"])
+            if not isinstance(options, dict) or set(options) - {"mode", "limit", "depth", "cursor", "start", "content_search"}:
+                return {"code": "invalid_device_file_arguments"}
+            if ("mode" in options and (not isinstance(options["mode"], str)
+                                      or options["mode"] not in {"exact", "substring", "glob", "literal", "regex"})
+                    or "cursor" in options and not isinstance(options["cursor"], str)
+                    or "content_search" in options and type(options["content_search"]) is not bool):
+                return {"code": "invalid_device_file_arguments"}
+            for key, default, low, high in (("limit", 50, 1, 100), ("depth", 6, 0, 12), ("start", 1, 1, 262144)):
+                value = options.setdefault(key, default)
+                if type(value) is not int or not low <= value <= high:
+                    return {"code": "invalid_device_file_arguments"}
+            action = service.Action(op=READ_SPECS[name][0], path=args["path"], query=json.dumps({
+                **options, "query": args["query"],
+            }, ensure_ascii=False))
+            return await service.atomic_read(actor, args["device_id"], args["workspace_id"], action)
         if name == "device_workspace_list":
             return service.list_workspaces(actor)
         if name == "device_file_task_start":
@@ -49,12 +82,18 @@ async def execute(name, uid, char_id, args):
         if name == "device_file_task_cancel":
             return service.status(actor, args["task_id"], cancel=True)
         return await service.check_progress(actor, args["task_id"])
-    except (ValueError, RuntimeError):
+    except ValueError:
+        return {"code": "invalid_device_file_arguments"}
+    except RuntimeError:
         return {"code": "device_file_task_unavailable"}
 
 
 def register(registry):
     for name, (description, fields) in SPECS.items():
+        properties = {key: {"type": "string", "description": value} for key, value in fields.items()}
+        if name == "device_file_task_start":
+            properties["operation_intent"] = {"type": "string", "enum": sorted(service.INTENTS),
+                                               "description": "Immutable goal type. Omitted means legacy edit. Read-only goals cannot write."}
         registry[name] = {
             "description": description,
             "category": "artifacts",
@@ -62,9 +101,8 @@ def register(registry):
             "func": execute,
             "keywords": [],
             "examples": ["Work on a file exported to my computer"],
-            "parameters": {"type": "object", "properties": {
-                key: {"type": "string", "description": value} for key, value in fields.items()
-            }, "required": list(fields)},
+            "parameters": {"type": "object", "properties": properties, "required": list(fields),
+                           "additionalProperties": False},
             "persist": False,
             "live_owner_only": True,
             "write_short_term": False,
@@ -75,10 +113,17 @@ def register(registry):
 def format_result(result):
     state = result.get("status")
     unknown = state == "outcome_unknown" or result.get("receipt_pending") is True
-    failed = state in {"failed", "canceled", "cancelled", "expired", "paused"} or (
+    failed = state in {"failed", "canceled", "cancelled", "expired"} or (
         result.get("code") and "status" not in result
     )
-    result = {**result, "request_status": "completed", "task_status": state}
+    pending = state in {"queued", "running", "paused", "waiting_user"}
+    next_action = ("check_same_task" if pending else "reconcile_same_task" if unknown else
+                   "report_failure" if failed else "report_evidence")
+    result = {**result, "request_status": "accepted" if pending or unknown else "rejected" if failed else "completed",
+              "task_status": state, "error_code": result.get("code", "") if failed or unknown else "",
+              "operation_intent": result.get("operation_intent"),
+              "completion_reason": result.get("completion_reason", ""),
+              "evidence_summary": result.get("evidence_summary", {}), "next_action": next_action}
     content = json.dumps(result, ensure_ascii=False)
     return ToolResult(raw_data=content, safe_summary=content,
                       meta={"validity": "outcome_unknown" if unknown else

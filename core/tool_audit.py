@@ -51,7 +51,7 @@ def record(uid: str, char_id: str, *, tool: str, args: dict, origin: str, outcom
             "before": None, "after": None,
             "request_id": str(activity.get("event_id") or uuid.uuid4().hex)[:128],
         }
-        if tool.startswith("device_file_task_") or tool == "device_workspace_list" or tool == "web_search":
+        if tool.startswith("device_file_") or tool == "device_workspace_list" or tool == "web_search":
             # Retain correlation and business state, never raw arguments or result text.
             try:
                 result = json.loads(outcome.result)
@@ -63,8 +63,10 @@ def record(uid: str, char_id: str, *, tool: str, args: dict, origin: str, outcom
             if isinstance(task_id, str) and re.fullmatch(r"[0-9a-f]{32}", task_id):
                 receipt["task_id"] = task_id
             task_status = result.get("task_status", result.get("status"))
-            if task_status in {"queued", "running", "paused", "failed", "succeeded", "canceled", "expired", "outcome_unknown", "empty"}:
+            if task_status in {"queued", "running", "paused", "waiting_user", "failed", "succeeded", "canceled", "expired", "outcome_unknown", "empty"}:
                 receipt["business_status"] = task_status
+                if task_status in {"queued", "running", "paused", "waiting_user"}:
+                    receipt["status"] = "pending"
             code = result.get("code") or (outcome.result if outcome.result == "device_file_denied" else "")
             if isinstance(code, str) and re.fullmatch(r"[a-z][a-z0-9_]{0,63}", code):
                 receipt["business_code"] = code
