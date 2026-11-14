@@ -315,6 +315,9 @@ class TestMcpProxyRouting:
 
     def test_proxy_client_never_inherits_environment_settings(self, monkeypatch):
         import httpx
+        # The SDK evaluates httpx.AsyncClient annotations during import. Load it
+        # before replacing the network constructor, independent of test order.
+        import mcp.shared._httpx_utils  # noqa: F401
 
         calls = {}
         monkeypatch.setattr("core.config_loader.get_config", lambda: {
