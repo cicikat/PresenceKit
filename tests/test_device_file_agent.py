@@ -51,6 +51,8 @@ async def test_path_c_edit_uses_one_device_and_requires_verified_readback(monkey
             outcome = await tool_dispatcher.execute_structured(
                 name, args, user, user, False, None, origin=origin, char_id=char,
             )
+            if user == 'owner' and char == 'fixture_char' and origin == 'assistant_loop':
+                assert outcome.status == 'tool_executed'
             return outcome.result
 
         async def poll_command():

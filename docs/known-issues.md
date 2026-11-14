@@ -1,6 +1,6 @@
 ## 本地文件 Agent 318（open）
 
-Windows 原地 HTML 与回滚由 Rust 文件测试覆盖，真实角色发起、桌面选择器、物理断网回执及 macOS Apple Silicon/TCC 验收待完成。自动语法检查目前覆盖 JSON。构建与视觉检查报告 unknown。待补充任务持续接续、选择请求和整任务撤回后再验收完整工单。
+Windows 原地 HTML 与回滚由 Rust 文件测试覆盖，真实角色发起、桌面选择器、物理断网回执及 macOS Apple Silicon/TCC 验收待完成。自动语法检查目前覆盖 JSON。构建与视觉检查报告 unknown。活跃任务内暂停与调整已接入；崩溃后继续原计划、由聊天拉起选择器及新建文件的撤回仍待补齐。
 
 ## 角色私有意图（311，observe）
 

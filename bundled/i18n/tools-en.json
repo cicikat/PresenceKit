@@ -435,6 +435,10 @@
     "source": "Read the same local-file task's outcome, saved versions and verification receipts.",
     "en": "Read the same local-file task's outcome, saved versions and verification receipts."
   },
+  "device_file_task_control": {
+    "source": "Pause, resume, or steer an active file task to follow the owner's latest correction.",
+    "en": "Pause, resume, or steer an active file task to follow the owner's latest correction."
+  },
   "device_file_task_cancel": {
     "source": "Stop the same local-file task before another file action. Consult its saved changes afterwards.",
     "en": "Stop the same local-file task before another file action. Consult its saved changes afterwards."

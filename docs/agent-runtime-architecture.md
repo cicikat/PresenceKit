@@ -367,8 +367,8 @@ reusing the exhausted key.
 
 ## 318 device file capability
 
-`device_workspace_list`, `device_file_task_start`, `device_file_task_status` and
-`device_file_task_cancel` coordinate owner-bound desktop file work. The same Reality
+`device_workspace_list`, `device_file_task_start`, `device_file_task_status`,
+`device_file_task_control` and `device_file_task_cancel` coordinate owner-bound desktop file work. The same Reality
 principal and Work Session manage the task budget and receipt. See [device file protocol](device-file-agent-contract.md).
 
 ## Brief 233 workspace capability

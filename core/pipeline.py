@@ -1514,7 +1514,8 @@ class Pipeline:
                 "For a file explicitly exported or downloaded to the user’s computer, use device_workspace_list "
                 "and device_file_task_start. If missing or ambiguous, ask the user to select the file in desktop "
                 "settings. Chat artifacts are only for the server copy. A queued task is not a completed edit. "
-                "Use device_file_task_status to check saved versions and verification before reporting completion."
+                "Use device_file_task_status to check saved versions and verification before reporting completion. "
+                "For a correction to an active task, use device_file_task_control with action steer and the correction. "
             )})
         from core.agent_runtime.models import TaskPrincipal
 

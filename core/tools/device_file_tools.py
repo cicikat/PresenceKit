@@ -3,6 +3,7 @@ import json
 
 from core.agent_runtime import device_file_agent as service
 from core.agent_runtime.models import TaskPrincipal
+from core.tools.tool_result import ToolResult
 
 
 SPECS = {
@@ -16,6 +17,11 @@ SPECS = {
     "device_file_task_status": (
         "Read the same local-file task's outcome, saved versions and verification receipts.",
         {"task_id": "Task ID from device_file_task_start"},
+    ),
+    "device_file_task_control": (
+        "Pause, resume, or steer an active file task to follow the owner's latest correction.",
+        {"task_id": "Task ID from device_file_task_start", "action": "pause, resume, or steer",
+         "instruction": "New owner instruction for steer, otherwise an empty string"},
     ),
     "device_file_task_cancel": (
         "Stop the same local-file task before another file action. Consult its saved changes afterwards.",
@@ -35,6 +41,8 @@ async def execute(name, uid, char_id, args):
             return service.list_workspaces(actor)
         if name == "device_file_task_start":
             return service.start(actor, **args)
+        if name == "device_file_task_control":
+            return service.control(actor, **args)
         return service.status(actor, args["task_id"], cancel=name.endswith("_cancel"))
     except (ValueError, RuntimeError):
         return {"code": "device_file_task_unavailable"}
@@ -45,7 +53,7 @@ def register(registry):
         registry[name] = {
             "description": description,
             "category": "artifacts",
-            "effect": "write" if name.endswith(("_start", "_cancel")) else "read",
+            "effect": "write" if name.endswith(("_start", "_cancel", "_control")) else "read",
             "func": execute,
             "keywords": [],
             "examples": ["Work on a file exported to my computer"],
@@ -59,4 +67,7 @@ def register(registry):
 
 
 def format_result(result):
-    return json.dumps(result, ensure_ascii=False)
+    content = json.dumps(result, ensure_ascii=False)
+    failed = result.get("code") and "status" not in result
+    return ToolResult(raw_data=content, safe_summary=content,
+                      meta={"validity": "unavailable" if failed else "current_turn"})

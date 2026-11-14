@@ -113,6 +113,9 @@ class Run:
     expires: float
     delivery: Delivery | None = None
     receipt: dict = field(default_factory=dict)
+    paused: bool = False
+    instructions: list[str] = field(default_factory=list)
+    wake: asyncio.Event = field(default_factory=asyncio.Event)
 
 
 _devices: dict[str, Device] = {}
@@ -183,7 +186,7 @@ def poll(identity: str, body: Poll) -> dict:
     reply["online"] = True
     for run in _runs.values():
         delivery = run.delivery
-        if not delivery or delivery.sent or delivery.expires <= time.monotonic():
+        if run.paused or not delivery or delivery.sent or delivery.expires <= time.monotonic():
             continue
         if run.device.device_id != body.device_id or not _current(run):
             continue
@@ -268,15 +271,51 @@ def status(actor, task_id: str, *, cancel=False) -> dict:
     receipt = tasks.get_task(actor, task_id)
     if receipt["capability"] != CAPABILITY:
         return {"code": "task_not_found"}
+    run = _runs.get(task_id)
     if cancel:
         receipt = tasks.request_cancel(actor, task_id)
+        if run:
+            run.wake.set()
     local = _load(actor, task_id)
     return {
-        "task_id": task_id, "status": receipt["status"], "code": receipt.get("error_code", ""),
+        "task_id": task_id, "status": "paused" if run and run.paused else receipt["status"],
+        "code": receipt.get("error_code", ""),
         "changes": local.get("changes", []), "checks": local.get("checks", []),
         "receipt_pending": local.get("pending_write", False),
 
     }
+
+
+def control(actor, task_id: str, action: str, instruction: str) -> dict:
+    run = _runs.get(task_id)
+    if not run or run.actor != actor:
+        return {"code": "task_not_running"}
+    if action == "steer":
+        if not instruction.strip() or len(instruction) > 1200 or len(run.instructions) >= 4:
+            return {"code": "invalid_steering"}
+        run.instructions.append(instruction)
+    elif action in {"pause", "resume"}:
+        run.paused = action == "pause"
+    else:
+        return {"code": "invalid_task_control"}
+    if run.delivery and not run.delivery.sent and action in {"pause", "steer"}:
+        run.delivery.future.set_result(Result(ref=run.delivery.ref, code="invalid_action"))
+    run.wake.set()
+    return status(actor, task_id)
+
+
+async def _checkpoint(run: Run) -> bool:
+    while run.paused and not tasks.get_task(run.actor, run.task_id).get("cancel_requested"):
+        run.wake.clear()
+        remaining = run.expires - time.monotonic()
+        if remaining <= 0:
+            return False
+        try:
+            await asyncio.wait_for(run.wake.wait(), timeout=min(remaining, 2))
+        except asyncio.TimeoutError:
+            if not allowed(run.actor.uid, run.actor.char_id):
+                return False
+    return time.monotonic() < run.expires
 
 
 def snapshot() -> dict:
@@ -395,6 +434,9 @@ async def _worker(run: Run, goal: str) -> None:
         actions_ok = 0
         last_error = False
         for seq in range(1, MAX_ACTIONS + 2):
+            failure = "device_file_timeout"
+            if not await _checkpoint(run):
+                break
             failure = "cancel_requested"
             if tasks.get_task(actor, task_id).get("cancel_requested"):
                 break
@@ -406,10 +448,15 @@ async def _worker(run: Run, goal: str) -> None:
             if remaining <= 0:
                 break
             failure = "invalid_file_plan"
+            if run.instructions:
+                messages[1]["content"] += "\nOwner correction: " + "\n".join(run.instructions)
+                run.instructions.clear()
             plan = await _plan(run, messages, remaining)
+            if run.instructions or run.paused:
+                continue
             if plan.get("waiting_user") is True:
-                failure = "waiting_user"
-                break
+                run.paused = True
+                continue
             if plan.get("done") is True:
                 failure = "verification_required"
                 if not actions_ok or last_error or any(verified.get(path) != digest for path, digest in required.items()):
