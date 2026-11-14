@@ -44,6 +44,8 @@ JPEG最多384KiB，40,000字节分块，校验task/seq/hash/尺寸；后端最�
 | 后端全量 | Windows / Python3.12 `pytest -n auto -q --tb=short`：8445 passed、13 subtests passed，318.49秒 | 最终工作区全量；TEMP/TMP使用同盘隔离目录，MCP代理测试先加载SDK再替换网络构造器，保留业务断言 |
 | 桌面前端与构建 | 637个前端测试、TypeScript、Vite build、`cargo check --locked`：PASS | Vite仍有既有大chunk提示；不等于完整Tauri窗口验收 |
 | 桌面当前head CI | [run 43651463665](https://github.com/cicikat/PresenceKit-desktop/actions/runs/43651463665)：frontend、macOS Rust、Windows Rust均成功 | Windows包含打包worker和真实Chromium验收；对应提交 `e3db161d98b4b2d6a7202c58a52b85b05d610a23` |
+| 后端实现提交CI | [Tests 43652477701](https://github.com/cicikat/PresenceKit/actions/runs/43652477701)与[offline 43652477692](https://github.com/cicikat/PresenceKit/actions/runs/43652477692)成功 | 对应实现提交 `c867d03add4eb8678bd834ee220cbbd992eb7642`；含Python3.10/3.12 smoke、双版本全量、串行隔离、mutation与浏览器 |
+| 三仓固定合同 | [protocol 43652492390](https://github.com/cicikat/PresenceKit/actions/runs/43652492390)：后端provider、桌面consumer、手机consumer均成功 | 后端 `c867d03add4eb8678bd834ee220cbbd992eb7642` / 桌面 `e3db161d98b4b2d6a7202c58a52b85b05d610a23` / 手机 `43232e283e9c3649dbf19e7798d90b3fb013c4db`；其他组合需独立证据 |
 
 打包worker证据哈希（JPEG内容仅短期保留，不入仓）：
 
@@ -63,7 +65,7 @@ JPEG最多384KiB，40,000字节分块，校验task/seq/hash/尺寸；后端最�
 - 完整Tauri窗口→远程HTTP→Chromium→真实VLM同链、物理断网/崩溃及后端跨进程重启未验收。当前分层证据不能写成正式Windows端到端完成。
 - Fixture B的实际修复后VLM复评、Fixture D的Canvas专门VLM评价尚缺；已有保存回读/刷新/hash变化及Canvas像素证据不能替代它们。
 - 原生响应有20秒上限、会话TTL600秒。桌面撤权与在途native调用串行，不能保证调用中即时中断；任务取消/重启由下一次poll移除browser_tasks并释放进程。
-- 桌面已提交并push：`e3db161d98b4b2d6a7202c58a52b85b05d610a23`，[PR #7](https://github.com/cicikat/PresenceKit-desktop/pull/7)。后端314待独立提交；最终固定后端/桌面/手机完整SHA与三仓合同CI待交付补录，其他组合均为 `not_verified`。当前尚未合并或部署。
+- 实现提交：后端 `c867d03add4eb8678bd834ee220cbbd992eb7642`，[PR #16](https://github.com/cicikat/PresenceKit/pull/16)；桌面 `e3db161d98b4b2d6a7202c58a52b85b05d610a23`，[PR #7](https://github.com/cicikat/PresenceKit-desktop/pull/7)。上表证据仅适用于所列提交。交付记录后续提交的当前head复验、最终三仓组合、合并及部署状态以这两个PR的最终交付记录为准；未附成功运行的组合均为 `not_verified`。
 
 ## 部署与回滚
 
