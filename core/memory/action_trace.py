@@ -245,6 +245,8 @@ def finalize_display(uid: str, char_id: str, event: dict) -> None:
     if (row.get('display_activity') or {}).get('status') == 'unknown':
         event['status'] = 'unknown'
     row['display_activity'] = dict(event)
+    if event['tool_name'].startswith('device_file_') and event['status'] == 'running':
+        row['status'] = 'pending'
     path.parent.mkdir(parents=True, exist_ok=True)
     safe_write_json(path, entries[-_MAX_ENTRIES:])
 
@@ -395,6 +397,8 @@ def format_line(entry: dict) -> str:
         return f"{time_str} 想{label}，但没成功"
     if status == "pending_confirm":
         return f"{time_str} 问了要不要{label}，还在等你确认"
+    if status == "pending":
+        return f"{time_str} 已提交{label}，还未完成"
     digest = entry.get("result_digest") or ""
     if digest:
         return f"{time_str} {label}：{digest}"

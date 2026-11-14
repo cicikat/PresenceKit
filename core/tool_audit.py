@@ -65,6 +65,8 @@ def record(uid: str, char_id: str, *, tool: str, args: dict, origin: str, outcom
             task_status = result.get("task_status", result.get("status"))
             if task_status in {"queued", "running", "paused", "waiting_user", "failed", "succeeded", "canceled", "expired", "outcome_unknown", "empty"}:
                 receipt["business_status"] = task_status
+                if task_status in {"queued", "running", "paused", "waiting_user"}:
+                    receipt["status"] = "pending"
             code = result.get("code") or (outcome.result if outcome.result == "device_file_denied" else "")
             if isinstance(code, str) and re.fullmatch(r"[a-z][a-z0-9_]{0,63}", code):
                 receipt["business_code"] = code

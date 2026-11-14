@@ -23,6 +23,7 @@ def file_device(monkeypatch, sandbox):
                         lambda: SimpleNamespace(_active_character_id="fixture_char", character=None))
     monkeypatch.setattr(service, "_devices", {})
     monkeypatch.setattr(service, "_runs", {})
+    monkeypatch.setattr(service, "_completed", {})
     token = auth.TokenInfo("fixture-desktop", frozenset({"sensor.write", "ws.desktop", "state.read"}), "desktop")
     monkeypatch.setattr(auth, "resolve_token", lambda _: token)
     grant = {"workspace_id": uuid4().hex, "revision": uuid4().hex, "alias": "fixture", "write": True}

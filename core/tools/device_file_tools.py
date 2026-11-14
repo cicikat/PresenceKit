@@ -51,7 +51,9 @@ NAMES = frozenset(SPECS)
 async def execute(name, uid, char_id, args):
     actor = TaskPrincipal.reality(uid, char_id)
     parameters = SPECS[name][1]
-    if set(args) != set(parameters) or any(not isinstance(value, str) for value in args.values()):
+    optional = {"operation_intent"} if name == "device_file_task_start" else set()
+    if (set(args) - set(parameters) - optional or set(parameters) - set(args)
+            or any(not isinstance(value, str) for value in args.values())):
         return {"code": "invalid_device_file_arguments"}
     try:
         if name in READ_SPECS:
@@ -89,6 +91,9 @@ async def execute(name, uid, char_id, args):
 def register(registry):
     for name, (description, fields) in SPECS.items():
         properties = {key: {"type": "string", "description": value} for key, value in fields.items()}
+        if name == "device_file_task_start":
+            properties["operation_intent"] = {"type": "string", "enum": sorted(service.INTENTS),
+                                               "description": "Immutable goal type. Omitted means legacy edit. Read-only goals cannot write."}
         registry[name] = {
             "description": description,
             "category": "artifacts",
@@ -108,10 +113,17 @@ def register(registry):
 def format_result(result):
     state = result.get("status")
     unknown = state == "outcome_unknown" or result.get("receipt_pending") is True
-    failed = state in {"failed", "canceled", "cancelled", "expired", "paused"} or (
+    failed = state in {"failed", "canceled", "cancelled", "expired"} or (
         result.get("code") and "status" not in result
     )
-    result = {**result, "request_status": "completed", "task_status": state}
+    pending = state in {"queued", "running", "paused", "waiting_user"}
+    next_action = ("check_same_task" if pending else "reconcile_same_task" if unknown else
+                   "report_failure" if failed else "report_evidence")
+    result = {**result, "request_status": "accepted" if pending or unknown else "rejected" if failed else "completed",
+              "task_status": state, "error_code": result.get("code", "") if failed or unknown else "",
+              "operation_intent": result.get("operation_intent"),
+              "completion_reason": result.get("completion_reason", ""),
+              "evidence_summary": result.get("evidence_summary", {}), "next_action": next_action}
     content = json.dumps(result, ensure_ascii=False)
     return ToolResult(raw_data=content, safe_summary=content,
                       meta={"validity": "outcome_unknown" if unknown else

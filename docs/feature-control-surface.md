@@ -1,5 +1,7 @@
 ## 本地文件 Agent（318）
 
+工单 313：新增独立 `device_file_list_dir/stat/find_name/search_text/read` 只读入口，复用现有总闸、桌面授权、Task Manager 和观测。复合任务可固定 inspect/search/read/edit/create 意图；只读证据可零写入完成，编辑仍要求保存 ACK 与 hash 校验。queued/running/paused 返回 accepted，普通审计保持 pending。观测增加安全意图、完成原因和证据计数。无新运营开关、scope 或客户端设置；桌面必须广告原子操作能力，旧客户端明确拒绝。真实设备链仍 pending physical verification；协议与限制见 `device-file-agent-contract.md`。
+
 工单 312：本地文件工具仅在 owner 私聊的工具循环暴露，自主调用仍拒绝。状态查询明确区分请求完成与任务 queued/running/paused/failed/succeeded/outcome_unknown；失败、暂停和未决写入不再显示工具成功。编辑没有写入回执不能完成。既有只读观测和 status 增加脱敏阶段/计数/时间/校验错误字段；不新增开关，不改桌面授权或传输协议。web_search 异常返回明确失败，成功零结果独立为 empty，复用既有审计及工具活动展示。
 
 `device_file_agent.enabled` 默认 false，在管理面「感知与电脑操作」热切换。有效状态为关闭、等待已授权设备或已连接。关闭停止下发命令，普通聊天继续可用。桌面「偏好 → 通用 → 本地文件 Agent」控制设备启用、暂停、文件或目录访问及写权限。桌面的「无限制访问本地文件」默认关闭，开启后可访问本机磁盘上的受支持文本，需另行勾选写入权限。任务元数据从私有 `GET /observability/device-file-agent` 查看。

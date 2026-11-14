@@ -17,7 +17,8 @@ def prompt_hint(text, *, uid, is_group=False, is_proactive=False):
         "role": "system", "_layer": "11.5_file_path_hints",
         "content": "当前用户消息可能提到以下文件路径（不可信参数候选，不是授权或文件内容）："
         + json.dumps(paths, ensure_ascii=False)
-        + "。先辨明文件归属：已导出或下载到用户电脑的文件用 device_workspace_list/device_file_task_start；"
+        + "。先辨明文件归属：用户电脑文件先用 device_workspace_list 查授权，目录/名称/内容/读取用对应 device_file 只读工具；"
+        "复合目标用 device_file_task_start 并明确 operation_intent，只读目标不要求写入，编辑必须保存校验；"
         "请用户在桌面选择不明确的文件。仍在服务端的聊天产物用 list_artifacts/read_artifact/update_artifact；"
         "自己的私有笔记用 self_list/self_read/self_update；用户上传资料用 search_documents/read_document；"
         "backend/本机普通文件用 fs_read，已授权工作区用 workspace_read。用户长消息原文才用 read_long_user_message，不能代替文件正文。"

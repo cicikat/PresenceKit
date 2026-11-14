@@ -1511,14 +1511,21 @@ class Pipeline:
         loop_msgs = list(messages)
         if any((tool.get("function") or tool).get("name") in device_file_tools for tool in tools):
             loop_msgs.insert(0, {"role": "system", "_layer": "11.6_device_file_agent", "content": (
-                "For local desktop files, device_workspace_list, device_file_task_start and device_file_task_status "
-                "are already available. Call them directly and skip tool discovery and Computer Use for file edits. "
+                "For local desktop files, device_workspace_list and device_file_* tools are directly available. "
+                "Use device_file_list_dir/stat/find_name/search_text/read for independent read-only operations. "
+                "Name search never reads contents; search_text requires content_search=true in options. "
+                "Follow next_cursor and truncated; incomplete results are not all files. "
+                "Use device_file_task_start for compound work and set operation_intent explicitly: inspect/search/read/edit/create. "
+                "Skip tool discovery and Computer Use for supported file primitives. "
                 "Pass the exact filename or path, location hints and requested change in the goal; the worker searches "
                 "within the selected grant. If no grant covers the target, ask the owner for its location or access. "
                 "Check the same task ID once after starting. For queued or running work, report that it is in progress. "
                 "On follow-up, use active_task, the known task ID or recent_task from the workspace tool. "
                 "Steer an active task when the owner corrects it. "
-                "Report a saved edit only if the receipt confirms it. Server copies are handled by chat artifact tools."
+                "Report a saved edit only if the receipt confirms saved_and_verified. Zero writes is valid for read-only intent. "
+                "request_status=accepted is submission only; task_status is the work result. "
+                "Tests/scripts use an authorized process executor or existing MCP, not the file planner; "
+                "GUI goals use Computer Use. Server copies are handled by chat artifact tools."
             )})
         from core.agent_runtime.models import TaskPrincipal
 
