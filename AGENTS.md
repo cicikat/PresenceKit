@@ -208,6 +208,8 @@ python run_test.py
 
 ### 部署前的数据备份
 
+未明确要求备份时，不默认执行备份。
+
 部署、升级或迁移需要备份时，复用 `备份数据.bat` / `scripts/backup_weekly.py`，或 `main.py backup-state create/verify/coverage`；范围以 `core.backup_state` 的 protection inventory 为准。操作流程见 [离线私有状态备份](docs/offline-state-backup.md) 和 [服务器备份与升级手册](docs/user-teach/server-backup-and-upgrade-runbook.md)。
 
 **禁止为部署另写整盘、整个安装目录或整个 `data/` / `userdata/` 的递归复制、tar/ZIP 归档来代替数据备份脚本。** 不把源码、虚拟环境、缓存、普通日志或历史备份一起打包；程序回滚仅保存本次将覆盖的程序文件。先核对备份脚本、已有可用备份与剩余空间，再安排必要的停服窗口；备份完成并校验后及时恢复服务，下载与回传不应延长停服。空间不足或脚本报错时先恢复服务并排查，不能绕过 inventory 改成全量复制。
