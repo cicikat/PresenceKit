@@ -25,6 +25,7 @@ from core.llm_failover import (
     category_timeout,
     execute_create,
     execute_stream,
+    has_tool_results,
 )
 from core.llm_protocol import (
     UpstreamResponseFormatError,
@@ -562,6 +563,7 @@ async def chat(
             tools=request_tools,
             tool_choice="auto" if request_tools else None,
             gen_kwargs=gen_kwargs,
+            has_tool_results=has_tool_results(semantic_messages),
         )
 
     started_at = time.perf_counter()
@@ -752,6 +754,7 @@ async def chat_turn(
             tools=tools,
             tool_choice="auto",
             gen_kwargs=turn_kwargs,
+            has_tool_results=has_tool_results(semantic_messages),
         )
 
     purpose_token = _purpose_token(call_category, private_gmail=private_gmail)

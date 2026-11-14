@@ -22,6 +22,32 @@ loopback（127.0.0.1 / localhost / ::1）vision 连接另有强制直连，见�
 
 ## 中转站工具 schema 兼容（工单 B4）
 
+### 可选流尾包兼容与协议恢复（2026-11-15）
+
+Chat Completions preset 新增 `stream_compatibility: strict|openlux`（默认 `strict`）和
+`protocol_recovery: "off"|fallback|nonstream_then_fallback`（默认 `"off"`，YAML 需加引号）。
+管理面「模型路由 → 编辑 Preset」可热更新，GET 返回默认值及保存值；非 Chat Completions
+协议拒绝非默认策略。关闭两项即恢复原有严格解析与协议错误不切换的行为。
+
+`openlux` 用于已观察到的完整工具结束后 assistant 空 role 尾包、空 `stop` 尾包，以及同一
+事件 ID、相同 choice 的重复终止事件。保留最初的 `finish_reason=tool_calls` 和完整工具参数；
+新正文、参数、推理、拒绝、冲突结束原因、多 choice、重复工具 ID 和截断仍报错。
+必须收齐并校验整个响应，才交给现有工具权限与参数检查执行。
+
+恢复仅用于缓冲 `create` 调用的 `protocol_incompatible`：`fallback` 最多使用一次已配置备用；
+`nonstream_then_fallback` 对强制流式 preset 先尝试一次同模型非流式，失败后最多使用一次备用。
+共用既有总时间预算，不改变原 preset 的流式配置；连续协议失败纳入熔断。
+工具结果出现后禁止自动恢复或切换，转换前保留此状态，避免重复副作用。
+实时文本 `execute_stream` 沿用既有“发送正文后不切换”规则，本设置不增加其中的重试。
+主请求失败、`route_role=recovery` 非流式尝试与备用结果保留在既有 API 调用账本，
+通过 `/observability/api-calls`（`state.read`）查询；最终失败沿用聊天 HTTP 错误与通道失败回执。
+
+同配置合成请求实测捕获了“完整工具调用 → assistant 空 role → 空 stop → usage → DONE”，
+非流式对照亦返回完整工具调用。历史两次失败没有原始 SSE，不能据此宣称重放历史报文。
+本地 Chromium 已硬刷新并经实际 API 完成默认值、保存、重开、关闭及密钥保留验收；
+真实 pipeline、parser 和 dispatcher 的沙盒回归核对文档内容及单次版本回执，并验证写入后错误不重放。
+本次控制面仅涉及后端管理页，桌面和手机消费既有聊天结果，无跨端协议或设置变动。
+
 292：`force_stream`缓冲工具轮兼容已完成后的空delta用量块与同值重复结束标记；它们不能携带正文、工具参数、推理、拒绝或未知非空字段。冲突结束原因、未完成流、无效参数仍拒绝，不执行部分工具。兼容逻辑统一在`llm_protocol`，不按provider或模型名分支，无新设置。
 
 非字符串 `enum` 在统一协议出口移入参数说明，保留 integer/number/boolean 等原类型；本地按原 schema 严格校验允许值。避免严格 Gemini 中转把数字枚举解析为字符串时拒绝整次请求。三协议及嵌套结构共用此转换，无新增运营设置。

@@ -285,6 +285,21 @@
             <span data-i18n="settings_center.force_streaming_for_chat_completions_including_tool_calls_mobile_still_receives_complete_replies">强制流式请求（仅 Chat Completions；含工具调用，手机仍接收完整回复）</span>
           </label>
           <label class="field">
+            <span data-i18n="routing.preset.stream_compatibility">流兼容（默认 strict；关闭恢复原有校验）</span>
+            <select id="mr-preset-stream-compatibility">
+              <option value="strict">strict</option>
+              <option value="openlux">openlux</option>
+            </select>
+          </label>
+          <label class="field">
+            <span data-i18n="routing.preset.protocol_recovery">协议错误恢复（默认 off；已有工具结果时禁止重试；受原有时间预算限制）</span>
+            <select id="mr-preset-protocol-recovery">
+              <option value="off" data-i18n="routing.preset.recovery_off">关闭</option>
+              <option value="fallback" data-i18n="routing.preset.recovery_fallback">仅已有备用模型</option>
+              <option value="nonstream_then_fallback" data-i18n="routing.preset.recovery_nonstream">一次非流式，再已有备用模型</option>
+            </select>
+          </label>
+          <label class="field">
             <span data-i18n="routing.preset.anthropic_auth_label">anthropic_auth_mode（仅 anthropic_messages：认证头）</span>
             <select id="mr-preset-anthropic-auth-mode">
               <option value="x_api_key" data-i18n="routing.preset.anthropic_auth_x_api_key">x_api_key（官方 Anthropic API）</option>
@@ -662,7 +677,7 @@
 
 <div id="toast"></div>
 
-<script src="/static/i18n.js?v=device-file-reads-313-1"></script>
+<script src="/static/i18n.js?v=openlux-stream-1"></script>
 <!-- legacy cache marker: <script src="/static/i18n.js?v=image-diary-296"></script> -->
 <script src="/static/js/core.js?v=character-behavior-322"></script>
 <!-- legacy cache marker: <script src="/static/js/core.js?v=image-diary-296"></script> -->
@@ -676,7 +691,7 @@
 <script src="/static/js/status-users.js?v=admin-editor-20261011"></script>
 <script src="/static/js/runtime-config.js?v=288-experiments-20261013"></script>
 <script src="/static/js/lorebook.js?v=288-owned-entries-20261013"></script>
-<script src="/static/js/settings.js?v=computer-use-route-1"></script>
+<script src="/static/js/settings.js?v=openlux-stream-1"></script>
 <script src="/static/js/image-generation.js?v=gmail-304"></script>
 <script src="/static/js/owner-turn-api.js?v=brief-173-owner-turn-1"></script>
 <script src="/static/js/agent-runtime-browser.js?v=brief-239-browser-admin-1"></script>

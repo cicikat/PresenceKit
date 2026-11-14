@@ -61,6 +61,8 @@ class ModelClient:
     client: Any
     api_protocol: str = "chat_completions"
     force_stream: bool = False
+    stream_compatibility: str = "strict"
+    protocol_recovery: str = "off"
     tool_empty_params_placeholder: bool = False
     base_url: str = ""
     api_key: str = ""
@@ -517,6 +519,14 @@ def _build_model_client(preset_name: str, *, request_policy: dict[str, float | i
     force_stream = preset.get("force_stream", False)
     if type(force_stream) is not bool or (force_stream and api_protocol != "chat_completions"):
         raise ValueError("force_stream must be boolean and is supported only for chat_completions")
+    stream_compatibility = preset.get("stream_compatibility", "strict")
+    protocol_recovery = preset.get("protocol_recovery", "off")
+    if stream_compatibility not in {"strict", "openlux"}:
+        raise ValueError("stream_compatibility must be strict or openlux")
+    if protocol_recovery not in {"off", "fallback", "nonstream_then_fallback"}:
+        raise ValueError("invalid protocol_recovery")
+    if api_protocol != "chat_completions" and (stream_compatibility != "strict" or protocol_recovery != "off"):
+        raise ValueError("stream_compatibility and protocol_recovery require chat_completions")
     anthropic_auth_mode = preset.get("anthropic_auth_mode", "x_api_key")
     if anthropic_auth_mode not in VALID_ANTHROPIC_AUTH_MODES:
         raise ValueError(
@@ -567,6 +577,8 @@ def _build_model_client(preset_name: str, *, request_policy: dict[str, float | i
         client=client,
         api_protocol=api_protocol,
         force_stream=force_stream,
+        stream_compatibility=stream_compatibility,
+        protocol_recovery=protocol_recovery,
         tool_empty_params_placeholder=preset.get("tool_empty_params_placeholder", False) is True,
         base_url=base_url,
         api_key=api_key,
