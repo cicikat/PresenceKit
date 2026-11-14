@@ -1,8 +1,10 @@
-# Agent 能力矩阵（313 · PR-A）
+# Agent 能力矩阵（313 · PR-A 基线及 B/C 更新）
 
 审计基线：后端 `9e1b30c`，远端 main `ca76514`（已包含 PR #10）；两者业务代码一致，差异为接口总账的既有文档条目。桌面 `3bee952dbb8ba2c1b75d8234ac6b162fbda5ec87`。下表的 enabled 是准入条件，不能据此推断生产开关、设备在线或实际执行成功。测试只使用合成身份、临时工作区和模拟设备边界。
 
 状态：I=implemented（实现存在），W=wired（真实入口接线），E=enabled（需满足的开关/授权），T=tested（本轮证据），G=gaps。未实测的平台明确为 not_verified。
+
+下表保留 PR-A 的审计基线；B/C 的实现与验证更新以文末「本轮更新」为准，不能把基线缺口当作当前结论。
 
 | 注册能力 / 实现 | VPS 后端 | Windows 桌面 | macOS | Android | 聊天主链 / autonomy | I / W / E / T / G |
 |---|---|---|---|---|---|---|
@@ -38,3 +40,15 @@
 ## 后续独立交付
 
 PR-B 补授权设备原子发现及双版本拒绝；PR-C 补 typed intent、严格计划解析、证据完成条件与一致状态。P1 文件成组操作和 Windows 受限进程 POC 保留独立工单；P2 聚合成功率/延迟与列表体验需独立验收。删除候选：在新发现入口和回归完全接替后，删除旧 find 混合扫描实现及其专用守卫/文档；本单未授权删除该兼容协议。
+
+## 本轮更新（313 B/C）
+
+| 能力 | I / W / E | 实际验证 | 仍有缺口 |
+|---|---|---|---|
+| `device_file_list_dir/stat/find_name/search_text/read` | implemented/wired；沿用 owner/char、总闸、设备 grant，effect=read，无规划模型 | Python 3.10/3.12 dispatcher + 鉴权 HTTP；Windows Rust 临时文件扫描、分页、搜索、保存回读 | 真实 Tauri→HTTP→主链联调 pending physical verification；macOS not_verified |
+| typed inspect/search/read/edit/create | implemented/wired；固定意图、只读禁止写、默认 legacy edit | 零写成功、空匹配、读证据延迟查询及撤权、编辑保存核验、提前 done 恢复 | no-change 证明及显式复合目标清单未实现，保持 P0 遗留；不声称完整自然语言目标验证 |
+| 严格 native tool / fenced JSON 规划 | implemented/wired；有限格式/完成条件修复和独立调用预算 | 重复键、混合动作、多调用、空响应、坏 schema、超时、不确定写入回归 | 真实低能力模型 not_verified |
+| queued/running/paused 与最终结果 | implemented/wired；accepted / task_status / counters / next_action；审计 pending | 排队不冒充完成、同 task_id、失败/未知回执回归 | 三端主界面可见结果未验收 |
+| 本地 process / browser / Computer Use | 复用现有执行器与权限；路由提示已区分 | PR-A 原有模拟回归 | Windows headless 受限进程、浏览器 provider POC 为独立单，不能声称本轮新增远程 shell |
+
+Python 3.10/3.12 最终定向各 192 项通过，兼容失败组各 46 项通过；Windows Rust 6 项及两种功能构建检查、前端构建通过。管理面双语描述与缓存版本已同步，但浏览器实测未完成。扫描中逐条撤权/取消仍为 P0 遗留；真实设备与 macOS 验收未完成。完整命令、版本、提交组合、全量结果及未验证项见 [313 交付报告](agent-capabilities-313-delivery.md)。

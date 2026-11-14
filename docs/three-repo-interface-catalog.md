@@ -1,3 +1,7 @@
+## 手机 #52 跟随、等待与接入（2026-11-15，open / observe）
+
+current：手机发送显式跟随、手势/惯性阅读意图与限时120秒本地等待；复用消息锚点及uncertain详情，无新增后端/桌面开关、持久状态或mobile wire，原scope/request_id/final_only/ACK/TTL/fallback保留。Flutter428项通过。open：跨进程running恢复仍缺安全手机只读接口，禁止复用desktop request endpoint；生产/ws/mobile公网及loopback匿名Upgrade均404，需核查部署/路由/鉴权拒绝行为。observe：本机Fake-IP/代理影响直连证据，无VPN的手机Wi-Fi/移动网络及Windows业务链未验收；生产配置未修改。详见手机docs/mobile/chat-follow-wait-direct-52.md的网络证据与配置/回滚计划。本记录仅文档同步。
+
 ## 手机 #49 感知入口与原生通知（2026-11-14，open / observe）
 
 current：手机复用既有settings通道提供明确设备感知入口、读取失败/重试与恢复刷新，本机电量及授权不冒充后端receipt；普通能力观察只读。native常驻通知按文字去重，重复start不重置，复用60秒断线宽限；真实消息频道、FCM/SSE所有权及poll/inbox/ACK/TTL不变。无新增后端/桌面配置、接口或持久状态。open：逐项硬件/权限/本机意愿/后端effective/最近成功上报的统一观测仍需后端依赖及手机接入；不能以接口存在或本机开关认定完成。observe：真实权限往返、SSE/FCM/前后台/ROM通知未验收。手机Flutter416与Android19项通过，详见手机 docs/mobile/device-permissions-relay-49.md。本记录仅文档同步。
@@ -5,6 +9,12 @@ current：手机复用既有settings通道提供明确设备感知入口、读�
 ## 手机 #50 聊天恢复与阅读位置（2026-11-14，open / observe）
 
 手机本机 Outbox 增加可选 status_code 和明确 skipped（保留原 request_id 对账，不是服务器取消），通过既有本机快照/详情只读观测；队列阻塞安全出口与虚拟列表真实消息锚点已实现。无后端运行代码、管理开关或桌面合同变更；原 scoped session、final_only、poll/ACK/TTL 不变。open：手机缺安全 scoped 只读 request running 证据，不能借用 desktop 端点或以 WS ready/HTTP 在途冒充生成；需独立后端依赖，合同草案见手机 docs/mobile/chat-reliability-50.md。observe：真实手机/网络/杀进程/签名升级未验收。手机 #49 跟踪感知与原生通知收尾；本记录仅文档同步。
+
+## 工单 313 B · 设备原子发现（current / open / observe）
+
+current：文件 poll 加 `operations` 广告；新增只读模型入口 list_dir/stat/find_name/search_text/read，复用 Task Manager、Work Session、grant/epoch/revision/lease/nonce/ACK，effect=read。旧桌面缺操作时明确 unsupported_operation；新桌面须在后端更新后部署。名称查询仅元数据，正文搜索独立 opt-in，目录结果带排序、分页、截断，读页带 hash/has_more。无新增 scope、设置或手机协议，既有后端开关和桌面授权控制面不变；观测复用 `/observability/device-file-agent`。详见[文件合同](device-file-agent-contract.md)。
+
+open：桌面扫描期间授权变更与扫描串行，尚无逐条扫描的合作式取消；扫描硬上限一秒，后端撤权/取消后拒绝回执并不返回正文。no-change 与复合必要目标合同尚缺，保持 P0 遗留。observe：Windows Rust 临时文件 6 项、Python 3.10/3.12 定向各 192 项及兼容回归各 46 项通过；真实 Tauri→HTTP→模型全链、macOS、三仓固定 SHA CI 未验证，不能据此宣称实机完成。固定提交、dirty 工作区及浏览器限制见 [313 交付证据](agent-capabilities-313-delivery.md)。
 
 ## 工单 318 · 本地文件 Agent（open）
 

@@ -1082,3 +1082,11 @@ Windows 摄像头自动曝光、屏幕反光、混合音源和锁屏的真实结
 ### 317 Android FCM (observe)
 
 No connected phone or Firebase project configuration was available for the real delivery matrix. Doze, screen-off, carrier network changes, device rotation and power behavior require the procedure in [317 device feasibility](fcm-device-feasibility.md). A valid FCM sender response is recorded separately from Android notification posting.
+
+## 313 设备原子扫描与实机验收（open / observe）
+
+Windows 原子扫描仍与本机授权设置串行，逐扫描项合作式取消未完成；扫描硬上限一秒，后端撤权/取消后拒绝回执，正文不暴露。no-change 证明和显式复合必要目标清单尚未实现，以上保持原工单 P0 遗留。Python 3.10/3.12 定向各 192 项及兼容回归各 46 项通过；真实 Tauri→HTTP→模型联调、macOS、三仓固定 SHA CI 尚未验收。管理面翻译已更新缓存版本，但浏览器实测未完成（Pencil desktop transport 未连接）。文件协议与部署顺序见 `device-file-agent-contract.md`，证据及后续范围见 [313 交付报告](agent-capabilities-313-delivery.md)。
+
+## memeval 生产目录快照并发竞态（313 验证发现，open）
+
+`tests/memeval/conftest.py::_production_data_entries` 在 `rglob` 遍历后才过滤共享 `data/test_sandbox`，其他 xdist worker 清理子目录时，Windows Python 3.10 可在 fixture setup 抛 `FileNotFoundError`。最终实现 `ae1105b` 的3.10全量为8390 passed / 1 error；失败用例 `ms-05-episodic-plus-profile-natural` 隔离重跑1 passed。3.12同轮8391 passed。后续应在遍历前排除测试命名空间并保持生产新增文件断言，不以吞掉生产目录错误或放宽污染检测修复。本单未修改该测试设施。
