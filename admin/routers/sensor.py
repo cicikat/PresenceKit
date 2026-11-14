@@ -19,15 +19,53 @@
 import json
 import time
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 from typing import Literal, Optional
 from admin.auth import require_scopes
 from core.config_loader import get_config
 from core.memory import realtime_state
+from core.perception import ambient_state
 from core.sandbox import get_paths
 
 router = APIRouter()
+
+
+@router.post("/sensor/ambient", summary="更新已授权设备的短期环境观测")
+async def receive_ambient(
+    body: ambient_state.AmbientUpdate,
+    request: Request,
+    session_id: str = Header(alias="X-Presence-Session"),
+    auth=Depends(require_scopes("sensor.write", "chat")),
+):
+    from admin.routers.chat import _session_grant
+    from admin.token_registry import hash_token
+
+    device = {"desktop": "desktop", "mobile": "phone"}.get(auth.profile)
+    if device is None:
+        raise HTTPException(403, "ambient_device_profile_required")
+    grant = _session_grant(session_id, auth.label)
+    if grant is None:
+        raise HTTPException(422, "session_scope_required")
+    credential = request.headers["Authorization"].split(None, 1)[1]
+    try:
+        ambient_state.update(
+            grant.owner_id, grant.char_id, device, hash_token(credential),
+            grant.expires_at, body,
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+    return {"ok": True}
+
+
+@router.get("/sensor/ambient", summary="当前角色的短期环境观测")
+async def get_ambient_snapshot(
+    device: ambient_state.Device = "desktop",
+    auth=Depends(require_scopes("state.read")),
+):
+    from admin.routers.chat import _owner_media_scope
+
+    return ambient_state.snapshot(*_owner_media_scope(), device)
 
 # 最近一次手机传感器快照（内存缓存，重启清零）
 _last_sensor_data: dict = {}

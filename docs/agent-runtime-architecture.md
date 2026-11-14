@@ -232,6 +232,8 @@ The implemented registry does so; an unregistered label cannot enter the compati
 
 ## Tool to capability mapping
 
+`get_ambient_state` reads recent authorized desktop and mobile ambient observations as a same-character read capability.
+
 Current tools remain in `_TOOL_REGISTRY` and use `execute(origin=...)`; future adapters intersect all
 existing origin, role, danger, confirmation, deployment, MCP, and enablement gates. A tool living on
 a durable 副链 does not by itself mean the foreground 主链 cannot use that capability.

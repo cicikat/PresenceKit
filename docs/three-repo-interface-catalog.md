@@ -1363,3 +1363,11 @@ AGENT-06C 在设备 `poll` 回包增加可选 `agent_cue`，值为 `active` 或 
 
 AGENT-06D 新后端通过 `visual_verify_supported` 声明能力，新桌面再以 `visual_verify` 协商。父会话的 `verify_visual` 是只读步骤。桌面在已有截图许可下，经原 `/computer-use/vision/locate` 和原租约上传后置 JPEG。后端将结构化视觉结果与已确认的动作、截图帧和父修订绑定，桌面仅收 `verified` 或 `uncertain`。`/computer-use/status` 的最近视觉调用增加模型、地域、模式、错误分类和可用的 Token 计数。真实百炼及实机目标覆盖见 [AGENT-06 验收记录](agent-06-acceptance.md)（`observe`）。
 - 手机无消费者，普通屏幕观察和视频通话使用自己的既有接口。真实推理与 Windows 端到端进度见 [CU-05 验收](known-issues.md#302-cu-05-云端视觉实机验收observe)。
+
+### 315-A 手机后台投递（observe）
+
+`GET /observability/mobile-delivery` 需 `state.read`，返回进程内最多 256 条以消息 ID 的 SHA-256 前 16 位关联的时间链，以及后端入队、relay 发布 p50/p95。Android 可在能力检查中开启通知测试模式后用 `adb logcat -s PresenceDelivery` 采集同一 ID 哈希的唤醒、回源、交接、ACK 和通知提交时间。跨设备时间差需先校准时钟。系统实际弹出由真机观察记录。未连接 Android 真机，五分钟延迟、分设备 p50/p95 与功耗待验证。可回退本单提交，队列和 ACK 协议兼容。
+
+### 313–314 环境观测（observe）
+
+`POST /sensor/ambient` 接收显式启用后的分项统计。要求 desktop 或 mobile 单设备 profile 和同凭据 Reality 会话；服务端推导 owner、角色和设备来源。设备用独立令牌区分，轮换或撤销立即停止该令牌数据的读取。旧的 sensor 入口兼容。`GET /sensor/ambient?device=desktop|phone` 需 `state.read`。同一角色可用 `get_ambient_state` 读取短期状态。样本 120 秒内过期，过期后不暴露测量值。桌面只报摄像头相对亮度及混合声级，手机 lux 来自真实照度传感器。确认的桌面明暗变化可以进入 Autonomy 的静默反思；候选随事实过期。设备级别锁屏、权限撤销、误报率及功耗待真机验证。可分别回退两端的采集提交及后端契约。

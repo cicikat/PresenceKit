@@ -589,3 +589,31 @@ def _normalise_anchor_context(value: str | dict[str, Any] | None) -> str:
             if isinstance(item, (str, int, float)) and str(item).strip()
         ).strip()
     return str(value or "").strip()
+
+
+def enqueue_ambient_light_signal(uid: str, char_id: str, fact: dict) -> bool:
+    """Offer a confirmed camera-relative change to the existing decision loop."""
+    from core.autonomy import store
+    from core.autonomy.effective_state import autonomy_enabled
+
+    now = time.time()
+    if fact["expires_at"] <= now or not autonomy_enabled(uid, char_id, store.load(uid, char_id)):
+        return False
+    signal = ProactiveSignal(
+        source="sensor",
+        reason="A shared camera view showed a sustained change in relative brightness.",
+        evidence=[{
+            "fact": "ambient_changed",
+            "source": fact["source"],
+            "observed_at": fact["observed_at"],
+            "trend": fact["trend"],
+        }],
+        created_at=now,
+        expires_at=fact["expires_at"],
+        confidence=fact["confidence"],
+        priority=0.2,
+        action_mode=ActionMode.REFLECT.value,
+        suggested_action="silent",
+    )
+    queued, _ = store.enqueue_signal(uid, char_id, signal)
+    return queued

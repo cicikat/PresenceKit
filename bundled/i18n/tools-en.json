@@ -443,6 +443,10 @@
     "source": "Stop the same local-file task before another file action. Consult its saved changes afterwards.",
     "en": "Stop the same local-file task before another file action. Consult its saved changes afterwards."
   },
+  "get_ambient_state": {
+    "source": "读取用户授权设备的近期环境观测。只描述有来源的新鲜事实，不推断用户情绪、健康、睡眠或是否在场。",
+    "en": "Read recent ambient observations from authorized devices. Report fresh observations with sources and avoid inferring emotion, health, sleep, or presence."
+  },
   "list_artifacts": {
     "source": "列出当前用户与角色的产物元数据。",
     "en": "List artifact metadata for the current user and character."
