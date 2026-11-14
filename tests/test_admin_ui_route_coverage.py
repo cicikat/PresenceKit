@@ -26,6 +26,7 @@ ROOT = Path(__file__).resolve().parent.parent
 # (METHOD, 完整路径) -> 白名单理由（一行，说明为什么管理面板不需要接这个接口）。
 # 新增写接口默认要求要么出现在 index.html 里，要么显式加进这里。
 NO_ADMIN_UI_WHITELIST: dict[tuple[str, str], str] = {
+    ("POST", "/v1/development/turns"): "Isolated development runner API; admin must not simulate production owner conversation",
     ("POST", "/v1/ime/drafts"): "Desktop IME draft ingestion; admin observes drafts without simulating typing",
     ("POST", "/life-records/sync"): "Mobile life-record synchronization; admin manages policy and retry only",
     ("POST", "/phone_control/debug/start"): "Mobile device automation diagnostic session entry",

@@ -1,6 +1,6 @@
 """Bounded, non-cacheable desktop file transport."""
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import ValidationError
 
 from admin.auth import require_scopes
@@ -43,4 +43,15 @@ async def result(request: Request, auth=Depends(_desktop)):
 
 @router.get("/observability/device-file-agent")
 async def status(auth=Depends(require_scopes("state.read"))):
-    return _reply(service.snapshot())
+    from core.agent_runtime import browser_workbench
+    return _reply({**service.snapshot(), "browser_screenshots": browser_workbench.snapshot(service.principal())})
+
+
+@router.get("/observability/device-file-agent/browser/{task_id}/{sha256}")
+async def browser_image(task_id: str, sha256: str, auth=Depends(require_scopes("state.read"))):
+    from core.agent_runtime import browser_workbench
+    item = browser_workbench.image(service.principal(), task_id, sha256)
+    if not item:
+        raise HTTPException(404, "screenshot_unavailable")
+    return Response(item["raw"], media_type="image/jpeg", headers={"Cache-Control": "no-store",
+                    "Content-Security-Policy": "default-src 'none'", "X-Content-Type-Options": "nosniff"})

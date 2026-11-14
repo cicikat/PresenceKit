@@ -1,5 +1,7 @@
 ## 本地文件 Agent（318）
 
+314：桌面预览复用 `device_file_agent.enabled`、桌面启用/暂停及具体文件工作区授权；无限制 grant 不用于浏览器预览。安装 Windows sidecar 后才广告 browser 能力，无第二套开关或视觉连接。视觉沿用管理面 screen 主备路由；无路由明确 vision_unavailable。管理面「感知与电脑操作」增加只读截图刷新/复核，元数据和私有 JPEG 复用 state.read 观测；600 秒 TTL、撤权失效、不持久化。手机不执行此能力，无新增手机设置。真实完整应用联合验收仍 observe，详见 [314 交付](browser-workbench-314-delivery.md)。
+
 工单 313：新增独立 `device_file_list_dir/stat/find_name/search_text/read` 只读入口，复用现有总闸、桌面授权、Task Manager 和观测。复合任务可固定 inspect/search/read/edit/create 意图；只读证据可零写入完成，编辑仍要求保存 ACK 与 hash 校验。queued/running/paused 返回 accepted，普通审计保持 pending。观测增加安全意图、完成原因和证据计数。无新运营开关、scope 或客户端设置；桌面必须广告原子操作能力，旧客户端明确拒绝。真实设备链仍 pending physical verification；协议与限制见 `device-file-agent-contract.md`。
 
 工单 312：本地文件工具仅在 owner 私聊的工具循环暴露，自主调用仍拒绝。状态查询明确区分请求完成与任务 queued/running/paused/failed/succeeded/outcome_unknown；失败、暂停和未决写入不再显示工具成功。编辑没有写入回执不能完成。既有只读观测和 status 增加脱敏阶段/计数/时间/校验错误字段；不新增开关，不改桌面授权或传输协议。web_search 异常返回明确失败，成功零结果独立为 empty，复用既有审计及工具活动展示。

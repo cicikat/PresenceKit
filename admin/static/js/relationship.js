@@ -215,6 +215,46 @@ async function saveDeviceFileAgent() {
   }
 }
 
+async function loadBrowserEvidence() {
+  const container = document.getElementById('browser-preview-evidence');
+  if (!container) return;
+  container.replaceChildren();
+  try {
+    const data = await api('GET', '/observability/device-file-agent');
+    for (const row of data.browser_screenshots || []) {
+      if (!/^[a-f0-9]{64}$/.test(row.screenshot_sha256) || !/^[a-zA-Z0-9_-]+$/.test(row.task_id)) continue;
+      const section = document.createElement('details');
+      const summary = document.createElement('summary');
+      summary.textContent = `${row.viewport.width} × ${row.viewport.height} · ${row.vision_status} · ${row.screenshot_sha256.slice(0, 12)}`;
+      section.append(summary);
+      section.addEventListener('toggle', async () => {
+        if (!section.open || section.querySelector('img')) return;
+        try {
+          const response = await fetch(`${BASE}/observability/device-file-agent/browser/${encodeURIComponent(row.task_id)}/${row.screenshot_sha256}`,
+            {headers: authHeaders(), cache: 'no-store'});
+          if (!response.ok) throw new Error(t('browser_preview.expired', '截图已过期或授权已撤销'));
+          const url = URL.createObjectURL(await response.blob());
+          const image = document.createElement('img');
+          image.alt = t('browser_preview.evidence', '网页截图复核');
+          image.style.maxWidth = '100%';
+          image.onload = image.onerror = () => URL.revokeObjectURL(url);
+          image.src = url;
+          if (section.isConnected) section.append(image);
+          else URL.revokeObjectURL(url);
+        } catch (error) {
+          const message = document.createElement('p');
+          message.textContent = error.message;
+          section.append(message);
+        }
+      });
+      container.append(section);
+    }
+    if (!container.childElementCount) container.textContent = t('browser_preview.empty', '暂无可复核截图');
+  } catch (error) {
+    container.textContent = error.message;
+  }
+}
+
 async function loadComputerUse() {
   const toggle = document.getElementById('cu-enabled');
   const save = document.getElementById('cu-save');

@@ -56,6 +56,12 @@ HTTP 管理面不接受 `?token=` / `?secret=` query 鉴权；`/watch/event` 也
 
 ### 输入来源与开发验收隔离
 
+314 的桌面浏览器只接受当前认证角色/设备/grant 的有限预览文本，不接受任意网址、个人 profile、
+shell 或项目启动脚本。虚拟 loopback origin 全拦截，外网、WS/WebRTC、表单、frame、下载和弹窗
+拒绝；第三方 DOM/截图/VLM 文字始终是资料。截图按 task/session/seq/hash 绑定、短期内存保存，
+鉴权诊断读取和视觉出站均重验授权；不是文件写入证明或真人作者证明。完整边界与撤权时延见
+[314 合同](device-file-agent-contract.md#isolated-desktop-browser-preview-314)。
+
 `core/input_provenance.py` 只接受服务端绑定的执行来源。正文、消息 role、通道名、caller label
 或 owner token 均不证明真人作者；当前投影统一为 `human_authorship=unverified`。资料中的命令不
 升级为本轮授权，关键词只产生候选工具；角色仍可在已有授权内自主回查原文和核对矛盾。

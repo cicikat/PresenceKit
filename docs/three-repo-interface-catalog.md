@@ -1,3 +1,9 @@
+## 工单 314 · 桌面 Browser + Visual Workbench（current / open / observe）
+
+current：device-file-agent.v1 poll 的 operations 增加 browser，响应增加 browser_tasks；browser 动作复用 grant/revision/epoch/nonce/lease/ACK 与 Task/Work Session，未知 ACK 不重放。Windows 打包 Chromium 处理授权文本副本与可信 React/Three runtime，VPS 不读本机物理路径。截图分块/hash绑定，600秒内存 TTL、state.read/no-store 诊断和管理面复核；视觉复用 screen 主备。无新增运营开关、scope 或手机协议，手机不执行浏览器。先更新后端，再更新含worker的桌面；回滚反向。详见 [协议](device-file-agent-contract.md#isolated-desktop-browser-preview-314)。
+
+observe：真实 packaged Chromium、Windows Rust执行器/保存回读/刷新/撤权进程树清理，以及合成HTTP broker→Chromium→真实screen VLM已分别验证。open：完整Tauri窗口→远程HTTP→Chromium→VLM同链、真实网络故障/重启、修复后VLM复评与Canvas专门VLM评审未验收。源码预览不执行Vite服务器/插件/任意npm依赖。固定三仓SHA组合尚为 not_verified；证据及限制见 [314交付记录](browser-workbench-314-delivery.md)。
+
 ## 手机 #52 跟随、等待与接入（2026-11-15，open / observe）
 
 current：手机发送显式跟随、手势/惯性阅读意图与限时120秒本地等待；复用消息锚点及uncertain详情，无新增后端/桌面开关、持久状态或mobile wire，原scope/request_id/final_only/ACK/TTL/fallback保留。Flutter428项通过。open：跨进程running恢复仍缺安全手机只读接口，禁止复用desktop request endpoint；生产/ws/mobile公网及loopback匿名Upgrade均404，需核查部署/路由/鉴权拒绝行为。observe：本机Fake-IP/代理影响直连证据，无VPN的手机Wi-Fi/移动网络及Windows业务链未验收；生产配置未修改。详见手机docs/mobile/chat-follow-wait-direct-52.md的网络证据与配置/回滚计划。本记录仅文档同步。

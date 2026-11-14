@@ -1,3 +1,7 @@
+## Browser + Visual Workbench 314（open / observe）
+
+Windows packaged Chromium、Rust授权执行/保存回读/刷新/撤权进程树和合成HTTP→真实视觉路由分层验收已通过；完整Tauri窗口→远程HTTP→Chromium→VLM、物理断网/重启、修复后的VLM复评和Canvas专门视觉评价仍未完成。可信React/Vite源码预览只支持显式manifest和随包runtime，不执行Vite server、插件或任意npm依赖。桌面授权变更需等待在途native调用返回（响应超时20秒），非即时中断。视觉曾漏报低对比度，不能把模型结论视为穷尽缺陷。详见 [314证据](browser-workbench-314-delivery.md)。
+
 ## 输入来源与只读任务加固验收（observe）
 
 开发身份隔离、关键词候选和双端只读意图守卫已有合成 API/文件回归；真实 Windows
