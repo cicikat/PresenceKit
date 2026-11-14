@@ -2383,6 +2383,26 @@ from core.tools.qzone_tools import register_tools as _register_qzone_tools, _QZO
 _register_qzone_tools(_TOOL_REGISTRY)
 from core.listening_tools import register_tools as _register_listening_tools
 _register_listening_tools(_TOOL_REGISTRY)
+
+from core.perception.ambient_state import read_tool as _get_ambient_state
+_TOOL_REGISTRY["get_ambient_state"] = {
+    "func": _get_ambient_state,
+    "trace_result": False,
+    "echo_event_log": False,
+    "description": "读取用户授权设备的近期环境观测。只描述有来源的新鲜事实，不推断用户情绪、健康、睡眠或是否在场。",
+    "dangerous": False,
+    "category": "life",
+    "effect": "read",
+    "parameters": {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {"device": {"type": "string", "enum": ["desktop", "phone"],
+                                   "description": "Select desktop or phone. Omit to include both devices."}},
+        "required": [],
+    },
+    "examples": ["房间光线最近有变化吗", "手机能读到周围的亮度吗"],
+    "keywords": ["环境光", "房间光线", "房间声音", "手机亮度"],
+}
 from core.tools.image_gen import register_tools as _register_image_gen_tools
 _register_image_gen_tools(_TOOL_REGISTRY)
 from core.tools import gmail_tools as _gmail_tools
@@ -3047,7 +3067,7 @@ async def _execute_structured_impl(
         if is_group or origin not in {"assistant_loop", "autonomy_loop"} or not feature_enabled():
             return _execution_outcome("tool_failed", "Self Capability history is unavailable in this context.")
 
-    if tool_name in {"generate_image", "read_long_user_message", "search_events", "expand_event_window", "get_related_events", "search_memory_dossiers", "read_memory_dossier", "search_dossier_events", "update_memory_dossier", "get_memory_consolidation_status", "request_memory_consolidation", "read_life_records", "reread_image", "write_artifact", "update_artifact", "read_artifact", "list_artifacts", "self_db_tables", "self_db_create_table", "self_db_insert", "self_db_query", "self_db_update", "self_db_delete", "self_db_drop_table", "self_tool_define", "self_tool_list", "self_tool_run"} and is_group:
+    if tool_name in {"get_ambient_state", "generate_image", "read_long_user_message", "search_events", "expand_event_window", "get_related_events", "search_memory_dossiers", "read_memory_dossier", "search_dossier_events", "update_memory_dossier", "get_memory_consolidation_status", "request_memory_consolidation", "read_life_records", "reread_image", "write_artifact", "update_artifact", "read_artifact", "list_artifacts", "self_db_tables", "self_db_create_table", "self_db_insert", "self_db_query", "self_db_update", "self_db_delete", "self_db_drop_table", "self_tool_define", "self_tool_list", "self_tool_run"} and is_group:
         _trace("failed", "reality_event_tools_forbidden_in_group")
         return _execution_outcome("tool_failed")
 
@@ -3165,7 +3185,7 @@ async def _execute_structured_impl(
         _trace("failed", _msg)
         return _execution_outcome("arguments_invalid", _msg)
     if tool_name in {
-        "get_listening_state", "get_listening_queue", "get_listening_history",
+        "get_ambient_state", "get_listening_state", "get_listening_queue", "get_listening_history",
         "get_track_note", "write_track_note", "choose_next_track",
     }:
         for key in ("user_id", "uid", "char_id", "owner"):
@@ -3281,7 +3301,7 @@ async def _execute_structured_impl(
         elif tool_name in ("read_toy_file", "write_toy_file", "write_artifact", "update_artifact", "read_artifact", "list_artifacts", "drink_with_user", "generate_image"):
             result = await func(user_id=user_id, char_id=char_id, **tool_args)
         elif tool_name in {
-            "get_listening_state", "get_listening_queue", "get_listening_history",
+            "get_ambient_state", "get_listening_state", "get_listening_queue", "get_listening_history",
             "get_track_note", "write_track_note", "choose_next_track",
         }:
             for key in ("user_id", "uid", "char_id", "owner"):
