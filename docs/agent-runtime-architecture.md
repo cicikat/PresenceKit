@@ -372,6 +372,9 @@ reusing the exhausted key.
 `device_workspace_list`, `device_file_task_start`, `device_file_task_status`,
 `device_file_task_control` and `device_file_task_cancel` coordinate owner-bound desktop file work. The same Reality
 principal and Work Session manage the task budget and receipt. See [device file protocol](device-file-agent-contract.md).
+`device_file_list_dir`, `device_file_stat`, `device_file_find_name`,
+`device_file_search_text` and `device_file_read` independently dispatch bounded read operations
+through that same grant, lease, ACK and Work Session boundary, without a model planner.
 
 ## Brief 233 workspace capability
 

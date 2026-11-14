@@ -427,6 +427,26 @@
     "source": "Find authorized workspaces and any active local-file task. Use this directly for edits on the owner's desktop.",
     "en": "Find authorized workspaces on online desktops."
   },
+  "device_file_list_dir": {
+    "source": "List one authorized desktop directory; metadata only. Use the same grant and returned cursor for continuation; truncated is incomplete.",
+    "en": "List one authorized desktop directory; metadata only. Use the same grant and returned cursor for continuation; truncated is incomplete."
+  },
+  "device_file_stat": {
+    "source": "Inspect desktop file/directory metadata without reading its contents. Use the same grant and returned cursor for continuation; truncated is incomplete.",
+    "en": "Inspect desktop file/directory metadata without reading its contents. Use the same grant and returned cursor for continuation; truncated is incomplete."
+  },
+  "device_file_find_name": {
+    "source": "Find desktop paths by exact, substring or glob filename; never read contents. Use the same grant and returned cursor for continuation; truncated is incomplete.",
+    "en": "Find desktop paths by exact, substring or glob filename; never read contents. Use the same grant and returned cursor for continuation; truncated is incomplete."
+  },
+  "device_file_search_text": {
+    "source": "Search authorized desktop text: literal or bounded regex; returns lines and excerpts. Use the same grant and returned cursor for continuation; truncated is incomplete.",
+    "en": "Search authorized desktop text: literal or bounded regex; returns lines and excerpts. Use the same grant and returned cursor for continuation; truncated is incomplete."
+  },
+  "device_file_read": {
+    "source": "Read a desktop UTF-8 file page with full hash, line range and has_more. Use the same grant and returned cursor for continuation; truncated is incomplete.",
+    "en": "Read a desktop UTF-8 file page with full hash, line range and has_more. Use the same grant and returned cursor for continuation; truncated is incomplete."
+  },
   "device_file_task_start": {
     "source": "Start a bounded local-file work session on exactly one authorized desktop workspace. Include the exact path or filename, location hints and requested changes in goal. Reuse the current task ID if already running.",
     "en": "Start a bounded local-file work session on exactly one authorized desktop workspace. Include the requested target and changes in goal. A queued receipt means work has not finished."
