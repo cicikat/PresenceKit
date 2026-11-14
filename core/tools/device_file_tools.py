@@ -31,6 +31,20 @@ SPECS = {
         {"task_id": "Task ID from device_file_task_start"},
     ),
 }
+READ_SPECS = {
+    "device_file_list_dir": ("list_dir", "List one authorized desktop directory; metadata only."),
+    "device_file_stat": ("stat", "Inspect desktop file/directory metadata without reading its contents."),
+    "device_file_find_name": ("find_name", "Find desktop paths by exact, substring or glob filename; never read contents."),
+    "device_file_search_text": ("search_text", "Search authorized desktop text: literal or bounded regex; returns lines and excerpts."),
+    "device_file_read": ("read_page", "Read a desktop UTF-8 file page with full hash, line range and has_more."),
+}
+for _name, (_, _description) in READ_SPECS.items():
+    SPECS[_name] = (_description + " Use the same grant and returned cursor for continuation; truncated is incomplete.", {
+        "device_id": "Desktop ID from device_workspace_list", "workspace_id": "Authorized workspace ID",
+        "path": "Relative path in this workspace, or an explicitly authorized absolute local path; empty for root",
+        "query": "Filename pattern or content query; empty for list, stat or read",
+        "options": 'JSON object: mode=exact|substring|glob (names) or literal|regex (content), limit=1..100, depth=0..12, cursor, start=1..262144. search_text requires content_search=true.',
+    })
 NAMES = frozenset(SPECS)
 
 
@@ -40,6 +54,23 @@ async def execute(name, uid, char_id, args):
     if set(args) != set(parameters) or any(not isinstance(value, str) for value in args.values()):
         return {"code": "invalid_device_file_arguments"}
     try:
+        if name in READ_SPECS:
+            options = json.loads(args["options"])
+            if not isinstance(options, dict) or set(options) - {"mode", "limit", "depth", "cursor", "start", "content_search"}:
+                return {"code": "invalid_device_file_arguments"}
+            if ("mode" in options and (not isinstance(options["mode"], str)
+                                      or options["mode"] not in {"exact", "substring", "glob", "literal", "regex"})
+                    or "cursor" in options and not isinstance(options["cursor"], str)
+                    or "content_search" in options and type(options["content_search"]) is not bool):
+                return {"code": "invalid_device_file_arguments"}
+            for key, default, low, high in (("limit", 50, 1, 100), ("depth", 6, 0, 12), ("start", 1, 1, 262144)):
+                value = options.setdefault(key, default)
+                if type(value) is not int or not low <= value <= high:
+                    return {"code": "invalid_device_file_arguments"}
+            action = service.Action(op=READ_SPECS[name][0], path=args["path"], query=json.dumps({
+                **options, "query": args["query"],
+            }, ensure_ascii=False))
+            return await service.atomic_read(actor, args["device_id"], args["workspace_id"], action)
         if name == "device_workspace_list":
             return service.list_workspaces(actor)
         if name == "device_file_task_start":
@@ -49,12 +80,15 @@ async def execute(name, uid, char_id, args):
         if name == "device_file_task_cancel":
             return service.status(actor, args["task_id"], cancel=True)
         return await service.check_progress(actor, args["task_id"])
-    except (ValueError, RuntimeError):
+    except ValueError:
+        return {"code": "invalid_device_file_arguments"}
+    except RuntimeError:
         return {"code": "device_file_task_unavailable"}
 
 
 def register(registry):
     for name, (description, fields) in SPECS.items():
+        properties = {key: {"type": "string", "description": value} for key, value in fields.items()}
         registry[name] = {
             "description": description,
             "category": "artifacts",
@@ -62,9 +96,8 @@ def register(registry):
             "func": execute,
             "keywords": [],
             "examples": ["Work on a file exported to my computer"],
-            "parameters": {"type": "object", "properties": {
-                key: {"type": "string", "description": value} for key, value in fields.items()
-            }, "required": list(fields)},
+            "parameters": {"type": "object", "properties": properties, "required": list(fields),
+                           "additionalProperties": False},
             "persist": False,
             "live_owner_only": True,
             "write_short_term": False,
