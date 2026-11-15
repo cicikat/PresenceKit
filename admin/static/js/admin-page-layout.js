@@ -21,6 +21,9 @@ const AdminPageLayout = (() => {
   const origins = [];
   const sections = new Map();
   const navOrigins = new Map();
+  const behaviorLoads = new Map();
+  const behaviorFailures = new Map();
+  let layoutGeneration = 0;
   function isNew() { return AdminUI.version === 'new'; }
   function moduleKey(source) {
     return {'role-bindings':'model-role', 'tts-config':'model-stt', 'local-model-runtime':'model-stt', 'embedding-config':'model-embedding', 'network-config':'setup-network'}[source] || source;
@@ -94,6 +97,8 @@ const AdminPageLayout = (() => {
     }
   }
   function restore() {
+    layoutGeneration += 1;
+    behaviorFailures.clear();
     for (const [node, anchor] of origins.splice(0).reverse()) {
       if (anchor.isConnected) anchor.replaceWith(node);
     }
@@ -101,6 +106,100 @@ const AdminPageLayout = (() => {
     sections.clear();
     document.getElementById('tts-char-select')?.closest('label')?.removeAttribute('hidden');
     navigation();
+  }
+  function updateBehaviorStatus(parent, generation) {
+    if (generation !== layoutGeneration || !isNew()) return;
+    parent.querySelector('[data-behavior-loading]')?.remove();
+    if ([...behaviorLoads.keys()].some(key => key.startsWith(generation + ':'))) {
+      const status = document.createElement('p');
+      status.dataset.behaviorLoading = '';
+      status.setAttribute('role', 'status');
+      status.textContent = designText('正在加载其余设置，已显示的模块可独立使用。', 'Loading remaining settings. Available sections can be used independently.');
+      parent.prepend(status);
+    }
+    parent.querySelector('[data-behavior-load-error]')?.remove();
+    if (!behaviorFailures.size) return;
+    const status = document.createElement('p');
+    status.dataset.behaviorLoadError = '';
+    status.setAttribute('role', 'alert');
+    const failed = [...behaviorFailures].map(([source, error]) => {
+      const label = document.querySelector(`nav a[data-page="${source}"]`)?.textContent.trim() || source;
+      return label + ' (' + error.message + ')';
+    }).join(', ');
+    status.textContent = designText('部分设置暂时无法显示：', 'Some settings could not be displayed: ') + failed + ' ';
+    const retry = document.createElement('button');
+    retry.type = 'button'; retry.className = 'btn btn-ghost btn-sm';
+    retry.textContent = t('common.refresh', '刷新');
+    retry.addEventListener('click', () => goto('character-behavior'));
+    status.append(retry);
+    parent.prepend(status);
+  }
+  function placeBehaviorSection(parent, key) {
+    const order = [...behaviorPages, ...behaviorCards.map(([cardKey]) => cardKey)];
+    const next = order.slice(order.indexOf(key) + 1).map(item => sections.get(item)?.parentElement)
+      .find(card => card?.parentElement === parent);
+    if (next) parent.insertBefore(sections.get(key).parentElement, next);
+  }
+  async function prepareBehavior(reload) {
+    const generation = layoutGeneration;
+    // Feature Center and Autonomy also prepare these shared forms. Mount their
+    // owning shell first, so a later first visit cannot replace the moved nodes.
+    const parent = await loadPageFragment('character-behavior');
+    if (!isNew() || generation !== layoutGeneration) return;
+    const sources = [...new Set([...behaviorPages, ...behaviorCards.map(([, , source]) => source)])];
+    const jobs = sources.map(source => {
+      const key = generation + ':' + source;
+      if (behaviorLoads.has(key)) return behaviorLoads.get(key);
+      const retryFailed = behaviorFailures.has(source);
+      const alreadyMounted = behaviorPages.includes(source) ? sections.has(source)
+        : behaviorCards.some(([cardKey, , cardSource]) => cardSource === source && sections.has(cardKey));
+      behaviorFailures.delete(source);
+      const job = (async () => {
+        try {
+          await loadPageFragment(source, {reload: reload || (retryFailed && !alreadyMounted)});
+          if (!isNew() || generation !== layoutGeneration) return;
+          let mountedNow = false;
+          if (behaviorPages.includes(source)) {
+            const root = document.getElementById('page-' + source);
+            if (!sections.has(source)) {
+              decorateSettingsPanels(source, root);
+              const title = source === 'personal-settings' ? t('settings_center.user_profile_and_anniversaries', '用户资料与纪念日')
+                : document.querySelector(`nav a[data-page="${source}"]`)?.textContent || root.querySelector('.page-title')?.textContent || source;
+              const body = section(parent, source, title);
+              placeBehaviorSection(parent, source);
+              for (const node of [...root.children]) {
+                if (!node.matches('.page-title,.page-context,.settings-search')) move(node, body);
+              }
+              AdminUI.mount(body.parentElement);
+              mountedNow = true;
+            }
+          }
+          for (const [cardKey, title, cardSource, ids] of behaviorCards) {
+            if (cardSource !== source || sections.has(cardKey)) continue;
+            const nodes = ids.map(id => document.getElementById(id));
+            if (nodes.some(node => !node)) throw new Error('Missing settings section: ' + source);
+            const body = section(parent, cardKey, title);
+            placeBehaviorSection(parent, cardKey);
+            nodes.forEach(node => move(node, body));
+            AdminUI.mount(body.parentElement);
+            mountedNow = true;
+          }
+          // Start this source's reads now, without waiting for unrelated fragments.
+          if (mountedNow || retryFailed) await loadBehavior([source]);
+        } catch (error) {
+          if (generation !== layoutGeneration || !isNew()) return;
+          behaviorFailures.set(source, error);
+          console.error('[admin] behavior source failed', source, error);
+        } finally {
+          behaviorLoads.delete(key);
+          updateBehaviorStatus(parent, generation);
+        }
+      })();
+      behaviorLoads.set(key, job);
+      return job;
+    });
+    updateBehaviorStatus(parent, generation);
+    await Promise.all(jobs);
   }
   async function prepare(page, reload = false) {
     if (!isNew()) return;
@@ -143,41 +242,7 @@ const AdminPageLayout = (() => {
       }
       if (page === 'observe-dream') parent.append(document.getElementById('overview-drinking'));
     } else if (page === 'character-behavior') {
-      const sources = [...behaviorPages, ...behaviorCards.map(([, , source]) => source)];
-      const fragments = await Promise.allSettled(sources.map(source => loadPageFragment(source, {reload})));
-      if (!isNew()) return;
-      const parent = document.getElementById('page-character-behavior');
-      for (const source of behaviorPages) {
-        if (sections.has(source) || fragments[sources.indexOf(source)].status !== 'fulfilled') continue;
-        const root = document.getElementById('page-' + source);
-        decorateSettingsPanels(source, root);
-        const title = source === 'personal-settings' ? t('settings_center.user_profile_and_anniversaries', '用户资料与纪念日')
-          : document.querySelector(`nav a[data-page="${source}"]`)?.textContent || root.querySelector('.page-title')?.textContent || source;
-        const body = section(parent, source, title);
-        for (const node of [...root.children]) {
-          if (!node.matches('.page-title,.page-context,.settings-search')) move(node, body);
-        }
-      }
-      for (const [key, title, source, ids] of behaviorCards) {
-        if (sections.has(key)) continue;
-        const nodes = ids.map(id => document.getElementById(id));
-        if (fragments[sources.indexOf(source)].status !== 'fulfilled' || nodes.some(node => !node)) continue;
-        const body = section(parent, key, title);
-        nodes.forEach(node => move(node, body));
-      }
-      parent.querySelector('[data-behavior-load-error]')?.remove();
-      if ([...behaviorPages, ...behaviorCards.map(([key]) => key)].some(key => !sections.has(key))) {
-        const status = document.createElement('p');
-        status.dataset.behaviorLoadError = '';
-        status.setAttribute('role', 'alert');
-        status.textContent = designText('部分设置暂时无法显示。', 'Some settings could not be displayed.');
-        const retry = document.createElement('button');
-        retry.type = 'button'; retry.className = 'btn btn-ghost btn-sm';
-        retry.textContent = t('common.refresh', '刷新');
-        retry.addEventListener('click', () => goto('character-behavior'));
-        status.append(' ', retry);
-        parent.prepend(status);
-      }
+      await prepareBehavior(reload);
     } else if (page === 'client-settings') {
       await loadPageFragment('service-center', {reload});
       if (!sections.has('service-center')) {
@@ -239,24 +304,25 @@ const AdminPageLayout = (() => {
     }
     AdminUI.apply();
   }
-  async function loadBehavior() {
+  async function loadBehavior(sources = null) {
     const loaders = {
       'device-policy': () => loadScreenPeekSettings(),
-      'output-settings': loadStickerConfig,
+      'output-settings': () => loadStickerConfig(),
       'coplay-config': () => _loadSetupCoplayGames({inline: true}),
-      minecraft: loadMinecraftPage,
-      'listening-player': refreshListeningPlayer,
+      minecraft: () => loadMinecraftPage(),
+      'listening-player': () => refreshListeningPlayer(),
       'mail-config': () => _loadSetupMail({inline: true}),
       'diary-config': () => _loadSetupDiary({inline: true}),
       'personal-settings': () => _loadSetupAnniversaries({inline: true}),
-      'conversation-settings':loadConversationSettings,'observation-center':loadImeObservation,
+      'conversation-settings': () => loadConversationSettings(), 'observation-center': () => loadImeObservation(),
     };
-    const mounted = Object.fromEntries(behaviorPages.filter(source => sections.has(source))
+    const mounted = Object.fromEntries(behaviorPages.filter(source => sections.has(source) && (!sources || sources.includes(source)))
       .map(source => [source, loaders[source]]));
-    const extras = [loadToolsPage, loadHdsLocalSettings, loadVideoCallPresence];
-    await Promise.all([loadSources(mounted), ...behaviorCards.flatMap(([key], index) =>
-      sections.has(key) ? [Promise.resolve().then(extras[index]).catch(error => {
+    const extras = [() => loadToolsPage(), () => loadHdsLocalSettings(), () => loadVideoCallPresence()];
+    await Promise.all([loadSources(mounted, {protectInputs: true}), ...behaviorCards.flatMap(([key, , source], index) =>
+      sections.has(key) && (!sources || sources.includes(source)) ? [Promise.resolve().then(extras[index]).catch(error => {
         console.error('[admin] behavior section failed', key, error);
+        throw error;
       })] : [])]);
   }
   function apply() {
@@ -287,13 +353,32 @@ const AdminPageLayout = (() => {
       if (observationGroups[current]) await loadObservations(current,true);
     }
   }
-  async function loadSources(loaders) {
+  async function loadSources(loaders, {protectInputs = false} = {}) {
     await Promise.all(Object.entries(loaders).map(async ([source, loader]) => {
       const root = document.getElementById('page-' + source);
       if (root.dataset.pageVisited === 'true') return;
-      try { await loader(); root.dataset.pageVisited = 'true'; }
+      const host = sections.get(moduleKey(source));
+      let fields;
+      if (protectInputs && host) {
+        fields = host.querySelector(':scope > [data-source-fields]');
+        if (!fields) {
+          fields = document.createElement('fieldset');
+          fields.dataset.sourceFields = source;
+          fields.style.cssText = 'border:0;margin:0;padding:0;min-width:0';
+          fields.append(...host.childNodes);
+          host.append(fields);
+        }
+        // Keep unloaded defaults from being edited/saved. Unwrap after the read
+        // finishes so the original controls and their listeners retain identity.
+        fields.disabled = true;
+        fields.setAttribute('aria-busy', 'true');
+      }
+      try {
+        await loader(); root.dataset.pageVisited = 'true';
+        if (fields?.isConnected) fields.replaceWith(...fields.childNodes);
+      }
       catch (error) {
-        const host = sections.get(moduleKey(source));
+        if (fields?.isConnected) fields.replaceWith(...fields.childNodes);
         if (!host) throw error;
         host.querySelector(`[data-source-error="${source}"]`)?.remove();
         const status = document.createElement('p'); status.dataset.sourceError = source; status.setAttribute('role', 'alert');
@@ -301,7 +386,7 @@ const AdminPageLayout = (() => {
         const retry = document.createElement('button'); retry.type = 'button'; retry.className = 'btn btn-ghost btn-sm';
         retry.textContent = t('common.refresh', '刷新');
         retry.addEventListener('click', async () => {
-          status.remove(); await loadSources({[source]:loader});
+          status.remove(); await loadSources({[source]:loader}, {protectInputs});
           const page = host.closest('.page'); decorateSettingsPanels(page.id.replace(/^page-/, ''), page); AdminUI.mount(page);
         });
         status.append(' ', retry); host.append(status);

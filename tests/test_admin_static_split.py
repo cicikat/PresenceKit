@@ -52,7 +52,7 @@ def test_every_page_is_a_lazy_fragment_with_its_original_placeholder():
         assert fragment.read_text(encoding="utf-8").strip()
 
     assert "async function loadPageFragment(page, {reload = false} = {})" in source
-    assert "fetch(`/static/pages/${encodeURIComponent(page)}.html?v=${ADMIN_UI_FRAGMENT_VERSION}`)" in source
+    assert "fetch(`/static/pages/${encodeURIComponent(page)}.html?v=${ADMIN_UI_FRAGMENT_VERSION}`, {signal})" in source
     assert "window.AdminI18n?.applyI18n(container)" in source
 
 

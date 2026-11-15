@@ -46,7 +46,25 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'admin-latency-20261115';
+const ADMIN_UI_FRAGMENT_VERSION = 'behavior-recovery-20261115';
+
+async function withAdminDeadline(run, timeoutMs, parentSignal) {
+  if (!timeoutMs) return run(parentSignal);
+  const controller = new AbortController();
+  let timedOut = false;
+  const abort = () => controller.abort();
+  if (parentSignal?.aborted) abort();
+  else parentSignal?.addEventListener('abort', abort, {once: true});
+  const timer = setTimeout(() => { timedOut = true; controller.abort(); }, timeoutMs);
+  try { return await run(controller.signal); }
+  catch (error) {
+    if (timedOut) throw new Error(t('common.request_timeout', '请求超时，请重试。'));
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    parentSignal?.removeEventListener('abort', abort);
+  }
+}
 
 // Project only changed subtrees, once per frame. Disconnect during projection so
 // our own text/style changes cannot schedule a second full pass.
@@ -231,11 +249,11 @@ async function loadPageFragment(page, {reload = false} = {}) {
   }
   if (container.dataset.pageLoaded === 'true') return container;
   if (!_pageFragmentLoads.has(page)) {
-    const request = fetch(`/static/pages/${encodeURIComponent(page)}.html?v=${ADMIN_UI_FRAGMENT_VERSION}`)
-      .then(response => {
+    const request = withAdminDeadline(async signal => {
+        const response = await fetch(`/static/pages/${encodeURIComponent(page)}.html?v=${ADMIN_UI_FRAGMENT_VERSION}`, {signal});
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         return response.text();
-      })
+      }, 8000)
       .then(html => {
         container.innerHTML = html;
         container.dataset.pageLoaded = 'true';
@@ -377,80 +395,93 @@ async function goto(page, {reloadFragment = false, fromHistory = false} = {}) {
   pageElement.querySelector(':scope > [data-page-load-error]')?.remove();
 
   const loaders = {
-    'character-cleanup': loadCharacterCleanup,
+    'character-cleanup': () => loadCharacterCleanup(),
     guide: () => {},
-    'call-records': loadUnifiedRecords,
+    'call-records': () => loadUnifiedRecords(),
     'autonomy-settings': async () => { if (AdminUI.version === 'new') await Promise.all([loadSchedulerConfig(), loadHdsLocalSettings()]); await loadAutonomySettings(); await loadVideoCallPresence(); await loadAutonomyTools(); },
-    'output-settings': loadStickerConfig,
-    'device-policy': loadScreenPeekSettings,
+    'output-settings': () => loadStickerConfig(),
+    'device-policy': () => loadScreenPeekSettings(),
     'network-config': async () => { _bindProxyControls(); await loadProxy(); },
     'client-settings': async () => { await loadClientSettings(); if (AdminUI.version === 'new') await loadServiceCenter(); },
-    'personal-settings': _loadSetupAnniversaries,
-    'coplay-config': _loadSetupCoplayGames,
-    'diary-config': _loadSetupDiary,
-    'mail-config': _loadSetupMail,
-    'embedding-config': loadSetupEmbedding,
-    'local-model-runtime': loadLocalModelRuntime,
-    'observation-center': loadImeObservation,
-    'frozen-features': loadFrozenFeatures,
+    'personal-settings': () => _loadSetupAnniversaries(),
+    'coplay-config': () => _loadSetupCoplayGames(),
+    'diary-config': () => _loadSetupDiary(),
+    'mail-config': () => _loadSetupMail(),
+    'embedding-config': () => loadSetupEmbedding(),
+    'local-model-runtime': () => loadLocalModelRuntime(),
+    'observation-center': () => loadImeObservation(),
+    'frozen-features': () => loadFrozenFeatures(),
     'feature-center': () => AdminPageLayout.loadObservations('feature-center'),
-    'service-center': loadServiceCenter,
-    'role-bindings': loadRoleBindings,
-    'character-behavior': AdminPageLayout.loadBehavior,
-    'conversation-settings': loadConversationSettings,
+    'service-center': () => loadServiceCenter(),
+    'role-bindings': () => loadRoleBindings(),
+    'character-behavior': () => {}, // Each independent section initializes as it mounts.
+    'conversation-settings': () => loadConversationSettings(),
     'generation-debug': () => { loadPromptAblation(); loadMcpDebugRequests(); loadLatestAutonomyPrompt(); },
     setup:           async () => { await loadSetupPage(); if (AdminUI.version === 'new') await AdminPageLayout.loadNetwork(); },
-    'runtime-config': loadRuntimeConfig,
+    'runtime-config': () => loadRuntimeConfig(),
     'tts-config':     async () => { await Promise.all([...(AdminUI.version === 'new' ? [] : [loadTtsConfig()]), loadSttConfig(), loadSttVocabulary()]); },
-    'listening-player': refreshListeningPlayer,
-    'observe-listening': loadObserveListening,
+    'listening-player': () => refreshListeningPlayer(),
+    'observe-listening': () => loadObserveListening(),
     status:          () => AdminPageLayout.loadObservations('status'),
     logs:            () => { _runtimeWarningOffset = 0; loadLogs(); },
     'auth-tokens': () => AdminPageLayout.loadObservations('auth-tokens'),
     'model-routing': async () => { await loadModelRouting(); if (AdminUI.version === 'new') await AdminPageLayout.loadModels(); },
-    'data-management': AdminPageLayout.loadData,
-    mcp:             loadMcpPage,
-    tools:           loadToolsPage,
-    'owner-turn-api': loadOwnerTurnApiPage,
-    'agent-runtime-browser': loadBrowserRuntimePage,
-    minecraft: loadMinecraftPage,
-    'relationship-facts': loadRelationshipFactsPage,
+    'data-management': () => AdminPageLayout.loadData(),
+    mcp:             () => loadMcpPage(),
+    tools:           () => loadToolsPage(),
+    'owner-turn-api': () => loadOwnerTurnApiPage(),
+    'agent-runtime-browser': () => loadBrowserRuntimePage(),
+    minecraft: () => loadMinecraftPage(),
+    'relationship-facts': () => loadRelationshipFactsPage(),
     character:       async () => { await loadCharacterPage(); await _ensurePronounUidOptions(); await loadUserPronoun(); },
     lorebook:        () => { loadLorebook(); loadJbEntries(); },
-    'dream-settings': loadDreamSettings,
-    scheduler:       loadScheduler,
-    'observe-mood':    loadObserveMood,
+    'dream-settings': () => loadDreamSettings(),
+    scheduler:       () => loadScheduler(),
+    'observe-mood':    () => loadObserveMood(),
     'observe-dream':   () => AdminPageLayout.loadObservations('observe-dream'),
     'observe-memory':  () => {},
     'observe-memory-events': () => {},
-    'observe-hidden':  loadObserveHidden,
-    'observe-runtime': loadObserveRuntime,
-    'observe-visual':  loadObserveVisual,
-    'observe-spend':   loadObserveSpend,
-    'observe-group-arbiter': initObserveGroupArbiter,
+    'observe-hidden':  () => loadObserveHidden(),
+    'observe-runtime': () => loadObserveRuntime(),
+    'observe-visual':  () => loadObserveVisual(),
+    'observe-spend':   () => loadObserveSpend(),
+    'observe-group-arbiter': () => initObserveGroupArbiter(),
     'observe-memory-summary': () => initObserveCharacters('obs-memory-summary-char'),
     'memory-consolidation': () => initObserveCharacters('memory-consolidation-char', () => { loadMemoryConsolidationStatus(); loadMemoryHistoryReconciliation(); }),
     'observe-prompt':  () => AdminPageLayout.loadObservations('observe-prompt'),
     'observe-tools':   () => loadObserveToolUidList(),
     'observe-dream-prompt': () => loadObserveDreamPromptUidList(),
-    'observe-dream-operations': loadObserveDreamOperations,
+    'observe-dream-operations': () => loadObserveDreamOperations(),
     'observe-vector':          () => AdminPageLayout.loadObservations('observe-vector'),
     'observe-provenance':      () => loadProvenance(),
     'observe-resource-completeness': () => loadResourceCompleteness(),
     'observe-api-contract':          () => loadApiContractCheck(),
     'observe-runtime-signals':       () => loadRuntimeSignals(),
-    'observe-system-diagnosis':       loadSystemDiagnosis,
-    'observe-autonomy':              loadObserveAutonomy,
+    'observe-system-diagnosis':       () => loadSystemDiagnosis(),
+    'observe-autonomy':              () => loadObserveAutonomy(),
     'observe-char-permissions':      () => initObserveCharacters('obs-charperm-char', loadCharPermissions),
-    'user-data':                     loadUserDataPage,
+    'user-data':                     () => loadUserDataPage(),
   };
   // Returning to an already mounted page preserves its filters and form state.
   const resumePage = fromHistory && pageElement.dataset.pageVisited === 'true';
+  pageElement.querySelector(':scope > [data-page-data-error]')?.remove();
   if (!resumePage && loaders[page]) {
-    Promise.resolve(loaders[page]()).then(() => {
+    Promise.resolve().then(() => loaders[page]()).then(() => {
       decorateSettingsPanels(page, pageElement);
       AdminUI.mount(pageElement);
-    }).catch(error => console.error("[admin] page load failed", error));
+    }).catch(error => {
+      console.error('[admin] page load failed', error);
+      if (generation !== _navigationGeneration) return;
+      const status = document.createElement('p');
+      status.dataset.pageDataError = '';
+      status.setAttribute('role', 'alert');
+      status.textContent = t('common.load_failed', '加载失败：{error}', {error: error.message}) + ' ';
+      const retry = document.createElement('button');
+      retry.type = 'button'; retry.className = 'btn btn-ghost btn-sm';
+      retry.textContent = t('common.refresh', '刷新');
+      retry.addEventListener('click', () => goto(page));
+      status.append(retry); pageElement.prepend(status);
+    });
   }
   mountChainOverview(page, pageElement);
   pageElement.dataset.pageVisited = 'true';
@@ -479,12 +510,16 @@ function authHeaders(extra) {
 async function api(method, path, body, options = {}) {
   const opts = { method, headers: authHeaders(), ...(options.signal ? {signal: options.signal} : {}) };
   if (body !== undefined) opts.body = JSON.stringify(body);
-  const r = await fetch(BASE + path, opts);
-  if (!r.ok) {
-    const t = await r.text();
-    throw new Error(`HTTP ${r.status}: ${t}`);
-  }
-  return r.json();
+  // Bound reads, including body consumption. Writes keep their existing result
+  // semantics: a timeout must not imply that an uncertain save was rejected.
+  return withAdminDeadline(async signal => {
+    const r = await fetch(BASE + path, {...opts, ...(signal ? {signal} : {})});
+    if (!r.ok) {
+      const text = await r.text();
+      throw new Error(`HTTP ${r.status}: ${text}`);
+    }
+    return r.json();
+  }, method === 'GET' ? (options.timeoutMs ?? 10000) : 0, options.signal);
 }
 
 const ANNIVERSARY_EDITOR_FIELDS = Object.freeze([
