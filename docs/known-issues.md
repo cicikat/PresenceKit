@@ -6,7 +6,7 @@ DOM 增量投影、脚本并行下载、本机中文字体与 C 安全 YAML 已�
 
 ## 工单323/56 桌面发送与流响应（2026-11-15，partial / open）
 
-已确认线上六次桌面502为 gemini-ol / gemini-4-carbon 流结束后非法 choice，另一次500为配置重载关闭在途连接。工单56修复桌面流可见后忽略错误、失败回执删除正文及未回复历史尾注泄漏；缓冲失败正文可安全投递但仍为 failed。当前合成纯文本/工具流探针正常，历史坏尾包没有原始报文，具体形态仍 open；新增脱敏形态诊断，不能视作已重放历史故障。热重载在途连接竞争仍 open。工单324确认20:21及20:22仍因同类协议错误失败；后端失败正文保留与增强诊断已选择性部署，健康及隔离真实模型续轮通过，七次合成流未复现历史异常。精确兼容、原生设备及真实失败端到端仍未验收。见 [324工单](../cc-tasks/324-stream-tail-compatibility.md)、[323诊断](../cc-tasks/323-desktop-chat-failure-investigation.md) 与 [56交付](chat-recovery-stream-56.md)。
+已确认线上六次桌面502为 gemini-ol / gemini-4-carbon 流结束后非法 choice，另一次500为配置重载关闭在途连接。工单56修复桌面流可见后忽略错误、失败回执删除正文及未回复历史尾注泄漏；缓冲失败正文可安全投递但仍为 failed。工单324确认20:21、20:22及20:44同类失败；20:44出错步骤缓存正文0字符、工具1个，同事件再次出现tool_calls包。单工具探针正常；进一步真实合成双工具探针捕获每工具单独finish_reason=tool_calls且重复index=0、独立工具ID，旧解析器在第二包复现同一格式错误。已部署逐工具封包适配、重复快照去重、失败正文保留及诊断；必须收齐空stop总结束包再释放工具，截断不执行。真实同/不同工具双调用及捕获合成SSE回放通过。历史失败原包缺失，原生设备及自然用户聊天恢复仍observe；热重载在途连接竞争仍open。见 [324工单](../cc-tasks/324-stream-tail-compatibility.md)、[323诊断](../cc-tasks/323-desktop-chat-failure-investigation.md) 与 [56交付](chat-recovery-stream-56.md)。
 
 ## Browser + Visual Workbench 314（open / observe）
 
