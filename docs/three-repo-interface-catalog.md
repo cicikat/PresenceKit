@@ -1411,3 +1411,7 @@ FCM registration requires a mobile profile and a Reality session issued to the s
 current：手机只调度 queued，失败/未知保留原ID和载荷，不阻挡后续；每次本机尝试120秒截止，未知不自动重发，迟到结果沿HTTP/WS/poll/history按scope/request_id去重。复用Outbox v1和本机投递详情观测，不新增后端/桌面配置、权限、持久字段或mobile wire；ACK/cursor/TTL、后台通知不变。超时释放本机等待不等于远端取消，未知与后续请求的远端完成顺序不作保证。
 
 open：后端目前仅有desktop请求查询端点（admin/routers/chat.py），手机尚无安全scoped只读请求状态查询；手机查询按钮仅补读消息，不冒充running/failed证据或执行重试。observe：真实手机/弱网/后台杀进程/升级和真实后端往返未验收；见手机cc-tasks/54-chat-queue-recovery.md与docs/mobile/chat-queue-recovery-54.md。本次总账仅文档同步，不改后端运行代码。
+
+## 手机 #55 发送排队一分钟与取消（2026-11-15）
+
+current：手机私有Outbox v1新增可选queued_at（旧快照回退created_at）及expired/cancelled；未派发消息满一分钟停止自动发送，排队气泡可长按取消，保留失败内容并退出100条有效队列容量。派发与取消原子互斥；手动重试刷新排队时间；已派发的sending/outcomeUnknown不按这一期限清除，仍按原request_id对账。未修改chat/upload/mobile wire、鉴权、ACK/cursor/TTL、后台通知或桌面行为，无管理面新设置。observe：复用手机投递详情与现有loadChatOutbox读取本机状态/queued_at，不新增伪后端观测端点；手机scoped只读执行状态接口仍open，真实Android后台/重启/升级验收仍observe。保留载荷仍受64MiB物理存储上限，回退不识别新枚举的旧包前需处理记录。细节见手机docs/mobile/chat-queue-deadline-55.md与cc-tasks/55-chat-queue-deadline-cancel.md。
