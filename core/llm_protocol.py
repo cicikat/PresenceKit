@@ -1100,7 +1100,13 @@ async def _collect_chat_stream(mc, messages, kwargs, capture) -> NormalizedRespo
                 allowed_finish = (None, finish, "stop") if compatible and finish == "tool_calls" else (None, finish)
                 if tail_finish in allowed_finish and _empty_chat_delta(delta, allow_assistant_role=compatible):
                     continue
-                raise _format_error(mc, "Chat stream contains choices after completion")
+                # Log shape only: no gateway text, arguments, or credentials.
+                fields = _as_dict(delta) if delta is not None else {}
+                shape = ','.join(sorted(key for key, value in fields.items()
+                                        if value not in (None, '', [], {})))
+                raise _format_error(mc, f"Chat stream contains choices after completion "
+                                    f"(finish={finish!r}, tail_finish={tail_finish!r}, "
+                                    f"delta_fields={shape!r}, compatibility={'openlux' if compatible else 'strict'})")
             for key in ("reasoning_content", "reasoning"):
                 capture.add(key, getattr(delta, key, None))
             text = getattr(delta, "content", None)
@@ -1155,6 +1161,18 @@ async def _collect_chat_stream(mc, messages, kwargs, capture) -> NormalizedRespo
             usage=usage,
         )
         return _normalize_chat_completion(mc, response)
+    except Exception as exc:
+        # Preserve displayable prose for failed-turn UI only. This does not
+        # normalize a truncated turn or release any incomplete tool call.
+        if parts and not calls:
+            from core.thinking import strip_think_tags
+            from core.tool_grounding import ToolProtocolStreamFilter
+            visible_filter = ToolProtocolStreamFilter()
+            visible = visible_filter.feed(strip_think_tags(''.join(parts)))
+            visible += visible_filter.finish()
+            if not visible_filter.blocked and visible.strip():
+                exc.partial_text = visible
+        raise
     finally:
         await stream.close()
 

@@ -27,7 +27,7 @@ def test_retention_uses_updated_time_and_read_does_not_create(sandbox):
     assert store.query() == []
     assert not sandbox.ime_drafts_db().exists()
     now = int(time.time() * 1000)
-    store.receive('phone', [row(created_at=now - 5 * 3600000)], now_ms=now)
+    store.receive('phone', [row(created_at=now - 5 * 3600000, updated_at=now)], now_ms=now)
     assert len(store.query(now_ms=now)) == 1
     assert store.query(now_ms=now + store.RETENTION_MS) == []
     store.receive('phone', [], now_ms=now + store.RETENTION_MS)

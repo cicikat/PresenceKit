@@ -1,3 +1,7 @@
+## 工单56 失败流正文与历史显示（2026-11-15）
+
+无新控制项、默认值或权限。缓冲模型调用失败时，桌面可保留去除思考/工具协议后的已收到正文；执行与回执仍为 failed，不进入成功记忆或工具执行。沿用现有模型路由、调用观测及 stream 消息，历史过滤不改变结构化关联键。[交付与 open 边界](chat-recovery-stream-56.md)。
+
 ## 本地文件 Agent（318）
 
 314：桌面预览复用 `device_file_agent.enabled`、桌面启用/暂停及具体文件工作区授权；无限制 grant 不用于浏览器预览。安装 Windows sidecar 后才广告 browser 能力，无第二套开关或视觉连接。视觉沿用管理面 screen 主备路由；无路由明确 vision_unavailable。管理面「感知与电脑操作」增加只读截图刷新/复核，元数据和私有 JPEG 复用 state.read 观测；600 秒 TTL、撤权失效、不持久化。手机不执行此能力，无新增手机设置。真实完整应用联合验收仍 observe，详见 [314 交付](browser-workbench-314-delivery.md)。

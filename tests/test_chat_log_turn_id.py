@@ -207,3 +207,14 @@ def test_history_plain_and_styled_copy_share_visible_paragraphs(sandbox, monkeyp
     row = asyncio.run(chat_log.get_day('2026-10-08', x_presence_session=None))['entries'][0]
     assert row['assistant'] == 'first\nsecond'
     assert row['assistant_display_text'] == '<hl>first</hl>\nsecond'
+
+
+@pytest.mark.parametrize('ending', ['---', '', '\n---'])
+def test_unanswered_user_footer_never_becomes_message_text(ending):
+    rows = chat_log._parse_day('## 12:00\n**用户**：我觉得你好像有点不一样了\n> speaker:user turn_id:fixture-user-turn\n' + ending)
+    assert rows == [{'time': '12:00', 'user': '我觉得你好像有点不一样了', 'assistant': ''}]
+
+
+def test_unanswered_ordinary_turn_id_quote_is_still_body_text():
+    row = chat_log._parse_day('## 12:00\n**用户**：explain this\n> turn_id:quoted-example\n---')[0]
+    assert row['user'] == 'explain this\n> turn_id:quoted-example'

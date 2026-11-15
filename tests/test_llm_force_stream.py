@@ -203,3 +203,31 @@ def test_registry_rejects_unsupported_force_stream(monkeypatch, protocol, enable
     }}})
     with pytest.raises(ValueError, match="force_stream"):
         registry._build_model_client("test")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('ending', [chunk('late', finish=None), RuntimeError('disconnected')])
+async def test_failed_buffer_retains_safe_prose_without_claiming_success(ending):
+    mc, stream, _ = client([chunk('<think>private</think>visible answer', finish='stop'), ending])
+    with pytest.raises(Exception) as failure:
+        await create(mc, [], gen_kwargs={})
+    assert failure.value.partial_text == 'visible answer'
+    stream.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_failed_tool_buffer_never_exposes_arguments_as_partial_reply():
+    mc, _, _ = client([chunk(calls=[call(0, 'x', 'write_document', '{')]), RuntimeError('disconnected')])
+    with pytest.raises(RuntimeError) as failure:
+        await create(mc, [], gen_kwargs={})
+    assert not getattr(failure.value, 'partial_text', '')
+
+
+@pytest.mark.asyncio
+async def test_bad_trailer_diagnostic_contains_shape_not_payload():
+    mc, _, _ = client([chunk('answer', finish='stop'), chunk('private-new-content')])
+    with pytest.raises(UpstreamResponseFormatError) as failure:
+        await create(mc, [], gen_kwargs={})
+    assert 'delta_fields=' in str(failure.value)
+    assert 'private-new-content' not in str(failure.value)
+    assert failure.value.partial_text == 'answer'

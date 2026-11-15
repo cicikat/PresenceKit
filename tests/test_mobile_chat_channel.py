@@ -198,7 +198,7 @@ async def test_mobile_chat_dream_guard_blocks_before_owner_turn(sandbox, monkeyp
     assert exc.value.status_code == 409
 
 
-@pytest.mark.parametrize("empty_reply", [None, "", " \n\t"])
+@pytest.mark.parametrize("empty_reply", [None, "", " \n\t", "__buffered_failure__", "__stream_failure__"])
 @pytest.mark.parametrize("origin", ["mobile", "desktop"])
 @pytest.mark.parametrize("loop_active", [False, True])
 async def test_owner_chat_recovers_after_empty_reply(monkeypatch, empty_reply, origin, loop_active):
@@ -208,8 +208,23 @@ async def test_owner_chat_recovers_after_empty_reply(monkeypatch, empty_reply, o
     from core.pipeline import Pipeline
 
     critical_calls = []
+    if empty_reply == "__stream_failure__":
+        monkeypatch.setattr("core.output.segment_enforcer.get_segment_enforce_settings", lambda: (True, 4096))
     replies = iter([empty_reply, "mobile reply"])
     stream_ends = []
+
+    failed_generation = False
+
+    def next_reply():
+        nonlocal failed_generation
+        value = next(replies)
+        if value == "__buffered_failure__":
+            failed_generation = True
+            from core.llm_protocol import UpstreamResponseFormatError
+            error = UpstreamResponseFormatError("fixture stream interrupted")
+            error.partial_text = "<think>private reasoning</think>Reply before failure"
+            raise error
+        return value
 
     class _Character:
         name = "Companion"
@@ -228,13 +243,24 @@ async def test_owner_chat_recovers_after_empty_reply(monkeypatch, empty_reply, o
             return [], {}
 
         async def run_llm(self, _messages):
-            return next(replies)
+            value = next_reply()
+            if value == "__stream_failure__":
+                from core.llm_protocol import UpstreamResponseFormatError
+                raise UpstreamResponseFormatError("fixture disconnected")
+            return value
 
         async def run_llm_stream(self, _messages, **_kwargs):
-            yield next(replies) or ""
+            value = next_reply()
+            if value == "__stream_failure__":
+                from core.llm_protocol import UpstreamResponseFormatError
+                yield "Visible prefix\nShort tail"
+                raise UpstreamResponseFormatError("fixture disconnected")
+            yield value or ""
 
         async def run_agentic_loop(self, _messages, *, stream=False, **_kwargs):
             if stream:
+                if empty_reply == "__buffered_failure__" and not failed_generation:
+                    return next_reply()
                 return self.run_llm_stream(_messages)
             return await self.run_llm(_messages)
 
@@ -286,11 +312,28 @@ async def test_owner_chat_recovers_after_empty_reply(monkeypatch, empty_reply, o
     monkeypatch.setattr("channels.ui_push.push_stream_end", AsyncMock(side_effect=lambda mid: stream_ends.append(mid)))
     monkeypatch.setattr("channels.desktop_ws.push_message", AsyncMock())
     endpoint = mobile.mobile_chat if origin == "mobile" else chat.desktop_chat
-    with pytest.raises(HTTPException) as exc:
+    from core.llm_protocol import UpstreamResponseFormatError
+    expected_error = UpstreamResponseFormatError if origin == "mobile" and empty_reply in ("__buffered_failure__", "__stream_failure__") else HTTPException
+    with pytest.raises(expected_error) as exc:
         await endpoint({"message": "first attempt"}, _auth=True)
-    assert exc.value.status_code == 502
-    assert "回复正文" in exc.value.detail
+    if isinstance(exc.value, HTTPException):
+        assert exc.value.status_code == 502
+    else:
+        assert exc.value.category == "protocol_incompatible"
+    if empty_reply not in ("__buffered_failure__", "__stream_failure__"):
+        assert "回复正文" in exc.value.detail
     assert critical_calls == []
+    deltas = __import__('channels.ui_push', fromlist=['push_stream_delta']).push_stream_delta
+    if empty_reply == "__buffered_failure__" and origin == "desktop":
+        assert deltas.await_count == 1
+        assert deltas.call_args.args[1] == "Reply before failure"
+    elif empty_reply == "__stream_failure__" and origin == "desktop":
+        assert deltas.await_count == 2
+        assert "".join(call.args[1] for call in deltas.await_args_list) == "Visible prefix Short tail"
+    elif origin == "desktop" and empty_reply and empty_reply != "__buffered_failure__":
+        assert deltas.call_args.args[1] == empty_reply
+    else:
+        assert deltas.await_count == 0
     assert not conversation_lock("owner").locked()
     assert len(stream_ends) == (1 if origin == "desktop" else 0)
 

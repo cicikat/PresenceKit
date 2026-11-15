@@ -376,23 +376,23 @@ async def _execute_owner_chat_turn_locked(
             protocol_filter = ToolProtocolStreamFilter()
             _t_stream_launch = time.monotonic()
             _t_first_delta_ts = None
-            if _loop_active:
-                _stream_source = await pipeline.run_agentic_loop(
-                    messages, uid=user_id, char_id=_frozen_scope.character_id,
-                    session_state=_loop_session_state, is_group=False, stream=True,
-                    tool_event_observer=_tool_status_observer,
-                    exclude_tools=_fast_path_exclude_tools,
-                    tool_call_required=_tool_call_required,
-                    required_tool_names=_required_tool_names,
-                    media_refs=media_refs,
-                    allowed_tool_categories=allowed_tool_categories,
-                    allowed_tool_names=allowed_tool_names,
-                )
-            else:
-                _stream_source = pipeline.run_llm_stream(
-                    messages, char_id=_frozen_scope.character_id, user_id=user_id,
-                )
             try:
+                if _loop_active:
+                    _stream_source = await pipeline.run_agentic_loop(
+                        messages, uid=user_id, char_id=_frozen_scope.character_id,
+                        session_state=_loop_session_state, is_group=False, stream=True,
+                        tool_event_observer=_tool_status_observer,
+                        exclude_tools=_fast_path_exclude_tools,
+                        tool_call_required=_tool_call_required,
+                        required_tool_names=_required_tool_names,
+                        media_refs=media_refs,
+                        allowed_tool_categories=allowed_tool_categories,
+                        allowed_tool_names=allowed_tool_names,
+                    )
+                else:
+                    _stream_source = pipeline.run_llm_stream(
+                        messages, char_id=_frozen_scope.character_id, user_id=user_id,
+                    )
                 async for piece in _stream_source:
                     piece = protocol_filter.feed(piece)
                     if protocol_filter.blocked:
@@ -426,6 +426,25 @@ async def _execute_owner_chat_turn_locked(
                     visible_tail = _stream_paragraph_enforcer.finish()
                     if visible_tail:
                         await _ui_push.push_stream_delta(_stream_msg_id, visible_tail)
+            except Exception as exc:
+                # Newline lookahead can hold a short trailing segment when
+                # the upstream disconnects. Flush only the
+                # already-filtered text; do not complete the failed turn.
+                if _chunks and _stream_paragraph_enforcer is not None:
+                    pending_text = _stream_paragraph_enforcer.finish()
+                    if pending_text:
+                        await _ui_push.push_stream_delta(_stream_msg_id, pending_text)
+                # Buffered gateway turns can fail before yielding their first
+                # visible delta. Keep safe prose without claiming completion.
+                partial = getattr(exc, "partial_text", "")
+                if not _chunks and isinstance(partial, str) and partial.strip():
+                    from core.thinking import strip_think_tags
+                    failed_filter = ToolProtocolStreamFilter()
+                    visible = failed_filter.feed(strip_think_tags(partial))
+                    visible += failed_filter.finish()
+                    if not failed_filter.blocked and visible.strip():
+                        await _ui_push.push_stream_delta(_stream_msg_id, visible)
+                raise
             finally:
                 await _ui_push.push_stream_end(_stream_msg_id)
             if _t_first_delta_ts is not None:

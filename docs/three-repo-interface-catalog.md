@@ -1,3 +1,7 @@
+## 工单56 聊天失败正文与历史清理（2026-11-15，current / open / observe）
+
+current：桌面失败/未知显式感叹号重发、断流正文保留与晚到 canonical 原位替换；手机无气泡投递说明及旋转补读图标，既有失败按钮、长按取消保留。后端未回复历史尾注过滤、缓冲失败安全正文投递复用既有 stream 消息和 request_id；failed 不被伪装 completed。无新端点、设置、权限或持久字段，mobile session/ACK/cursor/TTL/通知不变。open：历史坏流尾包缺原始报文、配置重载在途连接竞争。observe：原生设备及修改后的线上验收未运行。详见 [56交付](chat-recovery-stream-56.md)。
+
 ## 工单 314 · 桌面 Browser + Visual Workbench（current / open / observe）
 
 current：device-file-agent.v1 poll 的 operations 增加 browser，响应增加 browser_tasks；browser 动作复用 grant/revision/epoch/nonce/lease/ACK 与 Task/Work Session，未知 ACK 不重放。Windows 打包 Chromium 处理授权文本副本与可信 React/Three runtime，VPS 不读本机物理路径。截图分块/hash绑定，600秒内存 TTL、state.read/no-store 诊断和管理面复核；视觉复用 screen 主备。无新增运营开关、scope 或手机协议，手机不执行浏览器。先更新后端，再更新含worker的桌面；回滚反向。详见 [协议](device-file-agent-contract.md#isolated-desktop-browser-preview-314)。
