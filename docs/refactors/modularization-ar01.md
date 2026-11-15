@@ -46,7 +46,11 @@ MCP: init_mcp_servers → 同一个 _TOOL_REGISTRY（运行期增删）
   → channels desktop/mobile / 同 msg_id canonical
 QQ/主动触发继续使用自己的 ingress 与既有 Pipeline/turn_sink，不改为 HTTP 请求。
 
-/dream/* → Dream router → core/dream 状态机/存储/资产路径
+/dream/* → dream.py（include_router + 原注册顺序、同对象旧 helper 导出）
+         → dream_sessions / archives / observability / presets / worlds / scenarios
+         → core/dream 状态机、存储、layered 资产路径
+         → 原 dream_hud（含迁入的 v0 派生）、scenario_authoring（纯 YAML）
+           / world_authoring（世界骨架与 lorebook 文件写入）
 index.html → defer i18n → core.js（api/auth/state/事件委托/页面加载）
            → 页面脚本 → AdminPageLayout / AdminUI（同节点新旧呈现）
 ```
@@ -73,7 +77,7 @@ index.html → defer i18n → core.js（api/auth/state/事件委托/页面加载
 |---|---|---|
 | A | 工具定义归域；共享暴露/校验/准入/结果/执行分层；元数据调用 | 全部六类快照与基线逐项一致；主组 377 passed / 1 failed（迁移时漏掉生成器的常量引用，已修复）；修复后含失败组的 90 passed；补充设备/邮件/QQ空间/浏览器/schema 47 passed；无 skip |
 | B | owner_chat service / prepare / generation / delivery；Router 保留同对象 API | 六类快照仍一致；入口/取消/锁/流式/失败/清洗组 230 passed；媒体/鉴权/开发入口/外部 companion/调度组 159 passed；0 failed / 0 skipped |
-| C | Dream 功能路由 | 待执行 |
+| C | 34 个 Dream endpoint 按功能分 router；HUD/YAML/文件序列化归 core | 六类快照仍零差异；临时沙盒 API/会话/文件 CRUD/硬退/挽留/档案/剧本/HUD 144 passed；资产回退/Reality 隔离与迁移后的静态守卫 140 passed；0 failed / 0 skipped |
 | D | Admin/i18n | 待执行 |
 
 A 补充：新增 1 项旧 spec 整体替换的入口回归，验证可信 uid/char 注入、空角色
@@ -86,6 +90,12 @@ B 的阶段参数是单轮冻结值对象，不创建队列、缓存或第二条
 admission/prepare/generate/stream/commit/deliver 的 debug 日志只加阶段、已有
 request_id 和异常类型，不包含请求正文。media Router 留在原文件：其上传/下载与
 会话准入共享 helper，额外切文件没有本阶段的净收益。
+
+C 的 HTTPException、Body/Query 默认值和 require_scopes 保留在 API 层。
+层级资产解析、只读回退和 canonical userdata 写入规则不改；不自动迁移。
+旧 helper 仍是同对象导出，通过惰性 facade 读取保留 `_owner_uid/get_config`
+等注入点。纯 HUD/YAML 不依赖 Admin。Dream 隔离静态守卫扩展到迁出的
+`dream_*.py`，Reality 的禁止裸记忆写入检查也覆盖 owner_chat，防止拆文件后守卫失效。
 
 ## 删除 brief 候选（本轮不执行）
 

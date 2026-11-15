@@ -250,7 +250,7 @@ def test_s2b_strip_tags_in_turn_sink_fanout():
 
 def test_s2c_strip_tags_in_desktop_chat_visible():
     """S2c: admin/routers/chat.py desktop_chat must strip render tags for visible reply."""
-    hits = _grep_lines("admin/routers/chat.py", "strip_render_tags")
+    hits = _grep_lines("core/owner_chat/delivery.py", "strip_render_tags")
     assert hits, (
         "admin/routers/chat.py: strip_render_tags not found — "
         "desktop chat visible reply may leak render tags"
@@ -281,9 +281,13 @@ def test_s3b_dream_pipeline_no_strip_render_tags():
     )
 
 
-def test_s3c_dream_router_no_reality_scrub():
+@pytest.mark.parametrize("relpath", ["admin/routers/dream.py"] + [
+    path.relative_to(_ROOT).as_posix()
+    for path in sorted((_ROOT / "admin/routers").glob("dream_*.py"))
+])
+def test_s3c_dream_router_no_reality_scrub(relpath):
     """S3c: admin/routers/dream.py must not apply reality scrub functions."""
-    src = _source("admin/routers/dream.py")
+    src = _source(relpath)
     assert "scrub_reality_output_text" not in src, (
         "admin/routers/dream.py calls scrub_reality_output_text — "
         "dream reply should bypass reality scrub"
@@ -648,7 +652,7 @@ def test_b8_visible_output_preserves_action_descriptions():
 
 def test_s5a_desktop_chat_uses_record_assistant_turn():
     """S5a: admin/routers/chat.py desktop_chat must go through record_assistant_turn."""
-    src = _source("admin/routers/chat.py")
+    src = _source("core/owner_chat/delivery.py")
     assert "record_assistant_turn" in src, (
         "admin/routers/chat.py: record_assistant_turn not called — "
         "desktop memory write may bypass turn_sink scrub"

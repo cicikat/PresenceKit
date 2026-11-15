@@ -17,6 +17,13 @@ runtime；`letter_writer` 的 Task/副链产物迁移。Brief 229 本身仍是�
 
 ## 系统全貌
 
+AR-01（325）组织边界：工具稳定入口仍为 `core/tool_dispatcher.py`，领域定义在
+`core/tools/*_definitions.py`，共享执行职责在 `core/tool_runtime/`；owner Reality
+聊天由 `core/owner_chat/` 编排原 Pipeline/turn_sink；`admin/routers/dream.py`
+组合按功能拆分的 Dream Router，状态机与存储仍属于 `core/dream/`。
+对外 API、工具合同、配置与数据路径不变。详见
+[模块边界与验收](docs/refactors/modularization-ar01.md)。
+
 工单 268 增加个人微信文本私聊 reference transport：第三方 REST/WS 仅在
 `integrations/wechat/` 解码，经 `integrations/wechat_transport.py` 规范合同、
 `core/wechat_service.py` owner 绑定及 `core/im_ingress.py` admission 进入现有 main 私聊
