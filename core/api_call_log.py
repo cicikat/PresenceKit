@@ -48,6 +48,11 @@ def append(
     skip_reason: str = "",
     logical_final: bool | None = None,
     sdk_retry_policy: str = "",
+    turn_id: str = "",
+    turn_step: int = 0,
+    effective_preset: str = "",
+    tool_history_present: bool = False,
+    breaker_open: bool = False,
 ) -> None:
     try:
         now = time.time()
@@ -66,6 +71,12 @@ def append(
             "protocol": str(protocol)[:48],
             "error_category": str(error_category)[:64],
         }
+        if turn_id:
+            row.update(turn_id=str(turn_id)[:64], turn_step=max(0, int(turn_step)))
+        if effective_preset:
+            row["effective_preset"] = str(effective_preset)[:128]
+        row["tool_history_present"] = bool(tool_history_present)
+        row["breaker_open"] = bool(breaker_open)
         if logical_call_id:
             row["logical_call_id"] = str(logical_call_id)[:64]
         if attempt_id:

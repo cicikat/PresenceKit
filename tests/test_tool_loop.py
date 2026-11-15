@@ -1442,3 +1442,113 @@ async def test_display_defense_does_not_replay_true_marker_as_tool(monkeypatch):
     assert result == "收尾"
     assert len(execute_calls) == 1
     _assert_no_internal_marker(result)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("primary_protocol,fallback_protocol", [
+    ("chat_completions", "anthropic_messages"),
+    ("anthropic_messages", "chat_completions"),
+    ("responses", "anthropic_messages"),
+    ("anthropic_messages", "responses"),
+    ("chat_completions", "responses"),
+    ("responses", "chat_completions"),
+])
+@pytest.mark.parametrize("fail_after_write", [False, True])
+async def test_failover_continues_real_tool_loop_without_repeating_write(
+    monkeypatch, sandbox, tmp_path, primary_protocol, fallback_protocol, fail_after_write,
+):
+    """A/B/C/H/L: real loop, adapters and dispatcher; mock only model transport/routing.
+
+    Includes actual discovery, two distinct writes, a repeated mutation under a
+    new ID after failover, natural completion and the tool-free final request.
+    """
+    from types import SimpleNamespace as NS
+    import httpx
+    from core import llm_failover as fo, tool_dispatcher as td
+    from core.llm_protocol import canonical_tool_history
+    from core.llm_turn_route import current_route
+    from core.model_registry import ModelClient
+    from core.session_state import SessionState
+
+    _patch_tool_loop_config(monkeypatch, exclude_tools=[], max_steps=6)
+    _patch_tools_schema(monkeypatch, ["fixture_save"])
+    writes = []
+    output = tmp_path / "fixture.txt"
+    async def save_fixture(value):
+        writes.append(value)
+        with output.open("a", encoding="utf-8") as handle:
+            handle.write(value)
+        return "synthetic saved receipt"
+    monkeypatch.setitem(td._TOOL_REGISTRY, "fixture_save", {
+        "func": save_fixture, "category": "info", "effect": "write", "dangerous": False,
+        "description": "save fixture", "parameters": {"type": "object", "properties": {
+            "value": {"type": "string"}}, "required": ["value"]},
+    })
+    plan = [("load_tools_info", {}), ("fixture_save", {"value": "a"}),
+            ("fixture_save", {"value": "a"}), ("fixture_save", {"value": "b"}), None, None]
+    phase = 0
+    failed = False
+    requests, rows, states = [], [], []
+    fo.clear_breakers()
+    fo.reset_shutdown()
+    monkeypatch.setattr("core.api_call_log.append", lambda **row: rows.append(row))
+
+    async def respond(name, protocol, kwargs):
+        nonlocal phase, failed
+        history = kwargs.get("messages", kwargs.get("input", []))
+        requests.append((name, canonical_tool_history(history)))
+        states.append(current_route())
+        if name == "primary" and not failed and phase == (2 if fail_after_write else 0):
+            failed = True
+            raise httpx.HTTPStatusError("synthetic upstream unavailable", request=httpx.Request("POST", "https://fixture.invalid"),
+                response=httpx.Response(503))
+        action = plan[phase]
+        phase += 1
+        text = "" if action else "The fixture is ready."
+        calls = [] if action is None else [{"id": f"fixture-{phase}", "name": action[0], "arguments": action[1]}]
+        if protocol == "chat_completions":
+            return NS(choices=[NS(finish_reason="tool_calls" if calls else "stop", message=NS(
+                content=text, tool_calls=[NS(id=c["id"], type="function", function=NS(
+                    name=c["name"], arguments=json.dumps(c["arguments"]))) for c in calls]))])
+        if protocol == "responses":
+            items = [NS(type="function_call", call_id=c["id"], name=c["name"], arguments=json.dumps(c["arguments"])) for c in calls]
+            if not calls:
+                items = [NS(type="message", role="assistant", content=[NS(type="output_text", text=text)])]
+            return NS(status="completed", output=items, usage=None)
+        blocks = [{"type": "tool_use", "id": c["id"], "name": c["name"], "input": c["arguments"]} for c in calls]
+        return httpx.Response(200, request=httpx.Request("POST", "https://fixture.invalid"), json={
+            "content": blocks or [{"type": "text", "text": text}], "stop_reason": "tool_use" if calls else "end_turn"})
+
+    def client(name, protocol):
+        async def create(**kwargs):
+            return await respond(name, protocol, kwargs)
+        async def post(url, **kwargs):
+            return await respond(name, protocol, kwargs["json"])
+        return ModelClient(name=name, provider_kind="openai", model=name,
+            tool_call_mode="function_calling", prompt_style="narrative", params={},
+            api_protocol=protocol, base_url="https://fixture.invalid", api_key="synthetic-key",
+            client=NS(chat=NS(completions=NS(create=create)), responses=NS(create=create), post=post))
+    primary, fallback = client("primary", primary_protocol), client("fallback", fallback_protocol)
+    monkeypatch.setattr("core.llm_client.get_model_client", lambda *a, **k: primary)
+    monkeypatch.setattr(fo, "resolve_fallback_client", lambda *a, **k: (fallback, ""))
+    try:
+        result = await _make_pipeline().run_agentic_loop(
+            [{"role": "user", "content": "Save the fixture."}], uid="fixture-owner", char_id=TEST_CHAR_ID,
+            session_state=SessionState())
+        assert result == "The fixture is ready."
+        assert writes == ["a", "b"]
+        assert output.read_text(encoding="utf-8") == "ab"
+        names = [r[0] for r in requests]
+        switch = names.index("fallback")
+        assert names[:switch] == ["primary"] * (3 if fail_after_write else 1)
+        assert set(names[switch:]) == {"fallback"}
+        final_receipts = [m["tool_call_id"] for m in requests[-1][1] if m.get("role") == "tool"]
+        assert final_receipts == ["fixture-1", "fixture-2", "fixture-3", "fixture-4"]
+        assert current_route() is None and all(state.closed for state in states)
+        assert len({r["turn_id"] for r in rows}) == 1
+        assert rows[0]["error_category"] == ("" if fail_after_write else "upstream_unavailable")
+        assert rows[-1]["ok"] and rows[-1]["effective_preset"] == "fallback"
+        assert rows[-1]["tool_history_present"]
+        assert "synthetic saved receipt" not in json.dumps(rows)
+    finally:
+        fo.clear_breakers()

@@ -37,7 +37,10 @@ Chat Completions preset 新增 `stream_compatibility: strict|openlux`（默认 `
 恢复仅用于缓冲 `create` 调用的 `protocol_incompatible`：`fallback` 最多使用一次已配置备用；
 `nonstream_then_fallback` 对强制流式 preset 先尝试一次同模型非流式，失败后最多使用一次备用。
 共用既有总时间预算，不改变原 preset 的流式配置；连续协议失败纳入熔断。
-工具结果出现后禁止自动恢复或切换，转换前保留此状态，避免重复副作用。
+工具结果出现后，`protocol_incompatible` 仍禁止自动恢复；已完成工具回执作为只读历史时，
+当前推理请求的 503、连接失败、超时等 allowlist 错误可在既有预算内切换备用，不重放历史工具。
+备用成功接管后，同一工具 turn 的后续步骤与无工具收尾保持该路由；下个独立 turn 重新解析配置。
+配置热重载、显式 preset 和角色路由优先级不变；取消或结束清理临时状态，不写回配置。
 实时文本 `execute_stream` 沿用既有“发送正文后不切换”规则，本设置不增加其中的重试。
 主请求失败、`route_role=recovery` 非流式尝试与备用结果保留在既有 API 调用账本，
 通过 `/observability/api-calls`（`state.read`）查询；最终失败沿用聊天 HTTP 错误与通道失败回执。

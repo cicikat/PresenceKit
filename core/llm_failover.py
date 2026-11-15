@@ -22,6 +22,7 @@ import httpx
 
 from core.llm_protocol import UpstreamResponseFormatError, error_category_for_exception
 from core.model_registry import ModelClient, get_model_client
+from core.llm_turn_route import current_route
 
 logger = logging.getLogger(__name__)
 
@@ -348,10 +349,18 @@ def _record_row(
     skip_reason: str = "",
     logical_final: bool = False,
     sdk_retry_policy: str = "",
+    effective_preset: str = "",
+    tool_history_present: bool = False,
 ) -> None:
     from core.api_call_log import append
 
+    route = current_route()
     append(
+        turn_id=route.turn_id if route else "",
+        turn_step=route.steps if route else 0,
+        effective_preset=effective_preset,
+        tool_history_present=tool_history_present,
+        breaker_open=skip_reason == "breaker_open",
         caller=caller,
         purpose=purpose,
         provider=provider,
@@ -387,8 +396,11 @@ def _row_from_mc(
     logical_final: bool = False,
     output_hint: str = "",
     failover: bool = False,
+    tool_history_present: bool = False,
 ) -> None:
     _record_row(
+        effective_preset=str(getattr(mc, "name", "") or ""),
+        tool_history_present=tool_history_present,
         caller=caller,
         purpose=purpose,
         provider=str(getattr(mc, "provider_kind", "") or "unknown"),
@@ -466,7 +478,7 @@ async def execute_create(
     reset_breaker_on_http_success: bool = True,
     purpose: str | None = None,
 ) -> AttemptOutcome:
-    """Bounded model attempts; never replay a round containing tool results."""
+    """Retry inference only; tool dispatch and receipts remain owned by the loop."""
     from core.llm_protocol import create as create_protocol_response
 
     purpose = purpose or call_category
@@ -474,6 +486,16 @@ async def execute_create(
     deadline = time.monotonic() + total_wall(call_category)
     if primary_mc is None:
         primary_mc = get_model_client(call_category, char_id=char_id)
+    original_mc = primary_mc
+    fallback_mc, fallback_skip = resolve_fallback_client(
+        call_category, char_id=char_id, primary=primary_mc, explicit_preset=explicit_preset,
+    )
+    route = current_route()
+    if route is not None:
+        primary_mc = route.select(primary_mc, fallback_mc, call_category, char_id, explicit_preset)
+    sticky = primary_mc is not original_mc
+    if sticky:
+        fallback_mc, fallback_skip = None, "turn_fallback_exhausted"
     recovery = getattr(primary_mc, "protocol_recovery", "off")
     tool_history = False
 
@@ -496,7 +518,7 @@ async def execute_create(
                 attempt_id=attempt_id, error_category="budget_exhausted",
             )
             _row_from_mc(
-                mc, caller=caller, purpose=purpose, duration_ms=0, ok=False,
+                mc, tool_history_present=tool_history, caller=caller, purpose=purpose, duration_ms=0, ok=False,
                 logical_call_id=logical_id, attempt_id=attempt_id, route_role=role,
                 skip_reason="budget_exhausted", error_category="budget_exhausted",
                 logical_final=logical_final, failover=failover,
@@ -516,7 +538,7 @@ async def execute_create(
             duration_ms = int((time.perf_counter() - started) * 1000)
             category, reason = classify_exception(exc)
             _row_from_mc(
-                mc, caller=caller, purpose=purpose, duration_ms=duration_ms, ok=False,
+                mc, tool_history_present=tool_history, caller=caller, purpose=purpose, duration_ms=duration_ms, ok=False,
                 logical_call_id=logical_id, attempt_id=attempt_id, route_role=role,
                 error_category=category, output_hint=type(exc).__name__,
                 logical_final=logical_final, failover=failover,
@@ -530,7 +552,7 @@ async def execute_create(
         if role != "recovery" and not breaker_permits(mc.name, call_category):
             duration_ms = int((time.perf_counter() - started) * 1000)
             _row_from_mc(
-                mc, caller=caller, purpose=purpose, duration_ms=duration_ms, ok=False,
+                mc, tool_history_present=tool_history, caller=caller, purpose=purpose, duration_ms=duration_ms, ok=False,
                 logical_call_id=logical_id, attempt_id=attempt_id, route_role=role,
                 skip_reason="breaker_open", error_category="breaker_open",
                 logical_final=logical_final, failover=failover,
@@ -544,7 +566,7 @@ async def execute_create(
         if prepared.refuse_reason:
             duration_ms = int((time.perf_counter() - started) * 1000)
             _row_from_mc(
-                mc, caller=caller, purpose=purpose, duration_ms=duration_ms, ok=False,
+                mc, tool_history_present=tool_history, caller=caller, purpose=purpose, duration_ms=duration_ms, ok=False,
                 logical_call_id=logical_id, attempt_id=attempt_id, route_role=role,
                 skip_reason=prepared.refuse_reason, error_category=prepared.refuse_reason,
                 logical_final=logical_final, failover=failover,
@@ -559,7 +581,7 @@ async def execute_create(
         req_timeout = min(float(gen_kwargs.get("timeout") or category_timeout(call_category)), _remaining(deadline))
         if req_timeout <= 0:
             _row_from_mc(
-                mc, caller=caller, purpose=purpose, duration_ms=int((time.perf_counter() - started) * 1000),
+                mc, tool_history_present=tool_history, caller=caller, purpose=purpose, duration_ms=int((time.perf_counter() - started) * 1000),
                 ok=False, logical_call_id=logical_id, attempt_id=attempt_id, route_role=role,
                 skip_reason="budget_exhausted", error_category="budget_exhausted",
                 logical_final=logical_final, failover=failover,
@@ -586,7 +608,7 @@ async def execute_create(
         except asyncio.CancelledError:
             duration_ms = int((time.perf_counter() - started) * 1000)
             _row_from_mc(
-                mc, caller=caller, purpose=purpose, duration_ms=duration_ms, ok=False,
+                mc, tool_history_present=tool_history, caller=caller, purpose=purpose, duration_ms=duration_ms, ok=False,
                 logical_call_id=logical_id, attempt_id=attempt_id, route_role=role,
                 skip_reason="cancelled", error_category="cancelled",
                 logical_final=logical_final, failover=failover, switch_reason=switch_reason,
@@ -600,7 +622,7 @@ async def execute_create(
             breaker_record(mc.name, call_category, category, ok=False,
                            protocol_recovery=recovery != "off")
             _row_from_mc(
-                mc, caller=caller, purpose=purpose, duration_ms=duration_ms, ok=False,
+                mc, tool_history_present=tool_history, caller=caller, purpose=purpose, duration_ms=duration_ms, ok=False,
                 logical_call_id=logical_id, attempt_id=attempt_id, route_role=role,
                 error_category=category, output_hint=type(exc).__name__,
                 switch_reason=switch_reason, logical_final=logical_final, failover=failover,
@@ -618,7 +640,7 @@ async def execute_create(
             except Exception as exc:
                 confirm_format_failure(mc.name, call_category)
                 _row_from_mc(
-                    mc, caller=caller, purpose=purpose, duration_ms=duration_ms, ok=False,
+                    mc, tool_history_present=tool_history, caller=caller, purpose=purpose, duration_ms=duration_ms, ok=False,
                     logical_call_id=logical_id, attempt_id=attempt_id, route_role=role,
                     error_category="response_format", output_hint=type(exc).__name__,
                     logical_final=logical_final, failover=failover,
@@ -631,7 +653,7 @@ async def execute_create(
         if reset_breaker_on_http_success:
             confirm_business_success(mc.name, call_category)
         _row_from_mc(
-            mc, caller=caller, purpose=purpose, duration_ms=duration_ms, ok=True,
+            mc, tool_history_present=tool_history, caller=caller, purpose=purpose, duration_ms=duration_ms, ok=True,
             logical_call_id=logical_id, attempt_id=attempt_id, route_role=role,
             switch_reason=switch_reason, logical_final=True, failover=failover,
         )
@@ -642,20 +664,20 @@ async def execute_create(
         )
 
     primary_id = f"{logical_id}:p"
-    fallback_mc, fallback_skip = resolve_fallback_client(
-        call_category, char_id=char_id, primary=primary_mc, explicit_preset=explicit_preset,
-    )
     primary_final = fallback_mc is None and recovery != "nonstream_then_fallback"
     primary = await _one(
-        primary_mc, role="primary", attempt_id=primary_id, logical_final=primary_final,
+        primary_mc, role="fallback" if sticky else "primary", attempt_id=primary_id,
+        switch_reason=route.switch_reason if sticky else "", logical_final=primary_final,
     )
     if primary.ok:
         primary.logical_ok = True
         return primary
-    if tool_history:
-        primary.skip_reason = "tool_history_present"
+    if tool_history and primary.error_category == "protocol_incompatible":
+        # A malformed/partially consumed generation cannot be safely recovered.
+        # Transport failure of a new inference with completed receipts can.
+        primary.skip_reason = "tool_history_protocol_incompatible"
         _row_from_mc(
-            primary_mc, caller=caller, purpose=purpose, duration_ms=0, ok=False,
+            primary_mc, tool_history_present=tool_history, caller=caller, purpose=purpose, duration_ms=0, ok=False,
             logical_call_id=logical_id, attempt_id=f"{logical_id}:skip",
             route_role="primary", skip_reason=primary.skip_reason,
             error_category=primary.error_category, logical_final=True,
@@ -678,7 +700,7 @@ async def execute_create(
         if (fallback_mc is not None or not primary_final) and not primary.skip_reason:
             primary.skip_reason = "not_eligible"
             _row_from_mc(
-                primary_mc, caller=caller, purpose=purpose, duration_ms=0, ok=False,
+                primary_mc, tool_history_present=tool_history, caller=caller, purpose=purpose, duration_ms=0, ok=False,
                 logical_call_id=logical_id, attempt_id=f"{logical_id}:skip",
                 route_role="primary", skip_reason="not_eligible",
                 error_category=primary.error_category or "not_eligible",
@@ -692,7 +714,7 @@ async def execute_create(
             # emit a companion skip breadcrumb only when the primary row had
             # no skip_reason. Stats read skip_reason from any row of the logical call.
             _row_from_mc(
-                primary_mc, caller=caller, purpose=purpose, duration_ms=0, ok=False,
+                primary_mc, tool_history_present=tool_history, caller=caller, purpose=purpose, duration_ms=0, ok=False,
                 logical_call_id=logical_id, attempt_id=f"{logical_id}:skip",
                 route_role="primary", skip_reason=primary.skip_reason,
                 error_category=primary.error_category or primary.skip_reason,
@@ -704,7 +726,7 @@ async def execute_create(
     if _remaining(deadline) <= 0:
         primary.skip_reason = "budget_exhausted"
         _row_from_mc(
-            fallback_mc, caller=caller, purpose=purpose, duration_ms=0, ok=False,
+            fallback_mc, tool_history_present=tool_history, caller=caller, purpose=purpose, duration_ms=0, ok=False,
             logical_call_id=logical_id, attempt_id=f"{logical_id}:f",
             route_role="fallback", skip_reason="budget_exhausted",
             error_category="budget_exhausted",
@@ -722,6 +744,9 @@ async def execute_create(
     )
     fallback.switched = True
     fallback.logical_ok = fallback.ok
+    fallback.failover_reason = primary.failover_reason or primary.skip_reason
+    if route is not None:
+        route.accept(original_mc, fallback, call_category, char_id)
     if not fallback.ok and fallback.error is None:
         fallback.error = primary.error
     return fallback
@@ -748,6 +773,14 @@ async def execute_stream(
     fallback_mc, fallback_skip = resolve_fallback_client(
         call_category, char_id=char_id, primary=primary_mc, explicit_preset=explicit_preset,
     )
+
+    original_mc = primary_mc
+    route = current_route()
+    if route is not None:
+        primary_mc = route.select(primary_mc, fallback_mc, call_category, char_id, explicit_preset)
+    sticky = primary_mc is not original_mc
+    if sticky:
+        fallback_mc, fallback_skip = None, "turn_fallback_exhausted"
 
     async def _stream_one(mc: ModelClient, *, role: str, switch_reason: str = "") -> AsyncIterator[str]:
         started = time.perf_counter()
@@ -822,7 +855,10 @@ async def execute_stream(
 
     switch_reason = ""
     try:
-        async for piece in _stream_one(primary_mc, role="primary"):
+        async for piece in _stream_one(
+            primary_mc, role="fallback" if sticky else "primary",
+            switch_reason=route.switch_reason if sticky else "",
+        ):
             yield piece
         return
     except StreamAttemptError as err:
@@ -881,6 +917,9 @@ async def execute_stream(
         switch_reason=switch_reason or "primary_failed",
     ):
         yield piece
+    if route is not None:
+        route.accept(original_mc, AttemptOutcome(ok=True, mc=fallback_mc, role="fallback",
+                     failover_reason=switch_reason), call_category, char_id)
 
 
 class StreamAttemptError(Exception):

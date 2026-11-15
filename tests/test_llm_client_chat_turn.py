@@ -414,7 +414,9 @@ async def test_private_gmail_turn_reaches_model_without_debug_snapshot(monkeypat
     monkeypatch.setattr(llm_client, "get_model_client", lambda cat, char_id=None: fake_mc)
     monkeypatch.setattr("core.llm_debug_requests.append", lambda **kwargs: snapshots.append(kwargs))
     await llm_client.chat_turn(
-        [{"role": "tool", "tool_call_id": "call1", "content": "bounded private email",
+        [{"role": "assistant", "content": "", "tool_calls": [{"id": "call1", "type": "function",
+          "function": {"name": "gmail_read", "arguments": "{}"}}]},
+         {"role": "tool", "tool_call_id": "call1", "content": "bounded private email",
           "_private_gmail_result": True}],
         tools=[],
     )

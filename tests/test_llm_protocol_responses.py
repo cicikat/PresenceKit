@@ -641,3 +641,45 @@ async def test_chat_completions_stream_tool_loop_echoes_gemini_thought_signature
     messages = await _second_step_messages(mc, calls)
     assert messages[0]["tool_calls"][0]["extra_content"] == _GEMINI_EXTRA
     assert messages[0]["tool_calls"][0]["function"]["arguments"] == '{"q":"rain"}'
+
+
+@pytest.mark.parametrize("count", [1, 2])
+@pytest.mark.parametrize("source", ["chat", "responses", "anthropic"])
+@pytest.mark.parametrize("target", ["chat", "responses", "anthropic"])
+def test_cross_protocol_completed_receipts_are_semantically_equal(source, target, count):
+    """H: all nine adapter combinations preserve ordered multi-call receipts."""
+    from core.llm_protocol import canonical_tool_history
+    calls = [{"id": f"call-{n}", "type": "function", "function": {
+        "name": "save_fixture", "arguments": json.dumps({"value": n})}} for n in range(count)]
+    history = [{"role": "user", "content": "save"},
+        {"role": "assistant", "content": "checking", "tool_calls": calls}]
+    history += [{"role": "tool", "tool_call_id": c["id"], "content": f"result-{n}"} for n, c in enumerate(calls)]
+    history += [{"role": "assistant", "content": "done"}]
+    serializers = {"chat": chat_completions_input, "responses": responses_input,
+                   "anthropic": lambda messages: anthropic_messages_input(messages)[1]}
+    canonical = canonical_tool_history(serializers[target](serializers[source](history)))
+    assert canonical_tool_history(history) == canonical
+
+
+@pytest.mark.parametrize("target", [chat_completions_input, responses_input, anthropic_messages_input])
+@pytest.mark.parametrize("corruption", ["orphan", "private_orphan", "missing", "duplicate_result", "duplicate_call", "invalid_json"])
+def test_invalid_tool_history_fails_closed_without_payload_in_error(target, corruption):
+    """H/L: reject broken pairs before transport; diagnostic contains no payload."""
+    call = {"id": "a", "type": "function", "function": {"name": "save", "arguments": "{}"}}
+    history = [{"role": "assistant", "content": "", "tool_calls": [call]},
+               {"role": "tool", "tool_call_id": "a", "content": "private-fixture-content"}]
+    if corruption in {"orphan", "private_orphan"}:
+        history.pop(0)
+        if corruption == "private_orphan":
+            history[0]["_private_gmail_result"] = True
+    elif corruption == "missing":
+        history.pop()
+    elif corruption == "duplicate_result":
+        history.append(dict(history[-1]))
+    elif corruption == "duplicate_call":
+        history[0]["tool_calls"].append(dict(call))
+    elif corruption == "invalid_json":
+        call["function"]["arguments"] = "private-fixture-content"
+    with pytest.raises(ValueError) as caught:
+        target(history)
+    assert "private-fixture-content" not in str(caught.value)
