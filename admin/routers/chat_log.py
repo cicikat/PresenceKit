@@ -121,7 +121,7 @@ def _parse_day(text: str) -> list[dict]:
             user_meta = (
                 state == "in_user"
                 and re.fullmatch(r'> (?:speaker:user|turn_id:\S+)(?: \S+:\S+)*', stripped)
-                and re.match(r'^\*\*(?!用户\*\*)(.+?)\*\*[：:]', tail)
+                and (tail in ('', '---') or re.match(r'^\*\*(?!用户\*\*)(.+?)\*\*[：:]', tail))
             )
             if assistant_meta or user_meta:
                 if assistant_meta:
