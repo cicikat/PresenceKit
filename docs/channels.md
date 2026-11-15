@@ -597,6 +597,12 @@ failed-ack results are explicit failures.
 
 ## 维护要点
 
+AR-01（325）：`admin.routers.chat.run_owner_chat_turn` 仍是兼容入口，直接导出
+`core.owner_chat.service` 的同一实现。准入/冻结身份与锁在 service，生成前准备、
+流式生成、最终 turn_sink 落盘/投递分别位于 `prepare`、`generation`、`delivery`。
+Pipeline 与 turn_sink 的权威及所有通道协议、事件顺序不变；见
+[迁移证据](refactors/modularization-ar01.md)。
+
 1. 新增输出通道时，实现 `channels.base.BaseChannel`，在 `main.py` 启动阶段注册。
 2. 不要在业务模块里直接写 `runtime/channel_queue.json`、`runtime/mobile_queue.json` 或 `runtime/agent_actions.json`，统一走 `DesktopChannel` / `MobileChannel` / `tool_dispatcher`。
 3. 桌面动作优先走 WebSocket ack；只有失败或离线时才降级到文件队列。

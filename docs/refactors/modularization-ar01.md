@@ -38,8 +38,12 @@ Path C: Pipeline.run_agentic_loop → tool_discovery → get_tools_schema
 MCP: init_mcp_servers → 同一个 _TOOL_REGISTRY（运行期增删）
 
 /desktop/chat、/mobile/chat、/v1/owner/turns
-  → run_owner_chat_turn → conversation_lock → Pipeline
-  → turn_sink.record_assistant_turn → channels desktop/mobile
+  → chat.run_owner_chat_turn（同对象导出 owner_chat.service）
+  → admission / 冻结 scope+EventContext / conversation_lock
+  → owner_chat.prepare（探针与上下文并发、取消、工具事实）
+  → owner_chat.generation（原 Pipeline/Agent、流式过滤/start/delta/end）
+  → owner_chat.delivery → turn_sink.record_assistant_turn
+  → channels desktop/mobile / 同 msg_id canonical
 QQ/主动触发继续使用自己的 ingress 与既有 Pipeline/turn_sink，不改为 HTTP 请求。
 
 /dream/* → Dream router → core/dream 状态机/存储/资产路径
@@ -68,13 +72,20 @@ index.html → defer i18n → core.js（api/auth/state/事件委托/页面加载
 | 阶段 | 迁移 | 验证 |
 |---|---|---|
 | A | 工具定义归域；共享暴露/校验/准入/结果/执行分层；元数据调用 | 全部六类快照与基线逐项一致；主组 377 passed / 1 failed（迁移时漏掉生成器的常量引用，已修复）；修复后含失败组的 90 passed；补充设备/邮件/QQ空间/浏览器/schema 47 passed；无 skip |
-| B | owner chat | 待执行 |
+| B | owner_chat service / prepare / generation / delivery；Router 保留同对象 API | 六类快照仍一致；入口/取消/锁/流式/失败/清洗组 230 passed；媒体/鉴权/开发入口/外部 companion/调度组 159 passed；0 failed / 0 skipped |
 | C | Dream 功能路由 | 待执行 |
 | D | Admin/i18n | 待执行 |
 
 A 补充：新增 1 项旧 spec 整体替换的入口回归，验证可信 uid/char 注入、空角色
 拒绝、伪造主体不触发读取。临时撤销 builtin adapter 回退时，业务成功断言失败；
 恢复后通过（`.tmp/ar01-adapter-mutation.log`）。
+
+B 的阶段参数是单轮冻结值对象，不创建队列、缓存或第二条 Pipeline。旧 Router 的
+`run_owner_chat_turn` 和 `_execute_owner_chat_turn_locked` 是同对象导出；
+`_probe_and_execute_tools` 的旧测试/本地扩展注入点以一次惰性导入保持。
+admission/prepare/generate/stream/commit/deliver 的 debug 日志只加阶段、已有
+request_id 和异常类型，不包含请求正文。media Router 留在原文件：其上传/下载与
+会话准入共享 helper，额外切文件没有本阶段的净收益。
 
 ## 删除 brief 候选（本轮不执行）
 
