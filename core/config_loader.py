@@ -6,6 +6,7 @@
 import os
 import yaml
 from pathlib import Path
+from core.config_yaml import load_config_yaml
 
 _config: dict | None = None
 _base_config: dict | None = None
@@ -53,7 +54,7 @@ def get_base_config() -> dict:
     if _base_config is None or mtime != _base_config_mtime:
         try:
             with open(_CONFIG_PATH, "r", encoding="utf-8") as f:
-                loaded = yaml.safe_load(f) or {}
+                loaded = load_config_yaml(f) or {}
         except FileNotFoundError:
             raise RuntimeError(f"配置文件不存在：{_CONFIG_PATH.absolute()}")
         except yaml.YAMLError as e:
@@ -75,7 +76,7 @@ def reload_config() -> dict:
     global _base_config, _base_config_mtime, _config, _config_mtime
     try:
         with open(_CONFIG_PATH, "r", encoding="utf-8") as f:
-            _base_config = yaml.safe_load(f) or {}
+            _base_config = load_config_yaml(f) or {}
         if not isinstance(_base_config, dict):
             raise RuntimeError(f"配置文件顶层必须是 mapping：{_CONFIG_PATH.absolute()}")
         _config = _base_config

@@ -7642,7 +7642,8 @@
     scope.querySelectorAll('[data-i18n]').forEach(element => {
       const key = element.dataset.i18n;
       const fallback = element.dataset.i18nFallback || element.textContent;
-      element.textContent = t(key, fallback);
+      const value = t(key, fallback);
+      if (element.textContent !== value) element.textContent = value;
     });
     scope.querySelectorAll('[data-i18n-placeholder]').forEach(element => {
       const key = element.dataset.i18nPlaceholder;

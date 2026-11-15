@@ -5,7 +5,7 @@
   try { saved = JSON.parse(localStorage.getItem(key) || '{}'); } catch (_) { saved = {}; }
   saved.text ||= {}; saved.order ||= {}; saved.cards ||= {};
   for (const name of Object.keys(saved.text)) if (saved.text[name] === '【删掉】') saved.text[name] = '';
-  let enabled = false, dragged = null, scheduled = false;
+  let enabled = false, dragged = null;
   const originals = new WeakMap();
   const panel = document.createElement('div');
   panel.id = 'admin-copy-editor';
@@ -47,7 +47,6 @@
     originals.set(node,value); return value;
   }
   function apply() {
-    scheduled=false;
     window.AdminCopy?.apply(saved.text);
     const walker=document.createTreeWalker(document.getElementById('app'),NodeFilter.SHOW_TEXT);
     while(walker.nextNode()) {
@@ -126,6 +125,10 @@
     persist(); dragged=null;
   });
   document.addEventListener('dragend',()=>{dragged=null;});
-  new MutationObserver(()=>{if(!scheduled){scheduled=true;requestAnimationFrame(apply);}}).observe(document.getElementById('app'),{childList:true,subtree:true,characterData:true});
-  apply();
+  // Ordinary operators have no editor state to project. Avoid walking all visited
+  // pages on every status update when the authoring tool is not in use.
+  if (panel.isConnected || Object.keys(saved.text).length || Object.keys(saved.order).length || Object.keys(saved.cards).length) {
+    observeAdminChanges(() => apply());
+    apply();
+  }
 })();

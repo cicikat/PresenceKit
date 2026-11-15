@@ -141,6 +141,13 @@ window.AdminCopyDefaults = {
 
 window.AdminCopy = (() => {
   const originals = new WeakMap();
+  const defaultsByText = new Map();
+  for (const [key, value] of Object.entries(AdminCopyDefaults.text)) {
+    if (!key.startsWith('i18n:')) {
+      const text = key.slice(key.indexOf(':') + 1);
+      if (!defaultsByText.has(text)) defaultsByText.set(text, value);
+    }
+  }
   function projectText(value) {
     return window.AdminI18n?.translateUiText(value) ?? value;
   }
@@ -152,28 +159,26 @@ window.AdminCopy = (() => {
     const key=translated?'i18n:'+translated.dataset.i18n:scope+':'+text;
     originals.set(node,{key,text});return key;
   }
-  function apply(overrides={}) {
-    const root=document.getElementById('app'); if(!root) return;
+  function apply(overrides={}, root=document.getElementById('app')) {
+    if(!root?.isConnected) return;
     const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);
-    while(walker.nextNode()) {
-      const node=walker.currentNode;
+    let node = root.nodeType === Node.TEXT_NODE ? root : walker.nextNode();
+    for (; node; node=walker.nextNode()) {
       if(!node.textContent.trim() || node.parentElement.closest('script,style,textarea,select,[contenteditable]')) continue;
       const key=textKey(node); let value=overrides[key] ?? AdminCopyDefaults.text[key];
       if(value===undefined && !key.startsWith('i18n:')) {
         const original=originals.get(node).text;
-        const entry=Object.entries(AdminCopyDefaults.text).find(([k])=>!k.startsWith('i18n:') && k.slice(k.indexOf(':')+1)===original);
-        if(entry) value=entry[1];
+        value=defaultsByText.get(original);
       }
       if(value!==undefined) value=projectText(value);
       if(value!==undefined && node.textContent!==value) node.textContent=value;
       if(value!==undefined && !value.trim() && node.parentElement.matches('p,small.admin-source-hint')) node.parentElement.hidden=true;
     }
   }
-  let pending=false;
-  new MutationObserver(()=>{if(!pending){pending=true;requestAnimationFrame(()=>{
-    pending=false;let edits={};try {edits=JSON.parse(localStorage.getItem('presencekit-admin-edits-v1')||'{}').text || {};} catch(_) {}
+  observeAdminChanges(roots=>{
+    let edits={};try {edits=JSON.parse(localStorage.getItem('presencekit-admin-edits-v1')||'{}').text || {};} catch(_) {}
     for(const k of Object.keys(edits)) if(edits[k]==='【删掉】') edits[k]='';
-    apply(edits);
-  });}}).observe(document.getElementById('app'),{subtree:true,childList:true,characterData:true});
+    roots.forEach(root=>apply(edits, root));
+  });
   apply();return {apply,textKey,projectText};
 })();

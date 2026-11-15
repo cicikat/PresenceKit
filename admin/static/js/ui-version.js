@@ -6,8 +6,6 @@ const AdminUI = (() => {
   const folds = new Map();
   const foldState = new WeakMap();
   let observer = null;
-  let scheduled = false;
-  const pendingRoots = new Set();
   // Map the known dark-theme signal palette to tokens without rewriting legacy inline styles.
   // CSS variable-based colors already inherit tokens; media and authored color inputs are excluded.
   const tones = new Map([
@@ -100,36 +98,31 @@ const AdminUI = (() => {
     });
   }
   function refresh() {
-    scheduled = false;
     if (version !== 'new') return;
     for (const [card, entry] of folds) if (!card.isConnected) removeFold(card, entry);
     document.querySelectorAll('.page[data-page-loaded="true"]').forEach(mount);
   }
   function observe() {
     if (observer || !document.getElementById('app')) return;
-    observer = new MutationObserver(records => {
-      records.forEach(record => {
-        const root = record.target.closest?.('.page');
-        if (root) pendingRoots.add(root);
+    observer = observeAdminChanges(roots => {
+      if (version !== 'new') return;
+      const cards = new Set();
+      roots.forEach(root => {
+        const element = root.nodeType === Node.TEXT_NODE ? root.parentElement : root;
+        if (!element?.closest?.('.page')) return;
+        mount(element);
+        const card = element.closest('.card');
+        if (card) cards.add(card);
       });
-      if (!scheduled && pendingRoots.size) {
-        scheduled = true;
-        queueMicrotask(() => {
-          scheduled = false;
-          if (version === 'new') pendingRoots.forEach(mount);
-          pendingRoots.clear();
-          for (const [card, entry] of folds) if (!card.isConnected) removeFold(card, entry);
-        });
-      }
-    });
-    observer.observe(document.getElementById('app'), {childList:true,subtree:true,attributes:true,attributeFilter:['style']});
+      cards.forEach(decorate);
+      for (const [card, entry] of folds) if (!card.isConnected) removeFold(card, entry);
+    }, {attributes:true,attributeFilter:['style']});
   }
   function apply() {
     document.body.classList.toggle('pk-admin', version === 'new');
     if (version === 'new') {refresh(); observe();}
     else {
       observer?.disconnect(); observer = null;
-      pendingRoots.clear();
       document.querySelectorAll('[data-pk-tone],[data-pk-surface]').forEach(node => {
         delete node.dataset.pkTone; delete node.dataset.pkSurface;
       });

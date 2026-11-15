@@ -127,7 +127,8 @@ const base = process.env.ADMIN_TEST_URL;
     });
     for (const [lang, expected] of [['zh-CN','保存'], ['en','Save']]) {
       await page.selectOption('#admin-language-select', lang);
-      await page.waitForFunction(value => document.getElementById('setup-gmail-oauth-save').textContent.trim() === value, expected);
+      // Language changes replace fragments; the control is briefly unmounted.
+      await page.waitForFunction(value => document.getElementById('setup-gmail-oauth-save')?.textContent.trim() === value, expected);
       const buttons = await page.locator('button[data-i18n="common.save"], button[data-i18n="settings_center.save"]').allTextContents();
       assert.ok(buttons.length > 0);
       for (const text of buttons) assert.equal(text.trim(), expected);
@@ -139,6 +140,9 @@ const base = process.env.ADMIN_TEST_URL;
       const saveLabel = lang === 'en' ? /^Save\b/i : /^保存/;
       for (const label of localizedButtons) assert.match(label.trim(), saveLabel);
     }
+    // Wait for the translated sources to move back into the active consolidated
+    // page; a matching button can still be in its hidden source during reload.
+    await page.waitForFunction(() => document.querySelector('#page-character-behavior #setup-gmail-oauth-save'));
     await page.screenshot({path:'.tmp/admin-navigation/oauth-en.png'});
     assert.deepEqual(errors, []);
     console.log('PASS: login denial/success, refresh restore, setup redirect, config PUT, secret clearing, bilingual save buttons, draft/history/language persistence.');

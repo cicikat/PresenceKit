@@ -15,11 +15,11 @@ def test_admin_html_is_a_shell_with_ordered_plain_static_assets():
         r'<link rel="stylesheet" href="/static/style\.css\?v=[^"]+">', index
     )
     assert "<style>" not in index
-    assert re.search(r'<script src="/static/i18n\.js(?:\?[^" ]*)?"></script>', index)
-    scripts = re.findall(r'<script src="/static/js/([^"?]+)(?:\?[^" ]*)?"></script>', index)
+    assert re.search(r'<script defer src="/static/i18n\.js(?:\?[^" ]*)?"></script>', index)
+    scripts = re.findall(r'<script(?: defer)? src="/static/js/([^"?]+)(?:\?[^" ]*)?"></script>', index)
     assert scripts[0] == "admin-theme-boot.js"
     assert index.index("admin-theme-boot.js") < index.index('<link rel="stylesheet"')
-    scripts = scripts[1:]
+    scripts = [script for script in scripts if script not in ('admin-theme-boot.js', 'admin-theme.js')]
     assert scripts[0] in ("core.js", "ui-version-boot.js")
     if scripts[0] == "ui-version-boot.js":
         assert "core.js" in scripts

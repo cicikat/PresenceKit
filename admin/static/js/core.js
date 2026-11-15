@@ -46,7 +46,53 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'browser-workbench-314';
+const ADMIN_UI_FRAGMENT_VERSION = 'admin-latency-20261115';
+
+// Project only changed subtrees, once per frame. Disconnect during projection so
+// our own text/style changes cannot schedule a second full pass.
+function observeAdminChanges(project, options = {}) {
+  const app = document.getElementById('app');
+  const roots = new Set();
+  let scheduled = false;
+  let frame = null;
+  let stopped = false;
+  const settings = {childList: true, subtree: true, characterData: true, ...options};
+  const observer = new MutationObserver(records => {
+    for (const record of records) {
+      if (record.type === 'childList') {
+        record.addedNodes.forEach(node => roots.add(node));
+        if (record.removedNodes.length) roots.add(record.target);
+      }
+      else roots.add(record.target);
+    }
+    if (scheduled || !roots.size) return;
+    scheduled = true;
+    frame = requestAnimationFrame(() => {
+      frame = null;
+      scheduled = false;
+      if (stopped) return;
+      const changed = [...roots].filter(node => node.isConnected);
+      roots.clear();
+      const changedSet = new Set(changed);
+      const unique = changed.filter(node => {
+        for (let parent = node.parentNode; parent; parent = parent.parentNode) {
+          if (changedSet.has(parent)) return false;
+        }
+        return true;
+      });
+      observer.disconnect();
+      try { project(unique); }
+      finally { if (!stopped) observer.observe(app, settings); }
+    });
+  });
+  observer.observe(app, settings);
+  return {disconnect() {
+    stopped = true;
+    if (frame !== null) cancelAnimationFrame(frame);
+    roots.clear();
+    observer.disconnect();
+  }};
+}
 
 const ADMIN_PAGE_ALIASES = Object.freeze({overview:'setup', users:'character', 'operations-center':'status', memory: 'observe-memory', 'creation-center':'data-management', 'observe-existence':'observe-dream'});
 
@@ -193,7 +239,7 @@ async function loadPageFragment(page, {reload = false} = {}) {
       .then(html => {
         container.innerHTML = html;
         container.dataset.pageLoaded = 'true';
-        AdminUI.apply();
+        AdminUI.mount(container);
         window.AdminI18n?.applyI18n(container);
         bindPageActions(container);
         decoratePageContext(page, container);
@@ -289,10 +335,11 @@ async function goto(page, {reloadFragment = false, fromHistory = false} = {}) {
   }
   const generation = ++_navigationGeneration;
   const main = document.querySelector('main');
+  const previousScroll = main.scrollTop;
   const current = _pageHistory[_pageHistory.length - 1];
   const samePage = current?.page === page;
   if (!fromHistory) {
-    if (current && document.getElementById('page-' + current.page)?.dataset.pageVisited === 'true') current.scroll = main.scrollTop;
+    if (current && document.getElementById('page-' + current.page)?.dataset.pageVisited === 'true') current.scroll = previousScroll;
     if (!samePage) _pageHistory.push({page, scroll: 0});
     _pageHistory = _pageHistory.slice(-100);
   }
@@ -407,7 +454,10 @@ async function goto(page, {reloadFragment = false, fromHistory = false} = {}) {
   }
   mountChainOverview(page, pageElement);
   pageElement.dataset.pageVisited = 'true';
-  main.scrollTop = (fromHistory || samePage) ? (_pageHistory.at(-1)?.scroll || 0) : 0;
+  const targetScroll = (fromHistory || samePage) ? (_pageHistory.at(-1)?.scroll || 0) : 0;
+  // Avoid forcing synchronous layout of a newly mounted page just to set an
+  // already-zero scroll position. Nonzero history restoration still runs.
+  if (previousScroll || targetScroll) main.scrollTop = targetScroll;
   AdminPageLayout.focus(requestedPage);
 }
 

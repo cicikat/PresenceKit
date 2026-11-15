@@ -32,7 +32,7 @@ def read_admin_page(page: str) -> str:
 def read_admin_client_source() -> str:
     """Return the HTML shell, page fragments, and scripts in browser load order."""
     index = INDEX.read_text(encoding="utf-8")
-    scripts = re.findall(r'<script src="/static/js/([^"?]+)(?:\?[^" ]*)?"></script>', index)
+    scripts = re.findall(r'<script(?: defer)? src="/static/js/([^"?]+)(?:\?[^" ]*)?"></script>', index)
     assert scripts, "admin page scripts must be loaded from admin/static/js"
     sources = [index]
     fragments = sorted(PAGES.glob("*.html"))
