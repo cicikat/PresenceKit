@@ -1405,3 +1405,9 @@ AGENT-06D 新后端通过 `visual_verify_supported` 声明能力，新桌面再�
 ### 317 Android system push (observe)
 
 FCM registration requires a mobile profile and a Reality session issued to the same credential. `PUT/DELETE /mobile/push/devices/self` manage a device installation, `GET /mobile/push/devices/status` returns status only, and `GET /mobile/push/message` reads one existing queued row for a valid binding and exact message ID/sequence. That read does not ACK a shared queue prefix. Existing foreground history and poll/ACK own recovery. When a proactive row has eligible FCM targets, one FCM publish path is selected; the existing relay remains available when there is no matching registration. Desktop REST/WS remain unchanged. Live acceptance and setup are tracked in [317 device feasibility](fcm-device-feasibility.md).
+
+## 手机 #54 发送队列恢复（2026-11-15，current / open / observe）
+
+current：手机只调度 queued，失败/未知保留原ID和载荷，不阻挡后续；每次本机尝试120秒截止，未知不自动重发，迟到结果沿HTTP/WS/poll/history按scope/request_id去重。复用Outbox v1和本机投递详情观测，不新增后端/桌面配置、权限、持久字段或mobile wire；ACK/cursor/TTL、后台通知不变。超时释放本机等待不等于远端取消，未知与后续请求的远端完成顺序不作保证。
+
+open：后端目前仅有desktop请求查询端点（admin/routers/chat.py），手机尚无安全scoped只读请求状态查询；手机查询按钮仅补读消息，不冒充running/failed证据或执行重试。observe：真实手机/弱网/后台杀进程/升级和真实后端往返未验收；见手机cc-tasks/54-chat-queue-recovery.md与docs/mobile/chat-queue-recovery-54.md。本次总账仅文档同步，不改后端运行代码。
