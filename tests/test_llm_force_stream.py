@@ -229,5 +229,40 @@ async def test_bad_trailer_diagnostic_contains_shape_not_payload():
     with pytest.raises(UpstreamResponseFormatError) as failure:
         await create(mc, [], gen_kwargs={})
     assert 'delta_fields=' in str(failure.value)
+    assert 'buffered_chars=6' in str(failure.value)
+    assert 'buffered_tools=0' in str(failure.value)
+    assert 'tail_content_matches_buffer=False' in str(failure.value)
     assert 'private-new-content' not in str(failure.value)
     assert failure.value.partial_text == 'answer'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('tail_text, matches', [('answer', True), ('answer extra', False)])
+async def test_rejected_text_replay_reports_equality_without_releasing_tail(tail_text, matches):
+    """A repeated final answer can be diagnosed without accepting unseen text."""
+    mc, stream, _ = client([chunk('answer', finish='stop'), chunk(tail_text, finish='stop')])
+    mc.stream_compatibility = 'openlux'
+    with pytest.raises(UpstreamResponseFormatError) as failure:
+        await create(mc, [], gen_kwargs={})
+    assert f'tail_content_matches_buffer={matches}' in str(failure.value)
+    assert failure.value.partial_text == 'answer'
+    assert tail_text not in str(failure.value)
+    stream.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_rejected_tool_tail_reports_counts_without_arguments_or_partial_reply():
+    """An operator can distinguish an interrupted tool turn from lost prose."""
+    mc, stream, _ = client([
+        chunk(calls=[call(0, 'fixture-call', 'read_fixture', '{"key":"private-fixture"}')], finish='tool_calls'),
+        chunk(calls=[call(0, args='private-late-arguments')]),
+    ])
+    mc.stream_compatibility = 'openlux'
+    with pytest.raises(UpstreamResponseFormatError) as failure:
+        await create(mc, [], gen_kwargs={})
+    diagnostic = str(failure.value)
+    assert 'buffered_chars=0' in diagnostic
+    assert 'buffered_tools=1' in diagnostic
+    assert 'private-fixture' not in diagnostic and 'private-late-arguments' not in diagnostic
+    assert not getattr(failure.value, 'partial_text', '')
+    stream.close.assert_awaited_once()

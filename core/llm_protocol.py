@@ -1104,9 +1104,15 @@ async def _collect_chat_stream(mc, messages, kwargs, capture) -> NormalizedRespo
                 fields = _as_dict(delta) if delta is not None else {}
                 shape = ','.join(sorted(key for key, value in fields.items()
                                         if value not in (None, '', [], {})))
+                tail_text = getattr(delta, "content", None)
+                text_matches = bool(parts) and isinstance(tail_text, str) and tail_text == ''.join(parts)
                 raise _format_error(mc, f"Chat stream contains choices after completion "
                                     f"(finish={finish!r}, tail_finish={tail_finish!r}, "
-                                    f"delta_fields={shape!r}, compatibility={'openlux' if compatible else 'strict'})")
+                                    f"delta_fields={shape!r}, compatibility={'openlux' if compatible else 'strict'}, "
+                                    f"buffered_chars={sum(map(len, parts))}, buffered_tools={len(calls)}, "
+                                    f"tail_content_matches_buffer={text_matches}, "
+                                    f"same_terminal_id={bool(terminal_id) and getattr(chunk, 'id', None) == terminal_id}, "
+                                    f"same_terminal_choice={_as_dict(choice) == terminal_choice})")
             for key in ("reasoning_content", "reasoning"):
                 capture.add(key, getattr(delta, key, None))
             text = getattr(delta, "content", None)
