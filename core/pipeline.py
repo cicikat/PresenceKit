@@ -1938,8 +1938,8 @@ class Pipeline:
                         return
                     outcome = ("natural", display_text)
                     return
-                # llm_client returns canonical assistant calls. Each target
-                # protocol reconstructs its own wire history from these receipts.
+                # Normalize provider continuations before storing loop history.
+                # Each target protocol reconstructs its wire input from receipts.
                 from core.llm_protocol import canonical_tool_history
                 loop_msgs.extend(canonical_tool_history(
                     turn.continuation_items or [turn.assistant_message], validate=False,

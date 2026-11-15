@@ -662,14 +662,16 @@ def test_cross_protocol_completed_receipts_are_semantically_equal(source, target
 
 
 @pytest.mark.parametrize("target", [chat_completions_input, responses_input, anthropic_messages_input])
-@pytest.mark.parametrize("corruption", ["orphan", "missing", "duplicate_result", "duplicate_call", "invalid_json"])
+@pytest.mark.parametrize("corruption", ["orphan", "private_orphan", "missing", "duplicate_result", "duplicate_call", "invalid_json"])
 def test_invalid_tool_history_fails_closed_without_payload_in_error(target, corruption):
     """H/L: reject broken pairs before transport; diagnostic contains no payload."""
     call = {"id": "a", "type": "function", "function": {"name": "save", "arguments": "{}"}}
     history = [{"role": "assistant", "content": "", "tool_calls": [call]},
                {"role": "tool", "tool_call_id": "a", "content": "private-fixture-content"}]
-    if corruption == "orphan":
+    if corruption in {"orphan", "private_orphan"}:
         history.pop(0)
+        if corruption == "private_orphan":
+            history[0]["_private_gmail_result"] = True
     elif corruption == "missing":
         history.pop()
     elif corruption == "duplicate_result":

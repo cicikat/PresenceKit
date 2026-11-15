@@ -335,10 +335,8 @@ def canonical_tool_history(messages: list[dict[str, Any]], *, validate: bool = T
         if role == "tool":
             call_id = item.get("tool_call_id")
             if (not isinstance(call_id, str) or not isinstance(item.get("content"), str)
-                    or (call_id not in pending and not item.get("_private_gmail_result"))):
+                    or call_id not in pending):
                 raise ValueError("orphan, duplicate or invalid tool receipt")
-            if call_id not in pending:
-                continue
             if item.get("name") and wire_tool_name(item["name"]) != pending[call_id]:
                 raise ValueError("tool receipt name mismatch")
             del pending[call_id]
