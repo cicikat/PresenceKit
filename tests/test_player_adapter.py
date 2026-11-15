@@ -350,7 +350,8 @@ def test_observe_listening_page_is_registered_and_cache_busted():
     assert_versioned_admin_asset('js/observability.js', index)
     assert_versioned_admin_asset('js/listening-player.js', index)
     assert "loadObserveListening" in script
-    assert "loadObserveListening" in core
+    registry = (root / "admin/static/js/admin-page-registry.js").read_text(encoding="utf-8")
+    assert "loadObserveListening" in registry
     assert 'id="obs-listening-flags"' in fragment
     assert 'id="obs-listening-player"' in fragment
     assert "/observability/listening" in script

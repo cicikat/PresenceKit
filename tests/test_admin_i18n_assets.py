@@ -3,8 +3,9 @@ from admin_static_assets import assert_versioned_admin_asset
 from pathlib import Path
 from html.parser import HTMLParser
 import re
+import pytest
 
-from admin_static_assets import PAGES, read_admin_client_source, read_admin_page
+from admin_static_assets import PAGES, read_admin_client_source, read_admin_page, read_admin_i18n_source
 
 ROOT = Path(__file__).parents[1]
 INDEX = ROOT / "admin" / "static" / "index.html"
@@ -117,12 +118,13 @@ def test_i18n_runtime_is_wired_with_persistent_chinese_default():
     assert "自主管理 overlay（关=恢复全局默认）" in runtime
 
 
-def test_i18n_javascript_is_served_with_an_executable_mime_type():
+@pytest.mark.parametrize("asset", ["i18n.js", "js/i18n-runtime.js", "js/admin-page-registry.js"])
+def test_i18n_javascript_is_served_with_an_executable_mime_type(asset):
     from fastapi.testclient import TestClient
 
     from admin.admin_server import app
 
-    response = TestClient(app).get("/static/i18n.js")
+    response = TestClient(app).get(f"/static/{asset}")
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/javascript")
 
@@ -137,7 +139,7 @@ def test_all_navigation_links_use_semantic_i18n_keys():
     assert all('data-i18n="nav.' in link for link in links)
     assert 'id="admin-language-select"' in index
     assert 'id="auth-language-select"' in index
-    assert index.count("data-language-select") == 2
+    assert len(re.findall(r'<select\b[^>]*\bdata-language-select', index)) == 2
     assert 'data-action-args=\'["observation-center"]\'' in index
     assert 'data-action-args=\'["status"]\'' in index
     assert 'data-page="observe-probe"' not in index
@@ -360,7 +362,7 @@ def test_every_page_fragment_has_complete_i18n_coverage_in_both_languages():
 
 def test_legacy_bridge_localizes_dynamic_dom_and_protects_raw_content():
     index = read_admin_client_source()
-    runtime = I18N.read_text(encoding="utf-8")
+    runtime = read_admin_i18n_source()
 
     assert "function translateUiText(value, allowFragments=false)" in runtime
     assert "function applyLegacyI18n(root)" in runtime

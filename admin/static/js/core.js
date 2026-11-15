@@ -46,7 +46,7 @@ window.addEventListener('admin-language-changed', () => {
 
 
 const _pageFragmentLoads = new Map();
-const ADMIN_UI_FRAGMENT_VERSION = 'behavior-recovery-20261115';
+const ADMIN_UI_FRAGMENT_VERSION = 'ar01-modules-325';
 
 async function withAdminDeadline(run, timeoutMs, parentSignal) {
   if (!timeoutMs) return run(parentSignal);
@@ -394,74 +394,7 @@ async function goto(page, {reloadFragment = false, fromHistory = false} = {}) {
   if (generation !== _navigationGeneration) return;
   pageElement.querySelector(':scope > [data-page-load-error]')?.remove();
 
-  const loaders = {
-    'character-cleanup': () => loadCharacterCleanup(),
-    guide: () => {},
-    'call-records': () => loadUnifiedRecords(),
-    'autonomy-settings': async () => { if (AdminUI.version === 'new') await Promise.all([loadSchedulerConfig(), loadHdsLocalSettings()]); await loadAutonomySettings(); await loadVideoCallPresence(); await loadAutonomyTools(); },
-    'output-settings': () => loadStickerConfig(),
-    'device-policy': () => loadScreenPeekSettings(),
-    'network-config': async () => { _bindProxyControls(); await loadProxy(); },
-    'client-settings': async () => { await loadClientSettings(); if (AdminUI.version === 'new') await loadServiceCenter(); },
-    'personal-settings': () => _loadSetupAnniversaries(),
-    'coplay-config': () => _loadSetupCoplayGames(),
-    'diary-config': () => _loadSetupDiary(),
-    'mail-config': () => _loadSetupMail(),
-    'embedding-config': () => loadSetupEmbedding(),
-    'local-model-runtime': () => loadLocalModelRuntime(),
-    'observation-center': () => loadImeObservation(),
-    'frozen-features': () => loadFrozenFeatures(),
-    'feature-center': () => AdminPageLayout.loadObservations('feature-center'),
-    'service-center': () => loadServiceCenter(),
-    'role-bindings': () => loadRoleBindings(),
-    'character-behavior': () => {}, // Each independent section initializes as it mounts.
-    'conversation-settings': () => loadConversationSettings(),
-    'generation-debug': () => { loadPromptAblation(); loadMcpDebugRequests(); loadLatestAutonomyPrompt(); },
-    setup:           async () => { await loadSetupPage(); if (AdminUI.version === 'new') await AdminPageLayout.loadNetwork(); },
-    'runtime-config': () => loadRuntimeConfig(),
-    'tts-config':     async () => { await Promise.all([...(AdminUI.version === 'new' ? [] : [loadTtsConfig()]), loadSttConfig(), loadSttVocabulary()]); },
-    'listening-player': () => refreshListeningPlayer(),
-    'observe-listening': () => loadObserveListening(),
-    status:          () => AdminPageLayout.loadObservations('status'),
-    logs:            () => { _runtimeWarningOffset = 0; loadLogs(); },
-    'auth-tokens': () => AdminPageLayout.loadObservations('auth-tokens'),
-    'model-routing': async () => { await loadModelRouting(); if (AdminUI.version === 'new') await AdminPageLayout.loadModels(); },
-    'data-management': () => AdminPageLayout.loadData(),
-    mcp:             () => loadMcpPage(),
-    tools:           () => loadToolsPage(),
-    'owner-turn-api': () => loadOwnerTurnApiPage(),
-    'agent-runtime-browser': () => loadBrowserRuntimePage(),
-    minecraft: () => loadMinecraftPage(),
-    'relationship-facts': () => loadRelationshipFactsPage(),
-    character:       async () => { await loadCharacterPage(); await _ensurePronounUidOptions(); await loadUserPronoun(); },
-    lorebook:        () => { loadLorebook(); loadJbEntries(); },
-    'dream-settings': () => loadDreamSettings(),
-    scheduler:       () => loadScheduler(),
-    'observe-mood':    () => loadObserveMood(),
-    'observe-dream':   () => AdminPageLayout.loadObservations('observe-dream'),
-    'observe-memory':  () => {},
-    'observe-memory-events': () => {},
-    'observe-hidden':  () => loadObserveHidden(),
-    'observe-runtime': () => loadObserveRuntime(),
-    'observe-visual':  () => loadObserveVisual(),
-    'observe-spend':   () => loadObserveSpend(),
-    'observe-group-arbiter': () => initObserveGroupArbiter(),
-    'observe-memory-summary': () => initObserveCharacters('obs-memory-summary-char'),
-    'memory-consolidation': () => initObserveCharacters('memory-consolidation-char', () => { loadMemoryConsolidationStatus(); loadMemoryHistoryReconciliation(); }),
-    'observe-prompt':  () => AdminPageLayout.loadObservations('observe-prompt'),
-    'observe-tools':   () => loadObserveToolUidList(),
-    'observe-dream-prompt': () => loadObserveDreamPromptUidList(),
-    'observe-dream-operations': () => loadObserveDreamOperations(),
-    'observe-vector':          () => AdminPageLayout.loadObservations('observe-vector'),
-    'observe-provenance':      () => loadProvenance(),
-    'observe-resource-completeness': () => loadResourceCompleteness(),
-    'observe-api-contract':          () => loadApiContractCheck(),
-    'observe-runtime-signals':       () => loadRuntimeSignals(),
-    'observe-system-diagnosis':       () => loadSystemDiagnosis(),
-    'observe-autonomy':              () => loadObserveAutonomy(),
-    'observe-char-permissions':      () => initObserveCharacters('obs-charperm-char', loadCharPermissions),
-    'user-data':                     () => loadUserDataPage(),
-  };
+  const loaders = AdminPageRegistry;
   // Returning to an already mounted page preserves its filters and form state.
   const resumePage = fromHistory && pageElement.dataset.pageVisited === 'true';
   pageElement.querySelector(':scope > [data-page-data-error]')?.remove();

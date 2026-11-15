@@ -1110,3 +1110,13 @@ Windows 原子扫描仍与本机授权设置串行，逐扫描项合作式取消
 ## memeval 生产目录快照并发竞态（313 验证发现，open）
 
 `tests/memeval/conftest.py::_production_data_entries` 在 `rglob` 遍历后才过滤共享 `data/test_sandbox`，其他 xdist worker 清理子目录时，Windows Python 3.10 可在 fixture setup 抛 `FileNotFoundError`。最终实现 `ae1105b` 的3.10全量为8390 passed / 1 error；失败用例 `ms-05-episodic-plus-profile-natural` 隔离重跑1 passed。3.12同轮8391 passed。后续应在遍历前排除测试命名空间并保持生产新增文件断言，不以吞掉生产目录错误或放宽污染检测修复。本单未修改该测试设施。
+
+
+## AR-01 管理面浏览器脚本验收缺口（325，observe）
+
+模块化前后均复现两项既有失败：`admin_ui_versions_browser.cjs` 在首次新旧版切换
+加载聚合子模块时触发“零 API 请求”断言；`admin_ui_business_browser.cjs` 在 tools
+字段/保存按钮间距断言失败。未放宽断言或顺带改 CSS，两个脚本后续步骤未完成。
+其他真实浏览器验收及 67 页×两版×宽窄屏的同输入前后投影通过；这不代表上述
+脚本全通过或全部真实服务业务验收完成。证据见
+[AR-01](refactors/modularization-ar01.md#admin-前后对比与验收限制)。

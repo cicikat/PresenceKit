@@ -16,6 +16,10 @@ def test_admin_html_is_a_shell_with_ordered_plain_static_assets():
     )
     assert "<style>" not in index
     assert re.search(r'<script defer src="/static/i18n\.js(?:\?[^" ]*)?"></script>', index)
+    assets = ["/static/i18n.js?v=", "/static/js/i18n-runtime.js?v=",
+              "/static/js/admin-page-registry.js?v=", "/static/js/core.js?v="]
+    positions = [index.index(asset) for asset in assets]
+    assert positions == sorted(positions), "dictionary/runtime/page registry must precede core"
     scripts = re.findall(r'<script(?: defer)? src="/static/js/([^"?]+)(?:\?[^" ]*)?"></script>', index)
     assert scripts[0] == "admin-theme-boot.js"
     assert index.index("admin-theme-boot.js") < index.index('<link rel="stylesheet"')
@@ -36,8 +40,9 @@ def test_every_page_is_a_lazy_fragment_with_its_original_placeholder():
     placeholder_names = set(re.findall(r'data-page-fragment="([^"]+)"', index))
     nav_names = set(re.findall(r'<a[^>]+data-page="([^"]+)"', index))
     source = read_admin_client_source()
-    loader_block = re.search(r"const loaders = \{(.*?)\n  \};", source, re.S)
-    assert loader_block, "core.js must publish the page loader map"
+    registry = (STATIC / "js/admin-page-registry.js").read_text(encoding="utf-8")
+    loader_block = re.search(r"const loaders = \{(.*?)\n  \};", registry, re.S)
+    assert loader_block, "page registry must publish the page loader map"
     loader_names = set(re.findall(r"^\s*['\"]?([\w-]+)['\"]?\s*:", loader_block.group(1), re.M))
 
     assert fragment_names == placeholder_names

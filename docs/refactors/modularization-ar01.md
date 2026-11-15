@@ -51,7 +51,8 @@ QQ/主动触发继续使用自己的 ingress 与既有 Pipeline/turn_sink，不�
          → core/dream 状态机、存储、layered 资产路径
          → 原 dream_hud（含迁入的 v0 派生）、scenario_authoring（纯 YAML）
            / world_authoring（世界骨架与 lorebook 文件写入）
-index.html → defer i18n → core.js（api/auth/state/事件委托/页面加载）
+index.html → defer i18n 字典 → i18n-runtime → admin-page-registry
+           → core.js（api/auth/state/事件委托/页面加载）
            → 页面脚本 → AdminPageLayout / AdminUI（同节点新旧呈现）
 ```
 
@@ -78,7 +79,7 @@ index.html → defer i18n → core.js（api/auth/state/事件委托/页面加载
 | A | 工具定义归域；共享暴露/校验/准入/结果/执行分层；元数据调用 | 全部六类快照与基线逐项一致；主组 377 passed / 1 failed（迁移时漏掉生成器的常量引用，已修复）；修复后含失败组的 90 passed；补充设备/邮件/QQ空间/浏览器/schema 47 passed；无 skip |
 | B | owner_chat service / prepare / generation / delivery；Router 保留同对象 API | 六类快照仍一致；入口/取消/锁/流式/失败/清洗组 230 passed；媒体/鉴权/开发入口/外部 companion/调度组 159 passed；0 failed / 0 skipped |
 | C | 34 个 Dream endpoint 按功能分 router；HUD/YAML/文件序列化归 core | 六类快照仍零差异；临时沙盒 API/会话/文件 CRUD/硬退/挽留/档案/剧本/HUD 144 passed；资产回退/Reality 隔离与迁移后的静态守卫 140 passed；0 failed / 0 skipped |
-| D | Admin/i18n | 待执行 |
+| D | i18n 数据/运行时分离；页面初始化注册表；67 页依赖索引 | 原定向 68 passed；真实 Chromium 268 个页面/版本/宽度投影前后相同，字典哈希相同；动态翻译/弹窗/节点与草稿/404/重复脚本检查通过；现有 acceptance/navigation/module_layout 前后均通过；versions/business 两项原有失败保持，见下文 |
 
 A 补充：新增 1 项旧 spec 整体替换的入口回归，验证可信 uid/char 注入、空角色
 拒绝、伪造主体不触发读取。临时撤销 builtin adapter 回退时，业务成功断言失败；
@@ -96,6 +97,42 @@ C 的 HTTPException、Body/Query 默认值和 require_scopes 保留在 API 层�
 旧 helper 仍是同对象导出，通过惰性 facade 读取保留 `_owner_uid/get_config`
 等注入点。纯 HUD/YAML 不依赖 Admin。Dream 隔离静态守卫扩展到迁出的
 `dream_*.py`，Reality 的禁止裸记忆写入检查也覆盖 owner_chat，防止拆文件后守卫失效。
+
+## Admin 前后对比与验收限制
+
+`i18n.js` 只保留原字典，字面量原样移动；原 t/AdminI18n、动态翻译、原生弹窗
+和 Observer 代码位于 `js/i18n-runtime.js`。浏览器实际字典 JSON 哈希前后均为
+`01c4b69eadb077b7b3b74ceb21349341cb12300db2e067b078fdfdcd3c1edc0f`。
+`admin-page-registry.js` 保存原 goto 的延迟 loader，不在脚本加载时调用业务。
+CSS/fragment/业务 handler 未修改，页面归属表见 `admin-ui-migration.md`。
+
+脚本清单唯一非零差异：新增 runtime、page registry 两个 defer script，均在 core
+之前；i18n/core URL 更新 `ar01-modules-325`。按现有缓存一致性合同同时推进
+fragment 常量；原有 38 个脚本的相对顺序保持，现共 40 个。
+工具注册/schema/探针与四 Router 的 OpenAPI/注册顺序仍与基线完全一致。
+
+浏览器环境：Chromium + 仓库 CI 固定的 Playwright 1.58.2；依赖安装在 ignored
+`.tmp/browser`，API 全部为合成 fixture 或 403，未访问真实服务/私有数据。
+浏览器清缓存并禁用缓存；原版三份静态资产保存在 ignored `.tmp` 用于相同用例
+前后对比（非部署或私有数据备份）。比较前等待既有 rAF Observer 完成 DOM 投影。
+
+- `admin_modularization_browser.cjs`：67×2×2 = 268 投影前后逐字段相同；实际点击
+  中英切换，动态 DOM、原生 prompt/confirm/alert、排除原始正文、节点/草稿保留，
+  无静态 404、重复脚本请求或未捕获异常。
+- `admin_acceptance_browser.cjs`：登录拒绝/成功、刷新恢复、设置保存、secret 清除、
+  双语按钮、草稿/历史/语言持久化，前后通过。
+- `admin_navigation_browser.cjs`：宽窄屏、键盘、导航/历史/滚动/刷新、语言、竞态、
+  重试、损坏存储、退出登录，前后通过。
+- `admin_module_layout_browser.cjs`：归属/只读/嵌套/客户端对齐/旧版恢复，前后通过。
+- 工单指定 `admin_ui_versions_browser.cjs` 原版与新版均失败在版本切换 API 数量：
+  现有聚合页在首次切换时加载子模块，测试断言“零 API”与当前行为不符，计数还受
+  既有异步加载完成时机影响。未放宽断言，整份脚本的后续遍历未完成。
+- `admin_ui_business_browser.cjs` 原版与新版均失败在 `field/save button gap`
+  （tools 页字段/保存按钮间距 >=16）；未修改既有 CSS 或放宽断言，后续步骤未完成。
+  这是现有脚本验收缺口，不将其算作 pass。
+
+真实模型/设备/生产流量未调用，真实首字/整轮延迟不作通过或性能提升声明。
+新增的阶段边界只多本地函数/值对象传递，没有新增模型/网络调用或 send 前等待项。
 
 ## 删除 brief 候选（本轮不执行）
 
