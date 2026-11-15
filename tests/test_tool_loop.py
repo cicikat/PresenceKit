@@ -619,7 +619,7 @@ async def test_action_trace_recorded_per_step(monkeypatch, sandbox):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("failure", ["none", "before_tools", "after_write", "snapshot_replay"])
+@pytest.mark.parametrize("failure", ["none", "before_tools", "after_write", "snapshot_replay", "split_packets", "split_packets_incomplete"])
 async def test_buffered_gateway_document_is_written_once(monkeypatch, sandbox, tmp_path, failure):
     """Real loop, parser and dispatcher: recover before tools, never replay a write."""
     from types import SimpleNamespace as NS
@@ -658,6 +658,19 @@ async def test_buffered_gateway_document_is_written_once(monkeypatch, sandbox, t
             return NS(choices=[NS(finish_reason="tool_calls", message=NS(content="", tool_calls=[
                 NS(id=name, type="function", function=NS(name=name, arguments=json.dumps(args))) ]))])
         terminal = chunk(calls=[call(0, name, name, json.dumps(args))], finish="tool_calls")
+        if failure in {'split_packets', 'split_packets_incomplete'} and name == 'workspace_create':
+            # SDK packets captured at the gateway use index zero and a
+            # separate finish marker for every complete sibling action.
+            from tests.test_llm_force_stream import tool_snapshot
+            def packet(call_id, arguments):
+                return tool_snapshot([{'index': 0, 'id': call_id, 'type': 'function',
+                    'function': {'name': name, 'arguments': json.dumps(arguments)}}], text='')
+            events = [packet('first-create', args), packet('second-create', {**args, 'path': 'result-second.md'})]
+            if failure == 'split_packets':
+                end = chunk(finish='stop')
+                end.id = 'fixture-event'
+                events.append(end)
+            return Stream(events)
         if failure == 'snapshot_replay':
             terminal.id = 'synthetic-event'
             terminal.choices[0].delta.content = ''
@@ -676,6 +689,13 @@ async def test_buffered_gateway_document_is_written_once(monkeypatch, sandbox, t
         request = _make_pipeline().run_agentic_loop(
             [{"role": "user", "content": "Create result.md in the workspace."}],
             uid="workspace-owner", char_id=TEST_CHAR_ID, session_state=SessionState())
+        if failure == 'split_packets_incomplete':
+            with pytest.raises(UpstreamResponseFormatError):
+                await request
+            assert not (root / 'result.md').exists()
+            assert not (root / 'result-second.md').exists()
+            assert not observability_snapshot(uid='workspace-owner', char_id=TEST_CHAR_ID)['entries']
+            return
         if failure == "after_write":
             with pytest.raises(UpstreamResponseFormatError):
                 await request
@@ -683,8 +703,10 @@ async def test_buffered_gateway_document_is_written_once(monkeypatch, sandbox, t
             assert await request == "Document created."
         assert (root / "result.md").read_text(encoding="utf-8") == "# Verified document\n"
         tasks = observability_snapshot(uid="workspace-owner", char_id=TEST_CHAR_ID)
-        assert tasks["status_counts"] == {"succeeded": 1}
-        assert tasks["entries"][0]["result_metadata"]["counters"]["version"] == 1
+        assert tasks["status_counts"] == {"succeeded": 2 if failure == 'split_packets' else 1}
+        assert all(entry['result_metadata']['counters']['version'] == 1 for entry in tasks['entries'])
+        if failure == 'split_packets':
+            assert (root / 'result-second.md').read_text(encoding='utf-8') == '# Verified document\n'
         if failure == "before_tools":
             assert requests[0]["stream"] is True and not requests[1].get("stream")
         if failure == "after_write":

@@ -321,3 +321,61 @@ async def test_tool_snapshot_replay_never_accepts_changed_actions_or_metadata(ch
     with pytest.raises(UpstreamResponseFormatError):
         await create(mc, [], gen_kwargs={})
     stream.close.assert_awaited_once()
+
+
+def split_tool_fixture():
+    """Observed synthetic gateway wire shape; IDs/signatures are public substitutes."""
+    import json
+    from pathlib import Path
+    return json.loads((Path(__file__).parent / 'fixtures/openlux-split-tools.json').read_text(encoding='utf-8'))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('same_tool', [False, True])
+async def test_openlux_split_complete_tool_packets_preserve_both_actions(same_tool):
+    """Per-tool terminal packets with reused index zero must retain both calls."""
+    from openai.types.chat import ChatCompletionChunk
+    events = split_tool_fixture()
+    if same_tool:
+        for event in events[:2]:
+            event['choices'][0]['delta']['tool_calls'][0]['function']['name'] = 'read_fixture'
+    mc, stream, _ = client([ChatCompletionChunk(**event) for event in events])
+    mc.stream_compatibility = 'openlux'
+    result = await create(mc, [], gen_kwargs={})
+    assert [(c.id, c.name, c.arguments) for c in result.tool_calls] == [
+        ('fixture-call-0', 'read_fixture' if same_tool else 'read_first_fixture', {'key': 'fixture-a'}),
+        ('fixture-call-1', 'read_fixture' if same_tool else 'read_second_fixture', {'key': 'fixture-b'}),
+    ]
+    assert result.status == 'tool_calls'
+    assert result.usage['total_tokens'] == 229
+    assert result.continuation_items[0]['tool_calls'][0]['extra_content'] == {
+        'google': {'thought_signature': 'synthetic-signature'}}
+    assert 'extra_content' not in result.continuation_items[0]['tool_calls'][1]
+    stream.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('change', ['strict', 'missing_stop', 'after_stop', 'event_id', 'same_id', 'truncated', 'text', 'reasoning', 'extra', 'choice_extra', 'stop_extra', 'first_extra', 'index'])
+async def test_split_tool_packets_reject_conflicts_and_incomplete_envelope(change):
+    """No sibling action is released from a truncated or conflicting envelope."""
+    from openai.types.chat import ChatCompletionChunk
+    events = split_tool_fixture()
+    second = events[1]['choices'][0]
+    if change == 'missing_stop': events = events[:3]
+    if change == 'after_stop': events = [events[0], events[3], events[1]]
+    if change == 'event_id': events[1]['id'] = 'another-event'
+    if change == 'same_id': second['delta']['tool_calls'][0]['id'] = 'fixture-call-0'
+    if change == 'truncated': second['delta']['tool_calls'][0]['function']['arguments'] = '{'
+    if change == 'text': second['delta']['content'] = 'unvalidated prose'
+    if change == 'reasoning': second['delta']['reasoning_content'] = 'private'
+    if change == 'extra': second['delta']['future_field'] = 'data'
+    if change == 'choice_extra': second['future_field'] = 'data'
+    if change == 'stop_extra': events[3]['choices'][0]['future_field'] = 'data'
+    if change == 'first_extra': events[0]['choices'][0]['future_field'] = 'data'
+    if change == 'index': second['delta']['tool_calls'][0]['index'] = 7
+    mc, stream, _ = client([ChatCompletionChunk(**event) for event in events])
+    mc.stream_compatibility = 'strict' if change == 'strict' else 'openlux'
+    with pytest.raises(UpstreamResponseFormatError) as failure:
+        await create(mc, [], gen_kwargs={})
+    assert not getattr(failure.value, 'partial_text', '')
+    stream.close.assert_awaited_once()

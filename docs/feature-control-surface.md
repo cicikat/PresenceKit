@@ -794,7 +794,10 @@ optional `openlux`) and `protocol_recovery` (`off` by default, optional `fallbac
 returns effective defaults; non-default policies require Chat Completions. `openlux` also
 deduplicates a complete tool snapshot under the same terminal event ID only when every tool
 index, ID, name, argument string and signature metadata matches the assembled calls exactly.
-It retains the first copy and never replays an action. Strict mode is unchanged. Turning them off
+It retains the first copy and never replays an action. It also buffers the observed per-tool
+terminal packets (same event, one complete function per packet, distinct tool IDs, reused index
+zero) until the same event's empty outer stop trailer arrives. Incomplete packets or missing
+outer stop fail the entire group before dispatch. Strict mode is unchanged. Turning them off
 restores strict trailer parsing and the existing protocol-error behavior. Recovery applies to
 buffered create calls before tool results exist: at most one nonstream attempt and one configured
 fallback within the existing time budget. Completed tool receipts prohibit automatic replay,
