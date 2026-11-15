@@ -213,3 +213,8 @@ def test_history_plain_and_styled_copy_share_visible_paragraphs(sandbox, monkeyp
 def test_unanswered_user_footer_never_becomes_message_text(ending):
     rows = chat_log._parse_day('## 12:00\n**用户**：我觉得你好像有点不一样了\n> speaker:user turn_id:1043484516_1794717917531\n' + ending)
     assert rows == [{'time': '12:00', 'user': '我觉得你好像有点不一样了', 'assistant': ''}]
+
+
+def test_unanswered_ordinary_turn_id_quote_is_still_body_text():
+    row = chat_log._parse_day('## 12:00\n**用户**：explain this\n> turn_id:quoted-example\n---')[0]
+    assert row['user'] == 'explain this\n> turn_id:quoted-example'
