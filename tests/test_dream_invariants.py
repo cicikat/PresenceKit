@@ -31,7 +31,7 @@ def test_conversation_prompt_modules_cannot_read_invariants_store():
         source = Path(name).read_text(encoding="utf-8")
         assert "dreams_invariants" not in source
         assert "core.dream.invariants" not in source
-    assert "core.dream.invariants" in Path("admin/routers/dream.py").read_text(encoding="utf-8")
+    assert "core.dream.invariants" in Path("admin/routers/dream_observability.py").read_text(encoding="utf-8")
 
 
 def test_llm_prompts_are_not_silently_mojibaked():

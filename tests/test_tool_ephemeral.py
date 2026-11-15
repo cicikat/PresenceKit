@@ -321,7 +321,7 @@ async def test_desktop_send_timeout_does_not_block_event_loop(monkeypatch, enabl
 def test_owner_chat_binds_tool_status_without_turn_start_snapshot():
     from pathlib import Path
 
-    chat = (Path(__file__).resolve().parents[1] / "admin" / "routers" / "chat.py").read_text(encoding="utf-8")
+    chat = (Path(__file__).resolve().parents[1] / "core" / "owner_chat" / "generation.py").read_text(encoding="utf-8")
     main = (Path(__file__).resolve().parents[1] / "main.py").read_text(encoding="utf-8")
     assert "push_tool_status if _dws.is_connected() else None" not in chat
     assert "tool_event_observer=_dws.push_tool_status" in chat or "_tool_status_observer = _dws.push_tool_status" in chat

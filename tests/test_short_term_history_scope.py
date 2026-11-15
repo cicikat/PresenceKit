@@ -14,6 +14,7 @@ Covers:
 """
 
 import ast
+import os
 import textwrap
 from pathlib import Path
 
@@ -147,7 +148,14 @@ def _collect_get_history_calls_missing_char_id(root: Path) -> list[tuple[str, in
     hits = []
     short_term_path = root / "core" / "memory" / "short_term.py"
 
-    for py_file in root.rglob("*.py"):
+    # Audit project source only. Ignored environments, test/deployment artifacts
+    # and private state are not production callers and may be unreadable.
+    excluded = {".git", ".venv", "venv", ".tmp", "node_modules", "__pycache__", "data", "userdata"}
+    py_files = []
+    for directory, children, files in os.walk(root):
+        children[:] = [name for name in children if name not in excluded]
+        py_files.extend(Path(directory) / name for name in files if name.endswith(".py"))
+    for py_file in py_files:
         if py_file == short_term_path:
             continue
         try:

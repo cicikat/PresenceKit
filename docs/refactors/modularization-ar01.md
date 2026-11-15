@@ -84,6 +84,8 @@ index.html → defer i18n 字典 → i18n-runtime → admin-page-registry
 A 补充：新增 1 项旧 spec 整体替换的入口回归，验证可信 uid/char 注入、空角色
 拒绝、伪造主体不触发读取。临时撤销 builtin adapter 回退时，业务成功断言失败；
 恢复后通过（`.tmp/ar01-adapter-mutation.log`）。
+另在独立进程撤销作用域检查，空角色拒绝断言失败（`.tmp/ar01-scope-mutation.log`），
+未改动真实配置或数据；原检查恢复后入口回归通过。
 
 B 的阶段参数是单轮冻结值对象，不创建队列、缓存或第二条 Pipeline。旧 Router 的
 `run_owner_chat_turn` 和 `_execute_owner_chat_turn_locked` 是同对象导出；
@@ -133,6 +135,85 @@ fragment 常量；原有 38 个脚本的相对顺序保持，现共 40 个。
 
 真实模型/设备/生产流量未调用，真实首字/整轮延迟不作通过或性能提升声明。
 新增的阶段边界只多本地函数/值对象传递，没有新增模型/网络调用或 send 前等待项。
+
+## 提交与集成复核
+
+| 阶段 | 独立 commit | 主要文件 |
+|---|---|---|
+| A | `8572eff` | tool_dispatcher、tool_runtime、tools/*_definitions；旧 spec 回归与路径守卫归属 |
+| B | `f181bff` | chat、owner_chat/service/prepare/generation/delivery/models、channels 文档 |
+| C | `a43d770` | dream 与七个功能/共享模块；dream_hud/scenario_authoring/world_authoring、隔离守卫 |
+| D | `3ffea5f` | 字典/runtime、page registry/core/index；Admin 索引与浏览器对比 |
+
+首轮全量（Python 3.12.13 / Windows / `-n auto`，8 workers）：8571 passed、
+5 failed、13 subtests passed，0 skipped。5 项分类及处理：
+
+1. Dream invariants 与 tool-status 的两个静态守卫仍读旧源码文件；改指实际归属，
+   原正/负断言不放宽。无真实业务行为变化。
+2. `core.api_contract_check` 只扫描旧 facade/pipeline，漏掉迁出的动作生产者。
+   扫描补上当前领域定义；原 mounted API 的漂移注入测试先失败、修复后通过。
+   前后动作类型同为 8 项：avatar_directive、dream_invite、media_play_pause、
+   minimize_window、open_url、play_netease、show_notify、toy_invite。
+   **非零差异**仅诊断证据的源码文件/行号随归属改变，字段和动作协议不变。
+3. relative self-root 测试的临时目录在不同盘，`relpath` 无法跨盘；按开发规范将
+   TEMP/TMP 指向仓库 ignored `.tmp/ar01-pytest-temp`，不改业务或该用例。
+4. 旧 get_history 源码审计递归扫描 ignored `.tmp`，命中其他任务的不可读归档，
+   而且不应读取环境依赖和私有状态。改为遍历源码时先剪枝环境/缓存/私有数据目录，
+   不吞 PermissionError。新增合成目录回归先证明原扫描错误计入依赖/私有文件，
+   修复后仍捕获项目里的无 char_id 调用。未改变任何生产调用准入。
+
+修复/环境调整后，同组 63 passed、0 failed、0 skipped。
+最终全量：**8577 passed、13 subtests passed、0 failed、0 skipped**，216.24 秒。
+最终 smoke：**241 passed、8337 deselected、0 failed、0 skipped**，21.39 秒；
+不把按 marker 排除的用例计为 skip。
+13 个 `u` 是 pytest 的**通过子测试**，不是 skip。
+新增浏览器回归接入现有 `tests.run_admin_browser`，CI 使用同一入口，无新增依赖版本。
+历史基线对比必须显式设置 `ADMIN_AR01_COMPARE_BASELINE=1`，普通回归不依赖 ignored
+目录里的旧快照，避免后续合法 UI 修改误撞本次临时基线。
+
+### 复现命令与日志
+
+以下 python 使用支持的 3.12 环境；均在公开合成配置/每测试沙盒中执行。
+
+```text
+A 修复复验（90 passed）：
+python -m pytest -q tests/test_mcp_client.py tests/test_action_trace.py tests/test_execute_structured_production.py tests/test_tool_read_log_bypass.py tests/test_tool_schema_portable.py --tb=short
+A 新增入口和守卫（23 passed）：
+python -m pytest -q tests/test_tool_modularization.py tests/test_no_hardcoded_character.py tests/test_r3_scope_lint.py --tb=short
+
+B 主组（230 passed）：
+python -m pytest -q tests/test_mobile_chat_channel.py tests/test_owner_turn_api_contract.py tests/test_desktop_chat_receipts.py tests/test_chat_media.py tests/test_session_scope.py tests/test_output_segment_enforcer.py tests/test_reality_output_guard.py tests/test_llm_response_validation.py tests/test_tool_grounding.py --tb=short
+
+C 主组（144 passed）：
+python -m pytest -q tests/test_dream_scenario_crud.py tests/test_dream_flow_entries.py tests/test_dream_world_management.py tests/test_dream_ui_endpoints.py tests/test_dream_archive_operations.py tests/test_dream_wake_confirmation.py tests/test_dream_state_projection.py tests/test_dream_session_char_scope.py tests/test_dream_rpg_api.py tests/test_dream_isolation.py tests/test_dream_isolation_guard.py tests/test_dream_guard_fail_closed.py tests/test_dream_hud_v12.py --tb=short
+
+D 末次静态/资产/API组（44 passed）：
+python -m pytest -q tests/admin_static_assets.py tests/test_admin_i18n_assets.py tests/test_admin_static_split.py tests/test_dream_operations_ui.py tests/test_player_adapter.py --tb=short
+node tests/admin_modularization_browser.cjs
+python -m tests.run_admin_browser
+node tests/admin_module_layout_browser.cjs
+node tests/admin_ui_versions_browser.cjs
+node tests/admin_ui_business_browser.cjs
+
+全量（TEMP/TMP 指向 .tmp/ar01-pytest-temp；PYTEST_XDIST_AUTO_NUM_WORKERS=8）：
+python -m pytest -n auto -q --tb=short
+python -m pytest -m smoke -q --tb=short
+```
+
+全部分组、复验、故障注入、浏览器前后与全量原始日志保留于 ignored `.tmp/ar01-*`。
+`tests/admin_static_assets.py` 是测试工具模块，自身没有测试；实际资产验收由引用它的
+`test_admin_i18n_assets/test_admin_static_split` 等执行，不把零收集当通过证据。
+
+最终合同快照前五项与开工哈希相同；40 个实际 script 标签哈希为
+`872796f85263bf2187c964c59801061efc60acaad02d2e75bd5a029d256ddb44`，
+非零差异已逐项解释。最终显式浏览器基线比较再次通过，CI browser runner
+的 navigation/acceptance/modularization 三项通过；额外 module_layout 也通过。
+两项指定旧浏览器脚本的既有失败仍保留在已知问题，不计为已完成验收。
+
+本次源码/测试在当前分支完成并提交；没有 push、PR、合并、部署或私有数据变更。
+工作区整体保留开工时的其他未提交工单/文档；known-issues 仅追加并提交本单条目，
+其他人的原有修改仍未暂存。未运行 Python 3.10/远端 CI、真实设备/模型/生产服务，
+对应部分不声称已验证。删除候选仅记录，没有执行。
 
 ## 删除 brief 候选（本轮不执行）
 

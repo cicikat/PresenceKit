@@ -36,7 +36,8 @@ def main():
     output = ROOT / ".tmp" / "admin-navigation"
     output.mkdir(parents=True, exist_ok=True)
     try:
-        for script in ("admin_navigation_browser.cjs", "admin_acceptance_browser.cjs"):
+        for script in ("admin_navigation_browser.cjs", "admin_acceptance_browser.cjs",
+                       "admin_modularization_browser.cjs"):
             result = subprocess.run([node, str(ROOT / "tests" / script)], cwd=ROOT, env=env,
                                     capture_output=True, text=True, encoding="utf-8", timeout=120)
             (output / f"{script}.log").write_text(result.stdout + result.stderr, encoding="utf-8", newline="\n")

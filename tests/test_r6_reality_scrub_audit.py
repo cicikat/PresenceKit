@@ -352,7 +352,8 @@ def test_s4_no_registry_broadcast_from_reality_core():
         "main.py",
         "admin/routers/chat.py",
         "core/scheduler/loop.py",
-    ]
+    ] + [path.relative_to(_ROOT).as_posix()
+         for path in sorted((_ROOT / "core/owner_chat").glob("*.py"))]
     violations = []
     for relpath in reality_files:
         src = _source(relpath)
