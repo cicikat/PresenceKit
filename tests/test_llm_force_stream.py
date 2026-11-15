@@ -266,3 +266,58 @@ async def test_rejected_tool_tail_reports_counts_without_arguments_or_partial_re
     assert 'private-fixture' not in diagnostic and 'private-late-arguments' not in diagnostic
     assert not getattr(failure.value, 'partial_text', '')
     stream.close.assert_awaited_once()
+
+
+def tool_snapshot(calls, *, finish='tool_calls', text=None):
+    from openai.types.chat import ChatCompletionChunk
+    delta = {'role': 'assistant', 'tool_calls': calls}
+    if text is not None:
+        delta['content'] = text
+    return ChatCompletionChunk(id='fixture-event', created=0, model='fixture',
+        object='chat.completion.chunk', choices=[{'index': 0, 'delta': delta, 'finish_reason': finish}])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('fragmented', [False, True])
+async def test_complete_tool_snapshot_replay_preserves_one_call(fragmented):
+    """A gateway's full replay must not duplicate assembled arguments or actions."""
+    full = {'index': 0, 'id': 'fixture-call', 'type': 'function',
+            'function': {'name': 'read_fixture', 'arguments': '{"key":"fixture"}'},
+            'extra_content': {'google': {'thought_signature': 'synthetic-signature'}}}
+    if fragmented:
+        first = {**full, 'function': {**full['function'], 'arguments': '{"key":'}}
+        events = [tool_snapshot([first], finish=None), tool_snapshot([
+            {'index': 0, 'function': {'arguments': '"fixture"}'}}])]
+    else:
+        events = [tool_snapshot([full], text='')]
+    events += [tool_snapshot([full]), chunk(finish='stop')]
+    mc, stream, _ = client(events)
+    mc.stream_compatibility = 'openlux'
+    result = await create(mc, [], gen_kwargs={})
+    assert [(c.id, c.name, c.arguments) for c in result.tool_calls] == [
+        ('fixture-call', 'read_fixture', {'key': 'fixture'})]
+    assert result.continuation_items[0]['tool_calls'][0]['extra_content'] == full['extra_content']
+    stream.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('change', ['id', 'name', 'arguments', 'signature', 'extra', 'text', 'strict', 'event_id', 'choice_extra'])
+async def test_tool_snapshot_replay_never_accepts_changed_actions_or_metadata(change):
+    """Duplicate handling must reject altered tool identity, data and signatures."""
+    full = {'index': 0, 'id': 'fixture-call', 'type': 'function',
+            'function': {'name': 'read_fixture', 'arguments': '{"key":"fixture"}'},
+            'extra_content': {'google': {'thought_signature': 'synthetic-signature'}}}
+    import copy
+    changed = copy.deepcopy(full)
+    if change == 'id': changed['id'] = 'other-call'
+    if change in {'name', 'arguments'}: changed['function'][change] = 'changed'
+    if change == 'signature': changed['extra_content']['google']['thought_signature'] = 'changed'
+    if change == 'extra': changed['new_field'] = 'changed'
+    tail = tool_snapshot([changed], text='new text' if change == 'text' else None)
+    if change == 'event_id': tail.id = 'other-event'
+    if change == 'choice_extra': tail.choices[0].future_field = 'changed'
+    mc, stream, _ = client([tool_snapshot([full], text=''), tail])
+    mc.stream_compatibility = 'strict' if change == 'strict' else 'openlux'
+    with pytest.raises(UpstreamResponseFormatError):
+        await create(mc, [], gen_kwargs={})
+    stream.close.assert_awaited_once()

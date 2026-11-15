@@ -619,7 +619,7 @@ async def test_action_trace_recorded_per_step(monkeypatch, sandbox):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("failure", ["none", "before_tools", "after_write"])
+@pytest.mark.parametrize("failure", ["none", "before_tools", "after_write", "snapshot_replay"])
 async def test_buffered_gateway_document_is_written_once(monkeypatch, sandbox, tmp_path, failure):
     """Real loop, parser and dispatcher: recover before tools, never replay a write."""
     from types import SimpleNamespace as NS
@@ -658,6 +658,12 @@ async def test_buffered_gateway_document_is_written_once(monkeypatch, sandbox, t
             return NS(choices=[NS(finish_reason="tool_calls", message=NS(content="", tool_calls=[
                 NS(id=name, type="function", function=NS(name=name, arguments=json.dumps(args))) ]))])
         terminal = chunk(calls=[call(0, name, name, json.dumps(args))], finish="tool_calls")
+        if failure == 'snapshot_replay':
+            terminal.id = 'synthetic-event'
+            terminal.choices[0].delta.content = ''
+            replay = chunk(calls=[call(0, name, name, json.dumps(args))], finish='tool_calls')
+            replay.id = terminal.id
+            return Stream([terminal, replay, chunk(finish='stop')])
         return Stream([terminal, NS(choices=[NS(index=0, delta=NS(role="assistant", content=""), finish_reason=None)]),
                        chunk(finish="stop")])
 

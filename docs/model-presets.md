@@ -31,6 +31,9 @@ Chat Completions preset 新增 `stream_compatibility: strict|openlux`（默认 `
 
 `openlux` 用于已观察到的完整工具结束后 assistant 空 role 尾包、空 `stop` 尾包，以及同一
 事件 ID、相同 choice 的重复终止事件。保留最初的 `finish_reason=tool_calls` 和完整工具参数；
+同一事件 ID 的完整工具快照重发也可去重：逐项核对工具索引、ID、名称、参数原字符串及
+签名元数据与已累积调用完全一致；允许省略空字段或重发完整快照，不拼接重复参数、
+不执行第二次动作。不同事件、变更参数/签名或未知非空字段仍拒绝。
 新正文、参数、推理、拒绝、冲突结束原因、多 choice、重复工具 ID 和截断仍报错。
 必须收齐并校验整个响应，才交给现有工具权限与参数检查执行。
 

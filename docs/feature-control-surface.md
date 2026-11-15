@@ -791,7 +791,10 @@ preserve keys. Ready is not tested. Runtime metadata uses
 2026-11-15: The admin Preset editor also exposes `stream_compatibility` (`strict` by default,
 optional `openlux`) and `protocol_recovery` (`off` by default, optional `fallback` or
 `nonstream_then_fallback`). Existing admin GET/PUT model configuration hot reloads both and
-returns effective defaults; non-default policies require Chat Completions. Turning them off
+returns effective defaults; non-default policies require Chat Completions. `openlux` also
+deduplicates a complete tool snapshot under the same terminal event ID only when every tool
+index, ID, name, argument string and signature metadata matches the assembled calls exactly.
+It retains the first copy and never replays an action. Strict mode is unchanged. Turning them off
 restores strict trailer parsing and the existing protocol-error behavior. Recovery applies to
 buffered create calls before tool results exist: at most one nonstream attempt and one configured
 fallback within the existing time budget. Completed tool receipts prohibit automatic replay,
