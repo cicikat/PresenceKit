@@ -198,7 +198,7 @@ async def test_mobile_chat_dream_guard_blocks_before_owner_turn(sandbox, monkeyp
     assert exc.value.status_code == 409
 
 
-@pytest.mark.parametrize("empty_reply", [None, "", " \n\t", "__buffered_failure__"])
+@pytest.mark.parametrize("empty_reply", [None, "", " \n\t", "__buffered_failure__", "__stream_failure__"])
 @pytest.mark.parametrize("origin", ["mobile", "desktop"])
 @pytest.mark.parametrize("loop_active", [False, True])
 async def test_owner_chat_recovers_after_empty_reply(monkeypatch, empty_reply, origin, loop_active):
@@ -208,6 +208,8 @@ async def test_owner_chat_recovers_after_empty_reply(monkeypatch, empty_reply, o
     from core.pipeline import Pipeline
 
     critical_calls = []
+    if empty_reply == "__stream_failure__":
+        monkeypatch.setattr("core.output.segment_enforcer.get_segment_enforce_settings", lambda: (True, 4096))
     replies = iter([empty_reply, "mobile reply"])
     stream_ends = []
 
@@ -241,10 +243,19 @@ async def test_owner_chat_recovers_after_empty_reply(monkeypatch, empty_reply, o
             return [], {}
 
         async def run_llm(self, _messages):
-            return next_reply()
+            value = next_reply()
+            if value == "__stream_failure__":
+                from core.llm_protocol import UpstreamResponseFormatError
+                raise UpstreamResponseFormatError("fixture disconnected")
+            return value
 
         async def run_llm_stream(self, _messages, **_kwargs):
-            yield next_reply() or ""
+            value = next_reply()
+            if value == "__stream_failure__":
+                from core.llm_protocol import UpstreamResponseFormatError
+                yield "Visible prefix\nShort tail"
+                raise UpstreamResponseFormatError("fixture disconnected")
+            yield value or ""
 
         async def run_agentic_loop(self, _messages, *, stream=False, **_kwargs):
             if stream:
@@ -302,20 +313,23 @@ async def test_owner_chat_recovers_after_empty_reply(monkeypatch, empty_reply, o
     monkeypatch.setattr("channels.desktop_ws.push_message", AsyncMock())
     endpoint = mobile.mobile_chat if origin == "mobile" else chat.desktop_chat
     from core.llm_protocol import UpstreamResponseFormatError
-    expected_error = UpstreamResponseFormatError if origin == "mobile" and empty_reply == "__buffered_failure__" else HTTPException
+    expected_error = UpstreamResponseFormatError if origin == "mobile" and empty_reply in ("__buffered_failure__", "__stream_failure__") else HTTPException
     with pytest.raises(expected_error) as exc:
         await endpoint({"message": "first attempt"}, _auth=True)
     if isinstance(exc.value, HTTPException):
         assert exc.value.status_code == 502
     else:
         assert exc.value.category == "protocol_incompatible"
-    if empty_reply != "__buffered_failure__":
+    if empty_reply not in ("__buffered_failure__", "__stream_failure__"):
         assert "回复正文" in exc.value.detail
     assert critical_calls == []
     deltas = __import__('channels.ui_push', fromlist=['push_stream_delta']).push_stream_delta
     if empty_reply == "__buffered_failure__" and origin == "desktop":
         assert deltas.await_count == 1
         assert deltas.call_args.args[1] == "Reply before failure"
+    elif empty_reply == "__stream_failure__" and origin == "desktop":
+        assert deltas.await_count == 2
+        assert "".join(call.args[1] for call in deltas.await_args_list) == "Visible prefix Short tail"
     elif origin == "desktop" and empty_reply and empty_reply != "__buffered_failure__":
         assert deltas.call_args.args[1] == empty_reply
     else:

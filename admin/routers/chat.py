@@ -427,6 +427,13 @@ async def _execute_owner_chat_turn_locked(
                     if visible_tail:
                         await _ui_push.push_stream_delta(_stream_msg_id, visible_tail)
             except Exception as exc:
+                # Newline lookahead can hold a short trailing segment when
+                # the upstream disconnects. Flush only the
+                # already-filtered text; do not complete the failed turn.
+                if _chunks and _stream_paragraph_enforcer is not None:
+                    pending_text = _stream_paragraph_enforcer.finish()
+                    if pending_text:
+                        await _ui_push.push_stream_delta(_stream_msg_id, pending_text)
                 # Buffered gateway turns can fail before yielding their first
                 # visible delta. Keep safe prose without claiming completion.
                 partial = getattr(exc, "partial_text", "")
