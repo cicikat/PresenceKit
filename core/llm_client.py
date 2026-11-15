@@ -835,8 +835,8 @@ async def chat_turn(
         # pipeline.py 里另开分支）。
         logger.warning(
             "[llm_client.chat_turn] content 疑似混进模型工具调用内部 token（网关"
-            "未解析成 tool_calls），丢弃并按空内容处理: %r",
-            "[private tool context]" if private_gmail else content[:200],
+            "未解析成 tool_calls），丢弃并按空内容处理 chars=%d",
+            len(content),
         )
         content = ""
         for item in continuation_items:

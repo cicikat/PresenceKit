@@ -13,6 +13,7 @@ import logging
 import time
 import uuid
 from core.tool_activity import display_chain
+from core.llm_turn_route import scoped_tool_turn
 
 from core.llm_output_validator import record_failure, reset
 from core.memory import pending_perception as _pending_perception
@@ -1294,6 +1295,7 @@ class Pipeline:
     # ──────────────────────────────────────────────────────────────────────────
 
     @display_chain
+    @scoped_tool_turn
     async def run_agentic_loop(
         self,
         messages: list[dict],
@@ -1775,6 +1777,7 @@ class Pipeline:
             business_steps = 0
             discovery_steps = 0
             life_record_reads: dict[str, ToolExecutionOutcome] = {}
+            action_receipts: dict[str, ToolExecutionOutcome] = {}
             while business_steps < max_steps:
                 tools = discovery.schemas()
                 _record_discovery(category="tool_loop_discovery", code="request_surface", status="ok",
@@ -1806,6 +1809,16 @@ class Pipeline:
                         # Local protocol receipt; not a dispatcher execute.
                         return ToolExecutionOutcome(status="discovery", result=result)
                     used_tool = True
+                    from core.llm_turn_route import current_route
+                    from core.tool_dispatcher import is_side_effect_tool
+                    action_key = json.dumps([name, tc["arguments"]], sort_keys=True, ensure_ascii=False)
+                    route = current_route()
+                    # A newly selected model must consume existing receipts, not
+                    # reissue an identical mutation (even under a fresh call ID).
+                    if (route is not None and route.effective is not None
+                            and is_side_effect_tool(name) and action_key in action_receipts):
+                        _record_discovery(category="tool_loop_dedupe", code="action_receipt_reused", status="ok")
+                        return action_receipts[action_key]
                     read_key = (json.dumps(tc["arguments"], sort_keys=True, ensure_ascii=False)
                                 if name in {"read_life_records", "list_self_capabilities", "read_self_action_history"} else None)
                     if read_key is not None and read_key in life_record_reads:
@@ -1816,6 +1829,7 @@ class Pipeline:
                     tool_outcome = await _execute_with_ephemeral_status(
                         tc["id"], name, tc["arguments"], index=index, total=total, origin=origin,
                     )
+                    action_receipts[action_key] = tool_outcome
                     if read_key is not None and tool_outcome.status != "outcome_unknown":
                         life_record_reads[read_key] = tool_outcome
                     elif name in {"manage_self_capability", "revise_memory", "revise_user_profile"}:
@@ -1924,11 +1938,12 @@ class Pipeline:
                         return
                     outcome = ("natural", display_text)
                     return
-                # The protocol adapter returns zero or more protocol-neutral
-                # continuation items. Chat Completions contributes one assistant
-                # message; Responses contributes function_call items keyed by the
-                # same call_id used by the tool result below.
-                loop_msgs.extend(turn.continuation_items or [turn.assistant_message])
+                # llm_client returns canonical assistant calls. Each target
+                # protocol reconstructs its own wire history from these receipts.
+                from core.llm_protocol import canonical_tool_history
+                loop_msgs.extend(canonical_tool_history(
+                    turn.continuation_items or [turn.assistant_message], validate=False,
+                ))
                 for _index, tc in enumerate(turn.tool_calls, start=1):
                     try:
                         tool_outcome = await _call(

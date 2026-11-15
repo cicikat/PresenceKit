@@ -262,10 +262,110 @@ def _message_text(content: Any) -> str:
     return content
 
 
+def canonical_tool_history(messages: list[dict[str, Any]], *, validate: bool = True) -> list[dict[str, Any]]:
+    """Rebuild semantic tool receipts without carrying provider-private items.
+
+    Diagnostics contain schema failures only, never arguments or result bodies.
+    Assistant blocks and Responses items become the existing chat-shaped contract.
+    """
+    result: list[dict[str, Any]] = []
+    for message in messages:
+        item = dict(message)
+        kind = item.get("type")
+        if kind == "function_call":
+            item = {"role": "assistant", "content": "", "tool_calls": [{
+                "id": item.get("call_id"), "type": "function", "function": {
+                    "name": item.get("name"), "arguments": item.get("arguments")}}]}
+        elif kind == "function_call_output":
+            item = {"role": "tool", "tool_call_id": item.get("call_id"), "content": item.get("output")}
+        elif kind == "message":
+            blocks = item.get("content")
+            if not isinstance(blocks, list):
+                raise ValueError("invalid Responses message history")
+            role = item.get("role")
+            if role == "assistant":
+                if any(not isinstance(b, dict) or b.get("type") != "output_text" for b in blocks):
+                    raise ValueError("invalid Responses assistant history")
+                item = {"role": "assistant", "content": "".join(b.get("text", "") for b in blocks)}
+            elif role in {"system", "developer", "user"}:
+                if any(not isinstance(b, dict) or b.get("type") != "input_text" for b in blocks):
+                    raise ValueError("invalid Responses input history")
+                item = {"role": role, "content": "".join(b.get("text", "") for b in blocks)}
+            else:
+                raise ValueError("invalid Responses message role")
+        elif item.get("role") == "assistant" and isinstance(item.get("content"), list):
+            blocks = item["content"]
+            if any(not isinstance(b, dict) or b.get("type") not in {"text", "tool_use"} for b in blocks):
+                raise ValueError("unsupported assistant history block")
+            calls = []
+            for b in blocks:
+                if b.get("type") == "tool_use":
+                    if not isinstance(b.get("input"), dict):
+                        raise ValueError("invalid tool-use input")
+                    calls.append({"id": b.get("id"), "type": "function", "function": {
+                        "name": b.get("name"), "arguments": json.dumps(b["input"], ensure_ascii=False)}})
+            item["content"] = "".join(b.get("text", "") for b in blocks if b.get("type") == "text")
+            if calls:
+                item["tool_calls"] = calls
+        elif item.get("role") == "user" and isinstance(item.get("content"), list) and any(
+            isinstance(b, dict) and b.get("type") == "tool_result" for b in item["content"]
+        ):
+            for b in item["content"]:
+                if b.get("type") != "tool_result" or not isinstance(b.get("content"), str):
+                    raise ValueError("unsupported mixed tool-result history")
+                result.append({"role": "tool", "tool_call_id": b.get("tool_use_id"),
+                               "content": b["content"],
+                               **({"is_error": True} if b.get("is_error") else {})})
+            continue
+        if (item.get("role") == "assistant" and result and result[-1].get("role") == "assistant"
+                and (item.get("tool_calls") or result[-1].get("tool_calls"))):
+            previous = result[-1]
+            previous["content"] = (previous.get("content") or "") + (item.get("content") or "")
+            previous["tool_calls"] = [*(previous.get("tool_calls") or []), *(item.get("tool_calls") or [])]
+        else:
+            result.append(item)
+    if not validate:
+        return result
+    pending: dict[str, str] = {}
+    seen: set[str] = set()
+    for item in result:
+        role = item.get("role")
+        if role in {"system", "developer"}:
+            continue
+        if role == "tool":
+            call_id = item.get("tool_call_id")
+            if (not isinstance(call_id, str) or not isinstance(item.get("content"), str)
+                    or (call_id not in pending and not item.get("_private_gmail_result"))):
+                raise ValueError("orphan, duplicate or invalid tool receipt")
+            if call_id not in pending:
+                continue
+            if item.get("name") and wire_tool_name(item["name"]) != pending[call_id]:
+                raise ValueError("tool receipt name mismatch")
+            del pending[call_id]
+            continue
+        if pending:
+            raise ValueError("missing tool receipt before next message")
+        for call in _chat_tool_calls(item.get("tool_calls")):
+            call_id = call["id"]
+            if call_id in seen:
+                raise ValueError("duplicate tool call ID")
+            try:
+                args = json.loads(call["function"]["arguments"])
+            except (ValueError, TypeError) as exc:
+                raise ValueError("invalid tool argument JSON") from exc
+            if not isinstance(args, dict):
+                raise ValueError("tool arguments must be an object")
+            pending[call_id] = call["function"]["name"]
+            seen.add(call_id)
+    if pending:
+        raise ValueError("missing tool receipt at end of history")
+    return result
+
+
 def responses_input(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Convert the existing structured conversation without flattening its order."""
     result: list[dict[str, Any]] = []
-    for message in messages:
+    for message in canonical_tool_history(messages):
         item_type = message.get("type")
         if item_type == "function_call":
             call_id = message.get("call_id")
@@ -364,7 +464,7 @@ def anthropic_messages_input(messages: list[dict[str, Any]]) -> tuple[str | None
             result.append({"role": "user", "content": pending_tool_results})
             pending_tool_results = []
 
-    for message in messages:
+    for message in canonical_tool_history(messages):
         role = message.get("role")
         content = message.get("content")
         if role in {"system", "developer"}:
@@ -380,6 +480,7 @@ def anthropic_messages_input(messages: list[dict[str, Any]]) -> tuple[str | None
                 raise ValueError("Anthropic tool history content must be text")
             pending_tool_results.append({
                 "type": "tool_result", "tool_use_id": call_id, "content": content,
+                **({"is_error": True} if message.get("is_error") else {}),
             })
             continue
 
@@ -388,6 +489,13 @@ def anthropic_messages_input(messages: list[dict[str, Any]]) -> tuple[str | None
             raise ValueError(f"unsupported message role for Anthropic Messages API: {role!r}")
         if not isinstance(content, (str, list)):
             raise ValueError("Anthropic user/assistant message content must be text or content blocks")
+        if role == "assistant" and message.get("tool_calls"):
+            blocks = [{"type": "text", "text": content}] if content else []
+            for call in _chat_tool_calls(message["tool_calls"]):
+                blocks.append({"type": "tool_use", "id": call["id"],
+                               "name": call["function"]["name"],
+                               "input": json.loads(call["function"]["arguments"])})
+            content = blocks
         result.append({"role": role, "content": content})
 
     flush_tool_results()
@@ -843,7 +951,7 @@ def chat_completions_tools(
 def chat_completions_input(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Rebuild Chat Completions history; never echo SDK dumps or internal keys."""
     result: list[dict[str, Any]] = []
-    for message in messages:
+    for message in canonical_tool_history(messages):
         if message.get("type") in {"function_call", "function_call_output"}:
             raise ValueError("Chat Completions history cannot carry Responses API items")
         role = message.get("role")
