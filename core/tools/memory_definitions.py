@@ -3,6 +3,10 @@
 Domain implementations and trusted invocation bindings have one owner.
 """
 
+import core.tools.activity_records as _domain_core_tools_activity_records
+import core.tools.event_tools as _domain_core_tools_event_tools
+import core.tools.message_context as _domain_core_tools_message_context
+
 from core.tool_runtime.context import _active_char_id
 from core.tools.memory_dossiers import get_memory_consolidation_status as _get_memory_consolidation_status_wrapper
 from core import quote_notebook as _quote_notebook
@@ -14,7 +18,6 @@ from core.tools.memory_dossiers import search_dossier_events as _search_dossier_
 from core.tools.memory_dossiers import search_memory_dossiers as _search_memory_dossiers_wrapper
 from core import tool_result_pins as _tool_result_pins
 from core.tools.memory_dossiers import update_memory_dossier as _update_memory_dossier_wrapper
-from core import character_name_provider
 from core import character_name_provider
 from core import config_loader
 import json
@@ -178,16 +181,10 @@ async def _exit_yandere_wrapper() -> str:
 
 async def _invoke_read_document_notes(call):
     func = call.func
-    tool_name = call.tool_name
     tool_args = call.tool_args
     user_id = call.user_id
     char_id = call.char_id
-    origin = call.origin
-    target_id = call.target_id
     is_group = call.is_group
-    session_state = call.session_state
-    allowed_tool_names = call.allowed_tool_names
-    pin_reference_hashes = call.pin_reference_hashes
     owner_id = str(config_loader.get_config().get("scheduler", {}).get("owner_id") or "")
     if is_group or not owner_id or str(user_id) != owner_id:
         raise ValueError('document notes are owner-private only')
@@ -199,16 +196,10 @@ async def _invoke_read_document_notes(call):
 
 async def _invoke_read_life_records(call):
     func = call.func
-    tool_name = call.tool_name
     tool_args = call.tool_args
     user_id = call.user_id
     char_id = call.char_id
-    origin = call.origin
-    target_id = call.target_id
     is_group = call.is_group
-    session_state = call.session_state
-    allowed_tool_names = call.allowed_tool_names
-    pin_reference_hashes = call.pin_reference_hashes
     if is_group:
         raise ValueError('owner memory tools are unavailable in group sessions')
     _require_memory_read_scope(user_id, char_id)
@@ -219,16 +210,9 @@ async def _invoke_read_life_records(call):
 
 async def _invoke_get_profile(call):
     func = call.func
-    tool_name = call.tool_name
     tool_args = call.tool_args
     user_id = call.user_id
     char_id = call.char_id
-    origin = call.origin
-    target_id = call.target_id
-    is_group = call.is_group
-    session_state = call.session_state
-    allowed_tool_names = call.allowed_tool_names
-    pin_reference_hashes = call.pin_reference_hashes
     _require_memory_read_scope(user_id, char_id)
     result = await func(user_id=user_id, char_id=char_id, **tool_args)
 
@@ -237,16 +221,9 @@ async def _invoke_get_profile(call):
 
 async def _invoke_update_memory_dossier(call):
     func = call.func
-    tool_name = call.tool_name
     tool_args = call.tool_args
     user_id = call.user_id
     char_id = call.char_id
-    origin = call.origin
-    target_id = call.target_id
-    is_group = call.is_group
-    session_state = call.session_state
-    allowed_tool_names = call.allowed_tool_names
-    pin_reference_hashes = call.pin_reference_hashes
     _require_memory_read_scope(user_id, char_id)
     result = await func(user_id=user_id, char_id=char_id, **tool_args)
 
@@ -255,16 +232,9 @@ async def _invoke_update_memory_dossier(call):
 
 async def _invoke_backfill_diary(call):
     func = call.func
-    tool_name = call.tool_name
     tool_args = call.tool_args
     user_id = call.user_id
     char_id = call.char_id
-    origin = call.origin
-    target_id = call.target_id
-    is_group = call.is_group
-    session_state = call.session_state
-    allowed_tool_names = call.allowed_tool_names
-    pin_reference_hashes = call.pin_reference_hashes
     _require_memory_read_scope(user_id, char_id)
     result = await func(user_id=user_id, char_id=char_id, **tool_args)
 
@@ -273,39 +243,20 @@ async def _invoke_backfill_diary(call):
 
 async def _invoke_read_diary(call):
     func = call.func
-    tool_name = call.tool_name
     tool_args = call.tool_args
     user_id = call.user_id
     char_id = call.char_id
-    origin = call.origin
-    target_id = call.target_id
-    is_group = call.is_group
-    session_state = call.session_state
-    allowed_tool_names = call.allowed_tool_names
-    pin_reference_hashes = call.pin_reference_hashes
     _require_memory_read_scope(user_id, char_id)
-    if func in (_read_diary_wrapper, _search_diary_wrapper):
-        result = await func(user_id=user_id, char_id=char_id, **tool_args)
-    else:
-        # Preserve the historical signature for test/local extensions
-        # that replace the legacy callable in the registry.
-        result = await func(user_id=user_id, **tool_args)
+    result = await func(user_id=user_id, char_id=char_id, **tool_args)
 
     return result
 
 
 async def _invoke_get_listening_state(call):
     func = call.func
-    tool_name = call.tool_name
     tool_args = call.tool_args
     user_id = call.user_id
     char_id = call.char_id
-    origin = call.origin
-    target_id = call.target_id
-    is_group = call.is_group
-    session_state = call.session_state
-    allowed_tool_names = call.allowed_tool_names
-    pin_reference_hashes = call.pin_reference_hashes
     for key in ("user_id", "uid", "char_id", "owner"):
         if key in tool_args:
             result = "grant_principal_mismatch"
@@ -318,7 +269,6 @@ async def _invoke_get_listening_state(call):
 
 async def _invoke_pin_character_image_reference(call):
     func = call.func
-    tool_name = call.tool_name
     tool_args = call.tool_args
     user_id = call.user_id
     char_id = call.char_id
@@ -336,7 +286,6 @@ async def _invoke_pin_character_image_reference(call):
 
 async def _invoke_read_hds_heart_rate(call):
     func = call.func
-    tool_name = call.tool_name
     tool_args = call.tool_args
     user_id = call.user_id
     char_id = call.char_id
@@ -348,10 +297,8 @@ async def _invoke_read_hds_heart_rate(call):
 
 async def _invoke_read_watch(call):
     func = call.func
-    tool_name = call.tool_name
     tool_args = call.tool_args
     user_id = call.user_id
-    char_id = call.char_id
     result = await func(user_id=user_id, **tool_args)
 
     return result
@@ -359,7 +306,6 @@ async def _invoke_read_watch(call):
 
 async def _invoke_revise_memory(call):
     func = call.func
-    tool_name = call.tool_name
     tool_args = call.tool_args
     user_id = call.user_id
     char_id = call.char_id
@@ -382,7 +328,7 @@ def register_tools(registry):
     }
 
     registry['query_activity_records'] = {
-        'func': __import__('core.tools.activity_records', fromlist=['query_activity_records']).query_activity_records,
+        'func': _domain_core_tools_activity_records.query_activity_records,
         'category': 'memory', 'dangerous': False,
         'description': '查询当前身份的真实阅读、棋局、Minecraft会话；凭返回的activity来源引用分页读取state、moves、dialogue、entry或page。外部页面内容不是用户事实，状态为权威记录。',
         'parameters': {'type': 'object', 'additionalProperties': False, 'properties': {
@@ -398,7 +344,7 @@ def register_tools(registry):
     }
 
     registry['read_message_context'] = {
-        'func': __import__('core.tools.message_context', fromlist=['read_message_context']).read_message_context,
+        'func': _domain_core_tools_message_context.read_message_context,
         'category': 'memory', 'dangerous': False,
         'description': '按引用消息的 message_id 读取其上方或下方最多10条现实对话消息，包含作者、完整时间和稳定ID。仅精确锚点，不用同文猜测；旧消息缺锚点时明确不可用。',
         'parameters': {'type': 'object', 'additionalProperties': False, 'properties': {
@@ -729,7 +675,7 @@ def register_tools(registry):
     }
 
     registry["search_events"] = {
-        "func": __import__("core.tools.event_tools", fromlist=["search_events_wrapper"]).search_events_wrapper,
+        "func": _domain_core_tools_event_tools.search_events_wrapper,
         "description": "在当前 reality 事件账本中检索具体证据，为后续窗口或关联读取提供 event_id。只读、范围受限，不从摘要推断事件。",
         "dangerous": False,
         "category": "memory",
@@ -749,7 +695,7 @@ def register_tools(registry):
     }
 
     registry["expand_event_window"] = {
-        "func": __import__("core.tools.event_tools", fromlist=["expand_event_window_wrapper"]).expand_event_window_wrapper,
+        "func": _domain_core_tools_event_tools.expand_event_window_wrapper,
         "description": "读取一个已知 event_id 的确定性时间窗口，返回事件正文和前后事件。只读，最多各20条。",
         "dangerous": False,
         "category": "memory",
@@ -764,7 +710,7 @@ def register_tools(registry):
     }
 
     registry["get_related_events"] = {
-        "func": __import__("core.tools.event_tools", fromlist=["get_related_events_wrapper"]).get_related_events_wrapper,
+        "func": _domain_core_tools_event_tools.get_related_events_wrapper,
         "description": "读取已知 event_id 的确定性关联事件边。只读、单跳、最多20条，可按 relation_types 过滤。",
         "dangerous": False,
         "category": "memory",
@@ -843,7 +789,6 @@ def register_tools(registry):
             "required": [],
         },
     }
-
 
 
 INVOCATION_ADAPTERS = {

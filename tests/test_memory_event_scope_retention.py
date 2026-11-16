@@ -19,7 +19,7 @@ class _Session:
 @pytest.mark.asyncio
 async def test_get_episodic_wrapper_reads_explicit_non_default_character(sandbox):
     from core.memory.episodic_memory import write_episode
-    from core.tool_dispatcher import _get_episodic_wrapper
+    from core.tools.memory_definitions import _get_episodic_wrapper
 
     uid = "memory-event-scope-owner"
     write_episode(uid, {
@@ -50,7 +50,7 @@ async def test_get_episodic_wrapper_reads_explicit_non_default_character(sandbox
 
 
 def test_memory_read_scope_rejects_empty_uid_or_character(sandbox):
-    from core.tool_dispatcher import _require_memory_read_scope
+    from core.tool_runtime.policy import _require_memory_read_scope
 
     with pytest.raises(ValueError):
         _require_memory_read_scope("", TEST_CHAR_ID)

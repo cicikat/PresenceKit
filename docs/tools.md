@@ -6,13 +6,17 @@
 
 # docs/tools.md — 工具系统
 
-AR-01（325）：`core/tool_dispatcher.py` 保留稳定入口与历史注入点；
-`core/tool_runtime/` 分担注册构建、暴露、准入、参数校验、执行与结果。
+AR-02（327）：`core/tool_dispatcher.py` 保留向外稳定入口，内部不反查 Facade；
+`core/tool_runtime/state.py` 唯一持有注册表，`registry.py` 组合域注册及显式覆盖。
+`core/tool_runtime/` 分担暴露、准入、参数校验、执行与结果。
 `core/tools/*_definitions.py` 将同域 schema、既有实现适配与 `invoke` 元数据放在一起；
 已有工具模块继续用原 `register_tools()`，不复制实现。新增工具可随注册提供
 `invoke(Invocation)`，始终先经过 `execute_structured()` 的统一闸门。
 可信主体与模型参数分离；原权限、结果及审计语义不变。迁移证据见
-[AR-01](refactors/modularization-ar01.md)。
+[AR-02](refactors/ar02-dependency-cleanup.md)。测试隔离使用
+`registry.temporary_registry()`；旧内置签名继承须显式指定
+`inherit_builtin_adapters=True`，只在注册覆盖时解析，执行时不扫描定义域。
+禁止替换 dispatcher 的整个注册表属性。MCP 与公开 alias 始终引用同一字典。
 
 314：artifacts 类新增持久桌面预览 `browser_session_start/action/status/cancel`、`browser_snapshot/screenshot/console/visual_review`，沿用 owner 私聊 Path C 与设备工作区权限。开始/交互/取消按 write 分类，证据读取按 read 分类；仅授权的隔离本地页面可交互。截图与视觉评审是独立动作，页面文字与视觉观察不得提升为授权或文件保存证据。旧 `browser_automation` 和 remote_server 本机执行限制保留。合同及支持边界见 [设备文件合同](device-file-agent-contract.md#isolated-desktop-browser-preview-314)。
 
@@ -657,7 +661,8 @@ self_access:
 
 ## 工具注册表
 
-文件：`core/tool_dispatcher.py` → `_TOOL_REGISTRY`
+唯一状态：`core/tool_runtime/state.py` → `_TOOL_REGISTRY`；组合入口
+`core/tool_runtime/registry.py`；`core/tool_dispatcher.py` 仅同对象导出。
 
 `read_long_user_message(sequence, offset=0)`：在当前用户、当前角色的现实私聊中，按层 9 历史显示的稳定序号读取单条超长用户消息原文，每次最多 1400 字。只读、分段返回；群聊禁用，不接受调用方指定其他用户或角色。概述不足以回答细节时再查，工具结果走常规有界层 10。
 
@@ -873,7 +878,7 @@ worker 在到期、异常、断线、显式取消和进程关闭时尝试停止�
 
 ## 探针规则（get_probe_prompt）
 
-文件：`core/tool_dispatcher.py` → `get_probe_prompt()`
+实现：`core/tool_runtime/exposure.py` → `get_probe_prompt()`；dispatcher 稳定导出。
 
 探针 prompt 现在从 `_TOOL_REGISTRY` 动态构建，不再硬编码规则列表。
 每个 `info` / `desktop` 类工具注册时需提供 `examples` 和 `keywords` 字段：
@@ -1087,8 +1092,8 @@ class ToolResult:
 ## 新增工具的规范
 
 1. 在 `core/tools/` 下创建独立实现文件
-2. 在 `tool_dispatcher.py` 顶部写 wrapper 函数（async）
-3. 在 `_TOOL_REGISTRY` 里注册，填写 `func / description / dangerous / category / parameters`
+2. 在所属 `*_definitions.py` 或已有域模块实现 wrapper 和可信调用 adapter
+3. 由域 `register_tools()` 注册到唯一 `_TOOL_REGISTRY`，填写 `func / description / dangerous / category / parameters`；特殊签名注册 `invoke(Invocation)`，无需修改 dispatcher 私有分支
 4. 如果需要探针覆盖（info/desktop 类），在注册条目里补充 `examples`（触发例句）和 `keywords`（快速路径关键词），`get_probe_prompt()` 会自动同步，无需手动改探针规则
 5. 工具执行无需风险说明或确认；声明 effect 供重试、审计及权限管理使用。
 6. 在 `config.yaml` 的 `tools:` 节点决定默认开关状态

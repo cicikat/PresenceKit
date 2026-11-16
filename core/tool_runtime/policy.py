@@ -394,11 +394,10 @@ def permission_admission(tool_name, tool_args, tool_info, scope: InvocationScope
     return None
 
 
-
 def principal_allowed(tool_name, info, uid, char_id, *, autonomy=False):
     """Shared principal/grant boundary; origin/group restrictions are additional."""
     if tool_name in _computer_use.OWNER_TOOL_NAMES:
-        return _computer_use.enabled() and _computer_use.owner_scope(uid, char_id)
+        return _computer_use.owner_scope(uid, char_id)
     if tool_name in _device_file_tools.NAMES:
         return not autonomy and _device_file_tools.service.allowed(uid, char_id)
     if tool_name in _gmail_tools.NAMES:

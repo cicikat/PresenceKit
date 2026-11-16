@@ -120,16 +120,9 @@ async def _life_records_wrapper(user_id: str, category: str = "", date_from: str
 
 async def _invoke_read_toy_file(call):
     func = call.func
-    tool_name = call.tool_name
     tool_args = call.tool_args
     user_id = call.user_id
     char_id = call.char_id
-    origin = call.origin
-    target_id = call.target_id
-    is_group = call.is_group
-    session_state = call.session_state
-    allowed_tool_names = call.allowed_tool_names
-    pin_reference_hashes = call.pin_reference_hashes
     result = await func(user_id=user_id, char_id=char_id, **tool_args)
 
     return result
@@ -279,7 +272,6 @@ def register_tools(registry):
         "examples": ["房间光线最近有变化吗", "手机能读到周围的亮度吗"],
         "keywords": ["环境光", "房间光线", "房间声音", "手机亮度"],
     }
-
 
 
 INVOCATION_ADAPTERS = {

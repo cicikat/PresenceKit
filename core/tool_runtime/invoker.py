@@ -4,8 +4,13 @@ Domain adapters run only after execution has passed the shared admission gates.
 The model's argument dictionary never supplies the trusted context fields.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
+
+if TYPE_CHECKING:
+    from core.session_state import SessionState
 
 
 @dataclass(frozen=True)
@@ -18,7 +23,7 @@ class Invocation:
     origin: str
     target_id: str
     is_group: bool
-    session_state: object
+    session_state: SessionState | None
     allowed_tool_names: frozenset[str] | None
     pin_reference_hashes: frozenset[str]
     notify_status: Callable

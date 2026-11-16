@@ -126,7 +126,8 @@ async def login_xiaohongshu(action: str, auth=Depends(require_scopes('admin'))):
 
 
 def _registry_rows(cfg: dict) -> list[dict]:
-    from core.tool_dispatcher import _INTIFACE_TOOL_NAMES, _TOOL_REGISTRY, intiface_opted_in
+    from core.tool_runtime.policy import _INTIFACE_TOOL_NAMES
+    from core.tool_dispatcher import _TOOL_REGISTRY, intiface_opted_in
 
     tools_config = cfg.get("tools", {})
     rows: list[dict] = []

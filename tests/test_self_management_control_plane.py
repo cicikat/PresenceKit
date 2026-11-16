@@ -30,7 +30,7 @@ def test_global_and_privacy_controls_remain_owner_only_with_stale_grants(sandbox
 
     from core.self_management import policy, registry, store
     from core.self_management.service import agent_change, agent_gateway_context, user_grant
-    from core.tool_dispatcher import _list_self_capabilities_wrapper
+    from core.tools.files_agents_definitions import _list_self_capabilities_wrapper
 
     owner_only = (
         registry.TOOL_LOOP_ENABLED, registry.MCP_ENABLED, registry.SCHEDULER_ENABLED,

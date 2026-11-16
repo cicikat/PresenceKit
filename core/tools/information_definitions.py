@@ -31,16 +31,10 @@ async def _read_xiaohongshu_wrapper(user_id, share: str='', read_id: str='', *, 
 
 async def _invoke_read_xiaohongshu(call):
     func = call.func
-    tool_name = call.tool_name
     tool_args = call.tool_args
     user_id = call.user_id
     char_id = call.char_id
-    origin = call.origin
-    target_id = call.target_id
     is_group = call.is_group
-    session_state = call.session_state
-    allowed_tool_names = call.allowed_tool_names
-    pin_reference_hashes = call.pin_reference_hashes
     if is_group:
         raise ValueError('scoped reader continuation is owner-private only')
     _require_memory_read_scope(user_id,char_id)
@@ -51,7 +45,6 @@ async def _invoke_read_xiaohongshu(call):
 
 async def _invoke_web_search(call):
     func = call.func
-    tool_name = call.tool_name
     tool_args = call.tool_args
     user_id = call.user_id
     char_id = call.char_id
@@ -147,7 +140,6 @@ def register_tools(registry):
         registry[_xhs_tool]={'func':getattr(_xhs_continuation,_xhs_tool),'category':'info','dangerous':False,
             'description':_xhs_description,'parameters':{'type':'object','additionalProperties':False,'properties':_xhs_properties,'required':_xhs_required},
             'examples':[_xhs_description],'keywords':['小红书','翻页','评论','图片','主页标题'],'trace_args':['count','start','cursor'],'echo_event_log':False}
-
 
 
 INVOCATION_ADAPTERS = {

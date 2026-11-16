@@ -112,7 +112,7 @@ def test_episodic_top_layer_depends_on_bucket(sandbox, monkeypatch, bucket, expe
 
 def test_get_episodic_tool_does_not_strengthen(sandbox):
     import asyncio
-    from core.tool_dispatcher import _get_episodic_wrapper
+    from core.tools.memory_definitions import _get_episodic_wrapper
     uid = "m4f"
     _seed(uid, [_ep("x", 10, strength=0.5)])
     asyncio.run(_get_episodic_wrapper(uid, "周末计划", char_id=CHAR))

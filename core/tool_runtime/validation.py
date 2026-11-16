@@ -1,10 +1,6 @@
 """Tool validation."""
 
 
-
-
-
-
 def _schema_value_matches(value, expected: object) -> bool:
     if isinstance(expected, list):
         return any(_schema_value_matches(value, item) for item in expected)

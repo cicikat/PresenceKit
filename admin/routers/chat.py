@@ -30,8 +30,7 @@ logger = logging.getLogger(__name__)
 # 打破第四面墙的提示——追加到 Author's Note 层
 
 
-from core.owner_chat.service import run_owner_chat_turn, _execute_owner_chat_turn_locked
-from core.owner_chat.prepare import _probe_and_execute_tools
+from core.owner_chat.service import run_owner_chat_turn
 
 
 

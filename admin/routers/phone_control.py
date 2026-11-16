@@ -134,7 +134,7 @@ async def phone_control_debug_start(body: dict = Body(...), auth=Depends(require
     task_state 注册、behavior 下发都复用 tool_dispatcher._phone_control_start_wrapper()，
     跟真实调用路径是同一份代码，不是另起一套逻辑。
     """
-    from core.tool_dispatcher import _phone_control_start_wrapper
+    from core.tools.devices_definitions import _phone_control_start_wrapper
 
     task = str(body.get("task") or "").strip()
     if not task:

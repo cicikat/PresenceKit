@@ -1,3 +1,5 @@
+
+import core.tool_runtime.policy as tool_policy
 import asyncio
 import io
 import base64
@@ -141,8 +143,8 @@ def test_screen_summary_never_enters_action_trace():
 def test_global_feature_and_explicit_tool_deny_both_apply(monkeypatch):
     from core import tool_dispatcher
     monkeypatch.setattr('core.config_loader.get_config', lambda: {'tools': {'observe_user_screen': {'enabled': False}}})
-    assert not tool_dispatcher._is_tool_enabled('observe_user_screen')
+    assert not tool_policy._is_tool_enabled('observe_user_screen')
     monkeypatch.setattr('core.config_loader.get_config', lambda: {})
-    assert tool_dispatcher._is_tool_enabled('observe_user_screen')
+    assert tool_policy._is_tool_enabled('observe_user_screen')
     monkeypatch.setattr(service, 'enabled', lambda: False)
-    assert not tool_dispatcher._is_tool_enabled('observe_user_screen')
+    assert not tool_policy._is_tool_enabled('observe_user_screen')

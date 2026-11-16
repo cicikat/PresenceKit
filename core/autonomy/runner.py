@@ -1104,7 +1104,8 @@ def _runtime_tools(uid: str, char_id: str, state: dict) -> tuple[list[dict], dic
     """Build a fresh autonomy tool surface; never reuse a stale capability grant."""
     tools = policy.allowed_tools(uid, char_id, state)
     from core.self_management.service import agent_gateway_context
-    from core.tool_dispatcher import _TOOL_REGISTRY, _is_tool_enabled
+    from core.tool_dispatcher import _TOOL_REGISTRY
+    from core.tool_runtime.policy import _is_tool_enabled
     context = agent_gateway_context(uid, char_id)
     gateway = _TOOL_REGISTRY.get("manage_self_capability")
     if context is not None and isinstance(gateway, dict) and _is_tool_enabled("manage_self_capability"):

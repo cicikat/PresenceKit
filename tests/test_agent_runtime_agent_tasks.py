@@ -199,7 +199,8 @@ def test_cross_character_query_and_model_authority_fields_are_rejected(monkeypat
     from core.agent_runtime import agent_tasks
     from core.agent_runtime.models import TaskPrincipal
     from core.agent_runtime.task_manager import TaskManagerError
-    from core.tool_dispatcher import _schema_errors, _TOOL_REGISTRY
+    from core.tool_runtime.validation import _schema_errors
+    from core.tool_dispatcher import _TOOL_REGISTRY
 
     with pytest.raises(TaskManagerError, match="task_not_found"):
         agent_tasks.get_agent_task(TaskPrincipal.reality(UID, "other-character"), "0" * 32)

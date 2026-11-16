@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import core.tool_runtime.policy as _domain_core_tool_runtime_policy
+
 import asyncio
 from types import SimpleNamespace
 
@@ -25,7 +27,7 @@ def test_autonomy_state_is_durable_and_manual_enqueue_is_not_execution(sandbox):
 
 def test_autonomy_origin_is_explicit_and_fail_closed_for_unknown(sandbox):
     from core import tool_dispatcher
-    assert "autonomy_loop" in tool_dispatcher._EXECUTE_ALLOWED_ORIGINS
+    assert "autonomy_loop" in _domain_core_tool_runtime_policy._EXECUTE_ALLOWED_ORIGINS
     result = asyncio.run(tool_dispatcher.execute_structured("get_time", {}, "owner", "owner", False, object(), origin="unknown_autonomy", char_id="char"))
     assert result.status == "tool_failed"
     assert result.result is None and result.confirmation_request is None

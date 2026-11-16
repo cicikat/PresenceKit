@@ -1,9 +1,7 @@
 """Tool outcome."""
 
-from core.agent_runtime import computer_use as _computer_use
 from core.tools import device_file_tools as _device_file_tools
 from core.tools import gmail_tools as _gmail_tools
-import json
 import logging
 logger = logging.getLogger("core.tool_dispatcher")
 
@@ -31,9 +29,9 @@ _TOOL_FALLBACKS = {
 from dataclasses import dataclass
 def _log_execute_failure_context(tool_name: str, tool_args: dict, origin: str) -> None:
     """Content-free diagnostics, including tools with private arguments."""
-    keys = sorted(str(k)[:64] for k in tool_args) if isinstance(tool_args, dict) else []
+    argument_count = len(tool_args) if isinstance(tool_args, dict) else 0
     logger.error("[tool_dispatcher.execute] failure context: tool=%s origin=%s argument_count=%d",
-                 tool_name, origin, len(keys))
+                 tool_name, origin, argument_count)
 
 
 def log_execution_error(tool_name, origin, error):

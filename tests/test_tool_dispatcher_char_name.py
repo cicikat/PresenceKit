@@ -103,7 +103,7 @@ def _get_raw_desc(tool_name: str) -> str:
 class TestExitYandereWrapper:
     @pytest.mark.asyncio
     async def test_uses_active_char_name(self):
-        from core.tool_dispatcher import _exit_yandere_wrapper
+        from core.tools.memory_definitions import _exit_yandere_wrapper
         pl = _make_pipeline("红茶")
         with patch("core.pipeline_registry.get", return_value=pl):
             with patch("core.config_loader.get_config", return_value={"emerald_desktop": {"path": "/tmp/x"}}):

@@ -89,7 +89,7 @@ async def _maybe_push_avatar_directive(mood_state: dict, char_id: str) -> None:
     """Phase A v8: push avatar_directive to desktop client when mood changes."""
     import time as _t
     try:
-        from core.tool_dispatcher import _push_desktop_action
+        from core.tools.devices_definitions import _push_desktop_action
         from core.pipeline_registry import get as _get_pipeline
         active = _get_pipeline()
         if active is not None and getattr(active, "_active_character_id", "") != char_id:

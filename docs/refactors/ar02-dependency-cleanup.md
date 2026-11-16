@@ -885,3 +885,140 @@ Baseline and each stage are recorded below after execution. Full synthetic snaps
   frozen roles, receipts and canonical writes. QQ/autonomy keep their existing
   Pipeline/turn_sink chain. No desktop/mobile repo or protocol changes.
 - D matrix: all three forbidden directions **0**; all six snapshots unchanged.
+
+### E — direction guard, deleted glue and final contracts
+
+- CI guard: `tests/test_ar02_dependency_directions.py`, included in Smoke's
+  tools inventory and ordinary full collection. It AST-walks all nested runtime,
+  owner, Dream core modules, definitions and Dream children, including local and
+  TYPE_CHECKING imports. It rejects reverse imports, aliased/dynamic loaders,
+  module/namespace service locators and reflective module lookup; legitimate
+  domain-object reflection and registry reload existence checks remain legal.
+  Original domain `__import__` registrations now use explicit domain imports.
+- Fault injection: 27 source variants across three forbidden edges (direct,
+  local, TYPE_CHECKING, aliased importlib, computed __import__, sys.modules,
+  getattr and globals). A real source mutation appended a reverse import to
+  execution.py: the actual repository guard failed, then passed after restore.
+- Extension proof: a new synthetic domain tool plus fragmented SDK model stream
+  reaches the real protocol collector, schema, dispatcher and trusted adapter;
+  a new mounted Dream child uses only common validation/auth contracts. Neither
+  requires a central private branch. These and lifecycle/privacy/direction tests:
+  **34 passed / 0 failed / 0 skipped**.
+- Removed old test-only private exports from tool and Dream facades; tests import
+  their actual owners. Removed chat's private probe/locked-service exports.
+  Removed per-adapter unused argument unpacking and redundant imports. Existing
+  outward endpoint/function exports and `run_owner_chat_turn` remain stable.
+- `prepare_overrides` is the sole explicit builtin adapter inheritance helper;
+  test patches and temporary overrides share it. There is no invocation-time
+  scan, copied registry authority, universal dependency bag or new DI framework.
+- Final opening→current JSON comparison is exact for every registry metadata
+  field/order, default schema, Path A probe, OpenAPI, routes and static script
+  list. All five domain definition modules retain identical function signatures
+  and INVOCATION_ADAPTERS maps (AST compared against opening Git source).
+  Ignored snapshots are `.tmp/ar01-ar02-{before,a,b,c,d,e}.json`; logs and
+  callable/consumer evidence are `.tmp/ar02-*`.
+
+| Forbidden import sites | Opening | Final |
+|---|---:|---:|
+| tool_runtime → tool_dispatcher | 31 | 0 |
+| domain definitions → tool_dispatcher | 105 | 0 |
+| Dream children → dream facade | 67 | 0 |
+| owner_chat → admin.routers.chat | 1 | 0 |
+
+#### Retained compatibility and consumers
+
+| Stable alias/API | Unique owner | Current consumers / removal condition |
+|---|---|---|
+| dispatcher `_TOOL_REGISTRY` | state; registry composes | settings_mcp/tools/misc, autonomy, character_permissions, action_trace, scheduler, pins, continuity, self-management/settings and recipes; same-object compatibility, no planned removal while externally used |
+| dispatcher public schema/probe/effect/loop/result/class/execute APIs, parse_tail_brace, resolve_action_target | runtime/domain/control_markers | Pipeline, pretool, settings, main, autonomy and extensions; public APIs remain |
+| register_send_callback and class forwarder | dispatcher | main initialization; retained public legacy registration API, never injected back into runtime |
+| dream `_valid_world_layer_values` | dream_presets | group_dream; retain until group adapter migrates |
+| dream endpoints and router | domain routers | admin_server and Python API callers; outward same-object exports remain |
+| chat run_owner_chat_turn | owner_chat.service | mobile, owner_turn and companion; outward same-object export remains |
+
+The former `_is_tool_enabled`, `_INTIFACE_TOOL_NAMES`, `_phone_control_start_wrapper`
+and `_push_desktop_action` aliases were removed after migrating **all** repository
+consumers to policy/devices. This includes small import-only changes to autonomy,
+continuity, pins, Pipeline, embodiment/heart and phone_control/settings_tools.
+They are private symbols; public callable signatures remain unchanged. The
+diary adapter's callable-identity signature fallback was also removed: scoped
+reads always bind the frozen character. Its old test double now accepts the
+real trusted argument contract.
+
+#### Full-run findings and repairs
+
+- First full run: **8595 passed / 7 failed / 12 errors / 0 skipped**, plus
+  13 passing subtests. Twelve fixture errors came from a loop still patching
+  removed dispatcher.get_config. Five failures exposed remaining production
+  private-alias consumers after test seams moved. These consumers now import
+  the actual domain/policy owner; no magic forwarding was reintroduced.
+- Hardware success test used two inconsistent owner configs before migration;
+  its setup now uses the shared owner config and explicitly disables result
+  candidate tracing for that fixture tool. The exact original completion-text
+  assertion remains, with pin behavior covered by its dedicated real-entry tests.
+- One backup test hit a transient Windows rename PermissionError. The unchanged
+  test passed in the repair group; backup production code was not modified.
+- Cold capability lookup was audited separately: direct state import could
+  observe an uninitialized builtin registry. A fresh-process, synthetic-config
+  test first failed its capability assertion, then passed after capability
+  lookup imported the registry composer. All reads still use the same state
+  identity; no lazy facade callback or second registry was added.
+- The initial repair run caught one remaining direct test attribute access
+  (94 passed / 1 failed); after completing its migration, expanded repair group
+  **228 passed / 0 failed / 0 skipped**. Lifecycle/Computer Use/diary rerun:
+  **74 passed / 0 failed / 0 skipped**. Computer Use enablement stays in the
+  original config gate, preserving denial ordering/text; principal policy only
+  checks the shared owner/character grant.
+
+#### Validation scope and deferred deletion candidates
+
+Internal ownership changed; no settings fields, defaults, effective states,
+permissions, Admin assets or client protocol changed, so no control-surface or
+client audit update is needed. No static assets changed; browser UI/cache
+acceptance is inapplicable. Real model/device/production acceptance and remote
+Python 3.10/3.12 CI for this new head are **not_verified** (no push/deploy was
+requested). Local supported Python 3.12 evidence follows below.
+This records only this refactor's unperformed production regression; prior
+production acceptance was not reopened or made a prerequisite.
+
+Safe private compatibility glue and unreachable /chat code were removed here.
+Legacy Admin UI and its adapters remain deletion-brief candidates, requiring
+separate product scope; they were not cleaned as part of backend decoupling.
+
+### Final validation and commits
+
+Python **3.12.13**, Windows; `TEMP/TMP` point to ignored `.tmp/ar02-temp`,
+`PYTEST_XDIST_AUTO_NUM_WORKERS=8`. Final source is covered by:
+
+```text
+python -m pytest -n auto -q --tb=short --durations=12 -o faulthandler_timeout=90
+  8615 passed, 13 subtests passed, 0 failed, 0 errors, 0 skipped (275.59s)
+python -m pytest -m smoke -q --tb=short
+  270 passed, 8346 deselected, 0 failed, 0 errors, 0 skipped (41.66s)
+python -m pytest -q tests/test_ar02_dependency_directions.py
+  29 passed; included again in final full and smoke
+```
+
+The source-level reverse-import mutation and privacy mutation failed the actual
+architectural/private-text assertions, then restored source passed. No xfail or
+skip was added, no business assertion loosened. All stage diffs passed
+`git diff --check`; normal and ignore-CR diff stats agree for staged files.
+Final registry/schema/probe/OpenAPI/routes/script values equal opening values;
+five domain function signatures/adapter maps also match. Full-run repair logs:
+`.tmp/ar02-final-full.log`, `.tmp/ar02-e-recheck2.log`,
+`.tmp/ar02-final-lifecycle.log`, `.tmp/ar02-final-full-recheck.log`,
+`.tmp/ar02-final-smoke-recheck.log`.
+
+| Stage | Independent commit | Main owners |
+|---|---|---|
+| A | `9341e11` | registry, context, domain definitions and test registry seam |
+| B | `a7dc2a9` | state, policy/exposure/validation/invoker/execution/outcome |
+| C | `ff6822e` | Dream child routers, session_control, authoring |
+| D | `418aa01` | owner_chat types/service/prepare and 410 cleanup |
+| E | this report's final commit | guards, remaining consumers, export cleanup and docs |
+
+Construction stayed on the existing branch; no construction branch/worktree,
+push, PR, merge, deployment or production-state/config change. Unrelated dirty
+work and task files are excluded from all five commits. Remote CI for this head,
+Python 3.10, real models and devices remain `not_verified`; local automated
+evidence is not represented as any of those acceptances.

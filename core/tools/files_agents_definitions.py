@@ -384,12 +384,6 @@ async def _invoke_device_workspace_list(call):
     tool_args = call.tool_args
     user_id = call.user_id
     char_id = call.char_id
-    origin = call.origin
-    target_id = call.target_id
-    is_group = call.is_group
-    session_state = call.session_state
-    allowed_tool_names = call.allowed_tool_names
-    pin_reference_hashes = call.pin_reference_hashes
     result = _device_file_tools.format_result(await func(tool_name, user_id, char_id, tool_args))
 
     return result
@@ -397,16 +391,9 @@ async def _invoke_device_workspace_list(call):
 
 async def _invoke_gmail_list_messages(call):
     func = call.func
-    tool_name = call.tool_name
     tool_args = call.tool_args
     user_id = call.user_id
     char_id = call.char_id
-    origin = call.origin
-    target_id = call.target_id
-    is_group = call.is_group
-    session_state = call.session_state
-    allowed_tool_names = call.allowed_tool_names
-    pin_reference_hashes = call.pin_reference_hashes
     result = await _gmail_tools.execute(func, user_id, char_id, tool_args)
 
     return result
@@ -414,16 +401,9 @@ async def _invoke_gmail_list_messages(call):
 
 async def _invoke_list_character_intents(call):
     func = call.func
-    tool_name = call.tool_name
     tool_args = call.tool_args
     user_id = call.user_id
     char_id = call.char_id
-    origin = call.origin
-    target_id = call.target_id
-    is_group = call.is_group
-    session_state = call.session_state
-    allowed_tool_names = call.allowed_tool_names
-    pin_reference_hashes = call.pin_reference_hashes
     result = await _intent_tools.execute(func, user_id, char_id, tool_args)
 
     return result
@@ -431,7 +411,6 @@ async def _invoke_list_character_intents(call):
 
 async def _invoke_self_tool_define(call):
     func = call.func
-    tool_name = call.tool_name
     tool_args = call.tool_args
     user_id = call.user_id
     char_id = call.char_id
@@ -440,7 +419,6 @@ async def _invoke_self_tool_define(call):
     is_group = call.is_group
     session_state = call.session_state
     allowed_tool_names = call.allowed_tool_names
-    pin_reference_hashes = call.pin_reference_hashes
     for key in ("user_id", "uid", "char_id", "owner", "realm", "origin"):
         if key in tool_args:
             result = "grant_principal_mismatch"
@@ -462,8 +440,6 @@ async def _invoke_fs_list(call):
     user_id = call.user_id
     char_id = call.char_id
     origin = call.origin
-    is_group = call.is_group
-    pin_reference_hashes = call.pin_reference_hashes
     for key in ("user_id", "uid", "char_id", "owner", "realm"):
         if key in tool_args:
             result = "grant_principal_mismatch"
@@ -756,7 +732,6 @@ def register_tools(registry):
         "keywords": ["self action history", "capability audit"],
         "self_management_read": True, "echo_event_log": False,
     }
-
 
 
 INVOCATION_ADAPTERS = {

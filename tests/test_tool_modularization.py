@@ -108,3 +108,19 @@ async def test_execution_failure_logs_only_content_free_diagnostics(caplog):
     assert private_argument not in caplog.text
     assert private_exception not in caplog.text
     assert "error_type=RuntimeError" in caplog.text
+
+
+def test_cold_capability_lookup_initializes_builtin_registry():
+    """A first capability request must see builtins before any facade import."""
+    import subprocess
+    import sys
+
+    source = (
+        "import tests.conftest; "
+        "from core import sandbox; "
+        "sandbox._instance = sandbox.DataPaths(mode='test', test_session_id='ar02-cold'); "
+        "from core.self_management.registry import capability_for_tool; "
+        "assert capability_for_tool('get_time') == 'tool.use:get_time'"
+    )
+    result = subprocess.run([sys.executable, "-c", source], capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stderr

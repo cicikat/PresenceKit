@@ -1,3 +1,5 @@
+
+import core.tools.life_media_definitions as _domain_core_tools_life_media_definitions
 import base64
 import io
 import json
@@ -292,10 +294,10 @@ async def test_character_reads_description_only_with_owner_permission(client,mon
     body=operation();body['image_mime']='image/png'
     store.sync('owner','device',body,b'fixture')
     store.finish(store.claim(),{'recognition_description':'可读账单内容'})
-    result=await tool_dispatcher._life_records_wrapper('owner')
+    result=await _domain_core_tools_life_media_definitions._life_records_wrapper('owner')
     assert '可读账单内容' in result.raw_data
     assert '用户备注和校正优先' in result.safe_summary
     cfg['life_records']['character_readable']=False
-    assert '未开放' in await tool_dispatcher._life_records_wrapper('owner')
+    assert '未开放' in await _domain_core_tools_life_media_definitions._life_records_wrapper('owner')
     cfg['life_records']['character_readable']=True
-    assert '未开放' in await tool_dispatcher._life_records_wrapper('someone_else')
+    assert '未开放' in await _domain_core_tools_life_media_definitions._life_records_wrapper('someone_else')

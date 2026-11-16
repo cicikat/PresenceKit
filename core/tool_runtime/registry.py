@@ -91,11 +91,7 @@ def temporary_registry(entries, *, inherit_builtin_adapters=False):
     Builtin signature inheritance is explicit and resolved here, never per call.
     """
     previous = dict(_TOOL_REGISTRY)
-    replacements = {name: dict(spec) for name, spec in entries.items()}
-    if inherit_builtin_adapters:
-        for name, spec in replacements.items():
-            if name in _BUILTIN_ADAPTERS:
-                spec.setdefault("invoke", _BUILTIN_ADAPTERS[name])
+    replacements = prepare_overrides(entries, inherit_builtin_adapters=inherit_builtin_adapters)
     _TOOL_REGISTRY.clear()
     _TOOL_REGISTRY.update(replacements)
     try:
@@ -103,3 +99,13 @@ def temporary_registry(entries, *, inherit_builtin_adapters=False):
     finally:
         _TOOL_REGISTRY.clear()
         _TOOL_REGISTRY.update(previous)
+
+
+def prepare_overrides(entries, *, inherit_builtin_adapters=False):
+    """Resolve explicitly requested builtin signatures before publishing specs."""
+    replacements = {name: dict(spec) for name, spec in entries.items()}
+    if inherit_builtin_adapters:
+        for name, spec in replacements.items():
+            if name in _BUILTIN_ADAPTERS:
+                spec.setdefault("invoke", _BUILTIN_ADAPTERS[name])
+    return replacements

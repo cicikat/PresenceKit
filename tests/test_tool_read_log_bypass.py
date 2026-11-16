@@ -46,7 +46,7 @@ async def test_execute_bypass_read_log_allows_reread_and_refreshes_fingerprint(s
 
     read_diary_calls: list = []
 
-    async def _fake_read_diary(user_id: str, date: str = "") -> str:
+    async def _fake_read_diary(user_id: str, date: str = "", *, char_id: str) -> str:
         read_diary_calls.append(user_id)
         return "模拟日记内容"
 

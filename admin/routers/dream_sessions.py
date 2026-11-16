@@ -6,17 +6,10 @@ from admin.routers import dream_presets
 from core.dream import session_control
 
 import logging
-import json
-import re
-import re as _re
-import time
-from pathlib import Path
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException
 from admin.auth import require_scopes
-from admin.routers._common import requested_char_id, resolve_requested_char_id
-from core import config_loader
-from core import sandbox
+from admin.routers._common import resolve_requested_char_id
 
 router = APIRouter()
 logger = logging.getLogger("admin.routers.dream")

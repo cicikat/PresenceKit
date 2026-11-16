@@ -317,7 +317,9 @@ def test_redaction_before_model_export(sandbox):
 def test_creating_python_is_not_a_process_grant(sandbox):
     created = _create("script.py", "print('hi')")
     assert created["ok"] is True
-    from core.tool_dispatcher import _SIDE_EFFECT_TOOLS, _TOOL_REGISTRY, is_side_effect_tool
+    from core.tool_runtime.policy import _SIDE_EFFECT_TOOLS
+    from core.tool_dispatcher import _TOOL_REGISTRY
+    from core.tool_dispatcher import is_side_effect_tool
     assert _TOOL_REGISTRY["self_create"]["effect"] == "write"
     assert "process_run" not in created
     for name in ("self_create", "self_update", "self_move", "self_delete", "self_restore"):

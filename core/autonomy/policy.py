@@ -203,7 +203,8 @@ def decide_autonomy_tools(uid: str, char_id: str, state: dict) -> list[AutonomyT
     from core.deployment_capabilities import tool_allowed as deployment_tool_allowed
     from core.self_management import registry as capability_registry, store as capability_store
     from core.self_management.policy import effective as capability_effective
-    from core.tool_dispatcher import _TOOL_REGISTRY, _is_tool_enabled, get_tool_effect, get_tools_schema, is_side_effect_tool
+    from core.tool_dispatcher import _TOOL_REGISTRY, get_tool_effect, get_tools_schema, is_side_effect_tool
+    from core.tool_runtime.policy import _is_tool_enabled
 
     schemas = {((item.get("function") or item).get("name")) for item in get_tools_schema(char_id=char_id, uid=uid, autonomy=True)}
     configured = state.get("config", {}).get("tools", {})

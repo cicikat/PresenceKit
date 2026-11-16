@@ -12,8 +12,10 @@
 
 ### 后端白名单执行
 
-LLM 不能直接执行系统能力。所有工具都必须在 `core/tool_dispatcher.py` 的 `_TOOL_REGISTRY`
-注册，通过 `execute_structured()` 做开关、权限和参数校验。tuple `execute()` 已删除。
+LLM 不能直接执行系统能力。所有工具都必须由域模块注册到
+`core/tool_runtime/state.py` 的唯一 `_TOOL_REGISTRY`（`registry.py` 组合），
+通过 `core.tool_dispatcher.execute_structured()` 稳定入口做开关、权限和参数校验。
+内部策略、执行和域定义不得反查 Facade。tuple `execute()` 已删除。
 
 - 探针只暴露 `info` / `desktop` 类工具：`get_tools_schema(categories=["info", "desktop"])`
 - 角色默认工具权限全开，执行不需要风险说明或二次确认；用户可手动调整全局及角色权限。

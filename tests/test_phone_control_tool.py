@@ -1,3 +1,5 @@
+
+import core.tools.devices_definitions as device_tools
 from tests.fixtures.public_assets import TEST_CHAR_ID
 """phone_control_start 工具的门禁行为：安全模式拦截、危险模式下仍需二次确认。"""
 import json
@@ -23,7 +25,7 @@ class _Session:
 
 @pytest.mark.asyncio
 async def test_wrapper_rejects_empty_task(sandbox):
-    result = await tool_dispatcher._phone_control_start_wrapper("", user_id="u1", char_id=TEST_CHAR_ID)
+    result = await device_tools._phone_control_start_wrapper("", user_id="u1", char_id=TEST_CHAR_ID)
     assert "没听清楚" in result or "没法" in result
 
 
@@ -57,7 +59,7 @@ async def test_wrapper_starts_task_and_queues_mobile_behavior(sandbox, monkeypat
     mobile = MobileChannel()
     registry.register(mobile)
 
-    result = await tool_dispatcher._phone_control_start_wrapper(
+    result = await device_tools._phone_control_start_wrapper(
         "帮我点杯奶茶", user_id="u1", char_id=TEST_CHAR_ID,
     )
     assert "已经把任务派给手机了" in result

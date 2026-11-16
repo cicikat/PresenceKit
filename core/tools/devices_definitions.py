@@ -308,16 +308,9 @@ async def _invite_video_call_wrapper(user_id: str, char_id: str) -> str:
 
 async def _invoke_observe_user_screen(call):
     func = call.func
-    tool_name = call.tool_name
-    tool_args = call.tool_args
     user_id = call.user_id
     char_id = call.char_id
-    origin = call.origin
-    target_id = call.target_id
     is_group = call.is_group
-    session_state = call.session_state
-    allowed_tool_names = call.allowed_tool_names
-    pin_reference_hashes = call.pin_reference_hashes
     if is_group:
         raise ValueError("device observation is owner-only")
     result = await func(user_id=user_id, char_id=char_id)
@@ -327,16 +320,9 @@ async def _invoke_observe_user_screen(call):
 
 async def _invoke_agent_session_start(call):
     func = call.func
-    tool_name = call.tool_name
     tool_args = call.tool_args
     user_id = call.user_id
     char_id = call.char_id
-    origin = call.origin
-    target_id = call.target_id
-    is_group = call.is_group
-    session_state = call.session_state
-    allowed_tool_names = call.allowed_tool_names
-    pin_reference_hashes = call.pin_reference_hashes
     result = await func(user_id=user_id, char_id=char_id, **tool_args)
 
     return result
@@ -670,7 +656,6 @@ def register_tools(registry):
         "keywords": ["硬件任务状态", "还剩多久", "玩具状态"],
         "trace_args": ["job_id"],
     }
-
 
 
 INVOCATION_ADAPTERS = {

@@ -11,7 +11,7 @@ from core import context_continuity as continuity, life_records, character_docum
 def configured(sandbox, monkeypatch):
     from core import config_loader, tool_dispatcher
     config = {'scheduler': {'owner_id': 'owner-test'}, 'life_records': {'enabled': True, 'character_readable': True}}
-    for module in (config_loader, life_records, tool_dispatcher):
+    for module in (config_loader, life_records):
         monkeypatch.setattr(module, 'get_config', lambda: config)
     monkeypatch.setattr(tool_dispatcher, 'get_tools_schema', lambda **kw: [
         {'function': {'name': name}} for name in ('read_document', 'reread_image', 'read_life_records', 'observe_user_screen')])
@@ -141,7 +141,7 @@ def test_screen_success_only_and_revocation(configured, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_life_tool_reads_detail_in_pages(configured):
-    from core.tool_dispatcher import _life_records_wrapper
+    from core.tools.life_media_definitions import _life_records_wrapper
     body = record()
     body['record']['note'] = 'abc' * 1200 + 'tail detail'
     life_records.sync('owner-test', 'device', body, char_id='char-test')

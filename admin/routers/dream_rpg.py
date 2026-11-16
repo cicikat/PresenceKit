@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
+import time
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
 from admin.auth import require_scopes
 from core.config_loader import get_config
 from core.data_paths import DEFAULT_CHAR_ID
-from core.dream.rpg_models import (
-    RpgCorrectionRequest, RpgCorrectionResponse, RpgEntry, RpgTranscriptResponse, RpgTurnRequest, RpgTurnResponse,
-)
+from core.dream.rpg_models import RpgCorrectionRequest, RpgCorrectionResponse, RpgEntry, RpgTranscriptResponse, RpgTurnRequest, RpgTurnResponse
 
 router = APIRouter()
 
@@ -183,7 +183,7 @@ async def rpg_correction(body: RpgCorrectionRequest, _auth=Depends(require_scope
         rows, _partial = rpg_store.read_transcript(_uid(), body.dream_id, char_id=state["char_id"])
         entry = next((row for row in reversed(rows) if row.get("correlation_id") == body.request_id), None)
         if entry is None:
-            entry = {"entry_id": "entry_" + body.request_id, "lane": "shared", "kind": "correction", "content": body.operation, "ts": __import__("time").time(), "correlation_id": body.request_id, "revision": result.get("revision", 0), "branch_id": result.get("branch_id")}
+            entry = {"entry_id": "entry_" + body.request_id, "lane": "shared", "kind": "correction", "content": body.operation, "ts": time.time(), "correlation_id": body.request_id, "revision": result.get("revision", 0), "branch_id": result.get("branch_id")}
             rpg_store.append_transcript(_uid(), body.dream_id, entry, char_id=state["char_id"])
         return RpgCorrectionResponse(dream_id=body.dream_id, request_id=body.request_id, operation=body.operation, scene_revision=int(result.get("revision", 0)), active_branch_id=str(result.get("branch_id") or state.get("active_branch_id") or "root"), idempotent=bool(result.get("idempotent")), entry=RpgEntry.model_validate(entry))
     except Exception as exc:
