@@ -330,6 +330,7 @@ async def record_assistant_turn(
     from core.expression_signal import explicit_expression
     audit_extras = {**(audit_extras or {}), "expression_signal": explicit_expression(assistant_text)}
     post_info: dict | None = None
+    post_process_scheduled = False
     async with _maybe_conversation_gate(uid, bypass_gate):
         if await_critical_post_process:
             # Brief 37: send 前只 await 落盘（post_process_critical），不再等
@@ -381,6 +382,7 @@ async def record_assistant_turn(
                         media_refs=media_refs,
                     )
                 )
+                post_process_scheduled = True
 
     # Canonical transport identity: prefer the persisted turn_id. When critical
     # post-process did not produce one, still mint an opaque id so mobile queue,
@@ -457,6 +459,7 @@ async def record_assistant_turn(
                 provenance_source=provenance_source,
             )
         )
+        post_process_scheduled = True
 
     # Narrative segments: push a parallel message_segments envelope to UI clients
     # (desktop + device) — but only to the ones actually included in this fanout.
@@ -499,7 +502,7 @@ async def record_assistant_turn(
         written_to_memory=bool((post_info or {}).get("critical_written", False)),
         fanout_targets=targets,
         fanout_failures=failures,
-        post_process_scheduled=not await_critical_post_process,
+        post_process_scheduled=post_process_scheduled,
         emotion=(post_info or {}).get("emotion", "neutral"),
         artifacts=artifacts,
         msg_id=_ws_msg_id,

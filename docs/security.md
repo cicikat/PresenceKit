@@ -28,7 +28,7 @@ Scope 以 `admin/scopes.py` 为准。通常 `admin` 蕴含全部；携带 `devel
 | `development.run` | 合成开发验收；无生产聊天、上下文或工具权限 | `POST /v1/development/turns` |
 | `activity` | 活动/梦境 overlay 全生命周期 | `/dream/*`、`/activity/reading\|gomoku\|chess\|dream_seed/*` |
 | `persona` | 人设/世界/呈现配置读写 | `/settings/prompt-assets`、`/jailbreak-entries`、`/lorebook`、character 卡、`/chat-mode\|chat-style\|chat-multi-message`、头像 |
-| `hardware` | 实体硬件控制 + 危险模式开关 | `/hardware/*`、`GET\|PATCH /system/meta-mode` |
+| `hardware` | 实体硬件控制 | `/hardware/*` |
 | `ws.desktop` | 连接 `/ws/desktop` | WS |
 | `ws.device` | 连接 `/ws/device` | WS |
 
@@ -37,7 +37,7 @@ Scope 以 `admin/scopes.py` 为准。通常 `admin` 蕴含全部；携带 `devel
 | profile | scopes | 发给谁 |
 |---|---|---|
 | `desktop` | chat, state.read, memory.read, activity, persona, hardware, sensor.write, ws.desktop | 桌面 Tauri 客户端 |
-| `mobile` | chat, state.read, memory.read, activity, persona, sensor.write | 手机 Flutter 端（yexuan_memery，同为 owner 胖客户端；刻意不含 hardware/admin——手机是最易丢失的设备，丢机不泄危险模式与 settings 写权） |
+| `mobile` | chat, state.read, memory.read, activity, persona, sensor.write | 手机 Flutter 端（同为 owner 客户端；不含 hardware/admin，不授予硬件控制与 settings 写权） |
 | `sensor` | sensor.write | 独立 sensor writer（按需手工签发；桌面内嵌 sensor 不使用） |
 | `watch` | sensor.write | Watch |
 | `integration` | integration.write | 外部论坛/来源 adapter（只允许提交标准化事件） |
@@ -175,8 +175,8 @@ owner retention policy confirmation.
 
 - `data/runtime/auth/audit.jsonl`：每行一条 JSON，字段 `ts` / `event` / `label` / `path` / `ip`。
   记录事件：`token_created` / `token_rotated` / `token_deleted`、`auth_failed`（401）、
-  `scope_denied`（403）、`meta_mode_danger`（`PATCH /system/meta-mode` 切到 danger，含操作者
-  label）。写失败 fail-open（`core.safe_write.safe_append_jsonl` 内部已 try/except），绝不
+  `scope_denied`（403）。危险模式及 `/system/meta-mode` 已退役，不再产生其旧审计事件。
+  写失败 fail-open（`core.safe_write.safe_append_jsonl` 内部已 try/except），绝不
   阻塞请求；**不记 token 值**，401 场景下 `label` 固定为 `"invalid"`。
 - 401 限速：`admin/auth.py` 进程内存计数（`_failure_times` / `_blocked_until`），按来源 IP，
   60s 窗口内 ≥10 次认证失败 → 该 IP 后续所有认证请求直接 429，持续 300s；重启进程清零。

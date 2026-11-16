@@ -103,7 +103,7 @@ Forgetting is demotion / tombstone, not casual physical deletion of evidence. Co
 - **Path C tool loop**: globally off by default; per-card `presence_ext.tool_loop` can override. Function-calling loop loads schemas by authorized category discovery.
 - Example categories: time/weather/reminders, web search, diary/toy files, memory, life records, garden, desktop window actions, screen observation, Xiaohongshu read-only, sandboxed chat artifacts, hardware (frozen unless opted in).
 - **MCP**: optional external tool transport, **not** the client protocol; off by default; local allowlist required. Experimental; must not block chat.
-- **Danger mode**: `PATCH /system/meta-mode`. Shutdown/sleep still need a second confirmation. Mobile tokens **do not** include `hardware` or `admin`.
+- **Device permissions**: owner, character grants, token scopes and device controls apply. Tools use ordinary character permissions; mobile tokens **do not** include `hardware` or `admin`.
 - **Agent Runtime** (Reality): the same character's durable/specialized 副链 runtime — durable tasks, bounded work sessions, controlled workspace, process runner, isolated browser worker. It is not a second agent. Leftover `running` records become `outcome_unknown` at startup and are not auto-replayed. Dream does not share this runtime. See [docs/agent-runtime-architecture.md](docs/agent-runtime-architecture.md), [docs/tools.md](docs/tools.md).
 
 ### Proactivity (scheduler + autonomy)
@@ -199,7 +199,7 @@ Single owner, opaque Bearer tokens, **default-deny**. Implementation: [docs/secu
 
 Plaintext tokens appear only at create/rotate. 401 = unknown token, 403 = insufficient scope, 429 = 401 rate limit (in-memory; restart clears). Do not put the admin secret on the phone.
 
-The LLM cannot execute system capabilities directly. Tools are further constrained by character permissions, category exposure, danger mode, confirmation, origin, and Dream/group exclusion rules.
+The LLM cannot execute system capabilities directly. Tools are constrained by character permissions, category exposure, origin, device authorization, and Dream/group exclusion rules.
 
 ---
 

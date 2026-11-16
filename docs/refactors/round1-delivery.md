@@ -28,6 +28,17 @@ mobile `09809d44fea621a0b329ca6e5faac490b466752f`。
 - [ ] F3：手机环境候选、授权、设置和真机验收
 - [ ] S5：联合固定 SHA CI、恢复演练、部署与回滚
 
+## R5：调度结果与权限文档（部分）
+
+- 失败先行：`test_post_process_scheduled_reports_actual_background_work` 的四种组合中，
+  默认 critical+slow 和禁用 slow 的异步模式两项失败。
+- 修复：返回值在真实任务创建或注册后置为 true；禁用调度保持 false。
+- 清理 README 双语、tools、security、feature-control-surface 中已退役危险模式与二次确认说明；
+  保留现行 owner、角色授权、scope 和设备控制。
+- Python 3.12.13：`pytest -q tests/test_turn_sink.py tests/test_llm_failover.py` 67 passed
+  （此结果早于新增 R1 热重载回归）。HTTP/WS/mobile 与固定 SHA CI 联验仍待完成。
+- 状态：partially verified。无新增配置或客户端协议字段。
+
 ## 删除 brief 候选（未授权，不执行）
 
 后续单独评估退役 `/system/meta-mode` 与危险模式的过期文档/守卫；

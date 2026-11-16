@@ -60,6 +60,33 @@ class _Channel:
         self.msg_ids.append(msg_id)
 
 
+@pytest.mark.parametrize("critical,schedule", [(True, True), (True, False), (False, True), (False, False)])
+async def test_post_process_scheduled_reports_actual_background_work(sandbox, critical, schedule):
+    """R5: response flag matches admitted work for both capture modes."""
+    from starlette.background import BackgroundTasks
+    from core.turn_sink import record_assistant_turn
+    calls = []
+
+    class Pipeline(_FakePipeline):
+        async def post_process_slow(self, *args, **kwargs):
+            calls.append("slow")
+
+        async def post_process(self, *args, **kwargs):
+            calls.append("combined")
+
+    background = BackgroundTasks()
+    result = await record_assistant_turn(
+        pipeline=Pipeline(), uid="schedule-owner", assistant_text="reply",
+        source="user_chat", user_text="hello", fanout=[],
+        await_critical_post_process=critical, schedule_slow=schedule,
+        background_tasks=background,
+    )
+    await background()
+    await asyncio.sleep(0)
+    assert calls == (["slow" if critical else "combined"] if schedule else [])
+    assert result.post_process_scheduled is schedule
+
+
 @pytest.mark.asyncio
 async def test_disabled_channel_cannot_send_even_when_active(monkeypatch):
     from channels import registry
