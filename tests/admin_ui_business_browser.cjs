@@ -130,13 +130,17 @@ const origin='http://127.0.0.1:8769';
         assert.equal(boxes.length,4);assert.ok(boxes.every(x=>Math.abs(x-boxes[0])<1),'all binding fields align');
         await page.screenshot({path:path.join(output,'bindings-spacing.png')});
         await mount('tools');
+        // New layout moves these original controls to Character Behavior. A
+        // hidden source page has zero rectangles and cannot prove spacing.
+        await page.evaluate(()=>goto('character-behavior',{fromHistory:true}));
         await page.locator('#xhs-enabled').evaluate(n=>n.closest('details').open=true);
+        await page.locator('#xhs-max-images').waitFor({state:'visible'});
         assert.equal(await page.locator('#xhs-enabled').evaluate(n=>getComputedStyle(n.closest('details').querySelector('summary'),'::before').content),'""');
         const spacing=await page.locator('#xhs-max-images').evaluate(n=>{
           const button=document.querySelector('[data-action="saveXiaohongshuSettings"]');
           return button.getBoundingClientRect().top-n.getBoundingClientRect().bottom;
         });
-        assert.ok(spacing>=16,'field/save button gap');
+        assert.ok(spacing>=16,'visible field/save button gap: '+spacing);
         await page.screenshot({path:path.join(output,'tools-spacing.png')});
       }
       await mount('observe-prompt');

@@ -182,3 +182,18 @@ Chromium component contract passes repeated enhance/dispose/remount, single acti
 injected duplicate listener detection, folding, draft identity, and modal keyboard/
 focus restoration. All 268 page projections still exactly equal baseline. Existing
 forms are never cloned. The new component contract runs on public assets only.
+
+## D: token and cascade ownership
+
+`admin-tokens.css` is the single default semantic token authority, extracted without
+changing values from `admin-v2.css`. The latter retains pk-ui component styling and
+fonts; scoped new-mode component rules retain legacy aliases; theme/palette overrides
+remain last. Repeated 6px control radius and focus constants now refer to tokens.
+No priority changes or legacy style deletion. Chromium samples six domains at
+1440/1024/768/480 and day/night in `.tmp/ar03/component-styles.json`.
+
+The business spacing failure was a test precondition bug: xhs controls were moved
+to `#page-character-behavior` (display:none while Feature Center was active), so both
+rectangles were zero despite 16px field margin. Navigating to the actual owner makes
+the existing >=16px assertion pass. CSS gap is preserved at baseline; no reduced
+threshold and no cosmetic workaround. Full business runner now completes successfully.

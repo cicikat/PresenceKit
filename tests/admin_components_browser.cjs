@@ -17,6 +17,26 @@ const root=path.resolve(__dirname,'../admin/static');
       return route.fulfill({body:fs.readFileSync(file),contentType:({'.html':'text/html','.js':'text/javascript','.css':'text/css','.woff2':'font/woff2'})[path.extname(file)]||'application/octet-stream'});
     });
     await page.goto('http://127.0.0.1:8769/static/index.html');
+    const samples=[];
+    for(const width of [1440,1024,768,480]) {
+      await page.setViewportSize({width,height:1000});
+      for(const theme of ['day','night']) {
+        samples.push(await page.evaluate(async ({width,theme})=>{
+          document.documentElement.dataset.adminTheme=theme;
+          const result=[];
+          for(const id of ['model-routing','tools','character','observe-prompt','dream-settings','setup']) {
+            const root=await loadPageFragment(id);
+            const button=root.querySelector('.btn'),field=root.querySelector('input:not([type=checkbox]),select,textarea');
+            const read=node=>{if(!node)return null;const s=getComputedStyle(node);return {color:s.color,background:s.backgroundColor,font:s.fontFamily,radius:s.borderRadius,minHeight:s.minHeight};};
+            result.push({id,button:read(button),field:read(field)});
+          }
+          return {width,theme,result};
+        },{width,theme}));
+      }
+    }
+    fs.mkdirSync(path.resolve(__dirname,'../.tmp/ar03'),{recursive:true});
+    fs.writeFileSync(path.resolve(__dirname,'../.tmp/ar03/component-styles.json'),JSON.stringify(samples,null,2));
+    await page.evaluate(()=>delete document.documentElement.dataset.adminTheme);
     await page.evaluate(()=>{
       document.getElementById('auth-overlay').style.display='none';document.getElementById('app').style.display='flex';
       const host=document.createElement('section');host.id='ar03-fixture';host.className='page active';

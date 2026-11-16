@@ -1,0 +1,3 @@
+/* Semantic default tokens. Theme/palette overrides live only in admin-theme.css.
+   Legacy aliases live only in admin-components-v2.css; no legacy base overrides. */
+.pk-ui, .pk-admin { --pk-bg:#eeedf3; --pk-surface:#faf9fc; --pk-field:#f3f1f7; --pk-text:#302d40; --pk-muted:#625e76; --pk-border:#d8d4e2; --pk-accent:#76668f; --pk-success:#316b50; --pk-error:#a23d47; --pk-radius:8px; --pk-space:20px; --pk-warn:#886324; --pk-success-bg:#e6f0e9; --pk-error-bg:#f7e8eb; --pk-warn-bg:#f4eddf; --pk-accent-bg:#ebe6f3; --pk-serif:"PK Lora","PK Noto Serif",SimSun,serif; --pk-sans:"Microsoft YaHei UI","Microsoft YaHei",system-ui,sans-serif; --pk-control-radius:6px; --pk-field-action-gap:16px; --pk-focus-width:2px; --pk-focus-offset:3px; }
