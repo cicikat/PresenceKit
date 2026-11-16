@@ -126,6 +126,8 @@ from admin.routers import ime_drafts
 app.include_router(ime_drafts.router, tags=["IME 接收"])
 from admin.routers import life_records
 app.include_router(life_records.router, tags=["生活记录"])
+from admin.routers import finance
+app.include_router(finance.router, tags=["财务候选账本"])
 from admin.routers import food_memory
 app.include_router(food_memory.router, tags=["饮食记忆"])
 from admin.routers import quote_notebook

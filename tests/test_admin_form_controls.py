@@ -40,7 +40,7 @@ def test_admin_templates_declare_input_types_and_do_not_keep_orphan_input_class(
 
 
 def test_setup_and_character_anniversary_editors_consume_shared_helper():
-    core = (STATIC / "js" / "core.js").read_text(encoding="utf-8")
+    core = read_admin_client_source()
     setup = (STATIC / "js" / "setup.js").read_text(encoding="utf-8")
     character = (STATIC / "js" / "character.js").read_text(encoding="utf-8")
 
@@ -72,7 +72,7 @@ def test_anniversary_fragments_keep_their_page_containers_and_accessible_dynamic
     character = (PAGES / "character.html").read_text(encoding="utf-8")
     assert 'id="setup-anniversaries-list"' in setup
     assert 'id="char-anniversaries"' in character
-    core = (STATIC / "js" / "core.js").read_text(encoding="utf-8")
+    core = read_admin_client_source()
     for label in (
         "Anniversary key", "Anniversary month", "Anniversary day",
         "Anniversary starting year", "Anniversary first-year prompt",

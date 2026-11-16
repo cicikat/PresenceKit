@@ -183,6 +183,19 @@ def select_for_prompt(
         core_remaining -= len(rendered_prefix) + len(fitted)
         selected_fields.append(field)
 
+    for fact in profile.get("_temporal_current", []):
+        value = str(fact.get("value") or "").strip()
+        if not value or _is_sensitive_for_prompt(value):
+            continue
+        prefix = ("，" if core_parts else "") + "当前事实："
+        fitted = _take_with_char_budget(value, core_remaining - len(prefix))
+        if not fitted:
+            core_budget_excluded += 1
+            continue
+        core_parts.append(prefix + fitted)
+        core_remaining -= len(prefix) + len(fitted)
+        selected_fields.append("temporal:" + str(fact.get("topic", "")))
+
     core_text = ""
     if core_parts:
         core_text = core_prefix + "".join(core_parts) + core_suffix
@@ -266,6 +279,7 @@ def select_for_prompt(
             "mode": "budgeted_whitelist",
             "source": "user_profile",
             "selected_fields": selected_fields,
+            "temporal_decisions": profile.get("_temporal_decisions", []),
             "archived_fact_count": archived_fact_count,
             "archived_scalar_fields": archived_scalar_fields,
             "sensitive_blocked_count": sensitive_blocked,
@@ -427,6 +441,8 @@ async def update(user_id: str, new_facts: dict, *, char_id: str = DEFAULT_CHAR_I
     profile = load(user_id, char_id=char_id)
 
     for key, value in new_facts.items():
+        if key == "temporal_facts" or key.startswith("_temporal_"):
+            continue  # only the evidence-bound temporal writer owns this field
         if key == "important_facts":
             # 列表字段：去重追加（支持旧 str 和新 {text,tag,ts} 两种格式）
             existing = profile.get("important_facts") or []

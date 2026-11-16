@@ -96,6 +96,10 @@
 
 ## AR-01 页面与依赖索引（325）
 
+328 更新：[AR-03 责任账本](refactors/ar03-admin-components.md) 记录现行 shared
+服务、原生组件、聚合数据 controller 和 Token 权威。以下 AR-01 表为迁移基线，
+当前精确 loader/fragment/owner 以唯一 Registry 的 descriptors 为准。
+
 全部页面的初始化入口在 `js/admin-page-registry.js`；原功能脚本继续拥有各自的
 DOM、表单事件、渲染、请求和可见错误。`core.js` 唯一持有 TOKEN/BASE、api/toast、
 fragment 加载与竞态取消、页面状态/历史和 data-action 委托。注册表只保存延迟回调，

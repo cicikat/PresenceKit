@@ -11,4 +11,12 @@
   <div class="admin-action-group"><button class="btn btn-primary" data-action="saveLifeRecords" data-i18n="life.save">保存设置</button><button class="btn btn-ghost" data-action="goto" data-action-args='["model-routing"]' data-i18n="life.vision_ocr">配置视觉与 OCR 连接</button></div>
 </section>
 <section class="card"><div class="card-header"><h3 data-i18n="life.jobs">识别任务</h3></div><div id="life-status" class="admin-result-panel" role="status"></div></section>
+<section class="card">
+  <div class="card-header"><h3 data-i18n="finance.title">自动记账</h3><button class="btn btn-ghost btn-sm" data-action="loadFinance" data-i18n="life.refresh">刷新状态</button></div>
+  <p class="admin-description" data-i18n="finance.hint">默认关闭。只接收手机解析后的候选，不接收通知原文；用户确认后才计入流水。关闭即停止同步和角色读取，保留已存记录。手机仍需独立开启收集并授权通知读取。</p>
+  <label class="admin-setting-row"><span><strong data-i18n="finance.sync">允许财务同步</strong></span><input id="finance-enabled" type="checkbox"></label>
+  <label class="admin-setting-row"><span><strong data-i18n="finance.readable">允许角色只读查询已确认流水</strong><small data-i18n="finance.readable_hint">默认关闭；不会自动付款或写入长期记忆。</small></span><input id="finance-readable" type="checkbox"></label>
+  <button class="btn btn-primary" data-action="saveFinance" data-i18n="finance.save">保存记账设置</button>
+  <div id="finance-status" class="admin-result-panel" role="status"></div>
+</section>
 <details class="card"><summary data-i18n="life.other_services">其他服务连接</summary><div id="service-center-list" class="admin-service-grid"></div></details>

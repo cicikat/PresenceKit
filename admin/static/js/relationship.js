@@ -122,10 +122,10 @@ function openFactModal(index) {
     document.getElementById('rf-fact-order').value = 60;
     document.getElementById('rf-fact-modal-title').textContent = '添加关系事实';
   }
-  document.getElementById('rf-fact-modal').classList.add('open');
+  AdminModal.open(document.getElementById('rf-fact-modal'), closeFactModal);
 }
 function closeFactModal() {
-  document.getElementById('rf-fact-modal').classList.remove('open');
+  AdminModal.close(document.getElementById('rf-fact-modal'));
 }
 async function submitFactModal() {
   const uid = document.getElementById('rf-uid-select').value;

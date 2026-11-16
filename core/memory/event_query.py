@@ -99,6 +99,11 @@ def _safe_media_refs(raw: object) -> list[dict[str, str]]:
 
 
 def _event_projection(row: sqlite3.Row) -> dict[str, Any]:
+    try:
+        input_meta = json.loads(row["raw_payload_json"] or "{}")
+        if not isinstance(input_meta, dict): input_meta = {}
+    except (ValueError, TypeError):
+        input_meta = {}
     tombstoned = row["redaction_state"] == "tombstoned"
     raw_text, raw_truncated = _safe_text("" if tombstoned else row["raw_text"])
     visible_text, visible_truncated = _safe_text("" if tombstoned else row["visible_text"])
@@ -119,6 +124,8 @@ def _event_projection(row: sqlite3.Row) -> dict[str, Any]:
         "source": row["source"],
         "redaction_state": row["redaction_state"],
         "tombstoned": tombstoned,
+        "input_modality": input_meta.get("input_modality") if input_meta.get("input_modality") in ("text", "voice", "image", "video") else "",
+        "asr_low_confidence": bool(input_meta.get("asr_low_confidence")),
         "raw_text": raw_text,
         "visible_text": visible_text,
         "memory_text": memory_text,

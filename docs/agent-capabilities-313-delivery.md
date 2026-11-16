@@ -38,4 +38,4 @@
 
 无新手机执行协议；Android 无本机文件执行器，消费后端工具结果。三仓固定 SHA 的端到端协议证据仍 not_verified，交付组合必须同时记录 dirty 工作区限制。
 
-仍缺 no-change 证明、显式复合必要目标清单、批量变更、逐条桌面取消、聚合质量指标和受限进程/浏览器 POC。独立范围见 [后续工单](../cc-tasks/313-agent-capabilities-followups.md)：D0/F0 保持 P0 遗留，D/E 为 P1，F 为 P2。不得把任一已保存文件视为自然语言全部子目标的完成证明。3.10 全量 fixture 竞态和浏览器/实机缺口也仍未关闭。
+仍缺 no-change 证明、显式复合必要目标清单、批量变更、逐条桌面取消、聚合质量指标和受限进程/浏览器 POC。独立范围见 [后续工单历史](https://github.com/cicikat/PresenceKit/blob/a0596b25fd56c10386d1719145e53f0ed00a853a/cc-tasks/313-agent-capabilities-followups.md)：D0/F0 保持 P0 遗留，D/E 为 P1，F 为 P2。不得把任一已保存文件视为自然语言全部子目标的完成证明。3.10 全量 fixture 竞态和浏览器/实机缺口也仍未关闭。

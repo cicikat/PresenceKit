@@ -763,9 +763,9 @@ document.getElementById('key-input').addEventListener('keydown', e => {
 });
 
 // Auto-login if key stored: silently verify, only surface the input if it's rejected
-if (TOKEN) {
-  tryLogin(TOKEN, true).catch(() => {});
-}
+document.addEventListener('DOMContentLoaded', () => {
+  if (TOKEN) tryLogin(TOKEN, true).catch(() => {});
+}, {once:true});
 
 // ══════════════════════════════════════════════════════════
 //  Nav group collapse

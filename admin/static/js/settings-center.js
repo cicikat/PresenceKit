@@ -292,6 +292,7 @@ async function loadImeObservation(more = false) {
 
 async function loadServiceCenter() {
   loadLifeRecords();
+  loadFinance();
   const root=document.getElementById('service-center-list'); root.textContent=t('settings_center.loading',"读取中…");
   const specs=[
     [t('settings_center.text_model',"文本模型"),'/settings/prompt-assets','model-routing',d=>{const current=d.characters?.find(c=>c.id===d.active?.active_character);return [current?.chat_configured,current?.resolved_chat_model];}],
@@ -310,6 +311,26 @@ async function loadServiceCenter() {
   bindPageActions(root);
 }
 
+async function loadFinance() {
+  const host = document.getElementById('finance-status');
+  if (!host) return;
+  try {
+    const data = await api('GET', '/settings/finance');
+    document.getElementById('finance-enabled').checked = data.enabled;
+    document.getElementById('finance-readable').checked = data.character_readable;
+    host.textContent = t('finance.status', '{state} · 待确认 {candidate} · 已确认 {confirmed} · 已保存操作 {operations}', {
+      state: data.effective ? t('finance.enabled', '同步已开启') : t('finance.disabled', '同步已关闭'),
+      candidate: Number(data.counts?.candidate || 0), confirmed: Number(data.counts?.confirmed || 0),
+      operations: Number(data.operation_count || 0),
+    });
+  } catch (error) { host.textContent = t('finance.load_error', '记账状态读取失败：{error}', {error:error.message}); }
+}
+async function saveFinance() {
+  try {
+    await api('PUT', '/settings/finance', {enabled:document.getElementById('finance-enabled').checked, character_readable:document.getElementById('finance-readable').checked});
+    await loadFinance();
+  } catch (error) { document.getElementById('finance-status').textContent = t('settings_center.save_error', '保存失败：{error}', {error:error.message}); }
+}
 async function loadLifeRecords() {
   const host = document.getElementById('life-status');
   if (!host) return;

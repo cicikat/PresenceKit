@@ -80,14 +80,21 @@ async def _write_document_note_wrapper(user_id: str, *, char_id: str, **kwargs):
 async def _get_profile_wrapper(user_id: str, *, char_id: str) -> str:
     """召回用户画像。"""
     from core.memory import user_profile
-    profile = user_profile.load(user_id, char_id=char_id)
-    if not profile:
+    from core.memory.scope import MemoryScope
+    from core.memory.temporal_facts import project
+    stored_profile = user_profile.load(user_id, char_id=char_id)
+    state = project(MemoryScope.reality_scope(user_id, char_id), stored_profile)
+    profile = state["profile"]
+    if not stored_profile and not state["_temporal_fact_decisions"]:
         return "暂无用户画像"
     parts = []
     if profile.get("nickname"):
         parts.append(f"称呼：{profile['nickname']}")
     if profile.get("location"):
         parts.append(f"位置：{profile['location']}")
+    if profile.get("occupation"):
+        parts.append(f"职业：{profile['occupation']}")
+    parts.extend("当前事实：" + row["value"] for row in profile.get("_temporal_current", []))
     facts = profile.get("important_facts", [])
     if facts:
         parts.append("已知信息：" + "；".join(str(f) for f in facts[:10]))
@@ -99,7 +106,14 @@ async def _get_episodic_wrapper(user_id: str, topic: str = "", *, char_id: str) 
     from core.memory.episodic_memory import retrieve, format_for_prompt
     # M4：查询不再顺手给被查到的记忆加强度（allow_strengthen=False）
     memories = retrieve(user_id=user_id, topic=topic, top_k=3, char_id=char_id, allow_strengthen=False)
-    return format_for_prompt(memories, char_name=character_name_provider.get_char_name(char_id)) if memories else "暂无相关记忆"
+    if not memories:
+        return "暂无相关记忆"
+    from core.memory import user_profile
+    from core.memory.scope import MemoryScope
+    from core.memory.temporal_facts import project
+    text = format_for_prompt(memories, char_name=character_name_provider.get_char_name(char_id))
+    return project(MemoryScope.reality_scope(user_id, char_id), user_profile.load(user_id, char_id=char_id),
+                   {"episodic_result": text})["episodic_result"]
 
 
 async def _read_long_user_message_wrapper(user_id: str, sequence: int, offset: int = 0,

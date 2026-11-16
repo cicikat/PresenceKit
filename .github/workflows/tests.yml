@@ -136,7 +136,7 @@ jobs:
         with:
           node-version: '22'
       - run: python -m pip install -r requirements.txt
-      - run: npm install --prefix .tmp/browser playwright@1.58.2
+      - run: npm install --prefix .tmp/browser playwright@1.58.2 acorn@8.15.0
       - run: .tmp/browser/node_modules/.bin/playwright install --with-deps chromium
       - name: Run isolated admin browser contract
         env:

@@ -14,6 +14,7 @@ SCOPES: frozenset[str] = frozenset({
     "companion.write",
     "diary.sync",
     "life_records",
+    "finance_ingest",
     "activity",
     "persona",
     "hardware",
@@ -29,6 +30,7 @@ PROFILES: dict[str, frozenset[str]] = {
     "mobile": frozenset({
         "chat", "state.read", "memory.read", "activity", "persona", "sensor.write",
         "life_records",
+        "finance_ingest",
     }),
     "sensor": frozenset({"sensor.write"}),
     "watch": frozenset({"sensor.write"}),

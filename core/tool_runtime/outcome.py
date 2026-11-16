@@ -99,6 +99,8 @@ class ResultDisposition:
 
 
 def classify_result(tool_name, result, tool_result):
+    if tool_result.meta.get("execution_status") == "failed":
+        return ResultDisposition("tool_failed", "failed", "failed")
     from core.tools.tool_result import ToolResult
     from core.tools.qzone_tools import _QZONE_TOOL_NAMES
     if private_receipt(tool_name) or (tool_name == "web_search" and isinstance(result, ToolResult)):

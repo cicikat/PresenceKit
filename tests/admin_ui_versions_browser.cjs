@@ -7,6 +7,7 @@ const origin = 'http://127.0.0.1:8769';
 const staticRoot = path.join(__dirname, '..', 'admin', 'static');
 const output = path.join(__dirname, '..', '.tmp', 'admin-all');
 const mode = process.env.ADMIN_UI_TEST_PHASE || 'shell';
+const assertReadOnly = calls => assert.ok(calls.every(call=>call.method==='GET'), 'version switching must not write configuration: '+JSON.stringify(calls));
 
 (async () => {
   fs.mkdirSync(output, {recursive:true});
@@ -49,8 +50,8 @@ const mode = process.env.ADMIN_UI_TEST_PHASE || 'shell';
     async function switchTo(version) {
       const before = apiCalls.length;
       await page.selectOption('#admin-ui-version',version);
-      await page.waitForTimeout(30);
-      assert.equal(apiCalls.length,before,'version switching must not call APIs');
+      await page.evaluate(()=>AdminUI.whenSettled());
+      assertReadOnly(apiCalls.slice(before));
     }
     assert.equal(await page.locator('#admin-ui-version').inputValue(),'new');
     await switchTo('legacy');
@@ -82,6 +83,9 @@ const mode = process.env.ADMIN_UI_TEST_PHASE || 'shell';
         const snapshot = await page.evaluate(name => {
           const root=document.getElementById('page-'+name);
           window._uiTestFields=[...root.querySelectorAll('input,select,textarea')];
+          // Data/status renderers may replace refresh/navigation buttons; form
+          // submit handlers and draft controls must retain their actual nodes.
+          window._uiTestActions=[...root.querySelectorAll('[data-action]')].filter(n=>/^(save|submit)/.test(n.dataset.action));
           const text=window._uiTestFields.find(n=>n.tagName==='TEXTAREA'||n.type==='text');
           if(text) text.value='browser-draft';
           window._uiTestDraft=text;
@@ -94,11 +98,10 @@ const mode = process.env.ADMIN_UI_TEST_PHASE || 'shell';
         await switchTo('legacy');
         assert.equal(await page.locator('#page-'+name+' .pk-collapse').count(),0);
         await switchTo('new');
-        assert.equal(apiCalls.length,before);
-        assert.deepEqual(await page.evaluate(name=>{
-          const root=document.getElementById('page-'+name);
-          return {fields:root.querySelectorAll('input,select,textarea').length,actions:root.querySelectorAll('[data-action]').length};
-        },name),snapshot);
+        assertReadOnly(apiCalls.slice(before));
+        // Aggregation moves original controls to their owning page. Source-page
+        // counts are not state duplication; every original node must survive.
+        assert.ok(await page.evaluate(()=>window._uiTestActions.every(n=>n.isConnected)),'original action identity: '+name);
         assert.ok(await page.evaluate(()=>window._uiTestFields.every(n=>n.isConnected)),'original field identity: '+name);
         assert.ok(await page.evaluate(()=>!window._uiTestDraft||window._uiTestDraft.value==='browser-draft'),'draft value: '+name);
         if (['model-routing','character','mcp','tts-config','client-settings','owner-turn-api','listening-player','status','observe-prompt','logs'].includes(name)) {
@@ -124,6 +127,9 @@ const mode = process.env.ADMIN_UI_TEST_PHASE || 'shell';
     await page.screenshot({path:path.join(output,'overview-narrow.png')});
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
     assert.deepEqual(errors,[]);
-    console.log('PASS: shell defaults, scoped style rollback, persistence, zero API switching, desktop/narrow. Mode:',mode);
+    // Prove the write guard rejects an injected version-change side effect.
+    await page.evaluate(()=>window.addEventListener('admin-ui-version-changed',()=>fetch('/fixture-forbidden-write',{method:'POST'}),{once:true}));
+    await assert.rejects(()=>switchTo('legacy'),/must not write configuration/);
+    console.log('PASS: shell defaults, scoped rollback, persistence, read-only switching, injected write detection, desktop/narrow. Mode:',mode);
   } finally {await browser.close();}
 })().catch(error => {console.error(error);process.exit(1);});

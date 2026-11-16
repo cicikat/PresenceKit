@@ -27,6 +27,8 @@ def build_registry(registry):
     _device_file_tools.register(registry)
     from core.tools import character_intent_tools as _intent_tools
     _intent_tools.register(registry)
+    from core.tools.finance_tools import register_tools as _register_finance
+    _register_finance(registry)
     for module in (information_definitions, memory_definitions, devices_definitions, files_agents_definitions, life_media_definitions):
         module.register_invokers(registry)
     # Existing order is a presentation contract; new domain entries append naturally.

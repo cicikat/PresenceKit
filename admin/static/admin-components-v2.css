@@ -18,7 +18,7 @@ body.pk-admin {
 .pk-admin nav a:hover, .pk-admin nav a.active {background:var(--pk-field);}
 .pk-admin nav a.active {font-weight:600;}
 .pk-admin .nav-pages .nav-group-header {font-size:13px;line-height:1.7;}
-.pk-admin .nav-menu-toggle {background:var(--pk-surface);color:var(--pk-text);border:1px solid var(--pk-border);border-radius:6px;}
+.pk-admin .nav-menu-toggle {background:var(--pk-surface);color:var(--pk-text);border:1px solid var(--pk-border);border-radius:var(--pk-control-radius);}
 .pk-admin .page {max-width:1480px;margin-inline:auto;min-width:0;}
 .pk-admin h1.page-title {font-size:28px;font-weight:500;line-height:1.45;margin-bottom:16px;}
 .pk-admin h2 {font-size:20px;line-height:1.6;font-weight:500;color:var(--text);}
@@ -37,7 +37,7 @@ body.pk-admin {
 .pk-admin .settings-footer, .pk-admin .modal-footer, .pk-admin .admin-action-group,
 .pk-admin .admin-card-actions, .pk-admin .tools-action-row {flex-wrap:wrap;overflow:visible;gap:10px;}
 .pk-admin .btn, .pk-admin .pk-collapse {
-  font:400 14px/1.6 var(--pk-serif);border-radius:6px;min-height:38px;padding:8px 16px;
+  font:400 14px/1.6 var(--pk-serif);border-radius:var(--pk-control-radius);min-height:38px;padding:8px 16px;
   border:1px solid var(--pk-border);background:var(--pk-surface);color:var(--pk-text);
   white-space:normal;overflow-wrap:anywhere;justify-content:center;
 }
@@ -49,19 +49,19 @@ body.pk-admin {
 .pk-admin .btn-sm {font-size:13px;padding:6px 12px;}
 .pk-admin :is(input:not([type]),input[type=text],input[type=number],input[type=password],input[type=url],input[type=email],input[type=search],input[type=tel],input[type=time],input[type=date],input[type=datetime-local],textarea,select) {
   font:400 15px/1.7 var(--pk-serif);background:var(--pk-field);color:var(--pk-text);
-  border:1px solid var(--pk-border);border-radius:6px;padding:8px 12px;min-height:38px;max-width:100%;min-width:0;color-scheme:light;
+  border:1px solid var(--pk-border);border-radius:var(--pk-control-radius);padding:8px 12px;min-height:38px;max-width:100%;min-width:0;color-scheme:light;
 }
 .pk-admin textarea {resize:vertical;}
 .pk-admin :is(input[type=checkbox],input[type=radio],input[type=range]) {accent-color:var(--pk-accent);}
 .pk-admin input[type=checkbox] {width:18px;height:18px;flex-shrink:0;}
 .pk-admin input[type=file] {max-width:100%;font:13px var(--pk-sans);}
-.pk-admin input[type=file]::file-selector-button {font:inherit;border:1px solid var(--pk-border);background:var(--pk-field);color:var(--pk-text);border-radius:6px;padding:8px 12px;margin-right:8px;}
+.pk-admin input[type=file]::file-selector-button {font:inherit;border:1px solid var(--pk-border);background:var(--pk-field);color:var(--pk-text);border-radius:var(--pk-control-radius);padding:8px 12px;margin-right:8px;}
 .pk-admin label.field {gap:6px;}
 .pk-admin label.field span, .pk-admin .admin-source-hint, .pk-admin .admin-source-note {font-size:13px;line-height:1.7;}
 .pk-admin .form-row {grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-bottom:16px;}
 .pk-admin .form-row.col-3 {grid-template-columns:repeat(3,minmax(0,1fr));}
 .pk-admin .form-row.col-1 {grid-template-columns:minmax(0,1fr);}
-.pk-admin :focus-visible {outline:2px solid var(--pk-accent);outline-offset:3px;}
+.pk-admin :focus-visible {outline:var(--pk-focus-width) solid var(--pk-accent);outline-offset:var(--pk-focus-offset);}
 .pk-admin :is(input,textarea,select):focus {box-shadow:none;border-color:var(--pk-accent);}
 .pk-admin .auth-card {background:var(--pk-surface);border-radius:8px;}
 .pk-admin .auth-card h1 {font-size:28px;font-weight:500;}
@@ -76,7 +76,7 @@ body.pk-admin {
 .pk-admin .control-center-card strong {font-size:18px;font-weight:500;}
 .pk-admin .control-center-card span {font-size:13px;line-height:1.7;}
 .pk-admin .control-center-card-readonly {border-style:dashed;}
-.pk-admin .configuration-notice {background:var(--pk-field);border-radius:6px;border-left:3px solid var(--pk-warn);}
+.pk-admin .configuration-notice {background:var(--pk-field);border-radius:var(--pk-control-radius);border-left:3px solid var(--pk-warn);}
 .pk-admin .empty, .pk-admin .loading {font-size:14px;line-height:1.7;color:var(--pk-muted);}
 .pk-admin [hidden] {display:none!important;}
 .pk-admin .pk-collapse {cursor:pointer;flex:0 0 auto;font:16px/1 var(--pk-sans);width:24px;min-height:32px;padding:0;border:0;background:transparent;color:var(--pk-text);text-align:left;}
@@ -116,13 +116,13 @@ body.pk-admin {
 .pk-admin .card :is(.settings-disclosure,.tts-advanced)>summary {font-size:18px;line-height:1.6;}
 .pk-admin .tts-advanced {padding:0;}
 .pk-admin .tts-advanced>summary {padding:16px 20px;}
-.pk-admin .vision-editor {background:var(--pk-field);border-radius:6px;border:1px solid var(--pk-border);padding:16px;margin-top:16px;}
+.pk-admin .vision-editor {background:var(--pk-field);border-radius:var(--pk-control-radius);border:1px solid var(--pk-border);padding:16px;margin-top:16px;}
 .pk-admin .dream-mode-btn.active, .pk-admin .mcp-domain-chip.active {background:var(--pk-accent);color:white;border-color:var(--pk-accent);}
 .pk-admin .admin-settings-list {gap:0;}
 .pk-admin .admin-setting-row {gap:20px;padding:16px 0;}
 .pk-admin .admin-setting-row strong {font-size:15px;}
 .pk-admin .admin-setting-row small {font-size:13px;line-height:1.7;}
-.pk-admin .config-switch {background:var(--pk-field);border-radius:6px;}
+.pk-admin .config-switch {background:var(--pk-field);border-radius:var(--pk-control-radius);}
 .pk-admin .config-parameter-grid {gap:20px;}
 .pk-admin .admin-field-grid, .pk-admin .runtime-config-grid {gap:16px;}
 .pk-admin .admin-service-grid {gap:20px;}
@@ -133,7 +133,7 @@ body.pk-admin {
 .pk-admin .owner-turn-api-layout {gap:20px;}
 .pk-admin .modal :is(textarea,pre) {max-width:100%;}
 .pk-admin .modal input[type=password] {font-family:var(--pk-sans);}
-.pk-admin .badge, .pk-admin .admin-status-badge {font-size:13px;line-height:1.6;font-weight:400;border-radius:6px;padding:3px 8px;white-space:normal;overflow-wrap:anywhere;}
+.pk-admin .badge, .pk-admin .admin-status-badge {font-size:13px;line-height:1.6;font-weight:400;border-radius:var(--pk-control-radius);padding:3px 8px;white-space:normal;overflow-wrap:anywhere;}
 .pk-admin .badge-accent {background:var(--pk-accent-bg);color:var(--pk-accent);}
 .pk-admin .badge-success {background:var(--pk-success-bg);color:var(--pk-success);}
 .pk-admin .badge-danger {background:var(--pk-error-bg);color:var(--pk-error);}
@@ -150,15 +150,15 @@ body.pk-admin {
 .pk-admin th {background:var(--pk-field);padding:12px;color:var(--pk-muted);font-weight:500;}
 .pk-admin td {padding:12px;}
 .pk-admin tr:hover td {background:var(--pk-field);}
-.pk-admin .tbl-wrap {border:1px solid var(--pk-border);border-radius:6px;}
+.pk-admin .tbl-wrap {border:1px solid var(--pk-border);border-radius:var(--pk-control-radius);}
 .pk-admin :is(pre,.log-box,.log-box pre,.autonomy-prompt-view) {max-width:100%;font:13px/1.7 var(--mono);white-space:pre-wrap;overflow-wrap:anywhere;overflow:auto;}
-.pk-admin .log-box {background:var(--pk-field);color:var(--pk-text);border-radius:6px;}
+.pk-admin .log-box {background:var(--pk-field);color:var(--pk-text);border-radius:var(--pk-control-radius);}
 .pk-admin code {font:13px/1.7 var(--mono);overflow-wrap:anywhere;color:inherit;}
 .pk-admin textarea:is(.admin-inline-192,.admin-inline-194,[id$="-json"],[id$="-schema"]) {font:13px/1.7 var(--mono);}
 .pk-admin .msg {font-size:15px;line-height:1.7;overflow-wrap:anywhere;}
 .pk-admin .msg.user {background:var(--pk-accent-bg);}
 .pk-admin .msg.assistant {background:var(--pk-field);border:1px solid var(--pk-border);}
-.pk-admin .user-data-asset {background:var(--pk-field);border-radius:6px;padding:16px;}
+.pk-admin .user-data-asset {background:var(--pk-field);border-radius:var(--pk-control-radius);padding:16px;}
 .pk-admin .user-data-category-grid {grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:20px;}
 .pk-admin .user-data-asset-meta :is(dt,dd), .pk-admin .user-data-file {font-size:12px;line-height:1.7;}
 .pk-admin .page details:not(.settings-disclosure):not(.card):not(.pk-accordion)>summary {cursor:pointer;font-size:15px;line-height:1.7;}

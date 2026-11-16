@@ -1045,6 +1045,23 @@ def capture_turn(
     if not all(writes):
         raise RuntimeError(f"capture_turn 写入不完整: turn_id={turn_id} writes={writes}")
 
+    # Explicit owner corrections become versioned profile facts without waiting
+    # for the periodic summarizer. Never consume assistant/media/isolated text.
+    if not trigger_name and source in {"", "user_chat", "qq", "wechat"} and not _voice_low:
+        try:
+            from core.config_loader import get_config
+            from core.write_envelope import SourceType
+            if (str(uid) == str(get_config().get("scheduler", {}).get("owner_id", ""))
+                    and envelope.source in {SourceType.USER_CHAT, SourceType.QQ, SourceType.WECHAT}):
+                from core.memory.temporal_facts import extract, record
+                record(MemoryScope.reality_scope(uid, char_id), extract(
+                    raw_user_text if raw_user_text is not None else user_msg,
+                    source_id=f"{turn_id}:user",
+                    occurred_at=event_context.occurred_at if event_context is not None else ts,
+                ))
+        except Exception as exc:
+            log_error("fixation_pipeline.temporal_facts", exc)
+
     if not trigger_name and _scrubbed_reply and user_msg:
         from core.conversation_stats import record
         record("chat_round", uid=uid, char_id=char_id,

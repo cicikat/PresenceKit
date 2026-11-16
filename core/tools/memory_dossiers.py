@@ -12,20 +12,26 @@ def _scope(user_id: str, char_id: str) -> MemoryScope:
     return MemoryScope.reality_scope(str(user_id), str(char_id))
 
 
-def _result(value: object, *, truncated: bool = False) -> ToolResult:
+def _result(value: object, *, truncated: bool = False, scope: MemoryScope | None = None) -> ToolResult:
     text = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
-    return ToolResult(safe_summary=text, raw_data=text, meta={"truncated": truncated})
+    summary = text
+    if scope is not None:
+        from core.memory import user_profile
+        from core.memory.temporal_facts import project
+        summary = project(scope, user_profile.load(scope.uid, char_id=scope.character_id),
+                          {"memory_dossier_context": text})["memory_dossier_context"]
+    return ToolResult(safe_summary=summary, raw_data=text, meta={"truncated": truncated})
 
 
 async def search_memory_dossiers(user_id: str, query: str = "", limit: int = 3, *, char_id: str) -> ToolResult:
     from core.memory.dossiers import search
-    return _result({"items": search(_scope(user_id, char_id), query, limit=min(3, limit))})
+    return _result({"items": search(_scope(user_id, char_id), query, limit=min(3, limit))}, scope=_scope(user_id, char_id))
 
 
 async def read_memory_dossier(user_id: str, dossier_id: str, *, char_id: str) -> ToolResult:
     from core.memory.dossiers import read
     value = read(_scope(user_id, char_id), dossier_id)
-    return _result(value or {"error": "dossier_not_found"})
+    return _result(value or {"error": "dossier_not_found"}, scope=_scope(user_id, char_id))
 
 
 async def search_dossier_events(user_id: str, dossier_id: str, offset: int = 0,
