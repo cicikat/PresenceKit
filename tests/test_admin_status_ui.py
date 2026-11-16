@@ -1,5 +1,6 @@
 from pathlib import Path
 import re
+from admin_static_assets import read_admin_client_source
 
 
 ROOT = Path(__file__).parents[1]
@@ -41,7 +42,7 @@ def test_status_page_is_read_only_summary_with_explicit_configuration_entries():
 
 
 def test_structured_provider_values_use_a_boolean_selector_and_keep_secrets_write_only():
-    core = (ROOT / "admin" / "static" / "js" / "core.js").read_text(encoding="utf-8")
+    core = read_admin_client_source()
     character = (ROOT / "admin" / "static" / "js" / "character.js").read_text(encoding="utf-8")
 
     assert 'data-kv-boolean' in core
