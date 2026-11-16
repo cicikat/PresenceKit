@@ -3,10 +3,14 @@ from contextlib import contextmanager
 import hashlib
 import json
 import sqlite3
+import threading
 import uuid
 
 from core.sandbox import get_paths
 from core.config_loader import get_config
+
+
+_connection_lock = threading.Lock()
 
 
 def settings():
@@ -19,9 +23,12 @@ def settings():
 
 @contextmanager
 def connection():
-    path = get_paths().finance_db()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    db = sqlite3.connect(path, timeout=15, isolation_level=None)
+    # Windows path resolution can race the first directory/file creation.
+    # Serialize connection setup only; SQLite owns transaction concurrency.
+    with _connection_lock:
+        path = get_paths().finance_db()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        db = sqlite3.connect(path, timeout=15, isolation_level=None)
     db.row_factory = sqlite3.Row
     try:
         db.executescript('''
