@@ -8,4 +8,3 @@ function toast(msg, type = 'ok') {
   clearTimeout(_toastTimer);
   _toastTimer = setTimeout(() => el.className = '', 3200);
 }
-

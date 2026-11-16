@@ -60,4 +60,3 @@ function bindPageActions(scope) {
 /* The bridge above is the only data-action/window lookup. Domain actions keep
    their current names while fragment consumers migrate; a copied data marker
    cannot suppress binding on a new node. */
-

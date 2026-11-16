@@ -44,4 +44,3 @@ function observeAdminChanges(project, options = {}) {
     observer.disconnect();
   }};
 }
-

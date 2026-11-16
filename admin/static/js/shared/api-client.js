@@ -35,4 +35,3 @@ async function api(method, path, body, options = {}) {
     return r.json();
   }, method === 'GET' ? (options.timeoutMs ?? 10000) : 0, options.signal);
 }
-

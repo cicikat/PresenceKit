@@ -39,5 +39,3 @@ function initMobileSidebar() {
   MOBILE_NAV_MEDIA.addEventListener('change', () => closeSidebar());
   setSidebarOpen(false);
 }
-
-

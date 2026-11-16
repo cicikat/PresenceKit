@@ -68,7 +68,6 @@ function readAnniversaryEditor(root, {onValidationError} = {}) {
   }
   return result;
 }
-
 // Small structured editor for settings whose supported keys vary by provider.
 function renderKeyValueEditor(id, values = {}, options = {}) {
   const root = document.getElementById(id);
@@ -154,4 +153,3 @@ function readKeyValueEditor(id) {
   });
   return result;
 }
-
