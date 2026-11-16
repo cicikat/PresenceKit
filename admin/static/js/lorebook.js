@@ -122,11 +122,11 @@ function openLoreModal(eid) {
     document.getElementById('lore-regex').checked            = false;
     document.getElementById('lore-insertion-order').value   = 100;
   }
-  document.getElementById('lore-modal').classList.add('open');
+  AdminModal.open(document.getElementById('lore-modal'), closeLoreModal);
 }
 
 function closeLoreModal() {
-  document.getElementById('lore-modal').classList.remove('open');
+  AdminModal.close(document.getElementById('lore-modal'));
 }
 
 async function saveLoreEntry() {

@@ -28,16 +28,36 @@ function _runAction(event) {
   fn(...args, element);
 }
 
-function bindPageActions(scope) {
-  if (!scope) return;
-  const actions = [
-    ...(scope.matches?.('[data-action]') ? [scope] : []),
-    ...scope.querySelectorAll('[data-action]'),
-  ];
-  actions.forEach(element => {
-    if (element.dataset.actionBound === 'true') return;
-    element.addEventListener('click', _runAction);
-    element.dataset.actionBound = 'true';
+const AdminActions = (() => {
+  const bound = new WeakSet();
+  function targets(scope) {
+    return [...(scope.matches?.('[data-action]') ? [scope] : []), ...scope.querySelectorAll('[data-action]')];
+  }
+  return Object.freeze({
+    enhance(scope) {
+      if (!scope) return;
+      targets(scope).forEach(element => {
+        if (bound.has(element)) return;
+        element.addEventListener('click', _runAction);
+        bound.add(element);
+        element.dataset.actionBound = 'true';
+      });
+    },
+    dispose(scope) {
+      if (!scope) return;
+      targets(scope).forEach(element => {
+        element.removeEventListener('click', _runAction);
+        bound.delete(element);
+        delete element.dataset.actionBound;
+      });
+    },
   });
+})();
+
+function bindPageActions(scope) {
+  AdminActions.enhance(scope);
 }
+/* The bridge above is the only data-action/window lookup. Domain actions keep
+   their current names while fragment consumers migrate; a copied data marker
+   cannot suppress binding on a new node. */
 

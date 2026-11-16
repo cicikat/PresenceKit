@@ -462,12 +462,12 @@ function runtimeWarningsNext() {
 function openMemModal(uid) {
   _currentUser = uid;
   document.getElementById('mem-modal-title').textContent = `用户记忆：${uid}`;
-  document.getElementById('mem-modal').classList.add('open');
+  AdminModal.open(document.getElementById('mem-modal'), closeMemModal);
   memTab('profile');
 }
 
 function closeMemModal() {
-  document.getElementById('mem-modal').classList.remove('open');
+  AdminModal.close(document.getElementById('mem-modal'));
   _currentUser = null;
 }
 

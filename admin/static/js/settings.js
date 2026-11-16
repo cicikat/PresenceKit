@@ -829,10 +829,10 @@ function openCreateTokenModal() {
   const sel = document.getElementById('at-create-profile');
   sel.innerHTML = Object.keys(_atProfiles).map(p => `<option value="${p}">${p}</option>`).join('');
   renderAtCreateScopesHint();
-  document.getElementById('at-create-modal').classList.add('open');
+  AdminModal.open(document.getElementById('at-create-modal'), closeCreateTokenModal);
 }
 function closeCreateTokenModal() {
-  document.getElementById('at-create-modal').classList.remove('open');
+  AdminModal.close(document.getElementById('at-create-modal'));
 }
 function renderAtCreateScopesHint() {
   const profile = document.getElementById('at-create-profile').value;

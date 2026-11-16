@@ -164,3 +164,21 @@ domain writes have been converted to cancellable controllers.
 
 Verification: isolated navigation, acceptance and all 268 modularization projections;
 cache URLs updated as one batch. No API/schema/scope/client changes.
+
+## C: component lifecycle
+
+`shared/presentation.js` owns existing Card/Accordion and semantic signal projection;
+`ui-version.js` owns mode and its single batched observer. `shared/events.js` owns
+the sole HTML action bridge with WeakSet-based enhance/dispose (cloned attributes
+cannot pretend to own listeners). `shared/form-editors.js` owns repeated Field/
+Input/Select render/read/validation; CSS continues to style existing Button/Switch/
+Field nodes without replacing them. `shared/feedback.js` remains the single Toast.
+`shared/modal.js` owns Tab/ESC/focus; lorebook, relationship, memory, preset/profile,
+token creation and Dream dialogs retain their domain validation and close callbacks.
+One-time token success dialogs retain their specialized secret-clearing lifecycle.
+Native details, MCP triangles, player/media and code editors keep their own controls.
+
+Chromium component contract passes repeated enhance/dispose/remount, single action,
+injected duplicate listener detection, folding, draft identity, and modal keyboard/
+focus restoration. All 268 page projections still exactly equal baseline. Existing
+forms are never cloned. The new component contract runs on public assets only.

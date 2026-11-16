@@ -9,6 +9,8 @@ async function loadPageFragment(page, {reload = false} = {}) {
     await pending.catch(() => {});
   }
   if (reload) {
+    AdminActions.dispose(container);
+    AdminPresentation.dispose(container);
     delete container.dataset.pageLoaded;
     delete container.dataset.pageVisited;
     container.replaceChildren();

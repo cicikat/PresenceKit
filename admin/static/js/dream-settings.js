@@ -286,11 +286,11 @@ function openDreamLoreModal(idx = -1) {
     document.getElementById('dl-insertion-order').value = _dreamLoreEntries.length;
     document.getElementById('dl-regex').checked = false;
   }
-  modal.classList.add('open');
+  AdminModal.open(modal, closeDreamLoreModal);
 }
 
 function closeDreamLoreModal() {
-  document.getElementById('dream-lore-modal').classList.remove('open');
+  AdminModal.close(document.getElementById('dream-lore-modal'));
 }
 
 async function saveDreamLoreEntry() {
