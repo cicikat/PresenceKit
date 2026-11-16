@@ -16,6 +16,7 @@ router = APIRouter()
 CONFIG_FILE = Path("config.yaml")
 
 FLAGS = {
+    "finance_ingest": ("finance_ingest", "enabled", "自动记账"),
     "affective_engine": ("affective_engine", "enabled", "事件驱动的混合情绪与认知重评"),
     "screen_observation": ("screen_observation", "enabled", "角色按需截图（电脑与手机）"),
     "computer_use": ("computer_use", "enabled", "Windows Computer Use"),
@@ -82,7 +83,10 @@ async def get_feature_flags(auth=Depends(require_scopes("admin"))):
             "apply_mode": "hot_reload",
             "restart_required": False,
         }
-        if name == "affective_engine":
+        if name == "finance_ingest":
+            item["effective_state"] = "enabled" if enabled else "disabled"
+            item["description"] = "默认关闭；控制手机财务候选同步。关闭即停止同步及角色读取，保留账本。手机仍需开启本机收集并授予通知读取权限；角色只读授权在细分设置单独控制。"
+        elif name == "affective_engine":
             item["effective_state"] = "enabled" if enabled else "expression-only"
             item["description"] = "默认开启；发送后评价真实用户对话，每回合最多一次、8秒总预算。关闭即回到仅明确表达余韵；既有事件保留但不参与心理提示。"
         elif name == "qq":

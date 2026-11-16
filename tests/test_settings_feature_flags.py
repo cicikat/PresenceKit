@@ -2,14 +2,49 @@ import asyncio
 
 import pytest
 import yaml
-
 from admin.routers import settings_feature_flags as mod
 
+
+def test_finance_overview_and_detail_share_one_persisted_switch(tmp_path, monkeypatch, sandbox):
+    """Overview must expose/toggle finance and retain the independent character-read consent."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from admin.auth import TokenInfo
+    from admin.routers import finance as routes
+    from core import finance as store, config_loader
+    path = tmp_path / 'finance-settings.yaml'
+    path.write_text(yaml.safe_dump({'scheduler': {'owner_id': 'fixture-owner'},
+                                  'finance_ingest': {'enabled': False, 'character_readable': True}}), encoding='utf-8')
+    read = lambda: yaml.safe_load(path.read_text(encoding='utf-8'))
+    monkeypatch.setattr(mod, 'CONFIG_FILE', path)
+    for module in (mod, routes, store):
+        monkeypatch.setattr(module, 'get_config', read)
+    monkeypatch.setattr(config_loader, 'reload_config', lambda: None)
+    monkeypatch.setattr(config_loader, 'get_config', read)
+    monkeypatch.setattr(config_loader, 'get_config_path', lambda: path)
+    monkeypatch.setattr('admin.auth.resolve_token', lambda token: TokenInfo('fixture', frozenset({token})))
+    app = FastAPI(); app.include_router(mod.router); app.include_router(routes.router)
+    headers = {'Authorization': 'Bearer admin'}
+    with TestClient(app) as client:
+        initial = client.get('/settings/feature-flags', headers=headers).json()['flags']
+        assert 'finance_ingest' in initial
+        assert initial['finance_ingest']['enabled'] is False
+        saved = client.put('/settings/feature-flags', json={'flags': {'finance_ingest': True}}, headers=headers)
+        assert saved.status_code == 200
+        assert saved.json()['flags']['finance_ingest']['effective_state'] == 'enabled'
+        detail = client.get('/settings/finance', headers=headers).json()
+        assert detail['enabled'] is True and detail['character_readable'] is True
+        assert read()['finance_ingest'] == {'enabled': True, 'character_readable': True}
+        assert client.get('/finance/capabilities', headers={'Authorization':'Bearer finance_ingest'}).json()['effective'] is True
+        assert client.put('/settings/finance', json={'enabled':False,'character_readable':True}, headers=headers).status_code == 200
+        assert client.get('/settings/feature-flags', headers=headers).json()['flags']['finance_ingest']['enabled'] is False
+        assert client.put('/settings/feature-flags', json={'flags':{'finance_ingest':True}}, headers={'Authorization':'Bearer finance_ingest'}).status_code == 403
 
 @pytest.fixture(autouse=True)
 def _stub_screen_observation_state(monkeypatch):
     from core.perception import screen_observation
-    from core import qq_service
+    from core import qq_service, config_loader
+    monkeypatch.setattr(config_loader, "get_config", lambda: mod.get_config() or {})
     monkeypatch.setattr(qq_service, "get_config", lambda: mod.get_config() or {})
 
     monkeypatch.setattr(
