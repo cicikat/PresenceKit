@@ -1,6 +1,6 @@
 ## 工具后空收尾与主模型延迟（326，2026-11-16，observe）
 
-08:32工具步骤成功后，额外tool-free收尾产生空正文，后端08:32:56返回502且回执failed，无canonical；并非昨晚的多工具封包异常。已修复空收尾丢弃同轮已有自然回答：候选重新经过完成声明及工具元数据守卫，不重跑工具，两份正文均空仍失败。已随325模块拆分部署；隔离真实pipeline/dispatcher、真实模型单/双工具及来源隔离验证通过。08:59自然消息后端completed、133字符；该轮主模型90秒超时后备用约8秒成功，延迟仍observe，未调整模型配置。原生展示及工具后空收尾的自然用户验收仍待观测。管理面VPS实际新资源/受影响页面加载已验证；完整登录刷新脚本在隧道guide恢复超时，尚未完成该项验收。详见[326交付](../cc-tasks/326-empty-tool-closing-and-vps-delivery.md)。
+08:32工具步骤成功后，额外tool-free收尾产生空正文，后端08:32:56返回502且回执failed，无canonical；并非昨晚的多工具封包异常。已修复空收尾丢弃同轮已有自然回答：候选重新经过完成声明及工具元数据守卫，不重跑工具，两份正文均空仍失败。已随325模块拆分部署；隔离真实pipeline/dispatcher、真实模型单/双工具及来源隔离验证通过。08:59自然消息后端completed、133字符；该轮主模型90秒超时后备用约8秒成功，延迟仍observe，未调整模型配置。原生展示及工具后空收尾的自然用户验收仍待观测。管理面VPS实际新资源/受影响页面加载已验证；完整登录刷新脚本在隧道guide恢复超时，尚未完成该项验收。详见[326交付历史](https://github.com/cicikat/PresenceKit/blob/a0596b25fd56c10386d1719145e53f0ed00a853a/cc-tasks/326-empty-tool-closing-and-vps-delivery.md)。
 
 ## 管理面板 200ms 预算（2026-11-15，open / observe）
 
@@ -10,7 +10,20 @@ DOM 增量投影、脚本并行下载、本机中文字体与 C 安全 YAML 已�
 
 ## 工单323/56 桌面发送与流响应（2026-11-15，partial / open）
 
-已确认线上六次桌面502为 gemini-ol / gemini-4-carbon 流结束后非法 choice，另一次500为配置重载关闭在途连接。工单56修复桌面流可见后忽略错误、失败回执删除正文及未回复历史尾注泄漏；缓冲失败正文可安全投递但仍为 failed。工单324确认20:21、20:22及20:44同类失败；20:44出错步骤缓存正文0字符、工具1个，同事件再次出现tool_calls包。单工具探针正常；进一步真实合成双工具探针捕获每工具单独finish_reason=tool_calls且重复index=0、独立工具ID，旧解析器在第二包复现同一格式错误。已部署逐工具封包适配、重复快照去重、失败正文保留及诊断；必须收齐空stop总结束包再释放工具，截断不执行。真实同/不同工具双调用及捕获合成SSE回放通过。历史失败原包缺失，原生设备及自然用户聊天恢复仍observe；热重载在途连接竞争仍open。见 [324工单](../cc-tasks/324-stream-tail-compatibility.md)、[323诊断](../cc-tasks/323-desktop-chat-failure-investigation.md) 与 [56交付](chat-recovery-stream-56.md)。
+已确认线上六次桌面502为 gemini-ol / gemini-4-carbon 流结束后非法 choice，另一次500为配置重载关闭在途连接。工单56修复桌面流可见后忽略错误、失败回执删除正文及未回复历史尾注泄漏；缓冲失败正文可安全投递但仍为 failed。工单324确认20:21、20:22及20:44同类失败；20:44出错步骤缓存正文0字符、工具1个，同事件再次出现tool_calls包。单工具探针正常；进一步真实合成双工具探针捕获每工具单独finish_reason=tool_calls且重复index=0、独立工具ID，旧解析器在第二包复现同一格式错误。已部署逐工具封包适配、重复快照去重、失败正文保留及诊断；必须收齐空stop总结束包再释放工具，截断不执行。真实同/不同工具双调用及捕获合成SSE回放通过。历史失败原包缺失，原生设备及自然用户聊天恢复仍observe；热重载在途连接竞争仍open。见 [324工单历史](https://github.com/cicikat/PresenceKit/blob/a0596b25fd56c10386d1719145e53f0ed00a853a/cc-tasks/324-stream-tail-compatibility.md)、[323诊断历史](https://github.com/cicikat/PresenceKit/blob/a0596b25fd56c10386d1719145e53f0ed00a853a/cc-tasks/323-desktop-chat-failure-investigation.md) 与 [56交付](chat-recovery-stream-56.md)。
+
+## 工具回合在模型切换后再次回到熔断主模型（2026-11-15，open）
+
+生产只读取证：UTC 02:14:54–02:15:04、02:16:38–02:16:56 的两次桌面请求均以 failed 结束，
+分别记录 InternalServerError 和 RuntimeError。服务日志与当日 api_calls 台账一致：
+主模型 gemini-3.8-flash-high 返回 503 model_unavailable（线路繁忙或维护）；第一次已有工具历史，
+failover 以 tool_history_present 跳过备用。第二次首步切换 claude-sonnet-5-5 成功，后续工具回合
+重新选择主模型，命中 breaker_open，再因 tool_history_present 跳过备用，最终异常为
+RuntimeError: tool_history_present。无最终 canonical 回复；期间 QQ 断线日志不是这两次 HTTP 500 的异常来源。
+
+排查入口：core/llm_failover.py 的 execute_create 工具历史闸门、core/llm_client.py 的 chat_turn、
+core/pipeline.py 的 run_agentic_loop。建议另单设计回合内模型接续，使工具响应留在匹配的执行模型，
+保留工具历史兼容保护与动作去重，不直接删除闸门或自动重放用户请求。本次只记录证据，未改生产路由或运行代码。
 
 ## Browser + Visual Workbench 314（open / observe）
 
@@ -1128,4 +1141,4 @@ Windows 原子扫描仍与本机授权设置串行，逐扫描项合作式取消
 
 ## 工单331 附件识别边界（observe）
 
-多格式附件已完成本地HTTP/资料库、桌面浏览器和手机回归验证；真实安装版、手机文件提供器和真实模型尚未验收。PDF扫描页、文档内图片/图表/版面与视频不自动识别，需另发图片；旧DOC/XLS/PPT需转换。详见 [331工单](../cc-tasks/331-multiformat-chat-attachments.md)。
+多格式附件已完成本地HTTP/资料库、桌面浏览器和手机回归验证；真实安装版、手机文件提供器和真实模型尚未验收。PDF扫描页、文档内图片/图表/版面与视频不自动识别，需另发图片；旧DOC/XLS/PPT需转换。详见 [331工单历史](https://github.com/cicikat/PresenceKit/blob/a0596b25fd56c10386d1719145e53f0ed00a853a/cc-tasks/331-multiformat-chat-attachments.md)。

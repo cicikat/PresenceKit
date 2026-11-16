@@ -2,6 +2,10 @@
 
 current：桌面失败/未知显式感叹号重发、断流正文保留与晚到 canonical 原位替换；手机无气泡投递说明及旋转补读图标，既有失败按钮、长按取消保留。后端未回复历史尾注过滤、缓冲失败安全正文投递复用既有 stream 消息和 request_id；failed 不被伪装 completed。无新端点、设置、权限或持久字段，mobile session/ACK/cursor/TTL/通知不变。open：历史坏流尾包缺原始报文、配置重载在途连接竞争。observe：原生设备及修改后的线上验收未运行。详见 [56交付](chat-recovery-stream-56.md)。
 
+## 桌面失败提示与工具回合接续（2026-11-15，current / open / observe）
+
+current：桌面失败或未知结果保留本地草稿，红色感叹号允许显式使用新 request_id 重发，复用用户气泡、保留新输入，恢复查询不自动重放；无 REST/WS/IPC、scope、运营开关或手机行为变更。observe：隔离浏览器已验证点击/双击及去重，真实安装版 Windows/Tauri 重发未验收。open：生产主模型 503 后，工具回合可能重新选择已熔断主模型，再被 tool_history_present 阻止备用，造成最终 HTTP 500；服务日志与 API 台账已互证，未改生产模型路由。详见 [已知问题](known-issues.md#工具回合在模型切换后再次回到熔断主模型2026-11-15open) 和桌面 docs/chat-correlation.md。
+
 ## 工单 314 · 桌面 Browser + Visual Workbench（current / open / observe）
 
 current：device-file-agent.v1 poll 的 operations 增加 browser，响应增加 browser_tasks；browser 动作复用 grant/revision/epoch/nonce/lease/ACK 与 Task/Work Session，未知 ACK 不重放。Windows 打包 Chromium 处理授权文本副本与可信 React/Three runtime，VPS 不读本机物理路径。截图分块/hash绑定，600秒内存 TTL、state.read/no-store 诊断和管理面复核；视觉复用 screen 主备。无新增运营开关、scope 或手机协议，手机不执行浏览器。先更新后端，再更新含worker的桌面；回滚反向。详见 [协议](device-file-agent-contract.md#isolated-desktop-browser-preview-314)。
@@ -1428,4 +1432,4 @@ current：手机私有Outbox v1新增可选queued_at（旧快照回退created_at
 
 CSV保留空格、空单元格、引号与换行；XLSX提取工作表和单元格地址、原始数字/日期值及公式文本，不执行公式；PPTX保留页序和正文/表格。PDF逐页提取文字，混合PDF无文字页标为未识别；纯扫描PDF返回422 `document_needs_ocr`，需上传页面图片或先转为可搜索PDF。容器超限返回422 `document_container_too_large`；损坏/加密/空正文返回 `file_parse_failed`；超过正文上限返回 `document_text_too_large`，均不静默截断。文档内图片、图表、版面和视频尚未自动视觉识别，旧DOC/XLS/PPT需转换。
 
-验证：后端HTTP/资料库及相关59项、增量含换行31项、桌面7项Vitest、TS/Vite生产构建、Rust检查和附件原生测试、手机静态分析和84项发送/附件回归通过；隔离浏览器验证CSV发送、实际选择器过滤、右侧关闭和附件保留。observe：真实安装版/手机文件提供器/真实模型与生产部署未验收。详见 [331工单](../cc-tasks/331-multiformat-chat-attachments.md)。
+验证：后端HTTP/资料库及相关59项、增量含换行31项、桌面7项Vitest、TS/Vite生产构建、Rust检查和附件原生测试、手机静态分析和84项发送/附件回归通过；隔离浏览器验证CSV发送、实际选择器过滤、右侧关闭和附件保留。observe：真实安装版/手机文件提供器/真实模型与生产部署未验收。详见 [331工单历史](https://github.com/cicikat/PresenceKit/blob/a0596b25fd56c10386d1719145e53f0ed00a853a/cc-tasks/331-multiformat-chat-attachments.md)。
