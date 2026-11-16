@@ -166,17 +166,10 @@ from core.tool_runtime.execution import (
 logger = logging.getLogger(__name__)
 
 
-def _active_char_id() -> str:
-    try:
-        from core.pipeline_registry import get as _get_pipeline
-        from core.data_paths import DEFAULT_CHAR_ID
-        return str(getattr(_get_pipeline(), "_active_character_id", None) or DEFAULT_CHAR_ID)
-    except Exception:
-        from core.data_paths import DEFAULT_CHAR_ID
-        return DEFAULT_CHAR_ID
+from core.tool_runtime.context import _active_char_id
 
 
-_TOOL_REGISTRY: dict[str, dict] = {}
+from core.tool_runtime.registry import _TOOL_REGISTRY
 
 
 _send_callback: Callable | None = None
@@ -215,20 +208,10 @@ _SCOPED_MEMORY_READ_TOOLS: frozenset[str] = frozenset({
 })
 
 
-_ACTION_TARGETS: dict[str, str] = {
-    "avatar_directive": "desktop",
-    "dream_invite": "desktop",
-    "media_play_pause": "desktop",
-    "minimize_window": "desktop",
-    "open_url": "desktop",
-    "play_netease": "desktop",
-    "show_notify": "desktop",
-    "toy_invite": "desktop",
-    "show_heart": "device",
-}
+from core.tools.devices_definitions import _ACTION_TARGETS
 
 
-_agent_session_id = {"type": "string", "maxLength": 32, "description": "持续桌面会话 ID，省略时使用最近的会话。"}
+from core.tools.devices_definitions import _agent_session_id
 
 
 _INTIFACE_TOOL_NAMES: frozenset[str] = frozenset({
@@ -354,7 +337,3 @@ class ToolDispatcher:
             tool_status_observer=tool_status_observer,
             allowed_tool_names=allowed_tool_names,
         )
-
-
-from core.tool_runtime.registry import build_registry as _build_registry
-_build_registry(_TOOL_REGISTRY)

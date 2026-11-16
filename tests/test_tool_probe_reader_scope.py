@@ -1,3 +1,5 @@
+
+from tests.tool_registry import patch_registry
 from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_tool_probe_reader_scope.py — P1-0B: handle_message probe reader char_id scope
@@ -72,7 +74,7 @@ def _patch_env(monkeypatch):
     monkeypatch.setattr(_sm, "notify_owner_turn", lambda uid: None)
     monkeypatch.setattr(_pr, "update_last_message", lambda uid: None)
     monkeypatch.setattr(_gc, "append", lambda *a, **kw: None)
-    monkeypatch.setattr(_td, "_TOOL_REGISTRY", {})
+    patch_registry(monkeypatch, {})
     monkeypatch.setattr(_td, "get_probe_prompt", lambda loc, **kwargs: "")
     monkeypatch.setattr(_td, "get_tools_schema", lambda categories=None: [
         {"type": "function", "function": {"name": "weather", "description": "", "parameters": {}}},

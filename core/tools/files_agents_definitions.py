@@ -1,7 +1,15 @@
 """Files Agents tool definitions and invocation adapters.
 
-The dispatcher remains the legacy dependency-injection seam; no state is copied.
+Domain implementations and trusted invocation bindings have one owner.
 """
+
+from core.tools import device_file_tools as _device_file_tools
+from core.tools import gmail_tools as _gmail_tools
+from core.tools import character_intent_tools as _intent_tools
+import hashlib
+import json
+import uuid
+
 
 async def _fs_list_wrapper(
     path: str | None = None,
@@ -10,7 +18,6 @@ async def _fs_list_wrapper(
     user_id: str | None = None,
     char_id: str | None = None,
 ) -> str:
-    from core import tool_dispatcher as _runtime
     from core.tools.fs_browse import fs_list
     return fs_list(path=path, depth=depth, user_id=user_id, char_id=char_id)
 
@@ -22,40 +29,35 @@ async def _fs_read_wrapper(
     user_id: str | None = None,
     char_id: str | None = None,
 ) -> str:
-    from core import tool_dispatcher as _runtime
     from core.tools.fs_browse import fs_read
     return fs_read(path=path, offset=offset, user_id=user_id, char_id=char_id)
 
 
 async def _workspace_list_wrapper(path: str | None = None, depth: int = 1, *, user_id: str | None = None, char_id: str | None = None) -> str:
-    from core import tool_dispatcher as _runtime
-    from core.agent_runtime.workspace import list_workspace
-    from core.agent_runtime.models import TaskPrincipal
-    return _runtime.json.dumps(list_workspace(TaskPrincipal.reality(user_id or "", char_id or ""), path, depth), ensure_ascii=False)
+    from core.agentworkspace import list_workspace
+    from core.agentmodels import TaskPrincipal
+    return json.dumps(list_workspace(TaskPrincipal.reality(user_id or "", char_id or ""), path, depth), ensure_ascii=False)
 
 
 async def _workspace_read_wrapper(path: str, *, user_id: str | None = None, char_id: str | None = None) -> str:
-    from core import tool_dispatcher as _runtime
-    from core.agent_runtime.workspace import read_workspace
-    from core.agent_runtime.models import TaskPrincipal
+    from core.agentworkspace import read_workspace
+    from core.agentmodels import TaskPrincipal
     return read_workspace(TaskPrincipal.reality(user_id or "", char_id or ""), path)
 
 
 def _workspace_tool_request(idem: str):
     """Workspace execute() has no canonical turn_id; bind the request fingerprint."""
-    from core import tool_dispatcher as _runtime
-    from core.agent_runtime.models import CausationRef
+    from core.agentmodels import CausationRef
     return CausationRef("tool_request", idem)
 
 
 async def _workspace_write_wrapper(path: str, content: str, *, operation: str, confirmed: bool = False, user_id: str | None = None, char_id: str | None = None) -> str:
-    from core import tool_dispatcher as _runtime
-    from core.agent_runtime.workspace import write_workspace
-    from core.agent_runtime.models import TaskPrincipal, RetryPolicy
-    from core.agent_runtime.task_manager import create_task, claim_next, complete_task, fail_task
+    from core.agentworkspace import write_workspace
+    from core.agentmodels import TaskPrincipal, RetryPolicy
+    from core.agenttask_manager import create_task, claim_next, complete_task, fail_task
     principal = TaskPrincipal.reality(user_id or "", char_id or "")
     capability = f"workspace.{operation}"
-    idem = _runtime.hashlib.sha256((operation + "\0" + path + "\0" + content).encode("utf-8")).hexdigest()
+    idem = hashlib.sha256((operation + "\0" + path + "\0" + content).encode("utf-8")).hexdigest()
     receipt, created = create_task(
         principal,
         capability=capability,
@@ -63,19 +65,19 @@ async def _workspace_write_wrapper(path: str, content: str, *, operation: str, c
         idempotency_key=idem,
         ttl_seconds=300,
         retry_policy=RetryPolicy.NEVER.value,
-        causation_ref=_runtime._workspace_tool_request(idem),
+        causation_ref=_workspace_tool_request(idem),
         request_fingerprint=idem,
     )
     if not created and receipt["status"] in {"succeeded", "failed", "canceled", "expired", "outcome_unknown"}:
-        return _runtime.json.dumps({"receipt": receipt["task_id"], "status": receipt["status"], "duplicate": True}, ensure_ascii=False)
+        return json.dumps({"receipt": receipt["task_id"], "status": receipt["status"], "duplicate": True}, ensure_ascii=False)
     lease = claim_next(principal, task_id=receipt["task_id"], capabilities={capability})
     if lease is None:
-        return _runtime.json.dumps({"receipt": receipt["task_id"], "status": receipt["status"], "duplicate": True}, ensure_ascii=False)
+        return json.dumps({"receipt": receipt["task_id"], "status": receipt["status"], "duplicate": True}, ensure_ascii=False)
     try:
         result = write_workspace(principal, path, content, overwrite=operation == "update", operation=operation)
         if lease:
             complete_task(principal, lease, result_metadata={"outcome_code": "written", "counters": {"bytes": result["size"], "version": result["version"]}})
-        return _runtime.json.dumps({"receipt": receipt["task_id"], **result}, ensure_ascii=False)
+        return json.dumps({"receipt": receipt["task_id"], **result}, ensure_ascii=False)
     except Exception as exc:
         if lease:
             fail_task(principal, lease, error_code=getattr(exc, "code", "workspace_write_failed"))
@@ -83,22 +85,19 @@ async def _workspace_write_wrapper(path: str, content: str, *, operation: str, c
 
 
 async def _workspace_create_wrapper(path: str, content: str, *, user_id: str | None = None, char_id: str | None = None) -> str:
-    from core import tool_dispatcher as _runtime
-    return await _runtime._workspace_write_wrapper(path, content, operation="create", user_id=user_id, char_id=char_id)
+    return await _workspace_write_wrapper(path, content, operation="create", user_id=user_id, char_id=char_id)
 
 
 async def _workspace_update_wrapper(path: str, content: str, *, confirmed: bool = False, user_id: str | None = None, char_id: str | None = None) -> str:
-    from core import tool_dispatcher as _runtime
-    return await _runtime._workspace_write_wrapper(path, content, operation="update", confirmed=confirmed, user_id=user_id, char_id=char_id)
+    return await _workspace_write_wrapper(path, content, operation="update", confirmed=confirmed, user_id=user_id, char_id=char_id)
 
 
 async def _workspace_delete_wrapper(path: str, *, confirmed: bool = False, user_id: str | None = None, char_id: str | None = None) -> str:
-    from core import tool_dispatcher as _runtime
-    from core.agent_runtime.workspace import delete_workspace
-    from core.agent_runtime.models import TaskPrincipal, RetryPolicy
-    from core.agent_runtime.task_manager import create_task, claim_next, complete_task, fail_task
+    from core.agentworkspace import delete_workspace
+    from core.agentmodels import TaskPrincipal, RetryPolicy
+    from core.agenttask_manager import create_task, claim_next, complete_task, fail_task
     principal = TaskPrincipal.reality(user_id or "", char_id or "")
-    idem = _runtime.hashlib.sha256(("delete\0" + path).encode("utf-8")).hexdigest()
+    idem = hashlib.sha256(("delete\0" + path).encode("utf-8")).hexdigest()
     receipt, created = create_task(
         principal,
         capability="workspace.delete",
@@ -106,19 +105,19 @@ async def _workspace_delete_wrapper(path: str, *, confirmed: bool = False, user_
         idempotency_key=idem,
         ttl_seconds=300,
         retry_policy=RetryPolicy.NEVER.value,
-        causation_ref=_runtime._workspace_tool_request(idem),
+        causation_ref=_workspace_tool_request(idem),
         request_fingerprint=idem,
     )
     if not created and receipt["status"] in {"succeeded", "failed", "canceled", "expired", "outcome_unknown"}:
-        return _runtime.json.dumps({"receipt": receipt["task_id"], "status": receipt["status"], "duplicate": True}, ensure_ascii=False)
+        return json.dumps({"receipt": receipt["task_id"], "status": receipt["status"], "duplicate": True}, ensure_ascii=False)
     lease = claim_next(principal, task_id=receipt["task_id"], capabilities={"workspace.delete"})
     if lease is None:
-        return _runtime.json.dumps({"receipt": receipt["task_id"], "status": receipt["status"], "duplicate": True}, ensure_ascii=False)
+        return json.dumps({"receipt": receipt["task_id"], "status": receipt["status"], "duplicate": True}, ensure_ascii=False)
     try:
         result = delete_workspace(principal, path, confirmed=True)
         if lease:
             complete_task(principal, lease, result_metadata={"outcome_code": "deleted", "counters": {"version": result["version"]}})
-        return _runtime.json.dumps({"receipt": receipt["task_id"], **result}, ensure_ascii=False)
+        return json.dumps({"receipt": receipt["task_id"], **result}, ensure_ascii=False)
     except Exception as exc:
         if lease:
             fail_task(principal, lease, error_code=getattr(exc, "code", "workspace_delete_failed"))
@@ -126,12 +125,11 @@ async def _workspace_delete_wrapper(path: str, *, confirmed: bool = False, user_
 
 
 async def _workspace_undo_wrapper(path: str, *, confirmed: bool = False, user_id: str | None = None, char_id: str | None = None) -> str:
-    from core import tool_dispatcher as _runtime
-    from core.agent_runtime.workspace import undo_workspace
-    from core.agent_runtime.models import TaskPrincipal, RetryPolicy
-    from core.agent_runtime.task_manager import create_task, claim_next, complete_task, fail_task
+    from core.agentworkspace import undo_workspace
+    from core.agentmodels import TaskPrincipal, RetryPolicy
+    from core.agenttask_manager import create_task, claim_next, complete_task, fail_task
     principal = TaskPrincipal.reality(user_id or "", char_id or "")
-    idem = _runtime.hashlib.sha256(("undo\0" + path).encode("utf-8")).hexdigest()
+    idem = hashlib.sha256(("undo\0" + path).encode("utf-8")).hexdigest()
     receipt, created = create_task(
         principal,
         capability="workspace.update",
@@ -139,19 +137,19 @@ async def _workspace_undo_wrapper(path: str, *, confirmed: bool = False, user_id
         idempotency_key=idem,
         ttl_seconds=300,
         retry_policy=RetryPolicy.NEVER.value,
-        causation_ref=_runtime._workspace_tool_request(idem),
+        causation_ref=_workspace_tool_request(idem),
         request_fingerprint=idem,
     )
     if not created and receipt["status"] in {"succeeded", "failed", "canceled", "expired", "outcome_unknown"}:
-        return _runtime.json.dumps({"receipt": receipt["task_id"], "status": receipt["status"], "duplicate": True}, ensure_ascii=False)
+        return json.dumps({"receipt": receipt["task_id"], "status": receipt["status"], "duplicate": True}, ensure_ascii=False)
     lease = claim_next(principal, task_id=receipt["task_id"], capabilities={"workspace.update"})
     if lease is None:
-        return _runtime.json.dumps({"receipt": receipt["task_id"], "status": receipt["status"], "duplicate": True}, ensure_ascii=False)
+        return json.dumps({"receipt": receipt["task_id"], "status": receipt["status"], "duplicate": True}, ensure_ascii=False)
     try:
         result = undo_workspace(principal, path, confirmed=True)
         if lease:
             complete_task(principal, lease, result_metadata={"outcome_code": "undone", "counters": {"version": result["version"]}})
-        return _runtime.json.dumps({"receipt": receipt["task_id"], **result}, ensure_ascii=False)
+        return json.dumps({"receipt": receipt["task_id"], **result}, ensure_ascii=False)
     except Exception as exc:
         if lease:
             fail_task(principal, lease, error_code=getattr(exc, "code", "workspace_undo_failed"))
@@ -169,9 +167,8 @@ async def _process_run_wrapper(
     char_id: str | None = None,
 ) -> str:
     """Run one explicitly requested, workspace-scoped temporary program."""
-    from core import tool_dispatcher as _runtime
-    from core.agent_runtime.models import TaskPrincipal
-    from core.agent_runtime.process_runner import ProcessLimits, run_process_task
+    from core.agentmodels import TaskPrincipal
+    from core.agentprocess_runner import ProcessLimits, run_process_task
 
     principal = TaskPrincipal.reality(user_id or "", char_id or "")
     result = await run_process_task(
@@ -179,12 +176,12 @@ async def _process_run_wrapper(
         program=program,
         args=args,
         interpreter=interpreter,
-        idempotency_key=_runtime.hashlib.sha256(
-            _runtime.json.dumps([program, args or [], interpreter, wall_seconds, output_bytes], separators=(",", ":")).encode("utf-8")
+        idempotency_key=hashlib.sha256(
+            json.dumps([program, args or [], interpreter, wall_seconds, output_bytes], separators=(",", ":")).encode("utf-8")
         ).hexdigest(),
         limits=ProcessLimits(wall_seconds=wall_seconds, output_bytes=output_bytes),
     )
-    return _runtime.json.dumps({
+    return json.dumps({
         "receipt": result.get("receipt"),
         "stdout": result.get("stdout", ""),
         "stderr": result.get("stderr", ""),
@@ -206,12 +203,11 @@ async def _start_agent_task_wrapper(
     char_id: str,
     origin: str,
 ) -> str:
-    from core import tool_dispatcher as _runtime
-    from core.agent_runtime.agent_tasks import AgentTaskError, start_agent_task
-    from core.agent_runtime.models import CausationRef, TaskPrincipal
+    from core.agentagent_tasks import AgentTaskError, start_agent_task
+    from core.agentmodels import CausationRef, TaskPrincipal
 
-    fingerprint = _runtime.hashlib.sha256(
-        _runtime.json.dumps(
+    fingerprint = hashlib.sha256(
+        json.dumps(
             [origin, request_id, goal, workspace_id, task_type, input_refs or [], budget or {}],
             ensure_ascii=False,
             sort_keys=True,
@@ -230,49 +226,47 @@ async def _start_agent_task_wrapper(
             causation_ref=CausationRef("tool_request", fingerprint),
             source="autonomy" if origin == "autonomy_loop" else "tool",
         )
-        return _runtime.json.dumps(result, ensure_ascii=False)
+        return json.dumps(result, ensure_ascii=False)
     except AgentTaskError as exc:
         if exc.code in {
             "workspace_id_not_found",
             "workspace_manifest_denied",
             "workspace_manifest_expired",
         }:
-            return _runtime.json.dumps({
+            return json.dumps({
                 "status": "waiting_approval",
                 "error_code": "workspace_grant_required",
                 "message": "等待管理面授权该 workspace 后再重试；当前请求未执行。",
             }, ensure_ascii=False)
-        return _runtime.json.dumps({"status": "failed", "error_code": exc.code}, ensure_ascii=False)
+        return json.dumps({"status": "failed", "error_code": exc.code}, ensure_ascii=False)
 
 
 async def _get_agent_task_wrapper(
     task_id: str, *, user_id: str, char_id: str, origin: str
 ) -> str:
-    from core import tool_dispatcher as _runtime
-    from core.agent_runtime.agent_tasks import get_agent_task
-    from core.agent_runtime.models import TaskPrincipal
+    from core.agentagent_tasks import get_agent_task
+    from core.agentmodels import TaskPrincipal
 
     try:
         result = get_agent_task(TaskPrincipal.reality(user_id, char_id), task_id)
-        return _runtime.json.dumps(result, ensure_ascii=False)
+        return json.dumps(result, ensure_ascii=False)
     except Exception as exc:
         code = getattr(exc, "code", "agent_task_not_found")
-        return _runtime.json.dumps({"status": "failed", "error_code": code}, ensure_ascii=False)
+        return json.dumps({"status": "failed", "error_code": code}, ensure_ascii=False)
 
 
 async def _cancel_agent_task_wrapper(
     task_id: str, *, user_id: str, char_id: str, origin: str
 ) -> str:
-    from core import tool_dispatcher as _runtime
-    from core.agent_runtime.agent_tasks import cancel_agent_task
-    from core.agent_runtime.models import TaskPrincipal
+    from core.agentagent_tasks import cancel_agent_task
+    from core.agentmodels import TaskPrincipal
 
     try:
         result = cancel_agent_task(TaskPrincipal.reality(user_id, char_id), task_id)
-        return _runtime.json.dumps(result, ensure_ascii=False)
+        return json.dumps(result, ensure_ascii=False)
     except Exception as exc:
         code = getattr(exc, "code", "agent_task_not_found")
-        return _runtime.json.dumps({"status": "failed", "error_code": code}, ensure_ascii=False)
+        return json.dumps({"status": "failed", "error_code": code}, ensure_ascii=False)
 
 
 async def _browser_automation_wrapper(
@@ -287,20 +281,19 @@ async def _browser_automation_wrapper(
     char_id: str | None = None,
 ) -> str:
     """Run one bounded browser task; page data never enters task receipts."""
-    from core import tool_dispatcher as _runtime
     from core.agent_runtime import browser
-    from core.agent_runtime.models import TaskPrincipal
+    from core.agentmodels import TaskPrincipal
     principal = TaskPrincipal.reality(user_id or "", char_id or "")
-    idem = _runtime.hashlib.sha256(_runtime.json.dumps([url, operation, selector, value, path], separators=(",", ":")).encode()).hexdigest()
+    idem = hashlib.sha256(json.dumps([url, operation, selector, value, path], separators=(",", ":")).encode()).hexdigest()
     try:
         call_params = {"selector": selector, "value": value, "path": path} if any((selector, value, path)) else {}
         receipt = browser.create_task(principal, url=url, operation=operation, params=call_params, idempotency_key=idem, confirmed=confirmed)
         if receipt["status"] == "waiting_confirm":
             receipt = browser.confirm_task(principal, receipt["task_id"])
         result = await browser.run_task(principal, receipt["task_id"], url=url, operation=operation, confirmed=confirmed, params=call_params)
-        return _runtime.json.dumps({"receipt": result.get("receipt"), "result": result.get("result")}, ensure_ascii=False)
+        return json.dumps({"receipt": result.get("receipt"), "result": result.get("result")}, ensure_ascii=False)
     except browser.BrowserError as exc:
-        return _runtime.json.dumps({"status": "failed", "error_code": exc.code}, ensure_ascii=False)
+        return json.dumps({"status": "failed", "error_code": exc.code}, ensure_ascii=False)
 
 
 async def _manage_self_capability_wrapper(
@@ -316,7 +309,6 @@ async def _manage_self_capability_wrapper(
     origin: str,
 ) -> str:
     """Narrow internal gateway; it never accepts a config path or secret."""
-    from core import tool_dispatcher as _runtime
     from core.self_management.models import CapabilityChange
     from core.self_management.registry import _canonical
     from core.self_management.service import agent_change
@@ -339,7 +331,7 @@ async def _manage_self_capability_wrapper(
     canonical_id = _canonical(capability_id)
     row = next((item for item in view(user_id, char_id)["capabilities"]
                 if item["capability_id"] == canonical_id), None)
-    return _runtime.json.dumps({
+    return json.dumps({
         "operation_succeeded": result.ok,
         "error_code": None if result.ok else result.code,
         "capability_id": canonical_id,
@@ -349,7 +341,6 @@ async def _manage_self_capability_wrapper(
 
 
 async def _list_self_capabilities_wrapper(*, user_id: str, char_id: str) -> str:
-    from core import tool_dispatcher as _runtime
     from core.self_management.policy import can_agent_manage
     from core.self_management.service import view
     from core.self_management.store import append_audit
@@ -367,29 +358,27 @@ async def _list_self_capabilities_wrapper(*, user_id: str, char_id: str) -> str:
             "requires_owner_authorization": not can_modify,
         })
     append_audit(user_id, char_id, {"actor": "agent_inspection", "result": "inspected",
-                                    "event_id": _runtime.uuid.uuid4().hex, "capability_id": "*"})
-    return _runtime.json.dumps({"revision": snapshot["revision"], "capabilities": rows}, ensure_ascii=False)
+                                    "event_id": uuid.uuid4().hex, "capability_id": "*"})
+    return json.dumps({"revision": snapshot["revision"], "capabilities": rows}, ensure_ascii=False)
 
 
 async def _read_self_action_history_wrapper(
     time_range: str = "24h", capability_id: str = "", tool: str = "", status: str = "",
     *, user_id: str, char_id: str,
 ) -> str:
-    from core import tool_dispatcher as _runtime
     from core.self_management.store import append_audit, query_audit
     from core.tool_audit import query as query_tool_audit
 
     actions = query_audit(user_id, char_id, time_range=time_range,
                           capability_id=capability_id, status=status)
     append_audit(user_id, char_id, {"actor": "agent_inspection", "result": "inspected",
-                                    "event_id": _runtime.uuid.uuid4().hex, "capability_id": capability_id or "*"})
+                                    "event_id": uuid.uuid4().hex, "capability_id": capability_id or "*"})
     tool_calls = query_tool_audit(user_id, char_id, time_range=time_range,
                                   tool=tool, status=status, limit=50)
-    return _runtime.json.dumps({"actions": actions, "tool_calls": tool_calls}, ensure_ascii=False)
+    return json.dumps({"actions": actions, "tool_calls": tool_calls}, ensure_ascii=False)
 
 
 async def _invoke_device_workspace_list(call):
-    from core import tool_dispatcher as _runtime
     func = call.func
     tool_name = call.tool_name
     tool_args = call.tool_args
@@ -401,13 +390,12 @@ async def _invoke_device_workspace_list(call):
     session_state = call.session_state
     allowed_tool_names = call.allowed_tool_names
     pin_reference_hashes = call.pin_reference_hashes
-    result = _runtime._device_file_tools.format_result(await func(tool_name, user_id, char_id, tool_args))
+    result = _device_file_tools.format_result(await func(tool_name, user_id, char_id, tool_args))
 
     return result
 
 
 async def _invoke_gmail_list_messages(call):
-    from core import tool_dispatcher as _runtime
     func = call.func
     tool_name = call.tool_name
     tool_args = call.tool_args
@@ -419,13 +407,12 @@ async def _invoke_gmail_list_messages(call):
     session_state = call.session_state
     allowed_tool_names = call.allowed_tool_names
     pin_reference_hashes = call.pin_reference_hashes
-    result = await _runtime._gmail_tools.execute(func, user_id, char_id, tool_args)
+    result = await _gmail_tools.execute(func, user_id, char_id, tool_args)
 
     return result
 
 
 async def _invoke_list_character_intents(call):
-    from core import tool_dispatcher as _runtime
     func = call.func
     tool_name = call.tool_name
     tool_args = call.tool_args
@@ -437,13 +424,12 @@ async def _invoke_list_character_intents(call):
     session_state = call.session_state
     allowed_tool_names = call.allowed_tool_names
     pin_reference_hashes = call.pin_reference_hashes
-    result = await _runtime._intent_tools.execute(func, user_id, char_id, tool_args)
+    result = await _intent_tools.execute(func, user_id, char_id, tool_args)
 
     return result
 
 
 async def _invoke_self_tool_define(call):
-    from core import tool_dispatcher as _runtime
     func = call.func
     tool_name = call.tool_name
     tool_args = call.tool_args
@@ -470,7 +456,6 @@ async def _invoke_self_tool_define(call):
 
 
 async def _invoke_fs_list(call):
-    from core import tool_dispatcher as _runtime
     func = call.func
     tool_name = call.tool_name
     tool_args = call.tool_args

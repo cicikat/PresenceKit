@@ -82,13 +82,15 @@ def reset_runtime_registries(monkeypatch):
     from channels import registry
     from core import pipeline_registry, qq_service
     from core.tools import chat_artifacts
+    from core.tool_runtime.registry import _TOOL_REGISTRY, temporary_registry
 
     monkeypatch.setattr(registry, "_channels", {})
     monkeypatch.setattr(pipeline_registry, "_pipeline", None)
     monkeypatch.setattr(qq_service, "_service", None)
     token = chat_artifacts._turn_artifacts.set(None)
     try:
-        yield
+        with temporary_registry(dict(_TOOL_REGISTRY)):
+            yield
     finally:
         chat_artifacts._turn_artifacts.reset(token)
 

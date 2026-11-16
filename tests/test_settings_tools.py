@@ -1,4 +1,6 @@
 """Admin tool-control API: registry observation and model-specific exposure."""
+
+from tests.tool_registry import patch_registry
 from unittest.mock import patch
 
 import yaml
@@ -98,7 +100,7 @@ def test_tool_page_hides_transient_mcp_tools_and_reports_only_global_state(tmp_p
     monkeypatch.setattr(st, "CONFIG_FILE", path)
     monkeypatch.setattr("admin.auth.get_admin_secret", lambda: VALID_TOKEN)
     monkeypatch.setattr(st, "get_config", lambda: yaml.safe_load(path.read_text(encoding="utf-8")))
-    monkeypatch.setattr(tool_dispatcher, "_TOOL_REGISTRY", {
+    patch_registry(monkeypatch, {
         "builtin": {"category": "info", "description": "built in"},
         "dynamic": {"category": "mcp", "description": "transient"},
     })
@@ -124,7 +126,7 @@ def test_global_default_tools_compile_to_categories_and_exclusions_without_touch
     monkeypatch.setattr(st, "CONFIG_FILE", path)
     monkeypatch.setattr("admin.auth.get_admin_secret", lambda: VALID_TOKEN)
     monkeypatch.setattr(st, "get_config", lambda: yaml.safe_load(path.read_text(encoding="utf-8")))
-    monkeypatch.setattr(tool_dispatcher, "_TOOL_REGISTRY", {
+    patch_registry(monkeypatch, {
         "read_one": {"category": "info", "description": "read one"},
         "read_two": {"category": "info", "description": "read two"},
         "dynamic": {"category": "mcp", "description": "dynamic"},
@@ -177,7 +179,7 @@ def test_path_exposure_can_be_saved_independently_for_a_and_c(tmp_path, monkeypa
     monkeypatch.setattr(st, "CONFIG_FILE", path)
     monkeypatch.setattr("admin.auth.get_admin_secret", lambda: VALID_TOKEN)
     monkeypatch.setattr(st, "get_config", lambda: yaml.safe_load(path.read_text(encoding="utf-8")))
-    monkeypatch.setattr(tool_dispatcher, "_TOOL_REGISTRY", {
+    patch_registry(monkeypatch, {
         "get_time": {"category": "info", "description": "time"},
         "fs_list": {"category": "fs", "description": "files"},
     })

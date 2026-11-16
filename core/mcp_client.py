@@ -875,7 +875,7 @@ async def _open_transport(stack: AsyncExitStack, server_cfg: dict):
 
 async def _connect_server(name: str, server_cfg: dict) -> None:
     from mcp import ClientSession
-    from core.tool_dispatcher import _TOOL_REGISTRY
+    from core.tool_runtime.registry import _TOOL_REGISTRY
 
     try:
         local_policy = _validated_local_tool_policy(server_cfg)
@@ -1226,7 +1226,7 @@ async def _close_server(name: str) -> None:
     handle = _servers.pop(name, None)
     if handle is None:
         return
-    from core.tool_dispatcher import _TOOL_REGISTRY
+    from core.tool_runtime.registry import _TOOL_REGISTRY
     for reg_name in handle.tool_names:
         _TOOL_REGISTRY.pop(reg_name, None)
     try:

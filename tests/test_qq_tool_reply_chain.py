@@ -1,3 +1,5 @@
+
+from tests.tool_registry import patch_registry
 from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_qq_tool_reply_chain.py — P2.1: QQ 工具确认回复链路修复验证
@@ -255,7 +257,7 @@ async def test_handle_message_main_path_intact(sandbox, monkeypatch):
     monkeypatch.setattr(_gc, "append", lambda *a, **kw: None)
 
     import core.tool_dispatcher as _td
-    monkeypatch.setattr(_td, "_TOOL_REGISTRY", {})
+    patch_registry(monkeypatch, {})
     monkeypatch.setattr(_td, "get_probe_prompt", lambda loc: "")
     monkeypatch.setattr(_td, "get_tools_schema", lambda categories=None: [])
     import core.llm_client as _llm

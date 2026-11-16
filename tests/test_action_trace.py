@@ -13,6 +13,8 @@ Brief 27 · 工具动作痕迹层测试。
   7. peek_screen_content 敏感回归
 """
 from __future__ import annotations
+
+from tests.tool_registry import patch_registry
 from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import importlib
@@ -113,7 +115,7 @@ class TestExecuteRecording:
             return ToolResult(raw_data="SECRET", safe_summary="SAFE")
 
         records: list[dict] = []
-        monkeypatch.setattr(td, "_TOOL_REGISTRY", {
+        patch_registry(monkeypatch, {
             "p0_safe_tool": {"func": _returns_secret, "dangerous": False, "category": "info"},
         })
         monkeypatch.setattr(td, "_is_tool_enabled", lambda _: True)

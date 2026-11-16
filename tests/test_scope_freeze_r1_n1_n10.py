@@ -10,6 +10,8 @@ tests/test_scope_freeze_r1_n1_n10.py — R1 + N1 + N10 regression tests
   5. QQ 发送前经过 reality output scrub（动作行不进记忆）
 """
 
+from tests.tool_registry import patch_registry
+
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch, call
 
@@ -78,7 +80,7 @@ def _patch_output(monkeypatch):
 
 def _patch_probe(monkeypatch):
     import core.tool_dispatcher as _td
-    monkeypatch.setattr(_td, "_TOOL_REGISTRY", {})
+    patch_registry(monkeypatch, {})
     monkeypatch.setattr(_td, "get_probe_prompt", lambda loc: "")
     monkeypatch.setattr(_td, "get_tools_schema", lambda categories=None: [])
     import core.llm_client as _llm

@@ -1,5 +1,7 @@
 """QQ fast path and native tool-loop duplication regressions."""
 
+from tests.tool_registry import patch_registry
+
 import logging
 from unittest.mock import AsyncMock, MagicMock
 
@@ -44,7 +46,7 @@ def _patch_handle_message_dependencies(monkeypatch, pipeline, execute_result):
     monkeypatch.setattr(state_machine, "notify_owner_turn", lambda uid: None)
     monkeypatch.setattr(presence, "update_last_message", lambda uid: None)
     monkeypatch.setattr(group_context, "append", lambda *args, **kwargs: None)
-    monkeypatch.setattr(tool_dispatcher, "_TOOL_REGISTRY", {
+    patch_registry(monkeypatch, {
         "get_time": {
             "keywords": ["几点"],
             "parameters": {"type": "object", "properties": {}},

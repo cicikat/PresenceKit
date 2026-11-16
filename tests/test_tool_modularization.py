@@ -1,4 +1,6 @@
-"""Regression: replacing a legacy builtin spec must retain its scoped adapter."""
+"""Registry lifecycle and explicit, identity-preserving builtin overrides."""
+
+from tests.tool_registry import patch_registry
 
 import pytest
 
@@ -13,9 +15,8 @@ async def test_replaced_builtin_spec_preserves_principal_and_scope_guard(monkeyp
         calls.append((document_id, user_id, char_id))
         return "fixture document"
 
-    # Historical local extensions can replace the complete spec, without the
-    # new invoke metadata. This remains an explicit supported injection seam.
-    monkeypatch.setattr(dispatcher, "_TOOL_REGISTRY", {
+    # The explicit override resolves the builtin adapter before invocation.
+    patch_registry(monkeypatch, {
         "read_document": {
             "func": reader, "category": "memory", "dangerous": False,
             "parameters": {"type": "object", "properties": {
@@ -42,3 +43,41 @@ async def test_replaced_builtin_spec_preserves_principal_and_scope_guard(monkeyp
     })
     assert forged_principal.status == "tool_failed"
     assert calls == [("fixture-document", "fixture_owner", "fixture_character")]
+
+
+@pytest.mark.asyncio
+async def test_registry_identity_reload_and_dynamic_execution(monkeypatch):
+    """New/removed entries are immediately visible to schema and execution."""
+    import importlib
+    from core import tool_dispatcher as dispatcher
+    from core.tool_runtime import registry
+
+    identity = registry._TOOL_REGISTRY
+    original_names = list(identity)
+    registry.build_registry(identity)
+    importlib.reload(registry)
+    assert identity is registry._TOOL_REGISTRY is dispatcher._TOOL_REGISTRY
+    assert list(identity) == original_names
+
+    async def inspect_fixture():
+        return "fixture inspected"
+
+    name = "mcp__fixture__inspect"
+    with registry.temporary_registry({name: {
+        "func": inspect_fixture, "category": "mcp", "mcp_server": "fixture", "mcp_tool": "inspect",
+        "parameters": {"type": "object", "properties": {}},
+    }}):
+        assert [s["function"]["name"] for s in dispatcher.get_tools_schema()] == [name]
+        result = await dispatcher.execute_structured(
+            name, {}, "fixture_owner", "fixture_owner", False, None,
+            origin="assistant_loop", char_id="fixture_character",
+        )
+        assert result.status == "tool_executed", result
+        identity.pop(name)
+        assert dispatcher.get_tools_schema() == []
+        result = await dispatcher.execute_structured(
+            name, {}, "fixture_owner", "fixture_owner", False, None,
+            origin="assistant_loop", char_id="fixture_character",
+        )
+        assert result.status == "tool_unknown"
+    assert list(identity) == original_names

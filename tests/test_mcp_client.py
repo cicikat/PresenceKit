@@ -10,6 +10,8 @@ call_tool 超时/异常→重连一次→再失败按失败处理、断线重连
 """
 
 from __future__ import annotations
+
+from tests.tool_registry import patch_registry
 from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import asyncio
@@ -55,7 +57,7 @@ class _FakeSession:
 @pytest.fixture(autouse=True)
 async def _clean_registry_and_servers(monkeypatch):
     """隔离真实 _TOOL_REGISTRY / _servers / _owners，测试结束后还原并回收专属 task。"""
-    monkeypatch.setattr(td, "_TOOL_REGISTRY", dict(td._TOOL_REGISTRY))
+    patch_registry(monkeypatch, dict(td._TOOL_REGISTRY))
     # Existing MCP regression cases intentionally exercise legacy configs.
     # Strict local-policy cases override this inside their own tests.
     monkeypatch.setattr(mc, "_require_local_policy", lambda: False)
@@ -178,7 +180,7 @@ def test_opaque_parameter_guidance_uses_registry_metadata_not_a_hardcoded_guide_
             "description": "Explains action parameters and available options",
         },
     }
-    monkeypatch.setattr(td, "_TOOL_REGISTRY", registry)
+    patch_registry(monkeypatch, registry)
     note = td.format_mcp_opaque_params_note([
         {"type": "function", "function": {
             "name": "mcp__arcade__play",

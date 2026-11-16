@@ -18,6 +18,8 @@ Naming: F-prefix = R6-final specific guard.
 """
 
 from __future__ import annotations
+
+from tests.tool_registry import patch_registry
 from tests.fixtures.public_assets import TEST_CHAR_ID
 
 from pathlib import Path
@@ -510,7 +512,7 @@ async def test_f7_handle_message_adapter_scrubs_before_post_process(sandbox, mon
     monkeypatch.setattr(_to, "send", AsyncMock())
 
     import core.tool_dispatcher as _td
-    monkeypatch.setattr(_td, "_TOOL_REGISTRY", {})
+    patch_registry(monkeypatch, {})
     monkeypatch.setattr(_td, "get_probe_prompt", lambda loc: "")
     monkeypatch.setattr(_td, "get_tools_schema", lambda categories=None: [])
     import core.llm_client as _llm

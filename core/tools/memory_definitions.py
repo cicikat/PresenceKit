@@ -1,73 +1,81 @@
 """Memory tool definitions and invocation adapters.
 
-The dispatcher remains the legacy dependency-injection seam; no state is copied.
+Domain implementations and trusted invocation bindings have one owner.
 """
 
+from core.tool_runtime.context import _active_char_id
+from core.tools.memory_dossiers import get_memory_consolidation_status as _get_memory_consolidation_status_wrapper
+from core import quote_notebook as _quote_notebook
+from core.food_memory import read_food_preferences as _read_food_preferences
+from core.tools.memory_dossiers import read_memory_dossier as _read_memory_dossier_wrapper
+from core.tools.memory_dossiers import request_memory_consolidation as _request_memory_consolidation_wrapper
+from core.tool_runtime.policy import _require_memory_read_scope
+from core.tools.memory_dossiers import search_dossier_events as _search_dossier_events_wrapper
+from core.tools.memory_dossiers import search_memory_dossiers as _search_memory_dossiers_wrapper
+from core import tool_result_pins as _tool_result_pins
+from core.tools.memory_dossiers import update_memory_dossier as _update_memory_dossier_wrapper
+from core.character_name_provider import get_active_char_name
+from core.character_name_provider import get_char_name
+from core.config_loader import get_config
+import json
+import logging
+logger = logging.getLogger("core.tool_dispatcher")
+
+
 async def _read_diary_wrapper(user_id: str, date: str = "", *, char_id: str | None = None) -> str:
-    from core import tool_dispatcher as _runtime
     from core.tools.character_recall import read_character_diary_for_user
-    return await read_character_diary_for_user(user_id, char_id or _runtime._active_char_id(), date_str=date)
+    return await read_character_diary_for_user(user_id, char_id or _active_char_id(), date_str=date)
 
 
 async def _backfill_diary_wrapper(user_id: str, date: str = "", *, char_id: str) -> str:
-    from core import tool_dispatcher as _runtime
     from core.tools.diary_backfill import backfill_diary
     return await backfill_diary(user_id, char_id, date)
 
 
 async def _read_watch_wrapper(user_id: str, query: str = "", *, char_id: str | None = None) -> str:
-    from core import tool_dispatcher as _runtime
     from core.tools.watch_tool import read_watch_for_user
-    return read_watch_for_user(user_id, query, char_id=char_id or _runtime._active_char_id())
+    return read_watch_for_user(user_id, query, char_id=char_id or _active_char_id())
 
 
 async def _read_hds_heart_rate_wrapper(user_id: str, *, char_id: str | None = None) -> str:
-    from core import tool_dispatcher as _runtime
     from core.hds_local import read_status
-    return _runtime.json.dumps(read_status(user_id, char_id=char_id or _runtime._active_char_id()), ensure_ascii=False)
+    return json.dumps(read_status(user_id, char_id=char_id or _active_char_id()), ensure_ascii=False)
 
 
 async def _search_diary_wrapper(
     user_id: str, query: str = "", date: str = "", *, char_id: str | None = None,
 ) -> str:
-    from core import tool_dispatcher as _runtime
     from core.tools.character_recall import search_character_diary_for_user
-    return await search_character_diary_for_user(user_id, char_id or _runtime._active_char_id(), query, date_str=date)
+    return await search_character_diary_for_user(user_id, char_id or _active_char_id(), query, date_str=date)
 
 
 async def _search_documents_wrapper(user_id: str, query: str = "", media_type: str = "", *, char_id: str):
-    from core import tool_dispatcher as _runtime
     from core.tools.character_recall import search_documents_for_user
     return await search_documents_for_user(user_id, char_id, query, media_type)
 
 
 async def _read_document_wrapper(user_id: str, document_id: str, offset: int = 0, mode: str = "context", query: str = "", limit: int = 6000, *, char_id: str):
-    from core import tool_dispatcher as _runtime
     from core.tools.character_recall import read_document_for_user
     return await read_document_for_user(user_id, char_id, document_id, offset, mode=mode, query=query, limit=limit)
 
 
 async def _search_character_notes_wrapper(user_id: str, query: str = "", *, char_id: str) -> str:
-    from core import tool_dispatcher as _runtime
     from core.tools.character_recall import search_character_notes_for_user
     return await search_character_notes_for_user(user_id, char_id, query)
 
 
 async def _read_document_notes_wrapper(user_id: str, *, char_id: str, **kwargs):
-    from core import tool_dispatcher as _runtime
     from core.document_notes import read_for_user
     return await read_for_user(user_id, char_id=char_id, **kwargs)
 
 
 async def _write_document_note_wrapper(user_id: str, *, char_id: str, **kwargs):
-    from core import tool_dispatcher as _runtime
     from core.document_notes import write_for_user
     return await write_for_user(user_id, char_id=char_id, **kwargs)
 
 
 async def _get_profile_wrapper(user_id: str, *, char_id: str) -> str:
     """召回用户画像。"""
-    from core import tool_dispatcher as _runtime
     from core.memory import user_profile
     profile = user_profile.load(user_id, char_id=char_id)
     if not profile:
@@ -85,22 +93,19 @@ async def _get_profile_wrapper(user_id: str, *, char_id: str) -> str:
 
 async def _get_episodic_wrapper(user_id: str, topic: str = "", *, char_id: str) -> str:
     """召回情景记忆。"""
-    from core import tool_dispatcher as _runtime
     from core.memory.episodic_memory import retrieve, format_for_prompt
     # M4：查询不再顺手给被查到的记忆加强度（allow_strengthen=False）
     memories = retrieve(user_id=user_id, topic=topic, top_k=3, char_id=char_id, allow_strengthen=False)
-    return format_for_prompt(memories, char_name=_runtime.get_char_name(char_id)) if memories else "暂无相关记忆"
+    return format_for_prompt(memories, char_name=get_char_name(char_id)) if memories else "暂无相关记忆"
 
 
 async def _read_long_user_message_wrapper(user_id: str, sequence: int, offset: int = 0,
                                           *, char_id: str) -> str:
-    from core import tool_dispatcher as _runtime
     from core.memory.short_term import read_long_user_message
     return read_long_user_message(user_id, sequence, offset=offset, char_id=char_id)
 
 
 async def _revise_memory_wrapper(user_id: str, episode_id: str, correction: str, *, char_id: str) -> str:
-    from core import tool_dispatcher as _runtime
     from core.memory.episodic_memory import revise_episode
     correction_id = revise_episode(user_id, episode_id, correction, char_id=char_id)
     if not correction_id:
@@ -115,7 +120,6 @@ async def _forget_episodic_wrapper(
     *,
     char_id: str,
 ) -> str:
-    from core import tool_dispatcher as _runtime
     from core.memory.episodic_memory import forget_episodes
 
     episode_id = str(episode_id or "").strip()
@@ -135,7 +139,6 @@ async def _forget_episodic_wrapper(
 
 
 async def _clear_midterm_wrapper(user_id: str, *, char_id: str) -> str:
-    from core import tool_dispatcher as _runtime
     from core.memory.mid_term import clear
 
     removed = clear(
@@ -147,7 +150,6 @@ async def _clear_midterm_wrapper(user_id: str, *, char_id: str) -> str:
 
 
 async def _revise_user_profile_wrapper(user_id: str, field: str, correction: str, *, char_id: str) -> str:
-    from core import tool_dispatcher as _runtime
     from core.memory.user_identity import overwrite_dimension
     ok = await overwrite_dimension(
         user_id, field, correction, char_id=char_id,
@@ -158,7 +160,6 @@ async def _revise_user_profile_wrapper(user_id: str, field: str, correction: str
 
 
 async def _exit_yandere_wrapper() -> str:
-    from core import tool_dispatcher as _runtime
     from core.deployment_capabilities import is_remote_server
     if is_remote_server():
         return "disabled_remote_server_local_capability"
@@ -167,16 +168,15 @@ async def _exit_yandere_wrapper() -> str:
     from core.config_loader import get_config
     emerald_path = get_config().get("emerald_desktop", {}).get("path", "")
     if not emerald_path:
-        _runtime.logger.warning("[exit_yandere] config.yaml 未配置 emerald_desktop.path，跳过")
+        logger.warning("[exit_yandere] config.yaml 未配置 emerald_desktop.path，跳过")
         return "未配置旧 Emerald-desktop 路径"
     signal_file = Path(emerald_path) / "data" / "yandere_exit.signal"
     signal_file.parent.mkdir(parents=True, exist_ok=True)
     signal_file.write_text(json.dumps({"exit": True}), encoding="utf-8")
-    return f"{_runtime.get_active_char_name()}平静下来了"
+    return f"{get_active_char_name()}平静下来了"
 
 
 async def _invoke_read_document_notes(call):
-    from core import tool_dispatcher as _runtime
     func = call.func
     tool_name = call.tool_name
     tool_args = call.tool_args
@@ -188,17 +188,16 @@ async def _invoke_read_document_notes(call):
     session_state = call.session_state
     allowed_tool_names = call.allowed_tool_names
     pin_reference_hashes = call.pin_reference_hashes
-    owner_id = str(_runtime.get_config().get("scheduler", {}).get("owner_id") or "")
+    owner_id = str(get_config().get("scheduler", {}).get("owner_id") or "")
     if is_group or not owner_id or str(user_id) != owner_id:
         raise ValueError('document notes are owner-private only')
-    _runtime._require_memory_read_scope(user_id, char_id)
+    _require_memory_read_scope(user_id, char_id)
     result = await func(user_id=user_id, char_id=char_id, **tool_args)
 
     return result
 
 
 async def _invoke_read_life_records(call):
-    from core import tool_dispatcher as _runtime
     func = call.func
     tool_name = call.tool_name
     tool_args = call.tool_args
@@ -212,14 +211,13 @@ async def _invoke_read_life_records(call):
     pin_reference_hashes = call.pin_reference_hashes
     if is_group:
         raise ValueError('owner memory tools are unavailable in group sessions')
-    _runtime._require_memory_read_scope(user_id, char_id)
+    _require_memory_read_scope(user_id, char_id)
     result = await func(user_id=user_id, char_id=char_id, **tool_args)
 
     return result
 
 
 async def _invoke_get_profile(call):
-    from core import tool_dispatcher as _runtime
     func = call.func
     tool_name = call.tool_name
     tool_args = call.tool_args
@@ -231,14 +229,13 @@ async def _invoke_get_profile(call):
     session_state = call.session_state
     allowed_tool_names = call.allowed_tool_names
     pin_reference_hashes = call.pin_reference_hashes
-    _runtime._require_memory_read_scope(user_id, char_id)
+    _require_memory_read_scope(user_id, char_id)
     result = await func(user_id=user_id, char_id=char_id, **tool_args)
 
     return result
 
 
 async def _invoke_update_memory_dossier(call):
-    from core import tool_dispatcher as _runtime
     func = call.func
     tool_name = call.tool_name
     tool_args = call.tool_args
@@ -250,14 +247,13 @@ async def _invoke_update_memory_dossier(call):
     session_state = call.session_state
     allowed_tool_names = call.allowed_tool_names
     pin_reference_hashes = call.pin_reference_hashes
-    _runtime._require_memory_read_scope(user_id, char_id)
+    _require_memory_read_scope(user_id, char_id)
     result = await func(user_id=user_id, char_id=char_id, **tool_args)
 
     return result
 
 
 async def _invoke_backfill_diary(call):
-    from core import tool_dispatcher as _runtime
     func = call.func
     tool_name = call.tool_name
     tool_args = call.tool_args
@@ -269,14 +265,13 @@ async def _invoke_backfill_diary(call):
     session_state = call.session_state
     allowed_tool_names = call.allowed_tool_names
     pin_reference_hashes = call.pin_reference_hashes
-    _runtime._require_memory_read_scope(user_id, char_id)
+    _require_memory_read_scope(user_id, char_id)
     result = await func(user_id=user_id, char_id=char_id, **tool_args)
 
     return result
 
 
 async def _invoke_read_diary(call):
-    from core import tool_dispatcher as _runtime
     func = call.func
     tool_name = call.tool_name
     tool_args = call.tool_args
@@ -288,8 +283,8 @@ async def _invoke_read_diary(call):
     session_state = call.session_state
     allowed_tool_names = call.allowed_tool_names
     pin_reference_hashes = call.pin_reference_hashes
-    _runtime._require_memory_read_scope(user_id, char_id)
-    if func in (_runtime._read_diary_wrapper, _runtime._search_diary_wrapper):
+    _require_memory_read_scope(user_id, char_id)
+    if func in (_read_diary_wrapper, _search_diary_wrapper):
         result = await func(user_id=user_id, char_id=char_id, **tool_args)
     else:
         # Preserve the historical signature for test/local extensions
@@ -300,7 +295,6 @@ async def _invoke_read_diary(call):
 
 
 async def _invoke_get_listening_state(call):
-    from core import tool_dispatcher as _runtime
     func = call.func
     tool_name = call.tool_name
     tool_args = call.tool_args
@@ -323,7 +317,6 @@ async def _invoke_get_listening_state(call):
 
 
 async def _invoke_pin_character_image_reference(call):
-    from core import tool_dispatcher as _runtime
     func = call.func
     tool_name = call.tool_name
     tool_args = call.tool_args
@@ -342,20 +335,18 @@ async def _invoke_pin_character_image_reference(call):
 
 
 async def _invoke_read_hds_heart_rate(call):
-    from core import tool_dispatcher as _runtime
     func = call.func
     tool_name = call.tool_name
     tool_args = call.tool_args
     user_id = call.user_id
     char_id = call.char_id
-    _runtime._require_memory_read_scope(user_id, char_id)
+    _require_memory_read_scope(user_id, char_id)
     result = await func(user_id=user_id, **tool_args)
 
     return result
 
 
 async def _invoke_read_watch(call):
-    from core import tool_dispatcher as _runtime
     func = call.func
     tool_name = call.tool_name
     tool_args = call.tool_args
@@ -367,7 +358,6 @@ async def _invoke_read_watch(call):
 
 
 async def _invoke_revise_memory(call):
-    from core import tool_dispatcher as _runtime
     func = call.func
     tool_name = call.tool_name
     tool_args = call.tool_args
@@ -379,17 +369,6 @@ async def _invoke_revise_memory(call):
 
 
 def register_tools(registry):
-    from core.tool_dispatcher import (
-        _get_memory_consolidation_status_wrapper,
-        _quote_notebook,
-        _read_food_preferences,
-        _read_memory_dossier_wrapper,
-        _request_memory_consolidation_wrapper,
-        _search_dossier_events_wrapper,
-        _search_memory_dossiers_wrapper,
-        _tool_result_pins,
-        _update_memory_dossier_wrapper,
-    )
     registry["read_food_preferences"] = {
         "func": _read_food_preferences, "category": "memory", "dangerous": False,
         "description": "推荐吃什么、讨论外卖或核对旧口味时，先查用户实际饮食评价与已记录吃过次数。最新用户表达优先；未知不猜测，吃过多不代表喜欢，暂时不想吃不代表永久讨厌。",

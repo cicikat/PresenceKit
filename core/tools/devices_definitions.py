@@ -1,57 +1,81 @@
 """Devices tool definitions and invocation adapters.
 
-The dispatcher remains the legacy dependency-injection seam; no state is copied.
+Domain implementations and trusted invocation bindings have one owner.
 """
 
+from core.agent_runtime.models import TaskPrincipal as _TaskPrincipal
+from core.agent_runtime import agent_sessions as _agent_sessions
+from core.agent_runtime import computer_use as _computer_use
+import json as _json
+from core.character_name_provider import get_active_char_name
+from core.config_loader import get_config
+import json
+from core.error_handler import log_error
+import logging
+logger = logging.getLogger("core.tool_dispatcher")
+import platform
+import subprocess
+
+_ACTION_TARGETS: dict[str, str] = {
+    "avatar_directive": "desktop",
+    "dream_invite": "desktop",
+    "media_play_pause": "desktop",
+    "minimize_window": "desktop",
+    "open_url": "desktop",
+    "play_netease": "desktop",
+    "show_notify": "desktop",
+    "toy_invite": "desktop",
+    "show_heart": "device",
+}
+
+_agent_session_id = {"type": "string", "maxLength": 32, "description": "持续桌面会话 ID，省略时使用最近的会话。"}
+
+
 async def _device_shutdown(delay_seconds: int = 60) -> str:
-    from core import tool_dispatcher as _runtime
     from core.deployment_capabilities import is_remote_server
     if is_remote_server():
         return "disabled_remote_server_local_capability"
     try:
-        system = _runtime.platform.system()
+        system = platform.system()
         if system == "Windows":
-            _runtime.subprocess.Popen(["shutdown", "/s", "/t", str(delay_seconds)])
+            subprocess.Popen(["shutdown", "/s", "/t", str(delay_seconds)])
         elif system in ("Linux", "Darwin"):
-            _runtime.subprocess.Popen(["shutdown", "-h", f"+{delay_seconds // 60}"])
+            subprocess.Popen(["shutdown", "-h", f"+{delay_seconds // 60}"])
         else:
             return f"不支持的系统平台：{system}"
         return f"已设置 {delay_seconds} 秒后关机"
     except Exception as e:
-        _runtime.log_error("tool.device_shutdown", e)
+        log_error("tool.device_shutdown", e)
         return "关机命令执行失败"
 
 
 async def _device_sleep() -> str:
-    from core import tool_dispatcher as _runtime
     from core.deployment_capabilities import is_remote_server
     if is_remote_server():
         return "disabled_remote_server_local_capability"
     try:
-        system = _runtime.platform.system()
+        system = platform.system()
         if system == "Windows":
-            _runtime.subprocess.Popen(["rundll32.exe", "powrprof.dll,SetSuspendState", "0,1,0"])
+            subprocess.Popen(["rundll32.exe", "powrprof.dll,SetSuspendState", "0,1,0"])
         elif system == "Darwin":
-            _runtime.subprocess.Popen(["pmset", "sleepnow"])
+            subprocess.Popen(["pmset", "sleepnow"])
         elif system == "Linux":
-            _runtime.subprocess.Popen(["systemctl", "suspend"])
+            subprocess.Popen(["systemctl", "suspend"])
         else:
             return f"不支持的系统平台：{system}"
         return "设备即将进入睡眠状态"
     except Exception as e:
-        _runtime.log_error("tool.device_sleep", e)
+        log_error("tool.device_sleep", e)
         return "睡眠命令执行失败"
 
 
 def resolve_action_target(action_type: str) -> str | None:
     """Return the sole transport owner for a registered action, else None."""
-    from core import tool_dispatcher as _runtime
-    return _runtime._ACTION_TARGETS.get(action_type)
+    return _ACTION_TARGETS.get(action_type)
 
 
 def _is_desktop_active() -> bool:
     """优先看 WS 连接，没连接才看文件 mtime fallback（5分钟内）。"""
-    from core import tool_dispatcher as _runtime
     from channels import desktop_ws
     if desktop_ws.is_connected():
         return True
@@ -70,11 +94,10 @@ async def _push_desktop_action(action: dict) -> str:
     WS-only: offline, NACK, and timeout are explicit failures and never enter
     the desktop-consumed action queue.
     """
-    from core import tool_dispatcher as _runtime
     action_type = action.get("type") if isinstance(action, dict) else None
-    target = _runtime.resolve_action_target(action_type) if isinstance(action_type, str) else None
+    target = resolve_action_target(action_type) if isinstance(action_type, str) else None
     if target is None:
-        _runtime.logger.warning("[_push_desktop_action] 未注册 action: type=%r", action_type)
+        logger.warning("[_push_desktop_action] 未注册 action: type=%r", action_type)
         return "未注册动作，未执行"
 
     from channels import desktop_ws, device_ws
@@ -82,13 +105,13 @@ async def _push_desktop_action(action: dict) -> str:
     if transport.is_connected():
         ok, err = await transport.push_action_and_wait(action, timeout=5.0)
         if ok:
-            _runtime.logger.info("[_push_desktop_action] action=%s target=%s ack=ok", action_type, target)
+            logger.info("[_push_desktop_action] action=%s target=%s ack=ok", action_type, target)
             return "ok"
-        _runtime.logger.warning("[_push_desktop_action] action=%s target=%s ack_failed=%s", action_type, target, err)
+        logger.warning("[_push_desktop_action] action=%s target=%s ack_failed=%s", action_type, target, err)
         if target == "device":
             return f"设备动作未执行: {err or 'NACK'}"
     elif target == "device":
-        _runtime.logger.info("[_push_desktop_action] action=%s target=device offline", action_type)
+        logger.info("[_push_desktop_action] action=%s target=device offline", action_type)
         return "设备端离线，动作未执行"
 
     from core.deployment_capabilities import is_remote_server
@@ -96,7 +119,7 @@ async def _push_desktop_action(action: dict) -> str:
         return "client_offline" if not transport.is_connected() else "ack_failed"
 
     # Only desktop-owned actions may use the legacy desktop file queue.
-    if not _runtime._is_desktop_active():
+    if not _is_desktop_active():
         return "桌宠端离线，动作未执行"
     try:
         from core.sandbox import get_paths
@@ -104,10 +127,10 @@ async def _push_desktop_action(action: dict) -> str:
         _actions_file.parent.mkdir(parents=True, exist_ok=True)
         queue = []
         if _actions_file.exists():
-            queue = _runtime._json.loads(_actions_file.read_text(encoding="utf-8"))
+            queue = _json.loads(_actions_file.read_text(encoding="utf-8"))
         queue.append(action)
         _actions_file.write_text(
-            _runtime._json.dumps(queue, ensure_ascii=False), encoding="utf-8"
+            _json.dumps(queue, ensure_ascii=False), encoding="utf-8"
         )
         return "ok"
     except Exception as e:
@@ -115,42 +138,36 @@ async def _push_desktop_action(action: dict) -> str:
 
 
 async def _desktop_minimize_wrapper(window: str = "") -> str:
-    from core import tool_dispatcher as _runtime
-    result = await _runtime._push_desktop_action({"type": "minimize_window", "window": window})
+    result = await _push_desktop_action({"type": "minimize_window", "window": window})
     return f"已请求最小化窗口「{window}」" if result == "ok" else result
 
 
 async def _desktop_open_url_wrapper(url: str = "") -> str:
-    from core import tool_dispatcher as _runtime
-    result = await _runtime._push_desktop_action({"type": "open_url", "url": url})
+    result = await _push_desktop_action({"type": "open_url", "url": url})
     return f"已请求打开网址：{url}" if result == "ok" else result
 
 
 async def _desktop_play_pause_wrapper() -> str:
-    from core import tool_dispatcher as _runtime
-    result = await _runtime._push_desktop_action({"type": "media_play_pause"})
+    result = await _push_desktop_action({"type": "media_play_pause"})
     return "已请求播放/暂停媒体" if result == "ok" else result
 
 
 async def _desktop_notify_wrapper(title: str = "", message: str = "") -> str:
-    from core import tool_dispatcher as _runtime
     if not title:
-        title = _runtime.get_active_char_name()
-    result = await _runtime._push_desktop_action({"type": "show_notify", "title": title, "message": message})
+        title = get_active_char_name()
+    result = await _push_desktop_action({"type": "show_notify", "title": title, "message": message})
     return f"已发送通知：{message}" if result == "ok" else result
 
 
 async def _toy_invite_wrapper() -> str:
     """以 desktop 工具正路推送 ToyWindow 邀请。"""
-    from core import tool_dispatcher as _runtime
-    result = await _runtime._push_desktop_action({"type": "toy_invite"})
+    result = await _push_desktop_action({"type": "toy_invite"})
     return "已邀请进入玩耍模式" if result == "ok" else result
 
 
 async def _dream_invite_wrapper() -> str:
     """以 desktop 工具正路推送 DreamWindow 邀请。"""
-    from core import tool_dispatcher as _runtime
-    result = await _runtime._push_desktop_action({"type": "dream_invite"})
+    result = await _push_desktop_action({"type": "dream_invite"})
     return "已邀请进入梦境" if result == "ok" else result
 
 
@@ -161,7 +178,6 @@ async def _phone_control_start_wrapper(task: str = "", *, user_id: str, char_id:
     docs/protocols/phone-control-protocol.md（Emerald-mobile 仓库）。dangerous=True，
     执行许可由全局工具开关和当前角色权限决定。
     """
-    from core import tool_dispatcher as _runtime
     task = (task or "").strip()
     if not task:
         return "没听清楚要在手机上做什么，没法开始。"
@@ -188,7 +204,6 @@ async def _toy_vibrate_wrapper(
     duration_ms: int = 1000,
     device_index: int | None = None,
 ) -> str:
-    from core import tool_dispatcher as _runtime
     from core.tools.hardware_tools import toy_vibrate
     return await toy_vibrate(
         intensity=intensity,
@@ -201,7 +216,6 @@ async def _toy_stop_wrapper(
     device_index: int | None = None,
     job_id: str | None = None,
 ) -> str:
-    from core import tool_dispatcher as _runtime
     from core.tools.hardware_tools import toy_stop
     kwargs = {"device_index": device_index}
     if job_id is not None:
@@ -213,79 +227,68 @@ async def _toy_pattern_wrapper(
     pattern_name: str = "gentle",
     device_index: int | None = None,
 ) -> str:
-    from core import tool_dispatcher as _runtime
     from core.tools.hardware_tools import toy_pattern
     return await toy_pattern(pattern_name=pattern_name, device_index=device_index)
 
 
 async def _toy_job_status_wrapper(job_id: str | None = None) -> str:
-    from core import tool_dispatcher as _runtime
     from core.tools.hardware_tools import toy_job_status
     return await toy_job_status(job_id=job_id)
 
 
 async def _peek_screen_content_wrapper() -> str:
-    from core import tool_dispatcher as _runtime
     from core.tools.screen_peek import peek_screen_content
     return await peek_screen_content()
 
 
 async def _computer_use_start(goal: str, *, user_id: str, char_id: str) -> str:
-    from core import tool_dispatcher as _runtime
     from core.tool_activity import current_call
 
     context = current_call() or {}
     request = context.get("request_id") or context.get("event_id") or ""
-    result = _runtime._computer_use.start(user_id, char_id, goal, request_id=request)
-    return _runtime._computer_use.role_receipt(result)
+    result = _computer_use.start(user_id, char_id, goal, request_id=request)
+    return _computer_use.role_receipt(result)
 
 
 async def _computer_use_status(task_id: str = "", *, user_id: str, char_id: str) -> str:
-    from core import tool_dispatcher as _runtime
-    return _runtime._computer_use.role_receipt(_runtime._computer_use.task_status(user_id, char_id, task_id))
+    return _computer_use.role_receipt(_computer_use.task_status(user_id, char_id, task_id))
 
 
 async def _computer_use_cancel(task_id: str = "", *, user_id: str, char_id: str) -> str:
-    from core import tool_dispatcher as _runtime
-    return _runtime._computer_use.role_receipt(_runtime._computer_use.task_status(user_id, char_id, task_id, cancel=True))
+    return _computer_use.role_receipt(_computer_use.task_status(user_id, char_id, task_id, cancel=True))
 
 
 async def _agent_session_start(goal: str, *, user_id: str, char_id: str) -> str:
-    from core import tool_dispatcher as _runtime
     from core.tool_activity import current_call
 
     call = current_call() or {}
     request_id = call.get("request_id") or call.get("event_id") or ""
-    result = _runtime._agent_sessions.start(_runtime._TaskPrincipal.reality(user_id, char_id), goal, request_id=request_id)
-    return _runtime.json.dumps(result, ensure_ascii=False)
+    result = _agent_sessions.start(_TaskPrincipal.reality(user_id, char_id), goal, request_id=request_id)
+    return json.dumps(result, ensure_ascii=False)
 
 
 async def _agent_session_status(session_id: str = "", *, user_id: str, char_id: str) -> str:
-    from core import tool_dispatcher as _runtime
-    return _runtime.json.dumps(_runtime._agent_sessions.status(_runtime._TaskPrincipal.reality(user_id, char_id), session_id))
+    return json.dumps(_agent_sessions.status(_TaskPrincipal.reality(user_id, char_id), session_id))
 
 
 async def _agent_session_control(action: str, session_id: str = "", instruction: str = "",
                                  *, user_id: str, char_id: str) -> str:
-    from core import tool_dispatcher as _runtime
     from core.tool_activity import current_call
 
     call = current_call() or {}
-    result = _runtime._agent_sessions.control(
-        _runtime._TaskPrincipal.reality(user_id, char_id), session_id, action, instruction=instruction,
+    result = _agent_sessions.control(
+        _TaskPrincipal.reality(user_id, char_id), session_id, action, instruction=instruction,
         request_id=call.get("request_id") or call.get("event_id") or "",
     )
-    return _runtime.json.dumps(result, ensure_ascii=False)
+    return json.dumps(result, ensure_ascii=False)
 
 
 async def _observe_user_screen_wrapper(user_id: str, char_id: str) -> str:
-    from core import tool_dispatcher as _runtime
     from core.perception.screen_observation import observe
     return await observe(user_id, char_id)
 
 
 async def _observe_video_call_camera_wrapper(user_id: str, char_id: str) -> str:
-    from core import tool_dispatcher as _runtime
     import json
     from core.video_call import observe_fresh_camera
 
@@ -293,11 +296,10 @@ async def _observe_video_call_camera_wrapper(user_id: str, char_id: str) -> str:
 
 
 async def _invite_video_call_wrapper(user_id: str, char_id: str) -> str:
-    from core import tool_dispatcher as _runtime
     import json
     from core.video_call_invite import invite
 
-    settings = _runtime.get_config().get("tools", {}).get("invite_video_call") or {}
+    settings = get_config().get("tools", {}).get("invite_video_call") or {}
     allowed = settings.get("allowed_char_ids") or [] if isinstance(settings, dict) else []
     if char_id not in allowed:
         return json.dumps({"status": "not_allowed_for_character"})
@@ -305,7 +307,6 @@ async def _invite_video_call_wrapper(user_id: str, char_id: str) -> str:
 
 
 async def _invoke_observe_user_screen(call):
-    from core import tool_dispatcher as _runtime
     func = call.func
     tool_name = call.tool_name
     tool_args = call.tool_args
@@ -325,7 +326,6 @@ async def _invoke_observe_user_screen(call):
 
 
 async def _invoke_agent_session_start(call):
-    from core import tool_dispatcher as _runtime
     func = call.func
     tool_name = call.tool_name
     tool_args = call.tool_args
@@ -343,9 +343,6 @@ async def _invoke_agent_session_start(call):
 
 
 def register_tools(registry):
-    from core.tool_dispatcher import (
-        _agent_session_id,
-    )
     registry["device_shutdown"] = {
         "func": _device_shutdown,
         "description": "请求关闭用户的电脑。仅在用户明确要求关机时调用；执行前仍会要求确认。",

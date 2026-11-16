@@ -8,6 +8,8 @@ LLM 全 mock：core.llm_client.chat_turn / chat / chat_stream 按脚本吐结果
 """
 
 from __future__ import annotations
+
+from tests.tool_registry import patch_registry
 from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import asyncio
@@ -832,7 +834,7 @@ async def test_nudge_hint_derives_opaque_mcp_parameter_guidance_from_current_reg
         }},
     }}]
     monkeypatch.setattr(td, "get_tools_schema", lambda categories=None, **kwargs: schema)
-    monkeypatch.setattr(td, "_TOOL_REGISTRY", {
+    patch_registry(monkeypatch, {
         "mcp__arcade__play": {"category": "mcp", "mcp_server": "arcade", "description": "play"},
         "mcp__arcade__inspect_action": {
             "category": "mcp", "mcp_server": "arcade", "mcp_read_only": True,

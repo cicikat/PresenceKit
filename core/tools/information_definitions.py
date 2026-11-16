@@ -1,10 +1,13 @@
 """Information tool definitions and invocation adapters.
 
-The dispatcher remains the legacy dependency-injection seam; no state is copied.
+Domain implementations and trusted invocation bindings have one owner.
 """
 
+from core.tool_runtime.policy import _require_memory_read_scope
+from core.tools import xiaohongshu_continuation as _xhs_continuation
+
+
 async def _get_current_time() -> str:
-    from core import tool_dispatcher as _runtime
     from datetime import datetime
     now = datetime.now()
     week = ["一", "二", "三", "四", "五", "六", "日"][now.weekday()]
@@ -12,25 +15,21 @@ async def _get_current_time() -> str:
 
 
 def _weather_wrapper(city: str):
-    from core import tool_dispatcher as _runtime
     from core.tools.weather import get_weather
     return get_weather(city)
 
 
 def _web_search_wrapper(query: str, uid: str | None = None, char_id: str | None = None):
-    from core import tool_dispatcher as _runtime
     from core.tools.web_search import search
     return search(query, uid=uid, char_id=char_id)
 
 
 async def _read_xiaohongshu_wrapper(user_id, share: str='', read_id: str='', *, char_id):
-    from core import tool_dispatcher as _runtime
     from core.tools.xiaohongshu import read_post
     return await read_post(share,user_id=user_id,char_id=char_id,read_id=read_id)
 
 
 async def _invoke_read_xiaohongshu(call):
-    from core import tool_dispatcher as _runtime
     func = call.func
     tool_name = call.tool_name
     tool_args = call.tool_args
@@ -44,14 +43,13 @@ async def _invoke_read_xiaohongshu(call):
     pin_reference_hashes = call.pin_reference_hashes
     if is_group:
         raise ValueError('scoped reader continuation is owner-private only')
-    _runtime._require_memory_read_scope(user_id,char_id)
+    _require_memory_read_scope(user_id,char_id)
     result = await func(user_id=user_id,char_id=char_id,**tool_args)
 
     return result
 
 
 async def _invoke_web_search(call):
-    from core import tool_dispatcher as _runtime
     func = call.func
     tool_name = call.tool_name
     tool_args = call.tool_args
@@ -77,9 +75,6 @@ async def _invoke_web_search(call):
 
 
 def register_tools(registry):
-    from core.tool_dispatcher import (
-        _xhs_continuation,
-    )
     registry["get_time"] = {
         "func": _get_current_time,
         "description": "获取当前本地日期、时间和星期。用户询问现在几点、今天日期或星期时调用；不要猜测时间。",
