@@ -1064,6 +1064,69 @@ def _empty_chat_delta(delta: Any, *, allow_assistant_role: bool = False) -> bool
                for value in fields.values())
 
 
+def _tool_snapshot_replay(delta: Any, calls: dict[int, dict]) -> str:
+    """Match a complete action snapshot; never append repeated tool fragments."""
+    fields = _as_dict(delta)
+    rest = SimpleNamespace(**{key: value for key, value in fields.items() if key != 'tool_calls'})
+    if not _empty_chat_delta(rest, allow_assistant_role=True):
+        return 'delta_fields'
+    snapshots = getattr(delta, 'tool_calls', None)
+    if not calls or not isinstance(snapshots, list) or len(snapshots) != len(calls):
+        return 'call_count'
+    seen = set()
+    for call in snapshots:
+        fields = _as_dict(call)
+        if any(value not in (None, '', [], {}) for key, value in fields.items()
+               if key not in {'index', 'id', 'type', 'function', 'extra_content'}):
+            return 'call_fields'
+        index = getattr(call, 'index', None)
+        if type(index) is not int or index not in calls or index in seen:
+            return 'index'
+        seen.add(index)
+        if getattr(call, 'type', None) not in (None, 'function'):
+            return 'type'
+        saved = calls[index]
+        if getattr(call, 'id', None) != saved['id']:
+            return 'id'
+        function = getattr(call, 'function', None)
+        if any(value not in (None, '', [], {}) for key, value in _as_dict(function).items()
+               if key not in {'name', 'arguments'}):
+            return 'function_fields'
+        for key in ('name', 'arguments'):
+            if getattr(function, key, None) != saved[key]:
+                return key
+        if _tool_call_extra_content(call) != saved['extra_content']:
+            return 'extra_content'
+    return 'match'
+
+
+def _complete_tool_packet(delta: Any) -> dict | None:
+    """Recognize the observed one-complete-call, index-zero gateway envelope."""
+    snapshots = getattr(delta, 'tool_calls', None)
+    if not isinstance(snapshots, list) or len(snapshots) != 1:
+        return None
+    call = snapshots[0]
+    function = getattr(call, 'function', None)
+    item = {'id': getattr(call, 'id', None), 'name': getattr(function, 'name', None),
+            'arguments': getattr(function, 'arguments', None),
+            'extra_content': _tool_call_extra_content(call)}
+    if any(not isinstance(item[key], str) or not item[key] for key in ('id', 'name', 'arguments')):
+        return None
+    if getattr(call, 'type', None) != 'function' or not isinstance(item['extra_content'], (dict, type(None))):
+        return None
+    try:
+        if not isinstance(json.loads(item['arguments']), dict):
+            return None
+    except (TypeError, ValueError):
+        return None
+    return item if _tool_snapshot_replay(delta, {0: item}) == 'match' else None
+
+
+def _empty_choice_metadata(choice: Any) -> bool:
+    return all(value in (None, '', [], {}) for key, value in _as_dict(choice).items()
+               if key not in {'index', 'delta', 'finish_reason'})
+
+
 async def _collect_chat_stream(mc, messages, kwargs, capture) -> NormalizedResponse:
     """Buffer a complete SSE turn; never execute partial tool arguments."""
     stream = await mc.client.chat.completions.create(
@@ -1077,6 +1140,9 @@ async def _collect_chat_stream(mc, messages, kwargs, capture) -> NormalizedRespo
     compatible = getattr(mc, "stream_compatibility", "strict") == "openlux"
     terminal_choice = None
     terminal_id = None
+    terminal_delta = None
+    split_tool_packets = False
+    packet_stop = False
     try:
         async for chunk in stream:
             usage = getattr(chunk, "usage", None) or usage
@@ -1091,6 +1157,8 @@ async def _collect_chat_stream(mc, messages, kwargs, capture) -> NormalizedRespo
                 continue
             delta = getattr(choice, "delta", None)
             if finish is not None:
+                if split_tool_packets and not _empty_choice_metadata(choice):
+                    raise _format_error(mc, 'Split tool packets contain unexpected choice fields')
                 # Some gateways retain an empty choices[0] in the usage
                 # trailer and repeat the same terminal marker. Never merge
                 # new content or tool fragments after completion.
@@ -1099,14 +1167,47 @@ async def _collect_chat_stream(mc, messages, kwargs, capture) -> NormalizedRespo
                     continue
                 allowed_finish = (None, finish, "stop") if compatible and finish == "tool_calls" else (None, finish)
                 if tail_finish in allowed_finish and _empty_chat_delta(delta, allow_assistant_role=compatible):
+                    if tail_finish == 'stop' and terminal_id and getattr(chunk, 'id', None) == terminal_id:
+                        packet_stop = True
                     continue
+                # A full action snapshot can differ from the final delta (or
+                # omit empty fields). Require exact assembled action identity,
+                # arguments and signature; retain the first validated copy.
+                replay = _tool_snapshot_replay(delta, calls)
+                if replay == 'match' and not _empty_choice_metadata(choice):
+                    replay = 'choice_fields'
+                if (compatible and finish == tail_finish == 'tool_calls'
+                        and terminal_id and getattr(chunk, 'id', None) == terminal_id
+                        and replay == 'match'):
+                    continue
+                # This gateway emits a terminal packet per sibling function,
+                # reusing index zero. Buffer distinct complete calls in wire
+                # order, and require its outer stop trailer before releasing.
+                if (compatible and not packet_stop and finish == tail_finish == 'tool_calls'
+                        and terminal_id and getattr(chunk, 'id', None) == terminal_id
+                        and _empty_choice_metadata(choice) and _empty_choice_metadata(terminal_choice)):
+                    sibling = _complete_tool_packet(delta)
+                    first_packet = _complete_tool_packet(terminal_delta)
+                    if (sibling is not None and first_packet is not None
+                            and (split_tool_packets or (len(calls) == 1 and calls.get(0) == first_packet))
+                            and sibling['id'] not in {item['id'] for item in calls.values()}):
+                        calls[max(calls) + 1] = sibling
+                        split_tool_packets = True
+                        continue
                 # Log shape only: no gateway text, arguments, or credentials.
                 fields = _as_dict(delta) if delta is not None else {}
                 shape = ','.join(sorted(key for key, value in fields.items()
                                         if value not in (None, '', [], {})))
+                tail_text = getattr(delta, "content", None)
+                text_matches = bool(''.join(parts)) and isinstance(tail_text, str) and tail_text == ''.join(parts)
                 raise _format_error(mc, f"Chat stream contains choices after completion "
                                     f"(finish={finish!r}, tail_finish={tail_finish!r}, "
-                                    f"delta_fields={shape!r}, compatibility={'openlux' if compatible else 'strict'})")
+                                    f"delta_fields={shape!r}, compatibility={'openlux' if compatible else 'strict'}, "
+                                    f"buffered_chars={sum(map(len, parts))}, buffered_tools={len(calls)}, "
+                                    f"tail_content_matches_buffer={text_matches}, "
+                                    f"tool_snapshot_replay={replay}, "
+                                    f"same_terminal_id={bool(terminal_id) and getattr(chunk, 'id', None) == terminal_id}, "
+                                    f"same_terminal_choice={_as_dict(choice) == terminal_choice})")
             for key in ("reasoning_content", "reasoning"):
                 capture.add(key, getattr(delta, key, None))
             text = getattr(delta, "content", None)
@@ -1139,8 +1240,11 @@ async def _collect_chat_stream(mc, messages, kwargs, capture) -> NormalizedRespo
             if finish is not None:
                 terminal_choice = _as_dict(choice)
                 terminal_id = getattr(chunk, "id", None)
+                terminal_delta = delta
         if finish is None:
             raise _format_error(mc, "Chat stream ended before finish_reason")
+        if split_tool_packets and not packet_stop:
+            raise _format_error(mc, "Split tool packets ended before outer stop trailer")
         if calls and finish != "tool_calls":
             raise _format_error(mc, "Chat stream ended without completing tool calls")
         if finish == "tool_calls" and not calls:

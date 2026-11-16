@@ -6,6 +6,14 @@
 
 # docs/tools.md — 工具系统
 
+AR-01（325）：`core/tool_dispatcher.py` 保留稳定入口与历史注入点；
+`core/tool_runtime/` 分担注册构建、暴露、准入、参数校验、执行与结果。
+`core/tools/*_definitions.py` 将同域 schema、既有实现适配与 `invoke` 元数据放在一起；
+已有工具模块继续用原 `register_tools()`，不复制实现。新增工具可随注册提供
+`invoke(Invocation)`，始终先经过 `execute_structured()` 的统一闸门。
+可信主体与模型参数分离；原权限、结果及审计语义不变。迁移证据见
+[AR-01](refactors/modularization-ar01.md)。
+
 314：artifacts 类新增持久桌面预览 `browser_session_start/action/status/cancel`、`browser_snapshot/screenshot/console/visual_review`，沿用 owner 私聊 Path C 与设备工作区权限。开始/交互/取消按 write 分类，证据读取按 read 分类；仅授权的隔离本地页面可交互。截图与视觉评审是独立动作，页面文字与视觉观察不得提升为授权或文件保存证据。旧 `browser_automation` 和 remote_server 本机执行限制保留。合同及支持边界见 [设备文件合同](device-file-agent-contract.md#isolated-desktop-browser-preview-314)。
 
 272 B：QQ 空间发布、评论、点赞及有界只读查询走独立 `qzone` 分类、owner/角色/账号闸门与标准 portable schema；详见 [qzone-integration.md](qzone-integration.md)。
@@ -30,7 +38,7 @@ Brief 249：删除未被生产链调用的旧工具名单生成器；Path A 仍�
 
 ## 工具 meta 文本泄漏闸门（工单组「语音链路 · 工具文本泄漏 · 视频帧差分」工单 C）
 
-工单 305 增加模型工具控制文本闸门。普通正文识别 sentinel、XML 工具标签与模型内部特殊标记。流式出口暂存跨块前缀，控制文本不会进入 delta。工具决策保留结构化调用，仍须通过当前暴露范围、参数 schema 和执行权限。工具后的收尾失败按整轮失败处理。工具返回 `outcome_unknown` 时停止本轮工具链，并告知结果待核实。
+工单 305 增加模型工具控制文本闸门。普通正文识别 sentinel、XML 工具标签与模型内部特殊标记。流式出口暂存跨块前缀，控制文本不会进入 delta。工具决策保留结构化调用，仍须通过当前暴露范围、参数 schema 和执行权限。工具后的收尾失败按整轮失败处理；若收尾正常返回空正文，但同轮工具链已有完整自然回答，则复用该回答并重新经过完成声明与工具元数据守卫，不重放工具。两份正文均为空时仍明确失败。工具返回 `outcome_unknown` 时停止本轮工具链，并告知结果待核实。
 
 症状：聊天里出现「加载…的工具定义。含：…只发现工具，不执行任何业务操作；下一轮才能调用具体工具。」
 这类文本。它不是系统把工具结果当回复发出（`role: tool` 消息只参与下一轮推理，不会成为 outcome），

@@ -1,6 +1,16 @@
+## 工具后空收尾与主模型延迟（326，2026-11-16，observe）
+
+08:32工具步骤成功后，额外tool-free收尾产生空正文，后端08:32:56返回502且回执failed，无canonical；并非昨晚的多工具封包异常。已修复空收尾丢弃同轮已有自然回答：候选重新经过完成声明及工具元数据守卫，不重跑工具，两份正文均空仍失败。已随325模块拆分部署；隔离真实pipeline/dispatcher、真实模型单/双工具及来源隔离验证通过。08:59自然消息后端completed、133字符；该轮主模型90秒超时后备用约8秒成功，延迟仍observe，未调整模型配置。原生展示及工具后空收尾的自然用户验收仍待观测。管理面VPS实际新资源/受影响页面加载已验证；完整登录刷新脚本在隧道guide恢复超时，尚未完成该项验收。详见[326交付](../cc-tasks/326-empty-tool-closing-and-vps-delivery.md)。
+
+## 管理面板 200ms 预算（2026-11-15，open / observe）
+
+DOM 增量投影、脚本并行下载、本机中文字体与 C 安全 YAML 已部署指定实例。已测本地常速切页约 28–117ms，隔离配置 POST 约 83–111ms；冷启动与压力冷切页仍可超过 200ms。服务器内部约 3ms，但实际管理隧道首字节约 0.88–1.54 秒，DERP 往返约 304–330ms。公网直连试验失败，代理设置已恢复；认证后全部页面和真实外部操作未验收，不能宣称全局达标。证据、部署边界及既有失败见 [管理面板延迟验收](admin-latency.md)。
+
+角色行为的共享表单首次导航被清空及悬挂请求兜底已修复并部署；进入顺序、局部重试和草稿回归通过。已登录现场点击复测仍待窗口恢复，见 [角色行为分区恢复](admin-behavior-recovery.md)。
+
 ## 工单323/56 桌面发送与流响应（2026-11-15，partial / open）
 
-已确认线上六次桌面502为 gemini-ol / gemini-4-carbon 流结束后非法 choice，另一次500为配置重载关闭在途连接。工单56修复桌面流可见后忽略错误、失败回执删除正文及未回复历史尾注泄漏；缓冲失败正文可安全投递但仍为 failed。当前合成纯文本/工具流探针正常，历史坏尾包没有原始报文，具体形态仍 open；新增脱敏形态诊断，不能视作已重放历史故障。热重载在途连接竞争仍 open。原生设备、修改后生产部署未验收。见 [323诊断](../cc-tasks/323-desktop-chat-failure-investigation.md) 与 [56交付](chat-recovery-stream-56.md)。
+已确认线上六次桌面502为 gemini-ol / gemini-4-carbon 流结束后非法 choice，另一次500为配置重载关闭在途连接。工单56修复桌面流可见后忽略错误、失败回执删除正文及未回复历史尾注泄漏；缓冲失败正文可安全投递但仍为 failed。工单324确认20:21、20:22及20:44同类失败；20:44出错步骤缓存正文0字符、工具1个，同事件再次出现tool_calls包。单工具探针正常；进一步真实合成双工具探针捕获每工具单独finish_reason=tool_calls且重复index=0、独立工具ID，旧解析器在第二包复现同一格式错误。已部署逐工具封包适配、重复快照去重、失败正文保留及诊断；必须收齐空stop总结束包再释放工具，截断不执行。真实同/不同工具双调用及捕获合成SSE回放通过。历史失败原包缺失，原生设备及自然用户聊天恢复仍observe；热重载在途连接竞争仍open。见 [324工单](../cc-tasks/324-stream-tail-compatibility.md)、[323诊断](../cc-tasks/323-desktop-chat-failure-investigation.md) 与 [56交付](chat-recovery-stream-56.md)。
 
 ## Browser + Visual Workbench 314（open / observe）
 
@@ -1104,3 +1114,13 @@ Windows 原子扫描仍与本机授权设置串行，逐扫描项合作式取消
 ## memeval 生产目录快照并发竞态（313 验证发现，open）
 
 `tests/memeval/conftest.py::_production_data_entries` 在 `rglob` 遍历后才过滤共享 `data/test_sandbox`，其他 xdist worker 清理子目录时，Windows Python 3.10 可在 fixture setup 抛 `FileNotFoundError`。最终实现 `ae1105b` 的3.10全量为8390 passed / 1 error；失败用例 `ms-05-episodic-plus-profile-natural` 隔离重跑1 passed。3.12同轮8391 passed。后续应在遍历前排除测试命名空间并保持生产新增文件断言，不以吞掉生产目录错误或放宽污染检测修复。本单未修改该测试设施。
+
+
+## AR-01 管理面浏览器脚本验收缺口（325，observe）
+
+模块化前后均复现两项既有失败：`admin_ui_versions_browser.cjs` 在首次新旧版切换
+加载聚合子模块时触发“零 API 请求”断言；`admin_ui_business_browser.cjs` 在 tools
+字段/保存按钮间距断言失败。未放宽断言或顺带改 CSS，两个脚本后续步骤未完成。
+其他真实浏览器验收及 67 页×两版×宽窄屏的同输入前后投影通过；这不代表上述
+脚本全通过或全部真实服务业务验收完成。证据见
+[AR-01](refactors/modularization-ar01.md#admin-前后对比与验收限制)。

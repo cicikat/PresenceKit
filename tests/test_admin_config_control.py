@@ -65,3 +65,13 @@ def test_settings_routers_do_not_write_config_directly():
             violations.append(path.name)
     assert violations == []
 
+
+def test_config_codec_rejects_python_object_tags(tmp_path):
+    """The accelerated safe loader must never construct Python objects."""
+    path = tmp_path / "config.yaml"
+    path.write_bytes(b"value: !!python/tuple [1, 2]\n")
+    with pytest.raises(HTTPException) as exc:
+        config_control.read_config_file(path)
+    assert exc.value.status_code == 500
+    assert path.read_bytes() == b"value: !!python/tuple [1, 2]\n"
+

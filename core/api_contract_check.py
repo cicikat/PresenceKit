@@ -1,7 +1,7 @@
 """
 core/api_contract_check.py — 后端→前端 desktop action 契约测试（2026-07-25，茶茶反馈）
 
-背景：core/tool_dispatcher.py 里 desktop 类 _TOOL_REGISTRY wrapper 会通过
+背景：工具领域模块里的 desktop 类 _TOOL_REGISTRY wrapper 会通过
 _push_desktop_action({"type": ..., ...})
 把动作推给桌面客户端；前端 Emerald-client 的 src/shared/api/ws.ts::_dispatchAction 用一个
 switch(type) 消费，不认识的 type 会 throw "unsupported action type"。两边分属两个仓库，
@@ -32,7 +32,7 @@ _TYPE_KEY_RE = re.compile(r'"type"\s*:\s*"([a-zA-Z0-9_]+)"')
 _FRONTEND_CASE_RE = re.compile(r"case\s*'([a-zA-Z0-9_]+)'\s*:")
 
 # 前端认识、但产出路径不在本模块扫描范围内的 type：不算契约漂移，只是生产者不在
-# tool_dispatcher.py/pipeline.py 这两个文件里，说明写在这防止被误判为"后端漏产出"。
+# 工具领域定义/pipeline.py 里，说明写在这防止被误判为"后端漏产出"。
 _FRONTEND_ONLY_EXPECTED: frozenset[str] = frozenset({
     # 由 core/scheduler/triggers/presence_nag.py 提案 → core/scheduler/loop.py 解析后
     # 推送，走 scheduler 专属链路而非 tool_dispatcher/pipeline 里的 _push_desktop_action
@@ -81,7 +81,11 @@ def _backend_producible_types() -> dict[str, list[str]]:
     backend_root = Path(__file__).resolve().parent
     sources: dict[str, list[str]] = {}
 
-    for py_file in (backend_root / "tool_dispatcher.py", backend_root / "pipeline.py"):
+    # AR-01 moved the actual producers into domain-owned definitions. Keep the
+    # facade/pipeline compatibility sources and scan all current domain owners.
+    py_files = (backend_root / "tool_dispatcher.py", backend_root / "pipeline.py",
+                *sorted((backend_root / "tools").glob("*_definitions.py")))
+    for py_file in py_files:
         try:
             text = py_file.read_text(encoding="utf-8")
         except Exception as e:

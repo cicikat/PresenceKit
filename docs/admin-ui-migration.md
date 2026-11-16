@@ -93,3 +93,91 @@
 | tts-config | 24 | 13 | pass |
 | user-data | 0 | 0 | pass |
 | users | 4 | 4 | pass |
+
+## AR-01 页面与依赖索引（325）
+
+全部页面的初始化入口在 `js/admin-page-registry.js`；原功能脚本继续拥有各自的
+DOM、表单事件、渲染、请求和可见错误。`core.js` 唯一持有 TOKEN/BASE、api/toast、
+fragment 加载与竞态取消、页面状态/历史和 data-action 委托。注册表只保存延迟回调，
+不在装载时发请求、不复制公共状态。`logs` 的 offset 仍引用原全局状态。
+
+同步装载关系：theme/ui boot → defer 字典 `i18n.js` → `js/i18n-runtime.js`
+（原 t/AdminI18n/Legacy DOM、Observer 和原生弹窗包装）→ 页面注册表 → core
+→ 原有业务脚本（顺序不变）→ DOMContentLoaded。`window.AdminI18nMessages`
+与 `AdminI18n.I18N` 指向同一份字典；既有 key、fallback、语言切换与初始化时机不变。
+
+公共呈现：`style.css`、`admin-design.css`、`admin-v2.css`、
+`admin-components-v2.css`、`admin-theme.css`，本次未移动/修改 CSS。
+DOM 列是原 fragment 容器；新版由 `AdminPageLayout.resolve/prepare` 将**同一个节点**
+移动到角色行为/模型/数据/观测聚合页，`ui-version.js` 只适配呈现，旧版恢复原位置。
+多个业务域共用这些 CSS，未引入第二份页面 DOM 或业务 loader。
+
+| 页面/fragment | 业务 JS（注册回调引用） | 原 DOM 容器 |
+|---|---|---|
+| `agent-runtime-browser` | `agent-runtime-browser.js` | `#page-agent-runtime-browser` |
+| `auth-tokens` | `admin-page-layout.js` | `#page-auth-tokens` |
+| `autonomy-settings` | `observability.js`, `scheduler.js`, `video-call-presence.js` | `#page-autonomy-settings` |
+| `call-records` | `settings-center.js` | `#page-call-records` |
+| `character-behavior` | 无首屏请求；表单/显式交互驱动 | `#page-character-behavior` |
+| `character-cleanup` | `character-cleanup.js` | `#page-character-cleanup` |
+| `character` | `character.js` | `#page-character` |
+| `client-settings` | `client-settings.js`, `settings-center.js` | `#page-client-settings` |
+| `conversation-settings` | `settings-center.js` | `#page-conversation-settings` |
+| `coplay-config` | `setup.js` | `#page-coplay-config` |
+| `data-management` | `admin-page-layout.js` | `#page-data-management` |
+| `device-policy` | `relationship.js` | `#page-device-policy` |
+| `diary-config` | `setup.js` | `#page-diary-config` |
+| `dream-settings` | `dream-settings.js` | `#page-dream-settings` |
+| `embedding-config` | `setup.js` | `#page-embedding-config` |
+| `feature-center` | `admin-page-layout.js` | `#page-feature-center` |
+| `frozen-features` | `settings-center.js` | `#page-frozen-features` |
+| `generation-debug` | `mcp.js`, `observability.js` | `#page-generation-debug` |
+| `guide` | 无首屏请求；表单/显式交互驱动 | `#page-guide` |
+| `integrations` | 冻结兼容 fragment | `#page-integrations` |
+| `listening-player` | `listening-player.js` | `#page-listening-player` |
+| `local-model-runtime` | `local-runtime.js` | `#page-local-model-runtime` |
+| `logs` | `status-users.js` | `#page-logs` |
+| `lorebook` | `lorebook.js` | `#page-lorebook` |
+| `mail-config` | `setup.js` | `#page-mail-config` |
+| `mcp` | `mcp.js` | `#page-mcp` |
+| `memory-consolidation` | `observability.js` | `#page-memory-consolidation` |
+| `minecraft` | `minecraft.js` | `#page-minecraft` |
+| `model-routing` | `admin-page-layout.js`, `settings.js` | `#page-model-routing` |
+| `network-config` | `settings.js` | `#page-network-config` |
+| `observation-center` | `settings-center.js` | `#page-observation-center` |
+| `observe-api-contract` | `observability.js` | `#page-observe-api-contract` |
+| `observe-autonomy` | `observability.js` | `#page-observe-autonomy` |
+| `observe-char-permissions` | `observability.js` | `#page-observe-char-permissions` |
+| `observe-dream-operations` | `dream-operations.js` | `#page-observe-dream-operations` |
+| `observe-dream-prompt` | `observability.js` | `#page-observe-dream-prompt` |
+| `observe-dream` | `admin-page-layout.js` | `#page-observe-dream` |
+| `observe-group-arbiter` | `observability.js` | `#page-observe-group-arbiter` |
+| `observe-hidden` | `observability.js` | `#page-observe-hidden` |
+| `observe-listening` | `observability.js` | `#page-observe-listening` |
+| `observe-memory-events` | 无首屏请求；表单/显式交互驱动 | `#page-observe-memory-events` |
+| `observe-memory-summary` | `observability.js` | `#page-observe-memory-summary` |
+| `observe-memory` | 无首屏请求；表单/显式交互驱动 | `#page-observe-memory` |
+| `observe-mood` | `observability.js` | `#page-observe-mood` |
+| `observe-prompt` | `admin-page-layout.js` | `#page-observe-prompt` |
+| `observe-provenance` | `provenance-vector.js` | `#page-observe-provenance` |
+| `observe-resource-completeness` | `observability.js` | `#page-observe-resource-completeness` |
+| `observe-runtime-signals` | `observability.js` | `#page-observe-runtime-signals` |
+| `observe-runtime` | `observability.js` | `#page-observe-runtime` |
+| `observe-spend` | `observability.js` | `#page-observe-spend` |
+| `observe-system-diagnosis` | `observability.js` | `#page-observe-system-diagnosis` |
+| `observe-tools` | `observability.js` | `#page-observe-tools` |
+| `observe-vector` | `admin-page-layout.js` | `#page-observe-vector` |
+| `observe-visual` | `observability.js` | `#page-observe-visual` |
+| `output-settings` | `character.js` | `#page-output-settings` |
+| `owner-turn-api` | `owner-turn-api.js` | `#page-owner-turn-api` |
+| `personal-settings` | `setup.js` | `#page-personal-settings` |
+| `relationship-facts` | `relationship.js` | `#page-relationship-facts` |
+| `role-bindings` | `settings-center.js` | `#page-role-bindings` |
+| `runtime-config` | `runtime-config.js` | `#page-runtime-config` |
+| `scheduler` | `scheduler.js` | `#page-scheduler` |
+| `service-center` | `settings-center.js` | `#page-service-center` |
+| `setup` | `admin-page-layout.js`, `setup.js` | `#page-setup` |
+| `status` | `admin-page-layout.js` | `#page-status` |
+| `tools` | `tools.js` | `#page-tools` |
+| `tts-config` | `character.js` | `#page-tts-config` |
+| `user-data` | `user-data.js` | `#page-user-data` |

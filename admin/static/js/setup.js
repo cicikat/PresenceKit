@@ -381,6 +381,10 @@ async function _loadSetupMail({inline = false} = {}) {
     if (!mounted.isConnected) return;
     if (inline) throw e;
     toast(t('setup.mail.load_error', '加载邮件通道配置失败: {error}', {error: _setupErrMsg(e)}), 'err');
+  } finally {
+    // The parallel Gmail reads own fields in this module too. Do not advertise
+    // the form as ready while a late initial read can still replace a draft.
+    await gmail;
   }
 }
 

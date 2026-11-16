@@ -16,14 +16,33 @@ const base = process.env.ADMIN_TEST_URL || 'http://127.0.0.1:8080';
     const errors = [];
     let diaryFragmentUnavailable = false;
     let diarySettingsUnavailable = false;
+    let stallMinecraftFragment = false;
+    let corruptToolsFragment = false;
+    let unavailableToolsScript = false;
+    let releaseMinecraft;
+    const minecraftGate = new Promise(resolve => { releaseMinecraft = resolve; });
+    let releaseDiaryRead;
+    const diaryReadGate = new Promise(resolve => { releaseDiaryRead = resolve; });
     page.on('pageerror', error => errors.push(error.message));
     await page.route('**/*', route => {
       const url = new URL(route.request().url());
+      if (url.pathname === '/static/js/tools.js' && unavailableToolsScript) {
+        return route.fulfill({status: 503, body: 'Script unavailable fixture'});
+      }
+      if (url.pathname === '/static/pages/tools.html' && corruptToolsFragment) {
+        return route.fulfill({contentType: 'text/html', body: '<h1>Incomplete fragment fixture</h1>'});
+      }
+      if (url.pathname === '/static/pages/minecraft.html' && stallMinecraftFragment) {
+        return minecraftGate.then(() => route.continue()).catch(() => {});
+      }
       if (url.pathname === '/static/pages/diary-config.html' && diaryFragmentUnavailable) {
         return route.fulfill({status: 503, body: 'Fixture unavailable'});
       }
       if (url.pathname === '/settings/diary' && !diarySettingsUnavailable) {
         return route.fulfill({json: {char_id: 'fixture', obsidian_path: 'fixture-notes', configured: true}});
+      }
+      if (url.pathname === '/settings/diary' && diarySettingsUnavailable === 'stall') {
+        return diaryReadGate.then(() => route.continue()).catch(() => {});
       }
       if (url.origin === base && (url.pathname.startsWith('/static/') || url.pathname === '/')) return route.continue();
       return route.fulfill({status: 403, contentType: 'application/json', body: '{}'});
@@ -49,21 +68,50 @@ const base = process.env.ADMIN_TEST_URL || 'http://127.0.0.1:8080';
     await openShell();
     await active('guide');
     diaryFragmentUnavailable = true;
+    stallMinecraftFragment = true;
+    corruptToolsFragment = true;
     await page.evaluate(() => AdminUI.select('new'));
-    await page.evaluate(() => goto('character-behavior'));
+    // Feature Center prepares the shared behavior forms before their own page
+    // is visited. Entering Behavior afterwards must retain those mounted forms.
+    await page.locator('nav a[data-page="feature-center"]').click();
+    await page.locator('#page-character-behavior #setup-mail-enabled').waitFor({state: 'attached', timeout:1500});
+    const sharedMailControl = await page.locator('#page-character-behavior #setup-mail-enabled').elementHandle();
+    await page.locator('nav a[data-page="character-behavior"]').click();
     const behavior = page.locator('#page-character-behavior');
     await behavior.getByRole('heading', {name: '角色行为', exact: true}).waitFor();
-    await behavior.locator('#setup-mail-enabled').waitFor({state: 'attached'});
+    // A stalled optional fragment must not block independent settings or retry.
+    await behavior.locator('#setup-mail-enabled').waitFor({state: 'attached', timeout: 1500});
+    assert.equal(await sharedMailControl.evaluate(node => node === document.getElementById('setup-mail-enabled')), true);
     const retryFragment = behavior.locator('[data-behavior-load-error] button');
     await retryFragment.waitFor();
+    await behavior.locator('[data-behavior-load-error]').filter({hasText: 'Missing settings section: tools'}).waitFor();
+    corruptToolsFragment = false;
     diaryFragmentUnavailable = false;
     diarySettingsUnavailable = true;
     await retryFragment.click();
+    await behavior.locator('[data-layout-key="behavior-reading"]').waitFor();
     const retryDiary = behavior.locator('[data-source-error="diary-config"] button');
     await retryDiary.waitFor();
-    diarySettingsUnavailable = false;
+    diarySettingsUnavailable = 'stall';
     await retryDiary.click();
+    // Header/body reads have a deadline too; only the failed source gets Retry.
+    await behavior.locator('[data-source-error="diary-config"]').filter({hasText: '请求超时'}).waitFor({timeout: 12000});
+    assert.equal(await behavior.locator('#setup-mail-enabled').count(), 1);
+    await behavior.locator('[data-behavior-load-error]').filter({hasText: 'Minecraft'}).waitFor({timeout: 1000});
+    diarySettingsUnavailable = false;
+    releaseDiaryRead();
+    await behavior.locator('[data-source-error="diary-config"] button').click();
     await page.waitForFunction(() => document.getElementById('setup-diary-path')?.value === 'fixture-notes');
+    await behavior.locator('#setup-diary-path').fill('draft-kept');
+    stallMinecraftFragment = false;
+    releaseMinecraft();
+    await behavior.locator('[data-behavior-load-error] button').click();
+    await behavior.locator('[data-layout-key="minecraft"]').waitFor();
+    const sectionOrder = await behavior.locator(':scope > [data-layout-key]').evaluateAll(cards => cards.map(card => card.dataset.layoutKey));
+    assert.ok(sectionOrder.indexOf('minecraft') < sectionOrder.indexOf('listening-player'), 'late fragments retain the settings order');
+    assert.equal(await behavior.locator('#setup-diary-path').inputValue(), 'draft-kept');
+    assert.equal(await behavior.locator('#setup-diary-path').count(), 1);
+    await behavior.locator('#setup-diary-path').fill('fixture-notes');
     await page.evaluate(() => goto('guide'));
     await page.evaluate(() => goto('character-behavior'));
     assert.equal(await behavior.locator('#setup-diary-path').inputValue(), 'fixture-notes');
@@ -170,7 +218,21 @@ const base = process.env.ADMIN_TEST_URL || 'http://127.0.0.1:8080';
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
     await page.screenshot({path: '.tmp/admin-navigation/mobile.png'});
     await page.evaluate(() => { localStorage.setItem('navGroupsCollapsed', '{broken'); });
+    unavailableToolsScript = true;
     await openShell();
+    // A missing unrelated JS module cannot prevent Guide navigation. Entering
+    // the affected page must surface an actionable error instead of rejecting goto.
+    await page.locator('#nav-menu-toggle').click();
+    await page.locator('nav a[data-page="tools"]').click();
+    await page.locator('#page-tools > [data-page-data-error] button').waitFor();
+    await page.locator('#nav-menu-toggle').click();
+    await page.locator('nav a[data-page="guide"]').click();
+    await active('guide');
+    await page.locator('#admin-ui-version').selectOption('new');
+    await page.locator('#nav-menu-toggle').click();
+    await page.locator('nav a[data-page="character-behavior"]').click();
+    await page.locator('#page-character-behavior #setup-mail-enabled').waitFor({state: 'attached', timeout:1500});
+    await page.locator('#page-character-behavior [data-behavior-load-error]').filter({hasText: 'loadToolsPage'}).waitFor();
     await page.evaluate(() => logout());
     assert.equal(await page.evaluate(() => sessionStorage.getItem('admin_active_page')), null);
     assert.equal(await page.locator('#nav-back').isDisabled(), true);

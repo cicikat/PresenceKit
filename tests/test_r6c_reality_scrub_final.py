@@ -234,7 +234,8 @@ _DREAM_MODULES = [
     "core/dream/dream_pipeline.py",
     "core/dream/dream_state.py",
     "admin/routers/dream.py",
-]
+] + [path.relative_to(_ROOT).as_posix()
+     for path in sorted((_ROOT / "admin/routers").glob("dream_*.py"))]
 
 
 @pytest.mark.parametrize("relpath", _DREAM_MODULES)
@@ -285,7 +286,7 @@ def test_f4_desktop_chat_routes_through_turn_sink():
     F4: admin/routers/chat.py must call record_assistant_turn.
     Desktop / mobile chat paths must use turn_sink for the pre-scrub + post_process chain.
     """
-    src = _src("admin/routers/chat.py")
+    src = _src("core/owner_chat/delivery.py")
     assert "record_assistant_turn" in src, (
         "admin/routers/chat.py: record_assistant_turn not called — "
         "desktop memory pre-scrub may be bypassed"
@@ -349,7 +350,9 @@ def test_f5b_no_bare_memory_writes_in_main_or_admin():
         "main.py",
         "admin/routers/chat.py",
         "admin/routers/dream.py",
-    ]
+    ] + [path.relative_to(_ROOT).as_posix()
+         for folder, pattern in (("admin/routers", "dream_*.py"), ("core/owner_chat", "*.py"))
+         for path in sorted((_ROOT / folder).glob(pattern))]
     violations: list[str] = []
     for relpath in files_to_check:
         lines = _lines(relpath)

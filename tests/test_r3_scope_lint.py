@@ -131,7 +131,7 @@ DATA_PATH_ALLOWLIST: frozenset[str] = frozenset({
     "core/data_paths.py",                          # canonical path authority — by design
 
     # existing violations / to migrate
-    "core/tool_dispatcher.py",                     # configured external desktop legacy IPC root
+    "core/tools/memory_definitions.py",            # same external desktop legacy IPC root, moved by AR-01
 })
 
 

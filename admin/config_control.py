@@ -7,10 +7,10 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-import yaml
 from fastapi import HTTPException
 
 from core.safe_write import safe_write_text
+from core.config_yaml import load_config_yaml, dump_config_yaml
 
 _WRITE_LOCK = threading.RLock()
 _MISSING = object()
@@ -26,7 +26,7 @@ class ConfigDocument(dict):
 
 def _load_mapping(path: Path) -> dict[str, Any]:
     try:
-        value = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        value = load_config_yaml(path.read_text(encoding="utf-8")) or {}
     except FileNotFoundError:
         return {}
     except Exception as exc:
@@ -97,7 +97,7 @@ def write_config_file(path: Path, updated: dict[str, Any]) -> None:
         for changed_path in changed:
             _apply_path(merged, updated, changed_path)
 
-        payload = yaml.safe_dump(
+        payload = dump_config_yaml(
             merged,
             allow_unicode=True,
             default_flow_style=False,

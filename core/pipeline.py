@@ -2046,6 +2046,19 @@ class Pipeline:
         # 工具已关闭，收尾生成不得再携带鼓励输出 relay 标记的专用指令。
         loop_msgs[:] = _drop_relay_nudge(loop_msgs)
         loop_msgs.append({"role": "system", "content": _voice_reanchor(char_id)})
+
+        def _closing_candidate(closing: str) -> str:
+            candidate = strip_control_markers(closing)
+            if not candidate.strip() and kind == 'natural':
+                retained = strip_control_markers(text)
+                if retained.strip():
+                    logger.warning(
+                        '[pipeline.run_agentic_loop] stage=closing empty tool-free reply; '
+                        'validating retained natural answer chars=%d', len(retained),
+                    )
+                    return retained
+            return candidate
+
         if stream:
             async def _grounded_stream():
                 _pieces: list[str] = []
@@ -2055,7 +2068,7 @@ class Pipeline:
                     _pieces.append(_piece)
                 from core.control_markers import strip_control_markers
                 _guarded = await self._guard_unverified_claim(
-                    loop_msgs, strip_control_markers("".join(_pieces)),
+                    loop_msgs, _closing_candidate("".join(_pieces)),
                     successful_tool_call=successful_tool_call,
                     char_id=char_id, is_proactive=is_proactive,
                 )
@@ -2069,7 +2082,7 @@ class Pipeline:
             loop_msgs, is_proactive=is_proactive, char_id=char_id, require_complete=True,
         )
         final_text = await self._guard_unverified_claim(
-            loop_msgs, strip_control_markers(final_text),
+            loop_msgs, _closing_candidate(final_text),
             successful_tool_call=successful_tool_call,
             char_id=char_id, is_proactive=is_proactive,
         )

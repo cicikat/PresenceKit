@@ -278,7 +278,8 @@ def test_c5b_scrub_called_before_short_term_write():
 _DREAM_FILES = [
     "core/dream/dream_pipeline.py",
     "admin/routers/dream.py",
-]
+] + [path.relative_to(_ROOT).as_posix()
+     for path in sorted((_ROOT / "admin/routers").glob("dream_*.py"))]
 
 
 @pytest.mark.parametrize("relpath", _DREAM_FILES)
