@@ -36,7 +36,7 @@ def post(client, payload):
     return client.post('/finance/candidates/sync', json=payload, headers=HEADERS)
 
 
-def test_shared_mobile_fixture_and_backup_inventory(client, sandbox):
+def test_shared_mobile_fixture_and_backup_inventory(client, sandbox, tmp_path):
     import json
     from pathlib import Path
     from core import backup_state
@@ -44,9 +44,15 @@ def test_shared_mobile_fixture_and_backup_inventory(client, sandbox):
     receipt = post(client, fixture['operation'])
     assert receipt.status_code == 200
     assert receipt.json()['record']['amount_minor'] == 1600
-    # The owning protection selector must include ledger and journal, not treat them as cache.
-    assert not backup_state._is_excluded_data_path(backup_state.PurePosixPath('data/runtime/finance/ledger.sqlite3'))
-    assert sandbox.finance_db().exists()
+    from tests.test_backup_state import _install, _create
+    installation = _install(tmp_path)
+    ledger = installation / 'data/runtime/finance/ledger.sqlite3'
+    ledger.parent.mkdir(parents=True)
+    ledger.write_bytes(sandbox.finance_db().read_bytes())
+    snapshot = _create(installation, tmp_path)
+    manifest = json.loads((snapshot / backup_state.MANIFEST_NAME).read_text(encoding='utf-8'))
+    assert 'data/runtime/finance/ledger.sqlite3' in {entry['path'] for entry in manifest['files']}
+    assert backup_state.verify_snapshot(snapshot)['ok']
 
 
 def test_http_idempotent_timeout_edit_history_and_tombstone(client):
