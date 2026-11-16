@@ -126,6 +126,34 @@ def _patch_final_chat(monkeypatch, text: str):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('stream', [False, True])
+@pytest.mark.parametrize('metadata_leak', [False, True])
+async def test_empty_tool_free_closing_preserves_existing_natural_answer(monkeypatch, sandbox, stream, metadata_leak):
+    """A successful tool turn must not lose its answer to an empty extra closing."""
+    _patch_tool_loop_config(monkeypatch)
+    _patch_tools_schema(monkeypatch, ['web_search'])
+    natural = 'load_tools_memory' if metadata_leak else 'The fixture is ready.{false}'
+    _script_chat_turn(monkeypatch, [
+        ChatTurn(content='', tool_calls=[{'id': 'lookup', 'name': 'web_search', 'arguments': {}}],
+                 assistant_message={'role': 'assistant', 'tool_calls': [{'id': 'lookup', 'type': 'function', 'function': {'name': 'web_search', 'arguments': '{}'}}]}),
+        ChatTurn(content=natural, tool_calls=[], assistant_message={'role': 'assistant', 'content': natural}),
+    ])
+    executions = _script_execute(monkeypatch, [('Synthetic fixture status: ready.', None)])
+    _patch_final_chat(monkeypatch, text='')
+    async def empty_stream(*args, **kwargs):
+        if False:
+            yield ''
+    monkeypatch.setattr('core.llm_client.chat_stream', empty_stream)
+    pipeline = _make_pipeline()
+    result = await pipeline.run_agentic_loop(
+        [{'role': 'user', 'content': 'Read the fixture.'}], uid='fixture-owner',
+        char_id=TEST_CHAR_ID, session_state=object(), stream=stream)
+    text = ''.join([piece async for piece in result]) if stream else result
+    assert text == ('' if metadata_leak else 'The fixture is ready.')
+    assert len(executions) == 1
+
+
+@pytest.mark.asyncio
 async def test_per_turn_exclude_tools_hides_only_completed_fast_path_tool(monkeypatch):
     _patch_tool_loop_config(monkeypatch, exclude_tools=[])
     _patch_tools_schema(monkeypatch, ["get_time", "web_search"])
