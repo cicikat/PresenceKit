@@ -140,7 +140,7 @@ const CENTER_DESTINATIONS = {
   sticker:['output-settings','observe-prompt'], browser:['frozen-features','observe-tools'],
 };
 const CENTER_FLAG_DESTINATIONS = {
-  finance_ingest:['client-settings','client-settings'],
+  finance_ingest:['service-center','service-center'],
   affective_engine:['feature-center','observe-mood'],
   wechat:['runtime-config','runtime-config'],
   qq:['feature-center','status'], mail:['mail-config','call-records'], visual_perception:['device-policy','observe-visual'],
