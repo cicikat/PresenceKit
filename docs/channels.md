@@ -697,3 +697,13 @@ QQ 默认 outbound_mode=reply_only：只回复 QQ 发起的当轮输入，不参
 ### 317 mobile system push
 
 The queue commits before wake selection. Proactive turn fanout can select data-only FCM for the matching owner and character. Ordinary chat continues to use its existing delivery paths. FCM registration is encrypted with a deployment secret and expires after 14 days without renewal. Client-side revocation suppresses new notifications immediately. Android background body reconciliation reads one exact message and leaves prefix ACK to the existing queue consumer. Provider acceptance is available in the existing delivery timing trace.
+
+## 工单331：多格式聊天附件（current / observe，2026-11-16）
+
+`POST /upload/ingest` 支持 CSV/TSV、XLSX、PDF、PPTX、JSON/JSONL、YAML、HTML、XML、日志和常用代码文本，保留 TXT/MD/DOCX及既有图片/语音入口。桌面TS/Rust/选择器与手机Dart/Android MIME和中英文提示同步；桌面附件提示可在右侧关闭，关闭不清除已选附件。
+
+单文档5MB、图片10MB、单文档不与图片混传、正文50万字符限制不变；Bearer/chat scope、冻结角色、request_id、可信附言、media_refs、WS、队列和ACK不变。全文复用角色资料库/read_document及既有只读观测，不新增配置/权限/持久状态库。
+
+CSV保留空格、空单元格、引号与换行；XLSX提取工作表和单元格地址、原始数字/日期值及公式文本，不执行公式；PPTX保留页序和正文/表格。PDF逐页提取文字，混合PDF无文字页标为未识别；纯扫描PDF返回422 `document_needs_ocr`，需上传页面图片或先转为可搜索PDF。容器超限返回422 `document_container_too_large`；损坏/加密/空正文返回 `file_parse_failed`；超过正文上限返回 `document_text_too_large`，均不静默截断。文档内图片、图表、版面和视频尚未自动视觉识别，旧DOC/XLS/PPT需转换。
+
+验证：后端HTTP/资料库及相关59项、增量含换行31项、桌面7项Vitest、TS/Vite生产构建、Rust检查和附件原生测试、手机静态分析和84项发送/附件回归通过；隔离浏览器验证CSV发送、实际选择器过滤、右侧关闭和附件保留。observe：真实安装版/手机文件提供器/真实模型与生产部署未验收。详见 [331工单](../cc-tasks/331-multiformat-chat-attachments.md)。

@@ -1419,3 +1419,13 @@ open：后端目前仅有desktop请求查询端点（admin/routers/chat.py），
 ## 手机 #55 发送排队一分钟与取消（2026-11-15）
 
 current：手机私有Outbox v1新增可选queued_at（旧快照回退created_at）及expired/cancelled；未派发消息满一分钟停止自动发送，排队气泡可长按取消，保留失败内容并退出100条有效队列容量。派发与取消原子互斥；手动重试刷新排队时间；已派发的sending/outcomeUnknown不按这一期限清除，仍按原request_id对账。未修改chat/upload/mobile wire、鉴权、ACK/cursor/TTL、后台通知或桌面行为，无管理面新设置。observe：复用手机投递详情与现有loadChatOutbox读取本机状态/queued_at，不新增伪后端观测端点；手机scoped只读执行状态接口仍open，真实Android后台/重启/升级验收仍observe。保留载荷仍受64MiB物理存储上限，回退不识别新枚举的旧包前需处理记录。细节见手机docs/mobile/chat-queue-deadline-55.md与cc-tasks/55-chat-queue-deadline-cancel.md。
+
+## 工单331：多格式聊天附件（current / observe，2026-11-16）
+
+`POST /upload/ingest` 支持 CSV/TSV、XLSX、PDF、PPTX、JSON/JSONL、YAML、HTML、XML、日志和常用代码文本，保留 TXT/MD/DOCX及既有图片/语音入口。桌面TS/Rust/选择器与手机Dart/Android MIME和中英文提示同步；桌面附件提示可在右侧关闭，关闭不清除已选附件。
+
+单文档5MB、图片10MB、单文档不与图片混传、正文50万字符限制不变；Bearer/chat scope、冻结角色、request_id、可信附言、media_refs、WS、队列和ACK不变。全文复用角色资料库/read_document及既有只读观测，不新增配置/权限/持久状态库。
+
+CSV保留空格、空单元格、引号与换行；XLSX提取工作表和单元格地址、原始数字/日期值及公式文本，不执行公式；PPTX保留页序和正文/表格。PDF逐页提取文字，混合PDF无文字页标为未识别；纯扫描PDF返回422 `document_needs_ocr`，需上传页面图片或先转为可搜索PDF。容器超限返回422 `document_container_too_large`；损坏/加密/空正文返回 `file_parse_failed`；超过正文上限返回 `document_text_too_large`，均不静默截断。文档内图片、图表、版面和视频尚未自动视觉识别，旧DOC/XLS/PPT需转换。
+
+验证：后端HTTP/资料库及相关59项、增量含换行31项、桌面7项Vitest、TS/Vite生产构建、Rust检查和附件原生测试、手机静态分析和84项发送/附件回归通过；隔离浏览器验证CSV发送、实际选择器过滤、右侧关闭和附件保留。observe：真实安装版/手机文件提供器/真实模型与生产部署未验收。详见 [331工单](../cc-tasks/331-multiformat-chat-attachments.md)。
