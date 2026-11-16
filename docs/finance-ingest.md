@@ -4,6 +4,8 @@
 
 ## 身份与控制
 
+「功能开关总览 → 功能总开关 → 自动记账」可直接热切换并搜索定位；其「细分设置」跳到原「消息分发与客户端设置」详细卡片。总览与详情共用同一配置字段，不产生第二个开关。角色读取仍需在详情单独授权。
+
 `finance_ingest` 专用 scope 纳入标准 mobile profile；显式 scopes 的旧 token 需补发，不能升级为 admin。所有路由从配置的单 owner 推导归属，不接受客户端 owner/char。不同角色共享同一用户账本，角色读取另受默认关闭的 character_readable 和统一工具权限约束，群聊/梦境不可读。
 
 后端 `finance_ingest.enabled`、`character_readable` 均默认 false。管理面「服务配置 → 自动记账」经 GET/PUT `/settings/finance`（admin）热更新并显示 effective/counts。关闭即停止同步/读取，数据保留。手机仅维护 origin+owner 隔离的收集开关和系统授权；新通知先落盘，后端拒绝不能标为云端已存。

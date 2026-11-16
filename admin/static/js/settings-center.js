@@ -116,6 +116,7 @@ function centerError(root, error) {
   root.textContent = t('settings_center.load_error','读取失败：{error}',{error:error.message});
 }
 function centerFeatureNames() { return {
+  finance_ingest:t('finance.title','自动记账'),
   affective_engine:t('flag.affective_engine','事件驱动的混合情绪与认知重评'),
   wechat:t('wechat.title', '个人微信'),
   qq:t('settings_center.qq_channel',"QQ 通道"), mail:t('settings_center.mail_channel',"邮件通道"), visual_perception:t('settings_center.screen_perception',"视觉感知"), spend:t('settings_center.spending_intentions',"支出意向"),
@@ -139,6 +140,7 @@ const CENTER_DESTINATIONS = {
   sticker:['output-settings','observe-prompt'], browser:['frozen-features','observe-tools'],
 };
 const CENTER_FLAG_DESTINATIONS = {
+  finance_ingest:['service-center','service-center'],
   affective_engine:['feature-center','observe-mood'],
   wechat:['runtime-config','runtime-config'],
   qq:['feature-center','status'], mail:['mail-config','call-records'], visual_perception:['device-policy','observe-visual'],
@@ -177,6 +179,7 @@ function centerAutonomyControls(config) {
   </div>`;
 }
 function centerFlagNote(item, name) {
+  if (name === 'finance_ingest') return t('finance.flag_hint',item.description) + ' · ' + (item.enabled ? t('finance.enabled','同步已开启') : t('finance.disabled','同步已关闭'));
   if (name === 'affective_engine') return t('flag.affective_engine_hint',item.description) + ' (' + item.effective_state + ')';
   if (name === 'self_management') return t('flag.self_management_hint',"关闭后 overlay 休眠、管理网关隐藏；全局工具/自主默认恢复。不删除授权或审计，也不是能力总闸。");
   if (name === 'speech_analysis') return t('flag.speech_analysis_hint',"STT 已配置不等于声学分析可用；分析失败不挡文字。");
