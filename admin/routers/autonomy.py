@@ -55,6 +55,15 @@ async def effective_state(auth=Depends(require_scopes("state.read"))):
     return build_effective_state(uid, char_id)
 
 
+@router.get("/observability/autonomy-deliveries", summary="读取主动消息投递回执（不含正文）")
+async def deliveries(auth=Depends(require_scopes("state.read"))):
+    from core.autonomy import store
+    uid, char_id = _scope()
+    rows = store.load(uid, char_id).get("delivery_receipts", [])
+    return {"receipts": rows, "acknowledgement_available": False,
+            "automatic_replay": False}
+
+
 def _redact_pending_signals(rows: list[dict]) -> list[dict]:
     """Expose queue state without returning legacy prompt/template content."""
     result = []

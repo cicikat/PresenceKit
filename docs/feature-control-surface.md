@@ -1,5 +1,10 @@
 ## 330 自动记账
 
+第一轮主动投递观测：`GET /observability/autonomy-deliveries`（state.read）返回当前
+owner/char 的最多100条无正文回执。claimed、attempted、accepted、failed 与
+outcome_unknown 分开；accepted 仅代表通道接口接受，acknowledgement_available=false。
+不新增配置开关，不自动重投已占用的关联 ID。
+
 「功能开关总览 → 功能总开关 → 自动记账」与服务配置的详细卡片共用 `finance_ingest.enabled`，支持搜索、热切换和已生效提示；细分设置指向「消息分发与客户端设置」中的原卡片。只切换总开关不会改变独立的角色读取授权或手机系统权限。
 
 服务配置的自动记账卡片控制 `finance_ingest.enabled` 与 `character_readable`，默认均关闭。GET/PUT `/settings/finance` 为 admin-only 热更新，返回 effective 与默认关闭的配置；关闭停止同步及角色读取，保留既有账本。`GET /observability/finance`（state.read）提供无正文计数。手机收集开关独立且按 origin+owner 隔离，不能替代后端 enabled；桌面无新原生消费者。数据、权限、错误/恢复合同见 [finance-ingest.md](finance-ingest.md)。

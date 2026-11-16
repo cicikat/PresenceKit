@@ -78,10 +78,12 @@ async def send(
     from channels.registry import get_active
     if not get_active():
         return False, "no_delivery_channel"
-    from core.autonomy.store import claim_delivery_correlation
+    from core.autonomy.store import claim_delivery_correlation, record_delivery
     correlation_id = str(correlation_id or run_id)
     if not claim_delivery_correlation(uid, char_id, correlation_id):
         return False, Disposition.DUPLICATE.value
+    if not record_delivery(uid, char_id, correlation_id, status="attempted", run_id=run_id):
+        return False, "delivery_receipt_unavailable"
     from core.turn_sink import TurnSource, record_assistant_turn
     from core.write_envelope import stamp_trigger
     from core.event_context import EventContext
@@ -100,18 +102,28 @@ async def send(
         observe_context(stage="ingress", disposition="accepted", context=event_context)
     except Exception:
         pass
-    result = await record_assistant_turn(
-        pipeline=pipeline, uid=uid, assistant_text=text, source=TurnSource.TRIGGER,
-        trigger_name="autonomy", char_id=char_id, bypass_gate=False,
-        audit_extras={
-            "source": "autonomy",
-            "trigger_source": source,
-            "run_id": run_id,
-            "correlation_id": correlation_id,
-        },
-        event_context=event_context,
-        envelope=stamp_trigger(),
-    )
+    try:
+        result = await record_assistant_turn(
+            pipeline=pipeline, uid=uid, assistant_text=text, source=TurnSource.TRIGGER,
+            trigger_name="autonomy", char_id=char_id, bypass_gate=False,
+            audit_extras={
+                "source": "autonomy",
+                "trigger_source": source,
+                "run_id": run_id,
+                "correlation_id": correlation_id,
+            },
+            event_context=event_context,
+            envelope=stamp_trigger(),
+        )
+    except BaseException:
+        record_delivery(uid, char_id, correlation_id, status="outcome_unknown", run_id=run_id)
+        raise
+    record_delivery(uid, char_id, correlation_id,
+        status="accepted" if result.fanout_targets else "failed", run_id=run_id,
+        turn_id=str(getattr(result, "turn_id", "") or ""),
+        persisted=bool(getattr(result, "written_to_memory", False)),
+        channels={**{name: "accepted" for name in result.fanout_targets},
+                  **{name: "failed" for name in getattr(result, "fanout_failures", {})}})
     if not result.fanout_targets: return False, "no_delivery_channel"
     from core.scheduler.proactive_ledger import record_send
     record_send("autonomy", channel="autonomy", gist=text, uid=uid, char_id=char_id)

@@ -1,5 +1,9 @@
 ## 330 自动记账（current / observe）
 
+第一轮主动投递回执（observe）：后端新增只读 `/observability/autonomy-deliveries`
+（state.read，当前 owner/char，无正文）。accepted 为通道接受，客户端送达/ACK 接线仍 open，
+不改变 desktop WS / mobile poll ACK 字段，也不重发已消费候选。
+
 current：手机独立通知监听/finance Channel/SQLite队列与Flutter确认页消费专用finance_ingest scope（标准mobile profile含此scope）。`/finance/capabilities`、`/finance/candidates/sync`、列表/详情由后端固定owner，用户账本不带char_id；operation_id稳定、revision冲突不自动覆盖、同一交易纠错保留ID、删除为墓碑。后端默认关，总开关与角色只读开关在管理面热更新，`/observability/finance`只读计数。手机origin+owner本机收集开关不能替代后端effective，系统通知读取授权独立于POST_NOTIFICATIONS。原通知全文不上传，库存/记忆/LifeRecords/chat/mobile-poll/ACK不变。桌面无原生消费者，使用后端管理页。
 
 observe：原生合成通知/真实loopback HTTP与后端持久化已联调，Android14真实支付通知、后台/强停/重启、已安装Flutter全链路、真实模型查询和生产部署仍NOT RUN。跨渠道模糊重复进入人工核对，完整报表/导入后续单。合同见 [finance-ingest.md](finance-ingest.md)，手机实现/恢复/验收见手机 docs/mobile/auto-bookkeeping-330.md。

@@ -51,6 +51,20 @@ mobile `09809d44fea621a0b329ca6e5faac490b466752f`。
   breaker、取消、工具历史保护、双工具/流尾包与空收尾的既有覆盖。
 - 状态：partially verified；真实 provider 与生产端到端 not verified。
 
+## R4：主动投递回执（部分）
+
+- 基线：claim 只记录关联 ID，异常、取消和部分通道失败没有独立投递状态。
+  新增四个失败先行用例确认回执缺失。
+- 修复：同一 scoped autonomy 状态记录 claimed/attempted/accepted/failed/outcome_unknown；
+  包含 run_id、correlation_id、canonical turn_id、persisted 与每通道接受/失败结果。
+  不存消息正文或异常文本。claimed/attempted 均不等于送达，accepted 不等于客户端 ACK。
+  异常或进程退出保留已消费关联 ID，不自动唤醒或重发。
+- 观测：`GET /observability/autonomy-deliveries`，`state.read`，当前 owner/char，最多100条。
+  客户端确认接线未完成，明确返回 acknowledgement_available=false。
+- 验证：Python 3.12.13，投递+autonomy+管理面 39 passed；
+  投递/信号/Dream retry 16 passed，包含新增 scoped HTTP 回执读取。
+- 状态：partially verified；真实通道 ACK 与进程强杀验证仍 not verified。
+
 ## 删除 brief 候选（未授权，不执行）
 
 后续单独评估退役 `/system/meta-mode` 与危险模式的过期文档/守卫；
