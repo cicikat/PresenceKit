@@ -29,6 +29,7 @@ NO_ADMIN_UI_WHITELIST: dict[tuple[str, str], str] = {
     ("POST", "/v1/development/turns"): "Isolated development runner API; admin must not simulate production owner conversation",
     ("POST", "/v1/ime/drafts"): "Desktop IME draft ingestion; admin observes drafts without simulating typing",
     ("POST", "/life-records/sync"): "Mobile life-record synchronization; admin manages policy and retry only",
+    ("POST", "/finance/candidates/sync"): "Mobile submits parsed finance candidates and owner operations; admin manages sync and read policy, not notification ingestion",
     ("POST", "/phone_control/debug/start"): "Mobile device automation diagnostic session entry",
     ("POST", "/computer-use/agent-session/control"): "Desktop agent session controls; device client owns execution",
     ("POST", "/computer-use/poll"): "Desktop device action lease polling",

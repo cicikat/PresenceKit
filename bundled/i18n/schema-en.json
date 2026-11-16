@@ -1,4 +1,8 @@
 {
+  "索引结果的 next_cursor；保持原筛选条件继续下一页。": "next_cursor from the index results; keep the original filters for the next page.",
+  "YYYY-MM，按记录来源时区筛选；省略不限。": "YYYY-MM, filtered in the record source time zone; omit for all months.",
+  "用户分类；省略不限。": "User category; omit for all categories.",
+  "上一页next_cursor。": "next_cursor from the previous page.",
   "列表或搜索返回的 Gmail 邮件 ID，也可传待办列表的 pending_id。": "Gmail message ID returned by a list or search, or pending_id from the pending list.",
   "本角色邮箱待办列表中的内部编号。": "Internal ID in this character's mailbox pending list.",
   "待办列表上一页返回的 next_cursor。": "next_cursor returned by the previous pending-list page.",

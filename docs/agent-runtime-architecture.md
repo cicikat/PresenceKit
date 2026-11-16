@@ -260,6 +260,7 @@ a durable 副链 does not by itself mean the foreground 主链 cannot use that c
 | `self_list`, `self_read`, `self_create`, `self_update`, `self_move`, `self_delete`, `self_restore` | character self space | current (256 C): Reality owner+char bucket, default grant, admin may revoke; not danger-gated; writes use lock+CAS+trash |
 | `start_agent_task`, `get_agent_task`, `cancel_agent_task` | same-character bounded coding worker | **current (256 F)**; starts asynchronously, rechecks manifest revision and budgets per step, and exposes only bounded result projection. Receipt creation ≠ coding complete |
 | `read_diary`, `search_diary`, `read_watch`, `get_profile`, `get_episodic`, `read_life_records` | memory/document | Reality-scoped read |
+| `read_finance_records` | finance | Owner-only confirmed ledger read; requires effective finance sync and character-read permission; no group or Dream access |
 | `backfill_diary` | authored diary write | owner-private missing-only backfill of today after 23:00 or yesterday; never overwrites; no records → no file |
 | `search_events`, `expand_event_window`, `get_related_events` | memory evidence | explicit Reality read; receipts never indexed |
 | `reread_image` | media recall | owner-scoped image reread; cached/vision/ocr, never a write |
