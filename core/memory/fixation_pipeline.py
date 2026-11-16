@@ -904,6 +904,8 @@ def capture_turn(
     media_of_event_id: str = "",
     event_context=None,
     observer_started_at: float | None = None,
+    occurred_at: float | None = None,
+    require_evidence: bool = False,
 ) -> str:
     """
     生成 turn_id，写 short_term + event_log。
@@ -932,7 +934,7 @@ def capture_turn(
     _voice_low = _voice and bool(audit_extras.get("asr_low_confidence"))
     _voice_kw = {"input_modality": "voice", "asr_low_confidence": _voice_low} if _voice else {}
 
-    ts = time.time()
+    ts = time.time() if occurred_at is None else occurred_at
     turn_id = turn_id or f"{uid}_{int(ts * 1000)}"
 
     if event_context is not None:
@@ -983,6 +985,20 @@ def capture_turn(
     from core.reality_output_scrubber import scrub_reality_output_text as _scrub
     _scrubbed_reply = _scrub(reply)
 
+    # Admit recovery before the first projection write. This bounded execution
+    # snapshot is removed on completion and is never a chat retrieval source.
+    from core.post_process import slow_queue, memory_outbox
+    _repair_id = slow_queue.enqueue("capture_turn_retry", {
+        "uid": uid, "char_id": char_id, "scope": MemoryScope.reality_scope(uid, char_id).to_payload(),
+        "turn_id": turn_id, "user_content": user_msg, "reply": reply,
+        "emotion": emotion, "trigger_name": trigger_name, "source": source,
+        "event_channel": event_channel, "event_source": event_source,
+        "visible_reply": visible_reply, "raw_user_text": raw_user_text,
+        "media_refs": media_refs, "audit_extras": audit_extras,
+        "event_context": event_context.to_payload() if event_context is not None else None,
+        "envelope_source": envelope.source.value, "occurred_at": ts,
+    })
+
     if trigger_name:
         # P0 trigger boundary: non-conversational triggers must NOT enter short_term.
         # Conversational triggers (those that speak to the user and expect a reply)
@@ -1015,7 +1031,7 @@ def capture_turn(
         _event_topics = set(get_tags(user_msg))
     except Exception:
         _event_topics = set()
-    _append_event_ledger(
+    _ledger_result = _append_event_ledger(
         uid=uid,
         char_id=char_id,
         turn_id=turn_id,
@@ -1044,6 +1060,12 @@ def capture_turn(
     )
     if not all(writes):
         raise RuntimeError(f"capture_turn 写入不完整: turn_id={turn_id} writes={writes}")
+    evidence_complete = (
+        (not _ledger_result.get("attempted") and not _ledger_result.get("error_code"))
+        or _ledger_result.get("disposition") == "committed"
+    )
+    if require_evidence and not evidence_complete:
+        raise RuntimeError("capture_turn evidence projection incomplete")
 
     # Explicit owner corrections become versioned profile facts without waiting
     # for the periodic summarizer. Never consume assistant/media/isolated text.
@@ -1067,6 +1089,8 @@ def capture_turn(
         record("chat_round", uid=uid, char_id=char_id,
                event_id=f"round:{uid}:{char_id}:{turn_id}", ts=ts)
 
+    if evidence_complete and _repair_id:
+        memory_outbox.finish(_repair_id, succeeded=True)
     return turn_id
 
 
@@ -2131,9 +2155,10 @@ async def handler_capture_turn_retry(payload: dict) -> None:
     scope = _get_scope_from_payload(payload, "handler_capture_turn_retry")
     uid = scope.uid
     char_id = scope.character_id
-    # retry 只有在原调用拥有写入权限时才会入队，固定用 INGEST 源恢复写入
+    # Only authorized captures are admitted; keep the original source. Legacy
+    # DLQ payloads without a source retain their INGEST compatibility behavior.
     _env = WriteEnvelope(
-        source=SourceType.INGEST,
+        source=SourceType(payload.get("envelope_source") or SourceType.INGEST.value),
         can_write_memory=True,
         can_affect_mood=False,
     )
@@ -2148,6 +2173,9 @@ async def handler_capture_turn_retry(payload: dict) -> None:
             "envelope": _env,
             "char_id": char_id,
         }
+        if payload.get("occurred_at") is not None:
+            capture_kwargs["occurred_at"] = payload["occurred_at"]
+            capture_kwargs["require_evidence"] = True
         if event_context is not None:
             capture_kwargs["event_context"] = event_context
         if payload.get("audit_extras"):

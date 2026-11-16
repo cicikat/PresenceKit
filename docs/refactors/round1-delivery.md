@@ -65,6 +65,23 @@ mobile `09809d44fea621a0b329ca6e5faac490b466752f`。
   投递/信号/Dream retry 16 passed，包含新增 scoped HTTP 回执读取。
 - 状态：partially verified；真实通道 ACK 与进程强杀验证仍 not verified。
 
+## R3：关键记忆恢复（部分）
+
+- 基线复现：独立进程 enqueue 后退出，新进程无法恢复任务，输出文件缺失。
+- 修复：捕获回合在首个投影写入前持久化 scope、turn_id、来源与原始授权源；
+  short_term/event_log/ledger 完成后清除执行快照正文。Ledger 的 best-effort 失败仍不阻断发送，
+  但保持待补偿任务；恢复 handler 要求 evidence 真正完成才收口。
+  summarize_to_midterm 复用 source_turn_id 幂等和来源隔离；其他任务不自动入库。
+- 恢复预算：每任务跨重启最多三次 handler 尝试；待处理上限1000；完成回执最多1000条；
+  取消仍完成内存 queue accounting，持久状态留待下次启动恢复。
+- 观测：`GET /observability/memory-task-outbox`（state.read），仅状态计数与最早积压时间。
+- 验证：Python 3.12.13，354 项定向测试通过；独立进程验证排队退出、执行中异常退出、
+  user short_term 写入后强制退出与恢复、完成任务重复入队不重复执行。后续取消清理改动的定向复验见最终结果。
+- 取消清理及 ledger IO 补偿复验：`pytest -q tests/test_round1_slow_recovery.py tests/test_slow_queue.py`
+  4 passed；`test_ledger_failure_is_repaired_without_duplicate_history` 同时断言 web 默认不可召回。
+- 未完成：vector 缺失补偿、reflect/identity 的持久恢复、逐投影完整故障矩阵与恢复 manifest。
+  状态：partially verified；真实模型/生产端到端 not verified。
+
 ## 删除 brief 候选（未授权，不执行）
 
 后续单独评估退役 `/system/meta-mode` 与危险模式的过期文档/守卫；

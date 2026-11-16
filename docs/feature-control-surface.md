@@ -1,5 +1,8 @@
 ## 330 自动记账
 
+第一轮记忆恢复观测：`GET /observability/memory-task-outbox`（state.read）只返回状态计数、
+最早积压时间、容量1000与重试上限3；恢复仅作用于幂等记忆任务，不增加运营开关。
+
 第一轮主动投递观测：`GET /observability/autonomy-deliveries`（state.read）返回当前
 owner/char 的最多100条无正文回执。claimed、attempted、accepted、failed 与
 outcome_unknown 分开；accepted 仅代表通道接口接受，acknowledgement_available=false。

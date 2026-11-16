@@ -1,5 +1,10 @@
 ## 330 自动记账真机验收（observe）
 
+第一轮 R3/R4（open / observe）：capture 与单轮摘要已有持久补偿，vector 缺失补偿、
+reflect/identity 恢复及完整逐投影故障矩阵尚未完成；主动消息只有通道接受回执，
+desktop/mobile 客户端确认未接线，accepted 不能视为 delivered/acknowledged。
+详见 [第一轮交付](refactors/round1-delivery.md)，不得据局部回归宣称联合交付完成。
+
 已完成独立原生收集/队列、用户账本API、管理控制面和Flutter确认页；合成原生→真实本地HTTP→后端SQLite验证回执丢失重试与纠错沿用同一交易ID。Android14真实支付通知、ROM折叠/缺失、授权往返、后台/强停/重启、真实角色查询与生产部署尚未验收，不能视作已完成微信实机自动记账。跨渠道证据不足时只提示疑似重复，不自动合并；完整报表和账单导入属后续范围。见 [财务合同](finance-ingest.md) 与手机 docs/mobile/auto-bookkeeping-330.md。
 
 ## 工具后空收尾与主模型延迟（326，2026-11-16，observe）

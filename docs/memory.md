@@ -4,6 +4,14 @@
 
 # docs/memory.md — 记忆子系统设计
 
+第一轮 R3：`capture_turn_retry` 与 `summarize_to_midterm` 使用有界 SQLite outbox，
+路径由 `DataPaths.memory_task_outbox()` 获取，属于备份 inventory 覆盖的 data/runtime。
+capture 在首个投影写入前保存恢复快照，完成后清除正文；失败保留原 scope/source/授权源/
+发生时间，恢复仅补记忆投影，绝不重跑工具或投递消息。每任务跨进程最多三次尝试，
+待处理上限1000，保留最多1000条无正文完成回执；DLQ 保留任务快照供诊断。
+其余慢任务仍为内存态。`GET /observability/memory-task-outbox`（state.read）只读状态计数、
+最早积压时间和限额。vector 缺失补偿及其余整合任务的恢复覆盖仍见第一轮交付未验收项。
+
 329：动态事实时效复用 scoped profile 的 `temporal_facts`，不新建记忆库。
 真实 owner 的明确自述在 capture 后幂等追加；fetch 在原检索后按发生时间、证据权威、
 生效/失效与替代关系投影当前状态，原始历史不删。计划、推断、外部来源、低置信语音
