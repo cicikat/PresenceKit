@@ -17,7 +17,7 @@ async def test_default_permission_executes_without_confirmation(sandbox, monkeyp
         'func': action, 'description': 'test', 'category': category,
         'dangerous': True, 'parameters': {},
     })
-    monkeypatch.setattr(td, '_is_tool_enabled', lambda name: True)
+    monkeypatch.setattr('core.tool_runtime.policy._is_tool_enabled', lambda name: True)
     outcome = await td.execute_structured(
         '_permission_test', {}, 'u1', 'u1', False, object(),
         origin='user_live', char_id=TEST_CHAR_ID,

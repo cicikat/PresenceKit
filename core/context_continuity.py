@@ -159,7 +159,8 @@ def _material_summary(kind, row):
 
 def _sources(uid, char_id):
     from core import character_document_library as library, life_records
-    from core.tool_dispatcher import _is_tool_enabled, get_tools_schema
+    from core.tool_runtime.policy import _is_tool_enabled
+    from core.tool_dispatcher import get_tools_schema
     visible = {(schema.get('function') or schema).get('name') for schema in get_tools_schema(uid=uid, char_id=char_id)}
     rows = []
     if 'read_document' in visible and _is_tool_enabled('read_document'):
@@ -348,7 +349,7 @@ def _tool_result_projection(row, pronoun):
 
 def result_messages(uid, char_id, *, now=None):
     from core.config_loader import get_config
-    from core.tool_dispatcher import _is_tool_enabled
+    from core.tool_runtime.policy import _is_tool_enabled
     from core.memory.user_facts import get_user_pronoun
     from core.self_management.policy import tool_allowed
     if not _owner(uid) or not char_id:

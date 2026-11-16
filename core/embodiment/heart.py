@@ -67,7 +67,7 @@ async def maybe_draw_heart(reply: str, char_id: str) -> None:
         _BACKOFF_UNTIL.pop(char_id, None)
         if not verdict:
             return
-        from core.tool_dispatcher import _push_desktop_action
+        from core.tools.devices_definitions import _push_desktop_action
         result = await _push_desktop_action({
             "type": "show_heart",
             "duration_ms": int(cfg.get("duration_ms", 4000)),

@@ -212,7 +212,7 @@ def heart(monkeypatch):
         return "ok"
 
     monkeypatch.setattr(heart_mod.llm_client, "detect_affection_checked", checked)
-    monkeypatch.setattr("core.tool_dispatcher._push_desktop_action", push)
+    monkeypatch.setattr('core.tools.devices_definitions._push_desktop_action', push)
     monkeypatch.setattr(heart_mod.config_loader, "get_config", lambda: {"embodiment": {"heart": state.cfg}})
     return heart_mod, state
 

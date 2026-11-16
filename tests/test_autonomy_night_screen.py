@@ -42,7 +42,7 @@ def test_autonomy_schema_and_observation_preserve_chat_tools(sandbox, monkeypatc
     names = ("observe_user_screen", "peek_screen_content")
     schemas = [{"type": "function", "function": {"name": name}} for name in names]
     monkeypatch.setattr(dispatcher, "get_tools_schema", lambda **kwargs: schemas)
-    monkeypatch.setattr(dispatcher, "_is_tool_enabled", lambda name: True)
+    monkeypatch.setattr('core.tool_runtime.policy._is_tool_enabled', lambda name: True)
     monkeypatch.setattr(capability_policy, "effective", lambda *args: (True, None))
     state = {"config": {"tools": {name: {"enabled": True} for name in names}}}
     rows = {row["name"]: row for row in policy.tool_decisions("owner", "char", state)}

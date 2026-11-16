@@ -30,7 +30,7 @@ async def test_dream_chat_wires_pseudo_stream_and_msg_id(sandbox, monkeypatch):
 
     monkeypatch.setattr("channels.ui_push.pseudo_stream_push", fake_pseudo_stream_push)
 
-    with patch("admin.routers.dream._owner_uid", return_value="owner"):
+    with patch('admin.routers.dream_common._owner_uid', return_value="owner"):
         result = await dream_router.dream_chat({"message": "你好"}, _auth=None)
 
     assert result["reply"] == "梦里的风很轻。"
@@ -53,7 +53,7 @@ async def test_dream_chat_no_msg_id_when_reply_empty(sandbox, monkeypatch):
         lambda *a, **kw: calls.append((a, kw)),
     )
 
-    with patch("admin.routers.dream._owner_uid", return_value="owner"):
+    with patch('admin.routers.dream_common._owner_uid', return_value="owner"):
         result = await dream_router.dream_chat({"message": "你好"}, _auth=None)
 
     assert "msg_id" not in result

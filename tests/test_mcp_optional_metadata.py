@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.tool_registry import patch_registry
+
 from types import SimpleNamespace
 
 import pytest
@@ -68,7 +70,7 @@ def _patch_session(monkeypatch, session):
 
 @pytest.fixture(autouse=True)
 async def _isolate(monkeypatch):
-    monkeypatch.setattr(td, "_TOOL_REGISTRY", dict(td._TOOL_REGISTRY))
+    patch_registry(monkeypatch, dict(td._TOOL_REGISTRY))
     monkeypatch.setattr(mc, "_require_local_policy", lambda: False)
     mc._servers.clear()
     mc._server_status.clear()
@@ -239,13 +241,13 @@ def test_domain_selector_only_narrows_and_include_unclassified_preserves_compati
             "description": "", "parameters": {},
         },
     }
-    monkeypatch.setattr(td, "_TOOL_REGISTRY", registry)
+    patch_registry(monkeypatch, registry)
     cfg = {"mcp_servers": {"servers": [{
         "name": "srv",
         "domain_selector": {"domains": ["observe"], "include_unclassified": True},
     }]}}
-    monkeypatch.setattr(td, "get_config", lambda: cfg)
-    monkeypatch.setattr(td, "_is_tool_enabled", lambda name: True)
+    monkeypatch.setattr('core.config_loader.get_config', lambda: cfg)
+    monkeypatch.setattr('core.tool_runtime.policy._is_tool_enabled', lambda name: True)
 
     schemas = td.get_tools_schema(categories=["mcp"])
     names = {(item.get("function") or item)["name"] for item in schemas}
@@ -286,9 +288,9 @@ def test_local_override_is_exact_name_and_reused_by_relay_schema(monkeypatch):
             "description": "new", "parameters": {},
         },
     }
-    monkeypatch.setattr(td, "_TOOL_REGISTRY", registry)
-    monkeypatch.setattr(td, "_is_tool_enabled", lambda name: True)
-    monkeypatch.setattr(td, "get_config", lambda: {"mcp_servers": {"servers": [{
+    patch_registry(monkeypatch, registry)
+    monkeypatch.setattr('core.tool_runtime.policy._is_tool_enabled', lambda name: True)
+    monkeypatch.setattr('core.config_loader.get_config', lambda: {"mcp_servers": {"servers": [{
         "name": "srv", "domain_selector": {
             "domains": ["local"], "include_unclassified": False,
         },

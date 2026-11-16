@@ -1,11 +1,16 @@
 """Life Media tool definitions and invocation adapters.
 
-The dispatcher remains the legacy dependency-injection seam; no state is copied.
+Domain implementations and trusted invocation bindings have one owner.
 """
+
+from core.perception.ambient_state import read_tool as _get_ambient_state
+from core.tools import devices_definitions
+from core import config_loader
+from core.tools.garden_tools import water_garden
+
 
 async def _play_song_wrapper(song_name: str = "", artist: str = "") -> str:
     """调网易云搜索API获取歌曲ID并推送播放动作。"""
-    from core import tool_dispatcher as _runtime
     try:
         import aiohttp
         query = f"{song_name} {artist}".strip()
@@ -38,7 +43,7 @@ async def _play_song_wrapper(song_name: str = "", artist: str = "") -> str:
         real_name = song.get("name", song_name)
         artists = "/".join(a.get("name", "") for a in song.get("artists", []))
 
-        result = await _runtime._push_desktop_action({
+        result = await devices_definitions._push_desktop_action({
             "type": "play_netease",
             "song_id": song_id,
         })
@@ -48,7 +53,6 @@ async def _play_song_wrapper(song_name: str = "", artist: str = "") -> str:
 
 
 async def _read_toy_file_wrapper(file_key: str, *, user_id: str | None = None, char_id: str | None = None) -> str:
-    from core import tool_dispatcher as _runtime
     from core.tools.toybox import read_toy_file
     return read_toy_file(file_key=file_key, user_id=user_id, char_id=char_id)
 
@@ -61,13 +65,11 @@ async def _write_toy_file_wrapper(
     user_id: str | None = None,
     char_id: str | None = None,
 ) -> str:
-    from core import tool_dispatcher as _runtime
     from core.tools.toybox import write_toy_file
     return write_toy_file(file_key=file_key, content=content, mode=mode, user_id=user_id, char_id=char_id)
 
 
 async def _reread_image_wrapper(user_id: str, sha256: str, instruction: str = "", mode: str = "cached", *, char_id: str) -> str:
-    from core import tool_dispatcher as _runtime
     from core.character_document_library import search
     rows = search(user_id, char_id, source="upload_image", sha256=sha256)
     if not rows:
@@ -81,13 +83,12 @@ async def _reread_image_wrapper(user_id: str, sha256: str, instruction: str = ""
 
 
 async def _life_records_wrapper(user_id: str, category: str = "", date_from: str = "", date_to: str = "", query: str = "", record_id: str = "", offset: int = 0, *, char_id: str | None = None):
-    from core import tool_dispatcher as _runtime
     import asyncio
     import json
     from datetime import date
     from core import life_records
     from core.tools.tool_result import ToolResult, sanitize_for_prompt
-    owner = str(_runtime.get_config().get("scheduler", {}).get("owner_id", ""))
+    owner = str(config_loader.get_config().get("scheduler", {}).get("owner_id", ""))
     cfg = life_records.settings()
     if user_id != owner or not cfg['enabled'] or not cfg['character_readable']:
         return "生活记录未开放角色读取。"
@@ -118,28 +119,16 @@ async def _life_records_wrapper(user_id: str, category: str = "", date_from: str
 
 
 async def _invoke_read_toy_file(call):
-    from core import tool_dispatcher as _runtime
     func = call.func
-    tool_name = call.tool_name
     tool_args = call.tool_args
     user_id = call.user_id
     char_id = call.char_id
-    origin = call.origin
-    target_id = call.target_id
-    is_group = call.is_group
-    session_state = call.session_state
-    allowed_tool_names = call.allowed_tool_names
-    pin_reference_hashes = call.pin_reference_hashes
     result = await func(user_id=user_id, char_id=char_id, **tool_args)
 
     return result
 
 
 def register_tools(registry):
-    from core.tool_dispatcher import (
-        _get_ambient_state,
-        water_garden,
-    )
     registry["read_life_records"] = {
         "func": _life_records_wrapper, "description": "按日期、分类和关键词只读检索用户提供的饮食、账单、购物车记录。",
         "dangerous": False, "category": "memory",
@@ -283,7 +272,6 @@ def register_tools(registry):
         "examples": ["房间光线最近有变化吗", "手机能读到周围的亮度吗"],
         "keywords": ["环境光", "房间光线", "房间声音", "手机亮度"],
     }
-
 
 
 INVOCATION_ADAPTERS = {

@@ -24,7 +24,8 @@ def reset_projection(uid,char_id):
 
 
 def allowed(uid,char_id,tool):
-    from core.tool_dispatcher import _is_tool_enabled,get_tools_schema
+    from core.tool_runtime.policy import _is_tool_enabled
+    from core.tool_dispatcher import get_tools_schema
     from core.self_management.policy import tool_allowed
     if not _is_tool_enabled(tool) or not tool_allowed(uid,char_id,tool):
         return False

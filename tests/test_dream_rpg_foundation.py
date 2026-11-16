@@ -52,7 +52,7 @@ def test_rpg_chat_endpoint_returns_structured_409(sandbox, monkeypatch):
 
     result = _enter()
     cfg = get_config()
-    monkeypatch.setattr("admin.routers.dream.get_config", lambda: {**cfg, "scheduler": {**cfg.get("scheduler", {}), "owner_id": _UID}})
+    monkeypatch.setattr('core.config_loader.get_config', lambda: {**cfg, "scheduler": {**cfg.get("scheduler", {}), "owner_id": _UID}})
     app = FastAPI()
     app.include_router(router)
     for route in router.routes:

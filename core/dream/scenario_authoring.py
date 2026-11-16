@@ -151,3 +151,69 @@ def _canonical_scenario_yaml(document: dict) -> str:
         default_flow_style=False,
         sort_keys=False,
     )
+
+
+
+class ScenarioAuthoringError(ValueError):
+    def __init__(self, status_code: int, detail: str):
+        super().__init__(detail)
+        self.status_code = status_code
+        self.detail = detail
+
+
+def _scenario_document_and_yaml(script_id: str, body: dict) -> tuple[dict, str]:
+    document = body.get("document")
+    if document is not None:
+        if not isinstance(document, dict):
+            raise ScenarioAuthoringError(status_code=422, detail="document 必须是 JSON object")
+        data = dict(document)
+        if data.get("id") and data["id"] != script_id:
+            raise ScenarioAuthoringError(status_code=422, detail="document.id 与剧本 id 不一致")
+        data["id"] = script_id
+        from core.dream.scenario_loader import _validate_script
+        try:
+            _validate_script(data, require_progressable=True)
+        except ValueError as exc:
+            raise ScenarioAuthoringError(status_code=422, detail=f"剧本 schema 校验失败: {exc}")
+        return data, _canonical_scenario_yaml(data)
+
+    yaml_text = body.get("yaml") or ""
+    data = _parse_and_validate_scenario_yaml(script_id, yaml_text)
+    return data, _canonical_scenario_yaml(data)
+
+def _parse_and_validate_scenario_yaml(
+    script_id: str | None,
+    yaml_text: str,
+    *,
+    require_progressable: bool = False,
+) -> dict:
+    """解析 + 用剧本加载器的真实 schema 校验，失败返回具体字段错误而不是 500。"""
+    import yaml as _yaml
+    from core.dream.scenario_loader import _validate_script
+
+    try:
+        data = _yaml.safe_load(_normalize_field_outline_scenario_yaml(yaml_text))
+    except Exception as e:
+        raise ScenarioAuthoringError(status_code=422, detail=f"YAML 解析失败: {e}")
+    if not isinstance(data, dict):
+        raise ScenarioAuthoringError(status_code=422, detail="剧本必须是 YAML 映射（mapping），不能是列表或标量")
+    if script_id is not None and data.get("id") != script_id:
+        raise ScenarioAuthoringError(
+            status_code=422,
+            detail=f"YAML 内 id={data.get('id')!r} 与剧本 id={script_id!r} 不一致",
+        )
+    try:
+        _validate_script(data, require_progressable=require_progressable)
+    except ValueError as e:
+        raise ScenarioAuthoringError(status_code=422, detail=f"剧本 schema 校验失败: {e}")
+    return data
+
+
+def write_scenario(path, yaml_text):
+    from core.safe_write import safe_write_text
+    path.parent.mkdir(parents=True, exist_ok=True)
+    safe_write_text(path, yaml_text)
+
+
+def delete_scenario(path):
+    path.unlink()

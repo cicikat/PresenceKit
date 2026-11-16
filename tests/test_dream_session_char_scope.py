@@ -123,7 +123,7 @@ def test_admin_dream_enter_passes_active_char_id(sandbox, chars_tree, monkeypatc
     with patch("core.pipeline_registry.get", return_value=mock_pipeline), \
          patch("core.dream.dream_pipeline.enter_dream", new=_mock_enter), \
          patch("core.config_loader.get_config", return_value=_mock_cfg), \
-         patch("admin.routers.dream.get_config", return_value=_mock_cfg):
+         patch('core.config_loader.get_config', return_value=_mock_cfg):
         from fastapi.testclient import TestClient
         from fastapi import FastAPI
         from admin.routers.dream import router

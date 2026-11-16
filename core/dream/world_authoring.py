@@ -28,3 +28,26 @@ def write_lorebook(directory: Path, entries: list) -> None:
         _yaml.dump(entries, allow_unicode=True, default_flow_style=False, sort_keys=False),
         encoding="utf-8",
     )
+
+
+
+def materialize_world(read_dir: Path, write_dir: Path) -> None:
+    _shutil.copytree(read_dir, write_dir)
+
+
+def rename_world(source: Path, destination: Path) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    source.rename(destination)
+
+
+def delete_world(directory: Path) -> None:
+    _shutil.rmtree(directory)
+
+
+def write_preset(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+
+
+def delete_preset(path: Path) -> None:
+    path.unlink()

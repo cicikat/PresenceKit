@@ -8,6 +8,8 @@ LLM 全 mock：core.llm_client.chat_turn / chat / chat_stream 按脚本吐结果
 """
 
 from __future__ import annotations
+
+from tests.tool_registry import patch_registry
 from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import asyncio
@@ -480,13 +482,13 @@ def test_tool_loop_active_gating(monkeypatch):
     # 而不是 core.config_loader.get_config 本体。
     monkeypatch.setattr("core.model_registry.get_model_client", lambda cat: _FakeMcFc())
 
-    monkeypatch.setattr("core.tool_dispatcher.get_config", lambda: _cfg(enabled=False))
+    monkeypatch.setattr('core.config_loader.get_config', lambda: _cfg(enabled=False))
     assert tool_loop_active("u1") is False  # 总开关关
 
-    monkeypatch.setattr("core.tool_dispatcher.get_config", lambda: _cfg(enabled=True, owner="u2"))
+    monkeypatch.setattr('core.config_loader.get_config', lambda: _cfg(enabled=True, owner="u2"))
     assert tool_loop_active("u1") is False  # 非 owner
 
-    monkeypatch.setattr("core.tool_dispatcher.get_config", lambda: _cfg(enabled=True, owner="u1"))
+    monkeypatch.setattr('core.config_loader.get_config', lambda: _cfg(enabled=True, owner="u1"))
     assert tool_loop_active("u1") is True  # 三项全满足
 
     monkeypatch.setattr("core.model_registry.get_model_client", lambda cat: _FakeMcXml())
@@ -511,7 +513,7 @@ def test_tool_loop_active_character_override(monkeypatch):
         tool_call_mode = "function_calling"
 
     monkeypatch.setattr(
-        "core.tool_dispatcher.get_config",
+        'core.config_loader.get_config',
         lambda: {"tool_loop": {"enabled": False}, "scheduler": {"owner_id": "u1"}},
     )
     monkeypatch.setattr("core.model_registry.get_model_client", lambda cat: _FakeMcFc())
@@ -523,7 +525,7 @@ def test_tool_loop_active_character_override(monkeypatch):
     assert tool_loop_active("u1") is False
 
     monkeypatch.setattr(
-        "core.tool_dispatcher.get_config",
+        'core.config_loader.get_config',
         lambda: {"tool_loop": {"enabled": True}, "scheduler": {"owner_id": "u1"}},
     )
     pipeline_registry.register(_Pipeline(_Char({})))
@@ -832,7 +834,7 @@ async def test_nudge_hint_derives_opaque_mcp_parameter_guidance_from_current_reg
         }},
     }}]
     monkeypatch.setattr(td, "get_tools_schema", lambda categories=None, **kwargs: schema)
-    monkeypatch.setattr(td, "_TOOL_REGISTRY", {
+    patch_registry(monkeypatch, {
         "mcp__arcade__play": {"category": "mcp", "mcp_server": "arcade", "description": "play"},
         "mcp__arcade__inspect_action": {
             "category": "mcp", "mcp_server": "arcade", "mcp_read_only": True,

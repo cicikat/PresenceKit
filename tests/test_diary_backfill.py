@@ -40,7 +40,7 @@ def setup_backfill(monkeypatch, sandbox):
     monkeypatch.setattr(backfill, "datetime", Clock)
     owner_config = lambda: {"scheduler": {"owner_id": "owner"}}
     monkeypatch.setattr("core.config_loader.get_config", owner_config)
-    monkeypatch.setattr("core.tool_dispatcher.get_config", owner_config)
+    monkeypatch.setattr('core.config_loader.get_config', owner_config)
     monkeypatch.setattr(time_based, "_collect_diary_voice", lambda cid: ("", "", ""))
     monkeypatch.setattr(time_based, "get_char_name", lambda cid: "Companion")
     monkeypatch.setattr("core.memory.event_log.get_recent_days", lambda *a, **kw: "yesterday evidence")
@@ -159,7 +159,7 @@ async def test_dispatcher_passes_frozen_character_scope(setup_backfill, monkeypa
     from core import tool_dispatcher as dispatcher
     from core.session_state import SessionState
     monkeypatch.setattr("core.self_management.policy.tool_allowed", lambda *a: True)
-    monkeypatch.setattr(dispatcher, "_is_tool_enabled", lambda name: True)
+    monkeypatch.setattr('core.tool_runtime.policy._is_tool_enabled', lambda name: True)
     result = await dispatcher.execute_structured("backfill_diary", {"date": "昨天"}, "owner", "owner", False,
         SessionState(), origin="assistant_loop", char_id=TEST_CHAR_ID)
     assert result.status == "tool_executed"

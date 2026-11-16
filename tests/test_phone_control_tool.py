@@ -1,3 +1,5 @@
+
+import core.tools.devices_definitions as device_tools
 from tests.fixtures.public_assets import TEST_CHAR_ID
 """phone_control_start 工具的门禁行为：安全模式拦截、危险模式下仍需二次确认。"""
 import json
@@ -23,7 +25,7 @@ class _Session:
 
 @pytest.mark.asyncio
 async def test_wrapper_rejects_empty_task(sandbox):
-    result = await tool_dispatcher._phone_control_start_wrapper("", user_id="u1", char_id=TEST_CHAR_ID)
+    result = await device_tools._phone_control_start_wrapper("", user_id="u1", char_id=TEST_CHAR_ID)
     assert "没听清楚" in result or "没法" in result
 
 
@@ -35,9 +37,9 @@ async def test_video_call_mistaken_for_phone_control_routes_to_desktop(sandbox, 
         calls.append((user_id, char_id))
         return '{"status": "desktop_offline"}'
 
-    monkeypatch.setattr(tool_dispatcher, "_invite_video_call_wrapper", fake_invite)
+    monkeypatch.setattr('core.tools.devices_definitions._invite_video_call_wrapper', fake_invite)
     monkeypatch.setitem(tool_dispatcher._TOOL_REGISTRY["invite_video_call"], "func", fake_invite)
-    monkeypatch.setattr(tool_dispatcher, "_is_tool_enabled", lambda _: True)
+    monkeypatch.setattr('core.tool_runtime.policy._is_tool_enabled', lambda _: True)
     result = await tool_dispatcher.execute_structured(
         "phone_control_start",
         {"task": "发起与角色的视频通话邀请，打开视频通话界面"},
@@ -57,7 +59,7 @@ async def test_wrapper_starts_task_and_queues_mobile_behavior(sandbox, monkeypat
     mobile = MobileChannel()
     registry.register(mobile)
 
-    result = await tool_dispatcher._phone_control_start_wrapper(
+    result = await device_tools._phone_control_start_wrapper(
         "帮我点杯奶茶", user_id="u1", char_id=TEST_CHAR_ID,
     )
     assert "已经把任务派给手机了" in result

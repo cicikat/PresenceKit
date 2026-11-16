@@ -1,6 +1,8 @@
 """Release-audit contracts for the public first-run configuration."""
 from __future__ import annotations
 
+import core.tool_runtime.policy as tool_policy
+
 import json
 from pathlib import Path
 
@@ -46,14 +48,14 @@ def test_tool_defaults_are_at_the_consumed_config_path(monkeypatch):
     from core.memory.embedding import connection_configured
 
     cfg = _template()
-    monkeypatch.setattr(tool_dispatcher, "get_config", lambda: cfg)
+    monkeypatch.setattr('core.config_loader.get_config', lambda: cfg)
     for name in ("get_time", "weather", "web_search", "read_diary", "device_shutdown"):
         assert name in cfg["tools"]
-        assert tool_dispatcher._is_tool_enabled(name)
-    assert not tool_dispatcher._is_tool_enabled("exit_yandere")
-    assert not tool_dispatcher._is_tool_enabled("toy_vibrate")
+        assert tool_policy._is_tool_enabled(name)
+    assert not tool_policy._is_tool_enabled("exit_yandere")
+    assert not tool_policy._is_tool_enabled("toy_vibrate")
     cfg["tools"]["web_search"]["enabled"] = False
-    assert not tool_dispatcher._is_tool_enabled("web_search")
+    assert not tool_policy._is_tool_enabled("web_search")
     assert set(cfg["xiaohongshu"]) == {"local_service", "reader_url", "max_comments", "max_images"}
     assert set(cfg["character_document_library"]) == {"retain_raw_uploads"}
     assert not connection_configured(cfg["embedding"])

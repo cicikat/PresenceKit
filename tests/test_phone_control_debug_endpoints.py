@@ -148,7 +148,7 @@ async def test_debug_start_calls_real_wrapper_in_danger_mode(monkeypatch):
         captured["char_id"] = char_id
         return "已经把任务派给手机了"
 
-    monkeypatch.setattr(td, "_phone_control_start_wrapper", _fake_wrapper)
+    monkeypatch.setattr('core.tools.devices_definitions._phone_control_start_wrapper', _fake_wrapper)
 
     result = await pc.phone_control_debug_start(
         body={"task": "帮我点杯奶茶", "user_id": "u1"}, auth=None,
@@ -175,7 +175,7 @@ async def test_debug_start_falls_back_to_owner_id_when_missing(monkeypatch):
         captured["user_id"] = user_id
         return "ok"
 
-    monkeypatch.setattr(td, "_phone_control_start_wrapper", _fake_wrapper)
+    monkeypatch.setattr('core.tools.devices_definitions._phone_control_start_wrapper', _fake_wrapper)
 
     await pc.phone_control_debug_start(body={"task": "帮我点杯奶茶"}, auth=None)
     assert captured["user_id"] == "123456789"

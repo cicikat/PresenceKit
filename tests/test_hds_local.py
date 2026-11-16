@@ -47,7 +47,9 @@ def test_hds_envelope_persistence_and_change(sandbox, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_hds_read_tool_reports_live_and_stale_without_consuming_signal(sandbox, monkeypatch):
-    from core.tool_dispatcher import _TOOL_REGISTRY, _read_hds_heart_rate_wrapper, get_tools_schema
+    from core.tool_dispatcher import _TOOL_REGISTRY
+    from core.tools.memory_definitions import _read_hds_heart_rate_wrapper
+    from core.tool_dispatcher import get_tools_schema
 
     monkeypatch.setattr(hds_local, "config", lambda: {"enabled": True})
     uid = "hds-read"
@@ -135,7 +137,7 @@ async def test_hds_admin_reports_current_address_and_restart_need(monkeypatch):
 
 def test_character_read_is_a_second_consent_layer(monkeypatch):
     """接收样本和「允许角色读取」是两层同意；缺字段时保持既有安装的行为不变。"""
-    from core.tool_dispatcher import _is_tool_enabled
+    from core.tool_runtime.policy import _is_tool_enabled
 
     monkeypatch.setattr(hds_local, "config", lambda: {"enabled": True})
     assert hds_local.character_read_enabled() is True

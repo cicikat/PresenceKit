@@ -209,7 +209,7 @@ async def test_owner_chat_passes_frozen_character_to_non_stream_llm(monkeypatch)
     monkeypatch.setattr("core.scheduler.state_machine.notify_owner_turn", lambda _uid: None)
     monkeypatch.setattr("core.scheduler.proactive_ledger.record_user_message", lambda _uid: None)
     monkeypatch.setattr("core.tool_dispatcher.tool_loop_active", lambda _uid: False)
-    monkeypatch.setattr(chat, "_probe_and_execute_tools", lambda *_args, **_kwargs: asyncio.sleep(0, result=None))
+    monkeypatch.setattr('core.owner_chat.prepare._probe_and_execute_tools', lambda *_args, **_kwargs: asyncio.sleep(0, result=None))
     monkeypatch.setattr("channels.ui_push.any_connected", lambda: False)
     monkeypatch.setattr("channels.registry.get", lambda _name: None)
     monkeypatch.setattr("core.coplay.session.is_active", lambda *_args, **_kwargs: False)
@@ -342,7 +342,7 @@ async def test_context_failure_stops_sibling_probe_before_retry(monkeypatch):
     monkeypatch.setattr("core.scheduler.state_machine.notify_owner_turn", lambda uid: None)
     monkeypatch.setattr("core.scheduler.proactive_ledger.record_user_message", lambda uid: None)
     monkeypatch.setattr("core.tool_dispatcher.tool_loop_active", lambda uid: False)
-    monkeypatch.setattr(chat, "_probe_and_execute_tools", probe)
+    monkeypatch.setattr('core.owner_chat.prepare._probe_and_execute_tools', probe)
     monkeypatch.setattr("core.pipeline_registry.get", lambda: Pipeline())
     with pytest.raises(RuntimeError, match="context unavailable"):
         await chat.run_owner_chat_turn("hello", "mobile",

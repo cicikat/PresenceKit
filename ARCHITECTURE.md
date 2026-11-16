@@ -17,12 +17,18 @@ runtime；`letter_writer` 的 Task/副链产物迁移。Brief 229 本身仍是�
 
 ## 系统全貌
 
-AR-01（325）组织边界：工具稳定入口仍为 `core/tool_dispatcher.py`，领域定义在
-`core/tools/*_definitions.py`，共享执行职责在 `core/tool_runtime/`；owner Reality
-聊天由 `core/owner_chat/` 编排原 Pipeline/turn_sink；`admin/routers/dream.py`
-组合按功能拆分的 Dream Router，状态机与存储仍属于 `core/dream/`。
-对外 API、工具合同、配置与数据路径不变。详见
-[模块边界与验收](docs/refactors/modularization-ar01.md)。
+AR-02（327）依赖方向：`core/tool_dispatcher.py` 只提供稳定向外 API；
+`core/tool_runtime/state.py` 持有唯一注册表，`registry.py` 组合领域定义与已有
+register_tools，MCP 在同一对象增删。exposure 与 execution 共享 policy 的主体授权，
+execution 组合 validation / invoker / outcome，域 adapter 绑定可信参数。
+`core/owner_chat/service → prepare / generation / delivery → Pipeline / turn_sink`
+不回调 HTTP Router；Router 同对象导出公开聊天入口。
+`admin/routers/dream.py → dream_* → dream_common / core.dream`，
+WAKE/resume 状态转换归 `core/dream/session_control.py`，素材校验/写入归
+scenario_authoring / world_authoring。无反向 Facade、第二套状态或消息写入。
+对外 API、工具合同、配置与数据路径不变。依赖台账、兼容消费者及验证见
+[AR-02](docs/refactors/ar02-dependency-cleanup.md)；CI 守门
+`tests/test_ar02_dependency_directions.py` 包含动态导入和故障注入。
 
 工单 268 增加个人微信文本私聊 reference transport：第三方 REST/WS 仅在
 `integrations/wechat/` 解码，经 `integrations/wechat_transport.py` 规范合同、

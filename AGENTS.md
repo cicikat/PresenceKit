@@ -56,7 +56,7 @@
 | Prompt 组装 | `core/prompt_builder.py` |
 | Prompt 层级消融开关（对比/消融测试，只过滤注入不短路检索） | `core/prompt_ablation.py` |
 | 话题标签规则 | `core/tag_rules.py` |
-| 工具注册 + 调度 + 探针 | `core/tool_dispatcher.py` |
+| 工具稳定入口 / 唯一注册表 / 注册组合 / 执行与探针 | `core/tool_dispatcher.py`（仅向外 API）；`core/tool_runtime/state.py` / `registry.py`；`execution.py` / `exposure.py`；域定义 `core/tools/*_definitions.py` |
 | Intiface / Buttplug 硬件控制 | `core/hardware/buttplug_client.py` / `core/hardware/device_registry.py` / `core/tools/hardware_tools.py` |
 | 通道注册与广播 | `channels/registry.py` |
 | 桌宠通道 WebSocket + 文件降级 | `channels/desktop_ws.py` / `channels/desktop.py`；跨仓接口总账 `docs/three-repo-interface-catalog.md`，桌面消息细节见 `Emerald-client/docs/protocol-v0.md` |
@@ -127,11 +127,11 @@
 | web 搜索沉淀（X3）：结果写入 vector_store source="web" | `core/tools/web_search.py` → `vector_store.upsert`；限频配置 `web_autosearch:` |
 | web 资料召回（X3）：semantic 召回 web 来源，注入 `web_recall` 层 | `core/pipeline.py` `fetch_context()` → `vector_store.query_with_preview(sources=["web"])` → `web_recall_result` → `prompt_builder.build(web_recall_result=)` |
 | web 与梦境来源同等隔离，不固化 | `web_recall_result` 非空时 `post_process` 携带 `web_echo=True`，`fixation_pipeline.handler_summarize_to_midterm` 与 dream_echo 同路跳过 mid_term/episodic/identity 写入；同一判定经 `event_log.append(source=)` 写入 event_log meta，`event_log_salvage` 抢救链按块过滤 `source:` 非空内容（Brief 79，见 `docs/memory.md` §三点八「来源隔离」） |
-| 工具探针（声明式） | `core/tool_dispatcher.py` → `get_probe_prompt()` / `_TOOL_REGISTRY` |
+| 工具探针（声明式） | `core/tool_runtime/exposure.py` → `get_probe_prompt()`；唯一 `_TOOL_REGISTRY` 在 `core/tool_runtime/state.py`，由 `registry.py` 组合；dispatcher 同对象导出 |
 | 工具已读指纹日志（P2，去重防重读） | `core/memory/tool_read_log.py`（`persist=True` 工具：read_diary / read_watch / read_toy_file / search_diary） |
 | 工具动作痕迹（Brief 27，跨轮"你最近做过的操作"，层 `10.5_action_trace`） | `core/memory/action_trace.py`（`execute_structured()` 收口埋点 + `event_log_echo` 经 `capture_turn` 回流） |
 | trusted_user_text / probe grounding | `main.py` `_trusted_user_text` 在 media merge 前捕获；`admin/routers/chat.py` `run_owner_chat_turn(trusted_user_text=)` |
-| execute_structured() origin 闸门 | `core/tool_dispatcher.py` → `_EXECUTE_ALLOWED_ORIGINS`（`user_live` / `assistant_loop` / `assistant_loop_relay`） / `execute_structured(origin=)` |
+| execute_structured() origin 闸门 | `core/tool_runtime/policy.py` → `_EXECUTE_ALLOWED_ORIGINS`；`core/tool_dispatcher.py::execute_structured(origin=)` 为稳定入口 |
 | tool loop 多步工具执行器（Path C，function_calling 模型专用） | `core/tool_dispatcher.py` → `tool_loop_active(uid)`；`core/pipeline.py` → `run_agentic_loop()`；全局 `config.tool_loop.enabled` 默认关，活跃角色卡可用 `presence_ext.tool_loop: "on"|"off"` 覆盖；设置接口 `admin/routers/settings_tool_loop.py` |
 | MCP（Model Context Protocol）外部工具客户端（Brief 29 · 4，只接工具不接 resources/prompts/记忆库，默认关） | `core/mcp_client.py`（`init_mcp_servers()` / `shutdown_mcp_servers()`）；配置 `config.mcp_servers`；工具只经 tool loop 暴露 |
 | per-char 兼容钩子（Brief 29 · "本我"模式：注入过滤/路由/发言闸门/工具暴露面） | 角色卡 `presence_ext` 块 → `core/character_loader.py`（解析 + `is_proactive_disabled()`）；消费点分别在 `core/prompt_ablation.py` / `core/model_registry.py` / `core/scheduler/gating.py`+`execution.py` / `core/pipeline.py::run_agentic_loop()`；示例卡 `bundled/examples/benwo.example.json`（发行内置模板/示例统一位于 `bundled/`） |
@@ -157,7 +157,7 @@ python run_test.py
 ## 改代码前的强制规则
 
 1. **所有 `data/` 路径必须通过 `core/sandbox.get_paths()` 获取，不得硬编码。**
-2. **新增工具必须注册进 `_TOOL_REGISTRY`，并补充 `examples` 和 `keywords` 字段，探针 prompt 会自动同步。**
+2. **新增工具在所属 `core/tools/*_definitions.py` 或已有域 `register_tools()` 中注册进唯一 `_TOOL_REGISTRY`，并补充 `examples` 和 `keywords` 字段，探针 prompt 会自动同步。** 域和 runtime 禁止反查 dispatcher；owner_chat 禁止反查 chat Router；Dream 子路由禁止反查总路由。守门：`tests/test_ar02_dependency_directions.py`。可信调用适配注册为 `invoke(Invocation)`，不得在中央执行器加域名分支。
 3. **新增 prompt 层必须加 `_layer` 字段，裁剪逻辑才能识别。**
 4. **tag 规则改动后，用 `python tests/run_eval.py` 验证层激活情况。**
 5. **改 assistant 消息写入或截断逻辑前，必须先看 `_sanitize_assistant_message`，避免绕过脱敏。**

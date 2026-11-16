@@ -4,7 +4,7 @@ SMOKE = {
     "security": {"test_n8_auth.py", "test_sec_auth1.py", "test_sec_ws1_auth.py"},
     "storage": {"test_n9_safe_write.py", "test_memory_direct_path_lint.py"},
     "chat": {"test_qq_fast_path_tool_loop.py", "test_brief171_owner_turn_diary.py", "test_turn_sink.py"},
-    "tools": {"test_tool_grounding.py", "test_tool_schema_portable.py"},
+    "tools": {"test_tool_grounding.py", "test_tool_schema_portable.py", "test_ar02_dependency_directions.py"},
     "oauth": {"test_gmail_oauth.py"},
     "contract": {"test_protocol_fixtures.py", "test_protocol_matrix.py"},
 }

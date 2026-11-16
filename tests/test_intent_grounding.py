@@ -49,7 +49,8 @@ def test_media_injection_trusted_text_excludes_media_span(sandbox):
 
 @pytest.mark.asyncio
 async def test_execute_unknown_origins_rejected(sandbox):
-    from core.tool_dispatcher import _EXECUTE_ALLOWED_ORIGINS, execute_structured
+    from core.tool_runtime.policy import _EXECUTE_ALLOWED_ORIGINS
+    from core.tool_dispatcher import execute_structured
 
     class FakeState:
         status = "idle"

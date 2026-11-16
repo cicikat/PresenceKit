@@ -1,3 +1,5 @@
+
+import core.tool_runtime.policy as tool_policy
 import json
 from unittest.mock import AsyncMock
 import pytest
@@ -31,10 +33,10 @@ def test_master_switch_disables_all_continuations(monkeypatch):
     from core import tool_dispatcher
     from admin.routers.settings_tools import _static_tool_enabled
     config = {'tools': {'read_xiaohongshu': {'enabled': False}}}
-    monkeypatch.setattr(tool_dispatcher, 'get_config', lambda: config)
+    monkeypatch.setattr('core.config_loader.get_config', lambda: config)
     monkeypatch.setattr(reader, 'settings', lambda cfg=None: {'effective': False})
     for name in ('continue_xiaohongshu_comments', 'read_xiaohongshu_images', 'read_xiaohongshu_author_posts'):
-        assert not tool_dispatcher._is_tool_enabled(name)
+        assert not tool_policy._is_tool_enabled(name)
         assert not _static_tool_enabled(name, config['tools'])
 
 

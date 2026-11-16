@@ -97,7 +97,8 @@ def is_protected(capability_id: str) -> bool:
 
 
 def capability_for_tool(tool_name: str) -> str | None:
-    from core.tool_dispatcher import _INTIFACE_TOOL_NAMES, _TOOL_REGISTRY, intiface_opted_in
+    from core.tool_runtime.registry import _TOOL_REGISTRY
+    from core.tool_runtime.policy import _INTIFACE_TOOL_NAMES, intiface_opted_in
 
     info = _TOOL_REGISTRY.get(tool_name)
     if not isinstance(info, dict):
@@ -147,7 +148,7 @@ def _dynamic_setting(capability_id: str) -> CapabilitySpec | None:
         return _management(value, value_type="integer" if field in {"max_steps", "total_timeout_s"} else "string_list" if field in {"categories", "exclude_tools"} else "bool")
     if value.startswith("setting.tool.") and value.endswith(".enabled"):
         tool_name = value[len("setting.tool."):-len(".enabled")]
-        from core.tool_dispatcher import _TOOL_REGISTRY
+        from core.tool_runtime.registry import _TOOL_REGISTRY
         info = _TOOL_REGISTRY.get(tool_name)
         if not isinstance(info, dict) or info.get("self_management"):
             return None
@@ -211,7 +212,7 @@ def resolve(capability_id: str) -> CapabilitySpec | None:
             return CapabilitySpec(value, "tool", tool_name)
         return None
     if value.startswith("mcp.use:"):
-        from core.tool_dispatcher import _TOOL_REGISTRY
+        from core.tool_runtime.registry import _TOOL_REGISTRY
         suffix = value[len("mcp.use:"):]
         for name, info in _TOOL_REGISTRY.items():
             if isinstance(info, dict) and info.get("category") == "mcp" and f"{info.get('mcp_server')}/{info.get('mcp_tool')}" == suffix:
@@ -246,7 +247,7 @@ def policy_matrix() -> list[dict[str, Any]]:
 
 
 def list_available() -> list[CapabilitySpec]:
-    from core.tool_dispatcher import _TOOL_REGISTRY
+    from core.tool_runtime.registry import _TOOL_REGISTRY
 
     items: list[CapabilitySpec] = [
         CapabilitySpec(AUTONOMY_ENABLED, "autonomy_enabled"),

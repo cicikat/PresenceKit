@@ -2,6 +2,9 @@
 
 新增工具（含 self_tool / MCP / discovery）会被自动遍历；不要在工具侧为单个 provider 打补丁。
 """
+
+import core.tool_runtime.execution as _domain_core_tool_runtime_execution
+import core.tool_runtime.validation as _domain_core_tool_runtime_validation
 import json
 import re
 
@@ -127,8 +130,8 @@ def test_non_string_enum_keeps_type_and_local_validation():
         assert params["properties"]["mode"]["enum"] == ["a", "b"]
         _walk(params)
     assert schema["properties"]["depth"]["enum"] == [1, 2]
-    assert td._schema_errors(1, schema["properties"]["depth"], "depth") == []
-    assert td._schema_errors(3, schema["properties"]["depth"], "depth")
+    assert _domain_core_tool_runtime_validation._schema_errors(1, schema["properties"]["depth"], "depth") == []
+    assert _domain_core_tool_runtime_validation._schema_errors(3, schema["properties"]["depth"], "depth")
 
 
 def test_bare_object_downgraded_and_args_coerced():
@@ -154,7 +157,7 @@ async def test_string_where_executes_via_dispatcher(monkeypatch):
     spec = dict(td._TOOL_REGISTRY["self_db_query"])
     spec["func"] = fake
     monkeypatch.setitem(td._TOOL_REGISTRY, "self_db_query", spec)
-    await td._execute_structured_impl(
+    await _domain_core_tool_runtime_execution._execute_structured_impl(
         "self_db_query", {"table": "t", "where": '{"a": 1}'}, "u", "u", False, None,
         origin="assistant_loop", char_id="c",
     )

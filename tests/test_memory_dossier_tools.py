@@ -96,7 +96,7 @@ def test_plans_cancellations_and_suggestions_do_not_count_as_occurrences(sandbox
 
 def test_tools_registered_with_discovery_metadata(monkeypatch):
     import core.tool_dispatcher as dispatcher
-    monkeypatch.setattr(dispatcher, "_is_tool_enabled", lambda _name: True)
+    monkeypatch.setattr('core.tool_runtime.policy._is_tool_enabled', lambda _name: True)
     monkeypatch.setattr("core.deployment_capabilities.tool_allowed", lambda _name: (True, ""))
     monkeypatch.setattr("core.self_management.policy.tool_allowed", lambda *_args: True)
     expected = {"search_memory_dossiers", "read_memory_dossier", "search_dossier_events",
@@ -114,7 +114,7 @@ def test_tools_registered_with_discovery_metadata(monkeypatch):
 async def test_dispatcher_freezes_scope_and_group_denies(monkeypatch, sandbox):
     import core.tool_dispatcher as dispatcher
     scope = _scope("owner"); _seed(scope)
-    monkeypatch.setattr(dispatcher, "_is_tool_enabled", lambda _name: True)
+    monkeypatch.setattr('core.tool_runtime.policy._is_tool_enabled', lambda _name: True)
     monkeypatch.setattr("core.self_management.policy.tool_allowed", lambda *_args: True)
     result = await dispatcher.execute_structured(
         "search_memory_dossiers", {"query": "coffee"}, "owner", "owner", False,
@@ -132,7 +132,7 @@ async def test_full_history_request_returns_durable_task_without_scanning(monkey
     import core.tool_dispatcher as dispatcher
     from core.agent_runtime.models import TaskPrincipal
     from core.agent_runtime.task_manager import list_tasks
-    monkeypatch.setattr(dispatcher, "_is_tool_enabled", lambda _name: True)
+    monkeypatch.setattr('core.tool_runtime.policy._is_tool_enabled', lambda _name: True)
     monkeypatch.setattr("core.self_management.policy.tool_allowed", lambda *_args: True)
     request_id = uuid.uuid4().hex
     result = await dispatcher.execute_structured(

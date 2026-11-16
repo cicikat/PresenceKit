@@ -19,7 +19,7 @@ def test_agent_change_requires_grant_lock_revision_and_idempotency(sandbox):
     import asyncio
 
     from core.self_management.service import agent_change, set_lock, user_grant
-    from core.tool_dispatcher import _list_self_capabilities_wrapper
+    from core.tools.files_agents_definitions import _list_self_capabilities_wrapper
 
     request = CapabilityChange("disable", "autonomy.enabled", None, "quiet", 0, "a1")
     assert agent_change("u1", "char_a", request, source="assistant_self_management").code == "not_granted"
@@ -41,7 +41,7 @@ def test_minimum_interval_is_constrained_and_restorable(sandbox):
 
     from core.self_management import policy
     from core.self_management.service import agent_change, restore_user_setting, user_grant
-    from core.tool_dispatcher import _list_self_capabilities_wrapper
+    from core.tools.files_agents_definitions import _list_self_capabilities_wrapper
 
     assert user_grant("u1", "char_a", capability_id="autonomy.min_interval_seconds", allowed=True, mutable_by_agent=True, constraints={"minimum": 120, "maximum": 300}, reason="bounded").ok
     assert agent_change("u1", "char_a", CapabilityChange("set_value", "autonomy.min_interval_seconds", 60, "shorten", 1, "a1"), source="assistant_self_management").code == "value_out_of_constraints"
@@ -139,10 +139,9 @@ def test_self_capability_read_tools_and_explicit_change_result(sandbox):
     import json
 
     from core.self_management.service import user_grant
-    from core.tool_dispatcher import (
-        _list_self_capabilities_wrapper, _manage_self_capability_wrapper,
-        _read_self_action_history_wrapper,
-    )
+    from core.tools.files_agents_definitions import _list_self_capabilities_wrapper
+    from core.tools.files_agents_definitions import _manage_self_capability_wrapper
+    from core.tools.files_agents_definitions import _read_self_action_history_wrapper
 
     assert user_grant("u1", "char_a", capability_id="autonomy.enabled", allowed=True,
                       mutable_by_agent=True, constraints={}, reason="allow").ok

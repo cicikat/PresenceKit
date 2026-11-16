@@ -1,3 +1,5 @@
+
+from tests.tool_registry import patch_registry
 from tests.fixtures.public_assets import TEST_CHAR_ID
 """
 tests/test_qq_dream_guard.py — QQ 入梦 guard
@@ -100,7 +102,7 @@ def _patch_response_processor(monkeypatch):
 
 def _patch_tool_dispatcher(monkeypatch):
     import core.tool_dispatcher as _td
-    monkeypatch.setattr(_td, "_TOOL_REGISTRY", {})
+    patch_registry(monkeypatch, {})
     monkeypatch.setattr(_td, "get_probe_prompt", lambda loc: "")
     monkeypatch.setattr(_td, "get_tools_schema", lambda categories=None: [])
 

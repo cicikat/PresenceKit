@@ -10,6 +10,10 @@ call_tool 超时/异常→重连一次→再失败按失败处理、断线重连
 """
 
 from __future__ import annotations
+
+import core.tool_runtime.outcome as _domain_core_tool_runtime_outcome
+
+from tests.tool_registry import patch_registry
 from tests.fixtures.public_assets import TEST_CHAR_ID
 
 import asyncio
@@ -55,7 +59,7 @@ class _FakeSession:
 @pytest.fixture(autouse=True)
 async def _clean_registry_and_servers(monkeypatch):
     """隔离真实 _TOOL_REGISTRY / _servers / _owners，测试结束后还原并回收专属 task。"""
-    monkeypatch.setattr(td, "_TOOL_REGISTRY", dict(td._TOOL_REGISTRY))
+    patch_registry(monkeypatch, dict(td._TOOL_REGISTRY))
     # Existing MCP regression cases intentionally exercise legacy configs.
     # Strict local-policy cases override this inside their own tests.
     monkeypatch.setattr(mc, "_require_local_policy", lambda: False)
@@ -178,7 +182,7 @@ def test_opaque_parameter_guidance_uses_registry_metadata_not_a_hardcoded_guide_
             "description": "Explains action parameters and available options",
         },
     }
-    monkeypatch.setattr(td, "_TOOL_REGISTRY", registry)
+    patch_registry(monkeypatch, registry)
     note = td.format_mcp_opaque_params_note([
         {"type": "function", "function": {
             "name": "mcp__arcade__play",
@@ -938,16 +942,16 @@ class TestMcpServerErrorPassthrough:
 class TestMcpServerReportedErrorHelper:
     def test_matches_format_result_prefix(self):
         e = RuntimeError("MCP 工具返回错误: 【cedartoy】command 参数必填")
-        assert td._mcp_server_reported_error(e) == "【cedartoy】command 参数必填"
+        assert _domain_core_tool_runtime_outcome._mcp_server_reported_error(e) == "【cedartoy】command 参数必填"
 
     def test_non_runtime_error_returns_none(self):
         e = ValueError("MCP 工具返回错误: 不算数")
-        assert td._mcp_server_reported_error(e) is None
+        assert _domain_core_tool_runtime_outcome._mcp_server_reported_error(e) is None
 
     def test_unrelated_runtime_error_returns_none(self):
         e = RuntimeError("MCP server 'cedar_toy' 未连接")
-        assert td._mcp_server_reported_error(e) is None
+        assert _domain_core_tool_runtime_outcome._mcp_server_reported_error(e) is None
 
     def test_empty_text_after_prefix_returns_none(self):
         e = RuntimeError("MCP 工具返回错误: ")
-        assert td._mcp_server_reported_error(e) is None
+        assert _domain_core_tool_runtime_outcome._mcp_server_reported_error(e) is None

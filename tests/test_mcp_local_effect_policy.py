@@ -1,6 +1,8 @@
 """MCP Local Effect Policy P1: trusted local classification and confirmation."""
 from __future__ import annotations
 
+from tests.tool_registry import patch_registry
+
 from types import SimpleNamespace
 
 import pytest
@@ -37,7 +39,7 @@ def _patch_client_session(monkeypatch, session):
 
 @pytest.fixture(autouse=True)
 def _isolated_registry(monkeypatch):
-    monkeypatch.setattr(td, "_TOOL_REGISTRY", dict(td._TOOL_REGISTRY))
+    patch_registry(monkeypatch, dict(td._TOOL_REGISTRY))
     mc._servers.clear()
     mc._server_status.clear()
     monkeypatch.setattr(mc, "_require_local_policy", lambda: True)
@@ -256,7 +258,7 @@ async def test_local_policy_ui_label_is_registered_without_using_remote_metadata
 
 
 def test_categories_mcp_exposes_no_local_tools(monkeypatch):
-    monkeypatch.setattr(td, "_is_tool_enabled", lambda name: True)
+    monkeypatch.setattr('core.tool_runtime.policy._is_tool_enabled', lambda name: True)
     td._TOOL_REGISTRY["mcp__srv1__read"] = {
         "description": "", "parameters": {}, "category": "mcp", "dangerous": False,
         "effect": "read",
@@ -362,7 +364,7 @@ async def test_actuate_and_emergency_execute_without_confirmation(monkeypatch):
 
 
 def test_effect_drives_side_effect_classification_without_changing_local_fallback(monkeypatch):
-    monkeypatch.setattr(td, "_TOOL_REGISTRY", {
+    patch_registry(monkeypatch, {
         "mcp__srv__read": {"effect": "read", "dangerous": False},
         "mcp__srv__write": {"effect": "write", "dangerous": False},
         "mcp__srv__pulse": {"effect": "actuate", "dangerous": False},

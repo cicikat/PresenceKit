@@ -107,7 +107,7 @@ def test_http_settings_follow_active_character_not_peer_bucket(sandbox, monkeypa
     save(_UID, {"world_layer": "abo"}, char_id=TEST_CHAR_ID)
     save(_UID, {"world_layer": "vampire"}, char_id=TEST_PEER_CHAR_ID)
     register(_Fake(TEST_CHAR_ID))
-    monkeypatch.setattr("admin.routers.dream._owner_uid", lambda: _UID)
+    monkeypatch.setattr('admin.routers.dream_common._owner_uid', lambda: _UID)
 
     got = __import__("asyncio").run(dream_settings_get())
     assert got["world_layer"] == "abo"
@@ -132,7 +132,7 @@ def test_http_settings_explicit_char_id_ignores_active(sandbox, monkeypatch):
     save(_UID, {"world_layer": "abo"}, char_id=TEST_CHAR_ID)
     save(_UID, {"world_layer": "vampire"}, char_id=TEST_PEER_CHAR_ID)
     register(_Fake(TEST_CHAR_ID))
-    monkeypatch.setattr("admin.routers.dream._owner_uid", lambda: _UID)
+    monkeypatch.setattr('admin.routers.dream_common._owner_uid', lambda: _UID)
 
     got = __import__("asyncio").run(dream_settings_get(char_id=TEST_PEER_CHAR_ID))
     assert got["world_layer"] == "vampire"
@@ -154,7 +154,7 @@ def test_world_rename_does_not_rewrite_peer_character_settings(sandbox, monkeypa
         _active_character_id = TEST_CHAR_ID
 
     register(_Fake())
-    monkeypatch.setattr("admin.routers.dream._owner_uid", lambda: _UID)
+    monkeypatch.setattr('admin.routers.dream_common._owner_uid', lambda: _UID)
     save(_UID, {"world_layer": "rename_src"}, char_id=TEST_CHAR_ID)
     save(_UID, {"world_layer": "rename_src"}, char_id=TEST_PEER_CHAR_ID)
     # Seed the world folder directly. This test owns settings isolation, not

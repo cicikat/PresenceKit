@@ -1,3 +1,5 @@
+
+import core.tools.devices_definitions as device_tools
 import pytest
 from pathlib import Path
 
@@ -13,7 +15,7 @@ def test_action_ownership_is_static_and_fail_closed():
 @pytest.mark.asyncio
 async def test_device_action_only_uses_device_transport(monkeypatch):
     from channels import desktop_ws, device_ws
-    from core.tool_dispatcher import _push_desktop_action
+    from core.tools.devices_definitions import _push_desktop_action
 
     calls = []
     monkeypatch.setattr(desktop_ws, "is_connected", lambda: True)
@@ -40,14 +42,14 @@ async def test_device_failures_do_not_use_desktop_queue(monkeypatch):
     from core import tool_dispatcher as dispatcher
 
     monkeypatch.setattr(device_ws, "is_connected", lambda: False)
-    monkeypatch.setattr(dispatcher, "_is_desktop_active", lambda: True)
-    assert await dispatcher._push_desktop_action({"type": "show_heart"}) == "设备端离线，动作未执行"
+    monkeypatch.setattr('core.tools.devices_definitions._is_desktop_active', lambda: True)
+    assert await device_tools._push_desktop_action({"type": "show_heart"}) == "设备端离线，动作未执行"
 
 
 @pytest.mark.asyncio
 async def test_device_nack_is_explicit_failure(monkeypatch):
     from channels import device_ws
-    from core.tool_dispatcher import _push_desktop_action
+    from core.tools.devices_definitions import _push_desktop_action
 
     monkeypatch.setattr(device_ws, "is_connected", lambda: True)
 
@@ -61,7 +63,7 @@ async def test_device_nack_is_explicit_failure(monkeypatch):
 @pytest.mark.asyncio
 async def test_desktop_action_only_uses_desktop_transport(monkeypatch):
     from channels import desktop_ws, device_ws
-    from core.tool_dispatcher import _push_desktop_action
+    from core.tools.devices_definitions import _push_desktop_action
 
     calls = []
     monkeypatch.setattr(desktop_ws, "is_connected", lambda: True)
@@ -85,7 +87,7 @@ async def test_desktop_action_only_uses_desktop_transport(monkeypatch):
 @pytest.mark.asyncio
 async def test_unknown_action_is_not_sent(monkeypatch):
     from channels import desktop_ws, device_ws
-    from core.tool_dispatcher import _push_desktop_action
+    from core.tools.devices_definitions import _push_desktop_action
 
     monkeypatch.setattr(desktop_ws, "is_connected", lambda: True)
     monkeypatch.setattr(device_ws, "is_connected", lambda: True)
@@ -111,7 +113,7 @@ async def test_heart_success_log_requires_device_ack(monkeypatch, caplog):
         return "设备端离线，动作未执行"
 
     monkeypatch.setattr(heart.llm_client, "detect_affection_checked", affectionate)
-    monkeypatch.setattr("core.tool_dispatcher._push_desktop_action", rejected)
+    monkeypatch.setattr('core.tools.devices_definitions._push_desktop_action', rejected)
     monkeypatch.setattr(heart.config_loader, "get_config", lambda: {
         "embodiment": {"heart": {"enabled": True, "cooldown_sec": 45}}
     })

@@ -139,7 +139,7 @@ async def run_owner_chat_turn(
         from core.tools.chat_artifacts import begin_turn_collection, drain_turn_artifacts
         begin_turn_collection()
         try:
-            return await _execute_owner_chat_turn_locked(
+            return await _execute_owner_chat_turn_locked(OwnerChatTurn(
                 message=message,
                 provenance_channel=provenance_channel,
                 live_origin_channel=live_origin_channel,
@@ -166,79 +166,21 @@ async def run_owner_chat_turn(
                 _loop_session_state=_loop_session_state,
                 _t_start=_t_start,
                 request_id=request_id,
-            )
+            ))
         finally:
             drain_turn_artifacts()
 
 
-async def _execute_owner_chat_turn_locked(
-    *,
-    message,
-    provenance_channel,
-    live_origin_channel,
-    durable_mobile_mirror,
-    _probe_text,
-    allowed_tool_categories,
-    allowed_tool_names,
-    audit_extras,
-    pipeline,
-    user_id,
-    frozen_scope,
-    tool_execution_enabled,
-    prompt_context_note,
-    prompt_capture_origin,
-    turn_source,
-    trigger_name,
-    envelope,
-    fanout,
-    provenance_source,
-    schedule_slow,
-    media_refs,
-    event_context,
-    _loop_active,
-    _loop_session_state,
-    _t_start,
-    request_id,
-):
-    from core.owner_chat.prepare import prepare_turn
+async def _execute_owner_chat_turn_locked(turn: OwnerChatTurn):
+    from core.owner_chat import prepare
     from core.owner_chat.generation import generate_turn
     from core.owner_chat.delivery import commit_and_deliver
-    # Preserve the existing local-extension/test injection point. The router
-    # re-exports the single prepare implementation; it owns no probe logic.
-    from admin.routers.chat import _probe_and_execute_tools
 
-    turn = OwnerChatTurn(
-        message=message,
-        provenance_channel=provenance_channel,
-        live_origin_channel=live_origin_channel,
-        durable_mobile_mirror=durable_mobile_mirror,
-        _probe_text=_probe_text,
-        allowed_tool_categories=allowed_tool_categories,
-        allowed_tool_names=allowed_tool_names,
-        audit_extras=audit_extras,
-        pipeline=pipeline,
-        user_id=user_id,
-        frozen_scope=frozen_scope,
-        tool_execution_enabled=tool_execution_enabled,
-        prompt_context_note=prompt_context_note,
-        prompt_capture_origin=prompt_capture_origin,
-        turn_source=turn_source,
-        trigger_name=trigger_name,
-        envelope=envelope,
-        fanout=fanout,
-        provenance_source=provenance_source,
-        schedule_slow=schedule_slow,
-        media_refs=media_refs,
-        event_context=event_context,
-        _loop_active=_loop_active,
-        _loop_session_state=_loop_session_state,
-        _t_start=_t_start,
-        request_id=request_id,
-    )
+    request_id = turn.request_id
     stage = "prepare"
     try:
         logger.debug("[owner_chat] stage=%s request_id=%s", stage, request_id)
-        prepared = await prepare_turn(turn, probe=_probe_and_execute_tools)
+        prepared = await prepare.prepare_turn(turn)
         stage = "generate"
         logger.debug("[owner_chat] stage=%s request_id=%s", stage, request_id)
         generated = await generate_turn(turn, prepared)

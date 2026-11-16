@@ -5,7 +5,7 @@ import pytest
 from PIL import Image
 
 from core import character_document_library as library, media_processor as media
-from core.tool_dispatcher import _reread_image_wrapper
+from core.tools.life_media_definitions import _reread_image_wrapper
 
 
 @pytest.mark.asyncio

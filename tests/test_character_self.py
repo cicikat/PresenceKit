@@ -317,7 +317,9 @@ def test_redaction_before_model_export(sandbox):
 def test_creating_python_is_not_a_process_grant(sandbox):
     created = _create("script.py", "print('hi')")
     assert created["ok"] is True
-    from core.tool_dispatcher import _SIDE_EFFECT_TOOLS, _TOOL_REGISTRY, is_side_effect_tool
+    from core.tool_runtime.policy import _SIDE_EFFECT_TOOLS
+    from core.tool_dispatcher import _TOOL_REGISTRY
+    from core.tool_dispatcher import is_side_effect_tool
     assert _TOOL_REGISTRY["self_create"]["effect"] == "write"
     assert "process_run" not in created
     for name in ("self_create", "self_update", "self_move", "self_delete", "self_restore"):
@@ -329,7 +331,7 @@ def test_creating_python_is_not_a_process_grant(sandbox):
 
 @pytest.mark.asyncio
 async def test_tools_are_discoverable_and_not_danger_gated(sandbox, monkeypatch):
-    monkeypatch.setattr(tool_dispatcher, "_is_tool_enabled", lambda _: True)
+    monkeypatch.setattr('core.tool_runtime.policy._is_tool_enabled', lambda _: True)
 
     schemas = tool_dispatcher.get_tools_schema(categories=["self"])
     names = {(item.get("function") or {}).get("name") for item in schemas}
@@ -372,7 +374,7 @@ async def test_tools_are_discoverable_and_not_danger_gated(sandbox, monkeypatch)
 
 @pytest.mark.asyncio
 async def test_model_cannot_inject_principal(sandbox, monkeypatch):
-    monkeypatch.setattr(tool_dispatcher, "_is_tool_enabled", lambda _: True)
+    monkeypatch.setattr('core.tool_runtime.policy._is_tool_enabled', lambda _: True)
     _create("notes/x.md", "x")
     result = await tool_dispatcher.execute_structured(
         "self_read",
@@ -428,7 +430,7 @@ def test_restore_wrong_revision_and_realm_isolation(sandbox):
 
 @pytest.mark.asyncio
 async def test_self_delete_does_not_ask_user_confirm(sandbox, monkeypatch):
-    monkeypatch.setattr(tool_dispatcher, "_is_tool_enabled", lambda _: True)
+    monkeypatch.setattr('core.tool_runtime.policy._is_tool_enabled', lambda _: True)
     created = _create("notes/tmp.md", "tmp")
     result = await tool_dispatcher.execute_structured(
         "self_delete",

@@ -23,7 +23,7 @@ _UID = "dream_proj_test"
 
 def _get():
     from admin.routers.dream import dream_state_get
-    with patch("admin.routers.dream._owner_uid", return_value=_UID):
+    with patch('admin.routers.dream_common._owner_uid', return_value=_UID):
         return asyncio.run(dream_state_get())
 
 
@@ -162,7 +162,7 @@ def test_full_transition_idle_dreaming_cooldown(sandbox):
     from core.dream.dream_pipeline import enter_dream, force_exit_dream
 
     uid = _UID + "_e2e"
-    with patch("admin.routers.dream._owner_uid", return_value=uid):
+    with patch('admin.routers.dream_common._owner_uid', return_value=uid):
         from admin.routers.dream import dream_state_get
 
         pre = asyncio.run(dream_state_get())

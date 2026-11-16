@@ -31,7 +31,7 @@ def _j(raw) -> dict:
 
 @pytest.fixture
 def env(sandbox, monkeypatch):
-    monkeypatch.setattr(tool_dispatcher, "_is_tool_enabled", lambda _: True)
+    monkeypatch.setattr('core.tool_runtime.policy._is_tool_enabled', lambda _: True)
 
     calls: list[tuple[str, dict]] = []
 

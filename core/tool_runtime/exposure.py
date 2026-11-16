@@ -1,4 +1,18 @@
-"""Tool exposure; called through the stable dispatcher facade."""
+"""Tool exposure."""
+
+from core.tool_runtime import policy
+
+from core.tool_runtime.registry import _TOOL_REGISTRY
+from core.agent_runtime import computer_use as _computer_use
+from core.tools import device_file_tools as _device_file_tools
+from core import character_name_provider
+from core import config_loader
+
+_MCP_DOC_DESCRIPTION_HINTS: tuple[str, ...] = (
+    "documentation", "document", "help", "usage", "schema", "parameter", "option", "describe",
+    "说明", "文档", "参数", "选项", "玩法", "规则", "操作",
+)
+
 
 def get_tools_schema(
     categories: list[str] | None = None,
@@ -11,27 +25,18 @@ def get_tools_schema(
     """返回已启用工具的 OpenAI function_calling 格式 schema。
     categories: 若提供，仅返回该分类内的工具；None 返回全部。
     """
-    from core import tool_dispatcher as _runtime
-    char_name = _runtime.get_active_char_name()
+    char_name = character_name_provider.get_active_char_name()
     from core.prompt_language import tool_description, tool_parameters
     schemas = []
-    for name, info in _runtime._TOOL_REGISTRY.items():
+    for name, info in _TOOL_REGISTRY.items():
         if only_names is not None and name not in only_names:
             continue
         if info.get('autonomy_only') and not autonomy:
             continue
-        if name in _runtime._computer_use.OWNER_TOOL_NAMES and (not _runtime._computer_use.enabled() or not _runtime._computer_use.owner_scope(uid, char_id)):
+        if not policy.principal_allowed(name, info, uid, char_id, autonomy=autonomy):
             continue
-        if name in _runtime._device_file_tools.NAMES and (autonomy or not _runtime._device_file_tools.service.allowed(uid, char_id)):
-            continue
-        if name in _runtime._gmail_tools.NAMES and not _runtime._gmail_tools.allowed(name, uid, char_id):
-            continue
-        if name in _runtime._QZONE_TOOL_NAMES:
-            from core.qzone_service import allowed
-            if not allowed(uid, char_id, write=info.get("effect") == "write"):
-                continue
         if name == "invite_video_call" and char_id is not None:
-            settings = _runtime.get_config().get("tools", {}).get(name) or {}
+            settings = config_loader.get_config().get("tools", {}).get(name) or {}
             allowed = settings.get("allowed_char_ids") or [] if isinstance(settings, dict) else []
             if char_id not in allowed:
                 continue
@@ -41,7 +46,7 @@ def get_tools_schema(
         from core.deployment_capabilities import tool_allowed
         if not tool_allowed(name)[0]:
             continue
-        if not _runtime._is_tool_enabled(name):
+        if not policy._is_tool_enabled(name):
             continue
         if categories is not None and info.get("category") not in categories:
             continue
@@ -67,8 +72,8 @@ def get_tools_schema(
     schemas = [
         schema
         for schema in schemas
-        if _runtime.mcp_domain_selector_allows(
-            _runtime._TOOL_REGISTRY.get(schema.get("function", {}).get("name", ""), {})
+        if policy.mcp_domain_selector_allows(
+            _TOOL_REGISTRY.get(schema.get("function", {}).get("name", ""), {})
         )
     ]
     return schemas
@@ -76,16 +81,15 @@ def get_tools_schema(
 
 def _has_open_object(schema) -> bool:
     """Whether JSON Schema contains an object with arbitrary nested keys."""
-    from core import tool_dispatcher as _runtime
     if not isinstance(schema, dict):
         return False
     additional = schema.get("additionalProperties")
     if additional is True or isinstance(additional, dict):
         return True
     for child in (schema.get("properties") or {}).values():
-        if _runtime._has_open_object(child):
+        if _has_open_object(child):
             return True
-    return any(_runtime._has_open_object(child) for key in ("allOf", "anyOf", "oneOf") for child in (schema.get(key) or []))
+    return any(_has_open_object(child) for key in ("allOf", "anyOf", "oneOf") for child in (schema.get(key) or []))
 
 
 def format_mcp_opaque_params_note(tool_schemas: list[dict]) -> str:
@@ -97,13 +101,12 @@ def format_mcp_opaque_params_note(tool_schemas: list[dict]) -> str:
     *declared read-only* documentation tool when one advertises that purpose,
     and otherwise use the server's concrete error feedback.
     """
-    from core import tool_dispatcher as _runtime
     opaque_by_server: dict[str, list[str]] = {}
     for schema in tool_schemas:
         function = schema.get("function") or schema
         name = function.get("name")
-        info = _runtime._TOOL_REGISTRY.get(name or "", {})
-        if info.get("category") != "mcp" or not _runtime._has_open_object(function.get("parameters", {})):
+        info = _TOOL_REGISTRY.get(name or "", {})
+        if info.get("category") != "mcp" or not _has_open_object(function.get("parameters", {})):
             continue
         server = str(info.get("mcp_server") or "")
         if server:
@@ -121,11 +124,11 @@ def format_mcp_opaque_params_note(tool_schemas: list[dict]) -> str:
         exposed_names = {(schema.get("function") or schema).get("name") for schema in tool_schemas}
         doc_tools = [
             candidate_name
-            for candidate_name, info in _runtime._TOOL_REGISTRY.items()
+            for candidate_name, info in _TOOL_REGISTRY.items()
             if candidate_name in exposed_names and info.get("category") == "mcp"
             and info.get("mcp_server") == server
             and info.get("mcp_read_only") is True
-            and any(hint in str(info.get("description") or "").casefold() for hint in _runtime._MCP_DOC_DESCRIPTION_HINTS)
+            and any(hint in str(info.get("description") or "").casefold() for hint in _MCP_DOC_DESCRIPTION_HINTS)
         ]
         if doc_tools:
             lines.append(
@@ -150,7 +153,6 @@ def _build_probe_prompt(
     共同调用。不要在 get_probe_prompt 里加 if 分支——两者未来措辞可能分叉，分开维护
     避免探针本身的 prompt 被这次改动污染。
     """
-    from core import tool_dispatcher as _runtime
     lines = ["只输出工具调用或空字符串，不要任何其他文字或思考过程。"]
     if relay:
         lines.append(
@@ -169,13 +171,13 @@ def _build_probe_prompt(
         "不要用工具结果替代陪伴回应；工具结果只能补充事实。"
         "\n可用工具："
     )
-    char_name = _runtime.get_active_char_name()
-    for name, spec in _runtime._TOOL_REGISTRY.items():
+    char_name = character_name_provider.get_active_char_name()
+    for name, spec in _TOOL_REGISTRY.items():
         if spec.get("probe") is False:
             continue
-        if name in _runtime._device_file_tools.NAMES:
+        if name in _device_file_tools.NAMES:
             continue
-        if name in _runtime._computer_use.OWNER_TOOL_NAMES and allowed_tool_names is None:
+        if name in _computer_use.OWNER_TOOL_NAMES and allowed_tool_names is None:
             continue
         if allowed_tool_names is not None and name not in allowed_tool_names:
             continue
@@ -199,8 +201,7 @@ def get_probe_prompt(
     allowed_tool_names: set[str] | frozenset[str] | None = None,
 ) -> str:
     """动态从注册表构建探针 prompt，默认保持 desktop 的 info/desktop 暴露面。"""
-    from core import tool_dispatcher as _runtime
-    return _runtime._build_probe_prompt(
+    return _build_probe_prompt(
         categories,
         location=location,
         allowed_tool_names=allowed_tool_names,
@@ -219,8 +220,7 @@ def get_tool_loop_relay_prompt(
     tool_loop.categories（含 mcp），而不是探针默认的 info/desktop 两类——否则钓鱼/
     海龟汤这类 mcp 工具还是够不着。
     """
-    from core import tool_dispatcher as _runtime
-    return _runtime._build_probe_prompt(
+    return _build_probe_prompt(
         categories,
         relay=True,
         allowed_tool_names=allowed_tool_names,

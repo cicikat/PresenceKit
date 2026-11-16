@@ -337,7 +337,7 @@ async def test_owner_chat_stream_enforces_visible_copy_only(monkeypatch, enabled
     monkeypatch.setattr(tool_dispatcher, "tool_loop_active", lambda uid: False)
     monkeypatch.setattr(scheduler_loop, "mark_user_active", lambda: None)
     monkeypatch.setattr(scheduler_state, "notify_owner_turn", lambda uid: None)
-    monkeypatch.setattr(chat, "_probe_and_execute_tools", noop_async)
+    monkeypatch.setattr('core.owner_chat.prepare._probe_and_execute_tools', noop_async)
     monkeypatch.setattr("core.conversation_gate.conversation_lock", noop_lock)
     monkeypatch.setattr(channel_registry, "get", lambda name: None)
     monkeypatch.setattr(turn_sink, "record_assistant_turn", fake_record_assistant_turn)

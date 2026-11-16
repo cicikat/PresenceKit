@@ -28,7 +28,7 @@ def main():
         for module in (config_loader, life_records, routes, tool_dispatcher):
             patch.setattr(module, 'get_config', lambda: config)
         patch.setattr(loop, '_active_char_id_or_none', lambda: 'fixture-char')
-        patch.setattr(tool_dispatcher, '_is_tool_enabled', lambda _: True)
+        patch.setattr('core.tool_runtime.policy._is_tool_enabled', lambda _: True)
         patch.setattr(tool_dispatcher, 'get_tools_schema', lambda **kw: [{'function': {'name': 'read_life_records'}}])
         life_records.sync('fixture-owner', 'fixture-device', {
             'record_id': 'fixture-record', 'operation_id': 'fixture-operation', 'base_revision': 0, 'action': 'upsert',

@@ -61,7 +61,7 @@ def test_decay_and_soft_layer():
 
 
 def test_registry_not_probe_and_perform():
-    from core.tool_dispatcher import _build_probe_prompt
+    from core.tool_runtime.exposure import _build_probe_prompt
     assert "drink_with_user" not in _build_probe_prompt(["info"], allowed_tool_names={"drink_with_user"})
     from core.perform_mapper import _map_with_rules
     result = _map_with_rules("撑桌，笑得慢", "好")

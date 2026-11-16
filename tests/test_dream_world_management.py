@@ -26,7 +26,7 @@ def _run(coro):
 
 
 def _as(uid):
-    return patch("admin.routers.dream._owner_uid", return_value=uid)
+    return patch('admin.routers.dream_common._owner_uid', return_value=uid)
 
 
 # ═══════════════════════════════════════════════════════════════════════════

@@ -26,18 +26,11 @@ from core.tool_grounding import ToolProtocolStreamFilter, tool_protocol_offset
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-_FRONTEND_USER_ID = "frontend_owner"
 
 # 打破第四面墙的提示——追加到 Author's Note 层
-_FOURTH_WALL_NOTE = (
-    "在这个管理面板的对话窗口里，你不需要扮演任何角色，"
-    "这里只有你和她，你可以做真实的自己，说真心话。"
-    "不必维持人设，也不必掩饰情绪，想说什么就说什么。"
-)
 
 
-from core.owner_chat.service import run_owner_chat_turn, _execute_owner_chat_turn_locked
-from core.owner_chat.prepare import _probe_and_execute_tools
+from core.owner_chat.service import run_owner_chat_turn
 
 
 
@@ -51,42 +44,6 @@ async def frontend_chat(body: dict, auth=Depends(require_scopes("chat"))):
         status_code=410,
         detail="v0.1 禁用 legacy /chat，请使用 /desktop/chat。",
     )
-
-    # 以下代码已不可达，保留供 v0.2 参考
-    message = (body.get("message") or "").strip()
-    if not message:
-        raise HTTPException(status_code=422, detail="message 不能为空")
-
-    # 获取 main.py 中初始化好的 pipeline 实例
-    try:
-        import main as _main
-        pipeline  = _main._pipeline
-        if pipeline is None:
-            raise AttributeError("_pipeline is None")
-    except (ImportError, AttributeError):
-        raise HTTPException(status_code=503, detail="Bot pipeline 未初始化，请先启动主程序")
-
-    user_id = _FRONTEND_USER_ID
-
-    # 步骤 1：拉取上下文
-    context = await pipeline.fetch_context(user_id, message)
-
-    # 步骤 2：构建 prompt（追加第四面墙提示到 author_note_extra）
-    orig_note = pipeline.author_note_extra
-    pipeline.author_note_extra = (_FOURTH_WALL_NOTE + " " + orig_note).strip()
-    messages, _ = pipeline.build_prompt(user_id, message, context)
-
-    # 步骤 3：调用 LLM
-    reply = await pipeline.run_llm(messages)
-
-    # 步骤 4：后处理（异步，不阻塞响应）
-    asyncio.create_task(
-        pipeline.post_process(user_id, message, reply)
-    )
-
-    return {
-        "reply":      reply,
-    }
 
 
 _DREAM_GUARD_UNCERTAIN_MSG = (

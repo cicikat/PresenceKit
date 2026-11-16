@@ -1,17 +1,14 @@
 """Dream observability API responsibilities; legacy names re-exported by dream.py."""
 
+from admin.routers import dream_archives
+from admin.routers import dream_common
+from admin.routers import dream_presets
+
 import logging
 import json
-import re
-import re as _re
-import time
-from pathlib import Path
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from admin.auth import require_scopes
-from admin.routers._common import requested_char_id, resolve_requested_char_id
-from core.config_loader import get_config
-from core.sandbox import get_paths
 
 router = APIRouter()
 logger = logging.getLogger("admin.routers.dream")
@@ -21,10 +18,9 @@ async def dream_invariants_get(
     char_id: str | None = Query(default=None),
     _auth=Depends(require_scopes("activity")),
 ):
-    from admin.routers import dream as _runtime
     from core.dream.invariants import load
-    selected_char = _runtime._validated_live_char_id(char_id)
-    entries = load(_runtime._owner_uid(), char_id=selected_char)
+    selected_char = dream_common._validated_live_char_id(char_id)
+    entries = load(dream_common._owner_uid(), char_id=selected_char)
     entries.sort(key=lambda item: (bool(item.get("contradicted_by")), int(item.get("count") or 0)), reverse=True)
     return {"entries": entries}
 
@@ -48,9 +44,8 @@ async def dream_state_get(
       intimacy_tendency, obsession, dream_stability, dream_depth,
       physiological_arousal — all int 0–100.
     """
-    from admin.routers import dream as _runtime
-    uid = _runtime._owner_uid()
-    selected_char = _runtime._validated_live_char_id(char_id)
+    uid = dream_common._owner_uid()
+    selected_char = dream_common._validated_live_char_id(char_id)
     from core.dream.dream_state import (
         read_state, DreamStatus, DreamGuardStatus,
         derive_dream_state_projection, get_reality_guard_status,
@@ -68,7 +63,7 @@ async def dream_state_get(
     scenario_injection_mode = "strict_stage"
     if dream_mode == "scenario" and state.get("scenario_core"):
         scenario_injection_mode = state.get("scenario_injection_mode", "strict_stage")
-        if scenario_injection_mode not in _runtime._VALID_SCENARIO_INJECTION_MODE:
+        if scenario_injection_mode not in dream_presets._VALID_SCENARIO_INJECTION_MODE:
             scenario_injection_mode = "strict_stage"
         _sc = state["scenario_core"]
         from core.dream.scenario_projection import scenario_projection_metadata
@@ -154,14 +149,13 @@ async def dream_operations_get(_auth=Depends(require_scopes("activity"))):
     prompts, and filesystem paths.  Replay is a separate explicitly scoped
     archive endpoint added for the desktop reader.
     """
-    from admin.routers import dream as _runtime
-    uid = _runtime._owner_uid()
+    uid = dream_common._owner_uid()
     from core.dream.dream_state import read_state
     from core.dream.exit_observability import DELIVERY_CONTINUATION, list_records
     from core.dream.scenario_progress_audit import list_records as list_scenario_progress
     from core.sandbox import get_paths as _get_paths
 
-    char_id = _runtime._active_dream_char_id()
+    char_id = dream_common._active_dream_char_id()
     state = read_state(uid)
     lifecycle = list_records(char_id=char_id, limit=50)
     continuation_lifecycle = list_records(
@@ -205,7 +199,7 @@ async def dream_operations_get(_auth=Depends(require_scopes("activity"))):
         "stale_count": sum(1 for status in reconciler_statuses if status == "stale"),
         "failed_count": sum(1 for status in reconciler_statuses if status == "failed"),
     }
-    archive_page = await _runtime.dream_archive_list(offset=0, limit=20, char_id=char_id)
+    archive_page = await dream_archives.dream_archive_list(offset=0, limit=20, char_id=char_id)
     last_dream_id = str(state.get("last_dream_id") or "")
     latest_archive = next(
         (item for item in archive_page["items"] if item.get("dream_id") == last_dream_id),
@@ -230,7 +224,7 @@ async def dream_operations_get(_auth=Depends(require_scopes("activity"))):
     schedule: list[dict] = []
     schedule_path = _get_paths().dreams_postcards_dir(char_id=char_id) / "schedule.json"
     try:
-        raw = _runtime.json.loads(schedule_path.read_text(encoding="utf-8")) if schedule_path.exists() else []
+        raw = json.loads(schedule_path.read_text(encoding="utf-8")) if schedule_path.exists() else []
         if isinstance(raw, list):
             for item in raw[-50:]:
                 if not isinstance(item, dict):
@@ -258,10 +252,10 @@ async def dream_operations_get(_auth=Depends(require_scopes("activity"))):
         pass
 
     summary: dict = {"present": False, "created_at": None, "dream_id": None}
-    if _runtime._SAFE_DREAM_ID_RE.fullmatch(last_dream_id):
+    if dream_common._SAFE_DREAM_ID_RE.fullmatch(last_dream_id):
         summary_path = _get_paths().dreams_summaries_dir(char_id=char_id) / f"dream_{last_dream_id}.summary.json"
         try:
-            data = _runtime.json.loads(summary_path.read_text(encoding="utf-8")) if summary_path.exists() else {}
+            data = json.loads(summary_path.read_text(encoding="utf-8")) if summary_path.exists() else {}
             summary = {
                 "present": bool(data),
                 "created_at": data.get("created_at"),
@@ -308,7 +302,6 @@ async def dream_stats_get(
     char_id: str | None = Query(default=None),
     _auth=Depends(require_scopes("activity")),
 ):
-    from admin.routers import dream as _runtime
     from core.dream.dream_log import count_valid_dreams
-    selected_char = _runtime._validated_live_char_id(char_id)
+    selected_char = dream_common._validated_live_char_id(char_id)
     return count_valid_dreams(char_id=selected_char)

@@ -1,28 +1,31 @@
 """Single builtin registry construction; MCP mutates the same returned object."""
 
 def build_registry(registry):
+    """Populate an empty registry once; repeated calls preserve extensions/order."""
+    if registry:
+        return
     from core.tools import information_definitions, memory_definitions, devices_definitions, files_agents_definitions, life_media_definitions
     for module in (information_definitions, memory_definitions, devices_definitions, files_agents_definitions, life_media_definitions):
         module.register_tools(registry)
-    from core.tool_dispatcher import _register_artifact_tools
+    from core.tools.chat_artifacts import register_tools as _register_artifact_tools
     _register_artifact_tools(registry)
-    from core.tool_dispatcher import _register_drinking_tools
+    from core.tools.drinking import register_tools as _register_drinking_tools
     _register_drinking_tools(registry)
-    from core.tool_dispatcher import _register_self_tools
+    from core.tools.character_self import register_tools as _register_self_tools
     _register_self_tools(registry)
-    from core.tool_dispatcher import _register_reminder_tools
+    from core.tools.reminder_tools import register_tools as _register_reminder_tools
     _register_reminder_tools(registry)
-    from core.tool_dispatcher import _register_qzone_tools
+    from core.tools.qzone_tools import register_tools as _register_qzone_tools
     _register_qzone_tools(registry)
-    from core.tool_dispatcher import _register_listening_tools
+    from core.listening_tools import register_tools as _register_listening_tools
     _register_listening_tools(registry)
-    from core.tool_dispatcher import _register_image_gen_tools
+    from core.tools.image_gen import register_tools as _register_image_gen_tools
     _register_image_gen_tools(registry)
-    from core.tool_dispatcher import _gmail_tools
+    from core.tools import gmail_tools as _gmail_tools
     _gmail_tools.register(registry)
-    from core.tool_dispatcher import _device_file_tools
+    from core.tools import device_file_tools as _device_file_tools
     _device_file_tools.register(registry)
-    from core.tool_dispatcher import _intent_tools
+    from core.tools import character_intent_tools as _intent_tools
     _intent_tools.register(registry)
     for module in (information_definitions, memory_definitions, devices_definitions, files_agents_definitions, life_media_definitions):
         module.register_invokers(registry)
@@ -66,3 +69,43 @@ def build_registry(registry):
     ordered.update(registry)
     registry.clear()
     registry.update(ordered)
+
+
+# The single process registry. Facades and MCP retain this exact identity.
+from core.tool_runtime.state import _TOOL_REGISTRY
+
+if "_BUILTIN_ADAPTERS" not in globals():
+    build_registry(_TOOL_REGISTRY)
+    _BUILTIN_ADAPTERS = {name: spec["invoke"] for name, spec in _TOOL_REGISTRY.items() if "invoke" in spec}
+
+
+from contextlib import contextmanager
+
+
+@contextmanager
+def temporary_registry(entries, *, inherit_builtin_adapters=False):
+    """Scoped test/extension override, preserving identity and restoring on exit.
+
+    Existing calls retain their admitted spec. Only idle, isolated runtimes may
+    replace the full view; production MCP adds/removes individual entries.
+    Builtin signature inheritance is explicit and resolved here, never per call.
+    """
+    previous = dict(_TOOL_REGISTRY)
+    replacements = prepare_overrides(entries, inherit_builtin_adapters=inherit_builtin_adapters)
+    _TOOL_REGISTRY.clear()
+    _TOOL_REGISTRY.update(replacements)
+    try:
+        yield _TOOL_REGISTRY
+    finally:
+        _TOOL_REGISTRY.clear()
+        _TOOL_REGISTRY.update(previous)
+
+
+def prepare_overrides(entries, *, inherit_builtin_adapters=False):
+    """Resolve explicitly requested builtin signatures before publishing specs."""
+    replacements = {name: dict(spec) for name, spec in entries.items()}
+    if inherit_builtin_adapters:
+        for name, spec in replacements.items():
+            if name in _BUILTIN_ADAPTERS:
+                spec.setdefault("invoke", _BUILTIN_ADAPTERS[name])
+    return replacements

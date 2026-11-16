@@ -1,6 +1,8 @@
 """Ticket 260 F: listening tools, music_playback stimulus, feedback-loop suppress."""
 from __future__ import annotations
 
+import core.tool_runtime.policy as tool_policy
+
 import json
 
 import pytest
@@ -86,7 +88,7 @@ def _clear_perceive():
 
 def test_music_control_keeps_listening_tools_off_by_default():
     for name in PLANNED_TOOLS:
-        assert tool_dispatcher._is_tool_enabled(name) is False
+        assert tool_policy._is_tool_enabled(name) is False
 
 
 @pytest.mark.asyncio

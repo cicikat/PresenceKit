@@ -282,7 +282,7 @@ async def test_run_owner_chat_turn_guard_applied(monkeypatch):
     async def _noop_probe(msg, uid, *, char_id=TEST_CHAR_ID, provenance_channel=None):
         return None
 
-    monkeypatch.setattr(_chat, "_probe_and_execute_tools", _noop_probe)
+    monkeypatch.setattr('core.owner_chat.prepare._probe_and_execute_tools', _noop_probe)
 
     # Stub conversation_lock to a no-op async context manager
     from contextlib import asynccontextmanager

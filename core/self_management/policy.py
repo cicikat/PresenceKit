@@ -29,7 +29,7 @@ def global_available(capability_id: str) -> bool:
     if spec is None:
         return False
     if spec.kind == "tool":
-        from core.tool_dispatcher import _is_tool_enabled
+        from core.tool_runtime.policy import _is_tool_enabled
         return bool(_is_tool_enabled(spec.tool_name))
     if spec.kind == "setting":
         # High-risk settings remain observable; their default grant is false

@@ -1,6 +1,8 @@
 """External Tool Contract P0 regressions for Path C and desktop probing."""
 from __future__ import annotations
 
+import core.owner_chat.prepare as _domain_core_owner_chat_prepare
+
 import pytest
 
 
@@ -110,7 +112,7 @@ async def test_desktop_probe_reads_both_buckets_with_frozen_char_id(monkeypatch)
     monkeypatch.setattr("core.self_management.policy.tool_allowed", lambda *args, **kwargs: True)
     monkeypatch.setattr(tool_dispatcher, "get_probe_prompt", _probe_prompt)
     monkeypatch.setattr(llm_client, "chat", _chat)
-    result = await chat._probe_and_execute_tools(
+    result = await _domain_core_owner_chat_prepare._probe_and_execute_tools(
         "你好",
         "u1",
         char_id="frozen_char",
