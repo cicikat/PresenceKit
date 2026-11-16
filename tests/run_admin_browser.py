@@ -33,11 +33,14 @@ def main():
     env = {key: value for key, value in os.environ.items()
            if not any(word in key.upper() for word in ("TOKEN", "SECRET", "GOOGLE", "GMAIL", "API_KEY"))}
     env["ADMIN_TEST_URL"] = f"http://127.0.0.1:{server.server_port}"
+    env["ADMIN_UI_TEST_PHASE"] = "all"
     output = ROOT / ".tmp" / "admin-navigation"
     output.mkdir(parents=True, exist_ok=True)
     try:
         for script in ("admin_navigation_browser.cjs", "admin_acceptance_browser.cjs",
-                       "admin_modularization_browser.cjs"):
+                       "admin_modularization_browser.cjs", "admin_module_layout_browser.cjs",
+                       "admin_ui_versions_browser.cjs", "admin_ui_business_browser.cjs",
+                       "admin_components_browser.cjs"):
             result = subprocess.run([node, str(ROOT / "tests" / script)], cwd=ROOT, env=env,
                                     capture_output=True, text=True, encoding="utf-8", timeout=120)
             (output / f"{script}.log").write_text(result.stdout + result.stderr, encoding="utf-8", newline="\n")

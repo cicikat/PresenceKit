@@ -141,6 +141,7 @@ const origin='http://127.0.0.1:8769';
           return button.getBoundingClientRect().top-n.getBoundingClientRect().bottom;
         });
         assert.ok(spacing>=16,'visible field/save button gap: '+spacing);
+        await page.locator('#xhs-max-images').scrollIntoViewIfNeeded();
         await page.screenshot({path:path.join(output,'tools-spacing.png')});
       }
       await mount('observe-prompt');

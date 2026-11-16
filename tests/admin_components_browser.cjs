@@ -17,6 +17,21 @@ const root=path.resolve(__dirname,'../admin/static');
       return route.fulfill({body:fs.readFileSync(file),contentType:({'.html':'text/html','.js':'text/javascript','.css':'text/css','.woff2':'font/woff2'})[path.extname(file)]||'application/octet-stream'});
     });
     await page.goto('http://127.0.0.1:8769/static/index.html');
+    const contracts=await page.evaluate(async()=>{
+      const missing=[];
+      for(const descriptor of Object.values(AdminPageRegistry.descriptors)) {
+        const root=await loadPageFragment(descriptor.id);
+        if(!root || descriptor.fragment!=='pages/'+descriptor.id+'.html') missing.push(descriptor.id);
+        for(const node of root.querySelectorAll('[data-action]')) {
+          const name=node.dataset.action;
+          if(name!=='focus-element' && typeof window[name]!=='function') missing.push(descriptor.id+':'+name);
+        }
+      }
+      const scripts=[...document.scripts].filter(node=>node.src).map(node=>new URL(node.src).pathname);
+      if(new Set(scripts).size!==scripts.length) missing.push('duplicate-script');
+      return missing;
+    });
+    assert.deepEqual(contracts,[],'registry fragments, action exports and unique scripts');
     const samples=[];
     for(const width of [1440,1024,768,480]) {
       await page.setViewportSize({width,height:1000});
