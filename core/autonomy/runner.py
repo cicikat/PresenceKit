@@ -641,7 +641,8 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
     confirm_available = False
     write_tool_count = 0
     memory_candidates_evaluated = False
-    read_cache: dict[tuple[str, str], tuple[str | None, str]] = {}
+    from core.tool_runtime.read_cache import ReadCache
+    read_cache = ReadCache(job.uid, job.char_id, origin="autonomy")
     deadline = time.monotonic() + max(1.0, float(cfg.get("total_timeout_seconds") or 120))
     try:
         from core import llm_client
@@ -781,18 +782,18 @@ async def _run_locked(job: Job, state: dict, run: Run) -> Run:
                 if name != "manage_self_capability" and _is_write_tool(name) and write_tool_count >= max_write_tools:
                     messages.append({"role": "tool", "tool_call_id": call["id"], "content": "write tool budget exhausted for this autonomy run"})
                     continue
-                cache_key = ((name, json.dumps(args, sort_keys=True, ensure_ascii=False))
-                             if name in {"read_life_records", "list_self_capabilities", "read_self_action_history"} else None)
-                if cache_key is not None and cache_key in read_cache:
-                    result, outcome = read_cache[cache_key]
+                cache_key = read_cache.key(name, args)
+                previous = read_cache.get(cache_key)
+                if previous is not None:
+                    result, outcome = previous
                     _record_event(run, "tool_read_reused", tool_name=name)
                 else:
                     tool_context = replace(intent_run, tools=frozenset(allowed_names)) if intent_run else None
                     with intent_context.activate(tool_context):
                         result, outcome = await _execute_intention_bound_tool(name, args, job, session, cfg, run, tool_context)
-                    if cache_key is not None and outcome == "ok":
-                        read_cache[cache_key] = (result, outcome)
-                    elif name == "manage_self_capability":
+                    if cache_key is not None:
+                        read_cache.put(name, args, (result, outcome), successful=outcome == "ok", expected_key=cache_key)
+                    else:
                         read_cache.clear()
                 run.tool_names.append(name)
                 if outcome == "outcome_unknown": run.disposition = Disposition.TOOL_OUTCOME_UNKNOWN.value; return _finish(run)

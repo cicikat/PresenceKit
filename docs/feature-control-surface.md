@@ -1,3 +1,10 @@
+## 329 事实时效与读取可靠性
+
+无新增运营开关或客户端设置。动态事实沿用 profile 与既有 prompt 层预算；
+`GET /memory/{user_id}/temporal-facts?char_id=...`（`memory.read`）只读返回来源 ID、
+时间、状态与裁决原因，不含正文。生活记录读取沿用原总开关及 character_readable，
+权限关闭明确失败，不变成“没有记录”。详见 [329 交付](refactors/329-memory-temporality-and-read-reliability.md)。
+
 ## 工单56 失败流正文与历史显示（2026-11-15）
 
 无新控制项、默认值或权限。缓冲模型调用失败时，桌面可保留去除思考/工具协议后的已收到正文；执行与回执仍为 failed，不进入成功记忆或工具执行。沿用现有模型路由、调用观测及 stream 消息，历史过滤不改变结构化关联键。[交付与 open 边界](chat-recovery-stream-56.md)。

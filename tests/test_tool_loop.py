@@ -213,7 +213,7 @@ async def test_without_per_turn_exclusion_native_fc_can_call_get_time(monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_same_life_records_query_runs_once_per_chat_turn(monkeypatch):
+async def test_same_life_records_query_runs_once_per_chat_turn(monkeypatch, sandbox):
     _patch_tool_loop_config(monkeypatch, exclude_tools=[])
     _patch_tools_schema(monkeypatch, ["read_life_records"])
     _script_chat_turn(monkeypatch, [
@@ -231,6 +231,77 @@ async def test_same_life_records_query_runs_once_per_chat_turn(monkeypatch):
 
     assert result == "已查到。"
     assert [call["tool_name"] for call in execute_calls] == ["read_life_records"]
+
+
+@pytest.mark.asyncio
+async def test_identical_arguments_different_read_tools_never_share_results(monkeypatch, sandbox):
+    """Catch the 329 collision through the actual owner tool loop."""
+    _patch_tool_loop_config(monkeypatch, exclude_tools=[])
+    names = ["read_life_records", "list_self_capabilities", "read_self_action_history"]
+    _patch_tools_schema(monkeypatch, names)
+    _script_chat_turn(monkeypatch, [
+        *[ChatTurn(content="", tool_calls=[{"id": name, "name": name, "arguments": {}}], assistant_message={}) for name in names],
+        ChatTurn(content="done", tool_calls=[], assistant_message={}),
+    ])
+    executed = _script_execute(monkeypatch, [(f"distinct result {name}", None) for name in names])
+    _patch_final_chat(monkeypatch, text="按实际记录回答。")
+    result = await _make_pipeline().run_agentic_loop([{"role":"user","content":"查生活记录和权限"}], uid="u1", char_id=TEST_CHAR_ID, session_state=object())
+    assert [call["tool_name"] for call in executed] == names
+    assert result == "按实际记录回答。"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("change", ["failure", "permission", "revision"])
+async def test_read_reuse_requires_success_and_unchanged_grants_and_data(monkeypatch, sandbox, change):
+    """Retry failed reads and reexecute when settings/data changed mid-turn."""
+    from core.tool_dispatcher import ToolExecutionOutcome
+    cfg = _patch_tool_loop_config(monkeypatch, exclude_tools=[])
+    _patch_tools_schema(monkeypatch, ["read_life_records"])
+    def turns():
+        yield ChatTurn(content="", tool_calls=[{"id":"one","name":"read_life_records","arguments":{}}], assistant_message={})
+        if change == "permission": cfg["life_records"] = {"character_readable":False}
+        if change == "revision":
+            path = sandbox.life_records_db(char_id=TEST_CHAR_ID);path.parent.mkdir(parents=True, exist_ok=True);path.write_bytes(b"revision changed")
+        yield ChatTurn(content="", tool_calls=[{"id":"two","name":"read_life_records","arguments":{}}], assistant_message={})
+        yield ChatTurn(content="done", tool_calls=[], assistant_message={})
+    _script_chat_turn(monkeypatch, turns())
+    first = ToolExecutionOutcome(status="tool_failed", result="temporarily unavailable") if change == "failure" else ("first result",None)
+    executed = _script_execute(monkeypatch, [first, ("new result", None)])
+    _patch_final_chat(monkeypatch, text="明确说明读取状态。")
+    await _make_pipeline().run_agentic_loop([{"role":"user","content":"查生活记录"}], uid="u1", char_id=TEST_CHAR_ID, session_state=object())
+    assert len(executed) == 2
+
+
+@pytest.mark.asyncio
+async def test_meal_question_keeps_goal_and_real_grocery_details_without_self_db(monkeypatch,sandbox):
+    """Actual dispatcher/storage -> final provider boundary retains goal and quantities.
+
+    Only the model is scripted; real-model acceptance is recorded separately.
+    """
+    from core import life_records
+    cfg=_patch_tool_loop_config(monkeypatch,exclude_tools=[])
+    cfg['scheduler']={'owner_id':'u1'}
+    cfg['life_records']={'enabled':True,'character_readable':True}
+    monkeypatch.setattr(life_records,'get_config',lambda:cfg)
+    life_records.sync('u1','fixture-device',{
+        'owner_id':'u1','operation_id':'grocery-upload','record_id':'grocery-fixture','action':'upsert','base_revision':0,
+        'record':{'category':'cart','occurred_on':'2026-11-14','captured_at':'2026-11-14T12:00:00Z',
+                  'title':'购物食材','items':[],'note':'用户确认：米饭4份，青菜4份，鸡蛋12枚。','user_edited_fields':['note']}},char_id=TEST_CHAR_ID)
+    _patch_tools_schema(monkeypatch,['read_life_records','self_db_tables'])
+    model_calls=_script_chat_turn(monkeypatch,[
+        ChatTurn(content='',tool_calls=[{'id':'index','name':'read_life_records','arguments':{}}],assistant_message={}),
+        ChatTurn(content='',tool_calls=[{'id':'detail','name':'read_life_records','arguments':{'record_id':'grocery-fixture'}}],assistant_message={}),
+        ChatTurn(content='可以根据份量估算。',tool_calls=[],assistant_message={}),
+    ])
+    closing=_patch_final_chat(monkeypatch,text='按每餐各一份米饭青菜和两枚鸡蛋，大约4餐，剩4枚鸡蛋。')
+    question='前些天买的那些东西大概可以吃几餐？每餐米饭青菜各一份、鸡蛋两枚。'
+    result=await _make_pipeline().run_agentic_loop([{'role':'user','content':question}],uid='u1',char_id=TEST_CHAR_ID,session_state=object())
+    assert '4餐' in result
+    final=closing[-1]
+    assert any(row.get('role')=='user' and row.get('content')==question for row in final)
+    evidence='\n'.join(row.get('content','') for row in final if row.get('role')=='tool')
+    assert all(value in evidence for value in ['米饭4份','青菜4份','鸡蛋12枚'])
+    assert any('status=detail' in row.get('content','') for row in final if row.get('role')=='tool')
 
 
 @pytest.mark.asyncio

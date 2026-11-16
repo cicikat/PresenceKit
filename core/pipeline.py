@@ -840,7 +840,7 @@ class Pipeline:
         except Exception as _ste:
             logger.debug("[pipeline.fetch_context] state trace skip: %s", _ste)
 
-        return {
+        fetched_context = {
             "history":             history,
             "profile":             profile,
             "relation":            relation,
@@ -876,6 +876,15 @@ class Pipeline:
             "hardware_jobs_text": _hardware_jobs_text,
             "_state_trace": _state_trace,
         }
+        if not group_id:
+            try:
+                from core.memory.temporal_facts import project
+                fetched_context = await loop.run_in_executor(
+                    None, lambda: project(MemoryScope.reality_scope(uid, char_id), profile, fetched_context),
+                )
+            except Exception as exc:
+                log_error("pipeline.temporal_facts", exc)
+        return fetched_context
 
     # ──────────────────────────────────────────────────────────────────────────
     # 步骤 2：组装 prompt
@@ -1776,7 +1785,8 @@ class Pipeline:
             nonlocal used_tool, successful_tool_call, outcome, tools
             business_steps = 0
             discovery_steps = 0
-            life_record_reads: dict[str, ToolExecutionOutcome] = {}
+            from core.tool_runtime.read_cache import ReadCache
+            life_record_reads = ReadCache(uid, char_id, origin="owner_chat")
             action_receipts: dict[str, ToolExecutionOutcome] = {}
             while business_steps < max_steps:
                 tools = discovery.schemas()
@@ -1819,20 +1829,21 @@ class Pipeline:
                             and is_side_effect_tool(name) and action_key in action_receipts):
                         _record_discovery(category="tool_loop_dedupe", code="action_receipt_reused", status="ok")
                         return action_receipts[action_key]
-                    read_key = (json.dumps(tc["arguments"], sort_keys=True, ensure_ascii=False)
-                                if name in {"read_life_records", "list_self_capabilities", "read_self_action_history"} else None)
-                    if read_key is not None and read_key in life_record_reads:
-                        previous = life_record_reads[read_key]
+                    read_key = life_record_reads.key(name, tc["arguments"])
+                    previous = life_record_reads.get(read_key)
+                    if previous is not None:
                         _record_discovery(category="tool_loop_dedupe", code="same_read_reused", status="ok",
                                           context={"tool": name})
-                        return previous
+                        return ToolExecutionOutcome(status=previous.status, result=(previous.result or "") + _pt(
+                            "\n同一查询本轮已经读取，数据版本未变，没有新增证据。需要继续时使用返回的记录 ID、分页位置或新的筛选条件。"))
                     tool_outcome = await _execute_with_ephemeral_status(
                         tc["id"], name, tc["arguments"], index=index, total=total, origin=origin,
                     )
                     action_receipts[action_key] = tool_outcome
-                    if read_key is not None and tool_outcome.status != "outcome_unknown":
-                        life_record_reads[read_key] = tool_outcome
-                    elif name in {"manage_self_capability", "revise_memory", "revise_user_profile"}:
+                    if read_key is not None:
+                        life_record_reads.put(name, tc["arguments"], tool_outcome, successful=tool_outcome.status == "tool_executed", expected_key=read_key)
+                    else:
+                        # Any intervening action can change data or grants.
                         life_record_reads.clear()
                     return tool_outcome
 
@@ -2045,6 +2056,11 @@ class Pipeline:
         # natural（用过工具）或 exhausted：强制收尾，注入声音锚定，走不带 tools 的出口。
         # 工具已关闭，收尾生成不得再携带鼓励输出 relay 标记的专用指令。
         loop_msgs[:] = _drop_relay_nudge(loop_msgs)
+        if kind == "exhausted":
+            loop_msgs.append({"role": "system", "content": _pt(
+                "检索执行状态：本轮预算已耗尽。请围绕用户原始问题，基于已返回的证据回答；"
+                "能估算则说明假设，不能得出结论则说明已查到什么、还缺什么。不得将未查到等同于不存在，也不要替换用户的任务目标。"),
+                "_layer": "11_tool_grounding"})
         loop_msgs.append({"role": "system", "content": _voice_reanchor(char_id)})
 
         def _closing_candidate(closing: str) -> str:

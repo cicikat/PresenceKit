@@ -13,6 +13,14 @@ from admin.auth import require_scopes
 router = APIRouter()
 
 
+@router.get("/{user_id}/temporal-facts", summary="读取动态事实时效裁决（不含正文）")
+async def get_temporal_facts(user_id: str, char_id: str | None = None,
+                             auth=Depends(require_scopes("memory.read"))):
+    from core.memory.scope import MemoryScope
+    from core.memory.temporal_facts import observe
+    return observe(MemoryScope.reality_scope(user_id, _resolve_char_id(char_id)))
+
+
 @router.get("/{user_id}/event-store", summary="读取 Memory Event 账本 schema 状态")
 async def get_event_store_status(
     user_id: str,

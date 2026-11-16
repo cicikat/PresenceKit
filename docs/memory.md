@@ -4,6 +4,15 @@
 
 # docs/memory.md — 记忆子系统设计
 
+329：动态事实时效复用 scoped profile 的 `temporal_facts`，不新建记忆库。
+真实 owner 的明确自述在 capture 后幂等追加；fetch 在原检索后按发生时间、证据权威、
+生效/失效与替代关系投影当前状态，原始历史不删。计划、推断、外部来源、低置信语音
+不覆盖当前事实；压缩或晚入库不能把旧状态重新升级。metadata-only 观测为
+`GET /memory/{user_id}/temporal-facts?char_id=...`（`memory.read`）。边界、前向兼容、
+回滚和验证见 [329 交付](refactors/329-memory-temporality-and-read-reliability.md)。
+管理员原有 profile 地点/职业编辑保留明确优先更新语义；画像/情景/dossier 工具与
+聊天检索共用时效投影。被撤回的来源不再作为当前依据，证据不可用则未知。
+
 工单 286：mid_term 存储合同不变；prompt 只补充本轮所选 history 未覆盖的来源回合。
 有 source_turn_id 时精确去重，缺少血缘时仅过滤可证实的正文重复，不按整个历史时间跨度
 删掉中间未选中的回合。按 occurred_at 排序（旧数据回退 ts），逐条完整日期时间，

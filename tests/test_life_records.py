@@ -298,6 +298,36 @@ async def test_character_reads_description_only_with_owner_permission(client,mon
     assert '可读账单内容' in result.raw_data
     assert '用户备注和校正优先' in result.safe_summary
     cfg['life_records']['character_readable']=False
-    assert '未开放' in await _domain_core_tools_life_media_definitions._life_records_wrapper('owner')
+    denied = await _domain_core_tools_life_media_definitions._life_records_wrapper('owner')
+    assert '未开放' in denied.safe_summary and denied.meta['execution_status'] == 'failed'
     cfg['life_records']['character_readable']=True
-    assert '未开放' in await _domain_core_tools_life_media_definitions._life_records_wrapper('someone_else')
+    denied = await _domain_core_tools_life_media_definitions._life_records_wrapper('someone_else')
+    assert '未开放' in denied.safe_summary and denied.meta['execution_status'] == 'failed'
+
+
+@pytest.mark.asyncio
+async def test_character_index_detail_and_cursor_keep_food_evidence_without_a_ledger(client,sandbox,monkeypatch):
+    """329: index has usable cursors; quantities are in details, not a self_db prerequisite."""
+    import re
+    cfg={'scheduler':{'owner_id':'owner'},'life_records':{'enabled':True,'character_readable':True}}
+    monkeypatch.setattr('core.config_loader.get_config',lambda:cfg)
+    monkeypatch.setattr(store,'get_config',lambda:cfg)
+    for index in range(6):
+        body=operation(record_id=f'groceries-{index}',operation_id=f'upload-{index}')
+        body['record'].update(category='cart',title='购物食材',note='鸡蛋12枚，米饭4份，青菜4份。'+('一人份。'*300 if index==0 else ''))
+        store.sync('owner','device',body,char_id='fixture_food')
+    first=await _domain_core_tools_life_media_definitions._life_records_wrapper('owner',category='cart',char_id='fixture_food')
+    assert len(json.loads(first.raw_data)['records'])==4
+    cursor=re.search(r'next_cursor=(\S+)；',first.safe_summary).group(1)
+    second=await _domain_core_tools_life_media_definitions._life_records_wrapper('owner',category='cart',cursor=cursor,char_id='fixture_food')
+    ids={row['id'] for result in [first,second] for row in json.loads(result.raw_data)['records']}
+    assert ids=={f'groceries-{index}' for index in range(6)}
+    detail=await _domain_core_tools_life_media_definitions._life_records_wrapper('owner',record_id='groceries-0',char_id='fixture_food')
+    assert '鸡蛋12枚' in detail.safe_summary
+    assert 'next_offset=1400' in detail.safe_summary
+    continuation=await _domain_core_tools_life_media_definitions._life_records_wrapper('owner',record_id='groceries-0',offset=1400,char_id='fixture_food')
+    assert 'next_offset=None' in continuation.safe_summary
+    empty=await _domain_core_tools_life_media_definitions._life_records_wrapper('owner',query='not-present',char_id='fixture_food')
+    assert 'status=empty' in empty.safe_summary and '不是全部生活记录不存在' in empty.safe_summary
+    missing=await _domain_core_tools_life_media_definitions._life_records_wrapper('owner',record_id='missing',char_id='fixture_food')
+    assert 'status=not_found' in missing.safe_summary and missing.meta['execution_status']=='failed'

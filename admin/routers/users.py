@@ -123,6 +123,22 @@ async def update_user_profile(
     for k, v in body.items():
         profile[k] = v
     user_profile.save(user_id, profile, char_id=resolved)
+    # Preserve explicit admin edits as dated assertions too. Periodic LLM
+    # writers do not use this route and cannot promote stale scalar summaries.
+    if "temporal_facts" not in body:
+        from core.memory.scope import MemoryScope
+        from core.memory.temporal_facts import claim, record
+        import time
+        import uuid
+        claims = []
+        for field, topic in (("location", "residence"), ("occupation", "employment")):
+            if field in body:
+                value = str(body[field] or "").strip()[:500] or "未知（管理员已清空）"
+                claims.append(claim(topic, value, source_id="admin-profile:" + uuid.uuid4().hex,
+                                    occurred_at=time.time(), source="admin"))
+        if claims:
+            record(MemoryScope.reality_scope(user_id, resolved), claims)
+            profile = user_profile.load(user_id, char_id=resolved)
     return {"message": f"用户 {user_id} 画像已更新", "char_id": resolved, "profile": profile}
 
 

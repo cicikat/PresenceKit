@@ -1,7 +1,8 @@
 """Static registry: which module owns each prompt layer and how strong its claim is.
 
-Pure constants, no IO.  Used by ``core.state_composer`` (shadow observation
-only).  ``KNOWN_LAYERS`` in ``core.prompt_builder`` is the universe; a test
+Pure constants, no IO. Used by ``core.state_composer`` (shadow observation)
+and temporal fact adjudication (live event-time conflict resolution).
+``KNOWN_LAYERS`` in ``core.prompt_builder`` is the universe; a test
 asserts every known layer is registered here.
 """
 from __future__ import annotations
@@ -11,6 +12,9 @@ AUTHORITIES = (
     "user_stated_fact", "derived_compat", "narrative", "ambient",
     "character_self", "system",
 )
+# Shared ordering for explicit temporal-claim adjudication as well as shadow
+# reporting. Event time is compared first; ingest time never grants authority.
+AUTHORITY_PRIORITY = {"canonical_evidence": 3, "user_stated_fact": 2, "derived_compat": 0}
 LINEAGES = ("event_ids", "days_only", "none")
 
 

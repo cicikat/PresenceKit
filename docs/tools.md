@@ -6,6 +6,12 @@
 
 # docs/tools.md — 工具系统
 
+329：`read_life_records` 的 `cursor` 续索引、`record_id/offset` 读详情及正文续页；
+结果区分索引、empty、detail、denied、not_found，不把空筛选当作全部资料不存在。
+购物数量/份量可直接支撑生活问题分析，不要求先创建 self_db。聊天和自主链共用轮内
+成功结果复用规则：工具名+参数+uid/角色/origin+授权/数据版本，失败或不确定结果不缓存。
+来源与实际模型验收见 [329 交付](refactors/329-memory-temporality-and-read-reliability.md)。
+
 AR-02（327）：`core/tool_dispatcher.py` 保留向外稳定入口，内部不反查 Facade；
 `core/tool_runtime/state.py` 唯一持有注册表，`registry.py` 组合域注册及显式覆盖。
 `core/tool_runtime/` 分担暴露、准入、参数校验、执行与结果。
