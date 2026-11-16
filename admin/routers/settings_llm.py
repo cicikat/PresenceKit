@@ -84,12 +84,18 @@ def _get_chat_preset_params(cfg: dict) -> dict:
 @router.get("/llm-params", summary="获取 LLM 生成参数")
 async def get_llm_params(auth=Depends(require_scopes("admin"))):
     """读取当前 chat preset 的生成参数。"""
-    params = _get_chat_preset_params(get_config())
+    cfg = get_config()
+    params = _get_chat_preset_params(cfg)
+    mp = cfg.get("model_presets") or {}
+    profiles = mp.get("routing_profiles") or {}
+    profile = profiles.get(mp.get("active_routing", "default")) or next(iter(profiles.values()), {})
+    preset = (mp.get("presets") or {}).get(_chat_preset_name(mp, profile), {})
     return {
         "temperature":       float(params.get("temperature",       0.7)),
         "top_p":             float(params.get("top_p",             0.9)),
         "max_tokens":        int(params.get("max_tokens",          1000)),
         "frequency_penalty": float(params.get("frequency_penalty", 0.0)),
+        "frequency_penalty_supported": preset.get("api_protocol") != "gemini_generate_content",
     }
 
 
@@ -118,6 +124,11 @@ async def update_llm_params(body: LlmParamsUpdate, auth=Depends(require_scopes("
         preset_name = _chat_preset_name(mp, profile)
         if preset_name and preset_name in mp.get("presets", {}):
             mp["presets"][preset_name].setdefault("params", {}).update(updates)
+            from core.llm_gemini_protocol import validate_preset
+            try:
+                validate_preset(mp["presets"][preset_name])
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
         target_params = mp.get("presets", {}).get(preset_name, {}).get("params", {})
     else:
         raise HTTPException(
@@ -239,7 +250,7 @@ class ModelDiscoveryRequest(BaseModel):
     api_key: str = ""
     preset_name: Optional[str] = None
     use_base_model: bool = False
-    api_protocol: Literal["chat_completions", "responses", "anthropic_messages", "systemone"] = "chat_completions"
+    api_protocol: Literal["chat_completions", "responses", "anthropic_messages", "systemone", "gemini_generate_content"] = "chat_completions"
     anthropic_auth_mode: Literal["x_api_key", "bearer"] = "x_api_key"
 
 
@@ -258,11 +269,11 @@ async def discover_models(body: ModelDiscoveryRequest, auth=Depends(require_scop
         if saved is None:
             raise HTTPException(404, "模型连接不存在")
     try:
-        requested_url = catalogue_url(body.base_url)
+        requested_url = catalogue_url(body.base_url, body.api_protocol)
         key = body.api_key.strip()
         if not key and saved.get("api_key"):
             # Editing the address must not forward the saved credential to a new destination.
-            if requested_url != catalogue_url(saved.get("base_url", "")):
+            if requested_url != catalogue_url(saved.get("base_url", ""), saved.get("api_protocol", "chat_completions")):
                 return {"status": "key_required", "models": []}
             key = saved["api_key"]
         return await discover(body.base_url, key, body.api_protocol, body.anthropic_auth_mode)
@@ -1291,8 +1302,13 @@ async def upsert_preset(name: str, body: PresetUpsert, auth=Depends(require_scop
         existing["params"] = update_data.pop("params")
 
     existing.update(update_data)
-    if existing.get("force_stream") and existing.get("api_protocol", "chat_completions") != "chat_completions":
-        raise HTTPException(status_code=422, detail="强制流式请求目前仅支持 Chat Completions 协议。")
+    from core.llm_gemini_protocol import validate_preset
+    try:
+        validate_preset(existing)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if existing.get("force_stream") and existing.get("api_protocol", "chat_completions") not in {"chat_completions", "gemini_generate_content"}:
+        raise HTTPException(status_code=422, detail="强制流式请求支持 Chat Completions 与 Gemini generateContent。")
     if existing.get("api_protocol", "chat_completions") != "chat_completions" and (
         existing.get("stream_compatibility", "strict") != "strict" or existing.get("protocol_recovery", "off") != "off"
     ):

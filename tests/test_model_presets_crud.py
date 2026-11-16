@@ -99,6 +99,31 @@ def test_force_stream_roundtrip_and_protocol_guard(admin_client):
     assert response.json()["preset"]["force_stream"] is False
 
 
+def test_native_gemini_preset_roundtrip_and_validation(admin_client):
+    client, path = admin_client
+    _write_cfg(path)
+    route = "/model-presets/presets/native-gemini"
+    native = {"provider_kind": "gemini", "api_protocol": "gemini_generate_content",
+              "base_url": "https://native.invalid/v1beta", "model": "fixture-model",
+              "api_key": "synthetic-native-secret", "force_stream": True, "params": {"top_k": 20}}
+    response = client.put(route, json=native, headers=_auth())
+    assert response.status_code == 200
+    saved = yaml.safe_load(path.read_text(encoding="utf-8"))["model_presets"]["presets"]["native-gemini"]
+    assert saved["api_protocol"] == "gemini_generate_content" and saved["force_stream"] is True
+    assert saved["params"] == {"top_k": 20}
+    assert "synthetic-native-secret" not in response.text
+    before = path.read_bytes()
+    for invalid in ({"provider_kind": "openai"}, {"base_url": "https://native.invalid/v1beta/openai"},
+                    {"params": {"unsupported_native_option": 1}}, {"params": {"top_k": -1}}):
+        assert client.put(route, json=invalid, headers=_auth()).status_code == 422
+        assert path.read_bytes() == before
+    assert client.put('/model-presets/routing-profiles/default', json={'chat':'native-gemini'}, headers=_auth()).status_code == 200
+    before = path.read_bytes()
+    assert client.put('/llm-params', json={'frequency_penalty':0.2}, headers=_auth()).status_code == 422
+    assert path.read_bytes() == before
+    assert client.put('/llm-params', json={'temperature':0.3}, headers=_auth()).status_code == 200
+
+
 def test_stream_compatibility_and_recovery_roundtrip(admin_client, monkeypatch):
     """Operators can hot-update and disable policy without changing credentials."""
     client, path = admin_client

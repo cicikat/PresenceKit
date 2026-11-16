@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import Any, AsyncIterator
 
 
-VALID_API_PROTOCOLS = frozenset({"chat_completions", "responses", "anthropic_messages", "systemone"})
+VALID_API_PROTOCOLS = frozenset({"chat_completions", "responses", "anthropic_messages", "systemone", "gemini_generate_content"})
 VALID_ANTHROPIC_AUTH_MODES = frozenset({"x_api_key", "bearer"})
 
 
@@ -1004,6 +1004,9 @@ async def _create(
 ) -> NormalizedResponse:
     """Call the declared wire protocol and normalize its response."""
     protocol = _protocol(mc)
+    if protocol == "gemini_generate_content":
+        from core.llm_gemini_protocol import generate
+        return await generate(mc, messages, tools=tools, tool_choice=tool_choice, gen_kwargs=gen_kwargs, capture=capture)
     if protocol == "chat_completions":
         kwargs = dict(gen_kwargs)
         try:
@@ -1289,6 +1292,11 @@ async def _stream_text(
     capture,
 ) -> AsyncIterator[str]:
     """Yield text deltas while validating the declared protocol's stream state."""
+    if _protocol(mc) == "gemini_generate_content":
+        from core.llm_gemini_protocol import stream_text as gemini_stream
+        async for text in gemini_stream(mc, messages, gen_kwargs=gen_kwargs, capture=capture):
+            yield text
+        return
     if _protocol(mc) == "chat_completions":
         try:
             wire_messages = chat_completions_input(messages)

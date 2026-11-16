@@ -1,5 +1,10 @@
 ## 330 自动记账
 
+第一轮 Gemini 原生文本：模型预设显式选择 gemini_generate_content/provider_kind=gemini，
+创建、编辑、JSON 导入、目录、测试与保存沿原管理面入口。force_stream 同时支持此协议。
+配置热重载只影响新回合，原协议默认不变。`/llm-params` 新增
+frequency_penalty_supported；原生 Gemini 为 false，管理页不发送该不支持参数。
+
 第一轮记忆恢复观测：`GET /observability/memory-task-outbox`（state.read）只返回状态计数、
 最早积压时间、容量1000与重试上限3；恢复仅作用于幂等记忆任务，不增加运营开关。
 

@@ -63,3 +63,17 @@ def test_route_requires_admin(monkeypatch):
     app = FastAPI()
     app.include_router(router)
     assert TestClient(app).post('/model-presets/discover', json={'base_url': 'https://example.invalid'}).status_code == 401
+
+
+async def test_native_gemini_catalogue_uses_header_and_native_models(monkeypatch):
+    client = AsyncMock()
+    client.__aenter__.return_value = client
+    client.get.return_value = httpx.Response(200, json={"models": [
+        {"name": "models/text-fixture", "supportedGenerationMethods": ["generateContent"]},
+        {"name": "models/embed-fixture", "supportedGenerationMethods": ["embedContent"]},
+    ], "nextPageToken": "next"})
+    monkeypatch.setattr('core.model_registry._make_http_client', lambda *a, **kw: client)
+    result = await discover('https://native.invalid/v1beta', 'synthetic-key', 'gemini_generate_content', 'x_api_key')
+    assert result == {"status": "ok", "models": ["text-fixture"], "has_more": True}
+    assert client.get.call_args.args[0] == 'https://native.invalid/v1beta/models'
+    assert client.get.call_args.kwargs['headers'] == {"x-goog-api-key": "synthetic-key"}

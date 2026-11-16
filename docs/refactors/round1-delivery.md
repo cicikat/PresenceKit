@@ -82,6 +82,21 @@ mobile `09809d44fea621a0b329ca6e5faac490b466752f`。
 - 未完成：vector 缺失补偿、reflect/identity 的持久恢复、逐投影完整故障矩阵与恢复 manifest。
   状态：partially verified；真实模型/生产端到端 not verified。
 
+## F1：Gemini 原生文本
+
+- 基线：旧边界拒绝 gemini_generate_content；首批11项回归中7项业务失败，其余拒绝场景
+  在未接入协议时不能当成功证据。实现后全部通过。
+- 实现：显式原生 REST、x-goog-api-key、系统提示/参数/usage、严格 SSE 完成态、
+  多函数校验/重复ID处理、原始签名续轮、错误脱敏；禁止跟随重定向转发凭据。
+  模型 registry、原子配置校验、目录、管理面创建/编辑/JSON/流式/连接测试闭环。
+- 验证：Python3.12.13 协议/预设/CRUD/目录/旧协议 162 passed；此前含 failover、client reload、
+  字面姓名和换行守卫的组合 205 passed。实际 chat_turn 续轮覆盖 sanitize 后签名保留。
+- 浏览器：`tests/round1_gemini_browser.cjs`，Edge headless，清缓存并重载；真实静态资产与控件，
+  API为合成边界；验证导入、未知协议拒绝、保存请求、编辑密钥遮罩、连接测试显示。
+  截图 `.tmp/round1-gemini-admin.png`（本地可重建产物）。
+- 当前配置没有官方样式 Gemini 凭据，未进行官方计费调用；不拿兼容网关配置冒充官方连接。
+  合成/管理面 verified；真实模型、打包客户端、生产端到端 not verified；总体 partially verified。
+
 ## 删除 brief 候选（未授权，不执行）
 
 后续单独评估退役 `/system/meta-mode` 与危险模式的过期文档/守卫；

@@ -1,5 +1,10 @@
 ## 330 自动记账（current / observe）
 
+第一轮原生 Gemini（current / observe）：后端独立文本 preset，不扩展桌面/手机消息协议；
+双端继续选择既有 routing profile，预设配置由后端管理面持有。admin-only `/llm-params`
+增加 frequency_penalty_supported（原生 Gemini=false），不授权客户端读取密钥。
+官方模型冒烟未执行（无可用官方凭据），联合 CI 与生产仍 not_verified。
+
 第一轮主动投递回执（observe）：后端新增只读 `/observability/autonomy-deliveries`
 （state.read，当前 owner/char，无正文）。accepted 为通道接受，客户端送达/ACK 接线仍 open，
 不改变 desktop WS / mobile poll ACK 字段，也不重发已消费候选。
