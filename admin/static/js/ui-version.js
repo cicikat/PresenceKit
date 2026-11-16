@@ -4,6 +4,7 @@ const AdminUI = (() => {
   let version = 'new';
   try { if (localStorage.getItem(key) === 'legacy') version = 'legacy'; } catch (_) {}
   let observer = null;
+  let transition = Promise.resolve();
   const components = AdminPresentation.components;
   function mount(root) {
     if (version !== 'new') return;
@@ -48,10 +49,12 @@ const AdminUI = (() => {
     version = value === 'new' ? 'new' : 'legacy';
     try { localStorage.setItem(key, version); } catch (_) {}
     apply();
-    AdminPageLayout.selected().catch(error => console.error('[admin] page layout failed', error));
+    transition = AdminPageLayout.selected();
+    transition.catch(error => console.error('[admin] page layout failed', error));
+    return transition;
   }
   document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('admin-ui-version')?.addEventListener('change', e => select(e.target.value)); apply();
   });
-  return {apply, select, mount, components, get version() { return version; }};
+  return {apply, select, mount, components, whenSettled: () => transition, get version() { return version; }};
 })();

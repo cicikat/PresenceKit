@@ -197,3 +197,19 @@ to `#page-character-behavior` (display:none while Feature Center was active), so
 rectangles were zero despite 16px field margin. Navigating to the actual owner makes
 the existing >=16px assertion pass. CSS gap is preserved at baseline; no reduced
 threshold and no cosmetic workaround. Full business runner now completes successfully.
+
+## E: aggregate data and node ownership
+
+`admin-page-data.js` now owns aggregate domain reads, loading protection, retry and
+source initialization. Layout retains mapping, original-node movement/restoration,
+section order and generation. Existing public `AdminPageLayout.load*` names are
+thin compatibility facades to one controller; the layout contains no domain loader
+maps. Mode transitions expose `AdminUI.whenSettled()` for deterministic integration
+and tests. UI/i18n/copy use the existing batched observer factory, with separate
+subscriber lifetimes and projection scopes; no per-component observers were added.
+Original fields and source-page visited markers remain the state owner.
+
+Verification: complete navigation, acceptance and 268 page projections pass after
+the split; module layout regression covers source-node restoration and real navigation.
+Remaining compatibility debt: classic domain functions and async internal renderers
+still exist; this is incremental native-component migration, not an ES module rewrite.
