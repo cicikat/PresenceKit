@@ -1001,6 +1001,11 @@ minecraft:
   reaction_calls_per_session: 120
   reaction_cooldown_seconds: 5
 
+# 财务候选同步及角色读取，管理面服务配置可热更新。关闭保留已存数据。
+finance_ingest:
+  enabled: false
+  character_readable: false
+
 # Jev 原生预设示例：添加至 model_presets.presets；不能用作聊天/default_preset。
 # jev:
 #   provider_kind: openai

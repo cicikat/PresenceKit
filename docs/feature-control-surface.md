@@ -1,3 +1,7 @@
+## 330 自动记账
+
+服务配置的自动记账卡片控制 `finance_ingest.enabled` 与 `character_readable`，默认均关闭。GET/PUT `/settings/finance` 为 admin-only 热更新，返回 effective 与默认关闭的配置；关闭停止同步及角色读取，保留既有账本。`GET /observability/finance`（state.read）提供无正文计数。手机收集开关独立且按 origin+owner 隔离，不能替代后端 enabled；桌面无新原生消费者。数据、权限、错误/恢复合同见 [finance-ingest.md](finance-ingest.md)。
+
 ## 329 事实时效与读取可靠性
 
 无新增运营开关或客户端设置。动态事实沿用 profile 与既有 prompt 层预算；

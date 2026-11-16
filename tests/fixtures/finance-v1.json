@@ -1,0 +1,14 @@
+{
+  "notification": {"package": "com.tencent.mm", "title": "微信支付", "text": "支付成功16.00元 商户：测试店"},
+  "operation": {
+    "operation_id": "fixture-operation", "candidate_id": "fixture-candidate", "base_revision": 0,
+    "record": {
+      "candidate_id": "fixture-candidate", "source_app": "com.tencent.mm",
+      "source_event_key": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "fingerprint": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "occurred_at": 1794801600000, "observed_at": 1794801601000, "timezone_offset_minutes": 480,
+      "direction": "expense", "amount_minor": 1600, "currency": "CNY", "merchant": "测试店",
+      "category": null, "confidence": "medium", "reason_codes": ["rule_v1", "payment_signal"], "status": "candidate"
+    }
+  }
+}

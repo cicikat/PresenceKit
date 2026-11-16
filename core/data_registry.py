@@ -108,6 +108,7 @@ REGISTRY: dict[str, PathMeta] = {
     "life_records_db":        PathMeta("canonical", "reality",         "per_char",      "ignore"),
     "legacy_life_records_db": PathMeta("archive", "reality",           "global",        "ignore"),
     "food_memory_db":         PathMeta("canonical", "reality",         "global",        "ignore"),
+    "finance_db":             PathMeta("canonical", "reality",         "global",        "ignore"),
     "quote_notebook_db":      PathMeta("canonical", "reality",         "global",        "ignore"),
     "drinking_state":         PathMeta("runtime",   "reality",         "per_char",      "ignore"),
     "mail_execution_log":     PathMeta("forensic",  "shared",          "global",        "ignore"),

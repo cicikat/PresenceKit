@@ -666,6 +666,10 @@ class DataPaths:
         """Unassigned old records, available only for explicit migration."""
         return self._p("runtime", "life_records", "records.sqlite3")
 
+    def finance_db(self) -> Path:
+        """Owner ledger, shared across characters; protected by backup inventory."""
+        return self._p("runtime", "finance", "ledger.sqlite3")
+
     def food_memory_db(self) -> Path:
         return self._p("runtime", "food_memory", "records.sqlite3")
 
