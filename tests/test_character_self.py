@@ -329,7 +329,7 @@ def test_creating_python_is_not_a_process_grant(sandbox):
 
 @pytest.mark.asyncio
 async def test_tools_are_discoverable_and_not_danger_gated(sandbox, monkeypatch):
-    monkeypatch.setattr(tool_dispatcher, "_is_tool_enabled", lambda _: True)
+    monkeypatch.setattr('core.tool_runtime.policy._is_tool_enabled', lambda _: True)
 
     schemas = tool_dispatcher.get_tools_schema(categories=["self"])
     names = {(item.get("function") or {}).get("name") for item in schemas}
@@ -372,7 +372,7 @@ async def test_tools_are_discoverable_and_not_danger_gated(sandbox, monkeypatch)
 
 @pytest.mark.asyncio
 async def test_model_cannot_inject_principal(sandbox, monkeypatch):
-    monkeypatch.setattr(tool_dispatcher, "_is_tool_enabled", lambda _: True)
+    monkeypatch.setattr('core.tool_runtime.policy._is_tool_enabled', lambda _: True)
     _create("notes/x.md", "x")
     result = await tool_dispatcher.execute_structured(
         "self_read",
@@ -428,7 +428,7 @@ def test_restore_wrong_revision_and_realm_isolation(sandbox):
 
 @pytest.mark.asyncio
 async def test_self_delete_does_not_ask_user_confirm(sandbox, monkeypatch):
-    monkeypatch.setattr(tool_dispatcher, "_is_tool_enabled", lambda _: True)
+    monkeypatch.setattr('core.tool_runtime.policy._is_tool_enabled', lambda _: True)
     created = _create("notes/tmp.md", "tmp")
     result = await tool_dispatcher.execute_structured(
         "self_delete",

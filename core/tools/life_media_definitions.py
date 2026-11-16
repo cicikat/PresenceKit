@@ -4,8 +4,8 @@ Domain implementations and trusted invocation bindings have one owner.
 """
 
 from core.perception.ambient_state import read_tool as _get_ambient_state
-from core.tools.devices_definitions import _push_desktop_action
-from core.config_loader import get_config
+from core.tools import devices_definitions
+from core import config_loader
 from core.tools.garden_tools import water_garden
 
 
@@ -43,7 +43,7 @@ async def _play_song_wrapper(song_name: str = "", artist: str = "") -> str:
         real_name = song.get("name", song_name)
         artists = "/".join(a.get("name", "") for a in song.get("artists", []))
 
-        result = await _push_desktop_action({
+        result = await devices_definitions._push_desktop_action({
             "type": "play_netease",
             "song_id": song_id,
         })
@@ -88,7 +88,7 @@ async def _life_records_wrapper(user_id: str, category: str = "", date_from: str
     from datetime import date
     from core import life_records
     from core.tools.tool_result import ToolResult, sanitize_for_prompt
-    owner = str(get_config().get("scheduler", {}).get("owner_id", ""))
+    owner = str(config_loader.get_config().get("scheduler", {}).get("owner_id", ""))
     cfg = life_records.settings()
     if user_id != owner or not cfg['enabled'] or not cfg['character_readable']:
         return "生活记录未开放角色读取。"

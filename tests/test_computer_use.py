@@ -820,7 +820,7 @@ async def test_owner_probe_exposes_computer_use_and_explains_missing_desktop_gra
     from core.pretool_router import route_pretool
     from core.session_state import SessionState
 
-    monkeypatch.setattr(tool_dispatcher, "get_active_char_name", lambda: "Fixture")
+    monkeypatch.setattr('core.character_name_provider.get_active_char_name', lambda: "Fixture")
     seen = []
 
     async def probe(messages, schemas, char_id):

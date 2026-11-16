@@ -482,13 +482,13 @@ def test_tool_loop_active_gating(monkeypatch):
     # 而不是 core.config_loader.get_config 本体。
     monkeypatch.setattr("core.model_registry.get_model_client", lambda cat: _FakeMcFc())
 
-    monkeypatch.setattr("core.tool_dispatcher.get_config", lambda: _cfg(enabled=False))
+    monkeypatch.setattr('core.config_loader.get_config', lambda: _cfg(enabled=False))
     assert tool_loop_active("u1") is False  # 总开关关
 
-    monkeypatch.setattr("core.tool_dispatcher.get_config", lambda: _cfg(enabled=True, owner="u2"))
+    monkeypatch.setattr('core.config_loader.get_config', lambda: _cfg(enabled=True, owner="u2"))
     assert tool_loop_active("u1") is False  # 非 owner
 
-    monkeypatch.setattr("core.tool_dispatcher.get_config", lambda: _cfg(enabled=True, owner="u1"))
+    monkeypatch.setattr('core.config_loader.get_config', lambda: _cfg(enabled=True, owner="u1"))
     assert tool_loop_active("u1") is True  # 三项全满足
 
     monkeypatch.setattr("core.model_registry.get_model_client", lambda cat: _FakeMcXml())
@@ -513,7 +513,7 @@ def test_tool_loop_active_character_override(monkeypatch):
         tool_call_mode = "function_calling"
 
     monkeypatch.setattr(
-        "core.tool_dispatcher.get_config",
+        'core.config_loader.get_config',
         lambda: {"tool_loop": {"enabled": False}, "scheduler": {"owner_id": "u1"}},
     )
     monkeypatch.setattr("core.model_registry.get_model_client", lambda cat: _FakeMcFc())
@@ -525,7 +525,7 @@ def test_tool_loop_active_character_override(monkeypatch):
     assert tool_loop_active("u1") is False
 
     monkeypatch.setattr(
-        "core.tool_dispatcher.get_config",
+        'core.config_loader.get_config',
         lambda: {"tool_loop": {"enabled": True}, "scheduler": {"owner_id": "u1"}},
     )
     pipeline_registry.register(_Pipeline(_Char({})))

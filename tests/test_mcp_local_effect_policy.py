@@ -258,7 +258,7 @@ async def test_local_policy_ui_label_is_registered_without_using_remote_metadata
 
 
 def test_categories_mcp_exposes_no_local_tools(monkeypatch):
-    monkeypatch.setattr(td, "_is_tool_enabled", lambda name: True)
+    monkeypatch.setattr('core.tool_runtime.policy._is_tool_enabled', lambda name: True)
     td._TOOL_REGISTRY["mcp__srv1__read"] = {
         "description": "", "parameters": {}, "category": "mcp", "dangerous": False,
         "effect": "read",

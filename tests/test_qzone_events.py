@@ -186,7 +186,7 @@ def test_permission_matrix_honors_explicit_disable_and_global_switch(source, mon
     from core.self_management import policy as self_policy
     monkeypatch.setattr(self_policy, "effective", lambda *args: (True, None))
     monkeypatch.setattr("core.deployment_capabilities.tool_allowed", lambda name: (True, ""))
-    monkeypatch.setattr(tool_dispatcher, "_is_tool_enabled", lambda name: True)
+    monkeypatch.setattr('core.tool_runtime.policy._is_tool_enabled', lambda name: True)
     monkeypatch.setattr(tool_dispatcher, "get_tools_schema", lambda **scope: [
         {"type": "function", "function": {"name": name}}
         for name in ["qzone_comment", "qzone_set_like", "qzone_publish", "qzone_delete_post", "qzone_get_posts"]])

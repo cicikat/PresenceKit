@@ -29,7 +29,7 @@ async def test_real_pin_handle_survives_autonomy_and_chat_clipping(sandbox, monk
         'func': action, 'description': 'fixture', 'category': 'memory',
         'parameters': {}, 'trace_result': True,
     })
-    monkeypatch.setattr(dispatcher, '_is_tool_enabled', lambda name: True)
+    monkeypatch.setattr('core.tool_runtime.policy._is_tool_enabled', lambda name: True)
     outcome = await dispatcher.execute_structured(
         'fixture_pin', {}, 'u', 'u', False, object(),
         origin='assistant_loop', char_id='c',
@@ -57,7 +57,7 @@ def test_autonomy_reminds_reuse_and_only_exposed_pin_tool():
 async def test_bad_pin_id_recovers_through_live_candidate_list(sandbox, monkeypatch):
     from core import tool_dispatcher as dispatcher
 
-    monkeypatch.setattr(dispatcher, '_is_tool_enabled', lambda name: True)
+    monkeypatch.setattr('core.tool_runtime.policy._is_tool_enabled', lambda name: True)
     identifier = candidate()
     async def dispatch(name, args):
         return await dispatcher.execute_structured(name, args, 'u', 'u', False, object(),

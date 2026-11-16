@@ -24,7 +24,7 @@ async def test_replaced_builtin_spec_preserves_principal_and_scope_guard(monkeyp
             }, "required": ["document_id"]},
         },
     })
-    monkeypatch.setattr(dispatcher, "_is_tool_enabled", lambda _: True)
+    monkeypatch.setattr('core.tool_runtime.policy._is_tool_enabled', lambda _: True)
 
     async def execute(char_id, arguments):
         return await dispatcher.execute_structured(
@@ -59,6 +59,7 @@ async def test_registry_identity_reload_and_dynamic_execution(monkeypatch):
     assert identity is registry._TOOL_REGISTRY is dispatcher._TOOL_REGISTRY
     assert list(identity) == original_names
 
+
     async def inspect_fixture():
         return "fixture inspected"
 
@@ -81,3 +82,29 @@ async def test_registry_identity_reload_and_dynamic_execution(monkeypatch):
         )
         assert result.status == "tool_unknown"
     assert list(identity) == original_names
+
+
+@pytest.mark.asyncio
+async def test_execution_failure_logs_only_content_free_diagnostics(caplog):
+    """Exception text and arguments must not expose memory/MCP credentials."""
+    from core import tool_dispatcher as dispatcher
+    from core.tool_runtime.registry import temporary_registry
+
+    private_argument = "fixture-private-memory-and-credential"
+    private_exception = "fixture-private-exception-body"
+
+    async def failing_tool(**arguments):
+        raise RuntimeError(private_exception)
+
+    with temporary_registry({"weather": {
+        "func": failing_tool, "category": "info",
+        "parameters": {"type": "object", "properties": {}},
+    }}):
+        result = await dispatcher.execute_structured(
+            "weather", {"private": private_argument}, "fixture_owner", "fixture_owner", False, None,
+            origin="assistant_loop", char_id="fixture_character",
+        )
+    assert result.status == "tool_failed"
+    assert private_argument not in caplog.text
+    assert private_exception not in caplog.text
+    assert "error_type=RuntimeError" in caplog.text

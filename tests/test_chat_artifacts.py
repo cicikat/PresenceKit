@@ -274,7 +274,7 @@ def test_js_is_writable_but_not_previewable(sandbox):
 @pytest.mark.asyncio
 async def test_artifact_tools_are_path_c_not_probe(sandbox, monkeypatch):
     _install_artifact_tool_specs(monkeypatch)
-    monkeypatch.setattr(tool_dispatcher, "_is_tool_enabled", lambda _: True)
+    monkeypatch.setattr('core.tool_runtime.policy._is_tool_enabled', lambda _: True)
     prompt = tool_dispatcher.get_probe_prompt("nowhere")
     assert "write_artifact" not in prompt
     assert "read_artifact" not in prompt

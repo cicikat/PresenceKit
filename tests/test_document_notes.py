@@ -74,8 +74,8 @@ def test_concurrent_same_revision_only_one_writer_succeeds(sandbox):
 @pytest.mark.asyncio
 async def test_dispatcher_private_owner_frozen_scope_and_budget(sandbox, monkeypatch):
     from core import tool_dispatcher as td
-    monkeypatch.setattr(td, "get_config", lambda: {"scheduler": {"owner_id": "reader"}})
-    monkeypatch.setattr(td, "_is_tool_enabled", lambda _: True)
+    monkeypatch.setattr('core.config_loader.get_config', lambda: {"scheduler": {"owner_id": "reader"}})
+    monkeypatch.setattr('core.tool_runtime.policy._is_tool_enabled', lambda _: True)
     monkeypatch.setattr("core.self_management.policy.tool_allowed", lambda *args, **kwargs: True)
     doc = upload()
     args = {"document_id": doc, "content": "主模型笔记", "start_offset": 0, "end_offset": 5}

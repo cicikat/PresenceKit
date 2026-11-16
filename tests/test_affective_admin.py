@@ -64,7 +64,7 @@ async def test_avatar_push_is_expression_only_and_scoped(monkeypatch):
     actions = []
     async def push(action):
         actions.append(action)
-    monkeypatch.setattr("core.tool_dispatcher._push_desktop_action", push)
+    monkeypatch.setattr('core.tools.devices_definitions._push_desktop_action', push)
     monkeypatch.setattr(pipeline_registry, "get", lambda: SimpleNamespace(_active_character_id="companion"))
     state = {"current": "happy", "intensity": .6, "has_signal": True, "source_turn_id": "turn-a",
              "source_at": time.time(), "expires_at": time.time()+1800, "version": 12,

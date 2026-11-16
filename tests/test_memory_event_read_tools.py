@@ -90,7 +90,7 @@ async def test_event_read_tools_are_reality_scoped_and_unknown_is_structured(san
 def test_event_tools_are_registered_in_memory_schema(monkeypatch):
     import core.tool_dispatcher as dispatcher
 
-    monkeypatch.setattr(dispatcher, "_is_tool_enabled", lambda _name: True)
+    monkeypatch.setattr('core.tool_runtime.policy._is_tool_enabled', lambda _name: True)
     monkeypatch.setattr("core.deployment_capabilities.tool_allowed", lambda _name: (True, ""))
     monkeypatch.setattr("core.self_management.policy.tool_allowed", lambda *_args: True)
     names = {item["function"]["name"] for item in dispatcher.get_tools_schema(categories=["memory"], char_id=TEST_CHAR_ID, uid="owner")}
@@ -104,7 +104,7 @@ async def test_dispatcher_preserves_origin_gate_and_unknown_status(monkeypatch, 
 
     records = []
     monkeypatch.setattr(action_trace, "record", lambda *args, **kwargs: records.append(kwargs))
-    monkeypatch.setattr(dispatcher, "_is_tool_enabled", lambda _name: True)
+    monkeypatch.setattr('core.tool_runtime.policy._is_tool_enabled', lambda _name: True)
     monkeypatch.setattr("core.self_management.policy.tool_allowed", lambda *_args: True)
     denied = await dispatcher.execute_structured(
         "expand_event_window", {"event_id": "not-present"}, "owner", "owner", False, _Session(),

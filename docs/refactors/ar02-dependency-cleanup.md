@@ -784,3 +784,45 @@ Baseline and each stage are recorded below after execution. Full synthetic snaps
 - Final A run: **124 passed / 0 failed / 0 skipped**. The new synthetic MCP
   test explicitly supplies real registration metadata (`mcp_server/mcp_tool`);
   missing metadata was correctly denied during test development.
+
+### B — runtime direction and responsibility
+
+- Runtime→dispatcher **0** and definitions→dispatcher **0** (imports, local
+  imports and dynamic lookups). The single dictionary is owned by `state.py`;
+  registry alone composes it. This separates policy reads from composition and
+  avoids a definitions→policy→composer initialization cycle.
+- `InvocationScope` carries trusted identity only. Policy owns ordered admission
+  and shares principal/grant checks with schema exposure. Validation recurses
+  locally. Invoker uses the registered adapter directly, with no domain scan.
+  Explicit builtin override inheritance is resolved before calls.
+- Outcome owns validity/status/observer classification and privacy. Execution
+  retains one deliberate per-name redirect: phone video invitations re-enter
+  the complete desktop admission path. This must remain orchestration because
+  invoking a domain adapter directly would bypass the destination gates.
+- Signature/permission helpers belong to the definitions; mutable config/name
+  integration boundaries are read from their actual module. Tests now patch
+  those owners. Capability registry/policy were migrated too, removing their
+  indirect facade cycle.
+- Minimal security fix: failure diagnostics no longer log raw arguments or
+  exception bodies, which could expose private memory, mail or MCP secrets.
+  Error type/origin/tool/count remain. Safe outward business-error handling is
+  unchanged. A short mutation restoring raw exception logging failed the
+  private-text absence assertion; restored implementation passes.
+- Main tools command (A group plus `test_tool_loop`, `test_pretool_router`,
+  `test_tool_read_log_bypass`, `-n auto`): **220 passed / 0 failed / 0 skipped**.
+  First B run caught an incomplete removed-loop fragment (28 failures); fixed
+  the SyntaxError and reran the identical group successfully.
+- Domain command: `python -m pytest -n auto -q
+  tests/test_device_file_agent.py tests/test_computer_use.py
+  tests/test_browser_workbench.py tests/test_gmail_messages.py
+  tests/test_gmail_pending.py tests/test_qzone.py tests/test_qzone_events.py
+  tests/test_memory_event_read_tools.py tests/test_memory_dossier_tools.py
+  tests/test_tool_permission_defaults.py tests/test_tool_result.py
+  tests/test_tool_result_pins.py tests/test_action_routing.py
+  tests/test_phone_control_tool.py tests/test_diary_backfill.py
+  tests/test_document_notes.py tests/test_fs_browse.py tests/test_chat_artifacts.py
+  --tb=short`: **253 passed / 0 failed / 0 skipped**.
+- Registry/reload/scope/privacy group: **3 passed**. Snapshot is unchanged
+  (all registered metadata/order, schema, probe, OpenAPI, mounted route order).
+- B matrix: runtime→facade **0**, domain definitions→facade **0**;
+  Dream and owner reverse calls still await C/D. No client/config/UI change.

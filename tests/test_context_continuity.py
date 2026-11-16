@@ -15,7 +15,7 @@ def configured(sandbox, monkeypatch):
         monkeypatch.setattr(module, 'get_config', lambda: config)
     monkeypatch.setattr(tool_dispatcher, 'get_tools_schema', lambda **kw: [
         {'function': {'name': name}} for name in ('read_document', 'reread_image', 'read_life_records', 'observe_user_screen')])
-    monkeypatch.setattr(tool_dispatcher, '_is_tool_enabled', lambda _: True)
+    monkeypatch.setattr('core.tool_runtime.policy._is_tool_enabled', lambda _: True)
     monkeypatch.setattr('core.self_management.policy.tool_allowed', lambda *args: True)
     return config
 

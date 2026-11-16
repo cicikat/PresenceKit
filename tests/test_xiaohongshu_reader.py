@@ -113,9 +113,9 @@ async def test_disabled_and_missing_service_are_explicit(monkeypatch):
 
 def test_dispatcher_exposure_gate(monkeypatch):
     from core import tool_dispatcher as dispatcher
-    monkeypatch.setattr(dispatcher, 'get_config', lambda: {})
+    monkeypatch.setattr('core.config_loader.get_config', lambda: {})
     assert not dispatcher._is_tool_enabled('read_xiaohongshu')
-    monkeypatch.setattr(dispatcher, 'get_config', lambda: {
+    monkeypatch.setattr('core.config_loader.get_config', lambda: {
         'tools': {'read_xiaohongshu': {'enabled': True}},
         'xiaohongshu': {'reader_url': 'http://127.0.0.1:18060'},
     })

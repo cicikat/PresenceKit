@@ -32,18 +32,6 @@ async def invoke(spec: dict, call: Invocation):
     if spec.get("self_management_read"):
         return await call.func(user_id=call.user_id, char_id=call.char_id, **call.tool_args)
     adapter = spec.get("invoke")
-    if adapter is None:
-        # Local extensions/tests historically replace whole builtin specs. Their
-        # original signature AND per-tool scope guard must survive that seam.
-        from core.tools import (
-            devices_definitions, files_agents_definitions,
-            information_definitions, life_media_definitions, memory_definitions,
-        )
-        for module in (devices_definitions, files_agents_definitions,
-                       information_definitions, life_media_definitions, memory_definitions):
-            adapter = module.INVOCATION_ADAPTERS.get(call.tool_name)
-            if adapter is not None:
-                break
     if adapter is not None:
         return await adapter(call)
     if spec.get("category") == "mcp" and call.has_status_observer:

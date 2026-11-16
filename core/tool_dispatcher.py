@@ -175,23 +175,7 @@ from core.tool_runtime.registry import _TOOL_REGISTRY
 _send_callback: Callable | None = None
 
 
-_TOOL_FALLBACKS = {
-    "weather": "天气信息暂时获取不到",
-    "web_search": "网络暂时有些不稳定，没搜到",
-    "get_time": "时间获取出了点问题",
-    "add_reminder": "备忘录暂时写不进去，稍后再试",
-    "list_reminders": "备忘录暂时读不到",
-    "get_reminder": "备忘录暂时读不到",
-    "update_reminder": "备忘录暂时改不了，稍后再试",
-    "cancel_reminder": "备忘录暂时取消不了，稍后再试",
-    "restore_reminder": "备忘录暂时恢复不了，稍后再试",
-    "read_diary": "日记暂时读不到",
-    "read_watch": "身体数据暂时读取不到",
-    "read_hds_heart_rate": "HDS 心率状态暂时读取不到",
-    "search_documents": "资料暂时检索不到",
-    "read_document": "资料暂时读取不到",
-    "search_character_notes": "角色手记暂时检索不到",
-}
+from core.tool_runtime.outcome import _TOOL_FALLBACKS
 
 
 def register_send_callback(callback: Callable):
@@ -200,12 +184,7 @@ def register_send_callback(callback: Callable):
     _send_callback = callback
 
 
-_SCOPED_MEMORY_READ_TOOLS: frozenset[str] = frozenset({
-    "get_profile", "get_episodic", "read_long_user_message", "search_events", "expand_event_window", "get_related_events",
-    "search_documents", "read_document", "search_character_notes",
-    "search_memory_dossiers", "read_memory_dossier", "search_dossier_events",
-    "get_memory_consolidation_status",
-})
+from core.tool_runtime.policy import _SCOPED_MEMORY_READ_TOOLS
 
 
 from core.tools.devices_definitions import _ACTION_TARGETS
@@ -214,68 +193,22 @@ from core.tools.devices_definitions import _ACTION_TARGETS
 from core.tools.devices_definitions import _agent_session_id
 
 
-_INTIFACE_TOOL_NAMES: frozenset[str] = frozenset({
-    "toy_vibrate",
-    "toy_stop",
-    "toy_pattern",
-    "toy_job_status",
-})
+from core.tool_runtime.policy import _INTIFACE_TOOL_NAMES
 
 
-_SIDE_EFFECT_TOOLS: frozenset[str] = frozenset({
-    # desktop 控制类 —— 会向桌宠端推送外部动作
-    "desktop_minimize",
-    "desktop_open_url",
-    "desktop_play_pause",
-    "desktop_notify",
-    "play_song",
-    "toy_vibrate",
-    "toy_stop",
-    "toy_pattern",
-    "write_toy_file",
-    # 写状态的工具
-    "add_reminder",
-    "update_reminder",
-    "cancel_reminder",
-    "restore_reminder",
-    "water_garden",
-    "self_create",
-    "self_update",
-    "self_move",
-    "self_delete",
-    "self_restore",
-    "write_track_note",
-    "choose_next_track",
-    "exit_yandere",
-    "forget_episodic",
-    "clear_midterm",
-    # system 类（dangerous=True，冗余标注，保证兜底）
-    "device_shutdown",
-    "device_sleep",
-})
+from core.tool_runtime.policy import _SIDE_EFFECT_TOOLS
 
 
-_MCP_DOC_DESCRIPTION_HINTS: tuple[str, ...] = (
-    "documentation", "document", "help", "usage", "schema", "parameter", "option", "describe",
-    "说明", "文档", "参数", "选项", "玩法", "规则", "操作",
-)
+from core.tool_runtime.exposure import _MCP_DOC_DESCRIPTION_HINTS
 
 
-_EXECUTE_ALLOWED_ORIGINS: frozenset[str] = frozenset({
-    "user_live", "assistant_loop", "assistant_loop_relay", "autonomy_loop", "admin_console",
-    "assistant_self_management", "autonomy_self_management",
-})
+from core.tool_runtime.policy import _EXECUTE_ALLOWED_ORIGINS
 
 
-_OWNER_ONLY_HARDWARE_TOOLS: frozenset[str] = frozenset({
-    "toy_vibrate",
-    "toy_stop",
-    "toy_pattern",
-    "toy_job_status",
-})
+from core.tool_runtime.policy import _OWNER_ONLY_HARDWARE_TOOLS
 
 
-_MCP_SERVER_ERROR_PREFIX = "MCP 工具返回错误: "
+from core.tool_runtime.outcome import _MCP_SERVER_ERROR_PREFIX
 
 
 async def execute_structured(

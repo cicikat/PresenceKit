@@ -14,9 +14,9 @@ from core.tools.memory_dossiers import search_dossier_events as _search_dossier_
 from core.tools.memory_dossiers import search_memory_dossiers as _search_memory_dossiers_wrapper
 from core import tool_result_pins as _tool_result_pins
 from core.tools.memory_dossiers import update_memory_dossier as _update_memory_dossier_wrapper
-from core.character_name_provider import get_active_char_name
-from core.character_name_provider import get_char_name
-from core.config_loader import get_config
+from core import character_name_provider
+from core import character_name_provider
+from core import config_loader
 import json
 import logging
 logger = logging.getLogger("core.tool_dispatcher")
@@ -96,7 +96,7 @@ async def _get_episodic_wrapper(user_id: str, topic: str = "", *, char_id: str) 
     from core.memory.episodic_memory import retrieve, format_for_prompt
     # M4：查询不再顺手给被查到的记忆加强度（allow_strengthen=False）
     memories = retrieve(user_id=user_id, topic=topic, top_k=3, char_id=char_id, allow_strengthen=False)
-    return format_for_prompt(memories, char_name=get_char_name(char_id)) if memories else "暂无相关记忆"
+    return format_for_prompt(memories, char_name=character_name_provider.get_char_name(char_id)) if memories else "暂无相关记忆"
 
 
 async def _read_long_user_message_wrapper(user_id: str, sequence: int, offset: int = 0,
@@ -165,15 +165,15 @@ async def _exit_yandere_wrapper() -> str:
         return "disabled_remote_server_local_capability"
     import json
     from pathlib import Path
-    from core.config_loader import get_config
-    emerald_path = get_config().get("emerald_desktop", {}).get("path", "")
+    from core import config_loader
+    emerald_path = config_loader.get_config().get("emerald_desktop", {}).get("path", "")
     if not emerald_path:
         logger.warning("[exit_yandere] config.yaml 未配置 emerald_desktop.path，跳过")
         return "未配置旧 Emerald-desktop 路径"
     signal_file = Path(emerald_path) / "data" / "yandere_exit.signal"
     signal_file.parent.mkdir(parents=True, exist_ok=True)
     signal_file.write_text(json.dumps({"exit": True}), encoding="utf-8")
-    return f"{get_active_char_name()}平静下来了"
+    return f"{character_name_provider.get_active_char_name()}平静下来了"
 
 
 async def _invoke_read_document_notes(call):
@@ -188,7 +188,7 @@ async def _invoke_read_document_notes(call):
     session_state = call.session_state
     allowed_tool_names = call.allowed_tool_names
     pin_reference_hashes = call.pin_reference_hashes
-    owner_id = str(get_config().get("scheduler", {}).get("owner_id") or "")
+    owner_id = str(config_loader.get_config().get("scheduler", {}).get("owner_id") or "")
     if is_group or not owner_id or str(user_id) != owner_id:
         raise ValueError('document notes are owner-private only')
     _require_memory_read_scope(user_id, char_id)

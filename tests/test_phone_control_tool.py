@@ -35,9 +35,9 @@ async def test_video_call_mistaken_for_phone_control_routes_to_desktop(sandbox, 
         calls.append((user_id, char_id))
         return '{"status": "desktop_offline"}'
 
-    monkeypatch.setattr(tool_dispatcher, "_invite_video_call_wrapper", fake_invite)
+    monkeypatch.setattr('core.tools.devices_definitions._invite_video_call_wrapper', fake_invite)
     monkeypatch.setitem(tool_dispatcher._TOOL_REGISTRY["invite_video_call"], "func", fake_invite)
-    monkeypatch.setattr(tool_dispatcher, "_is_tool_enabled", lambda _: True)
+    monkeypatch.setattr('core.tool_runtime.policy._is_tool_enabled', lambda _: True)
     result = await tool_dispatcher.execute_structured(
         "phone_control_start",
         {"task": "发起与角色的视频通话邀请，打开视频通话界面"},

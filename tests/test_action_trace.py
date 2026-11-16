@@ -52,7 +52,7 @@ class TestExecuteRecording:
         from core.session_state import SessionState
         from core.memory import action_trace
 
-        monkeypatch.setattr(td, "get_config", lambda: _controlled_config())
+        monkeypatch.setattr('core.config_loader.get_config', lambda: _controlled_config())
         state = SessionState()
         outcome = await td.execute_structured(
             tool_name="get_time", tool_args={}, user_id="u_ok", target_id="u_ok",
@@ -70,7 +70,7 @@ class TestExecuteRecording:
         from core.session_state import SessionState
         from core.memory import action_trace
 
-        monkeypatch.setattr(td, "get_config", lambda: _controlled_config())
+        monkeypatch.setattr('core.config_loader.get_config', lambda: _controlled_config())
 
         async def _boom(**kwargs):
             raise RuntimeError("boom")
@@ -91,7 +91,7 @@ class TestExecuteRecording:
         from core.session_state import SessionState
         from core.memory import action_trace
 
-        monkeypatch.setattr(td, "get_config", lambda: _controlled_config())
+        monkeypatch.setattr('core.config_loader.get_config', lambda: _controlled_config())
         state = SessionState()
         outcome = await td.execute_structured(
             tool_name="get_time", tool_args={}, user_id="u_reject", target_id="u_reject",
@@ -118,7 +118,7 @@ class TestExecuteRecording:
         patch_registry(monkeypatch, {
             "p0_safe_tool": {"func": _returns_secret, "dangerous": False, "category": "info"},
         })
-        monkeypatch.setattr(td, "_is_tool_enabled", lambda _: True)
+        monkeypatch.setattr('core.tool_runtime.policy._is_tool_enabled', lambda _: True)
         monkeypatch.setattr(action_trace, "record", lambda *args, **kwargs: records.append(kwargs))
 
         with caplog.at_level(logging.INFO, logger="core.tool_dispatcher"):
@@ -412,7 +412,7 @@ class TestPeekScreenSensitive:
         from core.session_state import SessionState
         from core.memory import action_trace
 
-        monkeypatch.setattr(td, "get_config", lambda: _controlled_config())
+        monkeypatch.setattr('core.config_loader.get_config', lambda: _controlled_config())
 
 
         async def _fake_peek():

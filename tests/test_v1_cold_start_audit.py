@@ -46,7 +46,7 @@ def test_tool_defaults_are_at_the_consumed_config_path(monkeypatch):
     from core.memory.embedding import connection_configured
 
     cfg = _template()
-    monkeypatch.setattr(tool_dispatcher, "get_config", lambda: cfg)
+    monkeypatch.setattr('core.config_loader.get_config', lambda: cfg)
     for name in ("get_time", "weather", "web_search", "read_diary", "device_shutdown"):
         assert name in cfg["tools"]
         assert tool_dispatcher._is_tool_enabled(name)

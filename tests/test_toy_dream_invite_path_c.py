@@ -42,7 +42,7 @@ class TestPushPayloadMatchesPathB:
     async def test_toy_invite_wrapper_payload(self):
         from core.tool_dispatcher import _toy_invite_wrapper
         with patch(
-            "core.tool_dispatcher._push_desktop_action",
+            'core.tools.devices_definitions._push_desktop_action',
             new=AsyncMock(return_value="ok"),
         ) as mock_push:
             result = await _toy_invite_wrapper()
@@ -53,7 +53,7 @@ class TestPushPayloadMatchesPathB:
     async def test_dream_invite_wrapper_payload(self):
         from core.tool_dispatcher import _dream_invite_wrapper
         with patch(
-            "core.tool_dispatcher._push_desktop_action",
+            'core.tools.devices_definitions._push_desktop_action',
             new=AsyncMock(return_value="ok"),
         ) as mock_push:
             result = await _dream_invite_wrapper()
@@ -64,7 +64,7 @@ class TestPushPayloadMatchesPathB:
     async def test_toy_invite_wrapper_propagates_failure(self):
         from core.tool_dispatcher import _toy_invite_wrapper
         with patch(
-            "core.tool_dispatcher._push_desktop_action",
+            'core.tools.devices_definitions._push_desktop_action',
             new=AsyncMock(return_value="端离线，动作未执行"),
         ):
             result = await _toy_invite_wrapper()

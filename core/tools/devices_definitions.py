@@ -7,8 +7,8 @@ from core.agent_runtime.models import TaskPrincipal as _TaskPrincipal
 from core.agent_runtime import agent_sessions as _agent_sessions
 from core.agent_runtime import computer_use as _computer_use
 import json as _json
-from core.character_name_provider import get_active_char_name
-from core.config_loader import get_config
+from core import character_name_provider
+from core import config_loader
 import json
 from core.error_handler import log_error
 import logging
@@ -154,7 +154,7 @@ async def _desktop_play_pause_wrapper() -> str:
 
 async def _desktop_notify_wrapper(title: str = "", message: str = "") -> str:
     if not title:
-        title = get_active_char_name()
+        title = character_name_provider.get_active_char_name()
     result = await _push_desktop_action({"type": "show_notify", "title": title, "message": message})
     return f"已发送通知：{message}" if result == "ok" else result
 
@@ -299,7 +299,7 @@ async def _invite_video_call_wrapper(user_id: str, char_id: str) -> str:
     import json
     from core.video_call_invite import invite
 
-    settings = get_config().get("tools", {}).get("invite_video_call") or {}
+    settings = config_loader.get_config().get("tools", {}).get("invite_video_call") or {}
     allowed = settings.get("allowed_char_ids") or [] if isinstance(settings, dict) else []
     if char_id not in allowed:
         return json.dumps({"status": "not_allowed_for_character"})

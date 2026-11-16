@@ -72,7 +72,7 @@ async def test_desktop_chat_keeps_desktop_provenance(monkeypatch):
 def test_mobile_probe_prompt_excludes_desktop_tools(monkeypatch):
     from core import tool_dispatcher
 
-    monkeypatch.setattr(tool_dispatcher, "get_active_char_name", lambda: "Companion")
+    monkeypatch.setattr('core.character_name_provider.get_active_char_name', lambda: "Companion")
     prompt = tool_dispatcher.get_probe_prompt("测试位置", categories=["info"])
 
     desktop_tools = [

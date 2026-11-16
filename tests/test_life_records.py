@@ -287,7 +287,7 @@ async def test_character_reads_description_only_with_owner_permission(client,mon
     assert 'category' not in schema['required']
     assert schema['properties']['category']['enum'] == ['diet', 'bill', 'cart']
     cfg={'scheduler':{'owner_id':'owner'},'life_records':{'enabled':True,'character_readable':True}}
-    monkeypatch.setattr(tool_dispatcher,'get_config',lambda:cfg)
+    monkeypatch.setattr('core.config_loader.get_config', lambda:cfg)
     monkeypatch.setattr(store,'get_config',lambda:cfg)
     body=operation();body['image_mime']='image/png'
     store.sync('owner','device',body,b'fixture')

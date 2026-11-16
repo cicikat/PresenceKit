@@ -148,16 +148,16 @@ def test_camera_tool_route_is_separately_configurable(monkeypatch):
     disabled["image_presets"]["routes"]["video_call_tool"] = ""
     monkeypatch.setattr("core.config_loader.get_config", lambda: disabled)
     from core import tool_dispatcher
-    monkeypatch.setattr(tool_dispatcher, "get_config", lambda: disabled)
+    monkeypatch.setattr('core.config_loader.get_config', lambda: disabled)
     assert not tool_dispatcher._is_tool_enabled("observe_video_call_camera")
     assert video_call.connection_state(disabled)["effective"] is True
 
 
 def test_camera_tool_uses_video_call_route_only(monkeypatch):
     from core import tool_dispatcher
-    monkeypatch.setattr(tool_dispatcher, "get_config", _config)
+    monkeypatch.setattr('core.config_loader.get_config', _config)
     assert tool_dispatcher._is_tool_enabled("observe_video_call_camera")
-    monkeypatch.setattr(tool_dispatcher, "get_config", lambda: _config("https://remote.example/v1"))
+    monkeypatch.setattr('core.config_loader.get_config', lambda: _config("https://remote.example/v1"))
     assert not tool_dispatcher._is_tool_enabled("observe_video_call_camera")
     assert "observe_video_call_camera" in tool_dispatcher._TOOL_REGISTRY
     assert "observe_user_screen" in tool_dispatcher._TOOL_REGISTRY
@@ -454,7 +454,7 @@ async def test_video_call_tool_is_scoped_and_autonomy_eligible(monkeypatch):
         return {"status": "declined"}
 
     monkeypatch.setattr("core.video_call_invite.invite", invite)
-    monkeypatch.setattr(tool_dispatcher, "get_config", lambda: {
+    monkeypatch.setattr('core.config_loader.get_config', lambda: {
         "tools": {"invite_video_call": {"enabled": True, "allowed_char_ids": ["allowed"]}}
     })
     wrapper = tool_dispatcher._invite_video_call_wrapper

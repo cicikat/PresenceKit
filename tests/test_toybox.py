@@ -93,7 +93,7 @@ def test_empty_read_is_normal(sandbox):
 @pytest.mark.asyncio
 async def test_toybox_tools_are_info_and_not_danger_gated(sandbox, monkeypatch):
     _install_toy_tool_specs(monkeypatch)
-    monkeypatch.setattr(tool_dispatcher, "_is_tool_enabled", lambda _: True)
+    monkeypatch.setattr('core.tool_runtime.policy._is_tool_enabled', lambda _: True)
 
     args = {"file_key": "wishlist", "content": "一起去看海"}
 

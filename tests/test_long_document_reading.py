@@ -142,7 +142,7 @@ async def test_document_progress_and_overview_continue_without_reannouncing_uplo
     from core import config_loader, context_continuity, tool_dispatcher, llm_client
     monkeypatch.setattr(config_loader, "get_config", lambda: {"scheduler": {"owner_id": "reader"}})
     monkeypatch.setattr(tool_dispatcher, "get_tools_schema", lambda **kwargs: [{"function": {"name": "read_document"}}])
-    monkeypatch.setattr(tool_dispatcher, "_is_tool_enabled", lambda _: True)
+    monkeypatch.setattr('core.tool_runtime.policy._is_tool_enabled', lambda _: True)
     doc = store("资料原文" * 3000)
     before = context_continuity.messages("reader", "char-test")
     context_continuity.acknowledge(before)
@@ -162,8 +162,8 @@ async def test_dispatcher_keeps_tail_of_document_page(sandbox, monkeypatch):
     text = "begin " + "x" * 5800 + " END_OF_FIRST_PAGE " + "y" * 5000
     doc = store(text)
     # Exercise the real dispatcher and ToolResult/frame boundary, isolated from grants.
-    monkeypatch.setattr(tool_dispatcher, "get_config", lambda: {"scheduler": {"owner_id": "reader"}})
-    monkeypatch.setattr(tool_dispatcher, "_is_tool_enabled", lambda _: True)
+    monkeypatch.setattr('core.config_loader.get_config', lambda: {"scheduler": {"owner_id": "reader"}})
+    monkeypatch.setattr('core.tool_runtime.policy._is_tool_enabled', lambda _: True)
     monkeypatch.setattr("core.self_management.policy.tool_allowed", lambda *args, **kwargs: True)
     outcome = await tool_dispatcher.execute_structured("read_document", {"document_id": doc}, "reader",
                                                       "reader", False, object(), char_id="char-test", origin="assistant_loop")

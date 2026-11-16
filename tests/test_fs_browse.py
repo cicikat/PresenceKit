@@ -408,7 +408,7 @@ def test_remote_server_allows_backend_denies_external(monkeypatch, tmp_path, san
 
 def test_fs_tools_only_visible_with_fs_category(monkeypatch):
     _install_fs_tool_specs(monkeypatch)
-    monkeypatch.setattr(tool_dispatcher, "_is_tool_enabled", lambda _: True)
+    monkeypatch.setattr('core.tool_runtime.policy._is_tool_enabled', lambda _: True)
     with_fs = {s["function"]["name"] for s in tool_dispatcher.get_tools_schema(categories=["info", "fs"])}
     without_fs = {s["function"]["name"] for s in tool_dispatcher.get_tools_schema(categories=["info", "desktop", "memory"])}
     assert {"fs_list", "fs_read"} <= with_fs
@@ -438,7 +438,7 @@ def test_fs_registry_contract(monkeypatch):
 @pytest.mark.asyncio
 async def test_fs_tools_execute_without_danger_mode(monkeypatch, tmp_path):
     _install_fs_tool_specs(monkeypatch)
-    monkeypatch.setattr(tool_dispatcher, "_is_tool_enabled", lambda _: True)
+    monkeypatch.setattr('core.tool_runtime.policy._is_tool_enabled', lambda _: True)
     allow_root, _ = _patch_fs_config(monkeypatch, tmp_path)
     f = allow_root / "note.txt"
     f.write_text("hello", encoding="utf-8")
@@ -453,7 +453,7 @@ async def test_fs_tools_execute_without_danger_mode(monkeypatch, tmp_path):
 @pytest.mark.asyncio
 async def test_model_cannot_inject_principal(monkeypatch, tmp_path):
     _install_fs_tool_specs(monkeypatch)
-    monkeypatch.setattr(tool_dispatcher, "_is_tool_enabled", lambda _: True)
+    monkeypatch.setattr('core.tool_runtime.policy._is_tool_enabled', lambda _: True)
     allow_root, _ = _patch_fs_config(monkeypatch, tmp_path)
     f = allow_root / "note.txt"
     f.write_text("hello", encoding="utf-8")

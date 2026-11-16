@@ -246,8 +246,8 @@ def test_domain_selector_only_narrows_and_include_unclassified_preserves_compati
         "name": "srv",
         "domain_selector": {"domains": ["observe"], "include_unclassified": True},
     }]}}
-    monkeypatch.setattr(td, "get_config", lambda: cfg)
-    monkeypatch.setattr(td, "_is_tool_enabled", lambda name: True)
+    monkeypatch.setattr('core.config_loader.get_config', lambda: cfg)
+    monkeypatch.setattr('core.tool_runtime.policy._is_tool_enabled', lambda name: True)
 
     schemas = td.get_tools_schema(categories=["mcp"])
     names = {(item.get("function") or item)["name"] for item in schemas}
@@ -289,8 +289,8 @@ def test_local_override_is_exact_name_and_reused_by_relay_schema(monkeypatch):
         },
     }
     patch_registry(monkeypatch, registry)
-    monkeypatch.setattr(td, "_is_tool_enabled", lambda name: True)
-    monkeypatch.setattr(td, "get_config", lambda: {"mcp_servers": {"servers": [{
+    monkeypatch.setattr('core.tool_runtime.policy._is_tool_enabled', lambda name: True)
+    monkeypatch.setattr('core.config_loader.get_config', lambda: {"mcp_servers": {"servers": [{
         "name": "srv", "domain_selector": {
             "domains": ["local"], "include_unclassified": False,
         },

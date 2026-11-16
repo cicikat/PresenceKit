@@ -34,27 +34,27 @@ async def _fs_read_wrapper(
 
 
 async def _workspace_list_wrapper(path: str | None = None, depth: int = 1, *, user_id: str | None = None, char_id: str | None = None) -> str:
-    from core.agentworkspace import list_workspace
-    from core.agentmodels import TaskPrincipal
+    from core.agent_runtime.workspace import list_workspace
+    from core.agent_runtime.models import TaskPrincipal
     return json.dumps(list_workspace(TaskPrincipal.reality(user_id or "", char_id or ""), path, depth), ensure_ascii=False)
 
 
 async def _workspace_read_wrapper(path: str, *, user_id: str | None = None, char_id: str | None = None) -> str:
-    from core.agentworkspace import read_workspace
-    from core.agentmodels import TaskPrincipal
+    from core.agent_runtime.workspace import read_workspace
+    from core.agent_runtime.models import TaskPrincipal
     return read_workspace(TaskPrincipal.reality(user_id or "", char_id or ""), path)
 
 
 def _workspace_tool_request(idem: str):
     """Workspace execute() has no canonical turn_id; bind the request fingerprint."""
-    from core.agentmodels import CausationRef
+    from core.agent_runtime.models import CausationRef
     return CausationRef("tool_request", idem)
 
 
 async def _workspace_write_wrapper(path: str, content: str, *, operation: str, confirmed: bool = False, user_id: str | None = None, char_id: str | None = None) -> str:
-    from core.agentworkspace import write_workspace
-    from core.agentmodels import TaskPrincipal, RetryPolicy
-    from core.agenttask_manager import create_task, claim_next, complete_task, fail_task
+    from core.agent_runtime.workspace import write_workspace
+    from core.agent_runtime.models import TaskPrincipal, RetryPolicy
+    from core.agent_runtime.task_manager import create_task, claim_next, complete_task, fail_task
     principal = TaskPrincipal.reality(user_id or "", char_id or "")
     capability = f"workspace.{operation}"
     idem = hashlib.sha256((operation + "\0" + path + "\0" + content).encode("utf-8")).hexdigest()
@@ -93,9 +93,9 @@ async def _workspace_update_wrapper(path: str, content: str, *, confirmed: bool 
 
 
 async def _workspace_delete_wrapper(path: str, *, confirmed: bool = False, user_id: str | None = None, char_id: str | None = None) -> str:
-    from core.agentworkspace import delete_workspace
-    from core.agentmodels import TaskPrincipal, RetryPolicy
-    from core.agenttask_manager import create_task, claim_next, complete_task, fail_task
+    from core.agent_runtime.workspace import delete_workspace
+    from core.agent_runtime.models import TaskPrincipal, RetryPolicy
+    from core.agent_runtime.task_manager import create_task, claim_next, complete_task, fail_task
     principal = TaskPrincipal.reality(user_id or "", char_id or "")
     idem = hashlib.sha256(("delete\0" + path).encode("utf-8")).hexdigest()
     receipt, created = create_task(
@@ -125,9 +125,9 @@ async def _workspace_delete_wrapper(path: str, *, confirmed: bool = False, user_
 
 
 async def _workspace_undo_wrapper(path: str, *, confirmed: bool = False, user_id: str | None = None, char_id: str | None = None) -> str:
-    from core.agentworkspace import undo_workspace
-    from core.agentmodels import TaskPrincipal, RetryPolicy
-    from core.agenttask_manager import create_task, claim_next, complete_task, fail_task
+    from core.agent_runtime.workspace import undo_workspace
+    from core.agent_runtime.models import TaskPrincipal, RetryPolicy
+    from core.agent_runtime.task_manager import create_task, claim_next, complete_task, fail_task
     principal = TaskPrincipal.reality(user_id or "", char_id or "")
     idem = hashlib.sha256(("undo\0" + path).encode("utf-8")).hexdigest()
     receipt, created = create_task(
@@ -167,8 +167,8 @@ async def _process_run_wrapper(
     char_id: str | None = None,
 ) -> str:
     """Run one explicitly requested, workspace-scoped temporary program."""
-    from core.agentmodels import TaskPrincipal
-    from core.agentprocess_runner import ProcessLimits, run_process_task
+    from core.agent_runtime.models import TaskPrincipal
+    from core.agent_runtime.process_runner import ProcessLimits, run_process_task
 
     principal = TaskPrincipal.reality(user_id or "", char_id or "")
     result = await run_process_task(
@@ -203,8 +203,8 @@ async def _start_agent_task_wrapper(
     char_id: str,
     origin: str,
 ) -> str:
-    from core.agentagent_tasks import AgentTaskError, start_agent_task
-    from core.agentmodels import CausationRef, TaskPrincipal
+    from core.agent_runtime.agent_tasks import AgentTaskError, start_agent_task
+    from core.agent_runtime.models import CausationRef, TaskPrincipal
 
     fingerprint = hashlib.sha256(
         json.dumps(
@@ -244,8 +244,8 @@ async def _start_agent_task_wrapper(
 async def _get_agent_task_wrapper(
     task_id: str, *, user_id: str, char_id: str, origin: str
 ) -> str:
-    from core.agentagent_tasks import get_agent_task
-    from core.agentmodels import TaskPrincipal
+    from core.agent_runtime.agent_tasks import get_agent_task
+    from core.agent_runtime.models import TaskPrincipal
 
     try:
         result = get_agent_task(TaskPrincipal.reality(user_id, char_id), task_id)
@@ -258,8 +258,8 @@ async def _get_agent_task_wrapper(
 async def _cancel_agent_task_wrapper(
     task_id: str, *, user_id: str, char_id: str, origin: str
 ) -> str:
-    from core.agentagent_tasks import cancel_agent_task
-    from core.agentmodels import TaskPrincipal
+    from core.agent_runtime.agent_tasks import cancel_agent_task
+    from core.agent_runtime.models import TaskPrincipal
 
     try:
         result = cancel_agent_task(TaskPrincipal.reality(user_id, char_id), task_id)
@@ -282,7 +282,7 @@ async def _browser_automation_wrapper(
 ) -> str:
     """Run one bounded browser task; page data never enters task receipts."""
     from core.agent_runtime import browser
-    from core.agentmodels import TaskPrincipal
+    from core.agent_runtime.models import TaskPrincipal
     principal = TaskPrincipal.reality(user_id or "", char_id or "")
     idem = hashlib.sha256(json.dumps([url, operation, selector, value, path], separators=(",", ":")).encode()).hexdigest()
     try:

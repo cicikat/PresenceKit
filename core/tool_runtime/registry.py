@@ -72,8 +72,9 @@ def build_registry(registry):
 
 
 # The single process registry. Facades and MCP retain this exact identity.
-if "_TOOL_REGISTRY" not in globals():
-    _TOOL_REGISTRY: dict[str, dict] = {}
+from core.tool_runtime.state import _TOOL_REGISTRY
+
+if "_BUILTIN_ADAPTERS" not in globals():
     build_registry(_TOOL_REGISTRY)
     _BUILTIN_ADAPTERS = {name: spec["invoke"] for name, spec in _TOOL_REGISTRY.items() if "invoke" in spec}
 
