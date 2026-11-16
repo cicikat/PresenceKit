@@ -302,6 +302,9 @@ async def reload_client() -> None:
         if identity in seen:
             continue
         seen.add(identity)
+        from core.llm_turn_route import defer_client_close
+        if defer_client_close(client):
+            continue
         try:
             close = getattr(client, "close", None) or getattr(client, "aclose", None)
             if not callable(close):

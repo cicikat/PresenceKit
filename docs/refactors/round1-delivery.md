@@ -19,7 +19,7 @@ mobile `09809d44fea621a0b329ca6e5faac490b466752f`。
 
 ## 待完成
 
-- [ ] R1：回合驻留、工具回执与断流矩阵
+- [x] R1：补齐热重载下的回合驻留；合成回归通过，真实模型/生产仍 not verified
 - [ ] R3：多存储补偿、关键慢任务恢复与观测
 - [ ] R4：主动投递状态与每通道回执
 - [ ] R5：权限文档、调度结果与固定 SHA 合同
@@ -38,6 +38,18 @@ mobile `09809d44fea621a0b329ca6e5faac490b466752f`。
 - Python 3.12.13：`pytest -q tests/test_turn_sink.py tests/test_llm_failover.py` 67 passed
   （此结果早于新增 R1 热重载回归）。HTTP/WS/mobile 与固定 SHA CI 联验仍待完成。
 - 状态：partially verified。无新增配置或客户端协议字段。
+
+## R1：冻结回合路由与连接池租约
+
+- 基线：已有备用接管、工具历史保护、流尾包校验和去重，不重复实现。
+  新增热重载回归先失败：下一轮用了 reconfigured-primary，而非已接管的 fallback。
+- 修复：每个回合冻结 category/char/显式 preset 的主备上下文；配置重载不改变已开始回合。
+  reload 将被回合租用的旧连接池延迟关闭，最后一个回合结束/取消/关闭流后释放。
+  新回合继续读取最新配置；不重跑任何工具。
+- 验证：Python 3.12.13，`pytest -q tests/test_llm_failover.py
+  tests/test_llm_client_reload.py tests/test_tool_loop.py`：118 passed，含 transport failover、
+  breaker、取消、工具历史保护、双工具/流尾包与空收尾的既有覆盖。
+- 状态：partially verified；真实 provider 与生产端到端 not verified。
 
 ## 删除 brief 候选（未授权，不执行）
 

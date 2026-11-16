@@ -1,5 +1,9 @@
 # docs/model-presets.md — 多模型 Preset 系统
 
+第一轮可靠性修复：工具回合冻结首次解析的 category/char/显式 preset 主备上下文。
+备用接管后在同一 turn 驻留；热重载只影响新回合，已租用连接池在最后一个回合结束后关闭。
+工具回执不重跑，协议不兼容的历史仍按现有守卫拒绝。
+
 275：`minecraft_reaction` 是同角色的快速动作判断路由，可分配小模型 JSON 或 Jev 原生 systemone 预设（263 A）；原生 choice 的 confidence 低于 0.65 回到本地规则；未分配沿用 sensor_judge → intent → chat。每次3秒总预算、零SDK重试，主模型仍负责角色表达；不是第二人格。模型路由页和 Minecraft 共玩页编辑同一生效 routing profile，后者显式显示角色覆盖及来源。修改模型配置撤销旧共玩授权，不让迟到判断继续动作。见 [Minecraft Activity](minecraft-activity.md)。
 
 `food_extract` 是饮食证据抽取的独立路由，管理面可配置小模型，遵循既有 fallback。发送后执行，20秒总限与零 SDK 重试；见 [food-memory.md](food-memory.md)。

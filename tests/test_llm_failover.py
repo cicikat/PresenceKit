@@ -661,3 +661,48 @@ async def test_turn_route_lazy_stream_close_and_failed_fallback_are_bounded(monk
     assert current_route() is None
     await asyncio.create_task(stream.aclose())
     assert captured[0].closed and current_route() is None
+
+
+@pytest.mark.asyncio
+async def test_turn_route_freezes_clients_across_registry_reload(monkeypatch):
+    """R1: hot reload between tool rounds cannot return to the failed primary."""
+    from core import llm_failover as fo
+    from core.llm_turn_route import scoped_tool_turn
+    from core import llm_client
+    primary, fallback = _mc("primary"), _mc("fallback")
+    class Pool:
+        closed = False
+        async def close(self):
+            self.closed = True
+    primary.client, fallback.client = Pool(), Pool()
+    monkeypatch.setattr(llm_client, "reload_registry", lambda: [primary, fallback])
+    monkeypatch.setattr(llm_client, "_vision_client", None)
+    monkeypatch.setattr(llm_client, "_vision_clients", {})
+    live = [primary, fallback]
+    seen = []
+    monkeypatch.setattr(fo, "get_model_client", lambda *a, **k: live[0])
+    monkeypatch.setattr(fo, "resolve_fallback_client", lambda *a, **k: (live[1], ""))
+
+    async def create(mc, messages, **kwargs):
+        seen.append(mc)
+        assert not mc.client.closed
+        if mc is primary:
+            raise _timeout()
+        return _ok()
+
+    monkeypatch.setattr("core.llm_protocol.create", create)
+
+    @scoped_tool_turn
+    async def run():
+        for step in range(2):
+            outcome = await execute_create(call_category="chat", char_id="fixture_character",
+                prepare=lambda mc: PreparedAttempt(messages=[]), caller="test")
+            assert outcome.ok
+            if step == 0:
+                live[:] = [_mc("reconfigured-primary"), _mc("reconfigured-fallback")]
+                await llm_client.reload_client()
+                assert not fallback.client.closed
+
+    await run()
+    assert seen == [primary, fallback, fallback]
+    assert primary.client.closed and fallback.client.closed

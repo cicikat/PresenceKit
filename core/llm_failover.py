@@ -492,6 +492,9 @@ async def execute_create(
     )
     route = current_route()
     if route is not None:
+        primary_mc, fallback_mc, fallback_skip = route.freeze(
+            primary_mc, fallback_mc, fallback_skip, call_category, char_id, explicit_preset)
+        original_mc = primary_mc
         primary_mc = route.select(primary_mc, fallback_mc, call_category, char_id, explicit_preset)
     sticky = primary_mc is not original_mc
     if sticky:
@@ -777,6 +780,9 @@ async def execute_stream(
     original_mc = primary_mc
     route = current_route()
     if route is not None:
+        primary_mc, fallback_mc, fallback_skip = route.freeze(
+            primary_mc, fallback_mc, fallback_skip, call_category, char_id, explicit_preset)
+        original_mc = primary_mc
         primary_mc = route.select(primary_mc, fallback_mc, call_category, char_id, explicit_preset)
     sticky = primary_mc is not original_mc
     if sticky:
