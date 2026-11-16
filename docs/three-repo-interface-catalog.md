@@ -1,3 +1,9 @@
+## 330 自动记账（current / observe）
+
+current：手机独立通知监听/finance Channel/SQLite队列与Flutter确认页消费专用finance_ingest scope（标准mobile profile含此scope）。`/finance/capabilities`、`/finance/candidates/sync`、列表/详情由后端固定owner，用户账本不带char_id；operation_id稳定、revision冲突不自动覆盖、同一交易纠错保留ID、删除为墓碑。后端默认关，总开关与角色只读开关在管理面热更新，`/observability/finance`只读计数。手机origin+owner本机收集开关不能替代后端effective，系统通知读取授权独立于POST_NOTIFICATIONS。原通知全文不上传，库存/记忆/LifeRecords/chat/mobile-poll/ACK不变。桌面无原生消费者，使用后端管理页。
+
+observe：原生合成通知/真实loopback HTTP与后端持久化已联调，Android14真实支付通知、后台/强停/重启、已安装Flutter全链路、真实模型查询和生产部署仍NOT RUN。跨渠道模糊重复进入人工核对，完整报表/导入后续单。合同见 [finance-ingest.md](finance-ingest.md)，手机实现/恢复/验收见手机 docs/mobile/auto-bookkeeping-330.md。
+
 ## 工单56 聊天失败正文与历史清理（2026-11-15，current / open / observe）
 
 current：桌面失败/未知显式感叹号重发、断流正文保留与晚到 canonical 原位替换；手机无气泡投递说明及旋转补读图标，既有失败按钮、长按取消保留。后端未回复历史尾注过滤、缓冲失败安全正文投递复用既有 stream 消息和 request_id；failed 不被伪装 completed。无新端点、设置、权限或持久字段，mobile session/ACK/cursor/TTL/通知不变。open：历史坏流尾包缺原始报文、配置重载在途连接竞争。observe：原生设备及修改后的线上验收未运行。详见 [56交付](chat-recovery-stream-56.md)。
