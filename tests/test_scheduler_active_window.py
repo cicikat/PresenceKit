@@ -135,7 +135,7 @@ async def test_owner_chat_turn_marks_user_active(monkeypatch):
     async def fake_probe(message, user_id, *, char_id=TEST_CHAR_ID, provenance_channel=None):
         return ""
 
-    monkeypatch.setattr(chat, "_probe_and_execute_tools", fake_probe)
+    monkeypatch.setattr('core.owner_chat.prepare._probe_and_execute_tools', fake_probe)
     monkeypatch.setattr("channels.registry.get", lambda name: None)
     monkeypatch.setattr("core.turn_sink.record_assistant_turn", fake_record_assistant_turn)
 

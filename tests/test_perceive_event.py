@@ -386,7 +386,7 @@ async def test_ordinary_owner_chat_unaffected(monkeypatch):
     async def _no_tool(msg, uid, *, char_id=TEST_CHAR_ID, provenance_channel=None):
         return None
 
-    monkeypatch.setattr(_chat, "_probe_and_execute_tools", _no_tool)
+    monkeypatch.setattr('core.owner_chat.prepare._probe_and_execute_tools', _no_tool)
 
     # Stub channel lookup
     from channels import registry as _reg

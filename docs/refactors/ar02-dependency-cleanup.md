@@ -857,3 +857,31 @@ Baseline and each stage are recorded below after execution. Full synthetic snaps
   route registration order/defaults. Core modules have no Admin imports.
 - Matrix: runtime→dispatcher **0**, definitions→dispatcher **0**,
   Dream children→dream **0**; owner service still awaits D.
+
+### D — owner chat direction and per-turn contracts
+
+- Owner core→chat router **0**. Service directly calls `owner_chat.prepare`;
+  prepare owns the sole pretool adapter and accepts an explicit request-local
+  probe override. Private test patches moved from Router to prepare.
+- `OwnerChatTurn` / `PreparedTurn` / `GeneratedTurn` have concrete types for
+  frozen scope, event identity, SessionState, booleans, timing, tool result and
+  stream identity. The public `run_owner_chat_turn` signature is unchanged.
+  One frozen turn object now crosses the locked service phases, eliminating a
+  redundant 27-field unpack/repack. No new shared state or message writer.
+- Removed only the body after `/chat`'s unconditional 410 and its two unused
+  constants. Repository callers were checked first; mounted route, response,
+  dependency, summary and description are retained exactly.
+- Regression command: `python -m pytest -n auto -q
+  tests/test_mobile_chat_channel.py tests/test_owner_turn_api_contract.py
+  tests/test_desktop_chat_receipts.py tests/test_llm_force_stream.py
+  tests/test_tool_grounding.py tests/test_reality_output_guard.py
+  tests/test_short_term_history_scope.py tests/test_session_scope.py
+  tests/test_output_segment_enforcer.py tests/test_chat_media.py
+  tests/test_external_tool_contract_p0.py tests/test_scheduler_active_window.py
+  tests/test_perceive_event.py --tb=short` (result recorded after completion).
+- Final D run: **308 passed / 0 failed / 0 skipped** (193.61 seconds).
+- These actual ingress tests exercise owner/desktop/mobile, stream protocol
+  rejection/upstream errors/cancellation, gather sibling cleanup, attachments,
+  frozen roles, receipts and canonical writes. QQ/autonomy keep their existing
+  Pipeline/turn_sink chain. No desktop/mobile repo or protocol changes.
+- D matrix: all three forbidden directions **0**; all six snapshots unchanged.

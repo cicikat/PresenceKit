@@ -1,60 +1,71 @@
 """Per-turn values passed between phases; no new persisted or shared state."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Sequence
+
+if TYPE_CHECKING:
+    from core.pipeline import Pipeline
+    from core.memory.scope import MemoryScope
+    from core.event_context import EventContext
+    from core.pretool_router import PreToolRouteResult
+    from core.session_state import SessionState
+    from core.write_envelope import WriteEnvelope
 
 
 @dataclass(frozen=True)
 class OwnerChatTurn:
-    message: object
-    provenance_channel: object
-    live_origin_channel: object
-    durable_mobile_mirror: object
-    _probe_text: object
-    allowed_tool_categories: object
-    allowed_tool_names: object
-    audit_extras: object
-    pipeline: object
-    user_id: object
-    frozen_scope: object
-    tool_execution_enabled: object
-    prompt_context_note: object
-    prompt_capture_origin: object
-    turn_source: object
-    trigger_name: object
-    envelope: object
-    fanout: object
-    provenance_source: object
-    schedule_slow: object
-    media_refs: object
-    event_context: object
-    _loop_active: object
-    _loop_session_state: object
-    _t_start: object
-    request_id: object
+    message: str
+    provenance_channel: str
+    live_origin_channel: str
+    durable_mobile_mirror: bool
+    _probe_text: str
+    allowed_tool_categories: frozenset[str] | None
+    allowed_tool_names: frozenset[str] | None
+    audit_extras: dict[str, Any] | None
+    pipeline: Pipeline
+    user_id: str
+    frozen_scope: MemoryScope
+    tool_execution_enabled: bool
+    prompt_context_note: str
+    prompt_capture_origin: str | None
+    turn_source: str
+    trigger_name: str
+    envelope: WriteEnvelope | None
+    fanout: str | Sequence[str]
+    provenance_source: str
+    schedule_slow: bool
+    media_refs: list[dict] | None
+    event_context: EventContext
+    _loop_active: bool
+    _loop_session_state: SessionState
+    _t_start: float
+    request_id: str
 
 
 @dataclass(frozen=True)
 class PreparedTurn:
-    pretool_result: object
-    context: object
-    _turn_char_name: object
-    tool_result_text: object
-    _pretool_direct_reply: object
-    _fast_path_exclude_tools: object
-    _tool_result_status: object
-    _tool_result_generated_at: object
-    _tool_call_required: object
-    _required_tool_names: object
-    _t_probe: object
-    _t_ctx: object
+    pretool_result: PreToolRouteResult | str | None
+    context: dict[str, Any]
+    _turn_char_name: str
+    tool_result_text: str | None
+    _pretool_direct_reply: str | None
+    _fast_path_exclude_tools: set[str]
+    _tool_result_status: str | None
+    _tool_result_generated_at: float | None
+    _tool_call_required: bool
+    _required_tool_names: set[str]
+    _t_probe: float
+    _t_ctx: float
 
 
 @dataclass(frozen=True)
 class GeneratedTurn:
-    reply: object
-    _stream_msg_id: object
-    _use_stream: object
-    _t_first_delta: object
-    _t_stream: object
-    _t_llm: object
-    _t_prompt: object
+    reply: str
+    _stream_msg_id: str | None
+    _use_stream: bool
+    _t_first_delta: float | None
+    _t_stream: float | None
+    _t_llm: float | None
+    _t_prompt: float

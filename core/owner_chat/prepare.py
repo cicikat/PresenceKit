@@ -6,7 +6,9 @@ import time
 from core.owner_chat.models import OwnerChatTurn, PreparedTurn
 
 
-async def prepare_turn(turn: OwnerChatTurn, *, probe) -> PreparedTurn:
+async def prepare_turn(turn: OwnerChatTurn, *, probe=None) -> PreparedTurn:
+    """Prepare using the core probe, or an explicitly supplied request-local probe."""
+    probe = probe if probe is not None else _probe_and_execute_tools
     allowed_tool_categories = turn.allowed_tool_categories
     allowed_tool_names = turn.allowed_tool_names
     _probe_text = turn._probe_text
@@ -121,7 +123,7 @@ async def _probe_and_execute_tools(
     categories: frozenset[str] | None = None,
     allowed_tool_names: frozenset[str] | None = None,
 ):
-    """Compatibility seam delegating to the channel-neutral pre-tool router."""
+    """Sole owner-chat adapter to the channel-neutral pre-tool router."""
     from core import tool_dispatcher
     from core.pretool_router import route_pretool
     from core.session_state import get as _get_state
