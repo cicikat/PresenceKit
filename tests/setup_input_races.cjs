@@ -13,7 +13,7 @@ const responses = {
   '/settings/embedding': {}, '/characters': {},
   '/model-presets': {active_routing:'main', routing_effective:{main:{probe:{effective_preset:'probe-real'},summary:{effective_preset:'summary-real'}}}},
 };
-const context = vm.createContext({TOKEN:'', window:{}, document:{getElementById:element},
+const context = vm.createContext({TOKEN:'', window:{}, document:{getElementById:element,addEventListener:()=>{}},
   api: async (method,path) => {
     if (defer && method === 'GET') await new Promise(resolve => pending.push(resolve));
     return responses[path] || {};

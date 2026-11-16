@@ -14,8 +14,7 @@ const context = vm.createContext({
 context.window.window=context.window;
 // Load the actual shared observer dependency. The DOM/observer boundary stays
 // synthetic; the copy projection and scheduling integration remain production code.
-const core=fs.readFileSync('admin/static/js/core.js','utf8');
-vm.runInContext(core.slice(core.indexOf('function observeAdminChanges('),core.indexOf('\nconst ADMIN_PAGE_ALIASES')),context);
+vm.runInContext(fs.readFileSync('admin/static/js/shared/observers.js','utf8'),context);
 vm.runInContext(fs.readFileSync('admin/static/js/admin-copy.js','utf8').replaceAll('AdminCopyDefaults', 'window.AdminCopyDefaults'),context);
 assert.equal(text,'Tool status');
 context.window.AdminCopy.apply();

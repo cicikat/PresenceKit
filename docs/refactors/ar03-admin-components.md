@@ -149,3 +149,18 @@ Every row uses the original `#page-<id>` container, global api/auth singleton, s
 `style.css`: legacy base; `admin-design.css`: layouts/disclosures; `admin-v2.css`: semantic pk tokens and pk-ui components; `admin-components-v2.css`: scoped new-mode components and legacy token aliases; `admin-theme.css`: explicit theme/palette overrides. Keep the legacy cascade; no broad priority deletion without computed-style evidence.
 
 Safe deletion candidate: disabled page-context implementation (already returns immediately). Preserve: old UI, global handlers consumed by fragments, player/media specialized controls, native details and MCP folding. These have distinct interaction contracts. No unrelated cleanup authorized.
+
+## B: shared responsibility extraction
+
+`core.js` retains auth/session state and prompt-language compatibility. API/deadline,
+navigation/fragment/history, event adapters, batched observers, mobile shell,
+structured editors, and feedback each have one shared owner under `js/shared/`.
+Classic exports preserve existing domain and HTML consumers without wrappers or
+duplicate state. Registry descriptors identify fragment, domain owners, loader and
+keep-draft retention from the same registration map. Dead introduction code was
+removed; navigation ignores stale completion decoration. Existing async domain
+loaders still own their internal rendering; generation is not a claim that all
+domain writes have been converted to cancellable controllers.
+
+Verification: isolated navigation, acceptance and all 268 modularization projections;
+cache URLs updated as one batch. No API/schema/scope/client changes.
