@@ -55,7 +55,7 @@ async def test_retention_confirmation_closes_same_session_and_archives_once(sand
         AsyncMock(return_value="再留一会儿。"),
     )
 
-    with patch.object(dream_router, "_owner_uid", return_value=UID):
+    with patch('admin.routers.dream_common._owner_uid', return_value=UID):
         retained = await dream_router.dream_wake({}, _auth=None)
 
     assert retained["retained"] is True
@@ -70,7 +70,7 @@ async def test_retention_confirmation_closes_same_session_and_archives_once(sand
     before = current_path.read_bytes()
     assert not archive_path.exists()
 
-    with patch.object(dream_router, "_owner_uid", return_value=UID):
+    with patch('admin.routers.dream_common._owner_uid', return_value=UID):
         closed = await dream_router.dream_wake({"dream_id": DREAM_ID}, _auth=None)
 
     assert closed["closed_now"] is True
@@ -84,7 +84,7 @@ async def test_retention_confirmation_closes_same_session_and_archives_once(sand
     assert not current_path.exists()
     assert archive_path.read_bytes() == before
 
-    with patch.object(dream_router, "_owner_uid", return_value=UID):
+    with patch('admin.routers.dream_common._owner_uid', return_value=UID):
         repeated = await dream_router.dream_wake({"dream_id": DREAM_ID}, _auth=None)
     assert repeated["already_closed"] is True
     assert repeated["dream_id"] == DREAM_ID
@@ -108,7 +108,7 @@ async def test_resume_requires_matching_dream_id_and_preserves_current_transcrip
         AsyncMock(return_value="留下来。"),
     )
 
-    with patch.object(dream_router, "_owner_uid", return_value=uid):
+    with patch('admin.routers.dream_common._owner_uid', return_value=uid):
         await dream_router.dream_wake({}, _auth=None)
         with pytest.raises(Exception) as stale_resume:
             await dream_router.dream_resume({"dream_id": "dream-stale"}, _auth=None)
@@ -119,7 +119,7 @@ async def test_resume_requires_matching_dream_id_and_preserves_current_transcrip
     assert stale_wake.value.status_code == 409
     assert read_state(uid)["status"] == "DREAM_EXIT_REQUESTED"
 
-    with patch.object(dream_router, "_owner_uid", return_value=uid):
+    with patch('admin.routers.dream_common._owner_uid', return_value=uid):
         resumed = await dream_router.dream_resume({"dream_id": DREAM_ID}, _auth=None)
 
     assert resumed == {"ok": True, "resumed": True, "dream_id": DREAM_ID}
@@ -143,7 +143,7 @@ async def test_first_wake_without_retention_uses_user_reason(sandbox, monkeypatc
     write_state(uid, state)
     monkeypatch.setattr("core.dream.dream_pipeline._should_retain", lambda _state: False)
 
-    with patch.object(dream_router, "_owner_uid", return_value=uid):
+    with patch('admin.routers.dream_common._owner_uid', return_value=uid):
         result = await dream_router.dream_wake({}, _auth=None)
 
     assert result["closed_now"] is True

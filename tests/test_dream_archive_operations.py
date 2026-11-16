@@ -147,8 +147,8 @@ def test_operations_omit_postcard_and_dream_text(sandbox, monkeypatch):
     schedule.parent.mkdir(parents=True, exist_ok=True)
     schedule.write_text(json.dumps([{"dream_id": "ops_1", "letter_text": "postcard prose", "sent": False, "attempts": 1, "delivery_status": "smtp_failed", "last_error": "smtp_failed"}], ensure_ascii=False), encoding="utf-8")
 
-    monkeypatch.setattr("admin.routers.dream._owner_uid", lambda: "owner")
-    monkeypatch.setattr("admin.routers.dream._active_dream_char_id", lambda: "dreamer")
+    monkeypatch.setattr('admin.routers.dream_common._owner_uid', lambda: "owner")
+    monkeypatch.setattr('admin.routers.dream_common._active_dream_char_id', lambda: "dreamer")
     result = asyncio.run(dream_operations_get())
 
     encoded = json.dumps(result, ensure_ascii=False)

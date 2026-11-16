@@ -826,3 +826,34 @@ Baseline and each stage are recorded below after execution. Full synthetic snaps
   (all registered metadata/order, schema, probe, OpenAPI, mounted route order).
 - B matrix: runtime→facade **0**, domain definitions→facade **0**;
   Dream and owner reverse calls still await C/D. No client/config/UI change.
+
+### C — Dream layering
+
+- All Dream children→dream facade edges: **0**. `dream_common` owns HTTP
+  owner/character validation and write-source diagnostics; domain children
+  import their actual peers. Core owns the Dream ID grammar and wake/resume
+  state transitions in `session_control`, returning typed domain errors that
+  routers translate to the identical HTTP status/detail.
+- `scenario_authoring` now owns YAML/document validation and canonical writes;
+  `world_authoring` owns copy/materialize/rename/delete/preset writes. HTTP
+  authorization/validation and canonical-vs-legacy checks remain in adapters.
+  Existing state storage, layered path providers and hard-exit chokepoint are
+  reused; there is no second state machine or root path.
+- Facade includes and old callable exports remain outward-only. Tests patch
+  `dream_common` / domain owners. Endpoint descriptions were restored after
+  an initial OpenAPI comparison caught two lost docstrings.
+- Command: `python -m pytest -n auto -q tests/test_dream_invariants.py
+  tests/test_dream_scenario_crud.py tests/test_dream_world_management.py
+  tests/test_dream_wake_confirmation.py tests/test_dream_isolation.py
+  tests/test_dream_guard_fail_closed.py tests/test_dream_archive_operations.py
+  tests/test_dream_flow_entries.py tests/test_dream_ui_endpoints.py
+  tests/test_dream_state_projection.py tests/test_dream_session_char_scope.py
+  tests/test_dream_rpg_api.py tests/test_dream_settings_ownership.py
+  tests/test_activity_pseudo_stream.py tests/test_dream_isolation_guard.py
+  --tb=short`: **150 passed / 0 failed / 0 skipped**.
+  Initial 149 passed / 1 failed caught an aliased path import; fixed and reran
+  the complete same group after all authoring changes.
+- Final C snapshot matches all opening values, including exact OpenAPI and
+  route registration order/defaults. Core modules have no Admin imports.
+- Matrix: runtime→dispatcher **0**, definitions→dispatcher **0**,
+  Dream children→dream **0**; owner service still awaits D.

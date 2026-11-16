@@ -22,7 +22,7 @@ def _app(monkeypatch):
 
     cfg = get_config()
     monkeypatch.setattr(dream_rpg, "_uid", lambda: UID)
-    monkeypatch.setattr(dream, "_owner_uid", lambda: UID)
+    monkeypatch.setattr('admin.routers.dream_common._owner_uid', lambda: UID)
     result = asyncio.run(enter_dream(UID, char_id=DEFAULT_CHAR_ID, dream_mode="rpg", script_id="prison_demo"))
     assert result["ok"]
 

@@ -161,7 +161,7 @@ def test_state_get_exposes_flow_entries_and_char_tension(sandbox):
         ],
     })
 
-    with patch("admin.routers.dream._owner_uid", return_value=uid):
+    with patch('admin.routers.dream_common._owner_uid', return_value=uid):
         result = asyncio.run(dream_state_get())
 
     assert result["flow_entries"] == [
@@ -178,7 +178,7 @@ def test_state_get_exposes_flow_entries_and_char_tension(sandbox):
 def test_state_get_no_dream_flow_entries_empty(sandbox):
     from admin.routers.dream import dream_state_get
 
-    with patch("admin.routers.dream._owner_uid", return_value=_UID + "_none"):
+    with patch('admin.routers.dream_common._owner_uid', return_value=_UID + "_none"):
         result = asyncio.run(dream_state_get())
 
     assert result["flow_entries"] == []

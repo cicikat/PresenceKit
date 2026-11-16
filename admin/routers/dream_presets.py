@@ -1,5 +1,10 @@
 """Dream presets API responsibilities; legacy names re-exported by dream.py."""
 
+from admin.routers import dream_common
+from core import sandbox
+
+from core.dream import world_authoring
+
 import logging
 import json
 import re
@@ -10,8 +15,8 @@ from pathlib import Path
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from admin.auth import require_scopes
 from admin.routers._common import requested_char_id, resolve_requested_char_id
-from core.config_loader import get_config
-from core.sandbox import get_paths
+from core import config_loader
+from core import sandbox
 
 router = APIRouter()
 logger = logging.getLogger("admin.routers.dream")
@@ -54,22 +59,20 @@ def _valid_world_layer_values() -> frozenset[str]:
 
     _default 是保留兜底世界（Brief 96 §1）：删除当前世界时设置回退到它。
 
-    直接扫描 get_paths().dream_worlds_dir()（与本文件世界管理端点用的是同一个
+    直接扫描 sandbox.get_paths().dream_worlds_dir()（与本文件世界管理端点用的是同一个
     accessor），不经 core.dream.world_loader.discover_worlds() —— 后者用的是
     模块级裸 Path("characters/dream_worlds")，不随 sandbox 测试夹具重定向，
     生产模式下两者指向同一目录、行为等价，但测试夹具下会读到不一致的目录。
     """
-    from admin.routers import dream as _runtime
     from core.dream.world_loader import discover_worlds
     discovered = frozenset(discover_worlds())
-    return _runtime._VALID_WORLD_LAYER_BUILTIN | discovered | {"_default"}
+    return _VALID_WORLD_LAYER_BUILTIN | discovered | {"_default"}
 
 
 @router.get("/dream/presets", summary="列出可用破限预设名（只读，供群聊梦境 per-char 选择器，Brief 100 §3）")
 async def list_dream_presets(_auth=Depends(require_scopes("activity"))):
     """列出 characters/dream_presets/ 下经 asset registry 登记的预设（经此层解析
     真实文件名，兼容中文命名的预设）。只读，不返回正文内容。"""
-    from admin.routers import dream as _runtime
     from core.asset_registry import get_registry
 
     entries = get_registry().list_all("dream_preset")
@@ -87,34 +90,31 @@ def _preset_asset_path(preset: str) -> Path:
     names).  New assets use the same safe ASCII id convention as
     ``jailbreak_presets`` in dream settings.
     """
-    from admin.routers import dream as _runtime
-    if not isinstance(preset, str) or not _runtime._SAFE_PRESET_RE.match(preset):
-        raise _runtime.HTTPException(status_code=422, detail=f"预设 id 不合法: {preset!r}")
+    if not isinstance(preset, str) or not dream_common._SAFE_PRESET_RE.match(preset):
+        raise HTTPException(status_code=422, detail=f"预设 id 不合法: {preset!r}")
 
     from core.asset_registry import get_registry
-    from core.sandbox import get_paths
+    from core import sandbox
 
     try:
         return get_registry().resolve(preset, "dream_preset").path()
     except ValueError:
         from core.authored_asset_resolver import resolve_layered_file
-        user_dir, legacy_dir = get_paths().dream_preset_read_dirs()
+        user_dir, legacy_dir = sandbox.get_paths().dream_preset_read_dirs()
         item = resolve_layered_file(
             user_dir, legacy_dir, f"{preset}.md", logical_asset="dream_preset"
         )
-        return item.path if item is not None else get_paths().dream_preset_write_path(preset)
+        return item.path if item is not None else sandbox.get_paths().dream_preset_write_path(preset)
 
 
 def _preset_write_path(preset: str) -> Path:
-    from admin.routers import dream as _runtime
-    if not isinstance(preset, str) or not _runtime._SAFE_PRESET_RE.match(preset):
-        raise _runtime.HTTPException(status_code=422, detail=f"预设 id 不合法: {preset!r}")
-    return _runtime.get_paths().dream_preset_write_path(preset)
+    if not isinstance(preset, str) or not dream_common._SAFE_PRESET_RE.match(preset):
+        raise HTTPException(status_code=422, detail=f"预设 id 不合法: {preset!r}")
+    return sandbox.get_paths().dream_preset_write_path(preset)
 
 
 def _reload_dream_preset_registry() -> None:
     """Make authoring changes visible to the next dream without a restart."""
-    from admin.routers import dream as _runtime
     from core.asset_registry import reload_registry
     reload_registry()
 
@@ -124,10 +124,9 @@ async def get_standalone_dream_preset(
     preset: str,
     _auth=Depends(require_scopes("activity")),
 ):
-    from admin.routers import dream as _runtime
-    path = _runtime._preset_asset_path(preset)
+    path = _preset_asset_path(preset)
     if not path.is_file():
-        raise _runtime.HTTPException(status_code=404, detail=f"预设 {preset} 不存在")
+        raise HTTPException(status_code=404, detail=f"预设 {preset} 不存在")
     return {"id": preset, "content": path.read_text(encoding="utf-8")}
 
 
@@ -136,19 +135,17 @@ async def create_standalone_dream_preset(
     body: dict,
     _auth=Depends(require_scopes("activity")),
 ):
-    from admin.routers import dream as _runtime
     preset = body.get("id")
     content = body.get("content", "")
     if not isinstance(content, str):
-        raise _runtime.HTTPException(status_code=422, detail="content 必须为字符串")
-    read_path = _runtime._preset_asset_path(preset)
-    path = _runtime._preset_write_path(preset)
+        raise HTTPException(status_code=422, detail="content 必须为字符串")
+    read_path = _preset_asset_path(preset)
+    path = _preset_write_path(preset)
     if read_path.exists():
-        raise _runtime.HTTPException(status_code=409, detail=f"预设 {preset} 已存在")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf-8")
-    _runtime._log_dream_write(kind="dream_preset", read_path=path, canonical=path, source="user")
-    _runtime._reload_dream_preset_registry()
+        raise HTTPException(status_code=409, detail=f"预设 {preset} 已存在")
+    world_authoring.write_preset(path, content)
+    dream_common._log_dream_write(kind="dream_preset", read_path=path, canonical=path, source="user")
+    _reload_dream_preset_registry()
     return {"ok": True, "id": preset, "bytes": len(content.encode("utf-8"))}
 
 
@@ -158,18 +155,16 @@ async def put_standalone_dream_preset(
     body: dict,
     _auth=Depends(require_scopes("activity")),
 ):
-    from admin.routers import dream as _runtime
     content = body.get("content")
     if not isinstance(content, str):
-        raise _runtime.HTTPException(status_code=422, detail="content 必须为字符串")
-    read_path = _runtime._preset_asset_path(preset)
+        raise HTTPException(status_code=422, detail="content 必须为字符串")
+    read_path = _preset_asset_path(preset)
     if not read_path.is_file():
-        raise _runtime.HTTPException(status_code=404, detail=f"预设 {preset} 不存在")
-    path = _runtime._preset_write_path(preset)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    _runtime._log_dream_write(kind="dream_preset", read_path=read_path, canonical=path)
-    path.write_text(content, encoding="utf-8")
-    _runtime._reload_dream_preset_registry()
+        raise HTTPException(status_code=404, detail=f"预设 {preset} 不存在")
+    path = _preset_write_path(preset)
+    dream_common._log_dream_write(kind="dream_preset", read_path=read_path, canonical=path)
+    world_authoring.write_preset(path, content)
+    _reload_dream_preset_registry()
     return {"ok": True, "id": preset, "bytes": len(content.encode("utf-8"))}
 
 
@@ -178,24 +173,23 @@ async def delete_standalone_dream_preset(
     preset: str,
     _auth=Depends(require_scopes("activity")),
 ):
-    from admin.routers import dream as _runtime
-    path = _runtime._preset_asset_path(preset)
+    path = _preset_asset_path(preset)
     if not path.is_file():
-        legacy = _runtime.get_paths().legacy_dream_presets_dir() / f"{preset}.md"
+        legacy = sandbox.get_paths().legacy_dream_presets_dir() / f"{preset}.md"
         if legacy.is_file():
-            raise _runtime.HTTPException(status_code=409, detail="legacy fallback Dream 预设为只读，不能删除")
-        raise _runtime.HTTPException(status_code=404, detail=f"预设 {preset} 不存在")
+            raise HTTPException(status_code=409, detail="legacy fallback Dream 预设为只读，不能删除")
+        raise HTTPException(status_code=404, detail=f"预设 {preset} 不存在")
 
     from core.dream.dream_settings import load as _load_settings
-    if preset in (_load_settings(_runtime._owner_uid(), char_id=_runtime._active_dream_char_id()).get("jailbreak_presets") or []):
-        raise _runtime.HTTPException(status_code=409, detail="该预设正在下一场梦的选用列表中，请先取消选用")
+    if preset in (_load_settings(dream_common._owner_uid(), char_id=dream_common._active_dream_char_id()).get("jailbreak_presets") or []):
+        raise HTTPException(status_code=409, detail="该预设正在下一场梦的选用列表中，请先取消选用")
 
-    canonical = _runtime._preset_write_path(preset)
+    canonical = _preset_write_path(preset)
     if path != canonical:
-        raise _runtime.HTTPException(status_code=409, detail="legacy fallback Dream 预设为只读，不能删除")
-    path.unlink()
-    _runtime._reload_dream_preset_registry()
-    legacy_reappeared = (_runtime.get_paths().legacy_dream_presets_dir() / path.name).is_file()
+        raise HTTPException(status_code=409, detail="legacy fallback Dream 预设为只读，不能删除")
+    world_authoring.delete_preset(path)
+    _reload_dream_preset_registry()
+    legacy_reappeared = (sandbox.get_paths().legacy_dream_presets_dir() / path.name).is_file()
     return {"ok": True, "deleted": preset, "legacy_fallback_reappeared": legacy_reappeared}
 
 
@@ -205,10 +199,9 @@ async def dream_settings_get(
     _auth=Depends(require_scopes("activity")),
 ):
     """Read-only: returns all dream settings fields with defaults applied."""
-    from admin.routers import dream as _runtime
-    uid = _runtime._owner_uid()
+    uid = dream_common._owner_uid()
     from core.dream.dream_settings import load as _load
-    return _load(uid, char_id=_runtime._validated_live_char_id(char_id))
+    return _load(uid, char_id=dream_common._validated_live_char_id(char_id))
 
 
 @router.patch("/dream/settings", summary="部分更新梦境设置（校验枚举值；仅影响下一场梦）")
@@ -224,25 +217,24 @@ async def dream_settings_patch(body: dict, _auth=Depends(require_scopes("activit
       and copies into dream_state). PATCH only affects the next dream session.
       Changing world_layer while DREAM_ACTIVE does NOT change the current dream.
     """
-    from admin.routers import dream as _runtime
-    uid = _runtime._owner_uid()
-    char_id = _runtime.resolve_requested_char_id(
-        body.get("char_id"), fallback=_runtime._active_dream_char_id,
+    uid = dream_common._owner_uid()
+    char_id = resolve_requested_char_id(
+        body.get("char_id"), fallback=dream_common._active_dream_char_id,
     )
     from core.dream.dream_settings import load as _load, save as _save
 
-    updates = {k: v for k, v in body.items() if k in _runtime._PATCH_ALLOWED}
+    updates = {k: v for k, v in body.items() if k in _PATCH_ALLOWED}
     if not updates:
-        raise _runtime.HTTPException(status_code=422, detail=f"可更新字段：{sorted(_runtime._PATCH_ALLOWED)}")
+        raise HTTPException(status_code=422, detail=f"可更新字段：{sorted(_PATCH_ALLOWED)}")
 
     errors: list[str] = []
-    for key, valid_set in _runtime._ENUM_VALIDATORS.items():
+    for key, valid_set in _ENUM_VALIDATORS.items():
         if key in updates:
             val = updates[key]
             if val not in valid_set:
                 errors.append(f"{key}={val!r} 非法，有效值：{sorted(valid_set)}")
     if "world_layer" in updates:
-        valid_worlds = _runtime._valid_world_layer_values()
+        valid_worlds = _valid_world_layer_values()
         if updates["world_layer"] not in valid_worlds:
             errors.append(f"world_layer={updates['world_layer']!r} 非法，有效值：{sorted(valid_worlds)}")
     if "enable_dream_lorebook" in updates and not isinstance(updates["enable_dream_lorebook"], bool):
@@ -255,7 +247,7 @@ async def dream_settings_patch(body: dict, _auth=Depends(require_scopes("activit
             errors.append("jailbreak_presets 必须为非空列表（最多 10 项）")
         else:
             for item in val:
-                if not isinstance(item, str) or not _runtime._SAFE_PRESET_RE.match(item):
+                if not isinstance(item, str) or not dream_common._SAFE_PRESET_RE.match(item):
                     errors.append(
                         f"jailbreak_presets 条目 {item!r} 非法，只允许字母/数字/下划线/短横线（1-64字符）"
                     )
@@ -271,7 +263,7 @@ async def dream_settings_patch(body: dict, _auth=Depends(require_scopes("activit
                 f"收到：{val['physiological_arousal']!r}"
             )
     if errors:
-        raise _runtime.HTTPException(status_code=422, detail="; ".join(errors))
+        raise HTTPException(status_code=422, detail="; ".join(errors))
 
     current = _load(uid, char_id=char_id)
     current.update(updates)
