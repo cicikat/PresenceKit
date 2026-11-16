@@ -122,6 +122,7 @@ async def test_character_read_gate_and_refunds(client, monkeypatch):
     assert post(client, payload).status_code == 200
     call = SimpleNamespace(user_id='owner', tool_args={}, is_group=False, origin='assistant_loop')
     denied = await finance_tools.invoke(call)
+    assert denied.raw_data == ''
     assert denied.meta['failure_reason'] == 'permission_denied'
     client.config['finance_ingest']['character_readable'] = True
     allowed = await finance_tools.invoke(call)
