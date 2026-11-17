@@ -30,6 +30,10 @@ const path = require('node:path');
         body={phone_ambient:phone,enabled:true,max_steps:3,max_tools:0,max_write_tools:0};
       }
       if(url.pathname==='/observability/phone-ambient')body={configured:phone,effective:{light:false,motion:false,usage:false},reason_codes:{light:'unavailable'},sources:[]};
+      if(url.pathname==='/observability/autonomy-deliveries')body={receipts:[
+        {run_id:'fixture-run',correlation_id:'fixture-opportunity',turn_id:'canonical-fixture',status:'accepted',persisted:true,channels:{mobile:'acknowledged',desktop:'failed'},channel_reason_codes:{mobile:'durable_client_inbox_ack',desktop:'permission_revoked'},reason_code:'accepted',created_at:100},
+        {run_id:'<img src=x onerror=alert(1)>',correlation_id:'interrupted-opportunity',status:'outcome_unknown',persisted:false,channels:{mobile:'outcome_unknown'},reason_code:'process_interrupted',created_at:101},
+      ],acknowledgement_available:true};
       return route.fulfill({contentType:'application/json',body:JSON.stringify(body)});
     });
     const cdp=await context.newCDPSession(page);
@@ -60,7 +64,17 @@ const path = require('node:path');
     await card.scrollIntoViewIfNeeded();
     fs.mkdirSync('.tmp',{recursive:true});
     await page.screenshot({path:'.tmp/round1-phone-ambient-admin.png',fullPage:true});
+    await page.evaluate(()=>goto('observe-autonomy'));
+    const receipts=page.locator('#autonomy-delivery-receipts');
+    await receipts.waitFor({state:'visible'});
+    await page.waitForFunction(()=>document.getElementById('autonomy-delivery-receipts').textContent.includes('手机已确认持久收件'));
+    assert.ok((await receipts.textContent()).includes('permission_revoked'));
+    assert.ok((await receipts.textContent()).includes('process_interrupted'));
+    assert.equal(await receipts.locator('img').count(),0);
+    assert.equal(await receipts.locator('tbody tr').count(),2);
+    await receipts.scrollIntoViewIfNeeded();
+    await page.screenshot({path:'.tmp/round1-autonomy-deliveries-admin.png',fullPage:true});
     assert.deepEqual(errors,[]);
-    console.log('Phone ambient admin browser: default off, scoped patch, reload and effective diagnostics passed.');
+    console.log('Phone ambient and delivery browser: consent save/reload, effective state, per-channel ACK/unknown receipts and escaped IDs passed.');
   }finally{await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

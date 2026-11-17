@@ -14,7 +14,7 @@ mobile `09809d44fea621a0b329ca6e5faac490b466752f`。
   缓存可重建、不存正文，不新增持久真相源。
 - 验证：Python 3.12.13，`pytest -q tests/test_round1_event_log_idempotency.py
   tests/test_event_log_source_tag.py tests/test_event_log_union.py tests/test_p1_memory_fields.py`：33 passed。
-- 范围：后端记忆投影内部修复，客户端字段和设置不变；真实进程强杀的半条写入留待 R3 联合验收。
+- 范围：后端记忆投影内部修复，客户端字段和设置不变；独立进程的半条恢复见下方追加证据。
 - 追加跨午夜恢复：实际capture回归先失败（原日期投影不存在）；event_log现接收捕获时的
   occurred_at，恢复写回原日期和分钟，不在重启当天重复投影。相关capture/eventlog/outbox
   与字段回归60项通过（Python3.12）。
@@ -29,7 +29,7 @@ mobile `09809d44fea621a0b329ca6e5faac490b466752f`。
 
 - [x] R1：补齐热重载下的回合驻留；合成回归通过，真实模型/生产仍 not verified
 - [x] R3：多存储补偿、关键慢任务恢复与观测的合成验证；生产仍 not verified
-- [ ] R4：主动投递状态与每通道回执
+- [x] R4：主动投递状态、每通道尝试与手机持久收件ACK；真实通道仍 not verified
 - [ ] R5：权限文档、调度结果与固定 SHA 合同
 - [ ] F1：原生 Gemini 适配、控制面与真实服务
 - [ ] F2：双端安全 Markdown 与可见验收
@@ -68,10 +68,21 @@ mobile `09809d44fea621a0b329ca6e5faac490b466752f`。
   不存消息正文或异常文本。claimed/attempted 均不等于送达，accepted 不等于客户端 ACK。
   异常或进程退出保留已消费关联 ID，不自动唤醒或重发。
 - 观测：`GET /observability/autonomy-deliveries`，`state.read`，当前 owner/char，最多100条。
-  客户端确认接线未完成，明确返回 acknowledgement_available=false。
+  手机沿现有ACK接线，acknowledgement_channels明确mobile=durable_client_inbox、
+  desktop=not_available；手机持久收件不表示用户已读，桌面正文仍无收件ACK。
 - 验证：Python 3.12.13，投递+autonomy+管理面 39 passed；
   投递/信号/Dream retry 16 passed，包含新增 scoped HTTP 回执读取。
-- 状态：partially verified；真实通道 ACK 与进程强杀验证仍 not verified。
+- 追加失败先行：关键落盘await期间撤权、两通道之间撤权、手机正常/抢先ACK未回流、
+  进程退出后仍显示attempted。现绑定transport ID后才fanout，逐通道尝试/结果持久化，
+  每次实际send前复查门控；手机ACK先写回执再删队列，失败503保留队列，可精确重试ACK。
+  终态记录不覆盖抢先ACK；重启将未完成尝试显式显示outcome_unknown且不重发。
+  原ACK落盘回归升级为真实HTTP请求，保留失败时队列字节不变与恢复断言。
+  Python3.12投递/ACK/门控/作用域/依赖/管理面及源码守卫组合161项通过；
+  管理面真实资产浏览器验证ACK、未知、每通道原因和ID转义，截图
+  `.tmp/round1-autonomy-deliveries-admin.png`，无真实消息正文或凭据。
+  桌面历史fallback活跃但WS断开时不再误准入；实际capture不得调用的回归先失败，修复后
+  投递/ACK/手机事实/晚间门控93项通过。无新桌面wire协议或手机操作权限。
+- 状态：partially verified；合成/独立进程 verified，真实客户端与生产端到端 not verified。
 
 ## R3：关键记忆恢复（部分）
 

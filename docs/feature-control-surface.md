@@ -1,5 +1,10 @@
 ## 第一轮：手机环境主动行为（current / observe）
 
+R4只读观测：「系统状态/主动活动记录」新增投递回执，展示运行/机会/消息关联、关键落盘、
+各通道结果及脱敏reason_code。`GET /observability/autonomy-deliveries`（state.read）最多100条。
+mobile ACK表示持久收件；desktop正文无ACK，accepted不能当收到或已读。中断尝试在重启后
+显示outcome_unknown，保留去重，永不自动重发。无新运营开关或客户端设置。
+
 Autonomy 设置页「手机环境触发主动行为」独立于手机上传和系统 Usage Access；
 默认 enabled=false，light/motion/usage 分项默认 true。关闭恢复原行为。
 管理面 PATCH /admin/autonomy/config 的 phone_ambient，手机 GET/PATCH

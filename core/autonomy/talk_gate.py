@@ -77,9 +77,12 @@ async def send(
     pipeline = pipeline_registry.get()
     if pipeline is None: return False, "pipeline_unavailable"
     from channels.registry import get_active
-    if not get_active():
+    from channels import desktop_ws
+    receivers=[channel for channel in get_active()
+        if getattr(channel,"name","")!="desktop" or desktop_ws.is_connected()]
+    if not receivers:
         return False, "no_delivery_channel"
-    from core.autonomy.store import claim_delivery_correlation, record_delivery
+    from core.autonomy.store import claim_delivery_correlation, record_delivery, record_delivery_channel
     correlation_id = str(correlation_id or run_id)
     if not claim_delivery_correlation(uid, char_id, correlation_id):
         return False, Disposition.DUPLICATE.value
@@ -108,6 +111,11 @@ async def send(
         if mode == "hard" or mode == "soft" and not bypass_soft_once:
             return reason
         return source_guard() if source_guard is not None else ""
+    def delivery_ready(turn_id,transport_id,persisted):
+        return record_delivery(uid,char_id,correlation_id,status="attempted",run_id=run_id,
+            turn_id=turn_id,transport_id=transport_id,persisted=persisted)
+    def delivery_channel(channel,status,reason):
+        return record_delivery_channel(uid,char_id,correlation_id,channel,status,reason)
     try:
         result = await record_assistant_turn(
             pipeline=pipeline, uid=uid, assistant_text=text, source=TurnSource.TRIGGER,
@@ -121,6 +129,8 @@ async def send(
             event_context=event_context,
             envelope=stamp_trigger(),
             delivery_guard=recheck_delivery,
+            delivery_ready=delivery_ready,
+            delivery_channel=delivery_channel,
         )
     except BaseException:
         record_delivery(uid, char_id, correlation_id, status="outcome_unknown", run_id=run_id)
@@ -128,6 +138,7 @@ async def send(
     record_delivery(uid, char_id, correlation_id,
         status="accepted" if result.fanout_targets else "failed", run_id=run_id,
         turn_id=str(getattr(result, "turn_id", "") or ""),
+        transport_id=str(getattr(result,"msg_id","") or ""),
         persisted=bool(getattr(result, "written_to_memory", False)),
         reason_code=str(getattr(result, "suppression_reason", "") or ""),
         channels={**{name: "accepted" for name in result.fanout_targets},

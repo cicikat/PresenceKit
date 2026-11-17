@@ -60,7 +60,8 @@ async def deliveries(auth=Depends(require_scopes("state.read"))):
     from core.autonomy import store
     uid, char_id = _scope()
     rows = store.load(uid, char_id).get("delivery_receipts", [])
-    return {"receipts": rows, "acknowledgement_available": False,
+    return {"receipts": rows, "acknowledgement_available": True,
+            "acknowledgement_channels":{"mobile":"durable_client_inbox","desktop":"not_available"},
             "automatic_replay": False}
 
 

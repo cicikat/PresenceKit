@@ -23,7 +23,10 @@
 | DLQ积压 | 1000份失败任务也占用正文容量；新任务拒绝准入 | test_dlq_payloads_count_toward_outbox_capacity |
 | 恢复manifest | 实际HTTP区分关键写入、证据、索引与慢任务完成；不暴露原消息/turnID | test_turn_manifest_reports_real_projection_and_slow_task_progress |
 | 主动投递失败/部分失败/取消 | 每通道结果保留；未知不自动重发；claimed/accepted不冒充ACK | test_round1_autonomy_delivery.py |
+| 手机正常/抢先ACK、落盘失败 | 真实HTTP或发送返回前ACK仅确认匹配scope；失败503保留队列，恢复重试可确认 | test_mobile_ack_confirms_only_matching_autonomy_receipt、test_mobile_queue_ack.py |
+| 主动投递进程退出 | 独立进程重启后显式outcome_unknown，关联ID不可重新占用 | test_interrupted_delivery_is_explicit_unknown_after_process_restart |
 | 等待对话锁时撤权 | 取得锁后重新核对，未投递也不补发 | test_autonomy_rechecks_policy_after_waiting_for_conversation_gate |
+| 关键落盘await或两通道之间撤权 | 发送前再次核对；已接受通道不重发，后续通道停止并记录原因 | test_autonomy_rechecks_revocation_after_critical_write_wait、test_autonomy_revocation_stops_later_channels_without_replaying_first |
 | 手机授权/去抖/过期/换token/角色/会话/进程 | HTTP接受事实只在稳态边沿生成候选，失效后不可投递 | test_phone_ambient_autonomy.py |
 
 ## 恢复状态与限制

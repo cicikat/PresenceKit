@@ -122,13 +122,23 @@ async def test_ack_persistence_failure_does_not_confirm_and_can_retry(
 
     monkeypatch.setattr(mobile_module, "safe_write_json", fail_write)
     monkeypatch.setattr(router, "_get_mobile_channel", lambda: channel)
-    with pytest.raises(OSError, match="persist"):
-        await router.mobile_ack({"ack_seq": rows[0]["seq"]}, auth=True)
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    app=FastAPI();app.include_router(router.router)
+    route=next(row for row in app.routes if row.path=="/mobile/ack")
+    app.dependency_overrides[route.dependant.dependencies[0].call]=lambda:"synthetic-mobile"
+    with TestClient(app) as client:
+        response=client.post("/mobile/ack",json={"ack_seq":rows[0]["seq"]})
+    assert response.status_code==503
+    assert response.json()["detail"]=="mobile_ack_persistence_unavailable"
     assert sandbox.mobile_queue().read_bytes() == before
     assert [row["id"] for row in await channel.poll()] == ["turn-1", "turn-2"]
 
     monkeypatch.setattr(mobile_module, "safe_write_json", real_write)
-    assert await router.mobile_ack({"ack_seq": rows[0]["seq"]}, auth=True) == {
+    with TestClient(app) as client:
+        response=client.post("/mobile/ack",json={"ack_seq":rows[0]["seq"]})
+    assert response.status_code==200
+    assert response.json() == {
         "ok": True, "remaining": 1,
     }
     assert await channel.ack(rows[0]["seq"]) == 1

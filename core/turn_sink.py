@@ -93,6 +93,16 @@ async def _maybe_conversation_gate(uid: str, bypass_gate: bool):
         yield
 
 
+def _delivery_guard_reason(guard) -> str:
+    if guard is None:
+        return ""
+    try:
+        reason=guard()
+        return reason if isinstance(reason,str) else "delivery_guard_error"
+    except Exception:
+        return "delivery_guard_error"
+
+
 async def _fanout(
     *,
     assistant_text: str,
@@ -106,6 +116,8 @@ async def _fanout(
     source: Optional[TurnSource] = None,
     artifacts: Optional[list[dict]] = None,
     request_id: Optional[str] = None,
+    delivery_guard: Callable[[], str] | None = None,
+    delivery_channel: Callable[[str, str, str], bool] | None = None,
 ) -> tuple[list[str], dict[str, str]]:
     from channels import registry
 
@@ -175,6 +187,14 @@ async def _fanout(
     failures: dict[str, str] = {}
     for channel in targets:
         name = getattr(channel, "name", channel.__class__.__name__)
+        blocked=_delivery_guard_reason(delivery_guard)
+        if blocked:
+            failures[name]="delivery_guard:"+blocked
+            if delivery_channel:delivery_channel(name,"failed",blocked)
+            continue
+        if delivery_channel and not delivery_channel(name,"attempted","attempted"):
+            failures[name]="delivery_guard:delivery_receipt_unavailable"
+            continue
         try:
             text_to_send = _visible_text
             send_kwargs = {"behavior": behavior}
@@ -200,8 +220,14 @@ async def _fanout(
                 send_kwargs["artifacts"] = artifacts
             await channel.send(text_to_send, uid, **send_kwargs)
             sent_targets.append(name)
+            if delivery_channel:delivery_channel(name,"accepted","accepted")
+        except asyncio.CancelledError:
+            if delivery_channel:delivery_channel(name,"outcome_unknown","cancelled")
+            raise
         except Exception as exc:
             failures[name] = str(exc)
+            if delivery_channel:
+                delivery_channel(name,"failed" if isinstance(exc,(ValueError,TypeError)) else "outcome_unknown","send_failed")
             logger.warning("[turn_sink] fanout failed channel=%s: %s", name, exc)
 
     if not targets:
@@ -245,6 +271,8 @@ async def record_assistant_turn(
     request_id: str = "",
     background_tasks=None,
     delivery_guard: Callable[[], str] | None = None,
+    delivery_ready: Callable[[str, str, bool], bool] | None = None,
+    delivery_channel: Callable[[str, str, str], bool] | None = None,
 ) -> TurnResult:
     """
     Record one completed assistant turn and deliver it to the requested channels.
@@ -335,12 +363,7 @@ async def record_assistant_turn(
     post_process_scheduled = False
     async with _maybe_conversation_gate(uid, bypass_gate):
         if delivery_guard is not None:
-            try:
-                blocked = delivery_guard()
-                if not isinstance(blocked, str):
-                    blocked = "delivery_guard_error"
-            except Exception:
-                blocked = "delivery_guard_error"
+            blocked = _delivery_guard_reason(delivery_guard)
             if blocked:
                 return TurnResult(turn_id="", written_to_memory=False,
                     fanout_targets=[], suppression_reason=blocked)
@@ -405,6 +428,17 @@ async def record_assistant_turn(
         from core.mobile_delivery_trace import mark
         mark(_ws_msg_id, 'turn_ready', at_ms=turn_ready_ms)
     _record_identity_outcome(persisted=bool(_persisted_turn_id), transport=bool(_ws_msg_id))
+    if delivery_ready is not None:
+        if not delivery_ready(_persisted_turn_id,_ws_msg_id,bool((post_info or {}).get("critical_written",False))):
+            return TurnResult(turn_id=_persisted_turn_id,msg_id=_ws_msg_id,
+                written_to_memory=bool((post_info or {}).get("critical_written",False)),
+                fanout_targets=[],suppression_reason="delivery_receipt_unavailable")
+    if delivery_guard is not None:
+        blocked=_delivery_guard_reason(delivery_guard)
+        if blocked:
+            return TurnResult(turn_id=_persisted_turn_id,msg_id=_ws_msg_id,
+                written_to_memory=bool((post_info or {}).get("critical_written",False)),
+                fanout_targets=[],suppression_reason=blocked)
     if artifacts and char_id:
         from core.tools.chat_artifacts import link_turn_artifacts
         link_turn_artifacts(_ws_msg_id, artifacts, uid=uid, char_id=char_id)
@@ -442,6 +476,8 @@ async def record_assistant_turn(
         source=source,
         artifacts=artifacts or None,
         request_id=request_id or None,
+        delivery_guard=delivery_guard,
+        delivery_channel=delivery_channel,
     )
 
     # Brief 37: send（上面的 fanout）已经完成，慢段（expression / appraisal /
@@ -518,6 +554,8 @@ async def record_assistant_turn(
         emotion=(post_info or {}).get("emotion", "neutral"),
         artifacts=artifacts,
         msg_id=_ws_msg_id,
+        suppression_reason=next((value.removeprefix("delivery_guard:") for value in failures.values()
+            if value.startswith("delivery_guard:")),"") if not targets else "",
     )
 
 

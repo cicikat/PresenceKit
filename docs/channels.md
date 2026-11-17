@@ -1,5 +1,10 @@
 ## 第一轮：手机环境候选
 
+R4手机ACK：原有 `/mobile/ack`、ack_seq与队列协议保持不变。确认属于客户端已持久化收件，
+不代表用户已读；按队列中的owner/char/message ID更新对应Autonomy回执，其他scope不受影响。
+先持久化回执再删队列；任一持久化失败返回503（mobile_ack_persistence_unavailable），
+保留原信封供同一ACK重试，不重新执行生成或工具。桌面正文仍fire-and-forget，无收件ACK。
+
 POST /sensor/ambient 保持既有 Reality session、mobile profile、120秒TTL和30秒前台节奏。
 新增 GET/PATCH /sensor/ambient/policy 控制后端候选授权，不改变采集或消息 poll/ACK。
 手机进入后台以既有会话上传 unavailable 清除三项事实；网络失败仍由TTL兜底。

@@ -1,5 +1,12 @@
 ## 第一轮：手机环境与 Autonomy（current / observe）
 
+R4：`/mobile/ack` 的chat scope、ack_seq、累计删除和请求/成功响应字段保持不变；
+回执/队列持久化失败明确503、detail=mobile_ack_persistence_unavailable，保留队列重试ACK。
+原客户端持久inbox→ACK→精确本地确认链继续有效，无需新增手机或桌面wire字段。
+后端 `/observability/autonomy-deliveries` 增加acknowledgement_channels，mobile为
+durable_client_inbox，desktop为not_available；receipt保留transport_id及每通道reason_code。
+服务器接受、客户端持久收件和用户已读分开；后两者不能从桌面WS写入成功推断。
+
 新增 GET/PATCH /sensor/ambient/policy：mobile profile，同token Reality session，
 header X-Presence-Session；GET state.read+chat，PATCH persona+sensor.write+chat。
 PATCH 仅接收 enabled/light/motion/usage 布尔值，未知字段422，保存失败503；

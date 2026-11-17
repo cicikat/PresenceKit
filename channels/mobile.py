@@ -175,6 +175,15 @@ class MobileChannel(BaseChannel):
                 item for item in queue
                 if int(item.get("seq", 0)) > up_to_seq
             ]
+            from core.autonomy.store import acknowledge_mobile_deliveries
+            acknowledged_scopes = {}
+            for item in queue:
+                if int(item.get("seq",0)) <= up_to_seq:
+                    scope=(str(item.get("user_id") or ""),str(item.get("char_id") or ""))
+                    acknowledged_scopes.setdefault(scope,set()).add(str(item.get("id") or ""))
+            for (uid,char_id), message_ids in acknowledged_scopes.items():
+                if not acknowledge_mobile_deliveries(uid,char_id,message_ids):
+                    raise OSError("mobile acknowledgement receipt persistence failed")
             if remaining != queue:
                 if not safe_write_json(get_paths().mobile_queue(), remaining):
                     raise OSError("mobile acknowledgement persistence failed")
