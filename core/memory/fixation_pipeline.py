@@ -198,6 +198,29 @@ def _save_fixation_state(uid: str, state: dict, *, char_id: str = DEFAULT_CHAR_I
     safe_write_json(_state_write_file(uid, char_id=char_id), state)
 
 
+def _refresh_fixation_from_evidence(uid: str, char_id: str, episodes: list[dict]) -> dict:
+    """Rebuild counters after a partial commit, never increment them on replay."""
+    from core.memory.source_policy import role_source_allowed
+    remaining = [ep for ep in episodes if ep.get("consolidated_at") is None
+        and not ep.get("invalidated") and role_source_allowed(ep.get("source"))]
+    strong = [ep for ep in remaining if float(ep.get("strength") or 0) >= _HIGH_STRENGTH_THRESHOLD]
+    state = _load_fixation_state(uid,char_id=char_id)
+    state.update(episodic_since_last=len(remaining),high_strength_since_last=len(strong),
+        high_strength_days=sorted({_episode_day(ep) for ep in strong})[-60:],
+        strength_accumulated=round(sum(float(ep.get("strength") or 0) for ep in remaining),3))
+    state["last_consolidated_at"] = max([float(state.get("last_consolidated_at") or 0)] +
+        [float(ep.get("consolidated_at") or 0) for ep in episodes])
+    _save_fixation_state(uid,state,char_id=char_id)
+    return state
+
+
+def _enqueue_identity_if_due(uid: str, char_id: str, state: dict) -> None:
+    if _should_consolidate(state):
+        from core.post_process import slow_queue
+        slow_queue.enqueue("consolidate_to_identity",{"uid":uid,"char_id":char_id,
+            "scope":MemoryScope.reality_scope(uid,char_id).to_payload()})
+
+
 def _should_consolidate(state: dict) -> bool:
     """检查是否满足 consolidate_to_identity 触发阈值（满足任一即返回 True）。"""
     high = state.get("high_strength_since_last", 0)
@@ -1419,8 +1442,11 @@ async def reflect_to_episodic(
             and not e.get("promoted_to_episodic_id")
             and not e.get("is_trigger_turn")
         ]
+        from core.memory.source_policy import role_source_allowed
+        to_process = [e for e in to_process if role_source_allowed(e.get("source")) and not e.get("invalidated")]
 
         if not to_process:
+            _enqueue_identity_if_due(uid,char_id,_refresh_fixation_from_evidence(uid,char_id,_load_memories(uid,char_id=char_id)))
             _log_fixation("reflect_to_episodic", uid, {
                 "mid_ids": mid_ids, "trigger": trigger,
             }, "ok", "already promoted")
@@ -1428,12 +1454,18 @@ async def reflect_to_episodic(
 
         # 幂等：检查 episodic 里是否已有相同 source_mid_ids 的条目
         existing_eps = _load_memories(uid, char_id=char_id)
-        for ep in existing_eps:
-            if mid_ids_set & set(ep.get("source_mid_ids", [])):
-                _log_fixation("reflect_to_episodic", uid, {
-                    "mid_ids": mid_ids, "trigger": trigger,
-                }, "ok", "already reflected")
-                return None
+        covered = {mid:ep["id"] for ep in existing_eps if ep.get("id")
+            for mid in (ep.get("source_mid_ids") or []) if mid in mid_ids_set}
+        for e in to_process:
+            if e.get("mid_id") in covered:
+                _mt.mark_promoted(uid,e["mid_id"],covered[e["mid_id"]],char_id=char_id)
+        if any(e.get("mid_id") in covered and e.get("promoted_to_episodic_id") != covered[e["mid_id"]]
+               for e in _mt.load(uid,char_id=char_id)):
+            raise RuntimeError("reflection_lineage_commit_incomplete")
+        to_process = [e for e in to_process if e.get("mid_id") not in covered]
+        if not to_process:
+            _enqueue_identity_if_due(uid,char_id,_refresh_fixation_from_evidence(uid,char_id,existing_eps))
+            return None
 
         # 构造 LLM 输入
         from core.character_name_provider import get_char_name
@@ -1486,7 +1518,7 @@ async def reflect_to_episodic(
             _log_fixation("reflect_to_episodic", uid, {
                 "mid_ids": mid_ids, "trigger": trigger,
             }, "error", "LLM 解析失败")
-            return None
+            raise RuntimeError("reflection_synthesis_invalid")
 
         ep_id = f"ep_{int(time.time() * 1000)}"
         if data.get("is_closure"):
@@ -1584,6 +1616,8 @@ async def reflect_to_episodic(
             existing_eps,
         )
         if _dup_ep is not None:
+            _dup_ep["source_mid_ids"] = list(dict.fromkeys([
+                *(_dup_ep.get("source_mid_ids") or []), *episode["source_mid_ids"]]))
             _dup_ep["last_retrieved"] = time.time()
             _dup_ep["retrieval_count"] = _dup_ep.get("retrieval_count", 0) + 1
             _dup_ep["source_event_ids"] = normalize_source_event_ids([
@@ -1643,26 +1677,18 @@ async def reflect_to_episodic(
             except Exception as _vs_e:
                 logger.debug("[fixation] vector_store upsert schedule error: %s", _vs_e)
 
+        persisted = next((ep for ep in _load_memories(uid,char_id=char_id) if ep.get("id")==ep_id),None)
+        if persisted is None or not set(episode["source_mid_ids"]) <= set(persisted.get("source_mid_ids") or []):
+            raise RuntimeError("reflection_episode_commit_incomplete")
         # 回写 mid_term：标记已晋升（指向新建 ep 或合并目标的 id）
         for e in to_process:
             if e.get("mid_id"):
                 _mt.mark_promoted(uid, e["mid_id"], ep_id, char_id=char_id)
 
-        # 更新 fixation_state
-        strength = episode.get("strength", 0.0)
-        state = _load_fixation_state(uid, char_id=char_id)
-        state["episodic_since_last"] = state.get("episodic_since_last", 0) + 1
-        if strength >= _HIGH_STRENGTH_THRESHOLD:
-            state["high_strength_since_last"] = state.get("high_strength_since_last", 0) + 1
-            _day = _episode_day(episode)
-            _days = [d for d in (state.get("high_strength_days") or []) if isinstance(d, str)]
-            if _day not in _days:
-                _days.append(_day)
-            state["high_strength_days"] = _days[-60:]
-        state["strength_accumulated"] = round(
-            state.get("strength_accumulated", 0.0) + strength, 3
-        )
-        _save_fixation_state(uid, state, char_id=char_id)
+        if any(e.get("mid_id") in episode["source_mid_ids"] and e.get("promoted_to_episodic_id") != ep_id
+               for e in _mt.load(uid,char_id=char_id)):
+            raise RuntimeError("reflection_lineage_commit_incomplete")
+        state = _refresh_fixation_from_evidence(uid,char_id,_load_memories(uid,char_id=char_id))
 
     # uid_lock 释放后检查阈值，携带入队时的 char_id 快照
     if _should_consolidate(state):
@@ -1966,6 +1992,9 @@ async def consolidate_to_identity(uid: str, llm_client, *, char_id: str = DEFAUL
     user_facts_snapshot = _uf.load_user_facts(uid,char_id=char_id)
 
     if not new_episodes:
+        if episode_ids is not None:
+            async with locks.uid_lock(uid):
+                _refresh_fixation_from_evidence(uid,char_id,_load_memories(uid,char_id=char_id))
         _log_fixation("consolidate_to_identity", uid, {}, "ok", "no unconsolidated episodes")
         return True
 
@@ -2071,13 +2100,7 @@ async def consolidate_to_identity(uid: str, llm_client, *, char_id: str = DEFAUL
         if any(ep.get("id") in snapshot_ids and ep.get("consolidated_at") is None for ep in persisted):
             raise RuntimeError("identity_evidence_commit_incomplete")
 
-        state = _load_fixation_state(uid, char_id=char_id)
-        state["episodic_since_last"] = 0
-        state["high_strength_since_last"] = 0
-        state["high_strength_days"] = []
-        state["strength_accumulated"] = 0.0
-        state["last_consolidated_at"] = now
-        _save_fixation_state(uid, state, char_id=char_id)
+        _refresh_fixation_from_evidence(uid,char_id,persisted)
 
     ep_count = len(snapshot_ids)
     duration_ms = int((time.time() - _ts_start) * 1000)

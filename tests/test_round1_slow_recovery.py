@@ -231,3 +231,70 @@ async def test_identity_evidence_io_failure_reuses_frozen_plan(sandbox,monkeypat
     assert await fp.consolidate_to_identity("owner",None,char_id="fixture_character",episode_ids=["synthetic-episode"])
     assert ep._load_memories("owner",char_id="fixture_character")[0]["consolidated_at"] is not None
     assert synth.await_count==1
+
+
+def test_reflection_recovers_after_episode_write_before_midterm_mark(sandbox,tmp_path):
+    """A committed episode must repair its lineage after restart, never mint twice."""
+    script='''
+import asyncio,os,sys,json,time
+from pathlib import Path
+from core import sandbox,llm_client
+from core.memory import fixation_pipeline as fp,mid_term as mt,episodic_memory as ep
+from core.post_process import slow_queue as sq
+paths=sandbox.DataPaths(mode="test",test_session_id="isolated");paths._base=Path(sys.argv[1]);sandbox._instance=paths
+async def chat(*args,**kwargs):
+    with (paths._base/"reflection-calls.txt").open("a") as stream:stream.write("call;")
+    return json.dumps({"raw_facts":["synthetic fact"],"topic_keywords":["fixture"],"emotion_peak":"gentle","strength":.5,"narrative_summary":"synthetic reflection"})
+llm_client.chat=chat
+async def main():
+    if sys.argv[2]=="crash":
+        mt.append("owner","synthetic summary",mid_id="synthetic-mid",source_turn_id="synthetic-turn",char_id="fixture_character")
+        original=ep.write_episode
+        def interrupted(*args,**kwargs):
+            original(*args,**kwargs);os._exit(23)
+        ep.write_episode=interrupted
+        sq.enqueue("reflect_to_episodic",{"uid":"owner","char_id":"fixture_character","mid_ids":["synthetic-mid"]})
+    sq.register_handler("reflect_to_episodic",fp.handler_reflect_to_episodic)
+    sq.start_worker();await sq.drain();await sq.shutdown()
+asyncio.run(main())
+'''
+    for mode in ("crash","recover"):
+        result=subprocess.run([sys.executable,"-X","utf8","-c",script,str(tmp_path),mode],
+            cwd=Path(__file__).resolve().parents[1],capture_output=True,text=True,encoding="utf-8",timeout=30)
+        assert result.returncode==(23 if mode=="crash" else 0),result.stderr
+    from core.memory import episodic_memory as ep,mid_term as mt,fixation_pipeline as fp
+    episodes=ep._load_memories("owner",char_id="fixture_character")
+    assert len(episodes)==1
+    assert mt.load("owner",char_id="fixture_character")[0].get("promoted_to_episodic_id")==episodes[0]["id"]
+    assert fp._load_fixation_state("owner",char_id="fixture_character")["episodic_since_last"]==1
+    assert (tmp_path/"reflection-calls.txt").read_text()=="call;"
+
+
+@pytest.mark.parametrize("projection",["episode","midterm"])
+async def test_reflection_retries_failed_projection_without_duplicate_episode(sandbox,monkeypatch,projection):
+    from core import llm_client
+    from core.memory import episodic_memory as ep,mid_term as mt,fixation_pipeline as fp
+    from core.post_process import slow_queue as sq,memory_outbox
+    from unittest.mock import AsyncMock
+    import json
+    mt.append("owner","synthetic summary",mid_id="synthetic-mid",char_id="fixture_character")
+    chat=AsyncMock(return_value=json.dumps({"raw_facts":["synthetic fact"],"topic_keywords":["fixture"],"emotion_peak":"gentle","strength":.5,"narrative_summary":"synthetic reflection"}))
+    monkeypatch.setattr(llm_client,"chat",chat)
+    module=ep if projection=="episode" else mt
+    original=module.safe_write_json
+    failed=False
+    def fail_once(*args,**kwargs):
+        nonlocal failed
+        if not failed:
+            failed=True
+            return False
+        return original(*args,**kwargs)
+    monkeypatch.setattr(module,"safe_write_json",fail_once)
+    sq.enqueue("reflect_to_episodic",{"uid":"owner","char_id":"fixture_character","mid_ids":["synthetic-mid"]})
+    sq.register_handler("reflect_to_episodic",fp.handler_reflect_to_episodic)
+    sq.start_worker();await sq.drain();await sq.shutdown()
+    episodes=ep._load_memories("owner",char_id="fixture_character")
+    assert len(episodes)==1
+    assert mt.load("owner",char_id="fixture_character")[0]["promoted_to_episodic_id"]==episodes[0]["id"]
+    assert chat.await_count==(2 if projection=="episode" else 1)
+    assert memory_outbox.snapshot()["counts"]=={"done":1}

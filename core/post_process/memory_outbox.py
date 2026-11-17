@@ -8,7 +8,7 @@ import time
 from core.sandbox import get_paths
 from core.memory.scope import MemoryScope
 
-DURABLE_TYPES = frozenset({"capture_turn_retry", "summarize_to_midterm", "consolidate_to_identity"})
+DURABLE_TYPES = frozenset({"capture_turn_retry", "summarize_to_midterm", "consolidate_to_identity", "reflect_to_episodic"})
 
 
 def _connect():
@@ -33,7 +33,9 @@ def put(task_type, payload):
     if scope.domain != "reality":
         raise ValueError("durable memory task requires reality scope")
     payload = dict(payload)
-    if task_type == "consolidate_to_identity":
+    if task_type == "reflect_to_episodic":
+        unit = [task_type, sorted(payload.get("mid_ids") or [])]
+    elif task_type == "consolidate_to_identity":
         if "episode_ids" not in payload:
             from core.memory.episodic_memory import load_unconsolidated
             payload["episode_ids"] = sorted(str(ep["id"]) for ep in load_unconsolidated(scope.uid, char_id=scope.character_id) if ep.get("id"))

@@ -4,7 +4,7 @@
 
 # docs/memory.md — 记忆子系统设计
 
-第一轮 R3：`capture_turn_retry`、`summarize_to_midterm` 与 `consolidate_to_identity` 使用有界 SQLite outbox，
+第一轮 R3：`capture_turn_retry`、`summarize_to_midterm`、`reflect_to_episodic` 与 `consolidate_to_identity` 使用有界 SQLite outbox，
 路径由 `DataPaths.memory_task_outbox()` 获取，属于备份 inventory 覆盖的 data/runtime。
 capture 在首个投影写入前保存恢复快照，完成后清除正文；失败保留原 scope/source/授权源/
 发生时间，恢复仅补记忆投影，绝不重跑工具或投递消息。每任务跨进程最多三次尝试，
@@ -16,7 +16,10 @@ event_log追加另存同一SQLite中的临时字节意图（位置、尾部校�
 身份整合按冻结episode ID集合去重；先保存派生执行计划，再用乐观比较写入身份，
 随后提交证据标记。重启复用同一计划，不重复调用模型；中途出现新身份或画像时停止旧计划，
 进入有界重试/DLQ，不覆盖用户更新。隔离来源（含混合来源列表）不进入整合。
-执行计划只在恢复DB暂存，完成清正文，不参与检索。其余慢任务仍为内存态。
+执行计划只在恢复DB暂存，完成清正文，不参与检索。
+反思按mid ID集合持久去重，已存在episode时仅补齐晋升血缘；核验实际episode与mid文件后收口。
+核心合并保留source_mid_ids，计数从未固化的canonical证据重建，避免重放累加。
+模型格式失败进入有界重试/DLQ（每次最多3次解析调用，任务最多3次尝试）。其余慢任务仍为内存态。
 `GET /observability/memory-task-outbox`（state.read）只读状态计数、
 最早积压时间和限额。其余整合任务的恢复覆盖仍见第一轮交付未验收项。
 既有每日 memory_janitor 从 canonical episodic 和近30天 event_log 补回缺失向量，
