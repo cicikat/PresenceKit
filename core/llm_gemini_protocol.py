@@ -157,20 +157,27 @@ def _packet(mc, packet, capture):
     parts = content.get("parts") or []
     if not isinstance(parts, list) or any(not isinstance(part, dict) for part in parts):
         raise _format_error(mc, "Gemini invalid candidate parts")
-    visible = []
+    native_parts = []
     for part in parts:
         if part.get("thought") is True:
+            if "functionCall" in part:
+                raise _format_error(mc,"Gemini function call marked as internal thought")
             capture.add("gemini_thought", part.get("text"))
+            # Hidden from display, but signed native parts must survive the
+            # next function response exactly as provided by the native API.
+            native_parts.append(part)
         elif "functionCall" in part or isinstance(part.get("text"), str):
-            visible.append(part)
+            native_parts.append(part)
         else:
             raise _format_error(mc, "Gemini unsupported non-text part")
-    return visible, finish
+    return native_parts, finish
 
 
 def _normalize(mc, parts, capture):
     text, calls, generic, ids = [], [], [], set()
     for part in parts:
+        if part.get("thought") is True:
+            continue
         if "text" in part:
             text.append(part["text"])
         if "functionCall" in part:
@@ -262,6 +269,8 @@ async def stream_text(mc, messages, *, gen_kwargs, capture):
         if finish and parts:
             raise _format_error(mc, "Gemini content after stream finish")
         for part in parts:
+            if part.get("thought") is True:
+                continue
             if "functionCall" in part:
                 raise _format_error(mc, "unexpected Gemini tool in text stream")
             if part.get("text"):

@@ -139,7 +139,11 @@ mobile `09809d44fea621a0b329ca6e5faac490b466752f`。
   API为合成边界；验证导入、未知协议拒绝、保存请求、编辑密钥遮罩、连接测试显示。
   截图 `.tmp/round1-gemini-admin.png`（本地可重建产物）。
 - 当前配置没有官方样式 Gemini 凭据，未进行官方计费调用；不拿兼容网关配置冒充官方连接。
+  此项是最初本机快照；用户随后指定服务器预设gemini-guanfang，正按该预设核对并推进真实冒烟。
   合成/管理面 verified；真实模型、打包客户端、生产端到端 not verified；总体 partially verified。
+  签名续轮追加：REST/SSE实际第二次请求回归先失败（thought标记的签名part被丢弃）；
+  现原样保留不透明原生part，仅在展示/流文本中隐藏thought；未提供原生ID的functionResponse
+  不伪造原生ID。Gemini/路由/工具组合133项通过，最终隐藏流文本与签名复验15项通过。
 
 ## F2：双端安全 Markdown
 

@@ -65,6 +65,32 @@ async def test_native_parallel_tools_preserve_signature_and_receipt_identity(san
         await mc.client.aclose()
 
 
+@pytest.mark.parametrize("force_stream",[False,True])
+async def test_native_signed_thought_parts_round_trip_without_visible_thought_text(sandbox,force_stream):
+    """Native continuation keeps opaque signed parts, while display stays clean."""
+    raw=[{"thought":True,"text":"synthetic internal thought","thoughtSignature":"opaque-thought"},
+         {"functionCall":{"name":"lookup","args":{"q":"one"}},"thoughtSignature":"opaque-call"}]
+    requests=[]
+    def handler(request):
+        payload=json.loads(request.content);requests.append(payload)
+        if len(requests)==2:
+            assert payload["contents"][1]["parts"]==raw
+            assert payload["contents"][2]["parts"]==[{"functionResponse":{"name":"lookup","response":{"output":"receipt"}}}]
+        packet=response(raw if len(requests)==1 else [{"text":"done"}])
+        return httpx.Response(200,text="data: "+json.dumps(packet)+"\n\n",headers={"content-type":"text/event-stream"}) if force_stream else httpx.Response(200,json=packet)
+    mc=model(handler);mc.force_stream=force_stream
+    history=[{"role":"user","content":"lookup"}]
+    try:
+        first=await create(mc,history,gen_kwargs={})
+        assert first.assistant_text=="" and len(first.tool_calls)==1
+        history+=first.continuation_items
+        history+=[{"role":"tool","tool_call_id":first.tool_calls[0].id,"content":"receipt"}]
+        final=await create(mc,history,gen_kwargs={})
+        assert final.assistant_text=="done"
+    finally:
+        await mc.client.aclose()
+
+
 @pytest.mark.parametrize("status", [401, 403, 429, 503])
 async def test_native_http_errors_do_not_echo_body_or_credentials(sandbox, status):
     mc = model(lambda request: httpx.Response(status, json={"error": {"message": "synthetic-key private-body"}}))
@@ -79,7 +105,7 @@ async def test_native_http_errors_do_not_echo_body_or_credentials(sandbox, statu
 
 @pytest.mark.parametrize("complete", [True, False])
 async def test_native_stream_requires_finish_and_preserves_unicode(sandbox, complete):
-    chunks = [response([{"text": "hello"}], finish=""), response([{"text": "世界"}], finish="STOP" if complete else "")]
+    chunks = [response([{"thought":True,"text":"synthetic private thought","thoughtSignature":"opaque-stream"},{"text": "hello"}], finish=""), response([{"text": "世界"}], finish="STOP" if complete else "")]
     body = "".join("data: " + json.dumps(chunk, ensure_ascii=False) + "\n\n" for chunk in chunks)
     mc = model(lambda request: httpx.Response(200, text=body, headers={"content-type": "text/event-stream"}))
     try:
