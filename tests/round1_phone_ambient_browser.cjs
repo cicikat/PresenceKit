@@ -20,6 +20,7 @@ const path = require('node:path');
         return route.fulfill({body:fs.readFileSync(file),contentType:({'.html':'text/html','.js':'text/javascript','.css':'text/css'})[path.extname(file)]||'application/octet-stream'});
       }
       let body={};
+      if(url.pathname==='/video-call/presence')body={settings:{enabled:false,max_talks_per_call:1,min_gap_seconds:60,silence_seconds:60,camera_signal_interval_seconds:30},talks_total:0,gate_blocks:{}};
       if(url.pathname==='/admin/autonomy/config') {
         if(req.method()==='PATCH') {
           writes.push(req.postDataJSON());phone={...phone,...writes.at(-1).phone_ambient,revision:phone.revision+1};
@@ -48,6 +49,7 @@ const path = require('node:path');
     await page.evaluate(()=>{document.getElementById('auth-overlay').style.display='none';document.getElementById('app').style.display='flex';goto('autonomy-settings');});
     await page.waitForFunction(()=>document.getElementById('autonomy-phone-enabled')?.checked);
     assert.equal(await page.locator('#autonomy-phone-motion').isChecked(),false);
+    assert.equal(await page.getByText(/Cannot read properties/).count(),0);
     await card.locator('summary').click();
     await card.scrollIntoViewIfNeeded();
     fs.mkdirSync('.tmp',{recursive:true});
